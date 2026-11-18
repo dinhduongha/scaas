@@ -29,12 +29,12 @@ services:
     container_name: mba_chain_sealer
     restart: unless-stopped
     image: scaas/nethermind-pqz:2.2.0-pqz6
-    mem_limit: 1g   # 768m was too tight: 694 MiB total / 611 MiB anon during the PQZ e2e (2026-10-31; raised live by docker update)
+    mem_limit: 1g # 768m was too tight: 694 MiB total / 611 MiB anon during the PQZ e2e (2026-10-31; raised live by docker update)
     volumes:
-      - ./data/nethermind_data:/nethermind/nethermind_datadir   # the single node's chain data (kept)
+      - ./data/nethermind_data:/nethermind/nethermind_datadir # the single node's chain data (kept)
       - ./genesis.json:/nethermind/genesis.json
       - ./config.json:/nethermind/config.json
-      - ./jsonrpc.filter:/nethermind/jsonrpc.filter:ro   # refuses eth_sendTransaction / eth_sign / eth_signTransaction / eth_signTypedData* (owner 2026-10-31)
+      - ./jsonrpc.filter:/nethermind/jsonrpc.filter:ro # refuses eth_sendTransaction / eth_sign / eth_signTransaction / eth_signTypedData* (owner 2026-10-31)
       - ./password.txt:/nethermind/password.txt
       - ./keystore:/nethermind/keystore
     command: --config /nethermind/config.json
@@ -61,7 +61,7 @@ services:
       - ./genesis.json:/nethermind/genesis.json:ro
       - ./config.rpc.json:/nethermind/config.json:ro
       - ./jsonrpc.filter:/nethermind/jsonrpc.filter:ro
-      - ./rpc-node.key:/nethermind/node.key:ro   # fixed P2P key (KeyStore.EnodeKeyFile): the enode stays the same across restarts
+      - ./rpc-node.key:/nethermind/node.key:ro # fixed P2P key (KeyStore.EnodeKeyFile): the enode stays the same across restarts
     command: --config /nethermind/config.json
       --datadir /nethermind/nethermind_datadir
     networks:
@@ -93,11 +93,7 @@ services:
     networks:
       - mba-net
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-blockscout}",
-        ]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-blockscout}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -123,7 +119,7 @@ services:
       # disables archive balances and Indexer.Fetcher.ContractCode crashes in a loop (CaseClauseError {:ok, %{}}). No trace_* call is made:
       # internal transactions and block rewards are off below
       ETHEREUM_JSONRPC_TRACE_URL: "http://rpc:8547"
-      ETHEREUM_JSONRPC_PENDING_TRANSACTIONS_TYPE: "geth"   # txpool_content (TxPool), not parity_pendingTransactions
+      ETHEREUM_JSONRPC_PENDING_TRANSACTIONS_TYPE: "geth" # txpool_content (TxPool), not parity_pendingTransactions
       ETHEREUM_JSONRPC_VARIANT: "nethermind"
       # block 0: its import needs the genesis balances at block 0, which the pruned single node (before the split) no
       # longer had ("No state available"), and 7.0.2 then retried block 0 in a 0 ms loop (one core); start at block 1.
@@ -222,7 +218,7 @@ services:
       NEXT_PUBLIC_API_PROTOCOL: "http"
       NEXT_PUBLIC_API_WEBSOCKET_PROTOCOL: "ws"
       NEXT_PUBLIC_APP_HOST: "${EXPLORER_HOST:-192.168.1.72}"
-      NEXT_PUBLIC_APP_PORT: "8558"   # host port of the UI (owner 2026-10-31: not 3000)
+      NEXT_PUBLIC_APP_PORT: "8558" # host port of the UI (owner 2026-10-31: not 3000)
       NEXT_PUBLIC_APP_PROTOCOL: "http"
       NEXT_PUBLIC_NETWORK_NAME: "MBANetwork"
       NEXT_PUBLIC_NETWORK_SHORT_NAME: "MBA"
@@ -232,6 +228,6 @@ services:
       NEXT_PUBLIC_NETWORK_CURRENCY_DECIMALS: "18"
       NEXT_PUBLIC_IS_TESTNET: "true"
     ports:
-      - "8558:3000"   # UI at http://<host>:8558; the container still listens on PORT 3000 (owner 2026-10-31)
+      - "8558:3000" # UI at http://<host>:8558; the container still listens on PORT 3000 (owner 2026-10-31)
     networks:
       - mba-net

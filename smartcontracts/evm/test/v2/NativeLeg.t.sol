@@ -21,7 +21,11 @@ contract CoinRefuser {}
 /// Re-enters the token from `receive` (unwrap to itself again).
 contract CoinReenterer {
     WrappedToken public t;
-    function arm(WrappedToken t_) external { t = t_; }
+
+    function arm(WrappedToken t_) external {
+        t = t_;
+    }
+
     receive() external payable {
         t.unwrap(1, address(this), 0);
     }
@@ -33,12 +37,26 @@ contract CoinReentersEveryEntry {
     WrappedToken public t;
     uint256 public refused;
     uint256 public tried;
-    function arm(WrappedToken t_) external { t = t_; }
+
+    function arm(WrappedToken t_) external {
+        t = t_;
+    }
+
     receive() external payable {
         bytes[13] memory calls = [
-            abi.encodeWithSelector(t.payWithFee.selector, address(1), 1, 0, 0, address(0), bytes32(0), PayMetaKit.meta(0)),
-            abi.encodeWithSelector(t.payWithFeeToUA.selector, bytes32(uint256(1) << 160), 1, 0, 0, address(0), bytes32(0),
-                PayMetaKit.meta(0)),
+            abi.encodeWithSelector(
+                t.payWithFee.selector, address(1), 1, 0, 0, address(0), bytes32(0), PayMetaKit.meta(0)
+            ),
+            abi.encodeWithSelector(
+                t.payWithFeeToUA.selector,
+                bytes32(uint256(1) << 160),
+                1,
+                0,
+                0,
+                address(0),
+                bytes32(0),
+                PayMetaKit.meta(0)
+            ),
             abi.encodeWithSelector(t.grantRole.selector, uint8(1), address(1), bytes32(0)),
             abi.encodeWithSelector(t.revokeRole.selector, uint8(1), address(1), bytes32(0)),
             abi.encodeWithSelector(t.renounceRole.selector, uint8(1), bytes32(0)),
@@ -47,7 +65,9 @@ contract CoinReentersEveryEntry {
             abi.encodeWithSelector(t.acceptAdmin.selector),
             abi.encodeWithSelector(t.renounceAdmin.selector, bytes32(0)),
             abi.encodeWithSelector(t.disableWrap.selector, address(0), bytes32(0), EnvKit.codeUidOf(address(t))),
-            abi.encodeWithSelector(t.proposeRate.selector, address(0), uint96(1), uint96(1), EnvKit.codeUidOf(address(t))),
+            abi.encodeWithSelector(
+                t.proposeRate.selector, address(0), uint96(1), uint96(1), EnvKit.codeUidOf(address(t))
+            ),
             abi.encodeWithSelector(t.cancelRate.selector, EnvKit.codeUidOf(address(t))),
             abi.encodeWithSelector(t.executeRate.selector, EnvKit.codeUidOf(address(t)))
         ];
@@ -167,8 +187,9 @@ contract NativeLegTest is V2Fixture {
         assertEq(reserve, 1 ether);
         assertEq(t.collateralValue(), 1 ether);
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.InsufficientReserve.selector, address(0), 2 ether,
-            1 ether));
+        vm.expectRevert(
+            abi.encodeWithSelector(IWrappedToken.InsufficientReserve.selector, address(0), 2 ether, 1 ether)
+        );
         t.unwrap(2 ether, alice, 0);
         _wrapNative(t, bob, 1 ether); // the surplus does not stop a wrap
         assertEq(t.balanceOf(bob), 1 ether);
@@ -180,8 +201,7 @@ contract NativeLegTest is V2Fixture {
         vm.deal(address(t), 1 ether); // the balance fell below the reserve
         vm.deal(bob, 1 ether);
         vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.ReserveShortfall.selector, address(0), 1 ether,
-            2 ether));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.ReserveShortfall.selector, address(0), 1 ether, 2 ether));
         t.wrap{value: 1 ether}(1 ether);
         vm.prank(alice);
         t.unwrap(1 ether, alice, 0);
@@ -260,8 +280,7 @@ contract NativeLegTest is V2Fixture {
         adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(0), 101, 100, EnvKit.codeUidOf(address(t)))));
         vm.warp(block.timestamp + 7 days);
         vm.deal(address(t), 0.5 ether);
-        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.ReserveShortfall.selector, address(0), 0.5 ether,
-            1 ether));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.ReserveShortfall.selector, address(0), 0.5 ether, 1 ether));
         adm.exec(address(t), abi.encodeCall(t.executeRate, (EnvKit.codeUidOf(address(t)))));
         vm.deal(address(t), 1 ether);
         adm.exec(address(t), abi.encodeCall(t.executeRate, (EnvKit.codeUidOf(address(t)))));
@@ -270,8 +289,17 @@ contract NativeLegTest is V2Fixture {
     }
 
     function test_native_decimalsOnHederaAre8() public {
-        WrappedToken h = WrappedToken(_clone(_envFor(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(UID_, address(0), address(0), true)),
-            address(this), _one(address(0)), _singleInit(address(0), 8, 1, 1, _fixedRate())));
+        WrappedToken h = WrappedToken(
+            _clone(
+                _envFor(
+                    address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
+                    EnvKit.env(UID_, address(0), address(0), true)
+                ),
+                address(this),
+                _one(address(0)),
+                _singleInit(address(0), 8, 1, 1, _fixedRate())
+            )
+        );
         (,,, uint8 dec,) = h.legOf(address(0));
         assertEq(dec, 8);
     }

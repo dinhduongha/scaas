@@ -50,15 +50,21 @@ abstract contract PqzFreezeSuite is PqzRegFixture {
     /// The four transfer entries and the unshield, direct: a frozen `fromUA` refused `Frozen(fromUA)`.
     function test_frozenSenderRefusedBeforeProof_direct() public {
         for (uint256 k; k < 5; ++k) {
-            _refusedBeforeProof(_opCall(k, 0, 0), alice, abi.encodeWithSelector(IRegulatedToken.Frozen.selector, alice), true);
+            _refusedBeforeProof(
+                _opCall(k, 0, 0), alice, abi.encodeWithSelector(IRegulatedToken.Frozen.selector, alice), true
+            );
         }
     }
 
     /// The signed forms (fee `NONE`, by `signer`'s EOA): the self-call refuses the proof's sender before the proof.
     function test_frozenSenderRefusedBeforeProof_signed() public {
         for (uint256 k; k < 5; ++k) {
-            _refusedBeforeProof(_signedCall(k, _envOf(false), false), alice,
-                abi.encodeWithSelector(IRegulatedToken.Frozen.selector, alice), false);
+            _refusedBeforeProof(
+                _signedCall(k, _envOf(false), false),
+                alice,
+                abi.encodeWithSelector(IRegulatedToken.Frozen.selector, alice),
+                false
+            );
         }
     }
 
@@ -116,7 +122,11 @@ abstract contract PqzFreezeSuite is PqzRegFixture {
             vm.prank(relayer);
             (bool ok2, bytes memory ret) = address(tok).call(_signedCall(k, _envOf(true), true));
             assertFalse(ok2);
-            assertEq(ret, abi.encodeWithSelector(IRegulatedToken.Frozen.selector, s), "fee-bearing: Frozen before the signature");
+            assertEq(
+                ret,
+                abi.encodeWithSelector(IRegulatedToken.Frozen.selector, s),
+                "fee-bearing: Frozen before the signature"
+            );
         }
     }
 
@@ -153,16 +163,26 @@ abstract contract PqzFreezeSuite is PqzRegFixture {
 }
 
 contract PqzFreeze12Test is PqzFreezeSuite {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 }
 
 contract PqzFreeze13Test is PqzFreezeSuite {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 
     /// Spec §4.2: the unshield-unwrap's sender first in `_burn`, before the proof; direct and signed.
     function test_unshieldUnwrapFrozenRefused() public {
-        _refusedBeforeProof(_unwrapCall(10, 0), alice, abi.encodeWithSelector(IRegulatedToken.Frozen.selector, alice), true);
-        _refusedBeforeProof(_signedUnwrap(_envOf(false), 10), alice,
-            abi.encodeWithSelector(IRegulatedToken.Frozen.selector, alice), false);
+        _refusedBeforeProof(
+            _unwrapCall(10, 0), alice, abi.encodeWithSelector(IRegulatedToken.Frozen.selector, alice), true
+        );
+        _refusedBeforeProof(
+            _signedUnwrap(_envOf(false), 10),
+            alice,
+            abi.encodeWithSelector(IRegulatedToken.Frozen.selector, alice),
+            false
+        );
     }
 }

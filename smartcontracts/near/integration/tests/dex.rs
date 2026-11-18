@@ -11,15 +11,27 @@ use near_workspaces::types::Gas;
 use scaas_near_common::hash::{hex, pay_lane};
 use scaas_near_common::Order;
 use scaas_near_dex::{
-    leg_gas, settle_gas, Settle, GAS_ON_LEGS, GAS_ON_REFUND, GAS_PAYOUT, GAS_SETTLE_SELF, GAS_VIEW, LEG_STORAGE_MAX_BYTES,
-    SETTLE_MARGIN_S,
+    leg_gas, settle_gas, Settle, GAS_ON_LEGS, GAS_ON_REFUND, GAS_PAYOUT, GAS_SETTLE_SELF, GAS_VIEW,
+    LEG_STORAGE_MAX_BYTES, SETTLE_MARGIN_S,
 };
 use scaas_near_relayfee::{call_ref, relay_gas, Check as RCheck};
-use scaas_near_token::{order_bytes, OrderClose, ACCOUNT_STORAGE_BYTES, MAX_ORIGINS, MAX_ORIGIN_LEN, TRADE_RECORD_OVERHEAD};
+use scaas_near_token::{
+    order_bytes, OrderClose, ACCOUNT_STORAGE_BYTES, MAX_ORIGINS, MAX_ORIGIN_LEN,
+    TRADE_RECORD_OVERHEAD,
+};
 
-const DEX_WASM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../target/near/scaas_near_dex/scaas_near_dex.wasm");
-const ROUTER_WASM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../target/near/scaas_near_relayfee/scaas_near_relayfee.wasm");
-const EXEC_WASM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../target/near/scaas_near_relayexec/scaas_near_relayexec.wasm");
+const DEX_WASM: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../target/near/scaas_near_dex/scaas_near_dex.wasm"
+);
+const ROUTER_WASM: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../target/near/scaas_near_relayfee/scaas_near_relayfee.wasm"
+);
+const EXEC_WASM: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../target/near/scaas_near_relayexec/scaas_near_relayexec.wasm"
+);
 /// The executor a DEX without a router is created with (no such account: only direct settles).
 const NO_EXECUTOR: &str = "no-executor.test.near";
 /// What the relayer attaches to `settle`: the escrow entry plus both legs' storage; each token returns its leg's excess
@@ -39,7 +51,8 @@ const MIN_CAP: &str = "min_nonce must be below 2^63";
 const MIN_UP: &str = "min_nonce only increases";
 const BEFORE_EXPIRY: &str = "refund before expiry";
 const SHORT_GAS: &str = "prepaid gas below the settle minimum (legs + callback)";
-const LEG_SHARE: &str = "a leg's deposit share is below the worst-case leg storage (LEG_STORAGE_MAX_BYTES)";
+const LEG_SHARE: &str =
+    "a leg's deposit share is below the worst-case leg storage (LEG_STORAGE_MAX_BYTES)";
 const EXPIRES_SOON: &str = "an order or a leg op expires within SETTLE_MARGIN_S (60 s)";
 /// The router payment's fee (token A units) in the routed settles.
 const FEE: u128 = 10;
@@ -70,9 +83,18 @@ async fn setup_dex() -> D {
 
 /// A DEX whose router executor is `executor` (`Dex::new(executor)`, Borsh).
 async fn deploy_dex(w: &Worker<Sandbox>, executor: &str) -> Contract {
-    let dex = w.dev_deploy(&std::fs::read(DEX_WASM).expect("run build.sh near first")).await.unwrap();
+    let dex = w
+        .dev_deploy(&std::fs::read(DEX_WASM).expect("run build.sh near first"))
+        .await
+        .unwrap();
     let e: near_sdk::AccountId = executor.parse().unwrap();
-    dex.call("new").args(b(&e)).transact().await.unwrap().into_result().unwrap();
+    dex.call("new")
+        .args(b(&e))
+        .transact()
+        .await
+        .unwrap()
+        .into_result()
+        .unwrap();
     dex
 }
 
@@ -89,16 +111,40 @@ async fn setup_routed() -> DR {
     let read = |p: &str| std::fs::read(p).expect("run build.sh near first");
     let exec = t.w.dev_deploy(&read(EXEC_WASM)).await.unwrap();
     let router = t.w.dev_deploy(&read(ROUTER_WASM)).await.unwrap();
-    router.call("new").args(b(&acc(exec.id()))).transact().await.unwrap().into_result().unwrap();
-    exec.call("new").args(b(&acc(router.id()))).transact().await.unwrap().into_result().unwrap();
+    router
+        .call("new")
+        .args(b(&acc(exec.id())))
+        .transact()
+        .await
+        .unwrap()
+        .into_result()
+        .unwrap();
+    exec.call("new")
+        .args(b(&acc(router.id())))
+        .transact()
+        .await
+        .unwrap()
+        .into_result()
+        .unwrap();
     let dex = deploy_dex(&t.w, exec.id().as_str()).await;
-    DR { d: D { t, b: tb, dex }, router, exec }
+    DR {
+        d: D { t, b: tb, dex },
+        router,
+        exec,
+    }
 }
 
 impl DR {
     /// `who` relays `dex.settle(a, bl)` through the router, paid by `payer` (FEE of token A, open mode, salt `salt`):
     /// `target_gas` = `settle_gas`, `target_deposit` = `DEPOSIT`, the quoted relay deposit and exactly `relay_gas`.
-    async fn relay_settle(&self, who: &Account, payer: &Signer, a: &L, bl: &L, salt: [u8; 32]) -> ExecutionFinalResult {
+    async fn relay_settle(
+        &self,
+        who: &Account,
+        payer: &Signer,
+        a: &L,
+        bl: &L,
+        salt: [u8; 32],
+    ) -> ExecutionFinalResult {
         let d = &self.d;
         let (target, router) = (acc(d.dex.id()), acc(self.router.id()));
         let args = b(&(&a.order, &a.op, &a.auth, &bl.order, &bl.op, &bl.auth));
@@ -109,18 +155,59 @@ impl DR {
             lane: pay_lane(&r),
             relayer: Some(router.clone()),
             extra: salt,
-            ..d.t.op(OP_PAY, &payer.ua(), &Holder::Near(router.clone()), 0, &[])
+            ..d.t
+                .op(OP_PAY, &payer.ua(), &Holder::Near(router.clone()), 0, &[])
         };
         let auth = payer.sign(&op, ORIGIN);
         let tg = settle_gas(&a.auth, &bl.auth);
-        let rargs = b(&(&target, "settle", &args, tg, U128(DEPOSIT), acc(d.t.token.id()), &op, &auth));
-        let rc: RCheck = self.router.view("relay_check").args(rargs.clone()).await.unwrap().borsh().unwrap();
+        let rargs = b(&(
+            &target,
+            "settle",
+            &args,
+            tg,
+            U128(DEPOSIT),
+            acc(d.t.token.id()),
+            &op,
+            &auth,
+        ));
+        let rc: RCheck = self
+            .router
+            .view("relay_check")
+            .args(rargs.clone())
+            .await
+            .unwrap()
+            .borsh()
+            .unwrap();
         let hold = b(&(&router, acc(who.id()), &op, &auth));
-        let hc: Check = d.t.token.view("relay_hold_check").args(hold).await.unwrap().borsh().unwrap();
-        assert_eq!((rc.error.clone(), hc.error.clone()), (None, None), "relay quote");
-        let out = who.call(self.router.id(), "relay").args(rargs).deposit(NearToken::from_yoctonear(rc.deposit_needed.0 + hc.storage_needed.0))
-            .gas(relay_gas(&auth, tg)).transact().await.unwrap();
-        println!("relay settle by {}: {:.3} Tgas, ok {}", who.id(), tgas(&out), out.is_success());
+        let hc: Check =
+            d.t.token
+                .view("relay_hold_check")
+                .args(hold)
+                .await
+                .unwrap()
+                .borsh()
+                .unwrap();
+        assert_eq!(
+            (rc.error.clone(), hc.error.clone()),
+            (None, None),
+            "relay quote"
+        );
+        let out = who
+            .call(self.router.id(), "relay")
+            .args(rargs)
+            .deposit(NearToken::from_yoctonear(
+                rc.deposit_needed.0 + hc.storage_needed.0,
+            ))
+            .gas(relay_gas(&auth, tg))
+            .transact()
+            .await
+            .unwrap();
+        println!(
+            "relay settle by {}: {:.3} Tgas, ok {}",
+            who.id(),
+            tgas(&out),
+            out.is_success()
+        );
         out
     }
 }
@@ -136,7 +223,13 @@ fn entry_bytes(a: &L, bl: &L, relayer: &AccountId) -> u128 {
         digest: l.op.digest(),
         amount: l.op.amount,
     };
-    let s = Settle { legs: [leg(a), leg(bl)], relayer: acc(relayer), deposit: 0, expiry: VU, done: false };
+    let s = Settle {
+        legs: [leg(a), leg(bl)],
+        relayer: acc(relayer),
+        deposit: 0,
+        expiry: VU,
+        done: false,
+    };
     (40 + 33 + b(&s).len() as u128) + 2 * (40 + 33 + 32)
 }
 
@@ -150,7 +243,11 @@ fn settle_id(a: &MetaOp, b: &MetaOp) -> [u8; 32] {
 
 impl D {
     fn tok(&self, sell_a: bool) -> &Contract {
-        if sell_a { &self.t.token } else { &self.b }
+        if sell_a {
+            &self.t.token
+        } else {
+            &self.b
+        }
     }
 
     fn dex_h(&self) -> Holder {
@@ -163,37 +260,83 @@ impl D {
             Holder::Near(a) => a.to_string(),
             Holder::Ua(_) => self.t.alice.id().to_string(),
         };
-        let reg: Value = tok.view("storage_balance_of").args_json(json!({"account_id": to})).await.unwrap().json().unwrap();
-        let dep = if reg.is_null() { NearToken::from_millinear(100) } else { NearToken::from_yoctonear(1) };
-        let out = tok.call("mint").args_json(json!({"to": to, "amount": amount.to_string()})).deposit(dep).transact().await.unwrap();
+        let reg: Value = tok
+            .view("storage_balance_of")
+            .args_json(json!({"account_id": to}))
+            .await
+            .unwrap()
+            .json()
+            .unwrap();
+        let dep = if reg.is_null() {
+            NearToken::from_millinear(100)
+        } else {
+            NearToken::from_yoctonear(1)
+        };
+        let out = tok
+            .call("mint")
+            .args_json(json!({"to": to, "amount": amount.to_string()}))
+            .deposit(dep)
+            .transact()
+            .await
+            .unwrap();
         assert!(out.is_success(), "{:?}", out.failures());
         if let Holder::Ua(id) = h {
-            let out = self.t.alice.call(tok.id(), "transfer_to_ua")
+            let out = self
+                .t
+                .alice
+                .call(tok.id(), "transfer_to_ua")
                 .args_json(json!({"id": id.to_vec(), "amount": amount.to_string()}))
-                .deposit(NearToken::from_millinear(100)).transact().await.unwrap();
+                .deposit(NearToken::from_millinear(100))
+                .transact()
+                .await
+                .unwrap();
             assert!(out.is_success(), "{:?}", out.failures());
         }
     }
 
     async fn bal(&self, tok: &Contract, h: &Holder) -> u128 {
         let v: String = match h {
-            Holder::Near(a) => tok.view("ft_balance_of").args_json(json!({"account_id": a})).await.unwrap().json().unwrap(),
-            Holder::Ua(id) => tok.view("ua_balance_of").args_json(json!({"id": id.to_vec()})).await.unwrap().json().unwrap(),
+            Holder::Near(a) => tok
+                .view("ft_balance_of")
+                .args_json(json!({"account_id": a}))
+                .await
+                .unwrap()
+                .json()
+                .unwrap(),
+            Holder::Ua(id) => tok
+                .view("ua_balance_of")
+                .args_json(json!({"id": id.to_vec()}))
+                .await
+                .unwrap()
+                .json()
+                .unwrap(),
         };
         v.parse().unwrap()
     }
 
     /// A native maker's SCaaS key on `tok` (a direct call by the account itself, §3.3).
     async fn native_key(&self, tok: &Contract, who: &Account, s: &Signer) {
-        let out = who.call(tok.id(), "add_key_native").args(b(&(s.key(), None::<String>)))
-            .deposit(NearToken::from_millinear(100)).transact().await.unwrap();
+        let out = who
+            .call(tok.id(), "add_key_native")
+            .args(b(&(s.key(), None::<String>)))
+            .deposit(NearToken::from_millinear(100))
+            .transact()
+            .await
+            .unwrap();
         assert!(out.is_success(), "{:?}", out.failures());
     }
 
     /// An order selling `amount` of A (`sell_a`) or B for at least `min_buy` of the other; open relayer, no expiry soon.
     fn order(&self, sell_a: bool, amount: u128, min_buy: u128) -> Order {
         let (s, by) = (self.tok(sell_a), self.tok(!sell_a));
-        Order { sell_token: acc(s.id()), buy_token: acc(by.id()), sell_amount: amount, min_buy, relayer: None, expiry: VU }
+        Order {
+            sell_token: acc(s.id()),
+            buy_token: acc(by.id()),
+            sell_amount: amount,
+            min_buy,
+            relayer: None,
+            expiry: VU,
+        }
     }
 
     /// The leg op of `order` signed by `s` for `maker` on order lane `lane` at `nonce` (op 1, `to = relayer = dex`).
@@ -212,7 +355,11 @@ impl D {
             valid_until: VU,
             extra: sha(&b(&order)),
         };
-        L { auth: s.sign(&op, ORIGIN), order, op }
+        L {
+            auth: s.sign(&op, ORIGIN),
+            order,
+            op,
+        }
     }
 
     fn resign(&self, s: &Signer, mut l: L, f: impl FnOnce(&mut L)) -> L {
@@ -223,9 +370,20 @@ impl D {
 
     async fn settle_gas(&self, who: &Account, a: &L, bl: &L, gas: Gas) -> ExecutionFinalResult {
         let args = b(&(&a.order, &a.op, &a.auth, &bl.order, &bl.op, &bl.auth));
-        let out = who.call(self.dex.id(), "settle").args(args).deposit(NearToken::from_yoctonear(DEPOSIT)).gas(gas)
-            .transact().await.unwrap();
-        println!("settle by {}: {:.3} Tgas, ok {}", who.id(), tgas(&out), out.is_success());
+        let out = who
+            .call(self.dex.id(), "settle")
+            .args(args)
+            .deposit(NearToken::from_yoctonear(DEPOSIT))
+            .gas(gas)
+            .transact()
+            .await
+            .unwrap();
+        println!(
+            "settle by {}: {:.3} Tgas, ok {}",
+            who.id(),
+            tgas(&out),
+            out.is_success()
+        );
         out
     }
 
@@ -234,9 +392,21 @@ impl D {
     }
 
     /// `settle` with `deposit` attached, 300 Tgas.
-    async fn settle_dep(&self, who: &Account, a: &L, bl: &L, deposit: u128) -> ExecutionFinalResult {
+    async fn settle_dep(
+        &self,
+        who: &Account,
+        a: &L,
+        bl: &L,
+        deposit: u128,
+    ) -> ExecutionFinalResult {
         let args = b(&(&a.order, &a.op, &a.auth, &bl.order, &bl.op, &bl.auth));
-        who.call(self.dex.id(), "settle").args(args).deposit(NearToken::from_yoctonear(deposit)).max_gas().transact().await.unwrap()
+        who.call(self.dex.id(), "settle")
+            .args(args)
+            .deposit(NearToken::from_yoctonear(deposit))
+            .max_gas()
+            .transact()
+            .await
+            .unwrap()
     }
 
     /// The smallest deposit `settle(a, bl)` by `who` accepts: the entry, 2 yoctoNEAR, and twice the worst-case leg.
@@ -246,49 +416,117 @@ impl D {
     }
 
     async fn pending(&self, id: [u8; 32]) -> Option<Settle> {
-        self.dex.view("pending").args(b(&id)).await.unwrap().borsh().unwrap()
+        self.dex
+            .view("pending")
+            .args(b(&id))
+            .await
+            .unwrap()
+            .borsh()
+            .unwrap()
     }
 
     async fn leg_settle(&self, l: &L) -> Option<[u8; 32]> {
-        self.dex.view("leg_settle").args(b(&l.op.digest())).await.unwrap().borsh().unwrap()
+        self.dex
+            .view("leg_settle")
+            .args(b(&l.op.digest()))
+            .await
+            .unwrap()
+            .borsh()
+            .unwrap()
     }
 
     /// The escrow entry under key `s` ‖ id (the sandbox clock cannot jump to an expiry; a lost callback is staged).
     async fn patch(&self, id: [u8; 32], f: impl FnOnce(&mut Settle)) {
         let mut s = self.pending(id).await.unwrap();
         f(&mut s);
-        self.t.w.patch_state(self.dex.id(), &[b"s".as_slice(), &id].concat(), &b(&s)).await.unwrap();
+        self.t
+            .w
+            .patch_state(self.dex.id(), &[b"s".as_slice(), &id].concat(), &b(&s))
+            .await
+            .unwrap();
     }
 
     async fn refund(&self, who: &Account, id: [u8; 32]) -> ExecutionFinalResult {
-        let out = who.call(self.dex.id(), "refund_expired").args(b(&id)).max_gas().transact().await.unwrap();
-        println!("refund_expired by {}: {:.3} Tgas, ok {}", who.id(), tgas(&out), out.is_success());
+        let out = who
+            .call(self.dex.id(), "refund_expired")
+            .args(b(&id))
+            .max_gas()
+            .transact()
+            .await
+            .unwrap();
+        println!(
+            "refund_expired by {}: {:.3} Tgas, ok {}",
+            who.id(),
+            tgas(&out),
+            out.is_success()
+        );
         out
     }
 
     async fn trade_check(&self, caller: &AccountId, l: &L, receiver: &Holder) -> Check {
-        let tok = if l.op.contract.as_str() == self.t.token.id().as_str() { &self.t.token } else { &self.b };
+        let tok = if l.op.contract.as_str() == self.t.token.id().as_str() {
+            &self.t.token
+        } else {
+            &self.b
+        };
         let args = b(&(acc(caller), &l.op, &l.auth, &l.order, receiver));
-        tok.view("mtx_trade_check").args(args).await.unwrap().borsh().unwrap()
+        tok.view("mtx_trade_check")
+            .args(args)
+            .await
+            .unwrap()
+            .borsh()
+            .unwrap()
     }
 
     async fn closed(&self, l: &L) -> Option<OrderClose> {
-        let tok = if l.op.contract.as_str() == self.t.token.id().as_str() { &self.t.token } else { &self.b };
-        tok.view("order_closed").args(b(&(&l.op.from, l.op.lane, l.op.nonce))).await.unwrap().borsh().unwrap()
+        let tok = if l.op.contract.as_str() == self.t.token.id().as_str() {
+            &self.t.token
+        } else {
+            &self.b
+        };
+        tok.view("order_closed")
+            .args(b(&(&l.op.from, l.op.lane, l.op.nonce)))
+            .await
+            .unwrap()
+            .borsh()
+            .unwrap()
     }
 
     async fn filled(&self, l: &L) -> bool {
-        let tok = if l.op.contract.as_str() == self.t.token.id().as_str() { &self.t.token } else { &self.b };
-        tok.view("filled").args(b(&(&l.op.from, l.op.lane, l.op.nonce))).await.unwrap().borsh().unwrap()
+        let tok = if l.op.contract.as_str() == self.t.token.id().as_str() {
+            &self.t.token
+        } else {
+            &self.b
+        };
+        tok.view("filled")
+            .args(b(&(&l.op.from, l.op.lane, l.op.nonce)))
+            .await
+            .unwrap()
+            .borsh()
+            .unwrap()
     }
 
     /// Each leg's receipt burnt ≤ its derived static gas (`leg_gas` of its auth) / 1.2; returns the two figures (Tgas).
     fn legs_within(&self, out: &ExecutionFinalResult, a: &L, bl: &L) -> [f64; 2] {
         let mut r = [0.0; 2];
-        for o in out.receipt_outcomes().iter().filter(|o| o.logs.iter().any(|l| l.contains("order_filled"))) {
-            let (i, l) = if o.executor_id.as_str() == a.order.sell_token.as_str() { (0, a) } else { (1, bl) };
-            let (burnt, pin) = (o.gas_burnt.as_gas() as f64 / 1e12, leg_gas(&l.auth).as_gas() as f64 / 1e12);
-            assert!(burnt <= pin / 1.2, "leg {i}: {burnt} Tgas over leg_gas {pin} / 1.2");
+        for o in out
+            .receipt_outcomes()
+            .iter()
+            .filter(|o| o.logs.iter().any(|l| l.contains("order_filled")))
+        {
+            let (i, l) = if o.executor_id.as_str() == a.order.sell_token.as_str() {
+                (0, a)
+            } else {
+                (1, bl)
+            };
+            let (burnt, pin) = (
+                o.gas_burnt.as_gas() as f64 / 1e12,
+                leg_gas(&l.auth).as_gas() as f64 / 1e12,
+            );
+            assert!(
+                burnt <= pin / 1.2,
+                "leg {i}: {burnt} Tgas over leg_gas {pin} / 1.2"
+            );
             r[i] = burnt;
         }
         assert!(r[0] > 0.0 && r[1] > 0.0, "both legs ran");
@@ -317,11 +555,21 @@ fn has(out: &ExecutionFinalResult, s: &str) -> bool {
 
 /// `matched` / `match_failed` carry both leg digests (settle-argument order) and the refunded legs by digest (M2).
 fn legs_json(a: &L, bl: &L) -> String {
-    format!(r#""legs":["0x{}","0x{}"]"#, hex(&a.op.digest()), hex(&bl.op.digest()))
+    format!(
+        r#""legs":["0x{}","0x{}"]"#,
+        hex(&a.op.digest()),
+        hex(&bl.op.digest())
+    )
 }
 
 fn refunded_json(ls: &[&L]) -> String {
-    format!(r#""refunded":[{}]"#, ls.iter().map(|l| format!(r#""0x{}""#, hex(&l.op.digest()))).collect::<Vec<_>>().join(","))
+    format!(
+        r#""refunded":[{}]"#,
+        ls.iter()
+            .map(|l| format!(r#""0x{}""#, hex(&l.op.digest())))
+            .collect::<Vec<_>>()
+            .join(",")
+    )
 }
 
 fn failed_with(out: &ExecutionFinalResult, err: &str) -> bool {
@@ -336,48 +584,121 @@ async fn settle_pays_both_legs() {
     let (e, bob) = (erin.ua(), d.t.near(&d.t.bob));
     let cost = d.t.byte_cost().await;
     // the relayer's quote: each leg's `mtx_trade_check` with the DEX as caller (the receiver is the other maker)
-    let (ca, cb) = (d.trade_check(d.dex.id(), &a, &bob).await, d.trade_check(d.dex.id(), &bl, &e).await);
+    let (ca, cb) = (
+        d.trade_check(d.dex.id(), &a, &bob).await,
+        d.trade_check(d.dex.id(), &bl, &e).await,
+    );
     assert_eq!((ca.error.clone(), cb.error.clone()), (None, None));
-    let opened = record_bytes(&e, &Subject { keys: vec![erin.key()], ..Default::default() });
+    let opened = record_bytes(
+        &e,
+        &Subject {
+            keys: vec![erin.key()],
+            ..Default::default()
+        },
+    );
     let filled = |h: &Holder| order_bytes(h, &OrderClose::Filled([0; 32]));
     // leg A: erin opened lazily, the order record, the DEX and bob registered on A
-    assert_eq!(ca.storage_needed.0, (opened + filled(&e) + 2 * ACCOUNT_STORAGE_BYTES) as u128 * cost);
+    assert_eq!(
+        ca.storage_needed.0,
+        (opened + filled(&e) + 2 * ACCOUNT_STORAGE_BYTES) as u128 * cost
+    );
     // leg B: bob's subject exists (add_key_native); the order record, the DEX registered on B, erin's UA record on B
-    assert_eq!(cb.storage_needed.0, (filled(&bob) + ACCOUNT_STORAGE_BYTES + scaas_near_token::UA_STORAGE_BYTES) as u128 * cost);
-    let (ua, ub, ud) = (d.usage(&d.t.token).await, d.usage(&d.b).await, d.usage(&d.dex).await);
+    assert_eq!(
+        cb.storage_needed.0,
+        (filled(&bob) + ACCOUNT_STORAGE_BYTES + scaas_near_token::UA_STORAGE_BYTES) as u128 * cost
+    );
+    let (ua, ub, ud) = (
+        d.usage(&d.t.token).await,
+        d.usage(&d.b).await,
+        d.usage(&d.dex).await,
+    );
     let n0 = d.dex.view_account().await.unwrap().balance.as_yoctonear();
     let out = d.settle(&d.t.relayer, &a, &bl).await;
     assert!(out.is_success(), "{:?}", out.failures());
     for o in out.receipt_outcomes() {
-        println!("  receipt {} {:.3} Tgas {:?}", o.executor_id, o.gas_burnt.as_gas() as f64 / 1e12, o.logs.first());
+        println!(
+            "  receipt {} {:.3} Tgas {:?}",
+            o.executor_id,
+            o.gas_burnt.as_gas() as f64 / 1e12,
+            o.logs.first()
+        );
     }
-    assert!(out.receipt_outcomes().iter().all(|o| o.is_success()), "every receipt succeeds: {:?}", out.failures());
+    assert!(
+        out.receipt_outcomes().iter().all(|o| o.is_success()),
+        "every receipt succeeds: {:?}",
+        out.failures()
+    );
     // each leg's excess deposit went to the signer: the DEX kept only its entry deposit (+ gas reward, < 0.001 NEAR)
     let kept = d.dex.view_account().await.unwrap().balance.as_yoctonear() - n0;
     let dep = d.pending(settle_id(&a.op, &bl.op)).await.unwrap().deposit;
-    assert!(kept >= dep && kept - dep < NearToken::from_millinear(1).as_yoctonear(), "DEX kept {kept} yocto");
+    assert!(
+        kept >= dep && kept - dep < NearToken::from_millinear(1).as_yoctonear(),
+        "DEX kept {kept} yocto"
+    );
     // each side receives the other's full sell_amount: bob 100 A by ft_transfer, erin 60 B by transfer_to_ua
-    assert_eq!((d.bal(&d.t.token, &e).await, d.bal(&d.t.token, &bob).await), (0, 100));
+    assert_eq!(
+        (d.bal(&d.t.token, &e).await, d.bal(&d.t.token, &bob).await),
+        (0, 100)
+    );
     assert_eq!((d.bal(&d.b, &bob).await, d.bal(&d.b, &e).await), (0, 60));
-    assert_eq!((d.bal(&d.t.token, &d.dex_h()).await, d.bal(&d.b, &d.dex_h()).await), (0, 0), "escrow empty");
+    assert_eq!(
+        (
+            d.bal(&d.t.token, &d.dex_h()).await,
+            d.bal(&d.b, &d.dex_h()).await
+        ),
+        (0, 0),
+        "escrow empty"
+    );
     let id = settle_id(&a.op, &bl.op);
-    assert!(has(&out, r#""event":"matched""#) && has(&out, &hex(&id)), "{:?}", out.logs());
-    assert!(has(&out, &legs_json(&a, &bl)), "matched names both leg digests: {:?}", out.logs());
+    assert!(
+        has(&out, r#""event":"matched""#) && has(&out, &hex(&id)),
+        "{:?}",
+        out.logs()
+    );
+    assert!(
+        has(&out, &legs_json(&a, &bl)),
+        "matched names both leg digests: {:?}",
+        out.logs()
+    );
     assert!(has(&out, r#""event":"order_filled""#));
-    assert!(has(&out, &format!(r#""old_owner_id":"{}","new_owner_id":"{}","amount":"100""#, d.dex.id(), d.t.bob.id())));
-    assert!(has(&out, &format!(r#""from":"{}","to":"{e}","amount":"60""#, d.dex.id())), "ua_transfer to erin");
+    assert!(has(
+        &out,
+        &format!(
+            r#""old_owner_id":"{}","new_owner_id":"{}","amount":"100""#,
+            d.dex.id(),
+            d.t.bob.id()
+        )
+    ));
+    assert!(
+        has(
+            &out,
+            &format!(r#""from":"{}","to":"{e}","amount":"60""#, d.dex.id())
+        ),
+        "ua_transfer to erin"
+    );
     assert!(d.filled(&a).await && d.filled(&bl).await);
     assert_eq!(d.closed(&a).await, Some(OrderClose::Filled(a.op.digest())));
     // storage: what each check quoted, less NEP-145's fixed 64-char registration over the real ids
     let short = |x: &AccountId| 64 - x.as_str().len() as u64;
     let grew_a = d.usage(&d.t.token).await - ua;
-    assert_eq!(grew_a, opened + filled(&e) + 2 * ACCOUNT_STORAGE_BYTES - short(d.dex.id()) - short(d.t.bob.id()));
+    assert_eq!(
+        grew_a,
+        opened + filled(&e) + 2 * ACCOUNT_STORAGE_BYTES - short(d.dex.id()) - short(d.t.bob.id())
+    );
     let grew_b = d.usage(&d.b).await - ub;
-    assert_eq!(grew_b, filled(&bob) + ACCOUNT_STORAGE_BYTES - short(d.dex.id()) + scaas_near_token::UA_STORAGE_BYTES);
+    assert_eq!(
+        grew_b,
+        filled(&bob) + ACCOUNT_STORAGE_BYTES - short(d.dex.id())
+            + scaas_near_token::UA_STORAGE_BYTES
+    );
     let s = d.pending(id).await.unwrap();
     let entry = d.usage(&d.dex).await - ud;
     assert!(s.done);
-    assert_eq!(s.deposit, entry as u128 * cost, "the entry's deposit = its measured bytes");
+    assert_eq!(
+        s.deposit,
+        entry as u128 * cost,
+        "the entry's deposit = its measured bytes"
+    );
     println!("storage: token A +{grew_a} B, token B +{grew_b} B, dex entry +{entry} B (order record {} B UA / {} B native)",
         filled(&e), filled(&bob));
     // the entry (and the leg index) stays until both expiries; then anyone prunes it and the relayer gets its deposit
@@ -385,13 +706,36 @@ async fn settle_pays_both_legs() {
     assert!(failed_with(&out, BEFORE_EXPIRY), "{:?}", out.failures());
     let now = d.t.now_s().await;
     d.patch(id, |s| s.expiry = now - 1).await;
-    let r0 = d.t.relayer.view_account().await.unwrap().balance.as_yoctonear();
+    let r0 =
+        d.t.relayer
+            .view_account()
+            .await
+            .unwrap()
+            .balance
+            .as_yoctonear();
     let out = d.refund(&d.t.alice, id).await;
     assert!(out.is_success(), "{:?}", out.failures());
-    assert_eq!(d.t.relayer.view_account().await.unwrap().balance.as_yoctonear() - r0, s.deposit, "deposit back");
-    assert_eq!((d.pending(id).await, d.usage(&d.dex).await), (None, ud), "pruned");
+    assert_eq!(
+        d.t.relayer
+            .view_account()
+            .await
+            .unwrap()
+            .balance
+            .as_yoctonear()
+            - r0,
+        s.deposit,
+        "deposit back"
+    );
+    assert_eq!(
+        (d.pending(id).await, d.usage(&d.dex).await),
+        (None, ud),
+        "pruned"
+    );
     // nothing moved on the prune
-    assert_eq!((d.bal(&d.t.token, &bob).await, d.bal(&d.b, &e).await), (100, 60));
+    assert_eq!(
+        (d.bal(&d.t.token, &bob).await, d.bal(&d.b, &e).await),
+        (100, 60)
+    );
 }
 
 /// Task 16 fix 2 (review f1): `leg_settle(digest)` answers the settle a leg is indexed in, from `settle` until the entry
@@ -401,18 +745,29 @@ async fn leg_settle_view_tracks_the_index() {
     let d = setup_dex().await;
     let (erin, bobk) = (Signer::ed("erin"), Signer::ed("bobk"));
     let (a, bl) = d.pair(&erin, &bobk).await;
-    assert_eq!((d.leg_settle(&a).await, d.leg_settle(&bl).await), (None, None), "not indexed before settle");
+    assert_eq!(
+        (d.leg_settle(&a).await, d.leg_settle(&bl).await),
+        (None, None),
+        "not indexed before settle"
+    );
     let out = d.settle(&d.t.relayer, &a, &bl).await;
     assert!(out.is_success(), "{:?}", out.failures());
     let id = settle_id(&a.op, &bl.op);
-    assert_eq!((d.leg_settle(&a).await, d.leg_settle(&bl).await), (Some(id), Some(id)));
+    assert_eq!(
+        (d.leg_settle(&a).await, d.leg_settle(&bl).await),
+        (Some(id), Some(id))
+    );
     let out = d.settle(&d.t.relayer, &a, &bl).await;
     assert!(failed_with(&out, IN_SETTLE), "{:?}", out.failures());
     let now = d.t.now_s().await;
     d.patch(id, |s| s.expiry = now - 1).await;
     let out = d.refund(&d.t.alice, id).await;
     assert!(out.is_success(), "{:?}", out.failures());
-    assert_eq!((d.leg_settle(&a).await, d.leg_settle(&bl).await), (None, None), "pruned with the entry");
+    assert_eq!(
+        (d.leg_settle(&a).await, d.leg_settle(&bl).await),
+        (None, None),
+        "pruned with the entry"
+    );
 }
 
 /// One leg refused (it returns `false` and nothing moves on its token), the other refunded by `on_legs`: a UA seller by
@@ -431,27 +786,80 @@ async fn one_leg_fails_other_refunded() {
     let n0 = d.dex.view_account().await.unwrap().balance.as_yoctonear();
     let out = d.settle(&d.t.relayer, &a, &bl).await;
     assert!(out.is_success(), "{:?}", out.failures());
-    assert!(has(&out, "mtx_trade refused: The account doesn't have enough balance"), "{:?}", out.logs());
+    assert!(
+        has(
+            &out,
+            "mtx_trade refused: The account doesn't have enough balance"
+        ),
+        "{:?}",
+        out.logs()
+    );
     // the refused leg's deposit (~0.046 NEAR) went back to the signer: the DEX kept its entry deposit, 1 yoctoNEAR and
     // its gas reward (30 % of its receipts' gas, < 0.001 NEAR)
     let s = d.pending(settle_id(&a.op, &bl.op)).await.unwrap();
     let kept = d.dex.view_account().await.unwrap().balance.as_yoctonear() - n0 - s.deposit;
-    assert!(kept < NearToken::from_millinear(1).as_yoctonear(), "DEX kept {kept} yocto");
+    assert!(
+        kept < NearToken::from_millinear(1).as_yoctonear(),
+        "DEX kept {kept} yocto"
+    );
     assert!(has(&out, r#""event":"match_failed""#), "{:?}", out.logs());
-    assert!(has(&out, &format!("{},{}", legs_json(&a, &bl), refunded_json(&[&a]))), "{:?}", out.logs());
-    assert_eq!((d.bal(&d.t.token, &e).await, d.bal(&d.b, &bob).await), (100, 10), "erin refunded, bob untouched");
-    assert_eq!((d.bal(&d.t.token, &d.dex_h()).await, d.bal(&d.t.token, &bob).await), (0, 0));
+    assert!(
+        has(
+            &out,
+            &format!("{},{}", legs_json(&a, &bl), refunded_json(&[&a]))
+        ),
+        "{:?}",
+        out.logs()
+    );
+    assert_eq!(
+        (d.bal(&d.t.token, &e).await, d.bal(&d.b, &bob).await),
+        (100, 10),
+        "erin refunded, bob untouched"
+    );
+    assert_eq!(
+        (
+            d.bal(&d.t.token, &d.dex_h()).await,
+            d.bal(&d.t.token, &bob).await
+        ),
+        (0, 0)
+    );
     assert_eq!(d.usage(&d.b).await, ub, "the refused leg wrote nothing");
     assert!(d.filled(&a).await && !d.filled(&bl).await);
     // the other way round: erin's leg refused (signed by a key that is not hers), bob's 60 B refunded by ft_transfer
     d.fund(&d.b, &bob, 50).await;
-    let a2 = d.resign(&bobk, d.leg(&erin, &e, d.order(true, 100, 50), [0xa0; 32], 1), |_| {});
+    let a2 = d.resign(
+        &bobk,
+        d.leg(&erin, &e, d.order(true, 100, 50), [0xa0; 32], 1),
+        |_| {},
+    );
     let b2 = d.leg(&bobk, &bob, d.order(false, 60, 100), [0xb0; 32], 1);
     let out = d.settle(&d.t.relayer, &a2, &b2).await;
-    assert!(has(&out, "mtx_trade refused: not a key of the subject"), "{:?}", out.logs());
-    assert!(out.is_success() && has(&out, r#""event":"match_failed""#), "{:?}", out.logs());
-    assert!(has(&out, &format!("{},{}", legs_json(&a2, &b2), refunded_json(&[&b2]))), "{:?}", out.logs());
-    assert_eq!((d.bal(&d.b, &bob).await, d.bal(&d.b, &d.dex_h()).await, d.bal(&d.t.token, &e).await), (60, 0, 100));
+    assert!(
+        has(&out, "mtx_trade refused: not a key of the subject"),
+        "{:?}",
+        out.logs()
+    );
+    assert!(
+        out.is_success() && has(&out, r#""event":"match_failed""#),
+        "{:?}",
+        out.logs()
+    );
+    assert!(
+        has(
+            &out,
+            &format!("{},{}", legs_json(&a2, &b2), refunded_json(&[&b2]))
+        ),
+        "{:?}",
+        out.logs()
+    );
+    assert_eq!(
+        (
+            d.bal(&d.b, &bob).await,
+            d.bal(&d.b, &d.dex_h()).await,
+            d.bal(&d.t.token, &e).await
+        ),
+        (60, 0, 100)
+    );
     assert!(d.filled(&b2).await, "bob's refunded order stays closed");
 }
 
@@ -462,14 +870,38 @@ async fn order_relayer_mismatch_refused() {
     let (erin, bobk) = (Signer::ed("erin"), Signer::ed("bobk"));
     let (a, bl) = d.pair(&erin, &bobk).await;
     let e = erin.ua();
-    let a = d.leg(&erin, &e, Order { relayer: Some(acc(d.t.relayer.id())), ..a.order }, [0xa0; 32], 0);
+    let a = d.leg(
+        &erin,
+        &e,
+        Order {
+            relayer: Some(acc(d.t.relayer.id())),
+            ..a.order
+        },
+        [0xa0; 32],
+        0,
+    );
     let out = d.settle(&d.t.alice, &a, &bl).await;
     assert!(failed_with(&out, ORDER_RELAYER), "{:?}", out.failures());
     let out = d.settle(&d.t.alice, &bl, &a).await;
-    assert!(failed_with(&out, ORDER_RELAYER), "either side: {:?}", out.failures());
-    assert_eq!((d.bal(&d.t.token, &e).await, d.pending(settle_id(&a.op, &bl.op)).await), (100, None), "nothing moved");
+    assert!(
+        failed_with(&out, ORDER_RELAYER),
+        "either side: {:?}",
+        out.failures()
+    );
+    assert_eq!(
+        (
+            d.bal(&d.t.token, &e).await,
+            d.pending(settle_id(&a.op, &bl.op)).await
+        ),
+        (100, None),
+        "nothing moved"
+    );
     let out = d.settle(&d.t.relayer, &a, &bl).await;
-    assert!(out.is_success() && has(&out, r#""event":"matched""#), "{:?}", out.failures());
+    assert!(
+        out.is_success() && has(&out, r#""event":"matched""#),
+        "{:?}",
+        out.failures()
+    );
 }
 
 /// Only the order's DEX (`to = relayer = predecessor`) pulls a leg: a direct call, or another contract, moves nothing.
@@ -482,34 +914,112 @@ async fn leg_called_by_non_dex_refused() {
     let c = d.trade_check(d.t.bob.id(), &a, &bob).await;
     assert_eq!(c.error.as_deref(), Some(NOT_DEX));
     let args = b(&(&a.op, &a.auth, &a.order, &bob));
-    let out = d.t.bob.call(d.t.token.id(), "mtx_trade").args(args).deposit(NearToken::from_millinear(10)).max_gas()
-        .transact().await.unwrap();
-    assert!(out.is_success(), "a refused leg returns false: {:?}", out.failures());
-    assert!(has(&out, &format!("mtx_trade refused: {NOT_DEX}")), "{:?}", out.logs());
+    let out =
+        d.t.bob
+            .call(d.t.token.id(), "mtx_trade")
+            .args(args)
+            .deposit(NearToken::from_millinear(10))
+            .max_gas()
+            .transact()
+            .await
+            .unwrap();
+    assert!(
+        out.is_success(),
+        "a refused leg returns false: {:?}",
+        out.failures()
+    );
+    assert!(
+        has(&out, &format!("mtx_trade refused: {NOT_DEX}")),
+        "{:?}",
+        out.logs()
+    );
     assert!(!out.borsh::<bool>().unwrap());
-    assert_eq!((d.bal(&d.t.token, &e).await, d.bal(&d.t.token, &bob).await, d.filled(&a).await), (100, 0, false));
+    assert_eq!(
+        (
+            d.bal(&d.t.token, &e).await,
+            d.bal(&d.t.token, &bob).await,
+            d.filled(&a).await
+        ),
+        (100, 0, false)
+    );
     // the leg op must name the DEX as relayer too (`relayer = None` would let any caller pull it)
     let open = d.resign(&erin, a.clone(), |l| l.op.relayer = None);
-    assert_eq!(d.trade_check(d.dex.id(), &open, &bob).await.error.as_deref(), Some(NOT_DEX));
+    assert_eq!(
+        d.trade_check(d.dex.id(), &open, &bob)
+            .await
+            .error
+            .as_deref(),
+        Some(NOT_DEX)
+    );
     let other = d.resign(&erin, a.clone(), |l| l.op.to = bob.clone());
-    assert_eq!(d.trade_check(d.dex.id(), &other, &bob).await.error.as_deref(), Some(NOT_DEX));
-    assert_eq!(d.trade_check(d.dex.id(), &a, &bob).await.error, None, "the DEX itself may");
+    assert_eq!(
+        d.trade_check(d.dex.id(), &other, &bob)
+            .await
+            .error
+            .as_deref(),
+        Some(NOT_DEX)
+    );
+    assert_eq!(
+        d.trade_check(d.dex.id(), &a, &bob).await.error,
+        None,
+        "the DEX itself may"
+    );
     // the token's own leg checks (the DEX checks the shape too, the token is the authority)
     let now = d.t.now_s().await;
     let cases: [(L, &str); 4] = [
-        (d.resign(&erin, a.clone(), |l| l.order.min_buy = 1), "extra is not sha256 of the order"),
-        (d.leg(&erin, &e, Order { expiry: now - 1, ..a.order.clone() }, [0xa0; 32], 0), "order expired"),
-        (d.resign(&erin, a.clone(), |l| l.order.sell_token = acc(d.b.id())), "order sells another token"),
-        (d.resign(&erin, a.clone(), |l| l.op.pay_ref = [1; 32]), "a trade leg carries no pay_ref"),
+        (
+            d.resign(&erin, a.clone(), |l| l.order.min_buy = 1),
+            "extra is not sha256 of the order",
+        ),
+        (
+            d.leg(
+                &erin,
+                &e,
+                Order {
+                    expiry: now - 1,
+                    ..a.order.clone()
+                },
+                [0xa0; 32],
+                0,
+            ),
+            "order expired",
+        ),
+        (
+            d.resign(&erin, a.clone(), |l| l.order.sell_token = acc(d.b.id())),
+            "order sells another token",
+        ),
+        (
+            d.resign(&erin, a.clone(), |l| l.op.pay_ref = [1; 32]),
+            "a trade leg carries no pay_ref",
+        ),
     ];
     for (l, err) in cases {
-        assert_eq!(d.trade_check(d.dex.id(), &l, &bob).await.error.as_deref(), Some(err));
+        assert_eq!(
+            d.trade_check(d.dex.id(), &l, &bob).await.error.as_deref(),
+            Some(err)
+        );
     }
     // ruling R8: a trade leg is a value op, so POLICY_PASSKEY_FOR_VALUE needs a passkey
-    let op = d.t.op(OP_SET_GUARDIAN, &e, &e, 0, &[KEYOP_SET_POLICY, POLICY_PASSKEY_FOR_VALUE]);
-    d.t.ok(&d.t.relayer, "mtx_set_policy", &op, &erin.sign(&op, ORIGIN), &b(&POLICY_PASSKEY_FOR_VALUE)).await;
+    let op = d.t.op(
+        OP_SET_GUARDIAN,
+        &e,
+        &e,
+        0,
+        &[KEYOP_SET_POLICY, POLICY_PASSKEY_FOR_VALUE],
+    );
+    d.t.ok(
+        &d.t.relayer,
+        "mtx_set_policy",
+        &op,
+        &erin.sign(&op, ORIGIN),
+        &b(&POLICY_PASSKEY_FOR_VALUE),
+    )
+    .await;
     let c = d.trade_check(d.dex.id(), &a, &bob).await;
-    assert_eq!(c.error.as_deref(), Some("POLICY_PASSKEY_FOR_VALUE: value ops need a passkey signature"));
+    assert_eq!(
+        c.error.as_deref(),
+        Some("POLICY_PASSKEY_FOR_VALUE: value ops need a passkey signature")
+    );
 }
 
 /// The DEX checks each leg against its order before any call: a mismatch fails `settle` and moves nothing.
@@ -524,9 +1034,27 @@ async fn settle_leg_shape_refused() {
     let cases: [(L, &str); 5] = [
         (d.resign(&erin, a.clone(), |l| l.op.relayer = None), shape),
         (d.resign(&erin, a.clone(), |l| l.op.op = OP_PAY), shape),
-        (d.resign(&erin, a.clone(), |l| l.op.contract = acc(d.b.id())), shape),
-        (d.resign(&erin, a.clone(), |l| l.order.min_buy = 1), "extra is not sha256 of the order"),
-        (d.leg(&erin, &e, Order { expiry: now - 1, ..a.order.clone() }, [0xa0; 32], 0), "order expired"),
+        (
+            d.resign(&erin, a.clone(), |l| l.op.contract = acc(d.b.id())),
+            shape,
+        ),
+        (
+            d.resign(&erin, a.clone(), |l| l.order.min_buy = 1),
+            "extra is not sha256 of the order",
+        ),
+        (
+            d.leg(
+                &erin,
+                &e,
+                Order {
+                    expiry: now - 1,
+                    ..a.order.clone()
+                },
+                [0xa0; 32],
+                0,
+            ),
+            "order expired",
+        ),
     ];
     for (l, err) in cases {
         let out = d.settle(&d.t.relayer, &l, &bl).await;
@@ -547,22 +1075,62 @@ async fn settle_deposit_short_refused() {
     let cost = d.t.byte_cost().await;
     let entry = entry_bytes(&a, &bl, d.t.relayer.id());
     let out = d.settle_dep(&d.t.relayer, &a, &bl, entry * cost + 1).await;
-    assert!(failed_with(&out, "attached deposit below the escrow entry storage"), "{:?}", out.failures());
+    assert!(
+        failed_with(&out, "attached deposit below the escrow entry storage"),
+        "{:?}",
+        out.failures()
+    );
     // the entry + 2 yoctoNEAR used to settle with both legs refused ("short of the leg's storage"): now refused at settle
     let out = d.settle_dep(&d.t.relayer, &a, &bl, entry * cost + 2).await;
     assert!(failed_with(&out, LEG_SHARE), "{:?}", out.failures());
     let floor = d.floor(&d.t.relayer, &a, &bl).await;
     let out = d.settle_dep(&d.t.relayer, &a, &bl, floor - 1).await;
-    assert!(failed_with(&out, LEG_SHARE), "one yoctoNEAR under the floor: {:?}", out.failures());
-    assert_eq!((d.bal(&d.t.token, &erin.ua()).await, d.filled(&a).await, d.filled(&bl).await), (100, false, false));
-    assert_eq!(d.pending(settle_id(&a.op, &bl.op)).await, None, "nothing held");
-    let r0 = d.t.relayer.view_account().await.unwrap().balance.as_yoctonear();
+    assert!(
+        failed_with(&out, LEG_SHARE),
+        "one yoctoNEAR under the floor: {:?}",
+        out.failures()
+    );
+    assert_eq!(
+        (
+            d.bal(&d.t.token, &erin.ua()).await,
+            d.filled(&a).await,
+            d.filled(&bl).await
+        ),
+        (100, false, false)
+    );
+    assert_eq!(
+        d.pending(settle_id(&a.op, &bl.op)).await,
+        None,
+        "nothing held"
+    );
+    let r0 =
+        d.t.relayer
+            .view_account()
+            .await
+            .unwrap()
+            .balance
+            .as_yoctonear();
     let out = d.settle_dep(&d.t.relayer, &a, &bl, floor).await;
-    assert!(out.is_success() && has(&out, r#""event":"matched""#), "{:?}", out.failures());
+    assert!(
+        out.is_success() && has(&out, r#""event":"matched""#),
+        "{:?}",
+        out.failures()
+    );
     let id = settle_id(&a.op, &bl.op);
-    assert_eq!(d.pending(id).await.unwrap().deposit, entry * cost, "measured = formula ({entry} B)");
+    assert_eq!(
+        d.pending(id).await.unwrap().deposit,
+        entry * cost,
+        "measured = formula ({entry} B)"
+    );
     // what the relayer kept paying: the entry deposit and the legs' real storage; each leg's excess came back
-    let spent = r0 - d.t.relayer.view_account().await.unwrap().balance.as_yoctonear();
+    let spent = r0
+        - d.t
+            .relayer
+            .view_account()
+            .await
+            .unwrap()
+            .balance
+            .as_yoctonear();
     let legs = d.usage(&d.t.token).await + d.usage(&d.b).await;
     println!("settle at the floor {floor} yocto ({} B per leg pinned): the relayer spent {spent} yocto in all (entry {} yocto, token storage now {legs} B)",
         LEG_STORAGE_MAX_BYTES, entry * cost);
@@ -581,33 +1149,88 @@ async fn settle_worst_case_leg_storage_pin() {
     let bob = d.t.near(&d.t.bob);
     let mut ms: Vec<Signer> = (40..52).map(|i| Signer::pk(i, RP)).collect();
     ms.sort_by_key(|s| s.key().id());
-    let body: Vec<u8> = ms.iter().flat_map(|s| [&ua::KIND_WEBAUTHN_P256.to_be_bytes()[..], &s.key().id(), &[0, 1]].concat()).collect();
+    let body: Vec<u8> = ms
+        .iter()
+        .flat_map(|s| {
+            [
+                &ua::KIND_WEBAUTHN_P256.to_be_bytes()[..],
+                &s.key().id(),
+                &[0, 1],
+            ]
+            .concat()
+        })
+        .collect();
     let kd = [&[0u8, MAX_ORIGINS as u8, 0, 12][..], &body].concat();
     let m = Holder::Ua(ua::ua_of(KIND_MSIG, &kd));
     d.fund(&d.t.token, &m, 100).await;
     d.fund(&d.b, &bob, 60).await;
     d.native_key(&d.b, &d.t.bob, &bobk).await;
-    let origins: Vec<String> =
-        (0..MAX_ORIGINS).map(|i| format!("https://{}{}", (b'a' + i as u8) as char, "x".repeat(MAX_ORIGIN_LEN - 9))).collect();
+    let origins: Vec<String> = (0..MAX_ORIGINS)
+        .map(|i| {
+            format!(
+                "https://{}{}",
+                (b'a' + i as u8) as char,
+                "x".repeat(MAX_ORIGIN_LEN - 9)
+            )
+        })
+        .collect();
     assert!(origins.iter().all(|o| o.len() == MAX_ORIGIN_LEN));
     let one = d.leg(&ms[0], &m, d.order(true, 100, 50), [0xa0; 32], 0);
-    let sigs = ms[..MAX_ORIGINS].iter().zip(&origins).enumerate().map(|(i, (s, o))| (i as u8, s.sign(&one.op, o))).collect();
-    let a = L { auth: Auth::Msig { key_data: kd.clone(), sigs }, ..one };
+    let sigs = ms[..MAX_ORIGINS]
+        .iter()
+        .zip(&origins)
+        .enumerate()
+        .map(|(i, (s, o))| (i as u8, s.sign(&one.op, o)))
+        .collect();
+    let a = L {
+        auth: Auth::Msig {
+            key_data: kd.clone(),
+            sigs,
+        },
+        ..one
+    };
     let bl = d.leg(&bobk, &bob, d.order(false, 60, 100), [0xb0; 32], 0);
     let cost = d.t.byte_cost().await;
     let c = d.trade_check(d.dex.id(), &a, &bob).await;
     assert_eq!(c.error, None);
-    let subject = Subject { keys: vec![KeyRecord { kind: KIND_MSIG, key_data: kd }], origins, ..Default::default() };
-    let worst = record_bytes(&m, &subject) + order_bytes(&m, &OrderClose::Filled([0; 32])) + 2 * ACCOUNT_STORAGE_BYTES;
-    assert_eq!(c.storage_needed.0, worst as u128 * cost, "measured = the token's formula");
+    let subject = Subject {
+        keys: vec![KeyRecord {
+            kind: KIND_MSIG,
+            key_data: kd,
+        }],
+        origins,
+        ..Default::default()
+    };
+    let worst = record_bytes(&m, &subject)
+        + order_bytes(&m, &OrderClose::Filled([0; 32]))
+        + 2 * ACCOUNT_STORAGE_BYTES;
+    assert_eq!(
+        c.storage_needed.0,
+        worst as u128 * cost,
+        "measured = the token's formula"
+    );
     println!("worst-case leg storage: {worst} B measured (mtx_trade_check), pin LEG_STORAGE_MAX_BYTES {LEG_STORAGE_MAX_BYTES} B");
     assert!(worst <= LEG_STORAGE_MAX_BYTES, "{worst} B over the pin");
     let floor = d.floor(&d.t.relayer, &a, &bl).await;
     let out = d.settle_dep(&d.t.relayer, &a, &bl, floor).await;
-    assert!(out.is_success() && has(&out, r#""event":"matched""#), "{:?}", out.failures());
-    assert!(out.receipt_outcomes().iter().all(|o| o.is_success()), "{:?}", out.failures());
-    assert_eq!((d.bal(&d.t.token, &bob).await, d.bal(&d.b, &m).await), (100, 60));
-    println!("settle_worst_case_leg_storage_pin: {:.3} Tgas, floor {floor} yocto", tgas(&out));
+    assert!(
+        out.is_success() && has(&out, r#""event":"matched""#),
+        "{:?}",
+        out.failures()
+    );
+    assert!(
+        out.receipt_outcomes().iter().all(|o| o.is_success()),
+        "{:?}",
+        out.failures()
+    );
+    assert_eq!(
+        (d.bal(&d.t.token, &bob).await, d.bal(&d.b, &m).await),
+        (100, 60)
+    );
+    println!(
+        "settle_worst_case_leg_storage_pin: {:.3} Tgas, floor {floor} yocto",
+        tgas(&out)
+    );
 }
 
 /// Final review I1 (b): a leg landing after its order's expiry (or its op's `valid_until`) is refused at the token and
@@ -621,18 +1244,55 @@ async fn settle_near_expiry_refused() {
     let e = erin.ua();
     let now = d.t.now_s().await;
     let soon = now + SETTLE_MARGIN_S / 2;
-    let order_soon = d.leg(&erin, &e, Order { expiry: soon, ..a.order.clone() }, [0xa0; 32], 0);
+    let order_soon = d.leg(
+        &erin,
+        &e,
+        Order {
+            expiry: soon,
+            ..a.order.clone()
+        },
+        [0xa0; 32],
+        0,
+    );
     let op_soon = d.resign(&erin, a.clone(), |l| l.op.valid_until = soon);
-    for (name, l) in [("order expiry", &order_soon), ("leg op valid_until", &op_soon)] {
+    for (name, l) in [
+        ("order expiry", &order_soon),
+        ("leg op valid_until", &op_soon),
+    ] {
         let out = d.settle(&d.t.relayer, l, &bl).await;
-        assert!(failed_with(&out, EXPIRES_SOON), "{name}: {:?}", out.failures());
+        assert!(
+            failed_with(&out, EXPIRES_SOON),
+            "{name}: {:?}",
+            out.failures()
+        );
         let out = d.settle(&d.t.relayer, &bl, l).await;
-        assert!(failed_with(&out, EXPIRES_SOON), "{name}, either side: {:?}", out.failures());
+        assert!(
+            failed_with(&out, EXPIRES_SOON),
+            "{name}, either side: {:?}",
+            out.failures()
+        );
     }
-    assert_eq!((d.bal(&d.t.token, &e).await, d.filled(&a).await), (100, false), "nothing moved");
-    let later = d.leg(&erin, &e, Order { expiry: now + 10 * SETTLE_MARGIN_S, ..a.order.clone() }, [0xa0; 32], 0);
+    assert_eq!(
+        (d.bal(&d.t.token, &e).await, d.filled(&a).await),
+        (100, false),
+        "nothing moved"
+    );
+    let later = d.leg(
+        &erin,
+        &e,
+        Order {
+            expiry: now + 10 * SETTLE_MARGIN_S,
+            ..a.order.clone()
+        },
+        [0xa0; 32],
+        0,
+    );
     let out = d.settle(&d.t.relayer, &later, &bl).await;
-    assert!(out.is_success() && has(&out, r#""event":"matched""#), "{:?}", out.failures());
+    assert!(
+        out.is_success() && has(&out, r#""event":"matched""#),
+        "{:?}",
+        out.failures()
+    );
 }
 
 /// Final review I2 (CTR-DEX-09 on the paid path): an order bound to relayer R settles through the router only in R's
@@ -646,18 +1306,56 @@ async fn lane_bound_order_settles_through_router() {
     let (a, bl) = d.pair(&erin, &bobk).await;
     let e = erin.ua();
     d.fund(&d.t.token, &payer.ua(), 100).await;
-    let a = d.leg(&erin, &e, Order { relayer: Some(acc(d.t.relayer.id())), ..a.order }, [0xa0; 32], 0);
+    let a = d.leg(
+        &erin,
+        &e,
+        Order {
+            relayer: Some(acc(d.t.relayer.id())),
+            ..a.order
+        },
+        [0xa0; 32],
+        0,
+    );
     let out = dr.relay_settle(&d.t.alice, &payer, &a, &bl, [1; 32]).await;
     // the relay transaction succeeds (the router refunds); the DEX's receipt is the one that failed
-    assert!(format!("{:?}", out.failures()).contains(ORDER_RELAYER), "another lane's relay: {:?}", out.failures());
+    assert!(
+        format!("{:?}", out.failures()).contains(ORDER_RELAYER),
+        "another lane's relay: {:?}",
+        out.failures()
+    );
     assert!(!has(&out, "relay_fee_paid"), "{:?}", out.logs());
-    assert_eq!((d.bal(&d.t.token, &e).await, d.bal(&d.t.token, &payer.ua()).await), (100, 100), "nothing moved, refunded");
-    let out = dr.relay_settle(&d.t.relayer, &payer, &a, &bl, [2; 32]).await;
-    assert!(out.is_success() && has(&out, r#""event":"matched""#), "{:?}", out.failures());
+    assert_eq!(
+        (
+            d.bal(&d.t.token, &e).await,
+            d.bal(&d.t.token, &payer.ua()).await
+        ),
+        (100, 100),
+        "nothing moved, refunded"
+    );
+    let out = dr
+        .relay_settle(&d.t.relayer, &payer, &a, &bl, [2; 32])
+        .await;
+    assert!(
+        out.is_success() && has(&out, r#""event":"matched""#),
+        "{:?}",
+        out.failures()
+    );
     assert!(has(&out, "relay_fee_paid"), "{:?}", out.logs());
-    assert_eq!(d.bal(&d.t.token, &payer.ua()).await, 100 - FEE, "the lane's fee");
-    assert_eq!(d.bal(&d.t.token, &d.t.near(&d.t.relayer)).await, FEE, "open mode: the relaying lane is paid");
-    assert_eq!((d.bal(&d.t.token, &e).await, d.bal(&d.b, &e).await), (0, 60), "erin's order filled");
+    assert_eq!(
+        d.bal(&d.t.token, &payer.ua()).await,
+        100 - FEE,
+        "the lane's fee"
+    );
+    assert_eq!(
+        d.bal(&d.t.token, &d.t.near(&d.t.relayer)).await,
+        FEE,
+        "open mode: the relaying lane is paid"
+    );
+    assert_eq!(
+        (d.bal(&d.t.token, &e).await, d.bal(&d.b, &e).await),
+        (0, 60),
+        "erin's order filled"
+    );
     // the executor the DEX accepts relayer-bound orders through (the node compares it with the router's at start)
     let got: String = d.dex.view("executor").await.unwrap().json().unwrap();
     assert_eq!(got, dr.exec.id().as_str(), "executor() view");
@@ -682,29 +1380,84 @@ async fn refund_expired_after_lost_callback() {
     let id = settle_id(&a.op, &bl.op);
     // stage the lost callback: the escrow back in the DEX, the entry unresolved
     for (who, tok, amt) in [(&d.t.bob, &d.t.token, 100u128), (&d.t.alice, &d.b, 60)] {
-        let out = who.call(tok.id(), "ft_transfer").args_json(json!({"receiver_id": d.dex.id(), "amount": amt.to_string()}))
-            .deposit(NearToken::from_yoctonear(1)).transact().await.unwrap();
+        let out = who
+            .call(tok.id(), "ft_transfer")
+            .args_json(json!({"receiver_id": d.dex.id(), "amount": amt.to_string()}))
+            .deposit(NearToken::from_yoctonear(1))
+            .transact()
+            .await
+            .unwrap();
         assert!(out.is_success(), "{:?}", out.failures());
     }
     d.patch(id, |s| s.done = false).await;
     // a late on_legs from outside is refused (#[private])
-    let out = d.t.bob.call(d.dex.id(), "on_legs").args(b(&id)).max_gas().transact().await.unwrap();
+    let out =
+        d.t.bob
+            .call(d.dex.id(), "on_legs")
+            .args(b(&id))
+            .max_gas()
+            .transact()
+            .await
+            .unwrap();
     assert!(out.is_failure(), "on_legs is private");
     let now = d.t.now_s().await;
     d.patch(id, |s| s.expiry = now - 1).await;
     let s = d.pending(id).await.unwrap();
-    let r0 = d.t.relayer.view_account().await.unwrap().balance.as_yoctonear();
+    let r0 =
+        d.t.relayer
+            .view_account()
+            .await
+            .unwrap()
+            .balance
+            .as_yoctonear();
     let out = d.refund(&d.t.bob, id).await;
     assert!(out.is_success(), "{:?}", out.failures());
     for o in out.receipt_outcomes() {
-        println!("  receipt {} {:.3} Tgas {:?}", o.executor_id, o.gas_burnt.as_gas() as f64 / 1e12, o.logs.first());
+        println!(
+            "  receipt {} {:.3} Tgas {:?}",
+            o.executor_id,
+            o.gas_burnt.as_gas() as f64 / 1e12,
+            o.logs.first()
+        );
     }
     assert!(has(&out, r#""event":"match_failed""#), "{:?}", out.logs());
-    assert!(has(&out, &format!("{},{}", legs_json(&a, &bl), refunded_json(&[&a, &bl]))), "{:?}", out.logs());
-    assert_eq!((d.bal(&d.t.token, &alice).await, d.bal(&d.b, &bob).await), (100, 60), "both sellers refunded");
-    assert_eq!((d.bal(&d.t.token, &d.dex_h()).await, d.bal(&d.b, &d.dex_h()).await), (0, 0), "escrow empty");
-    assert_eq!((d.pending(id).await, d.usage(&d.dex).await), (None, ud), "pruned");
-    assert_eq!(d.t.relayer.view_account().await.unwrap().balance.as_yoctonear() - r0, s.deposit, "deposit back");
+    assert!(
+        has(
+            &out,
+            &format!("{},{}", legs_json(&a, &bl), refunded_json(&[&a, &bl]))
+        ),
+        "{:?}",
+        out.logs()
+    );
+    assert_eq!(
+        (d.bal(&d.t.token, &alice).await, d.bal(&d.b, &bob).await),
+        (100, 60),
+        "both sellers refunded"
+    );
+    assert_eq!(
+        (
+            d.bal(&d.t.token, &d.dex_h()).await,
+            d.bal(&d.b, &d.dex_h()).await
+        ),
+        (0, 0),
+        "escrow empty"
+    );
+    assert_eq!(
+        (d.pending(id).await, d.usage(&d.dex).await),
+        (None, ud),
+        "pruned"
+    );
+    assert_eq!(
+        d.t.relayer
+            .view_account()
+            .await
+            .unwrap()
+            .balance
+            .as_yoctonear()
+            - r0,
+        s.deposit,
+        "deposit back"
+    );
     // gas pins of the refund path: the reads within GAS_VIEW / 1.2; on_refund prepays its refunds' static gas and their
     // exec fees (each ≤ the refund's burnt gas)
     let tg = |g: u64| g as f64 / 1e12;
@@ -715,15 +1468,33 @@ async fn refund_expired_after_lost_callback() {
         if o.executor_id == *d.dex.id() && log.contains("match_failed") {
             on_refund = x;
         } else if o.executor_id != *d.dex.id() && log.contains("ft_transfer") {
-            assert!(x <= g(GAS_PAYOUT) / 1.2, "refund payout {x} Tgas over GAS_PAYOUT / 1.2");
+            assert!(
+                x <= g(GAS_PAYOUT) / 1.2,
+                "refund payout {x} Tgas over GAS_PAYOUT / 1.2"
+            );
             refunds += x;
-        } else if o.executor_id != *d.dex.id() && o.executor_id != *d.t.relayer.id() && log.is_empty() && x > 0.5 {
-            assert!(x <= g(GAS_VIEW) / 1.2, "order_closed read {x} Tgas over GAS_VIEW / 1.2");
+        } else if o.executor_id != *d.dex.id()
+            && o.executor_id != *d.t.relayer.id()
+            && log.is_empty()
+            && x > 0.5
+        {
+            assert!(
+                x <= g(GAS_VIEW) / 1.2,
+                "order_closed read {x} Tgas over GAS_VIEW / 1.2"
+            );
         }
     }
     let used = (on_refund + refunds) * 1.2 + 2.0 * g(GAS_PAYOUT);
-    assert!(on_refund > 0.0 && used <= g(GAS_ON_REFUND), "on_refund + refunds: {used} Tgas with margin > GAS_ON_REFUND");
-    println!("pins: GAS_VIEW {:.0}, GAS_ON_REFUND {:.0}, GAS_PAYOUT {:.0} Tgas", g(GAS_VIEW), g(GAS_ON_REFUND), g(GAS_PAYOUT));
+    assert!(
+        on_refund > 0.0 && used <= g(GAS_ON_REFUND),
+        "on_refund + refunds: {used} Tgas with margin > GAS_ON_REFUND"
+    );
+    println!(
+        "pins: GAS_VIEW {:.0}, GAS_ON_REFUND {:.0}, GAS_PAYOUT {:.0} Tgas",
+        g(GAS_VIEW),
+        g(GAS_ON_REFUND),
+        g(GAS_PAYOUT)
+    );
     // refund once
     let out = d.refund(&d.t.bob, id).await;
     assert!(failed_with(&out, "no such settle"), "{:?}", out.failures());
@@ -764,26 +1535,53 @@ async fn cancel_filled_order_refused() {
         (erin.sign(&op, ORIGIN), op, p)
     };
     let (au, op, p) = cancel([0xa0; 32], 0);
-    d.t.refused(&d.t.relayer, "mtx_cancel", &op, &au, &p, CANCEL_FILLED).await;
+    d.t.refused(&d.t.relayer, "mtx_cancel", &op, &au, &p, CANCEL_FILLED)
+        .await;
     let (au, op, p) = cancel([0xa0; 32], 5);
     let u0 = d.t.usage().await;
     let c = d.t.ok(&d.t.relayer, "mtx_cancel", &op, &au, &p).await;
     let rec = order_bytes(&e, &OrderClose::Cancelled);
-    assert_eq!((c.storage_needed.0, d.t.usage().await - u0), (rec as u128 * d.t.byte_cost().await, rec));
+    assert_eq!(
+        (c.storage_needed.0, d.t.usage().await - u0),
+        (rec as u128 * d.t.byte_cost().await, rec)
+    );
     println!("mtx_cancel: order record {rec} B (UA, cancelled)");
-    d.t.refused(&d.t.relayer, "mtx_cancel", &op, &au, &p, CANCELLED_TWICE).await;
+    d.t.refused(&d.t.relayer, "mtx_cancel", &op, &au, &p, CANCELLED_TWICE)
+        .await;
     let l = d.leg(&erin, &e, d.order(true, 100, 50), [0xa0; 32], 5);
-    assert_eq!(d.trade_check(d.dex.id(), &l, &bob).await.error.as_deref(), Some(CANCELLED));
+    assert_eq!(
+        d.trade_check(d.dex.id(), &l, &bob).await.error.as_deref(),
+        Some(CANCELLED)
+    );
     assert_eq!(d.closed(&l).await, Some(OrderClose::Cancelled));
     // a filled order's leg again
-    assert_eq!(d.trade_check(d.dex.id(), &a, &bob).await.error.as_deref(), Some(FILLED));
+    assert_eq!(
+        d.trade_check(d.dex.id(), &a, &bob).await.error.as_deref(),
+        Some(FILLED)
+    );
     // shape and parameters are signed
     let (au, mut op, p) = cancel([0xa0; 32], 6);
     op.extra = sha(&b(&([0xa0u8; 32], 7u64)));
-    d.t.refused(&d.t.relayer, "mtx_cancel", &op, &au, &p, "extra is not sha256 of the parameters").await;
+    d.t.refused(
+        &d.t.relayer,
+        "mtx_cancel",
+        &op,
+        &au,
+        &p,
+        "extra is not sha256 of the parameters",
+    )
+    .await;
     let (_, mut op, p) = cancel([0xa0; 32], 6);
     op.nonce = 1;
-    d.t.refused(&d.t.relayer, "mtx_cancel", &op, &erin.sign(&op, ORIGIN), &p, "cancel shape").await;
+    d.t.refused(
+        &d.t.relayer,
+        "mtx_cancel",
+        &op,
+        &erin.sign(&op, ORIGIN),
+        &p,
+        "cancel shape",
+    )
+    .await;
 }
 
 /// CTR-DEX-10: `min_nonce < 2^63` (NEAR nonces are u64), only increasing; orders below it are refused.
@@ -799,32 +1597,74 @@ async fn min_nonce_cap_refused() {
         (erin.sign(&op, ORIGIN), op, p)
     };
     let (au, op, p) = inv(1 << 63);
-    d.t.refused(&d.t.relayer, "mtx_invalidate_nonces", &op, &au, &p, MIN_CAP).await;
+    d.t.refused(&d.t.relayer, "mtx_invalidate_nonces", &op, &au, &p, MIN_CAP)
+        .await;
     let (au, op, p) = inv(u64::MAX);
-    d.t.refused(&d.t.relayer, "mtx_invalidate_nonces", &op, &au, &p, MIN_CAP).await;
+    d.t.refused(&d.t.relayer, "mtx_invalidate_nonces", &op, &au, &p, MIN_CAP)
+        .await;
     let (au, op, p) = inv(10);
     let u0 = d.t.usage().await;
-    let c = d.t.ok(&d.t.relayer, "mtx_invalidate_nonces", &op, &au, &p).await;
-    let opened = record_bytes(&e, &Subject { keys: vec![erin.key()], ..Default::default() });
+    let c =
+        d.t.ok(&d.t.relayer, "mtx_invalidate_nonces", &op, &au, &p)
+            .await;
+    let opened = record_bytes(
+        &e,
+        &Subject {
+            keys: vec![erin.key()],
+            ..Default::default()
+        },
+    );
     let rec = TRADE_RECORD_OVERHEAD + b(&e).len() as u64;
-    assert_eq!((c.storage_needed.0, d.t.usage().await - u0), ((opened + rec) as u128 * d.t.byte_cost().await, opened + rec));
+    assert_eq!(
+        (c.storage_needed.0, d.t.usage().await - u0),
+        ((opened + rec) as u128 * d.t.byte_cost().await, opened + rec)
+    );
     println!("mtx_invalidate_nonces: min_nonce record {rec} B (UA)");
-    d.t.refused(&d.t.relayer, "mtx_invalidate_nonces", &op, &au, &p, MIN_UP).await;
+    d.t.refused(&d.t.relayer, "mtx_invalidate_nonces", &op, &au, &p, MIN_UP)
+        .await;
     let (au, op, p) = inv(5);
-    d.t.refused(&d.t.relayer, "mtx_invalidate_nonces", &op, &au, &p, MIN_UP).await;
+    d.t.refused(&d.t.relayer, "mtx_invalidate_nonces", &op, &au, &p, MIN_UP)
+        .await;
     let l = d.leg(&erin, &e, d.order(true, 100, 50), [0xa0; 32], 9);
-    assert_eq!(d.trade_check(d.dex.id(), &l, &bob).await.error.as_deref(), Some(BELOW_MIN));
+    assert_eq!(
+        d.trade_check(d.dex.id(), &l, &bob).await.error.as_deref(),
+        Some(BELOW_MIN)
+    );
     let l = d.leg(&erin, &e, d.order(true, 100, 50), [0xa0; 32], 10);
-    assert_eq!(d.trade_check(d.dex.id(), &l, &bob).await.error, None, "nonce = min_nonce is valid");
+    assert_eq!(
+        d.trade_check(d.dex.id(), &l, &bob).await.error,
+        None,
+        "nonce = min_nonce is valid"
+    );
     let l = d.leg(&erin, &e, d.order(true, 100, 50), [0xa1; 32], 0);
-    assert_eq!(d.trade_check(d.dex.id(), &l, &bob).await.error, None, "per lane");
+    assert_eq!(
+        d.trade_check(d.dex.id(), &l, &bob).await.error,
+        None,
+        "per lane"
+    );
     let (au, op, p) = inv((1 << 63) - 1);
-    d.t.ok(&d.t.relayer, "mtx_invalidate_nonces", &op, &au, &p).await;
-    let m: u64 = d.t.token.view("min_nonce").args(b(&(&e, [0xa0u8; 32]))).await.unwrap().borsh().unwrap();
+    d.t.ok(&d.t.relayer, "mtx_invalidate_nonces", &op, &au, &p)
+        .await;
+    let m: u64 =
+        d.t.token
+            .view("min_nonce")
+            .args(b(&(&e, [0xa0u8; 32])))
+            .await
+            .unwrap()
+            .borsh()
+            .unwrap();
     assert_eq!(m, (1 << 63) - 1);
     let p = b(&([0xa0u8; 32], 9u64));
     let op = d.t.op(OP_CANCEL, &e, &e, 0, &p);
-    d.t.refused(&d.t.relayer, "mtx_cancel", &op, &erin.sign(&op, ORIGIN), &p, BELOW_MIN).await;
+    d.t.refused(
+        &d.t.relayer,
+        "mtx_cancel",
+        &op,
+        &erin.sign(&op, ORIGIN),
+        &p,
+        BELOW_MIN,
+    )
+    .await;
 }
 
 /// Fill-or-kill: a leg moves the whole `sell_amount` or nothing; each side's `sell_amount` covers the other's `min_buy`;
@@ -836,7 +1676,13 @@ async fn no_partial_fill() {
     let (a, bl) = d.pair(&erin, &bobk).await;
     let (e, bob) = (erin.ua(), d.t.near(&d.t.bob));
     let part = d.resign(&erin, a.clone(), |l| l.op.amount = 99);
-    assert_eq!(d.trade_check(d.dex.id(), &part, &bob).await.error.as_deref(), Some(FOK_AMOUNT));
+    assert_eq!(
+        d.trade_check(d.dex.id(), &part, &bob)
+            .await
+            .error
+            .as_deref(),
+        Some(FOK_AMOUNT)
+    );
     let out = d.settle(&d.t.relayer, &part, &bl).await;
     assert!(failed_with(&out, FOK_AMOUNT), "{:?}", out.failures());
     // price: bob wants 101 A, erin sells 100
@@ -850,15 +1696,34 @@ async fn no_partial_fill() {
     // the pair must cross: both selling A
     let a3 = d.leg(&erin, &e, d.order(true, 100, 50), [0xa0; 32], 1);
     let out = d.settle(&d.t.relayer, &a, &a3).await;
-    assert!(failed_with(&out, "orders do not pair"), "{:?}", out.failures());
+    assert!(
+        failed_with(&out, "orders do not pair"),
+        "{:?}",
+        out.failures()
+    );
     // orders selling and buying the same token
-    let o = Order { buy_token: a.order.sell_token.clone(), min_buy: 0, ..a.order.clone() };
-    let (s1, s2) = (d.leg(&erin, &e, o.clone(), [0xa0; 32], 2), d.leg(&erin, &e, o, [0xa0; 32], 3));
+    let o = Order {
+        buy_token: a.order.sell_token.clone(),
+        min_buy: 0,
+        ..a.order.clone()
+    };
+    let (s1, s2) = (
+        d.leg(&erin, &e, o.clone(), [0xa0; 32], 2),
+        d.leg(&erin, &e, o, [0xa0; 32], 3),
+    );
     let out = d.settle(&d.t.relayer, &s1, &s2).await;
-    assert!(failed_with(&out, "orders do not pair"), "{:?}", out.failures());
+    assert!(
+        failed_with(&out, "orders do not pair"),
+        "{:?}",
+        out.failures()
+    );
     assert_eq!(d.bal(&d.t.token, &e).await, 100, "nothing moved");
     let out = d.settle(&d.t.relayer, &a, &bl).await;
-    assert!(out.is_success() && has(&out, r#""event":"matched""#), "{:?}", out.failures());
+    assert!(
+        out.is_success() && has(&out, r#""event":"matched""#),
+        "{:?}",
+        out.failures()
+    );
     // either leg again, with any counter-leg, while the entry holds it
     let b3 = d.leg(&bobk, &bob, d.order(false, 60, 100), [0xb0; 32], 1);
     let out = d.settle(&d.t.relayer, &a, &b3).await;
@@ -875,16 +1740,36 @@ async fn settle_short_gas_refused() {
     let (erin, bobk) = (Signer::ed("erin"), Signer::ed("bobk"));
     let (a, bl) = d.pair(&erin, &bobk).await;
     let need = settle_gas(&a.auth, &bl.auth);
-    assert_eq!(need.as_tgas(), 9 + 18 + 18 + 18, "each leg: base 6 + IMPLICIT_TRANSFER_GAS 11 + its ed25519 1");
+    assert_eq!(
+        need.as_tgas(),
+        9 + 18 + 18 + 18,
+        "each leg: base 6 + IMPLICIT_TRANSFER_GAS 11 + its ed25519 1"
+    );
     // T19 review I2: the pin the relayer checks against the chain's fees
-    let pin: u64 = d.dex.view("implicit_transfer_gas").await.unwrap().json().unwrap();
+    let pin: u64 = d
+        .dex
+        .view("implicit_transfer_gas")
+        .await
+        .unwrap()
+        .json()
+        .unwrap();
     assert_eq!(pin, scaas_near_common::IMPLICIT_TRANSFER_GAS.as_gas());
-    let out = d.settle_gas(&d.t.relayer, &a, &bl, Gas::from_gas(need.as_gas() - 1)).await;
+    let out = d
+        .settle_gas(&d.t.relayer, &a, &bl, Gas::from_gas(need.as_gas() - 1))
+        .await;
     assert!(failed_with(&out, SHORT_GAS), "{:?}", out.failures());
     assert_eq!(d.bal(&d.t.token, &erin.ua()).await, 100);
     let out = d.settle_gas(&d.t.relayer, &a, &bl, need).await;
-    assert!(out.is_success() && has(&out, r#""event":"matched""#), "{:?}", out.failures());
-    assert!(out.receipt_outcomes().iter().all(|o| o.is_success()), "{:?}", out.failures());
+    assert!(
+        out.is_success() && has(&out, r#""event":"matched""#),
+        "{:?}",
+        out.failures()
+    );
+    assert!(
+        out.receipt_outcomes().iter().all(|o| o.is_success()),
+        "{:?}",
+        out.failures()
+    );
     let [la, lb] = d.legs_within(&out, &a, &bl);
     println!("settle_short_gas_refused: ed25519 legs {la:.3} Tgas (erin, UA opened lazily) / {lb:.3} Tgas (bob), leg_gas 18 Tgas");
 }
@@ -901,17 +1786,34 @@ async fn settle_gas_pin() {
     d.fund(&d.b, &hb, 60).await;
     let a = d.leg(&pa, &ha, d.order(true, 100, 50), [0xa0; 32], 0);
     let bl = d.leg(&pb, &hb, d.order(false, 60, 100), [0xb0; 32], 0);
-    let out = d.settle_gas(&d.t.relayer, &a, &bl, settle_gas(&a.auth, &bl.auth)).await;
-    assert!(out.is_success() && has(&out, r#""event":"matched""#), "{:?}", out.failures());
-    assert!(out.receipt_outcomes().iter().all(|o| o.is_success()), "every receipt at the minimum: {:?}", out.failures());
+    let out = d
+        .settle_gas(&d.t.relayer, &a, &bl, settle_gas(&a.auth, &bl.auth))
+        .await;
+    assert!(
+        out.is_success() && has(&out, r#""event":"matched""#),
+        "{:?}",
+        out.failures()
+    );
+    assert!(
+        out.receipt_outcomes().iter().all(|o| o.is_success()),
+        "every receipt at the minimum: {:?}",
+        out.failures()
+    );
     let tg = |g: u64| g as f64 / 1e12;
     let (mut legs, mut payouts, mut on_legs) = (vec![], vec![], 0.0);
     for o in out.receipt_outcomes() {
         let g = tg(o.gas_burnt.as_gas());
-        println!("  receipt {} {g:.3} Tgas {:?}", o.executor_id, o.logs.first());
+        println!(
+            "  receipt {} {g:.3} Tgas {:?}",
+            o.executor_id,
+            o.logs.first()
+        );
         let log = o.logs.join(" ");
         if o.executor_id == *d.dex.id() && o.logs.is_empty() && g > 1.0 {
-            assert!(g <= tg(GAS_SETTLE_SELF.as_gas()) / 1.2, "settle receipt {g} Tgas over GAS_SETTLE_SELF / 1.2");
+            assert!(
+                g <= tg(GAS_SETTLE_SELF.as_gas()) / 1.2,
+                "settle receipt {g} Tgas over GAS_SETTLE_SELF / 1.2"
+            );
         } else if log.contains("order_filled") {
             legs.push(g);
         } else if log.contains(r#""event":"matched""#) {
@@ -922,21 +1824,41 @@ async fn settle_gas_pin() {
     }
     // the transfers to the relayer (an implicit account: the legs' excess deposits, gas refunds) are receipts of their
     // own, each within IMPLICIT_TRANSFER_GAS / 1.2 (ruling A); the pin covers the rest
-    let imp: Vec<f64> = out.receipt_outcomes().iter().filter(|o| o.executor_id == *d.t.relayer.id()).map(|o| tg(o.gas_burnt.as_gas())).collect();
-    assert!(imp.iter().all(|&g| g <= tg(scaas_near_common::IMPLICIT_TRANSFER_GAS.as_gas()) / 1.2), "{imp:?}");
-    println!("settle_gas_pin: {} receipts at the implicit relayer, {imp:?} Tgas", imp.len());
+    let imp: Vec<f64> = out
+        .receipt_outcomes()
+        .iter()
+        .filter(|o| o.executor_id == *d.t.relayer.id())
+        .map(|o| tg(o.gas_burnt.as_gas()))
+        .collect();
+    assert!(
+        imp.iter()
+            .all(|&g| g <= tg(scaas_near_common::IMPLICIT_TRANSFER_GAS.as_gas()) / 1.2),
+        "{imp:?}"
+    );
+    println!(
+        "settle_gas_pin: {} receipts at the implicit relayer, {imp:?} Tgas",
+        imp.len()
+    );
     let total = tgas(&out) - imp.iter().sum::<f64>();
     println!("settle_gas_pin: total {total:.3} Tgas (pin {SETTLE_TGAS_PIN}, prepaid {} Tgas); legs {legs:?}; on_legs {on_legs:.3}; payouts {payouts:?}", settle_gas(&a.auth, &bl.auth).as_tgas());
     assert_eq!((legs.len(), payouts.len()), (2, 2));
-    assert!(total <= SETTLE_TGAS_PIN / 1.2, "settle {total} Tgas > pin {SETTLE_TGAS_PIN} / 1.2");
+    assert!(
+        total <= SETTLE_TGAS_PIN / 1.2,
+        "settle {total} Tgas > pin {SETTLE_TGAS_PIN} / 1.2"
+    );
     let g = |x: near_sdk::Gas| tg(x.as_gas());
     d.legs_within(&out, &a, &bl);
-    assert!(payouts.iter().all(|&p| p <= g(GAS_PAYOUT) / 1.2), "payout over GAS_PAYOUT / 1.2");
+    assert!(
+        payouts.iter().all(|&p| p <= g(GAS_PAYOUT) / 1.2),
+        "payout over GAS_PAYOUT / 1.2"
+    );
     // on_legs prepays its payouts' static gas and their exec fees (each ≤ the payout's burnt gas)
     let used = (on_legs + payouts.iter().sum::<f64>()) * 1.2 + 2.0 * g(GAS_PAYOUT);
-    assert!(used <= g(GAS_ON_LEGS), "on_legs + payouts: {used} Tgas with margin > GAS_ON_LEGS");
+    assert!(
+        used <= g(GAS_ON_LEGS),
+        "on_legs + payouts: {used} Tgas with margin > GAS_ON_LEGS"
+    );
 }
-
 
 /// Ruling T8-I2: a passkey msig leg gets `leg_gas` = base + 25 Tgas per member signature. Against an ed25519 counter-leg,
 /// 9 passkey signatures settle within 300 Tgas prepaid (9 + 18 + 242 + 18 = 287; each leg's base carries one
@@ -950,7 +1872,17 @@ async fn settle_msig_leg_gas_limit() {
     // a 12-member passkey msig (MSIG_MAX_MEMBERS), threshold 9, each weight 1
     let mut ms: Vec<Signer> = (20..32).map(|i| Signer::pk(i, RP)).collect();
     ms.sort_by_key(|s| s.key().id());
-    let body: Vec<u8> = ms.iter().flat_map(|s| [&ua::KIND_WEBAUTHN_P256.to_be_bytes()[..], &s.key().id(), &[0, 1]].concat()).collect();
+    let body: Vec<u8> = ms
+        .iter()
+        .flat_map(|s| {
+            [
+                &ua::KIND_WEBAUTHN_P256.to_be_bytes()[..],
+                &s.key().id(),
+                &[0, 1],
+            ]
+            .concat()
+        })
+        .collect();
     let kd = [&[0u8, 9, 0, 12][..], &body].concat();
     let m = Holder::Ua(ua::ua_of(KIND_MSIG, &kd));
     d.fund(&d.t.token, &m, 100).await;
@@ -959,31 +1891,93 @@ async fn settle_msig_leg_gas_limit() {
     let bl = d.leg(&bobk, &bob, d.order(false, 60, 100), [0xb0; 32], 0);
     let one = d.leg(&ms[0], &m, d.order(true, 100, 50), [0xa0; 32], 0);
     let msig = |n: usize| L {
-        auth: Auth::Msig { key_data: kd.clone(), sigs: ms[..n].iter().enumerate().map(|(i, s)| (i as u8, s.sign(&one.op, ORIGIN))).collect() },
+        auth: Auth::Msig {
+            key_data: kd.clone(),
+            sigs: ms[..n]
+                .iter()
+                .enumerate()
+                .map(|(i, s)| (i as u8, s.sign(&one.op, ORIGIN)))
+                .collect(),
+        },
         ..one.clone()
     };
     let (a10, a11) = (msig(9), msig(10));
-    assert_eq!((settle_gas(&a10.auth, &bl.auth).as_tgas(), settle_gas(&a11.auth, &bl.auth).as_tgas()), (287, 312));
-    let r0 = d.t.relayer.view_account().await.unwrap().balance.as_yoctonear();
+    assert_eq!(
+        (
+            settle_gas(&a10.auth, &bl.auth).as_tgas(),
+            settle_gas(&a11.auth, &bl.auth).as_tgas()
+        ),
+        (287, 312)
+    );
+    let r0 =
+        d.t.relayer
+            .view_account()
+            .await
+            .unwrap()
+            .balance
+            .as_yoctonear();
     let out = d.settle(&d.t.relayer, &a11, &bl).await;
-    assert!(failed_with(&out, SHORT_GAS), "10 signatures refused at settle: {:?}", out.failures());
-    assert_eq!(out.receipt_outcomes().iter().filter(|o| o.executor_id != *d.t.relayer.id()).count(), 1, "no leg ran");
-    assert_eq!((d.bal(&d.t.token, &m).await, d.bal(&d.b, &bob).await), (100, 60), "nothing moved");
-    assert_eq!(d.pending(settle_id(&a11.op, &bl.op)).await, None, "nothing held");
-    let spent = r0 - d.t.relayer.view_account().await.unwrap().balance.as_yoctonear();
-    assert!(spent < NearToken::from_millinear(10).as_yoctonear(), "deposit back, only gas spent: {spent} yocto");
+    assert!(
+        failed_with(&out, SHORT_GAS),
+        "10 signatures refused at settle: {:?}",
+        out.failures()
+    );
+    assert_eq!(
+        out.receipt_outcomes()
+            .iter()
+            .filter(|o| o.executor_id != *d.t.relayer.id())
+            .count(),
+        1,
+        "no leg ran"
+    );
+    assert_eq!(
+        (d.bal(&d.t.token, &m).await, d.bal(&d.b, &bob).await),
+        (100, 60),
+        "nothing moved"
+    );
+    assert_eq!(
+        d.pending(settle_id(&a11.op, &bl.op)).await,
+        None,
+        "nothing held"
+    );
+    let spent = r0
+        - d.t
+            .relayer
+            .view_account()
+            .await
+            .unwrap()
+            .balance
+            .as_yoctonear();
+    assert!(
+        spent < NearToken::from_millinear(10).as_yoctonear(),
+        "deposit back, only gas spent: {spent} yocto"
+    );
     let out = d.settle(&d.t.relayer, &a10, &bl).await;
-    assert!(out.is_success() && has(&out, r#""event":"matched""#), "{:?}", out.failures());
-    assert!(out.receipt_outcomes().iter().all(|o| o.is_success()), "{:?}", out.failures());
+    assert!(
+        out.is_success() && has(&out, r#""event":"matched""#),
+        "{:?}",
+        out.failures()
+    );
+    assert!(
+        out.receipt_outcomes().iter().all(|o| o.is_success()),
+        "{:?}",
+        out.failures()
+    );
     let [lm, le] = d.legs_within(&out, &a10, &bl);
     for o in out.receipt_outcomes() {
         let g = o.gas_burnt.as_gas() as f64 / 1e12;
         if o.executor_id == *d.dex.id() && o.logs.is_empty() && g > 1.0 {
-            assert!(g <= GAS_SETTLE_SELF.as_gas() as f64 / 1e12 / 1.2, "settle receipt {g} Tgas over GAS_SETTLE_SELF / 1.2");
+            assert!(
+                g <= GAS_SETTLE_SELF.as_gas() as f64 / 1e12 / 1.2,
+                "settle receipt {g} Tgas over GAS_SETTLE_SELF / 1.2"
+            );
             println!("  settle receipt {g:.3} Tgas");
         }
     }
-    assert_eq!((d.bal(&d.t.token, &bob).await, d.bal(&d.b, &m).await), (100, 60));
+    assert_eq!(
+        (d.bal(&d.t.token, &bob).await, d.bal(&d.b, &m).await),
+        (100, 60)
+    );
     println!("settle_msig_leg_gas_limit: 9-signature passkey msig leg {lm:.3} Tgas (leg_gas {} Tgas), ed25519 leg {le:.3} Tgas; \
         total {:.3} Tgas at 300 prepaid; 10 signatures refused (settle_gas 312 Tgas)", leg_gas(&a10.auth).as_tgas(), tgas(&out));
 }
@@ -1002,23 +1996,54 @@ async fn settle_passkey_field_cap_refused() {
     let bl = d.leg(&bobk, &bob, d.order(false, 60, 100), [0xb0; 32], 0);
     let pad = |cd: usize, ad: usize| {
         let mut l = a.clone();
-        if let Auth::Passkey { client_data_json, authenticator_data, .. } = &mut l.auth {
+        if let Auth::Passkey {
+            client_data_json,
+            authenticator_data,
+            ..
+        } = &mut l.auth
+        {
             client_data_json.resize(cd.max(client_data_json.len()), b' ');
             authenticator_data.resize(ad.max(authenticator_data.len()), 0);
         }
         l
     };
-    let in_msig = |l: L| L { auth: Auth::Msig { key_data: vec![], sigs: vec![(0, l.auth.clone())] }, ..l };
+    let in_msig = |l: L| L {
+        auth: Auth::Msig {
+            key_data: vec![],
+            sigs: vec![(0, l.auth.clone())],
+        },
+        ..l
+    };
     let cap = "passkey clientDataJSON / authenticatorData over 1024 bytes";
-    for (name, l) in [("clientDataJSON 1025 B", pad(1025, 0)), ("authenticatorData 1025 B", pad(0, 1025)), ("msig member", in_msig(pad(1025, 0)))] {
+    for (name, l) in [
+        ("clientDataJSON 1025 B", pad(1025, 0)),
+        ("authenticatorData 1025 B", pad(0, 1025)),
+        ("msig member", in_msig(pad(1025, 0))),
+    ] {
         let out = d.settle(&d.t.relayer, &l, &bl).await;
         assert!(failed_with(&out, cap), "{name}: {:?}", out.failures());
         let out = d.settle(&d.t.relayer, &bl, &l).await;
-        assert!(failed_with(&out, cap), "{name}, either side: {:?}", out.failures());
+        assert!(
+            failed_with(&out, cap),
+            "{name}, either side: {:?}",
+            out.failures()
+        );
     }
-    assert_eq!((d.bal(&d.t.token, &ha).await, d.bal(&d.b, &bob).await), (100, 60), "nothing moved");
-    assert_eq!(d.pending(settle_id(&a.op, &bl.op)).await, None, "nothing held");
+    assert_eq!(
+        (d.bal(&d.t.token, &ha).await, d.bal(&d.b, &bob).await),
+        (100, 60),
+        "nothing moved"
+    );
+    assert_eq!(
+        d.pending(settle_id(&a.op, &bl.op)).await,
+        None,
+        "nothing held"
+    );
     // the real assertion (well under the cap) settles
     let out = d.settle(&d.t.relayer, &a, &bl).await;
-    assert!(out.is_success() && has(&out, r#""event":"matched""#), "{:?}", out.failures());
+    assert!(
+        out.is_success() && has(&out, r#""event":"matched""#),
+        "{:?}",
+        out.failures()
+    );
 }

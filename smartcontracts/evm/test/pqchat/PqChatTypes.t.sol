@@ -55,12 +55,17 @@ contract PqChatTypesTest is Test {
     /// before (`bytes32 owner`) stays as a legacy pin.
     function test_pqtopicAdminTypehashIsPinned() public pure {
         bytes32 h = keccak256(
-            "PqTopic(bytes32 admin,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies)");
+            "PqTopic(bytes32 admin,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies)"
+        );
         assertEq(h, 0x66954727fc72dc7660d7951b1a698a5f2fe331ec190195d0b0908f659510828e);
         assertEq(PqChatTypes.TOPIC_TYPEHASH, h);
-        assertEq(keccak256(
-            "PqTopic(bytes32 owner,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies)"),
-            0x75bed97bd08d9acabb9129fcd4953224878dd1dcfd40b822cb4dc8df462e1623, "the legacy pin");
+        assertEq(
+            keccak256(
+                "PqTopic(bytes32 owner,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies)"
+            ),
+            0x75bed97bd08d9acabb9129fcd4953224878dd1dcfd40b822cb4dc8df462e1623,
+            "the legacy pin"
+        );
     }
 
     function test_pqtopicTypehashIsPinned() public view {
@@ -100,8 +105,9 @@ contract PqChatTypesTest is Test {
         m = new IPqChat.MemberKey[](n);
         for (uint256 i; i < n; ++i) {
             string memory q = string.concat(p, ".members[", vm.toString(i), "]");
-            m[i] = IPqChat.MemberKey(_b32(j, string.concat(q, ".ua")), _u64(j, string.concat(q, ".keyId")),
-                _b32(j, string.concat(q, ".via")));
+            m[i] = IPqChat.MemberKey(
+                _b32(j, string.concat(q, ".ua")), _u64(j, string.concat(q, ".keyId")), _b32(j, string.concat(q, ".via"))
+            );
         }
     }
 
@@ -122,8 +128,10 @@ contract PqChatTypesTest is Test {
         assertEq(t, _b32(rec, ".session.typed"));
         assertEq(PqChatTypes.sessionId(s.creator, s.nonce), _b32(rec, ".session.id"));
         assertEq(PqChatTypes.scopeSession(s.creator), _b32(rec, ".session.scope"));
-        assertEq(UAKinds.uaMessage(uint16(vm.parseJsonUint(rec, ".session.uaMessage.kind")), UAKinds.PURPOSE_PQCHAT, t),
-            _b32(rec, ".session.uaMessage.digest"));
+        assertEq(
+            UAKinds.uaMessage(uint16(vm.parseJsonUint(rec, ".session.uaMessage.kind")), UAKinds.PURPOSE_PQCHAT, t),
+            _b32(rec, ".session.uaMessage.digest")
+        );
         // one change at a time moves the digest: `via`
         s.members[0].via = bytes32(uint256(s.members[0].via) ^ 1);
         assertTrue(h.session(s) != t);
@@ -145,16 +153,24 @@ contract PqChatTypesTest is Test {
         assertEq(PqChatTypes.epochId(e.sessionId, e.author, e.nonce), _b32(rec, ".epoch.id"));
         assertEq(PqChatTypes.scopeEpoch(e.sessionId, e.author), _b32(rec, ".epoch.scope"));
         p = ".leave.record";
-        IPqChat.PqChatLeave memory l = IPqChat.PqChatLeave(_b32(rec, string.concat(p, ".sessionId")),
-            _b32(rec, string.concat(p, ".epochId")), _b32(rec, string.concat(p, ".member")), _u64(rec, string.concat(p, ".nonce")));
+        IPqChat.PqChatLeave memory l = IPqChat.PqChatLeave(
+            _b32(rec, string.concat(p, ".sessionId")),
+            _b32(rec, string.concat(p, ".epochId")),
+            _b32(rec, string.concat(p, ".member")),
+            _u64(rec, string.concat(p, ".nonce"))
+        );
         assertEq(h.leave(l), _b32(rec, ".leave.typed"));
         assertEq(h.leave(l), _b32(rec, ".leave.id"));
         assertEq(PqChatTypes.scopeEpoch(l.sessionId, l.member), _b32(rec, ".leave.scope"));
         p = ".remove.record"; // UA-7 P48
-        IPqChat.PqChatRemove memory rm = IPqChat.PqChatRemove(_b32(rec, string.concat(p, ".sessionId")),
-            _b32(rec, string.concat(p, ".epochId")), _u64(rec, string.concat(p, ".nextEpoch")),
-            vm.parseJsonBytes32Array(rec, string.concat(p, ".members")), _b32(rec, string.concat(p, ".admin")),
-            _u64(rec, string.concat(p, ".nonce")));
+        IPqChat.PqChatRemove memory rm = IPqChat.PqChatRemove(
+            _b32(rec, string.concat(p, ".sessionId")),
+            _b32(rec, string.concat(p, ".epochId")),
+            _u64(rec, string.concat(p, ".nextEpoch")),
+            vm.parseJsonBytes32Array(rec, string.concat(p, ".members")),
+            _b32(rec, string.concat(p, ".admin")),
+            _u64(rec, string.concat(p, ".nonce"))
+        );
         assertEq(h.remove(rm), _b32(rec, ".remove.typed"));
         assertEq(PqChatTypes.scopeEpoch(rm.sessionId, rm.admin), _b32(rec, ".remove.scope"));
     }
@@ -189,23 +205,37 @@ contract PqChatTypesTest is Test {
 
     function test_topicVectors() public view {
         string memory p = ".topic.record";
-        IPqChat.PqTopic memory t = IPqChat.PqTopic(_b32(top, string.concat(p, ".admin")), _u64(top, string.concat(p, ".nonce")),
-            _b32(top, string.concat(p, ".homeChain")), vm.parseJsonAddress(top, string.concat(p, ".homeChatContract")),
-            vm.parseJsonString(top, string.concat(p, ".name")), vm.parseJsonBytes(top, string.concat(p, ".about")),
-            vm.parseJsonBool(top, string.concat(p, ".openReplies")));
+        IPqChat.PqTopic memory t = IPqChat.PqTopic(
+            _b32(top, string.concat(p, ".admin")),
+            _u64(top, string.concat(p, ".nonce")),
+            _b32(top, string.concat(p, ".homeChain")),
+            vm.parseJsonAddress(top, string.concat(p, ".homeChatContract")),
+            vm.parseJsonString(top, string.concat(p, ".name")),
+            vm.parseJsonBytes(top, string.concat(p, ".about")),
+            vm.parseJsonBool(top, string.concat(p, ".openReplies"))
+        );
         assertEq(h.topic(t), _b32(top, ".topic.typed"));
         assertEq(PqChatTypes.topicId(t.admin, t.nonce), _b32(top, ".topic.id"));
         assertEq(PqChatTypes.scopeTopic(t.admin), _b32(top, ".topic.scope"));
-        assertEq(abi.encode(t, keccak256(abi.encode(_uaSig(top, ".topic.uaSig")))), vm.parseJsonBytes(top, ".topic.blob"));
+        assertEq(
+            abi.encode(t, keccak256(abi.encode(_uaSig(top, ".topic.uaSig")))), vm.parseJsonBytes(top, ".topic.blob")
+        );
         p = ".update.record";
-        IPqChat.PqTopicUpdate memory u = IPqChat.PqTopicUpdate(_b32(top, string.concat(p, ".topicId")),
-            _u64(top, string.concat(p, ".seq")), vm.parseJsonString(top, string.concat(p, ".name")),
-            vm.parseJsonBytes(top, string.concat(p, ".about")), vm.parseJsonBool(top, string.concat(p, ".openReplies")));
+        IPqChat.PqTopicUpdate memory u = IPqChat.PqTopicUpdate(
+            _b32(top, string.concat(p, ".topicId")),
+            _u64(top, string.concat(p, ".seq")),
+            vm.parseJsonString(top, string.concat(p, ".name")),
+            vm.parseJsonBytes(top, string.concat(p, ".about")),
+            vm.parseJsonBool(top, string.concat(p, ".openReplies"))
+        );
         assertEq(h.topicUpdate(u), _b32(top, ".update.typed"));
         p = ".writer.record";
-        IPqChat.PqTopicWriter memory w = IPqChat.PqTopicWriter(_b32(top, string.concat(p, ".topicId")),
-            _b32(top, string.concat(p, ".writer")), vm.parseJsonBool(top, string.concat(p, ".granted")),
-            _u64(top, string.concat(p, ".seq")));
+        IPqChat.PqTopicWriter memory w = IPqChat.PqTopicWriter(
+            _b32(top, string.concat(p, ".topicId")),
+            _b32(top, string.concat(p, ".writer")),
+            vm.parseJsonBool(top, string.concat(p, ".granted")),
+            _u64(top, string.concat(p, ".seq"))
+        );
         assertEq(h.topicWriter(w), _b32(top, ".writer.typed"));
     }
 
@@ -215,8 +245,12 @@ contract PqChatTypesTest is Test {
         e.author = _b32(top, string.concat(p, ".author"));
         e.nonce = _u64(top, string.concat(p, ".nonce"));
         e.parentId = _b32(top, string.concat(p, ".parentId"));
-        e.ref = IPqChat.EntryRef(_b32(top, string.concat(p, ".ref.chainUid")), vm.parseJsonAddress(top, string.concat(p,
-            ".ref.pqchat")), _b32(top, string.concat(p, ".ref.entryId")), _b32(top, string.concat(p, ".ref.contentHash")));
+        e.ref = IPqChat.EntryRef(
+            _b32(top, string.concat(p, ".ref.chainUid")),
+            vm.parseJsonAddress(top, string.concat(p, ".ref.pqchat")),
+            _b32(top, string.concat(p, ".ref.entryId")),
+            _b32(top, string.concat(p, ".ref.contentHash"))
+        );
         e.mediaType = vm.parseJsonString(top, string.concat(p, ".mediaType"));
         e.body = vm.parseJsonBytes(top, string.concat(p, ".body"));
     }
@@ -228,19 +262,28 @@ contract PqChatTypesTest is Test {
             assertEq(h.entry(e), _b32(top, string.concat(".", row, ".typed")));
             assertEq(PqChatTypes.entryId(e.topicId, e.author, e.nonce), _b32(top, string.concat(".", row, ".id")));
             assertEq(PqChatTypes.scopeEntry(e.topicId, e.author), _b32(top, string.concat(".", row, ".scope")));
-            assertEq(abi.encode(e, keccak256(abi.encode(_uaSig(top, string.concat(".", row, ".uaSig"))))),
-                vm.parseJsonBytes(top, string.concat(".", row, ".blob")));
+            assertEq(
+                abi.encode(e, keccak256(abi.encode(_uaSig(top, string.concat(".", row, ".uaSig"))))),
+                vm.parseJsonBytes(top, string.concat(".", row, ".blob"))
+            );
         }
         string memory p = ".edit.record";
-        IPqChat.PqTopicEdit memory d = IPqChat.PqTopicEdit(_b32(top, string.concat(p, ".entryId")),
-            _b32(top, string.concat(p, ".author")), _u64(top, string.concat(p, ".nonce")),
-            uint32(vm.parseJsonUint(top, string.concat(p, ".version"))), vm.parseJsonString(top, string.concat(p, ".mediaType")),
-            vm.parseJsonBytes(top, string.concat(p, ".body")));
+        IPqChat.PqTopicEdit memory d = IPqChat.PqTopicEdit(
+            _b32(top, string.concat(p, ".entryId")),
+            _b32(top, string.concat(p, ".author")),
+            _u64(top, string.concat(p, ".nonce")),
+            uint32(vm.parseJsonUint(top, string.concat(p, ".version"))),
+            vm.parseJsonString(top, string.concat(p, ".mediaType")),
+            vm.parseJsonBytes(top, string.concat(p, ".body"))
+        );
         assertEq(h.edit(d), _b32(top, ".edit.typed"));
         p = ".vote.record";
-        IPqChat.PqTopicVote memory v = IPqChat.PqTopicVote(_b32(top, string.concat(p, ".entryId")),
-            _b32(top, string.concat(p, ".voter")), int8(vm.parseJsonInt(top, string.concat(p, ".value"))),
-            _u64(top, string.concat(p, ".seq")));
+        IPqChat.PqTopicVote memory v = IPqChat.PqTopicVote(
+            _b32(top, string.concat(p, ".entryId")),
+            _b32(top, string.concat(p, ".voter")),
+            int8(vm.parseJsonInt(top, string.concat(p, ".value"))),
+            _u64(top, string.concat(p, ".seq"))
+        );
         assertEq(v.value, -1);
         assertEq(h.vote(v), _b32(top, ".vote.typed"));
     }

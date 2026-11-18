@@ -88,8 +88,14 @@ contract UAFrostTest is Test {
 
     function test_xmd_rfc9380_k1() public pure {
         bytes memory dst = "QUUX-V01-CS02-with-expander-SHA256-128";
-        assertEq(HashToCurve.expandMessageXmd("", dst, 0x20), hex"68a985b87eb6b46952128911f2a4412bbc302a9d759667f87f7a21d803f07235");
-        assertEq(HashToCurve.expandMessageXmd("abc", dst, 0x20), hex"d8ccab23b5985ccea865c6c97b6e5b8350e794e603b4b97902f53a8a0d605615");
+        assertEq(
+            HashToCurve.expandMessageXmd("", dst, 0x20),
+            hex"68a985b87eb6b46952128911f2a4412bbc302a9d759667f87f7a21d803f07235"
+        );
+        assertEq(
+            HashToCurve.expandMessageXmd("abc", dst, 0x20),
+            hex"d8ccab23b5985ccea865c6c97b6e5b8350e794e603b4b97902f53a8a0d605615"
+        );
         assertEq(
             HashToCurve.expandMessageXmd("abcdef0123456789", dst, 0x20),
             hex"eff31487c770a893cfb36f912fbfcbff40d5661771ca4b2cb4eafe524333f5c1"
@@ -116,11 +122,16 @@ contract UAFrostTest is Test {
         bytes memory sig = vm.parseJsonBytes(gj, ".rfc9591E5.sig");
         assertEq(y, hex"02f37c34b66ced1fb51c34a90bdae006901f10625cc06c4f64663b0eae87d87b4f");
         assertEq(m, "test");
-        assertEq(sig, hex"0205b6d04d3774c8929413e3c76024d54149c372d57aae62574ed74319b5ea14d0c65dde8492a7471437e6c2fe3da49b90d23f642b5c6dbe7e36089f096dd97324");
+        assertEq(
+            sig,
+            hex"0205b6d04d3774c8929413e3c76024d54149c372d57aae62574ed74319b5ea14d0c65dde8492a7471437e6c2fe3da49b90d23f642b5c6dbe7e36089f096dd97324"
+        );
         assertTrue(h.verifyBytes(y, m, sig), "RFC text sig");
         assertTrue(h.verifyBytes(y, m, E5_SIG_ZF), "ZF vectors.json sig");
         assertFalse(h.verifyBytes(y, "tesu", sig), "other message");
-        assertFalse(h.verifyBytes(hex"03f37c34b66ced1fb51c34a90bdae006901f10625cc06c4f64663b0eae87d87b4f", m, sig), "-Y");
+        assertFalse(
+            h.verifyBytes(hex"03f37c34b66ced1fb51c34a90bdae006901f10625cc06c4f64663b0eae87d87b4f", m, sig), "-Y"
+        );
         for (uint256 k; k < 65; k += 8) {
             bytes memory bad = bytes.concat(sig);
             bad[k] ^= 0x01;
@@ -144,7 +155,8 @@ contract UAFrostTest is Test {
             bytes memory sig = vm.parseJsonBytes(gj, string.concat(p, "sig"));
             bool valid = vm.parseJsonBool(gj, string.concat(p, "valid"));
             bool got;
-            if (keccak256(bytes(vm.parseJsonString(gj, string.concat(p, "verifier")))) == keccak256("frost-secp256k1")) {
+            if (keccak256(bytes(vm.parseJsonString(gj, string.concat(p, "verifier")))) == keccak256("frost-secp256k1"))
+            {
                 got = m.length == 32 ? fs.verify(key, bytes32(m), sig) : h.verifyBytes(key, m, sig);
             } else {
                 if (m.length != 32) {
@@ -181,7 +193,8 @@ contract UAFrostTest is Test {
 
     function test_groups() public view {
         assertEq(frostGroups.length, 12);
-        uint256[2][6] memory tn = [[uint256(2), 3], [uint256(2), 2], [uint256(2), 8], [uint256(8), 8], [uint256(2), 16], [uint256(16), 16]];
+        uint256[2][6] memory tn =
+            [[uint256(2), 3], [uint256(2), 2], [uint256(2), 8], [uint256(8), 8], [uint256(2), 16], [uint256(16), 16]];
         for (uint256 j; j < 12; ++j) {
             uint256 i = frostGroups[j];
             bool secp = _secp(i);
@@ -232,7 +245,9 @@ contract UAFrostTest is Test {
     /// verifier's library; bn254 recomputed here per the ciphersuite table), and the row equals its key-data slice.
     function test_dkgRows() public view {
         uint256 rows;
-        for (uint256 j; j < 12; ++j) rows += this.dkgGroup(frostGroups[j]);
+        for (uint256 j; j < 12; ++j) {
+            rows += this.dkgGroup(frostGroups[j]);
+        }
         assertEq(rows, 106);
     }
 
@@ -248,7 +263,9 @@ contract UAFrostTest is Test {
             uint256 o = base + p * per;
             assertEq(r.id, p + 1);
             assertEq(r.commitments.length, t);
-            for (uint256 k; k < t; ++k) assertEq(r.commitments[k], _slice(kd, o + k * size, size));
+            for (uint256 k; k < t; ++k) {
+                assertEq(r.commitments[k], _slice(kd, o + k * size, size));
+            }
             assertEq(r.R, _slice(kd, o + t * size, size));
             assertEq(r.mu, bytes32(_word(kd, o + (t + 1) * size)));
             assertEq(r.preimage, abi.encodePacked(p + 1, r.commitments[0], r.R));
@@ -310,7 +327,9 @@ contract UAFrostTest is Test {
                         kh.validate(kind, kd);
                     }
                     if (vm.parseJsonBool(gj, _g(i, string.concat(p, "sigValid")))) {
-                        assertTrue(_verify(secp, _slice(kd, 0, secp ? 33 : 64), m, pop), string.concat(name, " sigValid"));
+                        assertTrue(
+                            _verify(secp, _slice(kd, 0, secp ? 33 : 64), m, pop), string.concat(name, " sigValid")
+                        );
                     }
                 }
                 ++counts[k];
@@ -392,7 +411,9 @@ contract UAFrostTest is Test {
         assertFalse(fs.verify(_slice(kd, 0, 32), m, sig), "vk 32 bytes");
         assertFalse(fs.verify(kd, m, sig), "vk = key data");
         uint256 big = frostGroups[5]; // t = n = 16: right length for 16, header says 17
-        assertFalse(fs.verifyPop(_setU16(_setU16(_gb(big, "keyData"), 33, 17), 35, 17), m, _gb(big, "pop.blob")), "t = n = 17");
+        assertFalse(
+            fs.verifyPop(_setU16(_setU16(_gb(big, "keyData"), 33, 17), 35, 17), m, _gb(big, "pop.blob")), "t = n = 17"
+        );
         (, kd, m, sig) = _main(false);
         assertFalse(fb.verifyPop(_setU16(kd, 66, 17), m, sig), "bn n = 17");
         assertFalse(fb.verifyPop(_setU16(kd, 64, 0), m, sig), "bn t = 0");
@@ -483,7 +504,11 @@ contract UAFrostTest is Test {
         return secp ? fs.verify(vk, m, sig) : fb.verify(vk, m, sig);
     }
 
-    function _layout(bytes memory kd, bool secp) internal pure returns (uint256 size, uint256 t, uint256 per, uint256 base) {
+    function _layout(bytes memory kd, bool secp)
+        internal
+        pure
+        returns (uint256 size, uint256 t, uint256 per, uint256 base)
+    {
         size = secp ? 33 : 64;
         t = (uint256(uint8(kd[size])) << 8) | uint8(kd[size + 1]);
         per = (t + 1) * size + 32;
@@ -492,11 +517,15 @@ contract UAFrostTest is Test {
 
     function _slice(bytes memory b, uint256 o, uint256 len) internal pure returns (bytes memory s) {
         s = new bytes(len);
-        for (uint256 i; i < len; ++i) s[i] = b[o + i];
+        for (uint256 i; i < len; ++i) {
+            s[i] = b[o + i];
+        }
     }
 
     function _copy(bytes memory dst, uint256 dOff, bytes memory src, uint256 sOff, uint256 len) internal pure {
-        for (uint256 i; i < len; ++i) dst[dOff + i] = src[sOff + i];
+        for (uint256 i; i < len; ++i) {
+            dst[dOff + i] = src[sOff + i];
+        }
     }
 
     function _word(bytes memory b, uint256 o) internal pure returns (uint256 w) {

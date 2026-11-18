@@ -91,15 +91,44 @@ library TradeLib {
     }
 
     function _tradeHash(ITradeToken.UATradeOrder memory o, bytes32 typehash) private pure returns (bytes32) {
-        return keccak256(abi.encode(
-            typehash, o.from, o.receiveToken, o.amount, o.receiveAmount, o.minFill, o.fee, o.relayer, o.dex,
-            o.destination, o.flags, o.batch, o.nonce, o.validUntil));
+        return keccak256(
+            abi.encode(
+                typehash,
+                o.from,
+                o.receiveToken,
+                o.amount,
+                o.receiveAmount,
+                o.minFill,
+                o.fee,
+                o.relayer,
+                o.dex,
+                o.destination,
+                o.flags,
+                o.batch,
+                o.nonce,
+                o.validUntil
+            )
+        );
     }
 
     function _wrapHash(ITradeToken.UATradeOrder memory o, bytes32 typehash) private pure returns (bytes32) {
-        return keccak256(abi.encode(
-            typehash, o.from, o.receiveToken, o.amount, o.receiveAmount, o.minFill, o.fee, o.relayer, o.destination,
-            o.flags, o.batch, o.nonce, o.validUntil));
+        return keccak256(
+            abi.encode(
+                typehash,
+                o.from,
+                o.receiveToken,
+                o.amount,
+                o.receiveAmount,
+                o.minFill,
+                o.fee,
+                o.relayer,
+                o.destination,
+                o.flags,
+                o.batch,
+                o.nonce,
+                o.validUntil
+            )
+        );
     }
 
     /// @notice EIP-712 struct hash of the cancel of a token's order: the nested struct the order was signed in (TS-D19).
@@ -131,16 +160,24 @@ library TradeLib {
 
     /// @notice Steps 1–3 (before the signature): caller and identities, relayer, shape. `token` is the sell token:
     ///         `address(this)` in a token; the leg's token in the DEX, which runs the same checks for outside tokens.
-    function precheck(ITradeToken.UATradeOrder memory o, ITradeToken.TradeFill memory f, bytes32 h, address caller,
-        address token) public view
-    {
+    function precheck(
+        ITradeToken.UATradeOrder memory o,
+        ITradeToken.TradeFill memory f,
+        bytes32 h,
+        address caller,
+        address token
+    ) public view {
         _precheck(o, f, h, caller, token);
     }
 
     /// @dev The body of `precheck` (T66b rule 4): a token's module T compiles it in; `precheck` is the DEX's library call.
-    function _precheck(ITradeToken.UATradeOrder memory o, ITradeToken.TradeFill memory f, bytes32 h, address caller,
-        address token) internal view
-    {
+    function _precheck(
+        ITradeToken.UATradeOrder memory o,
+        ITradeToken.TradeFill memory f,
+        bytes32 h,
+        address caller,
+        address token
+    ) internal view {
         if (caller != o.dex) revert ITradeToken.NotDex(caller);
         if (!SigCheck.isContract(o.dex)) revert ITradeToken.DexNotContract(o.dex);
         if (o.from == pad(token) || o.dex == token) revert ITradeToken.SelfOrder(h);
@@ -159,14 +196,16 @@ library TradeLib {
     /// @notice Steps 5–8 (after the signature): closed, Path A bounds or Path B shape, then `pulled` and the event.
     /// @return move the amount the token transfers from `o.from` to `o.dex`
     function record(ITradeToken.UATradeOrder memory o, ITradeToken.TradeFill memory f, bytes32 h, bool ua)
-        public returns (uint256 move)
+        public
+        returns (uint256 move)
     {
         return _record(o, f, h, ua);
     }
 
     /// @dev The body of `record` (T66b rule 4): a token's module T compiles it in; `record` is the DEX's library call.
     function _record(ITradeToken.UATradeOrder memory o, ITradeToken.TradeFill memory f, bytes32 h, bool ua)
-        internal returns (uint256 move)
+        internal
+        returns (uint256 move)
     {
         TradeStorage storage s = $();
         uint256 p = s.pulled[h];
@@ -178,7 +217,9 @@ library TradeLib {
             // the signer's minFill is the only per-fill minimum (CTR-DEX-14); the remainder may close below it
             if (move != o.amount - p && move < o.minFill) revert ITradeToken.BelowMinFill(h);
             if (mulGt(move, o.receiveAmount, f.receiveFill, o.amount)) revert ITradeToken.PriceLimit(h);
-            if (f.dexFee > Math.mulDiv(f.receiveFill, o.fee, PPM, Math.Rounding.Ceil)) revert ITradeToken.FeeAboveSigned(h);
+            if (f.dexFee > Math.mulDiv(f.receiveFill, o.fee, PPM, Math.Rounding.Ceil)) {
+                revert ITradeToken.FeeAboveSigned(h);
+            }
         } else {
             move = o.amount;
             if (p != 0 || f.sellFill != move || f.receiveFill != 0 || f.dexFee != 0) {

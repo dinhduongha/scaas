@@ -50,7 +50,9 @@ contract UARegistryMembershipTest is UARegistryBase {
     function _pqCfgs() internal view returns (UARegistry.KindConfig[] memory c) {
         UARegistry.KindConfig[] memory base = _cfgs(address(mock));
         c = new UARegistry.KindConfig[](base.length + 1);
-        for (uint256 i; i < base.length; ++i) c[i] = base[i];
+        for (uint256 i; i < base.length; ++i) {
+            c[i] = base[i];
+        }
         c[base.length] = UARegistry.KindConfig(ML, address(mock), 400_000);
     }
 
@@ -58,14 +60,18 @@ contract UARegistryMembershipTest is UARegistryBase {
         pk = new bytes(1952);
         for (uint256 i; i < pk.length; i += 32) {
             bytes32 w = keccak256(abi.encode(salt, i));
-            for (uint256 j; j < 32 && i + j < pk.length; ++j) pk[i + j] = w[j];
+            for (uint256 j; j < 32 && i + j < pk.length; ++j) {
+                pk[i + j] = w[j];
+            }
         }
     }
 
     /// A scheme-1 KEM key of 1,601 B.
     function _kemPk(uint256 seed) internal pure returns (bytes memory pk) {
         pk = new bytes(UAKinds.KEM_PK_LENGTH);
-        for (uint256 i; i < pk.length; ++i) pk[i] = bytes1(uint8(uint256(keccak256(abi.encode(seed, i)))));
+        for (uint256 i; i < pk.length; ++i) {
+            pk[i] = bytes1(uint8(uint256(keccak256(abi.encode(seed, i)))));
+        }
         pk[0] = bytes1(UAKinds.KEM_SCHEME_MLKEM1024_X25519);
     }
 
@@ -108,7 +114,11 @@ contract UARegistryMembershipTest is UARegistryBase {
     {
         bytes32 ua = UAKinds.uaOf(UAKinds.MSIG, d);
         bytes32 md = _memberDigest(ua, purpose, digest);
-        return IUARegistry.MemberSig(_indexOf(d, UAKinds.uaOf(ML, key)), new IUARegistry.InnerSig[](0), _sig(key, UAKinds.uaMessage(ML, UAKinds.PURPOSE_MEMBER, md)));
+        return IUARegistry.MemberSig(
+            _indexOf(d, UAKinds.uaOf(ML, key)),
+            new IUARegistry.InnerSig[](0),
+            _sig(key, UAKinds.uaMessage(ML, UAKinds.PURPOSE_MEMBER, md))
+        );
     }
 
     /// `a`, `b` in index order, as a `UASig`.
@@ -124,7 +134,8 @@ contract UARegistryMembershipTest is UARegistryBase {
     function _pqPop(bytes memory d, bytes memory a, bytes memory b) internal pure returns (bytes memory) {
         bytes32 ua = UAKinds.uaOf(UAKinds.MSIG, d);
         bytes32 rd = _regDigest(ua, UAKinds.MSIG);
-        return abi.encode(_two(_mlSig(d, a, UAKinds.PURPOSE_POP_V2, rd), _mlSig(d, b, UAKinds.PURPOSE_POP_V2, rd)).members);
+        return
+            abi.encode(_two(_mlSig(d, a, UAKinds.PURPOSE_POP_V2, rd), _mlSig(d, b, UAKinds.PURPOSE_POP_V2, rd)).members);
     }
 
     /// The registered `pqMsig` by the `pop` of ml1 + ml2.
@@ -152,7 +163,10 @@ contract UARegistryMembershipTest is UARegistryBase {
         assertEq(UAKinds.UA_MEMBERSHIP_TYPEHASH, th);
         assertEq(th, 0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4);
         bytes32 ds = 0x9a2c390d4dc940ccdb5fa6b21e673e87159bdd99aeef22ea791bcea9efc64ca1;
-        assertEq(UAKinds.membershipDigest(ua, member), keccak256(abi.encodePacked(hex"1901", ds, keccak256(abi.encode(th, ua, member)))));
+        assertEq(
+            UAKinds.membershipDigest(ua, member),
+            keccak256(abi.encodePacked(hex"1901", ds, keccak256(abi.encode(th, ua, member))))
+        );
         assertEq(UAKinds.PURPOSE_MEMBERSHIP, keccak256("scaas.ua.purpose.membership.v1"));
     }
 
@@ -169,7 +183,9 @@ contract UARegistryMembershipTest is UARegistryBase {
         vm.prank(address(0xDEAD));
         r.acceptMembership(ua, s);
         assertTrue(r.memberAccepted(ua, s.index));
-        for (uint256 i; i < 3; ++i) assertEq(r.memberAccepted(ua, i), i == s.index);
+        for (uint256 i; i < 3; ++i) {
+            assertEq(r.memberAccepted(ua, i), i == s.index);
+        }
     }
 
     /// A registered member under `member`, over `memberDigest`.
@@ -211,13 +227,15 @@ contract UARegistryMembershipTest is UARegistryBase {
     /// does it on every registry.
     function test_membershipPopSignersAccepted() public {
         (bytes memory d, bytes32 ua) = _pqRegistered(r);
-        (uint16 a, uint16 b, uint16 c) = (_indexOf(d, UAKinds.uaOf(ML, ml1)), _indexOf(d, UAKinds.uaOf(ML, ml2)), _indexOf(d, UAKinds.uaOf(ML, ml3)));
+        (uint16 a, uint16 b, uint16 c) =
+            (_indexOf(d, UAKinds.uaOf(ML, ml1)), _indexOf(d, UAKinds.uaOf(ML, ml2)), _indexOf(d, UAKinds.uaOf(ML, ml3)));
         assertTrue(r.memberAccepted(ua, a));
         assertTrue(r.memberAccepted(ua, b));
         assertFalse(r.memberAccepted(ua, c));
         assertEq(_bits(r, ua), 1 << a | 1 << b, "the stored bits, slot 15");
 
-        UARegistry x = _deploy(REG_N, keccak256("another chain"), address(0), false, BUDGET, address(0), true, _pqCfgs());
+        UARegistry x =
+            _deploy(REG_N, keccak256("another chain"), address(0), false, BUDGET, address(0), true, _pqCfgs());
         _members(x);
         _regMsig(x, d, _pqPop(d, ml1, ml2));
         assertEq(_bits(x, ua), 1 << a | 1 << b);
@@ -228,7 +246,9 @@ contract UARegistryMembershipTest is UARegistryBase {
         (bytes memory d, bytes32 ua) = _classical();
         _regMsig(r, d, "");
         assertEq(_bits(r, ua), 0);
-        for (uint256 i; i < 3; ++i) assertFalse(r.memberAccepted(ua, i));
+        for (uint256 i; i < 3; ++i) {
+            assertFalse(r.memberAccepted(ua, i));
+        }
     }
 
     /// The registration's own `pop` is what accepts its signers: it verifies with no slot accepted, on a registry where
@@ -248,9 +268,15 @@ contract UARegistryMembershipTest is UARegistryBase {
         _regMsig(r, d, "");
         bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_METATX, TX_DIGEST);
         IUARegistry.MemberSig memory a = IUARegistry.MemberSig(
-            _indexOf(d, _pad(vm.addr(ALICE))), new IUARegistry.InnerSig[](0), _nativeSig(r, ALICE, UAKinds.PURPOSE_MEMBER, md));
+            _indexOf(d, _pad(vm.addr(ALICE))),
+            new IUARegistry.InnerSig[](0),
+            _nativeSig(r, ALICE, UAKinds.PURPOSE_MEMBER, md)
+        );
         IUARegistry.MemberSig memory p = IUARegistry.MemberSig(
-            _indexOf(d, UAKinds.uaOf(P256, p1)), new IUARegistry.InnerSig[](0), _sig(p1, UAKinds.uaMessage(P256, UAKinds.PURPOSE_MEMBER, md)));
+            _indexOf(d, UAKinds.uaOf(P256, p1)),
+            new IUARegistry.InnerSig[](0),
+            _sig(p1, UAKinds.uaMessage(P256, UAKinds.PURPOSE_MEMBER, md))
+        );
         IUARegistry.UASig memory s = _two(a, p);
         vm.expectRevert(_unauthorized(ua));
         r.requireAuthorized(ua, UAKinds.PURPOSE_METATX, TX_DIGEST, s);
@@ -283,10 +309,17 @@ contract UARegistryMembershipTest is UARegistryBase {
         bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_METATX, TX_DIGEST);
         IUARegistry.UASig memory s;
         s.members = new IUARegistry.MemberSig[](1);
-        s.members[0] = IUARegistry.MemberSig(0, new IUARegistry.InnerSig[](0), _ecdsa(ALICE, r.uaAuthDigest(_pad(w), UAKinds.PURPOSE_MEMBER, md)));
+        s.members[0] = IUARegistry.MemberSig(
+            0, new IUARegistry.InnerSig[](0), _ecdsa(ALICE, r.uaAuthDigest(_pad(w), UAKinds.PURPOSE_MEMBER, md))
+        );
         vm.expectRevert(_unauthorized(ua));
         r.requireAuthorized(ua, UAKinds.PURPOSE_METATX, TX_DIGEST, s);
-        r.acceptMembership(ua, IUARegistry.MemberSig(0, new IUARegistry.InnerSig[](0), _ecdsa(ALICE, UAKinds.membershipDigest(ua, _pad(w)))));
+        r.acceptMembership(
+            ua,
+            IUARegistry.MemberSig(
+                0, new IUARegistry.InnerSig[](0), _ecdsa(ALICE, UAKinds.membershipDigest(ua, _pad(w)))
+            )
+        );
         r.requireAuthorized(ua, UAKinds.PURPOSE_METATX, TX_DIGEST, s);
     }
 
@@ -296,7 +329,8 @@ contract UARegistryMembershipTest is UARegistryBase {
         (bytes memory d, bytes32 ua) = _pqRegistered(r);
         bytes memory pk = _kemPk(1);
         bytes32 rd = UAKinds.kemRecordDigest(ua, 1, pk);
-        IUARegistry.UASig memory s = _two(_mlSig(d, ml1, UAKinds.PURPOSE_KEM, rd), _mlSig(d, ml3, UAKinds.PURPOSE_KEM, rd));
+        IUARegistry.UASig memory s =
+            _two(_mlSig(d, ml1, UAKinds.PURPOSE_KEM, rd), _mlSig(d, ml3, UAKinds.PURPOSE_KEM, rd));
         vm.expectRevert(_unauthorized(ua));
         r.requirePortable(ua, UAKinds.PURPOSE_KEM, rd, s);
         r.acceptMembership(ua, _acceptKeySig(d, ML, ml3));
@@ -311,7 +345,8 @@ contract UARegistryMembershipTest is UARegistryBase {
         bytes memory key = new bytes(16_384);
         bytes32 hash = keccak256("proof");
         bytes32 rd = UAKinds.pqzKeyRecordDigest(ua, UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key), hash);
-        IUARegistry.UASig memory s = _two(_mlSig(d, ml1, UAKinds.PURPOSE_PQZ_KEY, rd), _mlSig(d, ml3, UAKinds.PURPOSE_PQZ_KEY, rd));
+        IUARegistry.UASig memory s =
+            _two(_mlSig(d, ml1, UAKinds.PURPOSE_PQZ_KEY, rd), _mlSig(d, ml3, UAKinds.PURPOSE_PQZ_KEY, rd));
         vm.expectRevert(_unauthorized(ua));
         r.setPqzKey(ua, 0, key, hash, s);
         r.acceptMembership(ua, _acceptKeySig(d, ML, ml3));
@@ -333,11 +368,23 @@ contract UARegistryMembershipTest is UARegistryBase {
         // bob's key over the digest of alice's slot: right signer, wrong `member`
         uint16 ia = _indexOf(d, _pad(vm.addr(ALICE)));
         vm.expectRevert(_unauthorized(ua));
-        r.acceptMembership(ua, IUARegistry.MemberSig(ia, new IUARegistry.InnerSig[](0), _ecdsa(BOB, UAKinds.membershipDigest(ua, _pad(vm.addr(ALICE))))));
+        r.acceptMembership(
+            ua,
+            IUARegistry.MemberSig(
+                ia, new IUARegistry.InnerSig[](0), _ecdsa(BOB, UAKinds.membershipDigest(ua, _pad(vm.addr(ALICE))))
+            )
+        );
         // a derived member's digest names the member too
         uint16 ip = _indexOf(d, UAKinds.uaOf(P256, p1));
         vm.expectRevert(_unauthorized(ua));
-        r.acceptMembership(ua, IUARegistry.MemberSig(ip, new IUARegistry.InnerSig[](0), _sig(p1, UAKinds.uaMessage(P256, UAKinds.PURPOSE_MEMBER, _membershipMd(ua, _pad(vm.addr(ALICE)))))));
+        r.acceptMembership(
+            ua,
+            IUARegistry.MemberSig(
+                ip,
+                new IUARegistry.InnerSig[](0),
+                _sig(p1, UAKinds.uaMessage(P256, UAKinds.PURPOSE_MEMBER, _membershipMd(ua, _pad(vm.addr(ALICE)))))
+            )
+        );
         r.acceptMembership(ua, _acceptEoaSig(d, BOB));
         assertTrue(r.memberAccepted(ua, _indexOf(d, _pad(vm.addr(BOB)))));
     }
@@ -392,8 +439,10 @@ contract UARegistryMembershipTest is UARegistryBase {
         bytes32 typed = UAKinds.membershipDigest(ua, UAKinds.uaOf(ML, ml3));
         bytes32[3] memory purposes = [UAKinds.PURPOSE_POP_V2, UAKinds.PURPOSE_KEM, UAKinds.PURPOSE_PQZ_KEY];
         for (uint256 i; i < 3; ++i) {
-            for (uint256 j; j < 2; ++j) { // over the membership's own digest, and the record's
-                IUARegistry.MemberSig memory s = _mlSig(d, ml3, purposes[i], j == 0 ? typed : _regDigest(ua, UAKinds.MSIG));
+            for (uint256 j; j < 2; ++j) {
+                // over the membership's own digest, and the record's
+                IUARegistry.MemberSig memory s =
+                    _mlSig(d, ml3, purposes[i], j == 0 ? typed : _regDigest(ua, UAKinds.MSIG));
                 vm.expectRevert(_unauthorized(ua));
                 r.acceptMembership(ua, s);
             }
@@ -410,7 +459,9 @@ contract UARegistryMembershipTest is UARegistryBase {
         _regMsig(r, d, "");
         uint16 i = _indexOf(d, _pad(vm.addr(ALICE)));
         vm.expectRevert(_unauthorized(ua));
-        r.acceptMembership(ua, IUARegistry.MemberSig(i, new IUARegistry.InnerSig[](0), _ecdsa(ALICE, _regDigest(ua, UAKinds.MSIG))));
+        r.acceptMembership(
+            ua, IUARegistry.MemberSig(i, new IUARegistry.InnerSig[](0), _ecdsa(ALICE, _regDigest(ua, UAKinds.MSIG)))
+        );
         r.acceptMembership(ua, _acceptEoaSig(d, ALICE));
     }
 
@@ -436,7 +487,12 @@ contract UARegistryMembershipTest is UARegistryBase {
         bytes memory key = new bytes(16_384);
         vm.expectRevert(_unauthorized(ua));
         r.setPqzKey(ua, 0, key, keccak256("proof"), s);
-        r.requirePortable(ua, UAKinds.PURPOSE_KEM, rd, _two(_mlSig(d, ml1, UAKinds.PURPOSE_KEM, rd), _mlSig(d, ml2, UAKinds.PURPOSE_KEM, rd)));
+        r.requirePortable(
+            ua,
+            UAKinds.PURPOSE_KEM,
+            rd,
+            _two(_mlSig(d, ml1, UAKinds.PURPOSE_KEM, rd), _mlSig(d, ml2, UAKinds.PURPOSE_KEM, rd))
+        );
     }
 
     /// Non-empty `keyData`, native and derived (CTR-UA-33).
@@ -508,7 +564,9 @@ contract UARegistryMembershipTest is UARegistryBase {
         bytes memory d = _msigKey(2, m);
         bytes32 ua = _regMsig(r, d, _pqPop(d, keys_[0], keys_[1]));
         uint256 top;
-        for (uint256 i; i < 16; ++i) if (_indexOf(d, UAKinds.uaOf(ML, keys_[i])) == 15) top = i;
+        for (uint256 i; i < 16; ++i) {
+            if (_indexOf(d, UAKinds.uaOf(ML, keys_[i])) == 15) top = i;
+        }
         assertGt(top, 1, "the id at slot 15 is not one of the two `pop` signers");
         IUARegistry.UASig memory s = _txSig(d, keys_[0], keys_[top]);
         vm.expectRevert(_unauthorized(ua));
@@ -528,7 +586,8 @@ contract UARegistryMembershipTest is UARegistryBase {
     /// the bytes accepted on `r` accept on `x`, on another chain, and one flipped byte does not; `x` keeps its own bits.
     function test_membershipPortable() public {
         (bytes memory d, bytes32 ua) = _classical();
-        UARegistry x = _deploy(REG_N, keccak256("another chain"), address(0), false, BUDGET, address(0), true, _pqCfgs());
+        UARegistry x =
+            _deploy(REG_N, keccak256("another chain"), address(0), false, BUDGET, address(0), true, _pqCfgs());
         _members(x);
         _regMsig(r, d, "");
         _regMsig(x, d, "");
@@ -553,8 +612,13 @@ contract UARegistryMembershipTest is UARegistryBase {
 
     /// The digest by hand, with the domain's constant: the same words whatever `block.chainid` is.
     function _acceptDigestOn31337(bytes32 ua) internal view returns (bytes32) {
-        return keccak256(abi.encodePacked(hex"1901", UAKinds.PORTABLE_DOMAIN_SEPARATOR,
-            keccak256(abi.encode(UAKinds.UA_MEMBERSHIP_TYPEHASH, ua, _pad(vm.addr(ALICE))))));
+        return keccak256(
+            abi.encodePacked(
+                hex"1901",
+                UAKinds.PORTABLE_DOMAIN_SEPARATOR,
+                keccak256(abi.encode(UAKinds.UA_MEMBERSHIP_TYPEHASH, ua, _pad(vm.addr(ALICE))))
+            )
+        );
     }
 
     // ----- a gen-2 registry in front of a gen-1 record (as `setKemKey`, UA8-D11) -----
@@ -587,7 +651,8 @@ contract UARegistryMembershipTest is UARegistryBase {
         bytes memory key = new bytes(16_384);
         bytes32 hash = keccak256("proof");
         bytes32 rd = UAKinds.pqzKeyRecordDigest(ua, UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key), hash);
-        IUARegistry.UASig memory s = _two(_mlSig(d, ml1, UAKinds.PURPOSE_PQZ_KEY, rd), _mlSig(d, ml3, UAKinds.PURPOSE_PQZ_KEY, rd));
+        IUARegistry.UASig memory s =
+            _two(_mlSig(d, ml1, UAKinds.PURPOSE_PQZ_KEY, rd), _mlSig(d, ml3, UAKinds.PURPOSE_PQZ_KEY, rd));
         vm.expectRevert(_unauthorized(ua));
         g.setPqzKey(ua, 0, key, hash, s);
         r.acceptMembership(ua, _acceptKeySig(d, ML, ml3));
@@ -603,7 +668,8 @@ contract UARegistryMembershipTest is UARegistryBase {
         bytes memory key = new bytes(16_384);
         bytes32 hash = keccak256("proof");
         bytes32 rd = UAKinds.pqzKeyRecordDigest(ua, UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key), hash);
-        IUARegistry.UASig memory s = _two(_mlSig(d, ml1, UAKinds.PURPOSE_PQZ_KEY, rd), _mlSig(d, ml2, UAKinds.PURPOSE_PQZ_KEY, rd));
+        IUARegistry.UASig memory s =
+            _two(_mlSig(d, ml1, UAKinds.PURPOSE_PQZ_KEY, rd), _mlSig(d, ml2, UAKinds.PURPOSE_PQZ_KEY, rd));
         vm.mockCallRevert(address(r), abi.encodeWithSelector(IUARegistry.memberAccepted.selector), "");
         vm.expectRevert(UAKinds.UAVerifyGas.selector);
         g.setPqzKey(ua, 0, key, hash, s);
@@ -618,7 +684,9 @@ contract UARegistryMembershipTest is UARegistryBase {
         m[0] = Member(UAKinds.EVM_EOA, _pad(w), 1);
         bytes memory d = _msigKey(1, m);
         bytes32 ua = _regMsig(r, d, "");
-        IUARegistry.MemberSig memory s = IUARegistry.MemberSig(0, new IUARegistry.InnerSig[](0), _ecdsa(ALICE, UAKinds.membershipDigest(ua, _pad(w))));
+        IUARegistry.MemberSig memory s = IUARegistry.MemberSig(
+            0, new IUARegistry.InnerSig[](0), _ecdsa(ALICE, UAKinds.membershipDigest(ua, _pad(w)))
+        );
         bytes memory call_ = abi.encodeCall(r.acceptMembership, (ua, s));
         (bool ok, bytes memory ret) = address(r).call{gas: 60_000}(call_);
         assertFalse(ok);
@@ -634,7 +702,9 @@ contract UARegistryMembershipTest is UARegistryBase {
     function _reads(VmSafe.AccountAccess[] memory a, bytes32 slot) internal pure returns (uint256 n) {
         for (uint256 i; i < a.length; ++i) {
             VmSafe.StorageAccess[] memory sa = a[i].storageAccesses;
-            for (uint256 j; j < sa.length; ++j) if (sa[j].slot == slot && !sa[j].isWrite) ++n;
+            for (uint256 j; j < sa.length; ++j) {
+                if (sa[j].slot == slot && !sa[j].isWrite) ++n;
+            }
         }
     }
 
@@ -649,7 +719,9 @@ contract UARegistryMembershipTest is UARegistryBase {
         emit log_named_uint("gen 1 memberAccepted, next slot (warm)", warm);
         // CTR-UA-44 (TODO 3ze): 6,055 -> 8,572 (+2,517: the record's slot, read cold, for an updated msig's enabled word)
         assertLt(cold, 9_000, "measured 8,572");
-        assertLt(warm, 2_000, "measured 1,663 (3ze: 1,146 before, + the record's slot warm and the trailer's code read)");
+        assertLt(
+            warm, 2_000, "measured 1,663 (3ze: 1,146 before, + the record's slot warm and the trailer's code read)"
+        );
         assertTrue(g.memberAccepted(ua, i));
     }
 
@@ -662,7 +734,8 @@ contract UARegistryMembershipTest is UARegistryBase {
         assertEq(_reads(vm.stopAndReturnStateDiff(), slot), 1, "requireAuthorized");
         bytes memory pk = _kemPk(3);
         bytes32 rd = UAKinds.kemRecordDigest(ua, 1, pk);
-        IUARegistry.UASig memory s = _two(_mlSig(d, ml1, UAKinds.PURPOSE_KEM, rd), _mlSig(d, ml2, UAKinds.PURPOSE_KEM, rd));
+        IUARegistry.UASig memory s =
+            _two(_mlSig(d, ml1, UAKinds.PURPOSE_KEM, rd), _mlSig(d, ml2, UAKinds.PURPOSE_KEM, rd));
         vm.startStateDiffRecording();
         r.requirePortable(ua, UAKinds.PURPOSE_KEM, rd, s); // T66a: a stored record's signature, as setKemKey checked it
         assertEq(_reads(vm.stopAndReturnStateDiff(), slot), 1, "requirePortable");

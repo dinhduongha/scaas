@@ -29,18 +29,30 @@ type R<T> = Result<T, &'static str>;
 pub fn wrapper_ref(network: &[u8; 32], entry: &str, args: &[u8], salt: &[u8; 32]) -> [u8; 32] {
     let me = env::current_account_id();
     let target = [&[me.as_str().len() as u8][..], me.as_bytes()].concat();
-    relay_ref(network, &target, &[&[entry.len() as u8][..], entry.as_bytes(), args].concat(), salt)
+    relay_ref(
+        network,
+        &target,
+        &[&[entry.len() as u8][..], entry.as_bytes(), args].concat(),
+        salt,
+    )
 }
 
 impl Token {
     fn fee_ref(&self, entry: &str, args: &impl BorshSerialize, pay: &MetaOp) -> [u8; 32] {
-        wrapper_ref(&self.network, entry, &borsh::to_vec(args).expect("borsh"), &pay.extra)
+        wrapper_ref(
+            &self.network,
+            entry,
+            &borsh::to_vec(args).expect("borsh"),
+            &pay.extra,
+        )
     }
 
     /// After the entry body: the routed pay of `pay` for `r`, the storage of the whole call, then `relay_fee_paid`.
     fn relay_fee_pay(&mut self, r: [u8; 32], pay: &MetaOp, pay_auth: &Auth) {
         let (p, me) = (env::predecessor_account_id(), env::current_account_id());
-        let rt = self.routed_plan(&p, &me, &Holder::Near(p.clone()), pay, pay_auth, &r).unwrap_or_else(|e| env::panic_str(e));
+        let rt = self
+            .routed_plan(&p, &me, &Holder::Near(p.clone()), pay, pay_auth, &r)
+            .unwrap_or_else(|e| env::panic_str(e));
         self.open_lazily(&pay.from, rt.subject, rt.old);
         self.settle_pay(pay, &pay.from, &rt.payee);
         self.charge_storage();
@@ -58,10 +70,26 @@ impl Token {
     /// `entry`'s checks (`bytes`), then the payment's against the state now. When the entry's signer pays, the entry
     /// opens its record first (the payment never opens it twice) and draws `op.amount` first (`mtx_mandate_open`).
     #[allow(clippy::too_many_arguments)]
-    fn relay_fee_check(&self, caller: &AccountId, entry: &str, args: &impl BorshSerialize, op: &MetaOp, bytes: R<u64>, pay: &MetaOp, pay_auth: &Auth) -> Check {
+    fn relay_fee_check(
+        &self,
+        caller: &AccountId,
+        entry: &str,
+        args: &impl BorshSerialize,
+        op: &MetaOp,
+        bytes: R<u64>,
+        pay: &MetaOp,
+        pay_auth: &Auth,
+    ) -> Check {
         check_of(bytes.and_then(|b| {
             let me = env::current_account_id();
-            let rt = self.routed_plan(caller, &me, &Holder::Near(caller.clone()), pay, pay_auth, &self.fee_ref(entry, args, pay))?;
+            let rt = self.routed_plan(
+                caller,
+                &me,
+                &Holder::Near(caller.clone()),
+                pay,
+                pay_auth,
+                &self.fee_ref(entry, args, pay),
+            )?;
             if pay.from != op.from {
                 return Ok(b + rt.bytes);
             }
@@ -71,7 +99,12 @@ impl Token {
                     Holder::Ua(_) => "The UA doesn't have enough balance",
                 });
             }
-            Ok(b + rt.bytes - if rt.old == 0 { record_bytes(&pay.from, &rt.subject) } else { 0 })
+            Ok(b + rt.bytes
+                - if rt.old == 0 {
+                    record_bytes(&pay.from, &rt.subject)
+                } else {
+                    0
+                })
         }))
     }
 }
@@ -241,7 +274,11 @@ impl Token {
         #[serializer(borsh)] pay_op: MetaOp,
         #[serializer(borsh)] pay_auth: Auth,
     ) {
-        let r = self.fee_ref("mtx_cancel", &(&op, &auth, &target_lane, &target_nonce), &pay_op);
+        let r = self.fee_ref(
+            "mtx_cancel",
+            &(&op, &auth, &target_lane, &target_nonce),
+            &pay_op,
+        );
         self.cancel(&op, &auth, &target_lane, target_nonce);
         self.relay_fee_pay(r, &pay_op, &pay_auth);
     }
@@ -256,7 +293,11 @@ impl Token {
         #[serializer(borsh)] pay_op: MetaOp,
         #[serializer(borsh)] pay_auth: Auth,
     ) {
-        let r = self.fee_ref("mtx_invalidate_nonces", &(&op, &auth, &lane, &min_nonce), &pay_op);
+        let r = self.fee_ref(
+            "mtx_invalidate_nonces",
+            &(&op, &auth, &lane, &min_nonce),
+            &pay_op,
+        );
         self.invalidate_nonces(&op, &auth, &lane, min_nonce);
         self.relay_fee_pay(r, &pay_op, &pay_auth);
     }
@@ -274,8 +315,21 @@ impl Token {
         #[serializer(borsh)] pay_op: MetaOp,
         #[serializer(borsh)] pay_auth: Auth,
     ) -> Check {
-        let b = self.key_op_bytes(&caller, &op, &auth, &Action::AddKey(key.clone(), origin.clone()));
-        self.relay_fee_check(&caller, "mtx_add_key", &(&op, &auth, &key, &origin), &op, b, &pay_op, &pay_auth)
+        let b = self.key_op_bytes(
+            &caller,
+            &op,
+            &auth,
+            &Action::AddKey(key.clone(), origin.clone()),
+        );
+        self.relay_fee_check(
+            &caller,
+            "mtx_add_key",
+            &(&op, &auth, &key, &origin),
+            &op,
+            b,
+            &pay_op,
+            &pay_auth,
+        )
     }
 
     #[result_serializer(borsh)]
@@ -289,7 +343,15 @@ impl Token {
         #[serializer(borsh)] pay_auth: Auth,
     ) -> Check {
         let b = self.key_op_bytes(&caller, &op, &auth, &Action::RemoveKey(key.clone()));
-        self.relay_fee_check(&caller, "mtx_remove_key", &(&op, &auth, &key), &op, b, &pay_op, &pay_auth)
+        self.relay_fee_check(
+            &caller,
+            "mtx_remove_key",
+            &(&op, &auth, &key),
+            &op,
+            b,
+            &pay_op,
+            &pay_auth,
+        )
     }
 
     #[result_serializer(borsh)]
@@ -303,7 +365,15 @@ impl Token {
         #[serializer(borsh)] pay_auth: Auth,
     ) -> Check {
         let b = self.key_op_bytes(&caller, &op, &auth, &Action::AddOrigin(origin.clone()));
-        self.relay_fee_check(&caller, "mtx_add_origin", &(&op, &auth, &origin), &op, b, &pay_op, &pay_auth)
+        self.relay_fee_check(
+            &caller,
+            "mtx_add_origin",
+            &(&op, &auth, &origin),
+            &op,
+            b,
+            &pay_op,
+            &pay_auth,
+        )
     }
 
     #[result_serializer(borsh)]
@@ -317,7 +387,15 @@ impl Token {
         #[serializer(borsh)] pay_auth: Auth,
     ) -> Check {
         let b = self.key_op_bytes(&caller, &op, &auth, &Action::RemoveOrigin(origin.clone()));
-        self.relay_fee_check(&caller, "mtx_remove_origin", &(&op, &auth, &origin), &op, b, &pay_op, &pay_auth)
+        self.relay_fee_check(
+            &caller,
+            "mtx_remove_origin",
+            &(&op, &auth, &origin),
+            &op,
+            b,
+            &pay_op,
+            &pay_auth,
+        )
     }
 
     #[result_serializer(borsh)]
@@ -331,7 +409,15 @@ impl Token {
         #[serializer(borsh)] pay_auth: Auth,
     ) -> Check {
         let b = self.key_op_bytes(&caller, &op, &auth, &Action::SetGuardian(guardian.clone()));
-        self.relay_fee_check(&caller, "mtx_set_guardian", &(&op, &auth, &guardian), &op, b, &pay_op, &pay_auth)
+        self.relay_fee_check(
+            &caller,
+            "mtx_set_guardian",
+            &(&op, &auth, &guardian),
+            &op,
+            b,
+            &pay_op,
+            &pay_auth,
+        )
     }
 
     #[result_serializer(borsh)]
@@ -345,7 +431,15 @@ impl Token {
         #[serializer(borsh)] pay_auth: Auth,
     ) -> Check {
         let b = self.key_op_bytes(&caller, &op, &auth, &Action::SetPolicy(policy));
-        self.relay_fee_check(&caller, "mtx_set_policy", &(&op, &auth, &policy), &op, b, &pay_op, &pay_auth)
+        self.relay_fee_check(
+            &caller,
+            "mtx_set_policy",
+            &(&op, &auth, &policy),
+            &op,
+            b,
+            &pay_op,
+            &pay_auth,
+        )
     }
 
     #[result_serializer(borsh)]
@@ -359,8 +453,21 @@ impl Token {
         #[serializer(borsh)] pay_op: MetaOp,
         #[serializer(borsh)] pay_auth: Auth,
     ) -> Check {
-        let b = self.key_op_bytes(&caller, &op, &auth, &Action::StartRecovery(key.clone(), origin.clone()));
-        self.relay_fee_check(&caller, "mtx_start_recovery", &(&op, &auth, &key, &origin), &op, b, &pay_op, &pay_auth)
+        let b = self.key_op_bytes(
+            &caller,
+            &op,
+            &auth,
+            &Action::StartRecovery(key.clone(), origin.clone()),
+        );
+        self.relay_fee_check(
+            &caller,
+            "mtx_start_recovery",
+            &(&op, &auth, &key, &origin),
+            &op,
+            b,
+            &pay_op,
+            &pay_auth,
+        )
     }
 
     #[result_serializer(borsh)]
@@ -373,7 +480,15 @@ impl Token {
         #[serializer(borsh)] pay_auth: Auth,
     ) -> Check {
         let b = self.key_op_bytes(&caller, &op, &auth, &Action::CancelRecovery);
-        self.relay_fee_check(&caller, "mtx_cancel_recovery", &(&op, &auth), &op, b, &pay_op, &pay_auth)
+        self.relay_fee_check(
+            &caller,
+            "mtx_cancel_recovery",
+            &(&op, &auth),
+            &op,
+            b,
+            &pay_op,
+            &pay_auth,
+        )
     }
 
     #[result_serializer(borsh)]
@@ -386,7 +501,15 @@ impl Token {
         #[serializer(borsh)] pay_auth: Auth,
     ) -> Check {
         let b = self.key_op_bytes(&caller, &op, &auth, &Action::FinishRecovery);
-        self.relay_fee_check(&caller, "mtx_finish_recovery", &(&op, &auth), &op, b, &pay_op, &pay_auth)
+        self.relay_fee_check(
+            &caller,
+            "mtx_finish_recovery",
+            &(&op, &auth),
+            &op,
+            b,
+            &pay_op,
+            &pay_auth,
+        )
     }
 
     #[result_serializer(borsh)]
@@ -400,7 +523,15 @@ impl Token {
         #[serializer(borsh)] pay_auth: Auth,
     ) -> Check {
         let b = self.open_bytes(&caller, &op, &auth, &terms);
-        self.relay_fee_check(&caller, "mtx_mandate_open", &(&op, &auth, &terms), &op, b, &pay_op, &pay_auth)
+        self.relay_fee_check(
+            &caller,
+            "mtx_mandate_open",
+            &(&op, &auth, &terms),
+            &op,
+            b,
+            &pay_op,
+            &pay_auth,
+        )
     }
 
     #[result_serializer(borsh)]
@@ -413,7 +544,15 @@ impl Token {
         #[serializer(borsh)] pay_auth: Auth,
     ) -> Check {
         let b = self.revoke_bytes(&caller, &op, &auth);
-        self.relay_fee_check(&caller, "mtx_revoke", &(&op, &auth), &op, b, &pay_op, &pay_auth)
+        self.relay_fee_check(
+            &caller,
+            "mtx_revoke",
+            &(&op, &auth),
+            &op,
+            b,
+            &pay_op,
+            &pay_auth,
+        )
     }
 
     #[result_serializer(borsh)]
@@ -427,8 +566,18 @@ impl Token {
         #[serializer(borsh)] pay_op: MetaOp,
         #[serializer(borsh)] pay_auth: Auth,
     ) -> Check {
-        let b = self.cancel_plan(&caller, &op, &auth, &target_lane, target_nonce).map(|(_, _, b)| b);
-        self.relay_fee_check(&caller, "mtx_cancel", &(&op, &auth, &target_lane, &target_nonce), &op, b, &pay_op, &pay_auth)
+        let b = self
+            .cancel_plan(&caller, &op, &auth, &target_lane, target_nonce)
+            .map(|(_, _, b)| b);
+        self.relay_fee_check(
+            &caller,
+            "mtx_cancel",
+            &(&op, &auth, &target_lane, &target_nonce),
+            &op,
+            b,
+            &pay_op,
+            &pay_auth,
+        )
     }
 
     #[result_serializer(borsh)]
@@ -442,8 +591,18 @@ impl Token {
         #[serializer(borsh)] pay_op: MetaOp,
         #[serializer(borsh)] pay_auth: Auth,
     ) -> Check {
-        let b = self.invalidate_plan(&caller, &op, &auth, &lane, min_nonce).map(|(_, _, b)| b);
-        self.relay_fee_check(&caller, "mtx_invalidate_nonces", &(&op, &auth, &lane, &min_nonce), &op, b, &pay_op, &pay_auth)
+        let b = self
+            .invalidate_plan(&caller, &op, &auth, &lane, min_nonce)
+            .map(|(_, _, b)| b);
+        self.relay_fee_check(
+            &caller,
+            "mtx_invalidate_nonces",
+            &(&op, &auth, &lane, &min_nonce),
+            &op,
+            b,
+            &pay_op,
+            &pay_auth,
+        )
     }
 }
 
@@ -460,7 +619,10 @@ mod tests {
 
     fn hx(v: &Value) -> Vec<u8> {
         let s = v.as_str().unwrap().trim_start_matches("0x");
-        (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
+        (0..s.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+            .collect()
     }
 
     fn b32(v: &Value) -> [u8; 32] {
@@ -470,23 +632,49 @@ mod tests {
     #[test]
     fn relay_ref_vectors() {
         let d: Value = serde_json::from_str(&std::fs::read_to_string(VECTORS).unwrap()).unwrap();
-        let r = d["relayRefs"].as_array().unwrap().iter().find(|r| r["name"] == "wrapper_add_key_real").unwrap();
+        let r = d["relayRefs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["name"] == "wrapper_add_key_real")
+            .unwrap();
         let ops = d["metaops"]["vectors"].as_array().unwrap();
         let row = |n: &Value| ops.iter().find(|m| m["name"] == *n).unwrap();
         let token: AccountId = r["target"].as_str().unwrap().parse().unwrap();
-        testing_env!(VMContextBuilder::new().current_account_id(token.clone()).build());
+        testing_env!(VMContextBuilder::new()
+            .current_account_id(token.clone())
+            .build());
         // the wrapper re-encodes its arguments: Borsh decodes canonically, so these are the client's bytes
         let args = hx(&r["args"]);
-        let (op, auth, key, origin): (MetaOp, Auth, KeyRecord, Option<String>) = borsh::from_slice(&args).unwrap();
+        let (op, auth, key, origin): (MetaOp, Auth, KeyRecord, Option<String>) =
+            borsh::from_slice(&args).unwrap();
         assert_eq!(borsh::to_vec(&(&op, &auth, &key, &origin)).unwrap(), args);
-        assert_eq!(op.digest(), b32(&row(&r["entryOp"])["digest"]), "the entry op is the key op row");
-        assert_eq!([&[11u8][..], b"mtx_add_key", &args].concat(), hx(&r["call"]), "R6: the full entry name");
+        assert_eq!(
+            op.digest(),
+            b32(&row(&r["entryOp"])["digest"]),
+            "the entry op is the key op row"
+        );
+        assert_eq!(
+            [&[11u8][..], b"mtx_add_key", &args].concat(),
+            hx(&r["call"]),
+            "R6: the full entry name"
+        );
         // salt = the payment op's payer-signed extra, always (spec §2 row 8)
         let pay = &row(&r["payment"])["fields"];
         let net = b32(&d["network"]);
-        assert_eq!(wrapper_ref(&net, "mtx_add_key", &args, &b32(&pay["extra"])), b32(&r["ref"]));
-        assert_ne!(wrapper_ref(&net, "mtx_add_key", &args, &[0; 32]), b32(&r["ref"]));
+        assert_eq!(
+            wrapper_ref(&net, "mtx_add_key", &args, &b32(&pay["extra"])),
+            b32(&r["ref"])
+        );
+        assert_ne!(
+            wrapper_ref(&net, "mtx_add_key", &args, &[0; 32]),
+            b32(&r["ref"])
+        );
         assert_eq!(b32(&pay["pay_ref"]), b32(&r["ref"]));
-        assert_eq!((pay["relayer"].as_str(), pay["to"]["Near"].as_str()), (Some(token.as_str()), Some(token.as_str())), "bound to the token");
+        assert_eq!(
+            (pay["relayer"].as_str(), pay["to"]["Near"].as_str()),
+            (Some(token.as_str()), Some(token.as_str())),
+            "bound to the token"
+        );
     }
 }

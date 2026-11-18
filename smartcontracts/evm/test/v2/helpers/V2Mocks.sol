@@ -7,6 +7,7 @@ import {MockERC20} from "../../helpers/Mocks.sol";
 /// Wrap vẫn đúng (đo delta); unwrap thì số dư wrapper giảm hơn `out` ⇒ `UnderlyingTransferMismatch` (R143).
 contract SenderPaysFeeERC20 is MockERC20 {
     constructor() MockERC20("SenderFee", "SFEE", 18) {}
+
     function _update(address from, address to, uint256 v) internal override {
         if (from != address(0) && to != address(0)) super._update(from, address(0), v / 100);
         super._update(from, to, v);
@@ -16,7 +17,10 @@ contract SenderPaysFeeERC20 is MockERC20 {
 /// Rebase âm / tịch thu: `slash` đốt thẳng từ một địa chỉ (wrapper), `balanceOf < reserve` sau đó.
 contract SlashableERC20 is MockERC20 {
     constructor(uint8 d) MockERC20("Slash", "SLSH", d) {}
-    function slash(address who, uint256 v) external { _burn(who, v); }
+
+    function slash(address who, uint256 v) external {
+        _burn(who, v);
+    }
 }
 
 /// Blacklist: chuyển từ/tới một địa chỉ bị chặn thì revert.
@@ -24,7 +28,11 @@ contract BlacklistERC20 is MockERC20 {
     mapping(address => bool) public blocked;
     error Blocked(address);
     constructor() MockERC20("Black", "BLK", 6) {}
-    function setBlocked(address a, bool b) external { blocked[a] = b; }
+
+    function setBlocked(address a, bool b) external {
+        blocked[a] = b;
+    }
+
     function _update(address from, address to, uint256 v) internal override {
         if (blocked[from]) revert Blocked(from);
         if (blocked[to]) revert Blocked(to);
@@ -40,7 +48,11 @@ interface ITokensReceived {
 contract HookERC20 is MockERC20 {
     mapping(address => bool) public hooked;
     constructor() MockERC20("Hook", "HOOK", 18) {}
-    function setHooked(address a) external { hooked[a] = true; }
+
+    function setHooked(address a) external {
+        hooked[a] = true;
+    }
+
     function _update(address from, address to, uint256 v) internal override {
         super._update(from, to, v);
         if (from != address(0) && hooked[to]) ITokensReceived(to).tokensReceived(from, v);
@@ -49,22 +61,32 @@ contract HookERC20 is MockERC20 {
 
 /// Có code, không có `decimals()`.
 contract NoDecimals {
-    function balanceOf(address) external pure returns (uint256) { return 0; }
+    function balanceOf(address) external pure returns (uint256) {
+        return 0;
+    }
 }
 
 /// `decimals()` trả một word ngoài biên uint8.
 contract BadDecimals {
-    function decimals() external pure returns (uint256) { return 256; }
+    function decimals() external pure returns (uint256) {
+        return 256;
+    }
 }
 
 /// Rate admin là một hợp đồng (R135): forwarder tối thiểu, chủ là người deploy.
 contract RateAdminForwarder {
     address public immutable owner;
-    constructor() { owner = msg.sender; }
+
+    constructor() {
+        owner = msg.sender;
+    }
+
     function exec(address target, bytes calldata data) external returns (bytes memory) {
         require(msg.sender == owner, "owner");
         (bool ok, bytes memory ret) = target.call(data);
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        }
         return ret;
     }
 }

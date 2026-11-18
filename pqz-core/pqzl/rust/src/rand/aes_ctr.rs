@@ -14,7 +14,12 @@ pub(crate) struct AesCtr {
 
 impl AesCtr {
     pub(crate) fn new(key: &[u8; 32], nonce: &[u8; 16]) -> AesCtr {
-        AesCtr { aes: Aes256::new(key.into()), ctr: *nonce, buf: [0; 16], pos: 16 }
+        AesCtr {
+            aes: Aes256::new(key.into()),
+            ctr: *nonce,
+            buf: [0; 16],
+            pos: 16,
+        }
     }
 
     /// the next `out.len()` keystream bytes

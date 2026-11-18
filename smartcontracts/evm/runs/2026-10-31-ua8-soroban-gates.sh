@@ -20,7 +20,8 @@ FAMILIES="ua-rs ua-rs-pq ua-rs-signers ua-rs-json ua-py ua-go ua-cs ua-c ua-cxx 
 # "<step>|<form>|<name>": every test added from bdde1d66 (the typed-signing merge) to HEAD in the contracts, spike, node and
 # ua-rs (test functions found in the diff: Tasks M2, M3, G1, B0-B7c, V1, B9a, N2, MA-S), clientkeys' new titles, in the tool's pass
 # form (forms: see the base runner). e2e_ua8 tests sit in the e2e-ua8-N step that runs them.
-NEW_TESTS=$(cat <<'NAMES'
+NEW_TESTS=$(
+    cat <<'NAMES'
 forge|forge|test_gen1KindGate_refusesMissingZether
 forge|forge|test_gen1KindGate_refusesMissingSchnorrBls
 forge|forge|test_gen1KindGate_noBlsPasses

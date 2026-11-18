@@ -10,9 +10,11 @@ use std::process::{Command, Stdio};
 
 use serde_json::{json, Value};
 use zether_prover::api::{call, hx};
-use zether_prover::curve::{decode_point, encode_point, generator, point_len, Bls12381, Fr, ZCurve, G};
 #[cfg(feature = "bn254")]
 use zether_prover::curve::Bn254;
+use zether_prover::curve::{
+    decode_point, encode_point, generator, point_len, Bls12381, Fr, ZCurve, G,
+};
 use zether_prover::elgamal::Ciphertext;
 use zether_prover::vectors::MNEMONIC;
 
@@ -27,10 +29,20 @@ fn pt<C: ZCurve>(v: &Value) -> G<C> {
 }
 
 fn read_balance(args: &[&str], key: &Value) -> Result<Value, String> {
-    let mut child = Command::new(CLI).args(args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
-        .spawn().unwrap();
+    let mut child = Command::new(CLI)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
     // A CLI that refuses its arguments exits before reading stdin: the pipe breaks, the exit status carries the verdict.
-    if let Err(e) = child.stdin.take().unwrap().write_all(key.to_string().as_bytes()) {
+    if let Err(e) = child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(key.to_string().as_bytes())
+    {
         assert_eq!(e.kind(), std::io::ErrorKind::BrokenPipe, "{e}");
     }
     let out = child.wait_with_output().unwrap();
@@ -56,17 +68,38 @@ fn big_balance_cache_spend_and_cli_recovery_bn254() {
 fn recovery<C: ZCurve>() {
     let curve = C::NAME;
     let n = point_len::<C>();
-    let (k0, k1) = (json!({"mnemonic": MNEMONIC, "coin": 60, "account": 0}), json!({"mnemonic": MNEMONIC, "coin": 60, "account": 1}));
-    let (a, b) = (api("keygen", json!({"curve": curve, "key": k0})).unwrap(), api("keygen", json!({"curve": curve, "key": k1})).unwrap());
+    let (k0, k1) = (
+        json!({"mnemonic": MNEMONIC, "coin": 60, "account": 0}),
+        json!({"mnemonic": MNEMONIC, "coin": 60, "account": 1}),
+    );
+    let (a, b) = (
+        api("keygen", json!({"curve": curve, "key": k0})).unwrap(),
+        api("keygen", json!({"curve": curve, "key": k1})).unwrap(),
+    );
     let bal: u64 = (1 << 44) + (1 << 34);
-    let acc = api("encrypt", json!({"curve": curve, "Y": a["Y"], "amount": bal.to_string()})).unwrap();
+    let acc = api(
+        "encrypt",
+        json!({"curve": curve, "Y": a["Y"], "amount": bal.to_string()}),
+    )
+    .unwrap();
 
     // Device BSGS (scaled down: table 2^18, bound 2^24) cannot read it: the wallet sends the user to the CLI.
-    let e = api("decrypt", json!({"curve": curve, "key": k0, "ct": acc, "tableBits": 18, "boundBits": 24})).unwrap_err();
+    let e = api(
+        "decrypt",
+        json!({"curve": curve, "key": k0, "ct": acc, "tableBits": 18, "boundBits": 24}),
+    )
+    .unwrap_err();
     assert!(e.contains("zether-read-balance"), "{e}");
 
     // Cache: a right balance validates, a wrong one does not.
-    let check = |acc: &Value, b: u64| api("checkBalance", json!({"curve": curve, "key": k0, "acc": acc, "balance": b.to_string()})).unwrap()["ok"].clone();
+    let check = |acc: &Value, b: u64| {
+        api(
+            "checkBalance",
+            json!({"curve": curve, "key": k0, "acc": acc, "balance": b.to_string()}),
+        )
+        .unwrap()["ok"]
+            .clone()
+    };
     assert_eq!(check(&acc, bal), json!(true));
     assert_eq!(check(&acc, bal - 1), json!(false));
 
@@ -79,38 +112,97 @@ fn recovery<C: ZCurve>() {
         "sendCounter": 0, "accSeq": 1, "validUntilBlock": 100, "acc": acc, "balance": bal.to_string(), "yTo": b["Y"],
         "amount": v.to_string(), "fee": fee, "beneficiary": hx(&[0x22; 32]),
     })).unwrap();
-    assert_eq!(api("verifyTransfer", json!({"curve": curve, "statement": t["statement"], "proof": t["proof"]})).unwrap()["ok"], json!(true));
+    assert_eq!(
+        api(
+            "verifyTransfer",
+            json!({"curve": curve, "statement": t["statement"], "proof": t["proof"]})
+        )
+        .unwrap()["ok"],
+        json!(true)
+    );
     // The token's debit: acc −= (C_deb + [fee]G, D_out). Payload = 96 B ‖ salt(16) ‖ Y_f ‖ Y_t ‖ C_out ‖ D_out ‖ C_deb ‖ C_aud.
     let pl = hex::decode(&t["payload"].as_str().unwrap()[2..]).unwrap();
     let at = |i: usize| decode_point::<C>(&pl[112 + n * i..112 + n * (i + 1)]).unwrap();
     let (d_out, c_deb) = (at(3), at(4));
     let g = generator::<C>();
-    let acc2 = Ciphertext::<C> { c: pt::<C>(&acc["C"]) - c_deb - g * Fr::<C>::from(fee), d: pt::<C>(&acc["D"]) - d_out };
+    let acc2 = Ciphertext::<C> {
+        c: pt::<C>(&acc["C"]) - c_deb - g * Fr::<C>::from(fee),
+        d: pt::<C>(&acc["D"]) - d_out,
+    };
     let enc = |p: &G<C>| hx(&encode_point::<C>(p));
     let acc2_j = json!({"C": enc(&acc2.c), "D": enc(&acc2.d)});
     let left = bal - v - fee;
     assert!(left > 1 << 44);
-    assert_eq!(check(&acc2_j, left), json!(true), "cache update b -= v + fee");
+    assert_eq!(
+        check(&acc2_j, left),
+        json!(true),
+        "cache update b -= v + fee"
+    );
 
     // Cache lost: the CLI recovers the balance from the pasted ciphertext; the table file is
     // written on the first run, then loaded and verified on the second.
     let dir = std::env::temp_dir().join(format!("zrb-{}-{curve}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join(format!("{curve}-22.bsgs"));
-    let ct = format!("{}:{}", acc2_j["C"].as_str().unwrap(), acc2_j["D"].as_str().unwrap());
-    let args = ["--curve", curve, "--table-bits", "22", "--bound-bits", "45", "--ct", &ct, "--table-file", file.to_str().unwrap()];
+    let ct = format!(
+        "{}:{}",
+        acc2_j["C"].as_str().unwrap(),
+        acc2_j["D"].as_str().unwrap()
+    );
+    let args = [
+        "--curve",
+        curve,
+        "--table-bits",
+        "22",
+        "--bound-bits",
+        "45",
+        "--ct",
+        &ct,
+        "--table-file",
+        file.to_str().unwrap(),
+    ];
     for _ in 0..2 {
         let out = read_balance(&args, &k0).unwrap();
         // review N3: a pasted ciphertext alone is the user's word, neither verified nor refuted.
-        assert_eq!(out, json!({"balance": left.to_string(), "accSeq": null, "block": null, "source": "pasted"}));
+        assert_eq!(
+            out,
+            json!({"balance": left.to_string(), "accSeq": null, "block": null, "source": "pasted"})
+        );
     }
-    assert_eq!(std::fs::metadata(&file).unwrap().len(), (8 + 1 + curve.len() + 1) as u64 + (12 << 22));
+    assert_eq!(
+        std::fs::metadata(&file).unwrap().len(),
+        (8 + 1 + curve.len() + 1) as u64 + (12 << 22)
+    );
     // A bound below the balance, out-of-range knobs and a table file of another size are refused.
-    assert!(read_balance(&["--curve", curve, "--table-bits", "20", "--bound-bits", "21", "--ct", &ct], &k0).is_err());
+    assert!(read_balance(
+        &[
+            "--curve",
+            curve,
+            "--table-bits",
+            "20",
+            "--bound-bits",
+            "21",
+            "--ct",
+            &ct
+        ],
+        &k0
+    )
+    .is_err());
     assert!(read_balance(&["--curve", curve, "--table-bits", "28", "--ct", &ct], &k0).is_err());
     assert!(read_balance(&["--curve", curve, "--table-bits", "19", "--ct", &ct], &k0).is_err());
     assert!(read_balance(&["--curve", curve, "--bound-bits", "55", "--ct", &ct], &k0).is_err());
-    let other = ["--curve", curve, "--table-bits", "23", "--bound-bits", "45", "--ct", &ct, "--table-file", file.to_str().unwrap()];
+    let other = [
+        "--curve",
+        curve,
+        "--table-bits",
+        "23",
+        "--bound-bits",
+        "45",
+        "--ct",
+        &ct,
+        "--table-file",
+        file.to_str().unwrap(),
+    ];
     assert!(read_balance(&other, &k0).unwrap_err().contains("not 2^23"));
 
     std::fs::remove_dir_all(&dir).unwrap();
@@ -123,34 +215,116 @@ fn recovery<C: ZCurve>() {
 #[test]
 fn ct_only_with_hazmat_and_rpc_only_as_a_reading_layer() {
     let k0 = json!({"mnemonic": MNEMONIC, "coin": 60, "account": 0});
-    let y = zether_prover::keys::ZetherKey::<Bls12381>::conf(&zether_prover::keys::seed_from_mnemonic(MNEMONIC, "").unwrap()[..], 60, 0).unwrap();
+    let y = zether_prover::keys::ZetherKey::<Bls12381>::conf(
+        &zether_prover::keys::seed_from_mnemonic(MNEMONIC, "").unwrap()[..],
+        60,
+        0,
+    )
+    .unwrap();
     let ct = zether_prover::elgamal::encrypt(&y.y, 77, &Fr::<Bls12381>::from(5u64));
-    let pasted = format!("{}:{}", hx(&encode_point::<Bls12381>(&ct.c)), hx(&encode_point::<Bls12381>(&ct.d)));
-    let r = read_balance(&["--curve", "bls12381", "--table-bits", "20", "--bound-bits", "24", "--ct", &pasted], &k0);
+    let pasted = format!(
+        "{}:{}",
+        hx(&encode_point::<Bls12381>(&ct.c)),
+        hx(&encode_point::<Bls12381>(&ct.d))
+    );
+    let r = read_balance(
+        &[
+            "--curve",
+            "bls12381",
+            "--table-bits",
+            "20",
+            "--bound-bits",
+            "24",
+            "--ct",
+            &pasted,
+        ],
+        &k0,
+    );
     if cfg!(feature = "hazmat") {
-        assert_eq!(r.unwrap()["balance"], json!("77"), "hazmat: the pasted path");
+        assert_eq!(
+            r.unwrap()["balance"],
+            json!("77"),
+            "hazmat: the pasted path"
+        );
     } else {
-        assert!(r.unwrap_err().contains("unknown argument --ct"), "release: no --ct");
+        assert!(
+            r.unwrap_err().contains("unknown argument --ct"),
+            "release: no --ct"
+        );
     }
-    let url = format!("http://{}", std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap());
+    let url = format!(
+        "http://{}",
+        std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+    );
     let tok = "0x5fbdb2315678afecb367f032d93f642f64180aa3";
-    for missing in ["--chain-id", "--chain-uid", "--factory", "--token", "--depth"] {
-        let mut a = vec!["--curve", "bls12381", "--table-bits", "20", "--rpc", &url, "--chain-id", "31337", "--chain-uid", tok,
-            "--factory", tok, "--token", tok, "--depth", "1"];
+    for missing in [
+        "--chain-id",
+        "--chain-uid",
+        "--factory",
+        "--token",
+        "--depth",
+    ] {
+        let mut a = vec![
+            "--curve",
+            "bls12381",
+            "--table-bits",
+            "20",
+            "--rpc",
+            &url,
+            "--chain-id",
+            "31337",
+            "--chain-uid",
+            tok,
+            "--factory",
+            tok,
+            "--token",
+            tok,
+            "--depth",
+            "1",
+        ];
         let i = a.iter().position(|x| *x == missing).unwrap();
         a.drain(i..i + 2);
-        assert!(read_balance(&a, &k0).unwrap_err().contains("--rpc needs"), "{missing}");
+        assert!(
+            read_balance(&a, &k0).unwrap_err().contains("--rpc needs"),
+            "{missing}"
+        );
     }
-    let both = ["--curve", "bls12381", "--rpc", &url, "--chain-id", "1", "--chain-uid", tok, "--factory", tok, "--token", tok, "--depth",
-        "1", "--finalized"];
-    assert!(read_balance(&both, &k0).unwrap_err().contains("--rpc needs"), "one of --depth / --finalized");
+    let both = [
+        "--curve",
+        "bls12381",
+        "--rpc",
+        &url,
+        "--chain-id",
+        "1",
+        "--chain-uid",
+        tok,
+        "--factory",
+        tok,
+        "--token",
+        tok,
+        "--depth",
+        "1",
+        "--finalized",
+    ];
+    assert!(
+        read_balance(&both, &k0)
+            .unwrap_err()
+            .contains("--rpc needs"),
+        "one of --depth / --finalized"
+    );
 }
 
 fn b64url(b: &[u8]) -> String {
     const A: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     let mut s = String::new();
     for c in b.chunks(3) {
-        let n = c.iter().enumerate().fold(0u32, |a, (i, x)| a | (u32::from(*x) << (16 - 8 * i)));
+        let n = c
+            .iter()
+            .enumerate()
+            .fold(0u32, |a, (i, x)| a | (u32::from(*x) << (16 - 8 * i)));
         for i in 0..=c.len() {
             s.push(A[(n >> (18 - 6 * i) & 63) as usize] as char);
         }
@@ -162,12 +336,25 @@ fn b64url(b: &[u8]) -> String {
 fn seal(k: &zether_prover::keys::ZetherKey<Bls12381>, entries: &Value, path: &std::path::Path) {
     use aes_gcm::aead::{Aead, KeyInit, Payload};
     let mut ck = [0u8; 32];
-    hkdf::Hkdf::<sha2::Sha256>::new(None, &zether_prover::curve::encode_scalar::<Bls12381>(&k.x)).expand(b"scaas-zether-balance-cache-v1", &mut ck).unwrap();
-    let iv = [7u8; 12];
-    let ct = aes_gcm::Aes256Gcm::new_from_slice(&ck).unwrap()
-        .encrypt(&aes_gcm::Nonce::from(iv), Payload { msg: entries.to_string().as_bytes(), aad: b"zether-cache:bls12381" })
+    hkdf::Hkdf::<sha2::Sha256>::new(None, &zether_prover::curve::encode_scalar::<Bls12381>(&k.x))
+        .expand(b"scaas-zether-balance-cache-v1", &mut ck)
         .unwrap();
-    std::fs::write(path, json!({"iv": b64url(&iv), "ct": b64url(&ct)}).to_string()).unwrap();
+    let iv = [7u8; 12];
+    let ct = aes_gcm::Aes256Gcm::new_from_slice(&ck)
+        .unwrap()
+        .encrypt(
+            &aes_gcm::Nonce::from(iv),
+            Payload {
+                msg: entries.to_string().as_bytes(),
+                aad: b"zether-cache:bls12381",
+            },
+        )
+        .unwrap();
+    std::fs::write(
+        path,
+        json!({"iv": b64url(&iv), "ct": b64url(&ct)}).to_string(),
+    )
+    .unwrap();
 }
 
 /// `{k: v}`.
@@ -176,8 +363,20 @@ fn one(k: &str, v: Value) -> Value {
 }
 
 fn kat_key(id: &str, account: u32) -> Value {
-    let keys: Value = serde_json::from_str(&std::fs::read_to_string(format!("{}/../../smartcontracts/vectors/ua/keys.json", env!("CARGO_MANIFEST_DIR"))).unwrap()).unwrap();
-    let m = keys["mnemonics"].as_array().unwrap().iter().find(|m| m["id"] == id).unwrap();
+    let keys: Value = serde_json::from_str(
+        &std::fs::read_to_string(format!(
+            "{}/../../smartcontracts/vectors/ua/keys.json",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    let m = keys["mnemonics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["id"] == id)
+        .unwrap();
     json!({"mnemonic": m["words"], "passphrase": m["passphrase"], "coin": 60, "account": account})
 }
 
@@ -186,28 +385,77 @@ fn kat_key(id: &str, account: u32) -> Value {
 /// cached balance without any ciphertext.
 #[test]
 fn the_holders_cache_box() {
-    let z: Value = serde_json::from_str(&std::fs::read_to_string(format!("{}/../../smartcontracts/vectors/ua/zether.json", env!("CARGO_MANIFEST_DIR"))).unwrap()).unwrap();
+    let z: Value = serde_json::from_str(
+        &std::fs::read_to_string(format!(
+            "{}/../../smartcontracts/vectors/ua/zether.json",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap(),
+    )
+    .unwrap();
     let r = &z["cacheBox"][0];
     let dir = std::env::temp_dir().join(format!("zrb-box-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("box.json");
     std::fs::write(&file, r["box"].to_string()).unwrap();
-    let k = kat_key(r["mnemonic"].as_str().unwrap(), r["account"].as_u64().unwrap() as u32);
+    let k = kat_key(
+        r["mnemonic"].as_str().unwrap(),
+        r["account"].as_u64().unwrap() as u32,
+    );
     let tok = "0x5fbdb2315678afecb367f032d93f642f64180aa3";
-    let args = ["--curve", "bls12381", "--cache-box", file.to_str().unwrap(), "--token", tok];
-    assert!(read_balance(&args, &k).unwrap_err().contains("no entry for this key's UA"), "clientkeys' box opens");
-    assert!(read_balance(&args, &kat_key(r["mnemonic"].as_str().unwrap(), 1)).unwrap_err().contains("does not open"), "another key");
+    let args = [
+        "--curve",
+        "bls12381",
+        "--cache-box",
+        file.to_str().unwrap(),
+        "--token",
+        tok,
+    ];
+    assert!(
+        read_balance(&args, &k)
+            .unwrap_err()
+            .contains("no entry for this key's UA"),
+        "clientkeys' box opens"
+    );
+    assert!(
+        read_balance(&args, &kat_key(r["mnemonic"].as_str().unwrap(), 1))
+            .unwrap_err()
+            .contains("does not open"),
+        "another key"
+    );
     let key = zether_prover::api::key::<Bls12381>(&json!({"key": k})).unwrap();
     let id = format!("{}:{tok}", hx(&key.ua()));
-    seal(&key, &one(&id, json!({"ua": hx(&key.ua()), "token": tok, "accSeq": 3, "balance": "18014398509481983"})), &file);
+    seal(
+        &key,
+        &one(
+            &id,
+            json!({"ua": hx(&key.ua()), "token": tok, "accSeq": 3, "balance": "18014398509481983"}),
+        ),
+        &file,
+    );
     let out = read_balance(&args, &k).unwrap();
-    assert_eq!(out, json!({"balance": "18014398509481983", "accSeq": 3, "block": null, "source": "cache"}));
+    assert_eq!(
+        out,
+        json!({"balance": "18014398509481983", "accSeq": 3, "block": null, "source": "cache"})
+    );
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
 fn rpc(url: &str, method: &str, params: Value) -> Value {
     let body = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).to_string();
-    let out = Command::new("curl").args(["-s", "-X", "POST", "-H", "content-type: application/json", "--data", &body, url]).output().unwrap();
+    let out = Command::new("curl")
+        .args([
+            "-s",
+            "-X",
+            "POST",
+            "-H",
+            "content-type: application/json",
+            "--data",
+            &body,
+            url,
+        ])
+        .output()
+        .unwrap();
     let v: Value = serde_json::from_slice(&out.stdout).unwrap_or(Value::Null);
     v["result"].clone()
 }
@@ -229,7 +477,11 @@ const RECORDS: (&str, &str) = ("ua/UAStoreLayout.t.sol", "records");
 const UA_COUNT: (&str, &str) = ("ua/UAStoreLayout.t.sol", "uaCount");
 const UA_AT: (&str, &str) = ("ua/UAStoreLayout.t.sol", "uaAt");
 fn pin_slot((file, field): (&str, &str)) -> u64 {
-    let pin = std::fs::read_to_string(format!("{}/../../smartcontracts/evm/test/{file}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let pin = std::fs::read_to_string(format!(
+        "{}/../../smartcontracts/evm/test/{file}",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
     pin.lines()
         .find_map(|l| {
             let l = l.trim();
@@ -238,7 +490,12 @@ fn pin_slot((file, field): (&str, &str)) -> u64 {
             }
             let rest = l.strip_prefix("s.")?.strip_prefix(field)?;
             rest.starts_with(['[', '.', ' ']).then_some(())?;
-            rest.rsplit_once("// ")?.1.split_whitespace().next()?.parse().ok()
+            rest.rsplit_once("// ")?
+                .1
+                .split_whitespace()
+                .next()?
+                .parse()
+                .ok()
         })
         .unwrap_or_else(|| panic!("{field}: not in {file}"))
 }
@@ -248,7 +505,17 @@ fn pin_slot((file, field): (&str, &str)) -> u64 {
 fn clone_code(chain_uid: &[u8; 32], registry: &[u8; 20]) -> Vec<u8> {
     let head = hex::decode("363d3d373d3d3d363d73").unwrap();
     let tail = hex::decode("5af43d82803e903d91602b57fd5bf3").unwrap();
-    [&head[..], &[0x11; 20], &tail, chain_uid, registry, &[0x33; 20], &[0x44; 20], &[0, 0, 0]].concat()
+    [
+        &head[..],
+        &[0x11; 20],
+        &tail,
+        chain_uid,
+        registry,
+        &[0x33; 20],
+        &[0x44; 20],
+        &[0, 0, 0],
+    ]
+    .concat()
 }
 /// `_rec[token]` word 1 (T67; two words since round 3r R1), from the low end `contractClass(16) ‖ kind(16) ‖ version(64)`: class TOKEN, version 1.
 fn record(kind: u8) -> [u8; 32] {
@@ -279,10 +546,20 @@ fn add(a: &[u8; 32], i: u64) -> [u8; 32] {
 #[ignore]
 fn rpc_reading_layer_against_anvil() {
     use zether_prover::curve::{keccak256, proof_system_id};
-    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
     let url = format!("http://127.0.0.1:{port}");
     let bin = std::env::var("ANVIL").unwrap_or_else(|_| "anvil".into());
-    let _anvil = Anvil(Command::new(bin).args(["--port", &port.to_string(), "--silent"]).stdout(Stdio::null()).spawn().unwrap());
+    let _anvil = Anvil(
+        Command::new(bin)
+            .args(["--port", &port.to_string(), "--silent"])
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
     let mut up = false;
     for _ in 0..100 {
         if rpc(&url, "eth_chainId", json!([])).is_string() {
@@ -292,39 +569,79 @@ fn rpc_reading_layer_against_anvil() {
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
     assert!(up, "anvil did not start");
-    let chain_id = u64::from_str_radix(rpc(&url, "eth_chainId", json!([])).as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
-    let genesis = rpc(&url, "eth_getBlockByNumber", json!(["0x0", false]))["hash"].as_str().unwrap().to_string();
+    let chain_id = u64::from_str_radix(
+        rpc(&url, "eth_chainId", json!([]))
+            .as_str()
+            .unwrap()
+            .trim_start_matches("0x"),
+        16,
+    )
+    .unwrap();
+    let genesis = rpc(&url, "eth_getBlockByNumber", json!(["0x0", false]))["hash"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let set = |addr: &str, slot: &[u8; 32], w: &[u8; 32]| {
-        assert_eq!(rpc(&url, "anvil_setStorageAt", json!([addr, hx(slot), hx(w)])), json!(true));
+        assert_eq!(
+            rpc(&url, "anvil_setStorageAt", json!([addr, hx(slot), hx(w)])),
+            json!(true)
+        );
     };
     let be = |n: u64| {
         let mut w = [0u8; 32];
         w[24..].copy_from_slice(&n.to_be_bytes());
         w
     };
-    let (factory, token, other_token, pqz_token) = ("0x00000000000000000000000000000000000fac70", "0x0000000000000000000000000000000000002e7a",
-        "0x0000000000000000000000000000000000002e7b", "0x0000000000000000000000000000000000002e7c");
+    let (factory, token, other_token, pqz_token) = (
+        "0x00000000000000000000000000000000000fac70",
+        "0x0000000000000000000000000000000000002e7a",
+        "0x0000000000000000000000000000000000002e7b",
+        "0x0000000000000000000000000000000000002e7c",
+    );
     let catalogue = |t: &str, kind: u8| {
         let mut k = [0u8; 32];
         k[12..].copy_from_slice(&hex::decode(&t[2..]).unwrap());
-        set(factory, &add(&keccak256(&[k, be(pin_slot(REC))].concat()), 1), &record(kind));
+        set(
+            factory,
+            &add(&keccak256(&[k, be(pin_slot(REC))].concat()), 1),
+            &record(kind),
+        );
     };
     catalogue(token, 2);
     catalogue(pqz_token, 4);
     // the clone's code with its env (owner 2026-11-08), a catalogued Zether token with none
-    let kat: Value = serde_json::from_str(&std::fs::read_to_string(format!("{}/../../smartcontracts/vectors/factory/create3_kat.json",
-        env!("CARGO_MANIFEST_DIR"))).unwrap()).unwrap();
+    let kat: Value = serde_json::from_str(
+        &std::fs::read_to_string(format!(
+            "{}/../../smartcontracts/vectors/factory/create3_kat.json",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap(),
+    )
+    .unwrap();
     let plain = hex::decode(&kat["envs"][0]["cloneInitCode"].as_str().unwrap()[2..]).unwrap();
     let kenv = hex::decode(&kat["envs"][0]["env"].as_str().unwrap()[2..]).unwrap();
-    assert_eq!(clone_code(&kenv[..32].try_into().unwrap(), &kenv[32..52].try_into().unwrap()), plain[10..], "the fixture's clone is the KAT's");
+    assert_eq!(
+        clone_code(
+            &kenv[..32].try_into().unwrap(),
+            &kenv[32..52].try_into().unwrap()
+        ),
+        plain[10..],
+        "the fixture's clone is the KAT's"
+    );
     let uid: [u8; 32] = hex::decode(&genesis[2..]).unwrap().try_into().unwrap();
-    rpc(&url, "anvil_setCode", json!([token, hx(&clone_code(&uid, &[0xde; 20]))]));
+    rpc(
+        &url,
+        "anvil_setCode",
+        json!([token, hx(&clone_code(&uid, &[0xde; 20]))]),
+    );
     let bare = "0x0000000000000000000000000000000000002e7d";
     catalogue(bare, 2);
     let root = zether_prover::state::ROOT;
     set(token, &add(&root, 6), &proof_system_id::<Bls12381>());
     let seed = zether_prover::keys::seed_from_mnemonic(MNEMONIC, "").unwrap();
-    let keys: Vec<_> = (0..2).map(|a| zether_prover::keys::ZetherKey::<Bls12381>::conf(&seed[..], 60, a).unwrap()).collect();
+    let keys: Vec<_> = (0..2)
+        .map(|a| zether_prover::keys::ZetherKey::<Bls12381>::conf(&seed[..], 60, a).unwrap())
+        .collect();
     // the account of key `i` holding `b` at accSeq 5
     let account = |i: usize, b: u64| {
         let k = &keys[i];
@@ -335,7 +652,11 @@ fn rpc_reading_layer_against_anvil() {
             set(token, &s, &be(2 * 128 + 1));
             let enc = encode_point::<Bls12381>(p);
             for (j, c) in enc.chunks(32).enumerate() {
-                set(token, &add(&keccak256(&s), j as u64), &c.try_into().unwrap());
+                set(
+                    token,
+                    &add(&keccak256(&s), j as u64),
+                    &c.try_into().unwrap(),
+                );
             }
         }
         set(token, &add(&base, 4), &be(5)); // accSeq 5 (the low 8 bytes)
@@ -348,25 +669,116 @@ fn rpc_reading_layer_against_anvil() {
     let k0 = json!({"mnemonic": MNEMONIC, "coin": 60, "account": 0});
     let cid = chain_id.to_string();
     let args = |chain: &str, uid: &str, tok: &str, depth: &str| {
-        ["--curve", "bls12381", "--table-bits", "20", "--bound-bits", "24", "--rpc", &url, "--chain-id", chain, "--chain-uid", uid,
-            "--factory", factory, "--token", tok, "--depth", depth].map(String::from).to_vec()
+        [
+            "--curve",
+            "bls12381",
+            "--table-bits",
+            "20",
+            "--bound-bits",
+            "24",
+            "--rpc",
+            &url,
+            "--chain-id",
+            chain,
+            "--chain-uid",
+            uid,
+            "--factory",
+            factory,
+            "--token",
+            tok,
+            "--depth",
+            depth,
+        ]
+        .map(String::from)
+        .to_vec()
     };
     let run = |a: Vec<String>| read_balance(&a.iter().map(String::as_str).collect::<Vec<_>>(), &k0);
     let out = run(args(&cid, &genesis, token, "2")).unwrap();
-    assert_eq!((out["balance"].clone(), out["accSeq"].clone(), out["source"].clone()), (json!("42"), json!(5), json!("rpc")), "R3, R6");
-    assert_eq!(run(args(&cid, &genesis, token, "0")).unwrap()["balance"], json!("43"), "the head (positive control of R3)");
-    assert!(run(args("1", &genesis, token, "2")).unwrap_err().contains("R2"), "another chain id");
-    assert!(run(args(&cid, &hx(&[0x24; 32]), token, "2")).unwrap_err().contains("R2"), "another chain_uid");
-    assert!(run(args(&cid, &genesis, token, "100")).unwrap_err().contains("R3"), "a depth past the head");
-    assert!(run(args(&cid, &genesis, other_token, "2")).unwrap_err().contains("R5"), "not catalogued");
-    assert!(run(args(&cid, &genesis, pqz_token, "2")).unwrap_err().contains("R5"), "catalogued as PQZ");
-    assert!(run(args(&cid, &genesis, bare, "2")).unwrap_err().contains("R5: the token is not a clone of a chain-neutral release"), "no env");
+    assert_eq!(
+        (
+            out["balance"].clone(),
+            out["accSeq"].clone(),
+            out["source"].clone()
+        ),
+        (json!("42"), json!(5), json!("rpc")),
+        "R3, R6"
+    );
+    assert_eq!(
+        run(args(&cid, &genesis, token, "0")).unwrap()["balance"],
+        json!("43"),
+        "the head (positive control of R3)"
+    );
+    assert!(
+        run(args("1", &genesis, token, "2"))
+            .unwrap_err()
+            .contains("R2"),
+        "another chain id"
+    );
+    assert!(
+        run(args(&cid, &hx(&[0x24; 32]), token, "2"))
+            .unwrap_err()
+            .contains("R2"),
+        "another chain_uid"
+    );
+    assert!(
+        run(args(&cid, &genesis, token, "100"))
+            .unwrap_err()
+            .contains("R3"),
+        "a depth past the head"
+    );
+    assert!(
+        run(args(&cid, &genesis, other_token, "2"))
+            .unwrap_err()
+            .contains("R5"),
+        "not catalogued"
+    );
+    assert!(
+        run(args(&cid, &genesis, pqz_token, "2"))
+            .unwrap_err()
+            .contains("R5"),
+        "catalogued as PQZ"
+    );
+    assert!(
+        run(args(&cid, &genesis, bare, "2"))
+            .unwrap_err()
+            .contains("R5: the token is not a clone of a chain-neutral release"),
+        "no env"
+    );
     // R1 (owner 2026-11-08): several --rpc; failover by default, a strict majority with --rpc-agree (proxies of this anvil)
-    use std::sync::{atomic::{AtomicUsize, Ordering}, Arc};
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
     let multi = |urls: &[&str], agree: bool| {
-        let mut a: Vec<String> = ["--curve", "bls12381", "--table-bits", "20", "--bound-bits", "24"].map(String::from).to_vec();
-        a.extend(urls.iter().flat_map(|u| ["--rpc".to_string(), u.to_string()]));
-        a.extend(["--chain-id", &cid, "--chain-uid", &genesis, "--factory", factory, "--token", token, "--depth", "2"].map(String::from));
+        let mut a: Vec<String> = [
+            "--curve",
+            "bls12381",
+            "--table-bits",
+            "20",
+            "--bound-bits",
+            "24",
+        ]
+        .map(String::from)
+        .to_vec();
+        a.extend(
+            urls.iter()
+                .flat_map(|u| ["--rpc".to_string(), u.to_string()]),
+        );
+        a.extend(
+            [
+                "--chain-id",
+                &cid,
+                "--chain-uid",
+                &genesis,
+                "--factory",
+                factory,
+                "--token",
+                token,
+                "--depth",
+                "2",
+            ]
+            .map(String::from),
+        );
         if agree {
             a.push("--rpc-agree".into());
         }
@@ -376,18 +788,35 @@ fn rpc_reading_layer_against_anvil() {
     let psid_slot = hx(&add(&zether_prover::state::ROOT, 6));
     let lie = |byte: u8| {
         let slot = psid_slot.clone();
-        move |m: &str, p: &Value, r: Value, _: usize| Some(if m == "eth_getStorageAt" && p[1] == json!(slot) { json!(hx(&[byte; 32])) } else { r })
+        move |m: &str, p: &Value, r: Value, _: usize| {
+            Some(if m == "eth_getStorageAt" && p[1] == json!(slot) {
+                json!(hx(&[byte; 32]))
+            } else {
+                r
+            })
+        }
     };
     let same = node(url.clone(), hits(), |_, _, r, _| Some(r));
-    let (lie_a, lie_a2, lie_b) = (node(url.clone(), hits(), lie(0xa1)), node(url.clone(), hits(), lie(0xa1)), node(url.clone(), hits(), lie(0xb2)));
+    let (lie_a, lie_a2, lie_b) = (
+        node(url.clone(), hits(), lie(0xa1)),
+        node(url.clone(), hits(), lie(0xa1)),
+        node(url.clone(), hits(), lie(0xb2)),
+    );
     let counted = hits();
     let unused = node(url.clone(), counted.clone(), lie(0xa1));
-    let future = node(url.clone(), hits(), |m, _, r, _| Some(if m == "eth_blockNumber" { json!("0xffffff") } else { r }));
+    let future = node(url.clone(), hits(), |m, _, r, _| {
+        Some(if m == "eth_blockNumber" {
+            json!("0xffffff")
+        } else {
+            r
+        })
+    });
     let blocks = hits();
     let late = {
         let b = blocks.clone();
         node(url.clone(), hits(), move |m, p, mut r, _| {
-            if m == "eth_getBlockByNumber" && p[0] != "0x0" && b.fetch_add(1, Ordering::SeqCst) >= 1 {
+            if m == "eth_getBlockByNumber" && p[0] != "0x0" && b.fetch_add(1, Ordering::SeqCst) >= 1
+            {
                 r["hash"] = json!(hx(&[0x5b; 32])); // the read's own look passes, the one after every node's read does not
             }
             Some(r)
@@ -395,18 +824,55 @@ fn rpc_reading_layer_against_anvil() {
     };
     let (dead, dead2) = ("http://127.0.0.1:1", "http://127.0.0.1:2");
     let bal = |v: Result<Value, String>| v.unwrap()["balance"].clone();
-    assert_eq!(bal(multi(&[dead, &url], false)), json!("42"), "failover skips a dead first node");
-    assert_eq!(bal(multi(&[&url, &unused], false)), json!("42"), "the first node answered");
-    assert_eq!(counted.load(Ordering::SeqCst), 0, "a second node is not consulted when the first succeeds");
-    assert!(multi(&[dead, dead2], false).unwrap_err().contains("R1: no --rpc answered the whole read"), "all fail");
-    assert!(multi(&[&url, &url], false).unwrap_err().contains("the same node twice"));
-    assert_eq!(bal(multi(&[&lie_a, &url, &same], true)), json!("42"), "3 nodes, one differing word: the majority's words");
-    assert_eq!(bal(multi(&[dead, &url, &same], true)), json!("42"), "3 nodes, one dead");
-    assert_eq!(bal(multi(&[&url, &same, &future], true)), json!("42"), "a far-future block does not move the number");
-    for (urls, what) in [(&[&url[..], &lie_a, &lie_b][..], "3 nodes, all differing"), (&[&url[..], &lie_a][..], "2 nodes differing"),
-        (&[&url[..], &same, &lie_a, &lie_a2][..], "4 nodes split 2-2"), (&[&url[..], dead][..], "2 nodes, one dead"),
-        (&[&url[..], &late][..], "a node whose block changes after the reads (R3 after every node)")]
-    {
+    assert_eq!(
+        bal(multi(&[dead, &url], false)),
+        json!("42"),
+        "failover skips a dead first node"
+    );
+    assert_eq!(
+        bal(multi(&[&url, &unused], false)),
+        json!("42"),
+        "the first node answered"
+    );
+    assert_eq!(
+        counted.load(Ordering::SeqCst),
+        0,
+        "a second node is not consulted when the first succeeds"
+    );
+    assert!(
+        multi(&[dead, dead2], false)
+            .unwrap_err()
+            .contains("R1: no --rpc answered the whole read"),
+        "all fail"
+    );
+    assert!(multi(&[&url, &url], false)
+        .unwrap_err()
+        .contains("the same node twice"));
+    assert_eq!(
+        bal(multi(&[&lie_a, &url, &same], true)),
+        json!("42"),
+        "3 nodes, one differing word: the majority's words"
+    );
+    assert_eq!(
+        bal(multi(&[dead, &url, &same], true)),
+        json!("42"),
+        "3 nodes, one dead"
+    );
+    assert_eq!(
+        bal(multi(&[&url, &same, &future], true)),
+        json!("42"),
+        "a far-future block does not move the number"
+    );
+    for (urls, what) in [
+        (&[&url[..], &lie_a, &lie_b][..], "3 nodes, all differing"),
+        (&[&url[..], &lie_a][..], "2 nodes differing"),
+        (&[&url[..], &same, &lie_a, &lie_a2][..], "4 nodes split 2-2"),
+        (&[&url[..], dead][..], "2 nodes, one dead"),
+        (
+            &[&url[..], &late][..],
+            "a node whose block changes after the reads (R3 after every node)",
+        ),
+    ] {
         let e = multi(urls, true).unwrap_err();
         assert!(e.contains("R1: no strict majority"), "{what}: {e}");
     }
@@ -416,11 +882,25 @@ fn rpc_reading_layer_against_anvil() {
     let file = dir.join("box.json");
     let id = format!("{}:{token}", hx(&keys[0].ua()));
     for (b, source, want) in [(42u64, "cache+rpc", "42"), (41, "rpc", "42")] {
-        seal(&keys[0], &one(&id, json!({"ua": hx(&keys[0].ua()), "token": token, "accSeq": 5, "balance": b.to_string()})), &file);
+        seal(
+            &keys[0],
+            &one(
+                &id,
+                json!({"ua": hx(&keys[0].ua()), "token": token, "accSeq": 5, "balance": b.to_string()}),
+            ),
+            &file,
+        );
         let mut a = args(&cid, &genesis, token, "2");
-        a.extend(["--cache-box".to_string(), file.to_str().unwrap().to_string()]);
+        a.extend([
+            "--cache-box".to_string(),
+            file.to_str().unwrap().to_string(),
+        ]);
         let out = run(a).unwrap();
-        assert_eq!((out["balance"].clone(), out["source"].clone()), (json!(want), json!(source)), "cache {b}");
+        assert_eq!(
+            (out["balance"].clone(), out["source"].clone()),
+            (json!(want), json!(source)),
+            "cache {b}"
+        );
     }
     std::fs::remove_dir_all(&dir).unwrap();
 }
@@ -430,24 +910,122 @@ fn rpc_reading_layer_against_anvil() {
 #[test]
 fn decoy_arguments() {
     let u = format!("0x{}", "ab".repeat(32));
-    let base = ["--curve", "bls12381", "--rpc", "http://127.0.0.1:1", "--chain-id", "1", "--chain-uid", &u, "--factory",
-        "0x00000000000000000000000000000000000000aa", "--token", "0x00000000000000000000000000000000000000aa", "--depth", "0"];
-    let with = |x: &[&str]| -> Vec<String> { base.iter().chain(x).map(|s| s.to_string()).collect() };
+    let base = [
+        "--curve",
+        "bls12381",
+        "--rpc",
+        "http://127.0.0.1:1",
+        "--chain-id",
+        "1",
+        "--chain-uid",
+        &u,
+        "--factory",
+        "0x00000000000000000000000000000000000000aa",
+        "--token",
+        "0x00000000000000000000000000000000000000aa",
+        "--depth",
+        "0",
+    ];
+    let with =
+        |x: &[&str]| -> Vec<String> { base.iter().chain(x).map(|s| s.to_string()).collect() };
     for (args, want) in [
-        (with(&["--registry", &u[..42]]), "go with --decoy-count or --decoy-keys"),
-        (with(&["--exclude", &u]), "go with --decoy-count or --decoy-keys"),
-        (with(&["--recipient", &u]), "go with --decoy-count or --decoy-keys"),
-        (with(&["--decoy-keys", &u, "--registry", &u[..42], "--recipient", &u]), "--decoy-count with --exclude"),
-        (with(&["--decoy-count", "1", "--registry", &u[..42], "--exclude", &u, "--recipient", "0x01"]), "--recipient: 32 bytes"),
-        (with(&["--decoy-count", "2", "--exclude", &u]), "--rpc and --registry"),
-        (with(&["--decoy-count", "2", "--registry", &u[..42]]), "--decoy-count with --exclude"),
-        (with(&["--decoy-count", "2", "--registry", &u[..42], "--exclude", &u, "--window", "4"]), "--decoy-count with --exclude"),
-        (with(&["--decoy-keys", &u, "--registry", &u[..42], "--exclude", &u]), "--decoy-count with --exclude"),
-        (with(&["--decoy-keys", &u, "--decoy-count", "1", "--registry", &u[..42]]), "--decoy-count with --exclude"),
-        (with(&["--decoy-keys", "0x01", "--registry", &u[..42]]), "32 bytes each"),
-        (with(&["--decoy-count", "1", "--registry", &u[..42], "--exclude", &u, "--decoy-filter", "x", "--window", "4"]), "activity or holder"),
+        (
+            with(&["--registry", &u[..42]]),
+            "go with --decoy-count or --decoy-keys",
+        ),
+        (
+            with(&["--exclude", &u]),
+            "go with --decoy-count or --decoy-keys",
+        ),
+        (
+            with(&["--recipient", &u]),
+            "go with --decoy-count or --decoy-keys",
+        ),
+        (
+            with(&[
+                "--decoy-keys",
+                &u,
+                "--registry",
+                &u[..42],
+                "--recipient",
+                &u,
+            ]),
+            "--decoy-count with --exclude",
+        ),
+        (
+            with(&[
+                "--decoy-count",
+                "1",
+                "--registry",
+                &u[..42],
+                "--exclude",
+                &u,
+                "--recipient",
+                "0x01",
+            ]),
+            "--recipient: 32 bytes",
+        ),
+        (
+            with(&["--decoy-count", "2", "--exclude", &u]),
+            "--rpc and --registry",
+        ),
+        (
+            with(&["--decoy-count", "2", "--registry", &u[..42]]),
+            "--decoy-count with --exclude",
+        ),
+        (
+            with(&[
+                "--decoy-count",
+                "2",
+                "--registry",
+                &u[..42],
+                "--exclude",
+                &u,
+                "--window",
+                "4",
+            ]),
+            "--decoy-count with --exclude",
+        ),
+        (
+            with(&["--decoy-keys", &u, "--registry", &u[..42], "--exclude", &u]),
+            "--decoy-count with --exclude",
+        ),
+        (
+            with(&[
+                "--decoy-keys",
+                &u,
+                "--decoy-count",
+                "1",
+                "--registry",
+                &u[..42],
+            ]),
+            "--decoy-count with --exclude",
+        ),
+        (
+            with(&["--decoy-keys", "0x01", "--registry", &u[..42]]),
+            "32 bytes each",
+        ),
+        (
+            with(&[
+                "--decoy-count",
+                "1",
+                "--registry",
+                &u[..42],
+                "--exclude",
+                &u,
+                "--decoy-filter",
+                "x",
+                "--window",
+                "4",
+            ]),
+            "activity or holder",
+        ),
     ] {
-        let e = read_balance(&args.iter().map(String::as_str).collect::<Vec<_>>(), &json!({})).unwrap_err();
+        let e = read_balance(
+            &args.iter().map(String::as_str).collect::<Vec<_>>(),
+            &json!({}),
+        )
+        .unwrap_err();
         assert!(e.contains(want), "{args:?}: want {want}: {e}");
     }
 }
@@ -456,8 +1034,11 @@ fn decoy_arguments() {
 /// `eth_getBlockByNumber` with another hash when `lie` (R3: the re-check of every block read); else a pass-through.
 /// A node in front of `upstream` (R1, owner 2026-11-08): each answer passes `f(method, params, result, i)`, `i` this node's
 /// request number from 1; `None` drops the connection (a node that fails). `hits` counts the requests it received.
-fn node(upstream: String, hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
-    f: impl Fn(&str, &Value, Value, usize) -> Option<Value> + Send + 'static) -> String {
+fn node(
+    upstream: String,
+    hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    f: impl Fn(&str, &Value, Value, usize) -> Option<Value> + Send + 'static,
+) -> String {
     use std::io::{BufRead, BufReader, Read, Write};
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", l.local_addr().unwrap());
@@ -481,7 +1062,11 @@ fn node(upstream: String, hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
             }
             let req: Value = serde_json::from_slice(&body).unwrap();
             let i = hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
-            let res = rpc(&upstream, req["method"].as_str().unwrap(), req["params"].clone());
+            let res = rpc(
+                &upstream,
+                req["method"].as_str().unwrap(),
+                req["params"].clone(),
+            );
             if let Some(res) = f(req["method"].as_str().unwrap(), &req["params"], res, i) {
                 let out = json!({"jsonrpc": "2.0", "id": 1, "result": res}).to_string();
                 let _ = write!(c, "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{out}", out.len());
@@ -513,7 +1098,11 @@ fn liar(upstream: String, lie: bool) -> String {
             let mut body = vec![0u8; len];
             r.read_exact(&mut body).unwrap();
             let req: Value = serde_json::from_slice(&body).unwrap();
-            let mut res = rpc(&upstream, req["method"].as_str().unwrap(), req["params"].clone());
+            let mut res = rpc(
+                &upstream,
+                req["method"].as_str().unwrap(),
+                req["params"].clone(),
+            );
             if req["method"] == "eth_getBlockByNumber" && req["params"][0] != "0x0" {
                 n += 1;
                 if lie && n == 4 {
@@ -537,18 +1126,44 @@ fn liar(upstream: String, lie: bool) -> String {
 #[ignore]
 fn decoys_against_anvil() {
     use zether_prover::curve::keccak256;
-    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
     let url = format!("http://127.0.0.1:{port}");
     let bin = std::env::var("ANVIL").unwrap_or_else(|_| "anvil".into());
-    let _anvil = Anvil(Command::new(bin).args(["--port", &port.to_string(), "--silent"]).stdout(Stdio::null()).spawn().unwrap());
-    assert!((0..100).any(|_| {
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        rpc(&url, "eth_chainId", json!([])).is_string()
-    }), "anvil did not start");
-    let chain_id = u64::from_str_radix(rpc(&url, "eth_chainId", json!([])).as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
-    let genesis = rpc(&url, "eth_getBlockByNumber", json!(["0x0", false]))["hash"].as_str().unwrap().to_string();
+    let _anvil = Anvil(
+        Command::new(bin)
+            .args(["--port", &port.to_string(), "--silent"])
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    assert!(
+        (0..100).any(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            rpc(&url, "eth_chainId", json!([])).is_string()
+        }),
+        "anvil did not start"
+    );
+    let chain_id = u64::from_str_radix(
+        rpc(&url, "eth_chainId", json!([]))
+            .as_str()
+            .unwrap()
+            .trim_start_matches("0x"),
+        16,
+    )
+    .unwrap();
+    let genesis = rpc(&url, "eth_getBlockByNumber", json!(["0x0", false]))["hash"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let set = |addr: &str, slot: &[u8; 32], w: &[u8; 32]| {
-        assert_eq!(rpc(&url, "anvil_setStorageAt", json!([addr, hx(slot), hx(w)])), json!(true));
+        assert_eq!(
+            rpc(&url, "anvil_setStorageAt", json!([addr, hx(slot), hx(w)])),
+            json!(true)
+        );
     };
     let be = |n: u64| {
         let mut w = [0u8; 32];
@@ -556,32 +1171,76 @@ fn decoys_against_anvil() {
         w
     };
     let k2 = |a: &[u8; 32], b: &[u8; 32]| keccak256(&[*a, *b].concat());
-    let (factory, token, pqz_token, reg, reg2) = ("0x00000000000000000000000000000000000fac70", "0x0000000000000000000000000000000000002e7a",
-        "0x0000000000000000000000000000000000002e7c", "0x000000000000000000000000000000000000dec0", "0x000000000000000000000000000000000000dec2");
+    let (factory, token, pqz_token, reg, reg2) = (
+        "0x00000000000000000000000000000000000fac70",
+        "0x0000000000000000000000000000000000002e7a",
+        "0x0000000000000000000000000000000000002e7c",
+        "0x000000000000000000000000000000000000dec0",
+        "0x000000000000000000000000000000000000dec2",
+    );
     let reg3 = "0x000000000000000000000000000000000000dec3";
     // reg2's and reg3's tokens (owner 2026-11-08: `--registry` is the one the token's env names)
-    let (token2, token3) = ("0x0000000000000000000000000000000000002e8a", "0x0000000000000000000000000000000000002e8b");
+    let (token2, token3) = (
+        "0x0000000000000000000000000000000000002e8a",
+        "0x0000000000000000000000000000000000002e8b",
+    );
     let uid: [u8; 32] = hex::decode(&genesis[2..]).unwrap().try_into().unwrap();
-    for (t, kind, r) in [(token, 2u8, reg), (pqz_token, 4, reg), (token2, 2, reg2), (token3, 2, reg3)] {
+    for (t, kind, r) in [
+        (token, 2u8, reg),
+        (pqz_token, 4, reg),
+        (token2, 2, reg2),
+        (token3, 2, reg3),
+    ] {
         let mut k = [0u8; 32];
         k[12..].copy_from_slice(&hex::decode(&t[2..]).unwrap());
         set(factory, &add(&k2(&k, &be(pin_slot(REC))), 1), &record(kind));
-        rpc(&url, "anvil_setCode", json!([t, hx(&clone_code(&uid, &hex::decode(&r[2..]).unwrap().try_into().unwrap()))]));
+        rpc(
+            &url,
+            "anvil_setCode",
+            json!([
+                t,
+                hx(&clone_code(
+                    &uid,
+                    &hex::decode(&r[2..]).unwrap().try_into().unwrap()
+                ))
+            ]),
+        );
     }
     let seed = zether_prover::keys::seed_from_mnemonic(MNEMONIC, "").unwrap();
-    let keys: Vec<_> = (0..10).map(|a| zether_prover::keys::ZetherKey::<Bls12381>::conf(&seed[..], 60, a).unwrap()).collect();
+    let keys: Vec<_> = (0..10)
+        .map(|a| zether_prover::keys::ZetherKey::<Bls12381>::conf(&seed[..], 60, a).unwrap())
+        .collect();
     let ua = |i: usize| keys[i].ua();
     let y = |i: usize| encode_point::<Bls12381>(&keys[i].y);
     // `uaAt(0x0141, index) = ua` and its record `kind ‖ registeredAt ‖ keyPtr ‖ index` with the code `0x00 ‖ Y` of key `key`
     let register = |r: &str, index: u64, ua: [u8; 32], key: usize| {
-        let ptr = format!("0x{:040x}", 0xc0de00 + index + if r == reg2 { 0x100 } else if r == reg3 { 0x200 } else { 0 });
+        let ptr = format!(
+            "0x{:040x}",
+            0xc0de00
+                + index
+                + if r == reg2 {
+                    0x100
+                } else if r == reg3 {
+                    0x200
+                } else {
+                    0
+                }
+        );
         let mut rec = [0u8; 32];
         rec[..5].copy_from_slice(&index.to_be_bytes()[3..]);
         rec[5..25].copy_from_slice(&hex::decode(&ptr[2..]).unwrap());
         rec[30..].copy_from_slice(&[0x01, 0x41]);
         set(r, &k2(&ua, &be(pin_slot(RECORDS))), &rec);
-        set(r, &k2(&be(index), &k2(&be(0x0141), &be(pin_slot(UA_AT)))), &ua);
-        rpc(&url, "anvil_setCode", json!([ptr, hx(&[vec![0u8], y(key)].concat())]));
+        set(
+            r,
+            &k2(&be(index), &k2(&be(0x0141), &be(pin_slot(UA_AT)))),
+            &ua,
+        );
+        rpc(
+            &url,
+            "anvil_setCode",
+            json!([ptr, hx(&[vec![0u8], y(key)].concat())]),
+        );
         set(r, &k2(&be(0x0141), &be(pin_slot(UA_COUNT))), &be(index + 1));
     };
     // the counters word `accSeq ‖ pendingSeq ‖ lastRolledPendingSeq ‖ sendCounter` (low end first) of `ua(i)`
@@ -616,51 +1275,210 @@ fn decoys_against_anvil() {
 
     let cid = chain_id.to_string();
     let run = |r: &str, tok: &str, x: &[&str]| {
-        let mut a = ["--curve", "bls12381", "--rpc", &url, "--chain-id", &cid, "--chain-uid", &genesis, "--factory", factory, "--token", tok,
-            "--depth", "0", "--registry", r].map(String::from).to_vec();
+        let mut a = [
+            "--curve",
+            "bls12381",
+            "--rpc",
+            &url,
+            "--chain-id",
+            &cid,
+            "--chain-uid",
+            &genesis,
+            "--factory",
+            factory,
+            "--token",
+            tok,
+            "--depth",
+            "0",
+            "--registry",
+            r,
+        ]
+        .map(String::from)
+        .to_vec();
         a.extend(x.iter().map(|s| s.to_string()));
-        read_balance(&a.iter().map(String::as_str).collect::<Vec<_>>(), &json!({}))
+        read_balance(
+            &a.iter().map(String::as_str).collect::<Vec<_>>(),
+            &json!({}),
+        )
     };
     let hs = |r: std::ops::Range<usize>| r.map(|i| hx(&ua(i))).collect::<Vec<_>>();
     let ex = format!("{},{}", hx(&ua(0)), hx(&ua(1)));
-    let out = run(reg, token, &["--decoy-count", "3", "--exclude", &ex, "--sync-block", "1"]).unwrap();
-    assert_eq!(out["request"], json!({"candidates": hs(2..8), "exclude": hs(0..2), "count": 3}), "the list up to the sync point");
-    assert_eq!((&out["syncBlock"], &out["listCount"], &out["block"]), (&json!(1), &json!(8), &json!(21)));
-    assert_eq!(run(reg, token, &["--decoy-count", "3", "--exclude", &ex]).unwrap()["request"]["candidates"], json!(hs(2..10)), "default: the read block");
+    let out = run(
+        reg,
+        token,
+        &["--decoy-count", "3", "--exclude", &ex, "--sync-block", "1"],
+    )
+    .unwrap();
+    assert_eq!(
+        out["request"],
+        json!({"candidates": hs(2..8), "exclude": hs(0..2), "count": 3}),
+        "the list up to the sync point"
+    );
+    assert_eq!(
+        (&out["syncBlock"], &out["listCount"], &out["block"]),
+        (&json!(1), &json!(8), &json!(21))
+    );
+    assert_eq!(
+        run(reg, token, &["--decoy-count", "3", "--exclude", &ex]).unwrap()["request"]
+            ["candidates"],
+        json!(hs(2..10)),
+        "default: the read block"
+    );
     // `--recipient`: excluded, and named to the pick (which then answers the shuffled `legs`)
-    let out = run(reg, token, &["--decoy-count", "3", "--exclude", &ex, "--recipient", &hx(&ua(4)), "--sync-block", "1"]).unwrap();
+    let out = run(
+        reg,
+        token,
+        &[
+            "--decoy-count",
+            "3",
+            "--exclude",
+            &ex,
+            "--recipient",
+            &hx(&ua(4)),
+            "--sync-block",
+            "1",
+        ],
+    )
+    .unwrap();
     let (cands, excl) = ([hs(2..4), hs(5..8)].concat(), [hs(0..2), hs(4..5)].concat());
     let want = json!({"candidates": cands, "exclude": excl, "count": 3, "recipient": hx(&ua(4))});
     assert_eq!(out["request"], want, "--recipient");
-    let f = |filter: &str| run(reg, token, &["--decoy-count", "1", "--exclude", &ex, "--decoy-filter", filter, "--window", "10"]).unwrap()["request"].clone();
+    let f = |filter: &str| {
+        run(
+            reg,
+            token,
+            &[
+                "--decoy-count",
+                "1",
+                "--exclude",
+                &ex,
+                "--decoy-filter",
+                filter,
+                "--window",
+                "10",
+            ],
+        )
+        .unwrap()["request"]
+            .clone()
+    };
     let act = f("activity");
-    assert_eq!((&act["candidates"], &act["weights"]), (&json!(hs(2..5)), &json!([1, 2, 2])), "activity, by recency");
+    assert_eq!(
+        (&act["candidates"], &act["weights"]),
+        (&json!(hs(2..5)), &json!([1, 2, 2])),
+        "activity, by recency"
+    );
     let hold = f("holder");
-    assert_eq!((&hold["candidates"], &hold["weights"]), (&json!([hx(&ua(2)), hx(&ua(4))]), &json!([1, 2])), "holder: sendCounter only");
+    assert_eq!(
+        (&hold["candidates"], &hold["weights"]),
+        (&json!([hx(&ua(2)), hx(&ua(4))]), &json!([1, 2])),
+        "holder: sendCounter only"
+    );
     // the chosen decoys' keys
-    let d = run(reg, token, &["--decoy-keys", &format!("{},{}", hx(&ua(7)), hx(&ua(2))), "--sync-block", "1"]).unwrap();
-    assert_eq!(d["decoys"], json!([{"ua": hx(&ua(7)), "yTo": hx(&y(7))}, {"ua": hx(&ua(2)), "yTo": hx(&y(2))}]));
-    assert!(run(reg, token, &["--decoy-keys", &hx(&ua(8))]).is_ok(), "listed by the read block (positive control of the next)");
-    let tok_of = |r: &str| if r == reg2 { token2 } else if r == reg3 { token3 } else { token };
+    let d = run(
+        reg,
+        token,
+        &[
+            "--decoy-keys",
+            &format!("{},{}", hx(&ua(7)), hx(&ua(2))),
+            "--sync-block",
+            "1",
+        ],
+    )
+    .unwrap();
+    assert_eq!(
+        d["decoys"],
+        json!([{"ua": hx(&ua(7)), "yTo": hx(&y(7))}, {"ua": hx(&ua(2)), "yTo": hx(&y(2))}])
+    );
+    assert!(
+        run(reg, token, &["--decoy-keys", &hx(&ua(8))]).is_ok(),
+        "listed by the read block (positive control of the next)"
+    );
+    let tok_of = |r: &str| {
+        if r == reg2 {
+            token2
+        } else if r == reg3 {
+            token3
+        } else {
+            token
+        }
+    };
     let no = |r: &str, u: &str, x: &[&str], want: &str| {
         let e = run(r, tok_of(r), &[&["--decoy-keys", u][..], x].concat()).unwrap_err();
         assert!(e.contains(want), "want {want}: {e}");
     };
-    no(reg, &hx(&ua(8)), &["--sync-block", "1"], "on the 0x0141 list up to the sync point");
+    no(
+        reg,
+        &hx(&ua(8)),
+        &["--sync-block", "1"],
+        "on the 0x0141 list up to the sync point",
+    );
     no(reg, &hx(&[0xcc; 32]), &[], "is not a registered Zether UA");
     no(reg2, &hx(&[0xbb; 32]), &[], "is not a registered Zether UA");
     no(reg3, &hx(&ua(2)), &[], "is not a registered Zether UA"); // kind 0x0142
-    no(reg, &hx(&ua(2)), &["--sync-block", "22"], "past the read block");
+    no(
+        reg,
+        &hx(&ua(2)),
+        &["--sync-block", "22"],
+        "past the read block",
+    );
     let e = run(reg2, token, &["--decoy-keys", &hx(&ua(2))]).unwrap_err();
-    assert!(e.contains("R6: --registry is not the token's registry"), "reg2 is not token's: {e}");
-    assert!(run(reg, pqz_token, &["--decoy-keys", &hx(&ua(2))]).unwrap_err().contains("R5"), "R5");
-    assert!(run(reg, token, &["--decoy-count", "1", "--exclude", &ex, "--decoy-filter", "holder", "--window", "1"]).unwrap_err().contains("--window"));
+    assert!(
+        e.contains("R6: --registry is not the token's registry"),
+        "reg2 is not token's: {e}"
+    );
+    assert!(
+        run(reg, pqz_token, &["--decoy-keys", &hx(&ua(2))])
+            .unwrap_err()
+            .contains("R5"),
+        "R5"
+    );
+    assert!(run(
+        reg,
+        token,
+        &[
+            "--decoy-count",
+            "1",
+            "--exclude",
+            &ex,
+            "--decoy-filter",
+            "holder",
+            "--window",
+            "1"
+        ]
+    )
+    .unwrap_err()
+    .contains("--window"));
     // R3: every block read re-checked after the last read (here the sync block, on its re-check); the proxy alone changes nothing
     let via = |proxy: String| {
-        let a = ["--curve", "bls12381", "--rpc", &proxy, "--chain-id", &cid, "--chain-uid", &genesis, "--factory", factory, "--token", token,
-            "--depth", "0", "--registry", reg, "--decoy-keys", &hx(&ua(2)), "--sync-block", "1"];
+        let a = [
+            "--curve",
+            "bls12381",
+            "--rpc",
+            &proxy,
+            "--chain-id",
+            &cid,
+            "--chain-uid",
+            &genesis,
+            "--factory",
+            factory,
+            "--token",
+            token,
+            "--depth",
+            "0",
+            "--registry",
+            reg,
+            "--decoy-keys",
+            &hx(&ua(2)),
+            "--sync-block",
+            "1",
+        ];
         read_balance(&a, &json!({}))
     };
     assert!(via(liar(url.clone(), false)).is_ok());
-    assert!(via(liar(url.clone(), true)).unwrap_err().contains("R3: the block changed"), "the sync block re-checked");
+    assert!(
+        via(liar(url.clone(), true))
+            .unwrap_err()
+            .contains("R3: the block changed"),
+        "the sync block re-checked"
+    );
 }

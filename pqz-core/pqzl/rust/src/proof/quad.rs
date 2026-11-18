@@ -5,7 +5,7 @@ use super::{diag, hash2, Coder, Eq};
 use crate::arith::int::{int_div, Int, IntVec};
 use crate::arith::poly::Poly;
 use crate::arith::polymat::PolyMat;
-use crate::arith::polyvec::{self, Pv, PolyVec};
+use crate::arith::polyvec::{self, PolyVec, Pv};
 use crate::arith::spoly::Sparse;
 use crate::coder::ProofParts;
 use crate::params::Abdlop;
@@ -16,7 +16,11 @@ use crate::rand::urandom::polyvec_urandom;
 use crate::{Error, Wiped};
 
 /// `_schwartz_zippel_poly`: (R2, r1, r0) = sum_i mu_i (R2_i, r1_i, r0_i), mu = N uniform polys from (hash, 0)
-fn schwartz_zippel_poly(hash: &[u8; 32], eqs: &mut [Eq], p: &Abdlop) -> Result<(Sparse, Sparse, Poly), Error> {
+fn schwartz_zippel_poly(
+    hash: &[u8; 32],
+    eqs: &mut [Eq],
+    p: &Abdlop,
+) -> Result<(Sparse, Sparse, Poly), Error> {
     let n = 2 * (p.m1 + p.l) as usize;
     let mut mu = PolyVec::new(eqs.len())?;
     polyvec_urandom(&mut *mu, &p.ring.q, p.ring.log2q, hash, 0)?;
@@ -24,7 +28,10 @@ fn schwartz_zippel_poly(hash: &[u8; 32], eqs: &mut [Eq], p: &Abdlop) -> Result<(
     let mut r1 = Sparse::new_vec(n);
     let mut r0 = Poly::ZERO;
     let (mut r1tmp, mut r1tmp2) = (Sparse::new_vec(n), Sparse::new_vec(n));
-    let (mut r2tmp, mut r2tmp2) = (Sparse::new_mat(n, n, diag(n)), Sparse::new_mat(n, n, diag(n)));
+    let (mut r2tmp, mut r2tmp2) = (
+        Sparse::new_mat(n, n, diag(n)),
+        Sparse::new_mat(n, n, diag(n)),
+    );
     for (mui, e) in mu.iter_mut().zip(eqs.iter_mut()) {
         if let Some(r2i) = &mut e.r2 {
             Sparse::scale2(&mut r2tmp2, mui, r2i)?;
@@ -81,9 +88,21 @@ fn verify(
     r0: &mut Poly,
     p: &Abdlop,
 ) -> Result<bool, Error> {
-    let Opening { c, z1, z21, hint: h, t_a1, t_b } = o;
+    let Opening {
+        c,
+        z1,
+        z21,
+        hint: h,
+        t_a1,
+        t_b,
+    } = o;
     let dc = p.dcompress;
-    let (km, m1, l, lext) = (p.kmsis as usize, p.m1 as usize, p.l as usize, p.lext as usize);
+    let (km, m1, l, lext) = (
+        p.kmsis as usize,
+        p.m1 as usize,
+        p.l as usize,
+        p.lext as usize,
+    );
     let m2r = (p.m2 - p.kmsis) as usize;
     let (q, log2q) = (&p.ring.q, p.ring.log2q);
     let mut z = PolyVec::new(2 * (m1 + l))?;
@@ -102,7 +121,12 @@ fn verify(
 
     // recover v
     polyvec::scale2(&mut *f, c, &mut t_b.sub(l, lext, 1));
-    polyvec::submul(&mut *f, &mut bp.sub(l, 0, lext, m2r, 1, 1), &mut **z21, false);
+    polyvec::submul(
+        &mut *f,
+        &mut bp.sub(l, 0, lext, m2r, 1, 1),
+        &mut **z21,
+        false,
+    );
     for i in 0..m1 {
         z[2 * i] = z1[i].clone();
         z[2 * i + 1] = Poly::auto(&mut z1[i]);
@@ -110,7 +134,12 @@ fn verify(
     if l > 0 {
         let mut subb = PolyVec::new(l)?;
         polyvec::scale2(&mut *subb, c, &mut t_b.sub(0, l, 1));
-        polyvec::submul(&mut *subb, &mut bp.sub(0, 0, l, m2r, 1, 1), &mut **z21, false);
+        polyvec::submul(
+            &mut *subb,
+            &mut bp.sub(0, 0, l, m2r, 1, 1),
+            &mut **z21,
+            false,
+        );
         for i in 0..l {
             let a = Poly::auto(&mut subb[i]);
             z[2 * m1 + 2 * i] = subb[i].clone();
@@ -141,7 +170,7 @@ fn verify(
     let cseed = hash2(hash, &enc.end()?);
     #[cfg(feature = "test-hooks")]
     crate::fstrace::rec(8, &cseed, 0); // the final challenge's seed (after t, v, w1): review 3w Codex u1-2
-    // PQZ (R0-C3): the eta-filtered challenge (none of CHAL_TRIES samples passes: reject)
+                                       // PQZ (R0-C3): the eta-filtered challenge (none of CHAL_TRIES samples passes: reject)
     let mut ok = match Poly::urandom_challenge(p.omega, p.log2omega, p.eta, &cseed)? {
         Some(mut c2) => Poly::eq(c, &mut c2),
         None => false,
@@ -220,7 +249,13 @@ fn prove(
 ) -> Result<(), Error> {
     let Secret { s1, m, s2, t_a2 } = w;
     let dc = p.dcompress;
-    let (km, m1, m2, l, lext) = (p.kmsis as usize, p.m1 as usize, p.m2 as usize, p.l as usize, p.lext as usize);
+    let (km, m1, m2, l, lext) = (
+        p.kmsis as usize,
+        p.m1 as usize,
+        p.m2 as usize,
+        p.l as usize,
+        p.lext as usize,
+    );
     let m2r = m2 - km;
     let (q, log2q) = (&p.ring.q, p.ring.log2q);
     // s, the mask seed and c s1, c s2 are cleared on every exit (Wiped, fix B); since review 3w u1-3 also the masks
@@ -229,11 +264,21 @@ fn prove(
     let (mut y1, mut y2) = (Wiped(PolyVec::new(m1)?), Wiped(PolyVec::new(m2)?));
     let (mut cs1, mut cs2) = (Wiped(PolyVec::new(m1)?), Wiped(PolyVec::new(m2)?));
     let n = 2 * (m1 + l);
-    let (mut r2y, mut tmp, mut tmp2) = (Wiped(PolyVec::new(n)?), Wiped(PolyVec::new(n)?), Wiped(PolyVec::new(l)?));
+    let (mut r2y, mut tmp, mut tmp2) = (
+        Wiped(PolyVec::new(n)?),
+        Wiped(PolyVec::new(n)?),
+        Wiped(PolyVec::new(l)?),
+    );
     let (mut y, mut s) = (Wiped(PolyVec::new(n)?), Wiped(PolyVec::new(n)?));
-    let (mut wv, mut w1, mut w0) = (Wiped(PolyVec::new(km)?), Wiped(PolyVec::new(km)?), Wiped(PolyVec::new(km)?));
-    for v in [&y1, &y2, &cs1, &cs2, &r2y, &tmp, &tmp2, &y, &s, &wv, &w1, &w0] {
-        crate::name_buf(&v.0.0); // the wipe test hook (3zh Fable F-10)
+    let (mut wv, mut w1, mut w0) = (
+        Wiped(PolyVec::new(km)?),
+        Wiped(PolyVec::new(km)?),
+        Wiped(PolyVec::new(km)?),
+    );
+    for v in [
+        &y1, &y2, &cs1, &cs2, &r2y, &tmp, &tmp2, &y, &s, &wv, &w1, &w0,
+    ] {
+        crate::name_buf(&v.0 .0); // the wipe test hook (3zh Fable F-10)
     }
 
     // s = (<s1>, <m>)
@@ -269,7 +314,11 @@ fn prove(
         polyvec::set(&mut y.sub(0, m1, 2), &*y1);
         polyvec::auto(&mut y.sub(1, m1, 2), &mut *y1);
         if l > 0 {
-            polyvec::mul(&mut *tmp2, &mut bp.sub(0, 0, l, m2r, 1, 1), &mut y2.sub(0, m2r, 1));
+            polyvec::mul(
+                &mut *tmp2,
+                &mut bp.sub(0, 0, l, m2r, 1, 1),
+                &mut y2.sub(0, m2r, 1),
+            );
             polyvec::set(&mut y.sub(2 * m1, l, 2), &*tmp2);
             polyvec::auto(&mut y.sub(2 * m1 + 1, l, 2), &mut *tmp2);
             polyvec::neg_self(&mut y.sub(2 * m1, l, 2));
@@ -291,12 +340,22 @@ fn prove(
         // t
         let mut t = f.t_b.sub(l, lext, 1);
         t.at(0).clone_from(&*g1);
-        polyvec::addmul(&mut t, &mut bp.sub(l, 0, lext, m2r, 1, 1), &mut s2.sub(0, m2r, 1), false);
+        polyvec::addmul(
+            &mut t,
+            &mut bp.sub(l, 0, lext, m2r, 1, 1),
+            &mut s2.sub(0, m2r, 1),
+            false,
+        );
         polyvec::fromcrt(&mut t);
 
         // v
         let mut v = polyvec::dot(&mut *y, &mut *r2y);
-        polyvec::poly_addmul2(&mut v, &mut bp.sub(l, 0, lext, m2r, 1, 1), &mut y2.sub(0, m2r, 1), false);
+        polyvec::poly_addmul2(
+            &mut v,
+            &mut bp.sub(l, 0, lext, m2r, 1, 1),
+            &mut y2.sub(0, m2r, 1),
+            false,
+        );
         v.fromcrt();
 
         // encode t, v, w1: the hash of the encoding seeds the challenge

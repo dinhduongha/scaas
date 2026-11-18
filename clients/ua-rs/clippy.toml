@@ -3,8 +3,8 @@
 # and branch per bit; a secret goes through `secret_mul` only. The operator form (`point * scalar`) cannot be linted: the
 # structural test (feature `vectors`) covers it.
 disallowed-methods = [
-    { path = "ark_ec::PrimeGroup::mul_bigint", reason = "secret scalars: secret_mul (spec §12)" },
-    { path = "ark_ec::AffineRepr::mul_bigint", reason = "secret scalars: secret_mul (spec §12)" },
-    { path = "ark_ec::short_weierstrass::SWCurveConfig::mul_projective", reason = "secret scalars: secret_mul (spec §12)" },
-    { path = "ark_ec::short_weierstrass::SWCurveConfig::mul_affine", reason = "secret scalars: secret_mul (spec §12)" },
+  { path = "ark_ec::PrimeGroup::mul_bigint", reason = "secret scalars: secret_mul (spec §12)" },
+  { path = "ark_ec::AffineRepr::mul_bigint", reason = "secret scalars: secret_mul (spec §12)" },
+  { path = "ark_ec::short_weierstrass::SWCurveConfig::mul_projective", reason = "secret scalars: secret_mul (spec §12)" },
+  { path = "ark_ec::short_weierstrass::SWCurveConfig::mul_affine", reason = "secret scalars: secret_mul (spec §12)" },
 ]

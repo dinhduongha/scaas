@@ -30,11 +30,14 @@ pub mod transcript;
 /// `ids_are_the_labels_keccak` fails there by design), so pqz-ffi refuses to compile with it (review R3-1 / R4-C5)
 pub const FALLBACK_RETRY: bool = cfg!(feature = "fallback-retry");
 
-pub use cs::{RELS, Rel, form_of, multi_rels, rel_of};
-pub use ligero::{Cheat, Params, Why, prove, try_verify, verify, verify_unwinding};
+pub use cs::{form_of, multi_rels, rel_of, Rel, RELS};
 #[cfg(feature = "bench")]
 pub use ligero::{breakdown, prove_cheat, prove_unchecked, soundness, verify_reason};
-pub use pqz_stmt::{self, Form, OP_BURN, OP_DISCLOSE_RECEIVER, OP_DISCLOSE_SENDER, OP_REGISTER, OP_TRANSFER, OP_TRANSFER_MULTI};
+pub use ligero::{prove, try_verify, verify, verify_unwinding, Cheat, Params, Why};
+pub use pqz_stmt::{
+    self, Form, OP_BURN, OP_DISCLOSE_RECEIVER, OP_DISCLOSE_SENDER, OP_REGISTER, OP_TRANSFER,
+    OP_TRANSFER_MULTI,
+};
 
 /// Out of memory: a fault of the machine, not a property of the input (review P-D). [`try_verify`] returns it when one
 /// of the verifier's buffers could not be reserved; pqz-ffi maps it to `NodeFault`, as PQZL's `Error::Memory`.

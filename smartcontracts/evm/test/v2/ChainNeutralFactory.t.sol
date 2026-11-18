@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-
 import {Test, Vm} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -28,7 +27,9 @@ contract HistoryStub {
     bytes32 public h;
     uint8 public mode; // 0 answer, 1 revert, 2 a 31-byte answer
 
-    function set(bytes32 h_, uint8 m) external { (h, mode) = (h_, m); }
+    function set(bytes32 h_, uint8 m) external {
+        (h, mode) = (h_, m);
+    }
 
     fallback(bytes calldata) external returns (bytes memory) {
         if (mode == 1) revert("history");
@@ -60,8 +61,9 @@ contract ChainNeutralFactoryTest is Test {
         ureg.setSmartKeyCloneHash(EnvKit.cloneHash(address(0xBEEF)));
         router = new GovernanceRouter(UID_, address(ureg), address(0xBEEF), false);
         f = EnvKit.factory(registrar, UID_, 0, address(router));
-        normalImpl = NormalToken(Catalogue.plain(f, NORMAL, 1, type(NormalToken).creationCode, address(ureg), address(0xBEEF),
-            false));
+        normalImpl = NormalToken(
+            Catalogue.plain(f, NORMAL, 1, type(NormalToken).creationCode, address(ureg), address(0xBEEF), false)
+        );
     }
 
     function _cfg(address holder) internal pure returns (bytes memory) {
@@ -156,8 +158,11 @@ contract ChainNeutralFactoryTest is Test {
         vm.setBlockhash(290, keccak256("block 290"));
         OpenFactory g = new OpenFactory(nid(registrar));
         vm.prank(registrar);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.RefBlockMismatch.selector, 290, keccak256("a sibling"),
-            keccak256("block 290")));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IOpenFactory.RefBlockMismatch.selector, 290, keccak256("a sibling"), keccak256("block 290")
+            )
+        );
         g.configureChain(UID_, 0, address(0), bytes32(0), 290, keccak256("a sibling"));
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.RefBlockMismatch.selector, 400, bytes32(0), bytes32(0)));
@@ -210,11 +215,20 @@ contract ChainNeutralFactoryTest is Test {
     /// The spec's formula, written out here: `s` over the creator, class, kind and salt; the proxy by CREATE2; the
     /// instance at the proxy's nonce 1.
     function _expect(address factory_, bytes32 creatorId, uint16 cls, uint16 kind, bytes32 salt)
-        internal pure returns (address proxy, address instance)
+        internal
+        pure
+        returns (address proxy, address instance)
     {
         bytes32 s = keccak256(abi.encode(creatorId, cls, kind, salt));
-        proxy = address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), factory_, s,
-            keccak256(hex"67363d3d37363d34f03d5260086018f3"))))));
+        proxy = address(
+            uint160(
+                uint256(
+                    keccak256(
+                        abi.encodePacked(bytes1(0xff), factory_, s, keccak256(hex"67363d3d37363d34f03d5260086018f3"))
+                    )
+                )
+            )
+        );
         instance = address(uint160(uint256(keccak256(abi.encodePacked(hex"d694", proxy, hex"01")))));
     }
 
@@ -286,12 +300,29 @@ contract ChainNeutralFactoryTest is Test {
         vm.prank(alice);
         address t = f.createToken(NORMAL, 1, _cfg(alice), "c");
         IFactoryToken.ChainEnv memory want = EnvKit.env(UID_, address(ureg), address(0xBEEF), false, address(router));
-        assertEq(t.code, abi.encodePacked(hex"363d3d373d3d3d363d73", address(normalImpl), hex"5af43d82803e903d91602b57fd5bf3",
-            UID_, address(ureg), address(router), address(0xBEEF), false, uint8(0), uint8(0)), "proxy || env, byte for byte");
+        assertEq(
+            t.code,
+            abi.encodePacked(
+                hex"363d3d373d3d3d363d73",
+                address(normalImpl),
+                hex"5af43d82803e903d91602b57fd5bf3",
+                UID_,
+                address(ureg),
+                address(router),
+                address(0xBEEF),
+                false,
+                uint8(0),
+                uint8(0)
+            ),
+            "proxy || env, byte for byte"
+        );
         assertEq(t.code.length, 45 + 95, "a plain kind's env: 95 B");
         assertEq(keccak256(abi.encode(NormalToken(t).chainEnv())), keccak256(abi.encode(want)), "chainEnv()");
-        assertEq(keccak256(abi.encode(normalImpl.chainEnv())), keccak256(abi.encode(EnvKit.env(0, address(0), address(0), false))),
-            "the implementation: all zero");
+        assertEq(
+            keccak256(abi.encode(normalImpl.chainEnv())),
+            keccak256(abi.encode(EnvKit.env(0, address(0), address(0), false))),
+            "the implementation: all zero"
+        );
         assertEq(NormalToken(t).chainUid(), UID_);
         assertEq(normalImpl.chainUid(), bytes32(0));
     }
@@ -302,7 +333,9 @@ contract ChainNeutralFactoryTest is Test {
         (, address want) = _expect(address(f), nid(alice), 2, 0, "d");
         vm.recordLogs();
         vm.prank(alice);
-        address d = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(alice), 0, address(0xD7), false, 0, address(0), 0, 0)), "d");
+        address d = f.createDex(
+            1, abi.encode(ISCaaSDex.DexConfig(nid(alice), 0, address(0xD7), false, 0, address(0), 0, 0)), "d"
+        );
         assertEq(d, want);
         assertEq(SCaaSDex(d).chainUid(), UID_);
         assertEq(SCaaSDex(d).SMART_KEY_ACCOUNT_IMPL(), address(0xBEEF));
@@ -310,7 +343,11 @@ contract ChainNeutralFactoryTest is Test {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         Vm.Log memory l = logs[logs.length - 1];
         assertEq(l.topics[0], IOpenFactory.DexCreated.selector);
-        assertEq(l.topics[0], 0x7333afd911188665cfba5b0921a9d82a15bf753c9c60a1fdf384df1f502670bf, "DexCreated: no owner (3r R1)");
+        assertEq(
+            l.topics[0],
+            0x7333afd911188665cfba5b0921a9d82a15bf753c9c60a1fdf384df1f502670bf,
+            "DexCreated: no owner (3r R1)"
+        );
         assertEq(l.topics[2], nid(alice), "DexCreated: bytes32 creatorId");
     }
 
@@ -322,8 +359,11 @@ contract ChainNeutralFactoryTest is Test {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         Vm.Log memory l = logs[logs.length - 1];
         assertEq(l.topics[0], IOpenFactory.TokenCreated.selector);
-        assertEq(l.topics[0], keccak256(
-            "TokenCreated(address,bytes32,uint8,uint64,address,uint256,uint256,address[])"), "the new ABI (3r R1: no owner)");
+        assertEq(
+            l.topics[0],
+            keccak256("TokenCreated(address,bytes32,uint8,uint64,address,uint256,uint256,address[])"),
+            "the new ABI (3r R1: no owner)"
+        );
         assertEq(l.topics[0], 0x0ed419464185dced9c79d21177ebc4059e7d04c325b97fd771d3f3e290c95dae);
         assertEq(address(uint160(uint256(l.topics[1]))), t);
         assertEq(l.topics[2], nid(bob));
@@ -333,7 +373,9 @@ contract ChainNeutralFactoryTest is Test {
 
     /// The wrapper index is keyed by the creator's id (spec §6.3: new selectors).
     function test_getWrapper_byCreatorId() public {
-        Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false);
+        Catalogue.plain(
+            f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false
+        );
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features) = ("W", "W", 6, 1);
@@ -363,8 +405,10 @@ contract ChainNeutralFactoryTest is Test {
         assertEq(a.relayFeeRouter, b.relayFeeRouter, "the relay pair: one address");
         assertEq(a.relayFeeExecutor, b.relayFeeExecutor);
         assertTrue(a.govRouter != b.govRouter && a.uaRegistry != b.uaRegistry, "each chain its router and registry");
-        assertTrue(a.smartKeyAccountFactory != b.smartKeyAccountFactory && a.complianceRegistry != b.complianceRegistry,
-            "each chain its account factory and compliance registry");
+        assertTrue(
+            a.smartKeyAccountFactory != b.smartKeyAccountFactory && a.complianceRegistry != b.complianceRegistry,
+            "each chain its account factory and compliance registry"
+        );
         assertEq(gb.chainUid(), uidB);
         assertEq(SmartKeyAccountFactory(b.smartKeyAccountFactory).chainUid(), uidB);
         assertEq(ComplianceRegistry(b.complianceRegistry).govRouter(), b.govRouter);
@@ -384,8 +428,20 @@ contract ChainNeutralFactoryTest is Test {
         g = new OpenFactory{salt: 0}(nid(registrar));
         vm.startPrank(registrar);
         g.configureChain(uid, 0, address(r), address(r).codehash, 0, bytes32(0));
-        g.setChainEntries(IOpenFactory.ChainEntries(address(relay), address(relay).codehash, relay.EXECUTOR().codehash,
-            address(c), address(c).codehash, address(skaf), address(skaf).codehash, address(0), bytes32(0)), uid);
+        g.setChainEntries(
+            IOpenFactory.ChainEntries(
+                address(relay),
+                address(relay).codehash,
+                relay.EXECUTOR().codehash,
+                address(c),
+                address(c).codehash,
+                address(skaf),
+                address(skaf).codehash,
+                address(0),
+                bytes32(0)
+            ),
+            uid
+        );
         vm.stopPrank();
         d = g.directory();
         assertEq(d.uaRegistry, address(reg));

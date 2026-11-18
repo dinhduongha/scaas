@@ -50,8 +50,13 @@ contract AliasOf {
         main = m;
     }
 
-    function decimals() external pure returns (uint8) { return 6; }
-    function balanceOf(address a) external view returns (uint256) { return main.balanceOf(a); }
+    function decimals() external pure returns (uint8) {
+        return 6;
+    }
+
+    function balanceOf(address a) external view returns (uint256) {
+        return main.balanceOf(a);
+    }
 
     function transfer(address to, uint256 v) external returns (bool) {
         main.aliasMove(msg.sender, to, v);
@@ -96,7 +101,9 @@ contract GovRescueTest is Test {
     MockERC20 internal foo = new MockERC20("FOO", "FOO", 18);
 
     /// The test plays the factory: it registered no token, so every leg is outside to the leg check.
-    function isRegisteredToken(address) external pure returns (bool) { return false; }
+    function isRegisteredToken(address) external pure returns (bool) {
+        return false;
+    }
 
     function _base(address rescueTo) internal pure returns (IFactoryToken.TokenConfig memory c) {
         (c.name, c.symbol, c.decimals, c.admin, c.rescueTo) = ("R", "R", 6, nid(OWNER), rescueTo);
@@ -104,7 +111,9 @@ contract GovRescueTest is Test {
     }
 
     function _normalClone() internal returns (NormalToken) {
-        if (normalImpl == address(0)) normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
+        if (normalImpl == address(0)) {
+            normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
+        }
         return NormalToken(EnvKit.clone(normalImpl, EnvKit.env(UID, address(0), address(0), false)));
     }
 
@@ -120,10 +129,16 @@ contract GovRescueTest is Test {
         t.initialize(nid(address(this)), 1, abi.encode(_base(rescueTo)));
     }
 
-    function _wrappedCfg(address[] memory legs, address rescueTo) internal pure returns (IFactoryToken.TokenConfig memory c) {
+    function _wrappedCfg(address[] memory legs, address rescueTo)
+        internal
+        pure
+        returns (IFactoryToken.TokenConfig memory c)
+    {
         c = _base(rescueTo);
         c.legs = new IFactoryToken.Leg[](legs.length);
-        for (uint256 i; i < legs.length; ++i) c.legs[i] = IFactoryToken.Leg(legs[i], 1, 1);
+        for (uint256 i; i < legs.length; ++i) {
+            c.legs[i] = IFactoryToken.Leg(legs[i], 1, 1);
+        }
     }
 
     function _wrapped(address[] memory legs, address rescueTo) internal returns (WrappedToken w) {
@@ -385,7 +400,11 @@ contract GovRescueTest is Test {
     /// CTR-GOV-25 (owner 2026-11-12): the bit with `rescueTo` 0 stores the constant dev address; `rescueTo()` answers it
     /// and a rescue (an ERC-20, the native coin) pays it, on `NORMAL` and `WRAPPED`. Without the bit: 0, no rescue.
     function test_rescueToZeroIsTheDevAddress() public {
-        assertEq(RescueLib.SCAAS_DEV_RESCUE, 0xd33d17991f57BefB4CcBb3E57c477c10BdE5B465, "the vault (was the EOA 0x0389f77E846ff687d44db57bcC9DCB55dd6f4131, then the one-owner vault 0xc564b98ad818d5C870f4B2058C95435259D126cf, then 0xE20dddfCa81db0Bd8F1036189f20739e1605dF34 with ERC-5267 fields 0x0d)");
+        assertEq(
+            RescueLib.SCAAS_DEV_RESCUE,
+            0xd33d17991f57BefB4CcBb3E57c477c10BdE5B465,
+            "the vault (was the EOA 0x0389f77E846ff687d44db57bcC9DCB55dd6f4131, then the one-owner vault 0xc564b98ad818d5C870f4B2058C95435259D126cf, then 0xE20dddfCa81db0Bd8F1036189f20739e1605dF34 with ERC-5267 fields 0x0d)"
+        );
         address dev = RescueLib.SCAAS_DEV_RESCUE;
         IFactoryToken.TokenConfig memory c = _base(address(0));
         c.features = 1 | RESCUABLE;
@@ -432,12 +451,18 @@ contract GovRescueDexTest is Test {
 
     function setUp() public {
         f = EnvKit.factory(address(this), UID, 0);
-        Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
+        Catalogue.plain(
+            f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false
+        );
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
     }
 
     function _dex(address rescueTo, bytes32 salt) internal returns (SCaaSDex) {
-        return SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, rescueTo, 0, 0)), salt));
+        return SCaaSDex(
+            f.createDex(
+                1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, rescueTo, 0, 0)), salt
+            )
+        );
     }
 
     function test_pullerRescueWholeBalance() public {
@@ -517,9 +542,15 @@ contract GovRescueDexTest is Test {
         address[4] memory bad = [MetaTxLib.UA_POOL, MetaTxLib.SHIELD_POOL, address(d), p];
         for (uint256 i; i < 4; ++i) {
             vm.expectRevert(IRescuable.RescueConfigInvalid.selector);
-            d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, bad[i], 0, 0)));
+            d.initialize(
+                nid(address(this)),
+                1,
+                abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, bad[i], 0, 0))
+            );
         }
-        d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, TO, 0, 0))); // control
+        d.initialize(
+            nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, TO, 0, 0))
+        ); // control
         assertEq(d.puller(), p);
         assertEq(DexPuller(p).rescueTo(), TO);
     }
@@ -529,7 +560,7 @@ contract GovRescueDexTest is Test {
         SCaaSDex d = _dex(TO, "d");
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features, c.admin, c.rescueTo) =
-            ("N", "N", 6, 1 | (uint256(1) << GovernanceBits.RESCUABLE), nid(OWNER), TO);
+        ("N", "N", 6, 1 | (uint256(1) << GovernanceBits.RESCUABLE), nid(OWNER), TO);
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "t");
         assertTrue(d.supportsInterface(type(IGovernance).interfaceId));
         assertTrue(NormalToken(t).supportsInterface(type(IGovernance).interfaceId));
@@ -575,7 +606,9 @@ abstract contract GovRescueConfRows is Test {
 contract GovRescueZetherTest is GovRescueConfRows, ZetherFixture {
     function setUp() public {
         _stack();
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode);
+        Catalogue.release(
+            factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode
+        );
     }
 
     function _conf(bool wrapped) internal view override returns (IFactoryToken.TokenConfig memory c) {
@@ -584,7 +617,8 @@ contract GovRescueZetherTest is GovRescueConfRows, ZetherFixture {
     }
 
     function _make(bool wrapped, IFactoryToken.TokenConfig memory c) internal override returns (address) {
-        IOpenFactory.TokenKind k = wrapped ? IOpenFactory.TokenKind.WRAPPED_ZETHER : IOpenFactory.TokenKind.NORMAL_ZETHER;
+        IOpenFactory.TokenKind k =
+            wrapped ? IOpenFactory.TokenKind.WRAPPED_ZETHER : IOpenFactory.TokenKind.NORMAL_ZETHER;
         return factory.createToken(k, 1, abi.encode(c), wrapped ? bytes32("w") : bytes32("n"));
     }
 

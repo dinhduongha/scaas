@@ -56,7 +56,9 @@ contract WrapperHandler is Test {
         lastSlack = _slack();
     }
 
-    function actor(uint256 i) public view returns (address) { return vm.addr(pks[i % 3]); }
+    function actor(uint256 i) public view returns (address) {
+        return vm.addr(pks[i % 3]);
+    }
 
     // ------------------------------------------------------------------ bookkeeping
 
@@ -77,7 +79,9 @@ contract WrapperHandler is Test {
 
     function _expect(bytes memory err, bytes4[] memory ok) internal {
         bytes4 sel = err.length >= 4 ? bytes4(err) : bytes4(0);
-        for (uint256 i; i < ok.length; ++i) if (sel == ok[i]) return;
+        for (uint256 i; i < ok.length; ++i) {
+            if (sel == ok[i]) return;
+        }
         if (unexpected.length == 0) unexpected = err.length == 0 ? bytes("empty revert") : err;
     }
 
@@ -116,8 +120,8 @@ contract WrapperHandler is Test {
         uint256 num;
         uint256 den;
         uint256 balBefore; // wrapper's underlying balance
-        uint256 uBefore;   // actor's underlying balance
-        uint256 wBefore;   // actor's wrapped balance
+        uint256 uBefore; // actor's underlying balance
+        uint256 wBefore; // actor's wrapped balance
     }
 
     function _ctx(uint256 who, uint256 leg, bool attackerToo) internal view returns (Ctx memory c) {
@@ -145,14 +149,22 @@ contract WrapperHandler is Test {
             if (c.w == attacker && !_le(t.balanceOf(c.w) - c.wBefore, c.den, amount, c.num)) attackerProfited = true;
         } catch (bytes memory err) {
             vm.stopPrank();
-            _expect(err, _sels(IWrappedToken.WrapTooSmall.selector,
-                IWrappedToken.WrapPausedForRateChange.selector, IWrappedToken.WrapDisabledFor.selector,
-                IWrappedToken.ReserveShortfall.selector, NONE));
+            _expect(
+                err,
+                _sels(
+                    IWrappedToken.WrapTooSmall.selector,
+                    IWrappedToken.WrapPausedForRateChange.selector,
+                    IWrappedToken.WrapDisabledFor.selector,
+                    IWrappedToken.ReserveShortfall.selector,
+                    NONE
+                )
+            );
         }
     }
 
     function unwrap(uint256 who, uint256 leg, uint256 frac, uint256 minOutSeed, uint256 recipientSeed)
-        external tracked(false)
+        external
+        tracked(false)
     {
         Ctx memory c = _ctx(who, leg, true);
         uint256 wrapped = bound(frac, 0, c.wBefore);
@@ -167,35 +179,55 @@ contract WrapperHandler is Test {
                 attackerProfited = true;
             }
         } catch (bytes memory err) {
-            _expect(err, _sels(IWrappedToken.UnwrapTooSmall.selector,
-                IWrappedToken.InsufficientReserve.selector, IWrappedToken.UnwrapRecipientInvalid.selector,
-                IERC20Errors.ERC20InsufficientBalance.selector, NONE));
+            _expect(
+                err,
+                _sels(
+                    IWrappedToken.UnwrapTooSmall.selector,
+                    IWrappedToken.InsufficientReserve.selector,
+                    IWrappedToken.UnwrapRecipientInvalid.selector,
+                    IERC20Errors.ERC20InsufficientBalance.selector,
+                    NONE
+                )
+            );
         }
     }
 
     /// Gasless unwrap = `mtxExecute(unwrap(address,uint256,address,uint256))`, `AMOUNT(1)`: percent fee on `wrapped`
     ///  for `feeTaker`, after the call.
     function unwrapOp(uint256 who, uint256 leg, uint256 frac, uint256 feePpm, uint256 recipientSeed)
-        external tracked(false)
+        external
+        tracked(false)
     {
         Ctx memory c = _ctx(who, leg, false);
         address r = recipientSeed % 5 == 0 ? address(t) : (recipientSeed % 5 == 1 ? outsider : c.w);
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
             from: c.w,
-            data: abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(c.u),
-                bound(frac, 0, c.wBefore / 2), r, uint256(0)),
-            batch: ++seq, nonce: 0, validUntil: block.timestamp + 1, mode: MetaTxLib.MODE_RESTRICT_RELAYER
-                | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT | MetaTxLib.MODE_FEE_PERCENT,
-            relayer: relayer, fee: bound(feePpm, 0, 10_000), feeRecipient: feeTaker
+            data: abi.encodeWithSignature(
+                "unwrap(address,uint256,address,uint256)", address(c.u), bound(frac, 0, c.wBefore / 2), r, uint256(0)
+            ),
+            batch: ++seq,
+            nonce: 0,
+            validUntil: block.timestamp + 1,
+            mode: MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT | MetaTxLib.MODE_FEE_PERCENT,
+            relayer: relayer,
+            fee: bound(feePpm, 0, 10_000),
+            feeRecipient: feeTaker
         });
         (uint8 v, bytes32 rr, bytes32 ss) = vm.sign(pks[who % 3], MtxDigest.metaTx(address(t), m));
         vm.prank(relayer);
         try t.executeMetaTransaction(m, abi.encodePacked(rr, ss, v)) {
             ghostReserve[c.i] -= c.balBefore - c.u.balanceOf(address(t));
         } catch (bytes memory err) {
-            _expect(err, _sels(IWrappedToken.UnwrapTooSmall.selector,
-                IWrappedToken.InsufficientReserve.selector, IWrappedToken.UnwrapRecipientInvalid.selector,
-                IERC20Errors.ERC20InsufficientBalance.selector, NONE));
+            _expect(
+                err,
+                _sels(
+                    IWrappedToken.UnwrapTooSmall.selector,
+                    IWrappedToken.InsufficientReserve.selector,
+                    IWrappedToken.UnwrapRecipientInvalid.selector,
+                    IERC20Errors.ERC20InsufficientBalance.selector,
+                    NONE
+                )
+            );
         }
     }
 
@@ -216,8 +248,10 @@ contract WrapperHandler is Test {
         try t.addReserve(address(u), amount) {
             ghostReserve[i] += u.balanceOf(address(t)) - balBefore;
         } catch (bytes memory err) {
-            _expect(err, _sels(IWrappedToken.WrapDisabledFor.selector,
-                IWrappedToken.ReserveShortfall.selector, NONE, NONE, NONE));
+            _expect(
+                err,
+                _sels(IWrappedToken.WrapDisabledFor.selector, IWrappedToken.ReserveShortfall.selector, NONE, NONE, NONE)
+            );
         }
         vm.stopPrank();
     }
@@ -240,13 +274,22 @@ contract WrapperHandler is Test {
         uint256 pk = pks[from % 3];
         address f = vm.addr(pk);
         MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({
-            from: MetaTxLib.pad(f), to: MetaTxLib.pad(actor(to)), value: bound(frac, 0, t.balanceOf(f) / 2), entryRef: 0, batch: ++seq, nonce: 0,
-            validUntil: block.timestamp + 1, mode: MetaTxLib.MODE_FEE_PERCENT | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT,
-            relayer: address(0), fee: bound(feePpm, 0, 10_000), feeRecipient: feeTaker
+            from: MetaTxLib.pad(f),
+            to: MetaTxLib.pad(actor(to)),
+            value: bound(frac, 0, t.balanceOf(f) / 2),
+            entryRef: 0,
+            batch: ++seq,
+            nonce: 0,
+            validUntil: block.timestamp + 1,
+            mode: MetaTxLib.MODE_FEE_PERCENT | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT,
+            relayer: address(0),
+            fee: bound(feePpm, 0, 10_000),
+            feeRecipient: feeTaker
         });
         IUARegistry.UASig memory sig = _sign(pk, x);
         vm.prank(relayer);
-        try t.mtxExecuteTransfer(x, sig) {} catch (bytes memory err) {
+        try t.mtxExecuteTransfer(x, sig) {}
+        catch (bytes memory err) {
             _expect(err, new bytes4[](0));
         }
     }
@@ -260,7 +303,12 @@ contract WrapperHandler is Test {
         (uint256 n2, uint256 d2) = _candidate(n, d, bound(stepSeed, 0, t.maxRateStepBps()), up);
         if (n2 == 0 || d2 == 0 || n2 > type(uint96).max || d2 > type(uint96).max) return;
         if (!_withinStep(n, d, n2, d2)) return; // outside the bound: not this handler's business
-        adm.exec(address(t), abi.encodeCall(WrappedToken.proposeRate, (address(legs[i]), uint96(n2), uint96(d2), EnvKit.codeUidOf(address(t)))));
+        adm.exec(
+            address(t),
+            abi.encodeCall(
+                WrappedToken.proposeRate, (address(legs[i]), uint96(n2), uint96(d2), EnvKit.codeUidOf(address(t)))
+            )
+        );
         proposedAt = block.timestamp;
         (pOldNum, pOldDen) = (uint96(n), uint96(d));
     }
@@ -281,7 +329,8 @@ contract WrapperHandler is Test {
     }
 
     function cancel() external tracked(false) {
-        try adm.exec(address(t), abi.encodeCall(WrappedToken.cancelRate, (EnvKit.codeUidOf(address(t))))) {} catch (bytes memory err) {
+        try adm.exec(address(t), abi.encodeCall(WrappedToken.cancelRate, (EnvKit.codeUidOf(address(t))))) {}
+        catch (bytes memory err) {
             _expect(err, _sels(IWrappedToken.NoRateChangePending.selector, NONE, NONE, NONE, NONE));
         }
     }
@@ -295,16 +344,25 @@ contract WrapperHandler is Test {
         }
         // only the admin executes
         vm.prank(attacker);
-        try t.executeRate(EnvKit.codeUidOf(address(t))) { badExecution = true; } catch {}
+        try t.executeRate(EnvKit.codeUidOf(address(t))) {
+            badExecution = true;
+        } catch {}
         try adm.exec(address(t), abi.encodeCall(WrappedToken.executeRate, (EnvKit.codeUidOf(address(t))))) {
             if (u == address(0) || shortfall || block.timestamp < eta || eta != proposedAt + t.rateDelay()) {
                 badExecution = true;
             }
             if (!_withinStep(pOldNum, pOldDen, num, den)) badExecution = true;
         } catch (bytes memory err) {
-            _expect(err, _sels(IWrappedToken.NoRateChangePending.selector,
-                IWrappedToken.RateChangeNotReady.selector, IWrappedToken.RateChangeUndercollateralized.selector,
-                IWrappedToken.ReserveShortfall.selector, IWrappedToken.RateDecreaseWithDisabledLeg.selector));
+            _expect(
+                err,
+                _sels(
+                    IWrappedToken.NoRateChangePending.selector,
+                    IWrappedToken.RateChangeNotReady.selector,
+                    IWrappedToken.RateChangeUndercollateralized.selector,
+                    IWrappedToken.ReserveShortfall.selector,
+                    IWrappedToken.RateDecreaseWithDisabledLeg.selector
+                )
+            );
         }
     }
 
@@ -322,7 +380,9 @@ contract WrapperHandler is Test {
     function disable(uint256 leg) external tracked(false) {
         uint256 i = leg % 3;
         if (disabled[i]) {
-            try t.disableWrap(address(legs[i]), "again", EnvKit.codeUidOf(address(t))) { badExecution = true; } catch {}
+            try t.disableWrap(address(legs[i]), "again", EnvKit.codeUidOf(address(t))) {
+                badExecution = true;
+            } catch {}
             return;
         }
         t.disableWrap(address(legs[i]), "depeg", EnvKit.codeUidOf(address(t)));
@@ -349,22 +409,26 @@ abstract contract WrapperInvariantBase is StdInvariant, V2Fixture {
         uint256[] memory nums = new uint256[](3);
         uint256[] memory dens = new uint256[](3);
         (uint256 num, uint256 den) = _rate();
-        for (uint256 i; i < 3; ++i) (us[i], nums[i], dens[i]) = (address(legs[i]), num, den);
+        for (uint256 i; i < 3; ++i) {
+            (us[i], nums[i], dens[i]) = (address(legs[i]), num, den);
+        }
         t = _multi(us, nums, dens, _adjustable(address(h.adm())), address(h));
         h.init(t, legs);
         targetContract(address(h));
         bytes4[] memory sels = new bytes4[](13);
-        (sels[0], sels[1], sels[2], sels[3], sels[4]) = (h.wrap.selector, h.unwrap.selector, h.unwrapOp.selector,
-            h.addReserve.selector, h.donate.selector);
-        (sels[5], sels[6], sels[7], sels[8], sels[9]) = (h.shock.selector, h.transferMeta.selector, h.propose.selector,
-            h.cancel.selector, h.execute.selector);
+        (sels[0], sels[1], sels[2], sels[3], sels[4]) =
+        (h.wrap.selector, h.unwrap.selector, h.unwrapOp.selector, h.addReserve.selector, h.donate.selector);
+        (sels[5], sels[6], sels[7], sels[8], sels[9]) =
+        (h.shock.selector, h.transferMeta.selector, h.propose.selector, h.cancel.selector, h.execute.selector);
         // execute listed twice: rate executions are the rarest path to reach (pending + window + collateral)
         (sels[10], sels[11], sels[12]) = (h.warpToEta.selector, h.disable.selector, h.execute.selector);
         targetSelector(FuzzSelector({addr: address(h), selectors: sels}));
     }
 
     function _holdersSum() internal view returns (uint256 s) {
-        for (uint256 i; i < 3; ++i) s += t.balanceOf(h.actor(i));
+        for (uint256 i; i < 3; ++i) {
+            s += t.balanceOf(h.actor(i));
+        }
         s += t.balanceOf(h.attacker()) + t.balanceOf(h.feeTaker()) + t.balanceOf(h.relayer());
     }
 
@@ -398,25 +462,37 @@ abstract contract WrapperInvariantBase is StdInvariant, V2Fixture {
 }
 
 contract WrapperInvariant_1_1 is WrapperInvariantBase {
-    function _rate() internal pure override returns (uint256, uint256) { return (1, 1); }
+    function _rate() internal pure override returns (uint256, uint256) {
+        return (1, 1);
+    }
 }
 
 contract WrapperInvariant_1e12_1 is WrapperInvariantBase {
-    function _rate() internal pure override returns (uint256, uint256) { return (1e12, 1); }
+    function _rate() internal pure override returns (uint256, uint256) {
+        return (1e12, 1);
+    }
 }
 
 contract WrapperInvariant_1_1e4 is WrapperInvariantBase {
-    function _rate() internal pure override returns (uint256, uint256) { return (1, 1e4); }
+    function _rate() internal pure override returns (uint256, uint256) {
+        return (1, 1e4);
+    }
 }
 
 contract WrapperInvariant_max_1 is WrapperInvariantBase {
-    function _rate() internal pure override returns (uint256, uint256) { return (type(uint96).max, 1); }
+    function _rate() internal pure override returns (uint256, uint256) {
+        return (type(uint96).max, 1);
+    }
 }
 
 contract WrapperInvariant_1_max is WrapperInvariantBase {
-    function _rate() internal pure override returns (uint256, uint256) { return (1, type(uint96).max); }
+    function _rate() internal pure override returns (uint256, uint256) {
+        return (1, type(uint96).max);
+    }
 }
 
 contract WrapperInvariant_3_7 is WrapperInvariantBase {
-    function _rate() internal pure override returns (uint256, uint256) { return (3, 7); }
+    function _rate() internal pure override returns (uint256, uint256) {
+        return (3, 7);
+    }
 }

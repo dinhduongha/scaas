@@ -41,7 +41,9 @@ abstract contract ZetherPauseSuite is ZetherRegFixture {
     function test_pauseStopsShieldTransfersUnshield() public {
         bytes[] memory cds = new bytes[](5);
         cds[0] = abi.encodeWithSelector(IConfidentialToken.mtxShield.selector, ZetherTypes.UA.unwrap(bob.ua), 3);
-        for (uint256 k; k < 4; ++k) cds[k + 1] = _opCall(k, BAL, 0);
+        for (uint256 k; k < 4; ++k) {
+            cds[k + 1] = _opCall(k, BAL, 0);
+        }
         _pausedEach(cds, address(this));
     }
 
@@ -71,11 +73,15 @@ abstract contract ZetherPauseSuite is ZetherRegFixture {
 }
 
 contract ZetherPause10Test is ZetherPauseSuite {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 }
 
 contract ZetherPause11Test is ZetherPauseSuite {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 
     /// Kind 11: wrap-shield (`_regPayer()`) and unshield-unwrap (the Zether sender) stop under `P` (no confidential selector
     /// is pause-open, RK-7).
@@ -83,8 +89,9 @@ contract ZetherPause11Test is ZetherPauseSuite {
         usd.mint(address(this), 10 * SCALE);
         usd.approve(address(tok), 10 * SCALE);
         bytes[] memory cds = new bytes[](2);
-        cds[0] = abi.encodeWithSelector(IConfidentialWrappedToken.mtxWrapShield.selector, address(usd), 10 * SCALE,
-            ZetherTypes.UA.unwrap(bob.ua));
+        cds[0] = abi.encodeWithSelector(
+            IConfidentialWrappedToken.mtxWrapShield.selector, address(usd), 10 * SCALE, ZetherTypes.UA.unwrap(bob.ua)
+        );
         cds[1] = _unwrapCall(10, BAL);
         _pausedEach(cds, address(this));
     }

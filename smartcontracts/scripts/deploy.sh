@@ -109,164 +109,232 @@
 #                            ALGORAND_PRIVATE_KEY), ALGOD_TOKEN, ALGORAND_TOKENS, ALGORAND_ADMIN (algorand/scripts/deploy.py)
 set -euo pipefail
 SC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FAMILY="${1:?usage: $0 <family> <network> [args…]}"; NET="${2:?network}"; shift 2
+FAMILY="${1:?usage: $0 <family> <network> [args…]}"
+NET="${2:?network}"
+shift 2
 case "$FAMILY" in
-  evm)     cd "$SC/evm"; Z=(--disable-code-size-limit) # forge 1.8.5: EIP-3860 on the script contract itself (Deploy.s.sol initcode > 48 KiB); the chain enforces 64 KiB
-           # The scripts' own gas budget (forge's gas_limit, foundry.toml 2^33), not a chain figure: the simulations run every
-           # transaction twice (DeploySend: measured, then sent; Deploy.s.sol's public gate: each release measured, then
-           # deployed) and a snapshot's revert returns no gas; at reset 4b (153 transactions) DeploySend spent 2^33 by tx
-           # 108 and its call ran short of gas. block.gaslimit stays the chain's (the fork's block).
-           export FOUNDRY_GAS_LIMIT="${FOUNDRY_GAS_LIMIT:-68719476736}"
-           C="$(cast chain-id --rpc-url "$NET")"; S="$(cast wallet address --private-key "$PRIVATE_KEY")"
-           # NET-EVM-13: the book by the chain's key (DEPLOY_NAME for a chain not in chain-uids.json), a named fail first
-           G0="$(cast block 0 --field hash --rpc-url "$NET")"; K="$(python3 -I script/deploybook.py key "$C" "$G0")"
-           # deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): DEPLOY_SET names this deploy's set
-           # (mldsa-off with MLDSA_PRECOMPILE=off, mldsa-on with on), refused by name before anything is sent; the book then
-           # keeps every set of this chain (deploybook.py set-merge)
-           DS="${DEPLOY_SET:-}"
-           [ -z "$DS" ] || python3 -I script/deploybook.py set-check "$DS" "${MLDSA_PRECOMPILE:-}" > /dev/null \
-             || { echo "[deploy] FAIL DEPLOY_SET $DS refused, nothing sent"; exit 1; }
-           # forge writes the JSON in the simulation, before the broadcast: keep the previous one until it succeeds
-           J="deployments/$K.json"; [ -f "$J" ] && cp "$J" "$J.prev"
-           # NET-EVM-11: Deploy.s.sol simulated on the RPC's fork, nothing sent (the JSON, the release list, the plan in
-           # forge's dry-run file), then DeploySend.s.sol sends that plan, each transaction with an explicit gas limit
-           P="broadcast/Deploy.s.sol/$C/dry-run/run-latest.json" B="broadcast/DeploySend.s.sol/$C/run-latest.json"
-           Q="broadcast/Deploy.s.sol/$C/dry-run/send-plan.json" # DeploySend.plan's arrays, written from $P
-           rm -f "$P" "$Q" "$B" # never a stale plan, never a previous run's receipts
-           DL="${DEPLOY_LOG:-runs/$(date -u +%F)-deploy-$K${DS:+-$DS}.log}"; mkdir -p "$(dirname "$DL")"; : > "$DL"
-           say() { echo "[deploy] $*"; }
-           fail() { say "FAIL $1 rc $2 (forge's output: $DL)"; [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; exit 1; }
-           # follow <pid> [batch label]: wait for forge, a heartbeat every 30 s; for a batch, the sender's nonce count and a
-           # wall bound (DEPLOY_BATCH_LIMIT, default 1800 s: forge waits on a receipt that never comes past its --timeout),
-           # past it forge is stopped and the batch fails (rc 124)
-           follow() {
-             local t0=$SECONDS h=$SECONDS
-             while kill -0 "$1" 2> /dev/null; do
-               sleep 2
-               [ $((SECONDS - h)) -lt 30 ] || { h=$SECONDS
-                 say "… ${2:+$2, nonce +$(($(cast nonce --rpc-url "$NET" "$S" 2> /dev/null || echo "$N0") - N0)), }$((SECONDS - t0))s"; }
-               if [ -n "${2:-}" ] && [ $((SECONDS - t0)) -ge "${DEPLOY_BATCH_LIMIT:-1800}" ]; then
-                 say "$2: forge still running after $((SECONDS - t0))s (DEPLOY_BATCH_LIMIT), stopped"
-                 kill "$1" 2> /dev/null; wait "$1" 2> /dev/null; return 124
-               fi
-             done
-             wait "$1"
-           }
-           # the fee of every transaction forge signs (fee.sh: tip ONCHAIN_TIP, default 1 gwei; max fee 2 x base fee + tip),
-           # read before each batch; the fee gate (owner 2026-11-15): MAX_FEE_GWEI, default 0.1 on a mainnet (the key's
-           # -mainnet), none on a testnet; above it a named stop before the batch (a re-run skips the releases already there)
-           . script/onchain/fee.sh
-           case "$K" in *-mainnet) MF="${MAX_FEE_GWEI-0.1}" ;; *) MF="${MAX_FEE_GWEI:-}" ;; esac
-           feegate() {
-             ONCHAIN_REMOTE=1 remote_fee "$NET"
-             [ -z "$MF" ] || python3 -I script/deploy_batch.py fee "$MF" "$ETH_GAS_PRICE" | sed "s/fee gate/fee gate $1/" \
-               || { [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; exit 1; }
-           }
-           T0=$SECONDS
-           # owner 2026-11-15: the verifiers whose constructors probe the chain's own precompiles (PqzKeyVerifier 0x0142, the
-           # MldsaVerifiers 0x0130 / 0x0131 / 0x0134 with MLDSA_PRECOMPILE=on), on the real chain before the simulation (forge's EVM has no such precompile),
-           # by CREATE2 with DEPLOY_SALT (script/pq_verifiers.py, e2e.py's builders); their addresses reach Deploy.s.sol by
-           # env. A precompile the chain lacks: that verifier is skipped by name (DeployBase's gate then requires nothing).
-           feegate pq-verifiers
-           say "pq-verifiers start"
-           forge build src/pqz/PqzKeyVerifier.sol src/ua/MlDsa.sol >> "$DL" 2>&1 || fail pq-verifiers $?
-           PV="$(python3 -I script/pq_verifiers.py "$NET" 2>> "$DL")" || { printf '%s\n' "$PV" | grep '^\[deploy\]' || true; tail -n 3 "$DL" | sed 's/^/[deploy] pq-verifiers: /'; fail pq-verifiers 1; }
-           printf '%s\n' "$PV" | grep '^\[deploy\]' || true
-           for kv in $(printf '%s\n' "$PV" | grep -E '^(PQZ_KEY_VERIFIER|MLDSA44_VERIFIER|MLDSA65_VERIFIER|MLDSA87_VERIFIER)=0x[0-9a-fA-F]{40}$'); do export "${kv?}"; done
-           say "simulate start chain $C $K"
-           forge script script/Deploy.s.sol --rpc-url "$NET" "${Z[@]}" --sender "$S" "$@" >> "$DL" 2>&1 &
-           follow $! || fail simulate $?
-           [ -f "$P" ] || fail simulate "1 (no plan $P)"
-           say "simulate ok $(python3 -I -c 'import json,sys; t=json.load(open(sys.argv[1]))["transactions"]; print(len(t), "txs, est gas", format(sum(int(x["transaction"].get("gas") or "0x0", 16) for x in t), ","))' "$P")"
-           # one array per field (DeploySend.plan: four cheatcode calls, not five per transaction); a CREATE's `to` is the
-           # zero address and a missing value 0, both checked there; nothing else is changed or dropped
-           python3 -I -c 'import json, sys
+    evm)
+        cd "$SC/evm"
+        Z=(--disable-code-size-limit) # forge 1.8.5: EIP-3860 on the script contract itself (Deploy.s.sol initcode > 48 KiB); the chain enforces 64 KiB
+        # The scripts' own gas budget (forge's gas_limit, foundry.toml 2^33), not a chain figure: the simulations run every
+        # transaction twice (DeploySend: measured, then sent; Deploy.s.sol's public gate: each release measured, then
+        # deployed) and a snapshot's revert returns no gas; at reset 4b (153 transactions) DeploySend spent 2^33 by tx
+        # 108 and its call ran short of gas. block.gaslimit stays the chain's (the fork's block).
+        export FOUNDRY_GAS_LIMIT="${FOUNDRY_GAS_LIMIT:-68719476736}"
+        C="$(cast chain-id --rpc-url "$NET")"
+        S="$(cast wallet address --private-key "$PRIVATE_KEY")"
+        # NET-EVM-13: the book by the chain's key (DEPLOY_NAME for a chain not in chain-uids.json), a named fail first
+        G0="$(cast block 0 --field hash --rpc-url "$NET")"
+        K="$(python3 -I script/deploybook.py key "$C" "$G0")"
+        # deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): DEPLOY_SET names this deploy's set
+        # (mldsa-off with MLDSA_PRECOMPILE=off, mldsa-on with on), refused by name before anything is sent; the book then
+        # keeps every set of this chain (deploybook.py set-merge)
+        DS="${DEPLOY_SET:-}"
+        [ -z "$DS" ] || python3 -I script/deploybook.py set-check "$DS" "${MLDSA_PRECOMPILE:-}" >/dev/null ||
+            {
+                echo "[deploy] FAIL DEPLOY_SET $DS refused, nothing sent"
+                exit 1
+            }
+        # forge writes the JSON in the simulation, before the broadcast: keep the previous one until it succeeds
+        J="deployments/$K.json"
+        [ -f "$J" ] && cp "$J" "$J.prev"
+        # NET-EVM-11: Deploy.s.sol simulated on the RPC's fork, nothing sent (the JSON, the release list, the plan in
+        # forge's dry-run file), then DeploySend.s.sol sends that plan, each transaction with an explicit gas limit
+        P="broadcast/Deploy.s.sol/$C/dry-run/run-latest.json" B="broadcast/DeploySend.s.sol/$C/run-latest.json"
+        Q="broadcast/Deploy.s.sol/$C/dry-run/send-plan.json" # DeploySend.plan's arrays, written from $P
+        rm -f "$P" "$Q" "$B"                                 # never a stale plan, never a previous run's receipts
+        DL="${DEPLOY_LOG:-runs/$(date -u +%F)-deploy-$K${DS:+-$DS}.log}"
+        mkdir -p "$(dirname "$DL")"
+        : >"$DL"
+        say() { echo "[deploy] $*"; }
+        fail() {
+            say "FAIL $1 rc $2 (forge's output: $DL)"
+            [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"
+            exit 1
+        }
+        # follow <pid> [batch label]: wait for forge, a heartbeat every 30 s; for a batch, the sender's nonce count and a
+        # wall bound (DEPLOY_BATCH_LIMIT, default 1800 s: forge waits on a receipt that never comes past its --timeout),
+        # past it forge is stopped and the batch fails (rc 124)
+        follow() {
+            local t0=$SECONDS h=$SECONDS
+            while kill -0 "$1" 2>/dev/null; do
+                sleep 2
+                [ $((SECONDS - h)) -lt 30 ] || {
+                    h=$SECONDS
+                    say "… ${2:+$2, nonce +$(($(cast nonce --rpc-url "$NET" "$S" 2>/dev/null || echo "$N0") - N0)), }$((SECONDS - t0))s"
+                }
+                if [ -n "${2:-}" ] && [ $((SECONDS - t0)) -ge "${DEPLOY_BATCH_LIMIT:-1800}" ]; then
+                    say "$2: forge still running after $((SECONDS - t0))s (DEPLOY_BATCH_LIMIT), stopped"
+                    kill "$1" 2>/dev/null
+                    wait "$1" 2>/dev/null
+                    return 124
+                fi
+            done
+            wait "$1"
+        }
+        # the fee of every transaction forge signs (fee.sh: tip ONCHAIN_TIP, default 1 gwei; max fee 2 x base fee + tip),
+        # read before each batch; the fee gate (owner 2026-11-15): MAX_FEE_GWEI, default 0.1 on a mainnet (the key's
+        # -mainnet), none on a testnet; above it a named stop before the batch (a re-run skips the releases already there)
+        . script/onchain/fee.sh
+        case "$K" in *-mainnet) MF="${MAX_FEE_GWEI-0.1}" ;; *) MF="${MAX_FEE_GWEI:-}" ;; esac
+        feegate() {
+            ONCHAIN_REMOTE=1 remote_fee "$NET"
+            [ -z "$MF" ] || python3 -I script/deploy_batch.py fee "$MF" "$ETH_GAS_PRICE" | sed "s/fee gate/fee gate $1/" ||
+                {
+                    [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"
+                    exit 1
+                }
+        }
+        T0=$SECONDS
+        # owner 2026-11-15: the verifiers whose constructors probe the chain's own precompiles (PqzKeyVerifier 0x0142, the
+        # MldsaVerifiers 0x0130 / 0x0131 / 0x0134 with MLDSA_PRECOMPILE=on), on the real chain before the simulation (forge's EVM has no such precompile),
+        # by CREATE2 with DEPLOY_SALT (script/pq_verifiers.py, e2e.py's builders); their addresses reach Deploy.s.sol by
+        # env. A precompile the chain lacks: that verifier is skipped by name (DeployBase's gate then requires nothing).
+        feegate pq-verifiers
+        say "pq-verifiers start"
+        forge build src/pqz/PqzKeyVerifier.sol src/ua/MlDsa.sol >>"$DL" 2>&1 || fail pq-verifiers $?
+        PV="$(python3 -I script/pq_verifiers.py "$NET" 2>>"$DL")" || {
+            printf '%s\n' "$PV" | grep '^\[deploy\]' || true
+            tail -n 3 "$DL" | sed 's/^/[deploy] pq-verifiers: /'
+            fail pq-verifiers 1
+        }
+        printf '%s\n' "$PV" | grep '^\[deploy\]' || true
+        for kv in $(printf '%s\n' "$PV" | grep -E '^(PQZ_KEY_VERIFIER|MLDSA44_VERIFIER|MLDSA65_VERIFIER|MLDSA87_VERIFIER)=0x[0-9a-fA-F]{40}$'); do export "${kv?}"; done
+        say "simulate start chain $C $K"
+        forge script script/Deploy.s.sol --rpc-url "$NET" "${Z[@]}" --sender "$S" "$@" >>"$DL" 2>&1 &
+        follow $! || fail simulate $?
+        [ -f "$P" ] || fail simulate "1 (no plan $P)"
+        say "simulate ok $(python3 -I -c 'import json,sys; t=json.load(open(sys.argv[1]))["transactions"]; print(len(t), "txs, est gas", format(sum(int(x["transaction"].get("gas") or "0x0", 16) for x in t), ","))' "$P")"
+        # one array per field (DeploySend.plan: four cheatcode calls, not five per transaction); a CREATE's `to` is the
+        # zero address and a missing value 0, both checked there; nothing else is changed or dropped
+        python3 -I -c 'import json, sys
 t = [x["transaction"] for x in json.load(open(sys.argv[1]))["transactions"]]
 json.dump({"from": [x["from"] for x in t], "to": [x.get("to") or "0x" + "00" * 20 for x in t],
-           "value": [x.get("value") or "0x0" for x in t], "input": [x.get("input") or "0x" for x in t]}, open(sys.argv[2], "w"))' "$P" "$Q" \
-             || fail plan $?
-           # NET-EVM-11 Change (owner 2026-11-15): the plan in batches of DEPLOY_BATCH (16) without --slow, one forge run each
-           # (DeploySend.run(string,uint256,uint256): measured on the fork of the chain as the batches before left it, then
-           # sent at once); after each batch one line per transaction from its receipts, every status 1 checked before the
-           # next batch, a named stop at the first failure
-           N="$(python3 -I -c 'import json, sys; print(len(json.load(open(sys.argv[1]))["to"]))' "$Q")" BS="${DEPLOY_BATCH:-16}"
-           NB=$(((N + BS - 1) / BS)) AL="broadcast/DeploySend.s.sol/$C/run-batches${DS:+-$DS}.json"
-           rm -f "$AL"
-           for ((k = 1; k <= NB; k++)); do
-             lo=$(((k - 1) * BS)) hi=$((k * BS < N ? k * BS : N))
-             feegate "batch $k/$NB"
-             rm -f "$B"
-             N0="$(cast nonce --rpc-url "$NET" "$S")"; tb=$SECONDS
-             forge script script/DeploySend.s.sol --sig 'run(string,uint256,uint256)' "$Q" "$lo" "$hi" \
-               --rpc-url "$NET" --broadcast --timeout "${DEPLOY_TX_TIMEOUT:-600}" "${Z[@]}" --sender "$S" "$@" >> "$DL" 2>&1 &
-             rc=0; follow $! "batch $k/$NB" || rc=$?
-             if [ "$rc" != 0 ]; then
-               python3 -I script/deploy_batch.py check "$P" "$Q" "$B" "$lo" "$hi" "$AL" fail "$rc" 2>> "$DL" || true
-               [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; say "forge's output: $DL"; exit 1
-             fi
-             python3 -I script/deploy_batch.py check "$P" "$Q" "$B" "$lo" "$hi" "$AL" 2>> "$DL" \
-               || { [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; say "forge's output: $DL"; exit 1; }
-             say "batch $k/$NB ok: txs $((lo + 1))-$hi/$N, nonce +$(($(cast nonce --rpc-url "$NET" "$S") - N0)), $((SECONDS - tb))s"
-           done
-           if [ -n "$DS" ]; then  # this set beside the chain's other sets (a previous book of another chain is not kept)
-             PB=-; [ -f "$J.prev" ] && [ "$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1])).get("chainUid", ""))' "$J.prev")" = "$(echo "$G0" | tr A-F a-f)" ] && PB="$J.prev"
-             python3 -I script/deploybook.py set-merge "$J" "$PB" "$DS" "${RELEASES_JSON:-}" \
-               || { say "FAIL set-merge: $J stays this deploy's book alone, the previous one in $J.prev"; exit 1; }
-             say "set $DS in $J (sets: $(python3 -I -c 'import json, sys; b = json.load(open(sys.argv[1])); print(", ".join(b["sets"]), "default", b["default_set"])' "$J"))"
-           fi
-           rm -f "$J.prev"
-           say "ok $(python3 -I -c 'import json, sys; print(len(json.load(open(sys.argv[1]))["receipts"]))' "$AL" 2> /dev/null || echo 0) txs $((SECONDS - T0))s book $J"
-           # NET-EVM-12: a remote deploy is source-verified on the chain's explorer, VERIFY_TARGET naming its config
-           # (scaas-testnet, or VERIFY_EXPLORER / VERIFY_URL / VERIFY_API_KEY_ENV); chain 31337 or VERIFY_TARGET=local
-           # is local; VERIFY=none needs VERIFY_REASON; an unconfigured target fails VERIFY_NOT_CONFIGURED (exit 1)
-           if [ "$C" = 31337 ] || [ "${VERIFY_TARGET:-}" = local ]; then echo "[local/verify] local, not verified (no explorer)"
-           else VERIFY_RPC="$NET" sh script/onchain/verify.sh "${VERIFY_TARGET:-chain-$C}"; fi ;;
-  hedera)  cd "$SC/evm" && exec forge script script/hedera/DeployHedera.s.sol --rpc-url "$NET" --broadcast --slow --disable-code-size-limit \
-             --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@" ;;
-  aptos)   exec aptos move deploy-object --package-dir "$SC/move/aptos" --address-name scaas --profile "$NET" "$@" ;;
-  sui)     out="$(sui client --client.env "$NET" publish --json "$@" "$SC/move/sui")" || { echo "$out"; exit 1; }
-           echo "$out"
-           cap="$(python3 -c 'import json,sys; print(next(c["objectId"] for c in json.loads(sys.stdin.read())["objectChanges"]
-                  if c.get("type") == "created" and c.get("objectType") == "0x2::package::UpgradeCap"))' <<< "$out")" \
-             || { echo "no UpgradeCap in the publish output: make the package immutable by hand" >&2; exit 1; }
-           # --gas-budget: older Sui CLIs require it (SUI_GAS_BUDGET, MIST)
-           exec sui client --client.env "$NET" call --package 0x2 --module package --function make_immutable --args "$cap" \
-             --gas-budget "${SUI_GAS_BUDGET:-50000000}" ;;
-  soroban) C="${1:?contract (token|mandate|dex|smart_key_account|relay_fee|ua_registry)}"; shift
-           ST="${STELLAR_BIN:-stellar}"; W="$SC/soroban/target/wasm32v1-none/release"
-           # `contract id wasm` / `contract extend` take only the source / RPC / config options: pass those of "$@" before
-           # `--` (a deploy-only option such as --alias or --inclusion-fee would make them fail)
-           I=(); A=("$@")
-           for ((i = 0; i < ${#A[@]}; i++)); do
-             case "${A[i]}" in
-               --) break ;;
-               -s|--source|--source-account|--rpc-url|--rpc-header|--network-passphrase|--config-dir|--hd-path)
-                 I+=("${A[i]}" "${A[i + 1]-}"); i=$((i + 1)) ;;
-               --source=*|--source-account=*|--rpc-url=*|--rpc-header=*|--network-passphrase=*|--config-dir=*|--hd-path=*)
-                 I+=("${A[i]}") ;;
-             esac
-           done
-           # Warm (controller ruling 2026-10-31, T10 review): the instance and its code extended to the contracts' 60-day
-           # TTL target (S11: extend_ttl(30 days, 60 days)) by the deployer, so no relayed job pays a first-call rent.
-           warm() {
-             "$ST" contract extend --network "$NET" --id "$1" --ledgers-to-extend 1036800 "${I[@]}" >&2
-             "$ST" contract extend --network "$NET" --wasm "$2" --ledgers-to-extend 1036800 "${I[@]}" >&2
-           }
-           if [ "$C" = relay_fee ]; then
-             S="${SOROBAN_SALT:-$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')}"
-             R="$("$ST" contract id wasm --network "$NET" --salt "$S" "${I[@]}")"
-             X="$("$ST" contract deploy --network "$NET" --wasm "$W/scaas_relay_executor.wasm" "$@" -- --router "$R")"
-             got="$("$ST" contract deploy --network "$NET" --wasm "$W/scaas_relay_fee.wasm" --salt "$S" "$@" -- --executor "$X")"
-             [ "$got" = "$R" ] || { echo "router id $got != derived $R (executor $X is bound to $R)" >&2; exit 1; }
-             warm "$X" "$W/scaas_relay_executor.wasm"; warm "$R" "$W/scaas_relay_fee.wasm"
-             echo "$R"; exit 0
-           fi
-           id="$("$ST" contract deploy --network "$NET" --wasm "$W/scaas_$C.wasm" "$@")"
-           warm "$id" "$W/scaas_$C.wasm"
-           echo "$id" ;;
-  solana)  exec "$SC/solana/scripts/deploy.sh" "$NET" "$@" ;;
-  near)    exec "$SC/near/scripts/deploy.sh" "$NET" "$@" ;;
-  algorand) exec "$SC/algorand/scripts/deploy.sh" "$NET" "$@" ;;
-  cosmos|ton) echo "$FAMILY: no deploy tooling in this repo yet (build artifacts: build.sh $FAMILY)" >&2; exit 2 ;;
-  *) echo "unknown family '$FAMILY'" >&2; exit 2 ;;
+           "value": [x.get("value") or "0x0" for x in t], "input": [x.get("input") or "0x" for x in t]}, open(sys.argv[2], "w"))' "$P" "$Q" ||
+            fail plan $?
+        # NET-EVM-11 Change (owner 2026-11-15): the plan in batches of DEPLOY_BATCH (16) without --slow, one forge run each
+        # (DeploySend.run(string,uint256,uint256): measured on the fork of the chain as the batches before left it, then
+        # sent at once); after each batch one line per transaction from its receipts, every status 1 checked before the
+        # next batch, a named stop at the first failure
+        N="$(python3 -I -c 'import json, sys; print(len(json.load(open(sys.argv[1]))["to"]))' "$Q")" BS="${DEPLOY_BATCH:-16}"
+        NB=$(((N + BS - 1) / BS)) AL="broadcast/DeploySend.s.sol/$C/run-batches${DS:+-$DS}.json"
+        rm -f "$AL"
+        for ((k = 1; k <= NB; k++)); do
+            lo=$(((k - 1) * BS)) hi=$((k * BS < N ? k * BS : N))
+            feegate "batch $k/$NB"
+            rm -f "$B"
+            N0="$(cast nonce --rpc-url "$NET" "$S")"
+            tb=$SECONDS
+            forge script script/DeploySend.s.sol --sig 'run(string,uint256,uint256)' "$Q" "$lo" "$hi" \
+                --rpc-url "$NET" --broadcast --timeout "${DEPLOY_TX_TIMEOUT:-600}" "${Z[@]}" --sender "$S" "$@" >>"$DL" 2>&1 &
+            rc=0
+            follow $! "batch $k/$NB" || rc=$?
+            if [ "$rc" != 0 ]; then
+                python3 -I script/deploy_batch.py check "$P" "$Q" "$B" "$lo" "$hi" "$AL" fail "$rc" 2>>"$DL" || true
+                [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"
+                say "forge's output: $DL"
+                exit 1
+            fi
+            python3 -I script/deploy_batch.py check "$P" "$Q" "$B" "$lo" "$hi" "$AL" 2>>"$DL" ||
+                {
+                    [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"
+                    say "forge's output: $DL"
+                    exit 1
+                }
+            say "batch $k/$NB ok: txs $((lo + 1))-$hi/$N, nonce +$(($(cast nonce --rpc-url "$NET" "$S") - N0)), $((SECONDS - tb))s"
+        done
+        if [ -n "$DS" ]; then # this set beside the chain's other sets (a previous book of another chain is not kept)
+            PB=-
+            [ -f "$J.prev" ] && [ "$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1])).get("chainUid", ""))' "$J.prev")" = "$(echo "$G0" | tr A-F a-f)" ] && PB="$J.prev"
+            python3 -I script/deploybook.py set-merge "$J" "$PB" "$DS" "${RELEASES_JSON:-}" ||
+                {
+                    say "FAIL set-merge: $J stays this deploy's book alone, the previous one in $J.prev"
+                    exit 1
+                }
+            say "set $DS in $J (sets: $(python3 -I -c 'import json, sys; b = json.load(open(sys.argv[1])); print(", ".join(b["sets"]), "default", b["default_set"])' "$J"))"
+        fi
+        rm -f "$J.prev"
+        say "ok $(python3 -I -c 'import json, sys; print(len(json.load(open(sys.argv[1]))["receipts"]))' "$AL" 2>/dev/null || echo 0) txs $((SECONDS - T0))s book $J"
+        # NET-EVM-12: a remote deploy is source-verified on the chain's explorer, VERIFY_TARGET naming its config
+        # (scaas-testnet, or VERIFY_EXPLORER / VERIFY_URL / VERIFY_API_KEY_ENV); chain 31337 or VERIFY_TARGET=local
+        # is local; VERIFY=none needs VERIFY_REASON; an unconfigured target fails VERIFY_NOT_CONFIGURED (exit 1)
+        if [ "$C" = 31337 ] || [ "${VERIFY_TARGET:-}" = local ]; then
+            echo "[local/verify] local, not verified (no explorer)"
+        else VERIFY_RPC="$NET" sh script/onchain/verify.sh "${VERIFY_TARGET:-chain-$C}"; fi
+        ;;
+    hedera) cd "$SC/evm" && exec forge script script/hedera/DeployHedera.s.sol --rpc-url "$NET" --broadcast --slow --disable-code-size-limit \
+        --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@" ;;
+    aptos) exec aptos move deploy-object --package-dir "$SC/move/aptos" --address-name scaas --profile "$NET" "$@" ;;
+    sui)
+        out="$(sui client --client.env "$NET" publish --json "$@" "$SC/move/sui")" || {
+            echo "$out"
+            exit 1
+        }
+        echo "$out"
+        cap="$(python3 -c 'import json,sys; print(next(c["objectId"] for c in json.loads(sys.stdin.read())["objectChanges"]
+                  if c.get("type") == "created" and c.get("objectType") == "0x2::package::UpgradeCap"))' <<<"$out")" ||
+            {
+                echo "no UpgradeCap in the publish output: make the package immutable by hand" >&2
+                exit 1
+            }
+        # --gas-budget: older Sui CLIs require it (SUI_GAS_BUDGET, MIST)
+        exec sui client --client.env "$NET" call --package 0x2 --module package --function make_immutable --args "$cap" \
+            --gas-budget "${SUI_GAS_BUDGET:-50000000}"
+        ;;
+    soroban)
+        C="${1:?contract (token|mandate|dex|smart_key_account|relay_fee|ua_registry)}"
+        shift
+        ST="${STELLAR_BIN:-stellar}"
+        W="$SC/soroban/target/wasm32v1-none/release"
+        # `contract id wasm` / `contract extend` take only the source / RPC / config options: pass those of "$@" before
+        # `--` (a deploy-only option such as --alias or --inclusion-fee would make them fail)
+        I=()
+        A=("$@")
+        for ((i = 0; i < ${#A[@]}; i++)); do
+            case "${A[i]}" in
+                --) break ;;
+                -s | --source | --source-account | --rpc-url | --rpc-header | --network-passphrase | --config-dir | --hd-path)
+                    I+=("${A[i]}" "${A[i + 1]-}")
+                    i=$((i + 1))
+                    ;;
+                --source=* | --source-account=* | --rpc-url=* | --rpc-header=* | --network-passphrase=* | --config-dir=* | --hd-path=*)
+                    I+=("${A[i]}")
+                    ;;
+            esac
+        done
+        # Warm (controller ruling 2026-10-31, T10 review): the instance and its code extended to the contracts' 60-day
+        # TTL target (S11: extend_ttl(30 days, 60 days)) by the deployer, so no relayed job pays a first-call rent.
+        warm() {
+            "$ST" contract extend --network "$NET" --id "$1" --ledgers-to-extend 1036800 "${I[@]}" >&2
+            "$ST" contract extend --network "$NET" --wasm "$2" --ledgers-to-extend 1036800 "${I[@]}" >&2
+        }
+        if [ "$C" = relay_fee ]; then
+            S="${SOROBAN_SALT:-$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')}"
+            R="$("$ST" contract id wasm --network "$NET" --salt "$S" "${I[@]}")"
+            X="$("$ST" contract deploy --network "$NET" --wasm "$W/scaas_relay_executor.wasm" "$@" -- --router "$R")"
+            got="$("$ST" contract deploy --network "$NET" --wasm "$W/scaas_relay_fee.wasm" --salt "$S" "$@" -- --executor "$X")"
+            [ "$got" = "$R" ] || {
+                echo "router id $got != derived $R (executor $X is bound to $R)" >&2
+                exit 1
+            }
+            warm "$X" "$W/scaas_relay_executor.wasm"
+            warm "$R" "$W/scaas_relay_fee.wasm"
+            echo "$R"
+            exit 0
+        fi
+        id="$("$ST" contract deploy --network "$NET" --wasm "$W/scaas_$C.wasm" "$@")"
+        warm "$id" "$W/scaas_$C.wasm"
+        echo "$id"
+        ;;
+    solana) exec "$SC/solana/scripts/deploy.sh" "$NET" "$@" ;;
+    near) exec "$SC/near/scripts/deploy.sh" "$NET" "$@" ;;
+    algorand) exec "$SC/algorand/scripts/deploy.sh" "$NET" "$@" ;;
+    cosmos | ton)
+        echo "$FAMILY: no deploy tooling in this repo yet (build artifacts: build.sh $FAMILY)" >&2
+        exit 2
+        ;;
+    *)
+        echo "unknown family '$FAMILY'" >&2
+        exit 2
+        ;;
 esac

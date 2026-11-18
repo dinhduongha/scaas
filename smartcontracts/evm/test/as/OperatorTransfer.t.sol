@@ -36,7 +36,9 @@ contract OperatorTransferTest is RegFixture {
         (a, b) = (nid(alice), nid(bob));
         ts[0] = _opToken(0, 0, "o8");
         ts[1] = _opToken(1, 0, "o9");
-        for (uint256 i; i < 2; ++i) _grant(ts[i], nid(clerk));
+        for (uint256 i; i < 2; ++i) {
+            _grant(ts[i], nid(clerk));
+        }
     }
 
     /// Kind 8 (`i == 0`) or 9 as the fixture's, with bit 22 and, when `denied != 0`, `KYC` (round 3s) on `creg`.
@@ -47,8 +49,12 @@ contract OperatorTransferTest is RegFixture {
             c.features |= uint256(1) << GovernanceBits.KYC;
             (c.reg.complianceRegistry, c.reg.deniedFlags) = (address(creg), denied);
         }
-        t = f.createToken(i == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED : IOpenFactory.TokenKind.WRAPPED_REGULATED, 1,
-            abi.encode(c), salt);
+        t = f.createToken(
+            i == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED : IOpenFactory.TokenKind.WRAPPED_REGULATED,
+            1,
+            abi.encode(c),
+            salt
+        );
         if (i == 1) _wrapFor(t, alice, SUPPLY);
     }
 
@@ -129,13 +135,15 @@ contract OperatorTransferTest is RegFixture {
             _refused(t, a, b, 0, REF, abi.encodeWithSelector(IRegulatedToken.AmountZero.selector));
             _refused(t, a, b, 1, 0, abi.encodeWithSelector(IRegulatedToken.RefRequired.selector));
             _refused(t, a, a, 1, REF, abi.encodeWithSelector(IRegulatedToken.OperatorTargetRefused.selector, a));
-            bytes32[4] memory bad = [bytes32(0), MetaTxLib.pad(MetaTxLib.UA_POOL), MetaTxLib.pad(MetaTxLib.SHIELD_POOL),
-                nid(t)];
+            bytes32[4] memory bad =
+                [bytes32(0), MetaTxLib.pad(MetaTxLib.UA_POOL), MetaTxLib.pad(MetaTxLib.SHIELD_POOL), nid(t)];
             for (uint256 k; k < 4; ++k) {
-                _refused(t, bad[k], b, 1, REF,
-                    abi.encodeWithSelector(IRegulatedToken.OperatorTargetRefused.selector, bad[k]));
-                _refused(t, a, bad[k], 1, REF,
-                    abi.encodeWithSelector(IRegulatedToken.OperatorTargetRefused.selector, bad[k]));
+                _refused(
+                    t, bad[k], b, 1, REF, abi.encodeWithSelector(IRegulatedToken.OperatorTargetRefused.selector, bad[k])
+                );
+                _refused(
+                    t, a, bad[k], 1, REF, abi.encodeWithSelector(IRegulatedToken.OperatorTargetRefused.selector, bad[k])
+                );
             }
             _op(t, a, b, 1); // the control
         }
@@ -148,7 +156,14 @@ contract OperatorTransferTest is RegFixture {
             address t = ts[i];
             vm.prank(alice);
             IERC20(t).transfer(safe, 10);
-            _refused(t, nid(safe), b, 1, REF, abi.encodeWithSelector(IRegulatedToken.OperatorTargetRefused.selector, nid(safe)));
+            _refused(
+                t,
+                nid(safe),
+                b,
+                1,
+                REF,
+                abi.encodeWithSelector(IRegulatedToken.OperatorTargetRefused.selector, nid(safe))
+            );
             vm.prank(alice);
             IERC20(t).transfer(bob, 10);
             _op(t, b, a, 1); // the control: an EOA
@@ -199,8 +214,7 @@ contract OperatorTransferTest is RegFixture {
             _op(t, a, b, 1); // a frozen receiver receives
             _unfreeze(t, b);
             _pause(t, _now() + 1 days);
-            _refused(t, a, b, 1, REF,
-                abi.encodeWithSelector(IRegulatedToken.TokenPaused.selector, _now() + 1 days));
+            _refused(t, a, b, 1, REF, abi.encodeWithSelector(IRegulatedToken.TokenPaused.selector, _now() + 1 days));
             vm.warp(block.timestamp + 1 days);
             _op(t, a, b, 1); // the pause lapsed
         }
@@ -241,8 +255,12 @@ contract OperatorTransferTest is RegFixture {
         for (uint256 i; i < 2; ++i) {
             IFactoryToken.TokenConfig memory c = i == 0 ? _cfg8() : _cfg9();
             c.features |= (uint256(1) << GovernanceBits.MODERATE) | (uint256(1) << OP);
-            address t = f.createToken(i == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED
-                : IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, abi.encode(c), bytes32(uint256(200 + i)));
+            address t = f.createToken(
+                i == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED : IOpenFactory.TokenKind.WRAPPED_REGULATED,
+                1,
+                abi.encode(c),
+                bytes32(uint256(200 + i))
+            );
             if (i == 1) _wrapFor(t, alice, SUPPLY);
             vm.prank(ownerA);
             NormalToken(t).grantRole(GovernanceBits.MODERATE, nid(mod), EnvKit.codeUidOf(address(NormalToken(t))));
@@ -253,8 +271,9 @@ contract OperatorTransferTest is RegFixture {
             vm.prank(mod);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, OP, nid(mod)));
             _r(t).operatorTransfer(a, b, 1, REF, EnvKit.codeUidOf(t));
-            (bool ok, bytes memory ret) = t.call(abi.encodeWithSignature("moderatedTransfer(bytes32,bytes32,uint256,bytes32)",
-                a, b, uint256(1), REF));
+            (bool ok, bytes memory ret) = t.call(
+                abi.encodeWithSignature("moderatedTransfer(bytes32,bytes32,uint256,bytes32)", a, b, uint256(1), REF)
+            );
             assertFalse(ok, "no moderatedTransfer entry");
             assertEq(ret.length, 0, "an unknown selector");
             _grant(t, nid(mod)); // the control: the same contract with bit 22 moves
@@ -267,12 +286,12 @@ contract OperatorTransferTest is RegFixture {
     function test_plainKindsHaveNoEntry() public {
         IOpenFactory.TokenKind[2] memory plain = [IOpenFactory.TokenKind.NORMAL, IOpenFactory.TokenKind.WRAPPED];
         for (uint256 i; i < 2; ++i) {
-            (bool ok, bytes memory ret) = f.implementationOf(plain[i], 1).call(
-                abi.encodeCall(IRegulatedToken.operatorTransfer, (a, b, 1, REF, bytes32(0))));
+            (bool ok, bytes memory ret) = f.implementationOf(plain[i], 1)
+                .call(abi.encodeCall(IRegulatedToken.operatorTransfer, (a, b, 1, REF, bytes32(0))));
             assertFalse(ok);
             assertEq(ret.length, 0);
-            (ok, ret) = f.implementationOf(IOpenFactory.TokenKind.NORMAL_REGULATED, 1).call(
-                abi.encodeCall(IRegulatedToken.operatorTransfer, (a, b, 1, REF, bytes32(0))));
+            (ok, ret) = f.implementationOf(IOpenFactory.TokenKind.NORMAL_REGULATED, 1)
+                .call(abi.encodeCall(IRegulatedToken.operatorTransfer, (a, b, 1, REF, bytes32(0))));
             assertFalse(ok);
             assertGt(ret.length, 0, "the control: the regulated release has the entry (a named refusal)");
         }

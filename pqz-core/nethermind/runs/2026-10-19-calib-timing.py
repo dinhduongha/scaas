@@ -3,6 +3,7 @@
   python3 -I runs/2026-10-19-calib-timing.py <baseline log>[,<baseline log>...] <run log> [<run log> ...]
 The baseline logs are merged (the C core: 2026-10-15-calib.txt,2026-10-17-calib-ops7.txt). Prints p50 valid /
 p99 valid / p99 adversarial (ms) per (op, id, stmtLen [M, auditorOn]) row, PQZL rows first."""
+
 import sys
 
 

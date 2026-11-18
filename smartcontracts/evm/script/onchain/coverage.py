@@ -22,6 +22,7 @@
 A book (deployments/onchain-<net>-<group>.json, git-ignored, written by each group script) maps an address to a contract label of groups.json. A
 record is one JSON line: {net, to, sel, tx, gas, status, what, frames?}; any harness may append its own (the Python ones
 do). A group is pluggable by name: add it to groups.json, gen again; records of earlier runs keep their entries."""
+
 import argparse
 import glob
 import json
@@ -34,7 +35,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 EVM = os.path.abspath(os.path.join(HERE, "../.."))
 # matrix.sh's run dir (MATRIX_OUT), else today's; never an earlier round's committed run note
 OUT = os.path.join(EVM, os.environ.get("MATRIX_OUT") or time.strftime("runs/%Y-%m-%d-matrix"))
-BUILD = os.path.join(EVM, os.environ.get("ONCHAIN_OUT", "out/onchain"))  # the build the scripts ran from (src unchanged since the deploy)
+BUILD = os.path.join(
+    EVM, os.environ.get("ONCHAIN_OUT", "out/onchain")
+)  # the build the scripts ran from (src unchanged since the deploy)
 
 
 def _entries(c):
@@ -62,7 +65,7 @@ def _it(i):
     """A library's selector type: the internal type, `struct ` / `enum ` / `contract ` dropped (enum -> uint8)."""
     t = i.get("internalType", i["type"])
     if t.startswith("enum "):
-        return "uint8" + t[t.index("]"):] if "]" in t else "uint8"
+        return "uint8" + t[t.index("]") :] if "]" in t else "uint8"
     for p in ("struct ", "contract "):
         t = t.removeprefix(p)
     return t
@@ -70,12 +73,15 @@ def _it(i):
 
 def gen(a):
     g = json.load(open(a.groups))["groups"]
-    cov = {"_comment": "T66b Step 5b coverage list (script/onchain/coverage.py gen; runs added by `table`). mut: the ABI "
-                       "state mutability; module: a token kind's body module (K = kept in the core). UNAUDITED.",
-           "groups": {}}
+    cov = {
+        "_comment": "T66b Step 5b coverage list (script/onchain/coverage.py gen; runs added by `table`). mut: the ABI "
+        "state mutability; module: a token kind's body module (K = kept in the core). UNAUDITED.",
+        "groups": {},
+    }
     for name, cs in g.items():
-        cov["groups"][name] = {c["label"]: {k: v for k, v in c.items() if k != "label"} | {"entries": _entries(c)}
-                               for c in cs}
+        cov["groups"][name] = {
+            c["label"]: {k: v for k, v in c.items() if k != "label"} | {"entries": _entries(c)} for c in cs
+        }
     os.makedirs(a.out, exist_ok=True)
     json.dump(cov, open(os.path.join(a.out, "coverage.json"), "w"), indent=1)
     n = sum(len(c["entries"]) for cs in cov["groups"].values() for c in cs.values())
@@ -99,11 +105,22 @@ def forge(a):
                 to = (tx.get("to") or t.get("contractAddress") or "").lower()
                 data = tx.get("input") or tx.get("data") or "0x"
                 x = rc.get(t["hash"], {})
-                f.write(json.dumps({"net": a.net, "to": to, "label": book.get(to, t.get("contractName") or ""),
-                                    "sel": data[2:10] if tx.get("to") else "create", "tx": t["hash"],
-                                    "gas": int(x.get("gasUsed", "0x0"), 16), "status": int(x.get("status", "0x0"), 16),
-                                    "what": t.get("function") or t.get("contractName") or "",
-                                    "script": _script(p)}) + "\n")
+                f.write(
+                    json.dumps(
+                        {
+                            "net": a.net,
+                            "to": to,
+                            "label": book.get(to, t.get("contractName") or ""),
+                            "sel": data[2:10] if tx.get("to") else "create",
+                            "tx": t["hash"],
+                            "gas": int(x.get("gasUsed", "0x0"), 16),
+                            "status": int(x.get("status", "0x0"), 16),
+                            "what": t.get("function") or t.get("contractName") or "",
+                            "script": _script(p),
+                        }
+                    )
+                    + "\n"
+                )
     print(f"records: {rp}")
 
 
@@ -113,8 +130,11 @@ def _script(p):
 
 
 def _rpc(url, m, p):
-    q = urllib.request.Request(url, json.dumps({"jsonrpc": "2.0", "id": 1, "method": m, "params": p}).encode(),
-                               {"content-type": "application/json"})
+    q = urllib.request.Request(
+        url,
+        json.dumps({"jsonrpc": "2.0", "id": 1, "method": m, "params": p}).encode(),
+        {"content-type": "application/json"},
+    )
     r = json.load(urllib.request.urlopen(q, timeout=600))
     if "error" in r:
         raise RuntimeError(r["error"])
@@ -134,6 +154,7 @@ def trace(a):
                 fr.append([c["to"].lower(), c["input"][2:10], c.get("type", ""), 0 if c.get("error") else 1])
             for k in c.get("calls", []):
                 walk(k)
+
         walk(_rpc(a.rpc, "debug_traceTransaction", [r["tx"], {"tracer": "callTracer"}]))
         r["frames"] = fr[1:]
     with open(p, "w") as f:
@@ -162,13 +183,31 @@ def neg(a):
                 d = err.get("data") or ""
                 d = d.get("data", "") if isinstance(d, dict) else d
                 # the selector, or the whole revert data when the script listed it whole (`_negData`)
-                got = (d if len(want) > 10 else d[:10]) if isinstance(d, str) and d.startswith("0x") \
+                got = (
+                    (d if len(want) > 10 else d[:10])
+                    if isinstance(d, str) and d.startswith("0x")
                     else str(err.get("message", ""))[:80]
+                )
             ok = got.lower() == want.lower()
             n, bad = n + 1, bad + (not ok)
-            f.write(json.dumps({"net": a.net, "to": to.lower(), "label": book.get(to.lower(), ""), "sel": data[2:10],
-                                "tx": "", "gas": 0, "status": 2 if ok else 0, "what": f"negative: {what}",
-                                "expected": want, "got": got, "script": a.group}) + "\n")
+            f.write(
+                json.dumps(
+                    {
+                        "net": a.net,
+                        "to": to.lower(),
+                        "label": book.get(to.lower(), ""),
+                        "sel": data[2:10],
+                        "tx": "",
+                        "gas": 0,
+                        "status": 2 if ok else 0,
+                        "what": f"negative: {what}",
+                        "expected": want,
+                        "got": got,
+                        "script": a.group,
+                    }
+                )
+                + "\n"
+            )
             print(f"{'ok ' if ok else 'BAD'} negative {what}: expected {want}, got {got}")
     print(f"negatives: {n}, {bad} not refused as expected")
     if bad:
@@ -178,7 +217,8 @@ def neg(a):
 def _static_words(sig):
     """The head words of a signature whose parameters are all static (tuples flattened), else None."""
     import re
-    args = sig[sig.index("(") + 1:-1]
+
+    args = sig[sig.index("(") + 1 : -1]
     if "[" in args or "string" in args or re.search(r"\bbytes\b(?!\d)", args):
         return None
     return len([t for t in re.split(r"[(),]", args) if t])
@@ -210,26 +250,45 @@ def views(a):
                 except RuntimeError:
                     st = 0
                 ok += st
-                f.write(json.dumps({"net": a.net, "to": addr, "label": lb, "sel": e["sel"], "tx": "", "gas": 0,
-                                    "status": st, "what": f"view {e['sig']}", "script": "views"}) + "\n")
+                f.write(
+                    json.dumps(
+                        {
+                            "net": a.net,
+                            "to": addr,
+                            "label": lb,
+                            "sel": e["sel"],
+                            "tx": "",
+                            "gas": 0,
+                            "status": st,
+                            "what": f"view {e['sig']}",
+                            "script": "views",
+                        }
+                    )
+                    + "\n"
+                )
     print(f"views: {n} called, {ok} answered")
 
 
 def _records(out, n):
     """The record files of net `n`: the run dir's and its groups' own subdirectories (wraplimits writes under its own)."""
-    return glob.glob(os.path.join(out, f"records-{n}-*.jsonl")) + glob.glob(os.path.join(out, "*", f"records-{n}-*.jsonl"))
+    return glob.glob(os.path.join(out, f"records-{n}-*.jsonl")) + glob.glob(
+        os.path.join(out, "*", f"records-{n}-*.jsonl")
+    )
 
 
 def table(a):
     if a.set:  # deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): the set these runs targeted
         sys.path.insert(0, os.path.join(EVM, "script"))
         import deploybook
+
         print(f"# deploy set: {deploybook.set_label(a.set)}")
     # fail closed: a net with no book would recount its records unlabelled and write empty runs over the tally
     missing = [n for n in a.net if not glob.glob(os.path.join(EVM, f"deployments/onchain-{n}-*.json"))]
     if missing:
-        sys.exit(f"coverage.py table: no book for {', '.join(missing)} (deployments/onchain-<net>-*.json); "
-                 f"{os.path.join(a.out, 'coverage.json')} left as it was")
+        sys.exit(
+            f"coverage.py table: no book for {', '.join(missing)} (deployments/onchain-<net>-*.json); "
+            f"{os.path.join(a.out, 'coverage.json')} left as it was"
+        )
     cov = json.load(open(os.path.join(a.out, "coverage.json")))
     books = {}
     own = {}  # per net and group: its own book over the base book (local groups run on separate forks of one state, so
@@ -239,7 +298,7 @@ def table(a):
         base = os.path.join(EVM, f"deployments/onchain-{n}-base.json")
         for b in sorted(glob.glob(os.path.join(EVM, f"deployments/onchain-{n}-*.json"))):
             books[n].update(_book(b))
-            g = os.path.basename(b)[len(f"onchain-{n}-"):-len(".json")]
+            g = os.path.basename(b)[len(f"onchain-{n}-") : -len(".json")]
             own[n][g] = {**(_book(base) if os.path.exists(base) else {}), **_book(b)}
     lab = {lb: c for cs in cov["groups"].values() for lb, c in cs.items()}
     for c in lab.values():
@@ -263,7 +322,8 @@ def table(a):
                             v["tx"].append([r["tx"], r["gas"], r["status"], r.get("what", "")])
     json.dump(cov, open(os.path.join(a.out, "coverage.json"), "w"), indent=1)
     hdr = "group | contract | entries | state-changing | " + " | ".join(
-        f"{n}: state-changing called / reached / views reached" for n in a.net)
+        f"{n}: state-changing called / reached / views reached" for n in a.net
+    )
     print(hdr)
     for g, cs in cov["groups"].items():
         for lb, c in cs.items():
@@ -275,8 +335,12 @@ def table(a):
                 reached = sum(1 for e in sc if e["runs"].get(n, {}).get("reached"))
                 views = sum(1 for e in es if e not in sc and e["runs"].get(n, {}).get("reached"))
                 cols.append(f"{called} / {reached} / {views}")
-            print(f"{g} | {lb} | {len(es)} | {len(sc)} | " + " | ".join(cols)
-                  + (f" | needs {c['needs']}" if c.get("needs") else "") + (f" | via {', '.join(c['via'])}" if c.get("via") else ""))
+            print(
+                f"{g} | {lb} | {len(es)} | {len(sc)} | "
+                + " | ".join(cols)
+                + (f" | needs {c['needs']}" if c.get("needs") else "")
+                + (f" | via {', '.join(c['via'])}" if c.get("via") else "")
+            )
 
 
 def note(a):
@@ -286,28 +350,35 @@ def note(a):
     import contextlib
     import fnmatch
     import io
+
     rs = json.load(open(a.reasons)) if a.reasons and os.path.exists(a.reasons) else {}
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         table(a)
     cov = json.load(open(os.path.join(a.out, "coverage.json")))
-    out = ["## Coverage per contract (state-changing called = a transaction of this net called the entry and succeeded;",
-           "## reached = it also ran inside another call, by the trace (local only); views reached = answered an eth_call)",
-           buf.getvalue().rstrip()]
+    out = [
+        "## Coverage per contract (state-changing called = a transaction of this net called the entry and succeeded;",
+        "## reached = it also ran inside another call, by the trace (local only); views reached = answered an eth_call)",
+        buf.getvalue().rstrip(),
+    ]
     for n in a.net:
         recs = [json.loads(x) for p in sorted(_records(a.out, n)) for x in open(p)]
         if not recs:
             continue
-        out.append(f"\n## {n}: per record file (txs, status 1, the heaviest gasUsed; eth_calls answered; negatives refused as expected)")
+        out.append(
+            f"\n## {n}: per record file (txs, status 1, the heaviest gasUsed; eth_calls answered; negatives refused as expected)"
+        )
         out.append("records | txs | status 1 | max gasUsed | calls ok | negatives")
         for p in sorted(_records(a.out, n)):
             rr = [json.loads(x) for x in open(p)]
             t = [r for r in rr if r["tx"]]
             ng = [r for r in rr if r["what"].startswith("negative")]
             c = [r for r in rr if not r["tx"] and r not in ng]
-            out.append(f"{os.path.basename(p)[len(f'records-{n}-'):-6]} | {len(t)} | {sum(r['status'] == 1 for r in t)} | "
-                       f"{max([r['gas'] for r in t], default=0):,} | {sum(r['status'] == 1 for r in c)} / {len(c)} | "
-                       f"{sum(r['status'] == 2 for r in ng)} / {len(ng)}")
+            out.append(
+                f"{os.path.basename(p)[len(f'records-{n}-') : -6]} | {len(t)} | {sum(r['status'] == 1 for r in t)} | "
+                f"{max([r['gas'] for r in t], default=0):,} | {sum(r['status'] == 1 for r in c)} / {len(c)} | "
+                f"{sum(r['status'] == 2 for r in ng)} / {len(ng)}"
+            )
         out.append(f"\n## {n}: state-changing entries not called by a transaction, with the reason")
         miss = 0
         for g, cs in cov["groups"].items():
@@ -317,7 +388,11 @@ def note(a):
                         continue
                     why = c.get("needs") and f"needs {c['needs']}"
                     if not why and e["runs"].get(n, {}).get("reached"):
-                        why = "reached inside another call (trace)" if c.get("via") is None else "a library / module entry, reached by its callers"
+                        why = (
+                            "reached inside another call (trace)"
+                            if c.get("via") is None
+                            else "a library / module entry, reached by its callers"
+                        )
                     for key in (lb, "*"):
                         for pat, r in rs.get(key, {}).items():
                             if not why and fnmatch.fnmatchcase(e["sig"], pat):
@@ -333,14 +408,25 @@ def note(a):
             out += [f"gap | {g}" for g in gaps]
         neg = [r for r in recs if r["what"].startswith("negative")]
         out.append(f"\n## {n}: negatives ({len(neg)}; refused as expected = status 2)")
-        out += [f"{'ok ' if r['status'] == 2 else 'BAD'} | {r.get('label', '')} | {r['what']} | expected {r.get('expected', '')}"
-                f" got {r.get('got', '')}" for r in neg]
+        out += [
+            f"{'ok ' if r['status'] == 2 else 'BAD'} | {r.get('label', '')} | {r['what']} | expected {r.get('expected', '')}"
+            f" got {r.get('got', '')}"
+            for r in neg
+        ]
         txs = [r for r in recs if r["tx"]]
-        out.append(f"\n## {n}: transactions {len(txs)}, status 1: {sum(r['status'] == 1 for r in txs)}; the heaviest ten")
-        out += [f"{r['gas']:,} | {r['tx']} | {r.get('label', '')} | {r['what']}" for r in sorted(txs, key=lambda r: -r["gas"])[:10]]
+        out.append(
+            f"\n## {n}: transactions {len(txs)}, status 1: {sum(r['status'] == 1 for r in txs)}; the heaviest ten"
+        )
+        out += [
+            f"{r['gas']:,} | {r['tx']} | {r.get('label', '')} | {r['what']}"
+            for r in sorted(txs, key=lambda r: -r["gas"])[:10]
+        ]
         if a.txs:  # the records hold every transaction; the note lists them only when asked
             out.append(f"\n## {n}: every transaction (script | status | gasUsed | hash | contract | what)")
-            out += [f"{r['script']} | {r['status']} | {r['gas']:,} | {r['tx']} | {r.get('label', '')} | {r['what'][:90]}" for r in txs]
+            out += [
+                f"{r['script']} | {r['status']} | {r['gas']:,} | {r['tx']} | {r.get('label', '')} | {r['what'][:90]}"
+                for r in txs
+            ]
     print("\n".join(out))
 
 
@@ -367,10 +453,14 @@ def main():
     p.add_argument("rpc")
     p = sp.add_parser("table")
     p.add_argument("--net", action="append", default=[])
-    p.add_argument("--set", default=os.environ.get("DEPLOY_SET", ""), help="the deploy set (DEPLOY_SET; refused unknown)")
+    p.add_argument(
+        "--set", default=os.environ.get("DEPLOY_SET", ""), help="the deploy set (DEPLOY_SET; refused unknown)"
+    )
     p = sp.add_parser("note")
     p.add_argument("--net", action="append", default=[])
-    p.add_argument("--set", default=os.environ.get("DEPLOY_SET", ""), help="the deploy set (DEPLOY_SET; refused unknown)")
+    p.add_argument(
+        "--set", default=os.environ.get("DEPLOY_SET", ""), help="the deploy set (DEPLOY_SET; refused unknown)"
+    )
     p.add_argument("--reasons", default=os.path.join(HERE, "notrun.json"))
     p.add_argument("--txs", action="store_true", help="also list every transaction")
     a = ap.parse_args()

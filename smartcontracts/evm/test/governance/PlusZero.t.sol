@@ -43,10 +43,33 @@ import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
 import {NormalTokenP, NormalTokenT, NormalTokenA} from "../../src/metatx/NormalTokenModules.sol";
 import {WrappedTokenP, WrappedTokenT, WrappedTokenA, WrappedTokenW} from "../../src/metatx/WrappedTokenModules.sol";
-import {NormalZetherTokenP, NormalZetherTokenT, NormalZetherTokenA, NormalZetherTokenZ} from "../../src/zether/NormalZetherTokenModules.sol";
-import {WrappedZetherTokenP, WrappedZetherTokenT, WrappedZetherTokenA, WrappedZetherTokenW, WrappedZetherTokenZ} from "../../src/zether/WrappedZetherTokenModules.sol";
-import {NormalPqzTokenP, NormalPqzTokenT, NormalPqzTokenA, NormalPqzTokenQ} from "../../src/pqz/NormalPqzTokenModules.sol";
-import {WrappedPqzTokenP, WrappedPqzTokenT, WrappedPqzTokenA, WrappedPqzTokenW, WrappedPqzTokenQ, WrappedPqzTokenS} from "../../src/pqz/WrappedPqzTokenModules.sol";
+import {
+    NormalZetherTokenP,
+    NormalZetherTokenT,
+    NormalZetherTokenA,
+    NormalZetherTokenZ
+} from "../../src/zether/NormalZetherTokenModules.sol";
+import {
+    WrappedZetherTokenP,
+    WrappedZetherTokenT,
+    WrappedZetherTokenA,
+    WrappedZetherTokenW,
+    WrappedZetherTokenZ
+} from "../../src/zether/WrappedZetherTokenModules.sol";
+import {
+    NormalPqzTokenP,
+    NormalPqzTokenT,
+    NormalPqzTokenA,
+    NormalPqzTokenQ
+} from "../../src/pqz/NormalPqzTokenModules.sol";
+import {
+    WrappedPqzTokenP,
+    WrappedPqzTokenT,
+    WrappedPqzTokenA,
+    WrappedPqzTokenW,
+    WrappedPqzTokenQ,
+    WrappedPqzTokenS
+} from "../../src/pqz/WrappedPqzTokenModules.sol";
 import {probeArgs, probeRelease} from "../helpers/ProbeModules.sol";
 
 /// @notice "+0" (CTR-GOV-11, spec §10.2, B-33): on every kind, `transfer`, `mtxTransfer`, `transferToUA`
@@ -67,7 +90,9 @@ abstract contract PlusZeroRows is Test {
     /// with old → new in the commit.
     string internal constant PZ_GAS = "test/vectors/plus_zero_gas.json";
 
-    function _pzSigner() internal pure returns (address) { return vm.addr(PZ_PK); }
+    function _pzSigner() internal pure returns (address) {
+        return vm.addr(PZ_PK);
+    }
 
     /// The `auth` bytes of the derived UA `from` over `digest` (`UACall.auth` form), per fixture.
     function _pzAuth(bytes32 from, bytes32 digest) internal view virtual returns (bytes memory);
@@ -93,20 +118,41 @@ abstract contract PlusZeroRows is Test {
     }
 
     function _pzMtx(address t, uint256 nonce) internal view returns (bytes memory) {
-        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({from: MetaTxLib.pad(_pzSigner()),
-            to: MetaTxLib.pad(PZ_TO), value: 1, entryRef: 0, batch: PZ_LANE, nonce: nonce,
-            validUntil: block.timestamp + 600, mode: 0, relayer: address(0), fee: 0, feeRecipient: address(0)});
+        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({
+            from: MetaTxLib.pad(_pzSigner()),
+            to: MetaTxLib.pad(PZ_TO),
+            value: 1,
+            entryRef: 0,
+            batch: PZ_LANE,
+            nonce: nonce,
+            validUntil: block.timestamp + 600,
+            mode: 0,
+            relayer: address(0),
+            fee: 0,
+            feeRecipient: address(0)
+        });
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PZ_PK, IERC20MetaTx(t).mtxTransferDigest(x));
         IUARegistry.UASig memory a;
         a.signature = abi.encodePacked(r, s, v);
-        return abi.encodeCall(IMetaTokenV2.mtxTransfer,
-            (x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, a));
+        return abi.encodeCall(
+            IMetaTokenV2.mtxTransfer, (x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, a)
+        );
     }
 
     function _pzUa(address t, bytes32 from, bytes32 to) internal view returns (bytes memory) {
-        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({from: from, to: to, value: 1, entryRef: 0,
-            batch: PZ_LANE, nonce: NormalToken(t).mtxNonce(from, PZ_LANE), validUntil: block.timestamp + 600, mode: 0,
-            relayer: address(0), fee: 0, feeRecipient: address(0)});
+        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({
+            from: from,
+            to: to,
+            value: 1,
+            entryRef: 0,
+            batch: PZ_LANE,
+            nonce: NormalToken(t).mtxNonce(from, PZ_LANE),
+            validUntil: block.timestamp + 600,
+            mode: 0,
+            relayer: address(0),
+            fee: 0,
+            feeRecipient: address(0)
+        });
         IUARegistry.UASig memory sig = UACall.auth(from, _pzAuth(from, NormalToken(t).mtxTransferDigest(x)));
         return abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (x, sig));
     }
@@ -169,7 +215,9 @@ abstract contract PlusZeroRows is Test {
         for (uint256 i; i < a.length; ++i) {
             uint256 j = n;
             bool dup;
-            for (uint256 k; k < n; ++k) if (s[k] == a[i]) dup = true;
+            for (uint256 k; k < n; ++k) {
+                if (s[k] == a[i]) dup = true;
+            }
             if (dup) continue;
             while (j != 0 && uint256(s[j - 1]) > uint256(a[i])) {
                 s[j] = s[j - 1];
@@ -196,15 +244,34 @@ contract PlusZeroPlainTest is PlusZeroRows, UALedgerBase {
         return _authFor(from, digest);
     }
 
-    function test_plusZero_transfer_normal() public { _pzTransfer("transfer_normal", address(tok)); }
-    function test_plusZero_transfer_wrapped() public { _pzTransfer("transfer_wrapped", address(wrp)); }
-    function test_plusZero_mtxTransfer_normal() public { _pzMtxTransfer("mtxTransfer_normal", address(tok)); }
-    function test_plusZero_mtxTransfer_wrapped() public { _pzMtxTransfer("mtxTransfer_wrapped", address(wrp)); }
-    function test_plusZero_transferToUA_normal() public { _pzToUA("transferToUA_normal", address(tok), uaP); }
-    function test_plusZero_transferToUA_wrapped() public { _pzToUA("transferToUA_wrapped", address(wrp), uaP); }
+    function test_plusZero_transfer_normal() public {
+        _pzTransfer("transfer_normal", address(tok));
+    }
+
+    function test_plusZero_transfer_wrapped() public {
+        _pzTransfer("transfer_wrapped", address(wrp));
+    }
+
+    function test_plusZero_mtxTransfer_normal() public {
+        _pzMtxTransfer("mtxTransfer_normal", address(tok));
+    }
+
+    function test_plusZero_mtxTransfer_wrapped() public {
+        _pzMtxTransfer("mtxTransfer_wrapped", address(wrp));
+    }
+
+    function test_plusZero_transferToUA_normal() public {
+        _pzToUA("transferToUA_normal", address(tok), uaP);
+    }
+
+    function test_plusZero_transferToUA_wrapped() public {
+        _pzToUA("transferToUA_wrapped", address(wrp), uaP);
+    }
+
     function test_plusZero_uaExecuteTransfer_normal() public {
         _pzUaToUa("uaExecuteTransfer_normal", address(tok), uaP, uaB);
     }
+
     function test_plusZero_uaExecuteTransfer_wrapped() public {
         _pzUaToUa("uaExecuteTransfer_wrapped", address(wrp), uaP, uaB);
     }
@@ -220,7 +287,9 @@ contract PlusZeroZetherTest is PlusZeroRows, ZetherFixture {
         _users();
         nz = address(_newToken(false, "pz"));
         NormalZetherToken(nz).mint(_pzSigner(), 1_000_000, EnvKit.codeUidOf(address(nz)));
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode);
+        Catalogue.release(
+            factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode
+        );
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
         c.features = 1; // PAYABLE
@@ -238,23 +307,48 @@ contract PlusZeroZetherTest is PlusZeroRows, ZetherFixture {
         _pzPrime(wz, _a(), _b());
     }
 
-    function _a() internal view returns (bytes32) { return ZetherTypes.UA.unwrap(alice.ua); }
-    function _b() internal view returns (bytes32) { return ZetherTypes.UA.unwrap(bob.ua); }
+    function _a() internal view returns (bytes32) {
+        return ZetherTypes.UA.unwrap(alice.ua);
+    }
+
+    function _b() internal view returns (bytes32) {
+        return ZetherTypes.UA.unwrap(bob.ua);
+    }
 
     function _pzAuth(bytes32 from, bytes32 digest) internal view override returns (bytes memory) {
         uint256 x = from == _a() ? alice.x : bob.x;
-        return abi.encode(bytes(""), ZetherKeys.schnorr(x, reg.uaMessage(_zkind(), UAKinds.PURPOSE_METATX, digest), bls));
+        return
+            abi.encode(bytes(""), ZetherKeys.schnorr(x, reg.uaMessage(_zkind(), UAKinds.PURPOSE_METATX, digest), bls));
     }
 
-    function test_plusZero_transfer_normalZether() public { _pzTransfer("transfer_normalZether", nz); }
-    function test_plusZero_transfer_wrappedZether() public { _pzTransfer("transfer_wrappedZether", wz); }
-    function test_plusZero_mtxTransfer_normalZether() public { _pzMtxTransfer("mtxTransfer_normalZether", nz); }
-    function test_plusZero_mtxTransfer_wrappedZether() public { _pzMtxTransfer("mtxTransfer_wrappedZether", wz); }
-    function test_plusZero_transferToUA_normalZether() public { _pzToUA("transferToUA_normalZether", nz, _a()); }
-    function test_plusZero_transferToUA_wrappedZether() public { _pzToUA("transferToUA_wrappedZether", wz, _a()); }
+    function test_plusZero_transfer_normalZether() public {
+        _pzTransfer("transfer_normalZether", nz);
+    }
+
+    function test_plusZero_transfer_wrappedZether() public {
+        _pzTransfer("transfer_wrappedZether", wz);
+    }
+
+    function test_plusZero_mtxTransfer_normalZether() public {
+        _pzMtxTransfer("mtxTransfer_normalZether", nz);
+    }
+
+    function test_plusZero_mtxTransfer_wrappedZether() public {
+        _pzMtxTransfer("mtxTransfer_wrappedZether", wz);
+    }
+
+    function test_plusZero_transferToUA_normalZether() public {
+        _pzToUA("transferToUA_normalZether", nz, _a());
+    }
+
+    function test_plusZero_transferToUA_wrappedZether() public {
+        _pzToUA("transferToUA_wrappedZether", wz, _a());
+    }
+
     function test_plusZero_uaExecuteTransfer_normalZether() public {
         _pzUaToUa("uaExecuteTransfer_normalZether", nz, _a(), _b());
     }
+
     function test_plusZero_uaExecuteTransfer_wrappedZether() public {
         _pzUaToUa("uaExecuteTransfer_wrappedZether", wz, _a(), _b());
     }
@@ -291,15 +385,34 @@ contract PlusZeroPqzTest is PlusZeroRows, PqzFixture {
         return _mlAuth();
     }
 
-    function test_plusZero_transfer_normalPqz() public { _pzTransfer("transfer_normalPqz", np); }
-    function test_plusZero_transfer_wrappedPqz() public { _pzTransfer("transfer_wrappedPqz", wp); }
-    function test_plusZero_mtxTransfer_normalPqz() public { _pzMtxTransfer("mtxTransfer_normalPqz", np); }
-    function test_plusZero_mtxTransfer_wrappedPqz() public { _pzMtxTransfer("mtxTransfer_wrappedPqz", wp); }
-    function test_plusZero_transferToUA_normalPqz() public { _pzToUA("transferToUA_normalPqz", np, alice); }
-    function test_plusZero_transferToUA_wrappedPqz() public { _pzToUA("transferToUA_wrappedPqz", wp, alice); }
+    function test_plusZero_transfer_normalPqz() public {
+        _pzTransfer("transfer_normalPqz", np);
+    }
+
+    function test_plusZero_transfer_wrappedPqz() public {
+        _pzTransfer("transfer_wrappedPqz", wp);
+    }
+
+    function test_plusZero_mtxTransfer_normalPqz() public {
+        _pzMtxTransfer("mtxTransfer_normalPqz", np);
+    }
+
+    function test_plusZero_mtxTransfer_wrappedPqz() public {
+        _pzMtxTransfer("mtxTransfer_wrappedPqz", wp);
+    }
+
+    function test_plusZero_transferToUA_normalPqz() public {
+        _pzToUA("transferToUA_normalPqz", np, alice);
+    }
+
+    function test_plusZero_transferToUA_wrappedPqz() public {
+        _pzToUA("transferToUA_wrappedPqz", wp, alice);
+    }
+
     function test_plusZero_uaExecuteTransfer_normalPqz() public {
         _pzUaToUa("uaExecuteTransfer_normalPqz", np, alice, bob);
     }
+
     function test_plusZero_uaExecuteTransfer_wrappedPqz() public {
         _pzUaToUa("uaExecuteTransfer_wrappedPqz", wp, alice, bob);
     }
@@ -322,8 +435,20 @@ contract PlusZeroRouterTest is PlusZeroRows, GovRouterFixture {
 
     function _rtCancel() internal view returns (bytes memory) {
         MetaTxLib.UAEnvelope memory e = _envelope(router, eoa, PZ_LANE);
-        bytes32 h = keccak256(abi.encode(MetaTxLib.UA_CANCEL_NONCE_TYPEHASH, e.from, PZ_CANCEL_LANE, e.batch, e.nonce,
-            e.validUntil, e.mode, address(0), e.fee, address(0)));
+        bytes32 h = keccak256(
+            abi.encode(
+                MetaTxLib.UA_CANCEL_NONCE_TYPEHASH,
+                e.from,
+                PZ_CANCEL_LANE,
+                e.batch,
+                e.nonce,
+                e.validUntil,
+                e.mode,
+                address(0),
+                e.fee,
+                address(0)
+            )
+        );
         IUARegistry.UASig memory a;
         a.signature = _ecdsa(eoa, keccak256(abi.encodePacked("\x19\x01", _domain(router), h)));
         return abi.encodeCall(router.mtxCancelNonce, (e, PZ_CANCEL_LANE, a));
@@ -346,14 +471,14 @@ contract PlusZeroRouterTest is PlusZeroRows, GovRouterFixture {
 /// `Seat(hook, a, b, c)`: the probe's override of `hook` reached while armed, with its raw arguments (spec §2.2).
 error Seat(uint8 hook, bytes32 a, bytes32 b, uint256 c);
 
-uint8 constant H_PRE = 0;      // (from, sel, mode)
-uint8 constant H_FEE = 1;      // (feeTo, 0, fee)
-uint8 constant H_MOVE = 2;     // (from, to, value)
-uint8 constant H_PAYER = 3;    // (the payer as `_subject()` reads it, 0, 0)
-uint8 constant H_SENDER = 4;   // (a, 0, 0)
-uint8 constant H_NAME = 5;     // (beneficiary, 0, 0)
+uint8 constant H_PRE = 0; // (from, sel, mode)
+uint8 constant H_FEE = 1; // (feeTo, 0, fee)
+uint8 constant H_MOVE = 2; // (from, to, value)
+uint8 constant H_PAYER = 3; // (the payer as `_subject()` reads it, 0, 0)
+uint8 constant H_SENDER = 4; // (a, 0, 0)
+uint8 constant H_NAME = 5; // (beneficiary, 0, 0)
 uint8 constant H_RECEIVER = 6; // (recipient, 0, 0)
-uint8 constant H_ZSENDER = 7;  // (yFrom.x0, yFrom.y1, 0)
+uint8 constant H_ZSENDER = 7; // (yFrom.x0, yFrom.y1, 0)
 // keccak256("scaas.test.hookprobe.arm"): the probe's arm mask, in the clone's storage.
 uint256 constant PROBE_ARM = 0x23070c0bf924c575ed5098b27678cd5707273ab3de0359eff8a77a21570ada71;
 
@@ -372,582 +497,1096 @@ abstract contract Armed {
 
 contract NormalProbe is NormalToken, Armed {
     constructor(address f_, bytes memory a) NormalToken(f_, a) {}
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
+
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
+
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
+
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
+
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
+
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
+
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 }
 
 /// `NormalProbe`'s overrides in its kind's module P (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract NormalProbeP is NormalTokenP {
     constructor(address f_, bytes memory a) NormalTokenP(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 }
 
 /// `NormalProbe`'s overrides in its kind's module T (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract NormalProbeT is NormalTokenT {
     constructor(address f_, bytes memory a) NormalTokenT(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 }
 
 /// `NormalProbe`'s overrides in its kind's module A (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract NormalProbeA is NormalTokenA {
     constructor(address f_, bytes memory a) NormalTokenA(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 }
 
 contract WrappedProbe is WrappedToken, Armed {
     constructor(address f_, bytes memory a) WrappedToken(f_, a) {}
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
+
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
+
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
+
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
+
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
+
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
+
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 }
 
 /// `WrappedProbe`'s overrides in its kind's module P (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract WrappedProbeP is WrappedTokenP {
     constructor(address f_, bytes memory a) WrappedTokenP(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 }
 
 /// `WrappedProbe`'s overrides in its kind's module T (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract WrappedProbeT is WrappedTokenT {
     constructor(address f_, bytes memory a) WrappedTokenT(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 }
 
 /// `WrappedProbe`'s overrides in its kind's module A (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract WrappedProbeA is WrappedTokenA {
     constructor(address f_, bytes memory a) WrappedTokenA(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 }
 
 /// `WrappedProbe`'s overrides in its kind's module W (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract WrappedProbeW is WrappedTokenW {
     constructor(address f_, bytes memory a) WrappedTokenW(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 }
 
 contract NormalZetherProbe is NormalZetherToken, Armed {
     constructor(address f_, bytes memory a) NormalZetherToken(f_, a) {}
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
-    function _regZetherSender(IZetherToken.G1 calldata y) internal view override { _seat(H_ZSENDER, y.x0, y.y1, 0); }
+
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
+
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
+
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
+
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
+
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
+
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
+
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
+
+    function _regZetherSender(IZetherToken.G1 calldata y) internal view override {
+        _seat(H_ZSENDER, y.x0, y.y1, 0);
+    }
 }
 
 /// `NormalZetherProbe`'s overrides in its kind's module P (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract NormalZetherProbeP is NormalZetherTokenP {
     constructor(address f_, bytes memory a) NormalZetherTokenP(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 
-    function _regZetherSender(IZetherToken.G1 calldata y) internal view override { _seat(H_ZSENDER, y.x0, y.y1, 0); }
+    function _regZetherSender(IZetherToken.G1 calldata y) internal view override {
+        _seat(H_ZSENDER, y.x0, y.y1, 0);
+    }
 }
 
 /// `NormalZetherProbe`'s overrides in its kind's module T (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract NormalZetherProbeT is NormalZetherTokenT {
     constructor(address f_, bytes memory a) NormalZetherTokenT(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 
-    function _regZetherSender(IZetherToken.G1 calldata y) internal view override { _seat(H_ZSENDER, y.x0, y.y1, 0); }
+    function _regZetherSender(IZetherToken.G1 calldata y) internal view override {
+        _seat(H_ZSENDER, y.x0, y.y1, 0);
+    }
 }
 
 /// `NormalZetherProbe`'s overrides in its kind's module A (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract NormalZetherProbeA is NormalZetherTokenA {
     constructor(address f_, bytes memory a) NormalZetherTokenA(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 
-    function _regZetherSender(IZetherToken.G1 calldata y) internal view override { _seat(H_ZSENDER, y.x0, y.y1, 0); }
+    function _regZetherSender(IZetherToken.G1 calldata y) internal view override {
+        _seat(H_ZSENDER, y.x0, y.y1, 0);
+    }
 }
 
 /// `NormalZetherProbe`'s overrides in its kind's module Z (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract NormalZetherProbeZ is NormalZetherTokenZ {
     constructor(address f_, bytes memory a) NormalZetherTokenZ(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 
-    function _regZetherSender(IZetherToken.G1 calldata y) internal view override { _seat(H_ZSENDER, y.x0, y.y1, 0); }
+    function _regZetherSender(IZetherToken.G1 calldata y) internal view override {
+        _seat(H_ZSENDER, y.x0, y.y1, 0);
+    }
 }
 
 contract WrappedZetherProbe is WrappedZetherToken, Armed {
     constructor(address f_, bytes memory a) WrappedZetherToken(f_, a) {}
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
-    function _regZetherSender(IZetherToken.G1 calldata y) internal view override { _seat(H_ZSENDER, y.x0, y.y1, 0); }
+
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
+
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
+
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
+
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
+
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
+
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
+
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
+
+    function _regZetherSender(IZetherToken.G1 calldata y) internal view override {
+        _seat(H_ZSENDER, y.x0, y.y1, 0);
+    }
 }
 
 /// `WrappedZetherProbe`'s overrides in its kind's module P (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract WrappedZetherProbeP is WrappedZetherTokenP {
     constructor(address f_, bytes memory a) WrappedZetherTokenP(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 
-    function _regZetherSender(IZetherToken.G1 calldata y) internal view override { _seat(H_ZSENDER, y.x0, y.y1, 0); }
+    function _regZetherSender(IZetherToken.G1 calldata y) internal view override {
+        _seat(H_ZSENDER, y.x0, y.y1, 0);
+    }
 }
 
 /// `WrappedZetherProbe`'s overrides in its kind's module T (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract WrappedZetherProbeT is WrappedZetherTokenT {
     constructor(address f_, bytes memory a) WrappedZetherTokenT(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 
-    function _regZetherSender(IZetherToken.G1 calldata y) internal view override { _seat(H_ZSENDER, y.x0, y.y1, 0); }
+    function _regZetherSender(IZetherToken.G1 calldata y) internal view override {
+        _seat(H_ZSENDER, y.x0, y.y1, 0);
+    }
 }
 
 /// `WrappedZetherProbe`'s overrides in its kind's module A (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract WrappedZetherProbeA is WrappedZetherTokenA {
     constructor(address f_, bytes memory a) WrappedZetherTokenA(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 
-    function _regZetherSender(IZetherToken.G1 calldata y) internal view override { _seat(H_ZSENDER, y.x0, y.y1, 0); }
+    function _regZetherSender(IZetherToken.G1 calldata y) internal view override {
+        _seat(H_ZSENDER, y.x0, y.y1, 0);
+    }
 }
 
 /// `WrappedZetherProbe`'s overrides in its kind's module W (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract WrappedZetherProbeW is WrappedZetherTokenW {
     constructor(address f_, bytes memory a) WrappedZetherTokenW(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 
-    function _regZetherSender(IZetherToken.G1 calldata y) internal view override { _seat(H_ZSENDER, y.x0, y.y1, 0); }
+    function _regZetherSender(IZetherToken.G1 calldata y) internal view override {
+        _seat(H_ZSENDER, y.x0, y.y1, 0);
+    }
 }
 
 /// `WrappedZetherProbe`'s overrides in its kind's module Z (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract WrappedZetherProbeZ is WrappedZetherTokenZ {
     constructor(address f_, bytes memory a) WrappedZetherTokenZ(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 
-    function _regZetherSender(IZetherToken.G1 calldata y) internal view override { _seat(H_ZSENDER, y.x0, y.y1, 0); }
+    function _regZetherSender(IZetherToken.G1 calldata y) internal view override {
+        _seat(H_ZSENDER, y.x0, y.y1, 0);
+    }
 }
 
 contract NormalPqzProbe is NormalPqzToken, Armed {
     constructor(address f_, bytes memory a) NormalPqzToken(f_, a) {}
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
+
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
+
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
+
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
+
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
+
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
+
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 }
 
 /// `NormalPqzProbe`'s overrides in its kind's module P (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract NormalPqzProbeP is NormalPqzTokenP {
     constructor(address f_, bytes memory a) NormalPqzTokenP(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 }
 
 /// `NormalPqzProbe`'s overrides in its kind's module T (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract NormalPqzProbeT is NormalPqzTokenT {
     constructor(address f_, bytes memory a) NormalPqzTokenT(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 }
 
 /// `NormalPqzProbe`'s overrides in its kind's module A (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract NormalPqzProbeA is NormalPqzTokenA {
     constructor(address f_, bytes memory a) NormalPqzTokenA(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 }
 
 /// `NormalPqzProbe`'s overrides in its kind's module Q (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract NormalPqzProbeQ is NormalPqzTokenQ {
     constructor(address f_, bytes memory a) NormalPqzTokenQ(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 }
 
 contract WrappedPqzProbe is WrappedPqzToken, Armed {
     constructor(address f_, bytes memory a) WrappedPqzToken(f_, a) {}
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
+
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
+
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
+
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
+
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
+
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
+
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 }
 
 /// `WrappedPqzProbe`'s overrides in its kind's module P (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract WrappedPqzProbeP is WrappedPqzTokenP {
     constructor(address f_, bytes memory a) WrappedPqzTokenP(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 }
 
 /// `WrappedPqzProbe`'s overrides in its kind's module T (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract WrappedPqzProbeT is WrappedPqzTokenT {
     constructor(address f_, bytes memory a) WrappedPqzTokenT(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 }
 
 /// `WrappedPqzProbe`'s overrides in its kind's module A (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract WrappedPqzProbeA is WrappedPqzTokenA {
     constructor(address f_, bytes memory a) WrappedPqzTokenA(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 }
 
 /// `WrappedPqzProbe`'s overrides in its kind's module W (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract WrappedPqzProbeW is WrappedPqzTokenW {
     constructor(address f_, bytes memory a) WrappedPqzTokenW(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 }
 
 /// `WrappedPqzProbe`'s overrides in its kind's module Q (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract WrappedPqzProbeQ is WrappedPqzTokenQ {
     constructor(address f_, bytes memory a) WrappedPqzTokenQ(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 }
 
 /// `WrappedPqzProbe`'s overrides in its kind's module S (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
 contract WrappedPqzProbeS is WrappedPqzTokenS {
     constructor(address f_, bytes memory a) WrappedPqzTokenS(f_, a) {}
 
-    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
+    function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override {
+        _seat(H_PRE, f, bytes32(s), m);
+    }
 
-    function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
+    function _regFeeTo(bytes32 t, uint256 f) internal view override {
+        _seat(H_FEE, t, 0, f);
+    }
 
-    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
+    function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override {
+        _seat(H_MOVE, f, t, v);
+    }
 
-    function _regPayer() internal view override { _seat(H_PAYER, _subject(), 0, 0); }
+    function _regPayer() internal view override {
+        _seat(H_PAYER, _subject(), 0, 0);
+    }
 
-    function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
+    function _regSender(bytes32 a) internal view override {
+        _seat(H_SENDER, a, 0, 0);
+    }
 
-    function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
+    function _regName(bytes32 a) internal view override {
+        _seat(H_NAME, a, 0, 0);
+    }
 
-    function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
+    function _regReceiver(bytes32 a) internal view override {
+        _seat(H_RECEIVER, a, 0, 0);
+    }
 }
 
 /// Arms one hook of `t` and expects the next call to revert `Seat` with those arguments.
@@ -979,14 +1618,28 @@ contract HookSeatsPlainTest is UALedgerBase, SeatExpect {
 
     function setUp() public override {
         super.setUp();
-        np = NormalProbe(EnvKit.clone(address(new NormalProbe(address(this), probeArgs("PlusZero.t.sol:NormalProbe", 0, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        np = NormalProbe(
+            EnvKit.clone(
+                address(new NormalProbe(address(this), probeArgs("PlusZero.t.sol:NormalProbe", 0, address(this), ""))),
+                EnvKit.env(chainUidA, REG_L, address(0), false)
+            )
+        );
         np.initialize(nid(address(this)), 1, abi.encode(normalInit("Probe", "PRB", 6, 1_000_000, alice, address(this))));
-        wp = WrappedProbe(payable(EnvKit.clone(address(new WrappedProbe(address(this), probeArgs("PlusZero.t.sol:WrappedProbe", 1, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false))));
+        wp = WrappedProbe(
+            payable(EnvKit.clone(
+                    address(
+                        new WrappedProbe(address(this), probeArgs("PlusZero.t.sol:WrappedProbe", 1, address(this), ""))
+                    ),
+                    EnvKit.env(chainUidA, REG_L, address(0), false)
+                ))
+        );
         address[] memory us = new address[](1);
         uint256[] memory one = new uint256[](1);
         (us[0], one[0]) = (address(tok), 1);
         Rate memory fixedRate;
-        wp.initialize(nid(address(this)), 1, abi.encode(wrappedInit(us, one, one, 6, fixedRate, address(0), address(0))));
+        wp.initialize(
+            nid(address(this)), 1, abi.encode(wrappedInit(us, one, one, 6, fixedRate, address(0), address(0)))
+        );
         vm.prank(alice);
         np.transferToUA(uaP, 100);
     }
@@ -1002,7 +1655,8 @@ contract HookSeatsPlainTest is UALedgerBase, SeatExpect {
     }
 
     function _order(bytes32 destination, uint256 feePpm) internal view returns (ITradeToken.UAWrapOrder memory o) {
-        (o.from, o.wrappedToken, o.amount, o.minMinted, o.minFill, o.fee) = (_pad(alice), address(wp), 1000, 1, 1000, feePpm);
+        (o.from, o.wrappedToken, o.amount, o.minMinted, o.minFill, o.fee) =
+        (_pad(alice), address(wp), 1000, 1, 1000, feePpm);
         (o.relayer, o.destination, o.batch, o.nonce, o.validUntil) = (RELAYER, destination, 1, 1, block.timestamp + 300);
     }
 
@@ -1031,7 +1685,9 @@ contract HookSeatsPlainTest is UALedgerBase, SeatExpect {
         (t.entryRef, t.nonce) = (PayMetaKit.ref(bytes32(uint256(9))), 0);
         t.batch = np.payLane(t.entryRef);
         _expect(address(np), H_FEE, _pad(FEE_TO), 0, 3);
-        np.mtxPayWithPayeeFee(t, _noSig(), 3, FEE_TO, block.timestamp + 60, _noSig(), PayMetaKit.meta(bytes32(uint256(9))));
+        np.mtxPayWithPayeeFee(
+            t, _noSig(), 3, FEE_TO, block.timestamp + 60, _noSig(), PayMetaKit.meta(bytes32(uint256(9)))
+        );
         // mtxRelayFee: the relay's payee and value
         _expect(address(np), H_FEE, uaB, 0, 7);
         np.mtxRelayFee(_pad(alice), address(0x1234), bytes32(0), uaB, 7, 2, 0, block.timestamp + 60, _noSig());
@@ -1098,8 +1754,23 @@ contract HookSeatsPlainTest is UALedgerBase, SeatExpect {
         MetaTxLib.UAEnvelope memory e = _env(a, np.mtxNonce(a, 1), 0);
         _expect(address(np), H_PRE, a, bytes32(IMetaTx.cancelNonce.selector), 0);
         np.mtxCancelNonce(e, 9, _noSig());
-        IUARegistry.UASig memory cs = _sigAlice(address(np), keccak256(abi.encode(MetaTxLib.UA_CANCEL_NONCE_TYPEHASH, a,
-            uint256(9), e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
+        IUARegistry.UASig memory cs = _sigAlice(
+            address(np),
+            keccak256(
+                abi.encode(
+                    MetaTxLib.UA_CANCEL_NONCE_TYPEHASH,
+                    a,
+                    uint256(9),
+                    e.batch,
+                    e.nonce,
+                    e.validUntil,
+                    e.mode,
+                    address(0),
+                    e.fee,
+                    address(0)
+                )
+            )
+        );
         _expect(address(np), H_FEE, _pad(RELAYER), 0, 0);
         vm.prank(RELAYER);
         np.mtxCancelNonce(e, 9, cs);
@@ -1121,22 +1792,45 @@ contract HookSeatsPlainTest is UALedgerBase, SeatExpect {
 
     function _relayedAddress(bytes32 a) internal {
         // the address path: _execute (executeMetaTransaction), _namedCall (mtxWrap)
-        MetaTxLib.MetaTransaction memory am = MetaTxLib.MetaTransaction(alice, abi.encodeCall(IMetaTx.cancelNonce, (9)),
-            2, np.mtxNonce(a, 2), block.timestamp + 300, 0, address(0), 0, address(0));
+        MetaTxLib.MetaTransaction memory am = MetaTxLib.MetaTransaction(
+            alice,
+            abi.encodeCall(IMetaTx.cancelNonce, (9)),
+            2,
+            np.mtxNonce(a, 2),
+            block.timestamp + 300,
+            0,
+            address(0),
+            0,
+            address(0)
+        );
         _expect(address(np), H_PRE, a, bytes32(IMetaTx.cancelNonce.selector), 0);
         np.executeMetaTransaction(am, "");
         bytes memory asig = _ecdsa(ALICE_PK, MtxDigest.metaTx(address(np), am));
         _expect(address(np), H_FEE, _pad(RELAYER), 0, 0);
         vm.prank(RELAYER);
         np.executeMetaTransaction(am, asig);
-        MetaTxLib.Envelope memory we = MetaTxLib.Envelope(alice, 1, wp.mtxNonce(a, 1), block.timestamp + 300, 0,
-            address(0), 0, address(0));
+        MetaTxLib.Envelope memory we =
+            MetaTxLib.Envelope(alice, 1, wp.mtxNonce(a, 1), block.timestamp + 300, 0, address(0), 0, address(0));
         bytes4 selWrap = bytes4(keccak256("wrap(uint256)"));
         _expect(address(wp), H_PRE, a, bytes32(selWrap), 0);
         wp.mtxWrap(we, 1, "");
-        bytes32 wh = keccak256(abi.encode(keccak256("Wrap(address from,uint256 amount,uint256 batch,uint256 nonce,"
-            "uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"), alice, uint256(1), we.batch,
-            we.nonce, we.validUntil, we.mode, address(0), we.fee, address(0)));
+        bytes32 wh = keccak256(
+            abi.encode(
+                keccak256(
+                    "Wrap(address from,uint256 amount,uint256 batch,uint256 nonce,"
+                    "uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+                ),
+                alice,
+                uint256(1),
+                we.batch,
+                we.nonce,
+                we.validUntil,
+                we.mode,
+                address(0),
+                we.fee,
+                address(0)
+            )
+        );
         bytes memory wsig = _ecdsa(ALICE_PK, MtxDigest.typed(address(wp), wh));
         _expect(address(wp), H_FEE, _pad(RELAYER), 0, 0);
         vm.prank(RELAYER);
@@ -1156,16 +1850,37 @@ contract HookSeatsZetherTest is ZetherFixture, SeatExpect {
     function setUp() public {
         _stack();
         _users();
-        probeRelease(factory, IOpenFactory.TokenKind.NORMAL_ZETHER, 2, _zenv(), type(NormalZetherProbe).creationCode, "PlusZero.t.sol:NormalZetherProbe", "");
-        nz = NormalZetherProbe(factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 2,
-            abi.encode(_cfg(false, uint256(1) << 40)), "pz"));
-        probeRelease(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherProbe).creationCode, "PlusZero.t.sol:WrappedZetherProbe", "");
+        probeRelease(
+            factory,
+            IOpenFactory.TokenKind.NORMAL_ZETHER,
+            2,
+            _zenv(),
+            type(NormalZetherProbe).creationCode,
+            "PlusZero.t.sol:NormalZetherProbe",
+            ""
+        );
+        nz = NormalZetherProbe(
+            factory.createToken(
+                IOpenFactory.TokenKind.NORMAL_ZETHER, 2, abi.encode(_cfg(false, uint256(1) << 40)), "pz"
+            )
+        );
+        probeRelease(
+            factory,
+            IOpenFactory.TokenKind.WRAPPED_ZETHER,
+            1,
+            _zenv(),
+            type(WrappedZetherProbe).creationCode,
+            "PlusZero.t.sol:WrappedZetherProbe",
+            ""
+        );
         usd = new MockERC20("USD", "USD", 6);
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
         (c.features, c.lockedFeatures, c.roles.minter) = (1, 0, 0);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
-        wz = WrappedZetherProbe(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "pzw")));
+        wz = WrappedZetherProbe(
+            payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "pzw"))
+        );
     }
 
     function _y(uint256 i) internal pure returns (IZetherToken.G1 memory y) {
@@ -1237,11 +1952,27 @@ contract HookSeatsPqzTest is PqzFixture, SeatExpect {
 
     function setUp() public {
         _stack();
-        probeRelease(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 2,
-            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NormalPqzProbe).creationCode, "PlusZero.t.sol:NormalPqzProbe", "");
-        np = NormalPqzProbe(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 2, abi.encode(_cfg(uint256(1) << 40)), "pz"));
-        probeRelease(factory, IOpenFactory.TokenKind.WRAPPED_PQZ, 1,
-            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(WrappedPqzProbe).creationCode, "PlusZero.t.sol:WrappedPqzProbe", "");
+        probeRelease(
+            factory,
+            IOpenFactory.TokenKind.NORMAL_PQZ,
+            2,
+            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)),
+            type(NormalPqzProbe).creationCode,
+            "PlusZero.t.sol:NormalPqzProbe",
+            ""
+        );
+        np = NormalPqzProbe(
+            factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 2, abi.encode(_cfg(uint256(1) << 40)), "pz")
+        );
+        probeRelease(
+            factory,
+            IOpenFactory.TokenKind.WRAPPED_PQZ,
+            1,
+            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)),
+            type(WrappedPqzProbe).creationCode,
+            "PlusZero.t.sol:WrappedPqzProbe",
+            ""
+        );
         usd = new MockERC20("USD", "USD", 6);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         (c.features, c.lockedFeatures, c.roles.minter) = (1, 0, 0);
@@ -1272,7 +2003,12 @@ contract HookSeatsPqzTest is PqzFixture, SeatExpect {
         np.mtxConfidentialTransferSingle(u, "", none, "", noVerdict());
         _expect(address(np), H_NAME, ben, 0, 0);
         np.mtxConfidentialTransferSingleCompact(u, "", none, "", noVerdict());
-        _notSeat(address(np), H_PAYER, address(this), abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (u, "", none, "", noVerdict())));
+        _notSeat(
+            address(np),
+            H_PAYER,
+            address(this),
+            abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (u, "", none, "", noVerdict()))
+        );
         (t.shieldIn, u.shieldIn) = (1, 1);
         _expect(address(np), H_PAYER, me, 0, 0);
         np.mtxConfidentialTransfer(t, "", none, "", noVerdict());

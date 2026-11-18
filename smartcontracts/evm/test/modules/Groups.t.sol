@@ -12,25 +12,90 @@ import {regArgs} from "../helpers/Catalogue.sol";
 contract GroupsTest is Test {
     address internal constant F = address(0xFAC);
     uint8[12] internal kinds = [0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13];
-    string[14] internal faces = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
-        "WrappedPqzToken", "", "", "NormalRegulatedToken", "WrappedRegulatedToken", "NormalZetherRegulatedToken",
-        "WrappedZetherRegulatedToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"];
+    string[14] internal faces = [
+        "NormalToken",
+        "WrappedToken",
+        "NormalZetherToken",
+        "WrappedZetherToken",
+        "NormalPqzToken",
+        "WrappedPqzToken",
+        "",
+        "",
+        "NormalRegulatedToken",
+        "WrappedRegulatedToken",
+        "NormalZetherRegulatedToken",
+        "WrappedZetherRegulatedToken",
+        "NormalPqzRegulatedToken",
+        "WrappedPqzRegulatedToken"
+    ];
     /// R on 8-13: the regulated layer's entries (`RegulatedBase` and the kind's `disableFeature`), the same on every kind;
     /// round 3s (spec 2026-11-10-token-lists.md §6.1): 14 -> 18, + `enableFeature`, `listFlagsOf`, `setAllowed`, `setDenied`.
-    string[18] internal rNames = ["canReceive", "disableFeature", "enableFeature", "forceTransfer", "freeze", "freezeOf",
-        "isFrozen", "listFlagsOf", "operatorTransfer", "order", "pause", "recordOrder", "regulatedConfig", "revokeOrder",
-        "setAllowed", "setDenied", "unfreeze", "unpause"];
+    string[18] internal rNames = [
+        "canReceive",
+        "disableFeature",
+        "enableFeature",
+        "forceTransfer",
+        "freeze",
+        "freezeOf",
+        "isFrozen",
+        "listFlagsOf",
+        "operatorTransfer",
+        "order",
+        "pause",
+        "recordOrder",
+        "regulatedConfig",
+        "revokeOrder",
+        "setAllowed",
+        "setDenied",
+        "unfreeze",
+        "unpause"
+    ];
     /// S on 5, 12 and 13: the PQZ state, the four setters and the views but `verifyTransferAmount`; on 13 without `underlyings`
     /// (kind 13 restates it from the wrapped layer: its W holds it); on 12 (owner 2026-11-13) without the three wrap-only
     /// entries at the end (`unshieldUnwrapStatement`, `unwrapBinding`, `underlyings`).
     // round 3t: + setVerifierFee (gen_faces.py S_SETTERS)
     // the three-key model (CTR-PQZ-41): + `pqzSkipped`
-    string[35] internal sNames = ["auditorMode", "auditorUA", "burnStatement", "confidentialFee", "disclosureMode",
-        "disclosureStatement", "envelopeBinding", "maxShielded", "minDecoyFee", "pqzAcc", "pqzAccount", "pqzCancelVerifier",
-        "pqzDebitRecord", "pqzEntryBlob", "pqzPending", "pqzPendingCt", "pqzSkipped", "pqzRevokeVerifier", "pqzSetVerifier",
-        "pqzVerifyConfig", "precompile", "proofStore", "proofSystemId", "setProofStore", "setVerifierFee", "shieldScale", "totalShielded",
-        "transferCiphertextHash", "transferEntry", "transferSingleStatement", "transferStatement", "verifier",
-        "unshieldUnwrapStatement", "unwrapBinding", "underlyings"];
+    // set-auditor A4 (CTR-PQZ-43): + `setAuditorUA`, `auditorUAOf`, `auditorState`, before the wrapped kinds' three
+    string[38] internal sNames = [
+        "auditorMode",
+        "auditorUA",
+        "burnStatement",
+        "confidentialFee",
+        "disclosureMode",
+        "disclosureStatement",
+        "envelopeBinding",
+        "maxShielded",
+        "minDecoyFee",
+        "pqzAcc",
+        "pqzAccount",
+        "pqzCancelVerifier",
+        "pqzDebitRecord",
+        "pqzEntryBlob",
+        "pqzPending",
+        "pqzPendingCt",
+        "pqzSkipped",
+        "pqzRevokeVerifier",
+        "pqzSetVerifier",
+        "pqzVerifyConfig",
+        "precompile",
+        "proofStore",
+        "proofSystemId",
+        "setProofStore",
+        "setVerifierFee",
+        "shieldScale",
+        "totalShielded",
+        "transferCiphertextHash",
+        "transferEntry",
+        "transferSingleStatement",
+        "transferStatement",
+        "verifier",
+        "setAuditorUA",
+        "auditorUAOf",
+        "auditorState",
+        "unshieldUnwrapStatement",
+        "unwrapBinding",
+        "underlyings"
+    ];
 
     function create(bytes memory init) external returns (address a) {
         assembly ("memory-safe") {
@@ -62,7 +127,9 @@ contract GroupsTest is Test {
         string[] memory sigs = vm.parseJsonKeys(_json(artifact), ".methodIdentifiers");
         out = new string[](sigs.length);
         uint256 n;
-        for (uint256 i; i < sigs.length; ++i) if (!_kept(keccak256(bytes(sigs[i])))) out[n++] = sigs[i];
+        for (uint256 i; i < sigs.length; ++i) {
+            if (!_kept(keccak256(bytes(sigs[i])))) out[n++] = sigs[i];
+        }
         assembly ("memory-safe") {
             mstore(out, n)
         }
@@ -70,25 +137,30 @@ contract GroupsTest is Test {
 
     function _kept(bytes32 s) internal pure returns (bool) {
         return s == keccak256("kind()") || s == keccak256("moduleGroup()") || s == keccak256("factory()")
-            || s == keccak256("FACTORY()") || s == keccak256("COMPLIANCE_REGISTRY_CODEHASH()") || s == keccak256("pqzSet()")
-            || s == keccak256("name()") || s == keccak256("symbol()") || s == keccak256("decimals()")
-            || s == keccak256("totalSupply()") || s == keccak256("balanceOf(address)")
+            || s == keccak256("FACTORY()") || s == keccak256("COMPLIANCE_REGISTRY_CODEHASH()")
+            || s == keccak256("pqzSet()") || s == keccak256("name()") || s == keccak256("symbol()")
+            || s == keccak256("decimals()") || s == keccak256("totalSupply()") || s == keccak256("balanceOf(address)")
             || s == keccak256("allowance(address,address)") || s == keccak256("transfer(address,uint256)")
             || s == keccak256("transferFrom(address,address,uint256)") || s == keccak256("approve(address,uint256)")
             || s == keccak256("balanceOfUA(bytes32)") || s == keccak256("transferToUA(bytes32,uint256)")
             || s == keccak256("implementation()") || s == keccak256("registry()") || s == keccak256("chainUid()")
-            || s == keccak256("IS_HEDERA()") || s == keccak256("SMART_KEY_ACCOUNT_IMPL()") || s == keccak256("RATE_WINDOW()");
+            || s == keccak256("IS_HEDERA()") || s == keccak256("SMART_KEY_ACCOUNT_IMPL()")
+            || s == keccak256("RATE_WINDOW()");
     }
 
     function _has(string[] memory sigs, string memory name) internal pure returns (bool) {
-        for (uint256 i; i < sigs.length; ++i) if (_eq(vm.split(sigs[i], "(")[0], name)) return true;
+        for (uint256 i; i < sigs.length; ++i) {
+            if (_eq(vm.split(sigs[i], "(")[0], name)) return true;
+        }
         return false;
     }
 
     /// The index in `kind`'s module list of the module whose artifact name ends in `group` (one letter), or `type(uint256).max`.
     function _find(uint8 k, string memory group) internal view returns (uint256) {
         string[] memory n = kindModuleNames(k);
-        for (uint256 i; i < n.length; ++i) if (_eq(n[i], string.concat(faces[k], "Modules.sol:", faces[k], group))) return i;
+        for (uint256 i; i < n.length; ++i) {
+            if (_eq(n[i], string.concat(faces[k], "Modules.sol:", faces[k], group))) return i;
+        }
         return type(uint256).max;
     }
 
@@ -107,14 +179,21 @@ contract GroupsTest is Test {
             assertTrue(r != type(uint256).max, string.concat(faces[k], ": R"));
             string[] memory rs = _entries(kindModuleNames(k)[r]);
             assertEq(rs.length, rNames.length, string.concat(faces[k], "R: the regulated entries and no other"));
-            for (uint256 i; i < rNames.length; ++i) assertTrue(_has(rs, rNames[i]), string.concat(faces[k], "R: ", rNames[i]));
+            for (uint256 i; i < rNames.length; ++i) {
+                assertTrue(_has(rs, rNames[i]), string.concat(faces[k], "R: ", rNames[i]));
+            }
             if (k % 2 == 0) {
                 assertEq(w, type(uint256).max, string.concat(faces[k], ": W renamed R"));
                 continue;
             }
             string[] memory ws = _entries(kindModuleNames(k)[w]);
-            for (uint256 i; i < rNames.length; ++i) assertFalse(_has(ws, rNames[i]), string.concat(faces[k], "W: ", rNames[i]));
-            assertTrue(_has(ws, "wrap") && _has(ws, "rescue") && _has(ws, "underlyings"), string.concat(faces[k], "W: the wrap bodies"));
+            for (uint256 i; i < rNames.length; ++i) {
+                assertFalse(_has(ws, rNames[i]), string.concat(faces[k], "W: ", rNames[i]));
+            }
+            assertTrue(
+                _has(ws, "wrap") && _has(ws, "rescue") && _has(ws, "underlyings"),
+                string.concat(faces[k], "W: the wrap bodies")
+            );
         }
     }
 
@@ -136,7 +215,10 @@ contract GroupsTest is Test {
                 assertTrue(_has(ss, sNames[i]), string.concat(faces[k], "S: ", sNames[i]));
                 assertFalse(_has(qs, sNames[i]), string.concat(faces[k], "Q: ", sNames[i]));
             }
-            assertTrue(_has(qs, "verifyTransferAmount") && _has(qs, "mtxShield"), string.concat(faces[k], "Q: the ops and verdicts"));
+            assertTrue(
+                _has(qs, "verifyTransferAmount") && _has(qs, "mtxShield"),
+                string.concat(faces[k], "Q: the ops and verdicts")
+            );
         }
     }
 
@@ -148,13 +230,18 @@ contract GroupsTest is Test {
             uint8 k = kinds[x];
             (address[] memory ms,) = deployKindModules(k, F, _core(k));
             string memory n = faces[k];
-            address impl = this.create(bytes.concat(vm.getCode(string.concat(n, ".sol:", n)), abi.encode(F, kindImplArgs(k, ms, _core(k)))));
+            address impl = this.create(
+                bytes.concat(vm.getCode(string.concat(n, ".sol:", n)), abi.encode(F, kindImplArgs(k, ms, _core(k))))
+            );
             string[] memory names = kindModuleNames(k);
-            for (uint256 i; i < ms.length; ++i) vm.etch(ms[i], abi.encodePacked(hex"60", uint8(i + 1), hex"60005260206000f3"));
+            for (uint256 i; i < ms.length; ++i) {
+                vm.etch(ms[i], abi.encodePacked(hex"60", uint8(i + 1), hex"60005260206000f3"));
+            }
             for (uint256 i; i < ms.length; ++i) {
                 string[] memory sigs = _entries(names[i]);
                 for (uint256 j; j < sigs.length; ++j) {
-                    (bool ok, bytes memory ret) = impl.call(bytes.concat(bytes4(keccak256(bytes(sigs[j]))), new bytes(2048)));
+                    (bool ok, bytes memory ret) =
+                        impl.call(bytes.concat(bytes4(keccak256(bytes(sigs[j]))), new bytes(2048)));
                     string memory what = string.concat(n, ".", sigs[j], " -> ", vm.split(names[i], ":")[1]);
                     assertTrue(ok, what);
                     assertEq(ret, abi.encode(i + 1), what);

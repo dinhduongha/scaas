@@ -25,8 +25,10 @@ contract Rescue is OnchainBase {
 
     function run() external {
         _init("rescue");
-        require(address(V).code.length != 0 && V.admin() == _pad(a1) && V.rescuer() == a2 && V.seq() == 0,
-            "the vault at SCAAS_DEV_RESCUE, admin key 1, rescuer key 2, seq 0 (rescue.sh; the testnet's genesis alloc)");
+        require(
+            address(V).code.length != 0 && V.admin() == _pad(a1) && V.rescuer() == a2 && V.seq() == 0,
+            "the vault at SCAAS_DEV_RESCUE, admin key 1, rescuer key 2, seq 0 (rescue.sh; the testnet's genesis alloc)"
+        );
         _book(address(V), "RescueVault");
         _fund();
         _singletons();
@@ -39,7 +41,8 @@ contract Rescue is OnchainBase {
     /// A MockERC20 through the CREATE2 deployer (Dex.s.sol `_create2`: a top-level CREATE's estimate falls short here), 1e6
     /// of it and 1 ether to the vault.
     function _fund() internal {
-        bytes memory init = abi.encodePacked(type(MockERC20).creationCode, abi.encode("Onchain Rescue", "oRSC", uint8(6)));
+        bytes memory init =
+            abi.encodePacked(type(MockERC20).creationCode, abi.encode("Onchain Rescue", "oRSC", uint8(6)));
         bytes32 s = _salt("rescue-token");
         t = vm.computeCreate2Address(s, keccak256(init), CREATE2_FACTORY);
         vm.startBroadcast(k1);
@@ -62,7 +65,8 @@ contract Rescue is OnchainBase {
         _book(gr, "GovernanceRouter");
         _book(_dep("ua_registry"), "UARegistry");
         _book(_dep("relay_fee_router"), "RelayFeeRouter");
-        bytes memory cfg = abi.encode(ISCaaSDex.DexConfig(_pad(a1), 200_000, address(0x7EA5), false, 0, address(0), 0, 0));
+        bytes memory cfg =
+            abi.encode(ISCaaSDex.DexConfig(_pad(a1), 200_000, address(0x7EA5), false, 0, address(0), 0, 0));
         vm.broadcast(k1);
         address d = f.createDex(1, cfg, _salt("rescue-dex"));
         _book(d, "SCaaSDex");
@@ -129,21 +133,51 @@ contract Rescue is OnchainBase {
     /// rescuer, a non-native admin.
     function _negatives() internal {
         bytes memory s = _ecdsa(k2, V.setRescuerDigest(5, a1));
-        _negData(a3, address(V), abi.encodeCall(RescueVault.setRescuer, (5, a1, s)),
-            abi.encodeWithSelector(RescueVault.SeqInvalid.selector, uint64(4), uint64(5)), "setRescuer seq 5 (expected 4)");
+        _negData(
+            a3,
+            address(V),
+            abi.encodeCall(RescueVault.setRescuer, (5, a1, s)),
+            abi.encodeWithSelector(RescueVault.SeqInvalid.selector, uint64(4), uint64(5)),
+            "setRescuer seq 5 (expected 4)"
+        );
         s = _ecdsa(k1, V.setRescuerDigest(3, a2));
-        _negData(a3, address(V), abi.encodeCall(RescueVault.setRescuer, (3, a2, s)),
-            abi.encodeWithSelector(RescueVault.SeqInvalid.selector, uint64(4), uint64(3)), "setRescuer seq 3 replayed");
+        _negData(
+            a3,
+            address(V),
+            abi.encodeCall(RescueVault.setRescuer, (3, a2, s)),
+            abi.encodeWithSelector(RescueVault.SeqInvalid.selector, uint64(4), uint64(3)),
+            "setRescuer seq 3 replayed"
+        );
         s = _ecdsa(k1, V.setRescuerDigest(4, a1));
-        _negData(a3, address(V), abi.encodeCall(RescueVault.setRescuer, (4, a1, s)),
-            abi.encodeWithSelector(RescueVault.SignatureInvalid.selector), "setRescuer signed by the old admin");
+        _negData(
+            a3,
+            address(V),
+            abi.encodeCall(RescueVault.setRescuer, (4, a1, s)),
+            abi.encodeWithSelector(RescueVault.SignatureInvalid.selector),
+            "setRescuer signed by the old admin"
+        );
         s = _ecdsa(k2, V.rotateAdminDigest(4, _pad(a1)));
-        _negData(a3, address(V), abi.encodeCall(RescueVault.rotateAdmin, (4, _pad(a3), s)),
-            abi.encodeWithSelector(RescueVault.SignatureInvalid.selector), "rotateAdmin to key 3 with the admin's signature for key 1");
-        _negData(a3, address(V), abi.encodeCall(RescueVault.setRescuer, (4, address(0), s)),
-            abi.encodeWithSelector(RescueVault.RescuerInvalid.selector), "setRescuer to 0");
+        _negData(
+            a3,
+            address(V),
+            abi.encodeCall(RescueVault.rotateAdmin, (4, _pad(a3), s)),
+            abi.encodeWithSelector(RescueVault.SignatureInvalid.selector),
+            "rotateAdmin to key 3 with the admin's signature for key 1"
+        );
+        _negData(
+            a3,
+            address(V),
+            abi.encodeCall(RescueVault.setRescuer, (4, address(0), s)),
+            abi.encodeWithSelector(RescueVault.RescuerInvalid.selector),
+            "setRescuer to 0"
+        );
         bytes32 bad = bytes32(uint256(1) << 160 | uint160(a1));
-        _negData(a3, address(V), abi.encodeCall(RescueVault.rotateAdmin, (4, bad, s)),
-            abi.encodeWithSelector(RescueVault.AdminInvalid.selector, bad), "rotateAdmin to a non-native UA");
+        _negData(
+            a3,
+            address(V),
+            abi.encodeCall(RescueVault.rotateAdmin, (4, bad, s)),
+            abi.encodeWithSelector(RescueVault.AdminInvalid.selector, bad),
+            "rotateAdmin to a non-native UA"
+        );
     }
 }

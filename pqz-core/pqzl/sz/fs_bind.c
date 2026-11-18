@@ -24,160 +24,136 @@
 
 #include "pqz.h"
 
-extern void (*pqz_sz_trace_fn) (int kind, const uint8_t seed[32], uint64_t dom, int acc, const int64_t *v,
-                                unsigned int n);
-int pqz_test_mutate (uint8_t op, const uint8_t *proof, size_t len, unsigned kind, uint64_t r1, uint64_t r2,
-                     uint8_t *out, size_t *outlen);
+extern void (*pqz_sz_trace_fn)(int kind, const uint8_t seed[32], uint64_t dom, int acc, const int64_t *v,
+                               unsigned int n);
+int pqz_test_mutate(uint8_t op, const uint8_t *proof, size_t len, unsigned kind, uint64_t r1, uint64_t r2, uint8_t *out,
+                    size_t *outlen);
 
 /* the first seed of kinds 2, 3, 5 (generic) and 12, 13, 15 (pqz_sv.c's tagged kinds) in one verifier call */
-static struct
-{
-  int seen[16];
-  uint8_t seed[16][32];
+static struct {
+    int seen[16];
+    uint8_t seed[16][32];
 } cur;
 
-static void
-trace (int kind, const uint8_t seed[32], uint64_t dom, int acc, const int64_t *v, unsigned int n)
-{
-  (void)dom, (void)acc, (void)v, (void)n;
-  if ((kind % 10 == 2 || kind % 10 == 3 || kind % 10 == 5) && kind < 16 && !cur.seen[kind])
-    cur.seen[kind] = 1, memcpy (cur.seed[kind], seed, 32);
+static void trace(int kind, const uint8_t seed[32], uint64_t dom, int acc, const int64_t *v, unsigned int n) {
+    (void)dom, (void)acc, (void)v, (void)n;
+    if ((kind % 10 == 2 || kind % 10 == 3 || kind % 10 == 5) && kind < 16 && !cur.seen[kind])
+        cur.seen[kind] = 1, memcpy(cur.seed[kind], seed, 32);
 }
 
 /* ---- the honest R_REG statement and witness of sz_trace.c ---- */
 static uint64_t xs = 0x243F6A8885A308D3ULL;
-static uint64_t
-rnd (void)
-{
-  xs ^= xs >> 12, xs ^= xs << 25, xs ^= xs >> 27;
-  return xs * 2685821657736338717ULL;
+static uint64_t rnd(void) {
+    xs ^= xs >> 12, xs ^= xs << 25, xs ^= xs >> 27;
+    return xs * 2685821657736338717ULL;
 }
-static int
-cbd (int eta)
-{
-  int a = 0, b = 0;
-  uint64_t r = rnd ();
-  for (int i = 0; i < eta; i++)
-    a += (r >> i) & 1, b += (r >> (32 + i)) & 1;
-  return a - b;
+static int cbd(int eta) {
+    int a = 0, b = 0;
+    uint64_t r = rnd();
+    for (int i = 0; i < eta; i++)
+        a += (r >> i) & 1, b += (r >> (32 + i)) & 1;
+    return a - b;
 }
-static void
-short8 (int8_t *x, unsigned n, int eta, int64_t bound)
-{
-  int64_t s;
-  do
-    {
-      s = 0;
-      for (unsigned i = 0; i < n; i++)
-        x[i] = (int8_t)cbd (eta), s += x[i] * x[i];
-    }
-  while (s > bound * bound);
+static void short8(int8_t *x, unsigned n, int eta, int64_t bound) {
+    int64_t s;
+    do {
+        s = 0;
+        for (unsigned i = 0; i < n; i++)
+            x[i] = (int8_t)cbd(eta), s += x[i] * x[i];
+    } while (s > bound * bound);
 }
-static void
-short16 (int16_t *x, unsigned n, int eta, int64_t bound)
-{
-  int64_t s;
-  do
-    {
-      s = 0;
-      for (unsigned i = 0; i < n; i++)
-        x[i] = (int16_t)cbd (eta), s += x[i] * x[i];
-    }
-  while (s > bound * bound);
+static void short16(int16_t *x, unsigned n, int eta, int64_t bound) {
+    int64_t s;
+    do {
+        s = 0;
+        for (unsigned i = 0; i < n; i++)
+            x[i] = (int16_t)cbd(eta), s += x[i] * x[i];
+    } while (s > bound * bound);
 }
 
 static uint8_t stmt[PQZ_REG_STMT_BYTES];
 
-static int
-run (int fast, const uint8_t *proof, size_t len)
-{
-  memset (&cur, 0, sizeof cur);
-  return fast ? pqz_verify_fast (PQZ_OP_REGISTER, stmt, sizeof stmt, proof, len)
-              : pqz_verify (PQZ_OP_REGISTER, stmt, sizeof stmt, proof, len);
+static int run(int fast, const uint8_t *proof, size_t len) {
+    memset(&cur, 0, sizeof cur);
+    return fast ? pqz_verify_fast(PQZ_OP_REGISTER, stmt, sizeof stmt, proof, len)
+                : pqz_verify(PQZ_OP_REGISTER, stmt, sizeof stmt, proof, len);
 }
 
-int
-main (void)
-{
-  static uint8_t arena[(size_t)768 << 20];
-  static uint8_t proof[PQZ_MAX_PROOF], mut[4][2 * PQZ_MAX_PROOF], mutc[2 * PQZ_MAX_PROOF];
-  int8_t s[PQZ_N];
-  int16_t e[PQZ_N];
-  uint8_t pk[PQZ_POLYVEC_BYTES], wit[PQZ_REG_WIT_BYTES], rnd32[32];
-  size_t len = sizeof proof, mlen[4], mclen = sizeof mutc;
-  const char *mname[4] = { "h", "z3", "z4", "tg" };
-  const unsigned mkind[4] = { 7, 14, 5, 15 };
-  const char *kname[6] = { "", "", "V4 seed", "V3 seed", "", "mu seed" };
-  int fails = 0;
+int main(void) {
+    static uint8_t arena[(size_t)768 << 20];
+    static uint8_t proof[PQZ_MAX_PROOF], mut[4][2 * PQZ_MAX_PROOF], mutc[2 * PQZ_MAX_PROOF];
+    int8_t s[PQZ_N];
+    int16_t e[PQZ_N];
+    uint8_t pk[PQZ_POLYVEC_BYTES], wit[PQZ_REG_WIT_BYTES], rnd32[32];
+    size_t len = sizeof proof, mlen[4], mclen = sizeof mutc;
+    const char *mname[4] = {"h", "z3", "z4", "tg"};
+    const unsigned mkind[4] = {7, 14, 5, 15};
+    const char *kname[6] = {"", "", "V4 seed", "V3 seed", "", "mu seed"};
+    int fails = 0;
 
-  if (pqz_init (arena, sizeof (arena)))
-    return fprintf (stderr, "init failed\n"), 1;
-  short8 (s, PQZ_N, 1, PQZ_BETA_S);
-  short16 (e, PQZ_N, 20, PQZ_BETA_E);
-  if (pqz_keypair_from_secret (s, e, pk))
-    return fprintf (stderr, "keypair failed\n"), 1;
-  memset (stmt, 0xA5, PQZ_PREFIX_BYTES);
-  for (int i = 0; i < 32; i++)
-    stmt[PQZ_PREFIX_BYTES + i] = (uint8_t)i;
-  memcpy (stmt + PQZ_PREFIX_BYTES + 32, pk, PQZ_POLYVEC_BYTES);
-  for (int j = 0; j < PQZ_N; j++)
-    {
-      wit[j] = (uint8_t)s[j];
-      wit[PQZ_N + 2 * j] = (uint8_t)(uint16_t)e[j];
-      wit[PQZ_N + 2 * j + 1] = (uint8_t)((uint16_t)e[j] >> 8);
+    if (pqz_init(arena, sizeof(arena)))
+        return fprintf(stderr, "init failed\n"), 1;
+    short8(s, PQZ_N, 1, PQZ_BETA_S);
+    short16(e, PQZ_N, 20, PQZ_BETA_E);
+    if (pqz_keypair_from_secret(s, e, pk))
+        return fprintf(stderr, "keypair failed\n"), 1;
+    memset(stmt, 0xA5, PQZ_PREFIX_BYTES);
+    for (int i = 0; i < 32; i++)
+        stmt[PQZ_PREFIX_BYTES + i] = (uint8_t)i;
+    memcpy(stmt + PQZ_PREFIX_BYTES + 32, pk, PQZ_POLYVEC_BYTES);
+    for (int j = 0; j < PQZ_N; j++) {
+        wit[j] = (uint8_t)s[j];
+        wit[PQZ_N + 2 * j] = (uint8_t)(uint16_t)e[j];
+        wit[PQZ_N + 2 * j + 1] = (uint8_t)((uint16_t)e[j] >> 8);
     }
-  for (int i = 0; i < 32; i++)
-    rnd32[i] = (uint8_t)(i * 31 + 7);
-  if (pqz_prove (PQZ_OP_REGISTER, stmt, sizeof stmt, wit, sizeof wit, rnd32, proof, &len))
-    return fprintf (stderr, "prove failed\n"), 1;
+    for (int i = 0; i < 32; i++)
+        rnd32[i] = (uint8_t)(i * 31 + 7);
+    if (pqz_prove(PQZ_OP_REGISTER, stmt, sizeof stmt, wit, sizeof wit, rnd32, proof, &len))
+        return fprintf(stderr, "prove failed\n"), 1;
 
-  /* r1 = 0: h_0 / z3_0 / z4_0, (r1 >> 8) even (z4 at the bound), r1 & 12 == 0; r2 = 0x105: coefficient 5, sign + */
-  for (int m = 0; m < 4; m++)
-    {
-      mlen[m] = sizeof mut[m];
-      if (!pqz_test_mutate (PQZ_OP_REGISTER, proof, len, mkind[m], 0, 0x105, mut[m], &mlen[m])
-          || (mlen[m] == len && memcmp (mut[m], proof, len) == 0))
-        return fprintf (stderr, "mutation %s failed\n", mname[m]), 1;
+    /* r1 = 0: h_0 / z3_0 / z4_0, (r1 >> 8) even (z4 at the bound), r1 & 12 == 0; r2 = 0x105: coefficient 5, sign + */
+    for (int m = 0; m < 4; m++) {
+        mlen[m] = sizeof mut[m];
+        if (!pqz_test_mutate(PQZ_OP_REGISTER, proof, len, mkind[m], 0, 0x105, mut[m], &mlen[m]) ||
+            (mlen[m] == len && memcmp(mut[m], proof, len) == 0))
+            return fprintf(stderr, "mutation %s failed\n", mname[m]), 1;
     }
 
-  if (!pqz_test_mutate (PQZ_OP_REGISTER, proof, len, 9, 0, 0x105, mutc, &mclen))
-    return fprintf (stderr, "mutation c failed\n"), 1;
-  pqz_sz_trace_fn = trace;
-  for (int fast = 0; fast < 2; fast++)
-    {
-      const char *vn = fast ? "verify_fast" : "verify";
-      uint8_t hon[16][32];
-      int hseen[16];
-      int ok = run (fast, proof, len);
-      memcpy (hon, cur.seed, sizeof hon), memcpy (hseen, cur.seen, sizeof hseen);
-      printf ("P6-FS %s honest: %s\n", vn, ok == 1 ? "ACCEPT" : "REJECT (FAIL)");
-      fails += ok != 1;
-      if (run (fast, mutc, mclen) == 1)
-        printf ("P6-FS %s c-mutated: ACCEPT (FAIL)\n", vn), fails++;
-      else
-        printf ("P6-FS %s c-mutated: rejected\n", vn);
-      for (int m = 0; m < 4; m++)
-        {
-          int okm = run (fast, mut[m], mlen[m]);
-          if (m == 3 && okm == 1)
-            printf ("P6-FS %s tg-mutated: ACCEPT (FAIL)\n", vn), fails++;
-          for (int k = 2; k <= 5; k++)
-            {
-              if ((m == 0) != (k == 5) || k == 4)
-                continue; /* h -> kind 5; z3, z4 -> kinds 2, 3 */
-              const int t = k + 10 * fast; /* verify_fast must report pqz_sv.c's tagged kinds */
-              const char *res = !hseen[t] || !cur.seen[t]           ? "MISSING (FAIL)"
-                                : memcmp (hon[t], cur.seed[t], 32) ? "differ"
-                                                                   : "EQUAL (FAIL)";
-              printf ("P6-FS %s %s-mutated (%s) kind %d %s: honest %02x%02x%02x%02x mutated %02x%02x%02x%02x -> %s\n",
-                      vn, mname[m], okm == 1 ? "accepted" : "rejected", t, kname[k], hon[t][0], hon[t][1],
-                      hon[t][2], hon[t][3], cur.seed[t][0], cur.seed[t][1], cur.seed[t][2], cur.seed[t][3], res);
-              fails += res[0] != 'd';
+    if (!pqz_test_mutate(PQZ_OP_REGISTER, proof, len, 9, 0, 0x105, mutc, &mclen))
+        return fprintf(stderr, "mutation c failed\n"), 1;
+    pqz_sz_trace_fn = trace;
+    for (int fast = 0; fast < 2; fast++) {
+        const char *vn = fast ? "verify_fast" : "verify";
+        uint8_t hon[16][32];
+        int hseen[16];
+        int ok = run(fast, proof, len);
+        memcpy(hon, cur.seed, sizeof hon), memcpy(hseen, cur.seen, sizeof hseen);
+        printf("P6-FS %s honest: %s\n", vn, ok == 1 ? "ACCEPT" : "REJECT (FAIL)");
+        fails += ok != 1;
+        if (run(fast, mutc, mclen) == 1)
+            printf("P6-FS %s c-mutated: ACCEPT (FAIL)\n", vn), fails++;
+        else
+            printf("P6-FS %s c-mutated: rejected\n", vn);
+        for (int m = 0; m < 4; m++) {
+            int okm = run(fast, mut[m], mlen[m]);
+            if (m == 3 && okm == 1)
+                printf("P6-FS %s tg-mutated: ACCEPT (FAIL)\n", vn), fails++;
+            for (int k = 2; k <= 5; k++) {
+                if ((m == 0) != (k == 5) || k == 4)
+                    continue;                /* h -> kind 5; z3, z4 -> kinds 2, 3 */
+                const int t = k + 10 * fast; /* verify_fast must report pqz_sv.c's tagged kinds */
+                const char *res = !hseen[t] || !cur.seen[t]         ? "MISSING (FAIL)"
+                                  : memcmp(hon[t], cur.seed[t], 32) ? "differ"
+                                                                    : "EQUAL (FAIL)";
+                printf("P6-FS %s %s-mutated (%s) kind %d %s: honest %02x%02x%02x%02x mutated %02x%02x%02x%02x -> %s\n",
+                       vn, mname[m], okm == 1 ? "accepted" : "rejected", t, kname[k], hon[t][0], hon[t][1], hon[t][2],
+                       hon[t][3], cur.seed[t][0], cur.seed[t][1], cur.seed[t][2], cur.seed[t][3], res);
+                fails += res[0] != 'd';
             }
         }
     }
-  pqz_sz_trace_fn = 0;
-  printf ("\nVERDICT: P6-FS Fiat-Shamir binding (lazer#28) %s (%d failed checks of 20)\n", fails ? "FAIL" : "ok",
-          fails);
-  return fails != 0;
+    pqz_sz_trace_fn = 0;
+    printf("\nVERDICT: P6-FS Fiat-Shamir binding (lazer#28) %s (%d failed checks of 20)\n", fails ? "FAIL" : "ok",
+           fails);
+    return fails != 0;
 }

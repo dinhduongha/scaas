@@ -22,7 +22,8 @@ pub fn put_i8(out: &mut Vec<u8>, v: &[i8]) {
 }
 /// `int16` little-endian vector bytes
 pub fn put_i16(out: &mut Vec<u8>, v: &[i16]) {
-    v.iter().for_each(|x| out.extend_from_slice(&x.to_le_bytes()));
+    v.iter()
+        .for_each(|x| out.extend_from_slice(&x.to_le_bytes()));
 }
 
 /// Witness of `R_REG` / `R_DR`: `s ‖ e` (6,144 B).
@@ -52,8 +53,14 @@ pub fn wit_multi(kf: &Key, c: &pqzl::EncMulti, d_legs: &[[u8; 16]], d_f: [u8; 16
         put_i8(&mut w, &g.r[..]);
         put_i16(&mut w, &g.e1[..]);
     }
-    c.e2.iter().chain([&c.e2_f]).chain(&c.e2_a).for_each(|e| put_i16(&mut w, e));
-    d_legs.iter().chain([&d_f]).for_each(|d| w.extend_from_slice(d));
+    c.e2.iter()
+        .chain([&c.e2_f])
+        .chain(&c.e2_a)
+        .for_each(|e| put_i16(&mut w, e));
+    d_legs
+        .iter()
+        .chain([&d_f])
+        .for_each(|d| w.extend_from_slice(d));
     w
 }
 
@@ -116,12 +123,24 @@ fn disc(form: Form, id: &Word, kind: u64, pk: &[u8], u: &[u8], v: &[u8]) -> Opti
     }
     words[DW_AMOUNT] = u64_word(VALUE);
     words[DW_KIND] = u64_word(kind);
-    Stmt::Disclose(Disclose { form, words, pk, u, v }).encode().ok()
+    Stmt::Disclose(Disclose {
+        form,
+        words,
+        pk,
+        u,
+        v,
+    })
+    .encode()
+    .ok()
 }
 
 /// One honest case per form, in `pqz_stmt::FORMS` order; `None` if the core fails.
 pub fn cases(id: &Word) -> Option<Vec<Case>> {
-    let (kf, kt, ka) = (pqzl::keygen(&[0x46; 32])?, pqzl::keygen(&[0x54; 32])?, pqzl::keygen(&[0x41; 32])?);
+    let (kf, kt, ka) = (
+        pqzl::keygen(&[0x46; 32])?,
+        pqzl::keygen(&[0x54; 32])?,
+        pqzl::keygen(&[0x41; 32])?,
+    );
     let bal = pqzl::enc(&[&kf.pk], &[digits(BALANCE)], &[0x10; 32])?;
     let mut t = bal.u.to_vec();
     t.extend_from_slice(&bal.vs[0]);
@@ -131,24 +150,28 @@ pub fn cases(id: &Word) -> Option<Vec<Case>> {
     let tx0 = pqzl::enc(&[&kt.pk, &kf.pk], &[dv, dr], &[0x12; 32])?;
     let burn = pqzl::enc(&[&kf.pk], &[dr], &[0x13; 32])?;
     let refresh = pqzl::enc(&[&kf.pk], &[digits(BALANCE - FEE)], &[0x14; 32])?;
-    let debit = |form: Form, amount: u64, c: &pqzl::Enc, pk_t: Option<&[u8]>, pk_a: Option<&[u8]>| {
-        let tr = matches!(form, Form::Transfer | Form::Transfer0);
-        let d = Debit {
-            form,
-            header: header(form, id, amount),
-            pk_f: pk(&kf),
-            pk_t,
-            pk_a,
-            t: &t,
-            u: &c.u[..],
-            v_t: tr.then(|| &c.vs[0][..]),
-            v_f: &c.vs[tr as usize][..],
-            v_a: pk_a.map(|_| &c.vs[2][..]),
-            u_f: None,
+    let debit =
+        |form: Form, amount: u64, c: &pqzl::Enc, pk_t: Option<&[u8]>, pk_a: Option<&[u8]>| {
+            let tr = matches!(form, Form::Transfer | Form::Transfer0);
+            let d = Debit {
+                form,
+                header: header(form, id, amount),
+                pk_f: pk(&kf),
+                pk_t,
+                pk_a,
+                t: &t,
+                u: &c.u[..],
+                v_t: tr.then(|| &c.vs[0][..]),
+                v_f: &c.vs[tr as usize][..],
+                v_a: pk_a.map(|_| &c.vs[2][..]),
+                u_f: None,
+            };
+            Stmt::Debit(d).encode().ok()
         };
-        Stmt::Debit(d).encode().ok()
+    let reg = Register {
+        words: [Form::Register.op_tag(), *id, [0x37; 32]],
+        pk: pk(&kf),
     };
-    let reg = Register { words: [Form::Register.op_tag(), *id, [0x37; 32]], pk: pk(&kf) };
     let out = vec![
         Case {
             form: Form::Transfer,
@@ -160,18 +183,41 @@ pub fn cases(id: &Word) -> Option<Vec<Case>> {
             stmt: debit(Form::Transfer0, 0, &tx0, Some(pk(&kt)), None)?,
             wit: wit_debit(&kf, &tx0, &[dv, dr]),
         },
-        Case { form: Form::Burn, stmt: debit(Form::Burn, VALUE, &burn, None, None)?, wit: wit_debit(&kf, &burn, &[dr]) },
+        Case {
+            form: Form::Burn,
+            stmt: debit(Form::Burn, VALUE, &burn, None, None)?,
+            wit: wit_debit(&kf, &burn, &[dr]),
+        },
         Case {
             form: Form::Refresh,
             stmt: debit(Form::Refresh, 0, &refresh, None, None)?,
             wit: wit_debit(&kf, &refresh, &[digits(BALANCE - FEE)]),
         },
-        Case { form: Form::Register, stmt: Stmt::Register(reg).encode().ok()?, wit: wit_key(&kf) },
-        Case { form: Form::DiscloseSender, stmt: disc(Form::DiscloseSender, id, 0, pk(&kt), &tx.u[..], &tx.vs[0])?, wit: wit_ds(&tx) },
-        Case { form: Form::DiscloseReceiver, stmt: disc(Form::DiscloseReceiver, id, 1, pk(&kt), &tx.u[..], &tx.vs[0])?, wit: wit_key(&kt) },
-        Case { form: Form::DiscloseAuditor, stmt: disc(Form::DiscloseAuditor, id, 2, pk(&ka), &tx.u[..], &tx.vs[2])?, wit: wit_key(&ka) },
+        Case {
+            form: Form::Register,
+            stmt: Stmt::Register(reg).encode().ok()?,
+            wit: wit_key(&kf),
+        },
+        Case {
+            form: Form::DiscloseSender,
+            stmt: disc(Form::DiscloseSender, id, 0, pk(&kt), &tx.u[..], &tx.vs[0])?,
+            wit: wit_ds(&tx),
+        },
+        Case {
+            form: Form::DiscloseReceiver,
+            stmt: disc(Form::DiscloseReceiver, id, 1, pk(&kt), &tx.u[..], &tx.vs[0])?,
+            wit: wit_key(&kt),
+        },
+        Case {
+            form: Form::DiscloseAuditor,
+            stmt: disc(Form::DiscloseAuditor, id, 2, pk(&ka), &tx.u[..], &tx.vs[2])?,
+            wit: wit_key(&ka),
+        },
     ];
-    debug_assert!(out.iter().zip(FORMS).all(|(c, f)| c.form == f && c.stmt.len() == f.stmt_len() && c.wit.len() == f.wit_len()));
+    debug_assert!(out
+        .iter()
+        .zip(FORMS)
+        .all(|(c, f)| c.form == f && c.stmt.len() == f.stmt_len() && c.wit.len() == f.wit_len()));
     Some(out)
 }
 
@@ -199,13 +245,25 @@ impl MultiCase {
     }
     /// `TransferMulti<M>` / `TransferMulti<M>_0` (auditor off)
     pub fn name(&self) -> String {
-        format!("TransferMulti{}{}", self.m, if self.aud { "" } else { "_0" })
+        format!(
+            "TransferMulti{}{}",
+            self.m,
+            if self.aud { "" } else { "_0" }
+        )
     }
 }
 
 /// The op 7 shapes of `id` with M ≤ `max_m`: auditor on first, M ascending.
 pub fn multi_shapes(id: &Word, max_m: usize) -> Vec<(usize, bool)> {
-    [true, false].iter().flat_map(|&a| built_legs(id).iter().filter(|&&m| m <= max_m).map(move |&m| (m, a))).collect()
+    [true, false]
+        .iter()
+        .flat_map(|&a| {
+            built_legs(id)
+                .iter()
+                .filter(|&&m| m <= max_m)
+                .map(move |&m| (m, a))
+        })
+        .collect()
 }
 
 /// One honest op 7 case (`None` if the core fails or `(M, auditorOn)` is not built for `id`).
@@ -214,7 +272,9 @@ pub fn multi_case(id: &Word, m: usize, aud: bool) -> Option<MultiCase> {
         return None;
     }
     let (kf, ka) = (pqzl::keygen(&[0x46; 32])?, pqzl::keygen(&[0x41; 32])?);
-    let keys: Vec<Key> = (0..m).map(|j| pqzl::keygen(&[0x60 + j as u8; 32])).collect::<Option<_>>()?;
+    let keys: Vec<Key> = (0..m)
+        .map(|j| pqzl::keygen(&[0x60 + j as u8; 32]))
+        .collect::<Option<_>>()?;
     let bal = pqzl::enc(&[&kf.pk], &[digits(BALANCE)], &[0x10; 32])?;
     let mut t = bal.u.to_vec();
     t.extend_from_slice(&bal.vs[0]);
@@ -222,7 +282,11 @@ pub fn multi_case(id: &Word, m: usize, aud: bool) -> Option<MultiCase> {
     let amounts: Vec<u64> = (0..m).map(|j| if j == m - 1 { VALUE } else { 0 }).collect();
     let d_legs: Vec<[u8; 16]> = amounts.iter().map(|&a| digits(a)).collect();
     let d_f = digits(BALANCE - VALUE - fee);
-    let legs: Vec<(&[u8; pqzl::PK_BYTES], [u8; 16])> = keys.iter().map(|k| &*k.pk).zip(d_legs.iter().copied()).collect();
+    let legs: Vec<(&[u8; pqzl::PK_BYTES], [u8; 16])> = keys
+        .iter()
+        .map(|k| &*k.pk)
+        .zip(d_legs.iter().copied())
+        .collect();
     let seed = [0x70 ^ m as u8 ^ ((aud as u8) << 7); 32];
     let c = pqzl::enc_multi(&kf.pk, d_f, &legs, aud.then_some(&*ka.pk), &seed)?;
 
@@ -241,7 +305,12 @@ pub fn multi_case(id: &Word, m: usize, aud: bool) -> Option<MultiCase> {
     h[H_MEMO_HASH] = crate::selftest::keccak(&[&memo]);
 
     let pks = keys.iter().map(|k| &k.pk[..]).collect::<Vec<_>>().concat();
-    let us = c.groups.iter().map(|g| &g.u[..]).collect::<Vec<_>>().concat();
+    let us = c
+        .groups
+        .iter()
+        .map(|g| &g.u[..])
+        .collect::<Vec<_>>()
+        .concat();
     let (vs, v_as) = (c.v.concat(), c.v_a.concat());
     let st = Multi {
         header: h,
@@ -258,12 +327,21 @@ pub fn multi_case(id: &Word, m: usize, aud: bool) -> Option<MultiCase> {
     let stmt = st.encode().ok()?;
     let wit = wit_multi(&kf, &c, &d_legs, d_f);
     debug_assert!(stmt.len() == multi_len(m, aud) && wit.len() == multi_wit_len(m, aud));
-    Some(MultiCase { m, aud, stmt, wit, memo })
+    Some(MultiCase {
+        m,
+        aud,
+        stmt,
+        wit,
+        memo,
+    })
 }
 
 /// Every op 7 shape of `id` with M ≤ `max_m` (`multi_shapes` order).
 pub fn multi_cases(id: &Word, max_m: usize) -> Option<Vec<MultiCase>> {
-    multi_shapes(id, max_m).into_iter().map(|(m, a)| multi_case(id, m, a)).collect()
+    multi_shapes(id, max_m)
+        .into_iter()
+        .map(|(m, a)| multi_case(id, m, a))
+        .collect()
 }
 
 fn hex(b: &[u8]) -> String {
@@ -287,19 +365,32 @@ pub fn digest_lines(id: &Word, wasm_view: bool) -> String {
         return String::new(); // PQZH not in this build (parameter set without PQZH)
     }
     let sys = if *id == PQZL_ID { "PQZL" } else { "PQZH" };
-    let forms = cases(id).unwrap_or_default().into_iter().map(|c| (format!("{:?}", c.form), c.op(), c.stmt, c.wit, 0));
-    let multi = multi_cases(id, DIGEST_MAX_LEGS).unwrap_or_default().into_iter().map(|c| (c.name(), c.op(), c.stmt, c.wit, c.m));
+    let forms = cases(id)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|c| (format!("{:?}", c.form), c.op(), c.stmt, c.wit, 0));
+    let multi = multi_cases(id, DIGEST_MAX_LEGS)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|c| (c.name(), c.op(), c.stmt, c.wit, c.m));
     let mut s = String::new();
     for (name, op, stmt, wit, m) in forms.chain(multi) {
         let k = |b: &[u8]| hex(&crate::selftest::keccak(&[b]));
-        let refused = wasm_view && !cfg!(target_arch = "wasm32") && *id == PQZL_ID && m > crate::pqzl::WASM_PQZL_MAX_LEGS;
+        let refused = wasm_view
+            && !cfg!(target_arch = "wasm32")
+            && *id == PQZL_ID
+            && m > crate::pqzl::WASM_PQZL_MAX_LEGS;
         let proved = if refused {
             Err(crate::ProveError::Statement(crate::Reject::Legs))
         } else {
             crate::prove(op, &stmt, &wit, &[0x33; 32])
         };
         let (pf, len, ok) = match proved {
-            Ok(p) => (k(&p), p.len(), crate::precompile(&input(op, &stmt, &p)) == Ok(crate::VALID)),
+            Ok(p) => (
+                k(&p),
+                p.len(),
+                crate::precompile(&input(op, &stmt, &p)) == Ok(crate::VALID),
+            ),
             Err(e) => (format!("{e:?}"), 0, false),
         };
         s += &format!(

@@ -21,8 +21,11 @@ import {EnvKit} from "../helpers/EnvKit.sol";
 /// The token's trade side after ua-mtx-merge T6 (R12, R38), called by selector: this file compiles on the tree before T6
 /// too, so each test is red there on its own (plan T6 step 3).
 interface IMergedT6 {
-    function mtxTrade(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata auth,
-        ITradeToken.TradeFill calldata f) external;
+    function mtxTrade(
+        ITradeToken.UATradeOrder calldata o,
+        IUARegistry.UASig calldata auth,
+        ITradeToken.TradeFill calldata f
+    ) external;
     function mtxCancelOrder(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata auth) external;
     function mtxInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, IUARegistry.UASig calldata auth) external;
     function tradeOrderDigest(ITradeToken.UATradeOrder calldata o) external view returns (bytes32);
@@ -31,7 +34,8 @@ interface IMergedT6 {
     function minNonce(bytes32 from, uint256 batch) external view returns (uint256);
     function pulled(bytes32 orderHash) external view returns (uint256);
     function mtxCancelNonce(MetaTxLib.UAEnvelope calldata e, uint256 lane, IUARegistry.UASig calldata auth)
-        external returns (bytes memory);
+        external
+        returns (bytes memory);
     function mtxNonce(bytes32 from, uint256 batch) external view returns (uint256);
 }
 
@@ -45,8 +49,11 @@ interface IOldT6 {
     function cancelOrderDigest(ITradeToken.TradeOrder calldata o) external view returns (bytes32);
     function invalidateNoncesDigest(address from, uint256 batch, uint256 newMin) external view returns (bytes32);
     function minNonce(address from, uint256 batch) external view returns (uint256);
-    function uaTrade(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata auth,
-        ITradeToken.TradeFill calldata f) external;
+    function uaTrade(
+        ITradeToken.UATradeOrder calldata o,
+        IUARegistry.UASig calldata auth,
+        ITradeToken.TradeFill calldata f
+    ) external;
     function uaCancelOrder(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata auth) external;
     function uaInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, IUARegistry.UASig calldata auth) external;
     function uaTradeOrderDigest(ITradeToken.UATradeOrder calldata o) external view returns (bytes32);
@@ -57,7 +64,8 @@ interface IOldT6 {
 
 interface IWrapOrderT6 {
     function mtxWrapOrder(address u, ITradeToken.UAWrapOrder calldata o, IUARegistry.UASig calldata auth)
-        external returns (uint256);
+        external
+        returns (uint256);
 }
 
 /// T6: a SCaaS token leg is a `UATradeOrder` (CTR-DEX-26 shape 1), native or derived, through the token's merged
@@ -68,8 +76,11 @@ contract DexScaasLegsTest is UADexBase {
 
     function setUp() public override {
         super.setUp();
-        D = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 2,
-            abi.encode(normalInit("D", "D", 0, 1e6, alice, address(0))), "D"));
+        D = NormalToken(
+            f.createToken(
+                IOpenFactory.TokenKind.NORMAL, 2, abi.encode(normalInit("D", "D", 0, 1e6, alice, address(0))), "D"
+            )
+        );
         dex.setMarket(address(C), address(D), true, EnvKit.codeUidOf(address(dex)));
         assertEq(C.registry(), address(0));
         assertEq(D.registry(), address(0));
@@ -80,7 +91,9 @@ contract DexScaasLegsTest is UADexBase {
     }
 
     function _count(Vm.Log[] memory logs, bytes32 topic) internal pure returns (uint256 k) {
-        for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == topic) ++k;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] == topic) ++k;
+        }
     }
 
     /// R12: a `TradeOrder` (shape 0) selling a SCaaS token is refused by name, before any pull; the same trade as
@@ -89,8 +102,10 @@ contract DexScaasLegsTest is UADexBase {
         ITradeToken.TradeOrder memory t = _nat(alice, address(B), 1000, 1900, 0);
         ITradeToken.UATradeOrder memory m = _ua(_pad(bob), address(A), 2000, 1000, 0);
         ISCaaSDex.DexLeg memory shape0 = DexLegs.leg0(address(A), t, _ecdsa(ALICE_PK, keccak256("any digest")), 1000);
-        _expectOne(_s(shape0, _uaLeg(address(B), m, 2000)),
-            abi.encodeWithSelector(ISCaaSDex.LegShapeUnknown.selector, uint8(0)));
+        _expectOne(
+            _s(shape0, _uaLeg(address(B), m, 2000)),
+            abi.encodeWithSelector(ISCaaSDex.LegShapeUnknown.selector, uint8(0))
+        );
         // positive control: alice's order as a `UATradeOrder` (her address zero-padded, her own key)
         ITradeToken.UATradeOrder memory u = _ua(_pad(alice), address(B), 1000, 1900, 0);
         assertTrue(_settle(_s(_uaLeg(address(A), u, 1000), _uaLeg(address(B), m, 2000))));
@@ -122,8 +137,10 @@ contract DexScaasLegsTest is UADexBase {
         ITradeToken.UATradeOrder memory t = _ua(_pad(alice), address(C), 1000, 2000, 0);
         ITradeToken.UATradeOrder memory d = _ua(uaB, address(D), 2000, 1000, 0);
         IUARegistry.UASig memory any = UACall.auth(uaB, hex"00");
-        _expectOne(_s(_uaLeg(address(D), t, 1000), DexLegs.uaLeg(address(C), d, any, 2000)),
-            abi.encodeWithSelector(IUALedger.UALegNotLedger.selector, address(C)));
+        _expectOne(
+            _s(_uaLeg(address(D), t, 1000), DexLegs.uaLeg(address(C), d, any, 2000)),
+            abi.encodeWithSelector(IUALedger.UALegNotLedger.selector, address(C))
+        );
         IMergedT6 c = IMergedT6(address(C));
         vm.prank(address(dex));
         vm.expectRevert(IUALedger.UALedgerOff.selector);
@@ -159,8 +176,10 @@ contract DexScaasLegsTest is UADexBase {
         assertEq(outside, 1);
         assertEq(_count(logs, ISCaaSDex.UALegSettled.selector), 1);
         ITradeToken.UATradeOrder memory mu = _ua(_pad(dave), address(A), 500, 1000, 0);
-        _expectOne(_s(_uaLeg(address(A), t, 1000), DexLegs.uaLeg(address(usdc), mu, UACall.auth(mu.from, hex"00"), 500)),
-            abi.encodeWithSelector(IUALedger.UALegNotLedger.selector, address(usdc)));
+        _expectOne(
+            _s(_uaLeg(address(A), t, 1000), DexLegs.uaLeg(address(usdc), mu, UACall.auth(mu.from, hex"00"), 500)),
+            abi.encodeWithSelector(IUALedger.UALegNotLedger.selector, address(usdc))
+        );
     }
 
     /// R18: a SCaaS leg emits `UALegSettled` (the native signer zero-padded) and the token `UATradeFilled`; no address
@@ -187,8 +206,23 @@ contract DexScaasLegsTest is UADexBase {
         bytes32 me = _pad(alice);
         MetaTxLib.UAEnvelope memory e;
         (e.from, e.batch, e.nonce, e.validUntil) = (me, 7, 0, block.timestamp + 600);
-        bytes32 cd = MtxDigest.typed(address(A), keccak256(abi.encode(MetaTxLib.UA_CANCEL_NONCE_TYPEHASH, me, uint256(1),
-            e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
+        bytes32 cd = MtxDigest.typed(
+            address(A),
+            keccak256(
+                abi.encode(
+                    MetaTxLib.UA_CANCEL_NONCE_TYPEHASH,
+                    me,
+                    uint256(1),
+                    e.batch,
+                    e.nonce,
+                    e.validUntil,
+                    e.mode,
+                    address(0),
+                    e.fee,
+                    address(0)
+                )
+            )
+        );
         vm.prank(RELAYER);
         a.mtxCancelNonce(e, 1, _sigOf(ALICE_PK, cd));
         assertEq(a.mtxNonce(me, 1), 1);
@@ -217,8 +251,9 @@ contract DexScaasLegsTest is UADexBase {
         assertEq(sels[0], bytes4(0x874ab327));
         for (uint256 i; i < 3; ++i) {
             ISCaaSDex.Interaction[] memory bad = new ISCaaSDex.Interaction[](1);
-            bad[0] = ISCaaSDex.Interaction(address(A), abi.encodePacked(sels[i], abi.encode(o, l.auth,
-                ITradeToken.TradeFill(1, 2, 0, RELAYER))));
+            bad[0] = ISCaaSDex.Interaction(
+                address(A), abi.encodePacked(sels[i], abi.encode(o, l.auth, ITradeToken.TradeFill(1, 2, 0, RELAYER)))
+            );
             vm.prank(RELAYER);
             vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.ForbiddenSelector.selector, address(A), sels[i]));
             dex.mtxExchange(p, bad);
@@ -307,9 +342,20 @@ contract DexScaasLegsTest is UADexBase {
         assertEq(a.tradeOrderDigest(w), OrderJson.wrap(address(A), w, true));
         assertEq(a.cancelOrderDigest(w), OrderJson.cancelWrap(address(A), w, true));
         assertEq(a.cancelOrderDigest(u), OrderJson.cancelTrade(address(A), u, true));
-        assertEq(a.invalidateNoncesDigest(_pad(alice), 1, 2), MtxDigest.typed(address(A),
-            keccak256(abi.encode(keccak256("UAInvalidateNonces(bytes32 from,uint256 batch,uint256 minNonce)"),
-            _pad(alice), uint256(1), uint256(2)))));
+        assertEq(
+            a.invalidateNoncesDigest(_pad(alice), 1, 2),
+            MtxDigest.typed(
+                address(A),
+                keccak256(
+                    abi.encode(
+                        keccak256("UAInvalidateNonces(bytes32 from,uint256 batch,uint256 minNonce)"),
+                        _pad(alice),
+                        uint256(1),
+                        uint256(2)
+                    )
+                )
+            )
+        );
     }
 
     /// Carried from T3: an EOA's wrap order over a leg that is no SCaaS token (no `mtxTrade`: here an outside ERC-20)
@@ -317,7 +363,7 @@ contract DexScaasLegsTest is UADexBase {
     function test_wrapOrderOutsideLegNamedError() public {
         ITradeToken.UAWrapOrder memory w;
         (w.from, w.wrappedToken, w.amount, w.minMinted, w.batch, w.nonce, w.validUntil) =
-            (_pad(alice), address(wrp), 100, 100, 3, 1, block.timestamp + 300);
+        (_pad(alice), address(wrp), 100, 100, 3, 1, block.timestamp + 300);
         und.mint(alice, 100);
         vm.expectCall(REG_L, bytes(""), 0);
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UALegNotLedger.selector, address(und)));

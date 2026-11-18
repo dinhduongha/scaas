@@ -35,7 +35,7 @@ use crate::adapters::evm::{building, BUILDING};
 use crate::addresses::{algorand_address, b32decode, b32encode};
 use crate::chain::SimError;
 use crate::config::ChainCfg;
-use crate::odoo::Job;
+use crate::external_pull::Job;
 use crate::signer::{LocalSigner, Signer};
 
 pub use super::aptos::{meta_pay_id, pay_lane};
@@ -84,15 +84,20 @@ const SPENT_KEEP: Duration = Duration::from_secs(3_600);
 
 pub const METAOP_ABI: &str = "(byte[32],byte[32],uint8,(uint8,byte[32]),(uint8,byte[32]),byte[32],uint128,byte[32],byte[32],uint64,uint64,byte[32])";
 pub const ORDER_ABI: &str = "(uint64,uint64,uint128,uint128,byte[32],uint64)";
-pub const TERMS_ABI: &str = "((uint8,byte[32]),(uint8,byte[32]),uint128,uint128,uint64,uint64,uint128)";
+pub const TERMS_ABI: &str =
+    "((uint8,byte[32]),(uint8,byte[32]),uint128,uint128,uint64,uint64,uint128)";
 pub const EV_TRANSFER: &str = "arc200_Transfer(address,address,uint256)";
 pub const EV_UA_TRANSFER: &str = "UaTransfer((uint8,byte[32]),(uint8,byte[32]),uint256)";
-pub const EV_EXECUTED: &str = "MetaTransactionExecuted((uint8,byte[32]),address,byte[32],uint64,byte[32])";
+pub const EV_EXECUTED: &str =
+    "MetaTransactionExecuted((uint8,byte[32]),address,byte[32],uint64,byte[32])";
 pub const EV_SETTLED: &str = "PaymentSettled((uint8,byte[32]),(uint8,byte[32]),uint256,byte[32])";
 pub const EV_META: &str = "PaymentMeta(byte[32],byte[])";
-pub const EV_FILLED: &str = "OrderFilled((uint8,byte[32]),address,byte[32],uint64,uint256,byte[32])";
-pub const EV_FEE: &str = "RelayFeePaid(byte[32],uint64,uint64,(uint8,byte[32]),(uint8,byte[32]),uint256)";
-pub const EV_MANDATE_PAY: &str = "MandatePaymentSettled(uint64,(uint8,byte[32]),(uint8,byte[32]),uint256,byte[32])";
+pub const EV_FILLED: &str =
+    "OrderFilled((uint8,byte[32]),address,byte[32],uint64,uint256,byte[32])";
+pub const EV_FEE: &str =
+    "RelayFeePaid(byte[32],uint64,uint64,(uint8,byte[32]),(uint8,byte[32]),uint256)";
+pub const EV_MANDATE_PAY: &str =
+    "MandatePaymentSettled(uint64,(uint8,byte[32]),(uint8,byte[32]),uint256,byte[32])";
 pub const EV_MATCHED: &str = "Matched(byte[32],uint64,uint64,byte[32],byte[32])";
 const ADD_KEY_NATIVE: &str = "add_key_native((uint16,byte[]),byte[])void";
 
@@ -153,17 +158,28 @@ pub fn abi_bytes(b: &[u8]) -> Vec<u8> {
 
 /// Exactly one ARC-4 `byte[]`.
 fn un_abi_bytes(b: &[u8]) -> Result<&[u8]> {
-    let n = b.get(..2).map(|x| u16::from_be_bytes([x[0], x[1]]) as usize).ok_or_else(|| anyhow!("byte[] without its length"))?;
-    ensure!(b.len() == 2 + n, "byte[] length {n} but {} bytes", b.len().saturating_sub(2));
+    let n = b
+        .get(..2)
+        .map(|x| u16::from_be_bytes([x[0], x[1]]) as usize)
+        .ok_or_else(|| anyhow!("byte[] without its length"))?;
+    ensure!(
+        b.len() == 2 + n,
+        "byte[] length {n} but {} bytes",
+        b.len().saturating_sub(2)
+    );
     Ok(&b[2..])
 }
 
 fn arr32(b: &[u8]) -> Result<[u8; 32]> {
-    b.try_into().map_err(|_| anyhow!("{} bytes, not 32", b.len()))
+    b.try_into()
+        .map_err(|_| anyhow!("{} bytes, not 32", b.len()))
 }
 
 fn be_u64(b: &[u8]) -> Result<u64> {
-    Ok(u64::from_be_bytes(b.try_into().map_err(|_| anyhow!("{} bytes, not a uint64", b.len()))?))
+    Ok(u64::from_be_bytes(
+        b.try_into()
+            .map_err(|_| anyhow!("{} bytes, not a uint64", b.len()))?,
+    ))
 }
 
 /// go-algorand `basics.IsEdwards25519Point` / puya's autosalt predicate (conftest `on_curve`): `x² = (y² − 1) / (d y² + 1)`
@@ -175,12 +191,15 @@ pub fn on_curve(key: &[u8; 32]) -> bool {
     let mut k = *key;
     k[31] &= 0x7f;
     let y = U256::from_le_bytes(k) % p;
-    let d = sub(U256::ZERO, U256::from(121_665u32)).mul_mod(U256::from(121_666u32).pow_mod(p - U256::from(2u8), p), p);
+    let d = sub(U256::ZERO, U256::from(121_665u32))
+        .mul_mod(U256::from(121_666u32).pow_mod(p - U256::from(2u8), p), p);
     let yy = y.mul_mod(y, p);
     let u = sub(yy, U256::from(1u8));
     let v = d.mul_mod(yy, p).add_mod(U256::from(1u8), p);
     let uv7 = u.mul_mod(v.pow_mod(U256::from(7u8), p), p);
-    let x = u.mul_mod(v.pow_mod(U256::from(3u8), p), p).mul_mod(uv7.pow_mod((p - U256::from(5u8)) >> 3usize, p), p);
+    let x = u
+        .mul_mod(v.pow_mod(U256::from(3u8), p), p)
+        .mul_mod(uv7.pow_mod((p - U256::from(5u8)) >> 3usize, p), p);
     let vxx = v.mul_mod(x.mul_mod(x, p), p);
     vxx == u || vxx == sub(U256::ZERO, u)
 }
@@ -200,11 +219,27 @@ pub struct Executor {
 impl Executor {
     pub fn new(router: u64, salt: u8) -> Result<Self> {
         let a: Value = serde_json::from_str(ARTIFACTS).context("artifacts.json")?;
-        let part = |k: &str| a["relayfee"][k].as_str().and_then(|s| alloy::hex::decode(s).ok()).ok_or_else(|| anyhow!("artifacts.json relayfee.{k}"));
+        let part = |k: &str| {
+            a["relayfee"][k]
+                .as_str()
+                .and_then(|s| alloy::hex::decode(s).ok())
+                .ok_or_else(|| anyhow!("artifacts.json relayfee.{k}"))
+        };
         ensure!(salt < 128, "executor salt {salt} is not below 128");
-        let program = [part("executor_prefix")?, router.to_be_bytes().to_vec(), part("executor_suffix")?, vec![0x20, 1, salt]].concat();
+        let program = [
+            part("executor_prefix")?,
+            router.to_be_bytes().to_vec(),
+            part("executor_suffix")?,
+            vec![0x20, 1, salt],
+        ]
+        .concat();
         let address = program_address(&program);
-        Ok(Self { router, salt, program, address })
+        Ok(Self {
+            router,
+            salt,
+            program,
+            address,
+        })
     }
 }
 
@@ -218,23 +253,36 @@ pub struct Holder {
 
 impl Holder {
     pub fn addr(id: [u8; 32]) -> Self {
-        Self { kind: KIND_ADDRESS, id }
+        Self {
+            kind: KIND_ADDRESS,
+            id,
+        }
     }
 
     fn read(b: &[u8]) -> Result<Self> {
         ensure!(b.len() == 33, "a holder is 33 bytes");
         let kind = b[0];
-        ensure!(kind <= KIND_UA, "holder kind {kind} (0 an address, 1 a UA id)");
-        Ok(Self { kind, id: arr32(&b[1..])? })
+        ensure!(
+            kind <= KIND_UA,
+            "holder kind {kind} (0 an address, 1 a UA id)"
+        );
+        Ok(Self {
+            kind,
+            id: arr32(&b[1..])?,
+        })
     }
 
     fn bytes(&self) -> Vec<u8> {
         [&[self.kind][..], &self.id].concat()
     }
 
-    /// The event / Odoo form: an Algorand address (kind 0) or `0x` ‖ 64 hex (a UA id).
+    /// The event / ExternalPull form: an Algorand address (kind 0) or `0x` ‖ 64 hex (a UA id).
     pub fn display(&self) -> String {
-        if self.kind == KIND_ADDRESS { algorand_address(&self.id) } else { hex0x(&self.id) }
+        if self.kind == KIND_ADDRESS {
+            algorand_address(&self.id)
+        } else {
+            hex0x(&self.id)
+        }
     }
 }
 
@@ -257,11 +305,18 @@ pub struct MetaOp {
 impl MetaOp {
     /// `"scaas.metaop.v1"` ‖ the 291-byte ARC-4 tuple, nothing after it; holder kinds 0 / 1 only.
     pub fn decode(b: &[u8]) -> Result<Self> {
-        Self::from_arc4(b.strip_prefix(LABEL).ok_or_else(|| anyhow!("payload without the scaas.metaop.v1 label"))?)
+        Self::from_arc4(
+            b.strip_prefix(LABEL)
+                .ok_or_else(|| anyhow!("payload without the scaas.metaop.v1 label"))?,
+        )
     }
 
     pub fn from_arc4(b: &[u8]) -> Result<Self> {
-        ensure!(b.len() == METAOP_LEN, "a MetaOp is {METAOP_LEN} bytes, not {}", b.len());
+        ensure!(
+            b.len() == METAOP_LEN,
+            "a MetaOp is {METAOP_LEN} bytes, not {}",
+            b.len()
+        );
         let a = |i: usize| arr32(&b[i..i + 32]);
         Ok(Self {
             network: a(0)?,
@@ -280,8 +335,21 @@ impl MetaOp {
     }
 
     pub fn arc4(&self) -> Vec<u8> {
-        [&self.network[..], &self.contract, &[self.op], &self.from.bytes(), &self.to.bytes(), &self.relayer, &self.amount.to_be_bytes(),
-         &self.pay_ref, &self.lane, &self.nonce.to_be_bytes(), &self.valid_until.to_be_bytes(), &self.extra].concat()
+        [
+            &self.network[..],
+            &self.contract,
+            &[self.op],
+            &self.from.bytes(),
+            &self.to.bytes(),
+            &self.relayer,
+            &self.amount.to_be_bytes(),
+            &self.pay_ref,
+            &self.lane,
+            &self.nonce.to_be_bytes(),
+            &self.valid_until.to_be_bytes(),
+            &self.extra,
+        ]
+        .concat()
     }
 
     pub fn encode(&self) -> Vec<u8> {
@@ -315,16 +383,31 @@ pub fn parse_router_call(call: &[u8]) -> Result<(u64, Vec<Vec<u8>>)> {
     ensure!(call.len() >= 9, "op.extra.call is shorter than app id ‖ n");
     let app = be_u64(&call[..8])?;
     let n = call[8] as usize;
-    ensure!((1..=16).contains(&n), "op.extra.call has {n} application arguments (an ARC-4 call has 1 to 16)");
+    ensure!(
+        (1..=16).contains(&n),
+        "op.extra.call has {n} application arguments (an ARC-4 call has 1 to 16)"
+    );
     let (mut at, mut args) = (9, Vec::with_capacity(n));
     for _ in 0..n {
-        let len = call.get(at..at + 2).map(|x| u16::from_be_bytes([x[0], x[1]]) as usize).ok_or_else(|| anyhow!("op.extra.call truncated"))?;
-        let a = call.get(at + 2..at + 2 + len).ok_or_else(|| anyhow!("op.extra.call truncated"))?;
+        let len = call
+            .get(at..at + 2)
+            .map(|x| u16::from_be_bytes([x[0], x[1]]) as usize)
+            .ok_or_else(|| anyhow!("op.extra.call truncated"))?;
+        let a = call
+            .get(at + 2..at + 2 + len)
+            .ok_or_else(|| anyhow!("op.extra.call truncated"))?;
         args.push(a.to_vec());
         at += 2 + len;
     }
-    ensure!(at == call.len(), "op.extra.call has {} bytes after its arguments", call.len() - at);
-    ensure!(args[0].len() == 4, "op.extra.call argument 0 is not an ARC-4 selector");
+    ensure!(
+        at == call.len(),
+        "op.extra.call has {} bytes after its arguments",
+        call.len() - at
+    );
+    ensure!(
+        args[0].len() == 4,
+        "op.extra.call argument 0 is not an ARC-4 selector"
+    );
     Ok((app, args))
 }
 
@@ -349,8 +432,11 @@ pub struct RelayFeePolicy {
 }
 
 fn app_id_str(s: &str) -> Result<u64> {
-    crate::addresses::algorand(s).ok().filter(|v| !v.contains(|c: char| !c.is_ascii_digit()))
-        .and_then(|v| v.parse().ok()).ok_or_else(|| anyhow!("{s:?} is not an Algorand app id"))
+    crate::addresses::algorand(s)
+        .ok()
+        .filter(|v| !v.contains(|c: char| !c.is_ascii_digit()))
+        .and_then(|v| v.parse().ok())
+        .ok_or_else(|| anyhow!("{s:?} is not an Algorand app id"))
 }
 
 impl RelayFeePolicy {
@@ -366,14 +452,33 @@ impl RelayFeePolicy {
         let app = |k: &str| -> Result<Option<u64>> {
             match cfg.params.get(k) {
                 None => Ok(None),
-                Some(v) => v.as_integer().filter(|n| *n > 0).map(|n| Some(n as u64))
-                    .ok_or_else(|| anyhow!("params.{k} must be an app id (a positive TOML integer), not {v}")),
+                Some(v) => v
+                    .as_integer()
+                    .filter(|n| *n > 0)
+                    .map(|n| Some(n as u64))
+                    .ok_or_else(|| {
+                        anyhow!("params.{k} must be an app id (a positive TOML integer), not {v}")
+                    }),
             }
         };
-        let account_app = app("account_app")?.ok_or_else(|| anyhow!("algorand needs params.account_app (the deployment's account app id)"))?;
-        let (mandate_app, dex_app, router) = (app("mandate_app")?, app("dex_app")?, app("relayfee_app")?);
-        let tokens = cfg.tokens.iter().map(|t| app_id_str(&t.address).context("tokens: a token is its app id")).collect::<Result<Vec<u64>>>()?;
-        let mut all: Vec<u64> = tokens.iter().copied().chain([account_app]).chain(mandate_app).chain(dex_app).chain(router).collect();
+        let account_app = app("account_app")?.ok_or_else(|| {
+            anyhow!("algorand needs params.account_app (the deployment's account app id)")
+        })?;
+        let (mandate_app, dex_app, router) =
+            (app("mandate_app")?, app("dex_app")?, app("relayfee_app")?);
+        let tokens = cfg
+            .tokens
+            .iter()
+            .map(|t| app_id_str(&t.address).context("tokens: a token is its app id"))
+            .collect::<Result<Vec<u64>>>()?;
+        let mut all: Vec<u64> = tokens
+            .iter()
+            .copied()
+            .chain([account_app])
+            .chain(mandate_app)
+            .chain(dex_app)
+            .chain(router)
+            .collect();
         all.sort_unstable();
         if all.windows(2).any(|w| w[0] == w[1]) {
             bail!("algorand: an app id appears twice among tokens, account_app, mandate_app, dex_app and relayfee_app");
@@ -381,13 +486,25 @@ impl RelayFeePolicy {
         let t = cfg.params.get("relay_fee").and_then(|v| v.as_table());
         let mut min_microalgo_value = HashMap::new();
         if let Some(v) = t.and_then(|t| t.get("min_microalgo_value")) {
-            let table = v.as_table().ok_or_else(|| anyhow!("params.relay_fee.min_microalgo_value must be a table of token app id = µALGO"))?;
+            let table = v.as_table().ok_or_else(|| {
+                anyhow!(
+                    "params.relay_fee.min_microalgo_value must be a table of token app id = µALGO"
+                )
+            })?;
             for (k, n) in table {
-                let id = app_id_str(k).ok().filter(|id| tokens.contains(id))
-                    .ok_or_else(|| anyhow!("params.relay_fee.min_microalgo_value.{k}: not a configured token"))?;
+                let id = app_id_str(k)
+                    .ok()
+                    .filter(|id| tokens.contains(id))
+                    .ok_or_else(|| {
+                        anyhow!("params.relay_fee.min_microalgo_value.{k}: not a configured token")
+                    })?;
                 let price = match n {
                     toml::Value::Integer(i) => u128::try_from(*i).ok(),
-                    toml::Value::String(s) if !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit()) => s.parse().ok(),
+                    toml::Value::String(s)
+                        if !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit()) =>
+                    {
+                        s.parse().ok()
+                    }
                     _ => None,
                 };
                 let price = price.ok_or_else(|| anyhow!("params.relay_fee.min_microalgo_value.{k} must be a non-negative integer, not {n}"))?;
@@ -396,7 +513,9 @@ impl RelayFeePolicy {
         }
         let mut targets = BTreeMap::new();
         if let Some(v) = t.and_then(|t| t.get("targets")) {
-            let table = v.as_table().ok_or_else(|| anyhow!("params.relay_fee.targets must be a table of app id = [method signatures]"))?;
+            let table = v.as_table().ok_or_else(|| {
+                anyhow!("params.relay_fee.targets must be a table of app id = [method signatures]")
+            })?;
             for (k, ms) in table {
                 let id = app_id_str(k).context("params.relay_fee.targets")?;
                 if all.contains(&id) {
@@ -411,18 +530,35 @@ impl RelayFeePolicy {
                 targets.insert(id, sels);
             }
         }
-        Ok(Self { tokens, account_app, mandate_app, dex_app, router, params, min_microalgo_value, targets })
+        Ok(Self {
+            tokens,
+            account_app,
+            mandate_app,
+            dex_app,
+            router,
+            params,
+            min_microalgo_value,
+            targets,
+        })
     }
 
     /// Every app address of the deployment: never a payee (rules 12 / 15: the DEX holds a permanent box per token, the
     /// mandate only through an open, the router and the tokens strand what they get).
     fn app_addresses(&self) -> Vec<[u8; 32]> {
-        self.tokens.iter().copied().chain([self.account_app]).chain(self.mandate_app).chain(self.dex_app).chain(self.router)
-            .map(app_address).collect()
+        self.tokens
+            .iter()
+            .copied()
+            .chain([self.account_app])
+            .chain(self.mandate_app)
+            .chain(self.dex_app)
+            .chain(self.router)
+            .map(app_address)
+            .collect()
     }
 
     fn never_paid(&self, exec: Option<&Executor>, h: &Holder) -> bool {
-        h.kind == KIND_ADDRESS && (self.app_addresses().contains(&h.id) || exec.is_some_and(|e| e.address == h.id))
+        h.kind == KIND_ADDRESS
+            && (self.app_addresses().contains(&h.id) || exec.is_some_and(|e| e.address == h.id))
     }
 }
 
@@ -430,9 +566,15 @@ impl RelayFeePolicy {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Entry {
     Pay,
-    PayMeta { salt: [u8; 32], meta: Vec<u8> },
+    PayMeta {
+        salt: [u8; 32],
+        meta: Vec<u8>,
+    },
     /// The router group's target: app id and application arguments (arg 0 = the selector), bound by `ref`.
-    Fee { target_app: u64, args: Vec<Vec<u8>> },
+    Fee {
+        target_app: u64,
+        args: Vec<Vec<u8>>,
+    },
 }
 
 fn hex_field(v: &Value, what: &str) -> Result<Vec<u8>> {
@@ -455,15 +597,27 @@ fn bound(op: &MetaOp, r: &[u8; 32], o: &Value) -> Result<()> {
 /// its executor derived (`start_check`), the payment bound to exactly this call with the router as relayer, rule 13
 /// (no app 0, not the router, no `add_key_native`), the target and its method allowed. Never pays an app of the
 /// deployment or the executor (only the router itself, as the open-mode marker of a relay-fee payment).
-pub fn entry(policy: &RelayFeePolicy, exec: Option<&Executor>, op: &MetaOp, o: &Value) -> Result<Entry> {
+pub fn entry(
+    policy: &RelayFeePolicy,
+    exec: Option<&Executor>,
+    op: &MetaOp,
+    o: &Value,
+) -> Result<Entry> {
     let kind = crate::adapter::op_kind(o, &crate::adapter::PAY_KINDS)?;
-    let open = policy.router.is_some_and(|r| op.to == Holder::addr(app_address(r)));
+    let open = policy
+        .router
+        .is_some_and(|r| op.to == Holder::addr(app_address(r)));
     if policy.never_paid(exec, &op.to) && !(kind == Some("relay_fee") && open) {
-        bail!("never pay {} (an app of the deployment or the executor): the funds would be stranded", op.to.display());
+        bail!(
+            "never pay {} (an app of the deployment or the executor): the funds would be stranded",
+            op.to.display()
+        );
     }
     match kind {
         Some("pay_meta") => {
-            let salt: [u8; 32] = hex_field(&o["salt"], "salt")?.try_into().map_err(|_| anyhow!("op.salt is 32 bytes"))?;
+            let salt: [u8; 32] = hex_field(&o["salt"], "salt")?
+                .try_into()
+                .map_err(|_| anyhow!("op.salt is 32 bytes"))?;
             let meta = hex_field(&o["meta"], "meta")?;
             let cap = MAX_PAY_META_BYTES.min(policy.params.max_pay_meta_bytes);
             if meta.len() > cap {
@@ -472,7 +626,9 @@ pub fn entry(policy: &RelayFeePolicy, exec: Option<&Executor>, op: &MetaOp, o: &
             }
             let id = meta_pay_id(&salt, &meta);
             if op.pay_ref != id || op.lane != pay_lane(&id) || op.nonce != 0 {
-                bail!("pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane / 0");
+                bail!(
+                    "pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane / 0"
+                );
             }
             Ok(Entry::PayMeta { salt, meta })
         }
@@ -483,19 +639,36 @@ pub fn entry(policy: &RelayFeePolicy, exec: Option<&Executor>, op: &MetaOp, o: &
 
 const EXTRA_KEYS: [&str; 5] = ["call", "accounts", "apps", "boxes", "carries"];
 
-fn fee_entry(policy: &RelayFeePolicy, exec: Option<&Executor>, op: &MetaOp, o: &Value) -> Result<Entry> {
-    let router = policy.router.ok_or_else(|| anyhow!("relay-fee jobs need params.relayfee_app"))?;
-    let exec = exec.ok_or_else(|| anyhow!("the router's executor is not derived yet (start_check)"))?;
-    let extra = o["extra"].as_object().ok_or_else(|| anyhow!("op.extra must be an object with call"))?;
+fn fee_entry(
+    policy: &RelayFeePolicy,
+    exec: Option<&Executor>,
+    op: &MetaOp,
+    o: &Value,
+) -> Result<Entry> {
+    let router = policy
+        .router
+        .ok_or_else(|| anyhow!("relay-fee jobs need params.relayfee_app"))?;
+    let exec =
+        exec.ok_or_else(|| anyhow!("the router's executor is not derived yet (start_check)"))?;
+    let extra = o["extra"]
+        .as_object()
+        .ok_or_else(|| anyhow!("op.extra must be an object with call"))?;
     if let Some(k) = extra.keys().find(|k| !EXTRA_KEYS.contains(&k.as_str())) {
-        bail!("op.extra.{k} is not a relay-fee key ({}): the target call is always NoOp", EXTRA_KEYS.join(", "));
+        bail!(
+            "op.extra.{k} is not a relay-fee key ({}): the target call is always NoOp",
+            EXTRA_KEYS.join(", ")
+        );
     }
     if op.relayer != app_address(router) {
         bail!("the payment's relayer is not the router {router}'s address");
     }
     let call = hex_field(&o["extra"]["call"], "extra.call")?;
     let (target, args) = parse_router_call(&call)?;
-    bound(op, &relay_ref(&op.network, &app_address(target), &call, &op.extra), o)?;
+    bound(
+        op,
+        &relay_ref(&op.network, &app_address(target), &call, &op.extra),
+        o,
+    )?;
     if target == 0 {
         bail!("relay-fee target app 0 (an app create) is refused (rule 13)");
     }
@@ -519,7 +692,10 @@ fn fee_entry(policy: &RelayFeePolicy, exec: Option<&Executor>, op: &MetaOp, o: &
     if op.to == Holder::addr(exec.address) {
         bail!("the executor is never paid");
     }
-    Ok(Entry::Fee { target_app: target, args })
+    Ok(Entry::Fee {
+        target_app: target,
+        args,
+    })
 }
 
 /// The SCaaS apps a router job may target and their relayable entries (`n` ABI arguments; the signed op at `op`).
@@ -540,29 +716,128 @@ pub struct Method {
 }
 
 const METHODS: &[Method] = &[
-    Method { app: App::Token, name: "mtx_pay", params: "OP,byte[],address", n: 3 },
-    Method { app: App::Token, name: "mtx_pay_meta", params: "OP,byte[],byte[32],byte[]", n: 4 },
-    Method { app: App::Token, name: "mtx_transfer", params: "OP,byte[]", n: 2 },
-    Method { app: App::Token, name: "mtx_execute_transfer", params: "OP,byte[]", n: 2 },
-    Method { app: App::Token, name: "mtx_cancel", params: "OP,byte[],byte[32],uint64", n: 4 },
-    Method { app: App::Token, name: "mtx_invalidate_nonces", params: "OP,byte[],byte[32],uint64", n: 4 },
-    Method { app: App::Account, name: "mtx_add_key", params: "OP,byte[],(uint16,byte[]),byte[]", n: 4 },
-    Method { app: App::Account, name: "mtx_remove_key", params: "OP,byte[],(uint16,byte[])", n: 3 },
-    Method { app: App::Account, name: "mtx_add_origin", params: "OP,byte[],byte[]", n: 3 },
-    Method { app: App::Account, name: "mtx_remove_origin", params: "OP,byte[],byte[]", n: 3 },
-    Method { app: App::Account, name: "mtx_set_guardian", params: "OP,byte[],(uint8,byte[32])", n: 3 },
-    Method { app: App::Account, name: "mtx_set_policy", params: "OP,byte[],uint8", n: 3 },
-    Method { app: App::Account, name: "mtx_start_recovery", params: "OP,byte[],(uint16,byte[]),byte[]", n: 4 },
-    Method { app: App::Account, name: "mtx_finish_recovery", params: "OP,byte[]", n: 2 },
-    Method { app: App::Account, name: "mtx_cancel_recovery", params: "OP,byte[]", n: 2 },
-    Method { app: App::Mandate, name: "mtx_mandate_open", params: "uint64,OP,byte[],TERMS,uint64", n: 5 },
-    Method { app: App::Mandate, name: "mtx_mandate_pay", params: "uint64,OP,byte[]", n: 3 },
-    Method { app: App::Mandate, name: "mtx_revoke", params: "uint64,OP,byte[]", n: 3 },
-    Method { app: App::Dex, name: "settle", params: "ORDER,OP,byte[],ORDER,OP,byte[],uint64[4]", n: 7 },
+    Method {
+        app: App::Token,
+        name: "mtx_pay",
+        params: "OP,byte[],address",
+        n: 3,
+    },
+    Method {
+        app: App::Token,
+        name: "mtx_pay_meta",
+        params: "OP,byte[],byte[32],byte[]",
+        n: 4,
+    },
+    Method {
+        app: App::Token,
+        name: "mtx_transfer",
+        params: "OP,byte[]",
+        n: 2,
+    },
+    Method {
+        app: App::Token,
+        name: "mtx_execute_transfer",
+        params: "OP,byte[]",
+        n: 2,
+    },
+    Method {
+        app: App::Token,
+        name: "mtx_cancel",
+        params: "OP,byte[],byte[32],uint64",
+        n: 4,
+    },
+    Method {
+        app: App::Token,
+        name: "mtx_invalidate_nonces",
+        params: "OP,byte[],byte[32],uint64",
+        n: 4,
+    },
+    Method {
+        app: App::Account,
+        name: "mtx_add_key",
+        params: "OP,byte[],(uint16,byte[]),byte[]",
+        n: 4,
+    },
+    Method {
+        app: App::Account,
+        name: "mtx_remove_key",
+        params: "OP,byte[],(uint16,byte[])",
+        n: 3,
+    },
+    Method {
+        app: App::Account,
+        name: "mtx_add_origin",
+        params: "OP,byte[],byte[]",
+        n: 3,
+    },
+    Method {
+        app: App::Account,
+        name: "mtx_remove_origin",
+        params: "OP,byte[],byte[]",
+        n: 3,
+    },
+    Method {
+        app: App::Account,
+        name: "mtx_set_guardian",
+        params: "OP,byte[],(uint8,byte[32])",
+        n: 3,
+    },
+    Method {
+        app: App::Account,
+        name: "mtx_set_policy",
+        params: "OP,byte[],uint8",
+        n: 3,
+    },
+    Method {
+        app: App::Account,
+        name: "mtx_start_recovery",
+        params: "OP,byte[],(uint16,byte[]),byte[]",
+        n: 4,
+    },
+    Method {
+        app: App::Account,
+        name: "mtx_finish_recovery",
+        params: "OP,byte[]",
+        n: 2,
+    },
+    Method {
+        app: App::Account,
+        name: "mtx_cancel_recovery",
+        params: "OP,byte[]",
+        n: 2,
+    },
+    Method {
+        app: App::Mandate,
+        name: "mtx_mandate_open",
+        params: "uint64,OP,byte[],TERMS,uint64",
+        n: 5,
+    },
+    Method {
+        app: App::Mandate,
+        name: "mtx_mandate_pay",
+        params: "uint64,OP,byte[]",
+        n: 3,
+    },
+    Method {
+        app: App::Mandate,
+        name: "mtx_revoke",
+        params: "uint64,OP,byte[]",
+        n: 3,
+    },
+    Method {
+        app: App::Dex,
+        name: "settle",
+        params: "ORDER,OP,byte[],ORDER,OP,byte[],uint64[4]",
+        n: 7,
+    },
 ];
 
 fn sig_of(m: &Method) -> String {
-    let p = m.params.replace("OP", METAOP_ABI).replace("TERMS", TERMS_ABI).replace("ORDER", ORDER_ABI);
+    let p = m
+        .params
+        .replace("OP", METAOP_ABI)
+        .replace("TERMS", TERMS_ABI)
+        .replace("ORDER", ORDER_ABI);
     format!("{}({p})void", m.name)
 }
 
@@ -584,7 +859,13 @@ fn scaas_method(policy: &RelayFeePolicy, target: u64, sel: &[u8]) -> Option<(App
     } else {
         return None;
     };
-    Some((app, method_sels().iter().find(|(s, m)| m.app == app && s[..] == *sel).map(|(_, m)| *m)))
+    Some((
+        app,
+        method_sels()
+            .iter()
+            .find(|(s, m)| m.app == app && s[..] == *sel)
+            .map(|(_, m)| *m),
+    ))
 }
 
 /// A relay-fee job's resource references for the target (`op.extra.accounts` addresses, `apps` app ids, `boxes` = [{app
@@ -597,7 +878,8 @@ pub struct Refs {
 }
 
 fn json_u64(v: &Value) -> Option<u64> {
-    v.as_u64().or_else(|| v.as_str().and_then(|s| app_id_str(s).ok()))
+    v.as_u64()
+        .or_else(|| v.as_str().and_then(|s| app_id_str(s).ok()))
 }
 
 pub fn job_refs(o: &Value) -> Result<(Refs, Vec<Vec<u8>>)> {
@@ -609,19 +891,47 @@ pub fn job_refs(o: &Value) -> Result<(Refs, Vec<Vec<u8>>)> {
             v => bail!("op.extra.{k} must be a list, not {v}"),
         }
     };
-    let accounts = list("accounts")?.iter().map(|a| crate::addresses::algorand_key(a.as_str().unwrap_or_default()).context("op.extra.accounts"))
+    let accounts = list("accounts")?
+        .iter()
+        .map(|a| {
+            crate::addresses::algorand_key(a.as_str().unwrap_or_default())
+                .context("op.extra.accounts")
+        })
         .collect::<Result<Vec<_>>>()?;
-    let apps = list("apps")?.iter().map(|a| json_u64(a).ok_or_else(|| anyhow!("op.extra.apps: {a} is not an app id"))).collect::<Result<Vec<_>>>()?;
-    let boxes = list("boxes")?.iter().map(|b| {
-        let app = json_u64(&b["app"]).or_else(|| (b["app"] == json!(0)).then_some(0)).ok_or_else(|| anyhow!("op.extra.boxes: {b} has no app"))?;
-        let name = hex_field(&b["name"], "extra.boxes.name")?;
-        ensure!(name.len() <= 64, "op.extra.boxes: a box name is at most 64 bytes");
-        Ok((app, name))
-    }).collect::<Result<Vec<_>>>()?;
-    let carries = list("carries")?.iter().map(|c| hex_field(c, "extra.carries")).collect::<Result<Vec<_>>>()?;
-    ensure!(accounts.len() <= 4 && accounts.len() + apps.len() + boxes.len() <= 8,
-            "op.extra: at most 4 accounts and 8 references in all on the target transaction");
-    Ok((Refs { accounts, apps, boxes }, carries))
+    let apps = list("apps")?
+        .iter()
+        .map(|a| json_u64(a).ok_or_else(|| anyhow!("op.extra.apps: {a} is not an app id")))
+        .collect::<Result<Vec<_>>>()?;
+    let boxes = list("boxes")?
+        .iter()
+        .map(|b| {
+            let app = json_u64(&b["app"])
+                .or_else(|| (b["app"] == json!(0)).then_some(0))
+                .ok_or_else(|| anyhow!("op.extra.boxes: {b} has no app"))?;
+            let name = hex_field(&b["name"], "extra.boxes.name")?;
+            ensure!(
+                name.len() <= 64,
+                "op.extra.boxes: a box name is at most 64 bytes"
+            );
+            Ok((app, name))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let carries = list("carries")?
+        .iter()
+        .map(|c| hex_field(c, "extra.carries"))
+        .collect::<Result<Vec<_>>>()?;
+    ensure!(
+        accounts.len() <= 4 && accounts.len() + apps.len() + boxes.len() <= 8,
+        "op.extra: at most 4 accounts and 8 references in all on the target transaction"
+    );
+    Ok((
+        Refs {
+            accounts,
+            apps,
+            boxes,
+        },
+        carries,
+    ))
 }
 
 /// What the target of a router job signs and moves, read off its arguments.
@@ -650,35 +960,87 @@ fn margin(vu: u64, now: u64, what: &str) -> Result<()> {
 /// settle's orders are open or bound to this lane (the router's sender is the submitter), on configured tokens, valid ≥
 /// 120 s, and its empty auths are exactly the job's carries. A listed third-party target is the operator's.
 #[allow(clippy::too_many_arguments)]
-pub fn target_check(policy: &RelayFeePolicy, exec: &Executor, pay: &MetaOp, target: u64, args: &[Vec<u8>], lane: &[u8; 32], carries: usize,
-                    now: u64) -> Result<TargetInfo> {
-    let sel = args.first().ok_or_else(|| anyhow!("a target call without a selector"))?;
+pub fn target_check(
+    policy: &RelayFeePolicy,
+    exec: &Executor,
+    pay: &MetaOp,
+    target: u64,
+    args: &[Vec<u8>],
+    lane: &[u8; 32],
+    carries: usize,
+    now: u64,
+) -> Result<TargetInfo> {
+    let sel = args
+        .first()
+        .ok_or_else(|| anyhow!("a target call without a selector"))?;
     let Some((app, m)) = scaas_method(policy, target, sel) else {
         ensure!(carries == 0, "carries are for a DEX settle only");
-        return Ok(TargetInfo { app: None, method: "listed", ops: vec![], signers: vec![], dex_mbr: 0 });
+        return Ok(TargetInfo {
+            app: None,
+            method: "listed",
+            ops: vec![],
+            signers: vec![],
+            dex_mbr: 0,
+        });
     };
     let m = m.ok_or_else(|| anyhow!("{target} is not called with one of its relayable entries"))?;
-    ensure!(m.n + 1 == args.len(), "{target} is not called with one of its relayable entries");
-    ensure!(app == App::Dex || carries == 0, "carries are for a DEX settle only");
+    ensure!(
+        m.n + 1 == args.len(),
+        "{target} is not called with one of its relayable entries"
+    );
+    ensure!(
+        app == App::Dex || carries == 0,
+        "carries are for a DEX settle only"
+    );
     let signed = |at: usize, contract: [u8; 32], relayer: [u8; 32]| -> Result<(MetaOp, Vec<u8>)> {
         let op = MetaOp::from_arc4(&args[at]).with_context(|| format!("{} op", m.name))?;
-        ensure!(op.network == pay.network, "{}: the target op is for another network", m.name);
-        ensure!(op.contract == contract, "{}: the target op's contract is not app {target}'s", m.name);
-        ensure!(op.relayer == relayer, "{}: the target op's relayer must be {} (the executor sends it)", m.name,
-                if relayer == [0; 32] { "zero".to_string() } else { algorand_address(&relayer) });
+        ensure!(
+            op.network == pay.network,
+            "{}: the target op is for another network",
+            m.name
+        );
+        ensure!(
+            op.contract == contract,
+            "{}: the target op's contract is not app {target}'s",
+            m.name
+        );
+        ensure!(
+            op.relayer == relayer,
+            "{}: the target op's relayer must be {} (the executor sends it)",
+            m.name,
+            if relayer == [0; 32] {
+                "zero".to_string()
+            } else {
+                algorand_address(&relayer)
+            }
+        );
         margin(op.valid_until, now, &format!("{}'s op", m.name))?;
         Ok((op, un_abi_bytes(&args[at + 1])?.to_vec()))
     };
     let value = |op: &MetaOp| -> Result<()> {
-        ensure!(!policy.never_paid(Some(exec), &op.to), "{}: never pay {} (an app of the deployment or the executor)", m.name, op.to.display());
+        ensure!(
+            !policy.never_paid(Some(exec), &op.to),
+            "{}: never pay {} (an app of the deployment or the executor)",
+            m.name,
+            op.to.display()
+        );
         Ok(())
     };
     let me = app_address(target);
-    let mut info = TargetInfo { app: Some(app), method: m.name, ops: vec![], signers: vec![], dex_mbr: 0 };
+    let mut info = TargetInfo {
+        app: Some(app),
+        method: m.name,
+        ops: vec![],
+        signers: vec![],
+        dex_mbr: 0,
+    };
     match app {
         App::Token | App::Account => {
             let (op, auth) = signed(1, me, [0; 32])?;
-            if matches!(m.name, "mtx_pay" | "mtx_pay_meta" | "mtx_transfer" | "mtx_execute_transfer") {
+            if matches!(
+                m.name,
+                "mtx_pay" | "mtx_pay_meta" | "mtx_transfer" | "mtx_execute_transfer"
+            ) {
                 value(&op)?;
             }
             info.signers.push(op.from);
@@ -686,16 +1048,26 @@ pub fn target_check(policy: &RelayFeePolicy, exec: &Executor, pay: &MetaOp, targ
         }
         App::Mandate => {
             let token = be_u64(&args[1])?;
-            ensure!(policy.tokens.contains(&token), "{}: token {token} is not a configured token", m.name);
+            ensure!(
+                policy.tokens.contains(&token),
+                "{}: token {token} is not a configured token",
+                m.name
+            );
             let mandate = app_address(target);
             if m.name == "mtx_mandate_open" {
                 let (op, auth) = signed(2, app_address(token), mandate)?;
-                ensure!(op.to == Holder::addr(mandate), "mtx_mandate_open: the funding pays the mandate app");
+                ensure!(
+                    op.to == Holder::addr(mandate),
+                    "mtx_mandate_open: the funding pays the mandate app"
+                );
                 let terms = &args[4];
                 ensure!(terms.len() == 130, "mtx_mandate_open: terms are 130 bytes");
                 margin(be_u64(&terms[106..114])?, now, "the mandate")?;
                 // fix 1 (c): the mandate's payee is held to the never-pay rule
-                value(&MetaOp { to: Holder::read(&terms[33..66])?, ..op.clone() })?;
+                value(&MetaOp {
+                    to: Holder::read(&terms[33..66])?,
+                    ..op.clone()
+                })?;
                 be_u64(&args[5])?;
                 info.signers.push(op.from);
                 info.ops.push((op, auth));
@@ -717,9 +1089,15 @@ pub fn target_check(policy: &RelayFeePolicy, exec: &Executor, pay: &MetaOp, targ
                 let order = &args[o];
                 ensure!(order.len() == 88, "settle: an order is 88 bytes");
                 let (sell, buy) = (be_u64(&order[..8])?, be_u64(&order[8..16])?);
-                ensure!(policy.tokens.contains(&sell) && policy.tokens.contains(&buy), "settle: order tokens {sell} / {buy} are not both configured");
+                ensure!(
+                    policy.tokens.contains(&sell) && policy.tokens.contains(&buy),
+                    "settle: order tokens {sell} / {buy} are not both configured"
+                );
                 let relayer = arr32(&order[48..80])?;
-                ensure!(relayer == [0; 32] || relayer == *lane, "settle: an order is bound to another relayer");
+                ensure!(
+                    relayer == [0; 32] || relayer == *lane,
+                    "settle: an order is bound to another relayer"
+                );
                 margin(be_u64(&order[80..88])?, now, "a settle's order")?;
                 let (op, auth) = signed(at, app_address(sell), dex)?;
                 ensure!(op.to == Holder::addr(dex), "settle: a leg pays the DEX");
@@ -729,10 +1107,15 @@ pub fn target_check(policy: &RelayFeePolicy, exec: &Executor, pay: &MetaOp, targ
                 info.signers.push(op.from);
                 info.ops.push((op, auth));
             }
-            ensure!(empty == carries, "settle: {empty} carried auth(s) in the call, {carries} in op.extra.carries");
+            ensure!(
+                empty == carries,
+                "settle: {empty} carried auth(s) in the call, {carries} in op.extra.carries"
+            );
             let mbr = &args[7];
             ensure!(mbr.len() == 32, "settle: mbr is uint64[4]");
-            info.dex_mbr = mbr.chunks(8).try_fold(0u64, |s, c| be_u64(c).ok().and_then(|x| s.checked_add(x)))
+            info.dex_mbr = mbr
+                .chunks(8)
+                .try_fold(0u64, |s, c| be_u64(c).ok().and_then(|x| s.checked_add(x)))
                 .ok_or_else(|| anyhow!("settle: mbr parts overflow"))?;
         }
     }
@@ -755,9 +1138,13 @@ pub fn client_origin<'a>(cd: &'a [u8], d: &[u8; 32]) -> Option<&'a [u8]> {
     if origin.is_empty() || origin.len() > MAX_ORIGIN_LEN || origin.contains(&b'\\') {
         return None;
     }
-    let ok = t == b"}" || t == [CROSS, b"}"].concat()
-        || (t.len() > 22 && t.starts_with(&[CROSS, b","].concat()) && t.ends_with(b"}")
-            && !has(&t[20..], br#""topOrigin""#) && !has(&t[20..], br#""crossOrigin""#));
+    let ok = t == b"}"
+        || t == [CROSS, b"}"].concat()
+        || (t.len() > 22
+            && t.starts_with(&[CROSS, b","].concat())
+            && t.ends_with(b"}")
+            && !has(&t[20..], br#""topOrigin""#)
+            && !has(&t[20..], br#""crossOrigin""#));
     ok.then_some(origin)
 }
 
@@ -767,9 +1154,16 @@ pub fn auth_origins(auth: &[u8], digest: &[u8; 32]) -> Result<Vec<[u8; 32]>> {
     let passkey = |a: &[u8]| -> Result<[u8; 32]> {
         ensure!(a.len() >= 131, "passkey auth length");
         let n = u16::from_be_bytes([a[129], a[130]]) as usize;
-        let cd = a.get(131 + n..).ok_or_else(|| anyhow!("passkey authenticatorData truncated"))?;
-        ensure!(n <= PASSKEY_FIELD_MAX && cd.len() <= PASSKEY_FIELD_MAX, "passkey clientDataJSON / authenticatorData over 1024 bytes");
-        let o = client_origin(cd, digest).ok_or_else(|| anyhow!("passkey clientDataJSON is not in the account app's grammar for this op"))?;
+        let cd = a
+            .get(131 + n..)
+            .ok_or_else(|| anyhow!("passkey authenticatorData truncated"))?;
+        ensure!(
+            n <= PASSKEY_FIELD_MAX && cd.len() <= PASSKEY_FIELD_MAX,
+            "passkey clientDataJSON / authenticatorData over 1024 bytes"
+        );
+        let o = client_origin(cd, digest).ok_or_else(|| {
+            anyhow!("passkey clientDataJSON is not in the account app's grammar for this op")
+        })?;
         Ok(sha256(o))
     };
     Ok(match auth.first() {
@@ -780,8 +1174,13 @@ pub fn auth_origins(auth: &[u8], digest: &[u8; 32]) -> Result<Vec<[u8; 32]>> {
             let mut out = Vec::new();
             ensure!(at <= auth.len(), "msig key data truncated");
             while at < auth.len() {
-                let len = auth.get(at + 1..at + 3).map(|x| u16::from_be_bytes([x[0], x[1]]) as usize).ok_or_else(|| anyhow!("msig member truncated"))?;
-                let a = auth.get(at + 3..at + 3 + len).ok_or_else(|| anyhow!("msig member truncated"))?;
+                let len = auth
+                    .get(at + 1..at + 3)
+                    .map(|x| u16::from_be_bytes([x[0], x[1]]) as usize)
+                    .ok_or_else(|| anyhow!("msig member truncated"))?;
+                let a = auth
+                    .get(at + 3..at + 3 + len)
+                    .ok_or_else(|| anyhow!("msig member truncated"))?;
                 if a.first() == Some(&3) && a.len() != 64 {
                     let o = passkey(a)?;
                     if !out.contains(&o) {
@@ -798,16 +1197,31 @@ pub fn auth_origins(auth: &[u8], digest: &[u8; 32]) -> Result<Vec<[u8; 32]>> {
 
 /// The record growth (bytes) of an own key op (`mtx_add_key` … `mtx_cancel_recovery` except the recovery pair) on a
 /// record of `len` bytes holding the origin hashes `origins` (`old` = its stored length, `None` = not stored yet).
-pub fn key_op_delta(args: &[Vec<u8>], old: Option<usize>, len: usize, origins: &[[u8; 32]]) -> Result<i64> {
-    let m = method_sels().iter().find(|(s, m)| m.app == App::Account && args.first().is_some_and(|a| s[..] == a[..])).map(|(_, m)| m.name)
+pub fn key_op_delta(
+    args: &[Vec<u8>],
+    old: Option<usize>,
+    len: usize,
+    origins: &[[u8; 32]],
+) -> Result<i64> {
+    let m = method_sels()
+        .iter()
+        .find(|(s, m)| m.app == App::Account && args.first().is_some_and(|a| s[..] == a[..]))
+        .map(|(_, m)| m.name)
         .ok_or_else(|| anyhow!("not an account key op"))?;
     let origin = |b: &[u8]| -> Result<i64> {
         let o = un_abi_bytes(b)?;
-        Ok(if o.is_empty() || origins.contains(&sha256(o)) { 0 } else { 32 })
+        Ok(if o.is_empty() || origins.contains(&sha256(o)) {
+            0
+        } else {
+            32
+        })
     };
     let grow: i64 = match m {
         "mtx_add_key" => 32 + origin(args.get(4).ok_or_else(|| anyhow!("mtx_add_key origin"))?)?,
-        "mtx_add_origin" => origin(args.get(3).ok_or_else(|| anyhow!("mtx_add_origin origin"))?)?,
+        "mtx_add_origin" => origin(
+            args.get(3)
+                .ok_or_else(|| anyhow!("mtx_add_origin origin"))?,
+        )?,
         "mtx_remove_key" | "mtx_remove_origin" => -32,
         "mtx_set_guardian" | "mtx_set_policy" | "mtx_cancel_recovery" => 0,
         other => bail!("{other} is not an own key op"),
@@ -828,11 +1242,26 @@ fn box_delta(old: Option<usize>, new: usize) -> i64 {
 /// estimated time (`ts_last` at `last_round`, then `secs` per `rounds` as measured from algod's block timestamps) is
 /// past `valid_until` (seconds). Fix 1 (b): no measured round time (fewer than two sampled rounds, or equal timestamps)
 /// is an error, never an assumed figure.
-pub fn last_valid(first: u64, last_round: u64, ts_last: u64, rounds: u64, secs: u64, valid_until: u64) -> Result<u64> {
-    ensure!(valid_until >= ts_last, "valid_until {valid_until} is before the last block's time {ts_last}");
-    ensure!(secs > 0 && rounds > 0, "no measured round time ({rounds} rounds in {secs} s): never assumed");
+pub fn last_valid(
+    first: u64,
+    last_round: u64,
+    ts_last: u64,
+    rounds: u64,
+    secs: u64,
+    valid_until: u64,
+) -> Result<u64> {
+    ensure!(
+        valid_until >= ts_last,
+        "valid_until {valid_until} is before the last block's time {ts_last}"
+    );
+    ensure!(
+        secs > 0 && rounds > 0,
+        "no measured round time ({rounds} rounds in {secs} s): never assumed"
+    );
     let ahead = u128::from(valid_until - ts_last) * u128::from(rounds) / u128::from(secs);
-    let lv = first.saturating_add(MAX_TXN_LIFE).min(last_round.saturating_add(u64::try_from(ahead).unwrap_or(u64::MAX)));
+    let lv = first
+        .saturating_add(MAX_TXN_LIFE)
+        .min(last_round.saturating_add(u64::try_from(ahead).unwrap_or(u64::MAX)));
     ensure!(lv >= first, "the payload expires before round {first}");
     Ok(lv)
 }
@@ -858,7 +1287,10 @@ impl Mp {
 
     pub fn get(&self, k: &str) -> Option<&Mp> {
         match self {
-            Mp::Map(m) => m.iter().find(|(x, _)| matches!(x, Mp::Str(s) if s == k.as_bytes())).map(|(_, v)| v),
+            Mp::Map(m) => m
+                .iter()
+                .find(|(x, _)| matches!(x, Mp::Str(s) if s == k.as_bytes()))
+                .map(|(_, v)| v),
             _ => None,
         }
     }
@@ -984,7 +1416,16 @@ struct MpReader<'a> {
 
 impl<'a> MpReader<'a> {
     fn take(&mut self, n: usize) -> Result<&'a [u8]> {
-        let s = self.b.get(self.at..self.at.checked_add(n).ok_or_else(|| anyhow!("msgpack length overflow"))?).ok_or_else(|| anyhow!("msgpack truncated"))?;
+        let s = self
+            .b
+            .get(
+                self.at
+                    ..self
+                        .at
+                        .checked_add(n)
+                        .ok_or_else(|| anyhow!("msgpack length overflow"))?,
+            )
+            .ok_or_else(|| anyhow!("msgpack truncated"))?;
         self.at += n;
         Ok(s)
     }
@@ -1032,13 +1473,25 @@ impl<'a> MpReader<'a> {
     }
 
     fn arr(&mut self, len: usize, depth: u32) -> Result<Mp> {
-        ensure!(len <= self.b.len() - self.at, "msgpack array longer than its bytes");
-        (0..len).map(|_| self.read(depth + 1)).collect::<Result<_>>().map(Mp::Arr)
+        ensure!(
+            len <= self.b.len() - self.at,
+            "msgpack array longer than its bytes"
+        );
+        (0..len)
+            .map(|_| self.read(depth + 1))
+            .collect::<Result<_>>()
+            .map(Mp::Arr)
     }
 
     fn map(&mut self, len: usize, depth: u32) -> Result<Mp> {
-        ensure!(len <= self.b.len() - self.at, "msgpack map longer than its bytes");
-        (0..len).map(|_| Ok((self.read(depth + 1)?, self.read(depth + 1)?))).collect::<Result<_>>().map(Mp::Map)
+        ensure!(
+            len <= self.b.len() - self.at,
+            "msgpack map longer than its bytes"
+        );
+        (0..len)
+            .map(|_| Ok((self.read(depth + 1)?, self.read(depth + 1)?)))
+            .collect::<Result<_>>()
+            .map(Mp::Map)
     }
 }
 
@@ -1046,7 +1499,11 @@ impl<'a> MpReader<'a> {
 pub fn mp_decode(b: &[u8]) -> Result<Mp> {
     let mut r = MpReader { b, at: 0 };
     let v = r.read(0)?;
-    ensure!(r.at == b.len(), "{} bytes after the msgpack value", b.len() - r.at);
+    ensure!(
+        r.at == b.len(),
+        "{} bytes after the msgpack value",
+        b.len() - r.at
+    );
     Ok(v)
 }
 
@@ -1056,18 +1513,40 @@ pub fn mp_decode(b: &[u8]) -> Result<Mp> {
 /// target) the executor. `boxes` = (foreign-app index, name), index 0 = the called app. Always NoOp.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Tx {
-    Pay { to: [u8; 32], amount: u64 },
-    Call { app: u64, args: Vec<Vec<u8>>, accounts: Vec<[u8; 32]>, apps: Vec<u64>, boxes: Vec<(u64, Vec<u8>)>, executor: bool },
+    Pay {
+        to: [u8; 32],
+        amount: u64,
+    },
+    Call {
+        app: u64,
+        args: Vec<Vec<u8>>,
+        accounts: Vec<[u8; 32]>,
+        apps: Vec<u64>,
+        boxes: Vec<(u64, Vec<u8>)>,
+        executor: bool,
+    },
 }
 
 impl Tx {
     fn call(app: u64, args: Vec<Vec<u8>>) -> Self {
-        Tx::Call { app, args, accounts: vec![], apps: vec![], boxes: vec![], executor: false }
+        Tx::Call {
+            app,
+            args,
+            accounts: vec![],
+            apps: vec![],
+            boxes: vec![],
+            executor: false,
+        }
     }
 
     fn refs(&self) -> (usize, usize) {
         match self {
-            Tx::Call { accounts, apps, boxes, .. } => (accounts.len(), accounts.len() + apps.len() + boxes.len()),
+            Tx::Call {
+                accounts,
+                apps,
+                boxes,
+                ..
+            } => (accounts.len(), accounts.len() + apps.len() + boxes.len()),
             Tx::Pay { .. } => (0, 0),
         }
     }
@@ -1093,7 +1572,15 @@ fn k(s: &str) -> Mp {
 }
 
 /// The canonical transaction map (zero / empty fields omitted, as go-algorand's `omitempty`).
-fn txn_map(tx: &Tx, snd: &[u8; 32], fee: u64, fv: u64, lv: u64, chain: &Chain, grp: Option<&[u8; 32]>) -> Mp {
+fn txn_map(
+    tx: &Tx,
+    snd: &[u8; 32],
+    fee: u64,
+    fv: u64,
+    lv: u64,
+    chain: &Chain,
+    grp: Option<&[u8; 32]>,
+) -> Mp {
     let mut m = Vec::new();
     let int = |m: &mut Vec<(Mp, Mp)>, key: &str, n: u64| {
         if n != 0 {
@@ -1106,25 +1593,49 @@ fn txn_map(tx: &Tx, snd: &[u8; 32], fee: u64, fv: u64, lv: u64, chain: &Chain, g
             m.push((k("rcv"), Mp::Bin(to.to_vec())));
             m.push((k("type"), k("pay")));
         }
-        Tx::Call { app, args, accounts, apps, boxes, .. } => {
+        Tx::Call {
+            app,
+            args,
+            accounts,
+            apps,
+            boxes,
+            ..
+        } => {
             if !args.is_empty() {
-                m.push((k("apaa"), Mp::Arr(args.iter().map(|a| Mp::Bin(a.clone())).collect())));
+                m.push((
+                    k("apaa"),
+                    Mp::Arr(args.iter().map(|a| Mp::Bin(a.clone())).collect()),
+                ));
             }
             if !accounts.is_empty() {
-                m.push((k("apat"), Mp::Arr(accounts.iter().map(|a| Mp::Bin(a.to_vec())).collect())));
+                m.push((
+                    k("apat"),
+                    Mp::Arr(accounts.iter().map(|a| Mp::Bin(a.to_vec())).collect()),
+                ));
             }
             if !boxes.is_empty() {
-                m.push((k("apbx"), Mp::Arr(boxes.iter().map(|(i, n)| {
-                    let mut b = Vec::new();
-                    int(&mut b, "i", *i);
-                    if !n.is_empty() {
-                        b.push((k("n"), Mp::Bin(n.clone())));
-                    }
-                    Mp::Map(b)
-                }).collect())));
+                m.push((
+                    k("apbx"),
+                    Mp::Arr(
+                        boxes
+                            .iter()
+                            .map(|(i, n)| {
+                                let mut b = Vec::new();
+                                int(&mut b, "i", *i);
+                                if !n.is_empty() {
+                                    b.push((k("n"), Mp::Bin(n.clone())));
+                                }
+                                Mp::Map(b)
+                            })
+                            .collect(),
+                    ),
+                ));
             }
             if !apps.is_empty() {
-                m.push((k("apfa"), Mp::Arr(apps.iter().map(|a| Mp::Int(*a as i128)).collect())));
+                m.push((
+                    k("apfa"),
+                    Mp::Arr(apps.iter().map(|a| Mp::Int(*a as i128)).collect()),
+                ));
             }
             int(&mut m, "apid", *app);
             m.push((k("type"), k("appl")));
@@ -1151,31 +1662,64 @@ fn txid(txn: &Mp) -> [u8; 32] {
 
 /// `sha512_256("TG" ‖ msgpack({txlist}))`.
 pub fn group_id(ids: &[[u8; 32]]) -> [u8; 32] {
-    let list = Mp::Map(vec![(k("txlist"), Mp::Arr(ids.iter().map(|i| Mp::Bin(i.to_vec())).collect()))]);
+    let list = Mp::Map(vec![(
+        k("txlist"),
+        Mp::Arr(ids.iter().map(|i| Mp::Bin(i.to_vec())).collect()),
+    )]);
     sha512_256(&[b"TG", &mp_encode(&list)])
 }
 
 fn sender(tx: &Tx, lane: &[u8; 32], exec: Option<&Executor>) -> Result<[u8; 32]> {
     match tx {
-        Tx::Call { executor: true, .. } => exec.map(|e| e.address).ok_or_else(|| anyhow!("an executor call without the executor")),
+        Tx::Call { executor: true, .. } => exec
+            .map(|e| e.address)
+            .ok_or_else(|| anyhow!("an executor call without the executor")),
         _ => Ok(*lane),
     }
 }
 
-fn maps(g: &Group, chain: &Chain, fv: u64, lv: u64, lane: &[u8; 32], exec: Option<&Executor>, grp: Option<&[u8; 32]>) -> Result<Vec<Mp>> {
-    g.txs.iter().enumerate().map(|(i, t)| {
-        let fee = if i == g.main { g.fee } else { 0 };
-        Ok(txn_map(t, &sender(t, lane, exec)?, fee, fv, lv, chain, grp))
-    }).collect()
+fn maps(
+    g: &Group,
+    chain: &Chain,
+    fv: u64,
+    lv: u64,
+    lane: &[u8; 32],
+    exec: Option<&Executor>,
+    grp: Option<&[u8; 32]>,
+) -> Result<Vec<Mp>> {
+    g.txs
+        .iter()
+        .enumerate()
+        .map(|(i, t)| {
+            let fee = if i == g.main { g.fee } else { 0 };
+            Ok(txn_map(t, &sender(t, lane, exec)?, fee, fv, lv, chain, grp))
+        })
+        .collect()
 }
 
 /// The txids of the group's transactions before the group id is set (what the group id hashes).
-pub fn group_txids(g: &Group, chain: &Chain, fv: u64, lv: u64, lane: &[u8; 32], exec: Option<&Executor>) -> Vec<[u8; 32]> {
-    maps(g, chain, fv, lv, lane, exec, None).map(|m| m.iter().map(txid).collect()).unwrap_or_default()
+pub fn group_txids(
+    g: &Group,
+    chain: &Chain,
+    fv: u64,
+    lv: u64,
+    lane: &[u8; 32],
+    exec: Option<&Executor>,
+) -> Vec<[u8; 32]> {
+    maps(g, chain, fv, lv, lane, exec, None)
+        .map(|m| m.iter().map(txid).collect())
+        .unwrap_or_default()
 }
 
 /// The grouped maps (group id set) of the group's transactions.
-fn grouped(g: &Group, chain: &Chain, fv: u64, lv: u64, lane: &[u8; 32], exec: Option<&Executor>) -> Result<Vec<Mp>> {
+fn grouped(
+    g: &Group,
+    chain: &Chain,
+    fv: u64,
+    lv: u64,
+    lane: &[u8; 32],
+    exec: Option<&Executor>,
+) -> Result<Vec<Mp>> {
     let gid = (g.txs.len() > 1).then(|| group_id(&group_txids(g, chain, fv, lv, lane, exec)));
     maps(g, chain, fv, lv, lane, exec, gid.as_ref())
 }
@@ -1184,7 +1728,13 @@ fn signed_map(tx: &Tx, txn: Mp, sig: Option<Vec<u8>>, exec: Option<&Executor>) -
     Ok(match (tx, sig) {
         (Tx::Call { executor: true, .. }, _) => {
             let e = exec.ok_or_else(|| anyhow!("an executor call without the executor"))?;
-            Mp::Map(vec![(k("lsig"), Mp::Map(vec![(k("l"), Mp::Bin(e.program.clone()))])), (k("txn"), txn)])
+            Mp::Map(vec![
+                (
+                    k("lsig"),
+                    Mp::Map(vec![(k("l"), Mp::Bin(e.program.clone()))]),
+                ),
+                (k("txn"), txn),
+            ])
         }
         (_, Some(s)) => Mp::Map(vec![(k("sig"), Mp::Bin(s)), (k("txn"), txn)]),
         (_, None) => Mp::Map(vec![(k("txn"), txn)]),
@@ -1195,7 +1745,15 @@ pub type SignFn<'a> = dyn Fn(&[u8]) -> Result<Vec<u8>> + 'a;
 
 /// The group signed: the lane's transactions by `sign("TX" ‖ msgpack)`, the executor's by its program. Returns the
 /// concatenated signed transactions (algod's group submission) and their txids.
-pub fn sign_group(g: &Group, chain: &Chain, fv: u64, lv: u64, sign: &SignFn, lane: &[u8; 32], exec: Option<&Executor>) -> Result<(Vec<u8>, Vec<[u8; 32]>)> {
+pub fn sign_group(
+    g: &Group,
+    chain: &Chain,
+    fv: u64,
+    lv: u64,
+    sign: &SignFn,
+    lane: &[u8; 32],
+    exec: Option<&Executor>,
+) -> Result<(Vec<u8>, Vec<[u8; 32]>)> {
     let (mut raw, mut ids) = (Vec::new(), Vec::new());
     for (t, m) in g.txs.iter().zip(grouped(g, chain, fv, lv, lane, exec)?) {
         ids.push(txid(&m));
@@ -1239,12 +1797,29 @@ fn unnamed_of(v: &Value) -> Result<Unnamed> {
     }
     let list = |k: &str| v[k].as_array().cloned().unwrap_or_default();
     Ok(Unnamed {
-        accounts: list("accounts").iter().map(|a| crate::addresses::algorand_key(a.as_str().unwrap_or_default())).collect::<Result<_>>()?,
-        apps: list("apps").iter().map(|a| a.as_u64().ok_or_else(|| anyhow!("unnamed app {a}"))).collect::<Result<_>>()?,
-        boxes: list("boxes").iter().map(|b| Ok((b["app"].as_u64().ok_or_else(|| anyhow!("unnamed box {b}"))?, b64d(b["name"].as_str().unwrap_or_default())?)))
+        accounts: list("accounts")
+            .iter()
+            .map(|a| crate::addresses::algorand_key(a.as_str().unwrap_or_default()))
+            .collect::<Result<_>>()?,
+        apps: list("apps")
+            .iter()
+            .map(|a| a.as_u64().ok_or_else(|| anyhow!("unnamed app {a}")))
+            .collect::<Result<_>>()?,
+        boxes: list("boxes")
+            .iter()
+            .map(|b| {
+                Ok((
+                    b["app"]
+                        .as_u64()
+                        .ok_or_else(|| anyhow!("unnamed box {b}"))?,
+                    b64d(b["name"].as_str().unwrap_or_default())?,
+                ))
+            })
             .collect::<Result<_>>()?,
         extra_box_refs: v["extra-box-refs"].as_u64().unwrap_or(0),
-        other: ["assets", "app-locals", "asset-holdings"].iter().any(|k| !list(k).is_empty()),
+        other: ["assets", "app-locals", "asset-holdings"]
+            .iter()
+            .any(|k| !list(k).is_empty()),
     })
 }
 
@@ -1252,7 +1827,9 @@ fn count_inner(r: &Value, depth: u32) -> u64 {
     if depth > 8 {
         return 0;
     }
-    r["inner-txns"].as_array().map_or(0, |a| a.iter().map(|x| 1 + count_inner(x, depth + 1)).sum())
+    r["inner-txns"]
+        .as_array()
+        .map_or(0, |a| a.iter().map(|x| 1 + count_inner(x, depth + 1)).sum())
 }
 
 /// algod `simulate`'s JSON answer for one group.
@@ -1260,12 +1837,27 @@ pub fn parse_sim(v: &Value) -> Result<SimOut> {
     let g = &v["txn-groups"][0];
     ensure!(g.is_object(), "simulate: no txn-groups");
     let results = g["txn-results"].as_array().cloned().unwrap_or_default();
-    let failure = g["failure-message"].as_str().filter(|s| !s.is_empty()).map(str::to_string);
-    let mut out = SimOut { failure, unnamed: unnamed_of(&g["unnamed-resources-accessed"])?, ..Default::default() };
+    let failure = g["failure-message"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let mut out = SimOut {
+        failure,
+        unnamed: unnamed_of(&g["unnamed-resources-accessed"])?,
+        ..Default::default()
+    };
     for r in &results {
         out.inner += count_inner(&r["txn-result"], 0);
-        out.per_txn.push(unnamed_of(&r["unnamed-resources-accessed"])?);
-        out.logs.push(r["txn-result"]["logs"].as_array().into_iter().flatten().map(|l| b64d(l.as_str().unwrap_or_default())).collect::<Result<_>>()?);
+        out.per_txn
+            .push(unnamed_of(&r["unnamed-resources-accessed"])?);
+        out.logs.push(
+            r["txn-result"]["logs"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|l| b64d(l.as_str().unwrap_or_default()))
+                .collect::<Result<_>>()?,
+        );
     }
     Ok(out)
 }
@@ -1273,19 +1865,35 @@ pub fn parse_sim(v: &Value) -> Result<SimOut> {
 /// Bare `budget` calls on `token` carrying the unnamed resources (group resource sharing, AVM ≥ 9): at most 4 accounts
 /// and 8 references each; a box of another app names that app in the same call.
 fn budget_calls(token: u64, u: &Unnamed) -> Result<Vec<Tx>> {
-    ensure!(!u.other, "the group touches assets, holdings or local state the node does not reference");
+    ensure!(
+        !u.other,
+        "the group touches assets, holdings or local state the node does not reference"
+    );
     enum Item {
         Account([u8; 32]),
         App(u64),
         Box(u64, Vec<u8>),
     }
-    let items = u.accounts.iter().map(|a| Item::Account(*a)).chain(u.apps.iter().map(|a| Item::App(*a)))
-        .chain(u.boxes.iter().map(|(a, n)| Item::Box(*a, n.clone()))).chain((0..u.extra_box_refs).map(|_| Item::Box(token, vec![])));
+    let items = u
+        .accounts
+        .iter()
+        .map(|a| Item::Account(*a))
+        .chain(u.apps.iter().map(|a| Item::App(*a)))
+        .chain(u.boxes.iter().map(|(a, n)| Item::Box(*a, n.clone())))
+        .chain((0..u.extra_box_refs).map(|_| Item::Box(token, vec![])));
     let mut out: Vec<Tx> = Vec::new();
     for it in items {
         loop {
             let fits = match (out.last(), &it) {
-                (Some(t @ Tx::Call { apps, .. }), Item::Box(a, _)) => t.refs().1 + if *a == token || apps.contains(a) { 1 } else { 2 } <= 8,
+                (Some(t @ Tx::Call { apps, .. }), Item::Box(a, _)) => {
+                    t.refs().1
+                        + if *a == token || apps.contains(a) {
+                            1
+                        } else {
+                            2
+                        }
+                        <= 8
+                }
                 (Some(t), Item::Account(_)) => t.refs().0 < 4 && t.refs().1 < 8,
                 (Some(t), _) => t.refs().1 < 8,
                 (None, _) => false,
@@ -1294,7 +1902,15 @@ fn budget_calls(token: u64, u: &Unnamed) -> Result<Vec<Tx>> {
                 out.push(Tx::call(token, vec![]));
                 continue;
             }
-            let Some(Tx::Call { accounts, apps, boxes, .. }) = out.last_mut() else { unreachable!("a call was just pushed") };
+            let Some(Tx::Call {
+                accounts,
+                apps,
+                boxes,
+                ..
+            }) = out.last_mut()
+            else {
+                unreachable!("a call was just pushed")
+            };
             match &it {
                 Item::Account(a) => accounts.push(*a),
                 Item::App(a) => apps.push(*a),
@@ -1321,8 +1937,20 @@ fn add_own(tx: &mut Tx, u: &Unnamed) -> Result<()> {
     if *u == Unnamed::default() {
         return Ok(());
     }
-    ensure!(!u.other, "the group touches assets, holdings or local state the node does not reference");
-    let Tx::Call { app, accounts, apps, boxes, .. } = tx else { bail!("a payment with unnamed resources") };
+    ensure!(
+        !u.other,
+        "the group touches assets, holdings or local state the node does not reference"
+    );
+    let Tx::Call {
+        app,
+        accounts,
+        apps,
+        boxes,
+        ..
+    } = tx
+    else {
+        bail!("a payment with unnamed resources")
+    };
     accounts.extend(&u.accounts);
     apps.extend(&u.apps);
     for (a, n) in &u.boxes {
@@ -1338,7 +1966,10 @@ fn add_own(tx: &mut Tx, u: &Unnamed) -> Result<()> {
     }
     boxes.extend((0..u.extra_box_refs).map(|_| (0, vec![])));
     let (acc, all) = tx.refs();
-    ensure!(acc <= 4 && all <= 8, "a pre-AVM-9 app needs more references than one transaction holds");
+    ensure!(
+        acc <= 4 && all <= 8,
+        "a pre-AVM-9 app needs more references than one transaction holds"
+    );
     Ok(())
 }
 
@@ -1357,9 +1988,19 @@ fn target_tx(app: u64, args: Vec<Vec<u8>>, r: &Refs) -> Result<Tx> {
         };
         boxes.push((i, n.clone()));
     }
-    let t = Tx::Call { app, args, accounts: r.accounts.clone(), apps, boxes, executor: true };
+    let t = Tx::Call {
+        app,
+        args,
+        accounts: r.accounts.clone(),
+        apps,
+        boxes,
+        executor: true,
+    };
     let (acc, all) = t.refs();
-    ensure!(acc <= 4 && all <= 8, "op.extra: the target's references exceed one transaction's");
+    ensure!(
+        acc <= 4 && all <= 8,
+        "op.extra: the target's references exceed one transaction's"
+    );
     Ok(t)
 }
 
@@ -1387,8 +2028,15 @@ struct Sels {
 fn sels() -> &'static Sels {
     static S: OnceLock<Sels> = OnceLock::new();
     S.get_or_init(|| Sels {
-        transfer: selector(EV_TRANSFER), ua: selector(EV_UA_TRANSFER), executed: selector(EV_EXECUTED), settled: selector(EV_SETTLED),
-        meta: selector(EV_META), filled: selector(EV_FILLED), fee: selector(EV_FEE), mandate: selector(EV_MANDATE_PAY), matched: selector(EV_MATCHED),
+        transfer: selector(EV_TRANSFER),
+        ua: selector(EV_UA_TRANSFER),
+        executed: selector(EV_EXECUTED),
+        settled: selector(EV_SETTLED),
+        meta: selector(EV_META),
+        filled: selector(EV_FILLED),
+        fee: selector(EV_FEE),
+        mandate: selector(EV_MANDATE_PAY),
+        matched: selector(EV_MATCHED),
     })
 }
 
@@ -1402,13 +2050,24 @@ struct Node<'a> {
 fn node(stib: &Mp, depth: u32) -> Node<'_> {
     let txn = stib.get("txn");
     let app = if txn.and_then(|t| t.get("type")).and_then(Mp::bytes) == Some(b"appl") {
-        txn.and_then(|t| t.get("apid")).and_then(Mp::u64).unwrap_or(0)
+        txn.and_then(|t| t.get("apid"))
+            .and_then(Mp::u64)
+            .unwrap_or(0)
     } else {
         0
     };
     let dt = stib.get("dt");
-    let logs = dt.and_then(|d| d.get("lg")).map(|l| l.arr().iter().filter_map(Mp::bytes).collect()).unwrap_or_default();
-    let inner = if depth < 8 { dt.and_then(|d| d.get("itx")).map(|i| i.arr().iter().map(|x| node(x, depth + 1)).collect()).unwrap_or_default() } else { vec![] };
+    let logs = dt
+        .and_then(|d| d.get("lg"))
+        .map(|l| l.arr().iter().filter_map(Mp::bytes).collect())
+        .unwrap_or_default();
+    let inner = if depth < 8 {
+        dt.and_then(|d| d.get("itx"))
+            .map(|i| i.arr().iter().map(|x| node(x, depth + 1)).collect())
+            .unwrap_or_default()
+    } else {
+        vec![]
+    };
     Node { app, logs, inner }
 }
 
@@ -1430,18 +2089,25 @@ fn holder_at(b: &[u8]) -> Option<String> {
 fn u256_dec(b: &[u8]) -> Option<String> {
     // amounts are uint256 on chain, ≤ 2^128 − 1 by the token's supply cap
     let low: [u8; 16] = b.get(16..32)?.try_into().ok()?;
-    b[..16].iter().all(|x| *x == 0).then(|| u128::from_be_bytes(low).to_string())
+    b[..16]
+        .iter()
+        .all(|x| *x == 0)
+        .then(|| u128::from_be_bytes(low).to_string())
 }
 
 /// The canonical txid of a block transaction (the stored map + the block's genesis hash, and its genesis id when
 /// `hgi`), `0x` hex.
 fn block_txid(stib: &Mp, block: &Mp) -> Option<String> {
-    let Some(Mp::Map(m)) = stib.get("txn") else { return None };
+    let Some(Mp::Map(m)) = stib.get("txn") else {
+        return None;
+    };
     let mut m = m.clone();
     if !m.iter().any(|(x, _)| x.bytes() == Some(b"gh")) {
         m.push((k("gh"), block.get("gh")?.clone()));
     }
-    if matches!(stib.get("hgi"), Some(Mp::Bool(true))) && !m.iter().any(|(x, _)| x.bytes() == Some(b"gen")) {
+    if matches!(stib.get("hgi"), Some(Mp::Bool(true)))
+        && !m.iter().any(|(x, _)| x.bytes() == Some(b"gen"))
+    {
         m.push((k("gen"), block.get("gen")?.clone()));
     }
     Some(hex0x(&txid(&Mp::Map(m))))
@@ -1467,7 +2133,9 @@ pub fn block_events(ids: &Ids, block: &Mp, block_hash: &str) -> Result<Vec<Value
         if !nodes.iter().any(|n| ids.tokens.contains(&n.app)) {
             continue;
         }
-        let Some(tx_hash) = block_txid(stib, block) else { continue };
+        let Some(tx_hash) = block_txid(stib, block) else {
+            continue;
+        };
         let mut settles: HashMap<[u8; 32], [u8; 32]> = HashMap::new();
         for n in nodes.iter().filter(|n| ids.dex == Some(n.app)) {
             for b in n.logs.iter().filter_map(|l| ev(l, &s.matched, 112)) {
@@ -1493,16 +2161,31 @@ pub fn block_events(ids: &Ids, block: &Mp, block_hash: &str) -> Result<Vec<Value
             for (i, log) in n.logs.iter().enumerate() {
                 let row = if token {
                     if let Some(b) = ev(log, &s.settled, 130) {
-                        (|| Some(json!({"event": "PaymentSettled", "from": holder_at(&b[..33])?, "to": holder_at(&b[33..66])?,
-                                        "amount": u256_dec(&b[66..98])?, "entry_ref": hex0x(&b[98..130])})))()
-                    } else if let Some(b) = log.strip_prefix(&s.meta[..]).filter(|b| b.len() >= 36 && b[32..34] == [0, 34]) {
+                        (|| {
+                            Some(
+                                json!({"event": "PaymentSettled", "from": holder_at(&b[..33])?, "to": holder_at(&b[33..66])?,
+                                        "amount": u256_dec(&b[66..98])?, "entry_ref": hex0x(&b[98..130])}),
+                            )
+                        })()
+                    } else if let Some(b) = log
+                        .strip_prefix(&s.meta[..])
+                        .filter(|b| b.len() >= 36 && b[32..34] == [0, 34])
+                    {
                         let len = u16::from_be_bytes([b[34], b[35]]) as usize;
                         (b.len() == 36 + len).then(|| json!({"event": "PaymentMeta", "entry_ref": hex0x(&b[..32]), "meta": hex0x(&b[36..])}))
                     } else if let Some(b) = ev(log, &s.executed, 137) {
-                        (|| Some(json!({"event": "MetaTransactionExecuted", "from": holder_at(&b[..33])?, "relayer": algorand_address(&arr32(&b[33..65]).ok()?),
-                                        "lane": hex0x(&b[65..97]), "nonce": be_u64(&b[97..105]).ok()?.to_string(), "digest": hex0x(&b[105..137])})))()
+                        (|| {
+                            Some(
+                                json!({"event": "MetaTransactionExecuted", "from": holder_at(&b[..33])?, "relayer": algorand_address(&arr32(&b[33..65]).ok()?),
+                                        "lane": hex0x(&b[65..97]), "nonce": be_u64(&b[97..105]).ok()?.to_string(), "digest": hex0x(&b[105..137])}),
+                            )
+                        })()
                     } else if let Some(b) = ev(log, &s.ua, 98) {
-                        (|| Some(json!({"event": "Transfer", "from": holder_at(&b[..33])?, "to": holder_at(&b[33..66])?, "amount": u256_dec(&b[66..98])?})))()
+                        (|| {
+                            Some(
+                                json!({"event": "Transfer", "from": holder_at(&b[..33])?, "to": holder_at(&b[33..66])?, "amount": u256_dec(&b[66..98])?}),
+                            )
+                        })()
                     } else if let Some(b) = ev(log, &s.transfer, 96) {
                         let (f, t) = (arr32(&b[..32]).ok(), arr32(&b[32..64]).ok());
                         match (f, t) {
@@ -1564,14 +2247,17 @@ pub fn block_events(ids: &Ids, block: &Mp, block_hash: &str) -> Result<Vec<Value
 
 /// algod's raw JSON answer through the crate's bounded decode (scaas-rpc T24.9, CLI-RPC-07: 16 MiB, depth 64).
 fn json_of(what: &str, b: &[u8]) -> Result<Value> {
-    scaas_rpc::http::decode(b, scaas_rpc::family::ANSWER_MAX).map_err(|k| anyhow!("{what}: the answer: {k:?}"))
+    scaas_rpc::http::decode(b, scaas_rpc::family::ANSWER_MAX)
+        .map_err(|k| anyhow!("{what}: the answer: {k:?}"))
 }
 
 /// A family client's error as the classifier reads it: a status other than 2xx is `AlgodError`, anything else the endpoint's
 /// failure.
 fn algod_error(e: scaas_rpc::family::FamilyError) -> anyhow::Error {
     match e {
-        scaas_rpc::family::FamilyError::Status { status, message } => AlgodError { status, message }.into(),
+        scaas_rpc::family::FamilyError::Status { status, message } => {
+            AlgodError { status, message }.into()
+        }
         e => e.into(),
     }
 }
@@ -1639,22 +2325,39 @@ impl AlgorandAdapter {
     /// holding the `X-Algo-API-Token`.
     pub fn new(cfg: &ChainCfg, signers: &[LocalSigner]) -> Result<Self> {
         if cfg.rpc_urls.is_empty() || signers.is_empty() {
-            bail!("chain {}: needs rpc_urls and at least one lane", cfg.chain_key());
+            bail!(
+                "chain {}: needs rpc_urls and at least one lane",
+                cfg.chain_key()
+            );
         }
-        let net = cfg.network.as_deref().ok_or_else(|| anyhow!("algorand: network must be the genesis hash (base64)"))?;
-        let network = arr32(&b64d(net).context("algorand: network must be the genesis hash (base64 of 32 bytes)")?)?;
+        let net = cfg
+            .network
+            .as_deref()
+            .ok_or_else(|| anyhow!("algorand: network must be the genesis hash (base64)"))?;
+        let network = arr32(
+            &b64d(net)
+                .context("algorand: network must be the genesis hash (base64 of 32 bytes)")?,
+        )?;
         let tokens = crate::adapters::endpoint_keys(cfg, "algod_token_env", true)?;
         let cap = |k: &str, d: u64| -> Result<u64> {
             match cfg.params.get(k) {
                 None => Ok(d),
-                Some(v) => v.as_integer().and_then(|n| u64::try_from(n).ok()).ok_or_else(|| anyhow!("params.{k} must be a number of µALGO")),
+                Some(v) => v
+                    .as_integer()
+                    .and_then(|n| u64::try_from(n).ok())
+                    .ok_or_else(|| anyhow!("params.{k} must be a number of µALGO")),
             }
         };
         let (mut lanes, mut pks, mut own) = (Vec::new(), Vec::new(), Vec::new());
         for (s, &i) in signers.iter().zip(&cfg.lanes) {
-            let LocalSigner::Ed(k) = s else { bail!("algorand lanes are ed25519") };
+            let LocalSigner::Ed(k) = s else {
+                bail!("algorand lanes are ed25519")
+            };
             let pk = k.verifying_key().to_bytes();
-            lanes.push(Lane { index: i, address: algorand_address(&pk) });
+            lanes.push(Lane {
+                index: i,
+                address: algorand_address(&pk),
+            });
             pks.push(pk);
             own.push(LocalSigner::Ed(k.clone()));
         }
@@ -1664,7 +2367,10 @@ impl AlgorandAdapter {
             net: scaas_rpc::algorand::Algorand::new(
                 // scaas-rpc T24.10: each endpoint's own token only (a later endpoint gets none unless configured for it)
                 scaas_rpc::family::Client::of_urls_each(&cfg.rpc_urls, |i| {
-                    tokens[i].as_ref().map(|t| scaas_rpc::EndpointAuth::Header { name: "X-Algo-API-Token".into(), value: scaas_rpc::Secret::new(t) })
+                    tokens[i].as_ref().map(|t| scaas_rpc::EndpointAuth::Header {
+                        name: "X-Algo-API-Token".into(),
+                        value: scaas_rpc::Secret::new(t),
+                    })
                 })
                 .map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?,
                 net,
@@ -1702,9 +2408,14 @@ impl AlgorandAdapter {
     /// POST: `build`'s simulates failed over, any other (the send, `start_check`'s query) endpoint 0's.
     async fn post(&self, path: &str, body: Vec<u8>, ctype: &str) -> Result<Value> {
         if !building() {
-            return self.net.post(0, path, body, ctype).await.map_err(algod_error);
+            return self
+                .net
+                .post(0, path, body, ctype)
+                .await
+                .map_err(algod_error);
         }
-        self.read(true, |i| self.net.post(i, path, body.clone(), ctype)).await
+        self.read(true, |i| self.net.post(i, path, body.clone(), ctype))
+            .await
     }
 
     /// ARCH-POS-15 (CLI-RPC-04, scaas-rpc T18b): endpoint 0, then each next endpoint of this network (its genesis hash) not
@@ -1719,23 +2430,40 @@ impl AlgorandAdapter {
     {
         use scaas_rpc::family::FamilyError;
         use scaas_rpc::pool::ReadError;
-        let a = self.net.client.failover(&self.net, |i| {
-            let r = f(i);
-            async move {
-                r.await.map_err(|e| match e {
-                    FamilyError::Status { status, message } if status == 404 || (post && status == 400) => {
-                        ReadError::Revert { data: vec![], reason: format!("{status}\n{message}") }
-                    }
-                    FamilyError::Failure(f) => ReadError::Failure(f),
-                    e => ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string())),
-                })
-            }
-        }).await;
+        let a = self
+            .net
+            .client
+            .failover(&self.net, |i| {
+                let r = f(i);
+                async move {
+                    r.await.map_err(|e| match e {
+                        FamilyError::Status { status, message }
+                            if status == 404 || (post && status == 400) =>
+                        {
+                            ReadError::Revert {
+                                data: vec![],
+                                reason: format!("{status}\n{message}"),
+                            }
+                        }
+                        FamilyError::Failure(f) => ReadError::Failure(f),
+                        e => ReadError::Failure(scaas_rpc::EndpointFailure::new(
+                            i,
+                            scaas_rpc::FailureKind::Transport,
+                            &e.to_string(),
+                        )),
+                    })
+                }
+            })
+            .await;
         match a {
             Ok(a) => Ok(a.value),
             Err(scaas_rpc::RpcError::Revert { reason, .. }) => {
                 let (status, message) = reason.split_once('\n').unwrap_or(("0", &reason));
-                Err(AlgodError { status: status.parse().unwrap_or(0), message: message.into() }.into())
+                Err(AlgodError {
+                    status: status.parse().unwrap_or(0),
+                    message: message.into(),
+                }
+                .into())
             }
             Err(e) => Err(crate::adapters::evm::all_failed("algod", &e)),
         }
@@ -1747,17 +2475,40 @@ impl AlgorandAdapter {
 
     async fn params(&self) -> Result<Params> {
         let v = self.get("/v2/transactions/params").await?;
-        let gh = arr32(&b64d(v["genesis-hash"].as_str().ok_or_else(|| anyhow!("params without genesis-hash"))?)?)?;
+        let gh = arr32(&b64d(
+            v["genesis-hash"]
+                .as_str()
+                .ok_or_else(|| anyhow!("params without genesis-hash"))?,
+        )?)?;
         if gh != self.network {
-            bail!("algod's genesis hash {} is not the configured network {}", b64(&gh), b64(&self.network));
+            bail!(
+                "algod's genesis hash {} is not the configured network {}",
+                b64(&gh),
+                b64(&self.network)
+            );
         }
         let n = |k: &str| v[k].as_u64().ok_or_else(|| anyhow!("params without {k}"));
         // CLI-RPC-05 (scaas-rpc T24.4): the lane never pays a fee above the configured caps, whichever endpoint quoted it
         let (min_fee, fpb) = (n("min-fee")?, n("fee")?);
-        ensure!(min_fee <= self.max_min_fee, "min-fee {min_fee} above params.max_min_fee {}", self.max_min_fee);
-        ensure!(fpb <= self.max_fee_per_byte, "fee {fpb} per byte above params.max_fee_per_byte {}", self.max_fee_per_byte);
-        Ok(Params { min_fee, fpb, last_round: n("last-round")?,
-                    chain: Chain { gen: v["genesis-id"].as_str().unwrap_or_default().to_string(), gh } })
+        ensure!(
+            min_fee <= self.max_min_fee,
+            "min-fee {min_fee} above params.max_min_fee {}",
+            self.max_min_fee
+        );
+        ensure!(
+            fpb <= self.max_fee_per_byte,
+            "fee {fpb} per byte above params.max_fee_per_byte {}",
+            self.max_fee_per_byte
+        );
+        Ok(Params {
+            min_fee,
+            fpb,
+            last_round: n("last-round")?,
+            chain: Chain {
+                gen: v["genesis-id"].as_str().unwrap_or_default().to_string(),
+                gh,
+            },
+        })
     }
 
     async fn app(&self, id: u64) -> Result<Option<Value>> {
@@ -1769,10 +2520,20 @@ impl AlgorandAdapter {
     }
 
     async fn box_value(&self, app: u64, name: &[u8]) -> Result<Option<Vec<u8>>> {
-        match self.get_raw(&format!("/v2/applications/{app}/box"), &[("name", format!("b64:{}", b64(name)))]).await {
+        match self
+            .get_raw(
+                &format!("/v2/applications/{app}/box"),
+                &[("name", format!("b64:{}", b64(name)))],
+            )
+            .await
+        {
             Ok(b) => {
                 let v = json_of("box", &b)?;
-                Ok(Some(b64d(v["value"].as_str().ok_or_else(|| anyhow!("box without value"))?)?))
+                Ok(Some(b64d(
+                    v["value"]
+                        .as_str()
+                        .ok_or_else(|| anyhow!("box without value"))?,
+                )?))
             }
             Err(e) if status_of(&e) == Some(404) => Ok(None),
             Err(e) => Err(e),
@@ -1783,7 +2544,11 @@ impl AlgorandAdapter {
     /// "account <lane> balance B below min M" (T20 fix 1, review I3: the message a lane holding its minimum gets first) —
     /// the lane's balance, not the job (lesson 14, as NEAR's view gas cap): retried.
     fn sim_failed(&self, m: &str) -> SimError {
-        let below = m.contains("below min") && self.lanes.iter().any(|l| m.contains(&format!("account {} balance", l.address)));
+        let below = m.contains("below min")
+            && self
+                .lanes
+                .iter()
+                .any(|l| m.contains(&format!("account {} balance", l.address)));
         if m.contains("overspend") || below {
             SimError::Transport(format!("simulate: the lane cannot pay: {m}"))
         } else {
@@ -1795,11 +2560,29 @@ impl AlgorandAdapter {
         self.exec.lock().ok().and_then(|e| e.clone())
     }
 
-    fn sim_request(&self, p: &Params, g: &Group, lane: &[u8; 32], exec: Option<&Executor>, unnamed: bool, extra_budget: u64) -> Result<Vec<u8>> {
+    fn sim_request(
+        &self,
+        p: &Params,
+        g: &Group,
+        lane: &[u8; 32],
+        exec: Option<&Executor>,
+        unnamed: bool,
+        extra_budget: u64,
+    ) -> Result<Vec<u8>> {
         let lv = p.last_round.saturating_add(10);
-        let txns = g.txs.iter().zip(grouped(g, &p.chain, p.last_round, lv, lane, exec)?)
-            .map(|(t, m)| signed_map(t, m, None, exec)).collect::<Result<Vec<_>>>()?;
-        let mut req = vec![(k("allow-empty-signatures"), Mp::Bool(true)), (k("txn-groups"), Mp::Arr(vec![Mp::Map(vec![(k("txns"), Mp::Arr(txns))])]))];
+        let txns = g
+            .txs
+            .iter()
+            .zip(grouped(g, &p.chain, p.last_round, lv, lane, exec)?)
+            .map(|(t, m)| signed_map(t, m, None, exec))
+            .collect::<Result<Vec<_>>>()?;
+        let mut req = vec![
+            (k("allow-empty-signatures"), Mp::Bool(true)),
+            (
+                k("txn-groups"),
+                Mp::Arr(vec![Mp::Map(vec![(k("txns"), Mp::Arr(txns))])]),
+            ),
+        ];
         if unnamed {
             req.push((k("allow-unnamed-resources"), Mp::Bool(true)));
         }
@@ -1811,25 +2594,62 @@ impl AlgorandAdapter {
 
     /// algod `simulate` of `g` (lane signatures empty, the executor's program evaluated). HTTP errors (the endpoint's
     /// own limits, a node down) are transport: retried.
-    async fn simulate(&self, p: &Params, g: &Group, lane: &[u8; 32], exec: Option<&Executor>, unnamed: bool, extra_budget: u64)
-                      -> std::result::Result<SimOut, SimError> {
-        let body = self.sim_request(p, g, lane, exec, unnamed, extra_budget).map_err(|e| SimError::Revert(format!("{e:#}")))?;
-        let v = self.post("/v2/transactions/simulate?format=json", body, "application/msgpack").await.map_err(transport)?;
+    async fn simulate(
+        &self,
+        p: &Params,
+        g: &Group,
+        lane: &[u8; 32],
+        exec: Option<&Executor>,
+        unnamed: bool,
+        extra_budget: u64,
+    ) -> std::result::Result<SimOut, SimError> {
+        let body = self
+            .sim_request(p, g, lane, exec, unnamed, extra_budget)
+            .map_err(|e| SimError::Revert(format!("{e:#}")))?;
+        let v = self
+            .post(
+                "/v2/transactions/simulate?format=json",
+                body,
+                "application/msgpack",
+            )
+            .await
+            .map_err(transport)?;
         parse_sim(&v).map_err(transport)
     }
 
     /// A read-only ABI query by simulate (as the lane): its return value.
-    async fn query(&self, p: &Params, lane: &[u8; 32], app: u64, args: Vec<Vec<u8>>) -> std::result::Result<Vec<u8>, SimError> {
-        let g = Group { txs: vec![Tx::call(app, args)], main: 0, fee: p.min_fee, mbr: 0 };
+    async fn query(
+        &self,
+        p: &Params,
+        lane: &[u8; 32],
+        app: u64,
+        args: Vec<Vec<u8>>,
+    ) -> std::result::Result<Vec<u8>, SimError> {
+        let g = Group {
+            txs: vec![Tx::call(app, args)],
+            main: 0,
+            fee: p.min_fee,
+            mbr: 0,
+        };
         let s = self.simulate(p, &g, lane, None, true, QUERY_BUDGET).await?;
         if let Some(f) = s.failure {
             return Err(self.sim_failed(&f));
         }
-        s.logs.first().and_then(|l| l.last()).and_then(|l| l.strip_prefix(&ABI_RETURN[..])).map(<[u8]>::to_vec)
+        s.logs
+            .first()
+            .and_then(|l| l.last())
+            .and_then(|l| l.strip_prefix(&ABI_RETURN[..]))
+            .map(<[u8]>::to_vec)
             .ok_or_else(|| SimError::Transport(format!("app {app}: no ABI return")))
     }
 
-    async fn query_u64(&self, p: &Params, lane: &[u8; 32], app: u64, args: Vec<Vec<u8>>) -> std::result::Result<u64, SimError> {
+    async fn query_u64(
+        &self,
+        p: &Params,
+        lane: &[u8; 32],
+        app: u64,
+        args: Vec<Vec<u8>>,
+    ) -> std::result::Result<u64, SimError> {
         be_u64(&self.query(p, lane, app, args).await?).map_err(transport)
     }
 
@@ -1839,46 +2659,115 @@ impl AlgorandAdapter {
 
     /// The account app's part of a signer's first op: 0 for a native wallet signature or an existing record, else
     /// `verify_mbr` (the lazy open of a UA record).
-    async fn record_mbr(&self, p: &Params, lane: &[u8; 32], h: &Holder, digest: &[u8; 32], auth: &[u8]) -> std::result::Result<u64, SimError> {
+    async fn record_mbr(
+        &self,
+        p: &Params,
+        lane: &[u8; 32],
+        h: &Holder,
+        digest: &[u8; 32],
+        auth: &[u8],
+    ) -> std::result::Result<u64, SimError> {
         if h.kind == KIND_ADDRESS && auth.len() == 64 {
             return Ok(0);
         }
-        if self.box_value(self.policy.account_app, &Self::rec_name(h)).await.map_err(transport)?.is_some() {
+        if self
+            .box_value(self.policy.account_app, &Self::rec_name(h))
+            .await
+            .map_err(transport)?
+            .is_some()
+        {
             return Ok(0);
         }
-        self.query_u64(p, lane, self.policy.account_app, vec![selector("verify_mbr(uint8,byte[32],byte[32],byte[])uint64").to_vec(), vec![h.kind],
-                                                             h.id.to_vec(), digest.to_vec(), abi_bytes(auth)]).await
+        self.query_u64(
+            p,
+            lane,
+            self.policy.account_app,
+            vec![
+                selector("verify_mbr(uint8,byte[32],byte[32],byte[])uint64").to_vec(),
+                vec![h.kind],
+                h.id.to_vec(),
+                digest.to_vec(),
+                abi_bytes(auth),
+            ],
+        )
+        .await
     }
 
     /// The token's part of a value op (`mbr_needed`: the payer's lane box, the payee's balance box).
-    async fn token_mbr(&self, p: &Params, lane: &[u8; 32], token: u64, op: &MetaOp) -> std::result::Result<u64, SimError> {
-        self.query_u64(p, lane, token, vec![selector(&format!("mbr_needed({METAOP_ABI})uint64")).to_vec(), op.arc4()]).await
+    async fn token_mbr(
+        &self,
+        p: &Params,
+        lane: &[u8; 32],
+        token: u64,
+        op: &MetaOp,
+    ) -> std::result::Result<u64, SimError> {
+        self.query_u64(
+            p,
+            lane,
+            token,
+            vec![
+                selector(&format!("mbr_needed({METAOP_ABI})uint64")).to_vec(),
+                op.arc4(),
+            ],
+        )
+        .await
     }
 
     /// A record's (stored length, length, origin hashes) as `signed` sees it: stored, a native address's empty header, or
     /// the lazy UA record `verify_mbr` sizes (its passkey origins listed).
-    async fn record_as_signed(&self, p: &Params, lane: &[u8; 32], h: &Holder, digest: &[u8; 32], auth: &[u8])
-                              -> std::result::Result<(Option<usize>, usize, Vec<[u8; 32]>), SimError> {
-        match self.box_value(self.policy.account_app, &Self::rec_name(h)).await.map_err(transport)? {
+    async fn record_as_signed(
+        &self,
+        p: &Params,
+        lane: &[u8; 32],
+        h: &Holder,
+        digest: &[u8; 32],
+        auth: &[u8],
+    ) -> std::result::Result<(Option<usize>, usize, Vec<[u8; 32]>), SimError> {
+        match self
+            .box_value(self.policy.account_app, &Self::rec_name(h))
+            .await
+            .map_err(transport)?
+        {
             Some(r) => {
-                let (nk, no) = (r.get(116).copied().unwrap_or(0) as usize, r.get(117).copied().unwrap_or(0) as usize);
+                let (nk, no) = (
+                    r.get(116).copied().unwrap_or(0) as usize,
+                    r.get(117).copied().unwrap_or(0) as usize,
+                );
                 let at = REC_HEADER + 32 * nk;
-                let origins = (0..no).filter_map(|i| r.get(at + 32 * i..at + 32 * i + 32).and_then(|o| o.try_into().ok())).collect();
+                let origins = (0..no)
+                    .filter_map(|i| {
+                        r.get(at + 32 * i..at + 32 * i + 32)
+                            .and_then(|o| o.try_into().ok())
+                    })
+                    .collect();
                 Ok((Some(r.len()), r.len(), origins))
             }
             None if h.kind == KIND_ADDRESS && auth.len() == 64 => Ok((None, REC_HEADER, vec![])),
             None => {
                 let m = self.record_mbr(p, lane, h, digest, auth).await?;
-                let len = m.checked_sub(BOX_FLAT).map(|x| x / BOX_BYTE).and_then(|x| x.checked_sub(34))
-                    .ok_or_else(|| SimError::Revert(format!("verify_mbr {m} is not a record's MBR")))?;
-                let origins = auth_origins(auth, digest).map_err(|e| SimError::Revert(format!("{e:#}")))?;
+                let len = m
+                    .checked_sub(BOX_FLAT)
+                    .map(|x| x / BOX_BYTE)
+                    .and_then(|x| x.checked_sub(34))
+                    .ok_or_else(|| {
+                        SimError::Revert(format!("verify_mbr {m} is not a record's MBR"))
+                    })?;
+                let origins =
+                    auth_origins(auth, digest).map_err(|e| SimError::Revert(format!("{e:#}")))?;
                 Ok((None, len as usize, origins))
             }
         }
     }
 
     /// The target's own exact MBR payment, per entry (the apps' rules; the job dies in simulate if it is off).
-    async fn target_mbr(&self, p: &Params, lane: &[u8; 32], target: u64, args: &[Vec<u8>], info: &TargetInfo) -> std::result::Result<u64, SimError> {
+    async fn target_mbr(
+        &self,
+        p: &Params,
+        lane: &[u8; 32],
+        target: u64,
+        args: &[Vec<u8>],
+        info: &TargetInfo,
+    ) -> std::result::Result<u64, SimError> {
         let revert = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
         let Some(app) = info.app else { return Ok(0) };
         let one = info.ops.first().cloned();
@@ -1889,20 +2778,42 @@ impl AlgorandAdapter {
         };
         let d = op.digest();
         Ok(match (app, info.method) {
-            (App::Token, "mtx_cancel") => MBR_ORDER_BOX + self.record_mbr(p, lane, &op.from, &d, &auth).await?,
-            (App::Token, "mtx_invalidate_nonces") => {
-                let name = [&b"n"[..], &sha256(&[&op.from.bytes()[..], &args[3]].concat())].concat();
-                let new = self.box_value(target, &name).await.map_err(transport)?.is_none();
-                (if new { MBR_LANE_BOX } else { 0 }) + self.record_mbr(p, lane, &op.from, &d, &auth).await?
+            (App::Token, "mtx_cancel") => {
+                MBR_ORDER_BOX + self.record_mbr(p, lane, &op.from, &d, &auth).await?
             }
-            (App::Token, _) => self.token_mbr(p, lane, target, &op).await? + self.record_mbr(p, lane, &op.from, &d, &auth).await?,
+            (App::Token, "mtx_invalidate_nonces") => {
+                let name = [
+                    &b"n"[..],
+                    &sha256(&[&op.from.bytes()[..], &args[3]].concat()),
+                ]
+                .concat();
+                let new = self
+                    .box_value(target, &name)
+                    .await
+                    .map_err(transport)?
+                    .is_none();
+                (if new { MBR_LANE_BOX } else { 0 })
+                    + self.record_mbr(p, lane, &op.from, &d, &auth).await?
+            }
+            (App::Token, _) => {
+                self.token_mbr(p, lane, target, &op).await?
+                    + self.record_mbr(p, lane, &op.from, &d, &auth).await?
+            }
             (App::Account, "mtx_start_recovery" | "mtx_finish_recovery") => {
                 let (old_g, len_g, _) = self.record_as_signed(p, lane, &op.from, &d, &auth).await?;
                 let mut delta = box_delta(old_g, len_g);
                 if info.method == "mtx_finish_recovery" {
-                    let t = self.box_value(self.policy.account_app, &Self::rec_name(&op.to)).await.map_err(transport)?
-                        .ok_or_else(|| SimError::Revert("finish_recovery: no such subject".into()))?;
-                    let (nk, no) = (t.get(116).copied().unwrap_or(0) as usize, t.get(117).copied().unwrap_or(0) as usize);
+                    let t = self
+                        .box_value(self.policy.account_app, &Self::rec_name(&op.to))
+                        .await
+                        .map_err(transport)?
+                        .ok_or_else(|| {
+                            SimError::Revert("finish_recovery: no such subject".into())
+                        })?;
+                    let (nk, no) = (
+                        t.get(116).copied().unwrap_or(0) as usize,
+                        t.get(117).copied().unwrap_or(0) as usize,
+                    );
                     let oh = t.get(84..116).unwrap_or_default();
                     let at = REC_HEADER + 32 * nk;
                     let listed = (0..no).any(|i| t.get(at + 32 * i..at + 32 * i + 32) == Some(oh));
@@ -1912,20 +2823,43 @@ impl AlgorandAdapter {
                 delta.max(0) as u64
             }
             (App::Account, _) => {
-                let (old, len, origins) = self.record_as_signed(p, lane, &op.from, &d, &auth).await?;
-                key_op_delta(args, old, len, &origins).map_err(revert)?.max(0) as u64
+                let (old, len, origins) =
+                    self.record_as_signed(p, lane, &op.from, &d, &auth).await?;
+                key_op_delta(args, old, len, &origins)
+                    .map_err(revert)?
+                    .max(0) as u64
             }
             (App::Mandate, "mtx_mandate_open") => {
                 let token = be_u64(&args[1]).map_err(revert)?;
                 let payee = Holder::read(&args[4][33..66]).map_err(revert)?;
-                let name = [if payee.kind == KIND_ADDRESS { &b"b"[..] } else { &b"u"[..] }, &payee.id].concat();
+                let name = [
+                    if payee.kind == KIND_ADDRESS {
+                        &b"b"[..]
+                    } else {
+                        &b"u"[..]
+                    },
+                    &payee.id,
+                ]
+                .concat();
                 let fund = be_u64(&args[5]).map_err(revert)?;
-                let new = self.box_value(token, &name).await.map_err(transport)?.is_none();
-                MBR_MANDATE_BOX.saturating_add(fund).saturating_add(if new { MBR_AMOUNT_BOX } else { 0 })
+                let new = self
+                    .box_value(token, &name)
+                    .await
+                    .map_err(transport)?
+                    .is_none();
+                MBR_MANDATE_BOX.saturating_add(fund).saturating_add(if new {
+                    MBR_AMOUNT_BOX
+                } else {
+                    0
+                })
             }
             (App::Mandate, "mtx_mandate_pay") => {
                 let key = [&b"m"[..], &args[1], &op.from.id].concat();
-                let m = self.box_value(target, &key).await.map_err(transport)?.ok_or_else(|| SimError::Revert("mandate pay: no such mandate".into()))?;
+                let m = self
+                    .box_value(target, &key)
+                    .await
+                    .map_err(transport)?
+                    .ok_or_else(|| SimError::Revert("mandate pay: no such mandate".into()))?;
                 let delegate = Holder::read(m.get(33..66).unwrap_or_default()).map_err(revert)?;
                 MBR_LANE_BOX + self.record_mbr(p, lane, &delegate, &d, &auth).await?
             }
@@ -1935,15 +2869,22 @@ impl AlgorandAdapter {
     }
 
     fn work(&self, job: &Job, exec: Option<&Executor>) -> Result<Work> {
-        let o = job.op.as_ref().ok_or_else(|| anyhow!("not a signed_op job"))?;
+        let o = job
+            .op
+            .as_ref()
+            .ok_or_else(|| anyhow!("not a signed_op job"))?;
         let op = MetaOp::decode(&hex_field(&o["payload"], "payload")?)?;
         if op.op != OP_PAY {
             bail!("only pay ops (op 0) are relayed as jobs on Algorand (every other entry is a relay-fee target)");
         }
         if op.network != self.network {
-            bail!("the payload is for another network than {}", b64(&self.network));
+            bail!(
+                "the payload is for another network than {}",
+                b64(&self.network)
+            );
         }
-        let token = app_id_str(o["contract"].as_str().unwrap_or_default()).context("op.contract is the token app id")?;
+        let token = app_id_str(o["contract"].as_str().unwrap_or_default())
+            .context("op.contract is the token app id")?;
         if app_address(token) != op.contract {
             bail!("op.contract {token} is not the payload's token");
         }
@@ -1952,32 +2893,75 @@ impl AlgorandAdapter {
         }
         let auth = hex_field(&o["signature"], "signature")?;
         let entry = entry(&self.policy, exec, &op, o)?;
-        let (refs, carries) = if matches!(entry, Entry::Fee { .. }) { job_refs(o)? } else { Default::default() };
-        Ok(Work { op, token, auth, entry, refs, carries })
+        let (refs, carries) = if matches!(entry, Entry::Fee { .. }) {
+            job_refs(o)?
+        } else {
+            Default::default()
+        };
+        Ok(Work {
+            op,
+            token,
+            auth,
+            entry,
+            refs,
+            carries,
+        })
     }
 
     /// The bytes a transaction takes signed, at most (fee / rounds at their widest), for the per-byte fee.
     fn signed_len(t: &Tx, chain: &Chain, exec: Option<&Executor>) -> usize {
-        let m = txn_map(t, &[1; 32], u64::MAX, u64::MAX, u64::MAX, chain, Some(&[1; 32]));
-        signed_map(t, m, Some(vec![1; 64]), exec).map(|s| mp_encode(&s).len()).unwrap_or(4096)
+        let m = txn_map(
+            t,
+            &[1; 32],
+            u64::MAX,
+            u64::MAX,
+            u64::MAX,
+            chain,
+            Some(&[1; 32]),
+        );
+        signed_map(t, m, Some(vec![1; 64]), exec)
+            .map(|s| mp_encode(&s).len())
+            .unwrap_or(4096)
     }
 
     fn fee_of(p: &Params, g: &Group, inner: u64, exec: Option<&Executor>) -> u64 {
-        g.txs.iter().map(|t| p.min_fee.max(p.fpb.saturating_mul(Self::signed_len(t, &p.chain, exec) as u64)))
-            .fold(0u64, u64::saturating_add).saturating_add(inner.saturating_mul(p.min_fee))
+        g.txs
+            .iter()
+            .map(|t| {
+                p.min_fee.max(
+                    p.fpb
+                        .saturating_mul(Self::signed_len(t, &p.chain, exec) as u64),
+                )
+            })
+            .fold(0u64, u64::saturating_add)
+            .saturating_add(inner.saturating_mul(p.min_fee))
     }
 
     /// Two block timestamps `ROUND_SAMPLE` rounds apart, ending at `last`: (ts of `last`, rounds, seconds).
     async fn round_time(&self, last: u64) -> Result<(u64, u64, u64)> {
         let ts = |b: Vec<u8>| -> Result<u64> {
-            mp_decode(&b)?.get("block").and_then(|b| b.get("ts")).and_then(Mp::u64).ok_or_else(|| anyhow!("block without ts"))
+            mp_decode(&b)?
+                .get("block")
+                .and_then(|b| b.get("ts"))
+                .and_then(Mp::u64)
+                .ok_or_else(|| anyhow!("block without ts"))
         };
-        let t1 = ts(self.get_raw(&format!("/v2/blocks/{last}"), &[("format", "msgpack".into())]).await?)?;
+        let t1 = ts(self
+            .get_raw(
+                &format!("/v2/blocks/{last}"),
+                &[("format", "msgpack".into())],
+            )
+            .await?)?;
         let first = last.saturating_sub(ROUND_SAMPLE).max(1);
         if first >= last {
             return Ok((t1, 0, 0));
         }
-        let t0 = ts(self.get_raw(&format!("/v2/blocks/{first}"), &[("format", "msgpack".into())]).await?)?;
+        let t0 = ts(self
+            .get_raw(
+                &format!("/v2/blocks/{first}"),
+                &[("format", "msgpack".into())],
+            )
+            .await?)?;
         Ok((t1, last - first, t1.saturating_sub(t0)))
     }
 
@@ -1989,12 +2973,24 @@ impl AlgorandAdapter {
     /// R9: the key set of `holder` per configured token. Every token verifies through the one account app (start_check
     /// asserts each token's `account_app`), so the sets are one record: (token, key ids), `None` = no record.
     pub async fn key_sets(&self, holder: &Holder) -> Result<Vec<(u64, Option<Vec<[u8; 32]>>)>> {
-        let rec = self.box_value(self.policy.account_app, &Self::rec_name(holder)).await?;
+        let rec = self
+            .box_value(self.policy.account_app, &Self::rec_name(holder))
+            .await?;
         let keys = rec.map(|r| {
             let n = r.get(116).copied().unwrap_or(0) as usize;
-            (0..n).filter_map(|i| r.get(REC_HEADER + 32 * i..REC_HEADER + 32 * i + 32).and_then(|x| x.try_into().ok())).collect()
+            (0..n)
+                .filter_map(|i| {
+                    r.get(REC_HEADER + 32 * i..REC_HEADER + 32 * i + 32)
+                        .and_then(|x| x.try_into().ok())
+                })
+                .collect()
         });
-        Ok(self.policy.tokens.iter().map(|t| (*t, keys.clone())).collect())
+        Ok(self
+            .policy
+            .tokens
+            .iter()
+            .map(|t| (*t, keys.clone()))
+            .collect())
     }
 
     /// The §5 checks, the group with the apps' exact MBR payments, a discovery simulate (unnamed resources allowed, a
@@ -2004,97 +3000,222 @@ impl AlgorandAdapter {
     async fn build_on(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let revert = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
         let exec = self.exec();
-        let w = self.work(job, exec.as_ref()).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
+        let w = self
+            .work(job, exec.as_ref())
+            .map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
         let now = now();
         if w.op.valid_until <= now {
             return Err(SimError::Revert("payload expired".into()));
         }
         margin(w.op.valid_until, now, "the payment").map_err(revert)?;
-        let lane_pk = *self.pks.get(lane).ok_or_else(|| SimError::Transport(format!("no lane {lane}")))?;
+        let lane_pk = *self
+            .pks
+            .get(lane)
+            .ok_or_else(|| SimError::Transport(format!("no lane {lane}")))?;
         let p = self.params().await.map_err(transport)?;
         // fix 1 (b): the round time is read now, as sign will; none measured = retried, never assumed
         let (ts, rounds, secs) = self.round_time(p.last_round).await.map_err(transport)?;
-        last_valid(p.last_round, p.last_round, ts, rounds, secs, w.op.valid_until)
-            .map_err(|e| SimError::Transport(format!("round time: {e:#}")))?;
+        last_valid(
+            p.last_round,
+            p.last_round,
+            ts,
+            rounds,
+            secs,
+            w.op.valid_until,
+        )
+        .map_err(|e| SimError::Transport(format!("round time: {e:#}")))?;
         let digest = w.op.digest();
         let token_addr = app_address(w.token);
         let mut fee_ours = false;
         let mut g = match &w.entry {
             Entry::Pay | Entry::PayMeta { .. } => {
                 if w.op.relayer != [0; 32] && w.op.relayer != lane_pk {
-                    return Err(SimError::Revert("the op is bound to another relayer (rule 7)".into()));
+                    return Err(SimError::Revert(
+                        "the op is bound to another relayer (rule 7)".into(),
+                    ));
                 }
-                let mbr = self.token_mbr(&p, &lane_pk, w.token, &w.op).await? + self.record_mbr(&p, &lane_pk, &w.op.from, &digest, &w.auth).await?;
+                let mbr = self.token_mbr(&p, &lane_pk, w.token, &w.op).await?
+                    + self
+                        .record_mbr(&p, &lane_pk, &w.op.from, &digest, &w.auth)
+                        .await?;
                 let args = match &w.entry {
-                    Entry::PayMeta { salt, meta } => vec![selector(&format!("mtx_pay_meta({METAOP_ABI},byte[],byte[32],byte[])void")).to_vec(), w.op.arc4(),
-                                                          abi_bytes(&w.auth), salt.to_vec(), abi_bytes(meta)],
-                    _ => vec![selector(&format!("mtx_pay({METAOP_ABI},byte[],address)void")).to_vec(), w.op.arc4(), abi_bytes(&w.auth), lane_pk.to_vec()],
+                    Entry::PayMeta { salt, meta } => vec![
+                        selector(&format!(
+                            "mtx_pay_meta({METAOP_ABI},byte[],byte[32],byte[])void"
+                        ))
+                        .to_vec(),
+                        w.op.arc4(),
+                        abi_bytes(&w.auth),
+                        salt.to_vec(),
+                        abi_bytes(meta),
+                    ],
+                    _ => vec![
+                        selector(&format!("mtx_pay({METAOP_ABI},byte[],address)void")).to_vec(),
+                        w.op.arc4(),
+                        abi_bytes(&w.auth),
+                        lane_pk.to_vec(),
+                    ],
                 };
                 let mut txs = Vec::new();
                 if mbr > 0 {
-                    txs.push(Tx::Pay { to: token_addr, amount: mbr });
+                    txs.push(Tx::Pay {
+                        to: token_addr,
+                        amount: mbr,
+                    });
                 }
                 txs.push(Tx::call(w.token, args));
-                Group { main: txs.len() - 1, txs, fee: 0, mbr: 0 }
+                Group {
+                    main: txs.len() - 1,
+                    txs,
+                    fee: 0,
+                    mbr: 0,
+                }
             }
             Entry::Fee { target_app, args } => {
-                let ex = exec.as_ref().ok_or_else(|| SimError::Transport("the router's executor is not derived yet (start_check)".into()))?;
-                let router = self.policy.router.ok_or_else(|| SimError::Revert("no router".into()))?;
+                let ex = exec.as_ref().ok_or_else(|| {
+                    SimError::Transport(
+                        "the router's executor is not derived yet (start_check)".into(),
+                    )
+                })?;
+                let router = self
+                    .policy
+                    .router
+                    .ok_or_else(|| SimError::Revert("no router".into()))?;
                 let open = w.op.to == Holder::addr(app_address(router));
                 let to_lane = w.op.to == Holder::addr(lane_pk);
-                crate::adapter::relay_fee_ours(open, to_lane, w.op.amount, &self.policy.params).map_err(revert)?;
+                crate::adapter::relay_fee_ours(open, to_lane, w.op.amount, &self.policy.params)
+                    .map_err(revert)?;
                 fee_ours = open || to_lane;
                 if self.app(*target_app).await.map_err(transport)?.is_none() {
-                    return Err(SimError::Revert(format!("relay-fee target app {target_app} is missing (rule 13)")));
+                    return Err(SimError::Revert(format!(
+                        "relay-fee target app {target_app} is missing (rule 13)"
+                    )));
                 }
-                let info = target_check(&self.policy, ex, &w.op, *target_app, args, &lane_pk, w.carries.len(), now).map_err(revert)?;
+                let info = target_check(
+                    &self.policy,
+                    ex,
+                    &w.op,
+                    *target_app,
+                    args,
+                    &lane_pk,
+                    w.carries.len(),
+                    now,
+                )
+                .map_err(revert)?;
                 if info.app == Some(App::Account) {
                     if let Some((op, _)) = info.ops.first() {
                         match self.key_sets(&op.from).await {
-                            Ok(s) => info!(chain = %self.key, subject = %op.from.display(), keys = ?s.first().map(|x| x.1.as_ref().map(|k| k.iter().map(|x| hex0x(x)).collect::<Vec<_>>())), "key op job: the subject's key set (one record for every token)"),
-                            Err(e) => info!(chain = %self.key, "key op job: key set unreadable: {e:#}"),
+                            Ok(s) => {
+                                info!(chain = %self.key, subject = %op.from.display(), keys = ?s.first().map(|x| x.1.as_ref().map(|k| k.iter().map(|x| hex0x(x)).collect::<Vec<_>>())), "key op job: the subject's key set (one record for every token)")
+                            }
+                            Err(e) => {
+                                info!(chain = %self.key, "key op job: key set unreadable: {e:#}")
+                            }
                         }
                     }
                 }
-                let pt = self.target_mbr(&p, &lane_pk, *target_app, args, &info).await?;
+                let pt = self
+                    .target_mbr(&p, &lane_pk, *target_app, args, &info)
+                    .await?;
                 let payee = if open { Holder::addr(lane_pk) } else { w.op.to };
-                let opens = !(w.op.from.kind == KIND_ADDRESS && w.auth.len() == 64) && info.signers.contains(&w.op.from)
-                    && info.ops.iter().any(|(o, a)| o.from == w.op.from && !(o.from.kind == KIND_ADDRESS && a.len() == 64));
-                let rec = if opens && self.box_value(self.policy.account_app, &Self::rec_name(&w.op.from)).await.map_err(transport)?.is_none() {
+                let opens = !(w.op.from.kind == KIND_ADDRESS && w.auth.len() == 64)
+                    && info.signers.contains(&w.op.from)
+                    && info.ops.iter().any(|(o, a)| {
+                        o.from == w.op.from && !(o.from.kind == KIND_ADDRESS && a.len() == 64)
+                    });
+                let rec = if opens
+                    && self
+                        .box_value(self.policy.account_app, &Self::rec_name(&w.op.from))
+                        .await
+                        .map_err(transport)?
+                        .is_none()
+                {
                     0 // the target opens the payer's record before the router's pay verifies (one atomic group)
                 } else {
-                    self.record_mbr(&p, &lane_pk, &w.op.from, &digest, &w.auth).await?
+                    self.record_mbr(&p, &lane_pk, &w.op.from, &digest, &w.auth)
+                        .await?
                 };
-                let mut pr = self.token_mbr(&p, &lane_pk, w.token, &MetaOp { to: payee, ..w.op.clone() }).await? + rec;
+                let mut pr = self
+                    .token_mbr(
+                        &p,
+                        &lane_pk,
+                        w.token,
+                        &MetaOp {
+                            to: payee,
+                            ..w.op.clone()
+                        },
+                    )
+                    .await?
+                    + rec;
                 // fix 1 minor 4: a same-token value target paying the fee's payee creates its balance box first: paid once
-                let pays_payee = *target_app == w.token && info.app == Some(App::Token)
-                    && matches!(info.method, "mtx_pay" | "mtx_pay_meta" | "mtx_transfer" | "mtx_execute_transfer")
+                let pays_payee = *target_app == w.token
+                    && info.app == Some(App::Token)
+                    && matches!(
+                        info.method,
+                        "mtx_pay" | "mtx_pay_meta" | "mtx_transfer" | "mtx_execute_transfer"
+                    )
                     && info.ops.first().is_some_and(|(o, _)| o.to == payee);
                 if pays_payee {
-                    let name = [if payee.kind == KIND_ADDRESS { &b"b"[..] } else { &b"u"[..] }, &payee.id].concat();
-                    if self.box_value(w.token, &name).await.map_err(transport)?.is_none() {
+                    let name = [
+                        if payee.kind == KIND_ADDRESS {
+                            &b"b"[..]
+                        } else {
+                            &b"u"[..]
+                        },
+                        &payee.id,
+                    ]
+                    .concat();
+                    if self
+                        .box_value(w.token, &name)
+                        .await
+                        .map_err(transport)?
+                        .is_none()
+                    {
                         pr = pr.saturating_sub(MBR_AMOUNT_BOX);
                     }
                 }
                 let mut txs = Vec::new();
                 if pr > 0 {
-                    txs.push(Tx::Pay { to: app_address(router), amount: pr });
+                    txs.push(Tx::Pay {
+                        to: app_address(router),
+                        amount: pr,
+                    });
                 }
                 if pt > 0 {
-                    txs.push(Tx::Pay { to: app_address(*target_app), amount: pt });
+                    txs.push(Tx::Pay {
+                        to: app_address(*target_app),
+                        amount: pt,
+                    });
                 }
                 txs.push(target_tx(*target_app, args.clone(), &w.refs).map_err(revert)?);
-                txs.push(Tx::call(router, vec![selector(&format!("relay(uint64,{METAOP_ABI},byte[])void")).to_vec(), w.token.to_be_bytes().to_vec(),
-                                               w.op.arc4(), abi_bytes(&w.auth)]));
+                txs.push(Tx::call(
+                    router,
+                    vec![
+                        selector(&format!("relay(uint64,{METAOP_ABI},byte[])void")).to_vec(),
+                        w.token.to_be_bytes().to_vec(),
+                        w.op.arc4(),
+                        abi_bytes(&w.auth),
+                    ],
+                ));
                 let main = txs.len() - 1;
                 for c in &w.carries {
-                    txs.push(Tx::call(*target_app, vec![selector("carry(byte[])void").to_vec(), abi_bytes(c)]));
+                    txs.push(Tx::call(
+                        *target_app,
+                        vec![selector("carry(byte[])void").to_vec(), abi_bytes(c)],
+                    ));
                 }
-                Group { txs, main, fee: 0, mbr: 0 }
+                Group {
+                    txs,
+                    main,
+                    fee: 0,
+                    mbr: 0,
+                }
             }
         };
         let ex = exec.as_ref();
-        g.fee = p.min_fee.saturating_mul(g.txs.len() as u64 + DISCOVERY_CREDIT);
+        g.fee = p
+            .min_fee
+            .saturating_mul(g.txs.len() as u64 + DISCOVERY_CREDIT);
         // T20 (real algod): discovery runs with the opcode budget the group could still gain, so it only finds resources
         let room = (MAX_GROUP.saturating_sub(g.txs.len()) as u64).saturating_mul(BUDGET_PER_CALL);
         let d = self.simulate(&p, &g, &lane_pk, ex, true, room).await?;
@@ -2104,9 +3225,13 @@ impl AlgorandAdapter {
         for (t, u) in g.txs.iter_mut().zip(&d.per_txn) {
             add_own(t, u).map_err(revert)?;
         }
-        g.txs.extend(budget_calls(w.token, &d.unnamed).map_err(revert)?);
+        g.txs
+            .extend(budget_calls(w.token, &d.unnamed).map_err(revert)?);
         if g.txs.len() > MAX_GROUP {
-            return Err(SimError::Revert(format!("the group needs {} transactions, above {MAX_GROUP}", g.txs.len())));
+            return Err(SimError::Revert(format!(
+                "the group needs {} transactions, above {MAX_GROUP}",
+                g.txs.len()
+            )));
         }
         // the first exact pass learns the inner count with the discovery credit (the apps' own budget calls depend on the
         // pool, which discovery's extra budget enlarged); then the fee is exact
@@ -2120,9 +3245,20 @@ impl AlgorandAdapter {
                 // raise its own budget (token.mtx_pay_meta's pre-work, the router's tail); refused once the group is full
                 // each one distinct (equal transactions of one group share a txid: algod refuses the second as "already
                 // in ledger"), by its count of empty box references (I/O quota only)
-                let more = (0..8).map(|i| Tx::Call { app: w.token, args: vec![], accounts: vec![], apps: vec![], boxes: vec![(0, vec![]); i],
-                                                     executor: false }).find(|t| !g.txs.contains(t));
-                if let (true, Some(t)) = (f.contains("dynamic cost budget exceeded") && g.txs.len() < MAX_GROUP, more) {
+                let more = (0..8)
+                    .map(|i| Tx::Call {
+                        app: w.token,
+                        args: vec![],
+                        accounts: vec![],
+                        apps: vec![],
+                        boxes: vec![(0, vec![]); i],
+                        executor: false,
+                    })
+                    .find(|t| !g.txs.contains(t));
+                if let (true, Some(t)) = (
+                    f.contains("dynamic cost budget exceeded") && g.txs.len() < MAX_GROUP,
+                    more,
+                ) {
                     g.txs.push(t);
                     continue;
                 }
@@ -2136,12 +3272,32 @@ impl AlgorandAdapter {
             inner = s.inner;
         }
         if !settled {
-            return Err(SimError::Revert("the group's inner transaction count does not settle".into()));
+            return Err(SimError::Revert(
+                "the group's inner transaction count does not settle".into(),
+            ));
         }
-        g.mbr = g.txs.iter().map(|t| if let Tx::Pay { amount, .. } = t { *amount } else { 0 }).sum();
+        g.mbr = g
+            .txs
+            .iter()
+            .map(|t| {
+                if let Tx::Pay { amount, .. } = t {
+                    *amount
+                } else {
+                    0
+                }
+            })
+            .sum();
         if fee_ours {
-            let price = self.policy.min_microalgo_value.get(&w.token)
-                .ok_or_else(|| SimError::Revert(format!("params.relay_fee.min_microalgo_value has no price for token {}", w.token)))?;
+            let price = self
+                .policy
+                .min_microalgo_value
+                .get(&w.token)
+                .ok_or_else(|| {
+                    SimError::Revert(format!(
+                        "params.relay_fee.min_microalgo_value has no price for token {}",
+                        w.token
+                    ))
+                })?;
             let quote = u128::from(g.fee) + u128::from(g.mbr);
             let value = w.op.amount.saturating_mul(*price);
             if value < quote {
@@ -2150,9 +3306,13 @@ impl AlgorandAdapter {
             }
         }
         let meta = serde_json::to_value(&g).map_err(|e| SimError::Revert(e.to_string()))?;
-        Ok(Built { job_id: job.id, body: vec![], valid_until: w.op.valid_until, meta })
+        Ok(Built {
+            job_id: job.id,
+            body: vec![],
+            valid_until: w.op.valid_until,
+            meta,
+        })
     }
-
 }
 
 #[async_trait]
@@ -2172,8 +3332,14 @@ impl ChainAdapter for AlgorandAdapter {
     /// R80: the payer's lane box on the token has passed the op's nonce. Every job kind is one atomic group (no escrow,
     /// no refund), so a consumed payment lane means the job's group landed (lesson 1).
     async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
-        let Ok(w) = self.work(job, self.exec().as_ref()) else { return Ok(None) };
-        let name = [&b"l"[..], &sha256(&[&w.op.from.bytes()[..], &w.op.lane].concat())].concat();
+        let Ok(w) = self.work(job, self.exec().as_ref()) else {
+            return Ok(None);
+        };
+        let name = [
+            &b"l"[..],
+            &sha256(&[&w.op.from.bytes()[..], &w.op.lane].concat()),
+        ]
+        .concat();
         let next = match self.box_value(w.token, &name).await? {
             Some(v) => be_u64(&v)?,
             None => 0,
@@ -2186,7 +3352,9 @@ impl ChainAdapter for AlgorandAdapter {
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let mark = self.failovers();
         match BUILDING.scope((), self.build_on(job, lane)).await {
-            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),
+            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(
+                crate::adapters::evm::failover_answer(&r),
+            )),
             r => r,
         }
     }
@@ -2195,29 +3363,72 @@ impl ChainAdapter for AlgorandAdapter {
     /// the lane's transactions signed over `"TX"` ‖ bytes, the executor's by its program.
     async fn sign(&self, built: Built, lane: usize, sequence: u64) -> Result<Signed> {
         let g: Group = serde_json::from_value(built.meta)?;
-        let s = self.signers.get(lane).ok_or_else(|| anyhow!("no lane {lane}"))?;
+        let s = self
+            .signers
+            .get(lane)
+            .ok_or_else(|| anyhow!("no lane {lane}"))?;
         let p = self.params().await?;
         let (ts, rounds, secs) = self.round_time(sequence).await?;
         let lv = last_valid(sequence, sequence, ts, rounds, secs, built.valid_until)?;
         let exec = self.exec();
-        let (raw, ids) = sign_group(&g, &p.chain, sequence, lv, &|m| s.sign(m), &self.pks[lane], exec.as_ref())?;
-        let tx_id = hex0x(ids.get(g.main).ok_or_else(|| anyhow!("group without its main transaction"))?);
+        let (raw, ids) = sign_group(
+            &g,
+            &p.chain,
+            sequence,
+            lv,
+            &|m| s.sign(m),
+            &self.pks[lane],
+            exec.as_ref(),
+        )?;
+        let tx_id = hex0x(
+            ids.get(g.main)
+                .ok_or_else(|| anyhow!("group without its main transaction"))?,
+        );
         if let Ok(mut m) = self.spent.lock() {
             // fix 1 minor 1: a group is final or dead within MaxTxnLife rounds; older entries are never read
             m.retain(|_, (_, at)| at.elapsed() < SPENT_KEEP);
-            m.insert(tx_id.clone(), (u128::from(g.fee) + u128::from(g.mbr), std::time::Instant::now()));
+            m.insert(
+                tx_id.clone(),
+                (
+                    u128::from(g.fee) + u128::from(g.mbr),
+                    std::time::Instant::now(),
+                ),
+            );
         }
-        Ok(Signed { job_id: built.job_id, tx_id, raw, valid_until: built.valid_until, sequence })
+        Ok(Signed {
+            job_id: built.job_id,
+            tx_id,
+            raw,
+            valid_until: built.valid_until,
+            sequence,
+        })
     }
 
     /// A 4xx answer (dead window, fee, overspend, a logic failure at the pool's check): the same bytes never pass ⇒
     /// `Rejected`; "already in ledger" = it landed.
     async fn submit(&self, signed: &Signed) -> Result<()> {
         // scaas-rpc T24.7: the send is endpoint 0's, inside `build`'s scope too (never failed over)
-        match self.net.post(0, "/v2/transactions", signed.raw.clone(), "application/x-binary").await.map_err(algod_error) {
+        match self
+            .net
+            .post(
+                0,
+                "/v2/transactions",
+                signed.raw.clone(),
+                "application/x-binary",
+            )
+            .await
+            .map_err(algod_error)
+        {
             Ok(_) => Ok(()),
-            Err(e) if e.downcast_ref::<AlgodError>().is_some_and(|a| a.message.contains("already in ledger")) => Ok(()),
-            Err(e) if status_of(&e).is_some_and(|s| (400..500).contains(&s)) => Err(Rejected(format!("{e:#}")).into()),
+            Err(e)
+                if e.downcast_ref::<AlgodError>()
+                    .is_some_and(|a| a.message.contains("already in ledger")) =>
+            {
+                Ok(())
+            }
+            Err(e) if status_of(&e).is_some_and(|s| (400..500).contains(&s)) => {
+                Err(Rejected(format!("{e:#}")).into())
+            }
             Err(e) => Err(e),
         }
     }
@@ -2226,21 +3437,28 @@ impl ChainAdapter for AlgorandAdapter {
     /// 16: never requeued); not in the pool = unknown.
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
         let st: Result<TxStatus> = async {
-            let id = b32encode(&arr32(&alloy::hex::decode(tx_id.trim_start_matches("0x"))?)?);
+            let id = b32encode(&arr32(&alloy::hex::decode(
+                tx_id.trim_start_matches("0x"),
+            )?)?);
             let v = match self.get(&format!("/v2/transactions/pending/{id}")).await {
                 Ok(v) => v,
                 Err(e) if status_of(&e) == Some(404) => return Ok(TxStatus::Unknown),
                 Err(e) => return Err(e),
             };
             if let Some(h) = v["confirmed-round"].as_u64().filter(|h| *h > 0) {
-                return Ok(TxStatus::Mined { height: h, tx_hash: None });
+                return Ok(TxStatus::Mined {
+                    height: h,
+                    tx_hash: None,
+                });
             }
             match v["pool-error"].as_str().filter(|s| !s.is_empty()) {
                 Some(e) => {
                     if let Ok(mut m) = self.spent.lock() {
                         m.remove(tx_id);
                     }
-                    Ok(TxStatus::Reverted { reason: e.to_string() })
+                    Ok(TxStatus::Reverted {
+                        reason: e.to_string(),
+                    })
                 }
                 None => Ok(TxStatus::Pending),
             }
@@ -2255,17 +3473,32 @@ impl ChainAdapter for AlgorandAdapter {
 
     /// No account sequence on Algorand: the last round (the next group's FirstValid).
     async fn sequence(&self, _lane: usize) -> Result<u64> {
-        self.get("/v2/status").await?["last-round"].as_u64().ok_or_else(|| anyhow!("status without last-round"))
+        self.get("/v2/status").await?["last-round"]
+            .as_u64()
+            .ok_or_else(|| anyhow!("status without last-round"))
     }
 
     async fn lane_balance(&self, lane: usize) -> Result<Option<u128>> {
-        let a = &self.lanes.get(lane).ok_or_else(|| anyhow!("no lane {lane}"))?.address;
-        Ok(self.get(&format!("/v2/accounts/{a}?exclude=all")).await?["amount"].as_u64().map(u128::from))
+        let a = &self
+            .lanes
+            .get(lane)
+            .ok_or_else(|| anyhow!("no lane {lane}"))?
+            .address;
+        Ok(
+            self.get(&format!("/v2/accounts/{a}?exclude=all")).await?["amount"]
+                .as_u64()
+                .map(u128::from),
+        )
     }
 
     /// What the lane paid for its group: the pooled fee + its MBR payments (known since `sign`; read once, at mined).
     async fn tx_fee(&self, tx_id: &str) -> Result<Option<u128>> {
-        Ok(self.spent.lock().ok().and_then(|mut m| m.remove(tx_id)).map(|(n, _)| n))
+        Ok(self
+            .spent
+            .lock()
+            .ok()
+            .and_then(|mut m| m.remove(tx_id))
+            .map(|(n, _)| n))
     }
 
     /// The last round (one-round finality); with `quorum > 1` further endpoints must agree on its hash.
@@ -2290,33 +3523,58 @@ impl ChainAdapter for AlgorandAdapter {
     /// history) fails the range (lesson 9). With `quorum > 1` further endpoints must return the same block bytes.
     /// ponytail: two RPCs per round (block + hash); an indexer feed when a busy chain needs it.
     async fn events(&self, from: u64, to: u64, contracts: &[String]) -> Result<Vec<Value>> {
-        let tokens: Vec<u64> = contracts.iter().filter_map(|c| app_id_str(c).ok()).collect();
+        let tokens: Vec<u64> = contracts
+            .iter()
+            .filter_map(|c| app_id_str(c).ok())
+            .collect();
         if tokens.is_empty() && !contracts.is_empty() {
-            bail!("none of the {} registered tokens is an Algorand app id", contracts.len());
+            bail!(
+                "none of the {} registered tokens is an Algorand app id",
+                contracts.len()
+            );
         }
         if tokens.is_empty() || from > to {
             return Ok(vec![]);
         }
-        let ids = Ids { tokens, router: self.policy.router, mandate: self.policy.mandate_app, dex: self.policy.dex_app };
+        let ids = Ids {
+            tokens,
+            router: self.policy.router,
+            mandate: self.policy.mandate_app,
+            dex: self.policy.dex_app,
+        };
         let mut out = Vec::new();
         for h in from..=to {
             let q = [("format", "msgpack".to_string())];
             let raw = match self.get_raw_at(0, &format!("/v2/blocks/{h}"), &q).await {
                 Ok(b) => b,
-                Err(e) if status_of(&e) == Some(404) => bail!("round {h} is not in algod's history (pruned: use an archival node): {e:#}"),
+                Err(e) if status_of(&e) == Some(404) => bail!(
+                    "round {h} is not in algod's history (pruned: use an archival node): {e:#}"
+                ),
                 Err(e) => return Err(e),
             };
             if self.quorum > 1 {
                 let mut agree = 1;
                 for i in 1..self.net.client.len() {
-                    if self.get_raw_at(i, &format!("/v2/blocks/{h}"), &q).await.ok().as_deref() == Some(&raw[..]) {
+                    if self
+                        .get_raw_at(i, &format!("/v2/blocks/{h}"), &q)
+                        .await
+                        .ok()
+                        .as_deref()
+                        == Some(&raw[..])
+                    {
                         agree += 1;
                     }
                 }
-                ensure!(agree >= self.quorum, "block {h}: {agree} endpoint(s) agree, quorum is {}", self.quorum);
+                ensure!(
+                    agree >= self.quorum,
+                    "block {h}: {agree} endpoint(s) agree, quorum is {}",
+                    self.quorum
+                );
             }
             let b = mp_decode(&raw)?;
-            let block = b.get("block").ok_or_else(|| anyhow!("round {h}: no block"))?;
+            let block = b
+                .get("block")
+                .ok_or_else(|| anyhow!("round {h}: no block"))?;
             let hash = self.block_hash(h).await?;
             out.extend(block_events(&ids, block, &hash)?);
         }
@@ -2338,32 +3596,69 @@ impl ChainAdapter for AlgorandAdapter {
         apps.extend(self.policy.router.map(|r| (r, "relayfee")));
         let mut salt = None;
         for (id, program) in apps {
-            let v = self.app(id).await?.ok_or_else(|| anyhow!("missing app id: {program} app {id} does not exist"))?;
+            let v = self
+                .app(id)
+                .await?
+                .ok_or_else(|| anyhow!("missing app id: {program} app {id} does not exist"))?;
             let pp = &v["params"];
-            for (field, key) in [("approval-program", "approval_sha512_256"), ("clear-state-program", "clear_sha512_256")] {
-                let got = alloy::hex::encode(sha512_256(&[&b64d(pp[field].as_str().unwrap_or_default())?]));
-                let want = a[program][key].as_str().ok_or_else(|| anyhow!("artifacts.json {program}.{key}"))?;
+            for (field, key) in [
+                ("approval-program", "approval_sha512_256"),
+                ("clear-state-program", "clear_sha512_256"),
+            ] {
+                let got = alloy::hex::encode(sha512_256(&[&b64d(
+                    pp[field].as_str().unwrap_or_default(),
+                )?]));
+                let want = a[program][key]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("artifacts.json {program}.{key}"))?;
                 if got != want {
                     bail!("{program} app {id}: {field} sha512_256 {got} is not artifacts.json {want}: the chain is halted (spec §4.9)");
                 }
             }
-            let global = |name: &str| pp["global-state"].as_array().into_iter().flatten()
-                .find(|g| g["key"].as_str() == Some(b64(name.as_bytes()).as_str())).and_then(|g| g["value"]["uint"].as_u64());
+            let global = |name: &str| {
+                pp["global-state"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .find(|g| g["key"].as_str() == Some(b64(name.as_bytes()).as_str()))
+                    .and_then(|g| g["value"]["uint"].as_u64())
+            };
             match program {
                 "token" | "mandate" if global("account_app") != Some(self.policy.account_app) => {
-                    bail!("{program} app {id}: account_app {:?} is not params.account_app {}", global("account_app"), self.policy.account_app)
+                    bail!(
+                        "{program} app {id}: account_app {:?} is not params.account_app {}",
+                        global("account_app"),
+                        self.policy.account_app
+                    )
                 }
                 "dex" if global("router_app") != self.policy.router => {
-                    bail!("dex app {id}: router_app {:?} is not params.relayfee_app {:?}", global("router_app"), self.policy.router)
+                    bail!(
+                        "dex app {id}: router_app {:?} is not params.relayfee_app {:?}",
+                        global("router_app"),
+                        self.policy.router
+                    )
                 }
-                "relayfee" => salt = Some(global("salt").and_then(|s| u8::try_from(s).ok()).ok_or_else(|| anyhow!("router {id}: no salt global"))?),
+                "relayfee" => {
+                    salt = Some(
+                        global("salt")
+                            .and_then(|s| u8::try_from(s).ok())
+                            .ok_or_else(|| anyhow!("router {id}: no salt global"))?,
+                    )
+                }
                 _ => {}
             }
         }
         if let (Some(router), Some(salt)) = (self.policy.router, salt) {
             let x = Executor::new(router, salt)?;
             let p = self.params().await?;
-            let got = self.query(&p, &self.pks[0], router, vec![selector("executor()address").to_vec()]).await
+            let got = self
+                .query(
+                    &p,
+                    &self.pks[0],
+                    router,
+                    vec![selector("executor()address").to_vec()],
+                )
+                .await
                 .map_err(|e| anyhow!("router executor(): {e:?}"))?;
             if got != x.address {
                 bail!("router {router} executor() is {}, not the executor rebuilt from its salt {salt}: {}", hex0x(&got), algorand_address(&x.address));
@@ -2377,10 +3672,21 @@ impl ChainAdapter for AlgorandAdapter {
             }
         }
         // note 2: the router's address holds its base minimum (an account below it cannot receive the MBR it forwards)
-        let router = self.policy.router.map(|r| ("router", algorand_address(&app_address(r))));
-        for (what, a) in self.lanes.iter().map(|l| ("lane", l.address.clone())).chain(router) {
+        let router = self
+            .policy
+            .router
+            .map(|r| ("router", algorand_address(&app_address(r))));
+        for (what, a) in self
+            .lanes
+            .iter()
+            .map(|l| ("lane", l.address.clone()))
+            .chain(router)
+        {
             let v = self.get(&format!("/v2/accounts/{a}?exclude=all")).await?;
-            let (amount, min) = (v["amount"].as_u64().unwrap_or(0), v["min-balance"].as_u64().unwrap_or(0));
+            let (amount, min) = (
+                v["amount"].as_u64().unwrap_or(0),
+                v["min-balance"].as_u64().unwrap_or(0),
+            );
             if amount == 0 || amount < min {
                 bail!("{what} {a} holds {amount} µALGO, below its minimum balance {min}");
             }
@@ -2393,9 +3699,11 @@ mod tests {
     use super::*;
     use std::sync::{Arc, Mutex as M};
 
-    const VECTORS: &str = include_str!("../../../smartcontracts/algorand/vectors/algorand-vectors.json");
+    const VECTORS: &str =
+        include_str!("../../../smartcontracts/algorand/vectors/algorand-vectors.json");
     const TXV: &str = include_str!("../../../smartcontracts/algorand/vectors/algorand-tx.json");
-    const PAYMETA: &str = include_str!("../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json");
+    const PAYMETA: &str =
+        include_str!("../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json");
     const TOKEN: u64 = 1001;
     const ROUTER: u64 = 1002;
     const TARGET: u64 = 1003;
@@ -2417,7 +3725,13 @@ mod tests {
         format!("0x{}", alloy::hex::encode(b))
     }
     fn row(name: &str) -> Value {
-        v()["metaops"]["vectors"].as_array().unwrap().iter().find(|r| r["name"] == name).unwrap_or_else(|| panic!("{name}")).clone()
+        v()["metaops"]["vectors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["name"] == name)
+            .unwrap_or_else(|| panic!("{name}"))
+            .clone()
     }
     fn op_of(name: &str) -> MetaOp {
         MetaOp::decode(&hx(&row(name)["encoding"])).unwrap()
@@ -2436,7 +3750,15 @@ mod tests {
             "secp256k1" => [vec![2], hx(&a["key"]), sig[..64].to_vec()].concat(),
             "passkey" => {
                 let ad = hx(&a["authenticatorData"]);
-                [vec![3], hx(&a["key"]), sig, (ad.len() as u16).to_be_bytes().to_vec(), ad, a["clientDataJSON"].as_str().unwrap().as_bytes().to_vec()].concat()
+                [
+                    vec![3],
+                    hx(&a["key"]),
+                    sig,
+                    (ad.len() as u16).to_be_bytes().to_vec(),
+                    ad,
+                    a["clientDataJSON"].as_str().unwrap().as_bytes().to_vec(),
+                ]
+                .concat()
             }
             k => panic!("{k}"),
         }
@@ -2460,9 +3782,17 @@ mod tests {
             mandate_app: Some(MANDATE),
             dex_app: Some(DEX),
             router: Some(ROUTER),
-            params: crate::config::RelayParams { min_amount: 1, ..Default::default() },
+            params: crate::config::RelayParams {
+                min_amount: 1,
+                ..Default::default()
+            },
             min_microalgo_value: HashMap::from([(TOKEN, 1_000)]),
-            targets: BTreeMap::from([(TARGET, vec![selector(&format!("mtx_add_key({METAOP_ABI},byte[],(uint16,byte[]),byte[])void"))])]),
+            targets: BTreeMap::from([(
+                TARGET,
+                vec![selector(&format!(
+                    "mtx_add_key({METAOP_ABI},byte[],(uint16,byte[]),byte[])void"
+                ))],
+            )]),
         }
     }
     fn job(o: Value) -> Job {
@@ -2483,11 +3813,25 @@ mod tests {
     }
     /// A payment op of `call` (open mode unless `to` is given), signed by nobody (the mocked simulate decides).
     fn fee_op(call: &[u8], salt: [u8; 32], to: Option<Holder>) -> MetaOp {
-        let r = relay_ref(&network(), &app_address(parse_router_call(call).unwrap().0), call, &salt);
+        let r = relay_ref(
+            &network(),
+            &app_address(parse_router_call(call).unwrap().0),
+            call,
+            &salt,
+        );
         MetaOp {
-            network: network(), contract: app_address(TOKEN), op: 0, from: holder(1, [0x11; 32]),
-            to: to.unwrap_or(holder(0, app_address(ROUTER))), relayer: app_address(ROUTER), amount: 50_000, pay_ref: r,
-            lane: pay_lane(&r), nonce: 0, valid_until: far(), extra: salt,
+            network: network(),
+            contract: app_address(TOKEN),
+            op: 0,
+            from: holder(1, [0x11; 32]),
+            to: to.unwrap_or(holder(0, app_address(ROUTER))),
+            relayer: app_address(ROUTER),
+            amount: 50_000,
+            pay_ref: r,
+            lane: pay_lane(&r),
+            nonce: 0,
+            valid_until: far(),
+            extra: salt,
         }
     }
     fn fee_job(call: &[u8], op: &MetaOp, extra: Value) -> Value {
@@ -2498,11 +3842,30 @@ mod tests {
         o_op(op, &[0xaa; 70], json!({"kind": "relay_fee", "extra": e}))
     }
     fn target_op(contract: [u8; 32], op: u8, from: Holder, to: Holder) -> MetaOp {
-        MetaOp { network: network(), contract, op, from, to, relayer: [0; 32], amount: 5, pay_ref: [0; 32], lane: [0x33; 32],
-                 nonce: 0, valid_until: far(), extra: [0; 32] }
+        MetaOp {
+            network: network(),
+            contract,
+            op,
+            from,
+            to,
+            relayer: [0; 32],
+            amount: 5,
+            pay_ref: [0; 32],
+            lane: [0x33; 32],
+            nonce: 0,
+            valid_until: far(),
+            extra: [0; 32],
+        }
     }
     fn transfer_call(t: &MetaOp) -> Vec<u8> {
-        router_call(TOKEN, &[selector(&format!("mtx_transfer({METAOP_ABI},byte[])void")).to_vec(), t.arc4(), abi_bytes(&[0xbb; 70])])
+        router_call(
+            TOKEN,
+            &[
+                selector(&format!("mtx_transfer({METAOP_ABI},byte[])void")).to_vec(),
+                t.arc4(),
+                abi_bytes(&[0xbb; 70]),
+            ],
+        )
     }
 
     // ------------------------------------------------------------ mocked algod
@@ -2531,7 +3894,10 @@ mod tests {
     }
 
     fn app_json(program: &str, globals: Value) -> Value {
-        let b = |f: &str| base64::engine::general_purpose::STANDARD.encode(std::fs::read(format!("../smartcontracts/algorand/out/{f}")).unwrap());
+        let b = |f: &str| {
+            base64::engine::general_purpose::STANDARD
+                .encode(std::fs::read(format!("../smartcontracts/algorand/out/{f}")).unwrap())
+        };
         json!({"id": 0, "params": {"approval-program": b(&format!("{program}.approval.bin")), "clear-state-program": b(&format!("{program}.clear.bin")),
                                    "global-state": globals}})
     }
@@ -2540,22 +3906,55 @@ mod tests {
     }
 
     fn world() -> World {
-        let mut w = World { genesis: network(), last_round: 5_000, min_fee: 1_000, inner: 3, unnamed: json!({}), ..Default::default() };
-        w.apps.insert(TOKEN, app_json("Token", json!([g_uint("account_app", ACCOUNT)])));
-        w.apps.insert(TOKEN_B, app_json("Token", json!([g_uint("account_app", ACCOUNT)])));
+        let mut w = World {
+            genesis: network(),
+            last_round: 5_000,
+            min_fee: 1_000,
+            inner: 3,
+            unnamed: json!({}),
+            ..Default::default()
+        };
+        w.apps.insert(
+            TOKEN,
+            app_json("Token", json!([g_uint("account_app", ACCOUNT)])),
+        );
+        w.apps.insert(
+            TOKEN_B,
+            app_json("Token", json!([g_uint("account_app", ACCOUNT)])),
+        );
         w.apps.insert(ACCOUNT, app_json("Account", json!([])));
-        w.apps.insert(MANDATE, app_json("Mandate", json!([g_uint("account_app", ACCOUNT)])));
-        w.apps.insert(DEX, app_json("Dex", json!([g_uint("router_app", ROUTER)])));
-        w.apps.insert(ROUTER, app_json("RelayFee", json!([g_uint("salt", 2)])));
+        w.apps.insert(
+            MANDATE,
+            app_json("Mandate", json!([g_uint("account_app", ACCOUNT)])),
+        );
+        w.apps
+            .insert(DEX, app_json("Dex", json!([g_uint("router_app", ROUTER)])));
+        w.apps
+            .insert(ROUTER, app_json("RelayFee", json!([g_uint("salt", 2)])));
         w.apps.insert(TARGET, app_json("RelayTarget", json!([])));
-        w.accounts.insert(algorand_address(&lane_pk()), (10_000_000, 100_000));
-        w.accounts.insert(algorand_address(&app_address(ROUTER)), (100_000, 100_000));
-        w.views.insert(selector("executor()address"), exec().address.to_vec());
-        w.views.insert(selector(&format!("mbr_needed({METAOP_ABI})uint64")), 47_400u64.to_be_bytes().to_vec());
-        w.views.insert(selector("verify_mbr(uint8,byte[32],byte[32],byte[])uint64"), 76_100u64.to_be_bytes().to_vec());
+        w.accounts
+            .insert(algorand_address(&lane_pk()), (10_000_000, 100_000));
+        w.accounts
+            .insert(algorand_address(&app_address(ROUTER)), (100_000, 100_000));
+        w.views
+            .insert(selector("executor()address"), exec().address.to_vec());
+        w.views.insert(
+            selector(&format!("mbr_needed({METAOP_ABI})uint64")),
+            47_400u64.to_be_bytes().to_vec(),
+        );
+        w.views.insert(
+            selector("verify_mbr(uint8,byte[32],byte[32],byte[])uint64"),
+            76_100u64.to_be_bytes().to_vec(),
+        );
         let ts = ts_of;
         for r in [4_900u64, 5_000] {
-            let b = Mp::Map(vec![(Mp::str("block"), Mp::Map(vec![(Mp::str("rnd"), Mp::Int(r as i128)), (Mp::str("ts"), Mp::Int(ts(r) as i128))]))]);
+            let b = Mp::Map(vec![(
+                Mp::str("block"),
+                Mp::Map(vec![
+                    (Mp::str("rnd"), Mp::Int(r as i128)),
+                    (Mp::str("ts"), Mp::Int(ts(r) as i128)),
+                ]),
+            )]);
             w.blocks.insert(r, (mp_encode(&b), [r as u8; 32]));
         }
         w
@@ -2568,23 +3967,40 @@ mod tests {
     }
 
     fn txns_of(req: &Mp) -> Vec<Mp> {
-        req.get("txn-groups").and_then(|g| g.arr().first().cloned()).and_then(|g| g.get("txns").map(|t| t.arr().to_vec())).unwrap_or_default()
+        req.get("txn-groups")
+            .and_then(|g| g.arr().first().cloned())
+            .and_then(|g| g.get("txns").map(|t| t.arr().to_vec()))
+            .unwrap_or_default()
     }
 
     fn simulate(w: &mut World, req: Mp) -> Value {
         let txns = txns_of(&req);
         w.sims.push(req.clone());
-        let sel = |t: &Mp| t.get("txn").and_then(|x| x.get("apaa")).and_then(|a| a.arr().first().and_then(|s| s.bytes().map(|b| b.to_vec())));
+        let sel = |t: &Mp| {
+            t.get("txn")
+                .and_then(|x| x.get("apaa"))
+                .and_then(|a| a.arr().first().and_then(|s| s.bytes().map(|b| b.to_vec())))
+        };
         if txns.len() == 1 {
-            if let Some(ret) = sel(&txns[0]).and_then(|s| w.views.get(&<[u8; 4]>::try_from(&s[..]).ok()?).cloned()) {
-                let log = base64::engine::general_purpose::STANDARD.encode([&[0x15, 0x1f, 0x7c, 0x75][..], &ret].concat());
+            if let Some(ret) =
+                sel(&txns[0]).and_then(|s| w.views.get(&<[u8; 4]>::try_from(&s[..]).ok()?).cloned())
+            {
+                let log = base64::engine::general_purpose::STANDARD
+                    .encode([&[0x15, 0x1f, 0x7c, 0x75][..], &ret].concat());
                 return json!({"txn-groups": [{"txn-results": [{"txn-result": {"logs": [log]}}]}]});
             }
         }
         if let Some(f) = &w.fail {
             return json!({"txn-groups": [{"failure-message": f, "failed-at": [0], "txn-results": []}]});
         }
-        let bare = txns.iter().filter(|t| t.get("txn").is_some_and(|x| x.get("type").and_then(Mp::bytes) == Some(b"appl") && x.get("apaa").is_none())).count();
+        let bare = txns
+            .iter()
+            .filter(|t| {
+                t.get("txn").is_some_and(|x| {
+                    x.get("type").and_then(Mp::bytes) == Some(b"appl") && x.get("apaa").is_none()
+                })
+            })
+            .count();
         if bare < w.budget_calls_needed && req.get("extra-opcode-budget").is_none() {
             return json!({"txn-groups": [{"failure-message": "transaction X: logic eval error: dynamic cost budget exceeded, executing swap: local program cost was 700",
                                           "failed-at": [1], "txn-results": []}]});
@@ -2594,7 +4010,9 @@ mod tests {
         if let Some(last) = results.iter_mut().rev().find(|_| true) {
             last["txn-result"]["inner-txns"] = json!([{"inner-txns": inner}]);
         }
-        let unnamed = req.get("allow-unnamed-resources").is_some_and(|b| matches!(b, Mp::Bool(true)));
+        let unnamed = req
+            .get("allow-unnamed-resources")
+            .is_some_and(|b| matches!(b, Mp::Bool(true)));
         // the "inner-txns" tree holds w.inner + 1 transactions in all
         json!({"txn-groups": [{"txn-results": results, "unnamed-resources-accessed": if unnamed { w.unnamed.clone() } else { json!(null) }}]})
     }
@@ -2605,7 +4023,13 @@ mod tests {
         use axum::response::IntoResponse;
         use axum::routing::{get, post};
         type S = State<Arc<M<World>>>;
-        let nf = || (StatusCode::NOT_FOUND, axum::Json(json!({"message": "not found"}))).into_response();
+        let nf = || {
+            (
+                StatusCode::NOT_FOUND,
+                axum::Json(json!({"message": "not found"})),
+            )
+                .into_response()
+        };
         let app = axum::Router::new()
             .route("/v2/transactions/params", get(|State(s): S| async move {
                 let w = s.lock().unwrap();
@@ -2699,31 +4123,67 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
             let f = &r["fields"];
             assert_eq!(op.network.to_vec(), hx(&f["network"]));
             assert_eq!(op.contract.to_vec(), hx(&f["contract"]));
-            assert_eq!(op.contract, app_address(f["contractApp"].as_u64().unwrap()), "{}", r["name"]);
+            assert_eq!(
+                op.contract,
+                app_address(f["contractApp"].as_u64().unwrap()),
+                "{}",
+                r["name"]
+            );
             assert_eq!(u64::from(op.op), f["op"].as_u64().unwrap());
-            assert_eq!((u64::from(op.from.kind), op.from.id.to_vec()), (f["from"]["kind"].as_u64().unwrap(), hx(&f["from"]["id"])));
-            assert_eq!((u64::from(op.to.kind), op.to.id.to_vec()), (f["to"]["kind"].as_u64().unwrap(), hx(&f["to"]["id"])));
+            assert_eq!(
+                (u64::from(op.from.kind), op.from.id.to_vec()),
+                (f["from"]["kind"].as_u64().unwrap(), hx(&f["from"]["id"]))
+            );
+            assert_eq!(
+                (u64::from(op.to.kind), op.to.id.to_vec()),
+                (f["to"]["kind"].as_u64().unwrap(), hx(&f["to"]["id"]))
+            );
             if let Some(a) = f["from"]["address"].as_str() {
                 assert_eq!(op.from.display(), a);
             }
             assert_eq!(op.relayer.to_vec(), hx(&f["relayer"]));
             assert_eq!(op.amount.to_string(), f["amount"].as_str().unwrap());
-            assert_eq!((op.pay_ref.to_vec(), op.lane.to_vec(), op.extra.to_vec()), (hx(&f["pay_ref"]), hx(&f["lane"]), hx(&f["extra"])));
-            assert_eq!((op.nonce, op.valid_until), (f["nonce"].as_u64().unwrap(), f["valid_until"].as_u64().unwrap()));
+            assert_eq!(
+                (op.pay_ref.to_vec(), op.lane.to_vec(), op.extra.to_vec()),
+                (hx(&f["pay_ref"]), hx(&f["lane"]), hx(&f["extra"]))
+            );
+            assert_eq!(
+                (op.nonce, op.valid_until),
+                (
+                    f["nonce"].as_u64().unwrap(),
+                    f["valid_until"].as_u64().unwrap()
+                )
+            );
             assert_eq!(op.encode(), enc, "{}", r["name"]);
             assert_eq!(op.digest().to_vec(), hx(&r["digest"]), "{}", r["name"]);
             assert_eq!(op.arc4().len(), METAOP_LEN);
             assert!(MetaOp::decode(&enc[..enc.len() - 1]).is_err(), "truncated");
-            assert!(MetaOp::decode(&[&enc[..], &[0]].concat()).is_err(), "trailing byte");
+            assert!(
+                MetaOp::decode(&[&enc[..], &[0]].concat()).is_err(),
+                "trailing byte"
+            );
             assert!(MetaOp::decode(&enc[1..]).is_err(), "label");
             let mut k = enc.clone();
             k[15 + 65] = 2; // from.kind
             assert!(MetaOp::decode(&k).is_err(), "holder kind 2");
         }
-        assert_eq!(op_of("pay_ua_ed25519_u128_max").amount, u128::MAX, "Review Focus 5: 2^128 - 1 round-trips");
+        assert_eq!(
+            op_of("pay_ua_ed25519_u128_max").amount,
+            u128::MAX,
+            "Review Focus 5: 2^128 - 1 round-trips"
+        );
         let sel = |s: &str| h(&selector(s));
-        assert_eq!(sel(&format!("relay(uint64,{METAOP_ABI},byte[])void")), "0x4af7ebf5", "the executor's next-call selector");
-        assert_eq!(h(&selector(&format!("mtx_add_key({METAOP_ABI},byte[],(uint16,byte[]),byte[])void"))), h(&hx(&vv["routerCall"]["selector"])));
+        assert_eq!(
+            sel(&format!("relay(uint64,{METAOP_ABI},byte[])void")),
+            "0x4af7ebf5",
+            "the executor's next-call selector"
+        );
+        assert_eq!(
+            h(&selector(&format!(
+                "mtx_add_key({METAOP_ABI},byte[],(uint16,byte[]),byte[])void"
+            ))),
+            h(&hx(&vv["routerCall"]["selector"]))
+        );
     }
 
     /// CTR-MTX-26: pay_ref = metaPayId(salt, meta), lane = payLane(pay_ref), nonce 0; the cap is Task 11's measured
@@ -2732,16 +4192,33 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
     fn algorand_pay_meta_job_checks_commitment() {
         let rows: Vec<Value> = serde_json::from_str(PAYMETA).unwrap();
         let mut n = 0;
-        for r in v()["metaops"]["vectors"].as_array().unwrap().iter().filter(|r| r["paymetaRow"].is_string()) {
+        for r in v()["metaops"]["vectors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|r| r["paymetaRow"].is_string())
+        {
             let pm = rows.iter().find(|x| x["name"] == r["paymetaRow"]).unwrap();
             let (salt, meta) = (hx(&pm["salt"]), hx(&pm["meta"]));
             let op = MetaOp::decode(&hx(&r["encoding"])).unwrap();
             let o = json!({"kind": "pay_meta", "salt": h(&salt), "meta": h(&meta)});
             let got = entry(&pol(), Some(&exec()), &op, &o);
             if meta.len() <= MAX_PAY_META_BYTES {
-                assert_eq!(got.unwrap(), Entry::PayMeta { salt: salt.clone().try_into().unwrap(), meta }, "{}", r["name"]);
+                assert_eq!(
+                    got.unwrap(),
+                    Entry::PayMeta {
+                        salt: salt.clone().try_into().unwrap(),
+                        meta
+                    },
+                    "{}",
+                    r["name"]
+                );
             } else {
-                assert!(got.unwrap_err().to_string().contains("507"), "{}", r["name"]);
+                assert!(
+                    got.unwrap_err().to_string().contains("507"),
+                    "{}",
+                    r["name"]
+                );
             }
             n += 1;
         }
@@ -2750,13 +4227,34 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         let at = |len: usize, max: usize| {
             let meta = vec![0x5a; len];
             let id = meta_pay_id(&[3; 32], &meta);
-            let op = MetaOp { pay_ref: id, lane: pay_lane(&id), ..base.clone() };
-            let p = RelayFeePolicy { params: crate::config::RelayParams { max_pay_meta_bytes: max, ..Default::default() }, ..pol() };
-            entry(&p, None, &op, &json!({"kind": "pay_meta", "salt": h(&[3; 32]), "meta": h(&meta)}))
+            let op = MetaOp {
+                pay_ref: id,
+                lane: pay_lane(&id),
+                ..base.clone()
+            };
+            let p = RelayFeePolicy {
+                params: crate::config::RelayParams {
+                    max_pay_meta_bytes: max,
+                    ..Default::default()
+                },
+                ..pol()
+            };
+            entry(
+                &p,
+                None,
+                &op,
+                &json!({"kind": "pay_meta", "salt": h(&[3; 32]), "meta": h(&meta)}),
+            )
         };
         assert!(at(MAX_PAY_META_BYTES, 2048).is_ok());
-        assert!(at(MAX_PAY_META_BYTES + 1, 2048).is_err(), "above the measured fit");
-        assert!(at(100, 99).is_err() && at(99, 99).is_ok(), "a smaller max_pay_meta_bytes binds");
+        assert!(
+            at(MAX_PAY_META_BYTES + 1, 2048).is_err(),
+            "above the measured fit"
+        );
+        assert!(
+            at(100, 99).is_err() && at(99, 99).is_ok(),
+            "a smaller max_pay_meta_bytes binds"
+        );
         let pm = rows.iter().find(|x| x["name"] == "note_utf8").unwrap();
         let o = json!({"kind": "pay_meta", "salt": pm["salt"], "meta": pm["meta"]});
         let bad = |op: &MetaOp, o: &Value| entry(&pol(), None, op, o).is_err();
@@ -2767,9 +4265,36 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         j = o.clone();
         j["salt"] = json!(h(&[0; 31]));
         assert!(bad(&base, &j), "salt is 32 bytes");
-        assert!(bad(&MetaOp { nonce: 1, ..base.clone() }, &o), "nonce 1");
-        assert!(bad(&MetaOp { lane: [1; 32], ..base.clone() }, &o), "another lane");
-        assert!(bad(&MetaOp { to: holder(0, app_address(DEX)), ..base.clone() }, &o), "never pay the DEX");
+        assert!(
+            bad(
+                &MetaOp {
+                    nonce: 1,
+                    ..base.clone()
+                },
+                &o
+            ),
+            "nonce 1"
+        );
+        assert!(
+            bad(
+                &MetaOp {
+                    lane: [1; 32],
+                    ..base.clone()
+                },
+                &o
+            ),
+            "another lane"
+        );
+        assert!(
+            bad(
+                &MetaOp {
+                    to: holder(0, app_address(DEX)),
+                    ..base.clone()
+                },
+                &o
+            ),
+            "never pay the DEX"
+        );
     }
 
     /// Spec §4.8 / §2 rows 8–14: `ref` of every relayRefs row from the exact call bytes and the payment's `extra`; a job
@@ -2781,82 +4306,237 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
             let call = hx(&r["call"]);
             let (t, args) = parse_router_call(&call).unwrap();
             assert_eq!(t, r["targetApp"].as_u64().unwrap());
-            assert_eq!(args, r["args"].as_array().unwrap().iter().map(hx).collect::<Vec<_>>());
+            assert_eq!(
+                args,
+                r["args"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(hx)
+                    .collect::<Vec<_>>()
+            );
             assert_eq!(router_call(t, &args), call);
             assert_eq!(app_address(t).to_vec(), hx(&r["target"]));
             let rf = relay_ref(&network(), &app_address(t), &call, &b32(&r["salt"]));
-            assert_eq!((rf.to_vec(), pay_lane(&rf).to_vec()), (hx(&r["ref"]), hx(&r["lane"])), "{}", r["name"]);
+            assert_eq!(
+                (rf.to_vec(), pay_lane(&rf).to_vec()),
+                (hx(&r["ref"]), hx(&r["lane"])),
+                "{}",
+                r["name"]
+            );
             let op = op_of(r["payment"].as_str().unwrap());
             let o = json!({"kind": "relay_fee", "extra": {"call": r["call"]}, "ref": r["ref"]});
-            assert_eq!(entry(&pol(), Some(&exec()), &op, &o).unwrap(), Entry::Fee { target_app: t, args: args.clone() }, "{}", r["name"]);
-            let bad = |op: &MetaOp, o: &Value| entry(&pol(), Some(&exec()), op, o).unwrap_err().to_string();
+            assert_eq!(
+                entry(&pol(), Some(&exec()), &op, &o).unwrap(),
+                Entry::Fee {
+                    target_app: t,
+                    args: args.clone()
+                },
+                "{}",
+                r["name"]
+            );
+            let bad = |op: &MetaOp, o: &Value| {
+                entry(&pol(), Some(&exec()), op, o).unwrap_err().to_string()
+            };
             let mut j = o.clone();
             j["ref"] = json!(h(&[9; 32]));
             assert!(bad(&op, &j).contains("op.ref"));
-            assert!(bad(&MetaOp { extra: [0; 32], ..op.clone() }, &o).contains("not bound"), "salt = the payment's extra");
-            assert!(bad(&MetaOp { relayer: [0; 32], ..op.clone() }, &o).contains("relayer"));
-            assert!(entry(&RelayFeePolicy { router: None, ..pol() }, Some(&exec()), &op, &o).is_err(), "no router configured");
-            assert!(entry(&pol(), None, &op, &o).is_err(), "executor not derived yet");
+            assert!(
+                bad(
+                    &MetaOp {
+                        extra: [0; 32],
+                        ..op.clone()
+                    },
+                    &o
+                )
+                .contains("not bound"),
+                "salt = the payment's extra"
+            );
+            assert!(bad(
+                &MetaOp {
+                    relayer: [0; 32],
+                    ..op.clone()
+                },
+                &o
+            )
+            .contains("relayer"));
+            assert!(
+                entry(
+                    &RelayFeePolicy {
+                        router: None,
+                        ..pol()
+                    },
+                    Some(&exec()),
+                    &op,
+                    &o
+                )
+                .is_err(),
+                "no router configured"
+            );
+            assert!(
+                entry(&pol(), None, &op, &o).is_err(),
+                "executor not derived yet"
+            );
             j = o.clone();
             j["extra"]["call"] = json!(h(&call[..call.len() - 1]));
-            assert!(entry(&pol(), Some(&exec()), &op, &j).is_err(), "truncated call");
+            assert!(
+                entry(&pol(), Some(&exec()), &op, &j).is_err(),
+                "truncated call"
+            );
             j["extra"]["call"] = json!(h(&[&call[..], &[0]].concat()));
-            assert!(entry(&pol(), Some(&exec()), &op, &j).is_err(), "trailing byte");
+            assert!(
+                entry(&pol(), Some(&exec()), &op, &j).is_err(),
+                "trailing byte"
+            );
             j = o.clone();
             j["extra"]["on_completion"] = json!("clear_state");
             assert!(bad(&op, &j).contains("on_completion"), "unknown extra key");
-            assert!(entry(&RelayFeePolicy { targets: BTreeMap::new(), ..pol() }, Some(&exec()), &op, &o).unwrap_err().to_string().contains("allowed"));
-            let other = RelayFeePolicy { targets: BTreeMap::from([(TARGET, vec![selector("ping(uint64)void")])]), ..pol() };
-            assert!(entry(&other, Some(&exec()), &op, &o).unwrap_err().to_string().contains("method"));
+            assert!(entry(
+                &RelayFeePolicy {
+                    targets: BTreeMap::new(),
+                    ..pol()
+                },
+                Some(&exec()),
+                &op,
+                &o
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("allowed"));
+            let other = RelayFeePolicy {
+                targets: BTreeMap::from([(TARGET, vec![selector("ping(uint64)void")])]),
+                ..pol()
+            };
+            assert!(entry(&other, Some(&exec()), &op, &o)
+                .unwrap_err()
+                .to_string()
+                .contains("method"));
         }
         // payee rules (rule 12): never the executor, an app of the deployment or a token; open mode = the router
-        let t = target_op(app_address(TOKEN), 4, holder(1, [0x11; 32]), holder(0, [0x44; 32]));
+        let t = target_op(
+            app_address(TOKEN),
+            4,
+            holder(1, [0x11; 32]),
+            holder(0, [0x44; 32]),
+        );
         let call = transfer_call(&t);
-        for to in [holder(0, exec().address), holder(0, app_address(TOKEN)), holder(0, app_address(DEX)), holder(0, app_address(MANDATE)),
-                   holder(0, app_address(ACCOUNT))] {
+        for to in [
+            holder(0, exec().address),
+            holder(0, app_address(TOKEN)),
+            holder(0, app_address(DEX)),
+            holder(0, app_address(MANDATE)),
+            holder(0, app_address(ACCOUNT)),
+        ] {
             let op = fee_op(&call, [5; 32], Some(to));
-            assert!(entry(&pol(), Some(&exec()), &op, &fee_job(&call, &op, json!({}))).is_err(), "{}", to.display());
+            assert!(
+                entry(&pol(), Some(&exec()), &op, &fee_job(&call, &op, json!({}))).is_err(),
+                "{}",
+                to.display()
+            );
         }
         let op = fee_op(&call, [5; 32], None);
-        assert!(entry(&pol(), Some(&exec()), &op, &fee_job(&call, &op, json!({}))).is_ok(), "open mode");
+        assert!(
+            entry(&pol(), Some(&exec()), &op, &fee_job(&call, &op, json!({}))).is_ok(),
+            "open mode"
+        );
         // rule 13 and the allowlist, before any RPC
         let refused = |call: Vec<u8>| {
             let op = fee_op(&call, [5; 32], None);
-            entry(&pol(), Some(&exec()), &op, &fee_job(&call, &op, json!({}))).unwrap_err().to_string()
+            entry(&pol(), Some(&exec()), &op, &fee_job(&call, &op, json!({})))
+                .unwrap_err()
+                .to_string()
         };
         assert!(refused(router_call(ROUTER, &[selector("x()void").to_vec()])).contains("router"));
         assert!(refused(router_call(0, &[selector("x()void").to_vec()])).contains("app 0"));
-        assert!(refused(router_call(ACCOUNT, &[selector("add_key_native((uint16,byte[]),byte[])void").to_vec(), vec![0, 1], vec![0, 0]])).contains("add_key_native"));
+        assert!(refused(router_call(
+            ACCOUNT,
+            &[
+                selector("add_key_native((uint16,byte[]),byte[])void").to_vec(),
+                vec![0, 1],
+                vec![0, 0]
+            ]
+        ))
+        .contains("add_key_native"));
         assert!(refused(router_call(TOKEN, &[selector(&format!("mtx_trade({METAOP_ABI},byte[],(uint64,uint64,uint128,uint128,byte[32],uint64))void")).to_vec()])).contains("allowed"));
-        assert!(refused(router_call(ACCOUNT, &[selector("verify(uint8,byte[32],byte[32],byte[])bool").to_vec()])).contains("allowed"));
-        assert!(refused(router_call(TOKEN, &[selector(&format!("mtx_transfer({METAOP_ABI},byte[])void")).to_vec()])).contains("arguments"), "argument count");
-        assert!(refused(router_call(9999, &[selector("ping(uint64)void").to_vec()])).contains("allowed"), "unlisted app");
+        assert!(refused(router_call(
+            ACCOUNT,
+            &[selector("verify(uint8,byte[32],byte[32],byte[])bool").to_vec()]
+        ))
+        .contains("allowed"));
+        assert!(
+            refused(router_call(
+                TOKEN,
+                &[selector(&format!("mtx_transfer({METAOP_ABI},byte[])void")).to_vec()]
+            ))
+            .contains("arguments"),
+            "argument count"
+        );
+        assert!(
+            refused(router_call(9999, &[selector("ping(uint64)void").to_vec()]))
+                .contains("allowed"),
+            "unlisted app"
+        );
     }
 
     /// Rule 13 before the group runs: a missing target app or app 0 is refused, the target transaction is always NoOp
     /// (no `apan`), and a job cannot ask for another OnCompletion (unknown `op.extra` keys are refused).
     #[tokio::test]
     async fn relay_fee_target_app_missing_or_clearstate_refused() {
-        let ping = router_call(TARGET, &[selector("ping(uint64)void").to_vec(), 9u64.to_be_bytes().to_vec()]);
+        let ping = router_call(
+            TARGET,
+            &[
+                selector("ping(uint64)void").to_vec(),
+                9u64.to_be_bytes().to_vec(),
+            ],
+        );
         let mut w = world();
         w.apps.remove(&TARGET);
         let (a, _) = adapter(w).await;
         let op = fee_op(&ping, [5; 32], None);
-        let e = a.build(&job(fee_job(&ping, &op, json!({}))), 0).await.unwrap_err();
-        assert!(matches!(&e, SimError::Revert(m) if m.contains("missing")), "{e:?}");
-        for extra in [json!({"on_completion": "clear_state"}), json!({"on_complete": 3}), json!({"route": "router"})] {
-            let e = a.build(&job(fee_job(&ping, &op, extra.clone())), 0).await.unwrap_err();
-            assert!(matches!(&e, SimError::Revert(m) if m.contains("op.extra")), "{extra}: {e:?}");
+        let e = a
+            .build(&job(fee_job(&ping, &op, json!({}))), 0)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(&e, SimError::Revert(m) if m.contains("missing")),
+            "{e:?}"
+        );
+        for extra in [
+            json!({"on_completion": "clear_state"}),
+            json!({"on_complete": 3}),
+            json!({"route": "router"}),
+        ] {
+            let e = a
+                .build(&job(fee_job(&ping, &op, extra.clone())), 0)
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(&e, SimError::Revert(m) if m.contains("op.extra")),
+                "{extra}: {e:?}"
+            );
         }
         let (a, w) = adapter(world()).await;
-        let b = a.build(&job(fee_job(&ping, &op, json!({}))), 0).await.unwrap();
+        let b = a
+            .build(&job(fee_job(&ping, &op, json!({}))), 0)
+            .await
+            .unwrap();
         let g = group(&b);
-        let t = g.txs.iter().position(|t| matches!(t, Tx::Call { executor: true, .. })).unwrap();
+        let t = g
+            .txs
+            .iter()
+            .position(|t| matches!(t, Tx::Call { executor: true, .. }))
+            .unwrap();
         assert_eq!(g.main, t + 1, "the router call right after the target");
         let sent = txns_of(&last_sim(&w));
         let tm = sent[t].get("txn").unwrap();
-        assert!(tm.get("apan").is_none() && tm.get("apid").and_then(Mp::u64) == Some(TARGET), "NoOp on the target");
-        assert!(sent[t].get("lsig").is_some(), "the executor signs by its program");
+        assert!(
+            tm.get("apan").is_none() && tm.get("apid").and_then(Mp::u64) == Some(TARGET),
+            "NoOp on the target"
+        );
+        assert!(
+            sent[t].get("lsig").is_some(),
+            "the executor signs by its program"
+        );
         assert_eq!(tm.get("snd").and_then(Mp::bytes), Some(&exec().address[..]));
         assert!(tm.get("fee").is_none(), "the executor pays no fee");
     }
@@ -2875,63 +4555,202 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
                                      {"app": ACCOUNT, "name": base64::engine::general_purpose::STANDARD.encode(&rec)}],
                            "extra-box-refs": 1});
         let (a, w) = adapter(w).await;
-        let op = MetaOp { from: holder(1, [0x11; 32]), valid_until: far(), ..op_of("pay_ua_ed25519_u128_max") };
+        let op = MetaOp {
+            from: holder(1, [0x11; 32]),
+            valid_until: far(),
+            ..op_of("pay_ua_ed25519_u128_max")
+        };
         let auth = [vec![1], vec![0x22; 96]].concat();
         let b = a.build(&job(o_op(&op, &auth, json!({}))), 0).await.unwrap();
         let g = group(&b);
-        assert_eq!(g.txs[0], Tx::Pay { to: app_address(TOKEN), amount: 47_400 + 76_100 }, "token part + the record's lazy open");
+        assert_eq!(
+            g.txs[0],
+            Tx::Pay {
+                to: app_address(TOKEN),
+                amount: 47_400 + 76_100
+            },
+            "token part + the record's lazy open"
+        );
         assert_eq!(g.main, 1);
-        let Tx::Call { app, args, executor: false, .. } = &g.txs[1] else { panic!() };
+        let Tx::Call {
+            app,
+            args,
+            executor: false,
+            ..
+        } = &g.txs[1]
+        else {
+            panic!()
+        };
         assert_eq!((*app, args.len()), (TOKEN, 4));
-        assert_eq!(args[0], selector(&format!("mtx_pay({METAOP_ABI},byte[],address)void")).to_vec());
-        assert_eq!((args[1].clone(), args[2].clone(), args[3].clone()), (op.arc4(), abi_bytes(&auth), lane_pk().to_vec()));
+        assert_eq!(
+            args[0],
+            selector(&format!("mtx_pay({METAOP_ABI},byte[],address)void")).to_vec()
+        );
+        assert_eq!(
+            (args[1].clone(), args[2].clone(), args[3].clone()),
+            (op.arc4(), abi_bytes(&auth), lane_pk().to_vec())
+        );
         assert_eq!(g.txs.len(), 3, "one budget call carries 5 references");
-        let Tx::Call { app, args, accounts, apps, boxes, executor: false } = &g.txs[2] else { panic!() };
+        let Tx::Call {
+            app,
+            args,
+            accounts,
+            apps,
+            boxes,
+            executor: false,
+        } = &g.txs[2]
+        else {
+            panic!()
+        };
         assert_eq!((*app, args.is_empty()), (TOKEN, true), "a bare budget call");
-        assert_eq!((accounts.clone(), apps.clone()), (vec![acct], vec![ACCOUNT]));
-        assert_eq!(boxes.clone(), vec![(0, b"l-lane-box".to_vec()), (1, rec.clone()), (0, vec![])]);
+        assert_eq!(
+            (accounts.clone(), apps.clone()),
+            (vec![acct], vec![ACCOUNT])
+        );
+        assert_eq!(
+            boxes.clone(),
+            vec![(0, b"l-lane-box".to_vec()), (1, rec.clone()), (0, vec![])]
+        );
         assert_eq!(g.fee, 1_000 * (3 + 4), "3 transactions + 4 inner");
         assert_eq!(g.mbr, 123_500);
         let last = last_sim(&w);
-        assert!(matches!(last.get("allow-unnamed-resources"), None | Some(Mp::Bool(false))), "the exact group names every resource");
+        assert!(
+            matches!(
+                last.get("allow-unnamed-resources"),
+                None | Some(Mp::Bool(false))
+            ),
+            "the exact group names every resource"
+        );
         let sent = txns_of(&last);
         assert_eq!(sent.len(), 3);
-        assert_eq!(sent[1].get("txn").and_then(|t| t.get("fee")).and_then(Mp::u64), Some(7_000));
-        assert_eq!(sent[0].get("txn").and_then(|t| t.get("amt")).and_then(Mp::u64), Some(123_500));
+        assert_eq!(
+            sent[1]
+                .get("txn")
+                .and_then(|t| t.get("fee"))
+                .and_then(Mp::u64),
+            Some(7_000)
+        );
+        assert_eq!(
+            sent[0]
+                .get("txn")
+                .and_then(|t| t.get("amt"))
+                .and_then(Mp::u64),
+            Some(123_500)
+        );
         // a native payer's own wallet signature: no account record, no MBR when nothing is new
         let mut w2 = world();
-        w2.views.insert(selector(&format!("mbr_needed({METAOP_ABI})uint64")), 0u64.to_be_bytes().to_vec());
+        w2.views.insert(
+            selector(&format!("mbr_needed({METAOP_ABI})uint64")),
+            0u64.to_be_bytes().to_vec(),
+        );
         let (a2, _) = adapter(w2).await;
-        let op2 = MetaOp { valid_until: far(), ..op_of("pay") };
-        let g2 = group(&a2.build(&job(o_op(&op2, &auth_of("pay"), json!({}))), 0).await.unwrap());
-        assert_eq!((g2.txs.len(), g2.main, g2.mbr), (1, 0, 0), "no payment, no budget call");
+        let op2 = MetaOp {
+            valid_until: far(),
+            ..op_of("pay")
+        };
+        let g2 = group(
+            &a2.build(&job(o_op(&op2, &auth_of("pay"), json!({}))), 0)
+                .await
+                .unwrap(),
+        );
+        assert_eq!(
+            (g2.txs.len(), g2.main, g2.mbr),
+            (1, 0, 0),
+            "no payment, no budget call"
+        );
         // router group: [MBR → router][MBR → target][target, executor][relay]; the payer's record opens in the target
         let (a3, w3) = adapter(world()).await;
-        let t = target_op(app_address(TOKEN), 4, holder(1, [0x11; 32]), holder(0, [0x44; 32]));
+        let t = target_op(
+            app_address(TOKEN),
+            4,
+            holder(1, [0x11; 32]),
+            holder(0, [0x44; 32]),
+        );
         let call = transfer_call(&t);
         let op3 = fee_op(&call, [5; 32], None);
-        let g3 = group(&a3.build(&job(fee_job(&call, &op3, json!({}))), 0).await.unwrap());
-        assert_eq!(g3.txs[0], Tx::Pay { to: app_address(ROUTER), amount: 47_400 }, "the record part is 0: the target opens it");
-        assert_eq!(g3.txs[1], Tx::Pay { to: app_address(TOKEN), amount: 47_400 + 76_100 });
-        assert!(matches!(&g3.txs[2], Tx::Call { app: TOKEN, executor: true, .. }));
-        assert!(matches!(&g3.txs[3], Tx::Call { app: ROUTER, executor: false, .. }) && g3.main == 3);
-        let Tx::Call { args, .. } = &g3.txs[3] else { panic!() };
-        assert_eq!(args[0], selector(&format!("relay(uint64,{METAOP_ABI},byte[])void")).to_vec());
-        assert_eq!((args[1].clone(), args[2].clone()), (TOKEN.to_be_bytes().to_vec(), op3.arc4()));
+        let g3 = group(
+            &a3.build(&job(fee_job(&call, &op3, json!({}))), 0)
+                .await
+                .unwrap(),
+        );
+        assert_eq!(
+            g3.txs[0],
+            Tx::Pay {
+                to: app_address(ROUTER),
+                amount: 47_400
+            },
+            "the record part is 0: the target opens it"
+        );
+        assert_eq!(
+            g3.txs[1],
+            Tx::Pay {
+                to: app_address(TOKEN),
+                amount: 47_400 + 76_100
+            }
+        );
+        assert!(matches!(
+            &g3.txs[2],
+            Tx::Call {
+                app: TOKEN,
+                executor: true,
+                ..
+            }
+        ));
+        assert!(
+            matches!(
+                &g3.txs[3],
+                Tx::Call {
+                    app: ROUTER,
+                    executor: false,
+                    ..
+                }
+            ) && g3.main == 3
+        );
+        let Tx::Call { args, .. } = &g3.txs[3] else {
+            panic!()
+        };
+        assert_eq!(
+            args[0],
+            selector(&format!("relay(uint64,{METAOP_ABI},byte[])void")).to_vec()
+        );
+        assert_eq!(
+            (args[1].clone(), args[2].clone()),
+            (TOKEN.to_be_bytes().to_vec(), op3.arc4())
+        );
         assert_eq!(g3.fee, 1_000 * (4 + 4));
         // the router's MBR query asked for the open payee: the lane
-        let q = w3.lock().unwrap().sims.iter().filter_map(|s| {
-            let t = txns_of(s);
-            let a = t.first()?.get("txn")?.get("apaa")?.arr().to_vec();
-            (t.len() == 1 && a[0].bytes() == Some(&selector(&format!("mbr_needed({METAOP_ABI})uint64"))[..])).then(|| a[1].bytes().unwrap().to_vec())
-        }).collect::<Vec<_>>();
-        assert!(q.iter().any(|o| MetaOp::from_arc4(o).unwrap().to == holder(0, lane_pk())), "mbr_needed with to = the lane");
+        let q = w3
+            .lock()
+            .unwrap()
+            .sims
+            .iter()
+            .filter_map(|s| {
+                let t = txns_of(s);
+                let a = t.first()?.get("txn")?.get("apaa")?.arr().to_vec();
+                (t.len() == 1
+                    && a[0].bytes()
+                        == Some(&selector(&format!("mbr_needed({METAOP_ABI})uint64"))[..]))
+                .then(|| a[1].bytes().unwrap().to_vec())
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            q.iter()
+                .any(|o| MetaOp::from_arc4(o).unwrap().to == holder(0, lane_pk())),
+            "mbr_needed with to = the lane"
+        );
         // too many unnamed resources for one group of 16
         let mut w4 = world();
-        w4.unnamed = json!({"accounts": (0..80u8).map(|i| algorand_address(&[i; 32])).collect::<Vec<_>>()});
+        w4.unnamed =
+            json!({"accounts": (0..80u8).map(|i| algorand_address(&[i; 32])).collect::<Vec<_>>()});
         let (a4, _) = adapter(w4).await;
-        let e = a4.build(&job(o_op(&op, &auth, json!({}))), 0).await.unwrap_err();
-        assert!(matches!(&e, SimError::Revert(m) if m.contains("16")), "{e:?}");
+        let e = a4
+            .build(&job(o_op(&op, &auth, json!({}))), 0)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(&e, SimError::Revert(m) if m.contains("16")),
+            "{e:?}"
+        );
     }
 
     /// T20 (real algod, e2e_algorand: a UA pay-meta and an msig-3 passkey relay were refused in discovery): the
@@ -2944,17 +4763,50 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         w.budget_calls_needed = 1;
         w.unnamed = json!({"boxes": [{"app": TOKEN, "name": base64::engine::general_purpose::STANDARD.encode(b"l-lane-box")}]});
         let (a, w) = adapter(w).await;
-        let op = MetaOp { valid_until: far(), ..op_of("pay") };
-        let g = group(&a.build(&job(o_op(&op, &auth_of("pay"), json!({}))), 0).await.unwrap());
-        assert_eq!(g.txs.len(), 3, "[MBR][mtx_pay][the budget call carrying the box]");
+        let op = MetaOp {
+            valid_until: far(),
+            ..op_of("pay")
+        };
+        let g = group(
+            &a.build(&job(o_op(&op, &auth_of("pay"), json!({}))), 0)
+                .await
+                .unwrap(),
+        );
+        assert_eq!(
+            g.txs.len(),
+            3,
+            "[MBR][mtx_pay][the budget call carrying the box]"
+        );
         assert_eq!(g.fee, 1_000 * (3 + 4), "3 transactions + 4 inner");
         let sims = w.lock().unwrap().sims.clone();
-        let disc = sims.iter().find(|s| matches!(s.get("allow-unnamed-resources"), Some(Mp::Bool(true))) && txns_of(s).len() == 2).unwrap();
-        assert_eq!(disc.get("extra-opcode-budget").and_then(Mp::u64), Some(700 * 14), "discovery: the budget 14 more calls could add");
+        let disc = sims
+            .iter()
+            .find(|s| {
+                matches!(s.get("allow-unnamed-resources"), Some(Mp::Bool(true)))
+                    && txns_of(s).len() == 2
+            })
+            .unwrap();
+        assert_eq!(
+            disc.get("extra-opcode-budget").and_then(Mp::u64),
+            Some(700 * 14),
+            "discovery: the budget 14 more calls could add"
+        );
         let exact: Vec<&Mp> = sims.iter().filter(|s| txns_of(s).len() == 3).collect();
-        assert!(exact.iter().all(|s| s.get("extra-opcode-budget").is_none()), "the exact group runs on its own budget");
-        let fee = |s: &Mp| txns_of(s)[1].get("txn").and_then(|t| t.get("fee")).and_then(Mp::u64);
-        assert_eq!((fee(exact[0]), fee(exact.last().unwrap())), (Some(1_000 * (3 + DISCOVERY_CREDIT)), Some(7_000)), "learn the inner count, then exact");
+        assert!(
+            exact.iter().all(|s| s.get("extra-opcode-budget").is_none()),
+            "the exact group runs on its own budget"
+        );
+        let fee = |s: &Mp| {
+            txns_of(s)[1]
+                .get("txn")
+                .and_then(|t| t.get("fee"))
+                .and_then(Mp::u64)
+        };
+        assert_eq!(
+            (fee(exact[0]), fee(exact.last().unwrap())),
+            (Some(1_000 * (3 + DISCOVERY_CREDIT)), Some(7_000)),
+            "learn the inner count, then exact"
+        );
     }
 
     /// T20 fix 1 (review I4, spec §4.6): when the exact group runs out of opcode budget (an app that does not raise its
@@ -2965,19 +4817,49 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         let mut w = world();
         w.budget_calls_needed = 2;
         let (a, _) = adapter(w).await;
-        let op = MetaOp { valid_until: far(), ..op_of("pay") };
-        let g = group(&a.build(&job(o_op(&op, &auth_of("pay"), json!({}))), 0).await.unwrap());
+        let op = MetaOp {
+            valid_until: far(),
+            ..op_of("pay")
+        };
+        let g = group(
+            &a.build(&job(o_op(&op, &auth_of("pay"), json!({}))), 0)
+                .await
+                .unwrap(),
+        );
         let bare = g.txs.iter().filter(|t| matches!(t, Tx::Call { args, accounts, boxes, .. } if args.is_empty() && accounts.is_empty() && boxes.is_empty())).count();
-        let bare = bare + g.txs.iter().filter(|t| matches!(t, Tx::Call { args, boxes, .. } if args.is_empty() && !boxes.is_empty()
-            && boxes.iter().all(|b| b.1.is_empty()))).count();
-        assert_eq!((g.txs.len(), bare), (4, 2), "[MBR][mtx_pay] + two budget calls");
-        assert_ne!(g.txs[2], g.txs[3], "distinct transactions (equal ones share a txid: \"already in ledger\")");
-        assert_eq!(g.fee, 1_000 * (4 + 4), "each priced as a transaction of the group");
+        let bare = bare
+            + g.txs
+                .iter()
+                .filter(|t| {
+                    matches!(t, Tx::Call { args, boxes, .. } if args.is_empty() && !boxes.is_empty()
+            && boxes.iter().all(|b| b.1.is_empty()))
+                })
+                .count();
+        assert_eq!(
+            (g.txs.len(), bare),
+            (4, 2),
+            "[MBR][mtx_pay] + two budget calls"
+        );
+        assert_ne!(
+            g.txs[2], g.txs[3],
+            "distinct transactions (equal ones share a txid: \"already in ledger\")"
+        );
+        assert_eq!(
+            g.fee,
+            1_000 * (4 + 4),
+            "each priced as a transaction of the group"
+        );
         let mut w = world();
         w.budget_calls_needed = 20;
         let (a, _) = adapter(w).await;
-        let e = a.build(&job(o_op(&op, &auth_of("pay"), json!({}))), 0).await.unwrap_err();
-        assert!(matches!(&e, SimError::Revert(m) if m.contains("dynamic cost budget exceeded")), "a full group is refused: {e:?}");
+        let e = a
+            .build(&job(o_op(&op, &auth_of("pay"), json!({}))), 0)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(&e, SimError::Revert(m) if m.contains("dynamic cost budget exceeded")),
+            "a full group is refused: {e:?}"
+        );
     }
 
     /// T20 fix 1 (review I3): algod's "account X balance B below min M" for a lane means the lane cannot pay the group (as
@@ -2986,14 +4868,26 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
     async fn lane_below_min_balance_is_retried() {
         let lane = algorand_address(&lane_pk());
         let mut w = world();
-        w.fail = Some(format!("transaction ABC: account {lane} balance 95600 below min 100000 (0 assets)"));
+        w.fail = Some(format!(
+            "transaction ABC: account {lane} balance 95600 below min 100000 (0 assets)"
+        ));
         let (a, ww) = adapter(w).await;
-        let op = MetaOp { valid_until: far(), ..op_of("pay") };
+        let op = MetaOp {
+            valid_until: far(),
+            ..op_of("pay")
+        };
         let j = job(o_op(&op, &auth_of("pay"), json!({})));
-        assert!(matches!(a.build(&j, 0).await.unwrap_err(), SimError::Transport(m) if m.contains("the lane cannot pay")));
+        assert!(
+            matches!(a.build(&j, 0).await.unwrap_err(), SimError::Transport(m) if m.contains("the lane cannot pay"))
+        );
         let app = algorand_address(&app_address(TOKEN));
-        ww.lock().unwrap().fail = Some(format!("transaction ABC: account {app} balance 95600 below min 100000 (0 assets)"));
-        assert!(matches!(a.build(&j, 0).await.unwrap_err(), SimError::Revert(_)));
+        ww.lock().unwrap().fail = Some(format!(
+            "transaction ABC: account {app} balance 95600 below min 100000 (0 assets)"
+        ));
+        assert!(matches!(
+            a.build(&j, 0).await.unwrap_err(),
+            SimError::Revert(_)
+        ));
     }
 
     /// T15 fix 1 / note 1: program = prefix ‖ router id ‖ suffix ‖ 20 01 salt; its address equals the vector (the SDK's
@@ -3008,65 +4902,154 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         assert_eq!(x.address, program_address(&x.program));
         assert!(!on_curve(&x.address));
         for s in [0u8, 1] {
-            assert!(on_curve(&Executor::new(ROUTER, s).unwrap().address), "salt {s}");
+            assert!(
+                on_curve(&Executor::new(ROUTER, s).unwrap().address),
+                "salt {s}"
+            );
         }
         let key: [u8; 32] = lane0().public_key().try_into().unwrap();
         assert!(on_curve(&key), "a real ed25519 key is on the curve");
         let mut w = world();
-        w.views.insert(selector("executor()address"), [1u8; 32].to_vec());
+        w.views
+            .insert(selector("executor()address"), [1u8; 32].to_vec());
         let ww = Arc::new(M::new(w));
         let url = serve(ww.clone()).await;
         let a = AlgorandAdapter::new(&cfg(&url, FEE_CFG), &[lane0()]).unwrap();
-        assert!(a.start_check().await.unwrap_err().to_string().contains("executor"));
-        ww.lock().unwrap().views.insert(selector("executor()address"), Executor::new(ROUTER, 0).unwrap().address.to_vec());
-        ww.lock().unwrap().apps.insert(ROUTER, app_json("RelayFee", json!([g_uint("salt", 0)])));
-        assert!(a.start_check().await.unwrap_err().to_string().contains("on-curve"));
+        assert!(a
+            .start_check()
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("executor"));
+        ww.lock().unwrap().views.insert(
+            selector("executor()address"),
+            Executor::new(ROUTER, 0).unwrap().address.to_vec(),
+        );
+        ww.lock()
+            .unwrap()
+            .apps
+            .insert(ROUTER, app_json("RelayFee", json!([g_uint("salt", 0)])));
+        assert!(a
+            .start_check()
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("on-curve"));
     }
 
     /// R11 / §4.9: a deployed approval (or clear) program whose sha512_256 differs from artifacts.json halts the chain.
     #[tokio::test]
     async fn start_check_approval_hash_mismatch_halts() {
         let (a, w) = adapter(world()).await;
-        for (id, program) in [(TOKEN, "Token"), (ACCOUNT, "Account"), (MANDATE, "Mandate"), (DEX, "Dex"), (ROUTER, "RelayFee")] {
+        for (id, program) in [
+            (TOKEN, "Token"),
+            (ACCOUNT, "Account"),
+            (MANDATE, "Mandate"),
+            (DEX, "Dex"),
+            (ROUTER, "RelayFee"),
+        ] {
             let mut x = w.lock().unwrap().apps[&id].clone();
-            let mut p = base64::engine::general_purpose::STANDARD.decode(x["params"]["approval-program"].as_str().unwrap()).unwrap();
+            let mut p = base64::engine::general_purpose::STANDARD
+                .decode(x["params"]["approval-program"].as_str().unwrap())
+                .unwrap();
             p[3] ^= 1;
-            x["params"]["approval-program"] = json!(base64::engine::general_purpose::STANDARD.encode(&p));
+            x["params"]["approval-program"] =
+                json!(base64::engine::general_purpose::STANDARD.encode(&p));
             let old = w.lock().unwrap().apps.insert(id, x).unwrap();
             let e = a.start_check().await.unwrap_err().to_string();
-            assert!(e.contains("halted") && e.contains(program.to_lowercase().as_str()), "{program}: {e}");
+            assert!(
+                e.contains("halted") && e.contains(program.to_lowercase().as_str()),
+                "{program}: {e}"
+            );
             w.lock().unwrap().apps.insert(id, old);
         }
         a.start_check().await.unwrap();
         w.lock().unwrap().apps.remove(&MANDATE);
-        assert!(a.start_check().await.unwrap_err().to_string().contains("missing app id"));
-        w.lock().unwrap().apps.insert(DEX, app_json("Dex", json!([g_uint("router_app", 77)])));
-        w.lock().unwrap().apps.insert(MANDATE, app_json("Mandate", json!([g_uint("account_app", ACCOUNT)])));
-        assert!(a.start_check().await.unwrap_err().to_string().contains("router_app"), "the DEX was created with another router");
+        assert!(a
+            .start_check()
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("missing app id"));
+        w.lock()
+            .unwrap()
+            .apps
+            .insert(DEX, app_json("Dex", json!([g_uint("router_app", 77)])));
+        w.lock().unwrap().apps.insert(
+            MANDATE,
+            app_json("Mandate", json!([g_uint("account_app", ACCOUNT)])),
+        );
+        assert!(
+            a.start_check()
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("router_app"),
+            "the DEX was created with another router"
+        );
     }
 
     #[tokio::test]
     async fn start_check_genesis_mismatch_errors() {
         let (a, w) = adapter(world()).await;
         w.lock().unwrap().genesis = [1; 32];
-        assert!(a.start_check().await.unwrap_err().to_string().contains("genesis"));
+        assert!(a
+            .start_check()
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("genesis"));
         let mut op = op_of("pay");
         op.valid_until = far();
         op.network = [1; 32];
-        assert!(a.build(&job(o_op(&op, &auth_of("pay"), json!({}))), 0).await.is_err());
+        assert!(a
+            .build(&job(o_op(&op, &auth_of("pay"), json!({}))), 0)
+            .await
+            .is_err());
     }
 
     #[tokio::test]
     async fn start_check_lane_below_min_balance_errors() {
         let (a, w) = adapter(world()).await;
-        w.lock().unwrap().accounts.insert(algorand_address(&lane_pk()), (99_999, 100_000));
-        assert!(a.start_check().await.unwrap_err().to_string().contains("minimum balance"));
-        w.lock().unwrap().accounts.remove(&algorand_address(&lane_pk()));
-        assert!(a.start_check().await.unwrap_err().to_string().contains("minimum balance"), "an unfunded lane");
-        w.lock().unwrap().accounts.insert(algorand_address(&lane_pk()), (10_000_000, 100_000));
+        w.lock()
+            .unwrap()
+            .accounts
+            .insert(algorand_address(&lane_pk()), (99_999, 100_000));
+        assert!(a
+            .start_check()
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("minimum balance"));
+        w.lock()
+            .unwrap()
+            .accounts
+            .remove(&algorand_address(&lane_pk()));
+        assert!(
+            a.start_check()
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("minimum balance"),
+            "an unfunded lane"
+        );
+        w.lock()
+            .unwrap()
+            .accounts
+            .insert(algorand_address(&lane_pk()), (10_000_000, 100_000));
         a.start_check().await.unwrap();
-        w.lock().unwrap().accounts.remove(&algorand_address(&app_address(ROUTER)));
-        assert!(a.start_check().await.unwrap_err().to_string().contains("router"), "note 2: an unfunded router address");
+        w.lock()
+            .unwrap()
+            .accounts
+            .remove(&algorand_address(&app_address(ROUTER)));
+        assert!(
+            a.start_check()
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("router"),
+            "note 2: an unfunded router address"
+        );
     }
 
     /// Review Focus 1: LastValid ≤ the last round whose estimated time ≤ valid_until (seconds), the round time read
@@ -3075,33 +5058,93 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
     async fn algorand_last_valid_within_valid_until() {
         let ts = 1_800_000_000u64;
         // 100 rounds in 280 s: 2.8 s per round
-        assert_eq!(last_valid(1_000, 1_000, ts, 100, 280, ts + 28).unwrap(), 1_010);
-        assert_eq!(last_valid(1_000, 1_000, ts, 100, 280, ts + 27).unwrap(), 1_009);
-        assert_eq!(last_valid(1_000, 1_000, ts, 100, 280, ts + 1).unwrap(), 1_000);
-        assert_eq!(last_valid(1_000, 1_000, ts, 100, 280, ts + 10_000_000).unwrap(), 2_000, "MaxTxnLife");
-        assert!(last_valid(1_000, 1_000, ts, 100, 0, ts + 5).is_err(), "fix 1 (b): no measured round time, never assumed");
-        assert!(last_valid(1_000, 1_000, ts, 0, 0, ts + 5).is_err(), "fewer than two sampled rounds");
-        assert!(last_valid(1_000, 1_000, ts, 100, 280, ts - 1).is_err(), "already past");
-        assert!(last_valid(1_002, 1_000, ts, 100, 280, ts + 3).is_err(), "expires before the first valid round");
+        assert_eq!(
+            last_valid(1_000, 1_000, ts, 100, 280, ts + 28).unwrap(),
+            1_010
+        );
+        assert_eq!(
+            last_valid(1_000, 1_000, ts, 100, 280, ts + 27).unwrap(),
+            1_009
+        );
+        assert_eq!(
+            last_valid(1_000, 1_000, ts, 100, 280, ts + 1).unwrap(),
+            1_000
+        );
+        assert_eq!(
+            last_valid(1_000, 1_000, ts, 100, 280, ts + 10_000_000).unwrap(),
+            2_000,
+            "MaxTxnLife"
+        );
+        assert!(
+            last_valid(1_000, 1_000, ts, 100, 0, ts + 5).is_err(),
+            "fix 1 (b): no measured round time, never assumed"
+        );
+        assert!(
+            last_valid(1_000, 1_000, ts, 0, 0, ts + 5).is_err(),
+            "fewer than two sampled rounds"
+        );
+        assert!(
+            last_valid(1_000, 1_000, ts, 100, 280, ts - 1).is_err(),
+            "already past"
+        );
+        assert!(
+            last_valid(1_002, 1_000, ts, 100, 280, ts + 3).is_err(),
+            "expires before the first valid round"
+        );
         // through sign(): the mocked blocks 4,900 / 5,000 are 300 s apart (3 s per round)
         let (a, _) = adapter(world()).await;
-        let op = MetaOp { valid_until: ts_of(5_000) + 400, ..op_of("pay") };
-        let b = Built { job_id: 1, body: vec![], valid_until: op.valid_until,
-                        meta: serde_json::to_value(Group { txs: vec![Tx::Pay { to: [5; 32], amount: 1 }], main: 0, fee: 1_000, mbr: 1 }).unwrap() };
+        let op = MetaOp {
+            valid_until: ts_of(5_000) + 400,
+            ..op_of("pay")
+        };
+        let b = Built {
+            job_id: 1,
+            body: vec![],
+            valid_until: op.valid_until,
+            meta: serde_json::to_value(Group {
+                txs: vec![Tx::Pay {
+                    to: [5; 32],
+                    amount: 1,
+                }],
+                main: 0,
+                fee: 1_000,
+                mbr: 1,
+            })
+            .unwrap(),
+        };
         let s = a.sign(b, 0, 5_000).await.unwrap();
         let t = mp_decode(&s.raw).unwrap();
         let t = t.get("txn").unwrap();
-        assert_eq!((t.get("fv").and_then(Mp::u64), t.get("lv").and_then(Mp::u64)), (Some(5_000), Some(5_133)));
+        assert_eq!(
+            (t.get("fv").and_then(Mp::u64), t.get("lv").and_then(Mp::u64)),
+            (Some(5_000), Some(5_133))
+        );
     }
 
     #[test]
     fn unknown_job_kind_is_refused() {
         let op = op_of("pay");
-        for k in [json!("pay"), json!("wrapper"), json!("PAY_META"), json!(7), json!(true), json!({})] {
-            assert!(entry(&pol(), Some(&exec()), &op, &json!({"kind": k})).is_err(), "{k}");
+        for k in [
+            json!("pay"),
+            json!("wrapper"),
+            json!("PAY_META"),
+            json!(7),
+            json!(true),
+            json!({}),
+        ] {
+            assert!(
+                entry(&pol(), Some(&exec()), &op, &json!({"kind": k})).is_err(),
+                "{k}"
+            );
         }
-        assert!(entry(&pol(), Some(&exec()), &op, &json!({"salt": h(&[0; 32])})).is_err(), "pay-meta without its kind");
-        assert_eq!(entry(&pol(), Some(&exec()), &op, &json!({})).unwrap(), Entry::Pay);
+        assert!(
+            entry(&pol(), Some(&exec()), &op, &json!({"salt": h(&[0; 32])})).is_err(),
+            "pay-meta without its kind"
+        );
+        assert_eq!(
+            entry(&pol(), Some(&exec()), &op, &json!({})).unwrap(),
+            Entry::Pay
+        );
     }
 
     /// The hand-encoded canonical msgpack, `"TX"` ids, the group id and the signatures equal py-algorand-sdk's.
@@ -3113,26 +5156,67 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         let pk: [u8; 32] = lane.public_key().try_into().unwrap();
         assert_eq!(algorand_address(&pk), t["lane"].as_str().unwrap());
         let x = Executor::new(t["router"].as_u64().unwrap(), 2).unwrap();
-        assert_eq!(algorand_address(&x.address), t["executor"].as_str().unwrap());
+        assert_eq!(
+            algorand_address(&x.address),
+            t["executor"].as_str().unwrap()
+        );
         let alice = crate::addresses::algorand_key(t["alice"].as_str().unwrap()).unwrap();
         let token = t["token"].as_u64().unwrap();
         let g = Group {
             txs: vec![
-                Tx::Pay { to: app_address(t["router"].as_u64().unwrap()), amount: 18_900 },
-                Tx::Call { app: t["target"].as_u64().unwrap(), args: t["targetArgs"].as_array().unwrap().iter().map(hx).collect(), accounts: vec![],
-                           apps: vec![], boxes: vec![], executor: true },
-                Tx::Call { app: t["router"].as_u64().unwrap(), args: t["relayArgs"].as_array().unwrap().iter().map(hx).collect(), accounts: vec![alice],
-                           apps: vec![token], boxes: vec![(1, [&b"l"[..], &[1; 32]].concat()), (0, vec![])], executor: false },
-                Tx::Call { app: token, args: vec![], accounts: vec![], apps: vec![], boxes: vec![(0, [&b"u"[..], &[2; 32]].concat())], executor: false },
+                Tx::Pay {
+                    to: app_address(t["router"].as_u64().unwrap()),
+                    amount: 18_900,
+                },
+                Tx::Call {
+                    app: t["target"].as_u64().unwrap(),
+                    args: t["targetArgs"].as_array().unwrap().iter().map(hx).collect(),
+                    accounts: vec![],
+                    apps: vec![],
+                    boxes: vec![],
+                    executor: true,
+                },
+                Tx::Call {
+                    app: t["router"].as_u64().unwrap(),
+                    args: t["relayArgs"].as_array().unwrap().iter().map(hx).collect(),
+                    accounts: vec![alice],
+                    apps: vec![token],
+                    boxes: vec![(1, [&b"l"[..], &[1; 32]].concat()), (0, vec![])],
+                    executor: false,
+                },
+                Tx::Call {
+                    app: token,
+                    args: vec![],
+                    accounts: vec![],
+                    apps: vec![],
+                    boxes: vec![(0, [&b"u"[..], &[2; 32]].concat())],
+                    executor: false,
+                },
             ],
-            main: 2, fee: 7_000, mbr: 18_900,
+            main: 2,
+            fee: 7_000,
+            mbr: 18_900,
         };
-        let chain = Chain { gen: t["genesisId"].as_str().unwrap().into(), gh: b32(&t["genesisHash"]) };
-        let (raw, ids) = sign_group(&g, &chain, 1_000, 2_000, &|m| lane.sign(m), &pk, Some(&x)).unwrap();
+        let chain = Chain {
+            gen: t["genesisId"].as_str().unwrap().into(),
+            gh: b32(&t["genesisHash"]),
+        };
+        let (raw, ids) =
+            sign_group(&g, &chain, 1_000, 2_000, &|m| lane.sign(m), &pk, Some(&x)).unwrap();
         for (i, tx) in t["txns"].as_array().unwrap().iter().enumerate() {
             assert_eq!(h(&ids[i]), tx["txid"].as_str().unwrap(), "txid {i}");
         }
-        assert_eq!(h(&group_id(&group_txids(&g, &chain, 1_000, 2_000, &pk, Some(&x)))), t["group"].as_str().unwrap());
+        assert_eq!(
+            h(&group_id(&group_txids(
+                &g,
+                &chain,
+                1_000,
+                2_000,
+                &pk,
+                Some(&x)
+            ))),
+            t["group"].as_str().unwrap()
+        );
         assert_eq!(h(&raw), t["raw"].as_str().unwrap());
         // the decoder reads what the encoder wrote, canonically
         let mut at = 0;
@@ -3163,28 +5247,49 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         }
         let mut x = c("");
         x.params.remove("account_app");
-        assert!(RelayFeePolicy::from_cfg(&x).unwrap_err().to_string().contains("account_app"));
+        assert!(RelayFeePolicy::from_cfg(&x)
+            .unwrap_err()
+            .to_string()
+            .contains("account_app"));
         x = c("");
-        x.params.insert("dex_app".into(), toml::Value::Integer(TOKEN as i64));
-        assert!(RelayFeePolicy::from_cfg(&x).is_err(), "one app in two roles");
+        x.params
+            .insert("dex_app".into(), toml::Value::Integer(TOKEN as i64));
+        assert!(
+            RelayFeePolicy::from_cfg(&x).is_err(),
+            "one app in two roles"
+        );
         x = c("");
         x.params.insert("mandate_app".into(), "1005".into());
-        assert!(RelayFeePolicy::from_cfg(&x).is_err(), "an app id is a TOML integer");
+        assert!(
+            RelayFeePolicy::from_cfg(&x).is_err(),
+            "an app id is a TOML integer"
+        );
         x = c("");
         x.tokens[0].address = algorand_address(&[3; 32]);
-        assert!(RelayFeePolicy::from_cfg(&x).is_err(), "a token is an app id");
+        assert!(
+            RelayFeePolicy::from_cfg(&x).is_err(),
+            "a token is an app id"
+        );
     }
 
     /// T17 fee-covers-cost: a fee that is the node's (open mode or bound to the lane) must be worth, at
     /// `min_microalgo_value`, the group's fee + every MBR payment (no resend: a group lands once or costs nothing).
     #[tokio::test]
     async fn quote_covers_fees_and_mbr() {
-        let t = target_op(app_address(TOKEN), 4, holder(1, [0x11; 32]), holder(0, [0x44; 32]));
+        let t = target_op(
+            app_address(TOKEN),
+            4,
+            holder(1, [0x11; 32]),
+            holder(0, [0x44; 32]),
+        );
         let call = transfer_call(&t);
         let quote = 8_000u128 + 47_400 + 47_400 + 76_100;
         let (a, _) = adapter(world()).await;
         for (amount, ok) in [(quote.div_ceil(1_000), true), (quote / 1_000 - 1, false)] {
-            let op = MetaOp { amount, ..fee_op(&call, [5; 32], None) };
+            let op = MetaOp {
+                amount,
+                ..fee_op(&call, [5; 32], None)
+            };
             let r = a.build(&job(fee_job(&call, &op, json!({}))), 0).await;
             assert_eq!(r.is_ok(), ok, "{amount}: {r:?}");
             if !ok {
@@ -3192,18 +5297,37 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
             }
         }
         // bound to the lane: priced; bound elsewhere: sponsored only with relay_bound_payee
-        let op = MetaOp { amount: 1, ..fee_op(&call, [5; 32], Some(holder(0, lane_pk()))) };
-        assert!(a.build(&job(fee_job(&call, &op, json!({}))), 0).await.is_err());
-        let op = MetaOp { amount: 1, ..fee_op(&call, [5; 32], Some(holder(0, [0x55; 32]))) };
-        assert!(matches!(a.build(&job(fee_job(&call, &op, json!({}))), 0).await, Err(SimError::Revert(m)) if m.contains("relay_bound_payee")));
+        let op = MetaOp {
+            amount: 1,
+            ..fee_op(&call, [5; 32], Some(holder(0, lane_pk())))
+        };
+        assert!(a
+            .build(&job(fee_job(&call, &op, json!({}))), 0)
+            .await
+            .is_err());
+        let op = MetaOp {
+            amount: 1,
+            ..fee_op(&call, [5; 32], Some(holder(0, [0x55; 32])))
+        };
+        assert!(
+            matches!(a.build(&job(fee_job(&call, &op, json!({}))), 0).await, Err(SimError::Revert(m)) if m.contains("relay_bound_payee"))
+        );
         // a failing group is refused with its message; an overspent lane is the lane's problem (retry)
         let mut w = world();
         w.fail = Some("logic eval error: insufficient balance".into());
         let (a, ww) = adapter(w).await;
-        let op = MetaOp { amount: 1_000, ..fee_op(&call, [5; 32], None) };
-        assert!(matches!(a.build(&job(fee_job(&call, &op, json!({}))), 0).await, Err(SimError::Revert(m)) if m.contains("insufficient balance")));
+        let op = MetaOp {
+            amount: 1_000,
+            ..fee_op(&call, [5; 32], None)
+        };
+        assert!(
+            matches!(a.build(&job(fee_job(&call, &op, json!({}))), 0).await, Err(SimError::Revert(m)) if m.contains("insufficient balance"))
+        );
         ww.lock().unwrap().fail = Some("overspend (account X, data {...})".into());
-        assert!(matches!(a.build(&job(fee_job(&call, &op, json!({}))), 0).await, Err(SimError::Transport(_))));
+        assert!(matches!(
+            a.build(&job(fee_job(&call, &op, json!({}))), 0).await,
+            Err(SimError::Transport(_))
+        ));
     }
 
     /// Note 9 / lessons 2, 7: static target checks before any simulate.
@@ -3212,73 +5336,304 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         let lane = lane_pk();
         let now = now();
         let tc = |t: u64, args: &[Vec<u8>], carries: usize| {
-            target_check(&pol(), &exec(), &fee_op(&router_call(t, args), [5; 32], None), t, args, &lane, carries, now)
+            target_check(
+                &pol(),
+                &exec(),
+                &fee_op(&router_call(t, args), [5; 32], None),
+                t,
+                args,
+                &lane,
+                carries,
+                now,
+            )
         };
         let tsel = selector(&format!("mtx_transfer({METAOP_ABI},byte[])void")).to_vec();
-        let base = target_op(app_address(TOKEN), 4, holder(1, [0x11; 32]), holder(0, [0x44; 32]));
+        let base = target_op(
+            app_address(TOKEN),
+            4,
+            holder(1, [0x11; 32]),
+            holder(0, [0x44; 32]),
+        );
         assert!(tc(TOKEN, &[tsel.clone(), base.arc4(), abi_bytes(&[1; 70])], 0).is_ok());
         for (bad, why) in [
-            (MetaOp { relayer: lane, ..base.clone() }, "relayer"),
-            (MetaOp { valid_until: now + 60, ..base.clone() }, "120"),
-            (MetaOp { network: [1; 32], ..base.clone() }, "network"),
-            (MetaOp { contract: app_address(TOKEN_B), ..base.clone() }, "contract"),
-            (MetaOp { to: holder(0, exec().address), ..base.clone() }, "never pay"),
-            (MetaOp { to: holder(0, app_address(DEX)), ..base.clone() }, "never pay"),
+            (
+                MetaOp {
+                    relayer: lane,
+                    ..base.clone()
+                },
+                "relayer",
+            ),
+            (
+                MetaOp {
+                    valid_until: now + 60,
+                    ..base.clone()
+                },
+                "120",
+            ),
+            (
+                MetaOp {
+                    network: [1; 32],
+                    ..base.clone()
+                },
+                "network",
+            ),
+            (
+                MetaOp {
+                    contract: app_address(TOKEN_B),
+                    ..base.clone()
+                },
+                "contract",
+            ),
+            (
+                MetaOp {
+                    to: holder(0, exec().address),
+                    ..base.clone()
+                },
+                "never pay",
+            ),
+            (
+                MetaOp {
+                    to: holder(0, app_address(DEX)),
+                    ..base.clone()
+                },
+                "never pay",
+            ),
         ] {
-            let e = tc(TOKEN, &[tsel.clone(), bad.arc4(), abi_bytes(&[1; 70])], 0).unwrap_err().to_string();
+            let e = tc(TOKEN, &[tsel.clone(), bad.arc4(), abi_bytes(&[1; 70])], 0)
+                .unwrap_err()
+                .to_string();
             assert!(e.contains(why), "{why}: {e}");
         }
-        assert!(tc(TOKEN, &[tsel.clone(), base.arc4()[1..].to_vec(), abi_bytes(&[1; 70])], 0).is_err(), "short op");
-        assert!(tc(TOKEN, &[tsel.clone(), base.arc4(), vec![0, 9, 1]], 0).is_err(), "bad byte[]");
+        assert!(
+            tc(
+                TOKEN,
+                &[tsel.clone(), base.arc4()[1..].to_vec(), abi_bytes(&[1; 70])],
+                0
+            )
+            .is_err(),
+            "short op"
+        );
+        assert!(
+            tc(TOKEN, &[tsel.clone(), base.arc4(), vec![0, 9, 1]], 0).is_err(),
+            "bad byte[]"
+        );
         // DEX: orders open or bound to this lane, configured tokens, not expiring; carried auths = empty auths
         let order = |sell: u64, buy: u64, relayer: [u8; 32], expiry: u64| {
-            [sell.to_be_bytes().to_vec(), buy.to_be_bytes().to_vec(), 100u128.to_be_bytes().to_vec(), 50u128.to_be_bytes().to_vec(), relayer.to_vec(),
-             expiry.to_be_bytes().to_vec()].concat()
+            [
+                sell.to_be_bytes().to_vec(),
+                buy.to_be_bytes().to_vec(),
+                100u128.to_be_bytes().to_vec(),
+                50u128.to_be_bytes().to_vec(),
+                relayer.to_vec(),
+                expiry.to_be_bytes().to_vec(),
+            ]
+            .concat()
         };
-        let leg = |t: u64| MetaOp { relayer: app_address(DEX), to: holder(0, app_address(DEX)), op: 1, ..target_op(app_address(t), 1, holder(1, [7; 32]), holder(0, [0; 32])) };
-        let dsel = selector(&format!("settle({ORDER_ABI},{METAOP_ABI},byte[],{ORDER_ABI},{METAOP_ABI},byte[],uint64[4])void")).to_vec();
-        let mbr = [16_100u64, 16_100, 0, 28_500].iter().flat_map(|x| x.to_be_bytes()).collect::<Vec<u8>>();
-        let settle = |oa: Vec<u8>, ob: Vec<u8>, aa: Vec<u8>| vec![dsel.clone(), oa, leg(TOKEN).arc4(), abi_bytes(&aa), ob, leg(TOKEN_B).arc4(), abi_bytes(&[1; 70]), mbr.clone()];
-        let ok = settle(order(TOKEN, TOKEN_B, [0; 32], far()), order(TOKEN_B, TOKEN, lane, far()), vec![1; 70]);
+        let leg = |t: u64| MetaOp {
+            relayer: app_address(DEX),
+            to: holder(0, app_address(DEX)),
+            op: 1,
+            ..target_op(app_address(t), 1, holder(1, [7; 32]), holder(0, [0; 32]))
+        };
+        let dsel = selector(&format!(
+            "settle({ORDER_ABI},{METAOP_ABI},byte[],{ORDER_ABI},{METAOP_ABI},byte[],uint64[4])void"
+        ))
+        .to_vec();
+        let mbr = [16_100u64, 16_100, 0, 28_500]
+            .iter()
+            .flat_map(|x| x.to_be_bytes())
+            .collect::<Vec<u8>>();
+        let settle = |oa: Vec<u8>, ob: Vec<u8>, aa: Vec<u8>| {
+            vec![
+                dsel.clone(),
+                oa,
+                leg(TOKEN).arc4(),
+                abi_bytes(&aa),
+                ob,
+                leg(TOKEN_B).arc4(),
+                abi_bytes(&[1; 70]),
+                mbr.clone(),
+            ]
+        };
+        let ok = settle(
+            order(TOKEN, TOKEN_B, [0; 32], far()),
+            order(TOKEN_B, TOKEN, lane, far()),
+            vec![1; 70],
+        );
         let i = tc(DEX, &ok, 0).unwrap();
         assert_eq!(i.dex_mbr, 60_700);
-        assert!(tc(DEX, &settle(order(TOKEN, TOKEN_B, [0; 32], far()), order(TOKEN_B, TOKEN, lane, far()), vec![]), 1).is_ok(), "a carried auth");
-        assert!(tc(DEX, &settle(order(TOKEN, TOKEN_B, [0; 32], far()), order(TOKEN_B, TOKEN, lane, far()), vec![]), 0).is_err(), "no carry");
+        assert!(
+            tc(
+                DEX,
+                &settle(
+                    order(TOKEN, TOKEN_B, [0; 32], far()),
+                    order(TOKEN_B, TOKEN, lane, far()),
+                    vec![]
+                ),
+                1
+            )
+            .is_ok(),
+            "a carried auth"
+        );
+        assert!(
+            tc(
+                DEX,
+                &settle(
+                    order(TOKEN, TOKEN_B, [0; 32], far()),
+                    order(TOKEN_B, TOKEN, lane, far()),
+                    vec![]
+                ),
+                0
+            )
+            .is_err(),
+            "no carry"
+        );
         assert!(tc(DEX, &ok, 1).is_err(), "a carry without an empty auth");
-        assert!(tc(DEX, &settle(order(TOKEN, TOKEN_B, [9; 32], far()), order(TOKEN_B, TOKEN, lane, far()), vec![1; 70]), 0).is_err(), "bound to another relayer");
-        assert!(tc(DEX, &settle(order(TOKEN, 4242, [0; 32], far()), order(4242, TOKEN, lane, far()), vec![1; 70]), 0).is_err(), "unconfigured token");
-        assert!(tc(DEX, &settle(order(TOKEN, TOKEN_B, [0; 32], now + 30), order(TOKEN_B, TOKEN, lane, far()), vec![1; 70]), 0).is_err(), "order expiry margin");
+        assert!(
+            tc(
+                DEX,
+                &settle(
+                    order(TOKEN, TOKEN_B, [9; 32], far()),
+                    order(TOKEN_B, TOKEN, lane, far()),
+                    vec![1; 70]
+                ),
+                0
+            )
+            .is_err(),
+            "bound to another relayer"
+        );
+        assert!(
+            tc(
+                DEX,
+                &settle(
+                    order(TOKEN, 4242, [0; 32], far()),
+                    order(4242, TOKEN, lane, far()),
+                    vec![1; 70]
+                ),
+                0
+            )
+            .is_err(),
+            "unconfigured token"
+        );
+        assert!(
+            tc(
+                DEX,
+                &settle(
+                    order(TOKEN, TOKEN_B, [0; 32], now + 30),
+                    order(TOKEN_B, TOKEN, lane, far()),
+                    vec![1; 70]
+                ),
+                0
+            )
+            .is_err(),
+            "order expiry margin"
+        );
         // mandate open: the terms' expiry gets the margin too
-        let osel = selector(&format!("mtx_mandate_open(uint64,{METAOP_ABI},byte[],{TERMS_ABI},uint64)void")).to_vec();
-        let fund = MetaOp { relayer: app_address(MANDATE), to: holder(0, app_address(MANDATE)), ..target_op(app_address(TOKEN), 0, holder(1, [7; 32]), holder(0, [0; 32])) };
-        let open_to = |payee: Holder, e: u64| vec![osel.clone(), TOKEN.to_be_bytes().to_vec(), fund.arc4(), abi_bytes(&[1; 70]), terms(payee, e),
-                                                  0u64.to_be_bytes().to_vec()];
+        let osel = selector(&format!(
+            "mtx_mandate_open(uint64,{METAOP_ABI},byte[],{TERMS_ABI},uint64)void"
+        ))
+        .to_vec();
+        let fund = MetaOp {
+            relayer: app_address(MANDATE),
+            to: holder(0, app_address(MANDATE)),
+            ..target_op(
+                app_address(TOKEN),
+                0,
+                holder(1, [7; 32]),
+                holder(0, [0; 32]),
+            )
+        };
+        let open_to = |payee: Holder, e: u64| {
+            vec![
+                osel.clone(),
+                TOKEN.to_be_bytes().to_vec(),
+                fund.arc4(),
+                abi_bytes(&[1; 70]),
+                terms(payee, e),
+                0u64.to_be_bytes().to_vec(),
+            ]
+        };
         let open = |e: u64| open_to(holder(0, [9; 32]), e);
         assert!(tc(MANDATE, &open(far()), 0).is_ok());
-        assert!(tc(MANDATE, &open(now + 100), 0).unwrap_err().to_string().contains("mandate"));
+        assert!(tc(MANDATE, &open(now + 100), 0)
+            .unwrap_err()
+            .to_string()
+            .contains("mandate"));
         // fix 1 (c): the mandate's payee is held to the never-pay rule (router, a token, the executor, any deployment app)
-        for p in [holder(0, app_address(ROUTER)), holder(0, app_address(TOKEN)), holder(0, exec().address), holder(0, app_address(DEX))] {
-            assert!(tc(MANDATE, &open_to(p, far()), 0).unwrap_err().to_string().contains("never pay"), "{}", p.display());
+        for p in [
+            holder(0, app_address(ROUTER)),
+            holder(0, app_address(TOKEN)),
+            holder(0, exec().address),
+            holder(0, app_address(DEX)),
+        ] {
+            assert!(
+                tc(MANDATE, &open_to(p, far()), 0)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("never pay"),
+                "{}",
+                p.display()
+            );
         }
         let psel = selector(&format!("mtx_mandate_pay(uint64,{METAOP_ABI},byte[])void")).to_vec();
-        let mpay = |to: Holder| vec![psel.clone(), TOKEN.to_be_bytes().to_vec(),
-                                     MetaOp { to, ..target_op(app_address(MANDATE), 2, holder(1, [3; 32]), holder(0, [0; 32])) }.arc4(), abi_bytes(&[1; 70])];
+        let mpay = |to: Holder| {
+            vec![
+                psel.clone(),
+                TOKEN.to_be_bytes().to_vec(),
+                MetaOp {
+                    to,
+                    ..target_op(
+                        app_address(MANDATE),
+                        2,
+                        holder(1, [3; 32]),
+                        holder(0, [0; 32]),
+                    )
+                }
+                .arc4(),
+                abi_bytes(&[1; 70]),
+            ]
+        };
         assert!(tc(MANDATE, &mpay(holder(0, [9; 32])), 0).is_ok());
-        assert!(tc(MANDATE, &mpay(holder(0, app_address(TOKEN))), 0).unwrap_err().to_string().contains("never pay"));
+        assert!(tc(MANDATE, &mpay(holder(0, app_address(TOKEN))), 0)
+            .unwrap_err()
+            .to_string()
+            .contains("never pay"));
     }
 
     fn terms(payee: Holder, expiry: u64) -> Vec<u8> {
-        [vec![1u8], vec![8; 32], vec![payee.kind], payee.id.to_vec(), 100u128.to_be_bytes().to_vec(), 250u128.to_be_bytes().to_vec(),
-         86_400u64.to_be_bytes().to_vec(), expiry.to_be_bytes().to_vec(), 5u128.to_be_bytes().to_vec()].concat()
+        [
+            vec![1u8],
+            vec![8; 32],
+            vec![payee.kind],
+            payee.id.to_vec(),
+            100u128.to_be_bytes().to_vec(),
+            250u128.to_be_bytes().to_vec(),
+            86_400u64.to_be_bytes().to_vec(),
+            expiry.to_be_bytes().to_vec(),
+            5u128.to_be_bytes().to_vec(),
+        ]
+        .concat()
     }
 
     fn stib(app: u64, logs: Vec<Vec<u8>>, inner: Vec<Mp>, extra_dt: Vec<(Mp, Mp)>) -> Mp {
-        let mut dt = vec![(Mp::str("lg"), Mp::Arr(logs.into_iter().map(Mp::Str).collect()))];
+        let mut dt = vec![(
+            Mp::str("lg"),
+            Mp::Arr(logs.into_iter().map(Mp::Str).collect()),
+        )];
         if !inner.is_empty() {
             dt.push((Mp::str("itx"), Mp::Arr(inner)));
         }
         dt.extend(extra_dt);
-        Mp::Map(vec![(Mp::str("dt"), Mp::Map(dt)), (Mp::str("txn"), Mp::Map(vec![(Mp::str("apid"), Mp::Int(app as i128)), (Mp::str("type"), Mp::str("appl"))]))])
+        Mp::Map(vec![
+            (Mp::str("dt"), Mp::Map(dt)),
+            (
+                Mp::str("txn"),
+                Mp::Map(vec![
+                    (Mp::str("apid"), Mp::Int(app as i128)),
+                    (Mp::str("type"), Mp::str("appl")),
+                ]),
+            ),
+        ])
     }
 
     /// Fix 1 I1: go-algorand nests inner app calls 8 deep (maxAppCallDepth) and an app at level 8 may still pay (level
@@ -3286,24 +5641,62 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
     /// token's logs at the top are still booked, so no third party can stall the indexer.
     #[tokio::test]
     async fn deep_inner_block_decodes_at_protocol_depth() {
-        let settled = [selector(EV_SETTLED).to_vec(), vec![0], vec![0xa1; 32], vec![0], vec![0xb0; 32], vec![0; 31], vec![5], vec![0x77; 32]].concat();
-        let pay = Mp::Map(vec![(Mp::str("txn"), Mp::Map(vec![(Mp::str("amt"), Mp::Int(0)), (Mp::str("rcv"), Mp::Bin(vec![1; 32])),
-                                                            (Mp::str("type"), Mp::str("pay"))]))]);
-        let ld = (Mp::str("ld"), Mp::Map(vec![(Mp::Int(1), Mp::Map(vec![(Mp::str("k"), Mp::Map(vec![(Mp::str("at"), Mp::Int(1)), (Mp::str("ui"), Mp::Int(5))]))]))]));
+        let settled = [
+            selector(EV_SETTLED).to_vec(),
+            vec![0],
+            vec![0xa1; 32],
+            vec![0],
+            vec![0xb0; 32],
+            vec![0; 31],
+            vec![5],
+            vec![0x77; 32],
+        ]
+        .concat();
+        let pay = Mp::Map(vec![(
+            Mp::str("txn"),
+            Mp::Map(vec![
+                (Mp::str("amt"), Mp::Int(0)),
+                (Mp::str("rcv"), Mp::Bin(vec![1; 32])),
+                (Mp::str("type"), Mp::str("pay")),
+            ]),
+        )]);
+        let ld = (
+            Mp::str("ld"),
+            Mp::Map(vec![(
+                Mp::Int(1),
+                Mp::Map(vec![(
+                    Mp::str("k"),
+                    Mp::Map(vec![
+                        (Mp::str("at"), Mp::Int(1)),
+                        (Mp::str("ui"), Mp::Int(5)),
+                    ]),
+                )]),
+            )]),
+        );
         let mut n = stib(9008, vec![], vec![pay], vec![ld]);
         for app in (9001..9008).rev() {
             n = stib(app, vec![], vec![n], vec![]);
         }
         let top = stib(TOKEN, vec![settled], vec![n], vec![]);
-        let block = Mp::Map(vec![(Mp::str("gh"), Mp::Bin(network().to_vec())), (Mp::str("rnd"), Mp::Int(4_950)), (Mp::str("ts"), Mp::Int(1)),
-                                 (Mp::str("txns"), Mp::Arr(vec![top]))]);
+        let block = Mp::Map(vec![
+            (Mp::str("gh"), Mp::Bin(network().to_vec())),
+            (Mp::str("rnd"), Mp::Int(4_950)),
+            (Mp::str("ts"), Mp::Int(1)),
+            (Mp::str("txns"), Mp::Arr(vec![top])),
+        ]);
         let raw = mp_encode(&Mp::Map(vec![(Mp::str("block"), block)]));
         mp_decode(&raw).unwrap();
         let mut w = world();
         w.blocks.insert(4_950, (raw, [0x49; 32]));
         let (a, _) = adapter(w).await;
         let rows = a.events(4_950, 4_950, &["1001".into()]).await.unwrap();
-        assert_eq!(rows.iter().filter(|r| r["event"] == "PaymentSettled").count(), 1, "{rows:#?}");
+        assert_eq!(
+            rows.iter()
+                .filter(|r| r["event"] == "PaymentSettled")
+                .count(),
+            1,
+            "{rows:#?}"
+        );
     }
 
     /// Fix 1 I1: the reader's bound is far above what algod produces (≈ 36): a value nested at MP_MAX_DEPTH − 1 reads, one
@@ -3313,7 +5706,10 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         const { assert!(MP_MAX_DEPTH >= 64) };
         let nest = |n: u32| (0..n).fold(Mp::Int(1), |v, _| Mp::Arr(vec![v]));
         assert!(mp_decode(&mp_encode(&nest(MP_MAX_DEPTH - 1))).is_ok());
-        assert!(mp_decode(&mp_encode(&nest(MP_MAX_DEPTH))).unwrap_err().to_string().contains("deep"));
+        assert!(mp_decode(&mp_encode(&nest(MP_MAX_DEPTH)))
+            .unwrap_err()
+            .to_string()
+            .contains("deep"));
     }
 
     /// Fix 1 (a): the account app's `client_origin` grammar byte for byte: every row of the Algorand parity file (the NEAR
@@ -3322,19 +5718,39 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
     /// exactly that origin's hash, or is refused.
     #[test]
     fn origin_parity_vectors() {
-        let f: Value = serde_json::from_str(include_str!("../../../smartcontracts/algorand/vectors/webauthn-origin.json")).unwrap();
+        let f: Value = serde_json::from_str(include_str!(
+            "../../../smartcontracts/algorand/vectors/webauthn-origin.json"
+        ))
+        .unwrap();
         let rows = f["rows"].as_array().unwrap();
         assert!(rows.len() >= 40);
-        assert!(rows.iter().any(|r| r["near"].is_string() && r["origin"].is_null()), "a row where NEAR accepts and Algorand refuses");
+        assert!(
+            rows.iter()
+                .any(|r| r["near"].is_string() && r["origin"].is_null()),
+            "a row where NEAR accepts and Algorand refuses"
+        );
         for r in rows {
             let d = b32(&r["challenge"]);
             let cd = r["clientDataJSON"].as_str().unwrap().as_bytes();
             let got = client_origin(cd, &d).map(|o| String::from_utf8(o.to_vec()).unwrap());
             assert_eq!(got.as_deref(), r["origin"].as_str(), "{}", r["name"]);
             let ad = [vec![0x11; 32], vec![5, 0, 0, 0, 0]].concat();
-            let auth = [vec![3], vec![2; 64], vec![4; 64], (ad.len() as u16).to_be_bytes().to_vec(), ad, cd.to_vec()].concat();
+            let auth = [
+                vec![3],
+                vec![2; 64],
+                vec![4; 64],
+                (ad.len() as u16).to_be_bytes().to_vec(),
+                ad,
+                cd.to_vec(),
+            ]
+            .concat();
             match r["origin"].as_str() {
-                Some(o) if cd.len() <= 1024 => assert_eq!(auth_origins(&auth, &d).unwrap(), vec![sha256(o.as_bytes())], "{}", r["name"]),
+                Some(o) if cd.len() <= 1024 => assert_eq!(
+                    auth_origins(&auth, &d).unwrap(),
+                    vec![sha256(o.as_bytes())],
+                    "{}",
+                    r["name"]
+                ),
                 _ => assert!(auth_origins(&auth, &d).is_err(), "{}", r["name"]),
             }
         }
@@ -3344,51 +5760,123 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
     #[tokio::test]
     async fn no_measured_round_time_refuses() {
         let mut w = world();
-        let b = mp_encode(&Mp::Map(vec![(Mp::str("block"), Mp::Map(vec![(Mp::str("rnd"), Mp::Int(4_900)), (Mp::str("ts"), Mp::Int(ts_of(5_000) as i128))]))]));
+        let b = mp_encode(&Mp::Map(vec![(
+            Mp::str("block"),
+            Mp::Map(vec![
+                (Mp::str("rnd"), Mp::Int(4_900)),
+                (Mp::str("ts"), Mp::Int(ts_of(5_000) as i128)),
+            ]),
+        )]));
         w.blocks.insert(4_900, (b, [0x10; 32]));
         let (a, _) = adapter(w).await;
-        let op = MetaOp { valid_until: far(), ..op_of("pay") };
-        let e = a.build(&job(o_op(&op, &auth_of("pay"), json!({}))), 0).await.unwrap_err();
-        assert!(matches!(&e, SimError::Transport(m) if m.contains("round time")), "{e:?}");
+        let op = MetaOp {
+            valid_until: far(),
+            ..op_of("pay")
+        };
+        let e = a
+            .build(&job(o_op(&op, &auth_of("pay"), json!({}))), 0)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(&e, SimError::Transport(m) if m.contains("round time")),
+            "{e:?}"
+        );
     }
 
     /// Fix 1 minor 1: what a signed group cost is dropped once it ends (mined or reverted), and stale entries age out.
     #[tokio::test]
     async fn spent_entries_end_with_the_group() {
         let (a, w) = adapter(world()).await;
-        let b = Built { job_id: 1, body: vec![], valid_until: far(),
-                        meta: serde_json::to_value(Group { txs: vec![Tx::Pay { to: [5; 32], amount: 1 }], main: 0, fee: 1_000, mbr: 1 }).unwrap() };
+        let b = Built {
+            job_id: 1,
+            body: vec![],
+            valid_until: far(),
+            meta: serde_json::to_value(Group {
+                txs: vec![Tx::Pay {
+                    to: [5; 32],
+                    amount: 1,
+                }],
+                main: 0,
+                fee: 1_000,
+                mbr: 1,
+            })
+            .unwrap(),
+        };
         let s = a.sign(b, 0, 5_000).await.unwrap();
         let id = crate::addresses::b32encode(&b32(&json!(s.tx_id)));
-        w.lock().unwrap().pending.insert(id, json!({"pool-error": "txn dead", "confirmed-round": 0}));
-        assert!(matches!(a.tx_status(&s.tx_id).await.unwrap(), TxStatus::Reverted { .. }));
-        assert_eq!(a.tx_fee(&s.tx_id).await.unwrap(), None, "a reverted group leaves nothing behind");
+        w.lock()
+            .unwrap()
+            .pending
+            .insert(id, json!({"pool-error": "txn dead", "confirmed-round": 0}));
+        assert!(matches!(
+            a.tx_status(&s.tx_id).await.unwrap(),
+            TxStatus::Reverted { .. }
+        ));
+        assert_eq!(
+            a.tx_fee(&s.tx_id).await.unwrap(),
+            None,
+            "a reverted group leaves nothing behind"
+        );
     }
 
-    async fn router_build(w: World, target: u64, args: Vec<Vec<u8>>, relay_fee: &str) -> std::result::Result<Group, SimError> {
+    async fn router_build(
+        w: World,
+        target: u64,
+        args: Vec<Vec<u8>>,
+        relay_fee: &str,
+    ) -> std::result::Result<Group, SimError> {
         let w = Arc::new(M::new(w));
         let url = serve(w.clone()).await;
         let a = AlgorandAdapter::new(&cfg(&url, relay_fee), &[lane0()]).unwrap();
         a.start_check().await.unwrap();
         let call = router_call(target, &args);
         let op = fee_op(&call, [5; 32], None);
-        a.build(&job(fee_job(&call, &op, json!({}))), 0).await.map(|b| group(&b))
+        a.build(&job(fee_job(&call, &op, json!({}))), 0)
+            .await
+            .map(|b| group(&b))
     }
 
     /// Fix 1 minor 4: a same-token target paying the lane and the open-mode fee both create the lane's balance box: it is
     /// paid once (the target's part), not twice.
     #[tokio::test]
     async fn same_box_is_paid_once() {
-        let t = target_op(app_address(TOKEN), 4, holder(1, [0x11; 32]), holder(0, lane_pk()));
+        let t = target_op(
+            app_address(TOKEN),
+            4,
+            holder(1, [0x11; 32]),
+            holder(0, lane_pk()),
+        );
         let tsel = selector(&format!("mtx_transfer({METAOP_ABI},byte[])void")).to_vec();
         let args = vec![tsel, t.arc4(), abi_bytes(&[0xbb; 70])];
-        let g = router_build(world(), TOKEN, args.clone(), FEE_CFG).await.unwrap();
-        assert_eq!(g.txs[0], Tx::Pay { to: app_address(ROUTER), amount: 47_400 - MBR_AMOUNT_BOX });
-        assert_eq!(g.txs[1], Tx::Pay { to: app_address(TOKEN), amount: 47_400 + 76_100 });
+        let g = router_build(world(), TOKEN, args.clone(), FEE_CFG)
+            .await
+            .unwrap();
+        assert_eq!(
+            g.txs[0],
+            Tx::Pay {
+                to: app_address(ROUTER),
+                amount: 47_400 - MBR_AMOUNT_BOX
+            }
+        );
+        assert_eq!(
+            g.txs[1],
+            Tx::Pay {
+                to: app_address(TOKEN),
+                amount: 47_400 + 76_100
+            }
+        );
         let mut w = world();
-        w.boxes.insert((TOKEN, [&b"b"[..], &lane_pk()].concat()), vec![0; 32]);
+        w.boxes
+            .insert((TOKEN, [&b"b"[..], &lane_pk()].concat()), vec![0; 32]);
         let g = router_build(w, TOKEN, args, FEE_CFG).await.unwrap();
-        assert_eq!(g.txs[0], Tx::Pay { to: app_address(ROUTER), amount: 47_400 }, "the box exists: nothing overlaps");
+        assert_eq!(
+            g.txs[0],
+            Tx::Pay {
+                to: app_address(ROUTER),
+                amount: 47_400
+            },
+            "the box exists: nothing overlaps"
+        );
     }
 
     /// Fix 1 minor 5: the target's own MBR per entry — invalidate (the `n` box new or not), mandate open (the payee's
@@ -3396,38 +5884,157 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
     #[tokio::test]
     async fn target_mbr_per_entry() {
         let from = holder(1, [0x11; 32]);
-        let isel = selector(&format!("mtx_invalidate_nonces({METAOP_ABI},byte[],byte[32],uint64)void")).to_vec();
+        let isel = selector(&format!(
+            "mtx_invalidate_nonces({METAOP_ABI},byte[],byte[32],uint64)void"
+        ))
+        .to_vec();
         let lane = [0x6c; 32];
-        let inv = vec![isel, target_op(app_address(TOKEN), 15, from, from).arc4(), abi_bytes(&[0xbb; 70]), lane.to_vec(), 9u64.to_be_bytes().to_vec()];
-        let g = router_build(world(), TOKEN, inv.clone(), FEE_CFG).await.unwrap();
-        assert_eq!(g.txs[1], Tx::Pay { to: app_address(TOKEN), amount: MBR_LANE_BOX + 76_100 }, "a new min_nonce box + the record");
+        let inv = vec![
+            isel,
+            target_op(app_address(TOKEN), 15, from, from).arc4(),
+            abi_bytes(&[0xbb; 70]),
+            lane.to_vec(),
+            9u64.to_be_bytes().to_vec(),
+        ];
+        let g = router_build(world(), TOKEN, inv.clone(), FEE_CFG)
+            .await
+            .unwrap();
+        assert_eq!(
+            g.txs[1],
+            Tx::Pay {
+                to: app_address(TOKEN),
+                amount: MBR_LANE_BOX + 76_100
+            },
+            "a new min_nonce box + the record"
+        );
         let mut w = world();
-        w.boxes.insert((TOKEN, [&b"n"[..], &sha256(&[&[from.kind][..], &from.id, &lane].concat())].concat()), 1u64.to_be_bytes().to_vec());
+        w.boxes.insert(
+            (
+                TOKEN,
+                [
+                    &b"n"[..],
+                    &sha256(&[&[from.kind][..], &from.id, &lane].concat()),
+                ]
+                .concat(),
+            ),
+            1u64.to_be_bytes().to_vec(),
+        );
         let g = router_build(w, TOKEN, inv, FEE_CFG).await.unwrap();
-        assert_eq!(g.txs[1], Tx::Pay { to: app_address(TOKEN), amount: 76_100 }, "the min_nonce box exists");
-        let osel = selector(&format!("mtx_mandate_open(uint64,{METAOP_ABI},byte[],{TERMS_ABI},uint64)void")).to_vec();
-        let fund = MetaOp { relayer: app_address(MANDATE), to: holder(0, app_address(MANDATE)), ..target_op(app_address(TOKEN), 0, holder(1, [7; 32]), holder(0, [0; 32])) };
-        let open = vec![osel, TOKEN.to_be_bytes().to_vec(), fund.arc4(), abi_bytes(&[1; 70]), terms(holder(0, [9; 32]), far()), 30_000u64.to_be_bytes().to_vec()];
-        let g = router_build(world(), MANDATE, open.clone(), FEE_CFG).await.unwrap();
-        assert_eq!(g.txs[1], Tx::Pay { to: app_address(MANDATE), amount: MBR_MANDATE_BOX + 30_000 + MBR_AMOUNT_BOX });
+        assert_eq!(
+            g.txs[1],
+            Tx::Pay {
+                to: app_address(TOKEN),
+                amount: 76_100
+            },
+            "the min_nonce box exists"
+        );
+        let osel = selector(&format!(
+            "mtx_mandate_open(uint64,{METAOP_ABI},byte[],{TERMS_ABI},uint64)void"
+        ))
+        .to_vec();
+        let fund = MetaOp {
+            relayer: app_address(MANDATE),
+            to: holder(0, app_address(MANDATE)),
+            ..target_op(
+                app_address(TOKEN),
+                0,
+                holder(1, [7; 32]),
+                holder(0, [0; 32]),
+            )
+        };
+        let open = vec![
+            osel,
+            TOKEN.to_be_bytes().to_vec(),
+            fund.arc4(),
+            abi_bytes(&[1; 70]),
+            terms(holder(0, [9; 32]), far()),
+            30_000u64.to_be_bytes().to_vec(),
+        ];
+        let g = router_build(world(), MANDATE, open.clone(), FEE_CFG)
+            .await
+            .unwrap();
+        assert_eq!(
+            g.txs[1],
+            Tx::Pay {
+                to: app_address(MANDATE),
+                amount: MBR_MANDATE_BOX + 30_000 + MBR_AMOUNT_BOX
+            }
+        );
         let mut w = world();
-        w.boxes.insert((TOKEN, [&b"b"[..], &[9; 32]].concat()), vec![0; 32]);
+        w.boxes
+            .insert((TOKEN, [&b"b"[..], &[9; 32]].concat()), vec![0; 32]);
         let g = router_build(w, MANDATE, open, FEE_CFG).await.unwrap();
-        assert_eq!(g.txs[1], Tx::Pay { to: app_address(MANDATE), amount: MBR_MANDATE_BOX + 30_000 }, "the payee's token box exists");
+        assert_eq!(
+            g.txs[1],
+            Tx::Pay {
+                to: app_address(MANDATE),
+                amount: MBR_MANDATE_BOX + 30_000
+            },
+            "the payee's token box exists"
+        );
         // key ops: a lazily opened passkey record (118 + key + its origin) adding a key with that origin / another one
-        let ksel = selector(&format!("mtx_add_key({METAOP_ABI},byte[],(uint16,byte[]),byte[])void")).to_vec();
-        let keyrec = [0x01u8, 0x08, 0, 4, 0, 64].iter().copied().chain([1u8; 64]).collect::<Vec<u8>>();
-        let add = |o: &[u8]| vec![ksel.clone(), vec![0; METAOP_LEN], vec![0, 0], keyrec.clone(), abi_bytes(o)];
+        let ksel = selector(&format!(
+            "mtx_add_key({METAOP_ABI},byte[],(uint16,byte[]),byte[])void"
+        ))
+        .to_vec();
+        let keyrec = [0x01u8, 0x08, 0, 4, 0, 64]
+            .iter()
+            .copied()
+            .chain([1u8; 64])
+            .collect::<Vec<u8>>();
+        let add = |o: &[u8]| {
+            vec![
+                ksel.clone(),
+                vec![0; METAOP_LEN],
+                vec![0, 0],
+                keyrec.clone(),
+                abi_bytes(o),
+            ]
+        };
         let listed = sha256(b"https://pay.scaas.test");
         let rec = |n: u64| (BOX_FLAT + BOX_BYTE * (34 + n)) as i64;
-        assert_eq!(key_op_delta(&add(b"https://pay.scaas.test"), None, 182, &[listed]).unwrap(), rec(214), "origin already listed");
-        assert_eq!(key_op_delta(&add(b"https://other.test"), None, 182, &[listed]).unwrap(), rec(246));
-        assert_eq!(key_op_delta(&add(b""), Some(150), 150, &[]).unwrap(), 12_800, "an existing record grows by one key");
-        let rsel = selector(&format!("mtx_remove_key({METAOP_ABI},byte[],(uint16,byte[]))void")).to_vec();
-        assert_eq!(key_op_delta(&[rsel, vec![], vec![], keyrec.clone()], Some(182), 182, &[]).unwrap(), -12_800, "a shrink refunds nothing (clamped by the caller)");
-        let gsel = selector(&format!("mtx_set_guardian({METAOP_ABI},byte[],(uint8,byte[32]))void")).to_vec();
-        assert_eq!(key_op_delta(&[gsel.clone(), vec![], vec![], vec![0; 33]], Some(150), 150, &[]).unwrap(), 0);
-        assert_eq!(key_op_delta(&[gsel, vec![], vec![], vec![0; 33]], None, 118, &[]).unwrap(), rec(118), "a native address's first record");
+        assert_eq!(
+            key_op_delta(&add(b"https://pay.scaas.test"), None, 182, &[listed]).unwrap(),
+            rec(214),
+            "origin already listed"
+        );
+        assert_eq!(
+            key_op_delta(&add(b"https://other.test"), None, 182, &[listed]).unwrap(),
+            rec(246)
+        );
+        assert_eq!(
+            key_op_delta(&add(b""), Some(150), 150, &[]).unwrap(),
+            12_800,
+            "an existing record grows by one key"
+        );
+        let rsel = selector(&format!(
+            "mtx_remove_key({METAOP_ABI},byte[],(uint16,byte[]))void"
+        ))
+        .to_vec();
+        assert_eq!(
+            key_op_delta(&[rsel, vec![], vec![], keyrec.clone()], Some(182), 182, &[]).unwrap(),
+            -12_800,
+            "a shrink refunds nothing (clamped by the caller)"
+        );
+        let gsel = selector(&format!(
+            "mtx_set_guardian({METAOP_ABI},byte[],(uint8,byte[32]))void"
+        ))
+        .to_vec();
+        assert_eq!(
+            key_op_delta(
+                &[gsel.clone(), vec![], vec![], vec![0; 33]],
+                Some(150),
+                150,
+                &[]
+            )
+            .unwrap(),
+            0
+        );
+        assert_eq!(
+            key_op_delta(&[gsel, vec![], vec![], vec![0; 33]], None, 118, &[]).unwrap(),
+            rec(118),
+            "a native address's first record"
+        );
     }
 
     /// Fix 1 minor 8: with `relay_bound_payee = true` a fee bound to another payee is relayed as a sponsored job: built,
@@ -3439,10 +6046,20 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         let url = serve(w.clone()).await;
         let a = AlgorandAdapter::new(&cfg(&url, sponsored), &[lane0()]).unwrap();
         a.start_check().await.unwrap();
-        let t = target_op(app_address(TOKEN), 4, holder(1, [0x11; 32]), holder(0, [0x44; 32]));
+        let t = target_op(
+            app_address(TOKEN),
+            4,
+            holder(1, [0x11; 32]),
+            holder(0, [0x44; 32]),
+        );
         let call = transfer_call(&t);
-        let op = MetaOp { amount: 1, ..fee_op(&call, [5; 32], Some(holder(0, [0x55; 32]))) };
-        a.build(&job(fee_job(&call, &op, json!({}))), 0).await.unwrap();
+        let op = MetaOp {
+            amount: 1,
+            ..fee_op(&call, [5; 32], Some(holder(0, [0x55; 32])))
+        };
+        a.build(&job(fee_job(&call, &op, json!({}))), 0)
+            .await
+            .unwrap();
     }
 
     /// Spec §5: ARC-28 logs of configured apps only (a block holds only successful groups); joins by ids: PaymentMeta
@@ -3450,7 +6067,12 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
     /// the leg's transfer joined to the configured DEX's Matched.
     #[test]
     fn algorand_events_book_configured_only_and_join() {
-        let ids = Ids { tokens: vec![TOKEN, TOKEN_B], router: Some(ROUTER), mandate: Some(MANDATE), dex: Some(DEX) };
+        let ids = Ids {
+            tokens: vec![TOKEN, TOKEN_B],
+            router: Some(ROUTER),
+            mandate: Some(MANDATE),
+            dex: Some(DEX),
+        };
         let alice = holder(0, [0xa1; 32]);
         let bob = holder(0, [0xb0; 32]);
         let lane = holder(0, lane_pk());
@@ -3458,78 +6080,284 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         let amt = |n: u128| [vec![0; 16], n.to_be_bytes().to_vec()].concat();
         let log = |sig: &str, body: Vec<u8>| [selector(sig).to_vec(), body].concat();
         let hb = |x: &Holder| [vec![x.kind], x.id.to_vec()].concat();
-        let settled = |f: &Holder, t: &Holder, n: u128, r: [u8; 32]| log(EV_SETTLED, [hb(f), hb(t), amt(n), r.to_vec()].concat());
-        let xfer = |f: [u8; 32], t: [u8; 32], n: u128| log(EV_TRANSFER, [f.to_vec(), t.to_vec(), amt(n)].concat());
+        let settled = |f: &Holder, t: &Holder, n: u128, r: [u8; 32]| {
+            log(EV_SETTLED, [hb(f), hb(t), amt(n), r.to_vec()].concat())
+        };
+        let xfer = |f: [u8; 32], t: [u8; 32], n: u128| {
+            log(EV_TRANSFER, [f.to_vec(), t.to_vec(), amt(n)].concat())
+        };
         let pref = [0x77; 32];
         let meta = b"invoice 42".to_vec();
-        let meta_log = log(EV_META, [pref.to_vec(), vec![0, 34], (meta.len() as u16).to_be_bytes().to_vec(), meta.clone()].concat());
-        let exec_log = log(EV_EXECUTED, [hb(&alice), lane.id.to_vec(), [5; 32].to_vec(), 0u64.to_be_bytes().to_vec(), [6; 32].to_vec()].concat());
-        let fee_log = log(EV_FEE, [[0x88; 32].to_vec(), TARGET.to_be_bytes().to_vec(), TOKEN.to_be_bytes().to_vec(), hb(&ua), hb(&lane), amt(9)].concat());
-        let fake_fee = log(EV_FEE, [[0x88; 32].to_vec(), TARGET.to_be_bytes().to_vec(), 4242u64.to_be_bytes().to_vec(), hb(&ua), hb(&lane), amt(9)].concat());
-        let mpay = log(EV_MANDATE_PAY, [TOKEN.to_be_bytes().to_vec(), hb(&holder(1, [0x3c; 32])), hb(&bob), amt(100), [0x5e; 32].to_vec()].concat());
-        let mpay_fake = log(EV_MANDATE_PAY, [4242u64.to_be_bytes().to_vec(), hb(&holder(1, [0x3c; 32])), hb(&bob), amt(100), [0x5f; 32].to_vec()].concat());
+        let meta_log = log(
+            EV_META,
+            [
+                pref.to_vec(),
+                vec![0, 34],
+                (meta.len() as u16).to_be_bytes().to_vec(),
+                meta.clone(),
+            ]
+            .concat(),
+        );
+        let exec_log = log(
+            EV_EXECUTED,
+            [
+                hb(&alice),
+                lane.id.to_vec(),
+                [5; 32].to_vec(),
+                0u64.to_be_bytes().to_vec(),
+                [6; 32].to_vec(),
+            ]
+            .concat(),
+        );
+        let fee_log = log(
+            EV_FEE,
+            [
+                [0x88; 32].to_vec(),
+                TARGET.to_be_bytes().to_vec(),
+                TOKEN.to_be_bytes().to_vec(),
+                hb(&ua),
+                hb(&lane),
+                amt(9),
+            ]
+            .concat(),
+        );
+        let fake_fee = log(
+            EV_FEE,
+            [
+                [0x88; 32].to_vec(),
+                TARGET.to_be_bytes().to_vec(),
+                4242u64.to_be_bytes().to_vec(),
+                hb(&ua),
+                hb(&lane),
+                amt(9),
+            ]
+            .concat(),
+        );
+        let mpay = log(
+            EV_MANDATE_PAY,
+            [
+                TOKEN.to_be_bytes().to_vec(),
+                hb(&holder(1, [0x3c; 32])),
+                hb(&bob),
+                amt(100),
+                [0x5e; 32].to_vec(),
+            ]
+            .concat(),
+        );
+        let mpay_fake = log(
+            EV_MANDATE_PAY,
+            [
+                4242u64.to_be_bytes().to_vec(),
+                hb(&holder(1, [0x3c; 32])),
+                hb(&bob),
+                amt(100),
+                [0x5f; 32].to_vec(),
+            ]
+            .concat(),
+        );
         let (da, db) = ([0xda; 32], [0xdb; 32]);
         let sid = [0x51; 32];
-        let filled = |d: [u8; 32]| log(EV_FILLED, [hb(&ua), app_address(DEX).to_vec(), [1; 32].to_vec(), 0u64.to_be_bytes().to_vec(), amt(100), d.to_vec()].concat());
-        let matched = log(EV_MATCHED, [sid.to_vec(), TOKEN.to_be_bytes().to_vec(), TOKEN_B.to_be_bytes().to_vec(), da.to_vec(), db.to_vec()].concat());
+        let filled = |d: [u8; 32]| {
+            log(
+                EV_FILLED,
+                [
+                    hb(&ua),
+                    app_address(DEX).to_vec(),
+                    [1; 32].to_vec(),
+                    0u64.to_be_bytes().to_vec(),
+                    amt(100),
+                    d.to_vec(),
+                ]
+                .concat(),
+            )
+        };
+        let matched = log(
+            EV_MATCHED,
+            [
+                sid.to_vec(),
+                TOKEN.to_be_bytes().to_vec(),
+                TOKEN_B.to_be_bytes().to_vec(),
+                da.to_vec(),
+                db.to_vec(),
+            ]
+            .concat(),
+        );
         let node = |app: u64, logs: Vec<Vec<u8>>, inner: Vec<Mp>| {
-            let mut dt = vec![(Mp::str("lg"), Mp::Arr(logs.into_iter().map(Mp::Str).collect()))];
+            let mut dt = vec![(
+                Mp::str("lg"),
+                Mp::Arr(logs.into_iter().map(Mp::Str).collect()),
+            )];
             if !inner.is_empty() {
                 dt.push((Mp::str("itx"), Mp::Arr(inner)));
             }
-            Mp::Map(vec![(Mp::str("dt"), Mp::Map(dt)), (Mp::str("txn"), Mp::Map(vec![(Mp::str("apid"), Mp::Int(app as i128)), (Mp::str("type"), Mp::str("appl"))]))])
+            Mp::Map(vec![
+                (Mp::str("dt"), Mp::Map(dt)),
+                (
+                    Mp::str("txn"),
+                    Mp::Map(vec![
+                        (Mp::str("apid"), Mp::Int(app as i128)),
+                        (Mp::str("type"), Mp::str("appl")),
+                    ]),
+                ),
+            ])
         };
         let txns = vec![
             // 0: a plain pay-meta on the token
-            node(TOKEN, vec![meta_log.clone(), exec_log.clone(), xfer(alice.id, bob.id, 5), settled(&alice, &bob, 5, pref)], vec![]),
+            node(
+                TOKEN,
+                vec![
+                    meta_log.clone(),
+                    exec_log.clone(),
+                    xfer(alice.id, bob.id, 5),
+                    settled(&alice, &bob, 5, pref),
+                ],
+                vec![],
+            ),
             // 1: an unconfigured token: nothing
-            node(4242, vec![settled(&alice, &bob, 5, pref), xfer(alice.id, bob.id, 5)], vec![]),
+            node(
+                4242,
+                vec![settled(&alice, &bob, 5, pref), xfer(alice.id, bob.id, 5)],
+                vec![],
+            ),
             // 2: a router relay: the token's pay inside, RelayFeePaid after
-            node(ROUTER, vec![fee_log.clone()], vec![node(TOKEN, vec![settled(&ua, &lane, 9, [0x88; 32]), log(EV_UA_TRANSFER, [hb(&ua), hb(&lane), amt(9)].concat()),
-                                                                         xfer(app_address(TOKEN), lane.id, 9)], vec![])]),
+            node(
+                ROUTER,
+                vec![fee_log.clone()],
+                vec![node(
+                    TOKEN,
+                    vec![
+                        settled(&ua, &lane, 9, [0x88; 32]),
+                        log(EV_UA_TRANSFER, [hb(&ua), hb(&lane), amt(9)].concat()),
+                        xfer(app_address(TOKEN), lane.id, 9),
+                    ],
+                    vec![],
+                )],
+            ),
             // 3: a fake router's RelayFeePaid and a configured router's for an unconfigured token: nothing joins
             node(4343, vec![fee_log.clone()], vec![]),
             node(ROUTER, vec![fake_fee], vec![]),
             // 5: a mandate pay (configured token) and one for an unconfigured token
-            node(MANDATE, vec![mpay, mpay_fake], vec![node(TOKEN, vec![xfer(app_address(MANDATE), bob.id, 100)], vec![])]),
+            node(
+                MANDATE,
+                vec![mpay, mpay_fake],
+                vec![node(
+                    TOKEN,
+                    vec![xfer(app_address(MANDATE), bob.id, 100)],
+                    vec![],
+                )],
+            ),
             // 6: a DEX settle: two legs, the payouts, Matched last
-            node(DEX, vec![matched.clone()], vec![
-                node(TOKEN, vec![filled(da), xfer(alice.id, app_address(DEX), 100)], vec![]),
-                node(TOKEN_B, vec![filled(db), xfer(bob.id, app_address(DEX), 60)], vec![]),
-                node(TOKEN, vec![xfer(app_address(DEX), bob.id, 100)], vec![]),
-            ]),
+            node(
+                DEX,
+                vec![matched.clone()],
+                vec![
+                    node(
+                        TOKEN,
+                        vec![filled(da), xfer(alice.id, app_address(DEX), 100)],
+                        vec![],
+                    ),
+                    node(
+                        TOKEN_B,
+                        vec![filled(db), xfer(bob.id, app_address(DEX), 60)],
+                        vec![],
+                    ),
+                    node(TOKEN, vec![xfer(app_address(DEX), bob.id, 100)], vec![]),
+                ],
+            ),
             // 7: Matched from another app: no settle id
-            node(4444, vec![matched], vec![node(TOKEN, vec![filled([0xdc; 32]), xfer(alice.id, app_address(DEX), 1)], vec![])]),
+            node(
+                4444,
+                vec![matched],
+                vec![node(
+                    TOKEN,
+                    vec![filled([0xdc; 32]), xfer(alice.id, app_address(DEX), 1)],
+                    vec![],
+                )],
+            ),
         ];
-        let block = Mp::Map(vec![(Mp::str("gen"), Mp::str("scaas-localnet-v1")), (Mp::str("gh"), Mp::Bin(network().to_vec())),
-                                 (Mp::str("rnd"), Mp::Int(77)), (Mp::str("txns"), Mp::Arr(txns))]);
+        let block = Mp::Map(vec![
+            (Mp::str("gen"), Mp::str("scaas-localnet-v1")),
+            (Mp::str("gh"), Mp::Bin(network().to_vec())),
+            (Mp::str("rnd"), Mp::Int(77)),
+            (Mp::str("txns"), Mp::Arr(txns)),
+        ]);
         let rows = block_events(&ids, &block, "0xbb").unwrap();
-        let of = |e: &str| rows.iter().filter(|r| r["event"] == e).cloned().collect::<Vec<_>>();
+        let of = |e: &str| {
+            rows.iter()
+                .filter(|r| r["event"] == e)
+                .cloned()
+                .collect::<Vec<_>>()
+        };
         let ps = of("PaymentSettled");
         assert_eq!(ps.len(), 3, "{rows:#?}");
         assert_eq!(ps[0]["meta"], json!(h(&meta)));
-        assert_eq!((ps[0]["contract"].clone(), ps[0]["from"].clone(), ps[0]["to"].clone(), ps[0]["amount"].clone()),
-                   (json!("1001"), json!(alice.display()), json!(bob.display()), json!("5")));
-        assert_eq!(ps[1]["relay_payee"], json!(lane.display()), "RelayFeePaid joined (open mode, the lane)");
+        assert_eq!(
+            (
+                ps[0]["contract"].clone(),
+                ps[0]["from"].clone(),
+                ps[0]["to"].clone(),
+                ps[0]["amount"].clone()
+            ),
+            (
+                json!("1001"),
+                json!(alice.display()),
+                json!(bob.display()),
+                json!("5")
+            )
+        );
+        assert_eq!(
+            ps[1]["relay_payee"],
+            json!(lane.display()),
+            "RelayFeePaid joined (open mode, the lane)"
+        );
         assert_eq!(ps[1]["relay_target"], json!(TARGET.to_string()));
-        assert_eq!((ps[2]["contract"].clone(), ps[2]["from"].clone(), ps[2]["entry_ref"].clone()),
-                   (json!("1001"), json!(h(&[0x3c; 32])), json!(h(&[0x5e; 32]))), "mandate pay keyed (token, id)");
+        assert_eq!(
+            (
+                ps[2]["contract"].clone(),
+                ps[2]["from"].clone(),
+                ps[2]["entry_ref"].clone()
+            ),
+            (json!("1001"), json!(h(&[0x3c; 32])), json!(h(&[0x5e; 32]))),
+            "mandate pay keyed (token, id)"
+        );
         assert!(of("PaymentMeta").is_empty() && of("RelayFeePaid").is_empty());
         let ex = of("MetaTransactionExecuted");
         assert_eq!(ex.len(), 1);
         assert_eq!(ex[0]["relayer"], json!(lane.display()));
         let tr = of("Transfer");
-        let leg = tr.iter().filter(|r| r["leg_digest"].is_string()).collect::<Vec<_>>();
+        let leg = tr
+            .iter()
+            .filter(|r| r["leg_digest"].is_string())
+            .collect::<Vec<_>>();
         assert_eq!(leg.len(), 3, "{tr:#?}");
-        assert_eq!((leg[0]["leg_digest"].clone(), leg[0]["settle_id"].clone()), (json!(h(&da)), json!(h(&sid))));
-        assert_eq!((leg[1]["leg_digest"].clone(), leg[1]["contract"].clone()), (json!(h(&db)), json!("1007")));
-        assert!(leg[2]["settle_id"].is_null(), "Matched of an unconfigured DEX");
+        assert_eq!(
+            (leg[0]["leg_digest"].clone(), leg[0]["settle_id"].clone()),
+            (json!(h(&da)), json!(h(&sid)))
+        );
+        assert_eq!(
+            (leg[1]["leg_digest"].clone(), leg[1]["contract"].clone()),
+            (json!(h(&db)), json!("1007"))
+        );
+        assert!(
+            leg[2]["settle_id"].is_null(),
+            "Matched of an unconfigured DEX"
+        );
         assert!(tr.iter().all(|r| r["contract"] != "4242"));
-        assert!(tr.iter().any(|r| r["from"] == json!(ua.display()) && r["to"] == json!(lane.display())), "UaTransfer row");
-        assert!(!tr.iter().any(|r| r["from"] == json!(algorand_address(&app_address(TOKEN)))), "the UA pool side is skipped");
+        assert!(
+            tr.iter()
+                .any(|r| r["from"] == json!(ua.display()) && r["to"] == json!(lane.display())),
+            "UaTransfer row"
+        );
+        assert!(
+            !tr.iter()
+                .any(|r| r["from"] == json!(algorand_address(&app_address(TOKEN)))),
+            "the UA pool side is skipped"
+        );
         let tx0 = ps[0]["tx_hash"].as_str().unwrap();
         assert_eq!(tx0.len(), 66);
-        assert!(rows.iter().all(|r| r["block_number"] == 77 && r["block_hash"] == "0xbb"));
+        assert!(rows
+            .iter()
+            .all(|r| r["block_number"] == 77 && r["block_hash"] == "0xbb"));
         assert_ne!(ps[0]["tx_hash"], ps[1]["tx_hash"]);
     }
 
@@ -3537,15 +6365,35 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
     #[tokio::test]
     async fn events_scan_blocks_and_pruned_rounds_error() {
         let mut w = world();
-        let b = Mp::Map(vec![(Mp::str("block"), Mp::Map(vec![(Mp::str("gh"), Mp::Bin(network().to_vec())), (Mp::str("rnd"), Mp::Int(4_950)),
-                                                              (Mp::str("ts"), Mp::Int(1))]))]);
+        let b = Mp::Map(vec![(
+            Mp::str("block"),
+            Mp::Map(vec![
+                (Mp::str("gh"), Mp::Bin(network().to_vec())),
+                (Mp::str("rnd"), Mp::Int(4_950)),
+                (Mp::str("ts"), Mp::Int(1)),
+            ]),
+        )]);
         w.blocks.insert(4_950, (mp_encode(&b), [0x49; 32]));
         let (a, w) = adapter(w).await;
         let head = a.final_head().await.unwrap().unwrap();
-        assert_eq!((head.height, head.hash.clone()), (5_000, h(&[5_000u64 as u8; 32])));
+        assert_eq!(
+            (head.height, head.hash.clone()),
+            (5_000, h(&[5_000u64 as u8; 32]))
+        );
         assert_eq!(a.block_hash(4_950).await.unwrap(), h(&[0x49; 32]));
-        assert!(a.events(4_950, 4_950, &["1001".into()]).await.unwrap().is_empty());
-        assert!(a.events(4_949, 4_950, &["1001".into()]).await.unwrap_err().to_string().contains("4949"), "pruned");
+        assert!(a
+            .events(4_950, 4_950, &["1001".into()])
+            .await
+            .unwrap()
+            .is_empty());
+        assert!(
+            a.events(4_949, 4_950, &["1001".into()])
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("4949"),
+            "pruned"
+        );
         w.lock().unwrap().blocks.clear();
         assert!(a.block_hash(4_950).await.is_err());
     }
@@ -3553,20 +6401,50 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
     #[tokio::test]
     async fn submit_and_status_are_classified() {
         let (a, w) = adapter(world()).await;
-        let s = Signed { job_id: 1, tx_id: h(&[0x42; 32]), raw: vec![1, 2], valid_until: far(), sequence: 5_000 };
+        let s = Signed {
+            job_id: 1,
+            tx_id: h(&[0x42; 32]),
+            raw: vec![1, 2],
+            valid_until: far(),
+            sequence: 5_000,
+        };
         a.submit(&s).await.unwrap();
-        w.lock().unwrap().submit_err = Some("TransactionPool.Remember: transaction already in ledger: X".into());
+        w.lock().unwrap().submit_err =
+            Some("TransactionPool.Remember: transaction already in ledger: X".into());
         a.submit(&s).await.unwrap();
-        w.lock().unwrap().submit_err = Some("TransactionPool.Remember: txn dead: round 5000 outside of 10--20".into());
-        assert!(a.submit(&s).await.unwrap_err().downcast_ref::<Rejected>().is_some());
+        w.lock().unwrap().submit_err =
+            Some("TransactionPool.Remember: txn dead: round 5000 outside of 10--20".into());
+        assert!(a
+            .submit(&s)
+            .await
+            .unwrap_err()
+            .downcast_ref::<Rejected>()
+            .is_some());
         let id = crate::addresses::b32encode(&[0x42; 32]);
         assert_eq!(a.tx_status(&s.tx_id).await.unwrap(), TxStatus::Unknown);
-        w.lock().unwrap().pending.insert(id.clone(), json!({"pool-error": "", "confirmed-round": 0}));
+        w.lock()
+            .unwrap()
+            .pending
+            .insert(id.clone(), json!({"pool-error": "", "confirmed-round": 0}));
         assert_eq!(a.tx_status(&s.tx_id).await.unwrap(), TxStatus::Pending);
-        w.lock().unwrap().pending.insert(id.clone(), json!({"pool-error": "logic eval error: x", "confirmed-round": 0}));
-        assert!(matches!(a.tx_status(&s.tx_id).await.unwrap(), TxStatus::Reverted { reason } if reason.contains("logic eval")));
-        w.lock().unwrap().pending.insert(id, json!({"pool-error": "", "confirmed-round": 4_999}));
-        assert_eq!(a.tx_status(&s.tx_id).await.unwrap(), TxStatus::Mined { height: 4_999, tx_hash: None });
+        w.lock().unwrap().pending.insert(
+            id.clone(),
+            json!({"pool-error": "logic eval error: x", "confirmed-round": 0}),
+        );
+        assert!(
+            matches!(a.tx_status(&s.tx_id).await.unwrap(), TxStatus::Reverted { reason } if reason.contains("logic eval"))
+        );
+        w.lock()
+            .unwrap()
+            .pending
+            .insert(id, json!({"pool-error": "", "confirmed-round": 4_999}));
+        assert_eq!(
+            a.tx_status(&s.tx_id).await.unwrap(),
+            TxStatus::Mined {
+                height: 4_999,
+                tx_hash: None
+            }
+        );
         assert_eq!(a.sequence(0).await.unwrap(), 5_000);
         assert_eq!(a.lane_balance(0).await.unwrap(), Some(10_000_000));
     }
@@ -3575,13 +6453,28 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
     #[tokio::test]
     async fn op_consumed_reads_the_lane_box() {
         let (a, w) = adapter(world()).await;
-        let op = MetaOp { valid_until: far(), ..op_of("pay") };
+        let op = MetaOp {
+            valid_until: far(),
+            ..op_of("pay")
+        };
         let j = job(o_op(&op, &auth_of("pay"), json!({})));
         assert_eq!(a.op_consumed(&j).await.unwrap(), Some(false));
-        let name = [&b"l"[..], &sha256(&[&[op.from.kind][..], &op.from.id, &op.lane].concat())].concat();
-        w.lock().unwrap().boxes.insert((TOKEN, name), 1u64.to_be_bytes().to_vec());
+        let name = [
+            &b"l"[..],
+            &sha256(&[&[op.from.kind][..], &op.from.id, &op.lane].concat()),
+        ]
+        .concat();
+        w.lock()
+            .unwrap()
+            .boxes
+            .insert((TOKEN, name), 1u64.to_be_bytes().to_vec());
         assert_eq!(a.op_consumed(&j).await.unwrap(), Some(true));
-        assert_eq!(a.op_consumed(&job(json!({"payload": "0x00"}))).await.unwrap(), None);
+        assert_eq!(
+            a.op_consumed(&job(json!({"payload": "0x00"})))
+                .await
+                .unwrap(),
+            None
+        );
     }
 
     proptest::proptest! {
@@ -3638,8 +6531,16 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         let app = axum::Router::new().fallback(move |headers: axum::http::HeaderMap| {
             let s2 = s2.clone();
             async move {
-                s2.lock().unwrap().push(headers.get("x-algo-api-token").and_then(|v| v.to_str().ok()).map(str::to_string));
-                (axum::http::StatusCode::NOT_FOUND, axum::Json(json!({"message": "no such thing"})))
+                s2.lock().unwrap().push(
+                    headers
+                        .get("x-algo-api-token")
+                        .and_then(|v| v.to_str().ok())
+                        .map(str::to_string),
+                );
+                (
+                    axum::http::StatusCode::NOT_FOUND,
+                    axum::Json(json!({"message": "no such thing"})),
+                )
             }
         });
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -3648,7 +6549,8 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         std::env::set_var("SCAAS_T18_ALGOD_TOKEN", "tok");
         let mut c = cfg(&url, "");
         c.rpc_urls = vec![url.clone(), format!("{url}/second")];
-        c.params.insert("algod_token_env".into(), "SCAAS_T18_ALGOD_TOKEN".into());
+        c.params
+            .insert("algod_token_env".into(), "SCAAS_T18_ALGOD_TOKEN".into());
         let a = AlgorandAdapter::new(&c, &[lane0()]).unwrap();
         let e = a.get_raw_at(1, "/v2/status", &[]).await.unwrap_err();
         assert_eq!(status_of(&e), Some(404), "{e:#}");
@@ -3657,7 +6559,11 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         assert_eq!(*seen.lock().unwrap(), [None, Some("tok".to_string())]);
         let a = AlgorandAdapter::new(&cfg(&url, ""), &[lane0()]).unwrap();
         let _ = a.get("/v2/status").await;
-        assert_eq!(seen.lock().unwrap().last().unwrap(), &None, "control: no token configured");
+        assert_eq!(
+            seen.lock().unwrap().last().unwrap(),
+            &None,
+            "control: no token configured"
+        );
     }
 
     // ---- scaas-rpc T18b: ARCH-POS-15 failover, the first-endpoint carve-out first (F3) ----
@@ -3675,7 +6581,10 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
 
     /// The plain pay of the vectors, valid long enough.
     fn pay_op() -> MetaOp {
-        MetaOp { valid_until: far(), ..op_of("pay") }
+        MetaOp {
+            valid_until: far(),
+            ..op_of("pay")
+        }
     }
 
     /// F3: a status, `op_consumed`, the round (the lane sequence), the lane balance and `start_check` (the apps' hashes, the
@@ -3688,22 +6597,40 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         let tx = format!("0x{}", "11".repeat(32));
         let w = || {
             let mut w = world();
-            let name = [&b"l"[..], &sha256(&[&op.from.bytes()[..], &op.lane[..]].concat())].concat();
+            let name = [
+                &b"l"[..],
+                &sha256(&[&op.from.bytes()[..], &op.lane[..]].concat()),
+            ]
+            .concat();
             for t in [TOKEN, TOKEN_B] {
-                w.boxes.insert((t, name.clone()), (op.nonce + 1).to_be_bytes().to_vec());
+                w.boxes
+                    .insert((t, name.clone()), (op.nonce + 1).to_be_bytes().to_vec());
             }
-            w.pending.insert(b32encode(&[0x11; 32]), json!({"confirmed-round": 5}));
+            w.pending
+                .insert(b32encode(&[0x11; 32]), json!({"confirmed-round": 5}));
             w
         };
         let (a, _) = adapter_after(w(), &[DOWN]).await;
-        assert!(a.tx_status(&tx).await.is_err(), "unread, never Mined from endpoint 1");
+        assert!(
+            a.tx_status(&tx).await.is_err(),
+            "unread, never Mined from endpoint 1"
+        );
         assert!(a.op_consumed(&j).await.is_err());
         assert!(a.sequence(0).await.is_err());
         assert!(a.lane_balance(0).await.is_err());
-        assert!(a.start_check().await.is_err(), "the apps and the executor: endpoint 0's");
+        assert!(
+            a.start_check().await.is_err(),
+            "the apps and the executor: endpoint 0's"
+        );
         assert_eq!(a.failovers(), 0);
         let (a, _) = adapter_after(w(), &[]).await;
-        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { height: 5, .. }), "control");
+        assert!(
+            matches!(
+                a.tx_status(&tx).await.unwrap(),
+                TxStatus::Mined { height: 5, .. }
+            ),
+            "control"
+        );
         assert_eq!(a.op_consumed(&j).await.unwrap(), Some(true));
         a.sequence(0).await.unwrap();
         a.lane_balance(0).await.unwrap();
@@ -3727,11 +6654,17 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         };
         let (a, _) = adapter_after(failing(), &[DOWN]).await;
         match a.build(&j, 0).await {
-            Err(SimError::Transport(m)) => assert!(m.starts_with("FAILOVER_ANSWER") && m.contains("assert failed"), "{m}"),
+            Err(SimError::Transport(m)) => assert!(
+                m.starts_with("FAILOVER_ANSWER") && m.contains("assert failed"),
+                "{m}"
+            ),
             r => panic!("{r:?}"),
         }
         let (a, _) = adapter_after(failing(), &[]).await;
-        assert!(matches!(a.build(&j, 0).await, Err(SimError::Revert(m)) if m.contains("assert failed")), "control: endpoint 0's verdict");
+        assert!(
+            matches!(a.build(&j, 0).await, Err(SimError::Revert(m)) if m.contains("assert failed")),
+            "control: endpoint 0's verdict"
+        );
     }
 
     /// scaas-rpc T24.3: endpoint 0's answer other than a 404 or a refused simulate's 400 (a rate limit) is its failure, never
@@ -3739,7 +6672,13 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
     #[tokio::test]
     async fn algorand_endpoint_0_rate_limited_fails_over() {
         let j = job(o_op(&pay_op(), &auth_of("pay"), json!({})));
-        let first = crate::adapters::testkit::refusing(&serve(Arc::new(M::new(world()))).await, |p, _| p == "/v2/transactions/params", 429, json!({"message": "rate limited"})).await;
+        let first = crate::adapters::testkit::refusing(
+            &serve(Arc::new(M::new(world()))).await,
+            |p, _| p == "/v2/transactions/params",
+            429,
+            json!({"message": "rate limited"}),
+        )
+        .await;
         let (a, _) = adapter_after(world(), &[&first]).await;
         a.build(&j, 0).await.unwrap();
         assert!(a.failovers() > 0);
@@ -3750,33 +6689,63 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
     #[tokio::test]
     async fn algorand_a_mined_status_and_the_head_raise_the_floor() {
         let j = job(o_op(&pay_op(), &auth_of("pay"), json!({})));
-        let first = || crate::adapters::testkit::scripted(false, |p, _| match p {
-            "/v2/transactions/params" => Some(json!({"genesis-hash": base64::engine::general_purpose::STANDARD.encode(network()),
-                "genesis-id": "scaas-localnet-v1", "last-round": 5_000, "min-fee": 1_000, "fee": 0, "consensus-version": "future"})),
-            p if p.starts_with("/v2/transactions/pending/") => Some(json!({"confirmed-round": 5_001})),
-            "/v2/status" => Some(json!({"last-round": 5_001})),
-            _ => None,
-        });
+        let first = || {
+            crate::adapters::testkit::scripted(false, |p, _| match p {
+                "/v2/transactions/params" => Some(
+                    json!({"genesis-hash": base64::engine::general_purpose::STANDARD.encode(network()),
+                "genesis-id": "scaas-localnet-v1", "last-round": 5_000, "min-fee": 1_000, "fee": 0, "consensus-version": "future"}),
+                ),
+                p if p.starts_with("/v2/transactions/pending/") => {
+                    Some(json!({"confirmed-round": 5_001}))
+                }
+                "/v2/status" => Some(json!({"last-round": 5_001})),
+                _ => None,
+            })
+        };
         let tx = format!("0x{}", "11".repeat(32));
         let (a, _) = adapter_after(world(), &[&first().await]).await;
         a.build(&j, 0).await.unwrap();
-        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { height: 5_001, .. }));
-        assert!(matches!(a.build(&j, 0).await, Err(SimError::Transport(_))), "endpoint 1 below round 5001: skipped");
+        assert!(matches!(
+            a.tx_status(&tx).await.unwrap(),
+            TxStatus::Mined { height: 5_001, .. }
+        ));
+        assert!(
+            matches!(a.build(&j, 0).await, Err(SimError::Transport(_))),
+            "endpoint 1 below round 5001: skipped"
+        );
         let (a, _) = adapter_after(world(), &[&first().await]).await;
         let _ = a.final_head().await;
-        assert!(matches!(a.build(&j, 0).await, Err(SimError::Transport(_))), "the head: the same floor");
+        assert!(
+            matches!(a.build(&j, 0).await, Err(SimError::Transport(_))),
+            "the head: the same floor"
+        );
     }
 
     /// scaas-rpc T24.7: `submit` sends to endpoint 0 only, inside `build`'s scope too: with it down the send fails and endpoint
     /// 1 is sent nothing. Control: endpoint 0 up takes it.
     #[tokio::test]
     async fn algorand_submit_inside_build_asks_endpoint_0_only() {
-        let s = Signed { job_id: 1, tx_id: format!("0x{}", "11".repeat(32)), raw: vec![1, 2, 3], valid_until: u64::MAX / 2, sequence: 0 };
+        let s = Signed {
+            job_id: 1,
+            tx_id: format!("0x{}", "11".repeat(32)),
+            raw: vec![1, 2, 3],
+            valid_until: u64::MAX / 2,
+            sequence: 0,
+        };
         let (a, w) = adapter_after(world(), &[DOWN]).await;
-        assert!(crate::adapters::evm::BUILDING.scope((), a.submit(&s)).await.is_err());
-        assert!(w.lock().unwrap().submitted.is_empty(), "endpoint 1 is sent nothing");
+        assert!(crate::adapters::evm::BUILDING
+            .scope((), a.submit(&s))
+            .await
+            .is_err());
+        assert!(
+            w.lock().unwrap().submitted.is_empty(),
+            "endpoint 1 is sent nothing"
+        );
         let (a, w) = adapter_after(world(), &[]).await;
-        crate::adapters::evm::BUILDING.scope((), a.submit(&s)).await.unwrap();
+        crate::adapters::evm::BUILDING
+            .scope((), a.submit(&s))
+            .await
+            .unwrap();
         assert_eq!(w.lock().unwrap().submitted.len(), 1, "control");
     }
 
@@ -3786,18 +6755,29 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
     async fn algorand_endpoint_0_of_another_network_answers_no_read() {
         fn algod(p: &str, g: [u8; 32]) -> Option<Value> {
             match p {
-                "/v2/transactions/params" => Some(json!({"genesis-hash": base64::engine::general_purpose::STANDARD.encode(g), "genesis-id": "x",
-                    "last-round": 5_000, "min-fee": 1_000, "fee": 0})),
-                p if p.starts_with("/v2/transactions/pending/") => Some(json!({"confirmed-round": 5})),
+                "/v2/transactions/params" => Some(
+                    json!({"genesis-hash": base64::engine::general_purpose::STANDARD.encode(g), "genesis-id": "x",
+                    "last-round": 5_000, "min-fee": 1_000, "fee": 0}),
+                ),
+                p if p.starts_with("/v2/transactions/pending/") => {
+                    Some(json!({"confirmed-round": 5}))
+                }
                 _ => None,
             }
         }
         let tx = format!("0x{}", "11".repeat(32));
         let other = crate::adapters::testkit::scripted(false, |p, _| algod(p, [7; 32])).await;
-        assert!(AlgorandAdapter::new(&cfg(&other, FEE_CFG), &[lane0()]).unwrap().tx_status(&tx).await.is_err());
+        assert!(AlgorandAdapter::new(&cfg(&other, FEE_CFG), &[lane0()])
+            .unwrap()
+            .tx_status(&tx)
+            .await
+            .is_err());
         let this = crate::adapters::testkit::scripted(false, |p, _| algod(p, network())).await;
         let a = AlgorandAdapter::new(&cfg(&this, FEE_CFG), &[lane0()]).unwrap();
-        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { .. }), "control");
+        assert!(
+            matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { .. }),
+            "control"
+        );
     }
 
     /// scaas-rpc T24.9 (CLI-RPC-07): algod's raw JSON answers (`get`, a box) are decoded through the crate's bounded decode: one
@@ -3807,17 +6787,39 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         fn algod(p: &str, depth: usize) -> Option<Value> {
             let deep = (0..depth).fold(json!(5), |v, _| json!([v]));
             match p {
-                "/v2/transactions/params" => Some(json!({"genesis-hash": base64::engine::general_purpose::STANDARD.encode(network()), "last-round": 5})),
+                "/v2/transactions/params" => Some(
+                    json!({"genesis-hash": base64::engine::general_purpose::STANDARD.encode(network()), "last-round": 5}),
+                ),
                 "/v2/status" => Some(json!({"last-round": 5, "deep": deep})),
-                p if p.starts_with("/v2/applications/") => Some(json!({"value": "AQ==", "deep": deep})),
+                p if p.starts_with("/v2/applications/") => {
+                    Some(json!({"value": "AQ==", "deep": deep}))
+                }
                 _ => None,
             }
         }
-        let deep = AlgorandAdapter::new(&cfg(&crate::adapters::testkit::scripted(false, |p, _| algod(p, 100)).await, FEE_CFG), &[lane0()]).unwrap();
+        let deep = AlgorandAdapter::new(
+            &cfg(
+                &crate::adapters::testkit::scripted(false, |p, _| algod(p, 100)).await,
+                FEE_CFG,
+            ),
+            &[lane0()],
+        )
+        .unwrap();
         assert!(format!("{:#}", deep.get("/v2/status").await.unwrap_err()).contains("TooDeep"));
         assert!(deep.box_value(1, b"x").await.is_err());
-        let shallow = AlgorandAdapter::new(&cfg(&crate::adapters::testkit::scripted(false, |p, _| algod(p, 3)).await, FEE_CFG), &[lane0()]).unwrap();
-        assert_eq!(shallow.get("/v2/status").await.unwrap()["last-round"], 5, "control");
+        let shallow = AlgorandAdapter::new(
+            &cfg(
+                &crate::adapters::testkit::scripted(false, |p, _| algod(p, 3)).await,
+                FEE_CFG,
+            ),
+            &[lane0()],
+        )
+        .unwrap();
+        assert_eq!(
+            shallow.get("/v2/status").await.unwrap()["last-round"],
+            5,
+            "control"
+        );
         assert_eq!(shallow.box_value(1, b"x").await.unwrap(), Some(vec![1]));
     }
 
@@ -3830,13 +6832,22 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
             let url = serve(Arc::new(M::new(World { fpb: 2, ..world() }))).await;
             AlgorandAdapter::new(&cfg(&url, &format!("{FEE_CFG}, {caps}")), &[lane0()]).unwrap()
         };
-        for caps in ["max_min_fee = 999, max_fee_per_byte = 2", "max_min_fee = 1000, max_fee_per_byte = 1"] {
+        for caps in [
+            "max_min_fee = 999, max_fee_per_byte = 2",
+            "max_min_fee = 1000, max_fee_per_byte = 1",
+        ] {
             match on(caps).await.build(&j, 0).await {
-                Err(SimError::Transport(m)) => assert!(m.contains("above params.max_"), "{caps}: {m}"),
+                Err(SimError::Transport(m)) => {
+                    assert!(m.contains("above params.max_"), "{caps}: {m}")
+                }
                 r => panic!("{caps}: {r:?}"),
             }
         }
-        on("max_min_fee = 1000, max_fee_per_byte = 2").await.build(&j, 0).await.unwrap();
+        on("max_min_fee = 1000, max_fee_per_byte = 2")
+            .await
+            .build(&j, 0)
+            .await
+            .unwrap();
     }
 
     /// scaas-rpc T24.10 (spec §5.3, owner 2026-11-18): the algod token per endpoint. The name form is endpoint 0's token only
@@ -3880,24 +6891,48 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         let a = on(vec![u0.clone(), u1.clone()], "SCAAS_T24_10_ALGOD_0".into());
         a.get_raw_at(0, "/v2/status", &[]).await.unwrap();
         let e = a.get_raw_at(1, "/v2/status", &[]).await.unwrap_err();
-        assert_eq!((last(&s0), last(&s1)), (Some("token-zero".into()), None), "the name form: endpoint 0's only");
+        assert_eq!(
+            (last(&s0), last(&s1)),
+            (Some("token-zero".into()), None),
+            "the name form: endpoint 0's only"
+        );
         assert!(!format!("{e:#}").contains("token-zero"), "{e:#}");
-        let a = on(vec![u0, u1], toml::Value::Array(vec!["".into(), "SCAAS_T24_10_ALGOD_1".into()]));
+        let a = on(
+            vec![u0, u1],
+            toml::Value::Array(vec!["".into(), "SCAAS_T24_10_ALGOD_1".into()]),
+        );
         a.get_raw_at(0, "/v2/status", &[]).await.unwrap();
         let _ = a.get_raw_at(1, "/v2/status", &[]).await;
-        assert_eq!((last(&s0), last(&s1)), (None, Some("token-one".into())), "the list form: each its own");
+        assert_eq!(
+            (last(&s0), last(&s1)),
+            (None, Some("token-one".into())),
+            "the list form: each its own"
+        );
         // a failed-over read logs each endpoint's failure: endpoint 0 down (its token configured), endpoint 1's echoed refusal
         let buf = Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
         let w = buf.clone();
-        let sub = tracing_subscriber::fmt().with_ansi(false).with_max_level(tracing::Level::TRACE).with_writer(move || LogBuf(w.clone())).finish();
+        let sub = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_max_level(tracing::Level::TRACE)
+            .with_writer(move || LogBuf(w.clone()))
+            .finish();
         let g = tracing::subscriber::set_default(sub);
         let (u1, _) = algod(true).await;
         let a = on(vec![DOWN.into(), u1], "SCAAS_T24_10_ALGOD_0".into());
-        let e = crate::adapters::evm::BUILDING.scope((), a.get_raw("/v2/status", &[])).await.unwrap_err();
+        let e = crate::adapters::evm::BUILDING
+            .scope((), a.get_raw("/v2/status", &[]))
+            .await
+            .unwrap_err();
         drop(g);
         let logs = String::from_utf8_lossy(&buf.lock().unwrap()).to_string();
-        assert!(logs.contains("x-algo-api-token") || logs.contains("HTTP 400"), "endpoint 1's refusal is logged: {logs}");
-        assert!(!logs.contains("token-zero") && !format!("{e:#}").contains("token-zero"), "{logs}");
+        assert!(
+            logs.contains("x-algo-api-token") || logs.contains("HTTP 400"),
+            "endpoint 1's refusal is logged: {logs}"
+        );
+        assert!(
+            !logs.contains("token-zero") && !format!("{e:#}").contains("token-zero"),
+            "{logs}"
+        );
     }
 
     struct LogBuf(Arc<std::sync::Mutex<Vec<u8>>>);

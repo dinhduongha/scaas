@@ -31,10 +31,10 @@ library HashToCurve {
 
     address internal constant MODEXP = address(0x05);
 
-    uint256 internal constant B_IN_BYTES = 32;   // SHA-256: kích thước output
-    uint256 internal constant S_IN_BYTES = 64;   // SHA-256: kích thước block
-    uint256 internal constant L = 64;            // RFC 9380 §8.8.1 cho BLS12-381
-    uint256 internal constant FP_PAD = 16;       // 64 - 48, đệm 0 ở ĐẦU cho EIP-2537
+    uint256 internal constant B_IN_BYTES = 32; // SHA-256: kích thước output
+    uint256 internal constant S_IN_BYTES = 64; // SHA-256: kích thước block
+    uint256 internal constant L = 64; // RFC 9380 §8.8.1 cho BLS12-381
+    uint256 internal constant FP_PAD = 16; // 64 - 48, đệm 0 ở ĐẦU cho EIP-2537
 
     error DstTooLong(uint256 len);
     error TooManyBlocks(uint256 ell);
@@ -47,7 +47,9 @@ library HashToCurve {
     ///      - Giữa `l_i_b_str` và `DST_prime` có **một byte 0x00**.
     ///      - `DST_prime` = `DST ‖ len(DST)` — độ dài **đi sau**, một byte.
     function expandMessageXmd(bytes memory message, bytes memory dst, uint256 lenInBytes)
-        internal pure returns (bytes memory)
+        internal
+        pure
+        returns (bytes memory)
     {
         if (dst.length > 255) revert DstTooLong(dst.length);
         uint256 ell = (lenInBytes + B_IN_BYTES - 1) / B_IN_BYTES;
@@ -57,9 +59,9 @@ library HashToCurve {
 
         bytes32 b0 = sha256(
             bytes.concat(
-                new bytes(S_IN_BYTES),               // Z_pad
+                new bytes(S_IN_BYTES), // Z_pad
                 message,
-                bytes2(uint16(lenInBytes)),          // l_i_b_str, big-endian
+                bytes2(uint16(lenInBytes)), // l_i_b_str, big-endian
                 bytes1(0x00),
                 dstPrime
             )
@@ -84,11 +86,11 @@ library HashToCurve {
     ///      EIP-2537 đòi phần tử Fp mã hoá **64 byte: 16 byte 0 ở đầu, rồi 48 byte giá trị**.
     function _reduceToFp(bytes memory tv64) private view returns (bytes memory) {
         bytes memory input = bytes.concat(
-            bytes32(uint256(64)),   // độ dài base
-            bytes32(uint256(1)),    // độ dài exponent
-            bytes32(uint256(48)),   // độ dài modulus
+            bytes32(uint256(64)), // độ dài base
+            bytes32(uint256(1)), // độ dài exponent
+            bytes32(uint256(48)), // độ dài modulus
             tv64,
-            bytes1(0x01),           // exponent = 1  ⇒  base^1 mod p  =  base mod p
+            bytes1(0x01), // exponent = 1  ⇒  base^1 mod p  =  base mod p
             P
         );
         (bool ok, bytes memory out) = MODEXP.staticcall(input);
@@ -98,7 +100,9 @@ library HashToCurve {
 
     /// @notice RFC 9380 §5.2 `hash_to_field(msg, 2)` cho Fp.
     function hashToField2(bytes memory message, bytes memory dst)
-        internal view returns (bytes memory u0, bytes memory u1)
+        internal
+        view
+        returns (bytes memory u0, bytes memory u1)
     {
         bytes memory ub = expandMessageXmd(message, dst, 2 * L);
         bytes memory t0 = new bytes(L);
@@ -115,12 +119,10 @@ library HashToCurve {
     /// @dev Đây là `H(m)` trong `e(sig, -G2) · e(H(m), pk) == 1`. Nó **phải** ở trong
     ///      contract: nhận một điểm G1 do caller đưa là cho caller chọn `H(m)`, tức là
     ///      cho họ ký bất cứ thứ gì.
-    function hashToG1(bytes memory message, bytes memory dst)
-        internal view returns (bytes memory)
-    {
+    function hashToG1(bytes memory message, bytes memory dst) internal view returns (bytes memory) {
         (bytes memory u0, bytes memory u1) = hashToField2(message, dst);
         bytes memory q0 = Bls12381.mapFpToG1(u0);
         bytes memory q1 = Bls12381.mapFpToG1(u1);
-        return Bls12381.g1Add(q0, q1);   // cofactor đã clear trong từng map — xem đầu file
+        return Bls12381.g1Add(q0, q1); // cofactor đã clear trong từng map — xem đầu file
     }
 }

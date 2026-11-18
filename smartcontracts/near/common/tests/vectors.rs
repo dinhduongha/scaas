@@ -16,7 +16,10 @@ fn load(p: &str) -> Value {
 
 fn hx(v: &Value) -> Vec<u8> {
     let s = v.as_str().unwrap().trim_start_matches("0x");
-    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+        .collect()
 }
 
 fn b32(v: &Value) -> [u8; 32] {
@@ -49,7 +52,10 @@ fn metaop(f: &Value) -> MetaOp {
 
 fn auth(a: &Value) -> Auth {
     match a["kind"].as_str().unwrap() {
-        "ed25519" => Auth::Ed25519 { key: b32(&a["key"]), sig: hx(&a["sig"]).try_into().unwrap() },
+        "ed25519" => Auth::Ed25519 {
+            key: b32(&a["key"]),
+            sig: hx(&a["sig"]).try_into().unwrap(),
+        },
         "secp256k1" => Auth::Secp256k1 {
             key: hx(&a["key"]).try_into().unwrap(),
             sig: hx(&a["sig"]).try_into().unwrap(),
@@ -63,7 +69,12 @@ fn auth(a: &Value) -> Auth {
         },
         "msig" => Auth::Msig {
             key_data: hx(&a["keyData"]),
-            sigs: a["sigs"].as_array().unwrap().iter().map(|s| (s["index"].as_u64().unwrap() as u8, auth(&s["auth"]))).collect(),
+            sigs: a["sigs"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|s| (s["index"].as_u64().unwrap() as u8, auth(&s["auth"])))
+                .collect(),
         },
         k => panic!("kind {k}"),
     }
@@ -76,21 +87,38 @@ fn metaop_vectors_match() {
     let d = load(VECTORS);
     let token: AccountId = d["accounts"]["token"].as_str().unwrap().parse().unwrap();
     let rows = d["metaops"]["vectors"].as_array().unwrap();
-    assert!(rows.iter().filter(|r| r.get("params").is_some()).count() >= 9, "key-op rows missing");
+    assert!(
+        rows.iter().filter(|r| r.get("params").is_some()).count() >= 9,
+        "key-op rows missing"
+    );
     for r in rows {
         let op = metaop(&r["fields"]);
         assert_eq!(op.encode(), hx(&r["encoding"]), "{}", r["name"]);
         assert_eq!(op.digest().to_vec(), hx(&r["digest"]), "{}", r["name"]);
         if let Some(p) = r.get("params") {
-            assert_eq!(op.extra, near_sdk::env::sha256_array(hx(p)), "{}", r["name"]);
+            assert_eq!(
+                op.extra,
+                near_sdk::env::sha256_array(hx(p)),
+                "{}",
+                r["name"]
+            );
         }
         let a = auth(&r["auth"]);
         let pred: AccountId = d["msig"]["predecessor"].as_str().unwrap().parse().unwrap();
         let origins = [r["auth"]["origin"].as_str().unwrap_or("").to_string()];
-        assert!(auth::verify(&a, &op.digest(), &token, &pred, Some(&origins)).is_ok(), "{}", r["name"]);
+        assert!(
+            auth::verify(&a, &op.digest(), &token, &pred, Some(&origins)).is_ok(),
+            "{}",
+            r["name"]
+        );
         // lazily opened (no origin list): the assertion's own origin comes back
         let seen = auth::verify(&a, &op.digest(), &token, &pred, None).unwrap();
-        assert_eq!(seen.is_empty(), r["auth"]["kind"] != "passkey", "{}", r["name"]);
+        assert_eq!(
+            seen.is_empty(),
+            r["auth"]["kind"] != "passkey",
+            "{}",
+            r["name"]
+        );
         // the signer's key derives the UA the op is from, when it is a UA (lazy open); not for the guardian's
         // start_recovery (from = guardian, checked) nor a mandate pay (from = the mandate id, the delegate signs)
         if let Holder::Ua(id) = op.from {
@@ -101,7 +129,11 @@ fn metaop_vectors_match() {
         // another digest fails
         let mut other = op.digest();
         other[0] ^= 1;
-        assert!(auth::verify(&a, &other, &token, &pred, Some(&origins)).is_err(), "{}", r["name"]);
+        assert!(
+            auth::verify(&a, &other, &token, &pred, Some(&origins)).is_err(),
+            "{}",
+            r["name"]
+        );
     }
 }
 
@@ -113,12 +145,20 @@ fn nep413_vectors_match() {
     assert_eq!(s["tag"].as_u64().unwrap(), 2_147_484_061);
     let digest = b32(&s["nonce"]);
     assert_eq!(nep413_hash(&digest, &token).to_vec(), hx(&s["hash"]));
-    assert_eq!(scaas_near_common::hash::signed_text(&digest), s["message"].as_str().unwrap());
+    assert_eq!(
+        scaas_near_common::hash::signed_text(&digest),
+        s["message"].as_str().unwrap()
+    );
     let mut n = 0;
     for r in d["metaops"]["vectors"].as_array().unwrap() {
         let a = &r["auth"];
         if a["kind"] == "ed25519" {
-            assert_eq!(nep413_hash(&b32(&r["digest"]), &token).to_vec(), hx(&a["nep413Hash"]), "{}", r["name"]);
+            assert_eq!(
+                nep413_hash(&b32(&r["digest"]), &token).to_vec(),
+                hx(&a["nep413Hash"]),
+                "{}",
+                r["name"]
+            );
             n += 1;
         }
     }
@@ -139,8 +179,19 @@ fn ua_of_matches_kinds_json_valid_rows() {
     let mut n = 0;
     for r in k["valid"].as_array().unwrap() {
         let kind = r["kind"].as_u64().unwrap() as u16;
-        if [ua::KIND_WEBAUTHN_P256, ua::KIND_ED25519, ua::KIND_SECP256K1, ua::KIND_MSIG].contains(&kind) {
-            assert_eq!(ua::ua_of(kind, &hx(&r["keyData"])).to_vec(), hx(&r["ua"]), "{r}");
+        if [
+            ua::KIND_WEBAUTHN_P256,
+            ua::KIND_ED25519,
+            ua::KIND_SECP256K1,
+            ua::KIND_MSIG,
+        ]
+        .contains(&kind)
+        {
+            assert_eq!(
+                ua::ua_of(kind, &hx(&r["keyData"])).to_vec(),
+                hx(&r["ua"]),
+                "{r}"
+            );
             n += 1;
         }
     }
@@ -150,29 +201,68 @@ fn ua_of_matches_kinds_json_valid_rows() {
     let mut other = [0u32; 2];
     for r in k["valid"].as_array().unwrap() {
         let kind = r["kind"].as_u64().unwrap() as u16;
-        if ![ua::KIND_WEBAUTHN_P256, ua::KIND_ED25519, ua::KIND_SECP256K1, ua::KIND_MSIG].contains(&kind) {
-            assert!(KeyRecord { kind, key_data: hx(&r["keyData"]) }.validate().is_err(), "{r}");
+        if ![
+            ua::KIND_WEBAUTHN_P256,
+            ua::KIND_ED25519,
+            ua::KIND_SECP256K1,
+            ua::KIND_MSIG,
+        ]
+        .contains(&kind)
+        {
+            assert!(
+                KeyRecord {
+                    kind,
+                    key_data: hx(&r["keyData"])
+                }
+                .validate()
+                .is_err(),
+                "{r}"
+            );
             other[0] += u32::from(kind == 0x0134);
             other[1] += u32::from(kind == 0x0135);
         }
     }
-    assert_eq!(other, [1, 1], "the mldsa87 row and the fndsa1024 row of kinds.json");
+    assert_eq!(
+        other,
+        [1, 1],
+        "the mldsa87 row and the fndsa1024 row of kinds.json"
+    );
     // every invalid msig row of kinds.json is refused on NEAR too
     for r in k["invalid"].as_array().unwrap() {
         if r["kind"] == 0x0120 {
-            assert!(KeyRecord { kind: ua::KIND_MSIG, key_data: hx(&r["keyData"]) }.validate().is_err(), "{r}");
+            assert!(
+                KeyRecord {
+                    kind: ua::KIND_MSIG,
+                    key_data: hx(&r["keyData"])
+                }
+                .validate()
+                .is_err(),
+                "{r}"
+            );
         }
     }
     // the NEAR msig vector: id, members, threshold
     let d = load(VECTORS);
     let m = ua::parse_msig(&hx(&d["msig"]["keyData"])).unwrap();
-    assert_eq!(ua::ua_of(ua::KIND_MSIG, &hx(&d["msig"]["keyData"])).to_vec(), hx(&d["msig"]["ua"]));
+    assert_eq!(
+        ua::ua_of(ua::KIND_MSIG, &hx(&d["msig"]["keyData"])).to_vec(),
+        hx(&d["msig"]["ua"])
+    );
     assert_eq!(m.threshold, 2);
     let alice: AccountId = d["msig"]["predecessor"].as_str().unwrap().parse().unwrap();
-    assert!(m.members.iter().any(|x| x.kind == ua::KIND_NEAR_ACCOUNT && x.id == ua::native_id(&alice)));
+    assert!(m
+        .members
+        .iter()
+        .any(|x| x.kind == ua::KIND_NEAR_ACCOUNT && x.id == ua::native_id(&alice)));
     // member cap
     let one = |id: u8| [&[0x01, 0x02][..], &[id; 32], &[0, 1]].concat();
-    let cap = |n: u8| [&[0, 1, 0, n][..], &(1..=n).flat_map(one).collect::<Vec<_>>()].concat();
+    let cap = |n: u8| {
+        [
+            &[0, 1, 0, n][..],
+            &(1..=n).flat_map(one).collect::<Vec<_>>(),
+        ]
+        .concat()
+    };
     assert!(ua::parse_msig(&cap(ua::MSIG_MAX_MEMBERS as u8)).is_ok());
     assert!(ua::parse_msig(&cap(ua::MSIG_MAX_MEMBERS as u8 + 1)).is_err());
 }
@@ -181,7 +271,12 @@ fn ua_of_matches_kinds_json_valid_rows() {
 fn native_id_forms() {
     let d = load(VECTORS);
     let n = &d["nativeIds"];
-    let forms: Vec<&str> = n["rows"].as_array().unwrap().iter().map(|r| r["form"].as_str().unwrap()).collect();
+    let forms: Vec<&str> = n["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["form"].as_str().unwrap())
+        .collect();
     assert!(forms.contains(&"implicit") && forms.contains(&"sha256"));
     for r in n["rows"].as_array().unwrap() {
         let a: AccountId = r["accountId"].as_str().unwrap().parse().unwrap();
@@ -192,9 +287,23 @@ fn native_id_forms() {
             assert_eq!(ua::native_id(&a), near_sdk::env::sha256_array(a.as_bytes()));
         }
     }
-    assert!(n["rows"].as_array().unwrap().iter().any(|r| r["accountId"].as_str().unwrap().starts_with("0x")), "ETH-implicit row");
+    assert!(
+        n["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|r| r["accountId"].as_str().unwrap().starts_with("0x")),
+        "ETH-implicit row"
+    );
     for r in n["invalid"].as_array().unwrap() {
-        assert!(r["accountId"].as_str().unwrap().parse::<AccountId>().is_err(), "{r}");
+        assert!(
+            r["accountId"]
+                .as_str()
+                .unwrap()
+                .parse::<AccountId>()
+                .is_err(),
+            "{r}"
+        );
     }
 }
 
@@ -205,26 +314,51 @@ fn webauthn_grammar_net_all_04() {
     use p256::ecdsa::signature::hazmat::PrehashSigner;
     use scaas_near_common::webauthn::{self, b64url, AuthError};
     let sk = p256::ecdsa::SigningKey::from_bytes(&[9u8; 32].into()).unwrap();
-    let key: [u8; 64] = sk.verifying_key().to_encoded_point(false).as_bytes()[1..].try_into().unwrap();
+    let key: [u8; 64] = sk.verifying_key().to_encoded_point(false).as_bytes()[1..]
+        .try_into()
+        .unwrap();
     let rp = near_sdk::env::sha256_array(b"pay.scaas.test");
     let origin = "https://pay.scaas.test";
     let ch = [7u8; 32];
-    let pre = format!(r#"{{"type":"webauthn.get","challenge":"{}","origin":"{origin}""#, b64url(&ch));
+    let pre = format!(
+        r#"{{"type":"webauthn.get","challenge":"{}","origin":"{origin}""#,
+        b64url(&ch)
+    );
     let run = |flags: u8, cd: String| {
         let ad = [&rp[..], &[flags, 0, 0, 0, 1]].concat();
-        let h = near_sdk::env::sha256_array([&ad[..], &near_sdk::env::sha256_array(cd.as_bytes())].concat());
+        let h = near_sdk::env::sha256_array(
+            [&ad[..], &near_sdk::env::sha256_array(cd.as_bytes())].concat(),
+        );
         let sig: p256::ecdsa::Signature = sk.sign_prehash(&h).unwrap();
         let sig = sig.normalize_s().unwrap_or(sig).to_bytes().into();
-        webauthn::verify(&key, &ch, &ad, cd.as_bytes(), &sig, &rp, &[origin.to_string()])
+        webauthn::verify(
+            &key,
+            &ch,
+            &ad,
+            cd.as_bytes(),
+            &sig,
+            &rp,
+            &[origin.to_string()],
+        )
     };
     // accepted: Level 2 (no crossOrigin), Level 3 (crossOrigin false), members after crossOrigin false
-    for tail in [r#"}"#, r#","crossOrigin":false}"#, r#","crossOrigin":false,"other":"x"}"#] {
+    for tail in [
+        r#"}"#,
+        r#","crossOrigin":false}"#,
+        r#","crossOrigin":false,"other":"x"}"#,
+    ] {
         assert_eq!(run(0x05, format!("{pre}{tail}")), Ok(()), "{tail}");
     }
     assert_eq!(run(0x1d, format!("{pre}}}")), Ok(()));
     // flags: UV unset, UP unset
-    assert_eq!(run(0x01, format!("{pre}}}")), Err(AuthError::AuthenticatorData));
-    assert_eq!(run(0x04, format!("{pre}}}")), Err(AuthError::AuthenticatorData));
+    assert_eq!(
+        run(0x01, format!("{pre}}}")),
+        Err(AuthError::AuthenticatorData)
+    );
+    assert_eq!(
+        run(0x04, format!("{pre}}}")),
+        Err(AuthError::AuthenticatorData)
+    );
     let ch64 = b64url(&ch);
     for cd in [
         format!(r#"{pre},"crossOrigin":true}}"#),
@@ -237,14 +371,24 @@ fn webauthn_grammar_net_all_04() {
         format!(r#"{{"type": "webauthn.get","challenge":"{ch64}","origin":"{origin}"}}"#), // whitespace
         format!(r#"{{"type":"webauthn.create","challenge":"{ch64}","origin":"{origin}"}}"#),
         format!(r#"{{"type":"webauthn.get","challenge":"{ch64}","origin":"{origin}.evil"}}"#), // extended origin
-        format!(r#"{{"type":"webauthn.get","challenge":"{}","origin":"{origin}"}}"#, b64url(&[8; 32])),
+        format!(
+            r#"{{"type":"webauthn.get","challenge":"{}","origin":"{origin}"}}"#,
+            b64url(&[8; 32])
+        ),
         format!(r#"{pre}}} "#),
     ] {
         assert_eq!(run(0x05, cd.clone()), Err(AuthError::ClientData), "{cd}");
         // the lazy-open origin uses the same grammar (only the extended-origin case is grammatical)
-        assert_eq!(webauthn::origin(cd.as_bytes(), &ch).is_some(), cd.contains(".evil"), "{cd}");
+        assert_eq!(
+            webauthn::origin(cd.as_bytes(), &ch).is_some(),
+            cd.contains(".evil"),
+            "{cd}"
+        );
     }
-    assert_eq!(webauthn::origin(format!("{pre}}}").as_bytes(), &ch).as_deref(), Some(origin));
+    assert_eq!(
+        webauthn::origin(format!("{pre}}}").as_bytes(), &ch).as_deref(),
+        Some(origin)
+    );
 }
 
 /// T16 fix 4: `webauthn-origin.json`, also run against the scaas-node port (`adapters::near::origin_of`): `origin_of`
@@ -253,17 +397,24 @@ fn webauthn_grammar_net_all_04() {
 #[test]
 fn origin_of_parity_vectors() {
     use scaas_near_common::webauthn;
-    let v = load(concat!(env!("CARGO_MANIFEST_DIR"), "/../vectors/webauthn-origin.json"));
+    let v = load(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../vectors/webauthn-origin.json"
+    ));
     let rows = v["rows"].as_array().unwrap();
     assert_eq!(rows.len(), 31);
     for r in rows {
         let cd = r["clientDataJSON"].as_str().unwrap().as_bytes();
-        let got = webauthn::origin_of(cd, &b32(&r["challenge"])).map(|o| std::str::from_utf8(o).unwrap());
+        let got =
+            webauthn::origin_of(cd, &b32(&r["challenge"])).map(|o| std::str::from_utf8(o).unwrap());
         assert_eq!(got, r["origin"].as_str(), "{}", r["name"]);
     }
 }
 
-const PAYMETA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../vectors/metatx/legacy/ua-mtx-merge/paymeta.json");
+const PAYMETA: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../vectors/metatx/legacy/ua-mtx-merge/paymeta.json"
+);
 
 /// Spec §2 rows 3, 16 (R16): every `paymeta.json` row's `payId` / `payLane` through `env::keccak256`.
 #[test]
@@ -290,6 +441,11 @@ fn relay_ref_vectors_match() {
         let pay = metaop(&ops.iter().find(|m| m["name"] == r["payment"]).unwrap()["fields"]);
         let got = relay_ref(&net, &hx(&r["targetBytes"]), &hx(&r["call"]), &pay.extra);
         assert_eq!(got, b32(&r["ref"]), "{}", r["name"]);
-        assert_eq!((pay.pay_ref, pay.lane, pay.nonce), (got, pay_lane(&got), 0), "{}", r["name"]);
+        assert_eq!(
+            (pay.pay_ref, pay.lane, pay.nonce),
+            (got, pay_lane(&got), 0),
+            "{}",
+            r["name"]
+        );
     }
 }

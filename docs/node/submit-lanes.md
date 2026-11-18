@@ -474,7 +474,7 @@ moved out of the lane beyond fees, net of excess observed coming back (GRAM forw
 Soroban rent, NEAR storage stake attached as deposit, Algorand MBR payments). So `Breaker::spend(fee + value_out + deposits)`; adapter method `tx_cost(tx_id) → TxCost`
 (`tx_cost(tx_id) -> Option<TxCost { fee, value_out, deposits }>`) for every landed
 terminal status; the three are `outer_tx` cost fields. Status: the EVM path meters every receipt (**BUILT**). The generic
-runner's `fee` is **BUILT** (ua8-soroban B9a): `follow` feeds `Breaker::spend` with `tx_fee` once per landed transaction, for
+runner's `fee` is **BUILT** (ua-portable-soroban B9a): `follow` feeds `Breaker::spend` with `tx_fee` once per landed transaction, for
 `Mined` and for `Reverted`, on every family that reports one (Solana, Aptos, NEAR and Soroban charge a failure and answer
 what they charged; Algorand answers `None` at a pool error because that group paid nothing; Hedera, Sui, Cosmos and TON
 report no fee yet), so a lane burned by failing jobs stops. A failure a family answers as `Rejected` although it landed and
@@ -563,6 +563,8 @@ never `dead` (BUILT, branch `ua-mtx-wraplimit`, group 3l; wrap limits spec 2026-
 | `FeatureNotSet(31)`, `MaxSupplyInvalid`, `MaxWrapSupplyInvalid` | the setters, a creation | `dead`, by name |
 | `MissingRole(30, from)`, `FeatureNotSet(2)` / `(30)`, `GrantExpired`, `GrantExhausted` fields 0, 1, 2, 5, 7 | `mtxBurn` | `dead`, by name (the job's own subject lacks the power) |
 | `GrantExhausted(3)` (the grant's window spent) | a token's `mtxBurn`; the router's `mtxMint`, `mtxMintToUA` | `queued`, `GRANT_WINDOW_REFUSED: <error>`: the next window lifts it |
+| `AuditorNotReady(eta)` | the router's `mtxSetAuditorKey`, `mtxSetAuditorUA` only (a bit-32 confirm before its proposal's `eta`; set-auditor spec §8, [CTR-GOV-31](../decisions.md#CTR-GOV-31); BUILT); on any other op `dead` by name | `queued`, `AUDITOR_NOT_READY: <error>`: the clock lifts it. Such a held confirm is sent again only while `auditorState()` reads status 2 with the job's own `pending` and `proposer`; status 1 with them stays `queued`; anything else (none, expired, void, another proposal) is `dead` `AUDITOR_PROPOSAL_GONE` with zero sends (sent, it would propose afresh, spec §5.1), `consumed` if its nonce is spent. The hold is the node's own: a row of `auditor_hold` in the node store ([store.md §4](store.md#schema)), keyed by chain and job id with the proposal it waits for (token, `pending`, `proposer`), written before the requeue (unwritten, or a lane without a store: `dead` `AUDITOR_HOLD_UNSTORED`, never queued), read before every resend, kept by the startup requeue and every later requeue, dropped only at the job's final verdict; a restarted node gives the same verdict, whatever the client's job row carries (closing review C2, C2b; BUILT, test `submit::tests::a_held_confirm_is_sent_only_while_confirmable`) |
+| `AuditorPending`, `AuditorSame`, `AuditorEpochMismatch`, `AuditorKeyInvalid`, `AuditorConsentInvalid`, `NotProposer(32, …)`, the registry's consent refusals | the same two ops | `dead`, by name |
 
 Two rows are a **rule change**: before 3zb + 3zc no supply-cap and no grant refusal had a class here, so a wrap or a mint
 above `maxSupply` (`MaxSupplyExceeded`) and a mint whose window was spent went `dead`; now they wait in the queue (expiry or the

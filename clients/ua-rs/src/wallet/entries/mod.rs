@@ -22,12 +22,26 @@ mod zether;
 
 /// A row: `(struct, entry, kinds, fields, plan)` as the node's `TYPED` (`E` = the envelope; an empty plan = `E`, the fields
 /// between `from` and the envelope, the signature).
-pub(crate) type Def = (&'static str, &'static str, &'static [&'static str], &'static str, &'static str);
+pub(crate) type Def = (
+    &'static str,
+    &'static str,
+    &'static [&'static str],
+    &'static str,
+    &'static str,
+);
 
 /// The account's kind (its own entries sign `AccountSig`); the other kind lists are in their files, by the node's names.
 const A: &[&str] = &["account"];
 
-const ENV: [&str; 7] = ["batch", "nonce", "validUntil", "mode", "relayer", "fee", "feeRecipient"];
+const ENV: [&str; 7] = [
+    "batch",
+    "nonce",
+    "validUntil",
+    "mode",
+    "relayer",
+    "fee",
+    "feeRecipient",
+];
 const E_FIELDS: &str = "uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient";
 /// Bounds of an untrusted list: an `msig` level holds at most 16 slots (CTR-UA-09), anything else at most 256.
 const MSIG_MAX_SLOTS: usize = 16;
@@ -75,8 +89,19 @@ const NESTED: &[(&str, &str)] = &[
 
 /// The rows, every kind's file in turn.
 fn defs() -> impl Iterator<Item = (&'static Def, bool)> {
-    let node = [token::ROWS, zether::ROWS, pqz::ROWS, wallet::ROWS, account::ROWS, dex::ROWS, router::ROWS];
-    node.into_iter().flatten().map(|d| (d, true)).chain(router::NO_NODE_ROW.iter().map(|d| (d, false)))
+    let node = [
+        token::ROWS,
+        zether::ROWS,
+        pqz::ROWS,
+        wallet::ROWS,
+        account::ROWS,
+        dex::ROWS,
+        router::ROWS,
+    ];
+    node.into_iter()
+        .flatten()
+        .map(|d| (d, true))
+        .chain(router::NO_NODE_ROW.iter().map(|d| (d, false)))
 }
 
 /// One row of the table as the tests and the SDK read it.
@@ -98,7 +123,16 @@ pub struct EntryRow {
 
 /// Every row (the copy of the node's `TYPED`, then the rows the node does not take).
 pub fn entry_rows() -> Vec<EntryRow> {
-    defs().map(|((name, entry, kinds, f, plan), node)| EntryRow { name, entry, kinds, fields: expand(f), plan, node }).collect()
+    defs()
+        .map(|((name, entry, kinds, f, plan), node)| EntryRow {
+            name,
+            entry,
+            kinds,
+            fields: expand(f),
+            plan,
+            node,
+        })
+        .collect()
 }
 
 /// The structs a row nests, `(name, fields)` (the copy of the node's `NESTED`).
@@ -107,11 +141,19 @@ pub fn entry_structs() -> &'static [(&'static str, &'static str)] {
 }
 
 fn expand(f: &str) -> String {
-    f.strip_suffix(",E").map_or_else(|| f.to_string(), |h| format!("{h},{E_FIELDS}"))
+    f.strip_suffix(",E")
+        .map_or_else(|| f.to_string(), |h| format!("{h},{E_FIELDS}"))
 }
 
 fn fields_of(f: &str) -> Result<Vec<(String, String)>> {
-    expand(f).split(',').map(|x| x.split_once(' ').map(|(t, n)| (t.to_string(), n.to_string())).ok_or(Error::Argument)).collect()
+    expand(f)
+        .split(',')
+        .map(|x| {
+            x.split_once(' ')
+                .map(|(t, n)| (t.to_string(), n.to_string()))
+                .ok_or(Error::Argument)
+        })
+        .collect()
 }
 
 fn nested(ty: &str) -> Option<&'static str> {
@@ -189,14 +231,21 @@ struct Row {
 }
 
 fn row(name: &str, kind: &str) -> Result<Row> {
-    let (d, node) = defs().find(|((n, _, k, _, _), _)| *n == name && k.contains(&kind)).ok_or(Error::Argument)?;
+    let (d, node) = defs()
+        .find(|((n, _, k, _, _), _)| *n == name && k.contains(&kind))
+        .ok_or(Error::Argument)?;
     row_of(d, node)
 }
 
 fn row_of((name, entry, kinds, f, plan): &'static Def, node: bool) -> Result<Row> {
     let fields = fields_of(f)?;
     let enveloped = fields.len() > ENV.len()
-        && fields.iter().rev().take(ENV.len()).map(|x| x.1.as_str()).eq(ENV.iter().rev().copied());
+        && fields
+            .iter()
+            .rev()
+            .take(ENV.len())
+            .map(|x| x.1.as_str())
+            .eq(ENV.iter().rev().copied());
     let sig = if name.starts_with("UA") || name.starts_with("CancelUA") {
         Sig::Ua
     } else if *kinds == A {
@@ -207,8 +256,15 @@ fn row_of((name, entry, kinds, f, plan): &'static Def, node: bool) -> Result<Row
     let plan: Vec<Tok> = if entry.is_empty() {
         vec![]
     } else if plan.is_empty() {
-        let mid = fields.iter().skip(1).take(fields.len().saturating_sub(1 + ENV.len())).map(|x| Tok::Field(x.1.clone()));
-        std::iter::once(Tok::Env).chain(mid).chain([Tok::Sign(sig)]).collect()
+        let mid = fields
+            .iter()
+            .skip(1)
+            .take(fields.len().saturating_sub(1 + ENV.len()))
+            .map(|x| Tok::Field(x.1.clone()));
+        std::iter::once(Tok::Env)
+            .chain(mid)
+            .chain([Tok::Sign(sig)])
+            .collect()
     } else {
         plan.split(' ').map(|t| tok(t, sig)).collect()
     };
@@ -220,7 +276,15 @@ fn row_of((name, entry, kinds, f, plan): &'static Def, node: bool) -> Result<Row
         },
         _ => None,
     });
-    Ok(Row { name, entry, node, fields, enveloped, plan, sig })
+    Ok(Row {
+        name,
+        entry,
+        node,
+        fields,
+        enveloped,
+        plan,
+        sig,
+    })
 }
 
 // --- values ---
@@ -240,7 +304,11 @@ fn components(ty: &str) -> Result<Option<Vec<String>>> {
         return Ok(None);
     }
     if ty == "PayMeta" {
-        return Ok(Some(["bytes32", "bytes32", "bool", "uint16", "bytes"].map(String::from).to_vec()));
+        return Ok(Some(
+            ["bytes32", "bytes32", "bool", "uint16", "bytes"]
+                .map(String::from)
+                .to_vec(),
+        ));
     }
     if let Some(inner) = ty.strip_prefix('(').and_then(|x| x.strip_suffix(')')) {
         let (mut out, mut cur, mut depth) = (Vec::new(), String::new(), 0usize);
@@ -271,7 +339,13 @@ fn abi_type(ty: &str) -> Result<String> {
         return Ok(format!("{}[]", abi_type(el)?));
     }
     match components(ty)? {
-        Some(c) => Ok(format!("({})", c.iter().map(|x| abi_type(x)).collect::<Result<Vec<_>>>()?.join(","))),
+        Some(c) => Ok(format!(
+            "({})",
+            c.iter()
+                .map(|x| abi_type(x))
+                .collect::<Result<Vec<_>>>()?
+                .join(",")
+        )),
         None => Ok(ty.to_string()),
     }
 }
@@ -280,7 +354,10 @@ fn dynamic(ty: &str) -> bool {
     if ty.ends_with("[]") || ty == "bytes" || ty == "string" {
         return true;
     }
-    components(ty).ok().flatten().is_some_and(|c| c.iter().any(|x| dynamic(x)))
+    components(ty)
+        .ok()
+        .flatten()
+        .is_some_and(|c| c.iter().any(|x| dynamic(x)))
 }
 
 /// One JSON value as its type, strictly: present, every field of a struct and no other, lists bounded.
@@ -290,11 +367,17 @@ fn parse(ty: &str, j: &Value) -> Result<Val> {
     }
     if let Some(el) = ty.strip_suffix("[]") {
         let a = j.as_array().ok_or(Error::Argument)?;
-        let max = if matches!(el, "MemberSig" | "InnerSig") { MSIG_MAX_SLOTS } else { MAX_LIST };
+        let max = if matches!(el, "MemberSig" | "InnerSig") {
+            MSIG_MAX_SLOTS
+        } else {
+            MAX_LIST
+        };
         if a.len() > max {
             return Err(Error::Argument);
         }
-        return Ok(Val::List(a.iter().map(|x| parse(el, x)).collect::<Result<_>>()?));
+        return Ok(Val::List(
+            a.iter().map(|x| parse(el, x)).collect::<Result<_>>()?,
+        ));
     }
     if ty == "PayMeta" {
         return pay_meta(j);
@@ -314,7 +397,10 @@ fn take(fields: &[(String, String)], o: &Map<String, Value>) -> Result<Vec<Val>>
     if o.keys().any(|k| !fields.iter().any(|f| f.1 == *k)) {
         return Err(Error::Argument);
     }
-    fields.iter().map(|(t, n)| parse(t, o.get(n).ok_or(Error::Argument)?)).collect()
+    fields
+        .iter()
+        .map(|(t, n)| parse(t, o.get(n).ok_or(Error::Argument)?))
+        .collect()
 }
 
 /// A pay entry's `meta` (pay-meta-tax spec §7.1): `{salt, payNo?, save?, schema?, body?}`, the body named per schema (0 none,
@@ -322,17 +408,28 @@ fn take(fields: &[(String, String)], o: &Map<String, Value>) -> Result<Vec<Val>>
 /// refused (the node's `HEX_ARGS_REFUSED`).
 fn pay_meta(j: &Value) -> Result<Val> {
     let o = j.as_object().ok_or(Error::Argument)?;
-    if o.keys().any(|k| !matches!(k.as_str(), "salt" | "payNo" | "save" | "schema" | "body")) {
+    if o.keys()
+        .any(|k| !matches!(k.as_str(), "salt" | "payNo" | "save" | "schema" | "body"))
+    {
         return Err(Error::Argument);
     }
     let salt = parse("bytes32", o.get("salt").ok_or(Error::Argument)?)?;
-    let pay_no = o.get("payNo").map_or(Ok(Val::Word([0; 32])), |v| parse("bytes32", v))?;
-    let save = o.get("save").map_or(Ok(Val::Word([0; 32])), |v| parse("bool", v))?;
-    let schema = o.get("schema").map_or(Ok(0), |v| v.as_u64().filter(|n| *n <= 4).ok_or(Error::Argument))?;
+    let pay_no = o
+        .get("payNo")
+        .map_or(Ok(Val::Word([0; 32])), |v| parse("bytes32", v))?;
+    let save = o
+        .get("save")
+        .map_or(Ok(Val::Word([0; 32])), |v| parse("bool", v))?;
+    let schema = o.get("schema").map_or(Ok(0), |v| {
+        v.as_u64().filter(|n| *n <= 4).ok_or(Error::Argument)
+    })?;
     let body = o.get("body").filter(|b| !b.is_null());
     let named = |keys: &[(&str, &str)]| -> Result<Vec<Val>> {
         let b = body.and_then(Value::as_object).ok_or(Error::Argument)?;
-        let f: Vec<(String, String)> = keys.iter().map(|(t, n)| (t.to_string(), n.to_string())).collect();
+        let f: Vec<(String, String)> = keys
+            .iter()
+            .map(|(t, n)| (t.to_string(), n.to_string()))
+            .collect();
         take(&f, b)
     };
     let bytes = match schema {
@@ -341,10 +438,17 @@ fn pay_meta(j: &Value) -> Result<Val> {
             Some(Val::Raw(b)) => b,
             _ => return Err(Error::Argument),
         },
-        2 => seq(&["string".into(), "uint64".into()], &named(&[("string", "creditorRef"), ("uint64", "dueDate")])?)?,
+        2 => seq(
+            &["string".into(), "uint64".into()],
+            &named(&[("string", "creditorRef"), ("uint64", "dueDate")])?,
+        )?,
         3 => seq(
             &["uint256".into(), "bytes32".into(), "bytes32".into()],
-            &named(&[("uint256", "chainId"), ("bytes32", "target"), ("bytes32", "callHash")])?,
+            &named(&[
+                ("uint256", "chainId"),
+                ("bytes32", "target"),
+                ("bytes32", "callHash"),
+            ])?,
         )?,
         4 => match named(&[("bytes", "ciphertext")])?.pop() {
             Some(Val::Raw(b)) => b,
@@ -359,7 +463,13 @@ fn pay_meta(j: &Value) -> Result<Val> {
     if let Some(w) = s.last_mut() {
         *w = schema as u8;
     }
-    Ok(Val::Tuple(vec![salt, pay_no, save, Val::Word(s), Val::Raw(bytes)]))
+    Ok(Val::Tuple(vec![
+        salt,
+        pay_no,
+        save,
+        Val::Word(s),
+        Val::Raw(bytes),
+    ]))
 }
 
 // --- ABI encoding (head / tail) ---
@@ -396,8 +506,15 @@ fn seq(tys: &[String], vals: &[Val]) -> Result<Vec<u8>> {
     if tys.len() != vals.len() {
         return Err(Error::Argument);
     }
-    let parts: Vec<(bool, Vec<u8>)> = tys.iter().zip(vals).map(|(t, v)| Ok((dynamic(t), enc(t, v)?))).collect::<Result<_>>()?;
-    let head_len: usize = parts.iter().map(|(d, b)| if *d { 32 } else { b.len() }).sum();
+    let parts: Vec<(bool, Vec<u8>)> = tys
+        .iter()
+        .zip(vals)
+        .map(|(t, v)| Ok((dynamic(t), enc(t, v)?)))
+        .collect::<Result<_>>()?;
+    let head_len: usize = parts
+        .iter()
+        .map(|(d, b)| if *d { 32 } else { b.len() })
+        .sum();
     let (mut head, mut tail) = (Vec::new(), Vec::new());
     for (d, b) in parts {
         if d {
@@ -418,30 +535,53 @@ fn to_json(ty: &str, v: &Val) -> Result<Value> {
         return Err(Error::Argument); // kept as the canonical named form instead (`Built::meta`)
     }
     if let (Some(el), Val::List(a)) = (ty.strip_suffix("[]"), v) {
-        return Ok(Value::Array(a.iter().map(|x| to_json(el, x)).collect::<Result<_>>()?));
+        return Ok(Value::Array(
+            a.iter().map(|x| to_json(el, x)).collect::<Result<_>>()?,
+        ));
     }
     if let (Some(f), Val::Tuple(t)) = (nested(ty), v) {
         let f = fields_of(f)?;
-        return Ok(Value::Object(f.iter().zip(t).map(|((ty, n), x)| Ok((n.clone(), to_json(ty, x)?))).collect::<Result<_>>()?));
+        return Ok(Value::Object(
+            f.iter()
+                .zip(t)
+                .map(|((ty, n), x)| Ok((n.clone(), to_json(ty, x)?)))
+                .collect::<Result<_>>()?,
+        ));
     }
     Ok(match (ty, v) {
-        ("string", Val::Raw(b)) => json!(String::from_utf8(b.clone()).map_err(|_| Error::Argument)?),
+        ("string", Val::Raw(b)) => {
+            json!(String::from_utf8(b.clone()).map_err(|_| Error::Argument)?)
+        }
         ("bytes", Val::Raw(b)) => json!(to_hex(b)),
         ("address", Val::Word(w)) => json!(to_hex(w.get(12..).ok_or(Error::Argument)?)),
         ("bool", Val::Word(w)) => json!(w.last() == Some(&1)),
         (t, Val::Word(w)) if t.starts_with("bytes") => {
-            let n: usize = t.get(5..).and_then(|x| x.parse().ok()).ok_or(Error::Argument)?;
+            let n: usize = t
+                .get(5..)
+                .and_then(|x| x.parse().ok())
+                .ok_or(Error::Argument)?;
             json!(to_hex(w.get(..n).ok_or(Error::Argument)?))
         }
         (t, Val::Word(w)) if t.starts_with("uint") => {
-            let bits: usize = t.get(4..).and_then(|x| x.parse().ok()).ok_or(Error::Argument)?;
+            let bits: usize = t
+                .get(4..)
+                .and_then(|x| x.parse().ok())
+                .ok_or(Error::Argument)?;
             match bits {
-                ..=32 => json!(u64::from_be_bytes(w.get(24..).and_then(|x| x.try_into().ok()).ok_or(Error::Argument)?)),
+                ..=32 => json!(u64::from_be_bytes(
+                    w.get(24..)
+                        .and_then(|x| x.try_into().ok())
+                        .ok_or(Error::Argument)?
+                )),
                 _ => json!(u256_to_dec(w)),
             }
         }
         (t, Val::Word(w)) if t.starts_with("int") => {
-            json!(i64::from_be_bytes(w.get(24..).and_then(|x| x.try_into().ok()).ok_or(Error::Argument)?))
+            json!(i64::from_be_bytes(
+                w.get(24..)
+                    .and_then(|x| x.try_into().ok())
+                    .ok_or(Error::Argument)?
+            ))
         }
         _ => return Err(Error::Argument),
     })
@@ -467,7 +607,14 @@ pub struct Built {
 /// last, the empty one of a `PRECOMPILE` token) and optional `pqz_fee`, and the job's optional `validUntil`; nothing else.
 /// `sig`: the signature in the row's form, `0x`-hex `bytes`, a `UASig` `{keyData, signature, members}` or an `AccountSig`
 /// `{keyIndex, proof, signature}`. `Argument`: no such row, a field missing or unknown, a value its type refuses.
-pub fn entry(name: &str, kind: &str, contract: &[u8; 20], message: &Value, extra: &Value, sig: &Value) -> Result<Built> {
+pub fn entry(
+    name: &str,
+    kind: &str,
+    contract: &[u8; 20],
+    message: &Value,
+    extra: &Value,
+    sig: &Value,
+) -> Result<Built> {
     build(row(name, kind)?, kind, contract, message, extra, sig)
 }
 
@@ -475,20 +622,36 @@ pub fn entry(name: &str, kind: &str, contract: &[u8; 20], message: &Value, extra
 /// `mtxExecuteTransfer(UAMetaTransfer, UASig)`, not as a pay (`mtxPay` takes the `PayMeta` its `entryRef` commits to). Its node
 /// form is the body of `POST /v1/ua-metatx` without `chain`: `{token, contract, struct: "transfer", m, auth}` (`scaas-node`
 /// `gateway.rs`, the `ua_metatx` struct job), `m` the canonical message, `auth` the `UASig`. `Argument` as [`entry`].
-pub fn transfer_on_ids(kind: &str, contract: &[u8; 20], message: &Value, sig: &Value) -> Result<Built> {
+pub fn transfer_on_ids(
+    kind: &str,
+    contract: &[u8; 20],
+    message: &Value,
+    sig: &Value,
+) -> Result<Built> {
     if !token::IDS.2.contains(&kind) {
         return Err(Error::Argument);
     }
-    let mut b = build(row_of(&token::IDS, false)?, kind, contract, message, &json!({}), sig)?;
+    let mut b = build(
+        row_of(&token::IDS, false)?,
+        kind,
+        contract,
+        message,
+        &json!({}),
+        sig,
+    )?;
     let auth = to_json("UASig", &parse("UASig", sig)?)?;
-    b.op = Some(json!({"token": to_hex(contract), "contract": kind, "struct": "transfer", "m": b.message, "auth": auth}));
+    b.op = Some(
+        json!({"token": to_hex(contract), "contract": kind, "struct": "transfer", "m": b.message, "auth": auth}),
+    );
     Ok(b)
 }
 
 /// A pay entry's `meta` (its named form, as [`entry`]'s `extra.meta`) as the [`crate::pay::PayMeta`] whose `metaPayId` the
 /// signed `entryRef` commits to: the body bytes built from the named body. `Argument` as the calldata refuses it.
 pub fn pay_meta_of(meta: &Value) -> Result<crate::pay::PayMeta> {
-    let Val::Tuple(t) = pay_meta(meta)? else { return Err(Error::Argument) };
+    let Val::Tuple(t) = pay_meta(meta)? else {
+        return Err(Error::Argument);
+    };
     let word = |i: usize| match t.get(i) {
         Some(Val::Word(w)) => Ok(*w),
         _ => Err(Error::Argument),
@@ -507,7 +670,14 @@ pub fn pay_meta_of(meta: &Value) -> Result<crate::pay::PayMeta> {
     })
 }
 
-fn build(r: Row, kind: &str, contract: &[u8; 20], message: &Value, extra: &Value, sig: &Value) -> Result<Built> {
+fn build(
+    r: Row,
+    kind: &str,
+    contract: &[u8; 20],
+    message: &Value,
+    extra: &Value,
+    sig: &Value,
+) -> Result<Built> {
     if r.entry.is_empty() {
         return Err(Error::Argument); // `PqzAuth`: attached by the PQZ facade, no entry of its own
     }
@@ -530,7 +700,9 @@ fn build(r: Row, kind: &str, contract: &[u8; 20], message: &Value, extra: &Value
     let mut msg = m.clone();
     if let Some(b) = &init {
         let h = json!(to_hex(&keccak256(b)));
-        if msg.get("initHash").is_some_and(|v| v.as_str().map(str::to_ascii_lowercase) != h.as_str().map(String::from)) {
+        if msg.get("initHash").is_some_and(|v| {
+            v.as_str().map(str::to_ascii_lowercase) != h.as_str().map(String::from)
+        }) {
             return Err(Error::Argument);
         }
         msg.insert("initHash".into(), h);
@@ -556,7 +728,13 @@ fn build(r: Row, kind: &str, contract: &[u8; 20], message: &Value, extra: &Value
         Some(v) => Some(parse("PqzSignedVerdict", v)?),
         None => None,
     };
-    let ty_of = |n: &str| r.fields.iter().find(|f| f.1 == n).map(|f| f.0.clone()).ok_or(Error::Argument);
+    let ty_of = |n: &str| {
+        r.fields
+            .iter()
+            .find(|f| f.1 == n)
+            .map(|f| f.0.clone())
+            .ok_or(Error::Argument)
+    };
     let mut tys = Vec::new();
     let mut args = Vec::new();
     for t in &r.plan {
@@ -566,28 +744,50 @@ fn build(r: Row, kind: &str, contract: &[u8; 20], message: &Value, extra: &Value
                 for n in ENV {
                     e.push(get(n)?);
                 }
-                let ft = r.fields.first().map(|f| f.0.as_str()).ok_or(Error::Argument)?;
-                (format!("({ft},uint256,uint256,uint256,uint32,address,uint256,address)"), Val::Tuple(e))
+                let ft = r
+                    .fields
+                    .first()
+                    .map(|f| f.0.as_str())
+                    .ok_or(Error::Argument)?;
+                (
+                    format!("({ft},uint256,uint256,uint256,uint32,address,uint256,address)"),
+                    Val::Tuple(e),
+                )
             }
             Tok::Field(n) => (ty_of(n)?, get(n)?),
             Tok::Extra(n, ty) => (ty.clone(), get(n)?),
             Tok::Group(g) => {
                 let t: Vec<String> = g.iter().map(|n| ty_of(n)).collect::<Result<_>>()?;
-                (format!("({})", t.join(",")), Val::Tuple(g.iter().map(|n| get(n)).collect::<Result<_>>()?))
+                (
+                    format!("({})", t.join(",")),
+                    Val::Tuple(g.iter().map(|n| get(n)).collect::<Result<_>>()?),
+                )
             }
             Tok::List(b) => match &**b {
                 Tok::Field(n) => (format!("{}[]", ty_of(n)?), Val::List(vec![get(n)?])),
-                Tok::Sign(k) => (format!("{}[]", k.ty()), Val::List(vec![s.clone().ok_or(Error::Argument)?])),
+                Tok::Sign(k) => (
+                    format!("{}[]", k.ty()),
+                    Val::List(vec![s.clone().ok_or(Error::Argument)?]),
+                ),
                 _ => return Err(Error::Argument),
             },
             Tok::Whole => (
-                format!("({})", r.fields.iter().map(|f| f.0.as_str()).collect::<Vec<_>>().join(",")),
+                format!(
+                    "({})",
+                    r.fields
+                        .iter()
+                        .map(|f| f.0.as_str())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                ),
                 Val::Tuple(vals.clone()),
             ),
             Tok::WrapAsTrade(n) => {
                 // a `UAWrapOrder` cancelled as the `UATradeOrder` it trades through: `dex` = the wrapper (the order's
                 // `wrappedToken`), 13 words
-                let Val::Tuple(mut w) = get(n)? else { return Err(Error::Argument) };
+                let Val::Tuple(mut w) = get(n)? else {
+                    return Err(Error::Argument);
+                };
                 let wrapper = w.get(1).cloned().ok_or(Error::Argument)?;
                 if w.len() < 7 {
                     return Err(Error::Argument);
@@ -596,8 +796,14 @@ fn build(r: Row, kind: &str, contract: &[u8; 20], message: &Value, extra: &Value
                 ("UATradeOrder".to_string(), Val::Tuple(w))
             }
             Tok::Sign(k) => (k.ty().to_string(), s.clone().ok_or(Error::Argument)?),
-            Tok::Verdict => ("PqzSignedVerdict".to_string(), verdict.clone().ok_or(Error::Argument)?),
-            Tok::Init(..) | Tok::InitCall => ("bytes".into(), Val::Raw(init.clone().ok_or(Error::Argument)?)),
+            Tok::Verdict => (
+                "PqzSignedVerdict".to_string(),
+                verdict.clone().ok_or(Error::Argument)?,
+            ),
+            Tok::Init(..) | Tok::InitCall => (
+                "bytes".into(),
+                Val::Raw(init.clone().ok_or(Error::Argument)?),
+            ),
         };
         tys.push(ty);
         args.push(v);
@@ -606,10 +812,31 @@ fn build(r: Row, kind: &str, contract: &[u8; 20], message: &Value, extra: &Value
     let sel = keccak256(format!("{}({})", r.entry, abi.join(",")).as_bytes());
     let mut calldata = sel.get(..4).ok_or(Error::Argument)?.to_vec();
     calldata.extend(seq(&tys, &args)?);
-    let message =
-        Value::Object(r.fields.iter().zip(&vals).map(|((ty, n), v)| Ok((n.clone(), to_json(ty, v)?))).collect::<Result<_>>()?);
-    let op = if r.node { Some(op_json(&r, kind, contract, &message, x, s.as_ref(), verdict.as_ref())?) } else { None };
-    Ok(Built { calldata, op, message })
+    let message = Value::Object(
+        r.fields
+            .iter()
+            .zip(&vals)
+            .map(|((ty, n), v)| Ok((n.clone(), to_json(ty, v)?)))
+            .collect::<Result<_>>()?,
+    );
+    let op = if r.node {
+        Some(op_json(
+            &r,
+            kind,
+            contract,
+            &message,
+            x,
+            s.as_ref(),
+            verdict.as_ref(),
+        )?)
+    } else {
+        None
+    };
+    Ok(Built {
+        calldata,
+        op,
+        message,
+    })
 }
 
 /// `MetaTxLib.canon`, on the struct and on each nested struct: an unbound `relayer` / `feeRecipient` is 0.
@@ -638,7 +865,12 @@ fn canon(fields: &[(String, String)], vals: &mut [Val]) -> Result<()> {
 fn init_bytes(r: &Row, x: &Map<String, Value>) -> Result<Option<Vec<u8>>> {
     for t in &r.plan {
         match t {
-            Tok::Init(n, ty) => return Ok(Some(seq(std::slice::from_ref(ty), &[parse(ty, x.get(n).ok_or(Error::Argument)?)?])?)), // `abi.encode(config)`
+            Tok::Init(n, ty) => {
+                return Ok(Some(seq(
+                    std::slice::from_ref(ty),
+                    &[parse(ty, x.get(n).ok_or(Error::Argument)?)?],
+                )?))
+            } // `abi.encode(config)`
             Tok::InitCall => {
                 return match parse("bytes", x.get("init_call").ok_or(Error::Argument)?)? {
                     Val::Raw(b) if b.len() <= 4096 => Ok(Some(b)),
@@ -659,13 +891,25 @@ pub fn init_hash(name: &str, kind: &str, extra: &Value) -> Result<Option<[u8; 32
 }
 
 fn op_json(
-    r: &Row, kind: &str, contract: &[u8; 20], message: &Value, x: &Map<String, Value>, s: Option<&Val>, verdict: Option<&Val>,
+    r: &Row,
+    kind: &str,
+    contract: &[u8; 20],
+    message: &Value,
+    x: &Map<String, Value>,
+    s: Option<&Val>,
+    verdict: Option<&Val>,
 ) -> Result<Value> {
     let m = message.as_object().ok_or(Error::Argument)?;
     let in_env = |n: &str| r.enveloped && (n == "from" || ENV.contains(&n));
-    let init = r.plan.iter().any(|t| matches!(t, Tok::Init(..) | Tok::InitCall));
-    let mut args: Map<String, Value> =
-        m.iter().filter(|(k, _)| !in_env(k) && !(init && *k == "initHash")).map(|(k, v)| (k.clone(), v.clone())).collect();
+    let init = r
+        .plan
+        .iter()
+        .any(|t| matches!(t, Tok::Init(..) | Tok::InitCall));
+    let mut args: Map<String, Value> = m
+        .iter()
+        .filter(|(k, _)| !in_env(k) && !(init && *k == "initHash"))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
     for t in &r.plan {
         match t {
             Tok::Extra(n, ty) if ty == "PayMeta" => {
@@ -673,13 +917,25 @@ fn op_json(
                 args.insert(n.clone(), pay_meta_json(v)?);
             }
             Tok::Extra(n, ty) => {
-                args.insert(n.clone(), to_json(ty, &parse(ty, x.get(n).ok_or(Error::Argument)?)?)?);
+                args.insert(
+                    n.clone(),
+                    to_json(ty, &parse(ty, x.get(n).ok_or(Error::Argument)?)?)?,
+                );
             }
             Tok::Init(n, ty) => {
-                args.insert(n.clone(), to_json(ty, &parse(ty, x.get(n).ok_or(Error::Argument)?)?)?);
+                args.insert(
+                    n.clone(),
+                    to_json(ty, &parse(ty, x.get(n).ok_or(Error::Argument)?)?)?,
+                );
             }
             Tok::InitCall => {
-                args.insert("init_call".into(), to_json("bytes", &parse("bytes", x.get("init_call").ok_or(Error::Argument)?)?)?);
+                args.insert(
+                    "init_call".into(),
+                    to_json(
+                        "bytes",
+                        &parse("bytes", x.get("init_call").ok_or(Error::Argument)?)?,
+                    )?,
+                );
             }
             _ => {}
         }
@@ -687,7 +943,9 @@ fn op_json(
     // group 3f: the node rebuilds the `PqzVerdict` itself and takes the verifier's part by name; none for an empty verdict
     if let Some(Val::Tuple(v)) = verdict {
         if let (Some(Val::Tuple(pv)), Some(auth @ Val::Tuple(a))) = (v.first(), v.get(1)) {
-            if a.iter().any(|f| f != &Val::Raw(vec![]) && f != &Val::List(vec![])) {
+            if a.iter()
+                .any(|f| f != &Val::Raw(vec![]) && f != &Val::List(vec![]))
+            {
                 let epoch = to_json("uint32", pv.get(5).ok_or(Error::Argument)?)?;
                 let until = to_json("uint256", pv.get(6).ok_or(Error::Argument)?)?;
                 args.insert("pqz_verdict".into(), json!({"pqzVerifierEpoch": epoch, "validUntil": until, "auth": to_json("UASig", auth)?}));
@@ -699,15 +957,26 @@ fn op_json(
     }
     let mut op = json!({"entry": r.entry, "contract": kind, "struct": r.name, "token": to_hex(contract), "args": args});
     if r.enveloped {
-        let e: Map<String, Value> =
-            ["from"].iter().chain(ENV.iter()).map(|k| Ok((k.to_string(), m.get(*k).cloned().ok_or(Error::Argument)?))).collect::<Result<_>>()?;
+        let e: Map<String, Value> = ["from"]
+            .iter()
+            .chain(ENV.iter())
+            .map(|k| Ok((k.to_string(), m.get(*k).cloned().ok_or(Error::Argument)?)))
+            .collect::<Result<_>>()?;
         set(&mut op, "envelope", Value::Object(e))?;
     }
     if let (Some(k), Some(v)) = (r.sig, s) {
-        set(&mut op, if k == Sig::Bytes { "signature" } else { "auth" }, to_json(k.ty(), v)?)?;
+        set(
+            &mut op,
+            if k == Sig::Bytes { "signature" } else { "auth" },
+            to_json(k.ty(), v)?,
+        )?;
     }
     if let Some(v) = x.get("validUntil") {
-        set(&mut op, "validUntil", to_json("uint256", &parse("uint256", v)?)?)?;
+        set(
+            &mut op,
+            "validUntil",
+            to_json("uint256", &parse("uint256", v)?)?,
+        )?;
     }
     Ok(op)
 }
@@ -716,7 +985,9 @@ fn op_json(
 fn pay_meta_json(v: &Value) -> Result<Value> {
     pay_meta(v)?; // refused as the calldata refuses it
     let o = v.as_object().ok_or(Error::Argument)?;
-    let w = |k: &str, ty: &str, d: Val| -> Result<Value> { to_json(ty, &o.get(k).map_or(Ok(d), |x| parse(ty, x))?) };
+    let w = |k: &str, ty: &str, d: Val| -> Result<Value> {
+        to_json(ty, &o.get(k).map_or(Ok(d), |x| parse(ty, x))?)
+    };
     let schema = o.get("schema").and_then(Value::as_u64).unwrap_or(0);
     let mut out = json!({"salt": w("salt", "bytes32", Val::Word([0; 32]))?, "payNo": w("payNo", "bytes32", Val::Word([0; 32]))?,
         "save": w("save", "bool", Val::Word([0; 32]))?, "schema": schema});
@@ -724,13 +995,24 @@ fn pay_meta_json(v: &Value) -> Result<Value> {
     let keys: &[(&str, &str)] = match schema {
         1 => &[("string", "note")],
         2 => &[("string", "creditorRef"), ("uint64", "dueDate")],
-        3 => &[("uint256", "chainId"), ("bytes32", "target"), ("bytes32", "callHash")],
+        3 => &[
+            ("uint256", "chainId"),
+            ("bytes32", "target"),
+            ("bytes32", "callHash"),
+        ],
         4 => &[("bytes", "ciphertext")],
         _ => &[],
     };
     if let Some(b) = body.filter(|_| !keys.is_empty()) {
-        let nb: Map<String, Value> =
-            keys.iter().map(|(t, n)| Ok((n.to_string(), to_json(t, &parse(t, b.get(*n).ok_or(Error::Argument)?)?)?))).collect::<Result<_>>()?;
+        let nb: Map<String, Value> = keys
+            .iter()
+            .map(|(t, n)| {
+                Ok((
+                    n.to_string(),
+                    to_json(t, &parse(t, b.get(*n).ok_or(Error::Argument)?)?)?,
+                ))
+            })
+            .collect::<Result<_>>()?;
         set(&mut out, "body", Value::Object(nb))?;
     }
     Ok(out)
@@ -750,22 +1032,48 @@ pub fn relay_ref(chain_id: u64, target: &[u8; 20], call_data: &[u8]) -> [u8; 32]
 /// The router's `relay(target, callData, token, from, payee, value, batch, nonce, validUntil, UASig auth)` of a signed
 /// `UARelayFee` `message` on fee token `token` (`callData` the call it pays for: its keccak must be the signed
 /// `callDataHash`). The node sends this to the message's `relayer` (the router); the payer's lane is `batch`.
-pub fn relay_fee_router_calldata(message: &Value, token: &[u8; 20], call_data: &[u8], auth: &Value) -> Result<Vec<u8>> {
+pub fn relay_fee_router_calldata(
+    message: &Value,
+    token: &[u8; 20],
+    call_data: &[u8],
+    auth: &Value,
+) -> Result<Vec<u8>> {
     let r = row("UARelayFee", "token")?;
     let vals = take(&r.fields, message.as_object().ok_or(Error::Argument)?)?;
-    let get = |n: &str| r.fields.iter().position(|f| f.1 == n).and_then(|i| vals.get(i).cloned()).ok_or(Error::Argument);
+    let get = |n: &str| {
+        r.fields
+            .iter()
+            .position(|f| f.1 == n)
+            .and_then(|i| vals.get(i).cloned())
+            .ok_or(Error::Argument)
+    };
     if get("callDataHash")? != Val::Word(keccak256(call_data)) {
         return Err(Error::Argument);
     }
     let mut tok = [0u8; 32];
-    tok.get_mut(12..).ok_or(Error::Argument)?.copy_from_slice(token);
-    let tys: Vec<String> = ["address", "bytes", "address", "bytes32", "bytes32", "uint256", "uint256", "uint256", "uint256"]
-        .iter()
-        .map(|s| s.to_string())
-        .chain(["UASig".to_string()])
-        .collect();
-    let vals = vec![get("target")?, Val::Raw(call_data.to_vec()), Val::Word(tok), get("from")?, get("payee")?, get("value")?,
-        get("batch")?, get("nonce")?, get("validUntil")?, parse("UASig", auth)?];
+    tok.get_mut(12..)
+        .ok_or(Error::Argument)?
+        .copy_from_slice(token);
+    let tys: Vec<String> = [
+        "address", "bytes", "address", "bytes32", "bytes32", "uint256", "uint256", "uint256",
+        "uint256",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .chain(["UASig".to_string()])
+    .collect();
+    let vals = vec![
+        get("target")?,
+        Val::Raw(call_data.to_vec()),
+        Val::Word(tok),
+        get("from")?,
+        get("payee")?,
+        get("value")?,
+        get("batch")?,
+        get("nonce")?,
+        get("validUntil")?,
+        parse("UASig", auth)?,
+    ];
     let abi: Vec<String> = tys.iter().map(|t| abi_type(t)).collect::<Result<_>>()?;
     let sel = keccak256(format!("relay({})", abi.join(",")).as_bytes());
     let mut out = sel.get(..4).ok_or(Error::Argument)?.to_vec();
@@ -780,18 +1088,31 @@ pub fn relay_fee_router_calldata(message: &Value, token: &[u8; 20], call_data: &
 pub fn relay_fee_op(fee: &Built, call: &Built) -> Result<Value> {
     let mut op = fee.op.clone().ok_or(Error::Argument)?;
     let inner = call.op.clone().ok_or(Error::Argument)?;
-    let field = |v: &Value, k: &str| v.get(k).and_then(Value::as_str).map(str::to_string).unwrap_or_default();
-    if field(&op, "struct") != "UARelayFee" || field(&inner, "struct") == "UARelayFee" || call.calldata.is_empty() {
+    let field = |v: &Value, k: &str| {
+        v.get(k)
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .unwrap_or_default()
+    };
+    if field(&op, "struct") != "UARelayFee"
+        || field(&inner, "struct") == "UARelayFee"
+        || call.calldata.is_empty()
+    {
         return Err(Error::Argument);
     }
     let debit = row(&field(&inner, "struct"), &field(&inner, "contract"))?;
     if debit.plan.contains(&Tok::Verdict) {
         return Err(Error::Argument);
     }
-    let args = op.get_mut("args").and_then(Value::as_object_mut).ok_or(Error::Argument)?;
+    let args = op
+        .get_mut("args")
+        .and_then(Value::as_object_mut)
+        .ok_or(Error::Argument)?;
     let target = args.remove("target").ok_or(Error::Argument)?;
     let hash = args.remove("callDataHash").ok_or(Error::Argument)?;
-    if target.as_str() != Some(field(&inner, "token").as_str()) || hash != json!(to_hex(&keccak256(&call.calldata))) {
+    if target.as_str() != Some(field(&inner, "token").as_str())
+        || hash != json!(to_hex(&keccak256(&call.calldata)))
+    {
         return Err(Error::Argument);
     }
     set(&mut op, "call", inner)?;
@@ -799,6 +1120,8 @@ pub fn relay_fee_op(fee: &Built, call: &Built) -> Result<Value> {
 }
 
 fn set(v: &mut Value, k: &str, x: Value) -> Result<()> {
-    v.as_object_mut().ok_or(Error::Argument)?.insert(k.to_string(), x);
+    v.as_object_mut()
+        .ok_or(Error::Argument)?
+        .insert(k.to_string(), x);
     Ok(())
 }

@@ -1638,7 +1638,9 @@ type nfix struct {
 	ws map[string]*Wallet
 }
 
-func newNfix(t *testing.T) *nfix { return &nfix{t: t, v: vec(t, "smartcontracts/vectors/native/native.json"), ws: map[string]*Wallet{}} }
+func newNfix(t *testing.T) *nfix {
+	return &nfix{t: t, v: vec(t, "smartcontracts/vectors/native/native.json"), ws: map[string]*Wallet{}}
+}
 
 func (f *nfix) wallet(id string) *Wallet {
 	if w, ok := f.ws[id]; ok {

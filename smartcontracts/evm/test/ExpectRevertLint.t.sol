@@ -37,7 +37,9 @@ contract ExpectRevertLintTest is Test {
         assertEq(bad, 1, "after another cheatcode");
         (, bad) = _scan(bytes("vm.expectRevert(); deployCode(\"A\"); vm.deployCode(\"A\");"));
         assertEq(bad, 0, "forge-std deployCode, and a later statement");
-        (, bad) = _scan(bytes("// vm.expectRevert(); vm.deployCode(\"A\");\n /* vm.expectRevert(); vm.deployCode(\"A\"); */ x;"));
+        (, bad) = _scan(
+            bytes("// vm.expectRevert(); vm.deployCode(\"A\");\n /* vm.expectRevert(); vm.deployCode(\"A\"); */ x;")
+        );
         assertEq(bad, 0, "comments");
         (n, bad) = _scan(bytes("s = \"vm.expectRevert(); vm.deployCode(\";"));
         assertEq(n + bad, 0, "strings");
@@ -61,7 +63,10 @@ contract ExpectRevertLintTest is Test {
     function _scan(bytes memory s) internal pure returns (uint256 n, uint256 bad) {
         for (uint256 i; i < s.length;) {
             uint256 k = _skip(s, i);
-            if (k != i) { i = k; continue; }
+            if (k != i) {
+                i = k;
+                continue;
+            }
             if (s[i] == "v" && (i == 0 || !_ident(s[i - 1])) && _at(s, i, "vm.expectRevert")) {
                 ++n;
                 uint256 j = _end(s, i) + 1;
@@ -81,7 +86,10 @@ contract ExpectRevertLintTest is Test {
     /// Past a comment or string literal at `i`, else `i`. No literal `bytes` here: each would allocate per byte.
     function _skip(bytes memory s, uint256 i) internal pure returns (uint256) {
         bytes1 next = i + 1 < s.length ? s[i + 1] : bytes1(0);
-        if (s[i] == "/" && next == "/") { while (i < s.length && s[i] != "\n") ++i; return i; }
+        if (s[i] == "/" && next == "/") {
+            while (i < s.length && s[i] != "\n") ++i;
+            return i;
+        }
         if (s[i] == "/" && next == "*") {
             for (i += 2; i + 1 < s.length; ++i) {
                 if (s[i] == "*" && s[i + 1] == "/") return i + 2;
@@ -100,7 +108,10 @@ contract ExpectRevertLintTest is Test {
     function _space(bytes memory s, uint256 i) internal pure returns (uint256) {
         while (i < s.length) {
             uint256 k = _skip(s, i);
-            if (k != i && s[i] != '"') { i = k; continue; }
+            if (k != i && s[i] != '"') {
+                i = k;
+                continue;
+            }
             if (s[i] != " " && s[i] != "\n" && s[i] != "\t" && s[i] != "\r") break;
             ++i;
         }
@@ -111,7 +122,10 @@ contract ExpectRevertLintTest is Test {
     function _end(bytes memory s, uint256 i) internal pure returns (uint256) {
         while (i < s.length) {
             uint256 k = _skip(s, i);
-            if (k != i) { i = k; continue; }
+            if (k != i) {
+                i = k;
+                continue;
+            }
             if (s[i] == ";") return i;
             ++i;
         }

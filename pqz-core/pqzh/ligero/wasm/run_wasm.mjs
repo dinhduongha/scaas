@@ -4,22 +4,22 @@
 //   6.. op 7 R_TXM shapes (multi_rels(): auditor on M = 1, 2, 4 [8, 16 with feature oversize], then off), or 'txm' = all of them)
 // PQZH_PROOFS=DIR: verify only, proofs made natively by `ligero_bench --dump DIR` with the same parameters.
 // Build first: (cd wasm && cargo build --release --offline --target wasm32-unknown-unknown). Prints JSON lines.
-import { readFileSync } from 'node:fs';
+import { readFileSync } from "node:fs";
 
-const [np = 3, nv = 50, nadv = 4, proven = 1, r431 = 1] =
-  process.argv.slice(2, 7).map(Number);
-const NAMES = ['R_REG', 'R_TX', 'R_BURN', 'R_DS', 'R_DR', 'R_TX0'];
+const [np = 3, nv = 50, nadv = 4, proven = 1, r431 = 1] = process.argv.slice(2, 7).map(Number);
+const NAMES = ["R_REG", "R_TX", "R_BURN", "R_DS", "R_DR", "R_TX0"];
 const proofs = process.env.PQZH_PROOFS;
-const file = process.env.PQZH_WASM_FILE || new URL('target/wasm32-unknown-unknown/release/pqzh_ligero_wasm.wasm', import.meta.url);
+const file =
+  process.env.PQZH_WASM_FILE || new URL("target/wasm32-unknown-unknown/release/pqzh_ligero_wasm.wasm", import.meta.url);
 const bytes = readFileSync(file);
 const { instance } = await WebAssembly.instantiate(bytes, {});
 const x = instance.exports;
 for (let i = NAMES.length; i < x.step_nrel(); i++) {
   const sh = x.step_shape(i);
-  NAMES.push(`R_TXM${sh >> 1}${sh & 1 ? '' : '_0'}`);
+  NAMES.push(`R_TXM${sh >> 1}${sh & 1 ? "" : "_0"}`);
 }
-const relArg = process.argv[7] || '0,1';
-const rels = relArg === 'txm' ? NAMES.map((_, i) => i).slice(6) : relArg.split(',').map(Number);
+const relArg = process.argv[7] || "0,1";
+const rels = relArg === "txm" ? NAMES.map((_, i) => i).slice(6) : relArg.split(",").map(Number);
 const MiB = 2 ** 20;
 const mem = () => x.memory.buffer.byteLength / MiB; // never shrinks: the high-water mark of the allocator
 const out = (o) => console.log(JSON.stringify(o));
@@ -27,8 +27,13 @@ const r3 = (t) => Math.round(t * 1000) / 1000;
 const stats = (v) => {
   v.sort((a, b) => a - b);
   const n = v.length;
-  return { n, mean_ms: r3(v.reduce((s, t) => s + t, 0) / n), p50_ms: r3(v[n >> 1]), p99_ms: r3(v[Math.floor((n - 1) * 0.99)]),
-           max_ms: r3(v[n - 1]) };
+  return {
+    n,
+    mean_ms: r3(v.reduce((s, t) => s + t, 0) / n),
+    p50_ms: r3(v[n >> 1]),
+    p99_ms: r3(v[Math.floor((n - 1) * 0.99)]),
+    max_ms: r3(v[n - 1]),
+  };
 };
 
 out({ wasm_bytes: bytes.length, node: process.version, args: { np, nv, nadv, proven, r431, rels, proofs } });
@@ -55,10 +60,22 @@ for (const tx of rels) {
     t0 = performance.now();
     len = x.step_prove(tx, i);
     tp.push(performance.now() - t0);
-    if (!len) { out({ rel, prove_failed: i }); fails++; }
+    if (!len) {
+      out({ rel, prove_failed: i });
+      fails++;
+    }
   }
-  const fnv = (x.step_hash(tx) >>> 0).toString(16).padStart(8, '0');
-  if (!proofs) out({ rel, proof_bytes: len, fnv_last: fnv, timing: 'prove', stats: stats(tp), memory_mib: mem(), within_256mib: mem() <= 256 });
+  const fnv = (x.step_hash(tx) >>> 0).toString(16).padStart(8, "0");
+  if (!proofs)
+    out({
+      rel,
+      proof_bytes: len,
+      fnv_last: fnv,
+      timing: "prove",
+      stats: stats(tp),
+      memory_mib: mem(),
+      within_256mib: mem() <= 256,
+    });
   else out({ rel, proof_bytes: len, fnv_loaded: fnv, memory_mib: mem() });
   if (!proofs) x.step_prove_other(tx);
   const tv = [];
@@ -67,16 +84,19 @@ for (const tx of rels) {
     fails += x.step_verify(tx) !== 1;
     tv.push(performance.now() - t0);
   }
-  out({ rel, timing: 'verify_honest', stats: stats(tv), memory_mib: mem() });
+  out({ rel, timing: "verify_honest", stats: stats(tv), memory_mib: mem() });
   const ta = [];
   for (let k = 0; k < kinds; k++)
     for (let i = 0; i < nadv; i++) {
       t0 = performance.now();
       const acc = x.step_verify_bad(tx, k);
       ta.push(performance.now() - t0);
-      if (acc !== 0) { out({ rel, accepted_kind: k }); fails++; }
+      if (acc !== 0) {
+        out({ rel, accepted_kind: k });
+        fails++;
+      }
     }
-  out({ rel, timing: 'verify_adversarial', stats: stats(ta), memory_mib: mem() });
+  out({ rel, timing: "verify_adversarial", stats: stats(ta), memory_mib: mem() });
 }
 out({ fails, memory_mib_final: mem() });
 process.exit(fails ? 1 : 0);

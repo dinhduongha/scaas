@@ -5,12 +5,12 @@
 set -u
 cd "$(dirname "$0")/.."
 for ext in 2 5; do
-  for rate in 1 2 3 4; do
-    for fold in 4; do
-      for tgt in 128 130; do
-        target/release/pqzh_whir --ext $ext --rate $rate --fold $fold --target $tgt --np 1 --nv 3 --nadv 1 \
-          >> runs/t10-whir-sweep.jsonl 2>> runs/t10-whir-sweep.err || echo "ext $ext rate $rate fold $fold target $tgt rc=$?" >> runs/t10-whir-sweep.err
-      done
+    for rate in 1 2 3 4; do
+        for fold in 4; do
+            for tgt in 128 130; do
+                target/release/pqzh_whir --ext $ext --rate $rate --fold $fold --target $tgt --np 1 --nv 3 --nadv 1 \
+                    >>runs/t10-whir-sweep.jsonl 2>>runs/t10-whir-sweep.err || echo "ext $ext rate $rate fold $fold target $tgt rc=$?" >>runs/t10-whir-sweep.err
+            done
+        done
     done
-  done
 done

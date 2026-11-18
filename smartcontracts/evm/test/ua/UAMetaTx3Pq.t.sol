@@ -51,13 +51,25 @@ contract UAMetaTx3PqTest is UARegistryBase {
             string memory k = string.concat(".kinds[", vm.toString(i), "].");
             uint16 kind = uint16(vm.parseJsonUint(pj, string.concat(k, "kind")));
             bytes memory pk = vm.parseJsonBytes(pj, string.concat(k, "keyData"));
-            if (kind == 0x0134) ml87.allow(_in87(pk, vm.parseJsonBytes(pj, string.concat(k, "pop.sig")), vm.parseJsonBytes32(pj, string.concat(k, "pop.message"))));
-            for (uint256 p; kind <= 0x0131 && p < (kind == 0x0130 ? 1 : 2); ++p) reg.cacheExpandedKey(kind, pk, p);
+            if (kind == 0x0134) {
+                ml87.allow(
+                    _in87(
+                        pk,
+                        vm.parseJsonBytes(pj, string.concat(k, "pop.sig")),
+                        vm.parseJsonBytes32(pj, string.concat(k, "pop.message"))
+                    )
+                );
+            }
+            for (uint256 p; kind <= 0x0131 && p < (kind == 0x0130 ? 1 : 2); ++p) {
+                reg.cacheExpandedKey(kind, pk, p);
+            }
             UACall.register(reg, kind, pk, _none(), vm.parseJsonBytes(pj, string.concat(k, "pop.sig")), "");
         }
         // the payeeFee payee: mldsa65 index 1 (extraKeys[0]), its expanded key cached as the payer's
         bytes memory pk1 = vm.parseJsonBytes(pj, ".extraKeys[0].keyData");
-        for (uint256 p; p < 2; ++p) reg.cacheExpandedKey(0x0131, pk1, p);
+        for (uint256 p; p < 2; ++p) {
+            reg.cacheExpandedKey(0x0131, pk1, p);
+        }
         UACall.register(reg, 0x0131, pk1, _none(), vm.parseJsonBytes(pj, ".extraKeys[0].pop.sig"), "");
         address token = vm.parseJsonAddress(pj, ".metatx3.token");
         address impl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
@@ -83,11 +95,17 @@ contract UAMetaTx3PqTest is UARegistryBase {
                 string memory r = string.concat(set, vm.toString(i), "].");
                 if (vm.parseJsonUint(pj, string.concat(r, "kind")) != 0x0134) continue;
                 (, bytes memory sig) = abi.decode(vm.parseJsonBytes(pj, string.concat(r, "auth")), (bytes, bytes));
-                bytes32 m = UAKinds.uaMessage(0x0134, UAKinds.PURPOSE_METATX, vm.parseJsonBytes32(pj, string.concat(r, "digest")));
+                bytes32 m = UAKinds.uaMessage(
+                    0x0134, UAKinds.PURPOSE_METATX, vm.parseJsonBytes32(pj, string.concat(r, "digest"))
+                );
                 ml87.allow(_in87(vm.parseJsonBytes(pj, ".kinds[4].keyData"), sig, m));
             }
         }
-        return address(new MldsaVerifier(0x0134, address(ml87), valid, vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid")));
+        return address(
+            new MldsaVerifier(
+                0x0134, address(ml87), valid, vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid")
+            )
+        );
     }
 
     function _in87(bytes memory pk, bytes memory sig, bytes32 uaMsg) internal pure returns (bytes32) {
@@ -139,7 +157,12 @@ contract UAMetaTx3PqTest is UARegistryBase {
             bytes32 digest = vm.parseJsonBytes32(pj, string.concat(r, "digest"));
             assertEq(MtxHash.hashStruct(m), vm.parseJsonBytes32(pj, string.concat(r, "structHash")));
             assertEq(tok.mtxDigest(m), digest);
-            reg.requireAuthorized(m.from, UAKinds.PURPOSE_METATX, digest, UACall.auth(m.from, vm.parseJsonBytes(pj, string.concat(r, "auth"))));
+            reg.requireAuthorized(
+                m.from,
+                UAKinds.PURPOSE_METATX,
+                digest,
+                UACall.auth(m.from, vm.parseJsonBytes(pj, string.concat(r, "auth")))
+            );
             ++n;
         }
         assertEq(n, 6); // + fndsa1024 (CTR-UA-40)
@@ -162,7 +185,9 @@ contract UAMetaTx3PqTest is UARegistryBase {
             uint256 g = gasleft();
             tok.mtxExecuteTransfer(t, UACall.auth(t.from, auth));
             g -= gasleft();
-            emit log_named_uint(string.concat("mtxExecuteTransfer ", vm.parseJsonString(pj, string.concat(r, "name"))), g);
+            emit log_named_uint(
+                string.concat("mtxExecuteTransfer ", vm.parseJsonString(pj, string.concat(r, "name"))), g
+            );
             assertEq(tok.balanceOfUA(t.from), 0);
             ++n;
         }
@@ -187,7 +212,9 @@ contract UAMetaTx3PqTest is UARegistryBase {
         uint256 g = gasleft();
         (bool ok, bytes memory ret) = address(tok).call{gas: TX_GAS_CAP - 21_000 - std}(cd);
         g -= gasleft();
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        }
         uint256 txGas = 21_000 + (std + g > floor ? std + g : floor);
         emit log_named_uint("calldata bytes", cd.length);
         emit log_named_uint("calldata gas (EIP-2028)", std);
@@ -199,7 +226,9 @@ contract UAMetaTx3PqTest is UARegistryBase {
 
     /// The row's payment (digest checked), its fee, and the `mtxPayWithPayeeFee` calldata (`UAPayeeFee` digest checked).
     function _payeeFeeRow(string memory pj, string memory r)
-        internal view returns (MetaTxLib.UAMetaTransfer memory t, uint256 fee, bytes memory cd)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransfer memory t, uint256 fee, bytes memory cd)
     {
         t = _transferAt(pj, string.concat(r, "transfer.message."));
         bytes32 d = vm.parseJsonBytes32(pj, string.concat(r, "paymentDigest"));
@@ -210,13 +239,17 @@ contract UAMetaTx3PqTest is UARegistryBase {
     }
 
     function _rfFields(string memory pj, string memory r) internal pure returns (uint256, address, uint256) {
-        return (vm.parseJsonUint(pj, string.concat(r, "payeeFee.message.fee")),
+        return (
+            vm.parseJsonUint(pj, string.concat(r, "payeeFee.message.fee")),
             vm.parseJsonAddress(pj, string.concat(r, "payeeFee.message.feeRecipient")),
-            vm.parseJsonUint(pj, string.concat(r, "payeeFee.message.validUntil")));
+            vm.parseJsonUint(pj, string.concat(r, "payeeFee.message.validUntil"))
+        );
     }
 
     function _rfCalldata(string memory pj, string memory r, MetaTxLib.UAMetaTransfer memory t)
-        internal view returns (bytes memory)
+        internal
+        view
+        returns (bytes memory)
     {
         RfArgs memory a;
         a.meta = _rowMeta(pj, string.concat(r, "meta."), t.entryRef);
@@ -237,17 +270,27 @@ contract UAMetaTx3PqTest is UARegistryBase {
     }
 
     /// The row's `PayMeta` (pay-meta-tax T41), its commitment checked against the payment's `entryRef`.
-    function _rowMeta(string memory pj, string memory p, bytes32 entryRef) internal pure returns (MetaTxLib.PayMeta memory m) {
-        m = MetaTxLib.PayMeta(vm.parseJsonBytes32(pj, string.concat(p, "salt")), vm.parseJsonBytes32(pj, string.concat(p, "payNo")),
-            vm.parseJsonBool(pj, string.concat(p, "save")), uint16(vm.parseJsonUint(pj, string.concat(p, "schema"))),
-            vm.parseJsonBytes(pj, string.concat(p, "body")));
+    function _rowMeta(string memory pj, string memory p, bytes32 entryRef)
+        internal
+        pure
+        returns (MetaTxLib.PayMeta memory m)
+    {
+        m = MetaTxLib.PayMeta(
+            vm.parseJsonBytes32(pj, string.concat(p, "salt")),
+            vm.parseJsonBytes32(pj, string.concat(p, "payNo")),
+            vm.parseJsonBool(pj, string.concat(p, "save")),
+            uint16(vm.parseJsonUint(pj, string.concat(p, "schema"))),
+            vm.parseJsonBytes(pj, string.concat(p, "body"))
+        );
         assertEq(PayMetaKit.id(m), entryRef, "the row's entryRef commits to its PayMeta");
     }
 
     /// EIP-2028 calldata gas (4 per zero byte, 16 otherwise) and the EIP-7623 floor (10 per token, 4 tokens per non-zero byte).
     function _calldataGas(bytes memory cd) internal pure returns (uint256 std, uint256 floor) {
         uint256 zeros;
-        for (uint256 i; i < cd.length; ++i) if (cd[i] == 0) ++zeros;
+        for (uint256 i; i < cd.length; ++i) {
+            if (cd[i] == 0) ++zeros;
+        }
         std = 4 * zeros + 16 * (cd.length - zeros);
         floor = 10 * (zeros + 4 * (cd.length - zeros));
     }

@@ -128,7 +128,11 @@ impl Pv for Sv<'_> {
 }
 
 /// the NTT-domain zero a product accumulates into (`r->crt = 1; memset (r->crtrep, 0, ...)`)
-const CRT_ZERO: Poly = Poly { v: [0; super::ntt::D], neg: 0, crt: true };
+const CRT_ZERO: Poly = Poly {
+    v: [0; super::ntt::D],
+    neg: 0,
+    crt: true,
+};
 
 /// `polyvec_set` (`poly_set`: the source keeps its domain)
 pub(crate) fn set<R: Pv + ?Sized, A: PvRef + ?Sized>(r: &mut R, a: &A) {
@@ -216,13 +220,23 @@ pub(crate) fn lrot<R: Pv + ?Sized, A: Pv + ?Sized>(r: &mut R, a: &mut A, n: usiz
     map(r, a, |p| Poly::lrot(p, n));
 }
 
-pub(crate) fn add<R: Pv + ?Sized, A: Pv + ?Sized, B: Pv + ?Sized>(r: &mut R, a: &mut A, b: &mut B, crt: bool) {
+pub(crate) fn add<R: Pv + ?Sized, A: Pv + ?Sized, B: Pv + ?Sized>(
+    r: &mut R,
+    a: &mut A,
+    b: &mut B,
+    crt: bool,
+) {
     for i in 0..r.len() {
         *r.at(i) = Poly::add(a.at(i), b.at(i), crt);
     }
 }
 
-pub(crate) fn sub<R: Pv + ?Sized, A: Pv + ?Sized, B: Pv + ?Sized>(r: &mut R, a: &mut A, b: &mut B, crt: bool) {
+pub(crate) fn sub<R: Pv + ?Sized, A: Pv + ?Sized, B: Pv + ?Sized>(
+    r: &mut R,
+    a: &mut A,
+    b: &mut B,
+    crt: bool,
+) {
     for i in 0..r.len() {
         *r.at(i) = Poly::sub(a.at(i), b.at(i), crt);
     }
@@ -271,7 +285,12 @@ pub(crate) fn scale2<R: Pv + ?Sized, B: Pv + ?Sized>(r: &mut R, a: &mut Poly, b:
     }
 }
 
-pub(crate) fn subscale2<R: Pv + ?Sized, B: Pv + ?Sized>(r: &mut R, a: &mut Poly, b: &mut B, crt: bool) {
+pub(crate) fn subscale2<R: Pv + ?Sized, B: Pv + ?Sized>(
+    r: &mut R,
+    a: &mut Poly,
+    b: &mut B,
+    crt: bool,
+) {
     for i in 0..r.len() {
         r.at(i).submul(a, b.at(i), crt);
     }
@@ -307,11 +326,21 @@ pub(crate) fn dot2<B: Pv + ?Sized>(a: &mut Sparse, b: &mut B) -> Poly {
 }
 
 /// `poly_adddot (r, a, b, crt)`
-pub(crate) fn adddot<A: Pv + ?Sized, B: Pv + ?Sized>(r: &mut Poly, a: &mut A, b: &mut B, crt: bool) {
+pub(crate) fn adddot<A: Pv + ?Sized, B: Pv + ?Sized>(
+    r: &mut Poly,
+    a: &mut A,
+    b: &mut B,
+    crt: bool,
+) {
     r.add_assign(&mut dot(a, b), crt);
 }
 
-pub(crate) fn subdot<A: Pv + ?Sized, B: Pv + ?Sized>(r: &mut Poly, a: &mut A, b: &mut B, crt: bool) {
+pub(crate) fn subdot<A: Pv + ?Sized, B: Pv + ?Sized>(
+    r: &mut Poly,
+    a: &mut A,
+    b: &mut B,
+    crt: bool,
+) {
     r.sub_assign(&mut dot(a, b), crt);
 }
 
@@ -328,7 +357,12 @@ pub(crate) fn mul<R: Pv + ?Sized, M: Pm + ?Sized, B: Pv + ?Sized>(r: &mut R, a: 
 }
 
 /// `polyvec_addmul (r, a, b, crt)`: r += a b
-pub(crate) fn addmul<R: Pv + ?Sized, M: Pm + ?Sized, B: Pv + ?Sized>(r: &mut R, a: &mut M, b: &mut B, crt: bool) {
+pub(crate) fn addmul<R: Pv + ?Sized, M: Pm + ?Sized, B: Pv + ?Sized>(
+    r: &mut R,
+    a: &mut M,
+    b: &mut B,
+    crt: bool,
+) {
     for i in 0..a.nrows() {
         let mut t = dot_with(a.ncols(), |j| Poly::mul(a.at(i, j), b.at(j)));
         r.at(i).add_assign(&mut t, crt);
@@ -336,7 +370,12 @@ pub(crate) fn addmul<R: Pv + ?Sized, M: Pm + ?Sized, B: Pv + ?Sized>(r: &mut R, 
 }
 
 /// `polyvec_submul (r, a, b, crt)`: r -= a b
-pub(crate) fn submul<R: Pv + ?Sized, M: Pm + ?Sized, B: Pv + ?Sized>(r: &mut R, a: &mut M, b: &mut B, crt: bool) {
+pub(crate) fn submul<R: Pv + ?Sized, M: Pm + ?Sized, B: Pv + ?Sized>(
+    r: &mut R,
+    a: &mut M,
+    b: &mut B,
+    crt: bool,
+) {
     for i in 0..a.nrows() {
         let mut t = dot_with(a.ncols(), |j| Poly::mul(a.at(i, j), b.at(j)));
         r.at(i).sub_assign(&mut t, crt);
@@ -344,14 +383,23 @@ pub(crate) fn submul<R: Pv + ?Sized, M: Pm + ?Sized, B: Pv + ?Sized>(r: &mut R, 
 }
 
 /// `poly_addmul2 (r, a, b, crt)`: r += a b for a one-row matrix
-pub(crate) fn poly_addmul2<M: Pm + ?Sized, B: Pv + ?Sized>(r: &mut Poly, a: &mut M, b: &mut B, crt: bool) {
+pub(crate) fn poly_addmul2<M: Pm + ?Sized, B: Pv + ?Sized>(
+    r: &mut Poly,
+    a: &mut M,
+    b: &mut B,
+    crt: bool,
+) {
     let mut t = dot_with(a.ncols(), |j| Poly::mul(a.at(0, j), b.at(j)));
     r.add_assign(&mut t, crt);
 }
 
 /// `polyvec_mul2 (r, a, b)`: vector times matrix; a zero column of `b` (public data, `pqz_poly_is_zero_pub`) gives an
 /// NTT-domain zero without the products
-pub(crate) fn mul2<R: Pv + ?Sized, A: Pv + ?Sized, M: Pm + ?Sized>(r: &mut R, a: &mut A, b: &mut M) {
+pub(crate) fn mul2<R: Pv + ?Sized, A: Pv + ?Sized, M: Pm + ?Sized>(
+    r: &mut R,
+    a: &mut A,
+    b: &mut M,
+) {
     for i in 0..b.ncols() {
         *r.at(i) = if (0..b.nrows()).all(|j| b.get(j, i).is_zero_pub()) {
             CRT_ZERO
@@ -397,7 +445,12 @@ pub(crate) fn power2round<R: Pv + ?Sized, A: Pv + ?Sized>(r: &mut R, a: &mut A, 
     map(r, a, |x| Poly::power2round(x, p));
 }
 
-pub(crate) fn decompose<R1: Pv + ?Sized, R0: Pv + ?Sized, A: Pv + ?Sized>(r1: &mut R1, r0: &mut R0, r: &mut A, p: &Dcomp) {
+pub(crate) fn decompose<R1: Pv + ?Sized, R0: Pv + ?Sized, A: Pv + ?Sized>(
+    r1: &mut R1,
+    r0: &mut R0,
+    r: &mut A,
+    p: &Dcomp,
+) {
     for i in 0..r1.len() {
         let (h, l) = Poly::decompose(r.at(i), p);
         *r1.at(i) = h;
@@ -405,13 +458,23 @@ pub(crate) fn decompose<R1: Pv + ?Sized, R0: Pv + ?Sized, A: Pv + ?Sized>(r1: &m
     }
 }
 
-pub(crate) fn use_ghint<R: Pv + ?Sized, Y: Pv + ?Sized, A: Pv + ?Sized>(ret: &mut R, y: &mut Y, r: &mut A, p: &Dcomp) {
+pub(crate) fn use_ghint<R: Pv + ?Sized, Y: Pv + ?Sized, A: Pv + ?Sized>(
+    ret: &mut R,
+    y: &mut Y,
+    r: &mut A,
+    p: &Dcomp,
+) {
     for i in 0..ret.len() {
         *ret.at(i) = Poly::use_ghint(y.at(i), r.at(i), p);
     }
 }
 
-pub(crate) fn make_ghint<R: Pv + ?Sized, Z: Pv + ?Sized, A: Pv + ?Sized>(ret: &mut R, z: &mut Z, r: &mut A, p: &Dcomp) {
+pub(crate) fn make_ghint<R: Pv + ?Sized, Z: Pv + ?Sized, A: Pv + ?Sized>(
+    ret: &mut R,
+    z: &mut Z,
+    r: &mut A,
+    p: &Dcomp,
+) {
     for i in 0..ret.len() {
         *ret.at(i) = Poly::make_ghint(z.at(i), r.at(i), p);
     }

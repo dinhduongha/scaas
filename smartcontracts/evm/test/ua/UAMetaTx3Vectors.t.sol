@@ -51,11 +51,14 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
         reg = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _realCfgs());
         for (uint256 i; vm.keyExistsJson(sj, string.concat(".derived[", vm.toString(i), "]")); ++i) {
             string memory d = string.concat(".derived[", vm.toString(i), "].");
-            UACall.register(reg, uint16(vm.parseJsonUint(sj, string.concat(d, "kind"))),
+            UACall.register(
+                reg,
+                uint16(vm.parseJsonUint(sj, string.concat(d, "kind"))),
                 vm.parseJsonBytes(sj, string.concat(d, "keyData")),
                 _none(),
                 vm.parseJsonBytes(sj, string.concat(d, "pop.sig")),
-                "");
+                ""
+            );
         }
         address token = vm.parseJsonAddress(vj, ".token");
         address impl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
@@ -124,9 +127,18 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
         assertEq(vm.parseJsonBytes32(vj, ".typeHashes.UAMetaTransfer"), MetaTxLib.UAMETATRANSFER_TYPEHASH);
         (,,,,, bytes32 salt,) = tok.eip712Domain();
         assertEq(salt, chainUidA);
-        bytes32 ds = keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256("SCaaS MetaToken"), keccak256("1"), block.chainid, address(tok), chainUidA));
+        bytes32 ds = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256("SCaaS MetaToken"),
+                keccak256("1"),
+                block.chainid,
+                address(tok),
+                chainUidA
+            )
+        );
         assertEq(vm.parseJsonBytes32(vj, ".domainSeparator"), ds);
     }
 
@@ -160,7 +172,9 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             uint256 g = gasleft();
             tok.mtxExecuteTransfer(t, UACall.auth(t.from, auth));
             g -= gasleft();
-            emit log_named_uint(string.concat("mtxExecuteTransfer ", vm.parseJsonString(vj, string.concat(r, "name"))), g);
+            emit log_named_uint(
+                string.concat("mtxExecuteTransfer ", vm.parseJsonString(vj, string.concat(r, "name"))), g
+            );
             assertEq(tok.balanceOfUA(t.from), 0);
             ++n;
         }
@@ -224,10 +238,13 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             uint256 fee = vm.parseJsonUint(vj, string.concat(r, "payeeFee.message.fee"));
             address feeTo = vm.parseJsonAddress(vj, string.concat(r, "payeeFee.message.feeRecipient"));
             uint256 until = vm.parseJsonUint(vj, string.concat(r, "payeeFee.message.validUntil"));
-            assertEq(tok.payeeFeeDigest(t, fee, feeTo, until), vm.parseJsonBytes32(vj, string.concat(r, "payeeFeeDigest")));
+            assertEq(
+                tok.payeeFeeDigest(t, fee, feeTo, until), vm.parseJsonBytes32(vj, string.concat(r, "payeeFeeDigest"))
+            );
             _fund(t.from, t.value);
             uint256 before = tok.balanceOfUA(t.to);
-            IUARegistry.UASig memory payerAuth = UACall.auth(t.from, vm.parseJsonBytes(vj, string.concat(r, "payerAuth")));
+            IUARegistry.UASig memory payerAuth =
+                UACall.auth(t.from, vm.parseJsonBytes(vj, string.concat(r, "payerAuth")));
             IUARegistry.UASig memory payeeAuth = UACall.auth(t.to, vm.parseJsonBytes(vj, string.concat(r, "payeeAuth")));
             _authorizedAs(t.from, UAKinds.PURPOSE_METATX, d, payerAuth);
             _authorizedAs(t.to, UAKinds.PURPOSE_PAYEE_FEE, tok.payeeFeeDigest(t, fee, feeTo, until), payeeAuth);
@@ -237,8 +254,15 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             uint256 g = gasleft();
             tok.mtxPayWithPayeeFee(t, payerAuth, fee, feeTo, until, payeeAuth, m);
             g -= gasleft();
-            emit log_named_uint(string.concat("mtxPayWithPayeeFee ", vm.parseJsonString(vj, string.concat(r, "payer")), " > ",
-                vm.parseJsonString(vj, string.concat(r, "payee"))), g);
+            emit log_named_uint(
+                string.concat(
+                    "mtxPayWithPayeeFee ",
+                    vm.parseJsonString(vj, string.concat(r, "payer")),
+                    " > ",
+                    vm.parseJsonString(vj, string.concat(r, "payee"))
+                ),
+                g
+            );
             assertEq(tok.balanceOfUA(t.to), before + t.value - fee);
             ++n;
         }

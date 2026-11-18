@@ -12,7 +12,7 @@ D=$(date +%F)-calib${1:+-ops$(echo "$*" | tr -cd 0-9)}
 mkdir -p runs
 PRE="load before: $(cut -d" " -f1-3 /proc/loadavg)"
 docker run --rm --memory 4g --cpus 4 -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$(pwd)/runs:/out" "$TAG" \
-  run /opt/pqz-calibrate/data/corpus.jsonl /opt/pqz-calibrate/data/fresh.jsonl /opt/pqz-calibrate/data/ua /out --label "$D" "$@"
+    run /opt/pqz-calibrate/data/corpus.jsonl /opt/pqz-calibrate/data/fresh.jsonl /opt/pqz-calibrate/data/ua /out --label "$D" "$@"
 [ $# -gt 0 ] || cp "runs/$D-engine-pqz.json" chain/engine-pqz.json
-echo "# image $TAG $(docker image inspect "$TAG" --format '{{.Id}}'); host $PRE, after: $(cut -d" " -f1-3 /proc/loadavg)" >> "runs/$D.txt"
+echo "# image $TAG $(docker image inspect "$TAG" --format '{{.Id}}'); host $PRE, after: $(cut -d" " -f1-3 /proc/loadavg)" >>"runs/$D.txt"
 tail -1 "runs/$D.txt"

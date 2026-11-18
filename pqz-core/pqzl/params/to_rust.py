@@ -10,6 +10,7 @@ Stdlib only, deterministic. Each header's statements become typed Rust items wit
 lazer-in2.h's structs by the tables below (tests/oracle_params.rs reads every field back through the C compiler).
 The parser is strict: a statement it does not know fails, so a codegen change cannot slip through silently.
 """
+
 import os
 import re
 import sys
@@ -22,30 +23,103 @@ DEFAULT_SET = "n2304-kmax4096"  # the crate's default feature (Cargo.toml)
 
 def sets():
     return sorted(d for d in os.listdir(SETS_DIR) if os.path.exists(os.path.join(SETS_DIR, d, "pqz_set.h")))
+
+
 OVERSIZE = {"txm16", "txm160"}  # pqz_rel.c includes them only under PQZ_TXM_OVERSIZE
 
 # lazer-in2.h's structs, field by field: (Rust field, kind)
 STRUCTS = {
-    "polyring_t": ("Ring", [("q", "int"), ("d", "u32"), ("log2q", "u32"), ("log2d", "u32"), ("moduli", "moduli"),
-                            ("nmoduli", "u32"), ("pmodq", "int"), ("ppmodq", "ints"), ("inv2", "int")]),
-    "dcompress_params_t": ("Dcomp", [("q", "int"), ("qminus1", "int"), ("m", "int"), ("mby2", "int"), ("gamma", "int"),
-                                     ("gammaby2", "int"), ("pow2d", "int"), ("pow2dby2", "int"), ("d", "u32"),
-                                     ("m_odd", "bool"), ("log2m", "u32")]),
-    "abdlop_params_t": ("Abdlop", [("ring", "ref"), ("dcompress", "ref"), ("m1", "u32"), ("m2", "u32"), ("l", "u32"),
-                                   ("lext", "u32"), ("kmsis", "u32"), ("bsqr", "int"), ("nu", "i64"), ("omega", "i64"),
-                                   ("log2omega", "u32"), ("eta", "u64"), ("rej1", "i32"), ("log2stdev1", "u32"),
-                                   ("scm1", "int"), ("stdev1sqr", "int"), ("rej2", "i32"), ("log2stdev2", "u32"),
-                                   ("scm2", "int"), ("stdev2sqr", "int")]),
+    "polyring_t": (
+        "Ring",
+        [
+            ("q", "int"),
+            ("d", "u32"),
+            ("log2q", "u32"),
+            ("log2d", "u32"),
+            ("moduli", "moduli"),
+            ("nmoduli", "u32"),
+            ("pmodq", "int"),
+            ("ppmodq", "ints"),
+            ("inv2", "int"),
+        ],
+    ),
+    "dcompress_params_t": (
+        "Dcomp",
+        [
+            ("q", "int"),
+            ("qminus1", "int"),
+            ("m", "int"),
+            ("mby2", "int"),
+            ("gamma", "int"),
+            ("gammaby2", "int"),
+            ("pow2d", "int"),
+            ("pow2dby2", "int"),
+            ("d", "u32"),
+            ("m_odd", "bool"),
+            ("log2m", "u32"),
+        ],
+    ),
+    "abdlop_params_t": (
+        "Abdlop",
+        [
+            ("ring", "ref"),
+            ("dcompress", "ref"),
+            ("m1", "u32"),
+            ("m2", "u32"),
+            ("l", "u32"),
+            ("lext", "u32"),
+            ("kmsis", "u32"),
+            ("bsqr", "int"),
+            ("nu", "i64"),
+            ("omega", "i64"),
+            ("log2omega", "u32"),
+            ("eta", "u64"),
+            ("rej1", "i32"),
+            ("log2stdev1", "u32"),
+            ("scm1", "int"),
+            ("stdev1sqr", "int"),
+            ("rej2", "i32"),
+            ("log2stdev2", "u32"),
+            ("scm2", "int"),
+            ("stdev2sqr", "int"),
+        ],
+    ),
     "lnp_quad_eval_params_t": ("QuadEval", [("quad_eval", "ref"), ("quad_many", "ref"), ("lambda", "u32")]),
-    "lnp_tbox_params_t": ("Tbox", [("tbox", "ref"), ("quad_eval", "ref"), ("nbin", "u32"), ("n", "u32s"),
-                                   ("nprime", "u32"), ("z", "u32"), ("nex", "u32"), ("rej3", "i32"),
-                                   ("log2stdev3", "u32"), ("scm3", "int"), ("stdev3sqr", "int"), ("rej4", "i32"),
-                                   ("log2stdev4", "u32"), ("scm4", "int"), ("stdev4sqr", "int"), ("bz3sqr", "int"),
-                                   ("bz4", "int"), ("l2bsqr", "ints0"), ("inv4", "int"), ("prooflen", "u64")]),
+    "lnp_tbox_params_t": (
+        "Tbox",
+        [
+            ("tbox", "ref"),
+            ("quad_eval", "ref"),
+            ("nbin", "u32"),
+            ("n", "u32s"),
+            ("nprime", "u32"),
+            ("z", "u32"),
+            ("nex", "u32"),
+            ("rej3", "i32"),
+            ("log2stdev3", "u32"),
+            ("scm3", "int"),
+            ("stdev3sqr", "int"),
+            ("rej4", "i32"),
+            ("log2stdev4", "u32"),
+            ("scm4", "int"),
+            ("stdev4sqr", "int"),
+            ("bz3sqr", "int"),
+            ("bz4", "int"),
+            ("l2bsqr", "ints0"),
+            ("inv4", "int"),
+            ("prooflen", "u64"),
+        ],
+    ),
 }
-RANGE = {"i32": (-2**31, 2**31 - 1), "u32": (0, 2**32 - 1), "u64": (0, 2**64 - 1), "i64": (-2**63, 2**63 - 1), "bool": (0, 1)}
+RANGE = {
+    "i32": (-(2**31), 2**31 - 1),
+    "u32": (0, 2**32 - 1),
+    "u64": (0, 2**64 - 1),
+    "i64": (-(2**63), 2**63 - 1),
+    "bool": (0, 1),
+}
 
-MOD_RS = '''\
+MOD_RS = """\
 //! The relations' parameters (plan D8), generated by `pqzl/params/to_rust.py` from LaZer's codegen headers
 //! `pqz-core/params/sets/<set>/pqz_*_params.h`: one module per header, the C names lower-cased (`pqz_tx_Bsq` ->
 //! `pqz_tx_bsq`), the structs below field for field as lazer-in2.h's (`polyring_t`, `dcompress_params_t` =
@@ -130,7 +204,7 @@ pub(crate) struct Tbox {
     pub(crate) inv4: Int,
     pub(crate) prooflen: u64,
 }
-'''
+"""
 
 
 def fail(hdr, msg):
@@ -180,7 +254,9 @@ def convert(hdr, text):
             if n != len(l):
                 fail(hdr, "%s: nlimbs %d != %d limbs" % (name, n, len(l)))
             ints[name] = 1
-            items.append("pub(crate) const %s: Int = Int::from_limbs(&[%s], %d);" % (rname, ", ".join(map(str, l)), neg))
+            items.append(
+                "pub(crate) const %s: Int = Int::from_limbs(&[%s], %d);" % (rname, ", ".join(map(str, l)), neg)
+            )
         elif ctype == "unsigned int":
             v = [num(hdr, a, "u32") for a in args]
             if dim != "[%d]" % len(v):
@@ -191,7 +267,9 @@ def convert(hdr, text):
             if dim != "[]":
                 fail(hdr, line)
             intarrs[name] = len(args)
-            items.append("pub(crate) const %s: [Int; %d] = [%s];" % (rname, len(args), ", ".join(ref(a, ints) for a in args)))
+            items.append(
+                "pub(crate) const %s: [Int; %d] = [%s];" % (rname, len(args), ", ".join(ref(a, ints) for a in args))
+            )
         elif ctype in STRUCTS and dim is None:
             rtype, fields = STRUCTS[ctype]
             if len(args) != len(fields):
@@ -237,9 +315,16 @@ def convert(hdr, text):
 
     while doc and not doc[-1].strip():
         doc.pop()
-    head = ["//! Generated by `pqzl/params/to_rust.py` from `pqz-core/params/sets/%s`: do not edit. The header's codegen notes:" % hdr,
-            "//!", "//! ```text"] + [("//!" + d).rstrip() for d in doc] + ["//! ```",
-            "use super::{Abdlop, Dcomp, Int, QuadEval, Ring, Tbox};", ""]
+    head = (
+        [
+            "//! Generated by `pqzl/params/to_rust.py` from `pqz-core/params/sets/%s`: do not edit. The header's codegen notes:"
+            % hdr,
+            "//!",
+            "//! ```text",
+        ]
+        + [("//!" + d).rstrip() for d in doc]
+        + ["//! ```", "use super::{Abdlop, Dcomp, Int, QuadEval, Ring, Tbox};", ""]
+    )
     return "\n".join(head + items) + "\n"
 
 
@@ -248,8 +333,11 @@ def generate():
     files = {}
     for st in sets():
         d = os.path.join(SETS_DIR, st)
-        rels = sorted(re.fullmatch(r"pqz_(\w+)_params\.h", f).group(1) for f in os.listdir(d)
-                      if re.fullmatch(r"pqz_\w+_params\.h", f))
+        rels = sorted(
+            re.fullmatch(r"pqz_(\w+)_params\.h", f).group(1)
+            for f in os.listdir(d)
+            if re.fullmatch(r"pqz_\w+_params\.h", f)
+        )
         mods = []
         for r in rels:
             hdr = "pqz_%s_params.h" % r
@@ -257,17 +345,29 @@ def generate():
                 files[os.path.join(d, "rust", r + ".rs")] = convert("%s/%s" % (st, hdr), f.read())
             mods.append(('#[cfg(feature = "oversize")]\n' if r in OVERSIZE else "") + "pub(crate) mod %s;" % r)
         files[os.path.join(d, "rust", "mod.rs")] = (
-            "//! Parameter set `%s`: the relations' parameters (generated by `pqzl/params/to_rust.py`, do not edit) and\n"
-            "//! `set` (`pqz-core/params/sets/gen_set.py`). Loaded by `pqzl/rust/src/params/mod.rs` under the feature `set-%s`.\n"
-            "#![allow(non_upper_case_globals)]\npub(crate) use super::{Abdlop, Dcomp, Int, QuadEval, Ring, Tbox};\n\n"
-            "pub(crate) mod set;\n" % (st, st)) + "\n".join(mods) + "\n"
+            (
+                "//! Parameter set `%s`: the relations' parameters (generated by `pqzl/params/to_rust.py`, do not edit) and\n"
+                "//! `set` (`pqz-core/params/sets/gen_set.py`). Loaded by `pqzl/rust/src/params/mod.rs` under the feature `set-%s`.\n"
+                "#![allow(non_upper_case_globals)]\npub(crate) use super::{Abdlop, Dcomp, Int, QuadEval, Ring, Tbox};\n\n"
+                "pub(crate) mod set;\n" % (st, st)
+            )
+            + "\n".join(mods)
+            + "\n"
+        )
     sel = []
     for st in sets():
-        sel.append('#[cfg(feature = "set-%s")]\n#[path = "../../../../params/sets/%s/rust/mod.rs"]\nmod chosen;' % (st, st))
+        sel.append(
+            '#[cfg(feature = "set-%s")]\n#[path = "../../../../params/sets/%s/rust/mod.rs"]\nmod chosen;' % (st, st)
+        )
     one = " as u8 + ".join('cfg!(feature = "set-%s")' % st for st in sets())
-    files[os.path.join(OUT, "mod.rs")] = (MOD_RS + "\n// exactly one parameter set per build\nconst _: () = assert!(" + one +
-                                          ' as u8 == 1, "enable exactly one set-<set> feature");\n' + "\n".join(sel) +
-                                          "\npub(crate) use chosen::*;\n")
+    files[os.path.join(OUT, "mod.rs")] = (
+        MOD_RS
+        + "\n// exactly one parameter set per build\nconst _: () = assert!("
+        + one
+        + ' as u8 == 1, "enable exactly one set-<set> feature");\n'
+        + "\n".join(sel)
+        + "\npub(crate) use chosen::*;\n"
+    )
     return files
 
 

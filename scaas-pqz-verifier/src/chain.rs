@@ -4,14 +4,14 @@
 //! fails over in the configured order; the tests answer it with fixed views.
 
 use alloy::network::TransactionBuilder;
+use alloy::primitives::B256;
 use alloy::primitives::{Address, Bytes};
 use alloy::providers::{DynProvider, Provider};
-use scaas_rpc::evm::EvmPool;
-use scaas_rpc::{Endpoint, NodeList, Policy};
-use alloy::primitives::B256;
 use alloy::rpc::types::{BlockId, RpcBlockHash, TransactionRequest};
 use alloy::transports::TransportError;
 use async_trait::async_trait;
+use scaas_rpc::evm::EvmPool;
+use scaas_rpc::{Endpoint, NodeList, Policy};
 use std::future::Future;
 use std::time::Duration;
 
@@ -35,7 +35,10 @@ impl Block {
     pub fn id(self) -> BlockId {
         match self {
             Block::Number(n) => BlockId::number(n),
-            Block::Hash(h) => BlockId::Hash(RpcBlockHash { block_hash: h, require_canonical: Some(true) }),
+            Block::Hash(h) => BlockId::Hash(RpcBlockHash {
+                block_hash: h,
+                require_canonical: Some(true),
+            }),
         }
     }
 }
@@ -48,7 +51,13 @@ pub trait Chain: Send + Sync {
     async fn head(&self, node: usize) -> Result<u64, ChainError>;
     /// Node `node`'s header hash at `number`.
     async fn header(&self, node: usize, number: u64) -> Result<B256, ChainError>;
-    async fn call(&self, node: usize, block: Block, to: Address, data: Bytes) -> Result<Bytes, ChainError>;
+    async fn call(
+        &self,
+        node: usize,
+        block: Block,
+        to: Address,
+        data: Bytes,
+    ) -> Result<Bytes, ChainError>;
     async fn code(&self, node: usize, block: Block, at: Address) -> Result<Bytes, ChainError>;
 }
 
@@ -64,8 +73,13 @@ pub struct Rpc {
 }
 
 /// `f` within `t`, else the node's failure (`ChainError::Rpc`).
-async fn timed<T>(t: Duration, f: impl Future<Output = Result<T, ChainError>>) -> Result<T, ChainError> {
-    tokio::time::timeout(t, f).await.unwrap_or_else(|_| Err(ChainError::Rpc(format!("no answer within {t:?}"))))
+async fn timed<T>(
+    t: Duration,
+    f: impl Future<Output = Result<T, ChainError>>,
+) -> Result<T, ChainError> {
+    tokio::time::timeout(t, f)
+        .await
+        .unwrap_or_else(|_| Err(ChainError::Rpc(format!("no answer within {t:?}"))))
 }
 
 impl Rpc {
@@ -77,38 +91,74 @@ impl Rpc {
 
     /// As [`Rpc::connect`], and every endpoint's block 0 is the pinned `chain_uid` (T13 S11, CLI-RPC-03: the pool's identity
     /// check, run at start; an endpoint without block 0 is refused, `ChainIdentityUnreadable`). The service starts with this.
-    pub async fn connect_pinned(urls: &[String], chain_id: u64, chain_uid: B256) -> anyhow::Result<Self> {
+    pub async fn connect_pinned(
+        urls: &[String],
+        chain_id: u64,
+        chain_uid: B256,
+    ) -> anyhow::Result<Self> {
         let rpc = Self::build(urls, chain_id, Some(chain_uid), RPC_TIMEOUT)?;
         for i in 0..urls.len() {
             let pool = &rpc.pool;
-            timed(RPC_TIMEOUT, async { pool.pool().admit(pool, i, None).await.map_err(|e| ChainError::Rpc(e.to_string())) })
-                .await
-                .map_err(|e| anyhow::anyhow!("rpc_urls[{i}]: chain identity: {e:?}"))?;
+            timed(RPC_TIMEOUT, async {
+                pool.pool()
+                    .admit(pool, i, None)
+                    .await
+                    .map_err(|e| ChainError::Rpc(e.to_string()))
+            })
+            .await
+            .map_err(|e| anyhow::anyhow!("rpc_urls[{i}]: chain identity: {e:?}"))?;
         }
         Ok(rpc)
     }
 
     /// As [`Rpc::connect`], each read under `timeout` (the tests' short one).
-    pub async fn connect_within(urls: &[String], chain_id: u64, timeout: Duration) -> anyhow::Result<Self> {
+    pub async fn connect_within(
+        urls: &[String],
+        chain_id: u64,
+        timeout: Duration,
+    ) -> anyhow::Result<Self> {
         let Self { pool, timeout } = Self::build(urls, chain_id, None, timeout)?;
         for i in 0..urls.len() {
             let p = pool.endpoint(i, None);
-            let id = timed(timeout, async { p.get_chain_id().await.map_err(|e| ChainError::Rpc(e.to_string())) })
-                .await
-                .map_err(|e| anyhow::anyhow!("rpc_urls[{i}]: eth_chainId: {e:?}"))?;
-            anyhow::ensure!(id == chain_id, "rpc_urls[{i}] answers chain {id}, the config pins {chain_id}");
+            let id = timed(timeout, async {
+                p.get_chain_id()
+                    .await
+                    .map_err(|e| ChainError::Rpc(e.to_string()))
+            })
+            .await
+            .map_err(|e| anyhow::anyhow!("rpc_urls[{i}]: eth_chainId: {e:?}"))?;
+            anyhow::ensure!(
+                id == chain_id,
+                "rpc_urls[{i}] answers chain {id}, the config pins {chain_id}"
+            );
         }
         Ok(Self { pool, timeout })
     }
 
-    fn build(urls: &[String], chain_id: u64, chain_uid: Option<B256>, timeout: Duration) -> anyhow::Result<Self> {
-        let ms = u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX).max(1);
-        let endpoints = urls.iter().enumerate()
+    fn build(
+        urls: &[String],
+        chain_id: u64,
+        chain_uid: Option<B256>,
+        timeout: Duration,
+    ) -> anyhow::Result<Self> {
+        let ms = u64::try_from(timeout.as_millis())
+            .unwrap_or(u64::MAX)
+            .max(1);
+        let endpoints = urls
+            .iter()
+            .enumerate()
             .map(|(i, u)| Endpoint::named(u).map_err(|e| anyhow::anyhow!("rpc_urls[{i}]: {e}")))
             .collect::<anyhow::Result<Vec<_>>>()?;
-        let list = NodeList::new(endpoints, Policy::Failover, ms, ms, scaas_rpc::endpoint::READ_TIMEOUT_MS)
+        let list = NodeList::new(
+            endpoints,
+            Policy::Failover,
+            ms,
+            ms,
+            scaas_rpc::endpoint::READ_TIMEOUT_MS,
+        )
+        .map_err(|e| anyhow::anyhow!("rpc_urls: {e}"))?;
+        let pool = EvmPool::connect(list, chain_id, chain_uid)
             .map_err(|e| anyhow::anyhow!("rpc_urls: {e}"))?;
-        let pool = EvmPool::connect(list, chain_id, chain_uid).map_err(|e| anyhow::anyhow!("rpc_urls: {e}"))?;
         Ok(Self { pool, timeout })
     }
 
@@ -122,7 +172,9 @@ impl Rpc {
 /// pruned state, a rate limit, a node's own timeout) and no answer are the node's, so the request fails over.
 fn classify(e: TransportError) -> ChainError {
     match scaas_rpc::evm::classify(&e) {
-        scaas_rpc::evm::SimError::Revert(_) => ChainError::Revert(scaas_rpc::evm::revert_data(&e).unwrap_or_default()),
+        scaas_rpc::evm::SimError::Revert(_) => {
+            ChainError::Revert(scaas_rpc::evm::revert_data(&e).unwrap_or_default())
+        }
         scaas_rpc::evm::SimError::Transport(_) => ChainError::Rpc(e.to_string()),
     }
 }
@@ -134,29 +186,59 @@ impl Chain for Rpc {
     }
 
     async fn head(&self, node: usize) -> Result<u64, ChainError> {
-        timed(self.timeout, async { self.node(node).get_block_number().await.map_err(|e| ChainError::Rpc(e.to_string())) }).await
+        timed(self.timeout, async {
+            self.node(node)
+                .get_block_number()
+                .await
+                .map_err(|e| ChainError::Rpc(e.to_string()))
+        })
+        .await
     }
 
     async fn header(&self, node: usize, number: u64) -> Result<B256, ChainError> {
         let f = async {
-            let b = self.node(node).get_block_by_number(number.into()).await.map_err(|e| ChainError::Rpc(e.to_string()))?
+            let b = self
+                .node(node)
+                .get_block_by_number(number.into())
+                .await
+                .map_err(|e| ChainError::Rpc(e.to_string()))?
                 .ok_or_else(|| ChainError::Rpc(format!("no block {number}")))?;
             if b.header.number != number {
-                return Err(ChainError::Rpc(format!("asked block {number}, answered {}", b.header.number)));
+                return Err(ChainError::Rpc(format!(
+                    "asked block {number}, answered {}",
+                    b.header.number
+                )));
             }
             Ok(b.header.hash)
         };
         timed(self.timeout, f).await
     }
 
-    async fn call(&self, node: usize, block: Block, to: Address, data: Bytes) -> Result<Bytes, ChainError> {
+    async fn call(
+        &self,
+        node: usize,
+        block: Block,
+        to: Address,
+        data: Bytes,
+    ) -> Result<Bytes, ChainError> {
         let tx = TransactionRequest::default().with_to(to).with_input(data);
-        timed(self.timeout, async { self.node(node).call(tx).block(block.id()).await.map_err(classify) }).await
+        timed(self.timeout, async {
+            self.node(node)
+                .call(tx)
+                .block(block.id())
+                .await
+                .map_err(classify)
+        })
+        .await
     }
 
     async fn code(&self, node: usize, block: Block, at: Address) -> Result<Bytes, ChainError> {
         let f = async {
-            self.node(node).get_code_at(at).block_id(block.id()).await.map_err(|e| ChainError::Rpc(e.to_string()))
+            self.node(node)
+                .get_code_at(at)
+                .block_id(block.id())
+                .await
+                .map_err(|e| ChainError::Rpc(e.to_string()))
         };
         timed(self.timeout, f).await
     }

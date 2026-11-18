@@ -119,17 +119,43 @@ pub fn enc_split(
 /// The opening's encapsulation coins (K3-6): `m ‖ e`.
 pub fn coins(seed_leg: &[u8; 32], role: Role, kem_pk: &[u8]) -> [u8; 64] {
     let mut c = [0u8; 64];
-    shake(&[b"SCAAS-PQZ-OPEN-COINS-V1", seed_leg, &[role as u8], &keccak(&[kem_pk])], &mut c);
+    shake(
+        &[
+            b"SCAAS-PQZ-OPEN-COINS-V1",
+            seed_leg,
+            &[role as u8],
+            &keccak(&[kem_pk]),
+        ],
+        &mut c,
+    );
     c
 }
 
 /// The opening KEM seed (K3-6b): `token` `None` for offchain-shared, `Some` for offchain-token with the opening on.
-pub fn open_kem_seed(bip39_seed: &[u8; 64], ua: &[u8; 32], chain_uid: &[u8; 32], token: Option<&[u8; 20]>, v: u64) -> [u8; 96] {
-    let label: &[u8] = if token.is_some() { b"scaas.kem.pqz-opening-token.1" } else { b"scaas.kem.pqz-opening.1" };
+pub fn open_kem_seed(
+    bip39_seed: &[u8; 64],
+    ua: &[u8; 32],
+    chain_uid: &[u8; 32],
+    token: Option<&[u8; 20]>,
+    v: u64,
+) -> [u8; 96] {
+    let label: &[u8] = if token.is_some() {
+        b"scaas.kem.pqz-opening-token.1"
+    } else {
+        b"scaas.kem.pqz-opening.1"
+    };
     let mut okm = [0u8; 96];
-    let info = [label, ua, chain_uid, token.map_or(&[][..], |t| &t[..]), &v.to_be_bytes()];
+    let info = [
+        label,
+        ua,
+        chain_uid,
+        token.map_or(&[][..], |t| &t[..]),
+        &v.to_be_bytes(),
+    ];
     // 96 <= 255 * 32: never fails
-    Hkdf::<Sha256>::new(Some(b"scaas.ua.kem.v1"), bip39_seed).expand_multi_info(&info, &mut okm).expect("HKDF length");
+    Hkdf::<Sha256>::new(Some(b"scaas.ua.kem.v1"), bip39_seed)
+        .expand_multi_info(&info, &mut okm)
+        .expect("HKDF length");
     okm
 }
 
@@ -160,7 +186,9 @@ fn combine(ss_m: &[u8], ss_x: &[u8; 32], e: &[u8; 32], pk_x: &[u8]) -> [u8; 32] 
 
 fn kek(ss: &[u8; 32]) -> [u8; 32] {
     let mut k = [0u8; 32];
-    Hkdf::<Sha256>::new(None, ss).expand(b"PQZ/opening/kek/v1", &mut k).expect("HKDF length");
+    Hkdf::<Sha256>::new(None, ss)
+        .expand(b"PQZ/opening/kek/v1", &mut k)
+        .expect("HKDF length");
     k
 }
 
@@ -192,7 +220,10 @@ pub struct Credit<'a> {
 pub fn pack(lanes: &[u8]) -> Vec<u8> {
     let b = 64 - (crate::stmt::Q - 1).leading_zeros() as usize;
     let n = lanes.len() / 8;
-    assert!(lanes.len() == 8 * n && (n * b) % 8 == 0, "pack: whole lanes and bytes");
+    assert!(
+        lanes.len() == 8 * n && (n * b) % 8 == 0,
+        "pack: whole lanes and bytes"
+    );
     let mut out = Vec::with_capacity(n * b / 8);
     let (mut acc, mut bits) = (0u128, 0usize);
     for i in 0..n {
@@ -212,7 +243,14 @@ pub fn pack(lanes: &[u8]) -> Vec<u8> {
 /// stored form ([`pack`]) the reader finds in the op blob, with the reader's `ua`, `keyVersion` and `v`.
 pub fn aad(c: &Credit, p: &Party) -> Vec<u8> {
     let h = keccak(&[&pack(&c.u[..]), &pack(&p.v[..])]);
-    [&c.chain_uid[..], c.token, p.ua, &p.key_version.to_be_bytes(), &h].concat()
+    [
+        &c.chain_uid[..],
+        c.token,
+        p.ua,
+        &p.key_version.to_be_bytes(),
+        &h,
+    ]
+    .concat()
 }
 
 /// The opening of `seed_leg` to `p` (K3-6), deterministic: `None` for a `kemPk` that is not scheme 1, not 1,601 bytes,
@@ -240,7 +278,13 @@ pub fn seal(role: Role, c: &Credit, p: &Party, seed_leg: &[u8; 32]) -> Option<Ve
         pl::clear(&mut ss_m);
         let mut k = kek(&ss);
         pl::clear(&mut ss);
-        let sealed = Aes256Gcm::new_from_slice(&k).expect("32-byte key").encrypt(Nonce::from_slice(&[0; 12]), Payload { msg: seed_leg, aad: &aad(c, p) });
+        let sealed = Aes256Gcm::new_from_slice(&k).expect("32-byte key").encrypt(
+            Nonce::from_slice(&[0; 12]),
+            Payload {
+                msg: seed_leg,
+                aad: &aad(c, p),
+            },
+        );
         pl::clear(&mut k);
         sealed.ok().map(|s| [&ct[..], &big_e, &s].concat())
     });
@@ -311,13 +355,19 @@ impl Sealer {
         }
         let mut seed_leg = leg_seed(seed_enc, c.to.ua, c.to.pk);
         // F-8: the seed must give the credit's u (K3-7 step 6), else the recipient skips the credit
-        let pks: Vec<&[u8; PK_BYTES]> = std::iter::once(c.to.pk).chain(c.auditor.map(|a| a.pk)).collect();
+        let pks: Vec<&[u8; PK_BYTES]> = std::iter::once(c.to.pk)
+            .chain(c.auditor.map(|a| a.pk))
+            .collect();
         let gives_u = pl::enc(&pks, &vec![[0u8; 16]; pks.len()], &seed_leg).is_some_and(|mut e| {
             let ok = e.u[..] == c.u[..];
             e.vs.iter_mut().for_each(|v| pl::clear(v)); // the credit's masks (U2-1)
             ok
         });
-        let out = if gives_u { seal(role, c, &p, &seed_leg) } else { None };
+        let out = if gives_u {
+            seal(role, c, &p, &seed_leg)
+        } else {
+            None
+        };
         pl::clear(&mut seed_leg);
         let out = out.ok_or(SealError::Refused)?;
         self.seen.insert(key, fp);
@@ -330,9 +380,27 @@ impl Sealer {
 /// P(v_f))`, `party(p) = ua ‖ be8(keyVersion) ‖ keccak256(pk) ‖ keccak256(kemPk) ‖ P(v)` (each reader's AAD inputs and
 /// its key). Both roles of one credit share it.
 fn credit_fingerprint(c: &Credit, own_u: &[u8; PK_BYTES], own_v: &[u8; 128]) -> [u8; 32] {
-    let party = |p: &Party| [&p.ua[..], &p.key_version.to_be_bytes(), &keccak(&[&p.pk[..]]), &keccak(&[p.kem_pk]), &pack(&p.v[..])].concat();
+    let party = |p: &Party| {
+        [
+            &p.ua[..],
+            &p.key_version.to_be_bytes(),
+            &keccak(&[&p.pk[..]]),
+            &keccak(&[p.kem_pk]),
+            &pack(&p.v[..]),
+        ]
+        .concat()
+    };
     let aud = c.auditor.map(|a| party(&a)).unwrap_or_default();
-    keccak(&[b"SCAAS-PQZ-SEAL-GUARD-V1", c.chain_uid, c.token, &pack(&c.u[..]), &party(&c.to), &aud, &pack(&own_u[..]), &pack(&own_v[..])])
+    keccak(&[
+        b"SCAAS-PQZ-SEAL-GUARD-V1",
+        c.chain_uid,
+        c.token,
+        &pack(&c.u[..]),
+        &party(&c.to),
+        &aud,
+        &pack(&own_u[..]),
+        &pack(&own_v[..]),
+    ])
 }
 
 /// K3-7 steps 3–4: decapsulate `p.opening` with the opening KEM seed and open the sealed seed.
@@ -357,7 +425,13 @@ fn open(seed: &[u8; 96], c: &Credit, p: &Party) -> Option<[u8; 32]> {
     pl::clear(&mut ss_x);
     let mut k = kek(&ss);
     pl::clear(&mut ss);
-    let pt = Aes256Gcm::new_from_slice(&k).expect("32-byte key").decrypt(Nonce::from_slice(&[0; 12]), Payload { msg: sealed, aad: &aad(c, p) });
+    let pt = Aes256Gcm::new_from_slice(&k).expect("32-byte key").decrypt(
+        Nonce::from_slice(&[0; 12]),
+        Payload {
+            msg: sealed,
+            aad: &aad(c, p),
+        },
+    );
     pl::clear(&mut k);
     let mut pt = pt.ok()?;
     let out = pt.as_slice().try_into().ok();
@@ -369,7 +443,8 @@ fn open(seed: &[u8; 96], c: &Credit, p: &Party) -> Option<[u8; 32]> {
 /// `v0` the zero-message encryption under the leg's randomness.
 fn digits(v: &[u8; 128], v0: &[u8; 128]) -> Option<[u8; 16]> {
     let (q, delta) = (crate::stmt::Q, crate::stmt::DELTA as u64);
-    let be = |b: &[u8], i: usize| u64::from_be_bytes(b[8 * i..8 * i + 8].try_into().expect("8 bytes"));
+    let be =
+        |b: &[u8], i: usize| u64::from_be_bytes(b[8 * i..8 * i + 8].try_into().expect("8 bytes"));
     let mut d = [0u8; 16];
     let mut ok = true;
     for i in 0..16 {
@@ -389,8 +464,13 @@ fn digits(v: &[u8; 128], v0: &[u8; 128]) -> Option<[u8; 16]> {
 
 /// Steps 5–9 on a known `seed_leg`: `(digits of v_t, digits of v_a, O_t good, O_a good)`; `None` when the expansion
 /// fails or its `P(u)` is not byte-equal to the stored `u` (step 6).
-fn verify_leg(c: &Credit, seed_leg: &[u8; 32]) -> Option<(Option<[u8; 16]>, Option<[u8; 16]>, bool, bool)> {
-    let pks: Vec<&[u8; PK_BYTES]> = std::iter::once(c.to.pk).chain(c.auditor.map(|a| a.pk)).collect();
+fn verify_leg(
+    c: &Credit,
+    seed_leg: &[u8; 32],
+) -> Option<(Option<[u8; 16]>, Option<[u8; 16]>, bool, bool)> {
+    let pks: Vec<&[u8; PK_BYTES]> = std::iter::once(c.to.pk)
+        .chain(c.auditor.map(|a| a.pk))
+        .collect();
     // step 5: the pinned sampler (resampled to the relation's norm bounds) with zero messages
     let mut exp = pl::enc(&pks, &vec![[0u8; 16]; pks.len()], seed_leg)?;
     // step 6: packed bytes, not values mod q
@@ -398,7 +478,10 @@ fn verify_leg(c: &Credit, seed_leg: &[u8; 32]) -> Option<(Option<[u8; 16]>, Opti
         let d_t = digits(c.to.v, &exp.vs[0]); // step 7
         let o_t = seal(Role::Recipient, c, &c.to, seed_leg).is_some_and(|o| o == c.to.opening); // step 8
         let (d_a, o_a) = match c.auditor {
-            Some(a) => (digits(a.v, &exp.vs[1]), seal(Role::Auditor, c, &a, seed_leg).is_some_and(|o| o == a.opening)),
+            Some(a) => (
+                digits(a.v, &exp.vs[1]),
+                seal(Role::Auditor, c, &a, seed_leg).is_some_and(|o| o == a.opening),
+            ),
             None => (None, true),
         };
         (d_t, d_a, o_t, o_a)
@@ -434,8 +517,12 @@ pub enum AuditorOutcome {
 
 /// K3-7 with the roles swapped, with the auditor's opening KEM seed: never applies `s`.
 pub fn check_auditor(open_kem_seed: &[u8; 96], c: &Credit) -> AuditorOutcome {
-    let Some(a) = c.auditor else { return AuditorOutcome::Unreadable };
-    let Some(mut seed_leg) = open(open_kem_seed, c, &a) else { return AuditorOutcome::Unreadable };
+    let Some(a) = c.auditor else {
+        return AuditorOutcome::Unreadable;
+    };
+    let Some(mut seed_leg) = open(open_kem_seed, c, &a) else {
+        return AuditorOutcome::Unreadable;
+    };
     let r = verify_leg(c, &seed_leg);
     pl::clear(&mut seed_leg);
     match r {

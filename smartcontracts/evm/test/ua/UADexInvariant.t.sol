@@ -38,9 +38,16 @@ contract UADexHandler is Test {
     uint256 public settled;
     uint256 public exchanged;
 
-    constructor(NormalToken a, NormalToken b, SCaaSDex d, UARegistry r, UARouter ro, bytes32[2] memory uas,
-        bytes[2] memory keys_, uint16[2] memory kinds_)
-    {
+    constructor(
+        NormalToken a,
+        NormalToken b,
+        SCaaSDex d,
+        UARegistry r,
+        UARouter ro,
+        bytes32[2] memory uas,
+        bytes[2] memory keys_,
+        uint16[2] memory kinds_
+    ) {
         (A, B, dex, reg, router) = (a, b, d, r, ro);
         ids = [bytes32(uint256(uint160(vm.addr(pks[0])))), bytes32(uint256(uint160(vm.addr(pks[1])))), uas[0], uas[1]];
         (keys, kinds) = (keys_, kinds_);
@@ -70,9 +77,16 @@ contract UADexHandler is Test {
         bytes32 mDest;
     }
 
-    function settle(uint256 ti, uint256 mi, bool aSells, uint256 amt, uint256 extra, uint256 fees, uint256 dest,
-        uint256 shapes) external
-    {
+    function settle(
+        uint256 ti,
+        uint256 mi,
+        bool aSells,
+        uint256 amt,
+        uint256 extra,
+        uint256 fees,
+        uint256 dest,
+        uint256 shapes
+    ) external {
         Plan memory p;
         (p.ti, p.mi) = (ti % 4, mi % 4);
         if (p.ti == p.mi) return;
@@ -115,8 +129,9 @@ contract UADexHandler is Test {
         p.legs[0] = DexLegs.exchange(l, amt, amt);
         ISCaaSDex.Interaction[] memory xs = new ISCaaSDex.Interaction[](2);
         xs[0] = ISCaaSDex.Interaction(address(A), abi.encodeCall(IERC20.approve, (address(router), amt)));
-        xs[1] = ISCaaSDex.Interaction(address(router),
-            abi.encodeCall(UARouter.swap, (address(A), address(B), amt, amt + surplus, address(dex))));
+        xs[1] = ISCaaSDex.Interaction(
+            address(router), abi.encodeCall(UARouter.swap, (address(A), address(B), amt, amt + surplus, address(dex)))
+        );
         int256[6][2] memory w = _snap();
         vm.prank(RELAYER);
         dex.mtxExchange(p, xs);
@@ -140,20 +155,35 @@ contract UADexHandler is Test {
 
     /// An order at 1:1 (`receiveAmount = amount`) on a fresh nonce.
     function _order(NormalToken recv, bytes32 from, bytes32 dest, uint256 amount, uint256 fee, uint8 flags)
-        internal returns (ITradeToken.UATradeOrder memory o)
+        internal
+        returns (ITradeToken.UATradeOrder memory o)
     {
         o = ITradeToken.UATradeOrder({
-            from: from, receiveToken: address(recv), amount: amount, receiveAmount: amount, minFill: 0, fee: fee,
-            relayer: RELAYER, dex: address(dex), destination: dest, flags: flags, batch: 1, nonce: ++nonce,
+            from: from,
+            receiveToken: address(recv),
+            amount: amount,
+            receiveAmount: amount,
+            minFill: 0,
+            fee: fee,
+            relayer: RELAYER,
+            dex: address(dex),
+            destination: dest,
+            flags: flags,
+            batch: 1,
+            nonce: ++nonce,
             validUntil: block.timestamp + 300
         });
     }
 
     /// Shape 1 as is; shape 0 the same fields as a `TradeOrder` (a native `from` and `destination`).
     function _leg(NormalToken sell, ITradeToken.UATradeOrder memory o, bool shape1, uint256 fill)
-        internal view returns (ISCaaSDex.DexLeg memory)
+        internal
+        view
+        returns (ISCaaSDex.DexLeg memory)
     {
-        if (shape1) return DexLegs.uaLeg(address(sell), o, UACall.auth(o.from, _sign(o.from, sell.tradeOrderDigest(o))), fill);
+        if (shape1) {
+            return DexLegs.uaLeg(address(sell), o, UACall.auth(o.from, _sign(o.from, sell.tradeOrderDigest(o))), fill);
+        }
         // the same 13 words: a native id is its address zero-padded
         ITradeToken.TradeOrder memory t = abi.decode(abi.encode(o), (ITradeToken.TradeOrder));
         return DexLegs.leg(address(sell), t, _sign(o.from, sell.tradeOrderDigest(DexLegs.ua(t))), fill);
@@ -176,7 +206,9 @@ contract UADexHandler is Test {
     function _snap() internal view returns (int256[6][2] memory s) {
         NormalToken[2] memory t = [A, B];
         for (uint256 k; k < 2; ++k) {
-            for (uint256 i; i < 4; ++i) s[k][i] = int256(t[k].balanceOfUA(ids[i]));
+            for (uint256 i; i < 4; ++i) {
+                s[k][i] = int256(t[k].balanceOfUA(ids[i]));
+            }
             s[k][4] = int256(t[k].balanceOf(RELAYER));
             s[k][5] = int256(t[k].balanceOf(TREASURY));
         }
@@ -184,7 +216,9 @@ contract UADexHandler is Test {
 
     function _idx(bytes32 dest, uint256 self) internal view returns (uint256) {
         if (dest == 0) return self;
-        for (uint256 i; i < 4; ++i) if (ids[i] == dest) return i;
+        for (uint256 i; i < 4; ++i) {
+            if (ids[i] == dest) return i;
+        }
         revert("dest");
     }
 
@@ -205,7 +239,11 @@ contract UADexHandler is Test {
 
     function _checkDeltas(int256[6][2] memory want) internal view {
         int256[6][2] memory got = _snap();
-        for (uint256 k; k < 2; ++k) for (uint256 i; i < 6; ++i) assertEq(got[k][i], want[k][i], "delta");
+        for (uint256 k; k < 2; ++k) {
+            for (uint256 i; i < 6; ++i) {
+                assertEq(got[k][i], want[k][i], "delta");
+            }
+        }
     }
 }
 
@@ -228,15 +266,25 @@ contract UADexInvariantTest is UADexBase {
         B.transferToUA(uaP, 100_000);
         B.transfer(address(router), 100_000);
         vm.stopPrank();
-        h = new UADexHandler(A, B, dex, lreg, router, [uaP, uaB], [_key(UAKinds.P256), _key(UAKinds.BIP340)],
-            [UAKinds.P256, UAKinds.BIP340]);
+        h = new UADexHandler(
+            A,
+            B,
+            dex,
+            lreg,
+            router,
+            [uaP, uaB],
+            [_key(UAKinds.P256), _key(UAKinds.BIP340)],
+            [UAKinds.P256, UAKinds.BIP340]
+        );
         targetContract(address(h));
     }
 
     function _check(NormalToken t) internal view {
         address[7] memory a = h.natives();
         uint256 sum;
-        for (uint256 i; i < a.length; ++i) sum += t.balanceOf(a[i]);
+        for (uint256 i; i < a.length; ++i) {
+            sum += t.balanceOf(a[i]);
+        }
         assertEq(t.totalSupply(), sum, "supply");
         (bytes32 p, bytes32 b) = h.uaIds();
         assertEq(t.balanceOf(POOL), t.balanceOfUA(p) + t.balanceOfUA(b), "pool");

@@ -35,12 +35,10 @@ library MultiSig {
     ///         thay vì trả 0, và cũng chặn `s` cao (EIP-2 malleability).
     ///      3. **Ngưỡng 0.** `threshold == 0` làm hàm luôn trả về true trên mảng rỗng.
     ///         Kiểm ở đây chứ không tin caller.
-    function requireQuorum(
-        address[] memory owners,
-        uint256 threshold,
-        bytes32 fullDigest,
-        bytes[] memory sigs
-    ) internal pure {
+    function requireQuorum(address[] memory owners, uint256 threshold, bytes32 fullDigest, bytes[] memory sigs)
+        internal
+        pure
+    {
         if (threshold == 0 || threshold > owners.length) {
             revert BadThreshold(threshold, owners.length);
         }
@@ -49,12 +47,14 @@ library MultiSig {
         address last = address(0);
         uint256 valid;
         for (uint256 i; i < sigs.length; ++i) {
-            address rec = ECDSA.recover(fullDigest, sigs[i]);   // revert nếu rác hoặc s cao
-            if (rec <= last) revert DuplicateOrUnsorted(rec);   // ép tăng dần ⇒ không trùng
+            address rec = ECDSA.recover(fullDigest, sigs[i]); // revert nếu rác hoặc s cao
+            if (rec <= last) revert DuplicateOrUnsorted(rec); // ép tăng dần ⇒ không trùng
             if (!_isOwner(owners, rec)) revert NotAnOwner(rec);
             last = rec;
-            unchecked { ++valid; }
-            if (valid == threshold) return;                     // đủ rồi thì dừng, khỏi tốn gas
+            unchecked {
+                ++valid;
+            }
+            if (valid == threshold) return; // đủ rồi thì dừng, khỏi tốn gas
         }
         revert ThresholdNotMet(valid, threshold);
     }
@@ -67,7 +67,8 @@ library MultiSig {
         uint256 hi = owners.length;
         while (lo < hi) {
             uint256 mid = (lo + hi) >> 1;
-            if (owners[mid] < a) lo = mid + 1; else hi = mid;
+            if (owners[mid] < a) lo = mid + 1;
+            else hi = mid;
         }
         return lo < owners.length && owners[lo] == a;
     }

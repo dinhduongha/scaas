@@ -596,7 +596,9 @@ func (k *Key) SignHederaTransaction(bodyBytes []byte) ([]byte, error) {
 }
 
 func (k *Key) text(f func(p unsafe.Pointer, o *C.char, n *C.size_t) C.ScaasUaStatus) (string, error) {
-	b, err := k.out(256, func(p unsafe.Pointer, o *C.uint8_t, n *C.size_t) C.ScaasUaStatus { return f(p, (*C.char)(unsafe.Pointer(o)), n) })
+	b, err := k.out(256, func(p unsafe.Pointer, o *C.uint8_t, n *C.size_t) C.ScaasUaStatus {
+		return f(p, (*C.char)(unsafe.Pointer(o)), n)
+	})
 	if err != nil {
 		return "", err
 	}
@@ -605,7 +607,9 @@ func (k *Key) text(f func(p unsafe.Pointer, o *C.char, n *C.size_t) C.ScaasUaSta
 
 // Address is a native key's address as its network prints it.
 func (k *Key) Address() (string, error) {
-	return k.text(func(p unsafe.Pointer, o *C.char, n *C.size_t) C.ScaasUaStatus { return C.scaas_ua_key_address(kp(p), o, n) })
+	return k.text(func(p unsafe.Pointer, o *C.char, n *C.size_t) C.ScaasUaStatus {
+		return C.scaas_ua_key_address(kp(p), o, n)
+	})
 }
 
 // SS58Address is a Polkadot key's SS58 address at prefix.

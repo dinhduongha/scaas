@@ -15,14 +15,22 @@ export PQZ_SET=n2048-kmax1024 # the C build below, pqzh-ligero's featureless bui
 X=$(pwd)/target/lh2 R=vectors/runs/$1-lh2.txt
 rm -rf "$X" && mkdir -p "$X/c" "$X/ligero" "$X/out" vectors/runs
 fail=0
-step() { name=$1; shift; echo "\$ $*"; "$@" || { echo "FAILED: $name (rc=$?)"; fail=1; }; }
+step() {
+    name=$1
+    shift
+    echo "\$ $*"
+    "$@" || {
+        echo "FAILED: $name (rc=$?)"
+        fail=1
+    }
+}
 {
-  step build-c sh -c "cd ../pqzl && PQZ_SET=n2048-kmax1024 ./build.sh native > /dev/null"
-  step dump-c sh -c "${CC:-clang} -std=gnu11 -O2 -I../pqzl/src -I../pqzl/build/include -o $X/dump_setup ../pqzh/xcheck/dump_setup.c ../pqzl/build/native/libpqz.a && $X/dump_setup $X/c txm"
-  step dump-ligero sh -c "cd ../pqzh/ligero && cargo run -j2 --release --offline --quiet --example dump_setup -- $X/ligero"
-  step lh2 cargo run -j2 --release --offline --quiet --no-default-features --features pqzl-rust,set-n2048-kmax1024,prove --example lh2 -- "$X/c" "$X/ligero" "$X/out"
-  step kat_multi python3 -I ../pqzh/xcheck/kat_multi.py "$X/out"
-  echo "lh2.sh $1: $([ $fail = 0 ] && echo ok || echo FAILED)"
-} > "$R" 2>&1
+    step build-c sh -c "cd ../pqzl && PQZ_SET=n2048-kmax1024 ./build.sh native > /dev/null"
+    step dump-c sh -c "${CC:-clang} -std=gnu11 -O2 -I../pqzl/src -I../pqzl/build/include -o $X/dump_setup ../pqzh/xcheck/dump_setup.c ../pqzl/build/native/libpqz.a && $X/dump_setup $X/c txm"
+    step dump-ligero sh -c "cd ../pqzh/ligero && cargo run -j2 --release --offline --quiet --example dump_setup -- $X/ligero"
+    step lh2 cargo run -j2 --release --offline --quiet --no-default-features --features pqzl-rust,set-n2048-kmax1024,prove --example lh2 -- "$X/c" "$X/ligero" "$X/out"
+    step kat_multi python3 -I ../pqzh/xcheck/kat_multi.py "$X/out"
+    echo "lh2.sh $1: $([ $fail = 0 ] && echo ok || echo FAILED)"
+} >"$R" 2>&1
 tail -1 "$R"
 exit $fail

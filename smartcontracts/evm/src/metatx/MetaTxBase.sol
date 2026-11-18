@@ -68,7 +68,11 @@ abstract contract MetaTxBaseCore is Context, SaltedEIP712Core {
     }
 
     /// @notice The allowlist (CTR-MTX-19). An override returns the base entry first, then its own.
-    function _mtxSelectorsBody() internal view virtual returns (bytes4[] memory selectors, uint8[] memory feeClass, uint8[] memory amountArg)
+    function _mtxSelectorsBody()
+        internal
+        view
+        virtual
+        returns (bytes4[] memory selectors, uint8[] memory feeClass, uint8[] memory amountArg)
     {
         selectors = new bytes4[](1);
         feeClass = new uint8[](1);
@@ -80,7 +84,9 @@ abstract contract MetaTxBaseCore is Context, SaltedEIP712Core {
     // ------------------------------------------------------------------ entry points
 
     /// @notice EIP-1776 alias of the address `mtxExecute` (CTR-MTX-17, R3: kept on tokens, `0x47aea5b5`); returns `true`.
-    function _executeMetaTransactionBody(MetaTxLib.MetaTransaction calldata m, bytes calldata signature) internal returns (bool)
+    function _executeMetaTransactionBody(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
+        internal
+        returns (bool)
     {
         _execute(m, signature);
         return true;
@@ -98,15 +104,21 @@ abstract contract MetaTxBaseCore is Context, SaltedEIP712Core {
 
     /// @dev Every generic entry (generic, alias, batch, the wallets' builders) goes through here.
     function _execute(MetaTxLib.MetaTransaction memory m, bytes calldata signature)
-        internal virtual returns (bytes memory)
+        internal
+        virtual
+        returns (bytes memory)
     {
-        return _run(m, _hashTypedDataV4(MtxPipelineLib._structHash(MetaTxLib.METATX_TYPEHASH, _envelopeOf(m))), signature);
+        return _run(
+            m, _hashTypedDataV4(MtxPipelineLib._structHash(MetaTxLib.METATX_TYPEHASH, _envelopeOf(m))), signature
+        );
     }
 
     /// @dev A named entry (TS-D14), `sel` a static-shape op: the same pipeline, lanes and self-call as `_execute`, over
     ///      the entry's own struct (`typehash`, `args` = the op's parameters as ABI words, also the call's arguments).
     function _named(bytes32 typehash, bytes4 sel, MetaTxLib.Envelope calldata e, bytes memory args, bytes calldata sig)
-        internal virtual returns (bytes memory)
+        internal
+        virtual
+        returns (bytes memory)
     {
         MetaTxLib.MetaTransaction memory m = _metaOf(e, abi.encodePacked(sel, args));
         return _run(m, _hashTypedDataV4(MtxPipelineLib._namedHash(typehash, _envelopeOf(m, 0), args)), sig);
@@ -114,14 +126,15 @@ abstract contract MetaTxBaseCore is Context, SaltedEIP712Core {
 
     /// @dev CTR-MTX-17 over the digest of the entry's struct.
     function _run(MetaTxLib.MetaTransaction memory m, bytes32 digest, bytes calldata signature)
-        internal returns (bytes memory ret)
+        internal
+        returns (bytes memory ret)
     {
         _checkEnvelope(MetaTxLib.pad(m.from), m.batch, m.nonce, m.validUntil, m.mode, m.relayer); // 1
-        _requireValidSignature(m.from, digest, signature);      // 2
-        uint256 basis = _checkCall(m.data, m.mode);             // 3
-        _useNonce(MetaTxLib.pad(m.from), m.batch);              // 4
+        _requireValidSignature(m.from, digest, signature); // 2
+        uint256 basis = _checkCall(m.data, m.mode); // 3
+        _useNonce(MetaTxLib.pad(m.from), m.batch); // 4
         ret = _selfCall(MetaTxLib.pad(m.from), m.data, _envelopeBinding(m)); // 5
-        uint256 fee = _chargeFee(m.from, basis, m);             // 6
+        uint256 fee = _chargeFee(m.from, basis, m); // 6
         emit IMetaTx.MetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, digest, _feeRecipientOf(m), fee); // 7
     }
 
@@ -129,7 +142,12 @@ abstract contract MetaTxBaseCore is Context, SaltedEIP712Core {
     ///      (`MetaTransaction`, `UAMetaTransaction`, `UAMetaTransfer`), `from` as an id. Not virtual: one lane, one
     ///      nonce sequence.
     function _checkEnvelope(
-        bytes32 from, uint256 batch, uint256 nonce, uint256 validUntil, uint32 mode, address relayer
+        bytes32 from,
+        uint256 batch,
+        uint256 nonce,
+        uint256 validUntil,
+        uint32 mode,
+        address relayer
     ) internal view {
         if (MtxPipelineLib._checkEnvelope(from, batch, nonce, validUntil, mode, relayer)) _selfSender();
     }
@@ -145,7 +163,9 @@ abstract contract MetaTxBaseCore is Context, SaltedEIP712Core {
 
     /// @dev `cancelNonce` and the signed `mtxCancelNonce` on ids: the lane's next nonce, returned.
     function _bumpNonce(bytes32 from, uint256 batch) internal returns (uint256 n) {
-        unchecked { n = ++MtxPipelineLib._mtxStorage().nonce[from][batch]; }
+        unchecked {
+            n = ++MtxPipelineLib._mtxStorage().nonce[from][batch];
+        }
     }
 
     /// @dev Step 3: shape, allowlist, fee class, `supportedModes()` (`MtxPipelineLib._checkCall`). Returns the fee basis.
@@ -165,18 +185,24 @@ abstract contract MetaTxBaseCore is Context, SaltedEIP712Core {
     }
 
     function _envelopeOf(MetaTxLib.MetaTransaction memory m, bytes32 dataHash)
-        internal pure returns (MtxPipelineLib.Envelope memory)
+        internal
+        pure
+        returns (MtxPipelineLib.Envelope memory)
     {
-        return MtxPipelineLib.Envelope(MetaTxLib.pad(m.from), dataHash, m.batch, m.nonce, m.validUntil, m.mode, m.relayer,
-            m.fee, m.feeRecipient);
+        return MtxPipelineLib.Envelope(
+            MetaTxLib.pad(m.from), dataHash, m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient
+        );
     }
 
     /// @dev The `MetaTransaction` a named entry runs as (the binding hooks and the fee read it).
     function _metaOf(MetaTxLib.Envelope calldata e, bytes memory data)
-        internal pure returns (MetaTxLib.MetaTransaction memory)
+        internal
+        pure
+        returns (MetaTxLib.MetaTransaction memory)
     {
-        return MetaTxLib.MetaTransaction(e.from, data, e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee,
-            e.feeRecipient);
+        return MetaTxLib.MetaTransaction(
+            e.from, data, e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient
+        );
     }
 
     /// @dev Step 5: store the ticket (and the envelope binding, when the contract has one), call self, clear the ticket;
@@ -190,12 +216,14 @@ abstract contract MetaTxBaseCore is Context, SaltedEIP712Core {
         _tstore(_BINDING, uint256(binding)); // C5-5: unconditional, so an item with binding 0 never reads the last one
         bool ok;
         (ok, ret) = address(this).call(data);
-        bool guarded = _tload(_TICKET) == 2;    // the target was `nonReentrant` and consumed the ticket
+        bool guarded = _tload(_TICKET) == 2; // the target was `nonReentrant` and consumed the ticket
         _tstore(_TICKET, 0);
         _tstore(_SENDER, 0);
         _tstore(_BINDING, 0);
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 0x20), mload(ret)) }
-        if (!guarded) revert IMetaTx.Reentrancy();      // fail closed: an allowlisted function must be `nonReentrant`
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 0x20), mload(ret)) }
+        }
+        if (!guarded) revert IMetaTx.Reentrancy(); // fail closed: an allowlisted function must be `nonReentrant`
     }
 
     // ------------------------------------------------------------------ hooks
@@ -316,11 +344,22 @@ abstract contract MetaTxBase is MetaTxBaseCore, IERC5267, IMetaTx {
         return _supportedModesBody();
     }
 
-    function mtxSelectors() public view virtual override returns (bytes4[] memory selectors, uint8[] memory feeClass, uint8[] memory amountArg) {
+    function mtxSelectors()
+        public
+        view
+        virtual
+        override
+        returns (bytes4[] memory selectors, uint8[] memory feeClass, uint8[] memory amountArg)
+    {
         return _mtxSelectorsBody();
     }
 
-    function executeMetaTransaction(MetaTxLib.MetaTransaction calldata m, bytes calldata signature) external override nonReentrant returns (bool) {
+    function executeMetaTransaction(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
+        external
+        override
+        nonReentrant
+        returns (bool)
+    {
         return _executeMetaTransactionBody(m, signature);
     }
 
@@ -328,10 +367,21 @@ abstract contract MetaTxBase is MetaTxBaseCore, IERC5267, IMetaTx {
         _cancelNonceBody(batch);
     }
 
-    function eip712Domain() public view virtual override returns (
-            bytes1 fields, string memory name, string memory version, uint256 chainId,
-            address verifyingContract, bytes32 salt, uint256[] memory extensions
-        ) {
+    function eip712Domain()
+        public
+        view
+        virtual
+        override
+        returns (
+            bytes1 fields,
+            string memory name,
+            string memory version,
+            uint256 chainId,
+            address verifyingContract,
+            bytes32 salt,
+            uint256[] memory extensions
+        )
+    {
         return _eip712DomainBody();
     }
 }

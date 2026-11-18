@@ -20,20 +20,20 @@
 # deploy.sh evm runs it after a remote deploy; matrix.sh as the group `verify` and after each remote group.
 # Rows: runs/…-step5b/verify-<target>.txt.
 set -eu
-command -v forge > /dev/null || PATH=$HOME/.foundry/bin:$PATH
+command -v forge >/dev/null || PATH=$HOME/.foundry/bin:$PATH
 tgt=${1:?target}
 shift
 if [ "${VERIFY:-}" = none ]; then
-  echo "[$tgt/verify] not verified: VERIFY=none (${VERIFY_REASON:?VERIFY=none needs VERIFY_REASON})"
-  exit 0
+    echo "[$tgt/verify] not verified: VERIFY=none (${VERIFY_REASON:?VERIFY=none needs VERIFY_REASON})"
+    exit 0
 fi
 # deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): DEPLOY_SET all (the default: every set of the
 # chain's book) or one label (vcheck.py reads that set's entries); an unknown label stops by name (DEPLOY_SET_UNKNOWN)
-[ "${DEPLOY_SET:-all}" = all ] || python3 -I script/deploybook.py set-check "$DEPLOY_SET" > /dev/null || exit 1
-python3 -I script/onchain/vcheck.py "$tgt" --config  # VERIFY_NOT_CONFIGURED: exit 1
+[ "${DEPLOY_SET:-all}" = all ] || python3 -I script/deploybook.py set-check "$DEPLOY_SET" >/dev/null || exit 1
+python3 -I script/onchain/vcheck.py "$tgt" --config # VERIFY_NOT_CONFIGURED: exit 1
 export FOUNDRY_PROFILE=${FOUNDRY_PROFILE:-scaas-testnet}
 CAPPED=$(git rev-parse --show-toplevel)/scripts/capped
-bash ../../scripts/evm_libs.sh check > /dev/null
+bash ../../scripts/evm_libs.sh check >/dev/null
 # the SCaaS testnet's contracts by the commit whose sources built them: 6df89135, the T66b Step 5 deploy, PqChat and the
 # tokens harness; 11349728, the dex group's harness (OnchainRouter, OnchainExecutor: Dex.s.sol changed after its run);
 # bf6f3d04, the PQZ e2e GovernanceRouter of the 2026-11-04 reset; HEAD for what is deployed next
@@ -41,21 +41,24 @@ revs=HEAD
 [ "$tgt" != scaas-testnet ] || revs="HEAD 6df89135 11349728 bf6f3d04"
 roots=
 for r in ${*:-${VERIFY_REVS:-$revs}}; do
-  k=$(git ls-tree -r "$r" -- src script test foundry.toml | grep -E '\.(sol|toml)$' | git hash-object --stdin | cut -c1-12)
-  d=cache/verify-src/$k
-  if [ ! -f "$d/.built" ]; then
-    echo "[$tgt/verify] snapshot $r ($k): compile (scripts/capped) …"
-    rm -rf "$d"
-    mkdir -p "$d"
-    git -C ../.. archive "$(git rev-parse "$r^{commit}"):smartcontracts/evm" foundry.toml src script test | tar -x -C "$d"
-    cp -a lib "$d/lib"
-    # shellcheck disable=SC2046
-    (cd "$d" && CAPPED_SLOTS=3 "$CAPPED" forge build $(find src script -name '*.sol') test/helpers/Mocks.sol test/p6f/PqzPrecompileProbe.sol \
-      > build.log 2>&1) || { echo "[$tgt/verify] FAIL snapshot $r: forge build ($d/build.log)"; exit 1; }
-    touch "$d/.built"
-    echo "[$tgt/verify] snapshot $r ($k): $(grep -E '^Compiling' "$d/build.log" || echo compiled)"
-  fi
-  roots="$roots --root $d"
+    k=$(git ls-tree -r "$r" -- src script test foundry.toml | grep -E '\.(sol|toml)$' | git hash-object --stdin | cut -c1-12)
+    d=cache/verify-src/$k
+    if [ ! -f "$d/.built" ]; then
+        echo "[$tgt/verify] snapshot $r ($k): compile (scripts/capped) …"
+        rm -rf "$d"
+        mkdir -p "$d"
+        git -C ../.. archive "$(git rev-parse "$r^{commit}"):smartcontracts/evm" foundry.toml src script test | tar -x -C "$d"
+        cp -a lib "$d/lib"
+        # shellcheck disable=SC2046
+        (cd "$d" && CAPPED_SLOTS=3 "$CAPPED" forge build $(find src script -name '*.sol') test/helpers/Mocks.sol test/p6f/PqzPrecompileProbe.sol \
+            >build.log 2>&1) || {
+            echo "[$tgt/verify] FAIL snapshot $r: forge build ($d/build.log)"
+            exit 1
+        }
+        touch "$d/.built"
+        echo "[$tgt/verify] snapshot $r ($k): $(grep -E '^Compiling' "$d/build.log" || echo compiled)"
+    fi
+    roots="$roots --root $d"
 done
 fix=--fix
 [ "${VERIFY_MODE:-fix}" = fix ] || fix=

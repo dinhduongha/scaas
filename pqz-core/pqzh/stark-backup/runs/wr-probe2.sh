@@ -4,7 +4,7 @@
 set -eu
 cd "$(dirname "$0")/wr-probe"
 export CARGO_TARGET_DIR="$PWD/../../target"
-cargo build --release --offline >> ../wr-probe-build.txt 2>&1
-WR_LEVEL=debug $CARGO_TARGET_DIR/release/wr-probe tx > ../wr-tx2.jsonl 2> ../wr-tx2-debug-spans.txt
-python3 ../wr-spans.py ../wr-tx2-debug-spans.txt > ../wr-tx2-debug-summary.txt && rm ../wr-tx2-debug-spans.txt  # 255 MB raw
+cargo build --release --offline >>../wr-probe-build.txt 2>&1
+WR_LEVEL=debug $CARGO_TARGET_DIR/release/wr-probe tx >../wr-tx2.jsonl 2>../wr-tx2-debug-spans.txt
+python3 ../wr-spans.py ../wr-tx2-debug-spans.txt >../wr-tx2-debug-summary.txt && rm ../wr-tx2-debug-spans.txt # 255 MB raw
 echo done

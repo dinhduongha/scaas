@@ -40,6 +40,22 @@ interface IConfidentialToken {
     /// @notice A rollover; Zether: `rolled` = `accSeq`, `accUnits` and `accHash` 0.
     event RolledOver(bytes32 indexed ua, uint64 rolled, uint32 accUnits, bytes32 accHash);
 
+    // ------------------------------------------------------------------ the auditor's replacement (bit 32, CTR-GOV-31)
+
+    /// @notice The holder of bit 32 withdrew its own proposal by proposing the current auditor (set-auditor spec §5.1);
+    ///         `epoch` the one the proposal would have given.
+    event AuditorProposalCancelled(uint32 epoch);
+
+    /// @notice A confirm before the proposal's `eta` (set-auditor spec §5.1; a relayer queues it).
+    error AuditorNotReady(uint64 eta);
+    /// @notice Another value than the live proposal's, or the current auditor's (one proposal at a time).
+    error AuditorPending();
+    /// @notice A proposal of the current auditor with no live proposal to cancel.
+    error AuditorSame();
+    /// @notice The call names another epoch than the one the new auditor takes (`auditorEpoch + 1`).
+    error AuditorEpochMismatch(uint32 expected, uint32 got);
+    // `auditorState()` is each layer's (`IZetherToken`, `IPqzToken`): this interface's id stays `mtxShield`'s selector.
+
     /// @notice Moves `amount · shieldScale` public units of the signer (a derived UA signer: its UA-ledger balance) to
     ///         `SHIELD_POOL` and credits `amount` to `toUA`; no proof. (Group 3g: the rollovers take each layer's parameters,
     ///         `IZetherToken.mtxRollOver(ua, n)`, `IPqzToken.mtxRollOver(ua, keyVersion, n)`; the PQZ layer emits

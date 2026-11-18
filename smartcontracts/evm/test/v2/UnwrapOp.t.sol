@@ -8,8 +8,13 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {V2Fixture} from "./helpers/V2Fixture.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
-import {BlacklistERC20, SenderPaysFeeERC20, HookERC20, ITokensReceived, RateAdminForwarder}
-    from "./helpers/V2Mocks.sol";
+import {
+    BlacklistERC20,
+    SenderPaysFeeERC20,
+    HookERC20,
+    ITokensReceived,
+    RateAdminForwarder
+} from "./helpers/V2Mocks.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
@@ -29,7 +34,9 @@ contract HookRecipient is ITokensReceived {
     uint256 public seenFeeBalance;
     bool public reenterGuarded;
 
-    constructor(WrappedToken w_) { w = w_; }
+    constructor(WrappedToken w_) {
+        w = w_;
+    }
 
     function arm(address who, uint256 batch, address feeTo, bool guarded) external {
         watched = who;
@@ -78,7 +85,9 @@ contract UnwrapOpTest is V2Fixture {
 
     /// Gasless single-asset unwrap on lane 9.
     function _op(uint256 wrapped, address recipient, uint256 minOut)
-        internal view returns (MetaTxLib.MetaTransaction memory m)
+        internal
+        view
+        returns (MetaTxLib.MetaTransaction memory m)
     {
         m = _call(alice, abi.encodeWithSignature("unwrap(uint256,address,uint256)", wrapped, recipient, minOut), 9, RR);
     }
@@ -134,8 +143,9 @@ contract UnwrapOpTest is V2Fixture {
         m.mode = RR | RF | PCT;
         m.fee = 10_000;
         m.feeRecipient = feeTaker;
-        _runRevert(address(q), m,
-            abi.encodeWithSelector(IERC20Errors.ERC20InsufficientBalance.selector, alice, 0, bal / 100));
+        _runRevert(
+            address(q), m, abi.encodeWithSelector(IERC20Errors.ERC20InsufficientBalance.selector, alice, 0, bal / 100)
+        );
         assertEq(q.balanceOf(alice), bal);
         (,, uint256 reserveAfter,,) = q.legOf(address(usdc));
         assertEq(reserveAfter, reserve);
@@ -143,25 +153,40 @@ contract UnwrapOpTest is V2Fixture {
     }
 
     function test_innerRefusalsBubble() public {
-        _runRevert(address(t), _op(10e6, address(0), 0),
-            abi.encodeWithSelector(IWrappedToken.UnwrapRecipientInvalid.selector, address(0)));
-        _runRevert(address(t), _op(10e6, address(t), 0),
-            abi.encodeWithSelector(IWrappedToken.UnwrapRecipientInvalid.selector, address(t)));
-        _runRevert(address(t), _op(10e6, shop, 10e6 + 1),
-            abi.encodeWithSelector(IWrappedToken.UnwrapBelowMin.selector, 10e6, 10e6 + 1));
+        _runRevert(
+            address(t),
+            _op(10e6, address(0), 0),
+            abi.encodeWithSelector(IWrappedToken.UnwrapRecipientInvalid.selector, address(0))
+        );
+        _runRevert(
+            address(t),
+            _op(10e6, address(t), 0),
+            abi.encodeWithSelector(IWrappedToken.UnwrapRecipientInvalid.selector, address(t))
+        );
+        _runRevert(
+            address(t),
+            _op(10e6, shop, 10e6 + 1),
+            abi.encodeWithSelector(IWrappedToken.UnwrapBelowMin.selector, 10e6, 10e6 + 1)
+        );
         _runRevert(address(t), _op(0, shop, 0), abi.encodeWithSelector(IWrappedToken.UnwrapTooSmall.selector));
-        _runRevert(address(t), _op(2_000e6, shop, 0),
-            abi.encodeWithSelector(IWrappedToken.InsufficientReserve.selector, address(usdc), 2_000e6, 1_000e6));
+        _runRevert(
+            address(t),
+            _op(2_000e6, shop, 0),
+            abi.encodeWithSelector(IWrappedToken.InsufficientReserve.selector, address(usdc), 2_000e6, 1_000e6)
+        );
         // Multi: an underlying that is not a leg
         address[] memory us = new address[](2);
         (us[0], us[1]) = (address(usdc), address(new MockERC20("Tether", "USDT", 6)));
         uint256[] memory ones = new uint256[](2);
         (ones[0], ones[1]) = (1, 1);
         WrappedToken mu = _multi(us, ones, ones, _fixedRate(), address(0));
-        bytes memory d = abi.encodeWithSignature(
-            "unwrap(address,uint256,address,uint256)", address(0x1234), 10e6, shop, 0);
-        _runRevert(address(mu), _call(alice, d, 9, RR),
-            abi.encodeWithSelector(IWrappedToken.UnknownUnderlying.selector, address(0x1234)));
+        bytes memory d =
+            abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(0x1234), 10e6, shop, 0);
+        _runRevert(
+            address(mu),
+            _call(alice, d, 9, RR),
+            abi.encodeWithSelector(IWrappedToken.UnknownUnderlying.selector, address(0x1234))
+        );
     }
 
     /// R132 không áp cho unwrap: không có người được trả.
@@ -194,8 +219,11 @@ contract UnwrapOpTest is V2Fixture {
         sp.mint(alice, 1 ether); // the sender-side fee of the wrap itself
         _wrapFor(b, MockERC20(address(sp)), alice, 100 ether);
         sp.mint(address(b), 1 ether);
-        _runRevert(address(b), _op(10 ether, shop, 0), abi.encodeWithSelector(
-            IWrappedToken.UnderlyingTransferMismatch.selector, address(sp), 10 ether, 10.1 ether));
+        _runRevert(
+            address(b),
+            _op(10 ether, shop, 0),
+            abi.encodeWithSelector(IWrappedToken.UnderlyingTransferMismatch.selector, address(sp), 10 ether, 10.1 ether)
+        );
     }
 
     /// Hook ERC-777 giữa unwrap: nonce đã ghi (bước 4), đã đốt, CHƯA thu phí (phí sau lời gọi); hàm không guard
@@ -246,7 +274,10 @@ contract UnwrapOpTest is V2Fixture {
         RateAdminForwarder adm = new RateAdminForwarder();
         WrappedToken a = _single(address(usdc), 6, 1, 1, _adjustable(address(adm)));
         _wrapFor(a, usdc, alice, 100);
-        adm.exec(address(a), abi.encodeCall(WrappedToken.proposeRate, (address(usdc), 101, 100, EnvKit.codeUidOf(address(a)))));
+        adm.exec(
+            address(a),
+            abi.encodeCall(WrappedToken.proposeRate, (address(usdc), 101, 100, EnvKit.codeUidOf(address(a))))
+        );
         _run(address(a), _op(50, shop, 50));
         assertEq(usdc.balanceOf(shop), 50);
         vm.warp(block.timestamp + 7 days);
@@ -259,10 +290,16 @@ contract UnwrapOpTest is V2Fixture {
     /// No named unwrap any more (R10): both selectors hit no function and revert empty.
     function test_oldUnwrapEntryPointsAreGone() public {
         bytes4[2] memory sels = [
-            bytes4(keccak256(
-                "mtxUnwrap(address,address,uint256,address,uint256,uint256,uint256,uint256,uint32,address,bytes)")),
-            bytes4(keccak256(
-                "mtxUnwrapWithFee(address,address,uint256,address,uint256,uint256,uint256,uint256,uint32,address,uint256,address,bytes)"))
+            bytes4(
+                keccak256(
+                    "mtxUnwrap(address,address,uint256,address,uint256,uint256,uint256,uint256,uint32,address,bytes)"
+                )
+            ),
+            bytes4(
+                keccak256(
+                    "mtxUnwrapWithFee(address,address,uint256,address,uint256,uint256,uint256,uint256,uint32,address,uint256,address,bytes)"
+                )
+            )
         ];
         for (uint256 i; i < 2; ++i) {
             vm.prank(relayer);

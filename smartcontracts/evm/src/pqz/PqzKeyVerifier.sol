@@ -65,7 +65,9 @@ contract PqzKeyVerifier is IUAPopVerifier {
 
     /// @dev `u8(3) ‖ be32(STMT_REGISTER) ‖ opTag ‖ psid ‖ message ‖ pk ‖ proof`; true only on exactly the word 1.
     function _call(address pqz, bytes32 psid, bytes memory pk, bytes32 message, bytes memory proof)
-        private view returns (bool ok)
+        private
+        view
+        returns (bool ok)
     {
         bytes memory input = abi.encodePacked(OP_REGISTER, STMT_REGISTER, OP_TAG_REGISTER, psid, message, pk, proof);
         assembly ("memory-safe") {

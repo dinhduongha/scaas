@@ -34,7 +34,9 @@ contract SupplyCapsKind3Test is ZetherFixture {
 
     function setUp() public {
         _stack();
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode);
+        Catalogue.release(
+            factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode
+        );
         _users();
     }
 
@@ -44,8 +46,9 @@ contract SupplyCapsKind3Test is ZetherFixture {
         c.maxWrapSupply = 10 * SCALE;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
-        WrappedZetherToken w =
-            WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "c3")));
+        WrappedZetherToken w = WrappedZetherToken(
+            payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "c3"))
+        );
         usd.mint(address(this), 100 * SCALE);
         usd.approve(address(w), type(uint256).max);
         bytes32 to = ZetherTypes.UA.unwrap(alice.ua);
@@ -67,13 +70,16 @@ contract SupplyCapsKind3HybridTest is ZetherFixture {
 
     function setUp() public {
         _stack();
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode);
+        Catalogue.release(
+            factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode
+        );
         _users();
     }
 
     function test_kind3_hybridSetMaxSupplyAndViews() public {
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
-        (c.features, c.admin, c.lockedFeatures) = (1 | (uint256(1) << GovernanceBits.MINTABLE) | SCA_BIT, nid(address(this)), 0);
+        (c.features, c.admin, c.lockedFeatures) =
+        (1 | (uint256(1) << GovernanceBits.MINTABLE) | SCA_BIT, nid(address(this)), 0);
         (c.maxSupply, c.maxWrapSupply) = (1000 * SCALE, 100 * SCALE);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
@@ -176,7 +182,9 @@ contract SupplyCapsKind9HybridTest is RegFixture {
 }
 
 contract SupplyCapsKind11Test is ZetherRegFixture {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 
     function test_kind11_capCounterSetter() public {
         IFactoryToken.TokenConfig memory c = _regCfg(false, uint256(1) << 40);
@@ -203,7 +211,9 @@ contract SupplyCapsKind11Test is ZetherRegFixture {
 }
 
 contract SupplyCapsKind13Test is PqzRegFixture {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 
     /// Controller 2026-11-15 (Fable F-5): the regulated PQZ path's own unshield-unwrap (its hooks) leaves the counter by all of
     /// `amount · shieldScale`, as on kind 5; a pure wrap's counter stays its supply.

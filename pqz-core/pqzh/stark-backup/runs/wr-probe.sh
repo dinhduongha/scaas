@@ -5,10 +5,10 @@
 set -eu
 cd "$(dirname "$0")/wr-probe"
 export CARGO_TARGET_DIR="$PWD/../../target"
-cargo build --release --offline > ../wr-probe-build.txt 2>&1
+cargo build --release --offline >../wr-probe-build.txt 2>&1
 B=$CARGO_TARGET_DIR/release/wr-probe
-$B report > ../wr-report.txt
-/usr/bin/time -v $B tx > ../wr-tx.jsonl 2> ../wr-tx-spans.txt
-$B micro 22 1 24 60 > ../wr-micro.jsonl
-$B micro 21 24 >> ../wr-micro.jsonl
+$B report >../wr-report.txt
+/usr/bin/time -v $B tx >../wr-tx.jsonl 2>../wr-tx-spans.txt
+$B micro 22 1 24 60 >../wr-micro.jsonl
+$B micro 21 24 >>../wr-micro.jsonl
 echo done

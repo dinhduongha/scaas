@@ -29,7 +29,11 @@ abstract contract ERC20MetaTxWhole is ERC20MetaTx {
         return _cancelOrderDigestBody(o);
     }
 
-    function executeMetaTransaction(MetaTxLib.MetaTransaction calldata m, bytes calldata signature) external nonReentrant returns (bool _p0) {
+    function executeMetaTransaction(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
+        external
+        nonReentrant
+        returns (bool _p0)
+    {
         return _executeMetaTransactionBody(m, signature);
     }
 
@@ -41,19 +45,34 @@ abstract contract ERC20MetaTxWhole is ERC20MetaTx {
         return _minNonceBody(from, batch);
     }
 
-    function mtxBatch(MetaTxLib.UAMetaTransaction[] calldata ms, IUARegistry.UASig[] calldata auths) external nonReentrant returns (bool _p0) {
+    function mtxBatch(MetaTxLib.UAMetaTransaction[] calldata ms, IUARegistry.UASig[] calldata auths)
+        external
+        nonReentrant
+        returns (bool _p0)
+    {
         return _mtxBatchBody(ms, auths);
     }
 
-    function mtxBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata ts, IUARegistry.UASig[] calldata auths) external nonReentrant returns (bool _p0) {
+    function mtxBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata ts, IUARegistry.UASig[] calldata auths)
+        external
+        nonReentrant
+        returns (bool _p0)
+    {
         return _mtxBatchTransferBody(ts, auths);
     }
 
-    function mtxCancelNonce(MetaTxLib.UAEnvelope calldata e, uint256 lane, IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory _p0) {
+    function mtxCancelNonce(MetaTxLib.UAEnvelope calldata e, uint256 lane, IUARegistry.UASig calldata auth)
+        external
+        nonReentrant
+        returns (bytes memory _p0)
+    {
         return _mtxCancelNonceBody(e, lane, auth);
     }
 
-    function mtxCancelOrder(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata auth) external nonReentrant {
+    function mtxCancelOrder(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata auth)
+        external
+        nonReentrant
+    {
         _mtxCancelOrderBody(o, auth);
     }
 
@@ -61,19 +80,35 @@ abstract contract ERC20MetaTxWhole is ERC20MetaTx {
         return _mtxDigestBody(m);
     }
 
-    function mtxExecute(MetaTxLib.UAMetaTransaction calldata m, IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory _p0) {
+    function mtxExecute(MetaTxLib.UAMetaTransaction calldata m, IUARegistry.UASig calldata auth)
+        external
+        nonReentrant
+        returns (bytes memory _p0)
+    {
         return _mtxExecuteBody(m, auth);
     }
 
-    function mtxExecuteTransfer(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth) external nonReentrant returns (bool _p0) {
+    function mtxExecuteTransfer(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth)
+        external
+        nonReentrant
+        returns (bool _p0)
+    {
         return _mtxExecuteTransferBody(t, auth);
     }
 
-    function mtxInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, IUARegistry.UASig calldata auth) external nonReentrant {
+    function mtxInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, IUARegistry.UASig calldata auth)
+        external
+        nonReentrant
+    {
         _mtxInvalidateNoncesBody(from, batch, newMin, auth);
     }
 
-    function mtxLiquidityPull(ITradeToken.LiquidityOrder calldata o, IUARegistry.UASig calldata auth, uint256 amount, address submitter) external nonReentrant {
+    function mtxLiquidityPull(
+        ITradeToken.LiquidityOrder calldata o,
+        IUARegistry.UASig calldata auth,
+        uint256 amount,
+        address submitter
+    ) external nonReentrant {
         _mtxLiquidityPullBody(o, auth, amount, submitter);
     }
 
@@ -81,7 +116,11 @@ abstract contract ERC20MetaTxWhole is ERC20MetaTx {
         return _mtxNonceBody(from, batch);
     }
 
-    function mtxTrade(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata auth, ITradeToken.TradeFill calldata f) external nonReentrant {
+    function mtxTrade(
+        ITradeToken.UATradeOrder calldata o,
+        IUARegistry.UASig calldata auth,
+        ITradeToken.TradeFill calldata f
+    ) external nonReentrant {
         _mtxTradeBody(o, auth, f);
     }
 

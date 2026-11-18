@@ -19,6 +19,7 @@ lacks: DEPLOY_SET_MISSING; a label that is not the deploy's MLDSA_PRECOMPILE: DE
   python3 -I script/deploybook.py set-check <label> [<MLDSA_PRECOMPILE>]   the label known (and the deploy's mode its own)
   python3 -I script/deploybook.py set-merge <book> <previous book | -> <label> <releases json>   the new set into the book
   python3 -I script/deploybook.py set-book <book> <label> <out>   header + that set's entries in <out> (a reader's book)"""
+
 import json
 import os
 import re
@@ -42,13 +43,17 @@ def resolve(chain_id, chain_uid, env=os.environ):
     for r in rows():
         if r["chainId"] == cid and r["chainUid"].lower() == uid:
             if dn and dn != r["key"]:
-                raise BookError(f"DEPLOY_NAME_MISMATCH: DEPLOY_NAME={dn}, but this chain is {r['key']} in chain-uids.json")
+                raise BookError(
+                    f"DEPLOY_NAME_MISMATCH: DEPLOY_NAME={dn}, but this chain is {r['key']} in chain-uids.json"
+                )
             return r["key"], r["name"], r["network"]
         if dn == r["key"]:
             raise BookError(f"DEPLOY_NAME_TAKEN: {dn} names another chain in chain-uids.json")
     if not dn:
-        raise BookError(f"DEPLOY_NAME_REQUIRED: chain {cid} ({uid[:10]}…) is not in chain-uids.json; set "
-                        "DEPLOY_NAME=<name>-testnet or <name>-mainnet (NET-EVM-13)")
+        raise BookError(
+            f"DEPLOY_NAME_REQUIRED: chain {cid} ({uid[:10]}…) is not in chain-uids.json; set "
+            "DEPLOY_NAME=<name>-testnet or <name>-mainnet (NET-EVM-13)"
+        )
     if not re.fullmatch(r"[a-z0-9-]+-(mainnet|testnet)", dn):
         raise BookError(f"DEPLOY_NAME_INVALID: {dn!r} is not <name>-mainnet or <name>-testnet ([a-z0-9-])")
     return dn, dn, dn.rsplit("-", 1)[1]
@@ -76,8 +81,10 @@ def check(book, where):
     if miss:
         raise BookError(f"BOOK_HEADER_MISSING: {where} has no {', '.join(miss)} (a book from before NET-EVM-13)")
     if book["network"] != network_of(book["key"]):
-        raise BookError(f"BOOK_NETWORK_MISMATCH: {where}: network {book['network']!r}, key {book['key']} "
-                        f"({network_of(book['key'])})")
+        raise BookError(
+            f"BOOK_NETWORK_MISMATCH: {where}: network {book['network']!r}, key {book['key']} "
+            f"({network_of(book['key'])})"
+        )
     return book
 
 
@@ -92,8 +99,9 @@ def find(chain_id, chain_uid, suffix=".json", env=os.environ):
     key = resolve(chain_id, chain_uid, env)[0]
     new, old = f"deployments/{key}{suffix}", f"deployments/{int(chain_id)}{suffix}"
     if not os.path.exists(os.path.join(EVM, new)) and os.path.exists(os.path.join(EVM, old)):
-        raise BookError(f"BOOK_OLD_NAME: {old} is named by chain id; rename it to {new} and give it its header "
-                        "(NET-EVM-13)")
+        raise BookError(
+            f"BOOK_OLD_NAME: {old} is named by chain id; rename it to {new} and give it its header (NET-EVM-13)"
+        )
     return new
 
 
@@ -106,7 +114,9 @@ def set_label(label, mode=None):
     if label not in SETS:
         raise BookError(f"DEPLOY_SET_UNKNOWN: {label!r} is not a deploy set ({', '.join(SETS)})")
     if mode is not None and (mode or "on") != SETS[label]:
-        raise BookError(f"DEPLOY_SET_MISMATCH: set {label} is MLDSA_PRECOMPILE={SETS[label]}, the deploy's is {mode or 'on'}")
+        raise BookError(
+            f"DEPLOY_SET_MISMATCH: set {label} is MLDSA_PRECOMPILE={SETS[label]}, the deploy's is {mode or 'on'}"
+        )
     return label
 
 
@@ -119,8 +129,10 @@ def set_merge(new, prev, label, releases):
     if prev is not None:
         check(prev, "the previous book")
         if (prev["key"], prev["chainUid"]) != (new["key"], new["chainUid"]):
-            raise BookError(f"BOOK_SET_CHAIN: the previous book is {prev['key']} {prev['chainUid'][:10]}…, the new "
-                            f"{new['key']} {new['chainUid'][:10]}…")
+            raise BookError(
+                f"BOOK_SET_CHAIN: the previous book is {prev['key']} {prev['chainUid'][:10]}…, the new "
+                f"{new['key']} {new['chainUid'][:10]}…"
+            )
         sets = dict(prev.get("sets") or {})
     body = {k: v for k, v in new.items() if k not in HEADER and k not in ("sets", "default_set")}
     sets[label] = dict(body, set=label, releases_json=releases)
@@ -137,7 +149,9 @@ def set_book(book, label):
     set_label(label)
     check(book, "the book")
     if label not in (book.get("sets") or {}):
-        raise BookError(f"DEPLOY_SET_MISSING: the book has no set {label} (sets: {', '.join(book.get('sets') or {}) or 'none'})")
+        raise BookError(
+            f"DEPLOY_SET_MISSING: the book has no set {label} (sets: {', '.join(book.get('sets') or {}) or 'none'})"
+        )
     out = {k: book[k] for k in HEADER}
     out.update(book["sets"][label])
     return out

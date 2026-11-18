@@ -13,8 +13,9 @@ library PayMetaKit {
 
     /// `metaPayId(m)` under `scaas.pay.meta.v3` (plan T83: `payNo` a `bytes32`, `save` committed).
     function id(MetaTxLib.PayMeta memory m) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked("scaas.pay.meta.v3", m.salt,
-            keccak256(abi.encode(m.payNo, m.save, m.schema, m.body))));
+        return keccak256(
+            abi.encodePacked("scaas.pay.meta.v3", m.salt, keccak256(abi.encode(m.payNo, m.save, m.schema, m.body)))
+        );
     }
 
     /// A `PayMeta` that stores its record: `meta(seed)` with `payNo` and `save` set.

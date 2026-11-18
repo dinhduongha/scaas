@@ -1,194 +1,370 @@
 // UA-Soroban T4 (spec §2, §10): src/soroban.js against the Soroban cross vector of the node adapter and token, and
 // smartcontracts/soroban/vectors/ua-ops.json (the generator reproduces it; every digest is rebuilt from the args' XDR;
 // every auth verifies under its kind with the verifiers of test/ua-verify.js); derived ids are URNs, never strkeys.
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import * as ua from '../src/ua.js';
-import * as sor from '../src/soroban.js';
-import { sha256, concatBytes, hex } from '../src/bytes.js';
-import { be } from '../src/metaop.js';
-import { strkey } from '../src/seed.js';
-import { uaOpsJson, OUT } from '../scripts/soroban-ua-ops-vectors.mjs';
-import { B, sigOk, msigOk } from './ua-verify.js';
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import * as ua from "../src/ua.js";
+import * as sor from "../src/soroban.js";
+import { sha256, concatBytes, hex } from "../src/bytes.js";
+import { be } from "../src/metaop.js";
+import { strkey } from "../src/seed.js";
+import { uaOpsJson, OUT } from "../scripts/soroban-ua-ops-vectors.mjs";
+import { B, sigOk, msigOk } from "./ua-verify.js";
 
 const h = (b) => hex(b).slice(2);
 
-test('soroban op digest: the token cross vector reproduced', () => {
-  const rs = readFileSync(new URL('../../../scaas-node/src/adapters/soroban.rs', import.meta.url), 'utf8');
+test("soroban op digest: the token cross vector reproduced", () => {
+  const rs = readFileSync(new URL("../../../scaas-node/src/adapters/soroban.rs", import.meta.url), "utf8");
   const PREIMAGE = /const PREIMAGE: &str = "([0-9a-f]+)";/.exec(rs)[1];
-  const net = sor.networkId('Standalone Network ; February 2017');
-  const contract = sor.addr('CARCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEVQO');
-  const args = [sor.addr('GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6'),
-    sor.addr('GAZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTHCM6'), sor.i128(12_345),
-    sor.bytesN(new Uint8Array(32).fill(0x11)), sor.u64(1_800_000_300)];
+  const net = sor.networkId("Standalone Network ; February 2017");
+  const contract = sor.addr("CARCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEVQO");
+  const args = [
+    sor.addr("GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6"),
+    sor.addr("GAZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTHCM6"),
+    sor.i128(12_345),
+    sor.bytesN(new Uint8Array(32).fill(0x11)),
+    sor.u64(1_800_000_300),
+  ];
   // HashIdPreimage::SorobanAuthorization { network_id, nonce 42, expiration 1000, ContractFn(contract, "pay", args), [] }:
   // the XDR bodies are the ScVal encodings without their type word (and, for the args VecM, without the Option word).
-  const pre = concatBytes(be(9, 4), net, be(42, 8), be(1000, 4), be(0, 4), sor.scvalXdr(contract).subarray(4),
-    sor.scvalXdr(sor.sym('pay')).subarray(4), sor.scvalXdr(sor.vec(args)).subarray(8), be(0, 4));
+  const pre = concatBytes(
+    be(9, 4),
+    net,
+    be(42, 8),
+    be(1000, 4),
+    be(0, 4),
+    sor.scvalXdr(contract).subarray(4),
+    sor.scvalXdr(sor.sym("pay")).subarray(4),
+    sor.scvalXdr(sor.vec(args)).subarray(8),
+    be(0, 4),
+  );
   assert.equal(h(pre), PREIMAGE);
   // a job's named payload rebuilds the same bytes, as the node does
   const typed = (type, value) => ({ type, value });
-  const invocation = { contract: 'CARCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEVQO', function: 'pay', sub_invocations: [], args: [
-    typed('Address', 'GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6'), typed('Address', 'GAZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTHCM6'),
-    typed('i128', '12345'), typed('Bytes', hex(new Uint8Array(32).fill(0x11))), typed('u64', 1_800_000_300)] };
+  const invocation = {
+    contract: "CARCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEVQO",
+    function: "pay",
+    sub_invocations: [],
+    args: [
+      typed("Address", "GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6"),
+      typed("Address", "GAZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTHCM6"),
+      typed("i128", "12345"),
+      typed("Bytes", hex(new Uint8Array(32).fill(0x11))),
+      typed("u64", 1_800_000_300),
+    ],
+  };
   assert.equal(h(sor.authPreimage({ networkId: net, nonce: 42, expiry: 1000, invocation })), PREIMAGE);
-  assert.equal(h(sor.authDigest({ networkId: net, nonce: 42, expiry: 1000, invocation })), '0a2127bfdc94f6062f0ec27f6db966ae719dafaca90bc537666eab606b901103');
+  assert.equal(
+    h(sor.authDigest({ networkId: net, nonce: 42, expiry: 1000, invocation })),
+    "0a2127bfdc94f6062f0ec27f6db966ae719dafaca90bc537666eab606b901103",
+  );
   const digests = [];
-  const job = sor.signedAuth({ networkId: net, nonce: -1, expiry: 1000, invocation, from: 'GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6',
-    sign: (d) => { digests.push(h(d)); return new Uint8Array(64).fill(0xab); } });
-  assert.deepEqual(job, { payload: { nonce: '-1', expiry: 1000, invocation }, from: 'GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6', signature: `0x${'ab'.repeat(64)}` });
-  assert.deepEqual(digests, [h(sor.authDigest({ networkId: net, ...job.payload }))], 'the signature is over the bytes the named payload rebuilds');
-  const under = { ...invocation, sub_invocations: [{ ...invocation, function: 'relay', args: [] }] };
-  assert.ok(h(sor.authPreimage({ networkId: net, nonce: -1, expiry: 1, invocation: under })).includes('000000057265' + '6c6179'), 'a sub-invocation');
+  const job = sor.signedAuth({
+    networkId: net,
+    nonce: -1,
+    expiry: 1000,
+    invocation,
+    from: "GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6",
+    sign: (d) => {
+      digests.push(h(d));
+      return new Uint8Array(64).fill(0xab);
+    },
+  });
+  assert.deepEqual(job, {
+    payload: { nonce: "-1", expiry: 1000, invocation },
+    from: "GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6",
+    signature: `0x${"ab".repeat(64)}`,
+  });
+  assert.deepEqual(
+    digests,
+    [h(sor.authDigest({ networkId: net, ...job.payload }))],
+    "the signature is over the bytes the named payload rebuilds",
+  );
+  const under = { ...invocation, sub_invocations: [{ ...invocation, function: "relay", args: [] }] };
+  assert.ok(
+    h(sor.authPreimage({ networkId: net, nonce: -1, expiry: 1, invocation: under })).includes(
+      "000000057265" + "6c6179",
+    ),
+    "a sub-invocation",
+  );
   // the node's table of every other type, against its XDR
-  for (const r of JSON.parse(/const TYPED_KAT: &str = r#"(\[[\s\S]*?\])"#;/.exec(rs)[1])) assert.equal(h(sor.jobValue(r).xdr), r.xdr, r.type);
-  assert.equal(h(sha256(pre)), '0a2127bfdc94f6062f0ec27f6db966ae719dafaca90bc537666eab606b901103');
-  const d = sor.opDigest({ networkId: net, contract: 'CARCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEVQO', fn: 'pay', args });
-  assert.equal(h(d), '0bb4e9123b86f99303e03cfd8aacb1eecd3b8ccb10d572907e1228a715369b00'); // token VEC_DIGEST, ua-common
+  for (const r of JSON.parse(/const TYPED_KAT: &str = r#"(\[[\s\S]*?\])"#;/.exec(rs)[1]))
+    assert.equal(h(sor.jobValue(r).xdr), r.xdr, r.type);
+  assert.equal(h(sha256(pre)), "0a2127bfdc94f6062f0ec27f6db966ae719dafaca90bc537666eab606b901103");
+  const d = sor.opDigest({
+    networkId: net,
+    contract: "CARCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEVQO",
+    fn: "pay",
+    args,
+  });
+  assert.equal(h(d), "0bb4e9123b86f99303e03cfd8aacb1eecd3b8ccb10d572907e1228a715369b00"); // token VEC_DIGEST, ua-common
   // ScVal edges: i128 two's complement, Option, a struct's keys sorted, a Holder variant.
-  assert.equal(h(sor.scvalXdr(sor.i128(-1))), `0000000a${'ff'.repeat(16)}`);
-  assert.equal(h(sor.scvalXdr(sor.none())), '00000001');
-  assert.equal(h(sor.scvalXdr(sor.struct({ b: sor.u32(2), a: sor.bool(true) }))),
-    '000000110000000100000002' + '0000000f0000000161000000' + '0000000000000001' + '0000000f0000000162000000' + '0000000300000002');
-  assert.equal(h(sor.scvalXdr(sor.holderUa(new Uint8Array(32).fill(7)))),
-    `000000100000000100000002${'0000000f000000025561' + '0000'}0000000d00000020${'07'.repeat(32)}`);
+  assert.equal(h(sor.scvalXdr(sor.i128(-1))), `0000000a${"ff".repeat(16)}`);
+  assert.equal(h(sor.scvalXdr(sor.none())), "00000001");
+  assert.equal(
+    h(sor.scvalXdr(sor.struct({ b: sor.u32(2), a: sor.bool(true) }))),
+    "000000110000000100000002" +
+      "0000000f0000000161000000" +
+      "0000000000000001" +
+      "0000000f0000000162000000" +
+      "0000000300000002",
+  );
+  assert.equal(
+    h(sor.scvalXdr(sor.holderUa(new Uint8Array(32).fill(7)))),
+    `000000100000000100000002${"0000000f000000025561" + "0000"}0000000d00000020${"07".repeat(32)}`,
+  );
   assert.throws(() => sor.u32(2 ** 32), RangeError);
-  assert.throws(() => sor.addr('GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ7'), /strkey/);
+  assert.throws(() => sor.addr("GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ7"), /strkey/);
 });
 
-const TEXT = readFileSync(OUT, 'utf8');
+const TEXT = readFileSync(OUT, "utf8");
 const V = JSON.parse(TEXT);
 
-test('soroban ua-ops.json reproduced byte for byte', () => {
+test("soroban ua-ops.json reproduced byte for byte", () => {
   assert.equal(uaOpsJson(), TEXT);
   assert.equal(V.network.networkId, hex(sor.networkId(V.network.passphrase)));
-  assert.deepEqual(V.entries.map((e) => e.name), ['ua_transfer', 'ua_pay', 'ua_pay_meta', 'ua_burn', 'ua_cancel_nonce',
-    'ua_order', 'ua_cancel', 'ua_relay', 'ua_pay_lane', 'mtx_mandate_pay', 'mtx_set_mandate', 'mtx_set_payee', 'mtx_revoke', 'mtx_withdraw']);
+  assert.deepEqual(
+    V.entries.map((e) => e.name),
+    [
+      "ua_transfer",
+      "ua_pay",
+      "ua_pay_meta",
+      "ua_burn",
+      "ua_cancel_nonce",
+      "ua_order",
+      "ua_cancel",
+      "ua_relay",
+      "ua_pay_lane",
+      "mtx_mandate_pay",
+      "mtx_set_mandate",
+      "mtx_set_payee",
+      "mtx_revoke",
+      "mtx_withdraw",
+    ],
+  );
   for (const e of V.entries) {
-    assert.deepEqual(e.perKind.map((p) => p.kind), ['webauthn-p256', 'p256', 'ed25519', 'secp256k1', 'mldsa44', 'mldsa65', 'msig'], e.name);
+    assert.deepEqual(
+      e.perKind.map((p) => p.kind),
+      ["webauthn-p256", "p256", "ed25519", "secp256k1", "mldsa44", "mldsa65", "msig"],
+      e.name,
+    );
   }
   // the e2e signer (SOR-D13) signs as the vectors do
-  const e = V.entries.find((x) => x.name === 'ua_cancel_nonce');
-  for (const [kind, index] of [['mldsa65', '2'], ['msig', '0'], ['webauthn-p256', '0']]) {
+  const e = V.entries.find((x) => x.name === "ua_cancel_nonce");
+  for (const [kind, index] of [
+    ["mldsa65", "2"],
+    ["msig", "0"],
+    ["webauthn-p256", "0"],
+  ]) {
     const p = e.perKind.find((x) => x.kind === kind);
-    const out = execFileSync(process.execPath, [fileURLToPath(new URL('../scripts/soroban-sign.mjs', import.meta.url)),
-      kind, index, p.digest, e.purpose], { encoding: 'utf8' });
+    const out = execFileSync(
+      process.execPath,
+      [fileURLToPath(new URL("../scripts/soroban-sign.mjs", import.meta.url)), kind, index, p.digest, e.purpose],
+      { encoding: "utf8" },
+    );
     const r = V.registrations.find((x) => x.ua === p.ua);
     const { sig, ...signed } = JSON.parse(out);
     assert.deepEqual(signed, { ua: p.ua, keyData: r.keyData, auth: p.auth, authXdr: p.authXdr }, kind);
     // the job's named `UaSig` is the entry's XDR, field for field
     const slots = sig.members.map((m) => ({ index: m.index, keyData: m.key_data, sig: m.sig }));
     assert.equal(hex(sor.uaSig({ signature: sig.signature, members: slots }).xdr), p.authXdr, kind);
-    assert.equal(sig.key_data, '0x', kind);
+    assert.equal(sig.key_data, "0x", kind);
   }
 });
 
-test('soroban ua-ops: every auth verifies under its kind', () => {
+test("soroban ua-ops: every auth verifies under its kind", () => {
   const reg = (id) => V.registrations.find((r) => r.ua === id) ?? assert.fail(`no registration of ${id}`);
   const keyOf = (id) => reg(id).keyData;
   // registrations: portable pops (no network, no registry)
   for (const r of V.registrations) {
     assert.equal(hex(ua.uaOf(r.kind, B(r.keyData))), r.ua, r.name);
     const m = ua.holderPopMessage(r.kind, { ua: B(r.ua), keyData: B(r.keyData) });
-    assert.ok(r.kind === 0x0120 ? r.pop === '0x' && !ua.msigPqzEligible(B(r.keyData)) : sigOk(r.kind, r.keyData, hex(m.message), r.pop), r.name);
+    assert.ok(
+      r.kind === 0x0120
+        ? r.pop === "0x" && !ua.msigPqzEligible(B(r.keyData))
+        : sigOk(r.kind, r.keyData, hex(m.message), r.pop),
+      r.name,
+    );
   }
   // an msig accepts before it signs (CTR-UA-37): every slot's row by its member, over the typed digest of this ua and member
   const ms = V.registrations.find((r) => r.kind === 0x0120);
-  assert.deepEqual(ms.memberships.map((x) => x.member), ms.members.map((x) => x.id));
+  assert.deepEqual(
+    ms.memberships.map((x) => x.member),
+    ms.members.map((x) => x.id),
+  );
   for (const x of ms.memberships) {
     const r = ua.membershipMessage({ ua: B(ms.ua), member: B(x.member) });
     assert.equal(x.digest, hex(r.digest));
     assert.equal(x.memberDigest, hex(r.memberDigest));
     const kind = ms.members[x.index].kind;
-    assert.ok(sigOk(kind, keyOf(x.member), hex(ua.uaMessage(kind, ua.purposeTag('member'), B(x.memberDigest))), x.sig), x.member);
+    assert.ok(
+      sigOk(kind, keyOf(x.member), hex(ua.uaMessage(kind, ua.purposeTag("member"), B(x.memberDigest))), x.sig),
+      x.member,
+    );
   }
   for (const e of V.entries) {
     assert.equal(e.purposeTag, hex(ua.purposeTag(e.purpose)), e.name);
     for (const p of e.perKind) {
       const what = `${e.name} ${p.kind}`;
       const r = reg(p.ua);
-      const d = sor.opDigest({ networkId: B(V.network.networkId), contract: e.contract, fn: e.fn,
-        args: p.args.map((a) => ({ xdr: B(a.xdr) })) });
+      const d = sor.opDigest({
+        networkId: B(V.network.networkId),
+        contract: e.contract,
+        fn: e.fn,
+        args: p.args.map((a) => ({ xdr: B(a.xdr) })),
+      });
       assert.equal(hex(d), p.digest, what);
       const msg = ua.uaMessage(r.kind, B(e.purposeTag), d);
       assert.equal(hex(msg), p.uaMsg, what);
-      assert.ok(r.kind === 0x0120 ? msigOk(r, hex(ua.memberDigest(B(r.ua), msg)), p.auth, keyOf) : sigOk(r.kind, r.keyData, p.uaMsg, p.auth), what);
+      assert.ok(
+        r.kind === 0x0120
+          ? msigOk(r, hex(ua.memberDigest(B(r.ua), msg)), p.auth, keyOf)
+          : sigOk(r.kind, r.keyData, p.uaMsg, p.auth),
+        what,
+      );
       // the signature is bound to this digest: another entry's message fails
       const other = ua.uaMessage(r.kind, B(e.purposeTag), sha256(d));
-      assert.equal(r.kind === 0x0120 ? msigOk(r, hex(ua.memberDigest(B(r.ua), other)), p.auth, keyOf) : sigOk(r.kind, r.keyData, hex(other), p.auth), false, what);
+      assert.equal(
+        r.kind === 0x0120
+          ? msigOk(r, hex(ua.memberDigest(B(r.ua), other)), p.auth, keyOf)
+          : sigOk(r.kind, r.keyData, hex(other), p.auth),
+        false,
+        what,
+      );
       // a UA argument is the signer's own id (from / ua / order.maker), never another's
-      if (['ua_transfer', 'ua_pay', 'ua_pay_meta', 'ua_burn', 'ua_cancel_nonce', 'ua_relay', 'ua_pay_lane'].includes(e.name)) {
+      if (
+        ["ua_transfer", "ua_pay", "ua_pay_meta", "ua_burn", "ua_cancel_nonce", "ua_relay", "ua_pay_lane"].includes(
+          e.name,
+        )
+      ) {
         assert.equal(p.args[0].xdr, hex(sor.scvalXdr(sor.bytesN(B(p.ua)))), what);
       }
     }
   }
   // ua_pay_lane: Some(lane) is the address itself, and the digest differs from the same op with None
-  const bound = V.entries.find((e) => e.name === 'ua_pay_lane').perKind[0];
-  assert.deepEqual(bound.args.at(-1), { name: 'relayer', type: 'Option<Address>', xdr: hex(sor.scvalXdr(sor.addr('GCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIQAN7'))) });
-  assert.notEqual(hex(sor.opDigest({ networkId: B(V.network.networkId), contract: V.contracts.token, fn: 'ua_pay',
-    args: [...bound.args.slice(0, -1).map((x) => ({ xdr: B(x.xdr) })), sor.none()] })), bound.digest);
+  const bound = V.entries.find((e) => e.name === "ua_pay_lane").perKind[0];
+  assert.deepEqual(bound.args.at(-1), {
+    name: "relayer",
+    type: "Option<Address>",
+    xdr: hex(sor.scvalXdr(sor.addr("GCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIQAN7"))),
+  });
+  assert.notEqual(
+    hex(
+      sor.opDigest({
+        networkId: B(V.network.networkId),
+        contract: V.contracts.token,
+        fn: "ua_pay",
+        args: [...bound.args.slice(0, -1).map((x) => ({ xdr: B(x.xdr) })), sor.none()],
+      }),
+    ),
+    bound.digest,
+  );
   // ua_relay: the inner ua_pay's pay_ref is the router's relay_ref, relayer = Some(router)
-  const relay = V.entries.find((e) => e.name === 'ua_relay');
+  const relay = V.entries.find((e) => e.name === "ua_relay");
   for (const p of relay.perKind) {
-    assert.equal(p.args.find((a) => a.name === 'pay_ref').xdr, hex(sor.scvalXdr(sor.bytesN(B(relay.relay.ref)))));
-    assert.equal(p.args.find((a) => a.name === 'relayer').xdr, hex(sor.scvalXdr(sor.addr(V.contracts.router))));
+    assert.equal(p.args.find((a) => a.name === "pay_ref").xdr, hex(sor.scvalXdr(sor.bytesN(B(relay.relay.ref)))));
+    assert.equal(p.args.find((a) => a.name === "relayer").xdr, hex(sor.scvalXdr(sor.addr(V.contracts.router))));
   }
 });
 
-test('accept_membership (CTR-UA-37): the op a node takes, a row unchanged, the G member\'s entry', () => {
-  const P = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/ua/portable.json', import.meta.url), 'utf8'));
+test("accept_membership (CTR-UA-37): the op a node takes, a row unchanged, the G member's entry", () => {
+  const P = JSON.parse(
+    readFileSync(new URL("../../../smartcontracts/vectors/ua/portable.json", import.meta.url), "utf8"),
+  );
   const registry = V.contracts.token;
   const row = P.memberships[0];
-  const op = sor.acceptMembershipOp({ registry, ua: B(row.ua), index: row.index, sig: B(row.sig), validUntil: 1_800_000_300 });
-  assert.deepEqual(op, { contract: registry, function: 'accept_membership', valid_until: 1_800_000_300,
-    args: { ua: row.ua, member_sig: { index: row.index, key_data: '0x', sig: row.sig }, relayer: null } });
-  assert.deepEqual(sor.jobValue({ type: 'MemberSig', value: op.args.member_sig }).xdr,
-    sor.struct({ index: sor.u32(row.index), key_data: sor.bytes(new Uint8Array(0)), sig: sor.bytes(B(row.sig)) }).xdr);
-  const g = 'GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6';
+  const op = sor.acceptMembershipOp({
+    registry,
+    ua: B(row.ua),
+    index: row.index,
+    sig: B(row.sig),
+    validUntil: 1_800_000_300,
+  });
+  assert.deepEqual(op, {
+    contract: registry,
+    function: "accept_membership",
+    valid_until: 1_800_000_300,
+    args: { ua: row.ua, member_sig: { index: row.index, key_data: "0x", sig: row.sig }, relayer: null },
+  });
+  assert.deepEqual(
+    sor.jobValue({ type: "MemberSig", value: op.args.member_sig }).xdr,
+    sor.struct({ index: sor.u32(row.index), key_data: sor.bytes(new Uint8Array(0)), sig: sor.bytes(B(row.sig)) }).xdr,
+  );
+  const g = "GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6";
   const member = sor.decodeStrkey(g).payload;
   const invocation = sor.membershipInvocation({ registry, ua: B(row.ua), member });
   const typed = ua.membershipMessage({ ua: B(row.ua), member }).digest;
-  assert.deepEqual(invocation.args.map((a) => a.value), [row.ua, P.tags.PURPOSE_MEMBERSHIP.hash, hex(typed)]);
+  assert.deepEqual(
+    invocation.args.map((a) => a.value),
+    [row.ua, P.tags.PURPOSE_MEMBERSHIP.hash, hex(typed)],
+  );
   const net = sor.networkId(V.network.passphrase);
-  const auth = [sor.signedAuth({ networkId: net, nonce: 7, expiry: 100, invocation, from: g, sign: () => new Uint8Array(64) })];
+  const auth = [
+    sor.signedAuth({ networkId: net, nonce: 7, expiry: 100, invocation, from: g, sign: () => new Uint8Array(64) }),
+  ];
   const signed = sor.acceptMembershipOp({ registry, ua: B(row.ua), index: 2, relayer: g, validUntil: 1, auth });
   assert.deepEqual(signed.auth, auth);
-  assert.deepEqual([signed.args.member_sig.sig, signed.args.relayer], ['0x', g]);
+  assert.deepEqual([signed.args.member_sig.sig, signed.args.relayer], ["0x", g]);
 });
 
-test('soroban URN: derived ids never as strkey; a native send to a URN is refused', () => {
+test("soroban URN: derived ids never as strkey; a native send to a URN is refused", () => {
   for (const r of V.registrations) {
     const urn = sor.uaUrn(r.kind, B(r.ua));
     assert.match(urn, /^urn:scaas:ua:v1:[a-z0-9-]+:[0-9a-f]{64}$/);
     assert.deepEqual(sor.parseRecipient(urn), { ua: B(r.ua), kind: r.kind });
-    assert.throws(() => sor.assertNativeRecipient(urn), (e) => e instanceof ua.UAError && e.code === 'UaNotNative', r.name);
+    assert.throws(
+      () => sor.assertNativeRecipient(urn),
+      (e) => e instanceof ua.UAError && e.code === "UaNotNative",
+      r.name,
+    );
   }
   // native ids keep their strkeys; a native kind has no URN
-  const g = 'GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6';
+  const g = "GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6";
   assert.equal(sor.assertNativeRecipient(g), g);
   assert.equal(sor.assertNativeRecipient(V.contracts.token), V.contracts.token);
-  assert.throws(() => sor.uaUrn(0x0011, sor.decodeStrkey(g).payload), (e) => e.code === 'UAKindNotDerived');
-  assert.throws(() => sor.parseRecipient('urn:scaas:ua:v1:stellar-account:' + '11'.repeat(32)), (e) => e.code === 'UAKindNotDerived');
-  assert.throws(() => sor.parseRecipient('0x' + '11'.repeat(32)), /strkey/);
+  assert.throws(
+    () => sor.uaUrn(0x0011, sor.decodeStrkey(g).payload),
+    (e) => e.code === "UAKindNotDerived",
+  );
+  assert.throws(
+    () => sor.parseRecipient("urn:scaas:ua:v1:stellar-account:" + "11".repeat(32)),
+    (e) => e.code === "UAKindNotDerived",
+  );
+  assert.throws(() => sor.parseRecipient("0x" + "11".repeat(32)), /strkey/);
   // the same 32 bytes as a strkey are a different (native) recipient: the URN is the only form a UA is shown in
   const id = B(V.registrations[0].ua);
   assert.deepEqual(sor.parseRecipient(strkey(6 << 3, id)), { addr: strkey(6 << 3, id) });
 });
 
-test('soroban URN: any-case urn:scaas:ua: prefix is a UA form, never a strkey (NET-SOR-17)', () => {
-  const id = 'ab'.repeat(32);
-  for (const t of [`URN:SCAAS:UA:v1:ed25519:${id}`, `Urn:Scaas:Ua:v1:ed25519:${id}`, `urn:scaas:ua:v1:ED25519:${id}`,
-    `urn:scaas:ua:v1:ed25519:${id.toUpperCase()}`]) {
-    assert.throws(() => sor.assertNativeRecipient(t), (e) => e instanceof ua.UAError && e.code === 'UaNotNative', t);
-    assert.throws(() => sor.parseRecipient(t), (e) => e instanceof ua.UAError && e.code === 'UAIdFormat', t);
+test("soroban URN: any-case urn:scaas:ua: prefix is a UA form, never a strkey (NET-SOR-17)", () => {
+  const id = "ab".repeat(32);
+  for (const t of [
+    `URN:SCAAS:UA:v1:ed25519:${id}`,
+    `Urn:Scaas:Ua:v1:ed25519:${id}`,
+    `urn:scaas:ua:v1:ED25519:${id}`,
+    `urn:scaas:ua:v1:ed25519:${id.toUpperCase()}`,
+  ]) {
+    assert.throws(
+      () => sor.assertNativeRecipient(t),
+      (e) => e instanceof ua.UAError && e.code === "UaNotNative",
+      t,
+    );
+    assert.throws(
+      () => sor.parseRecipient(t),
+      (e) => e instanceof ua.UAError && e.code === "UAIdFormat",
+      t,
+    );
   }
 });
 
-test('soroban msig: a soroban-contract (C…) member is refused when building (S10, owner ruling 2026-10-31)', () => {
+test("soroban msig: a soroban-contract (C…) member is refused when building (S10, owner ruling 2026-10-31)", () => {
   const m = (kind, b) => ({ kind, id: new Uint8Array(32).fill(b), weight: 1 });
-  assert.throws(() => sor.encodeMsig(1, [m(0x0102, 1), m(0x0012, 2)]), (e) => e instanceof ua.UAError && e.code === 'MemberUnknown');
+  assert.throws(
+    () => sor.encodeMsig(1, [m(0x0102, 1), m(0x0012, 2)]),
+    (e) => e instanceof ua.UAError && e.code === "MemberUnknown",
+  );
   assert.deepEqual(sor.encodeMsig(1, [m(0x0011, 1), m(0x0102, 2)]), ua.encodeMsig(1, [m(0x0011, 1), m(0x0102, 2)]));
 });

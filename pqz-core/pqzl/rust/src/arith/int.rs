@@ -10,8 +10,8 @@
 //! Constant time (review fix E, 2026-10-19; C the same): add / sub / redc / redp have no branch and no address on the
 //! operands' values (the prover runs them on secrets); the results are upstream's, bit for bit.
 use super::mpn;
-use crate::ct::mask;
 use super::ntt::{red128, Q};
+use crate::ct::mask;
 use crate::Error;
 use alloc::vec::Vec;
 
@@ -72,7 +72,11 @@ fn sub_flags(a: &[u64], b: &[u64]) -> (u64, u64) {
 impl Int {
     pub(crate) const fn new(n: usize) -> Int {
         assert!(n >= 1 && n <= MAXL);
-        Int { l: [0; MAXL], n, neg: 0 }
+        Int {
+            l: [0; MAXL],
+            n,
+            neg: 0,
+        }
     }
 
     /// a constant (params): `limbs.len()` limbs

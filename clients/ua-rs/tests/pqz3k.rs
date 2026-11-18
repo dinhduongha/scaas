@@ -10,7 +10,10 @@ use scaas_ua::{keccak256, pqz3k};
 use serde_json::Value;
 
 fn load(p: &str) -> Value {
-    let path = format!("{}/../../smartcontracts/vectors/{p}", env!("CARGO_MANIFEST_DIR"));
+    let path = format!(
+        "{}/../../smartcontracts/vectors/{p}",
+        env!("CARGO_MANIFEST_DIR")
+    );
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 fn b(v: &Value) -> Vec<u8> {
@@ -20,7 +23,8 @@ fn a<const N: usize>(v: &Value) -> [u8; N] {
     b(v).try_into().unwrap()
 }
 fn n(v: &Value) -> u64 {
-    v.as_u64().unwrap_or_else(|| v.as_str().unwrap().parse().unwrap())
+    v.as_u64()
+        .unwrap_or_else(|| v.as_str().unwrap().parse().unwrap())
 }
 
 /// BIP-39's seed: PBKDF2-HMAC-SHA512(mnemonic, "mnemonic", 2048), 64 bytes (one block), here for the KAT only.
@@ -55,14 +59,24 @@ fn raw_token_seed_and_memo_hash() {
     let seed = bip39_seed(k["mnemonic"].as_str().unwrap());
     for r in k["pqzScopedSeeds"].as_array().unwrap() {
         if let Some(t) = r.get("token").map(a::<20>) {
-            let got = pqz3k::pqz_token_key_seed_without_opening(&seed, 0, 0, &a(&r["chainUid"]), &t, n(&r["version"]));
+            let got = pqz3k::pqz_token_key_seed_without_opening(
+                &seed,
+                0,
+                0,
+                &a(&r["chainUid"]),
+                &t,
+                n(&r["version"]),
+            );
             assert_eq!(*got, a::<32>(&r["seed32"]));
         }
     }
     for r in k["memoHashOpening"].as_array().unwrap() {
         let os: Vec<Vec<u8>> = r["openings"].as_array().unwrap().iter().map(b).collect();
         let refs: Vec<&[u8]> = os.iter().map(|o| &o[..]).collect();
-        assert_eq!(pqz3k::opening_memo_hash(&b(&r["memo"]), &a(&r["ownTag"]), &refs), a::<32>(&r["memoHash"]));
+        assert_eq!(
+            pqz3k::opening_memo_hash(&b(&r["memo"]), &a(&r["ownTag"]), &refs),
+            a::<32>(&r["memoHash"])
+        );
     }
 }
 
@@ -71,7 +85,10 @@ fn raw_token_seed_and_memo_hash() {
 #[test]
 fn client_rows() {
     let k = load("ua/pqz3k_kat.json");
-    let l = pqz3k::Layout { pkp: n(&k["layout"]["pkp"]) as usize, vp: n(&k["layout"]["vp"]) as usize };
+    let l = pqz3k::Layout {
+        pkp: n(&k["layout"]["pkp"]) as usize,
+        vp: n(&k["layout"]["vp"]) as usize,
+    };
     assert_eq!(l, L);
     let code = b(&k["entries"]["code"]);
     let mut hs = vec![];
@@ -81,27 +98,77 @@ fn client_rows() {
         assert_eq!(h, a::<32>(&r["h"]), "{}", r["what"]);
         hs.push(h);
     }
-    assert_eq!(pqz3k::entries_hash(&hs), a::<32>(&k["entries"]["entriesHash"]));
+    assert_eq!(
+        pqz3k::entries_hash(&hs),
+        a::<32>(&k["entries"]["entriesHash"])
+    );
     for r in k["scopedKeyRecords"].as_array().unwrap() {
-        let (u, cls, t, v) = (a::<32>(&r["ua"]), n(&r["keyClass"]) as u8, a::<20>(&r["token"]), n(&r["version"]));
+        let (u, cls, t, v) = (
+            a::<32>(&r["ua"]),
+            n(&r["keyClass"]) as u8,
+            a::<20>(&r["token"]),
+            n(&r["version"]),
+        );
         let kd = pqz3k::scoped_key_digest(&u, cls, &a(&r["chainUid"]), &t, v, &a(&r["pqzKeyHash"]));
-        let rd = pqz3k::scoped_key_record_digest(&u, cls, &a(&r["chainUid"]), &t, v, &a(&r["pqzKeyHash"]), &a(&r["pqzPopHash"]),
-            &a(&r["openKemHash"]), n(&r["validUntilBlock"]));
-        assert_eq!((kd, rd), (a::<32>(&r["keyDigest"]), a::<32>(&r["recordDigest"])));
+        let rd = pqz3k::scoped_key_record_digest(
+            &u,
+            cls,
+            &a(&r["chainUid"]),
+            &t,
+            v,
+            &a(&r["pqzKeyHash"]),
+            &a(&r["pqzPopHash"]),
+            &a(&r["openKemHash"]),
+            n(&r["validUntilBlock"]),
+        );
+        assert_eq!(
+            (kd, rd),
+            (a::<32>(&r["keyDigest"]), a::<32>(&r["recordDigest"]))
+        );
         let p = pqz3k::purpose_pqz_scoped_key();
-        assert_eq!(scaas_ua::ua_message(n(&r["kind"]) as u16, &p, &rd).unwrap(), a::<32>(&r["message"]));
-        assert_eq!(scaas_ua::ua_message(0x0142, &p, &kd).unwrap(), a::<32>(&r["regMessage"]));
+        assert_eq!(
+            scaas_ua::ua_message(n(&r["kind"]) as u16, &p, &rd).unwrap(),
+            a::<32>(&r["message"])
+        );
+        assert_eq!(
+            scaas_ua::ua_message(0x0142, &p, &kd).unwrap(),
+            a::<32>(&r["regMessage"])
+        );
     }
     let ob = &k["openingBlob"];
     let code = b(&ob["code"]);
     let blob = pqz3k::opening_blob(&code[1..], l).expect("the row's blob");
     let at = |f: &str| n(&ob["at"][f]) as usize;
     let d = &code[1..];
-    assert_eq!((blob.pu, blob.pva.unwrap(), blob.puf, blob.o_t, blob.o_a.unwrap()),
-        (&d[at("pu")..at("pvt")], &d[at("pva")..at("toUA")], &d[at("puf")..at("pvf")], &d[at("oT")..at("oA")], &d[at("oA")..at("ownTag")]));
-    assert_eq!((blob.to_ua, blob.own_tag, blob.kv.clone()), (d[at("toUA")..at("puf")].try_into().unwrap(),
-        d[at("ownTag")..at("kv")].try_into().unwrap(), vec![0, 2]));
-    assert_eq!(pqz3k::opening_blob(&d[..d.len() - 1], l), None, "one byte short");
+    assert_eq!(
+        (
+            blob.pu,
+            blob.pva.unwrap(),
+            blob.puf,
+            blob.o_t,
+            blob.o_a.unwrap()
+        ),
+        (
+            &d[at("pu")..at("pvt")],
+            &d[at("pva")..at("toUA")],
+            &d[at("puf")..at("pvf")],
+            &d[at("oT")..at("oA")],
+            &d[at("oA")..at("ownTag")]
+        )
+    );
+    assert_eq!(
+        (blob.to_ua, blob.own_tag, blob.kv.clone()),
+        (
+            d[at("toUA")..at("puf")].try_into().unwrap(),
+            d[at("ownTag")..at("kv")].try_into().unwrap(),
+            vec![0, 2]
+        )
+    );
+    assert_eq!(
+        pqz3k::opening_blob(&d[..d.len() - 1], l),
+        None,
+        "one byte short"
+    );
 }
 
 #[test]
@@ -112,22 +179,43 @@ fn open_kem_seeds_and_leg_seeds_equal_pqz_ffi() {
     for r in o["openKemSeeds"].as_array().unwrap() {
         let tok = b(&r["token"]);
         let t: Option<[u8; 20]> = (!tok.is_empty()).then(|| tok.try_into().unwrap());
-        let got = pqz3k::open_kem_seed(&seed, &a(&r["ua"]), &a(&r["chainUid"]), t.as_ref(), n(&r["version"]));
+        let got = pqz3k::open_kem_seed(
+            &seed,
+            &a(&r["ua"]),
+            &a(&r["chainUid"]),
+            t.as_ref(),
+            n(&r["version"]),
+        );
         assert_eq!(got.to_vec(), b(&r["openKemSeed"]));
     }
     for r in o["rows"].as_array().unwrap() {
-        assert_eq!(pqz3k::leg_seed(&a(&r["seed_enc"]), &a(&r["toUA"]), &a(&r["pk_t_keccak"])), a::<32>(&r["seed_leg"]));
+        assert_eq!(
+            pqz3k::leg_seed(&a(&r["seed_enc"]), &a(&r["toUA"]), &a(&r["pk_t_keccak"])),
+            a::<32>(&r["seed_leg"])
+        );
     }
 }
 
 #[test]
 fn roll_over_struct_hash_equals_typed_ops() {
     let r = &load("typed/typed_ops.json")["ops"]["PqzRollOver"];
-    assert_eq!(keccak256(pqz3k::ROLL_OVER_TYPE.as_bytes()), a::<32>(&r["typehash"]));
+    assert_eq!(
+        keccak256(pqz3k::ROLL_OVER_TYPE.as_bytes()),
+        a::<32>(&r["typehash"])
+    );
     let m = &r["message"];
     let skip: Vec<u64> = m["skip"].as_array().unwrap().iter().map(n).collect();
-    let h = pqz3k::roll_over_struct_hash(&a(&m["ua"]), n(&m["keyVersion"]), n(&m["rollSeq"]), n(&m["rolled"]), n(&m["n"]), &skip,
-        &a(&m["entriesHash"]), n(&m["validUntilBlock"]), &a(&m["chainUid"]));
+    let h = pqz3k::roll_over_struct_hash(
+        &a(&m["ua"]),
+        n(&m["keyVersion"]),
+        n(&m["rollSeq"]),
+        n(&m["rolled"]),
+        n(&m["n"]),
+        &skip,
+        &a(&m["entriesHash"]),
+        n(&m["validUntilBlock"]),
+        &a(&m["chainUid"]),
+    );
     assert_eq!(h, a::<32>(&r["structHash"]));
 }
 
@@ -141,14 +229,23 @@ mod handle {
     use pqz_ffi::stmt::{K_MAX, PK_BYTES};
     use scaas_ua::keccak256;
     use scaas_ua::pqz3k::{
-        self, AuditorKeys, Checked, Credit, Debit, Own, PqzKeyHandle, Reads, Refused, Scope, WindowEntry, LAYOUT,
+        self, AuditorKeys, Checked, Credit, Debit, Own, PqzKeyHandle, Reads, Refused, Scope,
+        WindowEntry, LAYOUT,
     };
     use scaas_ua::wallet::{Error, Unlock, Wallet};
     use serde_json::Value;
 
     const PASS: &str = "river-otter-7 custody";
-    const READ1: Reads = Reads { block: 100, finalized: false, strict_majority: false };
-    const READF: Reads = Reads { block: 90, finalized: true, strict_majority: true };
+    const READ1: Reads = Reads {
+        block: 100,
+        finalized: false,
+        strict_majority: false,
+    };
+    const READF: Reads = Reads {
+        block: 90,
+        finalized: true,
+        strict_majority: true,
+    };
 
     fn unlock() {
         #[cfg(feature = "vectors")]
@@ -158,20 +255,35 @@ mod handle {
     /// The build's set directory of the pqz vector files.
     fn set_dir() -> String {
         let s = pqz_ffi::stmt::SET;
-        if s == "n2048-kmax1024" { String::new() } else { format!("{s}/") }
+        if s == "n2048-kmax1024" {
+            String::new()
+        } else {
+            format!("{s}/")
+        }
     }
 
     /// pqz3k_kat.json's wallet (the release path: the mnemonic, no raw seed) and its UA and chain.
     fn kat() -> (Value, Wallet, [u8; 32], [u8; 32]) {
         unlock();
         let k = load("ua/pqz3k_kat.json");
-        assert_eq!(k["set"]["name"].as_str(), Some("n2304-kmax4096"), "pqz3k_kat.json's own rows are of one set");
+        assert_eq!(
+            k["set"]["name"].as_str(),
+            Some("n2304-kmax4096"),
+            "pqz3k_kat.json's own rows are of one set"
+        );
         let w = Wallet::from_mnemonic(k["mnemonic"].as_str().unwrap(), "").unwrap();
         let (ua, cu) = (a::<32>(&k["ua"]), a::<32>(&k["chainUid"]));
         (k, w, ua, cu)
     }
     fn scope(ua: [u8; 32], cu: [u8; 32], token: Option<[u8; 20]>, version: u64) -> Scope {
-        Scope { account: 0, index: 0, ua, chain_uid: cu, token, version }
+        Scope {
+            account: 0,
+            index: 0,
+            ua,
+            chain_uid: cu,
+            token,
+            version,
+        }
     }
 
     fn digits(amount: u64) -> [u8; 16] {
@@ -222,24 +334,66 @@ mod handle {
 
     /// An op 1 credit of `amount` to `h` (no auditor) by the sender side of pqz-ffi, the code of its blob; `plant` a bad one
     /// (spec §14.1: junk opening, a valid KEM ciphertext of a wrong seed, `v_t` moved off the lattice).
-    fn credit_to(h: &PqzKeyHandle, ua: &[u8; 32], cu: &[u8; 32], token: &[u8; 20], amount: u64, plant: Plant, salt: u8) -> Vec<u8> {
+    fn credit_to(
+        h: &PqzKeyHandle,
+        ua: &[u8; 32],
+        cu: &[u8; 32],
+        token: &[u8; 20],
+        amount: u64,
+        plant: Plant,
+        salt: u8,
+    ) -> Vec<u8> {
         let kf = pqzl::keygen(&[0x46; 32]).unwrap();
         let pk_t: Box<[u8; PK_BYTES]> = h.pk().into_boxed_slice().try_into().unwrap();
-        let s = op::enc_split(&kf.pk, [2; 16], ua, &pk_t, digits(amount), None, &[salt; 32]).unwrap();
+        let s = op::enc_split(
+            &kf.pk,
+            [2; 16],
+            ua,
+            &pk_t,
+            digits(amount),
+            None,
+            &[salt; 32],
+        )
+        .unwrap();
         let mut v_t = s.leg.vs[0];
         if plant == Plant::CraftedV {
             let x = u64::from_be_bytes(v_t[..8].try_into().unwrap());
             v_t[..8].copy_from_slice(&((x + 1) % pqz_ffi::stmt::Q).to_be_bytes());
         }
         let kem = h.open_kem_pk();
-        let to = Party { ua, key_version: h.version(), pk: &pk_t, kem_pk: &kem, v: &v_t, opening: &[] };
-        let c = op::Credit { chain_uid: cu, token, u: &s.leg.u, to, auditor: None };
+        let to = Party {
+            ua,
+            key_version: h.version(),
+            pk: &pk_t,
+            kem_pk: &kem,
+            v: &v_t,
+            opening: &[],
+        };
+        let c = op::Credit {
+            chain_uid: cu,
+            token,
+            u: &s.leg.u,
+            to,
+            auditor: None,
+        };
         let o_t = match plant {
-            Plant::Junk => (0..op::OPENING).map(|i| (i as u8).wrapping_mul(31) ^ 1).collect(),
-            Plant::WrongSeed => op::seal(Role::Recipient, &c, &to, &op::keccak(&[&s.seed_leg[..]])).unwrap(),
+            Plant::Junk => (0..op::OPENING)
+                .map(|i| (i as u8).wrapping_mul(31) ^ 1)
+                .collect(),
+            Plant::WrongSeed => {
+                op::seal(Role::Recipient, &c, &to, &op::keccak(&[&s.seed_leg[..]])).unwrap()
+            }
             _ => op::seal(Role::Recipient, &c, &to, &s.seed_leg).unwrap(),
         };
-        let leg = Leg { u: s.leg.u.to_vec(), v_t: v_t.to_vec(), v_a: None, u_f: s.own.u.to_vec(), v_f: s.own.vs[0].to_vec(), o_t, o_a: None };
+        let leg = Leg {
+            u: s.leg.u.to_vec(),
+            v_t: v_t.to_vec(),
+            v_a: None,
+            u_f: s.own.u.to_vec(),
+            v_f: s.own.vs[0].to_vec(),
+            o_t,
+            o_a: None,
+        };
         code_of(ua, &[h.version()], &leg)
     }
 
@@ -268,13 +422,43 @@ mod handle {
     };
 
     fn credit(token: [u8; 20], index: u64, code: &[u8]) -> Credit<'_> {
-        Credit { token, index, slot: SLOT, code, auditor: None, reads: READ1 }
+        Credit {
+            token,
+            index,
+            slot: SLOT,
+            code,
+            auditor: None,
+            reads: READ1,
+        }
     }
-    fn we<'a>(token: [u8; 20], index: u64, slot: [u8; 32], code: Option<&'a [u8]>, accepted: Option<&'a pqz3k::Accepted>) -> WindowEntry<'a> {
-        WindowEntry { token, index, slot, code, accepted }
+    fn we<'a>(
+        token: [u8; 20],
+        index: u64,
+        slot: [u8; 32],
+        code: Option<&'a [u8]>,
+        accepted: Option<&'a pqz3k::Accepted>,
+    ) -> WindowEntry<'a> {
+        WindowEntry {
+            token,
+            index,
+            slot,
+            code,
+            accepted,
+        }
     }
-    fn deb<'a>(token: [u8; 20], last_debit: u64, own: Option<Own<'a>>, window: &'a [WindowEntry<'a>]) -> Debit<'a> {
-        Debit { token, last_debit, own, window, shield_in: 0 }
+    fn deb<'a>(
+        token: [u8; 20],
+        last_debit: u64,
+        own: Option<Own<'a>>,
+        window: &'a [WindowEntry<'a>],
+    ) -> Debit<'a> {
+        Debit {
+            token,
+            last_debit,
+            own,
+            window,
+            shield_in: 0,
+        }
     }
     fn balance(r: Result<pqz3k::OpenedDebit, Refused>) -> Result<u64, Refused> {
         r.map(|o| o.balance)
@@ -301,33 +485,97 @@ mod handle {
         let rows = k["pqzScopedSeeds"].as_array().unwrap();
         assert_eq!(rows.len(), 12);
         for r in rows {
-            let s = Scope { account: n(&r["account"]) as u32, index: n(&r["index"]) as u32, ua: [0x11; 32], chain_uid: a(&r["chainUid"]),
-                token: r.get("token").map(a::<20>), version: n(&r["version"]) };
-            assert_eq!(w.pqz_scoped_key(&s).unwrap().seed_commitment(), Ok(keccak256(&a::<32>(&r["seed32"]))), "{}", r["keyClass"]);
+            let s = Scope {
+                account: n(&r["account"]) as u32,
+                index: n(&r["index"]) as u32,
+                ua: [0x11; 32],
+                chain_uid: a(&r["chainUid"]),
+                token: r.get("token").map(a::<20>),
+                version: n(&r["version"]),
+            };
+            assert_eq!(
+                w.pqz_scoped_key(&s).unwrap().seed_commitment(),
+                Ok(keccak256(&a::<32>(&r["seed32"]))),
+                "{}",
+                r["keyClass"]
+            );
         }
         let (k, w, ua, cu) = kat();
         for r in k["handles"].as_array().unwrap() {
-            let h = w.pqz_scoped_key(&scope(ua, cu, r.get("token").map(a::<20>), n(&r["version"]))).unwrap();
+            let h = w
+                .pqz_scoped_key(&scope(
+                    ua,
+                    cu,
+                    r.get("token").map(a::<20>),
+                    n(&r["version"]),
+                ))
+                .unwrap();
             assert_eq!(h.seed_commitment(), Ok(a::<32>(&r["seedCommitment"])));
             assert_eq!(keccak256(&h.open_kem_pk()), a::<32>(&r["openKemHash"]));
         }
         for r in k["ownTagOpening"].as_array().unwrap() {
             let token = a::<20>(&r["token"]);
             let class3 = r["keyClass"] == "offchain-token";
-            let h = w.pqz_scoped_key(&scope(ua, cu, class3.then_some(token), 0)).unwrap();
-            let (puf, pvf, tag, last) = (b(&r["puf"]), b(&r["pvf"]), a::<32>(&r["ownTag"]), n(&r["sendCounter"]) + 1);
-            let own = |pu| Some(Own { pu, pvf: &pvf, own_tag: tag });
+            let h = w
+                .pqz_scoped_key(&scope(ua, cu, class3.then_some(token), 0))
+                .unwrap();
+            let (puf, pvf, tag, last) = (
+                b(&r["puf"]),
+                b(&r["pvf"]),
+                a::<32>(&r["ownTag"]),
+                n(&r["sendCounter"]) + 1,
+            );
+            let own = |pu| {
+                Some(Own {
+                    pu,
+                    pvf: &pvf,
+                    own_tag: tag,
+                })
+            };
             let ok = h.open_debit(&deb(token, last, own(&puf[..]), &[]));
-            assert!(!matches!(ok, Err(Refused::OwnTag)), "control: the own part alone passes the tag: {ok:?}");
-            assert_eq!(h.open_debit(&deb(token, last + 1, own(&puf[..]), &[])).err(), Some(Refused::OwnTag), "the counter off by one");
-            let other = w.pqz_scoped_key(&scope(ua, cu, class3.then_some(token), 1)).unwrap();
-            assert_eq!(other.open_debit(&deb(token, last, own(&puf[..]), &[])).err(), Some(Refused::OwnTag), "a foreign key's tag");
-            let acc1 = w.pqz_scoped_key(&Scope { account: 1, ..scope(ua, cu, class3.then_some(token), 0) }).unwrap();
-            assert_eq!(acc1.open_debit(&deb(token, last, own(&puf[..]), &[])).err(), Some(Refused::OwnTag), "another account's tag");
+            assert!(
+                !matches!(ok, Err(Refused::OwnTag)),
+                "control: the own part alone passes the tag: {ok:?}"
+            );
+            assert_eq!(
+                h.open_debit(&deb(token, last + 1, own(&puf[..]), &[]))
+                    .err(),
+                Some(Refused::OwnTag),
+                "the counter off by one"
+            );
+            let other = w
+                .pqz_scoped_key(&scope(ua, cu, class3.then_some(token), 1))
+                .unwrap();
+            assert_eq!(
+                other
+                    .open_debit(&deb(token, last, own(&puf[..]), &[]))
+                    .err(),
+                Some(Refused::OwnTag),
+                "a foreign key's tag"
+            );
+            let acc1 = w
+                .pqz_scoped_key(&Scope {
+                    account: 1,
+                    ..scope(ua, cu, class3.then_some(token), 0)
+                })
+                .unwrap();
+            assert_eq!(
+                acc1.open_debit(&deb(token, last, own(&puf[..]), &[])).err(),
+                Some(Refused::OwnTag),
+                "another account's tag"
+            );
             let mut flipped = puf.clone();
             flipped[7] ^= 1;
-            assert_eq!(h.open_debit(&deb(token, last, own(&flipped[..]), &[])).err(), Some(Refused::OwnTag), "u_f alone differs");
-            assert_eq!((h.secret_loads(), other.secret_loads(), acc1.secret_loads()), (1, 0, 0));
+            assert_eq!(
+                h.open_debit(&deb(token, last, own(&flipped[..]), &[]))
+                    .err(),
+                Some(Refused::OwnTag),
+                "u_f alone differs"
+            );
+            assert_eq!(
+                (h.secret_loads(), other.secret_loads(), acc1.secret_loads()),
+                (1, 0, 0)
+            );
         }
     }
 
@@ -347,18 +595,33 @@ mod handle {
             let class3 = r["keyClass"] == "offchain-token";
             let sc = scope(ua, cu, class3.then_some(t1), 0);
             let h = w.pqz_scoped_key(&sc).unwrap();
-            let other = w.pqz_scoped_key(&scope(ua, cu, class3.then_some(t1), 1)).unwrap();
+            let other = w
+                .pqz_scoped_key(&scope(ua, cu, class3.then_some(t1), 1))
+                .unwrap();
             let good = credit_to(&h, &ua, &cu, &t1, 0x1234, Plant::Honest, 1);
             let acc = accepted(h.check(&credit(t1, 0, &good)), 0x1234);
-            assert_eq!((acc.token(), acc.index(), acc.entry_hash()), (t1, 0, pqz3k::entry_hash(0, &SLOT, Some(&good))));
+            assert_eq!(
+                (acc.token(), acc.index(), acc.entry_hash()),
+                (t1, 0, pqz3k::entry_hash(0, &SLOT, Some(&good)))
+            );
             // F1: the slot's offsets bound (control: SLOT above)
-            for (u_off, v_off, what) in [(17, 16 + LAYOUT.pkp, "uOff + 1"), (16, 17 + LAYOUT.pkp, "vOff + 1"), (16, 200, "vOff 200")] {
-                let c = Credit { slot: slot_at(u_off, v_off), ..credit(t1, 0, &good) };
+            for (u_off, v_off, what) in [
+                (17, 16 + LAYOUT.pkp, "uOff + 1"),
+                (16, 17 + LAYOUT.pkp, "vOff + 1"),
+                (16, 200, "vOff 200"),
+            ] {
+                let c = Credit {
+                    slot: slot_at(u_off, v_off),
+                    ..credit(t1, 0, &good)
+                };
                 assert!(matches!(h.check(&c), Err(Refused::Input(_))), "{what}");
             }
             let mut skips = vec![];
             let mut bad = vec![];
-            for (i, p) in [Plant::Junk, Plant::WrongSeed, Plant::CraftedV].into_iter().enumerate() {
+            for (i, p) in [Plant::Junk, Plant::WrongSeed, Plant::CraftedV]
+                .into_iter()
+                .enumerate()
+            {
                 bad = credit_to(&h, &ua, &cu, &t1, 0x99, p, 2 + i as u8);
                 match h.check(&credit(t1, 1, &bad)) {
                     Ok(Checked::Skip(s)) => skips.push(s),
@@ -366,15 +629,40 @@ mod handle {
                 }
             }
             let (good, bad) = (&good[..], &bad[..]);
-            let win = |slot1| [we(t1, 0, SLOT, Some(good), Some(&acc)), we(t1, 1, slot1, Some(bad), None), we(t1, 2, TRIVIAL, None, None)];
-            let (puf, pvf, tag, last) = (b(&r["puf"]), b(&r["pvf"]), a::<32>(&r["ownTag"]), n(&r["sendCounter"]) + 1);
-            let own = Some(Own { pu: &puf, pvf: &pvf, own_tag: tag });
+            let win = |slot1| {
+                [
+                    we(t1, 0, SLOT, Some(good), Some(&acc)),
+                    we(t1, 1, slot1, Some(bad), None),
+                    we(t1, 2, TRIVIAL, None, None),
+                ]
+            };
+            let (puf, pvf, tag, last) = (
+                b(&r["puf"]),
+                b(&r["pvf"]),
+                a::<32>(&r["ownTag"]),
+                n(&r["sendCounter"]) + 1,
+            );
+            let own = Some(Own {
+                pu: &puf,
+                pvf: &pvf,
+                own_tag: tag,
+            });
             let w0 = win(SLOT);
-            assert_eq!(h.open_debit(&deb(t1, last, own, &w0)).err(), Some(Refused::Window), "an unaccepted unmarked credit");
+            assert_eq!(
+                h.open_debit(&deb(t1, last, own, &w0)).err(),
+                Some(Refused::Window),
+                "an unaccepted unmarked credit"
+            );
             assert_eq!(h.secret_loads(), 0, "the secret was never loaded");
             // a skip read from one node at an unfinalized block is no reason to mark (Fable P2-1)
             assert_eq!(PqzKeyHandle::marks(&skips), Err(Refused::Unconfirmed));
-            let again: Vec<_> = skips.iter().map(|s| pqz3k::Skip { reads: READF, ..s.clone() }).collect();
+            let again: Vec<_> = skips
+                .iter()
+                .map(|s| pqz3k::Skip {
+                    reads: READF,
+                    ..s.clone()
+                })
+                .collect();
             assert_eq!(PqzKeyHandle::marks(&again), Ok(vec![1]));
             let wm = win(marked(SLOT));
             // the KAT's own part passes its tag but is no ciphertext of this key: that it opened is the seed's use (counted)
@@ -383,92 +671,270 @@ mod handle {
                 let _ = h.open_debit(d);
                 h.secret_loads() == n + 1
             };
-            assert!(opens(&deb(t1, last, own, &wm)), "the mark landed: own part and window");
-            assert!(opens(&deb(t1, last, own, &[])), "control: the own part alone");
-            assert_eq!(balance(h.open_debit(&deb(t1, 0, None, &wm))), Ok(0x1234 + 100), "control: a first debit, the window alone");
+            assert!(
+                opens(&deb(t1, last, own, &wm)),
+                "the mark landed: own part and window"
+            );
+            assert!(
+                opens(&deb(t1, last, own, &[])),
+                "control: the own part alone"
+            );
+            assert_eq!(
+                balance(h.open_debit(&deb(t1, 0, None, &wm))),
+                Ok(0x1234 + 100),
+                "control: a first debit, the window alone"
+            );
             assert_eq!(h.secret_loads(), 3);
             // the own part's gates (T21 L43): no empty-window bypass
-            assert_eq!(h.open_debit(&deb(t1, last, None, &[])).err(), Some(Refused::OwnRequired), "lastDebit > 0, zero entries");
-            assert_eq!(h.open_debit(&deb(t1, last, None, &wm)).err(), Some(Refused::OwnRequired), "lastDebit > 0, no own part");
-            assert!(matches!(h.open_debit(&deb(t1, 0, own, &wm)), Err(Refused::Input(_))), "an own part at lastDebit 0");
-            assert_eq!(h.open_debit(&deb(t1, 0, None, &[])).err(), Some(Refused::EmptyDebit), "nothing gated");
+            assert_eq!(
+                h.open_debit(&deb(t1, last, None, &[])).err(),
+                Some(Refused::OwnRequired),
+                "lastDebit > 0, zero entries"
+            );
+            assert_eq!(
+                h.open_debit(&deb(t1, last, None, &wm)).err(),
+                Some(Refused::OwnRequired),
+                "lastDebit > 0, no own part"
+            );
+            assert!(
+                matches!(h.open_debit(&deb(t1, 0, own, &wm)), Err(Refused::Input(_))),
+                "an own part at lastDebit 0"
+            );
+            assert_eq!(
+                h.open_debit(&deb(t1, 0, None, &[])).err(),
+                Some(Refused::EmptyDebit),
+                "nothing gated"
+            );
             let mut far = deb(t1, last, own, &[]);
             far.last_debit = (1 << 32) + 1;
-            assert!(matches!(h.open_debit(&far), Err(Refused::Input(_))), "a counter at 2^32");
+            assert!(
+                matches!(h.open_debit(&far), Err(Refused::Input(_))),
+                "a counter at 2^32"
+            );
             far.last_debit = 1 << 32;
-            assert!(!matches!(h.open_debit(&far), Err(Refused::Input(_))), "control: counter 2^32 - 1 is no Input");
+            assert!(
+                !matches!(h.open_debit(&far), Err(Refused::Input(_))),
+                "control: counter 2^32 - 1 is no Input"
+            );
             // owner 2026-11-16: a first debit of Trivial(shieldIn) alone
-            let sh = Debit { shield_in: 7, ..deb(t1, 0, None, &[]) };
+            let sh = Debit {
+                shield_in: 7,
+                ..deb(t1, 0, None, &[])
+            };
             let o = h.open_debit(&sh).unwrap();
             assert_eq!(o.balance, 7, "a shielded-in-only first debit");
             assert_eq!(o.t.len(), pqzl::CT_BYTES);
-            assert!(o.t[..PK_BYTES].iter().all(|x| *x == 0), "u of Trivial(shieldIn) is zero");
-            assert_eq!(balance(h.open_debit(&Debit { shield_in: 7, ..deb(t1, 0, None, &wm) })), Ok(0x1234 + 100 + 7), "and beside a window");
+            assert!(
+                o.t[..PK_BYTES].iter().all(|x| *x == 0),
+                "u of Trivial(shieldIn) is zero"
+            );
+            assert_eq!(
+                balance(h.open_debit(&Debit {
+                    shield_in: 7,
+                    ..deb(t1, 0, None, &wm)
+                })),
+                Ok(0x1234 + 100 + 7),
+                "and beside a window"
+            );
             // the window's tokens (T21 L47), order and count (the review's F2)
             let mut e = wm;
             e[2].token = t2;
-            assert_eq!(h.open_debit(&deb(t1, last, own, &e)).err(), Some(Refused::Window), "a TRIVIAL entry of another token");
+            assert_eq!(
+                h.open_debit(&deb(t1, last, own, &e)).err(),
+                Some(Refused::Window),
+                "a TRIVIAL entry of another token"
+            );
             let mut e = wm;
             e[0].token = t2;
-            assert_eq!(h.open_debit(&deb(t1, last, own, &e)).err(), Some(Refused::Window), "an accepted entry of another token");
+            assert_eq!(
+                h.open_debit(&deb(t1, last, own, &e)).err(),
+                Some(Refused::Window),
+                "an accepted entry of another token"
+            );
             let dup = [wm[0], wm[0]];
-            assert_eq!(h.open_debit(&deb(t1, 0, None, &dup)).err(), Some(Refused::Window), "an accepted entry twice");
+            assert_eq!(
+                h.open_debit(&deb(t1, 0, None, &dup)).err(),
+                Some(Refused::Window),
+                "an accepted entry twice"
+            );
             let desc = [wm[2], wm[1]];
-            assert_eq!(h.open_debit(&deb(t1, 0, None, &desc)).err(), Some(Refused::Window), "indexes descending");
-            let many: Vec<_> = (0..K_MAX as u64 - 1).map(|i| we(t1, i, TRIVIAL, None, None)).collect();
-            assert_eq!(h.open_debit(&deb(t1, 0, None, &many)).err(), Some(Refused::Window), "K_MAX - 1 entries");
+            assert_eq!(
+                h.open_debit(&deb(t1, 0, None, &desc)).err(),
+                Some(Refused::Window),
+                "indexes descending"
+            );
+            let many: Vec<_> = (0..K_MAX as u64 - 1)
+                .map(|i| we(t1, i, TRIVIAL, None, None))
+                .collect();
+            assert_eq!(
+                h.open_debit(&deb(t1, 0, None, &many)).err(),
+                Some(Refused::Window),
+                "K_MAX - 1 entries"
+            );
             let ok = h.open_debit(&deb(t1, 0, None, &many[..K_MAX - 2]));
-            assert_eq!(balance(ok), Ok(100 * (K_MAX as u64 - 2)), "control: K_MAX - 2 entries");
+            assert_eq!(
+                balance(ok),
+                Ok(100 * (K_MAX as u64 - 2)),
+                "control: K_MAX - 2 entries"
+            );
             // the acceptance is bound to the handle, the token, the index and the bytes
-            assert_eq!(other.open_debit(&deb(t1, 0, None, &wm[..1])).err(), Some(Refused::Window), "another version's acceptance");
+            assert_eq!(
+                other.open_debit(&deb(t1, 0, None, &wm[..1])).err(),
+                Some(Refused::Window),
+                "another version's acceptance"
+            );
             let a1 = w.pqz_scoped_key(&Scope { account: 1, ..sc }).unwrap();
-            assert_eq!(a1.open_debit(&deb(t1, 0, None, &wm[..1])).err(), Some(Refused::Window), "account 1 given account 0's acceptance");
-            let w2 = Wallet::from_mnemonic("legal winner thank year wave sausage worth useful legal winner thank yellow", "").unwrap();
+            assert_eq!(
+                a1.open_debit(&deb(t1, 0, None, &wm[..1])).err(),
+                Some(Refused::Window),
+                "account 1 given account 0's acceptance"
+            );
+            let w2 = Wallet::from_mnemonic(
+                "legal winner thank year wave sausage worth useful legal winner thank yellow",
+                "",
+            )
+            .unwrap();
             let o2 = w2.pqz_scoped_key(&sc).unwrap();
-            assert_eq!(o2.open_debit(&deb(t1, 0, None, &wm[..1])).err(), Some(Refused::Window), "another wallet's key, the same scope");
-            let short = Own { pu: &puf[1..], pvf: &pvf, own_tag: tag };
-            assert!(matches!(h.open_debit(&deb(t1, last, Some(short), &[])), Err(Refused::Input(_))), "a short P(u_f)");
+            assert_eq!(
+                o2.open_debit(&deb(t1, 0, None, &wm[..1])).err(),
+                Some(Refused::Window),
+                "another wallet's key, the same scope"
+            );
+            let short = Own {
+                pu: &puf[1..],
+                pvf: &pvf,
+                own_tag: tag,
+            };
+            assert!(
+                matches!(
+                    h.open_debit(&deb(t1, last, Some(short), &[])),
+                    Err(Refused::Input(_))
+                ),
+                "a short P(u_f)"
+            );
             let i1 = w.pqz_scoped_key(&Scope { index: 1, ..sc }).unwrap();
-            assert_eq!(i1.open_debit(&deb(t1, 0, None, &wm[..1])).err(), Some(Refused::Window), "index 1 given index 0's acceptance");
+            assert_eq!(
+                i1.open_debit(&deb(t1, 0, None, &wm[..1])).err(),
+                Some(Refused::Window),
+                "index 1 given index 0's acceptance"
+            );
             let g1 = credit_to(&a1, &ua, &cu, &t1, 0x31, Plant::Honest, 12);
             let acc_a1 = accepted(a1.check(&credit(t1, 0, &g1)), 0x31);
             let e = [we(t1, 0, SLOT, Some(&g1), Some(&acc_a1))];
-            assert_eq!(balance(a1.open_debit(&deb(t1, 0, None, &e))), Ok(0x31), "control: account 1's own acceptance");
-            assert_eq!(h.open_debit(&deb(t1, 0, None, &e)).err(), Some(Refused::Window), "account 0 given account 1's acceptance");
+            assert_eq!(
+                balance(a1.open_debit(&deb(t1, 0, None, &e))),
+                Ok(0x31),
+                "control: account 1's own acceptance"
+            );
+            assert_eq!(
+                h.open_debit(&deb(t1, 0, None, &e)).err(),
+                Some(Refused::Window),
+                "account 0 given account 1's acceptance"
+            );
             let mut e = wm[0];
             e.index = 3;
-            assert_eq!(h.open_debit(&deb(t1, 0, None, &[e])).err(), Some(Refused::Window), "another index");
+            assert_eq!(
+                h.open_debit(&deb(t1, 0, None, &[e])).err(),
+                Some(Refused::Window),
+                "another index"
+            );
             let mut e = wm[0];
             e.code = Some(bad);
-            assert_eq!(h.open_debit(&deb(t1, 0, None, &[e])).err(), Some(Refused::Window), "other bytes");
+            assert_eq!(
+                h.open_debit(&deb(t1, 0, None, &[e])).err(),
+                Some(Refused::Window),
+                "other bytes"
+            );
             let mut e = wm[0];
             e.code = None;
-            assert_eq!(h.open_debit(&deb(t1, 0, None, &[e])).err(), Some(Refused::Window), "no code");
+            assert_eq!(
+                h.open_debit(&deb(t1, 0, None, &[e])).err(),
+                Some(Refused::Window),
+                "no code"
+            );
             if class3 {
-                let d = Debit { token: t2, ..deb(t1, 0, None, &[]) };
-                assert_eq!(h.open_debit(&d).err(), Some(Refused::NotThisHandle), "a class-3 debit of another token");
-                let c = Credit { token: t2, ..credit(t1, 0, good) };
-                assert_eq!(h.check(&c).err(), Some(Refused::NotThisHandle), "a class-3 handle given another token's credit");
+                let d = Debit {
+                    token: t2,
+                    ..deb(t1, 0, None, &[])
+                };
+                assert_eq!(
+                    h.open_debit(&d).err(),
+                    Some(Refused::NotThisHandle),
+                    "a class-3 debit of another token"
+                );
+                let c = Credit {
+                    token: t2,
+                    ..credit(t1, 0, good)
+                };
+                assert_eq!(
+                    h.check(&c).err(),
+                    Some(Refused::NotThisHandle),
+                    "a class-3 handle given another token's credit"
+                );
             } else {
                 // a class-2 key serves every class-2 token; its acceptance names the token it was checked for
                 let g2 = credit_to(&h, &ua, &cu, &t2, 0x55, Plant::Honest, 9);
                 let acc2 = accepted(h.check(&credit(t2, 0, &g2)), 0x55);
                 assert_eq!(acc2.token(), t2);
-                let e = [WindowEntry { token: t1, index: 0, slot: SLOT, code: Some(&g2), accepted: Some(&acc2) }];
-                assert_eq!(h.open_debit(&deb(t1, 0, None, &e)).err(), Some(Refused::Window), "an acceptance of another token");
+                let e = [WindowEntry {
+                    token: t1,
+                    index: 0,
+                    slot: SLOT,
+                    code: Some(&g2),
+                    accepted: Some(&acc2),
+                }];
+                assert_eq!(
+                    h.open_debit(&deb(t1, 0, None, &e)).err(),
+                    Some(Refused::Window),
+                    "an acceptance of another token"
+                );
                 let e = [WindowEntry { token: t2, ..e[0] }];
-                assert_eq!(balance(h.open_debit(&deb(t2, 0, None, &e))), Ok(0x55), "control: its own token");
+                assert_eq!(
+                    balance(h.open_debit(&deb(t2, 0, None, &e))),
+                    Ok(0x55),
+                    "control: its own token"
+                );
             }
-            assert_eq!(h.secret_loads(), 6 + u32::from(!class3), "no refusal loaded the secret");
+            assert_eq!(
+                h.secret_loads(),
+                6 + u32::from(!class3),
+                "no refusal loaded the secret"
+            );
             // not this handle's credit, or incomplete inputs: refused before the check
             let to_other = credit_to(&h, &[0x22; 32], &cu, &t1, 1, Plant::Honest, 10);
             let other_kv = credit_to(&other, &ua, &cu, &t1, 1, Plant::Honest, 11);
-            assert_eq!(h.check(&credit(t1, 0, &to_other)).err(), Some(Refused::NotThisHandle), "another recipient");
-            assert_eq!(h.check(&credit(t1, 0, &other_kv)).err(), Some(Refused::NotThisHandle), "another key version");
+            assert_eq!(
+                h.check(&credit(t1, 0, &to_other)).err(),
+                Some(Refused::NotThisHandle),
+                "another recipient"
+            );
+            assert_eq!(
+                h.check(&credit(t1, 0, &other_kv)).err(),
+                Some(Refused::NotThisHandle),
+                "another key version"
+            );
             accepted(other.check(&credit(t1, 0, &other_kv)), 1);
-            assert!(matches!(h.check(&credit(t1, 0, &good[..good.len() - 1])), Err(Refused::Input(_))), "a short blob");
-            assert!(matches!(h.check(&credit(t1, 0, &good[1..])), Err(Refused::Input(_))), "no STOP byte");
-            assert!(matches!(h.check(&Credit { slot: TRIVIAL, ..credit(t1, 0, good) }), Err(Refused::Input(_))), "a TRIVIAL entry");
+            assert!(
+                matches!(
+                    h.check(&credit(t1, 0, &good[..good.len() - 1])),
+                    Err(Refused::Input(_))
+                ),
+                "a short blob"
+            );
+            assert!(
+                matches!(h.check(&credit(t1, 0, &good[1..])), Err(Refused::Input(_))),
+                "no STOP byte"
+            );
+            assert!(
+                matches!(
+                    h.check(&Credit {
+                        slot: TRIVIAL,
+                        ..credit(t1, 0, good)
+                    }),
+                    Err(Refused::Input(_))
+                ),
+                "a TRIVIAL entry"
+            );
             let d = format!("{h:?}");
             assert!(!d.contains("seed") && d.contains("PqzKeyHandle"), "{d}");
         }
@@ -483,12 +949,37 @@ mod handle {
         for token in [None, Some(t1)] {
             let h = w.pqz_scoped_key(&scope(ua, cu, token, 1)).unwrap();
             let r = h.prove_reg(&pqz_ffi::PQZL_ID).unwrap();
-            let kh = scaas_ua::key_hash_of(scaas_ua::PQZ_SCHEME, &h.pk()).unwrap().unwrap();
-            let kd = pqz3k::scoped_key_digest(&ua, if token.is_some() { 3 } else { 2 }, &cu, &token.unwrap_or([0; 20]), 1, &kh);
-            assert_eq!((r.pqz_key_hash, r.message), (kh, scaas_ua::ua_message(0x0142, &pqz3k::purpose_pqz_scoped_key(), &kd).unwrap()));
-            assert_eq!(pqzl::verify_fast(3, &r.stmt, &r.proof).ok(), Some(true), "the R_REG proof verifies");
-            assert!(r.stmt.windows(32).any(|x| x == r.message), "over the handle's message");
-            assert!(matches!(h.prove_reg(&[0x77; 32]), Err(Refused::Input(_))), "another build's proof system");
+            let kh = scaas_ua::key_hash_of(scaas_ua::PQZ_SCHEME, &h.pk())
+                .unwrap()
+                .unwrap();
+            let kd = pqz3k::scoped_key_digest(
+                &ua,
+                if token.is_some() { 3 } else { 2 },
+                &cu,
+                &token.unwrap_or([0; 20]),
+                1,
+                &kh,
+            );
+            assert_eq!(
+                (r.pqz_key_hash, r.message),
+                (
+                    kh,
+                    scaas_ua::ua_message(0x0142, &pqz3k::purpose_pqz_scoped_key(), &kd).unwrap()
+                )
+            );
+            assert_eq!(
+                pqzl::verify_fast(3, &r.stmt, &r.proof).ok(),
+                Some(true),
+                "the R_REG proof verifies"
+            );
+            assert!(
+                r.stmt.windows(32).any(|x| x == r.message),
+                "over the handle's message"
+            );
+            assert!(
+                matches!(h.prove_reg(&[0x77; 32]), Err(Refused::Input(_))),
+                "another build's proof system"
+            );
             assert_eq!(h.keygens(), 1);
         }
     }
@@ -513,18 +1004,53 @@ mod handle {
         assert_eq!(h.open_debit(&d).err(), Some(Refused::KeyRevoked));
         assert_eq!(h.check(&c).err(), Some(Refused::KeyRevoked));
         assert_eq!(h.seed_commitment(), Err(Refused::KeyRevoked));
-        assert_eq!(h.prove_reg(&pqz_ffi::PQZL_ID).err(), Some(Refused::KeyRevoked));
+        assert_eq!(
+            h.prove_reg(&pqz_ffi::PQZL_ID).err(),
+            Some(Refused::KeyRevoked)
+        );
         // KeyRevoked before any other refusal (the review, P3)
-        assert_eq!(h.check(&Credit { slot: TRIVIAL, ..c }).err(), Some(Refused::KeyRevoked), "a TRIVIAL credit");
-        assert_eq!(h.check(&credit(t1, 0, &good[1..])).err(), Some(Refused::KeyRevoked), "a malformed blob");
-        assert_eq!(h.open_debit(&deb(t1, 0, None, &[])).err(), Some(Refused::KeyRevoked), "an empty debit");
-        assert_eq!(h.open_debit(&deb(t1, 5, None, &[])).err(), Some(Refused::KeyRevoked), "no own part");
-        assert_eq!(h.prove_reg(&[0x77; 32]).err(), Some(Refused::KeyRevoked), "another proof system");
+        assert_eq!(
+            h.check(&Credit { slot: TRIVIAL, ..c }).err(),
+            Some(Refused::KeyRevoked),
+            "a TRIVIAL credit"
+        );
+        assert_eq!(
+            h.check(&credit(t1, 0, &good[1..])).err(),
+            Some(Refused::KeyRevoked),
+            "a malformed blob"
+        );
+        assert_eq!(
+            h.open_debit(&deb(t1, 0, None, &[])).err(),
+            Some(Refused::KeyRevoked),
+            "an empty debit"
+        );
+        assert_eq!(
+            h.open_debit(&deb(t1, 5, None, &[])).err(),
+            Some(Refused::KeyRevoked),
+            "no own part"
+        );
+        assert_eq!(
+            h.prove_reg(&[0x77; 32]).err(),
+            Some(Refused::KeyRevoked),
+            "another proof system"
+        );
         assert_eq!((h.secret_loads(), h.keygens()), (1, 0));
-        assert_eq!(w.pqz_scoped_key(&scope(ua, cu, None, 0)).err(), Some(Error::WalletLocked));
+        assert_eq!(
+            w.pqz_scoped_key(&scope(ua, cu, None, 0)).err(),
+            Some(Error::WalletLocked)
+        );
         w.unlock(&vault, Unlock::VaultPassphrase(PASS), "").unwrap();
-        assert_eq!(h.seed_commitment(), Err(Refused::KeyRevoked), "unlock does not revive the handle");
-        assert_eq!(w.pqz_scoped_key(&scope(ua, cu, None, 0)).unwrap().seed_commitment(), Ok(before));
+        assert_eq!(
+            h.seed_commitment(),
+            Err(Refused::KeyRevoked),
+            "unlock does not revive the handle"
+        );
+        assert_eq!(
+            w.pqz_scoped_key(&scope(ua, cu, None, 0))
+                .unwrap()
+                .seed_commitment(),
+            Ok(before)
+        );
     }
 
     /// T21 L82 for the handle: runs `op` on its own thread, paused (the `vectors` hook) where it holds its copy of the store's
@@ -549,7 +1075,9 @@ mod handle {
                 w.lock();
                 locked_tx.send(()).unwrap();
             });
-            let early = locked_rx.recv_timeout(std::time::Duration::from_millis(500)).is_ok();
+            let early = locked_rx
+                .recv_timeout(std::time::Duration::from_millis(500))
+                .is_ok();
             go_tx.send(()).unwrap();
             let r = a.join().unwrap();
             locker.join().unwrap();
@@ -597,7 +1125,9 @@ mod handle {
                 w.lock();
                 locked_tx.send(()).unwrap();
             });
-            let early = locked_rx.recv_timeout(std::time::Duration::from_millis(500)).is_ok();
+            let early = locked_rx
+                .recv_timeout(std::time::Duration::from_millis(500))
+                .is_ok();
             go_tx.send(()).unwrap();
             let r = op.join().unwrap();
             locker.join().unwrap();
@@ -623,17 +1153,53 @@ mod handle {
         let seed32 = h.with_secret_keygen(|s| *s).unwrap();
         let ctr = 4u32;
         let k_tag = hkdf_sha256(&seed32, &[], b"PQZ/owntag/v1", 32).unwrap();
-        let tag = hmac_sha256(&k_tag, &[&cu[..], &t1, &ua, &ctr.to_be_bytes(), &keccak256(&[&pu[..], &pvf[..]].concat())].concat());
+        let tag = hmac_sha256(
+            &k_tag,
+            &[
+                &cu[..],
+                &t1,
+                &ua,
+                &ctr.to_be_bytes(),
+                &keccak256(&[&pu[..], &pvf[..]].concat()),
+            ]
+            .concat(),
+        );
         let good = credit_to(&h, &ua, &cu, &t1, 0x20, Plant::Honest, 3);
         let acc = accepted(h.check(&credit(t1, 6, &good)), 0x20);
-        let win = [we(t1, 5, TRIVIAL, None, None), we(t1, 6, SLOT, Some(&good), Some(&acc))];
-        let d = Debit { shield_in: 3, ..deb(t1, u64::from(ctr) + 1, Some(Own { pu: &pu, pvf: &pvf, own_tag: tag }), &win) };
+        let win = [
+            we(t1, 5, TRIVIAL, None, None),
+            we(t1, 6, SLOT, Some(&good), Some(&acc)),
+        ];
+        let d = Debit {
+            shield_in: 3,
+            ..deb(
+                t1,
+                u64::from(ctr) + 1,
+                Some(Own {
+                    pu: &pu,
+                    pvf: &pvf,
+                    own_tag: tag,
+                }),
+                &win,
+            )
+        };
         let o = h.open_debit(&d).unwrap();
         assert_eq!(o.balance, 1000 + 100 + 0x20 + 3);
         assert_eq!(h.with_secret_debit(&d, |_, t| t.to_vec()), Ok(o.t));
         let mut bad = tag;
         bad[0] ^= 1;
-        assert_eq!(h.open_debit(&Debit { own: Some(Own { pu: &pu, pvf: &pvf, own_tag: bad }), ..d }).err(), Some(Refused::OwnTag));
+        assert_eq!(
+            h.open_debit(&Debit {
+                own: Some(Own {
+                    pu: &pu,
+                    pvf: &pvf,
+                    own_tag: bad
+                }),
+                ..d
+            })
+            .err(),
+            Some(Refused::OwnTag)
+        );
     }
 
     /// The reader pieces of opening.json's audited row, rebuilt from its seeds by pqz-ffi's sender side.
@@ -653,28 +1219,95 @@ mod handle {
         seed_t: [u8; 32],
     }
     fn opening_row(o: &Value) -> Row {
-        let r = o["rows"].as_array().unwrap().iter().find(|r| r["auditorOn"] == true).unwrap();
+        let r = o["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["auditorOn"] == true)
+            .unwrap();
         let aad_t = b(&r["aad_t"]);
-        let (token, cu): ([u8; 20], [u8; 32]) = (aad_t[32..52].try_into().unwrap(), aad_t[..32].try_into().unwrap());
+        let (token, cu): ([u8; 20], [u8; 32]) = (
+            aad_t[32..52].try_into().unwrap(),
+            aad_t[..32].try_into().unwrap(),
+        );
         let (to_ua, a_ua) = (a::<32>(&r["toUA"]), [0xA0u8; 32]);
         let seeds = o["openKemSeeds"].as_array().unwrap();
-        let ok_t: [u8; 96] = a(&seeds.iter().find(|s| a::<32>(&s["ua"]) == to_ua && b(&s["token"]).is_empty() && n(&s["version"]) == 0
-            && a::<32>(&s["chainUid"]) == cu).unwrap()["openKemSeed"]);
-        assert_eq!(op::open_kem_seed(&a(&o["bip39_seed"]), &to_ua, &cu, None, 0), ok_t);
+        let ok_t: [u8; 96] = a(&seeds
+            .iter()
+            .find(|s| {
+                a::<32>(&s["ua"]) == to_ua
+                    && b(&s["token"]).is_empty()
+                    && n(&s["version"]) == 0
+                    && a::<32>(&s["chainUid"]) == cu
+            })
+            .unwrap()["openKemSeed"]);
+        assert_eq!(
+            op::open_kem_seed(&a(&o["bip39_seed"]), &to_ua, &cu, None, 0),
+            ok_t
+        );
         // the auditor's opening KEM seed (ua 0xA0..) is no row of its own: pqz-ffi's, from the file's BIP-39 seed
         let ok_a = op::open_kem_seed(&a(&o["bip39_seed"]), &a_ua, &cu, None, 0);
-        let (kf, kt, ka) = (pqzl::keygen(&a(&r["seed_f"])).unwrap(), pqzl::keygen(&a(&r["seed_t"])).unwrap(),
-            pqzl::keygen(&a(&r["seed_a"])).unwrap());
-        let d: [u8; 16] = r["digits"].as_array().unwrap().iter().map(|x| n(x) as u8).collect::<Vec<_>>().try_into().unwrap();
-        let df: [u8; 16] = r["digits_f"].as_array().unwrap().iter().map(|x| n(x) as u8).collect::<Vec<_>>().try_into().unwrap();
-        let s = op::enc_split(&kf.pk, df, &to_ua, &kt.pk, d, Some(&ka.pk), &a(&r["seed_enc"])).unwrap();
+        let (kf, kt, ka) = (
+            pqzl::keygen(&a(&r["seed_f"])).unwrap(),
+            pqzl::keygen(&a(&r["seed_t"])).unwrap(),
+            pqzl::keygen(&a(&r["seed_a"])).unwrap(),
+        );
+        let d: [u8; 16] = r["digits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| n(x) as u8)
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+        let df: [u8; 16] = r["digits_f"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| n(x) as u8)
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
+        let s = op::enc_split(
+            &kf.pk,
+            df,
+            &to_ua,
+            &kt.pk,
+            d,
+            Some(&ka.pk),
+            &a(&r["seed_enc"]),
+        )
+        .unwrap();
         assert_eq!(s.seed_leg, a::<32>(&r["seed_leg"]));
         assert_eq!(keccak256(&s.leg.u[..]), a::<32>(&r["u_keccak"]));
-        assert_eq!((s.leg.vs[0].to_vec(), s.leg.vs[1].to_vec()), (b(&r["v_t"]), b(&r["v_a"])));
-        let leg = Leg { u: s.leg.u.to_vec(), v_t: s.leg.vs[0].to_vec(), v_a: Some(s.leg.vs[1].to_vec()), u_f: s.own.u.to_vec(),
-            v_f: s.own.vs[0].to_vec(), o_t: b(&r["opening_t"]), o_a: Some(b(&r["opening_a"])) };
-        Row { token, cu, to_ua, a_ua, pk_t: kt.pk.clone(), pk_a: ka.pk.clone(), ok_t, ok_a, kem_t: op::open_kem_pk(&ok_t),
-            kem_a: op::open_kem_pk(&ok_a), leg, digits: d, seed_t: a(&r["seed_t"]) }
+        assert_eq!(
+            (s.leg.vs[0].to_vec(), s.leg.vs[1].to_vec()),
+            (b(&r["v_t"]), b(&r["v_a"]))
+        );
+        let leg = Leg {
+            u: s.leg.u.to_vec(),
+            v_t: s.leg.vs[0].to_vec(),
+            v_a: Some(s.leg.vs[1].to_vec()),
+            u_f: s.own.u.to_vec(),
+            v_f: s.own.vs[0].to_vec(),
+            o_t: b(&r["opening_t"]),
+            o_a: Some(b(&r["opening_a"])),
+        };
+        Row {
+            token,
+            cu,
+            to_ua,
+            a_ua,
+            pk_t: kt.pk.clone(),
+            pk_a: ka.pk.clone(),
+            ok_t,
+            ok_a,
+            kem_t: op::open_kem_pk(&ok_t),
+            kem_a: op::open_kem_pk(&ok_a),
+            leg,
+            digits: d,
+            seed_t: a(&r["seed_t"]),
+        }
     }
 
     fn outcome_recipient(x: Option<[u8; 16]>) -> String {
@@ -696,44 +1329,127 @@ mod handle {
         let o = load(&format!("pqz/{}opening.json", set_dir()));
         let x = opening_row(&o);
         let (o_t, o_a) = (x.leg.o_t.clone(), x.leg.o_a.clone().unwrap());
-        let (v_t, v_a): ([u8; 128], [u8; 128]) = (x.leg.v_t.clone().try_into().unwrap(), x.leg.v_a.clone().unwrap().try_into().unwrap());
+        let (v_t, v_a): ([u8; 128], [u8; 128]) = (
+            x.leg.v_t.clone().try_into().unwrap(),
+            x.leg.v_a.clone().unwrap().try_into().unwrap(),
+        );
         let u: Box<[u8; PK_BYTES]> = x.leg.u.clone().into_boxed_slice().try_into().unwrap();
-        let to = Party { ua: &x.to_ua, key_version: 0, pk: &x.pk_t, kem_pk: &x.kem_t, v: &v_t, opening: &o_t };
-        let au = Party { ua: &x.a_ua, key_version: 0, pk: &x.pk_a, kem_pk: &x.kem_a, v: &v_a, opening: &o_a };
-        let c = op::Credit { chain_uid: &x.cu, token: &x.token, u: &u, to, auditor: Some(au) };
-        let r1 = o["rows"].as_array().unwrap().iter().find(|r| r["auditorOn"] == true).unwrap();
+        let to = Party {
+            ua: &x.to_ua,
+            key_version: 0,
+            pk: &x.pk_t,
+            kem_pk: &x.kem_t,
+            v: &v_t,
+            opening: &o_t,
+        };
+        let au = Party {
+            ua: &x.a_ua,
+            key_version: 0,
+            pk: &x.pk_a,
+            kem_pk: &x.kem_a,
+            v: &v_a,
+            opening: &o_a,
+        };
+        let c = op::Credit {
+            chain_uid: &x.cu,
+            token: &x.token,
+            u: &u,
+            to,
+            auditor: Some(au),
+        };
+        let r1 = o["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["auditorOn"] == true)
+            .unwrap();
         assert_eq!(op::aad(&c, &c.to), b(&r1["aad_t"]));
         assert_eq!(op::aad(&c, &au), b(&r1["aad_a"]));
-        assert_eq!(op::seal(Role::Recipient, &c, &to, &a(&r1["seed_leg"])).unwrap(), o_t, "the honest O_t is K3-6's");
+        assert_eq!(
+            op::seal(Role::Recipient, &c, &to, &a(&r1["seed_leg"])).unwrap(),
+            o_t,
+            "the honest O_t is K3-6's"
+        );
         let d = hex::encode(x.digits);
-        assert_eq!(outcome_recipient(op::check_recipient(&x.ok_t, &c)), format!("accepted:{d}"), "control");
-        assert_eq!(outcome_auditor(op::check_auditor(&x.ok_a, &c)), format!("read:{d}"), "control");
+        assert_eq!(
+            outcome_recipient(op::check_recipient(&x.ok_t, &c)),
+            format!("accepted:{d}"),
+            "control"
+        );
+        assert_eq!(
+            outcome_auditor(op::check_auditor(&x.ok_a, &c)),
+            format!("read:{d}"),
+            "control"
+        );
         let rejects = o["rejects"].as_array().unwrap();
         assert!(rejects.len() >= 22);
         let mut seen = std::collections::BTreeSet::new();
         for r in rejects {
-            let (field, v, case) = (r["field"].as_str().unwrap(), b(&r["value"]), r["case"].as_str().unwrap());
+            let (field, v, case) = (
+                r["field"].as_str().unwrap(),
+                b(&r["value"]),
+                r["case"].as_str().unwrap(),
+            );
             seen.insert(field);
             let chain: [u8; 32];
             let e = match field {
-                "to.opening" => op::Credit { to: Party { opening: &v, ..to }, ..c },
-                "auditor.opening" => op::Credit { auditor: Some(Party { opening: &v, ..au }), ..c },
-                "to.kemPk" => op::Credit { to: Party { kem_pk: &v, ..to }, ..c },
-                "auditor.kemPk" => op::Credit { auditor: Some(Party { kem_pk: &v, ..au }), ..c },
+                "to.opening" => op::Credit {
+                    to: Party { opening: &v, ..to },
+                    ..c
+                },
+                "auditor.opening" => op::Credit {
+                    auditor: Some(Party { opening: &v, ..au }),
+                    ..c
+                },
+                "to.kemPk" => op::Credit {
+                    to: Party { kem_pk: &v, ..to },
+                    ..c
+                },
+                "auditor.kemPk" => op::Credit {
+                    auditor: Some(Party { kem_pk: &v, ..au }),
+                    ..c
+                },
                 "chainUid" => {
                     chain = v.clone().try_into().unwrap();
-                    op::Credit { chain_uid: &chain, ..c }
+                    op::Credit {
+                        chain_uid: &chain,
+                        ..c
+                    }
                 }
-                "to.keyVersion" => op::Credit { to: Party { key_version: u64::from_be_bytes(v.clone().try_into().unwrap()), ..to }, ..c },
+                "to.keyVersion" => op::Credit {
+                    to: Party {
+                        key_version: u64::from_be_bytes(v.clone().try_into().unwrap()),
+                        ..to
+                    },
+                    ..c
+                },
                 f => panic!("an unknown field {f}"),
             };
-            assert_eq!(outcome_recipient(op::check_recipient(&x.ok_t, &e)), r["recipient"].as_str().unwrap(), "{case}");
-            assert_eq!(outcome_auditor(op::check_auditor(&x.ok_a, &e)), r["auditor"].as_str().unwrap(), "{case}");
+            assert_eq!(
+                outcome_recipient(op::check_recipient(&x.ok_t, &e)),
+                r["recipient"].as_str().unwrap(),
+                "{case}"
+            );
+            assert_eq!(
+                outcome_auditor(op::check_auditor(&x.ok_a, &e)),
+                r["auditor"].as_str().unwrap(),
+                "{case}"
+            );
             if let Some(want) = r.get("aad") {
                 assert_eq!(op::aad(&e, &e.to), b(want), "{case}");
             }
         }
-        assert_eq!(seen.into_iter().collect::<Vec<_>>(), ["auditor.kemPk", "auditor.opening", "chainUid", "to.kemPk", "to.keyVersion", "to.opening"]);
+        assert_eq!(
+            seen.into_iter().collect::<Vec<_>>(),
+            [
+                "auditor.kemPk",
+                "auditor.opening",
+                "chainUid",
+                "to.kemPk",
+                "to.keyVersion",
+                "to.opening"
+            ]
+        );
     }
 
     /// The same rows through `PqzKeyHandle::check` (the handle of the row's recipient from its two secrets): every row whose
@@ -747,32 +1463,99 @@ mod handle {
         let o = load(&format!("pqz/{}opening.json", set_dir()));
         let x = opening_row(&o);
         let handle = |cu: [u8; 32], v: u64| {
-            PqzKeyHandle::vectors_from_secrets(&x.seed_t, &x.ok_t, &Scope { account: 0, index: 0, ua: x.to_ua, chain_uid: cu, token: None, version: v })
-                .unwrap()
+            PqzKeyHandle::vectors_from_secrets(
+                &x.seed_t,
+                &x.ok_t,
+                &Scope {
+                    account: 0,
+                    index: 0,
+                    ua: x.to_ua,
+                    chain_uid: cu,
+                    token: None,
+                    version: v,
+                },
+            )
+            .unwrap()
         };
         let h = handle(x.cu, 0);
-        assert_eq!((h.pk(), h.open_kem_pk()), (x.pk_t.to_vec(), x.kem_t.clone()));
+        assert_eq!(
+            (h.pk(), h.open_kem_pk()),
+            (x.pk_t.to_vec(), x.kem_t.clone())
+        );
         let pk_a: &'static [u8] = Box::leak(x.pk_a.to_vec().into_boxed_slice());
-        let aud = |kem: &'static [u8]| AuditorKeys { ua: x.a_ua, pk: pk_a, kem_pk: kem };
+        let aud = |kem: &'static [u8]| AuditorKeys {
+            ua: x.a_ua,
+            pk: pk_a,
+            kem_pk: kem,
+        };
         let kem_a: &'static [u8] = Box::leak(x.kem_a.clone().into_boxed_slice());
         let check_with = |h: &PqzKeyHandle, leg: &Leg, kv: u64, a: Option<AuditorKeys>| {
             let code = code_of(&x.to_ua, &[kv, 0], leg);
-            h.check(&Credit { token: x.token, index: 4, slot: SLOT, code: &code, auditor: a, reads: READ1 })
+            h.check(&Credit {
+                token: x.token,
+                index: 4,
+                slot: SLOT,
+                code: &code,
+                auditor: a,
+                reads: READ1,
+            })
         };
-        let check = |h: &PqzKeyHandle, leg: &Leg, kv: u64, a: AuditorKeys| check_with(h, leg, kv, Some(a));
-        let amount = x.digits.iter().enumerate().map(|(i, d)| u64::from(*d) << (4 * i)).sum();
+        let check =
+            |h: &PqzKeyHandle, leg: &Leg, kv: u64, a: AuditorKeys| check_with(h, leg, kv, Some(a));
+        let amount = x
+            .digits
+            .iter()
+            .enumerate()
+            .map(|(i, d)| u64::from(*d) << (4 * i))
+            .sum();
         accepted(check(&h, &x.leg, 0, aud(kem_a)), amount);
-        assert!(matches!(check_with(&h, &x.leg, 0, None), Err(Refused::Input(_))), "an audited leg without the auditor's keys");
-        let short = AuditorKeys { pk: &pk_a[1..], ..aud(kem_a) };
-        assert!(matches!(check(&h, &x.leg, 0, short), Err(Refused::Input(_))), "an auditor key one byte short");
+        assert!(
+            matches!(check_with(&h, &x.leg, 0, None), Err(Refused::Input(_))),
+            "an audited leg without the auditor's keys"
+        );
+        let short = AuditorKeys {
+            pk: &pk_a[1..],
+            ..aud(kem_a)
+        };
+        assert!(
+            matches!(check(&h, &x.leg, 0, short), Err(Refused::Input(_))),
+            "an auditor key one byte short"
+        );
         let mut ran = 0;
         for r in o["rejects"].as_array().unwrap() {
-            let (field, v, case) = (r["field"].as_str().unwrap(), b(&r["value"]), r["case"].as_str().unwrap());
+            let (field, v, case) = (
+                r["field"].as_str().unwrap(),
+                b(&r["value"]),
+                r["case"].as_str().unwrap(),
+            );
             let got = match field {
-                "to.opening" => check(&h, &Leg { o_t: v.clone(), ..clone_leg(&x.leg) }, 0, aud(kem_a)),
-                "auditor.opening" => check(&h, &Leg { o_a: Some(v.clone()), ..clone_leg(&x.leg) }, 0, aud(kem_a)),
-                "auditor.kemPk" => check(&h, &x.leg, 0, aud(Box::leak(v.clone().into_boxed_slice()))),
-                "chainUid" => check(&handle(v.clone().try_into().unwrap(), 0), &x.leg, 0, aud(kem_a)),
+                "to.opening" => check(
+                    &h,
+                    &Leg {
+                        o_t: v.clone(),
+                        ..clone_leg(&x.leg)
+                    },
+                    0,
+                    aud(kem_a),
+                ),
+                "auditor.opening" => check(
+                    &h,
+                    &Leg {
+                        o_a: Some(v.clone()),
+                        ..clone_leg(&x.leg)
+                    },
+                    0,
+                    aud(kem_a),
+                ),
+                "auditor.kemPk" => {
+                    check(&h, &x.leg, 0, aud(Box::leak(v.clone().into_boxed_slice())))
+                }
+                "chainUid" => check(
+                    &handle(v.clone().try_into().unwrap(), 0),
+                    &x.leg,
+                    0,
+                    aud(kem_a),
+                ),
                 "to.keyVersion" => {
                     let kv = u64::from_be_bytes(v.clone().try_into().unwrap());
                     check(&handle(x.cu, kv), &x.leg, kv, aud(kem_a))
@@ -782,15 +1565,34 @@ mod handle {
             ran += 1;
             match got {
                 Ok(Checked::Skip(_)) => assert_eq!(r["recipient"], "skip", "{case}"),
-                Err(Refused::Input(_)) => assert_ne!(v.len(), pqz3k::OPENING, "{case}: a stored opening of 1,648 bytes is a blob"),
+                Err(Refused::Input(_)) => assert_ne!(
+                    v.len(),
+                    pqz3k::OPENING,
+                    "{case}: a stored opening of 1,648 bytes is a blob"
+                ),
                 g => panic!("{case}: {g:?}"),
             }
         }
-        assert_eq!(ran, o["rejects"].as_array().unwrap().iter().filter(|r| r["field"] != "to.kemPk").count());
+        assert_eq!(
+            ran,
+            o["rejects"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|r| r["field"] != "to.kemPk")
+                .count()
+        );
     }
     fn clone_leg(l: &Leg) -> Leg {
-        Leg { u: l.u.clone(), v_t: l.v_t.clone(), v_a: l.v_a.clone(), u_f: l.u_f.clone(), v_f: l.v_f.clone(), o_t: l.o_t.clone(),
-            o_a: l.o_a.clone() }
+        Leg {
+            u: l.u.clone(),
+            v_t: l.v_t.clone(),
+            v_a: l.v_a.clone(),
+            u_f: l.u_f.clone(),
+            v_f: l.v_f.clone(),
+            o_t: l.o_t.clone(),
+            o_a: l.o_a.clone(),
+        }
     }
 
     /// The test constructor from the raw seed equals the wallet's derivation; the class seeds of two chains, two tokens and
@@ -801,13 +1603,24 @@ mod handle {
         let (k, w, ua, cu) = kat();
         let seed = bip39_seed(k["mnemonic"].as_str().unwrap());
         let s = scope(ua, cu, Some([0xa1; 20]), 1);
-        let (h, r) = (w.pqz_scoped_key(&s).unwrap(), PqzKeyHandle::vectors_from_seed(&seed, &s).unwrap());
-        assert_eq!((h.seed_commitment(), h.pk(), h.open_kem_pk()), (r.seed_commitment(), r.pk(), r.open_kem_pk()));
+        let (h, r) = (
+            w.pqz_scoped_key(&s).unwrap(),
+            PqzKeyHandle::vectors_from_seed(&seed, &s).unwrap(),
+        );
+        assert_eq!(
+            (h.seed_commitment(), h.pk(), h.open_kem_pk()),
+            (r.seed_commitment(), r.pk(), r.open_kem_pk())
+        );
         let mut all = std::collections::HashSet::new();
         for cu in [[0xc1u8; 32], [0xc2; 32]] {
             for v in 0..2 {
                 for t in [None, Some([0xa1u8; 20]), Some([0xa2; 20])] {
-                    assert!(all.insert(PqzKeyHandle::vectors_from_seed(&seed, &scope([1; 32], cu, t, v)).unwrap().seed_commitment().unwrap()));
+                    assert!(all.insert(
+                        PqzKeyHandle::vectors_from_seed(&seed, &scope([1; 32], cu, t, v))
+                            .unwrap()
+                            .seed_commitment()
+                            .unwrap()
+                    ));
                 }
             }
         }

@@ -4,12 +4,14 @@
 // PQZH_WHIR="rate,fold,pow,target": zero-knowledge WHIR (step_init3; zk implied, FRI arguments unused).
 // PQZH_PROOFS=DIR: verify only, proofs made natively by `pqzh_bench --dump DIR` with the same parameters.
 // Build first: (cd wasm && cargo build --release --offline --target wasm32-unknown-unknown). Prints JSON lines.
-import { readFileSync } from 'node:fs';
+import { readFileSync } from "node:fs";
 
-const [np = 3, nv = 50, nadv = 4, lb = 0, q = 0, zk = 0, maxp = 0, ext5 = 0, cap = 0, ar = 0, pow = 0] =
-  process.argv.slice(2).map(Number);
+const [np = 3, nv = 50, nadv = 4, lb = 0, q = 0, zk = 0, maxp = 0, ext5 = 0, cap = 0, ar = 0, pow = 0] = process.argv
+  .slice(2)
+  .map(Number);
 const proofs = process.env.PQZH_PROOFS;
-const file = process.env.PQZH_WASM_FILE || new URL('target/wasm32-unknown-unknown/release/pqzh_wasm.wasm', import.meta.url);
+const file =
+  process.env.PQZH_WASM_FILE || new URL("target/wasm32-unknown-unknown/release/pqzh_wasm.wasm", import.meta.url);
 const bytes = readFileSync(file);
 const { instance } = await WebAssembly.instantiate(bytes, {});
 const x = instance.exports;
@@ -20,15 +22,25 @@ const r3 = (t) => Math.round(t * 1000) / 1000;
 const stats = (v) => {
   v.sort((a, b) => a - b);
   const n = v.length;
-  return { n, mean_ms: r3(v.reduce((s, t) => s + t, 0) / n), p50_ms: r3(v[n >> 1]), p99_ms: r3(v[Math.floor((n - 1) * 0.99)]),
-           max_ms: r3(v[n - 1]) };
+  return {
+    n,
+    mean_ms: r3(v.reduce((s, t) => s + t, 0) / n),
+    p50_ms: r3(v[n >> 1]),
+    p99_ms: r3(v[Math.floor((n - 1) * 0.99)]),
+    max_ms: r3(v[n - 1]),
+  };
 };
 
-out({ wasm_bytes: bytes.length, node: process.version, args: { np, nv, nadv, lb, q, zk, maxp, ext5, cap, ar, pow, proofs, whir: process.env.PQZH_WHIR } });
+out({
+  wasm_bytes: bytes.length,
+  node: process.version,
+  args: { np, nv, nadv, lb, q, zk, maxp, ext5, cap, ar, pow, proofs, whir: process.env.PQZH_WHIR },
+});
 let t0 = performance.now();
 const whir = process.env.PQZH_WHIR;
-const kinds = whir ? x.step_init3(maxp, ext5, ...whir.split(',').map(Number))
-                   : x.step_init2(lb, q, zk, maxp, ext5, cap, ar, pow);
+const kinds = whir
+  ? x.step_init3(maxp, ext5, ...whir.split(",").map(Number))
+  : x.step_init2(lb, q, zk, maxp, ext5, cap, ar, pow);
 const load = (tx, which, file) => {
   const b = readFileSync(file);
   const p = x.step_alloc(b.length);
@@ -39,7 +51,7 @@ const load = (tx, which, file) => {
 out({ init_ms: r3(performance.now() - t0), memory_mib: mem() });
 let fails = 0;
 for (const tx of [0, 1]) {
-  const rel = tx ? 'R_TX' : 'R_REG';
+  const rel = tx ? "R_TX" : "R_REG";
   const tp = [];
   let len = 0;
   if (proofs) {
@@ -50,10 +62,22 @@ for (const tx of [0, 1]) {
     t0 = performance.now();
     len = x.step_prove(tx, i);
     tp.push(performance.now() - t0);
-    if (!len) { out({ rel, prove_failed: i }); fails++; }
+    if (!len) {
+      out({ rel, prove_failed: i });
+      fails++;
+    }
   }
-  const fnv = (x.step_hash(tx) >>> 0).toString(16).padStart(8, '0');
-  if (!proofs) out({ rel, proof_bytes: len, fnv_last: fnv, timing: 'prove', stats: stats(tp), memory_mib: mem(), within_256mib: mem() <= 256 });
+  const fnv = (x.step_hash(tx) >>> 0).toString(16).padStart(8, "0");
+  if (!proofs)
+    out({
+      rel,
+      proof_bytes: len,
+      fnv_last: fnv,
+      timing: "prove",
+      stats: stats(tp),
+      memory_mib: mem(),
+      within_256mib: mem() <= 256,
+    });
   else out({ rel, proof_bytes: len, fnv_loaded: fnv, memory_mib: mem() });
   if (!proofs) x.step_prove_other(tx);
   const tv = [];
@@ -62,16 +86,19 @@ for (const tx of [0, 1]) {
     fails += x.step_verify(tx) !== 1;
     tv.push(performance.now() - t0);
   }
-  out({ rel, timing: 'verify_honest', stats: stats(tv), memory_mib: mem() });
+  out({ rel, timing: "verify_honest", stats: stats(tv), memory_mib: mem() });
   const ta = [];
   for (let k = 0; k < kinds; k++)
     for (let i = 0; i < nadv; i++) {
       t0 = performance.now();
       const acc = x.step_verify_bad(tx, k);
       ta.push(performance.now() - t0);
-      if (acc !== 0) { out({ rel, accepted_kind: k }); fails++; }
+      if (acc !== 0) {
+        out({ rel, accepted_kind: k });
+        fails++;
+      }
     }
-  out({ rel, timing: 'verify_adversarial', stats: stats(ta), memory_mib: mem() });
+  out({ rel, timing: "verify_adversarial", stats: stats(ta), memory_mib: mem() });
 }
 out({ fails, memory_mib_final: mem() });
 process.exit(fails ? 1 : 0);

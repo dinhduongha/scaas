@@ -96,7 +96,8 @@ contract PqChatDigests {
 contract PqChatOnchain is OnchainBase {
     uint16 internal constant ML65 = UAKinds.MLDSA65;
     bytes32 internal constant UA_RELAY_FEE = keccak256(
-        "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)");
+        "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)"
+    );
     uint256 internal constant LANE_FEE = 31; // test key 1's relay-fee lane on this run's token
     /// @dev A UA registration (ML-DSA-65 PoP through the cached key) and each part of `cacheExpandedKey`: a fixed 56 M (under
     ///      60 M), as Tokens.s.sol: the estimate undershoots regular + state gas (EIP-8037).
@@ -168,8 +169,15 @@ contract PqChatOnchain is OnchainBase {
                 (e.libs, e.libCodeHashes) = (new address[](1), new bytes32[](1));
                 (e.libs[0], e.libCodeHashes[0]) = (topics, topics.codehash);
                 f.publishClassEnv(3, 0, 1, f.chainUid(), e);
-                impl = f.deployImplementation{gas: RELEASE_GAS}(id, 1, IPqChat.initialize.selector, type(IPqChat).interfaceId,
-                    vm.getCode("PqChat.sol:PqChat"), abi.encode(topics), f.chainUid());
+                impl = f.deployImplementation{gas: RELEASE_GAS}(
+                    id,
+                    1,
+                    IPqChat.initialize.selector,
+                    type(IPqChat).interfaceId,
+                    vm.getCode("PqChat.sol:PqChat"),
+                    abi.encode(topics),
+                    f.chainUid()
+                );
                 f.setClassKindEnabled(3, 0, true, f.chainUid());
                 vm.stopBroadcast();
             }
@@ -183,34 +191,44 @@ contract PqChatOnchain is OnchainBase {
 
     function _instance() internal {
         vm.broadcast(k1);
-        chat2 = IPqChat(f.createInstance(IOpenFactory.ReleaseId(3, 0, 1), _salt("pqchat-2"),
-            abi.encodeCall(IPqChat.initialize, (bytes32(0)))));
+        chat2 = IPqChat(
+            f.createInstance(
+                IOpenFactory.ReleaseId(3, 0, 1), _salt("pqchat-2"), abi.encodeCall(IPqChat.initialize, (bytes32(0)))
+            )
+        );
         _book(address(chat2), "PqChat");
         require(chat2.owner() == 0, "instance 2 owner");
         (IOpenFactory.Created[] memory page, uint256 total) = f.contractsPage(3, 0, 64);
         bool found;
-        for (uint256 i; i < page.length; ++i) found = found || page[i].addr == address(chat2);
+        for (uint256 i; i < page.length; ++i) {
+            found = found || page[i].addr == address(chat2);
+        }
         require(found && total >= 2, "contractsPage(3) lists the instance");
     }
 
     function _ml(string memory job) internal returns (bytes memory) {
         string[] memory c = new string[](3);
         (c[0], c[1]) = ("sh", "-c");
-        c[2] = string.concat("printf '%s\\n' '", job,
-            "' | node script/pqz/mldsa.mjs ../../clients/clientkeys | sed 's/^/0x/'");
+        c[2] = string.concat(
+            "printf '%s\\n' '", job, "' | node script/pqz/mldsa.mjs ../../clients/clientkeys | sed 's/^/0x/'"
+        );
         return vm.ffi(c);
     }
 
     function _bare(bytes32 x) internal pure returns (string memory) {
         bytes memory s = bytes(vm.toString(x));
         bytes memory o = new bytes(64);
-        for (uint256 i; i < 64; ++i) o[i] = s[i + 2];
+        for (uint256 i; i < 64; ++i) {
+            o[i] = s[i + 2];
+        }
         return string(o);
     }
 
     function _kem(bytes32 seed) internal pure returns (IUARegistry.KemKey memory k) {
         bytes memory ek;
-        for (uint256 i; i < 49; ++i) ek = bytes.concat(ek, keccak256(abi.encode(seed, i))); // 1,568 B (ML-KEM-1024 ek)
+        for (uint256 i; i < 49; ++i) {
+            ek = bytes.concat(ek, keccak256(abi.encode(seed, i))); // 1,568 B (ML-KEM-1024 ek)
+        }
         k = IUARegistry.KemKey(UAKinds.KEM_SCHEME_MLKEM1024_X25519, ek, keccak256(abi.encode(seed, "x25519")));
     }
 
@@ -226,7 +244,8 @@ contract PqChatOnchain is OnchainBase {
             bytes32 rd = UAKinds.registrationDigest(ua, ML65, 0, UAKinds.kemRecordHash(ua, 0, UAKinds.kemPk(a.kem)), 0);
             bytes memory pop = _mlRaw(seed, reg.uaMessage(ML65, UAKinds.PURPOSE_POP_V2, rd));
             vm.startBroadcast(k1);
-            if (_mldsaCache(ML65)) { // 3zh: the cache path only (a precompile verifier refuses the cache)
+            if (_mldsaCache(ML65)) {
+                // 3zh: the cache path only (a precompile verifier refuses the cache)
                 reg.cacheExpandedKey{gas: REGISTER_GAS}(ML65, pk, 0);
                 reg.cacheExpandedKey{gas: REGISTER_GAS}(ML65, pk, 1);
             }
@@ -277,8 +296,12 @@ contract PqChatOnchain is OnchainBase {
     function _relayed(address target, bytes memory cd) internal {
         uint256 fn = NormalToken(tok).mtxNonce(_pad(a1), LANE_FEE);
         bytes32 payee = _pad(router);
-        bytes32 d = _digest(tok, keccak256(abi.encode(UA_RELAY_FEE, _pad(a1), target, keccak256(cd), payee, uint256(1),
-            LANE_FEE, fn, vu, router)));
+        bytes32 d = _digest(
+            tok,
+            keccak256(
+                abi.encode(UA_RELAY_FEE, _pad(a1), target, keccak256(cd), payee, uint256(1), LANE_FEE, fn, vu, router)
+            )
+        );
         vm.broadcast(k3);
         RelayFeeRouter(router).relay(target, cd, tok, _pad(a1), payee, 1, LANE_FEE, fn, vu, _sig(k1, d));
         require(NormalToken(tok).mtxNonce(_pad(a1), LANE_FEE) == fn + 1, "relay fee lane");
@@ -288,7 +311,9 @@ contract PqChatOnchain is OnchainBase {
 
     function _mk(uint256[] memory idx) internal view returns (IPqChat.MemberKey[] memory m) {
         m = new IPqChat.MemberKey[](idx.length);
-        for (uint256 i; i < idx.length; ++i) m[i] = IPqChat.MemberKey(uas[idx[i]], 0, bytes32(0));
+        for (uint256 i; i < idx.length; ++i) {
+            m[i] = IPqChat.MemberKey(uas[idx[i]], 0, bytes32(0));
+        }
     }
 
     function _ids(uint256 a, uint256 b) internal pure returns (uint256[] memory l) {
@@ -303,17 +328,25 @@ contract PqChatOnchain is OnchainBase {
 
     function _uas(uint256[] memory idx) internal view returns (bytes32[] memory u) {
         u = new bytes32[](idx.length);
-        for (uint256 i; i < idx.length; ++i) u[i] = uas[idx[i]];
+        for (uint256 i; i < idx.length; ++i) {
+            u[i] = uas[idx[i]];
+        }
     }
 
     /// @dev Stand-in wrap bytes (the contract checks shape and hash only): 1,568 B ciphertext, 48 B sealed key.
-    function _wraps(IPqChat.MemberKey[] memory m, bytes32 tag) internal view returns (IPqChat.Wrap[] memory w, bytes32[] memory hs)
+    function _wraps(IPqChat.MemberKey[] memory m, bytes32 tag)
+        internal
+        view
+        returns (IPqChat.Wrap[] memory w, bytes32[] memory hs)
     {
         (w, hs) = (new IPqChat.Wrap[](m.length), new bytes32[](m.length));
         for (uint256 i; i < m.length; ++i) {
             bytes memory ct;
-            for (uint256 j; j < 49; ++j) ct = bytes.concat(ct, keccak256(abi.encode(tag, m[i].ua, j)));
-            bytes memory sk = bytes.concat(keccak256(abi.encode(tag, m[i].ua, "k")), bytes16(keccak256(abi.encode(tag, "s"))));
+            for (uint256 j; j < 49; ++j) {
+                ct = bytes.concat(ct, keccak256(abi.encode(tag, m[i].ua, j)));
+            }
+            bytes memory sk =
+                bytes.concat(keccak256(abi.encode(tag, m[i].ua, "k")), bytes16(keccak256(abi.encode(tag, "s"))));
             w[i] = IPqChat.Wrap(m[i].ua, m[i].keyId, ct, keccak256(abi.encode(tag, m[i].ua, "x")), sk);
             hs[i] = h.wrap(w[i]);
         }
@@ -321,11 +354,15 @@ contract PqChatOnchain is OnchainBase {
 
     function _slice(IPqChat.Wrap[] memory w, uint256 from, uint256 to) internal pure returns (IPqChat.Wrap[] memory s) {
         s = new IPqChat.Wrap[](to - from);
-        for (uint256 i; i < s.length; ++i) s[i] = w[from + i];
+        for (uint256 i; i < s.length; ++i) {
+            s[i] = w[from + i];
+        }
     }
 
     function _session(uint256 creator, uint64 nonce, uint256[] memory idx)
-        internal view returns (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w)
+        internal
+        view
+        returns (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w)
     {
         (s.creator, s.nonce, s.homeChain, s.homeChatContract) = (uas[creator], nonce, uid, address(chat));
         s.admins = _uas(_ids(creator));
@@ -334,9 +371,15 @@ contract PqChatOnchain is OnchainBase {
         s.sealedInfo = bytes.concat(keccak256(abi.encode(runSalt, "info", nonce)));
     }
 
-    function _epoch(bytes32 sid_, uint256 author, uint64 nonce, uint64 n, bytes32 parent, bytes32[] memory admins,
-        uint256[] memory idx) internal view returns (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory w)
-    {
+    function _epoch(
+        bytes32 sid_,
+        uint256 author,
+        uint64 nonce,
+        uint64 n,
+        bytes32 parent,
+        bytes32[] memory admins,
+        uint256[] memory idx
+    ) internal view returns (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory w) {
         e.sessionId = sid_;
         e.author = uas[author];
         e.nonce = nonce;
@@ -363,8 +406,13 @@ contract PqChatOnchain is OnchainBase {
         sid = chat.createSession(s, w, sg);
         require(sid == h.sessionId(s.creator, s.nonce) && chat.epochComplete(sid), "session complete");
         require(chat.sessionCount(uas[1]) >= 1 && chat.latestEpoch(sid) == sid, "recovery views at create");
-        _neg(a2, address(chat), abi.encodeCall(IPqChat.createSession, (s, w, sg)), IPqChat.PqChatNonceUsed.selector,
-            "pqchat: createSession with a used (creator, nonce)");
+        _neg(
+            a2,
+            address(chat),
+            abi.encodeCall(IPqChat.createSession, (s, w, sg)),
+            IPqChat.PqChatNonceUsed.selector,
+            "pqchat: createSession with a used (creator, nonce)"
+        );
     }
 
     /// @dev In chunks: one wrap with the record, the other by `addWraps`, relayed unsigned through RelayFeeRouter.
@@ -389,8 +437,13 @@ contract PqChatOnchain is OnchainBase {
         require(chat.childOf(sid) == e1 && chat.latestEpoch(sid) == e1, "the home slot and latestEpoch");
         (e, ew) = _epoch(sid, 0, sn + 7, 1, sid, admins, _ids(0));
         sg = _sigOf(0, h.epoch(e));
-        _neg(a2, address(chat), abi.encodeCall(IPqChat.rekey, (e, ew, sg)), IPqChat.PqChatEpochTaken.selector,
-            "pqchat: a second child at home (the P9 removal attack)");
+        _neg(
+            a2,
+            address(chat),
+            abi.encodeCall(IPqChat.rekey, (e, ew, sg)),
+            IPqChat.PqChatEpochTaken.selector,
+            "pqchat: a second child at home (the P9 removal attack)"
+        );
         uint256[] memory abc = new uint256[](3);
         (abc[0], abc[1], abc[2]) = (0, 1, 2);
         (e, ew) = _epoch(sid, 0, sn + 1, 2, e1, admins, abc);
@@ -423,7 +476,9 @@ contract PqChatOnchain is OnchainBase {
     }
 
     function _msgAt(bytes32 session, bytes32 eid, uint256 sender, uint64 counter)
-        internal view returns (IPqChat.PqChatMessage memory m)
+        internal
+        view
+        returns (IPqChat.PqChatMessage memory m)
     {
         (m.sessionId, m.epochId, m.sender, m.device, m.counter) = (session, eid, uas[sender], dv, counter);
         m.parents = new bytes32[](1);
@@ -433,7 +488,8 @@ contract PqChatOnchain is OnchainBase {
 
     function _messages() internal {
         // the device id: a 16-byte UUID, v7 here (owner 2026-11-10: v7 or v4, never parsed)
-        dv = bytes16(uint128(uint256(_salt("device")))) & 0xffffffffffff0fff3fffffffffffffff | 0x00000000000070008000000000000000;
+        dv = bytes16(uint128(uint256(_salt("device")))) & 0xffffffffffff0fff3fffffffffffffff
+            | 0x00000000000070008000000000000000;
         _post();
         _postChunked();
         _leaveAndDrop();
@@ -448,8 +504,13 @@ contract PqChatOnchain is OnchainBase {
         IUARegistry.UASig memory sg = _sigOf(0, h.message(m));
         vm.broadcast(k2);
         chat.postMessage(m, sg);
-        _neg(a2, address(chat), abi.encodeCall(IPqChat.postMessage, (m, sg)), IPqChat.PqChatNonceUsed.selector,
-            "pqchat: postMessage with a used (epoch, sender, device) counter");
+        _neg(
+            a2,
+            address(chat),
+            abi.encodeCall(IPqChat.postMessage, (m, sg)),
+            IPqChat.PqChatNonceUsed.selector,
+            "pqchat: postMessage with a used (epoch, sender, device) counter"
+        );
     }
 
     /// @dev UA-7 P48, the race of the Fable review P1-2: a session of A, B, C where A removes C from epoch 0 and no child
@@ -467,14 +528,29 @@ contract PqChatOnchain is OnchainBase {
         vm.broadcast(k2);
         chat.remove(r, sg);
         require(chat.removedIn(s3, uas[2]), "removedIn");
-        _neg(a2, address(chat), abi.encodeCall(IPqChat.remove, (r, sg)), IPqChat.PqChatNonceUsed.selector,
-            "pqchat: remove replayed");
+        _neg(
+            a2,
+            address(chat),
+            abi.encodeCall(IPqChat.remove, (r, sg)),
+            IPqChat.PqChatNonceUsed.selector,
+            "pqchat: remove replayed"
+        );
         (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory ew) = _epoch(s3, 2, 1, 1, s3, s.admins, abc);
-        _neg(a2, address(chat), abi.encodeCall(IPqChat.rekey, (e, ew, _sigOf(2, h.epoch(e)))),
-            IPqChat.PqChatNotMember.selector, "pqchat: the removed member's rekey (the race of the Fable review P1-2)");
+        _neg(
+            a2,
+            address(chat),
+            abi.encodeCall(IPqChat.rekey, (e, ew, _sigOf(2, h.epoch(e)))),
+            IPqChat.PqChatNotMember.selector,
+            "pqchat: the removed member's rekey (the race of the Fable review P1-2)"
+        );
         (e, ew) = _epoch(s3, 1, 1, 1, s3, s.admins, abc);
-        _neg(a2, address(chat), abi.encodeCall(IPqChat.rekey, (e, ew, _sigOf(1, h.epoch(e)))),
-            IPqChat.PqChatRemovedKept.selector, "pqchat: a child keeping a removed member");
+        _neg(
+            a2,
+            address(chat),
+            abi.encodeCall(IPqChat.rekey, (e, ew, _sigOf(1, h.epoch(e)))),
+            IPqChat.PqChatRemovedKept.selector,
+            "pqchat: a child keeping a removed member"
+        );
     }
 
     function _post() internal {
@@ -509,11 +585,21 @@ contract PqChatOnchain is OnchainBase {
         bytes32 id3 = chat.rekey(e3, w3, sg);
         require(chat.latestEpoch(sid) == id3 && chat.epochComplete(id3), "latestEpoch after the drop");
         IPqChat.PqChatMessage memory nm = _msg(id3, 1, 0);
-        _neg(a2, address(chat), abi.encodeCall(IPqChat.postMessage, (nm, _sigOf(1, h.message(nm)))),
-            IPqChat.PqChatNotMember.selector, "pqchat: postMessage by a non-member");
+        _neg(
+            a2,
+            address(chat),
+            abi.encodeCall(IPqChat.postMessage, (nm, _sigOf(1, h.message(nm)))),
+            IPqChat.PqChatNotMember.selector,
+            "pqchat: postMessage by a non-member"
+        );
         nm = _msg(e2, 0, 1);
-        _neg(a2, address(chat), abi.encodeCall(IPqChat.postMessage, (nm, _sigOf(0, h.message(nm)))),
-            IPqChat.PqChatEpochTaken.selector, "pqchat: postMessage under a superseded epoch (Fable P1-1)");
+        _neg(
+            a2,
+            address(chat),
+            abi.encodeCall(IPqChat.postMessage, (nm, _sigOf(0, h.message(nm)))),
+            IPqChat.PqChatEpochTaken.selector,
+            "pqchat: postMessage under a superseded epoch (Fable P1-1)"
+        );
     }
 
     /// @dev storeMessage: direct by test key 3, and relayed unsigned through the router.
@@ -526,8 +612,13 @@ contract PqChatOnchain is OnchainBase {
         require(chat.storedCount(hint) == 2, "storedCount");
         require(keccak256(chat.storedAt(hint, 1)) == keccak256(abi.encode(uint8(1), hint, env)), "storedAt");
         require(chat.storedRange(hint, 0, 100).length == 2 && chat.STORED_RANGE_MAX() == 16, "storedRange");
-        _neg(a3, address(chat), abi.encodeCall(IPqChat.storeMessage, (uint8(2), hint, env)), IPqChat.PqChatShape.selector,
-            "pqchat: storeMessage of a version other than 1");
+        _neg(
+            a3,
+            address(chat),
+            abi.encodeCall(IPqChat.storeMessage, (uint8(2), hint, env)),
+            IPqChat.PqChatShape.selector,
+            "pqchat: storeMessage of a version other than 1"
+        );
     }
 
     // ------------------------------------------------------------------ public topics and votes (the module)
@@ -541,7 +632,7 @@ contract PqChatOnchain is OnchainBase {
     function _topic() internal {
         IPqChat.PqTopic memory t;
         (t.admin, t.nonce, t.homeChain, t.homeChatContract, t.name, t.about, t.openReplies) =
-            (uas[0], uint64(uint256(_salt("topic")) >> 200), uid, address(chat), "onchain", bytes("matrix"), true);
+        (uas[0], uint64(uint256(_salt("topic")) >> 200), uid, address(chat), "onchain", bytes("matrix"), true);
         IUARegistry.UASig memory sg = _sigOf(0, h.topic(t));
         vm.broadcast(k2);
         tid = chat.createTopic(t, sg);
@@ -566,7 +657,8 @@ contract PqChatOnchain is OnchainBase {
         vm.broadcast(k2);
         pid = chat.postEntry(p, sg);
         IPqChat.PqTopicEntry memory q;
-        (q.topicId, q.author, q.nonce, q.parentId, q.mediaType, q.body) = (tid, uas[2], 1, pid, "text/plain", bytes("a reply"));
+        (q.topicId, q.author, q.nonce, q.parentId, q.mediaType, q.body) =
+        (tid, uas[2], 1, pid, "text/plain", bytes("a reply"));
         sg = _sigOf(2, h.entry(q));
         vm.broadcast(k2);
         chat.postEntry(q, sg);
@@ -592,7 +684,12 @@ contract PqChatOnchain is OnchainBase {
         (uint128 up, uint128 down) = chat.scoreOf(pid);
         require(up == 0 && down == 1, "scoreOf: one count moved");
         v = IPqChat.PqTopicVote(pid, uas[2], 2, 1);
-        _neg(a2, address(chat), abi.encodeCall(IPqChat.voteEntry, (v, _sigOf(2, h.vote(v)))),
-            IPqChat.PqTopicVoteValue.selector, "pqchat: a vote value of 2");
+        _neg(
+            a2,
+            address(chat),
+            abi.encodeCall(IPqChat.voteEntry, (v, _sigOf(2, h.vote(v)))),
+            IPqChat.PqTopicVoteValue.selector,
+            "pqchat: a vote value of 2"
+        );
     }
 }

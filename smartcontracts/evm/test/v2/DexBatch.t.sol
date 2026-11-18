@@ -57,12 +57,18 @@ contract DexBatchTest is UADexBase {
     /// An exchange leg, ECDSA by its signer: an outside token's `DexOrder` (shape 0) or a SCaaS token's `UATradeOrder`
     /// (shape 1, ua-mtx-merge T6).
     function _leg(address sell, ITradeToken.TradeOrder memory o, uint256 sellFill, uint256 floor)
-        internal view returns (ISCaaSDex.ExchangeLeg memory)
+        internal
+        view
+        returns (ISCaaSDex.ExchangeLeg memory)
     {
         return DexLegs.xLeg(sell, o, _natSig(sell, o), sellFill, floor);
     }
 
-    function _plan(bytes32 ref, ISCaaSDex.ExchangeLeg memory l) internal pure returns (ISCaaSDex.ExchangePlan memory p) {
+    function _plan(bytes32 ref, ISCaaSDex.ExchangeLeg memory l)
+        internal
+        pure
+        returns (ISCaaSDex.ExchangePlan memory p)
+    {
         p.ref = ref;
         p.legs = new ISCaaSDex.ExchangeLeg[](1);
         p.legs[0] = l;
@@ -75,12 +81,15 @@ contract DexBatchTest is UADexBase {
 
     /// `approve(router, amountIn)` on `tIn`, then the router swaps `amountIn` for `amountOut` of `tOut` to the DEX.
     function _swap(address tIn, address tOut, uint256 amountIn, uint256 amountOut)
-        internal view returns (ISCaaSDex.Interaction[] memory xs)
+        internal
+        view
+        returns (ISCaaSDex.Interaction[] memory xs)
     {
         xs = new ISCaaSDex.Interaction[](2);
         xs[0] = ISCaaSDex.Interaction(tIn, abi.encodeCall(IERC20.approve, (address(router), amountIn)));
-        xs[1] = ISCaaSDex.Interaction(address(router),
-            abi.encodeCall(MockRouter.swap, (tIn, tOut, amountIn, amountOut, address(dex))));
+        xs[1] = ISCaaSDex.Interaction(
+            address(router), abi.encodeCall(MockRouter.swap, (tIn, tOut, amountIn, amountOut, address(dex)))
+        );
     }
 
     /// The base plan (see the contract comment) and its route.
@@ -93,35 +102,44 @@ contract DexBatchTest is UADexBase {
     }
 
     function _ps(ISCaaSDex.ExchangePlan memory a, ISCaaSDex.ExchangePlan memory b)
-        internal pure returns (ISCaaSDex.ExchangePlan[] memory ps)
+        internal
+        pure
+        returns (ISCaaSDex.ExchangePlan[] memory ps)
     {
         ps = new ISCaaSDex.ExchangePlan[](2);
         (ps[0], ps[1]) = (a, b);
     }
 
     function _xs(ISCaaSDex.Interaction[] memory a, ISCaaSDex.Interaction[] memory b)
-        internal pure returns (ISCaaSDex.Interaction[][] memory xs)
+        internal
+        pure
+        returns (ISCaaSDex.Interaction[][] memory xs)
     {
         xs = new ISCaaSDex.Interaction[][](2);
         (xs[0], xs[1]) = (a, b);
     }
 
     function _ps(ISCaaSDex.ExchangePlan memory a, ISCaaSDex.ExchangePlan memory b, ISCaaSDex.ExchangePlan memory c)
-        internal pure returns (ISCaaSDex.ExchangePlan[] memory ps)
+        internal
+        pure
+        returns (ISCaaSDex.ExchangePlan[] memory ps)
     {
         ps = new ISCaaSDex.ExchangePlan[](3);
         (ps[0], ps[1], ps[2]) = (a, b, c);
     }
 
     function _xs(ISCaaSDex.Interaction[] memory a, ISCaaSDex.Interaction[] memory b, ISCaaSDex.Interaction[] memory c)
-        internal pure returns (ISCaaSDex.Interaction[][] memory xs)
+        internal
+        pure
+        returns (ISCaaSDex.Interaction[][] memory xs)
     {
         xs = new ISCaaSDex.Interaction[][](3);
         (xs[0], xs[1], xs[2]) = (a, b, c);
     }
 
     function _batch(ISCaaSDex.ExchangePlan[] memory ps, ISCaaSDex.Interaction[][] memory xs)
-        internal returns (bool[] memory)
+        internal
+        returns (bool[] memory)
     {
         vm.prank(RELAYER);
         return dex.mtxExchangeBatch(ps, xs);
@@ -222,8 +240,7 @@ contract DexBatchTest is UADexBase {
         dex.exchangeOne(p, xs, RELAYER);
         ISCaaSDex.Interaction[] memory into = _ix(address(dex), abi.encodeCall(dex.exchangeOne, (p, xs, RELAYER)));
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.ExchangeFailed("p2",
-            abi.encodeWithSelector(ISCaaSDex.ForbiddenTarget.selector, address(dex)));
+        emit ISCaaSDex.ExchangeFailed("p2", abi.encodeWithSelector(ISCaaSDex.ForbiddenTarget.selector, address(dex)));
         assertEq(_oks(_batch(_ps(p, _p("p2", 2)), _xs(xs, into))), _bools(true, false));
     }
 
@@ -232,8 +249,9 @@ contract DexBatchTest is UADexBase {
         bytes4 restore = 0x58c18f87; // restorePulled(TradeOrder,uint256)
         ISCaaSDex.Interaction[] memory xs = _ix(address(A), abi.encodeWithSelector(restore, _order(1), 1));
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.ExchangeFailed("p2",
-            abi.encodeWithSelector(ISCaaSDex.ForbiddenSelector.selector, address(A), restore));
+        emit ISCaaSDex.ExchangeFailed(
+            "p2", abi.encodeWithSelector(ISCaaSDex.ForbiddenSelector.selector, address(A), restore)
+        );
         _batch(_ps(_p("p1", 1), _p("p2", 2)), _xs(_r(1900), xs));
     }
 
@@ -269,7 +287,8 @@ contract DexBatchTest is UADexBase {
         bytes32 h = A.tradeOrderDigest(DexLegs.ua(o));
         vm.expectEmit(address(dex));
         emit ISCaaSDex.ExchangeFailed("p3", abi.encodeWithSelector(ITradeToken.OrderClosed.selector, h));
-        bool[] memory ok = _batch(_ps(_plan("p1", l), _plan("p2", l), _plan("p3", l)), _xs(_r(1900), _r(1900), _r(1900)));
+        bool[] memory ok =
+            _batch(_ps(_plan("p1", l), _plan("p2", l), _plan("p3", l)), _xs(_r(1900), _r(1900), _r(1900)));
         assertEq(_oks(ok), _bools(true, true, false));
         assertEq(A.pulled(h), 2000);
         assertEq(A.balanceOf(address(dex)), 0);
@@ -290,8 +309,10 @@ contract DexBatchTest is UADexBase {
         ISCaaSDex.ExchangePlan[] memory ps = _ps(_p("p1", 1), _plan("p2", l));
         ISCaaSDex.Interaction[][] memory xs = _xs(_r(1900), _swap(address(usdc), address(A), 1000, 450));
         bytes memory cd = abi.encodeCall(dex.mtxExchangeBatch, (ps, xs));
-        assertTrue(_starvedAt(cd, 200_000, 1_500_000, 2_000, ISCaaSDex.SigCheckGasStarved.selector) != 0,
-            "a call gas starves the outside leg's check and reverts the whole batch");
+        assertTrue(
+            _starvedAt(cd, 200_000, 1_500_000, 2_000, ISCaaSDex.SigCheckGasStarved.selector) != 0,
+            "a call gas starves the outside leg's check and reverts the whole batch"
+        );
         assertEq(_oks(_batch(ps, xs)), _bools(true, true));
         assertEq(A.balanceOf(w), 450);
     }
@@ -299,13 +320,14 @@ contract DexBatchTest is UADexBase {
     /// A real `UAVerifyGas` (a p256 UA leg, verify cap 400 k) reverts the whole batch; with the gas both settle.
     function test_batch_realUAVerifyGas_revertsWhole() public {
         ITradeToken.UATradeOrder memory u = _ua(uaP, address(B), 1000, 1800, 0);
-        ISCaaSDex.ExchangeLeg memory l =
-            DexLegs.exchange(_uaLeg(address(A), u, 1000), 1000, 1800);
+        ISCaaSDex.ExchangeLeg memory l = DexLegs.exchange(_uaLeg(address(A), u, 1000), 1000, 1800);
         ISCaaSDex.ExchangePlan[] memory ps = _ps(_p("p1", 1), _plan("p2", l));
         ISCaaSDex.Interaction[][] memory xs = _xs(_r(1900), _r(1900));
         bytes memory cd = abi.encodeCall(dex.mtxExchangeBatch, (ps, xs));
-        assertTrue(_starvedAt(cd, 300_000, 2_000_000, 5_000, UAKinds.UAVerifyGas.selector) != 0,
-            "a call gas starves the UA verify and reverts the whole batch");
+        assertTrue(
+            _starvedAt(cd, 300_000, 2_000_000, 5_000, UAKinds.UAVerifyGas.selector) != 0,
+            "a call gas starves the UA verify and reverts the whole batch"
+        );
         assertEq(_oks(_batch(ps, xs)), _bools(true, true));
         assertEq(B.balanceOfUA(uaP), 1900);
     }
@@ -315,8 +337,9 @@ contract DexBatchTest is UADexBase {
     function test_batch_forgedStarvationFromTarget_onlyThatPlan() public {
         Hostile h = new Hostile();
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.ExchangeFailed("p2",
-            _wrapped(0, address(h), abi.encodeWithSelector(ISCaaSDex.SigCheckGasStarved.selector, 1, 2)));
+        emit ISCaaSDex.ExchangeFailed(
+            "p2", _wrapped(0, address(h), abi.encodeWithSelector(ISCaaSDex.SigCheckGasStarved.selector, 1, 2))
+        );
         bool[] memory ok =
             _batch(_ps(_p("p1", 1), _p("p2", 2)), _xs(_r(1900), _ix(address(h), abi.encodeCall(Hostile.forge, ()))));
         assertEq(_oks(ok), _bools(true, false));
@@ -332,8 +355,9 @@ contract DexBatchTest is UADexBase {
         (x2[0], x2[1]) = (r[0], r[1]);
         x2[2] = ISCaaSDex.Interaction(address(f), abi.encodeCall(IERC20.approve, (address(1), 1)));
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.ExchangeFailed("p2",
-            abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(f)));
+        emit ISCaaSDex.ExchangeFailed(
+            "p2", abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(f))
+        );
         bool[] memory ok = _batch(_ps(_p("p1", 1), _p("p2", 2)), _xs(_r(1900), x2));
         assertEq(_oks(ok), _bools(true, false));
         assertEq(A.balanceOf(address(dex)), 0);
@@ -370,7 +394,9 @@ contract DexBatchTest is UADexBase {
         ISCaaSDex.Interaction[][] memory xs =
             _xs(_r(1900), _ix(address(h), abi.encodeCall(Hostile.burn, ())), new ISCaaSDex.Interaction[](0));
         bytes memory cd = abi.encodeCall(dex.mtxExchangeBatch, (ps, xs));
-        for (uint256 g = 2_000_000; g <= 30_000_000; g += 50_000) if (_burnedAt(cd, g, address(h))) return;
+        for (uint256 g = 2_000_000; g <= 30_000_000; g += 50_000) {
+            if (_burnedAt(cd, g, address(h))) return;
+        }
         revert("no call gas left the third plan out of gas while the batch returned");
     }
 

@@ -24,8 +24,7 @@ type BalanceDelta is int256;
 
 interface IPoolManager {
     function unlock(bytes calldata data) external returns (bytes memory);
-    function swap(PoolKey memory key, SwapParams memory params, bytes calldata hookData)
-        external returns (BalanceDelta);
+    function swap(PoolKey memory key, SwapParams memory params, bytes calldata hookData) external returns (BalanceDelta);
     function sync(address currency) external;
     function settle() external payable returns (uint256 paid);
     function take(address currency, address to, uint256 amount) external;

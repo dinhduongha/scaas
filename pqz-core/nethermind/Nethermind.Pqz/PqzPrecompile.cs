@@ -175,7 +175,8 @@ public sealed class PqzPrecompile : IPrecompile<PqzPrecompile>
             {
                 Thread.Sleep(ExitWatchdogMs);
                 Environment.FailFast(WatchdogLine);
-            }) { IsBackground = true, Name = "pqz-exit-watchdog" };
+            })
+            { IsBackground = true, Name = "pqz-exit-watchdog" };
             w.Start();
         }
         catch

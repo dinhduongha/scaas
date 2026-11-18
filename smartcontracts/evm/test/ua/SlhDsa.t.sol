@@ -25,8 +25,16 @@ contract SlhDsaTest is PqVectors {
         assertEq(n, 28);
         for (uint256 i; i < n; ++i) {
             string memory c = _case("acvp_slhdsa", i);
-            bool got = h.verify(_b(ext, string.concat(c, ".pk")), _b(ext, string.concat(c, ".mprime")), _b(ext, string.concat(c, ".sig")));
-            assertEq(got, vm.parseJsonBool(ext, string.concat(c, ".valid")), vm.parseJsonString(ext, string.concat(c, ".reason")));
+            bool got = h.verify(
+                _b(ext, string.concat(c, ".pk")),
+                _b(ext, string.concat(c, ".mprime")),
+                _b(ext, string.concat(c, ".sig"))
+            );
+            assertEq(
+                got,
+                vm.parseJsonBool(ext, string.concat(c, ".valid")),
+                vm.parseJsonString(ext, string.concat(c, ".reason"))
+            );
         }
     }
 

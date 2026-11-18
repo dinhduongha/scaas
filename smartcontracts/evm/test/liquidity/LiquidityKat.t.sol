@@ -21,7 +21,9 @@ contract KatCaller {
 
     function fwd(address target, bytes calldata data) external returns (bytes memory) {
         (bool ok, bytes memory r) = target.call(data);
-        if (!ok) assembly { revert(add(r, 32), mload(r)) }
+        if (!ok) {
+            assembly { revert(add(r, 32), mload(r)) }
+        }
         return r;
     }
 }
@@ -55,9 +57,18 @@ contract LiquidityKatTest is LiquidityBase {
         vm.etch(at, address(dex).code);
         (, string memory name, string memory version, uint256 cid, address vc, bytes32 salt,) =
             IERC5267Like(at).eip712Domain();
-        bytes32 sep = keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256(bytes(name)), keccak256(bytes(version)), cid, vc, salt));
+        bytes32 sep = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256(bytes(name)),
+                keccak256(bytes(version)),
+                cid,
+                vc,
+                salt
+            )
+        );
         uint256 n = _rows();
         assertEq(n, 7);
         for (uint256 i; i < n; ++i) {
@@ -85,8 +96,11 @@ contract LiquidityKatTest is LiquidityBase {
             uint256 amount = vm.parseUint(kat.readStringArray(_r(i, "pullAmounts"))[0]);
             bytes32 from = kat.readBytes32(_r(i, "signer"));
             if (uint256(from) >> 160 == 0) {
-                vm.expectRevert(abi.encodeWithSelector(IERC20Errors.ERC20InsufficientBalance.selector,
-                    address(uint160(uint256(from))), 0, amount));
+                vm.expectRevert(
+                    abi.encodeWithSelector(
+                        IERC20Errors.ERC20InsufficientBalance.selector, address(uint160(uint256(from))), 0, amount
+                    )
+                );
             } else {
                 vm.expectRevert(IUALedger.UALedgerOff.selector);
             }
@@ -100,6 +114,8 @@ contract LiquidityKatTest is LiquidityBase {
 }
 
 interface IERC5267Like {
-    function eip712Domain() external view returns (bytes1, string memory, string memory, uint256, address, bytes32,
-        uint256[] memory);
+    function eip712Domain()
+        external
+        view
+        returns (bytes1, string memory, string memory, uint256, address, bytes32, uint256[] memory);
 }

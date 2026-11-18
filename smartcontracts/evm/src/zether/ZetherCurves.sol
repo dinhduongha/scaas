@@ -80,7 +80,7 @@ library G1Bn254 {
         out = new bytes(64);
         bool ok = true;
         assembly ("memory-safe") {
-            let m := mload(0x40)            // [0,64) acc, [64,128) term, [128,224) mul input
+            let m := mload(0x40) // [0,64) acc, [64,128) term, [128,224) mul input
             mstore(m, 0)
             mstore(add(m, 32), 0)
             for { let i := 0 } lt(i, k) { i := add(i, 1) } {
@@ -120,7 +120,7 @@ library G1Bn254 {
 
     /// @notice Try-and-increment (§3.1). Đầu vào công khai nên không cần constant-time.
     function mapToG1(bytes memory prefix) internal view returns (bytes memory) {
-        for (uint32 ctr = 0; ; ++ctr) {
+        for (uint32 ctr = 0;; ++ctr) {
             uint256 x = uint256(keccak256(abi.encodePacked(prefix, ctr))) % P;
             uint256 rhs = addmod(mulmod(mulmod(x, x, P), x, P), 3, P);
             uint256 y = _modexp(rhs, (P + 1) / 4);
@@ -165,8 +165,10 @@ library G1Bls12381 {
 
     function generator() internal pure returns (bytes memory) {
         return abi.encodePacked(
-            bytes16(0), hex"17f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb",
-            bytes16(0), hex"08b3f481e3aaa0f1a09e30ed741d8ae4fcf5e095d5d00af600db18cb2c04b3edd03cc744a2888ae40caa232946c5e7e1"
+            bytes16(0),
+            hex"17f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb",
+            bytes16(0),
+            hex"08b3f481e3aaa0f1a09e30ed741d8ae4fcf5e095d5d00af600db18cb2c04b3edd03cc744a2888ae40caa232946c5e7e1"
         );
     }
 

@@ -32,7 +32,10 @@ abstract contract UASafeVerifier is IUAPopVerifier {
     /// @notice The unguarded check (`pop` selects the PoP domain); may revert on malformed points. External only so
     ///         `verify` / `verifyPop` can catch its reverts; it is as safe to call as they are, minus that guarantee.
     function check(bytes calldata keyData, bytes32 message, bytes calldata sig, bool pop)
-        external view virtual returns (bool);
+        external
+        view
+        virtual
+        returns (bool);
 
     /// The gas `check` gets: `CHECK_GAS`; a kind whose PoP costs more (the MuSig2 / FROST group checks) overrides it.
     function _checkGas(bool) internal view virtual returns (uint256) {
@@ -58,7 +61,10 @@ contract SchnorrBn254Verifier is UASafeVerifier {
     constructor() UASafeVerifier(40_000) {}
 
     function check(bytes calldata keyData, bytes32 message, bytes calldata sig, bool)
-        external view override returns (bool)
+        external
+        view
+        override
+        returns (bool)
     {
         return keyData.length == 64 && CurveSigs.schnorr(SCHNORR_TAG, keyData, message, sig);
     }
@@ -70,7 +76,10 @@ contract SchnorrBls12381Verifier is UASafeVerifier {
     constructor() UASafeVerifier(60_000) {}
 
     function check(bytes calldata keyData, bytes32 message, bytes calldata sig, bool)
-        external view override returns (bool)
+        external
+        view
+        override
+        returns (bool)
     {
         return keyData.length == 128 && CurveSigs.schnorr(SCHNORR_TAG, keyData, message, sig);
     }
@@ -85,7 +94,10 @@ contract BlsMinSigBls12381Verifier is UASafeVerifier {
     bytes internal constant DST_POP = "SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_";
 
     function check(bytes calldata keyData, bytes32 message, bytes calldata sig, bool pop)
-        external view override returns (bool)
+        external
+        view
+        override
+        returns (bool)
     {
         return CurveSigs.bls12381(pop ? DST_POP : DST_SIG, keyData, message, sig);
     }
@@ -101,7 +113,10 @@ contract BlsMinSigBn254Verifier is UASafeVerifier {
     bytes internal constant LABEL_POP = "SCAAS-UA-BLS-BN254-POP-V1";
 
     function check(bytes calldata keyData, bytes32 message, bytes calldata sig, bool pop)
-        external view override returns (bool)
+        external
+        view
+        override
+        returns (bool)
     {
         return CurveSigs.blsBn254(pop ? LABEL_POP : LABEL_SIG, keyData, message, sig);
     }
@@ -117,7 +132,10 @@ contract ZetherSchnorrBls12381Verifier is UASafeVerifier {
     constructor() UASafeVerifier(60_000) {}
 
     function check(bytes calldata keyData, bytes32 message, bytes calldata sig, bool)
-        external view override returns (bool)
+        external
+        view
+        override
+        returns (bool)
     {
         return keyData.length == 128 && CurveSigs.schnorr(ZETHER_SCHNORR_TAG, keyData, message, sig);
     }

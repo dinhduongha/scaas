@@ -302,7 +302,8 @@ static class Run
                 GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
                 Thread.Sleep(r.Next(0, 3));
             }
-        }) { IsBackground = true };
+        })
+        { IsBackground = true };
         gc.Start();
 
         Thread[] ts = new Thread[threads];
@@ -501,7 +502,7 @@ static class Run
         _ => MlDsa87Precompile.Instance.Run(x, null!),
     }).Data!;
 
-        static List<(int lvl, byte[] input, bool valid)> MlDsaBases(string root)
+    static List<(int lvl, byte[] input, bool valid)> MlDsaBases(string root)
     {
         static bool V(JsonNode? v) => v!.GetValueKind() == System.Text.Json.JsonValueKind.String ? bool.Parse((string)v!) : (bool)v!;
         static byte[] H(string s) => Convert.FromHexString(s.StartsWith("0x") ? s[2..] : s);

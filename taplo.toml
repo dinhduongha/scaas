@@ -1,0 +1,8 @@
+# TOML formatting (Cargo.toml and other configs). Keys are never reordered: feature lists and pins keep their order.
+# The same settings as the scaas-app repository's taplo.toml. Pinned: taplo 0.9.3.
+exclude = ["**/legacy/**", "**/node_modules/**", "**/target/**", "smartcontracts/evm/lib/**"]
+
+[formatting]
+reorder_keys = false
+reorder_arrays = false
+column_width = 120

@@ -34,7 +34,11 @@ contract FrameProbe {
 
 /// The frame gas of one `requireAuthorized` from a contract, every account and slot cold (one transaction).
 contract HotProbe {
-    function cost(UARegistry r, bytes32 ua, bytes32 purpose, bytes32 digest, IUARegistry.UASig calldata s) external view returns (uint256 g) {
+    function cost(UARegistry r, bytes32 ua, bytes32 purpose, bytes32 digest, IUARegistry.UASig calldata s)
+        external
+        view
+        returns (uint256 g)
+    {
         g = gasleft();
         r.requireAuthorized(ua, purpose, digest, s);
         g -= gasleft();
@@ -108,7 +112,9 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
     function _cfgsMl(uint64 mlCap) internal view returns (UARegistry.KindConfig[] memory cfg) {
         UARegistry.KindConfig[] memory base = _cfgs(address(mock));
         cfg = new UARegistry.KindConfig[](base.length + 1);
-        for (uint256 i; i < base.length; ++i) cfg[i] = base[i];
+        for (uint256 i; i < base.length; ++i) {
+            cfg[i] = base[i];
+        }
         cfg[base.length] = UARegistry.KindConfig(ML, address(mock), mlCap);
     }
 
@@ -116,12 +122,16 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         pk = new bytes(1952);
         for (uint256 i; i < pk.length; i += 32) {
             bytes32 w = keccak256(abi.encode(salt, i));
-            for (uint256 j; j < 32 && i + j < pk.length; ++j) pk[i + j] = w[j];
+            for (uint256 j; j < 32 && i + j < pk.length; ++j) {
+                pk[i + j] = w[j];
+            }
         }
     }
 
     function _members(UARegistry x) internal {
-        for (uint256 i = 1; i <= 6; ++i) _register(x, ML, keyOfId[ml[i]]);
+        for (uint256 i = 1; i <= 6; ++i) {
+            _register(x, ML, keyOfId[ml[i]]);
+        }
         _register(x, P256, _key(P256));
     }
 
@@ -141,24 +151,38 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
     }
 
     function _idx(IUARegistry.MsigStructure memory st, bytes32 id) internal pure returns (uint16) {
-        for (uint256 i; i < st.members.length; ++i) if (st.members[i].id == id) return uint16(i);
+        for (uint256 i; i < st.members.length; ++i) {
+            if (st.members[i].id == id) return uint16(i);
+        }
         revert("no such slot");
     }
 
     /// One leaf's signature over `md` (derived: under `member`; native: `typed` itself on a portable record, its `UAAuth` over `md`
     /// on a transaction).
-    function _leaf(UARegistry x, bytes32 id, bytes32 md, bytes32 typed, bool portable) internal view returns (bytes memory) {
+    function _leaf(UARegistry x, bytes32 id, bytes32 md, bytes32 typed, bool portable)
+        internal
+        view
+        returns (bytes memory)
+    {
         uint16 k = kindOfId[id];
         if (address(dom) != address(0)) x = dom;
-        if (k == EOA) return portable ? _ecdsa(pkOf[id], typed) : _ecdsa(pkOf[id], x.uaAuthDigest(id, UAKinds.PURPOSE_MEMBER, md));
+        if (k == EOA) {
+            return portable ? _ecdsa(pkOf[id], typed) : _ecdsa(pkOf[id], x.uaAuthDigest(id, UAKinds.PURPOSE_MEMBER, md));
+        }
         return _sig(keyOfId[id], UAKinds.uaMessage(k, UAKinds.PURPOSE_MEMBER, md));
     }
 
     /// The `MemberSig[]` of `ids` in the structure `st` of `ua` over `(purpose, digest)`, in index order; an `msig` member signs by
     /// its `innerSigners` over its own current structure.
-    function _sigs(UARegistry x, IUARegistry.MsigStructure memory st, bytes32 ua, bytes32[] memory ids, bytes32 purpose,
-        bytes32 digest, bool portable) internal view returns (IUARegistry.MemberSig[] memory s)
-    {
+    function _sigs(
+        UARegistry x,
+        IUARegistry.MsigStructure memory st,
+        bytes32 ua,
+        bytes32[] memory ids,
+        bytes32 purpose,
+        bytes32 digest,
+        bool portable
+    ) internal view returns (IUARegistry.MemberSig[] memory s) {
         bytes32 md = _memberDigest(ua, purpose, digest);
         s = new IUARegistry.MemberSig[](ids.length);
         for (uint256 i; i < ids.length; ++i) {
@@ -166,11 +190,15 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
             if (kindOfId[id] == UAKinds.MSIG) {
                 s[i] = IUARegistry.MemberSig(_idx(st, id), _inner(x, id, md, digest, portable), "");
             } else {
-                s[i] = IUARegistry.MemberSig(_idx(st, id), new IUARegistry.InnerSig[](0), _leaf(x, id, md, digest, portable));
+                s[i] = IUARegistry.MemberSig(
+                    _idx(st, id), new IUARegistry.InnerSig[](0), _leaf(x, id, md, digest, portable)
+                );
             }
         }
         for (uint256 i = 1; i < s.length; ++i) {
-            for (uint256 j = i; j > 0 && s[j - 1].index > s[j].index; --j) (s[j - 1], s[j]) = (s[j], s[j - 1]);
+            for (uint256 j = i; j > 0 && s[j - 1].index > s[j].index; --j) {
+                (s[j - 1], s[j]) = (s[j], s[j - 1]);
+            }
         }
     }
 
@@ -183,9 +211,13 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         IUARegistry.MsigStructure memory st = x.msigOf(iu);
         bytes32[] memory who = innerSigners[iu];
         l = new IUARegistry.InnerSig[](who.length);
-        for (uint256 i; i < who.length; ++i) l[i] = IUARegistry.InnerSig(_idx(st, who[i]), _leaf(x, who[i], mdi, typed, portable));
+        for (uint256 i; i < who.length; ++i) {
+            l[i] = IUARegistry.InnerSig(_idx(st, who[i]), _leaf(x, who[i], mdi, typed, portable));
+        }
         for (uint256 i = 1; i < l.length; ++i) {
-            for (uint256 j = i; j > 0 && l[j - 1].index > l[j].index; --j) (l[j - 1], l[j]) = (l[j], l[j - 1]);
+            for (uint256 j = i; j > 0 && l[j - 1].index > l[j].index; --j) {
+                (l[j - 1], l[j]) = (l[j], l[j - 1]);
+            }
         }
     }
 
@@ -199,7 +231,9 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         returns (bytes32 ua)
     {
         Member[] memory m = new Member[](ids.length);
-        for (uint256 i; i < ids.length; ++i) m[i] = Member(kindOfId[ids[i]], ids[i], w[i]);
+        for (uint256 i; i < ids.length; ++i) {
+            m[i] = Member(kindOfId[ids[i]], ids[i], w[i]);
+        }
         bytes memory key = _msigKey(threshold, m);
         ua = UAKinds.uaOf(UAKinds.MSIG, key);
         IUARegistry.MsigStructure memory st = UACall.structure(key);
@@ -207,13 +241,17 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
             ? bytes("")
             : abi.encode(_sigs(x, st, ua, popIds, UAKinds.PURPOSE_POP_V2, _regDigest(ua, UAKinds.MSIG), true));
         UACall.register(x, UAKinds.MSIG, key, _none(), pop, "");
-        for (uint256 i; i < ids.length; ++i) if (!x.memberAccepted(ua, _idx(st, ids[i]))) _accept(x, ua, ids[i]);
+        for (uint256 i; i < ids.length; ++i) {
+            if (!x.memberAccepted(ua, _idx(st, ids[i]))) _accept(x, ua, ids[i]);
+        }
         kindOfId[ua] = UAKinds.MSIG;
     }
 
     function _w(uint256 n) internal pure returns (uint16[] memory w) {
         w = new uint16[](n);
-        for (uint256 i; i < n; ++i) w[i] = 1;
+        for (uint256 i; i < n; ++i) {
+            w[i] = 1;
+        }
     }
 
     function _accept(UARegistry x, bytes32 ua, bytes32 id) internal {
@@ -265,7 +303,9 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
 
     function _append(Up memory u, uint16 kind, bytes32 id, uint16 weight, bool on) internal pure {
         IUARegistry.MsigMember[] memory m = new IUARegistry.MsigMember[](u.st.members.length + 1);
-        for (uint256 i; i < u.st.members.length; ++i) m[i] = u.st.members[i];
+        for (uint256 i; i < u.st.members.length; ++i) {
+            m[i] = u.st.members[i];
+        }
         m[m.length - 1] = IUARegistry.MsigMember(kind, id, weight);
         u.st.members = m;
         if (on) u.enabled |= 1 << (m.length - 1);
@@ -293,11 +333,15 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
     }
 
     function _authorizes(UARegistry x, bytes32 ua, bytes32[] memory ids) internal view {
-        x.requireAuthorized(ua, UAKinds.PURPOSE_METATX, TX, _auth(_sigs(x, x.msigOf(ua), ua, ids, UAKinds.PURPOSE_METATX, TX, false)));
+        x.requireAuthorized(
+            ua, UAKinds.PURPOSE_METATX, TX, _auth(_sigs(x, x.msigOf(ua), ua, ids, UAKinds.PURPOSE_METATX, TX, false))
+        );
     }
 
     function _portable(UARegistry x, bytes32 ua, bytes32[] memory ids) internal view {
-        x.requirePortable(ua, UAKinds.PURPOSE_PQCHAT, CHAT, _auth(_sigs(x, x.msigOf(ua), ua, ids, UAKinds.PURPOSE_PQCHAT, CHAT, true)));
+        x.requirePortable(
+            ua, UAKinds.PURPOSE_PQCHAT, CHAT, _auth(_sigs(x, x.msigOf(ua), ua, ids, UAKinds.PURPOSE_PQCHAT, CHAT, true))
+        );
     }
 
     function _authRefused(UARegistry x, bytes32 ua, bytes32[] memory ids) internal {
@@ -363,10 +407,23 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         (bytes32 ua, bytes32 cu, address reg_) = (keccak256("an msig"), keccak256("a chain"), address(0x5ca));
         bytes32 h0 = keccak256(abi.encode(UAKinds.UA_MSIG_MEMBER_TYPEHASH, EOA, bytes32(uint256(0xa1)), uint16(1)));
         bytes32 h1 = keccak256(abi.encode(UAKinds.UA_MSIG_MEMBER_TYPEHASH, ML, keccak256("m"), uint16(3)));
-        bytes32 sh = keccak256(abi.encode(UAKinds.UA_MSIG_UPDATE_TYPEHASH, ua, cu, reg_, uint64(7), uint16(2),
-            keccak256(abi.encodePacked(h0, h1)), uint256(3), uint64(99)));
-        assertEq(UAKinds.msigUpdateDigest(ua, cu, reg_, 7, st, 3, 99),
-            keccak256(abi.encodePacked(hex"1901", UAKinds.PORTABLE_DOMAIN_SEPARATOR, sh)));
+        bytes32 sh = keccak256(
+            abi.encode(
+                UAKinds.UA_MSIG_UPDATE_TYPEHASH,
+                ua,
+                cu,
+                reg_,
+                uint64(7),
+                uint16(2),
+                keccak256(abi.encodePacked(h0, h1)),
+                uint256(3),
+                uint64(99)
+            )
+        );
+        assertEq(
+            UAKinds.msigUpdateDigest(ua, cu, reg_, 7, st, 3, 99),
+            keccak256(abi.encodePacked(hex"1901", UAKinds.PORTABLE_DOMAIN_SEPARATOR, sh))
+        );
     }
 
     // ----- positive controls -----
@@ -402,7 +459,9 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         assertEq(r.keyOf(ua).length, 0, "MM-10: no key");
         (IUARegistry.Record memory rec,) = r.recordOf(ua);
         assertTrue(rec.keyPtr != address(0), "MM-7: the blob pointer");
-        for (uint256 i; i < 3; ++i) assertEq(abi.encode(now_.members[i]), abi.encode(UACall.structure(key0).members[i]), "prefix");
+        for (uint256 i; i < 3; ++i) {
+            assertEq(abi.encode(now_.members[i]), abi.encode(UACall.structure(key0).members[i]), "prefix");
+        }
 
         _authRefused(r, ua, _ids(a, d)); // d has not accepted yet
         _accept(r, ua, d);
@@ -422,7 +481,9 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         assertEq(acc, 7);
         (IUARegistry.Record memory rec,) = r.recordOf(ua);
         assertEq(rec.keyPtr, address(0));
-        for (uint256 i; i < 3; ++i) assertTrue(r.memberAccepted(ua, i));
+        for (uint256 i; i < 3; ++i) {
+            assertTrue(r.memberAccepted(ua, i));
+        }
         assertFalse(r.memberAccepted(ua, 3));
         _authorizes(r, ua, _ids(a, b));
         (v, en, acc) = r.msigStateOf(a);
@@ -494,7 +555,8 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
     /// Gen 1 and gen 2 of one chain word: an `msig` registered on both (gen 1 does not see gen 2); an update signed for gen 2's
     /// address is refused on gen 1, the one for gen 1 passes there. Gen 2 refuses an update of a record gen 1 holds (row 3).
     function test_refusedOtherRegistry() public {
-        UARegistry g2 = _deploy(REG_G2, chainUidA, address(r), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
+        UARegistry g2 =
+            _deploy(REG_G2, chainUidA, address(r), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
         bytes32 ua = _eoa3(g2);
         _eoa3(r);
         Up memory u = _next(r, ua);
@@ -561,10 +623,14 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         u.enabled = 15;
         _refused(r, u, _ids(a, b), _slots(3)); // an enabled bit past the slots
         u.enabled = 7;
-        for (uint256 i; i < 254; ++i) _append(u, EOA, bytes32(uint256(0x10000 + i)), 1, false);
+        for (uint256 i; i < 254; ++i) {
+            _append(u, EOA, bytes32(uint256(0x10000 + i)), 1, false);
+        }
         _refused(r, u, _ids(a, b), _slots(257));
         u = _next(r, ua);
-        for (uint256 i; i < 14; ++i) _append(u, EOA, bytes32(uint256(0x10000 + i)), 1, true);
+        for (uint256 i; i < 14; ++i) {
+            _append(u, EOA, bytes32(uint256(0x10000 + i)), 1, true);
+        }
         _refused(r, u, _ids(a, b), _slots(17)); // 17 enabled
         u.enabled &= ~uint256(1 << 16);
         _apply(r, u, _ids(a, b)); // 16 enabled
@@ -733,11 +799,14 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
 
     /// Row 11: the target's enabled slots pass the registration bound (`verifyBudget`).
     function test_refusedBound() public {
-        UARegistry x = _deploy(REG_X, keccak256("chain x"), address(0), false, 1_300_000, address(0), true, _cfgsMl(400_000));
+        UARegistry x =
+            _deploy(REG_X, keccak256("chain x"), address(0), false, 1_300_000, address(0), true, _cfgsMl(400_000));
         _members(x);
         bytes32 ua = _eoa3(x);
         Up memory u = _next(x, ua);
-        for (uint256 k = 1; k <= 3; ++k) _append(u, ml[k], true);
+        for (uint256 k = 1; k <= 3; ++k) {
+            _append(u, ml[k], true);
+        }
         u.st.threshold = 3; // three of the lightest: 3 × (400 k + 45 k) + 2,500 > 1.3 M
         _refused(x, u, _ids(a, b), _keyData0120());
         u.st.threshold = 2; // 2 × 445 k + 2,500
@@ -745,7 +814,9 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         // the bound counts the enabled slots only: the three mldsa65 slots disabled, 3-of-{a, b, c} is 3 × 95 k + 2,500 (with them,
         // the three lightest would take the 400 k caps: 1,337,500 > 1.3 M)
         u = _next(x, ua);
-        for (uint256 k = 1; k <= 3; ++k) _set(u, ml[k], false);
+        for (uint256 k = 1; k <= 3; ++k) {
+            _set(u, ml[k], false);
+        }
         u.st.threshold = 3;
         _apply(x, u, _ids(a, b));
     }
@@ -762,7 +833,9 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         // a classical-dominant msig that stays so is not judged by the debit bound
         bytes32 cl = _eoa3(r);
         Up memory w = _next(r, cl);
-        for (uint256 k = 1; k <= 3; ++k) _append(w, ml[k], true);
+        for (uint256 k = 1; k <= 3; ++k) {
+            _append(w, ml[k], true);
+        }
         _set(w, c, false);
         _apply(r, w, _ids(a, b)); // classical a + b = 2, threshold 2: not eligible, allowed
     }
@@ -771,7 +844,8 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
     function test_refusedDebitBound() public {
         uint256 room = UARegistryCoreLib.TX_GAS_CAP - PqzSet.PQZ_DEBIT_MIN_GAS; // what the authorization may take
         uint64 cap = uint64(room * 63 / 64 / 3 + 50_000); // three such signers exceed it; two do not
-        UARegistry x = _deploy(REG_X, keccak256("chain x"), address(0), false, 3 * cap + 300_000, address(0), true, _cfgsMl(cap));
+        UARegistry x =
+            _deploy(REG_X, keccak256("chain x"), address(0), false, 3 * cap + 300_000, address(0), true, _cfgsMl(cap));
         _members(x);
         bytes32 ua = _pq3(x);
         Up memory u = _next(x, ua);
@@ -787,13 +861,18 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         bytes32 ua = _reg(r, 3, _ids(ml[1], ml[2], ml[3]), _w(3), _ids(ml[1], ml[2], ml[3]));
         uint256 worst = 3 * (UARegistryCoreLib.MSIG_MEMBER_GAS + 400_000) + UARegistryCoreLib.MSIG_ACCEPTED_GAS;
         worst += 16 * 3 * (192 + 3_328); // Fable P2-1: the quorum's signature calldata, three mldsa65 signatures (3,309 B each)
-        uint256 fit = (UARegistryCoreLib.TX_GAS_CAP - UARegistryCoreLib.MSIG_UPDATE_GAS - worst) / UARegistryCoreLib.MSIG_UPDATE_SLOT_GAS;
+        uint256 fit = (UARegistryCoreLib.TX_GAS_CAP - UARegistryCoreLib.MSIG_UPDATE_GAS - worst)
+            / UARegistryCoreLib.MSIG_UPDATE_SLOT_GAS;
         assertLt(fit, 256, "row 13 must be able to refuse here: heavier signers if the constants move");
         Up memory u = _next(r, ua);
-        for (uint256 i = 3; i <= fit; ++i) _append(u, EOA, bytes32(uint256(0x10000 + i)), 1, false);
+        for (uint256 i = 3; i <= fit; ++i) {
+            _append(u, EOA, bytes32(uint256(0x10000 + i)), 1, false);
+        }
         _refused(r, u, _ids(ml[1], ml[2], ml[3]), _slots(fit + 1));
         IUARegistry.MsigMember[] memory m = new IUARegistry.MsigMember[](fit);
-        for (uint256 i; i < fit; ++i) m[i] = u.st.members[i];
+        for (uint256 i; i < fit; ++i) {
+            m[i] = u.st.members[i];
+        }
         u.st.members = m;
         _apply(r, u, _ids(ml[1], ml[2], ml[3]));
     }
@@ -807,14 +886,22 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         uint256 w = 2 * UARegistryCoreLib.MSIG_MEMBER_GAS + UARegistryCoreLib.MSIG_ACCEPTED_GAS + 50_000
             + (UARegistryCoreLib.MSIG_MEMBER_GAS + UARegistryCoreLib.MSIG_ACCEPTED_GAS + 400_000);
         uint256 calldata_ = 16 * ((192 + 128 + 3_328) + (192 + 1_024));
-        uint256 fit = (UARegistryCoreLib.TX_GAS_CAP - UARegistryCoreLib.MSIG_UPDATE_GAS - w - calldata_ - UARegistryCoreLib.MSIG_UPDATE_INNER_GAS)
-            / UARegistryCoreLib.MSIG_UPDATE_SLOT_GAS;
+        uint256 fit =
+            (UARegistryCoreLib.TX_GAS_CAP
+                    - UARegistryCoreLib.MSIG_UPDATE_GAS
+                    - w
+                    - calldata_
+                    - UARegistryCoreLib.MSIG_UPDATE_INNER_GAS) / UARegistryCoreLib.MSIG_UPDATE_SLOT_GAS;
         assertLt(fit, 256);
         Up memory u = _next(r, ua);
-        for (uint256 k = 3; k <= fit; ++k) _append(u, EOA, bytes32(uint256(0x40000 + k)), 1, false);
+        for (uint256 k = 3; k <= fit; ++k) {
+            _append(u, EOA, bytes32(uint256(0x40000 + k)), 1, false);
+        }
         _refused(r, u, _ids(a, b), _slots(fit + 1));
         IUARegistry.MsigMember[] memory m = new IUARegistry.MsigMember[](fit);
-        for (uint256 k; k < fit; ++k) m[k] = u.st.members[k];
+        for (uint256 k; k < fit; ++k) {
+            m[k] = u.st.members[k];
+        }
         u.st.members = m;
         _apply(r, u, _ids(a, b));
     }
@@ -827,7 +914,8 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         Up memory u = _next(r, ua);
         _append(u, d, false);
         _apply(r, u, _ids(a, b));
-        IUARegistry.MemberSig memory s = _sigs(r, u.st, ua, _ids(d), UAKinds.PURPOSE_MEMBERSHIP, UAKinds.membershipDigest(ua, d), true)[0];
+        IUARegistry.MemberSig memory s =
+            _sigs(r, u.st, ua, _ids(d), UAKinds.PURPOSE_MEMBERSHIP, UAKinds.membershipDigest(ua, d), true)[0];
         s.index = 4;
         vm.expectRevert(_err(IUARegistry.UAUnauthorized.selector, ua));
         r.acceptMembership(ua, s);
@@ -845,7 +933,8 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         _append(u, d, true);
         _apply(r, u, _ids(a, b));
         _accept(r, ua, d);
-        UARegistry g2 = _deploy(REG_G2, chainUidA, address(r), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
+        UARegistry g2 =
+            _deploy(REG_G2, chainUidA, address(r), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
         dom = r; // gen 1 verifies its native members in its own domain
         assertEq(abi.encode(g2.msigOf(ua)), abi.encode(r.msigOf(ua)));
         (uint64 v, uint256 en, uint256 acc) = g2.msigStateOf(ua);
@@ -853,7 +942,9 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         assertEq(v, v1);
         assertEq(en, en1);
         assertEq(acc, acc1);
-        for (uint256 k; k < 5; ++k) assertEq(g2.memberAccepted(ua, k), r.memberAccepted(ua, k));
+        for (uint256 k; k < 5; ++k) {
+            assertEq(g2.memberAccepted(ua, k), r.memberAccepted(ua, k));
+        }
         _authorizes(g2, ua, _ids(a, d));
         _authRefused(g2, ua, _ids(b, c));
     }
@@ -875,14 +966,18 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         u = _next(r, ua);
         u.st.threshold = 3;
         _apply(r, u, _ids(ml[1], ml[4]));
-        _callRefused(address(g2), _pqzKeyCall(g2, ua, 1, _ids(ml[1], ml[2]), 2), _err(IUARegistry.UAUnauthorized.selector, ua));
+        _callRefused(
+            address(g2), _pqzKeyCall(g2, ua, 1, _ids(ml[1], ml[2]), 2), _err(IUARegistry.UAUnauthorized.selector, ua)
+        );
         (ok,) = _call(address(g2), _pqzKeyCall(g2, ua, 1, _ids(ml[1], ml[2], ml[3]), 2));
         assertTrue(ok, "three of the raised threshold");
     }
 
     function _callOrRevert(address t, bytes memory data) internal {
         (bool ok, bytes memory ret) = t.call(data);
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        }
     }
 
     /// A PQ `msig` after an update: the new quorum writes its PQZ key, the old one with the disabled slot does not.
@@ -893,7 +988,9 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         _append(u, ml[4], true);
         _apply(r, u, _ids(ml[1], ml[2]));
         _accept(r, ua, ml[4]);
-        _callRefused(address(r), _pqzKeyCall(r, ua, 0, _ids(ml[2], ml[3]), 1), _err(IUARegistry.UAUnauthorized.selector, ua));
+        _callRefused(
+            address(r), _pqzKeyCall(r, ua, 0, _ids(ml[2], ml[3]), 1), _err(IUARegistry.UAUnauthorized.selector, ua)
+        );
         _callOrRevert(address(r), _pqzKeyCall(r, ua, 0, _ids(ml[1], ml[4]), 1));
     }
 
@@ -928,9 +1025,12 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         bytes32 ua = _eoa3(r);
         Up memory u = _next(r, ua);
         IUARegistry.MemberSig[] memory s = _upSigs(r, u, _ids(a, b), chainUidA, address(r));
-        (bool ok,) = address(UARegistryAuxLib).call(
-            abi.encodeWithSelector(UARegistryAuxLib.updateMsig.selector, ua, u.version, u.st, u.enabled, u.until, s, chainUidA)
-        );
+        (bool ok,) = address(UARegistryAuxLib)
+            .call(
+                abi.encodeWithSelector(
+                    UARegistryAuxLib.updateMsig.selector, ua, u.version, u.st, u.enabled, u.until, s, chainUidA
+                )
+            );
         assertFalse(ok);
         r.updateMsig(ua, u.version, u.st, u.enabled, u.until, s, chainUidA);
     }
@@ -940,11 +1040,14 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
     /// A PQ `msig` grown to 256 slots (16 enabled at most): `requireAuthorized`, `requirePortable`, `setPqzKey` and a further
     /// `updateMsig` all pass; the further update fits one transaction. Its own registry: `mldsa65` at a 100 k cap.
     function test_256Slots() public {
-        UARegistry x = _deploy(REG_X, keccak256("chain x"), address(0), false, BUDGET, address(0), true, _cfgsMl(100_000));
+        UARegistry x =
+            _deploy(REG_X, keccak256("chain x"), address(0), false, BUDGET, address(0), true, _cfgsMl(100_000));
         _members(x);
         bytes32 ua = _pq3(x);
         Up memory u = _next(x, ua);
-        for (uint256 i; i < 253; ++i) _append(u, EOA, bytes32(uint256(0x10000 + i)), 1, false);
+        for (uint256 i; i < 253; ++i) {
+            _append(u, EOA, bytes32(uint256(0x10000 + i)), 1, false);
+        }
         _apply(x, u, _ids(ml[1], ml[2]));
         assertEq(x.msigOf(ua).members.length, 256);
         _authorizes(x, ua, _ids(ml[1], ml[3]));
@@ -953,8 +1056,18 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         assertFalse(x.memberAccepted(ua, 255));
         u = _next(x, ua);
         u.enabled |= 1 << 255; // the last slot, a 256-safe shift
-        bytes memory data = abi.encodeCall(IUARegistry.updateMsig,
-            (ua, u.version, u.st, u.enabled, u.until, _upSigs(x, u, _ids(ml[1], ml[2]), x.chainUid(), address(x)), x.chainUid()));
+        bytes memory data = abi.encodeCall(
+            IUARegistry.updateMsig,
+            (
+                ua,
+                u.version,
+                u.st,
+                u.enabled,
+                u.until,
+                _upSigs(x, u, _ids(ml[1], ml[2]), x.chainUid(), address(x)),
+                x.chainUid()
+            )
+        );
         uint256 total = _gasTotal(address(x), data);
         emit log_named_uint("updateMsig, 256 slots, a further update (regular + state)", total);
         assertLe(total, UARegistryCoreLib.TX_GAS_CAP, "the next update fits one transaction");
@@ -973,17 +1086,40 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
     /// An `msig` of 3 accepted EOAs and `n - 3` disabled EOA slots; returns the calldata of its next update (version + 1, no
     /// change, signed by a + b): the form row 13 bounds.
     function _grown(uint256 n) internal returns (address, bytes memory) {
-        UARegistry x = _deploy(address(uint160(0x5ca00 + n)), keccak256(abi.encode("chain", n)), address(0), false, BUDGET, address(0),
-            true, _cfgsMl(400_000));
+        UARegistry x = _deploy(
+            address(uint160(0x5ca00 + n)),
+            keccak256(abi.encode("chain", n)),
+            address(0),
+            false,
+            BUDGET,
+            address(0),
+            true,
+            _cfgsMl(400_000)
+        );
         bytes32 ua = _eoa3(x);
         if (n > 3) {
             Up memory g = _next(x, ua);
-            for (uint256 i = 3; i < n; ++i) _append(g, EOA, bytes32(uint256(0x10000 + i)), 1, false);
+            for (uint256 i = 3; i < n; ++i) {
+                _append(g, EOA, bytes32(uint256(0x10000 + i)), 1, false);
+            }
             _apply(x, g, _ids(a, b));
         }
         Up memory u = _next(x, ua);
-        return (address(x), abi.encodeCall(IUARegistry.updateMsig,
-            (ua, u.version, u.st, u.enabled, u.until, _upSigs(x, u, _ids(a, b), x.chainUid(), address(x)), x.chainUid())));
+        return (
+            address(x),
+            abi.encodeCall(
+                IUARegistry.updateMsig,
+                (
+                    ua,
+                    u.version,
+                    u.st,
+                    u.enabled,
+                    u.until,
+                    _upSigs(x, u, _ids(a, b), x.chainUid(), address(x)),
+                    x.chainUid()
+                )
+            )
+        );
     }
 
     /// Row 13's model: an update of `n` slots (regular + EIP-8037 state gas, intrinsic and calldata included, two EOA signers
@@ -996,7 +1132,9 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
             (address x, bytes memory data) = _grown(ns[k]);
             g[k] = _gasTotal(x, data);
             emit log_named_uint(string.concat("updateMsig total gas, slots ", vm.toString(ns[k])), g[k]);
-            assertLe(g[k], UARegistryCoreLib.MSIG_UPDATE_GAS + ns[k] * UARegistryCoreLib.MSIG_UPDATE_SLOT_GAS, "row 13 model");
+            assertLe(
+                g[k], UARegistryCoreLib.MSIG_UPDATE_GAS + ns[k] * UARegistryCoreLib.MSIG_UPDATE_SLOT_GAS, "row 13 model"
+            );
         }
         emit log_named_uint("per slot (256 - 16) / 240", (g[3] - g[1]) / 240);
         emit log_named_uint("fixed (3 slots less 3 per-slot)", g[0] - 3 * ((g[3] - g[1]) / 240));
@@ -1034,7 +1172,11 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
     }
 
     /// Every signing slot's signature, a real `mldsa65` size (3,309 B), in index order (the burner accepts any bytes).
-    function _burnSigs(UARegistry x, bytes32 ua, bytes32[] memory ids) internal view returns (IUARegistry.MemberSig[] memory s) {
+    function _burnSigs(UARegistry x, bytes32 ua, bytes32[] memory ids)
+        internal
+        view
+        returns (IUARegistry.MemberSig[] memory s)
+    {
         IUARegistry.MsigStructure memory st = x.msigOf(ua);
         s = new IUARegistry.MemberSig[](ids.length);
         for (uint256 i; i < ids.length; ++i) {
@@ -1042,9 +1184,13 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
                 IUARegistry.MsigStructure memory ist = x.msigOf(ids[i]);
                 bytes32[] memory who = innerSigners[ids[i]];
                 IUARegistry.InnerSig[] memory l = new IUARegistry.InnerSig[](who.length);
-                for (uint256 j; j < who.length; ++j) l[j] = IUARegistry.InnerSig(_idx(ist, who[j]), new bytes(3309));
+                for (uint256 j; j < who.length; ++j) {
+                    l[j] = IUARegistry.InnerSig(_idx(ist, who[j]), new bytes(3309));
+                }
                 for (uint256 j = 1; j < l.length; ++j) {
-                    for (uint256 k = j; k > 0 && l[k - 1].index > l[k].index; --k) (l[k - 1], l[k]) = (l[k], l[k - 1]);
+                    for (uint256 k = j; k > 0 && l[k - 1].index > l[k].index; --k) {
+                        (l[k - 1], l[k]) = (l[k], l[k - 1]);
+                    }
                 }
                 s[i] = IUARegistry.MemberSig(_idx(st, ids[i]), l, "");
             } else {
@@ -1052,14 +1198,18 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
             }
         }
         for (uint256 i = 1; i < s.length; ++i) {
-            for (uint256 j = i; j > 0 && s[j - 1].index > s[j].index; --j) (s[j - 1], s[j]) = (s[j], s[j - 1]);
+            for (uint256 j = i; j > 0 && s[j - 1].index > s[j].index; --j) {
+                (s[j - 1], s[j]) = (s[j], s[j - 1]);
+            }
         }
     }
 
     /// `n - k` disabled EOA slots appended to `ua` on `x` (version + 1), signed by `ids` (burner verifiers accept any bytes).
     function _widen(UARegistry x, bytes32 ua, uint256 n, bytes32[] memory ids) internal {
         Up memory u = _next(x, ua);
-        for (uint256 i = u.st.members.length; i < n; ++i) _append(u, EOA, bytes32(uint256(0x20000 + i)), 1, false);
+        for (uint256 i = u.st.members.length; i < n; ++i) {
+            _append(u, EOA, bytes32(uint256(0x20000 + i)), 1, false);
+        }
         IUARegistry.MemberSig[] memory s = _burnSigs(x, ua, ids);
         x.updateMsig(ua, u.version, u.st, u.enabled, u.until, s, x.chainUid());
     }
@@ -1074,7 +1224,9 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         UARegistry.KindConfig[] memory cfg = new UARegistry.KindConfig[](1);
         cfg[0] = UARegistry.KindConfig(ML, address(burner), 400_000);
         UARegistry x = _deploy(REG_X, keccak256("chain x"), address(0), false, uint64(bound), address(0), true, cfg);
-        for (uint256 i = 1; i <= 4; ++i) _register(x, ML, keyOfId[ml[i]]);
+        for (uint256 i = 1; i <= 4; ++i) {
+            _register(x, ML, keyOfId[ml[i]]);
+        }
         bytes32 i_ = _pq3(x);
         innerSigners[i_] = _ids(ml[1], ml[2]);
         _widen(x, i_, 230, _ids(ml[1], ml[2])); // row 13 admits about 239 at these caps
@@ -1093,7 +1245,8 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
     /// against row 13's model `w + MSIG_UPDATE_GAS + n x MSIG_UPDATE_SLOT_GAS`: logged, the margin recorded in CTR-UA-44.
     function test_gas_updateOverWideInners() public {
         uint256 m = 4;
-        UARegistry x = _deploy(REG_X, keccak256("chain x"), address(0), false, BUDGET, address(0), true, _cfgsMl(400_000));
+        UARegistry x =
+            _deploy(REG_X, keccak256("chain x"), address(0), false, BUDGET, address(0), true, _cfgsMl(400_000));
         _members(x);
         bytes32[] memory outer = new bytes32[](m + 2);
         for (uint256 k; k < m; ++k) {
@@ -1106,14 +1259,16 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         uint16[] memory w = _w(m + 2);
         bytes32 ua = _reg(x, 2, outer, w, new bytes32[](0));
         Up memory u = _next(x, ua);
-        bytes memory data = abi.encodeCall(IUARegistry.updateMsig,
-            (ua, u.version, u.st, u.enabled, u.until, _upSigs(x, u, _ids(a, b), x.chainUid(), address(x)), x.chainUid()));
+        bytes memory data = abi.encodeCall(
+            IUARegistry.updateMsig,
+            (ua, u.version, u.st, u.enabled, u.until, _upSigs(x, u, _ids(a, b), x.chainUid(), address(x)), x.chainUid())
+        );
         uint256 total = _gasTotal(address(x), data);
         // w: 2 x 45 k + 3,500 + two inners of 45 k + 3,500 + 400 k; a: two inner slots of 192 + 128 + 3,328 B (one mldsa65 leaf each)
-        uint256 worst = 2 * UARegistryCoreLib.MSIG_MEMBER_GAS + UARegistryCoreLib.MSIG_ACCEPTED_GAS
-            + 2 * (UARegistryCoreLib.MSIG_MEMBER_GAS + UARegistryCoreLib.MSIG_ACCEPTED_GAS + 400_000);
-        uint256 model = worst + 16 * 2 * (192 + 128 + 3_328) + UARegistryCoreLib.MSIG_UPDATE_GAS
-            + (m + 2) * UARegistryCoreLib.MSIG_UPDATE_SLOT_GAS + m * UARegistryCoreLib.MSIG_UPDATE_INNER_GAS;
+        uint256 worst = 2 * UARegistryCoreLib.MSIG_MEMBER_GAS + UARegistryCoreLib.MSIG_ACCEPTED_GAS + 2
+            * (UARegistryCoreLib.MSIG_MEMBER_GAS + UARegistryCoreLib.MSIG_ACCEPTED_GAS + 400_000);
+        uint256 model = worst + 16 * 2 * (192 + 128 + 3_328) + UARegistryCoreLib.MSIG_UPDATE_GAS + (m + 2)
+            * UARegistryCoreLib.MSIG_UPDATE_SLOT_GAS + m * UARegistryCoreLib.MSIG_UPDATE_INNER_GAS;
         emit log_named_uint("updateMsig over 4 inner msigs of 250 slots (regular + state)", total);
         emit log_named_uint("row 13's model for it", model);
         assertLe(total, model, "row 13 covers the walk over wide inner msigs");
@@ -1121,7 +1276,9 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
 
     function _widenSigned(UARegistry x, bytes32 ua, uint256 n, bytes32[] memory ids) internal {
         Up memory u = _next(x, ua);
-        for (uint256 i = u.st.members.length; i < n; ++i) _append(u, EOA, bytes32(uint256(0x30000 + i)), 1, false);
+        for (uint256 i = u.st.members.length; i < n; ++i) {
+            _append(u, EOA, bytes32(uint256(0x30000 + i)), 1, false);
+        }
         _apply(x, u, ids);
     }
 }

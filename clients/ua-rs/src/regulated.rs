@@ -141,7 +141,10 @@ router_ops! { RegulatedOp;
 }
 
 fn params_of(op: &str) -> Option<&'static str> {
-    REGULATED_OPS.iter().find(|(n, _)| *n == op).map(|(_, p)| *p)
+    REGULATED_OPS
+        .iter()
+        .find(|(n, _)| *n == op)
+        .map(|(_, p)| *p)
 }
 
 /// `UA<Op>(bytes32 from,address target,<params>,<E>)`.
@@ -151,18 +154,39 @@ pub fn type_string(op: &str) -> Option<String> {
 
 /// The words after the type hash: `from`, `target`, the op's own, then the envelope with `relayer` hashed as 0 unless
 /// `mode & 1`, `feeRecipient` as 0 unless `mode & 2` (`MetaTxLib.canon`). Shared with `admin`.
-pub(crate) fn router_struct_hash(type_string: &str, e: &Envelope, target: &[u8; 20], own: Vec<[u8; 32]>) -> [u8; 32] {
+pub(crate) fn router_struct_hash(
+    type_string: &str,
+    e: &Envelope,
+    target: &[u8; 20],
+    own: Vec<[u8; 32]>,
+) -> [u8; 32] {
     let canon = |bound: bool, a: &[u8; 20]| if bound { address_word(a) } else { [0; 32] };
-    let mut words: Vec<[u8; 32]> = vec![keccak256(type_string.as_bytes()), e.from, address_word(target)];
+    let mut words: Vec<[u8; 32]> = vec![
+        keccak256(type_string.as_bytes()),
+        e.from,
+        address_word(target),
+    ];
     words.extend(own);
-    words.extend([e.batch, e.nonce, e.valid_until, word(e.mode as u64), canon(e.mode & 1 != 0, &e.relayer), e.fee,
-        canon(e.mode & 2 != 0, &e.fee_recipient)]);
+    words.extend([
+        e.batch,
+        e.nonce,
+        e.valid_until,
+        word(e.mode as u64),
+        canon(e.mode & 1 != 0, &e.relayer),
+        e.fee,
+        canon(e.mode & 2 != 0, &e.fee_recipient),
+    ]);
     keccak(&words.iter().map(|w| &w[..]).collect::<Vec<_>>())
 }
 
 /// `hashStruct(UA<Op>)` of one of the eight typed ops (`UAFreeze` .. `UAOperatorTransfer`).
 pub fn struct_hash<O: RegulatedOp>(op: &O, e: &Envelope, target: &[u8; 20]) -> [u8; 32] {
-    router_struct_hash(&type_string(O::NAME).expect("a RegulatedOp is in REGULATED_OPS"), e, target, op.field_words())
+    router_struct_hash(
+        &type_string(O::NAME).expect("a RegulatedOp is in REGULATED_OPS"),
+        e,
+        target,
+        op.field_words(),
+    )
 }
 
 /// The router's domain: `("SCaaS GovernanceRouter", "1", chainId, router, salt = chainUid)`.
@@ -178,7 +202,12 @@ pub fn router_domain_separator(chain_id: u64, router: &[u8; 20], chain_uid: &[u8
 }
 
 /// `keccak256(0x1901 ‖ domainSeparator ‖ structHash)`: what the holder signs.
-pub fn digest<O: RegulatedOp>(op: &O, domain_separator: &[u8; 32], e: &Envelope, target: &[u8; 20]) -> [u8; 32] {
+pub fn digest<O: RegulatedOp>(
+    op: &O,
+    domain_separator: &[u8; 32],
+    e: &Envelope,
+    target: &[u8; 20],
+) -> [u8; 32] {
     keccak(&[&[0x19, 0x01], domain_separator, &struct_hash(op, e, target)])
 }
 
@@ -210,15 +239,34 @@ fn u128_word(v: u128) -> [u8; 32] {
 /// `commit = keccak256(abi.encode(uint8 action, uint8 bit, bytes32 account, argsHash))`, `argsHash` =
 /// `keccak256(abi.encode(GrantTerms))` for `SET` (2), else 0 (spec §3.6: `GRANT` 1 .. `DISABLE` 5). `None` for another
 /// action, or `terms` given with any action but `SET` or missing with it.
-pub fn relax_commit(action: u8, bit: u8, account: &[u8; 32], terms: Option<&GrantTerms>) -> Option<[u8; 32]> {
+pub fn relax_commit(
+    action: u8,
+    bit: u8,
+    account: &[u8; 32],
+    terms: Option<&GrantTerms>,
+) -> Option<[u8; 32]> {
     if !(1..=5).contains(&action) || (action == 2) != terms.is_some() {
         return None;
     }
     let args = terms.map_or([0; 32], |t| {
-        keccak(&[&u128_word(t.min), &u128_word(t.max), &u128_word(t.total), &u128_word(t.per_window), &word(t.window as u64),
-            &word(t.valid_until), &word(t.max_uses as u64), &word(t.delegable as u64), &t.scope])
+        keccak(&[
+            &u128_word(t.min),
+            &u128_word(t.max),
+            &u128_word(t.total),
+            &u128_word(t.per_window),
+            &word(t.window as u64),
+            &word(t.valid_until),
+            &word(t.max_uses as u64),
+            &word(t.delegable as u64),
+            &t.scope,
+        ])
     });
-    Some(keccak(&[&word(action as u64), &word(bit as u64), account, &args]))
+    Some(keccak(&[
+        &word(action as u64),
+        &word(bit as u64),
+        account,
+        &args,
+    ]))
 }
 
 /// One account's `ComplianceRegistry` row as `canReceive` reads it: flags, `validUntil`, whether its attester is enabled.
@@ -235,14 +283,30 @@ const ELIGIBLE_CONTRACT: u64 = 8;
 /// `Some(requiredFlags)`, `Some(deniedFlags)` with bit 28 `KYC` on (both masks; a zero mask constrains nothing), `None` with
 /// it off; `(ok, reason)`, reason 1 not attested or flags missing, 2 expired, 3 attester disabled, 4 denied.
 /// `ELIGIBLE_CONTRACT` satisfies `required`, never `denied`. The lists come first on chain: `listed`.
-pub fn can_receive(required: Option<u64>, denied: Option<u64>, a: &Attestation, now: u64) -> (bool, u8) {
+pub fn can_receive(
+    required: Option<u64>,
+    denied: Option<u64>,
+    a: &Attestation,
+    now: u64,
+) -> (bool, u8) {
     if required.is_none() && denied.is_none() {
         return (true, 0);
     }
     let active = a.attester_enabled && a.valid_until >= now;
     let req = required.unwrap_or(0);
     if req != 0 && !(active && (a.flags & req == req || a.flags & ELIGIBLE_CONTRACT != 0)) {
-        return (false, if a.valid_until == 0 { 1 } else if !a.attester_enabled { 3 } else if !active { 2 } else { 1 });
+        return (
+            false,
+            if a.valid_until == 0 {
+                1
+            } else if !a.attester_enabled {
+                3
+            } else if !active {
+                2
+            } else {
+                1
+            },
+        );
     }
     if active && a.flags & denied.unwrap_or(0) != 0 {
         return (false, 4);
@@ -278,23 +342,38 @@ pub fn enableable(features: u64, locked: u64, valid: u64, admin: bool, registry:
         return 0;
     }
     let e = ((1 << 8) | (1 << 9) | (1 << 28)) & valid & !features & !locked;
-    if registry { e } else { e & !(1 << 28) }
+    if registry {
+        e
+    } else {
+        e & !(1 << 28)
+    }
 }
 
 /// `UASetAllowed` (`allow`) or `UASetDenied`: bit 8's or bit 9's holder, 1-256 accounts, at once; `chainUid` the token's chain
 /// word (the Change of CTR-GOV-28 in round 3zb + 3zc).
 pub fn set_list_type(allow: bool) -> String {
-    format!("{}(bytes32 from,address target,bytes32[] accounts,bool on,bytes32 chainUid,{ENVELOPE})",
-        if allow { "UASetAllowed" } else { "UASetDenied" })
+    format!(
+        "{}(bytes32 from,address target,bytes32[] accounts,bool on,bytes32 chainUid,{ENVELOPE})",
+        if allow { "UASetAllowed" } else { "UASetDenied" }
+    )
 }
 
 /// `hashStruct(UASetAllowed | UASetDenied)`: `accounts` as EIP-712 hashes an array (`keccak256` of its words).
-pub fn set_list_struct_hash(allow: bool, e: &Envelope, target: &[u8; 20], accounts: &[[u8; 32]], on: bool, chain_uid: &[u8; 32])
-    -> [u8; 32]
-{
+pub fn set_list_struct_hash(
+    allow: bool,
+    e: &Envelope,
+    target: &[u8; 20],
+    accounts: &[[u8; 32]],
+    on: bool,
+    chain_uid: &[u8; 32],
+) -> [u8; 32] {
     let words = keccak(&accounts.iter().map(|a| &a[..]).collect::<Vec<_>>());
-    crate::wraplimit::struct_hash(keccak256(set_list_type(allow).as_bytes()), e, target,
-        &[words, crate::wraplimit::bool_word(on), *chain_uid])
+    crate::wraplimit::struct_hash(
+        keccak256(set_list_type(allow).as_bytes()),
+        e,
+        target,
+        &[words, crate::wraplimit::bool_word(on), *chain_uid],
+    )
 }
 
 /// `UAEnableFeature`: the admin switches on 8, 9 or 28; `chainUid` the token's chain word (CTR-GOV-28).
@@ -302,6 +381,16 @@ pub fn enable_feature_type() -> String {
     format!("UAEnableFeature(bytes32 from,address target,uint8 bit,bytes32 chainUid,{ENVELOPE})")
 }
 
-pub fn enable_feature_struct_hash(e: &Envelope, target: &[u8; 20], bit: u8, chain_uid: &[u8; 32]) -> [u8; 32] {
-    crate::wraplimit::struct_hash(keccak256(enable_feature_type().as_bytes()), e, target, &[word(bit as u64), *chain_uid])
+pub fn enable_feature_struct_hash(
+    e: &Envelope,
+    target: &[u8; 20],
+    bit: u8,
+    chain_uid: &[u8; 32],
+) -> [u8; 32] {
+    crate::wraplimit::struct_hash(
+        keccak256(enable_feature_type().as_bytes()),
+        e,
+        target,
+        &[word(bit as u64), *chain_uid],
+    )
 }

@@ -55,11 +55,15 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         pk = new bytes(len);
         for (uint256 i; i < len; i += 32) {
             bytes32 w = keccak256(abi.encode(kind, salt, i));
-            for (uint256 j; j < 32 && i + j < len; ++j) pk[i + j] = w[j];
+            for (uint256 j; j < 32 && i + j < len; ++j) {
+                pk[i + j] = w[j];
+            }
         }
         if (kind == FN) {
             pk[0] = 0x09;
-            for (uint256 i = 1; i < len; ++i) pk[i] = 0;
+            for (uint256 i = 1; i < len; ++i) {
+                pk[i] = 0;
+            }
             pk[1] = bytes1(uint8(salt)); // FN-DSA h: only its length is checked here, the salt keeps ids apart
         }
     }
@@ -73,7 +77,9 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         uint256 n;
         for (uint256 i; i < all.length; ++i) {
             bool seen = all[i] == UAKinds.MSIG;
-            for (uint256 m; m < n; ++m) seen = seen || k[m] == all[i];
+            for (uint256 m; m < n; ++m) {
+                seen = seen || k[m] == all[i];
+            }
             if (seen) continue;
             k[n] = uint16(all[i]);
             d[n++] = vm.parseJsonBytes(j, string.concat(".valid[", vm.toString(i), "].keyData"));
@@ -86,7 +92,9 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
 
     function _keyOf(uint16 want) internal view returns (bytes memory) {
         (uint16[] memory k, bytes[] memory d) = _rows();
-        for (uint256 i; i < k.length; ++i) if (k[i] == want) return d[i];
+        for (uint256 i; i < k.length; ++i) {
+            if (k[i] == want) return d[i];
+        }
         revert("no row");
     }
 
@@ -97,7 +105,8 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         for (uint256 i; i < k.length; ++i) {
             // 3zh (owner 2026-11-15, two paths): the ML-DSA rows on a precompile stand-in (`PRECOMPILE` != 0), so the FIPS-key
             // `verify` is their path; without one `register` would need the cache first (`UAKeyNotCached`)
-            address v = k[i] == ML44 || k[i] == ML65 || k[i] == 0x0134 ? address(new CacheVerifier(address(0x14)))
+            address v = k[i] == ML44 || k[i] == ML65 || k[i] == 0x0134
+                ? address(new CacheVerifier(address(0x14)))
                 : address(new MockVerifier(0, 0));
             c[i] = UARegistry.KindConfig(k[i], v, k[i] >= 0x0110 ? PQ : _cap(k[i]));
         }
@@ -140,13 +149,19 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         assertTrue(ok, "FN");
     }
 
-    function _member(bytes memory d, bytes32 id, bytes memory sig) internal pure returns (IUARegistry.MemberSig memory) {
+    function _member(bytes memory d, bytes32 id, bytes memory sig)
+        internal
+        pure
+        returns (IUARegistry.MemberSig memory)
+    {
         return IUARegistry.MemberSig(_indexOf(d, id), new IUARegistry.InnerSig[](0), sig);
     }
 
     function _sorted(IUARegistry.MemberSig[] memory s) internal pure returns (IUARegistry.MemberSig[] memory) {
         for (uint256 i = 1; i < s.length; ++i) {
-            for (uint256 j = i; j > 0 && s[j - 1].index > s[j].index; --j) (s[j - 1], s[j]) = (s[j], s[j - 1]);
+            for (uint256 j = i; j > 0 && s[j - 1].index > s[j].index; --j) {
+                (s[j - 1], s[j]) = (s[j], s[j - 1]);
+            }
         }
         return s;
     }
@@ -181,7 +196,10 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
 
     /// The call, and every call it made out of the registry and its library (kind, callee, calldata), in order: a verification that
     /// should not have happened is seen here even when the verdict stays `UAPoP`.
-    function _run(address at, bytes memory data) internal returns (bool ok, bytes memory ret, bytes32 calls, uint256 n) {
+    function _run(address at, bytes memory data)
+        internal
+        returns (bool ok, bytes memory ret, bytes32 calls, uint256 n)
+    {
         vm.startStateDiffRecording();
         vm.stopAndReturnStateDiff(); // a recording's first use also holds what came before it
         vm.startStateDiffRecording();
@@ -189,8 +207,10 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         VmSafe.AccountAccess[] memory d = vm.stopAndReturnStateDiff();
         for (uint256 i; i < d.length; ++i) {
             bool isCall = d[i].kind == VmSafe.AccountAccessKind.Call || d[i].kind == VmSafe.AccountAccessKind.StaticCall;
-            if (!isCall || d[i].account == at || d[i].account == address(UARegistryCoreLib)
-                || d[i].account == address(UARegistryAuxLib)) continue;
+            if (
+                !isCall || d[i].account == at || d[i].account == address(UARegistryCoreLib)
+                    || d[i].account == address(UARegistryAuxLib)
+            ) continue;
             calls = keccak256(abi.encode(calls, d[i].kind, d[i].account, d[i].data));
             ++n;
         }
@@ -248,7 +268,9 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         IUARegistry.MemberSig[] memory all = _slots(d, ua, _regDigest(ua, UAKinds.MSIG), ml, fn);
         IUARegistry.MemberSig[] memory one = new IUARegistry.MemberSig[](1);
         one[0] = all[0];
-        _refusedAs(R1, _msigCall(d, abi.encode(_two(all[0], all[0]))), _msigCall(d, abi.encode(one)), "the same member twice");
+        _refusedAs(
+            R1, _msigCall(d, abi.encode(_two(all[0], all[0]))), _msigCall(d, abi.encode(one)), "the same member twice"
+        );
     }
 
     /// An index past the members: refused before anything reads past the structure. A check that let it through would still end in
@@ -260,7 +282,9 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         IUARegistry.MemberSig[] memory one = new IUARegistry.MemberSig[](1);
         one[0] = all[0];
         IUARegistry.MemberSig memory past = IUARegistry.MemberSig(3, new IUARegistry.InnerSig[](0), _ecdsa(ALICE, rd));
-        _refusedAs(R1, _msigCall(d, abi.encode(_two(all[0], past))), _msigCall(d, abi.encode(one)), "an index past the members");
+        _refusedAs(
+            R1, _msigCall(d, abi.encode(_two(all[0], past))), _msigCall(d, abi.encode(one)), "an index past the members"
+        );
     }
 
     // ----- malformed calldata -----
@@ -351,8 +375,17 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         return 0;
     }
 
-    function _meter(address at, bytes32 ua, IUARegistry.UASig memory s, string memory label, uint256 before, uint256 slack) internal {
-        (bool ok,, uint256 used) = gm.measure(at, abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_METATX, DIGEST, s)));
+    function _meter(
+        address at,
+        bytes32 ua,
+        IUARegistry.UASig memory s,
+        string memory label,
+        uint256 before,
+        uint256 slack
+    ) internal {
+        (bool ok,, uint256 used) = gm.measure(
+            at, abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_METATX, DIGEST, s))
+        );
         assertTrue(ok, label);
         emit log_string(string.concat("GAS|", label, "|", vm.toString(before), "|", vm.toString(used)));
         assertLe(used, before + slack, label);
@@ -391,8 +424,10 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         bytes32 md = _memberDigest(mu, UAKinds.PURPOSE_METATX, DIGEST);
         IUARegistry.UASig memory sm;
         sm.members = new IUARegistry.MemberSig[](2);
-        sm.members[_indexOf(ds, alice)] = _member(ds, alice, _ecdsa(ALICE, UARegistry(at).uaAuthDigest(alice, UAKinds.PURPOSE_MEMBER, md)));
-        sm.members[_indexOf(ds, p)] = _member(ds, p, _sig(_key(0x0101), UAKinds.uaMessage(0x0101, UAKinds.PURPOSE_MEMBER, md)));
+        sm.members[_indexOf(ds, alice)] =
+            _member(ds, alice, _ecdsa(ALICE, UARegistry(at).uaAuthDigest(alice, UAKinds.PURPOSE_MEMBER, md)));
+        sm.members[_indexOf(ds, p)] =
+            _member(ds, p, _sig(_key(0x0101), UAKinds.uaMessage(0x0101, UAKinds.PURPOSE_MEMBER, md)));
         // CTR-UA-44 (TODO 3ze): 52,185 -> 52,968 (+783: the current structure's pointer and enabled word, once per level)
         _meter(at, mu, sm, "requireAuthorized msig 2-of-2", 52968, SLACK + 2 * MEMBER_LIST_GAS);
     }
@@ -404,7 +439,9 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         address at = R8;
         _deploy(at, chainUidA, address(0), false, BUDGET, address(0), true, _all());
         (uint16[] memory k, bytes[] memory d) = _rows();
-        for (uint256 i; i < k.length; ++i) _kindRow(at, k[i], d[i]);
+        for (uint256 i; i < k.length; ++i) {
+            _kindRow(at, k[i], d[i]);
+        }
         IUARegistry.UASig memory e;
         bytes32 alice = _pad(vm.addr(ALICE));
         e.signature = _ecdsa(ALICE, UARegistry(at).uaAuthDigest(alice, UAKinds.PURPOSE_METATX, DIGEST));

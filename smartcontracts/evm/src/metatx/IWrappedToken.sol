@@ -64,25 +64,29 @@ interface IWrappedToken {
 
     /// @notice `account` is credited `minted`: the caller of a direct wrap.
     event Wrapped(address indexed account, address indexed underlying, uint256 underlyingIn, uint256 minted);
-    event Unwrapped(address indexed account, address indexed underlying, address recipient, uint256 burned,
-        uint256 underlyingOut);
+    event Unwrapped(
+        address indexed account, address indexed underlying, address recipient, uint256 burned, uint256 underlyingOut
+    );
     /// @notice `unwrapToUA` (accounts.md CTR-UA-28): `account` is `UA_POOL` under a derived subject (its burn's
     ///         `UATransfer(ua, 0)` names the UA).
-    event UnwrappedToUA(address indexed account, address indexed underlying, bytes32 indexed to, uint256 burned,
-        uint256 out);
+    event UnwrappedToUA(
+        address indexed account, address indexed underlying, bytes32 indexed to, uint256 burned, uint256 out
+    );
     /// @notice `mtxWrapOrder` (CTR-TOK-20, UA-5b): `to` is credited `minted`: the order's `destination` (or `from`) and the
     ///         units net of the submitter's fee (W-Q).
     event UAWrapped(bytes32 indexed to, address indexed underlying, uint256 underlyingIn, uint256 minted);
     event ReserveAdded(address indexed from, address indexed underlying, uint256 amount);
-    event RateChangeProposed(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen,
-        uint64 eta);
+    event RateChangeProposed(
+        address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen, uint64 eta
+    );
     event RateChangeCancelled(address indexed underlying);
     event RateChanged(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen);
     event WrapDisabled(address indexed underlying, bytes32 indexed guardian, bytes32 reason);
     /// @notice Group 3l (§7): a configuration applied; one that waits the factory's `noticePeriod()`; a list membership.
     event WrapLimitsSet(bytes32 indexed by, WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList);
-    event WrapLimitsProposed(bytes32 indexed by, uint64 eta, WrapLegLimits[] legs, bool netUnwrap, bool wrapList,
-        bool unwrapList);
+    event WrapLimitsProposed(
+        bytes32 indexed by, uint64 eta, WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList
+    );
     event WrapMemberSet(bytes32 indexed account, bytes32 indexed by, bool canWrap, bool canUnwrap);
     /// @notice Round 3zc (CTR-GOV-30): a cap change proposed (applies at `eta`, in `[eta, eta + grantDelay]`) or applied.
     event MaxSupplyProposed(bytes32 indexed by, uint256 maxSupply, uint64 eta);
@@ -165,34 +169,61 @@ interface IWrappedToken {
     function unwrap(uint256 wrapped, address recipient) external returns (uint256 out);
     function unwrap(uint256 wrapped, address recipient, uint256 minOut) external returns (uint256 out);
     function unwrap(address underlying, uint256 wrapped, address recipient, uint256 minOut)
-        external returns (uint256 out, uint256 burned);
+        external
+        returns (uint256 out, uint256 burned);
     function addReserve(address underlying, uint256 amount) external payable;
     /// @notice `wrap(underlying, amount)` minted into the registered SIGNING UA `to` (CTR-UA-28).
     function wrapToUA(address underlying, uint256 amount, bytes32 to) external payable returns (uint256 minted);
     /// @notice `unwrap(underlying, …)` paid into `to` in the leg's UA ledger; the leg must be a SCaaS ledger token.
     function unwrapToUA(address underlying, uint256 wrapped, bytes32 to, uint256 minOut)
-        external returns (uint256 out, uint256 burned);
+        external
+        returns (uint256 out, uint256 burned);
     /// @notice Wrap a SCaaS underlying by the holder's `UAWrapOrder` (CTR-TOK-20, UA-5b; R39): the order is the
     ///         underlying's `UATradeOrder` with `dex` = `receiveToken` = this token; a derived holder needs a ledger
     ///         underlying, and a leg with no `mtxTrade` is refused (`UALegNotLedger` both); `minted − fee` to `o.destination` (0 ⇒ `o.from`), a derived id into the UA
     ///         ledger; `fee` pays the submitter in minted units.
     function mtxWrapOrder(address underlying, ITradeToken.UAWrapOrder calldata o, IUARegistry.UASig calldata auth)
-        external returns (uint256 minted);
+        external
+        returns (uint256 minted);
     /// @notice The named typed entries (TS-D14): the envelope, the op's own parameters, the signature.
     function mtxWrap(MetaTxLib.Envelope calldata e, uint256 amount, bytes calldata sig) external returns (bytes memory);
     function mtxWrapLeg(MetaTxLib.Envelope calldata e, address underlying, uint256 amount, bytes calldata sig)
-        external returns (bytes memory);
-    function mtxWrapToUA(MetaTxLib.Envelope calldata e, address underlying, uint256 amount, bytes32 to, bytes calldata sig)
-        external returns (bytes memory);
+        external
+        returns (bytes memory);
+    function mtxWrapToUA(
+        MetaTxLib.Envelope calldata e,
+        address underlying,
+        uint256 amount,
+        bytes32 to,
+        bytes calldata sig
+    ) external returns (bytes memory);
     function mtxAddReserve(MetaTxLib.Envelope calldata e, address underlying, uint256 amount, bytes calldata sig)
-        external returns (bytes memory);
+        external
+        returns (bytes memory);
     /// @notice The unwraps' pairs on ids (R23): a native id by its own key, a derived UA through the registry.
-    function mtxUnwrap(MetaTxLib.UAEnvelope calldata e, uint256 wrapped, address recipient, uint256 minOut,
-        IUARegistry.UASig calldata auth) external returns (bytes memory);
-    function mtxUnwrapLeg(MetaTxLib.UAEnvelope calldata e, address underlying, uint256 wrapped, address recipient,
-        uint256 minOut, IUARegistry.UASig calldata auth) external returns (bytes memory);
-    function mtxUnwrapToUA(MetaTxLib.UAEnvelope calldata e, address underlying, uint256 wrapped, bytes32 to, uint256 minOut,
-        IUARegistry.UASig calldata auth) external returns (bytes memory);
+    function mtxUnwrap(
+        MetaTxLib.UAEnvelope calldata e,
+        uint256 wrapped,
+        address recipient,
+        uint256 minOut,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes memory);
+    function mtxUnwrapLeg(
+        MetaTxLib.UAEnvelope calldata e,
+        address underlying,
+        uint256 wrapped,
+        address recipient,
+        uint256 minOut,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes memory);
+    function mtxUnwrapToUA(
+        MetaTxLib.UAEnvelope calldata e,
+        address underlying,
+        uint256 wrapped,
+        bytes32 to,
+        uint256 minOut,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes memory);
     /// @notice A hybrid's issuer (spec §5.2): `MINTABLE` and its holder, under `maxSupply`, into a public balance. Every role
     ///         holder's direct entry names the token's chain word `chainUid_` (CTR-GOV-28 Change, round 3zb + 3zc): a holder
     ///         with another word is refused (`ChainUidMismatch`) before any write; a caller without the power keeps its
@@ -206,8 +237,13 @@ interface IWrappedToken {
     /// @notice Group 3l (§6): the owner's limits of every leg (in leg order), the net rule and the two lists; a wrap-side
     ///         relaxation or an unwrap-side tightening waits the factory's `noticePeriod()` (two calls), the rest applies
     ///         at once. Reached through `GovernanceRouter`. The admin, then the chain word (CTR-GOV-28), before any write.
-    function setWrapLimits(WrapLegLimits[] calldata legs, bool netUnwrap, bool wrapList, bool unwrapList, bytes32 chainUid_)
-        external;
+    function setWrapLimits(
+        WrapLegLimits[] calldata legs,
+        bool netUnwrap,
+        bool wrapList,
+        bool unwrapList,
+        bytes32 chainUid_
+    ) external;
     /// @notice Bit 26's holder: `account`'s membership of the wrapper and unwrapper lists, at once.
     function setWrapMember(bytes32 account, bool canWrap, bool canUnwrap, bytes32 chainUid_) external;
     /// @notice Round 3zc (CTR-GOV-30), bit 31: the admin changes a hybrid's `maxSupply` (never to 0) or any wrapped kind's
@@ -219,7 +255,9 @@ interface IWrappedToken {
     function underlying() external view returns (address);
     function underlyings() external view returns (address[] memory);
     function legOf(address u)
-        external view returns (uint96 num, uint96 den, uint256 reserve, uint8 decimals, bool wrapEnabled);
+        external
+        view
+        returns (uint96 num, uint96 den, uint256 reserve, uint8 decimals, bool wrapEnabled);
     function collateralValue() external view returns (uint256);
     /// @notice The hybrid's cap on `totalSupply()`, wraps included; 0 = not a hybrid, fully backed (spec §5.5).
     function maxSupply() external view returns (uint256);
@@ -229,8 +267,17 @@ interface IWrappedToken {
     /// @notice Σ ⌊reserve_i · q_i⌋ over the legs (`collateralValue()`'s sum), to compare with `totalSupply()`.
     function reserveValue() external view returns (uint256);
     /// @notice The pending cap changes; `…Live` false past the window, after a change of admin, or with bit 31 not set.
-    function pendingSupplyCaps() external view returns (uint256 pendingMaxSupply, uint64 maxSupplyEta, bool maxSupplyLive,
-        uint256 pendingMaxWrapSupply, uint64 maxWrapSupplyEta, bool maxWrapSupplyLive);
+    function pendingSupplyCaps()
+        external
+        view
+        returns (
+            uint256 pendingMaxSupply,
+            uint64 maxSupplyEta,
+            bool maxSupplyLive,
+            uint256 pendingMaxWrapSupply,
+            uint64 maxWrapSupplyEta,
+            bool maxWrapSupplyLive
+        );
     function previewWrap(address u, uint256 amount) external view returns (uint256 minted, uint256 used);
     function previewUnwrap(address u, uint256 wrapped) external view returns (uint256 out, uint256 burned);
     function rateAdjustable() external view returns (bool);
@@ -239,8 +286,19 @@ interface IWrappedToken {
     function pendingRate() external view returns (address u, uint96 num, uint96 den, uint64 eta);
     /// @notice Group 3l (§7): the configuration in force and the pending one.
     ///         `delay`: the factory's `noticePeriod()` in force (0: every change applies at once).
-    function wrapLimits() external view returns (WrapLegLimits[] memory legs, bool netUnwrap, bool wrapList, bool unwrapList,
-        bytes32 pendingCommit, uint64 pendingEta, bool pendingLive, uint64 delay);
+    function wrapLimits()
+        external
+        view
+        returns (
+            WrapLegLimits[] memory legs,
+            bool netUnwrap,
+            bool wrapList,
+            bool unwrapList,
+            bytes32 pendingCommit,
+            uint64 pendingEta,
+            bool pendingLive,
+            uint64 delay
+        );
     function wrapQuotaOf(bytes32 account, address underlying) external view returns (WrapQuota memory);
     function wrapQuotaTotal(address underlying) external view returns (WrapQuotaTotal memory);
 }

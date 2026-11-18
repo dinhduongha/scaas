@@ -55,44 +55,81 @@ contract ListRouterTest is ListFixture {
     function _domain() internal view returns (bytes32) {
         (, string memory name, string memory version, uint256 chainId, address verifying, bytes32 salt,) =
             router.eip712Domain();
-        return keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256(bytes(name)), keccak256(bytes(version)), chainId, verifying, salt));
+        return keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256(bytes(name)),
+                keccak256(bytes(version)),
+                chainId,
+                verifying,
+                salt
+            )
+        );
     }
 
     function _env() internal view returns (MetaTxLib.UAEnvelope memory) {
-        return MetaTxLib.UAEnvelope(s, 0, router.mtxNonce(s, 0), block.timestamp + 1 hours, 0, address(0), 0, address(0));
+        return
+            MetaTxLib.UAEnvelope(s, 0, router.mtxNonce(s, 0), block.timestamp + 1 hours, 0, address(0), 0, address(0));
     }
 
     /// The digest over `typeString` with the words after `target` (EIP-712: an array as the `keccak256` of its words).
     function _auth(string memory typeString, MetaTxLib.UAEnvelope memory e, address target, bytes memory words)
-        internal view returns (IUARegistry.UASig memory a)
+        internal
+        view
+        returns (IUARegistry.UASig memory a)
     {
-        bytes32 h = keccak256(bytes.concat(abi.encode(keccak256(bytes(typeString)), e.from, target), words,
-            abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
+        bytes32 h = keccak256(
+            bytes.concat(
+                abi.encode(keccak256(bytes(typeString)), e.from, target),
+                words,
+                abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))
+            )
+        );
         (uint8 v, bytes32 r, bytes32 ss) = vm.sign(SIGNER_PK, keccak256(abi.encodePacked("\x19\x01", _domain(), h)));
         a.signature = abi.encodePacked(r, ss, v);
     }
 
     function _listType(bool allow) internal pure returns (string memory) {
-        return string.concat(allow ? "UASetAllowed" : "UASetDenied", "(bytes32 from,address target,bytes32[] accounts,bool on,bytes32 chainUid",
-            TAIL);
+        return string.concat(
+            allow ? "UASetAllowed" : "UASetDenied",
+            "(bytes32 from,address target,bytes32[] accounts,bool on,bytes32 chainUid",
+            TAIL
+        );
     }
 
     /// @dev The target's chain word after `on` (CTR-GOV-28), read from its clone code.
-    function _listCd(bool allow, MetaTxLib.UAEnvelope memory e, address target, bytes32[] memory as_, bool on,
-        IUARegistry.UASig memory a) internal view returns (bytes memory)
-    {
-        return abi.encodeWithSignature(string.concat(allow ? "mtxSetAllowed(" : "mtxSetDenied(", ENV, ",address,bytes32[],bool,bytes32,",
-            SIG, ")"), e, target, as_, on, EnvKit.codeUidOf(target), a);
+    function _listCd(
+        bool allow,
+        MetaTxLib.UAEnvelope memory e,
+        address target,
+        bytes32[] memory as_,
+        bool on,
+        IUARegistry.UASig memory a
+    ) internal view returns (bytes memory) {
+        return abi.encodeWithSignature(
+            string.concat(
+                allow ? "mtxSetAllowed(" : "mtxSetDenied(", ENV, ",address,bytes32[],bool,bytes32,", SIG, ")"
+            ),
+            e,
+            target,
+            as_,
+            on,
+            EnvKit.codeUidOf(target),
+            a
+        );
     }
 
     /// `u` the target's chain word, the op's last field (CTR-GOV-28).
     function _enableCd(MetaTxLib.UAEnvelope memory e, address target, uint8 bit, bytes32 u, IUARegistry.UASig memory a)
-        internal pure returns (bytes memory)
+        internal
+        pure
+        returns (bytes memory)
     {
-        return abi.encodeWithSignature(string.concat("mtxEnableFeature(", ENV, ",address,uint8,bytes32,", SIG, ")"), e, target,
-            bit, u, a);
+        return abi.encodeWithSignature(
+            string.concat("mtxEnableFeature(", ENV, ",address,uint8,bytes32,", SIG, ")"), e, target, bit, u, a
+        );
     }
 
     function _send(bytes memory cd) internal returns (bool ok) {
@@ -109,7 +146,8 @@ contract ListRouterTest is ListFixture {
     function _listMatrix(bool allow) internal returns (uint256 n) {
         MetaTxLib.UAEnvelope memory e = _env();
         bytes32[] memory as_ = _accounts();
-        IUARegistry.UASig memory a = _auth(_listType(allow), e, t, abi.encode(keccak256(abi.encodePacked(as_)), true, EnvKit.codeUidOf(t)));
+        IUARegistry.UASig memory a =
+            _auth(_listType(allow), e, t, abi.encode(keccak256(abi.encodePacked(as_)), true, EnvKit.codeUidOf(t)));
         bytes32[] memory el = _accounts();
         el[1] = bytes32(uint256(0xA3));
         bytes32[] memory longer = new bytes32[](3);
@@ -118,9 +156,16 @@ contract ListRouterTest is ListFixture {
         shorter[0] = as_[0];
         bytes32[] memory swapped = new bytes32[](2);
         (swapped[0], swapped[1]) = (as_[1], as_[0]);
-        bytes[5] memory v = [_listCd(allow, e, other, as_, true, a), _listCd(allow, e, t, el, true, a),
-            _listCd(allow, e, t, longer, true, a), _listCd(allow, e, t, shorter, true, a), _listCd(allow, e, t, swapped, true, a)];
-        for (uint256 k; k < 5; ++k) assertFalse(_send(v[k]), "a variant passed");
+        bytes[5] memory v = [
+            _listCd(allow, e, other, as_, true, a),
+            _listCd(allow, e, t, el, true, a),
+            _listCd(allow, e, t, longer, true, a),
+            _listCd(allow, e, t, shorter, true, a),
+            _listCd(allow, e, t, swapped, true, a)
+        ];
+        for (uint256 k; k < 5; ++k) {
+            assertFalse(_send(v[k]), "a variant passed");
+        }
         bool flip = _send(_listCd(allow, e, t, as_, false, a));
         assertFalse(flip, "on flipped passed");
         n = 6;
@@ -168,8 +213,20 @@ contract ListRouterTest is ListFixture {
         MetaTxLib.UAEnvelope memory e = _env();
         bytes32[] memory one = new bytes32[](1);
         one[0] = nid(bob);
-        assertTrue(_send(_listCd(false, e, t, one, true,
-            _auth(_listType(false), e, t, abi.encode(keccak256(abi.encodePacked(one)), true, EnvKit.codeUidOf(t))))));
+        assertTrue(
+            _send(
+                _listCd(
+                    false,
+                    e,
+                    t,
+                    one,
+                    true,
+                    _auth(
+                        _listType(false), e, t, abi.encode(keccak256(abi.encodePacked(one)), true, EnvKit.codeUidOf(t))
+                    )
+                )
+            )
+        );
         vm.prank(alice);
         IERC20(t).transfer(bob, 1); // the list off: the row is dormant
         e = _env();

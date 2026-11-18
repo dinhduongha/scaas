@@ -38,11 +38,11 @@ contract ZetherMsmDifferentialTest is ZetherMsmCorpus {
     /// @dev Where a form keeps its points and scalars.
     struct Shape {
         uint8 op;
-        uint256 sigmaPts;  // Σ points at the head of the proof
-        uint256 zs;        // Σ scalars after them
-        uint256 bps;       // range proofs after those
-        uint256 stPts;     // points after the statement header
-        uint256 legPts;    // the multi-recipient leg points, after `be32(M)`
+        uint256 sigmaPts; // Σ points at the head of the proof
+        uint256 zs; // Σ scalars after them
+        uint256 bps; // range proofs after those
+        uint256 stPts; // points after the statement header
+        uint256 legPts; // the multi-recipient leg points, after `be32(M)`
     }
 
     function setUp() public {
@@ -57,17 +57,27 @@ contract ZetherMsmDifferentialTest is ZetherMsmCorpus {
     }
 
     function verify(IZetherVerifier t, IZetherBurnVerifier b, uint8 op, bytes memory st, bytes memory pr)
-        external view returns (bool)
+        external
+        view
+        returns (bool)
     {
-        return op == TRANSFER ? t.verifyTransfer(st, pr) : op == MULTI ? t.verifyTransferMulti(st, pr) : b.verifyBurn(st, pr);
+        return op == TRANSFER
+            ? t.verifyTransfer(st, pr)
+            : op == MULTI ? t.verifyTransferMulti(st, pr) : b.verifyBurn(st, pr);
     }
 
     /// @dev A revert of the merged verifier is a refusal only as `BadPoint`: out of gas or a `Panic` must not read as one.
     function _verdict(IZetherVerifier t, IZetherBurnVerifier b, uint8 op, bytes memory st, bytes memory pr)
-        internal view returns (uint8)
+        internal
+        view
+        returns (uint8)
     {
-        try this.verify{gas: gasCap}(t, b, op, st, pr) returns (bool ok) { return ok ? YES : NO; } catch (bytes memory e) {
-            if (t == v) assertTrue(e.length == 4 && bytes4(e) == G1Bls12381.BadPoint.selector, "a revert other than BadPoint");
+        try this.verify{gas: gasCap}(t, b, op, st, pr) returns (bool ok) {
+            return ok ? YES : NO;
+        } catch (bytes memory e) {
+            if (t == v) {
+                assertTrue(e.length == 4 && bytes4(e) == G1Bls12381.BadPoint.selector, "a revert other than BadPoint");
+            }
             return REVERT;
         }
     }
@@ -105,10 +115,10 @@ contract ZetherMsmDifferentialTest is ZetherMsmCorpus {
     }
 
     function _mutatePoint(bytes memory t, uint256 at, uint256 kind) internal view {
-        if (kind == 0) _setPoint(t, at, new bytes(P));                                   // O
-        else if (kind == 1) _setPoint(t, at, G1Bls12381.generator());                    // another subgroup point
+        if (kind == 0) _setPoint(t, at, new bytes(P)); // O
+        else if (kind == 1) _setPoint(t, at, G1Bls12381.generator()); // another subgroup point
         else if (kind == 2) _setPoint(t, at, G1Bls12381.add(_point(t, at), _lowOrder())); // out of the subgroup
-        else t[at + P - 1] ^= 0x01;                                                      // off the curve, or not O any more
+        else t[at + P - 1] ^= 0x01; // off the curve, or not O any more
     }
 
     /// @dev A row that changed nothing (O on an auditor-off point) proves nothing and is skipped.
@@ -203,21 +213,51 @@ contract ZetherMsmDifferentialTest is ZetherMsmCorpus {
 
     // ------------------------------------------------------------------ the Rust prover's vectors, mutated
 
-    function test_s3TransferSigma() public { _s3("transfer_bls12381.json", TRANSFER, false); }
-    function test_s3TransferRanges() public { _s3("transfer_bls12381.json", TRANSFER, true); }
-    function test_s3TransferNoAuditorSigma() public { _s3("transfer_noaud_bls12381.json", TRANSFER, false); }
-    function test_s3TransferNoAuditorRanges() public { _s3("transfer_noaud_bls12381.json", TRANSFER, true); }
-    function test_s3BurnSigma() public { _s3("burn_bls12381.json", BURN, false); }
-    function test_s3BurnRanges() public { _s3("burn_bls12381.json", BURN, true); }
-    function test_s3MultiSigma() public { _s3("transfer_multi_bls12381.json", MULTI, false); }
-    function test_s3MultiRanges() public { _s3("transfer_multi_bls12381.json", MULTI, true); }
-    function test_s3MultiNoAuditorSigma() public { _s3("transfer_multi_noaud_bls12381.json", MULTI, false); }
-    function test_s3MultiNoAuditorRanges() public { _s3("transfer_multi_noaud_bls12381.json", MULTI, true); }
+    function test_s3TransferSigma() public {
+        _s3("transfer_bls12381.json", TRANSFER, false);
+    }
+
+    function test_s3TransferRanges() public {
+        _s3("transfer_bls12381.json", TRANSFER, true);
+    }
+
+    function test_s3TransferNoAuditorSigma() public {
+        _s3("transfer_noaud_bls12381.json", TRANSFER, false);
+    }
+
+    function test_s3TransferNoAuditorRanges() public {
+        _s3("transfer_noaud_bls12381.json", TRANSFER, true);
+    }
+
+    function test_s3BurnSigma() public {
+        _s3("burn_bls12381.json", BURN, false);
+    }
+
+    function test_s3BurnRanges() public {
+        _s3("burn_bls12381.json", BURN, true);
+    }
+
+    function test_s3MultiSigma() public {
+        _s3("transfer_multi_bls12381.json", MULTI, false);
+    }
+
+    function test_s3MultiRanges() public {
+        _s3("transfer_multi_bls12381.json", MULTI, true);
+    }
+
+    function test_s3MultiNoAuditorSigma() public {
+        _s3("transfer_multi_noaud_bls12381.json", MULTI, false);
+    }
+
+    function test_s3MultiNoAuditorRanges() public {
+        _s3("transfer_multi_noaud_bls12381.json", MULTI, true);
+    }
 
     /// The `v2` vectors carry the old proof system ids, so both verifiers stop at the header check: 0x0c is never called. This
     /// shows the header check only, nothing about `ρ` or the MSM.
     function test_oldProofSystemIdsStopAtTheHeader() public {
-        string[3] memory files = ["v2/transfer_bls12381.json", "v2/burn_bls12381.json", "v2/transfer_multi_bls12381.json"];
+        string[3] memory files =
+            ["v2/transfer_bls12381.json", "v2/burn_bls12381.json", "v2/transfer_multi_bls12381.json"];
         uint8[3] memory ops = [TRANSFER, BURN, MULTI];
         vm.expectCall(address(0x0c), bytes(""), 0);
         for (uint256 i; i < 3; ++i) {
@@ -242,10 +282,10 @@ contract ZetherMsmDifferentialTest is ZetherMsmCorpus {
     function _cases(uint256 i) internal pure returns (Case memory) {
         if (i == 0) return Case(1000, 300, 300, 5, false);
         if (i == 1) return Case(1000, 300, 300, 5, true);
-        if (i == 2) return Case(1000, 1000, 1000, 0, true);             // the whole balance, no fee
+        if (i == 2) return Case(1000, 1000, 1000, 0, true); // the whole balance, no fee
         if (i == 3) return Case(2 ** 64 + 6, 2 ** 64 - 1, 2 ** 64 - 1, 7, false); // v at the top, b' = 0
         if (i == 4) return Case(2 ** 54, 2 ** 44 + 3, 2 ** 44 + 3, 7, false);
-        return Case(2 ** 64, 1, 1, 2 ** 64 - 1, false);                 // the largest fee
+        return Case(2 ** 64, 1, 1, 2 ** 64 - 1, false); // the largest fee
     }
 
     function test_validTransfers() public {
@@ -257,10 +297,10 @@ contract ZetherMsmDifferentialTest is ZetherMsmCorpus {
 
     function test_cheatingTransfers() public {
         Case[4] memory bad = [
-            Case(1000, 1001, 1001, 0, false),            // overspent: b' = −1
-            Case(1000, 998, 998, 5, false),              // overspent by the fee
+            Case(1000, 1001, 1001, 0, false), // overspent: b' = −1
+            Case(1000, 998, 998, 5, false), // overspent by the fee
             Case(2 ** 64 + 10, 2 ** 64, 2 ** 64, 0, false), // v = 2^64
-            Case(1000, 900, 100, 0, false)               // the ciphertext says 900, the witness 100
+            Case(1000, 900, 100, 0, false) // the ciphertext says 900, the witness 100
         ];
         for (uint256 i; i < 4; ++i) {
             (bytes memory st, bytes memory pr) = _transfer(bad[i]);
@@ -313,7 +353,8 @@ contract ZetherMsmDifferentialTest is ZetherMsmCorpus {
     /// `verifyRange` keeps its answer and its returned state, a proof's mutated rows included.
     function test_verifyRangeAgrees() public view {
         (bytes memory st, bytes memory pr) = _transfer(true);
-        (bytes32 s,) = T.challenge(T.absorb(T.absorb(T.init(), "statement", st), "sigma.commit", _head(pr, 10 * P)), "sigma.c", R);
+        (bytes32 s,) =
+            T.challenge(T.absorb(T.absorb(T.init(), "statement", st), "sigma.commit", _head(pr, 10 * P)), "sigma.c", R);
         bytes memory bp = _at(pr, 10 * P + 192, BP_LEN);
         bytes memory V = _point(pr, 0);
         for (uint256 i; i <= 21; ++i) {
@@ -328,11 +369,23 @@ contract ZetherMsmDifferentialTest is ZetherMsmCorpus {
         }
     }
 
-    function _range(IZetherVerifier t, bytes32 s, bytes memory V, bytes memory bp) internal view returns (bool, bytes32) {
-        try this.range{gas: gasCap}(t, s, V, bp) returns (bool ok, bytes32 out) { return (ok, out); } catch { return (false, s); }
+    function _range(IZetherVerifier t, bytes32 s, bytes memory V, bytes memory bp)
+        internal
+        view
+        returns (bool, bytes32)
+    {
+        try this.range{gas: gasCap}(t, s, V, bp) returns (bool ok, bytes32 out) {
+            return (ok, out);
+        } catch {
+            return (false, s);
+        }
     }
 
-    function range(IZetherVerifier t, bytes32 s, bytes memory V, bytes memory bp) external view returns (bool, bytes32) {
+    function range(IZetherVerifier t, bytes32 s, bytes memory V, bytes memory bp)
+        external
+        view
+        returns (bool, bytes32)
+    {
         return IInnerProductOf(address(t)).innerProduct().verifyRange(s, V, bp);
     }
 }

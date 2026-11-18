@@ -12,7 +12,8 @@ FAMILIES=""
 # "<step>|<form>|<name>": the test functions the rename renamed (forge pass form), plus the renamed parity / KAT readers.
 # Not listed: invariant_T_V3_2_wrapped / _normal (renamed too): forge prints an invariant as "[PASS] <name>" without "(",
 # which the forge form does not match; their PASS lines are in the forge-* logs (UALedgerInvariantTest).
-NEW_TESTS=$(cat <<'NAMES'
+NEW_TESTS=$(
+    cat <<'NAMES'
 forge|forge|test_allowlistPinned_wrappedZether
 forge|forge|test_allowlistRefusals_wrappedZether
 forge|forge|test_everyListedSelectorRuns_wrappedZether

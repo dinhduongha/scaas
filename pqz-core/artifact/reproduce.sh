@@ -42,12 +42,15 @@ export PQZ_SET=n2304-kmax4096
 cd "$(dirname "$0")/.."
 MODE=quick
 case "${1:-}" in
-  "") ;;
-  --full) MODE=full ;;
-  --serve) MODE=serve ;;
-  --upstream) MODE=upstream ;;
-  --multi-bench) MODE=multi ;;
-  *) sed -n '2,38p' "$0"; exit 2 ;;
+    "") ;;
+    --full) MODE=full ;;
+    --serve) MODE=serve ;;
+    --upstream) MODE=upstream ;;
+    --multi-bench) MODE=multi ;;
+    *)
+        sed -n '2,38p' "$0"
+        exit 2
+        ;;
 esac
 # --upstream compares the fork with upstream LaZer at one set, n2048-kmax1024 (the set of the upstream golden KAT):
 # the fork's pqzl/build.sh and every upstream -I / KAT path below use $PQZ_SET; the other modes keep n2304-kmax4096
@@ -55,204 +58,226 @@ esac
 OUT=${OUT:-artifact/out/$MODE-$(date -u +%Y%m%dT%H%M%SZ)}
 mkdir -p "$OUT"
 OUT=$(cd "$OUT" && pwd)
-echo "$MODE" > "$OUT/mode.txt"
+echo "$MODE" >"$OUT/mode.txt"
 C="--release --locked --offline" # cargo: the committed Cargo.lock, no network (the image fetched the crates)
-L=pqzh/ligero # the Ligero crate (PQZH)
+L=pqzh/ligero                    # the Ligero crate (PQZH)
 LW=$L/wasm/target/wasm32-unknown-unknown/release/pqzh_ligero_wasm.wasm
 TXMB=research/pqzl-measure/txm-bench.sh # L3's PQZL op 7 harness (--multi-bench); writes $(dirname $TXMB)/runs/<label>-*
 cpu_has() { grep -m1 '^flags' /proc/cpuinfo | tr ' ' '\n' | grep -qx "$1"; }
 step() { echo "== $(date -u +%T) $*" | tee -a "$OUT/log.txt"; }
 run() { # run <file> <dir> <command...>: stdout + stderr to $OUT/<file>, then "rc=N" as its last line
-  f=$OUT/$1 d=$2; shift 2
-  (cd "$d" && "$@") > "$f" 2>&1 && r=0 || r=$?
-  echo "rc=$r" >> "$f"
+    f=$OUT/$1 d=$2
+    shift 2
+    (cd "$d" && "$@") >"$f" 2>&1 && r=0 || r=$?
+    echo "rc=$r" >>"$f"
 }
 
 if [ $MODE = serve ]; then
-  step "build wasm (PQZL pqzl/build/wasm/pqz.wasm, PQZH $LW)"
-  { pqzl/build.sh wasm && (cd $L/wasm && cargo build $C --target wasm32-unknown-unknown); } > "$OUT/build.txt" 2>&1
-  mkdir -p "$OUT/web"
-  cp artifact/web/index.html pqzl/build/wasm/pqz.wasm "$LW" "$OUT/web/"
-  step "serving $OUT/web on http://${BIND:-127.0.0.1}:${PORT:-8000}/ (Ctrl-C to stop)"
-  exec python3 -m http.server "${PORT:-8000}" --bind "${BIND:-127.0.0.1}" -d "$OUT/web"
+    step "build wasm (PQZL pqzl/build/wasm/pqz.wasm, PQZH $LW)"
+    { pqzl/build.sh wasm && (cd $L/wasm && cargo build $C --target wasm32-unknown-unknown); } >"$OUT/build.txt" 2>&1
+    mkdir -p "$OUT/web"
+    cp artifact/web/index.html pqzl/build/wasm/pqz.wasm "$LW" "$OUT/web/"
+    step "serving $OUT/web on http://${BIND:-127.0.0.1}:${PORT:-8000}/ (Ctrl-C to stop)"
+    exec python3 -m http.server "${PORT:-8000}" --bind "${BIND:-127.0.0.1}" -d "$OUT/web"
 fi
 
 if [ $MODE = upstream ]; then
-  # Upstream LaZer 3330e48 + HEXL (its third_party zip) + the distro's GMP / MPFR, built from source here; flags as
-  # research/upstream/static/build.sh (upstream Makefile defaults with -march=native -> the variant's flags, -fno-strict-aliasing
-  # for aes256ctr-amd64.c, -DNDEBUG). HEXL's cpu_features (a GitHub fetch) is replaced by research/upstream/static/cpuf (real
-  # CPUID through libgcc). v4: HEXL's AVX-512 kernels compiled in although the build host may lack AVX-512 (its
-  # configure test relaxed from "compiles and runs" to "compiles"); building needs only the flags, running needs the CPU.
-  N=${2:-3}
-  PIN=3330e487228f633eceb322807b13a596b516770f
-  U=$(pwd)/build/upstream
-  SRC=${LAZER_SRC:-$U/lazer-src}
-  [ -d "$SRC/.git" ] || git clone -q https://github.com/lazer-crypto/lazer "$SRC"
-  [ "$(git -C "$SRC" rev-parse "$PIN^{commit}")" = $PIN ] || { echo "no LaZer $PIN in $SRC" >&2; exit 1; }
-  P=$(pwd)
-  # Same relation on both sides: the upstream bench compiles the fork's own src/pqz_rel.c (the R_REG / R_TX statement
-  # builder and witness of libpqz), not a copy, with two upstream-API substitutions (no bounded decoder, no coder err
-  # flag). The check: exactly those two lines differ; the diff goes to upstream-relation.txt.
-  mkdir -p "$U"
-  sed -e 's#coder_dec_begin_len (cstate, in, len);#coder_dec_begin (cstate, in); /* xcheck: upstream has no bounded decoder */#' \
-      -e 's#if (cstate->err || coder_dec_end#if (0 /* xcheck: upstream coder has no err flag */ || coder_dec_end#' \
-      pqzl/src/pqz_rel.c > "$U/up_rel.c"
-  { echo "diff pqzl/src/pqz_rel.c build/upstream/up_rel.c (the upstream bench's relation source):"
-    diff pqzl/src/pqz_rel.c "$U/up_rel.c" || true; } > "$OUT/upstream-relation.txt"
-  [ "$(diff pqzl/src/pqz_rel.c "$U/up_rel.c" | grep -c '^[<>]')" = 4 ] \
-    || { cat "$OUT/upstream-relation.txt"; echo "up_rel.c: expected exactly 2 substituted lines" >&2; exit 1; }
-  for V in v3 v4; do
-    case $V in
-      v3) MARCH="-march=x86-64-v3 -maes -mpclmul" ;;
-      v4) MARCH="-march=x86-64-v4 -mavx512ifma -mavx512vbmi2 -maes -mpclmul" ;;
-    esac
-    step "build upstream $V ($MARCH)"
-    L=$U/lazer-$V
-    rm -rf "$L" && git -c advice.detachedHead=false clone -q "$SRC" "$L" && git -C "$L" checkout -q $PIN
-    (
-      cd "$L/third_party" && unzip -q hexl-development.zip
-      sed -i "s/-march=native/$MARCH/" hexl-development/hexl/CMakeLists.txt hexl-development/cmake/hexl/hexl-util.cmake
-      [ $V = v3 ] || sed -i "s/if (CAN_COMPILE AND CAN_RUN STREQUAL 0)/if (CAN_COMPILE)/" hexl-development/cmake/hexl/hexl-util.cmake
-      cd hexl-development
-      cmake -S . -B build -DHEXL_BENCHMARK=OFF -DHEXL_TESTING=OFF -DCpuFeatures_DIR="$P/research/upstream/static/cpuf" > "$U/hexl-cmake-$V.log" 2>&1
-      cmake --build build -j2 > "$U/hexl-build-$V.log" 2>&1
-      mkdir -p build/hexl/lib64 && cp build/hexl/lib/libhexl.a build/hexl/lib64/ && touch .
-      cd "$L"
-      make lazer.h liblazer.a CFLAGS="-Wall -O3 -g $MARCH -fomit-frame-pointer -DFALCON_FPNATIVE -DFALCON_AVX2 -DFALCON_FMA -DNDEBUG -fno-strict-aliasing" > "$U/lazer-build-$V.log" 2>&1
-      LIBS="$L/liblazer.a $L/third_party/hexl-development/build/hexl/lib/libhexl.a -lmpfr -lgmp -lstdc++ -lm -lpthread"
-      CF="-std=gnu11 -O3 $MARCH -fomit-frame-pointer -fno-strict-aliasing -DNDEBUG -w"
-      # R_REG / R_TX bench: the fork's relation source ($U/up_rel.c, above) and bench through the cross-check shim
-      # (research/upstream/README.md: libc heap instead of the arena)
-      gcc $CF -I"$P/research/upstream/shim" -I"$L" -I"$L/src" -I"$P/pqzl/src" -I"$P/params/sets/$PQZ_SET" -c "$U/up_rel.c" -o "$U/up_rel-$V.o"
-      gcc $CF -c "$P/research/upstream/shim/shim.c" -o "$U/up_shim-$V.o"
-      gcc $CF -I"$P/pqzl/src" -I"$P/params/sets/$PQZ_SET" -c "$P/research/upstream/shim/bench.c" -o "$U/up_bench-$V.o"
-      mkdir -p "$U/bin"
-      g++ -o "$U/bin/bench_up_$V" "$U/up_bench-$V.o" "$U/up_rel-$V.o" "$U/up_shim-$V.o" $LIBS
-      # arithmetic-layer KAT dump (pqzl/kat/build-lazer-dump.sh, here dynamic)
-      g++ -x c -std=gnu11 -O2 -fno-strict-aliasing $MARCH -DBUILD_FLAGS="\"lazer 3330e48 $V: $MARCH\"" -I. -I"$P/params/sets/$PQZ_SET" \
-        "$P/pqzl/kat/lazer_dump.c" -x none -o "$U/bin/lazer_dump-$V" $LIBS
-      echo "$V: $MARCH; HEXL: $(grep -E 'Setting HEXL|not found: HEXL' "$U/hexl-cmake-$V.log" | sed 's/.*-- //' | tr '\n' ';')"
-    ) >> "$OUT/upstream-build.txt" 2>&1 || { tail -20 "$OUT/upstream-build.txt"; echo "upstream $V build failed" >&2; exit 1; }
-  done
-  { gcc --version | head -1; cmake --version | head -1
-    dpkg-query -W libgmp-dev libmpfr-dev 2>/dev/null || true
-    echo "HEXL AVX-512 IFMA kernels in bench_up_v4: $(nm -C "$U/bin/bench_up_v4" | grep -c 'AVX512.*<52')"; } >> "$OUT/upstream-build.txt"
-  step "build fork bench (shim bench.c against pqzl/build/native/libpqz.a)"
-  pqzl/build.sh native > "$OUT/build.txt" 2>&1
-  ${CC:-clang} -std=gnu11 -O2 -w -Ipqzl/src -Ipqzl/build/include -o "$U/bin/bench_fork" research/upstream/shim/bench.c pqzl/build/native/libpqz.a
-  cat "$OUT/upstream-build.txt"
-  for V in v3 v4; do
-    if [ $V = v4 ] && ! cpu_has avx512ifma; then
-      step "KAT upstream v4: skipped, no avx512ifma in /proc/cpuinfo (built only; running needs an AVX-512 IFMA CPU or Intel SDE)"
-      continue
-    fi
-    step "KAT upstream $V against kat/lazer-3330e48.json"
-    "$U/bin/lazer_dump-$V" > "$OUT/kat-upstream-$V.json"
-    python3 -I pqzl/kat/check.py params/sets/$PQZ_SET/lazer-3330e48-kat.json "$OUT/kat-upstream-$V.json" | tee "$OUT/kat-upstream-$V.txt"
-  done
-  step "bench upstream vs fork, N=$N (research/upstream/static/run.sh; skips bench_up_v4 without avx512ifma)"
-  cp research/upstream/static/run.sh "$U/bin/"
-  (cd "$U/bin" && rm -rf raw-* results-*.json && ./run.sh "$N" bench_up_v3 bench_up_v4 bench_fork) | tee "$OUT/upstream-bench.txt"
-  cp "$U"/bin/results-*.json "$OUT/" && cp -r "$U"/bin/raw-* "$OUT/"
-  step "done: $OUT"
-  exit 0
+    # Upstream LaZer 3330e48 + HEXL (its third_party zip) + the distro's GMP / MPFR, built from source here; flags as
+    # research/upstream/static/build.sh (upstream Makefile defaults with -march=native -> the variant's flags, -fno-strict-aliasing
+    # for aes256ctr-amd64.c, -DNDEBUG). HEXL's cpu_features (a GitHub fetch) is replaced by research/upstream/static/cpuf (real
+    # CPUID through libgcc). v4: HEXL's AVX-512 kernels compiled in although the build host may lack AVX-512 (its
+    # configure test relaxed from "compiles and runs" to "compiles"); building needs only the flags, running needs the CPU.
+    N=${2:-3}
+    PIN=3330e487228f633eceb322807b13a596b516770f
+    U=$(pwd)/build/upstream
+    SRC=${LAZER_SRC:-$U/lazer-src}
+    [ -d "$SRC/.git" ] || git clone -q https://github.com/lazer-crypto/lazer "$SRC"
+    [ "$(git -C "$SRC" rev-parse "$PIN^{commit}")" = $PIN ] || {
+        echo "no LaZer $PIN in $SRC" >&2
+        exit 1
+    }
+    P=$(pwd)
+    # Same relation on both sides: the upstream bench compiles the fork's own src/pqz_rel.c (the R_REG / R_TX statement
+    # builder and witness of libpqz), not a copy, with two upstream-API substitutions (no bounded decoder, no coder err
+    # flag). The check: exactly those two lines differ; the diff goes to upstream-relation.txt.
+    mkdir -p "$U"
+    sed -e 's#coder_dec_begin_len (cstate, in, len);#coder_dec_begin (cstate, in); /* xcheck: upstream has no bounded decoder */#' \
+        -e 's#if (cstate->err || coder_dec_end#if (0 /* xcheck: upstream coder has no err flag */ || coder_dec_end#' \
+        pqzl/src/pqz_rel.c >"$U/up_rel.c"
+    {
+        echo "diff pqzl/src/pqz_rel.c build/upstream/up_rel.c (the upstream bench's relation source):"
+        diff pqzl/src/pqz_rel.c "$U/up_rel.c" || true
+    } >"$OUT/upstream-relation.txt"
+    [ "$(diff pqzl/src/pqz_rel.c "$U/up_rel.c" | grep -c '^[<>]')" = 4 ] ||
+        {
+            cat "$OUT/upstream-relation.txt"
+            echo "up_rel.c: expected exactly 2 substituted lines" >&2
+            exit 1
+        }
+    for V in v3 v4; do
+        case $V in
+            v3) MARCH="-march=x86-64-v3 -maes -mpclmul" ;;
+            v4) MARCH="-march=x86-64-v4 -mavx512ifma -mavx512vbmi2 -maes -mpclmul" ;;
+        esac
+        step "build upstream $V ($MARCH)"
+        L=$U/lazer-$V
+        rm -rf "$L" && git -c advice.detachedHead=false clone -q "$SRC" "$L" && git -C "$L" checkout -q $PIN
+        (
+            cd "$L/third_party" && unzip -q hexl-development.zip
+            sed -i "s/-march=native/$MARCH/" hexl-development/hexl/CMakeLists.txt hexl-development/cmake/hexl/hexl-util.cmake
+            [ $V = v3 ] || sed -i "s/if (CAN_COMPILE AND CAN_RUN STREQUAL 0)/if (CAN_COMPILE)/" hexl-development/cmake/hexl/hexl-util.cmake
+            cd hexl-development
+            cmake -S . -B build -DHEXL_BENCHMARK=OFF -DHEXL_TESTING=OFF -DCpuFeatures_DIR="$P/research/upstream/static/cpuf" >"$U/hexl-cmake-$V.log" 2>&1
+            cmake --build build -j2 >"$U/hexl-build-$V.log" 2>&1
+            mkdir -p build/hexl/lib64 && cp build/hexl/lib/libhexl.a build/hexl/lib64/ && touch .
+            cd "$L"
+            make lazer.h liblazer.a CFLAGS="-Wall -O3 -g $MARCH -fomit-frame-pointer -DFALCON_FPNATIVE -DFALCON_AVX2 -DFALCON_FMA -DNDEBUG -fno-strict-aliasing" >"$U/lazer-build-$V.log" 2>&1
+            LIBS="$L/liblazer.a $L/third_party/hexl-development/build/hexl/lib/libhexl.a -lmpfr -lgmp -lstdc++ -lm -lpthread"
+            CF="-std=gnu11 -O3 $MARCH -fomit-frame-pointer -fno-strict-aliasing -DNDEBUG -w"
+            # R_REG / R_TX bench: the fork's relation source ($U/up_rel.c, above) and bench through the cross-check shim
+            # (research/upstream/README.md: libc heap instead of the arena)
+            gcc $CF -I"$P/research/upstream/shim" -I"$L" -I"$L/src" -I"$P/pqzl/src" -I"$P/params/sets/$PQZ_SET" -c "$U/up_rel.c" -o "$U/up_rel-$V.o"
+            gcc $CF -c "$P/research/upstream/shim/shim.c" -o "$U/up_shim-$V.o"
+            gcc $CF -I"$P/pqzl/src" -I"$P/params/sets/$PQZ_SET" -c "$P/research/upstream/shim/bench.c" -o "$U/up_bench-$V.o"
+            mkdir -p "$U/bin"
+            g++ -o "$U/bin/bench_up_$V" "$U/up_bench-$V.o" "$U/up_rel-$V.o" "$U/up_shim-$V.o" $LIBS
+            # arithmetic-layer KAT dump (pqzl/kat/build-lazer-dump.sh, here dynamic)
+            g++ -x c -std=gnu11 -O2 -fno-strict-aliasing $MARCH -DBUILD_FLAGS="\"lazer 3330e48 $V: $MARCH\"" -I. -I"$P/params/sets/$PQZ_SET" \
+                "$P/pqzl/kat/lazer_dump.c" -x none -o "$U/bin/lazer_dump-$V" $LIBS
+            echo "$V: $MARCH; HEXL: $(grep -E 'Setting HEXL|not found: HEXL' "$U/hexl-cmake-$V.log" | sed 's/.*-- //' | tr '\n' ';')"
+        ) >>"$OUT/upstream-build.txt" 2>&1 || {
+            tail -20 "$OUT/upstream-build.txt"
+            echo "upstream $V build failed" >&2
+            exit 1
+        }
+    done
+    {
+        gcc --version | head -1
+        cmake --version | head -1
+        dpkg-query -W libgmp-dev libmpfr-dev 2>/dev/null || true
+        echo "HEXL AVX-512 IFMA kernels in bench_up_v4: $(nm -C "$U/bin/bench_up_v4" | grep -c 'AVX512.*<52')"
+    } >>"$OUT/upstream-build.txt"
+    step "build fork bench (shim bench.c against pqzl/build/native/libpqz.a)"
+    pqzl/build.sh native >"$OUT/build.txt" 2>&1
+    ${CC:-clang} -std=gnu11 -O2 -w -Ipqzl/src -Ipqzl/build/include -o "$U/bin/bench_fork" research/upstream/shim/bench.c pqzl/build/native/libpqz.a
+    cat "$OUT/upstream-build.txt"
+    for V in v3 v4; do
+        if [ $V = v4 ] && ! cpu_has avx512ifma; then
+            step "KAT upstream v4: skipped, no avx512ifma in /proc/cpuinfo (built only; running needs an AVX-512 IFMA CPU or Intel SDE)"
+            continue
+        fi
+        step "KAT upstream $V against kat/lazer-3330e48.json"
+        "$U/bin/lazer_dump-$V" >"$OUT/kat-upstream-$V.json"
+        python3 -I pqzl/kat/check.py params/sets/$PQZ_SET/lazer-3330e48-kat.json "$OUT/kat-upstream-$V.json" | tee "$OUT/kat-upstream-$V.txt"
+    done
+    step "bench upstream vs fork, N=$N (research/upstream/static/run.sh; skips bench_up_v4 without avx512ifma)"
+    cp research/upstream/static/run.sh "$U/bin/"
+    (cd "$U/bin" && rm -rf raw-* results-*.json && ./run.sh "$N" bench_up_v3 bench_up_v4 bench_fork) | tee "$OUT/upstream-bench.txt"
+    cp "$U"/bin/results-*.json "$OUT/" && cp -r "$U"/bin/raw-* "$OUT/"
+    step "done: $OUT"
+    exit 0
 fi
 
 if [ $MODE = multi ]; then
-  # P6-ANON S6 (D14): the op 7 measurement table. Reuses the L3 / H2 harnesses, not a copy: PQZL research/pqzl-measure/txm-bench.sh
-  # (its own OVERSIZE=1 bench build under pqzl/build/ov; M = 16 there only), PQZH steps 5-8 of pqzh/ligero/runs/txm.sh
-  # (feature oversize in target/oversize only). The precompile build (default stages) never has an oversize shape.
-  step "PQZL R_TXM: $TXMB (M = 1, 2, 4, 8, 16 on / off: 10 proves, 30 verifies, SV 200, wasm 3 / 3)"
-  run pqzl-txm.txt . $TXMB artifact-txm
-  TR=$(dirname $TXMB)/runs
-  for f in "$TR"/artifact-txm-*; do [ ! -e "$f" ] || mv "$f" "$OUT/pqzl-${f#"$TR"/artifact-}"; done
-  step "PQZH R_TXM: native ligero_bench --rel txm (built M = 1, 2, 4): 10 proofs, 1,000 verifies, 12 x 80 mutations"
-  run pqzh-txm-build.txt $L cargo build $C --bin ligero_bench
-  run pqzh-txm-native.jsonl $L target/release/ligero_bench --rel txm --regime proven --r431 1 --np 10 --nv 1000 --nadv 80
-  step "PQZH R_TXM oversize (M = 8, 16; feature oversize): 3 proofs, 100 verifies, 12 x 10 mutations"
-  run pqzh-txm-oversize-build.txt $L cargo build $C --features oversize --bin ligero_bench --target-dir target/oversize
-  run pqzh-txm-oversize.jsonl $L target/oversize/release/ligero_bench --rel txm --regime proven --r431 1 --np 3 --nv 100 --nadv 10
-  step "PQZH R_TXM wasm32: 2 proofs, 1,000 verifies (oversize build: 100), 12 x 4 mutations"
-  run pqzh-txm-wasm-build.txt $L/wasm cargo build $C --target wasm32-unknown-unknown
-  run pqzh-txm-wasm.jsonl $L node wasm/run_wasm.mjs 2 1000 4 1 1 txm
-  run pqzh-txm-oversize-wasm-build.txt $L/wasm cargo build $C --target wasm32-unknown-unknown --features oversize --target-dir target/oversize
-  run pqzh-txm-oversize-wasm.jsonl $L env PQZH_WASM_FILE=wasm/target/oversize/wasm32-unknown-unknown/release/pqzh_ligero_wasm.wasm \
-    node wasm/run_wasm.mjs 2 100 4 1 1 txm
-  # port plan Task 12: the Rust core's rows (pqzl/rust bench + wasm/run_wasm.mjs, the PQZL counts above, one process per
-  # shape; features oversize and, in wasm32, wasm-m8: the M <= 8 prove limit lifted to 16 for the measurement)
-  step "Rust R_TXM (pqzl/rust): M = 1, 2, 4, 8, 16 on / off: 10 proves, 30 verifies, SV 200, wasm 3 / 3, wasm SV 100"
-  RO=target/oversize RW=wasm/target/oversize/wasm32-unknown-unknown/release/pqzl_wasm.wasm
-  run rust-txm-build.txt pqzl/rust sh -c "cargo build $C --features bench,oversize --bin bench --target-dir $RO \
+    # P6-ANON S6 (D14): the op 7 measurement table. Reuses the L3 / H2 harnesses, not a copy: PQZL research/pqzl-measure/txm-bench.sh
+    # (its own OVERSIZE=1 bench build under pqzl/build/ov; M = 16 there only), PQZH steps 5-8 of pqzh/ligero/runs/txm.sh
+    # (feature oversize in target/oversize only). The precompile build (default stages) never has an oversize shape.
+    step "PQZL R_TXM: $TXMB (M = 1, 2, 4, 8, 16 on / off: 10 proves, 30 verifies, SV 200, wasm 3 / 3)"
+    run pqzl-txm.txt . $TXMB artifact-txm
+    TR=$(dirname $TXMB)/runs
+    for f in "$TR"/artifact-txm-*; do [ ! -e "$f" ] || mv "$f" "$OUT/pqzl-${f#"$TR"/artifact-}"; done
+    step "PQZH R_TXM: native ligero_bench --rel txm (built M = 1, 2, 4): 10 proofs, 1,000 verifies, 12 x 80 mutations"
+    run pqzh-txm-build.txt $L cargo build $C --bin ligero_bench
+    run pqzh-txm-native.jsonl $L target/release/ligero_bench --rel txm --regime proven --r431 1 --np 10 --nv 1000 --nadv 80
+    step "PQZH R_TXM oversize (M = 8, 16; feature oversize): 3 proofs, 100 verifies, 12 x 10 mutations"
+    run pqzh-txm-oversize-build.txt $L cargo build $C --features oversize --bin ligero_bench --target-dir target/oversize
+    run pqzh-txm-oversize.jsonl $L target/oversize/release/ligero_bench --rel txm --regime proven --r431 1 --np 3 --nv 100 --nadv 10
+    step "PQZH R_TXM wasm32: 2 proofs, 1,000 verifies (oversize build: 100), 12 x 4 mutations"
+    run pqzh-txm-wasm-build.txt $L/wasm cargo build $C --target wasm32-unknown-unknown
+    run pqzh-txm-wasm.jsonl $L node wasm/run_wasm.mjs 2 1000 4 1 1 txm
+    run pqzh-txm-oversize-wasm-build.txt $L/wasm cargo build $C --target wasm32-unknown-unknown --features oversize --target-dir target/oversize
+    run pqzh-txm-oversize-wasm.jsonl $L env PQZH_WASM_FILE=wasm/target/oversize/wasm32-unknown-unknown/release/pqzh_ligero_wasm.wasm \
+        node wasm/run_wasm.mjs 2 100 4 1 1 txm
+    # port plan Task 12: the Rust core's rows (pqzl/rust bench + wasm/run_wasm.mjs, the PQZL counts above, one process per
+    # shape; features oversize and, in wasm32, wasm-m8: the M <= 8 prove limit lifted to 16 for the measurement)
+    step "Rust R_TXM (pqzl/rust): M = 1, 2, 4, 8, 16 on / off: 10 proves, 30 verifies, SV 200, wasm 3 / 3, wasm SV 100"
+    RO=target/oversize RW=wasm/target/oversize/wasm32-unknown-unknown/release/pqzl_wasm.wasm
+    run rust-txm-build.txt pqzl/rust sh -c "cargo build $C --features bench,oversize --bin bench --target-dir $RO \
     && cd wasm && cargo build $C --target wasm32-unknown-unknown --features pqzl/oversize,pqzl/wasm-m8 --target-dir $RO"
-  run rust-txm.txt pqzl/rust sh -c "for t in 0 1 2 3 4 5 6 7 8 9; do m=\$((64 << t))
+    run rust-txm.txt pqzl/rust sh -c "for t in 0 1 2 3 4 5 6 7 8 9; do m=\$((64 << t))
       $RO/release/bench 10 30 \$m >> '$OUT/rust-txm-native-generic.jsonl' || echo \"native generic \$t rc=\$?\"
       PQZ_VERIFY=fast $RO/release/bench 2 200 \$m >> '$OUT/rust-txm-native-fast.jsonl' || echo \"native fast \$t rc=\$?\"
       PQZL_WASM_FILE=$RW node wasm/run_wasm.mjs 3 3 \$m >> '$OUT/rust-txm-wasm-generic.jsonl' || echo \"wasm generic \$t rc=\$?\"
       PQZL_WASM_FILE=$RW PQZ_VERIFY=fast node wasm/run_wasm.mjs 1 100 \$m >> '$OUT/rust-txm-wasm-fast.jsonl' || echo \"wasm fast \$t rc=\$?\"
     done"
-  step "op 7 table"
-  python3 -I artifact/results.py multi "$OUT" | tee "$OUT/summary.txt"
-  step "done: $OUT"
-  grep -q '^RESULT: PASS' "$OUT/summary.txt"
-  exit
+    step "op 7 table"
+    python3 -I artifact/results.py multi "$OUT" | tee "$OUT/summary.txt"
+    step "done: $OUT"
+    grep -q '^RESULT: PASS' "$OUT/summary.txt"
+    exit
 fi
 
 # ---- quick / full
 if [ $MODE = full ]; then
-  NP=10 NV=100 NPW=5 NVW=30 NF=200 DIFF3="2 2 2 2 10 6 6 6 6"
+    NP=10 NV=100 NPW=5 NVW=30 NF=200 DIFF3="2 2 2 2 10 6 6 6 6"
 else
-  NP=3 NV=3 NPW=3 NVW=1 NF=50 DIFF3=
+    NP=3 NV=3 NPW=3 NVW=1 NF=50 DIFF3=
 fi
 DIFF="4 4 2 1 10 12 12 12 12" # the sample of pqzl/sv/rel3.sh (n_tx0 = 12 last): 3,484 cases
 X86=1
-cpu_has avx2 && cpu_has aes || { X86=0; echo "no avx2 / aes: the x86-64-v3 runs are skipped" | tee -a "$OUT/log.txt"; }
+cpu_has avx2 && cpu_has aes || {
+    X86=0
+    echo "no avx2 / aes: the x86-64-v3 runs are skipped" | tee -a "$OUT/log.txt"
+}
 
-step "build (native, wasm, wasm without SV$( [ $X86 = 1 ] && echo ', native-x86v3'))"
-{ pqzl/build.sh all
-  [ $X86 = 0 ] || pqzl/build.sh native-x86v3
-  SV=0 B=build/wasm-nosv pqzl/build.sh wasm
-  wc -c pqzl/build/wasm/pqz.wasm pqzl/build/wasm-nosv/wasm/pqz.wasm; } > "$OUT/build.txt" 2>&1
+step "build (native, wasm, wasm without SV$([ $X86 = 1 ] && echo ', native-x86v3'))"
+{
+    pqzl/build.sh all
+    [ $X86 = 0 ] || pqzl/build.sh native-x86v3
+    SV=0 B=build/wasm-nosv pqzl/build.sh wasm
+    wc -c pqzl/build/wasm/pqz.wasm pqzl/build/wasm-nosv/wasm/pqz.wasm
+} >"$OUT/build.txt" 2>&1
 step "KAT"
-pqzl/build/native/kat_dump > "$OUT/kat-pqz.json"
+pqzl/build/native/kat_dump >"$OUT/kat-pqz.json"
 python3 -I pqzl/kat/check.py params/sets/$PQZ_SET/lazer-3330e48-kat.json "$OUT/kat-pqz.json" | tee "$OUT/kat.txt" || true
 step "check_tbox_fixes.sh"
-pqzl/check_tbox_fixes.sh > "$OUT/tbox-fixes.txt" 2>&1 || true
+pqzl/check_tbox_fixes.sh >"$OUT/tbox-fixes.txt" 2>&1 || true
 tail -1 "$OUT/tbox-fixes.txt"
 step "pqzl/sv/check_sv_fixes.sh"
-pqzl/sv/check_sv_fixes.sh > "$OUT/sv-fixes.txt" 2>&1 || true
+pqzl/sv/check_sv_fixes.sh >"$OUT/sv-fixes.txt" 2>&1 || true
 tail -1 "$OUT/sv-fixes.txt"
 step "differential test pqz_verify vs pqz_verify_fast, portable: pqz_sv_diff $DIFF"
-pqzl/build/native/pqz_sv_diff $DIFF > "$OUT/diff-portable.jsonl" || true
+pqzl/build/native/pqz_sv_diff $DIFF >"$OUT/diff-portable.jsonl" || true
 if [ -n "$DIFF3" ] && [ $X86 = 1 ]; then
-  step "differential test, x86-64-v3: pqz_sv_diff $DIFF3"
-  pqzl/build/native-x86v3/pqz_sv_diff $DIFF3 > "$OUT/diff-x86v3.jsonl" || true
+    step "differential test, x86-64-v3: pqz_sv_diff $DIFF3"
+    pqzl/build/native-x86v3/pqz_sv_diff $DIFF3 >"$OUT/diff-x86v3.jsonl" || true
 fi
 step "six relations, generic verifier: native pqz_bench $NP $NV, wasm run_wasm.mjs $NPW $NVW"
-pqzl/build/native/pqz_bench $NP $NV 63 > "$OUT/native-generic.jsonl" || true
-node pqzl/test/run_wasm.mjs $NPW $NVW 63 > "$OUT/wasm-generic.jsonl" || true
+pqzl/build/native/pqz_bench $NP $NV 63 >"$OUT/native-generic.jsonl" || true
+node pqzl/test/run_wasm.mjs $NPW $NVW 63 >"$OUT/wasm-generic.jsonl" || true
 if [ $MODE = full ]; then
-  step "proofs_fnv: native pqz_bench 5 5, wasm run_wasm.mjs 3 1"
-  pqzl/build/native/pqz_bench 5 5 63 > "$OUT/fnv-native.jsonl" || true
-  node pqzl/test/run_wasm.mjs 3 1 63 > "$OUT/fnv-wasm.jsonl" || true
+    step "proofs_fnv: native pqz_bench 5 5, wasm run_wasm.mjs 3 1"
+    pqzl/build/native/pqz_bench 5 5 63 >"$OUT/fnv-native.jsonl" || true
+    node pqzl/test/run_wasm.mjs 3 1 63 >"$OUT/fnv-wasm.jsonl" || true
 fi
-step "six relations, specialised verifier: pqz_bench 2 $NF (portable$( [ $X86 = 1 ] && echo ', x86-64-v3')), wasm 2 $((NF / 2)), wasm both"
-PQZ_VERIFY=fast pqzl/build/native/pqz_bench 2 $NF > "$OUT/native-fast.jsonl" || true
-[ $X86 = 0 ] || PQZ_VERIFY=fast pqzl/build/native-x86v3/pqz_bench 2 $NF > "$OUT/x86v3-fast.jsonl" || true
-PQZ_VERIFY=fast node pqzl/test/run_wasm.mjs 2 $((NF / 2)) > "$OUT/wasm-fast.jsonl" || true
-PQZ_VERIFY=both node pqzl/test/run_wasm.mjs 2 $((NF / 20)) > "$OUT/wasm-both.jsonl" || true
+step "six relations, specialised verifier: pqz_bench 2 $NF (portable$([ $X86 = 1 ] && echo ', x86-64-v3')), wasm 2 $((NF / 2)), wasm both"
+PQZ_VERIFY=fast pqzl/build/native/pqz_bench 2 $NF >"$OUT/native-fast.jsonl" || true
+[ $X86 = 0 ] || PQZ_VERIFY=fast pqzl/build/native-x86v3/pqz_bench 2 $NF >"$OUT/x86v3-fast.jsonl" || true
+PQZ_VERIFY=fast node pqzl/test/run_wasm.mjs 2 $((NF / 2)) >"$OUT/wasm-fast.jsonl" || true
+PQZ_VERIFY=both node pqzl/test/run_wasm.mjs 2 $((NF / 20)) >"$OUT/wasm-both.jsonl" || true
 step "wasm prove memory, one relation per process (the prover build without SV)"
-: > "$OUT/alone-wasm-nosv.jsonl"
+: >"$OUT/alone-wasm-nosv.jsonl"
 for m in 1 2 4 8 16 32; do
-  PQZ_WASM_FILE=pqzl/build/wasm-nosv/wasm/pqz.wasm node pqzl/test/run_wasm.mjs 1 0 $m | sed 's/^{/{"backend": "wasm-nosv", /' \
-    >> "$OUT/alone-wasm-nosv.jsonl" || true
+    PQZ_WASM_FILE=pqzl/build/wasm-nosv/wasm/pqz.wasm node pqzl/test/run_wasm.mjs 1 0 $m | sed 's/^{/{"backend": "wasm-nosv", /' \
+        >>"$OUT/alone-wasm-nosv.jsonl" || true
 done
 
 # ---- PQZH (Ligero, Rust 1.97.1 = the root rust-toolchain.toml), THE proven preset (Params::preset, --regime proven
 # --r431 1), all six forms (R_TX0 = op 1 by length)
 if [ $MODE = full ]; then
-  LNP=5 LNV=1000 LNA=80 LWV=1000 LWA=4 FN=200 # = pqzh/ligero/runs/tx0.sh (gate-B method); pqz-ffi as ffi/run.sh
+    LNP=5 LNV=1000 LNA=80 LWV=1000 LWA=4 FN=200 # = pqzh/ligero/runs/tx0.sh (gate-B method); pqz-ffi as ffi/run.sh
 else
-  LNP=2 LNV=20 LNA=2 LWV=20 LWA=1 FN=20
+    LNP=2 LNV=20 LNA=2 LWV=20 LWA=1 FN=20
 fi
 step "PQZH: cargo test (default features: 6 x 960 mutations, negative witnesses, cross-form, EVM fixtures)"
 run pqzh-test.txt $L cargo test $C -- --nocapture --test-threads 1
@@ -274,7 +299,7 @@ run pqzh-wasm.jsonl $L node wasm/run_wasm.mjs 2 $LWV $LWA 1 1 0,1,2,3,4,5
 # ---- pqz-ffi (P6e Task 7): the precompile over both systems; the subset of ffi/run.sh with this toolchain's clippy
 step "pqz-ffi: cargo test --features prove,test-hooks (native digest lines, self-test, rejections, differential, faults)"
 run ffi-test.txt ffi env PQZ_FFI_DIGESTS="$OUT/ffi-digests-native.jsonl" PQZ_FFI_FILL_OUT="$OUT/ffi-fill.txt" \
-  cargo test $C --features prove,test-hooks -- --nocapture --test-threads 2
+    cargo test $C --features prove,test-hooks -- --nocapture --test-threads 2
 step "pqz-ffi: unit tests without prove, verify-only cdylib, symbol scan, C smoke test, clippy -D clippy::float_arithmetic"
 run ffi-native.txt ffi sh -c "cargo test $C --lib && cargo build $C \
   && echo \"test hooks in the production cdylib (must be 0): \$(strings -a target/release/libpqz_ffi.so | grep -cE 'TEST_ARENA|TEST_FAIL_WORKER')\" \
@@ -303,8 +328,8 @@ run vectors-pqz-kat.txt . python3 -I $V/pqz_kat.py --check
 step "vectors: wasm32 replay (every proof proved again by pqz-ffi in wasm32: byte-equal, valid)"
 run vectors-wasm.jsonl ffi node vectors/replay_wasm.mjs wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
 if [ $MODE = full ]; then
-  step "vectors: tamper.py (each checker catches changed leaves)"
-  run vectors-tamper.txt ffi python3 -I vectors/tamper.py
+    step "vectors: tamper.py (each checker catches changed leaves)"
+    run vectors-tamper.txt ffi python3 -I vectors/tamper.py
 fi
 
 # ---- Rust = C (port plan Task 12): the Rust core pqzl/rust/ against values the C core fixed. The pqz-ffi and vectors
@@ -320,13 +345,13 @@ run rust-fnv-native.jsonl $R target/release/bench 5 5 63
 run rust-fnv-txm.jsonl $R target/release/bench 2 2 16320
 run rust-fnv-wasm.jsonl $R node wasm/run_wasm.mjs 3 1 63
 if [ $MODE = full ]; then
-  step "Rust = C: the same proofs with verify_fast (bench 5 50 63, 2 50 16320, wasm32 3 10 63)"
-  run rust-fast-native.jsonl $R env PQZ_VERIFY=fast target/release/bench 5 50 63
-  run rust-fast-txm.jsonl $R env PQZ_VERIFY=fast target/release/bench 2 50 16320
-  run rust-fast-wasm.jsonl $R env PQZ_VERIFY=fast node wasm/run_wasm.mjs 3 10 63
+    step "Rust = C: the same proofs with verify_fast (bench 5 50 63, 2 50 16320, wasm32 3 10 63)"
+    run rust-fast-native.jsonl $R env PQZ_VERIFY=fast target/release/bench 5 50 63
+    run rust-fast-txm.jsonl $R env PQZ_VERIFY=fast target/release/bench 2 50 16320
+    run rust-fast-wasm.jsonl $R env PQZ_VERIFY=fast node wasm/run_wasm.mjs 3 10 63
 fi
 step "Rust = C: keys KAT (keys_kat 100 = the C core's pqz_keys_kat 100 lines; pqz_kat.py --c-keys)"
-(cd $R && target/release/keys_kat 100) > "$OUT/rust-keys-kat.jsonl" 2> "$OUT/rust-keys-kat-stderr.txt" || true
+(cd $R && target/release/keys_kat 100) >"$OUT/rust-keys-kat.jsonl" 2>"$OUT/rust-keys-kat-stderr.txt" || true
 run rust-keys-pqz-kat.txt . python3 -I $V/pqz_kat.py --c-keys "$OUT/rust-keys-kat.jsonl"
 
 step "tables and comparison"

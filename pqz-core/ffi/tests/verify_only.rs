@@ -76,7 +76,10 @@ fn tmp(name: &str) -> String {
 }
 
 fn corpus(hs: &[Honest], n_gen: usize) -> Vec<Vec<u8>> {
-    let mut c: Vec<Vec<u8>> = hs.iter().flat_map(|h| negatives(h).into_iter().map(|x| x.1)).collect();
+    let mut c: Vec<Vec<u8>> = hs
+        .iter()
+        .flat_map(|h| negatives(h).into_iter().map(|x| x.1))
+        .collect();
     c.extend(framing(hs).into_iter().map(|x| x.1));
     c.extend(hs.iter().map(|h| h.input()));
     c.push(vec![6, 0, 0, 0, 0]);
@@ -93,7 +96,9 @@ fn hex(b: &[u8]) -> String {
 /// inputs; `fill:<byte>:<inputs>:<out>` runs the fill-pattern pass.
 #[test]
 fn child_task() {
-    let Ok(arg) = std::env::var("PQZ_FFI_CHILD") else { return };
+    let Ok(arg) = std::env::var("PQZ_FFI_CHILD") else {
+        return;
+    };
     let a: Vec<&str> = arg.split(':').collect();
     match a[0] {
         "gen" => std::fs::write(a[1], to_bytes(&prove_all())).unwrap(),
@@ -102,7 +107,9 @@ fn child_task() {
             let b = u8::from_str_radix(a[1], 16).unwrap();
             pqzl::TEST_ARENA_FILL.store(0x100 | b as u32, Relaxed);
             let hs = from_bytes(&std::fs::read(a[2]).unwrap());
-            let mut s = fixture::digest_lines(&PQZL_ID, false) + &fixture::digest_lines(&PQZH_ID, false) + &fixture::selftest_line();
+            let mut s = fixture::digest_lines(&PQZL_ID, false)
+                + &fixture::digest_lines(&PQZH_ID, false)
+                + &fixture::selftest_line();
             assert!(pqzl::reinit(pqzl::ARENA_SMALL));
             for inp in corpus(&hs, 2048) {
                 let (rc, w) = call(&inp);
@@ -150,10 +157,16 @@ fn verify_only_arena() {
         let js: Vec<_> = (0..8)
             .map(|t| {
                 let c = &c;
-                s.spawn(move || (gen_from + t..c.len()).step_by(8).map(|i| (i, call(&c[i]))).collect::<Vec<_>>())
+                s.spawn(move || {
+                    (gen_from + t..c.len())
+                        .step_by(8)
+                        .map(|i| (i, call(&c[i])))
+                        .collect::<Vec<_>>()
+                })
             })
             .collect();
-        let mut all: Vec<(usize, (i32, Word))> = js.into_iter().flat_map(|h| h.join().unwrap()).collect();
+        let mut all: Vec<(usize, (i32, Word))> =
+            js.into_iter().flat_map(|h| h.join().unwrap()).collect();
         all.sort_by_key(|x| x.0);
         all.into_iter().map(|x| x.1).collect()
     });
@@ -170,7 +183,10 @@ fn verify_only_arena() {
 
     // repeated mixed calls; the arena in use between calls never moves (the Rust backend: the heap, within 4 KiB)
     #[cfg(feature = "pqzl-rust")]
-    let (heap0, warm_peak) = (heap::LIVE.load(Relaxed), heap::PEAK.swap(heap::LIVE.load(Relaxed), Relaxed));
+    let (heap0, warm_peak) = (
+        heap::LIVE.load(Relaxed),
+        heap::PEAK.swap(heap::LIVE.load(Relaxed), Relaxed),
+    );
     #[cfg(feature = "pqzl-rust")]
     let (mut lo, mut hi) = (heap0, heap0);
     for k in 0..5_000usize {
@@ -181,14 +197,20 @@ fn verify_only_arena() {
         {
             let h = heap::LIVE.load(Relaxed);
             (lo, hi) = (lo.min(h), hi.max(h));
-            assert!(h.abs_diff(heap0) <= 4096, "Rust heap in use after mixed call {k}: {h} B, before them {heap0} B");
+            assert!(
+                h.abs_diff(heap0) <= 4096,
+                "Rust heap in use after mixed call {k}: {h} B, before them {heap0} B"
+            );
         }
     }
     assert_eq!(arena().1, peak0, "arena peak grew");
     #[cfg(feature = "pqzl-rust")]
     let loop_peak = heap::PEAK.load(Relaxed);
     #[cfg(feature = "pqzl-rust")]
-    assert!(loop_peak <= warm_peak, "Rust heap peak of the mixed calls {loop_peak} B over the warm-up's {warm_peak} B");
+    assert!(
+        loop_peak <= warm_peak,
+        "Rust heap peak of the mixed calls {loop_peak} B over the warm-up's {warm_peak} B"
+    );
     let lp = pqzh::verify_panics();
     #[cfg(feature = "pqzl-rust")]
     let mem = format!(
@@ -212,7 +234,10 @@ fn verify_only_arena() {
     );
     assert_eq!(lp, 0);
     #[cfg(not(feature = "pqzl-rust"))]
-    assert!(2 * pqzl::ARENA_SMALL >= 3 * peak0, "arena margin under 1.5x");
+    assert!(
+        2 * pqzl::ARENA_SMALL >= 3 * peak0,
+        "arena margin under 1.5x"
+    );
 }
 
 /// The C backend's arena (used between calls, peak) on `ARENA_SMALL`; (0, 0) for the Rust backend (no arena).

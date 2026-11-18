@@ -72,8 +72,14 @@ abstract contract PqzRollSignedGasBase is PqzSlots {
     /// An `n`-of-`n` `mldsa65` `msig` (PQ-eligible, no PQZ key); its auth bytes (every member's filler signature).
     function _msig(uint8 n) internal returns (bytes32 ua, bytes memory auth) {
         bytes32[] memory ids = new bytes32[](n);
-        for (uint8 i; i < n; ++i) ids[i] = _mldsaUA(nextSeed++);
-        for (uint256 i = 1; i < n; ++i) for (uint256 j = i; j > 0 && ids[j - 1] > ids[j]; --j) (ids[j - 1], ids[j]) = (ids[j], ids[j - 1]);
+        for (uint8 i; i < n; ++i) {
+            ids[i] = _mldsaUA(nextSeed++);
+        }
+        for (uint256 i = 1; i < n; ++i) {
+            for (uint256 j = i; j > 0 && ids[j - 1] > ids[j]; --j) {
+                (ids[j - 1], ids[j]) = (ids[j], ids[j - 1]);
+            }
+        }
         bytes memory d = abi.encodePacked(uint16(n), uint16(n));
         IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](n);
         for (uint16 i; i < n; ++i) {
@@ -89,7 +95,9 @@ abstract contract PqzRollSignedGasBase is PqzSlots {
     function _record(bytes32 ua, bytes memory auth) internal {
         IUARegistry.KemKey memory k;
         (k.scheme, k.mlkemEk, k.x25519) = (1, _blob(uint256(ua), 1568), keccak256(abi.encode(ua)));
-        reg.setPqzScopedKey(ua, address(tok), 0, _spk(++keySeed), keccak256(hex"aa"), k, type(uint64).max, UACall.auth(ua, auth));
+        reg.setPqzScopedKey(
+            ua, address(tok), 0, _spk(++keySeed), keccak256(hex"aa"), k, type(uint64).max, UACall.auth(ua, auth)
+        );
         reg.storePqzScopedPop(ua, address(tok), 0, hex"aa");
     }
 
@@ -108,13 +116,19 @@ abstract contract PqzRollSignedGasBase is PqzSlots {
     function _call(bytes32 ua, bytes memory auth, uint256 n) internal view returns (bytes memory) {
         uint64 r = tok.pqzAccount(ua, 0).rolled;
         uint64[] memory skip = new uint64[](n);
-        for (uint256 i; i < n; ++i) skip[i] = uint64(r + n + i);
-        return abi.encodeCall(IPqzToken.mtxRollOverSigned, (ua, 0, uint64(n), skip, uint64(block.number + 1000), UACall.auth(ua, auth)));
+        for (uint256 i; i < n; ++i) {
+            skip[i] = uint64(r + n + i);
+        }
+        return abi.encodeCall(
+            IPqzToken.mtxRollOverSigned, (ua, 0, uint64(n), skip, uint64(block.number + 1000), UACall.auth(ua, auth))
+        );
     }
 
     function _gas(bytes memory data) internal returns (uint256) {
         (bool ok, bytes memory ret) = address(tok).call(data);
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        }
         return vm.lastCallGas().gasTotalUsed;
     }
 
@@ -124,14 +138,19 @@ abstract contract PqzRollSignedGasBase is PqzSlots {
         bytes memory call;
         if (ua) {
             MetaTxLib.UAMetaTransaction memory u;
-            (u.from, u.data, u.validUntil, u.mode, u.fee) = (fee, data, block.timestamp + 1 hours, MetaTxLib.MODE_FEE_FIXED, 7);
+            (u.from, u.data, u.validUntil, u.mode, u.fee) =
+            (fee, data, block.timestamp + 1 hours, MetaTxLib.MODE_FEE_FIXED, 7);
             call = abi.encodeCall(tok.mtxExecute, (u, UACall.auth(fee, abi.encode(bytes(""), new bytes(feeSig)))));
         } else {
             MetaTxLib.MetaTransaction memory m;
-            (m.from, m.data, m.validUntil, m.mode, m.fee) = (vm.addr(RKEY), data, block.timestamp + 1 hours, MetaTxLib.MODE_FEE_FIXED, 7);
+            (m.from, m.data, m.validUntil, m.mode, m.fee) =
+            (vm.addr(RKEY), data, block.timestamp + 1 hours, MetaTxLib.MODE_FEE_FIXED, 7);
             (uint8 v, bytes32 r, bytes32 s) = vm.sign(RKEY, MtxDigest.metaTx(address(tok), m));
-            call = abi.encodeWithSignature("executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
-                m, abi.encodePacked(r, s, v));
+            call = abi.encodeWithSignature(
+                "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
+                m,
+                abi.encodePacked(r, s, v)
+            );
         }
         vm.clearMockedCalls();
         _burners();
@@ -142,7 +161,8 @@ abstract contract PqzRollSignedGasBase is PqzSlots {
     /// One holder kind on one path: a fresh holder per point `n = step, 2·step, …, last` (`PRE + 2n` credits, `PRE` rolled),
     /// then each worst-case call measured cold; `fit<step>` is the largest `n` of the run whose transaction stays under `CAP`.
     function _points(string memory name, bool msig_, bool ua, uint256 feeSig, uint256 step, uint256 last)
-        internal returns (uint256 fit)
+        internal
+        returns (uint256 fit)
     {
         uint256 k = last / step;
         bytes32[] memory h = new bytes32[](k);
@@ -161,7 +181,9 @@ abstract contract PqzRollSignedGasBase is PqzSlots {
         for (uint256 i; i < k; ++i) {
             tok.mtxPrepareAcc(h[i], 0, 0);
             tok.mtxPrepareAcc(h[i], 0, 1);
-            tok.mtxRollOverSigned(h[i], 0, uint64(PRE), new uint64[](0), uint64(block.number + 1000), UACall.auth(h[i], a[i]));
+            tok.mtxRollOverSigned(
+                h[i], 0, uint64(PRE), new uint64[](0), uint64(block.number + 1000), UACall.auth(h[i], a[i])
+            );
         }
         string memory head = string.concat("ROLLSIG ", PqzSet.NAME, " | ", name, " | ", ua ? "uaExecute" : "mtxExecute");
         for (uint256 i; i < k; ++i) {
@@ -171,16 +193,30 @@ abstract contract PqzRollSignedGasBase is PqzSlots {
             uint256 g = _fullTx(ua, feeSig, data);
             vm.revertToState(snap);
             if (g <= CAP && fit == n - step) fit = n;
-            console2.log(string.concat(head, " | n ", vm.toString(n), " + ", vm.toString(n), " marks | regular ", vm.toString(g),
-                g <= CAP ? " | fits" : " | OVER"));
+            console2.log(
+                string.concat(
+                    head,
+                    " | n ",
+                    vm.toString(n),
+                    " + ",
+                    vm.toString(n),
+                    " marks | regular ",
+                    vm.toString(g),
+                    g <= CAP ? " | fits" : " | OVER"
+                )
+            );
         }
-        console2.log(string.concat(head, " | ROLL_MAX ", vm.toString(RM), " | fit", vm.toString(step), " ", vm.toString(fit)));
+        console2.log(
+            string.concat(head, " | ROLL_MAX ", vm.toString(RM), " | fit", vm.toString(step), " ", vm.toString(fit))
+        );
     }
 
     /// The ML-DSA precompile cases: `ROLL_MAX` fits the signed rollover's worst case on this path (the set's `roll_max` is sized
     /// by them, decision 2026-11-14 on CTR-PQZ-41).
     function _pinned(string memory name, bool msig_, bool ua, uint256 feeSig) internal {
-        assertEq(_points(name, msig_, ua, feeSig, 16, RM), RM, "ROLL_MAX: the signed rollover's worst case fits on this path");
+        assertEq(
+            _points(name, msig_, ua, feeSig, 16, RM), RM, "ROLL_MAX: the signed rollover's worst case fits on this path"
+        );
     }
 }
 
@@ -202,13 +238,21 @@ contract PqzRollSignedGasTest is PqzRollSignedGasBase {
         vm.etch(ML65, address(new GasBurner(100_006 - 2_900)).code);
     }
 
-    function test_rollSigned_mldsa65_mtxExecute() public { _pinned("mldsa65 (precompile)", false, false, ML65_SIG); }
+    function test_rollSigned_mldsa65_mtxExecute() public {
+        _pinned("mldsa65 (precompile)", false, false, ML65_SIG);
+    }
 
-    function test_rollSigned_mldsa65_uaExecute() public { _pinned("mldsa65 (precompile)", false, true, ML65_SIG); }
+    function test_rollSigned_mldsa65_uaExecute() public {
+        _pinned("mldsa65 (precompile)", false, true, ML65_SIG);
+    }
 
-    function test_rollSigned_msig_mtxExecute() public { _pinned("msig 2-of-2 mldsa65 (precompile)", true, false, ML65_SIG); }
+    function test_rollSigned_msig_mtxExecute() public {
+        _pinned("msig 2-of-2 mldsa65 (precompile)", true, false, ML65_SIG);
+    }
 
-    function test_rollSigned_msig_uaExecute() public { _pinned("msig 2-of-2 mldsa65 (precompile)", true, true, ML65_SIG); }
+    function test_rollSigned_msig_uaExecute() public {
+        _pinned("msig 2-of-2 mldsa65 (precompile)", true, true, ML65_SIG);
+    }
 }
 
 /// @notice A chain without the ML-DSA precompile: the registry's `mldsa65` verifier in Solidity on the cached expanded key, standing
@@ -232,12 +276,19 @@ contract PqzRollSignedGasSolTest is PqzRollSignedGasBase {
         reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
         OpenFactory f2 = new OpenFactory(nid(registrar));
         EnvKit.configure(f2, PQZ_UID, 0, address(0));
-        Catalogue.release(f2, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(f2), PQZ_UID, address(reg), address(pqv)),
-            type(NormalPqzToken).creationCode);
+        Catalogue.release(
+            f2,
+            IOpenFactory.TokenKind.NORMAL_PQZ,
+            1,
+            pqzEnv(address(f2), PQZ_UID, address(reg), address(pqv)),
+            type(NormalPqzToken).creationCode
+        );
         vm.prank(registrar);
         f2.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(f2)));
         (vMode, vUA, vOwnKey, vOpening, aMode) = (PqzCore.OFFCHAIN, nid(vm.addr(0xA77E57)), true, true, 0); // no auditor: not read by a rollover
-        tok = NormalPqzToken(f2.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(uint256(1) << 40)), "rollsig-sol"));
+        tok = NormalPqzToken(
+            f2.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(uint256(1) << 40)), "rollsig-sol")
+        );
         (vMode, vUA, vOwnKey, vOpening) = (0, bytes32(0), false, false);
         fee = _fnUA(51);
         _fund(fee);
@@ -251,7 +302,9 @@ contract PqzRollSignedGasSolTest is PqzRollSignedGasBase {
 
     /// Every `n` from 1 to 16 (the client rule of CTR-PQZ-41: without the precompile the holder's client signs the largest `n`
     /// that fits; reported, not pinned: it depends on the chain's verifier).
-    function test_rollSignedSol_mldsa65_mtxExecute() public { _points("mldsa65 (Solidity, cached 5.81 M)", false, false, FN_SIG, 1, 16); }
+    function test_rollSignedSol_mldsa65_mtxExecute() public {
+        _points("mldsa65 (Solidity, cached 5.81 M)", false, false, FN_SIG, 1, 16);
+    }
 
     function test_rollSignedSol_mldsa65_uaExecute() public {
         _points("mldsa65 (Solidity, cached 5.81 M), fndsa512 fee UA", false, true, FN_SIG, 1, 16);
@@ -284,12 +337,19 @@ contract PqzRollSignedGasSol87Test is PqzRollSignedGasBase {
         reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
         OpenFactory f2 = new OpenFactory(nid(registrar));
         EnvKit.configure(f2, PQZ_UID, 0, address(0));
-        Catalogue.release(f2, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(f2), PQZ_UID, address(reg), address(pqv)),
-            type(NormalPqzToken).creationCode);
+        Catalogue.release(
+            f2,
+            IOpenFactory.TokenKind.NORMAL_PQZ,
+            1,
+            pqzEnv(address(f2), PQZ_UID, address(reg), address(pqv)),
+            type(NormalPqzToken).creationCode
+        );
         vm.prank(registrar);
         f2.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(f2)));
         (vMode, vUA, vOwnKey, vOpening, aMode) = (PqzCore.OFFCHAIN, nid(vm.addr(0xA77E57)), true, true, 0);
-        tok = NormalPqzToken(f2.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(uint256(1) << 40)), "rollsig-sol87"));
+        tok = NormalPqzToken(
+            f2.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(uint256(1) << 40)), "rollsig-sol87")
+        );
         (vMode, vUA, vOwnKey, vOpening) = (0, bytes32(0), false, false);
         fee = _mldsaUA(52);
         _fund(fee);
@@ -305,7 +365,10 @@ contract PqzRollSignedGasSol87Test is PqzRollSignedGasBase {
     function _holderOne(uint8 seed) internal override returns (bytes32, bytes memory) {
         bytes memory pk = new bytes(2_592);
         (pk[0], pk[1]) = (0x87, bytes1(seed));
-        return (UACall.register(reg, UAKinds.MLDSA87, pk, UACall.attrs("", 0, ""), new bytes(ML87_SIG), ""), _single(ML87_SIG));
+        return (
+            UACall.register(reg, UAKinds.MLDSA87, pk, UACall.attrs("", 0, ""), new bytes(ML87_SIG), ""),
+            _single(ML87_SIG)
+        );
     }
 
     /// This set's MD-13 verdict on a cached `mldsa87` holder (`UARegistryCoreLib._pqzHolder`'s single-key bound).
@@ -319,8 +382,12 @@ contract PqzRollSignedGasSol87Test is PqzRollSignedGasBase {
             IUARegistry.KemKey memory k;
             (k.scheme, k.mlkemEk, k.x25519) = (1, _blob(uint256(h), 1568), keccak256(abi.encode(h)));
             vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, h));
-            reg.setPqzScopedKey(h, address(tok), 0, _spk(++keySeed), keccak256(hex"aa"), k, type(uint64).max, UACall.auth(h, a));
-            console2.log(string.concat("ROLLSIG ", PqzSet.NAME, " | ", name, " | not a PQZ holder here (MD-13): UAPqzHolder"));
+            reg.setPqzScopedKey(
+                h, address(tok), 0, _spk(++keySeed), keccak256(hex"aa"), k, type(uint64).max, UACall.auth(h, a)
+            );
+            console2.log(
+                string.concat("ROLLSIG ", PqzSet.NAME, " | ", name, " | not a PQZ holder here (MD-13): UAPqzHolder")
+            );
             return;
         }
         uint256 fit = _points(name, false, ua, ML65_SIG, 1, 16);
@@ -328,7 +395,11 @@ contract PqzRollSignedGasSol87Test is PqzRollSignedGasBase {
         else assertLt(fit, RM, "ROLL_MAX is sized with precompile-priced signers");
     }
 
-    function test_rollSignedSol87_mtxExecute() public { _run(false, "mldsa87 (Solidity, cached 8.77 M)"); }
+    function test_rollSignedSol87_mtxExecute() public {
+        _run(false, "mldsa87 (Solidity, cached 8.77 M)");
+    }
 
-    function test_rollSignedSol87_uaExecute() public { _run(true, "mldsa87 (Solidity, cached 8.77 M), cached mldsa65 fee UA"); }
+    function test_rollSignedSol87_uaExecute() public {
+        _run(true, "mldsa87 (Solidity, cached 8.77 M), cached mldsa65 fee UA");
+    }
 }

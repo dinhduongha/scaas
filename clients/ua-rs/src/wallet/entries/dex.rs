@@ -6,6 +6,18 @@ use super::Def;
 const D: &[&str] = &["dex"];
 
 pub(super) const ROWS: &[Def] = &[
-    ("CancelDexOrder", "mtxCancelOrders", D, "DexOrder order", "[order] [@]"),
-    ("InvalidateNonces", "mtxInvalidateNonces", D, "address from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
+    (
+        "CancelDexOrder",
+        "mtxCancelOrders",
+        D,
+        "DexOrder order",
+        "[order] [@]",
+    ),
+    (
+        "InvalidateNonces",
+        "mtxInvalidateNonces",
+        D,
+        "address from,uint256 batch,uint256 minNonce",
+        "from batch minNonce @",
+    ),
 ];

@@ -70,11 +70,15 @@ contract SigOkHarness is UARegistry {
         UARegistry(uid, address(0), false, budget, address(0), true, k)
     {}
 
-    function sigOk(uint256 cfg, uint16 kind, bytes memory d, bytes32 ua, bytes32 purpose, bytes32 digest, bytes calldata sig)
-        external
-        view
-        returns (bool)
-    {
+    function sigOk(
+        uint256 cfg,
+        uint16 kind,
+        bytes memory d,
+        bytes32 ua,
+        bytes32 purpose,
+        bytes32 digest,
+        bytes calldata sig
+    ) external view returns (bool) {
         return UARegistryCoreLib._sigOk(cfg, kind, d, ua, purpose, digest, sig, new IUARegistry.MemberSig[](0));
     }
 }
@@ -95,7 +99,9 @@ contract ChunkHarness {
 
     function sizes() external view returns (uint256[] memory s) {
         s = new uint256[](ptrs.length);
-        for (uint256 i; i < s.length; ++i) s[i] = ptrs[i].code.length - 1;
+        for (uint256 i; i < s.length; ++i) {
+            s[i] = ptrs[i].code.length - 1;
+        }
     }
 }
 
@@ -251,7 +257,8 @@ contract UARegistryUA8Test is UARegistryBase {
         (r.msIndex, r.msHash) = (new uint16[](n), new bytes32[](n));
         for (uint256 i; i < n; ++i) {
             string memory e = string.concat(hs, "[", vm.toString(i), "]");
-            (r.msIndex[i], r.msHash[i]) = (uint16(_ju(j, string.concat(e, ".index"))), _jw(j, string.concat(e, ".hash")));
+            (r.msIndex[i], r.msHash[i]) =
+            (uint16(_ju(j, string.concat(e, ".index"))), _jw(j, string.concat(e, ".hash")));
         }
     }
 
@@ -260,7 +267,9 @@ contract UARegistryUA8Test is UARegistryBase {
         uint256 n;
         while (_jx(j, string.concat(".registrations[", vm.toString(n), "]"))) ++n;
         rows = new Row[](n);
-        for (uint256 i; i < n; ++i) rows[i] = _parseRow(j, string.concat(".registrations[", vm.toString(i), "]"));
+        for (uint256 i; i < n; ++i) {
+            rows[i] = _parseRow(j, string.concat(".registrations[", vm.toString(i), "]"));
+        }
     }
 
     function loadNegs() external view returns (Neg[] memory negs) {
@@ -332,7 +341,9 @@ contract UARegistryUA8Test is UARegistryBase {
             address(new BlsMinSigBls12381Verifier()),
             address(new BlsMinSigBn254Verifier())
         ];
-        for (uint256 i; i < 8; ++i) vcfg.push(UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i])));
+        for (uint256 i; i < 8; ++i) {
+            vcfg.push(UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i])));
+        }
         vcfg.push(UARegistry.KindConfig(0x0108, address(new Secp256k1Verifier()), 50_000));
         vcfg.push(UARegistry.KindConfig(0x0141, address(new ZetherSchnorrBls12381Verifier()), 70_000));
         vcfg.push(UARegistry.KindConfig(0x0130, address(new MldsaVerifier(0x0130, address(0), "", "")), CAP_MLDSA44));
@@ -345,8 +356,17 @@ contract UARegistryUA8Test is UARegistryBase {
         bytes memory probe = vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_valid");
         ml87 = new Eip8355Allowed();
         ml87.allow(keccak256(probe));
-        vcfg.push(UARegistry.KindConfig(0x0134, address(new MldsaVerifier(
-            0x0134, address(ml87), probe, vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid"))), CAP_MLDSA87));
+        vcfg.push(
+            UARegistry.KindConfig(
+                0x0134,
+                address(
+                    new MldsaVerifier(
+                        0x0134, address(ml87), probe, vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid")
+                    )
+                ),
+                CAP_MLDSA87
+            )
+        );
         vcfg.push(UARegistry.KindConfig(0x0135, address(new FndsaVerifier(0x0135)), CAP_FNDSA1024));
         rreg = makeAddr("rreg");
         vm.etch(rreg, hex"00"); // STOP: any input the test did not allow returns nothing (refused)
@@ -407,7 +427,9 @@ contract UARegistryUA8Test is UARegistryBase {
         for (uint256 k; k < s.length; ++k) {
             (uint16 kind, bytes32 id) = _member(d, s[k].index);
             if (kind != UAKinds.MLDSA65) continue;
-            _allowMl65(_byUa(rows, id).keyData, UAKinds.uaMessage(UAKinds.MLDSA65, UAKinds.PURPOSE_MEMBER, md), s[k].sig);
+            _allowMl65(
+                _byUa(rows, id).keyData, UAKinds.uaMessage(UAKinds.MLDSA65, UAKinds.PURPOSE_MEMBER, md), s[k].sig
+            );
         }
     }
 
@@ -467,7 +489,9 @@ contract UARegistryUA8Test is UARegistryBase {
         assertEq(r.kindOf(row.ua), row.kind);
         assertEq(r.popOf(row.ua), _popInState(row.kind, row.pop));
         for (uint256 i; i < row.msHash.length; ++i) {
-            assertEq(r.memberSigHashOf(row.ua, row.msIndex[i]), row.msHash[i], string.concat(row.name, ": memberSigHashes"));
+            assertEq(
+                r.memberSigHashOf(row.ua, row.msIndex[i]), row.msHash[i], string.concat(row.name, ": memberSigHashes")
+            );
         }
         assertEq(r.pqzPopOf(row.ua, 0), row.pqzPop);
         (, address ptr, bytes32 ph, bool proven) = r.pqzKeyOf(row.ua);
@@ -487,14 +511,17 @@ contract UARegistryUA8Test is UARegistryBase {
     /// (msig-classical), mldsa65#1, mldsa65#2 (msig-pq, msig-pq-native).
     function _members(UARegistry r, Row[] memory rows) internal {
         uint256[5] memory m = [uint256(1), 5, 8, 11, 12];
-        for (uint256 i; i < 5; ++i) _reg(r, rows[m[i]]);
+        for (uint256 i; i < 5; ++i) {
+            _reg(r, rows[m[i]]);
+        }
     }
 
     /// Every set-free row (single keys first, then the msigs) and the rows of this build's parameter set.
     function _registerAll(UARegistry r, Row[] memory rows) internal returns (uint256 n) {
         for (uint256 pass; pass < 2; ++pass) {
             for (uint256 i; i < rows.length; ++i) {
-                bool here = bytes(rows[i].set).length == 0 || keccak256(bytes(rows[i].set)) == keccak256(bytes(_setName()));
+                bool here =
+                    bytes(rows[i].set).length == 0 || keccak256(bytes(rows[i].set)) == keccak256(bytes(_setName()));
                 if (here && (rows[i].kind == UAKinds.MSIG) == (pass == 1)) {
                     _reg(r, rows[i]);
                     ++n;
@@ -581,13 +608,16 @@ contract UARegistryUA8Test is UARegistryBase {
         _members(b, rows);
         string[4] memory names = [string("fndsa512"), "slhdsa128s", "msig-pq-native", "zether-bls12381"];
         Row[] memory copied = new Row[](6);
-        for (uint256 i; i < 4; ++i) copied[i] = _find(rows, names[i]);
+        for (uint256 i; i < 4; ++i) {
+            copied[i] = _find(rows, names[i]);
+        }
         copied[4] = _find(rows, string.concat("mldsa65/", _setName()));
         copied[5] = _find(rows, string.concat("msig-pq/", _setName()));
         vm.chainId(7622);
         for (uint256 i; i < copied.length; ++i) {
             bytes32 ua = copied[i].ua;
-            (uint16 k, bytes memory d, IUARegistry.UAAttrs memory att, bytes memory p, bytes memory z) = a.registrationOf(ua);
+            (uint16 k, bytes memory d, IUARegistry.UAAttrs memory att, bytes memory p, bytes memory z) =
+                a.registrationOf(ua);
             if (k == UAKinds.MSIG) p = _popFromLogs(logs, a, ua);
             vm.prank(address(0xC0B1E5), address(0xC0B1E5));
             assertEq(UACall.register(b, k, d, att, p, z), ua);
@@ -666,13 +696,22 @@ contract UARegistryUA8Test is UARegistryBase {
         uint16[3] memory off = [uint16(0x0132), 0x0133, 0x0108];
         uint256[3] memory row = [FNDSA_ROW, SLH_ROW, SECP_ROW];
         for (uint256 i; i < 3; ++i) {
-            UARegistry r =
-                _deploy(address(uint160(0x5ce70 + i)), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(off[i], false));
+            UARegistry r = _deploy(
+                address(uint160(0x5ce70 + i)),
+                chainUidA,
+                address(0),
+                false,
+                BUDGET,
+                address(0),
+                true,
+                _vcfg(off[i], false)
+            );
             Row memory x = rows[row[i]];
             vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, off[i]));
             UACall.register(r, x.kind, x.keyData, x.attrs, x.pop, x.pqzPop);
         }
-        UARegistry noMsig = _deploy(address(0x5ce7f), chainUidA, address(0), false, BUDGET, address(0), false, _vcfg(0, false));
+        UARegistry noMsig =
+            _deploy(address(0x5ce7f), chainUidA, address(0), false, BUDGET, address(0), false, _vcfg(0, false));
         Row memory m = rows[MSIG_NATIVE_ROW];
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, UAKinds.MSIG));
         UACall.register(noMsig, m.kind, m.keyData, m.attrs, m.pop, m.pqzPop);
@@ -763,7 +802,8 @@ contract UARegistryUA8Test is UARegistryBase {
         assertEq(k0, UAKinds.EVM_EOA, "member 0 is the native one");
         bytes memory good = s[0].sig;
         assertEq(good.length, 65);
-        (bytes32 r_, bytes32 s_, uint8 v_) = (bytes32(_slice(good, 0, 32)), bytes32(_slice(good, 32, 32)), uint8(good[64]));
+        (bytes32 r_, bytes32 s_, uint8 v_) =
+            (bytes32(_slice(good, 0, 32)), bytes32(_slice(good, 32, 32)), uint8(good[64]));
         bytes[4] memory bad = [
             abi.encodePacked(r_, bytes32(SECP_N - uint256(s_)), v_ == 27 ? uint8(28) : uint8(27)), // high s
             abi.encodePacked(r_, s_), // 64 bytes
@@ -858,11 +898,18 @@ contract UARegistryUA8Test is UARegistryBase {
     }
 
     /// Slot `index` of `d` accepts (CTR-UA-37), `sk` for a native member.
-    function _acceptSlot(UARegistry a, Row[] memory rows, bytes memory d, bytes32 ua, uint256 index, uint256 sk) internal {
+    function _acceptSlot(UARegistry a, Row[] memory rows, bytes memory d, bytes32 ua, uint256 index, uint256 sk)
+        internal
+    {
         (, bytes32 id) = _member(d, index);
         bytes32 typed = UAKinds.membershipDigest(ua, id);
         bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MEMBERSHIP, typed));
-        a.acceptMembership(ua, IUARegistry.MemberSig(uint16(index), new IUARegistry.InnerSig[](0), _memberSig(rows, d, index, md, typed, sk)));
+        a.acceptMembership(
+            ua,
+            IUARegistry.MemberSig(
+                uint16(index), new IUARegistry.InnerSig[](0), _memberSig(rows, d, index, md, typed, sk)
+            )
+        );
     }
 
     /// Both slots verify and the old rule passes, but the weight-2 slot alone reaches the threshold: `UAPoP`. The weight-1
@@ -986,10 +1033,14 @@ contract UARegistryUA8Test is UARegistryBase {
         Row memory native = rows[MSIG_NATIVE_ROW];
         assertEq(UACall.register(a, UAKinds.MSIG, classical.keyData, _none(), "", ""), classical.ua);
         assertEq(UACall.register(a, UAKinds.MSIG, native.keyData, native.attrs, native.pop, native.pqzPop), native.ua);
-        for (uint256 i; i < 6; ++i) _membershipRow(a, rows, j, string.concat(".memberships[", vm.toString(i), "]."), classical.ua);
+        for (uint256 i; i < 6; ++i) {
+            _membershipRow(a, rows, j, string.concat(".memberships[", vm.toString(i), "]."), classical.ua);
+        }
     }
 
-    function _membershipRow(UARegistry a, Row[] memory rows, string memory j, string memory p, bytes32 classical) internal {
+    function _membershipRow(UARegistry a, Row[] memory rows, string memory j, string memory p, bytes32 classical)
+        internal
+    {
         bytes32 ua = vm.parseJsonBytes32(j, string.concat(p, "ua"));
         bytes32 member = vm.parseJsonBytes32(j, string.concat(p, "member"));
         uint16 index = uint16(vm.parseJsonUint(j, string.concat(p, "index")));
@@ -1028,7 +1079,8 @@ contract UARegistryUA8Test is UARegistryBase {
     function test_ua8_attrsShapeRefused() public {
         assertEq(_runNegatives(_errs("UAPqzPopHash", "UAKeyData", "UAKemKeyLength", "")), 16);
         Row[] memory rows = _rows();
-        UARegistry a = _deploy(address(0x5ce60), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, false));
+        UARegistry a =
+            _deploy(address(0x5ce60), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, false));
         Row memory p = rows[P256_ROW];
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzPopHash.selector, p.ua));
         UACall.register(a, p.kind, p.keyData, p.attrs, p.pop, hex"01");
@@ -1044,7 +1096,8 @@ contract UARegistryUA8Test is UARegistryBase {
     function test_ua8_nonHolderAttrsRefused() public {
         assertEq(_runNegatives(_errs("UAPqzHolder", "UAKemHolder", "", "")), 10); // + msig-with-kem at four sets (CTR-UA-32, T66a)
         Row[] memory rows = _rows();
-        UARegistry a = _deploy(address(0x5ce61), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, false));
+        UARegistry a =
+            _deploy(address(0x5ce61), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, false));
         Row memory s = rows[SLH_ROW];
         s.attrs.kem = rows[FNDSA_ROW].attrs.kem;
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemHolder.selector, s.ua));
@@ -1083,8 +1136,17 @@ contract UARegistryUA8Test is UARegistryBase {
             Row memory x = xs[i];
             uint64 v; // the register KEM key is version 0 (owner 2026-10-31)
             vm.expectEmit(true, true, false, true, address(a));
-            emit IUARegistry.UARegistered(x.ua, x.kind, x.keyData, x.attrs, keccak256(x.pop), x.pqzPop, UAKinds.CHECKED_CHAIN,
-                UAKinds.CHECKED_NONE, x.kemPk.length == 0 ? UAKinds.CHECKED_NONE : UAKinds.CHECKED_CHAIN);
+            emit IUARegistry.UARegistered(
+                x.ua,
+                x.kind,
+                x.keyData,
+                x.attrs,
+                keccak256(x.pop),
+                x.pqzPop,
+                UAKinds.CHECKED_CHAIN,
+                UAKinds.CHECKED_NONE,
+                x.kemPk.length == 0 ? UAKinds.CHECKED_NONE : UAKinds.CHECKED_CHAIN
+            );
             vm.startStateDiffRecording();
             UACall.register(a, x.kind, x.keyData, x.attrs, x.pop, x.pqzPop);
             (uint256 created, uint256 bytes_) = _created(vm.stopAndReturnStateDiff());
@@ -1093,8 +1155,11 @@ contract UARegistryUA8Test is UARegistryBase {
             uint256 blob = abi.encode(_slice(x.keyData, vk[i], rest), x.pop).length;
             uint256 want = vk[i] + x.attrs.pqzKey.length + x.pqzPop.length + x.kemPk.length + blob;
             assertEq(bytes_, want, "created code = keyPtr + pqzKey + pqzPop + KEM record + blob");
-            assertEq(created, (vk[i] == 0 ? 0 : 1) + (x.attrs.pqzKey.length == 0 ? 0 : 1) + _chunks(x.pqzPop.length)
-                + _chunks(x.kemPk.length) + _chunks(blob));
+            assertEq(
+                created,
+                (vk[i] == 0 ? 0 : 1) + (x.attrs.pqzKey.length == 0 ? 0 : 1) + _chunks(x.pqzPop.length)
+                    + _chunks(x.kemPk.length) + _chunks(blob)
+            );
             assertEq(a.keyOf(x.ua), vk[i] == 0 ? bytes("") : x.keyData);
             (IUARegistry.KemKey memory pk, bytes memory sig) = a.kemKeyAt(x.ua, v);
             assertEq(UACall.kemPk(pk), x.kemPk);
@@ -1163,8 +1228,9 @@ contract UARegistryUA8Test is UARegistryBase {
         Row[] memory rows = _rows();
         _allowAll(rows);
         UARegistry g1 = _regA(false);
-        UARegistry g2 = _deploy(address(0x5ce90), chainUidA, address(g1), false, BUDGET, address(0), true,
-            new UARegistry.KindConfig[](0));
+        UARegistry g2 = _deploy(
+            address(0x5ce90), chainUidA, address(g1), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0)
+        );
         Row[2] memory xs = [rows[FNDSA_ROW], _find(rows, string.concat("mldsa65/", _setName()))];
         for (uint256 i; i < 2; ++i) {
             Row memory x = xs[i];
@@ -1190,12 +1256,16 @@ contract UARegistryUA8Test is UARegistryBase {
             bytes memory d = new bytes(lens[i]);
             for (uint256 o; o < d.length; o += 32) {
                 bytes32 w = keccak256(abi.encode(i, o));
-                for (uint256 k; k < 32 && o + k < d.length; ++k) d[o + k] = w[k];
+                for (uint256 k; k < 32 && o + k < d.length; ++k) {
+                    d[o + k] = w[k];
+                }
             }
             assertEq(c.put(d), n[i]);
             assertEq(c.get(), d);
             uint256[] memory s = c.sizes();
-            for (uint256 k; k < s.length; ++k) assertEq(s[k], k + 1 < s.length ? 32_768 : lens[i] - 32_768 * k);
+            for (uint256 k; k < s.length; ++k) {
+                assertEq(s[k], k + 1 < s.length ? 32_768 : lens[i] - 32_768 * k);
+            }
         }
         assertEq(SSTORE2.BLOB_CHUNK, 32_768);
     }
@@ -1213,24 +1283,42 @@ contract UARegistryUA8Test is UARegistryBase {
         UARegistry r = _deploy(address(0x5cea0), chainUidA, address(0), false, uint64(bound), address(impl), true, c);
         Member[] memory m = new Member[](9);
         for (uint256 i; i < 8; ++i) {
-            m[i] = Member(0x0133, UACall.register(r, 0x0133, abi.encodePacked(keccak256(abi.encode("slh", i))), _none(), hex"01", ""), 1);
+            m[i] = Member(
+                0x0133,
+                UACall.register(r, 0x0133, abi.encodePacked(keccak256(abi.encode("slh", i))), _none(), hex"01", ""),
+                1
+            );
         }
         m[8] = Member(UAKinds.EVM_EOA, _pad(clone), 1);
         _storedPop(r, _msigKey(9, m), 9);
         // 12 members, a budget that admits them
         c[0].verifier = address(new AcceptAll());
-        UARegistry big = _deploy(address(0x5cea1), chainUidA, address(0), false, uint64(12 * 1_445_000 + uint256(1_000_000) / 63 + 3_500),
-            address(0), true, c);
+        UARegistry big = _deploy(
+            address(0x5cea1),
+            chainUidA,
+            address(0),
+            false,
+            uint64(12 * 1_445_000 + uint256(1_000_000) / 63 + 3_500),
+            address(0),
+            true,
+            c
+        );
         Member[] memory m12 = new Member[](12);
         for (uint256 i; i < 12; ++i) {
-            m12[i] = Member(0x0133, UACall.register(big, 0x0133, abi.encodePacked(keccak256(abi.encode("slh12", i))), _none(), hex"01", ""), 1);
+            m12[i] = Member(
+                0x0133,
+                UACall.register(big, 0x0133, abi.encodePacked(keccak256(abi.encode("slh12", i))), _none(), hex"01", ""),
+                1
+            );
         }
         _storedPop(big, _msigKey(12, m12), 12);
     }
 
     function _storedPop(UARegistry r, bytes memory d, uint16 n) internal {
         IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](n);
-        for (uint16 j; j < n; ++j) s[j] = IUARegistry.MemberSig(j, new IUARegistry.InnerSig[](0), new bytes(7_856));
+        for (uint16 j; j < n; ++j) {
+            s[j] = IUARegistry.MemberSig(j, new IUARegistry.InnerSig[](0), new bytes(7_856));
+        }
         bytes memory pop = abi.encode(s);
         vm.recordLogs();
         bytes32 ua = UACall.register(r, UAKinds.MSIG, d, _none(), pop, "");
@@ -1286,8 +1374,11 @@ contract UARegistryUA8Test is UARegistryBase {
         bytes32 rd = _regDigest(m.ua, UAKinds.MSIG, m.attrs);
         s[0].sig = _ecdsa(0x5E55, rd);
         (, bytes32 id) = _member(m.keyData, 0);
-        assertEq(IERC1271(address(uint160(uint256(id)))).isValidSignature(rd, s[0].sig), IERC1271.isValidSignature.selector,
-            "the delegate would accept it");
+        assertEq(
+            IERC1271(address(uint160(uint256(id)))).isValidSignature(rd, s[0].sig),
+            IERC1271.isValidSignature.selector,
+            "the delegate would accept it"
+        );
         bytes memory viaDelegate = abi.encode(s);
         vm.expectRevert(IUARegistry.UAPoP.selector);
         UACall.register(a, m.kind, m.keyData, m.attrs, viaDelegate, m.pqzPop);
@@ -1407,7 +1498,8 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// `registrationOf(ua)` on `from` submitted to `to` by a third party (`withProof`: with the stored `pqzPop`).
     function _copy(UARegistry from, UARegistry to, bytes32 ua, bool withProof) internal {
-        (uint16 k, bytes memory d, IUARegistry.UAAttrs memory att, bytes memory pop, bytes memory z) = from.registrationOf(ua);
+        (uint16 k, bytes memory d, IUARegistry.UAAttrs memory att, bytes memory pop, bytes memory z) =
+            from.registrationOf(ua);
         vm.prank(address(0xC0B1E5), address(0xC0B1E5));
         assertEq(UACall.register(to, k, d, att, pop, withProof ? z : bytes("")), ua);
     }
@@ -1552,8 +1644,11 @@ contract UARegistryUA8Test is UARegistryBase {
         Row memory x = _pqzRow(rows);
         UARegistry p = _regA(true);
         UACall.register(p, x.kind, x.keyData, x.attrs, x.pop, "");
-        vm.mockCall(rreg, abi.encodeCall(IUAPopVerifier.verifyPop, (x.attrs.pqzKey, x.pqzRegMessage, x.pqzPop)),
-            abi.encode(uint256(0)));
+        vm.mockCall(
+            rreg,
+            abi.encodeCall(IUAPopVerifier.verifyPop, (x.attrs.pqzKey, x.pqzRegMessage, x.pqzPop)),
+            abi.encode(uint256(0))
+        );
         vm.expectRevert(IUARegistry.UAPoP.selector);
         p.storePqzPop(x.ua, 0, x.pqzPop);
         assertEq(p.pqzPopOf(x.ua, 0), "");
@@ -1566,9 +1661,13 @@ contract UARegistryUA8Test is UARegistryBase {
     function _squatter(Row[] memory rows, Row memory x) internal returns (Row memory s) {
         s = _apply(rows[ML65_1], Neg("", "", "", "", new string[](0), new bytes[](0)));
         s.attrs = UACall.attrs(x.attrs.pqzKey, x.attrs.pqzPopHash, "");
-        bytes32 record = UAKinds.portableRecordHash(s.ua, UAKinds.MLDSA65, _h(x.attrs.pqzKey), UAKinds.kemRecordHash(s.ua, 0, ""));
-        s.popMessage = UAKinds.uaMessage(UAKinds.MLDSA65, UAKinds.PURPOSE_POP_V2,
-            UAKinds.portableDigest(UAKinds.registrationHash(record, s.attrs.pqzPopHash)));
+        bytes32 record =
+            UAKinds.portableRecordHash(s.ua, UAKinds.MLDSA65, _h(x.attrs.pqzKey), UAKinds.kemRecordHash(s.ua, 0, ""));
+        s.popMessage = UAKinds.uaMessage(
+            UAKinds.MLDSA65,
+            UAKinds.PURPOSE_POP_V2,
+            UAKinds.portableDigest(UAKinds.registrationHash(record, s.attrs.pqzPopHash))
+        );
         s.pqzRegMessage = UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, UAKinds.portableDigest(record));
         s.pop = new bytes(3309);
         s.pop[0] = 0x5a;
@@ -1626,8 +1725,9 @@ contract UARegistryUA8Test is UARegistryBase {
         Row memory x = _pqzRow(rows);
         KeyRec memory k = _keyRec(_keyRecs(), string.concat("fndsa512/", _setName()));
         UARegistry g1 = _regA(false);
-        UARegistry g2 = _deploy(address(0x5ceb4), chainUidA, address(g1), false, BUDGET, address(0), true,
-            new UARegistry.KindConfig[](0));
+        UARegistry g2 = _deploy(
+            address(0x5ceb4), chainUidA, address(g1), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0)
+        );
         UACall.register(g1, x.kind, x.keyData, x.attrs, x.pop, "");
         _reg(g1, rows[FNDSA_ROW]);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, x.ua));
@@ -1652,8 +1752,9 @@ contract UARegistryUA8Test is UARegistryBase {
         _members(g1, rows);
         Row memory m = _find(rows, string.concat("msig-pq/", _setName()));
         bytes32 h = _h(m.attrs.pqzKey);
-        UARegistry g2 = _deploy(address(0x5ceb5), chainUidA, address(g1), false, BUDGET, address(0), true,
-            new UARegistry.KindConfig[](0));
+        UARegistry g2 = _deploy(
+            address(0x5ceb5), chainUidA, address(g1), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0)
+        );
         uint256 snap = vm.snapshotState();
         _reg(g2, m);
         assertFalse(_proven(g2, m.ua));
@@ -1682,7 +1783,10 @@ contract UARegistryUA8Test is UARegistryBase {
         _reg(r, base);
         bytes32 h = _h(k.pqzKey);
         bytes32 kd = UAKinds.pqzKeyDigest(k.ua, h);
-        assertEq(UAKinds.uaMessage(k.kind, UAKinds.PURPOSE_PQZ_KEY, UAKinds.pqzKeyRecordDigest(k.ua, h, k.pqzPopHash)), k.message);
+        assertEq(
+            UAKinds.uaMessage(k.kind, UAKinds.PURPOSE_PQZ_KEY, UAKinds.pqzKeyRecordDigest(k.ua, h, k.pqzPopHash)),
+            k.message
+        );
         assertEq(UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_KEY, kd), k.pqzRegMessage);
         vm.expectEmit(true, false, false, true, address(r));
         emit IUARegistry.UAPqzKeyAdded(k.ua, 0, h, k.pqzPopHash, k.pqzKey, k.sig);
@@ -1693,7 +1797,10 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// A key added by `setPqzKey`: `pqzKeyOf`, `recordOf`, `pqzKeySigOf`, `pqzPopOf`, `checkedOf`, owner and list;
     /// `registrationOf` stays exactly the `register` arguments (ruling A4-c3: no key, no proof).
-    function _assertAdded(UARegistry r, Row memory base, KeyRec memory k, bytes memory proof, bool proven) internal view {
+    function _assertAdded(UARegistry r, Row memory base, KeyRec memory k, bytes memory proof, bool proven)
+        internal
+        view
+    {
         assertEq(keccak256(_stored(r, k.ua)), keccak256(_args(base)), string.concat(k.name, ": registrationOf"));
         (, address ptr, bytes32 ph, bool pv) = r.pqzKeyOf(k.ua);
         assertEq(SSTORE2.read(ptr), k.pqzKey);
@@ -1733,8 +1840,11 @@ contract UARegistryUA8Test is UARegistryBase {
             a.storePqzPop(k.ua, 0, proof);
             _assertAdded(a, base, k, proof, false);
             _addKey(p, base, k);
-            vm.mockCall(rreg, abi.encodeCall(IUAPopVerifier.verifyPop, (k.pqzKey, k.pqzRegMessage, proof)),
-                abi.encode(uint256(1)));
+            vm.mockCall(
+                rreg,
+                abi.encodeCall(IUAPopVerifier.verifyPop, (k.pqzKey, k.pqzRegMessage, proof)),
+                abi.encode(uint256(1))
+            );
             vm.expectEmit(true, false, false, true, address(p));
             emit IUARegistry.UAPqzPopStored(k.ua, 0, UAKinds.CHECKED_CHAIN, proof);
             vm.prank(address(0x7111D), address(0x7111D));
@@ -1773,9 +1883,17 @@ contract UARegistryUA8Test is UARegistryBase {
         for (uint256 i; i < n; ++i) {
             string memory p = string.concat(".pqzKeyVersions[", vm.toString(i), "]");
             KeyVer memory v = vs[i];
-            v.r = KeyRec(_js(j, string.concat(p, ".name")), _js(j, string.concat(p, ".set")), uint16(_ju(j, string.concat(p, ".kind"))),
-                _jw(j, string.concat(p, ".ua")), _jb(j, string.concat(p, ".pqzKey")), _jw(j, string.concat(p, ".pqzPopHash")),
-                _jw(j, string.concat(p, ".message")), _jb(j, string.concat(p, ".sig")), _jw(j, string.concat(p, ".pqzRegMessage")));
+            v.r = KeyRec(
+                _js(j, string.concat(p, ".name")),
+                _js(j, string.concat(p, ".set")),
+                uint16(_ju(j, string.concat(p, ".kind"))),
+                _jw(j, string.concat(p, ".ua")),
+                _jb(j, string.concat(p, ".pqzKey")),
+                _jw(j, string.concat(p, ".pqzPopHash")),
+                _jw(j, string.concat(p, ".message")),
+                _jb(j, string.concat(p, ".sig")),
+                _jw(j, string.concat(p, ".pqzRegMessage"))
+            );
             v.version = uint64(_ju(j, string.concat(p, ".version")));
             v.pqzKeyHash = _jw(j, string.concat(p, ".pqzKeyHash"));
             v.pqzPop = _jb(j, string.concat(p, ".pqzPop"));
@@ -1798,7 +1916,9 @@ contract UARegistryUA8Test is UARegistryBase {
             g.stored = vm.parseJsonUintArray(j, string.concat(p, ".mutation.stored"));
             g.keys = vm.parseJsonKeys(j, string.concat(p, ".mutation.set"));
             g.values = new bytes[](g.keys.length);
-            for (uint256 k; k < g.keys.length; ++k) g.values[k] = _jb(j, string.concat(p, ".mutation.set['", g.keys[k], "']"));
+            for (uint256 k; k < g.keys.length; ++k) {
+                g.values[k] = _jb(j, string.concat(p, ".mutation.set['", g.keys[k], "']"));
+            }
         }
     }
 
@@ -1850,7 +1970,11 @@ contract UARegistryUA8Test is UARegistryBase {
         vm.prank(address(0xBEEF), address(0xBEEF));
         p.setPqzKey(ua, v.version, k.pqzKey, k.pqzPopHash, UACall.sig(k.sig));
         assertEq(p.pqzKeyLatest(ua), v.version, k.name);
-        vm.mockCall(rreg, abi.encodeCall(IUAPopVerifier.verifyPop, (k.pqzKey, k.pqzRegMessage, v.pqzPop)), abi.encode(uint256(1)));
+        vm.mockCall(
+            rreg,
+            abi.encodeCall(IUAPopVerifier.verifyPop, (k.pqzKey, k.pqzRegMessage, v.pqzPop)),
+            abi.encode(uint256(1))
+        );
         vm.prank(address(0x7111D), address(0x7111D));
         p.storePqzPop(ua, v.version, v.pqzPop);
         (uint64 cur, address ptr,, bool proven) = p.pqzKeyOf(ua);
@@ -1895,7 +2019,9 @@ contract UARegistryUA8Test is UARegistryBase {
     {
         KeyVer memory v = _keyVer(vs, g.row);
         _reg(a, _byUa(rows, v.r.ua));
-        for (uint256 s; s < g.stored.length; ++s) _store(a, ks, vs, v.r, g.stored[s]);
+        for (uint256 s; s < g.stored.length; ++s) {
+            _store(a, ks, vs, v.r, g.stored[s]);
+        }
         (bytes32 ua, bytes memory key, bytes memory sig) = (v.r.ua, v.r.pqzKey, v.r.sig);
         for (uint256 f; f < g.keys.length; ++f) {
             if (_eq(g.keys[f], "ua")) ua = bytes32(g.values[f]);
@@ -1962,9 +2088,14 @@ contract UARegistryUA8Test is UARegistryBase {
                 ? IUARegistry.UAPqzKeySet.selector
                 : _eq(g.err, "UAPqzHolder")
                     ? IUARegistry.UAPqzHolder.selector
-                    : _eq(g.err, "UAPqzPopHash") ? IUARegistry.UAPqzPopHash.selector : IUARegistry.UAUnauthorized.selector;
-            assertTrue(_eq(g.err, "UAPqzKeySet") || _eq(g.err, "UAPqzHolder") || _eq(g.err, "UAUnauthorized")
-                || _eq(g.err, "UAPqzPopHash"), g.err);
+                    : _eq(g.err, "UAPqzPopHash")
+                        ? IUARegistry.UAPqzPopHash.selector
+                        : IUARegistry.UAUnauthorized.selector;
+            assertTrue(
+                _eq(g.err, "UAPqzKeySet") || _eq(g.err, "UAPqzHolder") || _eq(g.err, "UAUnauthorized")
+                    || _eq(g.err, "UAPqzPopHash"),
+                g.err
+            );
             vm.expectRevert(abi.encodeWithSelector(sel, k.ua));
             a.setPqzKey(k.ua, 0, k.pqzKey, k.pqzPopHash, UACall.sig(k.sig));
             vm.revertToState(snap);
@@ -2011,7 +2142,9 @@ contract UARegistryUA8Test is UARegistryBase {
         (, address ptr, bytes32 ph,) = a.pqzKeyOf(k.ua);
         vm.prank(address(0xC0B1E5), address(0xC0B1E5));
         p.setPqzKey(k.ua, 0, SSTORE2.read(ptr), ph, UACall.sig(a.pqzKeySigOf(k.ua, 0)));
-        vm.mockCall(rreg, abi.encodeCall(IUAPopVerifier.verifyPop, (k.pqzKey, k.pqzRegMessage, proof)), abi.encode(uint256(1)));
+        vm.mockCall(
+            rreg, abi.encodeCall(IUAPopVerifier.verifyPop, (k.pqzKey, k.pqzRegMessage, proof)), abi.encode(uint256(1))
+        );
         vm.prank(address(0xC0B1E5), address(0xC0B1E5));
         p.storePqzPop(k.ua, 0, a.pqzPopOf(k.ua, 0));
         _assertAdded(p, base, k, proof, true);
@@ -2027,8 +2160,14 @@ contract UARegistryUA8Test is UARegistryBase {
         _allowAll(rows);
         Row memory s = _squatter(rows, _pqzRow(rows));
         assertEq(s.kemPk.length, 0);
-        assertEq(s.pqzRegMessage, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2,
-            UAKinds.portableRecordDigest(s.ua, s.kind, _h(s.attrs.pqzKey), UAKinds.kemRecordHash(s.ua, 0, ""))));
+        assertEq(
+            s.pqzRegMessage,
+            UAKinds.uaMessage(
+                UAKinds.PQZ_MLWE,
+                UAKinds.PURPOSE_POP_V2,
+                UAKinds.portableRecordDigest(s.ua, s.kind, _h(s.attrs.pqzKey), UAKinds.kemRecordHash(s.ua, 0, ""))
+            )
+        );
         UARegistry p = _regA(true);
         UACall.register(p, s.kind, s.keyData, s.attrs, s.pop, "");
         _allowPqz(s);
@@ -2080,7 +2219,9 @@ contract UARegistryUA8Test is UARegistryBase {
         _checkedEq(g1, m.ua, 1, 0, m.kemPk.length != 0 ? 1 : 0);
         assertEq(g2.pqzPopOf(m.ua, 0), m.pqzPop);
         assertEq(g1.pqzPopOf(m.ua, 0), "");
-        assertEq(keccak256(_stored(g2, m.ua)), keccak256(_args(m)), "gen 2's registrationOf: gen 1's record + its proof");
+        assertEq(
+            keccak256(_stored(g2, m.ua)), keccak256(_args(m)), "gen 2's registrationOf: gen 1's record + its proof"
+        );
         (, address zp) = g2.recordOf(m.ua);
         assertEq(zp, p2);
         assertEq(t.keyPtr(address(g2), m.ua), p2);
@@ -2105,13 +2246,20 @@ contract UARegistryUA8Test is UARegistryBase {
         assertEq(g2.kindOf(x.ua), UAKinds.MLDSA65);
         bytes32 h = _h(x.attrs.pqzKey);
         bytes32 kh = UAKinds.kemRecordHash(x.ua, 0, x.kemPk);
-        assertEq(x.pqzRegMessage, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2,
-            g2.portableRecordDigest(x.ua, UAKinds.MLDSA65, h, kh)));
+        assertEq(
+            x.pqzRegMessage,
+            UAKinds.uaMessage(
+                UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, g2.portableRecordDigest(x.ua, UAKinds.MLDSA65, h, kh)
+            )
+        );
         // the same record under another kind is another message: refused by the stand-in
-        bytes32 other = UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2,
-            UAKinds.portableRecordDigest(x.ua, UAKinds.MLDSA44, h, kh));
+        bytes32 other = UAKinds.uaMessage(
+            UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, UAKinds.portableRecordDigest(x.ua, UAKinds.MLDSA44, h, kh)
+        );
         assertTrue(other != x.pqzRegMessage);
-        vm.mockCall(rreg, abi.encodeCall(IUAPopVerifier.verifyPop, (x.attrs.pqzKey, other, x.pqzPop)), abi.encode(uint256(1)));
+        vm.mockCall(
+            rreg, abi.encodeCall(IUAPopVerifier.verifyPop, (x.attrs.pqzKey, other, x.pqzPop)), abi.encode(uint256(1))
+        );
         vm.expectRevert(IUARegistry.UAPoP.selector);
         g2.storePqzPop(x.ua, 0, x.pqzPop);
         _allowPqz(x);
@@ -2148,8 +2296,11 @@ contract UARegistryUA8Test is UARegistryBase {
             assertEq(p1, address(0), "gen 1 untouched");
             vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzKeySet.selector, k.ua));
             g2.setPqzKey(k.ua, 0, k.pqzKey, k.pqzPopHash, UACall.sig(k.sig));
-            vm.mockCall(rreg, abi.encodeCall(IUAPopVerifier.verifyPop, (k.pqzKey, k.pqzRegMessage, proof)),
-                abi.encode(uint256(1)));
+            vm.mockCall(
+                rreg,
+                abi.encodeCall(IUAPopVerifier.verifyPop, (k.pqzKey, k.pqzRegMessage, proof)),
+                abi.encode(uint256(1))
+            );
             g2.storePqzPop(k.ua, 0, proof);
             _assertAdded(g2, base, k, proof, true);
             (, address p2,,) = g2.pqzKeyOf(k.ua);
@@ -2160,8 +2311,11 @@ contract UARegistryUA8Test is UARegistryBase {
             _reg(g1, base);
             vm.prank(address(0xBEEF), address(0xBEEF));
             g1.setPqzKey(k.ua, 0, k.pqzKey, k.pqzPopHash, UACall.sig(k.sig));
-            vm.mockCall(rreg, abi.encodeCall(IUAPopVerifier.verifyPop, (k.pqzKey, k.pqzRegMessage, proof)),
-                abi.encode(uint256(1)));
+            vm.mockCall(
+                rreg,
+                abi.encodeCall(IUAPopVerifier.verifyPop, (k.pqzKey, k.pqzRegMessage, proof)),
+                abi.encode(uint256(1))
+            );
             vm.prank(address(0x7111D), address(0x7111D));
             g2.storePqzPop(k.ua, 0, proof);
             _assertAdded(g2, base, k, proof, true);
@@ -2184,8 +2338,9 @@ contract UARegistryUA8Test is UARegistryBase {
         KeyRec memory k = _keyRec(_keyRecs(), string.concat("fndsa512/", _setName()));
         UARegistry g1 = _regA(true);
         _members(g1, rows);
-        UARegistry g2 = _deploy(address(0x5cebd), chainUidA, address(g1), false, BUDGET, address(0), true,
-            new UARegistry.KindConfig[](0));
+        UARegistry g2 = _deploy(
+            address(0x5cebd), chainUidA, address(g1), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0)
+        );
         UACall.register(g1, x.kind, x.keyData, x.attrs, x.pop, "");
         _reg(g1, rows[FNDSA_ROW]);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, x.ua));
@@ -2371,7 +2526,9 @@ contract UARegistryUA8Test is UARegistryBase {
 
     function _kemRecs() internal view returns (KemRec[] memory recs) {
         recs = this.loadKemRecs();
-        assertEq(recs.length, 12, "kemRecords: v1-v3 of mldsa65, fndsa512, mldsa87, fndsa1024 (CTR-UA-32: no msig record)");
+        assertEq(
+            recs.length, 12, "kemRecords: v1-v3 of mldsa65, fndsa512, mldsa87, fndsa1024 (CTR-UA-32: no msig record)"
+        );
         for (uint256 i; i < recs.length; ++i) {
             KemRec memory k = recs[i];
             assertEq(k.digest, UAKinds.kemRecordDigest(k.ua, k.version, k.kemPk), k.id);
@@ -2436,13 +2593,18 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// A KEM record of the single-key `mldsa65` row `r`, signed (mocked) over its `PURPOSE_KEM` message.
     function _ml65Kem(Row memory r, uint64 v, bytes memory pk) internal returns (bytes memory) {
-        return _ml65Sig(r.keyData, UAKinds.uaMessage(UAKinds.MLDSA65, UAKinds.PURPOSE_KEM, UAKinds.kemRecordDigest(r.ua, v, pk)));
+        return _ml65Sig(
+            r.keyData, UAKinds.uaMessage(UAKinds.MLDSA65, UAKinds.PURPOSE_KEM, UAKinds.kemRecordDigest(r.ua, v, pk))
+        );
     }
 
     function _assertKemAt(UARegistry r, bytes32 ua, uint64 v, bytes memory pk, bytes memory sig) internal view {
         (IUARegistry.KemKey memory p, bytes memory s) = r.kemKeyAt(ua, v);
-        assertEq(keccak256(abi.encode(UACall.kemPk(p), s)), keccak256(abi.encode(pk, sig)),
-            string.concat("kemKeyAt v", vm.toString(v)));
+        assertEq(
+            keccak256(abi.encode(UACall.kemPk(p), s)),
+            keccak256(abi.encode(pk, sig)),
+            string.concat("kemKeyAt v", vm.toString(v))
+        );
     }
 
     function _assertKemOf(UARegistry r, bytes32 ua, uint64 v, bytes memory pk, bytes memory sig) internal view {
@@ -2466,7 +2628,9 @@ contract UARegistryUA8Test is UARegistryBase {
         _assertKemAt(a, k2.ua, 3, "", "");
         _assertKemOf(a, k2.ua, 2, k2.kemPk, k2.sig);
         _checkedEq(a, k2.ua, 1, 0, 1);
-        assertEq(keccak256(_stored(a, k2.ua)), keccak256(_args(rows[FNDSA_ROW])), "registrationOf: the register args (C2)");
+        assertEq(
+            keccak256(_stored(a, k2.ua)), keccak256(_args(rows[FNDSA_ROW])), "registrationOf: the register args (C2)"
+        );
     }
 
     /// P1 / P10: every portable.json `kemRecords` row lands on two registries (other chain id, uid, address) with the
@@ -2525,7 +2689,9 @@ contract UARegistryUA8Test is UARegistryBase {
             _assertKemOf(a, x.ua, 3, pks[3], sigs[3]);
             _checkedEq(a, x.ua, 1, 0, 1);
         }
-        for (uint64 v = 1; v <= 3; ++v) _assertKemAt(a, x.ua, v, pks[v], sigs[v]);
+        for (uint64 v = 1; v <= 3; ++v) {
+            _assertKemAt(a, x.ua, v, pks[v], sigs[v]);
+        }
     }
 
     /// UA8-D5: write-once per `(ua, version)`: the same bytes again and other (validly signed) bytes are `UAKemVersion`.
@@ -2783,8 +2949,18 @@ contract UARegistryUA8Test is UARegistryBase {
             }
             assertEq(mine, 1, "one log");
             uint256 data = abi.encode(keccak256(k.kemPk), k.kemPk, k.sig).length;
-            emit log_named_uint(string.concat("setKemKey gas, ", k.id, " (sig ", vm.toString(k.sig.length),
-                " B; event data B ", vm.toString(data), ")"), g);
+            emit log_named_uint(
+                string.concat(
+                    "setKemKey gas, ",
+                    k.id,
+                    " (sig ",
+                    vm.toString(k.sig.length),
+                    " B; event data B ",
+                    vm.toString(data),
+                    ")"
+                ),
+                g
+            );
         }
     }
 
@@ -2808,7 +2984,9 @@ contract UARegistryUA8Test is UARegistryBase {
             _reg(g1, base);
             if (k.kind == UAKinds.FNDSA512) {
                 assertFalse(g2.kindEnabled(UAKinds.FNDSA512));
-                g1.requireAuthorized(k.ua, UAKinds.PURPOSE_KEM, k.digest, UACall.auth(k.ua, abi.encode(bytes(""), k.sig))); // _sigOk's fallback
+                g1.requireAuthorized(
+                    k.ua, UAKinds.PURPOSE_KEM, k.digest, UACall.auth(k.ua, abi.encode(bytes(""), k.sig))
+                ); // _sigOk's fallback
             }
             vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, k.ua));
             g2.setKemKey(k.ua, k.version, UACall.kem(k.kemPk), UACall.sig(k.sig));
@@ -2933,7 +3111,8 @@ contract UARegistryUA8Test is UARegistryBase {
         for (uint256 i; i < rows.length; ++i) {
             Row memory x = rows[i];
             if (!_here(x)) continue;
-            (uint16 k, bytes memory d, IUARegistry.UAAttrs memory at, bytes memory p, bytes memory z) = a.registrationOf(x.ua);
+            (uint16 k, bytes memory d, IUARegistry.UAAttrs memory at, bytes memory p, bytes memory z) =
+                a.registrationOf(x.ua);
             assertEq(k, x.kind, x.name);
             assertEq(d, x.keyData, x.name);
             assertEq(p, _popInState(x.kind, x.pop), x.name);
@@ -3002,8 +3181,11 @@ contract UARegistryUA8Test is UARegistryBase {
             a[i].entry = _js(j, string.concat(p, "args.entry"));
             a[i].kem = _kemAt(j, string.concat(p, "args.attrs.kem."));
             if (_eq(a[i].entry, "registerWebAuthn")) {
-                a[i].key = IUARegistry.WebAuthnKey(_jw(j, string.concat(p, "args.key.x")),
-                    _jw(j, string.concat(p, "args.key.y")), _jw(j, string.concat(p, "args.key.rpIdHash")));
+                a[i].key = IUARegistry.WebAuthnKey(
+                    _jw(j, string.concat(p, "args.key.x")),
+                    _jw(j, string.concat(p, "args.key.y")),
+                    _jw(j, string.concat(p, "args.key.rpIdHash"))
+                );
             }
             if (_eq(a[i].entry, "registerMsig")) {
                 a[i].structure.threshold = uint16(_ju(j, string.concat(p, "args.structure.threshold")));
@@ -3012,8 +3194,11 @@ contract UARegistryUA8Test is UARegistryBase {
                 a[i].structure.members = new IUARegistry.MsigMember[](m);
                 for (uint256 k; k < m; ++k) {
                     string memory e = string.concat(p, "args.structure.members[", vm.toString(k), "].");
-                    a[i].structure.members[k] = IUARegistry.MsigMember(uint16(_ju(j, string.concat(e, "kind"))),
-                        _jw(j, string.concat(e, "id")), uint16(_ju(j, string.concat(e, "weight"))));
+                    a[i].structure.members[k] = IUARegistry.MsigMember(
+                        uint16(_ju(j, string.concat(e, "kind"))),
+                        _jw(j, string.concat(e, "id")),
+                        uint16(_ju(j, string.concat(e, "weight")))
+                    );
                 }
             }
             a[i].commit = _jx(j, string.concat(p, "kemCommit"));
@@ -3040,11 +3225,20 @@ contract UARegistryUA8Test is UARegistryBase {
         uint256 commits;
         for (uint256 i; i < rows.length; ++i) {
             Row memory x = rows[i];
-            assertEq(a[i].entry, x.kind == UAKinds.MSIG ? "registerMsig"
-                : x.kind == UAKinds.WEBAUTHN_P256 ? "registerWebAuthn" : "register", x.name);
-            if (x.kind == UAKinds.WEBAUTHN_P256) assertEq(abi.encode(a[i].key), abi.encode(UACall.webAuthnKey(x.keyData)));
+            assertEq(
+                a[i].entry,
+                x.kind == UAKinds.MSIG
+                    ? "registerMsig"
+                    : x.kind == UAKinds.WEBAUTHN_P256 ? "registerWebAuthn" : "register",
+                x.name
+            );
+            if (x.kind == UAKinds.WEBAUTHN_P256) {
+                assertEq(abi.encode(a[i].key), abi.encode(UACall.webAuthnKey(x.keyData)));
+            }
             assertEq(abi.encode(a[i].kem), abi.encode(x.attrs.kem), x.name);
-            if (x.kind == UAKinds.MSIG) assertEq(abi.encode(a[i].structure), abi.encode(UACall.structure(x.keyData)), x.name);
+            if (x.kind == UAKinds.MSIG) {
+                assertEq(abi.encode(a[i].structure), abi.encode(UACall.structure(x.keyData)), x.name);
+            }
             assertEq(a[i].commit, x.kemPk.length != 0, x.name);
             if (!a[i].commit) continue;
             IUARegistry.UAAttrs memory c = UACall.commit(x.attrs);
@@ -3062,7 +3256,9 @@ contract UARegistryUA8Test is UARegistryBase {
         _allowAll(rows);
         _members(a, rows);
         h = [_find(rows, "fndsa512"), _find(rows, string.concat("mldsa65/", _setName()))];
-        for (uint256 i; i < 2; ++i) assertEq(h[i].kemPk.length, 1601, h[i].name);
+        for (uint256 i; i < 2; ++i) {
+            assertEq(h[i].kemPk.length, 1601, h[i].name);
+        }
     }
 
     /// Owner 2026-10-31 (KEM items 2, 3): `register` with the KEM record's hash only (`kem` = the scheme, `kemPkHash`)
@@ -3154,7 +3350,8 @@ contract UARegistryUA8Test is UARegistryBase {
         a.setKemKey(x.ua, 0, other, UACall.sig(k1.sig));
         _assertKemAt(a, x.ua, 0, x.kemPk, "");
         // version 0 after the hash-commit fill
-        UARegistry b = _deploy(address(0x5ce0b), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, false));
+        UARegistry b =
+            _deploy(address(0x5ce0b), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, false));
         UACall.register(b, x.kind, x.keyData, UACall.commit(x.attrs), x.pop, x.pqzPop);
         b.setKemKey(x.ua, 0, x.attrs.kem, _noSig());
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemVersion.selector, x.ua, 0));
@@ -3277,7 +3474,9 @@ contract UARegistryUA8Test is UARegistryBase {
         string memory j = vm.readFile(PJ);
         for (uint256 i; _jx(j, string.concat(".negatives[", vm.toString(i), "]")); ++i) {
             string memory p = string.concat(".negatives[", vm.toString(i), "]");
-            if (keccak256(_jbRaw(j, string.concat(p, ".name"))) != keccak256("native-personal-sign-under-metatx")) continue;
+            if (keccak256(_jbRaw(j, string.concat(p, ".name"))) != keccak256("native-personal-sign-under-metatx")) {
+                continue;
+            }
             purpose = _jw(j, string.concat(p, ".mutation.set.purposeTag"));
             digest = _jw(j, string.concat(p, ".mutation.set.digest"));
             auth = _jb(j, string.concat(p, ".mutation.set.auth"));
@@ -3315,7 +3514,8 @@ contract UARegistryUA8Test is UARegistryBase {
         UARegistry a = _regA(false);
         _members(a, rows);
         // a negative on a member row (record-kind-mismatch: p256) runs where that row is not registered yet
-        UARegistry fresh = _deploy(address(0x5ce6f), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, false));
+        UARegistry fresh =
+            _deploy(address(0x5ce6f), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, false));
         for (uint256 i; i < negs.length; ++i) {
             Neg memory g = negs[i];
             if (keccak256(bytes(g.entry)) != keccak256("register") || !_in(g.err, errs)) continue;
@@ -3336,9 +3536,21 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// A copy of `r` with the negative's fields replaced (the rows array is not touched).
     function _apply(Row memory src, Neg memory g) internal pure returns (Row memory r) {
-        r = Row(src.name, src.set, src.kind, src.keyData, src.ua,
-            UACall.attrs(src.attrs.pqzKey, src.attrs.pqzPopHash, src.kemPk), src.kemPk, src.pop, src.pqzPop,
-            src.popMessage, src.pqzRegMessage, src.msIndex, src.msHash);
+        r = Row(
+            src.name,
+            src.set,
+            src.kind,
+            src.keyData,
+            src.ua,
+            UACall.attrs(src.attrs.pqzKey, src.attrs.pqzPopHash, src.kemPk),
+            src.kemPk,
+            src.pop,
+            src.pqzPop,
+            src.popMessage,
+            src.pqzRegMessage,
+            src.msIndex,
+            src.msHash
+        );
         for (uint256 k; k < g.keys.length; ++k) {
             bytes32 key = keccak256(bytes(g.keys[k]));
             bytes memory v = g.values[k];
@@ -3357,7 +3569,9 @@ contract UARegistryUA8Test is UARegistryBase {
         if (k == keccak256("UAPqzPopHash")) return abi.encodeWithSelector(IUARegistry.UAPqzPopHash.selector, x.ua);
         if (k == keccak256("UAPqzHolder")) return abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, x.ua);
         if (k == keccak256("UAKemHolder")) return abi.encodeWithSelector(IUARegistry.UAKemHolder.selector, x.ua);
-        if (k == keccak256("UAKeyData")) return abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.PQZ_MLWE);
+        if (k == keccak256("UAKeyData")) {
+            return abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.PQZ_MLWE);
+        }
         if (k == keccak256("UAKemKeyLength")) {
             return abi.encodeWithSelector(IUARegistry.UAKemKeyLength.selector, x.kemPk.length);
         }
@@ -3371,8 +3585,10 @@ contract UARegistryUA8Test is UARegistryBase {
     function _created(VmSafe.AccountAccess[] memory acc) internal pure returns (uint256 n, uint256 bytes_) {
         for (uint256 i; i < acc.length; ++i) {
             // not the linked library: forge books its creation in a test's first recording
-            if (acc[i].kind == VmSafe.AccountAccessKind.Create && !acc[i].reverted && acc[i].account != address(UARegistryCoreLib)
-                && acc[i].account != address(UARegistryAuxLib)) {
+            if (
+                acc[i].kind == VmSafe.AccountAccessKind.Create && !acc[i].reverted
+                    && acc[i].account != address(UARegistryCoreLib) && acc[i].account != address(UARegistryAuxLib)
+            ) {
                 ++n;
                 bytes_ += acc[i].deployedCode.length - 1;
             }
@@ -3385,7 +3601,9 @@ contract UARegistryUA8Test is UARegistryBase {
 
     function _slice(bytes memory b, uint256 o, uint256 n) internal pure returns (bytes memory r) {
         r = new bytes(n);
-        for (uint256 i; i < n; ++i) r[i] = b[o + i];
+        for (uint256 i; i < n; ++i) {
+            r[i] = b[o + i];
+        }
     }
 
     // ----- A8: gas figures (UA-8 `register`, `storePqzPop`, `setKemKey`) -----
@@ -3423,6 +3641,7 @@ contract UARegistryUA8Test is UARegistryBase {
     function _pin(string memory name) internal pure returns (uint256, uint256) {
         bytes32 h = keccak256(bytes(name));
         // PINS: name -> (regular gas, state gas); the rows of all four sets (a set's rows carry its name)
+        // pqvault R1 (CTR-UA-46: `_single` split out of `_sigOk`, one more selector in `UARegistryCoreLib`'s dispatch; the rows of the other sets by at-set): setKemKey fndsa512/v2 n2304-kmax4096: 2,524,662 -> 2,524,767; n2048-kmax1024, n2560-kmax16384, n2816-kmax65536: 2,524,650 -> 2,524,767
         // D1 at n2816-kmax65536 (owner 2026-11-15: `registrationOf` from `UARegistryCoreLib` to `UARegistryAuxLib`; at-set on 967576671): registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536: 176,607 -> 176,851; registrationOf msig-pq on gen 1 n2816-kmax65536: 122,189 -> 122,263
         // D1 at n2560-kmax16384 (owner 2026-11-15: `registrationOf` from `UARegistryCoreLib` to `UARegistryAuxLib`; at-set on 967576671): registrationOf msig-pq on gen 2 (gen 1 record) n2560-kmax16384: 157,099 -> 157,343; registrationOf msig-pq on gen 1 n2560-kmax16384: 106,976 -> 107,050
         // D1 at n2048-kmax1024 (owner 2026-11-15: `registrationOf` from `UARegistryCoreLib` to `UARegistryAuxLib`; at-set on 967576671): registrationOf msig-pq on gen 2 (gen 1 record) n2048-kmax1024: 135,892 -> 136,136; registrationOf msig-pq on gen 1 n2048-kmax1024: 93,409 -> 93,483
@@ -3452,9 +3671,14 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("register msig-pq-native")) return (333373, 1360170);
         if (h == keccak256("setKemKey mldsa65/v2 n2048-kmax1024")) return (357272, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2048-kmax1024")) return (20229, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2048-kmax1024")) return (2524650, 3947400);
+        if (h == keccak256("setKemKey fndsa512/v2 n2048-kmax1024")) return (2524767, 3947400);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2048-kmax1024")) return (17772, 0);
-        if (h == keccak256("popOf (the blob setKemKey decodes) msig-12-slhdsa128s (32 B: keccak256 of its 96,832 B pop)")) return (17439, 0);
+        if (
+            h
+                == keccak256(
+                    "popOf (the blob setKemKey decodes) msig-12-slhdsa128s (32 B: keccak256 of its 96,832 B pop)"
+                )
+        ) return (17439, 0);
         if (h == keccak256("popOf unregistered (view baseline)")) return (10819, 0);
         if (h == keccak256("register mldsa65 with pqzPop n2048-kmax1024")) return (3341208, 81513810);
         if (h == keccak256("register mldsa65 without pqzPop n2048-kmax1024")) return (1536920, 37608930);
@@ -3469,7 +3693,7 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("register msig-pq/n2304-kmax4096")) return (3740568, 79930260);
         if (h == keccak256("setKemKey mldsa65/v2 n2304-kmax4096")) return (357272, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2304-kmax4096")) return (20229, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2304-kmax4096")) return (2524662, 3947400);
+        if (h == keccak256("setKemKey fndsa512/v2 n2304-kmax4096")) return (2524767, 3947400);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2304-kmax4096")) return (17772, 0);
         if (h == keccak256("register mldsa65 with pqzPop n2304-kmax4096")) return (3613592, 87997950);
         if (h == keccak256("register mldsa65 without pqzPop n2304-kmax4096")) return (1667992, 40742370);
@@ -3484,7 +3708,7 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("register msig-pq/n2560-kmax16384")) return (4008856, 86365440);
         if (h == keccak256("setKemKey mldsa65/v2 n2560-kmax16384")) return (357272, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2560-kmax16384")) return (20229, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2560-kmax16384")) return (2524650, 3947400);
+        if (h == keccak256("setKemKey fndsa512/v2 n2560-kmax16384")) return (2524767, 3947400);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2560-kmax16384")) return (17772, 0);
         if (h == keccak256("register mldsa65 with pqzPop n2560-kmax16384")) return (3881880, 94433130);
         if (h == keccak256("register mldsa65 without pqzPop n2560-kmax16384")) return (1799064, 43875810);
@@ -3499,7 +3723,7 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("register msig-pq/n2816-kmax65536")) return (4328344, 94280130);
         if (h == keccak256("setKemKey mldsa65/v2 n2816-kmax65536")) return (357272, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2816-kmax65536")) return (20229, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2816-kmax65536")) return (2524650, 3947400);
+        if (h == keccak256("setKemKey fndsa512/v2 n2816-kmax65536")) return (2524767, 3947400);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2816-kmax65536")) return (17772, 0);
         if (h == keccak256("register mldsa65 with pqzPop n2816-kmax65536")) return (4201368, 102347820);
         if (h == keccak256("register mldsa65 without pqzPop n2816-kmax65536")) return (1930136, 47009250);
@@ -3563,13 +3787,15 @@ contract UARegistryUA8Test is UARegistryBase {
         // the msig-pq attachment: gen 1 alone, then gen 2 over a gen-1 record
         Row memory m = _find(rows, string.concat("msig-pq/", sn));
         _allowPqz(m);
-        UARegistry g1 = _deploy(address(0x5cebc), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, false));
+        UARegistry g1 =
+            _deploy(address(0x5cebc), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, false));
         _members(g1, rows);
         UACall.register(g1, m.kind, m.keyData, m.attrs, m.pop, "");
         UARegistry g2 = _gen2Pqz(address(0x5cebb), g1);
         g2.storePqzPop(m.ua, 0, m.pqzPop);
         _gas(string.concat("storePqzPop msig-pq on gen 2 (gen 1 record) ", sn));
-        UARegistry solo = _deploy(address(0x5cebd), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, true));
+        UARegistry solo =
+            _deploy(address(0x5cebd), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, true));
         _members(solo, rows);
         UACall.register(solo, m.kind, m.keyData, m.attrs, m.pop, "");
         _gas(string.concat("register msig-pq without pqzPop ", sn));
@@ -3599,7 +3825,11 @@ contract UARegistryUA8Test is UARegistryBase {
             if (!_here(x)) continue; // another set's row (an msig-pq/<set> row shares its id with this set's)
             (uint16[] memory idx, bytes32[] memory h) = a.popSlotsOf(x.ua);
             (uint16[] memory idx2, bytes32[] memory h2) = g2.popSlotsOf(x.ua);
-            assertEq(keccak256(abi.encode(idx2, h2)), keccak256(abi.encode(idx, h)), string.concat(x.name, ": gen 2 forwards"));
+            assertEq(
+                keccak256(abi.encode(idx2, h2)),
+                keccak256(abi.encode(idx, h)),
+                string.concat(x.name, ": gen 2 forwards")
+            );
             if (x.kind != UAKinds.MSIG) {
                 assertEq(idx.length + h.length, 0, x.name);
                 continue;
@@ -3643,7 +3873,9 @@ contract UARegistryUA8Test is UARegistryBase {
             string memory p = string.concat(".memberships[", vm.toString(i), "]");
             if (_jw(j, string.concat(p, ".ua")) != c.ua) continue;
             uint16 index = uint16(_ju(j, string.concat(p, ".index")));
-            a.acceptMembership(c.ua, IUARegistry.MemberSig(index, new IUARegistry.InnerSig[](0), _jb(j, string.concat(p, ".sig"))));
+            a.acceptMembership(
+                c.ua, IUARegistry.MemberSig(index, new IUARegistry.InnerSig[](0), _jb(j, string.concat(p, ".sig")))
+            );
             assertTrue(a.memberAccepted(c.ua, index));
             ++accepted;
         }
@@ -3672,7 +3904,10 @@ contract UARegistryUA8Test is UARegistryBase {
         (uint16[] memory idx, bytes32[] memory h) = a.popSlotsOf(ua);
         assertEq(idx.length, 2);
         assertEq(uint256(idx[0]) * 16 + idx[1], 18, "slots 1 and 2");
-        assertTrue(a.memberSigHashOf(ua, 0) != 0 && a.memberSigHashOf(ua, 0) != h[0], "slot 0's later acceptance is no pop slot");
+        assertTrue(
+            a.memberSigHashOf(ua, 0) != 0 && a.memberSigHashOf(ua, 0) != h[0],
+            "slot 0's later acceptance is no pop slot"
+        );
         assertEq(h[0], a.memberSigHashOf(ua, 1));
         assertEq(h[1], a.memberSigHashOf(ua, 2));
         IUARegistry.MemberSig[] memory p = UACall.memberSigs(pop);
@@ -3700,12 +3935,24 @@ contract UARegistryUA8Test is UARegistryBase {
         // 12 x slhdsa128s members
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
         c[0] = UARegistry.KindConfig(0x0133, address(new AcceptAll()), 1_400_000);
-        UARegistry big = _deploy(address(0x5cea2), chainUidA, address(0), false, uint64(12 * 1_445_000 + uint256(1_000_000) / 63 + 3_500),
-            address(0), true, c);
+        UARegistry big = _deploy(
+            address(0x5cea2),
+            chainUidA,
+            address(0),
+            false,
+            uint64(12 * 1_445_000 + uint256(1_000_000) / 63 + 3_500),
+            address(0),
+            true,
+            c
+        );
         Member[] memory m12 = new Member[](12);
         IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](12);
         for (uint16 i; i < 12; ++i) {
-            m12[i] = Member(0x0133, UACall.register(big, 0x0133, abi.encodePacked(keccak256(abi.encode("slhk", i))), _none(), hex"01", ""), 1);
+            m12[i] = Member(
+                0x0133,
+                UACall.register(big, 0x0133, abi.encodePacked(keccak256(abi.encode("slhk", i))), _none(), hex"01", ""),
+                1
+            );
             s[i] = IUARegistry.MemberSig(i, new IUARegistry.InnerSig[](0), new bytes(7_856));
         }
         bytes memory d = _msigKey(12, m12); // threshold 12: the KEM signature is as large as the pop (calldata-floor bound)

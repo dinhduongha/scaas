@@ -28,8 +28,9 @@ contract MirrorTest is RegFixture {
     }
 
     function _on(address t, uint8 bit) internal view returns (bool) {
-        return bit == 5 ? _r(t).isFrozen(a) : _r(t).regulatedConfig().pausedUntil > block.timestamp
-            && _r(t).regulatedConfig().controls & 4 != 0;
+        return bit == 5
+            ? _r(t).isFrozen(a)
+            : _r(t).regulatedConfig().pausedUntil > block.timestamp && _r(t).regulatedConfig().controls & 4 != 0;
     }
 
     /// Spec §2.3, I12: at creation and after each applied disable `controls == (features >> 5) & 0x3F`.

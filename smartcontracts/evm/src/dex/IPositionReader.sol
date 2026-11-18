@@ -9,6 +9,8 @@ interface IPositionReader {
 
     /// @notice `poolId`: v4 the `PoolId` (keccak256 of the `PoolKey`), v3 the pool address as bytes32. `encumbered`:
     ///         anything that lets a third party act on the position after a transfer (v4: a subscriber).
-    function position(uint256 tokenId) external view
+    function position(uint256 tokenId)
+        external
+        view
         returns (bytes32 poolId, int24 tickLower, int24 tickUpper, uint128 liquidity, bool encumbered);
 }

@@ -27,10 +27,12 @@ pub use wrappers::*;
 /// `Config` do đúng upgrade authority của bản đó tạo).
 pub const TEST_PROGRAM_ID: &str = "BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d";
 
-declare_id!(anchor_lang::solana_program::pubkey::Pubkey::from_str_const(match option_env!("SCAAS_PROGRAM_ID") {
-    Some(id) => id,
-    None => TEST_PROGRAM_ID,
-}));
+declare_id!(anchor_lang::solana_program::pubkey::Pubkey::from_str_const(
+    match option_env!("SCAAS_PROGRAM_ID") {
+        Some(id) => id,
+        None => TEST_PROGRAM_ID,
+    }
+));
 
 #[program]
 pub mod scaas {
@@ -44,15 +46,32 @@ pub mod scaas {
         account::open(ctx)
     }
 
-    pub fn open_passkey(ctx: Context<OpenPasskey>, owner: [u8; 32], pk33: [u8; 33], auth: Auth) -> Result<()> {
+    pub fn open_passkey(
+        ctx: Context<OpenPasskey>,
+        owner: [u8; 32],
+        pk33: [u8; 33],
+        auth: Auth,
+    ) -> Result<()> {
         account::open_passkey(ctx, owner, pk33, auth)
     }
 
-    pub fn relay_pay(ctx: Context<RelayPay>, owner: [u8; 32], args: PayArgs, auth: Auth) -> Result<()> {
+    pub fn relay_pay(
+        ctx: Context<RelayPay>,
+        owner: [u8; 32],
+        args: PayArgs,
+        auth: Auth,
+    ) -> Result<()> {
         account::relay_pay(ctx, owner, args, auth)
     }
 
-    pub fn relay_pay_meta(ctx: Context<RelayPay>, owner: [u8; 32], args: PayArgs, salt: [u8; 32], meta: Vec<u8>, auth: Auth) -> Result<()> {
+    pub fn relay_pay_meta(
+        ctx: Context<RelayPay>,
+        owner: [u8; 32],
+        args: PayArgs,
+        salt: [u8; 32],
+        meta: Vec<u8>,
+        auth: Auth,
+    ) -> Result<()> {
         account::relay_pay_meta(ctx, owner, args, salt, meta, auth)
     }
 
@@ -112,7 +131,15 @@ pub mod scaas {
         args: PayArgs,
         pay_auth: Auth,
     ) -> Result<()> {
-        wrappers::relay_fee_mandate_close_signed(ctx, nonce, valid_until, auth, owner, args, pay_auth)
+        wrappers::relay_fee_mandate_close_signed(
+            ctx,
+            nonce,
+            valid_until,
+            auth,
+            owner,
+            args,
+            pay_auth,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -163,7 +190,11 @@ pub mod scaas {
         mandate::mandate_pay(ctx, args, auth)
     }
 
-    pub fn mandate_revoke_signed(ctx: Context<MandateRevoke>, valid_until: u64, auth: Auth) -> Result<()> {
+    pub fn mandate_revoke_signed(
+        ctx: Context<MandateRevoke>,
+        valid_until: u64,
+        auth: Auth,
+    ) -> Result<()> {
         mandate::mandate_revoke_signed(ctx, valid_until, auth)
     }
 
@@ -176,11 +207,20 @@ pub mod scaas {
         mandate::mandate_close_signed(ctx, nonce, valid_until, auth)
     }
 
-    pub fn list_market(ctx: Context<ListMarket>, fee_ppm: u32, fee_recipient: Pubkey) -> Result<()> {
+    pub fn list_market(
+        ctx: Context<ListMarket>,
+        fee_ppm: u32,
+        fee_recipient: Pubkey,
+    ) -> Result<()> {
         dex::list_market(ctx, fee_ppm, fee_recipient)
     }
 
-    pub fn set_market(ctx: Context<SetMarket>, fee_ppm: u32, enabled: bool, fee_recipient: Pubkey) -> Result<()> {
+    pub fn set_market(
+        ctx: Context<SetMarket>,
+        fee_ppm: u32,
+        enabled: bool,
+        fee_recipient: Pubkey,
+    ) -> Result<()> {
         dex::set_market(ctx, fee_ppm, enabled, fee_recipient)
     }
 
@@ -199,11 +239,20 @@ pub mod scaas {
         dex::settle(ctx, a, b, hash_a, hash_b, fill_a, fill_b, auth_a, auth_b)
     }
 
-    pub fn cancel_signed(ctx: Context<CancelSigned>, order: Order, order_hash: [u8; 32], auth: Auth) -> Result<()> {
+    pub fn cancel_signed(
+        ctx: Context<CancelSigned>,
+        order: Order,
+        order_hash: [u8; 32],
+        auth: Auth,
+    ) -> Result<()> {
         dex::cancel_signed(ctx, order, order_hash, auth)
     }
 
-    pub fn invalidate_nonces_signed(ctx: Context<InvalidateNonces>, min_nonce: u64, auth: Auth) -> Result<()> {
+    pub fn invalidate_nonces_signed(
+        ctx: Context<InvalidateNonces>,
+        min_nonce: u64,
+        auth: Auth,
+    ) -> Result<()> {
         dex::invalidate_nonces_signed(ctx, min_nonce, auth)
     }
 

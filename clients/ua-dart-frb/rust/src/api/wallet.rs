@@ -19,7 +19,10 @@ type R<T> = Result<T, UAError>;
 
 /// The surface generation of this binding, in step with the C ABI's `SCAAS_UA_ABI_VERSION` (6, ua-rs-sign T12).
 const ABI_VERSION: u32 = 6;
-const _: () = assert!(!scaas_ua::build::VECTORS, "ua-dart-frb must not build scaas-ua with feature `vectors`");
+const _: () = assert!(
+    !scaas_ua::build::VECTORS,
+    "ua-dart-frb must not build scaas-ua with feature `vectors`"
+);
 /// The PQZ facade's largest output (`SCAAS_UA_PQZ_OUT_MAX`); a call returns its whole JSON, never sized by a query.
 const _: () = assert!(1_052_672 >= fpqz::OUT_MAX);
 
@@ -27,12 +30,18 @@ impl From<uw::Error> for UAError {
     fn from(e: uw::Error) -> Self {
         match e {
             uw::Error::Ua(e) => e.into(),
-            e => UAError { code: format!("UA{}", e.code()), reason: String::new() },
+            e => UAError {
+                code: format!("UA{}", e.code()),
+                reason: String::new(),
+            },
         }
     }
 }
 fn arg() -> UAError {
-    UAError { code: "UAArgument".into(), reason: String::new() }
+    UAError {
+        code: "UAArgument".into(),
+        reason: String::new(),
+    }
 }
 
 static LIVE: AtomicI64 = AtomicI64::new(0);
@@ -81,7 +90,9 @@ pub struct UaPqzKey(fpqz::PqzKey, Live);
 /// 16 KiB page-aligned blocks of its own, allocated once at their final size and never moved, locked in RAM and no-dump best
 /// effort, zeroed on drop. Dart writes an input and reads an output in place (`addr`, `size`, `dart:ffi`), never through frb's
 /// codec. `SecretBytes.take(src)` (Dart) allocates, writes and zeroes `src`; `dispose()` drops this side.
-#[frb(opaque, dart_code = "
+#[frb(
+    opaque,
+    dart_code = "
 import 'dart:ffi' as ffi;
 
   /// A new secret holding [src], written in place (no codec copy); [src] is zeroed afterwards, whatever the outcome. Native
@@ -105,7 +116,8 @@ import 'dart:ffi' as ffi;
   }
 
   static final _views = Expando<SecretBytes>();
-")]
+"
+)]
 pub struct SecretBytes(uw::SecretBytes);
 impl SecretBytes {
     fn alloc(len: usize) -> R<SecretBytes> {
@@ -189,7 +201,10 @@ pub fn features() -> u64 {
         | on(b::FALCON, 2)
         | on(b::ZETHER, 3)
         | on(b::PQZ, 4)
-        | b::PQZ_SETS.iter().zip(5..).fold(0, |a, (x, bit)| a | on(*x, bit))
+        | b::PQZ_SETS
+            .iter()
+            .zip(5..)
+            .fold(0, |a, (x, bit)| a | on(*x, bit))
         | on(b::MLOCK, 10)
         | on(b::VECTORS, 11)
 }
@@ -216,11 +231,16 @@ type Secret = RustAutoOpaque<SecretBytes>;
 fn read(s: &Option<Secret>) -> Option<impl std::ops::Deref<Target = SecretBytes> + '_> {
     s.as_ref().map(|s| s.blocking_read())
 }
-fn unlock<'a>(vault_passphrase: Option<&'a SecretBytes>, prf32: Option<&'a SecretBytes>) -> R<uw::Unlock<'a>> {
+fn unlock<'a>(
+    vault_passphrase: Option<&'a SecretBytes>,
+    prf32: Option<&'a SecretBytes>,
+) -> R<uw::Unlock<'a>> {
     if let Some(p) = prf32 {
         return Ok(uw::Unlock::Prf(p.get().try_into().map_err(|_| arg())?));
     }
-    Ok(uw::Unlock::VaultPassphrase(text(vault_passphrase.ok_or_else(arg)?.get())?))
+    Ok(uw::Unlock::VaultPassphrase(text(
+        vault_passphrase.ok_or_else(arg)?.get(),
+    )?))
 }
 fn key(k: KeyInner) -> UaKey {
     UaKey(Arc::new(k), Live::new())
@@ -234,18 +254,42 @@ struct Opening {
     accepted: Option<uw::AcceptedJson>,
 }
 impl Opening {
-    fn read(expect_json: &str, members_json: Option<String>, accepted_json: Option<String>) -> R<Opening> {
+    fn read(
+        expect_json: &str,
+        members_json: Option<String>,
+        accepted_json: Option<String>,
+    ) -> R<Opening> {
         let members = match members_json {
             Some(m) => uw::MembersJson::from_json(m.as_bytes())?,
             None => uw::MembersJson::default(),
         };
-        let accepted = accepted_json.map(|a| uw::AcceptedJson::from_json(a.as_bytes())).transpose()?;
-        Ok(Opening { expect: uw::ContainerExpectJson::from_json(expect_json.as_bytes())?, members, accepted })
+        let accepted = accepted_json
+            .map(|a| uw::AcceptedJson::from_json(a.as_bytes()))
+            .transpose()?;
+        Ok(Opening {
+            expect: uw::ContainerExpectJson::from_json(expect_json.as_bytes())?,
+            members,
+            accepted,
+        })
     }
-    fn with<T>(&self, f: impl FnOnce(&uw::ContainerExpect, &scaas_ua::ua8::Members, Option<&scaas_ua::ua8::Accepted>) -> T) -> T {
+    fn with<T>(
+        &self,
+        f: impl FnOnce(
+            &uw::ContainerExpect,
+            &scaas_ua::ua8::Members,
+            Option<&scaas_ua::ua8::Accepted>,
+        ) -> T,
+    ) -> T {
         let members = |id: [u8; 32]| self.members.lookup(id);
-        let accepted = |id: [u8; 32], i: u16| self.accepted.as_ref().is_some_and(|a| a.accepted(id, i));
-        f(&self.expect.get(), &members, self.accepted.as_ref().map(|_| &accepted as &scaas_ua::ua8::Accepted))
+        let accepted =
+            |id: [u8; 32], i: u16| self.accepted.as_ref().is_some_and(|a| a.accepted(id, i));
+        f(
+            &self.expect.get(),
+            &members,
+            self.accepted
+                .as_ref()
+                .map(|_| &accepted as &scaas_ua::ua8::Accepted),
+        )
     }
 }
 
@@ -254,113 +298,269 @@ impl Opening {
 /// ua-rs-native: every network name in the C ABI's order (clientkeys `NETWORKS`, then `NATIVE_NETWORKS`).
 #[frb(sync)]
 pub fn native_networks() -> Vec<String> {
-    uw::Network::all().iter().map(|n| n.name().to_string()).collect()
+    uw::Network::all()
+        .iter()
+        .map(|n| n.name().to_string())
+        .collect()
 }
 pub fn wallet_generate() -> R<(UaWallet, UaSeedBackup)> {
     let (w, b) = uw::Wallet::generate()?;
-    Ok((UaWallet(w, Live::new()), UaSeedBackup(Mutex::new(b), Live::new())))
+    Ok((
+        UaWallet(w, Live::new()),
+        UaSeedBackup(Mutex::new(b), Live::new()),
+    ))
 }
 pub fn wallet_from_mnemonic(words: &SecretBytes, bip39_passphrase: &SecretBytes) -> R<UaWallet> {
-    Ok(UaWallet(uw::Wallet::from_mnemonic(text(words.get())?, text(bip39_passphrase.get())?)?, Live::new()))
+    Ok(UaWallet(
+        uw::Wallet::from_mnemonic(text(words.get())?, text(bip39_passphrase.get())?)?,
+        Live::new(),
+    ))
 }
 /// Exactly one of `vault_passphrase` / `prf32` (null = absent; both: the PRF secret, the passphrase not tried).
 pub fn wallet_open_vault(
-    vault_json: String, vault_passphrase: Option<Secret>, prf32: Option<Secret>, bip39_passphrase: &SecretBytes,
+    vault_json: String,
+    vault_passphrase: Option<Secret>,
+    prf32: Option<Secret>,
+    bip39_passphrase: &SecretBytes,
 ) -> R<UaWallet> {
-    let (vp, prf, v) = (read(&vault_passphrase), read(&prf32), uw::Vault::from_json(vault_json.as_bytes())?);
-    Ok(UaWallet(uw::Wallet::open_vault(&v, unlock(vp.as_deref(), prf.as_deref())?, text(bip39_passphrase.get())?)?, Live::new()))
+    let (vp, prf, v) = (
+        read(&vault_passphrase),
+        read(&prf32),
+        uw::Vault::from_json(vault_json.as_bytes())?,
+    );
+    Ok(UaWallet(
+        uw::Wallet::open_vault(
+            &v,
+            unlock(vp.as_deref(), prf.as_deref())?,
+            text(bip39_passphrase.get())?,
+        )?,
+        Live::new(),
+    ))
 }
 pub fn wallet_unlock(
-    w: &UaWallet, vault_json: String, vault_passphrase: Option<Secret>, prf32: Option<Secret>,
+    w: &UaWallet,
+    vault_json: String,
+    vault_passphrase: Option<Secret>,
+    prf32: Option<Secret>,
     bip39_passphrase: &SecretBytes,
 ) -> R<()> {
-    let (vp, prf, v) = (read(&vault_passphrase), read(&prf32), uw::Vault::from_json(vault_json.as_bytes())?);
-    Ok(w.0.unlock(&v, unlock(vp.as_deref(), prf.as_deref())?, text(bip39_passphrase.get())?)?)
+    let (vp, prf, v) = (
+        read(&vault_passphrase),
+        read(&prf32),
+        uw::Vault::from_json(vault_json.as_bytes())?,
+    );
+    Ok(w.0.unlock(
+        &v,
+        unlock(vp.as_deref(), prf.as_deref())?,
+        text(bip39_passphrase.get())?,
+    )?)
 }
 pub fn wallet_seal_vault(w: &UaWallet, vault_passphrase: &SecretBytes) -> R<String> {
-    Ok(w.0.seal_vault(text(vault_passphrase.get())?, None)?.to_json())
+    Ok(w.0
+        .seal_vault(text(vault_passphrase.get())?, None)?
+        .to_json())
 }
-pub fn wallet_import_native_key(w: &UaWallet, network_name: String, secret_key: &SecretBytes) -> R<UaKey> {
-    Ok(key(KeyInner::Native(w.0.import_native_key(network(&network_name)?, secret_key.get())?)))
+pub fn wallet_import_native_key(
+    w: &UaWallet,
+    network_name: String,
+    secret_key: &SecretBytes,
+) -> R<UaKey> {
+    Ok(key(KeyInner::Native(w.0.import_native_key(
+        network(&network_name)?,
+        secret_key.get(),
+    )?)))
 }
-pub fn wallet_seal_label_vault(w: &UaWallet, label: String, vault_passphrase: &SecretBytes) -> R<String> {
-    Ok(w.0.seal_label_vault(&label, text(vault_passphrase.get())?, None)?.to_json())
+pub fn wallet_seal_label_vault(
+    w: &UaWallet,
+    label: String,
+    vault_passphrase: &SecretBytes,
+) -> R<String> {
+    Ok(w.0
+        .seal_label_vault(&label, text(vault_passphrase.get())?, None)?
+        .to_json())
 }
 pub fn wallet_open_label_vault(
-    w: &UaWallet, vault_json: String, vault_passphrase: Option<Secret>, prf32: Option<Secret>,
+    w: &UaWallet,
+    vault_json: String,
+    vault_passphrase: Option<Secret>,
+    prf32: Option<Secret>,
 ) -> R<()> {
-    let (vp, prf, v) = (read(&vault_passphrase), read(&prf32), uw::Vault::from_json(vault_json.as_bytes())?);
+    let (vp, prf, v) = (
+        read(&vault_passphrase),
+        read(&prf32),
+        uw::Vault::from_json(vault_json.as_bytes())?,
+    );
     Ok(w.0.open_label_vault(&v, unlock(vp.as_deref(), prf.as_deref())?)?)
 }
 #[allow(clippy::too_many_arguments)]
 fn restore(
-    kk: &UaKemKey, container_json: String, expect_json: String, members_json: Option<String>, accepted_json: Option<String>,
-    current: Option<&UaWallet>, rollback: Option<uw::AllowRollback>, bip39_passphrase: &SecretBytes,
+    kk: &UaKemKey,
+    container_json: String,
+    expect_json: String,
+    members_json: Option<String>,
+    accepted_json: Option<String>,
+    current: Option<&UaWallet>,
+    rollback: Option<uw::AllowRollback>,
+    bip39_passphrase: &SecretBytes,
 ) -> R<Option<UaWallet>> {
-    let (c, o) = (container(&container_json)?, Opening::read(&expect_json, members_json, accepted_json)?);
+    let (c, o) = (
+        container(&container_json)?,
+        Opening::read(&expect_json, members_json, accepted_json)?,
+    );
     let pass = text(bip39_passphrase.get())?;
-    let w = o.with(|e, m, acc| uw::Wallet::restore_backup(&kk.0, &c, e, m, acc, current.map(|w| &w.0), rollback, pass))?;
+    let w = o.with(|e, m, acc| {
+        uw::Wallet::restore_backup(&kk.0, &c, e, m, acc, current.map(|w| &w.0), rollback, pass)
+    })?;
     Ok(w.map(|w| UaWallet(w, Live::new())))
 }
 /// The wallet of a backup container (`None`: an equal generation installed nothing). `members_json` / `accepted_json` null = none.
 pub fn wallet_restore_backup(
-    kk: &UaKemKey, container_json: String, expect_json: String, members_json: Option<String>, accepted_json: Option<String>,
+    kk: &UaKemKey,
+    container_json: String,
+    expect_json: String,
+    members_json: Option<String>,
+    accepted_json: Option<String>,
     bip39_passphrase: &SecretBytes,
 ) -> R<Option<UaWallet>> {
-    restore(kk, container_json, expect_json, members_json, accepted_json, None, None, bip39_passphrase)
+    restore(
+        kk,
+        container_json,
+        expect_json,
+        members_json,
+        accepted_json,
+        None,
+        None,
+        bip39_passphrase,
+    )
 }
 /// As `wallet_restore_backup` over the wallet `current` holds (an older generation: `UABackupRollback`).
 pub fn wallet_restore_backup_over(
-    current: &UaWallet, kk: &UaKemKey, container_json: String, expect_json: String, members_json: Option<String>,
-    accepted_json: Option<String>, bip39_passphrase: &SecretBytes,
+    current: &UaWallet,
+    kk: &UaKemKey,
+    container_json: String,
+    expect_json: String,
+    members_json: Option<String>,
+    accepted_json: Option<String>,
+    bip39_passphrase: &SecretBytes,
 ) -> R<Option<UaWallet>> {
-    restore(kk, container_json, expect_json, members_json, accepted_json, Some(current), None, bip39_passphrase)
+    restore(
+        kk,
+        container_json,
+        expect_json,
+        members_json,
+        accepted_json,
+        Some(current),
+        None,
+        bip39_passphrase,
+    )
 }
 /// The rollback, by its own name.
 pub fn wallet_restore_backup_rollback(
-    current: &UaWallet, kk: &UaKemKey, container_json: String, expect_json: String, members_json: Option<String>,
-    accepted_json: Option<String>, bip39_passphrase: &SecretBytes,
+    current: &UaWallet,
+    kk: &UaKemKey,
+    container_json: String,
+    expect_json: String,
+    members_json: Option<String>,
+    accepted_json: Option<String>,
+    bip39_passphrase: &SecretBytes,
 ) -> R<Option<UaWallet>> {
     let allow = Some(uw::AllowRollback);
-    restore(kk, container_json, expect_json, members_json, accepted_json, Some(current), allow, bip39_passphrase)
+    restore(
+        kk,
+        container_json,
+        expect_json,
+        members_json,
+        accepted_json,
+        Some(current),
+        allow,
+        bip39_passphrase,
+    )
 }
 pub fn wallet_from_link(
-    session: &UaLinkSession, container_json: String, expect_json: String, members_json: Option<String>,
-    accepted_json: Option<String>, bip39_passphrase: &SecretBytes,
+    session: &UaLinkSession,
+    container_json: String,
+    expect_json: String,
+    members_json: Option<String>,
+    accepted_json: Option<String>,
+    bip39_passphrase: &SecretBytes,
 ) -> R<UaWallet> {
-    let (c, o) = (container(&container_json)?, Opening::read(&expect_json, members_json, accepted_json)?);
+    let (c, o) = (
+        container(&container_json)?,
+        Opening::read(&expect_json, members_json, accepted_json)?,
+    );
     let pass = text(bip39_passphrase.get())?;
-    let taken = session.0.lock().map_err(|_| arg())?.take().ok_or_else(|| UAError { code: "UAKeyRevoked".into(), reason: String::new() })?;
+    let taken = session
+        .0
+        .lock()
+        .map_err(|_| arg())?
+        .take()
+        .ok_or_else(|| UAError {
+            code: "UAKeyRevoked".into(),
+            reason: String::new(),
+        })?;
     let w = o.with(|e, m, acc| uw::Wallet::from_link(taken, &c, e, m, acc, pass))?;
     Ok(UaWallet(w, Live::new()))
 }
 /// Whether `answers` are the words at the challenged positions, in order (the call consumes them).
 pub fn seed_backup_verify(b: &UaSeedBackup, answers: Vec<SecretBytes>) -> R<bool> {
-    let words = answers.iter().map(|a| text(a.get())).collect::<R<Vec<&str>>>()?;
+    let words = answers
+        .iter()
+        .map(|a| text(a.get()))
+        .collect::<R<Vec<&str>>>()?;
     Ok(b.0.lock().map_err(|_| arg())?.verify(&words)?)
 }
 pub fn vault_needs_rewrap(vault_json: String) -> R<bool> {
     Ok(uw::Vault::from_json(vault_json.as_bytes())?.needs_rewrap())
 }
-pub fn vault_rewrap_pin(vault_json: String, old_passphrase: &SecretBytes, new_passphrase: &SecretBytes) -> R<String> {
+pub fn vault_rewrap_pin(
+    vault_json: String,
+    old_passphrase: &SecretBytes,
+    new_passphrase: &SecretBytes,
+) -> R<String> {
     let (o, n) = (text(old_passphrase.get())?, text(new_passphrase.get())?);
-    Ok(uw::Vault::from_json(vault_json.as_bytes())?.rewrap_pin(o, n)?.to_json())
+    Ok(uw::Vault::from_json(vault_json.as_bytes())?
+        .rewrap_pin(o, n)?
+        .to_json())
 }
 pub fn vault_enable_prf(
-    vault_json: String, vault_passphrase: &SecretBytes, prf32: &SecretBytes, credential_id: String, salt: Vec<u8>,
+    vault_json: String,
+    vault_passphrase: &SecretBytes,
+    prf32: &SecretBytes,
+    credential_id: String,
+    salt: Vec<u8>,
 ) -> R<String> {
     let output: &[u8; 32] = prf32.get().try_into().map_err(|_| arg())?;
-    let env = uw::PrfEnvelope { output, credential_id: &credential_id, salt: &salt };
-    Ok(uw::Vault::from_json(vault_json.as_bytes())?.enable_prf(text(vault_passphrase.get())?, &env)?.to_json())
+    let env = uw::PrfEnvelope {
+        output,
+        credential_id: &credential_id,
+        salt: &salt,
+    };
+    Ok(uw::Vault::from_json(vault_json.as_bytes())?
+        .enable_prf(text(vault_passphrase.get())?, &env)?
+        .to_json())
 }
 /// One container JSON per recipient; raises the backup generation once. (A free function: the Dart facade refuses a version
 /// outside u64 before frb's 64-bit encoding wraps it.)
-pub fn wallet_backup_seal(w: &UaWallet, sender: &UaKey, recipients: Vec<UaRecipient>) -> R<Vec<String>> {
+pub fn wallet_backup_seal(
+    w: &UaWallet,
+    sender: &UaKey,
+    recipients: Vec<UaRecipient>,
+) -> R<Vec<String>> {
     let rs = recipients
         .iter()
-        .map(|r| if r.ephemeral { Ok(uw::Recipient::ephemeral(&r.kem_pk)) } else { uw::Recipient::ua(r.kind, &r.key_data, r.version, &r.kem_pk) })
+        .map(|r| {
+            if r.ephemeral {
+                Ok(uw::Recipient::ephemeral(&r.kem_pk))
+            } else {
+                uw::Recipient::ua(r.kind, &r.key_data, r.version, &r.kem_pk)
+            }
+        })
         .collect::<uw::Result<Vec<_>>>()?;
-    Ok(w.0.backup_seal(sender.ua()?, &rs)?.iter().map(uw::SealedContainer::to_json).collect())
+    Ok(w.0
+        .backup_seal(sender.ua()?, &rs)?
+        .iter()
+        .map(uw::SealedContainer::to_json)
+        .collect())
 }
 /// The UA's KEM key of record `version` (a free function for the same reason).
 pub fn key_kem_key(k: &UaKey, version: u64) -> R<UaKemKey> {
@@ -371,15 +571,26 @@ pub fn kem_ephemeral() -> R<UaKemKey> {
 }
 pub fn kem_encaps(kem_pk: Vec<u8>) -> R<UaEncapsulated> {
     let (ct, e, ss) = uw::kem_encaps(&kem_pk)?;
-    Ok(UaEncapsulated { mlkem_ct: ct, x25519_eph: e.to_vec(), ss: out(&*ss)? })
+    Ok(UaEncapsulated {
+        mlkem_ct: ct,
+        x25519_eph: e.to_vec(),
+        ss: out(&*ss)?,
+    })
 }
 /// A seal to `kem_pk` (authenticates no sender).
 pub fn seal(kem_pk: Vec<u8>, purpose: String, aad: Vec<u8>, pt: &SecretBytes) -> R<UaSealed> {
     let s = uw::seal(&kem_pk, &purpose, &aad, pt.get())?;
-    Ok(UaSealed { mlkem_ct: s.mlkem_ct, x25519_eph: s.x25519_eph.to_vec(), ciphertext: s.ciphertext })
+    Ok(UaSealed {
+        mlkem_ct: s.mlkem_ct,
+        x25519_eph: s.x25519_eph.to_vec(),
+        ciphertext: s.ciphertext,
+    })
 }
 pub fn link_session_new() -> R<UaLinkSession> {
-    Ok(UaLinkSession(Mutex::new(Some(uw::LinkSession::new()?)), Live::new()))
+    Ok(UaLinkSession(
+        Mutex::new(Some(uw::LinkSession::new()?)),
+        Live::new(),
+    ))
 }
 pub fn key_list_new() -> UaKeyList {
     UaKeyList(Vec::new())
@@ -407,12 +618,36 @@ fn k32(k: &SecretBytes) -> R<&[u8; 32]> {
     k.get().try_into().map_err(|_| arg())
 }
 /// `alg` 1 = AES-256-GCM, 2 = AES-256-GCM-SIV; `pt` the plaintext.
-pub fn aead_seal(alg_id: i64, key32: &SecretBytes, nonce12: Vec<u8>, aad: Vec<u8>, pt: &SecretBytes) -> R<Vec<u8>> {
-    Ok(uw::aead_seal(alg(int(alg_id)?)?, k32(key32)?, &a(&nonce12)?, &aad, pt.get())?)
+pub fn aead_seal(
+    alg_id: i64,
+    key32: &SecretBytes,
+    nonce12: Vec<u8>,
+    aad: Vec<u8>,
+    pt: &SecretBytes,
+) -> R<Vec<u8>> {
+    Ok(uw::aead_seal(
+        alg(int(alg_id)?)?,
+        k32(key32)?,
+        &a(&nonce12)?,
+        &aad,
+        pt.get(),
+    )?)
 }
 /// The plaintext of `data`.
-pub fn aead_open(alg_id: i64, key32: &SecretBytes, nonce12: Vec<u8>, aad: Vec<u8>, data: Vec<u8>) -> R<SecretBytes> {
-    out(&uw::aead_open(alg(int(alg_id)?)?, k32(key32)?, &a(&nonce12)?, &aad, &data)?)
+pub fn aead_open(
+    alg_id: i64,
+    key32: &SecretBytes,
+    nonce12: Vec<u8>,
+    aad: Vec<u8>,
+    data: Vec<u8>,
+) -> R<SecretBytes> {
+    out(&uw::aead_open(
+        alg(int(alg_id)?)?,
+        k32(key32)?,
+        &a(&nonce12)?,
+        &aad,
+        &data,
+    )?)
 }
 /// The output keying material.
 pub fn hkdf_sha256(ikm: &SecretBytes, salt: Vec<u8>, info: Vec<u8>, len: i64) -> R<SecretBytes> {
@@ -426,9 +661,21 @@ pub fn webauthn_challenge(purpose: Vec<u8>, digest: Vec<u8>) -> R<Vec<u8>> {
     Ok(uw::webauthn_challenge(&a(&purpose)?, &a(&digest)?)?.to_vec())
 }
 pub fn webauthn_assertion(
-    key_data: Vec<u8>, expected_challenge: Vec<u8>, auth_data: Vec<u8>, client_data_json: Vec<u8>, r: Vec<u8>, s: Vec<u8>,
+    key_data: Vec<u8>,
+    expected_challenge: Vec<u8>,
+    auth_data: Vec<u8>,
+    client_data_json: Vec<u8>,
+    r: Vec<u8>,
+    s: Vec<u8>,
 ) -> R<Vec<u8>> {
-    Ok(uw::webauthn_assertion(&key_data, &a(&expected_challenge)?, &auth_data, &client_data_json, &a(&r)?, &a(&s)?)?)
+    Ok(uw::webauthn_assertion(
+        &key_data,
+        &a(&expected_challenge)?,
+        &auth_data,
+        &client_data_json,
+        &a(&r)?,
+        &a(&s)?,
+    )?)
 }
 /// `{set, pkLen, pqzlId, pqzhId}` of this build.
 pub fn pqz_set() -> String {
@@ -439,7 +686,9 @@ pub fn pqz_check(request_json: String) -> R<String> {
     Ok(fpqz::check_proven(request_json.as_bytes())?)
 }
 pub fn pqz_check_set(deployed_json: String) -> R<()> {
-    Ok(fpqz::check_set(&fpqz::PqzSet::from_json(deployed_json.as_bytes())?)?)
+    Ok(fpqz::check_set(&fpqz::PqzSet::from_json(
+        deployed_json.as_bytes(),
+    )?)?)
 }
 
 // --- handle methods (public data and calls on a handle; no secret input) --------------------------------------------------
@@ -453,30 +702,59 @@ impl UaWallet {
     pub fn memory_protection(&self) -> UaMemoryProtection {
         let m = self.0.memory_protection();
         let c = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
-        UaMemoryProtection { chunks: c(m.chunks), locked: c(m.locked), no_dump: c(m.no_dump) }
+        UaMemoryProtection {
+            chunks: c(m.chunks),
+            locked: c(m.locked),
+            no_dump: c(m.no_dump),
+        }
     }
     pub fn ua_key(&self, kind: i64, account: i64, index: i64) -> R<UaKey> {
-        Ok(key(KeyInner::Ua(self.0.ua_key(int(kind)?, int(account)?, int(index)?)?)))
+        Ok(key(KeyInner::Ua(self.0.ua_key(
+            int(kind)?,
+            int(account)?,
+            int(index)?,
+        )?)))
     }
     /// `network_name` the clientkeys name (`evm`, `hedera_ecdsa`, ...); `coin_type` null = the network's own.
     pub fn native_key(&self, network_name: String, index: i64, coin_type: Option<i64>) -> R<UaKey> {
-        Ok(key(KeyInner::Native(self.0.native_key(network(&network_name)?, int(index)?, coin_type.map(int).transpose()?)?)))
+        Ok(key(KeyInner::Native(self.0.native_key(
+            network(&network_name)?,
+            int(index)?,
+            coin_type.map(int).transpose()?,
+        )?)))
     }
     /// Bitcoin key `index` of chain `change` (0 receive, 1 change); `coin_type` null, 0 or 1 (ua-rs-native).
-    pub fn bitcoin_key(&self, network_name: String, coin_type: Option<i64>, change: i64, index: i64) -> R<UaKey> {
-        Ok(key(KeyInner::Native(self.0.bitcoin_key(network(&network_name)?, coin_type.map(int).transpose()?, int(change)?, int(index)?)?)))
+    pub fn bitcoin_key(
+        &self,
+        network_name: String,
+        coin_type: Option<i64>,
+        change: i64,
+        index: i64,
+    ) -> R<UaKey> {
+        Ok(key(KeyInner::Native(self.0.bitcoin_key(
+            network(&network_name)?,
+            coin_type.map(int).transpose()?,
+            int(change)?,
+            int(index)?,
+        )?)))
     }
     /// The Polkadot key of the junction path `path` ("" the bare account; ua-rs-native).
     pub fn polkadot_key(&self, path: String) -> R<UaKey> {
         Ok(key(KeyInner::Native(self.0.polkadot_key(&path)?)))
     }
     pub fn imported_key(&self, network_name: String, n: i64) -> R<UaKey> {
-        Ok(key(KeyInner::Native(self.0.imported_key(network(&network_name)?, int(n)?)?)))
+        Ok(key(KeyInner::Native(
+            self.0.imported_key(network(&network_name)?, int(n)?)?,
+        )))
     }
     /// T20c (owner 2026-11-08): the UA of imported key `n`, `kind` the derived kind of its own scheme (0x0108 secp256k1, 0x0102
     /// ed25519), any other `UAArgument`; a UA key (`sign_ua` / `sign_member`), no KEM key, never a backup or link sender.
     pub fn imported_ua_key(&self, network_name: String, n: i64, kind: i64) -> R<UaKey> {
-        Ok(key(KeyInner::Ua(self.0.imported_ua_key(network(&network_name)?, int(n)?, int(kind)?)?)))
+        Ok(key(KeyInner::Ua(self.0.imported_ua_key(
+            network(&network_name)?,
+            int(n)?,
+            int(kind)?,
+        )?)))
     }
     #[frb(sync)]
     pub fn manifest_json(&self) -> String {
@@ -484,33 +762,70 @@ impl UaWallet {
     }
     /// JSON `[{index, ua}]`.
     pub fn discover_candidates(&self, kind: i64, account: i64, gap: i64) -> R<String> {
-        let hex = |u: &[u8; 32]| u.iter().fold(String::from("0x"), |s, b| s + &format!("{b:02x}"));
-        let rows: Vec<String> =
-            self.0.discover_candidates(int(kind)?, int(account)?, int(gap)?)?.iter().map(|(i, u)| format!("{{\"index\":{i},\"ua\":\"{}\"}}", hex(u))).collect();
+        let hex = |u: &[u8; 32]| {
+            u.iter()
+                .fold(String::from("0x"), |s, b| s + &format!("{b:02x}"))
+        };
+        let rows: Vec<String> = self
+            .0
+            .discover_candidates(int(kind)?, int(account)?, int(gap)?)?
+            .iter()
+            .map(|(i, u)| format!("{{\"index\":{i},\"ua\":\"{}\"}}", hex(u)))
+            .collect();
         Ok(format!("[{}]", rows.join(",")))
     }
-    pub fn link_seal(&self, sender: &UaKey, session_kem_pk: Vec<u8>, short_code: String) -> R<String> {
-        Ok(self.0.link_seal(sender.ua()?, &session_kem_pk, &short_code)?.to_json())
+    pub fn link_seal(
+        &self,
+        sender: &UaKey,
+        session_kem_pk: Vec<u8>,
+        short_code: String,
+    ) -> R<String> {
+        Ok(self
+            .0
+            .link_seal(sender.ua()?, &session_kem_pk, &short_code)?
+            .to_json())
     }
     pub fn zether_key(&self, coin: i64, account: i64, key_use: i64) -> R<UaZetherKey> {
-        Ok(UaZetherKey(self.0.zether_key(int(coin)?, int(account)?, int(key_use)?)?, Live::new()))
+        Ok(UaZetherKey(
+            self.0
+                .zether_key(int(coin)?, int(account)?, int(key_use)?)?,
+            Live::new(),
+        ))
     }
     pub fn pqz_key(&self, account: i64, index: i64) -> R<UaPqzKey> {
-        Ok(UaPqzKey(self.0.pqz_key(int(account)?, int(index)?)?, Live::new()))
+        Ok(UaPqzKey(
+            self.0.pqz_key(int(account)?, int(index)?)?,
+            Live::new(),
+        ))
     }
     /// The PQZ leaf `seed32`: the explicit export (spec §8.4).
     pub fn export_pqz_leaf_raw(&self, account: i64, index: i64) -> R<SecretBytes> {
-        out(&*self.0.export_pqz_leaf_raw(int(account)?, int(index)?, fpqz::AllowSecretExport)?)
+        out(&*self
+            .0
+            .export_pqz_leaf_raw(int(account)?, int(index)?, fpqz::AllowSecretExport)?)
     }
 }
 /// Group 3g (T15o): the PQZ key of `account` / `index` at key `version` (0 the info without a suffix, v >= 1 with be64(v)). A free
 /// function, as [`key_kem_key`]: the Dart facade refuses a version outside u64 before frb's 64-bit encoding wraps it (T21 L54).
 pub fn wallet_pqz_key_version(w: &UaWallet, account: i64, index: i64, version: u64) -> R<UaPqzKey> {
-    Ok(UaPqzKey(w.0.pqz_key_version(int(account)?, int(index)?, version)?, Live::new()))
+    Ok(UaPqzKey(
+        w.0.pqz_key_version(int(account)?, int(index)?, version)?,
+        Live::new(),
+    ))
 }
 /// The PQZ leaf `seed32` of a key version: the explicit export (spec §8.4); a free function for the same reason.
-pub fn wallet_export_pqz_leaf_raw_version(w: &UaWallet, account: i64, index: i64, version: u64) -> R<SecretBytes> {
-    out(&*w.0.export_pqz_leaf_raw_version(int(account)?, int(index)?, version, fpqz::AllowSecretExport)?)
+pub fn wallet_export_pqz_leaf_raw_version(
+    w: &UaWallet,
+    account: i64,
+    index: i64,
+    version: u64,
+) -> R<SecretBytes> {
+    out(&*w.0.export_pqz_leaf_raw_version(
+        int(account)?,
+        int(index)?,
+        version,
+        fpqz::AllowSecretExport,
+    )?)
 }
 
 impl UaSeedBackup {
@@ -521,11 +836,18 @@ impl UaSeedBackup {
     /// Three 1-based positions to ask.
     pub fn challenge(&self) -> R<Vec<u32>> {
         let p = self.0.lock().map_err(|_| arg())?.challenge()?;
-        Ok(p.iter().map(|i| u32::try_from(*i).unwrap_or(u32::MAX)).collect())
+        Ok(p.iter()
+            .map(|i| u32::try_from(*i).unwrap_or(u32::MAX))
+            .collect())
     }
     /// The entropy, once confirmed; null before that and after the first call.
     pub fn take(&self) -> R<Option<SecretBytes>> {
-        self.0.lock().map_err(|_| arg())?.take().map(|e| out(&e)).transpose()
+        self.0
+            .lock()
+            .map_err(|_| arg())?
+            .take()
+            .map(|e| out(&e))
+            .transpose()
     }
 }
 
@@ -566,7 +888,9 @@ impl UaKey {
     /// "" for a UA key.
     #[frb(sync)]
     pub fn network_name(&self) -> String {
-        self.native().map(|n| n.network().name().to_string()).unwrap_or_default()
+        self.native()
+            .map(|n| n.network().name().to_string())
+            .unwrap_or_default()
     }
     #[frb(sync)]
     pub fn address(&self) -> R<String> {
@@ -576,21 +900,30 @@ impl UaKey {
         Ok(self.ua()?.sign_ua(&a(&purpose)?, &a(&digest)?)?)
     }
     pub fn sign_member(&self, structure_ua: Vec<u8>, structure_ua_msg: Vec<u8>) -> R<Vec<u8>> {
-        Ok(self.ua()?.sign_member(&a(&structure_ua)?, &a(&structure_ua_msg)?)?)
+        Ok(self
+            .ua()?
+            .sign_member(&a(&structure_ua)?, &a(&structure_ua_msg)?)?)
     }
     /// Typed data through the signing policy (`expect_json`: what the user confirmed, spec §5.4).
     pub fn sign_typed(&self, typed_data_json: String, expect_json: String) -> R<Vec<u8>> {
         let td = uw::TypedData::from_json(typed_data_json.as_bytes())?;
-        Ok(self.native()?.sign_typed(&td, uw::Expect::from_json(expect_json.as_bytes())?)?)
+        Ok(self
+            .native()?
+            .sign_typed(&td, uw::Expect::from_json(expect_json.as_bytes())?)?)
     }
     /// Any typed data, as supplied (the explicit opt-in of `AllowAnyTypedData`).
     pub fn sign_typed_any(&self, typed_data_json: String) -> R<Vec<u8>> {
         let td = uw::TypedData::from_json(typed_data_json.as_bytes())?;
-        Ok(self.native()?.sign_typed(&td, uw::Expect::Any(uw::AllowAnyTypedData))?)
+        Ok(self
+            .native()?
+            .sign_typed(&td, uw::Expect::Any(uw::AllowAnyTypedData))?)
     }
     /// The raw transaction.
     pub fn sign_transaction(&self, tx_json: String) -> R<Vec<u8>> {
-        Ok(self.native()?.sign_transaction(&uw::EvmTx::from_json(tx_json.as_bytes())?)?.raw)
+        Ok(self
+            .native()?
+            .sign_transaction(&uw::EvmTx::from_json(tx_json.as_bytes())?)?
+            .raw)
     }
     pub fn sign_key_proof(&self, challenge: Vec<u8>) -> R<Vec<u8>> {
         Ok(self.native()?.sign_key_proof(&challenge)?)
@@ -605,19 +938,27 @@ impl UaKey {
     }
     /// NEAR: ed25519 over `sha256(tx_borsh)`.
     pub fn sign_near_transaction(&self, tx_borsh: Vec<u8>) -> R<Vec<u8>> {
-        Ok(self.raw()?.sign_near_transaction(&tx_borsh, uw::AllowRawDigest)?)
+        Ok(self
+            .raw()?
+            .sign_near_transaction(&tx_borsh, uw::AllowRawDigest)?)
     }
     /// Sui: ed25519 over `blake2b-256(0x000000 ‖ tx_bcs)`.
     pub fn sign_sui_transaction(&self, tx_bcs: Vec<u8>) -> R<Vec<u8>> {
-        Ok(self.raw()?.sign_sui_transaction(&tx_bcs, uw::AllowRawDigest)?)
+        Ok(self
+            .raw()?
+            .sign_sui_transaction(&tx_bcs, uw::AllowRawDigest)?)
     }
     /// Stellar: ed25519 over `sha256(network_id ‖ 0x00000002 ‖ tx_xdr)`.
     pub fn sign_stellar_transaction(&self, network_id: Vec<u8>, tx_xdr: Vec<u8>) -> R<Vec<u8>> {
-        Ok(self.raw()?.sign_stellar_transaction(&a(&network_id)?, &tx_xdr, uw::AllowRawDigest)?)
+        Ok(self
+            .raw()?
+            .sign_stellar_transaction(&a(&network_id)?, &tx_xdr, uw::AllowRawDigest)?)
     }
     /// Hedera Ed25519: ed25519 over the body bytes.
     pub fn sign_hedera_transaction(&self, body_bytes: Vec<u8>) -> R<Vec<u8>> {
-        Ok(self.raw()?.sign_hedera_transaction(&body_bytes, uw::AllowRawDigest)?)
+        Ok(self
+            .raw()?
+            .sign_hedera_transaction(&body_bytes, uw::AllowRawDigest)?)
     }
     /// A Polkadot key's SS58 address at `prefix`.
     #[frb(sync)]
@@ -627,11 +968,17 @@ impl UaKey {
     /// A Bitcoin key's witness program: the version byte, then the program.
     #[frb(sync)]
     pub fn witness_program(&self) -> R<Vec<u8>> {
-        self.native()?.witness_program().map(|(v, p)| [&[v][..], &p].concat()).ok_or_else(arg)
+        self.native()?
+            .witness_program()
+            .map(|(v, p)| [&[v][..], &p].concat())
+            .ok_or_else(arg)
     }
     fn raw(&self) -> R<&uw::NativeKey> {
         match &*self.0 {
-            KeyInner::Ua(_) => Err(UAError { code: "UARawDigestRefused".into(), reason: String::new() }),
+            KeyInner::Ua(_) => Err(UAError {
+                code: "UARawDigestRefused".into(),
+                reason: String::new(),
+            }),
             KeyInner::Native(n) => Ok(n),
         }
     }
@@ -656,21 +1003,42 @@ impl UaKemKey {
     }
     /// The plaintext.
     pub fn open(&self, purpose: String, aad: Vec<u8>, sealed: UaSealed) -> R<SecretBytes> {
-        let s = uw::Sealed { version: 1, scheme: 1, mlkem_ct: sealed.mlkem_ct, x25519_eph: a(&sealed.x25519_eph)?, ciphertext: sealed.ciphertext };
+        let s = uw::Sealed {
+            version: 1,
+            scheme: 1,
+            mlkem_ct: sealed.mlkem_ct,
+            x25519_eph: a(&sealed.x25519_eph)?,
+            ciphertext: sealed.ciphertext,
+        };
         out(&self.0.open(&purpose, &aad, &s)?)
     }
     /// A container's plaintext, accepted as `expect_json` says (spec §6.3); `members_json` / `accepted_json` null = none.
     pub fn open_container(
-        &self, container_json: String, expect_json: String, members_json: Option<String>, accepted_json: Option<String>,
+        &self,
+        container_json: String,
+        expect_json: String,
+        members_json: Option<String>,
+        accepted_json: Option<String>,
     ) -> R<SecretBytes> {
-        let (c, o) = (container(&container_json)?, Opening::read(&expect_json, members_json, accepted_json)?);
+        let (c, o) = (
+            container(&container_json)?,
+            Opening::read(&expect_json, members_json, accepted_json)?,
+        );
         out(&o.with(|e, m, acc| self.0.open_container(&c, e, m, acc))?)
     }
 }
 
 impl UaLinkSession {
     fn with<T>(&self, f: impl FnOnce(&uw::LinkSession) -> T) -> R<T> {
-        self.0.lock().map_err(|_| arg())?.as_ref().map(f).ok_or_else(|| UAError { code: "UAKeyRevoked".into(), reason: String::new() })
+        self.0
+            .lock()
+            .map_err(|_| arg())?
+            .as_ref()
+            .map(f)
+            .ok_or_else(|| UAError {
+                code: "UAKeyRevoked".into(),
+                reason: String::new(),
+            })
     }
     #[frb(sync)]
     pub fn kem_pk(&self) -> R<Vec<u8>> {
@@ -744,8 +1112,17 @@ mod tests {
     fn secret_sizes_and_outputs() {
         let e = secret_alloc(0).unwrap();
         assert_eq!((e.size(), e.get().len()), (0, 0), "an empty secret");
-        assert_eq!(secret_alloc(i64::try_from(uw::SECRET_MAX + 1).unwrap()).err().map(|e| e.code), Some("UAArgument".into()));
-        assert_eq!(secret_alloc(-1).err().map(|e| e.code), Some("UAArgument".into()), "a negative length (T13 C4)");
+        assert_eq!(
+            secret_alloc(i64::try_from(uw::SECRET_MAX + 1).unwrap())
+                .err()
+                .map(|e| e.code),
+            Some("UAArgument".into())
+        );
+        assert_eq!(
+            secret_alloc(-1).err().map(|e| e.code),
+            Some("UAArgument".into()),
+            "a negative length (T13 C4)"
+        );
         assert_eq!(out(b"words").unwrap().get(), b"words");
     }
 
@@ -754,8 +1131,22 @@ mod tests {
     fn secrets_never_cross_the_codec() {
         let src = include_str!("wallet.rs");
         let src = &src[..src.find("#[cfg(test)]\nmod tests").unwrap()];
-        for p in ["words", "bip39_passphrase", "vault_passphrase", "prf32", "secret_key", "answers", "old_passphrase",
-                  "new_passphrase", "pt", "key32", "ikm", "key_bytes", "entries_json", "entries"] {
+        for p in [
+            "words",
+            "bip39_passphrase",
+            "vault_passphrase",
+            "prf32",
+            "secret_key",
+            "answers",
+            "old_passphrase",
+            "new_passphrase",
+            "pt",
+            "key32",
+            "ikm",
+            "key_bytes",
+            "entries_json",
+            "entries",
+        ] {
             let decl = format!("{p}: ");
             let at: Vec<usize> = src
                 .match_indices(&decl)
@@ -765,14 +1156,37 @@ mod tests {
             assert!(!at.is_empty(), "{p} not found");
             for i in at {
                 let ty = &src[i + decl.len()..];
-                assert!(["&SecretBytes", "Option<Secret>", "Vec<SecretBytes>", "Option<&'a SecretBytes>"].iter().any(|t| ty.starts_with(t)), "{p} crosses the codec");
+                assert!(
+                    [
+                        "&SecretBytes",
+                        "Option<Secret>",
+                        "Vec<SecretBytes>",
+                        "Option<&'a SecretBytes>"
+                    ]
+                    .iter()
+                    .any(|t| ty.starts_with(t)),
+                    "{p} crosses the codec"
+                );
             }
         }
-        for f in ["fn decaps(", "fn open(", "fn open_container(", "fn aead_open(", "fn hkdf_sha256(", "fn export_pqz_leaf_raw(", "fn export_pqz_leaf_raw_version(",
-                  "fn reveal(", "fn take(", "fn open_balance_cache("] {
+        for f in [
+            "fn decaps(",
+            "fn open(",
+            "fn open_container(",
+            "fn aead_open(",
+            "fn hkdf_sha256(",
+            "fn export_pqz_leaf_raw(",
+            "fn export_pqz_leaf_raw_version(",
+            "fn reveal(",
+            "fn take(",
+            "fn open_balance_cache(",
+        ] {
             for at in src.match_indices(f).map(|(i, _)| i) {
                 let sig = &src[at..at + src[at..].find('{').unwrap()];
-                assert!(sig.contains("SecretBytes>"), "{f} returns bytes through the codec");
+                assert!(
+                    sig.contains("SecretBytes>"),
+                    "{f} returns bytes through the codec"
+                );
             }
         }
         assert!(src.contains("pub ss: SecretBytes,"));

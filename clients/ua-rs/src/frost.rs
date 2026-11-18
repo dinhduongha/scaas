@@ -131,7 +131,9 @@ impl Group for Bn254Group {
         if b.iter().all(|x| *x == 0) {
             return Err(GroupError::InvalidIdentityElement);
         }
-        bn_parse(b).map(Bn254Element).ok_or(GroupError::MalformedElement)
+        bn_parse(b)
+            .map(Bn254Element)
+            .ok_or(GroupError::MalformedElement)
     }
 }
 
@@ -207,10 +209,17 @@ mod fixture {
     use frost_core::{Error, Signature, SigningPackage};
 
     fn others<K: Ord + Copy, V: Clone>(m: &BTreeMap<K, V>, me: &K) -> BTreeMap<K, V> {
-        m.iter().filter(|(k, _)| *k != me).map(|(k, v)| (*k, v.clone())).collect()
+        m.iter()
+            .filter(|(k, _)| *k != me)
+            .map(|(k, v)| (*k, v.clone()))
+            .collect()
     }
 
-    pub fn dkg<C: Ciphersuite, R: RngCore + CryptoRng>(t: u16, n: u16, rng: &mut R) -> Result<Dkg<C>, Error<C>> {
+    pub fn dkg<C: Ciphersuite, R: RngCore + CryptoRng>(
+        t: u16,
+        n: u16,
+        rng: &mut R,
+    ) -> Result<Dkg<C>, Error<C>> {
         if n < 2 {
             return Err(Error::InvalidMaxSigners); // part1 checks t and n, but n = 0 would never reach it
         }
@@ -234,22 +243,37 @@ mod fixture {
         let mut public = None;
         for (me, s2) in &sec2 {
             let (kp, pkp) = part3(s2, &others(&round1, me), &inbox[me])?;
-            assert!(public.as_ref().is_none_or(|p| *p == pkp), "participants disagree on the public key package");
+            assert!(
+                public.as_ref().is_none_or(|p| *p == pkp),
+                "participants disagree on the public key package"
+            );
             public = Some(pkp);
             keys.insert(*me, kp);
         }
-        Ok(Dkg { t, n, round1, keys, public: public.expect("n ≥ 2") })
+        Ok(Dkg {
+            t,
+            n,
+            round1,
+            keys,
+            public: public.expect("n ≥ 2"),
+        })
     }
 
     impl<C: Ciphersuite> Dkg<C> {
         /// The group secret (Σ a_i0), reconstructed from `t` shares.
         pub fn group_secret(&self) -> frost_core::SigningKey<C> {
-            let kps: Vec<KeyPackage<C>> = self.keys.values().take(self.t as usize).cloned().collect();
+            let kps: Vec<KeyPackage<C>> =
+                self.keys.values().take(self.t as usize).cloned().collect();
             frost_core::keys::reconstruct(&kps).expect("t shares")
         }
 
         /// RFC 9591 two-round signing by `signers`, aggregated and checked against `Y`.
-        pub fn sign<R: RngCore + CryptoRng>(&self, signers: &[u16], msg: &[u8], rng: &mut R) -> Result<Signature<C>, Error<C>> {
+        pub fn sign<R: RngCore + CryptoRng>(
+            &self,
+            signers: &[u16],
+            msg: &[u8],
+            rng: &mut R,
+        ) -> Result<Signature<C>, Error<C>> {
             let mut nonces = BTreeMap::new();
             let mut commitments = BTreeMap::new();
             for i in signers {

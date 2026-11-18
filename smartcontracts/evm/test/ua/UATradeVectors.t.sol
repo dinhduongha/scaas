@@ -71,11 +71,14 @@ contract UATradeVectorsTest is UARegistryBase {
         reg = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _realCfgs());
         for (uint256 i; vm.keyExistsJson(sj, string.concat(".derived[", vm.toString(i), "]")); ++i) {
             string memory d = string.concat(".derived[", vm.toString(i), "].");
-            UACall.register(reg, uint16(vm.parseJsonUint(sj, string.concat(d, "kind"))),
+            UACall.register(
+                reg,
+                uint16(vm.parseJsonUint(sj, string.concat(d, "kind"))),
                 vm.parseJsonBytes(sj, string.concat(d, "keyData")),
                 _none(),
                 vm.parseJsonBytes(sj, string.concat(d, "pop.sig")),
-                "");
+                ""
+            );
         }
         for (uint256 i; i < 4; ++i) {
             string memory k = string.concat(".kinds[", vm.toString(i), "].");
@@ -91,14 +94,20 @@ contract UATradeVectorsTest is UARegistryBase {
         vm.etch(at, EnvKit.runtime(impl, EnvKit.env(chainUidA, address(0), address(0), false)));
         dex = SCaaSDex(at);
         vm.prank(address(kf));
-        dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, TREASURY, false, 0, address(0), 0, 0)));
+        dex.initialize(
+            nid(address(this)),
+            1,
+            abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, TREASURY, false, 0, address(0), 0, 0))
+        );
         dex.setMarket(address(A), address(B), true, EnvKit.codeUidOf(address(dex)));
         vm.warp(1_800_000_000);
     }
 
     function _registerMldsa65(string memory pj, string memory k) internal {
         bytes memory pk = vm.parseJsonBytes(pj, string.concat(k, "keyData"));
-        for (uint256 p; p < 2; ++p) reg.cacheExpandedKey(0x0131, pk, p);
+        for (uint256 p; p < 2; ++p) {
+            reg.cacheExpandedKey(0x0131, pk, p);
+        }
         UACall.register(reg, 0x0131, pk, _none(), vm.parseJsonBytes(pj, string.concat(k, "pop.sig")), "");
     }
 
@@ -111,12 +120,19 @@ contract UATradeVectorsTest is UARegistryBase {
 
     function _realCfgs() internal returns (UARegistry.KindConfig[] memory c) {
         address[8] memory v = [
-            address(new WebAuthnP256Verifier()), address(new P256Verifier()), address(new Ed25519Verifier()),
-            address(new Bip340Verifier()), address(new SchnorrBn254Verifier()), address(new SchnorrBls12381Verifier()),
-            address(new BlsMinSigBls12381Verifier()), address(new BlsMinSigBn254Verifier())
+            address(new WebAuthnP256Verifier()),
+            address(new P256Verifier()),
+            address(new Ed25519Verifier()),
+            address(new Bip340Verifier()),
+            address(new SchnorrBn254Verifier()),
+            address(new SchnorrBls12381Verifier()),
+            address(new BlsMinSigBls12381Verifier()),
+            address(new BlsMinSigBn254Verifier())
         ];
         c = new UARegistry.KindConfig[](11);
-        for (uint256 i; i < 8; ++i) c[i] = UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]));
+        for (uint256 i; i < 8; ++i) {
+            c[i] = UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]));
+        }
         c[8] = UARegistry.KindConfig(0x0131, address(new MldsaVerifier(0x0131, address(0), "", "")), 5_950_000);
         c[9] = UARegistry.KindConfig(0x0108, address(new Secp256k1Verifier()), 50_000);
         c[10] = UARegistry.KindConfig(0x0141, address(new ZetherSchnorrBls12381Verifier()), 70_000);
@@ -162,9 +178,18 @@ contract UATradeVectorsTest is UARegistryBase {
         assertEq(vm.parseJsonBytes32(vj, ".typeHashes.UAInvalidateNonces"), TradeLib.UA_INVALIDATE_NONCES_TYPEHASH);
         assertEq(vm.parseJsonBytes32(vj, ".typeHashes.CancelUAOrder"), TradeLib.CANCEL_UA_ORDER_TYPEHASH);
         assertEq(vm.parseJsonBytes32(vj, ".purposeTag"), UAKinds.PURPOSE_TRADE);
-        bytes32 ds = keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256("SCaaS MetaToken"), keccak256("1"), block.chainid, address(A), chainUidA));
+        bytes32 ds = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256("SCaaS MetaToken"),
+                keccak256("1"),
+                block.chainid,
+                address(A),
+                chainUidA
+            )
+        );
         assertEq(vm.parseJsonBytes32(vj, ".domainSeparatorA"), ds);
     }
 
@@ -180,7 +205,9 @@ contract UATradeVectorsTest is UARegistryBase {
             bytes32 h = vm.parseJsonBytes32(vj, string.concat(r, "orderHash"));
             assertEq(A.tradeOrderDigest(o), h);
             assertEq(A.cancelOrderDigest(o), vm.parseJsonBytes32(vj, string.concat(r, "cancelDigest")));
-            assertEq(A.invalidateNoncesDigest(o.from, 1, 5), vm.parseJsonBytes32(vj, string.concat(r, "invalidateDigest")));
+            assertEq(
+                A.invalidateNoncesDigest(o.from, 1, 5), vm.parseJsonBytes32(vj, string.concat(r, "invalidateDigest"))
+            );
             uint256 snap = vm.snapshotState();
             if (o.from != makerId) {
                 _fund(A, o.from, 1000);
@@ -195,14 +222,21 @@ contract UATradeVectorsTest is UARegistryBase {
                 bool ok = dex.mtxSettle(ss)[0];
                 g -= gasleft();
                 assertTrue(ok);
-                emit log_named_uint(string.concat("mtxSettle UA taker x native maker (shape 1 x 1): ",
-                    vm.parseJsonString(vj, string.concat(r, "name"))), g);
+                emit log_named_uint(
+                    string.concat(
+                        "mtxSettle UA taker x native maker (shape 1 x 1): ",
+                        vm.parseJsonString(vj, string.concat(r, "name"))
+                    ),
+                    g
+                );
                 assertEq(B.balanceOfUA(o.from), 2000 - 6);
                 assertEq(A.pulled(h), 1000);
             }
             A.mtxCancelOrder(o, UACall.auth(o.from, vm.parseJsonBytes(vj, string.concat(r, "cancelAuth"))));
             assertEq(A.pulled(h), 1000);
-            A.mtxInvalidateNonces(o.from, 1, 5, UACall.auth(o.from, vm.parseJsonBytes(vj, string.concat(r, "invalidateAuth"))));
+            A.mtxInvalidateNonces(
+                o.from, 1, 5, UACall.auth(o.from, vm.parseJsonBytes(vj, string.concat(r, "invalidateAuth")))
+            );
             assertEq(A.minNonce(o.from, 1), 5);
             vm.revertToState(snap);
             ++n;
@@ -232,7 +266,9 @@ contract UATradeVectorsTest is UARegistryBase {
     /// EIP-2028 calldata gas and the EIP-7623 floor (as UAMetaTx3Pq.t.sol).
     function _calldataGas(bytes memory cd) internal pure returns (uint256 std, uint256 floor) {
         uint256 zeros;
-        for (uint256 i; i < cd.length; ++i) if (cd[i] == 0) ++zeros;
+        for (uint256 i; i < cd.length; ++i) {
+            if (cd[i] == 0) ++zeros;
+        }
         std = 4 * zeros + 16 * (cd.length - zeros);
         floor = 10 * (zeros + 4 * (cd.length - zeros));
     }
@@ -246,7 +282,9 @@ contract UATradeVectorsTest is UARegistryBase {
         uint256 g = gasleft();
         (bool ok, bytes memory ret) = address(dex).call{gas: TX_GAS_CAP - 21_000 - std}(cd);
         g -= gasleft();
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        }
         assertTrue(abi.decode(ret, (bool[]))[0]);
         uint256 txGas = 21_000 + (std + g > floor ? std + g : floor);
         emit log_named_uint("calldata bytes", cd.length);

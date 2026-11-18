@@ -12,6 +12,7 @@ Then the rule of runs/2026-10-30-fs3-t13-rows.py (imported, kept unchanged as re
 FAIL unless live and both runs have the same keys (never on 0 matches), FAIL on t_row > 60 ms, WARN rows printed.
 mldsa44Gas / mldsa65Gas stay live (as in the rule; their calibrated value depends on the baseline too). The table compares
 each row's per-slice-baseline price (Calibrate's json) with the single-baseline price."""
+
 import importlib.util
 import json
 import math
@@ -19,7 +20,9 @@ import os
 import re
 import sys
 
-_s = importlib.util.spec_from_file_location("rows", os.path.join(os.path.dirname(os.path.abspath(__file__)), "2026-10-30-fs3-t13-rows.py"))
+_s = importlib.util.spec_from_file_location(
+    "rows", os.path.join(os.path.dirname(os.path.abspath(__file__)), "2026-10-30-fs3-t13-rows.py")
+)
 R = importlib.util.module_from_spec(_s)
 _s.loader.exec_module(R)
 T_EC = 0.016
@@ -56,9 +59,17 @@ def main(live_p, l1, l2, out_p, md_p):
     (a, st1), (b, st2) = run(l1), run(l2)
     for name, g in (("run 1", a), ("run 2", b)):
         if not g or set(g) != lk:
-            sys.exit(f"FAIL keys: live {len(lk)} rows, {name} {len(g)}; only live {sorted(lk - set(g))}, only {name} {sorted(set(g) - lk)}")
-    rows, warn, md = [], [], ["| row | live | t_row run 1 / run 2 ms | slice t_ecMul run 1 / run 2 ms | per-slice baseline: run 1 / run 2 → rule | one baseline 0.016 ms: run 1 / run 2 → rule | change |",
-                              "|---|---|---|---|---|---|---|"]
+            sys.exit(
+                f"FAIL keys: live {len(lk)} rows, {name} {len(g)}; only live {sorted(lk - set(g))}, only {name} {sorted(set(g) - lk)}"
+            )
+    rows, warn, md = (
+        [],
+        [],
+        [
+            "| row | live | t_row run 1 / run 2 ms | slice t_ecMul run 1 / run 2 ms | per-slice baseline: run 1 / run 2 → rule | one baseline 0.016 ms: run 1 / run 2 → rule | change |",
+            "|---|---|---|---|---|---|---|",
+        ],
+    )
     for r in live["pqz"]:
         k, r = R.K(r), dict(r)
         name = f"op {r['op']} {'pqzl' if r['id'].startswith('0xef1f') else 'pqzh'} {r['stmtLen']}{R.shape(r)}"
@@ -67,16 +78,22 @@ def main(live_p, l1, l2, out_p, md_p):
             warn.append(f"  WARN {name}: max(run 1, run 2) {hi:,} > live {r['gas']:,} (kept at live)")
         old = R.rule(r["gas"], a[k][0], b[k][0])
         new = R.rule(r["gas"], a[k][1], b[k][1])
-        md.append(f"| {name} | {r['gas']:,} | {a[k][2]:.3f} / {b[k][2]:.3f} | {a[k][3]} / {b[k][3]} | {a[k][0]:,} / {b[k][0]:,} → {old:,} | "
-                  f"{a[k][1]:,} / {b[k][1]:,} → **{new:,}** | {100 * (new - old) / old:+.1f} % |")
+        md.append(
+            f"| {name} | {r['gas']:,} | {a[k][2]:.3f} / {b[k][2]:.3f} | {a[k][3]} / {b[k][3]} | {a[k][0]:,} / {b[k][0]:,} → {old:,} | "
+            f"{a[k][1]:,} / {b[k][1]:,} → **{new:,}** | {100 * (new - old) / old:+.1f} % |"
+        )
         r["gas"] = new
         rows.append(r)
     st = R.rule(live["selftestGas"], st1, st2)
     st0 = R.rule(live["selftestGas"], min(v[0] for v in a.values()), min(v[0] for v in b.values()))
     json.dump({"schedules": [dict(live, timestamp="0x0", pqz=rows, selftestGas=st)]}, open(out_p, "w"), indent=2)
-    md.append(f"| selftestGas (smallest row) | {live['selftestGas']:,} | | | → {st0:,} | {st1:,} / {st2:,} → **{st:,}** | {100 * (st - st0) / st0:+.1f} % |")
+    md.append(
+        f"| selftestGas (smallest row) | {live['selftestGas']:,} | | | → {st0:,} | {st1:,} / {st2:,} → **{st:,}** | {100 * (st - st0) / st0:+.1f} % |"
+    )
     open(md_p, "w").write("\n".join(md) + "\n")
-    print(f"{out_p}: {len(rows)} rows matched, T_EC {T_EC} ms, selftestGas {live['selftestGas']:,} -> {st:,}; table {md_p}")
+    print(
+        f"{out_p}: {len(rows)} rows matched, T_EC {T_EC} ms, selftestGas {live['selftestGas']:,} -> {st:,}; table {md_p}"
+    )
     print("\n".join(warn) if warn else "no row measured above live")
 
 

@@ -46,9 +46,16 @@ impl Blocks {
         if len > SECRET_MAX {
             return Err(Error::Argument);
         }
-        let mut mem: Box<[Block]> = (0..len.div_ceil(BLOCK).max(1)).map(|_| Block([0; BLOCK])).collect();
+        let mut mem: Box<[Block]> = (0..len.div_ceil(BLOCK).max(1))
+            .map(|_| Block([0; BLOCK]))
+            .collect();
         let (locked, no_dump) = protect::on(mem.as_mut_ptr().cast(), mem.len() * BLOCK);
-        Ok(Blocks { mem, len, locked, no_dump })
+        Ok(Blocks {
+            mem,
+            len,
+            locked,
+            no_dump,
+        })
     }
     fn get(&self) -> &[u8] {
         // SAFETY: `mem` is `mem.len() * BLOCK` contiguous initialised bytes (`Block` is `repr(C)`, its size its alignment), and
@@ -66,7 +73,12 @@ impl Drop for Blocks {
         self.mem.iter_mut().for_each(|b| b.0.zeroize());
         #[cfg(test)]
         tests::released(&self.mem);
-        protect::off(self.mem.as_mut_ptr().cast(), self.mem.len() * BLOCK, self.locked, self.no_dump);
+        protect::off(
+            self.mem.as_mut_ptr().cast(),
+            self.mem.len() * BLOCK,
+            self.locked,
+            self.no_dump,
+        );
     }
 }
 
@@ -74,7 +86,9 @@ type Cell = Arc<Mutex<Option<Blocks>>>;
 
 fn registry() -> MutexGuard<'static, HashMap<u64, Cell>> {
     static R: OnceLock<Mutex<HashMap<u64, Cell>>> = OnceLock::new();
-    R.get_or_init(Default::default).lock().unwrap_or_else(PoisonError::into_inner)
+    R.get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
 }
 
 fn cell(c: &Cell) -> MutexGuard<'_, Option<Blocks>> {
@@ -146,7 +160,9 @@ impl SecretBytes {
 
     /// The address of the first byte, the same for the secret's life (0 once disposed): for ua-dart-frb's in-place write only.
     pub fn addr(&self) -> usize {
-        cell(&self.cell).as_mut().map_or(0, |b| b.mem.as_mut_ptr() as usize)
+        cell(&self.cell)
+            .as_mut()
+            .map_or(0, |b| b.mem.as_mut_ptr() as usize)
     }
 
     /// Zeroes and frees the blocks and leaves the registry; later reads see nothing, later copy calls are `Argument`.
@@ -184,7 +200,9 @@ pub fn secret_read(id: u64, dst: &mut [u8]) -> Result<usize> {
     let c = lookup(id)?;
     let g = cell(&c);
     let src = g.as_ref().map(Blocks::get).ok_or(Error::Argument)?;
-    dst.get_mut(..src.len()).ok_or(Error::Argument)?.copy_from_slice(src);
+    dst.get_mut(..src.len())
+        .ok_or(Error::Argument)?
+        .copy_from_slice(src);
     Ok(src.len())
 }
 
@@ -233,13 +251,24 @@ mod tests {
         unsafe { std::ptr::write_bytes(p as *mut u8, 0xa5, 100) };
         assert!(s.with(|b| b == [0xa5; 100]));
         assert_eq!(s.addr(), p, "never moved");
-        assert_eq!(cell(&s.cell).as_ref().map(|b| (b.locked, b.mem.len())), Some((cfg!(all(unix, feature = "mlock")), 1)));
+        assert_eq!(
+            cell(&s.cell).as_ref().map(|b| (b.locked, b.mem.len())),
+            Some((cfg!(all(unix, feature = "mlock")), 1))
+        );
         let before = RELEASED.with(StdCell::get);
         s.dispose();
-        assert_eq!(RELEASED.with(StdCell::get), (before.0 + 1, before.1), "released once, every byte zero");
+        assert_eq!(
+            RELEASED.with(StdCell::get),
+            (before.0 + 1, before.1),
+            "released once, every byte zero"
+        );
         assert_eq!((s.len(), s.addr()), (0, 0));
         drop(s);
-        assert_eq!(RELEASED.with(StdCell::get), (before.0 + 1, before.1), "a disposed secret is not released twice");
+        assert_eq!(
+            RELEASED.with(StdCell::get),
+            (before.0 + 1, before.1),
+            "a disposed secret is not released twice"
+        );
         // a positive control: the hook sees a non-zero block
         released(&[Block([1; BLOCK])]);
         assert_eq!(RELEASED.with(StdCell::get), (before.0 + 2, before.1 + 1));
@@ -252,16 +281,28 @@ mod tests {
     /// `with2`: one secret given twice is read once (a nested `with` would wait on its own lock), two in either order (T13 P2-1).
     #[test]
     fn with2_one_secret_twice_and_both_orders() {
-        let (a, b) = (SecretBytes::from_zeroizing(Zeroizing::new(vec![1])).unwrap(), SecretBytes::from_zeroizing(Zeroizing::new(vec![2])).unwrap());
+        let (a, b) = (
+            SecretBytes::from_zeroizing(Zeroizing::new(vec![1])).unwrap(),
+            SecretBytes::from_zeroizing(Zeroizing::new(vec![2])).unwrap(),
+        );
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            let r = (a.with2(&a, |x, y| (x[0], y[0])), a.with2(&b, |x, y| (x[0], y[0])), b.with2(&a, |x, y| (x[0], y[0])));
+            let r = (
+                a.with2(&a, |x, y| (x[0], y[0])),
+                a.with2(&b, |x, y| (x[0], y[0])),
+                b.with2(&a, |x, y| (x[0], y[0])),
+            );
             let _ = tx.send(r);
         });
-        let r = rx.recv_timeout(std::time::Duration::from_secs(10)).expect("with2 of one secret twice waits on itself");
+        let r = rx
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("with2 of one secret twice waits on itself");
         assert_eq!(r, ((1, 1), (1, 2), (2, 1)));
         // two threads naming the two secrets in opposite orders, many times: in id order they never wait on each other
-        let (a, b) = (Arc::new(SecretBytes::new(1).unwrap()), Arc::new(SecretBytes::new(1).unwrap()));
+        let (a, b) = (
+            Arc::new(SecretBytes::new(1).unwrap()),
+            Arc::new(SecretBytes::new(1).unwrap()),
+        );
         let (tx, rx) = std::sync::mpsc::channel();
         for flip in [false, true] {
             let (x, y, tx) = (a.clone(), b.clone(), tx.clone());
@@ -274,7 +315,8 @@ mod tests {
             });
         }
         for _ in 0..2 {
-            rx.recv_timeout(std::time::Duration::from_secs(20)).expect("two with2 in opposite orders wait on each other");
+            rx.recv_timeout(std::time::Duration::from_secs(20))
+                .expect("two with2 in opposite orders wait on each other");
         }
     }
 
@@ -309,18 +351,33 @@ mod tests {
         let fresh = new_done.recv_timeout(Duration::from_secs(5));
         release.send(()).unwrap();
         kdf.join().unwrap();
-        assert_eq!(fresh, Ok(true), "a new secret waited on the dispose of one in use");
-        assert_eq!(dispose_done.recv_timeout(Duration::from_secs(5)), Ok(true), "control: the dispose completes");
+        assert_eq!(
+            fresh,
+            Ok(true),
+            "a new secret waited on the dispose of one in use"
+        );
+        assert_eq!(
+            dispose_done.recv_timeout(Duration::from_secs(5)),
+            Ok(true),
+            "control: the dispose completes"
+        );
     }
 
     /// ua-dart-frb's `secret_sizes_and_outputs`, moved with the implementation.
     #[test]
     fn secret_sizes() {
         let e = SecretBytes::new(0).unwrap();
-        assert_eq!((e.len(), cell(&e.cell).as_ref().map(|b| b.mem.len())), (0, Some(1)), "an empty secret: one block");
+        assert_eq!(
+            (e.len(), cell(&e.cell).as_ref().map(|b| b.mem.len())),
+            (0, Some(1)),
+            "an empty secret: one block"
+        );
         let big = SecretBytes::new(BLOCK + 1).unwrap();
         assert_eq!(cell(&big.cell).as_ref().map(|b| b.mem.len()), Some(2));
-        assert_eq!(SecretBytes::new(SECRET_MAX + 1).err(), Some(Error::Argument));
+        assert_eq!(
+            SecretBytes::new(SECRET_MAX + 1).err(),
+            Some(Error::Argument)
+        );
         assert!(SecretBytes::new(SECRET_MAX).is_ok());
     }
 }

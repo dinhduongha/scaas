@@ -52,13 +52,23 @@ fn freed_during<R>(f: impl FnOnce() -> R) -> (R, Vec<[u8; 32]>) {
 fn frost_nonce_copies_are_wiped_before_they_are_freed() {
     use rand_chacha::rand_core::SeedableRng;
     let (_, control) = freed_during(|| drop(std::hint::black_box(vec![0xa5u8; 32])));
-    assert!(control.contains(&[0xa5; 32]), "control: the recorder sees a freed buffer");
+    assert!(
+        control.contains(&[0xa5; 32]),
+        "control: the recorder sees a freed buffer"
+    );
     let w = Wallet::from_mnemonic("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about", "").unwrap();
-    let g = dkg::<Secp256K1Sha256, _>(2, 2, &mut rand_chacha::ChaCha20Rng::seed_from_u64(9)).unwrap();
+    let g =
+        dkg::<Secp256K1Sha256, _>(2, 2, &mut rand_chacha::ChaCha20Rng::seed_from_u64(9)).unwrap();
     let (s, freed) = freed_during(|| w.frost_session(&g.keys[&id::<Secp256K1Sha256>(1)]).unwrap());
     let slot = s.vectors_nonce_probe().unwrap().bytes().unwrap();
     assert_eq!(slot.len(), 64);
     let (h, b) = slot.split_at(32);
-    assert!(h.iter().chain(b).any(|x| *x != 0), "control: the slot holds the nonces");
-    assert!(!freed.iter().any(|f| f[..] == *h || f[..] == *b), "a freed buffer held a nonce");
+    assert!(
+        h.iter().chain(b).any(|x| *x != 0),
+        "control: the slot holds the nonces"
+    );
+    assert!(
+        !freed.iter().any(|f| f[..] == *h || f[..] == *b),
+        "a freed buffer held a nonce"
+    );
 }

@@ -56,13 +56,20 @@ contract UniswapExecutor is IExchangeExecutor, IUniswapV3SwapCallback, IUnlockCa
         V4_POOL_MANAGER = v4PoolManager;
     }
 
-    function exchangeCallback(bytes32, address[] calldata tokensOut, uint256[] calldata,
-        address[] calldata tokensIn, uint256[] calldata, bytes calldata data) external
-    {
+    function exchangeCallback(
+        bytes32,
+        address[] calldata tokensOut,
+        uint256[] calldata,
+        address[] calldata tokensIn,
+        uint256[] calldata,
+        bytes calldata data
+    ) external {
         if (msg.sender != DEX) revert NotDex();
         Hop[] memory hops = abi.decode(data, (Hop[]));
         bool v4;
-        for (uint256 i; i < hops.length; ++i) if (hops[i].kind == 2) v4 = true;
+        for (uint256 i; i < hops.length; ++i) {
+            if (hops[i].kind == 2) v4 = true;
+        }
         if (v4) {
             if (V4_POOL_MANAGER == address(0)) revert HopKindOff(2);
             unlocking = true;
@@ -70,8 +77,12 @@ contract UniswapExecutor is IExchangeExecutor, IUniswapV3SwapCallback, IUnlockCa
         } else {
             _run(hops);
         }
-        for (uint256 i; i < tokensIn.length; ++i) _flush(tokensIn[i]);
-        for (uint256 i; i < tokensOut.length; ++i) _flush(tokensOut[i]);
+        for (uint256 i; i < tokensIn.length; ++i) {
+            _flush(tokensIn[i]);
+        }
+        for (uint256 i; i < tokensOut.length; ++i) {
+            _flush(tokensOut[i]);
+        }
         for (uint256 i; i < hops.length; ++i) {
             (address t0, address t1) = _tokens(hops[i]);
             if (IERC20(t0).balanceOf(address(this)) != 0) revert Leftover(t0);
@@ -106,8 +117,8 @@ contract UniswapExecutor is IExchangeExecutor, IUniswapV3SwapCallback, IUnlockCa
     function _v3Hop(bytes memory args) private {
         (address tIn, address tOut, uint24 fee) = abi.decode(args, (address, address, uint24));
         bool zeroForOne = tIn < tOut;
-        IUniswapV3Pool(_v3Pool(tIn, tOut, fee)).swap(address(this), zeroForOne, int256(_bal(tIn)),
-            zeroForOne ? MIN_SQRT : MAX_SQRT, args);
+        IUniswapV3Pool(_v3Pool(tIn, tOut, fee))
+            .swap(address(this), zeroForOne, int256(_bal(tIn)), zeroForOne ? MIN_SQRT : MAX_SQRT, args);
     }
 
     /// @dev Exact input of the whole balance; the input owed is settled (sync / transfer / settle), the output taken.
@@ -118,7 +129,8 @@ contract UniswapExecutor is IExchangeExecutor, IUniswapV3SwapCallback, IUnlockCa
         (address cIn, address cOut) = zeroForOne ? (key.currency0, key.currency1) : (key.currency1, key.currency0);
         IPoolManager pm = IPoolManager(V4_POOL_MANAGER);
         int256 d = BalanceDelta.unwrap(
-            pm.swap(key, SwapParams(zeroForOne, -int256(_bal(cIn)), zeroForOne ? MIN_SQRT : MAX_SQRT), ""));
+            pm.swap(key, SwapParams(zeroForOne, -int256(_bal(cIn)), zeroForOne ? MIN_SQRT : MAX_SQRT), "")
+        );
         (int128 dIn, int128 dOut) = zeroForOne ? (int128(d >> 128), int128(d)) : (int128(d), int128(d >> 128));
         if (dIn < 0) {
             pm.sync(cIn);
@@ -139,8 +151,17 @@ contract UniswapExecutor is IExchangeExecutor, IUniswapV3SwapCallback, IUnlockCa
 
     function _v3Pool(address a, address b, uint24 fee) private view returns (address) {
         (address t0, address t1) = a < b ? (a, b) : (b, a);
-        return address(uint160(uint256(keccak256(abi.encodePacked(hex"ff", V3_FACTORY,
-            keccak256(abi.encode(t0, t1, fee)), V3_POOL_INIT_CODE_HASH)))));
+        return address(
+            uint160(
+                uint256(
+                    keccak256(
+                        abi.encodePacked(
+                            hex"ff", V3_FACTORY, keccak256(abi.encode(t0, t1, fee)), V3_POOL_INIT_CODE_HASH
+                        )
+                    )
+                )
+            )
+        );
     }
 
     function _flush(address token) private {

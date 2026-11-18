@@ -9,12 +9,19 @@ set -u
 cd "$(dirname "$0")/../.."
 SETS=${*:-n2048-kmax1024 n2304-kmax4096 n2560-kmax16384 n2816-kmax65536}
 for S in $SETS; do
-  for D in pqz ua as; do
-    L=runs/2026-11-08-ua-mtx-merge-t44-at-$S-$D.log
-    if [ -f "$L" ] && grep -qE "^Ran [0-9]+ test suites?" "$L"; then echo "skip $S $D (done)"; continue; fi
-    M="test/$D/*"; [ "$D" = as ] && M="test/as/confidential/*"
-    FOUNDRY_TEST=test/$D FOUNDRY_SCRIPT=test/$D ../../scripts/capped script/pqz/at-set.sh "$S" test --match-path "$M" > "$L" 2>&1
-    echo "$S $D rc=$? $(grep -E '^Ran [0-9]+ test suites?' "$L" | tail -1)"
-    git diff --quiet HEAD -- src/pqz/PqzSet.sol || { echo "PqzSet.sol not restored"; exit 1; }
-  done
+    for D in pqz ua as; do
+        L=runs/2026-11-08-ua-mtx-merge-t44-at-$S-$D.log
+        if [ -f "$L" ] && grep -qE "^Ran [0-9]+ test suites?" "$L"; then
+            echo "skip $S $D (done)"
+            continue
+        fi
+        M="test/$D/*"
+        [ "$D" = as ] && M="test/as/confidential/*"
+        FOUNDRY_TEST=test/$D FOUNDRY_SCRIPT=test/$D ../../scripts/capped script/pqz/at-set.sh "$S" test --match-path "$M" >"$L" 2>&1
+        echo "$S $D rc=$? $(grep -E '^Ran [0-9]+ test suites?' "$L" | tail -1)"
+        git diff --quiet HEAD -- src/pqz/PqzSet.sol || {
+            echo "PqzSet.sol not restored"
+            exit 1
+        }
+    done
 done

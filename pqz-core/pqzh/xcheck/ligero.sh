@@ -14,16 +14,19 @@ export PQZ_SET=$S # pqz_kat.py (kat_stmt.py) reads the same set
 out=ligero/target/xcheck/$T
 XB=build/$T/xcheck-ligero # pqzl-relative C build of the set (its own dir)
 mkdir -p $out/c $out/rust
-(cd ../pqzl && B=$XB ./build.sh native > /dev/null)
+(cd ../pqzl && B=$XB ./build.sh native >/dev/null)
 ${CC:-clang} -std=gnu11 -O2 -I../pqzl/src -I../pqzl/$XB/include -o $out/dump_setup xcheck/dump_setup.c ../pqzl/$XB/native/libpqz.a
 $out/dump_setup $out/c pqzh
 (cd ligero && CARGO_TARGET_DIR=target/$T cargo run --release --offline --quiet --features set-$S --example dump_setup -- target/xcheck/$T/rust)
 rc=0
 for r in reg tx burn ds dr tx0; do
-  for f in ${r}_stmt ${r}_wit; do
-    if cmp -s $out/c/$f.bin $out/rust/$f.bin; then x=equal; else x=DIFFERENT; rc=1; fi
-    echo "$f $(wc -c < $out/c/$f.bin) B c=$(sha256sum < $out/c/$f.bin | cut -c1-16) rust=$(sha256sum < $out/rust/$f.bin | cut -c1-16) $x"
-  done
+    for f in ${r}_stmt ${r}_wit; do
+        if cmp -s $out/c/$f.bin $out/rust/$f.bin; then x=equal; else
+            x=DIFFERENT
+            rc=1
+        fi
+        echo "$f $(wc -c <$out/c/$f.bin) B c=$(sha256sum <$out/c/$f.bin | cut -c1-16) rust=$(sha256sum <$out/rust/$f.bin | cut -c1-16) $x"
+    done
 done
 python3 -I xcheck/kat_stmt.py $out/rust || rc=1
 exit $rc

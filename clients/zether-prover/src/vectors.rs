@@ -11,16 +11,20 @@ use serde_json::{json, Value};
 
 use crate::api::{hx, prove_burn_json, prove_transfer_json, prove_transfer_multi_json};
 use crate::bulletproofs::Gens;
-use crate::curve::{decode_scalar, encode_point, encode_scalar, zether_kind, Bls12381, Fr, ZCurve};
 #[cfg(feature = "bn254")]
 use crate::curve::Bn254;
+use crate::curve::{decode_scalar, encode_point, encode_scalar, zether_kind, Bls12381, Fr, ZCurve};
 use crate::elgamal::encrypt;
 #[cfg(feature = "bn254")]
 use crate::keys::{derive_child_sk, derive_master_sk};
 use crate::keys::{seed_from_mnemonic, ZetherKey, USE_CONF, USE_DISCLOSURE};
-use crate::schnorr::{self, entry_ref, open_chaum_pedersen, open_sender, open_sender_cp, Entry, OpeningKind};
+use crate::schnorr::{
+    self, entry_ref, open_chaum_pedersen, open_sender, open_sender_cp, Entry, OpeningKind,
+};
 use crate::transcript::{hash_to_scalar, Op, Transcript};
-use crate::zether::{self, BurnProof, BurnStatement, MultiTransferStatement, TransferProof, TransferStatement};
+use crate::zether::{
+    self, BurnProof, BurnStatement, MultiTransferStatement, TransferProof, TransferStatement,
+};
 
 pub const MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
 abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
@@ -73,7 +77,8 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
     let gens = Gens::<C>::new();
     let mut rng = ChaCha20Rng::seed_from_u64(0x5a37_4e72);
     let (from, to) = (conf::<C>(0), conf::<C>(1));
-    let aud = ZetherKey::<C>::conf(&seed_from_mnemonic(MNEMONIC, "auditor").unwrap()[..], 60, 0).unwrap();
+    let aud =
+        ZetherKey::<C>::conf(&seed_from_mnemonic(MNEMONIC, "auditor").unwrap()[..], 60, 0).unwrap();
     let acc = encrypt(&from.y, BAL, &Fr::<C>::from(0x1234_5678_9abc_def0u64));
     let acc_j = json!({"C": hx(&encode_point::<C>(&acc.c)), "D": hx(&encode_point::<C>(&acc.d))});
     let base = json!({
@@ -96,14 +101,20 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
     let mut tv = prove_transfer_json::<C, _>(&gens, &req, &mut rng).unwrap();
     tv["expect"] = json!(true);
     tv["request"] = req;
-    let st = TransferStatement::<C>::decode(&hex::decode(&tv["statement"].as_str().unwrap()[2..]).unwrap()).unwrap();
-    let p = TransferProof::<C>::decode(&hex::decode(&tv["proof"].as_str().unwrap()[2..]).unwrap()).unwrap();
+    let st = TransferStatement::<C>::decode(
+        &hex::decode(&tv["statement"].as_str().unwrap()[2..]).unwrap(),
+    )
+    .unwrap();
+    let p = TransferProof::<C>::decode(&hex::decode(&tv["proof"].as_str().unwrap()[2..]).unwrap())
+        .unwrap();
     let t = zether::verify_transfer(&gens, &st, &p).unwrap();
-    transcripts.push(json!({"name": format!("transfer_{}", C::NAME), "case": transcript_json::<C>(&t)}));
+    transcripts
+        .push(json!({"name": format!("transfer_{}", C::NAME), "case": transcript_json::<C>(&t)}));
 
     // disclosure of that transfer, four kinds. SENDER_CP (and the multi legs below) draw from their own
     // RNG so the files after this one keep their bytes.
-    let s = decode_scalar::<C>(&hex::decode(&tv["witness"]["s"].as_str().unwrap()[2..]).unwrap()).unwrap();
+    let s = decode_scalar::<C>(&hex::decode(&tv["witness"]["s"].as_str().unwrap()[2..]).unwrap())
+        .unwrap();
     let token: [u8; 20] = hex::decode(&TOKEN[2..]).unwrap().try_into().unwrap();
     let uid: [u8; 32] = hex::decode(&CHAIN_UID[2..]).unwrap().try_into().unwrap();
     let mut cp_rng = ChaCha20Rng::seed_from_u64(0x5e9d_e7c9);
@@ -123,9 +134,18 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
     let amount = AMOUNT;
     let openings = [
         (OpeningKind::SenderS, open_sender::<C>(&s)),
-        (OpeningKind::ReceiverX, open_chaum_pedersen(&e, amount, OpeningKind::ReceiverX, &to, &mut rng).unwrap()),
-        (OpeningKind::Auditor, open_chaum_pedersen(&e, amount, OpeningKind::Auditor, &aud, &mut rng).unwrap()),
-        (OpeningKind::SenderCp, open_sender_cp(&e, amount, &s, &mut cp_rng).unwrap()),
+        (
+            OpeningKind::ReceiverX,
+            open_chaum_pedersen(&e, amount, OpeningKind::ReceiverX, &to, &mut rng).unwrap(),
+        ),
+        (
+            OpeningKind::Auditor,
+            open_chaum_pedersen(&e, amount, OpeningKind::Auditor, &aud, &mut rng).unwrap(),
+        ),
+        (
+            OpeningKind::SenderCp,
+            open_sender_cp(&e, amount, &s, &mut cp_rng).unwrap(),
+        ),
     ];
     let mut cases = disclosure_cases(&e, amount, &openings);
     files.push((format!("transfer_{}.json", C::NAME), tv));
@@ -145,10 +165,14 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
     let mut bv = prove_burn_json::<C, _>(&gens, &req, &mut rng).unwrap();
     bv["expect"] = json!(true);
     bv["request"] = req;
-    let st = BurnStatement::<C>::decode(&hex::decode(&bv["statement"].as_str().unwrap()[2..]).unwrap()).unwrap();
-    let p = BurnProof::<C>::decode(&hex::decode(&bv["proof"].as_str().unwrap()[2..]).unwrap()).unwrap();
+    let st =
+        BurnStatement::<C>::decode(&hex::decode(&bv["statement"].as_str().unwrap()[2..]).unwrap())
+            .unwrap();
+    let p =
+        BurnProof::<C>::decode(&hex::decode(&bv["proof"].as_str().unwrap()[2..]).unwrap()).unwrap();
     let t = zether::verify_burn(&gens, &st, &p).unwrap();
-    transcripts.push(json!({"name": format!("burn_{}", C::NAME), "case": transcript_json::<C>(&t)}));
+    transcripts
+        .push(json!({"name": format!("burn_{}", C::NAME), "case": transcript_json::<C>(&t)}));
     files.push((format!("burn_{}.json", C::NAME), bv));
 
     // Schnorr over the portable PoP message (UA-8 P1, typed in typed-signing P4; no PQZ key or KEM record), fixed k.
@@ -181,8 +205,12 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
     mv["expect"] = json!(true);
     mv["request"] = req;
     // disclosure of leg j = 1 (the real recipient): the challenge binds j.
-    let st = MultiTransferStatement::<C>::decode(&hex::decode(&mv["statement"].as_str().unwrap()[2..]).unwrap()).unwrap();
-    let s = decode_scalar::<C>(&hex::decode(&mv["witness"]["s"].as_str().unwrap()[2..]).unwrap()).unwrap();
+    let st = MultiTransferStatement::<C>::decode(
+        &hex::decode(&mv["statement"].as_str().unwrap()[2..]).unwrap(),
+    )
+    .unwrap();
+    let s = decode_scalar::<C>(&hex::decode(&mv["witness"]["s"].as_str().unwrap()[2..]).unwrap())
+        .unwrap();
     let leg = &st.legs[1];
     let e = Entry {
         chain_id: CHAIN,
@@ -199,23 +227,40 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
     };
     let openings = [
         (OpeningKind::SenderS, open_sender::<C>(&s)),
-        (OpeningKind::ReceiverX, open_chaum_pedersen(&e, amount, OpeningKind::ReceiverX, &to, &mut cp_rng).unwrap()),
-        (OpeningKind::Auditor, open_chaum_pedersen(&e, amount, OpeningKind::Auditor, &aud, &mut cp_rng).unwrap()),
-        (OpeningKind::SenderCp, open_sender_cp(&e, amount, &s, &mut cp_rng).unwrap()),
+        (
+            OpeningKind::ReceiverX,
+            open_chaum_pedersen(&e, amount, OpeningKind::ReceiverX, &to, &mut cp_rng).unwrap(),
+        ),
+        (
+            OpeningKind::Auditor,
+            open_chaum_pedersen(&e, amount, OpeningKind::Auditor, &aud, &mut cp_rng).unwrap(),
+        ),
+        (
+            OpeningKind::SenderCp,
+            open_sender_cp(&e, amount, &s, &mut cp_rng).unwrap(),
+        ),
     ];
     cases.extend(disclosure_cases(&e, amount, &openings));
-    files.push((format!("disclosure_{}.json", C::NAME), json!({"curve": C::NAME, "cases": cases})));
+    files.push((
+        format!("disclosure_{}.json", C::NAME),
+        json!({"curve": C::NAME, "cases": cases}),
+    ));
     files.push((format!("transfer_multi_{}.json", C::NAME), mv));
 
     // multi-recipient, M = 1, auditor off, no fee, BUNDLE.
-    let req = with(json!({"recipients": [{"yTo": hx(&to.encoded_y()), "amount": 1}], "mode": "bundle"}));
+    let req =
+        with(json!({"recipients": [{"yTo": hx(&to.encoded_y()), "amount": 1}], "mode": "bundle"}));
     let mut mv = prove_transfer_multi_json::<C, _>(&gens, &req, &mut rng).unwrap();
     mv["expect"] = json!(true);
     mv["request"] = req;
     files.push((format!("transfer_multi_noaud_{}.json", C::NAME), mv));
 }
 
-fn disclosure_cases<C: ZCurve>(e: &Entry<C>, amount: u64, openings: &[(OpeningKind, Vec<u8>)]) -> Vec<Value> {
+fn disclosure_cases<C: ZCurve>(
+    e: &Entry<C>,
+    amount: u64,
+    openings: &[(OpeningKind, Vec<u8>)],
+) -> Vec<Value> {
     openings
         .iter()
         .map(|(kind, opening)| {
@@ -305,9 +350,22 @@ fn eip2333_bn254() -> Value {
 /// which path indices are accepted (and the key they give), and the NFKD passphrase rule.
 fn r33_inputs() -> Value {
     let coins = [
-        json!(0), json!(60), json!(4294967295u64), json!(4294967296u64), json!(-1), json!(1.5), json!("60"),
-        json!("+60"), json!("060"), json!("4294967296"), json!("-1"), json!("6 0"), json!(""), json!(null),
-        json!(true), json!([60]),
+        json!(0),
+        json!(60),
+        json!(4294967295u64),
+        json!(4294967296u64),
+        json!(-1),
+        json!(1.5),
+        json!("60"),
+        json!("+60"),
+        json!("060"),
+        json!("4294967296"),
+        json!("-1"),
+        json!("6 0"),
+        json!(""),
+        json!(null),
+        json!(true),
+        json!([60]),
     ];
     let index_cases: Vec<Value> = coins
         .into_iter()
@@ -362,8 +420,69 @@ fn envelope_vector() -> Value {
                  "mode": 0x21, "relayer": "0x".to_string() + &"bb".repeat(20), "fee": 1000,
                  "feeRecipient": "0x".to_string() + &"cc".repeat(20)},
     });
-    let out: Value = serde_json::from_str(&crate::api::call("envelope", &req.to_string()).unwrap()).unwrap();
+    let out: Value =
+        serde_json::from_str(&crate::api::call("envelope", &req.to_string()).unwrap()).unwrap();
     req["binding"] = out["binding"].clone();
     req["digest"] = out["digest"].clone();
     req
+}
+
+/// Set-auditor A3 (CTR-ZTH-95, spec §5.2): the auditor's proof of possession, `smartcontracts/vectors/zether/auditor_pop.json`
+/// (`zether-cli auditor-pop <path>`; never by hand). Each row: the key `x` (zether-prover `r33_keys.json`'s `m/12381/60/0/8`
+/// and `m/12381/60/1/8`), its `Y`, a digest `d`, the nonce `k` (explicit, vectors only), `R`, `c`, `z` and `pop = R ‖ be32(z)`;
+/// `refused`: the same rows' proofs broken one way each (`z + r`, `R` off the curve, another `d`, a byte too many), every one
+/// refused by `ZetherLib.popHolds` and [`schnorr::verify_auditor_pop`].
+pub fn auditor_pop() -> Value {
+    type C = Bls12381;
+    let xs = [
+        "25f771eaad146dd5c0a479073adf0bdcef837123e5e61770d13bd5f8a9e3e1d9",
+        "2592aae4a72ff35d24196d8aa5fbf03bb270d3a83056fa7a6b31fb8700bb882e",
+    ];
+    let g = crate::curve::generator::<C>();
+    let mut rows = Vec::new();
+    let mut refused = Vec::new();
+    for (i, xh) in xs.iter().enumerate() {
+        let x = decode_scalar::<C>(&hex::decode(xh).expect("hex")).expect("scalar");
+        let y = g * x;
+        let d = crate::curve::keccak256(format!("scaas set-auditor pop vector {i}").as_bytes());
+        let k = hash_to_scalar::<C>(&crate::curve::keccak256(
+            format!("scaas set-auditor pop nonce {i}").as_bytes(),
+        ));
+        let pop = schnorr::auditor_pop_with_k::<C>(&x, &d, &k);
+        let pl = crate::curve::point_len::<C>();
+        let r = crate::curve::decode_point::<C>(&pop[..pl]).expect("R");
+        let c = schnorr::auditor_pop_challenge::<C>(&d, &y, &r);
+        rows.push(json!({"x": hx(&encode_scalar::<C>(&x)), "y": hx(&encode_point::<C>(&y)), "d": hx(&d), "k": hx(&encode_scalar::<C>(&k)),
+            "R": hx(&pop[..pl]), "c": hx(&encode_scalar::<C>(&c)), "z": hx(&pop[pl..]), "pop": hx(&pop)}));
+        let order = crate::curve::order_be::<C>();
+        let mut z_high = pop.clone();
+        let mut carry = 0u16;
+        for j in (0..32).rev() {
+            let t = u16::from(z_high[pl + j]) + u16::from(order[j]) + carry;
+            z_high[pl + j] = t as u8;
+            carry = t >> 8;
+        }
+        let mut r_off = pop.clone();
+        r_off[pl - 1] ^= 1;
+        let other_d =
+            crate::curve::keccak256(format!("scaas set-auditor pop vector {i} other").as_bytes());
+        let mut long = pop.clone();
+        long.push(0);
+        for (name, p, dd) in [
+            ("z + r", z_high, d),
+            ("R off the curve", r_off, d),
+            (
+                "a proof for another d",
+                schnorr::auditor_pop_with_k::<C>(&x, &other_d, &k),
+                d,
+            ),
+            ("one byte too many", long, d),
+        ] {
+            refused.push(
+                json!({"name": name, "y": hx(&encode_point::<C>(&y)), "d": hx(&dd), "pop": hx(&p)}),
+            );
+        }
+    }
+    json!({"_comment": "set-auditor A3 (CTR-ZTH-95, spec §5.2): the auditor's Schnorr proof of possession over its AuditorConsent digest d, pop = R ‖ be32(z), c = hashToScalar(keccak256(\"SCAAS-ZETHER-AUDITOR-POP-V1\" ‖ d ‖ G ‖ Y ‖ R)), [z]G − R − [c]Y = O; written by zether-cli auditor-pop (zether-prover src/vectors.rs), never by hand; read by zether-prover tests/auditor_pop.rs and smartcontracts/evm/test/zether/ZetherAuditor.t.sol. UNAUDITED.",
+        "curve": "bls12381", "rows": rows, "refused": refused})
 }

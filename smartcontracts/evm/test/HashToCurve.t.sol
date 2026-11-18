@@ -63,9 +63,11 @@ contract HashToCurveTest is Test {
     /// làm hỏng domain separation, và test này bắt được.
     function test_lengthIsBoundIntoTheHash() public pure {
         bytes memory short_ = HashToCurve.expandMessageXmd("abc", DST, 32);
-        bytes memory long_  = HashToCurve.expandMessageXmd("abc", DST, 128);
+        bytes memory long_ = HashToCurve.expandMessageXmd("abc", DST, 128);
         bytes memory prefix = new bytes(32);
-        for (uint256 i; i < 32; ++i) prefix[i] = long_[i];
+        for (uint256 i; i < 32; ++i) {
+            prefix[i] = long_[i];
+        }
         assertTrue(keccak256(short_) != keccak256(prefix));
     }
 
@@ -84,7 +86,7 @@ contract HashToCurveTest is Test {
     /// Ở đây chỉ ghim độ dài và byte đầu/cuối để một lần sửa nhầm không đi lọt.
     function test_fieldModulusShape() public pure {
         assertEq(HashToCurve.P.length, 48);
-        assertEq(uint8(HashToCurve.P[0]),  0x1a);
+        assertEq(uint8(HashToCurve.P[0]), 0x1a);
         assertEq(uint8(HashToCurve.P[47]), 0xab);
     }
 }

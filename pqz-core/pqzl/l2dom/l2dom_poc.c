@@ -22,15 +22,13 @@ extern int pqz_err_line;
 #endif
 
 static uint64_t xs = 0x9E3779B97F4A7C15ULL;
-static int
-tern (void)
-{
-  xs ^= xs >> 12, xs ^= xs << 25, xs ^= xs >> 27;
-  uint64_t r = xs * 2685821657736338717ULL;
-  return (int)((r >> 7) & 1) - (int)((r >> 33) & 1); /* cbd(1) */
+static int tern(void) {
+    xs ^= xs >> 12, xs ^= xs << 25, xs ^= xs >> 27;
+    uint64_t r = xs * 2685821657736338717ULL;
+    return (int)((r >> 7) & 1) - (int)((r >> 33) & 1); /* cbd(1) */
 }
 
-static const char *cases[] = { "honest", "s_over_A", "s_over_B" };
+static const char *cases[] = {"honest", "s_over_A", "s_over_B"};
 #define BS2 (PQZ_BETA_S * PQZ_BETA_S)
 #define BE2 (PQZ_BETA_E * PQZ_BETA_E)
 #define NB4 ((BS2 + BE2) / 16)
@@ -38,97 +36,87 @@ static const char *cases[] = { "honest", "s_over_A", "s_over_B" };
 /* honest: cbd(1) s, small e. A: s polys 1..k-1 = +-3 (||s||^2 = 9 (n - 64)), e cbd(1).
    B: all of the budget in s: NB4 = (beta_s^2 + beta_e^2) / 16 coefficients +-4 (v3 1762), e = 0. s[0] poly stays cbd(1)/0
    (it also carries the approximate filler proof). */
-static void
-witness (int c, int8_t s[PQZ_N], int16_t e[PQZ_N])
-{
-  for (int j = 0; j < PQZ_N; j++)
-    {
-      s[j] = (int8_t)(c == 2 ? 0 : tern ());
-      e[j] = (int16_t)(c == 2 ? 0 : tern ());
-      if (c == 1 && j >= 64)
-        s[j] = (int8_t)((j & 1) ? 3 : -3);
-      if (c == 2 && j >= 64 && j < 64 + NB4)
-        s[j] = (int8_t)((j & 1) ? 4 : -4);
+static void witness(int c, int8_t s[PQZ_N], int16_t e[PQZ_N]) {
+    for (int j = 0; j < PQZ_N; j++) {
+        s[j] = (int8_t)(c == 2 ? 0 : tern());
+        e[j] = (int16_t)(c == 2 ? 0 : tern());
+        if (c == 1 && j >= 64)
+            s[j] = (int8_t)((j & 1) ? 3 : -3);
+        if (c == 2 && j >= 64 && j < 64 + NB4)
+            s[j] = (int8_t)((j & 1) ? 4 : -4);
     }
 }
 
-static void
-build (int c, uint8_t *stmt, uint8_t *wit)
-{
-  static int8_t s[PQZ_N];
-  static int16_t e[PQZ_N];
-  long ns = 0, ne = 0;
-  witness (c, s, e);
-  for (int j = 0; j < PQZ_N; j++)
-    ns += s[j] * s[j], ne += e[j] * e[j];
-  memset (stmt, 0xA5, PQZ_PREFIX_BYTES);
-  for (int i = 0; i < 32; i++)
-    stmt[PQZ_PREFIX_BYTES + i] = (uint8_t)i;
-  pqz_keypair_from_secret (s, e, stmt + PQZ_PREFIX_BYTES + 32);
-  for (int j = 0; j < PQZ_N; j++)
-    wit[j] = (uint8_t)s[j], wit[PQZ_N + 2 * j] = (uint8_t)e[j], wit[PQZ_N + 1 + 2 * j] = (uint8_t)((uint16_t)e[j] >> 8);
-  printf ("%-9s ||s||^2=%ld (bound %d) ||e||^2=%ld (bound %d) sum=%ld (bound %d)%s\n", cases[c], ns, BS2, ne, BE2,
-          ns + ne, BS2 + BE2, ns > BS2 ? "  <-- s exceeds its own bound" : "");
+static void build(int c, uint8_t *stmt, uint8_t *wit) {
+    static int8_t s[PQZ_N];
+    static int16_t e[PQZ_N];
+    long ns = 0, ne = 0;
+    witness(c, s, e);
+    for (int j = 0; j < PQZ_N; j++)
+        ns += s[j] * s[j], ne += e[j] * e[j];
+    memset(stmt, 0xA5, PQZ_PREFIX_BYTES);
+    for (int i = 0; i < 32; i++)
+        stmt[PQZ_PREFIX_BYTES + i] = (uint8_t)i;
+    pqz_keypair_from_secret(s, e, stmt + PQZ_PREFIX_BYTES + 32);
+    for (int j = 0; j < PQZ_N; j++)
+        wit[j] = (uint8_t)s[j], wit[PQZ_N + 2 * j] = (uint8_t)e[j],
+        wit[PQZ_N + 1 + 2 * j] = (uint8_t)((uint16_t)e[j] >> 8);
+    printf("%-9s ||s||^2=%ld (bound %d) ||e||^2=%ld (bound %d) sum=%ld (bound %d)%s\n", cases[c], ns, BS2, ne, BE2,
+           ns + ne, BS2 + BE2, ns > BS2 ? "  <-- s exceeds its own bound" : "");
 }
 
-static int
-rw (const char *dir, const char *c, const char *ext, uint8_t *buf, size_t *len, int wr)
-{
-  char path[512];
-  snprintf (path, sizeof path, "%s/%s.%s", dir, c, ext);
-  FILE *f = fopen (path, wr ? "wb" : "rb");
-  if (!f)
-    return 0;
-  if (wr)
-    fwrite (buf, 1, *len, f);
-  else
-    *len = fread (buf, 1, *len, f);
-  fclose (f);
-  return 1;
+static int rw(const char *dir, const char *c, const char *ext, uint8_t *buf, size_t *len, int wr) {
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s.%s", dir, c, ext);
+    FILE *f = fopen(path, wr ? "wb" : "rb");
+    if (!f)
+        return 0;
+    if (wr)
+        fwrite(buf, 1, *len, f);
+    else
+        *len = fread(buf, 1, *len, f);
+    fclose(f);
+    return 1;
 }
 
-int
-main (int argc, char **argv)
-{
-  static uint8_t stmt[PQZ_REG_STMT_BYTES], wit[PQZ_REG_WIT_BYTES], proof[PQZ_MAX_PROOF];
-  size_t arena_len = (size_t)256 << 20;
-  void *arena = malloc (arena_len);
-  if (argc < 3 || !arena || pqz_init (arena, arena_len))
-    return fprintf (stderr, "usage: %s prove|verify DIR\n", argv[0]), 2;
-  int prove = !strcmp (argv[1], "prove");
-  for (int c = 0; c < 3; c++)
-    {
-      size_t sl = sizeof stmt, pl = sizeof proof;
-      if (prove)
-        {
+int main(int argc, char **argv) {
+    static uint8_t stmt[PQZ_REG_STMT_BYTES], wit[PQZ_REG_WIT_BYTES], proof[PQZ_MAX_PROOF];
+    size_t arena_len = (size_t)256 << 20;
+    void *arena = malloc(arena_len);
+    if (argc < 3 || !arena || pqz_init(arena, arena_len))
+        return fprintf(stderr, "usage: %s prove|verify DIR\n", argv[0]), 2;
+    int prove = !strcmp(argv[1], "prove");
+    for (int c = 0; c < 3; c++) {
+        size_t sl = sizeof stmt, pl = sizeof proof;
+        if (prove) {
 #ifdef PQZ_L2DOM_POC
-          uint8_t rnd32[32];
-          for (int i = 0; i < 32; i++)
-            rnd32[i] = (uint8_t)(c * 31 + i);
-          build (c, stmt, wit);
-          pqz_l2dom_poc = 0;
-          int rc0 = pqz_prove (PQZ_OP_REGISTER, stmt, sl, wit, sizeof wit, rnd32, proof, &pl);
-          printf ("  honest prover rc=%d (%s)\n", rc0, rc0 ? "refuses: witness above a block bound" : "proves");
-          pqz_l2dom_poc = 1;
-          pl = sizeof proof;
-          int rc = pqz_prove (PQZ_OP_REGISTER, stmt, sl, wit, sizeof wit, rnd32, proof, &pl);
-          printf ("  pooled-slack prover rc=%d proof %zu B; prover self-checks: %s%s:%d\n", rc, pl,
-                  pqz_err ? "FAIL (ignored), first at " : "pass", pqz_err ? pqz_err_file : "", pqz_err ? pqz_err_line : 0);
-          if (rc && !(rc == pqz_err && pl < sizeof proof)) /* rc = the ignored self-check error, proof emitted */
-            continue;
-          rw (argv[2], cases[c], "stmt", stmt, &sl, 1);
-          rw (argv[2], cases[c], "proof", proof, &pl, 1);
+            uint8_t rnd32[32];
+            for (int i = 0; i < 32; i++)
+                rnd32[i] = (uint8_t)(c * 31 + i);
+            build(c, stmt, wit);
+            pqz_l2dom_poc = 0;
+            int rc0 = pqz_prove(PQZ_OP_REGISTER, stmt, sl, wit, sizeof wit, rnd32, proof, &pl);
+            printf("  honest prover rc=%d (%s)\n", rc0, rc0 ? "refuses: witness above a block bound" : "proves");
+            pqz_l2dom_poc = 1;
+            pl = sizeof proof;
+            int rc = pqz_prove(PQZ_OP_REGISTER, stmt, sl, wit, sizeof wit, rnd32, proof, &pl);
+            printf("  pooled-slack prover rc=%d proof %zu B; prover self-checks: %s%s:%d\n", rc, pl,
+                   pqz_err ? "FAIL (ignored), first at " : "pass", pqz_err ? pqz_err_file : "",
+                   pqz_err ? pqz_err_line : 0);
+            if (rc && !(rc == pqz_err && pl < sizeof proof)) /* rc = the ignored self-check error, proof emitted */
+                continue;
+            rw(argv[2], cases[c], "stmt", stmt, &sl, 1);
+            rw(argv[2], cases[c], "proof", proof, &pl, 1);
 #else
-          return fprintf (stderr, "prove needs -DPQZ_L2DOM_POC\n"), 2;
+            return fprintf(stderr, "prove needs -DPQZ_L2DOM_POC\n"), 2;
 #endif
+        } else if (!rw(argv[2], cases[c], "stmt", stmt, &sl, 0) || !rw(argv[2], cases[c], "proof", proof, &pl, 0)) {
+            printf("%-9s (no proof file)\n", cases[c]);
+            continue;
         }
-      else if (!rw (argv[2], cases[c], "stmt", stmt, &sl, 0) || !rw (argv[2], cases[c], "proof", proof, &pl, 0))
-        {
-          printf ("%-9s (no proof file)\n", cases[c]);
-          continue;
-        }
-      int ok = pqz_verify (PQZ_OP_REGISTER, stmt, sl, proof, pl);
-      printf ("  %s pqz_verify(%s): %s\n", prove ? "in-process" : "production-lib", cases[c], ok ? "ACCEPT" : "REJECT");
+        int ok = pqz_verify(PQZ_OP_REGISTER, stmt, sl, proof, pl);
+        printf("  %s pqz_verify(%s): %s\n", prove ? "in-process" : "production-lib", cases[c],
+               ok ? "ACCEPT" : "REJECT");
     }
-  return 0;
+    return 0;
 }

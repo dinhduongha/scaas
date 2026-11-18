@@ -3,8 +3,8 @@
 
 use std::cell::RefCell;
 
-use pqzh::client::{KINDS, R, Setup, mutate, setup};
-use pqzh::{OP_REGISTER, OP_TRANSFER, Params, prove, verify};
+use pqzh::client::{mutate, setup, Setup, KINDS, R};
+use pqzh::{prove, verify, Params, OP_REGISTER, OP_TRANSFER};
 
 struct St {
     s: Setup,
@@ -19,7 +19,11 @@ thread_local! {
 }
 
 fn op(tx: u32) -> u8 {
-    if tx != 0 { OP_TRANSFER } else { OP_REGISTER }
+    if tx != 0 {
+        OP_TRANSFER
+    } else {
+        OP_REGISTER
+    }
 }
 
 fn with<T>(f: impl FnOnce(&mut St) -> T) -> T {
@@ -36,7 +40,16 @@ pub extern "C" fn step_init(log_blowup: u32, queries: u32, zk: u32, max_proof: u
 /// step_init plus Goldilocks^5, Merkle cap height, FRI log arity and grinding bits (0 = default)
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]
-pub extern "C" fn step_init2(log_blowup: u32, queries: u32, zk: u32, max_proof: u32, ext5: u32, cap: u32, arity: u32, pow: u32) -> u32 {
+pub extern "C" fn step_init2(
+    log_blowup: u32,
+    queries: u32,
+    zk: u32,
+    max_proof: u32,
+    ext5: u32,
+    cap: u32,
+    arity: u32,
+    pow: u32,
+) -> u32 {
     let mut p = Params::DEFAULT;
     p.ext5 = ext5 != 0;
     p.cap_height = cap as usize;
@@ -56,14 +69,29 @@ pub extern "C" fn step_init2(log_blowup: u32, queries: u32, zk: u32, max_proof: 
     if max_proof != 0 {
         p.max_proof = max_proof as usize;
     }
-    ST.with(|c| *c.borrow_mut() = Some(St { s: setup(), p, proof: [vec![], vec![]], other: [vec![], vec![]], r: R(0x9E3779B97F4A7C15) }));
+    ST.with(|c| {
+        *c.borrow_mut() = Some(St {
+            s: setup(),
+            p,
+            proof: [vec![], vec![]],
+            other: [vec![], vec![]],
+            r: R(0x9E3779B97F4A7C15),
+        })
+    });
     KINDS.len() as u32
 }
 
 /// zero-knowledge WHIR (src/whirpcs.rs): proof limit, Goldilocks^5, WHIR starting rate, folding factor, grinding
 /// bits, per-term target (0 = default)
 #[no_mangle]
-pub extern "C" fn step_init3(max_proof: u32, ext5: u32, rate: u32, fold: u32, pow: u32, target: u32) -> u32 {
+pub extern "C" fn step_init3(
+    max_proof: u32,
+    ext5: u32,
+    rate: u32,
+    fold: u32,
+    pow: u32,
+    target: u32,
+) -> u32 {
     let n = step_init2(0, 0, 1, max_proof, ext5, 0, 0, 0);
     let d = pqzh::config::WhirParams::DEFAULT;
     let or = |v: u32, d: usize| if v != 0 { v as usize } else { d };
@@ -80,7 +108,11 @@ pub extern "C" fn step_init3(max_proof: u32, ext5: u32, rate: u32, fold: u32, po
 }
 
 fn stmt_wit(st: &St, tx: u32) -> (&[u8], &[u8]) {
-    if tx != 0 { (&st.s.tx_stmt, &st.s.tx_wit) } else { (&st.s.reg_stmt, &st.s.reg_wit) }
+    if tx != 0 {
+        (&st.s.tx_stmt, &st.s.tx_wit)
+    } else {
+        (&st.s.reg_stmt, &st.s.reg_wit)
+    }
 }
 
 /// prove (seeded masks for ZK); returns the proof length, 0 on error
@@ -122,8 +154,19 @@ pub extern "C" fn step_verify(tx: u32) -> u32 {
 #[no_mangle]
 pub extern "C" fn step_verify_bad(tx: u32, kind: u32) -> u32 {
     with(|st| {
-        let stmt = if tx != 0 { &st.s.tx_stmt } else { &st.s.reg_stmt };
-        let (s, p) = mutate(kind as usize, op(tx), stmt, &st.proof[tx as usize], &st.other[tx as usize], &mut st.r);
+        let stmt = if tx != 0 {
+            &st.s.tx_stmt
+        } else {
+            &st.s.reg_stmt
+        };
+        let (s, p) = mutate(
+            kind as usize,
+            op(tx),
+            stmt,
+            &st.proof[tx as usize],
+            &st.other[tx as usize],
+            &mut st.r,
+        );
         verify(op(tx), &s, &p, &st.p) as u32
     })
 }
@@ -131,7 +174,11 @@ pub extern "C" fn step_verify_bad(tx: u32, kind: u32) -> u32 {
 /// FNV-1a of the last proof (native and wasm must agree for the same seed)
 #[no_mangle]
 pub extern "C" fn step_hash(tx: u32) -> u32 {
-    with(|st| st.proof[tx as usize].iter().fold(2166136261u32, |h, &b| (h ^ b as u32).wrapping_mul(16777619)))
+    with(|st| {
+        st.proof[tx as usize]
+            .iter()
+            .fold(2166136261u32, |h, &b| (h ^ b as u32).wrapping_mul(16777619))
+    })
 }
 
 /// a buffer of `len` bytes in linear memory for step_load (proofs made natively: pqzh_bench --dump)
@@ -144,5 +191,11 @@ pub extern "C" fn step_alloc(len: u32) -> *mut u8 {
 #[no_mangle]
 pub extern "C" fn step_load(tx: u32, which: u32, ptr: *mut u8, len: u32) {
     let v = unsafe { Vec::from_raw_parts(ptr, len as usize, len as usize) };
-    with(|st| if which == 0 { st.proof[tx as usize] = v } else { st.other[tx as usize] = v });
+    with(|st| {
+        if which == 0 {
+            st.proof[tx as usize] = v
+        } else {
+            st.other[tx as usize] = v
+        }
+    });
 }

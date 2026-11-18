@@ -27,7 +27,11 @@ import {nid} from "../helpers/Ids.sol";
 contract ReenteringERC20 is MockERC20 {
     address public target;
     constructor() MockERC20("Re", "RE", 6) {}
-    function arm(address t) external { target = t; }
+
+    function arm(address t) external {
+        target = t;
+    }
+
     function transferFrom(address from, address to, uint256 v) public override returns (bool) {
         if (target != address(0)) WrappedToken(target).wrap(1);
         return super.transferFrom(from, to, v);
@@ -59,18 +63,29 @@ contract AllowlistTest is Test {
 
     /// The test plays the factory: it registered no token, so the leg check (CTR-GOV-05, spec §6.1) reads every leg as an
     /// outside leg and asks it nothing.
-    function isRegisteredToken(address) external pure returns (bool) { return false; }
+    function isRegisteredToken(address) external pure returns (bool) {
+        return false;
+    }
 
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
         u = new MockERC20("U", "U", 6);
         u2 = new MockERC20("U2", "U2", 6);
-        none = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(UID, address(0), address(0), false)));
+        none = NormalToken(
+            EnvKit.clone(
+                address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+                EnvKit.env(UID, address(0), address(0), false)
+            )
+        );
         none.initialize(nid(address(this)), 1, abi.encode(normalInit("P", "P", 6, 0, address(this), address(this))));
         stub = new StubUARegistry(UID);
         single = WrappedToken(
-            EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(UID, address(stub), address(0), false)));
+            EnvKit.clone(
+                address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
+                EnvKit.env(UID, address(stub), address(0), false)
+            )
+        );
         Rate memory cfg;
         address[] memory one = new address[](1);
         one[0] = address(u);
@@ -78,16 +93,29 @@ contract AllowlistTest is Test {
         r1[0] = 1;
         single.initialize(nid(address(this)), 1, abi.encode(wrappedInit(one, r1, r1, 6, cfg, address(0), address(0))));
         multi = WrappedToken(
-            EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(UID, address(stub), address(0), false)));
+            EnvKit.clone(
+                address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
+                EnvKit.env(UID, address(stub), address(0), false)
+            )
+        );
         address[] memory two = new address[](2);
         (two[0], two[1]) = (address(u), address(u2));
         uint256[] memory r = new uint256[](2);
         (r[0], r[1]) = (1, 1);
         multi.initialize(nid(address(this)), 1, abi.encode(wrappedInit(two, r, r, 6, cfg, address(0), address(0))));
-        pts = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(UID, address(stub), address(0), false)));
+        pts = NormalToken(
+            EnvKit.clone(
+                address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+                EnvKit.env(UID, address(stub), address(0), false)
+            )
+        );
         pts.initialize(nid(address(this)), 1, abi.encode(normalInit("PTS", "PTS", 6, 0, address(this), address(this))));
         ledgered = WrappedToken(
-            EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(UID, address(stub), address(0), false)));
+            EnvKit.clone(
+                address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
+                EnvKit.env(UID, address(stub), address(0), false)
+            )
+        );
         one[0] = address(pts);
         ledgered.initialize(nid(address(this)), 1, abi.encode(wrappedInit(one, r1, r1, 6, cfg, address(0), address(0))));
         pts.mint(address(this), 10e6, EnvKit.codeUidOf(address(pts))); // this fixture is a contract, so it may approve (CTR-TOK-01)
@@ -107,10 +135,20 @@ contract AllowlistTest is Test {
     uint256 internal lane;
 
     function _m(address t, bytes memory data, uint32 mode, uint256 fee)
-        internal returns (MetaTxLib.MetaTransaction memory m, bytes memory sig)
+        internal
+        returns (MetaTxLib.MetaTransaction memory m, bytes memory sig)
     {
-        m = MetaTxLib.MetaTransaction({from: alice, data: data, batch: ++lane, nonce: 0,
-            validUntil: block.timestamp + 300, mode: mode, relayer: relayer, fee: fee, feeRecipient: address(0)});
+        m = MetaTxLib.MetaTransaction({
+            from: alice,
+            data: data,
+            batch: ++lane,
+            nonce: 0,
+            validUntil: block.timestamp + 300,
+            mode: mode,
+            relayer: relayer,
+            fee: fee,
+            feeRecipient: address(0)
+        });
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, MtxDigest.metaTx(t, m));
         sig = abi.encodePacked(r, s, v);
     }
@@ -189,12 +227,15 @@ contract AllowlistTest is Test {
         _run(address(single), abi.encodeWithSignature("wrap(uint256)", 10e6));
         _run(address(single), abi.encodeWithSignature("unwrap(uint256,address,uint256)", 1e6, alice, 1e6));
         _run(address(single), abi.encodeWithSignature("wrap(address,uint256)", address(u), 10e6));
-        _run(address(single), abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(u), 1e6, alice, 0));
+        _run(
+            address(single),
+            abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(u), 1e6, alice, 0)
+        );
         _run(address(single), abi.encodeWithSignature("addReserve(address,uint256)", address(u), 1e6));
         _run(address(single), abi.encodeCall(WrappedToken.wrapToUA, (address(u), 10e6, UA)));
         assertEq(single.balanceOf(alice), 36e6);
         assertEq(single.balanceOfUA(UA), 20e6);
-        assertEq(u.balanceOf(address(single)), 58e6);       // 60 wrapped − 4 unwrapped + 2 by addReserve
+        assertEq(u.balanceOf(address(single)), 58e6); // 60 wrapped − 4 unwrapped + 2 by addReserve
         // `unwrapToUA` needs a ledger leg: the same implementation, one leg `pts`
         _run(address(ledgered), abi.encodeCall(WrappedToken.unwrapToUA, (address(pts), 1e6, UA, 1e6)));
         assertEq(pts.balanceOfUA(UA), 2e6);
@@ -205,12 +246,15 @@ contract AllowlistTest is Test {
     function test_multi_everyListedSelectorRuns() public {
         _run(address(multi), abi.encodeCall(IMetaTx.cancelNonce, (99)));
         _run(address(multi), abi.encodeWithSignature("wrap(address,uint256)", address(u2), 10e6));
-        _run(address(multi), abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(u2), 1e6, alice, 0));
+        _run(
+            address(multi),
+            abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(u2), 1e6, alice, 0)
+        );
         _run(address(multi), abi.encodeWithSignature("addReserve(address,uint256)", address(u), 1e6));
         _run(address(multi), abi.encodeCall(WrappedToken.wrapToUA, (address(u2), 10e6, UA)));
         assertEq(multi.balanceOf(alice), 18e6);
         assertEq(multi.balanceOfUA(UA), 20e6);
-        assertEq(u.balanceOf(address(multi)), 2e6);         // addReserve(u) twice
+        assertEq(u.balanceOf(address(multi)), 2e6); // addReserve(u) twice
         assertEq(u2.balanceOf(address(multi)), 38e6);
     }
 
@@ -232,7 +276,9 @@ contract AllowlistTest is Test {
             } else {
                 assertEq(c[i], 2);
                 (m, sig) = _m(t, calls[i], RR | FIX, basis[i] / 100 + 1);
-                vm.expectRevert(abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, basis[i] / 100 + 1, basis[i] / 100));
+                vm.expectRevert(
+                    abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, basis[i] / 100 + 1, basis[i] / 100)
+                );
             }
             vm.prank(relayer);
             NormalToken(t).executeMetaTransaction(m, sig);
@@ -258,7 +304,8 @@ contract AllowlistTest is Test {
         (k[2], b[2]) = (abi.encodeWithSignature("unwrap(uint256,address,uint256)", 3e6, alice, 1e6), 3e6);
         k[3] = abi.encodeWithSignature("wrap(address,uint256)", address(pts), 10e6);
         // basis = arg 1 (`wrapped`), not arg 0 (an address) or arg 3 (`minOut`)
-        (k[4], b[4]) = (abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(pts), 3e6, alice, 1e6), 3e6);
+        (k[4], b[4]) =
+        (abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(pts), 3e6, alice, 1e6), 3e6);
         k[5] = abi.encodeWithSignature("addReserve(address,uint256)", address(pts), 1e6);
         k[6] = abi.encodeCall(WrappedToken.wrapToUA, (address(pts), 10e6, UA));
         (k[7], b[7]) = (abi.encodeCall(WrappedToken.unwrapToUA, (address(pts), 3e6, UA, 1e6)), 3e6);
@@ -274,11 +321,22 @@ contract AllowlistTest is Test {
             _refused(t, abi.encodeWithSignature("transfer(address,uint256)", address(1), 1));
             _refused(t, abi.encodeWithSignature("transferFrom(address,address,uint256)", alice, address(1), 1));
             _refused(t, abi.encodeWithSignature("approve(address,uint256)", address(this), 1));
-            _refused(t, abi.encodeWithSignature(
-                "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes))",
-                address(1), 1, 0, 0, address(0), bytes32(0), PayMetaKit.meta(0)));
-            _refused(t, abi.encodeWithSignature("initialize(address,address[],uint64,bytes)",
-                alice, new address[](0), 1, ""));
+            _refused(
+                t,
+                abi.encodeWithSignature(
+                    "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes))",
+                    address(1),
+                    1,
+                    0,
+                    0,
+                    address(0),
+                    bytes32(0),
+                    PayMetaKit.meta(0)
+                )
+            );
+            _refused(
+                t, abi.encodeWithSignature("initialize(address,address[],uint64,bytes)", alice, new address[](0), 1, "")
+            );
             _refused(t, abi.encodeWithSelector(UAMetaTxBase.mtxExecute.selector));
             _refused(t, abi.encodeWithSelector(IMetaTx.executeMetaTransaction.selector));
             _refused(t, abi.encodeWithSelector(UAMetaTxBase.mtxBatch.selector));
@@ -295,16 +353,31 @@ contract AllowlistTest is Test {
         _refused(address(none), abi.encodeCall(NormalToken.mintToUA, (UA, 1, EnvKit.codeUidOf(address(none)))));
         _refused(address(none), abi.encodeCall(IGovernance.renounceRole, (1, EnvKit.codeUidOf(address(none)))));
         _refused(address(single), abi.encodeWithSignature("unwrap(uint256,address)", 1, alice));
-        _refused(address(single), abi.encodeWithSignature("proposeRate(address,uint96,uint96,bytes32)", address(u), 1, 1, EnvKit.codeUidOf(address(single))));
+        _refused(
+            address(single),
+            abi.encodeWithSignature(
+                "proposeRate(address,uint96,uint96,bytes32)", address(u), 1, 1, EnvKit.codeUidOf(address(single))
+            )
+        );
         _refused(address(single), abi.encodeWithSignature("cancelRate(bytes32)", EnvKit.codeUidOf(address(single))));
         _refused(address(single), abi.encodeWithSignature("executeRate(bytes32)", EnvKit.codeUidOf(address(single))));
         _refused(address(single), abi.encodeCall(IGovernance.renounceRole, (3, EnvKit.codeUidOf(address(single)))));
         _refused(address(multi), abi.encodeWithSignature("unwrap(uint256,address)", 1, alice));
-        _refused(address(multi), abi.encodeWithSignature("proposeRate(address,uint96,uint96,bytes32)", address(u), 1, 1, EnvKit.codeUidOf(address(multi))));
+        _refused(
+            address(multi),
+            abi.encodeWithSignature(
+                "proposeRate(address,uint96,uint96,bytes32)", address(u), 1, 1, EnvKit.codeUidOf(address(multi))
+            )
+        );
         _refused(address(multi), abi.encodeWithSignature("cancelRate(bytes32)", EnvKit.codeUidOf(address(multi))));
         _refused(address(multi), abi.encodeWithSignature("executeRate(bytes32)", EnvKit.codeUidOf(address(multi))));
         _refused(address(multi), abi.encodeCall(IGovernance.renounceRole, (3, EnvKit.codeUidOf(address(multi)))));
-        _refused(address(multi), abi.encodeWithSignature("disableWrap(address,bytes32,bytes32)", address(u), bytes32(0), EnvKit.codeUidOf(address(multi))));
+        _refused(
+            address(multi),
+            abi.encodeWithSignature(
+                "disableWrap(address,bytes32,bytes32)", address(u), bytes32(0), EnvKit.codeUidOf(address(multi))
+            )
+        );
         _refused(address(multi), abi.encodeCall(IGovernance.renounceRole, (4, EnvKit.codeUidOf(address(multi)))));
     }
 
@@ -326,7 +399,7 @@ contract AllowlistTest is Test {
         single.executeMetaTransaction(m, sig);
         assertEq(single.balanceOf(alice), 7e6);
         assertEq(single.balanceOf(relayer), 3e6);
-        assertEq(u.balanceOf(alice), 990e6);                 // pulled from the signer, not the relayer
+        assertEq(u.balanceOf(alice), 990e6); // pulled from the signer, not the relayer
     }
 
     function test_innerRevertBubbles_laneUntouched() public {
@@ -342,7 +415,11 @@ contract AllowlistTest is Test {
     function test_reentryFromUnderlyingHook_reverts() public {
         ReenteringERC20 bad = new ReenteringERC20();
         WrappedToken w = WrappedToken(
-            EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(UID, address(0), address(0), false)));
+            EnvKit.clone(
+                address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
+                EnvKit.env(UID, address(0), address(0), false)
+            )
+        );
         Rate memory cfg;
         address[] memory one = new address[](1);
         one[0] = address(bad);

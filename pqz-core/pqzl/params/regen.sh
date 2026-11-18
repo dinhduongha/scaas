@@ -11,14 +11,19 @@ mkdir -p "$OUT"
 echo "LaZer $(git -C "$LZ" rev-parse HEAD); image $(grep -o 'sha256:[0-9a-f]*' params/codegen/run.sh)"
 rc=0
 for r in "$@"; do
-  t0=$(date +%s)
-  params/codegen/run.sh "$LZ" params/${r}_params.sage > "$OUT/pqz_${r}_params.h" 2> "$OUT/$r.err" || rc=1
-  echo "== $r: $(( $(date +%s) - t0 )) s, $(wc -c < "$OUT/pqz_${r}_params.h") B, sha256 $(sha256sum < "$OUT/pqz_${r}_params.h" | cut -c1-16)"
-  if [ -f params/pqz_${r}_params.h ]; then
-    if cmp -s params/pqz_${r}_params.h "$OUT/pqz_${r}_params.h"; then echo "   identical to params/pqz_${r}_params.h"
-    else echo "   DIFFERENT from params/pqz_${r}_params.h"; diff params/pqz_${r}_params.h "$OUT/pqz_${r}_params.h" | head -40; rc=1; fi
-  else echo "   new (no checked-in header)"; fi
-  sed 's/^/   stderr: /' "$OUT/$r.err" | head -20
+    t0=$(date +%s)
+    params/codegen/run.sh "$LZ" params/${r}_params.sage >"$OUT/pqz_${r}_params.h" 2>"$OUT/$r.err" || rc=1
+    echo "== $r: $(($(date +%s) - t0)) s, $(wc -c <"$OUT/pqz_${r}_params.h") B, sha256 $(sha256sum <"$OUT/pqz_${r}_params.h" | cut -c1-16)"
+    if [ -f params/pqz_${r}_params.h ]; then
+        if cmp -s params/pqz_${r}_params.h "$OUT/pqz_${r}_params.h"; then
+            echo "   identical to params/pqz_${r}_params.h"
+        else
+            echo "   DIFFERENT from params/pqz_${r}_params.h"
+            diff params/pqz_${r}_params.h "$OUT/pqz_${r}_params.h" | head -40
+            rc=1
+        fi
+    else echo "   new (no checked-in header)"; fi
+    sed 's/^/   stderr: /' "$OUT/$r.err" | head -20
 done
 # D8: the Rust params (pqzl/rust/src/params) equal the converter's text from the checked-in headers; after copying a
 # header here, regenerate them with python3 -I pqz-core/pqzl/params/to_rust.py

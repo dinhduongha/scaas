@@ -41,36 +41,37 @@ library MetaTxLib {
     ///          bit:  7 6 5 4 | 3 2 1 0
     ///                └──┬──┘   └──┬──┘
     ///                 fee mode   cờ ràng buộc
-    uint32 internal constant MODE_OPEN                   = 0x0000_0000; // không bit nào
+    uint32 internal constant MODE_OPEN = 0x0000_0000; // không bit nào
 
     // --- nửa byte đầu: cờ ràng buộc ---
-    uint32 internal constant MODE_RESTRICT_RELAYER       = 0x0000_0001;
+    uint32 internal constant MODE_RESTRICT_RELAYER = 0x0000_0001;
     uint32 internal constant MODE_RESTRICT_FEE_RECIPIENT = 0x0000_0002;
-    uint32 internal constant MODE_FLAGS_MASK             = 0x0000_000F;
+    uint32 internal constant MODE_FLAGS_MASK = 0x0000_000F;
 
     // --- nửa byte sau: cách tính phí (giá trị, không phải cờ) ---
-    uint32 internal constant MODE_FEE_MASK               = 0x0000_00F0;
-    uint32 internal constant MODE_FEE_SHIFT              = 4;
-    uint32 internal constant MODE_FEE_NONE               = 0x0000_0000; // FeeMode.NONE
-    uint32 internal constant MODE_FEE_PERCENT            = 0x0000_0010; // FeeMode.PERCENT
-    uint32 internal constant MODE_FEE_FIXED              = 0x0000_0020; // FeeMode.FIXED
+    uint32 internal constant MODE_FEE_MASK = 0x0000_00F0;
+    uint32 internal constant MODE_FEE_SHIFT = 4;
+    uint32 internal constant MODE_FEE_NONE = 0x0000_0000; // FeeMode.NONE
+    uint32 internal constant MODE_FEE_PERCENT = 0x0000_0010; // FeeMode.PERCENT
+    uint32 internal constant MODE_FEE_FIXED = 0x0000_0020; // FeeMode.FIXED
 
-    uint32 internal constant MODE_KNOWN_MASK             = 0x0000_00F3;
+    uint32 internal constant MODE_KNOWN_MASK = 0x0000_00F3;
 
     error ModeFeeInvalid(uint32 mode);
+
     // `ModeUnknownBits(uint32)` moved with `validateMode` to legacy/ua-mtx-fix-contracts/ (re-check C6): nothing raises it.
 
     /// @notice v3 (CTR-MTX-15): the signed call of one of THIS contract's allowlisted functions.
     struct MetaTransaction {
-        address from;           // signer; the authority the call runs under
-        bytes   data;           // a call of THIS contract, allowlisted selector
-        uint256 batch;          // nonce dimension 1: lane
-        uint256 nonce;          // nonce dimension 2: sequence inside the lane
-        uint256 validUntil;     // unix seconds
-        uint32  mode;           // constraint flags + fee mode
-        address relayer;        // bound relayer when MODE_RESTRICT_RELAYER
-        uint256 fee;            // only where the contract charges it (tokens); elsewhere fee mode NONE
-        address feeRecipient;   // bound fee recipient when MODE_RESTRICT_FEE_RECIPIENT
+        address from; // signer; the authority the call runs under
+        bytes data; // a call of THIS contract, allowlisted selector
+        uint256 batch; // nonce dimension 1: lane
+        uint256 nonce; // nonce dimension 2: sequence inside the lane
+        uint256 validUntil; // unix seconds
+        uint32 mode; // constraint flags + fee mode
+        address relayer; // bound relayer when MODE_RESTRICT_RELAYER
+        uint256 fee; // only where the contract charges it (tokens); elsewhere fee mode NONE
+        address feeRecipient; // bound fee recipient when MODE_RESTRICT_FEE_RECIPIENT
     }
 
     /// @dev Pinned by `test_metaTxTypehashIsPinned` (test/metatx/MetaTxLib.t.sol).
@@ -90,7 +91,7 @@ library MetaTxLib {
     ///      cho cùng một hành động. Ngoài ra encoding độ dài thay đổi phá injectivity.
     ///      Một type string, hai giá trị canonical.
     function canon(MetaTransaction memory m) internal pure returns (address r, address f) {
-        r = (m.mode & MODE_RESTRICT_RELAYER)       != 0 ? m.relayer      : address(0);
+        r = (m.mode & MODE_RESTRICT_RELAYER) != 0 ? m.relayer : address(0);
         f = (m.mode & MODE_RESTRICT_FEE_RECIPIENT) != 0 ? m.feeRecipient : address(0);
     }
 
@@ -121,11 +122,11 @@ library MetaTxLib {
     ///         SIGNING UA); the fields after `from` are those of `MetaTransaction`.
     struct UAMetaTransaction {
         bytes32 from;
-        bytes   data;
+        bytes data;
         uint256 batch;
         uint256 nonce;
         uint256 validUntil;
-        uint32  mode;
+        uint32 mode;
         address relayer;
         uint256 fee;
         address feeRecipient;
@@ -145,7 +146,7 @@ library MetaTxLib {
         uint256 batch;
         uint256 nonce;
         uint256 validUntil;
-        uint32  mode;
+        uint32 mode;
         address relayer;
         uint256 fee;
         address feeRecipient;
@@ -164,11 +165,11 @@ library MetaTxLib {
     ///         `save`: the payer's choice to store a `PayRecord` under `payNo` (`paymentsOf`); `save` with `payNo == 0` is
     ///         refused (`PayMetaShape`).
     struct PayMeta {
-        bytes32 salt;    // 32 bytes from a CSPRNG; never 0
-        bytes32 payNo;   // the payment request's id; 0 = none; recommended a right-aligned UUIDv7
-        bool    save;    // store a `PayRecord` under `payNo` after the transfer
-        uint16  schema;  // 0 = no body; 1 note, 2 structured reference, 3 bound call, 4 encrypted
-        bytes   body;    // the schema's encoding; empty iff schema == 0
+        bytes32 salt; // 32 bytes from a CSPRNG; never 0
+        bytes32 payNo; // the payment request's id; 0 = none; recommended a right-aligned UUIDv7
+        bool save; // store a `PayRecord` under `payNo` after the transfer
+        uint16 schema; // 0 = no body; 1 note, 2 structured reference, 3 bound call, 4 encrypted
+        bytes body; // the schema's encoding; empty iff schema == 0
     }
 
     /// @notice One stored payment of a `payNo` (plan T83, owner 2026-11-09), two slots: `to` the payee id, `amount` what
@@ -176,9 +177,8 @@ library MetaTxLib {
     struct PayRecord {
         bytes32 to;
         uint192 amount;
-        uint64  blockNumber;
+        uint64 blockNumber;
     }
-
 
     /// @notice TS-D14: the signed fields of a named entry around the op's own explicit parameters, in the struct
     ///         `<Op>(address from,<op params>,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)`. The lanes of `MetaTransaction`.
@@ -187,7 +187,7 @@ library MetaTxLib {
         uint256 batch;
         uint256 nonce;
         uint256 validUntil;
-        uint32  mode;
+        uint32 mode;
         address relayer;
         uint256 fee;
         address feeRecipient;
@@ -199,7 +199,7 @@ library MetaTxLib {
         uint256 batch;
         uint256 nonce;
         uint256 validUntil;
-        uint32  mode;
+        uint32 mode;
         address relayer;
         uint256 fee;
         address feeRecipient;

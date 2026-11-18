@@ -19,20 +19,21 @@ use std::sync::Mutex;
 
 use p3_challenger::FieldChallenger;
 use p3_commit::{
-    CommitmentOpening, MultilinearPcs, OpenedValues, OpeningRequest, Pcs, PolynomialSpace, UnivariateStarkPcs,
+    CommitmentOpening, MultilinearPcs, OpenedValues, OpeningRequest, Pcs, PolynomialSpace,
+    UnivariateStarkPcs,
 };
 use p3_dft::{Radix2DFTSmallBatch, TwoAdicSubgroupDft};
 use p3_field::coset::TwoAdicMultiplicativeCoset;
 use p3_field::{ExtensionField, Field, PrimeCharacteristicRing, TwoAdicField};
 use p3_keccak::Keccak256Hash;
-use p3_matrix::Matrix;
 use p3_matrix::dense::RowMajorMatrix;
+use p3_matrix::Matrix;
 use p3_multilinear_util::point::Point;
 use p3_multilinear_util::poly::Poly;
 use p3_symmetric::MerkleCap;
 use p3_whir::{
-    FoldingFactor, HidingWhirPcs, HidingWhirProverData, ProtocolParameters, SecurityAssumption, ZkParameters,
-    ZkWhirConfig, ZkWhirProof,
+    FoldingFactor, HidingWhirPcs, HidingWhirProverData, ProtocolParameters, SecurityAssumption,
+    ZkParameters, ZkWhirConfig, ZkWhirProof,
 };
 use rand::distr::{Distribution, StandardUniform};
 use rand::rngs::StdRng;
@@ -61,12 +62,22 @@ pub struct WhirUniPcs<EF> {
 /// a clone forks the mask stream (as p3-fri's HidingFriPcs)
 impl<EF> Clone for WhirUniPcs<EF> {
     fn clone(&self) -> Self {
-        WhirUniPcs { w: self.w, dft: self.dft.clone(), rng: Mutex::new(self.fresh_rng()), _ef: Default::default() }
+        WhirUniPcs {
+            w: self.w,
+            dft: self.dft.clone(),
+            rng: Mutex::new(self.fresh_rng()),
+            _ef: Default::default(),
+        }
     }
 }
 
 fn hmmcs(rng: &mut StdRng) -> HidingValMmcs {
-    HidingValMmcs::new(BeKeccak, Compress::new(Keccak256Hash {}), 0, StdRng::from_rng(rng))
+    HidingValMmcs::new(
+        BeKeccak,
+        Compress::new(Keccak256Hash {}),
+        0,
+        StdRng::from_rng(rng),
+    )
 }
 
 impl<EF> WhirUniPcs<EF> {
@@ -76,7 +87,12 @@ impl<EF> WhirUniPcs<EF> {
 
     /// `rnd` seeds every mask and salt of the proofs made with this PCS (prover randomness; a verifier passes anything)
     pub fn new(w: WhirParams, rnd: [u8; 32]) -> Self {
-        WhirUniPcs { w, dft: WDft::default(), rng: Mutex::new(StdRng::from_seed(rnd)), _ef: Default::default() }
+        WhirUniPcs {
+            w,
+            dft: WDft::default(),
+            rng: Mutex::new(StdRng::from_seed(rnd)),
+            _ef: Default::default(),
+        }
     }
 }
 
@@ -110,7 +126,10 @@ fn layout(shapes: &[(usize, usize)]) -> (Vec<usize>, usize) {
         offs[i] = off;
         off += shapes[i].0 * shapes[i].1;
     }
-    (offs, off.max(1).next_power_of_two().trailing_zeros() as usize)
+    (
+        offs,
+        off.max(1).next_power_of_two().trailing_zeros() as usize,
+    )
 }
 
 /// value of a coefficient column at z (Horner)
@@ -120,7 +139,14 @@ fn horner<EF: ExtensionField<F>>(c: &[F], z: EF) -> EF {
 
 /// The claims of one matrix (offset `off`, height `h` = 2^m, `w` columns) at point z: per aligned dyadic block of
 /// `2^k` columns, (point of the stacked polynomial, scale S, block's first column). None if some 1 + a_j = 0.
-fn claims<EF: ExtensionField<F>>(n: usize, off: usize, h: usize, w: usize, z: EF, beta: EF) -> Option<Vec<(Point<EF>, EF, usize, usize)>> {
+fn claims<EF: ExtensionField<F>>(
+    n: usize,
+    off: usize,
+    h: usize,
+    w: usize,
+    z: EF,
+    beta: EF,
+) -> Option<Vec<(Point<EF>, EF, usize, usize)>> {
     let m = h.trailing_zeros() as usize;
     let u0 = off / h;
     let mut out = Vec::new();
@@ -129,7 +155,11 @@ fn claims<EF: ExtensionField<F>>(n: usize, off: usize, h: usize, w: usize, z: EF
         // largest aligned block at unit u0 + c within the matrix
         let u = u0 + c;
         let kmax = (w - c).ilog2() as usize;
-        let k = if u == 0 { kmax } else { (u.trailing_zeros() as usize).min(kmax) };
+        let k = if u == 0 {
+            kmax
+        } else {
+            (u.trailing_zeros() as usize).min(kmax)
+        };
         let mut a: Vec<EF> = Vec::with_capacity(k + m);
         let mut b = beta;
         let mut pb = Vec::with_capacity(k);
@@ -147,7 +177,15 @@ fn claims<EF: ExtensionField<F>>(n: usize, off: usize, h: usize, w: usize, z: EF
         a.extend(pz.into_iter().rev());
         let pre = n - k - m;
         let prefix = u >> k;
-        let mut coords: Vec<EF> = (0..pre).map(|i| if (prefix >> (pre - 1 - i)) & 1 == 1 { EF::ONE } else { EF::ZERO }).collect();
+        let mut coords: Vec<EF> = (0..pre)
+            .map(|i| {
+                if (prefix >> (pre - 1 - i)) & 1 == 1 {
+                    EF::ONE
+                } else {
+                    EF::ZERO
+                }
+            })
+            .collect();
         let mut s = EF::ONE;
         for &x in &a {
             let d = EF::ONE + x;
@@ -172,11 +210,22 @@ where
             pow_bits: w.pow,
             round_log_inv_rates: vec![],
             folding_factor: FoldingFactor::Constant(w.fold),
-            soundness_type: if w.unique { SecurityAssumption::UniqueDecoding } else { SecurityAssumption::JohnsonBound },
+            soundness_type: if w.unique {
+                SecurityAssumption::UniqueDecoding
+            } else {
+                SecurityAssumption::JohnsonBound
+            },
             starting_log_inv_rate: w.rate,
         };
-        let cfg = ZkWhirConfig::new(n, params, ZkParameters { ell_zk: w.ell_zk, mask_log_inv_rate: w.mask_rate })
-            .map_err(|e| format!("whir config (n = {n}): {e}"))?;
+        let cfg = ZkWhirConfig::new(
+            n,
+            params,
+            ZkParameters {
+                ell_zk: w.ell_zk,
+                mask_log_inv_rate: w.mask_rate,
+            },
+        )
+        .map_err(|e| format!("whir config (n = {n}): {e}"))?;
         let mut rng = rng;
         let mmcs = hmmcs(&mut rng);
         Ok(HidingWhirPcs::new(cfg, self.dft.clone(), mmcs, rng))
@@ -200,7 +249,11 @@ where
     }
 
     /// Stack coefficient matrices and commit them.
-    fn stack_commit(&self, mats: Vec<RowMajorMatrix<F>>, public: bool) -> Result<(Cap, WhirData<EF>), String> {
+    fn stack_commit(
+        &self,
+        mats: Vec<RowMajorMatrix<F>>,
+        public: bool,
+    ) -> Result<(Cap, WhirData<EF>), String> {
         let shapes: Vec<(usize, usize)> = mats.iter().map(|m| (m.height(), m.width())).collect();
         let (offs, n0) = layout(&shapes);
         let n = self.n_vars(n0)?;
@@ -213,17 +266,37 @@ where
                 }
             }
         }
-        let rng = if public { StdRng::from_seed(PRE_SEED) } else { self.fresh() };
+        let rng = if public {
+            StdRng::from_seed(PRE_SEED)
+        } else {
+            self.fresh()
+        };
         let hw = self.hw(n, rng)?;
-        let (commit, data) =
-            hw.commit(Poly::new(msg.clone()), &mut BeChallenger::new(&[0; 32])).map_err(|e| format!("{e:?}"))?;
+        let (commit, data) = hw
+            .commit(Poly::new(msg.clone()), &mut BeChallenger::new(&[0; 32]))
+            .map_err(|e| format!("{e:?}"))?;
         let inner = if public { None } else { Some(data) };
-        Ok((commit.clone(), WhirData { shapes, offs, n_vars: n, msg, commit: Some(commit), inner: Mutex::new(inner) }))
+        Ok((
+            commit.clone(),
+            WhirData {
+                shapes,
+                offs,
+                n_vars: n,
+                msg,
+                commit: Some(commit),
+                inner: Mutex::new(inner),
+            },
+        ))
     }
 
     /// coefficients of the column polynomials given by evaluations on the subgroup of size `h = mat.height()`, of
     /// degree < `size`; with `rng`, masked as `t + Z_H·r`, `deg r < size - h` (needs size ≤ 2h)
-    fn trace_coeffs(&self, mat: RowMajorMatrix<F>, size: usize, rng: Option<&mut StdRng>) -> RowMajorMatrix<F> {
+    fn trace_coeffs(
+        &self,
+        mat: RowMajorMatrix<F>,
+        size: usize,
+        rng: Option<&mut StdRng>,
+    ) -> RowMajorMatrix<F> {
         let (h, w) = (mat.height(), mat.width());
         assert!(size >= h && size <= 2 * h);
         let mut c = self.dft.idft_batch(mat);
@@ -254,7 +327,10 @@ where
         Domain::new(F::ONE, degree.trailing_zeros() as usize).unwrap()
     }
 
-    fn commit(&self, evaluations: impl IntoIterator<Item = (Domain, RowMajorMatrix<F>)>) -> Result<(Cap, WhirData<EF>), String> {
+    fn commit(
+        &self,
+        evaluations: impl IntoIterator<Item = (Domain, RowMajorMatrix<F>)>,
+    ) -> Result<(Cap, WhirData<EF>), String> {
         let mut rng = self.fresh();
         let mats = evaluations
             .into_iter()
@@ -328,12 +404,15 @@ where
         if num_chunks < 2 {
             return Err("quotient: fewer than 2 chunks is not hiding".into());
         }
-        let (domains, evals): (Vec<Domain>, Vec<RowMajorMatrix<F>>) = evaluations.into_iter().unzip();
+        let (domains, evals): (Vec<Domain>, Vec<RowMajorMatrix<F>>) =
+            evaluations.into_iter().unzip();
         let cis = zp_cis(&domains);
         let last = domains.len() - 1;
         let (h, w) = (evals[0].height(), evals[0].width());
         let mut rng = self.fresh();
-        let mut t: Vec<Vec<F>> = (0..last).map(|_| (0..h * w).map(|_| rng.random::<F>()).collect()).collect();
+        let mut t: Vec<Vec<F>> = (0..last)
+            .map(|_| (0..h * w).map(|_| rng.random::<F>()).collect())
+            .collect();
         let mut tl = vec![F::ZERO; h * w];
         for (j, tj) in t.iter().enumerate() {
             let mc = cis[j] * cis[last].inverse();
@@ -365,7 +444,12 @@ where
     }
 
     /// the committed polynomial of matrix `idx` evaluated on `domain` (natural order)
-    fn get_evaluations_on_domain<'a>(&self, d: &'a WhirData<EF>, idx: usize, domain: Domain) -> RowMajorMatrix<F> {
+    fn get_evaluations_on_domain<'a>(
+        &self,
+        d: &'a WhirData<EF>,
+        idx: usize,
+        domain: Domain,
+    ) -> RowMajorMatrix<F> {
         let (h, w) = d.shapes[idx];
         let off = d.offs[idx];
         let n = domain.size();
@@ -376,7 +460,9 @@ where
                 v[r * w + c] = d.msg[off + c * h + r];
             }
         }
-        self.dft.coset_dft_batch(RowMajorMatrix::new(v, w), domain.shift()).to_row_major_matrix()
+        self.dft
+            .coset_dft_batch(RowMajorMatrix::new(v, w), domain.shift())
+            .to_row_major_matrix()
     }
 
     fn open_with_preprocessing(
@@ -399,7 +485,10 @@ where
                                 (0..w)
                                     .map(|c| match d.commit {
                                         None => EF::ZERO,
-                                        Some(_) => horner(&d.msg[d.offs[m] + c * h..d.offs[m] + (c + 1) * h], z),
+                                        Some(_) => horner(
+                                            &d.msg[d.offs[m] + c * h..d.offs[m] + (c + 1) * h],
+                                            z,
+                                        ),
                                     })
                                     .collect()
                             })
@@ -420,7 +509,8 @@ where
             let mut pts = Vec::new();
             for (m, zs) in r.points.iter().enumerate() {
                 for &z in zs {
-                    let cl = claims(d.n_vars, d.offs[m], d.shapes[m].0, d.shapes[m].1, z, beta).ok_or("degenerate point")?;
+                    let cl = claims(d.n_vars, d.offs[m], d.shapes[m].0, d.shapes[m].1, z, beta)
+                        .ok_or("degenerate point")?;
                     pts.extend(cl.into_iter().map(|c| c.0));
                 }
             }
@@ -439,7 +529,15 @@ where
                     x
                 }
             };
-            LAST_OPENINGS.lock().unwrap().push((d.n_vars, pts.len(), r.points.iter().zip(&d.shapes).map(|(z, s)| z.len() * s.1).sum()));
+            LAST_OPENINGS.lock().unwrap().push((
+                d.n_vars,
+                pts.len(),
+                r.points
+                    .iter()
+                    .zip(&d.shapes)
+                    .map(|(z, s)| z.len() * s.1)
+                    .sum(),
+            ));
             hw.observe_commitment(commit, ch);
             proofs.push(hw.open(data, pts, ch).map_err(|e| format!("{e:?}"))?);
         }
@@ -466,7 +564,12 @@ where
         // the ZK layout puts the randomisation round first: nothing committed, everything zero
         let (r0, rest) = rounds.split_first().ok_or("no rounds")?;
         if r0.commitment.roots() != zero_cap().roots()
-            || r0.matrices.iter().flat_map(|m| &m.points).flat_map(|p| &p.values).any(|v| !v.is_zero())
+            || r0
+                .matrices
+                .iter()
+                .flat_map(|m| &m.points)
+                .flat_map(|p| &p.values)
+                .any(|v| !v.is_zero())
         {
             return Err("randomisation round must be zero".into());
         }
@@ -476,7 +579,12 @@ where
         for (r, pf) in rest.iter().zip(proof) {
             let mut shapes = Vec::new();
             for m in &r.matrices {
-                let w = m.points.first().ok_or("matrix without points")?.values.len();
+                let w = m
+                    .points
+                    .first()
+                    .ok_or("matrix without points")?
+                    .values
+                    .len();
                 if m.points.iter().any(|p| p.values.len() != w) {
                     return Err("ragged opening".into());
                 }
@@ -492,7 +600,8 @@ where
             for (m, mat) in r.matrices.iter().enumerate() {
                 for p in &mat.points {
                     for (pt, s, c0, len) in
-                        claims(n, offs[m], shapes[m].0, shapes[m].1, p.point, beta).ok_or("degenerate point")?
+                        claims(n, offs[m], shapes[m].0, shapes[m].1, p.point, beta)
+                            .ok_or("degenerate point")?
                     {
                         let mut acc = EF::ZERO;
                         for v in p.values[c0..c0 + len].iter().rev() {
@@ -507,7 +616,8 @@ where
                 return Err("claimed evaluations do not match the opened values".into());
             }
             let hw = self.hw(n, StdRng::from_seed([0; 32]))?;
-            hw.verify(&r.commitment, pf, ch, pts).map_err(|e| format!("{e:?}"))?;
+            hw.verify(&r.commitment, pf, ch, pts)
+                .map_err(|e| format!("{e:?}"))?;
         }
         Ok(())
     }
@@ -520,16 +630,34 @@ where
         trace_domain: Domain,
         quotient_domain: Domain,
     ) -> p3_commit::PeriodicLdeTable<F> {
-        p3_fri::build_periodic_lde_table_two_adic(&self.dft, periodic_cols, &trace_domain, &quotient_domain)
+        p3_fri::build_periodic_lde_table_two_adic(
+            &self.dft,
+            periodic_cols,
+            &trace_domain,
+            &quotient_domain,
+        )
     }
 
     fn get_opt_randomization_poly_commitment(
         &self,
         domains: impl IntoIterator<Item = Domain>,
     ) -> Result<Option<(Cap, WhirData<EF>)>, String> {
-        let shapes: Vec<(usize, usize)> = domains.into_iter().map(|d| (d.size(), EF::DIMENSION)).collect();
+        let shapes: Vec<(usize, usize)> = domains
+            .into_iter()
+            .map(|d| (d.size(), EF::DIMENSION))
+            .collect();
         let offs = vec![0; shapes.len()];
-        Ok(Some((zero_cap(), WhirData { shapes, offs, n_vars: 0, msg: vec![], commit: None, inner: Mutex::new(None) })))
+        Ok(Some((
+            zero_cap(),
+            WhirData {
+                shapes,
+                offs,
+                n_vars: 0,
+                msg: vec![],
+                commit: None,
+                inner: Mutex::new(None),
+            },
+        )))
     }
 }
 
@@ -549,28 +677,60 @@ where
         let c = &hw.config;
         let a = c.soundness_type;
         let fb = EF::bits() - 1;
-        let mut t: Vec<(String, f64)> = vec![("initial-claims".into(), c.initial_claims_error(claims))];
-        let jr = if a == SecurityAssumption::JohnsonBound { 1.0 } else { 0.0 };
-        let folds = |t: &mut Vec<(String, f64)>, r: usize, nv: usize, rate: usize, k: usize, pow: usize| {
-            let gap = a.prox_gaps_error(nv, rate, fb, 2) - jr;
-            let sc = a.fold_sumcheck_error(fb, nv, rate);
-            for _ in 0..k {
-                t.push((format!("r{r}-fold-gap"), gap + pow as f64));
-                t.push((format!("r{r}-fold-sumcheck"), sc + pow as f64));
-            }
+        let mut t: Vec<(String, f64)> =
+            vec![("initial-claims".into(), c.initial_claims_error(claims))];
+        let jr = if a == SecurityAssumption::JohnsonBound {
+            1.0
+        } else {
+            0.0
         };
-        folds(&mut t, 0, c.num_variables(), c.starting_log_inv_rate, c.folding_schedule()[0], c.starting_folding_pow_bits());
+        let folds =
+            |t: &mut Vec<(String, f64)>, r: usize, nv: usize, rate: usize, k: usize, pow: usize| {
+                let gap = a.prox_gaps_error(nv, rate, fb, 2) - jr;
+                let sc = a.fold_sumcheck_error(fb, nv, rate);
+                for _ in 0..k {
+                    t.push((format!("r{r}-fold-gap"), gap + pow as f64));
+                    t.push((format!("r{r}-fold-sumcheck"), sc + pow as f64));
+                }
+            };
+        folds(
+            &mut t,
+            0,
+            c.num_variables(),
+            c.starting_log_inv_rate,
+            c.folding_schedule()[0],
+            c.starting_folding_pow_bits(),
+        );
         let mut old = c.starting_log_inv_rate;
         for (i, r) in c.round_parameters().iter().enumerate() {
             if a != SecurityAssumption::UniqueDecoding {
-                t.push((format!("r{}-ood", i + 1), a.ood_error(r.num_variables, r.log_inv_rate, fb, r.ood_samples)));
+                t.push((
+                    format!("r{}-ood", i + 1),
+                    a.ood_error(r.num_variables, r.log_inv_rate, fb, r.ood_samples),
+                ));
             }
-            t.push((format!("r{}-queries", i + 1), a.queries_error(old, r.num_queries) + r.pow_bits as f64));
+            t.push((
+                format!("r{}-queries", i + 1),
+                a.queries_error(old, r.num_queries) + r.pow_bits as f64,
+            ));
             t.push((
                 format!("r{}-queries-combination", i + 1),
-                a.queries_combination_error(fb, r.num_variables, r.log_inv_rate, r.ood_samples, r.num_queries) + r.pow_bits as f64,
+                a.queries_combination_error(
+                    fb,
+                    r.num_variables,
+                    r.log_inv_rate,
+                    r.ood_samples,
+                    r.num_queries,
+                ) + r.pow_bits as f64,
             ));
-            folds(&mut t, i + 1, r.num_variables, r.log_inv_rate, c.folding_schedule()[i + 1], r.folding_pow_bits);
+            folds(
+                &mut t,
+                i + 1,
+                r.num_variables,
+                r.log_inv_rate,
+                c.folding_schedule()[i + 1],
+                r.folding_pow_bits,
+            );
             old = r.log_inv_rate;
         }
         let rt = c.randomized_terminal();
@@ -589,8 +749,14 @@ where
             f64::INFINITY,
         ));
         let b = c.hiding_base_case_security_report();
-        t.push(("base-case-gamma".into(), b.gamma_round.combined.bits.unwrap_or(0.0)));
-        t.push(("base-case-queries".into(), b.query_round.with_pow.bits.unwrap_or(0.0)));
+        t.push((
+            "base-case-gamma".into(),
+            b.gamma_round.combined.bits.unwrap_or(0.0),
+        ));
+        t.push((
+            "base-case-queries".into(),
+            b.query_round.with_pow.bits.unwrap_or(0.0),
+        ));
         Ok(t)
     }
 }
@@ -618,8 +784,8 @@ fn zp_cis(ds: &[Domain]) -> Vec<F> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use p3_field::BasedVectorSpace;
     use crate::config::Challenge5;
+    use p3_field::BasedVectorSpace;
     type EF = Challenge5;
 
     fn rnd(r: &mut StdRng) -> EF {
@@ -649,7 +815,14 @@ mod tests {
     }
 
     fn pcs() -> WhirUniPcs<EF> {
-        WhirUniPcs::new(WhirParams { target: 64, pow: 0, ..WhirParams::DEFAULT }, [4; 32])
+        WhirUniPcs::new(
+            WhirParams {
+                target: 64,
+                pow: 0,
+                ..WhirParams::DEFAULT
+            },
+            [4; 32],
+        )
     }
 
     /// trace masking agrees with the trace on H; quotient masks keep each chunk's values on its domain
@@ -664,14 +837,24 @@ mod tests {
             for col in 0..3 {
                 let x = g.exp_u64(row as u64);
                 let col_c: Vec<F> = (0..32).map(|i| c.values[i * 3 + col]).collect();
-                assert_eq!(horner::<EF>(&col_c, EF::from(x)), EF::from(tr.values[row * 3 + col]));
+                assert_eq!(
+                    horner::<EF>(&col_c, EF::from(x)),
+                    EF::from(tr.values[row * 3 + col])
+                );
             }
         }
         // quotient: chunk domains of a disjoint coset split in 4, the masks cancel in the Lagrange recombination
         let qd = Domain::new(F::GENERATOR, 6).unwrap();
         let ds = qd.split_domains(4);
-        let ev: Vec<(Domain, RowMajorMatrix<F>)> =
-            ds.iter().map(|d| (*d, RowMajorMatrix::new((0..16 * 2).map(|_| r.random()).collect(), 2))).collect();
+        let ev: Vec<(Domain, RowMajorMatrix<F>)> = ds
+            .iter()
+            .map(|d| {
+                (
+                    *d,
+                    RowMajorMatrix::new((0..16 * 2).map(|_| r.random()).collect(), 2),
+                )
+            })
+            .collect();
         let ldes = p.get_quotient_ldes(ev.clone(), 4).unwrap();
         let zeta = rnd(&mut r);
         let cis = zp_cis(&ds);
@@ -679,7 +862,12 @@ mod tests {
         let mut rhs = [EF::ZERO; 2];
         for (i, ((d, e), l)) in ev.iter().zip(&ldes).enumerate() {
             let plain = p.dft.coset_idft_batch(e.clone(), d.shift());
-            let zp: EF = ds.iter().enumerate().filter(|(j, _)| *j != i).map(|(_, o)| o.vanishing_poly_at_point(zeta)).product::<EF>()
+            let zp: EF = ds
+                .iter()
+                .enumerate()
+                .filter(|(j, _)| *j != i)
+                .map(|(_, o)| o.vanishing_poly_at_point(zeta))
+                .product::<EF>()
                 * cis[i];
             for col in 0..2 {
                 let lc: Vec<F> = (0..32).map(|k| l.values[k * 2 + col]).collect();
@@ -688,45 +876,81 @@ mod tests {
                 rhs[col] += zp * horner::<EF>(&pc, zeta);
                 // on its own domain the masked chunk equals the chunk
                 let x = d.first_point() * F::two_adic_generator(4);
-                assert_eq!(horner::<EF>(&lc, EF::from(x)), horner::<EF>(&pc, EF::from(x)));
+                assert_eq!(
+                    horner::<EF>(&lc, EF::from(x)),
+                    horner::<EF>(&pc, EF::from(x))
+                );
             }
         }
         assert_eq!(lhs, rhs);
     }
 
-    fn round_trip(tamper: impl Fn(&mut OpenedValues<EF>, &mut Vec<ZkWhirProof<F, EF, HidingValMmcs>>)) -> bool {
+    fn round_trip(
+        tamper: impl Fn(&mut OpenedValues<EF>, &mut Vec<ZkWhirProof<F, EF, HidingValMmcs>>),
+    ) -> bool {
         let p = pcs();
         let mut r = StdRng::from_seed([6; 32]);
         let dom = |n: usize| p.natural_domain_for_degree(n);
         let m1 = RowMajorMatrix::new((0..64 * 9).map(|_| r.random()).collect::<Vec<F>>(), 9);
         let m2 = RowMajorMatrix::new((0..16 * 4).map(|_| r.random()).collect::<Vec<F>>(), 4);
         let (c, d) = p.commit(vec![(dom(128), m1), (dom(32), m2)]).unwrap();
-        let (rc, rd) = p.get_opt_randomization_poly_commitment([dom(128), dom(32)]).unwrap().unwrap();
+        let (rc, rd) = p
+            .get_opt_randomization_poly_commitment([dom(128), dom(32)])
+            .unwrap()
+            .unwrap();
         let (z, z2) = (rnd(&mut r), rnd(&mut r));
         let req = vec![
-            OpeningRequest { prover_data: &rd, points: vec![vec![z], vec![z]] },
-            OpeningRequest { prover_data: &d, points: vec![vec![z, z2], vec![z]] },
+            OpeningRequest {
+                prover_data: &rd,
+                points: vec![vec![z], vec![z]],
+            },
+            OpeningRequest {
+                prover_data: &d,
+                points: vec![vec![z, z2], vec![z]],
+            },
         ];
         let mut ch = BeChallenger::new(&[1; 32]);
         let (mut ov, mut pf) = p.open(req, &mut ch).unwrap();
         tamper(&mut ov, &mut pf);
         let rounds = vec![
-            CommitmentOpening::from((rc, vec![(dom(128), vec![(z, ov[0][0][0].clone())]), (dom(32), vec![(z, ov[0][1][0].clone())])])),
+            CommitmentOpening::from((
+                rc,
+                vec![
+                    (dom(128), vec![(z, ov[0][0][0].clone())]),
+                    (dom(32), vec![(z, ov[0][1][0].clone())]),
+                ],
+            )),
             CommitmentOpening::from((
                 c,
-                vec![(dom(128), vec![(z, ov[1][0][0].clone()), (z2, ov[1][0][1].clone())]), (dom(32), vec![(z, ov[1][1][0].clone())])],
+                vec![
+                    (
+                        dom(128),
+                        vec![(z, ov[1][0][0].clone()), (z2, ov[1][0][1].clone())],
+                    ),
+                    (dom(32), vec![(z, ov[1][1][0].clone())]),
+                ],
             )),
         ];
         let v = WhirUniPcs::<EF>::new(p.w, [0; 32]);
-        v.verify(rounds, &pf, &mut BeChallenger::new(&[1; 32])).is_ok()
+        v.verify(rounds, &pf, &mut BeChallenger::new(&[1; 32]))
+            .is_ok()
     }
 
     #[test]
     fn open_verify_and_rejections() {
         assert!(round_trip(|_, _| {}));
-        assert!(!round_trip(|ov, _| ov[1][0][1][3] += EF::ONE), "wrong opened value");
-        assert!(!round_trip(|ov, _| ov[0][1][0][0] = EF::ONE), "nonzero randomisation value");
-        assert!(!round_trip(|_, pf| pf[0].evals[0] += EF::ONE), "wrong evals entry");
+        assert!(
+            !round_trip(|ov, _| ov[1][0][1][3] += EF::ONE),
+            "wrong opened value"
+        );
+        assert!(
+            !round_trip(|ov, _| ov[0][1][0][0] = EF::ONE),
+            "nonzero randomisation value"
+        );
+        assert!(
+            !round_trip(|_, pf| pf[0].evals[0] += EF::ONE),
+            "wrong evals entry"
+        );
         assert!(!round_trip(|_, pf| pf.clear()), "missing opening");
     }
 }

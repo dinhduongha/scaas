@@ -11,6 +11,7 @@ results.json was written by the image's older results.py, so the run files are s
 results.py. Inputs: the run files of this directory, c-fnv-n5.jsonl / c-fnv-n10.jsonl (the C core's pqz_bench 5 / 10
 in the same image). The output equals the committed expected-results.json (fs3 Task 6 fix 1: diff empty).
 """
+
 import importlib.util, json, os, sys
 
 RUN = os.path.dirname(os.path.abspath(__file__))
@@ -28,7 +29,8 @@ CHANGE = (
     "same hashes, proof sizes and digest lines (times, ratios and memory peaks within tolerance): relations.*.fnv n = 1/2/3 from that run's C benches, n = 5/10 from the C core's pqz_bench there "
     "(c-fnv-n5/n10.jsonl; the Rust core gives the same hashes for n = 1/3/5/10), proof_bytes_max, "
     "wasm_prove_peak_bytes, ratios, times, pqzh figures of seeds 0/1 only (seeds 2-4 need a --full refreeze), "
-    "ffi.selftest + digest_lines, txm, rust.txm_fnv, rust.keys_kat; machine block unchanged")
+    "ffi.selftest + digest_lines, txm, rust.txm_fnv, rust.keys_kat; machine block unchanged"
+)
 
 
 def bench_fnv(name):
@@ -43,7 +45,10 @@ def bench_fnv(name):
 
 def main(base):
     e = json.load(open(base))
-    files = {n: os.path.join(RUN, n) for n in list(R.BENCH) + R.CHECKS + list(R.PQZH_RUNS) + list(R.TEXT) + R.FFI + [R.VECTORS]}
+    files = {
+        n: os.path.join(RUN, n)
+        for n in list(R.BENCH) + R.CHECKS + list(R.PQZH_RUNS) + list(R.TEXT) + R.FFI + [R.VECTORS]
+    }
     files.update({n: os.path.join(RUN, n) for n in list(R.RUST_BENCH) + R.RUST_TXM + [R.RUST_KEYS]})
     r = R.summarize(files)
     R.add_pqzh(r, files)
@@ -55,7 +60,9 @@ def main(base):
         o["proof_bytes_max"] = x["proof_bytes_max"]
         o["wasm_prove_peak_bytes"] = x["wasm_prove_peak_bytes"]
         o["ratios"] = x["ratios"]
-        o["times_ms_informational"] = {k: v for k, v in x.items() if k.endswith(("_ms_native", "_ms_wasm", "_ms_x86v3"))}
+        o["times_ms_informational"] = {
+            k: v for k, v in x.items() if k.endswith(("_ms_native", "_ms_wasm", "_ms_x86v3"))
+        }
     for rel, x in r["pqzh"]["forms"].items():
         o = e["pqzh"]["forms"][rel]
         o["fnv"] = {s: h for _, s, h in x["fnv_seen"]}
@@ -66,11 +73,18 @@ def main(base):
     e["ffi"] = {"selftest": r["ffi"]["selftest"], "digest_lines": r["ffi"]["digests_native"]}
     e["txm"] = R.txm_expected(r)
     e["rust"]["txm_fnv"] = {rel: {str(n): h} for rel, _, n, h in r["rust"]["txm_fnv_seen"]}
-    e["rust"]["txm_fnv_source"] = (REL_RUN + " (Rust core, bench 2 per shape; the PASS run " + PASS_RUN + " gives the "
-                                   "same hashes; the C core gives the same proofs at this set: gate fin-fnv-c.txt)")
+    e["rust"]["txm_fnv_source"] = (
+        REL_RUN + " (Rust core, bench 2 per shape; the PASS run " + PASS_RUN + " gives the "
+        "same hashes; the C core gives the same proofs at this set: gate fin-fnv-c.txt)"
+    )
     e["rust"]["keys_kat"]["sha256"] = r["rust"]["keys_kat_sha256"]
-    e["rust"]["keys_kat"]["source"] = ("SHA-256 of the Rust keys KAT (pqz keys_kat 100) at n2304-kmax4096, run " + REL_RUN
-                                       + " (the PASS run " + PASS_RUN + " gives the same file; pqz_kat.py --c-keys: = C)")
+    e["rust"]["keys_kat"]["source"] = (
+        "SHA-256 of the Rust keys KAT (pqz keys_kat 100) at n2304-kmax4096, run "
+        + REL_RUN
+        + " (the PASS run "
+        + PASS_RUN
+        + " gives the same file; pqz_kat.py --c-keys: = C)"
+    )
     e["changes"].append(CHANGE)
     names = {os.path.basename(p) for p in files.values() if os.path.exists(p)}
     names |= {"c-fnv-n5.jsonl", "c-fnv-n10.jsonl", "rust-host-bench-n1.jsonl", "rust-host-bench-n10.jsonl"}

@@ -6,6 +6,7 @@ and never above live, because D6 measured the Rust core faster than the C core o
 exceeds live keeps live). Same rule for selftestGas (PQZL-led: the smallest row). <out> is a calibration-shaped file
 (one schedule) for chain/add-schedule.py ... --ops 1,2,3,4,5,7 --id pqzl --selftest: its PQZL rows and selftestGas
 are the result; its PQZH rows and ML-DSA prices are the live ones (add-schedule takes only the PQZL rows)."""
+
 import json
 import sys
 
@@ -34,7 +35,9 @@ def main(live_p, r1_p, r2_p, out_p):
     print(f"{out_p}: {len(changed)} PQZL rows changed, selftestGas {live['selftestGas']:,} -> {st:,}")
     for r, o in changed:
         shape = f" [{r['legs']}, {r['auditorOn']}]" if r["op"] == 7 else ""
-        print(f"  op {r['op']} stmtLen {r['stmtLen']}{shape}: {o['gas']:,} -> {r['gas']:,} ({100 * (r['gas'] - o['gas']) / o['gas']:+.1f} %)")
+        print(
+            f"  op {r['op']} stmtLen {r['stmtLen']}{shape}: {o['gas']:,} -> {r['gas']:,} ({100 * (r['gas'] - o['gas']) / o['gas']:+.1f} %)"
+        )
 
 
 if __name__ == "__main__":

@@ -39,15 +39,27 @@ impl Executor {
     ) -> Promise {
         self.router_only();
         Promise::new(target)
-            .function_call_weight(method, args, env::attached_deposit(), target_gas, GasWeight(0))
+            .function_call_weight(
+                method,
+                args,
+                env::attached_deposit(),
+                target_gas,
+                GasWeight(0),
+            )
             .transfer(NearToken::from_yoctonear(0))
     }
 
-    pub fn return_deposit(&mut self, #[serializer(borsh)] to: AccountId, #[serializer(borsh)] amount: U128) {
+    pub fn return_deposit(
+        &mut self,
+        #[serializer(borsh)] to: AccountId,
+        #[serializer(borsh)] amount: U128,
+    ) {
         self.router_only();
         // T19 ruling A: never a zero-amount return (the router asks only for a deposit that came back)
         if amount.0 > 0 {
-            Promise::new(to).transfer(NearToken::from_yoctonear(amount.0)).detach();
+            Promise::new(to)
+                .transfer(NearToken::from_yoctonear(amount.0))
+                .detach();
         }
     }
 
@@ -59,6 +71,9 @@ impl Executor {
 
 impl Executor {
     fn router_only(&self) {
-        require!(env::predecessor_account_id() == self.router, "only the router calls the executor");
+        require!(
+            env::predecessor_account_id() == self.router,
+            "only the router calls the executor"
+        );
     }
 }

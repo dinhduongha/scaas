@@ -17,10 +17,10 @@
 //! `Error::Memory` → `NodeFault` (status 4, as the C backend's arena exhaustion), never `…00`, so a node under memory
 //! pressure cannot reject a proof its peers accept; `prove` gives code 2. Every other core error is the verdict
 //! false, as the C backend (only `pqz_err == PQZ_ERR_ARENA` is a node fault there).
-use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
-use std::sync::Mutex;
+use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 #[cfg(feature = "test-hooks")]
 use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
+use std::sync::Mutex;
 
 use ::pqzl::Ctx;
 
@@ -41,7 +41,10 @@ struct State {
     worker: Option<Worker>,
 }
 
-static STATE: Mutex<State> = Mutex::new(State { ctx: Vec::new(), worker: None });
+static STATE: Mutex<State> = Mutex::new(State {
+    ctx: Vec::new(),
+    worker: None,
+});
 
 /// Test hook (feature `test-hooks`, never in a production build): every core call panics inside `with_ctx`'s catch,
 /// as a panic in the core would (`tests/fault.rs`: the panic path).
@@ -118,14 +121,22 @@ fn verdict(r: Result<bool, ::pqzl::Error>) -> Result<bool, NodeFault> {
 #[doc(hidden)]
 pub fn verify_fast_on_caller(op: u8, stmt: &[u8], proof: &[u8]) -> bool {
     let mut g = STATE.lock().unwrap_or_else(|e| e.into_inner());
-    g.ctx.first_mut().is_some_and(|c| c.verify_fast(op, stmt, proof))
+    g.ctx
+        .first_mut()
+        .is_some_and(|c| c.verify_fast(op, stmt, proof))
 }
 
 /// `pqzl::test_mutate` (feature `fuzz` only): decode `proof` for relation `rel` (an op, 0x81 for `R_TX0`, or an
 /// `R_TXM` shape code), change one field (`kind` 0..14 with `r1` / `r2`; any other kind changes nothing) and
 /// re-encode. `Ok(None)`: the proof does not decode.
 #[cfg(feature = "fuzz")]
-pub fn test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Result<Option<Vec<u8>>, NodeFault> {
+pub fn test_mutate(
+    rel: u8,
+    proof: &[u8],
+    kind: u32,
+    r1: u64,
+    r2: u64,
+) -> Result<Option<Vec<u8>>, NodeFault> {
     with_ctx(|_| ::pqzl::test_mutate(rel, proof, kind, r1, r2))?.map_err(|_| NodeFault)
 }
 
@@ -141,7 +152,12 @@ pub fn keypair_from_secret(s: &[i8; N], e: &[i16; N]) -> Option<Box<[u8; PK_BYTE
 
 pub fn keygen(seed32: &[u8; 32]) -> Option<Key> {
     let k = with_ctx(|c| c.keygen(seed32)).ok()?.ok()?;
-    Some(Key { pk: k.pk, s: k.s, e: k.e, ctr: k.ctr })
+    Some(Key {
+        pk: k.pk,
+        s: k.s,
+        e: k.e,
+        ctr: k.ctr,
+    })
 }
 
 pub fn enc(pks: &[&[u8; PK_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> Option<Enc> {
@@ -149,7 +165,12 @@ pub fn enc(pks: &[&[u8; PK_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> O
 }
 
 /// `pqz_enc_seed_win`: recipient j's v at window `win[j]` < 4 (None: every window 0; R0-1)
-pub fn enc_win(pks: &[&[u8; PK_BYTES]], win: Option<&[u8]>, msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> Option<Enc> {
+pub fn enc_win(
+    pks: &[&[u8; PK_BYTES]],
+    win: Option<&[u8]>,
+    msgs: &[[u8; 16]],
+    seed_enc: &[u8; 32],
+) -> Option<Enc> {
     if pks.is_empty() {
         return None; // as the C backend (the core takes a count; the lengths it checks)
     }
@@ -159,7 +180,14 @@ pub fn enc_win(pks: &[&[u8; PK_BYTES]], win: Option<&[u8]>, msgs: &[[u8; 16]], s
     }
     .ok()?
     .ok()?;
-    Some(Enc { u: c.u, vs: c.vs, r: c.r, e1: c.e1, e2: c.e2, ctr: c.ctr })
+    Some(Enc {
+        u: c.u,
+        vs: c.vs,
+        r: c.r,
+        e1: c.e1,
+        e2: c.e2,
+        ctr: c.ctr,
+    })
 }
 
 /// `seed_enc_g` of `R_TXM` group `g` (P6-ANON D13, `pqz_enc_group_seed`): `seed_enc` for g = 0, else
@@ -188,12 +216,14 @@ pub fn dec_win(s: &[i8; N], ct: &[u8; CT_BYTES], win: usize) -> Option<([i64; 16
 #[cfg(feature = "prove")]
 pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8>, i32> {
     use ::pqzl::Error::*;
-    with_ctx(|c| c.prove(op, stmt, wit, rnd32)).map_err(|NodeFault| -1)?.map_err(|e| match e {
-        Internal => 1,
-        Memory => 2,
-        Input => 3,
-        Reject => 4,
-    })
+    with_ctx(|c| c.prove(op, stmt, wit, rnd32))
+        .map_err(|NodeFault| -1)?
+        .map_err(|e| match e {
+            Internal => 1,
+            Memory => 2,
+            Input => 3,
+            Reject => 4,
+        })
 }
 
 /// Encryption with chosen short vectors (`pqz_encrypt`, no norm check): `u = A^T r + e1`, `v_j = pk_j^T r + e2_j +
@@ -240,7 +270,11 @@ mod tests {
         assert_eq!(verdict(Ok(true)), Ok(true));
         assert_eq!(verdict(Ok(false)), Ok(false));
         assert_eq!(verdict(Err(::pqzl::Error::Memory)), Err(NodeFault));
-        for e in [::pqzl::Error::Internal, ::pqzl::Error::Input, ::pqzl::Error::Reject] {
+        for e in [
+            ::pqzl::Error::Internal,
+            ::pqzl::Error::Input,
+            ::pqzl::Error::Reject,
+        ] {
             assert_eq!(verdict(Err(e)), Ok(false));
         }
     }

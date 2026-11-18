@@ -43,12 +43,15 @@ library FrostSecp256k1 {
 
     /// `z·G − c·Q == (rx, ry)` with `Q` the compressed point at `q[o:o+33]` (lifted by ecrecover from its prefix).
     function isLinear(bytes memory q, uint256 o, uint256 z, uint256 c, uint256 rx, uint256 ry)
-        internal pure returns (bool)
+        internal
+        pure
+        returns (bool)
     {
         uint256 prefix = uint8(q[o]);
         uint256 qx = _word(q, o + 1);
         if (prefix != 2 && prefix != 3) return false;
-        address got = ecrecover(bytes32(mulmod(N - z, qx, N)), uint8(prefix + 25), bytes32(qx), bytes32(mulmod(N - c, qx, N)));
+        address got =
+            ecrecover(bytes32(mulmod(N - z, qx, N)), uint8(prefix + 25), bytes32(qx), bytes32(mulmod(N - c, qx, N)));
         return got != address(0) && got == address(uint160(uint256(keccak256(abi.encodePacked(rx, ry)))));
     }
 

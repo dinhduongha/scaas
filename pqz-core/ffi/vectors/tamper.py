@@ -7,6 +7,7 @@ REGISTER rows').
   python3 -I tamper.py [vector dir] [leaves per file, default 12]
 The parameter set: PQZ_SET (pqz_kat.py's; default the v3 set and its directory smartcontracts/vectors/pqz, another set
 smartcontracts/vectors/pqz/<set>)."""
+
 import importlib.util
 import json
 import os
@@ -81,5 +82,8 @@ for name in sorted(f for f in os.listdir(D) if f.endswith(".json")):
         print(f"{name}: {caught} / {len(picks)} changes caught (partial checker: {kat.PARTIAL_CHECKERS[name]})")
         continue
     print(f"{name}: {caught} / {len(picks)} changes caught")
-print(f"tamper: {total - fails - excused} / {total} caught ({excused} not caught by a partial checker):", "ok" if fails == 0 else "FAIL")
+print(
+    f"tamper: {total - fails - excused} / {total} caught ({excused} not caught by a partial checker):",
+    "ok" if fails == 0 else "FAIL",
+)
 sys.exit(1 if fails else 0)

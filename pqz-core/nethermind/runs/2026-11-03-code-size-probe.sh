@@ -19,21 +19,22 @@ SHA=$(git -C "$ROOT" rev-parse --short HEAD)
 LOG=$HERE/2026-11-03-code-size-probe-$ARM-${IMAGE##*:}.log
 
 if [ -z "${PROBE_INNER:-}" ]; then
-  if [ -f "$LOG" ] && [ "$(head -1 "$LOG")" = "# $ARM at commit $SHA" ] && [ "$(tail -1 "$LOG")" = "rc=0" ]; then
-    echo "arm $ARM: done at $SHA, skipped"; exit 0
-  fi
-  echo "# $ARM at commit $SHA" > "$LOG"
-  rc=0
-  PROBE_INNER=1 sh "$0" "$@" >> "$LOG" 2>&1 || rc=$?
-  echo "rc=$rc" >> "$LOG"
-  grep -E '^(ok|FAIL) |params:|PROBE-' "$LOG" || true
-  echo "arm $ARM: rc=$rc"
-  exit "$rc"
+    if [ -f "$LOG" ] && [ "$(head -1 "$LOG")" = "# $ARM at commit $SHA" ] && [ "$(tail -1 "$LOG")" = "rc=0" ]; then
+        echo "arm $ARM: done at $SHA, skipped"
+        exit 0
+    fi
+    echo "# $ARM at commit $SHA" >"$LOG"
+    rc=0
+    PROBE_INNER=1 sh "$0" "$@" >>"$LOG" 2>&1 || rc=$?
+    echo "rc=$rc" >>"$LOG"
+    grep -E '^(ok|FAIL) |params:|PROBE-' "$LOG" || true
+    echo "arm $ARM: rc=$rc"
+    exit "$rc"
 fi
 
 # signer | follower: one service of the copy's compose file, on the port the file gives only to nginx
 node_up() {
-  IMAGE=$IMAGE GENESIS=genesis.arm.json docker compose -f "$C/docker-compose.copy.yml" -f - up -d "$1" <<'YML'
+    IMAGE=$IMAGE GENESIS=genesis.arm.json docker compose -f "$C/docker-compose.copy.yml" -f - up -d "$1" <<'YML'
 services:
   signer:
     ports: ["127.0.0.1:18545:8545"]
@@ -42,13 +43,19 @@ services:
     environment: {NETHERMIND_HIVE_ENABLED: "true"}
     volumes: ["${COPY}/rows.jsonl.rlp:/chain.rlp:ro"]
 YML
-  curl -s --retry 90 --retry-delay 2 --retry-all-errors --retry-max-time 240 -o /dev/null -H 'content-type: application/json' \
-    --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' http://127.0.0.1:18545
+    curl -s --retry 90 --retry-delay 2 --retry-all-errors --retry-max-time 240 -o /dev/null -H 'content-type: application/json' \
+        --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' http://127.0.0.1:18545
 }
 node_log() { docker logs "pqzcopy-$1" 2>&1 | grep -E 'PQZ-START|PQZ-REFUSE|Invalid|Rejected|[Ii]nvalid block|Exception|Nethermind 2\.|Hive' | head -40 || true; }
 e2e() { python3 -I "$C/e2e.py" "$@"; }
 rows() { e2e codesize --key "$KEY" --record "$COPY/rows.jsonl" --sizes "$1" --gas "$2"; }
-clean() { rc=$?; trap - EXIT; "$C/copy.sh" down || true; "$C/copy.sh" wipe || true; exit "$rc"; }
+clean() {
+    rc=$?
+    trap - EXIT
+    "$C/copy.sh" down || true
+    "$C/copy.sh" wipe || true
+    exit "$rc"
+}
 
 [ -z "$(docker ps -q --filter name=pqzcopy-)" ]
 awk '/MemAvailable/ {exit !($2 >= 4194304)}' /proc/meminfo
@@ -90,26 +97,29 @@ KEY=$(python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); print((d["
 echo "PROBE-image $IMAGE $(docker image inspect "$IMAGE" --format '{{.Id}}')"
 
 node_up signer
-: > "$COPY/rows.jsonl"
+: >"$COPY/rows.jsonl"
 fail=0
 case $ARM in
-0) rows 65536:ok,65537:fail 110000000 || fail=1 ;;
-A|C)
-  rows 65536:ok,65537:ok,70000:jump 130000000 || fail=1
-  rows 119000:ok 198900000 || fail=1
-  rows 119800:any 199900000 || fail=1          # not in T0: the same size at a tx.gas that fits the block
-  rows 119800:out 200100000 || fail=1 ;;       # T0: formula tx.gas above the block; last, it may stay pending
-B)
-  rows 131072:ok,131073:fail 290000000 || fail=1
-  rows 131073:init,140000:init 30000000 || fail=1 ;;
-D)
-  rows 131072:ok,131073:fail 290000000 || fail=1
-  # init code rows, accepted or refused, ascending: a refusal at the pool takes no nonce. The largest .init row of
-  # size-baseline.json (WrappedPqzToken's) first.
-  INIT=$(python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); print(max(v for k, v in d.items() if k.endswith(".init")))' \
-    "$ROOT/smartcontracts/evm/size-baseline.json")
-  echo "PROBE-largest-init size-baseline.json $INIT B"
-  rows "$INIT:init,131072:init,131073:init,262144:init,262145:init" 290000000 || fail=1 ;;
+    0) rows 65536:ok,65537:fail 110000000 || fail=1 ;;
+    A | C)
+        rows 65536:ok,65537:ok,70000:jump 130000000 || fail=1
+        rows 119000:ok 198900000 || fail=1
+        rows 119800:any 199900000 || fail=1 # not in T0: the same size at a tx.gas that fits the block
+        rows 119800:out 200100000 || fail=1
+        ;; # T0: formula tx.gas above the block; last, it may stay pending
+    B)
+        rows 131072:ok,131073:fail 290000000 || fail=1
+        rows 131073:init,140000:init 30000000 || fail=1
+        ;;
+    D)
+        rows 131072:ok,131073:fail 290000000 || fail=1
+        # init code rows, accepted or refused, ascending: a refusal at the pool takes no nonce. The largest .init row of
+        # size-baseline.json (WrappedPqzToken's) first.
+        INIT=$(python3 -I -c 'import json,sys; d=json.load(open(sys.argv[1])); print(max(v for k, v in d.items() if k.endswith(".init")))' \
+            "$ROOT/smartcontracts/evm/size-baseline.json")
+        echo "PROBE-largest-init size-baseline.json $INIT B"
+        rows "$INIT:init,131072:init,131073:init,262144:init,262145:init" 290000000 || fail=1
+        ;;
 esac
 e2e codedump --record "$COPY/rows.jsonl" || fail=1
 node_log signer

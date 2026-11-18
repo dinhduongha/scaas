@@ -44,8 +44,21 @@ library DexLegs {
     /// The order a wrap order is at the underlying (TS-D19): `dex == receiveToken == wrappedToken` (the address
     /// `WrapOrder` is in legacy/ua-mtx-merge/, R39).
     function asTrade(ITradeToken.UAWrapOrder memory w) internal pure returns (ITradeToken.UATradeOrder memory) {
-        return ITradeToken.UATradeOrder(w.from, w.wrappedToken, w.amount, w.minMinted, w.minFill, w.fee, w.relayer,
-            w.wrappedToken, w.destination, w.flags, w.batch, w.nonce, w.validUntil);
+        return ITradeToken.UATradeOrder(
+            w.from,
+            w.wrappedToken,
+            w.amount,
+            w.minMinted,
+            w.minFill,
+            w.fee,
+            w.relayer,
+            w.wrappedToken,
+            w.destination,
+            w.flags,
+            w.batch,
+            w.nonce,
+            w.validUntil
+        );
     }
 
     function pad(address a) internal pure returns (bytes32) {
@@ -54,8 +67,21 @@ library DexLegs {
 
     /// The `UATradeOrder` a SCaaS token takes for an address-shaped order (a copy: the caller may change `o` later).
     function ua(ITradeToken.TradeOrder memory o) internal pure returns (ITradeToken.UATradeOrder memory) {
-        return ITradeToken.UATradeOrder(pad(o.from), o.receiveToken, o.amount, o.receiveAmount, o.minFill, o.fee, o.relayer,
-            o.dex, pad(o.destination), o.flags, o.batch, o.nonce, o.validUntil);
+        return ITradeToken.UATradeOrder(
+            pad(o.from),
+            o.receiveToken,
+            o.amount,
+            o.receiveAmount,
+            o.minFill,
+            o.fee,
+            o.relayer,
+            o.dex,
+            pad(o.destination),
+            o.flags,
+            o.batch,
+            o.nonce,
+            o.validUntil
+        );
     }
 
     /// A native id's `UASig`: its own signature only (R17).
@@ -74,7 +100,9 @@ library DexLegs {
 
     /// The tagged leg the DEX takes for `o` (see `wire`).
     function leg(address sell, ITradeToken.TradeOrder memory o, bytes memory sig, uint256 fill)
-        internal view returns (ISCaaSDex.DexLeg memory)
+        internal
+        view
+        returns (ISCaaSDex.DexLeg memory)
     {
         if (scaas(o.dex, sell)) return uaLeg(sell, ua(o), sigOf(sig), fill);
         return leg0(sell, o, sig, fill);
@@ -82,34 +110,49 @@ library DexLegs {
 
     /// A shape-0 leg, whatever the sell token (on a SCaaS token the DEX refuses it, R12).
     function leg0(address sell, ITradeToken.TradeOrder memory o, bytes memory sig, uint256 fill)
-        internal pure returns (ISCaaSDex.DexLeg memory l)
+        internal
+        pure
+        returns (ISCaaSDex.DexLeg memory l)
     {
         (l.sellToken, l.order, l.sig, l.fill) = (sell, o, sig, fill);
     }
 
     function uaLeg(address sell, ITradeToken.UATradeOrder memory o, IUARegistry.UASig memory auth, uint256 fill)
-        internal pure returns (ISCaaSDex.DexLeg memory l)
+        internal
+        pure
+        returns (ISCaaSDex.DexLeg memory l)
     {
         (l.sellToken, l.shape, l.uaOrder, l.auth, l.fill) = (sell, 1, o, auth, fill);
     }
 
     /// A settlement leg as an exchange leg.
     function exchange(ISCaaSDex.DexLeg memory l, uint256 sellFill, uint256 receiveFill)
-        internal pure returns (ISCaaSDex.ExchangeLeg memory x)
+        internal
+        pure
+        returns (ISCaaSDex.ExchangeLeg memory x)
     {
-        (x.sellToken, x.shape, x.order, x.uaOrder, x.sig, x.auth) = (l.sellToken, l.shape, l.order, l.uaOrder, l.sig, l.auth);
+        (x.sellToken, x.shape, x.order, x.uaOrder, x.sig, x.auth) =
+        (l.sellToken, l.shape, l.order, l.uaOrder, l.sig, l.auth);
         (x.sellFill, x.receiveFill) = (sellFill, receiveFill);
     }
 
-    function xLeg(address sell, ITradeToken.TradeOrder memory o, bytes memory sig, uint256 sellFill, uint256 receiveFill)
-        internal view returns (ISCaaSDex.ExchangeLeg memory)
-    {
+    function xLeg(
+        address sell,
+        ITradeToken.TradeOrder memory o,
+        bytes memory sig,
+        uint256 sellFill,
+        uint256 receiveFill
+    ) internal view returns (ISCaaSDex.ExchangeLeg memory) {
         return exchange(leg(sell, o, sig, 0), sellFill, receiveFill);
     }
 
-    function uaXLeg(address sell, ITradeToken.UATradeOrder memory o, IUARegistry.UASig memory auth, uint256 sellFill,
-        uint256 receiveFill) internal pure returns (ISCaaSDex.ExchangeLeg memory)
-    {
+    function uaXLeg(
+        address sell,
+        ITradeToken.UATradeOrder memory o,
+        IUARegistry.UASig memory auth,
+        uint256 sellFill,
+        uint256 receiveFill
+    ) internal pure returns (ISCaaSDex.ExchangeLeg memory) {
         return exchange(uaLeg(sell, o, auth, 0), sellFill, receiveFill);
     }
 
@@ -121,12 +164,16 @@ library DexLegs {
         w.ref = s.ref;
         w.taker = wire(s.taker);
         w.makers = new ISCaaSDex.DexLeg[](s.makers.length);
-        for (uint256 i; i < s.makers.length; ++i) w.makers[i] = wire(s.makers[i]);
+        for (uint256 i; i < s.makers.length; ++i) {
+            w.makers[i] = wire(s.makers[i]);
+        }
     }
 
     function wire(Settlement[] memory ss) internal view returns (ISCaaSDex.Settlement[] memory w) {
         w = new ISCaaSDex.Settlement[](ss.length);
-        for (uint256 i; i < ss.length; ++i) w[i] = wire(ss[i]);
+        for (uint256 i; i < ss.length; ++i) {
+            w[i] = wire(ss[i]);
+        }
     }
 
     function wire(ExchangePlan memory p) internal view returns (ISCaaSDex.ExchangePlan memory w) {

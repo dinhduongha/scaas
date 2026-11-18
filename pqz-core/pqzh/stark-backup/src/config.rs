@@ -5,20 +5,22 @@
 //! Goldilocks^5 (the PQZH choice).
 
 use p3_challenger::{
-    ByteGrindingChallenger, CanObserve, CanSample, CanSampleBits, CanSampleUniformBits, FieldChallenger,
-    GrindingChallenger, HashChallenger, ResamplingError,
+    ByteGrindingChallenger, CanObserve, CanSample, CanSampleBits, CanSampleUniformBits,
+    FieldChallenger, GrindingChallenger, HashChallenger, ResamplingError,
 };
 use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2DitParallel;
 use p3_field::extension::BinomialExtensionField;
-use p3_field::{BasedVectorSpace, ExtensionField, PrimeCharacteristicRing, PrimeField64, TwoAdicField};
+use p3_field::{
+    BasedVectorSpace, ExtensionField, PrimeCharacteristicRing, PrimeField64, TwoAdicField,
+};
 use p3_fri::{FriParameters, HidingFriPcs, TwoAdicFriPcs};
 use p3_keccak::Keccak256Hash;
 use p3_merkle_tree::{MerkleCap, MerkleTreeHidingMmcs, MerkleTreeMmcs};
 use p3_symmetric::{CompressionFunctionFromHasher, CryptographicHasher};
 use p3_uni_stark::StarkConfig;
-use rand::SeedableRng;
 use rand::rngs::StdRng;
+use rand::SeedableRng;
 use sha3::Digest;
 
 use crate::ring::F;
@@ -106,7 +108,10 @@ impl CanSampleBits<usize> for BeChallenger {
 }
 
 impl CanSampleUniformBits<F> for BeChallenger {
-    fn sample_uniform_bits<const RESAMPLE: bool>(&mut self, bits: usize) -> Result<usize, ResamplingError> {
+    fn sample_uniform_bits<const RESAMPLE: bool>(
+        &mut self,
+        bits: usize,
+    ) -> Result<usize, ResamplingError> {
         Ok(self.sample_bits(bits)) // bytes from the hash are uniform: no rejection band
     }
 }
@@ -125,9 +130,12 @@ impl GrindingChallenger for BeChallenger {
         let mut sq = self.clone();
         let _: u8 = sq.0.sample();
         let mask = (1u64 << bits) - 1;
-        let i = sq
-            .0
-            .find_witness(F::ORDER_U64, |i| i.to_be_bytes(), |b: [u8; 8]| u64::from_be_bytes(b) & mask == 0)
+        let i =
+            sq.0.find_witness(
+                F::ORDER_U64,
+                |i| i.to_be_bytes(),
+                |b: [u8; 8]| u64::from_be_bytes(b) & mask == 0,
+            )
             .expect("no proof-of-work witness");
         let w = F::from_u64(i);
         assert!(self.check_witness(bits, w));
@@ -144,11 +152,15 @@ impl GrindingChallenger for BeChallenger {
     }
 }
 
-pub type PlainCfg<EF> = StarkConfig<TwoAdicFriPcs<F, Dft, ValMmcs, ExtensionMmcs<F, EF, ValMmcs>>, EF, BeChallenger>;
+pub type PlainCfg<EF> =
+    StarkConfig<TwoAdicFriPcs<F, Dft, ValMmcs, ExtensionMmcs<F, EF, ValMmcs>>, EF, BeChallenger>;
 pub type PlainConfig = PlainCfg<Challenge>;
 pub type Plain5Config = PlainCfg<Challenge5>;
-pub type ZkCfg<EF> =
-    StarkConfig<HidingFriPcs<F, Dft, HidingValMmcs, ExtensionMmcs<F, EF, HidingValMmcs>, StdRng>, EF, BeChallenger>;
+pub type ZkCfg<EF> = StarkConfig<
+    HidingFriPcs<F, Dft, HidingValMmcs, ExtensionMmcs<F, EF, HidingValMmcs>, StdRng>,
+    EF,
+    BeChallenger,
+>;
 pub type ZkConfig = ZkCfg<Challenge>;
 pub type WhirCfg<EF> = StarkConfig<WhirUniPcs<EF>, EF, BeChallenger>;
 pub type Whir2Config = WhirCfg<Challenge>;
@@ -199,8 +211,15 @@ impl WhirParams {
     /// Goldilocks^5, Johnson bound, 128-bit per-term target, fold 4, 16 grinding bits; mask code rate 1/16 (the
     /// smallest proofs with every term at the target, runs/w0-mask-probe.log: rate 1/2 gives 305 mask spot checks,
     /// 1/64 drops the base case's gamma round to 49 bits).
-    pub const DEFAULT: WhirParams =
-        WhirParams { rate: 3, fold: 4, pow: 16, target: 128, unique: false, ell_zk: 4, mask_rate: 4 };
+    pub const DEFAULT: WhirParams = WhirParams {
+        rate: 3,
+        fold: 4,
+        pow: 16,
+        target: 128,
+        unique: false,
+        ell_zk: 4,
+        mask_rate: 4,
+    };
 }
 
 impl Params {
@@ -249,24 +268,46 @@ impl Params {
     }
 
     /// Hiding variant; `rnd` seeds the masks and salts (prover randomness; the verifier passes anything).
-    pub fn zk_ext<EF: ExtensionField<F> + TwoAdicField>(&self, seed: &[u8; 32], rnd: [u8; 32]) -> ZkCfg<EF> {
+    pub fn zk_ext<EF: ExtensionField<F> + TwoAdicField>(
+        &self,
+        seed: &[u8; 32],
+        rnd: [u8; 32],
+    ) -> ZkCfg<EF> {
         let mut r = StdRng::from_seed(rnd);
-        let mmcs =
-            HidingValMmcs::new(BeKeccak, Compress::new(Keccak256Hash {}), self.cap_height, StdRng::from_rng(&mut r));
+        let mmcs = HidingValMmcs::new(
+            BeKeccak,
+            Compress::new(Keccak256Hash {}),
+            self.cap_height,
+            StdRng::from_rng(&mut r),
+        );
         let fri = self.fri(ExtensionMmcs::new(mmcs.clone()));
-        let pcs = HidingFriPcs::new(Dft::default(), mmcs, fri, self.random_codewords(), StdRng::from_rng(&mut r));
+        let pcs = HidingFriPcs::new(
+            Dft::default(),
+            mmcs,
+            fri,
+            self.random_codewords(),
+            StdRng::from_rng(&mut r),
+        );
         StarkConfig::new(pcs, BeChallenger::new(seed))
     }
 
     /// random codewords of the hiding PCS: Plonky3 needs at least the extension degree (4 as in the prototype, 5 for
     /// Goldilocks^5)
     pub fn random_codewords(&self) -> usize {
-        if self.ext5 { 5 } else { 4 }
+        if self.ext5 {
+            5
+        } else {
+            4
+        }
     }
 
     /// extension degree of the challenge field
     pub fn ext_degree(&self) -> usize {
-        if self.ext5 { 5 } else { 2 }
+        if self.ext5 {
+            5
+        } else {
+            2
+        }
     }
 
     pub fn zk(&self, seed: &[u8; 32], rnd: [u8; 32]) -> ZkConfig {
@@ -274,7 +315,14 @@ impl Params {
     }
 
     /// The zero-knowledge WHIR configuration (`self.whir` must be set); `rnd` seeds the masks and salts.
-    pub fn whir_ext<EF: ExtensionField<F> + TwoAdicField>(&self, seed: &[u8; 32], rnd: [u8; 32]) -> WhirCfg<EF> {
-        StarkConfig::new(WhirUniPcs::new(self.whir.expect("whir parameters"), rnd), BeChallenger::new(seed))
+    pub fn whir_ext<EF: ExtensionField<F> + TwoAdicField>(
+        &self,
+        seed: &[u8; 32],
+        rnd: [u8; 32],
+    ) -> WhirCfg<EF> {
+        StarkConfig::new(
+            WhirUniPcs::new(self.whir.expect("whir parameters"), rnd),
+            BeChallenger::new(seed),
+        )
     }
 }

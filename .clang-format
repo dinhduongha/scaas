@@ -1,0 +1,7 @@
+# C / C++ / Qt (clients/ua-c, clients/ua-cxx, clients/ua-qt, the pqz-core C oracle). The same settings as the scaas-app
+# repository, plus ReflowComments off: comment text is never rewritten. Pinned: clang-format 19.1.7 (pip wheel).
+# Excluded files: .clang-format-ignore.
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 120
+ReflowComments: false

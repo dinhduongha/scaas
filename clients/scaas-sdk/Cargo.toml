@@ -56,7 +56,12 @@ uuid = { version = "1", default-features = false }
 getrandom = "0.2"
 # T9: the EVM reads of `account` (the restore scan); T10: the operations of `wallet` (logs, blocks, `U256`); the version and
 # features scaas-rpc takes
-alloy = { version = "~1.6", default-features = false, features = ["std", "rpc-types", "network", "providers"], optional = true }
+alloy = { version = "~1.6", default-features = false, features = [
+  "std",
+  "rpc-types",
+  "network",
+  "providers",
+], optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }

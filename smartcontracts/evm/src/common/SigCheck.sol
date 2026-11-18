@@ -55,9 +55,7 @@ library SigCheck {
     /// @notice accounts.md CTR-UA-24, one rule for the address and the UA paths (owner ruling 2026-10-30, D1): no code
     ///         or the 23-byte EIP-7702 designator ⇒ ECDSA by the address's own key only (the delegate is never asked);
     ///         other code ⇒ ERC-1271 only.
-    function isValid(address signer, bytes32 digest, bytes memory sig, uint256 cap1271)
-        internal view returns (bool)
-    {
+    function isValid(address signer, bytes32 digest, bytes memory sig, uint256 cap1271) internal view returns (bool) {
         if (!isContract(signer)) return _ecdsa(signer, digest, sig);
         return _erc1271(signer, digest, sig, cap1271);
     }
@@ -68,7 +66,9 @@ library SigCheck {
     }
 
     function _erc1271(address signer, bytes32 digest, bytes memory sig, uint256 cap1271)
-        private view returns (bool ok)
+        private
+        view
+        returns (bool ok)
     {
         bytes memory payload = abi.encodeCall(IERC1271.isValidSignature, (digest, sig));
         uint256 left = gasleft();

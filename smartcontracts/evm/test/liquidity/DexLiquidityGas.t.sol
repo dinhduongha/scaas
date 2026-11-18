@@ -35,9 +35,11 @@ contract DexLiquidityGasTest is LiquidityBase {
         o.inputs = _two(_t(address(a), ADD), _t(address(usdc), ADD));
         o.outputs = _one(_t(address(p2), 98_000));
         ISCaaSDex.LiquidityPlan memory p = _plan(o, ALICE_PK, _u2(ADD, ADD));
-        ISCaaSDex.Interaction[] memory xs = _xs3(_ix(address(a), abi.encodeCall(IERC20.transfer, (address(p2), ADD))),
+        ISCaaSDex.Interaction[] memory xs = _xs3(
+            _ix(address(a), abi.encodeCall(IERC20.transfer, (address(p2), ADD))),
             _ix(address(usdc), abi.encodeCall(IERC20.transfer, (address(p2), ADD))),
-            _ix(address(p2), abi.encodeCall(MockV2LiquidityPair.mint, (address(dex)))));
+            _ix(address(p2), abi.encodeCall(MockV2LiquidityPair.mint, (address(dex))))
+        );
         vm.prank(relayer);
         dex.mtxLiquidity(p, xs);
         assertLe(_last("mtxLiquidity v2 add, SCaaS + outside"), 825_000);

@@ -102,13 +102,23 @@ contract DexHandler is Test {
     uint256 public refillsAfterRestore;
     uint256 public skipped;
 
-    constructor(SCaaSDex d, UARegistry r, MockRouter ro, MockExecutor ex, address[3] memory toks, uint256[3] memory pks_,
-        bytes32[2] memory uas, bytes[2] memory keys_, uint16[2] memory kinds_)
-    {
+    constructor(
+        SCaaSDex d,
+        UARegistry r,
+        MockRouter ro,
+        MockExecutor ex,
+        address[3] memory toks,
+        uint256[3] memory pks_,
+        bytes32[2] memory uas,
+        bytes[2] memory keys_,
+        uint16[2] memory kinds_
+    ) {
         (dex, reg, router, exec) = (d, r, ro, ex);
         (A, B, usdc) = (toks[0], toks[1], toks[2]);
         pks = pks_;
-        for (uint256 i; i < 3; ++i) ids[i] = bytes32(uint256(uint160(vm.addr(pks_[i]))));
+        for (uint256 i; i < 3; ++i) {
+            ids[i] = bytes32(uint256(uint160(vm.addr(pks_[i]))));
+        }
         (ids[3], ids[4]) = (uas[0], uas[1]);
         (keys, kinds) = (keys_, kinds_);
     }
@@ -127,7 +137,9 @@ contract DexHandler is Test {
         ISCaaSDex.Settlement[] memory ss = new ISCaaSDex.Settlement[](1);
         (ss[0].ref, ss[0].taker, ss[0].makers) = (bytes32(seed), _leg(tk, m.sell), m.legs);
         _use(tk, m.sell, 0, false);
-        for (uint256 j; j < m.picks.length; ++j) _use(m.picks[j].k, m.picks[j].fill, 0, false);
+        for (uint256 j; j < m.picks.length; ++j) {
+            _use(m.picks[j].k, m.picks[j].fill, 0, false);
+        }
         vm.prank(RELAYER);
         assertTrue(dex.mtxSettle(ss)[0], "settles");
         _commit();
@@ -145,9 +157,7 @@ contract DexHandler is Test {
     }
 
     /// `n` makers selling `sell` for `recv`, each of a party not yet used (new or resting orders, as `_order`).
-    function _makers(uint256 seed, address sell, address recv, uint8 used, uint256 n)
-        internal returns (Ms memory m)
-    {
+    function _makers(uint256 seed, address sell, address recv, uint8 used, uint256 n) internal returns (Ms memory m) {
         (m.used, m.legs, m.picks) = (used, new ISCaaSDex.DexLeg[](n), new Pick[](n));
         for (uint256 j; j < n; ++j) {
             (bool ok, Pick memory q) = _order(_r(seed, 10 + j), sell, recv, m.used);
@@ -185,7 +195,9 @@ contract DexHandler is Test {
         uint256 out = floors + _pick(_r(seed, 2), 0, 100);
         if (IERC20(y).balanceOf(address(router)) < out) return _skip();
         ISCaaSDex.Interaction[] memory xs = _swap(x, y, sold + _pick(_r(seed, 3), 0, 50), sold, out);
-        for (uint256 j; j < n; ++j) _use(qs[j].k, qs[j].fill, 0, false);
+        for (uint256 j; j < n; ++j) {
+            _use(qs[j].k, qs[j].fill, 0, false);
+        }
         vm.prank(RELAYER);
         dex.mtxExchange(p, xs);
         _commit();
@@ -223,12 +235,16 @@ contract DexHandler is Test {
         c.via = _r(seed, 7) & 1 == 1;
         c.tk = _taker(tp, c.x, c.y, fill, m.fill + c.outsideFloor, fill - c.leftover, _r(seed, 8));
         if (c.tk == type(uint256).max) return _skip();
-        if (IERC20(c.y).balanceOf(c.via ? address(exec) : address(router)) < c.outsideFloor + c.surplus) return _skip();
+        if (IERC20(c.y).balanceOf(c.via ? address(exec) : address(router)) < c.outsideFloor + c.surplus) {
+            return _skip();
+        }
         ISCaaSDex.HybridPlan memory p;
         (p.ref, p.taker, p.makers) = (bytes32(seed), _leg(c.tk, fill), m.legs);
         (p.outsideSell, p.outsideFloor) = (c.outsideSell, c.outsideFloor);
         _use(c.tk, fill, c.leftover, false);
-        for (uint256 j; j < m.picks.length; ++j) _use(m.picks[j].k, m.picks[j].fill, 0, true);
+        for (uint256 j; j < m.picks.length; ++j) {
+            _use(m.picks[j].k, m.picks[j].fill, 0, true);
+        }
         _hybridCall(p, c);
         _commit();
         if (c.via) ++hybridsB;
@@ -247,7 +263,8 @@ contract DexHandler is Test {
             vm.prank(RELAYER);
             dex.mtxHybridVia(p, address(exec), abi.encode(int256(c.surplus)));
         } else {
-            ISCaaSDex.Interaction[] memory xs = c.outsideSell == 0 ? new ISCaaSDex.Interaction[](0)
+            ISCaaSDex.Interaction[] memory xs = c.outsideSell == 0
+                ? new ISCaaSDex.Interaction[](0)
                 : _swap(c.x, c.y, c.outsideSell, c.outsideSell - c.leftover, c.outsideFloor + c.surplus);
             vm.prank(RELAYER);
             dex.mtxHybrid(p, xs);
@@ -280,7 +297,9 @@ contract DexHandler is Test {
         }
         vm.prank(RELAYER);
         bool[] memory ok_ = dex.mtxExchangeBatch(ps, xs);
-        for (uint256 i; i < m; ++i) assertEq(ok_[i], i != bad, "plan outcome");
+        for (uint256 i; i < m; ++i) {
+            assertEq(ok_[i], i != bad, "plan outcome");
+        }
         _commit();
         ++batches;
         batchPlansOk += bad == type(uint256).max ? m : m - 1;
@@ -304,8 +323,10 @@ contract DexHandler is Test {
     }
 
     /// A measured fill with its order's signed limit and fee rate.
-    function fillAt(uint256 i) external view returns (uint256 sold, uint256 net, uint256 amount, uint256 receiveAmount,
-        uint256 fee)
+    function fillAt(uint256 i)
+        external
+        view
+        returns (uint256 sold, uint256 net, uint256 amount, uint256 receiveAmount, uint256 fee)
     {
         Fill storage f = fills[i];
         ITradeToken.UATradeOrder storage o = ords[f.k].o;
@@ -323,8 +344,10 @@ contract DexHandler is Test {
             for (uint256 i; i < n; ++i) {
                 uint256 k = (s + i) % n;
                 Ord storage o = ords[k];
-                if (o.sell != sell || o.o.receiveToken != recv || o.o.flags & IOC != 0 || o.ghostPulled >= o.o.amount
-                    || (used >> o.party) & 1 != 0) continue;
+                if (
+                    o.sell != sell || o.o.receiveToken != recv || o.o.flags & IOC != 0 || o.ghostPulled >= o.o.amount
+                        || (used >> o.party) & 1 != 0
+                ) continue;
                 uint256 f = _fill(_r(r, 9), o.o.amount - o.ghostPulled, o.o.minFill);
                 if (_bal(o.party, sell) < f) continue;
                 return (true, Pick(k, f, o.party));
@@ -351,7 +374,8 @@ contract DexHandler is Test {
 
     /// An exchange leg: an order as `_order` and a floor at or a little above its signed limit.
     function _xleg(uint256 r, address sell, address recv, uint8 used)
-        internal returns (bool ok, Pick memory q, uint256 floor)
+        internal
+        returns (bool ok, Pick memory q, uint256 floor)
     {
         (ok, q) = _order(r, sell, recv, used);
         if (ok) floor = _ceil(q.fill, ords[q.k].o.receiveAmount, ords[q.k].o.amount) + _pick(_r(r, 8), 0, 3);
@@ -360,7 +384,8 @@ contract DexHandler is Test {
     /// A new taker of party `p` selling `fill` of x for at least `recv` of y (its price fitted below that), `minFill` at
     /// most `soldMax` (its sold part after any leftover); max when its balance is short.
     function _taker(uint8 p, address x, address y, uint256 fill, uint256 recv, uint256 soldMax, uint256 r)
-        internal returns (uint256)
+        internal
+        returns (uint256)
     {
         uint256 amount = fill + _pick(_r(r, 1), 0, fill);
         uint8 flags = _flags(_r(r, 2), x);
@@ -370,7 +395,9 @@ contract DexHandler is Test {
     }
 
     function _o(address recv, uint256 amount, uint256 rAmt, uint256 minFill, uint8 flags)
-        internal pure returns (ITradeToken.UATradeOrder memory o)
+        internal
+        pure
+        returns (ITradeToken.UATradeOrder memory o)
     {
         (o.receiveToken, o.amount, o.receiveAmount, o.minFill, o.flags) = (recv, amount, rAmt, minFill, flags);
     }
@@ -401,7 +428,8 @@ contract DexHandler is Test {
 
     function _leg(uint256 k, uint256 fill) internal view returns (ISCaaSDex.DexLeg memory) {
         Ord storage o = ords[k];
-        return o.shape == 0 ? DexLegs.leg(o.sell, o.t, o.sig, fill)
+        return o.shape == 0
+            ? DexLegs.leg(o.sell, o.t, o.sig, fill)
             : DexLegs.uaLeg(o.sell, o.o, UACall.auth(o.o.from, o.sig), fill);
     }
 
@@ -493,12 +521,15 @@ contract DexHandler is Test {
 
     /// `[approve(router, approved)` on x, `router.swap(x, y, amountIn, amountOut, dex)]`.
     function _swap(address x, address y, uint256 approved, uint256 amountIn, uint256 amountOut)
-        internal view returns (ISCaaSDex.Interaction[] memory xs)
+        internal
+        view
+        returns (ISCaaSDex.Interaction[] memory xs)
     {
         xs = new ISCaaSDex.Interaction[](2);
         xs[0] = ISCaaSDex.Interaction(x, abi.encodeCall(IERC20.approve, (address(router), approved)));
-        xs[1] = ISCaaSDex.Interaction(address(router),
-            abi.encodeCall(MockRouter.swap, (x, y, amountIn, amountOut, address(dex))));
+        xs[1] = ISCaaSDex.Interaction(
+            address(router), abi.encodeCall(MockRouter.swap, (x, y, amountIn, amountOut, address(dex)))
+        );
     }
 
     function _bal(uint8 p, address t) internal view returns (uint256) {
@@ -575,14 +606,29 @@ contract DexInvariantTest is UADexBase {
         usdc.mint(address(exec), 200_000);
         // every target listed: a `LISTED_POOLS` order still settles
         address[5] memory targets = [address(router), address(exec), address(A), address(B), address(usdc)];
-        for (uint256 i; i < targets.length; ++i) dex.setExchangeTarget(targets[i], true, EnvKit.codeUidOf(address(dex)));
-        h = new DexHandler(dex, lreg, router, exec, [address(A), address(B), address(usdc)],
-            [ALICE_PK, BOB_PK, DAVE_PK], [uaP, uaB], [_key(UAKinds.P256), _key(UAKinds.BIP340)],
-            [UAKinds.P256, UAKinds.BIP340]);
+        for (uint256 i; i < targets.length; ++i) {
+            dex.setExchangeTarget(targets[i], true, EnvKit.codeUidOf(address(dex)));
+        }
+        h = new DexHandler(
+            dex,
+            lreg,
+            router,
+            exec,
+            [address(A), address(B), address(usdc)],
+            [ALICE_PK, BOB_PK, DAVE_PK],
+            [uaP, uaB],
+            [_key(UAKinds.P256), _key(UAKinds.BIP340)],
+            [UAKinds.P256, UAKinds.BIP340]
+        );
         targetContract(address(h));
         bytes4[] memory sel = new bytes4[](4);
         (sel[0], sel[1], sel[2], sel[3]) =
-            (DexHandler.settle.selector, DexHandler.exchange.selector, DexHandler.hybrid.selector, DexHandler.batch.selector);
+        (
+            DexHandler.settle.selector,
+            DexHandler.exchange.selector,
+            DexHandler.hybrid.selector,
+            DexHandler.batch.selector
+        );
         targetSelector(FuzzSelector(address(h), sel));
     }
 
@@ -592,7 +638,9 @@ contract DexInvariantTest is UADexBase {
 
     function invariant_dexHoldsNothing() public view {
         address[4] memory t = _tokens();
-        for (uint256 i; i < t.length; ++i) assertEq(IERC20(t[i]).balanceOf(address(dex)), 0, "the DEX holds a token");
+        for (uint256 i; i < t.length; ++i) {
+            assertEq(IERC20(t[i]).balanceOf(address(dex)), 0, "the DEX holds a token");
+        }
         assertEq(address(dex).balance, 0, "the DEX holds native coin");
     }
 
@@ -633,7 +681,9 @@ contract DexInvariantTest is UADexBase {
     /// Per party, Σ over its hybrid maker fills of `⌈fill · receiveAmount / amount⌉` less the fee equals exactly what it
     /// received: no surplus and no leftover ever reaches a maker (DX5, DX7).
     function invariant_makersNeverGetHybridSurplus() public view {
-        for (uint256 p; p < 5; ++p) assertEq(h.makerGot(p), h.makerWant(p), "a hybrid maker got other than its price");
+        for (uint256 p; p < 5; ++p) {
+            assertEq(h.makerGot(p), h.makerWant(p), "a hybrid maker got other than its price");
+        }
     }
 
     function afterInvariant() public {

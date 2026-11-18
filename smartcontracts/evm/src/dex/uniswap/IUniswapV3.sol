@@ -6,8 +6,13 @@ pragma solidity ^0.8.24;
 interface IUniswapV3Pool {
     /// Exact input when `amountSpecified > 0`; the pool sends the output to `recipient`, then calls
     /// `uniswapV3SwapCallback` on `msg.sender`, which must pay the positive delta.
-    function swap(address recipient, bool zeroForOne, int256 amountSpecified, uint160 sqrtPriceLimitX96,
-        bytes calldata data) external returns (int256 amount0, int256 amount1);
+    function swap(
+        address recipient,
+        bool zeroForOne,
+        int256 amountSpecified,
+        uint160 sqrtPriceLimitX96,
+        bytes calldata data
+    ) external returns (int256 amount0, int256 amount1);
 }
 
 interface IUniswapV3Factory {

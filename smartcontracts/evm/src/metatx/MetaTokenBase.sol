@@ -20,6 +20,7 @@ import {IUALedger} from "./IUALedger.sol";
 import {ILiquidityPullToken} from "../trade/ITradeToken.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {IFactoryToken, requireRegOfKind} from "../factory/IFactoryToken.sol";
+import {IOpenFactory} from "../factory/IOpenFactory.sol";
 import {ChainEnvCode} from "../factory/ChainEnvCode.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
@@ -69,7 +70,10 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
     /// @dev Runs ONCE on the implementation and locks it, so nobody can `initialize` it. Chain-neutral (chain-neutral spec
     ///      §2.1, plan T72): the factory's address and `implArgs` (values the same on every chain; plain kinds take none)
     ///      are the only arguments `OpenFactory.deployTokenImplementation` appends.
-    constructor(address factory_) ERC20MetaTx(bytes32(0), address(0), address(0), false) GovernanceBaseCore(address(0)) {
+    constructor(address factory_)
+        ERC20MetaTx(bytes32(0), address(0), address(0), false)
+        GovernanceBaseCore(address(0))
+    {
         FACTORY = factory_;
         _SELF = address(this);
         TokenStore.$().initialized = true;
@@ -111,30 +115,49 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
     /// @dev Plain kinds check nothing; a confidential layer overrides it (its library holds the body).
     function _validateEnv(IFactoryToken.ChainEnv calldata env) internal view virtual {}
 
-    function _chainUidInCode() internal pure override returns (bool) { return true; }
+    function _chainUidInCode() internal pure override returns (bool) {
+        return true;
+    }
 
-    function _chainUidRaw() internal view override returns (bytes32) { return ChainEnvCode.chainUid(); }
+    function _chainUidRaw() internal view override returns (bytes32) {
+        return ChainEnvCode.chainUid();
+    }
 
-    function _govChainUid() internal view override returns (bytes32) { return ChainEnvCode.chainUid(); }
+    function _govChainUid() internal view override returns (bytes32) {
+        return ChainEnvCode.chainUid();
+    }
 
     /// @notice This instance's `chain_uid`; 0 on the implementation (a view: no revert).
-    function chainUid() external view  returns (bytes32) { return ChainEnvCode.chainUid(); }
+    function chainUid() external view returns (bytes32) {
+        return ChainEnvCode.chainUid();
+    }
 
     /// @notice ERC-5267 under the clone's `chain_uid` (`ChainUidZero` on the implementation): the salt every digest uses.
-    function _eip712DomainBody() internal view override returns (
-        bytes1, string memory, string memory, uint256, address, bytes32, uint256[] memory
-    ) {
+    function _eip712DomainBody()
+        internal
+        view
+        override
+        returns (bytes1, string memory, string memory, uint256, address, bytes32, uint256[] memory)
+    {
         return _eip712DomainUnder(_chainUid());
     }
 
     /// @dev No cache (chain-neutral spec §2.4): rebuilt under the clone's `chain_uid` on every call.
-    function _domainSeparatorV4() internal view override returns (bytes32) { return _separator(_chainUid()); }
+    function _domainSeparatorV4() internal view override returns (bytes32) {
+        return _separator(_chainUid());
+    }
 
-    function _registry() internal view override returns (address) { return ChainEnvCode.registry(); }
+    function _registry() internal view override returns (address) {
+        return ChainEnvCode.registry();
+    }
 
-    function _hedera() internal view override returns (bool) { return ChainEnvCode.hedera(); }
+    function _hedera() internal view override returns (bool) {
+        return ChainEnvCode.hedera();
+    }
 
-    function _govRouter() internal view override returns (address) { return ChainEnvCode.govRouter(); }
+    function _govRouter() internal view override returns (address) {
+        return ChainEnvCode.govRouter();
+    }
 
     /// @dev The one reader of the pipeline's values: the head once, the separator under its `chain_uid` (0: the
     ///      implementation, `ChainUidZero`), the `SmartKeyAccount` clone code hash recomputed (chain-neutral spec §2.2).
@@ -142,8 +165,14 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
         ChainEnvCode.Head memory h = ChainEnvCode.head();
         if (h.chainUid == bytes32(0)) revert ChainUidZero();
         address ska = h.smartKeyAccountImpl;
-        return MtxPipelineLib.Ctx(_separator(h.chainUid), h.registry, ska == address(0) ? bytes32(0) : keccak256(
-            abi.encodePacked(hex"363d3d373d3d3d363d73", ska, hex"5af43d82803e903d91602b57fd5bf3")), h.hedera);
+        return MtxPipelineLib.Ctx(
+            _separator(h.chainUid),
+            h.registry,
+            ska == address(0)
+                ? bytes32(0)
+                : keccak256(abi.encodePacked(hex"363d3d373d3d3d363d73", ska, hex"5af43d82803e903d91602b57fd5bf3")),
+            h.hedera
+        );
     }
 
     /// @notice No underlying (the `NORMAL*` kinds); `WrappedToken` lists its legs. Read by the factory's index.
@@ -161,17 +190,38 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
 
     /// @dev `ConfigFieldForOtherKind` for a set field the kind does not use; `conf` is used only by `*_ZETHER`; `maxSupply`
     ///      only by `WRAPPED*`, as `legs`; `reg` only by the regulated kinds (`requireRegOfKind` on `kind()`).
-    function _requireUnused(IFactoryToken.TokenConfig memory cfg, bool supply, bool legs, bool rate, bool conf) internal pure {
+    function _requireUnused(IFactoryToken.TokenConfig memory cfg, bool supply, bool legs, bool rate, bool conf)
+        internal
+        pure
+    {
         requireRegOfKind(kind(), cfg.reg);
-        if (supply && (cfg.initialSupply != 0 || cfg.initialHolder != address(0))) revert IFactoryToken.ConfigFieldForOtherKind(1);
+        if (supply && (cfg.initialSupply != 0 || cfg.initialHolder != address(0))) {
+            revert IFactoryToken.ConfigFieldForOtherKind(1);
+        }
         if (legs && cfg.legs.length != 0) revert IFactoryToken.ConfigFieldForOtherKind(2);
         if (legs && (cfg.maxSupply != 0 || cfg.maxWrapSupply != 0)) revert IFactoryToken.ConfigFieldForOtherKind(5);
-        if (rate && (cfg.rate.rateDelay != 0 || cfg.rate.maxRateStepBps != 0)) revert IFactoryToken.ConfigFieldForOtherKind(3);
+        if (rate && (cfg.rate.rateDelay != 0 || cfg.rate.maxRateStepBps != 0)) {
+            revert IFactoryToken.ConfigFieldForOtherKind(3);
+        }
         IFactoryToken.ConfidentialConfig memory c = cfg.conf;
-        if (conf && (c.auditorKey.length != 0 || c.shieldScale != 0 || c.maxShielded != 0
-            || c.confidentialFee != 0 || c.disclosureMode != 0 || c.auditorMode != 0 || c.minDecoyFee != 0
-            || c.pqzVerifyMode != 0 || c.pqzVerifierUA != 0 || c.pqzVerifierFixed || c.proofStore != 0
-            || c.verifierFee != 0 || c.verifierFeeMax != 0 || c.pqzOwnKey || c.pqzOpening)) {
+        if (
+            conf
+                && (c.auditorKey.length != 0
+                    || c.shieldScale != 0
+                    || c.maxShielded != 0
+                    || c.confidentialFee != 0
+                    || c.disclosureMode != 0
+                    || c.auditorMode != 0
+                    || c.minDecoyFee != 0
+                    || c.pqzVerifyMode != 0
+                    || c.pqzVerifierUA != 0
+                    || c.pqzVerifierFixed
+                    || c.proofStore != 0
+                    || c.verifierFee != 0
+                    || c.verifierFeeMax != 0
+                    || c.pqzOwnKey
+                    || c.pqzOpening)
+        ) {
             revert IFactoryToken.ConfigFieldForOtherKind(4);
         }
     }
@@ -184,15 +234,45 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
         t.kind = kind();
     }
 
-    function name() public view override returns (string memory) { return TokenStore.$().name; }
-    function symbol() public view override returns (string memory) { return TokenStore.$().symbol; }
-    function decimals() public view override returns (uint8) { return TokenStore.$().decimals; }
+    function name() public view override returns (string memory) {
+        return TokenStore.$().name;
+    }
 
-    function factory() external view returns (address) { return FACTORY; }
-    function implementation() external view returns (address) { return _SELF; }
-    function IS_HEDERA() external view returns (bool) { return _IS_HEDERABody(); }
-    function _creatorBody() internal view returns (address) { return TokenStore.$().creator; }
-    function _versionBody() internal view returns (uint64) { return TokenStore.$().version; }
+    function symbol() public view override returns (string memory) {
+        return TokenStore.$().symbol;
+    }
+
+    function decimals() public view override returns (uint8) {
+        return TokenStore.$().decimals;
+    }
+
+    function factory() external view returns (address) {
+        return FACTORY;
+    }
+
+    /// @dev Bit 32 `AUDITOR`'s delay (set-auditor spec §4, owner O1): `max(factory noticePeriod(), grantDelay)`, both fixed
+    ///      after creation and capped at 30 days. Never `PqzStorage.noticePeriod` (0 on a `PRECOMPILE` token).
+    function _auditorDelay() internal view returns (uint64 d) {
+        d = IOpenFactory(FACTORY).noticePeriod();
+        uint64 g = GovernanceLib.$().grantDelay;
+        if (g > d) d = g;
+    }
+
+    function implementation() external view returns (address) {
+        return _SELF;
+    }
+
+    function IS_HEDERA() external view returns (bool) {
+        return _IS_HEDERABody();
+    }
+
+    function _creatorBody() internal view returns (address) {
+        return TokenStore.$().creator;
+    }
+
+    function _versionBody() internal view returns (uint64) {
+        return TokenStore.$().version;
+    }
     /// @notice CTR-TOK-21 kind: 0 `NORMAL`, 1 `WRAPPED`, 2 `NORMAL_ZETHER`, 3 `WRAPPED_ZETHER`; a constant of the
     ///         implementation, so the factory can check it before any clone exists.
     function kind() public pure virtual returns (uint8);
@@ -249,17 +329,39 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
     }
 
     /// @dev One guard over every entry point (CTR-MTX-18), the role and admin functions too (W-Q).
-    function _guardIn() internal override returns (bool) { return _enter(); }
-    function _guardOut(bool outer) internal override { _exit(outer); }
+    function _guardIn() internal override returns (bool) {
+        return _enter();
+    }
 
-    function _caller() internal view override returns (address) { return _msgSender(); }
+    function _guardOut(bool outer) internal override {
+        _exit(outer);
+    }
+
+    function _caller() internal view override returns (address) {
+        return _msgSender();
+    }
+
     /// @dev The `NORMAL*` masks (spec §1.2): roles bit 1, no contract-only bit; `WrappedToken` overrides both. Every token
     ///      kind: scalar bit 1, no scope.
-    function _roleBits() internal pure virtual override returns (uint256) { return GovernanceBits.NORMAL_ROLES; }
-    function _contractOnlyBits() internal pure virtual override returns (uint256) { return 0; }
-    function _scalarBits() internal pure virtual override returns (uint256) { return GovernanceBits.TOKEN_SCALAR; }
-    function _scopeBits() internal pure override returns (uint256) { return 0; }
-    function _uaRegistry() internal view override returns (address) { return _registry(); }
+    function _roleBits() internal pure virtual override returns (uint256) {
+        return GovernanceBits.NORMAL_ROLES;
+    }
+
+    function _contractOnlyBits() internal pure virtual override returns (uint256) {
+        return 0;
+    }
+
+    function _scalarBits() internal pure virtual override returns (uint256) {
+        return GovernanceBits.TOKEN_SCALAR;
+    }
+
+    function _scopeBits() internal pure override returns (uint256) {
+        return 0;
+    }
+
+    function _uaRegistry() internal view override returns (address) {
+        return _registry();
+    }
 
     /// @notice ERC-165; `IERC20Payment` only while `PAYABLE` is set, `IRescuable` only while `RESCUABLE` is;
     ///         `ILiquidityPullToken` on every kind (CTR-DEX-30: the node's pre-check of a liquidity input).
@@ -293,8 +395,15 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
 
     /// @notice `mtxExecuteTransfer(UAMetaTransfer{from, to, amount, 0, batch, nonce, validUntil, mode, relayer, 0, 0})`.
     function _mtxTransferBody(
-        bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
-        uint32 mode, address relayer, IUARegistry.UASig calldata auth
+        bytes32 from,
+        bytes32 to,
+        uint256 amount,
+        uint256 batch,
+        uint256 nonce,
+        uint256 validUntil,
+        uint32 mode,
+        address relayer,
+        IUARegistry.UASig calldata auth
     ) internal returns (bool) {
         if (mode & ~MetaTxLib.MODE_RESTRICT_RELAYER != 0) revert MtxModeShape(mode);
         MetaTxLib.UAMetaTransfer memory t;
@@ -311,8 +420,17 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
     }
 
     function _mtxTransferWithFeeBody(
-        bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
-        uint32 mode, address relayer, uint256 fee, address feeRecipient, IUARegistry.UASig calldata auth
+        bytes32 from,
+        bytes32 to,
+        uint256 amount,
+        uint256 batch,
+        uint256 nonce,
+        uint256 validUntil,
+        uint32 mode,
+        address relayer,
+        uint256 fee,
+        address feeRecipient,
+        IUARegistry.UASig calldata auth
     ) internal returns (bool) {
         _requireFeeShape(mode, feeRecipient);
         MetaTxLib.UAMetaTransfer memory t;
@@ -332,8 +450,11 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
 
     /// @notice The payment `t` with its metadata (CTR-MTX-10, CTR-MTX-26; pay-meta-tax spec §2.1): any lane, the nonce
     ///         space of `mtxExecuteTransfer` (O3); `t.entryRef == metaPayId(meta)` (O11), `PaymentMeta` first.
-    function _mtxPayBody(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth, MetaTxLib.PayMeta calldata meta) internal returns (bool)
-    {
+    function _mtxPayBody(
+        MetaTxLib.UAMetaTransfer calldata t,
+        IUARegistry.UASig calldata auth,
+        MetaTxLib.PayMeta calldata meta
+    ) internal returns (bool) {
         GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
         _payMeta(t.entryRef, meta);
         _uaExecuteTransfer(t, 0, auth, 0, 0);
@@ -364,15 +485,22 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
     }
 
     /// @notice Records `[offset, offset + limit)` of `payNo`, cut at the end; the reader filters `to` and adds up itself.
-    function _paymentsOfBody(bytes32 payNo, uint256 offset, uint256 limit) internal view returns (MetaTxLib.PayRecord[] memory)
+    function _paymentsOfBody(bytes32 payNo, uint256 offset, uint256 limit)
+        internal
+        view
+        returns (MetaTxLib.PayRecord[] memory)
     {
         return _pipePaymentsOf(payNo, offset, limit);
     }
 
     // ------------------------------------------------------------------ payee fee (CTR-MTX-05, CTR-MTX-06)
 
-    function _payeeFeeDigestBody(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil) internal view returns (bytes32)
-    {
+    function _payeeFeeDigestBody(
+        MetaTxLib.UAMetaTransfer calldata t,
+        uint256 fee,
+        address feeRecipient,
+        uint256 validUntil
+    ) internal view returns (bytes32) {
         return _pipePayeeFeeDigest(_domainSeparatorV4(), t, fee, feeRecipient, validUntil);
     }
 
@@ -382,8 +510,12 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
     ///         received. A `UA_POOL` recipient is refused before any move (a move to the pool's address would credit its
     ///         slot with no UA balance behind it).
     function _mtxPayWithPayeeFeeBody(
-        MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth,
-        uint256 fee, address feeRecipient, uint256 pfValidUntil, IUARegistry.UASig calldata payeeAuth,
+        MetaTxLib.UAMetaTransfer calldata t,
+        IUARegistry.UASig calldata payerAuth,
+        uint256 fee,
+        address feeRecipient,
+        uint256 pfValidUntil,
+        IUARegistry.UASig calldata payeeAuth,
         MetaTxLib.PayMeta calldata meta
     ) internal returns (bool) {
         GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
@@ -395,11 +527,17 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
 
     /// @dev `mtxPayWithPayeeFee`'s body after `_payMeta` (its seven arguments leave no stack for the locals).
     function _payeeFee(
-        MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth,
-        uint256 fee, address feeRecipient, uint256 pfValidUntil, IUARegistry.UASig calldata payeeAuth
+        MetaTxLib.UAMetaTransfer calldata t,
+        IUARegistry.UASig calldata payerAuth,
+        uint256 fee,
+        address feeRecipient,
+        uint256 pfValidUntil,
+        IUARegistry.UASig calldata payeeAuth
     ) private {
-        if (t.mode & MetaTxLib.MODE_FEE_MASK != 0 || t.fee != 0
-            || t.mode & MetaTxLib.MODE_RESTRICT_RELAYER == 0 || feeRecipient == address(0)) revert IMetaTokenV2.PayeeFeeShape();
+        if (
+            t.mode & MetaTxLib.MODE_FEE_MASK != 0 || t.fee != 0 || t.mode & MetaTxLib.MODE_RESTRICT_RELAYER == 0
+                || feeRecipient == address(0)
+        ) revert IMetaTokenV2.PayeeFeeShape();
         if (block.timestamp > pfValidUntil) revert IMetaTokenV2.PayeeFeeExpired(pfValidUntil, block.timestamp);
         if (fee == 0 || fee > t.value) revert IMetaTokenV2.PayeeFeeAmount(fee, t.value);
         bytes32 to = MetaTxLib.pad(feeRecipient);
@@ -409,8 +547,13 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
         if (feeRecipient == MetaTxLib.UA_POOL) revert IUALedger.UAPoolNotPayable();
         _regFeeTo(to, fee);
         bytes32 d = _uaExecuteTransfer(t, 0, payerAuth, 0, 0);
-        _pipeAuthorize(_mtxCtx(), t.to, UAKinds.PURPOSE_PAYEE_FEE,
-            _payeeFeeDigestBody(t, fee, feeRecipient, pfValidUntil), payeeAuth);
+        _pipeAuthorize(
+            _mtxCtx(),
+            t.to,
+            UAKinds.PURPOSE_PAYEE_FEE,
+            _payeeFeeDigestBody(t, fee, feeRecipient, pfValidUntil),
+            payeeAuth
+        );
         _uaMove(t.to, to, fee);
         emit IMetaTokenV2.UAPayeeFeePaid(d, t.to, feeRecipient, fee);
     }
@@ -421,8 +564,17 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
     ///         `UARelayFee` with the router as `relayer`, so only the router's own call matches the signature; `payee`
     ///         gets `value` on the payer's lane `(from, batch)` at `nonce` (pay-meta-tax spec §4, O4: one signature runs
     ///         once, a call may be paid by several), fee `NONE`, `ref` = the router's `relayRef(target, callData)`.
-    function _mtxRelayFeeBody(bytes32 from, address target, bytes32 callDataHash, bytes32 payee, uint256 value, uint256 batch,
-        uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) internal {
+    function _mtxRelayFeeBody(
+        bytes32 from,
+        address target,
+        bytes32 callDataHash,
+        bytes32 payee,
+        uint256 value,
+        uint256 batch,
+        uint256 nonce,
+        uint256 validUntil,
+        IUARegistry.UASig calldata auth
+    ) internal {
         _regFeeTo(payee, value);
         MetaTxLib.UAMetaTransfer memory t;
         t.from = from;
@@ -444,17 +596,33 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
     /// @dev The struct the payer signs, `UARelayFee`, from the payment `t` built of it; `relayer` is `msg.sender` (the
     ///      router).
     function _relayHash(MetaTxLib.UAMetaTransfer memory t, address target, bytes32 callDataHash)
-        private view returns (bytes32)
+        private
+        view
+        returns (bytes32)
     {
-        return keccak256(abi.encode(UA_RELAY_FEE_TYPEHASH, t.from, target, callDataHash, t.to, t.value, t.batch, t.nonce,
-            t.validUntil, msg.sender));
+        return keccak256(
+            abi.encode(
+                UA_RELAY_FEE_TYPEHASH,
+                t.from,
+                target,
+                callDataHash,
+                t.to,
+                t.value,
+                t.batch,
+                t.nonce,
+                t.validUntil,
+                msg.sender
+            )
+        );
     }
 
     /// @dev Fee `PERCENT`/`FIXED`, recipient bound by the signer and non-zero.
     function _requireFeeShape(uint32 mode, address feeRecipient) private pure {
         uint32 f = mode & MetaTxLib.MODE_FEE_MASK;
-        if ((f != MetaTxLib.MODE_FEE_PERCENT && f != MetaTxLib.MODE_FEE_FIXED)
-            || mode & MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT == 0 || feeRecipient == address(0)) {
+        if (
+            (f != MetaTxLib.MODE_FEE_PERCENT && f != MetaTxLib.MODE_FEE_FIXED)
+                || mode & MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT == 0 || feeRecipient == address(0)
+        ) {
             revert MtxModeShape(mode);
         }
     }
@@ -463,7 +631,12 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
 
     /// @notice The caller pays gas itself; the fee is on top, `amount` arrives whole; never to the payee (CTR-MTX-08).
     function _payWithFeeBody(
-        address to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient, bytes32 entryRef,
+        address to,
+        uint256 amount,
+        FeeMode feeMode,
+        uint256 fee,
+        address feeRecipient,
+        bytes32 entryRef,
         MetaTxLib.PayMeta calldata meta
     ) internal returns (bool) {
         GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
@@ -485,7 +658,12 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
     /// @notice `payWithFee` to a derived payee (CTR-UA-28): the caller pays `amount` into `to`'s UA balance and the fee
     ///         on top to `feeRecipient` (an address: never the payee; `UA_POOL` and the token are refused by `_update`).
     function _payWithFeeToUABody(
-        bytes32 to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient, bytes32 entryRef,
+        bytes32 to,
+        uint256 amount,
+        FeeMode feeMode,
+        uint256 fee,
+        address feeRecipient,
+        bytes32 entryRef,
         MetaTxLib.PayMeta calldata meta
     ) internal returns (bool) {
         GovernanceLib.requireFeature(GovernanceBits.PAYABLE);

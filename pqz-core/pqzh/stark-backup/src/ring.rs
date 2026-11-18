@@ -19,14 +19,22 @@ pub type Poly = [i64; D];
 
 #[inline]
 pub fn fi(v: i64) -> F {
-    if v >= 0 { F::from_u64(v as u64) } else { -F::from_u64(v.unsigned_abs()) }
+    if v >= 0 {
+        F::from_u64(v as u64)
+    } else {
+        -F::from_u64(v.unsigned_abs())
+    }
 }
 
 /// Centred integer of a field element (|v| < p/2).
 #[inline]
 pub fn centre(x: F) -> i64 {
     let v = x.as_canonical_u64();
-    if v > F::ORDER_U64 / 2 { -((F::ORDER_U64 - v) as i64) } else { v as i64 }
+    if v > F::ORDER_U64 / 2 {
+        -((F::ORDER_U64 - v) as i64)
+    } else {
+        v as i64
+    }
 }
 
 struct Tw {
@@ -139,7 +147,11 @@ pub fn a_matrix() -> &'static Vec<Poly> {
                     r.read(&mut w);
                     let v = u64::from_be_bytes(w) & ((1u64 << 42) - 1);
                     if v < Q {
-                        out[i * K + j][k] = if v > (Q - 1) / 2 { v as i64 - Q as i64 } else { v as i64 };
+                        out[i * K + j][k] = if v > (Q - 1) / 2 {
+                            v as i64 - Q as i64
+                        } else {
+                            v as i64
+                        };
                         k += 1;
                     }
                 }
@@ -163,7 +175,11 @@ pub fn rd_poly(b: &[u8], n: usize) -> Option<Poly> {
         if v >= Q {
             return None;
         }
-        p[k] = if v > (Q - 1) / 2 { v as i64 - Q as i64 } else { v as i64 };
+        p[k] = if v > (Q - 1) / 2 {
+            v as i64 - Q as i64
+        } else {
+            v as i64
+        };
     }
     Some(p)
 }
@@ -189,7 +205,11 @@ pub fn dot_int(a: &[&Poly], b: &[&Poly]) -> Poly {
             }
             for n in 0..D {
                 let v = x[n] as i128 * y[m] as i128;
-                if m + n < D { acc[m + n] += v } else { acc[m + n - D] -= v }
+                if m + n < D {
+                    acc[m + n] += v
+                } else {
+                    acc[m + n - D] -= v
+                }
             }
         }
     }
@@ -198,7 +218,11 @@ pub fn dot_int(a: &[&Poly], b: &[&Poly]) -> Poly {
 
 pub fn modq(v: i64) -> i64 {
     let r = v.rem_euclid(Q as i64);
-    if r > (Q as i64 - 1) / 2 { r - Q as i64 } else { r }
+    if r > (Q as i64 - 1) / 2 {
+        r - Q as i64
+    } else {
+        r
+    }
 }
 
 #[cfg(test)]

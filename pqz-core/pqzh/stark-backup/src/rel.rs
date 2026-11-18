@@ -1,13 +1,18 @@
 //! R_REG and R_TX as PQZH statements: the same statement and witness bytes as pqz-core (pqz.h, pqz_rel.c
 //! build_reg / build_tx / tx_witness), proved with the AIRs of air.rs.
 
-use p3_batch_stark::{BatchProof, CommonData, ProverData, StarkInstance, prove_batch, verify_batch};
+use p3_batch_stark::{
+    prove_batch, verify_batch, BatchProof, CommonData, ProverData, StarkInstance,
+};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
 use sha3::Digest;
 
-use crate::air::{DigitAir, MvAir, MvOut, PolyAir, PolySpec, PqzhAir, RANGE_N, RangeAir, dc};
-use crate::config::{Challenge, Challenge5, Params, Plain5Config, PlainConfig, Whir2Config, Whir5Config, Zk5Config, ZkConfig};
+use crate::air::{dc, DigitAir, MvAir, MvOut, PolyAir, PolySpec, PqzhAir, RangeAir, RANGE_N};
+use crate::config::{
+    Challenge, Challenge5, Params, Plain5Config, PlainConfig, Whir2Config, Whir5Config, Zk5Config,
+    ZkConfig,
+};
 use crate::enc;
 use crate::ring::*;
 
@@ -29,14 +34,20 @@ pub const MAX_PROOF: usize = 160 * 1024;
 /// proofSystemId (statement bytes 32..63) of PQZH, proposed in the style of pqz.h's PQZ_PROOF_SYSTEM_ID:
 /// keccak256("scaas/pqz/pqzh/stark-d1-goldilocks5-fri-keccak256-zk/v1"). Like pqz-core, the relation only hashes it
 /// (the precompile dispatches on it). Provisional until the FRI parameters (soundness regime) are fixed.
-pub const PQZH_PROOF_SYSTEM_ID: [u8; 32] = hex32("aa1f92ddc5763201c2582c8387bd6513842e52779310d6bcf39a7fec99284304");
+pub const PQZH_PROOF_SYSTEM_ID: [u8; 32] =
+    hex32("aa1f92ddc5763201c2582c8387bd6513842e52779310d6bcf39a7fec99284304");
 /// PQZL's id as pqz-core writes it at the set n2048-kmax1024 (its pqz_set.h PQZ_PROOF_SYSTEM_ID =
 /// keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v6"), three-key step 2a; v5 (the R0 review fix 2026-10-25), v4, v3 and
 /// v2 retired), used only for the byte cross-check against pqz_bench.c (pqzh/xcheck/run.sh, n2048-kmax1024 only).
-pub const PQZL_PROOF_SYSTEM_ID: [u8; 32] = hex32("a626d57bc790f063db680c5a8263922da2ad9922b8798edce10b4879afd222ee");
+pub const PQZL_PROOF_SYSTEM_ID: [u8; 32] =
+    hex32("a626d57bc790f063db680c5a8263922da2ad9922b8798edce10b4879afd222ee");
 
 const fn nib(c: u8) -> u8 {
-    if c <= b'9' { c - b'0' } else { c - b'a' + 10 }
+    if c <= b'9' {
+        c - b'0'
+    } else {
+        c - b'a' + 10
+    }
 }
 
 const fn hex32(h: &str) -> [u8; 32] {
@@ -83,11 +94,17 @@ pub fn mask_seed(rnd32: &[u8; 32], op: u8, stmt: &[u8], wit: &[u8]) -> [u8; 32] 
 }
 
 fn rd_i8(b: &[u8], n: usize) -> Vec<Poly> {
-    (0..n / D).map(|i| std::array::from_fn(|m| b[i * D + m] as i8 as i64)).collect()
+    (0..n / D)
+        .map(|i| std::array::from_fn(|m| b[i * D + m] as i8 as i64))
+        .collect()
 }
 fn rd_i16(b: &[u8], n: usize) -> Vec<Poly> {
     (0..n / D)
-        .map(|i| std::array::from_fn(|m| i16::from_le_bytes([b[2 * (i * D + m)], b[2 * (i * D + m) + 1]]) as i64))
+        .map(|i| {
+            std::array::from_fn(|m| {
+                i16::from_le_bytes([b[2 * (i * D + m)], b[2 * (i * D + m) + 1]]) as i64
+            })
+        })
         .collect()
 }
 
@@ -135,7 +152,12 @@ pub struct Built {
     pub traces: Option<Vec<RowMajorMatrix<F>>>,
 }
 
-fn finish(poly: PolyAir, mvs: Vec<MvAir>, digit: Option<(DigitAir, [[i64; dc::W]; 16])>, w: Option<Vec<Poly>>) -> Built {
+fn finish(
+    poly: PolyAir,
+    mvs: Vec<MvAir>,
+    digit: Option<(DigitAir, [[i64; dc::W]; 16])>,
+    w: Option<Vec<Poly>>,
+) -> Built {
     let traces = w.map(|w| {
         let what: Vec<[F; D]> = w.iter().map(ntt_i).collect();
         let mut rc = vec![0u32; RANGE_N];
@@ -157,11 +179,21 @@ fn finish(poly: PolyAir, mvs: Vec<MvAir>, digit: Option<(DigitAir, [[i64; dc::W]
 }
 
 fn spec(range: bool, group: Option<usize>) -> PolySpec {
-    PolySpec { range, group, ntt: 0, coef16: false }
+    PolySpec {
+        range,
+        group,
+        ntt: 0,
+        coef16: false,
+    }
 }
 
 /// One MV AIR for all ring identities; the Poly AIR sends each NTT value once per read.
-fn layout(mut specs: Vec<PolySpec>, bsq: Vec<i64>, lists: &[(Vec<usize>, Vec<MvOut>)], p: &Params) -> (PolyAir, MvAir) {
+fn layout(
+    mut specs: Vec<PolySpec>,
+    bsq: Vec<i64>,
+    lists: &[(Vec<usize>, Vec<MvOut>)],
+    p: &Params,
+) -> (PolyAir, MvAir) {
     let (mv, reads) = MvAir::new(lists, p.mv_width);
     for (q, n) in reads {
         specs[q].ntt += n;
@@ -170,7 +202,12 @@ fn layout(mut specs: Vec<PolySpec>, bsq: Vec<i64>, lists: &[(Vec<usize>, Vec<MvO
 }
 
 /// R_REG: pk = A s + e, ||s|| <= 36, ||e|| <= 164. `check` = false skips the honest prover's own checks (tests).
-pub fn build_reg(stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Result<Built, &'static str> {
+pub fn build_reg(
+    stmt: &[u8],
+    wit: Option<&[u8]>,
+    check: bool,
+    p: &Params,
+) -> Result<Built, &'static str> {
     if stmt.len() != REG_STMT || wit.is_some_and(|w| w.len() != REG_WIT) {
         return Err("length");
     }
@@ -245,24 +282,49 @@ fn parse_tx(stmt: &[u8]) -> Option<TxSt> {
     p += VB;
     let u = rd_polyvec(&stmt[p..])?;
     p += POLYVEC;
-    let v = [rd_poly(&stmt[p..], 16)?, rd_poly(&stmt[p + VB..], 16)?, rd_poly(&stmt[p + 2 * VB..], 16)?];
-    Some(TxSt { pkf, pkt, pka, ut, vt_, u, v, fee })
+    let v = [
+        rd_poly(&stmt[p..], 16)?,
+        rd_poly(&stmt[p + VB..], 16)?,
+        rd_poly(&stmt[p + 2 * VB..], 16)?,
+    ];
+    Some(TxSt {
+        pkf,
+        pkt,
+        pka,
+        ut,
+        vt_,
+        u,
+        v,
+        fee,
+    })
 }
 
 /// Digit table height: 16 rows, or enough for the hiding FRI PCS's masking budget (2 (queries + extension degree * 2
 /// opening points) rows). HVZK-WHIR budgets its own query openings: 16.
 pub fn digit_height(p: &Params) -> usize {
-    if p.zk && p.whir.is_none() { (2 * (p.num_queries + 2 * p.ext_degree())).next_power_of_two().max(16) } else { 16 }
+    if p.zk && p.whir.is_none() {
+        (2 * (p.num_queries + 2 * p.ext_degree()))
+            .next_power_of_two()
+            .max(16)
+    } else {
+        16
+    }
 }
 
 /// R_TX rows 1-7 (pq-zero-knowledge.md §7.4, pqz_rel.c build_tx).
-pub fn build_tx(stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Result<Built, &'static str> {
+pub fn build_tx(
+    stmt: &[u8],
+    wit: Option<&[u8]>,
+    check: bool,
+    p: &Params,
+) -> Result<Built, &'static str> {
     if stmt.len() != TX_STMT || wit.is_some_and(|w| w.len() != TX_WIT) {
         return Err("length");
     }
     let t = parse_tx(stmt).ok_or("non-canonical")?;
     let hat = |v: &[Poly]| -> Vec<[F; D]> { v.iter().map(ntt_i).collect() };
-    let (pkfh, pkth, pkah, uth, uh) = (hat(&t.pkf), hat(&t.pkt), hat(&t.pka), hat(&t.ut), hat(&t.u));
+    let (pkfh, pkth, pkah, uth, uh) =
+        (hat(&t.pkf), hat(&t.pkt), hat(&t.pka), hat(&t.ut), hat(&t.u));
     // polys: s_f 0..32, e_f 32..64, t1 64..96, r 96..128, e1 128..160, t2 160..192, y_t, y_f, y_a, y_T 192..196
     let mut specs = vec![spec(true, Some(0)); K];
     specs.extend(vec![spec(true, Some(1)); K]);
@@ -270,7 +332,15 @@ pub fn build_tx(stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Res
     specs.extend(vec![spec(true, Some(2)); K]);
     specs.extend(vec![spec(true, Some(3)); K]);
     specs.extend(vec![spec(true, None); K]);
-    specs.extend(vec![PolySpec { range: false, group: None, ntt: 0, coef16: true }; 4]);
+    specs.extend(vec![
+        PolySpec {
+            range: false,
+            group: None,
+            ntt: 0,
+            coef16: true
+        };
+        4
+    ]);
     let zero = [F::ZERO; D];
     let neg1 = [-F::ONE; D];
     // MV1: inputs s_f, e_f, t1, y_T
@@ -286,7 +356,16 @@ pub fn build_tx(stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Res
             stmt_lead: 0,
         })
         .collect();
-    outs1.push(MvOut { coef: uth.iter().copied().chain(vec![zero; 2 * K]).chain([neg1]).collect(), target: zero, stmt_lead: K });
+    outs1.push(MvOut {
+        coef: uth
+            .iter()
+            .copied()
+            .chain(vec![zero; 2 * K])
+            .chain([neg1])
+            .collect(),
+        target: zero,
+        stmt_lead: K,
+    });
 
     // MV2: inputs r, e1, t2, y_t, y_f, y_a
     let mut outs2: Vec<MvOut> = (0..K)
@@ -302,28 +381,55 @@ pub fn build_tx(stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Res
         })
         .collect();
     for (x, pkx) in [&pkth, &pkfh, &pkah].into_iter().enumerate() {
-        let mut coef: Vec<[F; D]> = pkx.iter().copied().chain(vec![zero; 2 * K]).chain([zero; 3]).collect();
+        let mut coef: Vec<[F; D]> = pkx
+            .iter()
+            .copied()
+            .chain(vec![zero; 2 * K])
+            .chain([zero; 3])
+            .collect();
         coef[3 * K + x] = neg1;
-        outs2.push(MvOut { coef, target: zero, stmt_lead: K });
+        outs2.push(MvOut {
+            coef,
+            target: zero,
+            stmt_lead: K,
+        });
     }
     let (poly, mv) = layout(
         specs,
         vec![BS, BE, BS, BE],
-        &[((0..3 * K).chain([195]).collect(), outs1), ((3 * K..6 * K).chain([192, 193, 194]).collect(), outs2)],
+        &[
+            ((0..3 * K).chain([195]).collect(), outs1),
+            ((3 * K..6 * K).chain([192, 193, 194]).collect(), outs2),
+        ],
         p,
     );
     let v4 = [t.v[0], t.v[1], t.v[2], t.vt_].map(|p| std::array::from_fn(|i| p[i]));
-    let digit = DigitAir::new(digit_height(p), v4, t.fee, [192 * D, 193 * D, 194 * D, 195 * D]);
+    let digit = DigitAir::new(
+        digit_height(p),
+        v4,
+        t.fee,
+        [192 * D, 193 * D, 194 * D, 195 * D],
+    );
 
     let Some(wit) = wit else {
-        return Ok(finish(poly, vec![mv], Some((digit, [[0; dc::W]; 16])), None));
+        return Ok(finish(
+            poly,
+            vec![mv],
+            Some((digit, [[0; dc::W]; 16])),
+            None,
+        ));
     };
     let sf = rd_i8(wit, 2048);
     let ef = rd_i16(&wit[2048..], 2048);
     let r = rd_i8(&wit[6144..], 2048);
     let e1 = rd_i16(&wit[8192..], 2048);
     let e2: Vec<[i64; 16]> = (0..3)
-        .map(|x| std::array::from_fn(|j| i16::from_le_bytes([wit[12288 + 32 * x + 2 * j], wit[12289 + 32 * x + 2 * j]]) as i64))
+        .map(|x| {
+            std::array::from_fn(|j| {
+                i16::from_le_bytes([wit[12288 + 32 * x + 2 * j], wit[12289 + 32 * x + 2 * j]])
+                    as i64
+            })
+        })
         .collect();
     let d: [i64; 16] = std::array::from_fn(|i| wit[12384 + i] as i64);
     let dp: [i64; 16] = std::array::from_fn(|i| wit[12400 + i] as i64);
@@ -332,13 +438,20 @@ pub fn build_tx(stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Res
             || l2(&ef) > BE
             || l2(&r) > BS
             || l2(&e1) > BE
-            || e2.iter().any(|x| x.iter().map(|v| v * v).sum::<i64>() > 64 * 64))
+            || e2
+                .iter()
+                .any(|x| x.iter().map(|v| v * v).sum::<i64>() > 64 * 64))
     {
         return Err("witness norm");
     }
     let (sfh, efh, rh, e1h) = (hat(&sf), hat(&ef), hat(&r), hat(&e1));
     let prod = |a: &[[F; D]], b: &[[F; D]]| lift(&sum_hat(&a.iter().collect::<Vec<_>>(), b));
-    let y = [prod(&pkth, &rh), prod(&pkfh, &rh), prod(&pkah, &rh), prod(&uth, &sfh)];
+    let y = [
+        prod(&pkth, &rh),
+        prod(&pkfh, &rh),
+        prod(&pkah, &rh),
+        prod(&uth, &sfh),
+    ];
     let mut w: Vec<Poly> = sf.clone();
     w.extend(ef.iter().copied());
     for i in 0..K {
@@ -366,10 +479,20 @@ pub fn build_tx(stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Res
     let mut cprev = 0i64;
     for i in 0..16 {
         let wv = modq(t.vt_[i] - y[3][i]);
-        let m = (if wv >= 0 { wv + DELTA / 2 } else { wv - DELTA / 2 }) / DELTA;
+        let m = (if wv >= 0 {
+            wv + DELTA / 2
+        } else {
+            wv - DELTA / 2
+        }) / DELTA;
         let et = wv - DELTA * m;
         let s = m + cprev - dp[i] - d[i] - ((t.fee >> (4 * i)) & 15) as i64;
-        if check && (s % 16 != 0 || d[i] > 15 || dp[i] > 15 || !(0..1 << 14).contains(&m) || !(-(1 << 24)..1 << 24).contains(&et)) {
+        if check
+            && (s % 16 != 0
+                || d[i] > 15
+                || dp[i] > 15
+                || !(0..1 << 14).contains(&m)
+                || !(-(1 << 24)..1 << 24).contains(&et))
+        {
             return Err(NOT_DECRYPTABLE);
         }
         let c = s / 16;
@@ -411,7 +534,13 @@ pub fn build_tx(stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Res
 /// `cs::NOT_DECRYPTABLE`; ARCH-POS-13: the result goes to the key holder only).
 pub const NOT_DECRYPTABLE: &str = "the ciphertext does not decrypt to the statement under this key";
 
-pub fn build(op: u8, stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Result<Built, &'static str> {
+pub fn build(
+    op: u8,
+    stmt: &[u8],
+    wit: Option<&[u8]>,
+    check: bool,
+    p: &Params,
+) -> Result<Built, &'static str> {
     match op {
         OP_REGISTER => build_reg(stmt, wit, check, p),
         OP_TRANSFER => build_tx(stmt, wit, check, p),
@@ -455,7 +584,12 @@ macro_rules! prove_with {
 
 /// The verifier's constants per (op, parameters): the preprocessed commitment (statement-independent) and the lookup
 /// layout, computed once with the setup configuration and kept (a precompile would hard-code the root).
-fn common<SC: SetupCfg>(op: u8, p: &Params, b: &Built, deg: &[usize]) -> Option<std::rc::Rc<CommonData<SC>>> {
+fn common<SC: SetupCfg>(
+    op: u8,
+    p: &Params,
+    b: &Built,
+    deg: &[usize],
+) -> Option<std::rc::Rc<CommonData<SC>>> {
     thread_local! {
         static CACHE: std::cell::RefCell<std::collections::HashMap<(u8, Params), std::rc::Rc<dyn std::any::Any>>> =
             Default::default();
@@ -477,9 +611,15 @@ trait SetupCfg: p3_uni_stark::StarkGenericConfig + Sized + 'static {
 macro_rules! setup_cfg {
     ($ty:ty, $mk:expr) => {
         impl SetupCfg for $ty {
-            fn build_common(p: &Params, airs: &[PqzhAir], deg: &[usize]) -> Option<CommonData<Self>> {
+            fn build_common(
+                p: &Params,
+                airs: &[PqzhAir],
+                deg: &[usize],
+            ) -> Option<CommonData<Self>> {
                 let cfg: $ty = $mk(p);
-                ProverData::from_airs_and_degrees(&cfg, airs, deg).ok().map(|d| d.common)
+                ProverData::from_airs_and_degrees(&cfg, airs, deg)
+                    .ok()
+                    .map(|d| d.common)
             }
         }
     };
@@ -488,18 +628,24 @@ setup_cfg!(PlainConfig, |p: &Params| p.plain(&[0; 32]));
 setup_cfg!(Plain5Config, |p: &Params| p.plain_ext(&[0; 32]));
 setup_cfg!(ZkConfig, |p: &Params| p.zk(&[0; 32], [0; 32]));
 setup_cfg!(Zk5Config, |p: &Params| p.zk_ext(&[0; 32], [0; 32]));
-setup_cfg!(Whir2Config, |p: &Params| p.whir_ext::<Challenge>(&[0; 32], [0; 32]));
-setup_cfg!(Whir5Config, |p: &Params| p.whir_ext::<Challenge5>(&[0; 32], [0; 32]));
+setup_cfg!(Whir2Config, |p: &Params| p
+    .whir_ext::<Challenge>(&[0; 32], [0; 32]));
+setup_cfg!(Whir5Config, |p: &Params| p
+    .whir_ext::<Challenge5>(&[0; 32], [0; 32]));
 
 macro_rules! verify_with {
     ($cfg:expr, $ty:ty, $b:expr, $proof:expr, $zk:expr, $op:expr, $p:expr) => {{
         let cfg = $cfg;
-        let Ok((proof, rest)) = enc::take_from_bytes::<BatchProof<$ty>>($proof) else { return false };
+        let Ok((proof, rest)) = enc::take_from_bytes::<BatchProof<$ty>>($proof) else {
+            return false;
+        };
         let deg = degrees(&$b, $zk);
         if !rest.is_empty() || proof.degree_bits != deg {
             return false;
         }
-        let Some(common) = common::<$ty>($op, $p, &$b, &deg) else { return false };
+        let Some(common) = common::<$ty>($op, $p, &$b, &deg) else {
+            return false;
+        };
         let pvs = vec![vec![]; $b.airs.len()];
         verify_batch(&cfg, &$b.airs, &proof, &pvs, &common).is_ok()
     }};
@@ -507,16 +653,35 @@ macro_rules! verify_with {
 
 /// Prove `op` on `stmt` with witness `wit` (pqz-core byte formats). `rnd32`, hedged with the statement and the witness
 /// ([`mask_seed`]), seeds the hiding masks (ZK mode).
-pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd32: [u8; 32], p: &Params) -> Result<Vec<u8>, &'static str> {
+pub fn prove(
+    op: u8,
+    stmt: &[u8],
+    wit: &[u8],
+    rnd32: [u8; 32],
+    p: &Params,
+) -> Result<Vec<u8>, &'static str> {
     prove_inner(op, stmt, wit, rnd32, p, true)
 }
 
 /// Test hook: skips the honest prover's checks so out-of-range witnesses reach the proof system.
-pub fn prove_unchecked(op: u8, stmt: &[u8], wit: &[u8], rnd32: [u8; 32], p: &Params) -> Result<Vec<u8>, &'static str> {
+pub fn prove_unchecked(
+    op: u8,
+    stmt: &[u8],
+    wit: &[u8],
+    rnd32: [u8; 32],
+    p: &Params,
+) -> Result<Vec<u8>, &'static str> {
     prove_inner(op, stmt, wit, rnd32, p, false)
 }
 
-fn prove_inner(op: u8, stmt: &[u8], wit: &[u8], rnd32: [u8; 32], p: &Params, check: bool) -> Result<Vec<u8>, &'static str> {
+fn prove_inner(
+    op: u8,
+    stmt: &[u8],
+    wit: &[u8],
+    rnd32: [u8; 32],
+    p: &Params,
+    check: bool,
+) -> Result<Vec<u8>, &'static str> {
     let b = build(op, stmt, Some(wit), check, p)?;
     let seed = stmt_digest(op, stmt);
     let rnd32 = mask_seed(&rnd32, op, stmt, wit);
@@ -524,15 +689,31 @@ fn prove_inner(op: u8, stmt: &[u8], wit: &[u8], rnd32: [u8; 32], p: &Params, che
         return Err("whir requires zk");
     }
     let proof = if p.whir.is_some() && p.ext5 {
-        prove_with!(p.whir_ext::<Challenge5>(&seed, rnd32), p.whir_ext::<Challenge5>(&[0; 32], [0; 32]), b)
+        prove_with!(
+            p.whir_ext::<Challenge5>(&seed, rnd32),
+            p.whir_ext::<Challenge5>(&[0; 32], [0; 32]),
+            b
+        )
     } else if p.whir.is_some() {
-        prove_with!(p.whir_ext::<Challenge>(&seed, rnd32), p.whir_ext::<Challenge>(&[0; 32], [0; 32]), b)
+        prove_with!(
+            p.whir_ext::<Challenge>(&seed, rnd32),
+            p.whir_ext::<Challenge>(&[0; 32], [0; 32]),
+            b
+        )
     } else if p.zk && p.ext5 {
-        prove_with!(p.zk_ext::<Challenge5>(&seed, rnd32), p.zk_ext::<Challenge5>(&[0; 32], [0; 32]), b)
+        prove_with!(
+            p.zk_ext::<Challenge5>(&seed, rnd32),
+            p.zk_ext::<Challenge5>(&[0; 32], [0; 32]),
+            b
+        )
     } else if p.zk {
         prove_with!(p.zk(&seed, rnd32), p.zk(&[0; 32], [0; 32]), b)
     } else if p.ext5 {
-        prove_with!(p.plain_ext::<Challenge5>(&seed), p.plain_ext::<Challenge5>(&[0; 32]), b)
+        prove_with!(
+            p.plain_ext::<Challenge5>(&seed),
+            p.plain_ext::<Challenge5>(&[0; 32]),
+            b
+        )
     } else {
         prove_with!(p.plain(&seed), p.plain(&[0; 32]), b)
     };
@@ -548,20 +729,54 @@ pub fn verify(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> bool {
         return false;
     }
     std::panic::catch_unwind(|| {
-        let Ok(b) = build(op, stmt, None, false, p) else { return false };
+        let Ok(b) = build(op, stmt, None, false, p) else {
+            return false;
+        };
         let seed = stmt_digest(op, stmt);
         if p.whir.is_some() && !p.zk {
             false
         } else if p.whir.is_some() && p.ext5 {
-            verify_with!(p.whir_ext::<Challenge5>(&seed, [0; 32]), Whir5Config, b, proof, true, op, p)
+            verify_with!(
+                p.whir_ext::<Challenge5>(&seed, [0; 32]),
+                Whir5Config,
+                b,
+                proof,
+                true,
+                op,
+                p
+            )
         } else if p.whir.is_some() {
-            verify_with!(p.whir_ext::<Challenge>(&seed, [0; 32]), Whir2Config, b, proof, true, op, p)
+            verify_with!(
+                p.whir_ext::<Challenge>(&seed, [0; 32]),
+                Whir2Config,
+                b,
+                proof,
+                true,
+                op,
+                p
+            )
         } else if p.zk && p.ext5 {
-            verify_with!(p.zk_ext::<Challenge5>(&seed, [0; 32]), Zk5Config, b, proof, true, op, p)
+            verify_with!(
+                p.zk_ext::<Challenge5>(&seed, [0; 32]),
+                Zk5Config,
+                b,
+                proof,
+                true,
+                op,
+                p
+            )
         } else if p.zk {
             verify_with!(p.zk(&seed, [0; 32]), ZkConfig, b, proof, true, op, p)
         } else if p.ext5 {
-            verify_with!(p.plain_ext::<Challenge5>(&seed), Plain5Config, b, proof, false, op, p)
+            verify_with!(
+                p.plain_ext::<Challenge5>(&seed),
+                Plain5Config,
+                b,
+                proof,
+                false,
+                op,
+                p
+            )
         } else {
             verify_with!(p.plain(&seed), PlainConfig, b, proof, false, op, p)
         }
@@ -596,7 +811,9 @@ fn fri_parts<F: p3_field::Field, M: p3_commit::Mmcs<F>, W, I: serde::Serialize>(
 
 macro_rules! breakdown_as {
     ($ty:ty, $proof:expr, |$f:ident, $o:ident| $fri:expr) => {{
-        let Ok((p, _)) = enc::take_from_bytes::<BatchProof<$ty>>($proof) else { return vec![] };
+        let Ok((p, _)) = enc::take_from_bytes::<BatchProof<$ty>>($proof) else {
+            return vec![];
+        };
         let mut out = vec![
             ("total".into(), $proof.len()),
             ("commitments".into(), sz(&p.commitments)),
@@ -606,7 +823,9 @@ macro_rules! breakdown_as {
         let $f = &p.opening_proof;
         let $o = &mut out;
         let fri = $fri;
-        fri_parts(&mut out, fri, |o| (sz(&o.opened_values), sz(&o.opening_proof)));
+        fri_parts(&mut out, fri, |o| {
+            (sz(&o.opened_values), sz(&o.opening_proof))
+        });
         out
     }};
 }
@@ -615,7 +834,11 @@ macro_rules! breakdown_as {
 /// multiproof), FRI layers, final polynomial; hiding proofs also list the random codewords' opened values.
 pub fn breakdown(proof: &[u8], p: &Params) -> Vec<(String, usize)> {
     if p.whir.is_some() {
-        return if p.ext5 { whir_breakdown::<Challenge5>(proof) } else { whir_breakdown::<Challenge>(proof) };
+        return if p.ext5 {
+            whir_breakdown::<Challenge5>(proof)
+        } else {
+            whir_breakdown::<Challenge>(proof)
+        };
     }
     match (p.zk, p.ext5) {
         (false, false) => breakdown_as!(PlainConfig, proof, |f, _o| f),
@@ -639,7 +862,9 @@ where
     rand::distr::StandardUniform: rand::distr::Distribution<EF>,
 {
     type SC<EF> = crate::config::WhirCfg<EF>;
-    let Ok((p, _)) = enc::take_from_bytes::<BatchProof<SC<EF>>>(proof) else { return vec![] };
+    let Ok((p, _)) = enc::take_from_bytes::<BatchProof<SC<EF>>>(proof) else {
+        return vec![];
+    };
     let mut out = vec![
         ("total".into(), proof.len()),
         ("commitments".into(), sz(&p.commitments)),
@@ -649,7 +874,10 @@ where
     for (i, w) in p.opening_proof.iter().enumerate() {
         out.push((format!("whir{i}_total"), sz(w)));
         out.push((format!("whir{i}_evals"), sz(&w.evals)));
-        out.push((format!("whir{i}_sumchecks"), sz(&w.sumchecks) + sz(&w.sumcheck_mask_commitments)));
+        out.push((
+            format!("whir{i}_sumchecks"),
+            sz(&w.sumchecks) + sz(&w.sumcheck_mask_commitments),
+        ));
         out.push((format!("whir{i}_rounds"), sz(&w.rounds)));
         out.push((format!("whir{i}_base_case"), sz(&w.base_case)));
     }
@@ -669,6 +897,9 @@ mod tests {
         assert_ne!(a, super::mask_seed(&[3; 32], 1, &st, &w2));
         assert_ne!(a, super::mask_seed(&[4; 32], 1, &st, &w));
         assert_ne!(a, super::mask_seed(&[3; 32], 3, &st, &w));
-        assert_ne!(a, super::mask_seed(&[3; 32], 1, &st[..99], &[&st[99..], &w[..]].concat()));
+        assert_ne!(
+            a,
+            super::mask_seed(&[3; 32], 1, &st[..99], &[&st[99..], &w[..]].concat())
+        );
     }
 }

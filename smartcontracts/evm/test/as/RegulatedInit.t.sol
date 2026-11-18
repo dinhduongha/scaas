@@ -102,8 +102,13 @@ contract RegulatedInitTest is RegFixture {
             IFactoryToken.TokenConfig memory c = _cfg(i);
             c.features |= 1 << 9;
             (c.reg.deniedFlags, c.reg.complianceRegistry) = (4, address(0xC0FFEE));
-            _refused(i == 0 ? K8 : K9, c,
-                abi.encodeWithSelector(IRegulatedToken.ComplianceRegistryCodeMismatch.selector, address(0xC0FFEE), bytes32(0)));
+            _refused(
+                i == 0 ? K8 : K9,
+                c,
+                abi.encodeWithSelector(
+                    IRegulatedToken.ComplianceRegistryCodeMismatch.selector, address(0xC0FFEE), bytes32(0)
+                )
+            );
         }
     }
 

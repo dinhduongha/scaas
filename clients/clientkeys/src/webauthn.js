@@ -1,10 +1,10 @@
 // WebAuthn (passkey) helpers for SmartKeyAccount (R31). Nothing secret: the private key never
 // leaves the authenticator; we only shape options and re-encode what it returns.
-import { abiEncode, fromHex, fromB64url } from './bytes.js';
+import { abiEncode, fromHex, fromB64url } from "./bytes.js";
 
 // P-256 group order.
 export const P256_N = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n;
-const SPKI_P256_PREFIX = '3059301306072a8648ce3d020106082a8648ce3d030107034200';
+const SPKI_P256_PREFIX = "3059301306072a8648ce3d020106082a8648ce3d030107034200";
 
 export function passkeySupported(win = globalThis) {
   return Boolean(win.PublicKeyCredential && win.navigator && win.navigator.credentials);
@@ -18,17 +18,20 @@ export function passkeySupported(win = globalThis) {
  * authenticator that already holds one refuse with `InvalidStateError` instead.
  */
 export function creationOptions({ rpId, rpName, userId, userName, challenge, excludeCredentialIds, prf = true }) {
-  if (userId !== undefined) throw new Error('the user handle is random per passkey; do not pass one');
-  if (!Array.isArray(excludeCredentialIds)) throw new Error('excludeCredentialIds (the account passkeys) is required');
+  if (userId !== undefined) throw new Error("the user handle is random per passkey; do not pass one");
+  if (!Array.isArray(excludeCredentialIds)) throw new Error("excludeCredentialIds (the account passkeys) is required");
   return {
     publicKey: {
       rp: { id: rpId, name: rpName || rpId },
       user: { id: crypto.getRandomValues(new Uint8Array(16)), name: userName, displayName: userName },
       challenge,
-      excludeCredentials: excludeCredentialIds.map((id) => ({ type: 'public-key', id: typeof id === 'string' ? fromB64url(id) : id })),
-      pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
-      authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
-      attestation: 'none',
+      excludeCredentials: excludeCredentialIds.map((id) => ({
+        type: "public-key",
+        id: typeof id === "string" ? fromB64url(id) : id,
+      })),
+      pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+      authenticatorSelection: { residentKey: "required", userVerification: "required" },
+      attestation: "none",
       ...(prf ? { extensions: { prf: {} } } : {}),
     },
   };
@@ -36,13 +39,13 @@ export function creationOptions({ rpId, rpName, userId, userName, challenge, exc
 
 /** `navigator.credentials.get` options: challenge = the 32-byte digest (or batch root). */
 export function requestOptions({ rpId, challenge, credentialIds = [], prfSalt }) {
-  if (challenge.length !== 32) throw new Error('challenge must be the 32-byte operation digest');
+  if (challenge.length !== 32) throw new Error("challenge must be the 32-byte operation digest");
   return {
     publicKey: {
       rpId,
       challenge,
-      allowCredentials: credentialIds.map((id) => ({ type: 'public-key', id })),
-      userVerification: 'required',
+      allowCredentials: credentialIds.map((id) => ({ type: "public-key", id })),
+      userVerification: "required",
       ...(prfSalt ? { extensions: { prf: { eval: { first: prfSalt } } } } : {}),
     },
   };
@@ -52,7 +55,7 @@ export function requestOptions({ rpId, challenge, credentialIds = [], prfSalt })
 export function publicKeyFromSpki(spki) {
   const prefix = fromHex(SPKI_P256_PREFIX);
   if (spki.length !== 91 || !prefix.every((b, i) => spki[i] === b) || spki[26] !== 4) {
-    throw new Error('not an uncompressed P-256 SPKI public key');
+    throw new Error("not an uncompressed P-256 SPKI public key");
   }
   return { x: spki.slice(27, 59), y: spki.slice(59, 91) };
 }
@@ -65,7 +68,10 @@ function toBig(b) {
 
 function to32(v) {
   const out = new Uint8Array(32);
-  for (let i = 31; i >= 0; i--) { out[i] = Number(v & 0xffn); v >>= 8n; }
+  for (let i = 31; i >= 0; i--) {
+    out[i] = Number(v & 0xffn);
+    v >>= 8n;
+  }
   return out;
 }
 
@@ -75,7 +81,9 @@ function to32(v) {
  * review S5). Strict DER: short lengths only, minimal integers.
  */
 export function derToRS(der) {
-  const fail = () => { throw new Error('malformed DER ECDSA signature'); };
+  const fail = () => {
+    throw new Error("malformed DER ECDSA signature");
+  };
   if (der[0] !== 0x30 || der[1] !== der.length - 2) fail();
   let i = 2;
   const int = () => {
@@ -98,5 +106,5 @@ export function derToRS(der) {
 /** Inner payload for a P-256 key: `abi.encode(authenticatorData, clientDataJSON, r, s)`. */
 export function encodeAssertion({ authenticatorData, clientDataJSON, signature }) {
   const { r, s } = derToRS(signature);
-  return abiEncode(['bytes', 'bytes', 'bytes32', 'bytes32'], [authenticatorData, clientDataJSON, r, s]);
+  return abiEncode(["bytes", "bytes", "bytes32", "bytes32"], [authenticatorData, clientDataJSON, r, s]);
 }

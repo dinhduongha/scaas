@@ -39,7 +39,9 @@ contract UATradeTest is UALedgerBase {
     // ----- orders and auths -----
 
     function _o(bytes32 from, uint256 amount, uint256 receiveAmount)
-        internal view returns (ITradeToken.UATradeOrder memory o)
+        internal
+        view
+        returns (ITradeToken.UATradeOrder memory o)
     {
         o.from = from;
         o.receiveToken = address(wrp);
@@ -93,22 +95,45 @@ contract UATradeTest is UALedgerBase {
 
     function test_digests_typehashes() public view {
         ITradeToken.UATradeOrder memory o = _o(uaP, 1000, 2000);
-        assertEq(TradeLib.UA_TRADE_ORDER_TYPEHASH, keccak256(
-            "UATradeOrder(bytes32 from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,"
-            "uint256 fee,address relayer,address dex,bytes32 destination,uint8 flags,uint256 batch,uint256 nonce,"
-            "uint256 validUntil)"));
-        assertEq(TradeLib.UA_INVALIDATE_NONCES_TYPEHASH,
-            keccak256("UAInvalidateNonces(bytes32 from,uint256 batch,uint256 minNonce)"));
+        assertEq(
+            TradeLib.UA_TRADE_ORDER_TYPEHASH,
+            keccak256(
+                "UATradeOrder(bytes32 from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,"
+                "uint256 fee,address relayer,address dex,bytes32 destination,uint8 flags,uint256 batch,uint256 nonce,"
+                "uint256 validUntil)"
+            )
+        );
+        assertEq(
+            TradeLib.UA_INVALIDATE_NONCES_TYPEHASH,
+            keccak256("UAInvalidateNonces(bytes32 from,uint256 batch,uint256 minNonce)")
+        );
         assertEq(UAKinds.PURPOSE_TRADE, keccak256("scaas.ua.purpose.trade.v1"));
         (, string memory name, string memory version, uint256 chainId, address vc, bytes32 salt,) = tok.eip712Domain();
-        bytes32 sep = keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256(bytes(name)), keccak256(bytes(version)), chainId, vc, salt));
+        bytes32 sep = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256(bytes(name)),
+                keccak256(bytes(version)),
+                chainId,
+                vc,
+                salt
+            )
+        );
         // a static struct encodes inline: the typehash then the 13 fields in order
         bytes32 sh = keccak256(abi.encode(TradeLib.UA_TRADE_ORDER_TYPEHASH, o));
         assertEq(tok.tradeOrderDigest(o), keccak256(abi.encodePacked(hex"1901", sep, sh)));
-        assertEq(tok.invalidateNoncesDigest(uaP, 1, 5), keccak256(abi.encodePacked(hex"1901", sep,
-            keccak256(abi.encode(TradeLib.UA_INVALIDATE_NONCES_TYPEHASH, uaP, uint256(1), uint256(5))))));
+        assertEq(
+            tok.invalidateNoncesDigest(uaP, 1, 5),
+            keccak256(
+                abi.encodePacked(
+                    hex"1901",
+                    sep,
+                    keccak256(abi.encode(TradeLib.UA_INVALIDATE_NONCES_TYPEHASH, uaP, uint256(1), uint256(5)))
+                )
+            )
+        );
         // ua-mtx-merge T6 (R12), meaning: the token has one order struct; an address-shaped order is the padded
         // `UATradeOrder` (was: the same fields as a `TradeOrder` hashed differently, another typehash)
         o.from = _pad(alice);
@@ -167,7 +192,8 @@ contract UATradeTest is UALedgerBase {
         // a registry `trade` auth is not a native signature
         ITradeToken.UATradeOrder memory o2 = _o(_pad(alice), 1000, 2000);
         o2.nonce = 2;
-        bytes memory bad = _auth(lreg, UAKinds.P256, _key(UAKinds.P256), UAKinds.PURPOSE_TRADE, tok.tradeOrderDigest(o2));
+        bytes memory bad =
+            _auth(lreg, UAKinds.P256, _key(UAKinds.P256), UAKinds.PURPOSE_TRADE, tok.tradeOrderDigest(o2));
         vm.expectRevert();
         tok.mtxTrade(o2, UACall.auth(o2.from, bad), _f(1000, 2000, 0));
     }
@@ -271,7 +297,9 @@ contract UATradeTest is UALedgerBase {
 
     function test_nonceFloor_and_balance() public {
         ITradeToken.UATradeOrder memory o = _o(uaP, 1000, 2000);
-        tok.mtxInvalidateNonces(uaP, 1, 2, UACall.auth(uaP, _authP(uaP, UAKinds.PURPOSE_TRADE, tok.invalidateNoncesDigest(uaP, 1, 2))));
+        tok.mtxInvalidateNonces(
+            uaP, 1, 2, UACall.auth(uaP, _authP(uaP, UAKinds.PURPOSE_TRADE, tok.invalidateNoncesDigest(uaP, 1, 2)))
+        );
         _expect(ITradeToken.NonceInvalidated.selector, o, _f(600, 1200, 0));
         o.batch = 2; // another lane
         _trade(o, _f(600, 1200, 0));
@@ -314,8 +342,12 @@ contract UATradeTest is UALedgerBase {
     }
 
     function test_ledgerOff_everyUATradeFunction() public {
-        NormalToken off = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
-            EnvKit.env(chainUidA, address(0), address(0), false)));
+        NormalToken off = NormalToken(
+            EnvKit.clone(
+                address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+                EnvKit.env(chainUidA, address(0), address(0), false)
+            )
+        );
         off.initialize(nid(address(this)), 1, abi.encode(normalInit("Off", "OFF", 6, 1_000_000, alice, address(this))));
         ITradeToken.UATradeOrder memory o = _o(_pad(alice), 1000, 2000);
         // ua-mtx-merge T3, meaning (C, R9; pulled forward from T6 for R39's `mtxWrapOrder`): `uaTrade` needs a registry only
@@ -408,8 +440,11 @@ contract UATradeTest is UALedgerBase {
         bytes32 h = tok.tradeOrderDigest(o);
         bytes32 wallet = OrderJson.cancelTrade(address(tok), o, true);
         assertEq(tok.cancelOrderDigest(o), wallet);
-        bytes32 flat = keccak256(abi.encodePacked(hex"1901", domainOf(address(tok)),
-            keccak256(abi.encode(keccak256("CancelOrder(bytes32 orderHash)"), h))));
+        bytes32 flat = keccak256(
+            abi.encodePacked(
+                hex"1901", domainOf(address(tok)), keccak256(abi.encode(keccak256("CancelOrder(bytes32 orderHash)"), h))
+            )
+        );
         bytes memory old = _authP(uaB, UAKinds.PURPOSE_TRADE, flat);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaB));
         tok.mtxCancelOrder(o, UACall.auth(o.from, old));
@@ -479,14 +514,33 @@ contract UATradeTest is UALedgerBase {
 
     /// The address `TradeOrder` struct hash of `n` and its `CancelOrder` digest in `tok`'s domain (the retired forms).
     function _addressDigests(ITradeToken.TradeOrder memory n) internal view returns (bytes32 hn, bytes32 cn) {
-        bytes32 sh = keccak256(abi.encode(keccak256("TradeOrder(address from,address receiveToken,uint256 amount,"
-            "uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,address destination,uint8 flags,"
-            "uint256 batch,uint256 nonce,uint256 validUntil)"), n)); // a static struct: its 13 words inline
+        bytes32 sh = keccak256(
+            abi.encode(
+                keccak256(
+                    "TradeOrder(address from,address receiveToken,uint256 amount,"
+                    "uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,address destination,uint8 flags,"
+                    "uint256 batch,uint256 nonce,uint256 validUntil)"
+                ),
+                n
+            )
+        ); // a static struct: its 13 words inline
         hn = keccak256(abi.encodePacked(hex"1901", domainOf(address(tok)), sh));
-        cn = keccak256(abi.encodePacked(hex"1901", domainOf(address(tok)), keccak256(abi.encode(keccak256(
-            "CancelOrder(TradeOrder order)TradeOrder(address from,address receiveToken,uint256 amount,uint256 receiveAmount,"
-            "uint256 minFill,uint256 fee,address relayer,address dex,address destination,uint8 flags,uint256 batch,"
-            "uint256 nonce,uint256 validUntil)"), sh))));
+        cn = keccak256(
+            abi.encodePacked(
+                hex"1901",
+                domainOf(address(tok)),
+                keccak256(
+                    abi.encode(
+                        keccak256(
+                            "CancelOrder(TradeOrder order)TradeOrder(address from,address receiveToken,uint256 amount,uint256 receiveAmount,"
+                            "uint256 minFill,uint256 fee,address relayer,address dex,address destination,uint8 flags,uint256 batch,"
+                            "uint256 nonce,uint256 validUntil)"
+                        ),
+                        sh
+                    )
+                )
+            )
+        );
     }
 
     /// ua-mtx-merge T6 (R12), meaning: was `test_twoStructs_twoOrders` (a `TradeOrder` and a `UATradeOrder` of the same

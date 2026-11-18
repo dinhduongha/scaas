@@ -45,10 +45,13 @@ fn gaussian155(st: &mut Rng, u: u64, s: u32) -> Result<i64, Error> {
         let w: [u64; 4] = core::array::from_fn(|_| st.u64());
         // k0 = #{z : (hi, lo) < CDF155[z]}
         let x128 = (w[0] as u128) << 64 | w[1] as u128;
-        let k0: i64 = CDF155.iter().map(|&(h, l)| (x128 < ((h as u128) << 64 | l as u128)) as i64).sum();
+        let k0: i64 = CDF155
+            .iter()
+            .map(|&(h, l)| (x128 < ((h as u128) << 64 | l as u128)) as i64)
+            .sum();
         let b = (w[3] & 1) as i64;
         let k = (b.wrapping_neg() & (2 * k0)) - k0 + b; // bimodal: b ? k0 + 1 : -k0
-        // x = (b - c)(2k - b - c) / (2 * 1.55^2), in Q56
+                                                        // x = (b - c)(2k - b - c) / (2 * 1.55^2), in Q56
         let f1 = (b * (1i64 << s) - u as i64) * (1i64 << (56 - s));
         let f2 = ((2 * k - b) * (1i64 << s) - u as i64) * (1i64 << (56 - s));
         let x56 = (f1 as i128 * f2 as i128) >> 56;
@@ -116,7 +119,12 @@ pub(crate) fn grandom(r: &mut [i64], log2o: u32, seed: &[u8; 32], dom: u64) -> R
 /// refused (`Error::Internal`, as C; review 3w u1-2), since `grandom` then gives every coefficient of a polynomial the
 /// same sample and z1 = y1 + c s1 would give the witness away; every set's relations stay below 21 (gen_set.py and
 /// to_rust.py assert it), so no proof changes.
-pub(crate) fn polyvec_grandom<R: Pv + ?Sized>(r: &mut R, log2o: u32, seed: &[u8; 32], dom: u32) -> Result<(), Error> {
+pub(crate) fn polyvec_grandom<R: Pv + ?Sized>(
+    r: &mut R,
+    log2o: u32,
+    seed: &[u8; 32],
+    dom: u32,
+) -> Result<(), Error> {
     if log2o >= 24 {
         return Err(Error::Internal);
     }

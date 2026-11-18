@@ -48,23 +48,51 @@ pub fn set_wrap_member_type() -> String {
 /// Round 3zc (CTR-GOV-30, spec 2026-11-13-burner-wrap-caps.md §3.5, §3.7): the admin's `UASetMaxWrapSupply` (`wrap`) or
 /// `UASetMaxSupply`, the new cap and the token's chain word; the propose and the apply are the same op sent twice.
 pub fn set_cap_type(wrap: bool) -> String {
-    let (op, cap) = if wrap { ("UASetMaxWrapSupply", "maxWrapSupply") } else { ("UASetMaxSupply", "maxSupply") };
+    let (op, cap) = if wrap {
+        ("UASetMaxWrapSupply", "maxWrapSupply")
+    } else {
+        ("UASetMaxSupply", "maxSupply")
+    };
     format!("{op}(bytes32 from,address target,uint256 {cap},bytes32 chainUid,{ENVELOPE})")
 }
 
 /// `hashStruct(UASetMaxSupply | UASetMaxWrapSupply)`: `cap` a `uint256` word.
-pub fn set_cap_struct_hash(wrap: bool, e: &Envelope, target: &[u8; 20], cap: &[u8; 32], chain_uid: &[u8; 32]) -> [u8; 32] {
-    struct_hash(keccak256(set_cap_type(wrap).as_bytes()), e, target, &[*cap, *chain_uid])
+pub fn set_cap_struct_hash(
+    wrap: bool,
+    e: &Envelope,
+    target: &[u8; 20],
+    cap: &[u8; 32],
+    chain_uid: &[u8; 32],
+) -> [u8; 32] {
+    struct_hash(
+        keccak256(set_cap_type(wrap).as_bytes()),
+        e,
+        target,
+        &[*cap, *chain_uid],
+    )
 }
 
 fn limit_hash(l: &WrapLimit) -> [u8; 32] {
-    keccak(&[&keccak256(WRAP_LIMIT_TYPE.as_bytes()), &word(l.per_user as u64), &word(l.token_wide), &word(l.period as u64)])
+    keccak(&[
+        &keccak256(WRAP_LIMIT_TYPE.as_bytes()),
+        &word(l.per_user as u64),
+        &word(l.token_wide),
+        &word(l.period as u64),
+    ])
 }
 
 fn leg_hash(l: &WrapLegLimits) -> [u8; 32] {
     let th = keccak256(format!("{WRAP_LEG_LIMITS_TYPE}{WRAP_LIMIT_TYPE}").as_bytes());
-    keccak(&[&th, &address_word(&l.underlying), &word(l.unit_exp as u64), &word(l.decay_days as u64), &limit_hash(&l.wrap_short),
-        &limit_hash(&l.wrap_long), &limit_hash(&l.unwrap_short), &limit_hash(&l.unwrap_long)])
+    keccak(&[
+        &th,
+        &address_word(&l.underlying),
+        &word(l.unit_exp as u64),
+        &word(l.decay_days as u64),
+        &limit_hash(&l.wrap_short),
+        &limit_hash(&l.wrap_long),
+        &limit_hash(&l.unwrap_short),
+        &limit_hash(&l.unwrap_long),
+    ])
 }
 
 /// `hashStruct(WrapLegLimits[])`: `keccak256` of the concatenated struct hashes.
@@ -73,12 +101,24 @@ pub fn legs_hash(legs: &[WrapLegLimits]) -> [u8; 32] {
     keccak(&hs.iter().map(|h| &h[..]).collect::<Vec<_>>())
 }
 
-pub(crate) fn struct_hash(typehash: [u8; 32], e: &Envelope, target: &[u8; 20], words: &[[u8; 32]]) -> [u8; 32] {
+pub(crate) fn struct_hash(
+    typehash: [u8; 32],
+    e: &Envelope,
+    target: &[u8; 20],
+    words: &[[u8; 32]],
+) -> [u8; 32] {
     let canon = |bound: bool, a: &[u8; 20]| if bound { address_word(a) } else { [0; 32] };
     let mut w: Vec<[u8; 32]> = vec![typehash, e.from, address_word(target)];
     w.extend_from_slice(words);
-    w.extend([e.batch, e.nonce, e.valid_until, word(e.mode as u64), canon(e.mode & 1 != 0, &e.relayer), e.fee,
-        canon(e.mode & 2 != 0, &e.fee_recipient)]);
+    w.extend([
+        e.batch,
+        e.nonce,
+        e.valid_until,
+        word(e.mode as u64),
+        canon(e.mode & 1 != 0, &e.relayer),
+        e.fee,
+        canon(e.mode & 2 != 0, &e.fee_recipient),
+    ]);
     keccak(&w.iter().map(|x| &x[..]).collect::<Vec<_>>())
 }
 
@@ -87,19 +127,49 @@ pub(crate) fn bool_word(b: bool) -> [u8; 32] {
 }
 
 /// `hashStruct(UASetWrapLimits)`.
-pub fn set_wrap_limits_struct_hash(e: &Envelope, target: &[u8; 20], legs: &[WrapLegLimits], net_unwrap: bool, wrap_list: bool,
-    unwrap_list: bool, chain_uid: &[u8; 32]) -> [u8; 32]
-{
-    struct_hash(keccak256(set_wrap_limits_type().as_bytes()), e, target,
-        &[legs_hash(legs), bool_word(net_unwrap), bool_word(wrap_list), bool_word(unwrap_list), *chain_uid])
+pub fn set_wrap_limits_struct_hash(
+    e: &Envelope,
+    target: &[u8; 20],
+    legs: &[WrapLegLimits],
+    net_unwrap: bool,
+    wrap_list: bool,
+    unwrap_list: bool,
+    chain_uid: &[u8; 32],
+) -> [u8; 32] {
+    struct_hash(
+        keccak256(set_wrap_limits_type().as_bytes()),
+        e,
+        target,
+        &[
+            legs_hash(legs),
+            bool_word(net_unwrap),
+            bool_word(wrap_list),
+            bool_word(unwrap_list),
+            *chain_uid,
+        ],
+    )
 }
 
 /// `hashStruct(UASetWrapMember)`.
-pub fn set_wrap_member_struct_hash(e: &Envelope, target: &[u8; 20], account: &[u8; 32], can_wrap: bool, can_unwrap: bool,
-    chain_uid: &[u8; 32]) -> [u8; 32]
-{
-    struct_hash(keccak256(set_wrap_member_type().as_bytes()), e, target,
-        &[*account, bool_word(can_wrap), bool_word(can_unwrap), *chain_uid])
+pub fn set_wrap_member_struct_hash(
+    e: &Envelope,
+    target: &[u8; 20],
+    account: &[u8; 32],
+    can_wrap: bool,
+    can_unwrap: bool,
+    chain_uid: &[u8; 32],
+) -> [u8; 32] {
+    struct_hash(
+        keccak256(set_wrap_member_type().as_bytes()),
+        e,
+        target,
+        &[
+            *account,
+            bool_word(can_wrap),
+            bool_word(can_unwrap),
+            *chain_uid,
+        ],
+    )
 }
 
 /// `keccak256(0x1901 ‖ domainSeparator ‖ structHash)`, the router's domain (`regulated::router_domain_separator`).
@@ -153,6 +223,10 @@ impl NetLine {
     pub fn debit(&mut self, q: u64, decay_days: u16, now_min: u64) {
         let (e, _) = self.ent(decay_days, now_min);
         let q = q as u128;
-        self.base = if q >= e { 0 } else { (self.base as u128 * (e - q) / e) as u64 };
+        self.base = if q >= e {
+            0
+        } else {
+            (self.base as u128 * (e - q) / e) as u64
+        };
     }
 }

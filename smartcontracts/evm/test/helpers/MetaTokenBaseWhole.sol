@@ -61,11 +61,27 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         _disableFeatureBody(bit, chainUid_);
     }
 
-    function eip712Domain() external view returns (bytes1 _p0, string memory _p1, string memory _p2, uint256 _p3, address _p4, bytes32 _p5, uint256[] memory _p6) {
+    function eip712Domain()
+        external
+        view
+        returns (
+            bytes1 _p0,
+            string memory _p1,
+            string memory _p2,
+            uint256 _p3,
+            address _p4,
+            bytes32 _p5,
+            uint256[] memory _p6
+        )
+    {
         return _eip712DomainBody();
     }
 
-    function executeMetaTransaction(MetaTxLib.MetaTransaction calldata m, bytes calldata signature) external nonReentrant returns (bool _p0) {
+    function executeMetaTransaction(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
+        external
+        nonReentrant
+        returns (bool _p0)
+    {
         return _executeMetaTransactionBody(m, signature);
     }
 
@@ -117,19 +133,34 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         return _minNonceBody(from, batch);
     }
 
-    function mtxBatch(MetaTxLib.UAMetaTransaction[] calldata ms, IUARegistry.UASig[] calldata auths) external nonReentrant returns (bool _p0) {
+    function mtxBatch(MetaTxLib.UAMetaTransaction[] calldata ms, IUARegistry.UASig[] calldata auths)
+        external
+        nonReentrant
+        returns (bool _p0)
+    {
         return _mtxBatchBody(ms, auths);
     }
 
-    function mtxBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata ts, IUARegistry.UASig[] calldata auths) external nonReentrant returns (bool _p0) {
+    function mtxBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata ts, IUARegistry.UASig[] calldata auths)
+        external
+        nonReentrant
+        returns (bool _p0)
+    {
         return _mtxBatchTransferBody(ts, auths);
     }
 
-    function mtxCancelNonce(MetaTxLib.UAEnvelope calldata e, uint256 lane, IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory _p0) {
+    function mtxCancelNonce(MetaTxLib.UAEnvelope calldata e, uint256 lane, IUARegistry.UASig calldata auth)
+        external
+        nonReentrant
+        returns (bytes memory _p0)
+    {
         return _mtxCancelNonceBody(e, lane, auth);
     }
 
-    function mtxCancelOrder(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata auth) external nonReentrant {
+    function mtxCancelOrder(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata auth)
+        external
+        nonReentrant
+    {
         _mtxCancelOrderBody(o, auth);
     }
 
@@ -137,19 +168,35 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         return _mtxDigestBody(m);
     }
 
-    function mtxExecute(MetaTxLib.UAMetaTransaction calldata m, IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory _p0) {
+    function mtxExecute(MetaTxLib.UAMetaTransaction calldata m, IUARegistry.UASig calldata auth)
+        external
+        nonReentrant
+        returns (bytes memory _p0)
+    {
         return _mtxExecuteBody(m, auth);
     }
 
-    function mtxExecuteTransfer(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth) external nonReentrant returns (bool _p0) {
+    function mtxExecuteTransfer(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth)
+        external
+        nonReentrant
+        returns (bool _p0)
+    {
         return _mtxExecuteTransferBody(t, auth);
     }
 
-    function mtxInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, IUARegistry.UASig calldata auth) external nonReentrant {
+    function mtxInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, IUARegistry.UASig calldata auth)
+        external
+        nonReentrant
+    {
         _mtxInvalidateNoncesBody(from, batch, newMin, auth);
     }
 
-    function mtxLiquidityPull(ITradeToken.LiquidityOrder calldata o, IUARegistry.UASig calldata auth, uint256 amount, address submitter) external nonReentrant {
+    function mtxLiquidityPull(
+        ITradeToken.LiquidityOrder calldata o,
+        IUARegistry.UASig calldata auth,
+        uint256 amount,
+        address submitter
+    ) external nonReentrant {
         _mtxLiquidityPullBody(o, auth, amount, submitter);
     }
 
@@ -157,23 +204,59 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         return _mtxNonceBody(from, batch);
     }
 
-    function mtxPay(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth, MetaTxLib.PayMeta calldata meta) external nonReentrant returns (bool _p0) {
+    function mtxPay(
+        MetaTxLib.UAMetaTransfer calldata t,
+        IUARegistry.UASig calldata auth,
+        MetaTxLib.PayMeta calldata meta
+    ) external nonReentrant returns (bool _p0) {
         return _mtxPayBody(t, auth, meta);
     }
 
-    function mtxPayWithPayeeFee(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth, uint256 fee, address feeRecipient, uint256 pfValidUntil, IUARegistry.UASig calldata payeeAuth, MetaTxLib.PayMeta calldata meta) external nonReentrant returns (bool _p0) {
+    function mtxPayWithPayeeFee(
+        MetaTxLib.UAMetaTransfer calldata t,
+        IUARegistry.UASig calldata payerAuth,
+        uint256 fee,
+        address feeRecipient,
+        uint256 pfValidUntil,
+        IUARegistry.UASig calldata payeeAuth,
+        MetaTxLib.PayMeta calldata meta
+    ) external nonReentrant returns (bool _p0) {
         return _mtxPayWithPayeeFeeBody(t, payerAuth, fee, feeRecipient, pfValidUntil, payeeAuth, meta);
     }
 
-    function mtxRelayFee(bytes32 from, address target, bytes32 callDataHash, bytes32 payee, uint256 value, uint256 batch, uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) external nonReentrant {
+    function mtxRelayFee(
+        bytes32 from,
+        address target,
+        bytes32 callDataHash,
+        bytes32 payee,
+        uint256 value,
+        uint256 batch,
+        uint256 nonce,
+        uint256 validUntil,
+        IUARegistry.UASig calldata auth
+    ) external nonReentrant {
         _mtxRelayFeeBody(from, target, callDataHash, payee, value, batch, nonce, validUntil, auth);
     }
 
-    function mtxTrade(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata auth, ITradeToken.TradeFill calldata f) external nonReentrant {
+    function mtxTrade(
+        ITradeToken.UATradeOrder calldata o,
+        IUARegistry.UASig calldata auth,
+        ITradeToken.TradeFill calldata f
+    ) external nonReentrant {
         _mtxTradeBody(o, auth, f);
     }
 
-    function mtxTransfer(bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil, uint32 mode, address relayer, IUARegistry.UASig calldata auth) external nonReentrant returns (bool _p0) {
+    function mtxTransfer(
+        bytes32 from,
+        bytes32 to,
+        uint256 amount,
+        uint256 batch,
+        uint256 nonce,
+        uint256 validUntil,
+        uint32 mode,
+        address relayer,
+        IUARegistry.UASig calldata auth
+    ) external nonReentrant returns (bool _p0) {
         return _mtxTransferBody(from, to, amount, batch, nonce, validUntil, mode, relayer, auth);
     }
 
@@ -181,23 +264,57 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         return _mtxTransferDigestBody(t);
     }
 
-    function mtxTransferWithFee(bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil, uint32 mode, address relayer, uint256 fee, address feeRecipient, IUARegistry.UASig calldata auth) external nonReentrant returns (bool _p0) {
-        return _mtxTransferWithFeeBody(from, to, amount, batch, nonce, validUntil, mode, relayer, fee, feeRecipient, auth);
+    function mtxTransferWithFee(
+        bytes32 from,
+        bytes32 to,
+        uint256 amount,
+        uint256 batch,
+        uint256 nonce,
+        uint256 validUntil,
+        uint32 mode,
+        address relayer,
+        uint256 fee,
+        address feeRecipient,
+        IUARegistry.UASig calldata auth
+    ) external nonReentrant returns (bool _p0) {
+        return _mtxTransferWithFeeBody(
+            from, to, amount, batch, nonce, validUntil, mode, relayer, fee, feeRecipient, auth
+        );
     }
 
     function payLane(bytes32 payId) external pure returns (uint256 _p0) {
         return _payLaneBody(payId);
     }
 
-    function payWithFee(address to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient, bytes32 entryRef, MetaTxLib.PayMeta calldata meta) external nonReentrant returns (bool _p0) {
+    function payWithFee(
+        address to,
+        uint256 amount,
+        FeeMode feeMode,
+        uint256 fee,
+        address feeRecipient,
+        bytes32 entryRef,
+        MetaTxLib.PayMeta calldata meta
+    ) external nonReentrant returns (bool _p0) {
         return _payWithFeeBody(to, amount, feeMode, fee, feeRecipient, entryRef, meta);
     }
 
-    function payWithFeeToUA(bytes32 to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient, bytes32 entryRef, MetaTxLib.PayMeta calldata meta) external nonReentrant returns (bool _p0) {
+    function payWithFeeToUA(
+        bytes32 to,
+        uint256 amount,
+        FeeMode feeMode,
+        uint256 fee,
+        address feeRecipient,
+        bytes32 entryRef,
+        MetaTxLib.PayMeta calldata meta
+    ) external nonReentrant returns (bool _p0) {
         return _payWithFeeToUABody(to, amount, feeMode, fee, feeRecipient, entryRef, meta);
     }
 
-    function payeeFeeDigest(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil) external view returns (bytes32 _p0) {
+    function payeeFeeDigest(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil)
+        external
+        view
+        returns (bytes32 _p0)
+    {
         return _payeeFeeDigestBody(t, fee, feeRecipient, validUntil);
     }
 
@@ -205,7 +322,11 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         return _paymentCountBody(payNo);
     }
 
-    function paymentsOf(bytes32 payNo, uint256 offset, uint256 limit) external view returns (MetaTxLib.PayRecord[] memory _p0) {
+    function paymentsOf(bytes32 payNo, uint256 offset, uint256 limit)
+        external
+        view
+        returns (MetaTxLib.PayRecord[] memory _p0)
+    {
         return _paymentsOfBody(payNo, offset, limit);
     }
 
@@ -213,7 +334,11 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         return _pendingAdminBody();
     }
 
-    function pendingGrant(uint8 bit, bytes32 account) external view returns (uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3) {
+    function pendingGrant(uint8 bit, bytes32 account)
+        external
+        view
+        returns (uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3)
+    {
         return _pendingGrantBody(bit, account);
     }
 
@@ -245,7 +370,10 @@ abstract contract MetaTokenBaseWhole is MetaTokenBase {
         _revokeRoleBody(bit, account, chainUid_);
     }
 
-    function setGrant(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms, bytes32 chainUid_) external governed {
+    function setGrant(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms, bytes32 chainUid_)
+        external
+        governed
+    {
         _setGrantBody(bit, holder, terms, chainUid_);
     }
 

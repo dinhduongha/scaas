@@ -3,8 +3,8 @@ use anchor_lang::prelude::*;
 use anchor_lang::system_program;
 use anchor_spl::associated_token;
 use anchor_spl::token_2022::spl_token_2022::extension::{
-    non_transferable::NonTransferable, transfer_fee::TransferFeeConfig, transfer_hook::TransferHook,
-    BaseStateWithExtensions, StateWithExtensions,
+    non_transferable::NonTransferable, transfer_fee::TransferFeeConfig,
+    transfer_hook::TransferHook, BaseStateWithExtensions, StateWithExtensions,
 };
 use anchor_spl::token_2022::spl_token_2022::state::Mint as MintState;
 use anchor_spl::token_interface::{self, TransferChecked};
@@ -19,13 +19,22 @@ pub fn check_mint(mint: &AccountInfo, amount: u64) -> Result<()> {
     }
     let data = mint.try_borrow_data()?;
     let m = StateWithExtensions::<MintState>::unpack(&data)?;
-    require!(m.get_extension::<NonTransferable>().is_err(), ScaasError::MintNotAllowed);
+    require!(
+        m.get_extension::<NonTransferable>().is_err(),
+        ScaasError::MintNotAllowed
+    );
     if let Ok(h) = m.get_extension::<TransferHook>() {
-        require!(Option::<Pubkey>::from(h.program_id).is_none(), ScaasError::MintNotAllowed);
+        require!(
+            Option::<Pubkey>::from(h.program_id).is_none(),
+            ScaasError::MintNotAllowed
+        );
     }
     if let Ok(f) = m.get_extension::<TransferFeeConfig>() {
         let epoch = Clock::get()?.epoch;
-        require!(f.calculate_epoch_fee(epoch, amount) == Some(0), ScaasError::MintNotAllowed);
+        require!(
+            f.calculate_epoch_fee(epoch, amount) == Some(0),
+            ScaasError::MintNotAllowed
+        );
     }
     Ok(())
 }
@@ -45,9 +54,18 @@ pub fn transfer<'info>(
     if amount == 0 {
         return Ok(());
     }
-    let accounts = TransferChecked { from: from.clone(), mint: mint.clone(), to: to.clone(), authority: authority.clone() };
+    let accounts = TransferChecked {
+        from: from.clone(),
+        mint: mint.clone(),
+        to: to.clone(),
+        authority: authority.clone(),
+    };
     let signer: &[&[&[u8]]] = &[seeds];
-    token_interface::transfer_checked(CpiContext::new_with_signer(token_program.key(), accounts, signer), amount, decimals)
+    token_interface::transfer_checked(
+        CpiContext::new_with_signer(token_program.key(), accounts, signer),
+        amount,
+        decimals,
+    )
 }
 
 /// ATA(`wallet`, `mint`) theo đúng token program của mint; chương trình ATA tự kiểm dẫn xuất (sai ⇒ lỗi).
@@ -84,25 +102,76 @@ pub fn create_pda<'info>(
     let signer: &[&[&[u8]]] = &[seeds];
     let sys = system.key();
     if target.lamports() == 0 {
-        let a = system_program::CreateAccount { from: payer.clone(), to: target.clone() };
-        return system_program::create_account(CpiContext::new_with_signer(sys, a, signer), rent, space as u64, &crate::ID);
+        let a = system_program::CreateAccount {
+            from: payer.clone(),
+            to: target.clone(),
+        };
+        return system_program::create_account(
+            CpiContext::new_with_signer(sys, a, signer),
+            rent,
+            space as u64,
+            &crate::ID,
+        );
     }
     let top = rent.saturating_sub(target.lamports());
     if top > 0 {
-        system_program::transfer(CpiContext::new(sys, system_program::Transfer { from: payer.clone(), to: target.clone() }), top)?;
+        system_program::transfer(
+            CpiContext::new(
+                sys,
+                system_program::Transfer {
+                    from: payer.clone(),
+                    to: target.clone(),
+                },
+            ),
+            top,
+        )?;
     }
-    system_program::allocate(CpiContext::new_with_signer(sys, system_program::Allocate { account_to_allocate: target.clone() }, signer), space as u64)?;
-    system_program::assign(CpiContext::new_with_signer(sys, system_program::Assign { account_to_assign: target.clone() }, signer), &crate::ID)
+    system_program::allocate(
+        CpiContext::new_with_signer(
+            sys,
+            system_program::Allocate {
+                account_to_allocate: target.clone(),
+            },
+            signer,
+        ),
+        space as u64,
+    )?;
+    system_program::assign(
+        CpiContext::new_with_signer(
+            sys,
+            system_program::Assign {
+                account_to_assign: target.clone(),
+            },
+            signer,
+        ),
+        &crate::ID,
+    )
 }
 
 /// Nới account của program tới `len` (chỉ lớn lên), `payer` bù rent.
-pub fn grow<'info>(target: &AccountInfo<'info>, payer: &AccountInfo<'info>, system: &AccountInfo<'info>, len: usize) -> Result<()> {
+pub fn grow<'info>(
+    target: &AccountInfo<'info>,
+    payer: &AccountInfo<'info>,
+    system: &AccountInfo<'info>,
+    len: usize,
+) -> Result<()> {
     if len <= target.data_len() {
         return Ok(());
     }
-    let need = Rent::get()?.minimum_balance(len).saturating_sub(target.lamports());
+    let need = Rent::get()?
+        .minimum_balance(len)
+        .saturating_sub(target.lamports());
     if need > 0 {
-        system_program::transfer(CpiContext::new(system.key(), system_program::Transfer { from: payer.clone(), to: target.clone() }), need)?;
+        system_program::transfer(
+            CpiContext::new(
+                system.key(),
+                system_program::Transfer {
+                    from: payer.clone(),
+                    to: target.clone(),
+                },
+            ),
+            need,
+        )?;
     }
     target.resize(len)?;
     Ok(())
@@ -122,7 +191,10 @@ pub fn close(target: &AccountInfo, to: &AccountInfo) -> Result<()> {
 /// ký được ⇒ tiền mất. PDA của program khác (vault multisig…) vẫn được.
 pub fn check_recipient(recipient: &AccountInfo) -> Result<()> {
     let o = recipient.owner;
-    require!(*o != anchor_spl::token::ID && *o != anchor_spl::token_2022::ID, ScaasError::TokenAccountRecipient);
+    require!(
+        *o != anchor_spl::token::ID && *o != anchor_spl::token_2022::ID,
+        ScaasError::TokenAccountRecipient
+    );
     Ok(())
 }
 

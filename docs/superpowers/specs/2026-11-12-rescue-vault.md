@@ -130,12 +130,16 @@ moves it; the designator and native-space checks are copies of `SigCheck.isDesig
 
 **The init code is committed** as `smartcontracts/evm/rescue-vault-init.hex` (one line, `0x`, the creation code followed by the
 two constructor arguments; keccak `0xd42ad5b7…d1dcd4fd`), and the deploy script sends those bytes, never a fresh compile: a later
-compiler, OpenZeppelin commit or setting cannot move the address. `test_addressIsTheConstant` pins the artifact's keccak and its
-CREATE2 address against `RescueLib.SCAAS_DEV_RESCUE` and deploys it; `test_artifactIsTheSource` pins today's compile (creation
-code hash `0xa103dbdc…c153dc66`) to the artifact, so every behaviour test of the source tests the deployed bytes; the deploy
-script refuses an artifact whose address is not the constant. **`RescueVault.sol` must never be edited**; under a later compiler
-`test_artifactIsTheSource` may fail while the artifact stays the deploy truth. A new vault means a new file, a new salt and a new
-constant, under a new owner ruling.
+compiler, OpenZeppelin commit or setting cannot move the address. The committed artifact is the deployed vault; it was built
+with the Solidity metadata hash. The repository's `bytecode_hash = "none"` (code-format F2, 2026-11-18) applies to today's
+compile only (owner 2026-11-19, [CTR-GOV-25](../../decisions.md#CTR-GOV-25)'s Change, option (a)): `test_addressIsTheConstant`
+pins the artifact's keccak and its CREATE2 address against `RescueLib.SCAAS_DEV_RESCUE` and deploys it;
+`test_artifactIsTheSource` compares the deployed runtime with today's compiled runtime with the trailing CBOR metadata removed,
+exact on every other byte (`test_artifactCompareCatchesOneByte`: one changed opcode byte fails it), so every behaviour test of
+the source tests the deployed code; the tests that deploy a vault at the CREATE2 address use the committed creation code; the
+deploy script refuses an artifact whose address is not the constant. **`RescueVault.sol` must never be edited**: a code change
+is a new vault, under a new owner ruling, with a new init code built under the settings of its day, a new salt and a new
+constant (a new address).
 
 ## 3. Constant and pins
 

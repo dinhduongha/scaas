@@ -91,7 +91,9 @@ pub struct PrfEnvelope<'a> {
 pub fn check_passphrase(p: &str) -> Result<()> {
     let p = super::sized(|| p.nfkc());
     // JS `\d` is ASCII, `\s` Unicode white space and U+FEFF
-    let other = p.chars().any(|c| !(c.is_ascii_digit() || c.is_whitespace() || c == '\u{feff}'));
+    let other = p
+        .chars()
+        .any(|c| !(c.is_ascii_digit() || c.is_whitespace() || c == '\u{feff}'));
     if p.chars().count() < 8 || !other {
         return Err(Error::Argument);
     }
@@ -111,7 +113,10 @@ fn aad(id: &str, label: &str, part: &str) -> Vec<u8> {
 /// A lower-case UUID v4: a vault id.
 pub(crate) fn is_vault_id(s: &str) -> bool {
     let b = s.as_bytes();
-    let hex = |r: std::ops::Range<usize>| b.get(r).is_some_and(|x| x.iter().all(|c| matches!(c, b'0'..=b'9' | b'a'..=b'f')));
+    let hex = |r: std::ops::Range<usize>| {
+        b.get(r)
+            .is_some_and(|x| x.iter().all(|c| matches!(c, b'0'..=b'9' | b'a'..=b'f')))
+    };
     b.len() == 36
         && [8, 13, 18, 23].iter().all(|i| b.get(*i) == Some(&b'-'))
         && hex(0..8)
@@ -129,12 +134,22 @@ pub(crate) fn new_vault_id() -> Result<String> {
     b[6] = (b[6] & 0x0f) | 0x40;
     b[8] = (b[8] & 0x3f) | 0x80;
     let h: String = b.iter().map(|x| format!("{x:02x}")).collect();
-    Ok(format!("{}-{}-{}-{}-{}", &h[..8], &h[8..12], &h[12..16], &h[16..20], &h[20..]))
+    Ok(format!(
+        "{}-{}-{}-{}-{}",
+        &h[..8],
+        &h[8..12],
+        &h[12..16],
+        &h[16..20],
+        &h[20..]
+    ))
 }
 
 fn gcm_seal(key: &[u8; 32], data: &[u8], aad: &[u8]) -> Result<GcmBox> {
     let iv = random::<12>()?;
-    Ok(GcmBox { ct: aead_seal(Alg::Aes256Gcm, key, &iv, aad, data)?, iv: iv.to_vec() })
+    Ok(GcmBox {
+        ct: aead_seal(Alg::Aes256Gcm, key, &iv, aad, data)?,
+        iv: iv.to_vec(),
+    })
 }
 
 /// `VaultOpen` for a bad tag or an IV of other than 12 bytes.
@@ -169,23 +184,46 @@ fn pin_envelope(id: &str, label: &str, dek: &[u8; 32], pin: &str) -> Result<Pin>
     let salt = random::<16>()?;
     let kek = pin_kek(pin, &salt, LOG_N_NEW)?;
     let sealed = gcm_seal(&kek, dek, &aad(id, label, "pin"))?;
-    Ok(Pin { kdf: "scrypt".into(), n: 1 << LOG_N_NEW, r: 8, p: 1, salt: salt.to_vec(), sealed })
+    Ok(Pin {
+        kdf: "scrypt".into(),
+        n: 1 << LOG_N_NEW,
+        r: 8,
+        p: 1,
+        salt: salt.to_vec(),
+        sealed,
+    })
 }
 
 fn prf_envelope(id: &str, label: &str, dek: &[u8; 32], prf: &PrfEnvelope) -> Result<Prf> {
     let sealed = gcm_seal(&*prf_kek(prf.output)?, dek, &aad(id, label, "prf"))?;
-    Ok(Prf { credential_id: prf.credential_id.to_owned(), salt: prf.salt.to_vec(), sealed })
+    Ok(Prf {
+        credential_id: prf.credential_id.to_owned(),
+        salt: prf.salt.to_vec(),
+        sealed,
+    })
 }
 
 impl Vault {
     /// A new vault of `secret` under `id` and `label`: a fresh DEK, the pin envelope at `N = 2^17` (the passphrase policy
     /// first), and the PRF envelope if given.
-    pub(crate) fn seal(id: &str, label: &str, secret: &[u8], pin: &str, prf: Option<&PrfEnvelope>) -> Result<Vault> {
+    pub(crate) fn seal(
+        id: &str,
+        label: &str,
+        secret: &[u8],
+        pin: &str,
+        prf: Option<&PrfEnvelope>,
+    ) -> Result<Vault> {
         Ok(Vault::seal_dek(id, label, secret, pin, prf)?.0)
     }
 
     /// [`Vault::seal`] and the new DEK; `Argument` for an `id` not a lower-case UUID v4.
-    pub(crate) fn seal_dek(id: &str, label: &str, secret: &[u8], pin: &str, prf: Option<&PrfEnvelope>) -> Result<(Vault, Dek)> {
+    pub(crate) fn seal_dek(
+        id: &str,
+        label: &str,
+        secret: &[u8],
+        pin: &str,
+        prf: Option<&PrfEnvelope>,
+    ) -> Result<(Vault, Dek)> {
         check_passphrase(pin)?;
         if !is_vault_id(id) {
             return Err(Error::Argument);
@@ -194,12 +232,24 @@ impl Vault {
         let data = gcm_seal(&dek, secret, &aad(id, label, "data"))?;
         let pin = pin_envelope(id, label, &dek, pin)?;
         let prf = prf.map(|p| prf_envelope(id, label, &dek, p)).transpose()?;
-        Ok((Vault { id: id.to_owned(), label: label.to_owned(), data, pin, prf }, dek))
+        Ok((
+            Vault {
+                id: id.to_owned(),
+                label: label.to_owned(),
+                data,
+                pin,
+                prf,
+            },
+            dek,
+        ))
     }
 
     /// This vault with `data` replaced by `secret` sealed under `dek` (its DEK) and a fresh IV, both envelopes kept.
     pub(crate) fn with_data(&self, dek: &[u8; 32], secret: &[u8]) -> Result<Vault> {
-        Ok(Vault { data: gcm_seal(dek, secret, &aad(&self.id, &self.label, "data"))?, ..self.clone() })
+        Ok(Vault {
+            data: gcm_seal(dek, secret, &aad(&self.id, &self.label, "data"))?,
+            ..self.clone()
+        })
     }
 
     /// The vault with `secret` in place of its payload, under its **same DEK** (opened by `unlock`) and a fresh IV: the pin and
@@ -219,11 +269,21 @@ impl Vault {
             }
             Unlock::VaultPassphrase(pin) => {
                 let p = &self.pin;
-                let log_n = LOG_N.iter().find(|l| 1u64 << **l == p.n).filter(|_| p.kdf == "scrypt" && p.r == 8 && p.p == 1);
-                (pin_kek(pin, &p.salt, *log_n.ok_or(Error::VaultParams)?)?, &p.sealed, "pin")
+                let log_n = LOG_N
+                    .iter()
+                    .find(|l| 1u64 << **l == p.n)
+                    .filter(|_| p.kdf == "scrypt" && p.r == 8 && p.p == 1);
+                (
+                    pin_kek(pin, &p.salt, *log_n.ok_or(Error::VaultParams)?)?,
+                    &p.sealed,
+                    "pin",
+                )
             }
         };
-        key32(gcm_open(&kek, sealed, &aad(&self.id, &self.label, part))?, Error::VaultOpen)
+        key32(
+            gcm_open(&kek, sealed, &aad(&self.id, &self.label, part))?,
+            Error::VaultOpen,
+        )
     }
 
     /// The secret (errors as `dek`).
@@ -234,15 +294,24 @@ impl Vault {
     /// [`Vault::open`] and the DEK.
     pub(crate) fn open_dek(&self, unlock: Unlock) -> Result<(Zeroizing<Vec<u8>>, Dek)> {
         let dek = self.dek(unlock)?;
-        Ok((gcm_open(&dek, &self.data, &aad(&self.id, &self.label, "data"))?, dek))
+        Ok((
+            gcm_open(&dek, &self.data, &aad(&self.id, &self.label, "data"))?,
+            dek,
+        ))
     }
 
     /// [`Vault::open_dek`] through the PRF envelope with its key-encryption key `kek` already derived ([`prf_key`]): `Argument`
     /// for a vault without a PRF envelope, `VaultOpen` for another key or an altered envelope.
     pub(crate) fn open_dek_prf_kek(&self, kek: &[u8; 32]) -> Result<(Zeroizing<Vec<u8>>, Dek)> {
         let p = self.prf.as_ref().ok_or(Error::Argument)?;
-        let dek = key32(gcm_open(kek, &p.sealed, &aad(&self.id, &self.label, "prf"))?, Error::VaultOpen)?;
-        Ok((gcm_open(&dek, &self.data, &aad(&self.id, &self.label, "data"))?, dek))
+        let dek = key32(
+            gcm_open(kek, &p.sealed, &aad(&self.id, &self.label, "prf"))?,
+            Error::VaultOpen,
+        )?;
+        Ok((
+            gcm_open(&dek, &self.data, &aad(&self.id, &self.label, "data"))?,
+            dek,
+        ))
     }
 
     /// What the vault holds: `seed`, `manifest`, `native-import:<network>:<n>`, …
@@ -266,24 +335,35 @@ impl Vault {
     pub fn rewrap_pin(&self, old: &str, new: &str) -> Result<Vault> {
         check_passphrase(new)?;
         let dek = self.dek(Unlock::VaultPassphrase(old))?;
-        Ok(Vault { pin: pin_envelope(&self.id, &self.label, &dek, new)?, ..self.clone() })
+        Ok(Vault {
+            pin: pin_envelope(&self.id, &self.label, &dek, new)?,
+            ..self.clone()
+        })
     }
 
     /// The vault with a PRF envelope (replacing one it had), opened by the passphrase once.
     pub fn enable_prf(&self, pin: &str, prf: &PrfEnvelope) -> Result<Vault> {
         let dek = self.dek(Unlock::VaultPassphrase(pin))?;
-        Ok(Vault { prf: Some(prf_envelope(&self.id, &self.label, &dek, prf)?), ..self.clone() })
+        Ok(Vault {
+            prf: Some(prf_envelope(&self.id, &self.label, &dek, prf)?),
+            ..self.clone()
+        })
     }
 
     /// The vault without its PRF envelope (scaas-sdk spec §6.10 `disable_prf_unlock`): the data and pin envelopes unchanged. It
     /// revokes nothing from an earlier copy of the vault that still has the envelope.
     pub fn without_prf(&self) -> Vault {
-        Vault { prf: None, ..self.clone() }
+        Vault {
+            prf: None,
+            ..self.clone()
+        }
     }
 
     /// Whether the vault carries a PRF envelope, and its credential id and salt (public: what the authenticator is asked with).
     pub fn prf_params(&self) -> Option<(String, Vec<u8>)> {
-        self.prf.as_ref().map(|p| (p.credential_id.clone(), p.salt.clone()))
+        self.prf
+            .as_ref()
+            .map(|p| (p.credential_id.clone(), p.salt.clone()))
     }
 
     /// The clientkeys JSON (its field order).
@@ -293,7 +373,12 @@ impl Vault {
         let gcm = |g: &GcmBox| format!("\"iv\":\"{}\",\"ct\":\"{}\"", b(&g.iv), b(&g.ct));
         let p = &self.pin;
         let prf = self.prf.as_ref().map_or(String::new(), |f| {
-            format!(",\"prf\":{{\"credentialId\":{},\"salt\":\"{}\",{}}}", s(&f.credential_id), b(&f.salt), gcm(&f.sealed))
+            format!(
+                ",\"prf\":{{\"credentialId\":{},\"salt\":\"{}\",{}}}",
+                s(&f.credential_id),
+                b(&f.salt),
+                gcm(&f.sealed)
+            )
         });
         format!(
             "{{\"v\":2,\"id\":{},\"label\":{},\"data\":{{{}}},\"pin\":{{\"kdf\":{},\"N\":{},\"r\":{},\"p\":{},\"salt\":\"{}\",{}}}{prf}}}",
@@ -317,7 +402,9 @@ impl Vault {
         if v.get("v").and_then(Value::as_u64) != Some(2) || v.get("moved").is_some() {
             return Err(Error::VaultVersion);
         }
-        parse(&v).filter(|x| is_vault_id(&x.id)).ok_or(Error::Argument)
+        parse(&v)
+            .filter(|x| is_vault_id(&x.id))
+            .ok_or(Error::Argument)
     }
 }
 
@@ -332,7 +419,12 @@ impl Vault {
 
 fn parse(v: &Value) -> Option<Vault> {
     let bytes = |x: &Value, k: &str| Base64UrlUnpadded::decode_vec(x.get(k)?.as_str()?).ok();
-    let gcm = |x: &Value| Some(GcmBox { iv: bytes(x, "iv")?, ct: bytes(x, "ct")? });
+    let gcm = |x: &Value| {
+        Some(GcmBox {
+            iv: bytes(x, "iv")?,
+            ct: bytes(x, "ct")?,
+        })
+    };
     let int = |x: &Value, k: &str| x.get(k).and_then(Value::as_u64).unwrap_or(0);
     let p = v.get("pin")?;
     let pin = Pin {
@@ -345,9 +437,19 @@ fn parse(v: &Value) -> Option<Vault> {
     };
     let prf = match v.get("prf") {
         None | Some(Value::Null) => None,
-        Some(f) => Some(Prf { credential_id: f.get("credentialId")?.as_str()?.to_owned(), salt: bytes(f, "salt")?, sealed: gcm(f)? }),
+        Some(f) => Some(Prf {
+            credential_id: f.get("credentialId")?.as_str()?.to_owned(),
+            salt: bytes(f, "salt")?,
+            sealed: gcm(f)?,
+        }),
     };
-    Some(Vault { id: v.get("id")?.as_str()?.to_owned(), label: v.get("label")?.as_str()?.to_owned(), data: gcm(v.get("data")?)?, pin, prf })
+    Some(Vault {
+        id: v.get("id")?.as_str()?.to_owned(),
+        label: v.get("label")?.as_str()?.to_owned(),
+        data: gcm(v.get("data")?)?,
+        pin,
+        prf,
+    })
 }
 
 impl Wallet {
@@ -357,7 +459,9 @@ impl Wallet {
     /// (T21 L82).
     pub fn seal_vault(&self, vault_passphrase: &str, prf: Option<&PrfEnvelope>) -> Result<Vault> {
         let _lease = self.store.lease();
-        let entropy = self.store.with_arena(|a| Ok(Zeroizing::new(a.entropy()?.to_vec())))?;
+        let entropy = self
+            .store
+            .with_arena(|a| Ok(Zeroizing::new(a.entropy()?.to_vec())))?;
         super::store::copied();
         Vault::seal(&self.vault_id()?, "seed", &entropy, vault_passphrase, prf)
     }

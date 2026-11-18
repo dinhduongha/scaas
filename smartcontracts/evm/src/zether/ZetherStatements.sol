@@ -32,7 +32,9 @@ contract ZetherStatements {
 
     /// @notice The single-recipient statement (`mtxConfidentialTransferSingle`).
     function transferStatementSingle(address token, IZetherToken.ZetherSingle calldata t, bytes32 envelopeBinding)
-        external view returns (bytes memory)
+        external
+        view
+        returns (bytes memory)
     {
         ZetherLib.Ctx memory c = _ctx(token, ZetherLib.tagOf(envelopeBinding), envelopeBinding);
         ZetherLib.Acct memory a = _acct(token, ZetherLib.uaOf(t.yFrom));

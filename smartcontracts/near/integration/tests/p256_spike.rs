@@ -7,8 +7,14 @@ use scaas_near_common::webauthn::b64url;
 use scaas_near_spike_p256::PasskeyCase;
 use sha2::{Digest, Sha256};
 
-const WASM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../target/near/scaas_near_spike_p256/scaas_near_spike_p256.wasm");
-const VECTOR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../evm/test/vectors/webauthn_soft.json");
+const WASM: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../target/near/scaas_near_spike_p256/scaas_near_spike_p256.wasm"
+);
+const VECTOR: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../evm/test/vectors/webauthn_soft.json"
+);
 
 fn hx(v: &serde_json::Value) -> Vec<u8> {
     hex::decode(v.as_str().unwrap().trim_start_matches("0x")).unwrap()
@@ -16,7 +22,8 @@ fn hx(v: &serde_json::Value) -> Vec<u8> {
 
 /// The repo's soft WebAuthn vector (low-s form) and its raw high-s signature.
 fn vector() -> (PasskeyCase, [u8; 64]) {
-    let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(VECTOR).unwrap()).unwrap();
+    let v: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(VECTOR).unwrap()).unwrap();
     let der = Signature::from_der(&hx(&v["signatureDer"])).unwrap();
     let low = der.normalize_s().expect("vector DER is high-s");
     let case = PasskeyCase {
@@ -35,11 +42,16 @@ fn vector() -> (PasskeyCase, [u8; 64]) {
 fn second(challenge: [u8; 32], rp_id_hash: [u8; 32], origin: &str) -> PasskeyCase {
     let sk = SigningKey::from_bytes(&[7u8; 32].into()).unwrap();
     let ad = [rp_id_hash.as_slice(), &[0x05, 0, 0, 0, 1]].concat();
-    let cdj = format!(r#"{{"type":"webauthn.get","challenge":"{}","origin":"{origin}","crossOrigin":false}}"#, b64url(&challenge));
+    let cdj = format!(
+        r#"{{"type":"webauthn.get","challenge":"{}","origin":"{origin}","crossOrigin":false}}"#,
+        b64url(&challenge)
+    );
     let digest = Sha256::digest([ad.as_slice(), &Sha256::digest(cdj.as_bytes())].concat());
     let sig: Signature = sk.sign_prehash(&digest).unwrap();
     PasskeyCase {
-        key: sk.verifying_key().to_encoded_point(false).as_bytes()[1..].try_into().unwrap(),
+        key: sk.verifying_key().to_encoded_point(false).as_bytes()[1..]
+            .try_into()
+            .unwrap(),
         challenge,
         authenticator_data: ad,
         client_data_json: cdj.into_bytes(),
@@ -52,11 +64,21 @@ fn second(challenge: [u8; 32], rp_id_hash: [u8; 32], origin: &str) -> PasskeyCas
 async fn deploy() -> near_workspaces::Contract {
     let wasm = std::fs::read(WASM).expect("run smartcontracts/scripts/build.sh near first");
     println!("wasm {} B", wasm.len());
-    near_workspaces::sandbox().await.unwrap().dev_deploy(&wasm).await.unwrap()
+    near_workspaces::sandbox()
+        .await
+        .unwrap()
+        .dev_deploy(&wasm)
+        .await
+        .unwrap()
 }
 
 async fn check(c: &near_workspaces::Contract, case: &PasskeyCase) -> String {
-    c.view("check").args(borsh::to_vec(case).unwrap()).await.unwrap().json().unwrap()
+    c.view("check")
+        .args(borsh::to_vec(case).unwrap())
+        .await
+        .unwrap()
+        .json()
+        .unwrap()
 }
 
 #[tokio::test]
@@ -64,7 +86,10 @@ async fn webauthn_vector_accepted() {
     let c = deploy().await;
     let (v, high) = vector();
     assert_eq!(check(&c, &v).await, "ok");
-    assert_eq!(check(&c, &second([9; 32], v.rp_id_hash, &v.origins[0])).await, "ok");
+    assert_eq!(
+        check(&c, &second([9; 32], v.rp_id_hash, &v.origins[0])).await,
+        "ok"
+    );
 
     let mut x = v.clone();
     x.sig[31] ^= 1; // r
@@ -112,11 +137,21 @@ async fn p256_two_passkey_relay_fee_fits_300_tgas() {
     let burnt = out.total_gas_burnt;
     let ok = out.is_success();
     println!("success {ok}");
-    println!("total_gas_burnt {} gas = {:.3} Tgas (limit 300 Tgas)", burnt.as_gas(), burnt.as_gas() as f64 / 1e12);
+    println!(
+        "total_gas_burnt {} gas = {:.3} Tgas (limit 300 Tgas)",
+        burnt.as_gas(),
+        burnt.as_gas() as f64 / 1e12
+    );
     for (i, r) in out.receipt_outcomes().iter().enumerate() {
-        println!("receipt {i} (function call) burnt {} gas", r.gas_burnt.as_gas());
+        println!(
+            "receipt {i} (function call) burnt {} gas",
+            r.gas_burnt.as_gas()
+        );
     }
-    println!("tx -> receipt conversion burnt {} gas", out.outcome().gas_burnt.as_gas());
+    println!(
+        "tx -> receipt conversion burnt {} gas",
+        out.outcome().gas_burnt.as_gas()
+    );
     assert!(ok, "{:?}", out.failures());
     let per: Vec<u64> = out.json().unwrap();
     for (n, g) in ["a (vector)", "b (generated)"].iter().zip(&per) {

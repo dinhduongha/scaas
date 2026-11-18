@@ -56,7 +56,9 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
     function test_splitOverhead_dataSizeBound() public {
         gj = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqz-gas/", PqzSet.NAME, ".json"));
         logOnly = vm.envOr("MTX_OV_PRESPLIT", uint256(0)) == 1;
-        if (!logOnly) pre = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/metatx-overhead-presplit.json"));
+        if (!logOnly) {
+            pre = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/metatx-overhead-presplit.json"));
+        }
         // the pre-split figures exist for n2304-kmax4096 and n2048-kmax1024 only (T5 measured those two)
         if (!logOnly) vm.skip(!vm.keyExistsJson(pre, string.concat(".", PqzSet.NAME)));
         bytes memory fpk = new bytes(897); // fndsa512: 0x09 then every h_i = 0 < q
@@ -89,9 +91,12 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
         console2.log(string.concat("MEAS ", PqzSet.NAME, " direct ", id), dir);
         uint256 preDir = vm.parseJsonUint(pre, string.concat(".", PqzSet.NAME, "['direct|", id, "']"));
         uint256 ovL = (l - dir) - (_pre(id, false) - preDir);
-        uint256 ovS = (sMeas - sDir) - (_pre("", true) - vm.parseJsonUint(pre, string.concat(".", PqzSet.NAME, "['direct|S|7558a364']")));
+        uint256 ovS = (sMeas - sDir)
+            - (_pre("", true) - vm.parseJsonUint(pre, string.concat(".", PqzSet.NAME, "['direct|S|7558a364']")));
         uint256 d = ovL > ovS ? ovL - ovS : 0;
-        console2.log(string.concat("OVERHEAD ", PqzSet.NAME, " ", kind, " ", id, " smallest / largest / difference"), ovS, ovL, d);
+        console2.log(
+            string.concat("OVERHEAD ", PqzSet.NAME, " ", kind, " ", id, " smallest / largest / difference"), ovS, ovL, d
+        );
         assertLe(d, bound, string.concat(kind, " ", id, ": overhead grows with data"));
     }
 

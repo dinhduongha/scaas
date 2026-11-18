@@ -12,6 +12,7 @@ send and the receipt. Foundry's numbers for the same transactions come from `cas
       --dev-key 0x…04 --roll 80 > log
 Stdlib only; waits for every receipt, so it leaves no pending transaction.
 """
+
 import argparse, hashlib, json, secrets, sys, time, urllib.request
 
 p = argparse.ArgumentParser()
@@ -33,7 +34,9 @@ GAS_PRICE = 1_000  # wei; base fee is 7
 
 def rpc(method, *params):
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": list(params)}).encode()
-    r = json.load(urllib.request.urlopen(urllib.request.Request(a.rpc, body, {"Content-Type": "application/json"}), timeout=60))
+    r = json.load(
+        urllib.request.urlopen(urllib.request.Request(a.rpc, body, {"Content-Type": "application/json"}), timeout=60)
+    )
     if "error" in r:
         raise RuntimeError(f"{method}: {r['error']}")
     return r["result"]
@@ -83,7 +86,7 @@ def link(code, refs, addrs):
     for f, libs in refs.items():
         for lib, spots in libs.items():
             for s in spots:
-                h = h[:2 * s["start"]] + addrs[lib][2:].lower() + h[2 * (s["start"] + s["length"]):]
+                h = h[: 2 * s["start"]] + addrs[lib][2:].lower() + h[2 * (s["start"] + s["length"]) :]
     return bytes.fromhex(h)
 
 
@@ -113,9 +116,18 @@ def send(k, to, data, value=0, label="", measure=False, gas=None):
         time.sleep(1)
     used = int(r["gasUsed"], 16)
     ok = r["status"] == "0x1"
-    row = {"label": label, "hash": h, "block": int(r["blockNumber"], 16), "calldata": len(data), "estimate": est,
-           "gasLimit": g, "gasUsed": used, "status": r["status"], "contract": r.get("contractAddress"),
-           "receiptKeys": sorted(r.keys())}
+    row = {
+        "label": label,
+        "hash": h,
+        "block": int(r["blockNumber"], 16),
+        "calldata": len(data),
+        "estimate": est,
+        "gasLimit": g,
+        "gasUsed": used,
+        "status": r["status"],
+        "contract": r.get("contractAddress"),
+        "receiptKeys": sorted(r.keys()),
+    }
     if measure:
         rows.append(row)
         log("MEASURED", json.dumps(row))
@@ -130,7 +142,9 @@ def call(to, data):
     return bytes.fromhex(rpc("eth_call", {"to": to, "data": "0x" + data.hex()}, "latest")[2:])
 
 
-log(f"== xcheck7622: chain {int(rpc('eth_chainId'), 16)}, head {int(rpc('eth_blockNumber'), 16)}, client {rpc('web3_clientVersion')}")
+log(
+    f"== xcheck7622: chain {int(rpc('eth_chainId'), 16)}, head {int(rpc('eth_blockNumber'), 16)}, client {rpc('web3_clientVersion')}"
+)
 log(f"fresh key -> {me} (funded once from the dev key)")
 send(dev, me, b"", value=10**18, label="fund the fresh key (a new account: EIP-8037 state gas)", measure=True)
 
@@ -161,7 +175,7 @@ for i, ua in enumerate([AUD, BOB, CAROL]):
 # the op blobs: STOP ‖ salt(16) ‖ u ‖ v_t ‖ toUA ‖ v_f, every coefficient q − 1 (the gas test's _blobCode)
 q1 = (Q - 1).to_bytes(8, "big")
 blob = bytearray(1 + 16 + PK + 128 + 32 + 128)
-blob[17:17 + CT] = q1 * (CT // 8)
+blob[17 : 17 + CT] = q1 * (CT // 8)
 blobs = []
 n_blobs = a.pre + a.roll
 for i in range(n_blobs):
@@ -169,13 +183,36 @@ for i in range(n_blobs):
     hn = 4 + i
     blobs.append("0x" + eth.keccak256(eth.rlp([bytes.fromhex(H[2:]), hn]))[12:].hex())
 assert len(rpc("eth_getCode", blobs[-1], "latest")) == 2 + 2 * len(blob)
-send(key, H, sel("seed(bytes32,uint64,address[],uint256)") + enc(ALICE, 0, ("a", blobs), PK), label=f"seed {n_blobs} entries")
+send(
+    key,
+    H,
+    sel("seed(bytes32,uint64,address[],uint256)") + enc(ALICE, 0, ("a", blobs), PK),
+    label=f"seed {n_blobs} entries",
+)
 # the measured transactions
-send(key, H, sel("setKey(bytes32,address)") + enc(ALICE, blobs[0]), label="setKey alice (any non-zero pointer: registered for prepareAcc)")
+send(
+    key,
+    H,
+    sel("setKey(bytes32,address)") + enc(ALICE, blobs[0]),
+    label="setKey alice (any non-zero pointer: registered for prepareAcc)",
+)
 send(key, H, sel("prepareAcc(bytes32,uint256)") + enc(ALICE, 0), label="prepareAcc half 0", measure=True)
 send(key, H, sel("prepareAcc(bytes32,uint256)") + enc(ALICE, 1), label="prepareAcc half 1", measure=True)
-send(key, H, sel("rollOver(bytes32,uint256)") + enc(ALICE, a.pre), label=f"rollOver {a.pre} (first materialisation)", measure=True)
-send(key, H, sel("rollOver(bytes32,uint256)") + enc(ALICE, a.roll), label=f"rollOver {a.roll} (ROLL_MAX, distinct cold blobs)", measure=True)
+send(
+    key,
+    H,
+    sel("rollOver(bytes32,uint256)") + enc(ALICE, a.pre),
+    label=f"rollOver {a.pre} (first materialisation)",
+    measure=True,
+)
+send(
+    key,
+    H,
+    sel("rollOver(bytes32,uint256)") + enc(ALICE, a.roll),
+    label=f"rollOver {a.roll} (ROLL_MAX, distinct cold blobs)",
+    measure=True,
+)
+
 
 # op 1: carol (fresh, p = 0) -> bob, beneficiary carol, auditor on; out canonical (40-bit lanes), u != 0
 def stream(tag, n):
@@ -184,14 +221,21 @@ def stream(tag, n):
         o += hashlib.sha256(tag + i.to_bytes(4, "big")).digest()
         i += 1
     return o[:n]
+
+
 mask = bytes.fromhex("000000ffffffffff" * 4)
 out = bytes(x & y for x, y in zip(stream(b"out", 20_864), mask * (20_864 // 32)))
 head = int(rpc("eth_blockNumber"), 16)
 payload = enc(0, head + 1000, 0, CAROL, BOB, CAROL) + (0x5A17).to_bytes(16, "big") + out
 auth = enc(("b", b""), ("b", bytes(3309)))
 proof = stream(b"proof", a.proof)
-send(key, H, sel("transferSingle(bytes,bytes,bytes,bytes)") + enc(("b", payload), ("b", proof), ("b", auth), ("b", b"")),
-     label="op 1 BUNDLE, auditor, fee, fresh sender, proof 52,624 B", measure=True)
+send(
+    key,
+    H,
+    sel("transferSingle(bytes,bytes,bytes,bytes)") + enc(("b", payload), ("b", proof), ("b", auth), ("b", b"")),
+    label="op 1 BUNDLE, auditor, fee, fresh sender, proof 52,624 B",
+    measure=True,
+)
 
 pend = int(rpc("eth_getTransactionCount", me, "pending"), 16)
 lat = int(rpc("eth_getTransactionCount", me, "latest"), 16)

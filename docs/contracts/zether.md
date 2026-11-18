@@ -1060,6 +1060,10 @@ The built interface is quoted in [accounts.md](accounts.md#legacy-registry).
 <a id="disclosure"></a>
 <a id="CTR-ZTH-43"></a>**CTR-ZTH-43** — **Disclosure lives in a separate stateless `ZetherDisclosure`** (owner): no state, no admin, no upgrade, one instance for every Zether token on every curve. `verifyTransferAmount` and `transferCiphertext` are there; the token exposes the raw record `transferEntry(entryRef)` (as [CTR-ZTH-38](#CTR-ZTH-38): `R` for every entry, read from state, inline or by SSTORE2 for commit-reveal; empty only for an unknown ref; review C0-3) and the implementation-immutable `disclosure()` (set in the constructor, shared by every clone), so a third party finds the canonical contract from the token. `ZetherDisclosure` reads `transferEntry(entryRef)`, `verifier()` and `auditorKey()` from the token: `token.disclosure().verifyTransferAmount(token, entryRef, j, amount, kind, opening)` serves both formats (a single entry has `j = 0`; there is no `bundles` argument: the record always comes from the token's state; an unknown ref is `UnknownEntry`, an entry that is not a record length `RecordMalformed`). `transferCiphertext(token, entryRef, j)` exports the raw leg for an independent verifier. The caller picks the token it trusts (a fake "token" can answer anything); the challenge binds the token address, not the disclosure contract's.
 
+**Change (owner 2026-11-17; BUILT at `eb05597c8`; [CTR-ZTH-95](#CTR-ZTH-95)).** For `AUDITOR` it reads `auditorKeyOf(entryRef)`, the key
+of the entry's auditor epoch, instead of `auditorKey()`; the other kinds are unchanged. A new `ZetherDisclosure` deployment,
+named by each new release's `disclosure()`; nothing deployed is upgraded.
+
 A verifier checks an opening like this:
 
 ```mermaid
@@ -1123,8 +1127,17 @@ Additional checks: `amount < 2^n_v = 2^64` (otherwise `amount + r` would also "p
 <a id="auditor"></a>
 <a id="CTR-ZTH-09"></a>**CTR-ZTH-09** — **The auditor key is immutable**, set at `initialize` (there is no setter, so no timelock is needed). It follows the immutable `auditorMode` ([CTR-ZTH-49](#CTR-ZTH-49)): none under NONE, required under FULL and OPTIONAL.
 
+**Change (owner 2026-11-17; BUILT at `eb05597c8`; [CTR-ZTH-95](#CTR-ZTH-95)).** Immutable only on a token created without bit 32
+`AUDITOR`. With bit 32 set at creation a holder of the bit replaces the key, with the new auditor's proof of possession, after
+`max(noticePeriod(), grantDelay)`, the earlier keys kept for the entries of their epochs ([§14.1](#auditor-replacement)); `auditorMode` stays immutable, so the key is never
+empty under FULL or OPTIONAL and never set under NONE.
+
 <a id="threshold-auditor"></a>
 <a id="CTR-ZTH-41"></a>**CTR-ZTH-41** — **The auditor key should be a k-of-n threshold key** (owner), e.g. company, audit firm and regulator: `Y_a` stays one public key and `x_a` is split off chain by a DKG, so decrypting or an `AUDITOR` opening needs k parties (FULL and OPTIONAL tokens). No contract change; the prover/CLI protocol follows with [CTR-ZTH-29](#CTR-ZTH-29).
+
+**Change (owner 2026-11-17; SPECIFIED).** Re-sharing the threshold key off chain, `Y_a` unchanged, stays the way to change
+the auditing parties without a new key. A new key is set on chain only under bit 32 `AUDITOR` ([CTR-ZTH-95](#CTR-ZTH-95));
+the "no setter" Change of the same day ([decisions.md](../decisions.md#ctr-zth-41--auditor-key-should-be-a-k-of-n-threshold-key)) is replaced.
 
 <a id="sender-randomness"></a>
 <a id="CTR-ZTH-30"></a>**CTR-ZTH-30** — **The sender randomness `s` is derived from the seed and a published salt, not stored** (owner; salt form 2026-10-11, built in P3b): `s = OKM mod r`, `OKM = HKDF-SHA256(seed_zether, info = "ZTX/s/v2" ‖ chainUid ‖ token(20) ‖ fromUA ‖ be32(sendCounter) ‖ salt, L = 64)`, where `salt` = 16 fresh random bytes per build, published with the transfer (statement header and payload, hence in the event, the stored record `R`, the commitment and the no-bundle calldata) and not checked by the contract (beyond the memo's copy, [CTR-ZTH-50](#CTR-ZTH-50)); the prover re-draws on `s = 0` (`OKM mod r` and the re-draw: controller ruling, pending the owner). The sender rebuilds `s` from its seed and the published salt, and opens the transfer from storage alone through the memo ([CTR-ZTH-50](#CTR-ZTH-50)). Why the salt: the counter-only form (`"ZTX/s/v1" ‖ chainId ‖ tokenAddress ‖ fromUA ‖ sendCounter`) reuses `s` on a retry at the same counter, and `C_aud₁ − C_aud₂ = [v₁ − v₂]G` leaks the amount difference (failed-transaction calldata is public); mixing the amounts into `s` made the sender remember amounts. (An earlier rule "the client must store every `s`" is superseded.) `seed_zether` is the account's confidential key `x` (the IKM is `be32(x)`, 32 bytes big-endian, and HKDF-Extract runs without a salt, i.e. 32 zero bytes, here and for the memo key of [CTR-ZTH-50](#CTR-ZTH-50); controller ruling, pending the owner); `clients/zether-prover/src/zether.rs` `derive_s`.
@@ -1140,6 +1153,57 @@ The single format keeps its one auditor copy under `s` (one leg, no cross-leg di
 
 <a id="independent-verifier"></a>
 <a id="CTR-ZTH-29"></a>**CTR-ZTH-29** — **An independent, open-source disclosure verifier CLI** (owner, PLANNED): any third party (an auditor, a dispute resolver) verifies an opening against chain data without trusting SCaaS. The chain of evidence holds in both directions: the sender cannot open falsely (the ciphertext binds `v` and `s`), and the receiver cannot deny the amount (its own key opens it). The CLI takes `(entryRef, v, s)`, reads an archive node or a signed chain export, and prints PASS/FAIL with every intermediate value, deterministically (two examiners get the same result); the client exports a standalone evidence file `(entryRef, v, s, chainId, tokenAddress)` that the CLI checks without the app.
+
+### <a id="auditor-replacement"></a>14.1 Replacing the auditor key (bit 32 `AUDITOR`)
+
+Status: **BUILT** (owner 2026-11-17; spec [2026-11-17-set-auditor.md](../superpowers/specs/2026-11-17-set-auditor.md));
+`eb05597c8`, matrix rows `db10fdd09`. **UNAUDITED.** The bit itself (kinds, holder, revoke): [CTR-GOV-31](../decisions.md#CTR-GOV-31); the PQZ
+twin: [CTR-PQZ-43](pq-zero-knowledge.md#CTR-PQZ-43).
+
+<a id="CTR-ZTH-95"></a>**CTR-ZTH-95** — **A holder of bit 32 replaces the auditor key with the new auditor's proof of
+possession, after `max(noticePeriod(), grantDelay)`; every audited entry keeps the key of its epoch** (owner 2026-11-17: build
+`setAuditor` on one bit, any UA as holder, the delay `max(noticePeriod(), grantDelay)`, at once when it is 0; the other
+mechanics are controller calls, spec §4–§9, §15). On the kinds 2, 3, 10, 11 created with bit 32 (never on a NONE token, never
+with admin 0, CTR-GOV-31):
+
+- **Entry.** `setAuditorKey(bytes newKey, uint32 epoch, bytes pop, bytes32 chainUid_)`: the holder first (`MissingRole(32,
+  caller)`), then its chain word (CTR-GOV-28), then `use(32)` (one use per call), then `epoch` = the current epoch + 1
+  (`AuditorEpochMismatch`). Router: `mtxSetAuditorKey` over `UASetAuditorKey(bytes32 from,address target,bytes newKey,uint32
+  epoch,bytes32 chainUid,…)`, `pop` forwarded beside it; fee mode `NONE`, relayable at fee 0.
+- **Delay and window.** `D = max(IOpenFactory(FACTORY).noticePeriod(), grantDelay)`, at most 30 days (both values are capped at
+  30 days), never `PqzStorage.noticePeriod`. With no live proposal, a key other than the current proposes it: `eta = now + D`,
+  `AuditorKeyProposed(epoch, newKey, proposer, eta)`; `D = 0` applies at once. The same key by the same holder in
+  `[eta, eta + AUDITOR_CONFIRM_WINDOW]`, `AUDITOR_CONFIRM_WINDOW = 7 days` (its own constant, so the window is never empty),
+  applies it (`AuditorNotReady(eta)` before `eta`, `NotProposer` for another holder); the current key by the proposer cancels
+  its own proposal (`AuditorProposalCancelled`); another key while one is live `AuditorPending()`; the current key with none
+  live `AuditorSame()`. A proposal is live only inside its window, while its proposer keeps the bit without a break (its role
+  epoch is stored) and bit 32 is set; an expired or void proposal frees the slot for the next proposal, no cancel needed. The
+  admin's `revokeRole(32, …)` or `disableFeature(32, …)` ends a proposal at once; after an apply neither undoes it (spec §5.3).
+- **Consent and checks**, at the proposal and again at the apply: `pop` is the new auditor's Schnorr proof of possession of
+  `x_a` (`pop = R ‖ be32(z)`, `c = hashToScalar(keccak256("SCAAS-ZETHER-AUDITOR-POP-V1" ‖ d ‖ G ‖ Y_a ‖ R))`, `[z]G − R −
+  [c]Y_a == O`, `z < r`, `c ≠ 0`; `AuditorConsentInvalid()`) over `d`, the token-domain digest of `AuditorConsent(address
+  token,bytes32 auditor,uint32 epoch,bytes32 chainUid)` with `auditor = toUA(newKey)`; so a key nobody holds, or another
+  holder's key without its consent, is never named. `newKey` is a valid point of the token's curve, not `O`, of the encoded
+  length (`AuditorKeyInvalid()`). A proof of possession is not withdrawn on chain: within its epoch any holder of the bit may
+  reuse it after a cancel or an expired window (owner 2026-11-18, accepted residual,
+  [CTR-GOV-31's Change on the consent's reuse](../decisions.md#CTR-GOV-31)).
+- **Apply.** The outgoing key is kept as `auditorKeys[epoch]` (written once, never rewritten), `auditorKey` becomes the new
+  key and `auditorEpoch` (a `uint32` in slot 0's free bytes, read with `auditorMode` on every transfer) grows by one:
+  `AuditorKeySet(epoch, previousKey, newKey)`. A transfer reads `auditorKey` as before; no relation, statement or
+  `proofSystemId` changes.
+- **Per entry.** A transfer with the auditor on (`Y_a ≠ O`), single or multi-recipient, at an epoch other than 0, writes
+  `entryAuditorEpoch[entryRef] = auditorEpoch`; absent means epoch 0, so a token never replaced writes nothing.
+  `auditorKeyOf(entryRef)` returns the key of the entry's epoch; `auditorState()` the epoch and the stored proposal with its
+  status (none, waiting, confirmable, expired, void).
+- **Disclosure and readers.** `ZetherDisclosure` checks an `AUDITOR` opening against `auditorKeyOf(entryRef)`
+  ([CTR-ZTH-43](#CTR-ZTH-43)'s Change); `K = Y_a` of that epoch is in the challenge, so no opening verifies across epochs. The
+  sender's recovery uses the entry's key; an auditor's reader refuses an entry of another epoch before it applies its secret
+  ([ARCH-POS-13](../decisions.md#ARCH-POS-13)).
+
+No retroactive reading either way: earlier transfers stay readable by their epoch's key only, and the new key reads from its
+epoch on. Threat and residual (spec §11): any holder of the bit, one single key included, can move the readability of every
+later audited transfer to a consenting key of its choice after `D`; the guard is the consent, the public proposal, the delay,
+the window and the admin's revoke before the apply; when `D` is 0 it applies at once, with no notice, and the wallet says so.
 
 ## 15. Confidential layer
 

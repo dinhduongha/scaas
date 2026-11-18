@@ -19,8 +19,8 @@ alt=on
 # mldsa-on itself, checked by real transactions (a forge script is refused against it in its simulation: no ML-DSA
 # precompile in forge's EVM); the forge matrix's set mldsa-off runs the off side here
 if [ "${DEPLOY_SET:-}" = mldsa-off ]; then
-  alt=off
-  echo "[$NET/mldsaalt] deploy set mldsa-off: the throwaway registry off; the on side is the deploy set mldsa-on (real transactions)"
+    alt=off
+    echo "[$NET/mldsaalt] deploy set mldsa-off: the throwaway registry off; the on side is the deploy set mldsa-on (real transactions)"
 fi
 # reset 5: the main deploy's PqzKeyVerifier for the throwaway registry's 0x0142 (DeployBase's gen-1 gate refuses a registry
 # without it where the PQZ precompile answers); none in a book without one (anvil)
@@ -30,14 +30,20 @@ MLDSAALT_SALT=$(cast keccak "scaas.onchain.mldsaalt.$NET.$(date +%s).$$")
 export MLDSAALT_SALT MLDSA_PRECOMPILE=$alt
 echo "[$NET/mldsaalt] main deploy MLDSA_PRECOMPILE=$main: the throwaway registry $alt"
 if [ "$alt" = on ]; then
-  PV=$(FOUNDRY_OUT=out/onchain-mldsaalt DEPLOY_SALT=$MLDSAALT_SALT PQ_VERIFIERS=mldsa python3 -I script/pq_verifiers.py "$RPC" 2>> "$L") \
-    || { echo "[$NET/mldsaalt] FAIL pq_verifiers.py: $(tail -1 "$L")"; exit 1; }
-  printf '%s\n' "$PV" | grep '^\[deploy\]' | sed "s/^/[$NET\/mldsaalt] /" || true
-  n=0
-  for kv in $(printf '%s\n' "$PV" | grep -E '^MLDSA(44|65|87)_VERIFIER=0x[0-9a-fA-F]{40}$'); do export "${kv?}"; n=$((n + 1)); done
-  if [ "$n" = 0 ]; then
-    echo "[$NET/mldsaalt] not run: the on side needs an ML-DSA precompile, none answers here"
-    exit 0
-  fi
+    PV=$(FOUNDRY_OUT=out/onchain-mldsaalt DEPLOY_SALT=$MLDSAALT_SALT PQ_VERIFIERS=mldsa python3 -I script/pq_verifiers.py "$RPC" 2>>"$L") ||
+        {
+            echo "[$NET/mldsaalt] FAIL pq_verifiers.py: $(tail -1 "$L")"
+            exit 1
+        }
+    printf '%s\n' "$PV" | grep '^\[deploy\]' | sed "s/^/[$NET\/mldsaalt] /" || true
+    n=0
+    for kv in $(printf '%s\n' "$PV" | grep -E '^MLDSA(44|65|87)_VERIFIER=0x[0-9a-fA-F]{40}$'); do
+        export "${kv?}"
+        n=$((n + 1))
+    done
+    if [ "$n" = 0 ]; then
+        echo "[$NET/mldsaalt] not run: the on side needs an ML-DSA precompile, none answers here"
+        exit 0
+    fi
 fi
 sh script/onchain/run.sh "$NET" MldsaAlt --tc MldsaAlt

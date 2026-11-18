@@ -25,7 +25,9 @@ library NamespaceProbeIds {
 
     /// A `bytes` value of `len` bytes, its words `keccak256(len, j)`: distinct lengths tell two `bytes` fields apart.
     function blob(uint256 len) internal pure returns (bytes memory b) {
-        for (uint256 j; 32 * j < len; ++j) b = bytes.concat(b, keccak256(abi.encode(len, j)));
+        for (uint256 j; 32 * j < len; ++j) {
+            b = bytes.concat(b, keccak256(abi.encode(len, j)));
+        }
         assembly ("memory-safe") { mstore(b, len) }
     }
 }
@@ -86,7 +88,7 @@ contract NamespaceProbe is UAMetaTxBase {
         // plan T19c (no-decryption-oracle spec §4.4, §4.7): `scaas.pqz` and `scaas.zether`, read by `ua-rs` from the pin
         PqzCore.PqzStorage storage q = PqzCore.$();
         (q.pqz, q.disclosureMode, q.auditorMode, q.verifier) =
-            (A, ZetherTypes.DisclosureMode.COMPACT, ZetherTypes.AuditorMode.OPTIONAL, B);
+        (A, ZetherTypes.DisclosureMode.COMPACT, ZetherTypes.AuditorMode.OPTIONAL, B);
         (q.psid, q.shieldScale, q.maxShielded, q.confidentialFee) = (bytes32(uint256(0xd1)), 0xd2, 0xd3, 0xd4);
         (q.totalShielded, q.auditorUA, q.minDecoyFee) = (0xd5, V, 0xd6);
         // group 3f (PQZ verifier mode spec §3, §4.4): the mode at byte 22 of slot 0, the verifier state appended
@@ -107,11 +109,15 @@ contract NamespaceProbe is UAMetaTxBase {
         // round 3t (CTR-PQZ-36, verifier fee spec §4): slots 20-22 appended
         (q.verifierFee, q.verifierFeeMax, q.verifierFeePending, q.verifierFeeEta) = (0xb1, 0xb2, 0xb3, 0xb4);
         (q.verifierFeeProposer, q.verifierFeeProposerGeneration) = (bytes32(uint256(0xb5)), 0xb6);
+        // set-auditor A4 (spec §6, CTR-PQZ-43): the epoch at byte 26 of slot 0, the proposal in slot 22's free bytes and after
+        (q.auditorEpoch, q.auditorEta, q.auditorProposerRoleEpoch) = (0xa1a1, 0xa1a2, 0xa1a3);
+        (q.auditorProposer, q.pendingAuditorUA) = (bytes32(uint256(0xa1a4)), bytes32(uint256(0xa1a5)));
+        (q.auditorUAs[7], q.entryAuditorEpoch[V]) = (bytes32(uint256(0xa1a6)), 0xa1a7);
         q.entryPtr[V] = A;
         (q.memos[V], q.memos[U]) = (NamespaceProbeIds.blob(58), NamespaceProbeIds.blob(21));
         ZetherLib.ZetherStorage storage z = ZetherLib.$();
         (z.verifier, z.disclosureMode, z.auditorMode) =
-            (IZetherVerifier(A), ZetherTypes.DisclosureMode.COMPACT, ZetherTypes.AuditorMode.OPTIONAL);
+        (IZetherVerifier(A), ZetherTypes.DisclosureMode.COMPACT, ZetherTypes.AuditorMode.OPTIONAL);
         (z.shieldScale, z.maxShielded, z.confidentialFee, z.totalShielded) = (0xf1, 0xf2, 0xf3, 0xf4);
         (z.auditorKey, z.psid, z.p, z.minDecoyFee) = (NamespaceProbeIds.blob(124), bytes32(uint256(0xf5)), 0xf6, 0xf7);
         ZetherLib.Account storage za = z.acct[ZetherTypes.UA.wrap(U)];
@@ -122,6 +128,10 @@ contract NamespaceProbe is UAMetaTxBase {
         z.entries[V] = NamespaceProbeIds.blob(200);
         z.entryPtrs[V] = B;
         (z.memos[V], z.memos[U]) = (NamespaceProbeIds.blob(33), NamespaceProbeIds.blob(20));
+        // set-auditor A2 (spec §6, CTR-ZTH-95): the epoch at byte 22 of slot 0, the proposal and the history appended
+        (z.auditorEpoch, z.auditorEta, z.auditorProposerRoleEpoch) = (0xf9a1, 0xf9a2, 0xf9a3);
+        (z.auditorProposer, z.pendingAuditorKeyHash) = (bytes32(uint256(0xf9a4)), bytes32(uint256(0xf9a5)));
+        (z.auditorKeys[7], z.entryAuditorEpoch[V]) = (NamespaceProbeIds.blob(129), 0xf9a6);
     }
 
     /// Group 3l (wrap limits spec §5, R26): `scaas.wraplimit`, leg 1's two config words and two token-wide window words by
@@ -129,9 +139,11 @@ contract NamespaceProbe is UAMetaTxBase {
     function _pokeWrapLimit() internal {
         WrappedLib.WrapLimitStorage storage x = WrappedLib.wl();
         WrappedLib.LegConfig storage c = x.config[1];
-        (c.wrapShortPerUser, c.wrapShortTokenWide, c.wrapShortPeriodMin, c.wrapLongPerUser) = (0x101, 0x102, 0x103, 0x104);
+        (c.wrapShortPerUser, c.wrapShortTokenWide, c.wrapShortPeriodMin, c.wrapLongPerUser) =
+        (0x101, 0x102, 0x103, 0x104);
         (c.wrapLongTokenWide, c.wrapLongPeriodMin, c.unitExp, c.decayDays) = (0x105, 0x106, 0x07, 0x108);
-        (c.unwrapShortPerUser, c.unwrapShortTokenWide, c.unwrapShortPeriodMin, c.unwrapLongPerUser) = (0x109, 0x10a, 0x10b, 0x10c);
+        (c.unwrapShortPerUser, c.unwrapShortTokenWide, c.unwrapShortPeriodMin, c.unwrapLongPerUser) =
+        (0x109, 0x10a, 0x10b, 0x10c);
         (c.unwrapLongTokenWide, c.unwrapLongPeriodMin, c.unitExpCopy, c.decayDaysCopy) = (0x10d, 0x10e, 0x0f, 0x110);
         WrappedLib.TokenWindow storage t = x.total[1][0];
         (t.shortStart, t.shortUsed, t.longStart, t.longUsed) = (0x111, 0x112, 0x113, 0x114);
@@ -162,7 +174,8 @@ contract LayoutTest is V2Fixture {
     using stdJson for string;
 
     function _pin(string memory file, string memory name) internal view {
-        string memory art = vm.readFile(string.concat("./", vm.envOr("FOUNDRY_OUT", string("out")), "/", file, ".sol/", name, ".json"));
+        string memory art =
+            vm.readFile(string.concat("./", vm.envOr("FOUNDRY_OUT", string("out")), "/", file, ".sol/", name, ".json"));
         string memory pin = vm.readFile(string.concat("./test/v2/layout/", name, ".json"));
         string[] memory pl = pin.readStringArray(".labels");
         string[] memory ps = pin.readStringArray(".slots");
@@ -354,6 +367,13 @@ contract LayoutTest is V2Fixture {
         f = _more(f, F("pqzOwnKey", 0, 0, 1, 1));
         f = _more(f, F("pqzOpening", 0, 0, 1, 1));
         f = _more(f, F("acct[U][7].rollSeq", u, 0, 0xb7, 8));
+        f = _more(f, F("auditorEpoch", 0, 0, 0xa1a1, 4));
+        f = _more(f, F("auditorEta", 0, 0, 0xa1a2, 8));
+        f = _more(f, F("auditorProposerRoleEpoch", 0, 0, 0xa1a3, 4));
+        f = _more(f, F("auditorProposer", 0, 0, 0xa1a4, 32));
+        f = _more(f, F("pendingAuditorUA", 0, 0, 0xa1a5, 32));
+        f = _more(f, F("auditorUAs[E]", 7, 0, 0xa1a6, 32));
+        f = _more(f, F("entryAuditorEpoch[V]", v, 0, 0xa1a7, 4));
         _ns(address(p), "pqz", "scaas.pqz", f);
         f = new F[](25);
         f[0] = F("verifier", 0, 0, a, 20);
@@ -381,6 +401,13 @@ contract LayoutTest is V2Fixture {
         f[22] = F("memos[V]", v, 0, 33, 32);
         f[23] = F("memos[U]", u, 0, 20, 32);
         f[24] = F("minDecoyFee", 0, 0, 0xf7, 32);
+        f = _more(f, F("auditorEpoch", 0, 0, 0xf9a1, 4));
+        f = _more(f, F("auditorEta", 0, 0, 0xf9a2, 8));
+        f = _more(f, F("auditorProposerRoleEpoch", 0, 0, 0xf9a3, 4));
+        f = _more(f, F("auditorProposer", 0, 0, 0xf9a4, 32));
+        f = _more(f, F("pendingAuditorKeyHash", 0, 0, 0xf9a5, 32));
+        f = _more(f, F("auditorKeys[E]", 7, 0, 129, 32));
+        f = _more(f, F("entryAuditorEpoch[V]", v, 0, 0xf9a6, 4));
         _ns(address(p), "zether", "scaas.zether", f);
         AdminProbe ap = new AdminProbe();
         ap.poke();
@@ -401,8 +428,15 @@ contract LayoutTest is V2Fixture {
         assertEq(pin.readBytes32(".payRecords.root"), root, "payRecords root");
         assertEq(MtxPipelineLib.PAY_RECORDS_SLOT, root, "PAY_RECORDS_SLOT");
         string[] memory labels = pin.readStringArray(".payRecords.labels");
-        uint256[7] memory want = [uint256(2), uint256(NamespaceProbeIds.U), type(uint192).max - 1, 0x0b,
-            uint256(NamespaceProbeIds.V), 0x0c, type(uint64).max - 1];
+        uint256[7] memory want = [
+            uint256(2),
+            uint256(NamespaceProbeIds.U),
+            type(uint192).max - 1,
+            0x0b,
+            uint256(NamespaceProbeIds.V),
+            0x0c,
+            type(uint64).max - 1
+        ];
         uint256[7] memory width = [uint256(32), 32, 24, 8, 32, 24, 8];
         assertEq(labels.length, 7, "payRecords rows");
         for (uint256 i; i < 7; ++i) {
@@ -413,10 +447,14 @@ contract LayoutTest is V2Fixture {
 
     /// Row `i` of `payRecords`: the word at its slot (`length`: the length slot; `array`: the record's), shifted to `bytes`.
     function _payRecordAt(address p, string memory pin, uint256 root, uint256 i, uint256 width)
-        internal view returns (uint256)
+        internal
+        view
+        returns (uint256)
     {
-        uint256 len = uint256(keccak256(abi.encode(NamespaceProbeIds.V, root + pin.readUintArray(".payRecords.slots")[i])));
-        uint256 s = keccak256(bytes(pin.readStringArray(".payRecords.encodings")[i])) == keccak256("length") ? len
+        uint256 len =
+            uint256(keccak256(abi.encode(NamespaceProbeIds.V, root + pin.readUintArray(".payRecords.slots")[i])));
+        uint256 s = keccak256(bytes(pin.readStringArray(".payRecords.encodings")[i])) == keccak256("length")
+            ? len
             : uint256(keccak256(abi.encode(len))) + 2 * pin.readUintArray(".payRecords.index")[i]
                 + pin.readUintArray(".payRecords.inner")[i];
         uint256 mask = width == 32 ? type(uint256).max : (uint256(1) << (8 * width)) - 1;
@@ -425,19 +463,44 @@ contract LayoutTest is V2Fixture {
 
     /// Group 3l (wrap limits spec §5, R26): `scaas.wraplimit` at the probe's keys (leg 1, `U`).
     function _wrapLimitPinned(address p, uint256 u) internal {
-        string[16] memory cfg = ["wrapShortPerUser", "wrapShortTokenWide", "wrapShortPeriodMin", "wrapLongPerUser",
-            "wrapLongTokenWide", "wrapLongPeriodMin", "unitExp", "decayDays", "unwrapShortPerUser", "unwrapShortTokenWide",
-            "unwrapShortPeriodMin", "unwrapLongPerUser", "unwrapLongTokenWide", "unwrapLongPeriodMin", "unitExpCopy", "decayDaysCopy"];
+        string[16] memory cfg = [
+            "wrapShortPerUser",
+            "wrapShortTokenWide",
+            "wrapShortPeriodMin",
+            "wrapLongPerUser",
+            "wrapLongTokenWide",
+            "wrapLongPeriodMin",
+            "unitExp",
+            "decayDays",
+            "unwrapShortPerUser",
+            "unwrapShortTokenWide",
+            "unwrapShortPeriodMin",
+            "unwrapLongPerUser",
+            "unwrapLongTokenWide",
+            "unwrapLongPeriodMin",
+            "unitExpCopy",
+            "decayDaysCopy"
+        ];
         uint8[8] memory cw = [3, 8, 3, 3, 8, 3, 1, 2];
-        string[8] memory tot = ["[0].shortStart", "[0].shortUsed", "[0].longStart", "[0].longUsed", "[1].shortStart",
-            "[1].shortUsed", "[1].longStart", "[1].longUsed"];
+        string[8] memory tot = [
+            "[0].shortStart",
+            "[0].shortUsed",
+            "[0].longStart",
+            "[0].longUsed",
+            "[1].shortStart",
+            "[1].shortUsed",
+            "[1].longStart",
+            "[1].longUsed"
+        ];
         uint8[4] memory tw = [3, 8, 3, 8];
         F[] memory f = new F[](29);
         for (uint256 i; i < 16; ++i) {
             uint256 v = i % 8 == 6 ? 0x07 + 8 * (i / 8) : 0x101 + i;
             f[i] = F(string.concat("config[1].", cfg[i]), 1, 0, v, cw[i % 8]);
         }
-        for (uint256 i; i < 8; ++i) f[16 + i] = F(string.concat("total[1]", tot[i]), 1, 0, 0x111 + i, tw[i % 4]);
+        for (uint256 i; i < 8; ++i) {
+            f[16 + i] = F(string.concat("total[1]", tot[i]), 1, 0, 0x111 + i, tw[i % 4]);
+        }
         f[24] = F("quota[U][1]", u, 1, 0x119, 32);
         f[25] = F("member[U]", u, 0, 3, 1);
         f[26] = F("pendingCommit", 0, 0, 0x11a, 32);
@@ -448,7 +511,9 @@ contract LayoutTest is V2Fixture {
 
     function _more(F[] memory f, F memory x) internal pure returns (F[] memory g) {
         g = new F[](f.length + 1);
-        for (uint256 i; i < f.length; ++i) g[i] = f[i];
+        for (uint256 i; i < f.length; ++i) {
+            g[i] = f[i];
+        }
         g[f.length] = x;
     }
 
@@ -464,7 +529,9 @@ contract LayoutTest is V2Fixture {
         {
             string[] memory labels = pin.readStringArray(string.concat(k, ".labels"));
             assertEq(labels.length, f.length, id);
-            for (uint256 i; i < f.length; ++i) assertEq(labels[i], f[i].label, id);
+            for (uint256 i; i < f.length; ++i) {
+                assertEq(labels[i], f[i].label, id);
+            }
         }
         Pin memory q;
         q.slots = pin.readUintArray(string.concat(k, ".slots"));
@@ -472,16 +539,21 @@ contract LayoutTest is V2Fixture {
         q.at = pin.readUintArray(string.concat(k, ".bytes"));
         q.enc = new string[](f.length);
         q.ver = vm.keyExistsJson(pin, string.concat(k, ".keyVersions"))
-            ? pin.readUintArray(string.concat(k, ".keyVersions")) : new uint256[](f.length);
+            ? pin.readUintArray(string.concat(k, ".keyVersions"))
+            : new uint256[](f.length);
         assertEq(q.ver.length, f.length, id);
         if (vm.keyExistsJson(pin, string.concat(k, ".encodings"))) {
             q.enc = pin.readStringArray(string.concat(k, ".encodings"));
             uint256[] memory widths = pin.readUintArray(string.concat(k, ".widths"));
             assertEq(q.enc.length, f.length, id);
             assertEq(widths.length, f.length, id);
-            for (uint256 i; i < f.length; ++i) assertEq(widths[i], f[i].width, string.concat(id, " ", f[i].label));
+            for (uint256 i; i < f.length; ++i) {
+                assertEq(widths[i], f[i].width, string.concat(id, " ", f[i].label));
+            }
         }
-        for (uint256 i; i < f.length; ++i) _field(p, uint256(root), q, i, f[i], id);
+        for (uint256 i; i < f.length; ++i) {
+            _field(p, uint256(root), q, i, f[i], id);
+        }
     }
 
     struct Pin {

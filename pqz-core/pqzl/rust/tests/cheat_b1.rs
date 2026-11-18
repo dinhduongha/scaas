@@ -39,6 +39,17 @@ fn cheating_prover_rejected() {
         }
         println!("{line}");
     }
-    println!("VERDICT: B-1 cheating prover {} ({} accepted)", if accepted.is_empty() { "rejected" } else { "FORGES" }, accepted.len());
-    assert!(accepted.is_empty(), "cheating proofs accepted (verify, verify_fast, C verify, C verify_fast): {accepted:?}");
+    println!(
+        "VERDICT: B-1 cheating prover {} ({} accepted)",
+        if accepted.is_empty() {
+            "rejected"
+        } else {
+            "FORGES"
+        },
+        accepted.len()
+    );
+    assert!(
+        accepted.is_empty(),
+        "cheating proofs accepted (verify, verify_fast, C verify, C verify_fast): {accepted:?}"
+    );
 }

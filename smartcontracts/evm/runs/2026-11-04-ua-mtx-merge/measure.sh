@@ -11,9 +11,9 @@ set -euo pipefail
 run=$1
 here=$(cd "$(dirname "$0")" && pwd)
 export PATH="$HOME/.foundry/bin:$PATH"
-../../scripts/capped forge build src --sizes --json > "$here/build-$run.log" 2> "$here/build-$run.err.log" || true
-python3 "$here/sizes.py" "$here/build-$run.log" "$run" > /dev/null
-FOUNDRY_TEST=test/merge FOUNDRY_SCRIPT=test/merge ../../scripts/capped forge test -vv ${T0_SKIP:+--skip $T0_SKIP} > "$here/test-$run.log" 2>&1 || true
-grep -E "T0DEPLOY|T0GAS" "$here/test-$run.log" | sed 's/^ *//' | sort -u > "$here/t0-$run.txt" || true
-grep -E "Suite result|FAIL" "$here/test-$run.log" | sed 's/finished in.*//' | sort | uniq -c > "$here/suites-$run.txt" || true
-echo "$run: $(wc -l < "$here/t0-$run.txt") rows; $(grep -c FAIL "$here/suites-$run.txt" || true) FAIL lines"
+../../scripts/capped forge build src --sizes --json >"$here/build-$run.log" 2>"$here/build-$run.err.log" || true
+python3 "$here/sizes.py" "$here/build-$run.log" "$run" >/dev/null
+FOUNDRY_TEST=test/merge FOUNDRY_SCRIPT=test/merge ../../scripts/capped forge test -vv ${T0_SKIP:+--skip $T0_SKIP} >"$here/test-$run.log" 2>&1 || true
+grep -E "T0DEPLOY|T0GAS" "$here/test-$run.log" | sed 's/^ *//' | sort -u >"$here/t0-$run.txt" || true
+grep -E "Suite result|FAIL" "$here/test-$run.log" | sed 's/finished in.*//' | sort | uniq -c >"$here/suites-$run.txt" || true
+echo "$run: $(wc -l <"$here/t0-$run.txt") rows; $(grep -c FAIL "$here/suites-$run.txt" || true) FAIL lines"

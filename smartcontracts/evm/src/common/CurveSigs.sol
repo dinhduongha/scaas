@@ -31,7 +31,9 @@ library CurveSigs {
         bytes memory rPt = new bytes(p);
         uint256 z;
         assembly ("memory-safe") {
-            for { let i := 0 } lt(i, p) { i := add(i, 32) } { mstore(add(add(rPt, 32), i), mload(add(add(sig, 32), i))) }
+            for { let i := 0 } lt(i, p) { i := add(i, 32) } {
+                mstore(add(add(rPt, 32), i), mload(add(add(sig, 32), i)))
+            }
             z := mload(add(add(sig, 32), p))
         }
         // bn254: R, Y canonical and on the curve (cofactor 1), so the precompiles below cannot fail.

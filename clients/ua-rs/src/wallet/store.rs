@@ -55,7 +55,8 @@ pub mod protect {
     fn whole_pages(p: *mut u8, len: usize) -> bool {
         // SAFETY: sysconf reads a constant of the system
         let ps = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
-        usize::try_from(ps).is_ok_and(|ps| ps > 0 && (p as usize).is_multiple_of(ps) && len.is_multiple_of(ps))
+        usize::try_from(ps)
+            .is_ok_and(|ps| ps > 0 && (p as usize).is_multiple_of(ps) && len.is_multiple_of(ps))
     }
 
     /// `(locked, no_dump)`: whether `mlock` and `MADV_DONTDUMP` took on the chunk at `p`.
@@ -112,7 +113,11 @@ impl Chunk {
     fn new() -> Chunk {
         let mut page = Box::new(Page([0; PAGE]));
         let (locked, no_dump) = protect::on(page.0.as_mut_ptr(), PAGE);
-        Chunk { page, locked, no_dump }
+        Chunk {
+            page,
+            locked,
+            no_dump,
+        }
     }
 }
 
@@ -141,7 +146,10 @@ pub(crate) mod vectors {
 
     /// `(released, released non-zero)`.
     pub fn chunks_released() -> (usize, usize) {
-        (RELEASED.load(Ordering::SeqCst), NONZERO.load(Ordering::SeqCst))
+        (
+            RELEASED.load(Ordering::SeqCst),
+            NONZERO.load(Ordering::SeqCst),
+        )
     }
 
     std::thread_local! {
@@ -175,15 +183,15 @@ pub(crate) struct Slot {
 
 pub(crate) struct Arena {
     chunks: Vec<Chunk>,
-    used: usize, // bytes used in the last chunk
+    used: usize,  // bytes used in the last chunk
     total: usize, // bytes written, every chunk
     entropy: Slot,
     seed: Slot,
     /// The `substrate-bip39` mini-secret, computed at open from the entropy and the passphrase (ua-rs-native spec §4.3).
     mini: Slot,
     keys: HashMap<KeyId, (Slot, Vec<u8>)>, // a derived key: its slot and its public key data
-    tested: HashSet<KeyId>,                // the keys whose self-test ran in this store (a KEM key: FIPS 203 §7.3)
-    self_tests: usize,                     // self-tests run in this store
+    tested: HashSet<KeyId>, // the keys whose self-test ran in this store (a KEM key: FIPS 203 §7.3)
+    self_tests: usize,      // self-tests run in this store
     /// The DEK of each label vault opened or sealed while this arena is open, and that vault as it stands (its public
     /// envelopes): what `Wallet::reseal_label_vault` re-seals under the same DEK (scaas-sdk spec §6.10). Wiped with the arena.
     deks: HashMap<String, (Slot, Vault)>,
@@ -195,9 +203,25 @@ pub(crate) struct Arena {
 impl Arena {
     /// An arena with no entropy and no seed (an ephemeral key's store).
     fn empty() -> Arena {
-        let empty = Slot { chunk: 0, start: 0, len: 0 };
+        let empty = Slot {
+            chunk: 0,
+            start: 0,
+            len: 0,
+        };
         let (keys, tested) = (HashMap::new(), HashSet::new());
-        Arena { chunks: Vec::new(), used: 0, total: 0, entropy: empty, seed: empty, mini: empty, keys, tested, self_tests: 0, deks: HashMap::new(), prf_kek: None }
+        Arena {
+            chunks: Vec::new(),
+            used: 0,
+            total: 0,
+            entropy: empty,
+            seed: empty,
+            mini: empty,
+            keys,
+            tested,
+            self_tests: 0,
+            deks: HashMap::new(),
+            prf_kek: None,
+        }
     }
 
     fn new(entropy: &[u8], seed: &[u8; 64], mini: &[u8; 32]) -> Result<Arena> {
@@ -216,8 +240,16 @@ impl Arena {
             self.chunks.push(Chunk::new());
             self.used = 0;
         }
-        let slot = Slot { chunk: self.chunks.len() - 1, start: self.used, len: bytes.len() };
-        let dst = self.chunks.last_mut().and_then(|c| c.page.0.get_mut(slot.start..slot.start + slot.len)).ok_or(Error::Argument)?;
+        let slot = Slot {
+            chunk: self.chunks.len() - 1,
+            start: self.used,
+            len: bytes.len(),
+        };
+        let dst = self
+            .chunks
+            .last_mut()
+            .and_then(|c| c.page.0.get_mut(slot.start..slot.start + slot.len))
+            .ok_or(Error::Argument)?;
         dst.copy_from_slice(bytes);
         self.used += bytes.len();
         self.total += bytes.len();
@@ -225,11 +257,17 @@ impl Arena {
     }
 
     fn get(&self, s: Slot) -> Result<&[u8]> {
-        self.chunks.get(s.chunk).and_then(|c| c.page.0.get(s.start..s.start + s.len)).ok_or(Error::KeyRevoked)
+        self.chunks
+            .get(s.chunk)
+            .and_then(|c| c.page.0.get(s.start..s.start + s.len))
+            .ok_or(Error::KeyRevoked)
     }
 
     fn get_mut(&mut self, s: Slot) -> Result<&mut [u8]> {
-        self.chunks.get_mut(s.chunk).and_then(|c| c.page.0.get_mut(s.start..s.start + s.len)).ok_or(Error::KeyRevoked)
+        self.chunks
+            .get_mut(s.chunk)
+            .and_then(|c| c.page.0.get_mut(s.start..s.start + s.len))
+            .ok_or(Error::KeyRevoked)
     }
 
     pub(crate) fn entropy(&self) -> Result<&[u8]> {
@@ -272,7 +310,9 @@ impl Arena {
 
     /// The retained PRF key-encryption key, if any.
     pub(crate) fn prf_kek(&self) -> Option<Zeroizing<[u8; 32]>> {
-        Some(Zeroizing::new(self.get(self.prf_kek?).ok()?.try_into().ok()?))
+        Some(Zeroizing::new(
+            self.get(self.prf_kek?).ok()?.try_into().ok()?,
+        ))
     }
 
     /// Whether label vault `label` is open in this arena (its DEK held).
@@ -337,11 +377,15 @@ pub(crate) struct Handle {
 fn keeps_held(a: &Arena, old: &Manifest, new: &Manifest) -> bool {
     fn same<E: PartialEq>(a: &Arena, old: &[E], new: &[E], id: impl Fn(&E) -> KeyId) -> bool {
         let held = |e: &&E| a.secret(id(e)).is_some();
-        old.iter().filter(held).all(|e| new.contains(e)) && new.iter().filter(held).all(|e| old.contains(e))
+        old.iter().filter(held).all(|e| new.contains(e))
+            && new.iter().filter(held).all(|e| old.contains(e))
     }
     let imports = same(a, &old.imports, &new.imports, |e| KeyId::Import(e.n));
     #[cfg(feature = "pqz")]
-    let imports = imports && same(a, &old.pqz_held, &new.pqz_held, |p| KeyId::PqzHeld(p.pqz_key_hash));
+    let imports = imports
+        && same(a, &old.pqz_held, &new.pqz_held, |p| {
+            KeyId::PqzHeld(p.pqz_key_hash)
+        });
     imports
 }
 
@@ -355,11 +399,19 @@ fn seed_matches(seed: &[u8; 64], m: &Manifest) -> Result<()> {
 
 impl SecretStore {
     pub(crate) fn new() -> Arc<SecretStore> {
-        Self::of(Inner { generation: 0, arena: None, manifest: Manifest::default() })
+        Self::of(Inner {
+            generation: 0,
+            arena: None,
+            manifest: Manifest::default(),
+        })
     }
 
     fn of(inner: Inner) -> Arc<SecretStore> {
-        Arc::new(SecretStore { inner: RwLock::new(inner), leases: Mutex::new(0), ended: Condvar::new() })
+        Arc::new(SecretStore {
+            inner: RwLock::new(inner),
+            leases: Mutex::new(0),
+            ended: Condvar::new(),
+        })
     }
 
     /// A read lease of this store (taken before any of its guards, never while one is held).
@@ -400,7 +452,10 @@ impl SecretStore {
     pub(crate) fn set_manifest(&self, m: Manifest) -> Result<()> {
         let mut g = self.write();
         if let Some(a) = &g.arena {
-            seed_matches(&Zeroizing::new(a.get(a.seed)?.try_into().map_err(|_| Error::Argument)?), &m)?;
+            seed_matches(
+                &Zeroizing::new(a.get(a.seed)?.try_into().map_err(|_| Error::Argument)?),
+                &m,
+            )?;
             if !keeps_held(a, &g.manifest, &m) {
                 return Err(Error::WalletMismatch);
             }
@@ -413,7 +468,10 @@ impl SecretStore {
     /// the generation. The lease count stays held until the wipe, so no lease begins in between.
     pub(crate) fn lock(&self) {
         let n = self.leases.lock().unwrap_or_else(PoisonError::into_inner);
-        let _n = self.ended.wait_while(n, |n| *n > 0).unwrap_or_else(PoisonError::into_inner);
+        let _n = self
+            .ended
+            .wait_while(n, |n| *n > 0)
+            .unwrap_or_else(PoisonError::into_inner);
         let mut g = self.write();
         g.arena = None;
         g.generation += 1;
@@ -443,7 +501,8 @@ impl SecretStore {
         let mut g = self.write();
         let generation = g.generation;
         let arena = g.arena.as_mut().ok_or(Error::WalletLocked)?;
-        let mini: Zeroizing<[u8; 32]> = Zeroizing::new(arena.mini()?.try_into().map_err(|_| Error::Argument)?);
+        let mini: Zeroizing<[u8; 32]> =
+            Zeroizing::new(arena.mini()?.try_into().map_err(|_| Error::Argument)?);
         self.key_in(arena, generation, id, |_| derive(&mini))
     }
 
@@ -457,14 +516,26 @@ impl SecretStore {
         let (slot, public) = match arena.keys.get(&id) {
             Some((slot, public)) => (*slot, public.clone()),
             None => {
-                let seed: Zeroizing<[u8; 64]> = Zeroizing::new(arena.get(arena.seed)?.try_into().map_err(|_| Error::Argument)?);
+                let seed: Zeroizing<[u8; 64]> = Zeroizing::new(
+                    arena
+                        .get(arena.seed)?
+                        .try_into()
+                        .map_err(|_| Error::Argument)?,
+                );
                 let (secret, public) = derive(&seed)?;
                 let slot = arena.put(&secret)?;
                 arena.keys.insert(id, (slot, public.clone()));
                 (slot, public)
             }
         };
-        Ok((Handle { store: self.clone(), generation, slot }, public))
+        Ok((
+            Handle {
+                store: self.clone(),
+                generation,
+                slot,
+            },
+            public,
+        ))
     }
 
     /// A one-use secret put into the open arena at the store's generation (a FROST session's nonces, spec §8.2), under the
@@ -473,15 +544,27 @@ impl SecretStore {
         let mut g = self.write();
         let generation = g.generation;
         let slot = g.arena.as_mut().ok_or(Error::WalletLocked)?.put(bytes)?;
-        Ok(Handle { store: self.clone(), generation, slot })
+        Ok(Handle {
+            store: self.clone(),
+            generation,
+            slot,
+        })
     }
 
     /// A store of its own holding only `secret` (an ephemeral KEM key, spec §8.2), and the secret's handle.
     pub(crate) fn single(secret: &[u8]) -> Result<Handle> {
         let mut arena = Arena::empty();
         let slot = arena.put(secret)?;
-        let inner = Inner { generation: 0, arena: Some(arena), manifest: Manifest::default() };
-        Ok(Handle { store: Self::of(inner), generation: 0, slot })
+        let inner = Inner {
+            generation: 0,
+            arena: Some(arena),
+            manifest: Manifest::default(),
+        };
+        Ok(Handle {
+            store: Self::of(inner),
+            generation: 0,
+            slot,
+        })
     }
 
     /// `f` over the open arena under the read guard; `WalletLocked` while locked.
@@ -491,23 +574,35 @@ impl SecretStore {
 
     /// `f` over the seed under the read guard (a derivation that stores nothing: discovery); `WalletLocked` while locked.
     pub(crate) fn with_seed<R>(&self, f: impl FnOnce(&[u8; 64]) -> Result<R>) -> Result<R> {
-        self.with_arena(|a| f(&Zeroizing::new(a.get(a.seed)?.try_into().map_err(|_| Error::Argument)?)))
+        self.with_arena(|a| {
+            f(&Zeroizing::new(
+                a.get(a.seed)?.try_into().map_err(|_| Error::Argument)?,
+            ))
+        })
     }
 
     /// `f` over the open arena and the manifest under the write lock; `WalletLocked` while locked.
-    pub(crate) fn with_all<R>(&self, f: impl FnOnce(&mut Arena, &mut Manifest) -> Result<R>) -> Result<R> {
+    pub(crate) fn with_all<R>(
+        &self,
+        f: impl FnOnce(&mut Arena, &mut Manifest) -> Result<R>,
+    ) -> Result<R> {
         let mut g = self.write();
-        let Inner { arena, manifest, .. } = &mut *g;
+        let Inner {
+            arena, manifest, ..
+        } = &mut *g;
         f(arena.as_mut().ok_or(Error::WalletLocked)?, manifest)
     }
 
     /// The open arena's protection; all zero while locked.
     pub(crate) fn memory_protection(&self) -> MemoryProtection {
-        self.read().arena.as_ref().map_or_else(MemoryProtection::default, |a| MemoryProtection {
-            chunks: a.chunks.len(),
-            locked: a.chunks.iter().filter(|c| c.locked).count(),
-            no_dump: a.chunks.iter().filter(|c| c.no_dump).count(),
-        })
+        self.read()
+            .arena
+            .as_ref()
+            .map_or_else(MemoryProtection::default, |a| MemoryProtection {
+                chunks: a.chunks.len(),
+                locked: a.chunks.iter().filter(|c| c.locked).count(),
+                no_dump: a.chunks.iter().filter(|c| c.no_dump).count(),
+            })
     }
 
     /// The manifest (public; kept by `lock`).
@@ -522,7 +617,11 @@ impl SecretStore {
 
     #[cfg(feature = "vectors")]
     pub(crate) fn seed(&self) -> Result<Zeroizing<[u8; 64]>> {
-        self.with_arena(|a| Ok(Zeroizing::new(a.get(a.seed)?.try_into().map_err(|_| Error::Argument)?)))
+        self.with_arena(|a| {
+            Ok(Zeroizing::new(
+                a.get(a.seed)?.try_into().map_err(|_| Error::Argument)?,
+            ))
+        })
     }
 
     #[cfg(feature = "vectors")]
@@ -539,7 +638,11 @@ impl SecretStore {
 impl Handle {
     /// A second handle of the same secret (a session keeps its key's), for the crate only: handles are not `Clone`.
     pub(crate) fn dup(&self) -> Handle {
-        Handle { store: self.store.clone(), generation: self.generation, slot: self.slot }
+        Handle {
+            store: self.store.clone(),
+            generation: self.generation,
+            slot: self.slot,
+        }
     }
 
     /// Whether this handle is of store `s` (a backup's sender key of the wallet that seals).
@@ -579,7 +682,11 @@ impl Handle {
 
     /// `test` over the secret once per store for key `id`, under the write lock; the record is the store's (wiped with its
     /// arena). A failed test records nothing and is returned.
-    pub(crate) fn self_test(&self, id: KeyId, test: impl FnOnce(&[u8]) -> Result<()>) -> Result<()> {
+    pub(crate) fn self_test(
+        &self,
+        id: KeyId,
+        test: impl FnOnce(&[u8]) -> Result<()>,
+    ) -> Result<()> {
         let mut g = self.store.write();
         if g.generation != self.generation {
             return Err(Error::KeyRevoked);
@@ -602,7 +709,11 @@ impl Handle {
             return Err(Error::KeyRevoked);
         }
         let slot = g.arena.as_mut().ok_or(Error::KeyRevoked)?.put(bytes)?;
-        Ok(Handle { store: self.store.clone(), generation: self.generation, slot })
+        Ok(Handle {
+            store: self.store.clone(),
+            generation: self.generation,
+            slot,
+        })
     }
 
     /// The secret's bytes, wiped in the arena as they are read (under the write lock): a one-use secret's only read.
@@ -620,7 +731,11 @@ impl Handle {
             if g.generation != self.generation {
                 return Err(Error::KeyRevoked);
             }
-            let s = g.arena.as_mut().ok_or(Error::KeyRevoked)?.get_mut(self.slot)?;
+            let s = g
+                .arena
+                .as_mut()
+                .ok_or(Error::KeyRevoked)?
+                .get_mut(self.slot)?;
             let out = Zeroizing::new(s.to_vec());
             s.zeroize();
             out
@@ -635,7 +750,11 @@ impl Handle {
         if g.generation != self.generation {
             return Err(Error::KeyRevoked);
         }
-        Ok(f(g.arena.as_ref().ok_or(Error::KeyRevoked)?.get(self.slot)?))
+        Ok(f(g
+            .arena
+            .as_ref()
+            .ok_or(Error::KeyRevoked)?
+            .get(self.slot)?))
     }
 
     /// Whether the bytes [`Handle::with`] gives lie inside one of the arena's chunks and outside `owner` (the handle's own
@@ -645,7 +764,10 @@ impl Handle {
         let p = self.with(|s| s.as_ptr() as usize)?;
         let g = self.store.read();
         let a = g.arena.as_ref().ok_or(Error::KeyRevoked)?;
-        let in_chunk = a.chunks.iter().any(|c| (c.page.0.as_ptr() as usize..c.page.0.as_ptr() as usize + PAGE).contains(&p));
+        let in_chunk = a
+            .chunks
+            .iter()
+            .any(|c| (c.page.0.as_ptr() as usize..c.page.0.as_ptr() as usize + PAGE).contains(&p));
         Ok(in_chunk && !(owner.0..owner.0 + owner.1).contains(&p))
     }
 }

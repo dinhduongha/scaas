@@ -16,7 +16,16 @@ pub fn signed_text(digest: &[u8; 32]) -> String {
 /// `sha256(u32 LE 2^31+413 ‖ Borsh { message = signed_text, nonce = digest, recipient, callback_url = None })`.
 pub fn nep413_hash(digest: &[u8; 32], recipient: &AccountId) -> [u8; 32] {
     let mut b = NEP413_TAG.to_le_bytes().to_vec();
-    borsh::to_writer(&mut b, &(signed_text(digest), digest, recipient.as_str(), None::<String>)).expect("borsh");
+    borsh::to_writer(
+        &mut b,
+        &(
+            signed_text(digest),
+            digest,
+            recipient.as_str(),
+            None::<String>,
+        ),
+    )
+    .expect("borsh");
     env::sha256_array(b)
 }
 
@@ -33,5 +42,14 @@ pub fn pay_lane(p: &[u8; 32]) -> [u8; 32] {
 /// CTR-MTX-27 `ref = keccak256("scaas.relayfee" ‖ network ‖ target ‖ keccak256(call) ‖ salt)`; `salt` = the payment
 /// op's payer-signed `extra` (spec §2 row 8).
 pub fn relay_ref(network: &[u8; 32], target: &[u8], call: &[u8], salt: &[u8; 32]) -> [u8; 32] {
-    env::keccak256_array([&b"scaas.relayfee"[..], network, target, &env::keccak256_array(call), salt].concat())
+    env::keccak256_array(
+        [
+            &b"scaas.relayfee"[..],
+            network,
+            target,
+            &env::keccak256_array(call),
+            salt,
+        ]
+        .concat(),
+    )
 }

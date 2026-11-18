@@ -5,20 +5,16 @@
 #include <stddef.h>
 #include <stdint.h>
 
-void pqz_fuzz_init (const char *target);
-void pqz_fuzz_mutate (const uint8_t *data, size_t len);
+void pqz_fuzz_init(const char *target);
+void pqz_fuzz_mutate(const uint8_t *data, size_t len);
 
-int
-LLVMFuzzerInitialize (int *argc, char ***argv)
-{
-  (void)argc, (void)argv;
-  pqz_fuzz_init ("mutate");
-  return 0;
+int LLVMFuzzerInitialize(int *argc, char ***argv) {
+    (void)argc, (void)argv;
+    pqz_fuzz_init("mutate");
+    return 0;
 }
 
-int
-LLVMFuzzerTestOneInput (const uint8_t *data, size_t size)
-{
-  pqz_fuzz_mutate (data, size);
-  return 0;
+int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    pqz_fuzz_mutate(data, size);
+    return 0;
 }

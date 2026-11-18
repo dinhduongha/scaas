@@ -65,12 +65,16 @@ contract PqChatTest is PqChatBase {
         vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatOwnerNotCreator.selector, OWNER_UA));
         f.createInstance(IOpenFactory.ReleaseId(3, 0, 1), "forged", other);
         vm.prank(address(0xB0B));
-        PqChat own = PqChat(f.createInstance(IOpenFactory.ReleaseId(3, 0, 1), "own",
-            abi.encodeCall(IPqChat.initialize, (bytes32(uint256(0xB0B))))));
+        PqChat own = PqChat(
+            f.createInstance(
+                IOpenFactory.ReleaseId(3, 0, 1), "own", abi.encodeCall(IPqChat.initialize, (bytes32(uint256(0xB0B))))
+            )
+        );
         assertEq(own.owner(), bytes32(uint256(0xB0B)));
         vm.prank(address(0xB0B));
-        PqChat none = PqChat(f.createInstance(IOpenFactory.ReleaseId(3, 0, 1), "none",
-            abi.encodeCall(IPqChat.initialize, (bytes32(0)))));
+        PqChat none = PqChat(
+            f.createInstance(IOpenFactory.ReleaseId(3, 0, 1), "none", abi.encodeCall(IPqChat.initialize, (bytes32(0))))
+        );
         assertEq(none.owner(), bytes32(0));
     }
 
@@ -88,8 +92,9 @@ contract PqChatTest is PqChatBase {
     }
 
     function _envRefused(IFactoryToken.ChainEnv memory good, uint256 which) internal view {
-        IFactoryToken.ChainEnv memory e = IFactoryToken.ChainEnv(good.chainUid, good.registry, good.govRouter,
-            good.smartKeyAccountImpl, good.hedera, good.deps, good.params);
+        IFactoryToken.ChainEnv memory e = IFactoryToken.ChainEnv(
+            good.chainUid, good.registry, good.govRouter, good.smartKeyAccountImpl, good.hedera, good.deps, good.params
+        );
         if (which == 0) e.chainUid = 0;
         if (which == 1) e.registry = address(0);
         if (which == 2) e.params = new bytes32[](0);
@@ -110,13 +115,27 @@ contract PqChatTest is PqChatBase {
         f.publishClassEnv(3, 0, 2, EnvKit.uidOf(address(f)), _classEnv(address(p), 24_575));
         vm.prank(REGISTRAR);
         vm.expectRevert(IPqChat.PqChatEnv.selector);
-        f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 2, IPqChat.initialize.selector, type(IPqChat).interfaceId,
-            type(PqChat).creationCode, _args(), EnvKit.uidOf(address(f)));
+        f.deployImplementation(
+            IOpenFactory.ReleaseId(3, 0, 2),
+            2,
+            IPqChat.initialize.selector,
+            type(IPqChat).interfaceId,
+            type(PqChat).creationCode,
+            _args(),
+            EnvKit.uidOf(address(f))
+        );
         vm.prank(REGISTRAR);
         f.publishClassEnv(3, 0, 3, EnvKit.uidOf(address(f)), _classEnv(address(p), 24_576));
         vm.prank(REGISTRAR);
-        f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 3, IPqChat.initialize.selector, type(IPqChat).interfaceId,
-            type(PqChat).creationCode, _args(), EnvKit.uidOf(address(f)));
+        f.deployImplementation(
+            IOpenFactory.ReleaseId(3, 0, 2),
+            3,
+            IPqChat.initialize.selector,
+            type(IPqChat).interfaceId,
+            type(PqChat).creationCode,
+            _args(),
+            EnvKit.uidOf(address(f))
+        );
     }
 
     function test_constructor_refusesOtherIds() public {
@@ -139,15 +158,35 @@ contract PqChatTest is PqChatBase {
         vm.prank(REGISTRAR);
         f.publishClassEnv(3, 0, 2, EnvKit.uidOf(address(f)), e);
         vm.prank(REGISTRAR);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.LibraryCodeHashMismatch.selector, address(topics),
-            keccak256("another code"), address(topics).codehash));
-        f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 2, IPqChat.initialize.selector, type(IPqChat).interfaceId,
-            type(PqChat).creationCode, _args(), EnvKit.uidOf(address(f)));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IOpenFactory.LibraryCodeHashMismatch.selector,
+                address(topics),
+                keccak256("another code"),
+                address(topics).codehash
+            )
+        );
+        f.deployImplementation(
+            IOpenFactory.ReleaseId(3, 0, 2),
+            2,
+            IPqChat.initialize.selector,
+            type(IPqChat).interfaceId,
+            type(PqChat).creationCode,
+            _args(),
+            EnvKit.uidOf(address(f))
+        );
         vm.prank(REGISTRAR);
         f.publishClassEnv(3, 0, 3, EnvKit.uidOf(address(f)), _classEnv(address(p), LIMIT));
         vm.prank(REGISTRAR);
-        f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 3, IPqChat.initialize.selector, type(IPqChat).interfaceId,
-            type(PqChat).creationCode, _args(), EnvKit.uidOf(address(f)));
+        f.deployImplementation(
+            IOpenFactory.ReleaseId(3, 0, 2),
+            3,
+            IPqChat.initialize.selector,
+            type(IPqChat).interfaceId,
+            type(PqChat).creationCode,
+            _args(),
+            EnvKit.uidOf(address(f))
+        );
     }
 
     /// CTR-TOK-30 (owner 2026-11-10): the factory refuses a release whose `modules()` names a module its env does not pin
@@ -159,13 +198,27 @@ contract PqChatTest is PqChatBase {
         f.publishClassEnv(3, 0, 2, EnvKit.uidOf(address(f)), e);
         vm.prank(REGISTRAR);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ModuleNotPinned.selector, address(topics)));
-        f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 2, IPqChat.initialize.selector, type(IPqChat).interfaceId,
-            type(PqChat).creationCode, _args(), EnvKit.uidOf(address(f)));
+        f.deployImplementation(
+            IOpenFactory.ReleaseId(3, 0, 2),
+            2,
+            IPqChat.initialize.selector,
+            type(IPqChat).interfaceId,
+            type(PqChat).creationCode,
+            _args(),
+            EnvKit.uidOf(address(f))
+        );
         vm.prank(REGISTRAR);
         f.publishClassEnv(3, 0, 3, EnvKit.uidOf(address(f)), _classEnv(address(p), LIMIT));
         vm.prank(REGISTRAR);
-        f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 3, IPqChat.initialize.selector, type(IPqChat).interfaceId,
-            type(PqChat).creationCode, _args(), EnvKit.uidOf(address(f)));
+        f.deployImplementation(
+            IOpenFactory.ReleaseId(3, 0, 2),
+            3,
+            IPqChat.initialize.selector,
+            type(IPqChat).interfaceId,
+            type(PqChat).creationCode,
+            _args(),
+            EnvKit.uidOf(address(f))
+        );
     }
 
     /// CTR-TOK-30 (owner 2026-11-10): the factory reads `modules()` once, at the release, so the answer is fixed by code
@@ -226,7 +279,9 @@ contract PqChatTest is PqChatBase {
         (IPqChat.PqChatSession memory got, bytes32 sigHash) = chat.sessionOf(sid);
         assertEq(keccak256(abi.encode(got)), keccak256(abi.encode(s)), "the record in state");
         assertEq(sigHash, keccak256(abi.encode(sig)));
-        for (uint256 i; i < 3; ++i) assertEq(keccak256(abi.encode(chat.wrapAt(sid, i))), keccak256(abi.encode(w[i])));
+        for (uint256 i; i < 3; ++i) {
+            assertEq(keccak256(abi.encode(chat.wrapAt(sid, i))), keccak256(abi.encode(w[i])));
+        }
         assertTrue(chat.nonceUsed(PqChatTypes.scopeSession(s.creator), 1));
         assertFalse(chat.nonceUsed(PqChatTypes.scopeSession(s.creator), 2));
         assertEq(chat.childOf(sid), bytes32(0));
@@ -249,11 +304,15 @@ contract PqChatTest is PqChatBase {
         chat.addWraps(sid, 2, _slice(w, 2, 3));
         assertTrue(chat.epochComplete(sid));
         assertEq(_completions(vm.getRecordedLogs()), 1);
-        for (uint256 i; i < 4; ++i) assertEq(keccak256(abi.encode(chat.wrapAt(sid, i))), keccak256(abi.encode(w[i])));
+        for (uint256 i; i < 4; ++i) {
+            assertEq(keccak256(abi.encode(chat.wrapAt(sid, i))), keccak256(abi.encode(w[i])));
+        }
     }
 
     function _completions(Vm.Log[] memory logs) internal pure returns (uint256 n) {
-        for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == IPqChat.PqChatEpochComplete.selector) ++n;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] == IPqChat.PqChatEpochComplete.selector) ++n;
+        }
     }
 
     /// Wraps packed per call: more than one blob's worth in one call still reads back per index (14 per 24,576 B blob).
@@ -261,10 +320,20 @@ contract PqChatTest is PqChatBase {
         vm.prank(REGISTRAR);
         f.publishClassEnv(3, 0, 2, EnvKit.uidOf(address(f)), _classEnv(address(p), 24_576));
         vm.prank(REGISTRAR);
-        f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 2, IPqChat.initialize.selector, type(IPqChat).interfaceId,
-            type(PqChat).creationCode, _args(), EnvKit.uidOf(address(f)));
-        PqChat small = PqChat(f.createInstance(IOpenFactory.ReleaseId(3, 0, 2), "s", abi.encodeCall(IPqChat.initialize, (0))));
-        for (uint8 i = 6; i <= 16; ++i) _member(i); // 16 members
+        f.deployImplementation(
+            IOpenFactory.ReleaseId(3, 0, 2),
+            2,
+            IPqChat.initialize.selector,
+            type(IPqChat).interfaceId,
+            type(PqChat).creationCode,
+            _args(),
+            EnvKit.uidOf(address(f))
+        );
+        PqChat small =
+            PqChat(f.createInstance(IOpenFactory.ReleaseId(3, 0, 2), "s", abi.encodeCall(IPqChat.initialize, (0))));
+        for (uint8 i = 6; i <= 16; ++i) {
+            _member(i); // 16 members
+        }
         (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _session(16, 1, address(small));
         bytes32 sid = _create(small, s, w);
         assertTrue(small.epochComplete(sid));
@@ -357,17 +426,20 @@ contract PqChatTest is PqChatBase {
             (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _session(3, 1, address(chat));
             if (k == 0) (s.members[0], s.members[1]) = (s.members[1], s.members[0]); // unsorted
             if (k == 1) s.members[1] = s.members[0]; // a repeated member
-            if (k == 2) { // one member only
+            if (k == 2) {
+                // one member only
                 s.members = _members(1);
                 w = _slice(w, 0, 1);
             }
-            if (k == 3) { // the creator not a member
+            if (k == 3) {
+                // the creator not a member
                 s.members = new IPqChat.MemberKey[](2);
                 (s.members[0], s.members[1]) = (IPqChat.MemberKey(ids[1], 0, 0), IPqChat.MemberKey(ids[2], 0, 0));
             }
             if (k == 4) s.admins = _list(ids[1]); // the creator not an admin
             if (k == 5) s.admins = _list(ids[2], ids[0]); // admins unsorted
-            if (k == 6) { // an admin not registered, the list sorted
+            if (k == 6) {
+                // an admin not registered, the list sorted
                 bytes32 u = keccak256("unregistered");
                 s.admins = u < ids[0] ? _list(u, ids[0]) : _list(ids[0], u);
             }
@@ -409,8 +481,11 @@ contract PqChatTest is PqChatBase {
         IUARegistry.UASig memory forged = _sig(ids[1], h.session(s));
         vm.expectRevert(_unauthorized(s.creator));
         chat.createSession(s, w, forged);
-        _refusedCreate(s, w, abi.encodeWithSelector(IPqChat.PqChatNonceUsed.selector, PqChatTypes.scopeSession(s.creator),
-            uint64(4))); // the control: its own signature meets the used nonce
+        _refusedCreate(
+            s,
+            w,
+            abi.encodeWithSelector(IPqChat.PqChatNonceUsed.selector, PqChatTypes.scopeSession(s.creator), uint64(4))
+        ); // the control: its own signature meets the used nonce
     }
 
     function test_createSession_forgedRecordBurnsNoNonce() public {

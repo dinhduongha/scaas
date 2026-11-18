@@ -75,6 +75,8 @@ abstract contract ZetherFixture is Test {
     /// @dev The `validUntilBlock` every payload the fixture builds carries (review C0-9, `TransferExpired`).
     uint256 internal vub = type(uint64).max;
     uint8 internal aMode = uint8(ZetherTypes.AuditorMode.OPTIONAL);
+    /// @dev The factory's `noticePeriod()` of the next `_stack()` (0 unless a test sets it: the auditor's delay, CTR-ZTH-95).
+    uint64 internal notice;
     /// @dev Public units the fixture created per token (`mint` or wrap): `totalSupply + totalShielded·SCALE` stays equal.
     mapping(address => uint256) internal minted;
 
@@ -100,12 +102,15 @@ abstract contract ZetherFixture is Test {
         // the curve's verifiers and disclosure, then the factory's env of the Zether kinds (plan 5g-Z2, CTR-ZTH-20)
         (ver, burnVer) = ZetherVerifiers.deploy();
         dis = new ZetherDisclosure();
-        factory = EnvKit.factory(registrar, ZUID, 0);
+        factory = EnvKit.factory(registrar, ZUID, notice);
         stm = new ZetherStatements();
         reg = _uaRegistry();
         prover = new ZetherProver();
-        normalImpl = NormalZetherToken(Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_ZETHER, 1, _zenv(),
-            type(NormalZetherToken).creationCode));
+        normalImpl = NormalZetherToken(
+            Catalogue.release(
+                factory, IOpenFactory.TokenKind.NORMAL_ZETHER, 1, _zenv(), type(NormalZetherToken).creationCode
+            )
+        );
         vm.startPrank(registrar);
         factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER, true, EnvKit.uidOf(address(factory)));
         factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER, true, EnvKit.uidOf(address(factory)));
@@ -114,8 +119,15 @@ abstract contract ZetherFixture is Test {
 
     /// The release env of this stack's curve (`deps`: transfer, burn, inner-product verifier, disclosure).
     function _zenv() internal view returns (IFactoryToken.Env memory) {
-        return zetherEnv(address(factory), ZUID, address(reg), address(ver), address(burnVer),
-            address(ZetherVerifierBase(address(ver)).innerProduct()), address(dis));
+        return zetherEnv(
+            address(factory),
+            ZUID,
+            address(reg),
+            address(ver),
+            address(burnVer),
+            address(ZetherVerifierBase(address(ver)).innerProduct()),
+            address(dis)
+        );
     }
 
     /// Gen 1 with `zether-bls12381` and `schnorr-bn254` (caps as accounts.md §1.15), budget 12 M, no msig.
@@ -141,9 +153,22 @@ abstract contract ZetherFixture is Test {
         c.roles.minter = nid(address(this));
         c.lockedFeatures = 1 << GovernanceBits.MINTABLE; // no owner: the minter survives creation on a locked bit (B-06, GD-14)
         c.conf = IFactoryToken.ConfidentialConfig(
-            auditor ? ZetherKeys.pub(X_AUD, bls) : bytes(""), SCALE, maxShielded, FEE, dMode,
-            auditor ? aMode : 0, minDecoy
-        , 0, bytes32(0), false, 0, 0, 0, false, false);
+            auditor ? ZetherKeys.pub(X_AUD, bls) : bytes(""),
+            SCALE,
+            maxShielded,
+            FEE,
+            dMode,
+            auditor ? aMode : 0,
+            minDecoy,
+            0,
+            bytes32(0),
+            false,
+            0,
+            0,
+            0,
+            false,
+            false
+        );
     }
 
     function _newToken(bool auditor, bytes32 salt) internal virtual returns (NormalZetherToken) {
@@ -151,7 +176,9 @@ abstract contract ZetherFixture is Test {
     }
 
     function _newToken(bool auditor, bytes32 salt, uint256 maxShielded) internal virtual returns (NormalZetherToken) {
-        return NormalZetherToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(_cfg(auditor, maxShielded)), salt));
+        return NormalZetherToken(
+            factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(_cfg(auditor, maxShielded)), salt)
+        );
     }
 
     /// Registers `Y = [x]G` as `zether-bls12381` (the Zether key is the UA: no `authRef` since UA-6), relayed by
@@ -172,7 +199,11 @@ abstract contract ZetherFixture is Test {
     /// the portable `uaMessage(kind, POP_V2, registrationDigest(UA(Y), kind, 0, zero KEM record, 0))` (UA-8, typed-signing TS-D3), what the Zether key signs to register (CTR-UA-07).
     function _popMsg(bytes memory y) internal view returns (bytes32) {
         bytes32 ua = ZetherTypes.UA.unwrap(ZetherTypes.toUA(y));
-        return reg.uaMessage(_zkind(), UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(ua, _zkind(), 0, UAKinds.kemRecordHash(ua, 0, ""), 0));
+        return reg.uaMessage(
+            _zkind(),
+            UAKinds.PURPOSE_POP_V2,
+            UAKinds.registrationDigest(ua, _zkind(), 0, UAKinds.kemRecordHash(ua, 0, ""), 0)
+        );
     }
 
     /// An owner op (roll-over, mode; `requireAuthorized` under `zether-owner`, UA-6 U9): `UASig{signature}`, the Schnorr by
@@ -182,22 +213,92 @@ abstract contract ZetherFixture is Test {
     }
 
     /// The typed `ZetherRollOver` of `ua` under `t`'s domain (TS-D19).
-    function _rollOverDigest(NormalZetherToken t, ZetherTypes.UA ua, uint64 accSeq, uint64 expected, uint64 until) internal view returns (bytes32) {
-        return _typed(t, keccak256(abi.encode(
-            keccak256("ZetherRollOver(bytes32 ua,uint64 accSeq,uint64 expectedPendingSeq,uint64 validUntilBlock)"), ua, accSeq, expected, until)));
+    function _rollOverDigest(NormalZetherToken t, ZetherTypes.UA ua, uint64 accSeq, uint64 expected, uint64 until)
+        internal
+        view
+        returns (bytes32)
+    {
+        return _typed(
+            t,
+            keccak256(
+                abi.encode(
+                    keccak256(
+                        "ZetherRollOver(bytes32 ua,uint64 accSeq,uint64 expectedPendingSeq,uint64 validUntilBlock)"
+                    ),
+                    ua,
+                    accSeq,
+                    expected,
+                    until
+                )
+            )
+        );
     }
 
     /// The typed `ZetherSetRollOverMode` of `ua` under `t`'s domain (TS-D19).
-    function _setModeDigest(NormalZetherToken t, ZetherTypes.UA ua, uint8 mode, uint64 modeNonce, uint64 until) internal view returns (bytes32) {
-        return _typed(t, keccak256(abi.encode(
-            keccak256("ZetherSetRollOverMode(bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock)"), ua, mode, modeNonce, until)));
+    function _setModeDigest(NormalZetherToken t, ZetherTypes.UA ua, uint8 mode, uint64 modeNonce, uint64 until)
+        internal
+        view
+        returns (bytes32)
+    {
+        return _typed(
+            t,
+            keccak256(
+                abi.encode(
+                    keccak256("ZetherSetRollOverMode(bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock)"),
+                    ua,
+                    mode,
+                    modeNonce,
+                    until
+                )
+            )
+        );
+    }
+
+    /// @dev Bit 32 (CTR-ZTH-95): the Schnorr proof of possession `R ‖ be32(z)` of `x` over `t`'s typed `AuditorConsent` of
+    ///      `[x]G`'s UA for `epoch` and `t`'s word (set-auditor spec §5.2; the test nonce is deterministic).
+    function _auditorPop(NormalZetherToken t, uint256 x, uint32 epoch) internal view returns (bytes memory) {
+        bytes memory y = ZetherKeys.pub(x, bls);
+        bytes32 d = _typed(
+            t,
+            keccak256(
+                abi.encode(
+                    keccak256("AuditorConsent(address token,bytes32 auditor,uint32 epoch,bytes32 chainUid)"),
+                    address(t),
+                    ZetherTypes.UA.unwrap(ZetherTypes.toUA(y)),
+                    epoch,
+                    EnvKit.codeUidOf(address(t))
+                )
+            )
+        );
+        uint256 n = ver.groupOrder();
+        uint256 k = uint256(keccak256(abi.encode("pop-k", x, d))) % n;
+        bytes memory r = ver.g1MulBase(k);
+        uint256 c = ZetherTranscript.hashToScalar(
+            keccak256(abi.encodePacked("SCAAS-ZETHER-AUDITOR-POP-V1", d, ver.g1MulBase(1), y, r)), n
+        );
+        return bytes.concat(r, bytes32(addmod(k, mulmod(c, x, n), n)));
     }
 
     function _typed(NormalZetherToken t, bytes32 structHash) internal view returns (bytes32) {
         (, string memory name, string memory version, uint256 chainId, address vc, bytes32 s,) = t.eip712Domain();
-        return keccak256(abi.encodePacked(hex"1901", keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256(bytes(name)), keccak256(bytes(version)), chainId, vc, s)), structHash));
+        return keccak256(
+            abi.encodePacked(
+                hex"1901",
+                keccak256(
+                    abi.encode(
+                        keccak256(
+                            "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                        ),
+                        keccak256(bytes(name)),
+                        keccak256(bytes(version)),
+                        chainId,
+                        vc,
+                        s
+                    )
+                ),
+                structHash
+            )
+        );
     }
 
     // ------------------------------------------------------------------ operations
@@ -224,27 +325,49 @@ abstract contract ZetherFixture is Test {
     }
 
     /// @dev Payload and proof of `from → to`, value `v`, from the acc balance `b`; `binding` 0 = a direct call.
-    function _proveTransfer(NormalZetherToken t, User memory from, User memory to, uint256 v, uint256 b, ZetherTypes.UA ben, bytes32 binding)
-        internal view returns (Tx memory r)
-    {
+    function _proveTransfer(
+        NormalZetherToken t,
+        User memory from,
+        User memory to,
+        uint256 v,
+        uint256 b,
+        ZetherTypes.UA ben,
+        bytes32 binding
+    ) internal view returns (Tx memory r) {
         IZetherToken.AccountState memory st = t.accountState(from.ua);
-        r.s = forceS != 0 ? forceS : uint256(keccak256(abi.encode(from.x, st.sendCounter, v, address(t)))) % ver.groupOrder();
+        r.s = forceS != 0
+            ? forceS
+            : uint256(keccak256(abi.encode(from.x, st.sendCounter, v, address(t)))) % ver.groupOrder();
         r.payload = _payload(t, from, to, v, r.s, st);
-        ZetherProver.TransferWitness memory w = _witness(from.x, v, r.s, b - v - (ZetherTypes.UA.unwrap(ben) == 0 ? 0 : t.confidentialFee()));
+        ZetherProver.TransferWitness memory w =
+            _witness(from.x, v, r.s, b - v - (ZetherTypes.UA.unwrap(ben) == 0 ? 0 : t.confidentialFee()));
         r.proof = _proveT(stm.transferStatementSingle(address(t), _zSingle(r.payload, ben), binding), w);
     }
 
-    function _witness(uint256 x, uint256 v, uint256 s, uint256 bPrime) internal pure returns (ZetherProver.TransferWitness memory) {
+    function _witness(uint256 x, uint256 v, uint256 s, uint256 bPrime)
+        internal
+        pure
+        returns (ZetherProver.TransferWitness memory)
+    {
         return ZetherProver.TransferWitness(x, v, s, bPrime, 0x1234 + v, 0x5678 + bPrime, keccak256(abi.encode(s)));
     }
 
-    function _proveT(bytes memory statement, ZetherProver.TransferWitness memory w) internal view returns (bytes memory) {
+    function _proveT(bytes memory statement, ZetherProver.TransferWitness memory w)
+        internal
+        view
+        returns (bytes memory)
+    {
         return prover.proveTransfer(ver, statement, w);
     }
 
-    function _payload(NormalZetherToken t, User memory from, User memory to, uint256 v, uint256 s, IZetherToken.AccountState memory st)
-        internal view returns (bytes memory)
-    {
+    function _payload(
+        NormalZetherToken t,
+        User memory from,
+        User memory to,
+        uint256 v,
+        uint256 s,
+        IZetherToken.AccountState memory st
+    ) internal view returns (bytes memory) {
         return bytes.concat(_head(st), salt, from.y, to.y, _cts(t, from.y, to.y, v, s));
     }
 
@@ -253,16 +376,23 @@ abstract contract ZetherFixture is Test {
         return abi.encode(uint256(st.accSeq), uint256(st.sendCounter), vub);
     }
 
-    function _cts(NormalZetherToken t, bytes memory yf, bytes memory yt, uint256 v, uint256 s) internal view returns (bytes memory) {
+    function _cts(NormalZetherToken t, bytes memory yf, bytes memory yt, uint256 v, uint256 s)
+        internal
+        view
+        returns (bytes memory)
+    {
         bytes memory aud = _aud(t);
-        (bytes memory cOut, bytes memory dOut, bytes memory cDeb, bytes memory cAud) = prover.ciphertexts(ver, yf, yt, aud, v, s);
+        (bytes memory cOut, bytes memory dOut, bytes memory cDeb, bytes memory cAud) =
+            prover.ciphertexts(ver, yf, yt, aud, v, s);
         return bytes.concat(cOut, dOut, cDeb, cAud);
     }
 
     /// @dev A memo of `m` legs (CTR-ZTH-50): the salt, then `1 + 40·m` filler bytes.
     function _memo(uint256 m) internal view returns (bytes memory memo) {
         memo = bytes.concat(salt, new bytes(1 + 40 * m));
-        for (uint256 i = 16; i < memo.length; ++i) memo[i] = bytes1(uint8(i));
+        for (uint256 i = 16; i < memo.length; ++i) {
+            memo[i] = bytes1(uint8(i));
+        }
     }
 
     /// @dev The `Y_a` the sender encrypts to: the token's key, `O` without one or when left out, the test key if forced.
@@ -301,13 +431,17 @@ abstract contract ZetherFixture is Test {
         if (ZetherTypes.UA.unwrap(ben) != 0) b -= t.confidentialFee();
         b -= to.length * decoyFee;
         r.proof = prover.proveTransferMulti(
-            ver, stm.transferStatement(address(t), _zMulti(r.payload, ben), mode, binding), _multiWitness(from.x, r.s, vs, b)
+            ver,
+            stm.transferStatement(address(t), _zMulti(r.payload, ben), mode, binding),
+            _multiWitness(from.x, r.s, vs, b)
         );
     }
 
     /// @dev `bAfterFee` = the balance less the inner fee; `b' = bAfterFee − Σv`.
     function _multiWitness(uint256 x, uint256 s, uint256[] memory vs, uint256 bAfterFee)
-        internal view returns (ZetherProver.MultiWitness memory w)
+        internal
+        view
+        returns (ZetherProver.MultiWitness memory w)
     {
         uint256[] memory gv = new uint256[](vs.length);
         uint256[] memory t = new uint256[](vs.length);
@@ -345,31 +479,50 @@ abstract contract ZetherFixture is Test {
             legs = bytes.concat(legs, to[j].y, cOut, cAud, dAud);
             total += vs[j];
         }
-        (,bytes memory dOut, bytes memory cDeb,) = prover.ciphertexts(ver, from.y, from.y, aud, total, s);
+        (, bytes memory dOut, bytes memory cDeb,) = prover.ciphertexts(ver, from.y, from.y, aud, total, s);
         payload = bytes.concat(_head(st), salt, abi.encode(to.length, decoyFee), from.y, dOut, cDeb, legs);
     }
 
     /// @dev Payload and proof of an unshield of `amount` to `recipient` from the acc balance `b`.
-    function _proveUnshield(NormalZetherToken t, User memory from, uint256 amount, uint256 b, address recipient, ZetherTypes.UA ben, bytes32 binding)
-        internal view returns (bytes memory payload, bytes memory proof)
-    {
+    function _proveUnshield(
+        NormalZetherToken t,
+        User memory from,
+        uint256 amount,
+        uint256 b,
+        address recipient,
+        ZetherTypes.UA ben,
+        bytes32 binding
+    ) internal view returns (bytes memory payload, bytes memory proof) {
         return _proveUnshieldTo(t, from, amount, b, bytes32(uint256(uint160(recipient))), ben, binding);
     }
 
     /// @dev As `_proveUnshield`, to a recipient id: a padded address or a derived UA (CTR-ZTH-51, the same word).
-    function _proveUnshieldTo(NormalZetherToken t, User memory from, uint256 amount, uint256 b, bytes32 recipient, ZetherTypes.UA ben, bytes32 binding)
-        internal view returns (bytes memory payload, bytes memory proof)
-    {
+    function _proveUnshieldTo(
+        NormalZetherToken t,
+        User memory from,
+        uint256 amount,
+        uint256 b,
+        bytes32 recipient,
+        ZetherTypes.UA ben,
+        bytes32 binding
+    ) internal view returns (bytes memory payload, bytes memory proof) {
         payload = _unshieldPayload(t, from);
         bytes memory statement = stm.unshieldStatement(address(t), _zBurn(payload, ben), amount, recipient, binding);
         proof = _proveU(from, statement, amount, b, ben, t);
     }
 
-    function _proveU(User memory from, bytes memory statement, uint256 amount, uint256 b, ZetherTypes.UA ben, NormalZetherToken t)
-        internal view returns (bytes memory)
-    {
+    function _proveU(
+        User memory from,
+        bytes memory statement,
+        uint256 amount,
+        uint256 b,
+        ZetherTypes.UA ben,
+        NormalZetherToken t
+    ) internal view returns (bytes memory) {
         b = b - amount - (ZetherTypes.UA.unwrap(ben) == 0 ? 0 : t.confidentialFee()); // from here: b'
-        return prover.proveBurn(ver, statement, ZetherProver.BurnWitness(from.x, b, 0x9abc + b, keccak256(abi.encode(b, amount))));
+        return prover.proveBurn(
+            ver, statement, ZetherProver.BurnWitness(from.x, b, 0x9abc + b, keccak256(abi.encode(b, amount)))
+        );
     }
 
     function _unshieldPayload(NormalZetherToken t, User memory from) internal view returns (bytes memory) {
@@ -380,8 +533,12 @@ abstract contract ZetherFixture is Test {
     /// @dev The calldata of the Zether-layer op `sel` on `tok` for an envelope with binding `b`: shield 3 to bob, else
     ///      10 from alice's acc balance `bal` (to bob, or unshielded to 0xB0C). Used to relay every listed selector once.
     function _zetherOpCall(bytes4 sel, uint256 bal, bytes32 b) internal view returns (bytes memory) {
-        if (sel == IConfidentialToken.mtxShield.selector) return abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(bob.ua), 3));
-        if (sel == IZetherToken.mtxRollOver.selector) return abi.encodeCall(IZetherToken.mtxRollOver, (ZetherTypes.UA.unwrap(alice.ua), 1));
+        if (sel == IConfidentialToken.mtxShield.selector) {
+            return abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(bob.ua), 3));
+        }
+        if (sel == IZetherToken.mtxRollOver.selector) {
+            return abi.encodeCall(IZetherToken.mtxRollOver, (ZetherTypes.UA.unwrap(alice.ua), 1));
+        }
         if (sel == IZetherToken.mtxRollOverBatch.selector) {
             ZetherTypes.UA[] memory one = new ZetherTypes.UA[](1);
             one[0] = alice.ua;
@@ -389,25 +546,37 @@ abstract contract ZetherFixture is Test {
         }
         if (sel == IZetherToken.mtxUnshield.selector) {
             (bytes memory pl, bytes memory pr) = _proveUnshield(tok, alice, 10, bal, address(0xB0C), _none(), b);
-            return abi.encodeCall(IZetherToken.mtxUnshield, (_zBurn(pl, _none()), 10, bytes32(uint256(uint160(address(0xB0C)))), pr));
+            return abi.encodeCall(
+                IZetherToken.mtxUnshield, (_zBurn(pl, _none()), 10, bytes32(uint256(uint160(address(0xB0C)))), pr)
+            );
         }
         if (sel == IZetherToken.mtxConfidentialTransferSingle.selector) {
             Tx memory t = _proveTransfer(tok, alice, bob, 10, bal, _none(), b);
             return abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (_zSingle(t.payload, _none()), t.proof));
         }
-        ZetherTypes.TransferMode mode = sel == IZetherToken.mtxConfidentialTransferCompact.selector ? ZetherTypes.TransferMode.HASH
+        ZetherTypes.TransferMode mode = sel == IZetherToken.mtxConfidentialTransferCompact.selector
+            ? ZetherTypes.TransferMode.HASH
             : _defaultForm(tok);
-        require(sel == IZetherToken.mtxConfidentialTransfer.selector || sel == IZetherToken.mtxConfidentialTransferCompact.selector, "not a Zether op");
+        require(
+            sel == IZetherToken.mtxConfidentialTransfer.selector
+                || sel == IZetherToken.mtxConfidentialTransferCompact.selector,
+            "not a Zether op"
+        );
         return _multiCall(sel, mode, bal, b);
     }
 
     /// @dev The stored form of `mtxConfidentialTransfer` on `t` (CTR-ZTH-38): BUNDLE, or HASH on a `COMMIT` token.
     function _defaultForm(NormalZetherToken t) internal view returns (ZetherTypes.TransferMode) {
-        return t.disclosureMode() == ZetherTypes.DisclosureMode.COMPACT ? ZetherTypes.TransferMode.HASH
+        return t.disclosureMode() == ZetherTypes.DisclosureMode.COMPACT
+            ? ZetherTypes.TransferMode.HASH
             : ZetherTypes.TransferMode.BUNDLE;
     }
 
-    function _multiCall(bytes4 sel, ZetherTypes.TransferMode mode, uint256 bal, bytes32 b) internal view returns (bytes memory) {
+    function _multiCall(bytes4 sel, ZetherTypes.TransferMode mode, uint256 bal, bytes32 b)
+        internal
+        view
+        returns (bytes memory)
+    {
         User[] memory to = new User[](1);
         to[0] = bob;
         uint256[] memory vs = new uint256[](1);
@@ -432,33 +601,53 @@ abstract contract ZetherFixture is Test {
 
     /// @dev `be32(accSeq) ‖ be32(sendCounter) ‖ be32(validUntilBlock) ‖ salt(16) ‖ Y_f ‖ Y_t ‖ C_out ‖ D_out ‖ C_deb ‖ C_aud`.
     function _zSingle(bytes memory p, ZetherTypes.UA ben) internal pure returns (IZetherToken.ZetherSingle memory) {
-        return IZetherToken.ZetherSingle(uint64(uint256(_zWord(p, 0))), uint64(uint256(_zWord(p, 32))), uint256(_zWord(p, 64)),
-            bytes16(_zWord(p, 96)), ZetherTypes.UA.unwrap(ben), _zPoint(p, 112), _zPoint(p, 240), _zPoint(p, 368), _zPoint(p, 496),
-            _zPoint(p, 624), _zPoint(p, 752));
+        return IZetherToken.ZetherSingle(
+            uint64(uint256(_zWord(p, 0))),
+            uint64(uint256(_zWord(p, 32))),
+            uint256(_zWord(p, 64)),
+            bytes16(_zWord(p, 96)),
+            ZetherTypes.UA.unwrap(ben),
+            _zPoint(p, 112),
+            _zPoint(p, 240),
+            _zPoint(p, 368),
+            _zPoint(p, 496),
+            _zPoint(p, 624),
+            _zPoint(p, 752)
+        );
     }
 
     /// @dev `… ‖ salt(16) ‖ be32(M) ‖ be32(decoyFee) ‖ Y_f ‖ D_out ‖ C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j ‖ D_aud_j)_j [‖ salt ‖ sealed]`.
     function _zMulti(bytes memory p, ZetherTypes.UA ben) internal pure returns (IZetherToken.ZetherMulti memory t) {
-        (t.accSeq, t.sendCounter, t.validUntilBlock) = (uint64(uint256(_zWord(p, 0))), uint64(uint256(_zWord(p, 32))), uint256(_zWord(p, 64)));
-        (t.salt, t.beneficiaryUA, t.decoyFee) = (bytes16(_zWord(p, 96)), ZetherTypes.UA.unwrap(ben), uint256(_zWord(p, 144)));
+        (t.accSeq, t.sendCounter, t.validUntilBlock) =
+        (uint64(uint256(_zWord(p, 0))), uint64(uint256(_zWord(p, 32))), uint256(_zWord(p, 64)));
+        (t.salt, t.beneficiaryUA, t.decoyFee) =
+        (bytes16(_zWord(p, 96)), ZetherTypes.UA.unwrap(ben), uint256(_zWord(p, 144)));
         (t.yFrom, t.dOut, t.cDeb) = (_zPoint(p, 176), _zPoint(p, 304), _zPoint(p, 432));
         uint256 m = uint256(_zWord(p, 112));
         t.legs = new IZetherToken.ZetherLeg[](m);
         for (uint256 j; j < m; ++j) {
             uint256 o = 560 + 512 * j;
-            t.legs[j] = IZetherToken.ZetherLeg(_zPoint(p, o), _zPoint(p, o + 128), _zPoint(p, o + 256), _zPoint(p, o + 384));
+            t.legs[j] =
+                IZetherToken.ZetherLeg(_zPoint(p, o), _zPoint(p, o + 128), _zPoint(p, o + 256), _zPoint(p, o + 384));
         }
         uint256 end = 560 + 512 * m;
         if (p.length > end + 16) {
             t.sealedMemo = new bytes(p.length - end - 16);
-            for (uint256 i; i < t.sealedMemo.length; ++i) t.sealedMemo[i] = p[end + 16 + i];
+            for (uint256 i; i < t.sealedMemo.length; ++i) {
+                t.sealedMemo[i] = p[end + 16 + i];
+            }
         }
     }
 
     /// @dev `be32(accSeq) ‖ be32(sendCounter) ‖ be32(validUntilBlock) ‖ Y_f`.
     function _zBurn(bytes memory p, ZetherTypes.UA ben) internal pure returns (IZetherToken.ZetherBurn memory) {
-        return IZetherToken.ZetherBurn(uint64(uint256(_zWord(p, 0))), uint64(uint256(_zWord(p, 32))), uint256(_zWord(p, 64)),
-            ZetherTypes.UA.unwrap(ben), _zPoint(p, 96));
+        return IZetherToken.ZetherBurn(
+            uint64(uint256(_zWord(p, 0))),
+            uint64(uint256(_zWord(p, 32))),
+            uint256(_zWord(p, 64)),
+            ZetherTypes.UA.unwrap(ben),
+            _zPoint(p, 96)
+        );
     }
 
     // ------------------------------------------------------------------ disclosure (ZetherDisclosure)
@@ -494,15 +683,26 @@ abstract contract ZetherFixture is Test {
             bytes.concat(
                 abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V2", block.chainid, t.chainUid(), address(t)),
                 abi.encodePacked(ref, j, amount, uint8(kind))
-            ), x, amount, base, a1, a2);
+            ),
+            x,
+            amount,
+            base,
+            a1,
+            a2
+        );
         return abi.encode(a1, a2, addmod(k, mulmod(e, x, ver.groupOrder()), ver.groupOrder()));
     }
 
     /// @dev Strong Fiat-Shamir (review C0-4): `H(pre ‖ G ‖ K ‖ B ‖ M ‖ A1 ‖ A2)`; `K = [x]G` for every kind and, for an
     ///      honest opening, `M = [amount]G + [x]B`.
-    function _cpChallenge(bytes memory pre, uint256 x, uint256 amount, bytes memory base, bytes memory a1, bytes memory a2)
-        internal view returns (uint256)
-    {
+    function _cpChallenge(
+        bytes memory pre,
+        uint256 x,
+        uint256 amount,
+        bytes memory base,
+        bytes memory a1,
+        bytes memory a2
+    ) internal view returns (uint256) {
         pre = bytes.concat(pre, ver.g1MulBase(1), ver.g1MulBase(x), base);
         pre = bytes.concat(pre, ver.g1Add(ver.g1MulBase(amount), ver.g1Mul(base, x)));
         return ZetherTranscript.hashToScalar(keccak256(bytes.concat(pre, a1, a2)), ver.groupOrder());
@@ -513,9 +713,14 @@ abstract contract ZetherFixture is Test {
     ///      the UA one of the merged entries).
     function _addrBinding(NormalZetherToken t, MetaTxLib.MetaTransaction memory m) internal view returns (bytes32) {
         (address r, address f) = MetaTxLib.canon(m);
-        return keccak256(bytes.concat(
-            abi.encode(keccak256("SCAAS-ZETHER-ENVELOPE-V1"), block.chainid, t.chainUid(), address(t), m.from, m.batch),
-            abi.encode(m.nonce, m.validUntil, m.mode, r, m.fee, f)));
+        return keccak256(
+            bytes.concat(
+                abi.encode(
+                    keccak256("SCAAS-ZETHER-ENVELOPE-V1"), block.chainid, t.chainUid(), address(t), m.from, m.batch
+                ),
+                abi.encode(m.nonce, m.validUntil, m.mode, r, m.fee, f)
+            )
+        );
     }
 
     function _none() internal pure returns (ZetherTypes.UA) {
@@ -524,9 +729,9 @@ abstract contract ZetherFixture is Test {
 
     /// @dev `entryRef` (CTR-ZTH-36) of `from`'s debit number `counter`.
     function _ref(NormalZetherToken t, User memory from, uint256 counter) internal view returns (bytes32) {
-        return keccak256(abi.encode(
-            keccak256("SCAAS-ZETHER-ENTRY-V1"), block.chainid, t.chainUid(), address(t), from.ua, counter
-        ));
+        return keccak256(
+            abi.encode(keccak256("SCAAS-ZETHER-ENTRY-V1"), block.chainid, t.chainUid(), address(t), from.ua, counter)
+        );
     }
 
     // ------------------------------------------------------------------ test-side decryption
@@ -550,7 +755,11 @@ abstract contract ZetherFixture is Test {
         return keccak256(ver.g1Sub(c, ver.g1Mul(d, u.x))) == keccak256(ver.g1MulBase(b));
     }
 
-    function _balances(NormalZetherToken t, User memory u, uint256 max) internal view returns (uint256 acc, uint256 pend) {
+    function _balances(NormalZetherToken t, User memory u, uint256 max)
+        internal
+        view
+        returns (uint256 acc, uint256 pend)
+    {
         IZetherToken.AccountState memory s = t.accountState(u.ua);
         acc = _decrypt(s.accC, s.accD, u.x, max);
         pend = _decrypt(s.pendingC, s.pendingD, u.x, max);
@@ -568,6 +777,8 @@ abstract contract ZetherFixture is Test {
         }
         assertEq(sum, t.totalShielded(), "sum of plaintext balances == totalShielded");
         assertEq(t.totalSupply(), minted[address(t)], "totalSupply == created (D19: no burn)");
-        assertEq(t.balanceOf(SHIELD_POOL_), t.totalShielded() * SCALE, "balanceOf(SHIELD_POOL) == totalShielded x scale");
+        assertEq(
+            t.balanceOf(SHIELD_POOL_), t.totalShielded() * SCALE, "balanceOf(SHIELD_POOL) == totalShielded x scale"
+        );
     }
 }

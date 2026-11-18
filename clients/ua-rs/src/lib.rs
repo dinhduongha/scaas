@@ -9,29 +9,29 @@
 //! `--no-default-features` keeps this verify-only layer. UNAUDITED.
 use sha3::{Digest, Keccak256};
 
+pub mod algorand;
 mod keydata;
 pub mod near;
-pub mod algorand;
 pub use keydata::validate_key_data;
-pub mod verify;
-pub mod ua8;
-#[cfg(feature = "pq")]
-pub mod pq;
 #[cfg(feature = "pq")]
 mod falcon;
 #[cfg(feature = "json")]
 pub mod json;
+#[cfg(feature = "pq")]
+pub mod pq;
+pub mod ua8;
+pub mod verify;
 pub use ua8::{holder_pop_message, pqz_reg_message};
-mod groups;
-#[cfg(feature = "signers")]
-pub mod musig2;
-#[cfg(feature = "signers")]
-pub mod frost;
-#[cfg(feature = "wallet")]
-pub mod wallet;
 /// The facades (spec §10; ua-rs-sign T14 `zether`, T15 `pqz`): key custody and the ABI over the prover crates.
 #[cfg(any(feature = "zether", feature = "pqz"))]
 pub mod facade;
+#[cfg(feature = "signers")]
+pub mod frost;
+mod groups;
+#[cfg(feature = "signers")]
+pub mod musig2;
+#[cfg(feature = "wallet")]
+pub mod wallet;
 /// Test-only (feature `vectors`): the ladder's record of `secret_mul` (the structural test, spec §12).
 #[cfg(feature = "vectors")]
 pub use scaas_ct;
@@ -149,10 +149,27 @@ pub struct Kind {
 }
 
 const fn native(kind: u16, name: &'static str, lengths: &'static [usize]) -> Kind {
-    Kind { kind, name, native: true, lengths, group: None }
+    Kind {
+        kind,
+        name,
+        native: true,
+        lengths,
+        group: None,
+    }
 }
-const fn derived(kind: u16, name: &'static str, lengths: &'static [usize], group: Option<&'static str>) -> Kind {
-    Kind { kind, name, native: false, lengths, group }
+const fn derived(
+    kind: u16,
+    name: &'static str,
+    lengths: &'static [usize],
+    group: Option<&'static str>,
+) -> Kind {
+    Kind {
+        kind,
+        name,
+        native: false,
+        lengths,
+        group,
+    }
 }
 
 pub const KINDS: &[Kind] = &[
@@ -187,27 +204,59 @@ pub const KINDS: &[Kind] = &[
     derived(0x0133, "slhdsa128s", &[32], Some("slhdsa128s")),
     derived(0x0141, "zether-bls12381", &[128], Some("bls12381-g1")),
     derived(0x0108, "secp256k1", &[64], Some("secp256k1")), // 2026-10-17, appended as in kinds.json
-    derived(0x0134, "mldsa87", &[2592], Some("mldsa87")),   // CTR-UA-39, 2026-11-04, appended as in kinds.json
+    derived(0x0134, "mldsa87", &[2592], Some("mldsa87")), // CTR-UA-39, 2026-11-04, appended as in kinds.json
     derived(0x0135, "fndsa1024", &[1793], Some("fndsa1024")), // CTR-UA-40, 2026-11-04, appended as in kinds.json
 ];
 
 /// Schemes are not kinds (UA-6 U14): 0x0142 is the PQZ key attribute of a PQ holder; it keeps its tag and keyHash group.
-pub const SCHEMES: &[Kind] = &[derived(0x0142, "pqz-mlwe", &PQZ_KEY_LENGTHS, Some("pqz-mlwe"))];
+pub const SCHEMES: &[Kind] = &[derived(
+    0x0142,
+    "pqz-mlwe",
+    &PQZ_KEY_LENGTHS,
+    Some("pqz-mlwe"),
+)];
 /// The key lengths of the PQZ parameter sets (PqzSet.PK).
 pub const PQZ_KEY_LENGTHS: [usize; 4] = [16384, 18432, 20480, 22528];
 /// The scheme number of the PQZ key attribute.
 pub const PQZ_SCHEME: u16 = 0x0142;
 
 pub const GROUPS: &[&str] = &[
-    "p256", "ed25519", "secp256k1", "bn254-g1", "bls12381-g1", "bls12381-g2", "bn254-g2", "mldsa44", "mldsa65", "fndsa512",
-    "slhdsa128s", "mldsa87", "fndsa1024", "pqz-mlwe",
+    "p256",
+    "ed25519",
+    "secp256k1",
+    "bn254-g1",
+    "bls12381-g1",
+    "bls12381-g2",
+    "bn254-g2",
+    "mldsa44",
+    "mldsa65",
+    "fndsa512",
+    "slhdsa128s",
+    "mldsa87",
+    "fndsa1024",
+    "pqz-mlwe",
 ];
 
 /// Every purpose at v1 (clientkeys `PURPOSES`, `vectors/ua/kinds.json`); `pqz-verdict` (group 3f, `UAKinds.PURPOSE_PQZ_VERDICT`):
 /// what a PQZ verifier UA signs a `PqzVerdict` under (`wallet::pqz_verdict_typed_data`, feature `wallet`).
 pub const PURPOSES: &[&str] = &[
-    "pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "payee-fee", "vp",
-    "vc-anchor", "trade", "kem", "pqz-key", "membership", "msig-update", "pqz-verdict",
+    "pop",
+    "metatx",
+    "metatx-cancel",
+    "member",
+    "zether-auth",
+    "zether-owner",
+    "keyop",
+    "payee-fee",
+    "vp",
+    "vc-anchor",
+    "trade",
+    "kem",
+    "pqz-key",
+    "membership",
+    "msig-update",
+    "pqz-verdict",
+    "auditor-consent",
 ];
 
 /// The off-chain purpose of a sealed container's sender signature, `keccak256("scaas.ua.purpose.seal.v1")` (MD-10, ua-rs-sign
@@ -245,7 +294,12 @@ pub fn pay_lane(p: &[u8; 32]) -> [u8; 32] {
 /// CTR-MTX-27 (EVM `RelayFeeRouter.relayRef`): `keccak256("scaas.relayfee" ‖ uint256 chain_id ‖ target ‖ keccak256(call_data))`.
 /// Other families use their own `ref` forms (salted, family address bytes); this is the EVM one only.
 pub fn relay_ref(chain_id: u64, target: &[u8; 20], call_data: &[u8]) -> [u8; 32] {
-    keccak(&[b"scaas.relayfee", &word(chain_id), target, &keccak256(call_data)])
+    keccak(&[
+        b"scaas.relayfee",
+        &word(chain_id),
+        target,
+        &keccak256(call_data),
+    ])
 }
 
 pub(crate) fn keccak(parts: &[&[u8]]) -> [u8; 32] {
@@ -258,17 +312,25 @@ pub(crate) fn keccak(parts: &[&[u8]]) -> [u8; 32] {
 
 /// `smartcontracts/vectors/governance/governance_bits.json` (spec 2026-11-02-governance §1.2), compiled in: written by forge
 /// (`GovBitsVector.t.sol`), one row per line.
-pub const GOVERNANCE_BITS_JSON: &str = include_str!("../../../smartcontracts/vectors/governance/governance_bits.json");
+pub const GOVERNANCE_BITS_JSON: &str =
+    include_str!("../../../smartcontracts/vectors/governance/governance_bits.json");
 
-/// Governance bit `bit`'s row as the file's JSON object, `{bit, name, type, sentences}`: rows 0-31; `None` past them (bits 32-127
+/// Governance bit `bit`'s row as the file's JSON object, `{bit, name, type, sentences}` (bit 32's also `sentencesWhen`): rows 0-32; `None` past them (bits 33-127
 /// are free, bits 128-255 the application contract's own, labelled by its `bitLabel(bit)`).
 pub fn governance_bit(bit: u8) -> Option<&'static str> {
     let head = format!("{{\"bit\": {bit}, ");
-    GOVERNANCE_BITS_JSON.lines().map(str::trim).find(|l| l.starts_with(&head)).map(|l| l.trim_end_matches(','))
+    GOVERNANCE_BITS_JSON
+        .lines()
+        .map(str::trim)
+        .find(|l| l.starts_with(&head))
+        .map(|l| l.trim_end_matches(','))
 }
 
 pub fn kind_info(kind: u16) -> Result<&'static Kind> {
-    KINDS.iter().find(|k| k.kind == kind).ok_or(UAError::KindUnknown(kind))
+    KINDS
+        .iter()
+        .find(|k| k.kind == kind)
+        .ok_or(UAError::KindUnknown(kind))
 }
 
 fn derived_kind(kind: u16) -> Result<&'static Kind> {
@@ -307,11 +369,21 @@ pub fn msig_pqz_eligible(key_data: &[u8]) -> Result<bool> {
 /// `msig_pqz_eligible` with `inner`, an `msig` member's key data by its id: a member is PQ if its kind is in 0x0130-0x0135, or it is an
 /// `msig` that is PQ-eligible itself; none is `MemberUnknown`. CTR-UA-44 MM-14: at that member's own level its `msig` slots are classical
 /// weight, never followed (a member that grew a level since it was listed).
-pub fn msig_pqz_eligible_with(key_data: &[u8], inner: &dyn Fn([u8; 32]) -> Option<Vec<u8>>) -> Result<bool> {
+pub fn msig_pqz_eligible_with(
+    key_data: &[u8],
+    inner: &dyn Fn([u8; 32]) -> Option<Vec<u8>>,
+) -> Result<bool> {
     eligible_at(key_data, Some(inner))
 }
-fn eligible_at(key_data: &[u8], inner: Option<&dyn Fn([u8; 32]) -> Option<Vec<u8>>>) -> Result<bool> {
-    let u16_at = |o: usize| key_data.get(o..o + 2).map(|s| u16::from_be_bytes([s[0], s[1]]) as usize);
+fn eligible_at(
+    key_data: &[u8],
+    inner: Option<&dyn Fn([u8; 32]) -> Option<Vec<u8>>>,
+) -> Result<bool> {
+    let u16_at = |o: usize| {
+        key_data
+            .get(o..o + 2)
+            .map(|s| u16::from_be_bytes([s[0], s[1]]) as usize)
+    };
     let bad = || UAError::KeyData("length");
     let count = u16_at(2).ok_or_else(bad)?;
     if key_data.len() != 4 + 36 * count {
@@ -321,13 +393,14 @@ fn eligible_at(key_data: &[u8], inner: Option<&dyn Fn([u8; 32]) -> Option<Vec<u8
     for i in 0..count {
         let o = 4 + 36 * i;
         let kind = u16_at(o).ok_or_else(bad)?;
-        let pq = (0x0130..=0x0135).contains(&kind) || match (kind, inner) {
-            (0x0120, Some(f)) => {
-                let id: [u8; 32] = key_data[o + 2..o + 34].try_into().expect("32 bytes");
-                eligible_at(&f(id).ok_or(UAError::MemberUnknown)?, None)?
-            }
-            _ => false,
-        };
+        let pq = (0x0130..=0x0135).contains(&kind)
+            || match (kind, inner) {
+                (0x0120, Some(f)) => {
+                    let id: [u8; 32] = key_data[o + 2..o + 34].try_into().expect("32 bytes");
+                    eligible_at(&f(id).ok_or(UAError::MemberUnknown)?, None)?
+                }
+                _ => false,
+            };
         if !pq {
             classical += u16_at(o + 34).ok_or_else(bad)?;
         }
@@ -336,12 +409,19 @@ fn eligible_at(key_data: &[u8], inner: Option<&dyn Fn([u8; 32]) -> Option<Vec<u8
 }
 /// An `msig` too, one level down (owner 2026-11-02): a record that holds one is refused as a member by the registry.
 pub fn is_member(kind: u16, hedera_native: bool) -> bool {
-    single_signing(kind) || kind == 0x0120 || kind == 0x0001 || kind == 0x0002 || (hedera_native && kind == 0x0003)
+    single_signing(kind)
+        || kind == 0x0120
+        || kind == 0x0001
+        || kind == 0x0002
+        || (hedera_native && kind == 0x0003)
 }
 
 // tag / keyHash / message accept a kind or a scheme; id derivation and key-data validation accept kinds only
 fn tagged_kind(kind: u16) -> Result<&'static Kind> {
-    SCHEMES.iter().find(|k| k.kind == kind).map_or_else(|| derived_kind(kind), Ok)
+    SCHEMES
+        .iter()
+        .find(|k| k.kind == kind)
+        .map_or_else(|| derived_kind(kind), Ok)
 }
 pub fn kind_tag_string(kind: u16) -> Result<String> {
     Ok(format!("scaas.ua.{}.v1", tagged_kind(kind)?.name))
@@ -350,7 +430,9 @@ pub fn tag(kind: u16) -> Result<[u8; 32]> {
     Ok(keccak256(kind_tag_string(kind)?.as_bytes()))
 }
 pub fn group_tag_string(group: &str) -> Option<String> {
-    GROUPS.contains(&group).then(|| format!("scaas.ua.group.{group}.v1"))
+    GROUPS
+        .contains(&group)
+        .then(|| format!("scaas.ua.group.{group}.v1"))
 }
 pub fn group_tag(group: &str) -> Option<[u8; 32]> {
     group_tag_string(group).map(|s| keccak256(s.as_bytes()))
@@ -362,7 +444,9 @@ pub fn purpose_tag(purpose: &str) -> Result<[u8; 32]> {
     if !PURPOSES.contains(&purpose) {
         return Err(UAError::PurposeUnknown);
     }
-    Ok(keccak256(format!("scaas.ua.purpose.{purpose}.v1").as_bytes()))
+    Ok(keccak256(
+        format!("scaas.ua.purpose.{purpose}.v1").as_bytes(),
+    ))
 }
 
 /// The tag of a purpose version: every purpose is v1, `pop` is also v2 (UA-8: the portable PoP).
@@ -407,7 +491,9 @@ pub fn native_id(kind: u16, raw: &[u8]) -> Result<[u8; 32]> {
 /// `keccak256(GROUP(g) ‖ canonical pubkey)`, `None` for structures. Call on validated key data.
 pub fn key_hash_of(kind: u16, key_data: &[u8]) -> Result<Option<[u8; 32]>> {
     let k = tagged_kind(kind)?;
-    let Some(group) = k.group else { return Ok(None) };
+    let Some(group) = k.group else {
+        return Ok(None);
+    };
     let (lo, hi) = match kind {
         0x0100 | 0x0101 | 0x0108 => (0, 32),
         0x0110 | 0x0111 => (1, 33),
@@ -415,7 +501,10 @@ pub fn key_hash_of(kind: u16, key_data: &[u8]) -> Result<Option<[u8; 32]>> {
         _ => (0, key_data.len()),
     };
     let pubkey = key_data.get(lo..hi).ok_or(UAError::KeyData("length"))?;
-    Ok(Some(keccak(&[&group_tag(group).expect("table group"), pubkey])))
+    Ok(Some(keccak(&[
+        &group_tag(group).expect("table group"),
+        pubkey,
+    ])))
 }
 
 pub fn ua_message(kind: u16, purpose: &[u8; 32], digest: &[u8; 32]) -> Result<[u8; 32]> {
@@ -435,15 +524,33 @@ fn address_word(a: &[u8; 20]) -> [u8; 32] {
     w
 }
 /// LEGACY (pre-UA-8, chain-bound; the registry accepts only the typed [`ua8::registration_digest`]). `pop_digest_v1` (CTR-UA-07): `pqz_key_hash` is the keyHash of the UA's PQZ key, 0 without one (the bytes of the former `authRef = 0`).
-pub fn pop_digest_v1(chain_id: u64, chain_uid: &[u8; 32], registry: &[u8; 20], ua: &[u8; 32], pqz_key_hash: &[u8; 32]) -> [u8; 32] {
-    keccak(&[&purpose_tag("pop").expect("pop"), &chain_key_hash(chain_id), chain_uid, &address_word(registry), ua, pqz_key_hash])
+pub fn pop_digest_v1(
+    chain_id: u64,
+    chain_uid: &[u8; 32],
+    registry: &[u8; 20],
+    ua: &[u8; 32],
+    pqz_key_hash: &[u8; 32],
+) -> [u8; 32] {
+    keccak(&[
+        &purpose_tag("pop").expect("pop"),
+        &chain_key_hash(chain_id),
+        chain_uid,
+        &address_word(registry),
+        ua,
+        pqz_key_hash,
+    ])
 }
 
 /// LEGACY (pre-UA-8): what a PQ holder signed to register (UA-6 U14): `(pqzKeyHash, popDigest, message)`, `message = ua_message(kind, pop,
 /// pop_digest(ua, h))`, `h = key_hash_of(0x0142, pqz_key)`, 0 without a key. A key needs a single-key holder ([`is_pqz_holder`]);
 /// a PQ-eligible `msig` uses `pop_digest` / `key_hash_of` and signs `member_digest(ua, message)` per member.
 pub fn holder_pop_message_v1(
-    kind: u16, chain_id: u64, chain_uid: &[u8; 32], registry: &[u8; 20], ua: &[u8; 32], pqz_key: Option<&[u8]>,
+    kind: u16,
+    chain_id: u64,
+    chain_uid: &[u8; 32],
+    registry: &[u8; 20],
+    ua: &[u8; 32],
+    pqz_key: Option<&[u8]>,
 ) -> Result<([u8; 32], [u8; 32], [u8; 32])> {
     let h = match pqz_key {
         Some(k) => {
@@ -459,9 +566,19 @@ pub fn holder_pop_message_v1(
 }
 
 /// LEGACY (pre-UA-8): the message `R_REG` proved over: `ua_message(0x0142, pop, pop_digest(ua, key_hash_of(0x0142, pqz_key)))`.
-pub fn pqz_reg_message_v1(chain_id: u64, chain_uid: &[u8; 32], registry: &[u8; 20], ua: &[u8; 32], pqz_key: &[u8]) -> Result<[u8; 32]> {
+pub fn pqz_reg_message_v1(
+    chain_id: u64,
+    chain_uid: &[u8; 32],
+    registry: &[u8; 20],
+    ua: &[u8; 32],
+    pqz_key: &[u8],
+) -> Result<[u8; 32]> {
     let h = key_hash_of(PQZ_SCHEME, pqz_key)?.expect("scheme group");
-    ua_message(PQZ_SCHEME, &purpose_tag("pop")?, &pop_digest_v1(chain_id, chain_uid, registry, ua, &h))
+    ua_message(
+        PQZ_SCHEME,
+        &purpose_tag("pop")?,
+        &pop_digest_v1(chain_id, chain_uid, registry, ua, &h),
+    )
 }
 
 /// The registry's EIP-712 domain: `("SCaaS UARegistry", "<generation>", chainId, registry, salt = chainUid)`.
@@ -482,7 +599,12 @@ pub fn ua_auth_domain_separator(d: &Domain) -> [u8; 32] {
     ])
 }
 /// EIP-712 digest of `UAAuth(ua, purpose, digest)`: what native signers behind the registry sign.
-pub fn ua_auth_digest(d: &Domain, ua: &[u8; 32], purpose: &[u8; 32], digest: &[u8; 32]) -> [u8; 32] {
+pub fn ua_auth_digest(
+    d: &Domain,
+    ua: &[u8; 32],
+    purpose: &[u8; 32],
+    digest: &[u8; 32],
+) -> [u8; 32] {
     let s = keccak(&[&keccak256(UAAUTH_TYPE.as_bytes()), ua, purpose, digest]);
     keccak(&[&[0x19, 0x01], &ua_auth_domain_separator(d), &s])
 }
@@ -497,11 +619,13 @@ pub fn canonical_id(text: &str) -> Result<String> {
         return Err(UAError::IdFormat);
     }
     let h = h.to_ascii_lowercase();
-    Ok(if h.len() == 64 && h.as_bytes()[..24].iter().all(|c| *c == b'0') {
-        format!("0x{}", &h[24..])
-    } else {
-        format!("0x{h}")
-    })
+    Ok(
+        if h.len() == 64 && h.as_bytes()[..24].iter().all(|c| *c == b'0') {
+            format!("0x{}", &h[24..])
+        } else {
+            format!("0x{h}")
+        },
+    )
 }
 
 /// How a client shows a `bytes32` id before the user signs (ua-mtx-merge spec §6, MD-9).
@@ -525,23 +649,34 @@ impl IdDisplay {
 /// `id` is `0x` + 64 hex digits; `kind` is a derived id's kind from its registry record (0 = none known: refused). A native-space
 /// id ignores `kind`. Pinned by smartcontracts/vectors/ua/id_display.json.
 pub fn id_display(id: &str, kind: u16) -> Result<IdDisplay> {
-    let h = id.strip_prefix("0x").filter(|h| h.len() == 64 && h.bytes().all(|c| c.is_ascii_hexdigit())).ok_or(UAError::IdFormat)?;
+    let h = id
+        .strip_prefix("0x")
+        .filter(|h| h.len() == 64 && h.bytes().all(|c| c.is_ascii_hexdigit()))
+        .ok_or(UAError::IdFormat)?;
     let h = h.to_ascii_lowercase();
     if h.as_bytes()[..24].iter().all(|c| *c == b'0') {
-        return Ok(IdDisplay::Native { address: checksum_address(&h[24..]) });
+        return Ok(IdDisplay::Native {
+            address: checksum_address(&h[24..]),
+        });
     }
     let k = kind_info(kind)?;
     if k.native {
         return Err(UAError::KindNotDerived(kind));
     }
-    Ok(IdDisplay::Derived { urn: format!("urn:scaas:ua:v1:{}:{h}", k.name) })
+    Ok(IdDisplay::Derived {
+        urn: format!("urn:scaas:ua:v1:{}:{h}", k.name),
+    })
 }
 
 /// EIP-55 of 40 lower-case hex digits: a letter is upper case where its nibble of `keccak256(digits)` is 8 or more.
 fn checksum_address(lower: &str) -> String {
     let h = keccak256(lower.as_bytes());
     let up = |i: usize| (h[i / 2] >> (4 * (1 - i % 2))) & 0xf >= 8;
-    let body: String = lower.chars().enumerate().map(|(i, c)| if up(i) { c.to_ascii_uppercase() } else { c }).collect();
+    let body: String = lower
+        .chars()
+        .enumerate()
+        .map(|(i, c)| if up(i) { c.to_ascii_uppercase() } else { c })
+        .collect();
     format!("0x{body}")
 }
 
@@ -558,17 +693,17 @@ pub fn encode_msig(threshold: u16, members: &[(u16, [u8; 32], u16)]) -> Vec<u8> 
     out
 }
 
-/// ua-mtx-merge T34: the regulated kinds' router ops, `recordId`, the relaxation `commit`, `R` (regulated-kinds spec §3, §5).
-pub mod regulated;
-pub mod pay;
-/// T20b (ua-mtx-merge T71, T74): the factory's chain-neutral CREATE3 address of a creation (chain-neutral releases spec §4).
-pub mod factory;
-pub mod wraplimit;
-/// Round 3t: the router's `UASetVerifierFee` and a PQZ debit's fee word (CTR-PQZ-36).
-pub mod pqzfee;
 /// Round 3r: the router's 18 admin ops and the factory's release approval keys (CTR-GOV-23).
 pub mod admin;
-/// The PQZ three-key model: the scoped seeds, the opening KEM seed, the leg seed, `memoHash`, `PqzRollOver` (CTR-PQZ-37 .. -41).
-pub mod pqz3k;
+/// T20b (ua-mtx-merge T71, T74): the factory's chain-neutral CREATE3 address of a creation (chain-neutral releases spec §4).
+pub mod factory;
 /// NODE-JOB-29 (CTR-UA-23): an ML-DSA key's `cacheExpandedKey` part transactions and the cache-then-register order.
 pub mod mldsa_cache;
+pub mod pay;
+/// The PQZ three-key model: the scoped seeds, the opening KEM seed, the leg seed, `memoHash`, `PqzRollOver` (CTR-PQZ-37 .. -41).
+pub mod pqz3k;
+/// Round 3t: the router's `UASetVerifierFee` and a PQZ debit's fee word (CTR-PQZ-36).
+pub mod pqzfee;
+/// ua-mtx-merge T34: the regulated kinds' router ops, `recordId`, the relaxation `commit`, `R` (regulated-kinds spec §3, §5).
+pub mod regulated;
+pub mod wraplimit;

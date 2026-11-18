@@ -1,14 +1,14 @@
-//! `/json/2` — đường duy nhất vào Odoo (ruling R6). Một client cho mỗi API key.
+//! `/json/2` — đường duy nhất vào ExternalPull (ruling R6). Một client cho mỗi API key.
 use alloy::primitives::Address;
 use anyhow::{anyhow, Context, Result};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::config::OdooCfg;
+use crate::config::ExternalPullCfg;
 
 #[derive(Clone)]
-pub struct Odoo {
+pub struct ExternalPull {
     http: reqwest::Client,
     base: String,
     db: String,
@@ -149,22 +149,29 @@ pub struct IngestResult {
     pub created: u64,
 }
 
-impl Odoo {
-    pub fn new(cfg: &OdooCfg, key_env: &str) -> Result<Self> {
+impl ExternalPull {
+    pub fn new(cfg: &ExternalPullCfg, key_env: &str) -> Result<Self> {
         let key = std::env::var(key_env).with_context(|| format!("env {key_env} not set"))?;
         Self::with_key(cfg, key)
     }
 
-    pub fn with_key(cfg: &OdooCfg, key: String) -> Result<Self> {
+    pub fn with_key(cfg: &ExternalPullCfg, key: String) -> Result<Self> {
         Ok(Self {
-            http: reqwest::Client::builder().timeout(std::time::Duration::from_secs(30)).build()?,
+            http: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .build()?,
             base: cfg.url.trim_end_matches('/').to_string(),
             db: cfg.database.clone(),
             key,
         })
     }
 
-    pub async fn call<T: DeserializeOwned>(&self, model: &str, method: &str, body: Value) -> Result<T> {
+    pub async fn call<T: DeserializeOwned>(
+        &self,
+        model: &str,
+        method: &str,
+        body: Value,
+    ) -> Result<T> {
         let res = self
             .http
             .post(format!("{}/json/2/{model}/{method}", self.base))
@@ -177,7 +184,7 @@ impl Odoo {
         let status = res.status();
         let text = res.text().await?;
         if !status.is_success() {
-            // Cắt ngắn: lỗi Odoo có thể kèm traceback dài.
+            // Cắt ngắn: lỗi ExternalPull có thể kèm traceback dài.
             let head: String = text.chars().take(300).collect();
             return Err(anyhow!("{model}.{method}: HTTP {status}: {head}"));
         }
@@ -185,12 +192,18 @@ impl Odoo {
     }
 
     pub async fn node_config(&self, chain: u64, relayer: Option<Address>) -> Result<NodeConfig> {
-        self.node_config_ref(json!(chain), relayer.map(|r| format!("{r:#x}")), None).await
+        self.node_config_ref(json!(chain), relayer.map(|r| format!("{r:#x}")), None)
+            .await
     }
 
     /// `chain` = số EIP-155 (EVM) hoặc khoá `family:network` (R61). `worker` lọc job đã claim mà
     /// chưa ký về đúng lane đã claim (nhiều lane cùng chain).
-    pub async fn node_config_ref(&self, chain: Value, relayer: Option<String>, worker: Option<String>) -> Result<NodeConfig> {
+    pub async fn node_config_ref(
+        &self,
+        chain: Value,
+        relayer: Option<String>,
+        worker: Option<String>,
+    ) -> Result<NodeConfig> {
         let mut body = json!({"evm_chain_number": chain});
         if let Some(r) = relayer {
             body["relayer_address"] = json!(r);
@@ -206,12 +219,21 @@ impl Odoo {
     }
 
     pub async fn relay_poll_ref(&self, chain: Value, limit: u32) -> Result<Vec<Job>> {
-        self.call("blockchain.relay.job", "relay_poll", json!({"evm_chain_number": chain, "limit": limit}))
-            .await
+        self.call(
+            "blockchain.relay.job",
+            "relay_poll",
+            json!({"evm_chain_number": chain, "limit": limit}),
+        )
+        .await
     }
 
     pub async fn relay_claim(&self, ids: &[i64], worker: &str) -> Result<Vec<i64>> {
-        self.call("blockchain.relay.job", "relay_claim", json!({"job_ids": ids, "worker": worker})).await
+        self.call(
+            "blockchain.relay.job",
+            "relay_claim",
+            json!({"job_ids": ids, "worker": worker}),
+        )
+        .await
     }
 
     pub async fn relay_report(&self, r: &Report) -> Result<()> {
@@ -225,7 +247,12 @@ impl Odoo {
     }
 
     /// Drift C (R56): số dư ví nhận tại `height` (= cursor đã index). `stale` = cursor đã đi tiếp, đọc lại.
-    pub async fn balance_report(&self, chain_key: &str, height: u64, balances: &[Value]) -> Result<BalanceReport> {
+    pub async fn balance_report(
+        &self,
+        chain_key: &str,
+        height: u64,
+        balances: &[Value],
+    ) -> Result<BalanceReport> {
         self.call(
             "blockchain.chain",
             "balance_report",
@@ -234,11 +261,25 @@ impl Odoo {
         .await
     }
 
-    pub async fn ingest(&self, chain: u64, from: u64, to: u64, hash: &str, events: &[Value]) -> Result<IngestResult> {
+    pub async fn ingest(
+        &self,
+        chain: u64,
+        from: u64,
+        to: u64,
+        hash: &str,
+        events: &[Value],
+    ) -> Result<IngestResult> {
         self.ingest_ref(json!(chain), from, to, hash, events).await
     }
 
-    pub async fn ingest_ref(&self, chain: Value, from: u64, to: u64, hash: &str, events: &[Value]) -> Result<IngestResult> {
+    pub async fn ingest_ref(
+        &self,
+        chain: Value,
+        from: u64,
+        to: u64,
+        hash: &str,
+        events: &[Value],
+    ) -> Result<IngestResult> {
         self.call(
             "blockchain.chain.event",
             "chain_event_ingest",
@@ -257,7 +298,7 @@ mod tests {
     use alloy::sol_types::SolCall;
 
     #[test]
-    fn job_payload_from_odoo_decodes() {
+    fn job_payload_from_external_pull_decodes() {
         let raw = r#"{"id": 3, "token": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
             "digest": "0x33", "signature": "0x44", "struct": "transfer",
             "metatx": {"from": "0xabababababababababababababababababababab",
@@ -268,7 +309,8 @@ mod tests {
                        "fee": "0", "feeRecipient": "0x0000000000000000000000000000000000000000"}}"#;
         let job: Job = serde_json::from_str(raw).unwrap();
         assert_eq!(job.id, 3);
-        let m = crate::metatx::Mtx::from_wire(job.struct_.as_deref(), job.metatx.as_ref().unwrap()).unwrap();
+        let m = crate::metatx::Mtx::from_wire(job.struct_.as_deref(), job.metatx.as_ref().unwrap())
+            .unwrap();
         assert_eq!(m.batch(), alloy::primitives::U256::from(7));
     }
 
@@ -281,10 +323,20 @@ mod tests {
         let job: Job = serde_json::from_str(raw).unwrap();
         assert!(job.metatx.is_none());
         let w = crate::submit::work_from_job(&job, None).unwrap();
-        assert_eq!(w.data[..4], crate::abi::IUARegistry::storePqzPopCall::SELECTOR);
+        assert_eq!(
+            w.data[..4],
+            crate::abi::IUARegistry::storePqzPopCall::SELECTOR
+        );
         // group 3g: the version a named field, word 2 of the rebuilt call
-        let c = <crate::abi::IUARegistry::storePqzPopCall as alloy::sol_types::SolCall>::abi_decode(&w.data).unwrap();
-        assert_eq!((c.version, c.pqzPop.to_vec()), (1, vec![0xde, 0xad, 0xbe, 0xef]));
+        let c =
+            <crate::abi::IUARegistry::storePqzPopCall as alloy::sol_types::SolCall>::abi_decode(
+                &w.data,
+            )
+            .unwrap();
+        assert_eq!(
+            (c.version, c.pqzPop.to_vec()),
+            (1, vec![0xde, 0xad, 0xbe, 0xef])
+        );
         assert_eq!(w.valid_until, 1_800_000_300);
     }
 
@@ -299,7 +351,10 @@ mod tests {
         let w = crate::submit::work_from_job(&job, None).unwrap();
         use alloy::sol_types::SolCall;
         let call = crate::abi::IUARegistry::acceptMembershipCall::abi_decode(&w.data).unwrap();
-        assert_eq!((call.memberSig.index, call.memberSig.sig.to_vec()), (3, vec![0xde, 0xad, 0xbe, 0xef]));
+        assert_eq!(
+            (call.memberSig.index, call.memberSig.sig.to_vec()),
+            (3, vec![0xde, 0xad, 0xbe, 0xef])
+        );
         assert_eq!(call.ua, alloy::primitives::B256::with_last_byte(0x42));
         assert!(call.memberSig.members.is_empty());
     }
@@ -316,20 +371,28 @@ mod tests {
         assert!(mk("paused").submittable_tokens().is_empty());
     }
 
-    /// Review H1: Odoo gửi địa chỉ token dạng chuẩn của HỌ (`wasm1…`, `0.0.x`, …); chỉ đường EVM đọc thành `Address`.
+    /// Review H1: ExternalPull gửi địa chỉ token dạng chuẩn của HỌ (`wasm1…`, `0.0.x`, …); chỉ đường EVM đọc thành `Address`.
     #[test]
     fn non_evm_token_addresses_decode() {
         let nc: NodeConfig = serde_json::from_value(json!({"evm_chain_number": "cosmos:scaas-1", "finality_mode": "instant",
             "finality_depth": 0, "finality_quorum": 1, "indexed_block": 0, "journal_max_nonce": null,
             "tokens": [{"address": "wasm1g3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zqn0lflt", "decimals": 6}]}))
         .unwrap();
-        assert_eq!(nc.tokens[0].address, "wasm1g3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zqn0lflt");
+        assert_eq!(
+            nc.tokens[0].address,
+            "wasm1g3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zqn0lflt"
+        );
         assert!(nc.submittable_tokens().is_empty(), "never an EVM address");
     }
 
     #[test]
     fn report_omits_absent_fields() {
-        let r = Report { job_id: 1, chain_state: "dead".into(), error: Some("x".into()), ..Default::default() };
+        let r = Report {
+            job_id: 1,
+            chain_state: "dead".into(),
+            error: Some("x".into()),
+            ..Default::default()
+        };
         let v = serde_json::to_value(r).unwrap();
         assert!(v.get("tx_hash").is_none());
         assert_eq!(v["error"], "x");

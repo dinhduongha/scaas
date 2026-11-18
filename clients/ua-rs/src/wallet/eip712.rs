@@ -44,8 +44,13 @@ fn fill(v: Option<&Value>, n: &Cell<usize>) -> Result<()> {
 
 const DOMAIN: &str = "EIP712Domain";
 /// The `EIP712Domain` fields in EIP-712 order.
-const DOMAIN_FIELDS: [(&str, &str); 5] =
-    [("name", "string"), ("version", "string"), ("chainId", "uint256"), ("verifyingContract", "address"), ("salt", "bytes32")];
+const DOMAIN_FIELDS: [(&str, &str); 5] = [
+    ("name", "string"),
+    ("version", "string"),
+    ("chainId", "uint256"),
+    ("verifyingContract", "address"),
+    ("salt", "bytes32"),
+];
 pub(crate) const ZERO_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
 
 /// `(name, type)` in declaration order.
@@ -64,14 +69,21 @@ pub struct TypedData {
 
 fn ident(s: &str) -> bool {
     let mut c = s.chars();
-    c.next().is_some_and(|f| f.is_ascii_alphabetic() || f == '_' || f == '$') && c.all(|x| x.is_ascii_alphanumeric() || x == '_' || x == '$')
+    c.next()
+        .is_some_and(|f| f.is_ascii_alphabetic() || f == '_' || f == '$')
+        && c.all(|x| x.is_ascii_alphanumeric() || x == '_' || x == '$')
 }
 
 /// `T[k]` / `T[]` → `(T, Some(k) / None)` (the outer dimension); not an array → `Ok(None)`.
 fn outer(ty: &str) -> Result<Option<(&str, Option<usize>)>> {
-    let Some(body) = ty.strip_suffix(']') else { return Ok(None) };
+    let Some(body) = ty.strip_suffix(']') else {
+        return Ok(None);
+    };
     let i = body.rfind('[').ok_or(Error::Argument)?;
-    let (elem, k) = (body.get(..i).ok_or(Error::Argument)?, body.get(i + 1..).ok_or(Error::Argument)?);
+    let (elem, k) = (
+        body.get(..i).ok_or(Error::Argument)?,
+        body.get(i + 1..).ok_or(Error::Argument)?,
+    );
     if k.is_empty() {
         return Ok(Some((elem, None)));
     }
@@ -102,13 +114,18 @@ fn bytes_n(ty: &str) -> Option<usize> {
     size_of(ty, "bytes", |n| (1..=32).contains(&n))
 }
 fn uint_bits(ty: &str) -> Option<usize> {
-    size_of(ty, "uint", |n| n.is_multiple_of(8) && (8..=256).contains(&n))
+    size_of(ty, "uint", |n| {
+        n.is_multiple_of(8) && (8..=256).contains(&n)
+    })
 }
 fn int_bits(ty: &str) -> Option<usize> {
     size_of(ty, "int", |n| n.is_multiple_of(8) && (8..=256).contains(&n))
 }
 fn atom(ty: &str) -> bool {
-    matches!(ty, "string" | "bytes" | "address" | "bool") || bytes_n(ty).is_some() || uint_bits(ty).is_some() || int_bits(ty).is_some()
+    matches!(ty, "string" | "bytes" | "address" | "bool")
+        || bytes_n(ty).is_some()
+        || uint_bits(ty).is_some()
+        || int_bits(ty).is_some()
 }
 /// A service-pull operation's field type (spec 2026-11-09-service-pull C3, clientkeys `OP_FIELD`): an atom but `intN` (C3's too, not
 /// in the reference builder: refused, never mis-encoded).
@@ -171,20 +188,25 @@ pub(crate) fn u256_div(x: &U256, d: u64) -> (U256, u64) {
     (q, rem as u64)
 }
 fn bit_len(x: &U256) -> usize {
-    x.iter().position(|b| *b != 0).map_or(0, |i| (32 - i) * 8 - x.get(i).map_or(0, |b| b.leading_zeros() as usize))
+    x.iter().position(|b| *b != 0).map_or(0, |i| {
+        (32 - i) * 8 - x.get(i).map_or(0, |b| b.leading_zeros() as usize)
+    })
 }
 /// Decimal digits only.
 pub(crate) fn u256_dec(s: &str) -> Option<U256> {
     if s.is_empty() || !s.bytes().all(|c| c.is_ascii_digit()) {
         return None;
     }
-    s.bytes().try_fold([0u8; 32], |x, c| u256_mul_add(&x, 10, u64::from(c - b'0')))
+    s.bytes()
+        .try_fold([0u8; 32], |x, c| u256_mul_add(&x, 10, u64::from(c - b'0')))
 }
 fn u256_hex(s: &str) -> Option<U256> {
     if s.is_empty() || !s.bytes().all(|c| c.is_ascii_hexdigit()) {
         return None;
     }
-    s.bytes().try_fold([0u8; 32], |x, c| u256_mul_add(&x, 16, u64::from((c as char).to_digit(16)?)))
+    s.bytes().try_fold([0u8; 32], |x, c| {
+        u256_mul_add(&x, 16, u64::from((c as char).to_digit(16)?))
+    })
 }
 pub(crate) fn u256_to_dec(x: &U256) -> String {
     let (mut x, mut digits) = (*x, Vec::new());
@@ -229,7 +251,11 @@ fn int_word(v: Option<&Value>, bits: usize) -> Result<U256> {
     };
     // a positive value below 2^(N-1), a negative one at most 2^(N-1) in magnitude
     let limit = bits - 1;
-    let ok = if neg { mag == [0; 32] || bit_len(&u256_sub_one(&mag)) <= limit } else { bit_len(&mag) <= limit };
+    let ok = if neg {
+        mag == [0; 32] || bit_len(&u256_sub_one(&mag)) <= limit
+    } else {
+        bit_len(&mag) <= limit
+    };
     if !ok {
         return Err(Error::Argument);
     }
@@ -260,11 +286,19 @@ fn u256_sub_one(x: &U256) -> U256 {
 
 /// Hex with an optional `0x` / `0X` (clientkeys `fromHex`): even length, hex digits.
 pub(crate) fn from_hex(s: &str) -> Option<Vec<u8>> {
-    let h = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).unwrap_or(s);
+    let h = s
+        .strip_prefix("0x")
+        .or_else(|| s.strip_prefix("0X"))
+        .unwrap_or(s);
     if !h.len().is_multiple_of(2) {
         return None;
     }
-    (0..h.len() / 2).map(|i| h.get(2 * i..2 * i + 2).and_then(|p| u8::from_str_radix(p, 16).ok())).collect()
+    (0..h.len() / 2)
+        .map(|i| {
+            h.get(2 * i..2 * i + 2)
+                .and_then(|p| u8::from_str_radix(p, 16).ok())
+        })
+        .collect()
 }
 pub(crate) fn to_hex(b: &[u8]) -> String {
     let mut s = String::with_capacity(2 + 2 * b.len());
@@ -293,7 +327,10 @@ fn encode_atom(ty: &str, v: Option<&Value>) -> Result<[u8; 32]> {
         "bytes" => Ok(keccak256(&hex_of(v)?.unwrap_or_default())),
         "address" => {
             let a = hex_of(v)?.unwrap_or_else(|| vec![0; 20]);
-            w.get_mut(12..).filter(|_| a.len() == 20).ok_or(Error::Argument)?.copy_from_slice(&a);
+            w.get_mut(12..)
+                .filter(|_| a.len() == 20)
+                .ok_or(Error::Argument)?
+                .copy_from_slice(&a);
             Ok(w)
         }
         "bool" => match v {
@@ -304,7 +341,10 @@ fn encode_atom(ty: &str, v: Option<&Value>) -> Result<[u8; 32]> {
         _ => {
             if let Some(n) = bytes_n(ty) {
                 let b = hex_of(v)?.unwrap_or_else(|| vec![0; n]);
-                w.get_mut(..n).filter(|_| b.len() == n).ok_or(Error::Argument)?.copy_from_slice(&b);
+                w.get_mut(..n)
+                    .filter(|_| b.len() == n)
+                    .ok_or(Error::Argument)?
+                    .copy_from_slice(&b);
                 Ok(w)
             } else if let Some(bits) = uint_bits(ty) {
                 let x = uint_value(v)?;
@@ -323,16 +363,31 @@ fn encode_atom(ty: &str, v: Option<&Value>) -> Result<[u8; 32]> {
 
 /// The present domain fields in EIP-712 order.
 fn domain_fields(domain: &Map<String, Value>) -> Fields {
-    DOMAIN_FIELDS.iter().filter(|(n, _)| domain.contains_key(*n)).map(|(n, t)| (n.to_string(), t.to_string())).collect()
+    DOMAIN_FIELDS
+        .iter()
+        .filter(|(n, _)| domain.contains_key(*n))
+        .map(|(n, t)| (n.to_string(), t.to_string()))
+        .collect()
 }
 fn type_string(name: &str, fields: &Fields) -> String {
-    format!("{name}({})", fields.iter().map(|(n, t)| format!("{t} {n}")).collect::<Vec<_>>().join(","))
+    format!(
+        "{name}({})",
+        fields
+            .iter()
+            .map(|(n, t)| format!("{t} {n}"))
+            .collect::<Vec<_>>()
+            .join(",")
+    )
 }
 /// `"t1 n1,t2 n2"` → fields.
 fn parse_fields(list: &str) -> Result<Fields> {
     list.split(',')
         .filter(|f| !f.is_empty())
-        .map(|f| f.split_once(' ').map(|(t, n)| (n.to_string(), t.to_string())).ok_or(Error::Argument))
+        .map(|f| {
+            f.split_once(' ')
+                .map(|(t, n)| (n.to_string(), t.to_string()))
+                .ok_or(Error::Argument)
+        })
         .collect()
 }
 
@@ -343,9 +398,20 @@ impl TypedData {
     }
 
     pub(crate) fn from_value(v: Value) -> Result<TypedData> {
-        let Value::Object(mut o) = v else { return Err(Error::Argument) };
-        let (Some(Value::Object(types)), Some(Value::String(primary_type)), Some(Value::Object(domain)), Some(message)) =
-            (o.remove("types"), o.remove("primaryType"), o.remove("domain"), o.remove("message"))
+        let Value::Object(mut o) = v else {
+            return Err(Error::Argument);
+        };
+        let (
+            Some(Value::Object(types)),
+            Some(Value::String(primary_type)),
+            Some(Value::Object(domain)),
+            Some(message),
+        ) = (
+            o.remove("types"),
+            o.remove("primaryType"),
+            o.remove("domain"),
+            o.remove("message"),
+        )
         else {
             return Err(Error::Argument);
         };
@@ -354,14 +420,20 @@ impl TypedData {
         }
         let (mut structs, mut domain_type) = (BTreeMap::new(), None);
         for (name, fields) in types {
-            let Value::Array(fields) = fields else { return Err(Error::Argument) };
+            let Value::Array(fields) = fields else {
+                return Err(Error::Argument);
+            };
             if !ident(&name) || fields.len() > MAX_FIELDS {
                 return Err(Error::Argument);
             }
             let mut list = Fields::new();
             for f in fields {
-                let Value::Object(mut f) = f else { return Err(Error::Argument) };
-                let (Some(Value::String(n)), Some(Value::String(t))) = (f.remove("name"), f.remove("type")) else {
+                let Value::Object(mut f) = f else {
+                    return Err(Error::Argument);
+                };
+                let (Some(Value::String(n)), Some(Value::String(t))) =
+                    (f.remove("name"), f.remove("type"))
+                else {
                     return Err(Error::Argument);
                 };
                 if !f.is_empty() || !ident(&n) || list.iter().any(|(m, _)| *m == n) {
@@ -375,10 +447,19 @@ impl TypedData {
                 structs.insert(name, list);
             }
         }
-        if domain.keys().any(|k| !DOMAIN_FIELDS.iter().any(|(n, _)| n == k)) || domain_type.is_some_and(|t| t != domain_fields(&domain)) {
+        if domain
+            .keys()
+            .any(|k| !DOMAIN_FIELDS.iter().any(|(n, _)| n == k))
+            || domain_type.is_some_and(|t| t != domain_fields(&domain))
+        {
             return Err(Error::Argument);
         }
-        let td = TypedData { types: structs, primary_type, domain, message };
+        let td = TypedData {
+            types: structs,
+            primary_type,
+            domain,
+            message,
+        };
         td.validate()?;
         Ok(td)
     }
@@ -428,7 +509,13 @@ impl TypedData {
     /// `{types, primaryType, domain, message}` as hashed (`EIP712Domain` the fields present in `domain`).
     pub fn to_value(&self) -> Value {
         let mut types: Map<String, Value> = Map::new();
-        let list = |f: &Fields| Value::Array(f.iter().map(|(n, t)| serde_json::json!({"name": n, "type": t})).collect());
+        let list = |f: &Fields| {
+            Value::Array(
+                f.iter()
+                    .map(|(n, t)| serde_json::json!({"name": n, "type": t}))
+                    .collect(),
+            )
+        };
         types.insert(DOMAIN.to_string(), list(&domain_fields(&self.domain)));
         for (n, f) in &self.types {
             types.insert(n.clone(), list(f));
@@ -507,7 +594,10 @@ impl TypedData {
     }
     /// `keccak256(0x1901 ‖ domain separator ‖ struct hash)`: the digest a signature is over.
     pub fn digest(&self) -> Result<[u8; 32]> {
-        Ok(eip712_digest(&self.domain_separator()?, &self.struct_hash()?))
+        Ok(eip712_digest(
+            &self.domain_separator()?,
+            &self.struct_hash()?,
+        ))
     }
 
     /// The domain's `name` and `verifyingContract` as given (the policy's checks read them).
@@ -531,7 +621,11 @@ impl TypedData {
     fn canonical(&self, ty: &str, v: Option<&Value>, c: &Cell<usize>) -> Result<Value> {
         fill(v, c)?;
         if let Some((elem, len)) = outer(ty)? {
-            return items(v, len)?.into_iter().map(|x| self.canonical(elem, x, c)).collect::<Result<Vec<_>>>().map(Value::Array);
+            return items(v, len)?
+                .into_iter()
+                .map(|x| self.canonical(elem, x, c))
+                .collect::<Result<Vec<_>>>()
+                .map(Value::Array);
         }
         if let Some(fields) = self.types.get(ty) {
             let empty = Map::new();
@@ -547,7 +641,10 @@ impl TypedData {
             for (n, t) in fields {
                 m.insert(n.clone(), self.canonical(t, o.get(n), c)?);
             }
-            if ["mode", "relayer", "feeRecipient"].iter().all(|k| m.contains_key(*k)) {
+            if ["mode", "relayer", "feeRecipient"]
+                .iter()
+                .all(|k| m.contains_key(*k))
+            {
                 let mode = uint_value(m.get("mode"))?.last().copied().unwrap_or(0);
                 if mode & 1 == 0 {
                     m.insert("relayer".into(), ZERO_ADDRESS.into());
@@ -560,9 +657,15 @@ impl TypedData {
         }
         encode_atom(ty, v)?; // the value checks
         Ok(match ty {
-            "address" => v.filter(|x| !x.is_null()).cloned().unwrap_or_else(|| ZERO_ADDRESS.into()),
+            "address" => v
+                .filter(|x| !x.is_null())
+                .cloned()
+                .unwrap_or_else(|| ZERO_ADDRESS.into()),
             "bool" => Value::Bool(matches!(v, Some(Value::Bool(true)))),
-            "string" => v.filter(|x| !x.is_null()).cloned().unwrap_or_else(|| "".into()),
+            "string" => v
+                .filter(|x| !x.is_null())
+                .cloned()
+                .unwrap_or_else(|| "".into()),
             "bytes" => to_hex(&hex_of(v)?.unwrap_or_default()).into(),
             _ => {
                 if let Some(n) = bytes_n(ty) {
@@ -570,7 +673,11 @@ impl TypedData {
                 } else if let Some(bits) = uint_bits(ty) {
                     let x = uint_value(v)?;
                     if bits <= 32 {
-                        Value::from(u64::from(u32::from_be_bytes(x.get(28..).and_then(|b| b.try_into().ok()).ok_or(Error::Argument)?)))
+                        Value::from(u64::from(u32::from_be_bytes(
+                            x.get(28..)
+                                .and_then(|b| b.try_into().ok())
+                                .ok_or(Error::Argument)?,
+                        )))
                     } else {
                         u256_to_dec(&x).into()
                     }
@@ -579,7 +686,9 @@ impl TypedData {
                     match v {
                         None | Some(Value::Null) => Value::from(0),
                         Some(Value::Number(n)) => Value::from(n.as_i64().ok_or(Error::Argument)?),
-                        Some(Value::String(s)) => Value::from(s.parse::<i64>().map_err(|_| Error::Argument)?),
+                        Some(Value::String(s)) => {
+                            Value::from(s.parse::<i64>().map_err(|_| Error::Argument)?)
+                        }
                         _ => return Err(Error::Argument),
                     }
                 } else {
@@ -606,10 +715,18 @@ impl TypedData {
     /// `chainUid`) beside it, in the app's domain. `Argument` when the app's types already define `TypedDataSign`, or for a
     /// contents name the wallet refuses (empty, starting `a`-`z`, or holding `,` space `(` `)` or NUL: `ERC7739Lib`, EIP-7739).
     /// Its digest is what the key signs; [`TypedData::erc7739_signature`] wraps the signature.
-    pub fn erc7739(&self, wallet: Erc7739Wallet, address: &[u8; 20], chain_id: u64, chain_uid: &[u8; 32]) -> Result<TypedData> {
+    pub fn erc7739(
+        &self,
+        wallet: Erc7739Wallet,
+        address: &[u8; 20],
+        chain_id: u64,
+        chain_uid: &[u8; 32],
+    ) -> Result<TypedData> {
         let name = &self.primary_type;
         let bad = |c: char| matches!(c, ',' | ' ' | '(' | ')' | '\0');
-        if self.types.contains_key("TypedDataSign") || name.is_empty() || name.starts_with(|c: char| c.is_ascii_lowercase())
+        if self.types.contains_key("TypedDataSign")
+            || name.is_empty()
+            || name.starts_with(|c: char| c.is_ascii_lowercase())
             || name.chars().any(bad)
         {
             return Err(Error::Argument);
@@ -623,7 +740,12 @@ impl TypedData {
             "{name} contents,string name,string version,uint256 chainId,address verifyingContract,bytes32 salt"))?);
         let message = serde_json::json!({"contents": self.message, "name": wallet_name, "version": "1",
             "chainId": chain_id.to_string(), "verifyingContract": to_hex(address), "salt": to_hex(chain_uid)});
-        let td = TypedData { types, primary_type: "TypedDataSign".into(), domain: self.domain.clone(), message };
+        let td = TypedData {
+            types,
+            primary_type: "TypedDataSign".into(),
+            domain: self.domain.clone(),
+            message,
+        };
         td.validate()?;
         Ok(td)
     }
@@ -637,12 +759,22 @@ impl TypedData {
         self.walk(&self.primary_type, &self.primary_type, &mut deps);
         deps.insert(self.primary_type.clone());
         let names: Vec<&String> = deps.iter().collect();
-        let mut descr: String = names.iter().filter_map(|t| self.types.get(*t).map(|f| type_string(t, f))).collect();
+        let mut descr: String = names
+            .iter()
+            .filter_map(|t| self.types.get(*t).map(|f| type_string(t, f)))
+            .collect();
         if names.first().map(|n| n.as_str()) != Some(self.primary_type.as_str()) {
             descr.push_str(&self.primary_type);
         }
         let len = u16::try_from(descr.len()).map_err(|_| Error::Argument)?;
-        Ok([inner, &self.domain_separator()?, &self.struct_hash()?, descr.as_bytes(), &len.to_be_bytes()].concat())
+        Ok([
+            inner,
+            &self.domain_separator()?,
+            &self.struct_hash()?,
+            descr.as_bytes(),
+            &len.to_be_bytes(),
+        ]
+        .concat())
     }
 }
 
@@ -665,12 +797,21 @@ pub(crate) fn eip712_digest(domain_separator: &[u8; 32], struct_hash: &[u8; 32])
 
 /// The request for `td`'s digest, the value carried for a clear-signing screen.
 pub(crate) fn request(td: &TypedData) -> Result<SignRequest> {
-    Ok(SignRequest::Eip712 { domain_separator: td.domain_separator()?, struct_hash: td.struct_hash()?, typed_data: Box::new(td.clone()) })
+    Ok(SignRequest::Eip712 {
+        domain_separator: td.domain_separator()?,
+        struct_hash: td.struct_hash()?,
+        typed_data: Box::new(td.clone()),
+    })
 }
 
 /// `UAAuth(ua, purpose, digest)` under the registry's domain `("SCaaS UARegistry", generation, chainId, registry, chainUid)`: what a
 /// native signer behind the registry signs (CTR-UA-24, CTR-MTX-14); its digest is `crate::ua_auth_digest`.
-pub(crate) fn ua_auth(d: &Domain, ua: &[u8; 32], purpose: &[u8; 32], digest: &[u8; 32]) -> Result<TypedData> {
+pub(crate) fn ua_auth(
+    d: &Domain,
+    ua: &[u8; 32],
+    purpose: &[u8; 32],
+    digest: &[u8; 32],
+) -> Result<TypedData> {
     let b32 = |n: &str| serde_json::json!({"name": n, "type": "bytes32"});
     TypedData::from_value(serde_json::json!({
         "types": {"UAAuth": [b32("ua"), b32("purpose"), b32("digest")]},
@@ -714,8 +855,13 @@ macro_rules! wrap_order {
 }
 macro_rules! relay_fee {
     ($id:literal) => {
-        concat!($id, " from,address target,bytes32 callDataHash,", $id, " payee,uint256 value,uint256 batch,uint256 nonce,",
-            "uint256 validUntil,address relayer")
+        concat!(
+            $id,
+            " from,address target,bytes32 callDataHash,",
+            $id,
+            " payee,uint256 value,uint256 batch,uint256 nonce,",
+            "uint256 validUntil,address relayer"
+        )
     };
 }
 
@@ -782,11 +928,30 @@ struct Op {
     on: &'static [&'static str],
     amount: Option<&'static str>,
 }
-const fn op(name: &'static str, fields: &'static str, on: &'static [&'static str], amount: Option<&'static str>) -> Op {
-    Op { name, primary: name, fields, raw: false, on, amount }
+const fn op(
+    name: &'static str,
+    fields: &'static str,
+    on: &'static [&'static str],
+    amount: Option<&'static str>,
+) -> Op {
+    Op {
+        name,
+        primary: name,
+        fields,
+        raw: false,
+        on,
+        amount,
+    }
 }
 const fn raw(name: &'static str, fields: &'static str, on: &'static [&'static str]) -> Op {
-    Op { name, primary: name, fields, raw: true, on, amount: None }
+    Op {
+        name,
+        primary: name,
+        fields,
+        raw: true,
+        on,
+        amount: None,
+    }
 }
 /// ua-mtx-merge (CTR-MTX-30): one signed entry per operation, `UA<Op>` the merged entry on ids; an address struct only where the op
 /// has no merged entry (the five wraps, every op of `SmartKeyAccount`).
@@ -889,6 +1054,9 @@ const OPS: &[Op] = &[
     op("UASetVerifierFee", "address target,uint64 next,bytes32 chainUid", &[ROUTER], None),
     // group 3h (proof-path spec §5, PP-5): bit 24 `PQZ_PROOF`'s router op, the token's `proofStore` from its next debit
     op("UASetProofStore", "address target,uint8 next,bytes32 chainUid", &[ROUTER], None),
+    // set-auditor (spec §8, CTR-GOV-31): bit 32 `AUDITOR`'s two router ops (the new auditor's consent rides beside them)
+    op("UASetAuditorKey", "address target,bytes newKey,uint32 epoch,bytes32 chainUid", &[ROUTER], None),
+    op("UASetAuditorUA", "address target,bytes32 newAuditor,uint32 epoch,bytes32 chainUid", &[ROUTER], None),
     op("UASetWrapLimits", "address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,bytes32 chainUid", &[ROUTER], None),
     op("UASetWrapMember", "address target,bytes32 account,bool canWrap,bool canUnwrap,bytes32 chainUid", &[ROUTER], None),
     op("UASetMaxSupply", "address target,uint256 maxSupply,bytes32 chainUid", &[ROUTER], None),
@@ -911,6 +1079,9 @@ const OPS: &[Op] = &[
     op("UASetKycProvider", "address target,bytes32 provider,bool enabled,bytes32 chainUid", &[ROUTER], None),
     op("UASetCompliance", "address target,bytes32[] accounts,uint64[] flags,uint64[] until,bytes32 chainUid", &[ROUTER], None),
     op("UASetChainEntries", "address target,ChainEntries entries,bytes32 chainUid", &[ROUTER], None),
+    // set-auditor (spec §5.2): the new auditor's consent in a confidential token's domain (PQZ: its UA signature under
+    // `auditor-consent`; Zether: the proof of possession over the digest)
+    raw("AuditorConsent", "address token,bytes32 auditor,uint32 epoch,bytes32 chainUid", CONFIDENTIAL),
     raw("PqzAuth", "uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,bytes32 chainUid,bytes32 binding,uint128 salt,bytes32 memoHash,bytes32 bodyHash", &[P]),
 ];
 /// The generic path's builders (clientkeys `metaTxTypedData`, `uaMetaTxTypedData`, `uaMetaTransferTypedData`,
@@ -940,23 +1111,49 @@ fn op_def(o: &Op) -> Def {
     let own = if o.raw {
         o.fields.to_string()
     } else {
-        let from = if o.primary.starts_with("UA") { "bytes32 from" } else { "address from" };
-        [from, o.fields, E].iter().filter(|f| !f.is_empty()).copied().collect::<Vec<_>>().join(",")
+        let from = if o.primary.starts_with("UA") {
+            "bytes32 from"
+        } else {
+            "address from"
+        };
+        [from, o.fields, E]
+            .iter()
+            .filter(|f| !f.is_empty())
+            .copied()
+            .collect::<Vec<_>>()
+            .join(",")
     };
     let default_name = match o.on {
         [one] => Some(*one),
         _ => None,
     };
-    Def { primary: o.primary, own, domains: o.on, default_name, envelope: !o.raw, amount: o.amount }
+    Def {
+        primary: o.primary,
+        own,
+        domains: o.on,
+        default_name,
+        envelope: !o.raw,
+        amount: o.amount,
+    }
 }
 fn free_def(name: &str) -> Option<Def> {
     let (primary, default_name) = FREE.iter().find(|(n, _)| *n == name)?;
     let (_, own) = STRUCTS.iter().find(|(n, _)| n == primary)?;
-    Some(Def { primary, own: own.to_string(), domains: &[], default_name: *default_name, envelope: false, amount: None })
+    Some(Def {
+        primary,
+        own: own.to_string(),
+        domains: &[],
+        default_name: *default_name,
+        envelope: false,
+        amount: None,
+    })
 }
 /// The SCaaS struct of row `name` (clientkeys `TYPED_OPS[name]`), or a generic-path struct.
 pub(crate) fn def(name: &str) -> Option<Def> {
-    OPS.iter().find(|o| o.name == name).map(op_def).or_else(|| free_def(name))
+    OPS.iter()
+        .find(|o| o.name == name)
+        .map(op_def)
+        .or_else(|| free_def(name))
 }
 /// A row of the op table only (clientkeys `TYPED_OPS[name]`; `checkOp` takes no generic-path struct).
 pub(crate) fn op_row(name: &str) -> Option<Def> {
@@ -968,7 +1165,9 @@ fn def_in(primary: &str, name: Option<&str>) -> Result<Def> {
     if of.peek().is_none() {
         return free_def(primary).ok_or(Error::Argument);
     }
-    let found: Vec<&Op> = of.filter(|o| name.is_none_or(|n| o.on.contains(&n))).collect();
+    let found: Vec<&Op> = of
+        .filter(|o| name.is_none_or(|n| o.on.contains(&n)))
+        .collect();
     match found.as_slice() {
         [o] => Ok(op_def(o)),
         _ => Err(Error::Argument),
@@ -987,7 +1186,10 @@ fn types_of(d: &Def) -> Result<BTreeMap<String, Fields>> {
         for (_, ty) in types.get(&t).cloned().unwrap_or_default() {
             let (b, _) = base(&ty)?;
             if !atom(b) && !types.contains_key(b) {
-                let (_, list) = STRUCTS.iter().find(|(n, _)| *n == b).ok_or(Error::Argument)?;
+                let (_, list) = STRUCTS
+                    .iter()
+                    .find(|(n, _)| *n == b)
+                    .ok_or(Error::Argument)?;
                 types.insert(b.to_string(), parse_fields(list)?);
                 todo.push(b.to_string());
             }
@@ -1003,18 +1205,45 @@ fn types_of(d: &Def) -> Result<BTreeMap<String, Fields>> {
 /// never chosen without one; a generic-path struct takes any name. `Argument`: no SCaaS struct of that name, another domain, a value
 /// its type refuses.
 pub fn scaas_typed_data(
-    primary_type: &str, name: Option<&str>, contract: &[u8; 20], chain_id: u64, chain_uid: &[u8; 32], message: &Value,
+    primary_type: &str,
+    name: Option<&str>,
+    contract: &[u8; 20],
+    chain_id: u64,
+    chain_uid: &[u8; 32],
+    message: &Value,
 ) -> Result<TypedData> {
-    typed_data_of(&def_in(primary_type, name)?, name, contract, chain_id, chain_uid, message)
+    typed_data_of(
+        &def_in(primary_type, name)?,
+        name,
+        contract,
+        chain_id,
+        chain_uid,
+        message,
+    )
 }
 
 /// clientkeys `pqzVerdictTypedData` (group 3f, PQZ verifier mode spec §5.1): the `PqzVerdict` a PQZ verifier UA signs, in the PQZ
 /// token's salted domain `("SCaaS PqzToken", "1", chain_id, contract, chain_uid)`, under the purpose `pqz-verdict` (a native verifier
 /// over the registry's `uaAuthDigest`, a derived one over `uaMessage`). `message.token` and `message.chainId` repeat the domain (the
 /// token checks them equal): another value is `Argument`, as is a value its type refuses.
-pub fn pqz_verdict_typed_data(contract: &[u8; 20], chain_id: u64, chain_uid: &[u8; 32], message: &Value) -> Result<TypedData> {
-    let (primary, own) = STRUCTS.iter().find(|(n, _)| *n == "PqzVerdict").ok_or(Error::Argument)?;
-    let d = Def { primary, own: own.to_string(), domains: &[P], default_name: Some(P), envelope: false, amount: None };
+pub fn pqz_verdict_typed_data(
+    contract: &[u8; 20],
+    chain_id: u64,
+    chain_uid: &[u8; 32],
+    message: &Value,
+) -> Result<TypedData> {
+    let (primary, own) = STRUCTS
+        .iter()
+        .find(|(n, _)| *n == "PqzVerdict")
+        .ok_or(Error::Argument)?;
+    let d = Def {
+        primary,
+        own: own.to_string(),
+        domains: &[P],
+        default_name: Some(P),
+        envelope: false,
+        amount: None,
+    };
     let td = typed_data_of(&d, None, contract, chain_id, chain_uid, message)?;
     let field = |f: &str, ty: &str| encode_atom(ty, td.message.get(f));
     if field("token", "address")? != encode_atom("address", Some(&to_hex(contract).into()))?
@@ -1029,9 +1258,24 @@ pub fn pqz_verdict_typed_data(contract: &[u8; 20], chain_id: u64, chain_uid: &[u
 /// salted domain `("SCaaS Dex", "1", chain_id, dex, chain_uid)`, ids of 32 bytes (a native address zero-padded), every field
 /// signed (no unbound field to zero), an unset field 0. Pinned by `vectors/ua/liquidity_kat.json`. `Argument` for a value its
 /// type refuses (an `int24` tick out of range is refused, never zero-extended).
-pub fn liquidity_order_typed_data(dex: &[u8; 20], chain_id: u64, chain_uid: &[u8; 32], order: &Value) -> Result<TypedData> {
-    let (primary, own) = STRUCTS.iter().find(|(n, _)| *n == "LiquidityOrder").ok_or(Error::Argument)?;
-    let d = Def { primary, own: own.to_string(), domains: &[DEX], default_name: Some(DEX), envelope: false, amount: None };
+pub fn liquidity_order_typed_data(
+    dex: &[u8; 20],
+    chain_id: u64,
+    chain_uid: &[u8; 32],
+    order: &Value,
+) -> Result<TypedData> {
+    let (primary, own) = STRUCTS
+        .iter()
+        .find(|(n, _)| *n == "LiquidityOrder")
+        .ok_or(Error::Argument)?;
+    let d = Def {
+        primary,
+        own: own.to_string(),
+        domains: &[DEX],
+        default_name: Some(DEX),
+        envelope: false,
+        amount: None,
+    };
     let td = typed_data_of(&d, None, dex, chain_id, chain_uid, order)?;
     td.digest()?; // every value in range
     Ok(td)
@@ -1053,11 +1297,23 @@ pub enum RescueVaultOp {
 /// `vectors/governance/rescue_vault_kat.json`. `Argument`: `seq` 0, a zero rescuer, a `newAdmin` that is 0 or not a native UA.
 pub fn rescue_vault_typed_data(vault: &[u8; 20], op: RescueVaultOp) -> Result<TypedData> {
     let (primary, field, ty, seq, value) = match op {
-        RescueVaultOp::SetRescuer { seq, new_rescuer } if new_rescuer != [0; 20] => {
-            ("SetRescuer", "newRescuer", "address", seq, to_hex(&new_rescuer))
-        }
-        RescueVaultOp::RotateAdmin { seq, new_admin } if new_admin.get(..12) == Some(&[0; 12][..]) && new_admin != [0; 32] => {
-            ("RotateAdmin", "newAdmin", "bytes32", seq, to_hex(&new_admin))
+        RescueVaultOp::SetRescuer { seq, new_rescuer } if new_rescuer != [0; 20] => (
+            "SetRescuer",
+            "newRescuer",
+            "address",
+            seq,
+            to_hex(&new_rescuer),
+        ),
+        RescueVaultOp::RotateAdmin { seq, new_admin }
+            if new_admin.get(..12) == Some(&[0; 12][..]) && new_admin != [0; 32] =>
+        {
+            (
+                "RotateAdmin",
+                "newAdmin",
+                "bytes32",
+                seq,
+                to_hex(&new_admin),
+            )
         }
         _ => return Err(Error::Argument),
     };
@@ -1065,7 +1321,10 @@ pub fn rescue_vault_typed_data(vault: &[u8; 20], op: RescueVaultOp) -> Result<Ty
         return Err(Error::Argument);
     }
     let mut types = BTreeMap::new();
-    types.insert(primary.to_string(), parse_fields(&format!("uint64 seq,{ty} {field}"))?);
+    types.insert(
+        primary.to_string(),
+        parse_fields(&format!("uint64 seq,{ty} {field}"))?,
+    );
     let mut domain = Map::new();
     domain.insert("name".into(), "SCaaS RescueVault".into());
     domain.insert("version".into(), "1".into());
@@ -1073,7 +1332,12 @@ pub fn rescue_vault_typed_data(vault: &[u8; 20], op: RescueVaultOp) -> Result<Ty
     let mut message = Map::new();
     message.insert("seq".into(), seq.to_string().into());
     message.insert(field.into(), value.into());
-    let td = TypedData { types, primary_type: primary.into(), domain, message: Value::Object(message) };
+    let td = TypedData {
+        types,
+        primary_type: primary.into(),
+        domain,
+        message: Value::Object(message),
+    };
     td.validate()?;
     Ok(td)
 }
@@ -1081,9 +1345,17 @@ pub fn rescue_vault_typed_data(vault: &[u8; 20], op: RescueVaultOp) -> Result<Ty
 /// Root (c)'s derivation message (scaas-sdk spec §6.6; `wallet::roots::key_derivation_typed_data` gives the fixed fields):
 /// `KeyDerivation(string warning,address account,uint32 set)` in the chain-free domain `("SCaaS key derivation", "1", salt)`.
 #[cfg(feature = "roots")]
-pub(crate) fn key_derivation_typed_data(account: &[u8; 20], set: u32, warning: &str, salt: &[u8; 32]) -> Result<TypedData> {
+pub(crate) fn key_derivation_typed_data(
+    account: &[u8; 20],
+    set: u32,
+    warning: &str,
+    salt: &[u8; 32],
+) -> Result<TypedData> {
     let mut types = BTreeMap::new();
-    types.insert("KeyDerivation".to_string(), parse_fields("string warning,address account,uint32 set")?);
+    types.insert(
+        "KeyDerivation".to_string(),
+        parse_fields("string warning,address account,uint32 set")?,
+    );
     let mut domain = Map::new();
     domain.insert("name".into(), "SCaaS key derivation".into());
     domain.insert("version".into(), "1".into());
@@ -1092,7 +1364,12 @@ pub(crate) fn key_derivation_typed_data(account: &[u8; 20], set: u32, warning: &
     message.insert("warning".into(), warning.into());
     message.insert("account".into(), to_hex(account).into());
     message.insert("set".into(), set.to_string().into());
-    let td = TypedData { types, primary_type: "KeyDerivation".into(), domain, message: Value::Object(message) };
+    let td = TypedData {
+        types,
+        primary_type: "KeyDerivation".into(),
+        domain,
+        message: Value::Object(message),
+    };
     td.validate()?;
     Ok(td)
 }
@@ -1100,7 +1377,12 @@ pub(crate) fn key_derivation_typed_data(account: &[u8; 20], set: u32, warning: &
 /// [`scaas_typed_data`] of one struct (a row of the op table: `checkOp` builds the op it was asked for, never another struct of the
 /// same primary type).
 pub(crate) fn typed_data_of(
-    d: &Def, name: Option<&str>, contract: &[u8; 20], chain_id: u64, chain_uid: &[u8; 32], message: &Value,
+    d: &Def,
+    name: Option<&str>,
+    contract: &[u8; 20],
+    chain_id: u64,
+    chain_uid: &[u8; 32],
+    message: &Value,
 ) -> Result<TypedData> {
     let name = match name {
         Some(n) if d.domains.is_empty() || d.domains.contains(&n) => n,
@@ -1114,7 +1396,12 @@ pub(crate) fn typed_data_of(
     domain.insert("chainId".into(), chain_id.to_string().into());
     domain.insert("verifyingContract".into(), to_hex(contract).into());
     domain.insert("salt".into(), to_hex(chain_uid).into());
-    let mut td = TypedData { types, primary_type: d.primary.to_string(), domain, message: Value::Null };
+    let mut td = TypedData {
+        types,
+        primary_type: d.primary.to_string(),
+        domain,
+        message: Value::Null,
+    };
     td.validate()?;
     td.message = td.canonical(d.primary, Some(message), &Cell::new(0))?;
     Ok(td)

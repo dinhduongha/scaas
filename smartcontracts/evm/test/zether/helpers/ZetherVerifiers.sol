@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {IZetherVerifier, IZetherBurnVerifier, IZetherInnerProductVerifier} from "../../../src/zether/IZetherVerifier.sol";
+import {
+    IZetherVerifier,
+    IZetherBurnVerifier,
+    IZetherInnerProductVerifier
+} from "../../../src/zether/IZetherVerifier.sol";
 import {
     ZetherInnerProductVerifierBls12381,
     ZetherTransferVerifierBls12381,

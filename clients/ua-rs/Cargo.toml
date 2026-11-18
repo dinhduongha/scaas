@@ -103,8 +103,33 @@ js-sys = { version = "=0.3.107", optional = true }
 # `vectors` also keeps the facades' raw decrypt commands and zether-prover's `hazmat` (ARCH-POS-13, T15c: never in a release build).
 # `mlock` on by default for native builds (owner 2026-11-06, superseding MD-5's list); off Unix it compiles out (no libc).
 default = ["wallet", "zether", "pqz", "pqz-set-n2304-kmax4096", "mlock"]
-wallet = ["pq", "signers", "json", "dep:bip39", "dep:bip32", "dep:hkdf", "dep:zeroize", "dep:unicode-normalization",
-    "dep:ripemd", "dep:bs58", "dep:blake2", "dep:alloy-rlp", "dep:ml-kem", "dep:aes-gcm", "dep:aes-gcm-siv", "dep:base64ct", "dep:scrypt", "dep:schnorrkel", "dep:pbkdf2", "dep:js-sys", "rand_core/getrandom", "dep:getrandom", "ed25519-dalek/zeroize", "ml-dsa/zeroize", "slh-dsa/zeroize"]
+wallet = [
+  "pq",
+  "signers",
+  "json",
+  "dep:bip39",
+  "dep:bip32",
+  "dep:hkdf",
+  "dep:zeroize",
+  "dep:unicode-normalization",
+  "dep:ripemd",
+  "dep:bs58",
+  "dep:blake2",
+  "dep:alloy-rlp",
+  "dep:ml-kem",
+  "dep:aes-gcm",
+  "dep:aes-gcm-siv",
+  "dep:base64ct",
+  "dep:scrypt",
+  "dep:schnorrkel",
+  "dep:pbkdf2",
+  "dep:js-sys",
+  "rand_core/getrandom",
+  "dep:getrandom",
+  "ed25519-dalek/zeroize",
+  "ml-dsa/zeroize",
+  "slh-dsa/zeroize",
+]
 zether = ["wallet", "dep:zether-prover"]
 pqz = ["wallet", "dep:pqz-ffi", "dep:subtle"]
 pqz-set-n2048-kmax1024 = ["pqz-ffi?/set-n2048-kmax1024"]

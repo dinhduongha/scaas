@@ -19,46 +19,42 @@
 #include "../../sz/sz_trace.c"
 #undef main
 
-int
-main (void)
-{
-  if (sz_trace_main () != 0)
-    printf ("(sz_trace verdict non-zero)\n");
-  const unsigned ncall = nrec / 4;
-  unsigned shared = 0;
-  printf ("\n%u accumulate2 calls (R_REG, M = 0)\n", ncall);
-  for (unsigned a = 0; a < ncall; a++)
-    for (unsigned b = a + 1; b < ncall; b++)
-      if (rec[4 * a].dom == rec[4 * b].dom)
-        {
-          int same = 1;
-          for (unsigned k = 0; k < 4; k++)
-            same &= veceq (4 * a + k, 4 * b + k);
-          printf ("SHARED dom %llu: call %u and call %u (calls 0..62 beta3, 63..125 beta4, 126 upsilon, 127.. l2); "
-                  "challenge rows %s\n",
-                  (unsigned long long)rec[4 * a].dom, a, b, same ? "IDENTICAL" : "differ");
-          shared++;
-        }
-  /* V4 / V3 (kinds 2 / 3, B-1: the same seed) */
-  printf ("%u V matrices (V4, V3)\n", n_v_z4z3);
-  for (unsigned v = 0; v < n_v_z4z3 && v < 8; v++)
-    {
-      for (unsigned a = 0; a < ncall; a++)
-        for (unsigned i = 0; i < 4; i++)
-          if (rec[4 * a].dom == vdom[v] || rec[4 * a].dom == ((vdom[v] << 32) | (256u * i)))
-            {
-              printf ("SHARED dom / nonce: V%d dom %llu (row %u) and accumulate2 call %u (dom %llu)\n", vkind[v] == 2 ? 4 : 3,
-                      (unsigned long long)vdom[v], i, a, (unsigned long long)rec[4 * a].dom);
-              shared++;
-              i = 4;
+int main(void) {
+    if (sz_trace_main() != 0)
+        printf("(sz_trace verdict non-zero)\n");
+    const unsigned ncall = nrec / 4;
+    unsigned shared = 0;
+    printf("\n%u accumulate2 calls (R_REG, M = 0)\n", ncall);
+    for (unsigned a = 0; a < ncall; a++)
+        for (unsigned b = a + 1; b < ncall; b++)
+            if (rec[4 * a].dom == rec[4 * b].dom) {
+                int same = 1;
+                for (unsigned k = 0; k < 4; k++)
+                    same &= veceq(4 * a + k, 4 * b + k);
+                printf(
+                    "SHARED dom %llu: call %u and call %u (calls 0..62 beta3, 63..125 beta4, 126 upsilon, 127.. l2); "
+                    "challenge rows %s\n",
+                    (unsigned long long)rec[4 * a].dom, a, b, same ? "IDENTICAL" : "differ");
+                shared++;
             }
-      for (unsigned w = v + 1; w < n_v_z4z3 && w < 8; w++)
-        if (vdom[w] == vdom[v])
-          {
-            printf ("SHARED dom: V matrices %u and %u (dom %llu)\n", v, w, (unsigned long long)vdom[v]);
-            shared++;
-          }
+    /* V4 / V3 (kinds 2 / 3, B-1: the same seed) */
+    printf("%u V matrices (V4, V3)\n", n_v_z4z3);
+    for (unsigned v = 0; v < n_v_z4z3 && v < 8; v++) {
+        for (unsigned a = 0; a < ncall; a++)
+            for (unsigned i = 0; i < 4; i++)
+                if (rec[4 * a].dom == vdom[v] || rec[4 * a].dom == ((vdom[v] << 32) | (256u * i))) {
+                    printf("SHARED dom / nonce: V%d dom %llu (row %u) and accumulate2 call %u (dom %llu)\n",
+                           vkind[v] == 2 ? 4 : 3, (unsigned long long)vdom[v], i, a,
+                           (unsigned long long)rec[4 * a].dom);
+                    shared++;
+                    i = 4;
+                }
+        for (unsigned w = v + 1; w < n_v_z4z3 && w < 8; w++)
+            if (vdom[w] == vdom[v]) {
+                printf("SHARED dom: V matrices %u and %u (dom %llu)\n", v, w, (unsigned long long)vdom[v]);
+                shared++;
+            }
     }
-  printf ("%u shared dom(s)\n", shared);
-  return shared != 0;
+    printf("%u shared dom(s)\n", shared);
+    return shared != 0;
 }

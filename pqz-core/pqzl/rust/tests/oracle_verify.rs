@@ -67,9 +67,24 @@ fn c_out_of_range_rejected() {
                 let i = off + k * bits as usize + b;
                 p[i / 8] = (p[i / 8] & !(1 << (i % 8))) | ((((v >> b) & 1) as u8) << (i % 8));
             }
-            assert_eq!(test_mutate(r.code, &p, 99, 0, 0), Ok(None), "{} c = {v}", r.name);
-            assert_eq!(c_test_mutate(r.code, &p, 99, 0, 0), None, "{} c = {v}", r.name);
-            assert_eq!(both(&mut ctx, r.op, &r.stmt, &p), (false, false), "{} c = {v}", r.name);
+            assert_eq!(
+                test_mutate(r.code, &p, 99, 0, 0),
+                Ok(None),
+                "{} c = {v}",
+                r.name
+            );
+            assert_eq!(
+                c_test_mutate(r.code, &p, 99, 0, 0),
+                None,
+                "{} c = {v}",
+                r.name
+            );
+            assert_eq!(
+                both(&mut ctx, r.op, &r.stmt, &p),
+                (false, false),
+                "{} c = {v}",
+                r.name
+            );
         }
     }
 }
@@ -79,7 +94,10 @@ fn c_out_of_range_rejected() {
 /// sample is 20,000: about 0.3 s per output, so hours; run it as a separate job).
 #[test]
 fn mutated_eq_c() {
-    let n: usize = std::env::var("PQZL_MUTATED_N").ok().and_then(|s| s.parse().ok()).unwrap_or(280);
+    let n: usize = std::env::var("PQZL_MUTATED_N")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(280);
     let rows = per_code();
     let mut ctx = Ctx::new();
     let mut g = Rnd(0x7E57_5EED);
@@ -90,7 +108,12 @@ fn mutated_eq_c() {
             let kind = (g.next() % 16) as u32;
             let (r1, r2) = (g.next(), g.next());
             let rust = test_mutate(r.code, &cur, kind, r1, r2).unwrap();
-            assert_eq!(rust, c_test_mutate(r.code, &cur, kind, r1, r2), "{} seed {seed} kind {kind}", r.name);
+            assert_eq!(
+                rust,
+                c_test_mutate(r.code, &cur, kind, r1, r2),
+                "{} seed {seed} kind {kind}",
+                r.name
+            );
             if let Some(m) = rust {
                 cur = m;
             }
@@ -110,7 +133,11 @@ fn mutated_eq_c() {
 fn cheating_eq_c() {
     let mut ctx = Ctx::new();
     for (case, op, stmt, proof, honest) in common::cheating() {
-        assert_eq!(both(&mut ctx, op, &stmt, &proof), (honest, honest), "{case}");
+        assert_eq!(
+            both(&mut ctx, op, &stmt, &proof),
+            (honest, honest),
+            "{case}"
+        );
     }
 }
 
@@ -126,10 +153,23 @@ fn bad_length_eq_c() {
     for r in per_code() {
         let mut long = r.stmt.clone();
         long.push(0);
-        let cases = [(&long[..], &r.proof[..]), (&r.stmt[..r.stmt.len() - 1], &r.proof[..]), (&r.stmt[..], &big[..])];
+        let cases = [
+            (&long[..], &r.proof[..]),
+            (&r.stmt[..r.stmt.len() - 1], &r.proof[..]),
+            (&r.stmt[..], &big[..]),
+        ];
         for (i, (stmt, proof)) in cases.into_iter().enumerate() {
-            assert_eq!(both(&mut ctx, r.op, stmt, proof), (false, false), "{} case {i}", r.name);
-            assert!(!ctx.verify_fast(r.op, stmt, proof) && !c_verify_fast(r.op, stmt, proof), "{} fast case {i}", r.name);
+            assert_eq!(
+                both(&mut ctx, r.op, stmt, proof),
+                (false, false),
+                "{} case {i}",
+                r.name
+            );
+            assert!(
+                !ctx.verify_fast(r.op, stmt, proof) && !c_verify_fast(r.op, stmt, proof),
+                "{} fast case {i}",
+                r.name
+            );
         }
     }
 }

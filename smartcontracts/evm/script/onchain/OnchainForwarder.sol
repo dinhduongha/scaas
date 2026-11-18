@@ -18,6 +18,8 @@ contract OnchainForwarder {
         require(msg.sender == O, "OnchainForwarder: not the deployer");
         bool ok;
         (ok, r) = target.call(data);
-        if (!ok) assembly ("memory-safe") { revert(add(r, 32), mload(r)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(r, 32), mload(r)) }
+        }
     }
 }

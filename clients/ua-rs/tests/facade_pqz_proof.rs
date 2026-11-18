@@ -15,7 +15,8 @@ use scaas_ua::facade::pqz_pack::{unpack, PKP, VP};
 use scaas_ua::wallet::{Error, Wallet};
 use serde_json::{json, Value};
 
-const WORDS: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+const WORDS: &str =
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 const A: Word = [0xA1; 32];
 const BOB: Word = [0xB0; 32];
 const AUD: Word = [0xAD; 32];
@@ -28,7 +29,8 @@ fn unlock() {
     scaas_ua::facade::vectors_unlock(scaas_ua::facade::TestOnly);
 }
 fn call(k: &PqzKey, cmd: &str, v: &Value) -> Result<Value, Error> {
-    k.call(cmd, v.to_string().as_bytes()).map(|s| serde_json::from_str(&s).unwrap())
+    k.call(cmd, v.to_string().as_bytes())
+        .map(|s| serde_json::from_str(&s).unwrap())
 }
 fn verify(op: u8, stmt: &[u8], proof: &[u8]) -> bool {
     pqz_ffi::precompile(&st::input(op, stmt, proof)) == Ok(pqz_ffi::VALID)
@@ -41,7 +43,11 @@ fn key_uses() -> usize {
 }
 /// `PqzCore._bindMode`: `keccak256(abi.encode(binding == 0 ? TAG_DIRECT_MODE : binding, uint8(mode)))`, HASH 0, BUNDLE 1.
 fn bind(binding: &Word, mode: &str) -> Word {
-    let b = if *binding == [0; 32] { scaas_ua::keccak256(b"SCAAS-PQZ-DIRECT-MODE-V1") } else { *binding };
+    let b = if *binding == [0; 32] {
+        scaas_ua::keccak256(b"SCAAS-PQZ-DIRECT-MODE-V1")
+    } else {
+        *binding
+    };
     scaas_ua::keccak256(&[b, st::u64_word((mode == "BUNDLE") as u64)].concat())
 }
 
@@ -52,8 +58,16 @@ struct Opt {
     binding: Word,
     shield_in: u64,
 }
-const LOG: Opt = Opt { log: true, binding: [0; 32], shield_in: 0 };
-const NONE: Opt = Opt { log: false, binding: [0; 32], shield_in: 0 };
+const LOG: Opt = Opt {
+    log: true,
+    binding: [0; 32],
+    shield_in: 0,
+};
+const NONE: Opt = Opt {
+    log: false,
+    binding: [0; 32],
+    shield_in: 0,
+};
 
 /// Holders of one wallet on a fresh chain with the auditor `AUD`; `extra` more UAs (op 7's legs).
 struct World {
@@ -69,13 +83,25 @@ impl World {
         unlock();
         let w = Wallet::from_mnemonic(WORDS, "").unwrap();
         let mut c = Chain::new();
-        let uas: Vec<Word> = [A, BOB, AUD, Z, X, Y].into_iter().chain((0..extra).map(|i| [0xE0 + i as u8; 32])).collect();
-        let k: Vec<(Word, PqzKey)> = uas.iter().enumerate().map(|(i, ua)| (*ua, w.pqz_key(i as u32, 0).unwrap())).collect();
+        let uas: Vec<Word> = [A, BOB, AUD, Z, X, Y]
+            .into_iter()
+            .chain((0..extra).map(|i| [0xE0 + i as u8; 32]))
+            .collect();
+        let k: Vec<(Word, PqzKey)> = uas
+            .iter()
+            .enumerate()
+            .map(|(i, ua)| (*ua, w.pqz_key(i as u32, 0).unwrap()))
+            .collect();
         for (ua, key) in &k {
             c.register(*ua, &key.pk());
         }
         c.auditor = Some(AUD);
-        World { w, k, c, psid: st::PQZL_ID }
+        World {
+            w,
+            k,
+            c,
+            psid: st::PQZL_ID,
+        }
     }
     fn key(&self, ua: &Word) -> &PqzKey {
         &self.k.iter().find(|x| x.0 == *ua).unwrap().1
@@ -85,14 +111,24 @@ impl World {
         hx(&self.c.blobs[&self.c.key_ptr(ua)][1..])
     }
     fn balance(&self, ua: &Word) -> u64 {
-        call(self.key(ua), "balance", &merge(self.c.bal(ua), json!({"psid": hx(&self.psid)}))).unwrap()["value"].as_u64().unwrap()
+        call(
+            self.key(ua),
+            "balance",
+            &merge(self.c.bal(ua), json!({"psid": hx(&self.psid)})),
+        )
+        .unwrap()["value"]
+            .as_u64()
+            .unwrap()
     }
     fn open(&self, ua: &Word, v: u64) -> Value {
         merge(self.c.proven_open(ua, v), json!({"psid": hx(&self.psid)}))
     }
     /// A words debit of `ua` at version `v` with `o`'s binding and `shieldIn`; the NONE call fields a reader takes from it.
     fn debit(&self, ua: &Word, v: u64, mode: &str, o: Opt, extra: Value) -> (Value, Value) {
-        let mut d = merge(merge(self.c.own_at(ua, v, 16), self.c.debit_fields()), extra);
+        let mut d = merge(
+            merge(self.c.own_at(ua, v, 16), self.c.debit_fields()),
+            extra,
+        );
         d["psid"] = json!(hx(&self.psid));
         d["envelopeBinding"] = json!(hx(&bind(&o.binding, mode)));
         d["shieldIn"] = json!(o.shield_in);
@@ -129,8 +165,18 @@ impl World {
         self.settle(1, &p, cl, o, &[])
     }
     /// Op 7 from `from` to `legs`.
-    fn pay_multi(&mut self, from: &Word, legs: &[(Word, u64)], aud: bool, mode: &str, o: Opt) -> Word {
-        let l: Vec<Value> = legs.iter().map(|(ua, a)| json!({"pk": self.pk(ua), "ua": hx(ua), "amount": a})).collect();
+    fn pay_multi(
+        &mut self,
+        from: &Word,
+        legs: &[(Word, u64)],
+        aud: bool,
+        mode: &str,
+        o: Opt,
+    ) -> Word {
+        let l: Vec<Value> = legs
+            .iter()
+            .map(|(ua, a)| json!({"pk": self.pk(ua), "ua": hx(ua), "amount": a}))
+            .collect();
         let mut extra = json!({"legs": l, "mode": mode});
         if aud {
             extra["pkA"] = json!(self.pk(&AUD));
@@ -145,19 +191,49 @@ impl World {
     }
     /// A burn (`amount` > 0) of `ua`'s version 0 on handle `k`; `unwrap` `(underlying, minOut)`: its envelope is
     /// `unwrapBinding(underlying, minOut)`, relayed `keccak256(abi.encode(binding, unwrapBinding))` (`WrappedPqzToken._envUnwrap`).
-    fn burn(&mut self, k: &PqzKey, ua: &Word, amount: u64, unwrap: Option<([u8; 20], u64)>, o: Opt) {
+    fn burn(
+        &mut self,
+        k: &PqzKey,
+        ua: &Word,
+        amount: u64,
+        unwrap: Option<([u8; 20], u64)>,
+        o: Opt,
+    ) {
         self.op2(k, ua, 0, amount, unwrap, o);
     }
     /// Op 2 with its NONE call fields (§4.14.4 step 4: a burn's binding is its envelope word as given).
-    fn op2(&mut self, k: &PqzKey, ua: &Word, v: u64, amount: u64, unwrap: Option<([u8; 20], u64)>, o: Opt) {
-        let extra = if amount == 0 { json!({}) } else { json!({"amount": amount, "recipient": hx(&[3; 32])}) };
+    fn op2(
+        &mut self,
+        k: &PqzKey,
+        ua: &Word,
+        v: u64,
+        amount: u64,
+        unwrap: Option<([u8; 20], u64)>,
+        o: Opt,
+    ) {
+        let extra = if amount == 0 {
+            json!({})
+        } else {
+            json!({"amount": amount, "recipient": hx(&[3; 32])})
+        };
         let (mut d, _) = self.debit(ua, v, "BUNDLE", o, extra);
         let env = match unwrap {
             Some((u, min)) => {
                 let mut a = [0u8; 32];
                 a[12..].copy_from_slice(&u);
-                let w = scaas_ua::keccak256(&[scaas_ua::keccak256(b"SCAAS-PQZ-UNWRAP-V1"), a, st::u64_word(min)].concat());
-                if o.binding == [0; 32] { w } else { scaas_ua::keccak256(&[o.binding, w].concat()) }
+                let w = scaas_ua::keccak256(
+                    &[
+                        scaas_ua::keccak256(b"SCAAS-PQZ-UNWRAP-V1"),
+                        a,
+                        st::u64_word(min),
+                    ]
+                    .concat(),
+                );
+                if o.binding == [0; 32] {
+                    w
+                } else {
+                    scaas_ua::keccak256(&[o.binding, w].concat())
+                }
             }
             None => o.binding,
         };
@@ -168,7 +244,16 @@ impl World {
             cl["underlying"] = json!(hx(&u));
             cl["minOut"] = json!(min);
         }
-        let p = call(k, if amount == 0 { "proveRefresh" } else { "proveBurn" }, &d).unwrap();
+        let p = call(
+            k,
+            if amount == 0 {
+                "proveRefresh"
+            } else {
+                "proveBurn"
+            },
+            &d,
+        )
+        .unwrap();
         let (stmt, proof) = (h(&p["stmt"]), h(&p["proof"]));
         assert!(verify(2, &stmt, &proof));
         self.c.proof_store = o.log as u8;
@@ -178,14 +263,22 @@ impl World {
     }
     /// Every credit of `(ua, v)`'s window.
     fn credits(&self, ua: &Word, v: u64, need: &Value) -> Vec<Cred> {
-        need.as_array().unwrap().iter().map(|i| self.c.proven_credit(ua, v, i.as_u64().unwrap())).collect()
+        need.as_array()
+            .unwrap()
+            .iter()
+            .map(|i| self.c.proven_credit(ua, v, i.as_u64().unwrap()))
+            .collect()
     }
     /// Path (B) end to end on handle `k`: open, every credit in one batch (all accepted), the proven balance.
     fn proven(&self, k: &PqzKey, ua: &Word, v: u64) -> Value {
         let o = call(k, "provenOpen", &self.open(ua, v)).unwrap();
         let cs = self.credits(ua, v, &o["need"]);
         let r = call(k, "provenAdd", &self.c.add_request(&o["session"], &cs)).unwrap();
-        assert_eq!(r, json!({"accepted": o["need"], "refused": []}), "every credit accepted");
+        assert_eq!(
+            r,
+            json!({"accepted": o["need"], "refused": []}),
+            "every credit accepted"
+        );
         call(k, "balanceProven", &json!({"session": o["session"]})).unwrap()
     }
 }
@@ -195,7 +288,12 @@ type Cred = (Value, Vec<[u8; 20]>);
 
 /// `parts`' kinds, in order.
 fn kinds(b: &Value) -> Vec<String> {
-    b["parts"].as_array().unwrap().iter().map(|p| p["kind"].as_str().unwrap().to_string()).collect()
+    b["parts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["kind"].as_str().unwrap().to_string())
+        .collect()
 }
 
 /// The positive control (no-oracle spec §5, plan T20d4): path (B)'s value equals path (A)'s over the same state for op 1 with
@@ -209,26 +307,71 @@ fn balance_proven_equals_path_a() {
         wd.c.shield(&ua, v);
     }
     wd.pay(&A, &BOB, 300, true, "BUNDLE", NONE);
-    wd.pay(&X, &BOB, 50, false, "HASH", Opt { shield_in: 5, ..LOG });
+    wd.pay(
+        &X,
+        &BOB,
+        50,
+        false,
+        "HASH",
+        Opt {
+            shield_in: 5,
+            ..LOG
+        },
+    );
     wd.pay_multi(&Z, &[(BOB, 20), (Y, 5)], true, "BUNDLE", LOG);
     wd.c.shield(&BOB, 7);
-    wd.pay(&A, &BOB, 4, true, "HASH", Opt { binding: [0xB7; 32], ..NONE });
+    wd.pay(
+        &A,
+        &BOB,
+        4,
+        true,
+        "HASH",
+        Opt {
+            binding: [0xB7; 32],
+            ..NONE
+        },
+    );
     let kb = wd.key(&BOB);
     assert_eq!(wd.balance(&BOB), 381);
     let o = call(kb, "provenOpen", &wd.c.proven_open(&BOB, 0)).unwrap();
-    assert_eq!((&o["p"], &o["sendCounter"], o["need"].as_array().unwrap().len()), (&json!(5), &json!(0), 4));
+    assert_eq!(
+        (
+            &o["p"],
+            &o["sendCounter"],
+            o["need"].as_array().unwrap().len()
+        ),
+        (&json!(5), &json!(0), 4)
+    );
     let mut cs = wd.credits(&BOB, 0, &o["need"]);
     // a source's key record for the holder's own leg (another key): never read
-    cs[0].0["keyRecords"].as_array_mut().unwrap().push(json!({"ua": hx(&BOB), "version": 0, "word": hx(&wd.c.key_record(&Y))}));
+    cs[0].0["keyRecords"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"ua": hx(&BOB), "version": 0, "word": hx(&wd.c.key_record(&Y))}));
     cs[0].1.push(wd.c.key_ptr(&Y));
     let r = call(kb, "provenAdd", &wd.c.add_request(&o["session"], &cs)).unwrap();
     assert_eq!(r, json!({"accepted": o["need"], "refused": []}));
     let before = key_uses();
     let b = call(kb, "balanceProven", &json!({"session": o["session"]})).unwrap();
-    assert_eq!(key_uses() - before, if cfg!(feature = "vectors") { 1 } else { 0 }, "the key once, at the end");
-    assert_eq!((&b["value"], &b["p"], &b["sendCounter"]), (&json!(381), &json!(5), &json!(0)), "path (A)'s value");
-    assert_eq!(kinds(&b), ["trivial", "credit", "credit", "credit", "credit"]);
-    assert_eq!(call(kb, "balanceProven", &json!({"session": o["session"]})).err(), Some(Error::Argument), "the session closed");
+    assert_eq!(
+        key_uses() - before,
+        if cfg!(feature = "vectors") { 1 } else { 0 },
+        "the key once, at the end"
+    );
+    assert_eq!(
+        (&b["value"], &b["p"], &b["sendCounter"]),
+        (&json!(381), &json!(5), &json!(0)),
+        "path (A)'s value"
+    );
+    assert_eq!(
+        kinds(&b),
+        ["trivial", "credit", "credit", "credit", "credit"]
+    );
+    assert_eq!(
+        call(kb, "balanceProven", &json!({"session": o["session"]})).err(),
+        Some(Error::Argument),
+        "the session closed"
+    );
     // the holder's own debit: its `v_f` by its tag; a credit after it, rolled over (path (B) sums the parts, never `acc`)
     let kb = wd.w.pqz_key(1, 0).unwrap();
     wd.refresh(&kb, &BOB, 0, LOG);
@@ -240,7 +383,13 @@ fn balance_proven_equals_path_a() {
     wd.c.roll(&BOB, 1);
     assert_eq!(wd.balance(&BOB), 392);
     let b = wd.proven(&kb, &BOB, 0);
-    assert_eq!((&b["value"], kinds(&b)), (&json!(392), vec!["own".to_string(), "credit".into(), "credit".into()]));
+    assert_eq!(
+        (&b["value"], kinds(&b)),
+        (
+            &json!(392),
+            vec!["own".to_string(), "credit".into(), "credit".into()]
+        )
+    );
 }
 
 /// A PQZH token (when this set has PQZH): the credits' P are PQZH proofs, the same rules.
@@ -255,7 +404,10 @@ fn pqzh_token() {
     wd.pay(&A, &BOB, 300, true, "BUNDLE", LOG);
     wd.pay(&A, &BOB, 30, false, "HASH", NONE);
     let b = wd.proven(wd.key(&BOB), &BOB, 0);
-    assert_eq!((&b["value"], b["value"].as_u64()), (&json!(330), Some(wd.balance(&BOB))));
+    assert_eq!(
+        (&b["value"], b["value"].as_u64()),
+        (&json!(330), Some(wd.balance(&BOB)))
+    );
 }
 
 /// Group 3g across path (B): Bob rotates to version 1; version 0 migrates to it. On a derived handle the migration credit is
@@ -267,9 +419,18 @@ fn rotation_migration_by_reencryption_or_p() {
     let mut wd = World::new(0);
     wd.c.shield(&A, 1000);
     wd.pay(&A, &BOB, 300, false, "BUNDLE", LOG);
-    let (b0, b1) = (wd.w.pqz_key(1, 0).unwrap(), wd.w.pqz_key_version(1, 0, 1).unwrap());
+    let (b0, b1) = (
+        wd.w.pqz_key(1, 0).unwrap(),
+        wd.w.pqz_key_version(1, 0, 1).unwrap(),
+    );
     wd.c.add_version(BOB, &b1.pk(), true);
-    let (d, cl) = wd.debit(&BOB, 0, "BUNDLE", NONE, json!({"toUA": hx(&BOB), "pkT": hx(&b1.pk()), "amount": 260, "mode": "BUNDLE"}));
+    let (d, cl) = wd.debit(
+        &BOB,
+        0,
+        "BUNDLE",
+        NONE,
+        json!({"toUA": hx(&BOB), "pkT": hx(&b1.pk()), "amount": 260, "mode": "BUNDLE"}),
+    );
     let m = call(&b0, "proveTransfer", &d).unwrap();
     wd.settle(1, &m, cl, NONE, &[]);
     // the auditor at version 1 (the credit's `kv` names it)
@@ -284,22 +445,43 @@ fn rotation_migration_by_reencryption_or_p() {
         wrong.0[f] = cs[0].0[f].clone();
     }
     let r = call(&b1, "provenAdd", &wd.c.add_request(&o["session"], &[wrong])).unwrap();
-    assert_eq!(r, json!({"accepted": [], "refused": [o["need"][1]]}), "not a migration");
+    assert_eq!(
+        r,
+        json!({"accepted": [], "refused": [o["need"][1]]}),
+        "not a migration"
+    );
     let b = wd.proven(&b1, &BOB, 1);
-    assert_eq!((&b["value"], kinds(&b)), (&json!(300), vec!["migration".to_string(), "credit".into()]));
+    assert_eq!(
+        (&b["value"], kinds(&b)),
+        (&json!(300), vec!["migration".to_string(), "credit".into()])
+    );
     let b = wd.proven(&b0, &BOB, 0);
-    assert_eq!((&b["value"], kinds(&b)), (&json!(40), vec!["own".to_string()]), "version 0 keeps the rest: its own v_f");
+    assert_eq!(
+        (&b["value"], kinds(&b)),
+        (&json!(40), vec!["own".to_string()]),
+        "version 0 keeps the rest: its own v_f"
+    );
     #[cfg(feature = "vectors")]
     {
-        let seed = *wd.w.export_pqz_leaf_raw_version(1, 0, 1, scaas_ua::facade::pqz::AllowSecretExport).unwrap();
+        let seed = *wd
+            .w
+            .export_pqz_leaf_raw_version(1, 0, 1, scaas_ua::facade::pqz::AllowSecretExport)
+            .unwrap();
         let alone = PqzKey::vectors_from_seed32(&seed).unwrap();
         let b = wd.proven(&alone, &BOB, 1);
-        assert_eq!((&b["value"], kinds(&b)), (&json!(300), vec!["migration".to_string(), "credit".into()]), "the migration by its P");
+        assert_eq!(
+            (&b["value"], kinds(&b)),
+            (&json!(300), vec!["migration".to_string(), "credit".into()]),
+            "the migration by its P"
+        );
         // without P's fields that credit is a malformed request there (it needs its P)
         let o = call(&alone, "provenOpen", &wd.open(&BOB, 1)).unwrap();
         let mut cs = wd.credits(&BOB, 1, &o["need"]);
         cs[0].0.as_object_mut().unwrap().remove("proof");
-        assert_eq!(call(&alone, "provenAdd", &wd.c.add_request(&o["session"], &cs)).err(), Some(Error::Argument));
+        assert_eq!(
+            call(&alone, "provenAdd", &wd.c.add_request(&o["session"], &cs)).err(),
+            Some(Error::Argument)
+        );
     }
 }
 
@@ -320,12 +502,21 @@ fn credit_negatives_refused_alone() {
     wd.c.add_version(X, &x1.pk(), true);
     wd.c.shield(&X, 60);
     // Y and the auditor: a pending version 1 each (a key of another version)
-    let (y1, a1) = (wd.w.pqz_key_version(5, 0, 1).unwrap(), wd.w.pqz_key_version(2, 0, 1).unwrap());
+    let (y1, a1) = (
+        wd.w.pqz_key_version(5, 0, 1).unwrap(),
+        wd.w.pqz_key_version(2, 0, 1).unwrap(),
+    );
     wd.c.add_version(Y, &y1.pk(), false);
     wd.c.add_version(AUD, &a1.pk(), false);
     wd.pay(&A, &BOB, 300, true, "BUNDLE", LOG);
     wd.pay_multi(&Z, &[(BOB, 20), (Y, 5)], true, "BUNDLE", LOG);
-    let (d, cl) = wd.debit(&X, 1, "BUNDLE", LOG, json!({"toUA": hx(&BOB), "pkT": wd.pk(&BOB), "amount": 30, "mode": "BUNDLE"}));
+    let (d, cl) = wd.debit(
+        &X,
+        1,
+        "BUNDLE",
+        LOG,
+        json!({"toUA": hx(&BOB), "pkT": wd.pk(&BOB), "amount": 30, "mode": "BUNDLE"}),
+    );
     let p = call(&x1, "proveTransfer", &d).unwrap();
     wd.settle(1, &p, cl, LOG, &[]);
     let kb = wd.key(&BOB);
@@ -362,46 +553,93 @@ fn credit_negatives_refused_alone() {
             c.1.push(wd.c.keys[&(Y, 1)]);
             c
         }),
-        ("two keys swapped", set(&op7, &|c| {
-            aud_rec(c, &Y, 0, wd.c.key_record_at(&AUD, 0));
-            aud_rec(c, &AUD, 0, wd.c.key_record_at(&Y, 0));
-        })),
-        ("the record's shieldIn", set(&op1, &|c| {
-            c["record"]["w0"] = json!(word(&w0(&op1), &|w| w[31] |= 2));
-            let mut w1 = [0u8; 32];
-            w1[7] = 1;
-            c["record"]["w1"] = json!(hx(&w1));
-        })),
+        (
+            "two keys swapped",
+            set(&op7, &|c| {
+                aud_rec(c, &Y, 0, wd.c.key_record_at(&AUD, 0));
+                aud_rec(c, &AUD, 0, wd.c.key_record_at(&Y, 0));
+            }),
+        ),
+        (
+            "the record's shieldIn",
+            set(&op1, &|c| {
+                c["record"]["w0"] = json!(word(&w0(&op1), &|w| w[31] |= 2));
+                let mut w1 = [0u8; 32];
+                w1[7] = 1;
+                c["record"]["w1"] = json!(hx(&w1));
+            }),
+        ),
         ("the record's predecessor", {
-            let mut c = set(&op1, &|c| c["record"]["w0"] = json!(word(&w0(&op1), &|w| w[..20].copy_from_slice(&other_blob))));
+            let mut c = set(&op1, &|c| {
+                c["record"]["w0"] =
+                    json!(word(&w0(&op1), &|w| w[..20].copy_from_slice(&other_blob)))
+            });
             c.1.push(other_blob);
             c
         }),
-        ("the record's Δp", set(&op1, &|c| {
-            c["record"]["w0"] = json!(word(&w0(&op1), &|w| w[29] -= 1));
-            c["senderPending"].as_array_mut().unwrap().remove(0);
-        })),
-        ("the record's mode", set(&op1, &|c| c["record"]["w0"] = json!(word(&w0(&op1), &|w| w[30] ^= 1)))),
-        ("the window of another version", set(&xv1, &|c| {
-            c["senderPending"][0]["word"] = json!(hx(&wd.c.accts[&(X, 0)].pending[&0]));
-        })),
-        ("a forged window word", set(&op1, &|c| {
-            let mut e = h(&c["senderPending"][0]["word"]);
-            e[19] ^= 1;
-            c["senderPending"][0]["word"] = json!(hx(&e));
-        })),
-        ("P of another debit", set(&op1, &|c| c["proof"] = op7.0["proof"].clone())),
-        ("an index outside need", set(&op1, &|c| c["index"] = json!(99))),
+        (
+            "the record's Δp",
+            set(&op1, &|c| {
+                c["record"]["w0"] = json!(word(&w0(&op1), &|w| w[29] -= 1));
+                c["senderPending"].as_array_mut().unwrap().remove(0);
+            }),
+        ),
+        (
+            "the record's mode",
+            set(&op1, &|c| {
+                c["record"]["w0"] = json!(word(&w0(&op1), &|w| w[30] ^= 1))
+            }),
+        ),
+        (
+            "the window of another version",
+            set(&xv1, &|c| {
+                c["senderPending"][0]["word"] = json!(hx(&wd.c.accts[&(X, 0)].pending[&0]));
+            }),
+        ),
+        (
+            "a forged window word",
+            set(&op1, &|c| {
+                let mut e = h(&c["senderPending"][0]["word"]);
+                e[19] ^= 1;
+                c["senderPending"][0]["word"] = json!(hx(&e));
+            }),
+        ),
+        (
+            "P of another debit",
+            set(&op1, &|c| c["proof"] = op7.0["proof"].clone()),
+        ),
+        (
+            "an index outside need",
+            set(&op1, &|c| c["index"] = json!(99)),
+        ),
     ];
     for (what, c) in &cases {
         let before = key_uses();
-        let r = call(kb, "provenAdd", &wd.c.add_request(&o["session"], std::slice::from_ref(c))).unwrap();
-        assert_eq!(r, json!({"accepted": [], "refused": [c.0["index"]]}), "{what}");
+        let r = call(
+            kb,
+            "provenAdd",
+            &wd.c.add_request(&o["session"], std::slice::from_ref(c)),
+        )
+        .unwrap();
+        assert_eq!(
+            r,
+            json!({"accepted": [], "refused": [c.0["index"]]}),
+            "{what}"
+        );
         assert_eq!(key_uses(), before, "{what}: the key unused");
     }
     // the session is kept: the true credits pass, one sent twice is refused the second time
-    let r = call(kb, "provenAdd", &wd.c.add_request(&o["session"], &[op1.clone(), op7, op1.clone()])).unwrap();
-    assert_eq!(r, json!({"accepted": [o["need"][0], o["need"][1]], "refused": [o["need"][0]]}));
+    let r = call(
+        kb,
+        "provenAdd",
+        &wd.c
+            .add_request(&o["session"], &[op1.clone(), op7, op1.clone()]),
+    )
+    .unwrap();
+    assert_eq!(
+        r,
+        json!({"accepted": [o["need"][0], o["need"][1]], "refused": [o["need"][0]]})
+    );
     let r = call(kb, "provenAdd", &wd.c.add_request(&o["session"], &[xv1])).unwrap();
     assert_eq!(r["refused"], json!([]));
     let b = call(kb, "balanceProven", &json!({"session": o["session"]})).unwrap();
@@ -420,14 +658,25 @@ fn op7_leg_paired_with_its_own_group() {
     let kb = wd.key(&BOB);
     let mut open = wd.c.proven_open(&BOB, 0);
     let mut slot = h(&open["pending"][0]["word"]);
-    assert_eq!(u16::from_be_bytes([slot[20], slot[21]]) as usize, 16 + scaas_ua::facade::pqz_pack::PKP, "u_1");
+    assert_eq!(
+        u16::from_be_bytes([slot[20], slot[21]]) as usize,
+        16 + scaas_ua::facade::pqz_pack::PKP,
+        "u_1"
+    );
     slot[20..22].copy_from_slice(&16u16.to_be_bytes());
     open["pending"][0]["word"] = json!(hx(&slot));
     let o = call(kb, "provenOpen", &open).unwrap();
     let cs = wd.credits(&BOB, 0, &o["need"]);
     let before = key_uses();
-    assert_eq!(call(kb, "provenAdd", &wd.c.add_request(&o["session"], &cs)).unwrap()["refused"], json!([0]), "v_5 with u_0");
-    assert_eq!(call(kb, "balanceProven", &json!({"session": o["session"]})).err(), Some(Error::Argument));
+    assert_eq!(
+        call(kb, "provenAdd", &wd.c.add_request(&o["session"], &cs)).unwrap()["refused"],
+        json!([0]),
+        "v_5 with u_0"
+    );
+    assert_eq!(
+        call(kb, "balanceProven", &json!({"session": o["session"]})).err(),
+        Some(Error::Argument)
+    );
     assert_eq!(key_uses(), before, "the key unused");
     let b = wd.proven(kb, &BOB, 0);
     assert_eq!(b["value"], 9);
@@ -445,19 +694,45 @@ fn session_rules_and_open_negatives() {
     let kb = wd.w.pqz_key(1, 0).unwrap();
     let o = call(&kb, "provenOpen", &wd.c.proven_open(&BOB, 0)).unwrap();
     let cs = wd.credits(&BOB, 0, &o["need"]);
-    assert_eq!(call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &cs[..1])).unwrap()["accepted"], json!([o["need"][0]]));
+    assert_eq!(
+        call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &cs[..1])).unwrap()["accepted"],
+        json!([o["need"][0]])
+    );
     let before = key_uses();
     for _ in 0..2 {
-        assert_eq!(call(&kb, "balanceProven", &json!({"session": o["session"]})).err(), Some(Error::Argument), "one need index missing");
+        assert_eq!(
+            call(&kb, "balanceProven", &json!({"session": o["session"]})).err(),
+            Some(Error::Argument),
+            "one need index missing"
+        );
     }
     assert_eq!(key_uses(), before, "the key unused");
     // another id; a second open replaces the first
-    assert_eq!(call(&kb, "provenAdd", &wd.c.add_request(&json!(hx(&[9; 16])), &cs[1..])).err(), Some(Error::Argument));
+    assert_eq!(
+        call(
+            &kb,
+            "provenAdd",
+            &wd.c.add_request(&json!(hx(&[9; 16])), &cs[1..])
+        )
+        .err(),
+        Some(Error::Argument)
+    );
     let o2 = call(&kb, "provenOpen", &wd.c.proven_open(&BOB, 0)).unwrap();
     assert_ne!(o2["session"], o["session"]);
-    assert_eq!(call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &cs[1..])).err(), Some(Error::Argument), "the old session");
-    assert_eq!(call(&kb, "provenCancel", &json!({"session": o2["session"]})).unwrap(), json!({}));
-    assert_eq!(call(&kb, "balanceProven", &json!({"session": o2["session"]})).err(), Some(Error::Argument), "cancelled");
+    assert_eq!(
+        call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &cs[1..])).err(),
+        Some(Error::Argument),
+        "the old session"
+    );
+    assert_eq!(
+        call(&kb, "provenCancel", &json!({"session": o2["session"]})).unwrap(),
+        json!({})
+    );
+    assert_eq!(
+        call(&kb, "balanceProven", &json!({"session": o2["session"]})).err(),
+        Some(Error::Argument),
+        "cancelled"
+    );
     // the own v_f: a forged tag refused at the open
     wd.refresh(&kb, &BOB, 0, LOG);
     let ok = wd.c.proven_open(&BOB, 0);
@@ -473,7 +748,11 @@ fn session_rules_and_open_negatives() {
         }
     }
     let before = key_uses();
-    assert_eq!(call(&kb, "provenOpen", &forged).err(), Some(Error::Argument), "a forged ownTag");
+    assert_eq!(
+        call(&kb, "provenOpen", &forged).err(),
+        Some(Error::Argument),
+        "a forged ownTag"
+    );
     assert_eq!(key_uses(), before);
     // the parts' bound at its edge (no debit: `p` entries and `Trivial(shieldIn)`, at most `K_MAX` units): `p = K_MAX − 1` opens,
     // `K_MAX` is refused (forged account words of TRIVIAL entries)
@@ -489,15 +768,27 @@ fn session_rules_and_open_negatives() {
         s0[16..24].copy_from_slice(&(st::K_MAX as u64 - 2).to_be_bytes()); // rolled (the model's `slots`: cleared, floor, rolled, count)
         s0[24..32].copy_from_slice(&count.to_be_bytes()); // pendingCount
         v["account"][0] = json!(hx(&s0));
-        v["pending"] = json!((0..count).map(|i| json!({"index": i, "word": hx(&c.accts[&(Y, 0)].pending[&i])})).collect::<Vec<_>>());
+        v["pending"] = json!((0..count)
+            .map(|i| json!({"index": i, "word": hx(&c.accts[&(Y, 0)].pending[&i])}))
+            .collect::<Vec<_>>());
         v
     };
-    assert!(call(wd.key(&Y), "provenOpen", &edge(st::K_MAX as u64 - 1)).is_ok(), "K_MAX units");
-    assert_eq!(call(wd.key(&Y), "provenOpen", &edge(st::K_MAX as u64)).err(), Some(Error::Argument), "one part more");
+    assert!(
+        call(wd.key(&Y), "provenOpen", &edge(st::K_MAX as u64 - 1)).is_ok(),
+        "K_MAX units"
+    );
+    assert_eq!(
+        call(wd.key(&Y), "provenOpen", &edge(st::K_MAX as u64)).err(),
+        Some(Error::Argument),
+        "one part more"
+    );
     // a locked wallet drops the session
     let o3 = call(&kb, "provenOpen", &ok).unwrap();
     wd.w.lock();
-    assert_eq!(call(&kb, "balanceProven", &json!({"session": o3["session"]})).err(), Some(Error::KeyRevoked));
+    assert_eq!(
+        call(&kb, "balanceProven", &json!({"session": o3["session"]})).err(),
+        Some(Error::KeyRevoked)
+    );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
@@ -531,9 +822,24 @@ fn proven_debits_equal_path_a() {
     let kb = wd.w.pqz_key(1, 0).unwrap();
     let legs = json!([{"pk": wd.pk(&Y), "ua": hx(&Y), "amount": 3}, {"pk": wd.pk(&Z), "ua": hx(&Z), "amount": 2}]);
     for (b_cmd, a_cmd, op, extra) in [
-        ("proveTransferProven", "proveTransfer", 1, json!({"toUA": hx(&Y), "pkT": wd.pk(&Y), "pkA": wd.pk(&AUD), "amount": 30, "mode": "HASH", "shieldIn": 5})),
-        ("proveTransferMultiProven", "proveTransferMulti", 7, json!({"legs": legs, "pkA": wd.pk(&AUD), "mode": "BUNDLE"})),
-        ("proveBurnProven", "proveBurn", 2, json!({"amount": 10, "recipient": hx(&[3; 32])})),
+        (
+            "proveTransferProven",
+            "proveTransfer",
+            1,
+            json!({"toUA": hx(&Y), "pkT": wd.pk(&Y), "pkA": wd.pk(&AUD), "amount": 30, "mode": "HASH", "shieldIn": 5}),
+        ),
+        (
+            "proveTransferMultiProven",
+            "proveTransferMulti",
+            7,
+            json!({"legs": legs, "pkA": wd.pk(&AUD), "mode": "BUNDLE"}),
+        ),
+        (
+            "proveBurnProven",
+            "proveBurn",
+            2,
+            json!({"amount": 10, "recipient": hx(&[3; 32])}),
+        ),
         ("proveRefreshProven", "proveRefresh", 2, json!({})),
     ] {
         let mut open = wd.open(&BOB, 0);
@@ -542,19 +848,59 @@ fn proven_debits_equal_path_a() {
         let cs = wd.credits(&BOB, 0, &o["need"]);
         call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &cs)).unwrap();
         let fields = merge(wd.c.debit_fields(), extra.clone());
-        let pb = call(&kb, b_cmd, &merge(fields.clone(), json!({"session": o["session"]}))).unwrap();
-        let pa = call(&kb, a_cmd, &merge(merge(wd.c.own(&BOB, 16), fields), json!({}))).unwrap();
+        let pb = call(
+            &kb,
+            b_cmd,
+            &merge(fields.clone(), json!({"session": o["session"]})),
+        )
+        .unwrap();
+        let pa = call(
+            &kb,
+            a_cmd,
+            &merge(merge(wd.c.own(&BOB, 16), fields), json!({})),
+        )
+        .unwrap();
         let (sb, sa) = (h(&pb["stmt"]), h(&pa["stmt"]));
         assert!(verify(op, &sb, &h(&pb["proof"])), "{b_cmd} verifies");
-        assert_eq!(t_of(op, &sb), t_of(op, &sa), "{b_cmd}: path (A)'s T, p, sendCounter and plainUsed");
-        assert_eq!((pb["p"].clone(), pb["ownTag"].as_str().map(str::len)), (pa["p"].clone(), Some(66)), "{b_cmd}: p, ownTag");
-        assert_eq!(call(&kb, b_cmd, &merge(merge(wd.c.debit_fields(), extra), json!({"session": o["session"]}))).err(),
-            Some(Error::Argument), "{b_cmd}: the session closed");
+        assert_eq!(
+            t_of(op, &sb),
+            t_of(op, &sa),
+            "{b_cmd}: path (A)'s T, p, sendCounter and plainUsed"
+        );
+        assert_eq!(
+            (pb["p"].clone(), pb["ownTag"].as_str().map(str::len)),
+            (pa["p"].clone(), Some(66)),
+            "{b_cmd}: p, ownTag"
+        );
+        assert_eq!(
+            call(
+                &kb,
+                b_cmd,
+                &merge(
+                    merge(wd.c.debit_fields(), extra),
+                    json!({"session": o["session"]})
+                )
+            )
+            .err(),
+            Some(Error::Argument),
+            "{b_cmd}: the session closed"
+        );
     }
     // a refresh by path (B) settles; both paths read the balance after it
     let o = call(&kb, "provenOpen", &wd.open(&BOB, 0)).unwrap();
-    call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &wd.credits(&BOB, 0, &o["need"]))).unwrap();
-    let p = call(&kb, "proveRefreshProven", &merge(wd.c.debit_fields(), json!({"session": o["session"]}))).unwrap();
+    call(
+        &kb,
+        "provenAdd",
+        &wd.c
+            .add_request(&o["session"], &wd.credits(&BOB, 0, &o["need"])),
+    )
+    .unwrap();
+    let p = call(
+        &kb,
+        "proveRefreshProven",
+        &merge(wd.c.debit_fields(), json!({"session": o["session"]})),
+    )
+    .unwrap();
     wd.c.own_tag = h(&p["ownTag"]).try_into().unwrap();
     wd.c.settle_burn(&h(&p["stmt"]));
     assert_eq!(wd.balance(&BOB), 377);
@@ -563,10 +909,30 @@ fn proven_debits_equal_path_a() {
     wd.pay(&A, &BOB, 3, false, "BUNDLE", LOG);
     wd.c.roll(&BOB, 1);
     let o = call(&kb, "provenOpen", &wd.open(&BOB, 0)).unwrap();
-    call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &wd.credits(&BOB, 0, &o["need"]))).unwrap();
-    let p = call(&kb, "proveRefreshProven", &merge(wd.c.debit_fields(), json!({"session": o["session"]}))).unwrap();
-    let pa = call(&kb, "proveRefresh", &merge(wd.c.own(&BOB, 16), wd.c.debit_fields())).unwrap();
-    assert_eq!(t_of(2, &h(&p["stmt"])), t_of(2, &h(&pa["stmt"])), "own v_f and a rolled credit: path (A)'s T");
+    call(
+        &kb,
+        "provenAdd",
+        &wd.c
+            .add_request(&o["session"], &wd.credits(&BOB, 0, &o["need"])),
+    )
+    .unwrap();
+    let p = call(
+        &kb,
+        "proveRefreshProven",
+        &merge(wd.c.debit_fields(), json!({"session": o["session"]})),
+    )
+    .unwrap();
+    let pa = call(
+        &kb,
+        "proveRefresh",
+        &merge(wd.c.own(&BOB, 16), wd.c.debit_fields()),
+    )
+    .unwrap();
+    assert_eq!(
+        t_of(2, &h(&p["stmt"])),
+        t_of(2, &h(&pa["stmt"])),
+        "own v_f and a rolled credit: path (A)'s T"
+    );
 }
 
 /// The debit's own refusals, each before the key: a `need` index not accepted, `forOp7` not the debit's, another `chainId`,
@@ -588,57 +954,140 @@ fn proven_debit_negatives() {
         assert_eq!(key_uses(), before, "{what}: the key unused");
     };
     let o = call(&kb, "provenOpen", &wd.open(&BOB, 0)).unwrap();
-    refused("a need index not accepted", "proveBurnProven", &fields(&burn, &o["session"]));
+    refused(
+        "a need index not accepted",
+        "proveBurnProven",
+        &fields(&burn, &o["session"]),
+    );
     let cs = wd.credits(&BOB, 0, &o["need"]);
     call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &cs)).unwrap();
     let legs = json!({"legs": [{"pk": wd.pk(&Y), "ua": hx(&Y), "amount": 1}], "mode": "BUNDLE"});
-    refused("forOp7 not the debit's", "proveTransferMultiProven", &fields(&legs, &o["session"]));
-    refused("another chainId", "proveBurnProven", &merge(fields(&burn, &o["session"]), json!({"chainId": 1})));
-    assert!(call(&kb, "proveBurnProven", &fields(&burn, &o["session"])).is_ok(), "positive control");
+    refused(
+        "forOp7 not the debit's",
+        "proveTransferMultiProven",
+        &fields(&legs, &o["session"]),
+    );
+    refused(
+        "another chainId",
+        "proveBurnProven",
+        &merge(fields(&burn, &o["session"]), json!({"chainId": 1})),
+    );
+    assert!(
+        call(&kb, "proveBurnProven", &fields(&burn, &o["session"])).is_ok(),
+        "positive control"
+    );
     // `rolled` past `p_last` without a materialised `acc`: viewing reads it, a debit refuses
     let mut open = wd.open(&BOB, 0);
     let mut s0 = h(&open["account"][0]);
     s0[16..24].copy_from_slice(&1u64.to_be_bytes());
     open["account"][0] = json!(hx(&s0));
     let o = call(&kb, "provenOpen", &open).unwrap();
-    call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &wd.credits(&BOB, 0, &o["need"]))).unwrap();
-    refused("rolled past p_last without acc", "proveBurnProven", &fields(&burn, &o["session"]));
+    call(
+        &kb,
+        "provenAdd",
+        &wd.c
+            .add_request(&o["session"], &wd.credits(&BOB, 0, &o["need"])),
+    )
+    .unwrap();
+    refused(
+        "rolled past p_last without acc",
+        "proveBurnProven",
+        &fields(&burn, &o["session"]),
+    );
     // a materialised `acc` with its words and `accHash` forged together
     wd.c.roll(&BOB, 1);
     let mut open = wd.open(&BOB, 0);
-    let mut stream: Vec<u8> = open["accWords"].as_array().unwrap().iter().flat_map(|w| h(w).into_iter().map(|b| !b)).collect();
+    let mut stream: Vec<u8> = open["accWords"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|w| h(w).into_iter().map(|b| !b))
+        .collect();
     stream.truncate(scaas_ua::facade::pqz_pack::CTP);
     stream[scaas_ua::facade::pqz_pack::PKP + 3] ^= 1;
     let mut words = stream.clone();
     words.resize(scaas_ua::facade::pqz_pack::ACC_WORDS * 32, 0);
-    open["accWords"] = json!(words.chunks(32).map(|w| hx(&w.iter().map(|b| !b).collect::<Vec<_>>())).collect::<Vec<_>>());
+    open["accWords"] = json!(words
+        .chunks(32)
+        .map(|w| hx(&w.iter().map(|b| !b).collect::<Vec<_>>()))
+        .collect::<Vec<_>>());
     open["account"][3] = json!(hx(&scaas_ua::keccak256(&stream)));
     let o = call(&kb, "provenOpen", &open).unwrap();
-    call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &wd.credits(&BOB, 0, &o["need"]))).unwrap();
-    refused("acc not the parts below rolled", "proveRefreshProven", &fields(&json!({}), &o["session"]));
+    call(
+        &kb,
+        "provenAdd",
+        &wd.c
+            .add_request(&o["session"], &wd.credits(&BOB, 0, &o["need"])),
+    )
+    .unwrap();
+    refused(
+        "acc not the parts below rolled",
+        "proveRefreshProven",
+        &fields(&json!({}), &o["session"]),
+    );
     // group 3g: version 0 stale after a rotation
     let b1 = wd.w.pqz_key_version(1, 0, 1).unwrap();
     wd.c.add_version(BOB, &b1.pk(), true);
     for (what, cmd, x) in [
         ("a stale burn", "proveBurnProven", burn.clone()),
         ("a stale op 7", "proveTransferMultiProven", legs.clone()),
-        ("a stale payment to another UA", "proveTransferProven", json!({"toUA": hx(&Y), "pkT": wd.pk(&Y), "amount": 1, "mode": "BUNDLE"})),
+        (
+            "a stale payment to another UA",
+            "proveTransferProven",
+            json!({"toUA": hx(&Y), "pkT": wd.pk(&Y), "amount": 1, "mode": "BUNDLE"}),
+        ),
     ] {
         let mut open = wd.open(&BOB, 0);
         open["forOp7"] = json!(cmd == "proveTransferMultiProven");
         let o = call(&kb, "provenOpen", &open).unwrap();
-        call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &wd.credits(&BOB, 0, &o["need"]))).unwrap();
+        call(
+            &kb,
+            "provenAdd",
+            &wd.c
+                .add_request(&o["session"], &wd.credits(&BOB, 0, &o["need"])),
+        )
+        .unwrap();
         refused(what, cmd, &fields(&x, &o["session"]));
     }
     let o = call(&kb, "provenOpen", &wd.open(&BOB, 0)).unwrap();
-    call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &wd.credits(&BOB, 0, &o["need"]))).unwrap();
-    let m = call(&kb, "proveTransferProven", &fields(&json!({"toUA": hx(&BOB), "pkT": hx(&b1.pk()), "amount": 5, "mode": "BUNDLE"}), &o["session"]))
-        .unwrap();
-    assert!(verify(1, &h(&m["stmt"]), &h(&m["proof"])), "the stale version's migration is proven");
+    call(
+        &kb,
+        "provenAdd",
+        &wd.c
+            .add_request(&o["session"], &wd.credits(&BOB, 0, &o["need"])),
+    )
+    .unwrap();
+    let m = call(
+        &kb,
+        "proveTransferProven",
+        &fields(
+            &json!({"toUA": hx(&BOB), "pkT": hx(&b1.pk()), "amount": 5, "mode": "BUNDLE"}),
+            &o["session"],
+        ),
+    )
+    .unwrap();
+    assert!(
+        verify(1, &h(&m["stmt"]), &h(&m["proof"])),
+        "the stale version's migration is proven"
+    );
     let o = call(&kb, "provenOpen", &wd.open(&BOB, 0)).unwrap();
-    call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &wd.credits(&BOB, 0, &o["need"]))).unwrap();
-    let r = call(&kb, "proveRefreshProven", &fields(&json!({}), &o["session"])).unwrap();
-    assert!(verify(2, &h(&r["stmt"]), &h(&r["proof"])), "and its refresh");
+    call(
+        &kb,
+        "provenAdd",
+        &wd.c
+            .add_request(&o["session"], &wd.credits(&BOB, 0, &o["need"])),
+    )
+    .unwrap();
+    let r = call(
+        &kb,
+        "proveRefreshProven",
+        &fields(&json!({}), &o["session"]),
+    )
+    .unwrap();
+    assert!(
+        verify(2, &h(&r["stmt"]), &h(&r["proof"])),
+        "and its refresh"
+    );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
@@ -658,7 +1107,10 @@ fn seal_advice() {
         let o = call(&kb, "provenOpen", &wd.open(&BOB, 0)).unwrap();
         let b = wd.proven(&kb, &BOB, 0);
         assert_eq!(o["unsealed"], b["unsealed"]);
-        (b["unsealed"].as_u64().unwrap(), b["sealAdvised"].as_bool().unwrap())
+        (
+            b["unsealed"].as_u64().unwrap(),
+            b["sealAdvised"].as_bool().unwrap(),
+        )
     };
     assert_eq!(seal(&wd), (2, true));
     wd.c.roll(&BOB, 1);
@@ -671,7 +1123,11 @@ fn seal_advice() {
     for _ in 0..16 {
         wd.c.shield(&BOB, 1);
     }
-    assert_eq!(seal(&wd), (17, true), "pendingCount − p_last, not p − p_last");
+    assert_eq!(
+        seal(&wd),
+        (17, true),
+        "pendingCount − p_last, not p − p_last"
+    );
 }
 
 /// Fable P2-2: an older own blob under the current `lastDebit` and record is refused (its tag binds its own counter, not
@@ -697,13 +1153,21 @@ fn a_tag_proves_authorship_not_inclusion() {
     forged["account"][1] = json!(hx(&s1));
     forged["blobs"] = json!(wd.c.blobs_json(&[wd.c.keys[&(BOB, 0)], old_blob]));
     let before = key_uses();
-    assert_eq!(call(&kb, "provenOpen", &forged).err(), Some(Error::Argument), "an older own blob under the current record");
+    assert_eq!(
+        call(&kb, "provenOpen", &forged).err(),
+        Some(Error::Argument),
+        "an older own blob under the current record"
+    );
     assert_eq!(key_uses(), before, "the key unused");
     // the older state, all its own words: accepted, the past balance
     let o = call(&kb, "provenOpen", &old).unwrap();
     assert_eq!(o["need"], json!([]));
     let b = call(&kb, "balanceProven", &json!({"session": o["session"]})).unwrap();
-    assert_eq!((&b["value"], kinds(&b)), (&json!(300), vec!["own".to_string()]), "a past balance");
+    assert_eq!(
+        (&b["value"], kinds(&b)),
+        (&json!(300), vec!["own".to_string()]),
+        "a past balance"
+    );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
@@ -711,7 +1175,8 @@ fn a_tag_proves_authorship_not_inclusion() {
 // ---------------------------------------------------------------------------------------------------------------------------
 
 fn check(v: &Value) -> Result<Value, Error> {
-    scaas_ua::facade::pqz::check_proven(v.to_string().as_bytes()).map(|s| serde_json::from_str(&s).unwrap())
+    scaas_ua::facade::pqz::check_proven(v.to_string().as_bytes())
+        .map(|s| serde_json::from_str(&s).unwrap())
 }
 
 /// The stored form of `Σ cts mod q` (64-bit lanes), as `checkProven`'s `sum`.
@@ -722,21 +1187,34 @@ fn packed_sum(cts: &[Vec<u8>]) -> String {
             *a = (*a + u64::from_be_bytes(b.try_into().unwrap())) % st::Q;
         }
     }
-    hx(&pack(&c.iter().flat_map(|x| x.to_be_bytes()).collect::<Vec<_>>()))
+    hx(&pack(
+        &c.iter().flat_map(|x| x.to_be_bytes()).collect::<Vec<_>>(),
+    ))
 }
 
 /// The ciphertext a slot of `(ua, v)` names, and the own `(u, v_f)` of its `accBlob`.
 fn slot_ct(c: &Chain, ua: &Word, v: u64, i: u64) -> Vec<u8> {
     let w = c.accts[&(*ua, v)].pending[&i];
     let d = &c.blobs[&<[u8; 20]>::try_from(&w[..20]).unwrap()][1..];
-    let (u, x) = (u16::from_be_bytes([w[20], w[21]]) as usize, u16::from_be_bytes([w[22], w[23]]) as usize);
-    [unpack(&d[u..u + PKP]).unwrap(), unpack(&d[x..x + VP]).unwrap()].concat()
+    let (u, x) = (
+        u16::from_be_bytes([w[20], w[21]]) as usize,
+        u16::from_be_bytes([w[22], w[23]]) as usize,
+    );
+    [
+        unpack(&d[u..u + PKP]).unwrap(),
+        unpack(&d[x..x + VP]).unwrap(),
+    ]
+    .concat()
 }
 fn own_ct(c: &Chain, ua: &Word, v: u64) -> Vec<u8> {
     let a = &c.accts[&(*ua, v)];
     let d = &c.blobs[&a.acc_blob][1..];
     let (u, x) = (a.acc_u as usize, a.acc_v as usize);
-    [unpack(&d[u..u + PKP]).unwrap(), unpack(&d[x..x + VP]).unwrap()].concat()
+    [
+        unpack(&d[u..u + PKP]).unwrap(),
+        unpack(&d[x..x + VP]).unwrap(),
+    ]
+    .concat()
 }
 
 /// A quorum member's check (no-oracle spec §4.14.8): the quorum's own last debit (a NONE refresh, its call shape) and every
@@ -762,7 +1240,12 @@ fn quorum_check_before_a_partial() {
     let cs: Vec<Cred> = ix.iter().map(|i| wd.c.proven_credit(&BOB, 0, *i)).collect();
     let req = wd.c.check_request(&BOB, 0, &pk, Some(&own), &cs);
     let r = check(&req).unwrap();
-    let kinds: Vec<&str> = r["parts"].as_array().unwrap().iter().map(|p| p["kind"].as_str().unwrap()).collect();
+    let kinds: Vec<&str> = r["parts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["kind"].as_str().unwrap())
+        .collect();
     assert_eq!(kinds, ["own", "credit", "credit"]);
     let mut cts = vec![own_ct(&wd.c, &BOB, 0)];
     cts.extend(ix.iter().map(|i| slot_ct(&wd.c, &BOB, 0, *i)));
@@ -770,7 +1253,11 @@ fn quorum_check_before_a_partial() {
     #[cfg(feature = "vectors")]
     {
         let ct = unpack(&h(&r["sum"])).unwrap();
-        assert_eq!(call(&kb, "dec", &json!({"ct": hx(&ct)})).unwrap()["value"], 327, "path (A)'s 331 less the TRIVIAL 4");
+        assert_eq!(
+            call(&kb, "dec", &json!({"ct": hx(&ct)})).unwrap()["value"],
+            327,
+            "path (A)'s 331 less the TRIVIAL 4"
+        );
     }
     // a batch: the member adds the batches' sums
     let b1 = check(&wd.c.check_request(&BOB, 0, &pk, Some(&own), &cs[..1])).unwrap();
@@ -779,9 +1266,15 @@ fn quorum_check_before_a_partial() {
     let mut with_key = req.clone();
     with_key["keyRecord"] = json!(hx(&wd.c.key_record(&BOB)));
     let mut ours = cs.clone();
-    ours[0].0["keyRecords"].as_array_mut().unwrap().push(json!({"ua": hx(&BOB), "version": 0, "word": hx(&wd.c.key_record(&BOB))}));
+    ours[0].0["keyRecords"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"ua": hx(&BOB), "version": 0, "word": hx(&wd.c.key_record(&BOB))}));
     let mut own_ours = own.clone();
-    own_ours.0["keyRecords"].as_array_mut().unwrap().push(json!({"ua": hx(&BOB), "version": 0, "word": hx(&wd.c.key_record(&BOB))}));
+    own_ours.0["keyRecords"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"ua": hx(&BOB), "version": 0, "word": hx(&wd.c.key_record(&BOB))}));
     let mut own_p = own.clone();
     own_p.0["proof"] = cs[0].0["proof"].clone();
     let mut credit_p = cs.clone();
@@ -790,13 +1283,31 @@ fn quorum_check_before_a_partial() {
     no_own.as_object_mut().unwrap().remove("own");
     for (what, v) in [
         ("a keyRecord of the quorum (Fable P1-1)", with_key),
-        ("a keyRecords entry of the quorum at the version checked", wd.c.check_request(&BOB, 0, &pk, Some(&own), &ours)),
-        ("that entry in the own debit's keyRecords", wd.c.check_request(&BOB, 0, &pk, Some(&own_ours), &cs)),
-        ("the own debit's P of another debit", wd.c.check_request(&BOB, 0, &pk, Some(&own_p), &cs)),
-        ("a credit's P of another debit", wd.c.check_request(&BOB, 0, &pk, Some(&own), &credit_p)),
-        ("a credit twice", wd.c.check_request(&BOB, 0, &pk, Some(&own), &[cs[0].clone(), cs[0].clone()])),
+        (
+            "a keyRecords entry of the quorum at the version checked",
+            wd.c.check_request(&BOB, 0, &pk, Some(&own), &ours),
+        ),
+        (
+            "that entry in the own debit's keyRecords",
+            wd.c.check_request(&BOB, 0, &pk, Some(&own_ours), &cs),
+        ),
+        (
+            "the own debit's P of another debit",
+            wd.c.check_request(&BOB, 0, &pk, Some(&own_p), &cs),
+        ),
+        (
+            "a credit's P of another debit",
+            wd.c.check_request(&BOB, 0, &pk, Some(&own), &credit_p),
+        ),
+        (
+            "a credit twice",
+            wd.c.check_request(&BOB, 0, &pk, Some(&own), &[cs[0].clone(), cs[0].clone()]),
+        ),
         ("own missing", no_own),
-        ("another key as the quorum's", wd.c.check_request(&BOB, 0, &h(&json!(wd.pk(&Y))), Some(&own), &cs)),
+        (
+            "another key as the quorum's",
+            wd.c.check_request(&BOB, 0, &h(&json!(wd.pk(&Y))), Some(&own), &cs),
+        ),
     ] {
         assert_eq!(check(&v).err(), Some(Error::Argument), "{what}");
     }
@@ -815,7 +1326,12 @@ fn quorum_own_debit_in_each_form() {
         f(wd);
         let own = wd.c.proven_own(&BOB, 0);
         let r = check(&wd.c.check_request(&BOB, 0, &pk, Some(&own), &[])).unwrap();
-        assert_eq!(r["sum"], packed_sum(&[own_ct(&wd.c, &BOB, 0)]), "{}", own.0["form"]);
+        assert_eq!(
+            r["sum"],
+            packed_sum(&[own_ct(&wd.c, &BOB, 0)]),
+            "{}",
+            own.0["form"]
+        );
         forms.push(own.0["form"].as_str().unwrap().to_string());
     };
     step(&mut wd, &|wd| {
@@ -824,11 +1340,44 @@ fn quorum_own_debit_in_each_form() {
     step(&mut wd, &|wd| {
         wd.pay_multi(&BOB, &[(X, 3), (Y, 2)], false, "BUNDLE", NONE);
     });
-    step(&mut wd, &|wd| wd.burn(&wd.w.pqz_key(1, 0).unwrap(), &BOB, 5, None, NONE));
-    step(&mut wd, &|wd| wd.burn(&wd.w.pqz_key(1, 0).unwrap(), &BOB, 6, Some(([0x77; 20], 4)), NONE));
-    step(&mut wd, &|wd| wd.burn(&wd.w.pqz_key(1, 0).unwrap(), &BOB, 7, Some(([0x77; 20], 4)), Opt { binding: [0xB7; 32], ..NONE }));
-    step(&mut wd, &|wd| wd.refresh(&wd.w.pqz_key(1, 0).unwrap(), &BOB, 0, LOG));
-    assert_eq!(forms, ["transfer", "transferMulti", "burn", "unwrap", "unwrap", "refresh"]);
+    step(&mut wd, &|wd| {
+        wd.burn(&wd.w.pqz_key(1, 0).unwrap(), &BOB, 5, None, NONE)
+    });
+    step(&mut wd, &|wd| {
+        wd.burn(
+            &wd.w.pqz_key(1, 0).unwrap(),
+            &BOB,
+            6,
+            Some(([0x77; 20], 4)),
+            NONE,
+        )
+    });
+    step(&mut wd, &|wd| {
+        wd.burn(
+            &wd.w.pqz_key(1, 0).unwrap(),
+            &BOB,
+            7,
+            Some(([0x77; 20], 4)),
+            Opt {
+                binding: [0xB7; 32],
+                ..NONE
+            },
+        )
+    });
+    step(&mut wd, &|wd| {
+        wd.refresh(&wd.w.pqz_key(1, 0).unwrap(), &BOB, 0, LOG)
+    });
+    assert_eq!(
+        forms,
+        [
+            "transfer",
+            "transferMulti",
+            "burn",
+            "unwrap",
+            "unwrap",
+            "refresh"
+        ]
+    );
 }
 
 /// Fable re-check P3-A: across the quorum's own migration (version 0 to 1), the check at version 1 takes the migration credit by
@@ -839,22 +1388,46 @@ fn quorum_across_its_own_migration() {
     let mut wd = World::new(0);
     wd.c.shield(&A, 1000);
     wd.pay(&A, &BOB, 300, false, "BUNDLE", LOG);
-    let (b0, b1) = (wd.w.pqz_key(1, 0).unwrap(), wd.w.pqz_key_version(1, 0, 1).unwrap());
+    let (b0, b1) = (
+        wd.w.pqz_key(1, 0).unwrap(),
+        wd.w.pqz_key_version(1, 0, 1).unwrap(),
+    );
     wd.c.add_version(BOB, &b1.pk(), true);
-    let (d, cl) = wd.debit(&BOB, 0, "BUNDLE", NONE, json!({"toUA": hx(&BOB), "pkT": hx(&b1.pk()), "amount": 260, "mode": "BUNDLE"}));
+    let (d, cl) = wd.debit(
+        &BOB,
+        0,
+        "BUNDLE",
+        NONE,
+        json!({"toUA": hx(&BOB), "pkT": hx(&b1.pk()), "amount": 260, "mode": "BUNDLE"}),
+    );
     let m = call(&b0, "proveTransfer", &d).unwrap();
     wd.settle(1, &m, cl, NONE, &[]);
     let ix = wd.c.window_credits(&BOB, 1);
     let cs: Vec<Cred> = ix.iter().map(|i| wd.c.proven_credit(&BOB, 1, *i)).collect();
     let r = check(&wd.c.check_request(&BOB, 1, &b1.pk(), None, &cs)).unwrap();
-    assert_eq!(r["parts"], json!([{"index": ix[0], "kind": "migration"}]), "the older key a sender key");
+    assert_eq!(
+        r["parts"],
+        json!([{"index": ix[0], "kind": "migration"}]),
+        "the older key a sender key"
+    );
     let mut ours = cs.clone();
-    ours[0].0["keyRecords"].as_array_mut().unwrap().push(json!({"ua": hx(&BOB), "version": 1, "word": hx(&wd.c.key_record_at(&BOB, 1))}));
-    assert_eq!(check(&wd.c.check_request(&BOB, 1, &b1.pk(), None, &ours)).err(), Some(Error::Argument), "the checked version's key");
+    ours[0].0["keyRecords"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"ua": hx(&BOB), "version": 1, "word": hx(&wd.c.key_record_at(&BOB, 1))}));
+    assert_eq!(
+        check(&wd.c.check_request(&BOB, 1, &b1.pk(), None, &ours)).err(),
+        Some(Error::Argument),
+        "the checked version's key"
+    );
     let own = wd.c.proven_own(&BOB, 0);
     assert_eq!(own.0["form"], "transfer");
     let r = check(&wd.c.check_request(&BOB, 0, &b0.pk(), Some(&own), &[])).unwrap();
-    assert_eq!(r["sum"], packed_sum(&[own_ct(&wd.c, &BOB, 0)]), "the migration as the own debit at version 0");
+    assert_eq!(
+        r["sum"],
+        packed_sum(&[own_ct(&wd.c, &BOB, 0)]),
+        "the migration as the own debit at version 0"
+    );
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
@@ -892,14 +1465,20 @@ fn bounds_refused_before_any_proof_is_checked() {
     let mut short = cs[0].clone();
     short.0["header"].as_array_mut().unwrap().pop();
     let mut big = add(&cs);
-    big["blobs"].as_array_mut().unwrap().push(json!({"address": hx(&[0x99; 20]), "code": hx(&vec![0u8; 2 << 20])}));
+    big["blobs"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"address": hx(&[0x99; 20]), "code": hx(&vec![0u8; 2 << 20])}));
     let mut deep = json!(0);
     for _ in 0..8 {
         deep = json!([deep]);
     }
     let mut nested = add(&cs);
     nested["credits"][0]["call"] = deep;
-    let quorum = merge(wd.c.check_request(&BOB, 0, &kb.pk(), None, &[]), json!({"credits": many["credits"].clone()}));
+    let quorum = merge(
+        wd.c.check_request(&BOB, 0, &kb.pk(), None, &[]),
+        json!({"credits": many["credits"].clone()}),
+    );
     let before = verifies();
     for (what, req) in [
         ("more than K_MAX credits", many),
@@ -909,12 +1488,27 @@ fn bounds_refused_before_any_proof_is_checked() {
         ("past CMD_MAX", big),
         ("deeper than 8", nested),
     ] {
-        assert_eq!(call(kb, "provenAdd", &req).err(), Some(Error::Argument), "{what}");
+        assert_eq!(
+            call(kb, "provenAdd", &req).err(),
+            Some(Error::Argument),
+            "{what}"
+        );
     }
-    assert_eq!(check(&quorum).err(), Some(Error::Argument), "checkProven: more than K_MAX credits");
+    assert_eq!(
+        check(&quorum).err(),
+        Some(Error::Argument),
+        "checkProven: more than K_MAX credits"
+    );
     assert_eq!(verifies(), before, "refused before any proof is checked");
-    assert_eq!(call(kb, "provenAdd", &add(&cs)).unwrap()["accepted"], json!([o["need"][0]]));
-    assert_eq!(verifies() - before, if cfg!(feature = "vectors") { 1 } else { 0 }, "one credit, one verification");
+    assert_eq!(
+        call(kb, "provenAdd", &add(&cs)).unwrap()["accepted"],
+        json!([o["need"][0]])
+    );
+    assert_eq!(
+        verifies() - before,
+        if cfg!(feature = "vectors") { 1 } else { 0 },
+        "one credit, one verification"
+    );
 }
 
 /// A large workload: a window of `K_MAX − 2` parts (TRIVIAL entries with one credit among them, the earlier ones rolled
@@ -931,7 +1525,10 @@ fn a_window_of_k_max_parts() {
     wd.c.shield(&BOB, 2);
     wd.c.roll(&BOB, n - 18);
     let b = wd.proven(wd.key(&BOB), &BOB, 0);
-    assert_eq!((&b["p"], b["value"].as_u64()), (&json!(n - 2), Some(wd.balance(&BOB))));
+    assert_eq!(
+        (&b["p"], b["value"].as_u64()),
+        (&json!(n - 2), Some(wd.balance(&BOB)))
+    );
     assert_eq!(b["value"], n - 4 + 5 + 2);
     assert_eq!(b["parts"].as_array().unwrap().len() as u64, n - 2);
 }
@@ -949,10 +1546,89 @@ fn credits_from_interleaved_sender_versions() {
     let x1 = wd.w.pqz_key_version(4, 0, 1).unwrap();
     wd.c.add_version(X, &x1.pk(), true);
     wd.c.shield(&X, 70);
-    let (d, cl) = wd.debit(&X, 1, "BUNDLE", LOG, json!({"toUA": hx(&BOB), "pkT": wd.pk(&BOB), "amount": 20, "mode": "BUNDLE"}));
+    let (d, cl) = wd.debit(
+        &X,
+        1,
+        "BUNDLE",
+        LOG,
+        json!({"toUA": hx(&BOB), "pkT": wd.pk(&BOB), "amount": 20, "mode": "BUNDLE"}),
+    );
     let p = call(&x1, "proveTransfer", &d).unwrap();
     wd.settle(1, &p, cl, LOG, &[]);
     wd.pay(&A, &BOB, 1, false, "HASH", LOG);
     let b = wd.proven(wd.key(&BOB), &BOB, 0);
-    assert_eq!((b["value"].as_u64(), b["value"].as_u64()), (Some(61), Some(wd.balance(&BOB))));
+    assert_eq!(
+        (b["value"].as_u64(), b["value"].as_u64()),
+        (Some(61), Some(wd.balance(&BOB)))
+    );
+}
+
+/// Fable C1 (set-auditor, CTR-PQZ-43): after the auditor is replaced (epoch 0 to 1), the proof path reads each audited record by
+/// its own epoch's auditor (its `auditor` words, as `pqz-read` resolves them): an audited credit and the own audited debit made at
+/// epoch 0 are accepted by `provenOpen` / `provenAdd` / `balanceProven` and by `checkProven`; the same records read by the current
+/// auditor (no `auditor` words) are refused.
+#[test]
+fn proven_path_reads_each_entry_by_its_epoch() {
+    let mut wd = World::new(0);
+    wd.c.shield(&A, 1000);
+    wd.pay(&A, &BOB, 300, true, "BUNDLE", LOG);
+    wd.pay(&BOB, &X, 10, true, "HASH", LOG);
+    wd.pay(&A, &BOB, 40, true, "BUNDLE", NONE);
+    wd.c.replace_auditor(Z);
+    let current = |c: &Cred| {
+        let mut x = c.clone();
+        assert!(
+            x.0.as_object_mut().unwrap().remove("auditor").is_some(),
+            "an audited record carries its auditor"
+        );
+        x
+    };
+    // path (B)
+    let kb = wd.key(&BOB);
+    let o = call(kb, "provenOpen", &wd.open(&BOB, 0)).unwrap();
+    let cs = wd.credits(&BOB, 0, &o["need"]);
+    assert_eq!(
+        cs.len(),
+        1,
+        "the epoch-0 audited credit after the own debit"
+    );
+    let r = call(
+        kb,
+        "provenAdd",
+        &wd.c.add_request(&o["session"], &[current(&cs[0])]),
+    )
+    .unwrap();
+    assert_eq!(
+        r["accepted"],
+        json!([]),
+        "the current auditor in its place: refused"
+    );
+    let r = call(kb, "provenAdd", &wd.c.add_request(&o["session"], &cs)).unwrap();
+    assert_eq!(
+        r,
+        json!({"accepted": o["need"], "refused": []}),
+        "read by its epoch's auditor: accepted"
+    );
+    call(kb, "balanceProven", &json!({"session": o["session"]})).unwrap();
+    // checkProven: the own audited debit and the credit
+    let pk = h(&json!(wd.pk(&BOB)));
+    let own = wd.c.proven_own(&BOB, 0);
+    let ix = wd.c.window_credits(&BOB, 0);
+    let cs: Vec<Cred> = ix.iter().map(|i| wd.c.proven_credit(&BOB, 0, *i)).collect();
+    let r = check(&wd.c.check_request(&BOB, 0, &pk, Some(&own), &cs)).unwrap();
+    assert_eq!(kinds(&r), ["own", "credit"]);
+    assert_eq!(
+        check(&wd.c.check_request(&BOB, 0, &pk, Some(&current(&own)), &cs)).err(),
+        Some(Error::Argument),
+        "own by the current auditor"
+    );
+    assert_eq!(
+        check(
+            &wd.c
+                .check_request(&BOB, 0, &pk, Some(&own), &[current(&cs[0])])
+        )
+        .err(),
+        Some(Error::Argument),
+        "a credit by the current auditor"
+    );
 }

@@ -21,7 +21,8 @@ pub const ROOT_RAW_KEY_TAG: &str = "scaas.sdk.root.raw-key.v1";
 /// The fewest code points of a derivation passphrase after NFKC (owner R4).
 pub const ROOT_PASSPHRASE_MIN: usize = 10;
 /// The `warning` field of the derivation message (spec §6.6, research §5.3).
-pub const KEY_DERIVATION_WARNING: &str = "This signature creates secret keys. Any site that obtains it, with your passphrase, \
+pub const KEY_DERIVATION_WARNING: &str =
+    "This signature creates secret keys. Any site that obtains it, with your passphrase, \
 controls those keys. Sign it only inside your SCaaS app.";
 const ARGON2_M_KIB: u32 = 131_072;
 const ARGON2_T: u32 = 3;
@@ -42,7 +43,12 @@ pub fn check_derivation_passphrase(p: &str, optional: bool) -> Result<()> {
 /// version: "1", salt: keccak256(ROOT_EOA_SIG_TAG)}` (no chainId, no verifyingContract) and `KeyDerivation(string warning,
 /// address account, uint32 set)`. What the app's external wallet signs, twice.
 pub fn key_derivation_typed_data(account: &[u8; 20], set: u32) -> Result<eip712::TypedData> {
-    eip712::key_derivation_typed_data(account, set, KEY_DERIVATION_WARNING, &keccak256(ROOT_EOA_SIG_TAG.as_bytes()))
+    eip712::key_derivation_typed_data(
+        account,
+        set,
+        KEY_DERIVATION_WARNING,
+        &keccak256(ROOT_EOA_SIG_TAG.as_bytes()),
+    )
 }
 
 /// A 64-byte EIP-2098 compact signature `r ‖ yParityAndS` as `r ‖ s ‖ v` (v 27 / 28): the explicit conversion root (c) asks for.
@@ -59,7 +65,8 @@ pub fn signature_from_compact(sig: &[u8; 64]) -> [u8; 65] {
 fn stretch(passphrase: &str, tag: &str, address: &[u8; 20]) -> Result<Zeroizing<[u8; 32]>> {
     let p = sized(|| passphrase.nfkc());
     let salt = keccak256(&[tag.as_bytes(), address].concat());
-    let params = Params::new(ARGON2_M_KIB, ARGON2_T, ARGON2_P, Some(32)).map_err(|_| Error::Argument)?;
+    let params =
+        Params::new(ARGON2_M_KIB, ARGON2_T, ARGON2_P, Some(32)).map_err(|_| Error::Argument)?;
     let mut out = Zeroizing::new([0u8; 32]);
     Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
         .hash_password_into(p.as_bytes(), &salt, &mut *out)
@@ -76,14 +83,20 @@ fn info(tag: &str, n: u32) -> Vec<u8> {
 fn address_of(vk: &VerifyingKey) -> Result<[u8; 20]> {
     let pt = vk.to_sec1_point(false);
     let h = keccak256(pt.as_bytes().get(1..).ok_or(Error::Argument)?);
-    h.get(12..).and_then(|a| a.try_into().ok()).ok_or(Error::Argument)
+    h.get(12..)
+        .and_then(|a| a.try_into().ok())
+        .ok_or(Error::Argument)
 }
 
 /// Root (c)'s 32 bytes: `sig1` and `sig2` byte-equal, 65 bytes, `r`, `s` in [1, n), `v` in {0, 1, 27, 28}, recovering to
 /// `account` over [`key_derivation_typed_data`]; then `r ‖ low-s s` is the HKDF input. `ExternalSignature` for a failed check
 /// (the SDK's `OriginSignature`), `Argument` for a short passphrase (checked first).
 pub fn root_from_eoa_signature(
-    account: &[u8; 20], set: u32, sig1: &[u8], sig2: &[u8], passphrase: &str,
+    account: &[u8; 20],
+    set: u32,
+    sig1: &[u8],
+    sig2: &[u8],
+    passphrase: &str,
 ) -> Result<Zeroizing<[u8; 32]>> {
     check_derivation_passphrase(passphrase, false)?;
     if sig1.len() != 65 || sig1 != sig2 {
@@ -108,13 +121,16 @@ pub fn root_from_eoa_signature(
     let digest = key_derivation_typed_data(account, set)?.digest()?;
     let rec = RecoveryId::from_byte(bit).ok_or(Error::ExternalSignature)?;
     let low = Signature::from_slice(&ikm[..]).map_err(|_| Error::ExternalSignature)?;
-    let vk = VerifyingKey::recover_from_prehash(&digest, &low, rec).map_err(|_| Error::ExternalSignature)?;
+    let vk = VerifyingKey::recover_from_prehash(&digest, &low, rec)
+        .map_err(|_| Error::ExternalSignature)?;
     if address_of(&vk)? != *account {
         return Err(Error::ExternalSignature);
     }
     let pw = stretch(passphrase, ROOT_EOA_SIG_TAG, account)?;
     let root = hkdf_sha256(&ikm[..], &*pw, &info(ROOT_EOA_SIG_TAG, set), 32)?;
-    Ok(Zeroizing::new(root.as_slice().try_into().map_err(|_| Error::Argument)?))
+    Ok(Zeroizing::new(
+        root.as_slice().try_into().map_err(|_| Error::Argument)?,
+    ))
 }
 
 /// Root (d)'s 32 bytes (spec §25 Q-K18): a secp256k1 EVM private key in [1, n), `index` the seed-set number, the passphrase
@@ -127,29 +143,52 @@ pub fn root_from_key(key: &[u8; 32], passphrase: &str, index: u32) -> Result<Zer
         let salt: [u8; 32] = Sha256::digest(ROOT_RAW_KEY_TAG.as_bytes()).into();
         hkdf_sha256(key, &salt, &info, 32)?
     } else {
-        let pw = stretch(passphrase, ROOT_RAW_KEY_TAG, &address_of(sk.verifying_key())?)?;
+        let pw = stretch(
+            passphrase,
+            ROOT_RAW_KEY_TAG,
+            &address_of(sk.verifying_key())?,
+        )?;
         hkdf_sha256(key, &*pw, &info, 32)?
     };
-    Ok(Zeroizing::new(root.as_slice().try_into().map_err(|_| Error::Argument)?))
+    Ok(Zeroizing::new(
+        root.as_slice().try_into().map_err(|_| Error::Argument)?,
+    ))
 }
 
 impl Wallet {
     /// Root (c)'s new seed set (spec §6.6): the wallet of [`root_from_eoa_signature`]'s 24 words (empty BIP-39 passphrase) and its
     /// backup. Errors as that function.
     pub fn from_eoa_signature(
-        account: &[u8; 20], set: u32, sig1: &[u8], sig2: &[u8], passphrase: &str,
+        account: &[u8; 20],
+        set: u32,
+        sig1: &[u8],
+        sig2: &[u8],
+        passphrase: &str,
     ) -> Result<(Wallet, SeedBackup)> {
-        Self::from_root(root_from_eoa_signature(account, set, sig1, sig2, passphrase)?)
+        Self::from_root(root_from_eoa_signature(
+            account, set, sig1, sig2, passphrase,
+        )?)
     }
 
     /// Root (d)'s new seed set (spec §6.6): the wallet of [`root_from_key`]'s 24 words and its backup.
-    pub fn from_private_key(key: &[u8; 32], passphrase: &str, index: u32) -> Result<(Wallet, SeedBackup)> {
+    pub fn from_private_key(
+        key: &[u8; 32],
+        passphrase: &str,
+        index: u32,
+    ) -> Result<(Wallet, SeedBackup)> {
         Self::from_root(root_from_key(key, passphrase, index)?)
     }
 
     fn from_root(root: Zeroizing<[u8; 32]>) -> Result<(Wallet, SeedBackup)> {
         let e = Zeroizing::new(root.to_vec());
         let w = Wallet::from_entropy(&e, "")?;
-        Ok((w, SeedBackup { entropy: Some(e), state: BackupState::Fresh, asked: [0; 3] }))
+        Ok((
+            w,
+            SeedBackup {
+                entropy: Some(e),
+                state: BackupState::Fresh,
+                asked: [0; 3],
+            },
+        ))
     }
 }

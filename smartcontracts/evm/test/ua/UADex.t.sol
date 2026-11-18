@@ -47,12 +47,32 @@ abstract contract UADexBase is UALedgerBase {
         dave = vm.addr(DAVE_PK);
         f = EnvKit.factory(address(this), chainUidA, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, REG_L, address(0), false);
-        Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 2, type(NormalToken).creationCode, address(0), address(0), false);
+        Catalogue.plain(
+            f, IOpenFactory.TokenKind.NORMAL, 2, type(NormalToken).creationCode, address(0), address(0), false
+        );
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        A = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 0, 1e6, alice, address(0))), "A"));
-        B = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("B", "B", 0, 1e6, bob, address(0))), "B"));
-        C = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 2, abi.encode(normalInit("C", "C", 0, 1e6, bob, address(0))), "C"));
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, TREASURY, false, 0, address(0), 0, 0)), "dex"));
+        A = NormalToken(
+            f.createToken(
+                IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 0, 1e6, alice, address(0))), "A"
+            )
+        );
+        B = NormalToken(
+            f.createToken(
+                IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("B", "B", 0, 1e6, bob, address(0))), "B"
+            )
+        );
+        C = NormalToken(
+            f.createToken(
+                IOpenFactory.TokenKind.NORMAL, 2, abi.encode(normalInit("C", "C", 0, 1e6, bob, address(0))), "C"
+            )
+        );
+        dex = SCaaSDex(
+            f.createDex(
+                1,
+                abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, TREASURY, false, 0, address(0), 0, 0)),
+                "dex"
+            )
+        );
         usdc = new MockERC20("USD Coin", "USDC", 6);
         usdc.mint(dave, 1e6);
         address puller = dex.puller();
@@ -70,7 +90,9 @@ abstract contract UADexBase is UALedgerBase {
     // ----- orders -----
 
     function _ua(bytes32 from, address receiveToken, uint256 amount, uint256 receiveAmount, uint256 fee)
-        internal view returns (ITradeToken.UATradeOrder memory o)
+        internal
+        view
+        returns (ITradeToken.UATradeOrder memory o)
     {
         o.from = from;
         o.receiveToken = receiveToken;
@@ -84,7 +106,9 @@ abstract contract UADexBase is UALedgerBase {
     }
 
     function _nat(address from, address receiveToken, uint256 amount, uint256 receiveAmount, uint256 fee)
-        internal view returns (ITradeToken.TradeOrder memory o)
+        internal
+        view
+        returns (ITradeToken.TradeOrder memory o)
     {
         o.from = from;
         o.receiveToken = receiveToken;
@@ -105,7 +129,9 @@ abstract contract UADexBase is UALedgerBase {
 
     /// A shape-1 leg: a derived signer through the registry under `trade`, a padded native by its own signature.
     function _uaLeg(address sell, ITradeToken.UATradeOrder memory o, uint256 fill)
-        internal view returns (ISCaaSDex.DexLeg memory)
+        internal
+        view
+        returns (ISCaaSDex.DexLeg memory)
     {
         bytes32 h = ITradeToken(sell).tradeOrderDigest(o);
         bytes memory auth = UAKinds.inNativeSpace(o.from)
@@ -117,19 +143,24 @@ abstract contract UADexBase is UALedgerBase {
     /// A native signer's leg written address-shaped: an outside token's `DexOrder` (shape 0), or on a SCaaS token its
     /// `UATradeOrder` (shape 1, the address zero-padded; ua-mtx-merge T6, R12: no SCaaS leg is a `TradeOrder`).
     function _natLeg(address sell, ITradeToken.TradeOrder memory o, uint256 fill)
-        internal view returns (ISCaaSDex.DexLeg memory)
+        internal
+        view
+        returns (ISCaaSDex.DexLeg memory)
     {
         return DexLegs.leg(sell, o, _natSig(sell, o), fill);
     }
 
     /// The signer's own signature of that leg's digest.
     function _natSig(address sell, ITradeToken.TradeOrder memory o) internal view returns (bytes memory) {
-        bytes32 h = sell == address(usdc) ? dex.dexOrderDigest(sell, o) : ITradeToken(sell).tradeOrderDigest(DexLegs.ua(o));
+        bytes32 h =
+            sell == address(usdc) ? dex.dexOrderDigest(sell, o) : ITradeToken(sell).tradeOrderDigest(DexLegs.ua(o));
         return _ecdsa(_pk(o.from), h);
     }
 
     function _s(ISCaaSDex.DexLeg memory taker, ISCaaSDex.DexLeg memory maker)
-        internal pure returns (ISCaaSDex.Settlement[] memory ss)
+        internal
+        pure
+        returns (ISCaaSDex.Settlement[] memory ss)
     {
         ss = new ISCaaSDex.Settlement[](1);
         ss[0].ref = "ua";
@@ -249,12 +280,16 @@ contract UADexTest is UADexBase {
     function test_selfTrade_byId() public {
         ITradeToken.TradeOrder memory t = _nat(alice, address(B), 1000, 2000, 0);
         ITradeToken.UATradeOrder memory m = _ua(_pad(alice), address(A), 2000, 1000, 0);
-        _expectOne(_s(_natLeg(address(A), t, 1000), _uaLeg(address(B), m, 2000)),
-            abi.encodeWithSelector(ISCaaSDex.SelfTrade.selector, _pad(alice)));
+        _expectOne(
+            _s(_natLeg(address(A), t, 1000), _uaLeg(address(B), m, 2000)),
+            abi.encodeWithSelector(ISCaaSDex.SelfTrade.selector, _pad(alice))
+        );
         ITradeToken.UATradeOrder memory u = _ua(uaB, address(B), 1000, 2000, 0);
         ITradeToken.UATradeOrder memory v = _ua(uaB, address(A), 2000, 1000, 0);
-        _expectOne(_s(_uaLeg(address(A), u, 1000), _uaLeg(address(B), v, 2000)),
-            abi.encodeWithSelector(ISCaaSDex.SelfTrade.selector, uaB));
+        _expectOne(
+            _s(_uaLeg(address(A), u, 1000), _uaLeg(address(B), v, 2000)),
+            abi.encodeWithSelector(ISCaaSDex.SelfTrade.selector, uaB)
+        );
     }
 
     /// Path B on a UA leg: the token pulls the whole amount; the DEX refunds the unmatched part into the UA's ledger.
@@ -276,16 +311,22 @@ contract UADexTest is UADexBase {
         // ua-mtx-merge T6 (C, R9), meaning: a derived seller's shape-1 leg in a ledger-off SCaaS token (was: a padded
         // native's, which now runs by its own key), and any shape-1 leg in an outside token
         ITradeToken.UATradeOrder memory tc = _ua(uaB, address(A), 1000, 1000, 0);
-        _expectOne(_s(_uaLeg(address(C), tc, 1000), _natLeg(address(A), _nat(alice, address(C), 1000, 1000, 0), 1000)),
-            abi.encodeWithSelector(ISCaaSDex.UALegNotLedger.selector, address(C)));
+        _expectOne(
+            _s(_uaLeg(address(C), tc, 1000), _natLeg(address(A), _nat(alice, address(C), 1000, 1000, 0), 1000)),
+            abi.encodeWithSelector(ISCaaSDex.UALegNotLedger.selector, address(C))
+        );
         ITradeToken.UATradeOrder memory tu = _ua(_pad(dave), address(A), 1000, 1000, 0);
         ISCaaSDex.DexLeg memory lu = DexLegs.uaLeg(address(usdc), tu, UACall.auth(tu.from, hex"00"), 1000); // usdc has no digest
-        _expectOne(_s(lu, _natLeg(address(A), _nat(alice, address(usdc), 1000, 1000, 0), 1000)),
-            abi.encodeWithSelector(ISCaaSDex.UALegNotLedger.selector, address(usdc)));
+        _expectOne(
+            _s(lu, _natLeg(address(A), _nat(alice, address(usdc), 1000, 1000, 0), 1000)),
+            abi.encodeWithSelector(ISCaaSDex.UALegNotLedger.selector, address(usdc))
+        );
         // ua-mtx-merge T6 (R12): a shape-0 leg selling a SCaaS token
         ITradeToken.TradeOrder memory t0 = _nat(alice, address(B), 1000, 2000, 0);
-        _expectOne(_s(DexLegs.leg0(address(A), t0, _natSig(address(A), t0), 1000), _natLeg(address(B), m, 2000)),
-            abi.encodeWithSelector(ISCaaSDex.LegShapeUnknown.selector, uint8(0)));
+        _expectOne(
+            _s(DexLegs.leg0(address(A), t0, _natSig(address(A), t0), 1000), _natLeg(address(B), m, 2000)),
+            abi.encodeWithSelector(ISCaaSDex.LegShapeUnknown.selector, uint8(0))
+        );
         // an unknown tag
         ISCaaSDex.Settlement[] memory ss =
             _s(_uaLeg(address(A), _ua(uaP, address(B), 1000, 2000, 0), 1000), _natLeg(address(B), m, 2000));
@@ -298,19 +339,25 @@ contract UADexTest is UADexBase {
         // uaP's proceeds in the outside usdc (dave's outside maker order)
         ITradeToken.UATradeOrder memory t = _ua(uaP, address(usdc), 1000, 2000, 0);
         ITradeToken.TradeOrder memory d = _nat(dave, address(A), 2000, 1000, 0);
-        _expectOne(_s(_uaLeg(address(A), t, 1000), _natLeg(address(usdc), d, 2000)),
-            abi.encodeWithSelector(ISCaaSDex.UAReceiveNotLedger.selector, address(usdc)));
+        _expectOne(
+            _s(_uaLeg(address(A), t, 1000), _natLeg(address(usdc), d, 2000)),
+            abi.encodeWithSelector(ISCaaSDex.UAReceiveNotLedger.selector, address(usdc))
+        );
         // a padded native in C (ledger off) with a derived destination
         ITradeToken.UATradeOrder memory tc = _ua(_pad(alice), address(C), 1000, 1000, 0);
         tc.destination = uaB;
-        _expectOne(_s(_uaLeg(address(A), tc, 1000), _natLeg(address(C), _nat(bob, address(A), 1000, 1000, 0), 1000)),
-            abi.encodeWithSelector(ISCaaSDex.UAReceiveNotLedger.selector, address(C)));
+        _expectOne(
+            _s(_uaLeg(address(A), tc, 1000), _natLeg(address(C), _nat(bob, address(A), 1000, 1000, 0), 1000)),
+            abi.encodeWithSelector(ISCaaSDex.UAReceiveNotLedger.selector, address(C))
+        );
         // an unregistered derived destination: the receive token's transferToUA refuses it
         ITradeToken.UATradeOrder memory tx_ = _ua(uaP, address(B), 1000, 2000, 0);
         tx_.destination = bytes32(uint256(keccak256("nobody")));
         ITradeToken.TradeOrder memory m = _nat(bob, address(A), 2000, 1000, 0);
-        _expectOne(_s(_uaLeg(address(A), tx_, 1000), _natLeg(address(B), m, 2000)),
-            abi.encodeWithSelector(IUALedger.UANotRegistered.selector, tx_.destination));
+        _expectOne(
+            _s(_uaLeg(address(A), tx_, 1000), _natLeg(address(B), m, 2000)),
+            abi.encodeWithSelector(IUALedger.UANotRegistered.selector, tx_.destination)
+        );
         // through mtxSettle that is one MatchFailed, the call itself does not revert when another settlement works
         ISCaaSDex.Settlement[] memory two = new ISCaaSDex.Settlement[](2);
         two[0] = _s(_uaLeg(address(A), tx_, 1000), _natLeg(address(B), m, 2000))[0];
@@ -341,11 +388,16 @@ contract UADexTest is UADexBase {
     /// taker (stand-in verifier) — what the UA ledger costs. ua-mtx-merge T6 (R12), meaning: the shape-0 x 0 row of a
     /// SCaaS pair is gone (no SCaaS leg is a `TradeOrder`); two rows.
     function test_gas_legShapes() public {
-        ISCaaSDex.Settlement[] memory s11 = _s(_uaLeg(address(A), _ua(_pad(alice), address(B), 1000, 2000, 3_000), 1000),
-            _uaLeg(address(B), _ua(_pad(bob), address(A), 2000, 1000, 3_000), 2000));
-        ISCaaSDex.Settlement[] memory sP1 = _s(_uaLeg(address(A), _ua(uaP, address(B), 1000, 2000, 3_000), 1000),
-            _uaLeg(address(B), _ua(_pad(bob), address(A), 2000, 1000, 3_000), 2000));
-        string[2] memory names = ["native x native, shape 1 x 1 (padded ids)", "p256 UA (stand-in) x native, shape 1 x 1"];
+        ISCaaSDex.Settlement[] memory s11 = _s(
+            _uaLeg(address(A), _ua(_pad(alice), address(B), 1000, 2000, 3_000), 1000),
+            _uaLeg(address(B), _ua(_pad(bob), address(A), 2000, 1000, 3_000), 2000)
+        );
+        ISCaaSDex.Settlement[] memory sP1 = _s(
+            _uaLeg(address(A), _ua(uaP, address(B), 1000, 2000, 3_000), 1000),
+            _uaLeg(address(B), _ua(_pad(bob), address(A), 2000, 1000, 3_000), 2000)
+        );
+        string[2] memory names =
+            ["native x native, shape 1 x 1 (padded ids)", "p256 UA (stand-in) x native, shape 1 x 1"];
         ISCaaSDex.Settlement[][2] memory all = [s11, sP1];
         for (uint256 i; i < 2; ++i) {
             uint256 snap = vm.snapshotState();
@@ -369,16 +421,20 @@ contract UADexTest is UADexBase {
         p.legs[0] = DexLegs.exchange(l, 1000, 1900);
         // `mtxTrade` is never an interaction (the DEX is `o.dex` of every order)
         ISCaaSDex.Interaction[] memory bad = new ISCaaSDex.Interaction[](1);
-        bad[0] = ISCaaSDex.Interaction(address(A),
-            abi.encodeCall(ITradeToken.mtxTrade, (o, l.auth, ITradeToken.TradeFill(1, 2, 0, RELAYER))));
+        bad[0] = ISCaaSDex.Interaction(
+            address(A), abi.encodeCall(ITradeToken.mtxTrade, (o, l.auth, ITradeToken.TradeFill(1, 2, 0, RELAYER)))
+        );
         vm.prank(RELAYER);
-        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.ForbiddenSelector.selector, address(A), ITradeToken.mtxTrade.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(ISCaaSDex.ForbiddenSelector.selector, address(A), ITradeToken.mtxTrade.selector)
+        );
         dex.mtxExchange(p, bad);
         // 1000 A → 2000 B through the router: floor 1900, fee ⌈5.7⌉ = 6, surplus 100
         ISCaaSDex.Interaction[] memory xs = new ISCaaSDex.Interaction[](2);
         xs[0] = ISCaaSDex.Interaction(address(A), abi.encodeCall(IERC20.approve, (address(router), 1000)));
-        xs[1] = ISCaaSDex.Interaction(address(router),
-            abi.encodeCall(UARouter.swap, (address(A), address(B), 1000, 2000, address(dex))));
+        xs[1] = ISCaaSDex.Interaction(
+            address(router), abi.encodeCall(UARouter.swap, (address(A), address(B), 1000, 2000, address(dex)))
+        );
         vm.recordLogs();
         vm.prank(RELAYER);
         dex.mtxExchange(p, xs);
@@ -391,8 +447,10 @@ contract UADexTest is UADexBase {
         for (uint256 k; k < logs.length; ++k) {
             if (logs[k].topics[0] != ISCaaSDex.UAExchangeLegSettled.selector) continue;
             assertEq(logs[k].topics[3], uaP);
-            assertEq(logs[k].data, abi.encode(uaP, uint256(1000), uint256(1900), uint256(100), uint256(6), uint256(0),
-                uint256(1900)));
+            assertEq(
+                logs[k].data,
+                abi.encode(uaP, uint256(1000), uint256(1900), uint256(100), uint256(6), uint256(0), uint256(1900))
+            );
             ++n;
         }
         assertEq(n, 1);

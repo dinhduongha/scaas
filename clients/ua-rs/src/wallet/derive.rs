@@ -45,7 +45,11 @@ fn hmac512(key: &[u8], parts: &[&[u8]]) -> Result<Zeroizing<[u8; 64]>> {
         m.update(p);
     }
     let mut r = m.finalize().into_bytes();
-    let out = Zeroizing::new(AsRef::<[u8]>::as_ref(&r).try_into().map_err(|_| Error::Argument)?);
+    let out = Zeroizing::new(
+        AsRef::<[u8]>::as_ref(&r)
+            .try_into()
+            .map_err(|_| Error::Argument)?,
+    );
     AsMut::<[u8]>::as_mut(&mut r).zeroize();
     Ok(out)
 }
@@ -53,7 +57,11 @@ fn hmac512(key: &[u8], parts: &[&[u8]]) -> Result<Zeroizing<[u8; 64]>> {
 fn halves(i: &[u8; 64]) -> (Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>) {
     let (mut l, mut r) = (Zeroizing::new([0u8; 32]), Zeroizing::new([0u8; 32]));
     for (n, b) in i.iter().enumerate() {
-        if let Some(x) = if n < 32 { l.get_mut(n) } else { r.get_mut(n - 32) } {
+        if let Some(x) = if n < 32 {
+            l.get_mut(n)
+        } else {
+            r.get_mut(n - 32)
+        } {
             *x = *b;
         }
     }
@@ -62,7 +70,8 @@ fn halves(i: &[u8; 64]) -> (Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>) {
 
 /// A P-256 scalar in `[1, n)`, else `None` (`0` or `≥ n`).
 fn p256_key(b: &[u8; 32]) -> Option<p256::Scalar> {
-    Option::<p256::Scalar>::from(p256::Scalar::from_repr((*b).into())).filter(|s| !bool::from(s.is_zero()))
+    Option::<p256::Scalar>::from(p256::Scalar::from_repr((*b).into()))
+        .filter(|s| !bool::from(s.is_zero()))
 }
 
 fn p256_compressed(k: &[u8; 32]) -> Result<Vec<u8>> {
@@ -98,7 +107,10 @@ pub fn slip10(curve: Curve, seed: &[u8], path: &[u32]) -> Result<Zeroizing<[u8; 
                 break next;
             }
             let (il, ir) = halves(&next);
-            let child = p256_key(&il).zip(p256_key(&k)).map(|(a, b)| a + b).filter(|s| !bool::from(s.is_zero()));
+            let child = p256_key(&il)
+                .zip(p256_key(&k))
+                .map(|(a, b)| a + b)
+                .filter(|s| !bool::from(s.is_zero()));
             if let Some(s) = child {
                 let mut out = Zeroizing::new([0u8; 64]);
                 for (n, b) in s.to_repr().iter().chain(ir.iter()).enumerate() {
@@ -126,7 +138,9 @@ pub fn bip32(seed: &[u8], path: &[u32]) -> Result<Zeroizing<[u8; 32]>> {
 
 fn scalar32<F: PrimeField>(f: &F) -> Result<Zeroizing<[u8; 32]>> {
     let v = Zeroizing::new(f.into_bigint().to_bytes_be());
-    Ok(Zeroizing::new(v.as_slice().try_into().map_err(|_| Error::Argument)?))
+    Ok(Zeroizing::new(
+        v.as_slice().try_into().map_err(|_| Error::Argument)?,
+    ))
 }
 
 /// EIP-2333 `HKDF_mod_r(IKM)` with the curve order of `F` and the salt `salt0`.
@@ -135,7 +149,9 @@ fn hkdf_mod_r<F: PrimeField>(ikm: &[u8], salt0: &[u8]) -> Result<F> {
     let mut salt = Sha256::digest(salt0);
     loop {
         let mut okm = Zeroizing::new([0u8; 48]);
-        Hkdf::<Sha256>::new(Some(&salt), &ikm0).expand(&[0, 48], &mut okm[..]).map_err(|_| Error::Argument)?;
+        Hkdf::<Sha256>::new(Some(&salt), &ikm0)
+            .expand(&[0, 48], &mut okm[..])
+            .map_err(|_| Error::Argument)?;
         let sk = F::from_be_bytes_mod_order(&okm[..]);
         if !sk.is_zero() {
             return Ok(sk);
@@ -151,7 +167,9 @@ fn lamport_pk<F: PrimeField>(parent: &F, index: u32) -> Result<[u8; 32]> {
     let mut h = Sha256::new();
     for k in [&ikm[..], &not_ikm[..]] {
         let mut okm = Zeroizing::new(vec![0u8; 255 * 32]);
-        Hkdf::<Sha256>::new(Some(&index.to_be_bytes()), k).expand(&[], &mut okm).map_err(|_| Error::Argument)?;
+        Hkdf::<Sha256>::new(Some(&index.to_be_bytes()), k)
+            .expand(&[], &mut okm)
+            .map_err(|_| Error::Argument)?;
         for c in okm.chunks(32) {
             h.update(Sha256::digest(c));
         }
@@ -161,7 +179,11 @@ fn lamport_pk<F: PrimeField>(parent: &F, index: u32) -> Result<[u8; 32]> {
 
 /// EIP-2333: the key at `path` (no hardened steps) from `seed` (≥ 32 bytes), over the order of `F` with `salt`; 32 bytes
 /// big-endian.
-pub fn eip2333<F: PrimeField>(seed: &[u8], path: &[u32], salt: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
+pub fn eip2333<F: PrimeField>(
+    seed: &[u8],
+    path: &[u32],
+    salt: &[u8],
+) -> Result<Zeroizing<[u8; 32]>> {
     if seed.len() < 32 {
         return Err(Error::Argument);
     }
@@ -177,17 +199,38 @@ pub fn eip2333<F: PrimeField>(seed: &[u8], path: &[u32], salt: &[u8]) -> Result<
 }
 
 /// The PQ seed of `tag` (pq.js `pqSeed`).
-pub fn hkdf_pq(seed: &[u8], tag: &str, account: u32, index: u32, len: usize) -> Result<Zeroizing<Vec<u8>>> {
+pub fn hkdf_pq(
+    seed: &[u8],
+    tag: &str,
+    account: u32,
+    index: u32,
+    len: usize,
+) -> Result<Zeroizing<Vec<u8>>> {
     hkdf_pq_version(seed, tag, account, index, 0, len)
 }
 
 /// [`hkdf_pq`] of key version `version` (CTR-PQZ-13 with group 3g's C8; pq.js `pqzKeySeed`): version 0 is [`hkdf_pq`]'s `info`,
 /// every version v ≥ 1 appends `be64(v)` (the map stays injective, today's keys stay).
-pub fn hkdf_pq_version(seed: &[u8], tag: &str, account: u32, index: u32, version: u64, len: usize) -> Result<Zeroizing<Vec<u8>>> {
+pub fn hkdf_pq_version(
+    seed: &[u8],
+    tag: &str,
+    account: u32,
+    index: u32,
+    version: u64,
+    len: usize,
+) -> Result<Zeroizing<Vec<u8>>> {
     let v = version.to_be_bytes();
-    let info = [tag.as_bytes(), &account.to_be_bytes(), &index.to_be_bytes(), if version == 0 { &[] } else { &v[..] }].concat();
+    let info = [
+        tag.as_bytes(),
+        &account.to_be_bytes(),
+        &index.to_be_bytes(),
+        if version == 0 { &[] } else { &v[..] },
+    ]
+    .concat();
     let mut out = Zeroizing::new(vec![0u8; len]);
-    Hkdf::<Sha256>::new(Some(PQ_SALT), seed).expand(&info, &mut out).map_err(|_| Error::Argument)?;
+    Hkdf::<Sha256>::new(Some(PQ_SALT), seed)
+        .expand(&info, &mut out)
+        .map_err(|_| Error::Argument)?;
     Ok(out)
 }
 
@@ -202,14 +245,30 @@ pub fn ua_secret(seed: &[u8], kind: u16, account: u32, index: u32) -> Result<Zer
     range(account)?;
     range(index)?;
     crate::kind_info(kind)?;
-    let tree = [UA_PURPOSE | HARDENED, HARDENED, account | HARDENED, u32::from(kind) | HARDENED, index | HARDENED];
-    let eip = |root: u32| if index == 0 { Ok([root, 0, account, u32::from(kind)]) } else { Err(Error::Argument) };
+    let tree = [
+        UA_PURPOSE | HARDENED,
+        HARDENED,
+        account | HARDENED,
+        u32::from(kind) | HARDENED,
+        index | HARDENED,
+    ];
+    let eip = |root: u32| {
+        if index == 0 {
+            Ok([root, 0, account, u32::from(kind)])
+        } else {
+            Err(Error::Argument)
+        }
+    };
     Ok(match kind {
         0x0101 => head(slip10(Curve::Nist256p1, seed, &tree)?),
         0x0102 => head(slip10(Curve::Ed25519, seed, &tree)?),
         0x0103 | 0x0108 | 0x0110 => Zeroizing::new(bip32(seed, &tree)?.to_vec()),
-        0x0104 | 0x0107 | 0x0112 => Zeroizing::new(eip2333::<ark_bn254::Fr>(seed, &eip(254)?, BN254_SALT)?.to_vec()),
-        0x0105 | 0x0106 => Zeroizing::new(eip2333::<ark_bls12_381::Fr>(seed, &eip(12381)?, BLS_SALT)?.to_vec()),
+        0x0104 | 0x0107 | 0x0112 => {
+            Zeroizing::new(eip2333::<ark_bn254::Fr>(seed, &eip(254)?, BN254_SALT)?.to_vec())
+        }
+        0x0105 | 0x0106 => {
+            Zeroizing::new(eip2333::<ark_bls12_381::Fr>(seed, &eip(12381)?, BLS_SALT)?.to_vec())
+        }
         0x0130 | 0x0131 | 0x0134 => hkdf_pq(seed, &kind_tag_string(kind)?, account, index, 32)?,
         0x0132 | 0x0133 | 0x0135 => hkdf_pq(seed, &kind_tag_string(kind)?, account, index, 48)?,
         _ => return Err(Error::Argument),
@@ -225,12 +284,19 @@ fn arr32(s: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
 }
 
 fn ed25519_public(s: &[u8]) -> Result<Vec<u8>> {
-    Ok(ed25519_dalek::SigningKey::from_bytes(&*arr32(s)?).verifying_key().to_bytes().to_vec())
+    Ok(ed25519_dalek::SigningKey::from_bytes(&*arr32(s)?)
+        .verifying_key()
+        .to_bytes()
+        .to_vec())
 }
 
 fn secp_public(s: &[u8], compressed: bool) -> Result<Vec<u8>> {
     let sk = k256::SecretKey::from_slice(s).map_err(|_| Error::Argument)?;
-    Ok(sk.public_key().to_sec1_point(compressed).as_bytes().to_vec())
+    Ok(sk
+        .public_key()
+        .to_sec1_point(compressed)
+        .as_bytes()
+        .to_vec())
 }
 
 /// The key data of UA kind `kind` from its secret (accounts.md §1.6 forms; a MuSig2 participant: its individual key).
@@ -242,7 +308,11 @@ pub fn ua_key_data(kind: u16, s: &[u8]) -> Result<Vec<u8>> {
             tail(sk.public_key().to_sec1_point(false).as_bytes())
         }
         0x0102 => ed25519_public(s),
-        0x0103 => Ok(k256::schnorr::SigningKey::from_slice(s).map_err(|_| Error::Argument)?.verifying_key().to_bytes().to_vec()),
+        0x0103 => Ok(k256::schnorr::SigningKey::from_slice(s)
+            .map_err(|_| Error::Argument)?
+            .verifying_key()
+            .to_bytes()
+            .to_vec()),
         0x0108 => tail(&secp_public(s, false)?),
         0x0110 => secp_public(s, true),
         // the pairing kinds and the musig2-bn254 participant: `scaas_ct::secret_mul` (T3c)
@@ -265,14 +335,22 @@ pub fn ua_key(kind: u16, s: Zeroizing<Vec<u8>>) -> Result<(Zeroizing<Vec<u8>>, V
 
 /// The secret of `network`'s key `index` (clientkeys `deriveKey`): BIP-32 or SLIP-10 ed25519 at the network's SLIP-44 path,
 /// `coin_type` in place of the network's coin type.
-pub fn native_secret(seed: &[u8], network: Network, index: u32, coin_type: Option<u32>, change: u32) -> Result<Zeroizing<Vec<u8>>> {
+pub fn native_secret(
+    seed: &[u8],
+    network: Network,
+    index: u32,
+    coin_type: Option<u32>,
+    change: u32,
+) -> Result<Zeroizing<Vec<u8>>> {
     let mut path = network.path(range(index)?, change);
     if let (Some(c), Some(p)) = (coin_type, path.get_mut(1)) {
         *p = range(c)? | HARDENED;
     }
     Ok(match network.scheme() {
         super::NativeScheme::Ed25519 => head(slip10(Curve::Ed25519, seed, &path)?),
-        super::NativeScheme::Secp256k1Ecdsa | super::NativeScheme::Bip340Taproot => Zeroizing::new(bip32(seed, &path)?.to_vec()),
+        super::NativeScheme::Secp256k1Ecdsa | super::NativeScheme::Bip340Taproot => {
+            Zeroizing::new(bip32(seed, &path)?.to_vec())
+        }
         super::NativeScheme::Sr25519 => return Err(Error::Argument),
     })
 }
@@ -281,7 +359,9 @@ pub fn native_secret(seed: &[u8], network: Network, index: u32, coin_type: Optio
 pub fn native_public(network: Network, s: &[u8]) -> Result<Vec<u8>> {
     match network.scheme() {
         super::NativeScheme::Ed25519 => ed25519_public(s),
-        super::NativeScheme::Secp256k1Ecdsa | super::NativeScheme::Bip340Taproot => secp_public(s, true),
+        super::NativeScheme::Secp256k1Ecdsa | super::NativeScheme::Bip340Taproot => {
+            secp_public(s, true)
+        }
         super::NativeScheme::Sr25519 => Err(Error::Argument),
     }
 }
@@ -299,21 +379,46 @@ const TAP_TWEAK: &[u8] = b"TapTweak";
 pub fn taproot_tweak(internal_x: &[u8; 32]) -> Result<TaprootOutput> {
     use k256::elliptic_curve::PrimeField as _;
     let tag = Sha256::digest(TAP_TWEAK);
-    let tweak: [u8; 32] = Sha256::new().chain_update(tag).chain_update(tag).chain_update(internal_x).finalize().into();
-    let t = Option::<k256::Scalar>::from(k256::Scalar::from_repr(tweak.into())).ok_or(Error::Argument)?;
-    let p = k256::PublicKey::from_sec1_bytes(&[&[2u8][..], internal_x].concat()).map_err(|_| Error::Argument)?;
+    let tweak: [u8; 32] = Sha256::new()
+        .chain_update(tag)
+        .chain_update(tag)
+        .chain_update(internal_x)
+        .finalize()
+        .into();
+    let t = Option::<k256::Scalar>::from(k256::Scalar::from_repr(tweak.into()))
+        .ok_or(Error::Argument)?;
+    let p = k256::PublicKey::from_sec1_bytes(&[&[2u8][..], internal_x].concat())
+        .map_err(|_| Error::Argument)?;
     let q = (p.to_projective() + k256::ProjectivePoint::GENERATOR * t).to_affine();
-    let enc = k256::PublicKey::from_affine(q).map_err(|_| Error::Argument)?.to_sec1_point(true);
+    let enc = k256::PublicKey::from_affine(q)
+        .map_err(|_| Error::Argument)?
+        .to_sec1_point(true);
     let b = enc.as_bytes();
-    Ok(TaprootOutput { tweak, output_key: b.get(1..33).ok_or(Error::Argument)?.try_into().map_err(|_| Error::Argument)? })
+    Ok(TaprootOutput {
+        tweak,
+        output_key: b
+            .get(1..33)
+            .ok_or(Error::Argument)?
+            .try_into()
+            .map_err(|_| Error::Argument)?,
+    })
 }
 
 /// A Bitcoin key's witness program (spec §5.1): `(0, HASH160(pk))` for P2WPKH, `(1, x(Q))` for P2TR; `None` elsewhere.
 pub fn witness_program(network: Network, public_key: &[u8]) -> Option<(u8, Vec<u8>)> {
     use ripemd::Digest as _;
     match network {
-        Network::BitcoinP2wpkh => Some((0, ripemd::Ripemd160::digest(Sha256::digest(public_key)).to_vec())),
-        Network::BitcoinP2tr => Some((1, taproot_tweak(public_key.get(1..)?.try_into().ok()?).ok()?.output_key.to_vec())),
+        Network::BitcoinP2wpkh => Some((
+            0,
+            ripemd::Ripemd160::digest(Sha256::digest(public_key)).to_vec(),
+        )),
+        Network::BitcoinP2tr => Some((
+            1,
+            taproot_tweak(public_key.get(1..)?.try_into().ok()?)
+                .ok()?
+                .output_key
+                .to_vec(),
+        )),
         _ => None,
     }
 }
@@ -325,7 +430,11 @@ fn hex(b: &[u8]) -> String {
 
 /// EIP-55 checksummed `0x…` address of an uncompressed secp256k1 key `04 ‖ x ‖ y`.
 fn eip55(uncompressed: &[u8]) -> Result<String> {
-    let h = hex(crate::keccak256(uncompressed.get(1..).ok_or(Error::Argument)?).get(12..).ok_or(Error::Argument)?);
+    let h = hex(
+        crate::keccak256(uncompressed.get(1..).ok_or(Error::Argument)?)
+            .get(12..)
+            .ok_or(Error::Argument)?,
+    );
     let check = hex(&crate::keccak256(h.as_bytes()));
     let mut out = String::from("0x");
     for (c, k) in h.chars().zip(check.chars()) {
@@ -352,7 +461,10 @@ fn groups5(bytes: &[u8]) -> Vec<u8> {
 }
 
 fn alphabet(a: &[u8; 32], groups: impl IntoIterator<Item = u8>) -> String {
-    groups.into_iter().filter_map(|g| a.get(usize::from(g & 31)).map(|c| char::from(*c))).collect()
+    groups
+        .into_iter()
+        .filter_map(|g| a.get(usize::from(g & 31)).map(|c| char::from(*c)))
+        .collect()
 }
 
 /// BIP-173 bech32 of `data` under `hrp`.
@@ -368,9 +480,19 @@ pub fn segwit_address(hrp: &str, version: u8, program: &[u8]) -> String {
 }
 
 fn bech32_words(hrp: &str, words: Vec<u8>, constant: u32) -> String {
-    const GEN: [u32; 5] = [0x3b6a_57b2, 0x2650_8e6d, 0x1ea1_19fa, 0x3d42_33dd, 0x2a14_62b3];
+    const GEN: [u32; 5] = [
+        0x3b6a_57b2,
+        0x2650_8e6d,
+        0x1ea1_19fa,
+        0x3d42_33dd,
+        0x2a14_62b3,
+    ];
     let mut chk = 1u32;
-    let expanded = hrp.bytes().map(|c| c >> 5).chain([0]).chain(hrp.bytes().map(|c| c & 31));
+    let expanded = hrp
+        .bytes()
+        .map(|c| c >> 5)
+        .chain([0])
+        .chain(hrp.bytes().map(|c| c & 31));
     for v in expanded.chain(words.iter().copied()).chain([0; 6]) {
         let top = chk >> 25;
         chk = ((chk & 0x1ff_ffff) << 5) ^ u32::from(v);
@@ -382,7 +504,13 @@ fn bech32_words(hrp: &str, words: Vec<u8>, constant: u32) -> String {
     }
     chk ^= constant;
     let sum = (0..6).map(|i| ((chk >> (5 * (5 - i))) & 31) as u8);
-    format!("{hrp}1{}", alphabet(b"qpzry9x8gf2tvdw0s3jn54khce6mua7l", words.into_iter().chain(sum)))
+    format!(
+        "{hrp}1{}",
+        alphabet(
+            b"qpzry9x8gf2tvdw0s3jn54khce6mua7l",
+            words.into_iter().chain(sum)
+        )
+    )
 }
 
 /// Stellar StrKey `G…` of an ed25519 key: base32 of `version ‖ key ‖ crc16-xmodem (little-endian)`; 35 bytes, so no padding.
@@ -392,21 +520,36 @@ fn strkey(pk: &[u8]) -> String {
     for b in &body {
         crc ^= u16::from(*b) << 8;
         for _ in 0..8 {
-            crc = if crc & 0x8000 != 0 { (crc << 1) ^ 0x1021 } else { crc << 1 };
+            crc = if crc & 0x8000 != 0 {
+                (crc << 1) ^ 0x1021
+            } else {
+                crc << 1
+            };
         }
     }
-    alphabet(b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567", groups5(&[&body[..], &crc.to_le_bytes()].concat()))
+    alphabet(
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567",
+        groups5(&[&body[..], &crc.to_le_bytes()].concat()),
+    )
 }
 
 /// The address of a native key from its public key (clientkeys `describe`): EIP-55 (`evm`, `hedera_ecdsa`), bech32
 /// `cosmos` of RIPEMD-160(SHA-256(compressed key)), Sui `0x` BLAKE2b-256(`0x00 ‖ key`), Aptos `0x` SHA3-256(`key ‖ 0x00`),
 /// Stellar StrKey, Solana base58, NEAR `hex(key)`; `None` for `ton` and `hedera_ed25519` (clientkeys prints none).
-pub fn native_address(network: Network, coin_type: Option<u32>, public_key: &[u8]) -> Option<String> {
+pub fn native_address(
+    network: Network,
+    coin_type: Option<u32>,
+    public_key: &[u8],
+) -> Option<String> {
     use sha3::Digest as _;
     match network {
         Network::BitcoinP2wpkh | Network::BitcoinP2tr => {
             let (v, program) = witness_program(network, public_key)?;
-            Some(segwit_address(if coin_type == Some(1) { "tb" } else { "bc" }, v, &program))
+            Some(segwit_address(
+                if coin_type == Some(1) { "tb" } else { "bc" },
+                v,
+                &program,
+            ))
         }
         Network::Evm | Network::HederaEcdsa => {
             let pk = k256::PublicKey::from_sec1_bytes(public_key).ok()?;
@@ -414,13 +557,24 @@ pub fn native_address(network: Network, coin_type: Option<u32>, public_key: &[u8
         }
         Network::Cosmos => {
             use ripemd::Digest as _;
-            Some(bech32("cosmos", &ripemd::Ripemd160::digest(Sha256::digest(public_key))))
+            Some(bech32(
+                "cosmos",
+                &ripemd::Ripemd160::digest(Sha256::digest(public_key)),
+            ))
         }
         Network::Sui => {
             use blake2::Digest as _;
-            Some(format!("0x{}", hex(&blake2::Blake2b::<blake2::digest::consts::U32>::digest([&[0u8][..], public_key].concat()))))
+            Some(format!(
+                "0x{}",
+                hex(&blake2::Blake2b::<blake2::digest::consts::U32>::digest(
+                    [&[0u8][..], public_key].concat()
+                ))
+            ))
         }
-        Network::Aptos => Some(format!("0x{}", hex(&sha3::Sha3_256::digest([public_key, &[0u8]].concat())))),
+        Network::Aptos => Some(format!(
+            "0x{}",
+            hex(&sha3::Sha3_256::digest([public_key, &[0u8]].concat()))
+        )),
         Network::Stellar => Some(strkey(public_key)),
         Network::Solana => Some(bs58::encode(public_key).into_string()),
         // NEAR's implicit account id: the 64 lower-case hex digits of the ed25519 key

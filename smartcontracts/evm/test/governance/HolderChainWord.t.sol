@@ -51,13 +51,18 @@ contract HolderChainWordTest is Test {
     // ------------------------------------------------------------------ fixtures
 
     function _clone(address impl) internal returns (address) {
-        return EnvKit.clone(impl, EnvKit.env(UID, address(0x5Ca0000000000000000000000000000000000003),
-            address(0), false, address(0)));
+        return EnvKit.clone(
+            impl, EnvKit.env(UID, address(0x5Ca0000000000000000000000000000000000003), address(0), false, address(0))
+        );
     }
 
     function _kind(string memory name, uint8 kind) internal returns (address t) {
         bytes memory core = kind >= 8 ? regArgs() : bytes("");
-        t = _clone(vm.deployCode(string.concat(name, ".sol:", name), abi.encode(address(this), kindArgs(kind, address(this), core))));
+        t = _clone(
+            vm.deployCode(
+                string.concat(name, ".sol:", name), abi.encode(address(this), kindArgs(kind, address(this), core))
+            )
+        );
     }
 
     function _dex() internal returns (address) {
@@ -89,45 +94,78 @@ contract HolderChainWordTest is Test {
     function _cd(Entry memory e, bytes32 word) internal view returns (bytes memory) {
         bytes4 sel = bytes4(keccak256(bytes(e.sig)));
         bytes32 k = keccak256(bytes(e.sig));
-        if (k == keccak256("setAllowed(bytes32[],bool,bytes32)") || k == keccak256("setDenied(bytes32[],bool,bytes32)")) {
+        if (k == keccak256("setAllowed(bytes32[],bool,bytes32)") || k == keccak256("setDenied(bytes32[],bool,bytes32)"))
+        {
             bytes32[] memory a = new bytes32[](1);
             a[0] = bytes32(uint256(0xACC));
             return abi.encodeWithSelector(sel, a, true, word);
         }
-        if (k == keccak256("mint(address,uint256,bytes32)")) return abi.encodeWithSelector(sel, address(0xD0), uint256(1), word);
-        if (k == keccak256("mintToUA(bytes32,uint256,bytes32)")) return abi.encodeWithSelector(sel, bytes32(uint256(0xD1)), uint256(1), word);
-        if (k == keccak256("disableWrap(address,bytes32,bytes32)")) return abi.encodeWithSelector(sel, address(0xD2), bytes32("r"), word);
+        if (k == keccak256("mint(address,uint256,bytes32)")) {
+            return abi.encodeWithSelector(sel, address(0xD0), uint256(1), word);
+        }
+        if (k == keccak256("mintToUA(bytes32,uint256,bytes32)")) {
+            return abi.encodeWithSelector(sel, bytes32(uint256(0xD1)), uint256(1), word);
+        }
+        if (k == keccak256("disableWrap(address,bytes32,bytes32)")) {
+            return abi.encodeWithSelector(sel, address(0xD2), bytes32("r"), word);
+        }
         if (k == keccak256("proposeRate(address,uint96,uint96,bytes32)")) {
             return abi.encodeWithSelector(sel, address(0xD2), uint96(101), uint96(100), word);
         }
-        if (k == keccak256("cancelRate(bytes32)") || k == keccak256("executeRate(bytes32)")) return abi.encodeWithSelector(sel, word);
+        if (k == keccak256("cancelRate(bytes32)") || k == keccak256("executeRate(bytes32)")) {
+            return abi.encodeWithSelector(sel, word);
+        }
         if (k == keccak256("setWrapMember(bytes32,bool,bool,bytes32)")) {
             return abi.encodeWithSelector(sel, bytes32(uint256(0xACC)), true, true, word);
         }
         if (k == keccak256("freeze(bytes32,bytes32,bytes32,bytes32)")) {
             return abi.encodeWithSelector(sel, bytes32(uint256(0xACC)), bytes32("ref"), bytes32(0), word);
         }
-        if (k == keccak256("unfreeze(bytes32,bytes32,bytes32)")) return abi.encodeWithSelector(sel, bytes32(uint256(0xACC)), bytes32("ref"), word);
-        if (k == keccak256("forceTransfer(bytes32,uint256,bytes32)")) return abi.encodeWithSelector(sel, bytes32("rid"), uint256(1), word);
-        if (k == keccak256("pause(bytes32,uint64,bytes32)")) return abi.encodeWithSelector(sel, bytes32("ref"), uint64(block.timestamp + 1 days), word);
+        if (k == keccak256("unfreeze(bytes32,bytes32,bytes32)")) {
+            return abi.encodeWithSelector(sel, bytes32(uint256(0xACC)), bytes32("ref"), word);
+        }
+        if (k == keccak256("forceTransfer(bytes32,uint256,bytes32)")) {
+            return abi.encodeWithSelector(sel, bytes32("rid"), uint256(1), word);
+        }
+        if (k == keccak256("pause(bytes32,uint64,bytes32)")) {
+            return abi.encodeWithSelector(sel, bytes32("ref"), uint64(block.timestamp + 1 days), word);
+        }
         if (k == keccak256("unpause(bytes32,bytes32)")) return abi.encodeWithSelector(sel, bytes32("ref"), word);
         if (k == keccak256("recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32)")) {
-            return abi.encodeWithSelector(sel, bytes32("o"), bytes32("d"), bytes32(uint256(0xACC)), bytes32(uint256(0xBE)),
-                uint256(1), uint64(0), word);
+            return abi.encodeWithSelector(
+                sel,
+                bytes32("o"),
+                bytes32("d"),
+                bytes32(uint256(0xACC)),
+                bytes32(uint256(0xBE)),
+                uint256(1),
+                uint64(0),
+                word
+            );
         }
-        if (k == keccak256("revokeOrder(bytes32,bytes32,bytes32)")) return abi.encodeWithSelector(sel, bytes32("rid"), bytes32("why"), word);
+        if (k == keccak256("revokeOrder(bytes32,bytes32,bytes32)")) {
+            return abi.encodeWithSelector(sel, bytes32("rid"), bytes32("why"), word);
+        }
         if (k == keccak256("operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32)")) {
-            return abi.encodeWithSelector(sel, bytes32(uint256(0xACC)), bytes32(uint256(0xBE)), uint256(1), bytes32("ref"), word);
+            return abi.encodeWithSelector(
+                sel, bytes32(uint256(0xACC)), bytes32(uint256(0xBE)), uint256(1), bytes32("ref"), word
+            );
         }
         if (k == keccak256("setTaxRate(uint32,bytes32)")) return abi.encodeWithSelector(sel, uint32(7), word);
-        if (k == keccak256("setTaxRecipient(bytes32,bytes32)")) return abi.encodeWithSelector(sel, bytes32(uint256(0x7A1)), word);
+        if (k == keccak256("setTaxRecipient(bytes32,bytes32)")) {
+            return abi.encodeWithSelector(sel, bytes32(uint256(0x7A1)), word);
+        }
         if (k == keccak256("setProofStore(uint8,bytes32)")) return abi.encodeWithSelector(sel, uint8(1), word);
         if (k == keccak256("setMarket(address,address,bool,bytes32)")) {
             return abi.encodeWithSelector(sel, address(0xBA5E), address(0x0907E), true, word);
         }
-        if (k == keccak256("setExchangeTarget(address,bool,bytes32)")) return abi.encodeWithSelector(sel, address(0xE7), true, word);
+        if (k == keccak256("setExchangeTarget(address,bool,bytes32)")) {
+            return abi.encodeWithSelector(sel, address(0xE7), true, word);
+        }
         if (k == keccak256("setListedOnly(bool,bytes32)")) return abi.encodeWithSelector(sel, true, word);
-        if (k == keccak256("setFeeSplit(uint32,address,bytes32)")) return abi.encodeWithSelector(sel, uint32(500_000), address(0x7EA5), word);
+        if (k == keccak256("setFeeSplit(uint32,address,bytes32)")) {
+            return abi.encodeWithSelector(sel, uint32(500_000), address(0x7EA5), word);
+        }
         revert(string.concat("no calldata for ", e.sig));
     }
 
@@ -174,29 +212,45 @@ contract HolderChainWordTest is Test {
         es = new Entry[](24);
         es[0] = Entry("mint(address,uint256,bytes32)", "mint(address,uint256)", GovernanceBits.MINTABLE);
         es[1] = Entry("mintToUA(bytes32,uint256,bytes32)", "mintToUA(bytes32,uint256)", GovernanceBits.MINTABLE);
-        es[2] = Entry("disableWrap(address,bytes32,bytes32)", "disableWrap(address,bytes32)", GovernanceBits.WRAP_DISABLEABLE);
-        es[3] = Entry("proposeRate(address,uint96,uint96,bytes32)", "proposeRate(address,uint96,uint96)",
-            GovernanceBits.RATE_ADJUSTABLE);
+        es[2] = Entry(
+            "disableWrap(address,bytes32,bytes32)", "disableWrap(address,bytes32)", GovernanceBits.WRAP_DISABLEABLE
+        );
+        es[3] = Entry(
+            "proposeRate(address,uint96,uint96,bytes32)",
+            "proposeRate(address,uint96,uint96)",
+            GovernanceBits.RATE_ADJUSTABLE
+        );
         es[4] = Entry("cancelRate(bytes32)", "cancelRate()", GovernanceBits.RATE_ADJUSTABLE);
         es[5] = Entry("executeRate(bytes32)", "executeRate()", GovernanceBits.RATE_ADJUSTABLE);
-        es[6] = Entry("setWrapMember(bytes32,bool,bool,bytes32)", "setWrapMember(bytes32,bool,bool)", GovernanceBits.WRAP_LIST);
+        es[6] = Entry(
+            "setWrapMember(bytes32,bool,bool,bytes32)", "setWrapMember(bytes32,bool,bool)", GovernanceBits.WRAP_LIST
+        );
         es[7] = Entry("setAllowed(bytes32[],bool,bytes32)", "setAllowed(bytes32[],bool)", GovernanceBits.ALLOWLIST);
         es[8] = Entry("setDenied(bytes32[],bool,bytes32)", "setDenied(bytes32[],bool)", GovernanceBits.DENYLIST);
-        es[9] = Entry("freeze(bytes32,bytes32,bytes32,bytes32)", "freeze(bytes32,bytes32,bytes32)", GovernanceBits.FREEZE);
+        es[9] =
+            Entry("freeze(bytes32,bytes32,bytes32,bytes32)", "freeze(bytes32,bytes32,bytes32)", GovernanceBits.FREEZE);
         es[10] = Entry("unfreeze(bytes32,bytes32,bytes32)", "unfreeze(bytes32,bytes32)", GovernanceBits.FREEZE);
         es[11] = Entry("forceTransfer(bytes32,uint256,bytes32)", "forceTransfer(bytes32,uint256)", GovernanceBits.FORCE);
         es[12] = Entry("pause(bytes32,uint64,bytes32)", "pause(bytes32,uint64)", GovernanceBits.PAUSE);
         es[13] = Entry("unpause(bytes32,bytes32)", "unpause(bytes32)", GovernanceBits.PAUSE);
-        es[14] = Entry("recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32)",
-            "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)", GovernanceBits.RECORD);
+        es[14] = Entry(
+            "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32)",
+            "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
+            GovernanceBits.RECORD
+        );
         es[15] = Entry("revokeOrder(bytes32,bytes32,bytes32)", "revokeOrder(bytes32,bytes32)", GovernanceBits.RECORD);
-        es[16] = Entry("operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32)",
-            "operatorTransfer(bytes32,bytes32,uint256,bytes32)", GovernanceBits.OPERATOR_TRANSFER);
+        es[16] = Entry(
+            "operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32)",
+            "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+            GovernanceBits.OPERATOR_TRANSFER
+        );
         es[17] = Entry("setTaxRate(uint32,bytes32)", "setTaxRate(uint32)", GovernanceBits.TAX);
         es[18] = Entry("setTaxRecipient(bytes32,bytes32)", "setTaxRecipient(bytes32)", GovernanceBits.TAX);
         es[19] = Entry("setProofStore(uint8,bytes32)", "setProofStore(uint8)", GovernanceBits.PQZ_PROOF);
-        es[20] = Entry("setMarket(address,address,bool,bytes32)", "setMarket(address,address,bool)", GovernanceBits.LISTING);
-        es[21] = Entry("setExchangeTarget(address,bool,bytes32)", "setExchangeTarget(address,bool)", GovernanceBits.LISTING);
+        es[20] =
+            Entry("setMarket(address,address,bool,bytes32)", "setMarket(address,address,bool)", GovernanceBits.LISTING);
+        es[21] =
+            Entry("setExchangeTarget(address,bool,bytes32)", "setExchangeTarget(address,bool)", GovernanceBits.LISTING);
         es[22] = Entry("setListedOnly(bool,bytes32)", "setListedOnly(bool)", GovernanceBits.LISTING);
         es[23] = Entry("setFeeSplit(uint32,address,bytes32)", "setFeeSplit(uint32,address)", GovernanceBits.FEE_ROUTING);
     }
@@ -239,31 +293,57 @@ contract HolderChainWordTest is Test {
         assertEq(n, _count(kind), "entries walked (spec 3.9 table)");
     }
 
-    function test_kind0_NormalToken() public { _token("NormalToken", 0); }
+    function test_kind0_NormalToken() public {
+        _token("NormalToken", 0);
+    }
 
-    function test_kind1_WrappedToken() public { _token("WrappedToken", 1); }
+    function test_kind1_WrappedToken() public {
+        _token("WrappedToken", 1);
+    }
 
-    function test_kind2_NormalZetherToken() public { _token("NormalZetherToken", 2); }
+    function test_kind2_NormalZetherToken() public {
+        _token("NormalZetherToken", 2);
+    }
 
-    function test_kind3_WrappedZetherToken() public { _token("WrappedZetherToken", 3); }
+    function test_kind3_WrappedZetherToken() public {
+        _token("WrappedZetherToken", 3);
+    }
 
-    function test_kind4_NormalPqzToken() public { _token("NormalPqzToken", 4); }
+    function test_kind4_NormalPqzToken() public {
+        _token("NormalPqzToken", 4);
+    }
 
-    function test_kind5_WrappedPqzToken() public { _token("WrappedPqzToken", 5); }
+    function test_kind5_WrappedPqzToken() public {
+        _token("WrappedPqzToken", 5);
+    }
 
-    function test_kind8_NormalRegulatedToken() public { _token("NormalRegulatedToken", 8); }
+    function test_kind8_NormalRegulatedToken() public {
+        _token("NormalRegulatedToken", 8);
+    }
 
-    function test_kind9_WrappedRegulatedToken() public { _token("WrappedRegulatedToken", 9); }
+    function test_kind9_WrappedRegulatedToken() public {
+        _token("WrappedRegulatedToken", 9);
+    }
 
-    function test_kind10_NormalZetherRegulatedToken() public { _token("NormalZetherRegulatedToken", 10); }
+    function test_kind10_NormalZetherRegulatedToken() public {
+        _token("NormalZetherRegulatedToken", 10);
+    }
 
-    function test_kind11_WrappedZetherRegulatedToken() public { _token("WrappedZetherRegulatedToken", 11); }
+    function test_kind11_WrappedZetherRegulatedToken() public {
+        _token("WrappedZetherRegulatedToken", 11);
+    }
 
-    function test_kind12_NormalPqzRegulatedToken() public { _token("NormalPqzRegulatedToken", 12); }
+    function test_kind12_NormalPqzRegulatedToken() public {
+        _token("NormalPqzRegulatedToken", 12);
+    }
 
-    function test_kind13_WrappedPqzRegulatedToken() public { _token("WrappedPqzRegulatedToken", 13); }
+    function test_kind13_WrappedPqzRegulatedToken() public {
+        _token("WrappedPqzRegulatedToken", 13);
+    }
 
-    function test_dex_SCaaSDex() public { _token("SCaaSDex", 255); }
+    function test_dex_SCaaSDex() public {
+        _token("SCaaSDex", 255);
+    }
 
     /// The acting control on kind 0: the holder's `mint` with the own word mints.
     function test_kind0_mintActs() public {
@@ -282,13 +362,20 @@ contract HolderChainWordTest is Test {
         address t = _kind("WrappedToken", 1);
         _seat(t, GovernanceBits.WRAP_LIST);
         vm.prank(HOLDER);
-        (bool ok, bytes memory ret) = t.call(abi.encodeWithSignature("setWrapMember(bytes32,bool,bool,bytes32)",
-            bytes32(uint256(0xACC)), true, true, UID));
+        (bool ok, bytes memory ret) = t.call(
+            abi.encodeWithSignature(
+                "setWrapMember(bytes32,bool,bool,bytes32)", bytes32(uint256(0xACC)), true, true, UID
+            )
+        );
         assertTrue(ok, string(ret));
         address r = _kind("NormalRegulatedToken", 8);
         _seat(r, GovernanceBits.PAUSE);
         vm.prank(HOLDER);
-        (ok, ret) = r.call(abi.encodeWithSignature("pause(bytes32,uint64,bytes32)", bytes32("ref"), uint64(block.timestamp + 1 days), UID));
+        (ok, ret) = r.call(
+            abi.encodeWithSignature(
+                "pause(bytes32,uint64,bytes32)", bytes32("ref"), uint64(block.timestamp + 1 days), UID
+            )
+        );
         assertTrue(ok, string(ret));
     }
 
@@ -315,10 +402,14 @@ contract HolderChainWordTest is Test {
         address[] memory ms = SCaaSDex(payable(d)).modules();
         // the governance module (ms[0]) refuses a direct call of each of the four by name before its body runs
         // (`onlyDelegated`); the liquidity module has no such entry
-        bytes[4] memory direct = [abi.encodeWithSignature("setListedOnly(bool,bytes32)", false, UID),
-            abi.encodeWithSignature("setMarket(address,address,bool,bytes32)", address(0xBA5E), address(0x0907E), false, UID),
+        bytes[4] memory direct = [
+            abi.encodeWithSignature("setListedOnly(bool,bytes32)", false, UID),
+            abi.encodeWithSignature(
+                "setMarket(address,address,bool,bytes32)", address(0xBA5E), address(0x0907E), false, UID
+            ),
             abi.encodeWithSignature("setExchangeTarget(address,bool,bytes32)", address(0xE7), false, UID),
-            abi.encodeWithSignature("setFeeSplit(uint32,address,bytes32)", uint32(2), address(0x7EA5), UID)];
+            abi.encodeWithSignature("setFeeSplit(uint32,address,bytes32)", uint32(2), address(0x7EA5), UID)
+        ];
         for (uint256 i; i < 4; ++i) {
             vm.prank(HOLDER);
             (bool ok0, bytes memory r0) = ms[0].call(direct[i]);
@@ -336,7 +427,8 @@ contract HolderChainWordTest is Test {
         address d = _dex();
         _seat(d, GovernanceBits.FEE_ROUTING);
         vm.prank(HOLDER);
-        (bool ok, bytes memory ret) = d.call(abi.encodeWithSignature("setFeeSplit(uint32,address,bytes32)", uint32(1), d, UID));
+        (bool ok, bytes memory ret) =
+            d.call(abi.encodeWithSignature("setFeeSplit(uint32,address,bytes32)", uint32(1), d, UID));
         assertFalse(ok);
         assertEq(bytes4(ret), ISCaaSDex.FeeSplitInvalid.selector, "treasury = the DEX refused");
         address[] memory ms = SCaaSDex(payable(d)).modules();

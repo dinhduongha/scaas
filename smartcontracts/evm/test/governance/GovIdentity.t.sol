@@ -35,7 +35,9 @@ contract MockGovRouter {
         bool ok;
         (ok, r) = target.call(data);
         subject = 0;
-        if (!ok) assembly ("memory-safe") { revert(add(r, 32), mload(r)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(r, 32), mload(r)) }
+        }
     }
 }
 
@@ -59,7 +61,9 @@ contract GovIdentityTest is Test {
     address internal wrappedImpl;
 
     /// The test plays the factory: it registered no token, so every leg is outside to the leg check.
-    function isRegisteredToken(address) external pure returns (bool) { return false; }
+    function isRegisteredToken(address) external pure returns (bool) {
+        return false;
+    }
 
     /// The clones' env (chain-neutral spec §2.1): this chain, no registry, the router.
     function _cenv() internal view returns (IFactoryToken.ChainEnv memory) {
@@ -67,7 +71,9 @@ contract GovIdentityTest is Test {
     }
 
     function _normal(bytes32 owner_, bytes32 minter) internal returns (NormalToken t) {
-        if (normalImpl == address(0)) normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
+        if (normalImpl == address(0)) {
+            normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
+        }
         t = NormalToken(EnvKit.clone(normalImpl, _cenv()));
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features, c.admin) = ("I", "I", 6, 1 | (uint256(1) << MINT), owner_);
@@ -83,14 +89,18 @@ contract GovIdentityTest is Test {
     }
 
     function _wrapped(IFactoryToken.TokenConfig memory c) internal returns (WrappedToken w) {
-        if (wrappedImpl == address(0)) wrappedImpl = address(new WrappedToken(address(this), kindArgs(1, address(this), "")));
+        if (wrappedImpl == address(0)) {
+            wrappedImpl = address(new WrappedToken(address(this), kindArgs(1, address(this), "")));
+        }
         w = WrappedToken(payable(EnvKit.clone(wrappedImpl, _cenv())));
         w.initialize(nid(address(this)), 1, abi.encode(c));
     }
 
     function _dex(bytes32 owner_) internal returns (SCaaSDex d) {
         d = SCaaSDex(EnvKit.clone(address(new SCaaSDex(address(this), dexArgs(address(this)))), _cenv()));
-        d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(owner_, 0, address(0xAA), false, 0, address(0), 0, 0)));
+        d.initialize(
+            nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(owner_, 0, address(0xAA), false, 0, address(0), 0, 0))
+        );
     }
 
     function _open() internal pure returns (IGovernance.GrantTerms memory g) {
@@ -113,12 +123,20 @@ contract GovIdentityTest is Test {
         assertEq(t.admin(), ISSUER);
         vm.expectEmit(address(t));
         emit IGovernance.RoleGranted(MINT, MINTER, ISSUER);
-        router.run(ISSUER, address(t), abi.encodeCall(IGovernance.grantRole, (MINT, MINTER, EnvKit.codeUidOf(address(t)))));
+        router.run(
+            ISSUER, address(t), abi.encodeCall(IGovernance.grantRole, (MINT, MINTER, EnvKit.codeUidOf(address(t))))
+        );
         assertTrue(t.hasRole(MINT, MINTER));
-        router.run(ISSUER, address(t), abi.encodeCall(IGovernance.setGrant, (MINT, MINTER, _limited(5), EnvKit.codeUidOf(address(t)))));
+        router.run(
+            ISSUER,
+            address(t),
+            abi.encodeCall(IGovernance.setGrant, (MINT, MINTER, _limited(5), EnvKit.codeUidOf(address(t))))
+        );
         assertEq(t.grantOf(MINT, MINTER).total, 5);
         assertEq(t.grantOf(MINT, MINTER).grantor, bytes32(0), "the owner's grant is a root");
-        router.run(ISSUER, address(t), abi.encodeCall(IGovernance.revokeRole, (MINT, MINTER, EnvKit.codeUidOf(address(t)))));
+        router.run(
+            ISSUER, address(t), abi.encodeCall(IGovernance.revokeRole, (MINT, MINTER, EnvKit.codeUidOf(address(t))))
+        );
         assertFalse(t.hasRole(MINT, MINTER));
         // ownership moves to a native account, then back to another derived UA
         bytes32 alice = bytes32(uint256(uint160(ALICE)));
@@ -232,17 +250,25 @@ contract GovIdentityTest is Test {
         bytes32 derived = bytes32(uint256(uint160(address(this))) | (uint256(0xd1) << 160));
         IFactoryToken.TokenConfig memory c = _wrappedCfg(ISSUER);
         c.roles.rateAdmin = derived;
-        if (wrappedImpl == address(0)) wrappedImpl = address(new WrappedToken(address(this), kindArgs(1, address(this), "")));
+        if (wrappedImpl == address(0)) {
+            wrappedImpl = address(new WrappedToken(address(this), kindArgs(1, address(this), "")));
+        }
         WrappedToken w = WrappedToken(payable(EnvKit.clone(wrappedImpl, _cenv())));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleNotContract.selector, RATE, derived));
         w.initialize(nid(address(this)), 1, abi.encode(c));
         w = _wrapped(_wrappedCfg(ISSUER));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleNotContract.selector, RATE, derived));
-        router.run(ISSUER, address(w), abi.encodeCall(IGovernance.grantRole, (RATE, derived, EnvKit.codeUidOf(address(w)))));
+        router.run(
+            ISSUER, address(w), abi.encodeCall(IGovernance.grantRole, (RATE, derived, EnvKit.codeUidOf(address(w))))
+        );
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleNotContract.selector, RATE, ISSUER));
-        router.run(ISSUER, address(w), abi.encodeCall(IGovernance.grantRole, (RATE, ISSUER, EnvKit.codeUidOf(address(w)))));
+        router.run(
+            ISSUER, address(w), abi.encodeCall(IGovernance.grantRole, (RATE, ISSUER, EnvKit.codeUidOf(address(w))))
+        );
         bytes32 self = bytes32(uint256(uint160(address(this))));
-        router.run(ISSUER, address(w), abi.encodeCall(IGovernance.grantRole, (RATE, self, EnvKit.codeUidOf(address(w)))));
+        router.run(
+            ISSUER, address(w), abi.encodeCall(IGovernance.grantRole, (RATE, self, EnvKit.codeUidOf(address(w))))
+        );
         assertTrue(w.hasRole(RATE, self), "a native id with code holds it");
     }
 
@@ -250,7 +276,9 @@ contract GovIdentityTest is Test {
     function test_poolsAndZeroRefusedAsOwnerAndHolder() public {
         bytes32[2] memory pools = [MetaTxLib.pad(MetaTxLib.UA_POOL), MetaTxLib.pad(MetaTxLib.SHIELD_POOL)];
         for (uint256 i; i < 2; ++i) {
-            if (normalImpl == address(0)) normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
+            if (normalImpl == address(0)) {
+                normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
+            }
             NormalToken n = NormalToken(EnvKit.clone(normalImpl, _cenv()));
             IFactoryToken.TokenConfig memory c;
             (c.name, c.symbol, c.decimals, c.features, c.admin) = ("I", "I", 6, 1 | (uint256(1) << MINT), pools[i]);
@@ -262,16 +290,32 @@ contract GovIdentityTest is Test {
             n.initialize(nid(address(this)), 1, abi.encode(c));
             NormalToken t = _normal(ISSUER, 0);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminAccountPool.selector, pools[i]));
-            router.run(ISSUER, address(t), abi.encodeCall(IAdmin.transferAdmin, (pools[i], EnvKit.codeUidOf(address(t)))));
+            router.run(
+                ISSUER, address(t), abi.encodeCall(IAdmin.transferAdmin, (pools[i], EnvKit.codeUidOf(address(t))))
+            );
             vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleAccountPool.selector, MINT, pools[i]));
-            router.run(ISSUER, address(t), abi.encodeCall(IGovernance.grantRole, (MINT, pools[i], EnvKit.codeUidOf(address(t)))));
+            router.run(
+                ISSUER,
+                address(t),
+                abi.encodeCall(IGovernance.grantRole, (MINT, pools[i], EnvKit.codeUidOf(address(t))))
+            );
             vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleAccountPool.selector, MINT, pools[i]));
-            router.run(ISSUER, address(t), abi.encodeCall(IGovernance.setGrant, (MINT, pools[i], _limited(1), EnvKit.codeUidOf(address(t)))));
+            router.run(
+                ISSUER,
+                address(t),
+                abi.encodeCall(IGovernance.setGrant, (MINT, pools[i], _limited(1), EnvKit.codeUidOf(address(t))))
+            );
         }
         NormalToken z = _normal(ISSUER, 0);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleAccountZero.selector, MINT));
-        router.run(ISSUER, address(z), abi.encodeCall(IGovernance.grantRole, (MINT, bytes32(0), EnvKit.codeUidOf(address(z)))));
+        router.run(
+            ISSUER, address(z), abi.encodeCall(IGovernance.grantRole, (MINT, bytes32(0), EnvKit.codeUidOf(address(z))))
+        );
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleAccountZero.selector, MINT));
-        router.run(ISSUER, address(z), abi.encodeCall(IGovernance.setGrant, (MINT, bytes32(0), _limited(1), EnvKit.codeUidOf(address(z)))));
+        router.run(
+            ISSUER,
+            address(z),
+            abi.encodeCall(IGovernance.setGrant, (MINT, bytes32(0), _limited(1), EnvKit.codeUidOf(address(z))))
+        );
     }
 }

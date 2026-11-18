@@ -17,20 +17,30 @@ H="${2:-${NEAR_SANDBOX_HOME:-$(dirname "$(mktemp -u)")/scaas-near-sandbox}}"
 RPC=32060 NET=32061
 
 bin() {
-  if [ -n "${NEAR_SANDBOX_BIN_PATH:-}" ]; then echo "$NEAR_SANDBOX_BIN_PATH"; return; fi
-  local b
-  b="$(ls "$NEAR"/target/*/build/near-sandbox-*/out/.near/near-sandbox-*/near-sandbox 2>/dev/null | sort -V | tail -1)"
-  [ -x "$b" ] || { echo "no near-sandbox binary: run smartcontracts/scripts/test.sh near once, or set NEAR_SANDBOX_BIN_PATH" >&2; exit 1; }
-  echo "$b"
+    if [ -n "${NEAR_SANDBOX_BIN_PATH:-}" ]; then
+        echo "$NEAR_SANDBOX_BIN_PATH"
+        return
+    fi
+    local b
+    b="$(ls "$NEAR"/target/*/build/near-sandbox-*/out/.near/near-sandbox-*/near-sandbox 2>/dev/null | sort -V | tail -1)"
+    [ -x "$b" ] || {
+        echo "no near-sandbox binary: run smartcontracts/scripts/test.sh near once, or set NEAR_SANDBOX_BIN_PATH" >&2
+        exit 1
+    }
+    echo "$b"
 }
 
 up() {
-  local b; b="$(bin)"
-  if [ -f "$H/pid" ] && kill -0 "$(cat "$H/pid")" 2>/dev/null; then echo "http://127.0.0.1:$RPC"; return; fi
-  if [ ! -f "$H/config.json" ]; then
-    mkdir -p "$H"
-    "$b" --home "$H" init --fast --max-gas-burnt-view "300 Tgas" > "$H/init.log" 2>&1
-    python3 -I - "$H" "$RPC" "$NET" <<'EOF'
+    local b
+    b="$(bin)"
+    if [ -f "$H/pid" ] && kill -0 "$(cat "$H/pid")" 2>/dev/null; then
+        echo "http://127.0.0.1:$RPC"
+        return
+    fi
+    if [ ! -f "$H/config.json" ]; then
+        mkdir -p "$H"
+        "$b" --home "$H" init --fast --max-gas-burnt-view "300 Tgas" >"$H/init.log" 2>&1
+        python3 -I - "$H" "$RPC" "$NET" <<'EOF'
 import json, sys
 h, rpc, net = sys.argv[1], sys.argv[2], sys.argv[3]
 c = json.load(open(f"{h}/config.json"))
@@ -42,34 +52,51 @@ g = json.load(open(f"{h}/genesis.json"))
 g["transaction_validity_period"], g["epoch_length"] = 600, 1000  # nearcore: validity <= epoch length
 json.dump(g, open(f"{h}/genesis.json", "w"), indent=2)
 EOF
-  fi
-  nohup "$b" --home "$H" run < /dev/null > "$H/sandbox.log" 2>&1 &
-  local pid=$!
-  echo "$pid" > "$H/pid"
-  if [ -n "${NEAR_SANDBOX_WATCH_PID:-}" ]; then
-    ( while kill -0 "$NEAR_SANDBOX_WATCH_PID" 2>/dev/null && kill -0 "$pid" 2>/dev/null; do sleep 1; done
-      kill "$pid" 2>/dev/null ) < /dev/null > /dev/null 2>&1 &
-  fi
-  for _ in $(seq 1 120); do
-    if curl -sf -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"status","params":[]}' \
-         "http://127.0.0.1:$RPC" > /dev/null 2>&1; then echo "http://127.0.0.1:$RPC"; return; fi
-    kill -0 "$pid" 2>/dev/null || { tail -30 "$H/sandbox.log" >&2; exit 1; }
-    sleep 0.5
-  done
-  tail -30 "$H/sandbox.log" >&2; echo "near-sandbox not ready" >&2; exit 1
+    fi
+    nohup "$b" --home "$H" run </dev/null >"$H/sandbox.log" 2>&1 &
+    local pid=$!
+    echo "$pid" >"$H/pid"
+    if [ -n "${NEAR_SANDBOX_WATCH_PID:-}" ]; then
+        (
+            while kill -0 "$NEAR_SANDBOX_WATCH_PID" 2>/dev/null && kill -0 "$pid" 2>/dev/null; do sleep 1; done
+            kill "$pid" 2>/dev/null
+        ) </dev/null >/dev/null 2>&1 &
+    fi
+    for _ in $(seq 1 120); do
+        if curl -sf -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"status","params":[]}' \
+            "http://127.0.0.1:$RPC" >/dev/null 2>&1; then
+            echo "http://127.0.0.1:$RPC"
+            return
+        fi
+        kill -0 "$pid" 2>/dev/null || {
+            tail -30 "$H/sandbox.log" >&2
+            exit 1
+        }
+        sleep 0.5
+    done
+    tail -30 "$H/sandbox.log" >&2
+    echo "near-sandbox not ready" >&2
+    exit 1
 }
 
 down() {
-  [ -f "$H/pid" ] || return 0
-  local pid; pid="$(cat "$H/pid")"
-  kill "$pid" 2>/dev/null || true
-  for _ in $(seq 1 40); do kill -0 "$pid" 2>/dev/null || break; sleep 0.25; done
-  kill -9 "$pid" 2>/dev/null || true
-  rm -f "$H/pid"
+    [ -f "$H/pid" ] || return 0
+    local pid
+    pid="$(cat "$H/pid")"
+    kill "$pid" 2>/dev/null || true
+    for _ in $(seq 1 40); do
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 0.25
+    done
+    kill -9 "$pid" 2>/dev/null || true
+    rm -f "$H/pid"
 }
 
 case "$CMD" in
-  up) up ;;
-  down) down ;;
-  *) echo "usage: $0 up|down [home]" >&2; exit 2 ;;
+    up) up ;;
+    down) down ;;
+    *)
+        echo "usage: $0 up|down [home]" >&2
+        exit 2
+        ;;
 esac

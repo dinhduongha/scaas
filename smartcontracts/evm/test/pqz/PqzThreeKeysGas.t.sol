@@ -76,20 +76,34 @@ contract PqzThreeKeysGasTest is PqzOffchainBase {
 
     function _opening(uint256 seed) internal pure returns (IPqzToken.PqzOpening memory o) {
         (o.mlkemCt, o.x25519Eph, o.sealedSeed) =
-            (_blob(seed, PqzCore.MLKEM_CT), keccak256(abi.encode("eph", seed)), _blob(seed + 1, PqzCore.SEALED_SEED));
+        (_blob(seed, PqzCore.MLKEM_CT), keccak256(abi.encode("eph", seed)), _blob(seed + 1, PqzCore.SEALED_SEED));
     }
 
     function _gasTo(address t, bytes memory data) internal returns (uint256 used) {
         (bool ok, bytes memory ret) = t.call(data);
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        }
         Vm.Gas memory g = vm.lastCallGas();
         used = g.gasTotalUsed;
         lastState = uint256(int256(g.gasStateUsed));
     }
 
     function _log(string memory row, uint256 reg) internal view {
-        console2.log(string.concat("GAS3K ", PqzSet.NAME, " | ", row, " | regular ", vm.toString(reg), " | state ",
-            vm.toString(lastState), " | total ", vm.toString(reg + lastState)));
+        console2.log(
+            string.concat(
+                "GAS3K ",
+                PqzSet.NAME,
+                " | ",
+                row,
+                " | regular ",
+                vm.toString(reg),
+                " | state ",
+                vm.toString(lastState),
+                " | total ",
+                vm.toString(reg + lastState)
+            )
+        );
     }
 
     /// `data` on token `t` relayed as a full transaction (fee 7) on one path, measured cold, logged.
@@ -117,8 +131,11 @@ contract PqzThreeKeysGasTest is PqzOffchainBase {
             MetaTxLib.MetaTransaction memory m = _envM();
             m.data = data;
             (uint8 v, bytes32 r, bytes32 s) = vm.sign(RKEY, MtxDigest.metaTx(address(t), m));
-            call = abi.encodeWithSignature("executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
-                m, abi.encodePacked(r, s, v));
+            call = abi.encodeWithSignature(
+                "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
+                m,
+                abi.encodePacked(r, s, v)
+            );
         }
         uint256 snap = vm.snapshotState();
         vm.clearMockedCalls();
@@ -138,14 +155,21 @@ contract PqzThreeKeysGasTest is PqzOffchainBase {
             a.openingTo = _opening(61);
             if (aud) a.openingAuditor = _opening(64);
         }
-        uint256 plen = open ? (aud ? _proofLen("TXS", 61_276) : _proofLen("TXS0", 60_957))
+        uint256 plen = open
+            ? (aud ? _proofLen("TXS", 61_276) : _proofLen("TXS0", 60_957))
             : (aud ? _proofLen("TX", 46_660) : _proofLen("TX0", 46_312));
-        string memory r = string.concat(row, aud ? ", auditor on" : ", auditor off", ", proof ", vm.toString(plen), " B");
-        for (uint256 k; k < 2; ++k) _op1Via(t, k == 1, a, _proof(plen), r);
+        string memory r =
+            string.concat(row, aud ? ", auditor on" : ", auditor off", ", proof ", vm.toString(plen), " B");
+        for (uint256 k; k < 2; ++k) {
+            _op1Via(t, k == 1, a, _proof(plen), r);
+        }
     }
 
-    function _op1Via(NormalPqzToken t, bool ua, IPqzToken.PqzTransferArgs memory a, bytes memory proof, string memory r) internal {
-        IPqzToken.PqzSignedVerdict memory sv = _sign(t, VKEY, _verdict(t, t.transferSingleStatement(a, _binding(t, ua)), proof));
+    function _op1Via(NormalPqzToken t, bool ua, IPqzToken.PqzTransferArgs memory a, bytes memory proof, string memory r)
+        internal
+    {
+        IPqzToken.PqzSignedVerdict memory sv =
+            _sign(t, VKEY, _verdict(t, t.transferSingleStatement(a, _binding(t, ua)), proof));
         _relayed(t, ua, abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (a, proof, _pqAuth(), "", sv)), r);
     }
 
@@ -166,14 +190,16 @@ contract PqzThreeKeysGasTest is PqzOffchainBase {
 
     /// A refresh (burn of 0) of bob on the class-2 token.
     function test_gas3k_refresh_class2() public {
-        IPqzToken.PqzBurnArgs memory b = _bs(bytes.concat(abi.encode(uint256(1), block.number + 50, uint256(0), bob, bytes32(0)),
-            _blob(71, PqzCt.CT)));
+        IPqzToken.PqzBurnArgs memory b = _bs(
+            bytes.concat(abi.encode(uint256(1), block.number + 50, uint256(0), bob, bytes32(0)), _blob(71, PqzCt.CT))
+        );
         uint256 plen = _proofLen("REFRESH", 45_833);
         bytes memory proof = _proof(plen);
         string memory r = string.concat("refresh, class 2, proof ", vm.toString(plen), " B");
         for (uint256 k; k < 2; ++k) {
             bool ua = k == 1;
-            IPqzToken.PqzSignedVerdict memory sv = _sign(c2, VKEY, _verdict(c2, c2.burnStatement(b, 0, bytes32(0), _binding(c2, ua)), proof));
+            IPqzToken.PqzSignedVerdict memory sv =
+                _sign(c2, VKEY, _verdict(c2, c2.burnStatement(b, 0, bytes32(0), _binding(c2, ua)), proof));
             _relayed(c2, ua, abi.encodeCall(IPqzToken.mtxUnshield, (b, 0, bytes32(0), proof, _pqAuth(), "", sv)), r);
         }
     }
@@ -186,9 +212,24 @@ contract PqzThreeKeysGasTest is PqzOffchainBase {
         (uint256 g1, uint256 s1) = _setRecord(ua, scope, kem, keccak256(pop));
         (uint256 g2, uint256 price) = _storePop(ua, scope, pop);
         string memory head = string.concat("GAS3K ", PqzSet.NAME, " | ", row);
-        console2.log(string.concat(head, " | setPqzScopedKey regular with ML-DSA 100,006 ", vm.toString(g1), " state ", vm.toString(s1)));
-        console2.log(string.concat(head, " | storePqzScopedPop (proof ", vm.toString(pop.length), " B, op 3 ", vm.toString(price),
-            ") regular with the op 3 row ", vm.toString(g2), " state ", vm.toString(lastState)));
+        console2.log(
+            string.concat(
+                head, " | setPqzScopedKey regular with ML-DSA 100,006 ", vm.toString(g1), " state ", vm.toString(s1)
+            )
+        );
+        console2.log(
+            string.concat(
+                head,
+                " | storePqzScopedPop (proof ",
+                vm.toString(pop.length),
+                " B, op 3 ",
+                vm.toString(price),
+                ") regular with the op 3 row ",
+                vm.toString(g2),
+                " state ",
+                vm.toString(lastState)
+            )
+        );
         console2.log(string.concat(head, " | sum total ", vm.toString(g1 + s1 + g2 + lastState)));
     }
 
@@ -208,7 +249,9 @@ contract PqzThreeKeysGasTest is PqzOffchainBase {
     }
 
     function _setCall(bytes32 ua) internal {
-        reg.setPqzScopedKey(ua, rScope, 0, _spk(++keySeed), rPopHash, rKem, type(uint64).max, UACall.auth(ua, _mlAuth()));
+        reg.setPqzScopedKey(
+            ua, rScope, 0, _spk(++keySeed), rPopHash, rKem, type(uint64).max, UACall.auth(ua, _mlAuth())
+        );
     }
 
     function _storePop(bytes32 ua, address scope, bytes memory pop) internal returns (uint256 g, uint256 price) {

@@ -33,7 +33,10 @@ contract ReceiverTest is RegFixture {
     bytes32 internal PAYREF = PayMetaKit.ref("request-1"); // pay-meta-tax T37: the commitment of its `PayMeta`
     bytes4 constant HAS_FLAGS = IComplianceRegistry.hasFlags.selector;
 
-    function _reason(address t, bytes32 a, bool ok, uint8 reason, uint64 req, uint64 den, string memory what) internal view {
+    function _reason(address t, bytes32 a, bool ok, uint8 reason, uint64 req, uint64 den, string memory what)
+        internal
+        view
+    {
         (bool o, uint8 r) = IRegulatedToken(t).canReceive(a);
         assertEq(o, ok, what);
         assertEq(r, reason, what);
@@ -120,7 +123,9 @@ contract ReceiverTest is RegFixture {
             bytes32 rid = _order(t, keccak256("o"), nid(alice), nid(address(0xBE11)), 10, 0);
             _freeze(t, nid(alice));
             vm.prank(issuer);
-            vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, nid(address(0xBE11)), uint8(0)));
+            vm.expectRevert(
+                abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, nid(address(0xBE11)), uint8(0))
+            );
             IRegulatedToken(t).forceTransfer(rid, 5, EnvKit.codeUidOf(address(t)));
             _attest(nid(address(0xBE11)), KYC, MAX);
             vm.prank(issuer);
@@ -147,7 +152,9 @@ contract ReceiverTest is RegFixture {
     function _ready(uint256 i, bytes32 salt) internal returns (address t) {
         t = _listed(i, KYC, SANCTIONED, salt);
         address[5] memory who = [bob, relayer, feeTo, address(0xBE11), alice];
-        for (uint256 j; j < who.length; ++j) _attest(nid(who[j]), KYC, MAX);
+        for (uint256 j; j < who.length; ++j) {
+            _attest(nid(who[j]), KYC, MAX);
+        }
         _attest(UA_X, KYC, MAX);
     }
 
@@ -194,7 +201,7 @@ contract ReceiverTest is RegFixture {
             address t = _ready(i, bytes32(i));
             MetaTxLib.UAMetaTransfer memory x;
             (x.from, x.to, x.value, x.batch, x.validUntil, x.mode, x.fee) =
-                (nid(alice), nid(bob), 100, 1, block.timestamp + 60, FIX, 1);
+            (nid(alice), nid(bob), 100, 1, block.timestamp + 60, FIX, 1);
             (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, NormalToken(t).mtxTransferDigest(x));
             IUARegistry.UASig memory sig;
             sig.signature = abi.encodePacked(r, s, v);
@@ -209,12 +216,31 @@ contract ReceiverTest is RegFixture {
             _budget(3, "payWithFee");
             _countStart();
             vm.prank(alice);
-            NormalToken(t).payWithFeeToUA(UA_X, 100, FeeMode.FIXED, 1, feeTo, PayMetaKit.ref(keccak256("request-2")), PayMetaKit.meta(keccak256("request-2")));
+            NormalToken(t)
+                .payWithFeeToUA(
+                    UA_X,
+                    100,
+                    FeeMode.FIXED,
+                    1,
+                    feeTo,
+                    PayMetaKit.ref(keccak256("request-2")),
+                    PayMetaKit.meta(keccak256("request-2"))
+                );
             _budget(3, "payWithFeeToUA");
 
-            MetaTxLib.UAMetaTransfer memory p = MetaTxLib.UAMetaTransfer({from: nid(alice), to: nid(bob), value: 100,
-                entryRef: PayMetaKit.ref("request-3"), batch: NormalToken(t).payLane(PayMetaKit.ref("request-3")), nonce: 0,
-                validUntil: block.timestamp + 300, mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
+            MetaTxLib.UAMetaTransfer memory p = MetaTxLib.UAMetaTransfer({
+                from: nid(alice),
+                to: nid(bob),
+                value: 100,
+                entryRef: PayMetaKit.ref("request-3"),
+                batch: NormalToken(t).payLane(PayMetaKit.ref("request-3")),
+                nonce: 0,
+                validUntil: block.timestamp + 300,
+                mode: RR,
+                relayer: relayer,
+                fee: 0,
+                feeRecipient: address(0)
+            });
             IUARegistry.UASig memory ps;
             IUARegistry.UASig memory rs;
             (v, r, s) = vm.sign(ALICE_PK, NormalToken(t).mtxTransferDigest(p));
@@ -231,8 +257,9 @@ contract ReceiverTest is RegFixture {
     /// `mtxWrapOrder` with a fee (kind 9 over a kind-0 underlying, `KYC` on): three calls (the destination's mint, the
     /// submitter at the seat and at its mint).
     function test_callBudgetWrapOrder() public {
-        address u = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("U", "U", 0, SUPPLY, alice,
-            address(0))), "u");
+        address u = f.createToken(
+            IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("U", "U", 0, SUPPLY, alice, address(0))), "u"
+        );
         IFactoryToken.TokenConfig memory c = _cfg9();
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.FREEZE) | (1 << GovernanceBits.KYC);
         (c.roles.compliance, c.reg.complianceRegistry, c.reg.requiredFlags) = (0, address(creg), KYC);

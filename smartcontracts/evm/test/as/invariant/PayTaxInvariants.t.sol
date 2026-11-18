@@ -31,8 +31,14 @@ contract PayTaxInvariants is RegFixture {
     function setUp() public override {
         super.setUp();
         OpenFactory fN = EnvKit.factory(address(this), UID, NOTICE);
-        Catalogue.release(fN, IOpenFactory.TokenKind.NORMAL_REGULATED, 1, plainEnv(address(fN), address(0), UID,
-            address(ureg), false), type(NormalRegulatedToken).creationCode, regArgs());
+        Catalogue.release(
+            fN,
+            IOpenFactory.TokenKind.NORMAL_REGULATED,
+            1,
+            plainEnv(address(fN), address(0), UID, address(ureg), false),
+            type(NormalRegulatedToken).creationCode,
+            regArgs()
+        );
         fN.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true, EnvKit.uidOf(address(fN)));
         vm.warp(block.timestamp + NOTICE);
         IFactoryToken.TokenConfig memory c = _cfg8();
@@ -52,19 +58,38 @@ contract PayTaxInvariants is RegFixture {
         assertEq(h.vio(j), 0, h.why());
     }
 
-    function invariant_J1_payMetaBeforeSettled() public view { _ok(1); }
-    function invariant_J2_oneLanding() public view { _ok(2); }
-    function invariant_J3_books() public view { _ok(3); }
-    function invariant_J4_rate() public view { _ok(4); }
-    function invariant_J5_taxLeg() public view { _ok(5); }
+    function invariant_J1_payMetaBeforeSettled() public view {
+        _ok(1);
+    }
+
+    function invariant_J2_oneLanding() public view {
+        _ok(2);
+    }
+
+    function invariant_J3_books() public view {
+        _ok(3);
+    }
+
+    function invariant_J4_rate() public view {
+        _ok(4);
+    }
+
+    function invariant_J5_taxLeg() public view {
+        _ok(5);
+    }
 
     function invariant_supply() public view {
-        uint256 s = IERC20(tok).balanceOf(alice) + IERC20(tok).balanceOf(h.recipient(0)) + IERC20(tok).balanceOf(h.recipient(1));
-        for (uint256 i; i < 3; ++i) s += IERC20(tok).balanceOf(h.eoas(i));
+        uint256 s = IERC20(tok).balanceOf(alice) + IERC20(tok).balanceOf(h.recipient(0))
+            + IERC20(tok).balanceOf(h.recipient(1));
+        for (uint256 i; i < 3; ++i) {
+            s += IERC20(tok).balanceOf(h.eoas(i));
+        }
         assertEq(s, IERC20(tok).totalSupply(), "supply");
     }
 
     function afterInvariant() public view {
-        for (uint256 j = 1; j <= 6; ++j) console.log("J", j, "checks", h.hits(j));
+        for (uint256 j = 1; j <= 6; ++j) {
+            console.log("J", j, "checks", h.hits(j));
+        }
     }
 }

@@ -9,7 +9,10 @@
 //! `pairing` (T3c). UNAUDITED.
 use super::signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
 use super::{derive, pairing, pqsign, Error, NativeKey, NativeScheme, Network, Result, UaKey};
-use crate::{keccak256, member_digest, purpose_tag, ua_message, ua8::portable_record_purposes, UAError, PURPOSES};
+use crate::{
+    keccak256, member_digest, purpose_tag, ua8::portable_record_purposes, ua_message, UAError,
+    PURPOSES,
+};
 use rand_core::{OsRng, RngCore};
 use sha2::{Digest, Sha256};
 
@@ -50,7 +53,12 @@ fn arr32(s: &[u8]) -> Result<&[u8; 32]> {
 }
 
 /// The scheme's signature of `msg` with the 32-byte `secret`; `aux` for BIP-340 only (required there).
-fn sign_scheme(scheme: Scheme, secret: &[u8], msg: &[u8], aux: Option<&[u8; 32]>) -> Result<Vec<u8>> {
+fn sign_scheme(
+    scheme: Scheme,
+    secret: &[u8],
+    msg: &[u8],
+    aux: Option<&[u8; 32]>,
+) -> Result<Vec<u8>> {
     match scheme {
         Scheme::Secp256k1 => {
             let sk = k256::ecdsa::SigningKey::from_slice(secret).map_err(|_| Error::Argument)?;
@@ -63,17 +71,25 @@ fn sign_scheme(scheme: Scheme, secret: &[u8], msg: &[u8], aux: Option<&[u8; 32]>
         Scheme::P256 => {
             use p256::ecdsa::signature::hazmat::PrehashSigner;
             let sk = p256::ecdsa::SigningKey::from_slice(secret).map_err(|_| Error::Argument)?;
-            let sig: p256::ecdsa::Signature = sk.sign_prehash(&Sha256::digest(msg)).map_err(|_| Error::Argument)?;
+            let sig: p256::ecdsa::Signature = sk
+                .sign_prehash(&Sha256::digest(msg))
+                .map_err(|_| Error::Argument)?;
             // p256 does not normalise (NORMALIZE_S = false); the chains refuse high s
             Ok(sig.normalize_s().to_bytes().to_vec())
         }
         Scheme::Ed25519 => {
             use ed25519_dalek::Signer as _;
-            Ok(ed25519_dalek::SigningKey::from_bytes(arr32(secret)?).sign(msg).to_bytes().to_vec())
+            Ok(ed25519_dalek::SigningKey::from_bytes(arr32(secret)?)
+                .sign(msg)
+                .to_bytes()
+                .to_vec())
         }
         Scheme::Bip340 => {
             let sk = k256::schnorr::SigningKey::from_slice(secret).map_err(|_| Error::Argument)?;
-            let sig = sk.sign_raw(msg, aux.ok_or(Error::Argument)?).map_err(|_| Error::Argument)?.to_bytes();
+            let sig = sk
+                .sign_raw(msg, aux.ok_or(Error::Argument)?)
+                .map_err(|_| Error::Argument)?
+                .to_bytes();
             // BIP-340 Sign's last step (k256 runs it under `debug_assertions` only): a faulty signature never leaves (T21 L08)
             if !crate::verify::bip340(&sk.verifying_key().to_bytes(), arr32(msg)?, &sig) {
                 return Err(Error::Argument);
@@ -106,7 +122,10 @@ fn role_of(purpose: &[u8; 32]) -> SigRole {
 
 /// `purpose` a tag of `PURPOSES` (v1) or a portable record purpose (`pop` v2, `pqz-scoped-key`), else `UAPurposeUnknown`.
 pub(super) fn check_purpose(purpose: &[u8; 32]) -> Result<()> {
-    let known = portable_record_purposes().contains(purpose) || PURPOSES.iter().any(|p| purpose_tag(p).is_ok_and(|t| t == *purpose));
+    let known = portable_record_purposes().contains(purpose)
+        || PURPOSES
+            .iter()
+            .any(|p| purpose_tag(p).is_ok_and(|t| t == *purpose));
     if !known {
         return Err(Error::Ua(UAError::PurposeUnknown));
     }
@@ -117,7 +136,11 @@ pub(super) fn check_purpose(purpose: &[u8; 32]) -> Result<()> {
 /// `WebAuthn` with the same `ua_msg`.
 pub(super) fn ua_request(kind: u16, purpose: &[u8; 32], digest: &[u8; 32]) -> Result<SignRequest> {
     check_purpose(purpose)?;
-    Ok(request(kind, ua_message(kind, purpose, digest)?, role_of(purpose)))
+    Ok(request(
+        kind,
+        ua_message(kind, purpose, digest)?,
+        role_of(purpose),
+    ))
 }
 
 fn request(kind: u16, ua_msg: [u8; 32], role: SigRole) -> SignRequest {
@@ -131,13 +154,35 @@ fn request(kind: u16, ua_msg: [u8; 32], role: SigRole) -> SignRequest {
 /// The request of a sealed container's sender of `kind` (spec §6.3, MD-10): `uaMessage(kind, seal, digest)` under the off-chain
 /// purpose, role `Authorization`; only the container builder (`seal`) asks it: `check_purpose` refuses that purpose everywhere else.
 pub(super) fn seal_request(kind: u16, digest: &[u8; 32]) -> Result<SignRequest> {
-    Ok(request(kind, ua_message(kind, &crate::seal_purpose_tag(), digest)?, SigRole::Authorization))
+    Ok(request(
+        kind,
+        ua_message(kind, &crate::seal_purpose_tag(), digest)?,
+        SigRole::Authorization,
+    ))
+}
+
+/// CTR-UA-46: the request of a single key over app `app_id`'s portable record, `uaMessage(kind, app_purpose(app_id), digest)`, role
+/// `Pop` (the registry's `requirePortableApp` checks it with the kind's `verifyPop`, as every portable record); `app_id` 0 refused.
+pub(super) fn app_request(kind: u16, app_id: &[u8; 32], digest: &[u8; 32]) -> Result<SignRequest> {
+    Ok(request(
+        kind,
+        ua_message(kind, &crate::ua8::app_purpose(app_id)?, digest)?,
+        SigRole::Pop,
+    ))
 }
 
 /// The request of `sign_member` for a key of `kind` (the `msig` builder's too): always `Authorization`.
-pub(super) fn member_request(kind: u16, structure_ua: &[u8; 32], structure_ua_msg: &[u8; 32]) -> Result<SignRequest> {
+pub(super) fn member_request(
+    kind: u16,
+    structure_ua: &[u8; 32],
+    structure_ua_msg: &[u8; 32],
+) -> Result<SignRequest> {
     let digest = member_digest(structure_ua, structure_ua_msg);
-    Ok(request(kind, ua_message(kind, &purpose_tag("member")?, &digest)?, SigRole::Authorization))
+    Ok(request(
+        kind,
+        ua_message(kind, &purpose_tag("member")?, &digest)?,
+        SigRole::Authorization,
+    ))
 }
 
 impl UaKey {
@@ -145,7 +190,11 @@ impl UaKey {
         ua_request(self.kind, purpose, digest)
     }
 
-    fn member_request(&self, structure_ua: &[u8; 32], structure_ua_msg: &[u8; 32]) -> Result<SignRequest> {
+    fn member_request(
+        &self,
+        structure_ua: &[u8; 32],
+        structure_ua_msg: &[u8; 32],
+    ) -> Result<SignRequest> {
         member_request(self.kind, structure_ua, structure_ua_msg)
     }
 
@@ -153,22 +202,29 @@ impl UaKey {
     /// and scaas Schnorr `aux`, the PQ kinds' `rnd` / `opt_rand` / Falcon's 88 bytes), else from the OS RNG. The BLS kinds
     /// sign under the domain of the request's role.
     fn sign_ua_msg(&self, req: &SignRequest, fixed: Option<&[u8]>) -> Result<Vec<u8>> {
-        let SignRequest::UaMsg { kind, ua_msg, role } = req else { return Err(Error::Argument) };
+        let SignRequest::UaMsg { kind, ua_msg, role } = req else {
+            return Err(Error::Argument);
+        };
         if *kind != self.kind {
             return Err(Error::Argument);
         }
         if pqsign::is_pq(self.kind) {
-            return self.secret.with(|s| pqsign::sign(self.kind, s, ua_msg, fixed))?;
+            return self
+                .secret
+                .with(|s| pqsign::sign(self.kind, s, ua_msg, fixed))?;
         }
         if pairing::is_pairing(self.kind) {
-            return self.secret.with(|s| pairing::sign(self.kind, s, &self.key_data, ua_msg, *role, fixed))?;
+            return self
+                .secret
+                .with(|s| pairing::sign(self.kind, s, &self.key_data, ua_msg, *role, fixed))?;
         }
         let scheme = ua_scheme(self.kind)?;
         let aux = match (scheme, fixed) {
             (Scheme::Bip340, None) => Some(os_aux()?),
             (_, f) => f.map(arr32).transpose()?.copied(),
         };
-        self.secret.with(|s| sign_scheme(scheme, s, ua_msg, aux.as_ref()))?
+        self.secret
+            .with(|s| sign_scheme(scheme, s, ua_msg, aux.as_ref()))?
     }
 
     /// The signature of `ua_msg = uaMessage(kind, purpose, digest)`; `purpose` a tag of `PURPOSES` or `pop` v2.
@@ -176,15 +232,27 @@ impl UaKey {
         self.sign_ua_msg(&self.ua_request(purpose, digest)?, None)
     }
 
+    /// CTR-UA-46: the signature of `uaMessage(kind, app_purpose(app_id), digest)`, app `app_id`'s portable record (role `Pop`).
+    pub fn sign_ua_app(&self, app_id: &[u8; 32], digest: &[u8; 32]) -> Result<Vec<u8>> {
+        self.sign_ua_msg(&app_request(self.kind, app_id, digest)?, None)
+    }
+
     /// As an `msig` member: the signature of `uaMessage(kind, member, memberDigest(structure_ua, structure_ua_msg))`.
-    pub fn sign_member(&self, structure_ua: &[u8; 32], structure_ua_msg: &[u8; 32]) -> Result<Vec<u8>> {
+    pub fn sign_member(
+        &self,
+        structure_ua: &[u8; 32],
+        structure_ua_msg: &[u8; 32],
+    ) -> Result<Vec<u8>> {
         self.sign_ua_msg(&self.member_request(structure_ua, structure_ua_msg)?, None)
     }
 }
 
 impl Signer for UaKey {
     fn key_ref(&self) -> KeyRef {
-        KeyRef::Ua { kind: self.kind, key_data: self.key_data.clone() }
+        KeyRef::Ua {
+            kind: self.kind,
+            key_data: self.key_data.clone(),
+        }
     }
     fn sign_request(&self, req: &SignRequest) -> Result<Vec<u8>> {
         self.sign_ua_msg(req, None)
@@ -226,7 +294,11 @@ impl NativeKey {
     /// actions such as a NEP-366 delegate action, 2^31 and up off-chain messages such as NEP-413; T13 C6). A `Transaction` starts
     /// with its `signer_id`'s Borsh length, at most 64.
     pub fn sign_near_transaction(&self, tx_borsh: &[u8], _: AllowRawDigest) -> Result<Vec<u8>> {
-        if tx_borsh.get(..4).and_then(|b| <[u8; 4]>::try_from(b).ok()).is_some_and(|b| u32::from_le_bytes(b) >= NEP461_MIN) {
+        if tx_borsh
+            .get(..4)
+            .and_then(|b| <[u8; 4]>::try_from(b).ok())
+            .is_some_and(|b| u32::from_le_bytes(b) >= NEP461_MIN)
+        {
             return Err(Error::Argument);
         }
         self.envelope(Network::Near, tx_borsh, |t| Sha256::digest(t).to_vec())
@@ -235,12 +307,22 @@ impl NativeKey {
     /// Sui: ed25519 over `blake2b-256(0x00 0x00 0x00 ‖ tx_bcs)` (intent `TransactionData`, `V0`, app `Sui`).
     pub fn sign_sui_transaction(&self, tx_bcs: &[u8], _: AllowRawDigest) -> Result<Vec<u8>> {
         use blake2::Digest as _;
-        self.envelope(Network::Sui, tx_bcs, |t| blake2::Blake2b::<blake2::digest::consts::U32>::digest([&[0u8; 3][..], t].concat()).to_vec())
+        self.envelope(Network::Sui, tx_bcs, |t| {
+            blake2::Blake2b::<blake2::digest::consts::U32>::digest([&[0u8; 3][..], t].concat())
+                .to_vec()
+        })
     }
 
     /// Stellar: ed25519 over `sha256(network_id ‖ 0x00000002 ‖ tx_xdr)` (`ENVELOPE_TYPE_TX`; `network_id` = `sha256(passphrase)`).
-    pub fn sign_stellar_transaction(&self, network_id: &[u8; 32], tx_xdr: &[u8], _: AllowRawDigest) -> Result<Vec<u8>> {
-        self.envelope(Network::Stellar, tx_xdr, |t| Sha256::digest([&network_id[..], &[0, 0, 0, 2], t].concat()).to_vec())
+    pub fn sign_stellar_transaction(
+        &self,
+        network_id: &[u8; 32],
+        tx_xdr: &[u8],
+        _: AllowRawDigest,
+    ) -> Result<Vec<u8>> {
+        self.envelope(Network::Stellar, tx_xdr, |t| {
+            Sha256::digest([&network_id[..], &[0, 0, 0, 2], t].concat()).to_vec()
+        })
     }
 
     /// The SS58 address of a Polkadot key at `prefix` (0 to 16,383, not 46 or 47; spec §7.4); `Argument` on any other network.
@@ -258,7 +340,12 @@ impl NativeKey {
 
     /// The envelope calls' common part: this key's network only, 1 to [`MAX_RAW_MESSAGE`] bytes, the built bytes signed as the
     /// scheme's message (no GRAM / TON call: CLI-UAL-63 (14)).
-    fn envelope(&self, network: Network, tx: &[u8], build: impl FnOnce(&[u8]) -> Vec<u8>) -> Result<Vec<u8>> {
+    fn envelope(
+        &self,
+        network: Network,
+        tx: &[u8],
+        build: impl FnOnce(&[u8]) -> Vec<u8>,
+    ) -> Result<Vec<u8>> {
         if self.network != network || tx.is_empty() || tx.len() > MAX_RAW_MESSAGE {
             return Err(Error::Argument);
         }
@@ -272,7 +359,9 @@ const NEP461_MIN: u32 = 1 << 30;
 
 /// [`NativeKey::sign_key_proof`] by any [`Signer`] (spec §9.4).
 pub fn sign_key_proof_by(key: &dyn Signer, challenge: &[u8]) -> Result<Vec<u8>> {
-    key.sign_request(&SignRequest::KeyProof { digest: keccak256(&[KEY_PROOF_PREFIX, challenge].concat()) })
+    key.sign_request(&SignRequest::KeyProof {
+        digest: keccak256(&[KEY_PROOF_PREFIX, challenge].concat()),
+    })
 }
 
 /// [`NativeKey::sign_digest`] by any [`Signer`] (spec §9.4), only with the marker value (CLI-SGN-40).
@@ -284,14 +373,19 @@ pub fn sign_digest_by(key: &dyn Signer, digest: &[u8; 32], _: AllowRawDigest) ->
 /// signer (a `UaKey` refuses the request: `Argument`).
 pub fn sign_message_by(key: &dyn Signer, message: &[u8], _: AllowRawDigest) -> Result<Vec<u8>> {
     message_ok(message)?;
-    key.sign_request(&SignRequest::RawMessage { message: message.to_vec() })
+    key.sign_request(&SignRequest::RawMessage {
+        message: message.to_vec(),
+    })
 }
 
 /// The raw-message checks of [`sign_message_by`]: 1 to [`MAX_RAW_MESSAGE`] bytes, no SCaaS off-chain envelope. No first-byte rule
 /// beyond the envelopes: on an Ed25519 or sr25519 key `0x05` or `0x19 0x01` is chain data (a Substrate call of pallet 5, a Solana
 /// message with five signers), and no secp256k1 key reaches this call (CLI-UAL-63 (11) withdrawn, T13 C1).
 fn message_ok(message: &[u8]) -> Result<()> {
-    if message.is_empty() || message.len() > MAX_RAW_MESSAGE || ENVELOPES.iter().any(|p| message.starts_with(p)) {
+    if message.is_empty()
+        || message.len() > MAX_RAW_MESSAGE
+        || ENVELOPES.iter().any(|p| message.starts_with(p))
+    {
         return Err(Error::Argument);
     }
     Ok(())
@@ -306,9 +400,17 @@ pub(super) fn native_bytes(network: Network, req: &SignRequest) -> Result<Vec<u8
     match req {
         SignRequest::RawDigest { digest } => Ok(digest.to_vec()),
         SignRequest::KeyProof { digest } if network.key_proof() => Ok(digest.to_vec()),
-        SignRequest::Eip712 { domain_separator, struct_hash, .. } if evm => Ok(super::eip712::eip712_digest(domain_separator, struct_hash).to_vec()),
+        SignRequest::Eip712 {
+            domain_separator,
+            struct_hash,
+            ..
+        } if evm => Ok(super::eip712::eip712_digest(domain_separator, struct_hash).to_vec()),
         SignRequest::Transaction { sighash, .. } if evm => Ok(sighash.to_vec()),
-        SignRequest::RawMessage { message } if matches!(scheme, NativeScheme::Ed25519 | NativeScheme::Sr25519) => Ok(message.clone()),
+        SignRequest::RawMessage { message }
+            if matches!(scheme, NativeScheme::Ed25519 | NativeScheme::Sr25519) =>
+        {
+            Ok(message.clone())
+        }
         _ => Err(Error::Argument),
     }
 }
@@ -334,7 +436,9 @@ impl Signer for NativeKey {
             }
             NativeScheme::Sr25519 => {
                 let r = os_aux()?;
-                return self.secret.with(|s| super::substrate::sign(s, &bytes, r, &self.public_key))?;
+                return self
+                    .secret
+                    .with(|s| super::substrate::sign(s, &bytes, r, &self.public_key))?;
             }
         };
         self.secret.with(|s| sign_scheme(scheme, s, &bytes, None))?
@@ -345,22 +449,41 @@ impl Signer for NativeKey {
 /// BIP-340 Verify against `check` (the output key `x(Q)` in the release path): a faulty signature never leaves. The base scalar
 /// `d0` (a `NonZeroScalar`: `Zeroize` but no `Drop`, T13 C3) and the negated and tweaked scalars are wiped as they drop, on every
 /// exit (k256's `schnorr::SigningKey` wipes its own on drop, plan T0).
-fn taproot_sign(d0: &[u8], msg: &[u8], aux: &[u8; 32], check: Option<&[u8; 32]>) -> Result<Vec<u8>> {
+fn taproot_sign(
+    d0: &[u8],
+    msg: &[u8],
+    aux: &[u8; 32],
+    check: Option<&[u8; 32]>,
+) -> Result<Vec<u8>> {
     use k256::elliptic_curve::sec1::ToSec1Point as _;
     use k256::elliptic_curve::PrimeField as _;
-    let d0 = zeroize::Zeroizing::new(k256::NonZeroScalar::try_from(d0).map_err(|_| Error::Argument)?);
+    let d0 =
+        zeroize::Zeroizing::new(k256::NonZeroScalar::try_from(d0).map_err(|_| Error::Argument)?);
     let p = k256::PublicKey::from_secret_scalar(&d0).to_sec1_point(true);
-    let x: [u8; 32] = p.as_bytes().get(1..33).ok_or(Error::Argument)?.try_into().map_err(|_| Error::Argument)?;
+    let x: [u8; 32] = p
+        .as_bytes()
+        .get(1..33)
+        .ok_or(Error::Argument)?
+        .try_into()
+        .map_err(|_| Error::Argument)?;
     let out = derive::taproot_tweak(&x)?;
-    let t = Option::<k256::Scalar>::from(k256::Scalar::from_repr(out.tweak.into())).ok_or(Error::Argument)?;
+    let t = Option::<k256::Scalar>::from(k256::Scalar::from_repr(out.tweak.into()))
+        .ok_or(Error::Argument)?;
     // the negated and tweaked scalars live in this block only (wiped as they drop, before signing)
     let sk = {
-        let d = zeroize::Zeroizing::new(if p.as_bytes().first() == Some(&3) { -**d0 } else { **d0 });
+        let d = zeroize::Zeroizing::new(if p.as_bytes().first() == Some(&3) {
+            -**d0
+        } else {
+            **d0
+        });
         let tweaked = zeroize::Zeroizing::new(*d + t);
         let bytes = zeroize::Zeroizing::new(tweaked.to_repr());
         k256::schnorr::SigningKey::from_bytes(&bytes).map_err(|_| Error::Argument)?
     };
-    let sig = sk.sign_raw(msg, aux).map_err(|_| Error::Argument)?.to_bytes();
+    let sig = sk
+        .sign_raw(msg, aux)
+        .map_err(|_| Error::Argument)?
+        .to_bytes();
     if !crate::verify::bip340(check.unwrap_or(&out.output_key), arr32(msg)?, &sig) {
         return Err(Error::Argument);
     }
@@ -374,10 +497,18 @@ mod vectors {
 
     impl NativeKey {
         /// [`NativeKey::sign_digest`] with fixed randomness: the Taproot `aux` (the release path draws it from the OS RNG).
-        pub fn vectors_sign_digest_fixed(&self, digest: &[u8; 32], r: &[u8; 32]) -> Result<Vec<u8>> {
+        pub fn vectors_sign_digest_fixed(
+            &self,
+            digest: &[u8; 32],
+            r: &[u8; 32],
+        ) -> Result<Vec<u8>> {
             match self.network.scheme() {
-                NativeScheme::Bip340Taproot => self.secret.with(|s| taproot_sign(s, digest, r, None))?,
-                NativeScheme::Sr25519 => self.secret.with(|s| crate::wallet::substrate::sign(s, digest, *r, &self.public_key))?,
+                NativeScheme::Bip340Taproot => {
+                    self.secret.with(|s| taproot_sign(s, digest, r, None))?
+                }
+                NativeScheme::Sr25519 => self
+                    .secret
+                    .with(|s| crate::wallet::substrate::sign(s, digest, *r, &self.public_key))?,
                 _ => self.sign_digest(digest, AllowRawDigest),
             }
         }
@@ -386,14 +517,22 @@ mod vectors {
             match self.network.scheme() {
                 NativeScheme::Sr25519 => {
                     message_ok(message)?;
-                    self.secret.with(|s| crate::wallet::substrate::sign(s, message, *r, &self.public_key))?
+                    self.secret.with(|s| {
+                        crate::wallet::substrate::sign(s, message, *r, &self.public_key)
+                    })?
                 }
                 _ => self.sign_message(message, AllowRawDigest),
             }
         }
         /// The sr25519 signer with its self-verify against `claimed_public_key` (the fault hook: a wrong key gives `Argument`).
-        pub fn vectors_sr25519_sign_check(&self, message: &[u8], r: &[u8; 32], claimed_public_key: &[u8; 32]) -> Result<Vec<u8>> {
-            self.secret.with(|s| crate::wallet::substrate::sign(s, message, *r, claimed_public_key))?
+        pub fn vectors_sr25519_sign_check(
+            &self,
+            message: &[u8],
+            r: &[u8; 32],
+            claimed_public_key: &[u8; 32],
+        ) -> Result<Vec<u8>> {
+            self.secret
+                .with(|s| crate::wallet::substrate::sign(s, message, *r, claimed_public_key))?
         }
     }
 
@@ -408,49 +547,80 @@ mod vectors {
     pub fn vectors_one_shot_reads() -> u32 {
         crate::wallet::substrate::vectors::one_shot_reads()
     }
-    impl NativeKey {
-    }
+    impl NativeKey {}
 
     /// The release Taproot signer over a raw internal secret (BIP-341 `keyPathSpending` rows): negate, tweak, BIP-340, self-check.
-    pub fn vectors_taproot_sign(internal_secret: &[u8; 32], sighash: &[u8; 32], aux: &[u8; 32]) -> Result<Vec<u8>> {
+    pub fn vectors_taproot_sign(
+        internal_secret: &[u8; 32],
+        sighash: &[u8; 32],
+        aux: &[u8; 32],
+    ) -> Result<Vec<u8>> {
         taproot_sign(internal_secret, sighash, aux, None)
     }
 
     /// [`vectors_taproot_sign`] with its self-check against `output_key` (the fault hook: a wrong key must give `Argument`).
-    pub fn vectors_taproot_sign_check(internal_secret: &[u8; 32], sighash: &[u8; 32], aux: &[u8; 32], output_key: &[u8; 32]) -> Result<Vec<u8>> {
+    pub fn vectors_taproot_sign_check(
+        internal_secret: &[u8; 32],
+        sighash: &[u8; 32],
+        aux: &[u8; 32],
+        output_key: &[u8; 32],
+    ) -> Result<Vec<u8>> {
         taproot_sign(internal_secret, sighash, aux, Some(output_key))
     }
 
     impl UaKey {
         /// `sign_ua` with fixed randomness: BIP-340 and scaas Schnorr `aux` (32 B), ML-DSA `rnd` (32 B, zero = deterministic), SLH-DSA
         /// `opt_rand` (16 B, `PK.seed` = deterministic), Falcon nonce ‖ sampler seed (88 B).
-        pub fn vectors_sign_ua_fixed(&self, purpose: &[u8; 32], digest: &[u8; 32], fixed: &[u8]) -> Result<Vec<u8>> {
+        pub fn vectors_sign_ua_fixed(
+            &self,
+            purpose: &[u8; 32],
+            digest: &[u8; 32],
+            fixed: &[u8],
+        ) -> Result<Vec<u8>> {
             self.sign_ua_msg(&self.ua_request(purpose, digest)?, Some(fixed))
         }
         /// A raw `ua_msg` of this key's kind with fixed randomness (pq_kat.json signs a `pop` v1 message `sign_ua` refuses).
         pub fn vectors_sign_ua_msg(&self, ua_msg: &[u8; 32], fixed: &[u8]) -> Result<Vec<u8>> {
-            let req = SignRequest::UaMsg { kind: self.kind, ua_msg: *ua_msg, role: SigRole::Authorization };
+            let req = SignRequest::UaMsg {
+                kind: self.kind,
+                ua_msg: *ua_msg,
+                role: SigRole::Authorization,
+            };
             self.sign_ua_msg(&req, Some(fixed))
         }
         /// The request `sign_ua` signs.
-        pub fn vectors_request(&self, purpose: &[u8; 32], digest: &[u8; 32]) -> Result<SignRequest> {
+        pub fn vectors_request(
+            &self,
+            purpose: &[u8; 32],
+            digest: &[u8; 32],
+        ) -> Result<SignRequest> {
             self.ua_request(purpose, digest)
         }
         /// The request `sign_member` signs.
-        pub fn vectors_member_request(&self, structure_ua: &[u8; 32], structure_ua_msg: &[u8; 32]) -> Result<SignRequest> {
+        pub fn vectors_member_request(
+            &self,
+            structure_ua: &[u8; 32],
+            structure_ua_msg: &[u8; 32],
+        ) -> Result<SignRequest> {
             self.member_request(structure_ua, structure_ua_msg)
         }
     }
 }
 
 #[cfg(feature = "vectors")]
-pub use vectors::{vectors_fail_os_rng, vectors_one_shot_reads, vectors_taproot_sign, vectors_taproot_sign_check};
+pub use vectors::{
+    vectors_fail_os_rng, vectors_one_shot_reads, vectors_taproot_sign, vectors_taproot_sign_check,
+};
 
 /// The scheme primitive of `kind` over `msg` with a raw `secret` (feature `vectors`: the external answers): `0x0101` signs
 /// `sha256(msg)`; `0x0108` and the native EVM kind `0x0001` sign the 32-byte `msg` as it is; `0x0102` ed25519; `0x0103`
 /// BIP-340 with `aux` (required).
 #[cfg(feature = "vectors")]
 pub fn sign_raw(kind: u16, secret: &[u8], msg: &[u8], aux: Option<&[u8; 32]>) -> Result<Vec<u8>> {
-    let scheme = if kind == 0x0001 { Scheme::Secp256k1 } else { ua_scheme(kind)? };
+    let scheme = if kind == 0x0001 {
+        Scheme::Secp256k1
+    } else {
+        ua_scheme(kind)?
+    };
     sign_scheme(scheme, secret, msg, aux)
 }

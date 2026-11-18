@@ -21,99 +21,128 @@ QT=${QT:-$HOME/usr/Qt/6.12.0/gcc_64}
 export CAPPED_SLOTS=${CAPPED_SLOTS:-2} CAPPED_MEM=${CAPPED_MEM:-3G}
 
 run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
-  # OWN_STEPS: steps of this runner a wrapper's extra_step runs its own way (ua-rs-sign T20: the CI cells of this round)
-  case " ${OWN_STEPS:-} " in *" $1 "*) extra_step "$1"; return ;; esac
-  case $1 in
-    forge-isolate) cd smartcontracts/evm && ../../scripts/capped forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol' ;;
-    forge-n[0-9]*-kmax[0-9]*) scripts/capped smartcontracts/evm/script/pqz/at-set.sh "${1#forge-}" test ;; # other forge-* steps: extra_step
-    sizes) cd smartcontracts/evm || return 1
-      python3 -I ../../scripts/size_gate.py --self-test || return 1
-      j=$(mktemp) && ../../scripts/capped forge build src --sizes --json > "$j"
-      [ -s "$j" ] && # forge exits 1 when a contract is above 64 KiB; the gate below judges the sizes
-        python3 -I ../../scripts/size_gate.py "$j" size-baseline.json; rc=$?; rm -f "$j"; return $rc ;;
-    gen-set) python3 -I pqz-core/params/sets/gen_set.py --all --check ;;
-    docs) python3 scripts/test_docs_check.py && python3 scripts/docs_check.py check &&
-      { python3 scripts/docs_check.py facts check | tail -n 12; true; } ;; # facts: logged only (as review2)
-    cargo-zether-prover) cd clients/zether-prover && ../../scripts/capped cargo test -j2 ;;
-    wasm-zether-prover) cd clients/zether-prover && ../../scripts/capped cargo build -j2 --release --bin zether-cli &&
-      ../../scripts/capped cargo build -j2 --release --lib --target wasm32-unknown-unknown &&
-      ~/.cargo/bin/wasm-bindgen --target nodejs --out-dir pkg target/wasm32-unknown-unknown/release/zether_prover.wasm &&
-      node smoke/smoke.cjs ;;
-    zether-cross) # the CLI-vs-contract cross-check; a skipped test (no CLI / no --ffi) must FAIL the step
-      (cd clients/zether-prover && ../../scripts/capped cargo build -j2 --release --bin zether-cli) || return 1
-      cd smartcontracts/evm || return 1
-      o=$(mktemp); ZETHER_CLI="$W/clients/zether-prover/target/release/zether-cli" ../../scripts/capped forge test --ffi \
-        --match-path test/zether/ZetherProverCross.t.sol 2>&1 | tee "$o"; rc=${PIPESTATUS[0]}
-      [ $rc -eq 0 ] && grep -q "${ZETHER_CROSS_N:-6} passed; 0 failed; 0 skipped" "$o" || { echo "zether-cross: not ${ZETHER_CROSS_N:-6} passed / 0 skipped"; rc=1; }
-      rm -f "$o"; return $rc ;;
-    cargo-scaas-node) cd scaas-node && ../scripts/capped sh -c 'cargo clippy -j2 --all-targets -- -D warnings && cargo test -j2' ;;
-    # the anvil e2e CI runs (`cargo test --test e2e -- --ignored`); added 2026-10-30 after CI caught a stale register ABI there
-    node-e2e-anvil) cd scaas-node && ../scripts/capped cargo test -j2 --test e2e -- --ignored --test-threads=1 ;;
-    clientkeys) cd clients/clientkeys && ../../scripts/capped npm test ;;
-    ua-rs) cd clients/ua-rs && ../../scripts/capped cargo test -j2 ;;
-    summary) make_summary ;;
-    ua-rs-pq) cd clients/ua-rs && ../../scripts/capped cargo test -j2 --features pq ;;
-    soroban-roundtrip-check) CARGO_BUILD_JOBS=2 scripts/capped sh -c 'cd smartcontracts/soroban && cargo test -j2 -p scaas-ua-registry ua8_record_bytes_round_trip' ;;
-    # e2e_ua8 is 10 ignored tests, a full run 688 s (the command limit is 600 s): three filtered runs, each test once
-    # (e2e-ua8-union checks the union); --exact so a filter is a name, never a substring
-    e2e-ua8-1) smartcontracts/soroban/scripts/e2e-ua8-local.sh --exact e2e_ua8_tx_size_limit e2e_ua8_copy_evm_soroban_evm e2e_ua8_simulation_auth_mode e2e_ua8_unused_source_account_entry e2e_ua8_spend_stop ;;
-    e2e-ua8-2) smartcontracts/soroban/scripts/e2e-ua8-local.sh --exact e2e_ua8_frost_every_size e2e_ua8_relayer_checked_msig_slot ;;
-    e2e-ua8-3) smartcontracts/soroban/scripts/e2e-ua8-local.sh --exact e2e_ua8_attestation_binds e2e_ua8_network_fit e2e_ua8_relayer_table ;;
-    e2e-ua8-union) # the 10 ignored tests of e2e_ua8 = the 10 that ran, each once across the three step logs
-      cd scaas-node && ../scripts/capped cargo test -j2 --test e2e_ua8 -- --ignored --list | sed -n 's/^\(e2e_ua8_[a-z0-9_]*\): test$/\1/p' | sort > "${TMPDIR:-/tmp}/ua8.list" || return 1
-      cd "$W" || return 1
-      cat $R/$P-e2e-ua8-[123].${LOGEXT} | sed -n 's/^test \(e2e_ua8_[a-z0-9_]*\) \.\.\. .*/\1/p' | sort > "${TMPDIR:-/tmp}/ua8.ran"
-      echo "listed $(wc -l < "${TMPDIR:-/tmp}/ua8.list"), started $(wc -l < "${TMPDIR:-/tmp}/ua8.ran")"
-      [ "$(wc -l < "${TMPDIR:-/tmp}/ua8.list")" -eq 10 ] && cmp "${TMPDIR:-/tmp}/ua8.list" "${TMPDIR:-/tmp}/ua8.ran" &&
-        [ "$(cat $R/$P-e2e-ua8-[123].${LOGEXT} | grep -c '^test result: ok. [0-9]* passed; 0 failed')" -eq 3 ] ;;
-    ua-rs-signers) cd clients/ua-rs && ../../scripts/capped cargo test -j2 --features signers ;;
-    ua-rs-json) cd clients/ua-rs && ../../scripts/capped sh -c 'cargo clippy -j2 --all-targets --features json -- -D warnings && cargo test -j2 --features json' ;;
-    vectors-check) # typed-signing PG: each generator twice, the committed vector files must not move; groups.json = ua-rs write_groups_json
-      (cd clients/zether-prover && ../../scripts/capped cargo build -j2 --release --bin zether-cli) || return 1
-      for i in 1 2; do
-        (cd clients/clientkeys && ../../scripts/capped sh -c 'node scripts/ua-vectors.mjs && node scripts/ua-sig-vectors.mjs &&
+    # OWN_STEPS: steps of this runner a wrapper's extra_step runs its own way (ua-rs-sign T20: the CI cells of this round)
+    case " ${OWN_STEPS:-} " in *" $1 "*)
+        extra_step "$1"
+        return
+        ;;
+    esac
+    case $1 in
+        forge-isolate) cd smartcontracts/evm && ../../scripts/capped forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol' ;;
+        forge-n[0-9]*-kmax[0-9]*) scripts/capped smartcontracts/evm/script/pqz/at-set.sh "${1#forge-}" test ;; # other forge-* steps: extra_step
+        sizes)
+            cd smartcontracts/evm || return 1
+            python3 -I ../../scripts/size_gate.py --self-test || return 1
+            j=$(mktemp) && ../../scripts/capped forge build src --sizes --json >"$j"
+            [ -s "$j" ] && # forge exits 1 when a contract is above 64 KiB; the gate below judges the sizes
+                python3 -I ../../scripts/size_gate.py "$j" size-baseline.json
+            rc=$?
+            rm -f "$j"
+            return $rc
+            ;;
+        gen-set) python3 -I pqz-core/params/sets/gen_set.py --all --check ;;
+        docs) python3 scripts/test_docs_check.py && python3 scripts/docs_check.py check &&
+            {
+                python3 scripts/docs_check.py facts check | tail -n 12
+                true
+            } ;; # facts: logged only (as review2)
+        cargo-zether-prover) cd clients/zether-prover && ../../scripts/capped cargo test -j2 ;;
+        wasm-zether-prover) cd clients/zether-prover && ../../scripts/capped cargo build -j2 --release --bin zether-cli &&
+            ../../scripts/capped cargo build -j2 --release --lib --target wasm32-unknown-unknown &&
+            ~/.cargo/bin/wasm-bindgen --target nodejs --out-dir pkg target/wasm32-unknown-unknown/release/zether_prover.wasm &&
+            node smoke/smoke.cjs ;;
+        zether-cross) # the CLI-vs-contract cross-check; a skipped test (no CLI / no --ffi) must FAIL the step
+            (cd clients/zether-prover && ../../scripts/capped cargo build -j2 --release --bin zether-cli) || return 1
+            cd smartcontracts/evm || return 1
+            o=$(mktemp)
+            ZETHER_CLI="$W/clients/zether-prover/target/release/zether-cli" ../../scripts/capped forge test --ffi \
+                --match-path test/zether/ZetherProverCross.t.sol 2>&1 | tee "$o"
+            rc=${PIPESTATUS[0]}
+            [ $rc -eq 0 ] && grep -q "${ZETHER_CROSS_N:-6} passed; 0 failed; 0 skipped" "$o" || {
+                echo "zether-cross: not ${ZETHER_CROSS_N:-6} passed / 0 skipped"
+                rc=1
+            }
+            rm -f "$o"
+            return $rc
+            ;;
+        cargo-scaas-node) cd scaas-node && ../scripts/capped sh -c 'cargo clippy -j2 --all-targets -- -D warnings && cargo test -j2' ;;
+        # the anvil e2e CI runs (`cargo test --test e2e -- --ignored`); added 2026-10-30 after CI caught a stale register ABI there
+        node-e2e-anvil) cd scaas-node && ../scripts/capped cargo test -j2 --test e2e -- --ignored --test-threads=1 ;;
+        clientkeys) cd clients/clientkeys && ../../scripts/capped npm test ;;
+        ua-rs) cd clients/ua-rs && ../../scripts/capped cargo test -j2 ;;
+        summary) make_summary ;;
+        ua-rs-pq) cd clients/ua-rs && ../../scripts/capped cargo test -j2 --features pq ;;
+        soroban-roundtrip-check) CARGO_BUILD_JOBS=2 scripts/capped sh -c 'cd smartcontracts/soroban && cargo test -j2 -p scaas-ua-registry ua8_record_bytes_round_trip' ;;
+        # e2e_ua8 is 10 ignored tests, a full run 688 s (the command limit is 600 s): three filtered runs, each test once
+        # (e2e-ua8-union checks the union); --exact so a filter is a name, never a substring
+        e2e-ua8-1) smartcontracts/soroban/scripts/e2e-ua8-local.sh --exact e2e_ua8_tx_size_limit e2e_ua8_copy_evm_soroban_evm e2e_ua8_simulation_auth_mode e2e_ua8_unused_source_account_entry e2e_ua8_spend_stop ;;
+        e2e-ua8-2) smartcontracts/soroban/scripts/e2e-ua8-local.sh --exact e2e_ua8_frost_every_size e2e_ua8_relayer_checked_msig_slot ;;
+        e2e-ua8-3) smartcontracts/soroban/scripts/e2e-ua8-local.sh --exact e2e_ua8_attestation_binds e2e_ua8_network_fit e2e_ua8_relayer_table ;;
+        e2e-ua8-union) # the 10 ignored tests of e2e_ua8 = the 10 that ran, each once across the three step logs
+            cd scaas-node && ../scripts/capped cargo test -j2 --test e2e_ua8 -- --ignored --list | sed -n 's/^\(e2e_ua8_[a-z0-9_]*\): test$/\1/p' | sort >"${TMPDIR:-/tmp}/ua8.list" || return 1
+            cd "$W" || return 1
+            cat $R/$P-e2e-ua8-[123].${LOGEXT} | sed -n 's/^test \(e2e_ua8_[a-z0-9_]*\) \.\.\. .*/\1/p' | sort >"${TMPDIR:-/tmp}/ua8.ran"
+            echo "listed $(wc -l <"${TMPDIR:-/tmp}/ua8.list"), started $(wc -l <"${TMPDIR:-/tmp}/ua8.ran")"
+            [ "$(wc -l <"${TMPDIR:-/tmp}/ua8.list")" -eq 10 ] && cmp "${TMPDIR:-/tmp}/ua8.list" "${TMPDIR:-/tmp}/ua8.ran" &&
+                [ "$(cat $R/$P-e2e-ua8-[123].${LOGEXT} | grep -c '^test result: ok. [0-9]* passed; 0 failed')" -eq 3 ]
+            ;;
+        ua-rs-signers) cd clients/ua-rs && ../../scripts/capped cargo test -j2 --features signers ;;
+        ua-rs-json) cd clients/ua-rs && ../../scripts/capped sh -c 'cargo clippy -j2 --all-targets --features json -- -D warnings && cargo test -j2 --features json' ;;
+        vectors-check) # typed-signing PG: each generator twice, the committed vector files must not move; groups.json = ua-rs write_groups_json
+            (cd clients/zether-prover && ../../scripts/capped cargo build -j2 --release --bin zether-cli) || return 1
+            for i in 1 2; do
+                (cd clients/clientkeys && ../../scripts/capped sh -c 'node scripts/ua-vectors.mjs && node scripts/ua-sig-vectors.mjs &&
            node scripts/ua-portable-vectors.mjs && node scripts/soroban-ua-ops-vectors.mjs && node scripts/typed-ops-vectors.mjs') || return 1
-        (cd clients/ua-rs && ../../scripts/capped cargo test -j2 --features signers --test groups -- --ignored write_groups_json) || return 1
-        (cd clients/zether-prover && target/release/zether-cli vectors vectors) || return 1
-        git diff --exit-code --stat -- smartcontracts/vectors/ua smartcontracts/vectors/typed smartcontracts/soroban/vectors clients/zether-prover/vectors || return 1
-      done
-      (cd clients/clientkeys && ../../scripts/capped node scripts/typed-ops-cast-check.mjs) || return 1 # needs cast: Foundry, as every forge step
-      for f in r33_keys schnorr_bls12381; do # the committed copies of the zether files
-        cmp clients/zether-prover/vectors/$f.json clients/clientkeys/test/vectors/$f.json &&
-          cmp clients/zether-prover/vectors/$f.json smartcontracts/evm/test/vectors/zether/s3/$f.json || return 1
-      done ;;
-    ua-qt) # as Task 18; build/ is git-ignored; ctest -V prints QtQuickTest's per-function PASS lines for named-tests
-      : "${QT:?set QT to the Qt 6 prefix (the directory holding bin/qmake6)}"
-      QMAKE=$QT/bin/qmake6 LD_LIBRARY_PATH=$QT/lib QT_QPA_PLATFORM=offscreen scripts/capped sh -c \
-        "cmake -S clients/ua-qt -B clients/ua-qt/build -DCMAKE_PREFIX_PATH=$QT && cmake --build clients/ua-qt/build -j2 &&
-         cd clients/ua-qt/build && ctest -V --no-tests=error --output-on-failure" ;;
-    # near-algorand T22: the UA reproducers of Task 2 (commands: the ci.yml header), NEAR / Algorand, their node e2e
-    ua-py) cd clients/ua-py && python3 -m unittest -v tests.test_vectors ;;
-    ua-go) cd clients/ua-go && ../../scripts/capped sh -c 'go vet ./... && go test -v ./...' ;;
-    ua-cs) cd clients/ua-cs && ../../scripts/capped dotnet test Scaas.Ua.Tests --logger 'console;verbosity=normal'; rc=$?
-      dotnet build-server shutdown >/dev/null 2>&1; return $rc ;; # VBCSCompiler would keep the capped slot
-    ua-c) cd clients/ua-c && ../../scripts/capped sh -c 'cargo clippy -j2 --locked --all-targets -- -D warnings &&
+                (cd clients/ua-rs && ../../scripts/capped cargo test -j2 --features signers --test groups -- --ignored write_groups_json) || return 1
+                (cd clients/zether-prover && target/release/zether-cli vectors vectors) || return 1
+                git diff --exit-code --stat -- smartcontracts/vectors/ua smartcontracts/vectors/typed smartcontracts/soroban/vectors clients/zether-prover/vectors || return 1
+            done
+            (cd clients/clientkeys && ../../scripts/capped node scripts/typed-ops-cast-check.mjs) || return 1 # needs cast: Foundry, as every forge step
+            for f in r33_keys schnorr_bls12381; do                                                            # the committed copies of the zether files
+                cmp clients/zether-prover/vectors/$f.json clients/clientkeys/test/vectors/$f.json &&
+                    cmp clients/zether-prover/vectors/$f.json smartcontracts/evm/test/vectors/zether/s3/$f.json || return 1
+            done
+            ;;
+        ua-qt) # as Task 18; build/ is git-ignored; ctest -V prints QtQuickTest's per-function PASS lines for named-tests
+            : "${QT:?set QT to the Qt 6 prefix (the directory holding bin/qmake6)}"
+            QMAKE=$QT/bin/qmake6 LD_LIBRARY_PATH=$QT/lib QT_QPA_PLATFORM=offscreen scripts/capped sh -c \
+                "cmake -S clients/ua-qt -B clients/ua-qt/build -DCMAKE_PREFIX_PATH=$QT && cmake --build clients/ua-qt/build -j2 &&
+         cd clients/ua-qt/build && ctest -V --no-tests=error --output-on-failure"
+            ;;
+        # near-algorand T22: the UA reproducers of Task 2 (commands: the ci.yml header), NEAR / Algorand, their node e2e
+        ua-py) cd clients/ua-py && python3 -m unittest -v tests.test_vectors ;;
+        ua-go) cd clients/ua-go && ../../scripts/capped sh -c 'go vet ./... && go test -v ./...' ;;
+        ua-cs)
+            cd clients/ua-cs && ../../scripts/capped dotnet test Scaas.Ua.Tests --logger 'console;verbosity=normal'
+            rc=$?
+            dotnet build-server shutdown >/dev/null 2>&1
+            return $rc
+            ;; # VBCSCompiler would keep the capped slot
+        ua-c) cd clients/ua-c && ../../scripts/capped sh -c 'cargo clippy -j2 --locked --all-targets -- -D warnings &&
         cargo build -j2 --locked && cargo test -j2 --locked &&
         cc -std=c99 -Wall -Wextra -Werror -Iinclude tests/smoke.c target/debug/libscaas_ua_c.a -lpthread -ldl -lm -o target/smoke &&
         target/smoke && c++ -fsyntax-only -x c++ include/scaas_ua.h' && python3 -m unittest -v tests.test_vectors ;;
-    ua-cxx) cd clients/ua-cxx && ../../scripts/capped sh -c 'cargo clippy -j2 --locked --all-targets -- -D warnings &&
+        ua-cxx) cd clients/ua-cxx && ../../scripts/capped sh -c 'cargo clippy -j2 --locked --all-targets -- -D warnings &&
         cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSCAAS_UA_CARGO_TARGET_DIR=$PWD/target &&
         cmake --build build -j2 && ctest --test-dir build --no-tests=error --output-on-failure' ;;
-    ua-dart) cd clients/ua-dart && ../../scripts/capped sh -c 'dart pub get && dart analyze && dart test -r expanded && dart test -r expanded -p node &&
+        ua-dart) cd clients/ua-dart && ../../scripts/capped sh -c 'dart pub get && dart analyze && dart test -r expanded && dart test -r expanded -p node &&
         dart run test/vectors_test.dart' ;;
-    ua-dart-frb) cd clients/ua-dart-frb && ../../scripts/capped sh -c 'dart pub get --enforce-lockfile &&
+        ua-dart-frb) cd clients/ua-dart-frb && ../../scripts/capped sh -c 'dart pub get --enforce-lockfile &&
         cargo build -j2 --locked --manifest-path rust/Cargo.toml && dart test -r expanded' ;;
-    soroban|solana|cosmos|sui|aptos|ton|near) CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh "$1" ;;
-    # -rA: pytest's summary lists every "PASSED tests/<file>::<test>" for named-tests (the suite runs -q -s)
-    algorand) PYTEST_ADDOPTS=-rA scripts/capped smartcontracts/scripts/test.sh algorand ;;
-    # starts near-sandbox itself (the binary near-workspaces fetched for the near step) and stops it with the test
-    e2e-near) cd scaas-node && ../scripts/capped cargo test -j2 --test e2e_near -- --ignored ;;
-    e2e-algorand) smartcontracts/algorand/scripts/e2e.sh ;; # a fresh localnet up (capped), e2e, down on any exit
-    soroban-spike-local) CAPPED_SLOTS=1 smartcontracts/soroban/spike/run.sh ;;
-    e2e-soroban-local) smartcontracts/soroban/scripts/e2e-local.sh ;;
-    named-tests) named_tests ;;
-    *) if declare -F extra_step > /dev/null; then extra_step "$1"; else echo "unknown step $1"; return 2; fi ;; # extra_step: a wrapper's own steps
-  esac
+        soroban | solana | cosmos | sui | aptos | ton | near) CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh "$1" ;;
+        # -rA: pytest's summary lists every "PASSED tests/<file>::<test>" for named-tests (the suite runs -q -s)
+        algorand) PYTEST_ADDOPTS=-rA scripts/capped smartcontracts/scripts/test.sh algorand ;;
+        # starts near-sandbox itself (the binary near-workspaces fetched for the near step) and stops it with the test
+        e2e-near) cd scaas-node && ../scripts/capped cargo test -j2 --test e2e_near -- --ignored ;;
+        e2e-algorand) smartcontracts/algorand/scripts/e2e.sh ;; # a fresh localnet up (capped), e2e, down on any exit
+        soroban-spike-local) CAPPED_SLOTS=1 smartcontracts/soroban/spike/run.sh ;;
+        e2e-soroban-local) smartcontracts/soroban/scripts/e2e-local.sh ;;
+        named-tests) named_tests ;;
+        *) if declare -F extra_step >/dev/null; then extra_step "$1"; else
+            echo "unknown step $1"
+            return 2
+        fi ;; # extra_step: a wrapper's own steps
+    esac
 }
 
 # The new tests of the plan (Tasks 1-18), "<step>|<form>|<name>", and the pass line each must show in that step's log:
@@ -127,7 +156,8 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
 # (the plan's test names, as the tasks built them: git diff of the test functions, merge-base..T19;
 #  near-algorand T22: the same for merge-base..T21, plus the existing tests its briefs name; final fix wave: its new
 #  tests; node-ua-jobs (EVM `ua_metatx` jobs, 2026-10-30) and its fix 1: their unit tests, last block)
-NEW_TESTS_DEFAULT=$(cat <<'EOF'
+NEW_TESTS_DEFAULT=$(
+    cat <<'EOF'
 forge|forge|test_parity
 forge|forge|test_isValid_7702_ctrUa24
 forge|forge|test_isValid_7702_badDelegates
@@ -796,67 +826,91 @@ EOF
 NEW_TESTS=${NEW_TESTS-$NEW_TESTS_DEFAULT}
 
 named_tests() { # every new test passed; no family log with 0 passed, a skipped suite, or a new test ignored
-  local D=${NAMED_TESTS_LOG_DIR:-$R} miss=0 step form name re f n
-  norm() { sed -E 's/^[[:space:]]*([0-9]+: )?[[:space:]]*//; s/ \([0-9.]+ ?m?s\)$//' "$1"; }
-  # cargo --nocapture --test-threads=1 (the near step) prints "test <t> ... " + the test's output + "ok" on its own line:
-  # rejoin each result to its "test <t> ... " line
-  cnorm() { awk '/^test [^ ]+( - should panic)? \.\.\. / { i = index($0, " ... "); h = substr($0, 1, i + 4); r = substr($0, i + 5)
+    local D=${NAMED_TESTS_LOG_DIR:-$R} miss=0 step form name re f n
+    norm() { sed -E 's/^[[:space:]]*([0-9]+: )?[[:space:]]*//; s/ \([0-9.]+ ?m?s\)$//' "$1"; }
+    # cargo --nocapture --test-threads=1 (the near step) prints "test <t> ... " + the test's output + "ok" on its own line:
+    # rejoin each result to its "test <t> ... " line
+    cnorm() { awk '/^test [^ ]+( - should panic)? \.\.\. / { i = index($0, " ... "); h = substr($0, 1, i + 4); r = substr($0, i + 5)
       if (r ~ /^(ok|FAILED|ignored)/) print; else p = h; next }
     p != "" && /^(ok|FAILED|ignored)/ { print p $0; p = "" }' "$1"; }
-  while IFS='|' read -r step form name; do
-    case $form in
-      forge) cat "$D/$P"-forge-*.${LOGEXT} "$D/$P-zether-cross.${LOGEXT}" 2>/dev/null | grep -qF "[PASS] $name(" ;;
-      cargo) re="^test ([^ ]+::)?${name//::/::([^ ]+::)?}( - should panic)?" # a #[should_panic] test prints the suffix
-        f=$(cnorm "$D/$P-$step.${LOGEXT}" 2>/dev/null)
-        ! grep -qE "$re \.\.\. ignored(, .*)?$" <<< "$f" && grep -qE "$re \.\.\. ok$" <<< "$f" ;;
-      move) grep -qE "\[ PASS +\] [^ ]*::${name}\$" "$D/$P-$step.${LOGEXT}" 2>/dev/null ;;
-      jest) norm "$D/$P-$step.${LOGEXT}" 2>/dev/null | grep -qxF "✓ $name" ;;
-      node) norm "$D/$P-$step.${LOGEXT}" 2>/dev/null | grep -qxF "✔ $name" ;;
-      qt) grep -qE "PASS +: ([A-Za-z_]+::)+${name}\(\)" "$D/$P-$step.${LOGEXT}" 2>/dev/null ;;
-      pytest) grep -qE "^PASSED tests/${name}(\[[^ ]*\])?\$" "$D/$P-$step.${LOGEXT}" 2>/dev/null ;;
-      go) grep -qE "^--- PASS: ${name} \\(" "$D/$P-$step.${LOGEXT}" 2>/dev/null ;;
-      cs) grep -qE "^ *Passed ([A-Za-z0-9_]+\\.)*${name} \\[" "$D/$P-$step.${LOGEXT}" 2>/dev/null ;;
-      ctest) grep -qE "Test +#[0-9]+: ${name} \\.+ +Passed" "$D/$P-$step.${LOGEXT}" 2>/dev/null ;;
-      # dart: the expanded reporter prints a name when its test STARTS; it passed only if the next progress line has
-      # "+" one higher and the same "~skipped -failed" tail. Every occurrence (vm, -p node, dart run) must pass.
-      dart) sed -E 's/\x1b\[[0-9;]*m//g' "$D/$P-$step.${LOGEXT}" 2>/dev/null | awk -v n="$name" '
+    while IFS='|' read -r step form name; do
+        case $form in
+            forge) cat "$D/$P"-forge-*.${LOGEXT} "$D/$P-zether-cross.${LOGEXT}" 2>/dev/null | grep -qF "[PASS] $name(" ;;
+            cargo)
+                re="^test ([^ ]+::)?${name//::/::([^ ]+::)?}( - should panic)?" # a #[should_panic] test prints the suffix
+                f=$(cnorm "$D/$P-$step.${LOGEXT}" 2>/dev/null)
+                ! grep -qE "$re \.\.\. ignored(, .*)?$" <<<"$f" && grep -qE "$re \.\.\. ok$" <<<"$f"
+                ;;
+            move) grep -qE "\[ PASS +\] [^ ]*::${name}\$" "$D/$P-$step.${LOGEXT}" 2>/dev/null ;;
+            jest) norm "$D/$P-$step.${LOGEXT}" 2>/dev/null | grep -qxF "✓ $name" ;;
+            node) norm "$D/$P-$step.${LOGEXT}" 2>/dev/null | grep -qxF "✔ $name" ;;
+            qt) grep -qE "PASS +: ([A-Za-z_]+::)+${name}\(\)" "$D/$P-$step.${LOGEXT}" 2>/dev/null ;;
+            pytest) grep -qE "^PASSED tests/${name}(\[[^ ]*\])?\$" "$D/$P-$step.${LOGEXT}" 2>/dev/null ;;
+            go) grep -qE "^--- PASS: ${name} \\(" "$D/$P-$step.${LOGEXT}" 2>/dev/null ;;
+            cs) grep -qE "^ *Passed ([A-Za-z0-9_]+\\.)*${name} \\[" "$D/$P-$step.${LOGEXT}" 2>/dev/null ;;
+            ctest) grep -qE "Test +#[0-9]+: ${name} \\.+ +Passed" "$D/$P-$step.${LOGEXT}" 2>/dev/null ;;
+            # dart: the expanded reporter prints a name when its test STARTS; it passed only if the next progress line has
+            # "+" one higher and the same "~skipped -failed" tail. Every occurrence (vm, -p node, dart run) must pass.
+            dart) sed -E 's/\x1b\[[0-9;]*m//g' "$D/$P-$step.${LOGEXT}" 2>/dev/null | awk -v n="$name" '
           match($0, /^[0-9:]+ \+[0-9]+( [-~][0-9]+)*: /) {
             t = substr($0, RLENGTH + 1); sub(/^[^ ]+\.dart: /, "", t)
             a = substr($0, 1, RLENGTH - 2); sub(/^[0-9:]+ \+/, "", a); x = a; sub(/^[0-9]+/, "", x); sub(/ .*/, "", a)
             if (p) { if (a == pa + 1 && x == px) ok++; p = 0 }
             if (t == n) { p = 1; pa = a; px = x; seen++ } }
           END { exit !(seen > 0 && ok == seen) }' ;;
-      # a test with a docstring prints its name, then "<docstring> ... ok" on the next line
-      unittest) grep -A1 -E "^${name} \(.*\)( \.\.\. ok)?\$" "$D/$P-$step.${LOGEXT}" 2>/dev/null | grep -qE " \.\.\. ok\$" ;;
-    esac || { echo "named-tests: not passed in $step: $name"; miss=$((miss + 1)); }
-  done <<< "$NEW_TESTS"
-  for s in $FAMILIES; do
-    f=$D/$P-$s.${LOGEXT}
-    [ -f "$f" ] || { echo "named-tests: no log for $s"; miss=$((miss + 1)); continue; }
-    # cargo: a crate's doc-test or a test-less binary prints "0 passed"; only those lines are allowed
-    n=$(awk '/^ *Doc-tests /{d=1} /^ *Running /{d=0} /^running 0 tests$/{z=1}
+            # a test with a docstring prints its name, then "<docstring> ... ok" on the next line
+            unittest) grep -A1 -E "^${name} \(.*\)( \.\.\. ok)?\$" "$D/$P-$step.${LOGEXT}" 2>/dev/null | grep -qE " \.\.\. ok\$" ;;
+        esac || {
+            echo "named-tests: not passed in $step: $name"
+            miss=$((miss + 1))
+        }
+    done <<<"$NEW_TESTS"
+    for s in $FAMILIES; do
+        f=$D/$P-$s.${LOGEXT}
+        [ -f "$f" ] || {
+            echo "named-tests: no log for $s"
+            miss=$((miss + 1))
+            continue
+        }
+        # cargo: a crate's doc-test or a test-less binary prints "0 passed"; only those lines are allowed
+        n=$(awk '/^ *Doc-tests /{d=1} /^ *Running /{d=0} /^running 0 tests$/{z=1}
              / 0 passed/{ if (!d && !z) c++; z=0 } END{print c+0}' "$f")
-    [ "$n" -eq 0 ] || { echo "named-tests: $s reports 0 passed ($n)"; miss=$((miss + 1)); }
-    # jest / pytest / cargo totals, then the UA-8 client forms: dart "+n ~s", go "--- SKIP", unittest, dotnet, qt, ctest
-    sed -E 's/\x1b\[[0-9;]*m//g' "$f" | grep -qE 'Test Suites:.* skipped|Total tests: 0;|passed: 0;|^(=+ )?([0-9]+ [a-z]+, )*[0-9]+ (skipped|deselected|xfailed)|^[0-9:]+ \+[0-9]+ ~[0-9]|^ *--- SKIP: |^Ran 0 tests|^OK \(.*skipped=| \.\.\. skipped |^ +Skipped( [A-Za-z]|: +[1-9])|^SKIP +: |\*\*\*(Skipped|Not Run)' && { echo "named-tests: $s has a skipped / empty suite"; miss=$((miss + 1)); }
-  done
-  n=$(grep -c . <<< "$NEW_TESTS")
-  [ "$n" -gt 0 ] || { echo "named-tests: NEW_TESTS is empty"; miss=$((miss + 1)); }
-  echo "named-tests: $n names, $miss problem(s)"
-  [ $miss -eq 0 ]
+        [ "$n" -eq 0 ] || {
+            echo "named-tests: $s reports 0 passed ($n)"
+            miss=$((miss + 1))
+        }
+        # jest / pytest / cargo totals, then the UA-8 client forms: dart "+n ~s", go "--- SKIP", unittest, dotnet, qt, ctest
+        sed -E 's/\x1b\[[0-9;]*m//g' "$f" | grep -qE 'Test Suites:.* skipped|Total tests: 0;|passed: 0;|^(=+ )?([0-9]+ [a-z]+, )*[0-9]+ (skipped|deselected|xfailed)|^[0-9:]+ \+[0-9]+ ~[0-9]|^ *--- SKIP: |^Ran 0 tests|^OK \(.*skipped=| \.\.\. skipped |^ +Skipped( [A-Za-z]|: +[1-9])|^SKIP +: |\*\*\*(Skipped|Not Run)' && {
+            echo "named-tests: $s has a skipped / empty suite"
+            miss=$((miss + 1))
+        }
+    done
+    n=$(grep -c . <<<"$NEW_TESTS")
+    [ "$n" -gt 0 ] || {
+        echo "named-tests: NEW_TESTS is empty"
+        miss=$((miss + 1))
+    }
+    echo "named-tests: $n names, $miss problem(s)"
+    [ $miss -eq 0 ]
 }
 
 # <prefix>-summary.txt: one row per step "step | commit | rc | counts" from the logs, then the short result lines; the repo root
 # is stripped and any /home path left fails the step (owner 2026-11-02: no compiler / test output in git)
 make_summary() {
-  local out=$R/$P-summary.txt s f c rc n
-  { echo "# $P at commit $(git rev-parse --short HEAD)"; echo "step | commit | rc | counts"
-    for s in $STEPS; do
-      [ "$s" = summary ] && continue
-      f=$R/$P-$s.$LOGEXT
-      if [ ! -f "$f" ]; then echo "$s | - | missing | -"; continue; fi
-      c=$(head -n1 "$f" | sed -n 's/^# .* at commit //p'); rc=$(tail -n1 "$f" | sed -n 's/^rc=//p')
-      n=$(sed -E 's/\x1b\[[0-9;]*m//g' "$f" | awk '
+    local out=$R/$P-summary.txt s f c rc n
+    {
+        echo "# $P at commit $(git rev-parse --short HEAD)"
+        echo "step | commit | rc | counts"
+        for s in $STEPS; do
+            [ "$s" = summary ] && continue
+            f=$R/$P-$s.$LOGEXT
+            if [ ! -f "$f" ]; then
+                echo "$s | - | missing | -"
+                continue
+            fi
+            c=$(head -n1 "$f" | sed -n 's/^# .* at commit //p')
+            rc=$(tail -n1 "$f" | sed -n 's/^rc=//p')
+            n=$(sed -E 's/\x1b\[[0-9;]*m//g' "$f" | awk '
         /^test result: .* [0-9]+ passed;/ { for (i = 1; i <= NF; i++) { if ($(i+1) ~ /^passed/) p += $i; if ($(i+1) ~ /^failed/) fl += $i; if ($(i+1) ~ /^ignored/) ig += $i } }
         /\[PASS\]/ { fp++ } /\[FAIL/ { ff++ }
         /^Ran [0-9]+ test suites.*: [0-9]+ tests passed, [0-9]+ failed, [0-9]+ skipped/ { # forge totals: fuzz and table rows print [PASS] more than once
@@ -873,39 +927,67 @@ make_summary() {
           if (gp) o = o gp " passed (go) "; if (py) o = o py " ran (unittest) "
           if (cs) o = o cs " passed (dotnet) "; if (ct) o = o ct " passed (ctest) "; if (qt) o = o qt " passed (qt) "
           print (o == "" ? "-" : o) }')
-      echo "$s | $c | $rc | $n"
-    done
-    echo; echo "# result lines"
-    for s in $STEPS; do
-      f=$R/$P-$s.$LOGEXT; [ -f "$f" ] && [ "$s" != summary ] || continue
-      sed -E 's/\x1b\[[0-9;]*m//g' "$f" | grep -aE '^(test result: |Suite result: |Ran [0-9]+ test suites|named-tests: |listed [0-9]+, started|e2e-ua8-local: PASS|== e2e-ua8-local: [0-9a-f]+)' | cut -c1-200 | sed "s|^|$s: |"
-    done; } | sed "s|$W/||g" > "$out"
-  if grep -n '/home' "$out"; then echo "summary: an absolute /home path is left in $out"; return 1; fi
-  echo "summary: $(grep -c ' | ' "$out") rows -> $out"
+            echo "$s | $c | $rc | $n"
+        done
+        echo
+        echo "# result lines"
+        for s in $STEPS; do
+            f=$R/$P-$s.$LOGEXT
+            [ -f "$f" ] && [ "$s" != summary ] || continue
+            sed -E 's/\x1b\[[0-9;]*m//g' "$f" | grep -aE '^(test result: |Suite result: |Ran [0-9]+ test suites|named-tests: |listed [0-9]+, started|e2e-ua8-local: PASS|== e2e-ua8-local: [0-9a-f]+)' | cut -c1-200 | sed "s|^|$s: |"
+        done
+    } | sed "s|$W/||g" >"$out"
+    if grep -n '/home' "$out"; then
+        echo "summary: an absolute /home path is left in $out"
+        return 1
+    fi
+    echo "summary: $(grep -c ' | ' "$out") rows -> $out"
 }
 
 done_at_head() { # log ends rc=0, first line names HEAD, tree clean apart from the logs
-  L=$R/$P-$1.${LOGEXT}
-  [ -f "$L" ] && [ "$(tail -n1 "$L")" = "rc=0" ] && [ "$(head -n1 "$L")" = "# $1 at commit $(git rev-parse --short HEAD)" ] &&
-    [ -z "$(git status --porcelain -- . ":(exclude)$R")" ]
+    L=$R/$P-$1.${LOGEXT}
+    [ -f "$L" ] && [ "$(tail -n1 "$L")" = "rc=0" ] && [ "$(head -n1 "$L")" = "# $1 at commit $(git rev-parse --short HEAD)" ] &&
+        [ -z "$(git status --porcelain -- . ":(exclude)$R")" ]
 }
 
 only=
 [ "$1" = "--only" ] && only=$2
-[ -z "$only" ] || case " $STEPS " in *" $only "*) ;; *) echo "unknown step $only" >&2; exit 2 ;; esac
+[ -z "$only" ] || case " $STEPS " in *" $only "*) ;; *)
+    echo "unknown step $only" >&2
+    exit 2
+    ;;
+esac
 if [ -n "$NAMED_TESTS_LOG_DIR" ]; then # the guard self-check: report only, never write runs/
-  [ "$only" = named-tests ] || { echo "NAMED_TESTS_LOG_DIR only with --only named-tests" >&2; exit 2; }
-  named_tests; exit $?
+    [ "$only" = named-tests ] || {
+        echo "NAMED_TESTS_LOG_DIR only with --only named-tests" >&2
+        exit 2
+    }
+    named_tests
+    exit $?
 fi
-[ -n "${STEPS//[[:space:]]/}" ] || { echo "STEPS is empty" >&2; exit 2; }
+[ -n "${STEPS//[[:space:]]/}" ] || {
+    echo "STEPS is empty" >&2
+    exit 2
+}
 fail=0
 for s in $STEPS; do
-  [ -z "$only" ] || [ "$s" = "$only" ] || continue
-  if [ -z "$GATES_FRESH" ] && done_at_head "$s"; then echo "skip $s (rc=0 at $(git rev-parse --short HEAD))"; continue; fi
-  L=$R/$P-$s.${LOGEXT}
-  echo "run  $s"
-  { echo "# $s at commit $(git rev-parse --short HEAD)"; (run_step "$s") 2>&1; echo "rc=$?"; } > "$L.tmp" 2>&1
-  mv "$L.tmp" "$L"   # named-tests reads $R; the step's own log appears only when the step is done
-  tail -n1 "$L" | grep -qx 'rc=0' || { echo "FAIL $s ($L)"; fail=1; break; }
+    [ -z "$only" ] || [ "$s" = "$only" ] || continue
+    if [ -z "$GATES_FRESH" ] && done_at_head "$s"; then
+        echo "skip $s (rc=0 at $(git rev-parse --short HEAD))"
+        continue
+    fi
+    L=$R/$P-$s.${LOGEXT}
+    echo "run  $s"
+    {
+        echo "# $s at commit $(git rev-parse --short HEAD)"
+        (run_step "$s") 2>&1
+        echo "rc=$?"
+    } >"$L.tmp" 2>&1
+    mv "$L.tmp" "$L" # named-tests reads $R; the step's own log appears only when the step is done
+    tail -n1 "$L" | grep -qx 'rc=0' || {
+        echo "FAIL $s ($L)"
+        fail=1
+        break
+    }
 done
 exit $fail

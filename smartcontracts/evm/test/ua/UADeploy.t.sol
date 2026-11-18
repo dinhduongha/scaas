@@ -20,7 +20,8 @@ import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 ///         and `bls-bn254-minsig`.
 contract UADeployTest is Test {
     bytes32 constant UID = keccak256("scaas.ua3.deploy");
-    uint16[12] internal EVERYWHERE = [0x0100, 0x0101, 0x0102, 0x0103, 0x0104, 0x0110, 0x0111, 0x0112, 0x0113, 0x0120, 0, 0];
+    uint16[12] internal EVERYWHERE =
+        [0x0100, 0x0101, 0x0102, 0x0103, 0x0104, 0x0110, 0x0111, 0x0112, 0x0113, 0x0120, 0, 0];
     address ska = new SmartKeyAccountFactory(UID).IMPLEMENTATION();
 
     function _registry(uint256 chainId, bool hedera) internal returns (IUARegistry reg) {
@@ -69,7 +70,9 @@ contract UADeployTest is Test {
         assertEq(reg.verifyCap(UAKinds.ZETHER_BLS12381), 70_000);
         assertFalse(reg.kindEnabled(UAKinds.PQZ_MLWE));
         _pq(reg, true);
-        assertTrue(reg.kindEnabled(0x0134), "mldsa87: on the cache without a precompile (CTR-UA-39 Q1, owner 2026-11-15)");
+        assertTrue(
+            reg.kindEnabled(0x0134), "mldsa87: on the cache without a precompile (CTR-UA-39 Q1, owner 2026-11-15)"
+        );
         assertEq(reg.verifyCap(0x0134), 8_850_000, "the cached cap");
     }
 
@@ -120,7 +123,11 @@ contract UADeployTest is Test {
         h.deploy(UID, false, ska);
         h = new DeployHarness(); // on: the chain answers 0x0131's probe, no verifier handed in
         h.forceMl(false, true);
-        vm.expectRevert(bytes("gen-1 registry: PQ precompile kind 0x0131 the probe passes is missing (MLDSA65_VERIFIER: deploy.sh evm's pq-verifiers step)"));
+        vm.expectRevert(
+            bytes(
+                "gen-1 registry: PQ precompile kind 0x0131 the probe passes is missing (MLDSA65_VERIFIER: deploy.sh evm's pq-verifiers step)"
+            )
+        );
         h.deploy(UID, false, ska);
         h = new DeployHarness();
         h.setMldsa(true, address(0), v65);
@@ -138,7 +145,11 @@ contract UADeployTest is Test {
     /// requires no kind.
     function test_mldsaProbeFailureRefuses() public {
         DeployHarness h = new DeployHarness();
-        vm.expectRevert(bytes("MLDSA_PRECOMPILE=on: the chain's PQ precompile probe (PqPrecompileProbe by eth_call) failed or answered no 128 bytes: refused (MD-15)"));
+        vm.expectRevert(
+            bytes(
+                "MLDSA_PRECOMPILE=on: the chain's PQ precompile probe (PqPrecompileProbe by eth_call) failed or answered no 128 bytes: refused (MD-15)"
+            )
+        );
         h.realPq();
         h.setMldsa(false, address(0), address(0));
         (bool pqz, bool[3] memory ml) = h.realPq();
@@ -253,8 +264,17 @@ contract UADeployTest is Test {
         // T66b: an Ethereum-like 60 M block holds the largest confidential release (it could not before the split); one
         // gas below its need is refused by name
         h.checkGas("WrappedPqzToken", 60_000_000);
-        vm.expectRevert(bytes(string.concat("block gas limit ", vm.toString(conf - 1), " < ", vm.toString(conf),
-            " needed to deploy the WrappedPqzToken release (NET-EVM-06)")));
+        vm.expectRevert(
+            bytes(
+                string.concat(
+                    "block gas limit ",
+                    vm.toString(conf - 1),
+                    " < ",
+                    vm.toString(conf),
+                    " needed to deploy the WrappedPqzToken release (NET-EVM-06)"
+                )
+            )
+        );
         h.checkGas("WrappedPqzToken", conf - 1);
         h.checkGas("WrappedPqzToken", conf);
         // the gate reads the chain's block gas limit (at the SCaaS testnet's declared code limit, GD-4: WrappedPqzToken
@@ -315,8 +335,15 @@ contract UADeployTest is Test {
     }
 
     function _missingPq(string memory kind, string memory env) internal pure returns (bytes memory) {
-        return bytes(string.concat("gen-1 registry: PQ precompile kind ", kind, " the probe passes is missing (", env,
-            ": deploy.sh evm's pq-verifiers step)"));
+        return bytes(
+            string.concat(
+                "gen-1 registry: PQ precompile kind ",
+                kind,
+                " the probe passes is missing (",
+                env,
+                ": deploy.sh evm's pq-verifiers step)"
+            )
+        );
     }
 
     /// Owner 2026-11-15: the chain answers the `PQZ` self-test / the `mldsa87` probe and the registry lacks `pqz-mlwe` 0x0142
@@ -409,8 +436,12 @@ contract UADeployTest is Test {
         assertGt(address(r).code.length, 0);
         assertEq(r.chainUid(), UID);
         assertEq(r.registry(), vm.parseJsonAddress(json, ".ua_registry"));
-        string[4] memory impls = ["implementation_normal", "dex_implementation", "implementation_normal_zether_bls12381",
-            "implementation_wrapped_zether_bls12381"];
+        string[4] memory impls = [
+            "implementation_normal",
+            "dex_implementation",
+            "implementation_normal_zether_bls12381",
+            "implementation_wrapped_zether_bls12381"
+        ];
         for (uint256 i; i < 4; ++i) {
             address impl = vm.parseJsonAddress(json, string.concat(".", impls[i]));
             assertEq(GovernanceBase(impl).GOV_ROUTER(), address(0), impls[i]);
@@ -420,8 +451,19 @@ contract UADeployTest is Test {
 
     function _refused(DeployHarness h, uint256 limit, uint256 need, string memory name) internal {
         h.limitBlockGas(limit);
-        vm.expectRevert(bytes(string.concat("block gas limit ", vm.toString(limit), " < ", vm.toString(need),
-            " needed to deploy the ", name, " release (NET-EVM-06)")));
+        vm.expectRevert(
+            bytes(
+                string.concat(
+                    "block gas limit ",
+                    vm.toString(limit),
+                    " < ",
+                    vm.toString(need),
+                    " needed to deploy the ",
+                    name,
+                    " release (NET-EVM-06)"
+                )
+            )
+        );
         h.deploy(UID, false, ska);
     }
 }

@@ -10,7 +10,23 @@ use anchor_lang::solana_program::pubkey::Pubkey;
 anchor_lang::solana_program::entrypoint!(process);
 
 fn process(_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Result<(), ProgramError> {
-    let (target, rest) = accounts.split_first().ok_or(ProgramError::NotEnoughAccountKeys)?;
-    let metas = rest.iter().map(|a| AccountMeta { pubkey: *a.key, is_signer: a.is_signer, is_writable: a.is_writable }).collect();
-    invoke(&Instruction { program_id: *target.key, accounts: metas, data: data.to_vec() }, rest)
+    let (target, rest) = accounts
+        .split_first()
+        .ok_or(ProgramError::NotEnoughAccountKeys)?;
+    let metas = rest
+        .iter()
+        .map(|a| AccountMeta {
+            pubkey: *a.key,
+            is_signer: a.is_signer,
+            is_writable: a.is_writable,
+        })
+        .collect();
+    invoke(
+        &Instruction {
+            program_id: *target.key,
+            accounts: metas,
+            data: data.to_vec(),
+        },
+        rest,
+    )
 }

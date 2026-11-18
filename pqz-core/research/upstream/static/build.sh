@@ -19,7 +19,10 @@ PIN=3330e487228f633eceb322807b13a596b516770f
 IMG=p6d-lazer-build:ubuntu24.04
 SHA=$(git -C "$PQZ" rev-parse --short HEAD)
 OUT=$W/pqz-bench-$SHA
-[ "$(git -C "$LZ" rev-parse HEAD)" = "$PIN" ] || { echo "LaZer clone is not at $PIN" >&2; exit 1; }
+[ "$(git -C "$LZ" rev-parse HEAD)" = "$PIN" ] || {
+    echo "LaZer clone is not at $PIN" >&2
+    exit 1
+}
 rm -rf "$OUT" && mkdir -p "$OUT"
 
 # ---- inputs, copied into the work dir (the container sees only /w)
@@ -32,13 +35,13 @@ cp -a "$PQZ" "$W/src/pqz-core" && rm -rf "$W/src/pqz-core/build"
 # condition is relaxed to "compiles"). Both use cpuf/: real CPUID at run time, so v4 takes the IFMA kernels
 # exactly when the CPU has them.
 for V in v3 v4; do
-  case $V in
-    v3) MARCH="-march=x86-64-v3 -maes -mpclmul" ;;
-    v4) MARCH="-march=x86-64-v4 -mavx512ifma -mavx512vbmi2 -maes -mpclmul" ;;
-  esac
-  rm -rf "$W/lazer-$V" && git clone -q "$LZ" "$W/lazer-$V" && git -C "$W/lazer-$V" -c advice.detachedHead=false checkout -q "$PIN"
-  docker run --rm --network none --memory=4g -u "$(id -u):$(id -g)" -e V=$V -e MARCH="$MARCH" -v "$W":/w -w /w \
-    "$IMG" sh -euc '
+    case $V in
+        v3) MARCH="-march=x86-64-v3 -maes -mpclmul" ;;
+        v4) MARCH="-march=x86-64-v4 -mavx512ifma -mavx512vbmi2 -maes -mpclmul" ;;
+    esac
+    rm -rf "$W/lazer-$V" && git clone -q "$LZ" "$W/lazer-$V" && git -C "$W/lazer-$V" -c advice.detachedHead=false checkout -q "$PIN"
+    docker run --rm --network none --memory=4g -u "$(id -u):$(id -g)" -e V=$V -e MARCH="$MARCH" -v "$W":/w -w /w \
+        "$IMG" sh -euc '
     L=/w/lazer-$V
     cd $L/third_party && unzip -q hexl-development.zip
     sed -i "s/-march=native/$MARCH/" hexl-development/hexl/CMakeLists.txt hexl-development/cmake/hexl/hexl-util.cmake
@@ -60,28 +63,38 @@ for V in v3 v4; do
       echo "  HEXL configure: $(grep -E "Setting HEXL|not found: HEXL" /w/hexl-cmake-$V.log | sed "s/.*-- //" | tr "\n" ";")"
       echo "  $(gcc --version | head -1); $(dpkg-query -W -f "\${Package} \${Version}; " libgmp-dev libmpfr-dev libc6-dev)"
     } > /w/info-$V.txt'
-  mv "$W/bench_up_$V" "$OUT/"
+    mv "$W/bench_up_$V" "$OUT/"
 done
 
 # ---- fork: as shipped (pqz-core/pqzl/build.sh native: clang -O2, generic x86-64, PQZ_ASSERT=1) and v3 (-O3
 # -march=x86-64-v3, asserts off). The bench harness itself is -O2 generic in both (it times library calls only).
 for V in as v3; do
-  rm -rf "$W/fork-$V" && cp -a "$W/src/pqz-core" "$W/fork-$V"
-  [ $V = as ] || sed -i 's/^CFLAGS_LIB="-std=gnu11 -O2 /CFLAGS_LIB="-std=gnu11 -O3 -march=x86-64-v3 -DPQZ_ASSERT=0 /' "$W/fork-$V/build.sh"
-  (cd "$W/fork-$V" && ./build.sh native >"$W/fork-build-$V.log" 2>&1)
-  B=bench_fork; [ $V = as ] || B=bench_fork_$V
-  clang -static -std=gnu11 -O2 -w -I"$W/fork-$V/src" -o "$OUT/$B" "$XC/shim/bench.c" "$W/fork-$V/build/native/libpqz.a"
-  echo "$B: pqz-core $SHA, $(grep '^CFLAGS_LIB=' "$W/fork-$V/build.sh" | cut -c1-80)..., $(clang --version | head -1)" \
-    > "$W/info-fork-$V.txt"
+    rm -rf "$W/fork-$V" && cp -a "$W/src/pqz-core" "$W/fork-$V"
+    [ $V = as ] || sed -i 's/^CFLAGS_LIB="-std=gnu11 -O2 /CFLAGS_LIB="-std=gnu11 -O3 -march=x86-64-v3 -DPQZ_ASSERT=0 /' "$W/fork-$V/build.sh"
+    (cd "$W/fork-$V" && ./build.sh native >"$W/fork-build-$V.log" 2>&1)
+    B=bench_fork
+    [ $V = as ] || B=bench_fork_$V
+    clang -static -std=gnu11 -O2 -w -I"$W/fork-$V/src" -o "$OUT/$B" "$XC/shim/bench.c" "$W/fork-$V/build/native/libpqz.a"
+    echo "$B: pqz-core $SHA, $(grep '^CFLAGS_LIB=' "$W/fork-$V/build.sh" | cut -c1-80)..., $(clang --version | head -1)" \
+        >"$W/info-fork-$V.txt"
 done
 
 # ---- bundle
 cp "$HERE/run.sh" "$HERE/README.md" "$OUT/"
-{ echo "pqz-bench $SHA built $(date -u +%FT%TZ) on $(uname -m)"
-  cat "$W/info-v3.txt" "$W/info-v4.txt" "$W/info-fork-as.txt" "$W/info-fork-v3.txt"
-  echo "HEXL AVX-512 IFMA kernels linked into bench_up_v4: $(nm -C "$OUT/bench_up_v4" | grep -c 'AVX512.*<52')"
-  echo; (cd "$OUT" && sha256sum bench_*; file bench_* | sed 's/, BuildID[^,]*//') ; } > "$OUT/build-info.txt"
+{
+    echo "pqz-bench $SHA built $(date -u +%FT%TZ) on $(uname -m)"
+    cat "$W/info-v3.txt" "$W/info-v4.txt" "$W/info-fork-as.txt" "$W/info-fork-v3.txt"
+    echo "HEXL AVX-512 IFMA kernels linked into bench_up_v4: $(nm -C "$OUT/bench_up_v4" | grep -c 'AVX512.*<52')"
+    echo
+    (
+        cd "$OUT" && sha256sum bench_*
+        file bench_* | sed 's/, BuildID[^,]*//'
+    )
+} >"$OUT/build-info.txt"
 cat "$OUT/build-info.txt"
-for b in "$OUT"/bench_*; do file "$b" | grep -q 'statically linked' || { echo "not static: $b" >&2; exit 1; }; done
+for b in "$OUT"/bench_*; do file "$b" | grep -q 'statically linked' || {
+    echo "not static: $b" >&2
+    exit 1
+}; done
 tar -C "$W" -czf "$OUT.tar.gz" "pqz-bench-$SHA"
 ls -la "$OUT.tar.gz"

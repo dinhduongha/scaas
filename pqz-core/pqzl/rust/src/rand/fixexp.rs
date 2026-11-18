@@ -13,9 +13,27 @@ pub(crate) const X_MAX: i64 = 1 << 62;
 
 /// 2^63 / k!
 const EXP_C: [u64; 21] = [
-    9223372036854775808, 9223372036854775808, 4611686018427387904, 1537228672809129301, 384307168202282325,
-    76861433640456465, 12810238940076078, 1830034134296583, 228754266787073, 25417140754119, 2541714075412,
-    231064915947, 19255409662, 1481185359, 105798954, 7053264, 440829, 25931, 1441, 76, 4,
+    9223372036854775808,
+    9223372036854775808,
+    4611686018427387904,
+    1537228672809129301,
+    384307168202282325,
+    76861433640456465,
+    12810238940076078,
+    1830034134296583,
+    228754266787073,
+    25417140754119,
+    2541714075412,
+    231064915947,
+    19255409662,
+    1481185359,
+    105798954,
+    7053264,
+    440829,
+    25931,
+    1441,
+    76,
+    4,
 ];
 
 /// `pqz_ct_sel64`: mask ? a : b (mask all ones or zero)
@@ -49,7 +67,10 @@ pub(crate) fn exp_fp(x: i64) -> (u64, i32) {
     n = n.wrapping_sub(m2);
     r = r.wrapping_sub(LN2_Q56 & m2);
     // exp(r) = 2 * exp(-(ln 2 - r))
-    (expneg_q63(LN2_Q56.wrapping_sub(r) as u64), n.wrapping_add(1) as i32)
+    (
+        expneg_q63(LN2_Q56.wrapping_sub(r) as u64),
+        n.wrapping_add(1) as i32,
+    )
 }
 
 /// `pqz_bernoulli_fp`: u / 2^64 < mant * 2^(e - 63), u uniform 64-bit
@@ -91,7 +112,11 @@ mod tests {
     fn bernoulli_masked_add_eq_shift() {
         let old = |u: u64, mant: u64, e: i32| {
             let sh = e as i64 + 1;
-            let (neg, far, always) = ((sh >> 63) as u64, ((sh + 63) >> 63) as u64, ((1 - sh) >> 63) as u64);
+            let (neg, far, always) = (
+                (sh >> 63) as u64,
+                ((sh + 63) >> 63) as u64,
+                ((1 - sh) >> 63) as u64,
+            );
             let tneg = ((mant >> ((sh.wrapping_neg() as u64) & 63)) as u128) & !(far as u128);
             let tpos = (mant as u128) << ((sh as u64) & 1);
             let nm = 0u128.wrapping_sub((neg & 1) as u128);

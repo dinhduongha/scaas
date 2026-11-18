@@ -3,9 +3,9 @@
 
 use hmac::{Hmac, Mac};
 use sha2::Sha512;
-use zether_prover::curve::{decode_point, encode_scalar, keccak256, ua_of, Bls12381, ZCurve};
 #[cfg(feature = "bn254")]
 use zether_prover::curve::Bn254;
+use zether_prover::curve::{decode_point, encode_scalar, keccak256, ua_of, Bls12381, ZCurve};
 #[cfg(feature = "bn254")]
 use zether_prover::keys::{derive_child_sk, derive_master_sk};
 use zether_prover::keys::{derive_path, seed_from_mnemonic, ZetherKey};
@@ -67,7 +67,10 @@ fn bn254_pinned_vectors() {
     for (s, master, idx, child) in cases {
         let m = derive_master_sk::<Bn254>(&hex::decode(s).unwrap()).unwrap();
         assert_eq!(encode_scalar::<Bn254>(&m), dec_to_be(master));
-        assert_eq!(encode_scalar::<Bn254>(&derive_child_sk::<Bn254>(&m, idx)), dec_to_be(child));
+        assert_eq!(
+            encode_scalar::<Bn254>(&derive_child_sk::<Bn254>(&m, idx)),
+            dec_to_be(child)
+        );
     }
 }
 
@@ -76,10 +79,16 @@ fn conf_key_pinned_for_abandon_art() {
     #[cfg(feature = "bn254")]
     {
         let bn = ZetherKey::<Bn254>::conf(&seed(), 60, 0).unwrap();
-        assert_eq!(hex::encode(encode_scalar::<Bn254>(&bn.x)), "2c6941c0d6c2913b0de687819730f0ee74ee01da6c9906d8cc6feac4a163e87e");
+        assert_eq!(
+            hex::encode(encode_scalar::<Bn254>(&bn.x)),
+            "2c6941c0d6c2913b0de687819730f0ee74ee01da6c9906d8cc6feac4a163e87e"
+        );
     }
     let bls = ZetherKey::<Bls12381>::conf(&seed(), 60, 0).unwrap();
-    assert_eq!(hex::encode(encode_scalar::<Bls12381>(&bls.x)), "67c93b3838eb86a76ead85bd6be7ca97ad82758b4ccd30ec58bff013a3392074");
+    assert_eq!(
+        hex::encode(encode_scalar::<Bls12381>(&bls.x)),
+        "67c93b3838eb86a76ead85bd6be7ca97ad82758b4ccd30ec58bff013a3392074"
+    );
 }
 
 fn scalars<C: ZCurve>() -> Vec<[u8; 32]> {
@@ -88,14 +97,20 @@ fn scalars<C: ZCurve>() -> Vec<[u8; 32]> {
     for coin in [60u32, 3030] {
         for account in [0u32, 1] {
             for key_use in [7u32, 8] {
-                v.push(encode_scalar::<C>(&ZetherKey::<C>::derive(&s, coin, account, key_use).unwrap().x));
+                v.push(encode_scalar::<C>(
+                    &ZetherKey::<C>::derive(&s, coin, account, key_use)
+                        .unwrap()
+                        .x,
+                ));
             }
         }
     }
     // A different seed gives a different key.
     let mut s2 = s;
     s2[0] ^= 1;
-    v.push(encode_scalar::<C>(&ZetherKey::<C>::conf(&s2, 60, 0).unwrap().x));
+    v.push(encode_scalar::<C>(
+        &ZetherKey::<C>::conf(&s2, 60, 0).unwrap().x,
+    ));
     v
 }
 
@@ -109,7 +124,11 @@ fn keys_independent_across_paths_curves_seeds() {
     let n = all.len();
     all.sort();
     all.dedup();
-    assert_eq!(all.len(), n, "two (curve, coin, account, use, seed) tuples collided");
+    assert_eq!(
+        all.len(),
+        n,
+        "two (curve, coin, account, use, seed) tuples collided"
+    );
 }
 
 fn bip32_secp256k1(seed: &[u8], path: &str) -> [u8; 32] {
@@ -137,7 +156,10 @@ fn conf_key_never_equals_a_signing_key() {
     let s = seed();
     // Known BIP-32 vector for this mnemonic: m/44'/60'/0'/0/0, cross-checked with tools/bip32_ref.py
     let evm = bip32_secp256k1(&s, "m/44'/60'/0'/0/0");
-    assert_eq!(hex::encode(evm), "1053fae1b3ac64f178bcc21026fd06a3f4544ec2f35338b001f02d1d8efa3d5f");
+    assert_eq!(
+        hex::encode(evm),
+        "1053fae1b3ac64f178bcc21026fd06a3f4544ec2f35338b001f02d1d8efa3d5f"
+    );
     let mut signing: Vec<[u8; 32]> = vec![
         evm,
         bip32_secp256k1(&s, "m/44'/118'/0'/0/0"),  // Cosmos
@@ -148,8 +170,12 @@ fn conf_key_never_equals_a_signing_key() {
         slip10_ed25519(&s, &[44, 607, 0]),         // TON
     ];
     // EIP-2334 BLS withdrawal (m/12381/60/0/0) and signing (m/12381/60/0/0/0) keys of the same tree.
-    signing.push(encode_scalar::<Bls12381>(&derive_path::<Bls12381>(&s, &[12381, 60, 0, 0]).unwrap()));
-    signing.push(encode_scalar::<Bls12381>(&derive_path::<Bls12381>(&s, &[12381, 60, 0, 0, 0]).unwrap()));
+    signing.push(encode_scalar::<Bls12381>(
+        &derive_path::<Bls12381>(&s, &[12381, 60, 0, 0]).unwrap(),
+    ));
+    signing.push(encode_scalar::<Bls12381>(
+        &derive_path::<Bls12381>(&s, &[12381, 60, 0, 0, 0]).unwrap(),
+    ));
     #[allow(unused_mut)]
     let mut confs = scalars::<Bls12381>();
     #[cfg(feature = "bn254")]
@@ -169,7 +195,11 @@ fn ua_roundtrip<C: ZCurve>() {
     assert_eq!(y, k.y);
     assert_eq!(ua_of::<C>(&y), k.ua());
     let tag = keccak256(format!("scaas.ua.zether-{}.v1", C::NAME).as_bytes());
-    assert_eq!(k.ua(), keccak256(&[&tag[..], &enc].concat()), "UA = keccak256(TAG(kind) ‖ Y), CTR-UA-16");
+    assert_eq!(
+        k.ua(),
+        keccak256(&[&tag[..], &enc].concat()),
+        "UA = keccak256(TAG(kind) ‖ Y), CTR-UA-16"
+    );
 }
 
 #[test]
@@ -180,7 +210,10 @@ fn ua_pubkey_roundtrip() {
 }
 
 fn hex32(v: &serde_json::Value) -> [u8; 32] {
-    hex::decode(&v.as_str().unwrap()[2..]).unwrap().try_into().unwrap()
+    hex::decode(&v.as_str().unwrap()[2..])
+        .unwrap()
+        .try_into()
+        .unwrap()
 }
 
 /// The UA identity vectors (UA-1, `smartcontracts/vectors/ua/`): the Zether kinds' `UA` (kinds.json `valid`), their PoP
@@ -190,8 +223,13 @@ fn hex32(v: &serde_json::Value) -> [u8; 32] {
 fn ua_identity_matches_ua_vectors() {
     use zether_prover::curve::decode_point;
     use zether_prover::schnorr::{portable_record_digest, registration_digest, ua_message};
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/vectors/ua/");
-    let kinds: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(format!("{dir}kinds.json")).unwrap()).unwrap();
+    let dir = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../smartcontracts/vectors/ua/"
+    );
+    let kinds: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(format!("{dir}kinds.json")).unwrap())
+            .unwrap();
     let mut n = 0;
     for row in kinds["valid"].as_array().unwrap() {
         let kd = hex::decode(&row["keyData"].as_str().unwrap()[2..]).unwrap();
@@ -215,13 +253,25 @@ fn ua_identity_matches_ua_vectors() {
         assert_eq!(m, hex32(&row["uaMsg"]));
         n += 1;
     }
-    let st: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(format!("{dir}structures.json")).unwrap()).unwrap();
+    let st: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(format!("{dir}structures.json")).unwrap())
+            .unwrap();
     // typed-signing: every kind's row (typed `UAPortableRecord` / `UARegistration`, TS-D1)
     for row in st["pop"].as_array().unwrap() {
-        let (ua, pqz, kem) = (hex32(&row["ua"]), hex32(&row["pqzKeyHash"]), hex32(&row["kemRecordHash"]));
+        let (ua, pqz, kem) = (
+            hex32(&row["ua"]),
+            hex32(&row["pqzKeyHash"]),
+            hex32(&row["kemRecordHash"]),
+        );
         let kind = row["kind"].as_u64().unwrap() as u16;
-        assert_eq!(portable_record_digest(&ua, kind, &pqz, &kem), hex32(&row["portableRecordDigest"]));
-        assert_eq!(registration_digest(&ua, kind, &pqz, &kem, &hex32(&row["pqzPopHash"])), hex32(&row["registrationDigest"]));
+        assert_eq!(
+            portable_record_digest(&ua, kind, &pqz, &kem),
+            hex32(&row["portableRecordDigest"])
+        );
+        assert_eq!(
+            registration_digest(&ua, kind, &pqz, &kem, &hex32(&row["pqzPopHash"])),
+            hex32(&row["registrationDigest"])
+        );
         n += 1;
     }
     assert!(n >= 7, "{n} rows");
@@ -233,16 +283,46 @@ fn ua_identity_matches_ua_vectors() {
 fn pop_matches_structures() {
     use zether_prover::curve::Bls12381;
     use zether_prover::schnorr::{pop_tag, ua_message, zether_registration_digest};
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/vectors/ua/");
-    let st: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(format!("{dir}structures.json")).unwrap()).unwrap();
-    let row = st["pop"].as_array().unwrap().iter().find(|r| r["kind"] == 0x0141).expect("zether pop row");
-    assert_eq!(zether_registration_digest::<Bls12381>(&hex32(&row["ua"])), hex32(&row["registrationDigest"]));
+    let dir = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../smartcontracts/vectors/ua/"
+    );
+    let st: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(format!("{dir}structures.json")).unwrap())
+            .unwrap();
+    let row = st["pop"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["kind"] == 0x0141)
+        .expect("zether pop row");
+    assert_eq!(
+        zether_registration_digest::<Bls12381>(&hex32(&row["ua"])),
+        hex32(&row["registrationDigest"])
+    );
     // portable.json: the tag and the message (`popMessage`) of the Zether registration, byte for byte
-    let pj: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(format!("{dir}portable.json")).unwrap()).unwrap();
-    assert_eq!(pop_tag(), hex32(&pj["tags"]["PURPOSE_POP_V2"]["hash"]), "pop.v2");
-    let r = pj["registrations"].as_array().unwrap().iter().find(|r| r["name"] == "zether-bls12381").unwrap();
-    assert_eq!(hex32(&r["registrationDigest"]), zether_registration_digest::<Bls12381>(&hex32(&r["ua"])));
-    assert_eq!(ua_message::<Bls12381>(&pop_tag(), &hex32(&r["registrationDigest"])), hex32(&r["popMessage"]));
+    let pj: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(format!("{dir}portable.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        pop_tag(),
+        hex32(&pj["tags"]["PURPOSE_POP_V2"]["hash"]),
+        "pop.v2"
+    );
+    let r = pj["registrations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["name"] == "zether-bls12381")
+        .unwrap();
+    assert_eq!(
+        hex32(&r["registrationDigest"]),
+        zether_registration_digest::<Bls12381>(&hex32(&r["ua"]))
+    );
+    assert_eq!(
+        ua_message::<Bls12381>(&pop_tag(), &hex32(&r["registrationDigest"])),
+        hex32(&r["popMessage"])
+    );
 }
 
 /// typed-signing P4: the S3 PoPs of r33_keys.json (what clientkeys and the forge S3 suite read) sign the typed
@@ -250,18 +330,30 @@ fn pop_matches_structures() {
 /// `UAPortableRecord` digest.
 #[test]
 fn pop_over_typed_registration() {
-    use zether_prover::schnorr::{pop_tag, ua_message, verify_pop, zether_record_digest, zether_registration_digest};
+    use zether_prover::schnorr::{
+        pop_tag, ua_message, verify_pop, zether_record_digest, zether_registration_digest,
+    };
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/vectors/r33_keys.json");
-    let r: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let r: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     let mut n = 0;
-    for k in r["bls12381"]["keys"].as_array().unwrap().iter().filter(|k| k.get("pop").is_some()) {
+    for k in r["bls12381"]["keys"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|k| k.get("pop").is_some())
+    {
         let (ua, p) = (hex32(&k["UA"]), &k["pop"]);
         assert_eq!(p["kind"], 0x0141);
-        assert_eq!(zether_record_digest::<Bls12381>(&ua), hex32(&p["popDigest"]));
+        assert_eq!(
+            zether_record_digest::<Bls12381>(&ua),
+            hex32(&p["popDigest"])
+        );
         let rd = zether_registration_digest::<Bls12381>(&ua);
         assert_eq!(rd, hex32(&p["registrationDigest"]));
         assert_eq!(ua_message::<Bls12381>(&pop_tag(), &rd), hex32(&p["uaMsg"]));
-        let y = decode_point::<Bls12381>(&hex::decode(&k["Y"].as_str().unwrap()[2..]).unwrap()).unwrap();
+        let y = decode_point::<Bls12381>(&hex::decode(&k["Y"].as_str().unwrap()[2..]).unwrap())
+            .unwrap();
         verify_pop(&y, &hex::decode(&p["pop"].as_str().unwrap()[2..]).unwrap()).unwrap();
         n += 1;
     }
@@ -275,16 +367,38 @@ fn pop_over_typed_registration() {
 fn bip39_passphrase_is_nfkd_normalized() {
     let want = "e031dc67ae9c173bf9b1989a53fe05b4da4282e0f4f671aad0e7a7a6cd9e401f\
                 2683914fbbefe9aee48280d2e415f23d5020ffa80284e037f91b4120757ff519";
-    for pass in ["m\u{1ead}t kh\u{1ea9}u", "ma\u{323}\u{302}t kha\u{302}\u{309}u"] {
-        assert_eq!(hex::encode(&seed_from_mnemonic(ABANDON_ART, pass).unwrap()[..]), want, "{pass:?}");
+    for pass in [
+        "m\u{1ead}t kh\u{1ea9}u",
+        "ma\u{323}\u{302}t kha\u{302}\u{309}u",
+    ] {
+        assert_eq!(
+            hex::encode(&seed_from_mnemonic(ABANDON_ART, pass).unwrap()[..]),
+            want,
+            "{pass:?}"
+        );
     }
     // Same through the JSON API, and a non-string passphrase is an error, not "".
-    let call = |key: serde_json::Value| zether_prover::api::call("keygen", &serde_json::json!({"curve": "bls12381", "key": key}).to_string());
-    let by_words = call(serde_json::json!({"mnemonic": ABANDON_ART, "passphrase": "m\u{1ead}t kh\u{1ea9}u", "coin": 60, "account": 0}));
+    let call = |key: serde_json::Value| {
+        zether_prover::api::call(
+            "keygen",
+            &serde_json::json!({"curve": "bls12381", "key": key}).to_string(),
+        )
+    };
+    let by_words = call(
+        serde_json::json!({"mnemonic": ABANDON_ART, "passphrase": "m\u{1ead}t kh\u{1ea9}u", "coin": 60, "account": 0}),
+    );
     let by_seed = call(serde_json::json!({"seed": format!("0x{want}"), "coin": 60, "account": 0}));
     assert_eq!(by_words.unwrap(), by_seed.unwrap());
-    for bad in [serde_json::json!(1), serde_json::json!({}), serde_json::json!(["x"]), serde_json::json!(true)] {
+    for bad in [
+        serde_json::json!(1),
+        serde_json::json!({}),
+        serde_json::json!(["x"]),
+        serde_json::json!(true),
+    ] {
         assert!(call(serde_json::json!({"mnemonic": ABANDON_ART, "passphrase": bad, "coin": 60, "account": 0})).is_err());
     }
-    assert!(call(serde_json::json!({"mnemonic": ABANDON_ART, "passphrase": null, "coin": 60, "account": 0})).is_ok());
+    assert!(call(
+        serde_json::json!({"mnemonic": ABANDON_ART, "passphrase": null, "coin": 60, "account": 0})
+    )
+    .is_ok());
 }

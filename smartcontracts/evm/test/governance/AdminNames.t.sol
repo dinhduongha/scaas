@@ -61,13 +61,18 @@ contract AdminNamesTest is Test {
     // ------------------------------------------------------------------ fixtures
 
     function _clone(address impl) internal returns (address) {
-        return EnvKit.clone(impl, EnvKit.env(UID, address(0x5Ca0000000000000000000000000000000000003),
-            address(0), false, address(0)));
+        return EnvKit.clone(
+            impl, EnvKit.env(UID, address(0x5Ca0000000000000000000000000000000000003), address(0), false, address(0))
+        );
     }
 
     function _kind(string memory name, uint8 kind) internal returns (address) {
         bytes memory core = kind >= 8 ? regArgs() : bytes("");
-        return _clone(vm.deployCode(string.concat(name, ".sol:", name), abi.encode(address(this), kindArgs(kind, address(this), core))));
+        return _clone(
+            vm.deployCode(
+                string.concat(name, ".sol:", name), abi.encode(address(this), kindArgs(kind, address(this), core))
+            )
+        );
     }
 
     function _call(address t, address from, bytes memory cd) internal returns (bool ok, bytes memory ret) {
@@ -84,7 +89,9 @@ contract AdminNamesTest is Test {
     function _refused(string memory name, address t, bytes memory cd, bytes4 err) internal {
         (bool ok, bytes memory ret) = _call(t, STRANGER, cd);
         assertFalse(ok, string.concat(name, ": the stranger passed"));
-        assertEq(ret, abi.encodeWithSelector(err, nid(STRANGER)), string.concat(name, ": refused by name, the stranger's id"));
+        assertEq(
+            ret, abi.encodeWithSelector(err, nid(STRANGER)), string.concat(name, ": refused by name, the stranger's id")
+        );
     }
 
     function _check(string memory name, address t) internal {
@@ -129,7 +136,11 @@ contract AdminNamesTest is Test {
     function _transferSibling(string memory name, address t) internal {
         (bool okT, bytes memory retT) = _call(t, A1, abi.encodeWithSelector(TRANSFER_ADMIN, nid(A2), SIB));
         assertFalse(okT, string.concat(name, ": a sibling's word transferred"));
-        assertEq(retT, abi.encodeWithSelector(CHAIN_UID_MISMATCH, UID, SIB), string.concat(name, ": transfer ChainUidMismatch"));
+        assertEq(
+            retT,
+            abi.encodeWithSelector(CHAIN_UID_MISMATCH, UID, SIB),
+            string.concat(name, ": transfer ChainUidMismatch")
+        );
         (bool okTO, bytes memory retTO) = _call(t, A1, abi.encodeWithSelector(TRANSFER_ADMIN_OLD, nid(A2)));
         assertTrue(!okTO && retTO.length == 0, string.concat(name, ": transferAdmin(bytes32) has no entry"));
         assertEq(_word(t, PENDING_ADMIN), 0, string.concat(name, ": no pending after the refusals"));
@@ -137,21 +148,37 @@ contract AdminNamesTest is Test {
 
     // ------------------------------------------------------------------ the 12 kinds and the DEX
 
-    function test_kind0_NormalToken() public { _check("NormalToken", _kind("NormalToken", 0)); }
+    function test_kind0_NormalToken() public {
+        _check("NormalToken", _kind("NormalToken", 0));
+    }
 
-    function test_kind1_WrappedToken() public { _check("WrappedToken", _kind("WrappedToken", 1)); }
+    function test_kind1_WrappedToken() public {
+        _check("WrappedToken", _kind("WrappedToken", 1));
+    }
 
-    function test_kind2_NormalZetherToken() public { _check("NormalZetherToken", _kind("NormalZetherToken", 2)); }
+    function test_kind2_NormalZetherToken() public {
+        _check("NormalZetherToken", _kind("NormalZetherToken", 2));
+    }
 
-    function test_kind3_WrappedZetherToken() public { _check("WrappedZetherToken", _kind("WrappedZetherToken", 3)); }
+    function test_kind3_WrappedZetherToken() public {
+        _check("WrappedZetherToken", _kind("WrappedZetherToken", 3));
+    }
 
-    function test_kind4_NormalPqzToken() public { _check("NormalPqzToken", _kind("NormalPqzToken", 4)); }
+    function test_kind4_NormalPqzToken() public {
+        _check("NormalPqzToken", _kind("NormalPqzToken", 4));
+    }
 
-    function test_kind5_WrappedPqzToken() public { _check("WrappedPqzToken", _kind("WrappedPqzToken", 5)); }
+    function test_kind5_WrappedPqzToken() public {
+        _check("WrappedPqzToken", _kind("WrappedPqzToken", 5));
+    }
 
-    function test_kind8_NormalRegulatedToken() public { _check("NormalRegulatedToken", _kind("NormalRegulatedToken", 8)); }
+    function test_kind8_NormalRegulatedToken() public {
+        _check("NormalRegulatedToken", _kind("NormalRegulatedToken", 8));
+    }
 
-    function test_kind9_WrappedRegulatedToken() public { _check("WrappedRegulatedToken", _kind("WrappedRegulatedToken", 9)); }
+    function test_kind9_WrappedRegulatedToken() public {
+        _check("WrappedRegulatedToken", _kind("WrappedRegulatedToken", 9));
+    }
 
     function test_kind10_NormalZetherRegulatedToken() public {
         _check("NormalZetherRegulatedToken", _kind("NormalZetherRegulatedToken", 10));
@@ -170,6 +197,9 @@ contract AdminNamesTest is Test {
     }
 
     function test_dex_SCaaSDex() public {
-        _check("SCaaSDex", _clone(vm.deployCode("SCaaSDex.sol:SCaaSDex", abi.encode(address(this), dexArgs(address(this))))));
+        _check(
+            "SCaaSDex",
+            _clone(vm.deployCode("SCaaSDex.sol:SCaaSDex", abi.encode(address(this), dexArgs(address(this)))))
+        );
     }
 }

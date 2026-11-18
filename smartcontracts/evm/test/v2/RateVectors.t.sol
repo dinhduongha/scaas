@@ -16,7 +16,8 @@ contract RateVectorsTest is V2Fixture {
     function test_writeRateVectors() public {
         MockERC20 u = new MockERC20("U", "U", 6);
         uint256 m96 = type(uint96).max;
-        uint256[2][6] memory rates = [[uint256(1), 1], [uint256(1e12), 1], [uint256(1), 1e4], [m96, 1], [uint256(1), m96], [uint256(3), 7]];
+        uint256[2][6] memory rates =
+            [[uint256(1), 1], [uint256(1e12), 1], [uint256(1), 1e4], [m96, 1], [uint256(1), m96], [uint256(3), 7]];
         uint256[8] memory ins = [uint256(0), 1, 9_999, 10_000, 15_000, 1e6, 1e18, m96];
         uint256[7] memory ws = [uint256(0), 1, 1e12 - 1, 1e12, 1.5e12 + 7, 1e18, m96];
         string memory wj = "[";
@@ -27,17 +28,36 @@ contract RateVectorsTest is V2Fixture {
             for (uint256 i; i < ins.length; ++i) {
                 (uint256 minted, uint256 used) = t.previewWrap(address(u), ins[i]);
                 assertLe(used, ins[i]);
-                wj = string.concat(wj, r + i == 0 ? "" : ",", head, ',"in":', _q(ins[i]),
-                    ',"minted":', _q(minted), ',"used":', _q(used), "}");
+                wj = string.concat(
+                    wj,
+                    r + i == 0 ? "" : ",",
+                    head,
+                    ',"in":',
+                    _q(ins[i]),
+                    ',"minted":',
+                    _q(minted),
+                    ',"used":',
+                    _q(used),
+                    "}"
+                );
             }
             for (uint256 i; i < ws.length; ++i) {
                 (uint256 out, uint256 burned) = t.previewUnwrap(address(u), ws[i]);
                 assertLe(burned, ws[i]);
-                uj = string.concat(uj, r + i == 0 ? "" : ",", head, ',"w":', _q(ws[i]),
-                    ',"out":', _q(out), ',"burned":', _q(burned), "}");
+                uj = string.concat(
+                    uj,
+                    r + i == 0 ? "" : ",",
+                    head,
+                    ',"w":',
+                    _q(ws[i]),
+                    ',"out":',
+                    _q(out),
+                    ',"burned":',
+                    _q(burned),
+                    "}"
+                );
             }
         }
-        vm.writeFile("./test/vectors/wrap_rate_vectors.json",
-            string.concat('{"wrap":', wj, '],"unwrap":', uj, "]}\n"));
+        vm.writeFile("./test/vectors/wrap_rate_vectors.json", string.concat('{"wrap":', wj, '],"unwrap":', uj, "]}\n"));
     }
 }

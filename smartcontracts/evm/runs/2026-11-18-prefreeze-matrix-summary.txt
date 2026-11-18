@@ -1,0 +1,133 @@
+ci-guards | a5c38f476 | 0 | no temp path
+clean | d4c4f239f | 0 | build directories removed
+clientkeys | 4e56d360a | 0 | -
+clientkeys-mldsa | 4e56d360a | 0 | forge 2 passed, 0 failed, 0 skipped (1 suites)
+docs | a5c38f476 | 0 | docs ok
+fam-cosmos | d4c4f239f | 0 | cargo 27 passed, 0 failed, 0 ignored (15 binaries)
+fam-near | d4c4f239f | 0 | cargo 133 passed, 0 failed, 0 ignored (24 binaries)
+fam-solana | d4c4f239f | 0 | cargo 71 passed, 0 failed, 0 ignored (14 binaries)
+features | a5c38f476 | 0 | -
+forge-account | d4c4f239f | 0 | forge 103 passed, 0 failed, 0 skipped (6 suites)
+forge-as | d4c4f239f | 0 | forge 568 passed, 0 failed, 0 skipped (92 suites)
+forge-confidential | d4c4f239f | 0 | forge 5 passed, 0 failed, 0 skipped (1 suites)
+forge-factory | d4c4f239f | 0 | forge 2 passed, 0 failed, 0 skipped (1 suites)
+forge-fork | d4c4f239f | 0 | forge 0 passed, 0 failed, 1 skipped (1 suites)
+forge-governance | d395ce7ba | 0 | forge 929 passed, 0 failed, 0 skipped (89 suites)
+forge-hedera | d4c4f239f | 0 | forge 20 passed, 0 failed, 0 skipped (2 suites)
+forge-liquidity | d4c4f239f | 0 | forge 93 passed, 0 failed, 1 skipped (9 suites)
+forge-merge | d4c4f239f | 0 | forge 350 passed, 0 failed, 0 skipped (30 suites)
+forge-metatx | d4c4f239f | 0 | forge 548 passed, 0 failed, 1 skipped (44 suites)
+forge-modules | d4c4f239f | 0 | forge 35 passed, 0 failed, 0 skipped (12 suites)
+forge-p6f | d4c4f239f | 0 | forge 4 passed, 0 failed, 0 skipped (1 suites)
+forge-pqchat | d4c4f239f | 0 | forge 99 passed, 0 failed, 0 skipped (9 suites)
+forge-pqz | d4c4f239f | 0 | forge 693 passed, 0 failed, 4 skipped (64 suites)
+forge-pqzh | d4c4f239f | 0 | forge 42 passed, 0 failed, 0 skipped (3 suites)
+forge-research | d395ce7ba | 0 | forge 360 passed, 0 failed, 7 skipped (29 suites)
+forge-top | d4c4f239f | 0 | forge 29 passed, 0 failed, 0 skipped (5 suites)
+forge-ua | d4c4f239f | 0 | forge 847 passed, 0 failed, 0 skipped (58 suites)
+forge-v2 | d4c4f239f | 0 | forge 750 passed, 0 failed, 0 skipped (57 suites)
+forge-wallet | d4c4f239f | 0 | forge 185 passed, 0 failed, 0 skipped (12 suites)
+forge-wrap | d4c4f239f | 0 | forge 324 passed, 0 failed, 0 skipped (37 suites)
+forge-zether | d4c4f239f | 0 | forge 474 passed, 0 failed, 4 skipped (38 suites)
+format | a5c38f476 | 0 | -
+gen-set | a5c38f476 | 0 | generated files in sync
+node-clippy | a5c38f476 | 0 | -; tree dirty
+node-e2e | a5c38f476 | 0 | cargo 24 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-algorand | d4c4f239f | 0 | cargo 8 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-aptos | d4c4f239f | 0 | cargo 1 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-cosmos | d4c4f239f | 0 | cargo 1 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-hedera | d4c4f239f | 0 | cargo 1 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-near | d4c4f239f | 0 | cargo 12 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-solana | d4c4f239f | 0 | cargo 1 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-soroban | d4c4f239f | 0 | cargo 11 passed, 0 failed, 0 ignored (2 binaries)
+node-e2e-sui | d4c4f239f | 0 | cargo 1 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-ton | d4c4f239f | 0 | cargo 1 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-ua8 | d4c4f239f | 101 | cargo 0 passed, 10 failed, 0 ignored (1 binaries)
+node-e2e-ua-portable-soroban | 6bed6e40d | 0 | cargo 10 passed, 0 failed, 0 ignored (1 binaries)
+node-test | 6bed6e40d | 0 | cargo 859 passed, 0 failed, 72 ignored (18 binaries)
+pqzvec-n2048-kmax1024 | a5c38f476 | 0 | forge 2 passed, 0 failed, 0 skipped (1 suites)
+pqzvec-n2304-kmax4096 | a5c38f476 | 0 | forge 2 passed, 0 failed, 0 skipped (1 suites)
+pqzvec-n2560-kmax16384 | a5c38f476 | 0 | forge 2 passed, 0 failed, 0 skipped (1 suites)
+pqzvec-n2816-kmax65536 | a5c38f476 | 0 | forge 2 passed, 0 failed, 0 skipped (1 suites)
+rpc-anvil | d4c4f239f | 0 | cargo 10 passed, 0 failed, 0 ignored (1 binaries)
+rpc-clippy | d4c4f239f | 0 | -
+rpc-deny | d4c4f239f | 0 | -
+rpc-test | d4c4f239f | 0 | cargo 161 passed, 0 failed, 10 ignored (16 binaries)
+rpc-wasm | d4c4f239f | 0 | wasm32 check ok
+set-n2048-kmax1024-as | a5c38f476 | 0 | forge 106 passed, 0 failed, 0 skipped (34 suites)
+set-n2048-kmax1024-governance | a5c38f476 | 0 | forge 237 passed, 0 failed, 0 skipped (41 suites)
+set-n2048-kmax1024-metatx | a5c38f476 | 0 | forge 183 passed, 0 failed, 0 skipped (13 suites)
+set-n2048-kmax1024-pqz | a5c38f476 | 0 | forge 519 passed, 0 failed, 3 skipped (49 suites)
+set-n2048-kmax1024-pqzh | a5c38f476 | 0 | forge 42 passed, 0 failed, 0 skipped (3 suites)
+set-n2048-kmax1024-research | a5c38f476 | 0 | forge 89 passed, 0 failed, 0 skipped (3 suites)
+set-n2048-kmax1024-ua | a5c38f476 | 0 | forge 236 passed, 0 failed, 0 skipped (7 suites)
+set-n2048-kmax1024-v2 | a5c38f476 | 0 | forge 37 passed, 0 failed, 0 skipped (4 suites)
+set-n2048-kmax1024-wrap | a5c38f476 | 0 | forge 24 passed, 0 failed, 0 skipped (14 suites)
+set-n2560-kmax16384-as | a5c38f476 | 0 | forge 106 passed, 0 failed, 0 skipped (34 suites)
+set-n2560-kmax16384-governance | a5c38f476 | 0 | forge 237 passed, 0 failed, 0 skipped (41 suites)
+set-n2560-kmax16384-metatx | a5c38f476 | 0 | forge 183 passed, 0 failed, 0 skipped (13 suites)
+set-n2560-kmax16384-pqz | a5c38f476 | 0 | forge 515 passed, 0 failed, 7 skipped (49 suites)
+set-n2560-kmax16384-pqzh | a5c38f476 | 0 | forge 42 passed, 0 failed, 0 skipped (3 suites)
+set-n2560-kmax16384-research | a5c38f476 | 0 | forge 87 passed, 0 failed, 2 skipped (3 suites)
+set-n2560-kmax16384-ua | a5c38f476 | 0 | forge 236 passed, 0 failed, 0 skipped (7 suites)
+set-n2560-kmax16384-v2 | a5c38f476 | 0 | forge 37 passed, 0 failed, 0 skipped (4 suites)
+set-n2560-kmax16384-wrap | a5c38f476 | 0 | forge 24 passed, 0 failed, 0 skipped (14 suites)
+set-n2816-kmax65536-as | a5c38f476 | 0 | forge 106 passed, 0 failed, 0 skipped (34 suites)
+set-n2816-kmax65536-governance | a5c38f476 | 0 | forge 237 passed, 0 failed, 0 skipped (41 suites)
+set-n2816-kmax65536-metatx | a5c38f476 | 0 | forge 183 passed, 0 failed, 0 skipped (13 suites)
+set-n2816-kmax65536-pqz | a5c38f476 | 0 | forge 510 passed, 0 failed, 12 skipped (49 suites)
+set-n2816-kmax65536-pqzh | a5c38f476 | 0 | forge 42 passed, 0 failed, 0 skipped (3 suites)
+set-n2816-kmax65536-research | a5c38f476 | 0 | forge 80 passed, 0 failed, 9 skipped (3 suites)
+set-n2816-kmax65536-ua | a5c38f476 | 0 | forge 236 passed, 0 failed, 0 skipped (7 suites)
+set-n2816-kmax65536-v2 | a5c38f476 | 0 | forge 37 passed, 0 failed, 0 skipped (4 suites)
+set-n2816-kmax65536-wrap | a5c38f476 | 0 | forge 24 passed, 0 failed, 0 skipped (14 suites)
+size | d4c4f239f | 0 | -
+testnet-build | a5c38f476 | 0 | src and script built
+ua-c | d4c4f239f | 0 | cargo 9 passed, 0 failed, 0 ignored (2 binaries); Ran 101 tests in 16.811s
+ua-c-release | d4c4f239f | 0 | release library built
+ua-cs | d4c4f239f | 0 | Passed!  - Failed:     0, Passed:    61, Skipped:     0, Total:    61, Duration: 16 s - Scaas.Ua.Tests.dll (net10.0)
+ua-cxx | d4c4f239f | 0 | 100% tests passed, 0 tests failed out of 43
+ua-dart | d4c4f239f | 0 | -
+ua-dart-frb | d4c4f239f | 0 | cargo 3 passed, 0 failed, 0 ignored (1 binaries)
+uagas | d4c4f239f | 0 | forge 22 passed, 0 failed, 0 skipped (2 suites)
+ua-go | d4c4f239f | 0 | -
+ua-py | d4c4f239f | 0 | Ran 99 tests in 16.248s
+ua-qt | d4c4f239f | 0 | 100% tests passed, 0 tests failed out of 1
+ua-rs-default | d4c4f239f | 0 | cargo 509 passed, 0 failed, 3 ignored (47 binaries)
+ua-rs-json | d4c4f239f | 0 | cargo 8 passed, 0 failed, 0 ignored (1 binaries)
+ua-rs-pq | d4c4f239f | 0 | cargo 38 passed, 0 failed, 0 ignored (2 binaries)
+ua-rs-pqz-n2048 | d4c4f239f | 0 | cargo 79 passed, 0 failed, 3 ignored (7 binaries)
+ua-rs-pqz-n2048-vectors | 4e56d360a | 0 | cargo 66 passed, 0 failed, 0 ignored (4 binaries)
+ua-rs-pqz-read | d4c4f239f | 0 | cargo 13 passed, 0 failed, 0 ignored (2 binaries)
+ua-rs-signers | d4c4f239f | 0 | cargo 4 passed, 0 failed, 0 ignored (1 binaries)
+ua-rs-vectors | d4c4f239f | 0 | cargo 608 passed, 0 failed, 6 ignored (53 binaries)
+ua-rs-verify-only | d4c4f239f | 0 | cargo 84 passed, 0 failed, 0 ignored (18 binaries)
+ua-rs-wallet-mlock | d4c4f239f | 0 | cargo 375 passed, 0 failed, 0 ignored (37 binaries)
+ua-rs-wallet-rows | d4c4f239f | 0 | cargo 1 passed, 0 failed, 0 ignored (1 binaries)
+ua-rs-zether-only | d4c4f239f | 0 | cargo 23 passed, 0 failed, 0 ignored (2 binaries)
+ver-clippy | d4c4f239f | 0 | -
+ver-test | d4c4f239f | 0 | cargo 41 passed, 0 failed, 1 ignored (6 binaries)
+zp-clippy | d4c4f239f | 0 | -
+zp-read-balance | d4c4f239f | 0 | cargo 19 passed, 0 failed, 0 ignored (4 binaries)
+zp-test | d4c4f239f | 0 | cargo 186 passed, 0 failed, 4 ignored (32 binaries)
+zp-wasm | d4c4f239f | 0 | wasm smoke default and hazmat ok
+
+# Notes (round-end matrix, 2026-11-18/19; runner runs/2026-11-18-prefreeze-matrix.sh, logs git-ignored)
+# - Clean builds: step `clean` removed every build directory at d4c4f239f; each forge cell starts from its own empty
+#   out/ and cache/.
+# - Commit column: the first two runner processes (groups evm and other, started at d4c4f239f) wrote that commit on
+#   every row; their later rows ran on later trees (the runner reads the commit per step since 9b02820f6). The commits
+#   after d4c4f239f touch: gen_set.py (656fdae2c), the generated Aptos vector files (aa3b0f81d), PqzKeys.s.sol variable
+#   names (4d9f54f05), RescueVault.t.sol (855cc636c), the debit_min_gas test (151e7d061), the e2e_ua8 ->
+#   e2e_ua_portable_soroban rename and comments (b5b338a2a), docs (d395ce7ba), two clientkeys tests (6bed6e40d) and the
+#   runner; every cell they reach was rerun after them (gen-set, node-test, forge-governance, forge-research,
+#   clientkeys, clientkeys-mldsa, testnet-build, node-e2e, node-clippy, docs, format, the per-set group).
+# - node-e2e-ua8 (rc 101): the old label of node-e2e-ua-portable-soroban; that first row ran the test without the
+#   quickstart and the anvils (the runner skipped e2e-ua8-local.sh). The cell under its current label is green.
+# - node-clippy "tree dirty": src/pqz/PqzSet.sol was rewritten by the per-set cell running beside it; no Rust reads it.
+# - Counts the parser leaves "-": clientkeys 465 tests, 461 passed, 0 failed, 4 skipped; ua-dart 3 runs "All tests
+#   passed!" (+30 the VM run); ua-go 2 packages ok; size 0 errors, 171 contracts; clippy cells -D warnings clean.
+# - testnet-build: the scaas-testnet profile over src/ and script/ (the whole tree in one solc was OOM-killed at 4 and
+#   6 GB here; CI keeps the whole-tree build); test/ compiles per directory at the same settings in the forge cells.
+# - fam-cosmos / fam-solana / fam-near: the families whose deployable artifacts moved with the rustfmt commits (only in
+#   source line / column numbers, 058436a47); counts equal to the pre-format runs (27, 71, 133).

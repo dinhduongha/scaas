@@ -56,19 +56,40 @@ contract DexLiquidityMldsaTest is UARegistryBase {
         assertEq(pk.length, 1952, "an ML-DSA-65 key");
         ua = UAKinds.uaOf(ML65, pk);
         bytes32 rd = UAKinds.registrationDigest(ua, ML65, 0, UAKinds.kemRecordHash(ua, 0, bytes("")), 0);
-        for (uint256 p; p < 2; ++p) mreg.cacheExpandedKey(ML65, pk, p);
+        for (uint256 p; p < 2; ++p) {
+            mreg.cacheExpandedKey(ML65, pk, p);
+        }
         UACall.register(mreg, ML65, pk, _none(), _sign(mreg.uaMessage(ML65, UAKinds.PURPOSE_POP_V2, rd)), "");
         assertEq(mreg.kindOf(ua), ML65);
 
         OpenFactory f = EnvKit.factory(address(this), chainUidA, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, REG_M, address(0), false);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        A = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1,
-            abi.encode(normalInit("A", "A", 0, 1e6, address(this), address(0))), "A"));
-        B = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1,
-            abi.encode(normalInit("B", "B", 0, 1e6, address(this), address(0))), "B"));
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, address(0x7EA5), false, 0,
-            address(0), 0, 0)), "dex"));
+        A = NormalToken(
+            f.createToken(
+                IOpenFactory.TokenKind.NORMAL,
+                1,
+                abi.encode(normalInit("A", "A", 0, 1e6, address(this), address(0))),
+                "A"
+            )
+        );
+        B = NormalToken(
+            f.createToken(
+                IOpenFactory.TokenKind.NORMAL,
+                1,
+                abi.encode(normalInit("B", "B", 0, 1e6, address(this), address(0))),
+                "B"
+            )
+        );
+        dex = SCaaSDex(
+            f.createDex(
+                1,
+                abi.encode(
+                    ISCaaSDex.DexConfig(nid(address(this)), 200_000, address(0x7EA5), false, 0, address(0), 0, 0)
+                ),
+                "dex"
+            )
+        );
         dex.setMarket(address(A), address(B), true, EnvKit.codeUidOf(address(dex)));
         pair = MockV2LiquidityPair(new MockV2Factory().createPair(address(A), address(B)));
         A.transferToUA(ua, 100_000);
@@ -87,7 +108,9 @@ contract DexLiquidityMldsaTest is UARegistryBase {
     function _bare(bytes32 x) internal pure returns (string memory) {
         bytes memory h = bytes(vm.toString(x));
         bytes memory o = new bytes(64);
-        for (uint256 i; i < 64; ++i) o[i] = h[i + 2];
+        for (uint256 i; i < 64; ++i) {
+            o[i] = h[i + 2];
+        }
         return string(o);
     }
 
@@ -112,7 +135,10 @@ contract DexLiquidityMldsaTest is UARegistryBase {
     }
 
     /// The plan of `o`, its `auth` the ML-DSA-65 signature over `signed` under the purpose `trade`.
-    function _plan(ITradeToken.LiquidityOrder memory o, bytes32 signed) internal returns (ISCaaSDex.LiquidityPlan memory p) {
+    function _plan(ITradeToken.LiquidityOrder memory o, bytes32 signed)
+        internal
+        returns (ISCaaSDex.LiquidityPlan memory p)
+    {
         p.ref = "mldsa65";
         p.order = o;
         p.auth.signature = _sign(mreg.uaMessage(ML65, UAKinds.PURPOSE_TRADE, signed));
@@ -130,7 +156,9 @@ contract DexLiquidityMldsaTest is UARegistryBase {
     /// EIP-2028 calldata gas (as test/ua/UATradeVectors.t.sol).
     function _calldataGas(bytes memory cd) internal pure returns (uint256 std) {
         uint256 zeros;
-        for (uint256 i; i < cd.length; ++i) if (cd[i] == 0) ++zeros;
+        for (uint256 i; i < cd.length; ++i) {
+            if (cd[i] == 0) ++zeros;
+        }
         std = 4 * zeros + 16 * (cd.length - zeros);
     }
 
@@ -142,11 +170,15 @@ contract DexLiquidityMldsaTest is UARegistryBase {
         (uint256 a0, uint256 b0) = (A.balanceOfUA(ua), B.balanceOfUA(ua));
         vm.prank(RELAYER);
         (bool ok, bytes memory ret) = address(dex).call{gas: TX_GAS_CAP - 21_000 - _calldataGas(cd)}(cd);
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        }
         Vm.Gas memory g = vm.lastCallGas();
         emit log_named_uint("calldata bytes", cd.length);
         emit log_named_uint("GAS mtxLiquidity, two mldsa65-verified SCaaS inputs (regular)", g.gasTotalUsed);
-        emit log_named_uint("GAS mtxLiquidity, two mldsa65-verified SCaaS inputs (state)", uint256(int256(g.gasStateUsed)));
+        emit log_named_uint(
+            "GAS mtxLiquidity, two mldsa65-verified SCaaS inputs (state)", uint256(int256(g.gasStateUsed))
+        );
         assertLe(g.gasTotalUsed, TX_GAS_CAP);
         assertEq(a0 - A.balanceOfUA(ua), 50_000, "A pulled");
         assertEq(b0 - B.balanceOfUA(ua), 50_000, "B pulled");

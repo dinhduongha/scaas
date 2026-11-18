@@ -2,11 +2,14 @@
 //! keygen.json, enc.json (rows, the trivial ciphertext and the Add / Sub ops), matrix.json, the R_TXM group seeds,
 //! and Enc's input errors. Codec part (feature `test-hooks`): every PQZL proof decodes and re-encodes to itself.
 //! Verify part: every PQZL proof verifies; negative.json's PQZL rows and the cheating fixtures are rejected.
-use pqzl::{dec, enc_group_seed, enc_leg_seed, enc_seed, keygen, keypair_from_secret, Ctx, Error, CT_BYTES, POLYVEC_BYTES};
-use std::path::PathBuf;
+use pqzl::{
+    dec, enc_group_seed, enc_leg_seed, enc_seed, keygen, keypair_from_secret, Ctx, Error, CT_BYTES,
+    POLYVEC_BYTES,
+};
 use serde_json::Value;
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 use sha3::{Digest, Keccak256, Shake256};
+use std::path::PathBuf;
 
 mod common;
 use common::{hex, json};
@@ -31,7 +34,11 @@ fn check_row_count(rows: &[common::Row]) {
     let bench = pqzl::bench::NREL;
     #[cfg(not(feature = "bench"))]
     let bench = 0; // unreachable: without vectors and feature bench, pqzl_rows panics first
-    let want = if common::vectors_dir().is_some() { 27 } else { bench };
+    let want = if common::vectors_dir().is_some() {
+        27
+    } else {
+        bench
+    };
     assert_eq!(rows.len(), want);
 }
 
@@ -40,15 +47,24 @@ fn hex32(s: &Value) -> [u8; 32] {
 }
 
 fn kec(b: &[u8]) -> String {
-    Keccak256::digest(b).iter().map(|x| format!("{x:02x}")).collect()
+    Keccak256::digest(b)
+        .iter()
+        .map(|x| format!("{x:02x}"))
+        .collect()
 }
 
 fn be8(b: &[u8]) -> Vec<u64> {
-    b.chunks(8).map(|c| u64::from_be_bytes(c.try_into().unwrap())).collect()
+    b.chunks(8)
+        .map(|c| u64::from_be_bytes(c.try_into().unwrap()))
+        .collect()
 }
 
 fn ints(v: &Value) -> Vec<i64> {
-    v.as_array().unwrap().iter().map(|x| x.as_i64().unwrap()).collect()
+    v.as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x.as_i64().unwrap())
+        .collect()
 }
 
 fn digits(x: u64) -> [u8; 16] {
@@ -72,10 +88,27 @@ fn keygen_json() {
         let k = keygen(&hex32(&r["seed"])).expect("keygen");
         let sq = |v: &mut dyn Iterator<Item = i64>| v.map(|x| x * x).sum::<i64>();
         assert_eq!(k.ctr as u64, r["ctr"].as_u64().unwrap());
-        assert_eq!(kec(&k.pk[..]), r["pk_keccak"].as_str().unwrap(), "seed {}", r["seed"]);
-        assert_eq!(be8(&k.pk[..32]), ints(&r["pk_first4"]).iter().map(|&x| x as u64).collect::<Vec<_>>());
-        assert_eq!(sq(&mut k.s.iter().map(|&x| x as i64)), r["s_sq"].as_i64().unwrap());
-        assert_eq!(sq(&mut k.e.iter().map(|&x| x as i64)), r["e_sq"].as_i64().unwrap());
+        assert_eq!(
+            kec(&k.pk[..]),
+            r["pk_keccak"].as_str().unwrap(),
+            "seed {}",
+            r["seed"]
+        );
+        assert_eq!(
+            be8(&k.pk[..32]),
+            ints(&r["pk_first4"])
+                .iter()
+                .map(|&x| x as u64)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            sq(&mut k.s.iter().map(|&x| x as i64)),
+            r["s_sq"].as_i64().unwrap()
+        );
+        assert_eq!(
+            sq(&mut k.e.iter().map(|&x| x as i64)),
+            r["e_sq"].as_i64().unwrap()
+        );
     }
 }
 
@@ -99,7 +132,8 @@ fn matrix_json() {
             a.extend_from_slice(&col[512 * i..512 * (i + 1)]);
         }
     }
-    let coeffs = |i: usize, c: usize, k: usize| be8(&cols[c][512 * i + 8 * k..512 * i + 8 * k + 64]);
+    let coeffs =
+        |i: usize, c: usize, k: usize| be8(&cols[c][512 * i + 8 * k..512 * i + 8 * k + 64]);
     assert_eq!(a.len() as u64, j["a_bytes"].as_u64().unwrap());
     assert_eq!(kec(&a), j["a_keccak"].as_str().unwrap());
     let want = |k: &str| ints(&j[k]).iter().map(|&x| x as u64).collect::<Vec<_>>();
@@ -137,9 +171,18 @@ fn enc_json() {
     let rows = j["rows"].as_array().unwrap();
     assert_eq!(rows.len(), 6);
     for (i, r) in rows.iter().enumerate() {
-        let keys: Vec<_> =
-            r["recipients"].as_array().unwrap().iter().map(|s| keygen(&hex32(s)).expect("keygen")).collect();
-        let values: Vec<u64> = r["values"].as_array().unwrap().iter().map(|v| v.as_u64().unwrap()).collect();
+        let keys: Vec<_> = r["recipients"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| keygen(&hex32(s)).expect("keygen"))
+            .collect();
+        let values: Vec<u64> = r["values"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_u64().unwrap())
+            .collect();
         let pks: Vec<&[u8; POLYVEC_BYTES]> = keys.iter().map(|k| &*k.pk).collect();
         let msgs: Vec<[u8; 16]> = values.iter().map(|&v| digits(v)).collect();
         let c = enc_seed(&pks, &msgs, &hex32(&r["seed_enc"])).expect("enc_seed");
@@ -160,12 +203,16 @@ fn enc_json() {
     let trivial = |x: u64| {
         let mut ct = Box::new([0u8; CT_BYTES]);
         for (i, d) in digits(x).iter().enumerate() {
-            ct[POLYVEC_BYTES + 8 * i..POLYVEC_BYTES + 8 * i + 8].copy_from_slice(&(DELTA * *d as u64).to_be_bytes());
+            ct[POLYVEC_BYTES + 8 * i..POLYVEC_BYTES + 8 * i + 8]
+                .copy_from_slice(&(DELTA * *d as u64).to_be_bytes());
         }
         ct
     };
     let t = &j["trivial"];
-    assert_eq!(kec(&trivial(t["value"].as_u64().unwrap())[..]), t["ct_keccak"].as_str().unwrap());
+    assert_eq!(
+        kec(&trivial(t["value"].as_u64().unwrap())[..]),
+        t["ct_keccak"].as_str().unwrap()
+    );
     let ops = j["ops"].as_array().unwrap();
     assert_eq!(ops.len(), 4);
     for o in ops {
@@ -231,7 +278,10 @@ fn enc_dec_input_errors() {
     assert_eq!(dec(&k.s, &ct).unwrap().0.map(|d| d as u8), msg[0]);
     let mut pk = k.pk.clone();
     pk[POLYVEC_BYTES - 8..].copy_from_slice(&Q.to_be_bytes()); // the last coefficient = q
-    assert_eq!(enc_seed(&[&*k.pk, &*pk], &[msg[0]; 2], &[9; 32]).err(), Some(Error::Input));
+    assert_eq!(
+        enc_seed(&[&*k.pk, &*pk], &[msg[0]; 2], &[9; 32]).err(),
+        Some(Error::Input)
+    );
     let mut m = msg;
     m[0][15] = 16;
     assert_eq!(enc_seed(&[&*k.pk], &m, &[9; 32]).err(), Some(Error::Input));
@@ -253,7 +303,11 @@ fn codec_roundtrip() {
     let rows = common::pqzl_rows();
     check_row_count(&rows);
     for r in &rows {
-        assert!(pqzl::test_mutate(r.code, &r.proof, 99, 0, 0) == Ok(Some(r.proof.clone())), "{}", r.name);
+        assert!(
+            pqzl::test_mutate(r.code, &r.proof, 99, 0, 0) == Ok(Some(r.proof.clone())),
+            "{}",
+            r.name
+        );
     }
 }
 
@@ -266,8 +320,16 @@ fn reprove_byte_equal() {
     let only = std::env::var("PQZL_REPROVE").unwrap_or_default();
     let mut ctx = pqzl::Ctx::new();
     for r in rows.iter().filter(|r| r.name.contains(&only)) {
-        let p = ctx.prove(r.op, &r.stmt, &r.wit, &r.rnd32).unwrap_or_else(|e| panic!("{}: {e:?}", r.name));
-        assert!(p == r.proof, "{}: {} bytes, want {}", r.name, p.len(), r.proof.len());
+        let p = ctx
+            .prove(r.op, &r.stmt, &r.wit, &r.rnd32)
+            .unwrap_or_else(|e| panic!("{}: {e:?}", r.name));
+        assert!(
+            p == r.proof,
+            "{}: {} bytes, want {}",
+            r.name,
+            p.len(),
+            r.proof.len()
+        );
     }
 }
 
@@ -292,11 +354,19 @@ fn prove_refuses_noncanonical_statement() {
         let r = rows.iter().find(|r| r.name == name).unwrap();
         let mut st = r.stmt.clone();
         st[coef..coef + 8].copy_from_slice(&Q.to_be_bytes());
-        assert_eq!(ctx.prove(r.op, &st, &r.wit, &r.rnd32), Err(Error::Input), "{name} coefficient");
+        assert_eq!(
+            ctx.prove(r.op, &st, &r.wit, &r.rnd32),
+            Err(Error::Input),
+            "{name} coefficient"
+        );
         if let Some(w) = word {
             let mut st = r.stmt.clone();
             st[w] = 1;
-            assert_eq!(ctx.prove(r.op, &st, &r.wit, &r.rnd32), Err(Error::Input), "{name} word");
+            assert_eq!(
+                ctx.prove(r.op, &st, &r.wit, &r.rnd32),
+                Err(Error::Input),
+                "{name} word"
+            );
         }
     }
 }
@@ -355,7 +425,10 @@ fn negative_rows_reject() {
             n += 1;
         }
     }
-    eprintln!("negative_rows_reject: {n} of {} rows split into (op, stmt, proof), all rejected", rows.len());
+    eprintln!(
+        "negative_rows_reject: {n} of {} rows split into (op, stmt, proof), all rejected",
+        rows.len()
+    );
 }
 
 /// the cheating provers' proofs of check_tbox_fixes.sh (P6-L2: blocks over their own l2 bound within the pooled
@@ -371,7 +444,8 @@ fn cheating_proofs_reject() {
 }
 
 fn fnv(b: &[u8]) -> u32 {
-    b.iter().fold(2166136261u32, |h, &x| (h ^ x as u32).wrapping_mul(16777619))
+    b.iter()
+        .fold(2166136261u32, |h, &x| (h ^ x as u32).wrapping_mul(16777619))
 }
 
 /// hex, "." for no bytes (one field of a space-separated line)
@@ -390,25 +464,55 @@ fn hx(b: &[u8]) -> String {
 #[test]
 fn wasm_replay_inputs() {
     // under gate.sh (PQZ_BUILD_TAG = the set; concurrent gates) target/wasm-replay-<set>, else target/wasm-replay
-    let tag = std::env::var("PQZ_BUILD_TAG").map(|t| format!("-{t}")).unwrap_or_default();
+    let tag = std::env::var("PQZ_BUILD_TAG")
+        .map(|t| format!("-{t}"))
+        .unwrap_or_default();
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("target/wasm-replay{tag}"));
     std::fs::create_dir_all(&dir).unwrap();
     let (mut inp, mut out) = (String::new(), String::new());
     let mut c = Ctx::new();
     for r in common::pqzl_rows() {
-        let legs: usize = if r.op == 7 { r.name[1..].split('-').next().unwrap().parse().unwrap() } else { 0 };
-        inp += &format!("row {} {} {legs} {} {} {} {}\n", r.name.replace(' ', "_"), r.op, hx(&r.stmt), hx(&r.wit),
-                        hx(&r.rnd32), hx(&r.proof));
-        let pv = if legs > pqzl::WASM_MAX_LEGS { String::new() } else { format!("\"prove\": \"{:08x}\", ", fnv(&r.proof)) };
-        let (v, f) = (c.verify(r.op, &r.stmt, &r.proof), c.verify_fast(r.op, &r.stmt, &r.proof));
+        let legs: usize = if r.op == 7 {
+            r.name[1..].split('-').next().unwrap().parse().unwrap()
+        } else {
+            0
+        };
+        inp += &format!(
+            "row {} {} {legs} {} {} {} {}\n",
+            r.name.replace(' ', "_"),
+            r.op,
+            hx(&r.stmt),
+            hx(&r.wit),
+            hx(&r.rnd32),
+            hx(&r.proof)
+        );
+        let pv = if legs > pqzl::WASM_MAX_LEGS {
+            String::new()
+        } else {
+            format!("\"prove\": \"{:08x}\", ", fnv(&r.proof))
+        };
+        let (v, f) = (
+            c.verify(r.op, &r.stmt, &r.proof),
+            c.verify_fast(r.op, &r.stmt, &r.proof),
+        );
         assert!(v && f, "{}", r.name);
-        out += &format!("{{\"row\": \"{}\", {pv}\"verify\": {}, \"verify_fast\": {}}}\n", r.name.replace(' ', "_"), v as u8, f as u8);
+        out += &format!(
+            "{{\"row\": \"{}\", {pv}\"verify\": {}, \"verify_fast\": {}}}\n",
+            r.name.replace(' ', "_"),
+            v as u8,
+            f as u8
+        );
     }
     for (i, (_, b)) in common::negative_inputs().iter().enumerate() {
-        let Some((op, st, pf)) = common::split(b) else { continue };
+        let Some((op, st, pf)) = common::split(b) else {
+            continue;
+        };
         inp += &format!("neg {i} {op} 0 {} . . {}\n", hx(st), hx(pf));
         let (v, f) = (c.verify(op, st, pf), c.verify_fast(op, st, pf));
-        out += &format!("{{\"neg\": \"{i}\", \"verify\": {}, \"verify_fast\": {}}}\n", v as u8, f as u8);
+        out += &format!(
+            "{{\"neg\": \"{i}\", \"verify\": {}, \"verify_fast\": {}}}\n",
+            v as u8, f as u8
+        );
     }
     std::fs::write(dir.join("in.txt"), inp).unwrap();
     std::fs::write(dir.join("native.jsonl"), out).unwrap();

@@ -1,0 +1,28 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{yml,yaml,json,md}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{js,mjs,cjs,ts}]
+# read by Prettier: the JavaScript's two-space indent
+indent_size = 2
+
+[*.cs]
+# read by dotnet format (clients/ua-cs, pqz-core/nethermind): four spaces, braces on their own line (the .NET default)
+indent_size = 4
+csharp_new_line_before_open_brace = all
+
+[*.sh]
+# read by shfmt: four spaces, case bodies indented; the shell variant (POSIX sh or bash) comes from each script's shebang
+switch_case_indent = true

@@ -26,7 +26,8 @@ contract Approver {
 /// ledger rows refuse `TokenPaused(pausedUntil)` but the holder's burn and unwrap; the pause-open set by the inner selector
 /// on the named, generic and address paths at fee mode `NONE`, each refused with a fee; `cancelNonce` refused.
 contract PauseTest is RegFixture {
-    string constant E = "uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
+    string constant E =
+        "uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
     uint32 constant FIX = MetaTxLib.MODE_FEE_FIXED;
     uint64 until;
 
@@ -150,8 +151,8 @@ contract PauseTest is RegFixture {
     function test_pauseOpenBurn_8() public {
         _pause(t8, until);
         MetaTxLib.UAEnvelope memory e = _env(alice, 0, 0);
-        IUARegistry.UASig memory s = _namedSig(ALICE_PK, t8, string.concat("UABurn(bytes32 from,uint256 amount,", E), e,
-            abi.encode(uint256(3)));
+        IUARegistry.UASig memory s =
+            _namedSig(ALICE_PK, t8, string.concat("UABurn(bytes32 from,uint256 amount,", E), e, abi.encode(uint256(3)));
         vm.prank(relayer);
         NormalToken(t8).mtxBurn(e, 3, s);
         MetaTxLib.UAMetaTransaction memory m = _uaTx(alice, abi.encodeWithSignature("burn(uint256)", 4), 0, 0);
@@ -171,14 +172,25 @@ contract PauseTest is RegFixture {
     function test_pauseOpenUnwrap_9() public {
         _pause(t9, until);
         MetaTxLib.UAEnvelope memory e = _env(alice, 0, 0);
-        IUARegistry.UASig memory s = _namedSig(ALICE_PK, t9, string.concat(
-            "UAUnwrap(bytes32 from,uint256 wrapped,address recipient,uint256 minOut,", E), e, abi.encode(uint256(3), bob, uint256(3)));
+        IUARegistry.UASig memory s = _namedSig(
+            ALICE_PK,
+            t9,
+            string.concat("UAUnwrap(bytes32 from,uint256 wrapped,address recipient,uint256 minOut,", E),
+            e,
+            abi.encode(uint256(3), bob, uint256(3))
+        );
         vm.prank(relayer);
         WrappedToken(payable(t9)).mtxUnwrap(e, 3, bob, 3, s);
         e.nonce = 1;
-        s = _namedSig(ALICE_PK, t9, string.concat(
-            "UAUnwrapLeg(bytes32 from,address underlying,uint256 wrapped,address recipient,uint256 minOut,", E), e,
-            abi.encode(address(usd), uint256(4), bob, uint256(4)));
+        s = _namedSig(
+            ALICE_PK,
+            t9,
+            string.concat(
+                "UAUnwrapLeg(bytes32 from,address underlying,uint256 wrapped,address recipient,uint256 minOut,", E
+            ),
+            e,
+            abi.encode(address(usd), uint256(4), bob, uint256(4))
+        );
         vm.prank(relayer);
         WrappedToken(payable(t9)).mtxUnwrapLeg(e, address(usd), 4, bob, 4, s);
         MetaTxLib.UAMetaTransaction memory m =
@@ -207,8 +219,13 @@ contract PauseTest is RegFixture {
             bytes[] memory c = new bytes[](8);
             MetaTxLib.UAEnvelope memory e = _env(alice, mode, fee);
             c[0] = abi.encodeCall(NormalToken.mtxBurn, (e, 1, _bad()));
-            c[1] = abi.encodeCall(UAMetaTxBase.mtxExecute, (_uaTx(alice, abi.encodeWithSignature("burn(uint256)", 1), mode, fee), _bad()));
-            c[2] = abi.encodeCall(IMetaTx.executeMetaTransaction, (_addrTx(alice, abi.encodeWithSignature("burn(uint256)", 1), mode, fee), new bytes(65)));
+            c[1] = abi.encodeCall(
+                UAMetaTxBase.mtxExecute, (_uaTx(alice, abi.encodeWithSignature("burn(uint256)", 1), mode, fee), _bad())
+            );
+            c[2] = abi.encodeCall(
+                IMetaTx.executeMetaTransaction,
+                (_addrTx(alice, abi.encodeWithSignature("burn(uint256)", 1), mode, fee), new bytes(65))
+            );
             c[3] = abi.encodeCall(WrappedToken.mtxUnwrap, (e, 1, bob, 0, _bad()));
             c[4] = abi.encodeCall(WrappedToken.mtxUnwrapLeg, (e, address(usd), 1, bob, 0, _bad()));
             c[5] = abi.encodeCall(WrappedToken.mtxUnwrapToUA, (e, address(usd), 1, UA_X, 0, _bad()));
@@ -230,14 +247,22 @@ contract PauseTest is RegFixture {
             address t = _ks()[i];
             _pause(t, until);
             bytes memory tr = abi.encodeWithSignature("transfer(address,uint256)", bob, 1);
-            assertEq(_try(t, abi.encodeCall(UAMetaTxBase.mtxExecute, (_uaTx(alice, tr, 0, 0), _bad()))),
-                IRegulatedToken.TokenPaused.selector);
-            assertEq(_try(t, abi.encodeCall(UAMetaTxBase.mtxCancelNonce, (_env(alice, 0, 0), 9, _bad()))),
-                IRegulatedToken.TokenPaused.selector, "cancelNonce is not pause-open");
+            assertEq(
+                _try(t, abi.encodeCall(UAMetaTxBase.mtxExecute, (_uaTx(alice, tr, 0, 0), _bad()))),
+                IRegulatedToken.TokenPaused.selector
+            );
+            assertEq(
+                _try(t, abi.encodeCall(UAMetaTxBase.mtxCancelNonce, (_env(alice, 0, 0), 9, _bad()))),
+                IRegulatedToken.TokenPaused.selector,
+                "cancelNonce is not pause-open"
+            );
             MetaTxLib.UAMetaTransfer memory x;
             (x.from, x.to, x.value, x.batch, x.validUntil) = (nid(alice), nid(bob), 1, 1, block.timestamp + 60);
-            assertEq(_try(t, abi.encodeCall(NormalToken.mtxExecuteTransfer, (x, _bad()))),
-                IRegulatedToken.TokenPaused.selector, "a typed transfer (sel 0)");
+            assertEq(
+                _try(t, abi.encodeCall(NormalToken.mtxExecuteTransfer, (x, _bad()))),
+                IRegulatedToken.TokenPaused.selector,
+                "a typed transfer (sel 0)"
+            );
         }
     }
 }

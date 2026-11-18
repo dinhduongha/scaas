@@ -28,7 +28,9 @@ import {EnvKit} from "../helpers/EnvKit.sol";
 contract GasBurner {
     uint256 internal immutable B;
 
-    constructor(uint256 b) { B = b; }
+    constructor(uint256 b) {
+        B = b;
+    }
 
     fallback(bytes calldata) external returns (bytes memory) {
         uint256 g0 = gasleft();
@@ -42,7 +44,9 @@ contract GasBurner {
 contract RowBurner {
     uint256 internal immutable ROW;
 
-    constructor(uint256 r) { ROW = r; }
+    constructor(uint256 r) {
+        ROW = r;
+    }
 
     fallback(bytes calldata d) external returns (bytes memory) {
         uint256 b = ROW + 3 * ((d.length + 31) / 32) - 2_900;
@@ -63,7 +67,12 @@ contract GasMeter {
         uint256 g0 = gasleft();
         assembly ("memory-safe") { ok := call(gas(), t, 0, add(m, 32), mload(m), 0, 0) }
         used = g0 - gasleft();
-        if (!ok) assembly ("memory-safe") { returndatacopy(0, 0, returndatasize()) revert(0, returndatasize()) }
+        if (!ok) {
+            assembly ("memory-safe") {
+                returndatacopy(0, 0, returndatasize())
+                revert(0, returndatasize())
+            }
+        }
     }
 }
 
@@ -117,7 +126,9 @@ contract PqzStatePinGasTest is PqzSlots {
         dave = _pqzUA(_pk(9), 9);
         eve = _pqzUA(_pk(10), 10);
         frank = _pqzUA(_pk(11), 11);
-        for (uint8 i; i < 8; ++i) xs[i] = _pqzUA(_pk(20 + i), 20 + i);
+        for (uint8 i; i < 8; ++i) {
+            xs[i] = _pqzUA(_pk(20 + i), 20 + i);
+        }
         bytes memory code = _blobCode();
         _seed(alice, PRE + PqzCore.ROLL_MAX, code);
         _seed(dave, PRE + LO, code);
@@ -147,11 +158,27 @@ contract PqzStatePinGasTest is PqzSlots {
     /// probe re-mocks op 3, so it comes after every registration and op 3 is mocked to 1 again.
     function _tableSetUp() internal {
         gus = _pqzUA(_pk(40), 40);
-        for (uint8 i; i < 8; ++i) ys[i] = _pqzUA(_pk(41 + i), 41 + i);
+        for (uint8 i; i < 8; ++i) {
+            ys[i] = _pqzUA(_pk(41 + i), 41 + i);
+        }
         bytes memory r;
-        for (uint256 j; j < 8; ++j) r = bytes.concat(r, ys[j]);
-        discRef7 = tok.mtxConfidentialTransfer(_ms(bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0), gus,
-            alice, uint256(8), uint256(0)), salt, r, _blob(99, _outLen(8, true)))), hex"c0de", _pqAuth(), "", noVerdict());
+        for (uint256 j; j < 8; ++j) {
+            r = bytes.concat(r, ys[j]);
+        }
+        discRef7 = tok.mtxConfidentialTransfer(
+            _ms(
+                bytes.concat(
+                    abi.encode(uint256(0), block.number + 100, uint256(0), gus, alice, uint256(8), uint256(0)),
+                    salt,
+                    r,
+                    _blob(99, _outLen(8, true))
+                )
+            ),
+            hex"c0de",
+            _pqAuth(),
+            "",
+            noVerdict()
+        );
         meter = new GasMeter();
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
         k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 200_000);
@@ -193,7 +220,9 @@ contract PqzStatePinGasTest is PqzSlots {
 
     function _gasTo(address t, bytes memory data) internal returns (uint256 used) {
         (bool ok, bytes memory ret) = t.call(data);
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        }
         Vm.Gas memory g = vm.lastCallGas();
         used = g.gasTotalUsed;
         lastState = uint256(int256(g.gasStateUsed));
@@ -220,8 +249,11 @@ contract PqzStatePinGasTest is PqzSlots {
         _log("mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs)", g128);
         _log("mtxRollOver ROLL_MAX (steady, distinct cold blobs)", gMax);
         _log("mtxRollOver ROLL_MAX + 16 (linear fit)", next);
-        console2.log("per entry / fixed (fit)", (gMax - g128) / (PqzCore.ROLL_MAX - LO),
-            g128 - (gMax - g128) * LO / (PqzCore.ROLL_MAX - LO));
+        console2.log(
+            "per entry / fixed (fit)",
+            (gMax - g128) / (PqzCore.ROLL_MAX - LO),
+            g128 - (gMax - g128) * LO / (PqzCore.ROLL_MAX - LO)
+        );
         assertLe(gMax, CAP, "ROLL_MAX under 0.75 * 2^24");
         bytes memory acc = tok.pqzAcc(alice, 0);
         uint256 want = PqzCt.Q - (PRE + PqzCore.ROLL_MAX);
@@ -241,7 +273,13 @@ contract PqzStatePinGasTest is PqzSlots {
         m.data = data;
         m.validUntil = block.timestamp + 1 hours;
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, MtxDigest.metaTx(address(tok), m));
-        return _gas(abi.encodeWithSignature("executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)", m, abi.encodePacked(r, s, v)));
+        return _gas(
+            abi.encodeWithSignature(
+                "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
+                m,
+                abi.encodePacked(r, s, v)
+            )
+        );
     }
 
     /// Fix round 1 (review I1, m3): `data` relayed as a full transaction. The envelope pays a FIXED (absolute) outer fee
@@ -264,17 +302,26 @@ contract PqzStatePinGasTest is PqzSlots {
         }
         bytes memory call = _envelopeVia(ua, data, fee);
         uint256 zeros;
-        for (uint256 i; i < call.length; ++i) if (call[i] == 0) ++zeros;
+        for (uint256 i; i < call.length; ++i) {
+            if (call[i] == 0) ++zeros;
+        }
         vm.prank(RELAYER);
         reg = _gas(call);
         st = lastState;
         int256 refund = vm.lastCallGas().gasRefunded;
         assertEq(tok.balanceOf(RELAYER), fee, "the outer fee was paid");
-        console2.log(string.concat(ua ? "  uaExecute" : "  mtxExecute",
-            " calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte)"), call.length, zeros,
-            15_000 + 64 * call.length);
-        console2.log("  calldata gas 4 / 16 / refund (not subtracted)", 4 * zeros + 16 * (call.length - zeros),
-            uint256(refund));
+        console2.log(
+            string.concat(
+                ua ? "  uaExecute" : "  mtxExecute",
+                " calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte)"
+            ),
+            call.length,
+            zeros,
+            15_000 + 64 * call.length
+        );
+        console2.log(
+            "  calldata gas 4 / 16 / refund (not subtracted)", 4 * zeros + 16 * (call.length - zeros), uint256(refund)
+        );
         console2.log("  full tx regular / state / total", reg, st, reg + st);
     }
 
@@ -305,7 +352,11 @@ contract PqzStatePinGasTest is PqzSlots {
         uint256 snap = vm.snapshotState();
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(RKEY, MtxDigest.metaTx(address(tok), m));
         vm.revertToState(snap);
-        return abi.encodeWithSignature("executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)", m, abi.encodePacked(r, s, v));
+        return abi.encodeWithSignature(
+            "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
+            m,
+            abi.encodePacked(r, s, v)
+        );
     }
 
     /// Fix round 1 (I1): the `ROLL_MAX` rollover as a full relayed transaction with an outer fee: the binding convention
@@ -322,8 +373,13 @@ contract PqzStatePinGasTest is PqzSlots {
         assertLe(e, CAP, "mtxExecute: the full relayed transaction's regular gas under 0.75 * 2^24");
         assertLe(u, CAP, "uaExecute: the full relayed transaction's regular gas under 0.75 * 2^24");
         (uint256 fe, uint256 fu) = (_largestFit(e, el), _largestFit(u, ul));
-        console2.log("ROLL_MAX / the largest multiple of 16 that fits on both paths (linear fit; reported, not required) / "
-            "headroom at ROLL_MAX on the costlier path", PqzCore.ROLL_MAX, fe < fu ? fe : fu, CAP - (e > u ? e : u));
+        console2.log(
+            "ROLL_MAX / the largest multiple of 16 that fits on both paths (linear fit; reported, not required) / "
+            "headroom at ROLL_MAX on the costlier path",
+            PqzCore.ROLL_MAX,
+            fe < fu ? fe : fu,
+            CAP - (e > u ? e : u)
+        );
     }
 
     /// The largest multiple of 16 whose relayed full rollover fits `CAP` on one path: the line through `lo` (`LO` entries)
@@ -342,8 +398,11 @@ contract PqzStatePinGasTest is PqzSlots {
         console2.log(string.concat("relayed mtxRollOver (", p, "), full transaction, fee 7, entries"), PqzCore.ROLL_MAX);
         (reg,) = _fullTxVia(ua, abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), PqzCore.ROLL_MAX)), 7);
         vm.revertToState(snap);
-        console2.log(string.concat("ROLL_MAX + 16, relayed full transaction (", p, ", linear fit) / per entry"),
-            reg + (reg - lo) * 16 / (PqzCore.ROLL_MAX - LO), (reg - lo) / (PqzCore.ROLL_MAX - LO));
+        console2.log(
+            string.concat("ROLL_MAX + 16, relayed full transaction (", p, ", linear fit) / per entry"),
+            reg + (reg - lo) * 16 / (PqzCore.ROLL_MAX - LO),
+            (reg - lo) / (PqzCore.ROLL_MAX - LO)
+        );
     }
 
     /// Fix round 1 (I1): each `mtxPrepareAcc` half as a full relayed transaction with an outer fee, on both relay paths
@@ -377,7 +436,10 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     function test_gas_roll128() public {
-        _log("mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs)", _gas(abi.encodeCall(IPqzToken.mtxRollOver, (dave, uint64(0), LO))));
+        _log(
+            "mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs)",
+            _gas(abi.encodeCall(IPqzToken.mtxRollOver, (dave, uint64(0), LO)))
+        );
     }
 
     function test_gas_roll_1() public {
@@ -417,11 +479,16 @@ contract PqzStatePinGasTest is PqzSlots {
     // ------------------------------------------------------------------ the shield (D18)
 
     function test_gas_shield_firstEntry() public {
-        _log("mtxShield, the account's first entry (append)", _gas(abi.encodeCall(IConfidentialToken.mtxShield, (eve, 5))));
+        _log(
+            "mtxShield, the account's first entry (append)",
+            _gas(abi.encodeCall(IConfidentialToken.mtxShield, (eve, 5)))
+        );
     }
 
     function test_gas_shield_append() public {
-        _log("mtxShield, append (tail of an earlier block)", _gas(abi.encodeCall(IConfidentialToken.mtxShield, (bob, 5))));
+        _log(
+            "mtxShield, append (tail of an earlier block)", _gas(abi.encodeCall(IConfidentialToken.mtxShield, (bob, 5)))
+        );
     }
 
     function test_gas_shield_merge() public {
@@ -437,9 +504,14 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     function _op1p(bytes32 from, uint256 p, bool aud, bytes memory hint, bytes memory proof)
-        internal view returns (bytes memory)
+        internal
+        view
+        returns (bytes memory)
     {
-        return abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(_payload(p, 0, from, bob, carol, _out(77, aud), "")), proof, _pqAuth(), hint, noVerdict()));
+        return abi.encodeCall(
+            IPqzToken.mtxConfidentialTransferSingle,
+            (_ts(_payload(p, 0, from, bob, carol, _out(77, aud), "")), proof, _pqAuth(), hint, noVerdict())
+        );
     }
 
     /// `n` pseudo-random proof bytes (the calldata a real proof of that length costs: almost no zero bytes).
@@ -475,7 +547,9 @@ contract PqzStatePinGasTest is PqzSlots {
     function test_gas_op1_relayedFullTx_materialisedNoHint() public {
         _precompiles(vm.envOr("PQZ_GAS_TX", uint256(6_761_250)));
         uint256 plen = vm.envOr("PQZ_PROOF_TX", uint256(52_624));
-        console2.log("relayed op 1 BUNDLE, auditor, materialised acc, no hint, full transaction, fee 7, proof bytes", plen);
+        console2.log(
+            "relayed op 1 BUNDLE, auditor, materialised acc, no hint, full transaction, fee 7, proof bytes", plen
+        );
         _fullTx(_op1p(alice, PRE, true, "", _proof(plen)), 7);
     }
 
@@ -516,12 +590,18 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     function test_gas_op1_compact() public {
-        bytes memory d = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingleCompact, (_ts(_payload(0, 0, carol, bob, alice, _out(78, true), _memo())), hex"c0de", _pqAuth(), "", noVerdict()));
+        bytes memory d = abi.encodeCall(
+            IPqzToken.mtxConfidentialTransferSingleCompact,
+            (_ts(_payload(0, 0, carol, bob, alice, _out(78, true), _memo())), hex"c0de", _pqAuth(), "", noVerdict())
+        );
         _log("op 1 COMPACT (HASH), auditor, fee, fresh ref", _gas(d));
     }
 
     function test_gas_op1_shieldIn() public {
-        bytes memory d = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(_payload(0, 100, carol, bob, alice, _out(80, true), "")), hex"c0de", _pqAuth(), "", noVerdict()));
+        bytes memory d = abi.encodeCall(
+            IPqzToken.mtxConfidentialTransferSingle,
+            (_ts(_payload(0, 100, carol, bob, alice, _out(80, true), "")), hex"c0de", _pqAuth(), "", noVerdict())
+        );
         _log("op 1 BUNDLE, auditor, fee, shieldIn 100, fresh ref", _gas(d));
     }
 
@@ -535,10 +615,27 @@ contract PqzStatePinGasTest is PqzSlots {
 
     function _op7a(uint256 m, bool aud, bytes memory proof) internal view returns (bytes memory) {
         bytes memory r;
-        for (uint256 j; j < m; ++j) r = bytes.concat(r, xs[j]);
+        for (uint256 j; j < m; ++j) {
+            r = bytes.concat(r, xs[j]);
+        }
         bytes memory out = _blob(81 + m, _outLen(m, aud));
-        return abi.encodeCall(IPqzToken.mtxConfidentialTransfer, (_ms(bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0),
-            carol, alice, m, uint256(0)), salt, r, out)), proof, _pqAuth(), "", noVerdict()));
+        return abi.encodeCall(
+            IPqzToken.mtxConfidentialTransfer,
+            (
+                _ms(
+                    bytes.concat(
+                        abi.encode(uint256(0), block.number + 100, uint256(0), carol, alice, m, uint256(0)),
+                        salt,
+                        r,
+                        out
+                    )
+                ),
+                proof,
+                _pqAuth(),
+                "",
+                noVerdict()
+            )
+        );
     }
 
     function test_gas_op7_M4() public {
@@ -562,12 +659,17 @@ contract PqzStatePinGasTest is PqzSlots {
         }
         bytes memory data = _op7p(8, proof);
         uint256 zeros;
-        for (uint256 i; i < data.length; ++i) if (data[i] == 0) ++zeros;
+        for (uint256 i; i < data.length; ++i) {
+            if (data[i] == 0) ++zeros;
+        }
         uint256 reg = _gas(data);
         console2.log("op 7 M = 8 calldata bytes / zero bytes / proof bytes", data.length, zeros, plen);
         _log("op 7 M = 8 BUNDLE, auditor, fee, fresh ref, direct tx (precompile mocked)", reg);
-        console2.log("calldata gas 4 / 16 / EIP-7976 floor 15,000 + 64 per byte", 4 * zeros + 16 * (data.length - zeros),
-            15_000 + 64 * data.length);
+        console2.log(
+            "calldata gas 4 / 16 / EIP-7976 floor 15,000 + 64 per byte",
+            4 * zeros + 16 * (data.length - zeros),
+            15_000 + 64 * data.length
+        );
     }
 
     /// Fix round 1 (m3): op 7 M = 8 relayed as a full transaction with the real data (payload and a `PQZ_PROOF_LEN`-byte
@@ -589,17 +691,28 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     /// today's PQZL v3 op 7 rows, auditor on: M = 1 3,625,000; M = 2 3,710,000; M = 4 4,121,000 (× 1.25 [estimate])
-    function test_gas_op7_relayedFullTx_M1() public { _op7Relayed(1, 52_624, 3_625_000); }
-    function test_gas_op7_relayedFullTx_M2() public { _op7Relayed(2, 53_504, 3_710_000); }
-    function test_gas_op7_relayedFullTx_M4() public { _op7Relayed(4, 57_202, 4_121_000); }
+    function test_gas_op7_relayedFullTx_M1() public {
+        _op7Relayed(1, 52_624, 3_625_000);
+    }
+
+    function test_gas_op7_relayedFullTx_M2() public {
+        _op7Relayed(2, 53_504, 3_710_000);
+    }
+
+    function test_gas_op7_relayedFullTx_M4() public {
+        _op7Relayed(4, 57_202, 4_121_000);
+    }
 
     function _burn(uint256 amount, address to) internal view returns (bytes memory) {
         return _burnP(amount, to, hex"c0de");
     }
 
     function _burnP(uint256 amount, address to, bytes memory proof) internal view returns (bytes memory) {
-        bytes memory pl = bytes.concat(abi.encode(uint256(0), block.number + 5, uint256(0), carol, alice), _blob(5, PqzCt.CT));
-        return abi.encodeCall(IPqzToken.mtxUnshield, (_bs(pl), amount, bytes32(uint256(uint160(to))), proof, _pqAuth(), "", noVerdict()));
+        bytes memory pl =
+            bytes.concat(abi.encode(uint256(0), block.number + 5, uint256(0), carol, alice), _blob(5, PqzCt.CT));
+        return abi.encodeCall(
+            IPqzToken.mtxUnshield, (_bs(pl), amount, bytes32(uint256(uint160(to))), proof, _pqAuth(), "", noVerdict())
+        );
     }
 
     function test_gas_refresh() public {
@@ -670,16 +783,36 @@ contract PqzStatePinGasTest is PqzSlots {
         bytes memory hint = _packed(tok.pqzAcc(alice, 0));
         address t = address(tok);
         _row(sys, "TRANSFER", "op 1, auditor, fresh ref", t, _op1p(carol, 0, true, "", _pf(sys, "TRANSFER")), true);
-        _row(sys, "TRANSFER0", "op 1, no auditor, fresh ref", t, _op1p(carol, 0, false, "", _pf(sys, "TRANSFER0")), true);
-        _row(sys, "TRANSFER", "op 1, auditor, materialised acc, no hint", t,
-            _op1p(alice, PRE, true, "", _pf(sys, "TRANSFER")), true);
-        _row(sys, "TRANSFER", "op 1, auditor, materialised acc, hint", t,
-            _op1p(alice, PRE, true, hint, _pf(sys, "TRANSFER")), true);
+        _row(
+            sys, "TRANSFER0", "op 1, no auditor, fresh ref", t, _op1p(carol, 0, false, "", _pf(sys, "TRANSFER0")), true
+        );
+        _row(
+            sys,
+            "TRANSFER",
+            "op 1, auditor, materialised acc, no hint",
+            t,
+            _op1p(alice, PRE, true, "", _pf(sys, "TRANSFER")),
+            true
+        );
+        _row(
+            sys,
+            "TRANSFER",
+            "op 1, auditor, materialised acc, hint",
+            t,
+            _op1p(alice, PRE, true, hint, _pf(sys, "TRANSFER")),
+            true
+        );
         for (uint256 m = 1; m <= (h ? 4 : 8); m *= 2) {
             for (uint256 a; a < 2; ++a) {
                 string memory key = string.concat("M", vm.toString(m), a == 0 ? "-on" : "-off");
-                _row(sys, key, string.concat("op 7 M = ", vm.toString(m), a == 0 ? ", auditor" : ", no auditor", ", fresh ref"),
-                    t, _op7a(m, a == 0, _pf(sys, key)), true);
+                _row(
+                    sys,
+                    key,
+                    string.concat("op 7 M = ", vm.toString(m), a == 0 ? ", auditor" : ", no auditor", ", fresh ref"),
+                    t,
+                    _op7a(m, a == 0, _pf(sys, key)),
+                    true
+                );
             }
         }
         _row(sys, "BURN", "burn 1 to an address, fresh ref", t, _burnP(1, address(0xD00D), _pf(sys, "BURN")), true);
@@ -701,8 +834,14 @@ contract PqzStatePinGasTest is PqzSlots {
     /// storage string and re-read cold (`isolate`) for each row cost more than forge's per-test gas from T12 `6d4f5b04` on.
     function _loadOps() internal freed {
         string memory j = vm.readFile(TYPED_OPS);
-        string[6] memory ops = [string("PqzTransferSingle"), "PqzTransferSingleCompact", "PqzTransfer", "PqzTransferCompact",
-            "PqzUnshield", "PqzUnshieldUnwrap"];
+        string[6] memory ops = [
+            string("PqzTransferSingle"),
+            "PqzTransferSingleCompact",
+            "PqzTransfer",
+            "PqzTransferCompact",
+            "PqzUnshield",
+            "PqzUnshieldUnwrap"
+        ];
         for (uint256 i; i < ops.length; ++i) {
             string memory ua = string.concat("UA", ops[i]);
             typehashOf[ua] = vm.parseJsonBytes32(j, string.concat(".ops.", ua, ".typehash"));
@@ -725,7 +864,8 @@ contract PqzStatePinGasTest is PqzSlots {
     /// ua-mtx-merge T5, meaning (R36): the ECDSA envelope signer is a native id on the merged entry (`UAEnvelope`, its address
     /// zero-padded; was the address `Envelope`).
     function _envN() internal view returns (MetaTxLib.UAEnvelope memory u) {
-        (u.from, u.validUntil, u.mode, u.fee) = (MetaTxLib.pad(vm.addr(RKEY)), block.timestamp + 1 hours, MetaTxLib.MODE_FEE_FIXED, 7);
+        (u.from, u.validUntil, u.mode, u.fee) =
+        (MetaTxLib.pad(vm.addr(RKEY)), block.timestamp + 1 hours, MetaTxLib.MODE_FEE_FIXED, 7);
     }
 
     function _uaEnvN() internal view returns (MetaTxLib.UAEnvelope memory u) {
@@ -738,10 +878,19 @@ contract PqzStatePinGasTest is PqzSlots {
 
     /// The fee signer's real signature over the `UA…` struct of `op` (T5, R36): an entry hashing anything else reverts.
     /// `words`: the struct's own after `from`.
-    function _signN(string memory op, address t, bytes memory words) internal view returns (IUARegistry.UASig memory a) {
+    function _signN(string memory op, address t, bytes memory words)
+        internal
+        view
+        returns (IUARegistry.UASig memory a)
+    {
         MetaTxLib.UAEnvelope memory e = _envN();
-        bytes32 sh = keccak256(bytes.concat(abi.encode(typehashOf[string.concat("UA", op)], e.from), words,
-            abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
+        bytes32 sh = keccak256(
+            bytes.concat(
+                abi.encode(typehashOf[string.concat("UA", op)], e.from),
+                words,
+                abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))
+            )
+        );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(RKEY, keccak256(abi.encodePacked(hex"1901", domainOf(t), sh)));
         a.signature = abi.encodePacked(r, s, v);
     }
@@ -775,22 +924,40 @@ contract PqzStatePinGasTest is PqzSlots {
         bytes memory proof = _pf("pqzh", key);
         string memory op = compact ? "PqzTransferSingleCompact" : "PqzTransferSingle";
         IUARegistry.UASig memory sig = _signN(op, address(tok), abi.encode(_hashT(t), keccak256(proof), keccak256("")));
-        bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _uaEnvN(), t, proof, _pqAuth(), bytes(""), _feeAuth(), noVerdict())
-            : abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _envN(), t, proof, _pqAuth(), bytes(""), sig, noVerdict());
+        bytes memory d = viaUA
+            ? abi.encodeWithSignature(
+                _abiOf(string.concat("UA", op)), _uaEnvN(), t, proof, _pqAuth(), bytes(""), _feeAuth(), noVerdict()
+            )
+            : abi.encodeWithSignature(
+                _abiOf(string.concat("UA", op)), _envN(), t, proof, _pqAuth(), bytes(""), sig, noVerdict()
+            );
         _fits(key, string.concat(op, aud ? ", auditor" : ", no auditor"), address(tok), d);
     }
 
     function _nOp7(uint256 m, bool aud, bool compact, string memory key) internal freed {
         bytes memory r;
-        for (uint256 j; j < m; ++j) r = bytes.concat(r, xs[j]);
-        IPqzToken.PqzMultiArgs memory t = _ms(bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0), carol, alice, m, uint256(0)), salt, r,
-            _blob(81 + m, _outLen(m, aud))));
+        for (uint256 j; j < m; ++j) {
+            r = bytes.concat(r, xs[j]);
+        }
+        IPqzToken.PqzMultiArgs memory t = _ms(
+            bytes.concat(
+                abi.encode(uint256(0), block.number + 100, uint256(0), carol, alice, m, uint256(0)),
+                salt,
+                r,
+                _blob(81 + m, _outLen(m, aud))
+            )
+        );
         if (compact) t.sealedMemo = _slice(_blob(2, 352), 0, 2 + 40 * m);
         bytes memory proof = _pf("pqzh", key);
         string memory op = compact ? "PqzTransferCompact" : "PqzTransfer";
         IUARegistry.UASig memory sig = _signN(op, address(tok), abi.encode(_hashM(t), keccak256(proof), keccak256("")));
-        bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _uaEnvN(), t, proof, _pqAuth(), bytes(""), _feeAuth(), noVerdict())
-            : abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _envN(), t, proof, _pqAuth(), bytes(""), sig, noVerdict());
+        bytes memory d = viaUA
+            ? abi.encodeWithSignature(
+                _abiOf(string.concat("UA", op)), _uaEnvN(), t, proof, _pqAuth(), bytes(""), _feeAuth(), noVerdict()
+            )
+            : abi.encodeWithSignature(
+                _abiOf(string.concat("UA", op)), _envN(), t, proof, _pqAuth(), bytes(""), sig, noVerdict()
+            );
         _fits(key, string.concat(op, " M = ", vm.toString(m), aud ? ", auditor" : ", no auditor"), address(tok), d);
     }
 
@@ -802,21 +969,36 @@ contract PqzStatePinGasTest is PqzSlots {
         IPqzToken.PqzBurnArgs memory b = _nBurnArgs();
         IPqzToken.Payout memory p = IPqzToken.Payout(amount, to);
         bytes memory proof = _pf("pqzh", key);
-        IUARegistry.UASig memory sig = _signN("PqzUnshield", address(tok), abi.encode(_hashB(b), amount, to, keccak256(proof), keccak256("")));
-        bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf("UAPqzUnshield"), _uaEnvN(), b, p, proof, _pqAuth(), bytes(""), _feeAuth(), noVerdict())
-            : abi.encodeWithSignature(_abiOf("UAPqzUnshield"), _envN(), b, p, proof, _pqAuth(), bytes(""), sig, noVerdict());
+        IUARegistry.UASig memory sig =
+            _signN("PqzUnshield", address(tok), abi.encode(_hashB(b), amount, to, keccak256(proof), keccak256("")));
+        bytes memory d = viaUA
+            ? abi.encodeWithSignature(
+                _abiOf("UAPqzUnshield"), _uaEnvN(), b, p, proof, _pqAuth(), bytes(""), _feeAuth(), noVerdict()
+            )
+            : abi.encodeWithSignature(
+                _abiOf("UAPqzUnshield"), _envN(), b, p, proof, _pqAuth(), bytes(""), sig, noVerdict()
+            );
         _fits(key, key, address(tok), d);
     }
 
     /// The burn of `WrappedPqzToken`: its own token, with the fee payers funded.
     function _nUnwrap(WrappedPqzToken w) internal freed {
         IPqzToken.PqzBurnArgs memory b = _nBurnArgs();
-        IConfidentialWrappedToken.Unwrap memory x = IConfidentialWrappedToken.Unwrap(w.underlying(), MetaTxLib.pad(address(0xD00D)), 1, 0);
+        IConfidentialWrappedToken.Unwrap memory x =
+            IConfidentialWrappedToken.Unwrap(w.underlying(), MetaTxLib.pad(address(0xD00D)), 1, 0);
         bytes memory proof = _pf("pqzh", "BURN");
-        bytes32 xh = keccak256(abi.encode(keccak256("Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)"), x));
-        IUARegistry.UASig memory sig = _signN("PqzUnshieldUnwrap", address(w), abi.encode(_hashB(b), xh, keccak256(proof), keccak256("")));
-        bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf("UAPqzUnshieldUnwrap"), _uaEnvN(), b, x, proof, _pqAuth(), bytes(""), _feeAuth(), noVerdict())
-            : abi.encodeWithSignature(_abiOf("UAPqzUnshieldUnwrap"), _envN(), b, x, proof, _pqAuth(), bytes(""), sig, noVerdict());
+        bytes32 xh = keccak256(
+            abi.encode(keccak256("Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)"), x)
+        );
+        IUARegistry.UASig memory sig =
+            _signN("PqzUnshieldUnwrap", address(w), abi.encode(_hashB(b), xh, keccak256(proof), keccak256("")));
+        bytes memory d = viaUA
+            ? abi.encodeWithSignature(
+                _abiOf("UAPqzUnshieldUnwrap"), _uaEnvN(), b, x, proof, _pqAuth(), bytes(""), _feeAuth(), noVerdict()
+            )
+            : abi.encodeWithSignature(
+                _abiOf("UAPqzUnshieldUnwrap"), _envN(), b, x, proof, _pqAuth(), bytes(""), sig, noVerdict()
+            );
         _fits("BURN", "PqzUnshieldUnwrap", address(w), d);
     }
 
@@ -860,8 +1042,14 @@ contract PqzStatePinGasTest is PqzSlots {
     /// An n-of-n `mldsa65` `msig` PQZ holder (weights 1; the registry's PQZL rule admits it) and its debit auth.
     function _msigHolder(uint8 n, uint8 seed0) internal returns (bytes32 ua, bytes memory auth) {
         bytes32[] memory ids = new bytes32[](n);
-        for (uint8 i; i < n; ++i) ids[i] = _mldsaUA(seed0 + i);
-        for (uint256 i = 1; i < n; ++i) for (uint256 j = i; j > 0 && ids[j - 1] > ids[j]; --j) (ids[j - 1], ids[j]) = (ids[j], ids[j - 1]);
+        for (uint8 i; i < n; ++i) {
+            ids[i] = _mldsaUA(seed0 + i);
+        }
+        for (uint256 i = 1; i < n; ++i) {
+            for (uint256 j = i; j > 0 && ids[j - 1] > ids[j]; --j) {
+                (ids[j - 1], ids[j]) = (ids[j], ids[j - 1]);
+            }
+        }
         bytes memory d = abi.encodePacked(uint16(n), uint16(n));
         IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](n);
         for (uint16 i; i < n; ++i) {
@@ -877,8 +1065,12 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     function _burnH(bytes32 from, bytes memory auth, bytes memory proof) internal view returns (bytes memory) {
-        bytes memory pl = bytes.concat(abi.encode(uint256(0), block.number + 5, uint256(0), from, alice), _blob(5, PqzCt.CT));
-        return abi.encodeCall(IPqzToken.mtxUnshield, (_bs(pl), 1, bytes32(uint256(uint160(0xD00D))), proof, UACall.auth(from, auth), "", noVerdict()));
+        bytes memory pl =
+            bytes.concat(abi.encode(uint256(0), block.number + 5, uint256(0), from, alice), _blob(5, PqzCt.CT));
+        return abi.encodeCall(
+            IPqzToken.mtxUnshield,
+            (_bs(pl), 1, bytes32(uint256(uint160(0xD00D))), proof, UACall.auth(from, auth), "", noVerdict())
+        );
     }
 
     /// The cheapest debit (burn 1) of a 2-of-2 / 3-of-3 `mldsa65` `msig` holder on both relay paths, and of the
@@ -888,7 +1080,14 @@ contract PqzStatePinGasTest is PqzSlots {
     function test_gasTable_holderRows() public {
         (hm[0], ha[0]) = _msigHolder(2, 150);
         (hm[1], ha[1]) = _msigHolder(3, 160);
-        slhFee = UACall.register(reg, UAKinds.SLHDSA128S, abi.encodePacked(keccak256("slh fee")), UACall.attrs("", 0, ""), new bytes(7_856), "");
+        slhFee = UACall.register(
+            reg,
+            UAKinds.SLHDSA128S,
+            abi.encodePacked(keccak256("slh fee")),
+            UACall.attrs("", 0, ""),
+            new bytes(7_856),
+            ""
+        );
         NormalPqzToken(address(tok)).mintToUA(slhFee, 1000, EnvKit.codeUidOf(address(tok)));
         minted += 1000;
         bytes memory fpk = new bytes(897); // fndsa512: 0x09 then every h_i = 0 < q
@@ -911,8 +1110,19 @@ contract PqzStatePinGasTest is PqzSlots {
         for (uint256 h; h < 2; ++h) {
             for (uint256 k; k < 2; ++k) {
                 viaUA = k == 1;
-                uint256 g = _row(sys, "BURN", string.concat("burn 1, ", h == 0 ? "2-of-2" : "3-of-3", " mldsa65 msig holder, ",
-                    k == 1 ? "uaExecute" : "mtxExecute"), address(tok), _burnH(hm[h], ha[h], pf), true);
+                uint256 g = _row(
+                    sys,
+                    "BURN",
+                    string.concat(
+                        "burn 1, ",
+                        h == 0 ? "2-of-2" : "3-of-3",
+                        " mldsa65 msig holder, ",
+                        k == 1 ? "uaExecute" : "mtxExecute"
+                    ),
+                    address(tok),
+                    _burnH(hm[h], ha[h], pf),
+                    true
+                );
                 // 2-of-2 fits mtxExecute only; 3-of-3 neither path
                 if (verdicts) assertEq(g <= TX_CAP, h == 0 && k == 0, "PQZH n2048 holder verdict");
             }
@@ -921,19 +1131,37 @@ contract PqzStatePinGasTest is PqzSlots {
         _feeMl = feeUA;
         feeUA = slhFee;
         feeSigLen = 7_856;
-        uint256 gs = _row(sys, "BURN", "burn 1, mldsa65 holder, slhdsa128s fee UA, uaExecute", address(tok),
-            _burnP(1, address(0xD00D), pf), true);
+        uint256 gs = _row(
+            sys,
+            "BURN",
+            "burn 1, mldsa65 holder, slhdsa128s fee UA, uaExecute",
+            address(tok),
+            _burnP(1, address(0xD00D), pf),
+            true
+        );
         if (verdicts) assertGt(gs, TX_CAP, "PQZH n2048: an slhdsa128s fee UA is over uaExecute");
         // C0-11 (b): an `fndsa512` fee UA (valid verify 2.3 M [estimate], cap 2.5 M, 666 B signature) on uaExecute: burn 1
         // and, at PQZL (PQZH has no M = 8 form), the form the finding names, op 7 M = 8 with the auditor
         feeUA = fnFee;
         feeSigLen = 666;
-        uint256 fb = _row(sys, "BURN", "burn 1, mldsa65 holder, fndsa512 fee UA, uaExecute", address(tok),
-            _burnP(1, address(0xD00D), pf), true);
+        uint256 fb = _row(
+            sys,
+            "BURN",
+            "burn 1, mldsa65 holder, fndsa512 fee UA, uaExecute",
+            address(tok),
+            _burnP(1, address(0xD00D), pf),
+            true
+        );
         if (verdicts) assertLe(fb, TX_CAP, "PQZH n2048: burn with an fndsa512 fee UA fits uaExecute");
         if (keccak256(bytes(sys)) == keccak256("pqzl")) {
-            uint256 f8 = _row(sys, "M8-on", "op 7 M = 8, auditor, mldsa65 holder, fndsa512 fee UA, uaExecute", address(tok),
-                _op7a(8, true, _pf(sys, "M8-on")), true);
+            uint256 f8 = _row(
+                sys,
+                "M8-on",
+                "op 7 M = 8, auditor, mldsa65 holder, fndsa512 fee UA, uaExecute",
+                address(tok),
+                _op7a(8, true, _pf(sys, "M8-on")),
+                true
+            );
             // measured: fits at every set even with the verify at its 2.5 M cap (+ 0.2 M); the review's "about 4.4 M" is not
             // reproduced (the fndsa512 verifier cap bounds the verify at 2.5 M)
             assertLe(f8 + 200_000, TX_CAP, "op 7 M = 8 + fndsa512 fee UA");
@@ -947,8 +1175,15 @@ contract PqzStatePinGasTest is PqzSlots {
     function _discRow(string memory sys, uint8 kd, bytes32 ref, uint256 leg, string memory entry) internal {
         string memory kn = kd == 0 ? "SENDER" : kd == 1 ? "RECEIVER" : "AUDITOR";
         string memory key = string.concat("DISCLOSE-", kn);
-        bytes memory d = abi.encodeWithSignature("verifyTransferAmount(bytes32,uint256,uint256,uint8,uint64,bytes)", ref, leg, 1, kd,
-            uint64(0), _pf(sys, key));
+        bytes memory d = abi.encodeWithSignature(
+            "verifyTransferAmount(bytes32,uint256,uint256,uint8,uint64,bytes)",
+            ref,
+            leg,
+            1,
+            kd,
+            uint64(0),
+            _pf(sys, key)
+        );
         _row(sys, key, string.concat("disclosure ", kn, ", ", entry, " (verifyTransferAmount)"), address(tok), d, false);
     }
 
@@ -960,11 +1195,19 @@ contract PqzStatePinGasTest is PqzSlots {
         _row(sys, "REGISTER", "register (UARegistry.register: mldsa65 UA with a PQZ key)", address(r), d, false);
         PqzKeyVerifier v = h ? verH : verL;
         d = abi.encodeCall(v.verifyPop, (_pk(60), bytes32(uint256(1)), proof));
-        _row(sys, "REGISTER", "register: the R_REG verifyPop call alone (what the PQZ_MLWE cap must cover)", address(v), d, false);
+        _row(
+            sys,
+            "REGISTER",
+            "register: the R_REG verifyPop call alone (what the PQZ_MLWE cap must cover)",
+            address(v),
+            d,
+            false
+        );
     }
 
     function _row(string memory sys, string memory key, string memory what, address to, bytes memory data, bool relay)
-        internal returns (uint256)
+        internal
+        returns (uint256)
     {
         string memory k = string.concat(".", sys, "['", key, "']");
         uint256 row = vm.parseJsonUint(gj, string.concat(k, ".row"));
@@ -986,21 +1229,61 @@ contract PqzStatePinGasTest is PqzSlots {
         return reg;
     }
 
-    function _rowLog(string memory sys, string memory what, bytes memory data, uint256 pqzGas, uint256 exec, uint256 reg,
-        uint256 st) internal view
-    {
+    function _rowLog(
+        string memory sys,
+        string memory what,
+        bytes memory data,
+        uint256 pqzGas,
+        uint256 exec,
+        uint256 reg,
+        uint256 st
+    ) internal view {
         uint256 n = data.length;
         uint256 z;
-        for (uint256 i; i < n; ++i) if (data[i] == 0) ++z;
+        for (uint256 i; i < n; ++i) {
+            if (data[i] == 0) ++z;
+        }
         uint256 std = 4 * z + 16 * (n - z);
         uint256 floor = 15_000 + 64 * n;
         uint256 model = 15_000 + std + exec + pqzGas;
-        console2.log(string.concat("GAS ", PqzSet.NAME, " ", sys, viaUA ? "-ua" : "", " | ", what, " | calldata ", vm.toString(n), " (zero ",
-            vm.toString(z), ") | std ", vm.toString(std), " | floor ", vm.toString(floor)));
-        console2.log(string.concat("  | pqz ", vm.toString(pqzGas), " | exec ", vm.toString(exec), " | regular ",
-            vm.toString(reg), " (model ", vm.toString(model > floor ? model : floor), ") | state ", vm.toString(st),
-            " | fits 2^24 ", reg <= TX_CAP ? "yes" : "NO"));
-        if (keccak256(bytes(sys)) == keccak256("pqzl")) assertLe(reg, TX_CAP, string.concat("PQZL ", what, ": over 2^24"));
+        console2.log(
+            string.concat(
+                "GAS ",
+                PqzSet.NAME,
+                " ",
+                sys,
+                viaUA ? "-ua" : "",
+                " | ",
+                what,
+                " | calldata ",
+                vm.toString(n),
+                " (zero ",
+                vm.toString(z),
+                ") | std ",
+                vm.toString(std),
+                " | floor ",
+                vm.toString(floor)
+            )
+        );
+        console2.log(
+            string.concat(
+                "  | pqz ",
+                vm.toString(pqzGas),
+                " | exec ",
+                vm.toString(exec),
+                " | regular ",
+                vm.toString(reg),
+                " (model ",
+                vm.toString(model > floor ? model : floor),
+                ") | state ",
+                vm.toString(st),
+                " | fits 2^24 ",
+                reg <= TX_CAP ? "yes" : "NO"
+            )
+        );
+        if (keccak256(bytes(sys)) == keccak256("pqzl")) {
+            assertLe(reg, TX_CAP, string.concat("PQZL ", what, ": over 2^24"));
+        }
     }
 }
 
@@ -1021,7 +1304,9 @@ contract PqzStateTrivialRollGasTest is PqzSlots {
 
     function _gas(bytes memory data) internal returns (uint256 used) {
         (bool ok, bytes memory ret) = address(tok).call(data);
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        }
         Vm.Gas memory g = vm.lastCallGas(); // Task 7b: the call's own transaction, regular gas (state gas logged)
         used = g.gasTotalUsed;
         console2.log("  (state gas)", uint256(int256(g.gasStateUsed)));

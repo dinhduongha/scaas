@@ -17,10 +17,27 @@ pub fn set_verifier_fee_type() -> String {
 }
 
 /// `hashStruct(UASetVerifierFee)`: `next` the new fee; the envelope's `fee` the relay fee.
-pub fn set_verifier_fee_struct_hash(e: &Envelope, target: &[u8; 20], next: u64, chain_uid: &[u8; 32]) -> [u8; 32] {
+pub fn set_verifier_fee_struct_hash(
+    e: &Envelope,
+    target: &[u8; 20],
+    next: u64,
+    chain_uid: &[u8; 32],
+) -> [u8; 32] {
     let canon = |bound: bool, a: &[u8; 20]| if bound { address_word(a) } else { [0; 32] };
-    let w = [keccak256(set_verifier_fee_type().as_bytes()), e.from, address_word(target), word(next), *chain_uid, e.batch, e.nonce,
-        e.valid_until, word(e.mode as u64), canon(e.mode & 1 != 0, &e.relayer), e.fee, canon(e.mode & 2 != 0, &e.fee_recipient)];
+    let w = [
+        keccak256(set_verifier_fee_type().as_bytes()),
+        e.from,
+        address_word(target),
+        word(next),
+        *chain_uid,
+        e.batch,
+        e.nonce,
+        e.valid_until,
+        word(e.mode as u64),
+        canon(e.mode & 1 != 0, &e.relayer),
+        e.fee,
+        canon(e.mode & 2 != 0, &e.fee_recipient),
+    ];
     keccak(&w.iter().map(|x| &x[..]).collect::<Vec<_>>())
 }
 
@@ -31,8 +48,18 @@ pub fn digest(domain_separator: &[u8; 32], struct_hash: &[u8; 32]) -> [u8; 32] {
 
 /// A debit's fee word (header word 256): `txFee = confidentialFee` with a beneficiary else 0, plus the verifier fee in force
 /// (`OFFCHAIN`; 0 on `PRECOMPILE`), plus `legs · decoyFee` (op 7). `None` at `2^64` or more, as the token refuses it.
-pub fn pqz_fee_word(confidential_fee: u64, with_beneficiary: bool, verifier_fee: u64, legs: u64, decoy_fee: u64) -> Option<u64> {
-    let tx = if with_beneficiary { confidential_fee as u128 } else { 0 };
+pub fn pqz_fee_word(
+    confidential_fee: u64,
+    with_beneficiary: bool,
+    verifier_fee: u64,
+    legs: u64,
+    decoy_fee: u64,
+) -> Option<u64> {
+    let tx = if with_beneficiary {
+        confidential_fee as u128
+    } else {
+        0
+    };
     let w = tx + verifier_fee as u128 + legs as u128 * decoy_fee as u128;
     u64::try_from(w).ok()
 }

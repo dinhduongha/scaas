@@ -15,8 +15,18 @@ pub(crate) struct Params {
     pub sig: usize,
 }
 
-pub(crate) const FNDSA512: Params = Params { logn: 9, pk: 897, sk: 1281, sig: 666 };
-pub(crate) const FNDSA1024: Params = Params { logn: 10, pk: 1793, sk: 2305, sig: 1280 };
+pub(crate) const FNDSA512: Params = Params {
+    logn: 9,
+    pk: 897,
+    sk: 1281,
+    sig: 666,
+};
+pub(crate) const FNDSA1024: Params = Params {
+    logn: 10,
+    pk: 1793,
+    sk: 2305,
+    sig: 1280,
+};
 /// The keygen seed (clientkeys' 48-byte `pqSeed`).
 #[cfg_attr(not(feature = "wallet"), allow(dead_code))]
 pub(crate) const SEED_LEN: usize = 48;
@@ -34,11 +44,35 @@ mod ffi {
     use core::ffi::c_int;
     extern "C" {
         pub fn scaas_ua_fndsa512_keypair(pk: *mut u8, sk: *mut u8, seed: *const u8) -> c_int;
-        pub fn scaas_ua_fndsa512_sign(sig: *mut u8, m: *const u8, mlen: usize, sk: *const u8, rnd: *const u8) -> c_int;
-        pub fn scaas_ua_fndsa512_verify(sig: *const u8, siglen: usize, m: *const u8, mlen: usize, pk: *const u8) -> c_int;
+        pub fn scaas_ua_fndsa512_sign(
+            sig: *mut u8,
+            m: *const u8,
+            mlen: usize,
+            sk: *const u8,
+            rnd: *const u8,
+        ) -> c_int;
+        pub fn scaas_ua_fndsa512_verify(
+            sig: *const u8,
+            siglen: usize,
+            m: *const u8,
+            mlen: usize,
+            pk: *const u8,
+        ) -> c_int;
         pub fn scaas_ua_fndsa1024_keypair(pk: *mut u8, sk: *mut u8, seed: *const u8) -> c_int;
-        pub fn scaas_ua_fndsa1024_sign(sig: *mut u8, m: *const u8, mlen: usize, sk: *const u8, rnd: *const u8) -> c_int;
-        pub fn scaas_ua_fndsa1024_verify(sig: *const u8, siglen: usize, m: *const u8, mlen: usize, pk: *const u8) -> c_int;
+        pub fn scaas_ua_fndsa1024_sign(
+            sig: *mut u8,
+            m: *const u8,
+            mlen: usize,
+            sk: *const u8,
+            rnd: *const u8,
+        ) -> c_int;
+        pub fn scaas_ua_fndsa1024_verify(
+            sig: *const u8,
+            siglen: usize,
+            m: *const u8,
+            mlen: usize,
+            pk: *const u8,
+        ) -> c_int;
     }
 }
 
@@ -53,8 +87,12 @@ pub(crate) fn keypair(p: Params, seed: &[u8], pk: &mut [u8], sk: &mut [u8]) -> b
         // SAFETY: the three buffers have the lengths the C code reads and writes (checked above)
         let rc = unsafe {
             match p.logn {
-                9 => ffi::scaas_ua_fndsa512_keypair(pk.as_mut_ptr(), sk.as_mut_ptr(), seed.as_ptr()),
-                10 => ffi::scaas_ua_fndsa1024_keypair(pk.as_mut_ptr(), sk.as_mut_ptr(), seed.as_ptr()),
+                9 => {
+                    ffi::scaas_ua_fndsa512_keypair(pk.as_mut_ptr(), sk.as_mut_ptr(), seed.as_ptr())
+                }
+                10 => {
+                    ffi::scaas_ua_fndsa1024_keypair(pk.as_mut_ptr(), sk.as_mut_ptr(), seed.as_ptr())
+                }
                 _ => -1,
             }
         };
@@ -76,8 +114,20 @@ pub(crate) fn sign(p: Params, sk: &[u8], m: &[u8], rnd: &[u8], sig: &mut [u8]) -
         // SAFETY: `sig`, `sk` and `rnd` have the lengths the C code reads and writes (checked above); `m` is read for `m.len()`
         let rc = unsafe {
             match p.logn {
-                9 => ffi::scaas_ua_fndsa512_sign(sig.as_mut_ptr(), m.as_ptr(), m.len(), sk.as_ptr(), rnd.as_ptr()),
-                10 => ffi::scaas_ua_fndsa1024_sign(sig.as_mut_ptr(), m.as_ptr(), m.len(), sk.as_ptr(), rnd.as_ptr()),
+                9 => ffi::scaas_ua_fndsa512_sign(
+                    sig.as_mut_ptr(),
+                    m.as_ptr(),
+                    m.len(),
+                    sk.as_ptr(),
+                    rnd.as_ptr(),
+                ),
+                10 => ffi::scaas_ua_fndsa1024_sign(
+                    sig.as_mut_ptr(),
+                    m.as_ptr(),
+                    m.len(),
+                    sk.as_ptr(),
+                    rnd.as_ptr(),
+                ),
                 _ => -1,
             }
         };
@@ -101,8 +151,20 @@ pub(crate) fn verify(p: Params, pk: &[u8], m: &[u8], sig: &[u8]) -> bool {
         // SAFETY: `pk` has the length the C code reads (checked above); `sig` and `m` are read for their lengths
         let rc = unsafe {
             match p.logn {
-                9 => ffi::scaas_ua_fndsa512_verify(sig.as_ptr(), sig.len(), m.as_ptr(), m.len(), pk.as_ptr()),
-                10 => ffi::scaas_ua_fndsa1024_verify(sig.as_ptr(), sig.len(), m.as_ptr(), m.len(), pk.as_ptr()),
+                9 => ffi::scaas_ua_fndsa512_verify(
+                    sig.as_ptr(),
+                    sig.len(),
+                    m.as_ptr(),
+                    m.len(),
+                    pk.as_ptr(),
+                ),
+                10 => ffi::scaas_ua_fndsa1024_verify(
+                    sig.as_ptr(),
+                    sig.len(),
+                    m.as_ptr(),
+                    m.len(),
+                    pk.as_ptr(),
+                ),
                 _ => -1,
             }
         };

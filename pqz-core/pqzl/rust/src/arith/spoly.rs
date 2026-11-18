@@ -30,12 +30,23 @@ pub(crate) type SPolyMat = Sparse;
 impl Sparse {
     /// `spolyvec_alloc (r, ring, nelems, nelems_max)`: empty (and sorted)
     pub(crate) fn new_vec(nelems_max: usize) -> Sparse {
-        Sparse { slots: Vec::new(), nelems: 0, nelems_max, sorted: true, nrows: 0, ncols: 0 }
+        Sparse {
+            slots: Vec::new(),
+            nelems: 0,
+            nelems_max,
+            sorted: true,
+            nrows: 0,
+            ncols: 0,
+        }
     }
 
     /// `spolymat_alloc (r, ring, nrows, ncols, nelems_max)`
     pub(crate) fn new_mat(nrows: usize, ncols: usize, nelems_max: usize) -> Sparse {
-        Sparse { nrows, ncols, ..Sparse::new_vec(nelems_max) }
+        Sparse {
+            nrows,
+            ncols,
+            ..Sparse::new_vec(nelems_max)
+        }
     }
 
     pub(crate) fn nelems(&self) -> usize {
@@ -164,7 +175,12 @@ impl Sparse {
     }
 
     /// `add (r, a, b, crt)`: the merge of two sorted operands (`r` distinct from both), equal keys added
-    pub(crate) fn add(r: &mut Sparse, a: &mut Sparse, b: &mut Sparse, crt: bool) -> Result<(), Error> {
+    pub(crate) fn add(
+        r: &mut Sparse,
+        a: &mut Sparse,
+        b: &mut Sparse,
+        crt: bool,
+    ) -> Result<(), Error> {
         if !(a.sorted && b.sorted) {
             return Err(Error::Internal);
         }
@@ -200,7 +216,11 @@ impl Sparse {
     }
 
     /// `r[k] = f(b[k])` over `b`'s entries (`r` distinct from `b`, `r.nelems_max >= b.nelems_max`)
-    fn map(r: &mut Sparse, b: &mut Sparse, mut f: impl FnMut(&mut Poly) -> Poly) -> Result<(), Error> {
+    fn map(
+        r: &mut Sparse,
+        b: &mut Sparse,
+        mut f: impl FnMut(&mut Poly) -> Poly,
+    ) -> Result<(), Error> {
         if r.nelems_max < b.nelems_max {
             return Err(Error::Internal);
         }
@@ -244,8 +264,12 @@ mod tests {
         assert_eq!(m.insert_rc(1, 1).err(), Some(Error::Internal));
         m.sort().unwrap();
         assert_eq!(m.sort(), Err(Error::Internal));
-        assert_eq!((0..3).map(|i| (m.row(i), m.col(i), m.get_elem(i).v[0])).collect::<Vec<_>>(),
-                   [(0, 1, 1), (0, 2, 2), (2, 0, 6)]);
+        assert_eq!(
+            (0..3)
+                .map(|i| (m.row(i), m.col(i), m.get_elem(i).v[0]))
+                .collect::<Vec<_>>(),
+            [(0, 1, 1), (0, 2, 2), (2, 0, 6)]
+        );
         assert!(!m.is_upperdiag());
         m.set_empty();
         m.insert_rc(1, 1).unwrap();

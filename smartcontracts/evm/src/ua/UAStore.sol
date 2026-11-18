@@ -207,7 +207,11 @@ library UAStore {
 
     /// The blob of the structure `s` with its trailer (MM-6), in one allocation for any count (P2-4: never `bytes.concat` in a
     /// loop): what `updateMsig` stores, and the form a gen-1 structure takes here (`msigOf` + `msigStateOf`).
-    function blob(IUARegistry.MsigStructure memory s, uint256 enabled, uint64 version) internal pure returns (bytes memory d) {
+    function blob(IUARegistry.MsigStructure memory s, uint256 enabled, uint64 version)
+        internal
+        pure
+        returns (bytes memory d)
+    {
         IUARegistry.MsigMember[] memory m = s.members;
         uint256 n = m.length;
         uint256 len = 44 + 36 * n;
@@ -349,7 +353,10 @@ library UAStore {
         try IUARegistry(target).requireAuthorized(id, purposeTag, digest, auth) {
             return true;
         } catch (bytes memory err) {
-            if ((err.length == 4 && bytes4(err) == UAKinds.UAVerifyGas.selector) || (err.length == 0 && gasleft() < g / 63)) {
+            if (
+                (err.length == 4 && bytes4(err) == UAKinds.UAVerifyGas.selector)
+                    || (err.length == 0 && gasleft() < g / 63)
+            ) {
                 revert UAKinds.UAVerifyGas();
             }
             return false;

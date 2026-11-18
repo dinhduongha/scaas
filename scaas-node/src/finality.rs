@@ -1,4 +1,4 @@
-//! Cổng finality — thuần, không I/O. Odoo chỉ thấy log trong vùng `safe_head` trả về.
+//! Cổng finality — thuần, không I/O. ExternalPull chỉ thấy log trong vùng `safe_head` trả về.
 #[cfg(test)]
 use alloy::primitives::B256;
 

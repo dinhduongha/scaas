@@ -193,7 +193,12 @@ impl ProofParts {
     /// the Gaussian parts and their log2 stdev, in encoding order
     fn zs(&self) -> [(&PolyVec, u32); 4] {
         let qm = self.p.quad_eval.quad_many;
-        [(&self.z1, qm.log2stdev1), (&self.z21, qm.log2stdev2), (&self.z3, self.p.log2stdev3), (&self.z4, self.p.log2stdev4)]
+        [
+            (&self.z1, qm.log2stdev1),
+            (&self.z21, qm.log2stdev2),
+            (&self.z3, self.p.log2stdev3),
+            (&self.z4, self.p.log2stdev4),
+        ]
     }
 }
 
@@ -247,7 +252,11 @@ impl Rd<'_> {
                         while self.bit()? == 0 {
                             z += 1;
                         }
-                        if z % 2 == 0 { (z + 4) / 2 } else { -(z + 3) / 2 }
+                        if z % 2 == 0 {
+                            (z + 4) / 2
+                        } else {
+                            -(z + 3) / 2
+                        }
                     }
                 };
                 p.put(j, &Int::from_i64(1, e));
@@ -266,7 +275,11 @@ impl Rd<'_> {
                 while self.bit()? == 1 {
                     nones += 1;
                 }
-                let z1 = if nones % 2 == 0 { -nones / 2 } else { (nones + 1) / 2 };
+                let z1 = if nones % 2 == 0 {
+                    -nones / 2
+                } else {
+                    (nones + 1) / 2
+                };
                 let mut z0 = self.bits(la)? as i64;
                 if z0 & (1 << (la - 1)) != 0 {
                     z0 |= !0i64 << la; // sign-extend
@@ -353,7 +366,11 @@ impl Wr {
 pub(crate) fn reduced(a: &Poly, centred: bool) -> Poly {
     let mut t = a.clone();
     let mut t = Poly::mod_(&mut t);
-    if centred { Poly::redc(&mut t) } else { Poly::redp(&mut t) }
+    if centred {
+        Poly::redc(&mut t)
+    } else {
+        Poly::redp(&mut t)
+    }
 }
 
 /// `coder_enc_grandom`'s split of z: (z0 in [-ao/2, ao/2), z1) with z = ao z1 + z0, ao = 2^la
@@ -368,7 +385,11 @@ pub(crate) fn split(z: i64, la: u32) -> (i64, i64) {
 
 /// the unary length of z1 (`nones`)
 pub(crate) fn nones(z1: i64) -> u64 {
-    if z1 <= 0 { (-2 * z1) as u64 } else { (2 * z1 - 1) as u64 }
+    if z1 <= 0 {
+        (-2 * z1) as u64
+    } else {
+        (2 * z1 - 1) as u64
+    }
 }
 
 /// bits of `coder_enc_ghint` for e
@@ -397,8 +418,10 @@ pub(crate) fn encode_proof(f: &ProofParts, cap: usize) -> Result<Vec<u8>, Error>
         h.fromcrt();
         h
     };
-    let mut bits =
-        d * ((f.t_b.len() + f.h.len()) as u64 * log2q as u64 + f.t_a1.len() as u64 * mt as u64 + qm.log2omega as u64);
+    let mut bits = d
+        * ((f.t_b.len() + f.h.len()) as u64 * log2q as u64
+            + f.t_a1.len() as u64 * mt as u64
+            + qm.log2omega as u64);
     for h in f.hint.iter() {
         let h = hint(h);
         bits += (0..D).map(|j| ghint_bits(h.c(j).get_i64())).sum::<u64>();
@@ -406,18 +429,25 @@ pub(crate) fn encode_proof(f: &ProofParts, cap: usize) -> Result<Vec<u8>, Error>
     for (z, log2o) in f.zs() {
         for x in z.iter() {
             let x = reduced(x, true);
-            bits += (0..D).map(|j| nones(split(x.c(j).get_i64(), log2o + 1).1) + 1 + log2o as u64 + 1).sum::<u64>();
+            bits += (0..D)
+                .map(|j| nones(split(x.c(j).get_i64(), log2o + 1).1) + 1 + log2o as u64 + 1)
+                .sum::<u64>();
         }
     }
     if bits / 8 + 1 > cap as u64 {
         return Err(Error::Input);
     }
     let mut b = Vec::new();
-    b.try_reserve_exact(bits as usize / 8 + 1).map_err(|_| Error::Memory)?;
+    b.try_reserve_exact(bits as usize / 8 + 1)
+        .map_err(|_| Error::Memory)?;
     b.resize(bits as usize / 8 + 1, 0);
     let mut w = Wr { b, pos: 0 };
     let mut ok = true;
-    for (v, m, n) in [(&f.t_b, RING_Q, log2q), (&f.h, RING_Q, log2q), (&f.t_a1, Int::from_limbs(&[1 << mt], 0), mt)] {
+    for (v, m, n) in [
+        (&f.t_b, RING_Q, log2q),
+        (&f.h, RING_Q, log2q),
+        (&f.t_a1, Int::from_limbs(&[1 << mt], 0), mt),
+    ] {
         for x in v.iter() {
             let x = reduced(x, false);
             for j in 0..D {
@@ -478,9 +508,17 @@ pub(crate) fn encode_proof(f: &ProofParts, cap: usize) -> Result<Vec<u8>, Error>
 /// any other kind re-encodes only) and re-encode. `Ok(None)` where C returns 0: an unknown code, a proof that does
 /// not decode, an encoding over 2 MAX_PROOF bytes (the hook's buffer) or a fixed-width value out of range.
 #[cfg(feature = "test-hooks")]
-pub(crate) fn test_mutate(code: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Result<Option<Vec<u8>>, Error> {
+pub(crate) fn test_mutate(
+    code: u8,
+    proof: &[u8],
+    kind: u32,
+    r1: u64,
+    r2: u64,
+) -> Result<Option<Vec<u8>>, Error> {
     use crate::arith::ntt::Q;
-    let Some(p) = crate::rel::tbox_by_code(code) else { return Ok(None) };
+    let Some(p) = crate::rel::tbox_by_code(code) else {
+        return Ok(None);
+    };
     let mut f = match decode_proof(p, proof) {
         Err(Error::Input) => return Ok(None),
         r => r?,
@@ -496,27 +534,61 @@ pub(crate) fn test_mutate(code: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -
     let add = |x: &mut Poly, j: usize, v: i64| set(x, j, get(x, j) + v);
     match kind {
         0 => f.z1.swap(ix(m1), ((r1 / m1 + 1 + r1 % m1) % m1) as usize),
-        1 => f.z21.swap(ix(m2r), ((r1 / m2r + 1 + r1 % m2r) % m2r) as usize),
+        1 => f
+            .z21
+            .swap(ix(m2r), ((r1 / m2r + 1 + r1 % m2r) % m2r) as usize),
         2 => core::mem::swap(&mut f.z3[ix(4)], &mut f.z4[((r1 >> 8) % 4) as usize]),
         3 => add(&mut f.z1[ix(m1)], c64, sg),
         // 4 / 6: large fixed magnitudes, the same at every set (as C: the norm check or the equations reject them)
-        4 => set(&mut f.z1[ix(m1)], c64, sg * ((1 << 25) + (r1 % 1000) as i64)),
-        5 => set(&mut f.z4[ix(4)], c64, sg * (p.bz4.get_i64() + ((r1 >> 8) as i64) % 2)),
+        4 => set(
+            &mut f.z1[ix(m1)],
+            c64,
+            sg * ((1 << 25) + (r1 % 1000) as i64),
+        ),
+        5 => set(
+            &mut f.z4[ix(4)],
+            c64,
+            sg * (p.bz4.get_i64() + ((r1 >> 8) as i64) % 2),
+        ),
         6 => add(&mut f.z3[ix(4)], c64, sg * (1 << 20)),
-        7 => add(&mut f.h[ix(2)], if r1 & 4 != 0 { 0 } else if r1 & 8 != 0 { D / 2 } else { c64 }, sg),
-        8 => add(&mut f.hint[ix(km)], c64, sg * (1 + ((r1 >> 9) as i64) % 1000)),
+        7 => add(
+            &mut f.h[ix(2)],
+            if r1 & 4 != 0 {
+                0
+            } else if r1 & 8 != 0 {
+                D / 2
+            } else {
+                c64
+            },
+            sg,
+        ),
+        8 => add(
+            &mut f.hint[ix(km)],
+            c64,
+            sg * (1 + ((r1 >> 9) as i64) % 1000),
+        ),
         9 => {
             let v = (get(&f.c, c64) + 8 + 1 + (r1 % 16) as i64) % 17 - 8;
             set(&mut f.c, c64, v)
         }
-        10 => set(&mut f.t_b[ix((tb.l + tb.lext) as u64)], c64, (r1 % Q) as i64),
-        11 => set(&mut f.t_a1[ix(km)], c64, ((r1 >> 8) % (1 << (crate::params::set::LOG2Q - p.quad_eval.quad_many.dcompress.d))) as i64),
+        10 => set(
+            &mut f.t_b[ix((tb.l + tb.lext) as u64)],
+            c64,
+            (r1 % Q) as i64,
+        ),
+        11 => set(
+            &mut f.t_a1[ix(km)],
+            c64,
+            ((r1 >> 8) % (1 << (crate::params::set::LOG2Q - p.quad_eval.quad_many.dcompress.d)))
+                as i64,
+        ),
         12 => add(&mut f.z21[ix(m2r)], c64, sg),
         13 => f.h.swap(0, 1),
         14 => add(&mut f.z3[ix(4)], c64, sg),
         15 => {
             // tg (B-1's binding test, fs_bind): coefficient +1 mod q of one poly of the commitment to g
-            let x = &mut f.t_b[p.quad_eval.quad_eval.l as usize + ix(p.quad_eval.lambda as u64 / 2)];
+            let x =
+                &mut f.t_b[p.quad_eval.quad_eval.l as usize + ix(p.quad_eval.lambda as u64 / 2)];
             set(x, c64, (get(x, c64) + 1) % Q as i64)
         }
         _ => {}

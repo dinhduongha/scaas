@@ -20,9 +20,7 @@ library ZetherKeys {
         uint256 k = ZetherTranscript.hashToScalar(keccak256(abi.encode("test-nonce", x, m)), r);
         bytes memory y = pub(x, bls);
         bytes memory rPt = pub(k, bls);
-        uint256 e = ZetherTranscript.hashToScalar(
-            keccak256(abi.encodePacked(tag, rPt, y, m)), r
-        );
+        uint256 e = ZetherTranscript.hashToScalar(keccak256(abi.encodePacked(tag, rPt, y, m)), r);
         return abi.encodePacked(rPt, addmod(k, mulmod(e, x, r), r));
     }
 }

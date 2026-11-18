@@ -43,7 +43,11 @@ abstract contract ZetherMsmCorpus is Test {
         prover = new ZetherProver();
     }
 
-    function _header(bytes32 op, bytes32 psid, uint256 fee, uint256 amount, address to) internal view returns (bytes memory) {
+    function _header(bytes32 op, bytes32 psid, uint256 fee, uint256 amount, address to)
+        internal
+        view
+        returns (bytes memory)
+    {
         return bytes.concat(
             abi.encode(op, psid, block.chainid, keccak256("msm chain"), address(0x70CE), keccak256("ZTX_V1_DIRECT")),
             abi.encode(bytes32(0), uint256(7), uint256(3), fee, bytes32(uint256(0xBE))),
@@ -61,7 +65,8 @@ abstract contract ZetherMsmCorpus is Test {
     function _transferSt(Case memory k) internal view returns (bytes memory) {
         (bytes memory cAcc, bytes memory dAcc) = _acc(k.bal);
         bytes memory ya = k.aud ? v.g1MulBase(XA) : v.identity();
-        bytes memory head = bytes.concat(_header(OP_T, v.proofSystemId(), k.fee, 0, address(0)), v.g1MulBase(XF), v.g1MulBase(XT));
+        bytes memory head =
+            bytes.concat(_header(OP_T, v.proofSystemId(), k.fee, 0, address(0)), v.g1MulBase(XF), v.g1MulBase(XT));
         return bytes.concat(head, ya, cAcc, dAcc, _cts(ya, k.amt));
     }
 
@@ -78,7 +83,8 @@ abstract contract ZetherMsmCorpus is Test {
 
     function _proveTransfer(Case memory k, bytes memory st) internal view returns (bytes memory) {
         uint256 bPrime = addmod(k.bal, R - addmod(k.wit, k.fee, R), R);
-        return prover.proveTransfer(v, st, ZetherProver.TransferWitness(XF, k.wit, S, bPrime, 0x77, 0x88, keccak256("t")));
+        return
+            prover.proveTransfer(v, st, ZetherProver.TransferWitness(XF, k.wit, S, bPrime, 0x77, 0x88, keccak256("t")));
     }
 
     function _transfer(bool aud) internal view returns (bytes memory, bytes memory) {
@@ -121,7 +127,9 @@ abstract contract ZetherMsmCorpus is Test {
         bytes memory yf = v.g1MulBase(XF);
         (, bytes memory dOut, bytes memory cDeb,) = prover.ciphertexts(v, yf, yf, ya, total, S);
         (bytes memory cAcc, bytes memory dAcc) = _acc(B);
-        return bytes.concat(_header(OP_M, v.proofSystemIdMulti(), FEE, 0, address(0)), yf, ya, bytes.concat(cAcc, dAcc, dOut, cDeb));
+        return bytes.concat(
+            _header(OP_M, v.proofSystemIdMulti(), FEE, 0, address(0)), yf, ya, bytes.concat(cAcc, dAcc, dOut, cDeb)
+        );
     }
 
     function _multi(uint256 m, bool aud) internal view returns (bytes memory st, bytes memory pr) {
@@ -137,14 +145,19 @@ abstract contract ZetherMsmCorpus is Test {
     }
 
     function _proveMulti(bytes memory st, uint256[] memory vs, uint256 total, uint256 over)
-        internal view returns (bytes memory)
+        internal
+        view
+        returns (bytes memory)
     {
         uint256 m = vs.length;
         uint256[] memory gv = new uint256[](m);
         uint256[] memory ts = new uint256[](m);
-        for (uint256 j; j < m; ++j) (gv[j], ts[j]) = (0x1234 + 7 * j, T0 + j);
-        return prover.proveTransferMulti(v, st,
-            ZetherProver.MultiWitness(XF, S, vs, ts, B - FEE - total + over, gv, 0x5678, keccak256("m")));
+        for (uint256 j; j < m; ++j) {
+            (gv[j], ts[j]) = (0x1234 + 7 * j, T0 + j);
+        }
+        return prover.proveTransferMulti(
+            v, st, ZetherProver.MultiWitness(XF, S, vs, ts, B - FEE - total + over, gv, 0x5678, keccak256("m"))
+        );
     }
 
     function _word(bytes memory a, uint256 off) internal pure returns (uint256 w) {
@@ -156,7 +169,9 @@ abstract contract ZetherMsmCorpus is Test {
     }
 
     function _setPoint(bytes memory a, uint256 off, bytes memory pt) internal pure {
-        for (uint256 i; i < P; i += 32) _setWord(a, off + i, _word(pt, i));
+        for (uint256 i; i < P; i += 32) {
+            _setWord(a, off + i, _word(pt, i));
+        }
     }
 
     function _point(bytes memory a, uint256 off) internal pure returns (bytes memory pt) {
@@ -169,7 +184,9 @@ abstract contract ZetherMsmCorpus is Test {
 
     function _at(bytes memory a, uint256 off, uint256 n) internal pure returns (bytes memory out) {
         out = new bytes(n);
-        for (uint256 i; i < n; i += 32) _setWord(out, i, _word(a, off + i));
+        for (uint256 i; i < n; i += 32) {
+            _setWord(out, i, _word(a, off + i));
+        }
     }
 
     /// @dev `(0, 2)`: on the curve, order 3 (`y² = x³ + 4`, and `x = 0` is an inflection), outside the `r`-subgroup.

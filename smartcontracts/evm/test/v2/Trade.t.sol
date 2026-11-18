@@ -211,7 +211,9 @@ contract TradeTest is V2Fixture {
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
         o.relayer = address(0x5E1);
         bytes memory sig = _sign(t, o);
-        vm.expectRevert(abi.encodeWithSelector(ITradeToken.WrongRelayer.selector, t.tradeOrderDigest(DexLegs.ua(o)), relayer));
+        vm.expectRevert(
+            abi.encodeWithSelector(ITradeToken.WrongRelayer.selector, t.tradeOrderDigest(DexLegs.ua(o)), relayer)
+        );
         t.mtxTrade(DexLegs.ua(o), DexLegs.sigOf(sig), _fill(600, 1200, 0));
         o = _order(1000, 2000);
         o.validUntil = block.timestamp - 1;
@@ -301,14 +303,25 @@ contract TradeTest is V2Fixture {
         bytes4[3] memory sels = [t.mtxTrade.selector, t.mtxCancelOrder.selector, t.mtxInvalidateNonces.selector];
         (bytes4[] memory s,,) = t.mtxSelectors();
         for (uint256 i; i < sels.length; ++i) {
-            for (uint256 j; j < s.length; ++j) assertTrue(s[j] != sels[i]);
+            for (uint256 j; j < s.length; ++j) {
+                assertTrue(s[j] != sels[i]);
+            }
         }
     }
 
     function _domainSep() internal view returns (bytes32) {
-        return keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256("SCaaS MetaToken"), keccak256("1"), block.chainid, address(t), UID_));
+        return keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256("SCaaS MetaToken"),
+                keccak256("1"),
+                block.chainid,
+                address(t),
+                UID_
+            )
+        );
     }
 
     function _typed(bytes32 structHash) internal view returns (bytes32) {
@@ -323,17 +336,20 @@ contract TradeTest is V2Fixture {
         bytes32 order = keccak256(
             "TradeOrder(address from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,"
             "uint256 fee,address relayer,address dex,address destination,uint8 flags,uint256 batch,uint256 nonce,"
-            "uint256 validUntil)");
+            "uint256 validUntil)"
+        );
         assertEq(TradeLib.TRADE_ORDER_TYPEHASH, order);
         assertEq(order, 0xffe350903bdef674d7c33448fa7ce9b1cd306aa838f3ce1bbdd82aca46773f5d);
         bytes32 uaOrder = keccak256(
             "UATradeOrder(bytes32 from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,"
             "uint256 fee,address relayer,address dex,bytes32 destination,uint8 flags,uint256 batch,uint256 nonce,"
-            "uint256 validUntil)");
+            "uint256 validUntil)"
+        );
         bytes32 cancel = keccak256(
             "CancelUAOrder(UATradeOrder order)UATradeOrder(bytes32 from,address receiveToken,uint256 amount,"
             "uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,bytes32 destination,uint8 flags,"
-            "uint256 batch,uint256 nonce,uint256 validUntil)");
+            "uint256 batch,uint256 nonce,uint256 validUntil)"
+        );
         bytes32 inv = keccak256("UAInvalidateNonces(bytes32 from,uint256 batch,uint256 minNonce)");
         assertEq(TradeLib.UA_TRADE_ORDER_TYPEHASH, uaOrder);
         assertEq(TradeLib.CANCEL_UA_ORDER_TYPEHASH, cancel);
@@ -342,11 +358,29 @@ contract TradeTest is V2Fixture {
         assertEq(cancel, 0x47eb46c764008ffa5b8163f980941c277975e3b3ff8c8b3daf0462dd6a1eaeba);
         assertEq(inv, 0xc42c79a4d8ff5749bb2f0baa4620b8eeb79ad4e37eaa43d518b1f4ceb0319a60);
         ITradeToken.UATradeOrder memory o = DexLegs.ua(_order(1000, 2000));
-        bytes32 sh = keccak256(abi.encode(uaOrder, o.from, o.receiveToken, o.amount, o.receiveAmount, o.minFill, o.fee,
-            o.relayer, o.dex, o.destination, o.flags, o.batch, o.nonce, o.validUntil));
+        bytes32 sh = keccak256(
+            abi.encode(
+                uaOrder,
+                o.from,
+                o.receiveToken,
+                o.amount,
+                o.receiveAmount,
+                o.minFill,
+                o.fee,
+                o.relayer,
+                o.dex,
+                o.destination,
+                o.flags,
+                o.batch,
+                o.nonce,
+                o.validUntil
+            )
+        );
         assertEq(t.tradeOrderDigest(o), _typed(sh));
         assertEq(t.cancelOrderDigest(o), _typed(keccak256(abi.encode(cancel, sh))));
-        assertEq(t.invalidateNoncesDigest(o.from, 3, 4), _typed(keccak256(abi.encode(inv, o.from, uint256(3), uint256(4)))));
+        assertEq(
+            t.invalidateNoncesDigest(o.from, 3, 4), _typed(keccak256(abi.encode(inv, o.from, uint256(3), uint256(4))))
+        );
     }
 
     // ------------------------------------------------------------------ the typed forms (typed-signing C6, TS-D19)
@@ -475,7 +509,8 @@ contract TradeTest is V2Fixture {
         bytes[3] memory data = [
             abi.encodeCall(t.mtxTrade, (DexLegs.ua(o), DexLegs.sigOf(_sign(t, o)), _fill(600, 1200, 0))),
             abi.encodeCall(t.mtxCancelOrder, (DexLegs.ua(o), DexLegs.sigOf(_sign(t, o)))),
-            abi.encodeCall(t.mtxInvalidateNonces, (DexLegs.pad(alice), 1, 2, DexLegs.sigOf(_sign(t, o))))];
+            abi.encodeCall(t.mtxInvalidateNonces, (DexLegs.pad(alice), 1, 2, DexLegs.sigOf(_sign(t, o))))
+        ];
         for (uint256 i; i < 3; ++i) {
             MetaTxLib.MetaTransaction memory m = _call(alice, data[i], i + 1, RR);
             bytes memory sig = _signCall(ALICE_PK, address(t), m);
@@ -490,7 +525,9 @@ contract TradeTest is V2Fixture {
         bytes32 nsToken = 0x83083067f3d1caf66741d4eeefa9d3f4f0e5b0793677731d6fee7e67b774ac00;
         bytes32 nsMeta = 0x06b01547c739946503c06c80685cc72ae2fec5074fd602f84cd2fa888722ac00;
         bytes32[12] memory before_;
-        for (uint256 i; i < 12; i++) before_[i] = vm.load(address(t), bytes32(uint256(nsToken) + i));
+        for (uint256 i; i < 12; i++) {
+            before_[i] = vm.load(address(t), bytes32(uint256(nsToken) + i));
+        }
         bytes32 metaBefore = vm.load(address(t), nsMeta);
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
         bytes32 h = t.tradeOrderDigest(DexLegs.ua(o));

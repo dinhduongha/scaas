@@ -27,7 +27,16 @@ pub struct Breaker {
 
 impl Breaker {
     pub fn new(cfg: BreakerCfg) -> Self {
-        Self { cfg, fees: VecDeque::new(), spiking: false, window: 0, spent: 0, budget_warned: false, balance: None, fees_unread: 0 }
+        Self {
+            cfg,
+            fees: VecDeque::new(),
+            spiking: false,
+            window: 0,
+            spent: 0,
+            budget_warned: false,
+            balance: None,
+            fees_unread: 0,
+        }
     }
 
     /// Mẫu `baseFeePerGas` (EVM). So với trung bình 1 h của các mẫu TRƯỚC nó.
@@ -102,7 +111,10 @@ impl Breaker {
     /// Trạng thái từng cầu dao theo thứ tự `NAMES`.
     pub fn states(&mut self, now: u64) -> [bool; 3] {
         self.roll(now);
-        let budget = self.cfg.gas_budget_per_hour.is_some_and(|b| self.spent >= b);
+        let budget = self
+            .cfg
+            .gas_budget_per_hour
+            .is_some_and(|b| self.spent >= b);
         let floor = match (self.cfg.min_relayer_balance, self.balance) {
             (Some(f), Some(b)) => b < f,
             _ => false,
@@ -115,12 +127,18 @@ impl Breaker {
     pub fn calls_stopped(&mut self, now: u64, reserved: u128) -> bool {
         self.roll(now);
         let used = self.spent.saturating_add(reserved);
-        self.cfg.gas_budget_per_hour.is_some_and(|b| used.saturating_mul(100) >= b.saturating_mul(self.cfg.call_budget_pct.into()))
+        self.cfg.gas_budget_per_hour.is_some_and(|b| {
+            used.saturating_mul(100) >= b.saturating_mul(self.cfg.call_budget_pct.into())
+        })
     }
 
     /// Tên cầu dao đầu tiên đang mở, hoặc `None` = được nhận việc mới.
     pub fn open(&mut self, now: u64) -> Option<&'static str> {
-        self.states(now).iter().zip(NAMES).find(|(on, _)| **on).map(|(_, n)| n)
+        self.states(now)
+            .iter()
+            .zip(NAMES)
+            .find(|(on, _)| **on)
+            .map(|(_, n)| n)
     }
 }
 
@@ -129,7 +147,13 @@ mod tests {
     use super::*;
 
     fn b(spike: f64, budget: Option<u128>, floor: Option<u128>) -> Breaker {
-        Breaker::new(BreakerCfg { spike_ratio: spike, spike_min_base_fee_gwei: 0, gas_budget_per_hour: budget, min_relayer_balance: floor, ..BreakerCfg::default() })
+        Breaker::new(BreakerCfg {
+            spike_ratio: spike,
+            spike_min_base_fee_gwei: 0,
+            gas_budget_per_hour: budget,
+            min_relayer_balance: floor,
+            ..BreakerCfg::default()
+        })
     }
 
     #[test]
@@ -165,7 +189,10 @@ mod tests {
         off.base_fee(9, 1_000_000);
         assert_eq!(off.open(9), None, "ratio 0 disables");
         // below the absolute floor a ×1000 jump is noise (near-zero L2 fees)
-        let mut l2 = Breaker::new(BreakerCfg { spike_min_base_fee_gwei: 1, ..BreakerCfg::default() });
+        let mut l2 = Breaker::new(BreakerCfg {
+            spike_min_base_fee_gwei: 1,
+            ..BreakerCfg::default()
+        });
         for i in 0..5 {
             l2.base_fee(i, 1_000);
         }

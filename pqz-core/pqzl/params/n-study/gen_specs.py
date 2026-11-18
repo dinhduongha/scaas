@@ -6,6 +6,7 @@ M <= 4, one randomness group). pqz_delta / kmlwe_min start at the 16k values' de
 own rank); e_s1_n.sage raises them. log2q: see `specs`.
   python3 -I gen_specs.py <n> <K_MAX> <q> [kmlwe_min]   -> specs/n<n>k<K>/<rel>_params.sage
 """
+
 import math
 import os
 import sys
@@ -29,23 +30,38 @@ def specs(n, K, q, kmin=None):
     out = {}
 
     def spec(name, what, m1, alpha, nbin, ns, Bs, bprime):
-        head = (f"# Plan 5h Task 7c (n-study research spec, not a relation): {what}\n"
-                f"# n = {n} (k = {k}), q = {q} (2^{math.log2(q):.3f}), beta_s = {bs}, beta_e = {be}, K_MAX = {K:,}: "
-                f"M_i {m} bits, carries {m - 3}, e_T / e' {eb} bits.\n")
-        body = (f"pqz_verbose = 1\nname = \"pqz_{name}\"\nq_fixed = {q}\npqz_L = 4\nlog2q = {log2q}\n"
-                f"pqz_delta = 1.00366\n" + (f"kmlwe_min = {kmin}\n" if kmin else "") + "d = 64\n\n"
-                f"m1 = {m1}\nalpha = sqrt({alpha})\nl = 0\n\nnbin = {nbin}\nn = {ns}\nB = {Bs}\n\n"
-                f"nprime = 1\nBprime = {bprime}\n")
+        head = (
+            f"# Plan 5h Task 7c (n-study research spec, not a relation): {what}\n"
+            f"# n = {n} (k = {k}), q = {q} (2^{math.log2(q):.3f}), beta_s = {bs}, beta_e = {be}, K_MAX = {K:,}: "
+            f"M_i {m} bits, carries {m - 3}, e_T / e' {eb} bits.\n"
+        )
+        body = (
+            f'pqz_verbose = 1\nname = "pqz_{name}"\nq_fixed = {q}\npqz_L = 4\nlog2q = {log2q}\n'
+            f"pqz_delta = 1.00366\n" + (f"kmlwe_min = {kmin}\n" if kmin else "") + "d = 64\n\n"
+            f"m1 = {m1}\nalpha = sqrt({alpha})\nl = 0\n\nnbin = {nbin}\nn = {ns}\nB = {Bs}\n\n"
+            f"nprime = 1\nBprime = {bprime}\n"
+        )
         out[name] = head + body
 
     def nb(bits):
         return math.ceil(bits / 64)
 
     spec("reg", "R_REG pk = A s + e", 2 * k, blk, 0, [k, k], [bs, be], 1)
-    for name, e2, bits, what in (("tx", 3, tx_bits, "R_TX"), ("tx0", 2, tx_bits, "R_TX0 (auditor off)"),
-                                 ("burn", 1, tx_bits - 64, "R_BURN / REFRESH")):
-        spec(name, f"{what}, {e2} e2 blocks, {bits} bits", 4 * k + e2 + nb(bits),
-             f"2 * ({blk}) + {e2} * 64^2 + {nb(bits)} * 64", nb(bits), [k] * 4 + [1] * e2, [bs, be] * 2 + [64] * e2, 64)
+    for name, e2, bits, what in (
+        ("tx", 3, tx_bits, "R_TX"),
+        ("tx0", 2, tx_bits, "R_TX0 (auditor off)"),
+        ("burn", 1, tx_bits - 64, "R_BURN / REFRESH"),
+    ):
+        spec(
+            name,
+            f"{what}, {e2} e2 blocks, {bits} bits",
+            4 * k + e2 + nb(bits),
+            f"2 * ({blk}) + {e2} * 64^2 + {nb(bits)} * 64",
+            nb(bits),
+            [k] * 4 + [1] * e2,
+            [bs, be] * 2 + [64] * e2,
+            64,
+        )
     spec("ds", "R_DS", 2 * k + 1, f"{blk} + 64^2", 0, [k, k, 1], [bs, be, 64], 64)
     dr = 16 * eb
     spec("dr", f"R_DR, e' {eb} bits ({dr} bits)", 2 * k + nb(dr), f"{blk} + {nb(dr)} * 64", nb(dr), [k, k], [bs, be], 1)
@@ -53,9 +69,16 @@ def specs(n, K, q, kmin=None):
         bits = tx_bits - 64 + 64 * M
         for aud, e2 in ((1, 2 * M + 1), (0, M + 1)):
             name = f"txm{M}" + ("" if aud else "0")
-            spec(name, f"R_TXM M = {M}, G = 1, auditor {'on' if aud else 'off'}, {e2} e2 blocks, {bits} bits",
-                 4 * k + e2 + nb(bits), f"2 * ({blk}) + {e2} * 64^2 + {nb(bits)} * 64", nb(bits),
-                 [k] * 4 + [1] * e2, [bs, be] * 2 + [64] * e2, 64)
+            spec(
+                name,
+                f"R_TXM M = {M}, G = 1, auditor {'on' if aud else 'off'}, {e2} e2 blocks, {bits} bits",
+                4 * k + e2 + nb(bits),
+                f"2 * ({blk}) + {e2} * 64^2 + {nb(bits)} * 64",
+                nb(bits),
+                [k] * 4 + [1] * e2,
+                [bs, be] * 2 + [64] * e2,
+                64,
+            )
     return out
 
 
@@ -73,8 +96,20 @@ def main():
 if __name__ == "__main__":
     # self-check: at the 16k cell the generator reproduces the bit layout and witness shapes of ../p16k/
     s = specs(2560, 16384, 2**50 - 42_310_535)
-    assert "m1 = 181\n" in s["tx"] and "nbin = 18\n" in s["tx"] and "m1 = 178\n" in s["burn"] and "nbin = 17\n" in s["burn"]
-    assert "m1 = 88\n" in s["dr"] and "m1 = 184\n" in s["txm2"] and "m1 = 190\n" in s["txm4"] and "m1 = 186\n" in s["txm40"]
-    assert "m1 = 182\n" in s["txm20"] and "m1 = 81\n" in s["ds"] and "m1 = 80\n" in s["reg"] and "log2q = 50\n" in s["tx"]
+    assert (
+        "m1 = 181\n" in s["tx"]
+        and "nbin = 18\n" in s["tx"]
+        and "m1 = 178\n" in s["burn"]
+        and "nbin = 17\n" in s["burn"]
+    )
+    assert (
+        "m1 = 88\n" in s["dr"]
+        and "m1 = 184\n" in s["txm2"]
+        and "m1 = 190\n" in s["txm4"]
+        and "m1 = 186\n" in s["txm40"]
+    )
+    assert (
+        "m1 = 182\n" in s["txm20"] and "m1 = 81\n" in s["ds"] and "m1 = 80\n" in s["reg"] and "log2q = 50\n" in s["tx"]
+    )
     assert "log2q = 47\n" in specs(2304, 8192, 245122345819289)["tx"]
     main()

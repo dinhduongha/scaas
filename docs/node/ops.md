@@ -211,7 +211,7 @@ Existing (BUILT, `admin.rs` `render()`, `submit.rs`; first-release forms `scaas_
 | `scaas_relayer_balance` | gauge | `chain`, `lane` | smallest gas-coin unit; the account that pays, so on a chain with `fee_bump_lane` every lane reports the fee account |
 | `scaas_breaker_open` | gauge | `chain`, `lane`, `breaker` | + `revert_streak`, reported on every lane of the chain |
 | `scaas_rpc_failover_answers_total` | counter | `chain` | chain reads answered by an `rpc_urls` endpoint other than the first (the first did not answer); no job is `dead` or order `invalid` on them (`FAILOVER_ANSWER`, [submit-lanes.md](submit-lanes.md#rpc-failover)); 0 on families with no EVM `Chain`. BUILT (Fable recheck 5 R5-5) |
-| `scaas_fee_unread_total` | counter | `chain`, `lane` | landed transactions (mined or reverted) whose fee `tx_fee` could not read, so the gas budget missed that fee; each is also a warning in the log naming the job. BUILT (ua8-soroban B9a) |
+| `scaas_fee_unread_total` | counter | `chain`, `lane` | landed transactions (mined or reverted) whose fee `tx_fee` could not read, so the gas budget missed that fee; each is also a warning in the log naming the job. BUILT (ua-portable-soroban B9a) |
 | `scaas_submit_bump_skipped_consumed_total` | counter | none today; `chain`, `lane` added with the metrics core | consumption check |
 | `scaas_config_toml_drift` | gauge | — | [NODE-STO-03](store.md#NODE-STO-03) |
 
@@ -642,7 +642,7 @@ month). Conversion to the reporting currency happens only in the report, with an
 no client, so the rollup is needed; cost: one small upsert per terminal job.
 
 **Soroban spend limits are mandatory** ([NET-SOR-14](../networks/soroban.md#NET-SOR-14); controller call under the owner's
-ruling of 2026-11-01, owner may override; **BUILT**, ua8-soroban B9a). A `soroban` chain with `modules.submit` on does not
+ruling of 2026-11-01, owner may override; **BUILT**, ua-portable-soroban B9a). A `soroban` chain with `modules.submit` on does not
 start unless `[chains.breaker]` sets both `gas_budget_per_hour` and `min_relayer_balance` above 0 and `params` sets
 `max_resource_fee_per_job` above 0 ([NET-SOR-29](../networks/soroban.md#NET-SOR-29), owner 2026-11-02; stroops; the error names
 the chain). Why a refusal and not a default: a job is free to the client and its fee is the lane's, the amount is a money
@@ -942,6 +942,7 @@ only. **UNAUDITED.**
 | The regulated kinds 8–13 and `ComplianceRegistry` (BUILT, T24–T36, [asset-suite §2](../contracts/asset-suite.md#2-regulated-controls)); `TokenConfig` gained field 6 `reg` for every kind (a plain kind sends it zero, else `ConfigFieldForOtherKind(6)`); the plain kinds refuse bits 5–10, 21, 22 with `FeatureInvalidForKind` | token creators, the wizard, deployers | encode `reg` on every kind; deploy the regulated releases and the registry with the release set (deployments JSON `compliance_registry`, `compliance_registry_codehash`) |
 | The `GovernanceRouter` gained the eight control ops `mtxFreeze`, `mtxUnfreeze`, `mtxForceTransfer`, `mtxPause`, `mtxUnpause`, `mtxRecordOrder`, `mtxRevokeOrder`, `mtxOperatorTransfer` (BUILT, T32); the token has no `mtx` twin | issuers, compliance holders, node call tables | relay a holder's control as a router job (`gov_router`), fee 0; a contract holder signs by ERC-1271, an `msig` holder through the registry |
 | Regulated refusals by name at the node and the venue (`Frozen`, `TokenPaused`, `NotEligible`, `FeeRecipientFrozen`, `RegistryUnavailable`, `RegistryGasStarved`), regulated legs and alerts (BUILT, T35, [regulated legs](#regulated-legs)) | node operators, venues, wallets | set the registry keys for a venue; watch the alerts; use the runbook below |
+| Bit 32 `AUDITOR` on the confidential kinds (BUILT on branch `prefreeze-contracts`, [CTR-GOV-31](../decisions.md#CTR-GOV-31), spec `superpowers/specs/2026-11-17-set-auditor.md` §5.3; the router's `mtxSetAuditorKey` / `mtxSetAuditorUA`, a confirm before `eta` `queued` as `AUDITOR_NOT_READY`, then sent only while its proposal is confirmable, else `dead` `AUDITOR_PROPOSAL_GONE`, the hold kept in the node store's `auditor_hold`: **sign the confirm at `eta`**): a holder replaces the auditor after `max(noticePeriod(), grantDelay)` (0: at once); a transfer proven against the outgoing auditor and mined after the apply is `dead` | token admins, wallets, auditors | watch `AuditorKeyProposed` / `AuditorUAProposed`; to stop a hostile proposal **revoke the holder before `eta`**; **never `disableFeature(32)` after a hostile apply** (it freezes that auditor for good); the way back is a new holder (`grantDelay`) proposing the previous auditor with its consent (`D`); wallets re-prove transfers built before an apply |
 
 **Regulated kinds: emergency runbook** (regulated-kinds spec §3.6, F-06, M-06; [CTR-GOV-09](../decisions.md#ctr-gov-09--delayed-relaxing-and-record-later-with-the-asset-suite),
 [CTR-AS-21](../contracts/asset-suite.md#CTR-AS-21)): who stops what at once, who only after `grantDelay` (≤ 30 d).

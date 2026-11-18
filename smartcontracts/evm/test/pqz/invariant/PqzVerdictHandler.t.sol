@@ -57,11 +57,19 @@ contract PqzVerdictHandler is PqzOffchainBase {
     function _mockPre() internal {
         vm.clearMockedCalls();
         _mockMlDsa();
-        for (uint8 op = 1; op <= 7; ++op) if (op != 3 && op != 6) _mockOp(op, 1);
-        vm.mockCallRevert(address(reg), abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, vA,
-            UAKinds.PURPOSE_PQZ_VERDICT), "pre read the verdict");
-        vm.mockCallRevert(address(reg), abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, vB,
-            UAKinds.PURPOSE_PQZ_VERDICT), "pre read the verdict");
+        for (uint8 op = 1; op <= 7; ++op) {
+            if (op != 3 && op != 6) _mockOp(op, 1);
+        }
+        vm.mockCallRevert(
+            address(reg),
+            abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, vA, UAKinds.PURPOSE_PQZ_VERDICT),
+            "pre read the verdict"
+        );
+        vm.mockCallRevert(
+            address(reg),
+            abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, vB, UAKinds.PURPOSE_PQZ_VERDICT),
+            "pre read the verdict"
+        );
     }
 
     /// Only the ML-DSA consent mocked: the precompile reverts every call (I5).
@@ -74,7 +82,9 @@ contract PqzVerdictHandler is PqzOffchainBase {
     /// The statement of debit `kind` (0 op 1 alice -> bob, 1 op 7 alice -> [bob, carol], 2 a burn of 1, 3 a refresh) on `t`
     /// and its calldata with verdict `sv`.
     function _debit(NormalPqzToken t, uint8 kind, uint256 seed, IPqzToken.PqzSignedVerdict memory sv, bool withVerdict)
-        internal view returns (bytes memory st, bytes memory cd)
+        internal
+        view
+        returns (bytes memory st, bytes memory cd)
     {
         uint256 p = t.pqzAccount(alice, 0).pendingCount;
         if (kind == 0) {
@@ -85,14 +95,16 @@ contract PqzVerdictHandler is PqzOffchainBase {
         } else if (kind == 1) {
             bytes32[] memory legs = new bytes32[](2);
             (legs[0], legs[1]) = (bob, carol);
-            IPqzToken.PqzMultiArgs memory m = _ms(_mpayload(p, 0, alice, bytes32(0), legs, _blob(seed, _outLen(2, false)), ""));
+            IPqzToken.PqzMultiArgs memory m =
+                _ms(_mpayload(p, 0, alice, bytes32(0), legs, _blob(seed, _outLen(2, false)), ""));
             st = t.transferStatement(m, 0);
             if (withVerdict) sv = _sign(t, keyNow, _verdict(t, st, VPROOF));
             cd = abi.encodeCall(IPqzToken.mtxConfidentialTransfer, (m, VPROOF, _pqAuth(), "", sv));
         } else {
             (uint256 amt, bytes32 rcp) = kind == 2 ? (uint256(1), bytes32(uint256(0xD00D))) : (uint256(0), bytes32(0));
-            IPqzToken.PqzBurnArgs memory b = _bs(bytes.concat(abi.encode(p, block.number + 50, uint256(0), alice, bytes32(0)),
-                _blob(seed, PqzCt.CT)));
+            IPqzToken.PqzBurnArgs memory b = _bs(
+                bytes.concat(abi.encode(p, block.number + 50, uint256(0), alice, bytes32(0)), _blob(seed, PqzCt.CT))
+            );
             st = t.burnStatement(b, amt, rcp, 0);
             if (withVerdict) sv = _sign(t, keyNow, _verdict(t, st, VPROOF));
             cd = abi.encodeCall(IPqzToken.mtxUnshield, (b, amt, rcp, VPROOF, _pqAuth(), "", sv));
@@ -110,12 +122,14 @@ contract PqzVerdictHandler is PqzOffchainBase {
         } else if (kind == 1) {
             bytes32[] memory legs = new bytes32[](2);
             (legs[0], legs[1]) = (bob, carol);
-            IPqzToken.PqzMultiArgs memory m = _ms(_mpayload(p, 0, alice, bytes32(0), legs, _blob(seed, _outLen(2, false)), ""));
+            IPqzToken.PqzMultiArgs memory m =
+                _ms(_mpayload(p, 0, alice, bytes32(0), legs, _blob(seed, _outLen(2, false)), ""));
             cd = abi.encodeCall(IPqzToken.mtxConfidentialTransfer, (m, other, _pqAuth(), "", sv));
         } else {
             (uint256 amt, bytes32 rcp) = kind == 2 ? (uint256(1), bytes32(uint256(0xD00D))) : (uint256(0), bytes32(0));
-            IPqzToken.PqzBurnArgs memory b = _bs(bytes.concat(abi.encode(p, block.number + 50, uint256(0), alice, bytes32(0)),
-                _blob(seed, PqzCt.CT)));
+            IPqzToken.PqzBurnArgs memory b = _bs(
+                bytes.concat(abi.encode(p, block.number + 50, uint256(0), alice, bytes32(0)), _blob(seed, PqzCt.CT))
+            );
             cd = abi.encodeCall(IPqzToken.mtxUnshield, (b, amt, rcp, other, _pqAuth(), "", sv));
         }
     }

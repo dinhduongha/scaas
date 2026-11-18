@@ -60,7 +60,9 @@ library SSTORE2 {
     function readChunks(address[] storage ptrs) internal view returns (bytes memory data) {
         uint256 n = ptrs.length;
         uint256 total;
-        for (uint256 i; i < n; ++i) total += ptrs[i].code.length - 1;
+        for (uint256 i; i < n; ++i) {
+            total += ptrs[i].code.length - 1;
+        }
         data = new bytes(total);
         uint256 o;
         for (uint256 i; i < n; ++i) {

@@ -23,7 +23,7 @@ use sha2::{Digest, Sha256};
 use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Rejected, Signed, TxStatus};
 use crate::chain::SimError;
 use crate::config::ChainCfg;
-use crate::odoo::Job;
+use crate::external_pull::Job;
 use crate::signer::{LocalSigner, Signer};
 
 // ------------------------------------------------------------------ bech32 / địa chỉ
@@ -67,7 +67,11 @@ pub fn bech32(hrp: &str, data: &[u8]) -> String {
     v.extend([0u8; 6]);
     let pm = polymod(&v) ^ 1;
     let mut out = format!("{hrp}1");
-    for d in five.iter().copied().chain((0..6).map(|i| ((pm >> (5 * (5 - i))) & 31) as u8)) {
+    for d in five
+        .iter()
+        .copied()
+        .chain((0..6).map(|i| ((pm >> (5 * (5 - i))) & 31) as u8))
+    {
         out.push(BECH32[d as usize] as char);
     }
     out
@@ -121,7 +125,11 @@ pub fn tx_body(sender: &str, contract: &str, msg: &[u8]) -> Vec<u8> {
     opt_bytes(2, contract.as_bytes(), &mut exec);
     opt_bytes(3, msg, &mut exec);
     let mut body = Vec::new();
-    bytes_field(1, &any_msg("/cosmwasm.wasm.v1.MsgExecuteContract", &exec), &mut body);
+    bytes_field(
+        1,
+        &any_msg("/cosmwasm.wasm.v1.MsgExecuteContract", &exec),
+        &mut body,
+    );
     body
 }
 
@@ -178,11 +186,22 @@ fn hex_arg(s: &str) -> Result<Vec<u8>> {
 /// `Auth` JSON of a job. `signature`: base64 64 byte (ADR-036) hoặc JSON passkey `{signature, authenticator_data,
 /// client_data_json}`.
 fn auth_json(op: &Value) -> Result<Value> {
-    let sig = op["signature"].as_str().ok_or_else(|| anyhow!("op.signature"))?.trim();
-    let pk = B64.encode(hex_arg(op["public_key"].as_str().ok_or_else(|| anyhow!("op.public_key"))?)?);
+    let sig = op["signature"]
+        .as_str()
+        .ok_or_else(|| anyhow!("op.signature"))?
+        .trim();
+    let pk = B64.encode(hex_arg(
+        op["public_key"]
+            .as_str()
+            .ok_or_else(|| anyhow!("op.public_key"))?,
+    )?);
     Ok(if sig.starts_with('{') {
         let p: Value = serde_json::from_str(sig).context("passkey signature JSON")?;
-        let field = |k: &str| p[k].as_str().map(str::to_string).ok_or_else(|| anyhow!("passkey.{k}"));
+        let field = |k: &str| {
+            p[k].as_str()
+                .map(str::to_string)
+                .ok_or_else(|| anyhow!("passkey.{k}"))
+        };
         json!({"scheme": "passkey", "pubkey": pk, "signature": field("signature")?,
                "authenticator_data": field("authenticator_data")?, "client_data_json": field("client_data_json")?})
     } else {
@@ -195,9 +214,18 @@ fn auth_json(op: &Value) -> Result<Value> {
 
 /// Job `signed_op` ⇒ (contract, msg JSON `{"relay":{payload, auth}}`, valid_until).
 pub fn relay_msg(op: &Value) -> Result<(String, Vec<u8>, u64)> {
-    let contract = op["contract"].as_str().ok_or_else(|| anyhow!("op.contract"))?.to_string();
-    let payload = hex_arg(op["payload"].as_str().ok_or_else(|| anyhow!("op.payload"))?)?;
-    let valid_until = op["valid_until"].as_u64().ok_or_else(|| anyhow!("op.valid_until"))?;
+    let contract = op["contract"]
+        .as_str()
+        .ok_or_else(|| anyhow!("op.contract"))?
+        .to_string();
+    let payload = hex_arg(
+        op["payload"]
+            .as_str()
+            .ok_or_else(|| anyhow!("op.payload"))?,
+    )?;
+    let valid_until = op["valid_until"]
+        .as_u64()
+        .ok_or_else(|| anyhow!("op.valid_until"))?;
     let msg = json!({"relay": {"payload": B64.encode(&payload), "auth": auth_json(op)?}});
     Ok((contract, serde_json::to_vec(&msg)?, valid_until))
 }
@@ -221,7 +249,12 @@ pub fn pay_lane(p: &[u8; 32]) -> [u8; 32] {
 /// CTR-MTX-27 `ref = keccak256("scaas.relayfee" ‖ chain id ‖ target (canonical bytes) ‖ keccak256(msg))`, the
 /// router's `relay_ref`.
 pub fn relay_ref(chain_id: &str, target: &[u8], msg: &[u8]) -> [u8; 32] {
-    keccak(&[b"scaas.relayfee", chain_id.as_bytes(), target, &keccak(&[msg])])
+    keccak(&[
+        b"scaas.relayfee",
+        chain_id.as_bytes(),
+        target,
+        &keccak(&[msg]),
+    ])
 }
 
 /// What the node accepts as a relay-fee job (controller call 2026-10-27, owner may override): the configured
@@ -242,25 +275,36 @@ impl RelayFeePolicy {
         let router = match params.router.as_deref() {
             None => None,
             Some(r) => {
-                let (hrp, data) = crate::addresses::bech32_decode(r).context("params.relay_fee.router")?;
+                let (hrp, data) =
+                    crate::addresses::bech32_decode(r).context("params.relay_fee.router")?;
                 if hrp != prefix || data.len() != 32 || r != r.to_ascii_lowercase() {
                     bail!("params.relay_fee.router is not a lowercase {prefix}1… contract address");
                 }
                 Some(r.to_string())
             }
         };
-        Ok(Self { router, tokens: cfg.tokens.iter().map(|t| t.address.clone()).collect(), params })
+        Ok(Self {
+            router,
+            tokens: cfg.tokens.iter().map(|t| t.address.clone()).collect(),
+            params,
+        })
     }
 }
 
 fn payload_of(op: &Value) -> Result<(Vec<u8>, Value)> {
-    let raw = hex_arg(op["payload"].as_str().ok_or_else(|| anyhow!("op.payload"))?)?;
+    let raw = hex_arg(
+        op["payload"]
+            .as_str()
+            .ok_or_else(|| anyhow!("op.payload"))?,
+    )?;
     let p: Value = serde_json::from_slice(&raw).context("op.payload is not a MetaOp")?;
     Ok((raw, p))
 }
 
 fn field32(p: &Value, k: &str) -> Result<[u8; 32]> {
-    hex_arg(p[k].as_str().ok_or_else(|| anyhow!("payload.{k}"))?)?.try_into().map_err(|_| anyhow!("payload.{k} is 32 bytes"))
+    hex_arg(p[k].as_str().ok_or_else(|| anyhow!("payload.{k}"))?)?
+        .try_into()
+        .map_err(|_| anyhow!("payload.{k} is 32 bytes"))
 }
 
 /// The job's message, checked before simulation (fail closed). `op.kind`: `"pay_meta"` (`op.salt`, `op.meta` hex:
@@ -271,18 +315,34 @@ fn field32(p: &Value, k: &str) -> Result<[u8; 32]> {
 /// which could be the executor. A pay to an account (20 bytes) never is.
 pub fn executor_needed(op: &Value) -> bool {
     op["kind"] == "relay_fee"
-        || payload_of(op).ok().and_then(|(_, p)| p["to"].as_str().map(str::to_string))
-            .is_some_and(|to| crate::addresses::bech32_decode(&to).is_ok_and(|(_, d)| d.len() == 32))
+        || payload_of(op)
+            .ok()
+            .and_then(|(_, p)| p["to"].as_str().map(str::to_string))
+            .is_some_and(|to| {
+                crate::addresses::bech32_decode(&to).is_ok_and(|(_, d)| d.len() == 32)
+            })
 }
 
 /// The one `op.kind` rule (`adapter::op_kind`); outside a relay, never a payment to the router or its executor (`lane`
 /// = the submitting lane, `executor` = the router's `relayexec`, read from the router).
-pub fn job_msg(op: &Value, chain_id: &str, policy: &RelayFeePolicy, lane: &str, executor: Option<&str>) -> Result<(String, Vec<u8>, u64)> {
+pub fn job_msg(
+    op: &Value,
+    chain_id: &str,
+    policy: &RelayFeePolicy,
+    lane: &str,
+    executor: Option<&str>,
+) -> Result<(String, Vec<u8>, u64)> {
     let kind = crate::adapter::op_kind(op, &crate::adapter::PAY_KINDS)?;
     if kind != Some("relay_fee") {
-        let to = payload_of(op).ok().and_then(|(_, p)| p["to"].as_str().map(str::to_string));
-        if to.is_some() && (to.as_deref() == policy.router.as_deref() || to.as_deref() == executor) {
-            bail!("a plain pay to the relay-fee router / executor {} is refused", to.unwrap_or_default());
+        let to = payload_of(op)
+            .ok()
+            .and_then(|(_, p)| p["to"].as_str().map(str::to_string));
+        if to.is_some() && (to.as_deref() == policy.router.as_deref() || to.as_deref() == executor)
+        {
+            bail!(
+                "a plain pay to the relay-fee router / executor {} is refused",
+                to.unwrap_or_default()
+            );
         }
     }
     match kind {
@@ -303,47 +363,80 @@ fn pay_meta_msg(op: &Value, max_meta: usize) -> Result<(String, Vec<u8>, u64)> {
         .map_err(|_| anyhow!("op.salt is 32 bytes"))?;
     let meta = hex_arg(op["meta"].as_str().ok_or_else(|| anyhow!("op.meta"))?)?;
     if meta.len() > max_meta {
-        bail!("meta is {} B, above max_pay_meta_bytes {max_meta}", meta.len());
+        bail!(
+            "meta is {} B, above max_pay_meta_bytes {max_meta}",
+            meta.len()
+        );
     }
     if p["op"] != "pay" {
         bail!("pay-meta: op is not pay");
     }
     let id = meta_pay_id(&salt, &meta);
-    if field32(&p, "pay_ref")? != id || field32(&p, "lane")? != pay_lane(&id) || p["nonce"].as_u64() != Some(0) {
-        bail!("pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane(pay_ref) / 0");
+    if field32(&p, "pay_ref")? != id
+        || field32(&p, "lane")? != pay_lane(&id)
+        || p["nonce"].as_u64() != Some(0)
+    {
+        bail!(
+            "pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane(pay_ref) / 0"
+        );
     }
     let msg = json!({"relay_pay_meta": {"payload": B64.encode(&raw), "auth": auth_json(op)?,
                                          "salt": alloy::hex::encode(salt), "meta": B64.encode(&meta)}});
     Ok((contract, serde_json::to_vec(&msg)?, valid_until))
 }
 
-fn relay_fee_msg(op: &Value, chain_id: &str, policy: &RelayFeePolicy, lane: &str) -> Result<(String, Vec<u8>, u64)> {
-    let router = policy.router.as_deref().ok_or_else(|| anyhow!("params.relay_fee.router is not set"))?;
+fn relay_fee_msg(
+    op: &Value,
+    chain_id: &str,
+    policy: &RelayFeePolicy,
+    lane: &str,
+) -> Result<(String, Vec<u8>, u64)> {
+    let router = policy
+        .router
+        .as_deref()
+        .ok_or_else(|| anyhow!("params.relay_fee.router is not set"))?;
     let (contract, _, valid_until) = relay_msg(op)?;
     if contract != router {
         bail!("op.contract is not params.relay_fee.router");
     }
     let (raw, p) = payload_of(op)?;
-    let token = p["contract"].as_str().ok_or_else(|| anyhow!("payload.contract"))?;
+    let token = p["contract"]
+        .as_str()
+        .ok_or_else(|| anyhow!("payload.contract"))?;
     if !policy.tokens.iter().any(|t| t == token) {
         bail!("token {token} is not registered on this chain");
     }
     if p["op"] != "pay" {
         bail!("the relay-fee payment is not a pay op");
     }
-    let amount: u128 = p["amount"].as_str().and_then(|a| a.parse().ok()).ok_or_else(|| anyhow!("payload.amount"))?;
+    let amount: u128 = p["amount"]
+        .as_str()
+        .and_then(|a| a.parse().ok())
+        .ok_or_else(|| anyhow!("payload.amount"))?;
     // open mode (`to` = the router) pays the submitter, this lane; a bound payee is `to` itself
     crate::adapter::relay_fee_ours(p["to"] == router, p["to"] == lane, amount, &policy.params)?;
-    let target = op["extra"]["target"].as_str().ok_or_else(|| anyhow!("op.extra.target"))?;
+    let target = op["extra"]["target"]
+        .as_str()
+        .ok_or_else(|| anyhow!("op.extra.target"))?;
     let hrp = router.rsplit_once('1').map(|(h, _)| h);
     let target_bytes = match crate::addresses::bech32_decode(target) {
         Ok((h, data)) if Some(h.as_str()) == hrp && target == target.to_ascii_lowercase() => data,
         _ => bail!("op.extra.target is not a lowercase bech32 address of this chain"),
     };
-    let call = hex_arg(op["extra"]["msg"].as_str().ok_or_else(|| anyhow!("op.extra.msg"))?)?;
+    let call = hex_arg(
+        op["extra"]["msg"]
+            .as_str()
+            .ok_or_else(|| anyhow!("op.extra.msg"))?,
+    )?;
     let r = relay_ref(chain_id, &target_bytes, &call);
-    if field32(&p, "pay_ref")? != r || field32(&p, "lane")? != pay_lane(&r) || p["nonce"].as_u64() != Some(0) || p["relayer"] != router {
-        bail!("the payment is not bound to this call (ref, payLane(ref), nonce 0, relayer = router)");
+    if field32(&p, "pay_ref")? != r
+        || field32(&p, "lane")? != pay_lane(&r)
+        || p["nonce"].as_u64() != Some(0)
+        || p["relayer"] != router
+    {
+        bail!(
+            "the payment is not bound to this call (ref, payLane(ref), nonce 0, relayer = router)"
+        );
     }
     if !op["ref"].is_null() && hex_arg(op["ref"].as_str().unwrap_or_default())? != r {
         bail!("op.ref != relay_ref(chain id, target, msg)");
@@ -362,20 +455,31 @@ fn hash32(s: &str) -> Option<String> {
 /// luôn gắn (contract không đặt được khoá `_…`) — không đoán theo chain (review L3).
 fn attributes(ev: &Value) -> HashMap<String, String> {
     let pairs = || {
-        ev["attributes"].as_array().into_iter().flatten().filter_map(|a| Some((a["key"].as_str()?, a["value"].as_str().unwrap_or(""))))
+        ev["attributes"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|a| Some((a["key"].as_str()?, a["value"].as_str().unwrap_or(""))))
     };
-    let plain: HashMap<String, String> = pairs().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+    let plain: HashMap<String, String> = pairs()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
     if plain.contains_key("_contract_address") {
         return plain;
     }
     let dec = |s: &str| B64.decode(s).ok().and_then(|b| String::from_utf8(b).ok());
-    pairs().filter_map(|(k, v)| Some((dec(k)?, dec(v)?))).collect()
+    pairs()
+        .filter_map(|(k, v)| Some((dec(k)?, dec(v)?)))
+        .collect()
 }
 
 /// gRPC-gateway của `simulate`: lỗi thực thi (contract từ chối, tx hỏng) là Unknown(2)/InvalidArgument(3); còn lại
 /// (Unavailable 14, DeadlineExceeded 4, ResourceExhausted 8, cổng không body…) là đường truyền ⇒ thử lại (review L2).
 fn sim_error(http: u16, v: &Value) -> SimError {
-    let why = v["message"].as_str().map(str::to_string).unwrap_or_else(|| format!("{http} {v}"));
+    let why = v["message"]
+        .as_str()
+        .map(str::to_string)
+        .unwrap_or_else(|| format!("{http} {v}"));
     match v["code"].as_u64() {
         Some(2 | 3) if !why.contains("sequence mismatch") => SimError::Revert(why),
         _ => SimError::Transport(why),
@@ -385,11 +489,18 @@ fn sim_error(http: u16, v: &Value) -> SimError {
 /// Phản hồi `broadcast` SYNC. 19 = đã có trong mempool/cache (gửi lại sau khi mất phản hồi); 20 = mempool đầy (cùng
 /// bytes có thể qua sau). Mã khác ⇒ CheckTx từ chối, tx không vào mempool ⇒ `Rejected` (review L1).
 fn broadcast_outcome(http: u16, v: &Value) -> Result<()> {
-    let log = || v["tx_response"]["raw_log"].as_str().map(str::to_string).unwrap_or_else(|| v.to_string());
+    let log = || {
+        v["tx_response"]["raw_log"]
+            .as_str()
+            .map(str::to_string)
+            .unwrap_or_else(|| v.to_string())
+    };
     match v["tx_response"]["code"].as_u64() {
         Some(0) if http == 200 => Ok(()),
         Some(19) => Ok(()),
-        Some(c) if c != 0 && c != 20 => Err(Rejected(format!("CheckTx code {c}: {}", log())).into()),
+        Some(c) if c != 0 && c != 20 => {
+            Err(Rejected(format!("CheckTx code {c}: {}", log())).into())
+        }
         _ => bail!("broadcast: {http} {}", log()),
     }
 }
@@ -397,14 +508,23 @@ fn broadcast_outcome(http: u16, v: &Value) -> Result<()> {
 /// Trạng thái tx `tx_id` (= sha256 bytes) nếu nó nằm trong khối (`block` + `block_results` của RPC CometBFT).
 pub fn tx_in_block(block: &Value, results: &Value, tx_id: &str) -> Option<TxStatus> {
     let want = tx_id.trim_start_matches("0x").to_ascii_lowercase();
-    let i = block["block"]["data"]["txs"].as_array()?.iter().position(|t| {
-        B64.decode(t.as_str().unwrap_or_default()).is_ok_and(|b| alloy::hex::encode(Sha256::digest(&b)) == want)
-    })?;
+    let i = block["block"]["data"]["txs"]
+        .as_array()?
+        .iter()
+        .position(|t| {
+            B64.decode(t.as_str().unwrap_or_default())
+                .is_ok_and(|b| alloy::hex::encode(Sha256::digest(&b)) == want)
+        })?;
     let height = block["block"]["header"]["height"].as_str()?.parse().ok()?;
     let r = results["txs_results"].as_array()?.get(i)?;
     Some(match r["code"].as_u64().unwrap_or(0) {
-        0 => TxStatus::Mined { height, tx_hash: None },
-        _ => TxStatus::Reverted { reason: r["log"].as_str().unwrap_or("failed").to_string() },
+        0 => TxStatus::Mined {
+            height,
+            tx_hash: None,
+        },
+        _ => TxStatus::Reverted {
+            reason: r["log"].as_str().unwrap_or("failed").to_string(),
+        },
     })
 }
 
@@ -418,17 +538,31 @@ fn fill(kind: &str, attrs: &HashMap<String, String>, e: &mut Value) -> Option<()
     let r32 = |k: &str| attrs.get(k).and_then(|r| hash32(r));
     match kind {
         "PaymentSettled" => {
-            (e["from"], e["to"], e["amount"], e["entry_ref"]) = (json!(a("from")?), json!(a("to")?), json!(a("amount")?), json!(r32("pay_ref")?));
+            (e["from"], e["to"], e["amount"], e["entry_ref"]) = (
+                json!(a("from")?),
+                json!(a("to")?),
+                json!(a("amount")?),
+                json!(r32("pay_ref")?),
+            );
         }
-        "MetaTransactionExecuted" => (e["from"], e["digest"]) = (json!(a("from").unwrap_or_default()), json!(r32("digest")?)),
+        "MetaTransactionExecuted" => {
+            (e["from"], e["digest"]) = (json!(a("from").unwrap_or_default()), json!(r32("digest")?))
+        }
         "PaymentMeta" => {
             let meta = a("meta")?;
-            let meta = meta.strip_prefix("0x").filter(|m| alloy::hex::decode(m).is_ok())?;
-            (e["entry_ref"], e["meta"]) = (json!(r32("pay_id")?), json!(format!("0x{}", meta.to_ascii_lowercase())));
+            let meta = meta
+                .strip_prefix("0x")
+                .filter(|m| alloy::hex::decode(m).is_ok())?;
+            (e["entry_ref"], e["meta"]) = (
+                json!(r32("pay_id")?),
+                json!(format!("0x{}", meta.to_ascii_lowercase())),
+            );
         }
         _ => {
-            (e["entry_ref"], e["target"], e["token"]) = (json!(r32("ref")?), json!(a("target")?), json!(a("token")?));
-            (e["from"], e["to"], e["amount"]) = (json!(a("payer")?), json!(a("payee")?), json!(a("amount")?));
+            (e["entry_ref"], e["target"], e["token"]) =
+                (json!(r32("ref")?), json!(a("target")?), json!(a("token")?));
+            (e["from"], e["to"], e["amount"]) =
+                (json!(a("payer")?), json!(a("payee")?), json!(a("amount")?));
         }
     }
     Some(())
@@ -445,7 +579,9 @@ pub fn normalize_tx(tx: &Value, contracts: &[String], router: Option<&str>) -> V
     ) else {
         return out;
     };
-    let Some(events) = tx["tx_result"]["events"].as_array() else { return out };
+    let Some(events) = tx["tx_result"]["events"].as_array() else {
+        return out;
+    };
     for (i, ev) in events.iter().enumerate() {
         let kind = match ev["type"].as_str() {
             Some("wasm-payment_settled") => "PaymentSettled",
@@ -455,9 +591,12 @@ pub fn normalize_tx(tx: &Value, contracts: &[String], router: Option<&str>) -> V
             _ => continue,
         };
         let attrs = attributes(ev);
-        let Some(contract) = attrs.get("_contract_address") else { continue };
+        let Some(contract) = attrs.get("_contract_address") else {
+            continue;
+        };
         let ours = if kind == "RelayFeePaid" {
-            Some(contract.as_str()) == router && attrs.get("token").is_some_and(|t| contracts.contains(t))
+            Some(contract.as_str()) == router
+                && attrs.get("token").is_some_and(|t| contracts.contains(t))
         } else {
             contracts.contains(contract)
         };
@@ -497,37 +636,76 @@ pub struct CosmosAdapter {
 
 impl CosmosAdapter {
     pub fn new(cfg: &ChainCfg, signers: Vec<LocalSigner>) -> Result<Self> {
-        let p = |k: &str| cfg.params.get(k).and_then(|v| v.as_str()).map(str::to_string);
-        let prefix = p("prefix").ok_or_else(|| anyhow!("chain {}: params.prefix (bech32) is required", cfg.chain_key()))?;
+        let p = |k: &str| {
+            cfg.params
+                .get(k)
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        };
+        let prefix = p("prefix").ok_or_else(|| {
+            anyhow!(
+                "chain {}: params.prefix (bech32) is required",
+                cfg.chain_key()
+            )
+        })?;
         // owner 2026-11-18 (ARCH-POS-15): a list of REST gateways, no single-URL form
         let rest: Vec<String> = match cfg.params.get("rest") {
             Some(toml::Value::Array(a)) => a
                 .iter()
-                .map(|v| v.as_str().map(str::to_string).ok_or_else(|| anyhow!("chain {}: params.rest: a URL is not a string", cfg.chain_key())))
+                .map(|v| {
+                    v.as_str().map(str::to_string).ok_or_else(|| {
+                        anyhow!(
+                            "chain {}: params.rest: a URL is not a string",
+                            cfg.chain_key()
+                        )
+                    })
+                })
                 .collect::<Result<_>>()?,
-            Some(_) => bail!("chain {}: params.rest must be a list of REST gateway URLs", cfg.chain_key()),
-            None => bail!("chain {}: params.rest (a list of REST gateway URLs) is required", cfg.chain_key()),
+            Some(_) => bail!(
+                "chain {}: params.rest must be a list of REST gateway URLs",
+                cfg.chain_key()
+            ),
+            None => bail!(
+                "chain {}: params.rest (a list of REST gateway URLs) is required",
+                cfg.chain_key()
+            ),
         };
         let lanes = signers
             .iter()
             .zip(&cfg.lanes)
-            .map(|(s, &i)| Lane { index: i, address: account_address(&prefix, &s.public_key()) })
+            .map(|(s, &i)| Lane {
+                index: i,
+                address: account_address(&prefix, &s.public_key()),
+            })
             .collect();
-        if signers.iter().any(|s| s.curve() != crate::signer::Curve::Secp256k1) {
+        if signers
+            .iter()
+            .any(|s| s.curve() != crate::signer::Curve::Secp256k1)
+        {
             bail!("chain {}: cosmos lanes are secp256k1", cfg.chain_key());
         }
         // Review L1: chain-id rỗng ⇒ mọi chữ ký sai (CheckTx 4); giá gas 0 ⇒ thiếu phí (13) trên chain có min-gas-prices.
         let chain_id = cfg.network.clone().filter(|n| !n.is_empty());
-        let chain_id = chain_id.ok_or_else(|| anyhow!("chain {}: network (the chain-id) is required", cfg.chain_key()))?;
-        let gas_price: f64 = p("gas_price").unwrap_or_else(|| "0".into()).parse().context("params.gas_price")?;
+        let chain_id = chain_id.ok_or_else(|| {
+            anyhow!(
+                "chain {}: network (the chain-id) is required",
+                cfg.chain_key()
+            )
+        })?;
+        let gas_price: f64 = p("gas_price")
+            .unwrap_or_else(|| "0".into())
+            .parse()
+            .context("params.gas_price")?;
         let zero_fee = cfg.params.get("zero_fee").and_then(|v| v.as_bool()) == Some(true);
         if !zero_fee && (gas_price.is_nan() || gas_price <= 0.0) {
             bail!("chain {}: params.gas_price must be > 0 (params.zero_fee = true only on a zero-fee devnet)", cfg.chain_key());
         }
         let relay_fee = RelayFeePolicy::from_cfg(cfg, &prefix)?;
         let net = scaas_rpc::cosmos::Cosmos::new(
-            scaas_rpc::family::Client::of_urls(&cfg.rpc_urls, None).map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?,
-            scaas_rpc::family::Client::of_urls(&rest, None).map_err(|e| anyhow!("chain {}: params.rest: {e}", cfg.chain_key()))?,
+            scaas_rpc::family::Client::of_urls(&cfg.rpc_urls, None)
+                .map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?,
+            scaas_rpc::family::Client::of_urls(&rest, None)
+                .map_err(|e| anyhow!("chain {}: params.rest: {e}", cfg.chain_key()))?,
             &chain_id,
         );
         Ok(Self {
@@ -563,15 +741,25 @@ impl CosmosAdapter {
 
     /// REST GET on the first gateway only (F3; a value kept for the process: the router's executor).
     async fn rest_get_first(&self, path: &str) -> Result<(u16, Value)> {
-        self.net.rest.get(0, path).await.map_err(|e| anyhow!("GET {path}: {e}"))
+        self.net
+            .rest
+            .get(0, path)
+            .await
+            .map_err(|e| anyhow!("GET {path}: {e}"))
     }
 
     /// REST POST: inside `build` failed over (the simulate), outside it the first gateway's (the send).
     async fn rest_post(&self, path: &str, body: &Value) -> Result<(u16, Value)> {
         if building() {
-            return self.failover(path, |i| self.net.rest.post(i, path, body)).await;
+            return self
+                .failover(path, |i| self.net.rest.post(i, path, body))
+                .await;
         }
-        self.net.rest.post(0, path, body).await.map_err(|e| anyhow!("POST {path}: {e}"))
+        self.net
+            .rest
+            .post(0, path, body)
+            .await
+            .map_err(|e| anyhow!("POST {path}: {e}"))
     }
 
     /// ARCH-POS-15 (CLI-RPC-04, scaas-rpc T21b): the first gateway, then each next REST gateway of this chain (`node_info`'s
@@ -585,25 +773,46 @@ impl CosmosAdapter {
         Fut: std::future::Future<Output = std::result::Result<(u16, Value), FamilyError>>,
     {
         use scaas_rpc::pool::ReadError;
-        let a = self.net.rest.client.failover(&self.net.rest, |i| {
-            let r = f(i);
-            async move {
-                match r.await {
-                    Ok((s, v)) if (200..300).contains(&s) => Ok((s, v)),
-                    // T24.3: gRPC code 2 or 3 (a refused simulate, a smart query's error: `sim_error`'s verdicts) is the
-                    // first gateway's to classify; any other answer (503 code 14, a rate limit, a 404) fails over
-                    Ok((s, v)) if matches!(v["code"].as_u64(), Some(2 | 3)) => Err(ReadError::Revert { data: vec![], reason: format!("{s}\n{v}") }),
-                    Ok((s, _)) => Err(ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Http, &format!("{path}: HTTP {s}")))),
-                    Err(FamilyError::Failure(f)) => Err(ReadError::Failure(f)),
-                    Err(e) => Err(ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string()))),
+        let a = self
+            .net
+            .rest
+            .client
+            .failover(&self.net.rest, |i| {
+                let r = f(i);
+                async move {
+                    match r.await {
+                        Ok((s, v)) if (200..300).contains(&s) => Ok((s, v)),
+                        // T24.3: gRPC code 2 or 3 (a refused simulate, a smart query's error: `sim_error`'s verdicts) is the
+                        // first gateway's to classify; any other answer (503 code 14, a rate limit, a 404) fails over
+                        Ok((s, v)) if matches!(v["code"].as_u64(), Some(2 | 3)) => {
+                            Err(ReadError::Revert {
+                                data: vec![],
+                                reason: format!("{s}\n{v}"),
+                            })
+                        }
+                        Ok((s, _)) => Err(ReadError::Failure(scaas_rpc::EndpointFailure::new(
+                            i,
+                            scaas_rpc::FailureKind::Http,
+                            &format!("{path}: HTTP {s}"),
+                        ))),
+                        Err(FamilyError::Failure(f)) => Err(ReadError::Failure(f)),
+                        Err(e) => Err(ReadError::Failure(scaas_rpc::EndpointFailure::new(
+                            i,
+                            scaas_rpc::FailureKind::Transport,
+                            &e.to_string(),
+                        ))),
+                    }
                 }
-            }
-        }).await;
+            })
+            .await;
         match a {
             Ok(a) => Ok(a.value),
             Err(scaas_rpc::RpcError::Revert { reason, .. }) => {
                 let (s, v) = reason.split_once('\n').unwrap_or(("0", "null"));
-                Ok((s.parse().unwrap_or(0), serde_json::from_str(v).unwrap_or(Value::Null)))
+                Ok((
+                    s.parse().unwrap_or(0),
+                    serde_json::from_str(v).unwrap_or(Value::Null),
+                ))
             }
             Err(e) => Err(crate::adapters::evm::all_failed(path, &e)),
         }
@@ -616,19 +825,34 @@ impl CosmosAdapter {
     /// CometBFT RPC on the first endpoint: the `result`; an error answer is `rpc {path}: {error}`.
     async fn rpc(&self, path: &str) -> Result<Value> {
         self.net.rpc_at(0, path).await.map_err(|e| match e {
-            FamilyError::Rpc { error, .. } => anyhow!("rpc {path}: {}", scaas_rpc::error::endpoint_text(&error.to_string())),
+            FamilyError::Rpc { error, .. } => anyhow!(
+                "rpc {path}: {}",
+                scaas_rpc::error::endpoint_text(&error.to_string())
+            ),
             e => anyhow!("rpc {path}: {e}"),
         })
     }
 
     /// (account_number, sequence đã commit).
     async fn account(&self, lane: usize) -> Result<(u64, u64)> {
-        let addr = &self.lanes.get(lane).ok_or_else(|| anyhow!("no lane {lane}"))?.address;
-        let (code, v) = self.rest_get(&format!("/cosmos/auth/v1beta1/accounts/{addr}")).await?;
+        let addr = &self
+            .lanes
+            .get(lane)
+            .ok_or_else(|| anyhow!("no lane {lane}"))?
+            .address;
+        let (code, v) = self
+            .rest_get(&format!("/cosmos/auth/v1beta1/accounts/{addr}"))
+            .await?;
         if code != 200 {
             bail!("lane {addr} not found on chain (fund it first): {code} {v}");
         }
-        let num = |k: &str| v["account"][k].as_str().unwrap_or("0").parse::<u64>().map_err(|e| anyhow!("{k}: {e}"));
+        let num = |k: &str| {
+            v["account"][k]
+                .as_str()
+                .unwrap_or("0")
+                .parse::<u64>()
+                .map_err(|e| anyhow!("{k}: {e}"))
+        };
         let (an, seq) = (num("account_number")?, num("sequence")?);
         // T24.14: the signing account number is kept from the first gateway's answer only: a read outside `build` (inside it
         // a failover gateway may have answered); `sign` reads it there when none is kept
@@ -652,52 +876,100 @@ impl CosmosAdapter {
 
     /// The router's executor (one smart query on first need, then cached); `None` without a router.
     async fn executor(&self) -> Result<Option<&str>> {
-        let Some(router) = &self.relay_fee.router else { return Ok(None) };
-        let e = self.executor.get_or_try_init(|| async {
-            let q = base64::engine::general_purpose::URL_SAFE.encode(json!({"executor": {}}).to_string());
-            let (code, v) = self.rest_get_first(&format!("/cosmwasm/wasm/v1/contract/{router}/smart/{q}")).await?;
-            v["data"].as_str().filter(|_| code == 200).map(str::to_string).ok_or_else(|| anyhow!("router executor query: {code} {v}"))
-        }).await?;
+        let Some(router) = &self.relay_fee.router else {
+            return Ok(None);
+        };
+        let e = self
+            .executor
+            .get_or_try_init(|| async {
+                let q = base64::engine::general_purpose::URL_SAFE
+                    .encode(json!({"executor": {}}).to_string());
+                let (code, v) = self
+                    .rest_get_first(&format!("/cosmwasm/wasm/v1/contract/{router}/smart/{q}"))
+                    .await?;
+                v["data"]
+                    .as_str()
+                    .filter(|_| code == 200)
+                    .map(str::to_string)
+                    .ok_or_else(|| anyhow!("router executor query: {code} {v}"))
+            })
+            .await?;
         Ok(Some(e.as_str()))
     }
 
     async fn build_on(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
-        let op = job.op.as_ref().ok_or_else(|| SimError::Revert("job has no op".into()))?;
-        let sender = self.lanes.get(lane).ok_or_else(|| SimError::Transport(format!("no lane {lane}")))?.address.clone();
+        let op = job
+            .op
+            .as_ref()
+            .ok_or_else(|| SimError::Revert("job has no op".into()))?;
+        let sender = self
+            .lanes
+            .get(lane)
+            .ok_or_else(|| SimError::Transport(format!("no lane {lane}")))?
+            .address
+            .clone();
         // T17 fix 2: the router's executor is read lazily, only by a job that needs it (a relay-fee job, or a pay to a
         // contract address that could be the executor), and cached; until it answers such a job is retried, every
         // other job flows (a down router never stalls plain pays)
         let executor = if self.relay_fee.router.is_some() && executor_needed(op) {
-            Some(self.executor().await.map_err(|e| {
-                self.warn_executor(&e);
-                SimError::Transport(format!("the relay-fee router's executor is not resolved yet: {e:#}"))
-            })?.unwrap_or_default())
+            Some(
+                self.executor()
+                    .await
+                    .map_err(|e| {
+                        self.warn_executor(&e);
+                        SimError::Transport(format!(
+                            "the relay-fee router's executor is not resolved yet: {e:#}"
+                        ))
+                    })?
+                    .unwrap_or_default(),
+            )
         } else {
             self.executor.get().map(String::as_str)
         };
-        let (contract, msg, valid_until) = job_msg(op, &self.chain_id, &self.relay_fee, &sender, executor)
-            .map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
-        let (_, seq) = self.account(lane).await.map_err(|e| SimError::Transport(format!("{e:#}")))?;
-        let pk = self.pk(lane).map_err(|e| SimError::Transport(e.to_string()))?;
+        let (contract, msg, valid_until) =
+            job_msg(op, &self.chain_id, &self.relay_fee, &sender, executor)
+                .map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
+        let (_, seq) = self
+            .account(lane)
+            .await
+            .map_err(|e| SimError::Transport(format!("{e:#}")))?;
+        let pk = self
+            .pk(lane)
+            .map_err(|e| SimError::Transport(e.to_string()))?;
         let body = tx_body(&sender, &contract, &msg);
         let sim = tx_raw(&body, &auth_info(&pk, seq, &self.denom, 0, 0), &[]);
         let (code, v) = self
-            .rest_post("/cosmos/tx/v1beta1/simulate", &json!({"tx_bytes": B64.encode(&sim)}))
+            .rest_post(
+                "/cosmos/tx/v1beta1/simulate",
+                &json!({"tx_bytes": B64.encode(&sim)}),
+            )
             .await
             .map_err(|e| SimError::Transport(format!("{e:#}")))?;
         if code != 200 {
             return Err(sim_error(code, &v));
         }
-        let used: u64 = v["gas_info"]["gas_used"].as_str().and_then(|g| g.parse().ok()).unwrap_or(0);
+        let used: u64 = v["gas_info"]["gas_used"]
+            .as_str()
+            .and_then(|g| g.parse().ok())
+            .unwrap_or(0);
         let gas = used + used * 3 / 10 + 10_000;
         if gas > self.max_gas {
             return Err(SimError::Revert(format!("gas {gas} above max_gas_per_tx")));
         }
-        Ok(Built { job_id: job.id, body, valid_until, meta: json!({"gas": gas}) })
+        Ok(Built {
+            job_id: job.id,
+            body,
+            valid_until,
+            meta: json!({"gas": gas}),
+        })
     }
 
     fn pk(&self, lane: usize) -> Result<Vec<u8>> {
-        Ok(self.signers.get(lane).ok_or_else(|| anyhow!("no lane {lane}"))?.public_key())
+        Ok(self
+            .signers
+            .get(lane)
+            .ok_or_else(|| anyhow!("no lane {lane}"))?
+            .public_key())
     }
 }
 
@@ -718,16 +990,28 @@ impl ChainAdapter for CosmosAdapter {
     /// R80: `pay` ⇒ `QueryMsg::Nonce {owner, lane}` (`NONCES[(from, lane)]` của token) so với nonce đã ký. Token =
     /// `payload.contract` (một job relay-fee gửi tới router, không phải token).
     async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
-        let Some(op) = job.op.as_ref().filter(|o| o["op_kind"] == "pay") else { return Ok(None) };
-        let payload: Value = serde_json::from_slice(&hex_arg(op["payload"].as_str().unwrap_or_default())?)?;
-        let (Some(nonce), Some(contract)) = (payload["nonce"].as_u64(), payload["contract"].as_str()) else { return Ok(None) };
+        let Some(op) = job.op.as_ref().filter(|o| o["op_kind"] == "pay") else {
+            return Ok(None);
+        };
+        let payload: Value =
+            serde_json::from_slice(&hex_arg(op["payload"].as_str().unwrap_or_default())?)?;
+        let (Some(nonce), Some(contract)) =
+            (payload["nonce"].as_u64(), payload["contract"].as_str())
+        else {
+            return Ok(None);
+        };
         if payload["op"] != "pay" {
             return Ok(None);
         }
         let q = json!({"nonce": {"owner": payload["from"], "lane": payload["lane"]}});
         let q = base64::engine::general_purpose::URL_SAFE.encode(q.to_string());
-        let (code, v) = self.rest_get(&format!("/cosmwasm/wasm/v1/contract/{contract}/smart/{q}")).await?;
-        let next = v["data"].as_u64().filter(|_| code == 200).ok_or_else(|| anyhow!("nonce query: {code} {v}"))?;
+        let (code, v) = self
+            .rest_get(&format!("/cosmwasm/wasm/v1/contract/{contract}/smart/{q}"))
+            .await?;
+        let next = v["data"]
+            .as_u64()
+            .filter(|_| code == 200)
+            .ok_or_else(|| anyhow!("nonce query: {code} {v}"))?;
         Ok(Some(next > nonce))
     }
 
@@ -736,13 +1020,20 @@ impl ChainAdapter for CosmosAdapter {
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let mark = self.failovers();
         match BUILDING.scope((), self.build_on(job, lane)).await {
-            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),
+            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(
+                crate::adapters::evm::failover_answer(&r),
+            )),
             r => r,
         }
     }
 
     async fn sign(&self, built: Built, lane: usize, sequence: u64) -> Result<Signed> {
-        let an = match self.account_numbers.lock().ok().and_then(|m| m.get(&lane).copied()) {
+        let an = match self
+            .account_numbers
+            .lock()
+            .ok()
+            .and_then(|m| m.get(&lane).copied())
+        {
             Some(n) => n,
             None => self.account(lane).await?.0,
         };
@@ -753,12 +1044,22 @@ impl ChainAdapter for CosmosAdapter {
         let sig = self.signers[lane].sign(&Sha256::digest(&doc))?;
         let raw = tx_raw(&built.body, &auth, &sig[..64]);
         let tx_id = format!("0x{}", alloy::hex::encode(Sha256::digest(&raw)));
-        Ok(Signed { job_id: built.job_id, tx_id, raw, valid_until: built.valid_until, sequence })
+        Ok(Signed {
+            job_id: built.job_id,
+            tx_id,
+            raw,
+            valid_until: built.valid_until,
+            sequence,
+        })
     }
 
     async fn submit(&self, signed: &Signed) -> Result<()> {
         // Mốc quét khối cho `tx_status` (tx chỉ vào khối từ đỉnh hiện tại trở đi).
-        if !self.scan_from.lock().is_ok_and(|m| m.contains_key(&signed.tx_id)) {
+        if !self
+            .scan_from
+            .lock()
+            .is_ok_and(|m| m.contains_key(&signed.tx_id))
+        {
             let head = self.final_head().await?.map_or(1, |h| h.height);
             if let Ok(mut m) = self.scan_from.lock() {
                 m.insert(signed.tx_id.clone(), head);
@@ -766,7 +1067,12 @@ impl ChainAdapter for CosmosAdapter {
         }
         let body = json!({"tx_bytes": B64.encode(&signed.raw), "mode": "BROADCAST_MODE_SYNC"});
         // scaas-rpc T24.7: the send is the first gateway's, inside `build`'s scope too (never failed over)
-        let (code, v) = self.net.rest.post(0, "/cosmos/tx/v1beta1/txs", &body).await.map_err(|e| anyhow!("POST /cosmos/tx/v1beta1/txs: {e}"))?;
+        let (code, v) = self
+            .net
+            .rest
+            .post(0, "/cosmos/tx/v1beta1/txs", &body)
+            .await
+            .map_err(|e| anyhow!("POST /cosmos/tx/v1beta1/txs: {e}"))?;
         broadcast_outcome(code, &v)
     }
 
@@ -777,10 +1083,18 @@ impl ChainAdapter for CosmosAdapter {
             let h = tx_id.trim_start_matches("0x").to_ascii_uppercase();
             if let Ok((200, v)) = self.rest_get(&format!("/cosmos/tx/v1beta1/txs/{h}")).await {
                 let r = &v["tx_response"];
-                let height = r["height"].as_str().and_then(|s| s.parse().ok()).unwrap_or(0);
+                let height = r["height"]
+                    .as_str()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0);
                 let st = match r["code"].as_u64() {
-                    Some(0) => Some(TxStatus::Mined { height, tx_hash: None }),
-                    Some(_) => Some(TxStatus::Reverted { reason: r["raw_log"].as_str().unwrap_or("failed").to_string() }),
+                    Some(0) => Some(TxStatus::Mined {
+                        height,
+                        tx_hash: None,
+                    }),
+                    Some(_) => Some(TxStatus::Reverted {
+                        reason: r["raw_log"].as_str().unwrap_or("failed").to_string(),
+                    }),
                     None => None,
                 };
                 if let Some(st) = st {
@@ -790,11 +1104,23 @@ impl ChainAdapter for CosmosAdapter {
                     return Ok(st);
                 }
             }
-            let Some(from) = self.scan_from.lock().ok().and_then(|m| m.get(tx_id).copied()) else { return Ok(TxStatus::Unknown) };
-            let Some(head) = self.final_head().await? else { return Ok(TxStatus::Unknown) };
+            let Some(from) = self
+                .scan_from
+                .lock()
+                .ok()
+                .and_then(|m| m.get(tx_id).copied())
+            else {
+                return Ok(TxStatus::Unknown);
+            };
+            let Some(head) = self.final_head().await? else {
+                return Ok(TxStatus::Unknown);
+            };
             for height in from..=head.height.min(from + 50) {
                 let b = self.rpc(&format!("block?height={height}")).await?;
-                if b["block"]["data"]["txs"].as_array().is_some_and(|t| !t.is_empty()) {
+                if b["block"]["data"]["txs"]
+                    .as_array()
+                    .is_some_and(|t| !t.is_empty())
+                {
                     let r = self.rpc(&format!("block_results?height={height}")).await?;
                     if let Some(st) = tx_in_block(&b, &r, tx_id) {
                         if let Ok(mut m) = self.scan_from.lock() {
@@ -824,9 +1150,14 @@ impl ChainAdapter for CosmosAdapter {
     /// CometBFT: khối đã commit là final (BFT). ponytail: một endpoint, không quorum nhiều RPC.
     async fn final_head(&self) -> Result<Option<Head>> {
         let s = self.rpc("status").await?;
-        let height: u64 = s["sync_info"]["latest_block_height"].as_str().unwrap_or("0").parse()?;
+        let height: u64 = s["sync_info"]["latest_block_height"]
+            .as_str()
+            .unwrap_or("0")
+            .parse()?;
         self.net.rest.client.pool().saw_block(height); // the failover reads' floor: the first CometBFT endpoint's height
-        let hash = s["sync_info"]["latest_block_hash"].as_str().and_then(hash32);
+        let hash = s["sync_info"]["latest_block_hash"]
+            .as_str()
+            .and_then(hash32);
         Ok(match hash {
             Some(hash) if height > 0 => Some(Head { height, hash }),
             _ => None,
@@ -835,7 +1166,10 @@ impl ChainAdapter for CosmosAdapter {
 
     async fn block_hash(&self, height: u64) -> Result<String> {
         let b = self.rpc(&format!("block?height={height}")).await?;
-        b["block_id"]["hash"].as_str().and_then(hash32).ok_or_else(|| anyhow!("no block {height}"))
+        b["block_id"]["hash"]
+            .as_str()
+            .and_then(hash32)
+            .ok_or_else(|| anyhow!("no block {height}"))
     }
 
     /// Đọc `block_results` từng khối (kết quả ABCI lưu cùng lúc commit), KHÔNG dùng `tx_search`: indexer tx của
@@ -847,18 +1181,33 @@ impl ChainAdapter for CosmosAdapter {
             let br = self.rpc(&format!("block_results?height={h}")).await?;
             let results = br["txs_results"].as_array().cloned().unwrap_or_default();
             let router = self.relay_fee.router.as_deref();
-            let probe = |r: &Value| !normalize_tx(&json!({"hash": "00".repeat(32), "height": h.to_string(), "tx_result": r}), contracts, router).is_empty();
+            let probe = |r: &Value| {
+                !normalize_tx(
+                    &json!({"hash": "00".repeat(32), "height": h.to_string(), "tx_result": r}),
+                    contracts,
+                    router,
+                )
+                .is_empty()
+            };
             if !results.iter().any(probe) {
                 continue;
             }
             let b = self.rpc(&format!("block?height={h}")).await?;
-            let hash = b["block_id"]["hash"].as_str().and_then(hash32).ok_or_else(|| anyhow!("block {h}: no hash"))?;
-            let txs = b["block"]["data"]["txs"].as_array().cloned().unwrap_or_default();
+            let hash = b["block_id"]["hash"]
+                .as_str()
+                .and_then(hash32)
+                .ok_or_else(|| anyhow!("block {h}: no hash"))?;
+            let txs = b["block"]["data"]["txs"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
             if txs.len() != results.len() {
                 bail!("block {h}: {} txs but {} results", txs.len(), results.len());
             }
             for (raw, r) in txs.iter().zip(&results) {
-                let bytes = B64.decode(raw.as_str().unwrap_or_default()).context("tx bytes")?;
+                let bytes = B64
+                    .decode(raw.as_str().unwrap_or_default())
+                    .context("tx bytes")?;
                 let tx = json!({"hash": alloy::hex::encode(Sha256::digest(&bytes)), "height": h.to_string(), "tx_result": r});
                 for mut e in normalize_tx(&tx, contracts, router) {
                     e["block_hash"] = json!(hash);
@@ -886,19 +1235,43 @@ mod tests {
         .unwrap();
         let (curve, key) = crate::keys::lane_secret(&seed, "cosmos", 0).unwrap();
         let s = LocalSigner::new(curve, &key).unwrap();
-        assert_eq!(account_address("wasm", &s.public_key()), "wasm1r5v5srda7xfth3hn2s26txvrcrntldju3hkw75");
-        assert_eq!(bech32("wasm", &[0x33; 20]), "wasm1xvenxvenxvenxvenxvenxvenxvenxvenkz5vxp");
-        assert_eq!(bech32("wasm", &[0x44; 32]), "wasm1g3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zqn0lflt");
+        assert_eq!(
+            account_address("wasm", &s.public_key()),
+            "wasm1r5v5srda7xfth3hn2s26txvrcrntldju3hkw75"
+        );
+        assert_eq!(
+            bech32("wasm", &[0x33; 20]),
+            "wasm1xvenxvenxvenxvenxvenxvenxvenxvenkz5vxp"
+        );
+        assert_eq!(
+            bech32("wasm", &[0x44; 32]),
+            "wasm1g3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zqn0lflt"
+        );
         let vector = include_str!("../../../smartcontracts/cosmos/tests/tests/vector.txt");
-        let line = |k: &str| vector.lines().find_map(|l| l.strip_prefix(&format!("{k}="))).unwrap().to_string();
+        let line = |k: &str| {
+            vector
+                .lines()
+                .find_map(|l| l.strip_prefix(&format!("{k}=")))
+                .unwrap()
+                .to_string()
+        };
         let payload = line("payload");
-        assert_eq!(alloy::hex::encode(Sha256::digest(payload.as_bytes())), line("digest"));
+        assert_eq!(
+            alloy::hex::encode(Sha256::digest(payload.as_bytes())),
+            line("digest")
+        );
         let op = json!({"contract": line("contract"), "payload": alloy::hex::encode(&payload), "signature": line("sig"),
                         "public_key": alloy::hex::encode(s.public_key()), "valid_until": 2_000_000_000u64});
         let (contract, msg, vu) = relay_msg(&op).unwrap();
-        assert_eq!((contract.as_str(), vu), (line("contract").as_str(), 2_000_000_000));
+        assert_eq!(
+            (contract.as_str(), vu),
+            (line("contract").as_str(), 2_000_000_000)
+        );
         let m: Value = serde_json::from_slice(&msg).unwrap();
-        assert_eq!(B64.decode(m["relay"]["payload"].as_str().unwrap()).unwrap(), payload.as_bytes());
+        assert_eq!(
+            B64.decode(m["relay"]["payload"].as_str().unwrap()).unwrap(),
+            payload.as_bytes()
+        );
         assert_eq!(m["relay"]["auth"]["scheme"], "adr036");
     }
 
@@ -910,7 +1283,10 @@ mod tests {
         // BIP-173 vector.
         assert_eq!(bech32("a", &[]), "a12uel5l");
         // TxRaw keeps an empty signature slot for simulation.
-        assert_eq!(tx_raw(b"b", b"a", &[]), [0x0a, 1, b'b', 0x12, 1, b'a', 0x1a, 0]);
+        assert_eq!(
+            tx_raw(b"b", b"a", &[]),
+            [0x0a, 1, b'b', 0x12, 1, b'a', 0x1a, 0]
+        );
         let ai = auth_info(&[2; 33], 5, "stake", 0, 0);
         assert!(ai.windows(2).any(|w| w == [0x18, 5]), "sequence 5 encoded");
     }
@@ -922,9 +1298,15 @@ mod tests {
         let (_, msg, _) = relay_msg(&op).unwrap();
         let m: Value = serde_json::from_slice(&msg).unwrap();
         assert_eq!(m["relay"]["auth"]["scheme"], "passkey");
-        assert_eq!(m["relay"]["auth"]["client_data_json"], r#"{"type":"webauthn.get"}"#);
+        assert_eq!(
+            m["relay"]["auth"]["client_data_json"],
+            r#"{"type":"webauthn.get"}"#
+        );
         let bad = json!({"contract": "c", "payload": "00", "signature": "AQ==", "public_key": "02", "valid_until": 1});
-        assert!(relay_msg(&bad).is_err(), "adr036 signature must be 64 bytes");
+        assert!(
+            relay_msg(&bad).is_err(),
+            "adr036 signature must be 64 bytes"
+        );
     }
 
     fn tx(events: Value) -> Value {
@@ -935,11 +1317,21 @@ mod tests {
     /// `payment_settled` of the same transaction; a fee in an unregistered token or from another contract joins nothing.
     #[test]
     fn cosmos_indexer_joins_pay_meta_and_relay_fee() {
-        let attrs = |kv: &[(&str, String)]| json!(kv.iter().map(|(k, v)| json!({"key": k, "value": v})).collect::<Vec<_>>());
-        let (pid, rf) = (format!("0x{}", "04".repeat(32)), format!("0x{}", "05".repeat(32)));
-        let fee = |token: &str| json!({"type": "wasm-relay_fee_paid", "attributes": attrs(&[("_contract_address", "wasm1router".into()),
+        let attrs = |kv: &[(&str, String)]| {
+            json!(kv
+                .iter()
+                .map(|(k, v)| json!({"key": k, "value": v}))
+                .collect::<Vec<_>>())
+        };
+        let (pid, rf) = (
+            format!("0x{}", "04".repeat(32)),
+            format!("0x{}", "05".repeat(32)),
+        );
+        let fee = |token: &str| {
+            json!({"type": "wasm-relay_fee_paid", "attributes": attrs(&[("_contract_address", "wasm1router".into()),
             ("ref", rf.clone()), ("target", "wasm1target".into()), ("token", token.into()), ("payer", "wasm1a".into()),
-            ("payee", "wasm1lane".into()), ("amount", "5".into())])});
+            ("payee", "wasm1lane".into()), ("amount", "5".into())])})
+        };
         let ev = json!([
             // the router's own event first (wasmd lists it before the sub-messages' events)
             fee("wasm1tok"),
@@ -953,9 +1345,24 @@ mod tests {
         let out = normalize_tx(&tx(ev.clone()), &["wasm1tok".into()], Some("wasm1router"));
         assert_eq!(out.len(), 2);
         assert!(out.iter().all(|e| e["event"] == "PaymentSettled"));
-        assert_eq!((out[0]["meta"].as_str(), out[1]["meta"].as_str()), (Some("0xabcd"), None));
-        assert_eq!((out[1]["relay_target"].as_str(), out[1]["relay_payee"].as_str()), (Some("wasm1target"), Some("wasm1lane")), "open mode");
-        assert!(normalize_tx(&tx(ev), &["wasm1tok".into()], None).iter().all(|e| e["relay_payee"].is_null()), "no router: nothing joins");
+        assert_eq!(
+            (out[0]["meta"].as_str(), out[1]["meta"].as_str()),
+            (Some("0xabcd"), None)
+        );
+        assert_eq!(
+            (
+                out[1]["relay_target"].as_str(),
+                out[1]["relay_payee"].as_str()
+            ),
+            (Some("wasm1target"), Some("wasm1lane")),
+            "open mode"
+        );
+        assert!(
+            normalize_tx(&tx(ev), &["wasm1tok".into()], None)
+                .iter()
+                .all(|e| e["relay_payee"].is_null()),
+            "no router: nothing joins"
+        );
     }
 
     #[test]
@@ -974,7 +1381,13 @@ mod tests {
         let out = normalize_tx(&tx(ev.clone()), &["wasm1tok".into()], None);
         assert_eq!(out.len(), 2);
         assert_eq!(out[0]["event"], "PaymentSettled");
-        assert_eq!((out[0]["log_index"].as_u64(), out[0]["block_number"].as_u64()), (Some(1), Some(7)));
+        assert_eq!(
+            (
+                out[0]["log_index"].as_u64(),
+                out[0]["block_number"].as_u64()
+            ),
+            (Some(1), Some(7))
+        );
         assert_eq!(out[0]["tx_hash"], format!("0x{}", "ab".repeat(32)));
         assert_eq!(out[1]["digest"], format!("0x{}", "ee".repeat(32)));
         let mut failed = tx(ev);
@@ -986,11 +1399,20 @@ mod tests {
     #[test]
     fn simulate_errors_are_classified() {
         let revert = |code: u16, v: Value| matches!(sim_error(code, &v), SimError::Revert(_));
-        assert!(revert(500, json!({"code": 2, "message": "execute wasm contract failed: metaop: expired"})));
+        assert!(revert(
+            500,
+            json!({"code": 2, "message": "execute wasm contract failed: metaop: expired"})
+        ));
         assert!(revert(400, json!({"code": 3, "message": "tx parse error"})));
-        assert!(!revert(500, json!({"code": 2, "message": "account sequence mismatch, expected 4, got 3"})));
+        assert!(!revert(
+            500,
+            json!({"code": 2, "message": "account sequence mismatch, expected 4, got 3"})
+        ));
         for c in [4, 8, 13, 14] {
-            assert!(!revert(503, json!({"code": c, "message": "upstream"})), "grpc {c} is transport");
+            assert!(
+                !revert(503, json!({"code": c, "message": "upstream"})),
+                "grpc {c} is transport"
+            );
         }
         assert!(!revert(502, Value::Null), "gateway without a body");
     }
@@ -998,14 +1420,27 @@ mod tests {
     /// Review L1: CheckTx từ chối ⇒ tx không vào mempool, gửi lại cùng bytes vô ích ⇒ `Rejected`.
     #[test]
     fn checktx_rejections_are_not_retried_byte_for_byte() {
-        let r = |code: u64| broadcast_outcome(200, &json!({"tx_response": {"code": code, "raw_log": "x"}}));
+        let r = |code: u64| {
+            broadcast_outcome(200, &json!({"tx_response": {"code": code, "raw_log": "x"}}))
+        };
         assert!(r(0).is_ok() && r(19).is_ok());
         for c in [4, 5, 13, 32] {
-            assert!(r(c).unwrap_err().downcast_ref::<crate::adapter::Rejected>().is_some(), "code {c}");
+            assert!(
+                r(c).unwrap_err()
+                    .downcast_ref::<crate::adapter::Rejected>()
+                    .is_some(),
+                "code {c}"
+            );
         }
         let full = r(20).unwrap_err();
-        assert!(full.downcast_ref::<crate::adapter::Rejected>().is_none(), "mempool full: same bytes may pass later");
-        assert!(broadcast_outcome(502, &Value::Null).unwrap_err().downcast_ref::<crate::adapter::Rejected>().is_none());
+        assert!(
+            full.downcast_ref::<crate::adapter::Rejected>().is_none(),
+            "mempool full: same bytes may pass later"
+        );
+        assert!(broadcast_outcome(502, &Value::Null)
+            .unwrap_err()
+            .downcast_ref::<crate::adapter::Rejected>()
+            .is_none());
     }
 
     fn chain(extra: &str) -> ChainCfg {
@@ -1020,12 +1455,27 @@ mod tests {
     fn adapter_refuses_unsafe_config() {
         let k = || vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
         let p = "params = { rest = [\"http://x\"], prefix = \"wasm\"";
-        assert!(CosmosAdapter::new(&chain(&format!("network = \"c-1\"\n{p}, gas_price = \"0.025\" }}")), k()).is_ok());
-        let err = |cfg: &str| CosmosAdapter::new(&chain(cfg), k()).err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(CosmosAdapter::new(
+            &chain(&format!("network = \"c-1\"\n{p}, gas_price = \"0.025\" }}")),
+            k()
+        )
+        .is_ok());
+        let err = |cfg: &str| {
+            CosmosAdapter::new(&chain(cfg), k())
+                .err()
+                .map(|e| e.to_string())
+                .unwrap_or_default()
+        };
         assert!(err(&format!("{p}, gas_price = \"0.025\" }}")).contains("network"));
         assert!(err(&format!("network = \"c-1\"\n{p} }}")).contains("gas_price"));
-        assert!(err(&format!("network = \"c-1\"\n{p}, gas_price = \"0\" }}")).contains("gas_price"));
-        assert!(CosmosAdapter::new(&chain(&format!("network = \"c-1\"\n{p}, zero_fee = true }}")), k()).is_ok());
+        assert!(
+            err(&format!("network = \"c-1\"\n{p}, gas_price = \"0\" }}")).contains("gas_price")
+        );
+        assert!(CosmosAdapter::new(
+            &chain(&format!("network = \"c-1\"\n{p}, zero_fee = true }}")),
+            k()
+        )
+        .is_ok());
     }
 
     /// Review L3: CometBFT 0.34 trả khoá/giá trị base64; phát hiện qua `_contract_address`, không theo chain.
@@ -1038,7 +1488,10 @@ mod tests {
             {"key": b("pay_ref"), "value": b(&format!("0x{}", "22".repeat(32)))}]}]);
         let out = normalize_tx(&tx(ev), &["wasm1tok".into()], None);
         assert_eq!(out.len(), 1);
-        assert_eq!((out[0]["from"].as_str(), out[0]["amount"].as_str()), (Some("wasm1a"), Some("5")));
+        assert_eq!(
+            (out[0]["from"].as_str(), out[0]["amount"].as_str()),
+            (Some("wasm1a"), Some("5"))
+        );
     }
 
     /// Review M2: không có indexer tx, tx vẫn được tìm trong `block` + `block_results` theo sha256(bytes).
@@ -1048,8 +1501,19 @@ mod tests {
         let block = json!({"block": {"header": {"height": "9"}, "data": {"txs": [B64.encode(&a), B64.encode(&b)]}}});
         let results = json!({"txs_results": [{"code": 0}, {"code": 5, "log": "out of funds"}]});
         let id = |t: &[u8]| format!("0x{}", alloy::hex::encode(Sha256::digest(t)));
-        assert_eq!(tx_in_block(&block, &results, &id(&a)), Some(TxStatus::Mined { height: 9, tx_hash: None }));
-        assert_eq!(tx_in_block(&block, &results, &id(&b)), Some(TxStatus::Reverted { reason: "out of funds".into() }));
+        assert_eq!(
+            tx_in_block(&block, &results, &id(&a)),
+            Some(TxStatus::Mined {
+                height: 9,
+                tx_hash: None
+            })
+        );
+        assert_eq!(
+            tx_in_block(&block, &results, &id(&b)),
+            Some(TxStatus::Reverted {
+                reason: "out of funds".into()
+            })
+        );
         assert_eq!(tx_in_block(&block, &results, &id(b"other")), None);
     }
 
@@ -1066,11 +1530,18 @@ mod tests {
     }
 
     fn policy() -> RelayFeePolicy {
-        RelayFeePolicy { router: Some(router()), tokens: vec![token()], params: rp(5) }
+        RelayFeePolicy {
+            router: Some(router()),
+            tokens: vec![token()],
+            params: rp(5),
+        }
     }
 
     fn rp(min_amount: u128) -> crate::config::RelayParams {
-        crate::config::RelayParams { min_amount, ..Default::default() }
+        crate::config::RelayParams {
+            min_amount,
+            ..Default::default()
+        }
     }
 
     fn lane_c() -> String {
@@ -1087,7 +1558,14 @@ mod tests {
     }
 
     /// A signed `pay` op as the token parses it (keys sorted, `HexBinary` without `0x`, `Uint128` as a string).
-    fn pay_payload(pay_ref: &[u8; 32], lane: &[u8; 32], nonce: u64, relayer: &str, to: &str, amount: u128) -> Value {
+    fn pay_payload(
+        pay_ref: &[u8; 32],
+        lane: &[u8; 32],
+        nonce: u64,
+        relayer: &str,
+        to: &str,
+        amount: u128,
+    ) -> Value {
         json!({"amount": amount.to_string(), "contract": token(), "domain": "scaas.metaop.v1", "extra": "",
                "from": bech32("wasm", &[0x33; 20]), "lane": alloy::hex::encode(lane), "network": CHAIN, "nonce": nonce,
                "op": "pay", "pay_ref": alloy::hex::encode(pay_ref), "relayer": relayer, "to": to, "valid_until": 2_000_000_000u64})
@@ -1099,7 +1577,10 @@ mod tests {
     }
 
     fn rows() -> Vec<Value> {
-        serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json")).unwrap()
+        serde_json::from_str(include_str!(
+            "../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json"
+        ))
+        .unwrap()
     }
 
     fn unhex32(v: &Value) -> [u8; 32] {
@@ -1109,12 +1590,24 @@ mod tests {
     #[test]
     fn cosmos_pay_meta_job_builds_msg() {
         for r in rows() {
-            let id = meta_pay_id(&unhex32(&r["salt"]), &hex_arg(r["meta"].as_str().unwrap()).unwrap());
-            assert_eq!(format!("0x{}", alloy::hex::encode(id)), r["payId"].as_str().unwrap());
-            assert_eq!(format!("0x{}", alloy::hex::encode(pay_lane(&id))), r["payLane"].as_str().unwrap());
+            let id = meta_pay_id(
+                &unhex32(&r["salt"]),
+                &hex_arg(r["meta"].as_str().unwrap()).unwrap(),
+            );
+            assert_eq!(
+                format!("0x{}", alloy::hex::encode(id)),
+                r["payId"].as_str().unwrap()
+            );
+            assert_eq!(
+                format!("0x{}", alloy::hex::encode(pay_lane(&id))),
+                r["payLane"].as_str().unwrap()
+            );
         }
         let r = &rows()[0];
-        let (salt, meta) = (unhex32(&r["salt"]), hex_arg(r["meta"].as_str().unwrap()).unwrap());
+        let (salt, meta) = (
+            unhex32(&r["salt"]),
+            hex_arg(r["meta"].as_str().unwrap()).unwrap(),
+        );
         let id = meta_pay_id(&salt, &meta);
         let payee = bech32("wasm", &[0x44; 20]);
         let mk = |p: &Value, salt: &[u8], meta: &[u8]| {
@@ -1128,25 +1621,63 @@ mod tests {
         assert_eq!((contract, vu), (token(), 2_000_000_000));
         let m: Value = serde_json::from_slice(&msg).unwrap();
         let x = &m["relay_pay_meta"];
-        assert_eq!(B64.decode(x["payload"].as_str().unwrap()).unwrap(), serde_json::to_vec(&good).unwrap());
+        assert_eq!(
+            B64.decode(x["payload"].as_str().unwrap()).unwrap(),
+            serde_json::to_vec(&good).unwrap()
+        );
         assert_eq!(x["salt"].as_str().unwrap(), alloy::hex::encode(salt));
         assert_eq!(B64.decode(x["meta"].as_str().unwrap()).unwrap(), meta);
         assert_eq!(x["auth"]["scheme"], "adr036");
         let err = |o: Value| jm(&o, &policy()).unwrap_err().to_string();
-        const SHAPE: &str = "pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane(pay_ref) / 0";
+        const SHAPE: &str =
+            "pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane(pay_ref) / 0";
         assert_eq!(err(mk(&good, &[1; 32], &meta)), SHAPE);
         assert_eq!(err(mk(&good, &salt, b"other")), SHAPE);
-        assert_eq!(err(mk(&pay_payload(&id, &[3; 32], 0, "", &payee, 10), &salt, &meta)), SHAPE);
-        assert_eq!(err(mk(&pay_payload(&id, &pay_lane(&id), 1, "", &payee, 10), &salt, &meta)), SHAPE);
+        assert_eq!(
+            err(mk(
+                &pay_payload(&id, &[3; 32], 0, "", &payee, 10),
+                &salt,
+                &meta
+            )),
+            SHAPE
+        );
+        assert_eq!(
+            err(mk(
+                &pay_payload(&id, &pay_lane(&id), 1, "", &payee, 10),
+                &salt,
+                &meta
+            )),
+            SHAPE
+        );
         assert_eq!(err(mk(&good, &salt[..31], &meta)), "op.salt is 32 bytes");
         let mut revoke = good.clone();
         revoke["op"] = json!("revoke");
         assert_eq!(err(mk(&revoke, &salt, &meta)), "pay-meta: op is not pay");
         let long = vec![0u8; 2049];
-        assert_eq!(err(mk(&good, &salt, &long)), "meta is 2049 B, above max_pay_meta_bytes 2048");
-        let wide = RelayFeePolicy { params: crate::config::RelayParams { max_pay_meta_bytes: 4096, ..Default::default() }, ..policy() };
+        assert_eq!(
+            err(mk(&good, &salt, &long)),
+            "meta is 2049 B, above max_pay_meta_bytes 2048"
+        );
+        let wide = RelayFeePolicy {
+            params: crate::config::RelayParams {
+                max_pay_meta_bytes: 4096,
+                ..Default::default()
+            },
+            ..policy()
+        };
         let long_id = meta_pay_id(&salt, &long);
-        assert!(jm(&mk(&pay_payload(&long_id, &pay_lane(&long_id), 0, "", &payee, 10), &salt, &long), &wide).is_ok(), "the config raises the cap");
+        assert!(
+            jm(
+                &mk(
+                    &pay_payload(&long_id, &pay_lane(&long_id), 0, "", &payee, 10),
+                    &salt,
+                    &long
+                ),
+                &wide
+            )
+            .is_ok(),
+            "the config raises the cap"
+        );
         let mut other = mk(&good, &salt, &meta);
         other["contract"] = json!(router());
         assert_eq!(err(other), "op.contract is not the payload's contract");
@@ -1156,7 +1687,13 @@ mod tests {
     #[test]
     fn cosmos_relay_fee_job_checks_ref() {
         let vector = include_str!("../../../smartcontracts/cosmos/tests/tests/vector.txt");
-        let line = |k: &str| vector.lines().find_map(|l| l.strip_prefix(&format!("{k}="))).unwrap().to_string();
+        let line = |k: &str| {
+            vector
+                .lines()
+                .find_map(|l| l.strip_prefix(&format!("{k}=")))
+                .unwrap()
+                .to_string()
+        };
         let (target, call) = (line("contract"), line("relay_msg"));
         let rf: [u8; 32] = relay_ref(&line("relay_chain"), &[0x44; 32], call.as_bytes());
         assert_eq!(alloy::hex::encode(rf), line("relay_ref"));
@@ -1170,39 +1707,158 @@ mod tests {
         assert_eq!(contract, router());
         let m: Value = serde_json::from_slice(&msg).unwrap();
         let x = &m["relay"];
-        assert_eq!((x["target"].as_str().unwrap(), x["token"].as_str().unwrap()), (target.as_str(), token().as_str()));
-        assert_eq!(B64.decode(x["msg"].as_str().unwrap()).unwrap(), call.as_bytes());
-        assert_eq!(B64.decode(x["payload"].as_str().unwrap()).unwrap(), serde_json::to_vec(&good).unwrap());
+        assert_eq!(
+            (x["target"].as_str().unwrap(), x["token"].as_str().unwrap()),
+            (target.as_str(), token().as_str())
+        );
+        assert_eq!(
+            B64.decode(x["msg"].as_str().unwrap()).unwrap(),
+            call.as_bytes()
+        );
+        assert_eq!(
+            B64.decode(x["payload"].as_str().unwrap()).unwrap(),
+            serde_json::to_vec(&good).unwrap()
+        );
         let mut with_ref = mk(&good, &target, call.as_bytes());
         with_ref["ref"] = json!(format!("0x{}", line("relay_ref")));
         assert!(jm(&with_ref, &policy()).is_ok());
         let err = |o: &Value, p: &RelayFeePolicy| jm(o, p).unwrap_err().to_string();
         let o = mk(&good, &target, call.as_bytes());
-        assert_eq!(err(&o, &RelayFeePolicy { router: None, ..policy() }), "params.relay_fee.router is not set");
-        assert_eq!(err(&o, &RelayFeePolicy { router: Some(token()), ..policy() }), "op.contract is not params.relay_fee.router");
-        assert_eq!(err(&o, &RelayFeePolicy { tokens: vec![], ..policy() }), format!("token {} is not registered on this chain", token()));
-        assert_eq!(err(&o, &RelayFeePolicy { params: rp(6), ..policy() }), "fee 5 is below relay_fee.min_amount 6");
+        assert_eq!(
+            err(
+                &o,
+                &RelayFeePolicy {
+                    router: None,
+                    ..policy()
+                }
+            ),
+            "params.relay_fee.router is not set"
+        );
+        assert_eq!(
+            err(
+                &o,
+                &RelayFeePolicy {
+                    router: Some(token()),
+                    ..policy()
+                }
+            ),
+            "op.contract is not params.relay_fee.router"
+        );
+        assert_eq!(
+            err(
+                &o,
+                &RelayFeePolicy {
+                    tokens: vec![],
+                    ..policy()
+                }
+            ),
+            format!("token {} is not registered on this chain", token())
+        );
+        assert_eq!(
+            err(
+                &o,
+                &RelayFeePolicy {
+                    params: rp(6),
+                    ..policy()
+                }
+            ),
+            "fee 5 is below relay_fee.min_amount 6"
+        );
         // T17: the fee reaches this lane (open, or bound to it), else only with relay_bound_payee (sponsored)
-        let to = |payee: &str| mk(&pay_payload(&rf, &pay_lane(&rf), 0, &router(), payee, 5), &target, call.as_bytes());
+        let to = |payee: &str| {
+            mk(
+                &pay_payload(&rf, &pay_lane(&rf), 0, &router(), payee, 5),
+                &target,
+                call.as_bytes(),
+            )
+        };
         assert!(jm(&to(&lane_c()), &policy()).is_ok(), "bound to this lane");
         let elsewhere = bech32("wasm", &[0x44; 20]);
         assert!(err(&to(&elsewhere), &policy()).contains("relay_bound_payee"));
-        let sponsored = RelayFeePolicy { params: crate::config::RelayParams { relay_bound_payee: true, min_amount: 1_000, ..Default::default() }, ..policy() };
-        assert!(jm(&to(&elsewhere), &sponsored).is_ok(), "sponsored: no min_amount");
-        const BOUND: &str = "the payment is not bound to this call (ref, payLane(ref), nonce 0, relayer = router)";
-        assert_eq!(err(&mk(&good, &target, b"{\"record\":{}}"), &policy()), BOUND);
-        assert_eq!(err(&mk(&good, &bech32("wasm", &[0x45; 32]), call.as_bytes()), &policy()), BOUND);
-        assert_eq!(err(&mk(&pay_payload(&rf, &[1; 32], 0, &router(), &router(), 5), &target, call.as_bytes()), &policy()), BOUND);
-        assert_eq!(err(&mk(&pay_payload(&rf, &pay_lane(&rf), 1, &router(), &router(), 5), &target, call.as_bytes()), &policy()), BOUND);
-        assert_eq!(err(&mk(&pay_payload(&rf, &pay_lane(&rf), 0, "", &router(), 5), &target, call.as_bytes()), &policy()), BOUND);
+        let sponsored = RelayFeePolicy {
+            params: crate::config::RelayParams {
+                relay_bound_payee: true,
+                min_amount: 1_000,
+                ..Default::default()
+            },
+            ..policy()
+        };
+        assert!(
+            jm(&to(&elsewhere), &sponsored).is_ok(),
+            "sponsored: no min_amount"
+        );
+        const BOUND: &str =
+            "the payment is not bound to this call (ref, payLane(ref), nonce 0, relayer = router)";
+        assert_eq!(
+            err(&mk(&good, &target, b"{\"record\":{}}"), &policy()),
+            BOUND
+        );
+        assert_eq!(
+            err(
+                &mk(&good, &bech32("wasm", &[0x45; 32]), call.as_bytes()),
+                &policy()
+            ),
+            BOUND
+        );
+        assert_eq!(
+            err(
+                &mk(
+                    &pay_payload(&rf, &[1; 32], 0, &router(), &router(), 5),
+                    &target,
+                    call.as_bytes()
+                ),
+                &policy()
+            ),
+            BOUND
+        );
+        assert_eq!(
+            err(
+                &mk(
+                    &pay_payload(&rf, &pay_lane(&rf), 1, &router(), &router(), 5),
+                    &target,
+                    call.as_bytes()
+                ),
+                &policy()
+            ),
+            BOUND
+        );
+        assert_eq!(
+            err(
+                &mk(
+                    &pay_payload(&rf, &pay_lane(&rf), 0, "", &router(), 5),
+                    &target,
+                    call.as_bytes()
+                ),
+                &policy()
+            ),
+            BOUND
+        );
         let mut bad_ref = mk(&good, &target, call.as_bytes());
         bad_ref["ref"] = json!(format!("0x{}", "00".repeat(32)));
-        assert_eq!(err(&bad_ref, &policy()), "op.ref != relay_ref(chain id, target, msg)");
-        assert_eq!(err(&mk(&good, &target.to_uppercase(), call.as_bytes()), &policy()), "op.extra.target is not a lowercase bech32 address of this chain");
-        assert_eq!(err(&mk(&good, &bech32("cosmos", &[0x44; 32]), call.as_bytes()), &policy()), "op.extra.target is not a lowercase bech32 address of this chain");
+        assert_eq!(
+            err(&bad_ref, &policy()),
+            "op.ref != relay_ref(chain id, target, msg)"
+        );
+        assert_eq!(
+            err(
+                &mk(&good, &target.to_uppercase(), call.as_bytes()),
+                &policy()
+            ),
+            "op.extra.target is not a lowercase bech32 address of this chain"
+        );
+        assert_eq!(
+            err(
+                &mk(&good, &bech32("cosmos", &[0x44; 32]), call.as_bytes()),
+                &policy()
+            ),
+            "op.extra.target is not a lowercase bech32 address of this chain"
+        );
         let mut revoke = good.clone();
         revoke["op"] = json!("revoke");
-        assert_eq!(err(&mk(&revoke, &target, call.as_bytes()), &policy()), "the relay-fee payment is not a pay op");
+        assert_eq!(
+            err(&mk(&revoke, &target, call.as_bytes()), &policy()),
+            "the relay-fee payment is not a pay op"
+        );
     }
 
     /// T17 (every adapter): the one `op.kind` rule; outside a relay, never a payment to the router or its executor.
@@ -1210,7 +1866,11 @@ mod tests {
     fn cosmos_kind_rule_and_never_pay_router_or_executor() {
         let payee = bech32("wasm", &[0x44; 20]);
         let plain = |to: &str| {
-            let mut o = job("x", &token(), &pay_payload(&[1; 32], &[2; 32], 0, "", to, 10));
+            let mut o = job(
+                "x",
+                &token(),
+                &pay_payload(&[1; 32], &[2; 32], 0, "", to, 10),
+            );
             o.as_object_mut().unwrap().remove("kind");
             o
         };
@@ -1218,15 +1878,37 @@ mod tests {
         for k in [json!(7), json!(true), json!({}), json!("relay")] {
             let mut o = plain(&payee);
             o["kind"] = k.clone();
-            assert!(jm(&o, &policy()).unwrap_err().to_string().contains("unknown op.kind"), "{k}");
+            assert!(
+                jm(&o, &policy())
+                    .unwrap_err()
+                    .to_string()
+                    .contains("unknown op.kind"),
+                "{k}"
+            );
         }
         let mut o = plain(&payee);
         o["salt"] = json!("00");
         assert!(jm(&o, &policy()).is_err(), "a kind-less job with salt");
         for to in [router(), exec_c()] {
-            assert!(jm(&plain(&to), &policy()).unwrap_err().to_string().contains("refused"), "{to}");
+            assert!(
+                jm(&plain(&to), &policy())
+                    .unwrap_err()
+                    .to_string()
+                    .contains("refused"),
+                "{to}"
+            );
         }
-        assert!(job_msg(&plain(&router()), CHAIN, &RelayFeePolicy::default(), &lane_c(), None).is_ok(), "no router configured");
+        assert!(
+            job_msg(
+                &plain(&router()),
+                CHAIN,
+                &RelayFeePolicy::default(),
+                &lane_c(),
+                None
+            )
+            .is_ok(),
+            "no router configured"
+        );
     }
 
     /// T17 fix 2: a router whose executor does not answer never stalls plain pays: a pay to an account builds, a
@@ -1237,67 +1919,157 @@ mod tests {
         let u = up.clone();
         let exec = exec_c();
         let app = axum::Router::new()
-            .route("/cosmwasm/wasm/v1/contract/{c}/smart/{q}", axum::routing::get(move || {
-                let (e, u) = (exec.clone(), u.clone());
-                async move {
-                    if u.load(std::sync::atomic::Ordering::SeqCst) {
-                        (axum::http::StatusCode::OK, axum::Json(json!({"data": e})))
-                    } else {
-                        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, axum::Json(json!({"code": 2, "message": "no such contract"})))
+            .route(
+                "/cosmwasm/wasm/v1/contract/{c}/smart/{q}",
+                axum::routing::get(move || {
+                    let (e, u) = (exec.clone(), u.clone());
+                    async move {
+                        if u.load(std::sync::atomic::Ordering::SeqCst) {
+                            (axum::http::StatusCode::OK, axum::Json(json!({"data": e})))
+                        } else {
+                            (
+                                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                                axum::Json(json!({"code": 2, "message": "no such contract"})),
+                            )
+                        }
                     }
-                }
-            }))
-            .route("/cosmos/auth/v1beta1/accounts/{a}", axum::routing::get(|| async {
-                axum::Json(json!({"account": {"account_number": "1", "sequence": "0"}}))
-            }))
-            .route("/cosmos/tx/v1beta1/simulate", axum::routing::post(|| async { axum::Json(json!({"gas_info": {"gas_used": "100000"}})) }))
+                }),
+            )
+            .route(
+                "/cosmos/auth/v1beta1/accounts/{a}",
+                axum::routing::get(|| async {
+                    axum::Json(json!({"account": {"account_number": "1", "sequence": "0"}}))
+                }),
+            )
+            .route(
+                "/cosmos/tx/v1beta1/simulate",
+                axum::routing::post(|| async {
+                    axum::Json(json!({"gas_info": {"gas_used": "100000"}}))
+                }),
+            )
             // scaas-rpc T21b: the gateway's identity and head, read by `build`'s failover before its first answer
-            .route("/cosmos/base/tendermint/v1beta1/node_info", axum::routing::get(|| async { axum::Json(json!({"default_node_info": {"network": "c-1"}})) }))
-            .route("/cosmos/base/tendermint/v1beta1/blocks/latest", axum::routing::get(|| async { axum::Json(json!({"block": {"header": {"height": "5"}}})) }));
+            .route(
+                "/cosmos/base/tendermint/v1beta1/node_info",
+                axum::routing::get(|| async {
+                    axum::Json(json!({"default_node_info": {"network": "c-1"}}))
+                }),
+            )
+            .route(
+                "/cosmos/base/tendermint/v1beta1/blocks/latest",
+                axum::routing::get(|| async {
+                    axum::Json(json!({"block": {"header": {"height": "5"}}}))
+                }),
+            );
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let rest = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
         let k = vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
         let mut cfg = chain(&format!("network = \"c-1\"\nparams = {{ rest = [\"{rest}\"], prefix = \"wasm\", gas_price = \"0.025\", \
                                   relay_fee = {{ router = \"{}\" }} }}", router()));
-        cfg.tokens.push(crate::config::TokenCfg { address: token(), decimals: 6 });
+        cfg.tokens.push(crate::config::TokenCfg {
+            address: token(),
+            decimals: 6,
+        });
         let a = CosmosAdapter::new(&cfg, k).unwrap();
         let plain = |to: &str| {
-            let mut o = job("x", &token(), &pay_payload(&[1; 32], &[2; 32], 0, "", to, 10));
+            let mut o = job(
+                "x",
+                &token(),
+                &pay_payload(&[1; 32], &[2; 32], 0, "", to, 10),
+            );
             o.as_object_mut().unwrap().remove("kind");
-            Job { id: 1, op: Some(o), ..serde_json::from_value(json!({"id": 1})).unwrap() }
+            Job {
+                id: 1,
+                op: Some(o),
+                ..serde_json::from_value(json!({"id": 1})).unwrap()
+            }
         };
         let rf = relay_ref("c-1", &[0x44; 32], b"{}");
-        let mut fee = job("relay_fee", &router(), &pay_payload(&rf, &pay_lane(&rf), 0, &router(), &router(), 5));
+        let mut fee = job(
+            "relay_fee",
+            &router(),
+            &pay_payload(&rf, &pay_lane(&rf), 0, &router(), &router(), 5),
+        );
         fee["extra"] = json!({"target": bech32("wasm", &[0x44; 32]), "msg": "7b7d"});
-        let fee = Job { id: 2, op: Some(fee), ..serde_json::from_value(json!({"id": 2})).unwrap() };
-        a.build(&plain(&bech32("wasm", &[0x44; 20])), 0).await.expect("a plain pay builds while the router is down");
-        assert!(matches!(a.build(&fee, 0).await, Err(SimError::Transport(_))), "a relay-fee job retries");
-        assert!(matches!(a.build(&plain(&exec_c()), 0).await, Err(SimError::Transport(_))), "a pay to a contract waits too");
+        let fee = Job {
+            id: 2,
+            op: Some(fee),
+            ..serde_json::from_value(json!({"id": 2})).unwrap()
+        };
+        a.build(&plain(&bech32("wasm", &[0x44; 20])), 0)
+            .await
+            .expect("a plain pay builds while the router is down");
+        assert!(
+            matches!(a.build(&fee, 0).await, Err(SimError::Transport(_))),
+            "a relay-fee job retries"
+        );
+        assert!(
+            matches!(
+                a.build(&plain(&exec_c()), 0).await,
+                Err(SimError::Transport(_))
+            ),
+            "a pay to a contract waits too"
+        );
         up.store(true, std::sync::atomic::Ordering::SeqCst);
         a.build(&fee, 0).await.expect("the router answers: relayed");
         assert_eq!(a.executor.get(), Some(&exec_c()), "cached");
-        assert!(matches!(a.build(&plain(&exec_c()), 0).await, Err(SimError::Revert(e)) if e.contains("refused")), "never pay the executor");
+        assert!(
+            matches!(a.build(&plain(&exec_c()), 0).await, Err(SimError::Revert(e)) if e.contains("refused")),
+            "never pay the executor"
+        );
     }
 
     /// Rule 8: `params.relay_fee.router` set but unparsable is a startup error, never a silently disabled router.
     #[test]
     fn cosmos_relay_fee_policy_config() {
         let k = || vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
-        let cfg = |rf: &str| chain(&format!("network = \"c-1\"\nparams = {{ rest = [\"http://x\"], prefix = \"wasm\", gas_price = \"0.025\"{rf} }}"));
-        assert!(CosmosAdapter::new(&cfg(""), k()).unwrap().relay_fee.router.is_none());
-        let ok = CosmosAdapter::new(&cfg(&format!(", relay_fee = {{ router = \"{}\", min_amount = 7 }}", router())), k()).unwrap();
-        assert_eq!((ok.relay_fee.router.clone(), ok.relay_fee.params.min_amount), (Some(router()), 7));
-        for bad in ["\"wasm1notbech32\"", "12", &format!("\"{}\"", bech32("cosmos", &[0x55; 32])), &format!("\"{}\"", bech32("wasm", &[0x55; 20]))] {
-            let e = CosmosAdapter::new(&cfg(&format!(", relay_fee = {{ router = {bad} }}")), k()).err().map(|e| format!("{e:#}")).unwrap_or_default();
-            assert!(e.contains("params.relay_fee.router"), "{bad}: {e}");
-        }
-        for bad in ["\"5\"", "1.5", "-1"] {
-            let e = CosmosAdapter::new(&cfg(&format!(", relay_fee = {{ router = \"{}\", min_amount = {bad} }}", router())), k())
+        let cfg = |rf: &str| {
+            chain(&format!("network = \"c-1\"\nparams = {{ rest = [\"http://x\"], prefix = \"wasm\", gas_price = \"0.025\"{rf} }}"))
+        };
+        assert!(CosmosAdapter::new(&cfg(""), k())
+            .unwrap()
+            .relay_fee
+            .router
+            .is_none());
+        let ok = CosmosAdapter::new(
+            &cfg(&format!(
+                ", relay_fee = {{ router = \"{}\", min_amount = 7 }}",
+                router()
+            )),
+            k(),
+        )
+        .unwrap();
+        assert_eq!(
+            (ok.relay_fee.router.clone(), ok.relay_fee.params.min_amount),
+            (Some(router()), 7)
+        );
+        for bad in [
+            "\"wasm1notbech32\"",
+            "12",
+            &format!("\"{}\"", bech32("cosmos", &[0x55; 32])),
+            &format!("\"{}\"", bech32("wasm", &[0x55; 20])),
+        ] {
+            let e = CosmosAdapter::new(&cfg(&format!(", relay_fee = {{ router = {bad} }}")), k())
                 .err()
                 .map(|e| format!("{e:#}"))
                 .unwrap_or_default();
-            assert!(e.contains("params.relay_fee.min_amount must be a non-negative integer"), "{bad}: {e}");
+            assert!(e.contains("params.relay_fee.router"), "{bad}: {e}");
+        }
+        for bad in ["\"5\"", "1.5", "-1"] {
+            let e = CosmosAdapter::new(
+                &cfg(&format!(
+                    ", relay_fee = {{ router = \"{}\", min_amount = {bad} }}",
+                    router()
+                )),
+                k(),
+            )
+            .err()
+            .map(|e| format!("{e:#}"))
+            .unwrap_or_default();
+            assert!(
+                e.contains("params.relay_fee.min_amount must be a non-negative integer"),
+                "{bad}: {e}"
+            );
         }
     }
 
@@ -1353,12 +2125,22 @@ mod tests {
     #[test]
     fn cosmos_rest_is_a_list_of_gateways() {
         let k = || vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
-        let cfg = |rest: &str| chain(&format!("network = \"c-1\"\nparams = {{ rest = {rest}, prefix = \"wasm\", gas_price = \"0.025\" }}"));
-        let err = |rest: &str| CosmosAdapter::new(&cfg(rest), k()).err().map(|e| e.to_string()).unwrap_or_default();
+        let cfg = |rest: &str| {
+            chain(&format!("network = \"c-1\"\nparams = {{ rest = {rest}, prefix = \"wasm\", gas_price = \"0.025\" }}"))
+        };
+        let err = |rest: &str| {
+            CosmosAdapter::new(&cfg(rest), k())
+                .err()
+                .map(|e| e.to_string())
+                .unwrap_or_default()
+        };
         assert!(err("\"http://x\"").contains("must be a list"));
         assert!(err("[]").contains("params.rest"));
         assert!(err("[\"http://x\", \"http://x\"]").contains("params.rest"));
-        assert!(CosmosAdapter::new(&cfg("[\"http://x\", \"http://y\"]"), k()).is_ok(), "control");
+        assert!(
+            CosmosAdapter::new(&cfg("[\"http://x\", \"http://y\"]"), k()).is_ok(),
+            "control"
+        );
     }
 
     // ---- scaas-rpc T21b: ARCH-POS-15 failover over the REST gateways, the first-endpoint carve-out first (F3) ----
@@ -1368,7 +2150,9 @@ mod tests {
     /// A REST gateway of chain `c-1` at height 5: `node_info`, the latest block, the lane's account (sequence 0), a smart
     /// query (the router's executor, the lane nonce 1), a landed transaction, and a simulate using `gas` (`None`: refused,
     /// 500 code 2). Counts every request but the failover's identity and head reads.
-    async fn gateway(gas: Option<&'static str>) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+    async fn gateway(
+        gas: Option<&'static str>,
+    ) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
         use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
         let n = std::sync::Arc::new(AtomicUsize::new(0));
         let n2 = n.clone();
@@ -1420,17 +2204,28 @@ mod tests {
         let k = vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
         let mut cfg = chain(&format!("network = \"c-1\"\nparams = {{ rest = [{}], prefix = \"wasm\", gas_price = \"0.025\", \
                                   relay_fee = {{ router = \"{}\" }} }}", rest.join(", "), router()));
-        cfg.tokens.push(crate::config::TokenCfg { address: token(), decimals: 6 });
+        cfg.tokens.push(crate::config::TokenCfg {
+            address: token(),
+            decimals: 6,
+        });
         cfg.rpc_urls = vec![rpc.to_string()];
         CosmosAdapter::new(&cfg, k).unwrap()
     }
 
     /// A plain pay of 10 to an account (no executor needed), nonce 0.
     fn plain_pay() -> Job {
-        let mut o = job("x", &token(), &pay_payload(&[1; 32], &[2; 32], 0, "", &bech32("wasm", &[0x44; 20]), 10));
+        let mut o = job(
+            "x",
+            &token(),
+            &pay_payload(&[1; 32], &[2; 32], 0, "", &bech32("wasm", &[0x44; 20]), 10),
+        );
         o.as_object_mut().unwrap().remove("kind");
         o["op_kind"] = json!("pay");
-        Job { id: 1, op: Some(o), ..serde_json::from_value(json!({"id": 1})).unwrap() }
+        Job {
+            id: 1,
+            op: Some(o),
+            ..serde_json::from_value(json!({"id": 1})).unwrap()
+        }
     }
 
     /// F3: a status, `op_consumed` and the lane sequence are the first gateway's only: with it down none is endpoint 1's
@@ -1440,12 +2235,24 @@ mod tests {
         let (url, n) = gateway(Some("100000")).await;
         let a = adapter_on(&[DOWN, &url]);
         let tx = format!("0x{}", "11".repeat(32));
-        assert!(!matches!(a.tx_status(&tx).await, Ok(TxStatus::Mined { .. })), "never Mined from endpoint 1");
+        assert!(
+            !matches!(a.tx_status(&tx).await, Ok(TxStatus::Mined { .. })),
+            "never Mined from endpoint 1"
+        );
         assert!(a.op_consumed(&plain_pay()).await.is_err());
         assert!(a.sequence(0).await.is_err());
-        assert_eq!((n.load(std::sync::atomic::Ordering::SeqCst), a.failovers()), (0, 0));
+        assert_eq!(
+            (n.load(std::sync::atomic::Ordering::SeqCst), a.failovers()),
+            (0, 0)
+        );
         let a = adapter_on(&[&url]);
-        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { height: 5, .. }), "control");
+        assert!(
+            matches!(
+                a.tx_status(&tx).await.unwrap(),
+                TxStatus::Mined { height: 5, .. }
+            ),
+            "control"
+        );
         assert_eq!(a.op_consumed(&plain_pay()).await.unwrap(), Some(true));
         assert_eq!(a.sequence(0).await.unwrap(), 0);
     }
@@ -1461,30 +2268,63 @@ mod tests {
         a.build(&plain_pay(), 0).await.unwrap();
         assert!(a.failovers() > 0);
         let (refused, _) = gateway(None).await;
-        assert!(matches!(adapter_on(&[DOWN, &refused]).build(&plain_pay(), 0).await, Err(SimError::Transport(m)) if !m.contains("lane nonce")));
-        assert!(matches!(adapter_on(&[&refused]).build(&plain_pay(), 0).await, Err(SimError::Revert(m)) if m.contains("lane nonce")), "control");
+        assert!(
+            matches!(adapter_on(&[DOWN, &refused]).build(&plain_pay(), 0).await, Err(SimError::Transport(m)) if !m.contains("lane nonce"))
+        );
+        assert!(
+            matches!(adapter_on(&[&refused]).build(&plain_pay(), 0).await, Err(SimError::Revert(m)) if m.contains("lane nonce")),
+            "control"
+        );
         let (huge, _) = gateway(Some("999999999999")).await;
         match adapter_on(&[DOWN, &huge]).build(&plain_pay(), 0).await {
-            Err(SimError::Transport(m)) => assert!(m.starts_with("FAILOVER_ANSWER") && m.contains("max_gas_per_tx"), "{m}"),
+            Err(SimError::Transport(m)) => assert!(
+                m.starts_with("FAILOVER_ANSWER") && m.contains("max_gas_per_tx"),
+                "{m}"
+            ),
             r => panic!("{r:?}"),
         }
-        assert!(matches!(adapter_on(&[&huge]).build(&plain_pay(), 0).await, Err(SimError::Revert(m)) if m.contains("max_gas_per_tx")), "control");
+        assert!(
+            matches!(adapter_on(&[&huge]).build(&plain_pay(), 0).await, Err(SimError::Revert(m)) if m.contains("max_gas_per_tx")),
+            "control"
+        );
         // the executor: endpoint 0's only
         let (url, n) = gateway(Some("100000")).await;
         let a = adapter_on(&[DOWN, &url]);
         let rf = relay_ref("c-1", &[0x44; 32], b"{}");
-        let mut fee = job("relay_fee", &router(), &pay_payload(&rf, &pay_lane(&rf), 0, &router(), &router(), 5));
+        let mut fee = job(
+            "relay_fee",
+            &router(),
+            &pay_payload(&rf, &pay_lane(&rf), 0, &router(), &router(), 5),
+        );
         fee["extra"] = json!({"target": bech32("wasm", &[0x44; 32]), "msg": "7b7d"});
-        let fee = Job { id: 2, op: Some(fee), ..serde_json::from_value(json!({"id": 2})).unwrap() };
-        assert!(matches!(a.build(&fee, 0).await, Err(SimError::Transport(m)) if m.contains("executor")));
-        assert_eq!((n.load(std::sync::atomic::Ordering::SeqCst), a.executor.get()), (0, None));
+        let fee = Job {
+            id: 2,
+            op: Some(fee),
+            ..serde_json::from_value(json!({"id": 2})).unwrap()
+        };
+        assert!(
+            matches!(a.build(&fee, 0).await, Err(SimError::Transport(m)) if m.contains("executor"))
+        );
+        assert_eq!(
+            (
+                n.load(std::sync::atomic::Ordering::SeqCst),
+                a.executor.get()
+            ),
+            (0, None)
+        );
     }
 
     /// scaas-rpc T24.3: the first gateway's answer other than code 2 or 3 (503 code 14, unavailable) is its failure, never its
     /// verdict: the read fails over and endpoint 1 builds the job (endpoint 0 passes its identity read).
     #[tokio::test]
     async fn cosmos_gateway_0_unavailable_fails_over() {
-        let first = crate::adapters::testkit::refusing(&gateway(Some("100000")).await.0, |p, _| p.ends_with("/node_info"), 503, json!({"code": 14, "message": "unavailable"})).await;
+        let first = crate::adapters::testkit::refusing(
+            &gateway(Some("100000")).await.0,
+            |p, _| p.ends_with("/node_info"),
+            503,
+            json!({"code": 14, "message": "unavailable"}),
+        )
+        .await;
         let (url, _) = gateway(Some("100000")).await;
         let a = adapter_on(&[&first, &url]);
         a.build(&plain_pay(), 0).await.unwrap();
@@ -1495,42 +2335,94 @@ mod tests {
     /// at height 9 (or its head there), endpoint 1, at height 5, is skipped by `build`. Control: before that, endpoint 1 builds.
     #[tokio::test]
     async fn cosmos_a_mined_status_and_the_head_raise_the_floor() {
-        let first = || crate::adapters::testkit::scripted(false, |p, _| match p {
-            "/cosmos/base/tendermint/v1beta1/node_info" => Some(json!({"default_node_info": {"network": "c-1"}})),
-            p if p.starts_with("/cosmos/tx/v1beta1/txs/") => Some(json!({"tx_response": {"code": 0, "height": "9"}})),
-            _ => None,
-        });
-        let comet = || crate::adapters::testkit::scripted(false, |p, _| (p == "/status").then(|| json!({"result": {"node_info": {"network": "c-1"},
-            "sync_info": {"latest_block_height": "9", "latest_block_hash": "AA".repeat(32)}}})));
+        let first = || {
+            crate::adapters::testkit::scripted(false, |p, _| match p {
+                "/cosmos/base/tendermint/v1beta1/node_info" => {
+                    Some(json!({"default_node_info": {"network": "c-1"}}))
+                }
+                p if p.starts_with("/cosmos/tx/v1beta1/txs/") => {
+                    Some(json!({"tx_response": {"code": 0, "height": "9"}}))
+                }
+                _ => None,
+            })
+        };
+        let comet = || {
+            crate::adapters::testkit::scripted(false, |p, _| {
+                (p == "/status").then(|| {
+                    json!({"result": {"node_info": {"network": "c-1"},
+            "sync_info": {"latest_block_height": "9", "latest_block_hash": "AA".repeat(32)}}})
+                })
+            })
+        };
         let on = |rpc: String, rest: [String; 2]| {
             let k = vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
             let mut cfg = chain(&format!("network = \"c-1\"\nparams = {{ rest = [\"{}\", \"{}\"], prefix = \"wasm\", gas_price = \"0.025\" }}",
                                          rest[0], rest[1]));
             cfg.rpc_urls = vec![rpc];
-            cfg.tokens.push(crate::config::TokenCfg { address: token(), decimals: 6 });
+            cfg.tokens.push(crate::config::TokenCfg {
+                address: token(),
+                decimals: 6,
+            });
             CosmosAdapter::new(&cfg, k).unwrap()
         };
-        let a = on(comet().await, [first().await, gateway(Some("100000")).await.0]);
+        let a = on(
+            comet().await,
+            [first().await, gateway(Some("100000")).await.0],
+        );
         a.build(&plain_pay(), 0).await.unwrap();
-        assert!(matches!(a.tx_status(&format!("0x{}", "11".repeat(32))).await.unwrap(), TxStatus::Mined { height: 9, .. }));
-        assert!(matches!(a.build(&plain_pay(), 0).await, Err(SimError::Transport(_))), "endpoint 1 below height 9: skipped");
-        let a = on(comet().await, [first().await, gateway(Some("100000")).await.0]);
+        assert!(matches!(
+            a.tx_status(&format!("0x{}", "11".repeat(32)))
+                .await
+                .unwrap(),
+            TxStatus::Mined { height: 9, .. }
+        ));
+        assert!(
+            matches!(a.build(&plain_pay(), 0).await, Err(SimError::Transport(_))),
+            "endpoint 1 below height 9: skipped"
+        );
+        let a = on(
+            comet().await,
+            [first().await, gateway(Some("100000")).await.0],
+        );
         let _ = a.final_head().await;
-        assert!(matches!(a.build(&plain_pay(), 0).await, Err(SimError::Transport(_))), "the head: the same floor");
+        assert!(
+            matches!(a.build(&plain_pay(), 0).await, Err(SimError::Transport(_))),
+            "the head: the same floor"
+        );
     }
 
     /// scaas-rpc T24.7: `submit` sends to the first gateway only, inside `build`'s scope too: with it down the send fails and
     /// gateway 1 is asked nothing. Control: the first gateway up is asked.
     #[tokio::test]
     async fn cosmos_submit_inside_build_asks_gateway_0_only() {
-        let s = Signed { job_id: 1, tx_id: format!("0x{}", "11".repeat(32)), raw: vec![1, 2, 3], valid_until: u64::MAX / 2, sequence: 0 };
-        let comet = crate::adapters::testkit::scripted(false, |p, _| (p == "/status").then(|| json!({"result": {"node_info": {"network": "c-1"},
-            "sync_info": {"latest_block_height": "5", "latest_block_hash": "AA".repeat(32)}}}))).await;
+        let s = Signed {
+            job_id: 1,
+            tx_id: format!("0x{}", "11".repeat(32)),
+            raw: vec![1, 2, 3],
+            valid_until: u64::MAX / 2,
+            sequence: 0,
+        };
+        let comet = crate::adapters::testkit::scripted(false, |p, _| {
+            (p == "/status").then(|| {
+                json!({"result": {"node_info": {"network": "c-1"},
+            "sync_info": {"latest_block_height": "5", "latest_block_hash": "AA".repeat(32)}}})
+            })
+        })
+        .await;
         // the CometBFT head (the floor `submit`'s head read raises) is gateway 1's own: only the explicit send keeps it unasked
         let (url, n) = gateway(Some("100000")).await;
-        assert!(crate::adapters::evm::BUILDING.scope((), adapter_rpc(&comet, &[DOWN, &url]).submit(&s)).await.is_err());
-        assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst), 0, "gateway 1 is asked nothing");
-        let _ = crate::adapters::evm::BUILDING.scope((), adapter_rpc(&comet, &[&url]).submit(&s)).await;
+        assert!(crate::adapters::evm::BUILDING
+            .scope((), adapter_rpc(&comet, &[DOWN, &url]).submit(&s))
+            .await
+            .is_err());
+        assert_eq!(
+            n.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "gateway 1 is asked nothing"
+        );
+        let _ = crate::adapters::evm::BUILDING
+            .scope((), adapter_rpc(&comet, &[&url]).submit(&s))
+            .await;
         assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst), 1, "control");
     }
 
@@ -1540,23 +2432,51 @@ mod tests {
     async fn cosmos_endpoint_0_of_another_network_answers_no_read() {
         fn rest(p: &str, net: &str) -> Option<Value> {
             match p {
-                "/cosmos/base/tendermint/v1beta1/node_info" => Some(json!({"default_node_info": {"network": net}})),
+                "/cosmos/base/tendermint/v1beta1/node_info" => {
+                    Some(json!({"default_node_info": {"network": net}}))
+                }
                 p if p.starts_with("/cosmwasm/wasm/v1/contract/") => Some(json!({"data": 1})),
                 _ => None,
             }
         }
         fn status(p: &str, net: &str) -> Option<Value> {
-            (p == "/status").then(|| json!({"result": {"node_info": {"network": net},
-                "sync_info": {"latest_block_height": "9", "latest_block_hash": "AA".repeat(32)}}}))
+            (p == "/status").then(|| {
+                json!({"result": {"node_info": {"network": net},
+                "sync_info": {"latest_block_height": "9", "latest_block_hash": "AA".repeat(32)}}})
+            })
         }
         let other = crate::adapters::testkit::scripted(false, |p, _| rest(p, "c-2")).await;
-        assert!(adapter_on(&[&other]).op_consumed(&plain_pay()).await.is_err(), "the REST gateway");
+        assert!(
+            adapter_on(&[&other])
+                .op_consumed(&plain_pay())
+                .await
+                .is_err(),
+            "the REST gateway"
+        );
         let this = crate::adapters::testkit::scripted(false, |p, _| rest(p, "c-1")).await;
-        assert_eq!(adapter_on(&[&this]).op_consumed(&plain_pay()).await.unwrap(), Some(true), "control");
+        assert_eq!(
+            adapter_on(&[&this])
+                .op_consumed(&plain_pay())
+                .await
+                .unwrap(),
+            Some(true),
+            "control"
+        );
         let other = crate::adapters::testkit::scripted(false, |p, _| status(p, "c-2")).await;
-        assert!(adapter_rpc(&other, &[&this]).final_head().await.is_err(), "the CometBFT endpoint: status's node_info.network");
+        assert!(
+            adapter_rpc(&other, &[&this]).final_head().await.is_err(),
+            "the CometBFT endpoint: status's node_info.network"
+        );
         let comet = crate::adapters::testkit::scripted(false, |p, _| status(p, "c-1")).await;
-        assert_eq!(adapter_rpc(&comet, &[&this]).final_head().await.unwrap().map(|h| h.height), Some(9), "control");
+        assert_eq!(
+            adapter_rpc(&comet, &[&this])
+                .final_head()
+                .await
+                .unwrap()
+                .map(|h| h.height),
+            Some(9),
+            "control"
+        );
     }
 
     /// scaas-rpc T24.14: the account number `sign` uses is kept from the first gateway only: a `build` answered by gateway 1
@@ -1566,9 +2486,17 @@ mod tests {
         let (url, _) = gateway(Some("100000")).await;
         let a = adapter_on(&[DOWN, &url]);
         a.build(&plain_pay(), 0).await.unwrap();
-        assert_eq!(a.account_numbers.lock().unwrap().get(&0), None, "a failover gateway's answer is never kept");
+        assert_eq!(
+            a.account_numbers.lock().unwrap().get(&0),
+            None,
+            "a failover gateway's answer is never kept"
+        );
         let a = adapter_on(&[&url]);
         a.sequence(0).await.unwrap();
-        assert_eq!(a.account_numbers.lock().unwrap().get(&0), Some(&1), "control");
+        assert_eq!(
+            a.account_numbers.lock().unwrap().get(&0),
+            Some(&1),
+            "control"
+        );
     }
 }

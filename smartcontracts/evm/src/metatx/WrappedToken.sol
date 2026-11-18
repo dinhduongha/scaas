@@ -30,40 +30,98 @@ interface IWrappedTokenAbi {
     event EIP712DomainChanged();
     event FeatureDisabled(uint8 indexed bit, bytes32 indexed by);
     event GrantCancelled(uint8 indexed bit, bytes32 indexed account, bytes32 indexed by);
-    event GrantProposed(uint8 indexed bit, bytes32 indexed account, bytes32 indexed proposer, uint64 eta, bool whole, IGovernance.GrantTerms terms);
+    event GrantProposed(
+        uint8 indexed bit,
+        bytes32 indexed account,
+        bytes32 indexed proposer,
+        uint64 eta,
+        bool whole,
+        IGovernance.GrantTerms terms
+    );
     event GrantSet(uint8 indexed bit, bytes32 indexed holder, bytes32 indexed grantor);
     event GrantUsed(uint8 indexed bit, bytes32 indexed holder, uint256 scalar);
     event LiquidityPulled(bytes32 indexed orderHash, bytes32 indexed from, address indexed dex, uint256 amount);
     event MetaNonceCancelled(address indexed from, uint256 indexed batch, uint256 newNonce);
-    event MetaTransactionExecuted(address indexed from, address indexed relayer, uint256 indexed batch, uint256 nonce, bytes32 digest, address feeRecipient, uint256 fee);
+    event MetaTransactionExecuted(
+        address indexed from,
+        address indexed relayer,
+        uint256 indexed batch,
+        uint256 nonce,
+        bytes32 digest,
+        address feeRecipient,
+        uint256 fee
+    );
     event NoncesInvalidated(address indexed from, uint256 indexed batch, uint256 minNonce);
     event OrderCancelled(bytes32 indexed orderHash, address indexed from);
     event PaymentMeta(bytes32 indexed payId, bytes32 indexed payNo, bool save, uint16 schema, bytes body);
-    event PaymentSettled(address indexed from, address indexed to, uint256 amount, uint256 feeAmount, address feeRecipient, bytes32 indexed entryRef);
+    event PaymentSettled(
+        address indexed from,
+        address indexed to,
+        uint256 amount,
+        uint256 feeAmount,
+        address feeRecipient,
+        bytes32 indexed entryRef
+    );
     event PullRestored(bytes32 indexed orderHash, uint256 amount);
     event RateChangeCancelled(address indexed underlying);
-    event RateChangeProposed(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen, uint64 eta);
+    event RateChangeProposed(
+        address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen, uint64 eta
+    );
     event RateChanged(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen);
     event RelaxProposed(uint8 indexed bit, bytes32 indexed account, uint8 action, bytes32 proposer, uint64 eta);
     event Rescued(address indexed asset, address indexed to, uint256 amount);
     event ReserveAdded(address indexed from, address indexed underlying, uint256 amount);
     event RoleGranted(uint8 indexed bit, bytes32 indexed account, bytes32 indexed sender);
     event RoleRevoked(uint8 indexed bit, bytes32 indexed account, bytes32 indexed sender);
-    event TradeFilled(bytes32 indexed orderHash, address indexed from, uint256 sellFill, uint256 receiveFill, uint256 dexFee);
-    event UAMetaTransactionExecuted(bytes32 indexed from, address indexed relayer, uint256 indexed batch, uint256 nonce, bytes32 digest, address feeRecipient, uint256 fee);
+    event TradeFilled(
+        bytes32 indexed orderHash, address indexed from, uint256 sellFill, uint256 receiveFill, uint256 dexFee
+    );
+    event UAMetaTransactionExecuted(
+        bytes32 indexed from,
+        address indexed relayer,
+        uint256 indexed batch,
+        uint256 nonce,
+        bytes32 digest,
+        address feeRecipient,
+        uint256 fee
+    );
     event UANonceCancelled(bytes32 indexed ua, uint256 indexed batch, uint256 newNonce);
     event UANoncesInvalidated(bytes32 indexed from, uint256 indexed batch, uint256 minNonce);
     event UAOrderCancelled(bytes32 indexed orderHash, bytes32 indexed from);
-    event UAPaymentSettled(bytes32 indexed from, bytes32 indexed to, uint256 amount, uint256 feeAmount, address feeRecipient, bytes32 indexed entryRef);
-    event UAPayeeFeePaid(bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient, uint256 fee);
-    event UATradeFilled(bytes32 indexed orderHash, bytes32 indexed from, uint256 sellFill, uint256 receiveFill, uint256 dexFee);
+    event UAPaymentSettled(
+        bytes32 indexed from,
+        bytes32 indexed to,
+        uint256 amount,
+        uint256 feeAmount,
+        address feeRecipient,
+        bytes32 indexed entryRef
+    );
+    event UAPayeeFeePaid(
+        bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient, uint256 fee
+    );
+    event UATradeFilled(
+        bytes32 indexed orderHash, bytes32 indexed from, uint256 sellFill, uint256 receiveFill, uint256 dexFee
+    );
     event UAWrapped(bytes32 indexed to, address indexed underlying, uint256 underlyingIn, uint256 minted);
-    event Unwrapped(address indexed account, address indexed underlying, address recipient, uint256 burned, uint256 underlyingOut);
-    event UnwrappedToUA(address indexed account, address indexed underlying, bytes32 indexed to, uint256 burned, uint256 out);
+    event Unwrapped(
+        address indexed account, address indexed underlying, address recipient, uint256 burned, uint256 underlyingOut
+    );
+    event UnwrappedToUA(
+        address indexed account, address indexed underlying, bytes32 indexed to, uint256 burned, uint256 out
+    );
     event WrapDisabled(address indexed underlying, bytes32 indexed guardian, bytes32 reason);
     event Wrapped(address indexed account, address indexed underlying, uint256 underlyingIn, uint256 minted);
-    event WrapLimitsSet(bytes32 indexed by, IWrappedToken.WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList);
-    event WrapLimitsProposed(bytes32 indexed by, uint64 eta, IWrappedToken.WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList);
+    event WrapLimitsSet(
+        bytes32 indexed by, IWrappedToken.WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList
+    );
+    event WrapLimitsProposed(
+        bytes32 indexed by,
+        uint64 eta,
+        IWrappedToken.WrapLegLimits[] legs,
+        bool netUnwrap,
+        bool wrapList,
+        bool unwrapList
+    );
     event WrapMemberSet(bytes32 indexed account, bytes32 indexed by, bool canWrap, bool canUnwrap);
     event MaxSupplyProposed(bytes32 indexed by, uint256 maxSupply, uint64 eta);
     event MaxSupplySet(bytes32 indexed by, uint256 oldMaxSupply, uint256 newMaxSupply);
@@ -241,7 +299,10 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
     function _module(address[] memory ms, uint256 i, uint8 group) private view returns (address m) {
         m = ms[i];
         if (m.code.length == 0) revert ModuleMissing(i);
-        if (ITokenModule(m).kind() != uint8(IOpenFactory.TokenKind.WRAPPED) || ITokenModule(m).moduleGroup() != group || ITokenModule(m).factory() != FACTORY) {
+        if (
+            ITokenModule(m).kind() != uint8(IOpenFactory.TokenKind.WRAPPED) || ITokenModule(m).moduleGroup() != group
+                || ITokenModule(m).factory() != FACTORY
+        ) {
             revert ModuleMismatch(i);
         }
     }
@@ -324,7 +385,19 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forward(_MW);
     }
 
-    function eip712Domain() external view returns (bytes1 _p0, string memory _p1, string memory _p2, uint256 _p3, address _p4, bytes32 _p5, uint256[] memory _p6) {
+    function eip712Domain()
+        external
+        view
+        returns (
+            bytes1 _p0,
+            string memory _p1,
+            string memory _p2,
+            uint256 _p3,
+            address _p4,
+            bytes32 _p5,
+            uint256[] memory _p6
+        )
+    {
         _forwardView(_MA);
     }
 
@@ -372,7 +445,11 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forwardView(_MA);
     }
 
-    function legOf(address) external view returns (uint96 num, uint96 den, uint256 reserve, uint8 decimals_, bool wrapEnabled) {
+    function legOf(address)
+        external
+        view
+        returns (uint96 num, uint96 den, uint256 reserve, uint8 decimals_, bool wrapEnabled)
+    {
         _forwardView(_MW);
     }
 
@@ -408,19 +485,31 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forward(_MW);
     }
 
-    function mtxAddReserve(MetaTxLib.Envelope calldata, address, uint256, bytes calldata) external returns (bytes memory _p0) {
+    function mtxAddReserve(MetaTxLib.Envelope calldata, address, uint256, bytes calldata)
+        external
+        returns (bytes memory _p0)
+    {
         _forward(_MW);
     }
 
-    function mtxBatch(MetaTxLib.UAMetaTransaction[] calldata, IUARegistry.UASig[] calldata) external returns (bool _p0) {
+    function mtxBatch(MetaTxLib.UAMetaTransaction[] calldata, IUARegistry.UASig[] calldata)
+        external
+        returns (bool _p0)
+    {
         _forward(_MP);
     }
 
-    function mtxBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata, IUARegistry.UASig[] calldata) external returns (bool _p0) {
+    function mtxBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata, IUARegistry.UASig[] calldata)
+        external
+        returns (bool _p0)
+    {
         _forward(_MP);
     }
 
-    function mtxCancelNonce(MetaTxLib.UAEnvelope calldata, uint256, IUARegistry.UASig calldata) external returns (bytes memory _p0) {
+    function mtxCancelNonce(MetaTxLib.UAEnvelope calldata, uint256, IUARegistry.UASig calldata)
+        external
+        returns (bytes memory _p0)
+    {
         _forward(_MP);
     }
 
@@ -432,11 +521,17 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forwardView(_MP);
     }
 
-    function mtxExecute(MetaTxLib.UAMetaTransaction calldata, IUARegistry.UASig calldata) external returns (bytes memory _p0) {
+    function mtxExecute(MetaTxLib.UAMetaTransaction calldata, IUARegistry.UASig calldata)
+        external
+        returns (bytes memory _p0)
+    {
         _forward(_MP);
     }
 
-    function mtxExecuteTransfer(MetaTxLib.UAMetaTransfer calldata, IUARegistry.UASig calldata) external returns (bool _p0) {
+    function mtxExecuteTransfer(MetaTxLib.UAMetaTransfer calldata, IUARegistry.UASig calldata)
+        external
+        returns (bool _p0)
+    {
         _forward(_MP);
     }
 
@@ -444,7 +539,9 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forward(_MT);
     }
 
-    function mtxLiquidityPull(ITradeToken.LiquidityOrder calldata, IUARegistry.UASig calldata, uint256, address) external {
+    function mtxLiquidityPull(ITradeToken.LiquidityOrder calldata, IUARegistry.UASig calldata, uint256, address)
+        external
+    {
         _forward(_MT);
     }
 
@@ -452,15 +549,36 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forwardView(_MP);
     }
 
-    function mtxPay(MetaTxLib.UAMetaTransfer calldata, IUARegistry.UASig calldata, MetaTxLib.PayMeta calldata) external returns (bool _p0) {
+    function mtxPay(MetaTxLib.UAMetaTransfer calldata, IUARegistry.UASig calldata, MetaTxLib.PayMeta calldata)
+        external
+        returns (bool _p0)
+    {
         _forward(_MP);
     }
 
-    function mtxPayWithPayeeFee(MetaTxLib.UAMetaTransfer calldata, IUARegistry.UASig calldata, uint256, address, uint256, IUARegistry.UASig calldata, MetaTxLib.PayMeta calldata) external returns (bool _p0) {
+    function mtxPayWithPayeeFee(
+        MetaTxLib.UAMetaTransfer calldata,
+        IUARegistry.UASig calldata,
+        uint256,
+        address,
+        uint256,
+        IUARegistry.UASig calldata,
+        MetaTxLib.PayMeta calldata
+    ) external returns (bool _p0) {
         _forward(_MP);
     }
 
-    function mtxRelayFee(bytes32, address, bytes32, bytes32, uint256, uint256, uint256, uint256, IUARegistry.UASig calldata) external {
+    function mtxRelayFee(
+        bytes32,
+        address,
+        bytes32,
+        bytes32,
+        uint256,
+        uint256,
+        uint256,
+        uint256,
+        IUARegistry.UASig calldata
+    ) external {
         _forward(_MP);
     }
 
@@ -468,11 +586,23 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forwardPure(_modulePure(3));
     }
 
-    function mtxTrade(ITradeToken.UATradeOrder calldata, IUARegistry.UASig calldata, ITradeToken.TradeFill calldata) external {
+    function mtxTrade(ITradeToken.UATradeOrder calldata, IUARegistry.UASig calldata, ITradeToken.TradeFill calldata)
+        external
+    {
         _forward(_MT);
     }
 
-    function mtxTransfer(bytes32, bytes32, uint256, uint256, uint256, uint256, uint32, address, IUARegistry.UASig calldata) external returns (bool _p0) {
+    function mtxTransfer(
+        bytes32,
+        bytes32,
+        uint256,
+        uint256,
+        uint256,
+        uint256,
+        uint32,
+        address,
+        IUARegistry.UASig calldata
+    ) external returns (bool _p0) {
         _forward(_MP);
     }
 
@@ -480,19 +610,44 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forwardView(_MP);
     }
 
-    function mtxTransferWithFee(bytes32, bytes32, uint256, uint256, uint256, uint256, uint32, address, uint256, address, IUARegistry.UASig calldata) external returns (bool _p0) {
+    function mtxTransferWithFee(
+        bytes32,
+        bytes32,
+        uint256,
+        uint256,
+        uint256,
+        uint256,
+        uint32,
+        address,
+        uint256,
+        address,
+        IUARegistry.UASig calldata
+    ) external returns (bool _p0) {
         _forward(_MP);
     }
 
-    function mtxUnwrap(MetaTxLib.UAEnvelope calldata, uint256, address, uint256, IUARegistry.UASig calldata) external returns (bytes memory _p0) {
+    function mtxUnwrap(MetaTxLib.UAEnvelope calldata, uint256, address, uint256, IUARegistry.UASig calldata)
+        external
+        returns (bytes memory _p0)
+    {
         _forward(_MW);
     }
 
-    function mtxUnwrapLeg(MetaTxLib.UAEnvelope calldata, address, uint256, address, uint256, IUARegistry.UASig calldata) external returns (bytes memory _p0) {
+    function mtxUnwrapLeg(MetaTxLib.UAEnvelope calldata, address, uint256, address, uint256, IUARegistry.UASig calldata)
+        external
+        returns (bytes memory _p0)
+    {
         _forward(_MW);
     }
 
-    function mtxUnwrapToUA(MetaTxLib.UAEnvelope calldata, address, uint256, bytes32, uint256, IUARegistry.UASig calldata) external returns (bytes memory _p0) {
+    function mtxUnwrapToUA(
+        MetaTxLib.UAEnvelope calldata,
+        address,
+        uint256,
+        bytes32,
+        uint256,
+        IUARegistry.UASig calldata
+    ) external returns (bytes memory _p0) {
         _forward(_MW);
     }
 
@@ -500,15 +655,24 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forward(_MW);
     }
 
-    function mtxWrapLeg(MetaTxLib.Envelope calldata, address, uint256, bytes calldata) external returns (bytes memory _p0) {
+    function mtxWrapLeg(MetaTxLib.Envelope calldata, address, uint256, bytes calldata)
+        external
+        returns (bytes memory _p0)
+    {
         _forward(_MW);
     }
 
-    function mtxWrapOrder(address, ITradeToken.UAWrapOrder calldata, IUARegistry.UASig calldata) external returns (uint256 minted) {
+    function mtxWrapOrder(address, ITradeToken.UAWrapOrder calldata, IUARegistry.UASig calldata)
+        external
+        returns (uint256 minted)
+    {
         _forward(_MT);
     }
 
-    function mtxWrapToUA(MetaTxLib.Envelope calldata, address, uint256, bytes32, bytes calldata) external returns (bytes memory _p0) {
+    function mtxWrapToUA(MetaTxLib.Envelope calldata, address, uint256, bytes32, bytes calldata)
+        external
+        returns (bytes memory _p0)
+    {
         _forward(_MW);
     }
 
@@ -516,15 +680,25 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forwardPure(_modulePure(1));
     }
 
-    function payWithFee(address, uint256, FeeMode, uint256, address, bytes32, MetaTxLib.PayMeta calldata) external returns (bool _p0) {
+    function payWithFee(address, uint256, FeeMode, uint256, address, bytes32, MetaTxLib.PayMeta calldata)
+        external
+        returns (bool _p0)
+    {
         _forward(_MP);
     }
 
-    function payWithFeeToUA(bytes32, uint256, FeeMode, uint256, address, bytes32, MetaTxLib.PayMeta calldata) external returns (bool _p0) {
+    function payWithFeeToUA(bytes32, uint256, FeeMode, uint256, address, bytes32, MetaTxLib.PayMeta calldata)
+        external
+        returns (bool _p0)
+    {
         _forward(_MP);
     }
 
-    function payeeFeeDigest(MetaTxLib.UAMetaTransfer calldata, uint256, address, uint256) external view returns (bytes32 _p0) {
+    function payeeFeeDigest(MetaTxLib.UAMetaTransfer calldata, uint256, address, uint256)
+        external
+        view
+        returns (bytes32 _p0)
+    {
         _forwardView(_MP);
     }
 
@@ -548,7 +722,18 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forwardView(_MW);
     }
 
-    function pendingSupplyCaps() external view returns (uint256 pendingMaxSupply, uint64 maxSupplyEta, bool maxSupplyLive, uint256 pendingMaxWrapSupply, uint64 maxWrapSupplyEta, bool maxWrapSupplyLive) {
+    function pendingSupplyCaps()
+        external
+        view
+        returns (
+            uint256 pendingMaxSupply,
+            uint64 maxSupplyEta,
+            bool maxSupplyLive,
+            uint256 pendingMaxWrapSupply,
+            uint64 maxWrapSupplyEta,
+            bool maxWrapSupplyLive
+        )
+    {
         _forwardView(_MW);
     }
 
@@ -688,7 +873,20 @@ contract WrappedToken is WrappedTokenCore, IWrappedTokenAbi {
         _forward(_MW);
     }
 
-    function wrapLimits() external view returns (IWrappedToken.WrapLegLimits[] memory legs, bool netUnwrap, bool wrapList, bool unwrapList, bytes32 pendingCommit, uint64 pendingEta, bool pendingLive, uint64 delay) {
+    function wrapLimits()
+        external
+        view
+        returns (
+            IWrappedToken.WrapLegLimits[] memory legs,
+            bool netUnwrap,
+            bool wrapList,
+            bool unwrapList,
+            bytes32 pendingCommit,
+            uint64 pendingEta,
+            bool pendingLive,
+            uint64 delay
+        )
+    {
         _forwardView(_MW);
     }
 

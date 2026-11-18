@@ -51,8 +51,17 @@ contract PayeeFeeTest is Test {
 
     function _pay(address to, uint256 value) internal view returns (MetaTxLib.UAMetaTransfer memory) {
         return MetaTxLib.UAMetaTransfer({
-            from: MetaTxLib.pad(payer), to: MetaTxLib.pad(to), value: value, entryRef: REF, batch: t.payLane(REF), nonce: 0,
-            validUntil: block.timestamp + 300, mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)
+            from: MetaTxLib.pad(payer),
+            to: MetaTxLib.pad(to),
+            value: value,
+            entryRef: REF,
+            batch: t.payLane(REF),
+            nonce: 0,
+            validUntil: block.timestamp + 300,
+            mode: RR,
+            relayer: relayer,
+            fee: 0,
+            feeRecipient: address(0)
         });
     }
 
@@ -92,9 +101,16 @@ contract PayeeFeeTest is Test {
         IUARegistry.UASig memory ps = _n(_sig(PAYER_PK, t.mtxTransferDigest(x)));
         vm.prank(relayer);
         vm.expectRevert(IUALedger.UAPoolNotPayable.selector);
-        t.mtxPayWithPayeeFee(x, ps, 3e6, MetaTxLib.UA_POOL, block.timestamp + 60, _n(hex"00"), PayMetaKit.meta("request-1"));
-        _runRevert(x, 3e6, MetaTxLib.SHIELD_POOL, block.timestamp + 60,
-            abi.encodeWithSelector(IUALedger.ShieldPoolNotPayable.selector));
+        t.mtxPayWithPayeeFee(
+            x, ps, 3e6, MetaTxLib.UA_POOL, block.timestamp + 60, _n(hex"00"), PayMetaKit.meta("request-1")
+        );
+        _runRevert(
+            x,
+            3e6,
+            MetaTxLib.SHIELD_POOL,
+            block.timestamp + 60,
+            abi.encodeWithSelector(IUALedger.ShieldPoolNotPayable.selector)
+        );
         assertEq(t.balanceOf(payer), 1_000e6);
         assertEq(t.balanceOf(MetaTxLib.SHIELD_POOL), 0);
     }
@@ -110,14 +126,14 @@ contract PayeeFeeTest is Test {
         vm.expectEmit(address(t));
         emit IMetaTokenV2.UAPayeeFeePaid(d, MetaTxLib.pad(payee), feeTo, 3e6);
         _run(x, 3e6, feeTo, block.timestamp + 60);
-        assertEq(t.balanceOf(payer), 900e6);                 // RP1: payer −N
-        assertEq(t.balanceOf(payee), 97e6);                  // payee N − fee
+        assertEq(t.balanceOf(payer), 900e6); // RP1: payer −N
+        assertEq(t.balanceOf(payee), 97e6); // payee N − fee
         assertEq(t.balanceOf(feeTo), 3e6);
     }
 
     function test_feeEqualToValue_and_unboundPayerFeeRecipientIgnored() public {
         MetaTxLib.UAMetaTransfer memory x = _pay(payee, 10e6);
-        x.feeRecipient = address(0xDEAD);                    // not checked (canon zeroes it)
+        x.feeRecipient = address(0xDEAD); // not checked (canon zeroes it)
         _run(x, 10e6, feeTo, block.timestamp);
         assertEq(t.balanceOf(payee), 0);
         assertEq(t.balanceOf(feeTo), 10e6);
@@ -127,8 +143,9 @@ contract PayeeFeeTest is Test {
         bytes memory shape = abi.encodeWithSelector(IMetaTokenV2.PayeeFeeShape.selector);
         MetaTxLib.UAMetaTransfer memory x = _pay(payee, 10e6);
         x.entryRef = 0; // pay-meta-tax T37, meaning: `_payMeta` refuses it first, by name
-        _runRevert(x, 1, feeTo, block.timestamp,
-            abi.encodeWithSelector(IMetaTokenV2.PayMetaMismatch.selector, bytes32(0), REF));
+        _runRevert(
+            x, 1, feeTo, block.timestamp, abi.encodeWithSelector(IMetaTokenV2.PayMetaMismatch.selector, bytes32(0), REF)
+        );
         x = _pay(payee, 10e6);
         x.mode = RR | MetaTxLib.MODE_FEE_FIXED;
         _runRevert(x, 1, feeTo, block.timestamp, shape);
@@ -136,7 +153,7 @@ contract PayeeFeeTest is Test {
         x.fee = 1;
         _runRevert(x, 1, feeTo, block.timestamp, shape);
         x = _pay(payee, 10e6);
-        x.mode = 0;                                          // payer relayer unbound
+        x.mode = 0; // payer relayer unbound
         _runRevert(x, 1, feeTo, block.timestamp, shape);
         // pay-meta-tax T37 (O3, spec §2.5): `batch == payLane(entryRef)` and `nonce == 0` are no longer part of the shape
         // (test/metatx/PayLanes.t.sol `test_payeeFee_freeLane`)
@@ -145,12 +162,21 @@ contract PayeeFeeTest is Test {
 
     function test_amountExpiryAndPayeeCheck() public {
         MetaTxLib.UAMetaTransfer memory x = _pay(payee, 10e6);
-        _runRevert(x, 0, feeTo, block.timestamp,
-            abi.encodeWithSelector(IMetaTokenV2.PayeeFeeAmount.selector, 0, 10e6));
-        _runRevert(x, 10e6 + 1, feeTo, block.timestamp,
-            abi.encodeWithSelector(IMetaTokenV2.PayeeFeeAmount.selector, 10e6 + 1, 10e6));
-        _runRevert(x, 1, feeTo, block.timestamp - 1,
-            abi.encodeWithSelector(IMetaTokenV2.PayeeFeeExpired.selector, block.timestamp - 1, block.timestamp));
+        _runRevert(x, 0, feeTo, block.timestamp, abi.encodeWithSelector(IMetaTokenV2.PayeeFeeAmount.selector, 0, 10e6));
+        _runRevert(
+            x,
+            10e6 + 1,
+            feeTo,
+            block.timestamp,
+            abi.encodeWithSelector(IMetaTokenV2.PayeeFeeAmount.selector, 10e6 + 1, 10e6)
+        );
+        _runRevert(
+            x,
+            1,
+            feeTo,
+            block.timestamp - 1,
+            abi.encodeWithSelector(IMetaTokenV2.PayeeFeeExpired.selector, block.timestamp - 1, block.timestamp)
+        );
         _runRevert(x, 1, payee, block.timestamp, abi.encodeWithSelector(IERC20MetaTx.FeeRecipientIsPayee.selector));
         _runRevert(x, 1, address(t), block.timestamp, abi.encodeWithSelector(IERC20MetaTx.TransferToSelf.selector));
     }
@@ -163,7 +189,7 @@ contract PayeeFeeTest is Test {
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         t.mtxPayWithPayeeFee(x, ps, 1, feeTo, block.timestamp, rs, PayMetaKit.meta("request-1"));
-        assertEq(t.balanceOf(payee), 0);                     // RP4: no fee without the payment, and vice versa
+        assertEq(t.balanceOf(payee), 0); // RP4: no fee without the payment, and vice versa
     }
 
     function test_payerIntentLandedElsewhere_coSignatureDead() public {
@@ -200,15 +226,51 @@ contract PayeeFeeTest is Test {
     }
 
     function _walletFee(MetaTxLib.UAMetaTransfer memory x, uint256 fee, uint256 until) internal view returns (bytes32) {
-        string memory m = string.concat('{"payment":{"from":', h(x.from), ',"to":', h(x.to), ',"value":', n(x.value), ',"entryRef":', h(x.entryRef),
-            ',"batch":', n(x.batch), ',"nonce":', n(x.nonce), ',"validUntil":', n(x.validUntil));
-        return OrderJson.digest(address(t), "UAPayeeFee", string.concat(
-            '"UAPayeeFee":[{"name":"payment","type":"UAMetaTransfer"},{"name":"fee","type":"uint256"},{"name":"feeRecipient","type":"address"},',
-            '{"name":"validUntil","type":"uint256"}],"UAMetaTransfer":[{"name":"from","type":"bytes32"},{"name":"to","type":"bytes32"},',
-            '{"name":"value","type":"uint256"},{"name":"entryRef","type":"bytes32"},{"name":"batch","type":"uint256"},{"name":"nonce","type":"uint256"},',
-            '{"name":"validUntil","type":"uint256"},{"name":"mode","type":"uint32"},{"name":"relayer","type":"address"},{"name":"fee","type":"uint256"},',
-            '{"name":"feeRecipient","type":"address"}]'), string.concat(m, ',"mode":', n(x.mode), ',"relayer":', a_(x.relayer), ',"fee":', n(x.fee),
-            ',"feeRecipient":', a_(x.feeRecipient), '},"fee":', n(fee), ',"feeRecipient":', a_(feeTo), ',"validUntil":', n(until), '}'));
+        string memory m = string.concat(
+            '{"payment":{"from":',
+            h(x.from),
+            ',"to":',
+            h(x.to),
+            ',"value":',
+            n(x.value),
+            ',"entryRef":',
+            h(x.entryRef),
+            ',"batch":',
+            n(x.batch),
+            ',"nonce":',
+            n(x.nonce),
+            ',"validUntil":',
+            n(x.validUntil)
+        );
+        return OrderJson.digest(
+            address(t),
+            "UAPayeeFee",
+            string.concat(
+                '"UAPayeeFee":[{"name":"payment","type":"UAMetaTransfer"},{"name":"fee","type":"uint256"},{"name":"feeRecipient","type":"address"},',
+                '{"name":"validUntil","type":"uint256"}],"UAMetaTransfer":[{"name":"from","type":"bytes32"},{"name":"to","type":"bytes32"},',
+                '{"name":"value","type":"uint256"},{"name":"entryRef","type":"bytes32"},{"name":"batch","type":"uint256"},{"name":"nonce","type":"uint256"},',
+                '{"name":"validUntil","type":"uint256"},{"name":"mode","type":"uint32"},{"name":"relayer","type":"address"},{"name":"fee","type":"uint256"},',
+                '{"name":"feeRecipient","type":"address"}]'
+            ),
+            string.concat(
+                m,
+                ',"mode":',
+                n(x.mode),
+                ',"relayer":',
+                a_(x.relayer),
+                ',"fee":',
+                n(x.fee),
+                ',"feeRecipient":',
+                a_(x.feeRecipient),
+                '},"fee":',
+                n(fee),
+                ',"feeRecipient":',
+                a_(feeTo),
+                ',"validUntil":',
+                n(until),
+                "}"
+            )
+        );
     }
 
     /// `UAPayeeFee` nests the payment (TS-D19): the wallet's JSON is the digest the payee signs. The pre-C6 form over the
@@ -221,9 +283,23 @@ contract PayeeFeeTest is Test {
         assertEq(t.payeeFeeDigest(x, 3e6, feeTo, until), wallet);
         IUARegistry.UASig memory ps = _n(_sig(PAYER_PK, t.mtxTransferDigest(x)));
         {
-            bytes32 flat = keccak256(abi.encodePacked(hex"1901", domainOf(address(t)), keccak256(abi.encode(
-                keccak256("ReceiverFee(bytes32 paymentDigest,uint256 fee,address feeRecipient,uint256 validUntil)"),
-                t.mtxTransferDigest(x), uint256(3e6), feeTo, until))));
+            bytes32 flat = keccak256(
+                abi.encodePacked(
+                    hex"1901",
+                    domainOf(address(t)),
+                    keccak256(
+                        abi.encode(
+                            keccak256(
+                                "ReceiverFee(bytes32 paymentDigest,uint256 fee,address feeRecipient,uint256 validUntil)"
+                            ),
+                            t.mtxTransferDigest(x),
+                            uint256(3e6),
+                            feeTo,
+                            until
+                        )
+                    )
+                )
+            );
             IUARegistry.UASig memory old = _n(_sig(PAYEE_PK, flat));
             vm.prank(relayer);
             vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
@@ -243,36 +319,84 @@ contract PayeeFeeTest is Test {
     }
 
     function _paymentHash(MetaTxLib.UAMetaTransfer memory x) internal pure returns (bytes32) {
-        return keccak256(abi.encode(
-            keccak256("UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,"
-                "uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
-            x.from, x.to, x.value, x.entryRef, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, x.fee, x.feeRecipient));
+        return keccak256(
+            abi.encode(
+                keccak256(
+                    "UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,"
+                    "uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+                ),
+                x.from,
+                x.to,
+                x.value,
+                x.entryRef,
+                x.batch,
+                x.nonce,
+                x.validUntil,
+                x.mode,
+                x.relayer,
+                x.fee,
+                x.feeRecipient
+            )
+        );
     }
 
     /// The `UAPayeeFee` typehash and domain are pinned independently of the contract. ua-mtx-merge T2, meaning: the
     /// token's payee-fee struct is `UAPayeeFee` (R21); the address `ReceiverFee` pin stays
     /// (legacy, no entry), and so does `UAReceiverFee`'s, the name before the payee-fee rename (CTR-MTX-86).
     function test_payeeFeeDigestIsPinned() public view {
-        assertEq(keccak256("ReceiverFee(MetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)"
-            "MetaTransfer(address from,address to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,"
-            "uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
-            0x7c08a6ca283c642a92e66bc1b0a04aaf10abca26906244a63d8a5e3c28232305);
-        assertEq(keccak256("UAReceiverFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)"
-            "UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,"
-            "uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
-            0xb12d2a080dcf6d9edea1a63b0fd3a59ebffa656c929d21f676d1f1507c75021a);
+        assertEq(
+            keccak256(
+                "ReceiverFee(MetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)"
+                "MetaTransfer(address from,address to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,"
+                "uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+            ),
+            0x7c08a6ca283c642a92e66bc1b0a04aaf10abca26906244a63d8a5e3c28232305
+        );
+        assertEq(
+            keccak256(
+                "UAReceiverFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)"
+                "UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,"
+                "uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+            ),
+            0xb12d2a080dcf6d9edea1a63b0fd3a59ebffa656c929d21f676d1f1507c75021a
+        );
         // owner 2026-11-12 (CTR-MTX-86): the struct is `UAPayeeFee`, the same members
-        assertEq(keccak256("UAPayeeFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)"
-            "UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,"
-            "uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
-            0x8a3955a6c3529266f588d56c7bfd28bdd0b5ad194fc9ca4428e159686a16c7ca);
-        bytes32 domainSep = keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256("SCaaS MetaToken"), keccak256("1"), uint256(7622), address(t), UID));
+        assertEq(
+            keccak256(
+                "UAPayeeFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)"
+                "UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,"
+                "uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+            ),
+            0x8a3955a6c3529266f588d56c7bfd28bdd0b5ad194fc9ca4428e159686a16c7ca
+        );
+        bytes32 domainSep = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256("SCaaS MetaToken"),
+                keccak256("1"),
+                uint256(7622),
+                address(t),
+                UID
+            )
+        );
         MetaTxLib.UAMetaTransfer memory x = _pay(payee, 100e6);
-        bytes32 expected = keccak256(abi.encodePacked(hex"1901", domainSep, keccak256(abi.encode(
-            bytes32(0x8a3955a6c3529266f588d56c7bfd28bdd0b5ad194fc9ca4428e159686a16c7ca), _paymentHash(x), uint256(3e6), feeTo,
-            uint256(1_800_000_060)))));
+        bytes32 expected = keccak256(
+            abi.encodePacked(
+                hex"1901",
+                domainSep,
+                keccak256(
+                    abi.encode(
+                        bytes32(0x8a3955a6c3529266f588d56c7bfd28bdd0b5ad194fc9ca4428e159686a16c7ca),
+                        _paymentHash(x),
+                        uint256(3e6),
+                        feeTo,
+                        uint256(1_800_000_060)
+                    )
+                )
+            )
+        );
         assertEq(t.payeeFeeDigest(x, 3e6, feeTo, 1_800_000_060), expected);
     }
 
@@ -289,9 +413,21 @@ contract PayeeFeeTest is Test {
         (ok, ret) = address(t).staticcall(abi.encodePacked(IMetaTokenV2.payeeFeeDigest.selector, args));
         assertTrue(ok, "payeeFeeDigest");
         assertEq(abi.decode(ret, (bytes32)), t.payeeFeeDigest(x, 3e6, feeTo, until));
-        bytes32 oldTyped = keccak256(abi.encodePacked(hex"1901", Erc7739Kit.separator(address(t)), keccak256(abi.encode(
-            bytes32(0xb12d2a080dcf6d9edea1a63b0fd3a59ebffa656c929d21f676d1f1507c75021a), _paymentHash(x), uint256(3e6), feeTo,
-            until))));
+        bytes32 oldTyped = keccak256(
+            abi.encodePacked(
+                hex"1901",
+                Erc7739Kit.separator(address(t)),
+                keccak256(
+                    abi.encode(
+                        bytes32(0xb12d2a080dcf6d9edea1a63b0fd3a59ebffa656c929d21f676d1f1507c75021a),
+                        _paymentHash(x),
+                        uint256(3e6),
+                        feeTo,
+                        until
+                    )
+                )
+            )
+        );
         IUARegistry.UASig memory ps = _n(_sig(PAYER_PK, t.mtxTransferDigest(x)));
         IUARegistry.UASig memory rs = _n(_sig(PAYEE_PK, t.payeeFeeDigest(x, 3e6, feeTo, until)));
         bytes memory tail = abi.encode(x, ps, 3e6, feeTo, until, rs, PayMetaKit.meta("request-1"));

@@ -65,7 +65,11 @@ pub enum Error {
 
 pub trait Curve {
     type S: Copy + PartialEq + Add<Output = Self::S> + Mul<Output = Self::S> + Neg<Output = Self::S>;
-    type P: Copy + PartialEq + Add<Output = Self::P> + Mul<Self::S, Output = Self::P> + Neg<Output = Self::P>;
+    type P: Copy
+        + PartialEq
+        + Add<Output = Self::P>
+        + Mul<Self::S, Output = Self::P>
+        + Neg<Output = Self::P>;
     /// Serialized point length.
     const PLEN: usize;
     /// `agg_bytes` length (the aggregate key as NonceGen takes it).
@@ -151,7 +155,10 @@ impl Curve for Secp256k1 {
         Self::ser(q)[1..].to_vec()
     }
     fn challenge(r: &Self::P, q: &Self::P, msg: &[u8]) -> Self::S {
-        Self::hash_s("BIP0340/challenge", &[&Self::ser(r)[1..], &Self::ser(q)[1..], msg])
+        Self::hash_s(
+            "BIP0340/challenge",
+            &[&Self::ser(r)[1..], &Self::ser(q)[1..], msg],
+        )
     }
     fn sig(r: &Self::P, s: &Self::S) -> Vec<u8> {
         [&Self::ser(r)[1..], &Self::s_bytes(s)[..]].concat()
@@ -169,7 +176,11 @@ pub fn bn_ser(p: &ark_bn254::G1Projective) -> Vec<u8> {
     if a.infinity {
         return vec![0; 64];
     }
-    [a.x.into_bigint().to_bytes_be(), a.y.into_bigint().to_bytes_be()].concat()
+    [
+        a.x.into_bigint().to_bytes_be(),
+        a.y.into_bigint().to_bytes_be(),
+    ]
+    .concat()
 }
 
 /// Canonical coordinates, on the curve, not the identity (bn254 G1 has cofactor 1).
@@ -262,7 +273,11 @@ pub struct KeyAgg<C: Curve> {
 impl<C: Curve> KeyAgg<C> {
     /// `a_i`: 1 for the second distinct key, else `hash_{KeyAgg coefficient}(L ‖ pk) mod order`.
     pub fn coef(&self, pk: &[u8]) -> C::S {
-        if pk == self.second.as_slice() { C::one() } else { C::hash_s("KeyAgg coefficient", &[&self.l, pk]) }
+        if pk == self.second.as_slice() {
+            C::one()
+        } else {
+            C::hash_s("KeyAgg coefficient", &[&self.l, pk])
+        }
     }
 }
 
@@ -275,8 +290,16 @@ pub fn key_sort(pks: &mut [Vec<u8>]) {
 pub fn key_agg<C: Curve>(pks: &[Vec<u8>]) -> Result<KeyAgg<C>, Error> {
     let parts: Vec<&[u8]> = pks.iter().map(|p| p.as_slice()).collect();
     let l = tagged("KeyAgg list", &parts);
-    let second = pks.iter().find(|p| **p != pks[0]).cloned().unwrap_or_else(|| vec![0; C::PLEN]);
-    let mut ka = KeyAgg::<C> { q: C::inf(), l, second };
+    let second = pks
+        .iter()
+        .find(|p| **p != pks[0])
+        .cloned()
+        .unwrap_or_else(|| vec![0; C::PLEN]);
+    let mut ka = KeyAgg::<C> {
+        q: C::inf(),
+        l,
+        second,
+    };
     for (i, pk) in pks.iter().enumerate() {
         let p = C::parse(pk).ok_or(Error::Contribution(Some(i), "pubkey"))?;
         ka.q = ka.q + p * ka.coef(pk);
@@ -332,7 +355,11 @@ fn nonce_gen<C: Curve>(
 
 /// A point or, for `PLEN` zero bytes, the identity (BIP-327 `cpoint_ext`).
 fn parse_ext<C: Curve>(b: &[u8]) -> Option<C::P> {
-    if b.iter().all(|x| *x == 0) { Some(C::inf()) } else { C::parse(b) }
+    if b.iter().all(|x| *x == 0) {
+        Some(C::inf())
+    } else {
+        C::parse(b)
+    }
 }
 
 /// BIP-327 NonceAgg.
@@ -357,7 +384,11 @@ pub fn nonce_agg<C: Curve>(pubnonces: &[Vec<u8>]) -> Result<Vec<u8>, Error> {
 pub type Session<C> = (KeyAgg<C>, <C as Curve>::S, <C as Curve>::P, <C as Curve>::S);
 
 /// BIP-327 GetSessionValues (no tweaks).
-pub fn session<C: Curve>(aggnonce: &[u8], pks: &[Vec<u8>], msg: &[u8]) -> Result<Session<C>, Error> {
+pub fn session<C: Curve>(
+    aggnonce: &[u8],
+    pks: &[Vec<u8>],
+    msg: &[u8],
+) -> Result<Session<C>, Error> {
     let ka = key_agg::<C>(pks)?;
     let b = C::hash_s("MuSig/noncecoef", &[aggnonce, &C::agg_bytes(&ka.q), msg]);
     let bad = Error::Contribution(None, "aggnonce");
@@ -373,7 +404,11 @@ pub fn session<C: Curve>(aggnonce: &[u8], pks: &[Vec<u8>], msg: &[u8]) -> Result
 }
 
 fn sign_g<C: Curve>(q: &C::P) -> C::S {
-    if C::even(q) { C::one() } else { -C::one() }
+    if C::even(q) {
+        C::one()
+    } else {
+        -C::one()
+    }
 }
 
 vectors_pub! {
@@ -415,10 +450,18 @@ pub fn partial_sig_verify_internal<C: Curve>(
     }
     let (ka, b, r, e) = session::<C>(aggnonce, pks, msg)?;
     if !pks.iter().any(|k| k == pk) {
-        return Err(Error::Value("The signer's pubkey must be included in the list of pubkeys."));
+        return Err(Error::Value(
+            "The signer's pubkey must be included in the list of pubkeys.",
+        ));
     }
-    let Some(s) = C::s_parse(psig) else { return Ok(false) };
-    let (Some(r1), Some(r2), Some(p)) = (C::parse(&pubnonce[..C::PLEN]), C::parse(&pubnonce[C::PLEN..]), C::parse(pk)) else {
+    let Some(s) = C::s_parse(psig) else {
+        return Ok(false);
+    };
+    let (Some(r1), Some(r2), Some(p)) = (
+        C::parse(&pubnonce[..C::PLEN]),
+        C::parse(&pubnonce[C::PLEN..]),
+        C::parse(pk),
+    ) else {
         return Ok(false);
     };
     let re = r1 + r2 * b;
@@ -427,7 +470,13 @@ pub fn partial_sig_verify_internal<C: Curve>(
 }
 
 /// BIP-327 PartialSigVerify: signer `i`'s `psig` against all public nonces.
-pub fn partial_sig_verify<C: Curve>(psig: &[u8], pubnonces: &[Vec<u8>], pks: &[Vec<u8>], msg: &[u8], i: usize) -> Result<bool, Error> {
+pub fn partial_sig_verify<C: Curve>(
+    psig: &[u8],
+    pubnonces: &[Vec<u8>],
+    pks: &[Vec<u8>],
+    msg: &[u8],
+    i: usize,
+) -> Result<bool, Error> {
     let (Some(pubnonce), Some(pk)) = (pubnonces.get(i), pks.get(i)) else {
         return Err(Error::Value("The signer index is out of range."));
     };
@@ -436,7 +485,12 @@ pub fn partial_sig_verify<C: Curve>(psig: &[u8], pubnonces: &[Vec<u8>], pks: &[V
 }
 
 /// BIP-327 PartialSigAgg (no tweaks): the final signature.
-pub fn partial_sig_agg<C: Curve>(psigs: &[[u8; 32]], aggnonce: &[u8], pks: &[Vec<u8>], msg: &[u8]) -> Result<Vec<u8>, Error> {
+pub fn partial_sig_agg<C: Curve>(
+    psigs: &[[u8; 32]],
+    aggnonce: &[u8],
+    pks: &[Vec<u8>],
+    msg: &[u8],
+) -> Result<Vec<u8>, Error> {
     let (_, _, r, _) = session::<C>(aggnonce, pks, msg)?;
     let mut s = C::zero_s();
     for (i, p) in psigs.iter().enumerate() {
@@ -448,13 +502,29 @@ pub fn partial_sig_agg<C: Curve>(psigs: &[[u8; 32]], aggnonce: &[u8], pks: &[Vec
 /// The whole n-of-n protocol for one message, every signer simulated: `rands[i]` is signer i's NonceGen `rand'`.
 /// Returns the signature; every partial signature is verified on the way. Test-only (feature `vectors`).
 #[cfg(feature = "vectors")]
-pub fn sign_all<C: Curve>(sks: &[Vec<u8>], pks: &[Vec<u8>], msg: &[u8], rands: &[[u8; 32]]) -> Result<Vec<u8>, Error> {
+pub fn sign_all<C: Curve>(
+    sks: &[Vec<u8>],
+    pks: &[Vec<u8>],
+    msg: &[u8],
+    rands: &[[u8; 32]],
+) -> Result<Vec<u8>, Error> {
     if pks.len() != sks.len() || rands.len() != sks.len() {
         return Err(Error::Value("One pk and one rand per sk."));
     }
     let ka = key_agg::<C>(pks)?;
     let agg = C::agg_bytes(&ka.q);
-    let nonces = (0..sks.len()).map(|i| nonce_gen::<C>(&rands[i], Some(&sks[i]), &pks[i], Some(&agg), Some(msg), None)).collect::<Result<Vec<_>, _>>()?;
+    let nonces = (0..sks.len())
+        .map(|i| {
+            nonce_gen::<C>(
+                &rands[i],
+                Some(&sks[i]),
+                &pks[i],
+                Some(&agg),
+                Some(msg),
+                None,
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     let pubnonces: Vec<Vec<u8>> = nonces.iter().map(|n| n.1.clone()).collect();
     let aggnonce = nonce_agg::<C>(&pubnonces)?;
     let mut psigs = Vec::new();

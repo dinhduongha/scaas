@@ -158,8 +158,9 @@ const portableDomainName = 'SCaaS UA Portable';
 const portableDomainVersion = '1';
 
 /// `DS_P = keccak256(keccak256(type) ‖ keccak256(name) ‖ keccak256(version))`.
-final Uint8List portableDomainSeparator =
-    _k([for (final x in [portableDomainType, portableDomainName, portableDomainVersion]) _k([_utf8(x)])]);
+final Uint8List portableDomainSeparator = _k([
+  for (final x in [portableDomainType, portableDomainName, portableDomainVersion]) _k([_utf8(x)]),
+]);
 
 const _kemType = 'UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)';
 const _recordType = 'UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)';
@@ -177,7 +178,8 @@ const portableTypes = {
   'UAPqzKeyVersionRecord': 'UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)' + _pqzKeyVersionType,
   'UAMembership': 'UAMembership(bytes32 ua,bytes32 member)',
   // CTR-UA-44 (TODO 3ze): an msig's structure update on one registry
-  'UAMsigUpdate': 'UAMsigUpdate(bytes32 ua,bytes32 chainUid,address registry,uint64 version,uint16 threshold,UAMsigMember[] members,'
+  'UAMsigUpdate':
+      'UAMsigUpdate(bytes32 ua,bytes32 chainUid,address registry,uint64 version,uint16 threshold,UAMsigMember[] members,'
       'uint256 enabled,uint64 validUntilBlock)UAMsigMember(uint16 kind,bytes32 id,uint16 weight)',
   'UAMsigMember': 'UAMsigMember(uint16 kind,bytes32 id,uint16 weight)',
 };
@@ -190,7 +192,11 @@ Uint8List hashStruct(String name, List<Uint8List> words) =>
     _k([portableTypehash(name), for (final w in words) _sized(w, 32, 'word')]);
 
 /// `keccak256(0x1901 ‖ DS_P ‖ structHash)`: what `eth_signTypedData_v4` returns for a portable record.
-Uint8List _typed(Uint8List structHash) => _k([Uint8List.fromList([0x19, 0x01]), portableDomainSeparator, structHash]);
+Uint8List _typed(Uint8List structHash) => _k([
+  Uint8List.fromList([0x19, 0x01]),
+  portableDomainSeparator,
+  structHash,
+]);
 
 final _two64 = BigInt.one << 64;
 
@@ -199,7 +205,8 @@ final _two64 = BigInt.one << 64;
 /// byte ‖ key (`UAKemScheme` for an id other than 1, 0 included). No key (version 0, no key) is the zero record
 /// `UAKemRecord{ua, 0, 0, 0}` (TS-D2: a present record has scheme ≠ 0): the `kem` word of a `UAPortableRecord`.
 Uint8List kemRecordHash(Uint8List ua, BigInt version, Uint8List kemPk) {
-  if (version == BigInt.zero && kemPk.isEmpty) return hashStruct('UAKemRecord', [ua, Uint8List(32), Uint8List(32), Uint8List(32)]);
+  if (version == BigInt.zero && kemPk.isEmpty)
+    return hashStruct('UAKemRecord', [ua, Uint8List(32), Uint8List(32), Uint8List(32)]);
   if (version < BigInt.zero || version >= _two64) throw UAError('UAKemVersion', '$version');
   if (kemPk.isNotEmpty && kemPk[0] != kemSchemeMlkem1024X25519) throw UAError('UAKemScheme', '${kemPk[0]}');
   if (kemPk.length != kemPkLength) throw UAError('UAKemKeyLength', '${kemPk.length}');
@@ -209,7 +216,12 @@ Uint8List kemRecordHash(Uint8List ua, BigInt version, Uint8List kemPk) {
     v[i] = (x & BigInt.from(0xff)).toInt();
     x >>= 8;
   }
-  return hashStruct('UAKemRecord', [ua, v, _word(kemPk[0]), _k([kemPk])]);
+  return hashStruct('UAKemRecord', [
+    ua,
+    v,
+    _word(kemPk[0]),
+    _k([kemPk]),
+  ]);
 }
 
 /// The typed `UAKemRecord` digest `setKemKey` signs (versions ≥ 1: version 0 is the `register` key, `UAKemVersion` here).
@@ -228,8 +240,13 @@ Uint8List portableRecordDigest(Uint8List ua, int kind, Uint8List pqzKeyHash, Uin
 
 /// The typed `UARegistration{record, pqzPopHash}`: what the signer's `pop` signs under `uaMessage(kind, POP_V2, ·)` (and a
 /// native msig member signs itself, TS-D4).
-Uint8List registrationDigest(Uint8List ua, int kind, Uint8List pqzKeyHash, Uint8List kemRecordHash, Uint8List pqzPopHash) =>
-    _typed(hashStruct('UARegistration', [portableRecordHash(ua, kind, pqzKeyHash, kemRecordHash), pqzPopHash]));
+Uint8List registrationDigest(
+  Uint8List ua,
+  int kind,
+  Uint8List pqzKeyHash,
+  Uint8List kemRecordHash,
+  Uint8List pqzPopHash,
+) => _typed(hashStruct('UARegistration', [portableRecordHash(ua, kind, pqzKeyHash, kemRecordHash), pqzPopHash]));
 
 /// What the UA signs for a KEM record: `uaMessage(kind, PURPOSE_KEM, kemRecordDigest)`; a KEM holder only (UAKemHolder).
 Uint8List kemRecordMessage(int kind, Uint8List ua, BigInt version, Uint8List kemPk) {
@@ -291,14 +308,24 @@ typedef HolderPop = ({
 /// holders may carry them (UAPqzHolder: an `msig` needs [keyData] to show it is PQ-eligible; UAKemHolder: a single PQ kind only,
 /// never an `msig`); a PQZ key always
 /// comes with its proof hash and only with it (UAPqzPopHash).
-HolderPop holderPopMessage(int kind, Uint8List ua,
-    {Uint8List? keyData, Object? pqzKey, Uint8List? pqzPop, Uint8List? pqzPopHash, Uint8List? kemPk, Uint8List? Function(Uint8List id)? inner}) {
+HolderPop holderPopMessage(
+  int kind,
+  Uint8List ua, {
+  Uint8List? keyData,
+  Object? pqzKey,
+  Uint8List? pqzPop,
+  Uint8List? pqzPopHash,
+  Uint8List? kemPk,
+  Uint8List? Function(Uint8List id)? inner,
+}) {
   final hasKey = pqzKey != null && keyBytes(pqzKey).isNotEmpty;
   final hasKem = kemPk != null && kemPk.isNotEmpty;
-  if (hasKey && !_holds(kind, keyData ?? Uint8List(0), inner)) throw UAError('UAPqzHolder', '${_kindHex(kind)} may not hold a PQZ key');
+  if (hasKey && !_holds(kind, keyData ?? Uint8List(0), inner))
+    throw UAError('UAPqzHolder', '${_kindHex(kind)} may not hold a PQZ key');
   if (hasKem && !isKemHolder(kind)) throw UAError('UAKemHolder', '${_kindHex(kind)} may not hold a KEM key');
   final popHash = _proofHashOf(pqzPop, pqzPopHash);
-  if (hasKey != !_isZero(popHash)) throw UAError('UAPqzPopHash', 'a PQZ key comes with its proof hash and only with it');
+  if (hasKey != !_isZero(popHash))
+    throw UAError('UAPqzPopHash', 'a PQZ key comes with its proof hash and only with it');
   final kh = hasKey ? _pqzKeyHashOf(pqzKey) : Uint8List(32);
   final kr = _kemHash(ua, kemPk);
   final reg = registrationDigest(ua, kind, kh, kr, popHash);
@@ -326,8 +353,12 @@ Uint8List pqzKeyDigest(Uint8List ua, Uint8List pqzKeyHash) => _typed(hashStruct(
 
 /// The typed `UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}`: what `setPqzKey`'s signature signs under
 /// `uaMessage(kind, PURPOSE_PQZ_KEY, ·)` (and a native msig member signs itself, TS-D4).
-Uint8List pqzKeyRecordDigest(Uint8List ua, Uint8List pqzKeyHash, Uint8List pqzPopHash) =>
-    _typed(hashStruct('UAPqzKeyRecord', [hashStruct('UAPqzKey', [ua, pqzKeyHash]), pqzPopHash]));
+Uint8List pqzKeyRecordDigest(Uint8List ua, Uint8List pqzKeyHash, Uint8List pqzPopHash) => _typed(
+  hashStruct('UAPqzKeyRecord', [
+    hashStruct('UAPqzKey', [ua, pqzKeyHash]),
+    pqzPopHash,
+  ]),
+);
 
 /// The typed `UAMembership{ua, member}`: what `member` signs to accept its slot in the `msig` `ua` (CTR-UA-37): a native member
 /// this digest itself, a derived member `memberDigest(ua, uaMessage(MSIG, PURPOSE_MEMBERSHIP, ·))` under `member`.
@@ -336,8 +367,16 @@ Uint8List membershipDigest(Uint8List ua, Uint8List member) => _typed(hashStruct(
 /// CTR-UA-44: the typed `UAMsigUpdate{ua, chainUid, registry, version, threshold, members, enabled, validUntilBlock}`, [members]
 /// `(kind, id, weight)` records hashed as an EIP-712 array of `UAMsigMember`, [enabled] the uint256 bitmap (bit i = slot i): what a quorum
 /// of the stored structure signs for `updateMsig` on that one registry, under `uaMessage(MSIG, PURPOSE_MSIG_UPDATE, ·)`.
-Uint8List msigUpdateDigest(Uint8List ua, Uint8List chainUid, Uint8List registry, int version, int threshold,
-    List<({int kind, Uint8List id, int weight})> members, BigInt enabled, int validUntilBlock) {
+Uint8List msigUpdateDigest(
+  Uint8List ua,
+  Uint8List chainUid,
+  Uint8List registry,
+  int version,
+  int threshold,
+  List<({int kind, Uint8List id, int weight})> members,
+  BigInt enabled,
+  int validUntilBlock,
+) {
   if (enabled < BigInt.zero || enabled.bitLength > 256) throw ArgumentError('enabled must be a uint256');
   final en = Uint8List(32);
   var x = enabled;
@@ -346,8 +385,18 @@ Uint8List msigUpdateDigest(Uint8List ua, Uint8List chainUid, Uint8List registry,
     x >>= 8;
   }
   final hs = members.map((m) => hashStruct('UAMsigMember', [_word(m.kind), m.id, _word(m.weight)])).toList();
-  return _typed(hashStruct('UAMsigUpdate', [ua, chainUid, _addressWord(registry), _word(version), _word(threshold), _k(hs), en,
-    _word(validUntilBlock)]));
+  return _typed(
+    hashStruct('UAMsigUpdate', [
+      ua,
+      chainUid,
+      _addressWord(registry),
+      _word(version),
+      _word(threshold),
+      _k(hs),
+      en,
+      _word(validUntilBlock),
+    ]),
+  );
 }
 
 /// The PQZ key record of `setPqzKey` (ruling A1-I1), see [pqzKeyRecordMessage]. [message] is what the UA signs,
@@ -364,8 +413,16 @@ typedef PqzKeyRecord = ({
 
 /// The signed, portable, write-once PQZ key record: accepted only by a registration without a PQZ key ([alreadySet] = it has
 /// one: UAPqzKeySet). The holder rules of [holderPopMessage]; the key and its proof hash are both required.
-PqzKeyRecord pqzKeyRecordMessage(int kind, Uint8List ua, Uint8List keyData, Object? pqzKey,
-    {Uint8List? pqzPop, Uint8List? pqzPopHash, bool alreadySet = false, Uint8List? Function(Uint8List id)? inner}) {
+PqzKeyRecord pqzKeyRecordMessage(
+  int kind,
+  Uint8List ua,
+  Uint8List keyData,
+  Object? pqzKey, {
+  Uint8List? pqzPop,
+  Uint8List? pqzPopHash,
+  bool alreadySet = false,
+  Uint8List? Function(Uint8List id)? inner,
+}) {
   if (!_holds(kind, keyData, inner)) throw UAError('UAPqzHolder', '${_kindHex(kind)} may not hold a PQZ key');
   if (alreadySet) throw UAError('UAPqzKeySet', 'write-once');
   final kh = _pqzKeyHashOf(pqzKey);
@@ -392,8 +449,12 @@ Uint8List pqzKeyVersionDigest(Uint8List ua, int version, Uint8List pqzKeyHash) =
 
 /// Group 3g: the typed `UAPqzKeyVersionRecord{UAPqzKeyVersion{ua, version, pqzKeyHash}, pqzPopHash}`, what the UA signs for version
 /// v >= 1 under `uaMessage(kind, PURPOSE_PQZ_KEY, ·)`.
-Uint8List pqzKeyVersionRecordDigest(Uint8List ua, int version, Uint8List pqzKeyHash, Uint8List pqzPopHash) =>
-    _typed(hashStruct('UAPqzKeyVersionRecord', [hashStruct('UAPqzKeyVersion', [ua, _word(version), pqzKeyHash]), pqzPopHash]));
+Uint8List pqzKeyVersionRecordDigest(Uint8List ua, int version, Uint8List pqzKeyHash, Uint8List pqzPopHash) => _typed(
+  hashStruct('UAPqzKeyVersionRecord', [
+    hashStruct('UAPqzKeyVersion', [ua, _word(version), pqzKeyHash]),
+    pqzPopHash,
+  ]),
+);
 
 /// PQZ key version v >= 1 of `setPqzKey(ua, version, ...)`, see [pqzKeyVersionRecordMessage].
 typedef PqzKeyVersionRecord = ({
@@ -409,12 +470,22 @@ typedef PqzKeyVersionRecord = ({
 /// Group 3g (KV-1). [stored]: the UA's stored versions as `(version, pqzKeyHash)` (the chain's `pqzKeyAt`). Refuses version 0
 /// (UAPqzKeySet: a new key gets a new version), a version other than latest + 1 or no version 0 (UAPqzKeyVersion), a key a stored
 /// version holds (UAKeyInUse).
-PqzKeyVersionRecord pqzKeyVersionRecordMessage(int kind, Uint8List ua, Uint8List keyData, int version, Object? pqzKey,
-    {Uint8List? pqzPop, Uint8List? pqzPopHash, List<(int, Uint8List)> stored = const [], Uint8List? Function(Uint8List id)? inner}) {
+PqzKeyVersionRecord pqzKeyVersionRecordMessage(
+  int kind,
+  Uint8List ua,
+  Uint8List keyData,
+  int version,
+  Object? pqzKey, {
+  Uint8List? pqzPop,
+  Uint8List? pqzPopHash,
+  List<(int, Uint8List)> stored = const [],
+  Uint8List? Function(Uint8List id)? inner,
+}) {
   if (!_holds(kind, keyData, inner)) throw UAError('UAPqzHolder', '${_kindHex(kind)} may not hold a PQZ key');
   if (version == 0) throw UAError('UAPqzKeySet', 'version 0 is write-once: a new key gets a new version');
   final versions = stored.map((s) => s.$1);
-  if (!versions.contains(0) || version != versions.reduce((a, b) => a > b ? a : b) + 1) throw UAError('UAPqzKeyVersion', '$version');
+  if (!versions.contains(0) || version != versions.reduce((a, b) => a > b ? a : b) + 1)
+    throw UAError('UAPqzKeyVersion', '$version');
   final kh = _pqzKeyHashOf(pqzKey);
   if (stored.any((s) => _hexOf(s.$2) == _hexOf(kh))) throw UAError('UAKeyInUse', 'a stored version holds this key');
   final popHash = _proofHashOf(pqzPop, pqzPopHash);
@@ -470,26 +541,32 @@ class Domain {
 }
 
 Uint8List uaAuthDomainSeparator(Domain d) => _k([
-      _k([_utf8(domainType)]),
-      _k([_utf8(registryName)]),
-      _k([_utf8('${_id(d.generation)}')]),
-      _word(d.chainId),
-      _addressWord(d.registry),
-      _sized(d.chainUid, 32, 'chainUid'),
-    ]);
+  _k([_utf8(domainType)]),
+  _k([_utf8(registryName)]),
+  _k([_utf8('${_id(d.generation)}')]),
+  _word(d.chainId),
+  _addressWord(d.registry),
+  _sized(d.chainUid, 32, 'chainUid'),
+]);
 
 /// EIP-712 digest of UAAuth(ua, purpose, digest): what native signers behind the registry sign, except that
 /// under the portable purposes ([isPortablePurpose]) a code-less native msig member signs the record's typed digest
 /// instead (CTR-MTX-14, TS-D4).
 Uint8List uaAuthDigest(Domain d, Uint8List ua, Uint8List purpose, Uint8List digest) => _k([
-      Uint8List.fromList([0x19, 0x01]),
-      uaAuthDomainSeparator(d),
-      _k([_k([_utf8(uaAuthType)]), _sized(ua, 32, 'ua'), _sized(purpose, 32, 'purposeTag'), _sized(digest, 32, 'digest')]),
-    ]);
+  Uint8List.fromList([0x19, 0x01]),
+  uaAuthDomainSeparator(d),
+  _k([
+    _k([_utf8(uaAuthType)]),
+    _sized(ua, 32, 'ua'),
+    _sized(purpose, 32, 'purposeTag'),
+    _sized(digest, 32, 'digest'),
+  ]),
+]);
 
 /// `md_I = memberDigest(I, uaMessage(MSIG, member, md_U))`: what the members of the inner msig sign for its slot in an outer whose member digest is
 /// [md], purpose member whatever the outer's.
-Uint8List innerDigest(Uint8List inner, Uint8List md) => memberDigest(inner, uaMessage(0x0120, purposeTag('member'), md));
+Uint8List innerDigest(Uint8List inner, Uint8List md) =>
+    memberDigest(inner, uaMessage(0x0120, purposeTag('member'), md));
 
 Uint8List memberDigest(Uint8List structureUa, Uint8List uaMsg) =>
     _k([_sized(structureUa, 32, 'structureUa'), _sized(uaMsg, 32, 'uaMsg')]);
@@ -529,7 +606,9 @@ String idDisplay(String id, int kind) {
 Uint8List encodeMsig(int threshold, List<(int, Uint8List, int)> members) {
   void u16(List<int> o, int v) {
     if (v < 0 || v > 0xffff) throw ArgumentError('u16 out of range');
-    o..add(v >> 8)..add(v & 0xff);
+    o
+      ..add(v >> 8)
+      ..add(v & 0xff);
   }
 
   final o = <int>[];
@@ -566,7 +645,11 @@ Map<String, Object?> kemKeyOf(Uint8List? kemPk) {
   final pk = kemPk ?? Uint8List(0);
   if (pk.isEmpty) return {'scheme': 0, 'mlkemEk': '0x', 'x25519': _zeroWord};
   kemRecordHash(Uint8List(32), BigInt.zero, pk);
-  return {'scheme': pk[0], 'mlkemEk': _hexOf(pk.sublist(1, pk.length - 32)), 'x25519': _hexOf(pk.sublist(pk.length - 32))};
+  return {
+    'scheme': pk[0],
+    'mlkemEk': _hexOf(pk.sublist(1, pk.length - 32)),
+    'x25519': _hexOf(pk.sublist(pk.length - 32)),
+  };
 }
 
 /// CTR-UA-09 key data as `MsigStructure{threshold, members: MsigMember{kind, id, weight}[]}` (TS-D10).
@@ -576,7 +659,8 @@ Map<String, Object?> msigStructure(Object? keyData) {
   return {
     'threshold': _be16(d, 0),
     'members': [
-      for (var o = 4; o < d.length; o += 36) {'kind': _be16(d, o), 'id': _hexOf(d.sublist(o + 2, o + 34)), 'weight': _be16(d, o + 34)},
+      for (var o = 4; o < d.length; o += 36)
+        {'kind': _be16(d, o), 'id': _hexOf(d.sublist(o + 2, o + 34)), 'weight': _be16(d, o + 34)},
     ],
   };
 }
@@ -622,13 +706,15 @@ Map<String, Object?>? typedKey(int kind, Object? keyData) {
 typedef MemberSig = (int, List<(int, Uint8List)>, Uint8List?);
 
 List<Map<String, Object?>> _memberSigsJson(List<MemberSig> members) => [
-      for (final (i, inner, s) in members)
-        {
-          'index': i,
-          'members': [for (final (j, x) in inner) {'index': j, 'sig': _hexOf(x)}],
-          'sig': _hexOf(s),
-        }
-    ];
+  for (final (i, inner, s) in members)
+    {
+      'index': i,
+      'members': [
+        for (final (j, x) in inner) {'index': j, 'sig': _hexOf(x)},
+      ],
+      'sig': _hexOf(s),
+    },
+];
 
 /// `abi.encode(InnerSig[])` of (index, sig) records: what `UAMemberSig` carries for an msig slot.
 Uint8List encodeInnerSigs(List<(int, Uint8List)> members) {
@@ -668,8 +754,11 @@ MemberSig replayedMemberSig(Object? keyData, int index, Uint8List stored) {
 
 /// `UASig{keyData, signature, members}` (TS-D12) of `requireAuthorized` / `setKemKey` / `setPqzKey`: native — [signature]; a derived
 /// single key — [keyData] (empty for the stored kinds) + [signature]; an msig — [members]. A portable record's signature never has [keyData].
-Map<String, Object?> uaSig({Uint8List? keyData, Uint8List? signature, List<MemberSig> members = const []}) =>
-    {'keyData': _hexOf(keyData), 'signature': _hexOf(signature), 'members': _memberSigsJson(members)};
+Map<String, Object?> uaSig({Uint8List? keyData, Uint8List? signature, List<MemberSig> members = const []}) => {
+  'keyData': _hexOf(keyData),
+  'signature': _hexOf(signature),
+  'members': _memberSigsJson(members),
+};
 
 /// `setKemKey(ua, version, KemKey, UASig)`; [sig] a [uaSig] (empty for the version-0 hash-commit fill); no key is no call.
 Map<String, Object?> setKemKeyArgs(Uint8List ua, int version, Uint8List? kemPk, Map<String, Object?> sig) {
@@ -678,38 +767,57 @@ Map<String, Object?> setKemKeyArgs(Uint8List ua, int version, Uint8List? kemPk, 
 }
 
 /// Group 3g: `setPqzKey(ua, version, pqzKey, pqzPopHash, UASig)`; version 0 is [setPqzKeyArgs]' row.
-Map<String, Object?> setPqzKeyVersionArgs(Uint8List ua, int version, Uint8List pqzKey, Uint8List pqzPopHash, Map<String, Object?> sig) => {
-      'ua': _hexOf(_sized(ua, 32, 'ua')),
-      'version': version,
-      'pqzKey': _hexOf(pqzKey),
-      'pqzPopHash': _hexOf(_sized(pqzPopHash, 32, 'pqzPopHash')),
-      'sig': sig,
-    };
+Map<String, Object?> setPqzKeyVersionArgs(
+  Uint8List ua,
+  int version,
+  Uint8List pqzKey,
+  Uint8List pqzPopHash,
+  Map<String, Object?> sig,
+) => {
+  'ua': _hexOf(_sized(ua, 32, 'ua')),
+  'version': version,
+  'pqzKey': _hexOf(pqzKey),
+  'pqzPopHash': _hexOf(_sized(pqzPopHash, 32, 'pqzPopHash')),
+  'sig': sig,
+};
 
 /// `setPqzKey(ua, pqzKey, pqzPopHash, UASig)`.
 Map<String, Object?> setPqzKeyArgs(Uint8List ua, Uint8List pqzKey, Uint8List pqzPopHash, Map<String, Object?> sig) => {
-      'ua': _hexOf(_sized(ua, 32, 'ua')),
-      'pqzKey': _hexOf(pqzKey),
-      'pqzPopHash': _hexOf(_sized(pqzPopHash, 32, 'pqzPopHash')),
-      'sig': sig,
-    };
+  'ua': _hexOf(_sized(ua, 32, 'ua')),
+  'pqzKey': _hexOf(pqzKey),
+  'pqzPopHash': _hexOf(_sized(pqzPopHash, 32, 'pqzPopHash')),
+  'sig': sig,
+};
 
 int _tail(Object? h) => 32 + ((h as String).length + 61) ~/ 64 * 32; // a `bytes` tail: length word + padded data
 int _bytesArr(Object? xs) => (xs as List).fold(32, (n, x) => n + 32 + _tail(x));
 int _kemLen(Object? k) => 96 + _tail((k as Map)['mlkemEk']);
 int _attrsLen(Object? a) => 128 + _tail((a as Map)['pqzKey']) + _kemLen(a['kem']);
 int _innerSigsLen(Object? ms) => (ms as List).fold(32, (n, m) => n + 32 + 64 + _tail(m['sig']));
-int _memberSigsLen(Object? ms) => (ms as List).fold(32, (n, m) => n + 32 + 96 + _innerSigsLen(m['members']) + _tail(m['sig']));
+int _memberSigsLen(Object? ms) =>
+    (ms as List).fold(32, (n, m) => n + 32 + 96 + _innerSigsLen(m['members']) + _tail(m['sig']));
 
 /// The ABI calldata length (selector included) of a `register` / `registerMsig` / `registerWebAuthn` / `registerMuSig2` /
 /// `registerFrost` / `setKemKey` call from its named arguments, as clientkeys `registryCalldataLength`.
 int registryCalldataLength(String entry, Map<String, Object?> a) {
   if (entry == 'setKemKey') {
     final s = a['sig'] as Map;
-    return 4 + 128 + _kemLen(a['kem']) + 96 + _tail(s['keyData']) + _tail(s['signature']) + _memberSigsLen(s['members']);
+    return 4 +
+        128 +
+        _kemLen(a['kem']) +
+        96 +
+        _tail(s['keyData']) +
+        _tail(s['signature']) +
+        _memberSigsLen(s['members']);
   }
   if (entry == 'registerMsig') {
-    return 4 + 128 + 96 + 96 * ((a['structure'] as Map)['members'] as List).length + _attrsLen(a['attrs']) + _memberSigsLen(a['pop']) + _tail(a['pqzPop']);
+    return 4 +
+        128 +
+        96 +
+        96 * ((a['structure'] as Map)['members'] as List).length +
+        _attrsLen(a['attrs']) +
+        _memberSigsLen(a['pop']) +
+        _tail(a['pqzPop']);
   }
   final rest = _attrsLen(a['attrs']) + _tail(a['pop']) + _tail(a['pqzPop']);
   final k = a['key'] as Map?;
@@ -718,7 +826,9 @@ int registryCalldataLength(String entry, Map<String, Object?> a) {
     'registerWebAuthn' => 4 + 192 + rest,
     'registerMuSig2' => 4 + 160 + 64 + _tail(k!['aggKey']) + _bytesArr(k['memberKeys']) + rest,
     'registerFrost' => (k!['members'] as List).fold(
-        4 + 160 + 96 + _tail(k['groupKey']) + 32 + rest, (n, m) => n + 32 + 96 + _bytesArr(m['commitments']) + _tail(m['r'])),
+      4 + 160 + 96 + _tail(k['groupKey']) + 32 + rest,
+      (n, m) => n + 32 + 96 + _bytesArr(m['commitments']) + _tail(m['r']),
+    ),
     _ => throw ArgumentError('no calldata length for $entry'),
   };
 }
@@ -730,18 +840,29 @@ int registryCalldataLength(String entry, Map<String, Object?> a) {
 /// full call is over [registerCalldataLimit] (X0: PQZH n2560-kmax16384 with a PQZ key) or [kemCommit] is true, the hash commit
 /// (`kem = {scheme, 0x, 0}`, `kemPkHash = keccak256(kemPk)`) plus `kemFill = setKemKey(ua, 0, kem, UASig())`, open to anyone (the
 /// pop signed the same record). [kemCommit] false forces the full key. [pop]: the signer's signature; [members]: an msig's.
-(Map<String, Object?>, Map<String, Object?>?) registrationArgs(int kind, Object? keyData,
-    {Uint8List? pqzKey,
-    Uint8List? pqzPopHash,
-    Uint8List? pqzPop,
-    Uint8List? kemPk,
-    Uint8List? pop,
-    List<MemberSig> members = const [],
-    bool? kemCommit}) {
+(Map<String, Object?>, Map<String, Object?>?) registrationArgs(
+  int kind,
+  Object? keyData, {
+  Uint8List? pqzKey,
+  Uint8List? pqzPopHash,
+  Uint8List? pqzPop,
+  Uint8List? kemPk,
+  Uint8List? pop,
+  List<MemberSig> members = const [],
+  bool? kemCommit,
+}) {
   final d = keyBytes(keyData);
-  if ((kemPk?.isNotEmpty ?? false) && !isKemHolder(kind)) throw UAError('UAKemHolder', '${_kindHex(kind)} may not hold a KEM key');
-  final popHash = (pqzKey?.isNotEmpty ?? false) || (pqzPopHash?.isNotEmpty ?? false) ? _proofHashOf(pqzPop, pqzPopHash) : Uint8List(32);
-  final attrs = <String, Object?>{'pqzKey': _hexOf(pqzKey), 'pqzPopHash': _hexOf(popHash), 'kem': kemKeyOf(kemPk), 'kemPkHash': _zeroWord};
+  if ((kemPk?.isNotEmpty ?? false) && !isKemHolder(kind))
+    throw UAError('UAKemHolder', '${_kindHex(kind)} may not hold a KEM key');
+  final popHash = (pqzKey?.isNotEmpty ?? false) || (pqzPopHash?.isNotEmpty ?? false)
+      ? _proofHashOf(pqzPop, pqzPopHash)
+      : Uint8List(32);
+  final attrs = <String, Object?>{
+    'pqzKey': _hexOf(pqzKey),
+    'pqzPopHash': _hexOf(popHash),
+    'kem': kemKeyOf(kemPk),
+    'kemPkHash': _zeroWord,
+  };
   final tail = <String, Object?>{'attrs': attrs, 'pqzPop': _hexOf(pqzPop)};
   final key = typedKey(kind, d);
   final args = <String, Object?>{
@@ -756,7 +877,8 @@ int registryCalldataLength(String entry, Map<String, Object?> a) {
     'pop': kind == 0x0120 ? _memberSigsJson(members) : _hexOf(pop),
   };
   final full = kemPk ?? Uint8List(0);
-  if (full.isEmpty || !(kemCommit ?? registryCalldataLength(args['entry'] as String, args) > registerCalldataLimit)) return (args, null);
+  if (full.isEmpty || !(kemCommit ?? registryCalldataLength(args['entry'] as String, args) > registerCalldataLimit))
+    return (args, null);
   args['attrs'] = {
     ...attrs,
     'kem': {'scheme': full[0], 'mlkemEk': '0x', 'x25519': _zeroWord},

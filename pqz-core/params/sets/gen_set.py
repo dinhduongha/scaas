@@ -32,6 +32,7 @@ Barrett) are computed here. Stdlib only (Python >= 3.11: tomllib), deterministic
 
 Adding a set: write sets/<set>/set.toml, then pqz-core/params/sets/make.sh <set> all (README.md beside this file).
 """
+
 import hashlib
 import itertools
 import json
@@ -50,7 +51,9 @@ sys.path.insert(0, os.path.join(CORE, "pqzl", "params", "n-study"))
 from budget import budget  # noqa: E402
 
 N2048 = "n2048-kmax1024"  # pqz-stmt's set without a feature, vectors in smartcontracts/vectors/pqz/ itself (pqz-ffi's default is n2304-kmax4096)
-CONTRACTS = "n2304-kmax4096"  # the committed smartcontracts/evm/src/pqz/PqzSet.sol (plan 5h Task 8d part 2; one set per build)
+CONTRACTS = (
+    "n2304-kmax4096"  # the committed smartcontracts/evm/src/pqz/PqzSet.sol (plan 5h Task 8d part 2; one set per build)
+)
 SOL_EVM = os.path.join(REPO, "smartcontracts", "evm", "src", "pqz", "PqzSet.sol")
 U64 = ("Q", "ZETA", "IROOT", "ZETA3", "INV2", "INVZ", "INVI", "INVZ3", "R64", "MUX")
 
@@ -58,10 +61,32 @@ U64 = ("Q", "ZETA", "IROOT", "ZETA3", "INV2", "INVZ", "INVI", "INVZ3", "R64", "M
 # ---------------------------------------------------------------- proofSystemIds (plan 5h Task 8d: the one bump)
 def keccak256(data):
     """Keccak-256 (rate 136, pad 0x01; not hashlib's SHA3-256): selfcheck() pins it to the retired ids"""
-    rc = [1, 0x8082, 0x800000000000808A, 0x8000000080008000, 0x808B, 0x80000001, 0x8000000080008081, 0x8000000000008009,
-          0x8A, 0x88, 0x80008009, 0x8000000A, 0x8000808B, 0x800000000000008B, 0x8000000000008089, 0x8000000000008003,
-          0x8000000000008002, 0x8000000000000080, 0x800A, 0x800000008000000A, 0x8000000080008081, 0x8000000000008080,
-          0x80000001, 0x8000000080008008]
+    rc = [
+        1,
+        0x8082,
+        0x800000000000808A,
+        0x8000000080008000,
+        0x808B,
+        0x80000001,
+        0x8000000080008081,
+        0x8000000000008009,
+        0x8A,
+        0x88,
+        0x80008009,
+        0x8000000A,
+        0x8000808B,
+        0x800000000000008B,
+        0x8000000000008089,
+        0x8000000000008003,
+        0x8000000000008002,
+        0x8000000000000080,
+        0x800A,
+        0x800000008000000A,
+        0x8000000080008081,
+        0x8000000000008080,
+        0x80000001,
+        0x8000000080008008,
+    ]
     rot = [[0, 36, 3, 41, 18], [1, 44, 10, 45, 2], [62, 6, 43, 15, 61], [28, 55, 25, 21, 56], [27, 20, 39, 8, 14]]
     m64 = 2**64 - 1
     msg = bytearray(data) + b"\x01"
@@ -70,7 +95,7 @@ def keccak256(data):
     a = [[0] * 5 for _ in range(5)]
     for off in range(0, len(msg), 136):
         for i in range(17):
-            a[i % 5][i // 5] ^= int.from_bytes(msg[off + 8 * i:off + 8 * i + 8], "little")
+            a[i % 5][i // 5] ^= int.from_bytes(msg[off + 8 * i : off + 8 * i + 8], "little")
         for r in rc:
             c = [a[x][0] ^ a[x][1] ^ a[x][2] ^ a[x][3] ^ a[x][4] for x in range(5)]
             d = [c[x - 1] ^ (((c[(x + 1) % 5] << 1) | (c[(x + 1) % 5] >> 63)) & m64) for x in range(5)]
@@ -86,23 +111,39 @@ def keccak256(data):
 
 
 # the retired ids (decisions CTR-PQZ-09): never a set's id; pqz-stmt's tests refuse them
-RETIRED = {"scaas/pqz/lnp22/mlwe-d64k32-q42l4/v1": None,
-           "scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2": "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f",
-           "scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3": "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef",
-           "scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1": "0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4",
-           "scaas/pqz/pqzh/stark-d1-goldilocks5-fri-keccak256-zk/v1": "aa1f92ddc5763201c2582c8387bd6513842e52779310d6bcf39a7fec99284304"}
+RETIRED = {
+    "scaas/pqz/lnp22/mlwe-d64k32-q42l4/v1": None,
+    "scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2": "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f",
+    "scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3": "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef",
+    "scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1": "0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4",
+    "scaas/pqz/pqzh/stark-d1-goldilocks5-fri-keccak256-zk/v1": "aa1f92ddc5763201c2582c8387bd6513842e52779310d6bcf39a7fec99284304",
+}
 # the per-set ids of plan 5h Task 8d (PQZL v4, PQZH v2), retired by the R0 review fix (2026-10-25: R0-1 / R0-C2 / R0-C3)
-RETIRED |= {lab: keccak256(lab.encode()).hex() for lab in (
-    "scaas/pqz/lnp22/mlwe-d64k32-q42l4/v4", "scaas/pqz/lnp22/mlwe-d64k36-q46l4/v4", "scaas/pqz/lnp22/mlwe-d64k40-q50l4/v4",
-    "scaas/pqz/lnp22/mlwe-d64k44-q54l4/v4", "scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v2",
-    "scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v2",
-    "scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v2")}
+RETIRED |= {
+    lab: keccak256(lab.encode()).hex()
+    for lab in (
+        "scaas/pqz/lnp22/mlwe-d64k32-q42l4/v4",
+        "scaas/pqz/lnp22/mlwe-d64k36-q46l4/v4",
+        "scaas/pqz/lnp22/mlwe-d64k40-q50l4/v4",
+        "scaas/pqz/lnp22/mlwe-d64k44-q54l4/v4",
+        "scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v2",
+        "scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v2",
+        "scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v2",
+    )
+}
 # the R0-fix ids (PQZL v5, PQZH v3), retired by the three-key round (2026-11-13, K3-4b: T-35 / T-36; by chain reset only)
-RETIRED |= {lab: keccak256(lab.encode()).hex() for lab in (
-    "scaas/pqz/lnp22/mlwe-d64k32-q42l4/v5", "scaas/pqz/lnp22/mlwe-d64k36-q46l4/v5", "scaas/pqz/lnp22/mlwe-d64k40-q50l4/v5",
-    "scaas/pqz/lnp22/mlwe-d64k44-q54l4/v5", "scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v3",
-    "scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v3",
-    "scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v3")}
+RETIRED |= {
+    lab: keccak256(lab.encode()).hex()
+    for lab in (
+        "scaas/pqz/lnp22/mlwe-d64k32-q42l4/v5",
+        "scaas/pqz/lnp22/mlwe-d64k36-q46l4/v5",
+        "scaas/pqz/lnp22/mlwe-d64k40-q50l4/v5",
+        "scaas/pqz/lnp22/mlwe-d64k44-q54l4/v5",
+        "scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v3",
+        "scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v3",
+        "scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v3",
+    )
+}
 
 
 def ids(name):
@@ -116,7 +157,9 @@ def ids(name):
     out = {"pqzl": t["pqzl_id"], "pqzl_split": t["pqzl_split_id"]}
     for s in ("pqzl", "pqzl_split"):
         assert f"/mlwe-d64k{k}-q{L}l4/" in out[s], f"{name}: {s}_id {out[s]} does not name d64k{k}-q{L}"
-    assert out["pqzl_split"].rsplit("/", 1)[1].startswith("split-"), f"{name}: pqzl_split_id {out['pqzl_split']} is no split-v<n>"
+    assert out["pqzl_split"].rsplit("/", 1)[1].startswith("split-"), (
+        f"{name}: pqzl_split_id {out['pqzl_split']} is no split-v<n>"
+    )
     if t.get("pqzh"):
         out["pqzh"] = t["pqzh_id"]
         p = t["pqzh_preset"]
@@ -157,8 +200,8 @@ def consts(name):
     n, K, q = t["n"], t["k_max"], t["q"]
     b = budget(n, K, q)
     assert b["ok"] and q % 16 == 9, f"{name}: the §4.3 budget fails or q != 9 mod 16"
-    L = (q - 1).bit_length()                  # the ring's log2q (LaZer codegen: ceil(log2(q - 1)))
-    assert 2**(L - 1) < q < 2**L
+    L = (q - 1).bit_length()  # the ring's log2q (LaZer codegen: ceil(log2(q - 1)))
+    assert 2 ** (L - 1) < q < 2**L
     # the specialised verifiers' int64 JL fold sums 256 terms in [0, q) and pqz_modq_i64 takes |x| <= q 2^(63 - L): both
     # need 256 q < 2^63, i.e. L <= 55 (review R2-C1 / R1-C12; pqz_sv.c and sv.rs assert the same)
     assert L <= 55, f"{name}: log2 q = {L} > 55 (the SV's JL fold / modq_i64 bound)"
@@ -173,7 +216,7 @@ def consts(name):
     i, z3 = z * z % q, pow(z, 3, q)
     inv = lambda x: pow(x, q - 2, q)  # noqa: E731
     mbits, ebits = b["m"], b["e_bits"] + 1
-    assert 2 * L + 4 <= L + 63           # Barrett: floor(x / 2^(L-1)) MUX < 2^128
+    assert 2 * L + 4 <= L + 63  # Barrett: floor(x / 2^(L-1)) MUX < 2^128
     # pqz_sv.c's largest sum: c (sum over <= SVPR + SVBIN products of two values < q, 64 terms each; 65 at
     # n2304-kmax4096, 68 at n2816-kmax65536, pqz_sv.c asserts <= 128), 2^9 for c: < 2^(2L + 22);
     # NP primes near 2^30 hold |x| < P / 2 ~ 2^(30 NP - 1)
@@ -181,23 +224,38 @@ def consts(name):
     # pqz_sv.c / sv.rs: (SVPR + SVBIN) * 64 * 512 <= 2^22 (review R2-C6): SVPR <= 33 + the binary polys of R_TXM M = 8
     tx_bits = 64 + 16 * mbits + 15 * (mbits - 3) + 16 * ebits + 64 * 8
     assert (34 + -(-tx_bits // 64)) * 64 * 512 <= 1 << 22, f"{name}: the SV evaluation sum bound"
-    c = [("SET_NAME", None, f'"{name}"', "the set's name"),
-         ("K", b["k"], None, "polys per key / ciphertext vector u"), ("N", n, None, "ring dimension n = k d"),
-         ("Q", q, None, "the modulus (prime, q = 9 mod 16)"), ("LOG2Q", L, None, "ceil(log2(q - 1)): coder / urandom width of a value mod q, A expansion"),
-         ("DELTA", b["D"], None, f"floor(q / 2^{mbits + 2})"), ("K_MAX", K, None, "credits per account between refreshes"),
-         ("MBITS", mbits, None, "digit sums M_i < 2^MBITS (15 K_MAX < 2^MBITS)"),
-         ("CBITS", mbits - 3, None, "carries c_i + 64, i < 15"),
-         ("EBITS", ebits, None, f"e_T,i + 2^{ebits - 1} and e'_i + 2^{ebits - 1} (|e| < E = 2^{ebits - 1})"),
-         ("BETA_S", b["bs"], None, "||s||, ||r|| bound (CBD(1))"), ("BETA_E", b["be"], None, "||e||, ||e1|| bound (CBD(20))"),
-         ("BETA_2", 64, None, "||e2_j|| bound (16 coefficients)"),
-         ("S_AUD", s_aud, None, "legs per randomness group of an audited R_TXM (auditor copy of leg j at window j mod S_AUD)"),
-         ("ZETA", z, None, f"{g}^((q - 1) / 8), a primitive 8th root of unity"), ("IROOT", i, None, "zeta^2"),
-         ("ZETA3", z3, None, "zeta^3"), ("INV2", inv(2), None, "1/2"), ("INVZ", inv(z), None, "1/zeta"),
-         ("INVI", inv(i), None, "1/zeta^2"), ("INVZ3", inv(z3), None, "1/zeta^3"),
-         ("R64", 2**64 % q, None, "2^64 mod q"),
-         ("BARX", 2 * L + 4, None, "Barrett input range: x < 2^BARX = 2^(2 log2q + 4) > 16 q^2 (a basemul column sum)"),
-         ("MUX", 2**(2 * L + 4) // q, None, "floor(2^BARX / q) < 2^(log2q + 5)"),
-         ("SV_NP", sv_np, None, "30-bit CRT primes of the specialised verifier (pqz_sv.c): P / 2 above its largest sum")]
+    c = [
+        ("SET_NAME", None, f'"{name}"', "the set's name"),
+        ("K", b["k"], None, "polys per key / ciphertext vector u"),
+        ("N", n, None, "ring dimension n = k d"),
+        ("Q", q, None, "the modulus (prime, q = 9 mod 16)"),
+        ("LOG2Q", L, None, "ceil(log2(q - 1)): coder / urandom width of a value mod q, A expansion"),
+        ("DELTA", b["D"], None, f"floor(q / 2^{mbits + 2})"),
+        ("K_MAX", K, None, "credits per account between refreshes"),
+        ("MBITS", mbits, None, "digit sums M_i < 2^MBITS (15 K_MAX < 2^MBITS)"),
+        ("CBITS", mbits - 3, None, "carries c_i + 64, i < 15"),
+        ("EBITS", ebits, None, f"e_T,i + 2^{ebits - 1} and e'_i + 2^{ebits - 1} (|e| < E = 2^{ebits - 1})"),
+        ("BETA_S", b["bs"], None, "||s||, ||r|| bound (CBD(1))"),
+        ("BETA_E", b["be"], None, "||e||, ||e1|| bound (CBD(20))"),
+        ("BETA_2", 64, None, "||e2_j|| bound (16 coefficients)"),
+        (
+            "S_AUD",
+            s_aud,
+            None,
+            "legs per randomness group of an audited R_TXM (auditor copy of leg j at window j mod S_AUD)",
+        ),
+        ("ZETA", z, None, f"{g}^((q - 1) / 8), a primitive 8th root of unity"),
+        ("IROOT", i, None, "zeta^2"),
+        ("ZETA3", z3, None, "zeta^3"),
+        ("INV2", inv(2), None, "1/2"),
+        ("INVZ", inv(z), None, "1/zeta"),
+        ("INVI", inv(i), None, "1/zeta^2"),
+        ("INVZ3", inv(z3), None, "1/zeta^3"),
+        ("R64", 2**64 % q, None, "2^64 mod q"),
+        ("BARX", 2 * L + 4, None, "Barrett input range: x < 2^BARX = 2^(2 log2q + 4) > 16 q^2 (a basemul column sum)"),
+        ("MUX", 2 ** (2 * L + 4) // q, None, "floor(2^BARX / q) < 2^(log2q + 5)"),
+        ("SV_NP", sv_np, None, "30-bit CRT primes of the specialised verifier (pqz_sv.c): P / 2 above its largest sum"),
+    ]
     return t, b, c
 
 
@@ -230,16 +288,20 @@ def pqzh_preset(name):
     gen = next(g for g in range(2, q) if all(pow(g, (q - 1) // r, q) != 1 for r in primes))
     nr = next(g for g in range(2, q) if pow(g, (q - 1) // 2, q) == q - 1)
     dom = 4 * math.prod(rad)  # fft.rs: every domain size divides 4 * the product of the radices
-    assert q % 4 == 1 and rad == sorted(set(rad)) and all((q - 1) % r == 0 for r in rad) and (q - 1) % dom == 0, \
+    assert q % 4 == 1 and rad == sorted(set(rad)) and all((q - 1) % r == 0 for r in rad) and (q - 1) % dom == 0, (
         f"{name}: [pqzh_preset] radices {rad} vs q - 1 = {f}"
-    assert dom % n == 0 and dom % k == 0 and 0 < tq < k - 1 and pow(gen, n * k // math.gcd(n, k), q) != 1, \
+    )
+    assert dom % n == 0 and dom % k == 0 and 0 < tq < k - 1 and pow(gen, n * k // math.gcd(n, k), q) != 1, (
         f"{name}: [pqzh_preset] n {n}, k {k}, t {tq} (n, k on the radices' domains, GEN H_n and H_k disjoint)"
+    )
     # the proven regime's floor (review 3w u5-6), exactly: per query max(1 - e / n, (e + 2k - 2) / n), e = (n - 2k + 1) / 2
     # the unique-decoding radius of RS[n, 2k - 1] (ligero_params.py factor_proven); t queries + 16 grinding bits >= 128
     e = (n - 2 * k + 1) // 2
     fq = max(Fraction(n - e, n), Fraction(e + 2 * k - 2, n))
     tmin = next(x for x in itertools.count(1) if fq.numerator**x << 112 <= fq.denominator**x)
-    assert n >= 4 * k and tq >= tmin, f"{name}: [pqzh_preset] n {n}, k {k}, t {tq}: needs n >= 4 k and t >= {tmin} (proven regime)"
+    assert n >= 4 * k and tq >= tmin, (
+        f"{name}: [pqzh_preset] n {n}, k {k}, t {tq}: needs n >= 4 k and t >= {tmin} (proven regime)"
+    )
     return f, gen, nr, rad, n, k, tq, p["description"]
 
 
@@ -249,48 +311,66 @@ def pqzh_text(name):
     mp, _ = limits(name)
 
     def fac(x):
-        return " ".join(f"{r}^{e}" if e > 1 else str(r) for r, e in sorted({r: factor(x).count(r) for r in factor(x)}.items()))
-    head = textwrap.wrap(f"PQZH (Ligero, pqz-core/pqzh/ligero) constants of parameter set `{name}` (q = {t['q']:,}): "
-                         f"{desc}.", 116, initial_indent="//! ", subsequent_indent="//! ", break_on_hyphens=False)
-    return "\n".join(head + [
-        "//! Generated by `pqz-core/params/sets/gen_set.py` from set.toml's [pqzh_preset] and q: do not edit. Checked there",
-        "//! (factors of q - 1, generator, non-square, radices dividing q - 1, n and k on their domains), by `python3 -I",
-        f"//! pqz-core/pqzh/ligero/ligero_params.py --set {name}` (soundness, sizes) and the crate's unit tests `fq::tests` /",
-        f"//! `fft::tests` / `ligero::tests`. MAX_PROOF_PQZH ({mp:,} B: the precompile's and the prover's limit) and the lattice",
-        "//! constants (q, n, k, Delta, bit widths, bounds) are in ./rust/set.rs.",
-        "#![allow(dead_code)]",
-        "/// the prime factors of q - 1, with multiplicity",
-        f"pub(crate) const QM1: &[u64] = &[{', '.join(f'{x:_}' for x in f)}];",
-        "/// the smallest generator of F_q^*: the domains H_n = <GEN^((q - 1) / n)> and the commitment coset GEN H_n",
-        f"pub(crate) const GEN: u64 = {gen};",
-        "/// F_q^4 = F_q[X]/(X^4 - NR): NR the smallest non-square (q = 1 mod 4, so X^4 - NR is irreducible)",
-        f"pub(crate) const NR: u64 = {nr};",
-        "/// FFT radices, ascending (the largest is the deepest stage; each stage a direct r-point DFT); each divides q - 1, 4",
-        "/// times their product bounds the domain sizes (fft.rs)",
-        f"pub(crate) const RADICES: [usize; {len(rad)}] = [{', '.join(map(str, rad))}];",
-        f"/// the preset (Params::proven): proven regime, n = {n:,} = {fac(n)} (the code on the coset {gen} H_n), k = {k:,} = {fac(k)},",
-        f"/// t = {tq}, l = k - t - 1 = {k - tq - 1}",
-        f"pub(crate) const PRESET_N: usize = {n:_};",
-        f"pub(crate) const PRESET_K: usize = {k:_};",
-        f"pub(crate) const PRESET_T: usize = {tq:_};",
-        ""])
+        return " ".join(
+            f"{r}^{e}" if e > 1 else str(r) for r, e in sorted({r: factor(x).count(r) for r in factor(x)}.items())
+        )
+
+    head = textwrap.wrap(
+        f"PQZH (Ligero, pqz-core/pqzh/ligero) constants of parameter set `{name}` (q = {t['q']:,}): {desc}.",
+        116,
+        initial_indent="//! ",
+        subsequent_indent="//! ",
+        break_on_hyphens=False,
+    )
+    return "\n".join(
+        head
+        + [
+            "//! Generated by `pqz-core/params/sets/gen_set.py` from set.toml's [pqzh_preset] and q: do not edit. Checked there",
+            "//! (factors of q - 1, generator, non-square, radices dividing q - 1, n and k on their domains), by `python3 -I",
+            f"//! pqz-core/pqzh/ligero/ligero_params.py --set {name}` (soundness, sizes) and the crate's unit tests `fq::tests` /",
+            f"//! `fft::tests` / `ligero::tests`. MAX_PROOF_PQZH ({mp:,} B: the precompile's and the prover's limit) and the lattice",
+            "//! constants (q, n, k, Delta, bit widths, bounds) are in ./rust/set.rs.",
+            "#![allow(dead_code)]",
+            "/// the prime factors of q - 1, with multiplicity",
+            f"pub(crate) const QM1: &[u64] = &[{', '.join(f'{x:_}' for x in f)}];",
+            "/// the smallest generator of F_q^*: the domains H_n = <GEN^((q - 1) / n)> and the commitment coset GEN H_n",
+            f"pub(crate) const GEN: u64 = {gen};",
+            "/// F_q^4 = F_q[X]/(X^4 - NR): NR the smallest non-square (q = 1 mod 4, so X^4 - NR is irreducible)",
+            f"pub(crate) const NR: u64 = {nr};",
+            "/// FFT radices, ascending (the largest is the deepest stage; each stage a direct r-point DFT); each divides q - 1, 4",
+            "/// times their product bounds the domain sizes (fft.rs)",
+            f"pub(crate) const RADICES: [usize; {len(rad)}] = [{', '.join(map(str, rad))}];",
+            f"/// the preset (Params::proven): proven regime, n = {n:,} = {fac(n)} (the code on the coset {gen} H_n), k = {k:,} = {fac(k)},",
+            f"/// t = {tq}, l = k - t - 1 = {k - tq - 1}",
+            f"pub(crate) const PRESET_N: usize = {n:_};",
+            f"pub(crate) const PRESET_K: usize = {k:_};",
+            f"pub(crate) const PRESET_T: usize = {tq:_};",
+            "",
+        ]
+    )
 
 
 def c_text(name):
     t, _, cs = consts(name)
-    out = [f"/* PQZL parameter set {name}: {t['description']}. Generated by pqz-core/params/sets/gen_set.py: do not edit.",
-           "   One set per library build (pqzl/build.sh PQZ_SET=<set>: pqz-core/params/sets/<set>). */",
-           "#ifndef PQZ_SET_H", "#define PQZ_SET_H", ""]
+    out = [
+        f"/* PQZL parameter set {name}: {t['description']}. Generated by pqz-core/params/sets/gen_set.py: do not edit.",
+        "   One set per library build (pqzl/build.sh PQZ_SET=<set>: pqz-core/params/sets/<set>). */",
+        "#ifndef PQZ_SET_H",
+        "#define PQZ_SET_H",
+        "",
+    ]
     for k, v, s, doc in cs:
         val = s if s is not None else (f"{v}ULL" if k in U64 else f"((int64_t){v})" if k == "DELTA" else str(v))
         out.append(f"#define PQZ_{k} {val} /* {doc} */")
     i = ids(name)
-    out.append(f"/* proofSystemId (statement bytes 32..63) = keccak256(\"{i['pqzl'][0]}\"): the cores only hash it */")
+    out.append(f'/* proofSystemId (statement bytes 32..63) = keccak256("{i["pqzl"][0]}"): the cores only hash it */')
     out.append(f"#define PQZ_PROOF_SYSTEM_ID {c_bytes(i['pqzl'][1])}")
     if "pqzh" in i:
-        out.append(f"/* PQZH's proofSystemId = keccak256(\"{i['pqzh'][0]}\") (the C side writes it only in test tools) */")
+        out.append(
+            f'/* PQZH\'s proofSystemId = keccak256("{i["pqzh"][0]}") (the C side writes it only in test tools) */'
+        )
         out.append(f"#define PQZ_PQZH_ID {c_bytes(i['pqzh'][1])}")
-    out.append(f"/* PQZL_SPLIT_ID = keccak256(\"{i['pqzl_split'][0]}\"): opening tokens' id (R_TXS; test tools only) */")
+    out.append(f'/* PQZL_SPLIT_ID = keccak256("{i["pqzl_split"][0]}"): opening tokens\' id (R_TXS; test tools only) */')
     out.append(f"#define PQZ_PROOF_SYSTEM_SPLIT_ID {c_bytes(i['pqzl_split'][1])}")
     out += ["", "#endif", ""]
     return "\n".join(out)
@@ -298,34 +378,60 @@ def c_text(name):
 
 def rs_text(name):
     t, _, cs = consts(name)
-    out = [f"//! PQZL parameter set `{name}`: {t['description']}. Generated by `pqz-core/params/sets/gen_set.py`: do not edit.",
-           "//! One set per build (cargo features `set-<set>`); `crate::params::set` re-exports it.",
-           "#![allow(dead_code)]"]
+    out = [
+        f"//! PQZL parameter set `{name}`: {t['description']}. Generated by `pqz-core/params/sets/gen_set.py`: do not edit.",
+        "//! One set per build (cargo features `set-<set>`); `crate::params::set` re-exports it.",
+        "#![allow(dead_code)]",
+    ]
     for k, v, s, doc in cs:
         if s is not None:
             out.append(f"/// {doc}\npub(crate) const {k}: &str = {s};")
             continue
-        ty = "u64" if k in U64 else "i64" if k == "DELTA" else "u32" if k in ("LOG2Q", "MBITS", "CBITS", "EBITS", "BARX") else "usize"
+        ty = (
+            "u64"
+            if k in U64
+            else "i64"
+            if k == "DELTA"
+            else "u32"
+            if k in ("LOG2Q", "MBITS", "CBITS", "EBITS", "BARX")
+            else "usize"
+        )
         out.append(f"/// {doc}\npub(crate) const {k}: {ty} = {v:_};")
     if not t.get("core_only"):  # pqz-stmt's per-set limits (plan 5h Task 8c part 2)
         mp, mi = limits(name)
-        out.append(f"/// MAX_PROOF(PQZH id): the precompile's and the PQZH prover's proof limit (set.toml [pqzh_preset] max_proof)\n"
-                   f"pub(crate) const MAX_PROOF_PQZH: usize = {mp:_};")
-        out.append(f"/// MAX_INPUT: the precompile input limit of pqz-stmt (set.toml max_input)\npub(crate) const MAX_INPUT: usize = {mi:_};")
+        out.append(
+            f"/// MAX_PROOF(PQZH id): the precompile's and the PQZH prover's proof limit (set.toml [pqzh_preset] max_proof)\n"
+            f"pub(crate) const MAX_PROOF_PQZH: usize = {mp:_};"
+        )
+        out.append(
+            f"/// MAX_INPUT: the precompile input limit of pqz-stmt (set.toml max_input)\npub(crate) const MAX_INPUT: usize = {mi:_};"
+        )
         cc = t["pqzl_c"]
-        out.append(f"/// pqz-ffi's C backend: the prover arena in MiB (set.toml [pqzl_c] prove_arena_mib)\n"
-                   f"pub(crate) const C_PROVE_ARENA_MIB: usize = {cc['prove_arena_mib']:_};")
-        out.append(f"/// pqz-ffi's C backend: the largest op 7 M proved in wasm32 (set.toml [pqzl_c] wasm_max_legs)\n"
-                   f"pub(crate) const C_WASM_MAX_LEGS: usize = {cc['wasm_max_legs']};")
-        out.append(f"/// whether this set has PQZH (set.toml pqzh): without it pqz-stmt knows no PQZH id (PQZH_ID below is the zero\n"
-                   f"/// word, never accepted) and pqz-ffi has no PQZH build\npub(crate) const PQZH: bool = {str(bool(t.get('pqzh'))).lower()};")
+        out.append(
+            f"/// pqz-ffi's C backend: the prover arena in MiB (set.toml [pqzl_c] prove_arena_mib)\n"
+            f"pub(crate) const C_PROVE_ARENA_MIB: usize = {cc['prove_arena_mib']:_};"
+        )
+        out.append(
+            f"/// pqz-ffi's C backend: the largest op 7 M proved in wasm32 (set.toml [pqzl_c] wasm_max_legs)\n"
+            f"pub(crate) const C_WASM_MAX_LEGS: usize = {cc['wasm_max_legs']};"
+        )
+        out.append(
+            f"/// whether this set has PQZH (set.toml pqzh): without it pqz-stmt knows no PQZH id (PQZH_ID below is the zero\n"
+            f"/// word, never accepted) and pqz-ffi has no PQZH build\npub(crate) const PQZH: bool = {str(bool(t.get('pqzh'))).lower()};"
+        )
         if not t.get("pqzh"):
-            out.append("/// no PQZH at this set: no label\npub(crate) const PQZH_LABEL: &str = \"\";")
-            out.append("/// no PQZH at this set: the zero word (pqz-stmt refuses it: `PQZH` is false)\npub(crate) const PQZH_ID: [u8; 32] = [0; 32];")
+            out.append('/// no PQZH at this set: no label\npub(crate) const PQZH_LABEL: &str = "";')
+            out.append(
+                "/// no PQZH at this set: the zero word (pqz-stmt refuses it: `PQZH` is false)\npub(crate) const PQZH_ID: [u8; 32] = [0; 32];"
+            )
     for sys_, (lab, h) in ids(name).items():
-        out.append(f"/// {sys_.upper()}'s proofSystemId label (set.toml {sys_}_id)\npub(crate) const {sys_.upper()}_LABEL: &str = \"{lab}\";")
-        out.append(f"/// {sys_.upper()}'s proofSystemId: keccak256({sys_.upper()}_LABEL)\n"
-                   f"pub(crate) const {sys_.upper()}_ID: [u8; 32] = [{', '.join(f'0x{x:02x}' for x in h)}];")
+        out.append(
+            f'/// {sys_.upper()}\'s proofSystemId label (set.toml {sys_}_id)\npub(crate) const {sys_.upper()}_LABEL: &str = "{lab}";'
+        )
+        out.append(
+            f"/// {sys_.upper()}'s proofSystemId: keccak256({sys_.upper()}_LABEL)\n"
+            f"pub(crate) const {sys_.upper()}_ID: [u8; 32] = [{', '.join(f'0x{x:02x}' for x in h)}];"
+        )
     out.append("")
     return "\n".join(out)
 
@@ -341,11 +447,13 @@ def specs(name):
     tx_bits = 64 + 64 + 16 * m + 15 * (m - 3) + 16 * eb  # d, d', M_i, c_i + 64, e_T + 2^(eb-1)
     blk = f"{bs}^2 + {be}^2"
     log2q = Q.bit_length() if math.log2(Q) > Q.bit_length() - 0.01 else Q.bit_length() - 1
-    head0 = (f"# Set {name} (pqz-core/params/sets/{name}/set.toml; generated by pqz-core/params/sets/gen_set.py: do not "
-             f"edit):\n# n = {N} (k = {k}), q = {Q} (2^{math.log2(Q):.3f}, prime, q = 9 mod 16), Delta = {b['D']}, "
-             f"beta_s = {bs}, beta_e = {be},\n# K_MAX = {K_MAX:,}: M_i {m} bits, carries {m - 3} bits (c_i + 64), "
-             f"e_T / e' + 2^{eb - 1} in {eb} bits.\n"
-             f"# pqz_delta / kmlwe_min: set.toml (checked by e_s1: MSIS beta >= 450, hiding MLWE uSVP and dual_hybrid >= 450).\n")
+    head0 = (
+        f"# Set {name} (pqz-core/params/sets/{name}/set.toml; generated by pqz-core/params/sets/gen_set.py: do not "
+        f"edit):\n# n = {N} (k = {k}), q = {Q} (2^{math.log2(Q):.3f}, prime, q = 9 mod 16), Delta = {b['D']}, "
+        f"beta_s = {bs}, beta_e = {be},\n# K_MAX = {K_MAX:,}: M_i {m} bits, carries {m - 3} bits (c_i + 64), "
+        f"e_T / e' + 2^{eb - 1} in {eb} bits.\n"
+        f"# pqz_delta / kmlwe_min: set.toml (checked by e_s1: MSIS beta >= 450, hiding MLWE uSVP and dual_hybrid >= 450).\n"
+    )
     kml = f"kmlwe_min = {t['kmlwe_min']}\n" if "kmlwe_min" in t else ""
     out = {}
 
@@ -353,8 +461,10 @@ def specs(name):
     # coefficients in [-1, 1] (CBD(1)), so ||s[0]||_2 <= isqrt(64 * 1^2) = 8; an e2 block is bounded by its exact-l2
     # proof, BETA_2 (set constants)
     beta_2 = next(v for k_, v, *_ in cs if k_ == "BETA_2")
-    FILL = {"s0": ("s[0]: 64 coefficients in [-1, 1], l2 <= %d" % math.isqrt(64 * 1**2), math.isqrt(64 * 1**2)),
-            "e2": (f"|coefficients| <= 20, l2 <= {beta_2} (its exact-l2 block)", beta_2)}
+    FILL = {
+        "s0": ("s[0]: 64 coefficients in [-1, 1], l2 <= %d" % math.isqrt(64 * 1**2), math.isqrt(64 * 1**2)),
+        "e2": (f"|coefficients| <= 20, l2 <= {beta_2} (its exact-l2 block)", beta_2),
+    }
 
     def spec(rel, what, ks, Bs, e2, bits, bprime, filler):
         # LaZer's codegen reads Bprime as the l2 bound alpha4 of the filler (stdev4 = gamma4 sqrt(337) alpha4; bimodal z4
@@ -365,16 +475,24 @@ def specs(name):
         assert bprime >= l2, f"{name} {rel}: Bprime {bprime} below the filler's l2 bound {l2}"
         nbin = math.ceil(bits / 64) if bits else 0
         m1 = len(ks) * k + e2 + nbin
-        alpha = " + ".join(x for x in (f"{len(ks) // 2} * ({blk})" if len(ks) > 2 else blk,
-                                       f"{e2} * 64^2" if e2 else "", f"{nbin} * 64" if nbin else "") if x)
+        alpha = " + ".join(
+            x
+            for x in (
+                f"{len(ks) // 2} * ({blk})" if len(ks) > 2 else blk,
+                f"{e2} * 64^2" if e2 else "",
+                f"{nbin} * 64" if nbin else "",
+            )
+            if x
+        )
         n = ", ".join([str(k)] * len(ks) + ["1"] * e2)
         B = ", ".join([str(x) for x in Bs] + ["64"] * e2)
-        out[rel] = (f"# {what}\n" + head0 +
-                    f"pqz_verbose = 1\nname = \"pqz_{rel}\"\nq_fixed = {Q}\npqz_L = 4\nlog2q = {log2q}\n"
-                    f"pqz_delta = {t['pqz_delta']}\n{kml}d = 64\n\n"
-                    f"m1 = {m1}\nalpha = sqrt({alpha})\nl = 0\n\nnbin = {nbin}\nn = [{n}]\nB = [{B}]\n\n"
-                    f"# LaZer's tbox needs nprime > 0: a one-poly approximate l_inf proof as filler ({filler}).\n"
-                    f"nprime = 1\nBprime = {bprime}\n")
+        out[rel] = (
+            f"# {what}\n" + head0 + f'pqz_verbose = 1\nname = "pqz_{rel}"\nq_fixed = {Q}\npqz_L = 4\nlog2q = {log2q}\n'
+            f"pqz_delta = {t['pqz_delta']}\n{kml}d = 64\n\n"
+            f"m1 = {m1}\nalpha = sqrt({alpha})\nl = 0\n\nnbin = {nbin}\nn = [{n}]\nB = [{B}]\n\n"
+            f"# LaZer's tbox needs nprime > 0: a one-poly approximate l_inf proof as filler ({filler}).\n"
+            f"nprime = 1\nBprime = {bprime}\n"
+        )
 
     def debit(G):
         return [k] * (2 + 2 * G), [bs, be] * (1 + G)
@@ -382,20 +500,55 @@ def specs(name):
     s0 = ("", "s0")
     spec("reg", f"R_REG pk = A s + e; s1 = s, e ({k} polys each)", [k, k], [bs, be], 0, 0, 8, s0)
     ks, Bs = debit(1)
-    spec("tx", f"R_TX: s_f, e_f, r, e1 ({k} polys each), e2_t, e2_f, e2_a; {tx_bits} bits (d 64, d' 64, M 16x{m}, "
-         f"c 15x{m - 3}, e_T 16x{eb})", ks, Bs, 3, tx_bits, 64, ("e2_t, ", "e2"))
+    spec(
+        "tx",
+        f"R_TX: s_f, e_f, r, e1 ({k} polys each), e2_t, e2_f, e2_a; {tx_bits} bits (d 64, d' 64, M 16x{m}, "
+        f"c 15x{m - 3}, e_T 16x{eb})",
+        ks,
+        Bs,
+        3,
+        tx_bits,
+        64,
+        ("e2_t, ", "e2"),
+    )
     spec("tx0", f"R_TX0 (auditor off): R_TX without e2_a; {tx_bits} bits", ks, Bs, 2, tx_bits, 64, ("e2_t, ", "e2"))
     # PQZL_SPLIT_ID's op 1 (three-key spec K3-4, CTR-PQZ-04's split randomness): the leg's (r, e1) for u, v_t, v_a and
     # the sender's own (r_f, e1_f) for u_f, v_f; two randomness groups, the bits of R_TX
     ks2, Bs2 = debit(2)
-    spec("txs", f"R_TXS: s_f, e_f, r, e1, r_f, e1_f ({k} polys each), e2_t, e2_f, e2_a; {tx_bits} bits (as R_TX)", ks2, Bs2,
-         3, tx_bits, 64, ("e2_t, ", "e2"))
-    spec("txs0", f"R_TXS0 (auditor off): R_TXS without e2_a; {tx_bits} bits", ks2, Bs2, 2, tx_bits, 64, ("e2_t, ", "e2"))
-    spec("burn", f"R_BURN / REFRESH: s_f, e_f, r, e1, e2_f; {tx_bits - 64} bits (d public)", ks, Bs, 1, tx_bits - 64,
-         64, ("e2_f, ", "e2"))
+    spec(
+        "txs",
+        f"R_TXS: s_f, e_f, r, e1, r_f, e1_f ({k} polys each), e2_t, e2_f, e2_a; {tx_bits} bits (as R_TX)",
+        ks2,
+        Bs2,
+        3,
+        tx_bits,
+        64,
+        ("e2_t, ", "e2"),
+    )
+    spec(
+        "txs0", f"R_TXS0 (auditor off): R_TXS without e2_a; {tx_bits} bits", ks2, Bs2, 2, tx_bits, 64, ("e2_t, ", "e2")
+    )
+    spec(
+        "burn",
+        f"R_BURN / REFRESH: s_f, e_f, r, e1, e2_f; {tx_bits - 64} bits (d public)",
+        ks,
+        Bs,
+        1,
+        tx_bits - 64,
+        64,
+        ("e2_f, ", "e2"),
+    )
     spec("ds", f"R_DS: s1 = r, e1 ({k} polys each), e2_t", [k, k], [bs, be], 1, 0, 64, ("e2_t, ", "e2"))
-    spec("dr", f"R_DR: s1 = s, e ({k} polys each), e'_i + 2^{eb - 1} in {eb} bits ({16 * eb} bits)", [k, k], [bs, be], 0,
-         16 * eb, 8, s0)
+    spec(
+        "dr",
+        f"R_DR: s1 = s, e ({k} polys each), e'_i + 2^{eb - 1} in {eb} bits ({16 * eb} bits)",
+        [k, k],
+        [bs, be],
+        0,
+        16 * eb,
+        8,
+        s0,
+    )
     for M in (2, 4, 8, 16):
         bits = tx_bits - 64 + 64 * M
         for aud in (1, 0):
@@ -404,9 +557,13 @@ def specs(name):
             ks, Bs = debit(G)
             e2 = M + 1 + aud * M
             rel = f"txm{M}" + ("" if aud else "0")
-            what = (f"R_TXM M = {M}, G = {G} randomness group(s) of <= {sg} legs, auditor {'on' if aud else 'off'}: s_f, "
-                    f"e_f, (r_g, e1_g) x {G}, e2_j, e2_f" + (", e2_{a,j}" if aud else "") +
-                    f"; {e2} e2 blocks, {bits} bits" + ("; OVERSIZE (bench builds only, -DPQZ_TXM_OVERSIZE)" if M == 16 else ""))
+            what = (
+                f"R_TXM M = {M}, G = {G} randomness group(s) of <= {sg} legs, auditor {'on' if aud else 'off'}: s_f, "
+                f"e_f, (r_g, e1_g) x {G}, e2_j, e2_f"
+                + (", e2_{a,j}" if aud else "")
+                + f"; {e2} e2 blocks, {bits} bits"
+                + ("; OVERSIZE (bench builds only, -DPQZ_TXM_OVERSIZE)" if M == 16 else "")
+            )
             spec(rel, what, ks, Bs, e2, bits, 64, ("e2_0, the first leg's noise, ", "e2"))
     return out
 
@@ -415,22 +572,51 @@ def specs(name):
 def lengths(k):
     """the statement / object byte lengths of pqz-stmt for k polys per vector (n2048-kmax1024: k = 32)"""
     pk, v, h = 512 * k, 128, 640
-    return {"pk": pk, "v": v, "ct": pk + v, "header": h,
-            "stmt": {"TRANSFER": h + 5 * pk + 4 * v, "TRANSFER0": h + 4 * pk + 3 * v, "BURN": h + 3 * pk + 2 * v,
-                     "REFRESH": h + 3 * pk + 2 * v, "REGISTER": 96 + pk, "DISCLOSE-SENDER": 288 + 2 * pk + v,
-                     "DISCLOSE-RECEIVER": 288 + 2 * pk + v, "DISCLOSE-AUDITOR": 288 + 2 * pk + v,
-                     # PQZL_SPLIT_ID's op 1 (three-key spec K3-4): TRANSFER / TRANSFER0 with u_f appended
-                     "TRANSFER-SPLIT": h + 6 * pk + 4 * v, "TRANSFER-SPLIT0": h + 5 * pk + 3 * v},
-            "bundle": 16 + pk + 2 * v + 32, "bundle0": 16 + pk + v + 32}
+    return {
+        "pk": pk,
+        "v": v,
+        "ct": pk + v,
+        "header": h,
+        "stmt": {
+            "TRANSFER": h + 5 * pk + 4 * v,
+            "TRANSFER0": h + 4 * pk + 3 * v,
+            "BURN": h + 3 * pk + 2 * v,
+            "REFRESH": h + 3 * pk + 2 * v,
+            "REGISTER": 96 + pk,
+            "DISCLOSE-SENDER": 288 + 2 * pk + v,
+            "DISCLOSE-RECEIVER": 288 + 2 * pk + v,
+            "DISCLOSE-AUDITOR": 288 + 2 * pk + v,
+            # PQZL_SPLIT_ID's op 1 (three-key spec K3-4): TRANSFER / TRANSFER0 with u_f appended
+            "TRANSFER-SPLIT": h + 6 * pk + 4 * v,
+            "TRANSFER-SPLIT0": h + 5 * pk + 3 * v,
+        },
+        "bundle": 16 + pk + 2 * v + 32,
+        "bundle0": 16 + pk + v + 32,
+    }
 
 
 def json_text(name):
     t, b, cs = consts(name)
     c = {k.lower(): v for k, v, s, d in cs if s is None}
-    j = {"set": name, "description": t["description"], "approval": t["approval"], "core_only": t.get("core_only", False),
-         "pqzh": t.get("pqzh", False), "pqz_delta": t["pqz_delta"], "kmlwe_min": t.get("kmlwe_min"), "d": 64} | c | {
-        "e": 2**(c["ebits"] - 1), "b_fresh": 2 * c["beta_e"] * c["beta_s"] + c["beta_2"],
-        "pack_bits": pack_bits(t["q"]), "lengths": lengths(c["k"])}
+    j = (
+        {
+            "set": name,
+            "description": t["description"],
+            "approval": t["approval"],
+            "core_only": t.get("core_only", False),
+            "pqzh": t.get("pqzh", False),
+            "pqz_delta": t["pqz_delta"],
+            "kmlwe_min": t.get("kmlwe_min"),
+            "d": 64,
+        }
+        | c
+        | {
+            "e": 2 ** (c["ebits"] - 1),
+            "b_fresh": 2 * c["beta_e"] * c["beta_s"] + c["beta_2"],
+            "pack_bits": pack_bits(t["q"]),
+            "lengths": lengths(c["k"]),
+        }
+    )
     if not t.get("core_only"):
         j["max_proof_pqzh"], j["max_input"] = limits(name)
     for sys_, (lab, h) in ids(name).items():
@@ -460,15 +646,22 @@ def sol_vectors(name):
     st = bytes.fromhex(rd("statement_register.json")["rows"][0]["stmt"])
     # each proof system's vectors under its id: the statements' PQZL id, and every proof_<sys>.json's proof_system_id
     # (review 3w u5-7: a PQZH bump alone left a probe over a proof never made under the new id)
-    other = [s.upper() for s, (_, h) in ids(name).items() if s != "pqzl_split"
-             and ((s == "pqzl" and st[32:64] != h) or rd(f"proof_{s}.json")["proof_system_id"] != h.hex())]
+    other = [
+        s.upper()
+        for s, (_, h) in ids(name).items()
+        if s != "pqzl_split"
+        and ((s == "pqzl" and st[32:64] != h) or rd(f"proof_{s}.json")["proof_system_id"] != h.hex())
+    ]
     if other:
         # the vectors are another id's (an id bump before `make.sh <set> vectors`): no hashes yet, never silently
         # (review R0 fix round m12): a warning here, and main() fails --check
         if name not in STALE:
             STALE.append(name)
-            print(f"gen_set.py: WARNING {name}: its vectors carry another {' / '.join(other)} id, PqzSet.sol SELFTEST / "
-                  f"PROBE_* = 0 until `make.sh {name} vectors`", file=sys.stderr)
+            print(
+                f"gen_set.py: WARNING {name}: its vectors carry another {' / '.join(other)} id, PqzSet.sol SELFTEST / "
+                f"PROBE_* = 0 until `make.sh {name} vectors`",
+                file=sys.stderr,
+            )
         return z, z, z
     out = [bytes.fromhex(rd("selftest.json")["hash"])]
     for sys_ in ("pqzl", "pqzh"):
@@ -485,7 +678,7 @@ def pack_bits(q):
     """ceil(log2 q) by integer arithmetic (review R2-C4: a float log2 rounds q just above a power of two down): q is a
     prime, not a power of two, so it is q's bit length"""
     b = q.bit_length()
-    assert 2**(b - 1) < q < 2**b
+    assert 2 ** (b - 1) < q < 2**b
     return b
 
 
@@ -524,78 +717,131 @@ def sol_text(name):
     ln = lengths(c["K"])
     u = lambda x: f"{x:_}"  # noqa: E731
     pack = pack_bits(t["q"])
-    rows = [("N", c["N"], "ring dimension n = k d"), ("K", c["K"], "polys per key / ciphertext vector u"),
-            ("Q", c["Q"], "the modulus"), ("DELTA", c["DELTA"], f"floor(q / 2^{c['MBITS'] + 2})"),
-            ("K_MAX", c["K_MAX"], "credits per account between refreshes"),
-            ("LOG2Q", c["LOG2Q"], "ceil(log2(q - 1))"),
-            ("PACK_BITS", pack, "stored-blob packing width ceil(log2 q) (P46 ruling, owner 2026-10-21; built in plan 5h Task 8d part 2)"),
-            ("S_AUD", c["S_AUD"], "legs per randomness group of an audited op 7 (R0-1; groups of 4 without the auditor)"),
-            ("ROLL_MAX", roll_max(name), "entries per rollover: the largest multiple of 16 whose relayed rollover stays under 0.75 * 2^24 on both relay paths, mtxExecute and uaExecute (set.toml roll_max)"),
-            ("PQZ_DEBIT_MIN_GAS", debit_min_gas(name), "at least the cheapest built PQZL debit form (burn 1), full relayed regular gas on the costlier relay path, uaExecute, rounded up to 1,000 (set.toml debit_min_gas; the UA registry's PQZ holder bound)"),
-            ("PK", ln["pk"], "pk / u bytes (k polys x 64 be8)"), ("V", ln["v"], "v bytes (16 be8)"),
-            ("CT", ln["ct"], "ciphertext u || v bytes"),
-            ("STMT_TRANSFER", ln["stmt"]["TRANSFER"], "op 1 statement, auditor on"),
-            ("STMT_TRANSFER0", ln["stmt"]["TRANSFER0"], "op 1 statement, auditor off"),
-            ("STMT_TRANSFER_SPLIT", ln["stmt"]["TRANSFER-SPLIT"], "op 1 statement under PQZL_SPLIT_ID (R_TXS, u_f appended; K3-4), auditor on"),
-            ("STMT_TRANSFER_SPLIT0", ln["stmt"]["TRANSFER-SPLIT0"], "op 1 statement under PQZL_SPLIT_ID, auditor off"),
-            ("STMT_BURN", ln["stmt"]["BURN"], "op 2 statement (burn / refresh)"),
-            ("STMT_REGISTER", ln["stmt"]["REGISTER"], "op 3 statement"),
-            ("STMT_DISCLOSE", ln["stmt"]["DISCLOSE-SENDER"], "op 4 / 5 statement"),
-            ("BUNDLE", ln["bundle"], "disclosure bundle, auditor on"), ("BUNDLE0", ln["bundle0"], "disclosure bundle, auditor off")]
-    out = ["// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0", "pragma solidity ^0.8.24;", "",
-           f"/// @title PqzSet: the PQZ parameter set `{name}` ({t['description']})",
-           "/// @notice Generated by pqz-core/params/sets/gen_set.py from the set's set.toml: do not edit. One set per build",
-           "/// (owner 2026-10-21): `PQZ_SOL_INSTALL=1 pqz-core/params/sets/make.sh <set> sol` writes this file; every PQZ",
-           f"/// contract reads its set from it (plan 5h Task 8d part 2). The committed one is {CONTRACTS}; another set's",
-           "/// build: smartcontracts/evm/script/pqz/at-set.sh <set> (installs, runs forge, restores).",
-           "library PqzSet {", f'    string internal constant NAME = "{name}";']
+    rows = [
+        ("N", c["N"], "ring dimension n = k d"),
+        ("K", c["K"], "polys per key / ciphertext vector u"),
+        ("Q", c["Q"], "the modulus"),
+        ("DELTA", c["DELTA"], f"floor(q / 2^{c['MBITS'] + 2})"),
+        ("K_MAX", c["K_MAX"], "credits per account between refreshes"),
+        ("LOG2Q", c["LOG2Q"], "ceil(log2(q - 1))"),
+        (
+            "PACK_BITS",
+            pack,
+            "stored-blob packing width ceil(log2 q) (P46 ruling, owner 2026-10-21; built in plan 5h Task 8d part 2)",
+        ),
+        ("S_AUD", c["S_AUD"], "legs per randomness group of an audited op 7 (R0-1; groups of 4 without the auditor)"),
+        (
+            "ROLL_MAX",
+            roll_max(name),
+            "entries per rollover: the largest multiple of 16 whose relayed rollover stays under 0.75 * 2^24 on both relay paths, mtxExecute and uaExecute (set.toml roll_max)",
+        ),
+        (
+            "PQZ_DEBIT_MIN_GAS",
+            debit_min_gas(name),
+            "at least the cheapest built PQZL debit form (burn 1), full relayed regular gas on the costlier relay path, uaExecute, rounded up to 1,000 (set.toml debit_min_gas; the UA registry's PQZ holder bound)",
+        ),
+        ("PK", ln["pk"], "pk / u bytes (k polys x 64 be8)"),
+        ("V", ln["v"], "v bytes (16 be8)"),
+        ("CT", ln["ct"], "ciphertext u || v bytes"),
+        ("STMT_TRANSFER", ln["stmt"]["TRANSFER"], "op 1 statement, auditor on"),
+        ("STMT_TRANSFER0", ln["stmt"]["TRANSFER0"], "op 1 statement, auditor off"),
+        (
+            "STMT_TRANSFER_SPLIT",
+            ln["stmt"]["TRANSFER-SPLIT"],
+            "op 1 statement under PQZL_SPLIT_ID (R_TXS, u_f appended; K3-4), auditor on",
+        ),
+        ("STMT_TRANSFER_SPLIT0", ln["stmt"]["TRANSFER-SPLIT0"], "op 1 statement under PQZL_SPLIT_ID, auditor off"),
+        ("STMT_BURN", ln["stmt"]["BURN"], "op 2 statement (burn / refresh)"),
+        ("STMT_REGISTER", ln["stmt"]["REGISTER"], "op 3 statement"),
+        ("STMT_DISCLOSE", ln["stmt"]["DISCLOSE-SENDER"], "op 4 / 5 statement"),
+        ("BUNDLE", ln["bundle"], "disclosure bundle, auditor on"),
+        ("BUNDLE0", ln["bundle0"], "disclosure bundle, auditor off"),
+    ]
+    out = [
+        "// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0",
+        "pragma solidity ^0.8.24;",
+        "",
+        f"/// @title PqzSet: the PQZ parameter set `{name}` ({t['description']})",
+        "/// @notice Generated by pqz-core/params/sets/gen_set.py from the set's set.toml: do not edit. One set per build",
+        "/// (owner 2026-10-21): `PQZ_SOL_INSTALL=1 pqz-core/params/sets/make.sh <set> sol` writes this file; every PQZ",
+        f"/// contract reads its set from it (plan 5h Task 8d part 2). The committed one is {CONTRACTS}; another set's",
+        "/// build: smartcontracts/evm/script/pqz/at-set.sh <set> (installs, runs forge, restores).",
+        "library PqzSet {",
+        f'    string internal constant NAME = "{name}";',
+    ]
     for k, v, doc in rows:
         out.append(f"    /// {doc}\n    uint256 internal constant {k} = {u(v)};")
     # group 3h (pqz-proof-path spec §2.2, plan T58): a debit record's 16-bit `deltaP`. A first debit's `p` reaches K_MAX - 1 by
     # the units rule (a later one's p - p_prev K_MAX - 2), so the bound is K_MAX - 1; a `uint16` literal: a set beyond it
     # fails to compile (solc refuses the conversion) instead of wrapping
-    out.append("    /// the largest `deltaP` of a PQZ debit record, K_MAX - 1 (a first debit's p; later debits K_MAX - 2): a uint16, so a\n"
-               "    /// set whose K_MAX - 1 exceeds 65,535 fails the build\n"
-               f"    uint16 internal constant DELTA_P_MAX = {u(c['K_MAX'] - 1)};")
+    out.append(
+        "    /// the largest `deltaP` of a PQZ debit record, K_MAX - 1 (a first debit's p; later debits K_MAX - 2): a uint16, so a\n"
+        "    /// set whose K_MAX - 1 exceeds 65,535 fails the build\n"
+        f"    uint16 internal constant DELTA_P_MAX = {u(c['K_MAX'] - 1)};"
+    )
     i = ids(name)
     lab, h = i["pqzl"]
-    out.append(f"    /// PQZL's proofSystemId: keccak256(\"{lab}\")\n    bytes32 internal constant PQZL_ID = 0x{h.hex()};")
+    out.append(
+        f'    /// PQZL\'s proofSystemId: keccak256("{lab}")\n    bytes32 internal constant PQZL_ID = 0x{h.hex()};'
+    )
     lab, h = i["pqzl_split"]
-    out.append(f"    /// PQZL_SPLIT_ID, the id of opening tokens (pqzOpening; R_TXS split randomness; OFFCHAIN only, never the\n"
-               f"    /// precompile's): keccak256(\"{lab}\")\n    bytes32 internal constant PQZL_SPLIT_ID = 0x{h.hex()};")
+    out.append(
+        f"    /// PQZL_SPLIT_ID, the id of opening tokens (pqzOpening; R_TXS split randomness; OFFCHAIN only, never the\n"
+        f'    /// precompile\'s): keccak256("{lab}")\n    bytes32 internal constant PQZL_SPLIT_ID = 0x{h.hex()};'
+    )
     has = "pqzh" in i
-    out.append(f"    /// PQZH (Ligero) built at this set (set.toml pqzh; pqz-stmt HAS_PQZH): {'true' if has else 'false: PQZH_ID is the zero word, never accepted'}\n"
-               f"    bool internal constant HAS_PQZH = {'true' if has else 'false'};")
+    out.append(
+        f"    /// PQZH (Ligero) built at this set (set.toml pqzh; pqz-stmt HAS_PQZH): {'true' if has else 'false: PQZH_ID is the zero word, never accepted'}\n"
+        f"    bool internal constant HAS_PQZH = {'true' if has else 'false'};"
+    )
     val = bool(t.get("pqzh_value", False))
     assert not val or has, f"{name}: pqzh_value without pqzh"
-    out.append("    /// PQZH value tokens (set.toml pqzh_value; owner 2026-10-27, C0-2): `init` refuses PQZH_ID unless true; the holder-kind rule applies\n"
-               f"    bool internal constant PQZH_VALUE = {'true' if val else 'false'};")
+    out.append(
+        "    /// PQZH value tokens (set.toml pqzh_value; owner 2026-10-27, C0-2): `init` refuses PQZH_ID unless true; the holder-kind rule applies\n"
+        f"    bool internal constant PQZH_VALUE = {'true' if val else 'false'};"
+    )
     lab, h = i["pqzh"] if has else ("none at this set", bytes(32))
-    out.append(f"    /// PQZH's proofSystemId: {'keccak256(\"' + lab + '\")' if has else lab}\n    bytes32 internal constant PQZH_ID = 0x{h.hex()};")
+    out.append(
+        f"    /// PQZH's proofSystemId: {'keccak256("' + lab + '")' if has else lab}\n    bytes32 internal constant PQZH_ID = 0x{h.hex()};"
+    )
     ctp = ln["ct"] // 32 * pack // 2
-    out.append(f"    /// keccak256 of the zero ciphertext Trivial(0) packed at PACK_BITS ({ctp:,} zero bytes: a new account's `acc`, P46)\n"
-               f"    bytes32 internal constant ZERO_HASH = 0x{keccak256(bytes(ctp)).hex()};")
+    out.append(
+        f"    /// keccak256 of the zero ciphertext Trivial(0) packed at PACK_BITS ({ctp:,} zero bytes: a new account's `acc`, P46)\n"
+        f"    bytes32 internal constant ZERO_HASH = 0x{keccak256(bytes(ctp)).hex()};"
+    )
     sv = sol_vectors(name)
     src = os.path.relpath(vec_dir(name), REPO)
-    out.append(f"    /// the precompile's OP_SELFTEST answer at this set ({src}/selftest.json hash; 0: no vectors yet)\n"
-               f"    bytes32 internal constant SELFTEST = 0x{sv[0].hex()};")
-    out.append("    /// keccak256(psid || message || pk || proof) of the self-test's R_REG vector (statement_register.json row 0,\n"
-               "    /// proof_<sys>.json row 4): PqzKeyVerifier's pinned probe per proof system (0: no vectors / no PQZH)\n"
-               f"    bytes32 internal constant PROBE_PQZL = 0x{sv[1].hex()};\n    bytes32 internal constant PROBE_PQZH = 0x{sv[2].hex()};")
-    out.append("    /// the build's set identity (T-26, review 3w u5-4; owner 2026-11-13): keccak256 of the generated constant block,\n"
-               "    /// gen_set.py set_digest: every `<type> [internal ]constant <NAME> = <value>;` of this file but SET_DIGEST, in\n"
-               "    /// file order, as `<type> <NAME> = <value>` joined by one newline (PQZ_ACC_WORDS included)\n"
-               f"    bytes32 internal constant SET_DIGEST = 0x{bytes(32).hex()};")
-    out += ["", "    /// op 7 statement bytes: header || pk_f || pk_0..pk_{M-1} || [pk_a] || T || u_0..u_{G-1} || v_0..v_{M-1} || v_f",
-            "    /// || [v_{a,0}..v_{a,M-1}], G = ceil(M / S_AUD) with the auditor, ceil(M / 4) without (pqz-stmt multi_len)",
-            "    function multiLen(uint256 m, bool aud) internal pure returns (uint256) {",
-            "        uint256 a = aud ? 1 : 0;",
-            "        uint256 g = aud ? (m + S_AUD - 1) / S_AUD : (m + 3) / 4; // randomness groups (R0-1)",
-            "        return 640 + (1 + m + a + g) * PK + CT + (m + 1 + a * m) * V;",
-            "    }", "}", "",
-            "// The slots of a materialised `acc` under P46 (owner 2026-10-21): CT / 32 words of four coefficients, each packed into",
-            "// 4 * PACK_BITS / 8 bytes, in 32-byte slots. At file level: Solidity takes no library member as an array length.",
-            f"uint256 constant PQZ_ACC_WORDS = {acc_words(name)};", ""]
+    out.append(
+        f"    /// the precompile's OP_SELFTEST answer at this set ({src}/selftest.json hash; 0: no vectors yet)\n"
+        f"    bytes32 internal constant SELFTEST = 0x{sv[0].hex()};"
+    )
+    out.append(
+        "    /// keccak256(psid || message || pk || proof) of the self-test's R_REG vector (statement_register.json row 0,\n"
+        "    /// proof_<sys>.json row 4): PqzKeyVerifier's pinned probe per proof system (0: no vectors / no PQZH)\n"
+        f"    bytes32 internal constant PROBE_PQZL = 0x{sv[1].hex()};\n    bytes32 internal constant PROBE_PQZH = 0x{sv[2].hex()};"
+    )
+    out.append(
+        "    /// the build's set identity (T-26, review 3w u5-4; owner 2026-11-13): keccak256 of the generated constant block,\n"
+        "    /// gen_set.py set_digest: every `<type> [internal ]constant <NAME> = <value>;` of this file but SET_DIGEST, in\n"
+        "    /// file order, as `<type> <NAME> = <value>` joined by one newline (PQZ_ACC_WORDS included)\n"
+        f"    bytes32 internal constant SET_DIGEST = 0x{bytes(32).hex()};"
+    )
+    out += [
+        "",
+        "    /// op 7 statement bytes: header || pk_f || pk_0..pk_{M-1} || [pk_a] || T || u_0..u_{G-1} || v_0..v_{M-1} || v_f",
+        "    /// || [v_{a,0}..v_{a,M-1}], G = ceil(M / S_AUD) with the auditor, ceil(M / 4) without (pqz-stmt multi_len)",
+        "    function multiLen(uint256 m, bool aud) internal pure returns (uint256) {",
+        "        uint256 a = aud ? 1 : 0;",
+        "        uint256 g = aud ? (m + S_AUD - 1) / S_AUD : (m + 3) / 4; // randomness groups (R0-1)",
+        "        return 640 + (1 + m + a + g) * PK + CT + (m + 1 + a * m) * V;",
+        "    }",
+        "}",
+        "",
+        "// The slots of a materialised `acc` under P46 (owner 2026-10-21): CT / 32 words of four coefficients, each packed into",
+        "// 4 * PACK_BITS / 8 bytes, in 32-byte slots. At file level: Solidity takes no library member as an array length.",
+        f"uint256 constant PQZ_ACC_WORDS = {acc_words(name)};",
+        "",
+    ]
     s = "\n".join(out)
     return s.replace(f"SET_DIGEST = 0x{bytes(32).hex()};", f"SET_DIGEST = 0x{set_digest(s).hex()};")
 
@@ -610,7 +856,9 @@ CONST_RE = re.compile(r"^\s*(\w+) (?:internal )?constant (\w+) = (.+);$", re.M)
 
 def set_digest(sol):
     """keccak256 of the constant block of a PqzSet.sol text (SET_DIGEST excluded)"""
-    return keccak256("\n".join(f"{ty} {nm} = {v}" for ty, nm, v in CONST_RE.findall(sol) if nm != "SET_DIGEST").encode())
+    return keccak256(
+        "\n".join(f"{ty} {nm} = {v}" for ty, nm, v in CONST_RE.findall(sol) if nm != "SET_DIGEST").encode()
+    )
 
 
 def digest_ok(sol):
@@ -623,11 +871,20 @@ def digest_ok(sol):
 BEGIN, END = "# BEGIN gen_set.py sets", "# END gen_set.py sets"
 
 
+def taplo_line(x, width=120):
+    """`key = [a, b, ...]` as taplo 0.9.3 writes it with the root taplo.toml (column_width 120): one line when it fits,
+    else one element a line, two spaces in, a trailing comma (scripts/format.sh formats the TOML files)"""
+    if len(x) <= width or " = [" not in x or not x.endswith("]"):
+        return x
+    key, items = x[: x.index(" = [")], x[x.index(" = [") + 4 : -1].split(", ")
+    return key + " = [\n" + "".join(f"  {e},\n" for e in items) + "]"
+
+
 def cargo_block(path, lines):
     """the Cargo.toml text of `path` with the lines between BEGIN and END replaced"""
     s = open(path, encoding="utf-8").read()
     i, j = s.index(BEGIN), s.index(END)
-    return s[:s.index("\n", i) + 1] + "".join(x + "\n" for x in lines) + s[j:]
+    return s[: s.index("\n", i) + 1] + "".join(taplo_line(x) + "\n" for x in lines) + s[j:]
 
 
 def wiring():
@@ -637,14 +894,21 @@ def wiring():
     f = lambda s: "set-" + s  # noqa: E731
     out = {}
     p = os.path.join(CORE, "pqzl", "rust", "Cargo.toml")
-    out[p] = cargo_block(p, [f'{f(s)} = []' for s in ss])
+    out[p] = cargo_block(p, [f"{f(s)} = []" for s in ss])
     p = os.path.join(CORE, "pqzl", "rust", "wasm", "Cargo.toml")
     out[p] = cargo_block(p, [f'{f(s)} = ["pqzl/{f(s)}"]' for s in ss])
     p = os.path.join(CORE, "stmt", "Cargo.toml")
-    out[p] = cargo_block(p, [f'{f(s)} = []' for s in rs])
+    out[p] = cargo_block(p, [f"{f(s)} = []" for s in rs])
     p = os.path.join(CORE, "ffi", "Cargo.toml")
-    out[p] = cargo_block(p, [f'{f(s)} = ["pqz-stmt/{f(s)}", "pqzl?/{f(s)}"' + (f', "pqzh-ligero?/{f(s)}", "pqzh"' if load(s).get("pqzh") else "") + "]"
-                             for s in rs])
+    out[p] = cargo_block(
+        p,
+        [
+            f'{f(s)} = ["pqz-stmt/{f(s)}", "pqzl?/{f(s)}"'
+            + (f', "pqzh-ligero?/{f(s)}", "pqzh"' if load(s).get("pqzh") else "")
+            + "]"
+            for s in rs
+        ],
+    )
     p = os.path.join(CORE, "ffi", "wasm", "Cargo.toml")
     out[p] = cargo_block(p, [f'{f(s)} = ["pqz-ffi/{f(s)}"]' for s in rs])
     p = os.path.join(CORE, "ffi", "wallet-wasm", "Cargo.toml")  # the browser wallet's module (TODO 3zf)
@@ -655,34 +919,44 @@ def wiring():
     # set features and the gate always pass one): the frozen set's module also stands for "no feature"
     others = [s for s in rs if s != N2048]
     none = "not(any(" + ", ".join(f'feature = "{f(s)}"' for s in others) + "))"
-    mods = "".join((f'#[cfg(any(feature = "{f(s)}", {none}))]' if s == N2048 else f'#[cfg(feature = "{f(s)}")]')
-                   + f'\n#[path = "../../params/sets/{s}/rust/set.rs"]\nmod set;\n' for s in rs)
+    mods = "".join(
+        (f'#[cfg(any(feature = "{f(s)}", {none}))]' if s == N2048 else f'#[cfg(feature = "{f(s)}")]')
+        + f'\n#[path = "../../params/sets/{s}/rust/set.rs"]\nmod set;\n'
+        for s in rs
+    )
     cnt = " + ".join(f'cfg!(feature = "{f(s)}") as u8' for s in rs)
     out[os.path.join(CORE, "stmt", "src", "sets.rs")] = (
         "// Generated by pqz-core/params/sets/gen_set.py: do not edit. The parameter set of this build (owner 2026-10-21:\n"
         "// pqz-core/params/sets/<set>/, one per build, cargo feature set-<set>; the same rust/set.rs as the PQZL crate).\n"
-        f"{mods}const _: () = assert!({cnt} <= 1, \"pqz-stmt: at most one parameter set feature set-<set> (none: {N2048})\");\n"
+        f'{mods}const _: () = assert!({cnt} <= 1, "pqz-stmt: at most one parameter set feature set-<set> (none: {N2048})");\n'
         f"/// the sets this crate builds for (set.toml without core_only)\npub const SETS: &[&str] = &[{', '.join(repr(s).replace(chr(39), chr(34)) for s in rs)}];\n"
         "/// every set's proofSystemIds (set, system, id; core_only sets too): the tests refuse each other set's\n"
         "#[cfg(test)]\npub(crate) const ALL_IDS: &[(&str, &str, Word)] = &[\n"
-        + "".join(f'    ("{s}", "{k}", hex32("{h.hex()}")),\n' for s in ss for k, (_, h) in ids(s).items()) + "];\n"
+        + "".join(f'    ("{s}", "{k}", hex32("{h.hex()}")),\n' for s in ss for k, (_, h) in ids(s).items())
+        + "];\n"
         "/// the retired ids (gen_set.py RETIRED, decisions CTR-PQZ-09; label, id): the tests refuse each\n"
         "#[cfg(test)]\npub(crate) const RETIRED_IDS: &[(&str, Word)] = &[\n"
-        + "".join(f'    ("{lab}", hex32("{h}")),\n' for lab, h in RETIRED.items() if h) + "];\n")
+        + "".join(f'    ("{lab}", hex32("{h}")),\n' for lab, h in RETIRED.items() if h)
+        + "];\n"
+    )
     # the Nethermind plugin's ids per set (review R4-C3): PqzStartupCheck refuses a schedule whose current or a later
     # row carries another id; the set is the plugin's -p:PqzSet (SelfTest.cs: its OP_SELFTEST hash)
-    br = "".join(f'#{"if" if i == 0 else "elif"} PQZ_SET_{s.upper().replace("-", "_")}\n'
-                 f'    public const string PqzlId = "{ids(s)["pqzl"][1].hex()}", PqzhId = "{ids(s)["pqzh"][1].hex() if "pqzh" in ids(s) else ""}";\n'
-                 for i, s in enumerate(rs))
+    br = "".join(
+        f"#{'if' if i == 0 else 'elif'} PQZ_SET_{s.upper().replace('-', '_')}\n"
+        f'    public const string PqzlId = "{ids(s)["pqzl"][1].hex()}", PqzhId = "{ids(s)["pqzh"][1].hex() if "pqzh" in ids(s) else ""}";\n'
+        for i, s in enumerate(rs)
+    )
     out[os.path.join(CORE, "nethermind", "Nethermind.Pqz", "PqzSetIds.cs")] = (
         "// Generated by pqz-core/params/sets/gen_set.py: do not edit.\n"
         "namespace Nethermind.Pqz;\n\n"
         "/// <summary>Review R4-C3: the proofSystemIds of the library's parameter set (keccak256 of set.toml's pqzl_id /\n"
-        "/// pqzh_id; <c>PqzhId</c> empty for a set without PQZH), compiled in next to <see cref=\"SelfTest.ExpectedHash\"/>\n"
-        "/// (MSBuild <c>-p:PqzSet</c>). <see cref=\"PqzStartupCheck\"/> refuses a schedule whose current or a later row\n"
+        '/// pqzh_id; <c>PqzhId</c> empty for a set without PQZH), compiled in next to <see cref="SelfTest.ExpectedHash"/>\n'
+        '/// (MSBuild <c>-p:PqzSet</c>). <see cref="PqzStartupCheck"/> refuses a schedule whose current or a later row\n'
         "/// carries another id.</summary>\n"
-        "public static class PqzSetIds\n{\n" + br +
-        "#else\n#error \"unknown PqzSet (MSBuild -p:PqzSet=<set>, a directory of pqz-core/params/sets)\"\n#endif\n}\n")
+        "public static class PqzSetIds\n{\n"
+        + br
+        + '#else\n#error "unknown PqzSet (MSBuild -p:PqzSet=<set>, a directory of pqz-core/params/sets)"\n#endif\n}\n'
+    )
     return out
 
 
@@ -701,10 +975,40 @@ def files(names):
 
 
 # the files a set directory may hold: set.toml, the docs, gen_set.py's, codegen's, to_rust.py's and make.sh's outputs
-RELS = ("reg", "tx", "tx0", "txs", "txs0", "burn", "ds", "dr", "txm2", "txm20", "txm4", "txm40", "txm8", "txm80", "txm16",
-        "txm160")
-SET_FILES = {"set.toml", "SET.md", "PQZH.md", "pqz_set.h", "PqzSet.sol", "set.json", "codegen.txt", "codegen-check.txt",
-             "e-s0.txt", "e-s1.txt", "lazer-3330e48-kat.json", "lazer-3330e48-kat-build.txt", "rust/set.rs", "rust/mod.rs"}
+RELS = (
+    "reg",
+    "tx",
+    "tx0",
+    "txs",
+    "txs0",
+    "burn",
+    "ds",
+    "dr",
+    "txm2",
+    "txm20",
+    "txm4",
+    "txm40",
+    "txm8",
+    "txm80",
+    "txm16",
+    "txm160",
+)
+SET_FILES = {
+    "set.toml",
+    "SET.md",
+    "PQZH.md",
+    "pqz_set.h",
+    "PqzSet.sol",
+    "set.json",
+    "codegen.txt",
+    "codegen-check.txt",
+    "e-s0.txt",
+    "e-s1.txt",
+    "lazer-3330e48-kat.json",
+    "lazer-3330e48-kat-build.txt",
+    "rust/set.rs",
+    "rust/mod.rs",
+}
 SET_FILES |= {f"{r}_params.sage" for r in RELS} | {f"pqz_{r}_params.h" for r in RELS} | {f"rust/{r}.rs" for r in RELS}
 # pqzh_set.rs: written above for a set with pqzh = true (stray() allows it there only). Hand-written research files of
 # n2304-kmax4096 (plan 5h Task 8c part 1b, owner 2026-10-22), kept as they are: pqzh_set_fallback.rs (THE preset,
@@ -718,11 +1022,16 @@ def stray(name):
     codegen headers"""
     d = os.path.join(HERE, name)
     ok = SET_FILES | ({"pqzh_set.rs"} if load(name).get("pqzh") else set()) | RESEARCH.get(name, set())
-    out = [os.path.join(d, f"pqz_{r}_params.h") for r in RELS if not os.path.exists(os.path.join(d, f"pqz_{r}_params.h"))]
+    out = [
+        os.path.join(d, f"pqz_{r}_params.h") for r in RELS if not os.path.exists(os.path.join(d, f"pqz_{r}_params.h"))
+    ]
     for root, dirs, fs in os.walk(d):
         dirs[:] = [x for x in dirs if not x.startswith(".")]
-        out += [os.path.join(root, f) for f in fs
-                if not f.startswith(".") and os.path.relpath(os.path.join(root, f), d).replace(os.sep, "/") not in ok]
+        out += [
+            os.path.join(root, f)
+            for f in fs
+            if not f.startswith(".") and os.path.relpath(os.path.join(root, f), d).replace(os.sep, "/") not in ok
+        ]
     return sorted(out)
 
 
@@ -735,18 +1044,31 @@ def header(name, rel):
     g = lambda pat: re.search(pat, com)[1]  # noqa: E731
     ex = re.search(r"exact euclidean: yes \(dimensions: \[([\d, ]*)\], bounds: \[([\d., ]*)\]\)", com)
     ap = re.search(r"approximate infinity: yes \(psi: [\d.]+, dimension: (\d+), bound: ([\d.]+)\)", com)
-    st = {nm: [a.strip() for a in body.split(",")]
-          for nm, body in re.findall(r"^static const \w+_t (pqz_\w+) = \{\{(.*)\}\};$", text, re.M)}
+    st = {
+        nm: [a.strip() for a in body.split(",")]
+        for nm, body in re.findall(r"^static const \w+_t (pqz_\w+) = \{\{(.*)\}\};$", text, re.M)
+    }
     p = f"pqz_{rel}"
     stdev = [int(st[nm][i]) for nm in st for i in (13, 17) if re.fullmatch(p + r"_(tbox|quad_eval_|quad_many_)", nm)]
     stdev += [int(st[p][i]) for i in (8, 12)]  # lnp_tbox_params_t log2stdev3, log2stdev4
-    return {"q": int(g(r"modulus q = (\d+)")), "m1": int(g(r"s1: m1 = (\d+)")), "m2": int(g(r"s2: m2 = (\d+)")),
-            "nbin": int(re.search(r"binary: (?:no|yes \(dimension: (\d+)\))", com)[1] or 0),
-            "n": [int(x) for x in ex[1].split(",")], "B": [float(x) for x in ex[2].split(",")],
-            "nprime": int(ap[1]), "bprime": float(ap[2]), "kmsis": int(g(r"MSIS dimension: (\d+)")),
-            "rhf": float(g(r"MSIS root hermite factor: ([\d.]+)")), "kmlwe": int(g(r"MLWE dimension: (\d+)")),
-            "D": int(g(r"\bD = (\d+)")), "gamma": int(g(r"gamma = (\d+)")),
-            "lambda": int(st[f"{p}_quad_eval"][-1]), "proof": int(st[p][-1].rstrip("UL")), "log2stdev": stdev}
+    return {
+        "q": int(g(r"modulus q = (\d+)")),
+        "m1": int(g(r"s1: m1 = (\d+)")),
+        "m2": int(g(r"s2: m2 = (\d+)")),
+        "nbin": int(re.search(r"binary: (?:no|yes \(dimension: (\d+)\))", com)[1] or 0),
+        "n": [int(x) for x in ex[1].split(",")],
+        "B": [float(x) for x in ex[2].split(",")],
+        "nprime": int(ap[1]),
+        "bprime": float(ap[2]),
+        "kmsis": int(g(r"MSIS dimension: (\d+)")),
+        "rhf": float(g(r"MSIS root hermite factor: ([\d.]+)")),
+        "kmlwe": int(g(r"MLWE dimension: (\d+)")),
+        "D": int(g(r"\bD = (\d+)")),
+        "gamma": int(g(r"gamma = (\d+)")),
+        "lambda": int(st[f"{p}_quad_eval"][-1]),
+        "proof": int(st[p][-1].rstrip("UL")),
+        "log2stdev": stdev,
+    }
 
 
 def bind(name):
@@ -764,23 +1086,38 @@ def bind(name):
         h = hs[r] = header(name, r)
         s = sp[r]
         v = lambda k: re.search(rf"^{k} = (.*)$", s, re.M)[1]  # noqa: E731
-        want = {"q": t["q"], "m1": int(v("m1")), "nbin": int(v("nbin")), "nprime": int(v("nprime")),
-                "bprime": float(v("Bprime")), "n": [int(x) for x in v("n").strip("[]").split(",")],
-                "B": [float(x) for x in v("B").strip("[]").split(",")], "kmlwe": t.get("kmlwe_min", h["kmlwe"])}
+        want = {
+            "q": t["q"],
+            "m1": int(v("m1")),
+            "nbin": int(v("nbin")),
+            "nprime": int(v("nprime")),
+            "bprime": float(v("Bprime")),
+            "n": [int(x) for x in v("n").strip("[]").split(",")],
+            "B": [float(x) for x in v("B").strip("[]").split(",")],
+            "kmlwe": t.get("kmlwe_min", h["kmlwe"]),
+        }
         out += [f"pqz_{r}_params.h {k} {h[k]} != spec {w}" for k, w in want.items() if h[k] != w]
         if h["rhf"] > t["pqz_delta"]:
             out.append(f"pqz_{r}_params.h MSIS root Hermite factor {h['rhf']} > pqz_delta {t['pqz_delta']}")
         if max(h["log2stdev"]) >= 24:
             out.append(f"pqz_{r}_params.h log2stdev {max(h['log2stdev'])} >= 24 (the sampler's limit)")
-    es1 = re.findall(r"^=> \S*?(\w+)_params\.sage: pqz_delta = ([\d.]+), kmlwe_min = (\d+) \(kmsis = (\d+), m2 = (\d+), "
-                     r"D = (\d+), gamma = (\d+), lambda = (\d+), MSIS beta (\d+), MLWE uSVP beta (\d+), dual_hybrid (\d+) "
-                     r"/ (\d+), codegen proof size ~(\d+) B\)$", rd("e-s1.txt"), re.M)
+    es1 = re.findall(
+        r"^=> \S*?(\w+)_params\.sage: pqz_delta = ([\d.]+), kmlwe_min = (\d+) \(kmsis = (\d+), m2 = (\d+), "
+        r"D = (\d+), gamma = (\d+), lambda = (\d+), MSIS beta (\d+), MLWE uSVP beta (\d+), dual_hybrid (\d+) "
+        r"/ (\d+), codegen proof size ~(\d+) B\)$",
+        rd("e-s1.txt"),
+        re.M,
+    )
     if sorted(x[0] for x in es1) != sorted(RELS):
         out.append(f"e-s1.txt: result lines for {sorted(x[0] for x in es1)}, not the {len(RELS)} relations")
     for r, dl, km, kmsis, m2, D, gamma, lam, *beta, proof in es1:
         h = hs.get(r)
         got = (float(dl), int(km), int(kmsis), int(m2), int(D), int(gamma), int(lam), int(proof))
-        want = (t["pqz_delta"], t.get("kmlwe_min"), *(h[k] for k in ("kmsis", "m2", "D", "gamma", "lambda", "proof"))) if h else None
+        want = (
+            (t["pqz_delta"], t.get("kmlwe_min"), *(h[k] for k in ("kmsis", "m2", "D", "gamma", "lambda", "proof")))
+            if h
+            else None
+        )
         if got != want or min(map(int, beta)) < 450:
             out.append(f"e-s1.txt {r}: {got}, betas {beta} vs set.toml / header {want}, betas >= 450")
     cg = rd("codegen.txt")
@@ -805,7 +1142,9 @@ def digests(name):
     16 codegen headers; PQZH the set constants and the [pqzh_preset] (radices, n, k, t, generator, non-square)"""
     t, _, cs = consts(name)
     c = {k: v for k, v, s, _ in cs if s is None}
-    h = hashlib.sha256(json.dumps(c | {"pqz_delta": t["pqz_delta"], "kmlwe_min": t.get("kmlwe_min")}, sort_keys=True).encode())
+    h = hashlib.sha256(
+        json.dumps(c | {"pqz_delta": t["pqz_delta"], "kmlwe_min": t.get("kmlwe_min")}, sort_keys=True).encode()
+    )
     for r in RELS:
         p = os.path.join(HERE, name, f"pqz_{r}_params.h")
         h.update(f"\n{r}\n".encode() + (open(p, "rb").read() if os.path.exists(p) else b"missing"))
@@ -866,8 +1205,10 @@ def main(argv):
         for p in [os.path.join(HERE, s, "PqzSet.sol") for s in names] + [SOL_EVM]:
             if os.path.exists(p) and not digest_ok(open(p, encoding="utf-8").read()):
                 diff.append(f"{os.path.relpath(p, REPO)} (SET_DIGEST is not its constant block's)")
-    print("gen_set.py%s: %d sets, %d files%s" % (" --check" if check else "", len(names), len(fs) + check,
-                                                 (", differ: " + " ".join(diff)) if diff else ""))
+    print(
+        "gen_set.py%s: %d sets, %d files%s"
+        % (" --check" if check else "", len(names), len(fs) + check, (", differ: " + " ".join(diff)) if diff else "")
+    )
     return 1 if diff else 0
 
 
@@ -878,7 +1219,15 @@ def selfcheck():
     assert keccak256(b"").hex() == "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
     # n2048-kmax1024 keeps main's constants of before the parameter sets (pqz_ntt.c / pqz_rel.c / pqz_keys.c of main)
     c = {k: v for k, v, s, d in consts(N2048)[2]}
-    assert (c["K"], c["Q"], c["LOG2Q"], c["DELTA"], c["MBITS"], c["CBITS"], c["EBITS"]) == (32, 4398046510889, 42, 2**26 - 1, 14, 11, 25)
+    assert (c["K"], c["Q"], c["LOG2Q"], c["DELTA"], c["MBITS"], c["CBITS"], c["EBITS"]) == (
+        32,
+        4398046510889,
+        42,
+        2**26 - 1,
+        14,
+        11,
+        25,
+    )
     assert (c["BETA_S"], c["BETA_E"], c["ZETA"], c["INVZ3"]) == (36, 164, 3367489746414, 1030556764475)
     assert lengths(32)["stmt"]["TRANSFER"] == 83_072 and lengths(32)["bundle"] == 16_688
     assert lengths(32)["stmt"]["TRANSFER-SPLIT"] == 99_456 and lengths(32)["stmt"]["TRANSFER-SPLIT0"] == 82_944  # K3-4
@@ -886,21 +1235,44 @@ def selfcheck():
     # digest line itself and the comments do not count
     sol = sol_text(N2048)
     assert digest_ok(sol) and len(CONST_RE.findall(sol)) >= 30
-    for a, b in (("S_AUD = 2;", "S_AUD = 3;"), ("ROLL_MAX = ", "ROLL_MAX = 1"), ("uint16 internal constant DELTA_P_MAX",
-                 "uint256 internal constant DELTA_P_MAX"), ("PQZ_ACC_WORDS = ", "PQZ_ACC_WORDS = 9"),
-                 ("bool internal constant PQZH_VALUE = true;", "bool internal constant PQZH_VALUE = false;")):
+    for a, b in (
+        ("S_AUD = 2;", "S_AUD = 3;"),
+        ("ROLL_MAX = ", "ROLL_MAX = 1"),
+        ("uint16 internal constant DELTA_P_MAX", "uint256 internal constant DELTA_P_MAX"),
+        ("PQZ_ACC_WORDS = ", "PQZ_ACC_WORDS = 9"),
+        ("bool internal constant PQZH_VALUE = true;", "bool internal constant PQZH_VALUE = false;"),
+    ):
         assert a in sol and not digest_ok(sol.replace(a, b, 1)), a
     assert digest_ok(sol.replace("/// the modulus", "/// q"))
     # n2048-kmax1024's spec shapes are pqzl/params/*.sage's (the record its first headers were made from)
     s = specs(N2048)
-    assert "m1 = 146\n" in s["tx"] and "nbin = 15\n" in s["tx"] and "m1 = 223\n" in s["txm80"] and "nbin = 22\n" in s["txm8"]
+    assert (
+        "m1 = 146\n" in s["tx"]
+        and "nbin = 15\n" in s["tx"]
+        and "m1 = 223\n" in s["txm80"]
+        and "nbin = 22\n" in s["txm8"]
+    )
     assert "m1 = 359\n" in s["txm8"] and "m1 = 219\n" in s["txm4"] and "Bprime = 8\n" in s["reg"]  # s_aud = 2 (R0-1)
     if "n2304-kmax4096" in sets():
         c = {k: v for k, v, s, d in consts("n2304-kmax4096")[2]}
-        assert (c["K"], c["DELTA"], c["MBITS"], c["EBITS"], c["BETA_S"], c["BETA_E"]) == (36, 233747196, 16, 27, 38, 173)
+        assert (c["K"], c["DELTA"], c["MBITS"], c["EBITS"], c["BETA_S"], c["BETA_E"]) == (
+            36,
+            233747196,
+            16,
+            27,
+            38,
+            173,
+        )
         s = specs("n2304-kmax4096")  # as gen_pa.py (now legacy/) wrote them, comment lines aside
-        assert "m1 = 163\n" in s["tx"] and "nbin = 16\n" in s["tx"] and "m1 = 160\n" in s["burn"] and "nbin = 15\n" in s["burn"]
-        assert "m1 = 79\n" in s["dr"] and "m1 = 73\n" in s["ds"] and "m1 = 72\n" in s["reg"] and "log2q = 45\n" in s["tx"]
+        assert (
+            "m1 = 163\n" in s["tx"]
+            and "nbin = 16\n" in s["tx"]
+            and "m1 = 160\n" in s["burn"]
+            and "nbin = 15\n" in s["burn"]
+        )
+        assert (
+            "m1 = 79\n" in s["dr"] and "m1 = 73\n" in s["ds"] and "m1 = 72\n" in s["reg"] and "log2q = 45\n" in s["tx"]
+        )
         assert "m1 = 168\n" in s["txm40"] and "m1 = 248\n" in s["txm80"] and "nbin = 23\n" in s["txm8"]
         assert "m1 = 244\n" in s["txm4"] and "m1 = 328\n" in s["txm8"] and "Bprime = 8\n" in s["dr"]  # s_aud = 3 (R0-1)
         # R_TXS: R_TX + (r_f, e1_f) (72 polys); R_TXS0 one e2 block fewer

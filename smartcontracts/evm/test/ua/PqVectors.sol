@@ -56,9 +56,17 @@ abstract contract PqVectors is Test {
         uint256 n;
         for (; vm.keyExistsJson(kat, string.concat(".kinds.", name, ".mutations[", vm.toString(n), "]")); ++n) {
             string memory m = string.concat(".kinds.", name, ".mutations[", vm.toString(n), "]");
-            bool got = IVerify(verifier).verify(_b(kat, string.concat(m, ".pk")),
-                bytes32(_b(kat, string.concat(m, ".ua_msg"))), _b(kat, string.concat(m, ".sig")));
-            assertEq(got, vm.parseJsonBool(kat, string.concat(m, ".valid")), vm.parseJsonString(kat, string.concat(m, ".what")));
+            bool got = IVerify(verifier)
+                .verify(
+                    _b(kat, string.concat(m, ".pk")),
+                    bytes32(_b(kat, string.concat(m, ".ua_msg"))),
+                    _b(kat, string.concat(m, ".sig"))
+                );
+            assertEq(
+                got,
+                vm.parseJsonBool(kat, string.concat(m, ".valid")),
+                vm.parseJsonString(kat, string.concat(m, ".what"))
+            );
         }
         // + 2 non-empty-context signatures for ML-DSA, SLH-DSA; + the c~ second-word flip for ML-DSA-87
         assertEq(n, falcon ? 6 : kind == PqUA.MLDSA87 ? 9 : 8, "mutations");
@@ -73,9 +81,13 @@ abstract contract PqVectors is Test {
         uint256 pw = 1;
         for (uint256 i; i < n; ++i) {
             uint256 r;
-            for (uint256 b; b < bits; ++b) r = (r << 1) | ((i >> b) & 1);
+            for (uint256 b; b < bits; ++b) {
+                r = (r << 1) | ((i >> b) & 1);
+            }
             uint256 v;
-            for (uint256 j; j < width; ++j) v = (v << 8) | uint8(t[r * width + j]);
+            for (uint256 j; j < width; ++j) {
+                v = (v << 8) | uint8(t[r * width + j]);
+            }
             assertEq(v, pw);
             pw = mulmod(pw, root, q);
         }

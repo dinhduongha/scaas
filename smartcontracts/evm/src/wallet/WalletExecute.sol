@@ -17,11 +17,22 @@ abstract contract WalletExecute is MetaTxAddressBase {
 
     constructor(string memory domainName, bytes32 chainUid_) MetaTxAddressBase(domainName, chainUid_) {}
 
-    function _namedExecute(MetaTxLib.Envelope calldata e, address target, uint256 value, bytes calldata data, bytes calldata sig)
-        internal returns (bytes memory)
-    {
+    function _namedExecute(
+        MetaTxLib.Envelope calldata e,
+        address target,
+        uint256 value,
+        bytes calldata data,
+        bytes calldata sig
+    ) internal returns (bytes memory) {
         MetaTxLib.MetaTransaction memory m = _metaOf(e, abi.encodeWithSelector(_EXECUTE, target, value, data));
-        return _run(m, _hashTypedDataV4(MtxPipelineLib._namedHash(
-            _EXECUTE_TYPEHASH, _envelopeOf(m, 0), abi.encode(target, value, keccak256(data)))), sig);
+        return _run(
+            m,
+            _hashTypedDataV4(
+                MtxPipelineLib._namedHash(
+                    _EXECUTE_TYPEHASH, _envelopeOf(m, 0), abi.encode(target, value, keccak256(data))
+                )
+            ),
+            sig
+        );
     }
 }

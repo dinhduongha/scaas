@@ -114,7 +114,8 @@ contract UALedgerTest is UALedgerBase {
         assertEq(uaTransfers, 0);
         assertEq(tok.balanceOf(bob), 70);
         t = _t(_pad(alice), uaP, 30);
-        bytes memory wrapped = _ecdsa(ALICE_PK, lreg.uaAuthDigest(_pad(alice), UAKinds.PURPOSE_METATX, tok.mtxTransferDigest(t)));
+        bytes memory wrapped =
+            _ecdsa(ALICE_PK, lreg.uaAuthDigest(_pad(alice), UAKinds.PURPOSE_METATX, tok.mtxTransferDigest(t)));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         vm.prank(RELAYER);
         tok.mtxExecuteTransfer(t, UACall.auth(t.from, wrapped));
@@ -146,8 +147,15 @@ contract UALedgerTest is UALedgerBase {
     /// is now `executeMetaTransaction` (R3: `MetaTransaction`, alice's own key), on the same lane as the typed transfer.
     function test_T_V3_1_sharedNonceMap() public {
         MetaTxLib.MetaTransaction memory v2 = MetaTxLib.MetaTransaction({
-            from: alice, data: abi.encodeCall(IMetaTx.cancelNonce, (9)), batch: 1, nonce: 0,
-            validUntil: block.timestamp + 300, mode: RR, relayer: RELAYER, fee: 0, feeRecipient: address(0)
+            from: alice,
+            data: abi.encodeCall(IMetaTx.cancelNonce, (9)),
+            batch: 1,
+            nonce: 0,
+            validUntil: block.timestamp + 300,
+            mode: RR,
+            relayer: RELAYER,
+            fee: 0,
+            feeRecipient: address(0)
         });
         MetaTxLib.UAMetaTransfer memory v3 = _t(_pad(alice), _pad(bob), 1);
         bytes memory a3 = _authT(address(tok), v3);
@@ -177,8 +185,15 @@ contract UALedgerTest is UALedgerBase {
         MetaTxLib.UAEnvelope memory e = _cancelEnv(uaP, block.timestamp + 60);
         bytes memory c = _auth(lreg, UAKinds.P256, _key(UAKinds.P256), UAKinds.PURPOSE_METATX, _cancelJsonDigest(e, 9));
         MetaTxLib.MetaTransaction memory v2 = MetaTxLib.MetaTransaction({
-            from: alice, data: abi.encodeCall(IMetaTx.cancelNonce, (9)), batch: 1, nonce: 0,
-            validUntil: block.timestamp + 300, mode: RR, relayer: RELAYER, fee: 0, feeRecipient: address(0)
+            from: alice,
+            data: abi.encodeCall(IMetaTx.cancelNonce, (9)),
+            batch: 1,
+            nonce: 0,
+            validUntil: block.timestamp + 300,
+            mode: RR,
+            relayer: RELAYER,
+            fee: 0,
+            feeRecipient: address(0)
         });
         bytes memory a2 = _ecdsa(ALICE_PK, MtxDigest.metaTx(address(tok), v2));
         MetaTxLib.UAMetaTransaction memory m;
@@ -254,8 +269,11 @@ contract UALedgerTest is UALedgerBase {
         _wrapFor(alice, 10_000);
         vm.prank(alice);
         wrp.transferToUA(uaP, 5_000);
-        MetaTxLib.UAMetaTransaction memory m = _m(address(wrp), uaP,
-            abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), 100, bob, 100));
+        MetaTxLib.UAMetaTransaction memory m = _m(
+            address(wrp),
+            uaP,
+            abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), 100, bob, 100)
+        );
         (m.mode, m.fee, m.feeRecipient) = (RR | RF | FIX, 1, sp);
         bytes memory a = _authM(address(wrp), m);
         vm.expectRevert(IUALedger.ShieldPoolNotPayable.selector);
@@ -366,14 +384,37 @@ contract UALedgerTest is UALedgerBase {
     /// The wallet's EIP-712 JSON digest of `UACancelNonce` in the token's domain (relayer and recipient unbound).
     function _cancelJsonDigest(MetaTxLib.UAEnvelope memory e, uint256 lane) internal view returns (bytes32) {
         string memory zero = '"0x0000000000000000000000000000000000000000"';
-        return OrderJson.digest(address(tok), "UACancelNonce",
-            string.concat('"UACancelNonce":[{"name":"from","type":"bytes32"},{"name":"lane","type":"uint256"},',
+        return OrderJson.digest(
+            address(tok),
+            "UACancelNonce",
+            string.concat(
+                '"UACancelNonce":[{"name":"from","type":"bytes32"},{"name":"lane","type":"uint256"},',
                 '{"name":"batch","type":"uint256"},{"name":"nonce","type":"uint256"},{"name":"validUntil","type":"uint256"},',
                 '{"name":"mode","type":"uint32"},{"name":"relayer","type":"address"},{"name":"fee","type":"uint256"},',
-                '{"name":"feeRecipient","type":"address"}]'),
-            string.concat('{"from":', h(e.from), ',"lane":', n(lane), ',"batch":', n(e.batch), ',"nonce":', n(e.nonce),
-                ',"validUntil":', n(e.validUntil), ',"mode":', n(e.mode), ',"relayer":', zero, ',"fee":', n(e.fee),
-                ',"feeRecipient":', zero, '}'));
+                '{"name":"feeRecipient","type":"address"}]'
+            ),
+            string.concat(
+                '{"from":',
+                h(e.from),
+                ',"lane":',
+                n(lane),
+                ',"batch":',
+                n(e.batch),
+                ',"nonce":',
+                n(e.nonce),
+                ',"validUntil":',
+                n(e.validUntil),
+                ',"mode":',
+                n(e.mode),
+                ',"relayer":',
+                zero,
+                ',"fee":',
+                n(e.fee),
+                ',"feeRecipient":',
+                zero,
+                "}"
+            )
+        );
     }
 
     /// `test_uaCancelNonceTyped` (TS-D19) on the ordered cancel (ua-mtx-merge T1, meaning: the struct is
@@ -400,9 +441,29 @@ contract UALedgerTest is UALedgerBase {
     function test_uaCancelNonce() public {
         MetaTxLib.UAEnvelope memory e = _cancelEnv(uaP, block.timestamp + 60);
         bytes32 d = _cancelJsonDigest(e, 9);
-        assertEq(d, keccak256(abi.encodePacked(hex"1901", domainOf(address(tok)), keccak256(abi.encode(
-            MetaTxLib.UA_CANCEL_NONCE_TYPEHASH, uaP, uint256(9), e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee,
-            address(0))))));
+        assertEq(
+            d,
+            keccak256(
+                abi.encodePacked(
+                    hex"1901",
+                    domainOf(address(tok)),
+                    keccak256(
+                        abi.encode(
+                            MetaTxLib.UA_CANCEL_NONCE_TYPEHASH,
+                            uaP,
+                            uint256(9),
+                            e.batch,
+                            e.nonce,
+                            e.validUntil,
+                            e.mode,
+                            address(0),
+                            e.fee,
+                            address(0)
+                        )
+                    )
+                )
+            )
+        );
         bytes memory a = _auth(lreg, UAKinds.P256, _key(UAKinds.P256), UAKinds.PURPOSE_METATX, d);
         vm.expectEmit(address(tok));
         emit IUALedger.UANonceCancelled(uaP, 9, 1);
@@ -422,7 +483,8 @@ contract UALedgerTest is UALedgerBase {
         _wrapFor(alice, 10_000);
         vm.prank(alice);
         wrp.transferToUA(uaP, 10_000);
-        bytes memory data = abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), 4_000, bob, 4_000);
+        bytes memory data =
+            abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), 4_000, bob, 4_000);
         MetaTxLib.UAMetaTransaction memory m = _m(address(wrp), uaP, data);
         (m.mode, m.fee, m.feeRecipient) = (RR | RF | PCT, 10_000, FEE_TO); // 1 % of the wrapped amount, after the call
         bytes memory a = _authM(address(wrp), m);
@@ -508,8 +570,15 @@ contract UALedgerTest is UALedgerBase {
         // ua-mtx-merge T2, meaning: the address side is `executeMetaTransaction` (R3), the typed address path having
         // left; its op is an allowlisted `burn(1)` of alice's own balance (CTR-MTX-19), not a transfer to bob
         MetaTxLib.MetaTransaction memory v2 = MetaTxLib.MetaTransaction({
-            from: alice, data: abi.encodeCall(NormalToken.burn, (1)), batch: 1, nonce: 1,
-            validUntil: block.timestamp + 300, mode: RR, relayer: RELAYER, fee: 0, feeRecipient: address(0)
+            from: alice,
+            data: abi.encodeCall(NormalToken.burn, (1)),
+            batch: 1,
+            nonce: 1,
+            validUntil: block.timestamp + 300,
+            mode: RR,
+            relayer: RELAYER,
+            fee: 0,
+            feeRecipient: address(0)
         });
         bytes memory v2Session = _ecdsa(BOB_PK, MtxDigest.metaTx(address(tok), v2));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector); // nor on the address path
@@ -525,7 +594,12 @@ contract UALedgerTest is UALedgerBase {
     // ----- registry binding (CTR-UA-19) -----
 
     function test_registryOff() public {
-        NormalToken off = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, address(0), address(0), false)));
+        NormalToken off = NormalToken(
+            EnvKit.clone(
+                address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+                EnvKit.env(chainUidA, address(0), address(0), false)
+            )
+        );
         off.initialize(nid(address(this)), 1, abi.encode(normalInit("Off", "OFF", 6, 100, alice, address(this))));
         assertEq(off.registry(), address(0));
         assertFalse(off.supportsInterface(type(IUALedger).interfaceId));
@@ -554,16 +628,35 @@ contract UALedgerTest is UALedgerBase {
         bytes32 other = keccak256("other genesis");
         OpenFactory g = EnvKit.factory(address(this), other, 0);
         vm.expectRevert(abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, other, chainUidA));
-        g.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, EnvKit.uidOf(address(g)), plainEnv(address(g), address(0), other, REG_L, false));
+        g.publishTokenEnv(
+            IOpenFactory.TokenKind.NORMAL,
+            1,
+            EnvKit.uidOf(address(g)),
+            plainEnv(address(g), address(0), other, REG_L, false)
+        );
         OpenFactory h = EnvKit.factory(address(this), chainUidA, 0); // positive control: this chain's factory
-        h.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, EnvKit.uidOf(address(h)), plainEnv(address(h), address(0), chainUidA, REG_L, false));
+        h.publishTokenEnv(
+            IOpenFactory.TokenKind.NORMAL,
+            1,
+            EnvKit.uidOf(address(h)),
+            plainEnv(address(h), address(0), chainUidA, REG_L, false)
+        );
     }
 
     function test_uaDigest_domainAndTypehash() public view {
         MetaTxLib.UAMetaTransfer memory t = _t(uaP, uaB, 1);
-        bytes32 domain = keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256("SCaaS MetaToken"), keccak256("1"), block.chainid, address(tok), chainUidA));
+        bytes32 domain = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256("SCaaS MetaToken"),
+                keccak256("1"),
+                block.chainid,
+                address(tok),
+                chainUidA
+            )
+        );
         assertEq(tok.mtxTransferDigest(t), keccak256(abi.encodePacked(hex"1901", domain, MtxHash.hashStruct(t))));
         MetaTxLib.UAMetaTransaction memory m = _m(address(tok), uaP, hex"01020304");
         assertEq(tok.mtxDigest(m), keccak256(abi.encodePacked(hex"1901", domain, MtxHash.hashStruct(m))));

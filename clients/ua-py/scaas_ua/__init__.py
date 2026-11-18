@@ -3,6 +3,7 @@ purpose tags, ua_msg, the portable PoP / KEM record / PQZ key record (typed EIP-
 The same rules live in Solidity (UAKinds.sol), JS (clientkeys ua.js), Rust (scaas-ua), Go and C#;
 smartcontracts/vectors/ua pins all six. secp256k1, P-256, ed25519 and bn254 G1 are integer arithmetic here; bn254 G2
 and BLS12-381 use py_ecc. Public inputs only: nothing here is constant-time. UNAUDITED."""
+
 import re
 from collections import namedtuple
 
@@ -15,7 +16,7 @@ class UAError(Exception):
     """An error whose ``code`` every implementation and the vector files share."""
 
     def __init__(self, code, reason=None):
-        super().__init__(f'{code}: {reason}' if reason else code)
+        super().__init__(f"{code}: {reason}" if reason else code)
         self.code = code
         self.reason = reason
 
@@ -29,79 +30,135 @@ def keccak256(*parts):
 
 def _need(ok, reason):
     if not ok:
-        raise UAError('UAKeyData', reason)
+        raise UAError("UAKeyData", reason)
 
 
 def _bytes(v):
     """Key data and raw ids are bytes-like only; ints, strs, lists and floats are refused, not coerced."""
     if isinstance(v, (bytes, bytearray, memoryview)):
         return bytes(v)
-    raise UAError('UAKeyData', 'type')
+    raise UAError("UAKeyData", "type")
 
 
 # (number, name, native, lengths (empty = variable), keyHash group)
 KINDS = (
-    (0x0001, 'evm-eoa', True, (20,), None),
-    (0x0002, 'evm-contract', True, (20,), None),
-    (0x0003, 'hedera-native', True, (20,), None),
-    (0x0010, 'solana-ed25519', True, (32,), None),
-    (0x0011, 'stellar-account', True, (32,), None),
-    (0x0012, 'soroban-contract', True, (32,), None),
-    (0x0013, 'aptos-account', True, (32,), None),
-    (0x0014, 'sui-address', True, (32,), None),
-    (0x0015, 'cosmos-account', True, (20, 32), None),
-    (0x0016, 'ton-wallet', True, (32,), None),
-    (0x0017, 'near-account', True, (32,), None),
-    (0x0018, 'algorand-address', True, (32,), None),
-    (0x0100, 'webauthn-p256', False, (96,), 'p256'),
-    (0x0101, 'p256', False, (64,), 'p256'),
-    (0x0102, 'ed25519', False, (32,), 'ed25519'),
-    (0x0103, 'bip340', False, (32,), 'secp256k1'),
-    (0x0104, 'schnorr-bn254', False, (64,), 'bn254-g1'),
-    (0x0105, 'schnorr-bls12381', False, (128,), 'bls12381-g1'),
-    (0x0106, 'bls12381-minsig', False, (256,), 'bls12381-g2'),
-    (0x0107, 'bls-bn254-minsig', False, (128,), 'bn254-g2'),
-    (0x0110, 'musig2-secp256k1', False, (), 'secp256k1'),
-    (0x0111, 'frost-secp256k1', False, (), 'secp256k1'),
-    (0x0112, 'musig2-bn254', False, (), 'bn254-g1'),
-    (0x0113, 'frost-bn254', False, (), 'bn254-g1'),
-    (0x0120, 'msig', False, (), None),
-    (0x0130, 'mldsa44', False, (1312,), 'mldsa44'),
-    (0x0131, 'mldsa65', False, (1952,), 'mldsa65'),
-    (0x0132, 'fndsa512', False, (897,), 'fndsa512'),
-    (0x0133, 'slhdsa128s', False, (32,), 'slhdsa128s'),
-    (0x0141, 'zether-bls12381', False, (128,), 'bls12381-g1'),
-    (0x0108, 'secp256k1', False, (64,), 'secp256k1'),  # 2026-10-17, appended as in kinds.json
-    (0x0134, 'mldsa87', False, (2592,), 'mldsa87'),  # CTR-UA-39, 2026-11-04, appended as in kinds.json
-    (0x0135, 'fndsa1024', False, (1793,), 'fndsa1024'),  # CTR-UA-40, 2026-11-04, appended as in kinds.json
+    (0x0001, "evm-eoa", True, (20,), None),
+    (0x0002, "evm-contract", True, (20,), None),
+    (0x0003, "hedera-native", True, (20,), None),
+    (0x0010, "solana-ed25519", True, (32,), None),
+    (0x0011, "stellar-account", True, (32,), None),
+    (0x0012, "soroban-contract", True, (32,), None),
+    (0x0013, "aptos-account", True, (32,), None),
+    (0x0014, "sui-address", True, (32,), None),
+    (0x0015, "cosmos-account", True, (20, 32), None),
+    (0x0016, "ton-wallet", True, (32,), None),
+    (0x0017, "near-account", True, (32,), None),
+    (0x0018, "algorand-address", True, (32,), None),
+    (0x0100, "webauthn-p256", False, (96,), "p256"),
+    (0x0101, "p256", False, (64,), "p256"),
+    (0x0102, "ed25519", False, (32,), "ed25519"),
+    (0x0103, "bip340", False, (32,), "secp256k1"),
+    (0x0104, "schnorr-bn254", False, (64,), "bn254-g1"),
+    (0x0105, "schnorr-bls12381", False, (128,), "bls12381-g1"),
+    (0x0106, "bls12381-minsig", False, (256,), "bls12381-g2"),
+    (0x0107, "bls-bn254-minsig", False, (128,), "bn254-g2"),
+    (0x0110, "musig2-secp256k1", False, (), "secp256k1"),
+    (0x0111, "frost-secp256k1", False, (), "secp256k1"),
+    (0x0112, "musig2-bn254", False, (), "bn254-g1"),
+    (0x0113, "frost-bn254", False, (), "bn254-g1"),
+    (0x0120, "msig", False, (), None),
+    (0x0130, "mldsa44", False, (1312,), "mldsa44"),
+    (0x0131, "mldsa65", False, (1952,), "mldsa65"),
+    (0x0132, "fndsa512", False, (897,), "fndsa512"),
+    (0x0133, "slhdsa128s", False, (32,), "slhdsa128s"),
+    (0x0141, "zether-bls12381", False, (128,), "bls12381-g1"),
+    (0x0108, "secp256k1", False, (64,), "secp256k1"),  # 2026-10-17, appended as in kinds.json
+    (0x0134, "mldsa87", False, (2592,), "mldsa87"),  # CTR-UA-39, 2026-11-04, appended as in kinds.json
+    (0x0135, "fndsa1024", False, (1793,), "fndsa1024"),  # CTR-UA-40, 2026-11-04, appended as in kinds.json
 )
 # Schemes are not kinds (UA-6 U14): 0x0142 is the PQZ key attribute of a PQ holder; it keeps its tag and keyHash group.
 PQZ_KEY_LENGTHS = (16384, 18432, 20480, 22528)  # the PQZ parameter sets' public key lengths (PqzSet.PK)
-SCHEMES = ((0x0142, 'pqz-mlwe', PQZ_KEY_LENGTHS, 'pqz-mlwe'),)
+SCHEMES = ((0x0142, "pqz-mlwe", PQZ_KEY_LENGTHS, "pqz-mlwe"),)
 _BY = {k[0]: k for k in KINDS}
 _SCHEME = {s[0]: s for s in SCHEMES}
-GROUPS = ('p256', 'ed25519', 'secp256k1', 'bn254-g1', 'bls12381-g1', 'bls12381-g2', 'bn254-g2', 'mldsa44', 'mldsa65',
-          'fndsa512', 'slhdsa128s', 'mldsa87', 'fndsa1024', 'pqz-mlwe')
-PURPOSES = ('pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner', 'keyop', 'payee-fee',
-            'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership', 'msig-update', 'pqz-verdict')
+GROUPS = (
+    "p256",
+    "ed25519",
+    "secp256k1",
+    "bn254-g1",
+    "bls12381-g1",
+    "bls12381-g2",
+    "bn254-g2",
+    "mldsa44",
+    "mldsa65",
+    "fndsa512",
+    "slhdsa128s",
+    "mldsa87",
+    "fndsa1024",
+    "pqz-mlwe",
+)
+PURPOSES = (
+    "pop",
+    "metatx",
+    "metatx-cancel",
+    "member",
+    "zether-auth",
+    "zether-owner",
+    "keyop",
+    "payee-fee",
+    "vp",
+    "vc-anchor",
+    "trade",
+    "kem",
+    "pqz-key",
+    "membership",
+    "msig-update",
+    "pqz-verdict",
+    "auditor-consent",
+)
 
 
-# The governance bits 0-31 (spec 2026-11-02-governance 1.2): (name, type) by bit. The disclosure sentences are read by the app
-# from smartcontracts/vectors/governance/governance_bits.json; bits 32-127 are free, 128-255 the application's bitLabel(bit).
+# The governance bits 0-32 (spec 2026-11-02-governance 1.2): (name, type) by bit. The disclosure sentences are read by the app
+# from smartcontracts/vectors/governance/governance_bits.json; bits 33-127 are free, 128-255 the application's bitLabel(bit).
 GOVERNANCE_BITS = (
-    ('PAYABLE', 'capability'), ('MINTABLE', 'power'), ('BURNABLE', 'capability'), ('RATE_ADJUSTABLE', 'power'),
-    ('WRAP_DISABLEABLE', 'power'), ('FREEZE', 'power'), ('FORCE', 'power'), ('PAUSE', 'power'), ('ALLOWLIST', 'power'),
-    ('DENYLIST', 'power'), ('RECORD', 'power'), ('LISTING', 'power'), ('FEE_ROUTING', 'power'), ('', 'unused'), ('', 'unused'),
-    ('ARBITRATE', 'reserved'), ('CORRECT', 'reserved'), ('RESCUABLE', 'capability'), ('PUBLISH', 'power'), ('DEPRECATE', 'power'),
-    ('ENABLE_KIND', 'power'), ('MODERATE', 'power'), ('OPERATOR_TRANSFER', 'power'), ('TAX', 'power'), ('PQZ_PROOF', 'power'),
+    ("PAYABLE", "capability"),
+    ("MINTABLE", "power"),
+    ("BURNABLE", "capability"),
+    ("RATE_ADJUSTABLE", "power"),
+    ("WRAP_DISABLEABLE", "power"),
+    ("FREEZE", "power"),
+    ("FORCE", "power"),
+    ("PAUSE", "power"),
+    ("ALLOWLIST", "power"),
+    ("DENYLIST", "power"),
+    ("RECORD", "power"),
+    ("LISTING", "power"),
+    ("FEE_ROUTING", "power"),
+    ("", "unused"),
+    ("", "unused"),
+    ("ARBITRATE", "reserved"),
+    ("CORRECT", "reserved"),
+    ("RESCUABLE", "capability"),
+    ("PUBLISH", "power"),
+    ("DEPRECATE", "power"),
+    ("ENABLE_KIND", "power"),
+    ("MODERATE", "power"),
+    ("OPERATOR_TRANSFER", "power"),
+    ("TAX", "power"),
+    ("PQZ_PROOF", "power"),
     # group 3l (wrap limits spec 2026-11-10 §2): the hybrids' wrap controls
-    ('WRAP_LIMIT', 'capability'), ('WRAP_LIST', 'power'), ('REDEEMER', 'power'),
+    ("WRAP_LIMIT", "capability"),
+    ("WRAP_LIST", "power"),
+    ("REDEEMER", "power"),
     # round 3s (CTR-GOV-24): 8, 9 the token's lists (powers), 28 the compliance registry check
-    ('KYC', 'capability'),
+    ("KYC", "capability"),
     # CTR-DEX-32 (owner 2026-11-12): the DEX's closed markets
-    ('CLOSED_MARKETS', 'capability'),
+    ("CLOSED_MARKETS", "capability"),
     # round 3zb + 3zc (CTR-GOV-29, CTR-GOV-30): the Normal kinds' burner role, the wrapped kinds' adjustable caps
-    ('BURNER', 'power'), ('SUPPLY_CAP_ADJUSTABLE', 'capability'),
+    ("BURNER", "power"),
+    ("SUPPLY_CAP_ADJUSTABLE", "capability"),
+    # the setAuditor round (CTR-GOV-31): the confidential kinds' auditor replacement
+    ("AUDITOR", "power"),
 )
 
 
@@ -109,15 +166,15 @@ def kind_info(kind):
     try:
         return _BY[kind]
     except KeyError:
-        raise UAError('UAKindUnknown', f'0x{kind:04x}') from None
+        raise UAError("UAKindUnknown", f"0x{kind:04x}") from None
 
 
 def _derived(kind):
     if kind in _SCHEME:
-        raise UAError('UAKindNotDerived', _SCHEME[kind][1])
+        raise UAError("UAKindNotDerived", _SCHEME[kind][1])
     k = kind_info(kind)
     if k[2]:
-        raise UAError('UAKindNotDerived', k[1])
+        raise UAError("UAKindNotDerived", k[1])
     return k
 
 
@@ -157,7 +214,7 @@ def is_member(kind, hedera_native=False):
 
 
 def kind_tag_string(kind):
-    return f'scaas.ua.{_tagged(kind)[0]}.v1'
+    return f"scaas.ua.{_tagged(kind)[0]}.v1"
 
 
 def tag(kind):
@@ -166,37 +223,39 @@ def tag(kind):
 
 def group_tag_string(group):
     if group not in GROUPS:
-        raise ValueError(f'unknown keyHash group {group}')
-    return f'scaas.ua.group.{group}.v1'
+        raise ValueError(f"unknown keyHash group {group}")
+    return f"scaas.ua.group.{group}.v1"
 
 
 def group_tag(group):
     return keccak256(group_tag_string(group).encode())
 
 
-MSG_TAG = keccak256(b'scaas.ua.msg.v1')
+MSG_TAG = keccak256(b"scaas.ua.msg.v1")
 
 
 def purpose_tag(purpose, version=1):
     """Every purpose is v1; ``pop`` is also v2 (UA-8: the portable PoP)."""
-    if purpose not in PURPOSES or not (version == 1 or (purpose, version) == ('pop', 2)):
-        raise UAError('UAPurposeUnknown', purpose)
-    return keccak256(f'scaas.ua.purpose.{purpose}.v{version}'.encode())
+    if purpose not in PURPOSES or not (version == 1 or (purpose, version) == ("pop", 2)):
+        raise UAError("UAPurposeUnknown", purpose)
+    return keccak256(f"scaas.ua.purpose.{purpose}.v{version}".encode())
 
 
-POP_TAG = purpose_tag('pop')  # v1, a registry constant (kinds.json); the portable PoP is POP_V2_TAG
-POP_V2_TAG = purpose_tag('pop', 2)
+POP_TAG = purpose_tag("pop")  # v1, a registry constant (kinds.json); the portable PoP is POP_V2_TAG
+POP_V2_TAG = purpose_tag("pop", 2)
 KEM_SCHEME_MLKEM1024_X25519 = 1  # kemPk[0] (CTR-UA-32); 2 = ML-KEM-1024 + HQC + X25519 is reserved (UAKemScheme)
 KEM_PK_LENGTH = 1601  # 0x01 ‖ ML-KEM-1024 ek ‖ X25519 pk (X-Wing order)
-DOMAIN_TYPEHASH = keccak256(b'EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)')
-UAAUTH_TYPEHASH = keccak256(b'UAAuth(bytes32 ua,bytes32 purpose,bytes32 digest)')
-NAME_HASH = keccak256(b'SCaaS UARegistry')
+DOMAIN_TYPEHASH = keccak256(
+    b"EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+)
+UAAUTH_TYPEHASH = keccak256(b"UAAuth(bytes32 ua,bytes32 purpose,bytes32 digest)")
+NAME_HASH = keccak256(b"SCaaS UARegistry")
 
 
 def _sized(b, n, what):
     b = bytes(b)
     if len(b) != n:
-        raise ValueError(f'{what} must be {n} bytes')
+        raise ValueError(f"{what} must be {n} bytes")
     return b
 
 
@@ -207,7 +266,7 @@ def ua_of(kind, key_data):
 
 
 def in_native_space(ua_id):
-    return _sized(ua_id, 32, 'id')[:12] == bytes(12)
+    return _sized(ua_id, 32, "id")[:12] == bytes(12)
 
 
 def derive_ua(kind, key_data, hedera_native=False):
@@ -215,16 +274,16 @@ def derive_ua(kind, key_data, hedera_native=False):
     validate_key_data(kind, key_data, hedera_native)
     ua = ua_of(kind, key_data)
     if in_native_space(ua):
-        raise UAError('UAIdInNativeSpace', ua.hex())
+        raise UAError("UAIdInNativeSpace", ua.hex())
     return ua
 
 
 def native_id(kind, raw):
     k = kind_info(kind)
     if not k[2]:
-        raise UAError('UAKindNotNative', k[1])
+        raise UAError("UAKindNotNative", k[1])
     raw = _bytes(raw)
-    _need(len(raw) in k[3], 'length')
+    _need(len(raw) in k[3], "length")
     return bytes(32 - len(raw)) + raw
 
 
@@ -234,47 +293,58 @@ def key_hash_of(kind, key_data):
     if group is None:
         return None
     d = _bytes(key_data)
-    lo, hi = {0x0100: (0, 32), 0x0101: (0, 32), 0x0108: (0, 32), 0x0110: (1, 33), 0x0111: (1, 33), 0x0112: (0, 64), 0x0113: (0, 64)}.get(kind, (0, len(d)))
-    _need(len(d) >= hi, 'length')
+    lo, hi = {
+        0x0100: (0, 32),
+        0x0101: (0, 32),
+        0x0108: (0, 32),
+        0x0110: (1, 33),
+        0x0111: (1, 33),
+        0x0112: (0, 64),
+        0x0113: (0, 64),
+    }.get(kind, (0, len(d)))
+    _need(len(d) >= hi, "length")
     return keccak256(group_tag(group), d[lo:hi])
 
 
 def ua_message(kind, purpose, digest):
-    return keccak256(MSG_TAG, tag(kind), _sized(purpose, 32, 'purposeTag'), _sized(digest, 32, 'digest'))
+    return keccak256(MSG_TAG, tag(kind), _sized(purpose, 32, "purposeTag"), _sized(digest, 32, "digest"))
 
 
 def chain_key_hash(chain_id):
-    return keccak256(f'evm:{int(chain_id)}'.encode())
+    return keccak256(f"evm:{int(chain_id)}".encode())
 
 
 def _word(n):
-    return int(n).to_bytes(32, 'big')
+    return int(n).to_bytes(32, "big")
 
 
 # The portable EIP-712 domain (TS-D1): name and version only, no chainId / verifyingContract / salt (CTR-UA-07).
-PORTABLE_DOMAIN_TYPE = 'EIP712Domain(string name,string version)'
-PORTABLE_DOMAIN_NAME = 'SCaaS UA Portable'
-PORTABLE_DOMAIN_VERSION = '1'
-PORTABLE_DOMAIN_SEPARATOR = keccak256(keccak256(PORTABLE_DOMAIN_TYPE.encode()), keccak256(PORTABLE_DOMAIN_NAME.encode()),
-                                      keccak256(PORTABLE_DOMAIN_VERSION.encode()))
-_KEM_TYPE = 'UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)'
-_RECORD_TYPE = 'UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)'
-_PQZ_KEY_TYPE = 'UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)'
-_PQZ_KEY_VERSION_TYPE = 'UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)'
+PORTABLE_DOMAIN_TYPE = "EIP712Domain(string name,string version)"
+PORTABLE_DOMAIN_NAME = "SCaaS UA Portable"
+PORTABLE_DOMAIN_VERSION = "1"
+PORTABLE_DOMAIN_SEPARATOR = keccak256(
+    keccak256(PORTABLE_DOMAIN_TYPE.encode()),
+    keccak256(PORTABLE_DOMAIN_NAME.encode()),
+    keccak256(PORTABLE_DOMAIN_VERSION.encode()),
+)
+_KEM_TYPE = "UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)"
+_RECORD_TYPE = "UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)"
+_PQZ_KEY_TYPE = "UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)"
+_PQZ_KEY_VERSION_TYPE = "UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)"
 # encodeType of each portable struct: primary, then the referenced types sorted by name
 PORTABLE_TYPES = {
-    'UAKemRecord': _KEM_TYPE,
-    'UAPortableRecord': _RECORD_TYPE + _KEM_TYPE,
-    'UARegistration': 'UARegistration(UAPortableRecord record,bytes32 pqzPopHash)' + _KEM_TYPE + _RECORD_TYPE,
-    'UAPqzKey': _PQZ_KEY_TYPE,
-    'UAPqzKeyRecord': 'UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)' + _PQZ_KEY_TYPE,
-    'UAPqzKeyVersion': _PQZ_KEY_VERSION_TYPE,
-    'UAPqzKeyVersionRecord': 'UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)' + _PQZ_KEY_VERSION_TYPE,
-    'UAMembership': 'UAMembership(bytes32 ua,bytes32 member)',
+    "UAKemRecord": _KEM_TYPE,
+    "UAPortableRecord": _RECORD_TYPE + _KEM_TYPE,
+    "UARegistration": "UARegistration(UAPortableRecord record,bytes32 pqzPopHash)" + _KEM_TYPE + _RECORD_TYPE,
+    "UAPqzKey": _PQZ_KEY_TYPE,
+    "UAPqzKeyRecord": "UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)" + _PQZ_KEY_TYPE,
+    "UAPqzKeyVersion": _PQZ_KEY_VERSION_TYPE,
+    "UAPqzKeyVersionRecord": "UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)" + _PQZ_KEY_VERSION_TYPE,
+    "UAMembership": "UAMembership(bytes32 ua,bytes32 member)",
     # CTR-UA-44 (TODO 3ze): an msig's structure update on one registry
-    'UAMsigUpdate': 'UAMsigUpdate(bytes32 ua,bytes32 chainUid,address registry,uint64 version,uint16 threshold,UAMsigMember[] members,'
-                    'uint256 enabled,uint64 validUntilBlock)UAMsigMember(uint16 kind,bytes32 id,uint16 weight)',
-    'UAMsigMember': 'UAMsigMember(uint16 kind,bytes32 id,uint16 weight)',
+    "UAMsigUpdate": "UAMsigUpdate(bytes32 ua,bytes32 chainUid,address registry,uint64 version,uint16 threshold,UAMsigMember[] members,"
+    "uint256 enabled,uint64 validUntilBlock)UAMsigMember(uint16 kind,bytes32 id,uint16 weight)",
+    "UAMsigMember": "UAMsigMember(uint16 kind,bytes32 id,uint16 weight)",
 }
 
 
@@ -284,40 +354,40 @@ def portable_typehash(name):
 
 def hash_struct(name, *words):
     """``keccak256(typehash(name) ‖ words)``: every portable field is a 32-byte word or a nested struct hash."""
-    return keccak256(portable_typehash(name), *(_sized(w, 32, 'word') for w in words))
+    return keccak256(portable_typehash(name), *(_sized(w, 32, "word") for w in words))
 
 
 def _typed(struct_hash):
     """``keccak256(0x1901 ‖ DS_P ‖ structHash)``: what ``eth_signTypedData_v4`` returns for a portable record."""
-    return keccak256(b'\x19\x01', PORTABLE_DOMAIN_SEPARATOR, struct_hash)
+    return keccak256(b"\x19\x01", PORTABLE_DOMAIN_SEPARATOR, struct_hash)
 
 
 def kem_record_hash(ua, version, kem_pk):
     """``hashStruct(UAKemRecord{ua, version, scheme = kemPk[0], kemPkHash = keccak256(kemPk)})``: version 0 … 2^64 − 1
     (version 0 = the key given at ``register``, owner 2026-10-31), ``kem_pk`` = scheme byte ‖ key. No key (version 0, no
     key) is the zero record ``UAKemRecord{ua, 0, 0, 0}`` (TS-D2: a present record has scheme ≠ 0)."""
-    pk = _bytes(kem_pk) if kem_pk is not None else b''
+    pk = _bytes(kem_pk) if kem_pk is not None else b""
     if version == 0 and not pk:
-        return hash_struct('UAKemRecord', ua, bytes(32), bytes(32), bytes(32))
+        return hash_struct("UAKemRecord", ua, bytes(32), bytes(32), bytes(32))
     if not 0 <= version < 2**64:
-        raise UAError('UAKemVersion', str(version))
+        raise UAError("UAKemVersion", str(version))
     if pk and pk[0] != KEM_SCHEME_MLKEM1024_X25519:
-        raise UAError('UAKemScheme', str(pk[0]))
+        raise UAError("UAKemScheme", str(pk[0]))
     if len(pk) != KEM_PK_LENGTH:
-        raise UAError('UAKemKeyLength', str(len(pk)))
-    return hash_struct('UAKemRecord', ua, _word(version), _word(pk[0]), keccak256(pk))
+        raise UAError("UAKemKeyLength", str(len(pk)))
+    return hash_struct("UAKemRecord", ua, _word(version), _word(pk[0]), keccak256(pk))
 
 
 def kem_record_digest(ua, version, kem_pk):
     """The typed ``UAKemRecord`` digest ``setKemKey`` signs (versions ≥ 1: version 0 is the ``register`` key, UAKemVersion here)."""
     if version == 0:
-        raise UAError('UAKemVersion', '0')
+        raise UAError("UAKemVersion", "0")
     return _typed(kem_record_hash(ua, version, kem_pk))
 
 
 def portable_record_hash(ua, kind, pqz_key_hash, kem_record_hash_):
     """``hashStruct(UAPortableRecord{ua, kind, pqzKeyHash, kem})``; ``kem_record_hash_`` = kem_record_hash (the zero record's when none)."""
-    return hash_struct('UAPortableRecord', ua, _word(kind), pqz_key_hash, kem_record_hash_)
+    return hash_struct("UAPortableRecord", ua, _word(kind), pqz_key_hash, kem_record_hash_)
 
 
 def portable_record_digest(ua, kind, pqz_key_hash, kem_record_hash_):
@@ -328,14 +398,16 @@ def portable_record_digest(ua, kind, pqz_key_hash, kem_record_hash_):
 def registration_digest(ua, kind, pqz_key_hash, kem_record_hash_, pqz_pop_hash):
     """The typed ``UARegistration{record, pqzPopHash}``: what the signer's pop signs under ``ua_message(kind, POP_V2, ·)``
     (and a native msig member signs itself, TS-D4)."""
-    return _typed(hash_struct('UARegistration', portable_record_hash(ua, kind, pqz_key_hash, kem_record_hash_), pqz_pop_hash))
+    return _typed(
+        hash_struct("UARegistration", portable_record_hash(ua, kind, pqz_key_hash, kem_record_hash_), pqz_pop_hash)
+    )
 
 
 def kem_record_message(kind, ua, version, kem_pk):
     """What the UA signs for a KEM record: ``ua_message(kind, PURPOSE_KEM, kem_record_digest)``; a KEM holder only (UAKemHolder)."""
     if not is_kem_holder(kind):
-        raise UAError('UAKemHolder', f'0x{kind:04x} may not hold a KEM key')
-    return ua_message(kind, purpose_tag('kem'), kem_record_digest(ua, version, kem_pk))
+        raise UAError("UAKemHolder", f"0x{kind:04x} may not hold a KEM key")
+    return ua_message(kind, purpose_tag("kem"), kem_record_digest(ua, version, kem_pk))
 
 
 def _holds(kind, key_data, inner=None):
@@ -352,7 +424,7 @@ def is_kem_holder(kind):
 
 def _pqz_key_hash_of(pqz_key):
     if len(_bytes(pqz_key)) not in PQZ_KEY_LENGTHS:
-        raise UAError('UAKeyData', 'PQZ key length')
+        raise UAError("UAKeyData", "PQZ key length")
     return key_hash_of(0x0142, pqz_key)
 
 
@@ -362,26 +434,28 @@ def _proof_hash_of(pqz_pop, pqz_pop_hash):
     proof = keccak256(_bytes(pqz_pop)) if pqz_pop is not None and len(pqz_pop) > 0 else None
     given = bytes(pqz_pop_hash) if pqz_pop_hash is not None and len(pqz_pop_hash) > 0 else None
     if given is not None and len(given) != 32:
-        raise UAError('UAPqzPopHash', 'hash must be 32 bytes')
+        raise UAError("UAPqzPopHash", "hash must be 32 bytes")
     if given is not None and not any(given):
         given = None
     if proof is not None and given is not None and proof != given:
-        raise UAError('UAPqzPopHash', 'proof and hash differ')
+        raise UAError("UAPqzPopHash", "proof and hash differ")
     h = proof or given or bytes(32)
-    if h == keccak256(b''):
-        raise UAError('UAPqzPopHash', 'empty proof')
+    if h == keccak256(b""):
+        raise UAError("UAPqzPopHash", "empty proof")
     return h
 
 
-HolderPop = namedtuple('HolderPop', 'pqz_key_hash pqz_pop_hash kem_record_hash portable_record_digest registration_digest '
-                                    'message member_digest')
+HolderPop = namedtuple(
+    "HolderPop",
+    "pqz_key_hash pqz_pop_hash kem_record_hash portable_record_digest registration_digest message member_digest",
+)
 HolderPop.__doc__ = """``kem_record_hash`` is hashStruct(UAKemRecord) (the zero record's when none), ``portable_record_digest`` the typed
 UAPortableRecord, ``registration_digest`` the typed UARegistration. ``member_digest`` (msig only, else None) is
 ``member_digest(ua, message)``: what each derived member signs under ``member``; a native member signs
 ``registration_digest`` itself (eth_signTypedData_v4, TS-D4)."""
 
 
-def holder_pop_message(kind, ua, key_data=b'', pqz_key=None, pqz_pop=None, pqz_pop_hash=None, kem_pk=None, inner=None):
+def holder_pop_message(kind, ua, key_data=b"", pqz_key=None, pqz_pop=None, pqz_pop_hash=None, kem_pk=None, inner=None):
     """The portable PoP of a registration (UA-8 P1, P2): a HolderPop. ``pqz_key`` with its proof ``pqz_pop`` (or only its hash
     ``pqz_pop_hash``) and the initial KEM key ``kem_pk`` (its record is always version 0, owner 2026-10-31); None / b'' = absent. Only holders
     carry them (UAPqzHolder: an msig needs ``key_data`` to show it is PQ-eligible; UAKemHolder: a single PQ kind only, never an msig); a PQZ key always comes with
@@ -390,18 +464,25 @@ def holder_pop_message(kind, ua, key_data=b'', pqz_key=None, pqz_pop=None, pqz_p
         pqz_key = None
     kem = kem_pk if kem_pk is not None and len(kem_pk) else None
     if pqz_key is not None and not _holds(kind, key_data, inner):
-        raise UAError('UAPqzHolder', f'0x{kind:04x} may not hold a PQZ key')
+        raise UAError("UAPqzHolder", f"0x{kind:04x} may not hold a PQZ key")
     if kem is not None and not is_kem_holder(kind):
-        raise UAError('UAKemHolder', f'0x{kind:04x} may not hold a KEM key')
+        raise UAError("UAKemHolder", f"0x{kind:04x} may not hold a KEM key")
     pop_hash = _proof_hash_of(pqz_pop, pqz_pop_hash)
     if (pqz_key is not None) != any(pop_hash):
-        raise UAError('UAPqzPopHash', 'a PQZ key comes with its proof hash and only with it')
+        raise UAError("UAPqzPopHash", "a PQZ key comes with its proof hash and only with it")
     kh = _pqz_key_hash_of(pqz_key) if pqz_key is not None else bytes(32)
     kr = kem_record_hash(ua, 0, kem)
     reg = registration_digest(ua, kind, kh, kr, pop_hash)
     msg = ua_message(kind, POP_V2_TAG, reg)
-    return HolderPop(kh, pop_hash, kr, portable_record_digest(ua, kind, kh, kr), reg, msg,
-                     member_digest(ua, msg) if kind == 0x0120 else None)
+    return HolderPop(
+        kh,
+        pop_hash,
+        kr,
+        portable_record_digest(ua, kind, kh, kr),
+        reg,
+        msg,
+        member_digest(ua, msg) if kind == 0x0120 else None,
+    )
 
 
 def pqz_reg_message(kind, ua, pqz_key, kem_pk=None):
@@ -413,32 +494,44 @@ def pqz_reg_message(kind, ua, pqz_key, kem_pk=None):
 
 def pqz_key_digest(ua, pqz_key_hash):
     """The typed ``UAPqzKey{ua, pqzKeyHash}``: what a later PQZ key's R_REG proves over (no proof hash: no cycle)."""
-    return _typed(hash_struct('UAPqzKey', ua, pqz_key_hash))
+    return _typed(hash_struct("UAPqzKey", ua, pqz_key_hash))
 
 
 def pqz_key_record_digest(ua, pqz_key_hash, pqz_pop_hash):
     """The typed ``UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}``: what ``setPqzKey``'s signature signs under
     ``ua_message(kind, PURPOSE_PQZ_KEY, ·)`` (and a native msig member signs itself, TS-D4)."""
-    return _typed(hash_struct('UAPqzKeyRecord', hash_struct('UAPqzKey', ua, pqz_key_hash), pqz_pop_hash))
+    return _typed(hash_struct("UAPqzKeyRecord", hash_struct("UAPqzKey", ua, pqz_key_hash), pqz_pop_hash))
 
 
 def membership_digest(ua, member):
     """The typed ``UAMembership{ua, member}``: what ``member`` signs to accept its slot in the ``msig`` ``ua`` (CTR-UA-37): a native
     member this digest itself, a derived member ``member_digest(ua, ua_message(MSIG, PURPOSE_MEMBERSHIP, ·))`` under ``member``."""
-    return _typed(hash_struct('UAMembership', ua, member))
+    return _typed(hash_struct("UAMembership", ua, member))
 
 
 def msig_update_digest(ua, chain_uid, registry, version, threshold, members, enabled, valid_until_block):
     """CTR-UA-44: the typed ``UAMsigUpdate{ua, chainUid, registry, version, threshold, members, enabled, validUntilBlock}``, ``members``
     ``(kind, id, weight)`` tuples hashed as an EIP-712 array of ``UAMsigMember``, ``enabled`` the uint256 bitmap (bit i = slot i): what a
     quorum of the stored structure signs for ``updateMsig`` on that one registry, under ``ua_message(MSIG, PURPOSE_MSIG_UPDATE, ·)``."""
-    hs = b''.join(hash_struct('UAMsigMember', _word(k), i, _word(w)) for k, i, w in members)
-    return _typed(hash_struct('UAMsigUpdate', ua, chain_uid, _address_word(registry), _word(version), _word(threshold), keccak256(hs),
-                              _word(enabled), _word(valid_until_block)))
+    hs = b"".join(hash_struct("UAMsigMember", _word(k), i, _word(w)) for k, i, w in members)
+    return _typed(
+        hash_struct(
+            "UAMsigUpdate",
+            ua,
+            chain_uid,
+            _address_word(registry),
+            _word(version),
+            _word(threshold),
+            keccak256(hs),
+            _word(enabled),
+            _word(valid_until_block),
+        )
+    )
 
 
-PqzKeyRecord = namedtuple('PqzKeyRecord', 'pqz_key_hash pqz_pop_hash pqz_key_digest record_digest message pqz_reg_message '
-                                          'member_digest')
+PqzKeyRecord = namedtuple(
+    "PqzKeyRecord", "pqz_key_hash pqz_pop_hash pqz_key_digest record_digest message pqz_reg_message member_digest"
+)
 
 
 def pqz_key_record_message(kind, ua, key_data, pqz_key, pqz_pop=None, pqz_pop_hash=None, already_set=False, inner=None):
@@ -446,102 +539,126 @@ def pqz_key_record_message(kind, ua, key_data, pqz_key, pqz_pop=None, pqz_pop_ha
     UA signs, ``pqz_reg_message`` what the key's R_REG proves over; holder rules of holder_pop_message; the key and its
     proof hash are both required. ``already_set``: the registration has a key (UAPqzKeySet)."""
     if not _holds(kind, key_data, inner):
-        raise UAError('UAPqzHolder', f'0x{kind:04x} may not hold a PQZ key')
+        raise UAError("UAPqzHolder", f"0x{kind:04x} may not hold a PQZ key")
     if already_set:
-        raise UAError('UAPqzKeySet', 'write-once')
+        raise UAError("UAPqzKeySet", "write-once")
     kh = _pqz_key_hash_of(pqz_key)
     pop_hash = _proof_hash_of(pqz_pop, pqz_pop_hash)
     if not any(pop_hash):
-        raise UAError('UAPqzPopHash', 'a PQZ key record needs its proof hash')
+        raise UAError("UAPqzPopHash", "a PQZ key record needs its proof hash")
     kd = pqz_key_digest(ua, kh)
     rd = pqz_key_record_digest(ua, kh, pop_hash)
-    tag = purpose_tag('pqz-key')
+    tag = purpose_tag("pqz-key")
     msg = ua_message(kind, tag, rd)
-    return PqzKeyRecord(kh, pop_hash, kd, rd, msg, ua_message(0x0142, tag, kd), member_digest(ua, msg) if kind == 0x0120 else None)
+    return PqzKeyRecord(
+        kh, pop_hash, kd, rd, msg, ua_message(0x0142, tag, kd), member_digest(ua, msg) if kind == 0x0120 else None
+    )
 
 
 def pqz_key_version_digest(ua, version, pqz_key_hash):
     """Group 3g: the typed ``UAPqzKeyVersion{ua, version, pqzKeyHash}``, what version v >= 1's R_REG proves over."""
-    return _typed(hash_struct('UAPqzKeyVersion', ua, _word(version), pqz_key_hash))
+    return _typed(hash_struct("UAPqzKeyVersion", ua, _word(version), pqz_key_hash))
 
 
 def pqz_key_version_record_digest(ua, version, pqz_key_hash, pqz_pop_hash):
     """Group 3g: the typed ``UAPqzKeyVersionRecord{UAPqzKeyVersion{ua, version, pqzKeyHash}, pqzPopHash}``, what the UA signs for
     version v >= 1 under ``ua_message(kind, PURPOSE_PQZ_KEY, ·)``."""
-    return _typed(hash_struct('UAPqzKeyVersionRecord', hash_struct('UAPqzKeyVersion', ua, _word(version), pqz_key_hash), pqz_pop_hash))
+    return _typed(
+        hash_struct(
+            "UAPqzKeyVersionRecord", hash_struct("UAPqzKeyVersion", ua, _word(version), pqz_key_hash), pqz_pop_hash
+        )
+    )
 
 
-PqzKeyVersionRecord = namedtuple('PqzKeyVersionRecord', 'pqz_key_hash pqz_pop_hash version_digest record_digest message pqz_reg_message '
-                                 'member_digest')
+PqzKeyVersionRecord = namedtuple(
+    "PqzKeyVersionRecord",
+    "pqz_key_hash pqz_pop_hash version_digest record_digest message pqz_reg_message member_digest",
+)
 
 
-def pqz_key_version_record_message(kind, ua, key_data, version, pqz_key, pqz_pop=None, pqz_pop_hash=None, stored=(), inner=None):
+def pqz_key_version_record_message(
+    kind, ua, key_data, version, pqz_key, pqz_pop=None, pqz_pop_hash=None, stored=(), inner=None
+):
     """Group 3g (KV-1): PQZ key version ``version`` >= 1 of ``setPqzKey(ua, version, ...)``: a PqzKeyVersionRecord. ``stored``: the UA's
     stored versions as ``(version, pqz_key_hash)`` (the chain's ``pqzKeyAt``), read first: version 0 (UAPqzKeySet: a new key gets a new
     version), a version other than latest + 1 or no version 0 (UAPqzKeyVersion), a key a stored version holds (UAKeyInUse)."""
     if not _holds(kind, key_data, inner):
-        raise UAError('UAPqzHolder', f'0x{kind:04x} may not hold a PQZ key')
+        raise UAError("UAPqzHolder", f"0x{kind:04x} may not hold a PQZ key")
     if not 0 <= version < 1 << 64:
-        raise UAError('UAPqzKeyVersion', str(version))
+        raise UAError("UAPqzKeyVersion", str(version))
     if version == 0:
-        raise UAError('UAPqzKeySet', 'version 0 is write-once: a new key gets a new version')
+        raise UAError("UAPqzKeySet", "version 0 is write-once: a new key gets a new version")
     versions = [v for v, _ in stored]
     if 0 not in versions or version != max(versions) + 1:
-        raise UAError('UAPqzKeyVersion', str(version))
+        raise UAError("UAPqzKeyVersion", str(version))
     kh = _pqz_key_hash_of(pqz_key)
     if any(bytes(h) == kh for _, h in stored):
-        raise UAError('UAKeyInUse', 'a stored version holds this key')
+        raise UAError("UAKeyInUse", "a stored version holds this key")
     pop_hash = _proof_hash_of(pqz_pop, pqz_pop_hash)
     if not any(pop_hash):
-        raise UAError('UAPqzPopHash', 'a PQZ key record needs its proof hash')
+        raise UAError("UAPqzPopHash", "a PQZ key record needs its proof hash")
     vd = pqz_key_version_digest(ua, version, kh)
     rd = pqz_key_version_record_digest(ua, version, kh, pop_hash)
-    tag = purpose_tag('pqz-key')
+    tag = purpose_tag("pqz-key")
     msg = ua_message(kind, tag, rd)
-    return PqzKeyVersionRecord(kh, pop_hash, vd, rd, msg, ua_message(0x0142, tag, vd), member_digest(ua, msg) if kind == 0x0120 else None)
+    return PqzKeyVersionRecord(
+        kh, pop_hash, vd, rd, msg, ua_message(0x0142, tag, vd), member_digest(ua, msg) if kind == 0x0120 else None
+    )
 
 
 def is_portable_purpose(purpose_tag_bytes):
     """POP_V2, KEM, PQZ_KEY: the only purposes where a code-less native msig member signs the record's typed digest itself
     (eth_signTypedData_v4, 65-byte r ‖ s ‖ v; a contract member answers ERC-1271 over it; TS-D4)."""
-    return bytes(purpose_tag_bytes) in (POP_V2_TAG, purpose_tag('kem'), purpose_tag('pqz-key'), purpose_tag('membership'))
+    return bytes(purpose_tag_bytes) in (
+        POP_V2_TAG,
+        purpose_tag("kem"),
+        purpose_tag("pqz-key"),
+        purpose_tag("membership"),
+    )
 
 
 def _address_word(a):
-    return bytes(12) + _sized(a, 20, 'registry')
+    return bytes(12) + _sized(a, 20, "registry")
 
 
 def ua_auth_domain_separator(generation, chain_id, registry, chain_uid):
-    return keccak256(DOMAIN_TYPEHASH, NAME_HASH, keccak256(str(int(generation)).encode()), int(chain_id).to_bytes(32, 'big'),
-                     _address_word(registry), _sized(chain_uid, 32, 'chainUid'))
+    return keccak256(
+        DOMAIN_TYPEHASH,
+        NAME_HASH,
+        keccak256(str(int(generation)).encode()),
+        int(chain_id).to_bytes(32, "big"),
+        _address_word(registry),
+        _sized(chain_uid, 32, "chainUid"),
+    )
 
 
 def ua_auth_digest(generation, chain_id, registry, chain_uid, ua, purpose, digest):
     """EIP-712 digest of ``UAAuth(ua, purpose, digest)`` under the registry's domain: what native signers sign,
     except that under the portable purposes (``is_portable_purpose``) a code-less native msig member signs the
     record's typed digest instead (CTR-MTX-14, TS-D4)."""
-    s = keccak256(UAAUTH_TYPEHASH, _sized(ua, 32, 'ua'), _sized(purpose, 32, 'purposeTag'), _sized(digest, 32, 'digest'))
-    return keccak256(b'\x19\x01', ua_auth_domain_separator(generation, chain_id, registry, chain_uid), s)
+    s = keccak256(
+        UAAUTH_TYPEHASH, _sized(ua, 32, "ua"), _sized(purpose, 32, "purposeTag"), _sized(digest, 32, "digest")
+    )
+    return keccak256(b"\x19\x01", ua_auth_domain_separator(generation, chain_id, registry, chain_uid), s)
 
 
 def member_digest(structure_ua, ua_msg):
-    return keccak256(_sized(structure_ua, 32, 'structureUa'), _sized(ua_msg, 32, 'uaMsg'))
+    return keccak256(_sized(structure_ua, 32, "structureUa"), _sized(ua_msg, 32, "uaMsg"))
 
 
-_ID = re.compile(r'0x([0-9a-fA-F]{40}|[0-9a-fA-F]{64})')
+_ID = re.compile(r"0x([0-9a-fA-F]{40}|[0-9a-fA-F]{64})")
 
 
 def canonical_id(text):
     """Lower-case hex; a 32-byte id with the top 96 bits zero is written as its 20-byte native id (CTR-UA-03)."""
     m = _ID.fullmatch(text) if isinstance(text, str) else None
     if not m:
-        raise UAError('UAIdFormat', repr(text))
+        raise UAError("UAIdFormat", repr(text))
     h = m.group(1).lower()
-    return '0x' + (h[24:] if len(h) == 64 and h.startswith('0' * 24) else h)
+    return "0x" + (h[24:] if len(h) == 64 and h.startswith("0" * 24) else h)
 
 
-
-_ID32 = re.compile(r'0x([0-9a-fA-F]{64})')
+_ID32 = re.compile(r"0x([0-9a-fA-F]{64})")
 
 
 def id_display(id, kind=0):
@@ -550,16 +667,16 @@ def id_display(id, kind=0):
     the id's registry kind (0 = none known: refused, never an address). ``id`` is ``0x`` + 64 hex digits."""
     m = _ID32.fullmatch(id) if isinstance(id, str) else None
     if not m:
-        raise UAError('UAIdFormat', repr(id))
+        raise UAError("UAIdFormat", repr(id))
     h = m.group(1).lower()
-    if h.startswith('0' * 24):
+    if h.startswith("0" * 24):
         a = h[24:]
         d = keccak256(a.encode()).hex()
-        return '0x' + ''.join(c.upper() if int(d[i], 16) >= 8 else c for i, c in enumerate(a))
+        return "0x" + "".join(c.upper() if int(d[i], 16) >= 8 else c for i, c in enumerate(a))
     k = kind_info(kind)
     if k[2]:
-        raise UAError('UAKindNotDerived', k[1])
-    return 'urn:scaas:ua:v1:%s:%s' % (k[1], h)
+        raise UAError("UAKindNotDerived", k[1])
+    return "urn:scaas:ua:v1:%s:%s" % (k[1], h)
 
 
 def msig_pqz_eligible(key_data, inner=None):
@@ -567,31 +684,32 @@ def msig_pqz_eligible(key_data, inner=None):
     0x0130-0x0135, or it is an msig that is PQ-eligible itself. ``inner``: an msig member's key data by its 0x-hex id, the record's; none,
     or an inner that holds an msig (two levels only), is UAMemberUnknown: the key data alone does not show it."""
     d = _bytes(key_data)
-    _need(len(d) >= 4 and len(d) == 4 + 36 * int.from_bytes(d[2:4], 'big'), 'length')
+    _need(len(d) >= 4 and len(d) == 4 + 36 * int.from_bytes(d[2:4], "big"), "length")
 
     def pq(o):
-        k = int.from_bytes(d[o:o + 2], 'big')
+        k = int.from_bytes(d[o : o + 2], "big")
         if k != 0x0120:
             return 0x0130 <= k <= 0x0135
-        kd = inner(_hx(d[o + 2:o + 34])) if inner else None
+        kd = inner(_hx(d[o + 2 : o + 34])) if inner else None
         if kd is None:
-            raise UAError('UAMemberUnknown', _hx(d[o + 2:o + 34]))
+            raise UAError("UAMemberUnknown", _hx(d[o + 2 : o + 34]))
         return msig_pqz_eligible(kd)
-    classical = sum(int.from_bytes(d[o + 34:o + 36], 'big') for o in range(4, len(d), 36) if not pq(o))
-    return classical < int.from_bytes(d[:2], 'big')
+
+    classical = sum(int.from_bytes(d[o + 34 : o + 36], "big") for o in range(4, len(d), 36) if not pq(o))
+    return classical < int.from_bytes(d[:2], "big")
 
 
 def inner_digest(inner, md):
     """``md_I = member_digest(I, ua_message(MSIG, member, md_U))``: what the members of the inner msig sign for its slot in an outer whose
     member digest is ``md``, purpose ``member`` whatever the outer's."""
-    return member_digest(inner, ua_message(0x0120, purpose_tag('member'), md))
+    return member_digest(inner, ua_message(0x0120, purpose_tag("member"), md))
 
 
 def encode_msig(threshold, members):
     """``u16 threshold ‖ u16 count ‖ count × (u16 kind ‖ bytes32 id ‖ u16 weight)``; members as (kind, id, weight)."""
-    out = threshold.to_bytes(2, 'big') + len(members).to_bytes(2, 'big')
+    out = threshold.to_bytes(2, "big") + len(members).to_bytes(2, "big")
     for kind, member_id, weight in members:
-        out += kind.to_bytes(2, 'big') + _sized(member_id, 32, 'member id') + weight.to_bytes(2, 'big')
+        out += kind.to_bytes(2, "big") + _sized(member_id, 32, "member id") + weight.to_bytes(2, "big")
     return out
 
 
@@ -611,31 +729,31 @@ BLS_R = _bls.curve_order
 
 
 def _int(b):
-    return int.from_bytes(b, 'big')
+    return int.from_bytes(b, "big")
 
 
 def _secp_xy(d):
     x, y = _int(d[:32]), _int(d[32:])
-    _need(x < SECP_P and y < SECP_P, 'range')
-    _need(y * y % SECP_P == (pow(x, 3, SECP_P) + 7) % SECP_P, 'curve')
+    _need(x < SECP_P and y < SECP_P, "range")
+    _need(y * y % SECP_P == (pow(x, 3, SECP_P) + 7) % SECP_P, "curve")
 
 
 def _secp_x(x):
-    _need(x < SECP_P, 'range')
+    _need(x < SECP_P, "range")
     rhs = (pow(x, 3, SECP_P) + 7) % SECP_P
     y = pow(rhs, (SECP_P + 1) // 4, SECP_P)
-    _need(y * y % SECP_P == rhs, 'curve')
+    _need(y * y % SECP_P == rhs, "curve")
 
 
 def _secp_compressed(b):
-    _need(b[0] in (2, 3), 'prefix')
+    _need(b[0] in (2, 3), "prefix")
     _secp_x(_int(b[1:33]))
 
 
 def _p256(xy):
     x, y = _int(xy[:32]), _int(xy[32:64])
-    _need(x < P256_P and y < P256_P, 'range')
-    _need((y * y - (x * x * x - 3 * x + P256_B)) % P256_P == 0, 'curve')
+    _need(x < P256_P and y < P256_P, "range")
+    _need((y * y - (x * x * x - 3 * x + P256_B)) % P256_P == 0, "curve")
 
 
 def _ed_add(p, q):
@@ -646,115 +764,115 @@ def _ed_add(p, q):
 
 
 def _ed25519(b):
-    v = int.from_bytes(b, 'little')
+    v = int.from_bytes(b, "little")
     sign, y = v >> 255, v & ((1 << 255) - 1)
-    _need(y < ED_P, 'range')
+    _need(y < ED_P, "range")
     x2 = (y * y - 1) * pow(ED_D * y * y + 1, -1, ED_P) % ED_P
     x = pow(x2, (ED_P + 3) // 8, ED_P)
     if (x * x - x2) % ED_P:
         x = x * ED_SQRT_M1 % ED_P
-    _need((x * x - x2) % ED_P == 0, 'curve')
-    _need(not (x == 0 and sign), 'sign')
+    _need((x * x - x2) % ED_P == 0, "curve")
+    _need(not (x == 0 and sign), "sign")
     if x & 1 != sign:
         x = ED_P - x
     p = (x, y)
     for _ in range(3):
         p = _ed_add(p, p)
-    _need(p != (0, 1), 'small-order')
+    _need(p != (0, 1), "small-order")
 
 
 def _bn_g1(b):
     x, y = _int(b[:32]), _int(b[32:64])
-    _need(x < BN_P and y < BN_P, 'range')
-    _need(x or y, 'identity')
-    _need((y * y - x * x * x - 3) % BN_P == 0, 'curve')
+    _need(x < BN_P and y < BN_P, "range")
+    _need(x or y, "identity")
+    _need((y * y - x * x * x - 3) % BN_P == 0, "curve")
 
 
 def _bn_g2(b):
-    xi, xr, yi, yr = (_int(b[32 * i:32 * i + 32]) for i in range(4))
-    _need(max(xi, xr, yi, yr) < BN_P, 'range')
-    _need(xi or xr or yi or yr, 'identity')
+    xi, xr, yi, yr = (_int(b[32 * i : 32 * i + 32]) for i in range(4))
+    _need(max(xi, xr, yi, yr) < BN_P, "range")
+    _need(xi or xr or yi or yr, "identity")
     pt = (_bn.FQ2([xr, xi]), _bn.FQ2([yr, yi]), _bn.FQ2.one())  # EIP-197: imaginary part first
-    _need(_bn.is_on_curve(pt, _bn.b2), 'curve')
-    _need(_bn.is_inf(_bn.multiply(pt, BN_R)), 'subgroup')
+    _need(_bn.is_on_curve(pt, _bn.b2), "curve")
+    _need(_bn.is_inf(_bn.multiply(pt, BN_R)), "subgroup")
 
 
 def _bls_fp(b):
-    _need(b[:16] == bytes(16), 'padding')
+    _need(b[:16] == bytes(16), "padding")
     v = _int(b[16:64])
-    _need(v < BLS_P, 'range')
+    _need(v < BLS_P, "range")
     return v
 
 
 def _bls_g1(b):
     x, y = _bls_fp(b[:64]), _bls_fp(b[64:128])
-    _need(x or y, 'identity')
+    _need(x or y, "identity")
     pt = (_bls.FQ(x), _bls.FQ(y), _bls.FQ.one())
-    _need(_bls.is_on_curve(pt, _bls.b), 'curve')
-    _need(_bls.is_inf(_bls.multiply(pt, BLS_R)), 'subgroup')
+    _need(_bls.is_on_curve(pt, _bls.b), "curve")
+    _need(_bls.is_inf(_bls.multiply(pt, BLS_R)), "subgroup")
 
 
 def _bls_g2(b):
-    x0, x1, y0, y1 = (_bls_fp(b[64 * i:64 * i + 64]) for i in range(4))
-    _need(x0 or x1 or y0 or y1, 'identity')
+    x0, x1, y0, y1 = (_bls_fp(b[64 * i : 64 * i + 64]) for i in range(4))
+    _need(x0 or x1 or y0 or y1, "identity")
     pt = (_bls.FQ2([x0, x1]), _bls.FQ2([y0, y1]), _bls.FQ2.one())  # EIP-2537: c0 first
-    _need(_bls.is_on_curve(pt, _bls.b2), 'curve')
-    _need(_bls.is_inf(_bls.multiply(pt, BLS_R)), 'subgroup')
+    _need(_bls.is_on_curve(pt, _bls.b2), "curve")
+    _need(_bls.is_inf(_bls.multiply(pt, BLS_R)), "subgroup")
 
 
 def _u16(d, o):
-    _need(len(d) >= o + 2, 'length')
+    _need(len(d) >= o + 2, "length")
     return (d[o] << 8) | d[o + 1]
 
 
 def _musig2(d, check, size):
     n = _u16(d, size)
-    _need(2 <= n <= 16, 'n')
-    _need(len(d) == size + 2 + n * size, 'length')
+    _need(2 <= n <= 16, "n")
+    _need(len(d) == size + 2 + n * size, "length")
     check(d[:size])
     for i in range(n):
         o = size + 2 + i * size
-        check(d[o:o + size])
+        check(d[o : o + size])
         if i:
-            _need(d[o - size:o] < d[o:o + size], 'order')
+            _need(d[o - size : o] < d[o : o + size], "order")
 
 
 def _frost(d, check, size, order):
     t, n = _u16(d, size), _u16(d, size + 2)
-    _need(2 <= t <= n <= 16, 'threshold')
+    _need(2 <= t <= n <= 16, "threshold")
     per = (t + 1) * size + 32
-    _need(len(d) == size + 4 + n * per, 'length')
+    _need(len(d) == size + 4 + n * per, "length")
     check(d[:size])
     for i in range(n):
         o = size + 4 + i * per
         for j in range(t + 1):  # t commitments, then R_i
-            check(d[o + j * size:o + (j + 1) * size])
-        _need(_int(d[o + (t + 1) * size:o + per]) < order, 'scalar')
+            check(d[o + j * size : o + (j + 1) * size])
+        _need(_int(d[o + (t + 1) * size : o + per]) < order, "scalar")
 
 
 def _msig(d, hedera_native):
     threshold, count = _u16(d, 0), _u16(d, 2)
-    _need(1 <= count <= 16, 'count')
-    _need(len(d) == 4 + 36 * count, 'length')
+    _need(1 <= count <= 16, "count")
+    _need(len(d) == 4 + 36 * count, "length")
     total = 0
     for i in range(count):
         o = 4 + 36 * i
-        kind, member_id, weight = _u16(d, o), d[o + 2:o + 34], _u16(d, o + 34)
-        _need(is_member(kind, hedera_native), 'member-kind')
-        _need(weight >= 1, 'weight')
-        _need(is_native(kind) == (member_id[:12] == bytes(12)), 'member-id')
+        kind, member_id, weight = _u16(d, o), d[o + 2 : o + 34], _u16(d, o + 34)
+        _need(is_member(kind, hedera_native), "member-kind")
+        _need(weight >= 1, "weight")
+        _need(is_native(kind) == (member_id[:12] == bytes(12)), "member-id")
         if i:
-            _need(d[o - 34:o - 2] < member_id, 'order')
+            _need(d[o - 34 : o - 2] < member_id, "order")
         total += weight
-    _need(1 <= threshold <= total, 'threshold')
+    _need(1 <= threshold <= total, "threshold")
 
 
 def _fndsa(d, head, n):
     """head ‖ n × 14-bit h_i, each < q: 0x09, n = 512 (fndsa512); 0x0A, n = 1,024 (fndsa1024)."""
-    _need(d[0] == head, 'header')
-    bits = int.from_bytes(d[1:], 'big')
+    _need(d[0] == head, "header")
+    bits = int.from_bytes(d[1:], "big")
     for i in range(n):
-        _need((bits >> ((len(d) - 1) * 8 - 14 * (i + 1))) & 0x3FFF < 12289, 'coefficient')
+        _need((bits >> ((len(d) - 1) * 8 - 14 * (i + 1))) & 0x3FFF < 12289, "coefficient")
 
 
 def validate_key_data(kind, key_data, hedera_native=False):
@@ -762,7 +880,7 @@ def validate_key_data(kind, key_data, hedera_native=False):
     k = _derived(kind)
     d = _bytes(key_data)
     if k[3]:
-        _need(len(d) in k[3], 'length')
+        _need(len(d) in k[3], "length")
     if kind == 0x0100:
         _p256(d[:64])
     elif kind == 0x0101:
@@ -801,8 +919,9 @@ def validate_key_data(kind, key_data, hedera_native=False):
 # ----- the registry's explicit arguments (typed-signing R1 / R1b: TS-D10 … TS-D13; owner KEM rulings 2026-10-31) -----
 # Named JSON as clientkeys registrationArgs and the node job API: bytes as 0x-hex, numbers as ints.
 
+
 def _hx(b):
-    return '0x' + bytes(b).hex()
+    return "0x" + bytes(b).hex()
 
 
 def _hb(h):
@@ -810,25 +929,31 @@ def _hb(h):
 
 
 _ZW = _hx(bytes(32))
-REGISTER_CALLDATA_LIMIT = ((1 << 24) - 15_000) // 64  # the largest calldata whose EIP-7976 floor fits the 2^24 cap: 261,909 B
+REGISTER_CALLDATA_LIMIT = (
+    (1 << 24) - 15_000
+) // 64  # the largest calldata whose EIP-7976 floor fits the 2^24 cap: 261,909 B
 
 
 def kem_key_of(kem_pk):
     """``KemKey{scheme, mlkemEk, x25519}`` (TS-D11) of ``kem_pk = scheme ‖ ek ‖ x25519``; None / b'' = the empty key; a
     malformed key is refused as the registry does (``kem_record_hash``: UAKemScheme, UAKemKeyLength)."""
-    pk = _bytes(kem_pk) if kem_pk is not None else b''
+    pk = _bytes(kem_pk) if kem_pk is not None else b""
     if not pk:
-        return {'scheme': 0, 'mlkemEk': '0x', 'x25519': _ZW}
+        return {"scheme": 0, "mlkemEk": "0x", "x25519": _ZW}
     kem_record_hash(bytes(32), 0, pk)
-    return {'scheme': pk[0], 'mlkemEk': _hx(pk[1:-32]), 'x25519': _hx(pk[-32:])}
+    return {"scheme": pk[0], "mlkemEk": _hx(pk[1:-32]), "x25519": _hx(pk[-32:])}
 
 
 def msig_structure(key_data):
     """CTR-UA-09 key data as ``MsigStructure{threshold, members: MsigMember{kind, id, weight}[]}`` (TS-D10)."""
     d = _bytes(key_data)
-    _need(len(d) >= 4 and len(d) == 4 + 36 * _u16(d, 2), 'length')
-    return {'threshold': _u16(d, 0), 'members': [{'kind': _u16(d, o), 'id': _hx(d[o + 2:o + 34]), 'weight': _u16(d, o + 34)}
-                                                 for o in range(4, len(d), 36)]}
+    _need(len(d) >= 4 and len(d) == 4 + 36 * _u16(d, 2), "length")
+    return {
+        "threshold": _u16(d, 0),
+        "members": [
+            {"kind": _u16(d, o), "id": _hx(d[o + 2 : o + 34]), "weight": _u16(d, o + 34)} for o in range(4, len(d), 36)
+        ],
+    }
 
 
 def typed_key(kind, key_data):
@@ -836,35 +961,43 @@ def typed_key(kind, key_data):
     ``FrostKey{groupKey, threshold, members: FrostMember{commitments, r, z}[]}`` (0x0111 / 0x0113) of packed key data (points
     of 33 B on secp256k1, 64 B on bn254); None for any other kind. The registry assembles the same bytes (same id)."""
     d = _bytes(key_data)
-    at = lambda o, n: _hx(d[o:o + n])
+    at = lambda o, n: _hx(d[o : o + n])
     if kind == 0x0100:
-        _need(len(d) == 96, 'length')
-        return {'x': at(0, 32), 'y': at(32, 32), 'rpIdHash': at(64, 32)}
+        _need(len(d) == 96, "length")
+        return {"x": at(0, 32), "y": at(32, 32), "rpIdHash": at(64, 32)}
     s = {0x0110: 33, 0x0111: 33, 0x0112: 64, 0x0113: 64}.get(kind)
     if s is None:
         return None
     if kind in (0x0110, 0x0112):
         n = _u16(d, s)
-        _need(len(d) == s + 2 + n * s, 'length')
-        return {'aggKey': at(0, s), 'memberKeys': [at(s + 2 + i * s, s) for i in range(n)]}
+        _need(len(d) == s + 2 + n * s, "length")
+        return {"aggKey": at(0, s), "memberKeys": [at(s + 2 + i * s, s) for i in range(n)]}
     t, n = _u16(d, s), _u16(d, s + 2)
     per = (t + 1) * s + 32
-    _need(len(d) == s + 4 + n * per, 'length')
-    return {'groupKey': at(0, s), 'threshold': t, 'members': [
-        {'commitments': [at(o + j * s, s) for j in range(t)], 'r': at(o + t * s, s), 'z': at(o + (t + 1) * s, 32)}
-        for o in (s + 4 + i * per for i in range(n))]}
+    _need(len(d) == s + 4 + n * per, "length")
+    return {
+        "groupKey": at(0, s),
+        "threshold": t,
+        "members": [
+            {"commitments": [at(o + j * s, s) for j in range(t)], "r": at(o + t * s, s), "z": at(o + (t + 1) * s, 32)}
+            for o in (s + 4 + i * per for i in range(n))
+        ],
+    }
 
 
 def _member_sigs(members):
-    return [{'index': int(i), 'members': [{'index': int(j), 'sig': _hx(x)} for j, x in inner], 'sig': _hx(s or b'')} for i, inner, s in members]
+    return [
+        {"index": int(i), "members": [{"index": int(j), "sig": _hx(x)} for j, x in inner], "sig": _hx(s or b"")}
+        for i, inner, s in members
+    ]
 
 
-def ua_sig(key_data=b'', signature=b'', members=()):
+def ua_sig(key_data=b"", signature=b"", members=()):
     """``UASig{keyData, signature, members}`` (TS-D12) of ``requireAuthorized`` / ``setKemKey`` / ``setPqzKey``: native —
     ``signature``; a derived single key — ``key_data`` (empty for the stored kinds) + ``signature``; an msig — ``members`` as
     (index, inner, sig) tuples: a signing member's ``inner`` is empty; an msig member's holds its (index, sig) slots, ``sig`` empty.
     A portable record's signature never has ``key_data``."""
-    return {'keyData': _hx(key_data or b''), 'signature': _hx(signature or b''), 'members': _member_sigs(members)}
+    return {"keyData": _hx(key_data or b""), "signature": _hx(signature or b""), "members": _member_sigs(members)}
 
 
 def encode_inner_sigs(members):
@@ -874,48 +1007,57 @@ def encode_inner_sigs(members):
     for t in tails:
         heads.append(_word(at))
         at += len(t)
-    return _word(32) + _word(len(tails)) + b''.join(heads) + b''.join(tails)
+    return _word(32) + _word(len(tails)) + b"".join(heads) + b"".join(tails)
 
 
 def replayed_member_sig(key_data, index, stored):
     """The (index, inner, sig) slot a copy sends to ``acceptMembership`` from the bytes of its ``UAMemberSig`` alone, which hash to ``memberSigHashOf(ua, index)`` (CTR-UA-37): an msig slot's
     stored bytes are ``abi.encode(InnerSig[])``, canonical, at most 16; a signing slot's its sig. UAUnauthorized otherwise."""
-    members, b = msig_structure(key_data)['members'], bytes(stored)
-    refused = UAError('UAUnauthorized', f'slot {index}')
+    members, b = msig_structure(key_data)["members"], bytes(stored)
+    refused = UAError("UAUnauthorized", f"slot {index}")
     if not 0 <= index < len(members):
         raise refused
-    if members[index]['kind'] != 0x0120:
+    if members[index]["kind"] != 0x0120:
         return index, [], b
-    w = lambda o: int.from_bytes(b[o:o + 32], 'big')
+    w = lambda o: int.from_bytes(b[o : o + 32], "big")
     if len(b) < 64 or w(0) != 32 or w(32) > 16:
         raise refused
     inner = []
     for j in range(w(32)):
         u = 64 + w(64 + 32 * j)
         o = u + w(u + 32) + 32
-        inner.append((w(u), b[o:o + w(o - 32)]))
+        inner.append((w(u), b[o : o + w(o - 32)]))
     if any(i > 0xFFFF for i, _ in inner) or encode_inner_sigs(inner) != b:
         raise refused
-    return index, inner, b''
+    return index, inner, b""
 
 
 def set_kem_key_args(ua, version, kem_pk, sig):
     """``setKemKey(ua, version, KemKey, UASig)``; ``sig`` a ua_sig (empty for the version-0 hash-commit fill); no key is no call."""
     if not kem_pk:
-        raise UAError('UAKemKeyLength', '0')
-    return {'ua': _hx(_sized(ua, 32, 'ua')), 'version': int(version), 'kem': kem_key_of(kem_pk), 'sig': sig}
+        raise UAError("UAKemKeyLength", "0")
+    return {"ua": _hx(_sized(ua, 32, "ua")), "version": int(version), "kem": kem_key_of(kem_pk), "sig": sig}
 
 
 def set_pqz_key_args(ua, pqz_key, pqz_pop_hash, sig):
     """``setPqzKey(ua, pqzKey, pqzPopHash, UASig)``."""
-    return {'ua': _hx(_sized(ua, 32, 'ua')), 'pqzKey': _hx(_bytes(pqz_key)), 'pqzPopHash': _hx(_sized(pqz_pop_hash, 32, 'pqzPopHash')),
-            'sig': sig}
+    return {
+        "ua": _hx(_sized(ua, 32, "ua")),
+        "pqzKey": _hx(_bytes(pqz_key)),
+        "pqzPopHash": _hx(_sized(pqz_pop_hash, 32, "pqzPopHash")),
+        "sig": sig,
+    }
 
 
 def set_pqz_key_version_args(ua, version, pqz_key, pqz_pop_hash, sig):
     """Group 3g: ``setPqzKey(ua, version, pqzKey, pqzPopHash, UASig)``; version 0 is set_pqz_key_args' row."""
-    return {'ua': _hx(_sized(ua, 32, 'ua')), 'version': version, 'pqzKey': _hx(_bytes(pqz_key)),
-            'pqzPopHash': _hx(_sized(pqz_pop_hash, 32, 'pqzPopHash')), 'sig': sig}
+    return {
+        "ua": _hx(_sized(ua, 32, "ua")),
+        "version": version,
+        "pqzKey": _hx(_bytes(pqz_key)),
+        "pqzPopHash": _hx(_sized(pqz_pop_hash, 32, "pqzPopHash")),
+        "sig": sig,
+    }
 
 
 def _tail(h):  # a `bytes` tail: length word + data padded to 32
@@ -927,45 +1069,76 @@ def _bytes_arr(xs):  # a `bytes[]` tail
 
 
 def _kem_len(k):
-    return 96 + _tail(k['mlkemEk'])
+    return 96 + _tail(k["mlkemEk"])
 
 
 def _attrs_len(a):
-    return 128 + _tail(a['pqzKey']) + _kem_len(a['kem'])
+    return 128 + _tail(a["pqzKey"]) + _kem_len(a["kem"])
 
 
 def _member_sigs_len(ms):
-    inner = lambda l: 32 + sum(32 + 64 + _tail(x['sig']) for x in l)
-    return 32 + sum(32 + 96 + inner(m['members']) + _tail(m['sig']) for m in ms)
+    inner = lambda l: 32 + sum(32 + 64 + _tail(x["sig"]) for x in l)
+    return 32 + sum(32 + 96 + inner(m["members"]) + _tail(m["sig"]) for m in ms)
 
 
 def registry_calldata_length(entry, a):
     """The ABI calldata length (selector included) of a ``register`` / ``registerMsig`` / ``registerWebAuthn`` /
     ``registerMuSig2`` / ``registerFrost`` / ``setKemKey`` call from its named arguments, as clientkeys registryCalldataLength."""
-    if entry == 'setKemKey':
-        s = a['sig']
-        return 4 + 128 + _kem_len(a['kem']) + 96 + _tail(s['keyData']) + _tail(s['signature']) + _member_sigs_len(s['members'])
-    if entry == 'registerMsig':
-        return 4 + 128 + 96 + 96 * len(a['structure']['members']) + _attrs_len(a['attrs']) + _member_sigs_len(a['pop']) + _tail(a['pqzPop'])
-    rest = _attrs_len(a['attrs']) + _tail(a['pop']) + _tail(a['pqzPop'])
-    k = a.get('key')
-    if entry == 'register':
-        return 4 + 160 + _tail(a['keyData']) + rest
-    if entry == 'registerWebAuthn':
+    if entry == "setKemKey":
+        s = a["sig"]
+        return (
+            4
+            + 128
+            + _kem_len(a["kem"])
+            + 96
+            + _tail(s["keyData"])
+            + _tail(s["signature"])
+            + _member_sigs_len(s["members"])
+        )
+    if entry == "registerMsig":
+        return (
+            4
+            + 128
+            + 96
+            + 96 * len(a["structure"]["members"])
+            + _attrs_len(a["attrs"])
+            + _member_sigs_len(a["pop"])
+            + _tail(a["pqzPop"])
+        )
+    rest = _attrs_len(a["attrs"]) + _tail(a["pop"]) + _tail(a["pqzPop"])
+    k = a.get("key")
+    if entry == "register":
+        return 4 + 160 + _tail(a["keyData"]) + rest
+    if entry == "registerWebAuthn":
         return 4 + 192 + rest
-    if entry == 'registerMuSig2':
-        return 4 + 160 + 64 + _tail(k['aggKey']) + _bytes_arr(k['memberKeys']) + rest
-    if entry == 'registerFrost':
-        return 4 + 160 + 96 + _tail(k['groupKey']) + 32 + sum(32 + 96 + _bytes_arr(m['commitments']) + _tail(m['r'])
-                                                               for m in k['members']) + rest
-    raise ValueError(f'no calldata length for {entry}')
+    if entry == "registerMuSig2":
+        return 4 + 160 + 64 + _tail(k["aggKey"]) + _bytes_arr(k["memberKeys"]) + rest
+    if entry == "registerFrost":
+        return (
+            4
+            + 160
+            + 96
+            + _tail(k["groupKey"])
+            + 32
+            + sum(32 + 96 + _bytes_arr(m["commitments"]) + _tail(m["r"]) for m in k["members"])
+            + rest
+        )
+    raise ValueError(f"no calldata length for {entry}")
 
 
-_TYPED_ENTRY = {0x0100: 'registerWebAuthn', 0x0110: 'registerMuSig2', 0x0112: 'registerMuSig2', 0x0111: 'registerFrost',
-                0x0113: 'registerFrost', 0x0120: 'registerMsig'}
+_TYPED_ENTRY = {
+    0x0100: "registerWebAuthn",
+    0x0110: "registerMuSig2",
+    0x0112: "registerMuSig2",
+    0x0111: "registerFrost",
+    0x0113: "registerFrost",
+    0x0120: "registerMsig",
+}
 
 
-def registration_args(kind, key_data, pqz_key=None, pqz_pop_hash=None, pqz_pop=None, kem_pk=None, pop=None, kem_commit=None):
+def registration_args(
+    kind, key_data, pqz_key=None, pqz_pop_hash=None, pqz_pop=None, kem_pk=None, pop=None, kem_commit=None
+):
     """The registry call of a registration (TS-D10 … TS-D13), as clientkeys registrationArgs: ``(args, kem_fill)``, ``args``
     the named arguments with ``entry`` — ``register(kind, keyData, attrs, pop, pqzPop)``, ``registerMsig(structure, attrs, pop,
     pqzPop)``, ``registerWebAuthn(key, attrs, pop, pqzPop)`` or ``registerMuSig2`` / ``registerFrost(kind, key, attrs, pop,
@@ -977,22 +1150,26 @@ def registration_args(kind, key_data, pqz_key=None, pqz_pop_hash=None, pqz_pop=N
     key_data = _bytes(key_data)
     has = lambda v: v is not None and len(v) > 0
     if has(kem_pk) and not is_kem_holder(kind):
-        raise UAError('UAKemHolder', f'0x{kind:04x} may not hold a KEM key')
+        raise UAError("UAKemHolder", f"0x{kind:04x} may not hold a KEM key")
     pop_hash = _proof_hash_of(pqz_pop, pqz_pop_hash) if has(pqz_key) or has(pqz_pop_hash) else bytes(32)
-    attrs = {'pqzKey': _hx(pqz_key or b''), 'pqzPopHash': _hx(pop_hash), 'kem': kem_key_of(kem_pk), 'kemPkHash': _ZW}
-    entry = _TYPED_ENTRY.get(kind, 'register')
-    tail = {'attrs': attrs, 'pqzPop': _hx(pqz_pop or b'')}
-    if entry == 'registerMsig':
-        args = {'entry': entry, 'structure': msig_structure(key_data), **tail, 'pop': _member_sigs(pop or ())}
-    elif entry == 'registerWebAuthn':
-        args = {'entry': entry, 'key': typed_key(kind, key_data), **tail, 'pop': _hx(pop or b'')}
-    elif entry == 'register':
-        args = {'entry': entry, 'kind': kind, 'keyData': _hx(key_data), **tail, 'pop': _hx(pop or b'')}
+    attrs = {"pqzKey": _hx(pqz_key or b""), "pqzPopHash": _hx(pop_hash), "kem": kem_key_of(kem_pk), "kemPkHash": _ZW}
+    entry = _TYPED_ENTRY.get(kind, "register")
+    tail = {"attrs": attrs, "pqzPop": _hx(pqz_pop or b"")}
+    if entry == "registerMsig":
+        args = {"entry": entry, "structure": msig_structure(key_data), **tail, "pop": _member_sigs(pop or ())}
+    elif entry == "registerWebAuthn":
+        args = {"entry": entry, "key": typed_key(kind, key_data), **tail, "pop": _hx(pop or b"")}
+    elif entry == "register":
+        args = {"entry": entry, "kind": kind, "keyData": _hx(key_data), **tail, "pop": _hx(pop or b"")}
     else:
-        args = {'entry': entry, 'kind': kind, 'key': typed_key(kind, key_data), **tail, 'pop': _hx(pop or b'')}
-    full = _bytes(kem_pk) if kem_pk is not None else b''
+        args = {"entry": entry, "kind": kind, "key": typed_key(kind, key_data), **tail, "pop": _hx(pop or b"")}
+    full = _bytes(kem_pk) if kem_pk is not None else b""
     commit = kem_commit if kem_commit is not None else registry_calldata_length(entry, args) > REGISTER_CALLDATA_LIMIT
     if not full or not commit:
         return args, None
-    args['attrs'] = {**attrs, 'kem': {'scheme': full[0], 'mlkemEk': '0x', 'x25519': _ZW}, 'kemPkHash': _hx(keccak256(full))}
+    args["attrs"] = {
+        **attrs,
+        "kem": {"scheme": full[0], "mlkemEk": "0x", "x25519": _ZW},
+        "kemPkHash": _hx(keccak256(full)),
+    }
     return args, set_kem_key_args(ua_of(kind, key_data), 0, full, ua_sig())

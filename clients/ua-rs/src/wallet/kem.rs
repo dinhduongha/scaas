@@ -54,12 +54,18 @@ fn kem_seed(seed: &[u8; 64], ua: &[u8; 32], version: u64) -> Result<Zeroizing<Ve
 
 /// The ML-KEM key of a 96-byte KEM seed (`KeyGen_internal(d, z)`).
 fn dk_of(s: &[u8]) -> Result<Dk> {
-    let d_z = Zeroizing::new(ml_kem::Seed::try_from(s.get(..64).ok_or(Error::Argument)?).map_err(|_| Error::Argument)?);
+    let d_z = Zeroizing::new(
+        ml_kem::Seed::try_from(s.get(..64).ok_or(Error::Argument)?).map_err(|_| Error::Argument)?,
+    );
     Ok(Dk::from_seed(*d_z))
 }
 
 fn sk_x(s: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
-    Ok(Zeroizing::new(s.get(64..SEED).and_then(|b| b.try_into().ok()).ok_or(Error::Argument)?))
+    Ok(Zeroizing::new(
+        s.get(64..SEED)
+            .and_then(|b| b.try_into().ok())
+            .ok_or(Error::Argument)?,
+    ))
 }
 
 /// `kemPk = 0x01 ‖ ek ‖ pk_X` of a 96-byte KEM seed.
@@ -81,7 +87,10 @@ pub fn x25519(k: &[u8; 32], u: &[u8; 32]) -> Zeroizing<[u8; 32]> {
 /// 1,568-byte `ek`.
 pub fn ek_modulus_ok(ek: &[u8]) -> bool {
     let lt_q = |c: &[u8]| match c {
-        [a, b, c] => (u16::from(*a) | u16::from(*b & 15) << 8) < 3329 && (u16::from(*b >> 4) | u16::from(*c) << 4) < 3329,
+        [a, b, c] => {
+            (u16::from(*a) | u16::from(*b & 15) << 8) < 3329
+                && (u16::from(*b >> 4) | u16::from(*c) << 4) < 3329
+        }
         _ => false,
     };
     ek.len() == EK && ek.get(..1536).is_some_and(|t| t.chunks(3).all(lt_q))
@@ -118,12 +127,16 @@ fn encaps(kem_pk: &[u8], m: &[u8; 32], e: &[u8; 32]) -> Result<Encapsulated> {
     if kem_pk.first() != Some(&1) || kem_pk.len() != KEM_PK_LEN {
         return Err(Error::KemCheck);
     }
-    let (ek, pk_x) = kem_pk.get(1..).and_then(|b| b.split_at_checked(EK)).ok_or(Error::KemCheck)?;
+    let (ek, pk_x) = kem_pk
+        .get(1..)
+        .and_then(|b| b.split_at_checked(EK))
+        .ok_or(Error::KemCheck)?;
     if !ek_modulus_ok(ek) {
         return Err(Error::KemCheck);
     }
     // the crate runs the same type and modulus checks (FIPS 203 §7.2) again
-    let ek = Ek::new(&ml_kem::Key::<Ek>::try_from(ek).map_err(|_| Error::KemCheck)?).map_err(|_| Error::KemCheck)?;
+    let ek = Ek::new(&ml_kem::Key::<Ek>::try_from(ek).map_err(|_| Error::KemCheck)?)
+        .map_err(|_| Error::KemCheck)?;
     let pk_x: &[u8; 32] = pk_x.try_into().map_err(|_| Error::KemCheck)?;
     let ss_x = x25519(e, pk_x);
     if *ss_x == [0; 32] {
@@ -179,7 +192,11 @@ impl KemKeyPair {
         let kem_pk = kem_pk_of(s)?;
         self_test(s)?; // its store's only key, checked once
         let recipient = RecipientId::KemPkHash(crate::keccak256(&kem_pk));
-        Ok(KemKeyPair { kem_pk, recipient, secret: SecretStore::single(s)? })
+        Ok(KemKeyPair {
+            kem_pk,
+            recipient,
+            secret: SecretStore::single(s)?,
+        })
     }
 
     /// `0x01 ‖ ek ‖ pk_X`, 1,601 bytes.
@@ -195,7 +212,11 @@ impl KemKeyPair {
     /// A second handle of the same key (a link session's probe, feature `vectors`).
     #[cfg_attr(not(feature = "vectors"), allow(dead_code))]
     pub(super) fn dup(&self) -> KemKeyPair {
-        KemKeyPair { kem_pk: self.kem_pk.clone(), recipient: self.recipient, secret: self.secret.dup() }
+        KemKeyPair {
+            kem_pk: self.kem_pk.clone(),
+            recipient: self.recipient,
+            secret: self.secret.dup(),
+        }
     }
 
     /// A read lease of the key's store (T21 L82).
@@ -212,7 +233,8 @@ impl KemKeyPair {
     /// `KeyRevoked` once the wallet was locked. ML-KEM's implicit rejection kept: a wrong `mlkem_ct` gives another `ss`.
     pub fn decaps(&self, mlkem_ct: &[u8], x25519_eph: &[u8; 32]) -> Result<Zeroizing<[u8; 32]>> {
         let pk_x = self.kem_pk.get(1 + EK..).ok_or(Error::Argument)?;
-        self.secret.with(|s| decaps(s, pk_x, mlkem_ct, x25519_eph))?
+        self.secret
+            .with(|s| decaps(s, pk_x, mlkem_ct, x25519_eph))?
     }
 }
 
@@ -233,7 +255,11 @@ impl UaKey {
         })?;
         secret.self_test(id, self_test)?;
         secret.note(|m| m.add_kem(ua, version));
-        Ok(KemKeyPair { kem_pk, recipient: RecipientId::Ua { ua, version }, secret })
+        Ok(KemKeyPair {
+            kem_pk,
+            recipient: RecipientId::Ua { ua, version },
+            secret,
+        })
     }
 }
 
@@ -252,12 +278,16 @@ mod vectors {
     pub fn vectors_mlkem_keygen(d: &[u8; 32], z: &[u8; 32]) -> (Vec<u8>, Zeroizing<Vec<u8>>) {
         use ml_kem::ExpandedKeyEncoding;
         let dk = Dk::from_seed(ml_kem::B32::from(*d).concat(ml_kem::B32::from(*z)));
-        (dk.encapsulation_key().to_bytes().to_vec(), Zeroizing::new(dk.to_expanded_bytes().to_vec()))
+        (
+            dk.encapsulation_key().to_bytes().to_vec(),
+            Zeroizing::new(dk.to_expanded_bytes().to_vec()),
+        )
     }
 
     /// `Encaps_internal(ek, m)`: `(c, K)`.
     pub fn vectors_mlkem_encaps(ek: &[u8], m: &[u8; 32]) -> Result<(Vec<u8>, Zeroizing<[u8; 32]>)> {
-        let ek = Ek::new(&ml_kem::Key::<Ek>::try_from(ek).map_err(|_| Error::KemCheck)?).map_err(|_| Error::KemCheck)?;
+        let ek = Ek::new(&ml_kem::Key::<Ek>::try_from(ek).map_err(|_| Error::KemCheck)?)
+            .map_err(|_| Error::KemCheck)?;
         let (c, k) = ek.encapsulate_deterministic(&ml_kem::B32::from(*m));
         Ok((c.to_vec(), Zeroizing::new(k.into())))
     }
@@ -266,7 +296,8 @@ mod vectors {
     #[allow(deprecated)]
     pub fn vectors_mlkem_decaps(dk: &[u8], c: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
         use ml_kem::ExpandedKeyEncoding;
-        let dk = ml_kem::ExpandedDecapsulationKey::<MlKem1024>::try_from(dk).map_err(|_| Error::KemCheck)?;
+        let dk = ml_kem::ExpandedDecapsulationKey::<MlKem1024>::try_from(dk)
+            .map_err(|_| Error::KemCheck)?;
         let dk = Dk::from_expanded_bytes(&dk).map_err(|_| Error::KemCheck)?;
         let c = ml_kem::Ciphertext::<MlKem1024>::try_from(c).map_err(|_| Error::KemCheck)?;
         Ok(Zeroizing::new(dk.decapsulate(&c).into()))
@@ -279,9 +310,12 @@ mod vectors {
         }
         /// Whether the seed the handle's operations read lies in its store's arena and outside the handle itself.
         pub fn vectors_secret_in_arena(&self) -> Result<bool> {
-            self.secret.in_arena((self as *const Self as usize, std::mem::size_of::<Self>()))
+            self.secret
+                .in_arena((self as *const Self as usize, std::mem::size_of::<Self>()))
         }
     }
 }
 #[cfg(feature = "vectors")]
-pub use vectors::{vectors_encaps, vectors_mlkem_decaps, vectors_mlkem_encaps, vectors_mlkem_keygen};
+pub use vectors::{
+    vectors_encaps, vectors_mlkem_decaps, vectors_mlkem_encaps, vectors_mlkem_keygen,
+};

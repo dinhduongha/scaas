@@ -30,7 +30,9 @@ pub fn hkdf_mod_r<C: ZCurve>(ikm: &[u8], key_info: &[u8]) -> Fr<C> {
     loop {
         salt = Sha256::digest(&salt).to_vec();
         let mut okm = [0u8; L];
-        Hkdf::<Sha256>::new(Some(&salt), &ikm0).expand(&info, &mut okm).expect("L <= 255*32");
+        Hkdf::<Sha256>::new(Some(&salt), &ikm0)
+            .expand(&info, &mut okm)
+            .expect("L <= 255*32");
         let sk = Fr::<C>::from_be_bytes_mod_order(&okm);
         okm.zeroize();
         if !sk.is_zero() {
@@ -42,7 +44,9 @@ pub fn hkdf_mod_r<C: ZCurve>(ikm: &[u8], key_info: &[u8]) -> Fr<C> {
 
 fn ikm_to_lamport_sk(ikm: &[u8], salt: &[u8]) -> Vec<u8> {
     let mut okm = vec![0u8; K * 32];
-    Hkdf::<Sha256>::new(Some(salt), ikm).expand(&[], &mut okm).expect("8160 <= 255*32");
+    Hkdf::<Sha256>::new(Some(salt), ikm)
+        .expand(&[], &mut okm)
+        .expect("8160 <= 255*32");
     okm
 }
 
@@ -88,7 +92,8 @@ pub fn derive_path<C: ZCurve>(seed: &[u8], path: &[u32]) -> Result<Fr<C>, ZError
 /// BIP-39 seed (64 B) from a 24-word English mnemonic (R32). Checksum is verified; mnemonic and
 /// passphrase are NFKD-normalized as BIP-39 requires (same seed as @scure/bip39).
 pub fn seed_from_mnemonic(words: &str, passphrase: &str) -> Result<Zeroizing<[u8; 64]>, ZError> {
-    let m = bip39::Mnemonic::parse(words).map_err(|_| ZError::BadSeed("invalid BIP-39 mnemonic"))?;
+    let m =
+        bip39::Mnemonic::parse(words).map_err(|_| ZError::BadSeed("invalid BIP-39 mnemonic"))?;
     if m.word_count() != 24 {
         return Err(ZError::BadSeed("R32: mnemonic must have 24 words"));
     }
@@ -113,12 +118,18 @@ impl<C: ZCurve> ZetherKey<C> {
         if x.is_zero() {
             return Err(ZError::BadScalar);
         }
-        Ok(Self { x, y: generator::<C>() * x })
+        Ok(Self {
+            x,
+            y: generator::<C>() * x,
+        })
     }
 
     /// R33 derivation: `m/<root>/<coin>/<account>/<use>`.
     pub fn derive(seed: &[u8], coin: u32, account: u32, key_use: u32) -> Result<Self, ZError> {
-        Self::from_secret(derive_path::<C>(seed, &[C::PATH_ROOT, coin, account, key_use])?)
+        Self::from_secret(derive_path::<C>(
+            seed,
+            &[C::PATH_ROOT, coin, account, key_use],
+        )?)
     }
 
     /// The Zether conf key (`<use> = 7`).
@@ -178,7 +189,10 @@ mod tests {
         for (seed, master, idx, child) in cases {
             let m = derive_master_sk::<Bls12381>(&hex::decode(seed).unwrap()).unwrap();
             assert_eq!(dec::<Bls12381>(&m), master);
-            assert_eq!(dec::<Bls12381>(&derive_child_sk::<Bls12381>(&m, idx)), child);
+            assert_eq!(
+                dec::<Bls12381>(&derive_child_sk::<Bls12381>(&m, idx)),
+                child
+            );
         }
     }
 

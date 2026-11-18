@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! scaas-sdk T2a: `SecretBytes` (spec §5): the copy calls by id, `dispose`, the registry. Its zeroing and blocks: the unit tests
 //! in src/wallet/secret.rs; not `Clone` / `Debug`: its compile-fail doc tests.
-use scaas_ua::wallet::{secret_dispose, secret_read, secret_write, secrets_live, Error, SecretBytes};
+use scaas_ua::wallet::{
+    secret_dispose, secret_read, secret_write, secrets_live, Error, SecretBytes,
+};
 use zeroize::Zeroizing;
 
 #[test]
@@ -14,9 +16,21 @@ fn copy_calls_by_id() {
     assert_eq!(secret_read(s.id(), &mut out), Ok(5));
     assert_eq!(&out[..5], b"hello");
     // refusals, each beside its accepted form above
-    assert_eq!(secret_write(s.id(), b"hell"), Err(Error::Argument), "another length");
-    assert_eq!(secret_read(s.id(), &mut [0u8; 4]), Err(Error::Argument), "a short buffer");
-    assert_eq!(secret_write(u64::MAX, b"hello"), Err(Error::Argument), "an unknown id");
+    assert_eq!(
+        secret_write(s.id(), b"hell"),
+        Err(Error::Argument),
+        "another length"
+    );
+    assert_eq!(
+        secret_read(s.id(), &mut [0u8; 4]),
+        Err(Error::Argument),
+        "a short buffer"
+    );
+    assert_eq!(
+        secret_write(u64::MAX, b"hello"),
+        Err(Error::Argument),
+        "an unknown id"
+    );
     s.with_mut(|b| b.copy_from_slice(b"world"));
     assert_eq!(secret_read(s.id(), &mut out), Ok(5));
     assert_eq!(&out[..5], b"world");

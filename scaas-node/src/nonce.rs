@@ -1,5 +1,5 @@
 //! Cold start (`_USER-DECISIONS` §23.1 + ruling R18). Thuần: đầu vào là con số của chain
-//! và journal của Odoo, đầu ra là việc phải làm.
+//! và journal của ExternalPull, đầu ra là việc phải làm.
 
 #[derive(Debug, Clone)]
 pub struct Inflight {
@@ -22,7 +22,11 @@ pub struct Plan {
 
 pub fn plan(pending: u64, journal_max: Option<u64>, inflight: &[Inflight]) -> Plan {
     let next = journal_max.map_or(pending, |j| pending.max(j + 1));
-    let mut p = Plan { next, gap_fill: (pending..next).collect(), ..Default::default() };
+    let mut p = Plan {
+        next,
+        gap_fill: (pending..next).collect(),
+        ..Default::default()
+    };
     for job in inflight {
         match job.nonce {
             Some(n) if job.state != "nonce_leased" && n < pending => p.track.push(job.job_id),
@@ -51,7 +55,11 @@ mod tests {
     use super::*;
 
     fn j(id: i64, nonce: Option<u64>, state: &str) -> Inflight {
-        Inflight { job_id: id, nonce, state: state.into() }
+        Inflight {
+            job_id: id,
+            nonce,
+            state: state.into(),
+        }
     }
 
     #[test]
@@ -62,7 +70,15 @@ mod tests {
 
     #[test]
     fn journal_ahead_of_pending_is_gap_filled_and_requeued() {
-        let p = plan(5, Some(7), &[j(1, Some(5), "broadcast"), j(2, Some(6), "signed"), j(3, Some(7), "broadcast")]);
+        let p = plan(
+            5,
+            Some(7),
+            &[
+                j(1, Some(5), "broadcast"),
+                j(2, Some(6), "signed"),
+                j(3, Some(7), "broadcast"),
+            ],
+        );
         assert_eq!(p.next, 8);
         assert_eq!(p.gap_fill, vec![5, 6, 7]);
         assert_eq!(p.requeue, vec![1, 2, 3]);
@@ -70,7 +86,11 @@ mod tests {
 
     #[test]
     fn jobs_below_pending_are_tracked_not_resent() {
-        let p = plan(5, Some(4), &[j(1, Some(4), "broadcast"), j(9, None, "nonce_leased")]);
+        let p = plan(
+            5,
+            Some(4),
+            &[j(1, Some(4), "broadcast"), j(9, None, "nonce_leased")],
+        );
         assert_eq!(p.next, 5);
         assert_eq!(p.track, vec![1]);
         assert_eq!(p.requeue, vec![9]);
@@ -91,7 +111,13 @@ mod tests {
         assert!(!replaceable((100, 10), (109, 12)), "max fee +9 %");
         assert!(!replaceable((100, 10), (125, 10)), "priority unchanged");
         assert!(!replaceable((100, 10), (100, 10)), "at the cap");
-        assert!(replaceable((10, 50), (11, 60)), "the effective tip is min(tip, max fee)");
-        assert!(!replaceable((585, 146), (600, 183)), "the clamped last step to a ceiling of 600");
+        assert!(
+            replaceable((10, 50), (11, 60)),
+            "the effective tip is min(tip, max fee)"
+        );
+        assert!(
+            !replaceable((585, 146), (600, 183)),
+            "the clamped last step to a ceiling of 600"
+        );
     }
 }

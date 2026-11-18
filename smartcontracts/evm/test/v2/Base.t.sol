@@ -136,15 +136,21 @@ contract BaseTest is V2Fixture {
 
     function test_approveIsNeverASelfCall() public {
         Puller p = new Puller();
-        _expectCallRevert(_call(alice, abi.encodeCall(t.approve, (address(p), 77)), 1, RR),
-            abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, t.approve.selector));
+        _expectCallRevert(
+            _call(alice, abi.encodeCall(t.approve, (address(p), 77)), 1, RR),
+            abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, t.approve.selector)
+        );
         assertEq(t.allowance(alice, address(p)), 0);
     }
 
     function test_erc1271Gets400kOnlyAsSmartKeyAccountClone() public {
         GasBurner1271 burner = new GasBurner1271();
-        BaseHarness impl = BaseHarness(_envFor(address(new BaseHarness(address(this), address(burner))),
-            EnvKit.env(UID_, address(0), address(burner), false)));
+        BaseHarness impl = BaseHarness(
+            _envFor(
+                address(new BaseHarness(address(this), address(burner))),
+                EnvKit.env(UID_, address(0), address(burner), false)
+            )
+        );
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.initialHolder) = ("H", "H", address(this)); // the harness mints `initialSupply` (0)
         BaseHarness tk = BaseHarness(_clone(address(impl), address(this), new address[](0), abi.encode(c)));
@@ -162,15 +168,22 @@ contract BaseTest is V2Fixture {
     }
 
     function test_shortAndUnlistedData() public {
-        _expectCallRevert(_call(alice, hex"0102", 1, RR),
-            abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, bytes4(0x01020000)));
-        _expectCallRevert(_call(alice, hex"deadbeef", 1, RR),
-            abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, bytes4(0xdeadbeef)));
+        _expectCallRevert(
+            _call(alice, hex"0102", 1, RR), abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, bytes4(0x01020000))
+        );
+        _expectCallRevert(
+            _call(alice, hex"deadbeef", 1, RR),
+            abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, bytes4(0xdeadbeef))
+        );
         bytes memory longCancel = abi.encodePacked(abi.encodeCall(t.cancelNonce, (1)), uint8(0));
-        _expectCallRevert(_call(alice, longCancel, 1, RR),
-            abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, t.cancelNonce.selector));
-        _expectCallRevert(_call(alice, abi.encodeCall(t.transfer, (shop, 1)), 1, RR),
-            abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, t.transfer.selector));
+        _expectCallRevert(
+            _call(alice, longCancel, 1, RR),
+            abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, t.cancelNonce.selector)
+        );
+        _expectCallRevert(
+            _call(alice, abi.encodeCall(t.transfer, (shop, 1)), 1, RR),
+            abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, t.transfer.selector)
+        );
     }
 
     /// Review L2: a transfer to 0 fails at step 3 (before the nonce), never after the fee.
@@ -258,7 +271,13 @@ contract BaseTest is V2Fixture {
     /// The named builders consume the signature of `mtxExecuteTransfer` on the struct they build: checked through
     /// the event (same digest) and the lane.
     function testFuzz_namedDigestEqualsGeneric(
-        uint8 which, uint256 amount, uint256 batch, uint64 ttl, bool restrict, uint16 feePpm, bytes32 payId
+        uint8 which,
+        uint256 amount,
+        uint256 batch,
+        uint64 ttl,
+        bool restrict,
+        uint16 feePpm,
+        bytes32 payId
     ) public {
         which = uint8(bound(which, 0, 3));
         amount = bound(amount, 0, 900e6);
@@ -277,14 +296,39 @@ contract BaseTest is V2Fixture {
         bytes32 d = t.mtxTransferDigest(x);
         IUARegistry.UASig memory s = _signTr(PK, address(t), x);
         vm.expectEmit(address(t));
-        emit IUALedger.UAMetaTransactionExecuted(MetaTxLib.pad(alice), relayer, x.batch, 0, d, // ua-mtx-merge T2 (R18)
-            x.feeRecipient == address(0) ? relayer : x.feeRecipient, x.value * x.fee / 1e6);
+        emit IUALedger.UAMetaTransactionExecuted(
+            MetaTxLib.pad(alice),
+            relayer,
+            x.batch,
+            0,
+            d, // ua-mtx-merge T2 (R18)
+            x.feeRecipient == address(0) ? relayer : x.feeRecipient,
+            x.value * x.fee / 1e6
+        );
         vm.prank(relayer);
-        if (which == 0) t.mtxTransfer(MetaTxLib.pad(alice), MetaTxLib.pad(shop), amount, x.batch, 0, x.validUntil, x.mode, relayer, s);
-        else if (which == 1) {
-            t.mtxTransferWithFee(MetaTxLib.pad(alice), MetaTxLib.pad(shop), amount, x.batch, 0, x.validUntil, x.mode, relayer, x.fee, feeTaker, s);
-        } else if (which == 2) t.mtxExecuteTransfer(x, s);
-        else t.mtxPay(x, s, PayMetaKit.meta(payId));
+        if (which == 0) {
+            t.mtxTransfer(
+                MetaTxLib.pad(alice), MetaTxLib.pad(shop), amount, x.batch, 0, x.validUntil, x.mode, relayer, s
+            );
+        } else if (which == 1) {
+            t.mtxTransferWithFee(
+                MetaTxLib.pad(alice),
+                MetaTxLib.pad(shop),
+                amount,
+                x.batch,
+                0,
+                x.validUntil,
+                x.mode,
+                relayer,
+                x.fee,
+                feeTaker,
+                s
+            );
+        } else if (which == 2) {
+            t.mtxExecuteTransfer(x, s);
+        } else {
+            t.mtxPay(x, s, PayMetaKit.meta(payId));
+        }
         assertEq(t.mtxNonce(MetaTxLib.pad(alice), x.batch), 1);
     }
 
@@ -317,10 +361,14 @@ contract BaseTest is V2Fixture {
         uint32[3] memory badFee = [RR | RF, PCT, uint32(0x30) | RF];
         for (uint256 i; i < 3; ++i) {
             vm.expectRevert(abi.encodeWithSelector(e, badFee[i]));
-            t.mtxTransferWithFee(MetaTxLib.pad(alice), MetaTxLib.pad(shop), 1, 1, 0, vu, badFee[i], relayer, 1, feeTaker, _nativeSig(""));
+            t.mtxTransferWithFee(
+                MetaTxLib.pad(alice), MetaTxLib.pad(shop), 1, 1, 0, vu, badFee[i], relayer, 1, feeTaker, _nativeSig("")
+            );
         }
         vm.expectRevert(abi.encodeWithSelector(e, RF | PCT));
-        t.mtxTransferWithFee(MetaTxLib.pad(alice), MetaTxLib.pad(shop), 1, 1, 0, vu, RF | PCT, relayer, 1, address(0), _nativeSig(""));
+        t.mtxTransferWithFee(
+            MetaTxLib.pad(alice), MetaTxLib.pad(shop), 1, 1, 0, vu, RF | PCT, relayer, 1, address(0), _nativeSig("")
+        );
     }
 
     /// L5: `fee` không bị canonical-zero hoá dưới `NONE`. Đường chung nhận; `mtxTransfer` đặt `fee = 0` nên
@@ -369,7 +417,11 @@ contract BaseTest is V2Fixture {
         t.payWithFee(shop, 1e6, FeeMode.NONE, 0, address(0), p, PayMetaKit.meta("invoice-1"));
     }
 
-    function _batchItems(uint256 n) internal view returns (MetaTxLib.UAMetaTransfer[] memory xs, IUARegistry.UASig[] memory ss) {
+    function _batchItems(uint256 n)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransfer[] memory xs, IUARegistry.UASig[] memory ss)
+    {
         xs = new MetaTxLib.UAMetaTransfer[](n);
         ss = new IUARegistry.UASig[](n);
         for (uint256 i; i < n; ++i) {

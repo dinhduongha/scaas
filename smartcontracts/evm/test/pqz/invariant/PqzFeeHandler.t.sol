@@ -71,7 +71,9 @@ contract PqzFeeHandler is PqzOffchainBase {
         u.approve(address(offW_), type(uint256).max);
         u.mint(address(this), 100_000 * SCALE);
         WrappedToken(payable(address(offW_))).wrap(address(u), 100_000 * SCALE);
-        for (uint256 t; t < 3; ++t) supplyWant[t] = toks[t].totalSupply();
+        for (uint256 t; t < 3; ++t) {
+            supplyWant[t] = toks[t].totalSupply();
+        }
     }
 
     // ------------------------------------------------------------------ the ghost
@@ -89,7 +91,9 @@ contract PqzFeeHandler is PqzOffchainBase {
     /// The ghost `T` of holder `i` at `p` (before `shieldIn`).
     function _T(uint256 t, uint256 i, uint256 p) internal view returns (uint256 s) {
         s = gAcc[t][i];
-        for (uint256 k = gRolled[t][i]; k < p; ++k) s += gPend[t][i][k];
+        for (uint256 k = gRolled[t][i]; k < p; ++k) {
+            s += gPend[t][i][k];
+        }
     }
 
     /// A credit of `amount` to holder `j`: appended, or merged into the tail as the token did (read back).
@@ -107,7 +111,9 @@ contract PqzFeeHandler is PqzOffchainBase {
     function hidden(uint256 t) public view returns (uint256 s) {
         for (uint256 i; i < 3; ++i) {
             s += gAcc[t][i];
-            for (uint256 k = gRolled[t][i]; k < gPend[t][i].length; ++k) s += gPend[t][i][k];
+            for (uint256 k = gRolled[t][i]; k < gPend[t][i].length; ++k) {
+                s += gPend[t][i][k];
+            }
         }
     }
 
@@ -115,7 +121,9 @@ contract PqzFeeHandler is PqzOffchainBase {
     function _payees(uint256 t) internal view returns (uint256 s) {
         NormalPqzToken k = toks[t];
         s = k.balanceOf(vm.addr(VKEY)) + IUALedger(address(k)).balanceOfUA(ben) + k.balanceOf(RCP);
-        for (uint256 i; i < 3; ++i) s += IUALedger(address(k)).balanceOfUA(us[i]);
+        for (uint256 i; i < 3; ++i) {
+            s += IUALedger(address(k)).balanceOfUA(us[i]);
+        }
     }
 
     // ------------------------------------------------------------------ actions
@@ -128,7 +136,8 @@ contract PqzFeeHandler is PqzOffchainBase {
             WrappedPqzToken w_ = WrappedPqzToken(payable(address(toks[2])));
             MockERC20 u = MockERC20(w_.underlyings()[0]);
             u.mint(address(this), amount * SCALE);
-            (ok,) = address(w_).call(abi.encodeCall(IConfidentialWrappedToken.mtxWrapShield, (address(u), amount * SCALE, us[j])));
+            (ok,) = address(w_)
+                .call(abi.encodeCall(IConfidentialWrappedToken.mtxWrapShield, (address(u), amount * SCALE, us[j])));
             if (ok) supplyWant[2] += amount * SCALE;
         } else {
             (ok,) = address(toks[t]).call(abi.encodeWithSignature("mtxShield(bytes32,uint256)", us[j], amount));
@@ -230,7 +239,10 @@ contract PqzFeeHandler is PqzOffchainBase {
     }
 
     function _burnArgs(D memory x) internal view returns (IPqzToken.PqzBurnArgs memory) {
-        return _bs(bytes.concat(abi.encode(x.p, block.number + 50, x.shieldIn, us[x.i], _ben(x)), _blob(x.p + 9, PqzCt.CT)));
+        return
+            _bs(
+                bytes.concat(abi.encode(x.p, block.number + 50, x.shieldIn, us[x.i], _ben(x)), _blob(x.p + 9, PqzCt.CT))
+            );
     }
 
     function _bBurn(D memory x, uint256 key) internal view returns (bytes memory st, bytes memory cd) {
@@ -241,7 +253,9 @@ contract PqzFeeHandler is PqzOffchainBase {
     }
 
     function _cdBurn(IPqzToken.PqzBurnArgs memory bb, uint256 amt, bytes32 rcp, IPqzToken.PqzSignedVerdict memory sv)
-        internal pure returns (bytes memory)
+        internal
+        pure
+        returns (bytes memory)
     {
         return abi.encodeCall(IPqzToken.mtxUnshield, (bb, amt, rcp, VPROOF, _pqAuth(), "", sv));
     }
@@ -255,9 +269,11 @@ contract PqzFeeHandler is PqzOffchainBase {
         cd = _cdUnwrap(bb, u, _svOf(x.t, st, key));
     }
 
-    function _cdUnwrap(IPqzToken.PqzBurnArgs memory bb, IConfidentialWrappedToken.Unwrap memory u,
-        IPqzToken.PqzSignedVerdict memory sv) internal pure returns (bytes memory)
-    {
+    function _cdUnwrap(
+        IPqzToken.PqzBurnArgs memory bb,
+        IConfidentialWrappedToken.Unwrap memory u,
+        IPqzToken.PqzSignedVerdict memory sv
+    ) internal pure returns (bytes memory) {
         return abi.encodeCall(IPqzWrappedToken.mtxUnshieldUnwrap, (bb, u, VPROOF, _pqAuth(), "", sv));
     }
 
@@ -278,21 +294,32 @@ contract PqzFeeHandler is PqzOffchainBase {
         t = 1 + t % 2;
         uint64 cur = _vf(t);
         if (cur == 0) return;
-        try IPqzToken(address(toks[t])).setVerifierFee(uint64(to % cur), EnvKit.codeUidOf(address(IPqzToken(address(toks[t]))))) { ++feeMoves; } catch {}
+        try IPqzToken(address(toks[t]))
+            .setVerifierFee(uint64(to % cur), EnvKit.codeUidOf(address(IPqzToken(address(toks[t]))))) {
+            ++feeMoves;
+        } catch {}
     }
 
     function feePropose(uint256 t, uint256 to) external {
         t = 1 + t % 2;
         IPqzToken.PqzVerifyConfig memory c = toks[t].pqzVerifyConfig();
         if (c.verifierFee == c.verifierFeeMax || c.verifierFeePending != 0) return;
-        try IPqzToken(address(toks[t])).setVerifierFee(uint64(c.verifierFee + 1 + to % (c.verifierFeeMax - c.verifierFee)), EnvKit.codeUidOf(address(IPqzToken(address(toks[t]))))) {} catch {}
+        try IPqzToken(address(toks[t]))
+            .setVerifierFee(
+                uint64(c.verifierFee + 1 + to % (c.verifierFeeMax - c.verifierFee)),
+                EnvKit.codeUidOf(address(IPqzToken(address(toks[t]))))
+            ) {}
+            catch {}
     }
 
     function feeConfirm(uint256 t) external {
         t = 1 + t % 2;
         IPqzToken.PqzVerifyConfig memory c = toks[t].pqzVerifyConfig();
         if (c.verifierFeePending == 0 || block.timestamp < c.verifierFeeEta) return;
-        try IPqzToken(address(toks[t])).setVerifierFee(c.verifierFeePending, EnvKit.codeUidOf(address(IPqzToken(address(toks[t]))))) { ++feeMoves; } catch {}
+        try IPqzToken(address(toks[t]))
+            .setVerifierFee(c.verifierFeePending, EnvKit.codeUidOf(address(IPqzToken(address(toks[t]))))) {
+            ++feeMoves;
+        } catch {}
     }
 
     function warp(uint256 s) external {

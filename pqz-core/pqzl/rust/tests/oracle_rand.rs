@@ -2,9 +2,13 @@
 //! seeded inputs per oracle test, Rust = C (outputs and error codes). The C halves are `pqz_shim_*` in
 //! tests/oracle_shim.c, the Rust halves `testkit::rand_*`.
 mod common;
-use pqzl::c_oracle::{c_autostable, c_grandom, c_rej, c_rej_limbs, c_rng, c_shake, c_urandom, c_urandom_bnd};
-use pqzl::testkit::{rand_autostable, rand_cbd, rand_grandom, rand_rej, rand_rej_limbs, rand_rng, rand_shake,
-                    rand_urandom, rand_urandom_bnd};
+use pqzl::c_oracle::{
+    c_autostable, c_grandom, c_rej, c_rej_limbs, c_rng, c_shake, c_urandom, c_urandom_bnd,
+};
+use pqzl::testkit::{
+    rand_autostable, rand_cbd, rand_grandom, rand_rej, rand_rej_limbs, rand_rng, rand_shake,
+    rand_urandom, rand_urandom_bnd,
+};
 
 const N: usize = 1_000;
 
@@ -30,25 +34,45 @@ impl Rnd {
 }
 
 fn hex(s: &str) -> Vec<u8> {
-    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+        .collect()
 }
 
 #[test]
 fn cbd_eq_vectors() {
     // the vectors of this build's parameter set (n2048-kmax1024 at the canonical path, another set below it; none if core_only)
     let Some(d) = common::vectors_dir() else {
-        eprintln!("set {}: core_only (set.json): no vectors, no cbd.json", pqzl::SET);
+        eprintln!(
+            "set {}: core_only (set.json): no vectors, no cbd.json",
+            pqzl::SET
+        );
         return;
     };
     let path = d.join("cbd.json");
-    let doc: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let doc: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     let mut parts = 0;
     for row in doc["rows"].as_array().unwrap() {
         let input = hex(row["stream"].as_str().unwrap());
         for p in row["parts"].as_array().unwrap() {
-            let want: Vec<i32> = p["samples"].as_array().unwrap().iter().map(|x| x.as_i64().unwrap() as i32).collect();
-            let (eta, off) = (p["eta"].as_u64().unwrap() as u32, p["bit_offset"].as_u64().unwrap() as usize);
-            assert_eq!(rand_cbd(&input, eta, off, want.len()), want, "{}", p["what"]);
+            let want: Vec<i32> = p["samples"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|x| x.as_i64().unwrap() as i32)
+                .collect();
+            let (eta, off) = (
+                p["eta"].as_u64().unwrap() as u32,
+                p["bit_offset"].as_u64().unwrap() as usize,
+            );
+            assert_eq!(
+                rand_cbd(&input, eta, off, want.len()),
+                want,
+                "{}",
+                p["what"]
+            );
             parts += 1;
         }
     }
@@ -61,7 +85,9 @@ fn aes_ctr_eq_c() {
     for t in 0..N {
         let (seed, dom) = (g.seed(), [0, g.next() % 1000, g.next()][t % 3]);
         // pieces across and on the 64-byte cache boundary of the C stream
-        let lens: Vec<u32> = (0..g.range(1, 24)).map(|_| [g.range(1, 200), 64, 128, g.range(1, 7)][(g.next() % 4) as usize] as u32).collect();
+        let lens: Vec<u32> = (0..g.range(1, 24))
+            .map(|_| [g.range(1, 200), 64, 128, g.range(1, 7)][(g.next() % 4) as usize] as u32)
+            .collect();
         let c = c_rng(&seed, dom, &lens);
         assert!(c.is_ok(), "C shim, input {t}");
         assert_eq!(rand_rng(&seed, dom, &lens), c, "input {t}: {lens:?}");
@@ -82,10 +108,16 @@ fn shake_eq_c() {
             left -= l;
         }
         // pieces of 0, 1..7, a rate (168 / 136) and odd lengths, so squeezes start at every lane offset
-        let slens: Vec<u32> = (0..g.range(1, 12)).map(|_| [0, g.range(1, 7), 168, 136, g.range(1, 400)][(g.next() % 5) as usize] as u32).collect();
+        let slens: Vec<u32> = (0..g.range(1, 12))
+            .map(|_| [0, g.range(1, 7), 168, 136, g.range(1, 400)][(g.next() % 5) as usize] as u32)
+            .collect();
         let c = c_shake(which, &input, &alens, &slens);
         assert!(c.is_ok(), "C shim, input {t}");
-        assert_eq!(Ok(rand_shake(which, &input, &alens, &slens)), c, "input {t}: {alens:?} {slens:?}");
+        assert_eq!(
+            Ok(rand_shake(which, &input, &alens, &slens)),
+            c,
+            "input {t}: {alens:?} {slens:?}"
+        );
     }
 }
 
@@ -103,12 +135,19 @@ fn grandom_eq_c() {
             _ => [12, 14, 18][(g.next() % 3) as usize],
         } as u32;
         let n = g.range(1, 64) as u32;
-        let (r, c) = (rand_grandom(&seed, dom, log2o, n), c_grandom(&seed, dom, log2o, n));
+        let (r, c) = (
+            rand_grandom(&seed, dom, log2o, n),
+            c_grandom(&seed, dom, log2o, n),
+        );
         assert_eq!(r, c, "input {t}: log2o {log2o}, n {n}");
         ok += c.is_ok() as usize;
         // review 3w u1-2: the masks' sampler refuses log2o >= 24 in both cores (the 128 coefficients are i64::MIN)
         if let Ok(v) = &c {
-            assert_eq!(v[n as usize..].iter().all(|&x| x == i64::MIN), log2o >= 24, "input {t}: log2o {log2o}");
+            assert_eq!(
+                v[n as usize..].iter().all(|&x| x == i64::MIN),
+                log2o >= 24,
+                "input {t}: log2o {log2o}"
+            );
         }
     }
     assert_eq!(ok, N - N / 8, "only log2o = 0 fails");
@@ -136,10 +175,24 @@ fn rejection_eq_c() {
         let n = 64 * g.range(1, 8) as usize;
         let (z, v): (Vec<i64>, Vec<i64>) = if t % 10 == 9 {
             // near 2^62: the dot products wrap or reach 2^126 (C's ERR)
-            (0..n).map(|_| ((g.next() >> 1) as i64 >> g.range(0, 3), (g.next() >> 1) as i64 >> g.range(0, 3))).unzip()
+            (0..n)
+                .map(|_| {
+                    (
+                        (g.next() >> 1) as i64 >> g.range(0, 3),
+                        (g.next() >> 1) as i64 >> g.range(0, 3),
+                    )
+                })
+                .unzip()
         } else if t % 10 == 8 {
             // exponents far beyond +-64 (z up to 2^50, v up to 2^12, either sign)
-            (0..n).map(|_| ((g.next() >> 13) as i64 - (1 << 50), (g.next() >> 51) as i64 - (1 << 12))).unzip()
+            (0..n)
+                .map(|_| {
+                    (
+                        (g.next() >> 13) as i64 - (1 << 50),
+                        (g.next() >> 51) as i64 - (1 << 12),
+                    )
+                })
+                .unzip()
         } else {
             // |v|^2 / sigma^2 ~ c in [0.01, 4], y uniform with deviation sigma, z = y + v: exponents of a few units
             let c100 = g.range(1, 400);
@@ -153,7 +206,10 @@ fn rejection_eq_c() {
                 .unzip()
         };
         for bimodal in [false, true] {
-            let (r, c) = (rand_rej(bimodal, &seed, dom, &z, &v, &scm, &[s2, 0]), c_rej(bimodal, &seed, dom, &z, &v, &scm, &[s2, 0]));
+            let (r, c) = (
+                rand_rej(bimodal, &seed, dom, &z, &v, &scm, &[s2, 0]),
+                c_rej(bimodal, &seed, dom, &z, &v, &scm, &[s2, 0]),
+            );
             assert_eq!(r, c, "input {t}, bimodal {bimodal}");
             match c {
                 Ok((true, _)) => rejects += 1,
@@ -185,14 +241,19 @@ fn rejection_saturation_eq_c() {
     for t in 0..200 {
         let (seed, dom) = (g.seed(), g.next());
         for (k, &(bimodal, z, v, want)) in cases.iter().enumerate() {
-            let (r, c) = (rand_rej(bimodal, &seed, dom, &[z], &[v], &scm, &s2), c_rej(bimodal, &seed, dom, &[z], &[v], &scm, &s2));
+            let (r, c) = (
+                rand_rej(bimodal, &seed, dom, &[z], &[v], &scm, &s2),
+                c_rej(bimodal, &seed, dom, &[z], &[v], &scm, &s2),
+            );
             assert_eq!(r, c, "stream {t}, case {k}");
             assert_eq!(c.map(|x| x.0), Ok(want), "stream {t}, case {k}");
         }
         // S3: z = (-(2^126 - 1), 0), v = (1, 1) in two limbs: t2 = 2, t1 = -(2^126 - 1), num = 2^127 saturates, accepts
         let (z3, v3) = ([u64::MAX, (1 << 62) - 1, 1, 0, 0, 0], [1, 0, 0, 1, 0, 0]);
-        let (r, c) = (rand_rej_limbs(false, &seed, dom, &z3, &v3, 2, &scm, &s2),
-                      c_rej_limbs(false, &seed, dom, &z3, &v3, 2, &scm, &s2));
+        let (r, c) = (
+            rand_rej_limbs(false, &seed, dom, &z3, &v3, 2, &scm, &s2),
+            c_rej_limbs(false, &seed, dom, &z3, &v3, 2, &scm, &s2),
+        );
         assert_eq!(r, c, "stream {t}, case S3");
         assert_eq!(c.map(|x| x.0), Ok(false), "stream {t}, case S3");
     }
@@ -202,7 +263,11 @@ fn rejection_saturation_eq_c() {
 fn int5(g: &mut Rnd, nlimbs: u64, small: bool) -> [u64; 5] {
     let mut w = [0u64; 5];
     for x in &mut w[..nlimbs as usize] {
-        *x = if small { g.range(0, 1000) } else { g.next() >> 2 };
+        *x = if small {
+            g.range(0, 1000)
+        } else {
+            g.next() >> 2
+        };
     }
     w[3] = g.next().is_multiple_of(4) as u64;
     w[4] = nlimbs;
@@ -232,8 +297,14 @@ fn urandom_eq_c() {
             m[0] |= 4;
             (m, g.range(60, 191) as u32)
         };
-        let (r, c) = (rand_urandom(&seed, dom, n, nl, &m, log2mod), c_urandom(&seed, dom, n, nl, &m, log2mod));
-        assert_eq!(r, c, "urandom, input {t}: m {m:?}, log2mod {log2mod}, nl {nl}");
+        let (r, c) = (
+            rand_urandom(&seed, dom, n, nl, &m, log2mod),
+            c_urandom(&seed, dom, n, nl, &m, log2mod),
+        );
+        assert_eq!(
+            r, c,
+            "urandom, input {t}: m {m:?}, log2mod {log2mod}, nl {nl}"
+        );
         ok += c.is_ok() as usize;
 
         // uniform in [lo, hi] (either order, either sign, lo / hi wider than the vector: C's assert)
@@ -243,8 +314,14 @@ fn urandom_eq_c() {
         if hi[0] == lo[0] {
             hi[0] ^= 1;
         }
-        let (r, c) = (rand_urandom_bnd(&seed, dom, n, nl, &lo, &hi), c_urandom_bnd(&seed, dom, n, nl, &lo, &hi));
-        assert_eq!(r, c, "urandom_bnd, input {t}: lo {lo:?}, hi {hi:?}, nl {nl}");
+        let (r, c) = (
+            rand_urandom_bnd(&seed, dom, n, nl, &lo, &hi),
+            c_urandom_bnd(&seed, dom, n, nl, &lo, &hi),
+        );
+        assert_eq!(
+            r, c,
+            "urandom_bnd, input {t}: lo {lo:?}, hi {hi:?}, nl {nl}"
+        );
         ok += c.is_ok() as usize;
 
         // the autostable challenge: 2 bnd + 1 in [2^(log2-1), 2^log2), every 8th one too wide (C's assert)
@@ -253,7 +330,10 @@ fn urandom_eq_c() {
             0 => 1 << (log2 - 1),
             _ => g.range((1 << (log2 - 1)) / 2, ((1 << log2) - 2) / 2),
         } as i64;
-        let (r, c) = (rand_autostable(&seed, dom, bnd, log2 as u32), c_autostable(&seed, dom, bnd, log2 as u32));
+        let (r, c) = (
+            rand_autostable(&seed, dom, bnd, log2 as u32),
+            c_autostable(&seed, dom, bnd, log2 as u32),
+        );
         assert_eq!(r, c, "autostable, input {t}: bnd {bnd}, log2 {log2}");
         ok += c.is_ok() as usize;
     }

@@ -41,6 +41,12 @@ pub(super) const ROWS: &[Def] = &[
     ("UAPqzCancelVerifier", "mtxPqzCancelVerifier", GR, "bytes32 from,address target,bytes32 chainUid,E", ""),
     ("UAPqzRevokeVerifier", "mtxPqzRevokeVerifier", GR, "bytes32 from,address target,bytes32 chainUid,E", ""),
     ("UASetProofStore", "mtxSetProofStore", GR, "bytes32 from,address target,uint8 next,bytes32 chainUid,E", ""),
+    // set-auditor (CTR-GOV-31): the new auditor's consent rides unsigned beside the struct (`pop` bytes on Zether, `consent`
+    // a `UASig` on PQZ)
+    ("UASetAuditorKey", "mtxSetAuditorKey", GR, "bytes32 from,address target,bytes newKey,uint32 epoch,bytes32 chainUid,E",
+        "E target newKey epoch pop:bytes chainUid @"),
+    ("UASetAuditorUA", "mtxSetAuditorUA", GR, "bytes32 from,address target,bytes32 newAuditor,uint32 epoch,bytes32 chainUid,E",
+        "E target newAuditor epoch consent:UASig chainUid @"),
     ("UASetVerifierFee", "mtxSetVerifierFee", GR, "bytes32 from,address target,uint64 next,bytes32 chainUid,E", ""),
     ("UASetWrapLimits", "mtxSetWrapLimits", GR, "bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,bytes32 chainUid,E", ""),
     ("UASetWrapMember", "mtxSetWrapMember", GR, "bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,bytes32 chainUid,E", ""),

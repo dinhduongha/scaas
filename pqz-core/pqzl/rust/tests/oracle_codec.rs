@@ -4,7 +4,7 @@
 //! functions of `dcompress.c` (`use_ghint` / `make_ghint`) through `tests/oracle_shim.c`.
 use pqzl::c_oracle::{c_chal, c_ghint, c_p2r, c_test_mutate};
 use pqzl::test_mutate;
-use pqzl::testkit::{chal, p2r, dcomp_gamma_m, ghint, synthetic_proof};
+use pqzl::testkit::{chal, dcomp_gamma_m, ghint, p2r, synthetic_proof};
 use serde_json::Value;
 use std::path::PathBuf;
 
@@ -32,7 +32,9 @@ impl Rnd {
 
 fn hex(s: &Value) -> Vec<u8> {
     let s = s.as_str().expect("hex string").as_bytes();
-    s.chunks(2).map(|p| u8::from_str_radix(std::str::from_utf8(p).unwrap(), 16).expect("hex")).collect()
+    s.chunks(2)
+        .map(|p| u8::from_str_radix(std::str::from_utf8(p).unwrap(), 16).expect("hex"))
+        .collect()
 }
 
 /// the relation code of a proof_pqzl.json row (pqz_int.h: an op, PQZ_REL_TX0, PQZ_REL_TXM (log2 M, auditorOn))
@@ -64,7 +66,8 @@ fn proofs() -> Vec<(u8, Vec<u8>)> {
         }
         return out;
     };
-    let j: Value = serde_json::from_str(&std::fs::read_to_string(d.join("proof_pqzl.json")).unwrap()).unwrap();
+    let j: Value =
+        serde_json::from_str(&std::fs::read_to_string(d.join("proof_pqzl.json")).unwrap()).unwrap();
     let mut out: Vec<(u8, Vec<u8>)> = Vec::new();
     for r in j["rows"].as_array().unwrap() {
         let code = rel_code(r);
@@ -74,7 +77,9 @@ fn proofs() -> Vec<(u8, Vec<u8>)> {
     }
     let mut codes: Vec<u8> = out.iter().map(|(c, _)| *c).collect();
     codes.sort();
-    let mut want = vec![1, 2, 3, 4, 5, 0x70, 0x71, 0x72, 0x73, 0x78, 0x79, 0x7a, 0x7b, 0x81];
+    let mut want = vec![
+        1, 2, 3, 4, 5, 0x70, 0x71, 0x72, 0x73, 0x78, 0x79, 0x7a, 0x7b, 0x81,
+    ];
     if common::ncodes() == 16 {
         want.extend([0x41, 0xc1]); // the bench's R_TXS / R_TXS0 (a set without vectors)
         want.sort();
@@ -105,7 +110,12 @@ fn test_mutate_eq_c() {
                 let (r1, r2) = (g.next(), g.next());
                 let r = test_mutate(code, &cur, kind, r1, r2).expect("Rust test_mutate error");
                 let c = c_test_mutate(code, &cur, kind, r1, r2);
-                assert!(r == c, "code {code:#x} seed {s} kind {kind} (r1 {r1:#x} r2 {r2:#x}): Rust {:?} C {:?}", len(&r), len(&c));
+                assert!(
+                    r == c,
+                    "code {code:#x} seed {s} kind {kind} (r1 {r1:#x} r2 {r2:#x}): Rust {:?} C {:?}",
+                    len(&r),
+                    len(&c)
+                );
                 if let Some(o) = r {
                     some[kind as usize] += 1;
                     cur = o;
@@ -113,7 +123,10 @@ fn test_mutate_eq_c() {
             }
         }
         println!("code {code:#04x}: re-encoded per kind {some:?} of 200");
-        assert!(some.iter().all(|&n| n > 0), "code {code:#x}: a kind never re-encodes {some:?}");
+        assert!(
+            some.iter().all(|&n| n > 0),
+            "code {code:#x}: a kind never re-encodes {some:?}"
+        );
     }
 }
 
@@ -130,7 +143,11 @@ fn malformed_eq_c() {
             v.push((format!("truncated to {k}"), proof[..k].to_vec(), true));
         }
         for tail in [0u8, 1, 0x80] {
-            v.push((format!("trailing byte {tail:#x}"), [&proof[..], &[tail]].concat(), true));
+            v.push((
+                format!("trailing byte {tail:#x}"),
+                [&proof[..], &[tail]].concat(),
+                true,
+            ));
         }
         let mut x = proof.clone();
         x[n - 1] = 0; // the pad one gone
@@ -170,17 +187,33 @@ fn malformed_eq_c() {
         for (name, x, must) in &v {
             let r = test_mutate(*code, x, 99, 0, 0).expect("Rust test_mutate error");
             let c = c_test_mutate(*code, x, 99, 0, 0);
-            assert!(r == c, "code {code:#x} {name}: Rust {:?} C {:?}", len(&r), len(&c));
+            assert!(
+                r == c,
+                "code {code:#x} {name}: Rust {:?} C {:?}",
+                len(&r),
+                len(&c)
+            );
             assert!(!must || c.is_none(), "code {code:#x} {name}: C accepts");
             flips += (c.is_none() && name.starts_with("bit flip")) as u32;
             foreign += (c.is_none() && name.starts_with("proof of")) as u32;
             if name == "honest" {
-                assert_eq!(c.as_ref(), Some(proof), "code {code:#x}: C does not re-encode its own proof");
+                assert_eq!(
+                    c.as_ref(),
+                    Some(proof),
+                    "code {code:#x}: C does not re-encode its own proof"
+                );
             }
         }
-        println!("code {code:#04x}: refused {flips} of 64 bit flips, {foreign} of {} foreign proofs", all.len() - 1);
+        println!(
+            "code {code:#04x}: refused {flips} of 64 bit flips, {foreign} of {} foreign proofs",
+            all.len() - 1
+        );
     }
-    assert_eq!(test_mutate(0x42, &all[0].1, 99, 0, 0), Ok(None), "unknown relation code");
+    assert_eq!(
+        test_mutate(0x42, &all[0].1, 99, 0, 0),
+        Ok(None),
+        "unknown relation code"
+    );
     assert_eq!(c_test_mutate(0x42, &all[0].1, 99, 0, 0), None);
 }
 
@@ -240,7 +273,11 @@ fn ghint_eq_c() {
             if t % 16 == 0 {
                 inp[64..128].fill([gamma / 2, -gamma / 2][t / 16 % 2]);
             }
-            assert_eq!(ghint(i, &inp), c_ghint(i as u32, &inp), "relation {i} input {t}");
+            assert_eq!(
+                ghint(i, &inp),
+                c_ghint(i as u32, &inp),
+                "relation {i} input {t}"
+            );
         }
         i += 1;
     }
@@ -258,7 +295,11 @@ fn challenge_resample_kat() {
     const KAT_SEED: u8 = 17;
     const KAT_DOM: u64 = 2;
     const KAT_FNV: u64 = 0xc5da598f94ff083a;
-    let fnv = |c: &[i64; 64]| c.iter().fold(0xcbf29ce484222325u64, |h, &x| (h ^ x as u64).wrapping_mul(0x100000001b3));
+    let fnv = |c: &[i64; 64]| {
+        c.iter().fold(0xcbf29ce484222325u64, |h, &x| {
+            (h ^ x as u64).wrapping_mul(0x100000001b3)
+        })
+    };
     if std::env::var("PQZ_CHAL_SEARCH").is_ok() {
         for i in 0..=255u8 {
             let (c, _, dom) = chal(&[i; 32]).unwrap();
@@ -270,7 +311,10 @@ fn challenge_resample_kat() {
     }
     let seed = [KAT_SEED; 32];
     let (c, c0, dom) = chal(&seed).expect("a passing sample");
-    assert_ne!(c, c0, "the dom-0 sample passes the filter: not a resample seed");
+    assert_ne!(
+        c, c0,
+        "the dom-0 sample passes the filter: not a resample seed"
+    );
     assert_eq!((dom, fnv(&c)), (KAT_DOM, KAT_FNV), "Rust challenge");
     assert_eq!(c_chal(&seed), Some((c, c0)), "C = Rust");
 }

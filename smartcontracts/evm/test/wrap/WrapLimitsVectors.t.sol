@@ -16,7 +16,9 @@ contract WrapLimitsVectorsTest is WrapLimitsBase {
         uint256 n;
         while (vm.keyExistsJson(j, string.concat(".rows[", vm.toString(n), "]"))) ++n;
         assertEq(n, 8, "rows");
-        for (uint256 r; r < n; ++r) _row(j, string.concat(".rows[", vm.toString(r), "]"));
+        for (uint256 r; r < n; ++r) {
+            _row(j, string.concat(".rows[", vm.toString(r), "]"));
+        }
     }
 
     function _row(string memory j, string memory p) internal {

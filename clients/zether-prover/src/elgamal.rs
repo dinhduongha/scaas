@@ -37,21 +37,33 @@ pub struct BsgsParams {
 
 impl BsgsParams {
     /// Mobile / wasm default: 64 MiB table, balances and `pending` up to 2^44.
-    pub const MOBILE: Self = Self { table_bits: 22, bound_bits: 44 };
+    pub const MOBILE: Self = Self {
+        table_bits: 22,
+        bound_bits: 44,
+    };
 
     pub fn new(table_bits: u32, bound_bits: u32) -> Result<Self, ZError> {
         check_table_bits(table_bits)?;
         if !(1..=BOUND_BITS_MAX).contains(&bound_bits) {
             return Err(ZError::Bsgs("bound_bits must be in 1..=54"));
         }
-        Ok(Self { table_bits, bound_bits })
+        Ok(Self {
+            table_bits,
+            bound_bits,
+        })
     }
 
     /// Desktop default from available RAM: `bound_bits 54`, the largest `table_bits` in 24–26
     /// whose table takes at most a quarter of `available` bytes (24 below that).
     pub fn desktop(available: u64) -> Self {
-        let table_bits = (24..=26).rev().find(|&b| table_bytes(b) * 4 <= available).unwrap_or(24);
-        Self { table_bits, bound_bits: BOUND_BITS_MAX }
+        let table_bits = (24..=26)
+            .rev()
+            .find(|&b| table_bytes(b) * 4 <= available)
+            .unwrap_or(24);
+        Self {
+            table_bits,
+            bound_bits: BOUND_BITS_MAX,
+        }
     }
 
     /// wasm → [`Self::MOBILE`]; native → [`Self::desktop`] of `MemAvailable`.
@@ -74,7 +86,9 @@ pub fn check_table_bits(table_bits: u32) -> Result<(), ZError> {
         return Err(ZError::Bsgs("table_bits must be in 18..=27"));
     }
     if cfg!(target_arch = "wasm32") && table_bits > WASM_TABLE_BITS_MAX {
-        return Err(ZError::Bsgs("table too large for wasm (2 GiB); use the native zether-read-balance"));
+        return Err(ZError::Bsgs(
+            "table too large for wasm (2 GiB); use the native zether-read-balance",
+        ));
     }
     Ok(())
 }
@@ -83,9 +97,9 @@ pub fn check_table_bits(table_bits: u32) -> Result<(), ZError> {
 /// buffer when it is saved). Unknown RAM (`None`, non-Linux) is not a refusal.
 pub fn check_ram(table_bits: u32, available: Option<u64>) -> Result<(), ZError> {
     match available {
-        Some(a) if a < 2 * table_bytes(table_bits) => {
-            Err(ZError::Bsgs("not enough free RAM for this table_bits; pick a smaller one"))
-        }
+        Some(a) if a < 2 * table_bytes(table_bits) => Err(ZError::Bsgs(
+            "not enough free RAM for this table_bits; pick a smaller one",
+        )),
         _ => Ok(()),
     }
 }
@@ -113,23 +127,38 @@ impl<C: ZCurve> Copy for Ciphertext<C> {}
 
 impl<C: ZCurve> Ciphertext<C> {
     pub fn zero() -> Self {
-        Self { c: G::<C>::zero(), d: G::<C>::zero() }
+        Self {
+            c: G::<C>::zero(),
+            d: G::<C>::zero(),
+        }
     }
     pub fn add(&self, o: &Self) -> Self {
-        Self { c: self.c + o.c, d: self.d + o.d }
+        Self {
+            c: self.c + o.c,
+            d: self.d + o.d,
+        }
     }
     pub fn sub(&self, o: &Self) -> Self {
-        Self { c: self.c - o.c, d: self.d - o.d }
+        Self {
+            c: self.c - o.c,
+            d: self.d - o.d,
+        }
     }
     /// Homomorphic subtraction of a public scalar (the fee path: `C' = C · g^{-fee}`).
     pub fn sub_plain(&self, v: u64) -> Self {
-        Self { c: self.c - generator::<C>() * Fr::<C>::from(v), d: self.d }
+        Self {
+            c: self.c - generator::<C>() * Fr::<C>::from(v),
+            d: self.d,
+        }
     }
 }
 
 pub fn encrypt<C: ZCurve>(y: &G<C>, b: u64, r: &Fr<C>) -> Ciphertext<C> {
     let g = generator::<C>();
-    Ciphertext { c: g * Fr::<C>::from(b) + *y * r, d: g * r }
+    Ciphertext {
+        c: g * Fr::<C>::from(b) + *y * r,
+        d: g * r,
+    }
 }
 
 hazmat_pub! {
@@ -171,7 +200,11 @@ pub fn cached_table<C: ZCurve>(table_bits: u32) -> Result<Arc<BsgsTable<C>>, ZEr
 
 /// `table_bits` of the table [`cached_table`] currently holds for this curve, if any.
 pub fn cached_table_bits<C: ZCurve>() -> Option<u32> {
-    C::bsgs_slot().lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|t| t.bits)
+    C::bsgs_slot()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .map(|t| t.bits)
 }
 
 /// Per-curve storage behind [`cached_table`].
@@ -207,7 +240,12 @@ impl<C: ZCurve> BsgsTable<C> {
             acc += g;
             if pts.len() == CHUNK || j + 1 == n {
                 let base = j + 1 - pts.len() as u32;
-                baby.extend(G::<C>::normalize_batch(&pts).iter().zip(base..).map(|(p, i)| (key::<C>(p), i)));
+                baby.extend(
+                    G::<C>::normalize_batch(&pts)
+                        .iter()
+                        .zip(base..)
+                        .map(|(p, i)| (key::<C>(p), i)),
+                );
                 pts.clear();
             }
         }
@@ -216,7 +254,11 @@ impl<C: ZCurve> BsgsTable<C> {
     }
 
     fn with_baby(bits: u32, baby: Vec<(u64, u32)>) -> Self {
-        Self { bits, baby, giant: -(generator::<C>() * Fr::<C>::from(1u64 << bits)) }
+        Self {
+            bits,
+            baby,
+            giant: -(generator::<C>() * Fr::<C>::from(1u64 << bits)),
+        }
     }
 
     pub fn table_bits(&self) -> u32 {
@@ -284,7 +326,11 @@ impl<C: ZCurve> BsgsTable<C> {
         let bad = |w| Err(ZError::Bsgs(w));
         let name = C::NAME.as_bytes();
         let head = MAGIC.len() + 1 + name.len() + 1;
-        if b.len() < head || &b[..8] != MAGIC || b[8] as usize != name.len() || &b[9..9 + name.len()] != name {
+        if b.len() < head
+            || &b[..8] != MAGIC
+            || b[8] as usize != name.len()
+            || &b[9..9 + name.len()] != name
+        {
             return bad("not a BSGS table for this curve");
         }
         let bits = b[head - 1] as u32;
@@ -296,9 +342,15 @@ impl<C: ZCurve> BsgsTable<C> {
         let mut baby = Vec::with_capacity(n);
         let mut seen = vec![0u64; n / 64];
         for e in b[head..].chunks_exact(12) {
-            let (k, j) = (u64::from_le_bytes(e[..8].try_into().unwrap()), u32::from_le_bytes(e[8..].try_into().unwrap()));
+            let (k, j) = (
+                u64::from_le_bytes(e[..8].try_into().unwrap()),
+                u32::from_le_bytes(e[8..].try_into().unwrap()),
+            );
             let ju = j as usize;
-            if ju >= n || seen[ju / 64] >> (ju % 64) & 1 == 1 || baby.last().is_some_and(|&p| p > (k, j)) {
+            if ju >= n
+                || seen[ju / 64] >> (ju % 64) & 1 == 1
+                || baby.last().is_some_and(|&p| p > (k, j))
+            {
                 return bad("table entries are not a sorted permutation of 0..2^table_bits");
             }
             seen[ju / 64] |= 1 << (ju % 64);
@@ -352,11 +404,23 @@ mod tests {
         assert_ne!(t.decrypt(&a, &x2, 24).ok(), Some(1_000_000));
         // Bound edges, giant steps crossing a 4096 batch: 2^26 − 1 decrypts, 2^26 does not.
         let r = Fr::<C>::rand(&mut rng);
-        assert_eq!(t.decrypt(&encrypt(&y, (1 << 26) - 1, &r), &x, 26).unwrap(), (1 << 26) - 1);
-        assert_eq!(t.decrypt(&encrypt(&y, 1 << 26, &r), &x, 26), Err(ZError::DecryptBound));
+        assert_eq!(
+            t.decrypt(&encrypt(&y, (1 << 26) - 1, &r), &x, 26).unwrap(),
+            (1 << 26) - 1
+        );
+        assert_eq!(
+            t.decrypt(&encrypt(&y, 1 << 26, &r), &x, 26),
+            Err(ZError::DecryptBound)
+        );
         // bound < table: values the table would find but the bound excludes are refused.
-        assert_eq!(t.decrypt(&encrypt(&y, 1 << 12, &r), &x, 12), Err(ZError::DecryptBound));
-        assert_eq!(t.decrypt(&encrypt(&y, (1 << 12) - 1, &r), &x, 12).unwrap(), (1 << 12) - 1);
+        assert_eq!(
+            t.decrypt(&encrypt(&y, 1 << 12, &r), &x, 12),
+            Err(ZError::DecryptBound)
+        );
+        assert_eq!(
+            t.decrypt(&encrypt(&y, (1 << 12) - 1, &r), &x, 12).unwrap(),
+            (1 << 12) - 1
+        );
         // check_balance: one comparison, any size.
         let big = encrypt(&y, (1 << 54) - 3, &r);
         assert!(check_balance(&big, &x, (1 << 54) - 3).unwrap());
@@ -387,10 +451,19 @@ mod tests {
         assert_eq!(BsgsParams::new(27, 54).unwrap().giant_steps(), 1 << 27);
         assert_eq!(BsgsParams::new(22, 20).unwrap().giant_steps(), 1);
         for (t, b) in [(17, 40), (28, 40), (22, 55), (22, 0)] {
-            assert!(matches!(BsgsParams::new(t, b), Err(ZError::Bsgs(_))), "{t}/{b}");
+            assert!(
+                matches!(BsgsParams::new(t, b), Err(ZError::Bsgs(_))),
+                "{t}/{b}"
+            );
         }
         // Desktop: largest of 24..=26 using at most a quarter of RAM.
-        assert_eq!(BsgsParams::desktop(0), BsgsParams { table_bits: 24, bound_bits: 54 });
+        assert_eq!(
+            BsgsParams::desktop(0),
+            BsgsParams {
+                table_bits: 24,
+                bound_bits: 54
+            }
+        );
         assert_eq!(BsgsParams::desktop(2 << 30).table_bits, 25);
         assert_eq!(BsgsParams::desktop(64 << 30).table_bits, 26);
         assert_eq!(BsgsParams::for_target().bound_bits, 54); // native test target

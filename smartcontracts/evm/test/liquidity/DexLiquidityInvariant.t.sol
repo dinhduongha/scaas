@@ -82,9 +82,11 @@ contract LiquidityInvariantTest is LiquidityBase {
         o.inputs = _two(_t(address(a), x + slack), _t(second, y + slack));
         o.outputs = _one(_t(address(lp), 1));
         ISCaaSDex.LiquidityPlan memory p = _plan(o, ALICE_PK, _u2(x + slack, y + slack));
-        ISCaaSDex.Interaction[] memory xs = _xs3(_ix(address(a), abi.encodeCall(IERC20.transfer, (address(lp), x))),
+        ISCaaSDex.Interaction[] memory xs = _xs3(
+            _ix(address(a), abi.encodeCall(IERC20.transfer, (address(lp), x))),
             _ix(second, abi.encodeCall(IERC20.transfer, (address(lp), y))),
-            _ix(address(lp), abi.encodeCall(MockV2LiquidityPair.mint, (address(dex)))));
+            _ix(address(lp), abi.encodeCall(MockV2LiquidityPair.mint, (address(dex))))
+        );
         _run(p, xs);
         _record(p);
         pulledA += x; // `slack` came back
@@ -103,8 +105,13 @@ contract LiquidityInvariantTest is LiquidityBase {
         o.inputs = _one(_t(address(pair), share));
         o.outputs = _two(_t(address(a), 0), _t(address(b), 0));
         ISCaaSDex.LiquidityPlan memory p = _plan(o, CAROL_PK, _u(share));
-        _run(p, _xs2(_ix(address(pair), abi.encodeCall(IERC20.transfer, (address(pair), share))),
-            _ix(address(pair), abi.encodeCall(MockV2LiquidityPair.burn, (address(dex))))));
+        _run(
+            p,
+            _xs2(
+                _ix(address(pair), abi.encodeCall(IERC20.transfer, (address(pair), share))),
+                _ix(address(pair), abi.encodeCall(MockV2LiquidityPair.burn, (address(dex))))
+            )
+        );
         _record(p);
     }
 

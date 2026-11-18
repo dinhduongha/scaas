@@ -57,8 +57,12 @@ interface IComplianceRegistry is IAdmin {
     ///         admin overwrites or revokes; a KYC provider gets `AdminWrittenSlot` (owner 2026-11-06). `until` is the
     ///         row's `validUntil` (the router's envelope has a `validUntil` of its own). The subject first
     ///         (`NotKycProvider`), then `chainUid_` the registry's word (`ChainUidMismatch`, CTR-GOV-28), before any write.
-    function setCompliance(bytes32[] calldata accounts, uint64[] calldata flags, uint64[] calldata until, bytes32 chainUid_)
-        external;
+    function setCompliance(
+        bytes32[] calldata accounts,
+        uint64[] calldata flags,
+        uint64[] calldata until,
+        bytes32 chainUid_
+    ) external;
     function complianceOf(bytes32 account) external view returns (uint64 flags, uint64 validUntil, uint32 providerId);
     /// @notice `(required == 0 || (active && ((f & required) == required || f & ELIGIBLE_CONTRACT != 0)))
     ///         && !(active && f & denied != 0)`, `active = kycProviderEnabled(id) && validUntil >= now`.

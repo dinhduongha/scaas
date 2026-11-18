@@ -178,9 +178,15 @@ library WrappedLib {
     /// @notice The token's `_init`: legs 1–8 (the factory's index reads the same `legs`), the metadata, the
     ///         flags/admin/roles of `kind` (`GovernanceLib.init` with the kind's masks, spec §1.2), the rate config, then
     ///         the legs in their given order (never changes).
-    function initToken(IFactoryToken.TokenConfig memory c, bool isHedera, uint8 kind, uint256 valid, uint256 roleBits,
-        uint256 contractOnly, address uaRegistry) public
-    {
+    function initToken(
+        IFactoryToken.TokenConfig memory c,
+        bool isHedera,
+        uint8 kind,
+        uint256 valid,
+        uint256 roleBits,
+        uint256 contractOnly,
+        address uaRegistry
+    ) public {
         uint256 n = c.legs.length;
         if (n == 0 || n > MAX_LEGS) revert MetaTokenBase.UnderlyingCountInvalid(n);
         { // scoped: `init` below takes ten words (stack)
@@ -198,19 +204,33 @@ library WrappedLib {
         uint256 wc = c.features & GovernanceBits.WRAP_CONTROLS;
         if (c.maxSupply == 0 && wc != 0) {
             revert IWrappedToken.WrapControlNeedsHybrid(wc & (uint256(1) << GovernanceBits.WRAP_LIMIT) != 0
-                ? GovernanceBits.WRAP_LIMIT : wc & (uint256(1) << GovernanceBits.WRAP_LIST) != 0
-                ? GovernanceBits.WRAP_LIST : GovernanceBits.REDEEMER);
+                    ? GovernanceBits.WRAP_LIMIT
+                    : wc & (uint256(1) << GovernanceBits.WRAP_LIST) != 0
+                        ? GovernanceBits.WRAP_LIST
+                        : GovernanceBits.REDEEMER);
         }
-        GovernanceLib.init(c.features, c.lockedFeatures, c.admin, c.grantDelay, c.rescueTo, c.roles, valid, roleBits,
-            contractOnly, uaRegistry);
+        GovernanceLib.init(
+            c.features,
+            c.lockedFeatures,
+            c.admin,
+            c.grantDelay,
+            c.rescueTo,
+            c.roles,
+            valid,
+            roleBits,
+            contractOnly,
+            uaRegistry
+        );
         bool adjustable = GovernanceLib.hasFeature(GovernanceBits.RATE_ADJUSTABLE);
         WrappedStorage storage s = $();
         IFactoryToken.RateConfig memory rate = c.rate;
         if (!adjustable) {
             if (rate.rateDelay != 0 || rate.maxRateStepBps != 0) revert IWrappedToken.RateConfigInvalid();
         } else {
-            if (rate.rateDelay < 2 days || rate.rateDelay > 30 days || rate.maxRateStepBps == 0
-                || rate.maxRateStepBps > 1000) revert IWrappedToken.RateConfigInvalid();
+            if (
+                rate.rateDelay < 2 days || rate.rateDelay > 30 days || rate.maxRateStepBps == 0
+                    || rate.maxRateStepBps > 1000
+            ) revert IWrappedToken.RateConfigInvalid();
             s.rateDelay = rate.rateDelay;
             s.maxRateStepBps = rate.maxRateStepBps;
         }
@@ -218,12 +238,12 @@ library WrappedLib {
         // CTR-GOV-30: `maxWrapSupply <= maxSupply` when both are non-zero; `totalWrapped` starts at 0
         if (c.maxSupply != 0 && c.maxWrapSupply > c.maxSupply) revert IWrappedToken.MaxWrapSupplyInvalid();
         s.maxWrapSupply = c.maxWrapSupply;
-        for (uint256 i; i < n; ++i) _addLeg(s, c.legs[i], adjustable, isHedera);
+        for (uint256 i; i < n; ++i) {
+            _addLeg(s, c.legs[i], adjustable, isHedera);
+        }
     }
 
-    function _addLeg(WrappedStorage storage s, IFactoryToken.Leg memory l, bool adjustable, bool isHedera)
-        private
-    {
+    function _addLeg(WrappedStorage storage s, IFactoryToken.Leg memory l, bool adjustable, bool isHedera) private {
         address u = l.underlying;
         uint8 d;
         if (u == NATIVE) {
@@ -234,8 +254,11 @@ library WrappedLib {
             // CTR-GOV-05 (spec §6.1, B-15): a leg this factory registered must not carry FORCE or MODERATE. `msg.sender` is
             // the factory (`initialize` checked it; DELEGATECALL keeps it, GD-20). `isRegisteredToken`, never `isToken`: an
             // unregistered leg or a second factory's token is an outside leg, never read. Features only lose bits.
-            if (IOpenFactory(msg.sender).isRegisteredToken(u) && IGovernance(u).features()
-                & ((uint256(1) << GovernanceBits.FORCE) | (uint256(1) << GovernanceBits.MODERATE)) != 0) {
+            if (
+                IOpenFactory(msg.sender).isRegisteredToken(u)
+                    && IGovernance(u).features()
+                            & ((uint256(1) << GovernanceBits.FORCE) | (uint256(1) << GovernanceBits.MODERATE)) != 0
+            ) {
                 revert IWrappedToken.UnderlyingInvalid(u);
             }
             (bool ok, bytes memory ret) = u.staticcall(abi.encodeCall(IERC20Metadata.decimals, ()));
@@ -249,8 +272,15 @@ library WrappedLib {
         if (s.legIndex[u] != 0) revert IWrappedToken.DuplicateUnderlying(u);
         uint256 i = s.legCount;
         s.legs[i] = Leg({
-            token: u, decimals: d, wrapEnabled: true, adjustable: adjustable, capped: s.maxSupply != 0, ctl: 0,
-            num: uint96(num), den: uint96(den), reserve: 0
+            token: u,
+            decimals: d,
+            wrapEnabled: true,
+            adjustable: adjustable,
+            capped: s.maxSupply != 0,
+            ctl: 0,
+            num: uint96(num),
+            den: uint96(den),
+            reserve: 0
         });
         s.legIndex[u] = i + 1;
         s.legCount = uint8(i + 1);
@@ -265,7 +295,8 @@ library WrappedLib {
     ///         hybrid's cap, `totalWrapped + minted <= maxWrapSupply` (0: no wrap cap), and the counter written, before the
     ///         token's mint (no outside call in between).
     function wrap(uint256 i, uint256 amount, address from, uint256 value, uint256 supply, bytes32 receiver)
-        public returns (address u, uint256 received, uint256 minted)
+        public
+        returns (address u, uint256 received, uint256 minted)
     {
         WrappedStorage storage s = $();
         Leg storage L = s.legs[i];
@@ -349,9 +380,13 @@ library WrappedLib {
     /// @return received the measured delta (must be `o.amount`)
     /// @return minted `⌊o.amount·num/den⌋`
     /// @return fee `⌈minted·o.fee/10⁶⌉`, the submitter's part of `minted`
-    function wrapBySigUA(address u, ITradeToken.UAWrapOrder calldata o, IUARegistry.UASig calldata auth, address submitter,
-        uint256 supply) public returns (uint256 received, uint256 minted, uint256 fee)
-    {
+    function wrapBySigUA(
+        address u,
+        ITradeToken.UAWrapOrder calldata o,
+        IUARegistry.UASig calldata auth,
+        address submitter,
+        uint256 supply
+    ) public returns (uint256 received, uint256 minted, uint256 fee) {
         (Leg storage L, uint256 i) = _wrapLeg(u, o.wrappedToken);
         if (!UAKinds.inNativeSpace(o.from) && !ERC165Checker.supportsInterface(u, type(IUALedger).interfaceId)) {
             revert IUALedger.UALegNotLedger(u);
@@ -403,7 +438,9 @@ library WrappedLib {
     /// @dev `minted = ⌊amount·num/den⌋`, the submitter's `fee = ⌈minted·feePpm/10⁶⌉`; a hybrid's cap on `minted` (the fee is
     ///      minted too); the wrap cap on it (CTR-GOV-30), checked here, written by `wrapBySigUA` after the leg's call.
     function _sigQuote(Leg storage L, uint256 amount, uint256 feePpm, uint256 supply)
-        private view returns (uint256 minted, uint256 fee)
+        private
+        view
+        returns (uint256 minted, uint256 fee)
     {
         minted = Math.mulDiv(amount, L.num, L.den);
         if (minted == 0) revert IWrappedToken.WrapTooSmall();
@@ -428,10 +465,15 @@ library WrappedLib {
     /// @notice Every check before any effect: recipient, `0 < out`, `out ≥ minOut`, `out ≤ reserve`; group 3l (spec §4):
     ///         the unwrapper list, the four limits and the entitlement of `holder` on `out`, checked, not written.
     function quoteUnwrap(uint256 i, uint256 wrapped, address recipient, uint256 minOut, bytes32 holder)
-        public view returns (uint256 out, uint256 burned)
+        public
+        view
+        returns (uint256 out, uint256 burned)
     {
-        if (recipient == address(0) || recipient == address(this) || recipient == MetaTxLib.UA_POOL
-            || recipient == MetaTxLib.SHIELD_POOL) { // C5-4
+        if (
+            recipient == address(0) || recipient == address(this) || recipient == MetaTxLib.UA_POOL
+                || recipient == MetaTxLib.SHIELD_POOL
+        ) {
+            // C5-4
             revert IWrappedToken.UnwrapRecipientInvalid(recipient);
         }
         return _quote(i, wrapped, minOut, holder);
@@ -440,13 +482,17 @@ library WrappedLib {
     /// @notice `unwrapToUA` (CTR-UA-28): the checks of `quoteUnwrap` but the recipient's (the leg's `transferToUA`
     ///         checks `to`).
     function quoteUnwrapToUA(uint256 i, uint256 wrapped, uint256 minOut, bytes32 holder)
-        public view returns (uint256 out, uint256 burned)
+        public
+        view
+        returns (uint256 out, uint256 burned)
     {
         return _quote(i, wrapped, minOut, holder);
     }
 
     function _quote(uint256 i, uint256 wrapped, uint256 minOut, bytes32 holder)
-        private view returns (uint256 out, uint256 burned)
+        private
+        view
+        returns (uint256 out, uint256 burned)
     {
         Leg storage L = $().legs[i];
         (uint256 num, uint256 den) = (L.num, L.den);
@@ -466,7 +512,10 @@ library WrappedLib {
     ///         refused (`UnwrapRecipientInvalid`: an EOA must not run code, owner ruling 2026-10-30, D4).
     ///         Group 3l (spec §4 step 6): `holder`'s count, checked again and written, before `reserve -= out`. Round 3zc
     ///         (CTR-GOV-30): `burned`, the units the caller burnt, leave `totalWrapped`.
-    function payOut(uint256 i, address recipient, uint256 out, uint256 burned, bytes32 holder) public returns (address u) {
+    function payOut(uint256 i, address recipient, uint256 out, uint256 burned, bytes32 holder)
+        public
+        returns (address u)
+    {
         Leg storage L = $().legs[i];
         u = L.token;
         _unwrapCount(L, i, holder, out);
@@ -476,8 +525,9 @@ library WrappedLib {
         if (u == NATIVE) {
             if (SigCheck.isDesignator(recipient)) revert IWrappedToken.UnwrapRecipientInvalid(recipient);
             Address.sendValue(payable(recipient), out);
+        } else {
+            IERC20(u).safeTransfer(recipient, out);
         }
-        else IERC20(u).safeTransfer(recipient, out);
         uint256 after_ = _balance(u);
         uint256 sent = before > after_ ? before - after_ : 0;
         if (sent != out) revert IWrappedToken.UnderlyingTransferMismatch(u, out, sent);
@@ -509,7 +559,9 @@ library WrappedLib {
     ///         unshield-unwrap runs it before its proof (spec §5.4), so a short reserve, or a wrap limit (group 3l, the proof's
     ///         sender `holder`), costs the relayer the cheap prefix.
     function quoteTo(uint256 i, bytes32 recipient, uint256 wrapped, uint256 minOut, bytes32 holder)
-        public view returns (uint256 out)
+        public
+        view
+        returns (uint256 out)
     {
         if (UAKinds.inNativeSpace(recipient)) {
             (out,) = quoteUnwrap(i, wrapped, address(uint160(uint256(recipient))), minOut, holder);
@@ -523,7 +575,8 @@ library WrappedLib {
     ///         by `quoteUnwrapToUA` + `payOutToUA` (`UALegNotLedger` for an outside leg). All of `wrapped` was burnt, so all of
     ///         it leaves `totalWrapped` (CTR-GOV-30).
     function payOutTo(uint256 i, bytes32 recipient, uint256 wrapped, uint256 minOut, bytes32 holder)
-        public returns (uint256 out)
+        public
+        returns (uint256 out)
     {
         out = quoteTo(i, recipient, wrapped, minOut, holder);
         if (UAKinds.inNativeSpace(recipient)) payOut(i, address(uint160(uint256(recipient))), out, wrapped, holder);
@@ -543,7 +596,9 @@ library WrappedLib {
         uint256 x = s.legIndex[asset]; // the leg's index + 1, 0 for a foreign asset
         uint256 n = s.legCount;
         uint256[] memory before = new uint256[](n);
-        for (uint256 i; i < n; ++i) if (i + 1 != x) before[i] = _balance(s.legs[i].token);
+        for (uint256 i; i < n; ++i) {
+            if (i + 1 != x) before[i] = _balance(s.legs[i].token);
+        }
         uint256 amount;
         if (x != 0) {
             uint256 r = s.legs[x - 1].reserve;
@@ -568,7 +623,10 @@ library WrappedLib {
 
     /// @notice One-way: no re-enable (a compromised guardian reopening a depegged inflow would drain the good legs).
     function disableWrap(address u, bytes32 reason, bytes32 caller) public {
-        if (!GovernanceLib.hasFeature(GovernanceBits.WRAP_DISABLEABLE) || !GovernanceLib.hasRole(GovernanceBits.WRAP_DISABLEABLE, caller)) {
+        if (
+            !GovernanceLib.hasFeature(GovernanceBits.WRAP_DISABLEABLE)
+                || !GovernanceLib.hasRole(GovernanceBits.WRAP_DISABLEABLE, caller)
+        ) {
             revert IWrappedToken.NotGuardian();
         }
         GovernanceUse.use(GovernanceBits.WRAP_DISABLEABLE, caller, 0); // a limited holder's grant binds it
@@ -648,7 +706,9 @@ library WrappedLib {
     ///      early exit once covered but still checking every leg's balance. Returns "some leg has wrap disabled". On a
     ///      hybrid (`capped`) no `C' ≥ supply`: a rate fall needs no `addReserve` (spec §5.3, C1, CTR-GOV-12).
     function _requireCollateral(WrappedStorage storage s, PendingRate memory p, uint256 supply)
-        private view returns (bool anyDisabled)
+        private
+        view
+        returns (bool anyDisabled)
     {
         uint256 c;
         uint256 n = s.legCount;
@@ -678,8 +738,10 @@ library WrappedLib {
     }
 
     /// @notice Round 3zc (CTR-GOV-30): `pendingSupplyCaps()`; a pending is shown live only with bit 31 set.
-    function pendingSupplyCaps() public view returns (uint256 pms, uint64 msEta, bool msLive, uint256 pws, uint64 wsEta,
-        bool wsLive)
+    function pendingSupplyCaps()
+        public
+        view
+        returns (uint256 pms, uint64 msEta, bool msLive, uint256 pws, uint64 wsEta, bool wsLive)
     {
         WrappedStorage storage s = $();
         bool on = GovernanceLib.hasFeature(GovernanceBits.SUPPLY_CAP_ADJUSTABLE);
@@ -778,7 +840,9 @@ library WrappedLib {
     /// @dev The two limits of one side (`side` 0 wrap, 1 unwrap) on `x` raw units: per-user parts in `qw` (the id's quota
     ///      word), token-wide parts in `tw` (the side's `TokenWindow` word); `q = ⌈x/unit⌉` (spec §2, "A use").
     function _side(uint256 cfg, uint256 qw, uint256 tw, uint256 side, Use memory c)
-        private pure returns (uint256, uint256)
+        private
+        pure
+        returns (uint256, uint256)
     {
         c.unit = 10 ** uint8(cfg >> 224);
         c.q = Math.ceilDiv(c.x, c.unit);
@@ -825,7 +889,9 @@ library WrappedLib {
     ///      elapsed minutes on the 2^21 circle, never a checked subtraction (spec §5, Fable P1-4); a new window starts at this
     ///      use. `nu > cap` is the caller's refusal.
     function _window(uint256 start, uint256 used, uint256 p, uint256 q, uint256 cap, uint256 nowMin)
-        private pure returns (uint256 ns, uint256 nu, uint256 left)
+        private
+        pure
+        returns (uint256 ns, uint256 nu, uint256 left)
     {
         bool active = used != 0 && (nowMin + _CIRCLE - start) % _CIRCLE <= p;
         uint256 base = active ? used : 0;
@@ -875,14 +941,21 @@ library WrappedLib {
     }
 
     /// @dev The wrap side's limits on the payer's word `ps`; the token-wide word written when a part of it is on.
-    function _wrapSide(uint256 cfg, uint256 i, uint256 ps, uint256 x, bytes32 payer, address u) private returns (uint256 qw) {
+    function _wrapSide(uint256 cfg, uint256 i, uint256 ps, uint256 x, bytes32 payer, address u)
+        private
+        returns (uint256 qw)
+    {
         (uint256 ts, uint256 tw) = _total(wl(), cfg, i, 0);
         (qw, tw) = _side(cfg, _ld(ps), tw, 0, _use(x, payer, u));
         if (ts != 0) _st(ts, tw);
     }
 
     /// @dev The side's token-wide word, read only when a token-wide part of the side is on: its slot (0 = none) and word.
-    function _total(WrapLimitStorage storage w, uint256 cfg, uint256 i, uint256 side) private view returns (uint256 ts, uint256 tw) {
+    function _total(WrapLimitStorage storage w, uint256 cfg, uint256 i, uint256 side)
+        private
+        view
+        returns (uint256 ts, uint256 tw)
+    {
         if (cfg & _TW == 0) return (0, 0);
         ts = _slot(w.total[i]) + side;
         tw = _ld(ts);
@@ -892,7 +965,9 @@ library WrappedLib {
     ///      limits and the entitlement rule on `q = ⌈out/unit⌉`; the new words returned, not written. `excess` > 0: a
     ///      redeemer's exemption used, the raw units above the entitlement (R27).
     function _unwrapNext(uint8 ctl, uint256 i, bytes32 holder, uint256 x, address u)
-        private view returns (uint256 qw, uint256 ts, uint256 tw, uint256 excess)
+        private
+        view
+        returns (uint256 qw, uint256 ts, uint256 tw, uint256 excess)
     {
         if (holder == 0) revert IWrappedToken.WrapSubjectZero();
         if (ctl & CTL_ULIST != 0) _listed(holder, 2);
@@ -907,7 +982,9 @@ library WrappedLib {
     ///      division at `E = 0`, Fable P1-3), else `b' = ⌊b·(E − q)/E⌋`, which is `b − q` without the decay; the start kept.
     ///      A would-be refusal reads the redeemer role (R9), and only then.
     function _debit(uint256 cfg, uint256 qw, uint8 ctl, uint256 x, bytes32 holder, address u)
-        private view returns (uint256, uint256 excess)
+        private
+        view
+        returns (uint256, uint256 excess)
     {
         uint256 unit = 10 ** uint8(cfg >> 224);
         uint256 decayDays = uint16(cfg >> 232);
@@ -947,12 +1024,28 @@ library WrappedLib {
     ///         shape): the first proposes, the same call again by the admin in `[eta, eta + delay]` under the same admin
     ///         generation applies; anything else applies at once and clears a pending. The first configuration on a bit-25
     ///         token fixes every leg's `unitExp` and starts the tracking.
-    function setWrapLimits(IWrappedToken.WrapLegLimits[] calldata legs, bool netUnwrap, bool wrapList, bool unwrapList,
-        bytes32 caller, address factory) public
-    {
+    function setWrapLimits(
+        IWrappedToken.WrapLegLimits[] calldata legs,
+        bool netUnwrap,
+        bool wrapList,
+        bool unwrapList,
+        bytes32 caller,
+        address factory
+    ) public {
         (bool slow, uint8 ctl) = _classify(legs, netUnwrap, wrapList, unwrapList, caller);
-        if (slow && !_due(keccak256(abi.encode(legs, netUnwrap, wrapList, unwrapList)), caller,
-            GovernanceLib.$().adminGeneration, IOpenFactory(factory).noticePeriod(), legs, netUnwrap, wrapList, unwrapList)) {
+        if (
+            slow
+                && !_due(
+                    keccak256(abi.encode(legs, netUnwrap, wrapList, unwrapList)),
+                    caller,
+                    GovernanceLib.$().adminGeneration,
+                    IOpenFactory(factory).noticePeriod(),
+                    legs,
+                    netUnwrap,
+                    wrapList,
+                    unwrapList
+                )
+        ) {
             return;
         }
         _apply(legs, ctl);
@@ -961,19 +1054,27 @@ library WrappedLib {
 
     /// @dev The admin, the leg count, the bits, every leg's checks; `slow`: R6 / R13, the wrap side looser or the unwrap side
     ///      tighter (the lists and the net rule included); `ctl` the copy the configuration writes.
-    function _classify(IWrappedToken.WrapLegLimits[] calldata legs, bool netUnwrap, bool wrapList, bool unwrapList,
-        bytes32 caller) private view returns (bool slow, uint8 ctl)
-    {
+    function _classify(
+        IWrappedToken.WrapLegLimits[] calldata legs,
+        bool netUnwrap,
+        bool wrapList,
+        bool unwrapList,
+        bytes32 caller
+    ) private view returns (bool slow, uint8 ctl) {
         bool has25 = _adminAndBits(legs.length, netUnwrap, wrapList, unwrapList, caller);
         uint8 old = $().legs[0].ctl;
-        slow = (old & CTL_WLIST != 0 && !wrapList) || (old & CTL_ULIST == 0 && unwrapList) || (old & CTL_NET == 0 && netUnwrap);
+        slow = (old & CTL_WLIST != 0 && !wrapList) || (old & CTL_ULIST == 0 && unwrapList)
+            || (old & CTL_NET == 0 && netUnwrap);
         slow = _legsSlow(legs, has25, old & CTL_TRACK != 0) || slow;
-        ctl = (has25 ? CTL_TRACK : 0) | (netUnwrap ? CTL_NET : 0) | (wrapList ? CTL_WLIST : 0) | (unwrapList ? CTL_ULIST : 0);
+        ctl = (has25 ? CTL_TRACK : 0) | (netUnwrap ? CTL_NET : 0) | (wrapList ? CTL_WLIST : 0)
+            | (unwrapList ? CTL_ULIST : 0);
     }
 
     /// @dev The admin, the leg count, the bits a field needs: 25 the limits, `unitExp`, the decay and the net rule, 26 the lists.
     function _adminAndBits(uint256 n, bool netUnwrap, bool wrapList, bool unwrapList, bytes32 caller)
-        private view returns (bool has25)
+        private
+        view
+        returns (bool has25)
     {
         GovernanceLib.GovernanceStorage storage g = GovernanceLib.$();
         if (caller == 0 || caller != g.admin) revert IAdmin.NotAdmin(caller);
@@ -985,9 +1086,15 @@ library WrappedLib {
         }
     }
 
-    function _legsSlow(IWrappedToken.WrapLegLimits[] calldata legs, bool has25, bool tracked) private view returns (bool slow) {
+    function _legsSlow(IWrappedToken.WrapLegLimits[] calldata legs, bool has25, bool tracked)
+        private
+        view
+        returns (bool slow)
+    {
         WrappedStorage storage s = $();
-        for (uint256 i; i < legs.length; ++i) if (_legSlow(s, i, legs[i], has25, tracked)) slow = true;
+        for (uint256 i; i < legs.length; ++i) {
+            if (_legSlow(s, i, legs[i], has25, tracked)) slow = true;
+        }
     }
 
     /// @dev The configuration written: every leg's two words and `ctl` (the hot-path copy), the pending cleared.
@@ -1006,9 +1113,13 @@ library WrappedLib {
 
     /// @dev One leg's checks and its classification against the configuration in force (§6's table): true when its wrap
     ///      side is looser or its unwrap side (the decay included) is tighter.
-    function _legSlow(WrappedStorage storage s, uint256 i, IWrappedToken.WrapLegLimits calldata l, bool has25, bool tracked)
-        private view returns (bool)
-    {
+    function _legSlow(
+        WrappedStorage storage s,
+        uint256 i,
+        IWrappedToken.WrapLegLimits calldata l,
+        bool has25,
+        bool tracked
+    ) private view returns (bool) {
         address u = s.legs[i].token;
         if (l.underlying != u) revert IWrappedToken.WrapLegMismatch(i, l.underlying);
         (uint256 w0, uint256 w1) = _words(l, u);
@@ -1016,7 +1127,9 @@ library WrappedLib {
         uint256 c = _slot(wl().config[i]);
         uint256 o0 = _ld(c);
         uint256 o1 = _ld(c + 1);
-        if (l.unitExp > 36 || (tracked && l.unitExp != uint8(o0 >> 224))) revert IWrappedToken.WrapUnitInvalid(u, l.unitExp);
+        if (l.unitExp > 36 || (tracked && l.unitExp != uint8(o0 >> 224))) {
+            revert IWrappedToken.WrapUnitInvalid(u, l.unitExp);
+        }
         (, bool loose) = _cmp(o0, w0);
         (bool tight,) = _cmp(o1, w1);
         (bool t,) = _amt(uint16(o1 >> 232), uint16(w1 >> 232));
@@ -1053,8 +1166,8 @@ library WrappedLib {
 
     function _part(IWrappedToken.WrapLimit calldata x, address u, uint8 id) private pure returns (uint256) {
         uint256 p = x.period;
-        bool bad = x.perUser > _MAX_PER_USER || (x.perUser != 0 || x.tokenWide != 0
-            ? p % 60 != 0 || p < 60 || p > _MAX_PERIOD_MIN * 60 : p != 0);
+        bool bad = x.perUser > _MAX_PER_USER
+            || (x.perUser != 0 || x.tokenWide != 0 ? p % 60 != 0 || p < 60 || p > _MAX_PERIOD_MIN * 60 : p != 0);
         if (bad && u != address(0)) revert IWrappedToken.WrapLimitInvalid(u, id);
         return uint256(x.perUser) | (uint256(x.tokenWide) << 24) | ((p / 60) << 88);
     }
@@ -1062,9 +1175,16 @@ library WrappedLib {
     /// @dev The two-call shape (governance spec §1.6, `GovernanceLib._due`): a live pending of the same commitment, at or
     ///      after `eta`, applies (true); before `eta` `GrantNotReady(25, 0, eta)`; anything else proposes (false), replacing
     ///      any pending. A delay of 0 applies at once.
-    function _due(bytes32 commit, bytes32 caller, uint32 gen, uint64 delay, IWrappedToken.WrapLegLimits[] calldata legs,
-        bool netUnwrap, bool wrapList, bool unwrapList) private returns (bool)
-    {
+    function _due(
+        bytes32 commit,
+        bytes32 caller,
+        uint32 gen,
+        uint64 delay,
+        IWrappedToken.WrapLegLimits[] calldata legs,
+        bool netUnwrap,
+        bool wrapList,
+        bool unwrapList
+    ) private returns (bool) {
         if (delay == 0) return true;
         WrapLimitStorage storage w = wl();
         uint64 eta = w.pendingEta;
@@ -1086,7 +1206,9 @@ library WrappedLib {
     /// @notice Bit 26's holder (`GovernanceUse.use`: a power, no scalar, no scope), at once both ways; a caller without the
     ///         role is refused by name first (`MissingRole`, as `disableWrap` names its guardian).
     function setWrapMember(bytes32 account, bool canWrap, bool canUnwrap, bytes32 caller) public {
-        if (!GovernanceLib.hasRole(GovernanceBits.WRAP_LIST, caller)) revert IGovernance.MissingRole(GovernanceBits.WRAP_LIST, caller);
+        if (!GovernanceLib.hasRole(GovernanceBits.WRAP_LIST, caller)) {
+            revert IGovernance.MissingRole(GovernanceBits.WRAP_LIST, caller);
+        }
         GovernanceUse.use(GovernanceBits.WRAP_LIST, caller, 0);
         wl().member[account] = (canWrap ? 1 : 0) | (canUnwrap ? 2 : 0);
         emit IWrappedToken.WrapMemberSet(account, caller, canWrap, canUnwrap);
@@ -1119,8 +1241,19 @@ library WrappedLib {
 
     /// @notice The configuration in force (zeros before the first), the pending one (`pendingLive` under `factory`'s
     ///         `noticePeriod()`) and that delay (Fable P2-3).
-    function wrapLimits(address factory) public view returns (IWrappedToken.WrapLegLimits[] memory legs, bool netUnwrap,
-        bool wrapList, bool unwrapList, bytes32 pendingCommit, uint64 pendingEta, bool pendingLive, uint64 delay)
+    function wrapLimits(address factory)
+        public
+        view
+        returns (
+            IWrappedToken.WrapLegLimits[] memory legs,
+            bool netUnwrap,
+            bool wrapList,
+            bool unwrapList,
+            bytes32 pendingCommit,
+            uint64 pendingEta,
+            bool pendingLive,
+            uint64 delay
+        )
     {
         legs = _legLimits();
         uint8 ctl = $().legs[0].ctl;
@@ -1137,8 +1270,15 @@ library WrappedLib {
         for (uint256 i; i < n; ++i) {
             uint256 c = _slot(wl().config[i]);
             (uint256 w0, uint256 w1) = (_ld(c), _ld(c + 1));
-            legs[i] = IWrappedToken.WrapLegLimits(s.legs[i].token, uint8(w0 >> 224), uint16(w0 >> 232), _lim(w0), _lim(w0 >> 112),
-                _lim(w1), _lim(w1 >> 112));
+            legs[i] = IWrappedToken.WrapLegLimits(
+                s.legs[i].token,
+                uint8(w0 >> 224),
+                uint16(w0 >> 232),
+                _lim(w0),
+                _lim(w0 >> 112),
+                _lim(w1),
+                _lim(w1 >> 112)
+            );
         }
     }
 
@@ -1161,7 +1301,10 @@ library WrappedLib {
     }
 
     /// @dev The net line, the entitlement, the lists and the role of `wrapQuotaOf`.
-    function _netView(IWrappedToken.WrapQuota memory r, bytes32 account, uint8 ctl, uint256 qw, uint256 cfg) private view {
+    function _netView(IWrappedToken.WrapQuota memory r, bytes32 account, uint8 ctl, uint256 qw, uint256 cfg)
+        private
+        view
+    {
         uint256 unit = 10 ** uint8(cfg >> 224);
         uint256 b = _get(qw, 160, 32);
         r.netWrapped = b * unit;
@@ -1190,14 +1333,20 @@ library WrappedLib {
         return _wv(uint64(part >> 24), uint24(tw), uint64(tw >> 24), uint24(part >> 88), 10 ** uint8(cfg >> 224));
     }
 
-    function _userView(uint256 cfg, uint256 qw, uint256 l, uint256 unit) private view returns (IWrappedToken.WindowView memory) {
+    function _userView(uint256 cfg, uint256 qw, uint256 l, uint256 unit)
+        private
+        view
+        returns (IWrappedToken.WindowView memory)
+    {
         uint256 part = cfg >> (112 * (l % 2));
         return _wv(uint24(part), _get(qw, 21 * l, 21), _get(qw, 84 + 19 * l, 19), uint24(part >> 88), unit);
     }
 
     /// @dev `left` raw units (`max` when the part is off), `resetAt` the active window's end (its last minute + 1).
     function _wv(uint256 cap, uint256 start, uint256 used, uint256 p, uint256 unit)
-        private view returns (IWrappedToken.WindowView memory v)
+        private
+        view
+        returns (IWrappedToken.WindowView memory v)
     {
         if (cap == 0) return IWrappedToken.WindowView(type(uint256).max, 0);
         uint256 nowMin = block.timestamp / 60;

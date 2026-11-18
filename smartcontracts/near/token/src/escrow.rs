@@ -42,19 +42,39 @@ pub struct Held {
 }
 
 pub fn held_bytes(router: &AccountId, h: &Held) -> u64 {
-    HELD_RECORD_OVERHEAD + (borsh::to_vec(router).unwrap().len() + borsh::to_vec(h).unwrap().len()) as u64
+    HELD_RECORD_OVERHEAD
+        + (borsh::to_vec(router).unwrap().len() + borsh::to_vec(h).unwrap().len()) as u64
 }
 
 impl Token {
     /// No write: the routed pay checks for `router` (the marker) with `relayer` as the open-mode payee, nothing of this
     /// router already held under `pay_ref`; returns the plan, the record to hold and every new byte (lazy open, lane,
     /// payee registration, the held record).
-    fn hold_plan(&self, router: &AccountId, relayer: &AccountId, op: &MetaOp, auth: &Auth) -> R<(Routed, Held, u64)> {
-        let rt = self.routed_plan(router, router, &Holder::Near(relayer.clone()), op, auth, &op.pay_ref)?;
+    fn hold_plan(
+        &self,
+        router: &AccountId,
+        relayer: &AccountId,
+        op: &MetaOp,
+        auth: &Auth,
+    ) -> R<(Routed, Held, u64)> {
+        let rt = self.routed_plan(
+            router,
+            router,
+            &Holder::Near(relayer.clone()),
+            op,
+            auth,
+            &op.pay_ref,
+        )?;
         if self.held.contains_key(&(router.clone(), op.pay_ref)) {
             return Err("a payment is already held under this pay_ref");
         }
-        let h = Held { payer: op.from.clone(), payee: rt.payee.clone(), amount: op.amount, relayer: relayer.clone(), deposit: 0 };
+        let h = Held {
+            payer: op.from.clone(),
+            payee: rt.payee.clone(),
+            amount: op.amount,
+            relayer: relayer.clone(),
+            deposit: 0,
+        };
         let bytes = rt.bytes + held_bytes(router, &h);
         Ok((rt, h, bytes))
     }
@@ -66,7 +86,9 @@ impl Token {
         self.credit(to, h.amount);
         transfer_events(&Holder::Near(me), to, h.amount, None);
         if h.deposit > 0 {
-            Promise::new(h.relayer.clone()).transfer(NearToken::from_yoctonear(h.deposit)).detach();
+            Promise::new(h.relayer.clone())
+                .transfer(NearToken::from_yoctonear(h.deposit))
+                .detach();
         }
     }
 }
@@ -119,19 +141,31 @@ impl Token {
             .remove(&(env::predecessor_account_id(), pay_ref))
             .unwrap_or_else(|| env::panic_str("nothing held under this pay_ref for this router"));
         self.unhold(&h, &h.payee);
-        Event::PaymentSettled { from: h.payer.to_string(), to: h.payee.to_string(), amount: U128(h.amount), pay_ref: x(&pay_ref) }.emit();
+        Event::PaymentSettled {
+            from: h.payer.to_string(),
+            to: h.payee.to_string(),
+            amount: U128(h.amount),
+            pay_ref: x(&pay_ref),
+        }
+        .emit();
     }
 
     #[result_serializer(borsh)]
     pub fn relay_refund(&mut self, #[serializer(borsh)] pay_ref: [u8; 32]) -> bool {
-        let Some(h) = self.held.remove(&(env::predecessor_account_id(), pay_ref)) else { return false };
+        let Some(h) = self.held.remove(&(env::predecessor_account_id(), pay_ref)) else {
+            return false;
+        };
         self.unhold(&h, &h.payer);
         true
     }
 
     /// What `router` holds under `pay_ref`.
     #[result_serializer(borsh)]
-    pub fn relay_held(&self, #[serializer(borsh)] router: AccountId, #[serializer(borsh)] pay_ref: [u8; 32]) -> Option<Held> {
+    pub fn relay_held(
+        &self,
+        #[serializer(borsh)] router: AccountId,
+        #[serializer(borsh)] pay_ref: [u8; 32],
+    ) -> Option<Held> {
         self.held.get(&(router, pay_ref)).cloned()
     }
 

@@ -151,14 +151,19 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
     function test_pqzVerdict_starvedIsUAVerifyGas() public {
         (IPqzToken.PqzTransferArgs memory a, bytes memory st) = _op();
         IPqzToken.PqzSignedVerdict memory sv = _sv(off, st);
-        vm.mockFunction(address(reg), address(new VerdictOutOfGas()), abi.encodeWithSelector(IUARegistry.requireAuthorized.selector));
+        vm.mockFunction(
+            address(reg), address(new VerdictOutOfGas()), abi.encodeWithSelector(IUARegistry.requireAuthorized.selector)
+        );
         vm.expectRevert(UAKinds.UAVerifyGas.selector);
         off.mtxConfidentialTransferSingle(a, VPROOF, _pqAuth(), "", sv);
         // the registry's own `UAVerifyGas`
         vm.clearMockedCalls();
         _mockMlDsa();
-        vm.mockCallRevert(address(reg), abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, vA),
-            abi.encodeWithSelector(UAKinds.UAVerifyGas.selector));
+        vm.mockCallRevert(
+            address(reg),
+            abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, vA),
+            abi.encodeWithSelector(UAKinds.UAVerifyGas.selector)
+        );
         vm.expectRevert(UAKinds.UAVerifyGas.selector);
         off.mtxConfidentialTransferSingle(a, VPROOF, _pqAuth(), "", sv);
     }
@@ -223,7 +228,9 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
         (vMode, vUA, vFixed, vOwnKey) = (mode, v, fixed_, mode == 1); // OFFCHAIN: class offchain-token (CTR-PQZ-37)
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         (vMode, vUA, vFixed, vOwnKey) = (0, bytes32(0), false, false);
-        return factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), keccak256(abi.encode(mode, v, fixed_)));
+        return factory.createToken(
+            IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), keccak256(abi.encode(mode, v, fixed_))
+        );
     }
 
     function test_mode_configInvalid() public {
@@ -252,8 +259,13 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
     function _zeroDepFactory() internal returns (OpenFactory f) {
         f = new OpenFactory(nid(registrar));
         EnvKit.configure(f, PQZ_UID, 0, address(0));
-        Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(f), PQZ_UID, address(reg), address(0)),
-            type(NormalPqzToken).creationCode);
+        Catalogue.release(
+            f,
+            IOpenFactory.TokenKind.NORMAL_PQZ,
+            1,
+            pqzEnv(address(f), PQZ_UID, address(reg), address(0)),
+            type(NormalPqzToken).creationCode
+        );
         vm.prank(registrar);
         f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(f)));
     }
@@ -273,7 +285,8 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
         (vMode, vUA, vFixed, vOwnKey) = (1, vA, false, true);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         (vMode, vUA, vFixed, vOwnKey) = (0, bytes32(0), false, false);
-        NormalPqzToken t = NormalPqzToken(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "zero-dep-off"));
+        NormalPqzToken t =
+            NormalPqzToken(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "zero-dep-off"));
         _scopedAll(address(t), false);
         assertEq(t.verifier(), address(0));
         assertEq(t.precompile(), address(0));
@@ -304,8 +317,11 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
         IPqzToken.PqzSignedVerdict memory g = _sv(off, st);
         g.pqzVerdict.token = address(0xBAD);
         g.sig.signature = hex"deadbeef";
-        vm.mockCallRevert(address(reg), abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, vA,
-            UAKinds.PURPOSE_PQZ_VERDICT), "never asked");
+        vm.mockCallRevert(
+            address(reg),
+            abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, vA, UAKinds.PURPOSE_PQZ_VERDICT),
+            "never asked"
+        );
         uint256 snap = vm.snapshotState();
         tok.mtxConfidentialTransferSingle(a, VPROOF, _pqAuth(), "", g);
         vm.revertToState(snap);
@@ -401,9 +417,15 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
     }
 
     function test_PqzVerdictTypehashIsPinned() public pure {
-        assertEq(PqzCore.VERDICT_TYPEHASH, keccak256(
-            "PqzVerdict(address token,uint256 chainId,bytes32 proofSystemId,bytes32 statementHash,bytes32 proofHash,uint32 pqzVerifierEpoch,uint64 validUntil)"));
-        assertEq(PqzCore.VERDICT_TYPEHASH, 0x18a510364af2f51c138ef32b05cda5a4ebabb81bc0a964b911044a3983d1ff88, "the pin");
+        assertEq(
+            PqzCore.VERDICT_TYPEHASH,
+            keccak256(
+                "PqzVerdict(address token,uint256 chainId,bytes32 proofSystemId,bytes32 statementHash,bytes32 proofHash,uint32 pqzVerifierEpoch,uint64 validUntil)"
+            )
+        );
+        assertEq(
+            PqzCore.VERDICT_TYPEHASH, 0x18a510364af2f51c138ef32b05cda5a4ebabb81bc0a964b911044a3983d1ff88, "the pin"
+        );
         assertEq(UAKinds.PURPOSE_PQZ_VERDICT, keccak256("scaas.ua.purpose.pqz-verdict.v1"));
     }
 
@@ -501,7 +523,9 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
     function test_keyReused_auditor_offchain() public {
         (IPqzToken.PqzTransferArgs memory a,) = _op();
         (uint64 v, address p, bytes32 ph, bool pr) = reg.pqzScopedKeyOf(aud, address(off));
-        vm.mockCall(address(reg), abi.encodeCall(IUARegistry.pqzScopedKeyOf, (bob, address(off))), abi.encode(v, p, ph, pr));
+        vm.mockCall(
+            address(reg), abi.encodeCall(IUARegistry.pqzScopedKeyOf, (bob, address(off))), abi.encode(v, p, ph, pr)
+        );
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.KeyReused.selector, aud));
         off.transferSingleStatement(a, 0);
     }
@@ -510,8 +534,11 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
     function test_keyReused_migration_offchain() public {
         _scoped(alice, address(off), _spk(0x7004), false);
         (, address p, bytes32 ph, bool pr) = reg.pqzScopedKeyOf(alice, address(off));
-        vm.mockCall(address(reg), abi.encodeCall(IUARegistry.pqzScopedKeyAt, (alice, address(off), uint64(0))),
-            abi.encode(p, ph, pr));
+        vm.mockCall(
+            address(reg),
+            abi.encodeCall(IUARegistry.pqzScopedKeyAt, (alice, address(off), uint64(0))),
+            abi.encode(p, ph, pr)
+        );
         IPqzToken.PqzTransferArgs memory a = _ts(_payload(1, 0, alice, alice, bytes32(0), _out(5, false), ""));
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.KeyReused.selector, alice));
         off.transferSingleStatement(a, 0);
@@ -525,8 +552,11 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         (vMode, vUA, vFixed, vOwnKey) = (0, bytes32(0), false, false);
         c.admin = bytes32(uint256(uint160(address(this))));
-        t = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), keccak256(abi.encode(v, fixed_,
-            gasleft()))));
+        t = NormalPqzToken(
+            factory.createToken(
+                IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), keccak256(abi.encode(v, fixed_, gasleft()))
+            )
+        );
         _scopedAll(address(t), false);
     }
 }

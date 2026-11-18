@@ -64,10 +64,16 @@ contract PayLanesTest is PayRigBase {
 
     /// `mtxPayMeta` and the flat `mtxPay` are gone (legacy): their selectors reach no function.
     function test_mtxPayMeta_selectorAbsent() public {
-        bytes4 meta = bytes4(keccak256(
-            "mtxPayMeta(bytes32,bytes32,uint256,bytes32,bytes,uint256,uint32,address,uint256,address,(bytes32,bytes32,bytes,bytes))"));
-        bytes4 flat = bytes4(keccak256(
-            "mtxPay(bytes32,bytes32,uint256,bytes32,uint256,uint32,address,uint256,address,(bytes32,bytes32,bytes,bytes))"));
+        bytes4 meta = bytes4(
+            keccak256(
+                "mtxPayMeta(bytes32,bytes32,uint256,bytes32,bytes,uint256,uint32,address,uint256,address,(bytes32,bytes32,bytes,bytes))"
+            )
+        );
+        bytes4 flat = bytes4(
+            keccak256(
+                "mtxPay(bytes32,bytes32,uint256,bytes32,uint256,uint32,address,uint256,address,(bytes32,bytes32,bytes,bytes))"
+            )
+        );
         bytes4 metaId = bytes4(keccak256("metaPayId(bytes32,bytes)"));
         for (uint256 i; i < toks.length; ++i) {
             (bool ok,) = toks[i].call(abi.encodeWithSelector(meta));
@@ -104,8 +110,19 @@ contract PayLanesTest is PayRigBase {
 
     /// The payer's payment for payee fee: fee `NONE`, `RESTRICT_RELAYER`, the payee `vm.addr(PAYEE_PK)`.
     function _rfX(bytes32 ref, uint256 batch, uint256 nonce) internal view returns (MetaTxLib.UAMetaTransfer memory) {
-        return MetaTxLib.UAMetaTransfer(MetaTxLib.pad(signer), MetaTxLib.pad(vm.addr(PAYEE_PK)), AMOUNT, ref, batch, nonce,
-            block.timestamp + 300, MetaTxLib.MODE_RESTRICT_RELAYER, REL, 0, address(0));
+        return MetaTxLib.UAMetaTransfer(
+            MetaTxLib.pad(signer),
+            MetaTxLib.pad(vm.addr(PAYEE_PK)),
+            AMOUNT,
+            ref,
+            batch,
+            nonce,
+            block.timestamp + 300,
+            MetaTxLib.MODE_RESTRICT_RELAYER,
+            REL,
+            0,
+            address(0)
+        );
     }
 
     function _rf(address t, MetaTxLib.UAMetaTransfer memory x, MetaTxLib.PayMeta memory m) internal {
@@ -136,8 +153,8 @@ contract PayLanesTest is PayRigBase {
             MetaTxLib.PayMeta memory m = _meta(70 + i);
             MetaTxLib.UAMetaTransfer memory x = _rfX(PayMetaKit.id(m), 7, 0);
             IUARegistry.UASig memory pa = _sigOf(t, x);
-            IUARegistry.UASig memory qa = UACall.auth(x.to,
-                _ecdsa(PAYEE_PK, NormalToken(t).payeeFeeDigest(x, 10, RF_TO, block.timestamp + 300)));
+            IUARegistry.UASig memory qa =
+                UACall.auth(x.to, _ecdsa(PAYEE_PK, NormalToken(t).payeeFeeDigest(x, 10, RF_TO, block.timestamp + 300)));
             uint256 snap = vm.snapshotState();
             vm.prank(REL);
             NormalToken(t).mtxPayWithPayeeFee(x, pa, 10, RF_TO, block.timestamp + 300, qa, m); // control
@@ -157,8 +174,8 @@ contract PayLanesTest is PayRigBase {
         MetaTxLib.PayMeta memory other = _meta(81);
         MetaTxLib.UAMetaTransfer memory x = _rfX(PayMetaKit.id(m), 7, 0);
         IUARegistry.UASig memory pa = _sigOf(t, x);
-        IUARegistry.UASig memory qa = UACall.auth(x.to,
-            _ecdsa(PAYEE_PK, NormalToken(t).payeeFeeDigest(x, 10, RF_TO, block.timestamp + 300)));
+        IUARegistry.UASig memory qa =
+            UACall.auth(x.to, _ecdsa(PAYEE_PK, NormalToken(t).payeeFeeDigest(x, 10, RF_TO, block.timestamp + 300)));
         vm.prank(REL);
         vm.expectRevert(abi.encodeWithSelector(IMetaTokenV2.PayMetaMismatch.selector, x.entryRef, PayMetaKit.id(other)));
         NormalToken(t).mtxPayWithPayeeFee(x, pa, 10, RF_TO, block.timestamp + 300, qa, other);

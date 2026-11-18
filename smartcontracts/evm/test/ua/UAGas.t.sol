@@ -195,8 +195,8 @@ contract UAGasTest is UARegistryBase {
         address clone = address(0x5cf40);
         vm.etch(clone, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
         // bound: 8 x (cap + member gas) + the clone (400 k + member gas) + the registry's own hold (1.4 M - 400 k) / 63
-        uint256 bound = 8 * (1_400_000 + MSIG_MEMBER_GAS) + SMART_KEY_1271_GAS + MSIG_MEMBER_GAS + (1_400_000 - SMART_KEY_1271_GAS) / 63
-            + MSIG_ACCEPTED_GAS;
+        uint256 bound = 8 * (1_400_000 + MSIG_MEMBER_GAS) + SMART_KEY_1271_GAS + MSIG_MEMBER_GAS
+            + (1_400_000 - SMART_KEY_1271_GAS) / 63 + MSIG_ACCEPTED_GAS;
         UARegistry tight = _deploy(address(0x5ce30), chainUidA, address(0), false, uint64(bound - 1), _impl, true, c);
         UARegistry r = _deploy(address(0x5ce31), chainUidA, address(0), false, uint64(bound), _impl, true, c);
         Member[] memory m = new Member[](9);
@@ -210,7 +210,9 @@ contract UAGasTest is UARegistryBase {
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
         UACall.register(tight, UAKinds.MSIG, d, _none(), "", "");
         IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](9);
-        for (uint16 j; j < 9; ++j) s[j] = IUARegistry.MemberSig(j, new IUARegistry.InnerSig[](0), _big);
+        for (uint16 j; j < 9; ++j) {
+            s[j] = IUARegistry.MemberSig(j, new IUARegistry.InnerSig[](0), _big);
+        }
         bytes32 ua = UACall.register(r, UAKinds.MSIG, d, _none(), abi.encode(s), ""); // all PQ but the clone: PQ-eligible, m-of-n PoP
         uint256 least = _leastGas(
             address(r),
@@ -244,7 +246,9 @@ contract UAGasTest is UARegistryBase {
         uint256 bound = _boundOf(d, gen == 2);
         (UARegistry r, bytes32 ua) = _registerAt(address(uint160(0x5ce00 + 16 * gen + 2 * n)), pred, cfg, d, bound);
         uint256 least = _leastGas(
-            address(r), abi.encodeCall(r.requireAuthorized, (ua, UAKinds.PURPOSE_METATX, DIGEST, UACall.auth(ua, _burnAuth(d)))), bound
+            address(r),
+            abi.encodeCall(r.requireAuthorized, (ua, UAKinds.PURPOSE_METATX, DIGEST, UACall.auth(ua, _burnAuth(d)))),
+            bound
         );
         emit log_named_uint(string.concat("gen ", vm.toString(gen), " case ", vm.toString(n), " bound"), bound);
         emit log_named_uint("  least requireAuthorized frame gas", least);
@@ -323,9 +327,11 @@ contract UAGasTest is UARegistryBase {
                     );
                     ++s
                 ) {
-                    uint256 n = vm.parseJsonBytes(
+                    uint256 n =
+                        vm.parseJsonBytes(
                         sj, string.concat(".derived[", vm.toString(i), "].", arr, "[", vm.toString(s), "].sig")
-                    ).length;
+                    )
+                    .length;
                     if (n > max) max = n;
                     ++rows;
                 }
@@ -352,7 +358,9 @@ contract UAGasTest is UARegistryBase {
         for (uint256 i; i < 8; ++i) {
             bytes memory k = _key(KINDS[i]);
             bytes32 id = UAKinds.uaOf(KINDS[i], k);
-            if (!home.isRegistered(id)) UACall.register(home, KINDS[i], k, _none(), _memberPop.length != 0 ? _memberPop : big, "");
+            if (!home.isRegistered(id)) {
+                UACall.register(home, KINDS[i], k, _none(), _memberPop.length != 0 ? _memberPop : big, "");
+            }
             m[i] = Member(KINDS[i], id, w);
         }
         uint256[2] memory used;
@@ -429,7 +437,12 @@ contract UAGasTest is UARegistryBase {
             assembly ("memory-safe") {
                 id := mload(add(add(d, 38), mul(36, j)))
             }
-            r.acceptMembership(ua, IUARegistry.MemberSig(j, new IUARegistry.InnerSig[](0), _ecdsa(_pkOf(id, ids), UAKinds.membershipDigest(ua, id))));
+            r.acceptMembership(
+                ua,
+                IUARegistry.MemberSig(
+                    j, new IUARegistry.InnerSig[](0), _ecdsa(_pkOf(id, ids), UAKinds.membershipDigest(ua, id))
+                )
+            );
         }
     }
 
@@ -445,7 +458,9 @@ contract UAGasTest is UARegistryBase {
             assembly ("memory-safe") {
                 id := mload(add(add(d, 38), mul(36, j)))
             }
-            s[j] = IUARegistry.MemberSig(j, new IUARegistry.InnerSig[](0), _ecdsa(_pkOf(id, ids), r.uaAuthDigest(id, UAKinds.PURPOSE_MEMBER, md)));
+            s[j] = IUARegistry.MemberSig(
+                j, new IUARegistry.InnerSig[](0), _ecdsa(_pkOf(id, ids), r.uaAuthDigest(id, UAKinds.PURPOSE_MEMBER, md))
+            );
         }
         return _msigAuth(d, s);
     }
@@ -572,7 +587,13 @@ contract UAGasTest is UARegistryBase {
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), false, c);
         bytes memory call = abi.encodeCall(
             r.register,
-            (0x0107, vm.parseJsonBytes(sj, ".derived[6].keyData"), _none(), vm.parseJsonBytes(sj, ".derived[6].pop.sig"), "")
+            (
+                0x0107,
+                vm.parseJsonBytes(sj, ".derived[6].keyData"),
+                _none(),
+                vm.parseJsonBytes(sj, ".derived[6].pop.sig"),
+                ""
+            )
         );
         uint256 lo = 100_000;
         uint256 hi = 4_000_000; // A8: the state gas of the record counts in the call gas (F185), so the least gas is > 1 M
@@ -617,7 +638,8 @@ contract UAGasTest is UARegistryBase {
         c[0] = UARegistry.KindConfig(0x0102, address(ev), uint64(cap));
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), false, c);
         bytes memory k = vm.parseJsonBytes(sj, ".derived[7].keyData");
-        bytes memory call = abi.encodeCall(r.register, (0x0102, k, _none(), vm.parseJsonBytes(sj, ".derived[7].pop.sig"), ""));
+        bytes memory call =
+            abi.encodeCall(r.register, (0x0102, k, _none(), vm.parseJsonBytes(sj, ".derived[7].pop.sig"), ""));
         uint256 lo = 100_000;
         uint256 hi = 4_000_000; // A8: the state gas of the record counts in the call gas (F185), so the least gas is > 1 M
         while (hi - lo > 500) {

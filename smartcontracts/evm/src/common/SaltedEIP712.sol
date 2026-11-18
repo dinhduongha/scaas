@@ -22,9 +22,8 @@ abstract contract SaltedEIP712Core {
     /// @notice NET-ALL-22: `chain_uid` is a non-zero bytes32.
     error ChainUidZero();
 
-    bytes32 private constant TYPE_HASH = keccak256(
-        "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
-    );
+    bytes32 private constant TYPE_HASH =
+        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)");
 
     /// @notice The chain's genesis block hash (NET-ALL-22), fixed by the implementation's constructor.
     bytes32 internal immutable CHAIN_UID;
@@ -50,13 +49,23 @@ abstract contract SaltedEIP712Core {
         _cachedDomainSeparator = _buildDomainSeparator();
     }
 
-    function _eip712DomainBody() internal view virtual returns (
-            bytes1 fields, string memory name, string memory version, uint256 chainId,
-            address verifyingContract, bytes32 salt, uint256[] memory extensions
+    function _eip712DomainBody()
+        internal
+        view
+        virtual
+        returns (
+            bytes1 fields,
+            string memory name,
+            string memory version,
+            uint256 chainId,
+            address verifyingContract,
+            bytes32 salt,
+            uint256[] memory extensions
         )
     {
-        return (hex"1f", _name.toString(), _version.toString(), block.chainid, address(this), CHAIN_UID,
-            new uint256[](0));
+        return (
+            hex"1f", _name.toString(), _version.toString(), block.chainid, address(this), CHAIN_UID, new uint256[](0)
+        );
     }
 
     function _domainSeparatorV4() internal view virtual returns (bytes32) {
@@ -75,10 +84,14 @@ abstract contract SaltedEIP712Core {
     // ------------------------------------------------------------------ the factory-made hook (CTR-TOK-29)
 
     /// @dev True on a factory-made contract: its `chain_uid` is in its clone's code, the constructor's is 0.
-    function _chainUidInCode() internal pure virtual returns (bool) { return false; }
+    function _chainUidInCode() internal pure virtual returns (bool) {
+        return false;
+    }
 
     /// @dev The chain's `chain_uid` as stored (0 on a factory-made implementation).
-    function _chainUidRaw() internal view virtual returns (bytes32) { return CHAIN_UID; }
+    function _chainUidRaw() internal view virtual returns (bytes32) {
+        return CHAIN_UID;
+    }
 
     /// @dev `_chainUidRaw()`, never 0: a factory-made contract's domains and chain-bound digests.
     function _chainUid() internal view returns (bytes32 u) {
@@ -93,9 +106,9 @@ abstract contract SaltedEIP712Core {
 
     /// @dev `eip712Domain()` under `salt` (a factory-made contract's override).
     function _eip712DomainUnder(bytes32 salt)
-        internal view returns (
-            bytes1, string memory, string memory, uint256, address, bytes32, uint256[] memory
-        )
+        internal
+        view
+        returns (bytes1, string memory, string memory, uint256, address, bytes32, uint256[] memory)
     {
         return (hex"1f", _name.toString(), _version.toString(), block.chainid, address(this), salt, new uint256[](0));
     }
@@ -104,10 +117,21 @@ abstract contract SaltedEIP712Core {
 /// @notice `SaltedEIP712Core` with its external entries, each calling its body (T66b, spec 2026-11-09-t66b-library-organisation.md §4.4):
 ///         the form its non-token users inherit, ABI and modifiers unchanged. UNAUDITED.
 abstract contract SaltedEIP712 is SaltedEIP712Core, IERC5267 {
-    function eip712Domain() public view virtual override returns (
-            bytes1 fields, string memory name, string memory version, uint256 chainId,
-            address verifyingContract, bytes32 salt, uint256[] memory extensions
-        ) {
+    function eip712Domain()
+        public
+        view
+        virtual
+        override
+        returns (
+            bytes1 fields,
+            string memory name,
+            string memory version,
+            uint256 chainId,
+            address verifyingContract,
+            bytes32 salt,
+            uint256[] memory extensions
+        )
+    {
         return _eip712DomainBody();
     }
 }

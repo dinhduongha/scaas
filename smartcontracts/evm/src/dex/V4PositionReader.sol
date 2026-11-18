@@ -22,12 +22,14 @@ contract V4PositionReader is IPositionReader {
         manager = positionManager;
     }
 
-    function position(uint256 tokenId) external view
+    function position(uint256 tokenId)
+        external
+        view
         returns (bytes32 poolId, int24 tickLower, int24 tickUpper, uint128 liquidity, bool encumbered)
     {
         (PoolKey memory key, uint256 info) = IV4PositionManager(manager).getPoolAndPositionInfo(tokenId);
         poolId = keccak256(abi.encode(key));
-        tickLower = int24(int256(info >> 8));   // the low 24 bits, sign-extended by the narrowing cast
+        tickLower = int24(int256(info >> 8)); // the low 24 bits, sign-extended by the narrowing cast
         tickUpper = int24(int256(info >> 32));
         encumbered = info & 0xff != 0;
         liquidity = IV4PositionManager(manager).getPositionLiquidity(tokenId);

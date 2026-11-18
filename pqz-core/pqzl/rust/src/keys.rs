@@ -53,7 +53,15 @@ fn expand_a() -> Result<PolyMat, Error> {
                 st.squeeze(&mut w);
                 let v = u64::from_be_bytes(w) & ((1 << set::LOG2Q) - 1);
                 if v < Q {
-                    set_c(p, k, if v > (Q - 1) / 2 { v as i64 - Q as i64 } else { v as i64 });
+                    set_c(
+                        p,
+                        k,
+                        if v > (Q - 1) / 2 {
+                            v as i64 - Q as i64
+                        } else {
+                            v as i64
+                        },
+                    );
                     k += 1;
                 }
             }
@@ -84,7 +92,15 @@ pub(crate) fn rd_poly(p: &mut Poly, inp: &[u8], n: usize) -> bool {
     for k in 0..n {
         let v = be8(&inp[8 * k..]);
         ok &= v < Q;
-        set_c(p, k, if v > (Q - 1) / 2 { (v as i64).wrapping_sub(Q as i64) } else { v as i64 });
+        set_c(
+            p,
+            k,
+            if v > (Q - 1) / 2 {
+                (v as i64).wrapping_sub(Q as i64)
+            } else {
+                v as i64
+            },
+        );
     }
     ok
 }
@@ -149,7 +165,10 @@ fn filled<T: Copy>(n: usize, x: T) -> Result<Vec<T>, Error> {
 
 /// a boxed array of `M` copies of x, `Error::Memory` if the allocation fails (no `Box::try_new` on stable)
 fn boxed<T: Copy, const M: usize>(x: T) -> Result<Box<[T; M]>, Error> {
-    filled(M, x)?.into_boxed_slice().try_into().map_err(|_| Error::Internal)
+    filled(M, x)?
+        .into_boxed_slice()
+        .try_into()
+        .map_err(|_| Error::Internal)
 }
 
 /// `pqz_keypair_from_secret`: pk = A s + e
@@ -174,7 +193,12 @@ pub(crate) fn keypair_from_secret(
 }
 
 /// `pqz_keygen` with the norm thresholds `bs`, `be` (`BS`, `BE`; lowered only by the keys KAT's test hooks)
-pub(crate) fn keygen(a: &mut Option<PolyMat>, seed32: &[u8; 32], bs: i64, be: i64) -> Result<Key, Error> {
+pub(crate) fn keygen(
+    a: &mut Option<PolyMat>,
+    seed32: &[u8; 32],
+    bs: i64,
+    be: i64,
+) -> Result<Key, Error> {
     // Q-B (review A-3): s, e are wiped on the error exits (`?`, `Reject`); only the accepted pair leaves
     // (the blanks `take` leaves in their place are allocated first: no allocation failure after the key is computed)
     let (mut s, mut e) = (Wiped(boxed(0i8)?), Wiped(boxed(0i16)?));
@@ -185,12 +209,16 @@ pub(crate) fn keygen(a: &mut Option<PolyMat>, seed32: &[u8; 32], bs: i64, be: i6
         // review E: the resample verdict is public (the counter is an output); the norms are not
         if crate::ct::verdict((ns <= bs * bs) & (ne <= be * be)) {
             let pk = keypair_from_secret(a, &s, &e)?;
-            return Ok(Key { pk, s: s.take(blank.0), e: e.take(blank.1), ctr });
+            return Ok(Key {
+                pk,
+                s: s.take(blank.0),
+                e: e.take(blank.1),
+                ctr,
+            });
         }
     }
     Err(Error::Reject)
 }
-
 
 /// `pqz_encrypt`'s outputs: u and one v per recipient
 type UVs = (Box<[u8; POLYVEC_BYTES]>, Vec<[u8; V_BYTES]>);
@@ -206,7 +234,8 @@ fn encrypt_raw(
     e1: &[i16; N],
     e2: &[[i16; 16]],
 ) -> Result<UVs, Error> {
-    if msgs.len() != pks.len() || e2.len() != pks.len() || win.is_some_and(|w| w.len() != pks.len()) {
+    if msgs.len() != pks.len() || e2.len() != pks.len() || win.is_some_and(|w| w.len() != pks.len())
+    {
         return Err(Error::Input); // the C ABI takes one count for all three
     }
     if win.is_some_and(|w| w.iter().any(|&x| x >= 4)) {
@@ -260,7 +289,14 @@ pub(crate) fn encrypt(
     e2v.copy_from_slice(e2);
     rb.copy_from_slice(r);
     e1b.copy_from_slice(e1);
-    Ok(Enc { u, vs, r: rb, e1: e1b, e2: e2v, ctr: 0 })
+    Ok(Enc {
+        u,
+        vs,
+        r: rb,
+        e1: e1b,
+        e2: e2v,
+        ctr: 0,
+    })
 }
 
 /// `pqz_enc_seed_win` with the norm thresholds `bs`, `be`, `b2` (`BS`, `BE`, `B2`; lowered only by the test hooks);
@@ -273,7 +309,9 @@ pub(crate) fn enc_seed(
     seed_enc: &[u8; 32],
     (bs, be, b2): (i64, i64, i64),
 ) -> Result<Enc, Error> {
-    if msgs.len() != pks.len() || win.is_some_and(|w| w.len() != pks.len() || w.iter().any(|&x| x >= 4)) {
+    if msgs.len() != pks.len()
+        || win.is_some_and(|w| w.len() != pks.len() || w.iter().any(|&x| x >= 4))
+    {
         return Err(Error::Input);
     }
     // review 3w u3-4 (the contract's KV-9 `_distinct`): two recipients with the same key at the same window under one
@@ -293,7 +331,11 @@ pub(crate) fn enc_seed(
         return Err(Error::Input);
     }
     // Q-B (review A-3): r, e1, e2 are wiped on the error exits (`?`, `Reject`); only the accepted ones leave
-    let (mut r, mut e1, mut e2) = (Wiped(boxed(0i8)?), Wiped(boxed(0i16)?), Wiped(filled(pks.len(), [0i16; 16])?));
+    let (mut r, mut e1, mut e2) = (
+        Wiped(boxed(0i8)?),
+        Wiped(boxed(0i16)?),
+        Wiped(filled(pks.len(), [0i16; 16])?),
+    );
     let blank = (boxed(0i8)?, boxed(0i16)?); // allocated first, as in keygen
     for ctr in 0..MAXCTR {
         let mut b = Stream::keys(b"SCAAS-PQZ-ENC-V1", seed_enc, ctr);
@@ -305,7 +347,14 @@ pub(crate) fn enc_seed(
         if crate::ct::verdict(ok) {
             // review E: the resample verdict is public
             let (u, vs) = encrypt_raw(a, pks, win, msgs, &r, &e1, &e2)?;
-            return Ok(Enc { u, vs, r: r.take(blank.0), e1: e1.take(blank.1), e2: e2.take(Vec::new()), ctr });
+            return Ok(Enc {
+                u,
+                vs,
+                r: r.take(blank.0),
+                e1: e1.take(blank.1),
+                e2: e2.take(Vec::new()),
+                ctr,
+            });
         }
     }
     Err(Error::Reject)
@@ -327,7 +376,14 @@ pub(crate) fn enc_group_seed(seed_enc: &[u8; 32], g: u32) -> [u8; 32] {
 /// seed_enc. `pkt_hash` = keccak256 of pk_t's bytes (the caller's: no keccak in this crate).
 pub(crate) fn enc_leg_seed(seed_enc: &[u8; 32], to_ua: &[u8; 32], pkt_hash: &[u8; 32]) -> [u8; 32] {
     let mut out = [0u8; 32];
-    Stream::new(&[b"SCAAS-PQZ-ENC-LEG-V1", seed_enc, &0u32.to_be_bytes(), to_ua, pkt_hash]).squeeze(&mut out);
+    Stream::new(&[
+        b"SCAAS-PQZ-ENC-LEG-V1",
+        seed_enc,
+        &0u32.to_be_bytes(),
+        to_ua,
+        pkt_hash,
+    ])
+    .squeeze(&mut out);
     out
 }
 
@@ -358,7 +414,11 @@ pub(crate) fn decrypt_raw(s: &[i8; N], u: &[u8], v: &[u8], win: usize) -> Result
 /// an encryption's |noise| < Delta / 2 never ties), noise w_i - Delta M_i; C's branch-free form with SH = MBITS + 3:
 /// t = 2w + Delta + 2 Delta 2^SH > 0 (|w| < q/2, 2 Delta 2^SH ~ 4q), floor(t / (2 Delta)) = M + 2^SH
 /// (`pqz_dec_win`: a v at window win < 4, the auditor's copy of an R_TXM leg j: win = j mod S_AUD; R0-1)
-pub(crate) fn dec(s: &[i8; N], ct: &[u8; CT_BYTES], win: usize) -> Result<([i64; 16], [i64; 16]), Error> {
+pub(crate) fn dec(
+    s: &[i8; N],
+    ct: &[u8; CT_BYTES],
+    win: usize,
+) -> Result<([i64; 16], [i64; 16]), Error> {
     if !canonical(&ct[..]) || win >= 4 {
         return Err(Error::Input);
     }

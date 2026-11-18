@@ -45,8 +45,10 @@ library ChainEnvCode {
         assembly ("memory-safe") {
             let m := mload(0x40)
             extcodecopy(address(), m, 0, 138)
-            if and(eq(shr(176, mload(m)), 0x363d3d373d3d3d363d73),
-                eq(shr(136, mload(add(m, 30))), 0x5af43d82803e903d91602b57fd5bf3)) {
+            if and(
+                eq(shr(176, mload(m)), 0x363d3d373d3d3d363d73),
+                eq(shr(136, mload(add(m, 30))), 0x5af43d82803e903d91602b57fd5bf3)
+            ) {
                 mstore(h, mload(add(m, 45)))
                 mstore(add(h, 0x20), shr(96, mload(add(m, 77))))
                 mstore(add(h, 0x40), shr(96, mload(add(m, 97))))
@@ -60,20 +62,32 @@ library ChainEnvCode {
         assembly ("memory-safe") {
             let m := mload(0x40)
             extcodecopy(address(), m, 0, 45)
-            ok := and(eq(shr(176, mload(m)), 0x363d3d373d3d3d363d73),
-                eq(shr(136, mload(add(m, 30))), 0x5af43d82803e903d91602b57fd5bf3))
+            ok := and(
+                eq(shr(176, mload(m)), 0x363d3d373d3d3d363d73),
+                eq(shr(136, mload(add(m, 30))), 0x5af43d82803e903d91602b57fd5bf3)
+            )
         }
     }
 
-    function chainUid() internal view returns (bytes32) { return head().chainUid; }
+    function chainUid() internal view returns (bytes32) {
+        return head().chainUid;
+    }
 
-    function registry() internal view returns (address) { return head().registry; }
+    function registry() internal view returns (address) {
+        return head().registry;
+    }
 
-    function govRouter() internal view returns (address) { return head().govRouter; }
+    function govRouter() internal view returns (address) {
+        return head().govRouter;
+    }
 
-    function smartKeyAccountImpl() internal view returns (address) { return head().smartKeyAccountImpl; }
+    function smartKeyAccountImpl() internal view returns (address) {
+        return head().smartKeyAccountImpl;
+    }
 
-    function hedera() internal view returns (bool) { return head().hedera; }
+    function hedera() internal view returns (bool) {
+        return head().hedera;
+    }
 
     /// @notice Dependency `i` (`ENV_ZETHER_*`, `ENV_PQZ_VERIFIER`), 0 when absent or not a clone.
     function dep(uint256 i) internal view returns (address) {
@@ -85,15 +99,19 @@ library ChainEnvCode {
     function decode() internal view returns (IFactoryToken.ChainEnv memory e) {
         Head memory h = head();
         (e.chainUid, e.registry, e.govRouter, e.smartKeyAccountImpl, e.hedera) =
-            (h.chainUid, h.registry, h.govRouter, h.smartKeyAccountImpl, h.hedera);
+        (h.chainUid, h.registry, h.govRouter, h.smartKeyAccountImpl, h.hedera);
         if (!isClone()) return e;
         uint256 n = _byte(OFF_DEPS);
         e.deps = new address[](n);
-        for (uint256 i; i < n; ++i) e.deps[i] = address(bytes20(_word(OFF_DEPS + 1 + 20 * i)));
+        for (uint256 i; i < n; ++i) {
+            e.deps[i] = address(bytes20(_word(OFF_DEPS + 1 + 20 * i)));
+        }
         uint256 off = OFF_DEPS + 1 + 20 * n;
         n = _byte(off);
         e.params = new bytes32[](n);
-        for (uint256 i; i < n; ++i) e.params[i] = _word(off + 1 + 32 * i);
+        for (uint256 i; i < n; ++i) {
+            e.params[i] = _word(off + 1 + 32 * i);
+        }
     }
 
     /// @notice `initialize`'s check (chain-neutral spec §2.1, Fable P3-4): this code is a clone whose length is exactly
@@ -111,16 +129,27 @@ library ChainEnvCode {
     /// @notice The env bytes of `e` (the factory's composition; counts within the bounds, checked at `publishTokenEnv`).
     function encode(IFactoryToken.ChainEnv memory e) internal pure returns (bytes memory b) {
         b = abi.encodePacked(e.chainUid, e.registry, e.govRouter, e.smartKeyAccountImpl, e.hedera, uint8(e.deps.length));
-        for (uint256 i; i < e.deps.length; ++i) b = bytes.concat(b, bytes20(e.deps[i]));
+        for (uint256 i; i < e.deps.length; ++i) {
+            b = bytes.concat(b, bytes20(e.deps[i]));
+        }
         b = bytes.concat(b, bytes1(uint8(e.params.length)));
-        for (uint256 i; i < e.params.length; ++i) b = bytes.concat(b, e.params[i]);
+        for (uint256 i; i < e.params.length; ++i) {
+            b = bytes.concat(b, e.params[i]);
+        }
     }
 
     /// @notice The init code of a clone of `implementation` with `env` appended: `PUSH2 n RETURNDATASIZE DUP2 PUSH1 10
     ///         RETURNDATASIZE CODECOPY RETURN` (10 B), then the runtime (`n = 45 + env.length`).
     function initCode(address implementation, bytes memory env) internal pure returns (bytes memory) {
-        return abi.encodePacked(hex"61", uint16(PROXY + env.length), hex"3d81600a3d39f3", hex"363d3d373d3d3d363d73",
-            implementation, hex"5af43d82803e903d91602b57fd5bf3", env);
+        return abi.encodePacked(
+            hex"61",
+            uint16(PROXY + env.length),
+            hex"3d81600a3d39f3",
+            hex"363d3d373d3d3d363d73",
+            implementation,
+            hex"5af43d82803e903d91602b57fd5bf3",
+            env
+        );
     }
 
     function _byte(uint256 off) private view returns (uint256 b) {

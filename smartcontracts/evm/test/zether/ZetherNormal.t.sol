@@ -23,7 +23,6 @@ import {UACall} from "../ua/UACall.sol";
 ///         roll-over, unshield into public units; replay protection; `chainUid` in every digest (CTR-ZTH-36);
 ///         disclosure.
 abstract contract ZetherNormalSuite is ZetherFixture {
-
     function setUp() public {
         _deploy(true);
     }
@@ -33,7 +32,9 @@ abstract contract ZetherNormalSuite is ZetherFixture {
     }
 
     function _vta(bytes32 ref, uint256 amount, ITransferDisclosure.OpeningKind kind, bytes memory opening)
-        internal view returns (bool)
+        internal
+        view
+        returns (bool)
     {
         return _vta(tok, ref, 0, amount, kind, opening);
     }
@@ -58,12 +59,18 @@ abstract contract ZetherNormalSuite is ZetherFixture {
         Tx memory t1 = _proveTransfer(tok, alice, bob, 300, 1000, carol.ua, 0);
         uint256 g0 = gasleft();
         bytes32 ref = _direct(tok, t1, carol.ua);
-        console2.log(bls ? "bls12-381" : "bn254", "mtxConfidentialTransferSingle (direct, auditor, fee) gas", g0 - gasleft());
+        console2.log(
+            bls ? "bls12-381" : "bn254", "mtxConfidentialTransferSingle (direct, auditor, fee) gas", g0 - gasleft()
+        );
         (a,) = _bal(alice);
         assertEq(a, 1000 - 300 - FEE, "sender acc debited v + fee");
         (, p) = _bal(bob);
         assertEq(p, 300, "receiver pending credited");
-        assertEq(tok.balanceOfUA(ZetherTypes.UA.unwrap(carol.ua)), FEE * SCALE, "beneficiary: fee x scale public units from the pool");
+        assertEq(
+            tok.balanceOfUA(ZetherTypes.UA.unwrap(carol.ua)),
+            FEE * SCALE,
+            "beneficiary: fee x scale public units from the pool"
+        );
         assertEq(tok.accountState(carol.ua).pendingSeq, 0, "no pend_ben credit (D19)");
         assertEq(tok.sendCounter(alice.ua), 1);
         assertEq(ref, _ref(tok, alice, 0), "entryRef carries chainUid");
@@ -151,7 +158,8 @@ abstract contract ZetherNormalSuite is ZetherFixture {
         assertEq(tok.balanceOf(SHIELD_POOL_), 30 * SCALE);
         assertTrue(_holds(tok, bob, 30, false));
         assertEq(tok.accountState(bob.ua).pendingSeq, 1);
-        bytes memory err = abi.encodeWithSignature("ERC20InsufficientBalance(address,uint256,uint256)", address(this), 1, SCALE);
+        bytes memory err =
+            abi.encodeWithSignature("ERC20InsufficientBalance(address,uint256,uint256)", address(this), 1, SCALE);
         vm.expectRevert(err);
         tok.mtxShield(ZetherTypes.UA.unwrap(bob.ua), 1);
         // the cap counts every account: room = max − totalShielded
@@ -176,11 +184,22 @@ abstract contract ZetherNormalSuite is ZetherFixture {
         Tx memory t = _proveTransfer(tok, alice, bob, 100, 500, carol.ua, 0);
         bytes memory st = stm.transferStatementSingle(address(tok), _zSingle(t.payload, carol.ua), 0);
         bytes memory head = new bytes(512);
-        for (uint256 i; i < 512; ++i) head[i] = st[i];
+        for (uint256 i; i < 512; ++i) {
+            head[i] = st[i];
+        }
         bytes memory expected = bytes.concat(
-            abi.encode(keccak256("SCAAS-ZETHER-OP-TRANSFER-V1"), ver.proofSystemId(), block.chainid, ZUID, address(tok),
-                keccak256("ZTX_V1_DIRECT"), bytes32(0)),
-            abi.encode(uint256(0), uint256(1), FEE, carol.ua, uint256(0), address(0), uint256(uint128(salt)), bytes32(0)),
+            abi.encode(
+                keccak256("SCAAS-ZETHER-OP-TRANSFER-V1"),
+                ver.proofSystemId(),
+                block.chainid,
+                ZUID,
+                address(tok),
+                keccak256("ZTX_V1_DIRECT"),
+                bytes32(0)
+            ),
+            abi.encode(
+                uint256(0), uint256(1), FEE, carol.ua, uint256(0), address(0), uint256(uint128(salt)), bytes32(0)
+            ),
             abi.encode(vub) // word 15: validUntilBlock (review C0-9)
         );
         assertEq(head, expected);
@@ -200,8 +219,15 @@ abstract contract ZetherNormalSuite is ZetherFixture {
         tok.mtxConfidentialTransferSingle(_zSingle(tampered, carol.ua), t.proof);
         bytes32 ref = _ref(tok, alice, 0);
         vm.expectEmit(true, true, true, true, address(tok));
-        emit IConfidentialToken.ConfidentialTransfer(ref, ZetherTypes.UA.unwrap(alice.ua), ZetherTypes.UA.unwrap(bob.ua),
-            ZetherTypes.UA.unwrap(carol.ua), FEE, 0, address(0));
+        emit IConfidentialToken.ConfidentialTransfer(
+            ref,
+            ZetherTypes.UA.unwrap(alice.ua),
+            ZetherTypes.UA.unwrap(bob.ua),
+            ZetherTypes.UA.unwrap(carol.ua),
+            FEE,
+            0,
+            address(0)
+        );
         _direct(tok, t, carol.ua);
     }
 
@@ -219,35 +245,82 @@ abstract contract ZetherNormalSuite is ZetherFixture {
     }
 
     function _modeSig(User memory u, ZetherTypes.RollOverMode mode, uint64 nonce, uint64 until)
-        internal view returns (IUARegistry.UASig memory)
+        internal
+        view
+        returns (IUARegistry.UASig memory)
     {
         return _ownerAuth(u, _setModeDigest(tok, u.ua, uint8(mode), nonce, until));
     }
 
-    function _rollSig(User memory u, uint64 accSeq, uint64 pendSeq, uint64 until) internal view returns (IUARegistry.UASig memory) {
+    function _rollSig(User memory u, uint64 accSeq, uint64 pendSeq, uint64 until)
+        internal
+        view
+        returns (IUARegistry.UASig memory)
+    {
         return _ownerAuth(u, _rollOverDigest(tok, u.ua, accSeq, pendSeq, until));
     }
 
     /// The domain of `tok` on another chain uid (a re-created chain, its counters restarted).
     function _otherChain(bytes32 structHash) internal view returns (bytes32) {
-        return keccak256(abi.encodePacked(hex"1901", keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256("SCaaS ZetherToken"), keccak256("1"), block.chainid, address(tok), keccak256("another chain"))), structHash));
+        return keccak256(
+            abi.encodePacked(
+                hex"1901",
+                keccak256(
+                    abi.encode(
+                        keccak256(
+                            "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                        ),
+                        keccak256("SCaaS ZetherToken"),
+                        keccak256("1"),
+                        block.chainid,
+                        address(tok),
+                        keccak256("another chain")
+                    )
+                ),
+                structHash
+            )
+        );
     }
 
     /// CTR-ZTH-36: a mode or roll-over signature under another chain's domain (a captured signature from a re-created
     /// chain, whose counters restarted: `salt` is `chainUid`) is refused.
     function test_rollOverAndModeDigestsCarryChainUid() public {
         uint64 until = uint64(block.number + 50);
-        IUARegistry.UASig memory bad = _ownerAuth(alice, _otherChain(keccak256(abi.encode(
-            keccak256("ZetherSetRollOverMode(bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock)"), alice.ua,
-            uint8(ZetherTypes.RollOverMode.OWNER_ONLY), uint64(0), until))));
+        IUARegistry.UASig memory bad = _ownerAuth(
+            alice,
+            _otherChain(
+                keccak256(
+                    abi.encode(
+                        keccak256(
+                            "ZetherSetRollOverMode(bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock)"
+                        ),
+                        alice.ua,
+                        uint8(ZetherTypes.RollOverMode.OWNER_ONLY),
+                        uint64(0),
+                        until
+                    )
+                )
+            )
+        );
         vm.expectRevert();
         tok.mtxSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, bad);
         _fund(tok, alice, 10);
-        bad = _ownerAuth(alice, _otherChain(keccak256(abi.encode(
-            keccak256("ZetherRollOver(bytes32 ua,uint64 accSeq,uint64 expectedPendingSeq,uint64 validUntilBlock)"), alice.ua,
-            uint64(0), uint64(1), until))));
+        bad = _ownerAuth(
+            alice,
+            _otherChain(
+                keccak256(
+                    abi.encode(
+                        keccak256(
+                            "ZetherRollOver(bytes32 ua,uint64 accSeq,uint64 expectedPendingSeq,uint64 validUntilBlock)"
+                        ),
+                        alice.ua,
+                        uint64(0),
+                        uint64(1),
+                        until
+                    )
+                )
+            )
+        );
         vm.expectRevert();
         tok.mtxRollOverSigned(alice.ua, 1, until, bad);
         tok.mtxRollOverSigned(alice.ua, 1, until, _rollSig(alice, 0, 1, until));
@@ -258,8 +331,12 @@ abstract contract ZetherNormalSuite is ZetherFixture {
     /// owner's roll-over still runs (merging the new credit too); the signature cannot replay (`accSeq` moved).
     function test_rollOverSignedSurvivesFrontRunCredit() public {
         uint64 until = uint64(block.number + 50);
-        tok.mtxSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until,
-            _modeSig(alice, ZetherTypes.RollOverMode.OWNER_ONLY, 0, until));
+        tok.mtxSetRollOverMode(
+            alice.ua,
+            ZetherTypes.RollOverMode.OWNER_ONLY,
+            until,
+            _modeSig(alice, ZetherTypes.RollOverMode.OWNER_ONLY, 0, until)
+        );
         _fund(tok, alice, 10);
         IUARegistry.UASig memory rs = _rollSig(alice, 0, 1, until);
         _direct(tok, _proveTransfer(tok, bob, alice, 0, 0, _none(), 0), _none());
@@ -276,8 +353,12 @@ abstract contract ZetherNormalSuite is ZetherFixture {
     /// CTR-ZTH-17: a signature that names no new credit is refused (it would be a reusable no-op ticket).
     function test_rollOverSignedWithoutNewCreditIsRejected() public {
         uint64 until = uint64(block.number + 50);
-        tok.mtxSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until,
-            _modeSig(alice, ZetherTypes.RollOverMode.OWNER_ONLY, 0, until));
+        tok.mtxSetRollOverMode(
+            alice.ua,
+            ZetherTypes.RollOverMode.OWNER_ONLY,
+            until,
+            _modeSig(alice, ZetherTypes.RollOverMode.OWNER_ONLY, 0, until)
+        );
         _fund(tok, alice, 10);
         tok.mtxRollOverSigned(alice.ua, 1, until, _rollSig(alice, 0, 1, until));
         IUARegistry.UASig memory stale = _rollSig(alice, 1, 1, until);
@@ -402,16 +483,22 @@ abstract contract ZetherNormalSuite is ZetherFixture {
 
     /// @dev Chaum-Pedersen opening of leg 0: RECEIVER_X/AUDITOR on base `D_out`, SENDER_CP on `Y_t` (key `s`).
     function _cpOpening(uint256 x, bytes32 ref, uint256 amount, ITransferDisclosure.OpeningKind kind)
-        internal view returns (bytes memory)
+        internal
+        view
+        returns (bytes memory)
     {
         (bytes memory ct, bytes memory yt) = dis.transferCiphertext(address(tok), ref, 0);
-        bytes memory base = kind == ITransferDisclosure.OpeningKind.SENDER_CP ? yt : _cut(ct, ver.g1EncodedBytes(), ver.g1EncodedBytes());
+        bytes memory base = kind == ITransferDisclosure.OpeningKind.SENDER_CP
+            ? yt
+            : _cut(ct, ver.g1EncodedBytes(), ver.g1EncodedBytes());
         return _cpOpening(tok, x, ref, 0, amount, kind, base);
     }
 
     function _cut(bytes memory a, uint256 off, uint256 len) internal pure returns (bytes memory out) {
         out = new bytes(len);
-        for (uint256 i; i < len; ++i) out[i] = a[off + i];
+        for (uint256 i; i < len; ++i) {
+            out[i] = a[off + i];
+        }
     }
 
     function _modInv(uint256 a, uint256 r) internal view returns (uint256 out) {
@@ -439,12 +526,21 @@ abstract contract ZetherNormalSuite is ZetherFixture {
         bytes32 ref = _ref(tok, alice, tok.accountState(alice.ua).sendCounter);
         (uint256 eOld, uint256 s) = _lateS(ref, 100, 5);
         forceS = s;
-        assertEq(_direct(tok, _proveTransfer(tok, alice, bob, 100, 500, _none(), 0), _none()), ref, "predicted entryRef");
+        assertEq(
+            _direct(tok, _proveTransfer(tok, alice, bob, 100, 500, _none(), 0), _none()), ref, "predicted entryRef"
+        );
         bytes memory forged = _forged(eOld);
         assertTrue(_oldAccepts(ref, 5, eOld, forged), "the OLD verifier opens the false amount 5");
         assertFalse(_vta(ref, 5, ITransferDisclosure.OpeningKind.RECEIVER_X, forged), "no false opening");
-        assertTrue(_vta(ref, 100, ITransferDisclosure.OpeningKind.RECEIVER_X,
-            _cpOpening(bob.x, ref, 100, ITransferDisclosure.OpeningKind.RECEIVER_X)), "honest opening of v");
+        assertTrue(
+            _vta(
+                ref,
+                100,
+                ITransferDisclosure.OpeningKind.RECEIVER_X,
+                _cpOpening(bob.x, ref, 100, ITransferDisclosure.OpeningKind.RECEIVER_X)
+            ),
+            "honest opening of v"
+        );
     }
 
     uint256 constant K1 = 0x1111;
@@ -453,11 +549,17 @@ abstract contract ZetherNormalSuite is ZetherFixture {
     /// @dev The old `e` for `A1 = [K1]G, A2 = [K2]G` and amount `a`, and `s = K1⁻¹(K2 + e(v − a))`.
     function _lateS(bytes32 ref, uint256 v, uint256 a) internal view returns (uint256 e, uint256 s) {
         uint256 r = ver.groupOrder();
-        e = ZetherTranscript.hashToScalar(keccak256(bytes.concat(
-            abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V2", block.chainid, tok.chainUid(), address(tok)),
-            abi.encodePacked(ref, uint256(0), a, uint8(ITransferDisclosure.OpeningKind.RECEIVER_X)),
-            ver.g1MulBase(K1), ver.g1MulBase(K2)
-        )), r);
+        e = ZetherTranscript.hashToScalar(
+            keccak256(
+                bytes.concat(
+                    abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V2", block.chainid, tok.chainUid(), address(tok)),
+                    abi.encodePacked(ref, uint256(0), a, uint8(ITransferDisclosure.OpeningKind.RECEIVER_X)),
+                    ver.g1MulBase(K1),
+                    ver.g1MulBase(K2)
+                )
+            ),
+            r
+        );
         s = mulmod(_modInv(K1, r), addmod(K2, mulmod(e, addmod(v, r - a, r), r), r), r);
     }
 
@@ -519,16 +621,31 @@ abstract contract ZetherNormalSuite is ZetherFixture {
         bytes memory a1 = ver.g1MulBase(k);
         bytes memory a2 = ver.g1Mul(dOut, k);
         // the full new preimage (G ‖ K ‖ B ‖ M) minus chainUid: chainUid is the only difference from the honest one
-        uint256 e = uint256(keccak256(bytes.concat(
-            abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V2", block.chainid, address(tok)),
-            abi.encodePacked(ref, uint256(0), uint256(123), uint8(1)),
-            ver.g1MulBase(1), bob.y, dOut, _cut(ct, 0, ver.g1EncodedBytes()), a1, a2
-        )));
+        uint256 e = uint256(
+            keccak256(
+                bytes.concat(
+                    abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V2", block.chainid, address(tok)),
+                    abi.encodePacked(ref, uint256(0), uint256(123), uint8(1)),
+                    ver.g1MulBase(1),
+                    bob.y,
+                    dOut,
+                    _cut(ct, 0, ver.g1EncodedBytes()),
+                    a1,
+                    a2
+                )
+            )
+        );
         e = _h2s(e, r);
         bytes memory noUid = abi.encode(a1, a2, addmod(k, mulmod(e, bob.x, r), r));
         assertFalse(_vta(ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X, noUid));
-        assertTrue(_vta(ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X,
-            _cpOpening(bob.x, ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X)));
+        assertTrue(
+            _vta(
+                ref,
+                123,
+                ITransferDisclosure.OpeningKind.RECEIVER_X,
+                _cpOpening(bob.x, ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X)
+            )
+        );
     }
 
     function _h2s(uint256 seed, uint256 r) internal pure returns (uint256) {
@@ -553,14 +670,39 @@ abstract contract ZetherNormalSuite is ZetherFixture {
         bytes32 ref = _direct(tok, t, _none());
         assertTrue(_holds(tok, bob, 123, false));
         assertTrue(_vta(ref, 123, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(t.s)));
-        assertTrue(_vta(ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X,
-            _cpOpening(bob.x, ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X)));
-        assertTrue(_vta(ref, 123, ITransferDisclosure.OpeningKind.SENDER_CP,
-            _cpOpening(t.s, ref, 123, ITransferDisclosure.OpeningKind.SENDER_CP)));
-        assertFalse(_vta(ref, 123, ITransferDisclosure.OpeningKind.AUDITOR,
-            _cpOpening(X_AUD, ref, 123, ITransferDisclosure.OpeningKind.AUDITOR)), "auditor reads nothing");
-        assertFalse(_vta(ref, 0, ITransferDisclosure.OpeningKind.AUDITOR,
-            _cpOpening(X_AUD, ref, 0, ITransferDisclosure.OpeningKind.AUDITOR)));
+        assertTrue(
+            _vta(
+                ref,
+                123,
+                ITransferDisclosure.OpeningKind.RECEIVER_X,
+                _cpOpening(bob.x, ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X)
+            )
+        );
+        assertTrue(
+            _vta(
+                ref,
+                123,
+                ITransferDisclosure.OpeningKind.SENDER_CP,
+                _cpOpening(t.s, ref, 123, ITransferDisclosure.OpeningKind.SENDER_CP)
+            )
+        );
+        assertFalse(
+            _vta(
+                ref,
+                123,
+                ITransferDisclosure.OpeningKind.AUDITOR,
+                _cpOpening(X_AUD, ref, 123, ITransferDisclosure.OpeningKind.AUDITOR)
+            ),
+            "auditor reads nothing"
+        );
+        assertFalse(
+            _vta(
+                ref,
+                0,
+                ITransferDisclosure.OpeningKind.AUDITOR,
+                _cpOpening(X_AUD, ref, 0, ITransferDisclosure.OpeningKind.AUDITOR)
+            )
+        );
     }
 
     /// n_v = 64: a transfer > 2^32 units, a balance > 2^44 held, spent (the whole balance in one transfer) and
@@ -575,11 +717,17 @@ abstract contract ZetherNormalSuite is ZetherFixture {
         Tx memory t = _proveTransfer(tok, alice, bob, v, b0, carol.ua, 0);
         uint256 g0 = gasleft();
         bytes32 ref = _direct(tok, t, carol.ua);
-        console2.log(bls ? "bls12-381" : "bn254", "mtxConfidentialTransferSingle v > 2^32 (direct, auditor, fee) gas", g0 - gasleft());
+        console2.log(
+            bls ? "bls12-381" : "bn254",
+            "mtxConfidentialTransferSingle v > 2^32 (direct, auditor, fee) gas",
+            g0 - gasleft()
+        );
         uint256 b1 = b0 - v - FEE;
         assertTrue(_holds(tok, alice, b1, true), "sender acc = b - v - fee");
         assertTrue(_holds(tok, bob, v, false), "receiver pending = v");
-        assertEq(tok.balanceOfUA(ZetherTypes.UA.unwrap(carol.ua)), FEE * SCALE, "beneficiary public balance = fee x scale");
+        assertEq(
+            tok.balanceOfUA(ZetherTypes.UA.unwrap(carol.ua)), FEE * SCALE, "beneficiary public balance = fee x scale"
+        );
         assertEq(tok.accountState(carol.ua).pendingSeq, 0, "no pend_ben credit (D19)");
         _discloseLarge(ref, v, t.s);
         _spendAllAndUnshield(b1, v);
@@ -589,10 +737,22 @@ abstract contract ZetherNormalSuite is ZetherFixture {
         assertTrue(_vta(ref, v, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(s)));
         bytes memory rx = _cpOpening(bob.x, ref, v, ITransferDisclosure.OpeningKind.RECEIVER_X);
         assertTrue(_vta(ref, v, ITransferDisclosure.OpeningKind.RECEIVER_X, rx));
-        assertTrue(_vta(ref, v, ITransferDisclosure.OpeningKind.AUDITOR,
-            _cpOpening(X_AUD, ref, v, ITransferDisclosure.OpeningKind.AUDITOR)));
-        assertTrue(_vta(ref, v, ITransferDisclosure.OpeningKind.SENDER_CP,
-            _cpOpening(s, ref, v, ITransferDisclosure.OpeningKind.SENDER_CP)));
+        assertTrue(
+            _vta(
+                ref,
+                v,
+                ITransferDisclosure.OpeningKind.AUDITOR,
+                _cpOpening(X_AUD, ref, v, ITransferDisclosure.OpeningKind.AUDITOR)
+            )
+        );
+        assertTrue(
+            _vta(
+                ref,
+                v,
+                ITransferDisclosure.OpeningKind.SENDER_CP,
+                _cpOpening(s, ref, v, ITransferDisclosure.OpeningKind.SENDER_CP)
+            )
+        );
         assertFalse(_vta(ref, v - (uint256(1) << 32), ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(s)));
         assertFalse(_vta(ref, uint256(1) << 64, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(s)));
     }
@@ -652,12 +812,16 @@ abstract contract ZetherNormalSuite is ZetherFixture {
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
         tok.mtxSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, wrong);
         IUARegistry.UASig memory sig = _ownerAuth(alice, d);
-        vm.expectCall(address(reg), abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_ZETHER_OWNER, d, sig)));
+        vm.expectCall(
+            address(reg), abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_ZETHER_OWNER, d, sig))
+        );
         tok.mtxSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, sig);
         _fund(tok, alice, 10);
         d = _rollOverDigest(tok, alice.ua, 0, 1, until);
         sig = _ownerAuth(alice, d);
-        vm.expectCall(address(reg), abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_ZETHER_OWNER, d, sig)));
+        vm.expectCall(
+            address(reg), abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_ZETHER_OWNER, d, sig))
+        );
         tok.mtxRollOverSigned(alice.ua, 1, until, sig);
         assertEq(tok.accountState(alice.ua).accSeq, 1);
     }
@@ -670,11 +834,16 @@ abstract contract ZetherNormalSuite is ZetherFixture {
         bytes32 other = reg.uaOf(UAKinds.SCHNORR_BN254, y);
         bytes32 pd = UAKinds.registrationDigest(other, UAKinds.SCHNORR_BN254, 0, UAKinds.kemRecordHash(other, 0, ""), 0); // UA-8: portable
         vm.prank(address(0xB0B));
-        UACall.register(reg, UAKinds.SCHNORR_BN254,
+        UACall.register(
+            reg,
+            UAKinds.SCHNORR_BN254,
             y,
             UACall.attrs("", 0, ""),
-            ZetherKeys.sign("scaas.ua.schnorr.v1", x, reg.uaMessage(UAKinds.SCHNORR_BN254, UAKinds.PURPOSE_POP_V2, pd), false),
-            "");
+            ZetherKeys.sign(
+                "scaas.ua.schnorr.v1", x, reg.uaMessage(UAKinds.SCHNORR_BN254, UAKinds.PURPOSE_POP_V2, pd), false
+            ),
+            ""
+        );
         _refusedOwnerOps(other, x);
         _refusedOwnerOps(keccak256("unregistered"), x);
     }
@@ -693,7 +862,9 @@ abstract contract ZetherNormalSuite is ZetherFixture {
     }
 
     function _otherSig(uint256 x, bytes32 d) internal view returns (IUARegistry.UASig memory s) {
-        s.signature = ZetherKeys.sign("scaas.ua.schnorr.v1", x, reg.uaMessage(UAKinds.SCHNORR_BN254, UAKinds.PURPOSE_ZETHER_OWNER, d), false);
+        s.signature = ZetherKeys.sign(
+            "scaas.ua.schnorr.v1", x, reg.uaMessage(UAKinds.SCHNORR_BN254, UAKinds.PURPOSE_ZETHER_OWNER, d), false
+        );
     }
 
     /// U8 (CTR-UA-30 (2), CTR-ZTH-51): the Zether UA's public balance lives on the UA ledger under the same id: it
@@ -706,8 +877,16 @@ abstract contract ZetherNormalSuite is ZetherFixture {
         tok.transferToUA(a, 100 * SCALE);
         assertEq(tok.balanceOfUA(a), 100 * SCALE);
         MetaTxLib.UAMetaTransfer memory t = MetaTxLib.UAMetaTransfer({
-            from: a, to: b, value: 10 * SCALE, entryRef: 0, batch: 1, nonce: tok.mtxNonce(a, 1),
-            validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer, fee: 0,
+            from: a,
+            to: b,
+            value: 10 * SCALE,
+            entryRef: 0,
+            batch: 1,
+            nonce: tok.mtxNonce(a, 1),
+            validUntil: block.timestamp + 300,
+            mode: MetaTxLib.MODE_RESTRICT_RELAYER,
+            relayer: relayer,
+            fee: 0,
             feeRecipient: address(0)
         });
         bytes memory auth = _uaAuth(alice, UAKinds.PURPOSE_METATX, tok.mtxTransferDigest(t));
@@ -715,8 +894,14 @@ abstract contract ZetherNormalSuite is ZetherFixture {
         tok.mtxExecuteTransfer(t, UACall.auth(t.from, auth));
         assertEq(tok.balanceOfUA(b), 10 * SCALE);
         MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction({
-            from: a, data: abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(alice.ua), 40)), batch: 1, nonce: tok.mtxNonce(a, 1),
-            validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer, fee: 0,
+            from: a,
+            data: abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(alice.ua), 40)),
+            batch: 1,
+            nonce: tok.mtxNonce(a, 1),
+            validUntil: block.timestamp + 300,
+            mode: MetaTxLib.MODE_RESTRICT_RELAYER,
+            relayer: relayer,
+            fee: 0,
             feeRecipient: address(0)
         });
         auth = _uaAuth(bob, UAKinds.PURPOSE_METATX, tok.mtxDigest(m)); // another key

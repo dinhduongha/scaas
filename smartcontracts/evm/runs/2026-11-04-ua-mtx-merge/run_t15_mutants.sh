@@ -12,15 +12,26 @@ node="$here/../../../../scaas-node"
 capped="$here/../../../../scripts/capped"
 files="src/gateway.rs"
 cd "$node" || exit 2
-git diff --quiet -- $files || { echo "scaas-node is not clean" >&2; exit 2; }
+git diff --quiet -- $files || {
+    echo "scaas-node is not clean" >&2
+    exit 2
+}
 names=${*:-$(python3 "$here/t15_mutants.py" --list)}
 for m in $names; do
-  python3 "$here/t15_mutants.py" "$m" || { echo "$m: anchor missing" >&2; echo 99 > "$here/mutant-t15-$m.rc.log"; git checkout -- $files; continue; }
-  "$capped" cargo test -j2 --no-fail-fast --lib -- gateway:: guard:: > "$here/mutant-t15-$m.log" 2>&1
-  echo $? > "$here/mutant-t15-$m.rc.log"
-  git checkout -- $files
+    python3 "$here/t15_mutants.py" "$m" || {
+        echo "$m: anchor missing" >&2
+        echo 99 >"$here/mutant-t15-$m.rc.log"
+        git checkout -- $files
+        continue
+    }
+    "$capped" cargo test -j2 --no-fail-fast --lib -- gateway:: guard:: >"$here/mutant-t15-$m.log" 2>&1
+    echo $? >"$here/mutant-t15-$m.rc.log"
+    git checkout -- $files
 done
-git diff --quiet -- $files || { echo "scaas-node not restored" >&2; exit 3; }
+git diff --quiet -- $files || {
+    echo "scaas-node not restored" >&2
+    exit 3
+}
 python3 - "$here" <<'PY'
 import os, re, sys
 here = sys.argv[1]

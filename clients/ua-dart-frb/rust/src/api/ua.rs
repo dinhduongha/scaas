@@ -16,10 +16,12 @@ pub struct UAError {
 
 impl From<scaas_ua::UAError> for UAError {
     fn from(e: scaas_ua::UAError) -> Self {
-        UAError { code: e.code().into(), reason: match &e {
-            scaas_ua::UAError::KeyData(r) => r.to_string(),
-            _ => String::new(),
-        },
+        UAError {
+            code: e.code().into(),
+            reason: match &e {
+                scaas_ua::UAError::KeyData(r) => r.to_string(),
+                _ => String::new(),
+            },
         }
     }
 }
@@ -36,10 +38,16 @@ impl From<scaas_ua::json::JsonError> for UAError {
 type R<T> = Result<T, UAError>;
 
 fn arg() -> UAError {
-    UAError { code: "UAArgument".into(), reason: String::new() }
+    UAError {
+        code: "UAArgument".into(),
+        reason: String::new(),
+    }
 }
 fn k(kind: i64) -> R<u16> {
-    u16::try_from(kind).map_err(|_| UAError { code: "UAKindUnknown".into(), reason: String::new() })
+    u16::try_from(kind).map_err(|_| UAError {
+        code: "UAKindUnknown".into(),
+        reason: String::new(),
+    })
 }
 /// A Dart `int` into its Rust type, `UAArgument` outside it (frb's own u16 / u32 encoding would wrap, T13 C4).
 pub(crate) fn n<T: TryFrom<i64>>(v: i64) -> R<T> {
@@ -66,15 +74,22 @@ pub struct UaDomain {
 impl TryFrom<UaDomain> for scaas_ua::Domain {
     type Error = UAError;
     fn try_from(d: UaDomain) -> R<Self> {
-        Ok(scaas_ua::Domain { generation: n(d.generation)?, chain_id: n(d.chain_id)?, registry: d.registry, chain_uid: d.chain_uid })
+        Ok(scaas_ua::Domain {
+            generation: n(d.generation)?,
+            chain_id: n(d.chain_id)?,
+            registry: d.registry,
+            chain_uid: d.chain_uid,
+        })
     }
 }
 
-/// `governance_bits.json`'s row of `bit` as JSON, `{bit, name, type, sentences}` (spec 2026-11-02-governance §1.2): bits 0-31,
+/// `governance_bits.json`'s row of `bit` as JSON, `{bit, name, type, sentences}` (spec 2026-11-02-governance §1.2): bits 0-32,
 /// any other `UAArgument`.
 #[frb(sync)]
 pub fn governance_bit(bit: i64) -> R<String> {
-    scaas_ua::governance_bit(n(bit)?).map(str::to_string).ok_or_else(arg)
+    scaas_ua::governance_bit(n(bit)?)
+        .map(str::to_string)
+        .ok_or_else(arg)
 }
 
 #[frb(sync)]
@@ -136,7 +151,11 @@ pub fn key_hash_of(kind: i64, key_data: Vec<u8>) -> R<Option<[u8; 32]>> {
 }
 #[frb(sync)]
 pub fn validate_key_data(kind: i64, key_data: Vec<u8>, hedera_native: bool) -> R<()> {
-    Ok(scaas_ua::validate_key_data(k(kind)?, &key_data, hedera_native)?)
+    Ok(scaas_ua::validate_key_data(
+        k(kind)?,
+        &key_data,
+        hedera_native,
+    )?)
 }
 #[frb(sync)]
 pub fn in_native_space(id: [u8; 32]) -> bool {
@@ -207,14 +226,36 @@ pub fn kem_record_hash(ua: [u8; 32], version: u64, kem_pk: Vec<u8>) -> R<[u8; 32
 }
 /// typed `UAPortableRecord{ua, kind, pqzKeyHash, kem}`: what `R_REG` proves over at `register`; a hash is 32 zero bytes when absent.
 #[frb(sync)]
-pub fn portable_record_digest(ua: [u8; 32], kind: i64, pqz_key_hash: [u8; 32], kem_record_hash: [u8; 32]) -> R<[u8; 32]> {
-    Ok(scaas_ua::ua8::portable_record_digest(&ua, k(kind)?, &pqz_key_hash, &kem_record_hash))
+pub fn portable_record_digest(
+    ua: [u8; 32],
+    kind: i64,
+    pqz_key_hash: [u8; 32],
+    kem_record_hash: [u8; 32],
+) -> R<[u8; 32]> {
+    Ok(scaas_ua::ua8::portable_record_digest(
+        &ua,
+        k(kind)?,
+        &pqz_key_hash,
+        &kem_record_hash,
+    ))
 }
 /// typed `UARegistration{record, pqzPopHash}`: what the signer's `pop` signs under `ua_message(kind, POP_V2, ·)` (and a native
 /// `msig` member signs itself, TS-D4).
 #[frb(sync)]
-pub fn registration_digest(ua: [u8; 32], kind: i64, pqz_key_hash: [u8; 32], kem_record_hash: [u8; 32], pqz_pop_hash: [u8; 32]) -> R<[u8; 32]> {
-    Ok(scaas_ua::ua8::registration_digest(&ua, k(kind)?, &pqz_key_hash, &kem_record_hash, &pqz_pop_hash))
+pub fn registration_digest(
+    ua: [u8; 32],
+    kind: i64,
+    pqz_key_hash: [u8; 32],
+    kem_record_hash: [u8; 32],
+    pqz_pop_hash: [u8; 32],
+) -> R<[u8; 32]> {
+    Ok(scaas_ua::ua8::registration_digest(
+        &ua,
+        k(kind)?,
+        &pqz_key_hash,
+        &kem_record_hash,
+        &pqz_pop_hash,
+    ))
 }
 /// typed `UAKemRecord{ua, version, scheme, kemPkHash}` that `setKemKey` signs (`UAKemVersion` for 0, `UAKemScheme` unless the first byte is 1, `UAKemKeyLength` unless 1,601 bytes).
 #[frb(sync)]
@@ -224,13 +265,21 @@ pub fn kem_record_digest(ua: [u8; 32], version: u64, kem_pk: Vec<u8>) -> R<[u8; 
 /// What the UA signs for a KEM record: `ua_message(kind, PURPOSE_KEM, kem_record_digest)`.
 #[frb(sync)]
 pub fn kem_record_message(kind: i64, ua: [u8; 32], version: u64, kem_pk: Vec<u8>) -> R<[u8; 32]> {
-    Ok(scaas_ua::ua8::kem_record_message(k(kind)?, &ua, version, &kem_pk)?)
+    Ok(scaas_ua::ua8::kem_record_message(
+        k(kind)?,
+        &ua,
+        version,
+        &kem_pk,
+    )?)
 }
 /// An empty proof hash is absent; another length than 32 is `UAPqzPopHash`.
 fn hash(h: &Option<Vec<u8>>) -> R<Option<[u8; 32]>> {
     match h.as_deref() {
         None | Some([]) => Ok(None),
-        Some(b) => Ok(Some(b.try_into().map_err(|_| UAError { code: "UAPqzPopHash".into(), reason: String::new() })?)),
+        Some(b) => Ok(Some(b.try_into().map_err(|_| UAError {
+            code: "UAPqzPopHash".into(),
+            reason: String::new(),
+        })?)),
     }
 }
 /// The portable PoP of a registration (UA-8 P1, P2). `message = ua_message(kind, POP_V2, registration_digest)`: what the signer's
@@ -259,7 +308,16 @@ pub fn holder_pop_message(
     pqz_pop_hash: Option<Vec<u8>>,
     kem_pk: Option<Vec<u8>>,
 ) -> R<HolderPop> {
-    holder_pop_message_with(kind, ua, key_data, pqz_key, pqz_pop, pqz_pop_hash, kem_pk, String::new())
+    holder_pop_message_with(
+        kind,
+        ua,
+        key_data,
+        pqz_key,
+        pqz_pop,
+        pqz_pop_hash,
+        kem_pk,
+        String::new(),
+    )
 }
 /// [`holder_pop_message`] with `inner` as in [`msig_pqz_eligible_with`].
 #[frb(sync)]
@@ -277,7 +335,16 @@ pub fn holder_pop_message_with(
     let (h, i) = (hash(&pqz_pop_hash)?, scaas_ua::json::inner_json(&inner)?);
     let l = scaas_ua::json::lookup(&i);
     let (key, pop, kem) = (pqz_key.as_deref(), pqz_pop.as_deref(), kem_pk.as_deref());
-    let r = scaas_ua::ua8::holder_pop_message_with(k(kind)?, &ua, &key_data, key, pop, h.as_ref(), kem, &l)?;
+    let r = scaas_ua::ua8::holder_pop_message_with(
+        k(kind)?,
+        &ua,
+        &key_data,
+        key,
+        pop,
+        h.as_ref(),
+        kem,
+        &l,
+    )?;
     Ok(HolderPop {
         pqz_key_hash: r.pqz_key_hash,
         pqz_pop_hash: r.pqz_pop_hash,
@@ -291,8 +358,18 @@ pub fn holder_pop_message_with(
 /// The message `R_REG` proves over: `ua_message(0x0142, POP_V2, portable_record_digest(ua, kind, key_hash(pqz_key),
 /// kem_record_hash))`, `kind` the registering kind, `kem_pk` the register KEM key (version 0; null / empty = none).
 #[frb(sync)]
-pub fn pqz_reg_message(kind: i64, ua: [u8; 32], pqz_key: Vec<u8>, kem_pk: Option<Vec<u8>>) -> R<[u8; 32]> {
-    Ok(scaas_ua::pqz_reg_message(k(kind)?, &ua, &pqz_key, kem_pk.as_deref())?)
+pub fn pqz_reg_message(
+    kind: i64,
+    ua: [u8; 32],
+    pqz_key: Vec<u8>,
+    kem_pk: Option<Vec<u8>>,
+) -> R<[u8; 32]> {
+    Ok(scaas_ua::pqz_reg_message(
+        k(kind)?,
+        &ua,
+        &pqz_key,
+        kem_pk.as_deref(),
+    )?)
 }
 /// typed `UAPqzKey{ua, pqzKeyHash}`: what a later PQZ key's `R_REG` proves over.
 #[frb(sync)]
@@ -302,7 +379,11 @@ pub fn pqz_key_digest(ua: [u8; 32], pqz_key_hash: [u8; 32]) -> [u8; 32] {
 /// typed `UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}`: what `setPqzKey`'s signature signs under
 /// `ua_message(kind, PURPOSE_PQZ_KEY, ·)` (and a native `msig` member signs itself, TS-D4).
 #[frb(sync)]
-pub fn pqz_key_record_digest(ua: [u8; 32], pqz_key_hash: [u8; 32], pqz_pop_hash: [u8; 32]) -> [u8; 32] {
+pub fn pqz_key_record_digest(
+    ua: [u8; 32],
+    pqz_key_hash: [u8; 32],
+    pqz_pop_hash: [u8; 32],
+) -> [u8; 32] {
     scaas_ua::ua8::pqz_key_record_digest(&ua, &pqz_key_hash, &pqz_pop_hash)
 }
 /// typed `UAMembership{ua, member}`: what `member` signs to accept its slot in the `msig` `ua` (CTR-UA-37): a native member this
@@ -334,7 +415,16 @@ pub fn pqz_key_record_message(
     pqz_pop_hash: Option<Vec<u8>>,
     already_set: bool,
 ) -> R<PqzKeyRecord> {
-    pqz_key_record_message_with(kind, ua, key_data, pqz_key, pqz_pop, pqz_pop_hash, already_set, String::new())
+    pqz_key_record_message_with(
+        kind,
+        ua,
+        key_data,
+        pqz_key,
+        pqz_pop,
+        pqz_pop_hash,
+        already_set,
+        String::new(),
+    )
 }
 /// [`pqz_key_record_message`] with `inner` as in [`msig_pqz_eligible_with`].
 #[frb(sync)]
@@ -351,7 +441,16 @@ pub fn pqz_key_record_message_with(
 ) -> R<PqzKeyRecord> {
     let (h, i) = (hash(&pqz_pop_hash)?, scaas_ua::json::inner_json(&inner)?);
     let l = scaas_ua::json::lookup(&i);
-    let r = scaas_ua::ua8::pqz_key_record_message_with(k(kind)?, &ua, &key_data, &pqz_key, pqz_pop.as_deref(), h.as_ref(), already_set, &l)?;
+    let r = scaas_ua::ua8::pqz_key_record_message_with(
+        k(kind)?,
+        &ua,
+        &key_data,
+        &pqz_key,
+        pqz_pop.as_deref(),
+        h.as_ref(),
+        already_set,
+        &l,
+    )?;
     Ok(PqzKeyRecord {
         pqz_key_hash: r.pqz_key_hash,
         pqz_pop_hash: r.pqz_pop_hash,
@@ -368,7 +467,11 @@ pub fn pqz_key_record_message_with(
 /// `UAUnauthorized`; an index outside u16 `UAArgument`.
 #[frb(sync)]
 pub fn replayed_member_sig(key_data: Vec<u8>, index: i64, stored: Vec<u8>) -> R<String> {
-    Ok(scaas_ua::json::replayed_member_sig_json(&key_data, n(index)?, &stored)?)
+    Ok(scaas_ua::json::replayed_member_sig_json(
+        &key_data,
+        n(index)?,
+        &stored,
+    )?)
 }
 /// POP_V2, KEM, PQZ_KEY: the only purposes where a code-less native `msig` member signs the record's typed digest itself
 /// (`eth_signTypedData_v4`, TS-D4); every other purpose stays UAAuth.
@@ -381,8 +484,18 @@ pub fn ua_auth_domain_separator(domain: UaDomain) -> R<[u8; 32]> {
     Ok(scaas_ua::ua_auth_domain_separator(&domain.try_into()?))
 }
 #[frb(sync)]
-pub fn ua_auth_digest(domain: UaDomain, ua: [u8; 32], purpose: [u8; 32], digest: [u8; 32]) -> R<[u8; 32]> {
-    Ok(scaas_ua::ua_auth_digest(&domain.try_into()?, &ua, &purpose, &digest))
+pub fn ua_auth_digest(
+    domain: UaDomain,
+    ua: [u8; 32],
+    purpose: [u8; 32],
+    digest: [u8; 32],
+) -> R<[u8; 32]> {
+    Ok(scaas_ua::ua_auth_digest(
+        &domain.try_into()?,
+        &ua,
+        &purpose,
+        &digest,
+    ))
 }
 #[frb(sync)]
 pub fn member_digest(structure_ua: [u8; 32], ua_msg: [u8; 32]) -> [u8; 32] {
@@ -454,6 +567,9 @@ pub fn encode_msig(threshold: i64, members: Vec<(i64, [u8; 32], i64)>) -> R<Vec<
     if members.len() > u16::MAX as usize {
         return Err(arg());
     }
-    let ms = members.into_iter().map(|(kd, id, w)| Ok((k(kd)?, id, n(w)?))).collect::<R<Vec<_>>>()?;
+    let ms = members
+        .into_iter()
+        .map(|(kd, id, w)| Ok((k(kd)?, id, n(w)?)))
+        .collect::<R<Vec<_>>>()?;
     Ok(scaas_ua::encode_msig(n(threshold)?, &ms))
 }

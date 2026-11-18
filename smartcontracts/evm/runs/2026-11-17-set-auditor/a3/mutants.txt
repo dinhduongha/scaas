@@ -1,0 +1,7 @@
+disclosure-current-key | test_disclosure_multi_acrossEpochs, test_disclosure_threeEpochs_single | 1
+recovery-current-key | auditor_epochs_bind_the_entry_key, the_sender_recovers_with_the_entry_epoch_key | 101
+reader-current-auditor | auditor_epochs_bind_the_entry_key | 101
+reader-secret-before-epoch | auditor_epochs_bind_the_entry_key, word_location_and_role_negatives_are_refused_before_the_key | 101
+pop-challenge-drops-y | committed_rows_are_current_and_verify | 101
+pop-challenge-drops-d | committed_rows_are_current_and_verify | 101
+ua-rs-reader-current-auditor | auditor_handles_read_their_own_epoch_only | 101

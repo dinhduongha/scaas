@@ -17,10 +17,20 @@ use anyhow::{anyhow, bail, Result};
 use serde_json::{json, Map, Value};
 
 use crate::abi::IRelayFeeRouter;
-use crate::metatx::{addr, check_mode, native, uint, MODE_RESTRICT_FEE_RECIPIENT, MODE_RESTRICT_RELAYER};
+use crate::metatx::{
+    addr, check_mode, native, uint, MODE_RESTRICT_FEE_RECIPIENT, MODE_RESTRICT_RELAYER,
+};
 
 /// The envelope after `from` (`MetaTxLib.Envelope` without it); `E` in a row's fields expands to it.
-const ENV: [&str; 7] = ["batch", "nonce", "validUntil", "mode", "relayer", "fee", "feeRecipient"];
+const ENV: [&str; 7] = [
+    "batch",
+    "nonce",
+    "validUntil",
+    "mode",
+    "relayer",
+    "fee",
+    "feeRecipient",
+];
 const E_FIELDS: &str = "uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient";
 
 const T: &[&str] = &["token", "zether", "pqz"];
@@ -217,6 +227,9 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     // `rollSeq`, `rolled`, `entriesHash` and `chainUid` itself
     ("PqzRollOver", "mtxRollOverSigned", P, "bytes32 ua,uint64 keyVersion,uint64 rollSeq,uint64 rolled,uint64 n,uint64[] skip,bytes32 entriesHash,uint64 validUntilBlock,bytes32 chainUid", "ua keyVersion n skip validUntilBlock @ua"),
     ("ZetherSetRollOverMode", "mtxSetRollOverMode", Z, "bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock", "ua mode validUntilBlock @ua"),
+    // set-auditor (spec §5.2): the new auditor's `AuditorConsent` in a confidential token's domain, no entry (the node relays the
+    // consent a client built beside the holder's op, it never builds one)
+    ("AuditorConsent", "", ZP, "address token,bytes32 auditor,uint32 epoch,bytes32 chainUid", ""),
     ("PqzAuth", "", P, "uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,bytes32 chainUid,bytes32 binding,uint128 salt,bytes32 memoHash,bytes32 bodyHash", ""),
     // the `GovernanceRouter`'s closed table (spec §3.2, ua-mtx-merge T7): `mtx<Op>`, `target` the first op word, fee mode `NONE`;
     // the Change of CTR-GOV-28 in round 3zb + 3zc (O5, O6, owner 2026-11-13): every op of a role holder and `UASetWrapLimits`
@@ -261,6 +274,13 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("UAPqzRevokeVerifier", "mtxPqzRevokeVerifier", GR, "bytes32 from,address target,bytes32 chainUid,E", ""),
     // group 3h (PQZ proof path spec §5): bit 24 `PQZ_PROOF`, a holder's `NONE` / `LOG` from the next debit
     ("UASetProofStore", "mtxSetProofStore", GR, "bytes32 from,address target,uint8 next,bytes32 chainUid,E", ""),
+    // set-auditor (spec §8, CTR-GOV-31): bit 32 `AUDITOR`, a holder replaces a confidential token's auditor (the propose and the
+    // confirm the same op sent twice); the new auditor's consent rides unsigned beside the struct (`pop` bytes on Zether,
+    // `consent` a `UASig` on PQZ), the struct signs `keccak256(newKey)` (EIP-712 `bytes`)
+    ("UASetAuditorKey", "mtxSetAuditorKey", GR, "bytes32 from,address target,bytes newKey,uint32 epoch,bytes32 chainUid,E",
+        "E target newKey epoch pop:bytes chainUid @"),
+    ("UASetAuditorUA", "mtxSetAuditorUA", GR, "bytes32 from,address target,bytes32 newAuditor,uint32 epoch,bytes32 chainUid,E",
+        "E target newAuditor epoch consent:UASig chainUid @"),
     // round 3t (CTR-PQZ-36): the admin's verifier fee of an `OFFCHAIN` PQZ token, no bit
     ("UASetVerifierFee", "mtxSetVerifierFee", GR, "bytes32 from,address target,uint64 next,bytes32 chainUid,E", ""),
     // group 3l (wrap limits spec §9): the owner's limits on a hybrid of the wrapped kinds and bit 26's membership
@@ -430,7 +450,9 @@ impl Row {
 }
 
 fn fields_of(s: &str) -> Vec<(String, String)> {
-    let s = s.strip_suffix(",E").map_or(s.to_string(), |h| format!("{h},{E_FIELDS}"));
+    let s = s
+        .strip_suffix(",E")
+        .map_or(s.to_string(), |h| format!("{h},{E_FIELDS}"));
     s.split(',')
         .map(|f| {
             let (t, n) = f.split_once(' ').unwrap_or_else(|| panic!("field {f:?}"));
@@ -483,7 +505,13 @@ fn abi_type(ty: &str) -> String {
         return PAY_META_ABI.into();
     }
     match nested(ty) {
-        Some(f) => format!("({})", f.iter().map(|x| abi_type(&x.0)).collect::<Vec<_>>().join(",")),
+        Some(f) => format!(
+            "({})",
+            f.iter()
+                .map(|x| abi_type(&x.0))
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
         None => ty.to_string(),
     }
 }
@@ -497,16 +525,41 @@ fn sig_type(s: Sig) -> &'static str {
 }
 
 fn tok_abi(t: &Tok, fields: &[(String, String)]) -> String {
-    let of = |n: &str| abi_type(&fields.iter().find(|f| f.1 == n).unwrap_or_else(|| panic!("no field {n}")).0);
+    let of = |n: &str| {
+        abi_type(
+            &fields
+                .iter()
+                .find(|f| f.1 == n)
+                .unwrap_or_else(|| panic!("no field {n}"))
+                .0,
+        )
+    };
     match t {
-        Tok::Env => format!("({},uint256,uint256,uint256,uint32,address,uint256,address)", fields[0].0),
+        Tok::Env => format!(
+            "({},uint256,uint256,uint256,uint32,address,uint256,address)",
+            fields[0].0
+        ),
         Tok::Field(n) => of(n),
         Tok::Extra(_, ty) => abi_type(ty),
-        Tok::Group(g) => format!("({})", g.iter().map(|n| of(n)).collect::<Vec<_>>().join(",")),
+        Tok::Group(g) => format!(
+            "({})",
+            g.iter().map(|n| of(n)).collect::<Vec<_>>().join(",")
+        ),
         Tok::List(x) => format!("{}[]", tok_abi(x, fields)),
-        Tok::Whole => format!("({})", fields.iter().map(|f| abi_type(&f.0)).collect::<Vec<_>>().join(",")),
+        Tok::Whole => format!(
+            "({})",
+            fields
+                .iter()
+                .map(|f| abi_type(&f.0))
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
         // `TradeOrder` / `UATradeOrder`, 13 words: `dex` = the wrapper
-        Tok::WrapAsTrade(n) => abi_type(if of(n).starts_with("(bytes32") { "UATradeOrder" } else { "TradeOrder" }),
+        Tok::WrapAsTrade(n) => abi_type(if of(n).starts_with("(bytes32") {
+            "UATradeOrder"
+        } else {
+            "TradeOrder"
+        }),
         Tok::Sign(s) => abi_type(sig_type(*s)),
         Tok::Verdict => abi_type("PqzSignedVerdict"),
         Tok::Init(..) | Tok::InitCall => "bytes".into(),
@@ -515,14 +568,20 @@ fn tok_abi(t: &Tok, fields: &[(String, String)]) -> String {
 
 fn selector(entry: &str, plan: &[Tok], fields: &[(String, String)]) -> [u8; 4] {
     let args: Vec<String> = plan.iter().map(|t| tok_abi(t, fields)).collect();
-    keccak256(format!("{entry}({})", args.join(",")))[..4].try_into().expect("4 bytes")
+    keccak256(format!("{entry}({})", args.join(",")))[..4]
+        .try_into()
+        .expect("4 bytes")
 }
 
 fn build() -> Vec<Row> {
     let mut rows = Vec::new();
     for (name, entry, contracts, f, plan) in TYPED {
         let fields = fields_of(f);
-        let enveloped = fields.len() > ENV.len() && fields[fields.len() - ENV.len()..].iter().map(|x| x.1.as_str()).eq(ENV);
+        let enveloped = fields.len() > ENV.len()
+            && fields[fields.len() - ENV.len()..]
+                .iter()
+                .map(|x| x.1.as_str())
+                .eq(ENV);
         let sig = if name.starts_with("UA") || name.starts_with("CancelUA") {
             Sig::Ua
         } else if *contracts == A {
@@ -533,8 +592,13 @@ fn build() -> Vec<Row> {
         let plan: Vec<Tok> = if entry.is_empty() {
             vec![]
         } else if plan.is_empty() {
-            let mid = fields[1..fields.len() - ENV.len()].iter().map(|x| Tok::Field(x.1.clone()));
-            std::iter::once(Tok::Env).chain(mid).chain([Tok::Sign(sig)]).collect()
+            let mid = fields[1..fields.len() - ENV.len()]
+                .iter()
+                .map(|x| Tok::Field(x.1.clone()));
+            std::iter::once(Tok::Env)
+                .chain(mid)
+                .chain([Tok::Sign(sig)])
+                .collect()
         } else {
             plan.split(' ').map(|t| tok(t, sig)).collect()
         };
@@ -551,13 +615,35 @@ fn build() -> Vec<Row> {
             },
             _ => None,
         });
-        rows.push(Row { name, entry, contracts, fields, enveloped, typed: true, plan, sig, selector: s, sent });
+        rows.push(Row {
+            name,
+            entry,
+            contracts,
+            fields,
+            enveloped,
+            typed: true,
+            plan,
+            sig,
+            selector: s,
+            sent,
+        });
     }
     for (entry, contracts, f) in PLAIN {
         let fields = fields_of(f);
         let plan: Vec<Tok> = fields.iter().map(|x| Tok::Field(x.1.clone())).collect();
         let s = selector(entry, &plan, &fields);
-        rows.push(Row { name: entry, entry, contracts, fields, enveloped: false, typed: false, plan, sig: None, selector: s, sent: s });
+        rows.push(Row {
+            name: entry,
+            entry,
+            contracts,
+            fields,
+            enveloped: false,
+            typed: false,
+            plan,
+            sig: None,
+            selector: s,
+            sent: s,
+        });
     }
     rows
 }
@@ -597,7 +683,13 @@ pub fn primary_of(name: &str) -> &str {
 
 fn type_string(name: &str, fields: &[(String, String)]) -> String {
     let one = |n: &str, f: &[(String, String)]| {
-        format!("{n}({})", f.iter().map(|(t, x)| format!("{t} {x}")).collect::<Vec<_>>().join(","))
+        format!(
+            "{n}({})",
+            f.iter()
+                .map(|(t, x)| format!("{t} {x}"))
+                .collect::<Vec<_>>()
+                .join(",")
+        )
     };
     let mut d = BTreeSet::new();
     deps(fields, &mut d);
@@ -631,16 +723,29 @@ fn pos(fields: &[(String, String)], n: &str) -> Option<usize> {
 /// `hashStruct`: `MetaTxLib.canon` is here, one place for an envelope and a nested payment: a struct with `mode`, `relayer`
 /// and `feeRecipient` hashes the fields its mode does not bind as 0.
 fn hash_tuple(name: &str, fields: &[(String, String)], vals: &[Val]) -> B256 {
-    let canon = match (pos(fields, "mode"), pos(fields, "relayer"), pos(fields, "feeRecipient")) {
-        (Some(m), Some(r), Some(f)) => Some((vals[m].as_uint().map_or(0u32, |x| x.0.saturating_to()), r, f)),
+    let canon = match (
+        pos(fields, "mode"),
+        pos(fields, "relayer"),
+        pos(fields, "feeRecipient"),
+    ) {
+        (Some(m), Some(r), Some(f)) => Some((
+            vals[m].as_uint().map_or(0u32, |x| x.0.saturating_to()),
+            r,
+            f,
+        )),
         _ => None,
     };
     let mut buf = keccak256(type_string(name, fields)).to_vec();
     for (i, (ty, _)) in fields.iter().enumerate() {
         let unbound = canon.is_some_and(|(m, r, f)| {
-            (i == r && m & MODE_RESTRICT_RELAYER == 0) || (i == f && m & MODE_RESTRICT_FEE_RECIPIENT == 0)
+            (i == r && m & MODE_RESTRICT_RELAYER == 0)
+                || (i == f && m & MODE_RESTRICT_FEE_RECIPIENT == 0)
         });
-        buf.extend(if unbound { B256::ZERO } else { word(ty, &vals[i]) });
+        buf.extend(if unbound {
+            B256::ZERO
+        } else {
+            word(ty, &vals[i])
+        });
     }
     keccak256(buf)
 }
@@ -699,8 +804,10 @@ fn list_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()> {
 const ROLL_MAX_ANY: usize = 80;
 
 fn skip_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()> {
-    let skip: Vec<U256> = pos(fields, "skip").and_then(|i| vals[i].as_array())
-        .map(|a| a.iter().filter_map(|v| v.as_uint().map(|x| x.0)).collect()).unwrap_or_default();
+    let skip: Vec<U256> = pos(fields, "skip")
+        .and_then(|i| vals[i].as_array())
+        .map(|a| a.iter().filter_map(|v| v.as_uint().map(|x| x.0)).collect())
+        .unwrap_or_default();
     if skip.len() > ROLL_MAX_ANY {
         bail!("BAD_PAYLOAD: args.skip: at most {ROLL_MAX_ANY} marks (RollOverRange)");
     }
@@ -727,23 +834,37 @@ fn register_msig_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()>
 /// `UAKeyData`). The fields are flat, so the decode's depth is the type's.
 fn cache_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()> {
     let at = |n: &str| pos(fields, n).map(|i| &vals[i]);
-    let kind = at("kind").and_then(Val::as_uint).and_then(|(k, _)| u16::try_from(k).ok()).unwrap_or(0);
+    let kind = at("kind")
+        .and_then(Val::as_uint)
+        .and_then(|(k, _)| u16::try_from(k).ok())
+        .unwrap_or(0);
     let Some((len, parts)) = crate::guard::mldsa_cache(kind) else {
         bail!("BAD_PAYLOAD: args.kind: {kind:#06x} is no ML-DSA kind (0x0130, 0x0131, 0x0134): no expanded-key cache");
     };
-    let n = at("pk").and_then(Val::as_bytes).map_or(usize::MAX, <[u8]>::len);
+    let n = at("pk")
+        .and_then(Val::as_bytes)
+        .map_or(usize::MAX, <[u8]>::len);
     if n != len {
         bail!("BAD_PAYLOAD: args.pk: {n} bytes, kind {kind:#06x} takes a {len}-byte FIPS 204 public key");
     }
-    if at("part").and_then(Val::as_uint).is_none_or(|(p, _)| p >= U256::from(parts)) {
-        bail!("BAD_PAYLOAD: args.part: kind {kind:#06x} has {parts} part(s), 0 to {}", parts - 1);
+    if at("part")
+        .and_then(Val::as_uint)
+        .is_none_or(|(p, _)| p >= U256::from(parts))
+    {
+        bail!(
+            "BAD_PAYLOAD: args.part: kind {kind:#06x} has {parts} part(s), 0 to {}",
+            parts - 1
+        );
     }
     Ok(())
 }
 
 /// A `UASetCompliance`'s three arrays: one length, at most 256.
 fn compliance_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()> {
-    let n: Vec<usize> = ["accounts", "flags", "until"].iter().map(|k| pos(fields, k).map_or(usize::MAX, |i| arr_len(&vals[i]))).collect();
+    let n: Vec<usize> = ["accounts", "flags", "until"]
+        .iter()
+        .map(|k| pos(fields, k).map_or(usize::MAX, |i| arr_len(&vals[i])))
+        .collect();
     if n[0] > COMPLIANCE_MAX_ROWS || n.iter().any(|x| *x != n[0]) {
         bail!("BAD_PAYLOAD: args.accounts: at most {COMPLIANCE_MAX_ROWS} rows, one flags and one until each");
     }
@@ -762,7 +883,9 @@ pub fn parse(ty: &str, j: &Value, path: &str) -> Result<Val> {
     let bad = |what: &str| anyhow!("BAD_PAYLOAD: {path}: {what}");
     let text = || j.as_str().ok_or_else(|| bad("not a string"));
     let hex = || -> Result<Vec<u8>> {
-        let s = text()?.strip_prefix("0x").ok_or_else(|| bad("not 0x-hex"))?;
+        let s = text()?
+            .strip_prefix("0x")
+            .ok_or_else(|| bad("not 0x-hex"))?;
         alloy::hex::decode(s).map_err(|_| bad("not 0x-hex"))
     };
     if let Some(el) = ty.strip_suffix("[]") {
@@ -781,7 +904,11 @@ pub fn parse(ty: &str, j: &Value, path: &str) -> Result<Val> {
         if el == "TokenLeg" && a.len() > 8 {
             return Err(bad("more than 8 legs"));
         }
-        let v: Result<Vec<Val>> = a.iter().enumerate().map(|(i, x)| parse(el, x, &format!("{path}[{i}]"))).collect();
+        let v: Result<Vec<Val>> = a
+            .iter()
+            .enumerate()
+            .map(|(i, x)| parse(el, x, &format!("{path}[{i}]")))
+            .collect();
         return Ok(Val::Array(v?));
     }
     if let Some(f) = nested(ty) {
@@ -810,15 +937,25 @@ pub fn parse(ty: &str, j: &Value, path: &str) -> Result<Val> {
                     return Err(bad(&format!("not {ty}")));
                 }
                 fixed(&b)
-            } else if let Some(bits) = ty.strip_prefix("int").and_then(|n| n.parse::<u32>().ok()).filter(|b| (8..=64).contains(b)) {
+            } else if let Some(bits) = ty
+                .strip_prefix("int")
+                .and_then(|n| n.parse::<u32>().ok())
+                .filter(|b| (8..=64).contains(b))
+            {
                 // `int8` (a `PqChat` vote): a JSON number in range
                 let n = j.as_i64().ok_or_else(|| bad("not a number"))?;
                 if bits < 64 && n >> (bits - 1) != 0 && n >> (bits - 1) != -1 {
                     return Err(bad(&format!("outside {ty}")));
                 }
-                Val::Int(alloy::primitives::I256::try_from(n).expect("64 bits"), bits as usize)
+                Val::Int(
+                    alloy::primitives::I256::try_from(n).expect("64 bits"),
+                    bits as usize,
+                )
             } else {
-                let bits: usize = ty.strip_prefix("uint").and_then(|n| n.parse().ok()).ok_or_else(|| bad("unknown type"))?;
+                let bits: usize = ty
+                    .strip_prefix("uint")
+                    .and_then(|n| n.parse().ok())
+                    .ok_or_else(|| bad("unknown type"))?;
                 let v = match j.as_u64() {
                     Some(n) if bits <= 32 => U256::from(n),
                     _ => uint(text()?).map_err(|e| bad(&e.to_string()))?,
@@ -860,28 +997,51 @@ const PAY_META_ABI: &str = "(bytes32,bytes32,bool,uint16,bytes)";
 /// callHash}`, 4 `{ciphertext}` hex, the one crypto object); the node builds the bytes (spec §3.1). A hex `body` is refused
 /// `HEX_ARGS_REFUSED`; the shape by name (`check_pay_meta`).
 fn pay_meta(j: &Value, path: &str) -> Result<Val> {
-    let o = j.as_object().ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}: not an object"))?;
-    if let Some(k) = o.keys().find(|k| !matches!(k.as_str(), "salt" | "payNo" | "save" | "schema" | "body")) {
+    let o = j
+        .as_object()
+        .ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}: not an object"))?;
+    if let Some(k) = o
+        .keys()
+        .find(|k| !matches!(k.as_str(), "salt" | "payNo" | "save" | "schema" | "body"))
+    {
         bail!("BAD_PAYLOAD: {path}.{k}: unknown field");
     }
-    let salt = parse("bytes32", o.get("salt").ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}.salt: missing"))?, &format!("{path}.salt"))?;
+    let salt = parse(
+        "bytes32",
+        o.get("salt")
+            .ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}.salt: missing"))?,
+        &format!("{path}.salt"),
+    )?;
     let pay_no = match o.get("payNo") {
         None => B256::ZERO,
-        Some(v) => B256::from_slice(parse("bytes32", v, &format!("{path}.payNo"))?.as_fixed_bytes().expect("bytes32").0),
+        Some(v) => B256::from_slice(
+            parse("bytes32", v, &format!("{path}.payNo"))?
+                .as_fixed_bytes()
+                .expect("bytes32")
+                .0,
+        ),
     };
     let save = match o.get("save") {
         None => false,
-        Some(v) => v.as_bool().ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}.save: not a bool"))?,
+        Some(v) => v
+            .as_bool()
+            .ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}.save: not a bool"))?,
     };
     let schema = match o.get("schema") {
         None => 0u16,
-        Some(v) => v.as_u64().and_then(|n| u16::try_from(n).ok()).ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}.schema: not a uint16"))?,
+        Some(v) => v
+            .as_u64()
+            .and_then(|n| u16::try_from(n).ok())
+            .ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}.schema: not a uint16"))?,
     };
     let body = o.get("body").filter(|b| !b.is_null());
     if body.is_some_and(Value::is_string) {
         bail!("HEX_ARGS_REFUSED: {path}.body: named fields per schema, the node builds the bytes");
     }
-    let f = |k: &str| body.and_then(|b| b.get(k)).ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}.body.{k}: missing"));
+    let f = |k: &str| {
+        body.and_then(|b| b.get(k))
+            .ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}.body.{k}: missing"))
+    };
     let only = |keys: &[&str]| -> Result<()> {
         match body.and_then(Value::as_object) {
             Some(b) => match b.keys().find(|k| !keys.contains(&k.as_str())) {
@@ -899,41 +1059,77 @@ fn pay_meta(j: &Value, path: &str) -> Result<Val> {
         }
         1 => {
             only(&["note"])?;
-            f("note")?.as_str().ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}.body.note: not a string"))?.as_bytes().to_vec()
+            f("note")?
+                .as_str()
+                .ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}.body.note: not a string"))?
+                .as_bytes()
+                .to_vec()
         }
         2 => {
             only(&["creditorRef", "dueDate"])?;
-            let c = parse("string", f("creditorRef")?, &format!("{path}.body.creditorRef"))?;
+            let c = parse(
+                "string",
+                f("creditorRef")?,
+                &format!("{path}.body.creditorRef"),
+            )?;
             let d = parse("uint64", f("dueDate")?, &format!("{path}.body.dueDate"))?;
             Val::Tuple(vec![c, d]).abi_encode_params()
         }
         3 => {
             only(&["chainId", "target", "callHash"])?;
-            let v: Result<Vec<Val>> = [("chainId", "uint256"), ("target", "bytes32"), ("callHash", "bytes32")].iter()
-                .map(|(k, t)| parse(t, f(k)?, &format!("{path}.body.{k}"))).collect();
+            let v: Result<Vec<Val>> = [
+                ("chainId", "uint256"),
+                ("target", "bytes32"),
+                ("callHash", "bytes32"),
+            ]
+            .iter()
+            .map(|(k, t)| parse(t, f(k)?, &format!("{path}.body.{k}")))
+            .collect();
             Val::Tuple(v?).abi_encode_params()
         }
         4 => {
             only(&["ciphertext"])?;
-            match parse("bytes", f("ciphertext")?, &format!("{path}.body.ciphertext"))? {
+            match parse(
+                "bytes",
+                f("ciphertext")?,
+                &format!("{path}.body.ciphertext"),
+            )? {
                 Val::Bytes(b) => b,
                 _ => unreachable!(),
             }
         }
         n => bail!("BAD_PAYLOAD: {path}.schema {n}: not one of 0-4"),
     };
-    let m = crate::abi::PayMeta { salt: salt.as_fixed_bytes().map(|x| B256::from_slice(x.0)).unwrap_or_default(), payNo: pay_no,
-        save, schema, body: bytes.into() };
+    let m = crate::abi::PayMeta {
+        salt: salt
+            .as_fixed_bytes()
+            .map(|x| B256::from_slice(x.0))
+            .unwrap_or_default(),
+        payNo: pay_no,
+        save,
+        schema,
+        body: bytes.into(),
+    };
     crate::metatx::check_pay_meta(&m)?;
-    Ok(Val::Tuple(vec![salt, fixed(m.payNo.as_slice()), Val::Bool(m.save), Val::Uint(U256::from(m.schema), 16),
-        Val::Bytes(m.body.to_vec())]))
+    Ok(Val::Tuple(vec![
+        salt,
+        fixed(m.payNo.as_slice()),
+        Val::Bool(m.save),
+        Val::Uint(U256::from(m.schema), 16),
+        Val::Bytes(m.body.to_vec()),
+    ]))
 }
 
 /// The parsed `PayMeta` value as `abi::PayMeta`.
 pub fn pay_meta_of(v: &Val) -> Option<crate::abi::PayMeta> {
     let t = v.as_tuple()?;
-    Some(crate::abi::PayMeta { salt: B256::from_slice(t[0].as_fixed_bytes()?.0), payNo: B256::from_slice(t[1].as_fixed_bytes()?.0),
-        save: t[2].as_bool()?, schema: t[3].as_uint()?.0.saturating_to(), body: t[4].as_bytes()?.to_vec().into() })
+    Some(crate::abi::PayMeta {
+        salt: B256::from_slice(t[0].as_fixed_bytes()?.0),
+        payNo: B256::from_slice(t[1].as_fixed_bytes()?.0),
+        save: t[2].as_bool()?,
+        schema: t[3].as_uint()?.0.saturating_to(),
+        body: t[4].as_bytes()?.to_vec().into(),
+    })
 }
 
 /// The inverse of [`pay_meta`]: the body decoded to its named fields (an undecodable body as `null`).
@@ -944,12 +1140,16 @@ fn pay_meta_json(v: &Val) -> Option<Value> {
         0 => Value::Null,
         1 => json!({"note": String::from_utf8(m.body.to_vec()).ok()?}),
         2 => {
-            let t = DynSolType::Tuple(vec![DynSolType::String, DynSolType::Uint(64)]).abi_decode_params(&m.body).ok()?;
+            let t = DynSolType::Tuple(vec![DynSolType::String, DynSolType::Uint(64)])
+                .abi_decode_params(&m.body)
+                .ok()?;
             let t = t.as_tuple()?;
             json!({"creditorRef": t[0].as_str()?, "dueDate": t[1].as_uint()?.0.to_string()})
         }
-        3 => json!({"chainId": U256::from_be_slice(w(0)?).to_string(), "target": format!("0x{}", alloy::hex::encode(w(1)?)),
-            "callHash": format!("0x{}", alloy::hex::encode(w(2)?))}),
+        3 => {
+            json!({"chainId": U256::from_be_slice(w(0)?).to_string(), "target": format!("0x{}", alloy::hex::encode(w(1)?)),
+            "callHash": format!("0x{}", alloy::hex::encode(w(2)?))})
+        }
         _ => json!({"ciphertext": format!("0x{}", alloy::hex::encode(&m.body))}),
     };
     let mut o = json!({"salt": format!("{:#x}", m.salt), "payNo": format!("{:#x}", m.payNo), "save": m.save, "schema": m.schema});
@@ -959,14 +1159,26 @@ fn pay_meta_json(v: &Val) -> Option<Value> {
     Some(o)
 }
 
-pub(crate) fn take(fields: &[(String, String)], o: &Map<String, Value>, path: &str) -> Result<Vec<Val>> {
+pub(crate) fn take(
+    fields: &[(String, String)],
+    o: &Map<String, Value>,
+    path: &str,
+) -> Result<Vec<Val>> {
     if let Some(k) = o.keys().find(|k| pos(fields, k).is_none()) {
         bail!("BAD_PAYLOAD: {path}.{k}: unknown field");
     }
-    fields.iter().map(|(t, n)| {
-        let p = format!("{path}.{n}");
-        parse(t, o.get(n).ok_or_else(|| anyhow!("BAD_PAYLOAD: {p}: missing"))?, &p)
-    }).collect()
+    fields
+        .iter()
+        .map(|(t, n)| {
+            let p = format!("{path}.{n}");
+            parse(
+                t,
+                o.get(n)
+                    .ok_or_else(|| anyhow!("BAD_PAYLOAD: {p}: missing"))?,
+                &p,
+            )
+        })
+        .collect()
 }
 
 /// The inverse of [`parse`]: a value as the explicit JSON of its type.
@@ -985,11 +1197,22 @@ fn json_of(ty: &str, v: &Val, number_bits: usize) -> Value {
         return pay_meta_json(v).unwrap_or(Value::Null);
     }
     if let Some(el) = ty.strip_suffix("[]") {
-        return Value::Array(v.as_array().unwrap_or_default().iter().map(|x| json_of(el, x, number_bits)).collect());
+        return Value::Array(
+            v.as_array()
+                .unwrap_or_default()
+                .iter()
+                .map(|x| json_of(el, x, number_bits))
+                .collect(),
+        );
     }
     if let Some(f) = nested(ty) {
         let t = v.as_tuple().unwrap_or_default();
-        return Value::Object(f.iter().zip(t).map(|((ty, n), x)| (n.clone(), json_of(ty, x, number_bits))).collect());
+        return Value::Object(
+            f.iter()
+                .zip(t)
+                .map(|((ty, n), x)| (n.clone(), json_of(ty, x, number_bits)))
+                .collect(),
+        );
     }
     match v {
         Val::Address(a) => json!(format!("{a:#x}")),
@@ -1007,21 +1230,41 @@ fn json_of(ty: &str, v: &Val, number_bits: usize) -> Value {
 /// A plain entry's calldata as its named op, `{entry, contract, token, args, validUntil}`: what the venue hands the client.
 pub fn call_op(contract: &str, target: Address, data: &[u8], valid_until: &str) -> Result<Value> {
     let sel = data.get(..4).ok_or_else(|| anyhow!("no selector"))?;
-    let row = rows().iter().find(|r| !r.typed && r.selector == sel && r.contracts.contains(&contract))
+    let row = rows()
+        .iter()
+        .find(|r| !r.typed && r.selector == sel && r.contracts.contains(&contract))
         .ok_or_else(|| anyhow!("no plain {contract} entry 0x{}", alloy::hex::encode(sel)))?;
     let args = decode_args(&row.fields, &data[4..])?;
     let mut op = json!({"entry": row.entry, "contract": contract, "token": format!("{target:#x}"), "args": args, "validUntil": valid_until});
-    if rows().iter().filter(|r| r.entry == row.entry && r.contracts.contains(&contract)).count() > 1 {
+    if rows()
+        .iter()
+        .filter(|r| r.entry == row.entry && r.contracts.contains(&contract))
+        .count()
+        > 1
+    {
         op["struct"] = json!(row.name);
     }
     Ok(op)
 }
 
 fn decode_args(fields: &[(String, String)], data: &[u8]) -> Result<Value> {
-    let sig = format!("({})", fields.iter().map(|f| abi_type(&f.0)).collect::<Vec<_>>().join(","));
+    let sig = format!(
+        "({})",
+        fields
+            .iter()
+            .map(|f| abi_type(&f.0))
+            .collect::<Vec<_>>()
+            .join(",")
+    );
     let v = DynSolType::parse(&sig)?.abi_decode_sequence(data)?;
     let t = v.as_tuple().ok_or_else(|| anyhow!("not a tuple"))?;
-    Ok(Value::Object(fields.iter().zip(t).map(|((ty, n), x)| (n.clone(), to_json(ty, x))).collect()))
+    Ok(Value::Object(
+        fields
+            .iter()
+            .zip(t)
+            .map(|((ty, n), x)| (n.clone(), to_json(ty, x)))
+            .collect(),
+    ))
 }
 
 /// One row's values, parsed once; the hash and the calldata below read only these.
@@ -1043,8 +1286,18 @@ fn word_of(v: &Val) -> Option<B256> {
 }
 
 /// An unbound `relayer` is sent as 0, an unbound `feeRecipient` as this node's (R84, NODE-LANE-10): the digest ignores both.
-fn normalize(fields: &[(String, String)], vals: &mut [Val], fee_recipient: Option<Address>) -> Result<()> {
-    let (Some(m), Some(r), Some(f)) = (pos(fields, "mode"), pos(fields, "relayer"), pos(fields, "feeRecipient")) else { return Ok(()) };
+fn normalize(
+    fields: &[(String, String)],
+    vals: &mut [Val],
+    fee_recipient: Option<Address>,
+) -> Result<()> {
+    let (Some(m), Some(r), Some(f)) = (
+        pos(fields, "mode"),
+        pos(fields, "relayer"),
+        pos(fields, "feeRecipient"),
+    ) else {
+        return Ok(());
+    };
     let mode: u32 = vals[m].as_uint().map_or(0, |x| x.0.saturating_to());
     check_mode(mode).map_err(|e| anyhow!("BAD_PAYLOAD: {e}"))?;
     if mode & MODE_RESTRICT_RELAYER == 0 {
@@ -1057,7 +1310,12 @@ fn normalize(fields: &[(String, String)], vals: &mut [Val], fee_recipient: Optio
 }
 
 fn emit(t: &Tok, row: &Row, a: &Assembled) -> Result<Val> {
-    let get = |n: &str| a.vals.get(n).cloned().ok_or_else(|| anyhow!("BAD_PAYLOAD: {n}: missing"));
+    let get = |n: &str| {
+        a.vals
+            .get(n)
+            .cloned()
+            .ok_or_else(|| anyhow!("BAD_PAYLOAD: {n}: missing"))
+    };
     Ok(match t {
         Tok::Env => {
             let mut e = vec![get("from")?];
@@ -1069,13 +1327,24 @@ fn emit(t: &Tok, row: &Row, a: &Assembled) -> Result<Val> {
         Tok::Field(n) | Tok::Extra(n, _) => get(n)?,
         Tok::Group(g) => Val::Tuple(g.iter().map(|n| get(n)).collect::<Result<_>>()?),
         Tok::List(x) => Val::Array(vec![emit(x, row, a)?]),
-        Tok::Whole => Val::Tuple(row.fields.iter().map(|f| get(&f.1)).collect::<Result<_>>()?),
+        Tok::Whole => Val::Tuple(
+            row.fields
+                .iter()
+                .map(|f| get(&f.1))
+                .collect::<Result<_>>()?,
+        ),
         Tok::WrapAsTrade(n) => {
-            let mut w = get(n)?.as_tuple().ok_or_else(|| anyhow!("wrap order"))?.to_vec();
+            let mut w = get(n)?
+                .as_tuple()
+                .ok_or_else(|| anyhow!("wrap order"))?
+                .to_vec();
             w.insert(7, w[1].clone());
             Val::Tuple(w)
         }
-        Tok::Sign(_) => a.sig.clone().ok_or_else(|| anyhow!("BAD_PAYLOAD: no signature"))?,
+        Tok::Sign(_) => a
+            .sig
+            .clone()
+            .ok_or_else(|| anyhow!("BAD_PAYLOAD: no signature"))?,
         Tok::Verdict => empty_verdict(),
         Tok::Init(n, _) => Val::Bytes(get(n)?.abi_encode()),
         Tok::InitCall => get(INIT_CALL)?,
@@ -1090,30 +1359,51 @@ const INIT_CALL: &str = "initCall";
 pub const MAX_INIT_CALL: usize = 4096;
 
 /// The classes whose `mtxCreateInstance` a job may name by fields (`args.config`): `(contractClass, kind)`, the initializer.
-pub const INSTANCE_CONFIGS: &[(u16, u16, &str)] = &[(crate::guard::CLASS_PQCHAT, 0, "PqChat initialize(bytes32 owner)")];
+pub const INSTANCE_CONFIGS: &[(u16, u16, &str)] = &[(
+    crate::guard::CLASS_PQCHAT,
+    0,
+    "PqChat initialize(bytes32 owner)",
+)];
 
 /// Owner 2026-11-12 (`mtxCreateInstance`, both forms): the initializer call of a generic creation, either `args.init_call` (bytes,
 /// at most [`MAX_INIT_CALL`]) or built from a known class's named `args.config` ([`INSTANCE_CONFIGS`]), never both. `PqChat`
 /// (class 3, kind 0): `{owner}`, 0 or the creator (`envelope.from`; the instance refuses any other, `PqChatOwnerNotCreator`).
 fn instance_init_call(a: &Map<String, Value>, e: &Map<String, Value>) -> Result<Vec<u8>> {
     match (a.get("config"), a.get("init_call")) {
-        (Some(_), Some(_)) => bail!("BAD_PAYLOAD: args.config and args.init_call: a creation names one of them"),
-        (None, None) => bail!("BAD_PAYLOAD: args.init_call: missing (or a known class's args.config)"),
+        (Some(_), Some(_)) => {
+            bail!("BAD_PAYLOAD: args.config and args.init_call: a creation names one of them")
+        }
+        (None, None) => {
+            bail!("BAD_PAYLOAD: args.init_call: missing (or a known class's args.config)")
+        }
         (None, Some(v)) => {
-            let b = parse("bytes", v, "args.init_call")?.as_bytes().map(<[u8]>::to_vec).unwrap_or_default();
+            let b = parse("bytes", v, "args.init_call")?
+                .as_bytes()
+                .map(<[u8]>::to_vec)
+                .unwrap_or_default();
             if b.len() > MAX_INIT_CALL {
-                bail!("INIT_CALL_TOO_LONG: args.init_call is {} bytes, at most {MAX_INIT_CALL}", b.len());
+                bail!(
+                    "INIT_CALL_TOO_LONG: args.init_call is {} bytes, at most {MAX_INIT_CALL}",
+                    b.len()
+                );
             }
             Ok(b)
         }
         (Some(c), None) => {
             let id = |k: &str| -> Result<u64> {
                 let p = format!("args.{k}");
-                let v = parse("uint16", a.get(k).ok_or_else(|| anyhow!("BAD_PAYLOAD: {p}: missing"))?, &p)?;
+                let v = parse(
+                    "uint16",
+                    a.get(k)
+                        .ok_or_else(|| anyhow!("BAD_PAYLOAD: {p}: missing"))?,
+                    &p,
+                )?;
                 Ok(v.as_uint().map_or(0, |(u, _)| u.to::<u64>()))
             };
             let (class, kind) = (id("contractClass")?, id("kind")?);
-            let c = c.as_object().ok_or_else(|| anyhow!("BAD_PAYLOAD: args.config: not an object"))?;
+            let c = c
+                .as_object()
+                .ok_or_else(|| anyhow!("BAD_PAYLOAD: args.config: not an object"))?;
             match (class, kind) {
                 (3, 0) => {
                     if let Some(k) = c.keys().find(|k| *k != "owner") {
@@ -1139,25 +1429,49 @@ fn instance_init_call(a: &Map<String, Value>, e: &Map<String, Value>) -> Result<
 fn empty_verdict() -> Val {
     let z = Val::FixedBytes(B256::ZERO, 32);
     Val::Tuple(vec![
-        Val::Tuple(vec![Val::Address(Address::ZERO), Val::Uint(U256::ZERO, 256), z.clone(), z.clone(), z, Val::Uint(U256::ZERO, 32),
-            Val::Uint(U256::ZERO, 64)]),
-        Val::Tuple(vec![Val::Bytes(vec![]), Val::Bytes(vec![]), Val::Array(vec![])]),
+        Val::Tuple(vec![
+            Val::Address(Address::ZERO),
+            Val::Uint(U256::ZERO, 256),
+            z.clone(),
+            z.clone(),
+            z,
+            Val::Uint(U256::ZERO, 32),
+            Val::Uint(U256::ZERO, 64),
+        ]),
+        Val::Tuple(vec![
+            Val::Bytes(vec![]),
+            Val::Bytes(vec![]),
+            Val::Array(vec![]),
+        ]),
     ])
 }
 
 fn extras(row: &Row) -> Vec<(&str, &str)> {
-    row.plan.iter().filter_map(|t| match t {
-        Tok::Extra(n, ty) | Tok::Init(n, ty) => Some((n.as_str(), ty.as_str())),
-        _ => None,
-    }).collect()
+    row.plan
+        .iter()
+        .filter_map(|t| match t {
+            Tok::Extra(n, ty) | Tok::Init(n, ty) => Some((n.as_str(), ty.as_str())),
+            _ => None,
+        })
+        .collect()
 }
 
 /// Reads `envelope`, `args` and the signature of a row, every field once, and builds what it signs and what it sends.
-pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&Value>, fee_recipient: Option<Address>) -> Result<Assembled> {
-    let a = args.as_object().ok_or_else(|| anyhow!("BAD_PAYLOAD: args is not an object"))?;
+pub fn assemble(
+    row: &Row,
+    envelope: Option<&Value>,
+    args: &Value,
+    sig: Option<&Value>,
+    fee_recipient: Option<Address>,
+) -> Result<Assembled> {
+    let a = args
+        .as_object()
+        .ok_or_else(|| anyhow!("BAD_PAYLOAD: args is not an object"))?;
     let empty = Map::new();
     let e = match (row.enveloped, envelope) {
-        (true, Some(e)) => e.as_object().ok_or_else(|| anyhow!("BAD_PAYLOAD: envelope is not an object"))?,
+        (true, Some(e)) => e
+            .as_object()
+            .ok_or_else(|| anyhow!("BAD_PAYLOAD: envelope is not an object"))?,
         (true, None) => bail!("BAD_PAYLOAD: {} needs an envelope", row.entry),
         (false, Some(_)) => bail!("BAD_PAYLOAD: {} takes no envelope", row.entry),
         (false, None) => &empty,
@@ -1168,21 +1482,36 @@ pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&
         bail!("BAD_PAYLOAD: envelope.{k}: unknown field");
     }
     let init_call = row.plan.contains(&Tok::InitCall);
-    if let Some(k) = a.keys().find(|k| in_env(k) || !(pos(&row.fields, k).is_some() || ext.iter().any(|x| x.0 == *k)
-        || (init_call && (*k == "init_call" || *k == "config")))) {
+    if let Some(k) = a.keys().find(|k| {
+        in_env(k)
+            || !(pos(&row.fields, k).is_some()
+                || ext.iter().any(|x| x.0 == *k)
+                || (init_call && (*k == "init_call" || *k == "config")))
+    }) {
         if matches!(k.as_str(), "data" | "calldata") {
-            bail!("HEX_DATA_REFUSED: args.{k}: {} takes explicit named fields", row.entry);
+            bail!(
+                "HEX_DATA_REFUSED: args.{k}: {} takes explicit named fields",
+                row.entry
+            );
         }
         bail!("BAD_PAYLOAD: args.{k}: unknown field");
     }
     // owner 2026-11-12 (the creations): `initHash` is the keccak of the encoded named struct, never the job's
-    let init_hash = match row.plan.iter().find_map(|t| match t { Tok::Init(n, ty) => Some((n, ty)), _ => None }) {
+    let init_hash = match row.plan.iter().find_map(|t| match t {
+        Tok::Init(n, ty) => Some((n, ty)),
+        _ => None,
+    }) {
         Some((n, ty)) => {
             if a.contains_key("initHash") {
                 bail!("BAD_PAYLOAD: args.initHash: the node hashes args.{n}");
             }
             let p = format!("args.{n}");
-            let v = parse(ty, a.get(n.as_str()).ok_or_else(|| anyhow!("BAD_PAYLOAD: {p}: missing"))?, &p)?;
+            let v = parse(
+                ty,
+                a.get(n.as_str())
+                    .ok_or_else(|| anyhow!("BAD_PAYLOAD: {p}: missing"))?,
+                &p,
+            )?;
             Some(json!(format!("{:#x}", keccak256(v.abi_encode()))))
         }
         None => None,
@@ -1196,7 +1525,11 @@ pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&
         }
         false => None,
     };
-    let init_hash = init_hash.or_else(|| init_call.as_ref().map(|c| json!(format!("{:#x}", keccak256(c)))));
+    let init_hash = init_hash.or_else(|| {
+        init_call
+            .as_ref()
+            .map(|c| json!(format!("{:#x}", keccak256(c))))
+    });
     let mut vals: Vec<Val> = Vec::new();
     for (ty, n) in &row.fields {
         let (src, p) = match &init_hash {
@@ -1205,7 +1538,11 @@ pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&
             _ => (a.get(n), "args"),
         };
         let p = format!("{p}.{n}");
-        vals.push(parse(ty, src.ok_or_else(|| anyhow!("BAD_PAYLOAD: {p}: missing"))?, &p)?);
+        vals.push(parse(
+            ty,
+            src.ok_or_else(|| anyhow!("BAD_PAYLOAD: {p}: missing"))?,
+            &p,
+        )?);
     }
     if row.name == "UASetCompliance" {
         compliance_bounds(&row.fields, &vals)?;
@@ -1231,11 +1568,21 @@ pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&
             normalize(&NESTED_MAP[pty.as_str()], t, fee_recipient)?;
         }
     }
-    let struct_hash = row.typed.then(|| hash_tuple(primary_of(row.name), &row.fields, &vals));
+    let struct_hash = row
+        .typed
+        .then(|| hash_tuple(primary_of(row.name), &row.fields, &vals));
     let mut map: HashMap<String, Val> = row.fields.iter().map(|f| f.1.clone()).zip(vals).collect();
     for (n, ty) in ext {
         let p = format!("args.{n}");
-        map.insert(n.to_string(), parse(ty, a.get(n).ok_or_else(|| anyhow!("BAD_PAYLOAD: {p}: missing"))?, &p)?);
+        map.insert(
+            n.to_string(),
+            parse(
+                ty,
+                a.get(n)
+                    .ok_or_else(|| anyhow!("BAD_PAYLOAD: {p}: missing"))?,
+                &p,
+            )?,
+        );
     }
     if let Some(c) = init_call {
         map.insert(INIT_CALL.into(), Val::Bytes(c));
@@ -1246,21 +1593,53 @@ pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&
         (Some(_), None) => bail!("BAD_PAYLOAD: {} without its signature", row.entry),
         (None, Some(_)) => bail!("BAD_PAYLOAD: {} takes its signature in args", row.entry),
     };
-    let mut out = Assembled { vals: map, sig, struct_hash, data: Vec::new() };
-    let params: Vec<Val> = row.plan.iter().map(|t| emit(t, row, &out)).collect::<Result<_>>()?;
-    out.data = [&row.selector[..], &Val::Tuple(params).abi_encode_sequence().unwrap_or_default()].concat();
+    let mut out = Assembled {
+        vals: map,
+        sig,
+        struct_hash,
+        data: Vec::new(),
+    };
+    let params: Vec<Val> = row
+        .plan
+        .iter()
+        .map(|t| emit(t, row, &out))
+        .collect::<Result<_>>()?;
+    out.data = [
+        &row.selector[..],
+        &Val::Tuple(params).abi_encode_sequence().unwrap_or_default(),
+    ]
+    .concat();
     Ok(out)
 }
 
 /// The relay-fee router's call of an assembled `RelayFee` / `UARelayFee` (CTR-MTX-27): `relay` / `uaRelay(target, callData,
 /// token, from, payee, value, batch, nonce, validUntil, sig)` (pay-meta-tax spec §4: the payer's own lane).
-pub fn router_call(row: &Row, a: &Assembled, target: Address, call_data: Bytes, token: Address) -> Result<Vec<u8>> {
+pub fn router_call(
+    row: &Row,
+    a: &Assembled,
+    target: Address,
+    call_data: Bytes,
+    token: Address,
+) -> Result<Vec<u8>> {
     let tail = Val::Tuple(vec![
-        Val::Address(target), Val::Bytes(call_data.to_vec()), Val::Address(token),
-        a.vals["from"].clone(), a.vals["payee"].clone(), a.vals["value"].clone(), a.vals["batch"].clone(), a.vals["nonce"].clone(),
-        a.vals["validUntil"].clone(), a.sig.clone().ok_or_else(|| anyhow!("BAD_PAYLOAD: no signature"))?,
+        Val::Address(target),
+        Val::Bytes(call_data.to_vec()),
+        Val::Address(token),
+        a.vals["from"].clone(),
+        a.vals["payee"].clone(),
+        a.vals["value"].clone(),
+        a.vals["batch"].clone(),
+        a.vals["nonce"].clone(),
+        a.vals["validUntil"].clone(),
+        a.sig
+            .clone()
+            .ok_or_else(|| anyhow!("BAD_PAYLOAD: no signature"))?,
     ]);
-    Ok([&row.sent[..], &tail.abi_encode_sequence().unwrap_or_default()].concat())
+    Ok([
+        &row.sent[..],
+        &tail.abi_encode_sequence().unwrap_or_default(),
+    ]
+    .concat())
 }
 
 /// What the guard and the in-flight set need of a built op; made only with its calldata, in [`Op::parse`] or for the transfer
@@ -1325,13 +1704,25 @@ impl Typed {
     }
 
     fn hashed(&self, h: B256, chain_id: u64, chain_uid: B256) -> Option<B256> {
-        Some(salted_digest(domain_name(self.contract)?, chain_id, self.domain_of, chain_uid, h))
+        Some(salted_digest(
+            domain_name(self.contract)?,
+            chain_id,
+            self.domain_of,
+            chain_uid,
+            h,
+        ))
     }
 
     /// The typed digest in the salted domain named `name` (a `service` job's pull, whose token kind is read from the chain:
     /// [`crate::guard::fill_digest`]).
     pub fn digest_in(&self, name: &str, chain_id: u64, chain_uid: B256) -> Option<B256> {
-        Some(salted_digest(name, chain_id, self.domain_of, chain_uid, self.struct_hash?))
+        Some(salted_digest(
+            name,
+            chain_id,
+            self.domain_of,
+            chain_uid,
+            self.struct_hash?,
+        ))
     }
 }
 
@@ -1342,7 +1733,10 @@ fn salted_digest(name: &str, chain_id: u64, contract: Address, chain_uid: B256, 
 
 /// The 65-byte native signature `sig` recovers to `who` over `digest`.
 pub fn recovers(digest: B256, sig: &[u8], who: Address) -> bool {
-    Signature::from_raw(sig).ok().and_then(|s| s.recover_address_from_prehash(&digest).ok()) == Some(who)
+    Signature::from_raw(sig)
+        .ok()
+        .and_then(|s| s.recover_address_from_prehash(&digest).ok())
+        == Some(who)
 }
 
 /// `MandateWallet.mandatePayLane(entryRef)`.
@@ -1352,7 +1746,17 @@ pub fn mandate_pay_lane(entry_ref: &[u8]) -> U256 {
 
 /// `MandateWallet.mandateRevokeLane(token, epoch)`.
 pub fn mandate_revoke_lane(token: Address, epoch: u64) -> U256 {
-    U256::from_be_bytes(keccak256([&b"scaas.mandate.revoke"[..], token.as_slice(), &epoch.to_be_bytes()].concat()).0)
+    U256::from_be_bytes(
+        keccak256(
+            [
+                &b"scaas.mandate.revoke"[..],
+                token.as_slice(),
+                &epoch.to_be_bytes(),
+            ]
+            .concat(),
+        )
+        .0,
+    )
 }
 
 /// One op read: the target, the bytes sent and what was signed, from one parse.
@@ -1367,20 +1771,40 @@ pub struct Op {
     pub valid_until: u64,
 }
 
-const OP_KEYS: [&str; 10] = ["entry", "contract", "struct", "token", "envelope", "args", "signature", "auth", "call", "validUntil"];
+const OP_KEYS: [&str; 10] = [
+    "entry",
+    "contract",
+    "struct",
+    "token",
+    "envelope",
+    "args",
+    "signature",
+    "auth",
+    "call",
+    "validUntil",
+];
 
-fn find(entry: &str, contract: Option<&str>, name: Option<&str>) -> Result<(&'static Row, &'static str)> {
-    let hits: Vec<&'static Row> = rows().iter()
+fn find(
+    entry: &str,
+    contract: Option<&str>,
+    name: Option<&str>,
+) -> Result<(&'static Row, &'static str)> {
+    let hits: Vec<&'static Row> = rows()
+        .iter()
         .filter(|r| !entry.is_empty() && r.entry == entry)
         .filter(|r| contract.is_none_or(|c| r.contracts.contains(&c)))
         .filter(|r| name.is_none_or(|n| r.name == n))
         .collect();
     match hits[..] {
-        [] => bail!("UNKNOWN_ENTRY: {entry:?} (contract {contract:?}, struct {name:?}) is no named entry"),
+        [] => bail!(
+            "UNKNOWN_ENTRY: {entry:?} (contract {contract:?}, struct {name:?}) is no named entry"
+        ),
         [r] => match (contract, r.contracts) {
             (Some(c), l) => Ok((r, l.iter().find(|x| **x == c).expect("filtered"))),
             (None, [c]) => Ok((r, c)),
-            (None, _) => bail!("ENTRY_AMBIGUOUS: {entry} is on several contract kinds: name op.contract"),
+            (None, _) => {
+                bail!("ENTRY_AMBIGUOUS: {entry} is on several contract kinds: name op.contract")
+            }
         },
         _ => bail!("ENTRY_AMBIGUOUS: {entry} is several structs: name op.struct or op.contract"),
     }
@@ -1388,8 +1812,18 @@ fn find(entry: &str, contract: Option<&str>, name: Option<&str>) -> Result<(&'st
 
 /// The row of every `service` job (proposed NODE-JOB-25): its entries are the chain's `[[chains.services]]`, not this table; a
 /// `ua_metatx` job (its signature a `UASig`), never a relay fee.
-pub static SERVICE_ROW: LazyLock<Row> = LazyLock::new(|| Row { name: "UAServicePull", entry: "", contracts: &["service"],
-    fields: vec![], enveloped: false, typed: true, plan: vec![], sig: Some(Sig::Ua), selector: [0; 4], sent: [0; 4] });
+pub static SERVICE_ROW: LazyLock<Row> = LazyLock::new(|| Row {
+    name: "UAServicePull",
+    entry: "",
+    contracts: &["service"],
+    fields: vec![],
+    enveloped: false,
+    typed: true,
+    plan: vec![],
+    sig: Some(Sig::Ua),
+    selector: [0; 4],
+    sent: [0; 4],
+});
 
 impl Op {
     /// `op` as job-api.md: the only way a named entry reaches a lane or the gateway. No `service` entry: [`Op::parse_with`].
@@ -1399,11 +1833,17 @@ impl Op {
 
     /// [`Op::parse`] with the chain's services (`contract: "service"`, [`crate::service::op`]), on the direct path and as a
     /// relay fee's inner call.
-    pub fn parse_with(op: &Value, fee_recipient: Option<Address>, services: &crate::service::Types) -> Result<Self> {
+    pub fn parse_with(
+        op: &Value,
+        fee_recipient: Option<Address>,
+        services: &crate::service::Types,
+    ) -> Result<Self> {
         if op.is_string() {
             return Err(hex_refused("op"));
         }
-        let o = op.as_object().ok_or_else(|| anyhow!("BAD_PAYLOAD: op is not an object"))?;
+        let o = op
+            .as_object()
+            .ok_or_else(|| anyhow!("BAD_PAYLOAD: op is not an object"))?;
         if o.get("call").is_some_and(Value::is_string) {
             return Err(hex_refused("op.call"));
         }
@@ -1415,7 +1855,14 @@ impl Op {
                 bail!("BAD_PAYLOAD: op.{k}: unknown field");
             }
         }
-        let text = |k: &str| o.get(k).map(|v| v.as_str().ok_or_else(|| anyhow!("BAD_PAYLOAD: op.{k} is not a string"))).transpose();
+        let text = |k: &str| {
+            o.get(k)
+                .map(|v| {
+                    v.as_str()
+                        .ok_or_else(|| anyhow!("BAD_PAYLOAD: op.{k} is not a string"))
+                })
+                .transpose()
+        };
         let entry = text("entry")?.ok_or_else(|| anyhow!("BAD_PAYLOAD: op.entry missing"))?;
         if entry == "mtxPayMeta" {
             bail!("ENTRY_RETIRED: mtxPayMeta: a pay is mtxPay(t, auth, meta) with its PayMeta (pay-meta-tax spec §7.1)");
@@ -1428,25 +1875,35 @@ impl Op {
         // old hex form
         if contract == "pqchat" {
             let args = o.get("args");
-            let hexed = |t: &str, n: &str| (t.ends_with("[]") || nested(t).is_some()) && args.and_then(|a| a.get(n)).is_some_and(Value::is_string);
+            let hexed = |t: &str, n: &str| {
+                (t.ends_with("[]") || nested(t).is_some())
+                    && args.and_then(|a| a.get(n)).is_some_and(Value::is_string)
+            };
             if args.is_some_and(Value::is_string) || row.fields.iter().any(|(t, n)| hexed(t, n)) {
                 bail!("HEX_ARGS_REFUSED: {entry}: name each record's fields in args, the node builds the calldata");
             }
         }
-        let token = addr(text("token")?.ok_or_else(|| anyhow!("BAD_PAYLOAD: op.token missing"))?).map_err(|e| anyhow!("BAD_PAYLOAD: op.token: {e}"))?;
+        let token = addr(text("token")?.ok_or_else(|| anyhow!("BAD_PAYLOAD: op.token missing"))?)
+            .map_err(|e| anyhow!("BAD_PAYLOAD: op.token: {e}"))?;
         let empty = json!({});
         let mut args = o.get("args").unwrap_or(&empty).clone();
         let mut envelope = o.get("envelope").cloned();
         // spec §7.1: a pay entry's signed payment is `args.t`: the `payment` member, or `mtxPay`'s envelope and fields (an entry
         // whose own argument is `t`, `PqChat`'s `createTopic`, keeps it)
-        if let Some(t) = args.as_object_mut().filter(|_| pos(&row.fields, "t").is_none()).and_then(|a| a.remove("t")) {
+        if let Some(t) = args
+            .as_object_mut()
+            .filter(|_| pos(&row.fields, "t").is_none())
+            .and_then(|a| a.remove("t"))
+        {
             if pos(&row.fields, "payment").is_some() {
                 args["payment"] = t;
             } else if row.name == "UAMetaTransfer" {
                 if envelope.is_some() {
                     bail!("BAD_PAYLOAD: mtxPay takes args.t or an envelope, not both");
                 }
-                let t = t.as_object().ok_or_else(|| anyhow!("BAD_PAYLOAD: args.t is not an object"))?;
+                let t = t
+                    .as_object()
+                    .ok_or_else(|| anyhow!("BAD_PAYLOAD: args.t is not an object"))?;
                 let mut e = Map::new();
                 for (k, v) in t {
                     if k == "from" || ENV.contains(&k.as_str()) {
@@ -1469,14 +1926,24 @@ impl Op {
             }
         }
         // round 3t: `args.pqz_fee` on a debit, a decimal string `< 2^64`, read into `Typed`, never into the bytes
-        let pqz_fee = match (verdict_slot(row), args.as_object_mut().and_then(|a| a.remove("pqz_fee"))) {
+        let pqz_fee = match (
+            verdict_slot(row),
+            args.as_object_mut().and_then(|a| a.remove("pqz_fee")),
+        ) {
             (_, None | Some(Value::Null)) => None,
             (None, Some(_)) => bail!("BAD_PAYLOAD: args.pqz_fee: {entry} is no PQZ debit"),
-            (Some(_), Some(Value::String(x))) if x.starts_with("0x") || x.starts_with("0X") =>
-                bail!("HEX_ARGS_REFUSED: args.pqz_fee: the proved fee word as a decimal string"),
-            (Some(_), Some(Value::String(x))) => Some(x.parse::<u64>().map_err(|_| anyhow!("BAD_PAYLOAD: args.pqz_fee: a uint64 \
-                decimal string (below 2^64), got {x:?}"))?),
-            (Some(_), Some(x)) => bail!("BAD_PAYLOAD: args.pqz_fee: a uint64 decimal string, got {x}"),
+            (Some(_), Some(Value::String(x))) if x.starts_with("0x") || x.starts_with("0X") => {
+                bail!("HEX_ARGS_REFUSED: args.pqz_fee: the proved fee word as a decimal string")
+            }
+            (Some(_), Some(Value::String(x))) => Some(x.parse::<u64>().map_err(|_| {
+                anyhow!(
+                    "BAD_PAYLOAD: args.pqz_fee: a uint64 \
+                decimal string (below 2^64), got {x:?}"
+                )
+            })?),
+            (Some(_), Some(x)) => {
+                bail!("BAD_PAYLOAD: args.pqz_fee: a uint64 decimal string, got {x}")
+            }
         };
         let pqz_verdict = match verdict_slot(row) {
             Some(_) => match args.as_object_mut().and_then(|a| a.remove("pqz_verdict")) {
@@ -1485,9 +1952,24 @@ impl Op {
             },
             None => None,
         };
-        let sig = o.get(if row.sig == Some(Sig::Bytes) { "signature" } else { "auth" });
-        if o.contains_key(if row.sig == Some(Sig::Bytes) { "auth" } else { "signature" }) {
-            bail!("BAD_PAYLOAD: {entry} takes its signature as {}", if row.sig == Some(Sig::Bytes) { "signature" } else { "auth" });
+        let sig = o.get(if row.sig == Some(Sig::Bytes) {
+            "signature"
+        } else {
+            "auth"
+        });
+        if o.contains_key(if row.sig == Some(Sig::Bytes) {
+            "auth"
+        } else {
+            "signature"
+        }) {
+            bail!(
+                "BAD_PAYLOAD: {entry} takes its signature as {}",
+                if row.sig == Some(Sig::Bytes) {
+                    "signature"
+                } else {
+                    "auth"
+                }
+            );
         }
         let inner = match (row.relay_fee(), o.get("call")) {
             (true, Some(c)) => {
@@ -1497,7 +1979,10 @@ impl Op {
                 // no `fee_recipient`: the payer hashed these bytes (`callDataHash`), the lane must not rewrite them; an unbound
                 // `relayer` / `feeRecipient` of the inner call goes as 0, which is what the client hashes (job-api.md §5.3)
                 // Fable E N-5: a nested relay fee is refused by name before the recursion, never bounded by depth alone
-                if c.get("entry").and_then(Value::as_str).is_some_and(|e| rows().iter().any(|r| r.relay_fee() && r.entry == e)) {
+                if c.get("entry")
+                    .and_then(Value::as_str)
+                    .is_some_and(|e| rows().iter().any(|r| r.relay_fee() && r.entry == e))
+                {
                     bail!("BAD_PAYLOAD: a relay fee does not relay a relay fee");
                 }
                 let c = Op::parse_with(c, None, services)?;
@@ -1520,13 +2005,28 @@ impl Op {
         };
         let a = assemble(row, envelope.as_ref(), &args, sig, fee_recipient)?;
         if let Some(c) = &inner {
-            crate::service::fee_nonce(c, token, &a.vals["from"], &a.vals["batch"], &a.vals["nonce"])?;
+            crate::service::fee_nonce(
+                c,
+                token,
+                &a.vals["from"],
+                &a.vals["batch"],
+                &a.vals["nonce"],
+            )?;
         }
         if let Some(m) = a.vals.get("meta") {
             // spec §7.1: `entryRef == metaPayId(meta)` before any simulation (`PAY_META_MISMATCH`), the contract's own check
-            let id = crate::metatx::meta_pay_id(&pay_meta_of(m).ok_or_else(|| anyhow!("BAD_PAYLOAD: meta"))?);
-            let entry_ref = a.vals.get("entryRef").cloned()
-                .or_else(|| a.vals.get("payment").and_then(|p| p.as_tuple().and_then(|t| t.get(3).cloned())))
+            let id = crate::metatx::meta_pay_id(
+                &pay_meta_of(m).ok_or_else(|| anyhow!("BAD_PAYLOAD: meta"))?,
+            );
+            let entry_ref = a
+                .vals
+                .get("entryRef")
+                .cloned()
+                .or_else(|| {
+                    a.vals
+                        .get("payment")
+                        .and_then(|p| p.as_tuple().and_then(|t| t.get(3).cloned()))
+                })
                 .and_then(|v| v.as_fixed_bytes().map(|x| B256::from_slice(x.0)))
                 .ok_or_else(|| anyhow!("BAD_PAYLOAD: no entryRef"))?;
             if entry_ref != id {
@@ -1545,33 +2045,64 @@ impl Op {
         let order = a.vals.get("order");
         // who signed: `from`, `ua`, the order's `from` (a `DexOrder`'s inner order), the payment's payee
         let order_from = order.and_then(|t| match at(t, 0) {
-            Some(x @ (Val::Address(_) | Val::FixedBytes(..))) if row.name != "CancelDexOrder" => Some(x),
+            Some(x @ (Val::Address(_) | Val::FixedBytes(..))) if row.name != "CancelDexOrder" => {
+                Some(x)
+            }
             _ => at(t, 1).and_then(|x| at(&x, 0)),
         });
         // spec §7.1 (C2): `UAPayWithTax`'s signer is the payer `payment.from`; `UAPayeeFee`'s the payee `payment.to`
         let payment_signer = if row.name == "UAPayWithTax" { 0 } else { 1 };
-        let who = a.vals.get("from").cloned().or_else(|| a.vals.get("ua").filter(|_| !row.enveloped).cloned())
+        let who = a
+            .vals
+            .get("from")
+            .cloned()
+            .or_else(|| a.vals.get("ua").filter(|_| !row.enveloped).cloned())
             .or_else(|| order_from.clone())
             .or_else(|| a.vals.get("payment").and_then(|p| at(p, payment_signer)));
         let native_sig = match (row.sig, a.sig.as_ref()) {
             (Some(Sig::Bytes), Some(Val::Bytes(b))) => Some(Bytes::from(b.clone())),
-            (Some(Sig::Ua), Some(Val::Tuple(t))) if t[0] == Val::Bytes(vec![]) && t[2] == Val::Array(vec![]) =>
-                t[1].as_bytes().map(|b| Bytes::from(b.to_vec())),
+            (Some(Sig::Ua), Some(Val::Tuple(t)))
+                if t[0] == Val::Bytes(vec![]) && t[2] == Val::Array(vec![]) =>
+            {
+                t[1].as_bytes().map(|b| Bytes::from(b.to_vec()))
+            }
             _ => None,
         };
-        let signer = who.as_ref().and_then(word_of).and_then(|w| native(&w)).zip(native_sig);
-        let payee = a.vals.get("payment").and_then(|p| at(p, 1)).as_ref().and_then(word_of);
+        let signer = who
+            .as_ref()
+            .and_then(word_of)
+            .and_then(|w| native(&w))
+            .zip(native_sig);
+        let payee = a
+            .vals
+            .get("payment")
+            .and_then(|p| at(p, 1))
+            .as_ref()
+            .and_then(word_of);
         // R44 / B: which sides are derived ids (an address is native by type)
-        let derived = |v: Option<Val>| v.as_ref().and_then(word_of).is_some_and(|w| native(&w).is_none());
-        let derived_signer = derived(a.vals.get("from").cloned()) || derived(order_from)
+        let derived = |v: Option<Val>| {
+            v.as_ref()
+                .and_then(word_of)
+                .is_some_and(|w| native(&w).is_none())
+        };
+        let derived_signer = derived(a.vals.get("from").cloned())
+            || derived(order_from)
             || derived(a.vals.get("payment").and_then(|p| at(p, 0)));
-        let derived_side = derived_signer || derived(a.vals.get("to").cloned()) || payee.is_some_and(|w| native(&w).is_none());
+        let derived_side = derived_signer
+            || derived(a.vals.get("to").cloned())
+            || payee.is_some_and(|w| native(&w).is_none());
         // the outer digest is the job's identity for `UAPayWithTax` (spec §7.1, Codex #1); a payee fee reports its payment's
-        let lane_hash = pos(&row.fields, "payment").filter(|_| row.name == "UAPayeeFee").and_then(|i| {
-            let ty = row.fields[i].0.as_str();
-            Some(hash_tuple(ty, nested(ty)?, a.vals["payment"].as_tuple()?))
-        });
-        let lane = if row.enveloped { lane_of(&a.vals) } else { a.vals.get("payment").and_then(payment_lane) };
+        let lane_hash = pos(&row.fields, "payment")
+            .filter(|_| row.name == "UAPayeeFee")
+            .and_then(|i| {
+                let ty = row.fields[i].0.as_str();
+                Some(hash_tuple(ty, nested(ty)?, a.vals["payment"].as_tuple()?))
+            });
+        let lane = if row.enveloped {
+            lane_of(&a.vals)
+        } else {
+            a.vals.get("payment").and_then(payment_lane)
+        };
         if matches!(row.name, "UAPayUnderMandate" | "UADelegateRevoke") {
             mandate_shape(row, &a)?;
         }
@@ -1579,29 +2110,66 @@ impl Op {
             true => a.vals["underlying"].as_address().expect("address"),
             false => token,
         };
-        let pay_meta_len = a.vals.get("meta").and_then(pay_meta_of).map_or(0, |m| m.body.len());
+        let pay_meta_len = a
+            .vals
+            .get("meta")
+            .and_then(pay_meta_of)
+            .map_or(0, |m| m.body.len());
         let (pqz_parties, pqz_auditor) = pqz_parties(row, &a.vals);
-        let typed = Typed { contract, domain_of, struct_hash: a.struct_hash, lane_hash, signer, payee, digest: None, derived_signer, derived_side,
-            pay_meta_len, pqz_parties, pqz_auditor, pqz_verdict, pqz_fee };
-        Ok(Op { row, to, data: data.into(), typed, lane, valid_until })
+        let typed = Typed {
+            contract,
+            domain_of,
+            struct_hash: a.struct_hash,
+            lane_hash,
+            signer,
+            payee,
+            digest: None,
+            derived_signer,
+            derived_side,
+            pay_meta_len,
+            pqz_parties,
+            pqz_auditor,
+            pqz_verdict,
+            pqz_fee,
+        };
+        Ok(Op {
+            row,
+            to,
+            data: data.into(),
+            typed,
+            lane,
+            valid_until,
+        })
     }
 }
 
 /// Group 3g (KV-7): the receivers of a PQZ debit's `args` and whether it has auditor copies; none for any other op (a burn has no
 /// receiver and no copies).
 fn pqz_parties(row: &Row, vals: &HashMap<String, Val>) -> (Vec<B256>, bool) {
-    let Some(ty) = pos(&row.fields, "args").map(|i| row.fields[i].0.as_str()) else { return (vec![], false) };
-    let (Some(f), Some(t)) = (nested(ty), vals.get("args").and_then(Val::as_tuple)) else { return (vec![], false) };
+    let Some(ty) = pos(&row.fields, "args").map(|i| row.fields[i].0.as_str()) else {
+        return (vec![], false);
+    };
+    let (Some(f), Some(t)) = (nested(ty), vals.get("args").and_then(Val::as_tuple)) else {
+        return (vec![], false);
+    };
     let field = |n: &str| pos(f, n).and_then(|i| t.get(i));
     let non_empty = |v: Option<&Val>| v.and_then(Val::as_bytes).is_some_and(|b| !b.is_empty());
     match ty {
-        "PqzTransferArgs" => (field("toUA").and_then(word_of).into_iter().collect(), non_empty(field("vAuditor"))),
+        "PqzTransferArgs" => (
+            field("toUA").and_then(word_of).into_iter().collect(),
+            non_empty(field("vAuditor")),
+        ),
         "PqzMultiArgs" => {
             let legs = field("legs").and_then(Val::as_array).unwrap_or_default();
             fn leg(l: &Val, i: usize) -> Option<&Val> {
                 l.as_tuple().and_then(|x| x.get(i))
             }
-            (legs.iter().filter_map(|l| leg(l, 0).and_then(word_of)).collect(), legs.iter().any(|l| non_empty(leg(l, 2))))
+            (
+                legs.iter()
+                    .filter_map(|l| leg(l, 0).and_then(word_of))
+                    .collect(),
+                legs.iter().any(|l| non_empty(leg(l, 2))),
+            )
         }
         _ => (vec![], false),
     }
@@ -1614,16 +2182,26 @@ fn mandate_shape(row: &Row, a: &Assembled) -> Result<()> {
     let lane = if row.name == "UAPayUnderMandate" {
         mandate_pay_lane(a.vals["entryRef"].as_fixed_bytes().map_or(&[][..], |x| x.0))
     } else {
-        mandate_revoke_lane(a.vals["token"].as_address().expect("address"), u("epoch").saturating_to())
+        mandate_revoke_lane(
+            a.vals["token"].as_address().expect("address"),
+            u("epoch").saturating_to(),
+        )
     };
     if u("batch") != lane || u("nonce") != U256::ZERO {
-        bail!("MANDATE_LANE: {} runs on its own lane at nonce 0 (batch {lane})", row.name);
+        bail!(
+            "MANDATE_LANE: {} runs on its own lane at nonce 0 (batch {lane})",
+            row.name
+        );
     }
     Ok(())
 }
 
 fn lane_of(v: &HashMap<String, Val>) -> Option<(B256, U256, U256)> {
-    Some((word_of(v.get("from")?)?, v.get("batch")?.as_uint()?.0, v.get("nonce")?.as_uint()?.0))
+    Some((
+        word_of(v.get("from")?)?,
+        v.get("batch")?.as_uint()?.0,
+        v.get("nonce")?.as_uint()?.0,
+    ))
 }
 
 fn payment_lane(p: &Val) -> Option<(B256, U256, U256)> {
@@ -1635,19 +2213,52 @@ fn payment_lane(p: &Val) -> Option<(B256, U256, U256)> {
 /// and `op.validUntil`, the job's own, whichever comes first: a job deadline narrows a signed one, never extends it. A cancel
 /// has no enforced deadline, so its order's `validUntil` is used only when the job names none.
 fn deadline(o: &Map<String, Value>, a: &Assembled, liquidity: bool) -> Result<u64> {
-    let job = o.get("validUntil").map(|v| {
-        let s = v.as_str().ok_or_else(|| anyhow!("BAD_PAYLOAD: op.validUntil is not a string"))?;
-        uint(s).map_err(|e| anyhow!("BAD_PAYLOAD: op.validUntil: {e}"))
-    }).transpose()?;
-    let nested = |k: &str, i: usize| a.vals.get(k).and_then(|t| t.as_tuple()).and_then(|t| t.get(i)).and_then(|v| v.as_uint()).map(|x| x.0);
-    let own = a.vals.get("validUntil").and_then(|v| v.as_uint()).map(|x| x.0);
+    let job = o
+        .get("validUntil")
+        .map(|v| {
+            let s = v
+                .as_str()
+                .ok_or_else(|| anyhow!("BAD_PAYLOAD: op.validUntil is not a string"))?;
+            uint(s).map_err(|e| anyhow!("BAD_PAYLOAD: op.validUntil: {e}"))
+        })
+        .transpose()?;
+    let nested = |k: &str, i: usize| {
+        a.vals
+            .get(k)
+            .and_then(|t| t.as_tuple())
+            .and_then(|t| t.get(i))
+            .and_then(|v| v.as_uint())
+            .map(|x| x.0)
+    };
+    let own = a
+        .vals
+        .get("validUntil")
+        .and_then(|v| v.as_uint())
+        .map(|x| x.0);
     // a liquidity plan's signed order, `p.order.validUntil` (spec 2026-11-10-dex-liquidity.md §11 "validUntil ahead")
-    let plan = liquidity.then(|| a.vals.get("p")?.as_tuple()?.get(1)?.as_tuple()?.get(16)?.as_uint().map(|x| x.0)).flatten();
-    let enforced = own.into_iter().chain(nested("payment", 6)).chain(plan).min();
+    let plan = liquidity
+        .then(|| {
+            a.vals
+                .get("p")?
+                .as_tuple()?
+                .get(1)?
+                .as_tuple()?
+                .get(16)?
+                .as_uint()
+                .map(|x| x.0)
+        })
+        .flatten();
+    let enforced = own
+        .into_iter()
+        .chain(nested("payment", 6))
+        .chain(plan)
+        .min();
     let t = match (enforced, job) {
         (Some(x), Some(y)) => x.min(y),
         (Some(x), None) | (None, Some(x)) => x,
-        (None, None) => nested("order", 12).or(nested("order", 11)).ok_or_else(|| anyhow!("BAD_PAYLOAD: op.validUntil missing"))?,
+        (None, None) => nested("order", 12)
+            .or(nested("order", 11))
+            .ok_or_else(|| anyhow!("BAD_PAYLOAD: op.validUntil missing"))?,
     };
     Ok(t.saturating_to())
 }
@@ -1663,7 +2274,14 @@ pub fn abi_of(ty: &str) -> String {
 }
 
 fn plan_abi(row: &Row) -> String {
-    format!("({})", row.plan.iter().map(|t| tok_abi(t, &row.fields)).collect::<Vec<_>>().join(","))
+    format!(
+        "({})",
+        row.plan
+            .iter()
+            .map(|t| tok_abi(t, &row.fields))
+            .collect::<Vec<_>>()
+            .join(",")
+    )
 }
 
 /// A row's calldata read back into its arguments, in plan order.
@@ -1672,12 +2290,18 @@ pub fn call_values(row: &Row, data: &[u8]) -> Result<Vec<Val>> {
         bail!("BAD_PAYLOAD: not {}'s selector", row.entry);
     }
     let v = DynSolType::parse(&plan_abi(row))?.abi_decode_sequence(&data[4..])?;
-    Ok(v.as_tuple().ok_or_else(|| anyhow!("BAD_PAYLOAD: not a tuple"))?.to_vec())
+    Ok(v.as_tuple()
+        .ok_or_else(|| anyhow!("BAD_PAYLOAD: not a tuple"))?
+        .to_vec())
 }
 
 /// The inverse of [`call_values`]: the row's calldata of `vals`.
 pub fn call_data(row: &Row, vals: Vec<Val>) -> Vec<u8> {
-    [&row.selector[..], &Val::Tuple(vals).abi_encode_sequence().unwrap_or_default()].concat()
+    [
+        &row.selector[..],
+        &Val::Tuple(vals).abi_encode_sequence().unwrap_or_default(),
+    ]
+    .concat()
 }
 
 /// Group 3f (spec §5.3): the plan position of a PQZ debit's trailing `PqzSignedVerdict`, which the node builds (never a job's
@@ -1717,7 +2341,11 @@ pub fn pqz_verdict_of(v: &Value, path: &str) -> Result<PqzVerdictArgs> {
     let t = t.as_tuple().ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}"))?;
     let n = |i: usize| t[i].as_uint().map_or(U256::ZERO, |x| x.0);
     let auth = <crate::abi::UASig as alloy::sol_types::SolValue>::abi_decode(&t[2].abi_encode())?;
-    Ok(PqzVerdictArgs { epoch: n(0).saturating_to(), valid_until: n(1).saturating_to(), auth })
+    Ok(PqzVerdictArgs {
+        epoch: n(0).saturating_to(),
+        valid_until: n(1).saturating_to(),
+        auth,
+    })
 }
 
 /// Hex `data` / `calldata` outside a named field: the name of the refusal every job kind and the gateway share.
@@ -1732,15 +2360,31 @@ pub mod testkit {
     /// Fable E N-6: a fake RPC's answer to `eip712Domain()` (`input`, `0x` hex) on `to`: the vector's token kinds by address
     /// (`0x…a1` token, `a2` zether, `a3` pqz), any other address `SCaaS MetaToken`; `None` for another call.
     pub fn domain_answer(input: &str, to: Address) -> Option<String> {
-        let sel = format!("0x{}", alloy::hex::encode(crate::abi::IToken::eip712DomainCall::SELECTOR));
+        let sel = format!(
+            "0x{}",
+            alloy::hex::encode(crate::abi::IToken::eip712DomainCall::SELECTOR)
+        );
         if !input.starts_with(&sel) {
             return None;
         }
-        let kind = match to.0[19] { 0xa2 if to.0[0] == 0x5c => "zether", 0xa3 if to.0[0] == 0x5c => "pqz", _ => "token" };
-        let r = crate::abi::IToken::eip712DomainReturn { fields: alloy::primitives::FixedBytes([0x1f]),
-            name: domain_name(kind).expect("a token kind").into(), version: "1".into(), chainId: U256::ZERO, verifyingContract: to,
-            salt: B256::ZERO, extensions: vec![] };
-        Some(format!("0x{}", alloy::hex::encode(crate::abi::IToken::eip712DomainCall::abi_encode_returns(&r))))
+        let kind = match to.0[19] {
+            0xa2 if to.0[0] == 0x5c => "zether",
+            0xa3 if to.0[0] == 0x5c => "pqz",
+            _ => "token",
+        };
+        let r = crate::abi::IToken::eip712DomainReturn {
+            fields: alloy::primitives::FixedBytes([0x1f]),
+            name: domain_name(kind).expect("a token kind").into(),
+            version: "1".into(),
+            chainId: U256::ZERO,
+            verifyingContract: to,
+            salt: B256::ZERO,
+            extensions: vec![],
+        };
+        Some(format!(
+            "0x{}",
+            alloy::hex::encode(crate::abi::IToken::eip712DomainCall::abi_encode_returns(&r))
+        ))
     }
 
     /// ua-mtx-merge T76: the router's three creations have vector rows; owner 2026-11-12: `UACreateToken` and `UACreateDex` are node
@@ -1748,16 +2392,31 @@ pub mod testkit {
     /// (`creation_rows_encode_the_named_config` pins them); `UACreateInstance` is walked (its `init_call` is the vector's bytes; the
     /// named form: `instance_rows_take_init_call_or_a_named_config`). The two must be in the file.
     /// Round 3r (spec §5.6, Q3): the four release approvals too (release management is not a node job, owner 2026-11-10).
-    pub const NO_NODE_ROW: [&str; 6] = ["UACreateToken", "UACreateDex", "UAApproveTokenRelease",
-        "UAApproveDexRelease", "UAApproveRelease", "UARevokeApproval"];
+    pub const NO_NODE_ROW: [&str; 6] = [
+        "UACreateToken",
+        "UACreateDex",
+        "UAApproveTokenRelease",
+        "UAApproveDexRelease",
+        "UAApproveRelease",
+        "UARevokeApproval",
+    ];
 
     /// Group 3f: the six PQZ debit rows, each taking the node-built `PqzSignedVerdict` last (spec §5.3).
-    pub const PQZ_DEBITS: [&str; 6] = ["UAPqzTransferSingle", "UAPqzTransferSingleCompact", "UAPqzTransfer", "UAPqzTransferCompact",
-        "UAPqzUnshield", "UAPqzUnshieldUnwrap"];
+    pub const PQZ_DEBITS: [&str; 6] = [
+        "UAPqzTransferSingle",
+        "UAPqzTransferSingleCompact",
+        "UAPqzTransfer",
+        "UAPqzTransferCompact",
+        "UAPqzUnshield",
+        "UAPqzUnshieldUnwrap",
+    ];
 
     pub fn vectors() -> Value {
         // ua-mtx-merge T14: the regenerated rows (MD-7 as amended: 68 structs; T34: 76); the old ones are in the vectors' legacy place
-        let mut v: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/typed/typed_ops.json")).unwrap();
+        let mut v: Value = serde_json::from_str(include_str!(
+            "../../smartcontracts/vectors/typed/typed_ops.json"
+        ))
+        .unwrap();
         let ops = v["ops"].as_object_mut().unwrap();
         for n in NO_NODE_ROW {
             assert!(ops.remove(n).is_some(), "{n}: the vector's row");
@@ -1766,12 +2425,19 @@ pub mod testkit {
     }
 
     pub fn row_of(name: &str, contract: &str) -> &'static Row {
-        rows().iter().find(|r| r.typed && r.name == name && r.contracts.contains(&contract))
+        rows()
+            .iter()
+            .find(|r| r.typed && r.name == name && r.contracts.contains(&contract))
             .unwrap_or_else(|| panic!("no row {name} on {contract}"))
     }
 
     /// `(envelope, args, signature value)` of a vector row, as a client sends them.
-    pub fn split(row: &Row, name: &str, kind: &str, v: &Value) -> (Option<Value>, Value, Option<Value>) {
+    pub fn split(
+        row: &Row,
+        name: &str,
+        kind: &str,
+        v: &Value,
+    ) -> (Option<Value>, Value, Option<Value>) {
         let o = &v["ops"][name];
         let d = &o["domains"][kind];
         let mut args = o["message"].as_object().unwrap().clone();
@@ -1786,7 +2452,9 @@ pub mod testkit {
         }
         // owner 2026-11-12: a generic creation names its initializer call `init_call`; the node hashes it
         if row.plan.contains(&Tok::InitCall) {
-            let c = args.remove("initCall").expect("the vector's extra.initCall");
+            let c = args
+                .remove("initCall")
+                .expect("the vector's extra.initCall");
             args.insert("init_call".into(), c);
             args.remove("initHash");
         }
@@ -1798,10 +2466,16 @@ pub mod testkit {
         }
         if row.name == "UAPayeeFee" {
             let s = args["payerSig"].clone();
-            args.insert("payerSig".into(), json!({"keyData": "0x", "signature": s, "members": []}));
+            args.insert(
+                "payerSig".into(),
+                json!({"keyData": "0x", "signature": s, "members": []}),
+            );
         }
         if extras(row).iter().any(|x| x.0 == "underlying") {
-            args.insert("underlying".into(), d["domain"]["verifyingContract"].clone());
+            args.insert(
+                "underlying".into(),
+                d["domain"]["verifyingContract"].clone(),
+            );
         }
         let s = d["signature"].clone();
         let sig = row.sig.map(|k| match k {
@@ -1809,14 +2483,24 @@ pub mod testkit {
             Sig::Ua => json!({"keyData": "0x", "signature": s, "members": []}),
             Sig::Account => json!({"keyIndex": "0", "proof": [], "signature": s}),
         });
-        (row.enveloped.then_some(Value::Object(env)), Value::Object(args), sig)
+        (
+            row.enveloped.then_some(Value::Object(env)),
+            Value::Object(args),
+            sig,
+        )
     }
 
     /// A `PayMeta` `{salt, payNo, save, schema, body: hex}` (the vectors' form) as a job's named one.
     pub fn named_meta(m: &Value) -> Value {
-        let h = |k: &str| alloy::hex::decode(m[k].as_str().unwrap().trim_start_matches("0x")).unwrap();
-        let v = Val::Tuple(vec![fixed(&h("salt")), fixed(&h("payNo")), Val::Bool(m["save"].as_bool().unwrap()),
-            Val::Uint(U256::from(m["schema"].as_u64().unwrap()), 16), Val::Bytes(h("body"))]);
+        let h =
+            |k: &str| alloy::hex::decode(m[k].as_str().unwrap().trim_start_matches("0x")).unwrap();
+        let v = Val::Tuple(vec![
+            fixed(&h("salt")),
+            fixed(&h("payNo")),
+            Val::Bool(m["save"].as_bool().unwrap()),
+            Val::Uint(U256::from(m["schema"].as_u64().unwrap()), 16),
+            Val::Bytes(h("body")),
+        ]);
         pay_meta_json(&v).unwrap()
     }
 
@@ -1834,7 +2518,11 @@ pub mod testkit {
             op["envelope"] = e;
         }
         if let Some(s) = sig {
-            op[if row.sig == Some(Sig::Bytes) { "signature" } else { "auth" }] = s;
+            op[if row.sig == Some(Sig::Bytes) {
+                "signature"
+            } else {
+                "auth"
+            }] = s;
         }
         Some(op)
     }
@@ -1842,7 +2530,10 @@ pub mod testkit {
     /// The calldata read back into the op that built it, by the row's plan alone (the digest-only fields stay out).
     pub fn op_from_calldata(row: &Row, data: &[u8]) -> (Option<Value>, Value, Option<Value>) {
         let tys: Vec<String> = row.plan.iter().map(|t| tok_abi(t, &row.fields)).collect();
-        let v = DynSolType::parse(&format!("({})", tys.join(","))).unwrap().abi_decode_sequence(&data[4..]).unwrap();
+        let v = DynSolType::parse(&format!("({})", tys.join(",")))
+            .unwrap()
+            .abi_decode_sequence(&data[4..])
+            .unwrap();
         let vals = v.as_tuple().unwrap();
         let (mut env, mut args, mut sig) = (Map::new(), Map::new(), None);
         let ty_of = |n: &str| row.fields.iter().find(|f| f.1 == n).unwrap().0.clone();
@@ -1856,10 +2547,17 @@ pub mod testkit {
                         env.insert(n.to_string(), to_json(&ty_of(n), &e[i + 1]));
                     }
                 }
-                Tok::Field(n) => { args.insert(n.clone(), to_json(&ty_of(n), x)); }
-                Tok::Extra(n, ty) => { args.insert(n.clone(), to_json(ty, x)); }
+                Tok::Field(n) => {
+                    args.insert(n.clone(), to_json(&ty_of(n), x));
+                }
+                Tok::Extra(n, ty) => {
+                    args.insert(n.clone(), to_json(ty, x));
+                }
                 Tok::Init(n, ty) => {
-                    let v = DynSolType::parse(&abi_type(ty)).unwrap().abi_decode(x.as_bytes().unwrap()).unwrap();
+                    let v = DynSolType::parse(&abi_type(ty))
+                        .unwrap()
+                        .abi_decode(x.as_bytes().unwrap())
+                        .unwrap();
                     args.insert(n.clone(), to_json(ty, &v));
                     args.remove("initHash");
                 }
@@ -1867,26 +2565,36 @@ pub mod testkit {
                     args.insert("init_call".into(), to_json("bytes", x));
                     args.remove("initHash");
                 }
-                Tok::Group(g) => for (n, y) in g.iter().zip(x.as_tuple().unwrap()) {
-                    args.insert(n.clone(), to_json(&ty_of(n), y));
-                },
-                Tok::Whole => for ((ty, n), y) in row.fields.iter().zip(x.as_tuple().unwrap()) {
-                    args.insert(n.clone(), to_json(ty, y));
-                },
+                Tok::Group(g) => {
+                    for (n, y) in g.iter().zip(x.as_tuple().unwrap()) {
+                        args.insert(n.clone(), to_json(&ty_of(n), y));
+                    }
+                }
+                Tok::Whole => {
+                    for ((ty, n), y) in row.fields.iter().zip(x.as_tuple().unwrap()) {
+                        args.insert(n.clone(), to_json(ty, y));
+                    }
+                }
                 Tok::WrapAsTrade(n) => {
                     let mut w = x.as_tuple().unwrap().to_vec();
                     assert_eq!(w.remove(7), w[1], "dex = the wrapper");
                     args.insert(n.clone(), to_json(&ty_of(n), &Val::Tuple(w)));
                 }
                 Tok::List(b) => match &**b {
-                    Tok::Field(n) => { args.insert(n.clone(), to_json(&ty_of(n), &list0(x))); }
+                    Tok::Field(n) => {
+                        args.insert(n.clone(), to_json(&ty_of(n), &list0(x)));
+                    }
                     _ => sig = Some(to_json("bytes", &list0(x))),
                 },
                 Tok::Sign(s) => sig = Some(to_json(sig_type(*s), x)),
                 Tok::Verdict => {}
             }
         }
-        (row.enveloped.then_some(Value::Object(env)), Value::Object(args), sig)
+        (
+            row.enveloped.then_some(Value::Object(env)),
+            Value::Object(args),
+            sig,
+        )
     }
 
     pub fn hex(s: &Value) -> Vec<u8> {
@@ -1916,7 +2624,10 @@ pub mod testkit {
                 _ => json!(n.to_string()),
             }
         }
-        let row = rows().iter().find(|r| r.entry == entry && r.contracts == ["pqchat"]).unwrap_or_else(|| panic!("no pqchat {entry}"));
+        let row = rows()
+            .iter()
+            .find(|r| r.entry == entry && r.contracts == ["pqchat"])
+            .unwrap_or_else(|| panic!("no pqchat {entry}"));
         let mut n = 0;
         json!({"entry": entry, "contract": "pqchat", "token": format!("{instance:#x}"), "validUntil": "4000000000",
             "args": Value::Object(row.fields.iter().map(|(t, k)| (k.clone(), sample(t, &mut n))).collect())})
@@ -1932,11 +2643,30 @@ mod tests {
 
     fn domain_of(d: &Value) -> (u64, Address, B256) {
         let g = |k: &str| d["domain"][k].as_str().unwrap();
-        (g("chainId").parse().unwrap(), g("verifyingContract").parse().unwrap(), g("salt").parse().unwrap())
+        (
+            g("chainId").parse().unwrap(),
+            g("verifyingContract").parse().unwrap(),
+            g("salt").parse().unwrap(),
+        )
     }
 
     fn typed(contract: &'static str, domain_of: Address, h: B256) -> Typed {
-        Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract, domain_of, struct_hash: Some(h), lane_hash: None, signer: None, payee: None, digest: None, derived_signer: false, derived_side: false }
+        Typed {
+            pay_meta_len: 0,
+            pqz_parties: vec![],
+            pqz_auditor: false,
+            pqz_verdict: None,
+            pqz_fee: None,
+            contract,
+            domain_of,
+            struct_hash: Some(h),
+            lane_hash: None,
+            signer: None,
+            payee: None,
+            digest: None,
+            derived_signer: false,
+            derived_side: false,
+        }
     }
 
     /// Every row and domain of `typed_ops.json`: encodeType, struct hash, digest, entry selector, calldata; the signature
@@ -1951,21 +2681,47 @@ mod tests {
             for (kind, d) in o["domains"].as_object().unwrap() {
                 let row = row_of(name, kind);
                 let (env, args, sig) = split(row, name, kind, &v);
-                assert_eq!(row.type_string(), o["typeString"].as_str().unwrap(), "{name}");
-                let a = assemble(row, env.as_ref(), &args, sig.as_ref(), FEE).unwrap_or_else(|e| panic!("{name} on {kind}: {e:#}"));
+                assert_eq!(
+                    row.type_string(),
+                    o["typeString"].as_str().unwrap(),
+                    "{name}"
+                );
+                let a = assemble(row, env.as_ref(), &args, sig.as_ref(), FEE)
+                    .unwrap_or_else(|e| panic!("{name} on {kind}: {e:#}"));
                 let h = a.struct_hash.unwrap();
-                assert_eq!(format!("{h:#x}"), o["structHash"].as_str().unwrap(), "{name}");
+                assert_eq!(
+                    format!("{h:#x}"),
+                    o["structHash"].as_str().unwrap(),
+                    "{name}"
+                );
                 let (chain_id, at, uid) = domain_of(d);
                 let contract = row.contracts.iter().find(|c| *c == kind).unwrap();
                 let digest = typed(contract, at, h).digest_on(chain_id, uid).unwrap();
-                assert_eq!(format!("{digest:#x}"), d["digest"].as_str().unwrap(), "{name} on {kind}");
-                assert!(recovers(digest, &hex(&d["signature"]), key), "{name} on {kind}");
+                assert_eq!(
+                    format!("{digest:#x}"),
+                    d["digest"].as_str().unwrap(),
+                    "{name} on {kind}"
+                );
+                assert!(
+                    recovers(digest, &hex(&d["signature"]), key),
+                    "{name} on {kind}"
+                );
                 domains += 1;
                 if row.entry.is_empty() {
                     continue;
                 }
-                assert_eq!(format!("0x{}", alloy::hex::encode(row.selector)), d["selector"].as_str().unwrap(), "{name} on {kind}: {}", d["abi"]);
-                assert_eq!(alloy::hex::encode(&a.data), &d["calldata"].as_str().unwrap()[2..], "{name} on {kind}: {}", d["abi"]);
+                assert_eq!(
+                    format!("0x{}", alloy::hex::encode(row.selector)),
+                    d["selector"].as_str().unwrap(),
+                    "{name} on {kind}: {}",
+                    d["abi"]
+                );
+                assert_eq!(
+                    alloy::hex::encode(&a.data),
+                    &d["calldata"].as_str().unwrap()[2..],
+                    "{name} on {kind}: {}",
+                    d["abi"]
+                );
                 calldata += 1;
             }
         }
@@ -1980,7 +2736,13 @@ mod tests {
         // owner 2026-11-12: -> (102, 136, 135), `UACreateInstance` (its `init_call` the vector's bytes)
         // the three-key model (CTR-PQZ-41): -> (103, 137, 136), `PqzRollOver` (`mtxRollOverSigned` on the PQZ token)
         // round 3zc (CTR-GOV-30): -> (105, 139, 138), the router's `UASetMaxSupply`, `UASetMaxWrapSupply`
-        assert_eq!((structs, domains, calldata), (105, 139, 138), "every row was walked (two creations and the approvals left out by vectors())");
+        // set-auditor (CTR-GOV-31): -> (108, 143, 140), the router's `UASetAuditorKey`, `UASetAuditorUA` and the raw
+        // `AuditorConsent` (two token domains, no entry)
+        assert_eq!(
+            (structs, domains, calldata),
+            (108, 143, 140),
+            "every row was walked (two creations and the approvals left out by vectors())"
+        );
         // plan T32: 70 -> 78, the router's eight regulated controls; pay-meta-tax T42: -> 82, + UAPayWithTax, the two tax ops and
         // mtxPay (its struct `UAMetaTransfer`, no row of the vector file: paymeta.json and pay_job_named_meta_builds_body pin it)
         // group 3g T55: -> 83, `UAPqzRollOver`
@@ -1991,27 +2753,64 @@ mod tests {
         // of the walk: filler `initArgs`, `creation_rows_encode_the_named_config`)
         // owner 2026-11-12: -> 107, `UACreateInstance`
         // the three-key model (CTR-PQZ-41): -> 108, `PqzRollOver`; round 3zc (CTR-GOV-30): -> 110, `UASetMaxSupply`,
-        // `UASetMaxWrapSupply`
-        assert_eq!(rows().iter().filter(|r| r.typed).count(), 110, "105 vector rows, mtxPay, the two invalidations (DEX, token), the two named creations");
+        // `UASetMaxWrapSupply`; set-auditor (CTR-GOV-31): -> 113, `UASetAuditorKey`, `UASetAuditorUA`, `AuditorConsent`
+        assert_eq!(
+            rows().iter().filter(|r| r.typed).count(),
+            113,
+            "108 vector rows, mtxPay, the two invalidations (DEX, token), the two named creations"
+        );
         // T93: 18 -> 30, `PqChat`'s twelve writes; UA-7 P48: -> 31, `remove`; ua-mtx-liquidity L6: -> 32, the DEX's `mtxLiquidity`
         // (CTR-DEX-30)
         // the three-key model (K3-3): -> 34, the registry's `setPqzScopedKey`, `storePqzScopedPop`
         // CTR-UA-44 (TODO 3ze): -> 35, the registry's `updateMsig`; NODE-JOB-29 (TODO 3zh MD-14): -> 36, the registry's `cacheExpandedKey`
-        assert_eq!(rows().iter().filter(|r| !r.typed).count(), 36, "the wallet's three flat builders are gone (MD-11 (a))");
+        assert_eq!(
+            rows().iter().filter(|r| !r.typed).count(),
+            36,
+            "the wallet's three flat builders are gone (MD-11 (a))"
+        );
     }
 
     /// Group 3g (KV-10): the rollover is one row per kind (Zether's form kept; the PQZ one with `keyVersion`, its EIP-712 struct
     /// `UARollOver`), the prepare names the version; a job's entry and kind pick the row.
     #[test]
     fn rollover_rows_per_kind() {
-        let on = |kind: &str| rows().iter().filter(|r| r.entry == "mtxRollOver" && r.contracts.contains(&kind)).map(|r| r.name).collect::<Vec<_>>();
-        assert_eq!((on("zether"), on("pqz")), (vec!["UARollOver"], vec!["UAPqzRollOver"]));
-        let (z, p) = (row_of("UARollOver", "zether"), row_of("UAPqzRollOver", "pqz"));
-        assert!(z.type_string().starts_with("UARollOver(bytes32 from,bytes32 ua,uint256 n,uint256 batch,"), "{}", z.type_string());
-        assert!(p.type_string().starts_with("UARollOver(bytes32 from,bytes32 ua,uint64 keyVersion,uint256 n,uint256 batch,"), "{}", p.type_string());
+        let on = |kind: &str| {
+            rows()
+                .iter()
+                .filter(|r| r.entry == "mtxRollOver" && r.contracts.contains(&kind))
+                .map(|r| r.name)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            (on("zether"), on("pqz")),
+            (vec!["UARollOver"], vec!["UAPqzRollOver"])
+        );
+        let (z, p) = (
+            row_of("UARollOver", "zether"),
+            row_of("UAPqzRollOver", "pqz"),
+        );
+        assert!(
+            z.type_string()
+                .starts_with("UARollOver(bytes32 from,bytes32 ua,uint256 n,uint256 batch,"),
+            "{}",
+            z.type_string()
+        );
+        assert!(
+            p.type_string().starts_with(
+                "UARollOver(bytes32 from,bytes32 ua,uint64 keyVersion,uint256 n,uint256 batch,"
+            ),
+            "{}",
+            p.type_string()
+        );
         assert_ne!(z.selector, p.selector, "two entries of one name");
         let prep = row_of("UAPrepareAcc", "pqz");
-        assert!(prep.type_string().starts_with("UAPrepareAcc(bytes32 from,bytes32 ua,uint64 keyVersion,uint256 half,"), "{}", prep.type_string());
+        assert!(
+            prep.type_string().starts_with(
+                "UAPrepareAcc(bytes32 from,bytes32 ua,uint64 keyVersion,uint256 half,"
+            ),
+            "{}",
+            prep.type_string()
+        );
         // a job names the entry and the kind: each kind its own row, never the other's
         let v = vectors();
         for (name, kind) in [("UARollOver", "zether"), ("UAPqzRollOver", "pqz")] {
@@ -2029,13 +2828,25 @@ mod tests {
         let v = vectors();
         let base = op_of("PqzRollOver", "pqz", &v).unwrap();
         assert_eq!(Op::parse(&base, FEE).unwrap().row.name, "PqzRollOver");
-        let with = |skip: Value| { let mut o = base.clone(); o["args"]["skip"] = skip; Op::parse(&o, FEE) };
-        let marks = |n: u64| Value::Array((0..n).map(|i| json!((10 + 2 * i).to_string())).collect());
+        let with = |skip: Value| {
+            let mut o = base.clone();
+            o["args"]["skip"] = skip;
+            Op::parse(&o, FEE)
+        };
+        let marks =
+            |n: u64| Value::Array((0..n).map(|i| json!((10 + 2 * i).to_string())).collect());
         assert!(with(marks(80)).is_ok(), "ROLL_MAX_ANY marks pass");
         assert!(with(json!([])).is_ok(), "no mark");
-        for (bad, why) in [(marks(81), "at most 80"), (json!(["7", "5"]), "strictly ascending"), (json!(["5", "5"]), "strictly ascending")] {
+        for (bad, why) in [
+            (marks(81), "at most 80"),
+            (json!(["7", "5"]), "strictly ascending"),
+            (json!(["5", "5"]), "strictly ascending"),
+        ] {
             let e = with(bad).unwrap_err().to_string();
-            assert!(e.starts_with("BAD_PAYLOAD: args.skip") && e.contains(why), "{e}");
+            assert!(
+                e.starts_with("BAD_PAYLOAD: args.skip") && e.contains(why),
+                "{e}"
+            );
         }
         let e = with(json!([["5"]])).unwrap_err().to_string();
         assert!(e.starts_with("BAD_PAYLOAD"), "a nested array: {e}");
@@ -2047,18 +2858,37 @@ mod tests {
     #[test]
     fn row_named_apart_from_its_struct_refuses_an_omitted_field() {
         let v = vectors();
-        let envelope: Vec<&str> = E_FIELDS.split(',').filter_map(|x| x.split(' ').nth(1)).chain(["from"]).collect();
-        let named: Vec<_> = rows().iter().filter(|r| primary_of(r.name) != r.name).collect();
+        let envelope: Vec<&str> = E_FIELDS
+            .split(',')
+            .filter_map(|x| x.split(' ').nth(1))
+            .chain(["from"])
+            .collect();
+        let named: Vec<_> = rows()
+            .iter()
+            .filter(|r| primary_of(r.name) != r.name)
+            .collect();
         assert!(named.iter().any(|r| r.name == "UAPqzRollOver"));
         for r in named {
             for kind in r.contracts.iter() {
                 let good = op_of(r.name, kind, &v).unwrap();
                 Op::parse(&good, FEE).unwrap();
-                for (_, f) in r.fields.iter().filter(|(_, f)| !envelope.contains(&f.as_str())) {
+                for (_, f) in r
+                    .fields
+                    .iter()
+                    .filter(|(_, f)| !envelope.contains(&f.as_str()))
+                {
                     let mut o = good.clone();
-                    assert!(o["args"].as_object_mut().unwrap().remove(f).is_some(), "{} {kind}: args.{f}", r.name);
+                    assert!(
+                        o["args"].as_object_mut().unwrap().remove(f).is_some(),
+                        "{} {kind}: args.{f}",
+                        r.name
+                    );
                     let e = Op::parse(&o, FEE).unwrap_err().to_string();
-                    assert!(e.contains(&format!("args.{f}: missing")), "{} {kind} without {f}: {e}", r.name);
+                    assert!(
+                        e.contains(&format!("args.{f}: missing")),
+                        "{} {kind} without {f}: {e}",
+                        r.name
+                    );
                 }
             }
         }
@@ -2070,7 +2900,11 @@ mod tests {
     #[test]
     fn pqz_key_version_named() {
         let v = vectors();
-        for (name, word) in [("UAPqzTransferSingle", 4), ("UAPqzTransfer", 4), ("UAPqzUnshield", 4)] {
+        for (name, word) in [
+            ("UAPqzTransferSingle", 4),
+            ("UAPqzTransfer", 4),
+            ("UAPqzUnshield", 4),
+        ] {
             let good = op_of(name, "pqz", &v).unwrap();
             let mut o = good.clone();
             o["args"]["args"]["keyVersion"] = json!("7");
@@ -2078,11 +2912,28 @@ mod tests {
             // the args struct is the first dynamic argument after the 8-word envelope: its offset, then its words
             let d = &a.data[4..];
             let at = usize::try_from(U256::from_be_slice(&d[8 * 32..9 * 32])).unwrap();
-            assert_eq!(U256::from_be_slice(&d[at + 32 * word..at + 32 * (word + 1)]), U256::from(7), "{name}: keyVersion at word {word}");
-            assert_ne!(a.data, Op::parse(&good, FEE).unwrap().data, "{name}: the version is in the bytes");
+            assert_eq!(
+                U256::from_be_slice(&d[at + 32 * word..at + 32 * (word + 1)]),
+                U256::from(7),
+                "{name}: keyVersion at word {word}"
+            );
+            assert_ne!(
+                a.data,
+                Op::parse(&good, FEE).unwrap().data,
+                "{name}: the version is in the bytes"
+            );
             let mut o = good.clone();
-            o["args"]["args"].as_object_mut().unwrap().remove("keyVersion");
-            assert!(Op::parse(&o, FEE).unwrap_err().to_string().starts_with("BAD_PAYLOAD"), "{name}: no keyVersion");
+            o["args"]["args"]
+                .as_object_mut()
+                .unwrap()
+                .remove("keyVersion");
+            assert!(
+                Op::parse(&o, FEE)
+                    .unwrap_err()
+                    .to_string()
+                    .starts_with("BAD_PAYLOAD"),
+                "{name}: no keyVersion"
+            );
         }
     }
 
@@ -2093,10 +2944,16 @@ mod tests {
         let mut o = good.clone();
         o["args"]["args"] = json!("0x1234");
         let e = Op::parse(&o, FEE).unwrap_err().to_string();
-        assert!(e.starts_with("HEX_ARGS_REFUSED") || e.starts_with("BAD_PAYLOAD"), "{e}");
+        assert!(
+            e.starts_with("HEX_ARGS_REFUSED") || e.starts_with("BAD_PAYLOAD"),
+            "{e}"
+        );
         let mut o = good;
         o["args"]["data"] = json!("0x1234");
-        assert!(Op::parse(&o, FEE).unwrap_err().to_string().starts_with("HEX_DATA_REFUSED"));
+        assert!(Op::parse(&o, FEE)
+            .unwrap_err()
+            .to_string()
+            .starts_with("HEX_DATA_REFUSED"));
     }
 
     /// Round 3t (CTR-PQZ-36, NODE-JOB-22's Change): a PQZ debit's proved fee word is `args.pqz_fee`, a `uint64` decimal string,
@@ -2107,23 +2964,50 @@ mod tests {
         for name in PQZ_DEBITS {
             let good = op_of(name, "pqz", &v).unwrap();
             let plain = Op::parse(&good, FEE).unwrap_or_else(|e| panic!("{name}: {e:#}"));
-            assert_eq!(plain.typed.pqz_fee, None, "{name}: optional at the parse (pqz.rs requires it on OFFCHAIN)");
-            let with = |x: Value| { let mut o = good.clone(); o["args"]["pqz_fee"] = x; Op::parse(&o, FEE) };
+            assert_eq!(
+                plain.typed.pqz_fee, None,
+                "{name}: optional at the parse (pqz.rs requires it on OFFCHAIN)"
+            );
+            let with = |x: Value| {
+                let mut o = good.clone();
+                o["args"]["pqz_fee"] = x;
+                Op::parse(&o, FEE)
+            };
             let p = with(json!("7")).unwrap();
             assert_eq!(p.typed.pqz_fee, Some(7), "{name}");
-            assert_eq!((p.data, p.typed.struct_hash), (plain.data.clone(), plain.typed.struct_hash), "{name}: not in the bytes");
-            assert_eq!(with(json!(u64::MAX.to_string())).unwrap().typed.pqz_fee, Some(u64::MAX));
+            assert_eq!(
+                (p.data, p.typed.struct_hash),
+                (plain.data.clone(), plain.typed.struct_hash),
+                "{name}: not in the bytes"
+            );
+            assert_eq!(
+                with(json!(u64::MAX.to_string())).unwrap().typed.pqz_fee,
+                Some(u64::MAX)
+            );
             let e = with(json!("0x07")).unwrap_err().to_string();
             assert!(e.starts_with("HEX_ARGS_REFUSED"), "{name}: {e}");
             let e = with(json!("18446744073709551616")).unwrap_err().to_string();
-            assert!(e.starts_with("BAD_PAYLOAD") && e.contains("pqz_fee"), "{name}: 2^64: {e}");
+            assert!(
+                e.starts_with("BAD_PAYLOAD") && e.contains("pqz_fee"),
+                "{name}: 2^64: {e}"
+            );
             let e = with(json!(7)).unwrap_err().to_string();
             assert!(e.starts_with("BAD_PAYLOAD"), "{name}: a number: {e}");
         }
-        for (name, kind) in [("UAShield", "pqz"), ("UAPqzRollOver", "pqz"), ("UAZetherTransferSingle", "zether")] {
+        for (name, kind) in [
+            ("UAShield", "pqz"),
+            ("UAPqzRollOver", "pqz"),
+            ("UAZetherTransferSingle", "zether"),
+        ] {
             let mut o = op_of(name, kind, &v).unwrap();
             o["args"]["pqz_fee"] = json!("7");
-            assert!(Op::parse(&o, FEE).unwrap_err().to_string().starts_with("BAD_PAYLOAD"), "{name} takes no pqz_fee");
+            assert!(
+                Op::parse(&o, FEE)
+                    .unwrap_err()
+                    .to_string()
+                    .starts_with("BAD_PAYLOAD"),
+                "{name} takes no pqz_fee"
+            );
         }
     }
 
@@ -2135,20 +3019,39 @@ mod tests {
     fn pqz_verdict_hex_refused() {
         use alloy::sol_types::SolValue;
         let v = vectors();
-        let auth = json!({"keyData": "0x", "signature": format!("0x{}", "7e".repeat(65)), "members": []});
+        let auth =
+            json!({"keyData": "0x", "signature": format!("0x{}", "7e".repeat(65)), "members": []});
         let sub = json!({"pqzVerifierEpoch": 7, "validUntil": "1800000000", "auth": auth.clone()});
         for name in PQZ_DEBITS {
             let good = op_of(name, "pqz", &v).unwrap();
             let row = row_of(name, "pqz");
-            assert_eq!(verdict_slot(row), Some(row.plan.len() - 1), "{name}: the verdict last");
+            assert_eq!(
+                verdict_slot(row),
+                Some(row.plan.len() - 1),
+                "{name}: the verdict last"
+            );
             let plain = Op::parse(&good, FEE).unwrap_or_else(|e| panic!("{name}: {e:#}"));
             assert_eq!(plain.typed.pqz_verdict, None);
             let mut o = good.clone();
             o["args"]["pqz_verdict"] = sub.clone();
             let p = Op::parse(&o, FEE).unwrap();
-            let want = crate::abi::UASig::abi_decode(&parse("UASig", &auth, "auth").unwrap().abi_encode()).unwrap();
-            assert_eq!(p.typed.pqz_verdict, Some(PqzVerdictArgs { epoch: 7, valid_until: 1_800_000_000, auth: want }), "{name}");
-            assert_eq!((p.data, p.typed.struct_hash), (plain.data, plain.typed.struct_hash), "{name}: not signed, not in the parsed bytes");
+            let want =
+                crate::abi::UASig::abi_decode(&parse("UASig", &auth, "auth").unwrap().abi_encode())
+                    .unwrap();
+            assert_eq!(
+                p.typed.pqz_verdict,
+                Some(PqzVerdictArgs {
+                    epoch: 7,
+                    valid_until: 1_800_000_000,
+                    auth: want
+                }),
+                "{name}"
+            );
+            assert_eq!(
+                (p.data, p.typed.struct_hash),
+                (plain.data, plain.typed.struct_hash),
+                "{name}: not signed, not in the parsed bytes"
+            );
             let refused = |args: &dyn Fn(&mut Value)| {
                 let mut o = good.clone();
                 args(&mut o["args"]);
@@ -2164,26 +3067,60 @@ mod tests {
                 "statementHash": format!("{:#x}", B256::ZERO), "proofHash": format!("{:#x}", B256::ZERO), "pqzVerifierEpoch": 7,
                 "validUntil": "1800000000"}, "sig": auth.clone()});
             let e = refused(&|a| a["pqzVerdict"] = full.clone());
-            assert!(e.starts_with("BAD_PAYLOAD"), "{name}: the struct is the node's: {e}");
-            for k in ["statementHash", "proofHash", "token", "chainId", "proofSystemId"] {
-                let e = refused(&|a| { a["pqz_verdict"] = sub.clone(); a["pqz_verdict"][k] = json!(format!("{:#x}", B256::ZERO)); });
-                assert!(e.starts_with("BAD_PAYLOAD") && e.contains(k), "{name}: {k} is rebuilt, never the job's: {e}");
+            assert!(
+                e.starts_with("BAD_PAYLOAD"),
+                "{name}: the struct is the node's: {e}"
+            );
+            for k in [
+                "statementHash",
+                "proofHash",
+                "token",
+                "chainId",
+                "proofSystemId",
+            ] {
+                let e = refused(&|a| {
+                    a["pqz_verdict"] = sub.clone();
+                    a["pqz_verdict"][k] = json!(format!("{:#x}", B256::ZERO));
+                });
+                assert!(
+                    e.starts_with("BAD_PAYLOAD") && e.contains(k),
+                    "{name}: {k} is rebuilt, never the job's: {e}"
+                );
             }
             for k in ["pqzVerifierEpoch", "validUntil", "auth"] {
-                let e = refused(&|a| { a["pqz_verdict"] = sub.clone(); a["pqz_verdict"].as_object_mut().unwrap().remove(k); });
+                let e = refused(&|a| {
+                    a["pqz_verdict"] = sub.clone();
+                    a["pqz_verdict"].as_object_mut().unwrap().remove(k);
+                });
                 assert!(e.starts_with("BAD_PAYLOAD") && e.contains(k), "{name}: {e}");
             }
             let slot = json!({"index": 0, "members": [], "sig": "0x01"});
-            let e = refused(&|a| { a["pqz_verdict"] = sub.clone(); a["pqz_verdict"]["auth"]["members"] = json!(vec![slot.clone(); 17]); });
+            let e = refused(&|a| {
+                a["pqz_verdict"] = sub.clone();
+                a["pqz_verdict"]["auth"]["members"] = json!(vec![slot.clone(); 17]);
+            });
             assert!(e.contains("more than 16 slots"), "{name}: {e}");
-            let e = refused(&|a| { a["pqz_verdict"] = sub.clone(); a["pqz_verdict"]["pqzVerifierEpoch"] = json!(1u64 << 32); });
+            let e = refused(&|a| {
+                a["pqz_verdict"] = sub.clone();
+                a["pqz_verdict"]["pqzVerifierEpoch"] = json!(1u64 << 32);
+            });
             assert!(e.starts_with("BAD_PAYLOAD"), "{name}: a uint32: {e}");
         }
-        for (name, kind) in [("UAShield", "pqz"), ("UAPqzRollOver", "pqz"), ("UAZetherTransferSingle", "zether")] {
+        for (name, kind) in [
+            ("UAShield", "pqz"),
+            ("UAPqzRollOver", "pqz"),
+            ("UAZetherTransferSingle", "zether"),
+        ] {
             let mut o = op_of(name, kind, &v).unwrap();
             assert_eq!(verdict_slot(row_of(name, kind)), None, "{name}");
             o["args"]["pqz_verdict"] = sub.clone();
-            assert!(Op::parse(&o, FEE).unwrap_err().to_string().starts_with("BAD_PAYLOAD"), "{name} takes no verdict");
+            assert!(
+                Op::parse(&o, FEE)
+                    .unwrap_err()
+                    .to_string()
+                    .starts_with("BAD_PAYLOAD"),
+                "{name} takes no verdict"
+            );
         }
     }
 
@@ -2191,32 +3128,62 @@ mod tests {
     /// three token domains, the mandate wallet and the router; `CancelNonce` (`address from`, `bytes`) on `SmartKeyAccount` only.
     #[test]
     fn cancel_row_split_per_kind() {
-        let on = |kind: &str| rows().iter().filter(|r| r.entry == "mtxCancelNonce" && r.contracts.contains(&kind)).map(|r| r.name).collect::<Vec<_>>();
+        let on = |kind: &str| {
+            rows()
+                .iter()
+                .filter(|r| r.entry == "mtxCancelNonce" && r.contracts.contains(&kind))
+                .map(|r| r.name)
+                .collect::<Vec<_>>()
+        };
         for k in ["token", "zether", "pqz", "wallet", "gov_router"] {
             assert_eq!(on(k), ["UACancelNonce"], "{k}");
         }
         assert_eq!(on("account"), ["CancelNonce"]);
         assert!(on("dex").is_empty() && on("registry").is_empty());
-        let (ua, a) = (row_of("UACancelNonce", "token"), row_of("CancelNonce", "account"));
-        assert_eq!((ua.fields[0].0.as_str(), ua.sig, ua.ua()), ("bytes32", Some(Sig::Ua), true));
-        assert_eq!((a.fields[0].0.as_str(), a.sig, a.ua()), ("address", Some(Sig::Bytes), false));
+        let (ua, a) = (
+            row_of("UACancelNonce", "token"),
+            row_of("CancelNonce", "account"),
+        );
+        assert_eq!(
+            (ua.fields[0].0.as_str(), ua.sig, ua.ua()),
+            ("bytes32", Some(Sig::Ua), true)
+        );
+        assert_eq!(
+            (a.fields[0].0.as_str(), a.sig, a.ua()),
+            ("address", Some(Sig::Bytes), false)
+        );
     }
 
     /// ua-mtx-merge T14 (R12, R38): `mtxInvalidateNonces` per kind: the token's on ids (`bytes32 from`, `UASig`), the DEX's on addresses
     /// (`address from`, `bytes`); one entry name, two rows, never the other kind's.
     #[test]
     fn invalidate_row_split_per_kind() {
-        let on = |kind: &str| rows().iter().filter(|r| r.entry == "mtxInvalidateNonces" && r.contracts.contains(&kind)).map(|r| r.name).collect::<Vec<_>>();
+        let on = |kind: &str| {
+            rows()
+                .iter()
+                .filter(|r| r.entry == "mtxInvalidateNonces" && r.contracts.contains(&kind))
+                .map(|r| r.name)
+                .collect::<Vec<_>>()
+        };
         for k in ["token", "zether", "pqz"] {
             assert_eq!(on(k), ["UAInvalidateNonces"], "{k}");
         }
         assert_eq!(on("dex"), ["InvalidateNonces"]);
-        let (t, d) = (row_of("UAInvalidateNonces", "token"), row_of("InvalidateNonces", "dex"));
+        let (t, d) = (
+            row_of("UAInvalidateNonces", "token"),
+            row_of("InvalidateNonces", "dex"),
+        );
         assert_eq!((t.fields[0].0.as_str(), t.sig), ("bytes32", Some(Sig::Ua)));
-        assert_eq!((d.fields[0].0.as_str(), d.sig), ("address", Some(Sig::Bytes)));
+        assert_eq!(
+            (d.fields[0].0.as_str(), d.sig),
+            ("address", Some(Sig::Bytes))
+        );
         let cast = |s: &str| -> [u8; 4] { keccak256(s)[..4].try_into().unwrap() };
         assert_eq!(t.selector, cast("mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"));
-        assert_eq!(d.selector, cast("mtxInvalidateNonces(address,uint256,uint256,bytes)"));
+        assert_eq!(
+            d.selector,
+            cast("mtxInvalidateNonces(address,uint256,uint256,bytes)")
+        );
     }
 
     /// Regulated-kinds spec §3.1, §7 (plan T35): the router's eight control rows are the ops `scaas_ua::regulated` signs, each way
@@ -2233,48 +3200,102 @@ mod tests {
             assert_eq!(r.entry, format!("mtx{}", &op[2..]), "{op}");
             assert_eq!(r.contracts, ["gov_router"], "{op}: the router's alone");
             assert!(r.ua() && r.enveloped && r.sig == Some(Sig::Ua), "{op}");
-            assert!(v["ops"][op]["domains"]["gov_router"].is_object(), "{op}: no typed_ops.json row");
+            assert!(
+                v["ops"][op]["domains"]["gov_router"].is_object(),
+                "{op}: no typed_ops.json row"
+            );
         }
-        let controls = ["mtxFreeze", "mtxUnfreeze", "mtxForceTransfer", "mtxPause", "mtxUnpause", "mtxRecordOrder", "mtxRevokeOrder",
-            "mtxOperatorTransfer"];
-        let ours: BTreeSet<&str> = rows().iter().filter(|r| controls.contains(&r.entry)).map(|r| r.name).collect();
-        assert_eq!(ours, REGULATED_OPS.iter().map(|(n, _)| *n).collect(), "the router's control rows, both directions");
-        assert_eq!(row_of("UAOperatorTransfer", "gov_router").fields[2], ("bytes32".into(), "account".into()));
+        let controls = [
+            "mtxFreeze",
+            "mtxUnfreeze",
+            "mtxForceTransfer",
+            "mtxPause",
+            "mtxUnpause",
+            "mtxRecordOrder",
+            "mtxRevokeOrder",
+            "mtxOperatorTransfer",
+        ];
+        let ours: BTreeSet<&str> = rows()
+            .iter()
+            .filter(|r| controls.contains(&r.entry))
+            .map(|r| r.name)
+            .collect();
+        assert_eq!(
+            ours,
+            REGULATED_OPS.iter().map(|(n, _)| *n).collect(),
+            "the router's control rows, both directions"
+        );
+        assert_eq!(
+            row_of("UAOperatorTransfer", "gov_router").fields[2],
+            ("bytes32".into(), "account".into())
+        );
     }
 
     /// Round 3r (spec §5.4, Fable P3): the node refuses what the factory and the registry refuse: an `Env` of more than 4 deps,
     /// 2 params or 32 libs, or libs and code hashes of two lengths; `UASetCompliance` arrays of two lengths or over 256.
     #[test]
     fn admin_decode_bounds() {
-        let a = |n: usize| Value::Array((0..n).map(|i| json!(format!("0x{:040x}", i + 1))).collect());
-        let h = |n: usize| Value::Array((0..n).map(|i| json!(format!("0x{:064x}", i + 1))).collect());
-        let env = |d: usize, p: usize, l: usize, c: usize| json!({"registry": format!("0x{:040x}", 0), "smartKeyAccountImpl":
-            format!("0x{:040x}", 0), "hedera": false, "deps": a(d), "params": h(p), "libs": a(l), "libCodeHashes": h(c)});
-        assert!(parse("Env", &env(4, 2, 32, 32), "env").is_ok(), "the bounds themselves pass");
-        for (bad, what) in [(env(5, 2, 1, 1), "deps"), (env(1, 3, 1, 1), "params"), (env(1, 1, 33, 33), "libs"), (env(1, 1, 2, 1), "libs")] {
+        let a =
+            |n: usize| Value::Array((0..n).map(|i| json!(format!("0x{:040x}", i + 1))).collect());
+        let h =
+            |n: usize| Value::Array((0..n).map(|i| json!(format!("0x{:064x}", i + 1))).collect());
+        let env = |d: usize, p: usize, l: usize, c: usize| {
+            json!({"registry": format!("0x{:040x}", 0), "smartKeyAccountImpl":
+            format!("0x{:040x}", 0), "hedera": false, "deps": a(d), "params": h(p), "libs": a(l), "libCodeHashes": h(c)})
+        };
+        assert!(
+            parse("Env", &env(4, 2, 32, 32), "env").is_ok(),
+            "the bounds themselves pass"
+        );
+        for (bad, what) in [
+            (env(5, 2, 1, 1), "deps"),
+            (env(1, 3, 1, 1), "params"),
+            (env(1, 1, 33, 33), "libs"),
+            (env(1, 1, 2, 1), "libs"),
+        ] {
             let e = parse("Env", &bad, "env").unwrap_err().to_string();
             assert!(e.starts_with("BAD_PAYLOAD") && e.contains(what), "{e}");
         }
-        let f: Vec<(String, String)> = [("bytes32[]", "accounts"), ("uint64[]", "flags"), ("uint64[]", "until")].iter()
-            .map(|(t, n)| (t.to_string(), n.to_string())).collect();
+        let f: Vec<(String, String)> = [
+            ("bytes32[]", "accounts"),
+            ("uint64[]", "flags"),
+            ("uint64[]", "until"),
+        ]
+        .iter()
+        .map(|(t, n)| (t.to_string(), n.to_string()))
+        .collect();
         let arr = |n: usize| Val::Array(vec![Val::Uint(U256::ZERO, 64); n]);
         assert!(compliance_bounds(&f, &[arr(256), arr(256), arr(256)]).is_ok());
         assert!(compliance_bounds(&f, &[arr(257), arr(257), arr(257)]).is_err());
         assert!(compliance_bounds(&f, &[arr(2), arr(1), arr(2)]).is_err());
         // round 3s (spec 2026-11-10-token-lists.md §9): a list edit's accounts, 1 to 256, as the token refuses
-        let l: Vec<(String, String)> = [("bytes32[]", "accounts"), ("bool", "on")].iter().map(|(t, n)| (t.to_string(), n.to_string())).collect();
+        let l: Vec<(String, String)> = [("bytes32[]", "accounts"), ("bool", "on")]
+            .iter()
+            .map(|(t, n)| (t.to_string(), n.to_string()))
+            .collect();
         let on = Val::Bool(true);
-        assert!(list_bounds(&l, &[arr(256), on.clone()]).is_ok() && list_bounds(&l, &[arr(1), on.clone()]).is_ok());
+        assert!(
+            list_bounds(&l, &[arr(256), on.clone()]).is_ok()
+                && list_bounds(&l, &[arr(1), on.clone()]).is_ok()
+        );
         for n in [0, 257] {
-            let e = list_bounds(&l, &[arr(n), on.clone()]).unwrap_err().to_string();
-            assert!(e.starts_with("BAD_PAYLOAD") && e.contains("ListBatchInvalid"), "{n}: {e}");
+            let e = list_bounds(&l, &[arr(n), on.clone()])
+                .unwrap_err()
+                .to_string();
+            assert!(
+                e.starts_with("BAD_PAYLOAD") && e.contains("ListBatchInvalid"),
+                "{n}: {e}"
+            );
         }
         // and the three rows are the router's alone, each with the type string `scaas_ua::regulated` signs
         for op in ["UASetAllowed", "UASetDenied", "UAEnableFeature"] {
             let r = row_of(op, "gov_router");
             assert_eq!(r.contracts, ["gov_router"], "{op}");
-            let ua = if op == "UAEnableFeature" { scaas_ua::regulated::enable_feature_type() }
-                else { scaas_ua::regulated::set_list_type(op == "UASetAllowed") };
+            let ua = if op == "UAEnableFeature" {
+                scaas_ua::regulated::enable_feature_type()
+            } else {
+                scaas_ua::regulated::set_list_type(op == "UASetAllowed")
+            };
             assert_eq!(r.type_string(), ua, "{op}");
         }
     }
@@ -2286,7 +3307,10 @@ mod tests {
         use scaas_ua::admin::{type_string as ua_type, ADMIN_OPS};
         for (op, _) in ADMIN_OPS {
             if NO_NODE_ROW.contains(&op) {
-                assert!(rows().iter().all(|r| r.name != op), "{op}: release management is not a node job");
+                assert!(
+                    rows().iter().all(|r| r.name != op),
+                    "{op}: release management is not a node job"
+                );
                 continue;
             }
             let r = row_of(op, "gov_router");
@@ -2303,10 +3327,12 @@ mod tests {
         let i = src.find(f).unwrap_or_else(|| panic!("{f}"));
         let body = &src[i..i + src[i..].find("\n    }\n").unwrap()];
         let ident = |c: char| c.is_ascii_alphanumeric() || c == '_' || c == '.';
-        body.split(|c: char| !ident(c)).filter_map(|t| match t.strip_suffix(".selector") {
-            Some(x) => x.rsplit('.').next().map(str::to_string),
-            None => t.starts_with("_REVOKE_").then(|| t.to_string()),
-        }).collect()
+        body.split(|c: char| !ident(c))
+            .filter_map(|t| match t.strip_suffix(".selector") {
+                Some(x) => x.rsplit('.').next().map(str::to_string),
+                None => t.starts_with("_REVOKE_").then(|| t.to_string()),
+            })
+            .collect()
     }
 
     /// Q6 / MD-11 (d), both directions against the wallet's own lists: every wallet row is a merged `UA<Op>` entry (`ua_metatx`, `UASig`,
@@ -2314,8 +3340,15 @@ mod tests {
     /// (a derived subject, B); every operation on either list has its row. No address row and no plain row is left on the wallet.
     #[test]
     fn wallet_rows_are_ua_structs() {
-        let src = std::fs::read_to_string(format!("{}/../smartcontracts/evm/src/wallet/MandateWallet.sol", env!("CARGO_MANIFEST_DIR"))).unwrap();
-        let (native, derived) = (wallet_list(&src, "function _mtxSelectorsBody()"), wallet_list(&src, "function _uaAllowed("));
+        let src = std::fs::read_to_string(format!(
+            "{}/../smartcontracts/evm/src/wallet/MandateWallet.sol",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap();
+        let (native, derived) = (
+            wallet_list(&src, "function _mtxSelectorsBody()"),
+            wallet_list(&src, "function _uaAllowed("),
+        );
         assert_eq!(native.len(), 7, "{native:?}");
         // the row's operation: what `mtx<Op>` self-calls (`MandateWallet.sol`); the cancel bumps the lane itself
         let op_of_row = |n: &str| match n {
@@ -2328,11 +3361,28 @@ mod tests {
             "UACancelNonce" => "cancelNonce",
             other => panic!("{other}: a wallet row the wallet does not list"),
         };
-        let wallet: Vec<&Row> = rows().iter().filter(|r| !r.entry.is_empty() && r.contracts.contains(&"wallet")).collect();
+        let wallet: Vec<&Row> = rows()
+            .iter()
+            .filter(|r| !r.entry.is_empty() && r.contracts.contains(&"wallet"))
+            .collect();
         for r in &wallet {
-            assert!(r.typed && r.ua() && r.enveloped && r.sig == Some(Sig::Ua) && r.fields[0] == ("bytes32".into(), "from".into()), "{}", r.name);
+            assert!(
+                r.typed
+                    && r.ua()
+                    && r.enveloped
+                    && r.sig == Some(Sig::Ua)
+                    && r.fields[0] == ("bytes32".into(), "from".into()),
+                "{}",
+                r.name
+            );
         }
-        let ops = |skip: &str| wallet.iter().filter(|r| r.name != skip).map(|r| op_of_row(r.name).to_string()).collect::<BTreeSet<_>>();
+        let ops = |skip: &str| {
+            wallet
+                .iter()
+                .filter(|r| r.name != skip)
+                .map(|r| op_of_row(r.name).to_string())
+                .collect::<BTreeSet<_>>()
+        };
         assert_eq!(ops(""), native, "_mtxRule, both directions");
         assert_eq!(ops("UACancelNonce"), derived, "_uaAllowed, both directions");
         assert_eq!(wallet.len(), 7);
@@ -2348,29 +3398,66 @@ mod tests {
         let err = |op: Value| Op::parse(&op, FEE).unwrap_err().to_string();
         let flat = json!({"token": z, "payee": z, "amount": "5", "entryRef": format!("{:#x}", B256::repeat_byte(1)), "epoch": "2", "validUntil": "1800000300", "sig": s});
         assert!(err(json!({"entry": "mtxPayUnderMandate", "struct": "mtxPayUnderMandate", "token": w, "args": flat})).starts_with("UNKNOWN_ENTRY"));
-        assert!(err(json!({"entry": "mtxPayUnderMandate", "token": w, "args": flat})).contains("needs an envelope"), "the named entry's shape");
+        assert!(
+            err(json!({"entry": "mtxPayUnderMandate", "token": w, "args": flat}))
+                .contains("needs an envelope"),
+            "the named entry's shape"
+        );
         assert!(err(json!({"entry": "mtxRevoke", "token": w, "args": {"token": z, "epoch": "2", "validUntil": "1800000300", "sig": s}})).starts_with("UNKNOWN_ENTRY"));
-        let own = |entry: &str, contract: &str| json!({"entry": entry, "contract": contract, "token": w,
-            "args": {"data": "0x", "nonce": "0", "validUntil": "1800000300", "sig": s}});
+        let own = |entry: &str, contract: &str| {
+            json!({"entry": entry, "contract": contract, "token": w,
+            "args": {"data": "0x", "nonce": "0", "validUntil": "1800000300", "sig": s}})
+        };
         assert!(err(own("mtxExecuteAsOwnerRaw", "wallet")).starts_with("UNKNOWN_ENTRY"));
         assert!(err(own("mtxExecuteAsOwner", "wallet")).starts_with("UNKNOWN_ENTRY"));
         Op::parse(&own("mtxExecuteAsOwner", "account"), FEE).unwrap();
-        assert!(rows().iter().all(|r| r.typed || !r.contracts.contains(&"wallet")), "no plain wallet row");
+        assert!(
+            rows()
+                .iter()
+                .all(|r| r.typed || !r.contracts.contains(&"wallet")),
+            "no plain wallet row"
+        );
     }
 
     /// `SmartKeyAccount` keeps its address entries (Q6): `Envelope` with `address from`, `AccountSig` (the cancel: `bytes`), a `metatx`
     /// job; `mtxExecuteAsOwner` on the account only; none of its structs on another kind.
     #[test]
     fn account_keeps_address_rows() {
-        let acct: BTreeSet<&str> = rows().iter().filter(|r| r.contracts.contains(&"account")).map(|r| r.name).collect();
-        assert_eq!(acct, ["AddKey", "CancelNonce", "CancelRecovery", "Execute", "RemoveKey", "RotateKey", "SetGuardian", "mtxExecuteAsOwner"]
-            .into_iter().collect());
+        let acct: BTreeSet<&str> = rows()
+            .iter()
+            .filter(|r| r.contracts.contains(&"account"))
+            .map(|r| r.name)
+            .collect();
+        assert_eq!(
+            acct,
+            [
+                "AddKey",
+                "CancelNonce",
+                "CancelRecovery",
+                "Execute",
+                "RemoveKey",
+                "RotateKey",
+                "SetGuardian",
+                "mtxExecuteAsOwner"
+            ]
+            .into_iter()
+            .collect()
+        );
         for r in rows().iter().filter(|r| r.contracts.contains(&"account")) {
             assert_eq!(r.contracts, ["account"], "{}: the account's alone", r.name);
             assert!(!r.ua(), "{}", r.name);
             if r.typed {
                 assert_eq!(r.fields[0], ("address".into(), "from".into()), "{}", r.name);
-                assert_eq!(r.sig, Some(if r.name == "CancelNonce" { Sig::Bytes } else { Sig::Account }), "{}", r.name);
+                assert_eq!(
+                    r.sig,
+                    Some(if r.name == "CancelNonce" {
+                        Sig::Bytes
+                    } else {
+                        Sig::Account
+                    }),
+                    "{}",
+                    r.name
+                );
             }
         }
     }
@@ -2383,8 +3470,13 @@ mod tests {
         let v = vectors();
         fn leaves(j: &Value, at: String, out: &mut Vec<String>) {
             match j {
-                Value::Object(o) => o.iter().for_each(|(k, x)| leaves(x, format!("{at}/{k}"), out)),
-                Value::Array(a) => a.iter().enumerate().for_each(|(i, x)| leaves(x, format!("{at}/{i}"), out)),
+                Value::Object(o) => o
+                    .iter()
+                    .for_each(|(k, x)| leaves(x, format!("{at}/{k}"), out)),
+                Value::Array(a) => a
+                    .iter()
+                    .enumerate()
+                    .for_each(|(i, x)| leaves(x, format!("{at}/{i}"), out)),
                 _ => out.push(at),
             }
         }
@@ -2400,14 +3492,18 @@ mod tests {
                 }
                 Value::String(s) if s == "0x" => json!("0x00"),
                 Value::String(s) if uint(s).is_err() => json!(format!("{s}.")), // a `string` (round 3r's `reason`)
-                Value::String(s) => json!(uint(s).unwrap().saturating_add(U256::from(1)).to_string()),
+                Value::String(s) => {
+                    json!(uint(s).unwrap().saturating_add(U256::from(1)).to_string())
+                }
                 x => x.clone(),
             }
         }
         let mut walked = 0;
         for (name, o) in v["ops"].as_object().unwrap() {
             for kind in o["domains"].as_object().unwrap().keys() {
-                let Some(mut op) = op_of(name, kind, &v) else { continue };
+                let Some(mut op) = op_of(name, kind, &v) else {
+                    continue;
+                };
                 let row = row_of(name, kind);
                 if name == "UAPayUnderMandate" || name == "UADelegateRevoke" {
                     continue; // their lanes: `mandate_ops_run_on_their_own_lane_at_nonce_zero`
@@ -2418,20 +3514,35 @@ mod tests {
                 let mut back = args.as_object().unwrap().clone();
                 // signed, not on the wire (the token reads them): Zether's `accSeq` / `modeNonce`; the PQZ rollover's `rollSeq`,
                 // `rolled`, `entriesHash`, `chainUid` (CTR-PQZ-41)
-                let off = if name == "PqzRollOver" { &["rollSeq", "rolled", "entriesHash", "chainUid"][..] } else { &["accSeq", "modeNonce"][..] };
+                let off = if name == "PqzRollOver" {
+                    &["rollSeq", "rolled", "entriesHash", "chainUid"][..]
+                } else {
+                    &["accSeq", "modeNonce"][..]
+                };
                 for (k, x) in op["args"].as_object().unwrap() {
                     if off.contains(&k.as_str()) {
                         back.insert(k.clone(), x.clone());
                     }
                 }
-                assert_eq!(Value::Object(back).to_string().to_lowercase(), op["args"].to_string().to_lowercase(), "{name} args from the bytes");
-                assert_eq!(sig.as_ref(), op.get("signature").or(op.get("auth")), "{name} signature from the bytes");
+                assert_eq!(
+                    Value::Object(back).to_string().to_lowercase(),
+                    op["args"].to_string().to_lowercase(),
+                    "{name} args from the bytes"
+                );
+                assert_eq!(
+                    sig.as_ref(),
+                    op.get("signature").or(op.get("auth")),
+                    "{name} signature from the bytes"
+                );
                 // what the entry takes unsigned moves the bytes alone, by definition: `pqzAuth`, `ownerSig`, `payerSig`, `underlying`
                 let unsigned = extras(row);
                 let mut ls = Vec::new();
                 for (k, part) in [("envelope", op.get("envelope")), ("args", op.get("args"))] {
-                    let Some(Value::Object(o)) = part else { continue };
-                    o.iter().filter(|(n, _)| !unsigned.iter().any(|x| x.0 == n.as_str()))
+                    let Some(Value::Object(o)) = part else {
+                        continue;
+                    };
+                    o.iter()
+                        .filter(|(n, _)| !unsigned.iter().any(|x| x.0 == n.as_str()))
                         .for_each(|(n, x)| leaves(x, format!("/{k}/{n}"), &mut ls));
                 }
                 for l in ls {
@@ -2443,9 +3554,16 @@ mod tests {
                     let Ok(m) = moved else { continue };
                     walked += 1;
                     // signed, not on the wire: the token reads them (Zether's sequence words; the PQZ rollover's, CTR-PQZ-41)
-                    let digest_only = matches!(row.name, "ZetherRollOver" | "ZetherSetRollOverMode" | "PqzRollOver") && m.data == base.data;
-                    assert!(digest_only || (m.typed.struct_hash != base.typed.struct_hash) == (m.data != base.data),
-                        "{name}: {l} moved one output only");
+                    let digest_only = matches!(
+                        row.name,
+                        "ZetherRollOver" | "ZetherSetRollOverMode" | "PqzRollOver"
+                    ) && m.data == base.data;
+                    assert!(
+                        digest_only
+                            || (m.typed.struct_hash != base.typed.struct_hash)
+                                == (m.data != base.data),
+                        "{name}: {l} moved one output only"
+                    );
                 }
             }
         }
@@ -2457,14 +3575,31 @@ mod tests {
     #[test]
     fn member_sig_json_is_two_levels() {
         let good = json!({"index": 0, "members": [{"index": 1, "sig": "0x01"}], "sig": "0x"});
-        assert_eq!(to_json("MemberSig", &parse("MemberSig", &good, "s").unwrap()), good);
+        assert_eq!(
+            to_json("MemberSig", &parse("MemberSig", &good, "s").unwrap()),
+            good
+        );
         let flat = json!({"index": 3, "members": [], "sig": "0xab"});
-        assert_eq!(to_json("MemberSig", &parse("MemberSig", &flat, "s").unwrap()), flat);
+        assert_eq!(
+            to_json("MemberSig", &parse("MemberSig", &flat, "s").unwrap()),
+            flat
+        );
         let err = |j: &Value| parse("MemberSig", j, "s").unwrap_err().to_string();
-        assert_eq!(err(&json!({"index": 0, "keyData": "0x", "sig": "0x"})), "BAD_PAYLOAD: s.keyData: unknown field");
-        assert_eq!(err(&json!({"index": 0, "members": [{"index": 0, "members": [], "sig": "0x"}], "sig": "0x"})),
-            "BAD_PAYLOAD: s.members[0].members: unknown field");
-        assert_eq!(err(&json!({"index": 0, "members": "0x", "sig": "0x"})), "BAD_PAYLOAD: s.members: not an array", "a packed list");
+        assert_eq!(
+            err(&json!({"index": 0, "keyData": "0x", "sig": "0x"})),
+            "BAD_PAYLOAD: s.keyData: unknown field"
+        );
+        assert_eq!(
+            err(
+                &json!({"index": 0, "members": [{"index": 0, "members": [], "sig": "0x"}], "sig": "0x"})
+            ),
+            "BAD_PAYLOAD: s.members[0].members: unknown field"
+        );
+        assert_eq!(
+            err(&json!({"index": 0, "members": "0x", "sig": "0x"})),
+            "BAD_PAYLOAD: s.members: not an array",
+            "a packed list"
+        );
         let mut deep = json!({"index": 0, "sig": "0x"});
         for _ in 0..100_000 {
             let mut o = Map::new();
@@ -2473,7 +3608,10 @@ mod tests {
             o.insert("sig".into(), json!("0x"));
             deep = Value::Object(o);
         }
-        assert!(err(&deep).ends_with("unknown field"), "a hostile depth stops at the type's");
+        assert!(
+            err(&deep).ends_with("unknown field"),
+            "a hostile depth stops at the type's"
+        );
         std::mem::forget(deep); // serde_json's drop recurses over the 100,000 levels
     }
 
@@ -2481,29 +3619,62 @@ mod tests {
     /// chain, after its calldata was copied to memory.
     #[test]
     fn member_sig_lists_are_bounded() {
-        let inner = |n: usize| Value::Array((0..n).map(|i| json!({"index": i, "sig": "0x"})).collect());
-        let outer = |n: usize, l: Value| Value::Array((0..n).map(|i| json!({"index": i, "members": l, "sig": "0x"})).collect());
+        let inner =
+            |n: usize| Value::Array((0..n).map(|i| json!({"index": i, "sig": "0x"})).collect());
+        let outer = |n: usize, l: Value| {
+            Value::Array(
+                (0..n)
+                    .map(|i| json!({"index": i, "members": l, "sig": "0x"}))
+                    .collect(),
+            )
+        };
         parse("MemberSig[]", &outer(16, inner(16)), "m").unwrap();
         let err = |j: Value| parse("MemberSig[]", &j, "m").unwrap_err().to_string();
-        assert_eq!(err(outer(17, inner(0))), "BAD_PAYLOAD: m: more than 16 slots");
-        assert_eq!(err(outer(1, inner(17))), "BAD_PAYLOAD: m[0].members: more than 16 slots");
+        assert_eq!(
+            err(outer(17, inner(0))),
+            "BAD_PAYLOAD: m: more than 16 slots"
+        );
+        assert_eq!(
+            err(outer(1, inner(17))),
+            "BAD_PAYLOAD: m[0].members: more than 16 slots"
+        );
         let bad = Value::Array(vec![json!("not a slot"); 17]);
-        assert_eq!(err(bad), "BAD_PAYLOAD: m: more than 16 slots", "before any element is read");
+        assert_eq!(
+            err(bad),
+            "BAD_PAYLOAD: m: more than 16 slots",
+            "before any element is read"
+        );
     }
 
     /// CTR-UA-44: a structure's members, at most 256 before any element is read (`updateMsig`), and at most 16 for `registerMsig`, refused
     /// by name before any simulation.
     #[test]
     fn msig_members_are_bounded() {
-        let members = |n: usize| Value::Array((0..n).map(|i| json!({"kind": 1, "id": format!("{:#x}", B256::with_last_byte(i as u8)), "weight": 1})).collect());
+        let members = |n: usize| {
+            Value::Array((0..n).map(|i| json!({"kind": 1, "id": format!("{:#x}", B256::with_last_byte(i as u8)), "weight": 1})).collect())
+        };
         parse("MsigMember[]", &members(256), "m").unwrap();
         let err = |j: Value| parse("MsigMember[]", &j, "m").unwrap_err().to_string();
         assert_eq!(err(members(257)), "BAD_PAYLOAD: m: more than 256 members");
-        assert_eq!(err(Value::Array(vec![json!("not a member"); 257])), "BAD_PAYLOAD: m: more than 256 members", "before any element");
+        assert_eq!(
+            err(Value::Array(vec![json!("not a member"); 257])),
+            "BAD_PAYLOAD: m: more than 256 members",
+            "before any element"
+        );
         let f = fields_of("MsigStructure structure");
-        let st = |n: usize| parse("MsigStructure", &json!({"threshold": 1, "members": members(n)}), "s").unwrap();
+        let st = |n: usize| {
+            parse(
+                "MsigStructure",
+                &json!({"threshold": 1, "members": members(n)}),
+                "s",
+            )
+            .unwrap()
+        };
         assert!(register_msig_bounds(&f, &[st(16)]).is_ok());
-        assert_eq!(register_msig_bounds(&f, &[st(17)]).unwrap_err().to_string(), "BAD_PAYLOAD: args.structure.members: more than 16 members");
+        assert_eq!(
+            register_msig_bounds(&f, &[st(17)]).unwrap_err().to_string(),
+            "BAD_PAYLOAD: args.structure.members: more than 16 members"
+        );
     }
 
     /// NODE-JOB-29: a cache part's `kind`, `pk` length and `part`, each kind's boundary accepted and one past it refused by name,
@@ -2511,25 +3682,55 @@ mod tests {
     #[test]
     fn cache_parts_are_bounded() {
         let f = fields_of("uint16 kind,bytes pk,uint256 part");
-        let v = |k: u64, n: usize, p: u64| [Val::Uint(U256::from(k), 16), Val::Bytes(vec![1; n]), Val::Uint(U256::from(p), 256)];
+        let v = |k: u64, n: usize, p: u64| {
+            [
+                Val::Uint(U256::from(k), 16),
+                Val::Bytes(vec![1; n]),
+                Val::Uint(U256::from(p), 256),
+            ]
+        };
         let err = |k: u64, n: usize, p: u64| cache_bounds(&f, &v(k, n, p)).unwrap_err().to_string();
         for (k, n, parts) in [(0x0130, 1312, 1), (0x0131, 1952, 2), (0x0134, 2592, 3)] {
             assert!(cache_bounds(&f, &v(k, n, parts - 1)).is_ok(), "{k:#x}");
-            assert!(err(k, n, parts).starts_with("BAD_PAYLOAD: args.part: "), "{k:#x}");
-            assert!(err(k, n - 1, 0).starts_with("BAD_PAYLOAD: args.pk: "), "{k:#x}");
-            assert!(err(k, n + 1, 0).starts_with("BAD_PAYLOAD: args.pk: "), "{k:#x}");
+            assert!(
+                err(k, n, parts).starts_with("BAD_PAYLOAD: args.part: "),
+                "{k:#x}"
+            );
+            assert!(
+                err(k, n - 1, 0).starts_with("BAD_PAYLOAD: args.pk: "),
+                "{k:#x}"
+            );
+            assert!(
+                err(k, n + 1, 0).starts_with("BAD_PAYLOAD: args.pk: "),
+                "{k:#x}"
+            );
         }
         for k in [0x0132, 0x0133, 0x0135, 0x0101, 0] {
-            assert!(err(k, 1952, 0).starts_with("BAD_PAYLOAD: args.kind: "), "{k:#x}");
+            assert!(
+                err(k, 1952, 0).starts_with("BAD_PAYLOAD: args.kind: "),
+                "{k:#x}"
+            );
         }
         // through the parser: the named op builds the contract's calldata
         let pk = vec![7u8; 1952];
-        let op = crate::guard::cache_part_op(Address::repeat_byte(0x5e), 0x0131, &pk, 1, 4_000_000_000);
+        let op =
+            crate::guard::cache_part_op(Address::repeat_byte(0x5e), 0x0131, &pk, 1, 4_000_000_000);
         let p = Op::parse(&op, None).unwrap();
-        assert_eq!(p.data.to_vec(), crate::abi::IUARegistry::cacheExpandedKeyCall { kind: 0x0131, pk: pk.into(), part: U256::from(1) }.abi_encode());
+        assert_eq!(
+            p.data.to_vec(),
+            crate::abi::IUARegistry::cacheExpandedKeyCall {
+                kind: 0x0131,
+                pk: pk.into(),
+                part: U256::from(1)
+            }
+            .abi_encode()
+        );
         let mut bad = op.clone();
         bad["args"]["part"] = json!("2");
-        assert!(Op::parse(&bad, None).unwrap_err().to_string().starts_with("BAD_PAYLOAD: args.part: "));
+        assert!(Op::parse(&bad, None)
+            .unwrap_err()
+            .to_string()
+            .starts_with("BAD_PAYLOAD: args.part: "));
     }
 
     /// The typed bytes a job builds are `abi.encode(MemberSig[])`, the stored form, nested too, and a blob that claims more than it holds
@@ -2540,10 +3741,30 @@ mod tests {
         let slots = json!([{"index": 0, "members": [{"index": 1, "sig": "0x01"}, {"index": 2, "sig": "0x02"}], "sig": "0x"},
             {"index": 3, "members": [], "sig": "0xab"}]);
         let sig = json!({"keyData": "0x", "signature": "0x", "members": slots});
-        let auth = crate::abi::UASig::abi_decode(&parse("UASig", &sig, "auth").unwrap().abi_encode()).unwrap();
+        let auth =
+            crate::abi::UASig::abi_decode(&parse("UASig", &sig, "auth").unwrap().abi_encode())
+                .unwrap();
         let ours = scaas_ua::ua8::encode_member_sigs(&[
-            scaas_ua::ua8::MemberSig { index: 0, members: vec![scaas_ua::ua8::InnerSig { index: 1, sig: vec![1] }, scaas_ua::ua8::InnerSig { index: 2, sig: vec![2] }], sig: vec![] },
-            scaas_ua::ua8::MemberSig { index: 3, members: vec![], sig: vec![0xab] }]);
+            scaas_ua::ua8::MemberSig {
+                index: 0,
+                members: vec![
+                    scaas_ua::ua8::InnerSig {
+                        index: 1,
+                        sig: vec![1],
+                    },
+                    scaas_ua::ua8::InnerSig {
+                        index: 2,
+                        sig: vec![2],
+                    },
+                ],
+                sig: vec![],
+            },
+            scaas_ua::ua8::MemberSig {
+                index: 3,
+                members: vec![],
+                sig: vec![0xab],
+            },
+        ]);
         assert_eq!(auth.members.abi_encode(), ours);
         let mut hostile = ours.clone();
         hostile[32 + 31] = 0xff; // 255 slots claimed
@@ -2558,10 +3779,22 @@ mod tests {
         for k in ["data", "calldata"] {
             let mut o = good.clone();
             o[k] = json!("0x1234");
-            assert!(Op::parse(&o, FEE).unwrap_err().to_string().starts_with("HEX_DATA_REFUSED"), "op.{k}");
+            assert!(
+                Op::parse(&o, FEE)
+                    .unwrap_err()
+                    .to_string()
+                    .starts_with("HEX_DATA_REFUSED"),
+                "op.{k}"
+            );
             let mut o = good.clone();
             o["args"][k] = json!("0x1234");
-            assert!(Op::parse(&o, FEE).unwrap_err().to_string().starts_with("HEX_DATA_REFUSED"), "args.{k}");
+            assert!(
+                Op::parse(&o, FEE)
+                    .unwrap_err()
+                    .to_string()
+                    .starts_with("HEX_DATA_REFUSED"),
+                "args.{k}"
+            );
         }
         Op::parse(&op_of("UAExecute", "wallet", &v).unwrap(), FEE).unwrap();
         Op::parse(&op_of("Execute", "account", &v).unwrap(), FEE).unwrap();
@@ -2574,20 +3807,36 @@ mod tests {
     #[test]
     fn chain_word_rows_refuse_a_missing_word() {
         let v = vectors();
-        let rows: Vec<&str> = TYPED.iter().filter(|r| r.2 == GR && r.3.contains("bytes32 chainUid")).map(|r| r.0).collect();
-        // owner 2026-11-13: + UARenounceRole; round 3zb + 3zc: 24 -> 51 (the 25 rows of O5 / O6, the two cap setters)
-        assert_eq!(rows.len(), 51, "{rows:?}");
+        let rows: Vec<&str> = TYPED
+            .iter()
+            .filter(|r| r.2 == GR && r.3.contains("bytes32 chainUid"))
+            .map(|r| r.0)
+            .collect();
+        // owner 2026-11-13: + UARenounceRole; round 3zb + 3zc: 24 -> 51 (the 25 rows of O5 / O6, the two cap setters);
+        // set-auditor (CTR-GOV-31): -> 53, `UASetAuditorKey`, `UASetAuditorUA`
+        assert_eq!(rows.len(), 53, "{rows:?}");
         for op in rows {
             let good = op_of(op, "gov_router", &v).unwrap();
             Op::parse(&good, FEE).unwrap();
             let mut o = good.clone();
-            o["args"].as_object_mut().unwrap().remove("chainUid").unwrap();
+            o["args"]
+                .as_object_mut()
+                .unwrap()
+                .remove("chainUid")
+                .unwrap();
             let e = Op::parse(&o, FEE).unwrap_err().to_string();
-            assert!(e.starts_with("BAD_PAYLOAD") && e.contains("args.chainUid: missing"), "{op}: {e}");
+            assert!(
+                e.starts_with("BAD_PAYLOAD") && e.contains("args.chainUid: missing"),
+                "{op}: {e}"
+            );
         }
         let mut o = op_of("UASetChainEntries", "gov_router", &v).unwrap();
         o["args"]["entries"] = json!(format!("0x{}", "00".repeat(9 * 32)));
-        assert_eq!(Op::parse(&o, FEE).unwrap_err().to_string(), "BAD_PAYLOAD: args.entries: not an object", "a packed blob");
+        assert_eq!(
+            Op::parse(&o, FEE).unwrap_err().to_string(),
+            "BAD_PAYLOAD: args.entries: not an object",
+            "a packed blob"
+        );
     }
 
     /// The router's rows (spec 2026-11-02-governance §3.2): every op is named JSON, `target` a named field the node signs and sends; a
@@ -2597,35 +3846,83 @@ mod tests {
         let v = vectors();
         let good = op_of("UASetGrant", "gov_router", &v).unwrap();
         let p = Op::parse(&good, FEE).unwrap();
-        assert_eq!((p.typed.contract, p.row.entry), ("gov_router", "mtxSetGrant"));
-        assert_eq!(p.to, good["token"].as_str().unwrap().parse::<Address>().unwrap(), "sent to the router");
+        assert_eq!(
+            (p.typed.contract, p.row.entry),
+            ("gov_router", "mtxSetGrant")
+        );
+        assert_eq!(
+            p.to,
+            good["token"].as_str().unwrap().parse::<Address>().unwrap(),
+            "sent to the router"
+        );
         let err = |f: &dyn Fn(&mut Value)| {
             let mut o = good.clone();
             f(&mut o);
             Op::parse(&o, FEE).unwrap_err().to_string()
         };
         for k in ["data", "calldata"] {
-            assert!(err(&|o| o[k] = json!("0x1234")).starts_with("HEX_DATA_REFUSED"), "op.{k}");
-            assert!(err(&|o| o["args"][k] = json!("0x1234")).starts_with("HEX_DATA_REFUSED"), "args.{k}");
+            assert!(
+                err(&|o| o[k] = json!("0x1234")).starts_with("HEX_DATA_REFUSED"),
+                "op.{k}"
+            );
+            assert!(
+                err(&|o| o["args"][k] = json!("0x1234")).starts_with("HEX_DATA_REFUSED"),
+                "args.{k}"
+            );
         }
-        assert!(Op::parse(&json!("0xdeadbeef"), FEE).unwrap_err().to_string().starts_with("HEX_DATA_REFUSED"), "op as hex");
+        assert!(
+            Op::parse(&json!("0xdeadbeef"), FEE)
+                .unwrap_err()
+                .to_string()
+                .starts_with("HEX_DATA_REFUSED"),
+            "op as hex"
+        );
         let packed = format!("0x{}", "00".repeat(9 * 32));
-        assert_eq!(err(&|o| o["args"]["terms"] = json!(packed)), "BAD_PAYLOAD: args.terms: not an object", "GrantTerms as a blob");
-        assert!(err(&|o| o["contract"] = json!("token")).starts_with("UNKNOWN_ENTRY"), "no governed contract has the entry");
+        assert_eq!(
+            err(&|o| o["args"]["terms"] = json!(packed)),
+            "BAD_PAYLOAD: args.terms: not an object",
+            "GrantTerms as a blob"
+        );
+        assert!(
+            err(&|o| o["contract"] = json!("token")).starts_with("UNKNOWN_ENTRY"),
+            "no governed contract has the entry"
+        );
         assert!(err(&|o| o["contract"] = json!("dex")).starts_with("UNKNOWN_ENTRY"));
-        for generic in ["mtxExecute", "mtxBatch", "uaExecute", "uaBatch", "executeMetaTransaction"] {
-            assert!(err(&|o| o["entry"] = json!(generic)).starts_with("UNKNOWN_ENTRY"), "{generic} is no row");
+        for generic in [
+            "mtxExecute",
+            "mtxBatch",
+            "uaExecute",
+            "uaBatch",
+            "executeMetaTransaction",
+        ] {
+            assert!(
+                err(&|o| o["entry"] = json!(generic)).starts_with("UNKNOWN_ENTRY"),
+                "{generic} is no row"
+            );
         }
-        assert!(err(&|o| { o["args"].as_object_mut().unwrap().remove("target"); }).contains("args.target: missing"));
+        assert!(err(&|o| {
+            o["args"].as_object_mut().unwrap().remove("target");
+        })
+        .contains("args.target: missing"));
         let other = Address::repeat_byte(0x42);
         let mut moved = good.clone();
         moved["args"]["target"] = json!(format!("{other:#x}"));
         let m = Op::parse(&moved, FEE).unwrap();
-        assert_ne!(m.typed.struct_hash, p.typed.struct_hash, "target is a signed word");
+        assert_ne!(
+            m.typed.struct_hash, p.typed.struct_hash,
+            "target is a signed word"
+        );
         assert_eq!(m.to, p.to, "and never where the job is sent");
         // every router struct is on the router's domain only
-        for r in rows().iter().filter(|r| r.contracts.contains(&"gov_router")) {
-            assert!(r.contracts == GR || matches!(r.name, "CancelNonce" | "UACancelNonce"), "{}", r.name);
+        for r in rows()
+            .iter()
+            .filter(|r| r.contracts.contains(&"gov_router"))
+        {
+            assert!(
+                r.contracts == GR || matches!(r.name, "CancelNonce" | "UACancelNonce"),
+                "{}",
+                r.name
+            );
         }
     }
 
@@ -2635,19 +3932,45 @@ mod tests {
     fn grant_terms_decode_is_bounded() {
         let v = vectors();
         let terms = v["ops"]["UASetGrant"]["message"]["terms"].clone();
-        assert_eq!(to_json("GrantTerms", &parse("GrantTerms", &terms, "t").unwrap()), terms);
+        assert_eq!(
+            to_json("GrantTerms", &parse("GrantTerms", &terms, "t").unwrap()),
+            terms
+        );
         let err = |f: &dyn Fn(&mut Value)| {
             let mut t = terms.clone();
             f(&mut t);
             parse("GrantTerms", &t, "t").unwrap_err().to_string()
         };
-        assert_eq!(err(&|t| t["extra"] = json!(1)), "BAD_PAYLOAD: t.extra: unknown field");
-        assert_eq!(err(&|t| { t.as_object_mut().unwrap().remove("scope"); }), "BAD_PAYLOAD: t.scope: missing");
-        assert_eq!(err(&|t| t["min"] = json!("340282366920938463463374607431768211456")), "BAD_PAYLOAD: t.min: above uint128");
-        assert_eq!(err(&|t| t["window"] = json!(1u64 << 32)), "BAD_PAYLOAD: t.window: above uint32");
-        assert_eq!(err(&|t| t["validUntil"] = json!("18446744073709551616")), "BAD_PAYLOAD: t.validUntil: above uint64");
-        assert_eq!(err(&|t| t["scope"] = json!(format!("0x{}", "11".repeat(33)))), "BAD_PAYLOAD: t.scope: not bytes32");
-        assert_eq!(err(&|t| t["delegable"] = json!("true")), "BAD_PAYLOAD: t.delegable: not a bool");
+        assert_eq!(
+            err(&|t| t["extra"] = json!(1)),
+            "BAD_PAYLOAD: t.extra: unknown field"
+        );
+        assert_eq!(
+            err(&|t| {
+                t.as_object_mut().unwrap().remove("scope");
+            }),
+            "BAD_PAYLOAD: t.scope: missing"
+        );
+        assert_eq!(
+            err(&|t| t["min"] = json!("340282366920938463463374607431768211456")),
+            "BAD_PAYLOAD: t.min: above uint128"
+        );
+        assert_eq!(
+            err(&|t| t["window"] = json!(1u64 << 32)),
+            "BAD_PAYLOAD: t.window: above uint32"
+        );
+        assert_eq!(
+            err(&|t| t["validUntil"] = json!("18446744073709551616")),
+            "BAD_PAYLOAD: t.validUntil: above uint64"
+        );
+        assert_eq!(
+            err(&|t| t["scope"] = json!(format!("0x{}", "11".repeat(33)))),
+            "BAD_PAYLOAD: t.scope: not bytes32"
+        );
+        assert_eq!(
+            err(&|t| t["delegable"] = json!("true")),
+            "BAD_PAYLOAD: t.delegable: not a bool"
+        );
         let mut deep = json!("0x");
         for _ in 0..100_000 {
             let mut o = Map::new();
@@ -2656,7 +3979,11 @@ mod tests {
         }
         let mut t = terms.clone();
         t["scope"] = deep;
-        assert_eq!(parse("GrantTerms", &t, "t").unwrap_err().to_string(), "BAD_PAYLOAD: t.scope: not a string", "a hostile depth stops at the type's");
+        assert_eq!(
+            parse("GrantTerms", &t, "t").unwrap_err().to_string(),
+            "BAD_PAYLOAD: t.scope: not a string",
+            "a hostile depth stops at the type's"
+        );
         std::mem::forget(t); // serde_json's drop recurses over the 100,000 levels
     }
 
@@ -2671,22 +3998,53 @@ mod tests {
             Op::parse(&o, FEE).unwrap_err().to_string()
         };
         assert!(err(&|o| o["entry"] = json!("mtxNoSuch")).starts_with("UNKNOWN_ENTRY"));
-        assert!(err(&|o| o["entry"] = json!("")).starts_with("UNKNOWN_ENTRY"), "PqzAuth is no entry");
+        assert!(
+            err(&|o| o["entry"] = json!("")).starts_with("UNKNOWN_ENTRY"),
+            "PqzAuth is no entry"
+        );
         assert!(err(&|o| o["contract"] = json!("wallet")).starts_with("UNKNOWN_ENTRY"));
-        assert!(err(&|o| { o.as_object_mut().unwrap().remove("contract"); }).starts_with("ENTRY_AMBIGUOUS"));
-        assert!(err(&|o| o["args"]["underlying"] = json!(format!("{:#x}", Address::ZERO))).contains("args.underlying: unknown field"), "mtxUnwrapLeg's field");
-        assert!(err(&|o| { o["args"].as_object_mut().unwrap().remove("minOut"); }).contains("args.minOut: missing"));
+        assert!(err(&|o| {
+            o.as_object_mut().unwrap().remove("contract");
+        })
+        .starts_with("ENTRY_AMBIGUOUS"));
+        assert!(
+            err(&|o| o["args"]["underlying"] = json!(format!("{:#x}", Address::ZERO)))
+                .contains("args.underlying: unknown field"),
+            "mtxUnwrapLeg's field"
+        );
+        assert!(err(&|o| {
+            o["args"].as_object_mut().unwrap().remove("minOut");
+        })
+        .contains("args.minOut: missing"));
         assert!(err(&|o| o["envelope"]["mode"] = json!(4)).contains("unknown mode"));
-        assert!(err(&|o| o["envelope"]["extra"] = json!(1)).contains("envelope.extra: unknown field"));
-        assert!(err(&|o| o["args"]["batch"] = json!("1")).contains("args.batch: unknown field"), "an envelope field in args");
+        assert!(
+            err(&|o| o["envelope"]["extra"] = json!(1)).contains("envelope.extra: unknown field")
+        );
+        assert!(
+            err(&|o| o["args"]["batch"] = json!("1")).contains("args.batch: unknown field"),
+            "an envelope field in args"
+        );
         assert!(err(&|o| o["args"]["wrapped"] = json!("0x10")).contains("not a canonical uint256"));
-        assert!(err(&|o| o["args"]["wrapped"] = json!(16)).contains("args.wrapped"), "a uint256 is a string");
+        assert!(
+            err(&|o| o["args"]["wrapped"] = json!(16)).contains("args.wrapped"),
+            "a uint256 is a string"
+        );
         // the dirty word of a padded address never reaches a leg
         let dirty = format!("0x{:0>64}", "ff");
         assert!(err(&|o| o["args"]["recipient"] = json!(dirty)).contains("args.recipient"));
-        assert!(err(&|o| { o["signature"] = o.as_object_mut().unwrap().remove("auth").unwrap(); }).contains("takes its signature as auth"));
-        assert!(err(&|o| { o.as_object_mut().unwrap().remove("auth"); }).contains("without its signature"));
-        assert!(err(&|o| o["auth"] = json!(format!("0x{}", "11".repeat(65)))).contains("signature: not an object"), "a UASig, never bytes");
+        assert!(err(&|o| {
+            o["signature"] = o.as_object_mut().unwrap().remove("auth").unwrap();
+        })
+        .contains("takes its signature as auth"));
+        assert!(err(&|o| {
+            o.as_object_mut().unwrap().remove("auth");
+        })
+        .contains("without its signature"));
+        assert!(
+            err(&|o| o["auth"] = json!(format!("0x{}", "11".repeat(65))))
+                .contains("signature: not an object"),
+            "a UASig, never bytes"
+        );
         assert!(err(&|o| o["call"] = json!({})).contains("takes no op.call"));
     }
 
@@ -2710,40 +4068,77 @@ mod tests {
         let mut op = op_of("UAPayeeFee", "token", &v).unwrap();
         let base = Op::parse(&op, FEE).unwrap().typed.struct_hash;
         op["args"]["payment"]["feeRecipient"] = json!(format!("{:#x}", Address::repeat_byte(0x77)));
-        assert_eq!(Op::parse(&op, FEE).unwrap().typed.struct_hash, base, "mode 1 does not bind it");
+        assert_eq!(
+            Op::parse(&op, FEE).unwrap().typed.struct_hash,
+            base,
+            "mode 1 does not bind it"
+        );
     }
 
     /// C5 review: pay on `mandatePayLane(ref)`, revoke on `mandateRevokeLane(token, epoch)`, nonce 0. The lanes are forge's
     /// (`mandate_kat.json`, the merged entries: `batch` beside the signed `args`), not this file's formula.
     #[test]
     fn mandate_ops_run_on_their_own_lane_at_nonce_zero() {
-        let k: Value = serde_json::from_str(&std::fs::read_to_string(format!(
-            "{}/../smartcontracts/evm/test/vectors/mandate_kat.json", env!("CARGO_MANIFEST_DIR"))).unwrap()).unwrap();
+        let k: Value = serde_json::from_str(
+            &std::fs::read_to_string(format!(
+                "{}/../smartcontracts/evm/test/vectors/mandate_kat.json",
+                env!("CARGO_MANIFEST_DIR")
+            ))
+            .unwrap(),
+        )
+        .unwrap();
         let word = |k: &Value, i: usize| hex(&k["args"])[32 * i..32 * (i + 1)].to_vec();
         // `payUnderMandate(token, payee, amount, entryRef, epoch)`
-        assert_eq!(mandate_pay_lane(&word(&k["pay"], 3)).to_string(), k["pay"]["batch"].as_str().unwrap());
+        assert_eq!(
+            mandate_pay_lane(&word(&k["pay"], 3)).to_string(),
+            k["pay"]["batch"].as_str().unwrap()
+        );
         // `revoke(token, epoch)`
         let token = Address::from_slice(&word(&k["revoke"], 0)[12..]);
         let epoch = u64::from_be_bytes(word(&k["revoke"], 1)[24..].try_into().unwrap());
-        assert_eq!(mandate_revoke_lane(token, epoch).to_string(), k["revoke"]["batch"].as_str().unwrap());
+        assert_eq!(
+            mandate_revoke_lane(token, epoch).to_string(),
+            k["revoke"]["batch"].as_str().unwrap()
+        );
         let v = vectors();
         let lane_of = |op: &Value| mandate_pay_lane(&hex(&op["args"]["entryRef"])).to_string();
         let mut pay = op_of("UAPayUnderMandate", "wallet", &v).unwrap();
-        assert!(Op::parse(&pay, FEE).unwrap_err().to_string().starts_with("MANDATE_LANE"), "the vector's lane 7");
+        assert!(
+            Op::parse(&pay, FEE)
+                .unwrap_err()
+                .to_string()
+                .starts_with("MANDATE_LANE"),
+            "the vector's lane 7"
+        );
         pay["envelope"]["batch"] = json!(lane_of(&pay));
         pay["envelope"]["nonce"] = json!("0");
         Op::parse(&pay, FEE).unwrap();
         pay["envelope"]["nonce"] = json!("1");
-        assert!(Op::parse(&pay, FEE).unwrap_err().to_string().starts_with("MANDATE_LANE"), "nonce 0 only");
+        assert!(
+            Op::parse(&pay, FEE)
+                .unwrap_err()
+                .to_string()
+                .starts_with("MANDATE_LANE"),
+            "nonce 0 only"
+        );
         let mut rev = op_of("UADelegateRevoke", "wallet", &v).unwrap();
         let token: Address = rev["args"]["token"].as_str().unwrap().parse().unwrap();
         let epoch: u64 = rev["args"]["epoch"].as_str().unwrap().parse().unwrap();
-        assert!(Op::parse(&rev, FEE).unwrap_err().to_string().starts_with("MANDATE_LANE"));
+        assert!(Op::parse(&rev, FEE)
+            .unwrap_err()
+            .to_string()
+            .starts_with("MANDATE_LANE"));
         rev["envelope"]["batch"] = json!(mandate_revoke_lane(token, epoch).to_string());
         rev["envelope"]["nonce"] = json!("0");
         Op::parse(&rev, FEE).unwrap();
         rev["args"]["epoch"] = json!((epoch + 1).to_string());
-        assert!(Op::parse(&rev, FEE).unwrap_err().to_string().starts_with("MANDATE_LANE"), "another epoch is another lane");
+        assert!(
+            Op::parse(&rev, FEE)
+                .unwrap_err()
+                .to_string()
+                .starts_with("MANDATE_LANE"),
+            "another epoch is another lane"
+        );
         // forge's pay calldata is what the node builds from the same fields: `mtxPayUnderMandate(UAEnvelope, …, UASig)`
         let p = &k["pay"];
         let s = |f: &str| p[f].as_str().unwrap().to_string();
@@ -2757,8 +4152,15 @@ mod tests {
                     "body": p["meta_body"]}))},
             "auth": {"keyData": "0x", "signature": s("signature"), "members": []}});
         let built = Op::parse(&op, FEE).unwrap();
-        assert_eq!(format!("0x{}", alloy::hex::encode(&built.data)), s("calldata"), "forge's calldata");
-        assert_eq!(format!("{:#x}", built.typed.struct_hash.unwrap()), s("struct_hash"));
+        assert_eq!(
+            format!("0x{}", alloy::hex::encode(&built.data)),
+            s("calldata"),
+            "forge's calldata"
+        );
+        assert_eq!(
+            format!("{:#x}", built.typed.struct_hash.unwrap()),
+            s("struct_hash")
+        );
     }
 
     /// forge's digests of the two invalidations, which `typed_ops.json` has no row for: the DEX's (`dex_order_kat.json`, the bytes
@@ -2767,7 +4169,14 @@ mod tests {
     fn invalidate_digests_match_the_vectors() {
         use crate::abi::ISCaaSDex;
         let file = |f: &str| -> Value {
-            serde_json::from_str(&std::fs::read_to_string(format!("{}/../smartcontracts/{f}", env!("CARGO_MANIFEST_DIR"))).unwrap()).unwrap()
+            serde_json::from_str(
+                &std::fs::read_to_string(format!(
+                    "{}/../smartcontracts/{f}",
+                    env!("CARGO_MANIFEST_DIR")
+                ))
+                .unwrap(),
+            )
+            .unwrap()
         };
         let chain = |k: &Value| k["chain_id"].as_str().unwrap().parse::<u64>().unwrap();
         let d = file("evm/test/vectors/dex_order_kat.json");
@@ -2778,8 +4187,15 @@ mod tests {
             "signature": format!("0x{}", alloy::hex::encode(&c.sig)), "validUntil": "1800000300"});
         let p = Op::parse(&op, FEE).unwrap();
         assert_eq!(p.data.to_vec(), hex(data), "the bytes too");
-        assert_eq!(format!("{:#x}", p.typed.digest_on(chain(&d), d["salt"].as_str().unwrap().parse().unwrap()).unwrap()),
-            d["invalidate_digest"].as_str().unwrap().to_lowercase());
+        assert_eq!(
+            format!(
+                "{:#x}",
+                p.typed
+                    .digest_on(chain(&d), d["salt"].as_str().unwrap().parse().unwrap())
+                    .unwrap()
+            ),
+            d["invalidate_digest"].as_str().unwrap().to_lowercase()
+        );
         let u = file("vectors/ua/uatrade_kat.json");
         let rows_ = u["rows"].as_array().unwrap();
         assert!(!rows_.is_empty());
@@ -2789,8 +4205,16 @@ mod tests {
                 "args": m, "auth": {"keyData": "0x", "signature": "0x", "members": []}, "validUntil": "1800000300"});
             let p = Op::parse(&op, FEE).unwrap();
             assert_eq!(p.data[..4], crate::guard::SEL_TOKEN_INVALIDATE_NONCES);
-            let h = p.typed.digest_on(u["chainId"].as_u64().unwrap(), u["chainUid"].as_str().unwrap().parse().unwrap());
-            assert_eq!(format!("{:#x}", h.unwrap()), r["invalidateDigest"].as_str().unwrap(), "{}", r["name"]);
+            let h = p.typed.digest_on(
+                u["chainId"].as_u64().unwrap(),
+                u["chainUid"].as_str().unwrap().parse().unwrap(),
+            );
+            assert_eq!(
+                format!("{:#x}", h.unwrap()),
+                r["invalidateDigest"].as_str().unwrap(),
+                "{}",
+                r["name"]
+            );
         }
     }
 
@@ -2799,22 +4223,41 @@ mod tests {
     /// liquidity lists are bounded by type (nine inputs, nine extra tokens, a `pull` short of the inputs).
     #[test]
     fn liquidity_rows_match_the_vectors() {
-        let path = format!("{}/../smartcontracts/vectors/ua/liquidity_kat.json", env!("CARGO_MANIFEST_DIR"));
+        let path = format!(
+            "{}/../smartcontracts/vectors/ua/liquidity_kat.json",
+            env!("CARGO_MANIFEST_DIR")
+        );
         let k: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         let rows_ = k["rows"].as_array().unwrap();
         assert_eq!(rows_.len(), 7);
-        let job = |r: &Value| json!({"entry": "mtxLiquidity", "contract": "dex", "token": k["dex"],
+        let job = |r: &Value| {
+            json!({"entry": "mtxLiquidity", "contract": "dex", "token": k["dex"],
             "args": {"p": {"ref": r["plan"]["ref"], "order": r["order"], "auth": r["auth"], "pull": r["plan"]["pull"],
                            "positionId": r["plan"]["positionId"], "extraTokens": r["plan"]["extraTokens"]},
                      "interactions": r["interactions"]},
-            "validUntil": r["order"]["validUntil"]});
+            "validUntil": r["order"]["validUntil"]})
+        };
         for r in rows_ {
             let p = Op::parse(&job(r), FEE).unwrap();
-            assert_eq!(format!("0x{}", alloy::hex::encode(&p.data)), r["mtxLiquidityCalldata"].as_str().unwrap(), "{}", r["name"]);
+            assert_eq!(
+                format!("0x{}", alloy::hex::encode(&p.data)),
+                r["mtxLiquidityCalldata"].as_str().unwrap(),
+                "{}",
+                r["name"]
+            );
             let c = crate::abi::ISCaaSDex::mtxLiquidityCall::abi_decode(&p.data).unwrap();
-            let d = crate::dex::domain("SCaaS Dex", k["chainId"].as_u64().unwrap(), k["dex"].as_str().unwrap().parse().unwrap(),
-                k["chainUid"].as_str().unwrap().parse().unwrap());
-            assert_eq!(format!("{:#x}", crate::dex::liquidity_order_hash(&d, &c.p.order)), r["h"].as_str().unwrap(), "{}", r["name"]);
+            let d = crate::dex::domain(
+                "SCaaS Dex",
+                k["chainId"].as_u64().unwrap(),
+                k["dex"].as_str().unwrap().parse().unwrap(),
+                k["chainUid"].as_str().unwrap().parse().unwrap(),
+            );
+            assert_eq!(
+                format!("{:#x}", crate::dex::liquidity_order_hash(&d, &c.p.order)),
+                r["h"].as_str().unwrap(),
+                "{}",
+                r["name"]
+            );
         }
         let err = |f: &dyn Fn(&mut Value)| -> String {
             let mut j = job(&rows_[0]);
@@ -2822,18 +4265,38 @@ mod tests {
             format!("{}", Op::parse(&j, FEE).err().unwrap())
         };
         let nine = |x: &Value| Value::Array(vec![x.clone(); 9]);
-        assert!(err(&|j| j["args"]["p"]["order"]["inputs"] = nine(&j["args"]["p"]["order"]["inputs"][0]))
-            .contains("p.order.inputs: more than 8"));
-        assert!(err(&|j| j["args"]["p"]["extraTokens"] = nine(&json!(k["lp"]))).contains("p.extraTokens: more than 8"));
+        assert!(err(
+            &|j| j["args"]["p"]["order"]["inputs"] = nine(&j["args"]["p"]["order"]["inputs"][0])
+        )
+        .contains("p.order.inputs: more than 8"));
+        assert!(
+            err(&|j| j["args"]["p"]["extraTokens"] = nine(&json!(k["lp"])))
+                .contains("p.extraTokens: more than 8")
+        );
         assert!(err(&|j| j["args"]["p"]["pull"] = json!(["1"])).contains("p.pull: one per input"));
-        assert!(err(&|j| j["args"]["p"]["order"]["tickLower"] = json!(8_388_608)).contains("outside int24"));
+        assert!(
+            err(&|j| j["args"]["p"]["order"]["tickLower"] = json!(8_388_608))
+                .contains("outside int24")
+        );
         // L6d (spec §11 "validUntil ahead"): the job's deadline narrows to the signed order's, never past it
-        let signed: u64 = rows_[0]["order"]["validUntil"].as_str().unwrap().parse().unwrap();
+        let signed: u64 = rows_[0]["order"]["validUntil"]
+            .as_str()
+            .unwrap()
+            .parse()
+            .unwrap();
         let mut j = job(&rows_[0]);
         j["validUntil"] = json!((signed + 100).to_string());
-        assert_eq!(Op::parse(&j, FEE).unwrap().valid_until, signed, "the order's validUntil");
+        assert_eq!(
+            Op::parse(&j, FEE).unwrap().valid_until,
+            signed,
+            "the order's validUntil"
+        );
         j["validUntil"] = json!((signed - 100).to_string());
-        assert_eq!(Op::parse(&j, FEE).unwrap().valid_until, signed - 100, "the job's, sooner");
+        assert_eq!(
+            Op::parse(&j, FEE).unwrap().valid_until,
+            signed - 100,
+            "the job's, sooner"
+        );
     }
 
     /// A job deadline narrows what is signed, never extends it; a cancel has none of its own.
@@ -2852,12 +4315,24 @@ mod tests {
         fee.as_object_mut().unwrap().remove("validUntil");
         let outer: u64 = fee["args"]["validUntil"].as_str().unwrap().parse().unwrap();
         fee["args"]["payment"]["validUntil"] = json!((outer + 5).to_string());
-        assert_eq!(Op::parse(&fee, FEE).unwrap().valid_until, outer, "the sooner: the fee's");
+        assert_eq!(
+            Op::parse(&fee, FEE).unwrap().valid_until,
+            outer,
+            "the sooner: the fee's"
+        );
         fee["args"]["payment"]["validUntil"] = json!((outer - 5).to_string());
-        assert_eq!(Op::parse(&fee, FEE).unwrap().valid_until, outer - 5, "the sooner: the payment's");
+        assert_eq!(
+            Op::parse(&fee, FEE).unwrap().valid_until,
+            outer - 5,
+            "the sooner: the payment's"
+        );
         let mut c = op_of("CancelUAOrder", "token", &v).unwrap();
         c["validUntil"] = json!((signed + 100).to_string());
-        assert_eq!(Op::parse(&c, FEE).unwrap().valid_until, signed + 100, "the chain enforces no deadline on a cancel");
+        assert_eq!(
+            Op::parse(&c, FEE).unwrap().valid_until,
+            signed + 100,
+            "the chain enforces no deadline on a cancel"
+        );
     }
 
     /// `classify` compares what the chain emits: a payee fee lands as its payment's `MetaTransfer`, not the outer struct.
@@ -2870,11 +4345,28 @@ mod tests {
         let (chain, at, uid) = domain_of(d);
         let wire = v["ops"]["UAPayeeFee"]["message"]["payment"].clone();
         let m = crate::metatx::UaMtx::from_wire(None, &wire).unwrap();
-        let dom = crate::metatx::Domain { name: "SCaaS MetaToken".into(), version: "1".into(), chain_id: chain, verifying_contract: at, salt: uid };
-        assert_eq!(p.typed.lane_digest_on(chain, uid), Some(m.digest(&dom)), "the sol! struct, another path");
-        assert_ne!(p.typed.lane_digest_on(chain, uid), p.typed.digest_on(chain, uid), "the in-flight key stays the outer op");
+        let dom = crate::metatx::Domain {
+            name: "SCaaS MetaToken".into(),
+            version: "1".into(),
+            chain_id: chain,
+            verifying_contract: at,
+            salt: uid,
+        };
+        assert_eq!(
+            p.typed.lane_digest_on(chain, uid),
+            Some(m.digest(&dom)),
+            "the sol! struct, another path"
+        );
+        assert_ne!(
+            p.typed.lane_digest_on(chain, uid),
+            p.typed.digest_on(chain, uid),
+            "the in-flight key stays the outer op"
+        );
         let plain = Op::parse(&op_of("UAUnwrap", "token", &v).unwrap(), FEE).unwrap();
-        assert_eq!(plain.typed.lane_digest_on(chain, uid), plain.typed.digest_on(chain, uid));
+        assert_eq!(
+            plain.typed.lane_digest_on(chain, uid),
+            plain.typed.digest_on(chain, uid)
+        );
     }
 
     /// Owner 2026-11-12 (every state-changing `mtx*` relayable): `mtxCreateToken` / `mtxCreateDex` take the config as named JSON
@@ -2883,22 +4375,50 @@ mod tests {
     /// job's own `initHash`, a missing field, a hex config, nine legs.
     #[test]
     fn creation_rows_encode_the_named_config() {
-        let raw: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/typed/typed_ops.json")).unwrap();
+        let raw: Value = serde_json::from_str(include_str!(
+            "../../smartcontracts/vectors/typed/typed_ops.json"
+        ))
+        .unwrap();
         let z = |b: u8| format!("{:#x}", B256::repeat_byte(b));
         // Fable recheck 2 P3-7: the named configs and their `initArgs` are `smartcontracts/vectors/factory/create_config.json`, which
         // forge's `CreateConfigKat.t.sol` checks against the contracts' structs field by field
-        let kat: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/factory/create_config.json")).unwrap();
-        let bytes_of = |k: &str| alloy::hex::decode(&kat[k]["initArgs"].as_str().unwrap()[2..]).unwrap();
-        let (token, want_token, dex, want_dex) = (kat["token"]["config"].clone(), bytes_of("token"), kat["dex"]["config"].clone(), bytes_of("dex"));
+        let kat: Value = serde_json::from_str(include_str!(
+            "../../smartcontracts/vectors/factory/create_config.json"
+        ))
+        .unwrap();
+        let bytes_of =
+            |k: &str| alloy::hex::decode(&kat[k]["initArgs"].as_str().unwrap()[2..]).unwrap();
+        let (token, want_token, dex, want_dex) = (
+            kat["token"]["config"].clone(),
+            bytes_of("token"),
+            kat["dex"]["config"].clone(),
+            bytes_of("dex"),
+        );
         for k in ["token", "dex"] {
-            assert_eq!(format!("{:#x}", keccak256(bytes_of(k))), kat[k]["initHash"].as_str().unwrap(), "{k}: the vector's initHash");
+            assert_eq!(
+                format!("{:#x}", keccak256(bytes_of(k))),
+                kat[k]["initHash"].as_str().unwrap(),
+                "{k}: the vector's initHash"
+            );
         }
-        for (name, config, want, init_at) in [("UACreateToken", token, want_token, 4usize), ("UACreateDex", dex, want_dex, 3)] {
+        for (name, config, want, init_at) in [
+            ("UACreateToken", token, want_token, 4usize),
+            ("UACreateDex", dex, want_dex, 3),
+        ] {
             let o = &raw["ops"][name];
             let d = &o["domains"]["gov_router"];
             let row = row_of(name, "gov_router");
-            assert_eq!(row.type_string(), o["typeString"].as_str().unwrap(), "{name}");
-            assert_eq!(format!("0x{}", alloy::hex::encode(row.selector)), d["selector"].as_str().unwrap(), "{name}: {}", d["abi"]);
+            assert_eq!(
+                row.type_string(),
+                o["typeString"].as_str().unwrap(),
+                "{name}"
+            );
+            assert_eq!(
+                format!("0x{}", alloy::hex::encode(row.selector)),
+                d["selector"].as_str().unwrap(),
+                "{name}: {}",
+                d["abi"]
+            );
             let mut args = o["message"].as_object().unwrap().clone();
             let mut env = Map::new();
             for k in ["from"].into_iter().chain(ENV) {
@@ -2908,38 +4428,79 @@ mod tests {
             args.insert("config".into(), config.clone());
             let sig = json!({"keyData": "0x", "signature": d["signature"], "members": []});
             let (env, args) = (Value::Object(env), Value::Object(args));
-            let built = assemble(row, Some(&env), &args, Some(&sig), FEE).unwrap_or_else(|e| panic!("{name}: {e:#}"));
+            let built = assemble(row, Some(&env), &args, Some(&sig), FEE)
+                .unwrap_or_else(|e| panic!("{name}: {e:#}"));
             // the struct hash, by hand: the vector's typehash over the message's words with `initHash = keccak256(initArgs)`
             let m = &o["message"];
             let word = |k: &str| -> [u8; 32] {
                 let v = &m[k];
                 match v.as_str() {
-                    Some(x) if x.starts_with("0x") => { let b = alloy::hex::decode(&x[2..]).unwrap(); let mut w = [0u8; 32]; w[32 - b.len()..].copy_from_slice(&b); w }
+                    Some(x) if x.starts_with("0x") => {
+                        let b = alloy::hex::decode(&x[2..]).unwrap();
+                        let mut w = [0u8; 32];
+                        w[32 - b.len()..].copy_from_slice(&b);
+                        w
+                    }
                     Some(x) => U256::from_str_radix(x, 10).unwrap().to_be_bytes(),
                     None => U256::from(v.as_u64().unwrap()).to_be_bytes(),
                 }
             };
             let mut enc = alloy::hex::decode(&o["typehash"].as_str().unwrap()[2..]).unwrap();
             for (_, k) in &row.fields {
-                enc.extend_from_slice(&if k == "initHash" { keccak256(&want).0 } else { word(k) });
+                enc.extend_from_slice(&if k == "initHash" {
+                    keccak256(&want).0
+                } else {
+                    word(k)
+                });
             }
-            assert_eq!(built.struct_hash, Some(keccak256(&enc)), "{name}: initHash is the keccak of the encoded named config");
+            assert_eq!(
+                built.struct_hash,
+                Some(keccak256(&enc)),
+                "{name}: initHash is the keccak of the encoded named config"
+            );
             let tys: Vec<String> = row.plan.iter().map(|t| tok_abi(t, &row.fields)).collect();
-            let call = DynSolType::parse(&format!("({})", tys.join(","))).unwrap().abi_decode_sequence(&built.data[4..]).unwrap();
-            assert_eq!(call.as_tuple().unwrap()[init_at].as_bytes(), Some(&want[..]), "{name}: initArgs = abi.encode(config)");
+            let call = DynSolType::parse(&format!("({})", tys.join(",")))
+                .unwrap()
+                .abi_decode_sequence(&built.data[4..])
+                .unwrap();
+            assert_eq!(
+                call.as_tuple().unwrap()[init_at].as_bytes(),
+                Some(&want[..]),
+                "{name}: initArgs = abi.encode(config)"
+            );
             let (_, back, _) = op_from_calldata(row, &built.data);
-            assert_eq!(back["config"], config, "{name}: the calldata reads back to the named config");
+            assert_eq!(
+                back["config"], config,
+                "{name}: the calldata reads back to the named config"
+            );
             // refused by name
             let refused = |mutate: &dyn Fn(&mut Value)| {
                 let mut x = args.clone();
                 mutate(&mut x);
-                assemble(row, Some(&env), &x, Some(&sig), FEE).unwrap_err().to_string()
+                assemble(row, Some(&env), &x, Some(&sig), FEE)
+                    .unwrap_err()
+                    .to_string()
             };
-            assert!(refused(&|x| x["initHash"] = json!(z(1))).starts_with("BAD_PAYLOAD: args.initHash: the node hashes args.config"), "{name}");
-            assert!(refused(&|x| { x["config"].as_object_mut().unwrap().remove("admin"); }).contains("args.config.admin: missing"), "{name}");
-            assert!(refused(&|x| x["config"] = json!(format!("0x{}", alloy::hex::encode(&want)))).contains("args.config: not an object"), "{name}");
+            assert!(
+                refused(&|x| x["initHash"] = json!(z(1)))
+                    .starts_with("BAD_PAYLOAD: args.initHash: the node hashes args.config"),
+                "{name}"
+            );
+            assert!(
+                refused(&|x| {
+                    x["config"].as_object_mut().unwrap().remove("admin");
+                })
+                .contains("args.config.admin: missing"),
+                "{name}"
+            );
+            assert!(
+                refused(&|x| x["config"] = json!(format!("0x{}", alloy::hex::encode(&want))))
+                    .contains("args.config: not an object"),
+                "{name}"
+            );
             if name == "UACreateToken" {
-                let nine = refused(&|x| x["config"]["legs"] = json!(vec![config["legs"][0].clone(); 9]));
+                let nine =
+                    refused(&|x| x["config"]["legs"] = json!(vec![config["legs"][0].clone(); 9]));
                 assert!(nine.contains("more than 8 legs"), "{nine}");
                 let mut eight = args.clone();
                 eight["config"]["legs"] = json!(vec![config["legs"][0].clone(); 8]);
@@ -2955,14 +4516,25 @@ mod tests {
     /// class without one, an unknown config field, an owner neither 0 nor the creator, an `init_call` above [`MAX_INIT_CALL`].
     #[test]
     fn instance_rows_take_init_call_or_a_named_config() {
-        let raw: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/typed/typed_ops.json")).unwrap();
-        let kat: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/factory/create_config.json")).unwrap();
+        let raw: Value = serde_json::from_str(include_str!(
+            "../../smartcontracts/vectors/typed/typed_ops.json"
+        ))
+        .unwrap();
+        let kat: Value = serde_json::from_str(include_str!(
+            "../../smartcontracts/vectors/factory/create_config.json"
+        ))
+        .unwrap();
         let k = &kat["instance"];
         let o = &raw["ops"]["UACreateInstance"];
         let d = &o["domains"]["gov_router"];
         let row = row_of("UACreateInstance", "gov_router");
         assert_eq!(row.type_string(), o["typeString"].as_str().unwrap());
-        assert_eq!(format!("0x{}", alloy::hex::encode(row.selector)), d["selector"].as_str().unwrap(), "{}", d["abi"]);
+        assert_eq!(
+            format!("0x{}", alloy::hex::encode(row.selector)),
+            d["selector"].as_str().unwrap(),
+            "{}",
+            d["abi"]
+        );
         let mut args = o["message"].as_object().unwrap().clone();
         let mut env = Map::new();
         for n in ["from"].into_iter().chain(ENV) {
@@ -2983,29 +4555,56 @@ mod tests {
         let with = |extra: &[(&str, Value)]| on(&args, extra);
         let raw_form = with(&[("init_call", k["initCall"].clone())]).unwrap();
         let named = with(&[("config", k["config"].clone())]).unwrap();
-        assert_eq!((&named.data, named.struct_hash), (&raw_form.data, raw_form.struct_hash), "the named config builds the same call");
-        assert_eq!(raw_form.vals["initHash"], Val::FixedBytes(k["initHash"].as_str().unwrap().parse::<B256>().unwrap(), 32), "initHash");
+        assert_eq!(
+            (&named.data, named.struct_hash),
+            (&raw_form.data, raw_form.struct_hash),
+            "the named config builds the same call"
+        );
+        assert_eq!(
+            raw_form.vals["initHash"],
+            Val::FixedBytes(k["initHash"].as_str().unwrap().parse::<B256>().unwrap(), 32),
+            "initHash"
+        );
         let (_, back, _) = op_from_calldata(row, &named.data);
-        assert_eq!(back["init_call"], k["initCall"], "the calldata carries the vector's initCall");
+        assert_eq!(
+            back["init_call"], k["initCall"],
+            "the calldata carries the vector's initCall"
+        );
         with(&[("config", json!({"owner": z32(0)}))]).expect("control: owner 0");
         let refused = |extra: &[(&str, Value)]| with(extra).unwrap_err().to_string();
         let other = json!({"owner": format!("{:#x}", B256::repeat_byte(0x0b))});
         assert!(refused(&[("config", other)]).contains("args.config.owner: 0 or the creator"));
-        assert!(refused(&[("config", k["config"].clone()), ("init_call", k["initCall"].clone())])
-            .starts_with("BAD_PAYLOAD: args.config and args.init_call"));
+        assert!(refused(&[
+            ("config", k["config"].clone()),
+            ("init_call", k["initCall"].clone())
+        ])
+        .starts_with("BAD_PAYLOAD: args.config and args.init_call"));
         assert!(refused(&[]).starts_with("BAD_PAYLOAD: args.init_call: missing"));
-        assert!(refused(&[("init_call", k["initCall"].clone()), ("initHash", k["initHash"].clone())])
-            .starts_with("BAD_PAYLOAD: args.initHash: the node hashes"));
-        assert!(refused(&[("config", json!({"owner": z32(0), "admin": z32(0)}))]).contains("args.config.admin: unknown field"));
+        assert!(refused(&[
+            ("init_call", k["initCall"].clone()),
+            ("initHash", k["initHash"].clone())
+        ])
+        .starts_with("BAD_PAYLOAD: args.initHash: the node hashes"));
+        assert!(
+            refused(&[("config", json!({"owner": z32(0), "admin": z32(0)}))])
+                .contains("args.config.admin: unknown field")
+        );
         assert!(refused(&[("config", json!("0x00"))]).contains("args.config: not an object"));
         let long = json!(format!("0x{}", "ab".repeat(MAX_INIT_CALL + 1)));
         assert!(refused(&[("init_call", long)]).starts_with("INIT_CALL_TOO_LONG"));
-        with(&[("init_call", json!(format!("0x{}", "ab".repeat(MAX_INIT_CALL))))]).expect("control: at the bound");
+        with(&[(
+            "init_call",
+            json!(format!("0x{}", "ab".repeat(MAX_INIT_CALL))),
+        )])
+        .expect("control: at the bound");
         let mut seven = args.clone();
         seven.insert("contractClass".into(), json!(7));
-        assert!(on(&seven, &[("config", k["config"].clone())]).unwrap_err().to_string()
+        assert!(on(&seven, &[("config", k["config"].clone())])
+            .unwrap_err()
+            .to_string()
             .starts_with("INSTANCE_CONFIG_UNKNOWN: class 7 kind 0"));
-        on(&seven, &[("init_call", k["initCall"].clone())]).expect("control: any class by init_call");
+        on(&seven, &[("init_call", k["initCall"].clone())])
+            .expect("control: any class by init_call");
     }
 
     /// CTR-MTX-27: `call` is a named op, not hex: the router's calldata carries its bytes, `callDataHash` their hash, and the
@@ -3013,15 +4612,30 @@ mod tests {
     #[test]
     fn relay_fee_call_object() {
         let v = vectors();
-        for (name, kind) in [("UARelayFee", "token"), ("UARelayFee", "pqz"), ("UARelayFee", "zether")] {
+        for (name, kind) in [
+            ("UARelayFee", "token"),
+            ("UARelayFee", "pqz"),
+            ("UARelayFee", "zether"),
+        ] {
             let d = &v["ops"][name]["domains"][kind];
             let row = row_of(name, kind);
             let (_, args, sig) = split(row, name, kind, &v);
             let a = assemble(row, None, &args, sig.as_ref(), FEE).unwrap();
-            let (target, token) = (args["target"].as_str().unwrap().parse().unwrap(), d["domain"]["verifyingContract"].as_str().unwrap().parse().unwrap());
+            let (target, token) = (
+                args["target"].as_str().unwrap().parse().unwrap(),
+                d["domain"]["verifyingContract"]
+                    .as_str()
+                    .unwrap()
+                    .parse()
+                    .unwrap(),
+            );
             let call = hex(&d["relayedCall"]);
             let r = router_call(row, &a, target, call.into(), token).unwrap();
-            assert_eq!(alloy::hex::encode(r), &d["routerCalldata"].as_str().unwrap()[2..], "{name} on {kind}");
+            assert_eq!(
+                alloy::hex::encode(r),
+                &d["routerCalldata"].as_str().unwrap()[2..],
+                "{name} on {kind}"
+            );
             // the job: the inner op is a named entry; hash, target and the bytes follow it
             let inner = op_of("UABurn", "token", &v).unwrap();
             let burn = Op::parse(&inner, FEE).unwrap();
@@ -3032,50 +4646,97 @@ mod tests {
             let mut op = json!({"entry": row.entry, "contract": kind, "token": format!("{token:#x}"), "args": a2, "call": inner});
             op["auth"] = sig.clone().unwrap();
             let p = Op::parse(&op, FEE).unwrap_or_else(|e| panic!("{name}: {e:#}"));
-            assert_eq!(p.to, args["relayer"].as_str().unwrap().parse::<Address>().unwrap(), "the signed router");
+            assert_eq!(
+                p.to,
+                args["relayer"]
+                    .as_str()
+                    .unwrap()
+                    .parse::<Address>()
+                    .unwrap(),
+                "the signed router"
+            );
             assert_eq!(p.data[..4], row.sent);
             assert_ne!(p.data[..4], row.selector, "never the direct entry");
             let c = IRelayFeeRouter::relayCall::abi_decode(&p.data).unwrap();
-            assert_eq!((c.target, c.callData.to_vec(), c.token), (burn.to, burn.data.to_vec(), token));
+            assert_eq!(
+                (c.target, c.callData.to_vec(), c.token),
+                (burn.to, burn.data.to_vec(), token)
+            );
             // the payer hashed the inner bytes: a node's `fee_recipient` leaves them alone
             let ours = Some(Address::repeat_byte(0x99));
             let mut open_inner = inner.clone();
             open_inner["envelope"]["mode"] = json!(0);
             let hashed = Op::parse(&open_inner, None).unwrap().data;
-            assert_ne!(Op::parse(&open_inner, ours).unwrap().data, hashed, "the control: a top-level op takes the lane's feeRecipient");
+            assert_ne!(
+                Op::parse(&open_inner, ours).unwrap().data,
+                hashed,
+                "the control: a top-level op takes the lane's feeRecipient"
+            );
             let mut unbound = op.clone();
             unbound["call"] = open_inner;
             let sent = Op::parse(&unbound, ours).unwrap();
-            assert_eq!(sent.data, Op::parse(&unbound, None).unwrap().data, "the relayed bytes do not follow the lane's fee_recipient");
-            assert!(sent.data.windows(hashed.len()).any(|w| w == &hashed[..]), "the router carries the bytes the payer hashed");
+            assert_eq!(
+                sent.data,
+                Op::parse(&unbound, None).unwrap().data,
+                "the relayed bytes do not follow the lane's fee_recipient"
+            );
+            assert!(
+                sent.data.windows(hashed.len()).any(|w| w == &hashed[..]),
+                "the router carries the bytes the payer hashed"
+            );
             let moved = {
                 let mut o2 = op.clone();
                 o2["call"]["args"]["amount"] = json!("1");
                 Op::parse(&o2, FEE).unwrap()
             };
-            assert_ne!(moved.typed.struct_hash, p.typed.struct_hash, "the signed hash follows the inner bytes");
+            assert_ne!(
+                moved.typed.struct_hash, p.typed.struct_hash,
+                "the signed hash follows the inner bytes"
+            );
             assert_ne!(moved.data, p.data);
             let mut bad = op.clone();
             bad.as_object_mut().unwrap().remove("call");
-            assert!(Op::parse(&bad, FEE).unwrap_err().to_string().contains("needs op.call"));
+            assert!(Op::parse(&bad, FEE)
+                .unwrap_err()
+                .to_string()
+                .contains("needs op.call"));
             let mut bad = op.clone();
             bad["args"]["callDataHash"] = args["callDataHash"].clone();
-            assert!(Op::parse(&bad, FEE).unwrap_err().to_string().contains("come from op.call"));
+            assert!(Op::parse(&bad, FEE)
+                .unwrap_err()
+                .to_string()
+                .contains("come from op.call"));
             let mut bad = op.clone();
             bad["call"] = json!({"target": "0x01", "calldata": "0x1234"});
-            assert!(Op::parse(&bad, FEE).unwrap_err().to_string().starts_with("HEX_DATA_REFUSED"));
+            assert!(Op::parse(&bad, FEE)
+                .unwrap_err()
+                .to_string()
+                .starts_with("HEX_DATA_REFUSED"));
             bad["call"] = json!("0x1234");
-            assert!(Op::parse(&bad, FEE).unwrap_err().to_string().starts_with("HEX_DATA_REFUSED"), "op.call as hex");
+            assert!(
+                Op::parse(&bad, FEE)
+                    .unwrap_err()
+                    .to_string()
+                    .starts_with("HEX_DATA_REFUSED"),
+                "op.call as hex"
+            );
             // Fable E N-5: a nested relay fee is refused by name before its body is parsed (its own fields need not be valid)
             bad["call"] = json!({"entry": row.entry, "call": {"entry": row.entry}});
-            assert_eq!(Op::parse(&bad, FEE).unwrap_err().to_string(), "BAD_PAYLOAD: a relay fee does not relay a relay fee");
+            assert_eq!(
+                Op::parse(&bad, FEE).unwrap_err().to_string(),
+                "BAD_PAYLOAD: a relay fee does not relay a relay fee"
+            );
             // Fable E N-4: a PQZ debit (a verdict slot) is no relay fee's call, refused by name; the control: the debit alone parses
             for debit in ["UAPqzTransferSingle", "UAPqzUnshield"] {
                 let d = op_of(debit, "pqz", &v).unwrap_or_else(|| panic!("{debit}"));
                 Op::parse(&d, FEE).unwrap_or_else(|e| panic!("{debit} alone: {e:#}"));
                 bad["call"] = d;
                 let e = Op::parse(&bad, FEE).unwrap_err().to_string();
-                assert!(e.starts_with("BAD_PAYLOAD: a PQZ debit") && e.contains("is no relay fee's call"), "{debit}: {e}");
+                assert!(
+                    e.starts_with("BAD_PAYLOAD: a PQZ debit")
+                        && e.contains("is no relay fee's call"),
+                    "{debit}: {e}"
+                );
             }
         }
     }
@@ -3085,12 +4746,29 @@ mod tests {
     fn the_signer_is_found_where_the_row_keeps_it() {
         let v = vectors();
         let key: Address = v["key"]["address"].as_str().unwrap().parse().unwrap();
-        let payee = Address::from_word(v["ops"]["UAPayeeFee"]["message"]["payment"]["to"].as_str().unwrap().parse().unwrap());
-        for (name, kind, who) in [("Wrap", "token", Some(key)), ("UAUnwrap", "token", Some(key)), ("CancelUAOrder", "token", Some(key)),
-            ("CancelDexOrder", "dex", Some(key)), ("UAWrapOrder", "token", Some(key)), ("UAPayeeFee", "token", Some(payee)),
-            ("UACancelNonce", "token", Some(key)), ("UASetPayee", "wallet", Some(key)), ("AddKey", "account", None)] {
+        let payee = Address::from_word(
+            v["ops"]["UAPayeeFee"]["message"]["payment"]["to"]
+                .as_str()
+                .unwrap()
+                .parse()
+                .unwrap(),
+        );
+        for (name, kind, who) in [
+            ("Wrap", "token", Some(key)),
+            ("UAUnwrap", "token", Some(key)),
+            ("CancelUAOrder", "token", Some(key)),
+            ("CancelDexOrder", "dex", Some(key)),
+            ("UAWrapOrder", "token", Some(key)),
+            ("UAPayeeFee", "token", Some(payee)),
+            ("UACancelNonce", "token", Some(key)),
+            ("UASetPayee", "wallet", Some(key)),
+            ("AddKey", "account", None),
+        ] {
             let op = op_of(name, kind, &v).unwrap();
-            let s = Op::parse(&op, FEE).unwrap_or_else(|e| panic!("{name}: {e:#}")).typed.signer;
+            let s = Op::parse(&op, FEE)
+                .unwrap_or_else(|e| panic!("{name}: {e:#}"))
+                .typed
+                .signer;
             assert_eq!(s.as_ref().map(|x| x.0), who, "{name}");
         }
     }
@@ -3107,30 +4785,66 @@ mod tests {
         assert_ne!(m["from"], m["to"], "a distinct payee");
         for kind in ["token", "zether", "pqz"] {
             let p = Op::parse(&op_of("UAPayWithTax", kind, &v).unwrap(), FEE).unwrap();
-            assert_eq!(p.typed.signer.as_ref().map(|x| x.0), Some(key), "{kind}: the payer signs");
-            assert_eq!(p.typed.lane_hash, None, "{kind}: the outer digest is the job's identity");
-            assert_eq!(format!("{:#x}", p.typed.struct_hash.unwrap()), v["ops"]["UAPayWithTax"]["structHash"].as_str().unwrap());
-            assert_eq!(p.typed.payee.map(|w| format!("{w:#x}")), m["to"].as_str().map(str::to_string));
+            assert_eq!(
+                p.typed.signer.as_ref().map(|x| x.0),
+                Some(key),
+                "{kind}: the payer signs"
+            );
+            assert_eq!(
+                p.typed.lane_hash, None,
+                "{kind}: the outer digest is the job's identity"
+            );
+            assert_eq!(
+                format!("{:#x}", p.typed.struct_hash.unwrap()),
+                v["ops"]["UAPayWithTax"]["structHash"].as_str().unwrap()
+            );
+            assert_eq!(
+                p.typed.payee.map(|w| format!("{w:#x}")),
+                m["to"].as_str().map(str::to_string)
+            );
         }
         let rf = Op::parse(&op_of("UAPayeeFee", "token", &v).unwrap(), FEE).unwrap();
-        assert!(rf.typed.lane_hash.is_some(), "a payee fee is matched by its payment's digest");
+        assert!(
+            rf.typed.lane_hash.is_some(),
+            "a payee fee is matched by its payment's digest"
+        );
         let d = &v["ops"]["UARelayFee"]["domains"]["token"];
         let c = IRelayFeeRouter::relayCall::abi_decode(&hex(&d["routerCalldata"])).unwrap();
-        assert_eq!((c.batch, c.nonce), (U256::from(7), U256::ZERO), "the payer's lane in the router call");
+        assert_eq!(
+            (c.batch, c.nonce),
+            (U256::from(7), U256::ZERO),
+            "the payer's lane in the router call"
+        );
     }
 
     /// A venue job is named JSON and encodes back to the same bytes.
     #[test]
     fn call_op_round_trips_a_plain_entry() {
-        let k: Value = serde_json::from_str(&std::fs::read_to_string(format!(
-            "{}/../smartcontracts/evm/test/vectors/dex_order_kat.json", env!("CARGO_MANIFEST_DIR"))).unwrap()).unwrap();
-        for key in ["settle_calldata", "exchange_calldata", "exchange_via_calldata", "hybrid_calldata", "hybrid_via_calldata",
-            "exchange_batch_calldata"] {
+        let k: Value = serde_json::from_str(
+            &std::fs::read_to_string(format!(
+                "{}/../smartcontracts/evm/test/vectors/dex_order_kat.json",
+                env!("CARGO_MANIFEST_DIR")
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        for key in [
+            "settle_calldata",
+            "exchange_calldata",
+            "exchange_via_calldata",
+            "hybrid_calldata",
+            "hybrid_via_calldata",
+            "exchange_batch_calldata",
+        ] {
             let raw = hex(&k[key]);
-            let op = call_op("dex", Address::repeat_byte(0xd0), &raw, "1800000300").unwrap_or_else(|e| panic!("{key}: {e:#}"));
+            let op = call_op("dex", Address::repeat_byte(0xd0), &raw, "1800000300")
+                .unwrap_or_else(|e| panic!("{key}: {e:#}"));
             let p = Op::parse(&op, FEE).unwrap_or_else(|e| panic!("{key}: {e:#}"));
             assert_eq!(p.data.to_vec(), raw, "{key}");
-            assert_eq!((p.to, p.valid_until, p.typed.struct_hash, p.lane), (Address::repeat_byte(0xd0), 1_800_000_300, None, None));
+            assert_eq!(
+                (p.to, p.valid_until, p.typed.struct_hash, p.lane),
+                (Address::repeat_byte(0xd0), 1_800_000_300, None, None)
+            );
         }
     }
 
@@ -3141,16 +4855,40 @@ mod tests {
     fn pqchat_jobs_name_their_fields() {
         use alloy::sol_types::SolValue;
         let at = Address::repeat_byte(0xc3);
-        let ours: Vec<&Row> = rows().iter().filter(|r| r.contracts.contains(&"pqchat")).collect();
+        let ours: Vec<&Row> = rows()
+            .iter()
+            .filter(|r| r.contracts.contains(&"pqchat"))
+            .collect();
         assert_eq!(ours.len(), 13);
         for r in &ours {
-            assert_eq!((r.typed, r.enveloped, r.sig, r.contracts, r.sent), (false, false, None, &["pqchat"][..], r.selector), "{}", r.entry);
+            assert_eq!(
+                (r.typed, r.enveloped, r.sig, r.contracts, r.sent),
+                (false, false, None, &["pqchat"][..], r.selector),
+                "{}",
+                r.entry
+            );
             let op = pqchat_op(r.entry, at);
             let p = Op::parse(&op, FEE).unwrap_or_else(|e| panic!("{}: {e:#}", r.entry));
-            assert_eq!((p.to, &p.data[..4], p.typed.contract, p.typed.struct_hash, p.lane, p.valid_until),
-                (at, &r.selector[..], "pqchat", None, None, 4_000_000_000), "{}", r.entry);
-            let back = call_op("pqchat", at, &p.data, "4000000000").unwrap_or_else(|e| panic!("{}: {e:#}", r.entry));
-            assert_eq!(back["args"], op["args"], "{}: the calldata's named fields", r.entry);
+            assert_eq!(
+                (
+                    p.to,
+                    &p.data[..4],
+                    p.typed.contract,
+                    p.typed.struct_hash,
+                    p.lane,
+                    p.valid_until
+                ),
+                (at, &r.selector[..], "pqchat", None, None, 4_000_000_000),
+                "{}",
+                r.entry
+            );
+            let back = call_op("pqchat", at, &p.data, "4000000000")
+                .unwrap_or_else(|e| panic!("{}: {e:#}", r.entry));
+            assert_eq!(
+                back["args"], op["args"],
+                "{}: the calldata's named fields",
+                r.entry
+            );
             assert_eq!(Op::parse(&back, FEE).unwrap().data, p.data, "{}", r.entry);
         }
         alloy::sol! {
@@ -3159,13 +4897,25 @@ mod tests {
         }
         let h = |b: u8| format!("{:#x}", B256::repeat_byte(b));
         let sig = json!({"keyData": "0x01", "signature": "0x02", "members": []});
-        let vote = |value: Value| json!({"entry": "voteEntry", "contract": "pqchat", "token": format!("{at:#x}"), "validUntil": "4000000000",
-            "args": {"v": {"entryId": h(0xe1), "voter": h(0xa1), "value": value, "seq": "7"}, "sig": sig}});
-        let auth = crate::abi::UASig { keyData: vec![1].into(), signature: vec![2].into(), members: vec![] };
-        let want = |value: i8| [&keccak256("voteEntry((bytes32,bytes32,int8,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))")[..4],
-            &(PqTopicVote { entryId: B256::repeat_byte(0xe1), voter: B256::repeat_byte(0xa1), value, seq: 7 }, auth.clone()).abi_encode_params()[..]].concat();
+        let vote = |value: Value| {
+            json!({"entry": "voteEntry", "contract": "pqchat", "token": format!("{at:#x}"), "validUntil": "4000000000",
+            "args": {"v": {"entryId": h(0xe1), "voter": h(0xa1), "value": value, "seq": "7"}, "sig": sig}})
+        };
+        let auth = crate::abi::UASig {
+            keyData: vec![1].into(),
+            signature: vec![2].into(),
+            members: vec![],
+        };
+        let want = |value: i8| {
+            [&keccak256("voteEntry((bytes32,bytes32,int8,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))")[..4],
+            &(PqTopicVote { entryId: B256::repeat_byte(0xe1), voter: B256::repeat_byte(0xa1), value, seq: 7 }, auth.clone()).abi_encode_params()[..]].concat()
+        };
         for x in [-1i8, 1, -128, 127, 0] {
-            assert_eq!(Op::parse(&vote(json!(x)), FEE).unwrap().data.to_vec(), want(x), "value {x}");
+            assert_eq!(
+                Op::parse(&vote(json!(x)), FEE).unwrap().data.to_vec(),
+                want(x),
+                "value {x}"
+            );
         }
         for bad in [json!(128), json!(-129), json!("-1"), json!(1.5)] {
             let e = Op::parse(&vote(bad.clone()), FEE).unwrap_err().to_string();
@@ -3173,8 +4923,19 @@ mod tests {
         }
         let store = json!({"entry": "storeMessage", "contract": "pqchat", "token": format!("{at:#x}"), "validUntil": "4000000000",
             "args": {"v": 1, "hint": "0x0102030405060708", "env": "0xabcdef"}});
-        let blob = Stored { v: 1, hint: alloy::primitives::FixedBytes::<8>([1, 2, 3, 4, 5, 6, 7, 8]), env: Bytes::from(vec![0xab, 0xcd, 0xef]) };
-        assert_eq!(Op::parse(&store, FEE).unwrap().data.to_vec(), [&keccak256("storeMessage(uint8,bytes8,bytes)")[..4], &blob.abi_encode_params()[..]].concat());
+        let blob = Stored {
+            v: 1,
+            hint: alloy::primitives::FixedBytes::<8>([1, 2, 3, 4, 5, 6, 7, 8]),
+            env: Bytes::from(vec![0xab, 0xcd, 0xef]),
+        };
+        assert_eq!(
+            Op::parse(&store, FEE).unwrap().data.to_vec(),
+            [
+                &keccak256("storeMessage(uint8,bytes8,bytes)")[..4],
+                &blob.abi_encode_params()[..]
+            ]
+            .concat()
+        );
         // the old hex forms, one change from a control that parses each
         let refused = |entry: &str, f: &dyn Fn(&mut Value)| {
             let mut o = pqchat_op(entry, at);
@@ -3183,17 +4944,43 @@ mod tests {
             Op::parse(&o, FEE).unwrap_err().to_string()
         };
         let blob = json!(format!("0x{}", "00".repeat(256)));
-        for (entry, path) in [("voteEntry", "args"), ("voteEntry", "v"), ("voteEntry", "sig"), ("createSession", "s"), ("createSession", "wraps"),
-            ("rekey", "e"), ("addWraps", "wraps"), ("postMessage", "m"), ("postEntry", "e")] {
-            let e = refused(entry, &|o| if path == "args" { o["args"] = blob.clone() } else { o["args"][path] = blob.clone() });
+        for (entry, path) in [
+            ("voteEntry", "args"),
+            ("voteEntry", "v"),
+            ("voteEntry", "sig"),
+            ("createSession", "s"),
+            ("createSession", "wraps"),
+            ("rekey", "e"),
+            ("addWraps", "wraps"),
+            ("postMessage", "m"),
+            ("postEntry", "e"),
+        ] {
+            let e = refused(entry, &|o| {
+                if path == "args" {
+                    o["args"] = blob.clone()
+                } else {
+                    o["args"][path] = blob.clone()
+                }
+            });
             assert!(e.starts_with("HEX_ARGS_REFUSED"), "{entry} {path}: {e}");
         }
-        assert!(refused("postMessage", &|o| o["args"]["data"] = blob.clone()).starts_with("HEX_DATA_REFUSED"));
-        assert!(refused("postMessage", &|o| o["call"] = blob.clone()).starts_with("HEX_DATA_REFUSED"));
+        assert!(
+            refused("postMessage", &|o| o["args"]["data"] = blob.clone())
+                .starts_with("HEX_DATA_REFUSED")
+        );
+        assert!(
+            refused("postMessage", &|o| o["call"] = blob.clone()).starts_with("HEX_DATA_REFUSED")
+        );
         // no fee form, no envelope, the signature named in `args` only
-        assert!(refused("postMessage", &|o| o["args"]["fee"] = json!("1")).starts_with("BAD_PAYLOAD: args.fee: unknown field"));
-        assert!(refused("postMessage", &|o| o["envelope"] = json!({})).contains("takes no envelope"));
-        assert!(refused("postMessage", &|o| o["auth"] = o["args"]["sig"].clone()).contains("takes its signature in args"));
+        assert!(refused("postMessage", &|o| o["args"]["fee"] = json!("1"))
+            .starts_with("BAD_PAYLOAD: args.fee: unknown field"));
+        assert!(
+            refused("postMessage", &|o| o["envelope"] = json!({})).contains("takes no envelope")
+        );
+        assert!(
+            refused("postMessage", &|o| o["auth"] = o["args"]["sig"].clone())
+                .contains("takes its signature in args")
+        );
     }
 
     /// The `PqChat` records' type strings and typehashes against `smartcontracts/vectors/pqchat/` (written by clientkeys), and a
@@ -3201,18 +4988,39 @@ mod tests {
     /// move one unnoticed.
     #[test]
     fn pqchat_typehashes_are_the_vectors() {
-        let th = |name: &str| type_string(name, nested(name).unwrap_or_else(|| panic!("{name}: no node struct")));
+        let th = |name: &str| {
+            type_string(
+                name,
+                nested(name).unwrap_or_else(|| panic!("{name}: no node struct")),
+            )
+        };
         let mut n = 0;
-        for f in [include_str!("../../smartcontracts/vectors/pqchat/records.json"), include_str!("../../smartcontracts/vectors/pqchat/topics.json")] {
+        for f in [
+            include_str!("../../smartcontracts/vectors/pqchat/records.json"),
+            include_str!("../../smartcontracts/vectors/pqchat/topics.json"),
+        ] {
             let v: Value = serde_json::from_str(f).unwrap();
             for (name, t) in v["typehashes"].as_object().unwrap() {
                 let s = th(name);
-                assert_eq!((s.as_str(), format!("{:#x}", keccak256(&s))), (t["type"].as_str().unwrap(), t["hash"].as_str().unwrap().into()), "{name}");
+                assert_eq!(
+                    (s.as_str(), format!("{:#x}", keccak256(&s))),
+                    (
+                        t["type"].as_str().unwrap(),
+                        t["hash"].as_str().unwrap().into()
+                    ),
+                    "{name}"
+                );
                 n += 1;
             }
         }
         assert_eq!(n, 14);
-        assert_eq!(format!("{:#x}", keccak256(th("PqChatSession"))), "0xe2c3b4c1033a28837e998f325e512f26783cea21cc6ccb347fa3d3d8d7ad1e4d");
-        assert_eq!(format!("{:#x}", keccak256(th("PqTopic"))), "0x66954727fc72dc7660d7951b1a698a5f2fe331ec190195d0b0908f659510828e"); // 3r: `admin`
+        assert_eq!(
+            format!("{:#x}", keccak256(th("PqChatSession"))),
+            "0xe2c3b4c1033a28837e998f325e512f26783cea21cc6ccb347fa3d3d8d7ad1e4d"
+        );
+        assert_eq!(
+            format!("{:#x}", keccak256(th("PqTopic"))),
+            "0x66954727fc72dc7660d7951b1a698a5f2fe331ec190195d0b0908f659510828e"
+        ); // 3r: `admin`
     }
 }

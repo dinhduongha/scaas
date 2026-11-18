@@ -7,15 +7,25 @@ import {DeployBook} from "../../script/DeployBook.sol";
 contract BookHarness is DeployBook {
     string internal name;
 
-    function setName(string calldata n) external { name = n; }
+    function setName(string calldata n) external {
+        name = n;
+    }
 
-    function _deployName() internal view override returns (string memory) { return name; }
+    function _deployName() internal view override returns (string memory) {
+        return name;
+    }
 
-    function key(bytes32 uid) external view returns (string memory, string memory, string memory) { return _bookKey(uid); }
+    function key(bytes32 uid) external view returns (string memory, string memory, string memory) {
+        return _bookKey(uid);
+    }
 
-    function write(bytes32 uid, string calldata path, string calldata body) external { _writeBook(uid, path, body); }
+    function write(bytes32 uid, string calldata path, string calldata body) external {
+        _writeBook(uid, path, body);
+    }
 
-    function check(string calldata j) external view returns (string memory) { return _checkBook(j, "book"); }
+    function check(string calldata j) external view returns (string memory) {
+        return _checkBook(j, "book");
+    }
 }
 
 /// NET-EVM-13: a book's key from `chain-uids.json` by (chainId, chain_uid), else `DEPLOY_NAME`, else a named fail; the
@@ -30,10 +40,14 @@ contract DeployBookTest is Test {
         h = new BookHarness();
     }
 
-    function _eq3(string memory k, string memory n, string memory net, string memory k2, string memory n2, string memory net2)
-        internal
-        pure
-    {
+    function _eq3(
+        string memory k,
+        string memory n,
+        string memory net,
+        string memory k2,
+        string memory n2,
+        string memory net2
+    ) internal pure {
         assertEq(k, k2);
         assertEq(n, n2);
         assertEq(net, net2);
@@ -47,7 +61,9 @@ contract DeployBookTest is Test {
         (k, n, net) = h.key(SCAAS_UID);
         _eq3(k, n, net, "scaas-testnet", "SCaaS testnet", "testnet");
         h.setName("other-testnet");
-        vm.expectRevert(bytes("DEPLOY_NAME_MISMATCH: DEPLOY_NAME=other-testnet, but this chain is scaas-testnet in chain-uids.json"));
+        vm.expectRevert(
+            bytes("DEPLOY_NAME_MISMATCH: DEPLOY_NAME=other-testnet, but this chain is scaas-testnet in chain-uids.json")
+        );
         h.key(SCAAS_UID);
         vm.chainId(560048); // a second testnet keeps its own name: the table's network
         h.setName("");
@@ -57,10 +73,18 @@ contract DeployBookTest is Test {
 
     function test_unknownChainNeedsDeployName() public {
         vm.chainId(31337);
-        vm.expectRevert(bytes("DEPLOY_NAME_REQUIRED: chain 31337 is not in chain-uids.json; set DEPLOY_NAME=<name>-testnet or <name>-mainnet (NET-EVM-13)"));
+        vm.expectRevert(
+            bytes(
+                "DEPLOY_NAME_REQUIRED: chain 31337 is not in chain-uids.json; set DEPLOY_NAME=<name>-testnet or <name>-mainnet (NET-EVM-13)"
+            )
+        );
         h.key(bytes32(uint256(1)));
         vm.chainId(7622); // a listed chain id with another genesis (a reset, a copy) is unknown too: no chain-id fallback
-        vm.expectRevert(bytes("DEPLOY_NAME_REQUIRED: chain 7622 is not in chain-uids.json; set DEPLOY_NAME=<name>-testnet or <name>-mainnet (NET-EVM-13)"));
+        vm.expectRevert(
+            bytes(
+                "DEPLOY_NAME_REQUIRED: chain 7622 is not in chain-uids.json; set DEPLOY_NAME=<name>-testnet or <name>-mainnet (NET-EVM-13)"
+            )
+        );
         h.key(bytes32(uint256(1)));
         h.setName("local-testnet");
         (string memory k, string memory n, string memory net) = h.key(bytes32(uint256(1)));
@@ -82,12 +106,26 @@ contract DeployBookTest is Test {
         vm.createDir("./deployments", true);
         // the body's keys in its own order (forge's writeJson keeps it), after the header; 2-space indent, as
         // json.dumps(…, indent=2)
-        h.write(SCAAS_UID, p, '{"z_last":"0x0000000000000000000000000000000000000002","token_factory":"0x0000000000000000000000000000000000000001","row":{"class":1}}');
-        string memory head = string.concat('{\n  "key": "scaas-testnet",\n  "name": "SCaaS testnet",\n  "chainId": 7622,\n',
-            '  "chainUid": "', vm.toString(SCAAS_UID), '",\n  "network": "testnet"');
+        h.write(
+            SCAAS_UID,
+            p,
+            '{"z_last":"0x0000000000000000000000000000000000000002","token_factory":"0x0000000000000000000000000000000000000001","row":{"class":1}}'
+        );
+        string memory head = string.concat(
+            '{\n  "key": "scaas-testnet",\n  "name": "SCaaS testnet",\n  "chainId": 7622,\n',
+            '  "chainUid": "',
+            vm.toString(SCAAS_UID),
+            '",\n  "network": "testnet"'
+        );
         string memory b = vm.readFile(p);
-        assertEq(b, string.concat(head, ',\n  "z_last": "0x0000000000000000000000000000000000000002",\n',
-            '  "token_factory": "0x0000000000000000000000000000000000000001",\n  "row": {\n    "class": 1\n  }\n}'));
+        assertEq(
+            b,
+            string.concat(
+                head,
+                ',\n  "z_last": "0x0000000000000000000000000000000000000002",\n',
+                '  "token_factory": "0x0000000000000000000000000000000000000001",\n  "row": {\n    "class": 1\n  }\n}'
+            )
+        );
         h.check(b);
         assertEq(vm.parseJsonAddress(b, ".token_factory"), address(1));
         assertEq(vm.parseJsonUint(b, ".row.class"), 1);
@@ -102,7 +140,11 @@ contract DeployBookTest is Test {
         h.check(string.concat('{"key":"scaas-testnet","name":"x","chainId":1,', u, '"network":"mainnet"}'));
         vm.expectRevert(bytes("BOOK_NETWORK_MISMATCH: book: network mainnet, key ethereum-hoodi"));
         h.check(string.concat('{"key":"ethereum-hoodi","name":"x","chainId":1,', u, '"network":"mainnet"}'));
-        vm.expectRevert(bytes("BOOK_HEADER_MISSING: book has no key, name, chainId, chainUid, network (a book from before NET-EVM-13)"));
+        vm.expectRevert(
+            bytes(
+                "BOOK_HEADER_MISSING: book has no key, name, chainId, chainUid, network (a book from before NET-EVM-13)"
+            )
+        );
         h.check('{"chain_uid":"0x01","token_factory":"0x0000000000000000000000000000000000000001"}');
     }
 }

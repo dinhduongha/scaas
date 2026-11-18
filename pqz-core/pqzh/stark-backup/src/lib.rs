@@ -10,4 +10,4 @@ pub mod ring;
 pub mod whirpcs;
 
 pub use config::Params;
-pub use rel::{MAX_PROOF, OP_REGISTER, OP_TRANSFER, prove, verify};
+pub use rel::{prove, verify, MAX_PROOF, OP_REGISTER, OP_TRANSFER};

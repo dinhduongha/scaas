@@ -13,7 +13,9 @@ pub enum Tok {
 
 /// The 32-byte words of `b` (`b.len()` a multiple of 32) as static tokens.
 pub fn words(b: &[u8]) -> Vec<Tok> {
-    b.chunks_exact(32).map(|c| Tok::Word(c.try_into().unwrap())).collect()
+    b.chunks_exact(32)
+        .map(|c| Tok::Word(c.try_into().unwrap()))
+        .collect()
 }
 
 pub fn u256(v: u64) -> [u8; 32] {
@@ -79,12 +81,16 @@ pub fn decode_account_state(ret: &[u8]) -> Option<([Vec<u8>; 4], u64)> {
     // Every word is RPC-controlled: all offset arithmetic is checked (review I6).
     let base = usize::try_from(word_at(ret, 0)?).ok()?;
     let field = |i: usize| -> Option<Vec<u8>> {
-        let at = base.checked_add(usize::try_from(word_at(ret, base.checked_add(32 * i)?)?).ok()?)?;
+        let at =
+            base.checked_add(usize::try_from(word_at(ret, base.checked_add(32 * i)?)?).ok()?)?;
         let len = usize::try_from(word_at(ret, at)?).ok()?;
         let start = at.checked_add(32)?;
         Some(ret.get(start..start.checked_add(len)?)?.to_vec())
     };
-    Some(([field(0)?, field(1)?, field(2)?, field(3)?], word_at(ret, base.checked_add(128)?)?))
+    Some((
+        [field(0)?, field(1)?, field(2)?, field(3)?],
+        word_at(ret, base.checked_add(128)?)?,
+    ))
 }
 
 #[cfg(test)]
@@ -112,7 +118,11 @@ mod tests {
     #[test]
     fn matches_solidity_layout() {
         // abi.encode(bytes(hex"aabb"), uint256(7), bytes(""))
-        let e = encode(&[Tok::Bytes(vec![0xaa, 0xbb]), Tok::Word(u256(7)), Tok::Bytes(vec![])]);
+        let e = encode(&[
+            Tok::Bytes(vec![0xaa, 0xbb]),
+            Tok::Word(u256(7)),
+            Tok::Bytes(vec![]),
+        ]);
         let h = hex::encode(e);
         let want = [
             "0000000000000000000000000000000000000000000000000000000000000060",

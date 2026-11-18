@@ -50,11 +50,27 @@ contract UALedgerHandler is Test {
     uint256 internal refs;
 
     constructor(
-        NormalToken tok_, WrappedToken wrp_, WrappedToken wrpL_, WrappedToken wrpN_, MockERC20 und_,
-        UARegistry reg_, address minter_, bytes32[2] memory uas_, bytes[2] memory keys_, uint16[2] memory kinds_
+        NormalToken tok_,
+        WrappedToken wrp_,
+        WrappedToken wrpL_,
+        WrappedToken wrpN_,
+        MockERC20 und_,
+        UARegistry reg_,
+        address minter_,
+        bytes32[2] memory uas_,
+        bytes[2] memory keys_,
+        uint16[2] memory kinds_
     ) {
-        (tok, wrp, wrpL, wrpN, und, reg, minter) = (tok_, NormalToken(address(wrp_)), NormalToken(address(wrpL_)),
-            NormalToken(address(wrpN_)), und_, reg_, minter_);
+        (tok, wrp, wrpL, wrpN, und, reg, minter) =
+        (
+            tok_,
+            NormalToken(address(wrp_)),
+            NormalToken(address(wrpL_)),
+            NormalToken(address(wrpN_)),
+            und_,
+            reg_,
+            minter_
+        );
         (uas, keys, kinds) = (uas_, keys_, kinds_);
         replay[address(tok_)][vm.addr(pks[0])] = int256(tok_.balanceOf(vm.addr(pks[0])));
         vm.recordLogs();
@@ -62,8 +78,16 @@ contract UALedgerHandler is Test {
 
     /// Every native holder of every tracked token: `wrpL` holds `tok` (its reserve), this handler wraps `wrpL`.
     function natives() public view returns (address[8] memory a) {
-        a = [vm.addr(pks[0]), vm.addr(pks[1]), vm.addr(pks[2]), RELAYER, FEE_TO, MetaTxLib.UA_POOL, address(wrpL),
-            address(this)];
+        a = [
+            vm.addr(pks[0]),
+            vm.addr(pks[1]),
+            vm.addr(pks[2]),
+            RELAYER,
+            FEE_TO,
+            MetaTxLib.UA_POOL,
+            address(wrpL),
+            address(this)
+        ];
     }
 
     // ----- ops: NORMAL clone -----
@@ -132,16 +156,25 @@ contract UALedgerHandler is Test {
         address recipient = vm.addr(pks[1]);
         uint256 fee = withFee ? amount / 100 : 0;
         MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction({
-            from: f, data: abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), amount, recipient, 0),
-            batch: 1, nonce: wrp.mtxNonce(f, 1), validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER,
-            relayer: RELAYER, fee: 0, feeRecipient: address(0)
+            from: f,
+            data: abi.encodeWithSignature(
+                "unwrap(address,uint256,address,uint256)", address(und), amount, recipient, 0
+            ),
+            batch: 1,
+            nonce: wrp.mtxNonce(f, 1),
+            validUntil: block.timestamp + 300,
+            mode: MetaTxLib.MODE_RESTRICT_RELAYER,
+            relayer: RELAYER,
+            fee: 0,
+            feeRecipient: address(0)
         });
         if (fee != 0) {
             m.mode |= MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT | MetaTxLib.MODE_FEE_PERCENT;
             (m.fee, m.feeRecipient) = (10_000, FEE_TO);
         }
         if (viaNamed) {
-            MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(f, m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient);
+            MetaTxLib.UAEnvelope memory e =
+                MetaTxLib.UAEnvelope(f, m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient);
             bytes memory sig = _auth(3 + fromIdx % 2, _unwrapDigest(e, amount, recipient));
             vm.prank(RELAYER);
             WrappedToken(address(wrp)).mtxUnwrap(e, amount, recipient, 0, UACall.auth(f, sig));
@@ -155,14 +188,44 @@ contract UALedgerHandler is Test {
     }
 
     /// The `UAUnwrap` digest under `wrp`'s domain (ERC-5267), as a wallet computes it; relayer and fee recipient bound.
-    function _unwrapDigest(MetaTxLib.UAEnvelope memory e, uint256 wrapped, address recipient) internal view returns (bytes32) {
-        bytes32 structHash = keccak256(bytes.concat(abi.encode(
-            keccak256("UAUnwrap(bytes32 from,uint256 wrapped,address recipient,uint256 minOut,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
-            e.from, wrapped, recipient, uint256(0)), abi.encode(e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient)));
+    function _unwrapDigest(MetaTxLib.UAEnvelope memory e, uint256 wrapped, address recipient)
+        internal
+        view
+        returns (bytes32)
+    {
+        bytes32 structHash = keccak256(
+            bytes.concat(
+                abi.encode(
+                    keccak256(
+                        "UAUnwrap(bytes32 from,uint256 wrapped,address recipient,uint256 minOut,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+                    ),
+                    e.from,
+                    wrapped,
+                    recipient,
+                    uint256(0)
+                ),
+                abi.encode(e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient)
+            )
+        );
         (, string memory name, string memory version, uint256 chainId, address vc, bytes32 salt,) = wrp.eip712Domain();
-        return keccak256(abi.encodePacked(hex"1901",
-            keccak256(abi.encode(keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-                keccak256(bytes(name)), keccak256(bytes(version)), chainId, vc, salt)), structHash));
+        return keccak256(
+            abi.encodePacked(
+                hex"1901",
+                keccak256(
+                    abi.encode(
+                        keccak256(
+                            "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                        ),
+                        keccak256(bytes(name)),
+                        keccak256(bytes(version)),
+                        chainId,
+                        vc,
+                        salt
+                    )
+                ),
+                structHash
+            )
+        );
     }
 
     // ----- ops: UA-5a receivers, the UA allowlist, payee fee -----
@@ -197,7 +260,15 @@ contract UALedgerHandler is Test {
         amount = bound(amount, 0, tok.balanceOf(a) * 100 / 101);
         uint256 fee = withFee ? amount / 100 : 0;
         vm.prank(a);
-        tok.payWithFeeToUA(uas[ua % 2], amount, fee != 0 ? FeeMode.FIXED : FeeMode.NONE, fee, FEE_TO, PayMetaKit.ref(keccak256("pay")), PayMetaKit.meta(keccak256("pay")));
+        tok.payWithFeeToUA(
+            uas[ua % 2],
+            amount,
+            fee != 0 ? FeeMode.FIXED : FeeMode.NONE,
+            fee,
+            FEE_TO,
+            PayMetaKit.ref(keccak256("pay")),
+            PayMetaKit.meta(keccak256("pay"))
+        );
         _settle(tok, 1, fee != 0 ? 2 : 1);
     }
 
@@ -253,7 +324,10 @@ contract UALedgerHandler is Test {
 
     /// Checks one `unwrapToUA` of `wrapped` against the balances: `debited` (burned + fee) off the subject, `out` into
     /// `to` in `tok`, `out` off the reserve.
-    function _checkUnwrapToUA(uint256 wrapped, uint256 fee, uint256 debited, uint256 credited, uint256 r0) internal view {
+    function _checkUnwrapToUA(uint256 wrapped, uint256 fee, uint256 debited, uint256 credited, uint256 r0)
+        internal
+        view
+    {
         (uint256 n, uint256 d, uint256 r1) = _legL();
         uint256 out = wrapped * d / n;
         assertEq(credited, out, "out");
@@ -310,16 +384,32 @@ contract UALedgerHandler is Test {
         bytes32 seed = keccak256(abi.encode("scaas.ua5a.inv", ++refs));
         bytes32 ref = PayMetaKit.ref(seed); // pay-meta-tax T37: the commitment of `PayMetaKit.meta(seed)`
         MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({
-            from: p, to: q, value: amount, entryRef: ref, batch: tok.payLane(ref), nonce: 0,
-            validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: RELAYER, fee: 0,
+            from: p,
+            to: q,
+            value: amount,
+            entryRef: ref,
+            batch: tok.payLane(ref),
+            nonce: 0,
+            validUntil: block.timestamp + 300,
+            mode: MetaTxLib.MODE_RESTRICT_RELAYER,
+            relayer: RELAYER,
+            fee: 0,
             feeRecipient: address(0)
         });
         bytes32 d = tok.mtxTransferDigest(x);
         bytes memory payerAuth = _auth(payer, d);
-        bytes memory payeeAuth = _sign(payee, UAKinds.PURPOSE_PAYEE_FEE,
-            tok.payeeFeeDigest(x, fee, FEE_TO, block.timestamp));
+        bytes memory payeeAuth =
+            _sign(payee, UAKinds.PURPOSE_PAYEE_FEE, tok.payeeFeeDigest(x, fee, FEE_TO, block.timestamp));
         vm.prank(RELAYER);
-        tok.mtxPayWithPayeeFee(x, UACall.auth(x.from, payerAuth), fee, FEE_TO, block.timestamp, UACall.auth(x.to, payeeAuth), PayMetaKit.meta(seed));
+        tok.mtxPayWithPayeeFee(
+            x,
+            UACall.auth(x.from, payerAuth),
+            fee,
+            FEE_TO,
+            block.timestamp,
+            UACall.auth(x.to, payeeAuth),
+            PayMetaKit.meta(seed)
+        );
         bool pUA = payer > 2;
         bool qUA = payee > 2;
         // the payment (UATransfer iff a derived side, Transfer iff a native side), then the fee from the payee to FEE_TO
@@ -336,8 +426,16 @@ contract UALedgerHandler is Test {
         bytes32 t = _id(to % 5);
         uint256 have = t_.balanceOfUA(f);
         MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({
-            from: f, to: t, value: bound(amount, 0, have), entryRef: 0, batch: 1, nonce: t_.mtxNonce(f, 1),
-            validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: RELAYER, fee: 0,
+            from: f,
+            to: t,
+            value: bound(amount, 0, have),
+            entryRef: 0,
+            batch: 1,
+            nonce: t_.mtxNonce(f, 1),
+            validUntil: block.timestamp + 300,
+            mode: MetaTxLib.MODE_RESTRICT_RELAYER,
+            relayer: RELAYER,
+            fee: 0,
             feeRecipient: address(0)
         });
         uint256 fee = withFee ? x.value / 100 : 0;
@@ -371,10 +469,22 @@ contract UALedgerHandler is Test {
 
     function _submit(NormalToken t_, MetaTxLib.UAMetaTransfer memory x, bytes memory auth, uint256 entry) internal {
         if (entry == 1 && x.fee == 0) {
-            t_.mtxTransfer(x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, UACall.auth(x.from, auth));
+            t_.mtxTransfer(
+                x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, UACall.auth(x.from, auth)
+            );
         } else if (entry == 1) {
             t_.mtxTransferWithFee(
-                x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, x.fee, x.feeRecipient, UACall.auth(x.from, auth)
+                x.from,
+                x.to,
+                x.value,
+                x.batch,
+                x.nonce,
+                x.validUntil,
+                x.mode,
+                x.relayer,
+                x.fee,
+                x.feeRecipient,
+                UACall.auth(x.from, auth)
             );
         } else if (entry == 2) {
             MetaTxLib.UAMetaTransfer[] memory xs = new MetaTxLib.UAMetaTransfer[](1);
@@ -407,11 +517,20 @@ contract UALedgerHandler is Test {
 
     /// A `UAMetaTransaction` of `f` on `t_`, lane 1, with a bound FIXED fee to `FEE_TO` when `fee ≠ 0`.
     function _uaCall(NormalToken t_, bytes32 f, bytes memory data, uint256 fee)
-        internal view returns (MetaTxLib.UAMetaTransaction memory m)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransaction memory m)
     {
         m = MetaTxLib.UAMetaTransaction({
-            from: f, data: data, batch: 1, nonce: t_.mtxNonce(f, 1), validUntil: block.timestamp + 300,
-            mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: RELAYER, fee: 0, feeRecipient: address(0)
+            from: f,
+            data: data,
+            batch: 1,
+            nonce: t_.mtxNonce(f, 1),
+            validUntil: block.timestamp + 300,
+            mode: MetaTxLib.MODE_RESTRICT_RELAYER,
+            relayer: RELAYER,
+            fee: 0,
+            feeRecipient: address(0)
         });
         if (fee != 0) {
             m.mode |= MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT | MetaTxLib.MODE_FEE_FIXED;

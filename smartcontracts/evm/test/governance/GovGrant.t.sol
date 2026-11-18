@@ -31,7 +31,9 @@ contract GovHookERC20 is MockERC20 {
 
     constructor() MockERC20("Hook", "HK", 18) {}
 
-    function setHook(address h) external { hookTarget = h; }
+    function setHook(address h) external {
+        hookTarget = h;
+    }
 
     function _update(address from, address to, uint256 v) internal override {
         super._update(from, to, v);
@@ -49,16 +51,39 @@ contract TopBandApp is GovernanceBase {
         GovernanceLib.init(BITS, 0, nid(owner_), 0, address(0), none, BITS, BITS, 0, address(0));
     }
 
-    function _guardIn() internal pure override returns (bool) { return false; }
+    function _guardIn() internal pure override returns (bool) {
+        return false;
+    }
     function _guardOut(bool) internal pure override {}
-    function _caller() internal view override returns (address) { return msg.sender; }
+
+    function _caller() internal view override returns (address) {
+        return msg.sender;
+    }
+
     /// @dev A test app has no chain word (not factory-made); its renounce is not exercised by chain (Fable recheck-2 P3-1).
-    function _govChainUid() internal pure override returns (bytes32) { return bytes32(0); }
-    function _validBits() internal pure override returns (uint256) { return BITS; }
-    function _roleBits() internal pure override returns (uint256) { return BITS; }
-    function _contractOnlyBits() internal pure override returns (uint256) { return 0; }
-    function _scalarBits() internal pure override returns (uint256) { return 0; }
-    function _scopeBits() internal pure override returns (uint256) { return 0; }
+    function _govChainUid() internal pure override returns (bytes32) {
+        return bytes32(0);
+    }
+
+    function _validBits() internal pure override returns (uint256) {
+        return BITS;
+    }
+
+    function _roleBits() internal pure override returns (uint256) {
+        return BITS;
+    }
+
+    function _contractOnlyBits() internal pure override returns (uint256) {
+        return 0;
+    }
+
+    function _scalarBits() internal pure override returns (uint256) {
+        return 0;
+    }
+
+    function _scopeBits() internal pure override returns (uint256) {
+        return 0;
+    }
 
     function act(uint8 bit) external {
         GovernanceUse.use(bit, _govSubject(), 0);
@@ -72,16 +97,36 @@ contract GovDexHolder {
     SCaaSDex public dex;
     bytes4[] public errs;
 
-    function setDex(SCaaSDex d) external { dex = d; }
+    function setDex(SCaaSDex d) external {
+        dex = d;
+    }
 
-    function n() external view returns (uint256) { return errs.length; }
+    function n() external view returns (uint256) {
+        return errs.length;
+    }
 
     function hook() external {
         if (errs.length != 0) return;
-        try dex.setMarket(address(0x51), address(0x52), true, EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.setExchangeTarget(address(0x53), true, EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.setListedOnly(true, EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.setFeeSplit(0, address(0xAA), EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.setMarket(address(0x51), address(0x52), true, EnvKit.codeUidOf(address(dex))) {
+            errs.push(0);
+        } catch (bytes memory r) {
+            errs.push(bytes4(r));
+        }
+        try dex.setExchangeTarget(address(0x53), true, EnvKit.codeUidOf(address(dex))) {
+            errs.push(0);
+        } catch (bytes memory r) {
+            errs.push(bytes4(r));
+        }
+        try dex.setListedOnly(true, EnvKit.codeUidOf(address(dex))) {
+            errs.push(0);
+        } catch (bytes memory r) {
+            errs.push(bytes4(r));
+        }
+        try dex.setFeeSplit(0, address(0xAA), EnvKit.codeUidOf(address(dex))) {
+            errs.push(0);
+        } catch (bytes memory r) {
+            errs.push(bytes4(r));
+        }
     }
 }
 
@@ -91,18 +136,39 @@ contract GovDexForwardHolder {
     SCaaSDex public dex;
     bytes4[] public errs;
 
-    function setDex(SCaaSDex d) external { dex = d; }
+    function setDex(SCaaSDex d) external {
+        dex = d;
+    }
 
-    function n() external view returns (uint256) { return errs.length; }
+    function n() external view returns (uint256) {
+        return errs.length;
+    }
 
     function hook() external {
         if (errs.length != 0) return;
         bytes32 other = bytes32(uint256(0x51));
-        try dex.grantRole(GovernanceBits.LISTING, other, EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.revokeRole(GovernanceBits.LISTING, bytes32(uint256(uint160(address(this)))), EnvKit.codeUidOf(address(dex))) { errs.push(0); }
-        catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.transferAdmin(other, EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.renounceAdmin(EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.grantRole(GovernanceBits.LISTING, other, EnvKit.codeUidOf(address(dex))) {
+            errs.push(0);
+        } catch (bytes memory r) {
+            errs.push(bytes4(r));
+        }
+        try dex.revokeRole(
+            GovernanceBits.LISTING, bytes32(uint256(uint160(address(this)))), EnvKit.codeUidOf(address(dex))
+        ) {
+            errs.push(0);
+        } catch (bytes memory r) {
+            errs.push(bytes4(r));
+        }
+        try dex.transferAdmin(other, EnvKit.codeUidOf(address(dex))) {
+            errs.push(0);
+        } catch (bytes memory r) {
+            errs.push(bytes4(r));
+        }
+        try dex.renounceAdmin(EnvKit.codeUidOf(address(dex))) {
+            errs.push(0);
+        } catch (bytes memory r) {
+            errs.push(bytes4(r));
+        }
     }
 }
 
@@ -124,8 +190,12 @@ contract GovGrantTest is Test {
     function setUp() public {
         vm.warp(1_800_000_000);
         f = EnvKit.factory(address(this), UID, 0);
-        Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
-        Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false);
+        Catalogue.plain(
+            f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false
+        );
+        Catalogue.plain(
+            f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false
+        );
         t = _token("t", 0);
     }
 
@@ -496,7 +566,9 @@ contract GovGrantTest is Test {
     }
 
     function _granted(Vm.Log[] memory logs) internal pure returns (uint256 k) {
-        for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == IGovernance.RoleGranted.selector) ++k;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] == IGovernance.RoleGranted.selector) ++k;
+        }
     }
 
     /// B-31: `setGrant` on a new holder emits `RoleGranted`, so the indexed holder list is whole; an edit does not.
@@ -540,7 +612,11 @@ contract GovGrantTest is Test {
 
     function _dexOf(bytes32 salt) internal returns (SCaaSDex) {
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        return SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), salt));
+        return SCaaSDex(
+            f.createDex(
+                1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), salt
+            )
+        );
     }
 
     /// `hasRole` is true for a limited holder: every power on the wrapped kinds must go through `use`.
@@ -561,13 +637,19 @@ contract GovGrantTest is Test {
         w.setGrant(GovernanceBits.WRAP_DISABLEABLE, nid(MANAGER), g, EnvKit.codeUidOf(address(w)));
         vm.warp(block.timestamp + 2 hours);
         vm.prank(MANAGER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantExpired.selector, GovernanceBits.WRAP_DISABLEABLE, MANAGER));
+        vm.expectRevert(
+            abi.encodeWithSelector(IGovernance.GrantExpired.selector, GovernanceBits.WRAP_DISABLEABLE, MANAGER)
+        );
         w.disableWrap(address(usd), bytes32(uint256(1)), EnvKit.codeUidOf(address(w)));
     }
 
     function test_dexPowerIsBound() public {
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"));
+        SCaaSDex d = SCaaSDex(
+            f.createDex(
+                1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"
+            )
+        );
         assertTrue(d.hasRole(GovernanceBits.LISTING, nid(OWNER)));
         IGovernance.GrantTerms memory g = _open();
         g.maxUses = 1;
@@ -586,7 +668,10 @@ contract GovGrantTest is Test {
     /// The DELEGATECALLs of the current call to `GovernanceLib` with selector `sel`.
     function _libCalls(Vm.AccountAccess[] memory acc, bytes4 sel) internal pure returns (uint256 k) {
         for (uint256 i; i < acc.length; ++i) {
-            if (acc[i].kind == VmSafe.AccountAccessKind.DelegateCall && acc[i].data.length >= 4 && bytes4(acc[i].data) == sel) ++k;
+            if (
+                acc[i].kind == VmSafe.AccountAccessKind.DelegateCall && acc[i].data.length >= 4
+                    && bytes4(acc[i].data) == sel
+            ) ++k;
         }
     }
 
@@ -603,14 +688,20 @@ contract GovGrantTest is Test {
         _set(OFFICER, g);
         vm.startStateDiffRecording();
         _mint(OFFICER, 1);
-        assertEq(_libCalls(vm.stopAndReturnStateDiff(), GovernanceLib.useLimited.selector), 1, "limited: one DELEGATECALL");
+        assertEq(
+            _libCalls(vm.stopAndReturnStateDiff(), GovernanceLib.useLimited.selector), 1, "limited: one DELEGATECALL"
+        );
     }
 
     /// B-27: the DEX's owner holds bits 11 and 12 from `initialize` through `initHolder`, once each, not by `grantRole`.
     function test_dexInitHoldsBothBitsThroughInitHolder() public {
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
         vm.startStateDiffRecording();
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"));
+        SCaaSDex d = SCaaSDex(
+            f.createDex(
+                1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"
+            )
+        );
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         assertEq(_libCalls(acc, GovernanceLib.initHolder.selector), 2, "initHolder, once per bit");
         assertEq(_libCalls(acc, GovernanceLib.grantRole.selector), 0, "no grantRole at init");
@@ -620,7 +711,9 @@ contract GovGrantTest is Test {
         assertEq(d.holderCount(GovernanceBits.FEE_ROUTING), 1);
         assertEq(d.admin(), nid(OWNER));
         // no owner: no holder either
-        d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(0, 0, address(0xAA), false, 0, address(0), 0, 0)), "d0"));
+        d = SCaaSDex(
+            f.createDex(1, abi.encode(ISCaaSDex.DexConfig(0, 0, address(0xAA), false, 0, address(0), 0, 0)), "d0")
+        );
         assertEq(d.holderCount(GovernanceBits.LISTING), 0);
         assertEq(d.holderCount(GovernanceBits.FEE_ROUTING), 0);
     }
@@ -628,7 +721,11 @@ contract GovGrantTest is Test {
     /// B-31: every `GovernanceBase` contract answers `IGovernance` and `IERC165`, the DEX too.
     function test_dexAnswersIGovernance() public {
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"));
+        SCaaSDex d = SCaaSDex(
+            f.createDex(
+                1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"
+            )
+        );
         assertTrue(d.supportsInterface(type(IGovernance).interfaceId));
         assertTrue(d.supportsInterface(type(IERC165).interfaceId));
         assertFalse(d.supportsInterface(0xffffffff));
@@ -640,7 +737,11 @@ contract GovGrantTest is Test {
     function test_dexForwardedGovernanceRefusedInsideASettlement() public {
         GovDexForwardHolder h = new GovDexForwardHolder();
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(h)), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"));
+        SCaaSDex d = SCaaSDex(
+            f.createDex(
+                1, abi.encode(ISCaaSDex.DexConfig(nid(address(h)), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"
+            )
+        );
         h.setDex(d);
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.features, c.initialSupply, c.initialHolder) = ("A", "A", 1, 1e6, vm.addr(ALICE_PK));
@@ -662,7 +763,9 @@ contract GovGrantTest is Test {
         assertTrue(ok[0], "the settlement runs");
         assertEq(h.n(), 4);
         bytes4 guard = bytes4(keccak256("ReentrancyGuardReentrantCall()"));
-        for (uint256 i; i < 4; ++i) assertEq(h.errs(i), guard);
+        for (uint256 i; i < 4; ++i) {
+            assertEq(h.errs(i), guard);
+        }
         assertEq(d.admin(), nid(address(h)), "nothing ran inside");
     }
 
@@ -671,7 +774,11 @@ contract GovGrantTest is Test {
     function test_dexPowerRefusedInsideASettlement() public {
         GovDexHolder h = new GovDexHolder();
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(h)), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"));
+        SCaaSDex d = SCaaSDex(
+            f.createDex(
+                1, abi.encode(ISCaaSDex.DexConfig(nid(address(h)), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"
+            )
+        );
         h.setDex(d);
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.features, c.initialSupply, c.initialHolder) = ("A", "A", 1, 1e6, vm.addr(ALICE_PK));
@@ -691,14 +798,20 @@ contract GovGrantTest is Test {
         assertTrue(ok[0], "the settlement runs");
         assertEq(h.n(), 4);
         bytes4 guard = bytes4(keccak256("ReentrancyGuardReentrantCall()"));
-        for (uint256 i; i < 4; ++i) assertEq(h.errs(i), guard);
+        for (uint256 i; i < 4; ++i) {
+            assertEq(h.errs(i), guard);
+        }
     }
 
     uint256 constant ALICE_PK = 0xA11CE;
     uint256 constant DAVE_PK = 0xDA7E;
 
     /// Dave sells 2000 of the hook token for 1000 A; Alice sells 1000 A for it, at Dave's price.
-    function _hookSettlement(SCaaSDex d, NormalToken a, address hk) internal view returns (DexLegs.Settlement memory st) {
+    function _hookSettlement(SCaaSDex d, NormalToken a, address hk)
+        internal
+        view
+        returns (DexLegs.Settlement memory st)
+    {
         st.ref = bytes32(uint256(1));
         st.makers = new DexLegs.Leg[](1);
         ITradeToken.TradeOrder memory o = _tradeOrder(vm.addr(DAVE_PK), address(a), 2000, 1000, address(d));
@@ -713,7 +826,9 @@ contract GovGrantTest is Test {
     }
 
     function _tradeOrder(address from, address receiveToken, uint256 amount, uint256 receiveAmount, address dex)
-        internal view returns (ITradeToken.TradeOrder memory o)
+        internal
+        view
+        returns (ITradeToken.TradeOrder memory o)
     {
         (o.from, o.receiveToken, o.amount, o.receiveAmount, o.dex) = (from, receiveToken, amount, receiveAmount, dex);
         (o.batch, o.nonce, o.validUntil) = (1, 1, block.timestamp + 300);
@@ -797,7 +912,8 @@ contract GovGrantTest is Test {
         _is(0, 0);
         _renounce();
         IFactoryToken.TokenConfig memory c; // INIT
-        (c.name, c.symbol, c.decimals, c.features, c.lockedFeatures, c.roles.minter) = ("G", "G", 18, 7, 1 << MINT, nid(MANAGER));
+        (c.name, c.symbol, c.decimals, c.features, c.lockedFeatures, c.roles.minter) =
+        ("G", "G", 18, 7, 1 << MINT, nid(MANAGER));
         _isOn(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "r1"), 1, 1);
     }
 
@@ -1127,16 +1243,28 @@ contract GovGrantTest is Test {
 
     function test_gas_setGrant_fresh() public {
         IGovernance.GrantTerms memory g = _open();
-        (g.min, g.total, g.perWindow, g.window, g.validUntil, g.maxUses) = (1, 1e6, 1e5, 1 days, uint64(block.timestamp + 365 days), 1000);
-        _gas("setGrant fresh, every word NORMAL binds", OWNER, address(t), abi.encodeCall(IGovernance.setGrant, (MINT, nid(MANAGER), g, EnvKit.codeUidOf(address(t)))));
+        (g.min, g.total, g.perWindow, g.window, g.validUntil, g.maxUses) =
+        (1, 1e6, 1e5, 1 days, uint64(block.timestamp + 365 days), 1000);
+        _gas(
+            "setGrant fresh, every word NORMAL binds",
+            OWNER,
+            address(t),
+            abi.encodeCall(IGovernance.setGrant, (MINT, nid(MANAGER), g, EnvKit.codeUidOf(address(t))))
+        );
     }
 
     function test_gas_mintLimited_everyBound() public {
         IGovernance.GrantTerms memory g = _open();
-        (g.min, g.total, g.perWindow, g.window, g.validUntil, g.maxUses) = (1, 1e6, 1e5, 1 days, uint64(block.timestamp + 365 days), 1000);
+        (g.min, g.total, g.perWindow, g.window, g.validUntil, g.maxUses) =
+        (1, 1e6, 1e5, 1 days, uint64(block.timestamp + 365 days), 1000);
         _set(MANAGER, g);
         _mint(MANAGER, 1);
-        _gas("mint limited, every bound, second use", MANAGER, address(t), abi.encodeCall(NormalToken.mint, (TO, 1, EnvKit.codeUidOf(address(t)))));
+        _gas(
+            "mint limited, every bound, second use",
+            MANAGER,
+            address(t),
+            abi.encodeCall(NormalToken.mint, (TO, 1, EnvKit.codeUidOf(address(t))))
+        );
     }
 
     function test_gas_mintLeaf() public {
@@ -1148,6 +1276,11 @@ contract GovGrantTest is Test {
         vm.prank(MANAGER);
         t.setGrant(MINT, nid(OFFICER), l, EnvKit.codeUidOf(address(t)));
         _mint(OFFICER, 1);
-        _gas("mint leaf, parent debited, second use", OFFICER, address(t), abi.encodeCall(NormalToken.mint, (TO, 1, EnvKit.codeUidOf(address(t)))));
+        _gas(
+            "mint leaf, parent debited, second use",
+            OFFICER,
+            address(t),
+            abi.encodeCall(NormalToken.mint, (TO, 1, EnvKit.codeUidOf(address(t))))
+        );
     }
 }

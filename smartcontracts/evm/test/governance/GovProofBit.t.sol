@@ -43,6 +43,7 @@ import {nid} from "../helpers/Ids.sol";
 /// Test only: the masks `GovernanceLib` receives from each PQZ kind (bit 24 on 4, 5, 12, 13).
 contract Bit24Masks4 is NormalPqzToken {
     constructor(address f_, bytes memory a) NormalPqzToken(f_, a) {}
+
     function masks() external pure returns (uint256, uint256, uint256, uint256) {
         return (_validBits(), _roleBits(), _contractOnlyBits(), _delayedRelaxBits());
     }
@@ -50,6 +51,7 @@ contract Bit24Masks4 is NormalPqzToken {
 
 contract Bit24Masks5 is WrappedPqzToken {
     constructor(address f_, bytes memory a) WrappedPqzToken(f_, a) {}
+
     function masks() external pure returns (uint256, uint256, uint256, uint256) {
         return (_validBits(), _roleBits(), _contractOnlyBits(), _delayedRelaxBits());
     }
@@ -57,6 +59,7 @@ contract Bit24Masks5 is WrappedPqzToken {
 
 contract Bit24Masks12 is NormalPqzRegulatedToken {
     constructor(address f_, bytes memory a) NormalPqzRegulatedToken(f_, a) {}
+
     function masks() external pure returns (uint256, uint256, uint256, uint256) {
         return (_validBits(), _roleBits(), _contractOnlyBits(), _delayedRelaxBits());
     }
@@ -64,6 +67,7 @@ contract Bit24Masks12 is NormalPqzRegulatedToken {
 
 contract Bit24Masks13 is WrappedPqzRegulatedToken {
     constructor(address f_, bytes memory a) WrappedPqzRegulatedToken(f_, a) {}
+
     function masks() external pure returns (uint256, uint256, uint256, uint256) {
         return (_validBits(), _roleBits(), _contractOnlyBits(), _delayedRelaxBits());
     }
@@ -97,10 +101,17 @@ contract GovProofBitTest is PqzOffchainBase {
         IFactoryToken.Env memory e = pqzEnv(address(f), PQZ_UID, address(reg), address(pqv));
         Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ, 1, e, type(NormalPqzToken).creationCode);
         Catalogue.release(f, IOpenFactory.TokenKind.WRAPPED_PQZ, 1, e, type(WrappedPqzToken).creationCode);
-        Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, 1, e, type(NormalPqzRegulatedToken).creationCode,
-            regArgs());
-        Catalogue.release(f, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, e, type(WrappedPqzRegulatedToken).creationCode,
-            regArgs());
+        Catalogue.release(
+            f, IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, 1, e, type(NormalPqzRegulatedToken).creationCode, regArgs()
+        );
+        Catalogue.release(
+            f,
+            IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED,
+            1,
+            e,
+            type(WrappedPqzRegulatedToken).creationCode,
+            regArgs()
+        );
         vm.startPrank(registrar);
         f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(f)));
         f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ, true, EnvKit.uidOf(address(f)));
@@ -125,24 +136,36 @@ contract GovProofBitTest is PqzOffchainBase {
         if (withBit) c.features |= uint256(1) << BIT;
         if (k >= 12) c.lockedFeatures = uint256(1) << GovernanceBits.DENYLIST; // round 3s: no deny list, no terms, a seat of 24 alone
         c.roles.issuer = issuer;
-        t = NormalPqzToken(f.createToken(IOpenFactory.TokenKind(k), 1, abi.encode(c), keccak256(abi.encode(k, issuer, withBit, delay))));
+        t = NormalPqzToken(
+            f.createToken(IOpenFactory.TokenKind(k), 1, abi.encode(c), keccak256(abi.encode(k, issuer, withBit, delay)))
+        );
     }
 
     function _setEvents(address t) internal returns (uint256 n) {
         Vm.Log[] memory ls = vm.getRecordedLogs();
-        for (uint256 i; i < ls.length; ++i) if (ls[i].emitter == t && ls[i].topics[0] == EV_SET) ++n;
+        for (uint256 i; i < ls.length; ++i) {
+            if (ls[i].emitter == t && ls[i].topics[0] == EV_SET) ++n;
+        }
     }
 
     /// `UASetProofStore(next)` for `from`, signed by `sign` (native `NKEY`, or a derived id's filler signature), relayed by
     /// a relayer the struct does not bind (fee mode `NONE`: the envelope's relayer and fee recipient set, zero in the digest).
     function _routerSet(bytes32 from, address target, uint8 next) internal {
-        MetaTxLib.UAEnvelope memory u = MetaTxLib.UAEnvelope(from, LANE, router.mtxNonce(from, LANE), block.timestamp + 300, 0,
-            address(0xBEEF), 0, address(0xFEE));
-        bytes32 sh = keccak256(bytes.concat(abi.encode(GovernanceRouterTypes.UA_SET_PROOF_STORE, u.from), abi.encode(target),
-            abi.encode(next, EnvKit.codeUidOf(target)), abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))));
+        MetaTxLib.UAEnvelope memory u = MetaTxLib.UAEnvelope(
+            from, LANE, router.mtxNonce(from, LANE), block.timestamp + 300, 0, address(0xBEEF), 0, address(0xFEE)
+        );
+        bytes32 sh = keccak256(
+            bytes.concat(
+                abi.encode(GovernanceRouterTypes.UA_SET_PROOF_STORE, u.from),
+                abi.encode(target),
+                abi.encode(next, EnvKit.codeUidOf(target)),
+                abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))
+            )
+        );
         IUARegistry.UASig memory auth;
         if (from == nId) {
-            (uint8 vv, bytes32 r, bytes32 ss) = vm.sign(NKEY, MessageHashUtils.toTypedDataHash(_sepOf(address(router)), sh));
+            (uint8 vv, bytes32 r, bytes32 ss) =
+                vm.sign(NKEY, MessageHashUtils.toTypedDataHash(_sepOf(address(router)), sh));
             auth.signature = abi.encodePacked(r, ss, vv);
         } else {
             auth = UACall.auth(from, _mlAuth());
@@ -154,9 +177,13 @@ contract GovProofBitTest is PqzOffchainBase {
     // ------------------------------------------------------------------ the kinds
 
     function _validKind(uint8 k) internal {
-        (uint256 v, uint256 r, uint256 c, uint256 d) = k == 4 ? new Bit24Masks4(address(f), kindArgs(4, address(f), "")).masks()
-            : k == 5 ? new Bit24Masks5(address(f), kindArgs(5, address(f), "")).masks() : k == 12 ? new Bit24Masks12(address(f), kindArgs(12, address(f), regArgs())).masks()
-            : new Bit24Masks13(address(f), kindArgs(13, address(f), regArgs())).masks();
+        (uint256 v, uint256 r, uint256 c, uint256 d) = k == 4
+            ? new Bit24Masks4(address(f), kindArgs(4, address(f), "")).masks()
+            : k == 5
+                ? new Bit24Masks5(address(f), kindArgs(5, address(f), "")).masks()
+                : k == 12
+                    ? new Bit24Masks12(address(f), kindArgs(12, address(f), regArgs())).masks()
+                    : new Bit24Masks13(address(f), kindArgs(13, address(f), regArgs())).masks();
         uint256 m = uint256(1) << BIT;
         assertTrue(v & m != 0, "valid");
         assertTrue(r & m != 0, "a role bit (a power)");
@@ -169,21 +196,39 @@ contract GovProofBitTest is PqzOffchainBase {
         assertTrue(IGovernance(address(t)).validBits() & m != 0);
     }
 
-    function test_bit24_validKinds_4() public { _validKind(4); }
-    function test_bit24_validKinds_5() public { _validKind(5); }
-    function test_bit24_validKinds_12() public { _validKind(12); }
-    function test_bit24_validKinds_13() public { _validKind(13); }
+    function test_bit24_validKinds_4() public {
+        _validKind(4);
+    }
+
+    function test_bit24_validKinds_5() public {
+        _validKind(5);
+    }
+
+    function test_bit24_validKinds_12() public {
+        _validKind(12);
+    }
+
+    function test_bit24_validKinds_13() public {
+        _validKind(13);
+    }
 
     /// Every other kind refuses it: 0-3 and 8-11 (Zether's 2, 3, 10, 11 among them) have it outside `validBits()`, and a
     /// creation that sets it reverts `FeatureInvalidForKind(24)` (kind 0 and kind 2 through a factory).
     function test_bit24_otherKindsRefused() public {
         uint256 m = uint256(1) << BIT;
-        address[8] memory impls = [address(new NormalToken(address(f), kindArgs(0, address(f), ""))), address(new WrappedToken(address(f), kindArgs(1, address(f), ""))),
-            address(new NormalZetherToken(address(f), kindArgs(2, address(f), ""))), address(new WrappedZetherToken(address(f), kindArgs(3, address(f), ""))),
-            address(new NormalRegulatedToken(address(f), kindArgs(8, address(f), regArgs()))), address(new WrappedRegulatedToken(address(f), kindArgs(9, address(f), regArgs()))),
+        address[8] memory impls = [
+            address(new NormalToken(address(f), kindArgs(0, address(f), ""))),
+            address(new WrappedToken(address(f), kindArgs(1, address(f), ""))),
+            address(new NormalZetherToken(address(f), kindArgs(2, address(f), ""))),
+            address(new WrappedZetherToken(address(f), kindArgs(3, address(f), ""))),
+            address(new NormalRegulatedToken(address(f), kindArgs(8, address(f), regArgs()))),
+            address(new WrappedRegulatedToken(address(f), kindArgs(9, address(f), regArgs()))),
             address(new NormalZetherRegulatedToken(address(f), kindArgs(10, address(f), regArgs()))),
-            address(new WrappedZetherRegulatedToken(address(f), kindArgs(11, address(f), regArgs())))];
-        for (uint256 i; i < 8; ++i) assertEq(IGovernance(impls[i]).validBits() & m, 0, vm.toString(i));
+            address(new WrappedZetherRegulatedToken(address(f), kindArgs(11, address(f), regArgs())))
+        ];
+        for (uint256 i; i < 8; ++i) {
+            assertEq(IGovernance(impls[i]).validBits() & m, 0, vm.toString(i));
+        }
         // the creation path: a PQZ kind's config with the bit, on kind 4's own factory refused nowhere else (the control)
         _tok24(4, 0, true, 0);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
@@ -203,8 +248,9 @@ contract GovProofBitTest is PqzOffchainBase {
     // ------------------------------------------------------------------ the holders (O10: any)
 
     function _holderSets(NormalPqzToken t, bytes32 h, bool viaRouter) internal {
-        if (viaRouter) _routerSet(h, address(t), PqzCore.LOG);
-        else {
+        if (viaRouter) {
+            _routerSet(h, address(t), PqzCore.LOG);
+        } else {
             vm.prank(address(uint160(uint256(h))));
             t.setProofStore(PqzCore.LOG, EnvKit.codeUidOf(address(t)));
         }
@@ -315,7 +361,9 @@ contract GovProofBitTest is PqzOffchainBase {
         t.mtxConfidentialTransferSingle(a, PROOF, _pqAuth(), "", noVerdict());
         Vm.Log[] memory ls = vm.getRecordedLogs();
         uint256 n;
-        for (uint256 i; i < ls.length; ++i) if (ls[i].emitter == address(t) && ls[i].topics[0] == EV_PROOF) ++n;
+        for (uint256 i; i < ls.length; ++i) {
+            if (ls[i].emitter == address(t) && ls[i].topics[0] == EV_PROOF) ++n;
+        }
         assertEq(n, wantLog ? 1 : 0, "the debit logs by the mode set before it");
         assertEq(t.pqzDebitRecord(alice, k).proofStore, wantLog ? PqzCore.LOG : PqzCore.NONE, "its record");
     }
@@ -345,8 +393,13 @@ contract GovProofBitTest is PqzOffchainBase {
         _debit(t, 0, mode == PqzCore.LOG);
     }
 
-    function test_disable24_freezesValue_none() public { _frozen(PqzCore.NONE); }
-    function test_disable24_freezesValue_log() public { _frozen(PqzCore.LOG); }
+    function test_disable24_freezesValue_none() public {
+        _frozen(PqzCore.NONE);
+    }
+
+    function test_disable24_freezesValue_log() public {
+        _frozen(PqzCore.LOG);
+    }
 
     /// The router op with a relayer and fee recipient the struct does not bind (fee mode `NONE`), for a native holder; the
     /// nonce spent once; a replay refused.
@@ -368,7 +421,9 @@ contract GovProofBitTest is PqzOffchainBase {
         for (uint256 i; i < 4; ++i) {
             NormalPqzToken t = _tok24(ks[i], nId, true, 0);
             (bytes4[] memory s,,) = IMetaTx(address(t)).mtxSelectors();
-            for (uint256 j; j < s.length; ++j) assertTrue(s[j] != IPqzToken.setProofStore.selector, "not allow-listed");
+            for (uint256 j; j < s.length; ++j) {
+                assertTrue(s[j] != IPqzToken.setProofStore.selector, "not allow-listed");
+            }
             assertEq(keccak256(abi.encode(s)), pin[i], vm.toString(ks[i]));
         }
     }

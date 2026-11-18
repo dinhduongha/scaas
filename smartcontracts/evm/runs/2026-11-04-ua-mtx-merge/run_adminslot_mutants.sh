@@ -14,11 +14,15 @@ cp "$src" "$here/.adminslot.orig"
 trap 'cp "$here/.adminslot.orig" "$src"; rm -f "$here/.adminslot.orig"' EXIT
 # ONLY="a b" runs those mutants alone; the table is written from every mutant's last log.
 for m in ${ONLY:-$(python3 "$here/adminslot_mutants.py" --list)}; do
-  python3 "$here/adminslot_mutants.py" "$m" || { echo "$m: anchor missing" >&2; echo 99 > "$here/mutant-adminslot-$m.rc.log"; continue; }
-  ../../scripts/capped forge test --match-path 'test/as/Registry*.t.sol' \
-    > "$here/mutant-adminslot-$m.log" 2>&1
-  echo $? > "$here/mutant-adminslot-$m.rc.log"
-  cp "$here/.adminslot.orig" "$src"
+    python3 "$here/adminslot_mutants.py" "$m" || {
+        echo "$m: anchor missing" >&2
+        echo 99 >"$here/mutant-adminslot-$m.rc.log"
+        continue
+    }
+    ../../scripts/capped forge test --match-path 'test/as/Registry*.t.sol' \
+        >"$here/mutant-adminslot-$m.log" 2>&1
+    echo $? >"$here/mutant-adminslot-$m.rc.log"
+    cp "$here/.adminslot.orig" "$src"
 done
 python3 - "$here" <<'PY'
 import os, re, sys

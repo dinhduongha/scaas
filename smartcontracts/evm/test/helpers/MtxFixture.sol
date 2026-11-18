@@ -22,11 +22,20 @@ abstract contract MtxFixture is Test {
     }
 
     function _m(address from, bytes memory data, uint256 batch, uint256 nonce)
-        internal view returns (MetaTxLib.MetaTransaction memory)
+        internal
+        view
+        returns (MetaTxLib.MetaTransaction memory)
     {
         return MetaTxLib.MetaTransaction({
-            from: from, data: data, batch: batch, nonce: nonce, validUntil: block.timestamp + 300,
-            mode: MetaTxLib.MODE_OPEN, relayer: address(0), fee: 0, feeRecipient: address(0)
+            from: from,
+            data: data,
+            batch: batch,
+            nonce: nonce,
+            validUntil: block.timestamp + 300,
+            mode: MetaTxLib.MODE_OPEN,
+            relayer: address(0),
+            fee: 0,
+            feeRecipient: address(0)
         });
     }
 

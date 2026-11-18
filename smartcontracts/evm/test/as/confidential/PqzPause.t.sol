@@ -36,7 +36,9 @@ abstract contract PqzPauseSuite is PqzRegFixture {
     function test_pauseStopsShieldTransfersUnshield() public {
         bytes[] memory cds = new bytes[](6);
         cds[0] = abi.encodeWithSelector(IConfidentialToken.mtxShield.selector, bob, 3);
-        for (uint256 k; k < 5; ++k) cds[k + 1] = _opCall(k, 0, 0);
+        for (uint256 k; k < 5; ++k) {
+            cds[k + 1] = _opCall(k, 0, 0);
+        }
         _pausedEach(cds, address(this));
     }
 
@@ -67,11 +69,15 @@ abstract contract PqzPauseSuite is PqzRegFixture {
 }
 
 contract PqzPause12Test is PqzPauseSuite {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 }
 
 contract PqzPause13Test is PqzPauseSuite {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 
     /// Kind 13: wrap-shield (`_regPayer()`) and unshield-unwrap (the sender, direct and signed) stop under `P` (no
     /// confidential selector is pause-open, RK-7).

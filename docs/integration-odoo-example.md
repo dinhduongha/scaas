@@ -450,11 +450,11 @@ forced create value, so `push_state` is `'local'`, not `False`; `write` strips t
 | old (pull only) | old | — | today |
 | old | new | `pull` | yes: pull path unchanged |
 | old | new | `push` | refused: `action_switch_to_push` requires `GET /v1/info` `api ≥ 1` |
-| transitional (`[odoo]` present) | old | — | yes: legacy path; job API idle; store indexer runs |
+| transitional (`[external_pull]` present) | old | — | yes: legacy path; job API idle; store indexer runs |
 | transitional | new | `pull` | yes |
 | transitional | new | `push` | yes: store path for new jobs; legacy path drains in-flight Odoo jobs |
 | final | new, all chains `push` | `push` | target |
-| final | any chain `pull` | — | refused by the Odoo pre-migration; the final node refuses `[odoo]` ("removed by" the node release that deletes pull) |
+| final | any chain `pull` | — | refused by the Odoo pre-migration; the final node refuses `[external_pull]` ("removed by" the node release that deletes pull) |
 
 Per-chain cutover (`action_switch_to_push`) preconditions: (1) every company with a non-terminal job **or an approved
 receiving/paying wallet** on the chain has a route; `event_node_id` set; secrets set; `bound_*` match; (2) `GET /v1/info`:

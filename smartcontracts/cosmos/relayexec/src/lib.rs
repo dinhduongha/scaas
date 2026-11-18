@@ -4,7 +4,10 @@
 //! clients never pay or approve it.
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{to_json_binary, Addr, Binary, Deps, DepsMut, Empty, Env, MessageInfo, Response, StdResult, WasmMsg};
+use cosmwasm_std::{
+    to_json_binary, Addr, Binary, Deps, DepsMut, Empty, Env, MessageInfo, Response, StdResult,
+    WasmMsg,
+};
 use cw_storage_plus::Item;
 use serde::{Deserialize, Serialize};
 
@@ -26,13 +29,23 @@ const ROUTER: Item<Addr> = Item::new("router");
 
 /// The instantiating contract (the router, by `Instantiate2`) is the router.
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn instantiate(deps: DepsMut, _env: Env, info: MessageInfo, _msg: Empty) -> StdResult<Response> {
+pub fn instantiate(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    _msg: Empty,
+) -> StdResult<Response> {
     ROUTER.save(deps.storage, &info.sender)?;
     Ok(Response::new())
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn execute(deps: DepsMut, _env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
+pub fn execute(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    msg: ExecuteMsg,
+) -> StdResult<Response> {
     let ExecuteMsg::Exec { target, msg } = msg;
     if !info.funds.is_empty() {
         return Err(err("relayexec: funds are not accepted"));
@@ -41,7 +54,11 @@ pub fn execute(deps: DepsMut, _env: Env, info: MessageInfo, msg: ExecuteMsg) -> 
         return Err(err("relayexec: only the router"));
     }
     let target = deps.api.addr_validate(&target)?;
-    Ok(Response::new().add_message(WasmMsg::Execute { contract_addr: target.into(), msg, funds: vec![] }))
+    Ok(Response::new().add_message(WasmMsg::Execute {
+        contract_addr: target.into(),
+        msg,
+        funds: vec![],
+    }))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]

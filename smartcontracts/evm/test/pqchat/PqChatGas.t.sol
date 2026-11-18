@@ -38,14 +38,22 @@ contract PqChatGasTest is PqTopicsBase {
     // 1,921,243 -> 1,971,175; state 43,413,750 -> 44,602,560 (+777 x 1,530)
     // fix2 recheck-2 P3-1 (CTR-GOV-27, `deployImplementation`'s last `chainUid_`: one more calldata word, the EIP-7976 floor;
     // PqChat unchanged): regular 1,971,175 -> 1,973,256
-    uint256 internal constant RUNTIME = 28_776;
-    uint256 internal constant RELEASE_REGULAR = 1_973_256;
-    uint256 internal constant RELEASE_STATE = 44_602_560;
+    // pqvault R3 (CTR-PQV-12: the group code in `PqGroupBase`, its errors through `_fail`; behaviour unchanged, CTR-PQV-15):
+    // 28,776 -> 29,152 B; regular 1,973,256 -> 1,998,222; state 44,602,560 -> 45,177,840 (+376 x 1,530)
+    // code-format F2 (`bytecode_hash = "none"`: the metadata hash leaves runtime and init code, 41 B each; code unchanged):
+    // 29,152 -> 29,111 B; regular 1,998,222 -> 1,996,141; state 45,177,840 -> 45,115,110 (-41 x 1,530)
+    uint256 internal constant RUNTIME = 29_111;
+    uint256 internal constant RELEASE_REGULAR = 1_996_141;
+    uint256 internal constant RELEASE_STATE = 45_115_110;
     // owner 2026-11-10 (group 3p): the topic `name` bound 128 -> 512 B, one PUSH2 for a PUSH1 twice: 16,396 -> 16,398 B, state
     // 25,269,480 -> 25,272,540 (+2 x 1,530), regular unchanged
-    uint256 internal constant MODULE_RUNTIME = 16_398;
+    // pqvault R3 (CTR-PQV-12: the shared code from `PqGroupBase`, the env and nonce errors through `PqChatCore._fail`): 16,398 ->
+    // 16,449 B; regular 1,099,442 -> 1,101,523; state 25,272,540 -> 25,350,570 (+51 x 1,530)
+    // code-format F2 (`bytecode_hash = "none"`, 41 B less runtime and init code; code unchanged): 16,449 -> 16,408 B; regular
+    // 1,101,523 -> 1,099,442; state 25,350,570 -> 25,287,840 (-41 x 1,530)
+    uint256 internal constant MODULE_RUNTIME = 16_408;
     uint256 internal constant MODULE_REGULAR = 1_099_442;
-    uint256 internal constant MODULE_STATE = 25_272_540;
+    uint256 internal constant MODULE_STATE = 25_287_840;
 
     function _row(string memory what, uint256 regular, uint256 state) internal {
         Vm.Gas memory g = vm.lastCallGas();
@@ -53,16 +61,20 @@ contract PqChatGasTest is PqTopicsBase {
         emit log_named_uint(string.concat("GAS ", what, " regular"), g.gasTotalUsed);
         emit log_named_uint(string.concat("GAS ", what, " state"), s);
         emit log_named_uint(string.concat("GAS ", what, " total"), g.gasTotalUsed + s);
-        if (regular != 0 && !vm.envOr("GAS_MEASURE", false)) { // GAS_MEASURE=true: the figures, no pin
+        if (regular != 0 && !vm.envOr("GAS_MEASURE", false)) {
+            // GAS_MEASURE=true: the figures, no pin
             assertApproxEqAbs(g.gasTotalUsed, regular, SLACK, string.concat(what, " regular"));
             assertEq(s, state, string.concat(what, " state"));
         }
     }
 
     function _msg(bytes32 sid, bytes32 eid, bytes32 sender, uint64 counter, uint256 size)
-        internal pure returns (IPqChat.PqChatMessage memory m)
+        internal
+        pure
+        returns (IPqChat.PqChatMessage memory m)
     {
-        (m.sessionId, m.epochId, m.sender, m.device, m.counter) = (sid, eid, sender, bytes16(0x0190f5c0a1e07000800000000000d0c5), counter);
+        (m.sessionId, m.epochId, m.sender, m.device, m.counter) =
+        (sid, eid, sender, bytes16(0x0190f5c0a1e07000800000000000d0c5), counter);
         m.parents = new bytes32[](2);
         (m.parents[0], m.parents[1]) = (keccak256("a"), keccak256("b"));
         m.ciphertext = new bytes(size);
@@ -140,7 +152,9 @@ contract PqChatGasTest is PqTopicsBase {
     // ----- groups (correct, not optimised for) -----
 
     function test_gas_groups() public {
-        for (uint8 i = 6; i <= 20; ++i) _member(i);
+        for (uint8 i = 6; i <= 20; ++i) {
+            _member(i);
+        }
         (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _session(10, 1, address(chat));
         IUARegistry.UASig memory sig = _sig(s.creator, h.session(s));
         vm.prank(STRANGER);
@@ -242,8 +256,15 @@ contract PqChatGasTest is PqTopicsBase {
     function test_gas_deployImplementation() public {
         bytes memory code = type(PqChat).creationCode;
         vm.prank(REGISTRAR);
-        address r = f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 1, IPqChat.initialize.selector,
-            type(IPqChat).interfaceId, code, _args(), EnvKit.uidOf(address(f)));
+        address r = f.deployImplementation(
+            IOpenFactory.ReleaseId(3, 0, 2),
+            1,
+            IPqChat.initialize.selector,
+            type(IPqChat).interfaceId,
+            code,
+            _args(),
+            EnvKit.uidOf(address(f))
+        );
         Vm.Gas memory g = vm.lastCallGas();
         (uint256 regular, uint256 state) = (uint256(g.gasTotalUsed) * 64 / 63, uint256(int256(g.gasStateUsed)));
         uint256 asked = (regular + state) * 105 / 100;

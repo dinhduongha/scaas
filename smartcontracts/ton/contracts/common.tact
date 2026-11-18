@@ -131,7 +131,7 @@ const SIGN_DATA_PREFIX: Int = 0x75569022;
 // crc32 of METAOP_SCHEMA (smartcontracts/ton/tests/vectors.ts checks it against the TL-B string).
 const METAOP_SCHEMA_CRC: Int = 0x45ba8d70;
 
-const PAY_TAG: Int = 0x626d7074;   // "bmpt": forward payload `pay_tag pay_ref:uint256`
+const PAY_TAG: Int = 0x626d7074; // "bmpt": forward payload `pay_tag pay_ref:uint256`
 const TRADE_TAG: Int = 0x626d7472; // "bmtr": forward payload `trade_tag ^MetaOp ^TradeParams match_with:uint256`
 // "bmcl": forward payload `cancel_tag order:uint256` of a zero-amount transfer. It rides the same jetton path as
 // the order's leg, so TON's per-pair message order delivers it after the leg (review L11: no cancel map).
@@ -224,7 +224,18 @@ fun parseMetaOp(c: Cell): MetaOp {
     let extra = r.loadUint(256);
     r.endParse();
     return MetaOp {
-        network, op, amount, nonce, validUntil, contract, from, to, relayer, payRef, lane, extra,
+        network,
+        op,
+        amount,
+        nonce,
+        validUntil,
+        contract,
+        from,
+        to,
+        relayer,
+        payRef,
+        lane,
+        extra,
         digest: c.hash(),
     };
 }
@@ -316,9 +327,15 @@ asm fun p256CheckDataSignature(data: Slice, signature: Slice, publicKey: Slice):
 asm fun sha256Of4(a: Slice, b: Slice, c: Slice, d: Slice): Int { 4 PUSHINT HASHEXT_SHA256 }
 
 fun b64urlChar(v: Int): Int {
-    if (v < 26) { return 65 + v; }
-    if (v < 52) { return 97 + v - 26; }
-    if (v < 62) { return 48 + v - 52; }
+    if (v < 26) {
+        return 65 + v;
+    }
+    if (v < 52) {
+        return 97 + v - 26;
+    }
+    if (v < 62) {
+        return 48 + v - 52;
+    }
     return v == 62 ? 45 : 95;
 }
 
@@ -376,8 +393,11 @@ fun checkPasskey(a: Slice, record: Cell, digest: Int) {
 /// `keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`, `meta` = the bytes of the snake chain (each cell's
 /// data along its first ref; Tact's `keccak256(Slice)`), byte for byte the EVM `metaPayId`.
 fun metaPayId(salt: Int, meta: Cell): Int {
-    return keccak256(beginCell().storeSlice("scaas.pay.meta".asSlice()).storeUint(salt, 256)
-        .storeUint(keccak256(meta.beginParse()), 256).asSlice());
+    return keccak256(beginCell()
+        .storeSlice("scaas.pay.meta".asSlice())
+        .storeUint(salt, 256)
+        .storeUint(keccak256(meta.beginParse()), 256)
+        .asSlice());
 }
 
 /// A pay-meta `meta` must be a plain snake: at most one ref per cell. `keccak256(Slice)` follows only the first ref of

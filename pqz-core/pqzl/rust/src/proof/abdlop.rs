@@ -13,7 +13,12 @@ use crate::Error;
 /// `seed` with domains 0, 1, 2
 pub(crate) fn keygen(seed: &[u8; 32], p: &Abdlop) -> Result<(PolyMat, PolyMat, PolyMat), Error> {
     let (q, log2q) = (&p.ring.q, p.ring.log2q);
-    let (km, m1, m2r, lt) = (p.kmsis as usize, p.m1 as usize, (p.m2 - p.kmsis) as usize, (p.l + p.lext) as usize);
+    let (km, m1, m2r, lt) = (
+        p.kmsis as usize,
+        p.m1 as usize,
+        (p.m2 - p.kmsis) as usize,
+        (p.l + p.lext) as usize,
+    );
     let mut a1 = PolyMat::new(km, m1)?;
     let mut a2p = PolyMat::new(km, m2r)?;
     let mut bp = PolyMat::new(lt, m2r)?;
@@ -29,12 +34,21 @@ pub(crate) fn keygen(seed: &[u8; 32], p: &Abdlop) -> Result<(PolyMat, PolyMat, P
 
 /// `abdlop_hashcomm`: hash = H(hash || enc(tA1, tB_)), tA1 in log2q - D bits (`redp` in place), tB_ = the first l
 /// polys of tB in log2q bits
-pub(crate) fn hashcomm(hash: &mut [u8; 32], t_a1: &mut PolyVec, t_b: &mut PolyVec, p: &Abdlop) -> Result<(), Error> {
+pub(crate) fn hashcomm(
+    hash: &mut [u8; 32],
+    t_a1: &mut PolyVec,
+    t_b: &mut PolyVec,
+    p: &Abdlop,
+) -> Result<(), Error> {
     let (log2q, d) = (p.ring.log2q, p.dcompress.d);
     let mut c = Coder::new();
     if p.m1 > 0 {
         crate::arith::polyvec::redp_self(&mut **t_a1);
-        c.urandom(&mut **t_a1, &Int::from_limbs(&[1 << (log2q - d)], 0), log2q - d)?;
+        c.urandom(
+            &mut **t_a1,
+            &Int::from_limbs(&[1 << (log2q - d)], 0),
+            log2q - d,
+        )?;
     }
     if p.l > 0 {
         let mut tb_ = t_b.sub(0, p.l as usize, 1);

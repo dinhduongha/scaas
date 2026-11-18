@@ -44,7 +44,11 @@ contract MldsaAlt is OnchainBase, DeployBase {
         alt = _deployUARegistry(address(0), false);
         vm.stopBroadcast();
         _book(address(alt), "UARegistry");
-        console.log(string.concat("mldsaalt: registry ", vm.toString(address(alt)), " MLDSA_PRECOMPILE=", mldsaPrecompile ? "on" : "off"));
+        console.log(
+            string.concat(
+                "mldsaalt: registry ", vm.toString(address(alt)), " MLDSA_PRECOMPILE=", mldsaPrecompile ? "on" : "off"
+            )
+        );
         uint16[3] memory ks = [UAKinds.MLDSA44, UAKinds.MLDSA65, UAKinds.MLDSA87];
         uint256[3] memory rows = [uint256(0), 1, 4];
         string[3] memory names = ["mldsa44", "mldsa65", "mldsa87"];
@@ -72,28 +76,57 @@ contract MldsaAlt is OnchainBase, DeployBase {
         bytes memory pop = vm.parseJsonBytes(pj, string.concat(r, "pop.sig"));
         bytes32 ua = alt.uaOf(kind, pk);
         IUARegistry.UAAttrs memory none;
-        console.log(string.concat("mldsaalt: ", name, cache ? " on the cache" : " on the precompile ",
-            cache ? "" : vm.toString(MldsaVerifier(v).PRECOMPILE())));
+        console.log(
+            string.concat(
+                "mldsaalt: ",
+                name,
+                cache ? " on the cache" : " on the precompile ",
+                cache ? "" : vm.toString(MldsaVerifier(v).PRECOMPILE())
+            )
+        );
         vm.startBroadcast(k1);
         if (cache) {
-            for (uint256 p; p < PqUA.mldsaParts(kind); ++p) alt.cacheExpandedKey(kind, pk, p);
+            for (uint256 p; p < PqUA.mldsaParts(kind); ++p) {
+                alt.cacheExpandedKey(kind, pk, p);
+            }
         }
         require(alt.register(kind, pk, none, pop, "") == ua, "mldsaalt: register");
         // the verify as a transaction of its own (a CALL, so it is sent): the chain's real cap applies to it
-        (bool ok,) = address(alt).call(abi.encodeCall(IUARegistry.requireAuthorized, (ua, _purpose(r), vm.parseJsonBytes32(pj, ".digest"),
-            IUARegistry.UASig("", vm.parseJsonBytes(pj, string.concat(r, "sigs[0].sig")), new IUARegistry.MemberSig[](0)))));
+        (bool ok,) = address(alt)
+            .call(
+                abi.encodeCall(
+                    IUARegistry.requireAuthorized,
+                    (
+                        ua,
+                        _purpose(r),
+                        vm.parseJsonBytes32(pj, ".digest"),
+                        IUARegistry.UASig(
+                            "", vm.parseJsonBytes(pj, string.concat(r, "sigs[0].sig")), new IUARegistry.MemberSig[](0)
+                        )
+                    )
+                )
+            );
         require(ok, "mldsaalt: requireAuthorized");
         vm.stopBroadcast();
         if (cache) {
             _refusals(kind, name);
         } else {
-            _neg(a1, address(alt), abi.encodeCall(IUARegistry.cacheExpandedKey, (kind, pk, 0)), IUARegistry.UAKeyCache.selector,
-                string.concat("mldsaalt: cacheExpandedKey of ", name, " on the precompile path"));
+            _neg(
+                a1,
+                address(alt),
+                abi.encodeCall(IUARegistry.cacheExpandedKey, (kind, pk, 0)),
+                IUARegistry.UAKeyCache.selector,
+                string.concat("mldsaalt: cacheExpandedKey of ", name, " on the precompile path")
+            );
         }
     }
 
     function _purpose(string memory r) internal view returns (bytes32) {
-        return keccak256(bytes(string.concat("scaas.ua.purpose.", vm.parseJsonString(pj, string.concat(r, "sigs[0].purpose")), ".v1")));
+        return keccak256(
+            bytes(
+                string.concat("scaas.ua.purpose.", vm.parseJsonString(pj, string.concat(r, "sigs[0].purpose")), ".v1")
+            )
+        );
     }
 
     /// `UAKeyNotCached` with no part (`mldsa_cache.json` key 1) and with part 0 only (key 2, its part 0 sent here): `register`
@@ -102,14 +135,22 @@ contract MldsaAlt is OnchainBase, DeployBase {
         IUARegistry.UAAttrs memory none;
         bytes memory k1_ = vm.parseJsonBytes(mc, string.concat(".levels.", name, ".keys[1].pk"));
         bytes memory k2_ = vm.parseJsonBytes(mc, string.concat(".levels.", name, ".keys[2].pk"));
-        _negData(a1, address(alt), abi.encodeCall(IUARegistry.register, (kind, k1_, none, hex"01", "")),
+        _negData(
+            a1,
+            address(alt),
+            abi.encodeCall(IUARegistry.register, (kind, k1_, none, hex"01", "")),
             abi.encodeWithSelector(IUARegistry.UAKeyNotCached.selector, alt.uaOf(kind, k1_)),
-            string.concat("mldsaalt: register of ", name, " without its cache"));
+            string.concat("mldsaalt: register of ", name, " without its cache")
+        );
         if (PqUA.mldsaParts(kind) < 2) return;
         vm.broadcast(k1);
         alt.cacheExpandedKey(kind, k2_, 0);
-        _negData(a1, address(alt), abi.encodeCall(IUARegistry.register, (kind, k2_, none, hex"01", "")),
+        _negData(
+            a1,
+            address(alt),
+            abi.encodeCall(IUARegistry.register, (kind, k2_, none, hex"01", "")),
             abi.encodeWithSelector(IUARegistry.UAKeyNotCached.selector, alt.uaOf(kind, k2_)),
-            string.concat("mldsaalt: register of ", name, " with part 0 only"));
+            string.concat("mldsaalt: register of ", name, " with part 0 only")
+        );
     }
 }

@@ -72,7 +72,11 @@ impl Drop for Stream {
 impl Stream {
     /// the bits of SHAKE256 of the concatenated `parts`
     pub(crate) fn new(parts: &[&[u8]]) -> Stream {
-        Stream { xof: shake256(parts), byte: 0, nbits: 0 }
+        Stream {
+            xof: shake256(parts),
+            byte: 0,
+            nbits: 0,
+        }
     }
 
     /// `stream (b, tag, taglen, seed, ctr)`: SHAKE256(tag || seed || be4(ctr))

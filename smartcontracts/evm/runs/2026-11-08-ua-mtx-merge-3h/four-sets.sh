@@ -14,18 +14,21 @@ shift 2
 [ $# -gt 0 ] || set -- n2048-kmax1024 n2304-kmax4096 n2560-kmax16384 n2816-kmax65536
 rc_all=0
 for s in "$@"; do
-  for d in test/pqz test/ua test/as/confidential; do
-    n=$(echo "$d" | tr '/' '-')
-    log=$D/2026-11-08-ua-mtx-merge-3h-$L-$s-$n.log
-    if [ "${RERUN:-0}" != 1 ] && [ -f "$log" ] && grep -q "^Ran .* 0 failed" "$log"; then
-      echo "$s $d: done ($(grep '^Ran ' "$log" | tail -1))"
-      continue
-    fi
-    FOUNDRY_TEST=$d sh "$EVM/script/pqz/at-set.sh" "$s" test -j 2 ${FORGE_ARGS:-} > "$log" 2>&1
-    rc=$?
-    [ $rc -eq 0 ] || rc_all=1
-    git -C "$EVM" diff --quiet HEAD -- src/pqz/PqzSet.sol || { echo "$s $d: PqzSet.sol not restored" >&2; exit 3; }
-    echo "$s $d: rc $rc | $(grep '^Ran ' "$log" | tail -1)"
-  done
+    for d in test/pqz test/ua test/as/confidential; do
+        n=$(echo "$d" | tr '/' '-')
+        log=$D/2026-11-08-ua-mtx-merge-3h-$L-$s-$n.log
+        if [ "${RERUN:-0}" != 1 ] && [ -f "$log" ] && grep -q "^Ran .* 0 failed" "$log"; then
+            echo "$s $d: done ($(grep '^Ran ' "$log" | tail -1))"
+            continue
+        fi
+        FOUNDRY_TEST=$d sh "$EVM/script/pqz/at-set.sh" "$s" test -j 2 ${FORGE_ARGS:-} >"$log" 2>&1
+        rc=$?
+        [ $rc -eq 0 ] || rc_all=1
+        git -C "$EVM" diff --quiet HEAD -- src/pqz/PqzSet.sol || {
+            echo "$s $d: PqzSet.sol not restored" >&2
+            exit 3
+        }
+        echo "$s $d: rc $rc | $(grep '^Ran ' "$log" | tail -1)"
+    done
 done
 exit $rc_all

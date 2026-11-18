@@ -18,38 +18,44 @@
 //! [`Wallet::restore_backup`]; `store`, T10: [`Wallet::unlock`] (the seed vault into a new arena at the raised generation) and
 //! [`Wallet::memory_protection`] (the arena's chunks `mlock`ed and no-dump, feature `mlock`). Randomness: `rand_core` 0.6
 //! `OsRng` inside; no call takes an RNG. UNAUDITED.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::disallowed_methods)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::disallowed_methods
+)]
 
 mod aead;
 pub mod bounded;
 #[cfg(feature = "vectors")]
 pub mod derive;
+#[cfg(not(feature = "vectors"))]
+pub(crate) mod derive;
 mod eip712;
 pub mod entries;
 #[cfg(feature = "vectors")]
 pub mod kem;
 #[cfg(not(feature = "vectors"))]
 mod kem;
-#[cfg(not(feature = "vectors"))]
-pub(crate) mod derive;
+mod manifest;
 #[cfg(feature = "vectors")]
 pub mod pairing;
 #[cfg(not(feature = "vectors"))]
 mod pairing;
-mod manifest;
 mod policy;
-#[cfg(feature = "roots")]
-pub mod roots;
-mod secret;
-mod service_pull;
-#[cfg(feature = "vectors")]
-pub mod seal;
-#[cfg(not(feature = "vectors"))]
-mod seal;
 #[cfg(feature = "vectors")]
 pub mod pqsign;
 #[cfg(not(feature = "vectors"))]
 mod pqsign;
+#[cfg(feature = "roots")]
+pub mod roots;
+#[cfg(feature = "vectors")]
+pub mod seal;
+#[cfg(not(feature = "vectors"))]
+mod seal;
+mod secret;
+mod service_pull;
 #[cfg(feature = "vectors")]
 pub mod sign;
 #[cfg(not(feature = "vectors"))]
@@ -63,49 +69,64 @@ mod vault;
 mod webauthn;
 
 pub use aead::{aead_open, aead_seal, hkdf_expand_sha256, hkdf_sha256, hmac_sha256, Alg};
-pub use eip712::{
-    liquidity_order_typed_data, pqz_verdict_typed_data, rescue_vault_typed_data, scaas_typed_data, Erc7739Wallet, RescueVaultOp,
-    TypedData,
-};
 #[cfg(any(feature = "zether", feature = "pqz"))]
 pub(crate) use eip712::{from_hex, to_hex};
+pub use eip712::{
+    liquidity_order_typed_data, pqz_verdict_typed_data, rescue_vault_typed_data, scaas_typed_data,
+    Erc7739Wallet, RescueVaultOp, TypedData,
+};
 pub use kem::{is_kem_holder, kem_encaps, KemKeyPair};
 #[cfg(feature = "vectors")]
 pub use manifest::vectors_backup_payload;
-pub use manifest::{AllowRollback, ImportEntry, ImportedUaEntry, KemEntry, Manifest, ManifestEntry, NativeEntry, PqzHeldEntry};
-pub use pairing::{FrostSession, Musig2Session};
+pub use manifest::{
+    AllowRollback, ImportEntry, ImportedUaEntry, KemEntry, Manifest, ManifestEntry, NativeEntry,
+    PqzHeldEntry,
+};
 #[cfg(feature = "vectors")]
 pub use pairing::NonceSlotProbe;
-pub use policy::{fee_due, sign_scaas, sign_typed_by, AllowAnyTypedData, AllowRow, DecodedCall, Expect, Invalidate, SubjectKey};
-pub use service_pull::{service_pull, RelayFeeWrap, ServicePull};
+pub use pairing::{FrostSession, Musig2Session};
+pub use policy::{
+    fee_due, sign_scaas, sign_typed_by, AllowAnyTypedData, AllowRow, DecodedCall, Expect,
+    Invalidate, SubjectKey,
+};
 #[cfg(feature = "pqz")]
 pub(crate) use seal::now;
 pub use seal::{
-    seal, seal_container, AcceptedJson, ContainerExpect, ContainerExpectJson, ContainerSigner, ExpectedSender, LinkSession,
-    MembersJson, Recipient, RecipientId, Sealed, SealedContainer, LINK_SKEW, LINK_WINDOW, MAX_PT, PURPOSE_BACKUP, PURPOSE_LINK,
+    seal, seal_container, AcceptedJson, ContainerExpect, ContainerExpectJson, ContainerSigner,
+    ExpectedSender, LinkSession, MembersJson, Recipient, RecipientId, Sealed, SealedContainer,
+    LINK_SKEW, LINK_WINDOW, MAX_PT, PURPOSE_BACKUP, PURPOSE_LINK,
 };
+pub use secret::{
+    secret_dispose, secret_read, secret_write, secrets_live, SecretBytes, SECRET_MAX,
+};
+pub use service_pull::{service_pull, RelayFeeWrap, ServicePull};
 pub use sign::{sign_digest_by, sign_key_proof_by, sign_message_by, MAX_RAW_MESSAGE};
+#[cfg(feature = "vectors")]
+pub use sign::{
+    vectors_fail_os_rng, vectors_one_shot_reads, vectors_taproot_sign, vectors_taproot_sign_check,
+};
 #[cfg(feature = "vectors")]
 pub use signer::TestExternalKey;
 pub use signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
 pub use tx::{sign_transaction_by, AccessListItem, EvmTx, SignedTx};
-pub use uasig::{membership_sig, membership_sig_current, msig_sig, msig_sig_current, msig_update_typed_data, ua_sig, Slot, UaSigRequest};
-pub use secret::{secret_dispose, secret_read, secret_write, secrets_live, SecretBytes, SECRET_MAX};
+pub use uasig::{
+    membership_sig, membership_sig_current, msig_sig, msig_sig_app, msig_sig_current,
+    msig_update_typed_data, ua_sig, ua_sig_app, Slot, UaSigRequest,
+};
 pub use vault::{check_passphrase, PrfEnvelope, Unlock, Vault};
-pub use webauthn::{webauthn_assertion, webauthn_challenge};
-pub use zeroize::ZeroizeOnDrop;
 #[cfg(feature = "vectors")]
 pub use vectors::{vectors_chunks_released, vectors_pause_after_copy};
-#[cfg(feature = "vectors")]
-pub use sign::{vectors_fail_os_rng, vectors_one_shot_reads, vectors_taproot_sign, vectors_taproot_sign_check};
+pub use webauthn::{webauthn_assertion, webauthn_challenge};
+pub use zeroize::ZeroizeOnDrop;
 
 use crate::UAError;
 use rand_core::{OsRng, RngCore};
 use std::sync::Arc;
-pub(crate) use store::{Handle, SecretStore};
-#[cfg(feature = "pqz")] // the PQZ facade's lease (T21 L82); unused, and so a -D warnings error, in a build without `pqz`
+#[cfg(feature = "pqz")]
+// the PQZ facade's lease (T21 L82); unused, and so a -D warnings error, in a build without `pqz`
 pub(crate) use store::{copied, Lease};
 pub use store::{protect, MemoryProtection};
+pub(crate) use store::{Handle, SecretStore};
 use unicode_normalization::UnicodeNormalization;
 use zeroize::{Zeroize, Zeroizing};
 
@@ -261,21 +282,33 @@ impl Network {
     }
     /// The clientkeys name (`evm`, `hedera_ecdsa`, …).
     pub fn from_name(name: &str) -> Option<Network> {
-        NETWORK_NAMES.iter().find(|(_, n)| *n == name).map(|(net, _)| *net)
+        NETWORK_NAMES
+            .iter()
+            .find(|(_, n)| *n == name)
+            .map(|(net, _)| *net)
     }
     pub fn name(self) -> &'static str {
-        NETWORK_NAMES.iter().find(|(net, _)| *net == self).map_or("", |(_, n)| n)
+        NETWORK_NAMES
+            .iter()
+            .find(|(net, _)| *net == self)
+            .map_or("", |(_, n)| n)
     }
     /// The signature scheme of this network's keys (ua-rs-native spec §4.1): every `match` on it names each scheme, so a new
     /// one is a compile error where it is not handled, never a silent default.
     pub fn scheme(self) -> NativeScheme {
         match self {
-            Network::Evm | Network::Cosmos | Network::HederaEcdsa | Network::BitcoinP2wpkh => NativeScheme::Secp256k1Ecdsa,
+            Network::Evm | Network::Cosmos | Network::HederaEcdsa | Network::BitcoinP2wpkh => {
+                NativeScheme::Secp256k1Ecdsa
+            }
             Network::BitcoinP2tr => NativeScheme::Bip340Taproot,
             Network::Polkadot => NativeScheme::Sr25519,
-            Network::HederaEd25519 | Network::Sui | Network::Stellar | Network::Ton | Network::Aptos | Network::Solana | Network::Near => {
-                NativeScheme::Ed25519
-            }
+            Network::HederaEd25519
+            | Network::Sui
+            | Network::Stellar
+            | Network::Ton
+            | Network::Aptos
+            | Network::Solana
+            | Network::Near => NativeScheme::Ed25519,
         }
     }
     /// The derived UA kind of this network's scheme, the one kind an imported key of it may take (T20c, owner 2026-11-08):
@@ -284,8 +317,15 @@ impl Network {
     pub fn scheme_kind(self) -> Option<u16> {
         match self {
             Network::Evm | Network::Cosmos | Network::HederaEcdsa => Some(0x0108),
-            Network::HederaEd25519 | Network::Sui | Network::Stellar | Network::Ton | Network::Aptos | Network::Solana => Some(0x0102),
-            Network::BitcoinP2wpkh | Network::BitcoinP2tr | Network::Near | Network::Polkadot => None,
+            Network::HederaEd25519
+            | Network::Sui
+            | Network::Stellar
+            | Network::Ton
+            | Network::Aptos
+            | Network::Solana => Some(0x0102),
+            Network::BitcoinP2wpkh | Network::BitcoinP2tr | Network::Near | Network::Polkadot => {
+                None
+            }
         }
     }
     pub(crate) fn bitcoin(self) -> bool {
@@ -296,7 +336,9 @@ impl Network {
     fn coin_ok(self, coin_type: Option<u32>) -> Result<()> {
         match (self, coin_type) {
             (Network::Near | Network::Polkadot, Some(_)) => Err(Error::Argument),
-            (Network::BitcoinP2wpkh | Network::BitcoinP2tr, Some(c)) if c > 1 => Err(Error::Argument),
+            (Network::BitcoinP2wpkh | Network::BitcoinP2tr, Some(c)) if c > 1 => {
+                Err(Error::Argument)
+            }
             _ => Ok(()),
         }
     }
@@ -379,7 +421,8 @@ fn parse_mnemonic(words: &str) -> Result<bip39::Mnemonic> {
         return Err(Error::Argument);
     }
     let joined = Zeroizing::new(lower.split_whitespace().collect::<Vec<_>>().join(" "));
-    bip39::Mnemonic::parse_in_normalized(bip39::Language::English, &joined).map_err(|_| Error::Argument)
+    bip39::Mnemonic::parse_in_normalized(bip39::Language::English, &joined)
+        .map_err(|_| Error::Argument)
 }
 
 /// `chars()` collected into a buffer of its exact size (counted on a first pass), so no reallocation frees an unwiped copy of
@@ -480,7 +523,8 @@ const REVEAL_CAP: usize = 24 * 9;
 
 impl SeedBackup {
     fn words(&self) -> Result<bip39::Mnemonic> {
-        bip39::Mnemonic::from_entropy(self.entropy.as_deref().ok_or(Error::Argument)?).map_err(|_| Error::Argument)
+        bip39::Mnemonic::from_entropy(self.entropy.as_deref().ok_or(Error::Argument)?)
+            .map_err(|_| Error::Argument)
     }
 
     /// The words, once (`Argument` after), in a buffer of capacity 24 × 9 reserved before they are written.
@@ -490,7 +534,8 @@ impl SeedBackup {
         }
         // 24 English words of at most 8 letters and their spaces fit 24 × 9 bytes: reserved, so the buffer never moves (T21 L32)
         let mut words = Zeroizing::new(String::with_capacity(REVEAL_CAP));
-        std::fmt::Write::write_fmt(&mut *words, format_args!("{}", self.words()?)).map_err(|_| Error::Argument)?;
+        std::fmt::Write::write_fmt(&mut *words, format_args!("{}", self.words()?))
+            .map_err(|_| Error::Argument)?;
         self.state = BackupState::Revealed;
         Ok(words)
     }
@@ -533,7 +578,10 @@ impl SeedBackup {
         let m = self.words()?;
         let words: Vec<&str> = m.words().collect();
         let ok = answers.len() == self.asked.len()
-            && self.asked.iter().zip(answers).all(|(i, a)| words.get(*i) == Some(&sized(|| a.trim().chars().flat_map(char::to_lowercase)).as_str()));
+            && self.asked.iter().zip(answers).all(|(i, a)| {
+                words.get(*i)
+                    == Some(&sized(|| a.trim().chars().flat_map(char::to_lowercase)).as_str())
+            });
         if ok {
             self.state = BackupState::Verified;
         }
@@ -636,7 +684,14 @@ impl Wallet {
         let mut e = Zeroizing::new(vec![0u8; 32]);
         OsRng.try_fill_bytes(&mut e).map_err(|_| Error::Rng)?;
         let w = Wallet::from_entropy(&e, "")?;
-        Ok((w, SeedBackup { entropy: Some(e), state: BackupState::Fresh, asked: [0; 3] }))
+        Ok((
+            w,
+            SeedBackup {
+                entropy: Some(e),
+                state: BackupState::Fresh,
+                asked: [0; 3],
+            },
+        ))
     }
 
     /// The wallet of a 12- to 24-word English mnemonic (NFKD, case and spacing as clientkeys) and its BIP-39 passphrase.
@@ -647,8 +702,15 @@ impl Wallet {
 
     /// The store from the entropy, its BIP-39 seed and its `substrate-bip39` mini-secret (the passphrase as given; spec §4.3).
     fn from_entropy(entropy: &[u8], bip39_passphrase: &str) -> Result<Wallet> {
-        let w = Wallet { store: SecretStore::new(), vault_id: std::sync::OnceLock::new() };
-        w.store.open(entropy, &*seed_of(entropy, bip39_passphrase)?, &substrate::mini_secret(entropy, bip39_passphrase))?;
+        let w = Wallet {
+            store: SecretStore::new(),
+            vault_id: std::sync::OnceLock::new(),
+        };
+        w.store.open(
+            entropy,
+            &*seed_of(entropy, bip39_passphrase)?,
+            &substrate::mini_secret(entropy, bip39_passphrase),
+        )?;
         Ok(w)
     }
 
@@ -661,7 +723,12 @@ impl Wallet {
     /// first 4 bytes of HASH160 of the master public key. A wallet of the empty BIP-39 passphrase gives its seed's main-set
     /// fingerprint, the keystore's duplicate check. `WalletLocked` while locked.
     pub fn fingerprint(&self) -> Result<[u8; 4]> {
-        self.store.with_seed(|seed| Ok(bip32::XPrv::new(seed).map_err(|_| Error::Argument)?.public_key().fingerprint()))
+        self.store.with_seed(|seed| {
+            Ok(bip32::XPrv::new(seed)
+                .map_err(|_| Error::Argument)?
+                .public_key()
+                .fingerprint())
+        })
     }
 
     /// The next BIP-85 child of this wallet (scaas-sdk spec §6.4; clientkeys `bip85Child`): BIP-85's BIP-39 application, 24
@@ -673,24 +740,39 @@ impl Wallet {
         use hmac::Mac as _;
         let entropy = self.store.with_all(|a, m| {
             let i = m.bip85_next;
-            let next = i.checked_add(1).filter(|n| *n < derive::HARDENED).ok_or(Error::Argument)?;
-            let seed: Zeroizing<[u8; 64]> = Zeroizing::new(a.seed_bytes()?.try_into().map_err(|_| Error::Argument)?);
+            let next = i
+                .checked_add(1)
+                .filter(|n| *n < derive::HARDENED)
+                .ok_or(Error::Argument)?;
+            let seed: Zeroizing<[u8; 64]> =
+                Zeroizing::new(a.seed_bytes()?.try_into().map_err(|_| Error::Argument)?);
             let path = [83696968, 39, 0, 24, i].map(|c| c | derive::HARDENED);
             let k = derive::bip32(&*seed, &path)?;
-            let mut mac = hmac::Hmac::<sha2::Sha512>::new_from_slice(b"bip-entropy-from-k").map_err(|_| Error::Argument)?;
+            let mut mac = hmac::Hmac::<sha2::Sha512>::new_from_slice(b"bip-entropy-from-k")
+                .map_err(|_| Error::Argument)?;
             mac.update(&*k);
             let out = Zeroizing::new(mac.finalize().into_bytes().to_vec());
             m.bip85_next = next;
-            Ok(Zeroizing::new(out.get(..32).ok_or(Error::Argument)?.to_vec()))
+            Ok(Zeroizing::new(
+                out.get(..32).ok_or(Error::Argument)?.to_vec(),
+            ))
         })?;
         let w = Wallet::from_entropy(&entropy, "")?;
-        Ok((w, SeedBackup { entropy: Some(entropy), state: BackupState::Fresh, asked: [0; 3] }))
+        Ok((
+            w,
+            SeedBackup {
+                entropy: Some(entropy),
+                state: BackupState::Fresh,
+                asked: [0; 3],
+            },
+        ))
     }
 
     /// The number of words of this wallet's mnemonic (12, 15, 18, 21 or 24: its entropy's length), the keystore's `words` check
     /// (scaas-sdk spec §6.1). `WalletLocked` while locked.
     pub fn word_count(&self) -> Result<u32> {
-        self.store.with_arena(|a| u32::try_from(a.entropy()?.len() * 3 / 4).map_err(|_| Error::Argument))
+        self.store
+            .with_arena(|a| u32::try_from(a.entropy()?.len() * 3 / 4).map_err(|_| Error::Argument))
     }
 
     /// The keystore index MAC of a seed entry (clientkeys `indexMac`; scaas-sdk spec §6.2): `HMAC-SHA256(HKDF-SHA256(entropy,
@@ -718,7 +800,11 @@ impl Wallet {
     /// Reopens a locked wallet from its entropy at the raised generation; earlier handles stay revoked. `Argument` if open.
     /// [`Wallet::unlock`] calls it.
     pub(crate) fn unlock_entropy(&self, entropy: &[u8], bip39_passphrase: &str) -> Result<()> {
-        self.store.open(entropy, &*seed_of(entropy, bip39_passphrase)?, &substrate::mini_secret(entropy, bip39_passphrase))
+        self.store.open(
+            entropy,
+            &*seed_of(entropy, bip39_passphrase)?,
+            &substrate::mini_secret(entropy, bip39_passphrase),
+        )
     }
 
     /// The UA key `kind` of `account` / `index` (spec §4): `Argument` for a value ≥ 2^31, index ≠ 0 on an EIP-2333 kind
@@ -729,29 +815,58 @@ impl Wallet {
             derive::ua_key(kind, derive::ua_secret(seed, kind, account, index)?)
         })?;
         // a MuSig2 participant (0x0110, 0x0112) has no UA of its own: its group is the UA
-        let ua = if matches!(kind, 0x0110 | 0x0112) { None } else { Some(crate::derive_ua(kind, &key_data, false)?) };
+        let ua = if matches!(kind, 0x0110 | 0x0112) {
+            None
+        } else {
+            Some(crate::derive_ua(kind, &key_data, false)?)
+        };
         if let Some(ua) = ua {
             self.store.note(|m| m.add_ua(kind, account, index, ua));
         }
-        Ok(UaKey { kind, account, index, key_data, ua, secret, imported: false })
+        Ok(UaKey {
+            kind,
+            account,
+            index,
+            key_data,
+            ua,
+            secret,
+            imported: false,
+        })
     }
 
     /// Key `index` of `network` (clientkeys `deriveKey`), `coin_type` in place of the network's (Pi Network: `Stellar`,
     /// 314159); `Argument` for a value ≥ 2^31.
-    pub fn native_key(&self, network: Network, index: u32, coin_type: Option<u32>) -> Result<NativeKey> {
+    pub fn native_key(
+        &self,
+        network: Network,
+        index: u32,
+        coin_type: Option<u32>,
+    ) -> Result<NativeKey> {
         self.derive_native(network, coin_type, 0, index)
     }
 
     /// Bitcoin key `index` of chain `change` (0 receive, 1 change; ua-rs-native spec §5.1): `change` 0 is
     /// [`Wallet::native_key`]'s slot. `Argument` for another network, `change` outside {0, 1} or a coin type other than 0 / 1.
-    pub fn bitcoin_key(&self, network: Network, coin_type: Option<u32>, change: u32, index: u32) -> Result<NativeKey> {
+    pub fn bitcoin_key(
+        &self,
+        network: Network,
+        coin_type: Option<u32>,
+        change: u32,
+        index: u32,
+    ) -> Result<NativeKey> {
         if !network.bitcoin() || change > 1 {
             return Err(Error::Argument);
         }
         self.derive_native(network, coin_type, change, index)
     }
 
-    fn derive_native(&self, network: Network, coin_type: Option<u32>, change: u32, index: u32) -> Result<NativeKey> {
+    fn derive_native(
+        &self,
+        network: Network,
+        coin_type: Option<u32>,
+        change: u32,
+        index: u32,
+    ) -> Result<NativeKey> {
         network.coin_ok(coin_type)?;
         if network == Network::Polkadot {
             if index != 0 {
@@ -759,14 +874,26 @@ impl Wallet {
             }
             return self.polkadot_bare();
         }
-        let id = if change == 0 { KeyId::Native(network, index, coin_type) } else { KeyId::BitcoinChange(network, coin_type, index) };
+        let id = if change == 0 {
+            KeyId::Native(network, index, coin_type)
+        } else {
+            KeyId::BitcoinChange(network, coin_type, index)
+        };
         let (secret, public_key) = self.store.key(id, |seed| {
             let s = derive::native_secret(seed, network, index, coin_type, change)?;
             let public = derive::native_public(network, &s)?;
             Ok((s, public))
         })?;
-        self.store.note(|m| m.add_native(network, coin_type, index, change));
-        Ok(NativeKey { network, index, coin_type, change, public_key, secret })
+        self.store
+            .note(|m| m.add_native(network, coin_type, index, change));
+        Ok(NativeKey {
+            network,
+            index,
+            coin_type,
+            change,
+            public_key,
+            secret,
+        })
     }
 
     /// The Polkadot key of the junction path `path` (spec §7.3; `sp-core` / polkadot.js): `""` is the bare account
@@ -792,18 +919,35 @@ impl Wallet {
             Ok((Zeroizing::new(sk.to_vec()), public))
         })?;
         self.store.note(|m| m.add_polkadot_path(path));
-        Ok(NativeKey { network: Network::Polkadot, index: 0, coin_type: None, change: 0, public_key, secret })
+        Ok(NativeKey {
+            network: Network::Polkadot,
+            index: 0,
+            coin_type: None,
+            change: 0,
+            public_key,
+            secret,
+        })
     }
 
     /// The bare Polkadot account (spec §7.2): the mini-secret's Ed25519-mode expansion, a 64-byte schnorrkel secret in the arena.
     fn polkadot_bare(&self) -> Result<NativeKey> {
-        let (secret, public_key) = self.store.key_from_mini(KeyId::Native(Network::Polkadot, 0, None), |mini| {
-            let sk = substrate::bare(mini)?;
-            let public = substrate::public(&sk[..])?;
-            Ok((Zeroizing::new(sk.to_vec()), public))
-        })?;
-        self.store.note(|m| m.add_native(Network::Polkadot, None, 0, 0));
-        Ok(NativeKey { network: Network::Polkadot, index: 0, coin_type: None, change: 0, public_key, secret })
+        let (secret, public_key) =
+            self.store
+                .key_from_mini(KeyId::Native(Network::Polkadot, 0, None), |mini| {
+                    let sk = substrate::bare(mini)?;
+                    let public = substrate::public(&sk[..])?;
+                    Ok((Zeroizing::new(sk.to_vec()), public))
+                })?;
+        self.store
+            .note(|m| m.add_native(Network::Polkadot, None, 0, 0));
+        Ok(NativeKey {
+            network: Network::Polkadot,
+            index: 0,
+            coin_type: None,
+            change: 0,
+            public_key,
+            secret,
+        })
     }
 }
 
@@ -813,7 +957,12 @@ impl Wallet {
     /// The Zether key of `coin` / `account` (`key_use` 7: the conf key, 8: the viewing key; any other `Argument`), BLS12-381,
     /// EIP-2333 path `m/12381/<coin>/<account>/<use>` (zether-prover `ZetherKey::derive`); `x` stays in this wallet's arena
     /// (`lock()` revokes the handle), `Y` and the UA come out. `WalletLocked` while locked.
-    pub fn zether_key(&self, coin: u32, account: u32, key_use: u32) -> Result<crate::facade::zether::ZetherKey> {
+    pub fn zether_key(
+        &self,
+        coin: u32,
+        account: u32,
+        key_use: u32,
+    ) -> Result<crate::facade::zether::ZetherKey> {
         crate::facade::zether::derive(&self.store, coin, account, key_use)
     }
 }
@@ -831,7 +980,12 @@ impl Wallet {
     /// The PQZ key of `account` / `index` at key version `version` (group 3g C8, ua-rs-sign T15o): version 0 is
     /// [`Wallet::pqz_key`]'s, every version v ≥ 1 appends `be64(v)` to the HKDF `info` (a single-key holder's rotation; an
     /// `msig` operator draws each version's `seed32` fresh instead, never from this). `WalletLocked` while locked.
-    pub fn pqz_key_version(&self, account: u32, index: u32, version: u64) -> Result<crate::facade::pqz::PqzKey> {
+    pub fn pqz_key_version(
+        &self,
+        account: u32,
+        index: u32,
+        version: u64,
+    ) -> Result<crate::facade::pqz::PqzKey> {
         crate::facade::pqz::derive(&self.store, account, index, version)
     }
 
@@ -839,7 +993,10 @@ impl Wallet {
     /// `offchain-shared` (`scope.token` `None`) or `offchain-token` of a token with the opening, at `scope.version`. Its PQZ seed
     /// (K3-2) and its opening KEM seed (K3-6b) are derived from this wallet's seed into its arena (`lock()` revokes the handle);
     /// `pk` and the opening KEM key come out. `WalletLocked` while locked.
-    pub fn pqz_scoped_key(&self, scope: &crate::pqz3k::Scope) -> Result<crate::pqz3k::PqzKeyHandle> {
+    pub fn pqz_scoped_key(
+        &self,
+        scope: &crate::pqz3k::Scope,
+    ) -> Result<crate::pqz3k::PqzKeyHandle> {
         crate::pqz3k::derive(&self.store, scope)
     }
 
@@ -859,12 +1016,35 @@ impl Wallet {
     #[cfg(feature = "pqz")]
     #[allow(clippy::too_many_arguments)]
     pub fn reconstruct_pqz_seed(
-        &self, kk: &KemKeyPair, containers: &[SealedContainer], expect: &ContainerExpect, members: &crate::ua8::Members,
-        accepted: Option<&crate::ua8::Accepted>, msig_ua: &[u8; 32], version: u64, pqz_key_hash: &[u8; 32],
+        &self,
+        kk: &KemKeyPair,
+        containers: &[SealedContainer],
+        expect: &ContainerExpect,
+        members: &crate::ua8::Members,
+        accepted: Option<&crate::ua8::Accepted>,
+        msig_ua: &[u8; 32],
+        version: u64,
+        pqz_key_hash: &[u8; 32],
     ) -> Result<crate::facade::pqz::PqzKey> {
         crate::facade::release_or_unlocked()?;
-        let k = crate::facade::pqz_backup::reconstruct(&self.store, kk, containers, expect, members, accepted, msig_ua, version, pqz_key_hash)?;
-        self.store.note(|m| m.add_pqz_held(PqzHeldEntry { ua: *msig_ua, version, pqz_key_hash: *pqz_key_hash }));
+        let k = crate::facade::pqz_backup::reconstruct(
+            &self.store,
+            kk,
+            containers,
+            expect,
+            members,
+            accepted,
+            msig_ua,
+            version,
+            pqz_key_hash,
+        )?;
+        self.store.note(|m| {
+            m.add_pqz_held(PqzHeldEntry {
+                ua: *msig_ua,
+                version,
+                pqz_key_hash: *pqz_key_hash,
+            })
+        });
         Ok(k)
     }
 
@@ -872,7 +1052,13 @@ impl Wallet {
     /// its key hash: `Argument` unless the manifest lists it and the store holds it (after `unlock`, open its vault first);
     /// `WalletLocked` while locked. Account and index `u32::MAX`.
     pub fn pqz_held_key(&self, pqz_key_hash: &[u8; 32]) -> Result<crate::facade::pqz::PqzKey> {
-        if !self.store.manifest().pqz_held.iter().any(|e| e.pqz_key_hash == *pqz_key_hash) {
+        if !self
+            .store
+            .manifest()
+            .pqz_held
+            .iter()
+            .any(|e| e.pqz_key_hash == *pqz_key_hash)
+        {
             return Err(Error::Argument);
         }
         crate::facade::pqz::held(&self.store, pqz_key_hash)
@@ -881,14 +1067,21 @@ impl Wallet {
     /// The 32-byte PQZ leaf `seed32` of `account` / `index` in the clear, for `pqz-cli` or a key oracle (spec §8.4,
     /// CTR-PQZ-13): the only call that returns a secret, so it takes the marker value. The caller wipes it (`Zeroizing`).
     pub fn export_pqz_leaf_raw(
-        &self, account: u32, index: u32, marker: crate::facade::pqz::AllowSecretExport,
+        &self,
+        account: u32,
+        index: u32,
+        marker: crate::facade::pqz::AllowSecretExport,
     ) -> Result<Zeroizing<[u8; 32]>> {
         self.export_pqz_leaf_raw_version(account, index, 0, marker)
     }
 
     /// [`Wallet::export_pqz_leaf_raw`] of key version `version` ([`Wallet::pqz_key_version`]; T15o).
     pub fn export_pqz_leaf_raw_version(
-        &self, account: u32, index: u32, version: u64, _: crate::facade::pqz::AllowSecretExport,
+        &self,
+        account: u32,
+        index: u32,
+        version: u64,
+        _: crate::facade::pqz::AllowSecretExport,
     ) -> Result<Zeroizing<[u8; 32]>> {
         crate::facade::pqz::derive(&self.store, account, index, version)?.leaf()
     }
@@ -995,14 +1188,19 @@ mod vectors {
 
     impl Wallet {
         pub fn vectors_entropy(&self) -> Result<Zeroizing<Vec<u8>>> {
-            self.store.with_arena(|a| Ok(Zeroizing::new(a.entropy()?.to_vec())))
+            self.store
+                .with_arena(|a| Ok(Zeroizing::new(a.entropy()?.to_vec())))
         }
         pub fn vectors_seed(&self) -> Result<Zeroizing<[u8; 64]>> {
             self.store.seed()
         }
         /// The `substrate-bip39` mini-secret the store computed at open (spec §7.1).
         pub fn vectors_substrate_mini(&self) -> Result<Zeroizing<[u8; 32]>> {
-            self.store.with_arena(|a| Ok(Zeroizing::new(a.mini()?.try_into().map_err(|_| Error::Argument)?)))
+            self.store.with_arena(|a| {
+                Ok(Zeroizing::new(
+                    a.mini()?.try_into().map_err(|_| Error::Argument)?,
+                ))
+            })
         }
         /// Bytes written to the store's arena.
         pub fn vectors_arena_used(&self) -> Result<usize> {
@@ -1024,7 +1222,8 @@ mod vectors {
         }
         /// Whether the bytes the handle's operations read lie in the arena and outside the handle itself.
         pub fn vectors_secret_in_arena(&self) -> Result<bool> {
-            self.secret.in_arena((self as *const Self as usize, std::mem::size_of::<Self>()))
+            self.secret
+                .in_arena((self as *const Self as usize, std::mem::size_of::<Self>()))
         }
     }
 
@@ -1033,7 +1232,8 @@ mod vectors {
             self.secret.with(f)
         }
         pub fn vectors_secret_in_arena(&self) -> Result<bool> {
-            self.secret.in_arena((self as *const Self as usize, std::mem::size_of::<Self>()))
+            self.secret
+                .in_arena((self as *const Self as usize, std::mem::size_of::<Self>()))
         }
     }
 }

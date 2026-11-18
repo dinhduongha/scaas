@@ -21,12 +21,14 @@
 use super::eip712::{from_hex, to_hex};
 use super::kem::{kem_encaps, Encapsulated};
 use super::seal::{
-    is_sender_kind, now, seal_container, seal_container_with, ContainerExpect, ContainerSigner, Recipient, SealedContainer, PURPOSE_BACKUP,
-    PURPOSE_LINK,
+    is_sender_kind, now, seal_container, seal_container_with, ContainerExpect, ContainerSigner,
+    Recipient, SealedContainer, PURPOSE_BACKUP, PURPOSE_LINK,
 };
-use super::vault::{Unlock, Vault, PrfEnvelope, SEED_LENGTHS};
 use super::store::Arena;
-use super::{bounded, derive, seed_of, Error, KemKeyPair, KeyId, Network, NativeKey, Result, UaKey, Wallet};
+use super::vault::{PrfEnvelope, Unlock, Vault, SEED_LENGTHS};
+use super::{
+    bounded, derive, seed_of, Error, KemKeyPair, KeyId, NativeKey, Network, Result, UaKey, Wallet,
+};
 use crate::derive_ua;
 use crate::ua8::{Accepted, Members};
 use base64ct::{Base64UrlUnpadded, Encoding};
@@ -124,19 +126,37 @@ const PQZ_HELD: &str = "pqz-held:";
 
 impl Manifest {
     pub(crate) fn add_ua(&mut self, kind: u16, account: u32, index: u32, ua: [u8; 32]) {
-        let e = ManifestEntry { kind, account, index, ua };
+        let e = ManifestEntry {
+            kind,
+            account,
+            index,
+            ua,
+        };
         if !self.entries.contains(&e) {
             self.entries.push(e);
         }
     }
-    pub(crate) fn add_native(&mut self, network: Network, coin_type: Option<u32>, index: u32, change: u32) {
-        let e = NativeEntry { network, coin_type, index, change };
+    pub(crate) fn add_native(
+        &mut self,
+        network: Network,
+        coin_type: Option<u32>,
+        index: u32,
+        change: u32,
+    ) {
+        let e = NativeEntry {
+            network,
+            coin_type,
+            index,
+            change,
+        };
         if !self.natives.contains(&e) {
             self.natives.push(e);
         }
     }
     pub(crate) fn add_polkadot_path(&mut self, path: &str) {
-        if !self.polkadot_paths.iter().any(|p| p == path) && self.polkadot_paths.len() < MAX_POLKADOT_PATHS {
+        if !self.polkadot_paths.iter().any(|p| p == path)
+            && self.polkadot_paths.len() < MAX_POLKADOT_PATHS
+        {
             self.polkadot_paths.push(path.to_owned());
         }
     }
@@ -171,7 +191,11 @@ impl Manifest {
                 .map(|n| {
                     let c = n.coin_type.map_or("null".to_owned(), |c| c.to_string());
                     let change = if n.change == 1 { ",\"change\":1" } else { "" };
-                    format!("{{\"network\":\"{}\",\"coinType\":{c},\"index\":{}{change}}}", n.network.name(), n.index)
+                    format!(
+                        "{{\"network\":\"{}\",\"coinType\":{c},\"index\":{}{change}}}",
+                        n.network.name(),
+                        n.index
+                    )
                 })
                 .collect(),
         );
@@ -179,20 +203,50 @@ impl Manifest {
         let paths = if self.polkadot_paths.is_empty() {
             String::new()
         } else {
-            let p: Vec<String> = self.polkadot_paths.iter().map(|p| serde_json::Value::from(p.as_str()).to_string()).collect();
+            let p: Vec<String> = self
+                .polkadot_paths
+                .iter()
+                .map(|p| serde_json::Value::from(p.as_str()).to_string())
+                .collect();
             format!(",\"polkadotPaths\":[{}]", p.join(","))
         };
-        let kem = list(self.kem.iter().map(|k| format!("{{\"ua\":\"{}\",\"version\":{}}}", to_hex(&k.ua), k.version)).collect());
-        let imports = list(self.imports.iter().map(|i| format!("{{\"network\":\"{}\",\"n\":{}}}", i.network.name(), i.n)).collect());
+        let kem = list(
+            self.kem
+                .iter()
+                .map(|k| format!("{{\"ua\":\"{}\",\"version\":{}}}", to_hex(&k.ua), k.version))
+                .collect(),
+        );
+        let imports = list(
+            self.imports
+                .iter()
+                .map(|i| format!("{{\"network\":\"{}\",\"n\":{}}}", i.network.name(), i.n))
+                .collect(),
+        );
         let imported_uas = list(self.imported_uas.iter().map(imported_ua_json).collect());
         let held = list(
             self.pqz_held
                 .iter()
-                .map(|p| format!("{{\"ua\":\"{}\",\"version\":{},\"pqzKeyHash\":\"{}\"}}", to_hex(&p.ua), p.version, to_hex(&p.pqz_key_hash)))
+                .map(|p| {
+                    format!(
+                        "{{\"ua\":\"{}\",\"version\":{},\"pqzKeyHash\":\"{}\"}}",
+                        to_hex(&p.ua),
+                        p.version,
+                        to_hex(&p.pqz_key_hash)
+                    )
+                })
                 .collect(),
         );
-        let senders = list(self.backup_senders.iter().map(|u| format!("\"{}\"", to_hex(u))).collect());
-        let bip85 = if self.bip85_next == 0 { String::new() } else { format!(",\"bip85Next\":{}", self.bip85_next) };
+        let senders = list(
+            self.backup_senders
+                .iter()
+                .map(|u| format!("\"{}\"", to_hex(u)))
+                .collect(),
+        );
+        let bip85 = if self.bip85_next == 0 {
+            String::new()
+        } else {
+            format!(",\"bip85Next\":{}", self.bip85_next)
+        };
         format!(
             "{{\"v\":1,\"entries\":[{entries}],\"natives\":[{natives}]{paths},\"kem\":[{kem}],\"imports\":[{imports}],\"importedUas\":[{imported_uas}],\"pqzHeld\":[{held}],\"backupGeneration\":{},\
              \"backupSenders\":[{senders}]{bip85}}}",
@@ -209,16 +263,35 @@ impl Manifest {
 }
 
 fn entry_json(e: &ManifestEntry) -> String {
-    format!("{{\"kind\":{},\"account\":{},\"index\":{},\"ua\":\"{}\"}}", e.kind, e.account, e.index, to_hex(&e.ua))
+    format!(
+        "{{\"kind\":{},\"account\":{},\"index\":{},\"ua\":\"{}\"}}",
+        e.kind,
+        e.account,
+        e.index,
+        to_hex(&e.ua)
+    )
 }
 fn imported_ua_json(e: &ImportedUaEntry) -> String {
-    format!("{{\"kind\":{},\"source\":\"{}\",\"ua\":\"{}\"}}", e.kind, Held::Import(e.source).label(), to_hex(&e.ua))
+    format!(
+        "{{\"kind\":{},\"source\":\"{}\",\"ua\":\"{}\"}}",
+        e.kind,
+        Held::Import(e.source).label(),
+        to_hex(&e.ua)
+    )
 }
 /// `{kind, source, ua}`: `source` a canonical `native-import:` label, `kind` its network's scheme kind, `ua` canonical.
 fn imported_ua_of(v: &Value) -> Option<ImportedUaEntry> {
-    let Held::Import(source) = Held::parse(v.get("source")?.as_str()?).ok()? else { return None };
-    let kind = u16::try_from(v.get("kind")?.as_u64()?).ok().filter(|k| Some(*k) == source.network.scheme_kind())?;
-    Some(ImportedUaEntry { kind, source, ua: ua_of(v.get("ua")?)? })
+    let Held::Import(source) = Held::parse(v.get("source")?.as_str()?).ok()? else {
+        return None;
+    };
+    let kind = u16::try_from(v.get("kind")?.as_u64()?)
+        .ok()
+        .filter(|k| Some(*k) == source.network.scheme_kind())?;
+    Some(ImportedUaEntry {
+        kind,
+        source,
+        ua: ua_of(v.get("ua")?)?,
+    })
 }
 /// The UA the imported secret `s` gives under `kind` (CTR-UA-06: `keccak256(TAG(kind) ‖ key_data)`).
 fn imported_ua(kind: u16, s: &[u8]) -> Result<[u8; 32]> {
@@ -229,7 +302,9 @@ fn list<'a>(v: &'a Value, k: &str) -> Option<&'a [Value]> {
     v.get(k)?.as_array().map(Vec::as_slice)
 }
 fn u31(v: &Value, k: &str) -> Option<u32> {
-    u32::try_from(v.get(k)?.as_u64()?).ok().filter(|x| *x < derive::HARDENED)
+    u32::try_from(v.get(k)?.as_u64()?)
+        .ok()
+        .filter(|x| *x < derive::HARDENED)
 }
 /// A UA as `0x` and 64 lower-case hex digits (as clientkeys `hex` writes it), nothing else.
 fn ua_of(v: &Value) -> Option<[u8; 32]> {
@@ -242,7 +317,12 @@ fn network_of(v: &Value) -> Option<Network> {
 }
 fn entry_of(v: &Value) -> Option<ManifestEntry> {
     let kind = u16::try_from(v.get("kind")?.as_u64()?).ok()?;
-    Some(ManifestEntry { kind, account: u31(v, "account")?, index: u31(v, "index")?, ua: ua_of(v.get("ua")?)? })
+    Some(ManifestEntry {
+        kind,
+        account: u31(v, "account")?,
+        index: u31(v, "index")?,
+        ua: ua_of(v.get("ua")?)?,
+    })
 }
 
 fn parse_manifest(v: &Value) -> Option<Manifest> {
@@ -254,7 +334,11 @@ fn parse_manifest(v: &Value) -> Option<Manifest> {
         .map(|n| {
             let coin_type = match n.get("coinType")? {
                 Value::Null => None,
-                c => Some(u32::try_from(c.as_u64()?).ok().filter(|x| *x < derive::HARDENED)?),
+                c => Some(
+                    u32::try_from(c.as_u64()?)
+                        .ok()
+                        .filter(|x| *x < derive::HARDENED)?,
+                ),
             };
             // `change` absent (0) or 1, nothing else
             let change = match n.get("change") {
@@ -266,7 +350,12 @@ fn parse_manifest(v: &Value) -> Option<Manifest> {
             if (change == 1 && !network.bitcoin()) || network.coin_ok(coin_type).is_err() {
                 return None;
             }
-            Some(NativeEntry { network, coin_type, index: u31(n, "index")?, change })
+            Some(NativeEntry {
+                network,
+                coin_type,
+                index: u31(n, "index")?,
+                change,
+            })
         })
         .collect::<Option<_>>()?;
     // absent in a manifest written before ua-rs-native: none; else at most 64 distinct paths, each a valid junction path
@@ -274,41 +363,84 @@ fn parse_manifest(v: &Value) -> Option<Manifest> {
         None => vec![],
         Some(_) => list(v, "polkadotPaths")?
             .iter()
-            .map(|p| p.as_str().filter(|s| super::substrate::parse_path(s).is_ok_and(|j| !j.is_empty())).map(str::to_owned))
+            .map(|p| {
+                p.as_str()
+                    .filter(|s| super::substrate::parse_path(s).is_ok_and(|j| !j.is_empty()))
+                    .map(str::to_owned)
+            })
             .collect::<Option<_>>()?,
     };
-    if polkadot_paths.len() > MAX_POLKADOT_PATHS || polkadot_paths.iter().enumerate().any(|(i, p)| polkadot_paths.get(..i).is_some_and(|b| b.contains(p))) {
+    if polkadot_paths.len() > MAX_POLKADOT_PATHS
+        || polkadot_paths
+            .iter()
+            .enumerate()
+            .any(|(i, p)| polkadot_paths.get(..i).is_some_and(|b| b.contains(p)))
+    {
         return None;
     }
     Some(Manifest {
-        entries: list(v, "entries")?.iter().map(entry_of).collect::<Option<_>>()?,
+        entries: list(v, "entries")?
+            .iter()
+            .map(entry_of)
+            .collect::<Option<_>>()?,
         natives,
         polkadot_paths,
-        kem: list(v, "kem")?.iter().map(|k| Some(KemEntry { ua: ua_of(k.get("ua")?)?, version: k.get("version")?.as_u64()? })).collect::<Option<_>>()?,
-        imports: list(v, "imports")?.iter().map(|i| Some(ImportEntry { network: network_of(i)?, n: u32::try_from(i.get("n")?.as_u64()?).ok()? })).collect::<Option<_>>()?,
+        kem: list(v, "kem")?
+            .iter()
+            .map(|k| {
+                Some(KemEntry {
+                    ua: ua_of(k.get("ua")?)?,
+                    version: k.get("version")?.as_u64()?,
+                })
+            })
+            .collect::<Option<_>>()?,
+        imports: list(v, "imports")?
+            .iter()
+            .map(|i| {
+                Some(ImportEntry {
+                    network: network_of(i)?,
+                    n: u32::try_from(i.get("n")?.as_u64()?).ok()?,
+                })
+            })
+            .collect::<Option<_>>()?,
         // absent in a manifest written before T20c: none
         imported_uas: match v.get("importedUas") {
             None => vec![],
-            Some(_) => list(v, "importedUas")?.iter().map(imported_ua_of).collect::<Option<_>>()?,
+            Some(_) => list(v, "importedUas")?
+                .iter()
+                .map(imported_ua_of)
+                .collect::<Option<_>>()?,
         },
         // absent in a manifest written before T16b: none
         pqz_held: match v.get("pqzHeld") {
             None => vec![],
-            Some(_) => list(v, "pqzHeld")?.iter().map(pqz_held_of).collect::<Option<_>>()?,
+            Some(_) => list(v, "pqzHeld")?
+                .iter()
+                .map(pqz_held_of)
+                .collect::<Option<_>>()?,
         },
         backup_generation: v.get("backupGeneration")?.as_u64()?,
-        backup_senders: list(v, "backupSenders")?.iter().map(ua_of).collect::<Option<_>>()?,
+        backup_senders: list(v, "backupSenders")?
+            .iter()
+            .map(ua_of)
+            .collect::<Option<_>>()?,
         // absent when zero (and in every manifest written before scaas-sdk T5); present, a non-zero index below 2^31
         bip85_next: match v.get("bip85Next") {
             None => 0,
-            Some(n) => u32::try_from(n.as_u64()?).ok().filter(|n| *n > 0 && *n < derive::HARDENED)?,
+            Some(n) => u32::try_from(n.as_u64()?)
+                .ok()
+                .filter(|n| *n > 0 && *n < derive::HARDENED)?,
         },
     })
 }
 
 fn pqz_held_of(v: &Value) -> Option<PqzHeldEntry> {
     let h = |k: &str| ua_of(v.get(k)?);
-    Some(PqzHeldEntry { ua: h("ua")?, version: v.get("version")?.as_u64()?, pqz_key_hash: h("pqzKeyHash")? })
+    Some(PqzHeldEntry {
+        ua: h("ua")?,
+        version: v.get("version")?.as_u64()?,
+        pqz_key_hash: h("pqzKeyHash")?,
+    })
 }
 
 /// A secret the wallet holds outside its derivations, by its label vault's and backup secret's label.
@@ -324,7 +456,12 @@ impl Held {
     fn label(&self) -> String {
         match self {
             Held::Import(i) => format!("{IMPORT}{}:{}", i.network.name(), i.n),
-            Held::Pqz(p) => format!("{PQZ_HELD}{}:{}:{}", to_hex(&p.ua), p.version, to_hex(&p.pqz_key_hash)),
+            Held::Pqz(p) => format!(
+                "{PQZ_HELD}{}:{}:{}",
+                to_hex(&p.ua),
+                p.version,
+                to_hex(&p.pqz_key_hash)
+            ),
         }
     }
 
@@ -334,13 +471,20 @@ impl Held {
         let h = if let Some(r) = label.strip_prefix(IMPORT) {
             let (net, n) = r.split_once(':').ok_or(Error::Argument)?;
             let network = Network::from_name(net).ok_or(Error::Argument)?;
-            Held::Import(ImportEntry { network, n: n.parse().map_err(|_| Error::Argument)? })
+            Held::Import(ImportEntry {
+                network,
+                n: n.parse().map_err(|_| Error::Argument)?,
+            })
         } else {
             let r = label.strip_prefix(PQZ_HELD).ok_or(Error::Argument)?;
             let h32 = |x: &str| from_hex(x).and_then(|b| <[u8; 32]>::try_from(b).ok());
             let p = || {
                 let mut f = r.split(':');
-                Some(PqzHeldEntry { ua: h32(f.next()?)?, version: f.next()?.parse().ok()?, pqz_key_hash: h32(f.next()?)? })
+                Some(PqzHeldEntry {
+                    ua: h32(f.next()?)?,
+                    version: f.next()?.parse().ok()?,
+                    pqz_key_hash: h32(f.next()?)?,
+                })
             };
             Held::Pqz(p().ok_or(Error::Argument)?)
         };
@@ -353,17 +497,26 @@ impl Held {
         let id = match self {
             Held::Import(i) => m.imports.contains(i).then_some(KeyId::Import(i.n)),
             #[cfg(feature = "pqz")]
-            Held::Pqz(p) => m.pqz_held.contains(p).then_some(KeyId::PqzHeld(p.pqz_key_hash)),
+            Held::Pqz(p) => m
+                .pqz_held
+                .contains(p)
+                .then_some(KeyId::PqzHeld(p.pqz_key_hash)),
             #[cfg(not(feature = "pqz"))]
             Held::Pqz(_) => None,
         };
-        id.and_then(|id| a.secret(id)).map(|s| Zeroizing::new(s.to_vec())).ok_or(Error::Argument)
+        id.and_then(|id| a.secret(id))
+            .map(|s| Zeroizing::new(s.to_vec()))
+            .ok_or(Error::Argument)
     }
 }
 
 /// Every secret the manifest lists outside the derivations: the imported keys, then the rebuilt PQZ keys.
 fn held(m: &Manifest) -> impl Iterator<Item = Held> + '_ {
-    m.imports.iter().copied().map(Held::Import).chain(m.pqz_held.iter().copied().map(Held::Pqz))
+    m.imports
+        .iter()
+        .copied()
+        .map(Held::Import)
+        .chain(m.pqz_held.iter().copied().map(Held::Pqz))
 }
 
 /// The marker of a restore that may install an older backup over newer state, passed after the user confirmed it (spec §6.3;
@@ -388,18 +541,45 @@ impl BackupPayload {
         // the parts first (each its own exact buffer, the secret ones wiped), then one buffer of their summed size: a buffer
         // that grew would free its earlier copy unwiped (T21 L32)
         let mut parts: Vec<Zeroizing<String>> = Vec::with_capacity(4 + 4 * self.secrets.len());
-        parts.push(Zeroizing::new(format!("{{\"v\":1,\"generation\":{},\"entropy\":\"", self.generation)));
-        parts.push(Zeroizing::new(Base64UrlUnpadded::encode_string(&self.entropy)));
+        parts.push(Zeroizing::new(format!(
+            "{{\"v\":1,\"generation\":{},\"entropy\":\"",
+            self.generation
+        )));
+        parts.push(Zeroizing::new(Base64UrlUnpadded::encode_string(
+            &self.entropy,
+        )));
         parts.push(Zeroizing::new("\",\"secrets\":[".into()));
         for (n, (e, b)) in self.secrets.iter().enumerate() {
-            parts.push(Zeroizing::new(format!("{}{}\",\"bytes\":\"", if n == 0 { "{\"label\":\"" } else { ",{\"label\":\"" }, e.label())));
+            parts.push(Zeroizing::new(format!(
+                "{}{}\",\"bytes\":\"",
+                if n == 0 {
+                    "{\"label\":\""
+                } else {
+                    ",{\"label\":\""
+                },
+                e.label()
+            )));
             parts.push(Zeroizing::new(Base64UrlUnpadded::encode_string(b)));
             parts.push(Zeroizing::new("\"}".into()));
         }
-        let mut tail = format!("],\"manifest\":{{\"entries\":[{}", self.entries.iter().map(entry_json).collect::<Vec<_>>().join(","));
+        let mut tail = format!(
+            "],\"manifest\":{{\"entries\":[{}",
+            self.entries
+                .iter()
+                .map(entry_json)
+                .collect::<Vec<_>>()
+                .join(",")
+        );
         if !self.imported_uas.is_empty() {
             tail.push_str("],\"importedUas\":[");
-            tail.push_str(&self.imported_uas.iter().map(imported_ua_json).collect::<Vec<_>>().join(","));
+            tail.push_str(
+                &self
+                    .imported_uas
+                    .iter()
+                    .map(imported_ua_json)
+                    .collect::<Vec<_>>()
+                    .join(","),
+            );
         }
         tail.push_str("]}}");
         parts.push(Zeroizing::new(tail));
@@ -422,7 +602,11 @@ impl BackupPayload {
 }
 
 fn parse_payload(v: &Value) -> Option<BackupPayload> {
-    let b64 = |x: &Value| Base64UrlUnpadded::decode_vec(x.as_str()?).ok().map(Zeroizing::new);
+    let b64 = |x: &Value| {
+        Base64UrlUnpadded::decode_vec(x.as_str()?)
+            .ok()
+            .map(Zeroizing::new)
+    };
     if v.get("v")?.as_u64()? != 1 {
         return None;
     }
@@ -432,14 +616,25 @@ fn parse_payload(v: &Value) -> Option<BackupPayload> {
         Some(l) => l
             .as_array()?
             .iter()
-            .map(|s| Some((Held::parse(s.get("label")?.as_str()?).ok()?, b64(s.get("bytes")?)?)))
+            .map(|s| {
+                Some((
+                    Held::parse(s.get("label")?.as_str()?).ok()?,
+                    b64(s.get("bytes")?)?,
+                ))
+            })
             .collect::<Option<_>>()?,
     };
     let m = v.get("manifest")?;
-    let entries = list(m, "entries")?.iter().map(entry_of).collect::<Option<_>>()?;
+    let entries = list(m, "entries")?
+        .iter()
+        .map(entry_of)
+        .collect::<Option<_>>()?;
     let imported_uas: Vec<ImportedUaEntry> = match m.get("importedUas") {
         None => vec![],
-        Some(_) => list(m, "importedUas")?.iter().map(imported_ua_of).collect::<Option<_>>()?,
+        Some(_) => list(m, "importedUas")?
+            .iter()
+            .map(imported_ua_of)
+            .collect::<Option<_>>()?,
     };
     if m.get("importedUas").is_some() && imported_uas.is_empty() {
         return None;
@@ -447,23 +642,37 @@ fn parse_payload(v: &Value) -> Option<BackupPayload> {
     for (i, e) in imported_uas.iter().enumerate() {
         let (_, secret) = secrets.iter().find(|(h, _)| *h == Held::Import(e.source))?;
         // one secret under two sources is two entries of one `ua` (allowed); one source twice is not
-        if imported_uas.iter().take(i).any(|x| x.source == e.source) || imported_ua(e.kind, secret).ok()? != e.ua {
+        if imported_uas.iter().take(i).any(|x| x.source == e.source)
+            || imported_ua(e.kind, secret).ok()? != e.ua
+        {
             return None;
         }
     }
-    Some(BackupPayload { generation: v.get("generation")?.as_u64()?, entropy, secrets, entries, imported_uas })
+    Some(BackupPayload {
+        generation: v.get("generation")?.as_u64()?,
+        entropy,
+        secrets,
+        entries,
+        imported_uas,
+    })
 }
 
 /// The UA `seed` derives at entry `e`'s `kind` / `account` / `index` (the secret dropped here).
 pub(super) fn entry_ua(seed: &[u8; 64], e: &ManifestEntry) -> Result<[u8; 32]> {
-    let (_secret, key_data) = derive::ua_key(e.kind, derive::ua_secret(seed, e.kind, e.account, e.index)?)?;
+    let (_secret, key_data) =
+        derive::ua_key(e.kind, derive::ua_secret(seed, e.kind, e.account, e.index)?)?;
     Ok(derive_ua(e.kind, &key_data, false)?)
 }
 
 /// Whether the payload's entropy (with `bip39_passphrase`) derives `sender` at the manifest entry naming it.
 fn derives_sender(p: &BackupPayload, sender: &[u8; 32], bip39_passphrase: &str) -> bool {
-    let Some(e) = p.entries.iter().find(|e| e.ua == *sender) else { return false };
-    seed_of(&p.entropy, bip39_passphrase).and_then(|seed| entry_ua(&seed, e)).ok() == Some(*sender)
+    let Some(e) = p.entries.iter().find(|e| e.ua == *sender) else {
+        return false;
+    };
+    seed_of(&p.entropy, bip39_passphrase)
+        .and_then(|seed| entry_ua(&seed, e))
+        .ok()
+        == Some(*sender)
 }
 
 impl Wallet {
@@ -484,15 +693,25 @@ impl Wallet {
     /// `(index, ua)` of the UA keys `kind` of `account` at indices `0..gap` (BIP-44 style, gap 20; index 0 alone for the
     /// EIP-2333 kinds `0x0104`–`0x0107`), derived and dropped: nothing is stored or written to the manifest. The registry scan
     /// is the caller's. `Argument` for `gap > 1024`, an account ≥ 2^31 or a kind with no UA of its own (`0x0110`, `0x0112`).
-    pub fn discover_candidates(&self, kind: u16, account: u32, gap: u32) -> Result<Vec<(u32, [u8; 32])>> {
+    pub fn discover_candidates(
+        &self,
+        kind: u16,
+        account: u32,
+        gap: u32,
+    ) -> Result<Vec<(u32, [u8; 32])>> {
         if gap > GAP_MAX || matches!(kind, 0x0110 | 0x0112) {
             return Err(Error::Argument);
         }
-        let n = if (0x0104..=0x0107).contains(&kind) { gap.min(1) } else { gap };
+        let n = if (0x0104..=0x0107).contains(&kind) {
+            gap.min(1)
+        } else {
+            gap
+        };
         self.store.with_seed(|seed| {
             (0..n)
                 .map(|i| {
-                    let (_secret, key_data) = derive::ua_key(kind, derive::ua_secret(seed, kind, account, i)?)?;
+                    let (_secret, key_data) =
+                        derive::ua_key(kind, derive::ua_secret(seed, kind, account, i)?)?;
                     Ok((i, derive_ua(kind, &key_data, false)?))
                 })
                 .collect()
@@ -511,11 +730,23 @@ impl Wallet {
     /// Imported key `n`, only for the network it was imported for (CLI-SGN-11): `Argument` for another network or an unknown
     /// `n`. Its `index()` is `n`.
     pub fn imported_key(&self, network: Network, n: u32) -> Result<NativeKey> {
-        if !self.store.manifest().imports.contains(&ImportEntry { network, n }) {
+        if !self
+            .store
+            .manifest()
+            .imports
+            .contains(&ImportEntry { network, n })
+        {
             return Err(Error::Argument);
         }
         let (secret, public_key) = self.store.key(KeyId::Import(n), |_| Err(Error::Argument))?;
-        Ok(NativeKey { network, index: n, coin_type: None, change: 0, public_key, secret })
+        Ok(NativeKey {
+            network,
+            index: n,
+            coin_type: None,
+            change: 0,
+            public_key,
+            secret,
+        })
     }
 
     /// The UA of imported key `n` of `network` (T20c, owner 2026-11-08, the CLI-SGN-29 Change): `kind` must be the derived kind of
@@ -534,8 +765,17 @@ impl Wallet {
         let (secret, _) = self.store.key(KeyId::Import(n), |_| Err(Error::Argument))?;
         let key_data = secret.with(|s| derive::ua_key_data(kind, s))??;
         let ua = derive_ua(kind, &key_data, false)?;
-        self.store.note(|m| m.set_imported_ua(ImportedUaEntry { kind, source, ua }));
-        Ok(UaKey { kind, account: u32::MAX, index: u32::MAX, key_data, ua: Some(ua), secret, imported: true })
+        self.store
+            .note(|m| m.set_imported_ua(ImportedUaEntry { kind, source, ua }));
+        Ok(UaKey {
+            kind,
+            account: u32::MAX,
+            index: u32::MAX,
+            key_data,
+            ua: Some(ua),
+            secret,
+            imported: true,
+        })
     }
 
     /// `secret` as import `n` of `network` (`None`: the next free number, picked under the store's write lock, so two imports at
@@ -548,9 +788,18 @@ impl Wallet {
         }
         let public = derive::native_public(network, secret)?;
         self.store.with_all(|a, m| {
-            let n = n.unwrap_or_else(|| m.imports.iter().map(|i| i.n.saturating_add(1)).max().unwrap_or(0));
+            let n = n.unwrap_or_else(|| {
+                m.imports
+                    .iter()
+                    .map(|i| i.n.saturating_add(1))
+                    .max()
+                    .unwrap_or(0)
+            });
             let e = ImportEntry { network, n };
-            if m.imports.iter().any(|i| i.n == e.n && i.network != e.network) {
+            if m.imports
+                .iter()
+                .any(|i| i.n == e.n && i.network != e.network)
+            {
                 return Err(Error::Argument);
             }
             match a.secret(KeyId::Import(e.n)) {
@@ -569,11 +818,17 @@ impl Wallet {
     /// `pqz-held:<ua>:<version>:<pqzKeyHash>` (that rebuilt PQZ key's `seed32`, T16b), as [`Wallet::seal_vault`]; `Argument`
     /// for another label or a key the wallet does not hold.
     /// The new vault's DEK is held in the arena while it is open (scaas-sdk spec §6.10), for [`Wallet::reseal_label_vault`].
-    pub fn seal_label_vault(&self, label: &str, vault_passphrase: &str, prf: Option<&PrfEnvelope>) -> Result<Vault> {
+    pub fn seal_label_vault(
+        &self,
+        label: &str,
+        vault_passphrase: &str,
+        prf: Option<&PrfEnvelope>,
+    ) -> Result<Vault> {
         let _lease = self.store.lease(); // the secret's copy, through the seal (T21 L82)
         let secret = self.label_secret(label)?;
         super::store::copied();
-        let (vault, dek) = Vault::seal_dek(&self.vault_id()?, label, &secret, vault_passphrase, prf)?;
+        let (vault, dek) =
+            Vault::seal_dek(&self.vault_id()?, label, &secret, vault_passphrase, prf)?;
         self.hold_dek(&dek, &vault);
         Ok(vault)
     }
@@ -655,7 +910,9 @@ impl Wallet {
     /// when none is kept or the vault has no PRF envelope, `VaultOpen` for a vault of another key, `WalletLocked` while locked.
     pub fn open_label_vault_retained(&self, vault: &Vault) -> Result<()> {
         self.same_vault_id(vault)?;
-        let kek = self.store.with_arena(|a| a.prf_kek().ok_or(Error::Argument))?;
+        let kek = self
+            .store
+            .with_arena(|a| a.prf_kek().ok_or(Error::Argument))?;
         let (secret, dek) = vault.open_dek_prf_kek(&kek)?;
         if vault.label() == "manifest" {
             self.store.set_manifest(Manifest::from_json(&secret)?)?;
@@ -668,7 +925,9 @@ impl Wallet {
 
     /// Whether label vault `label` is open in this wallet's arena (opened or sealed since the last unlock); false while locked.
     pub fn label_open(&self, label: &str) -> bool {
-        self.store.with_arena(|a| Ok(a.holds_label(label))).unwrap_or(false)
+        self.store
+            .with_arena(|a| Ok(a.holds_label(label)))
+            .unwrap_or(false)
     }
 
     fn install_held(&self, h: Held, secret: &[u8]) -> Result<()> {
@@ -696,7 +955,11 @@ impl Wallet {
     /// the imported keys, the UA entries with `sender`'s), signed by `sender`, a UA key of this wallet of a kind that signs
     /// containers (`Argument` otherwise, or for no recipient); `created` the clock. The BIP-39 passphrase is never in it.
     // ponytail: the payload is built once for every recipient; per-recipient generations if a holder ever needs its own.
-    pub fn backup_seal(&self, sender: &UaKey, recipients: &[Recipient]) -> Result<Vec<SealedContainer>> {
+    pub fn backup_seal(
+        &self,
+        sender: &UaKey,
+        recipients: &[Recipient],
+    ) -> Result<Vec<SealedContainer>> {
         if recipients.is_empty() {
             return Err(Error::Argument);
         }
@@ -705,7 +968,10 @@ impl Wallet {
         let pt = self.payload(sender, true)?;
         super::store::copied();
         let signer = ContainerSigner::Key(sender);
-        recipients.iter().map(|r| seal_container(r, PURPOSE_BACKUP, &signer, created, pt.as_bytes(), None)).collect()
+        recipients
+            .iter()
+            .map(|r| seal_container(r, PURPOSE_BACKUP, &signer, created, pt.as_bytes(), None))
+            .collect()
     }
 
     /// The link container of this wallet to a new device's session (spec §6.3, C-11; owner 2026-11-06), what
@@ -717,19 +983,36 @@ impl Wallet {
     /// key; `WalletLocked` while locked. The BIP-39 passphrase is never in it. The short code does not protect the payload
     /// against a swapped key: `session_kem_pk` must reach this device over an authenticated channel (a direct QR scan of the new
     /// device's screen), never a relay, deep link or pasted string (CLI-UAL-12, owner 2026-11-16).
-    pub fn link_seal(&self, sender: &UaKey, session_kem_pk: &[u8], short_code: &str) -> Result<SealedContainer> {
+    pub fn link_seal(
+        &self,
+        sender: &UaKey,
+        session_kem_pk: &[u8],
+        short_code: &str,
+    ) -> Result<SealedContainer> {
         self.link_seal_with(sender, session_kem_pk, short_code, now()?, kem_encaps)
     }
 
     fn link_seal_with(
-        &self, sender: &UaKey, session_kem_pk: &[u8], short_code: &str, created: u64,
+        &self,
+        sender: &UaKey,
+        session_kem_pk: &[u8],
+        short_code: &str,
+        created: u64,
         encaps: impl FnOnce(&[u8]) -> Result<Encapsulated>,
     ) -> Result<SealedContainer> {
         let _lease = self.store.lease(); // the payload's copies, through the seal (T21 L82)
         let pt = self.payload(sender, false)?;
         super::store::copied();
         let r = Recipient::ephemeral(session_kem_pk);
-        seal_container_with(&r, PURPOSE_LINK, &ContainerSigner::Key(sender), created, pt.as_bytes(), Some(short_code), encaps)
+        seal_container_with(
+            &r,
+            PURPOSE_LINK,
+            &ContainerSigner::Key(sender),
+            created,
+            pt.as_bytes(),
+            Some(short_code),
+            encaps,
+        )
     }
 
     /// The `BackupPayload` of this wallet with `sender` (a container key of this wallet) in its entries; `raise`: a backup
@@ -740,16 +1023,27 @@ impl Wallet {
         if sender.imported {
             return Err(Error::Argument);
         }
-        let ua = sender.ua.filter(|_| is_sender_kind(sender.kind) && sender.secret.of_store(&self.store)).ok_or(Error::Argument)?;
+        let ua = sender
+            .ua
+            .filter(|_| is_sender_kind(sender.kind) && sender.secret.of_store(&self.store))
+            .ok_or(Error::Argument)?;
         self.store.with_all(|a, m| {
-            let secrets = held(m).map(|h| Ok((h, h.secret(a, m)?))).collect::<Result<Vec<_>>>()?;
+            let secrets = held(m)
+                .map(|h| Ok((h, h.secret(a, m)?)))
+                .collect::<Result<Vec<_>>>()?;
             // each listed imported UA with the id its secret gives (the manifest is never a trust anchor)
             let imported_uas = m
                 .imported_uas
                 .iter()
                 .map(|e| {
-                    let (_, s) = secrets.iter().find(|(h, _)| *h == Held::Import(e.source)).ok_or(Error::Argument)?;
-                    Ok(ImportedUaEntry { ua: imported_ua(e.kind, s)?, ..*e })
+                    let (_, s) = secrets
+                        .iter()
+                        .find(|(h, _)| *h == Held::Import(e.source))
+                        .ok_or(Error::Argument)?;
+                    Ok(ImportedUaEntry {
+                        ua: imported_ua(e.kind, s)?,
+                        ..*e
+                    })
                 })
                 .collect::<Result<Vec<_>>>()?;
             let entropy = Zeroizing::new(a.entropy()?.to_vec());
@@ -757,7 +1051,14 @@ impl Wallet {
             if raise {
                 m.backup_generation = m.backup_generation.checked_add(1).ok_or(Error::Argument)?;
             }
-            Ok(BackupPayload { generation: m.backup_generation, entropy, secrets, entries: m.entries.clone(), imported_uas }.to_json())
+            Ok(BackupPayload {
+                generation: m.backup_generation,
+                entropy,
+                secrets,
+                entries: m.entries.clone(),
+                imported_uas,
+            }
+            .to_json())
         })
     }
 
@@ -770,8 +1071,14 @@ impl Wallet {
     /// protection** beyond the generation: an archived backup still opens.
     #[allow(clippy::too_many_arguments)]
     pub fn restore_backup(
-        recipient: &KemKeyPair, c: &SealedContainer, expect: &ContainerExpect, members: &Members, accepted: Option<&Accepted>,
-        current: Option<&Wallet>, rollback: Option<AllowRollback>, bip39_passphrase: &str,
+        recipient: &KemKeyPair,
+        c: &SealedContainer,
+        expect: &ContainerExpect,
+        members: &Members,
+        accepted: Option<&Accepted>,
+        current: Option<&Wallet>,
+        rollback: Option<AllowRollback>,
+        bip39_passphrase: &str,
     ) -> Result<Option<Wallet>> {
         if expect.purpose != PURPOSE_BACKUP {
             return Err(Error::Argument);
@@ -780,7 +1087,10 @@ impl Wallet {
         if !derives_sender(&p, &c.sender_ua, bip39_passphrase) {
             return Err(Error::ContainerSender);
         }
-        if let Some(m) = current.map(Wallet::manifest).filter(|m| m.entries.iter().any(|e| e.ua == c.sender_ua)) {
+        if let Some(m) = current
+            .map(Wallet::manifest)
+            .filter(|m| m.entries.iter().any(|e| e.ua == c.sender_ua))
+        {
             if p.generation < m.backup_generation && rollback.is_none() {
                 return Err(Error::BackupRollback);
             }
@@ -821,9 +1131,17 @@ pub(super) fn install_link(pt: &[u8], sender: &[u8; 32], bip39_passphrase: &str)
 impl Wallet {
     #[allow(clippy::too_many_arguments)]
     pub fn vectors_link_seal(
-        &self, sender: &UaKey, session_kem_pk: &[u8], short_code: &str, created: u64, m: &[u8; 32], e: &[u8; 32],
+        &self,
+        sender: &UaKey,
+        session_kem_pk: &[u8],
+        short_code: &str,
+        created: u64,
+        m: &[u8; 32],
+        e: &[u8; 32],
     ) -> Result<SealedContainer> {
-        self.link_seal_with(sender, session_kem_pk, short_code, created, |k| super::kem::vectors_encaps(k, m, e))
+        self.link_seal_with(sender, session_kem_pk, short_code, created, |k| {
+            super::kem::vectors_encaps(k, m, e)
+        })
     }
 }
 

@@ -21,22 +21,31 @@ W=$(mkdir -p "$1" && cd "$1" && pwd)
 V=${2:-v4}
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 PIN=3330e487228f633eceb322807b13a596b516770f
-IMG=ubuntu@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55   # ubuntu:24.04
+IMG=ubuntu@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55 # ubuntu:24.04
 case "$V" in
-  v4) MARCH="-march=x86-64-v4 -mavx512ifma -mavx512vbmi2 -maes -mpclmul" ;;
-  v3) MARCH="-march=x86-64-v3 -maes -mpclmul" ;;
-  *) echo "variant must be v4 or v3" >&2; exit 2 ;;
+    v4) MARCH="-march=x86-64-v4 -mavx512ifma -mavx512vbmi2 -maes -mpclmul" ;;
+    v3) MARCH="-march=x86-64-v3 -maes -mpclmul" ;;
+    *)
+        echo "variant must be v4 or v3" >&2
+        exit 2
+        ;;
 esac
 
 if [ ! -d "$W/lazer-$V/.git" ]; then
-  git clone -q https://github.com/lazer-crypto/lazer "$W/lazer-$V"
+    git clone -q https://github.com/lazer-crypto/lazer "$W/lazer-$V"
 fi
 git -C "$W/lazer-$V" checkout -q "$PIN"
-[ "$(git -C "$W/lazer-$V" rev-parse HEAD)" = "$PIN" ] || { echo "LaZer is not at $PIN" >&2; exit 1; }
+[ "$(git -C "$W/lazer-$V" rev-parse HEAD)" = "$PIN" ] || {
+    echo "LaZer is not at $PIN" >&2
+    exit 1
+}
 
 # the parameter set (PQZ_SET, default n2304-kmax4096): its pqz_set.h and R_TX header (pqz-core/params/sets/<set>/)
 SETD="$HERE/../params/sets/${PQZ_SET:-n2304-kmax4096}"
-[ -f "$SETD/pqz_set.h" ] || { echo "no parameter set $SETD" >&2; exit 2; }
+[ -f "$SETD/pqz_set.h" ] || {
+    echo "no parameter set $SETD" >&2
+    exit 2
+}
 cp "$HERE/kat/lazer_dump.c" "$SETD/pqz_tx_params.h" "$SETD/pqz_set.h" "$W/"
 
 docker run --rm --memory=4g -e MARCH="$MARCH" -e V="$V" -v "$W":/w -w /w "$IMG" sh -euc '

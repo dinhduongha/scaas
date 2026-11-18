@@ -31,15 +31,29 @@ contract FlagLeg {
         _kind = a.length == 0 ? 8 : abi.decode(a, (uint8));
     }
 
-    function chainUid() external view returns (bytes32) { return ChainEnvCode.chainUid(); }
+    function chainUid() external view returns (bytes32) {
+        return ChainEnvCode.chainUid();
+    }
     function validateEnv(IFactoryToken.ChainEnv calldata) external pure {}
-    function kind() external view returns (uint8) { return _kind; }
+
+    function kind() external view returns (uint8) {
+        return _kind;
+    }
     function modules() external pure returns (address[] memory) {} // T66b: no body module
-    function initialize(bytes32, uint64, bytes calldata a) external { features = abi.decode(a, (uint256)); }
+
+    function initialize(bytes32, uint64, bytes calldata a) external {
+        features = abi.decode(a, (uint256));
+    }
     function underlyings() external pure returns (address[] memory) {}
-    function lockedFeatures() external view returns (uint256) { return features; }
+
+    function lockedFeatures() external view returns (uint256) {
+        return features;
+    }
     function admin() external pure returns (address) {}
-    function decimals() external pure returns (uint8) { return 6; }
+
+    function decimals() external pure returns (uint8) {
+        return 6;
+    }
 }
 
 /// @notice D5, the leg check (spec §6.1; CTR-GOV-05 and its Change; B-15): `_addLeg` of every wrapped kind refuses a leg that
@@ -118,17 +132,28 @@ contract GovLegTest is GovLegRows {
 
     function setUp() public {
         f = EnvKit.factory(address(this), UID, 0);
-        Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
-        Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false);
+        Catalogue.plain(
+            f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false
+        );
+        Catalogue.plain(
+            f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false
+        );
     }
 
-    function _fac() internal view override returns (OpenFactory) { return f; }
-    function _wKind() internal pure override returns (IOpenFactory.TokenKind) { return IOpenFactory.TokenKind.WRAPPED; }
+    function _fac() internal view override returns (OpenFactory) {
+        return f;
+    }
+
+    function _wKind() internal pure override returns (IOpenFactory.TokenKind) {
+        return IOpenFactory.TokenKind.WRAPPED;
+    }
 
     function _wCfg(address[] memory legs) internal pure override returns (IFactoryToken.TokenConfig memory c) {
         (c.name, c.symbol, c.decimals, c.features) = ("W", "W", 18, PLAIN);
         c.legs = new IFactoryToken.Leg[](legs.length);
-        for (uint256 i; i < legs.length; ++i) c.legs[i] = IFactoryToken.Leg(legs[i], 1, 1);
+        for (uint256 i; i < legs.length; ++i) {
+            c.legs[i] = IFactoryToken.Leg(legs[i], 1, 1);
+        }
     }
 
     function test_registeredForceLegRefused() public {
@@ -150,7 +175,8 @@ contract GovLegTest is GovLegRows {
     /// accepted and never asked for its features.
     function test_unregisteredLegIsOutside() public {
         address impl = address(new FlagLeg(address(f), abi.encode(uint8(0))));
-        address leg = f.createTokenUnregistered(IOpenFactory.TokenKind.NORMAL, impl, abi.encode(PLAIN | FORCE | MODERATE), "u");
+        address leg =
+            f.createTokenUnregistered(IOpenFactory.TokenKind.NORMAL, impl, abi.encode(PLAIN | FORCE | MODERATE), "u");
         assertTrue(f.isToken(leg));
         assertFalse(f.isRegisteredToken(leg));
         vm.expectCall(leg, abi.encodeCall(IGovernance.features, ()), 0);
@@ -161,7 +187,9 @@ contract GovLegTest is GovLegRows {
     /// A second factory's registered `FORCE` token is outside to the first: accepted there, refused on its own factory.
     function test_secondFactoryLegIsOutside() public {
         OpenFactory f2 = EnvKit.factory(address(this), UID, 0);
-        Catalogue.plain(f2, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false);
+        Catalogue.plain(
+            f2, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false
+        );
         address force = _flagLeg(f2, PLAIN | FORCE, "force");
         assertTrue(f2.isRegisteredToken(force));
         assertFalse(f.isRegisteredToken(force));
@@ -183,7 +211,8 @@ contract GovLegTest is GovLegRows {
 
     /// Bits 5, 7, 8, 9 stay allowed on a leg (spec §6.1, B-34), each alone and together; 6 beside them is still refused.
     function test_pauseAndFreezeLegsStayAllowed() public {
-        uint8[4] memory bits = [GovernanceBits.FREEZE, GovernanceBits.PAUSE, GovernanceBits.ALLOWLIST, GovernanceBits.DENYLIST];
+        uint8[4] memory bits =
+            [GovernanceBits.FREEZE, GovernanceBits.PAUSE, GovernanceBits.ALLOWLIST, GovernanceBits.DENYLIST];
         uint256 all;
         for (uint256 i; i < 4; ++i) {
             uint256 b = uint256(1) << bits[i];
@@ -200,10 +229,15 @@ contract GovLegTest is GovLegRows {
 contract GovLegZetherTest is GovLegRows, ZetherFixture {
     function setUp() public {
         _stack();
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode);
+        Catalogue.release(
+            factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode
+        );
     }
 
-    function _fac() internal view override returns (OpenFactory) { return factory; }
+    function _fac() internal view override returns (OpenFactory) {
+        return factory;
+    }
+
     function _wKind() internal pure override returns (IOpenFactory.TokenKind) {
         return IOpenFactory.TokenKind.WRAPPED_ZETHER;
     }
@@ -212,7 +246,9 @@ contract GovLegZetherTest is GovLegRows, ZetherFixture {
         c = _cfg(false, uint256(1) << 40);
         (c.features, c.lockedFeatures, c.roles.minter) = (PLAIN, 0, 0);
         c.legs = new IFactoryToken.Leg[](legs.length);
-        for (uint256 i; i < legs.length; ++i) c.legs[i] = IFactoryToken.Leg(legs[i], 1, 1);
+        for (uint256 i; i < legs.length; ++i) {
+            c.legs[i] = IFactoryToken.Leg(legs[i], 1, 1);
+        }
     }
 }
 
@@ -223,13 +259,20 @@ contract GovLegPqzTest is GovLegRows, PqzFixture {
         _releaseWrapped();
     }
 
-    function _fac() internal view override returns (OpenFactory) { return factory; }
-    function _wKind() internal pure override returns (IOpenFactory.TokenKind) { return IOpenFactory.TokenKind.WRAPPED_PQZ; }
+    function _fac() internal view override returns (OpenFactory) {
+        return factory;
+    }
+
+    function _wKind() internal pure override returns (IOpenFactory.TokenKind) {
+        return IOpenFactory.TokenKind.WRAPPED_PQZ;
+    }
 
     function _wCfg(address[] memory legs) internal view override returns (IFactoryToken.TokenConfig memory c) {
         c = _cfg(uint256(1) << 40);
         (c.features, c.lockedFeatures, c.roles.minter) = (PLAIN, 0, 0);
         c.legs = new IFactoryToken.Leg[](legs.length);
-        for (uint256 i; i < legs.length; ++i) c.legs[i] = IFactoryToken.Leg(legs[i], 1, 1);
+        for (uint256 i; i < legs.length; ++i) {
+            c.legs[i] = IFactoryToken.Leg(legs[i], 1, 1);
+        }
     }
 }

@@ -34,7 +34,9 @@ abstract contract GovRows is Test {
     address internal constant G_RELAYER = address(0xBEEF);
     uint256 internal constant G_LANE = 1;
 
-    function _gSigner() internal pure returns (address) { return vm.addr(G_PK); }
+    function _gSigner() internal pure returns (address) {
+        return vm.addr(G_PK);
+    }
 
     /// Both sides hold a balance and lane `G_LANE` is past nonce 0, so neither row pays a first write.
     function _prime(address t) internal {
@@ -50,14 +52,25 @@ abstract contract GovRows is Test {
     /// ua-mtx-merge T2: the merged `mtxTransfer` (today's `uaTransfer` body): the EOA signs `UAMetaTransfer` with its own
     /// key, ids padded, `UASig{signature}`.
     function _mtxCall(address t, uint256 nonce) internal view returns (bytes memory) {
-        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({from: MetaTxLib.pad(_gSigner()),
-            to: MetaTxLib.pad(G_TO), value: 1, entryRef: 0, batch: G_LANE, nonce: nonce,
-            validUntil: block.timestamp + 600, mode: 0, relayer: address(0), fee: 0, feeRecipient: address(0)});
+        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({
+            from: MetaTxLib.pad(_gSigner()),
+            to: MetaTxLib.pad(G_TO),
+            value: 1,
+            entryRef: 0,
+            batch: G_LANE,
+            nonce: nonce,
+            validUntil: block.timestamp + 600,
+            mode: 0,
+            relayer: address(0),
+            fee: 0,
+            feeRecipient: address(0)
+        });
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(G_PK, IERC20MetaTx(t).mtxTransferDigest(x));
         IUARegistry.UASig memory a;
         a.signature = abi.encodePacked(r, s, v);
-        return abi.encodeCall(IMetaTokenV2.mtxTransfer,
-            (x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, a));
+        return abi.encodeCall(
+            IMetaTokenV2.mtxTransfer, (x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, a)
+        );
     }
 
     function _row(string memory label, address t, address sender, bytes memory cd) internal {
@@ -100,7 +113,9 @@ contract GovGasNormal is GovRows {
     function setUp() public {
         vm.warp(1_800_000_000);
         f = EnvKit.factory(address(this), UID, 0);
-        Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
+        Catalogue.plain(
+            f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false
+        );
         t = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(_tokenConfig(1_000 ether)), "n");
         _prime(t);
         m = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(_minted()), "m");
@@ -109,16 +124,27 @@ contract GovGasNormal is GovRows {
         assertTrue(ok);
     }
 
-    function test_transfer() public { _plain("NormalToken transfer", t); }
-    function test_mtxTransfer() public { _mtx("NormalToken mtxTransfer", t); }
+    function test_transfer() public {
+        _plain("NormalToken transfer", t);
+    }
+
+    function test_mtxTransfer() public {
+        _mtx("NormalToken mtxTransfer", t);
+    }
 
     /// A whole-shape holder: `use` pays one feature read and one role read, no call (B-26).
     function test_mintWholeShape() public {
-        _row("NormalToken mint whole-shape", m, G_MINTER, abi.encodeWithSignature("mint(address,uint256,bytes32)", G_TO, 1, EnvKit.codeUidOf(m)));
+        _row(
+            "NormalToken mint whole-shape",
+            m,
+            G_MINTER,
+            abi.encodeWithSignature("mint(address,uint256,bytes32)", G_TO, 1, EnvKit.codeUidOf(m))
+        );
     }
 
     function test_createToken() public {
-        bytes memory cd = abi.encodeCall(OpenFactory.createToken, (IOpenFactory.TokenKind.NORMAL, 1, abi.encode(_minted()), "c"));
+        bytes memory cd =
+            abi.encodeCall(OpenFactory.createToken, (IOpenFactory.TokenKind.NORMAL, 1, abi.encode(_minted()), "c"));
         _row("NormalToken createToken", address(f), address(this), cd);
     }
 
@@ -148,7 +174,12 @@ contract GovGasDex is GovRows {
     }
 
     function test_createDex() public {
-        _row("SCaaSDex createDex", address(f), address(this), abi.encodeCall(OpenFactory.createDex, (1, abi.encode(_dexConfig()), "d1")));
+        _row(
+            "SCaaSDex createDex",
+            address(f),
+            address(this),
+            abi.encodeCall(OpenFactory.createDex, (1, abi.encode(_dexConfig()), "d1"))
+        );
     }
 }
 
@@ -162,15 +193,29 @@ contract GovGasInstance is GovRows {
         vm.warp(1_800_000_000);
         f = EnvKit.factory(address(this), UID, 0);
         f.publishClassEnv(4, 0, 1, EnvKit.uidOf(address(f)), plainEnv(address(f), address(0), UID, address(0), false));
-        f.deployImplementation(IOpenFactory.ReleaseId(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
-            type(NoteKind).creationCode, "", EnvKit.uidOf(address(f)));
+        f.deployImplementation(
+            IOpenFactory.ReleaseId(4, 0, 1),
+            1,
+            INoteKind.initialize.selector,
+            type(INoteKind).interfaceId,
+            type(NoteKind).creationCode,
+            "",
+            EnvKit.uidOf(address(f))
+        );
         f.setClassKindEnabled(4, 0, true, EnvKit.uidOf(address(f)));
         f.createInstance(IOpenFactory.ReleaseId(4, 0, 1), "i0", abi.encodeCall(INoteKind.initialize, (nid(G_TO), "n")));
     }
 
     function test_createInstance() public {
-        _row("NoteKind createInstance", address(f), address(this), abi.encodeCall(OpenFactory.createInstance,
-            (IOpenFactory.ReleaseId(4, 0, 1), "i1", abi.encodeCall(INoteKind.initialize, (nid(G_TO), "n")))));
+        _row(
+            "NoteKind createInstance",
+            address(f),
+            address(this),
+            abi.encodeCall(
+                OpenFactory.createInstance,
+                (IOpenFactory.ReleaseId(4, 0, 1), "i1", abi.encodeCall(INoteKind.initialize, (nid(G_TO), "n")))
+            )
+        );
     }
 }
 
@@ -205,7 +250,9 @@ contract GovGasWrapped is GovRows {
     function setUp() public {
         vm.warp(1_800_000_000);
         OpenFactory f = EnvKit.factory(address(this), UID, 0);
-        Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false);
+        Catalogue.plain(
+            f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false
+        );
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         IFactoryToken.TokenConfig memory c = _tokenConfig(0);
         c.initialHolder = address(0);
@@ -225,8 +272,13 @@ contract GovGasWrapped is GovRows {
         vm.stopPrank();
     }
 
-    function test_transfer() public { _plain("WrappedToken transfer", t); }
-    function test_mtxTransfer() public { _mtx("WrappedToken mtxTransfer", t); }
+    function test_transfer() public {
+        _plain("WrappedToken transfer", t);
+    }
+
+    function test_mtxTransfer() public {
+        _mtx("WrappedToken mtxTransfer", t);
+    }
 }
 
 contract GovGasPqz is GovRows, PqzFixture {
@@ -234,8 +286,13 @@ contract GovGasPqz is GovRows, PqzFixture {
 
     function setUp() public {
         _stack();
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ, 1,
-            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(WrappedPqzToken).creationCode);
+        Catalogue.release(
+            factory,
+            IOpenFactory.TokenKind.WRAPPED_PQZ,
+            1,
+            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)),
+            type(WrappedPqzToken).creationCode
+        );
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features = 1; // PAYABLE
@@ -253,8 +310,13 @@ contract GovGasPqz is GovRows, PqzFixture {
         _prime(t);
     }
 
-    function test_transfer() public { _plain("WrappedPqzToken transfer", t); }
-    function test_mtxTransfer() public { _mtx("WrappedPqzToken mtxTransfer", t); }
+    function test_transfer() public {
+        _plain("WrappedPqzToken transfer", t);
+    }
+
+    function test_mtxTransfer() public {
+        _mtx("WrappedPqzToken mtxTransfer", t);
+    }
 }
 
 contract GovGasZether is GovRows, ZetherFixture {
@@ -262,7 +324,9 @@ contract GovGasZether is GovRows, ZetherFixture {
 
     function setUp() public {
         _stack();
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode);
+        Catalogue.release(
+            factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode
+        );
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
         c.features = 1; // PAYABLE
@@ -280,6 +344,11 @@ contract GovGasZether is GovRows, ZetherFixture {
         _prime(t);
     }
 
-    function test_transfer() public { _plain("WrappedZetherToken transfer", t); }
-    function test_mtxTransfer() public { _mtx("WrappedZetherToken mtxTransfer", t); }
+    function test_transfer() public {
+        _plain("WrappedZetherToken transfer", t);
+    }
+
+    function test_mtxTransfer() public {
+        _mtx("WrappedZetherToken mtxTransfer", t);
+    }
 }

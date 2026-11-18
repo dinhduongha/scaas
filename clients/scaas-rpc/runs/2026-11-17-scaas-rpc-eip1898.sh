@@ -13,11 +13,15 @@ export PATH="$HOME/.foundry/bin:$PATH"
 free_port() { python3 -I -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])'; }
 NAME=scaas-rpc-eip1898-$$
 APID=
-cleanup() { docker rm -f "$NAME" >/dev/null 2>&1; [[ -n $APID ]] && kill "$APID" 2>/dev/null; wait 2>/dev/null; }
+cleanup() {
+    docker rm -f "$NAME" >/dev/null 2>&1
+    [[ -n $APID ]] && kill "$APID" 2>/dev/null
+    wait 2>/dev/null
+}
 trap cleanup EXIT
 
 check() { # client url
-  python3 -I - "$1" "$2" <<'EOF'
+    python3 -I - "$1" "$2" <<'EOF'
 import json, sys, urllib.request
 client, url = sys.argv[1], sys.argv[2]
 def rpc(method, params):
@@ -54,9 +58,13 @@ rc=0
 P=$(free_port)
 echo "[eip1898] nethermind $IMAGE on 127.0.0.1:$P (dev chain spaceneth, --memory 2g)"
 docker run -d --rm --name "$NAME" --memory 2g -p "127.0.0.1:$P:8545" "$IMAGE" --config spaceneth \
-  --JsonRpc.Enabled true --JsonRpc.Host 0.0.0.0 --JsonRpc.Port 8545 >/dev/null || exit 1
+    --JsonRpc.Enabled true --JsonRpc.Host 0.0.0.0 --JsonRpc.Port 8545 >/dev/null || exit 1
 curl -s --retry 90 --retry-delay 1 --retry-connrefused --retry-all-errors -o /dev/null -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' "http://127.0.0.1:$P" || { echo "[eip1898] nethermind did not answer"; docker logs "$NAME" | tail -20; exit 1; }
+    -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' "http://127.0.0.1:$P" || {
+    echo "[eip1898] nethermind did not answer"
+    docker logs "$NAME" | tail -20
+    exit 1
+}
 check nethermind "http://127.0.0.1:$P" || rc=1
 docker rm -f "$NAME" >/dev/null
 
@@ -65,7 +73,10 @@ echo "[eip1898] anvil on 127.0.0.1:$A ($(anvil --version | head -1))"
 "$W/scripts/capped" anvil --port "$A" --silent &
 APID=$!
 curl -s --retry 60 --retry-delay 1 --retry-connrefused --retry-all-errors -o /dev/null -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' "http://127.0.0.1:$A" || { echo "[eip1898] anvil did not answer"; exit 1; }
+    -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' "http://127.0.0.1:$A" || {
+    echo "[eip1898] anvil did not answer"
+    exit 1
+}
 # one mined block, so the latest hash is not block 0's
 curl -s -o /dev/null -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"evm_mine","params":[]}' "http://127.0.0.1:$A"
 check anvil "http://127.0.0.1:$A" || rc=1

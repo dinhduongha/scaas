@@ -42,157 +42,206 @@ N2048="--no-default-features --features wallet,zether,pqz,pqz-set-n2048-kmax1024
 
 cap() { "$W/scripts/capped" "$@"; }
 uars() { # one ua-rs cell as CI runs it: clippy over every target, then the tests. Args: <features> [-- <test selection>]
-  local f=(); while [ $# -gt 0 ] && [ "$1" != -- ]; do f+=("$1"); shift; done; [ $# -gt 0 ] && shift
-  cd clients/ua-rs && cap cargo clippy $C --all-targets "${f[@]}" -- -D warnings && cap cargo test $C "${f[@]}" "$@"
+    local f=()
+    while [ $# -gt 0 ] && [ "$1" != -- ]; do
+        f+=("$1")
+        shift
+    done
+    [ $# -gt 0 ] && shift
+    cd clients/ua-rs && cap cargo clippy $C --all-targets "${f[@]}" -- -D warnings && cap cargo test $C "${f[@]}" "$@"
 }
 release_ua_c() { cap cargo build --release $C --manifest-path clients/ua-c/Cargo.toml; } # what ua-py, ua-go, ua-cs load
-clean() { git diff --exit-code --stat -- . ":(exclude)$R"; } # no tracked file moved (runs/: this runner's own files)
+clean() { git diff --exit-code --stat -- . ":(exclude)$R"; }                             # no tracked file moved (runs/: this runner's own files)
 
 extra_step() { # this branch's own steps (the base runner calls it for a step it does not know, and for OWN_STEPS)
-  case $1 in
-    # each generator twice (clientkeys first, MD-7; then the both-ways fixtures of ua-rs: rs_signatures.json, rs_vault.json, each
-    # keeping a row that still verifies / opens); the committed files must not move
-    vectors-check) : "${PQ_DOWNLOADS:?PQ_DOWNLOADS: the pinned downloads (see the header)}"
-      local i
-      for i in 1 2; do
-        (cd clients/clientkeys && UA_WALLET_DOWNLOADS=$PQ_DOWNLOADS cap node scripts/ua-wallet-vectors.mjs &&
-           cap node scripts/pq-external.mjs "$PQ_DOWNLOADS") || return 1
-        (cd clients/ua-rs && cap cargo test $C --features vectors --test wallet_pq --test wallet_vault -- --ignored regenerate) || return 1
-        clean || return 1
-      done ;;
-    # the contracts' UA suites read the shared vector files (lib/ at its pins, a real directory: scripts/evm_libs.sh install);
-    # test/ua alone (FOUNDRY_TEST, its own out/ and cache/): a whole-tree compile was OOM-killed at the 4 GB cap (ua-mtx-merge T21)
-    forge-ua) scripts/evm_libs.sh check && cd smartcontracts/evm &&
-              cap env FOUNDRY_TEST=test/ua FOUNDRY_OUT=out/ua-rs-sign-ua FOUNDRY_CACHE_PATH=cache/ua-rs-sign-ua forge test -j 2 ;;
-    # the ua-rs cells of CI (MD-5, T18); pqz_read against anvil is step pqz-read, the wallet_state.json generator wallet-rows
-    ua-rs-nodefault) uars --no-default-features ;;
-    ua-rs-wallet) uars --no-default-features --features wallet,mlock ;;
-    ua-rs) uars ;;
-    ua-rs-pq) uars --no-default-features --features pq -- --test pq --test ua8 ;;
-    ua-rs-signers) uars --no-default-features --features signers -- --test groups_verify ;; # as CI's signers cell (T21 L11: groups.rs, the generator, needs vectors)
-    ua-rs-json) uars --no-default-features --features json -- --test json ;;
-    ua-rs-vectors) uars --features vectors ;;
-    ua-rs-zether) uars --no-default-features --features wallet,zether,mlock -- --lib --test facade_zether ;;
-    # PQZ without Zether at the committed set (the zether-only cell's counterpart; no_oracle needs both facades)
-    ua-rs-pqz) uars --no-default-features --features wallet,pqz,pqz-set-n2304-kmax4096,mlock -- --lib --bin pqz-read --test pqz_read \
-                 --test facade_pqz_state --test facade_pqz --test facade_pqz_proof --test pqz_backup --test pqz_wallet_rows ;;
-    ua-rs-pqz-n2048) (uars $N2048 -- --lib --bin pqz-read --test pqz_read --test facade_pqz_state --test facade_pqz --test facade_pqz_proof --test pqz_backup \
-                        --test no_oracle) && uars $N2048,vectors -- --test facade_pqz_state --test facade_pqz --test facade_pqz_proof --test pqz_backup --test no_oracle ;;
-    # every lockfile over ua-rs resolves as committed; cargo deny by ua-rs/deny.toml; cargo audit with deny.toml's ignores (CI ua-deps)
-    ua-deny) local m d ig
-      for m in clients/ua-rs clients/ua-c clients/ua-cxx clients/ua-qt clients/ua-dart-frb/rust clients/ua-rs/fuzz clients/zether-prover scaas-node; do
-        cap cargo tree --locked --offline -e normal --manifest-path "$m/Cargo.toml" > /dev/null || { echo "cargo tree --locked failed: $m"; return 1; }
-      done
-      (cd clients/ua-rs && cap cargo deny --all-features check) && (cd clients/ua-c && cap cargo deny --all-features --config ../ua-rs/deny.toml check) &&
-        (cd clients/zether-prover && cap cargo deny --all-features --config ../ua-rs/deny.toml check) || return 1
-      ig=$(python3 -I -c 'import tomllib; print(" ".join("--ignore " + a["id"] for a in tomllib.load(open("clients/ua-rs/deny.toml", "rb"))["advisories"]["ignore"]))')
-      for d in clients/ua-rs clients/ua-c clients/zether-prover; do (cd "$d" && cap cargo audit $ig) || return 1; done ;;
-    # T11's libFuzzer binary, then every target a short run over its seeds and regress/ inputs: no finding, no crash
-    ua-fuzz) local t o bad=0
-      cap clients/ua-rs/fuzz/build.sh || return 1
-      for t in typed_data expect tx vault manifest container sealed kem_pk mnemonic container_expect members accepted uasig zether_cmd pqz_cmd; do
-        o=$(cap clients/ua-rs/fuzz/run.sh "$t" "${UA_FUZZ_SECONDS:-20}" "$P"); echo "== $t"; echo "$o"
-        grep -qx '\[fuzz rc=0\]' <<< "$o" && ! grep -qE 'ua-fuzz FINDING|deadly signal|^SUMMARY|^==[0-9]+==ERROR' <<< "$o" || bad=1
-      done; [ $bad = 0 ] ;;
-    # MD-12's ratchet (T17): every row this host builds (measure resumes per row), check, and every baseline cell measured
-    ua-sizes) local m=clients/ua-c/target/ua-sizes-$(git rev-parse --short HEAD).json
-      python3 -I clients/ua-c/sizes.py selftest > /dev/null || { echo "sizes.py selftest failed"; return 1; }
-      ANDROID_NDK_HOME=${ANDROID_NDK_HOME:-$HOME/usr/Android/sdk/ndk/29.0.13113456} LLVM_STRIP=${LLVM_STRIP:-llvm-strip-18} \
-        LLVM_NM=${LLVM_NM:-llvm-nm-18} QMAKE=$QT/bin/qmake6 LD_LIBRARY_PATH=$QT/lib python3 -I clients/ua-c/sizes.py measure "$m" &&
-        python3 -I clients/ua-c/sizes.py check "$m" || return 1
-      python3 -I -c 'import json, sys; m, b = (json.load(open(f))["sizes"] for f in sys.argv[1:]); miss = sorted(set(b) - set(m))
-print("baseline cells not measured:", miss or "none"); sys.exit(1 if miss else 0)' "$m" clients/ua-c/size-baseline.json ;;
-    ua-c) (cd clients/ua-c && cap sh -c "cargo clippy $C --all-targets -- -D warnings && cargo build $C && cargo test $C &&
+    case $1 in
+        # each generator twice (clientkeys first, MD-7; then the both-ways fixtures of ua-rs: rs_signatures.json, rs_vault.json, each
+        # keeping a row that still verifies / opens); the committed files must not move
+        vectors-check)
+            : "${PQ_DOWNLOADS:?PQ_DOWNLOADS: the pinned downloads (see the header)}"
+            local i
+            for i in 1 2; do
+                (cd clients/clientkeys && UA_WALLET_DOWNLOADS=$PQ_DOWNLOADS cap node scripts/ua-wallet-vectors.mjs &&
+                    cap node scripts/pq-external.mjs "$PQ_DOWNLOADS") || return 1
+                (cd clients/ua-rs && cap cargo test $C --features vectors --test wallet_pq --test wallet_vault -- --ignored regenerate) || return 1
+                clean || return 1
+            done
+            ;;
+        # the contracts' UA suites read the shared vector files (lib/ at its pins, a real directory: scripts/evm_libs.sh install);
+        # test/ua alone (FOUNDRY_TEST, its own out/ and cache/): a whole-tree compile was OOM-killed at the 4 GB cap (ua-mtx-merge T21)
+        forge-ua) scripts/evm_libs.sh check && cd smartcontracts/evm &&
+            cap env FOUNDRY_TEST=test/ua FOUNDRY_OUT=out/ua-rs-sign-ua FOUNDRY_CACHE_PATH=cache/ua-rs-sign-ua forge test -j 2 ;;
+        # the ua-rs cells of CI (MD-5, T18); pqz_read against anvil is step pqz-read, the wallet_state.json generator wallet-rows
+        ua-rs-nodefault) uars --no-default-features ;;
+        ua-rs-wallet) uars --no-default-features --features wallet,mlock ;;
+        ua-rs) uars ;;
+        ua-rs-pq) uars --no-default-features --features pq -- --test pq --test ua8 ;;
+        ua-rs-signers) uars --no-default-features --features signers -- --test groups_verify ;; # as CI's signers cell (T21 L11: groups.rs, the generator, needs vectors)
+        ua-rs-json) uars --no-default-features --features json -- --test json ;;
+        ua-rs-vectors) uars --features vectors ;;
+        ua-rs-zether) uars --no-default-features --features wallet,zether,mlock -- --lib --test facade_zether ;;
+        # PQZ without Zether at the committed set (the zether-only cell's counterpart; no_oracle needs both facades)
+        ua-rs-pqz) uars --no-default-features --features wallet,pqz,pqz-set-n2304-kmax4096,mlock -- --lib --bin pqz-read --test pqz_read \
+            --test facade_pqz_state --test facade_pqz --test facade_pqz_proof --test pqz_backup --test pqz_wallet_rows ;;
+        ua-rs-pqz-n2048) (uars $N2048 -- --lib --bin pqz-read --test pqz_read --test facade_pqz_state --test facade_pqz --test facade_pqz_proof --test pqz_backup \
+            --test no_oracle) && uars $N2048,vectors -- --test facade_pqz_state --test facade_pqz --test facade_pqz_proof --test pqz_backup --test no_oracle ;;
+        # every lockfile over ua-rs resolves as committed; cargo deny by ua-rs/deny.toml; cargo audit with deny.toml's ignores (CI ua-deps)
+        ua-deny)
+            local m d ig
+            for m in clients/ua-rs clients/ua-c clients/ua-cxx clients/ua-qt clients/ua-dart-frb/rust clients/ua-rs/fuzz clients/zether-prover scaas-node; do
+                cap cargo tree --locked --offline -e normal --manifest-path "$m/Cargo.toml" >/dev/null || {
+                    echo "cargo tree --locked failed: $m"
+                    return 1
+                }
+            done
+            (cd clients/ua-rs && cap cargo deny --all-features check) && (cd clients/ua-c && cap cargo deny --all-features --config ../ua-rs/deny.toml check) &&
+                (cd clients/zether-prover && cap cargo deny --all-features --config ../ua-rs/deny.toml check) || return 1
+            ig=$(python3 -I -c 'import tomllib; print(" ".join("--ignore " + a["id"] for a in tomllib.load(open("clients/ua-rs/deny.toml", "rb"))["advisories"]["ignore"]))')
+            for d in clients/ua-rs clients/ua-c clients/zether-prover; do (cd "$d" && cap cargo audit $ig) || return 1; done
+            ;;
+        # T11's libFuzzer binary, then every target a short run over its seeds and regress/ inputs: no finding, no crash
+        ua-fuzz)
+            local t o bad=0
+            cap clients/ua-rs/fuzz/build.sh || return 1
+            for t in typed_data expect tx vault manifest container sealed kem_pk mnemonic container_expect members accepted uasig zether_cmd pqz_cmd; do
+                o=$(cap clients/ua-rs/fuzz/run.sh "$t" "${UA_FUZZ_SECONDS:-20}" "$P")
+                echo "== $t"
+                echo "$o"
+                grep -qx '\[fuzz rc=0\]' <<<"$o" && ! grep -qE 'ua-fuzz FINDING|deadly signal|^SUMMARY|^==[0-9]+==ERROR' <<<"$o" || bad=1
+            done
+            [ $bad = 0 ]
+            ;;
+        # MD-12's ratchet (T17): every row this host builds (measure resumes per row), check, and every baseline cell measured
+        ua-sizes)
+            local m=clients/ua-c/target/ua-sizes-$(git rev-parse --short HEAD).json
+            python3 -I clients/ua-c/sizes.py selftest >/dev/null || {
+                echo "sizes.py selftest failed"
+                return 1
+            }
+            ANDROID_NDK_HOME=${ANDROID_NDK_HOME:-$HOME/usr/Android/sdk/ndk/29.0.13113456} LLVM_STRIP=${LLVM_STRIP:-llvm-strip-18} \
+                LLVM_NM=${LLVM_NM:-llvm-nm-18} QMAKE=$QT/bin/qmake6 LD_LIBRARY_PATH=$QT/lib python3 -I clients/ua-c/sizes.py measure "$m" &&
+                python3 -I clients/ua-c/sizes.py check "$m" || return 1
+            python3 -I -c 'import json, sys; m, b = (json.load(open(f))["sizes"] for f in sys.argv[1:]); miss = sorted(set(b) - set(m))
+print("baseline cells not measured:", miss or "none"); sys.exit(1 if miss else 0)' "$m" clients/ua-c/size-baseline.json
+            ;;
+        ua-c) (cd clients/ua-c && cap sh -c "cargo clippy $C --all-targets -- -D warnings && cargo build $C && cargo test $C &&
           cc -std=c99 -Wall -Wextra -Werror -Iinclude tests/smoke.c target/debug/libscaas_ua_c.a -lpthread -ldl -lm -o target/smoke &&
           target/smoke && c++ -fsyntax-only -x c++ include/scaas_ua.h" && python3 -m unittest -v tests.test_vectors &&
-          cap tests/asan-smoke.sh) ;;
-    # the binding's own Rust tests too (T13c: secrets never cross the codec), which CI's ua-dart-frb job does not run; dart -j 1:
-    # with two test files at once the expanded reporter leaves out a test that starts and ends between two of its lines (named-tests)
-    ua-dart-frb) cd clients/ua-dart-frb && cap sh -c "dart pub get --enforce-lockfile && cargo build $C --manifest-path rust/Cargo.toml &&
+            cap tests/asan-smoke.sh) ;;
+        # the binding's own Rust tests too (T13c: secrets never cross the codec), which CI's ua-dart-frb job does not run; dart -j 1:
+        # with two test files at once the expanded reporter leaves out a test that starts and ends between two of its lines (named-tests)
+        ua-dart-frb) cd clients/ua-dart-frb && cap sh -c "dart pub get --enforce-lockfile && cargo build $C --manifest-path rust/Cargo.toml &&
         cargo test $C --manifest-path rust/Cargo.toml && dart test -r expanded -j 1" ;;
-    ua-py) release_ua_c && cd clients/ua-py && python3 -m unittest -v tests.test_vectors tests.test_wallet ;;
-    # -count=1: Go's test cache does not recheck a file outside the module (the shared vectors), so a cached PASS hid a red row
-    ua-go) release_ua_c && cd clients/ua-go && # LD_LIBRARY_PATH as CI's ua-go job: no build rpath since T21 L56
-      cap sh -c 'go vet ./... && LD_LIBRARY_PATH=$PWD/../ua-c/target/release go test -count=1 -v ./...' ;;
-    ua-cs) release_ua_c || return 1
-      cd clients/ua-cs && cap dotnet test Scaas.Ua.Tests --logger 'console;verbosity=normal'; local rc=$?
-      dotnet build-server shutdown > /dev/null 2>&1; return $rc ;; # VBCSCompiler would keep the capped slot
-    cargo-zether-prover) cd clients/zether-prover && cap sh -c "cargo clippy $C --all-targets -- -D warnings &&
+        ua-py) release_ua_c && cd clients/ua-py && python3 -m unittest -v tests.test_vectors tests.test_wallet ;;
+        # -count=1: Go's test cache does not recheck a file outside the module (the shared vectors), so a cached PASS hid a red row
+        ua-go) release_ua_c && cd clients/ua-go && # LD_LIBRARY_PATH as CI's ua-go job: no build rpath since T21 L56
+            cap sh -c 'go vet ./... && LD_LIBRARY_PATH=$PWD/../ua-c/target/release go test -count=1 -v ./...' ;;
+        ua-cs)
+            release_ua_c || return 1
+            cd clients/ua-cs && cap dotnet test Scaas.Ua.Tests --logger 'console;verbosity=normal'
+            local rc=$?
+            dotnet build-server shutdown >/dev/null 2>&1
+            return $rc
+            ;; # VBCSCompiler would keep the capped slot
+        cargo-zether-prover) cd clients/zether-prover && cap sh -c "cargo clippy $C --all-targets -- -D warnings &&
         cargo clippy $C --all-targets --features hazmat -- -D warnings && cargo test $C && cargo test $C --features hazmat" ;;
-    # the shipped wasm refuses the raw commands; with hazmat (test-only) the prover runs in wasm
-    wasm-zether-prover) cd clients/zether-prover && cap ./wasm-smoke.sh && cap env ZETHER_HAZMAT=1 ./wasm-smoke.sh ;;
-    # secret_mul's own tests (T3c; the vectors feature exposes the ladder trace), which no CI job runs: ua-rs only builds the crate
-    scaas-ct) cd clients/scaas-ct && cap sh -c "cargo clippy $C --all-targets --features vectors -- -D warnings && cargo test $C &&
+        # the shipped wasm refuses the raw commands; with hazmat (test-only) the prover runs in wasm
+        wasm-zether-prover) cd clients/zether-prover && cap ./wasm-smoke.sh && cap env ZETHER_HAZMAT=1 ./wasm-smoke.sh ;;
+        # secret_mul's own tests (T3c; the vectors feature exposes the ladder trace), which no CI job runs: ua-rs only builds the crate
+        scaas-ct) cd clients/scaas-ct && cap sh -c "cargo clippy $C --all-targets --features vectors -- -D warnings && cargo test $C &&
         cargo test $C --features vectors" ;;
-    # the oracle harness and the wallet rows at the default set (release cell, then vectors: the positive control)
-    no-oracle) (cd clients/ua-rs && cap cargo test $C --test no_oracle --test pqz_wallet_rows &&
-                cap cargo test $C --features vectors --test no_oracle --test pqz_wallet_rows) ;;
-    no-oracle-n2048) (cd clients/ua-rs && cap cargo test $C $N2048 --test no_oracle && cap cargo test $C $N2048,vectors --test no_oracle) ;;
-    # the same harness through the C ABI (the release library, which every binding but ua-cxx / ua-dart-frb / ua-qt loads)
-    no-oracle-ua-py) release_ua_c && (cd clients/ua-py &&
-                     python3 -m unittest -v tests.test_wallet.Pqz.test_no_oracle tests.test_wallet.Pqz.test_no_oracle_proof_path) ;;
-    # the rows' generator twice: the same bytes as committed
-    wallet-rows) local f=smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json a b
-                 smartcontracts/vectors/pqz/gen_wallet_state.sh && a=$(sha256sum < $f) &&
-                 smartcontracts/vectors/pqz/gen_wallet_state.sh && b=$(sha256sum < $f) &&
-                 echo "sha256 $a / $b" && [ "$a" = "$b" ] && git diff --exit-code -- $f ;;
-    # no test feature in a production artifact: the manifests and `cargo tree -e features` of ua-c (libscaas_ua_c: ua-py,
-    # ua-go, ua-cs), ua-cxx, ua-qt, ua-dart-frb's crate and zether-prover (zether-read-balance); positive control: ua-c with
-    # scaas-ua/vectors forced fails the check (both the manifest and the graph check); restored, tree clean
-    test-features) local m=clients/ua-c/Cargo.toml r
-                   CARGO_NET_OFFLINE=true python3 -I scripts/check_test_features.py || return 1
-                   sed -i 's/features = \["json", "wallet"\] }/features = ["json", "wallet", "vectors"] }/' $m
-                   CARGO_NET_OFFLINE=true python3 -I scripts/check_test_features.py; r=$?
-                   git checkout -q -- $m
-                   echo "positive control (scaas-ua/vectors forced in $m): rc=$r (must be 1)"
-                   [ $r = 1 ] && clean ;;
-    # the mutant records of the round: each ends with no survivor, and every harness still applies at this commit (`check`:
-    # each replacement string found once, no run), so a later change cannot leave a record that no longer tests anything.
-    # T1a-T3d: `check` mode added at T20 (their stale strings brought to HEAD and re-run, each record's dated T20 section)
-    mutant-logs) local t bad=0
-                 for t in 2026-11-05-ua-rs-sign-t1a 2026-11-05-ua-rs-sign-t1b 2026-11-05-ua-rs-sign-t1c 2026-11-05-ua-rs-sign-t2 \
-                          2026-11-05-ua-rs-sign-t3a 2026-11-05-ua-rs-sign-t3b 2026-11-05-ua-rs-sign-t3c 2026-11-05-ua-rs-sign-t3d \
-                          2026-11-05-ua-rs-sign-t4 2026-11-05-ua-rs-sign-t5 2026-11-05-ua-rs-sign-t6 2026-11-05-ua-rs-sign-t7 \
-                          2026-11-06-ua-rs-sign-t8 2026-11-06-ua-rs-sign-t9 2026-11-06-ua-rs-sign-t10 2026-11-06-ua-rs-sign-t11 \
-                          2026-11-06-ua-rs-sign-parity 2026-11-06-ua-rs-sign-t12 2026-11-06-ua-rs-sign-t12fu 2026-11-06-ua-rs-sign-t13a \
-                          2026-11-06-ua-rs-sign-t13b 2026-11-06-ua-rs-sign-t13c 2026-11-06-ua-rs-sign-t13c-secrets 2026-11-06-ua-rs-sign-t13d \
-                          2026-11-06-ua-rs-sign-t13e 2026-11-06-ua-rs-sign-t13f 2026-11-06-ua-rs-sign-t14 2026-11-06-ua-rs-sign-t15 \
-                          2026-11-06-ua-rs-sign-t16 2026-11-06-ua-rs-sign-t16a 2026-11-06-ua-rs-sign-t16b \
-                          2026-11-06-ua-rs-sign-t15b 2026-11-06-ua-rs-sign-t15c 2026-11-07-ua-rs-sign-t15c2 2026-11-07-ua-rs-sign-t15e \
-                          2026-11-07-ua-rs-sign-t14b 2026-11-07-ua-rs-sign-t15g 2026-11-07-ua-rs-sign-t15k 2026-11-07-ua-rs-sign-t15i \
-                          2026-11-07-ua-rs-sign-t15l 2026-11-07-ua-rs-sign-t15m 2026-11-07-ua-rs-sign-t15n \
-                          2026-11-07-ua-rs-sign-t15n2 2026-11-08-ua-rs-sign-t15o 2026-11-08-ua-rs-sign-t20b1 \
-                          2026-11-08-ua-rs-sign-t20b2 2026-11-08-ua-rs-sign-t20b3 2026-11-08-ua-rs-sign-t20b4 \
-                          2026-11-08-ua-rs-sign-t20b5 2026-11-08-ua-rs-sign-t20c 2026-11-09-ua-rs-sign-t20d1 2026-11-09-ua-rs-sign-t20d3 2026-11-09-ua-rs-sign-t20d2 \
-                          2026-11-09-ua-rs-sign-t20d4 2026-11-09-ua-rs-sign-t20d5 2026-11-09-ua-rs-sign-t20d6 \
-                          2026-11-09-ua-rs-sign-t20d7 2026-11-09-ua-rs-sign-t20d8 2026-11-09-ua-rs-sign-t20d10 \
-                          2026-11-10-ua-rs-sign-t20e1 2026-11-10-ua-rs-sign-t20e2 2026-11-10-ua-rs-sign-t20e3 \
-                          ${MUTANT_LOGS_EXTRA:-}; do
-                   l=$(tail -n 1 smartcontracts/evm/runs/$t-mutants.txt); echo "$t: $l"
-                   grep -Eq '(survived or not loaded: 0|0 survived, 0 not loaded)$|0 survived, 0 not loaded \(' <<< "$l" || bad=1
-                   echo "$t check: $(python3 -I smartcontracts/evm/runs/$t-mutants.py check 2>&1 | tail -n 1)"
-                   python3 -I smartcontracts/evm/runs/$t-mutants.py check > /dev/null 2>&1 || bad=1
-                 done; [ $bad = 0 ] ;;
-    # the PQZ and Zether reading layers (R1-R7) against a local anvil each test starts and stops (CI: the default cell, zether-prover)
-    pqz-read) cd clients/ua-rs && cap cargo test $C --test pqz_read --bin pqz-read -- --include-ignored ;;
-    read-balance) cd clients/zether-prover && cap sh -c "cargo test $C --test read_balance --bin zether-read-balance -- --include-ignored &&
+        # the oracle harness and the wallet rows at the default set (release cell, then vectors: the positive control)
+        no-oracle) (cd clients/ua-rs && cap cargo test $C --test no_oracle --test pqz_wallet_rows &&
+            cap cargo test $C --features vectors --test no_oracle --test pqz_wallet_rows) ;;
+        no-oracle-n2048) (cd clients/ua-rs && cap cargo test $C $N2048 --test no_oracle && cap cargo test $C $N2048,vectors --test no_oracle) ;;
+        # the same harness through the C ABI (the release library, which every binding but ua-cxx / ua-dart-frb / ua-qt loads)
+        no-oracle-ua-py) release_ua_c && (cd clients/ua-py &&
+            python3 -m unittest -v tests.test_wallet.Pqz.test_no_oracle tests.test_wallet.Pqz.test_no_oracle_proof_path) ;;
+        # the rows' generator twice: the same bytes as committed
+        wallet-rows)
+            local f=smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json a b
+            smartcontracts/vectors/pqz/gen_wallet_state.sh && a=$(sha256sum <$f) &&
+                smartcontracts/vectors/pqz/gen_wallet_state.sh && b=$(sha256sum <$f) &&
+                echo "sha256 $a / $b" && [ "$a" = "$b" ] && git diff --exit-code -- $f
+            ;;
+        # no test feature in a production artifact: the manifests and `cargo tree -e features` of ua-c (libscaas_ua_c: ua-py,
+        # ua-go, ua-cs), ua-cxx, ua-qt, ua-dart-frb's crate and zether-prover (zether-read-balance); positive control: ua-c with
+        # scaas-ua/vectors forced fails the check (both the manifest and the graph check); restored, tree clean
+        test-features)
+            local m=clients/ua-c/Cargo.toml r
+            CARGO_NET_OFFLINE=true python3 -I scripts/check_test_features.py || return 1
+            sed -i 's/features = \["json", "wallet"\] }/features = ["json", "wallet", "vectors"] }/' $m
+            CARGO_NET_OFFLINE=true python3 -I scripts/check_test_features.py
+            r=$?
+            git checkout -q -- $m
+            echo "positive control (scaas-ua/vectors forced in $m): rc=$r (must be 1)"
+            [ $r = 1 ] && clean
+            ;;
+        # the mutant records of the round: each ends with no survivor, and every harness still applies at this commit (`check`:
+        # each replacement string found once, no run), so a later change cannot leave a record that no longer tests anything.
+        # T1a-T3d: `check` mode added at T20 (their stale strings brought to HEAD and re-run, each record's dated T20 section)
+        mutant-logs)
+            local t bad=0
+            for t in 2026-11-05-ua-rs-sign-t1a 2026-11-05-ua-rs-sign-t1b 2026-11-05-ua-rs-sign-t1c 2026-11-05-ua-rs-sign-t2 \
+                2026-11-05-ua-rs-sign-t3a 2026-11-05-ua-rs-sign-t3b 2026-11-05-ua-rs-sign-t3c 2026-11-05-ua-rs-sign-t3d \
+                2026-11-05-ua-rs-sign-t4 2026-11-05-ua-rs-sign-t5 2026-11-05-ua-rs-sign-t6 2026-11-05-ua-rs-sign-t7 \
+                2026-11-06-ua-rs-sign-t8 2026-11-06-ua-rs-sign-t9 2026-11-06-ua-rs-sign-t10 2026-11-06-ua-rs-sign-t11 \
+                2026-11-06-ua-rs-sign-parity 2026-11-06-ua-rs-sign-t12 2026-11-06-ua-rs-sign-t12fu 2026-11-06-ua-rs-sign-t13a \
+                2026-11-06-ua-rs-sign-t13b 2026-11-06-ua-rs-sign-t13c 2026-11-06-ua-rs-sign-t13c-secrets 2026-11-06-ua-rs-sign-t13d \
+                2026-11-06-ua-rs-sign-t13e 2026-11-06-ua-rs-sign-t13f 2026-11-06-ua-rs-sign-t14 2026-11-06-ua-rs-sign-t15 \
+                2026-11-06-ua-rs-sign-t16 2026-11-06-ua-rs-sign-t16a 2026-11-06-ua-rs-sign-t16b \
+                2026-11-06-ua-rs-sign-t15b 2026-11-06-ua-rs-sign-t15c 2026-11-07-ua-rs-sign-t15c2 2026-11-07-ua-rs-sign-t15e \
+                2026-11-07-ua-rs-sign-t14b 2026-11-07-ua-rs-sign-t15g 2026-11-07-ua-rs-sign-t15k 2026-11-07-ua-rs-sign-t15i \
+                2026-11-07-ua-rs-sign-t15l 2026-11-07-ua-rs-sign-t15m 2026-11-07-ua-rs-sign-t15n \
+                2026-11-07-ua-rs-sign-t15n2 2026-11-08-ua-rs-sign-t15o 2026-11-08-ua-rs-sign-t20b1 \
+                2026-11-08-ua-rs-sign-t20b2 2026-11-08-ua-rs-sign-t20b3 2026-11-08-ua-rs-sign-t20b4 \
+                2026-11-08-ua-rs-sign-t20b5 2026-11-08-ua-rs-sign-t20c 2026-11-09-ua-rs-sign-t20d1 2026-11-09-ua-rs-sign-t20d3 2026-11-09-ua-rs-sign-t20d2 \
+                2026-11-09-ua-rs-sign-t20d4 2026-11-09-ua-rs-sign-t20d5 2026-11-09-ua-rs-sign-t20d6 \
+                2026-11-09-ua-rs-sign-t20d7 2026-11-09-ua-rs-sign-t20d8 2026-11-09-ua-rs-sign-t20d10 \
+                2026-11-10-ua-rs-sign-t20e1 2026-11-10-ua-rs-sign-t20e2 2026-11-10-ua-rs-sign-t20e3 \
+                ${MUTANT_LOGS_EXTRA:-}; do
+                l=$(tail -n 1 smartcontracts/evm/runs/$t-mutants.txt)
+                echo "$t: $l"
+                grep -Eq '(survived or not loaded: 0|0 survived, 0 not loaded)$|0 survived, 0 not loaded \(' <<<"$l" || bad=1
+                echo "$t check: $(python3 -I smartcontracts/evm/runs/$t-mutants.py check 2>&1 | tail -n 1)"
+                python3 -I smartcontracts/evm/runs/$t-mutants.py check >/dev/null 2>&1 || bad=1
+            done
+            [ $bad = 0 ]
+            ;;
+        # the PQZ and Zether reading layers (R1-R7) against a local anvil each test starts and stops (CI: the default cell, zether-prover)
+        pqz-read) cd clients/ua-rs && cap cargo test $C --test pqz_read --bin pqz-read -- --include-ignored ;;
+        read-balance) cd clients/zether-prover && cap sh -c "cargo test $C --test read_balance --bin zether-read-balance -- --include-ignored &&
         cargo test $C --features hazmat --test read_balance --bin zether-read-balance -- --include-ignored" ;;
-    l-mutant-*) local n=${1#l-mutant-}; python3 -I "$T15L" "$n" "$n"; local r=$?; clean && return $r ;;
-    mutant-*) local n=${1#mutant-}; python3 -I "$T15I" "$n" "$n"; local r=$?; clean && return $r ;;
-    # the libraries the binding mutants rebuilt, from the clean tree
-    rebuild) cap cargo build --release $C --manifest-path clients/ua-c/Cargo.toml &&
-             cap cargo build $C --manifest-path clients/ua-c/Cargo.toml &&
-             cap sh -c 'cmake --build clients/ua-cxx/build -j2' &&
-             cap cargo build $C --manifest-path clients/ua-dart-frb/rust/Cargo.toml && clean ;;
-    *) echo "unknown step $1"; return 2 ;;
-  esac
+        l-mutant-*)
+            local n=${1#l-mutant-}
+            python3 -I "$T15L" "$n" "$n"
+            local r=$?
+            clean && return $r
+            ;;
+        mutant-*)
+            local n=${1#mutant-}
+            python3 -I "$T15I" "$n" "$n"
+            local r=$?
+            clean && return $r
+            ;;
+        # the libraries the binding mutants rebuilt, from the clean tree
+        rebuild) cap cargo build --release $C --manifest-path clients/ua-c/Cargo.toml &&
+            cap cargo build $C --manifest-path clients/ua-c/Cargo.toml &&
+            cap sh -c 'cmake --build clients/ua-cxx/build -j2' &&
+            cap cargo build $C --manifest-path clients/ua-dart-frb/rust/Cargo.toml && clean ;;
+        *)
+            echo "unknown step $1"
+            return 2
+            ;;
+    esac
 }
 
 # "<step>|<form>|<name>": the tests this branch adds (forms: see the base runner). Written at T20 from the test definitions the
 # diff merge-base(origin/main)..HEAD adds (Rust #[test] fns, node test(), unittest, Go, xUnit, QML, Dart test(), ua-cxx's ctest
 # names), each under the first step whose log shows it passed: 618 definitions, 611 rows (a name two test files of one step
 # share is one row; the two `regenerate` writers by their module).
-NEW_TESTS=$(cat <<'NAMES'
+NEW_TESTS=$(
+    cat <<'NAMES'
 clientkeys|node|kem.json keys: the KEM key of every holder × version {0, 1}, other account / index / version, the 12-word wallet
 clientkeys|node|kem.json refusals: a non-holder kind and an msig have no KEM key (KemHolder), version ≥ 2^64 (Argument)
 clientkeys|node|kem.json encaps: fixed m and e give mlkemCt, E and ss; the holder decapsulates the same ss

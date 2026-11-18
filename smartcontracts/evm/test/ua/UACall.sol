@@ -118,7 +118,9 @@ library UACall {
 
     function _bytesAt(bytes memory b, uint256 o) private pure returns (bytes memory r) {
         r = new bytes(_at(b, o));
-        for (uint256 i; i < r.length; ++i) r[i] = b[o + 32 + i];
+        for (uint256 i; i < r.length; ++i) {
+            r[i] = b[o + 32 + i];
+        }
     }
 
     /// `register`, or the typed entry of kind `msig` / `webauthn-p256` / MuSig2 / FROST (key data and pop in their byte
@@ -278,18 +280,26 @@ library UACall {
 
     /// `auth` of each transfer of a batch.
     function auths(MetaTxLib.UAMetaTransfer[] memory ts, bytes[] memory as_)
-        internal pure returns (IUARegistry.UASig[] memory s)
+        internal
+        pure
+        returns (IUARegistry.UASig[] memory s)
     {
         s = new IUARegistry.UASig[](as_.length);
-        for (uint256 i; i < as_.length; ++i) s[i] = auth(ts[i].from, as_[i]);
+        for (uint256 i; i < as_.length; ++i) {
+            s[i] = auth(ts[i].from, as_[i]);
+        }
     }
 
     /// `auth` of each call of a generic batch (ua-mtx-merge T1, R47: `mtxBatch` takes `UASig[]`).
     function auths(MetaTxLib.UAMetaTransaction[] memory ms, bytes[] memory as_)
-        internal pure returns (IUARegistry.UASig[] memory s)
+        internal
+        pure
+        returns (IUARegistry.UASig[] memory s)
     {
         s = new IUARegistry.UASig[](as_.length);
-        for (uint256 i; i < as_.length; ++i) s[i] = auth(ms[i].from, as_[i]);
+        for (uint256 i; i < as_.length; ++i) {
+            s[i] = auth(ms[i].from, as_[i]);
+        }
     }
 
     function _u16(bytes memory d, uint256 o) private pure returns (uint256 v) {

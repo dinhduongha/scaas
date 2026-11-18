@@ -7,8 +7,8 @@
 
 use std::cell::RefCell;
 
-use pqzh_ligero::client::{KINDS, R, inputs, mutate, setup};
-use pqzh_ligero::{Params, RELS, Rel, multi_rels, prove, verify};
+use pqzh_ligero::client::{inputs, mutate, setup, KINDS, R};
+use pqzh_ligero::{multi_rels, prove, verify, Params, Rel, RELS};
 
 struct St {
     ins: Vec<(Vec<u8>, Vec<u8>)>,
@@ -19,7 +19,10 @@ struct St {
 }
 
 fn rels() -> Vec<Rel> {
-    RELS.iter().map(|&f| Rel::Form(f)).chain(multi_rels()).collect()
+    RELS.iter()
+        .map(|&f| Rel::Form(f))
+        .chain(multi_rels())
+        .collect()
 }
 
 thread_local! {
@@ -57,11 +60,28 @@ fn with<T>(f: impl FnOnce(&mut St) -> T) -> T {
 #[no_mangle]
 pub extern "C" fn step_init(proven: u32, r431: u32) -> u32 {
     let rs = rels();
-    let p = rs.iter().map(|f| if proven == 2 { Params::johnson_preset() } else { Params::preset(f.op(), proven != 0, r431 != 0) }).collect();
+    let p = rs
+        .iter()
+        .map(|f| {
+            if proven == 2 {
+                Params::johnson_preset()
+            } else {
+                Params::preset(f.op(), proven != 0, r431 != 0)
+            }
+        })
+        .collect();
     let s = setup();
     let ins = rs.iter().map(|&r| inputs(&s, r)).collect();
     let n = rs.len();
-    ST.with(|c| *c.borrow_mut() = Some(St { ins, p, proof: vec![vec![]; n], other: vec![vec![]; n], r: R(0x9E3779B97F4A7C15) }));
+    ST.with(|c| {
+        *c.borrow_mut() = Some(St {
+            ins,
+            p,
+            proof: vec![vec![]; n],
+            other: vec![vec![]; n],
+            r: R(0x9E3779B97F4A7C15),
+        })
+    });
     KINDS.len() as u32
 }
 
@@ -97,7 +117,14 @@ pub extern "C" fn step_prove_other(rel: u32) -> u32 {
 
 #[no_mangle]
 pub extern "C" fn step_verify(rel: u32) -> u32 {
-    with(|st| verify(op(rel), &st.ins[rel as usize].0, &st.proof[rel as usize], &st.p[rel as usize]) as u32)
+    with(|st| {
+        verify(
+            op(rel),
+            &st.ins[rel as usize].0,
+            &st.proof[rel as usize],
+            &st.p[rel as usize],
+        ) as u32
+    })
 }
 
 /// mutated input of `kind` (client::KINDS order); 1 = accepted (must not happen)
@@ -105,7 +132,14 @@ pub extern "C" fn step_verify(rel: u32) -> u32 {
 pub extern "C" fn step_verify_bad(rel: u32, kind: u32) -> u32 {
     with(|st| {
         let stmt = &st.ins[rel as usize].0;
-        let (s, p) = mutate(kind as usize, form(rel), stmt, &st.proof[rel as usize], &st.other[rel as usize], &mut st.r);
+        let (s, p) = mutate(
+            kind as usize,
+            form(rel),
+            stmt,
+            &st.proof[rel as usize],
+            &st.other[rel as usize],
+            &mut st.r,
+        );
         verify(op(rel), &s, &p, &st.p[rel as usize]) as u32
     })
 }
@@ -113,7 +147,11 @@ pub extern "C" fn step_verify_bad(rel: u32, kind: u32) -> u32 {
 /// FNV-1a of the last proof (native and wasm must agree for the same seed)
 #[no_mangle]
 pub extern "C" fn step_hash(rel: u32) -> u32 {
-    with(|st| st.proof[rel as usize].iter().fold(2166136261u32, |h, &b| (h ^ b as u32).wrapping_mul(16777619)))
+    with(|st| {
+        st.proof[rel as usize]
+            .iter()
+            .fold(2166136261u32, |h, &b| (h ^ b as u32).wrapping_mul(16777619))
+    })
 }
 
 /// a buffer of `len` bytes in linear memory for step_load (proofs made natively: ligero_bench --dump)
@@ -130,5 +168,11 @@ pub extern "C" fn step_alloc(len: u32) -> *mut u8 {
 pub unsafe extern "C" fn step_load(rel: u32, which: u32, ptr: *mut u8, len: u32) {
     // SAFETY: the caller's contract above: a leaked boxed slice of exactly `len` bytes, owned from here on
     let v = unsafe { Vec::from_raw_parts(ptr, len as usize, len as usize) };
-    with(|st| if which == 0 { st.proof[rel as usize] = v } else { st.other[rel as usize] = v });
+    with(|st| {
+        if which == 0 {
+            st.proof[rel as usize] = v
+        } else {
+            st.other[rel as usize] = v
+        }
+    });
 }

@@ -48,7 +48,9 @@ contract PqzPackGasTest is PqzStatePinGasTest {
     function test_pack_op1_relayedFullTx_materialisedNoHint() public {
         _precompiles(vm.envOr("PQZ_GAS_TX", uint256(6_085_125)));
         uint256 plen = vm.envOr("PQZ_PROOF_TX", uint256(48_724));
-        console2.log("relayed op 1 BUNDLE, auditor, materialised acc, no hint, full transaction, fee 7, proof bytes", plen);
+        console2.log(
+            "relayed op 1 BUNDLE, auditor, materialised acc, no hint, full transaction, fee 7, proof bytes", plen
+        );
         _fullTx(_op1p(alice, PRE, true, "", _proof(plen)), 7);
     }
 
@@ -65,7 +67,9 @@ contract PqzPackGasTest is PqzStatePinGasTest {
     function test_pack_op7_relayedFullTx_M8() public {
         _precompiles(vm.envOr("PQZ_GAS_M8", uint256(6_949_125)));
         uint256 plen = vm.envOr("PQZ_PROOF_M8", uint256(70_353));
-        console2.log("relayed op 7 M = 8 (G = 2) BUNDLE, auditor, fresh ref, full transaction, fee 7, proof bytes", plen);
+        console2.log(
+            "relayed op 7 M = 8 (G = 2) BUNDLE, auditor, fresh ref, full transaction, fee 7, proof bytes", plen
+        );
         _fullTx(_op7p(8, _proof(plen)), 7);
     }
 }

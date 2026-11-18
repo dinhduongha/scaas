@@ -30,11 +30,24 @@ fn arr<const L: usize>(b: &[u8]) -> &[u8; L] {
 }
 
 fn party(p: &P) -> Party<'_> {
-    Party { ua: &p.ua, key_version: p.kv, pk: arr(&p.pk), kem_pk: &p.kem, v: arr(&p.v), opening: &p.opening }
+    Party {
+        ua: &p.ua,
+        key_version: p.kv,
+        pk: arr(&p.pk),
+        kem_pk: &p.kem,
+        v: arr(&p.v),
+        opening: &p.opening,
+    }
 }
 
 fn credit(c: &C) -> Credit<'_> {
-    Credit { chain_uid: &c.chain, token: &c.token, u: arr(&c.u), to: party(&c.to), auditor: c.au.as_ref().map(party) }
+    Credit {
+        chain_uid: &c.chain,
+        token: &c.token,
+        u: arr(&c.u),
+        to: party(&c.to),
+        auditor: c.au.as_ref().map(party),
+    }
 }
 
 fn hex(b: &[u8]) -> String {
@@ -67,7 +80,9 @@ fn cj(c: &C) -> String {
 }
 
 fn outcome_r(o: Option<[u8; 16]>) -> String {
-    o.map_or("\"skip\"".into(), |d| format!("\"accepted:{}\"", hex(&d).trim_matches('"')))
+    o.map_or("\"skip\"".into(), |d| {
+        format!("\"accepted:{}\"", hex(&d).trim_matches('"'))
+    })
 }
 
 fn outcome_a(o: AuditorOutcome) -> String {
@@ -88,7 +103,10 @@ fn main() {
     let bip39 = [0x4Du8; 64];
     let key = |s: u8| pqzl::keygen(&[s; 32]).expect("keygen").pk.to_vec();
     let (pk_f, pk_t, pk_a) = (key(0x46), key(0x54), key(0x41));
-    let (seed_t, seed_a) = (op::open_kem_seed(&bip39, &to_ua, &chain, None, 0), op::open_kem_seed(&bip39, &au_ua, &chain, None, 0));
+    let (seed_t, seed_a) = (
+        op::open_kem_seed(&bip39, &to_ua, &chain, None, 0),
+        op::open_kem_seed(&bip39, &au_ua, &chain, None, 0),
+    );
     // the twelve openKemSeeds of opening.json (recipient 0x11..): only (0xC1.., offchain-shared, 0) opens O_t
     let mut kem_seeds = vec![];
     for ch in [[0xC1u8; 32], [0xC2; 32]] {
@@ -114,18 +132,44 @@ fn main() {
     };
     for aud in [false, true] {
         let d: [u8; 16] = core::array::from_fn(|i| (i as u8 * 5 + 1) % 16);
-        let s = op::enc_split(arr(&pk_f), [2; 16], &to_ua, arr(&pk_t), d, aud.then_some(arr(&pk_a)), &[0x7E; 32]).expect("enc_split");
+        let s = op::enc_split(
+            arr(&pk_f),
+            [2; 16],
+            &to_ua,
+            arr(&pk_t),
+            d,
+            aud.then_some(arr(&pk_a)),
+            &[0x7E; 32],
+        )
+        .expect("enc_split");
         let kem_t = op::open_kem_pk(&seed_t);
         let kem_a = op::open_kem_pk(&seed_a);
         let mut c = C {
             chain,
             token,
             u: s.leg.u.to_vec(),
-            to: P { ua: to_ua, kv: 0, pk: pk_t.clone(), kem: kem_t, v: s.leg.vs[0].to_vec(), opening: vec![] },
-            au: aud.then(|| P { ua: au_ua, kv: 0, pk: pk_a.clone(), kem: kem_a, v: s.leg.vs[1].to_vec(), opening: vec![] }),
+            to: P {
+                ua: to_ua,
+                kv: 0,
+                pk: pk_t.clone(),
+                kem: kem_t,
+                v: s.leg.vs[0].to_vec(),
+                opening: vec![],
+            },
+            au: aud.then(|| P {
+                ua: au_ua,
+                kv: 0,
+                pk: pk_a.clone(),
+                kem: kem_a,
+                v: s.leg.vs[1].to_vec(),
+                opening: vec![],
+            }),
         };
-        let o_t = op::seal(Role::Recipient, &credit(&c), &party(&c.to), &s.seed_leg).expect("seal O_t");
-        let o_a = c.au.as_ref().map(|a| op::seal(Role::Auditor, &credit(&c), &party(a), &s.seed_leg).expect("seal O_a"));
+        let o_t =
+            op::seal(Role::Recipient, &credit(&c), &party(&c.to), &s.seed_leg).expect("seal O_t");
+        let o_a = c.au.as_ref().map(|a| {
+            op::seal(Role::Auditor, &credit(&c), &party(a), &s.seed_leg).expect("seal O_a")
+        });
         c.to.opening = o_t;
         if let (Some(a), Some(o)) = (c.au.as_mut(), o_a) {
             a.opening = o;
@@ -144,22 +188,50 @@ fn main() {
         // recipient: the control, then one change each
         case(format!("{r} recipient control"), "recipient", &seed_t, &c);
         for (i, ks) in kem_seeds.iter().enumerate() {
-            case(format!("{r} recipient openKemSeeds[{i}]"), "recipient", ks, &c);
+            case(
+                format!("{r} recipient openKemSeeds[{i}]"),
+                "recipient",
+                ks,
+                &c,
+            );
         }
-        case(format!("{r} recipient the auditor's seed"), "recipient", &seed_a, &c);
+        case(
+            format!("{r} recipient the auditor's seed"),
+            "recipient",
+            &seed_a,
+            &c,
+        );
         let mut wrong = seed_t;
         flip(&mut wrong, 65); // the X25519 half (byte 64 bit 0 is clamped away)
-        case(format!("{r} recipient seed X25519 half flipped"), "recipient", &wrong, &c);
+        case(
+            format!("{r} recipient seed X25519 half flipped"),
+            "recipient",
+            &wrong,
+            &c,
+        );
         let mut wrong = seed_t;
         flip(&mut wrong, 0); // the ML-KEM half: implicit rejection
-        case(format!("{r} recipient seed ML-KEM half flipped"), "recipient", &wrong, &c);
+        case(
+            format!("{r} recipient seed ML-KEM half flipped"),
+            "recipient",
+            &wrong,
+            &c,
+        );
         type M = (&'static str, fn(&mut C, u64));
         let muts: [M; 19] = [
-            ("O_t tag flipped", |c, _| flip(&mut c.to.opening, op::OPENING - 1)),
+            ("O_t tag flipped", |c, _| {
+                flip(&mut c.to.opening, op::OPENING - 1)
+            }),
             ("O_t mlkemCt flipped", |c, _| flip(&mut c.to.opening, 0)),
-            ("O_t x25519Eph flipped", |c, _| flip(&mut c.to.opening, op::MLKEM_CT)),
-            ("O_t sealedSeed flipped", |c, _| flip(&mut c.to.opening, op::MLKEM_CT + 32)),
-            ("O_t x25519Eph small order (0)", |c, _| c.to.opening[op::MLKEM_CT..op::MLKEM_CT + 32].fill(0)),
+            ("O_t x25519Eph flipped", |c, _| {
+                flip(&mut c.to.opening, op::MLKEM_CT)
+            }),
+            ("O_t sealedSeed flipped", |c, _| {
+                flip(&mut c.to.opening, op::MLKEM_CT + 32)
+            }),
+            ("O_t x25519Eph small order (0)", |c, _| {
+                c.to.opening[op::MLKEM_CT..op::MLKEM_CT + 32].fill(0)
+            }),
             ("O_t short", |c, _| {
                 c.to.opening.pop();
             }),
@@ -171,7 +243,9 @@ fn main() {
             ("kemPk scheme 2", |c, _| c.to.kem[0] = 2),
             ("u lane flipped", |c, _| flip(&mut c.u, 7)),
             ("v_t lane low bit flipped", |c, _| flip(&mut c.to.v, 7)),
-            ("v_t lane = q", |c, q| c.to.v[..8].copy_from_slice(&q.to_be_bytes())),
+            ("v_t lane = q", |c, q| {
+                c.to.v[..8].copy_from_slice(&q.to_be_bytes())
+            }),
             ("keyVersion 1", |c, _| c.to.kv = 1),
             ("chainUid flipped", |c, _| flip(&mut c.chain, 0)),
             ("token flipped", |c, _| flip(&mut c.token, 0)),
@@ -180,14 +254,26 @@ fn main() {
             ("pk_t all 0xff", |c, _| c.to.pk.fill(0xFF)),
         ];
         let aud_muts: [M; 4] = [
-            ("O_a tag flipped", |c, _| flip(&mut c.au.as_mut().expect("auditor").opening, op::OPENING - 1)),
+            ("O_a tag flipped", |c, _| {
+                flip(
+                    &mut c.au.as_mut().expect("auditor").opening,
+                    op::OPENING - 1,
+                )
+            }),
             ("O_a short", |c, _| {
                 c.au.as_mut().expect("auditor").opening.pop();
             }),
-            ("v_a lane low bit flipped", |c, _| flip(&mut c.au.as_mut().expect("auditor").v, 7)),
-            ("pk_a lane flipped", |c, _| flip(&mut c.au.as_mut().expect("auditor").pk, 7)),
+            ("v_a lane low bit flipped", |c, _| {
+                flip(&mut c.au.as_mut().expect("auditor").v, 7)
+            }),
+            ("pk_a lane flipped", |c, _| {
+                flip(&mut c.au.as_mut().expect("auditor").pk, 7)
+            }),
         ];
-        let all: Vec<&M> = muts.iter().chain(aud.then_some(&aud_muts[..]).into_iter().flatten()).collect();
+        let all: Vec<&M> = muts
+            .iter()
+            .chain(aud.then_some(&aud_muts[..]).into_iter().flatten())
+            .collect();
         for (name, m) in &all {
             let mut x = c.clone();
             m(&mut x, q);
@@ -195,7 +281,12 @@ fn main() {
         }
         // the auditor: on the audited row its control and one change each; on the plain row no auditor copy
         case(format!("{r} auditor control"), "auditor", &seed_a, &c);
-        case(format!("{r} auditor the recipient's seed"), "auditor", &seed_t, &c);
+        case(
+            format!("{r} auditor the recipient's seed"),
+            "auditor",
+            &seed_t,
+            &c,
+        );
         if aud {
             for (name, m) in &all {
                 let mut x = c.clone();
@@ -204,8 +295,18 @@ fn main() {
             }
             let mut x = c.clone();
             x.au = None;
-            case(format!("{r} recipient auditor dropped"), "recipient", &seed_t, &x);
-            case(format!("{r} auditor auditor dropped"), "auditor", &seed_a, &x);
+            case(
+                format!("{r} recipient auditor dropped"),
+                "recipient",
+                &seed_t,
+                &x,
+            );
+            case(
+                format!("{r} auditor auditor dropped"),
+                "auditor",
+                &seed_a,
+                &x,
+            );
         }
     }
     println!(

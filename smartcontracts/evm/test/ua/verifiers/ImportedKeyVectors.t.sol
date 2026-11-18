@@ -40,7 +40,9 @@ contract ImportedKeyVectorsTest is Test {
             assertEq(
                 m,
                 UAKinds.uaMessage(
-                    kind, vm.parseJsonBytes32(sj, string.concat(e, ".purposeTag")), vm.parseJsonBytes32(sj, string.concat(e, ".digest"))
+                    kind,
+                    vm.parseJsonBytes32(sj, string.concat(e, ".purposeTag")),
+                    vm.parseJsonBytes32(sj, string.concat(e, ".digest"))
                 ),
                 e
             );
@@ -60,7 +62,9 @@ contract ImportedKeyVectorsTest is Test {
             string memory net = vm.parseJsonString(sj, string.concat(e, ".network"));
             bytes memory key = _keyOf(net);
             bytes32 m = vm.parseJsonBytes32(sj, string.concat(e, ".uaMsg"));
-            assertTrue(_v(kind).verify(key, m, vm.parseJsonBytes(sj, string.concat(e, ".uaSignature"))), "UA positive control");
+            assertTrue(
+                _v(kind).verify(key, m, vm.parseJsonBytes(sj, string.concat(e, ".uaSignature"))), "UA positive control"
+            );
             assertFalse(_v(kind).verify(key, m, vm.parseJsonBytes(sj, string.concat(e, ".nativeSignature"))), e);
             ++n;
         }

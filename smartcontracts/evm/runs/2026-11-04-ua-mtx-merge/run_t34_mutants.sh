@@ -15,18 +15,25 @@ root=$(cd "$here/../../../.." && pwd)
 cd "$root" || exit 2
 export PATH="$HOME/.foundry/bin:$PATH"
 paths='clients/clientkeys clients/ua-rs/src smartcontracts/evm/src smartcontracts/vectors'
-git diff --quiet -- $paths || { echo "$paths: not clean (commit first)" >&2; exit 2; }
+git diff --quiet -- $paths || {
+    echo "$paths: not clean (commit first)" >&2
+    exit 2
+}
 for m in ${ONLY:-$(python3 "$here/t34_mutants.py" --list)}; do
-  log="$here/mutant-t34-$m.log"
-  python3 "$here/t34_mutants.py" "$m" || { echo "$m: anchor missing" >&2; echo 99 > "$here/mutant-t34-$m.rc.log"; continue; }
-  case "$m" in
-    ck-*) (cd clients/clientkeys && ../../scripts/capped node --test test/regulated.test.js test/typed-ops.test.js test/governance-bits.test.js) > "$log" 2>&1 ;;
-    gen-*) (cd clients/clientkeys && node scripts/typed-ops-vectors.mjs && ../../scripts/capped node --test test/regulated.test.js test/typed-ops.test.js) > "$log" 2>&1 ;;
-    rs-*) (cd clients/ua-rs && ../../scripts/capped cargo test --test regulated --test vectors) > "$log" 2>&1 ;;
-    sol-*) (cd smartcontracts/evm && ../../scripts/capped forge test --match-path 'test/{as/RegulatedKat,governance/{GovBitsVector,GovRouterTypehash},metatx/TypedOps}.t.sol') > "$log" 2>&1 ;;
-  esac
-  echo $? > "$here/mutant-t34-$m.rc.log"
-  git checkout -- $paths
+    log="$here/mutant-t34-$m.log"
+    python3 "$here/t34_mutants.py" "$m" || {
+        echo "$m: anchor missing" >&2
+        echo 99 >"$here/mutant-t34-$m.rc.log"
+        continue
+    }
+    case "$m" in
+        ck-*) (cd clients/clientkeys && ../../scripts/capped node --test test/regulated.test.js test/typed-ops.test.js test/governance-bits.test.js) >"$log" 2>&1 ;;
+        gen-*) (cd clients/clientkeys && node scripts/typed-ops-vectors.mjs && ../../scripts/capped node --test test/regulated.test.js test/typed-ops.test.js) >"$log" 2>&1 ;;
+        rs-*) (cd clients/ua-rs && ../../scripts/capped cargo test --test regulated --test vectors) >"$log" 2>&1 ;;
+        sol-*) (cd smartcontracts/evm && ../../scripts/capped forge test --match-path 'test/{as/RegulatedKat,governance/{GovBitsVector,GovRouterTypehash},metatx/TypedOps}.t.sol') >"$log" 2>&1 ;;
+    esac
+    echo $? >"$here/mutant-t34-$m.rc.log"
+    git checkout -- $paths
 done
 python3 - "$here" <<'PY'
 import os, re, sys

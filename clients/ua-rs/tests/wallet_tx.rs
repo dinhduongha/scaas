@@ -8,7 +8,10 @@ use scaas_ua::wallet::{Error, EvmTx, Network, Wallet};
 use serde_json::{json, Value};
 
 fn load(path: &str) -> Value {
-    let path = format!("{}/../../smartcontracts/vectors/{path}", env!("CARGO_MANIFEST_DIR"));
+    let path = format!(
+        "{}/../../smartcontracts/vectors/{path}",
+        env!("CARGO_MANIFEST_DIR")
+    );
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 fn bytes(v: &Value) -> Vec<u8> {
@@ -22,11 +25,23 @@ fn tx(v: &Value) -> Result<EvmTx, Error> {
 }
 fn wallet() -> Wallet {
     let k = load("ua/keys.json");
-    let m = k["mnemonics"].as_array().unwrap().iter().find(|m| m["id"] == "pq_kat").unwrap();
-    Wallet::from_mnemonic(m["words"].as_str().unwrap(), m["passphrase"].as_str().unwrap()).unwrap()
+    let m = k["mnemonics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["id"] == "pq_kat")
+        .unwrap();
+    Wallet::from_mnemonic(
+        m["words"].as_str().unwrap(),
+        m["passphrase"].as_str().unwrap(),
+    )
+    .unwrap()
 }
 fn addr20(a: &str) -> [u8; 20] {
-    hex::decode(a.trim_start_matches("0x")).unwrap().try_into().unwrap()
+    hex::decode(a.trim_start_matches("0x"))
+        .unwrap()
+        .try_into()
+        .unwrap()
 }
 /// `r`, `s` and `yParity` as the 65 bytes `native_ecdsa` takes (`v = 27 + yParity`).
 fn sig65(r: &[u8; 32], s: &[u8; 32], y_parity: u8) -> Vec<u8> {
@@ -45,7 +60,12 @@ fn check_row(w: &Wallet, r: &Value, unsigned: Option<&Value>) {
     let s = key.sign_transaction(&t).unwrap();
     assert_eq!(s.tx_type, t.tx_type());
     assert_eq!(s.sighash, b32(&r["sighash"]));
-    assert_eq!(s.y_parity, r["yParity"].as_u64().unwrap() as u8, "{}", r["tx"]);
+    assert_eq!(
+        s.y_parity,
+        r["yParity"].as_u64().unwrap() as u8,
+        "{}",
+        r["tx"]
+    );
     assert_eq!(s.r, b32(&r["r"]), "{}", r["tx"]);
     assert_eq!(s.s, b32(&r["s"]), "{}", r["tx"]);
     assert_eq!(s.raw, bytes(&r["raw"]), "{}", r["tx"]);
@@ -63,13 +83,20 @@ fn sign_json_tx_rows_per_type() {
         assert_eq!(r["signer"]["mnemonic"], "pq_kat");
         assert_eq!(r["signer"]["network"], "evm");
         assert_eq!(r["signer"]["index"], 0);
-        assert_eq!(evm.address().unwrap().to_lowercase(), r["signer"]["address"].as_str().unwrap().to_lowercase());
+        assert_eq!(
+            evm.address().unwrap().to_lowercase(),
+            r["signer"]["address"].as_str().unwrap().to_lowercase()
+        );
         check_row(&w, r, Some(&r["unsigned"]));
         types.insert(r["tx"]["type"].as_u64().unwrap());
     }
     assert_eq!(types.into_iter().collect::<Vec<_>>(), vec![0, 1, 2, 3]);
     assert_eq!(rows.len(), 7);
-    assert!(rows.iter().any(|r| r["tx"]["chainId"] == "18446744073709551615"), "a row at chainId 2^64 - 1");
+    assert!(
+        rows.iter()
+            .any(|r| r["tx"]["chainId"] == "18446744073709551615"),
+        "a row at chainId 2^64 - 1"
+    );
 }
 
 /// The EIP-155 example (source and sha256 in the row): the signing data, the signing hash and, with the published key, the
@@ -87,7 +114,9 @@ fn eip155_published_row() {
     assert_eq!(t.sighash().unwrap(), b32(&p["signingHash"]));
     #[cfg(feature = "vectors")]
     {
-        let s = t.vectors_sign_with_secret(&bytes(&p["privateKey"])).unwrap();
+        let s = t
+            .vectors_sign_with_secret(&bytes(&p["privateKey"]))
+            .unwrap();
         assert_eq!(s.raw, bytes(&p["signedTx"]));
         assert_eq!(s.y_parity, 0);
         let dec = |x: &Value| {
@@ -139,8 +168,27 @@ fn legacy_without_chain_id_refused() {
     let mut zero = row["tx"].clone();
     zero["chainId"] = json!("0");
     assert_eq!(tx(&zero).err(), Some(Error::Argument));
-    let EvmTx::Legacy { nonce, gas_price, gas_limit, to, value, data, .. } = tx(&row["tx"]).unwrap() else { panic!() };
-    let built = EvmTx::Legacy { chain_id: 0, nonce, gas_price, gas_limit, to, value, data };
+    let EvmTx::Legacy {
+        nonce,
+        gas_price,
+        gas_limit,
+        to,
+        value,
+        data,
+        ..
+    } = tx(&row["tx"]).unwrap()
+    else {
+        panic!()
+    };
+    let built = EvmTx::Legacy {
+        chain_id: 0,
+        nonce,
+        gas_price,
+        gas_limit,
+        to,
+        value,
+        data,
+    };
     assert_eq!(built.sighash().err(), Some(Error::Argument));
     let key = w.native_key(Network::Evm, 0, None).unwrap();
     assert_eq!(key.sign_transaction(&built).err(), Some(Error::Argument));
@@ -150,11 +198,41 @@ fn legacy_without_chain_id_refused() {
 #[test]
 fn blob_tx_without_hashes_refused_when_built() {
     let v = load("ua/sign.json");
-    let row = v["tx"]["rows"].as_array().unwrap().iter().find(|r| r["tx"]["type"] == 3).unwrap();
-    let EvmTx::Eip4844 { chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit, to, value, data, access_list,
-        max_fee_per_blob_gas, .. } = tx(&row["tx"]).unwrap() else { panic!() };
-    let built = EvmTx::Eip4844 { chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit, to, value, data, access_list,
-        max_fee_per_blob_gas, blob_versioned_hashes: vec![] };
+    let row = v["tx"]["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["tx"]["type"] == 3)
+        .unwrap();
+    let EvmTx::Eip4844 {
+        chain_id,
+        nonce,
+        max_priority_fee_per_gas,
+        max_fee_per_gas,
+        gas_limit,
+        to,
+        value,
+        data,
+        access_list,
+        max_fee_per_blob_gas,
+        ..
+    } = tx(&row["tx"]).unwrap()
+    else {
+        panic!()
+    };
+    let built = EvmTx::Eip4844 {
+        chain_id,
+        nonce,
+        max_priority_fee_per_gas,
+        max_fee_per_gas,
+        gas_limit,
+        to,
+        value,
+        data,
+        access_list,
+        max_fee_per_blob_gas,
+        blob_versioned_hashes: vec![],
+    };
     assert_eq!(built.sighash().err(), Some(Error::Argument));
 }
 
@@ -172,10 +250,23 @@ fn chain_separation_tx_rows() {
         check_row(&w, r, None);
     }
     let mut n = 0;
-    for x in cs["refusals"].as_array().unwrap().iter().filter(|x| x["what"] == "tx") {
-        let pick = |chain: &Value| rows.iter().find(|r| r["type"] == x["type"] && r["chainId"] == *chain).unwrap();
+    for x in cs["refusals"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|x| x["what"] == "tx")
+    {
+        let pick = |chain: &Value| {
+            rows.iter()
+                .find(|r| r["type"] == x["type"] && r["chainId"] == *chain)
+                .unwrap()
+        };
         let (signed, other) = (pick(&x["signedFor"]), pick(&x["checkedAgainst"]));
-        let sig = sig65(&b32(&signed["r"]), &b32(&signed["s"]), signed["yParity"].as_u64().unwrap() as u8);
+        let sig = sig65(
+            &b32(&signed["r"]),
+            &b32(&signed["s"]),
+            signed["yParity"].as_u64().unwrap() as u8,
+        );
         assert!(native_ecdsa(&address, &b32(&signed["sighash"]), &sig));
         assert!(!native_ecdsa(&address, &b32(&other["sighash"]), &sig));
         n += 1;
@@ -192,10 +283,25 @@ fn ed25519_native_key_refused() {
     let w = wallet();
     let evm = w.native_key(Network::Evm, 0, None).unwrap();
     let s = evm.sign_transaction(&t).unwrap();
-    assert!(native_ecdsa(&addr20(&evm.address().unwrap()), &s.sighash, &sig65(&s.r, &s.s, s.y_parity)));
-    for net in [Network::Solana, Network::Stellar, Network::Sui, Network::Aptos, Network::Ton, Network::HederaEd25519] {
+    assert!(native_ecdsa(
+        &addr20(&evm.address().unwrap()),
+        &s.sighash,
+        &sig65(&s.r, &s.s, s.y_parity)
+    ));
+    for net in [
+        Network::Solana,
+        Network::Stellar,
+        Network::Sui,
+        Network::Aptos,
+        Network::Ton,
+        Network::HederaEd25519,
+    ] {
         let key = w.native_key(net, 0, None).unwrap();
-        assert_eq!(key.sign_transaction(&t).err(), Some(Error::Argument), "{net:?}");
+        assert_eq!(
+            key.sign_transaction(&t).err(),
+            Some(Error::Argument),
+            "{net:?}"
+        );
     }
 }
 

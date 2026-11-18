@@ -17,14 +17,26 @@ fn send<T: Send>() {}
 /// every operation on row r: the vector's proof, verify and verify_fast accept it
 fn honest(c: &mut Ctx, r: &Row, prove: bool) {
     if prove {
-        assert_eq!(c.prove(r.op, &r.stmt, &r.wit, &r.rnd32).as_deref(), Ok(&r.proof[..]), "{} prove", r.name);
+        assert_eq!(
+            c.prove(r.op, &r.stmt, &r.wit, &r.rnd32).as_deref(),
+            Ok(&r.proof[..]),
+            "{} prove",
+            r.name
+        );
     }
     assert!(c.verify(r.op, &r.stmt, &r.proof), "{} verify", r.name);
-    assert!(c.verify_fast(r.op, &r.stmt, &r.proof), "{} verify_fast", r.name);
+    assert!(
+        c.verify_fast(r.op, &r.stmt, &r.proof),
+        "{} verify_fast",
+        r.name
+    );
 }
 
 fn negative(c: &mut Ctx, (op, st, pf): &(u8, Vec<u8>, Vec<u8>)) {
-    assert!(!c.verify(*op, st, pf) && !c.verify_fast(*op, st, pf), "negative row accepted");
+    assert!(
+        !c.verify(*op, st, pf) && !c.verify_fast(*op, st, pf),
+        "negative row accepted"
+    );
 }
 
 /// 8 threads, a `Ctx` each: thread t proves and verifies (both verifiers) every PQZL row, starting at row t so that
@@ -49,7 +61,10 @@ fn concurrent_eq_sequential() {
                 for k in 0..n {
                     honest(&mut c, &rows[(t + k) % n], true);
                 }
-                negs.iter().skip(t).step_by(THREADS).for_each(|x| negative(&mut c, x));
+                negs.iter()
+                    .skip(t)
+                    .step_by(THREADS)
+                    .for_each(|x| negative(&mut c, x));
             });
         }
     });
@@ -61,8 +76,14 @@ fn concurrent_eq_sequential() {
         for t in 0..THREADS {
             let (rows, negs, with) = (&rows, &negs, &with);
             sc.spawn(move || {
-                rows.iter().skip(t).step_by(THREADS).for_each(|r| with(&|c| honest(c, r, true)));
-                negs.iter().skip(t).step_by(THREADS).for_each(|x| with(&|c| negative(c, x)));
+                rows.iter()
+                    .skip(t)
+                    .step_by(THREADS)
+                    .for_each(|r| with(&|c| honest(c, r, true)));
+                negs.iter()
+                    .skip(t)
+                    .step_by(THREADS)
+                    .for_each(|x| with(&|c| negative(c, x)));
             });
         }
     });

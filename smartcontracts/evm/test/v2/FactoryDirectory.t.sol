@@ -41,8 +41,14 @@ interface IFactoryDirectory {
     error EnvRegistryMismatch(address expected, address got);
     error EnvSmartKeyAccountMismatch(bytes32 cloneHash, address got);
 
-    function configureChain(bytes32 chainUid_, uint64 noticePeriod_, address govRouter_, bytes32 govRouterCodeHash,
-        uint256 refBlock, bytes32 refHash) external;
+    function configureChain(
+        bytes32 chainUid_,
+        uint64 noticePeriod_,
+        address govRouter_,
+        bytes32 govRouterCodeHash,
+        uint256 refBlock,
+        bytes32 refHash
+    ) external;
     function setChainEntries(IOpenFactory.ChainEntries calldata entries, bytes32 chainUid_) external;
     function directory() external view returns (Directory memory);
     function uaRegistry() external view returns (address);
@@ -139,8 +145,17 @@ contract FactoryDirectoryTest is Test {
 
     /// The four entries of this chain, each with its own code hash.
     function _all() internal view returns (E memory e) {
-        e = E(address(relay), _h(address(relay)), _h(relay.EXECUTOR()), address(creg), _h(address(creg)), address(skaf),
-            _h(address(skaf)), address(zs), _h(address(zs)));
+        e = E(
+            address(relay),
+            _h(address(relay)),
+            _h(relay.EXECUTOR()),
+            address(creg),
+            _h(address(creg)),
+            address(skaf),
+            _h(address(skaf)),
+            address(zs),
+            _h(address(zs))
+        );
     }
 
     function _only(uint256 i) internal view returns (E memory e) {
@@ -157,14 +172,25 @@ contract FactoryDirectoryTest is Test {
 
     /// The entries `e` as the named struct (CTR-GOV-27), with the chain word `uid`.
     function _cd(E memory e, bytes32 uid) internal pure returns (bytes memory) {
-        return abi.encodeCall(IFactoryDirectory.setChainEntries, (IOpenFactory.ChainEntries(e.relay, e.relayHash, e.execHash,
-            e.creg, e.cregHash, e.skaf, e.skafHash, e.zs, e.zsHash), uid));
+        return abi.encodeCall(
+            IFactoryDirectory.setChainEntries,
+            (
+                IOpenFactory.ChainEntries(
+                    e.relay, e.relayHash, e.execHash, e.creg, e.cregHash, e.skaf, e.skafHash, e.zs, e.zsHash
+                ),
+                uid
+            )
+        );
     }
 
     /// The view selector of entry `i` (0 relay, 1 compliance registry, 2 account factory, 3 Zether statements).
     function _sel(uint256 i) internal pure returns (bytes4) {
-        return [IFactoryDirectory.relayFeeRouter.selector, IFactoryDirectory.complianceRegistry.selector,
-            IFactoryDirectory.smartKeyAccountFactory.selector, IFactoryDirectory.zetherStatements.selector][i];
+        return [
+            IFactoryDirectory.relayFeeRouter.selector,
+            IFactoryDirectory.complianceRegistry.selector,
+            IFactoryDirectory.smartKeyAccountFactory.selector,
+            IFactoryDirectory.zetherStatements.selector
+        ][i];
     }
 
     function _entryAt(OpenFactory f, uint256 i) internal view returns (address) {
@@ -185,7 +211,9 @@ contract FactoryDirectoryTest is Test {
     function _call(address from, address to, bytes memory cd) internal {
         vm.prank(from);
         (bool ok, bytes memory ret) = to.call(cd);
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        }
     }
 
     function _refused(address from, address to, bytes memory cd, bytes memory err) internal {
@@ -216,7 +244,9 @@ contract FactoryDirectoryTest is Test {
         EnvKit.genesis(UID);
         bytes32 h = _h(address(router));
         bytes32[3] memory bad = [_h(address(trouter)), bytes32(0), keccak256("")];
-        for (uint256 i; i < 3; ++i) _refused(deployer, address(u), _ccd(address(router), bad[i]), _chm(address(router), bad[i], h));
+        for (uint256 i; i < 3; ++i) {
+            _refused(deployer, address(u), _ccd(address(router), bad[i]), _chm(address(router), bad[i], h));
+        }
         _refused(deployer, address(u), _ccd(address(0), h), _chm(address(0), h, bytes32(0)));
         _call(deployer, address(u), _ccd(address(router), h)); // positive control
         assertEq(u.govRouter(), address(router));
@@ -236,8 +266,12 @@ contract FactoryDirectoryTest is Test {
         _refused(deployer, address(u), _ccd(address(r0), _h(address(r0))), abi.encodeWithSelector(e, address(0)));
         _refused(deployer, address(u), _ccd(address(rn), _h(address(rn))), abi.encodeWithSelector(e, address(0xD1)));
         StubUARegistry noRegistryView = new StubUARegistry(UID); // answers chainUid(), not registry()
-        _refused(deployer, address(u), _ccd(address(noRegistryView), _h(address(noRegistryView))),
-            abi.encodeWithSelector(e, address(0)));
+        _refused(
+            deployer,
+            address(u),
+            _ccd(address(noRegistryView), _h(address(noRegistryView))),
+            abi.encodeWithSelector(e, address(0))
+        );
         _call(deployer, address(u), _ccd(address(router), _h(address(router)))); // positive control
     }
 
@@ -246,10 +280,16 @@ contract FactoryDirectoryTest is Test {
         OpenFactory u = new OpenFactory(nid(deployer));
         EnvKit.genesis(UID);
         GovernanceRouter rx = new GovernanceRouter(UID, address(ureg), address(0xBEEF), false);
-        _refused(deployer, address(u), _ccd(address(rx), _h(address(rx))),
-            _cloneErr(EnvKit.cloneHash(address(0xBEEF)), EnvKit.cloneHash(impl)));
+        _refused(
+            deployer,
+            address(u),
+            _ccd(address(rx), _h(address(rx))),
+            _cloneErr(EnvKit.cloneHash(address(0xBEEF)), EnvKit.cloneHash(impl))
+        );
         GovernanceRouter r0 = new GovernanceRouter(UID, address(ureg), address(0), false);
-        _refused(deployer, address(u), _ccd(address(r0), _h(address(r0))), _cloneErr(bytes32(0), EnvKit.cloneHash(impl)));
+        _refused(
+            deployer, address(u), _ccd(address(r0), _h(address(r0))), _cloneErr(bytes32(0), EnvKit.cloneHash(impl))
+        );
         GovernanceRouter mute = new GovernanceRouter(UID, address(relay), address(0), false); // relay: no smartKeyCloneHash()
         _refused(deployer, address(u), _ccd(address(mute), _h(address(mute))), _cloneErr(bytes32(0), bytes32(0)));
         assertEq(IRouterCloneHash(address(router)).smartKeyCloneHash(), EnvKit.cloneHash(impl), "the router's view");
@@ -266,7 +306,9 @@ contract FactoryDirectoryTest is Test {
         address[4] memory ats = [a.relay, a.creg, a.skaf, a.zs];
         bytes32[4] memory hs = [a.relayHash, a.cregHash, a.skafHash, a.zsHash];
         for (uint256 i; i < 4; ++i) {
-            for (uint256 j = i; j < 4; ++j) assertEq(_entryAt(f, j), address(0), "open until written");
+            for (uint256 j = i; j < 4; ++j) {
+                assertEq(_entryAt(f, j), address(0), "open until written");
+            }
             vm.expectEmit(true, true, true, true, address(f));
             emit IFactoryDirectory.ChainEntrySet(_sel(i), ats[i], hs[i]);
             _call(deployer, address(f), _cd(_only(i)));
@@ -275,7 +317,9 @@ contract FactoryDirectoryTest is Test {
             _refused(deployer, address(f), _cd(_only(i)), again);
             _refused(deployer, address(f), _cd(_with(_only(i), i, address(router), _h(address(router)))), again);
         }
-        _refused(deployer, address(f), _cd(a), abi.encodeWithSelector(IFactoryDirectory.EntryAlreadySet.selector, _sel(0)));
+        _refused(
+            deployer, address(f), _cd(a), abi.encodeWithSelector(IFactoryDirectory.EntryAlreadySet.selector, _sel(0))
+        );
     }
 
     /// D2: an entry whose code hash is not its argument is refused (each entry), the factory's own too.
@@ -300,9 +344,15 @@ contract FactoryDirectoryTest is Test {
         assertEq(none.codehash, bytes32(0));
         assertEq(empty.codehash, keccak256(""));
         for (uint256 i; i < 4; ++i) {
-            _refused(deployer, address(f), _cd(_with(_only(i), i, none, bytes32(0))), _chm(none, bytes32(0), bytes32(0)));
-            _refused(deployer, address(f), _cd(_with(_only(i), i, empty, keccak256(""))),
-                _chm(empty, keccak256(""), keccak256("")));
+            _refused(
+                deployer, address(f), _cd(_with(_only(i), i, none, bytes32(0))), _chm(none, bytes32(0), bytes32(0))
+            );
+            _refused(
+                deployer,
+                address(f),
+                _cd(_with(_only(i), i, empty, keccak256(""))),
+                _chm(empty, keccak256(""), keccak256(""))
+            );
         }
         _call(deployer, address(f), _cd(_all())); // positive control
     }
@@ -321,11 +371,19 @@ contract FactoryDirectoryTest is Test {
     function test_setChainEntries_siblingWordRefused() public {
         OpenFactory f = _factory(address(router));
         vm.recordLogs();
-        _refused(deployer, address(f), _cd(_all(), UID_B),
-            abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, UID, UID_B));
-        _refused(STRANGER, address(f), _cd(_all(), UID_B), abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(STRANGER)));
+        _refused(
+            deployer,
+            address(f),
+            _cd(_all(), UID_B),
+            abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, UID, UID_B)
+        );
+        _refused(
+            STRANGER, address(f), _cd(_all(), UID_B), abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(STRANGER))
+        );
         assertEq(vm.getRecordedLogs().length, 0, "nothing written");
-        for (uint256 i; i < 4; ++i) assertEq(_entryAt(f, i), address(0));
+        for (uint256 i; i < 4; ++i) {
+            assertEq(_entryAt(f, i), address(0));
+        }
         _call(deployer, address(f), _cd(_all())); // positive control
         assertEq(_d(f).zetherStatements(), address(zs));
     }
@@ -336,7 +394,9 @@ contract FactoryDirectoryTest is Test {
         vm.recordLogs();
         _call(deployer, address(f), _cd(E(address(0), 0, 0, address(0), 0, address(0), 0, address(0), 0)));
         assertEq(vm.getRecordedLogs().length, 0, "nothing written");
-        for (uint256 i; i < 4; ++i) assertEq(_entryAt(f, i), address(0));
+        for (uint256 i; i < 4; ++i) {
+            assertEq(_entryAt(f, i), address(0));
+        }
         E memory a = _all();
         _call(deployer, address(f), _cd(_only(3)));
         E memory two = _only(1);
@@ -435,8 +495,12 @@ contract FactoryDirectoryTest is Test {
         OpenFactory n = _factory(address(0));
         ComplianceRegistry sib = new ComplianceRegistry(nid(deployer), address(0), UID_B);
         ComplianceRegistry own = new ComplianceRegistry(nid(deployer), address(0), UID);
-        _refused(deployer, address(n), _cd(_with(_only(1), 1, address(sib), _h(address(sib)))),
-            abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, UID, UID_B));
+        _refused(
+            deployer,
+            address(n),
+            _cd(_with(_only(1), 1, address(sib), _h(address(sib)))),
+            abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, UID, UID_B)
+        );
         _call(deployer, address(n), _cd(_with(_only(1), 1, address(own), _h(address(own))))); // positive control
     }
 
@@ -444,8 +508,12 @@ contract FactoryDirectoryTest is Test {
     function test_accountFactory_otherChainUidRefused() public {
         OpenFactory f = _factory(address(router));
         SmartKeyAccountFactory b = new SmartKeyAccountFactory(UID_B);
-        _refused(deployer, address(f), _cd(_with(_only(2), 2, address(b), _h(address(b)))),
-            abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, UID, UID_B));
+        _refused(
+            deployer,
+            address(f),
+            _cd(_with(_only(2), 2, address(b), _h(address(b)))),
+            abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, UID, UID_B)
+        );
         _call(deployer, address(f), _cd(_only(2))); // positive control
     }
 
@@ -454,8 +522,12 @@ contract FactoryDirectoryTest is Test {
     function test_accountFactory_otherImplementationRefused() public {
         OpenFactory f = _factory(address(router));
         SmartKeyAccountFactory other = new SmartKeyAccountFactory(UID);
-        _refused(deployer, address(f), _cd(_with(_only(2), 2, address(other), _h(address(other)))),
-            _cloneErr(EnvKit.cloneHash(impl), EnvKit.cloneHash(other.IMPLEMENTATION())));
+        _refused(
+            deployer,
+            address(f),
+            _cd(_with(_only(2), 2, address(other), _h(address(other)))),
+            _cloneErr(EnvKit.cloneHash(impl), EnvKit.cloneHash(other.IMPLEMENTATION()))
+        );
         _call(deployer, address(f), _cd(_only(2))); // positive control
         OpenFactory n = _factory(address(0));
         _call(deployer, address(n), _cd(_with(_only(2), 2, address(other), _h(address(other)))));
@@ -473,14 +545,32 @@ contract FactoryDirectoryTest is Test {
     /// `directory()` equal to the named views before and after.
     function test_views_zeroUntilWritten_directoryEqualsViews() public {
         OpenFactory n = _factory(address(0));
-        _eqViews(n, IFactoryDirectory.Directory(address(0), address(0), address(0), address(0), address(0), address(0),
-            address(0)));
+        _eqViews(
+            n,
+            IFactoryDirectory.Directory(
+                address(0), address(0), address(0), address(0), address(0), address(0), address(0)
+            )
+        );
         OpenFactory f = _factory(address(router));
-        _eqViews(f, IFactoryDirectory.Directory(address(ureg), address(router), address(0), address(0), address(0), address(0),
-            address(0)));
+        _eqViews(
+            f,
+            IFactoryDirectory.Directory(
+                address(ureg), address(router), address(0), address(0), address(0), address(0), address(0)
+            )
+        );
         _call(deployer, address(f), _cd(_all()));
-        _eqViews(f, IFactoryDirectory.Directory(address(ureg), address(router), address(relay), relay.EXECUTOR(), address(creg),
-            address(skaf), address(zs)));
+        _eqViews(
+            f,
+            IFactoryDirectory.Directory(
+                address(ureg),
+                address(router),
+                address(relay),
+                relay.EXECUTOR(),
+                address(creg),
+                address(skaf),
+                address(zs)
+            )
+        );
     }
 
     function _eqViews(OpenFactory f, IFactoryDirectory.Directory memory want) internal view {
@@ -514,12 +604,28 @@ contract FactoryDirectoryTest is Test {
     function _bound(uint256 p) internal {
         OpenFactory f = _factory(address(router));
         StubUARegistry other = new StubUARegistry(UID);
-        _refused(deployer, address(f), _pub(p, 1, _env(address(other), address(0))),
-            abi.encodeWithSelector(IFactoryDirectory.EnvRegistryMismatch.selector, address(ureg), address(other)));
-        _refused(deployer, address(f), _pub(p, 1, _env(address(0), address(0xBEEF))),
-            abi.encodeWithSelector(IFactoryDirectory.EnvSmartKeyAccountMismatch.selector, EnvKit.cloneHash(impl), address(0xBEEF)));
-        _refused(deployer, address(f), _pub(p, 1, _env(address(ureg), address(0xBEEF))),
-            abi.encodeWithSelector(IFactoryDirectory.EnvSmartKeyAccountMismatch.selector, EnvKit.cloneHash(impl), address(0xBEEF)));
+        _refused(
+            deployer,
+            address(f),
+            _pub(p, 1, _env(address(other), address(0))),
+            abi.encodeWithSelector(IFactoryDirectory.EnvRegistryMismatch.selector, address(ureg), address(other))
+        );
+        _refused(
+            deployer,
+            address(f),
+            _pub(p, 1, _env(address(0), address(0xBEEF))),
+            abi.encodeWithSelector(
+                IFactoryDirectory.EnvSmartKeyAccountMismatch.selector, EnvKit.cloneHash(impl), address(0xBEEF)
+            )
+        );
+        _refused(
+            deployer,
+            address(f),
+            _pub(p, 1, _env(address(ureg), address(0xBEEF))),
+            abi.encodeWithSelector(
+                IFactoryDirectory.EnvSmartKeyAccountMismatch.selector, EnvKit.cloneHash(impl), address(0xBEEF)
+            )
+        );
         _call(deployer, address(f), _pub(p, 1, _env(address(0), address(0))));
         _call(deployer, address(f), _pub(p, 2, _env(address(ureg), impl)));
         _call(deployer, address(f), _pub(p, 3, _env(address(ureg), address(0))));
@@ -546,9 +652,14 @@ contract FactoryDirectoryTest is Test {
         for (uint256 n = 32; n <= 33; ++n) {
             IFactoryToken.Env memory e;
             (e.libs, e.libCodeHashes) = (new address[](n), new bytes32[](n));
-            for (uint256 i; i < n; ++i) (e.libs[i], e.libCodeHashes[i]) = (address(uint160(0x1000 + i)), keccak256(abi.encode(i)));
-            if (n == 32) _call(deployer, address(f), _pub(0, 1, e));
-            else _refused(deployer, address(f), _pub(0, 2, e), abi.encodeWithSelector(IOpenFactory.EnvInvalid.selector));
+            for (uint256 i; i < n; ++i) {
+                (e.libs[i], e.libCodeHashes[i]) = (address(uint160(0x1000 + i)), keccak256(abi.encode(i)));
+            }
+            if (n == 32) {
+                _call(deployer, address(f), _pub(0, 1, e));
+            } else {
+                _refused(deployer, address(f), _pub(0, 2, e), abi.encodeWithSelector(IOpenFactory.EnvInvalid.selector));
+            }
         }
     }
 
@@ -565,8 +676,14 @@ contract FactoryDirectoryTest is Test {
         Vm.Gas memory g1 = vm.lastCallGas();
         _call(deployer, address(f), _cd(_all()));
         Vm.Gas memory g2 = vm.lastCallGas();
-        console2.log("DIRGAS configureChain without a router: regular / state", g0.gasTotalUsed, uint256(int256(g0.gasStateUsed)));
-        console2.log("DIRGAS configureChain with a router: regular / state", g1.gasTotalUsed, uint256(int256(g1.gasStateUsed)));
-        console2.log("DIRGAS setChainEntries, four entries: regular / state", g2.gasTotalUsed, uint256(int256(g2.gasStateUsed)));
+        console2.log(
+            "DIRGAS configureChain without a router: regular / state", g0.gasTotalUsed, uint256(int256(g0.gasStateUsed))
+        );
+        console2.log(
+            "DIRGAS configureChain with a router: regular / state", g1.gasTotalUsed, uint256(int256(g1.gasStateUsed))
+        );
+        console2.log(
+            "DIRGAS setChainEntries, four entries: regular / state", g2.gasTotalUsed, uint256(int256(g2.gasStateUsed))
+        );
     }
 }

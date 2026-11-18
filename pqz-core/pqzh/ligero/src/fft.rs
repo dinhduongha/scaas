@@ -3,8 +3,8 @@
 //! 2026-10-14: the radix-431 stage for longer codes). Each radix-r stage is a direct r-point DFT with lazy
 //! u128 accumulation (r + 1 products per point and stage), decimation in time, natural order in and out.
 
+use crate::fq::{cnt, red, Fq, Q};
 use crate::Wiped;
-use crate::fq::{Fq, Q, cnt, red};
 
 /// the set's generator of F_q^* (pqzh_set.rs)
 pub const GEN: Fq = Fq(crate::set::GEN);
@@ -46,7 +46,10 @@ impl Domain {
 
     /// `new` with the table reserved fallibly (the verifier's domains, review P-D)
     pub fn try_new(n: usize) -> Result<Domain, crate::Oom> {
-        assert!(n >= 1 && smooth(n), "domain size {n} not 2^a 19^b 43^c 431^d dividing q - 1");
+        assert!(
+            n >= 1 && smooth(n),
+            "domain size {n} not 2^a 19^b 43^c 431^d dividing q - 1"
+        );
         let mut radices = Vec::new();
         let mut m = n;
         for &r in RADICES {
@@ -62,7 +65,12 @@ impl Domain {
             w.push(x);
             x = x * om;
         }
-        Ok(Domain { n, radices, w, n_inv: Fq(n as u64).inv() })
+        Ok(Domain {
+            n,
+            radices,
+            w,
+            n_inv: Fq(n as u64).inv(),
+        })
     }
 
     /// omega^e for any (possibly negative) exponent
@@ -107,7 +115,16 @@ impl Domain {
     /// DIT on inp[0], inp[stride], ... (size n / tstep), root omega^tstep; result in out (natural order). `len`: inp[j]
     /// is zero for every j >= len (the zero padding of `fft`: structural, public).
     #[allow(clippy::too_many_arguments)]
-    fn rec(&self, inp: &[Fq], len: usize, stride: usize, out: &mut [Fq], level: usize, tstep: usize, inv: bool) {
+    fn rec(
+        &self,
+        inp: &[Fq],
+        len: usize,
+        stride: usize,
+        out: &mut [Fq],
+        level: usize,
+        tstep: usize,
+        inv: bool,
+    ) {
         let size = out.len();
         if size == 1 {
             out[0] = inp[0];
@@ -117,7 +134,15 @@ impl Domain {
         let m = size / r;
         for s in 0..r {
             let ls = len.saturating_sub(s * stride);
-            self.rec(&inp[s * stride..], ls, stride * r, &mut out[s * m..(s + 1) * m], level + 1, tstep * r, inv);
+            self.rec(
+                &inp[s * stride..],
+                ls,
+                stride * r,
+                &mut out[s * m..(s + 1) * m],
+                level + 1,
+                tstep * r,
+                inv,
+            );
         }
         let n = self.n;
         let w = &self.w;
@@ -142,7 +167,11 @@ impl Domain {
         for k in 0..m {
             for s in 0..r {
                 let v = out[s * m + k];
-                t[s] = if s == 0 { v.0 as u128 } else { red(w[ix(tstep * s * k)].0 as u128 * v.0 as u128) as u128 };
+                t[s] = if s == 0 {
+                    v.0 as u128
+                } else {
+                    red(w[ix(tstep * s * k)].0 as u128 * v.0 as u128) as u128
+                };
             }
             cnt((r - 1) as u64);
             if ns * 4 < r {
@@ -185,14 +214,18 @@ mod tests {
 
     #[test]
     fn fft_matches_naive_all_radices() {
-        let mut sizes = vec![1usize, 2, 4, 8, 19, 38, 43, 86, 152, 431, 862, 817, 1634, 3448, 18533, 32756];
+        let mut sizes = vec![
+            1usize, 2, 4, 8, 19, 38, 43, 86, 152, 431, 862, 817, 1634, 3448, 18533, 32756,
+        ];
         if RADICES.contains(&7) {
             // research spike B: the radix-7 / 17 domains of its preset (n 45,752, k 952, N2) and small ones
             sizes.extend([7, 17, 14, 119, 952, 2261, 45752]);
         }
         for n in sizes {
             let d = Domain::new(n);
-            let a: Vec<Fq> = (0..n as u64).map(|i| Fq((i * 7919 + 13) * 1_000_003 % Q)).collect();
+            let a: Vec<Fq> = (0..n as u64)
+                .map(|i| Fq((i * 7919 + 13) * 1_000_003 % Q))
+                .collect();
             let f = d.fft(&a);
             if n <= 1634 {
                 assert_eq!(f, naive(&a, d.w[1 % n]), "n = {n}");

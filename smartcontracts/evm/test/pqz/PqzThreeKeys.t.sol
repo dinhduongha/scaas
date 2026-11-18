@@ -55,12 +55,14 @@ contract PqzThreeKeysTest is PqzOffchainBase {
 
     function _bytesN(uint256 seed, uint256 n) internal pure returns (bytes memory b) {
         b = new bytes(n);
-        for (uint256 i; i < n; ++i) b[i] = bytes1(uint8(uint256(keccak256(abi.encode(seed, i / 32))) >> (8 * (i % 32))));
+        for (uint256 i; i < n; ++i) {
+            b[i] = bytes1(uint8(uint256(keccak256(abi.encode(seed, i / 32))) >> (8 * (i % 32))));
+        }
     }
 
     function _opening(uint256 seed) internal pure returns (IPqzToken.PqzOpening memory o) {
         (o.mlkemCt, o.x25519Eph, o.sealedSeed) =
-            (_bytesN(seed, PqzCore.MLKEM_CT), keccak256(abi.encode("eph", seed)), _bytesN(seed + 1, PqzCore.SEALED_SEED));
+        (_bytesN(seed, PqzCore.MLKEM_CT), keccak256(abi.encode("eph", seed)), _bytesN(seed + 1, PqzCore.SEALED_SEED));
     }
 
     function _oBytes(IPqzToken.PqzOpening memory o) internal pure returns (bytes memory) {
@@ -69,7 +71,9 @@ contract PqzThreeKeysTest is PqzOffchainBase {
 
     /// Op 1 of `from` to `to` at `p` (no fee, BUNDLE): on an opening token with `uFrom` and the openings.
     function _op1At(NormalPqzToken t, bytes32 from, bytes32 to, uint256 p, uint256 seed, bool withAud)
-        internal view returns (IPqzToken.PqzTransferArgs memory a)
+        internal
+        view
+        returns (IPqzToken.PqzTransferArgs memory a)
     {
         a = _ts(_payload(p, 0, from, to, bytes32(0), _out(seed, withAud), ""));
         if (t.pqzVerifyConfig().pqzOpening) {
@@ -80,7 +84,9 @@ contract PqzThreeKeysTest is PqzOffchainBase {
     }
 
     function _op1(NormalPqzToken t, bytes32 from, bytes32 to, uint256 seed, bool withAud)
-        internal view returns (IPqzToken.PqzTransferArgs memory a, bytes memory st)
+        internal
+        view
+        returns (IPqzToken.PqzTransferArgs memory a, bytes memory st)
     {
         a = _op1At(t, from, to, t.pqzAccount(from, 0).pendingCount, seed, withAud);
         st = t.transferSingleStatement(a, 0);
@@ -101,15 +107,25 @@ contract PqzThreeKeysTest is PqzOffchainBase {
 
     /// The registry accepts `ua`'s `zether-auth` signature `_pqAuth()` over `d` only (exact calldata wins over the prefix).
     function _onlyDigest(bytes32 ua, bytes32 d) internal {
-        vm.mockCallRevert(address(reg), abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, ua,
-            UAKinds.PURPOSE_ZETHER_AUTH), "another digest");
-        vm.mockCall(address(reg), abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_ZETHER_AUTH, d, _pqAuth())), "");
+        vm.mockCallRevert(
+            address(reg),
+            abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, ua, UAKinds.PURPOSE_ZETHER_AUTH),
+            "another digest"
+        );
+        vm.mockCall(
+            address(reg),
+            abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_ZETHER_AUTH, d, _pqAuth())),
+            ""
+        );
     }
 
     /// Every `zether-auth` signature of `ua` accepted again (the prefix mock replaced).
     function _anyDigest(bytes32 ua) internal {
-        vm.mockCall(address(reg), abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, ua,
-            UAKinds.PURPOSE_ZETHER_AUTH), "");
+        vm.mockCall(
+            address(reg),
+            abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, ua, UAKinds.PURPOSE_ZETHER_AUTH),
+            ""
+        );
     }
 
     /// The client's `h(i)` (CTR-PQZ-41): the slot without the mark, the blob's code hash or 0 for a TRIVIAL entry.
@@ -119,22 +135,39 @@ contract PqzThreeKeysTest is PqzOffchainBase {
         return keccak256(abi.encode(i, e, c));
     }
 
-    function _entries(NormalPqzToken t, bytes32 ua, uint64 v, uint64 n, uint64[] memory skip) internal view returns (bytes32) {
+    function _entries(NormalPqzToken t, bytes32 ua, uint64 v, uint64 n, uint64[] memory skip)
+        internal
+        view
+        returns (bytes32)
+    {
         uint64 r = t.pqzAccount(ua, v).rolled;
         bytes32[] memory h = new bytes32[](n + skip.length);
-        for (uint256 k; k < n; ++k) h[k] = _eh(t, ua, v, r + k);
-        for (uint256 j; j < skip.length; ++j) h[n + j] = _eh(t, ua, v, skip[j]);
+        for (uint256 k; k < n; ++k) {
+            h[k] = _eh(t, ua, v, r + k);
+        }
+        for (uint256 j; j < skip.length; ++j) {
+            h[n + j] = _eh(t, ua, v, skip[j]);
+        }
         return keccak256(abi.encodePacked(h));
     }
 
     /// The `PqzRollOver` digest a wallet signs (key version 0), from the token's state, in `domainOf`'s domain with
     /// `chainUid_`.
-    function _rollDigestAt(NormalPqzToken t, address domainOf, bytes32 chainUid_, bytes32 ua, uint64 n,
-        uint64[] memory skip, uint64 vub, bytes32 eh) internal view returns (bytes32)
-    {
+    function _rollDigestAt(
+        NormalPqzToken t,
+        address domainOf,
+        bytes32 chainUid_,
+        bytes32 ua,
+        uint64 n,
+        uint64[] memory skip,
+        uint64 vub,
+        bytes32 eh
+    ) internal view returns (bytes32) {
         bytes memory head = _rollHead(t, ua, n);
-        return MessageHashUtils.toTypedDataHash(_sepOf(domainOf), keccak256(bytes.concat(head,
-            abi.encode(keccak256(abi.encodePacked(skip)), eh, vub, chainUid_))));
+        return MessageHashUtils.toTypedDataHash(
+            _sepOf(domainOf),
+            keccak256(bytes.concat(head, abi.encode(keccak256(abi.encodePacked(skip)), eh, vub, chainUid_)))
+        );
     }
 
     function _rollHead(NormalPqzToken t, bytes32 ua, uint64 n) internal view returns (bytes memory) {
@@ -143,7 +176,9 @@ contract PqzThreeKeysTest is PqzOffchainBase {
     }
 
     function _rollDigest(NormalPqzToken t, bytes32 ua, uint64 v, uint64 n, uint64[] memory skip, uint64 vub)
-        internal view returns (bytes32)
+        internal
+        view
+        returns (bytes32)
     {
         bytes32 eh = _entries(t, ua, v, n, skip);
         return _rollDigestAt(t, address(t), t.chainUid(), ua, n, skip, vub, eh);
@@ -233,10 +268,15 @@ contract PqzThreeKeysTest is PqzOffchainBase {
         _refused(c, "x8");
         // controls, one change each: the four classes, each at its predicted address
         bytes32[4] memory ss = [bytes32("y1"), "y2", "y3", "y4"];
-        IFactoryToken.TokenConfig[4] memory cs = [_cfgWith(PqzCore.PRECOMPILE, false, false),
-            _cfgWith(PqzCore.OFFCHAIN, false, true), _cfgWith(PqzCore.OFFCHAIN, true, false), _cfgWith(PqzCore.OFFCHAIN, true, true)];
+        IFactoryToken.TokenConfig[4] memory cs = [
+            _cfgWith(PqzCore.PRECOMPILE, false, false),
+            _cfgWith(PqzCore.OFFCHAIN, false, true),
+            _cfgWith(PqzCore.OFFCHAIN, true, false),
+            _cfgWith(PqzCore.OFFCHAIN, true, true)
+        ];
         for (uint256 i; i < 4; ++i) {
-            address at = factory.predictAddress(nid(address(this)), 1, uint16(uint8(IOpenFactory.TokenKind.NORMAL_PQZ)), ss[i]);
+            address at =
+                factory.predictAddress(nid(address(this)), 1, uint16(uint8(IOpenFactory.TokenKind.NORMAL_PQZ)), ss[i]);
             assertEq(_create(cs[i], ss[i]), at, "the class's instance at the predicted address");
         }
     }
@@ -273,7 +313,9 @@ contract PqzThreeKeysTest is PqzOffchainBase {
         dan = _pqzUA(_pk(60), 60);
         reg.setPqzKey(dan, 1, _pk(61), keccak256("d1"), UACall.sig(new bytes(ML65_SIG)));
         reg.storePqzPop(dan, 1, "d1");
-        for (uint256 v; v < 4; ++v) _scoped(dan, address(0), _spk(0x6000 + v), true);
+        for (uint256 v; v < 4; ++v) {
+            _scoped(dan, address(0), _spk(0x6000 + v), true);
+        }
         (uint64 rc,,,) = reg.pqzKeyOf(dan);
         (uint64 sc,,,) = reg.pqzScopedKeyOf(dan, address(0));
         assertEq(rc, 1, "registry current");
@@ -302,7 +344,9 @@ contract PqzThreeKeysTest is PqzOffchainBase {
         a.keyVersion = 3;
         bytes memory st = c2.transferSingleStatement(a, 0);
         assertEq(_slice(st, 640, PqzCt.PK), _scopedKey(dan, address(0), 3), "pk_f: scope 0 version 3");
-        assertEq(_slice(st, 640 + 2 * PqzCt.PK, PqzCt.PK), _scopedKey(aud, address(0), 0), "pk_a: the auditor's scope-0 key");
+        assertEq(
+            _slice(st, 640 + 2 * PqzCt.PK, PqzCt.PK), _scopedKey(aud, address(0), 0), "pk_a: the auditor's scope-0 key"
+        );
         c2.mtxConfidentialTransferSingle(a, VPROOF, _pqAuth(), "", _sv(c2, st));
     }
 
@@ -367,8 +411,11 @@ contract PqzThreeKeysTest is PqzOffchainBase {
         assertEq(st.length, withAud ? PqzSet.STMT_TRANSFER_SPLIT : PqzSet.STMT_TRANSFER_SPLIT0, "the split statement");
         assertEq(_slice(st, st.length - PqzCt.PK, PqzCt.PK), a.uFrom, "u_f last");
         bytes memory os = withAud ? bytes.concat(_oBytes(a.openingTo), _oBytes(a.openingAuditor)) : _oBytes(a.openingTo);
-        assertEq(bytes32(_slice(st, 608, 32)), keccak256(abi.encodePacked(abi.encodePacked(a.ownTag), keccak256(os))),
-            "memoHash covers the openings");
+        assertEq(
+            bytes32(_slice(st, 608, 32)),
+            keccak256(abi.encodePacked(abi.encodePacked(a.ownTag), keccak256(os))),
+            "memoHash covers the openings"
+        );
         bytes32 ref = t.mtxConfidentialTransferSingle(a, VPROOF, _pqAuth(), "", _sv(t, st));
         bytes memory out = _out(11, withAud);
         bytes memory r = _rOf(out, bob);
@@ -481,7 +528,8 @@ contract PqzThreeKeysTest is PqzOffchainBase {
     function test_op7_unsupportedWithOpening() public {
         bytes32[] memory legs = new bytes32[](1);
         legs[0] = bob;
-        IPqzToken.PqzMultiArgs memory m = _ms(_mpayload(0, 0, alice, bytes32(0), legs, _blob(15, _outLen(1, false)), ""));
+        IPqzToken.PqzMultiArgs memory m =
+            _ms(_mpayload(0, 0, alice, bytes32(0), legs, _blob(15, _outLen(1, false)), ""));
         vm.expectRevert(IPqzToken.OpUnsupported.selector);
         c2.transferStatement(m, 0);
         vm.expectRevert(IPqzToken.OpUnsupported.selector);
@@ -580,8 +628,11 @@ contract PqzThreeKeysTest is PqzOffchainBase {
         _anyDigest(alice);
         IPqzToken.PqzTransferArgs memory a = _op1At(c2, alice, bob, 4, 19, false);
         bytes memory st = c2.transferSingleStatement(a, 0);
-        assertEq(_slice(st, 640 + 2 * PqzCt.PK, PqzCt.CT), ct.sumMixed(new bytes(PqzCt.CT), _two(c2, 1, 3), _amt(100)),
-            "a debit's window: the mark adds zero");
+        assertEq(
+            _slice(st, 640 + 2 * PqzCt.PK, PqzCt.CT),
+            ct.sumMixed(new bytes(PqzCt.CT), _two(c2, 1, 3), _amt(100)),
+            "a debit's window: the mark adds zero"
+        );
         // roll all four, then a debit below `rolled` (un-roll [2, 4)): T = acc - entry 3 (entry 2 adds zero both ways)
         _rollSigned(c2, alice, 4, _none());
         bytes[] memory one = new bytes[](1);
@@ -617,7 +668,9 @@ contract PqzThreeKeysTest is PqzOffchainBase {
 
     function _skippedLogs() internal returns (uint256 k) {
         Vm.Log[] memory l = vm.getRecordedLogs();
-        for (uint256 i; i < l.length; ++i) if (l[i].topics[0] == IPqzToken.PqzSkipped.selector) ++k;
+        for (uint256 i; i < l.length; ++i) {
+            if (l[i].topics[0] == IPqzToken.PqzSkipped.selector) ++k;
+        }
     }
 
     /// §14 item 20: a mark below `rolled` is refused (nothing in `acc` can be marked).
@@ -696,11 +749,14 @@ contract PqzThreeKeysTest is PqzOffchainBase {
         uint64 vub = uint64(block.number + 20);
         // a wallet that saw entry 1 as another blob: its h(1) differs
         bytes32[] memory h = new bytes32[](4);
-        for (uint256 k; k < 4; ++k) h[k] = _eh(c2, alice, 0, k);
+        for (uint256 k; k < 4; ++k) {
+            h[k] = _eh(c2, alice, 0, k);
+        }
         uint256 e1 = c2.pqzPending(alice, 0, 1);
         address other = address(uint160(c2.pqzPending(alice, 0, 3) >> 96));
         h[1] = keccak256(abi.encode(uint256(1), e1, other.codehash));
-        bytes32 d = _rollDigestAt(c2, address(c2), c2.chainUid(), alice, 4, _none(), vub, keccak256(abi.encodePacked(h)));
+        bytes32 d =
+            _rollDigestAt(c2, address(c2), c2.chainUid(), alice, 4, _none(), vub, keccak256(abi.encodePacked(h)));
         _onlyDigest(alice, d);
         vm.expectRevert(IPqzToken.AuthRejected.selector);
         c2.mtxRollOverSigned(alice, 0, 4, _none(), vub, _pqAuth());
@@ -750,8 +806,12 @@ contract PqzThreeKeysTest is PqzOffchainBase {
         assertEq(c3o.pqzAccount(alice, 0).rolled, 2);
         _onlyDigest(alice, _rollDigest(c3o, alice, 0, 2, _none(), vub));
         MetaTxLib.MetaTransaction memory m;
-        (m.from, m.data, m.validUntil) = (vm.addr(RKEY), abi.encodeCall(IPqzToken.mtxRollOverSigned, (alice, 0, 2, _none(),
-            vub, _pqAuth())), block.timestamp + 1 hours);
+        (m.from, m.data, m.validUntil) =
+        (
+            vm.addr(RKEY),
+            abi.encodeCall(IPqzToken.mtxRollOverSigned, (alice, 0, 2, _none(), vub, _pqAuth())),
+            block.timestamp + 1 hours
+        );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(RKEY, MtxDigest.metaTx(address(c3o), m));
         vm.prank(address(0x7E1B));
         c3o.executeMetaTransaction(m, abi.encodePacked(r, s, v));

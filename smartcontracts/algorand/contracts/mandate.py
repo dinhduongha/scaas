@@ -41,10 +41,29 @@ amount, pay_ref)` for a pay. Budget: the entries' own work fits the pooled budge
 account inner calls raise their own, Ruling T12-budget; pinned in the tests). No local state (OptIn refused); Update /
 Delete refused (the ARC-4 router accepts neither); no inner transaction rekeys or closes.
 """
+
 from algopy import Application, BigUInt, Bytes, BoxMap, Global, GlobalState, Txn, UInt64, arc4, itxn, op, subroutine
 
-from common import (KIND_ADDRESS, KIND_UA, MTX_PAY, OP_MANDATE_PAY, OP_REVOKE, VERIFY, VERIFY_KEY, Bytes32, Holder,
-                    MetaOp, check_envelope, digest, mbr_paid, pay_lane, rest, send, signed_by, zero)
+from common import (
+    KIND_ADDRESS,
+    KIND_UA,
+    MTX_PAY,
+    OP_MANDATE_PAY,
+    OP_REVOKE,
+    VERIFY,
+    VERIFY_KEY,
+    Bytes32,
+    Holder,
+    MetaOp,
+    check_envelope,
+    digest,
+    mbr_paid,
+    pay_lane,
+    rest,
+    send,
+    signed_by,
+    zero,
+)
 
 MANDATE_LEN = 204  # owner 33 ‖ terms 130 ‖ period_start 8 ‖ spent 16 ‖ remaining 16 ‖ revoked 1
 MBR_MANDATE_BOX = 2500 + 400 * (41 + MANDATE_LEN)
@@ -53,12 +72,13 @@ MBR_LANE_BOX = 2500 + 400 * (33 + 8)
 
 class MandateTerms(arc4.Struct, frozen=True):
     """As NEAR's (Task 7), ARC-4: `delegate` signs every pay (a UA may delegate, CTR-ACC-12)."""
+
     delegate: Holder
     payee: Holder
     per_payment: arc4.UInt128
     per_period: arc4.UInt128
     period_s: arc4.UInt64
-    expiry: arc4.UInt64   # seconds; a pay after it is refused
+    expiry: arc4.UInt64  # seconds; a pay after it is refused
     funding: arc4.UInt128  # moved in at the open: equals op.amount (R9)
 
 
@@ -87,31 +107,38 @@ class MandateApp(arc4.ARC4Contract, name="Mandate"):
         """Opcode budget / box references for the group (700 per app call, pooled)."""
 
     @arc4.abimethod
-    def mtx_mandate_open(self, token: arc4.UInt64, op_: MetaOp, auth: Bytes, terms: MandateTerms,
-                         fund_mbr: arc4.UInt64) -> None:
+    def mtx_mandate_open(
+        self, token: arc4.UInt64, op_: MetaOp, auth: Bytes, terms: MandateTerms, fund_mbr: arc4.UInt64
+    ) -> None:
         before = Global.current_application_address.min_balance
         t = token.as_uint64()
-        assert op_.to.bytes == this().bytes and op_.relayer.bytes == Global.current_application_address.bytes, \
+        assert op_.to.bytes == this().bytes and op_.relayer.bytes == Global.current_application_address.bytes, (
             "to and relayer must be the mandate app"
+        )
         assert terms.funding == op_.amount, "terms.funding must equal op.amount"
-        assert (terms.period_s.as_uint64() > 0 and terms.per_payment.as_biguint() > 0
-                and terms.per_payment.as_biguint() <= terms.per_period.as_biguint()), \
-            "bad mandate limits (period_s > 0, 0 < per_payment <= per_period)"
+        assert (
+            terms.period_s.as_uint64() > 0
+            and terms.per_payment.as_biguint() > 0
+            and terms.per_payment.as_biguint() <= terms.per_period.as_biguint()
+        ), "bad mandate limits (period_s > 0, 0 < per_payment <= per_period)"
         assert terms.expiry.as_uint64() > Global.latest_timestamp, "mandate expiry is past"
-        assert terms.delegate.kind.as_uint64() <= KIND_UA and terms.payee.kind.as_uint64() <= KIND_UA, \
+        assert terms.delegate.kind.as_uint64() <= KIND_UA and terms.payee.kind.as_uint64() <= KIND_UA, (
             "unknown holder kind"
+        )
         id = Bytes32.from_bytes(op.sha256(op_.from_.bytes + terms.bytes + op_.lane.bytes + op_.nonce.bytes))
         assert op_.pay_ref == id, "pay_ref must be the mandate id"
-        assert op_.extra.bytes == op.sha256(op.itob(t) + id.bytes + terms.bytes), \
+        assert op_.extra.bytes == op.sha256(op.itob(t) + id.bytes + terms.bytes), (
             "extra is not sha256 of the token, the mandate id and terms"
+        )
         assert terms.payee.bytes != this().bytes, "mandate app refuses itself as payee"
         key = mkey(t, id)
         assert key not in self.mandates, "mandate exists"
         fund = fund_mbr.as_uint64()
         payee_box = rest(MBR_MANDATE_BOX + fund)  # the rest of the payment: the payee's new token box (0 if it exists)
         fund_it(t, op_, auth, fund)
-        self.mandates[key] = Mandate(op_.from_, terms, arc4.UInt64(Global.latest_timestamp), arc4.UInt128(0),
-                                     terms.funding, arc4.Bool(False))
+        self.mandates[key] = Mandate(
+            op_.from_, terms, arc4.UInt64(Global.latest_timestamp), arc4.UInt128(0), terms.funding, arc4.Bool(False)
+        )
         send(t, terms.payee, BigUInt(0), payee_box)  # the payee's balance box exists from here on: no MBR at a pay
         arc4.emit("Mandate", token, id, arc4.String("open"), op_.from_)
         mbr_paid(before, fund + payee_box)
@@ -122,9 +149,12 @@ class MandateApp(arc4.ARC4Contract, name="Mandate"):
         t = token.as_uint64()
         assert op_.op.as_uint64() == OP_MANDATE_PAY, "wrong op code"
         key, m = self._load(t, op_.from_)
-        assert (op_.pay_ref != zero() and op_.lane == pay_lane(op_.pay_ref) and op_.nonce.as_uint64() == 0
-                and op_.extra.bytes == op.sha256(op.itob(t))), \
-            "mandate pay shape (pay_ref set, lane = payLane(pay_ref), nonce 0, extra = sha256(token))"
+        assert (
+            op_.pay_ref != zero()
+            and op_.lane == pay_lane(op_.pay_ref)
+            and op_.nonce.as_uint64() == 0
+            and op_.extra.bytes == op.sha256(op.itob(t))
+        ), "mandate pay shape (pay_ref set, lane = payLane(pay_ref), nonce 0, extra = sha256(token))"
         assert not m.revoked.native, "mandate revoked"
         now = Global.latest_timestamp
         assert now <= m.terms.expiry.as_uint64(), "mandate expired"
@@ -144,15 +174,17 @@ class MandateApp(arc4.ARC4Contract, name="Mandate"):
         assert amount <= m.terms.per_period.as_biguint() - spent, "over the per-period cap"
         check_envelope(op_)
         d = digest(op_)
-        fwd = signed_by(self.account_app.value, arc4.arc4_signature(VERIFY), m.terms.delegate, d, auth,
-                        rest(UInt64(MBR_LANE_BOX)))
+        fwd = signed_by(
+            self.account_app.value, arc4.arc4_signature(VERIFY), m.terms.delegate, d, auth, rest(UInt64(MBR_LANE_BOX))
+        )
         lane = Bytes32.from_bytes(op.sha256(key + op_.lane.bytes))
         assert lane not in self.lanes, "pay_ref already paid under this mandate"
         left = m.remaining.as_biguint()
         assert left >= amount, "the mandate's balance is short"
         self.lanes[lane] = UInt64(1)
-        self.mandates[key] = m._replace(period_start=arc4.UInt64(start), spent=arc4.UInt128(spent + amount),
-                                        remaining=arc4.UInt128(left - amount))
+        self.mandates[key] = m._replace(
+            period_start=arc4.UInt64(start), spent=arc4.UInt128(spent + amount), remaining=arc4.UInt128(left - amount)
+        )
         send(t, op_.to, amount, UInt64(0))
         arc4.emit("MandatePaymentSettled", token, op_.from_, op_.to, arc4.UInt256(amount), op_.pay_ref)
         mbr_paid(before, fwd)
@@ -161,16 +193,23 @@ class MandateApp(arc4.ARC4Contract, name="Mandate"):
     def mtx_revoke(self, token: arc4.UInt64, op_: MetaOp, auth: Bytes) -> None:
         before = Global.current_application_address.min_balance
         t = token.as_uint64()
-        assert (op_.op.as_uint64() == OP_REVOKE and op_.amount.as_biguint() == 0 and op_.pay_ref == zero()
-                and op_.lane == zero() and op_.nonce.as_uint64() == 0 and op_.extra.bytes == op.sha256(op.itob(t))), \
-            "revoke shape (op 3, amount 0, pay_ref, lane and nonce zero, extra = sha256(token))"
+        assert (
+            op_.op.as_uint64() == OP_REVOKE
+            and op_.amount.as_biguint() == 0
+            and op_.pay_ref == zero()
+            and op_.lane == zero()
+            and op_.nonce.as_uint64() == 0
+            and op_.extra.bytes == op.sha256(op.itob(t))
+        ), "revoke shape (op 3, amount 0, pay_ref, lane and nonce zero, extra = sha256(token))"
         key, m = self._load(t, op_.to)
-        assert op_.from_.bytes == m.owner.bytes or op_.from_.bytes == m.terms.delegate.bytes, \
+        assert op_.from_.bytes == m.owner.bytes or op_.from_.bytes == m.terms.delegate.bytes, (
             "only the owner or the delegate revokes"
+        )
         assert not m.revoked.native, "mandate revoked"
         check_envelope(op_)
-        fwd = signed_by(self.account_app.value, arc4.arc4_signature(VERIFY_KEY), op_.from_, digest(op_), auth,
-                        rest(UInt64(0)))
+        fwd = signed_by(
+            self.account_app.value, arc4.arc4_signature(VERIFY_KEY), op_.from_, digest(op_), auth, rest(UInt64(0))
+        )
         self._close(t, key, m)
         arc4.emit("Mandate", token, op_.to.id, arc4.String("revoke"), op_.from_)
         mbr_paid(before, fwd)
@@ -185,8 +224,13 @@ class MandateApp(arc4.ARC4Contract, name="Mandate"):
         assert m.remaining.as_biguint() > 0, "nothing to refund"
         assert Global.latest_timestamp > m.terms.expiry.as_uint64(), "mandate live: no refund before the expiry"
         self._close(t, key, m)
-        arc4.emit("Mandate", token, id, arc4.String("refund"), Holder(arc4.UInt8(KIND_ADDRESS),
-                                                                      Bytes32.from_bytes(Txn.sender.bytes)))
+        arc4.emit(
+            "Mandate",
+            token,
+            id,
+            arc4.String("refund"),
+            Holder(arc4.UInt8(KIND_ADDRESS), Bytes32.from_bytes(Txn.sender.bytes)),
+        )
         mbr_paid(before, UInt64(0))  # §2 row 15: no box, so no payment
 
     @arc4.abimethod(readonly=True)
@@ -232,9 +276,16 @@ def fund_it(token: UInt64, o: MetaOp, auth: Bytes, fund_mbr: UInt64) -> None:
     this app)]` — open mode (to == relayer == this app, the sender), so the token pays this app's address, and its
     rule 7 refuses the op from anyone else. The token checks its own MBR part exactly."""
     app = Application(token)
-    call = itxn.ApplicationCall(app_id=app, fee=0, app_args=(arc4.arc4_signature(MTX_PAY), o.bytes,
-                                                             arc4.DynamicBytes(auth).bytes,
-                                                             Global.current_application_address.bytes))
+    call = itxn.ApplicationCall(
+        app_id=app,
+        fee=0,
+        app_args=(
+            arc4.arc4_signature(MTX_PAY),
+            o.bytes,
+            arc4.DynamicBytes(auth).bytes,
+            Global.current_application_address.bytes,
+        ),
+    )
     if fund_mbr:
         itxn.submit_txns(itxn.Payment(receiver=app.address, amount=fund_mbr, fee=0), call)
     else:

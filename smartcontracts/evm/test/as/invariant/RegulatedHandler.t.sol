@@ -98,6 +98,7 @@ abstract contract RegCore is Test {
     mapping(bytes32 => uint64) internal gEnd; // I7: its last observed `until`
     mapping(bytes32 => uint64) internal gUntil; // I7: `until` last seen
     uint64 internal gPauseEnd; // I4: the last pause's actual end
+
     struct Pend {
         uint8 action;
         bytes32 proposer;
@@ -152,17 +153,26 @@ abstract contract RegCore is Test {
 
     // ------------------------------------------------------------------ init
 
-    function _coreInit(address t, ComplianceRegistry reg, address[2] memory att, address[6] memory gov, bool wrapped,
-        address leg, bytes32 minter) internal
-    {
+    function _coreInit(
+        address t,
+        ComplianceRegistry reg,
+        address[2] memory att,
+        address[6] memory gov,
+        bool wrapped,
+        address leg,
+        bytes32 minter
+    ) internal {
         (cT, cReg, cAttester, cAdmin) = (t, reg, att[0], att[1]);
         (cGov, cWrapped, cLeg, cMinter) = (gov, wrapped, leg, minter);
         cGd = NormalToken(t).grantDelay();
-        for (uint256 k; k < cIds.length; ++k) gUntil[cIds[k]] = IRegulatedToken(t).freezeOf(cIds[k]).until;
+        for (uint256 k; k < cIds.length; ++k) {
+            gUntil[cIds[k]] = IRegulatedToken(t).freezeOf(cIds[k]).until;
+        }
         // bit 22 to the operator: the owner's two calls (grantRole keeps two calls on every bit, spec §3.6)
         for (uint256 i; i < 2; ++i) {
             vm.prank(gov[0]);
-            NormalToken(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(gov[4]), EnvKit.codeUidOf(address(NormalToken(t))));
+            NormalToken(t)
+                .grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(gov[4]), EnvKit.codeUidOf(address(NormalToken(t))));
             if (i == 0) vm.warp(block.timestamp + cGd);
         }
     }
@@ -217,7 +227,9 @@ abstract contract RegCore is Test {
         }
         pP = _paused();
         delete pList;
-        for (uint256 k; k < cIds.length; ++k) pList.push(IRegulatedToken(cT).listFlagsOf(cIds[k]));
+        for (uint256 k; k < cIds.length; ++k) {
+            pList.push(IRegulatedToken(cT).listFlagsOf(cIds[k]));
+        }
         pCtl = IRegulatedToken(cT).regulatedConfig().controls;
         pFeat = NormalToken(cT).features();
         pSupply = IERC20(cT).totalSupply();
@@ -266,7 +278,9 @@ abstract contract RegCore is Test {
             if (!ok) _flag(9, string.concat("an op with frozen or denied legs refused: ", vm.toString(ret)));
         }
         if (pDiff) _i8(acc);
-        for (uint256 k; k < pDecoys.length; ++k) pDecoy[pDecoys[k]] = false;
+        for (uint256 k; k < pDecoys.length; ++k) {
+            pDecoy[pDecoys[k]] = false;
+        }
         delete pDecoys;
         (pRec, pLower, pExpect, pGasCap, pDiff) = (0, 0, false, 0, false);
     }
@@ -288,8 +302,12 @@ abstract contract RegCore is Test {
             if ((i == 0 && a == gForcedFrom) || (i == 1 && pDecoy[a])) continue;
             ++hits[14];
             uint8 fl = IRegulatedToken(cT).listFlagsOf(a);
-            if (pCtl & (1 << 3) != 0 && fl & 1 == 0) _flag(14, string.concat("a party not on the allow list: ", vm.toString(a)));
-            if (pCtl & (1 << 4) != 0 && fl & 2 != 0) _flag(14, string.concat("a party on the deny list: ", vm.toString(a)));
+            if (pCtl & (1 << 3) != 0 && fl & 1 == 0) {
+                _flag(14, string.concat("a party not on the allow list: ", vm.toString(a)));
+            }
+            if (pCtl & (1 << 4) != 0 && fl & 2 != 0) {
+                _flag(14, string.concat("a party on the deny list: ", vm.toString(a)));
+            }
         }
     }
 
@@ -305,12 +323,16 @@ abstract contract RegCore is Test {
             } else if (s == IRegulatedToken.ForcedTransfer.selector) {
                 gForcedFrom = l.topics[2];
                 _i2(l.topics[1], l.topics[2], l.topics[3], abi.decode(l.data, (uint256)));
-                for (uint256 k; k < cIds.length; ++k) if (cIds[k] == l.topics[2]) out[k] += abi.decode(l.data, (uint256));
+                for (uint256 k; k < cIds.length; ++k) {
+                    if (cIds[k] == l.topics[2]) out[k] += abi.decode(l.data, (uint256));
+                }
             } else if (s == IRegulatedToken.Paused.selector) {
                 uint64 until = abi.decode(l.data, (uint64));
                 ++hits[4];
                 if (until > block.timestamp + 7 days) _flag(4, "a pause longer than 7 d");
-                if (gPauseEnd != 0 && block.timestamp < uint256(gPauseEnd) + 7 days) _flag(4, "pauses less than 7 d apart");
+                if (gPauseEnd != 0 && block.timestamp < uint256(gPauseEnd) + 7 days) {
+                    _flag(4, "pauses less than 7 d apart");
+                }
                 gPauseEnd = until;
             } else if (s == IRegulatedToken.Unpaused.selector) {
                 gPauseEnd = uint64(block.timestamp);
@@ -326,7 +348,9 @@ abstract contract RegCore is Test {
                 delete gPend[keccak256(abi.encode(l.topics[1], l.topics[2]))];
             } else if (s == IGovernance.RoleRevoked.selector) {
                 uint256 bit = uint256(l.topics[1]);
-                if (bit >= 5 && bit <= 7) _i13(l.topics[1], l.topics[2], l.topics[3] == l.topics[2] ? 4 : 3, l.topics[3]);
+                if (bit >= 5 && bit <= 7) {
+                    _i13(l.topics[1], l.topics[2], l.topics[3] == l.topics[2] ? 4 : 3, l.topics[3]);
+                }
             } else if (s == IGovernance.FeatureDisabled.selector) {
                 uint256 bit = uint256(l.topics[1]);
                 if (bit >= 5 && bit <= 7) _i13(l.topics[1], 0, 5, l.topics[2]);
@@ -344,14 +368,18 @@ abstract contract RegCore is Test {
         if (pOrder.subject == 0 || pOrder.revoked || !pRecActive) _flag(2, "no live record or RECORD inactive");
         if (from != pOrder.subject || to != pOrder.beneficiary) _flag(2, "from / to are not the record's");
         bool frozenBefore;
-        for (uint256 k; k < cIds.length; ++k) if (cIds[k] == from) frozenBefore = pFz[k];
+        for (uint256 k; k < cIds.length; ++k) {
+            if (cIds[k] == from) frozenBefore = pFz[k];
+        }
         if (!frozenBefore) _flag(2, "the subject was not frozen");
         if (amount == 0) _flag(2, "amount 0");
         gExec[recordId] += amount;
         if (gExec[recordId] > pOrder.maxAmount) _flag(2, "executed > maxAmount");
         uint256 ex = IRegulatedToken(cT).order(recordId).executed;
         if (ex != gExec[recordId]) {
-            _flag(2, string.concat("executed ", vm.toString(ex), " is not the sum forced ", vm.toString(gExec[recordId])));
+            _flag(
+                2, string.concat("executed ", vm.toString(ex), " is not the sum forced ", vm.toString(gExec[recordId]))
+            );
         }
     }
 
@@ -364,7 +392,9 @@ abstract contract RegCore is Test {
         if (p.eta == 0) return _flag(13, "an effect without a pending");
         if (p.action != action) _flag(13, "another action's pending confirmed");
         if (p.proposer != by) _flag(13, "confirmed by another id than the proposer");
-        if (block.timestamp < p.eta || block.timestamp > uint256(p.eta) + cGd) _flag(13, "confirmed outside [eta, eta + gd]");
+        if (block.timestamp < p.eta || block.timestamp > uint256(p.eta) + cGd) {
+            _flag(13, "confirmed outside [eta, eta + gd]");
+        }
         if (p.gen != cGen) _flag(13, "confirmed in another owner generation");
     }
 
@@ -376,7 +406,9 @@ abstract contract RegCore is Test {
             if (b != pBal[k]) moved = true;
             if (pFz[k]) {
                 ++hits[3];
-                if (b + forcedOut[k] < pBal[k]) _flag(3, string.concat("a frozen balance decreased: ", vm.toString(cIds[k])));
+                if (b + forcedOut[k] < pBal[k]) {
+                    _flag(3, string.concat("a frozen balance decreased: ", vm.toString(cIds[k])));
+                }
             }
             if (ok && b > pBal[k] && !pDecoy[cIds[k]]) {
                 ++hits[5];
@@ -390,7 +422,8 @@ abstract contract RegCore is Test {
     }
 
     function _shieldHash() internal view returns (bytes32) {
-        return cConf ? keccak256(abi.encode(IShielded(cT).totalShielded(), IERC20(cT).balanceOf(MetaTxLib.SHIELD_POOL)))
+        return cConf
+            ? keccak256(abi.encode(IShielded(cT).totalShielded(), IERC20(cT).balanceOf(MetaTxLib.SHIELD_POOL)))
             : bytes32(0);
     }
 
@@ -406,7 +439,9 @@ abstract contract RegCore is Test {
         }
         if (sum != IERC20(cT).totalSupply()) _flag(1, "sum of balances != totalSupply");
         if (uas != IERC20(cT).balanceOf(MetaTxLib.UA_POOL)) _flag(1, "sum of UA balances != balanceOf(UA_POOL)");
-        if (cWrapped && WrappedToken(payable(cT)).collateralValue() < IERC20(cT).totalSupply()) _flag(1, "undercollateralised");
+        if (cWrapped && WrappedToken(payable(cT)).collateralValue() < IERC20(cT).totalSupply()) {
+            _flag(1, "undercollateralised");
+        }
         if (!_i1Extra()) _flag(1, "balanceOf(SHIELD_POOL) != totalShielded x scale");
         // I6, I12
         uint8 c = IRegulatedToken(cT).regulatedConfig().controls;
@@ -417,10 +452,14 @@ abstract contract RegCore is Test {
         _i15(kind, c, f);
         if (kind >= K_CTRL && kind <= K_GOV) {
             if (_legsHash() != pLegs) _flag(6, "a regulated call moved a leg's reserve, rate or wrapEnabled");
-            if (cMinter != 0 && NormalToken(cT).hasRole(GovernanceBits.MINTABLE, cMinter) != pMint) _flag(6, "the minter moved");
+            if (cMinter != 0 && NormalToken(cT).hasRole(GovernanceBits.MINTABLE, cMinter) != pMint) {
+                _flag(6, "the minter moved");
+            }
         }
         // I7
-        for (uint256 k; k < cIds.length; ++k) _i7(cIds[k], k);
+        for (uint256 k; k < cIds.length; ++k) {
+            _i7(cIds[k], k);
+        }
     }
 
     /// I6's round-3s rows (8, 9, 28 come back only by `enableFeature`; 8 and 9 never leave) and I15 (spec §4.5): `listFlags`
@@ -430,7 +469,9 @@ abstract contract RegCore is Test {
         if (pCtl & ~c & C_LIST_BITS != 0) _flag(6, "controls lost a list bit");
         ++hits[15];
         for (uint256 k; k < cIds.length; ++k) {
-            if (kind != K_LIST && IRegulatedToken(cT).listFlagsOf(cIds[k]) != pList[k]) _flag(15, "listFlags moved off a list edit");
+            if (kind != K_LIST && IRegulatedToken(cT).listFlagsOf(cIds[k]) != pList[k]) {
+                _flag(15, "listFlags moved off a list edit");
+            }
         }
         if (pFeat & ~f & (3 << 8) != 0) _flag(15, "a list bit left features");
         if ((pFeat ^ f) & NormalToken(cT).lockedFeatures() != 0) _flag(15, "a locked bit changed");
@@ -446,11 +487,15 @@ abstract contract RegCore is Test {
         if (s.recordBacked) return;
         if (s.episodeStart != gEp[a]) {
             ++hits[7];
-            if (gEnd[a] != 0 && s.episodeStart < uint256(gEnd[a]) + 30 days) _flag(7, "issuer episodes less than 30 d apart");
+            if (gEnd[a] != 0 && s.episodeStart < uint256(gEnd[a]) + 30 days) {
+                _flag(7, "issuer episodes less than 30 d apart");
+            }
             gEp[a] = s.episodeStart;
         }
         if (s.episodeStart == gEp[a]) {
-            if (s.until > block.timestamp && s.until > uint256(s.episodeStart) + 60 days) _flag(7, "an issuer episode > 60 d");
+            if (s.until > block.timestamp && s.until > uint256(s.episodeStart) + 60 days) {
+                _flag(7, "an issuer episode > 60 d");
+            }
             if (s.until != 0) gEnd[a] = s.until;
         }
     }
@@ -486,7 +531,9 @@ abstract contract RegCore is Test {
             for (uint256 j; j < sa.length; ++j) {
                 if (sa[j].account != cT) continue;
                 for (uint256 v; v < pViewSlots.length; ++v) {
-                    if (uint256(sa[j].slot) == pViewSlots[v]) return _flag(8, "FORCE / OPERATOR touched shielded state");
+                    if (uint256(sa[j].slot) == pViewSlots[v]) {
+                        return _flag(8, "FORCE / OPERATOR touched shielded state");
+                    }
                 }
             }
         }
@@ -500,7 +547,9 @@ abstract contract RegCore is Test {
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         for (uint256 i; i < acc.length; ++i) {
             VmSafe.StorageAccess[] memory sa = acc[i].storageAccesses;
-            for (uint256 j; j < sa.length; ++j) if (sa[j].account == cT) pViewSlots.push(uint256(sa[j].slot));
+            for (uint256 j; j < sa.length; ++j) {
+                if (sa[j].account == cT) pViewSlots.push(uint256(sa[j].slot));
+            }
         }
     }
 
@@ -523,13 +572,22 @@ abstract contract RegCore is Test {
     function listEdit(uint256 i, bool deny, bool on) external {
         bytes32[] memory one = new bytes32[](1);
         one[0] = _id(i);
-        _op(K_LIST, cGov[2], deny ? abi.encodeCall(IRegulatedToken.setDenied, (one, on, EnvKit.codeUidOf(cT)))
-            : abi.encodeCall(IRegulatedToken.setAllowed, (one, on, EnvKit.codeUidOf(cT))));
+        _op(
+            K_LIST,
+            cGov[2],
+            deny
+                ? abi.encodeCall(IRegulatedToken.setDenied, (one, on, EnvKit.codeUidOf(cT)))
+                : abi.encodeCall(IRegulatedToken.setAllowed, (one, on, EnvKit.codeUidOf(cT)))
+        );
     }
 
     /// The admin switches a list on, at once (bit 8 on 10-13: `FeatureInvalidForKind`).
     function enableList(bool deny) external {
-        _op(K_ENABLE, cGov[0], abi.encodeCall(IRegulatedToken.enableFeature, (deny ? uint8(9) : uint8(8), EnvKit.codeUidOf(cT))));
+        _op(
+            K_ENABLE,
+            cGov[0],
+            abi.encodeCall(IRegulatedToken.enableFeature, (deny ? uint8(9) : uint8(8), EnvKit.codeUidOf(cT)))
+        );
     }
 
     // ------------------------------------------------------------------ the controls (spec §3.1)
@@ -555,7 +613,13 @@ abstract contract RegCore is Test {
         max = bound(max, 0, 1000);
         uint64 fu = uint64(block.timestamp + bound(days_, 0, 90) * 1 days);
         bytes32 orderId = keccak256(abi.encode(cRecs.length, odd));
-        if (_op(K_CTRL, cGov[3], abi.encodeCall(IRegulatedToken.recordOrder, (orderId, keccak256("doc"), sub, ben, max, fu, EnvKit.codeUidOf(cT))))) {
+        if (_op(
+                K_CTRL,
+                cGov[3],
+                abi.encodeCall(
+                    IRegulatedToken.recordOrder, (orderId, keccak256("doc"), sub, ben, max, fu, EnvKit.codeUidOf(cT))
+                )
+            )) {
             cRecs.push(keccak256(abi.encode(orderId, sub, ben)));
         }
     }
@@ -572,16 +636,28 @@ abstract contract RegCore is Test {
         bytes32 rec = cRecs[r % cRecs.length];
         // half the time the record-backed freeze first (T4), so a force has a frozen subject to act on
         bytes32 sub = IRegulatedToken(cT).order(rec).subject;
-        if (r % 2 == 0 && !_fz(sub)) _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.freeze, (sub, CREF, rec, EnvKit.codeUidOf(cT))));
+        if (r % 2 == 0 && !_fz(sub)) {
+            _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.freeze, (sub, CREF, rec, EnvKit.codeUidOf(cT))));
+        }
         pRec = rec;
         pOrder = IRegulatedToken(cT).order(rec);
         pRecActive = IRegulatedToken(cT).regulatedConfig().controls & 32 != 0 && _roots(10) != 0;
         pDiff = cConf;
-        _op(K_FORCE, cGov[2], abi.encodeCall(IRegulatedToken.forceTransfer, (rec, bound(amount, 0, 300), EnvKit.codeUidOf(cT))));
+        _op(
+            K_FORCE,
+            cGov[2],
+            abi.encodeCall(IRegulatedToken.forceTransfer, (rec, bound(amount, 0, 300), EnvKit.codeUidOf(cT)))
+        );
     }
 
     function pause(uint256 secs) external {
-        _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.pause, (CREF, uint64(block.timestamp + bound(secs, 0, 8 days)), EnvKit.codeUidOf(cT))));
+        _op(
+            K_CTRL,
+            cGov[2],
+            abi.encodeCall(
+                IRegulatedToken.pause, (CREF, uint64(block.timestamp + bound(secs, 0, 8 days)), EnvKit.codeUidOf(cT))
+            )
+        );
     }
 
     function unpause() external {
@@ -590,7 +666,13 @@ abstract contract RegCore is Test {
 
     function operatorTransfer(uint256 i, uint256 j, uint256 amount) external {
         pDiff = cConf;
-        _op(K_OPER, cGov[4], abi.encodeCall(IRegulatedToken.operatorTransfer, (_id(i), _id(j), bound(amount, 0, 300), CREF, EnvKit.codeUidOf(cT))));
+        _op(
+            K_OPER,
+            cGov[4],
+            abi.encodeCall(
+                IRegulatedToken.operatorTransfer, (_id(i), _id(j), bound(amount, 0, 300), CREF, EnvKit.codeUidOf(cT))
+            )
+        );
     }
 
     // ------------------------------------------------------------------ the relaxation calls (spec §3.6)
@@ -606,11 +688,17 @@ abstract contract RegCore is Test {
         act %= 5;
         address who = w % 4 == 0 ? cGov[w % 6] : act == 1 ? hAddr : _owner();
         bytes32 u = EnvKit.codeUidOf(cT);
-        bytes memory cd = act == 0 ? abi.encodeCall(IGovernance.revokeRole, (bit, holder, u))
-            : act == 1 ? abi.encodeCall(IGovernance.renounceRole, (bit, u))
-            : act == 2 ? abi.encodeCall(IGovernance.disableFeature, (bit, u))
-            : act == 3 ? abi.encodeCall(IGovernance.cancelGrant, (bit, act == 3 && w % 2 == 0 ? bytes32(0) : holder, u))
-            : abi.encodeCall(IGovernance.grantRole, (22, nid(cGov[4]), u));
+        bytes memory cd = act == 0
+            ? abi.encodeCall(IGovernance.revokeRole, (bit, holder, u))
+            : act == 1
+                ? abi.encodeCall(IGovernance.renounceRole, (bit, u))
+                : act == 2
+                    ? abi.encodeCall(IGovernance.disableFeature, (bit, u))
+                    : act == 3
+                        ? abi.encodeCall(
+                            IGovernance.cancelGrant, (bit, act == 3 && w % 2 == 0 ? bytes32(0) : holder, u)
+                        )
+                        : abi.encodeCall(IGovernance.grantRole, (22, nid(cGov[4]), u));
         _op(K_GOV, who, cd);
         if (twice % 2 == 0) {
             uint256 j = twice % 7;
@@ -637,7 +725,8 @@ abstract contract RegCore is Test {
         (as_[0], f_[0], v_[0]) = (a, fl, vu);
         _pre();
         vm.prank(how == 3 ? cAdmin : cAttester); // ELIGIBLE_CONTRACT: the admin's, a contract's only (CTR-AS-16)
-        (bool ok, bytes memory ret) = address(cReg).call(abi.encodeCall(ComplianceRegistry.setCompliance, (as_, f_, v_, EnvKit.regUidOf(address(cReg)))));
+        (bool ok, bytes memory ret) = address(cReg)
+            .call(abi.encodeCall(ComplianceRegistry.setCompliance, (as_, f_, v_, EnvKit.regUidOf(address(cReg)))));
         _post(K_REG, ok, ret, 0);
     }
 
@@ -674,17 +763,30 @@ contract RegPublicHandler is RegFixture, RegCore {
         c.features |= (1 << GovernanceBits.KYC) | (1 << GovernanceBits.OPERATOR_TRANSFER); // round 3s: both masks under KYC
         (c.reg.complianceRegistry, c.reg.requiredFlags, c.reg.deniedFlags) = (address(creg), KYC, SANCTIONED);
         _attest(nid(alice), KYC, type(uint64).max);
-        address t = f.createToken(which == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED : IOpenFactory.TokenKind.WRAPPED_REGULATED,
-            1, abi.encode(c), "inv");
+        address t = f.createToken(
+            which == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED : IOpenFactory.TokenKind.WRAPPED_REGULATED,
+            1,
+            abi.encode(c),
+            "inv"
+        );
         if (which == 1) _wrapFor(t, alice, SUPPLY);
         bytes32[7] memory ids = [nid(alice), nid(bob), nid(carol), UA_X, nid(address(this)), nid(relayer), bytes32(0)];
-        for (uint256 k; k < 6; ++k) cIds.push(ids[k]);
+        for (uint256 k; k < 6; ++k) {
+            cIds.push(ids[k]);
+        }
         vm.prank(alice);
         IERC20(t).transfer(bob, SUPPLY / 4);
         vm.prank(alice);
         NormalToken(t).transferToUA(UA_X, SUPPLY / 4);
-        _coreInit(t, creg, [attester, cadmin], [ownerA, address(0x0B22), issuer, compliance, address(0x0BE7), address(0x5EE)],
-            which == 1, address(usd), which == 0 ? nid(address(this)) : bytes32(0));
+        _coreInit(
+            t,
+            creg,
+            [attester, cadmin],
+            [ownerA, address(0x0B22), issuer, compliance, address(0x0BE7), address(0x5EE)],
+            which == 1,
+            address(usd),
+            which == 0 ? nid(address(this)) : bytes32(0)
+        );
         if (which == 1) usd.approve(t, type(uint256).max);
     }
 
@@ -698,19 +800,26 @@ contract RegPublicHandler is RegFixture, RegCore {
         (address from,) = _eoa(i);
         bytes32 to = _id(j);
         amount = bound(amount, 0, 500);
-        _op(K_MOVE, from, uint256(to) >> 160 == 0 ? abi.encodeCall(IERC20.transfer, (address(uint160(uint256(to))), amount))
-            : abi.encodeCall(IUALedger.transferToUA, (to, amount)));
+        _op(
+            K_MOVE,
+            from,
+            uint256(to) >> 160 == 0
+                ? abi.encodeCall(IERC20.transfer, (address(uint160(uint256(to))), amount))
+                : abi.encodeCall(IUALedger.transferToUA, (to, amount))
+        );
     }
 
     /// The generic `mtxExecute` of `inner` signed by EOA `i`, relayed by `rel` (an EOA or `relayer`), fee `fee` (0: `NONE`).
-    function _relayed(uint256 i, bytes memory inner, uint256 fee, uint256 rel) internal returns (bool feeBearing, address r,
-        bytes memory cd)
+    function _relayed(uint256 i, bytes memory inner, uint256 fee, uint256 rel)
+        internal
+        returns (bool feeBearing, address r, bytes memory cd)
     {
         (address from, uint256 pk) = _eoa(i);
         feeBearing = fee % 3 != 0;
         uint32 mode = feeBearing ? MetaTxLib.MODE_FEE_FIXED : MetaTxLib.MODE_FEE_NONE;
-        MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction(nid(from), inner, ++cLane, 0,
-            block.timestamp + 300, mode, address(0), feeBearing ? fee % 7 : 0, address(0));
+        MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction(
+            nid(from), inner, ++cLane, 0, block.timestamp + 300, mode, address(0), feeBearing ? fee % 7 : 0, address(0)
+        );
         (uint8 v, bytes32 rr, bytes32 ss) = vm.sign(pk, NormalToken(cT).mtxDigest(m));
         IUARegistry.UASig memory s;
         s.signature = abi.encodePacked(rr, ss, v);
@@ -723,9 +832,19 @@ contract RegPublicHandler is RegFixture, RegCore {
     function pubRelayed(uint256 i, uint256 j, uint256 amount, uint256 fee, uint256 rel) external {
         (address from, uint256 pk) = _eoa(i);
         bool fb = fee % 3 != 0;
-        MetaTxLib.UAMetaTransfer memory t = MetaTxLib.UAMetaTransfer(nid(from), _id(j), bound(amount, 0, 500), CREF, ++cLane,
-            0, block.timestamp + 300, fb ? MetaTxLib.MODE_FEE_FIXED : MetaTxLib.MODE_FEE_NONE, address(0), fb ? fee % 7 : 0,
-            address(0));
+        MetaTxLib.UAMetaTransfer memory t = MetaTxLib.UAMetaTransfer(
+            nid(from),
+            _id(j),
+            bound(amount, 0, 500),
+            CREF,
+            ++cLane,
+            0,
+            block.timestamp + 300,
+            fb ? MetaTxLib.MODE_FEE_FIXED : MetaTxLib.MODE_FEE_NONE,
+            address(0),
+            fb ? fee % 7 : 0,
+            address(0)
+        );
         (uint8 v, bytes32 rr, bytes32 ss) = vm.sign(pk, NormalToken(cT).mtxTransferDigest(t));
         IUARegistry.UASig memory s;
         s.signature = abi.encodePacked(rr, ss, v);
@@ -739,8 +858,14 @@ contract RegPublicHandler is RegFixture, RegCore {
         (address to,) = _eoa(j);
         (address feeTo,) = rel % 4 == 3 ? (relayer, 0) : _eoa(rel);
         if (feeTo == to) feeTo = relayer;
-        _op(K_MOVE, from, abi.encodeCall(NormalToken.payWithFee, (to, bound(amount, 0, 500), FeeMode.FIXED, fee % 5,
-            feeTo, PayMetaKit.ref(CREF), PayMetaKit.meta(CREF))));
+        _op(
+            K_MOVE,
+            from,
+            abi.encodeCall(
+                NormalToken.payWithFee,
+                (to, bound(amount, 0, 500), FeeMode.FIXED, fee % 5, feeTo, PayMetaKit.ref(CREF), PayMetaKit.meta(CREF))
+            )
+        );
     }
 
     /// Kind 8: the minter mints to an id; kind 9: this handler wraps (a mint of the wrapped unit to itself).
@@ -749,7 +874,11 @@ contract RegPublicHandler is RegFixture, RegCore {
         if (which == 0) {
             bytes32 to = _id(j);
             if (uint256(to) >> 160 != 0) to = nid(carol);
-            _op(K_MOVE, address(this), abi.encodeCall(NormalToken.mint, (address(uint160(uint256(to))), amount, EnvKit.codeUidOf(cT))));
+            _op(
+                K_MOVE,
+                address(this),
+                abi.encodeCall(NormalToken.mint, (address(uint160(uint256(to))), amount, EnvKit.codeUidOf(cT)))
+            );
         } else {
             usd.mint(address(this), amount);
             _op(K_MOVE, address(this), abi.encodeWithSignature("wrap(uint256)", amount));
@@ -760,15 +889,21 @@ contract RegPublicHandler is RegFixture, RegCore {
     function pubBurn(uint256 i, uint256 amount) external {
         (address from,) = _eoa(i);
         amount = bound(amount, 1, 200);
-        _op(K_OPEN, from, which == 0 ? abi.encodeCall(NormalToken.burn, (amount))
-            : abi.encodeWithSignature("unwrap(uint256,address,uint256)", amount, from, 0));
+        _op(
+            K_OPEN,
+            from,
+            which == 0
+                ? abi.encodeCall(NormalToken.burn, (amount))
+                : abi.encodeWithSignature("unwrap(uint256,address,uint256)", amount, from, 0)
+        );
     }
 
     /// The pause-open set through `mtxExecute`: at fee `NONE` an open row; fee-bearing a move `P` refuses.
     function pubOpenRelayed(uint256 i, uint256 amount, uint256 fee, uint256 rel) external {
         (address from,) = _eoa(i);
         amount = bound(amount, 1, 200);
-        bytes memory inner = which == 0 ? abi.encodeWithSignature("burn(uint256)", amount)
+        bytes memory inner = which == 0
+            ? abi.encodeWithSignature("burn(uint256)", amount)
             : abi.encodeWithSignature("unwrap(uint256,address,uint256)", amount, from, 0);
         (bool fb, address r, bytes memory cd) = _relayed(i, inner, fee, rel);
         _op(fb ? K_MOVE : K_OPEN, r, cd);
@@ -808,9 +943,18 @@ abstract contract RegPqzHandler is PqzRegFixture, RegCore {
         tok.mtxShield(alice, 50_000);
         usd.approve(address(tok), type(uint256).max);
         bytes32[7] memory ids = [alice, bob, carol, leg0, leg1, nid(address(this)), nid(PAYEE)];
-        for (uint256 k; k < 7; ++k) cIds.push(ids[k]);
-        _coreInit(address(tok), creg, [attester, cadmin], [ownerA, address(0x0B22), issuer, compliance, address(0x0BE7), address(0x5EE)],
-            _isWrapped(), address(usd), _isWrapped() ? bytes32(0) : nid(address(this)));
+        for (uint256 k; k < 7; ++k) {
+            cIds.push(ids[k]);
+        }
+        _coreInit(
+            address(tok),
+            creg,
+            [attester, cadmin],
+            [ownerA, address(0x0B22), issuer, compliance, address(0x0BE7), address(0x5EE)],
+            _isWrapped(),
+            address(usd),
+            _isWrapped() ? bytes32(0) : nid(address(this))
+        );
     }
 
     function _shieldViews() internal view override {
@@ -852,7 +996,11 @@ abstract contract RegPqzHandler is PqzRegFixture, RegCore {
         usd.mint(address(this), a);
         pExpect = !_paused() && _free(nid(address(this)));
         _conf();
-        _op(K_MOVE, address(this), abi.encodeCall(IConfidentialWrappedToken.mtxWrapShield, (address(usd), a, cIds[j % 5])));
+        _op(
+            K_MOVE,
+            address(this),
+            abi.encodeCall(IConfidentialWrappedToken.mtxWrapShield, (address(usd), a, cIds[j % 5]))
+        );
     }
 
     /// `form` 0 the multi (two decoy legs, `decoyFee` each), 1 its COMPACT entry, 2 the single to `bob`, 3 its COMPACT entry.
@@ -869,13 +1017,27 @@ abstract contract RegPqzHandler is PqzRegFixture, RegCore {
             (pDecoy[leg0], pDecoy[leg1]) = (true, true);
             pDecoys.push(leg0);
             pDecoys.push(leg1);
-            cd = abi.encodeWithSelector(form == 0 ? IPqzToken.mtxConfidentialTransfer.selector
-                : IPqzToken.mtxConfidentialTransferCompact.selector, _multi(form == 1, rec, ben, top, ++seed), PROOF, _pqAuth(), "",
-                noVerdict());
+            cd = abi.encodeWithSelector(
+                form == 0
+                    ? IPqzToken.mtxConfidentialTransfer.selector
+                    : IPqzToken.mtxConfidentialTransferCompact.selector,
+                _multi(form == 1, rec, ben, top, ++seed),
+                PROOF,
+                _pqAuth(),
+                "",
+                noVerdict()
+            );
         } else {
-            cd = abi.encodeWithSelector(form == 2 ? IPqzToken.mtxConfidentialTransferSingle.selector
-                : IPqzToken.mtxConfidentialTransferSingleCompact.selector, _single(form == 3, bob, ben, top, ++seed), PROOF,
-                _pqAuth(), "", noVerdict());
+            cd = abi.encodeWithSelector(
+                form == 2
+                    ? IPqzToken.mtxConfidentialTransferSingle.selector
+                    : IPqzToken.mtxConfidentialTransferSingleCompact.selector,
+                _single(form == 3, bob, ben, top, ++seed),
+                PROOF,
+                _pqAuth(),
+                "",
+                noVerdict()
+            );
         }
         pExpect = !_paused() && _free(alice) && (top == 0 || _free(nid(address(this)))) && _benOk(ben);
         _conf();
@@ -889,16 +1051,40 @@ abstract contract RegPqzHandler is PqzRegFixture, RegCore {
         if (tok.totalShielded() <= fee) return;
         bytes32 to = [nid(PAYEE), bob, nid(address(this)), carol][r % 4];
         _conf();
-        _op(K_MOVE, address(this), abi.encodeWithSelector(IPqzToken.mtxUnshield.selector, _burnArgs(ben, 0, ++seed),
-            bound(a, 1, tok.totalShielded() - fee), to, PROOF, _pqAuth(), bytes(""), noVerdict()));
+        _op(
+            K_MOVE,
+            address(this),
+            abi.encodeWithSelector(
+                IPqzToken.mtxUnshield.selector,
+                _burnArgs(ben, 0, ++seed),
+                bound(a, 1, tok.totalShielded() - fee),
+                to,
+                PROOF,
+                _pqAuth(),
+                bytes(""),
+                noVerdict()
+            )
+        );
     }
 
     /// A refresh (amount 0, recipient 0): never refused without `shieldIn` (spec §4.2); with it, the payer's `P` and `F`.
     function pqRefresh(uint256 top) external {
         top = bound(top, 0, 2);
         _conf();
-        _op(top == 0 ? K_ROLL : K_MOVE, address(this), abi.encodeWithSelector(IPqzToken.mtxUnshield.selector,
-            _burnArgs(0, top, ++seed), 0, bytes32(0), PROOF, _pqAuth(), bytes(""), noVerdict()));
+        _op(
+            top == 0 ? K_ROLL : K_MOVE,
+            address(this),
+            abi.encodeWithSelector(
+                IPqzToken.mtxUnshield.selector,
+                _burnArgs(0, top, ++seed),
+                0,
+                bytes32(0),
+                PROOF,
+                _pqAuth(),
+                bytes(""),
+                noVerdict()
+            )
+        );
     }
 
     function pqUnshieldUnwrap(uint256 a, uint256 b) external {
@@ -910,8 +1096,14 @@ abstract contract RegPqzHandler is PqzRegFixture, RegCore {
         IConfidentialWrappedToken.Unwrap memory x =
             IConfidentialWrappedToken.Unwrap(address(usd), MetaTxLib.pad(PAYEE), a, a * SCALE);
         _conf();
-        _op(K_MOVE, address(this), abi.encodeCall(IPqzWrappedToken.mtxUnshieldUnwrap, (_burnArgs(ben, 0, ++seed), x, PROOF,
-            _pqAuth(), bytes(""), noVerdict())));
+        _op(
+            K_MOVE,
+            address(this),
+            abi.encodeCall(
+                IPqzWrappedToken.mtxUnshieldUnwrap,
+                (_burnArgs(ben, 0, ++seed), x, PROOF, _pqAuth(), bytes(""), noVerdict())
+            )
+        );
     }
 
     /// Prepare (both halves, once) and roll-over of a PQZ id: never refused (spec §4.2, §4.3).
@@ -929,17 +1121,26 @@ abstract contract RegPqzHandler is PqzRegFixture, RegCore {
         address from = i % 2 == 0 ? address(this) : PAYEE;
         bytes32 to = _id(j);
         amount = bound(amount, 0, 5000);
-        _op(K_MOVE, from, uint256(to) >> 160 == 0 ? abi.encodeCall(IERC20.transfer, (address(uint160(uint256(to))), amount))
-            : abi.encodeCall(IUALedger.transferToUA, (to, amount)));
+        _op(
+            K_MOVE,
+            from,
+            uint256(to) >> 160 == 0
+                ? abi.encodeCall(IERC20.transfer, (address(uint160(uint256(to))), amount))
+                : abi.encodeCall(IUALedger.transferToUA, (to, amount))
+        );
     }
 }
 
 contract RegPqzHandler12 is RegPqzHandler {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 }
 
 contract RegPqzHandler13 is RegPqzHandler {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 }
 
 /// Kinds 10 and 11 (`ZetherRegFixture`: the real Zether stack and test prover, BLS12-381): one token with every control,
@@ -974,9 +1175,18 @@ abstract contract RegZetherHandler is ZetherRegFixture, RegCore {
         }
         usd.approve(address(tok), type(uint256).max);
         bytes32[5] memory ids = [_zid(0), _zid(1), _zid(2), nid(address(this)), nid(PAYEE)];
-        for (uint256 k; k < 5; ++k) cIds.push(ids[k]);
-        _coreInit(address(tok), creg, [attester, cadmin], [ownerA, address(0x0B22), issuer, compliance, address(0x0BE7), address(0x5EE)],
-            _isWrapped(), address(usd), _isWrapped() ? bytes32(0) : nid(address(this)));
+        for (uint256 k; k < 5; ++k) {
+            cIds.push(ids[k]);
+        }
+        _coreInit(
+            address(tok),
+            creg,
+            [attester, cadmin],
+            [ownerA, address(0x0B22), issuer, compliance, address(0x0BE7), address(0x5EE)],
+            _isWrapped(),
+            address(usd),
+            _isWrapped() ? bytes32(0) : nid(address(this))
+        );
     }
 
     function _zid(uint256 i) internal view returns (bytes32) {
@@ -984,7 +1194,9 @@ abstract contract RegZetherHandler is ZetherRegFixture, RegCore {
     }
 
     function _shieldViews() internal view override {
-        for (uint256 i; i < 3; ++i) tok.accountState(us[i].ua);
+        for (uint256 i; i < 3; ++i) {
+            tok.accountState(us[i].ua);
+        }
         tok.totalShielded();
     }
 
@@ -1011,8 +1223,11 @@ abstract contract RegZetherHandler is ZetherRegFixture, RegCore {
         usd.mint(address(this), a * SCALE);
         pExpect = !_paused() && _free(nid(address(this)));
         _conf();
-        if (_op(K_MOVE, address(this), abi.encodeCall(IConfidentialWrappedToken.mtxWrapShield, (address(usd), a * SCALE,
-            _zid(i))))) zpend[i] += a;
+        if (_op(
+                K_MOVE,
+                address(this),
+                abi.encodeCall(IConfidentialWrappedToken.mtxWrapShield, (address(usd), a * SCALE, _zid(i)))
+            )) zpend[i] += a;
     }
 
     /// Roll-over: never refused (spec §4.3).
@@ -1032,9 +1247,11 @@ abstract contract RegZetherHandler is ZetherRegFixture, RegCore {
         Tx memory x = _proveTransfer(tok, us[i], us[j], v, zacc[i], _none(), 0);
         pExpect = !_paused() && _free(_zid(i));
         _conf();
-        if (_op(K_MOVE, address(this), abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle,
-            (_zSingle(x.payload, _none()), x.proof))))
-        {
+        if (_op(
+                K_MOVE,
+                address(this),
+                abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (_zSingle(x.payload, _none()), x.proof))
+            )) {
             zacc[i] -= v;
             zpend[j] += v;
         }
@@ -1053,17 +1270,26 @@ abstract contract RegZetherHandler is ZetherRegFixture, RegCore {
         uint256[] memory vs = new uint256[](2);
         vs[0] = v;
         decoyFee = d;
-        Tx memory x = _proveMulti(tok, us[i], to, vs, zacc[i], _none(), compact ? ZetherTypes.TransferMode.HASH
-            : _defaultForm(tok));
+        Tx memory x = _proveMulti(
+            tok, us[i], to, vs, zacc[i], _none(), compact ? ZetherTypes.TransferMode.HASH : _defaultForm(tok)
+        );
         decoyFee = 0;
         (pDecoy[_zid(j)], pDecoy[_zid(o)]) = (true, true);
         pDecoys.push(_zid(j));
         pDecoys.push(_zid(o));
         pExpect = !_paused() && _free(_zid(i));
         _conf();
-        if (_op(K_MOVE, address(this), abi.encodeWithSelector(compact ? IZetherToken.mtxConfidentialTransferCompact.selector
-            : IZetherToken.mtxConfidentialTransfer.selector, _zMulti(x.payload, _none()), x.proof)))
-        {
+        if (_op(
+                K_MOVE,
+                address(this),
+                abi.encodeWithSelector(
+                    compact
+                        ? IZetherToken.mtxConfidentialTransferCompact.selector
+                        : IZetherToken.mtxConfidentialTransfer.selector,
+                    _zMulti(x.payload, _none()),
+                    x.proof
+                )
+            )) {
             zacc[i] -= v + 2 * d;
             zpend[j] += v;
         }
@@ -1076,7 +1302,9 @@ abstract contract RegZetherHandler is ZetherRegFixture, RegCore {
         bytes32 rc = [nid(PAYEE), nid(address(this)), _zid((i + 1) % 3)][r % 3];
         (bytes memory pl, bytes memory pr) = _proveUnshieldTo(tok, us[i], a, zacc[i], rc, _none(), 0);
         _conf();
-        if (_op(K_MOVE, address(this), abi.encodeCall(IZetherToken.mtxUnshield, (_zBurn(pl, _none()), a, rc, pr)))) zacc[i] -= a;
+        if (_op(K_MOVE, address(this), abi.encodeCall(IZetherToken.mtxUnshield, (_zBurn(pl, _none()), a, rc, pr)))) {
+            zacc[i] -= a;
+        }
     }
 
     function zUnshieldUnwrap(uint256 i, uint256 a) external {
@@ -1087,25 +1315,42 @@ abstract contract RegZetherHandler is ZetherRegFixture, RegCore {
         IConfidentialWrappedToken.Unwrap memory x =
             IConfidentialWrappedToken.Unwrap(address(usd), MetaTxLib.pad(PAYEE), a, a * SCALE);
         IZetherToken.ZetherBurn memory b = _zBurn(_unshieldPayload(tok, us[i]), _none());
-        bytes memory pr = _proveU(us[i], stm.unshieldUnwrapStatement(address(tok), b, x.amount, x.recipient, x.underlying,
-            x.minOut, 0), a, zacc[i], _none(), tok);
+        bytes memory pr = _proveU(
+            us[i],
+            stm.unshieldUnwrapStatement(address(tok), b, x.amount, x.recipient, x.underlying, x.minOut, 0),
+            a,
+            zacc[i],
+            _none(),
+            tok
+        );
         _conf();
-        if (_op(K_MOVE, address(this), abi.encodeCall(IZetherUnwrapDirect.mtxUnshieldUnwrap, (b, x, pr)))) zacc[i] -= a;
+        if (_op(K_MOVE, address(this), abi.encodeCall(IZetherUnwrapDirect.mtxUnshieldUnwrap, (b, x, pr)))) {
+            zacc[i] -= a;
+        }
     }
 
     function pubTransfer(uint256 i, uint256 j, uint256 amount) external {
         address from = i % 2 == 0 ? address(this) : PAYEE;
         bytes32 to = _id(j);
         amount = bound(amount, 0, 5000);
-        _op(K_MOVE, from, uint256(to) >> 160 == 0 ? abi.encodeCall(IERC20.transfer, (address(uint160(uint256(to))), amount))
-            : abi.encodeCall(IUALedger.transferToUA, (to, amount)));
+        _op(
+            K_MOVE,
+            from,
+            uint256(to) >> 160 == 0
+                ? abi.encodeCall(IERC20.transfer, (address(uint160(uint256(to))), amount))
+                : abi.encodeCall(IUALedger.transferToUA, (to, amount))
+        );
     }
 }
 
 contract RegZetherHandler10 is RegZetherHandler {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 }
 
 contract RegZetherHandler11 is RegZetherHandler {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 }

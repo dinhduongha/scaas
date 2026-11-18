@@ -10,15 +10,16 @@
 //! digest)` under the registry's domain; as an `msig` member, at either level, the record's typed data itself in the portable
 //! purposes (`pop` v2, `kem`, `pqz-key`, `membership`), else `UAAuth(id, member, md)` of its level's member digest. UNAUDITED.
 use super::eip712::{self, TypedData};
-use super::sign::{check_purpose, member_request, ua_request};
+use super::sign::{app_request, check_purpose, member_request, ua_request};
 use super::signer::{KeyRef, SignRequest, Signer};
 use super::{bounded, Error, Network, Result};
-use serde_json::Value;
 use crate::ua8::{
-    is_portable_purpose, membership_digest, msig_slots_minimal, msig_update_digest, portable_record_purposes, slot_enabled, Current, Inner,
-    InnerSig, MemberSig, MsigMember, MsigStructure, MsigUpdate, UASig, PORTABLE_DOMAIN_SEPARATOR,
+    app_purpose, is_portable_purpose, membership_digest, msig_slots_minimal, msig_update_digest,
+    portable_record_purposes, slot_enabled, Current, Inner, InnerSig, MemberSig, MsigMember,
+    MsigStructure, MsigUpdate, UASig, PORTABLE_DOMAIN_SEPARATOR,
 };
 use crate::{derive_ua, keccak256, member_digest, purpose_tag, ua_message, Domain, UAError};
+use serde_json::Value;
 
 const MSIG: u16 = 0x0120;
 const EVM_EOA: u16 = 0x0001;
@@ -28,7 +29,10 @@ pub enum Slot<'a> {
     /// The derived member at `index` signs with `key`.
     Member { index: u16, key: &'a dyn Signer },
     /// The `msig` member at `index` signs by its own slots `(index, key)`, one level down.
-    Msig { index: u16, members: Vec<(u16, &'a dyn Signer)> },
+    Msig {
+        index: u16,
+        members: Vec<(u16, &'a dyn Signer)>,
+    },
 }
 
 impl Slot<'_> {
@@ -46,11 +50,19 @@ fn stored(kind: u16) -> bool {
 
 /// The native id (`evm-eoa`, CTR-UA-03) of an EVM key: its address left-padded to 32 bytes; any other key `None`.
 fn native_id(r: &KeyRef) -> Option<[u8; 32]> {
-    let KeyRef::Native { network: Network::Evm, public_key, .. } = r else { return None };
+    let KeyRef::Native {
+        network: Network::Evm,
+        public_key,
+        ..
+    } = r
+    else {
+        return None;
+    };
     let pk = k256::PublicKey::from_sec1_bytes(public_key).ok()?;
     let point = k256::elliptic_curve::sec1::ToSec1Point::to_sec1_point(&pk, false);
     let mut id = [0u8; 32];
-    id.get_mut(12..)?.copy_from_slice(keccak256(point.as_bytes().get(1..)?).get(12..)?);
+    id.get_mut(12..)?
+        .copy_from_slice(keccak256(point.as_bytes().get(1..)?).get(12..)?);
     Some(id)
 }
 
@@ -60,7 +72,12 @@ fn native_id(r: &KeyRef) -> Option<[u8; 32]> {
 /// over `UAAuth(id, purpose, digest)` under `domain` (`requireAuthorized`; `Argument` with no domain, or for a portable purpose:
 /// a native id has no portable record). `domain` is read only for a native key. A key claiming the `msig` kind (an `msig` has no
 /// key: [`msig_sig`]) or another native key: `Argument`.
-pub fn ua_sig(key: &dyn Signer, domain: Option<&Domain>, purpose: &[u8; 32], digest: &[u8; 32]) -> Result<UASig> {
+pub fn ua_sig(
+    key: &dyn Signer,
+    domain: Option<&Domain>,
+    purpose: &[u8; 32],
+    digest: &[u8; 32],
+) -> Result<UASig> {
     let r = key.key_ref();
     if let KeyRef::Native { .. } = r {
         check_purpose(purpose)?;
@@ -70,15 +87,83 @@ pub fn ua_sig(key: &dyn Signer, domain: Option<&Domain>, purpose: &[u8; 32], dig
         }
         let td = eip712::ua_auth(domain.ok_or(Error::Argument)?, &id, purpose, digest)?;
         let signature = key.sign_request(&eip712::request(&td)?)?;
-        return Ok(UASig { key_data: vec![], signature, members: vec![] });
+        return Ok(UASig {
+            key_data: vec![],
+            signature,
+            members: vec![],
+        });
     }
-    let KeyRef::Ua { kind, key_data } = r else { return Err(Error::Argument) };
+    let KeyRef::Ua { kind, key_data } = r else {
+        return Err(Error::Argument);
+    };
     if kind == MSIG {
         return Err(Error::Argument);
     }
     let signature = key.sign_request(&ua_request(kind, purpose, digest)?)?;
-    let bare = stored(kind) || is_portable_purpose(purpose) || portable_record_purposes().contains(purpose) || *purpose == purpose_tag("member")?;
-    Ok(UASig { key_data: if bare { vec![] } else { key_data }, signature, members: vec![] })
+    let bare = stored(kind)
+        || is_portable_purpose(purpose)
+        || portable_record_purposes().contains(purpose)
+        || *purpose == purpose_tag("member")?;
+    Ok(UASig {
+        key_data: if bare { vec![] } else { key_data },
+        signature,
+        members: vec![],
+    })
+}
+
+/// CTR-UA-46: the `UASig` of a single UA key over app `app_id`'s portable record (`requirePortableApp`): `signature` over
+/// `uaMessage(kind, app_purpose(app_id), digest)`, role `Pop`, no key data, no members. A native key, or a key claiming the `msig`
+/// kind: `Argument` (a native id has no portable record; an `msig` signs by [`msig_sig_app`]).
+pub fn ua_sig_app(key: &dyn Signer, app_id: &[u8; 32], digest: &[u8; 32]) -> Result<UASig> {
+    let KeyRef::Ua { kind, .. } = key.key_ref() else {
+        return Err(Error::Argument);
+    };
+    if kind == MSIG {
+        return Err(Error::Argument);
+    }
+    let signature = key.sign_request(&app_request(kind, app_id, digest)?)?;
+    Ok(UASig {
+        key_data: vec![],
+        signature,
+        members: vec![],
+    })
+}
+
+/// CTR-UA-46: [`msig_sig_current`] over app `app_id`'s portable record `record`, purpose `app_purpose(app_id)`, digest
+/// `record.digest()`: derived members over `memberDigest` under `member`, a native member (at either level) over `record` itself.
+/// `record`'s domain is an app's portable domain, exactly `name, version, salt` with `salt = app_id` (rule (c)), else `Argument`
+/// before anything is signed.
+pub fn msig_sig_app(
+    key_data: &[u8],
+    current: &Current,
+    inner: &Inner,
+    app_id: &[u8; 32],
+    record: &TypedData,
+    slots: &[Slot],
+) -> Result<UASig> {
+    let purpose = app_purpose(app_id)?;
+    let v = record.to_value();
+    let d = v
+        .get("domain")
+        .and_then(Value::as_object)
+        .ok_or(Error::Argument)?;
+    let mut keys: Vec<&str> = d.keys().map(String::as_str).collect();
+    keys.sort_unstable();
+    let salt = d.get("salt").and_then(Value::as_str);
+    if keys != ["name", "salt", "version"]
+        || !salt.is_some_and(|s| s.eq_ignore_ascii_case(&eip712::to_hex(app_id)))
+    {
+        return Err(Error::Argument);
+    }
+    msig_build(
+        key_data,
+        current,
+        inner,
+        &purpose,
+        &record.digest()?,
+        slots,
+        || Ok(Native::Record(record)),
+    )
 }
 
 /// The `UASig` of the `msig` `key_data` over `uaMessage(msig, purpose, digest)`: no key data, no signature, `members` the slots in
@@ -89,10 +174,24 @@ pub fn ua_sig(key: &dyn Signer, domain: Option<&Domain>, purpose: &[u8; 32], dig
 /// holds an `msig`); `Argument`: a slot's form not its member's, a key that is not its member, a native slot without what it signs
 /// (or `record` another digest's). Nothing is signed unless every slot passes.
 pub fn msig_sig(
-    key_data: &[u8], inner: &Inner, purpose: &[u8; 32], digest: &[u8; 32], domain: Option<&Domain>, record: Option<&TypedData>,
+    key_data: &[u8],
+    inner: &Inner,
+    purpose: &[u8; 32],
+    digest: &[u8; 32],
+    domain: Option<&Domain>,
+    record: Option<&TypedData>,
     slots: &[Slot],
 ) -> Result<UASig> {
-    msig_sig_current(key_data, &|_| None, inner, purpose, digest, domain, record, slots)
+    msig_sig_current(
+        key_data,
+        &|_| None,
+        inner,
+        purpose,
+        digest,
+        domain,
+        record,
+        slots,
+    )
 }
 
 /// [`msig_sig`] of an `msig` that `updateMsig` changed (CTR-UA-44, T21 L01): `key_data` its first structure (the id, for ever),
@@ -102,11 +201,19 @@ pub fn msig_sig(
 /// is `Argument` before anything is signed. `inner` gives an `msig` member's first structure.
 #[allow(clippy::too_many_arguments)]
 pub fn msig_sig_current(
-    key_data: &[u8], current: &Current, inner: &Inner, purpose: &[u8; 32], digest: &[u8; 32], domain: Option<&Domain>,
-    record: Option<&TypedData>, slots: &[Slot],
+    key_data: &[u8],
+    current: &Current,
+    inner: &Inner,
+    purpose: &[u8; 32],
+    digest: &[u8; 32],
+    domain: Option<&Domain>,
+    record: Option<&TypedData>,
+    slots: &[Slot],
 ) -> Result<UASig> {
     check_purpose(purpose)?;
-    msig_members_current(key_data, current, inner, purpose, digest, domain, record, slots)
+    msig_members_current(
+        key_data, current, inner, purpose, digest, domain, record, slots,
+    )
 }
 
 /// The typed `UAMsigUpdate` of an update (CTR-UA-44, the portable domain; clientkeys `msigUpdateMessage().typedData`): the `record`
@@ -114,8 +221,12 @@ pub fn msig_sig_current(
 pub fn msig_update_typed_data(u: &MsigUpdate) -> Result<TypedData> {
     use serde_json::json;
     let f = |n: &str, t: &str| json!({"name": n, "type": t});
-    let members: Vec<Value> = u.structure.members.iter()
-        .map(|m| json!({"kind": m.kind, "id": eip712::to_hex(&m.id), "weight": m.weight})).collect();
+    let members: Vec<Value> = u
+        .structure
+        .members
+        .iter()
+        .map(|m| json!({"kind": m.kind, "id": eip712::to_hex(&m.id), "weight": m.weight}))
+        .collect();
     let td = TypedData::from_value(json!({
         "types": {
             "UAMsigUpdate": [f("ua", "bytes32"), f("chainUid", "bytes32"), f("registry", "address"), f("version", "uint64"),
@@ -137,10 +248,24 @@ pub fn msig_update_typed_data(u: &MsigUpdate) -> Result<TypedData> {
 /// [`msig_sig`] past its purpose check: the sealed container's sender (`seal`, MD-10: the off-chain seal purpose, no native member)
 /// calls it directly.
 pub(super) fn msig_members(
-    key_data: &[u8], inner: &Inner, purpose: &[u8; 32], digest: &[u8; 32], domain: Option<&Domain>, record: Option<&TypedData>,
+    key_data: &[u8],
+    inner: &Inner,
+    purpose: &[u8; 32],
+    digest: &[u8; 32],
+    domain: Option<&Domain>,
+    record: Option<&TypedData>,
     slots: &[Slot],
 ) -> Result<UASig> {
-    msig_members_current(key_data, &|_| None, inner, purpose, digest, domain, record, slots)
+    msig_members_current(
+        key_data,
+        &|_| None,
+        inner,
+        purpose,
+        digest,
+        domain,
+        record,
+        slots,
+    )
 }
 
 /// The structure that authorizes the `msig` `id` whose first structure is `first` (CTR-UA-44) and its `enabled` word (`None`:
@@ -157,13 +282,44 @@ fn on(enabled: &Option<[u8; 32]>, index: u16) -> bool {
 /// `msig-update`, whose native members the contract checks over the update digest (`UARegistryAuxLib.updateMsig`,
 /// `UARegistryCoreLib._memberOk`; accounts.md CTR-UA-44). `is_portable_purpose` itself stays the contract's `requirePortable` set.
 fn native_signs_record(purpose: &[u8; 32]) -> Result<bool> {
-    Ok(is_portable_purpose(purpose) || portable_record_purposes().contains(purpose) || *purpose == purpose_tag("msig-update")?)
+    Ok(is_portable_purpose(purpose)
+        || portable_record_purposes().contains(purpose)
+        || *purpose == purpose_tag("msig-update")?)
 }
 
 #[allow(clippy::too_many_arguments)]
 fn msig_members_current(
-    first: &[u8], current: &Current, inner: &Inner, purpose: &[u8; 32], digest: &[u8; 32], domain: Option<&Domain>,
-    record: Option<&TypedData>, slots: &[Slot],
+    first: &[u8],
+    current: &Current,
+    inner: &Inner,
+    purpose: &[u8; 32],
+    digest: &[u8; 32],
+    domain: Option<&Domain>,
+    record: Option<&TypedData>,
+    slots: &[Slot],
+) -> Result<UASig> {
+    msig_build(first, current, inner, purpose, digest, slots, || {
+        if native_signs_record(purpose)? {
+            let r = record.ok_or(Error::Argument)?;
+            if r.domain_separator()? != PORTABLE_DOMAIN_SEPARATOR || r.digest()? != *digest {
+                return Err(Error::Argument);
+            }
+            Ok(Native::Record(r))
+        } else {
+            Ok(Native::Auth(domain.ok_or(Error::Argument)?))
+        }
+    })
+}
+
+/// The members of an `msig` signature, `native` asked only when a slot holds a native member: what that member signs.
+fn msig_build<'a>(
+    first: &[u8],
+    current: &Current,
+    inner: &Inner,
+    purpose: &[u8; 32],
+    digest: &[u8; 32],
+    slots: &[Slot],
+    native: impl FnOnce() -> Result<Native<'a>>,
 ) -> Result<UASig> {
     let ua = derive_ua(MSIG, first, false)?;
     let (key_data, enabled) = now(&ua, first, current);
@@ -175,23 +331,25 @@ fn msig_members_current(
         return Err(Error::Ua(UAError::Pop));
     }
     let structure = MsigStructure::from_key_data(&key_data)?;
-    let plans = slots.iter().map(|s| plan(&structure, s, inner, current)).collect::<Result<Vec<_>>>()?;
+    let plans = slots
+        .iter()
+        .map(|s| plan(&structure, s, inner, current))
+        .collect::<Result<Vec<_>>>()?;
     let native = if plans.iter().any(Plan::has_native) {
-        if native_signs_record(purpose)? {
-            let r = record.ok_or(Error::Argument)?;
-            if r.domain_separator()? != PORTABLE_DOMAIN_SEPARATOR || r.digest()? != *digest {
-                return Err(Error::Argument);
-            }
-            Native::Record(r)
-        } else {
-            Native::Auth(domain.ok_or(Error::Argument)?)
-        }
+        native()?
     } else {
         Native::None
     };
     let msg = ua_message(MSIG, purpose, digest)?;
-    let members = plans.iter().map(|p| sign(p, &ua, &msg, &native)).collect::<Result<Vec<_>>>()?;
-    Ok(UASig { key_data: vec![], signature: vec![], members })
+    let members = plans
+        .iter()
+        .map(|p| sign(p, &ua, &msg, &native))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(UASig {
+        key_data: vec![],
+        signature: vec![],
+        members,
+    })
 }
 
 /// The `MemberSig` of `acceptMembership(ua, ·)` for one slot of the `msig` `key_data` (CTR-UA-37): over typed
@@ -204,12 +362,21 @@ pub fn membership_sig(key_data: &[u8], inner: &Inner, slot: &Slot) -> Result<Mem
 /// [`membership_sig`] of an updated `msig` (CTR-UA-44, T21 L01): `key_data` the first structure (the id the record binds),
 /// `current` as [`msig_sig_current`]; the slot one of the current structure, enabled or not (an appended slot accepts before it
 /// counts, MM-2); an `msig` member's leaves enabled slots of its current structure.
-pub fn membership_sig_current(key_data: &[u8], current: &Current, inner: &Inner, slot: &Slot) -> Result<MemberSig> {
+pub fn membership_sig_current(
+    key_data: &[u8],
+    current: &Current,
+    inner: &Inner,
+    slot: &Slot,
+) -> Result<MemberSig> {
     let ua = derive_ua(MSIG, key_data, false)?;
     let structure = MsigStructure::from_key_data(&now(&ua, key_data, current).0)?;
     let p = plan(&structure, slot, inner, current)?;
     let record = eip712::membership(&ua, &p.member.id)?;
-    let msg = ua_message(MSIG, &purpose_tag("membership")?, &membership_digest(&ua, &p.member.id))?;
+    let msg = ua_message(
+        MSIG,
+        &purpose_tag("membership")?,
+        &membership_digest(&ua, &p.member.id),
+    )?;
     sign(&p, &ua, &msg, &Native::Record(&record))
 }
 
@@ -242,16 +409,28 @@ impl Plan<'_> {
     }
 }
 
-fn plan<'a>(structure: &MsigStructure, slot: &Slot<'a>, inner: &Inner, current: &Current) -> Result<Plan<'a>> {
+fn plan<'a>(
+    structure: &MsigStructure,
+    slot: &Slot<'a>,
+    inner: &Inner,
+    current: &Current,
+) -> Result<Plan<'a>> {
     let index = slot.index();
-    let member = *structure.members.get(usize::from(index)).ok_or(Error::Argument)?;
+    let member = *structure
+        .members
+        .get(usize::from(index))
+        .ok_or(Error::Argument)?;
     match slot {
         Slot::Member { key, .. } => {
             if member.kind == MSIG {
                 return Err(Error::Argument);
             }
             is_member(*key, &member)?;
-            Ok(Plan { index, member, signers: Signers::Key(*key) })
+            Ok(Plan {
+                index,
+                member,
+                signers: Signers::Key(*key),
+            })
         }
         Slot::Msig { members, .. } => {
             if member.kind != MSIG {
@@ -263,7 +442,11 @@ fn plan<'a>(structure: &MsigStructure, slot: &Slot<'a>, inner: &Inner, current: 
             }
             let (d, enabled) = now(&member.id, &first, current);
             let all = MsigStructure::from_key_data(&d)?.members;
-            if all.iter().chain(&MsigStructure::from_key_data(&first)?.members).any(|m| m.kind == MSIG) {
+            if all
+                .iter()
+                .chain(&MsigStructure::from_key_data(&first)?.members)
+                .any(|m| m.kind == MSIG)
+            {
                 return Err(Error::Ua(UAError::MemberUnknown)); // two levels only (CTR-UA-38)
             }
             if !members.iter().all(|(j, _)| on(&enabled, *j)) {
@@ -280,7 +463,11 @@ fn plan<'a>(structure: &MsigStructure, slot: &Slot<'a>, inner: &Inner, current: 
                     Ok((*j, m, *key))
                 })
                 .collect::<Result<Vec<_>>>()?;
-            Ok(Plan { index, member, signers: Signers::Leaves(leaves) })
+            Ok(Plan {
+                index,
+                member,
+                signers: Signers::Leaves(leaves),
+            })
         }
     }
 }
@@ -290,7 +477,9 @@ fn plan<'a>(structure: &MsigStructure, slot: &Slot<'a>, inner: &Inner, current: 
 fn is_member(key: &dyn Signer, m: &MsigMember) -> Result<()> {
     let r = key.key_ref();
     let ok = match &r {
-        KeyRef::Ua { kind, key_data } => *kind == m.kind && derive_ua(*kind, key_data, false).ok() == Some(m.id),
+        KeyRef::Ua { kind, key_data } => {
+            *kind == m.kind && derive_ua(*kind, key_data, false).ok() == Some(m.id)
+        }
         KeyRef::Native { .. } => m.kind == EVM_EOA && native_id(&r) == Some(m.id),
     };
     if ok {
@@ -322,15 +511,28 @@ fn sign(p: &Plan, ua: &[u8; 32], msg: &[u8; 32], native: &Native) -> Result<Memb
         key.sign_request(&req)
     };
     match &p.signers {
-        Signers::Key(key) => Ok(MemberSig { index: p.index, members: vec![], sig: leaf(*key, &p.member, ua, msg)? }),
+        Signers::Key(key) => Ok(MemberSig {
+            index: p.index,
+            members: vec![],
+            sig: leaf(*key, &p.member, ua, msg)?,
+        }),
         Signers::Leaves(leaves) => {
             // the inner `msig` signs, under `member`, its slot's message `uaMessage(msig, member, memberDigest(ua, msg))`
             let inner_msg = ua_message(MSIG, &purpose_tag("member")?, &member_digest(ua, msg))?;
             let members = leaves
                 .iter()
-                .map(|(j, m, key)| Ok(InnerSig { index: *j, sig: leaf(*key, m, &p.member.id, &inner_msg)? }))
+                .map(|(j, m, key)| {
+                    Ok(InnerSig {
+                        index: *j,
+                        sig: leaf(*key, m, &p.member.id, &inner_msg)?,
+                    })
+                })
                 .collect::<Result<Vec<_>>>()?;
-            Ok(MemberSig { index: p.index, members, sig: vec![] })
+            Ok(MemberSig {
+                index: p.index,
+                members,
+                sig: vec![],
+            })
         }
     }
 }
@@ -358,7 +560,12 @@ pub struct UaSigRequest {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum By {
     Key(usize),
-    Msig { key_data: Vec<u8>, inner: Vec<([u8; 32], Vec<u8>)>, current: Vec<([u8; 32], Vec<u8>, [u8; 32])>, slots: Vec<(u16, SlotBy)> },
+    Msig {
+        key_data: Vec<u8>,
+        inner: Vec<([u8; 32], Vec<u8>)>,
+        current: Vec<([u8; 32], Vec<u8>, [u8; 32])>,
+        slots: Vec<(u16, SlotBy)>,
+    },
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum SlotBy {
@@ -378,30 +585,66 @@ impl UaSigRequest {
     /// [`msig_sig`].
     pub fn sign(&self, keys: &[&dyn Signer]) -> Result<UASig> {
         let key = |i: &usize| keys.get(*i).copied().ok_or(Error::Argument);
-        let domain = self.domain.map(|(generation, chain_id, registry, chain_uid)| Domain { generation, chain_id, registry, chain_uid });
+        let domain = self
+            .domain
+            .map(|(generation, chain_id, registry, chain_uid)| Domain {
+                generation,
+                chain_id,
+                registry,
+                chain_uid,
+            });
         match &self.by {
             By::Key(i) => ua_sig(key(i)?, domain.as_ref(), &self.purpose, &self.digest),
-            By::Msig { key_data, inner, current, slots } => {
+            By::Msig {
+                key_data,
+                inner,
+                current,
+                slots,
+            } => {
                 let slots = slots
                     .iter()
                     .map(|(index, s)| match s {
-                        SlotBy::Key(i) => Ok(Slot::Member { index: *index, key: key(i)? }),
+                        SlotBy::Key(i) => Ok(Slot::Member {
+                            index: *index,
+                            key: key(i)?,
+                        }),
                         SlotBy::Members(l) => Ok(Slot::Msig {
                             index: *index,
-                            members: l.iter().map(|(j, i)| Ok((*j, key(i)?))).collect::<Result<_>>()?,
+                            members: l
+                                .iter()
+                                .map(|(j, i)| Ok((*j, key(i)?)))
+                                .collect::<Result<_>>()?,
                         }),
                     })
                     .collect::<Result<Vec<_>>>()?;
                 let lookup = crate::json::lookup(inner);
-                let now = |id: [u8; 32]| current.iter().find(|(x, ..)| *x == id).map(|(_, d, en)| (d.clone(), *en));
-                msig_sig_current(key_data, &now, &lookup, &self.purpose, &self.digest, domain.as_ref(), None, &slots)
+                let now = |id: [u8; 32]| {
+                    current
+                        .iter()
+                        .find(|(x, ..)| *x == id)
+                        .map(|(_, d, en)| (d.clone(), *en))
+                };
+                msig_sig_current(
+                    key_data,
+                    &now,
+                    &lookup,
+                    &self.purpose,
+                    &self.digest,
+                    domain.as_ref(),
+                    None,
+                    &slots,
+                )
             }
         }
     }
 }
 
 fn parse_request(v: &Value) -> Option<UaSigRequest> {
-    let only = |v: &Value, keys: &[&str]| v.as_object().filter(|o| o.keys().all(|k| keys.contains(&k.as_str()))).cloned();
+    let only = |v: &Value, keys: &[&str]| {
+        v.as_object()
+            .filter(|o| o.keys().all(|k| keys.contains(&k.as_str())))
+            .cloned()
+    };
     let h = |v: &Value| eip712::from_hex(v.as_str()?);
     let h32 = |v: &Value| <[u8; 32]>::try_from(h(v)?).ok();
     let u16_of = |v: &Value| u16::try_from(v.as_u64()?).ok();
@@ -412,7 +655,12 @@ fn parse_request(v: &Value) -> Option<UaSigRequest> {
         Some(d) => {
             let d = only(d, &["generation", "chainId", "registry", "chainUid"])?;
             let registry = <[u8; 20]>::try_from(h(d.get("registry")?)?).ok()?;
-            Some((u32::try_from(d.get("generation")?.as_u64()?).ok()?, d.get("chainId")?.as_u64()?, registry, h32(d.get("chainUid")?)?))
+            Some((
+                u32::try_from(d.get("generation")?.as_u64()?).ok()?,
+                d.get("chainId")?.as_u64()?,
+                registry,
+                h32(d.get("chainUid")?)?,
+            ))
         }
     };
     let by = match (o.get("key"), o.get("msig")) {
@@ -434,7 +682,10 @@ fn parse_request(v: &Value) -> Option<UaSigRequest> {
                             let x = only(x, &["index", "key"])?;
                             Some((u16_of(x.get("index")?)?, pos(x.get("key")?)?))
                         };
-                        Some((index, SlotBy::Members(l.iter().map(member).collect::<Option<_>>()?)))
+                        Some((
+                            index,
+                            SlotBy::Members(l.iter().map(member).collect::<Option<_>>()?),
+                        ))
                     }
                     _ => None,
                 }
@@ -442,16 +693,38 @@ fn parse_request(v: &Value) -> Option<UaSigRequest> {
             // CTR-UA-44: `current: [{ua, keyData, enabled}]`, the record's and its `msig` members' structures now (optional)
             let now = |c: &Value| {
                 let c = only(c, &["ua", "keyData", "enabled"])?;
-                Some((h32(c.get("ua")?)?, h(c.get("keyData")?)?, h32(c.get("enabled")?)?))
+                Some((
+                    h32(c.get("ua")?)?,
+                    h(c.get("keyData")?)?,
+                    h32(c.get("enabled")?)?,
+                ))
             };
             let current = match m.get("current") {
                 None => vec![],
-                Some(c) => c.as_array().filter(|l| l.len() <= SLOTS_MAX + 1)?.iter().map(now).collect::<Option<_>>()?,
+                Some(c) => c
+                    .as_array()
+                    .filter(|l| l.len() <= SLOTS_MAX + 1)?
+                    .iter()
+                    .map(now)
+                    .collect::<Option<_>>()?,
             };
-            let slots = m.get("slots")?.as_array().filter(|l| l.len() <= SLOTS_MAX)?;
-            By::Msig { key_data: h(m.get("keyData")?)?, inner, current, slots: slots.iter().map(slot).collect::<Option<_>>()? }
+            let slots = m
+                .get("slots")?
+                .as_array()
+                .filter(|l| l.len() <= SLOTS_MAX)?;
+            By::Msig {
+                key_data: h(m.get("keyData")?)?,
+                inner,
+                current,
+                slots: slots.iter().map(slot).collect::<Option<_>>()?,
+            }
         }
         _ => return None,
     };
-    Some(UaSigRequest { purpose: h32(o.get("purpose")?)?, digest: h32(o.get("digest")?)?, domain, by })
+    Some(UaSigRequest {
+        purpose: h32(o.get("purpose")?)?,
+        digest: h32(o.get("digest")?)?,
+        domain,
+        by,
+    })
 }

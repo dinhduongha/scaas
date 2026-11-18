@@ -10,10 +10,13 @@ set -eu
 cd "$(dirname "$0")/.."
 R=$1 K=$2 C=${3:-0}
 O=runs/fs3-t13-calib/run$R-k$K$([ "$C" = 0 ] || echo "-cold$C")
-[ ! -f "$O.txt" ] || { echo "skip $O (done)"; exit 0; }
+[ ! -f "$O.txt" ] || {
+    echo "skip $O (done)"
+    exit 0
+}
 mkdir -p runs/fs3-t13-calib
-S=$(echo "--keys $K --cold $C" | tr -cd 0-9)   # calibrate.sh names its files <date>-calib-ops<the digits of its args>
-sh calibrate.sh "${CALIB_LABEL:-pqz6}" --keys "$K" --cold "$C" > /dev/null
+S=$(echo "--keys $K --cold $C" | tr -cd 0-9) # calibrate.sh names its files <date>-calib-ops<the digits of its args>
+sh calibrate.sh "${CALIB_LABEL:-pqz6}" --keys "$K" --cold "$C" >/dev/null
 F=$(ls runs/*-calib-ops"$S".txt)
 mv "${F%.txt}-engine-pqz.json" "$O.json" && mv "$F" "$O.txt"
 echo "$O: $(grep -c '^| [0-9]' "$O.txt") rows; $(tail -1 "$O.txt")"

@@ -53,16 +53,19 @@
 //! }
 //! ```
 use super::aead::{aead_open, aead_seal, hkdf_sha256, Alg};
+use super::eip712::from_hex;
 use super::kem::{is_kem_holder, kem_encaps, Encapsulated, KemKeyPair};
 use super::sign::seal_request;
 use super::signer::{KeyRef, Signer};
 use super::uasig::{msig_members, Slot};
 use super::{bounded, Error, Result, Wallet};
-use crate::ua8::{inner_digest, member_keys_current, msig_sig_minimal, Accepted, Inner, InnerSig, MemberSig, Members, MsigStructure, UASig};
+use crate::ua8::{
+    inner_digest, member_keys_current, msig_sig_minimal, Accepted, Inner, InnerSig, MemberSig,
+    Members, MsigStructure, UASig,
+};
 use crate::{derive_ua, keccak256, member_digest, purpose_tag, seal_purpose_tag, ua_message};
 use base64ct::{Base64UrlUnpadded, Encoding};
 use rand_core::{OsRng, RngCore};
-use super::eip712::from_hex;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
@@ -86,8 +89,10 @@ const SEAL_INFO: &[u8] = b"scaas/seal/v1";
 const MSIG: u16 = 0x0120;
 /// The kinds whose key signs a container itself or as an `msig` member: the derived single keys. A native or group key, a
 /// Zether key, an `msig` as a leaf: none.
-const SENDER_KINDS: [u16; 15] =
-    [0x0100, 0x0101, 0x0102, 0x0103, 0x0104, 0x0105, 0x0106, 0x0107, 0x0108, 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135];
+const SENDER_KINDS: [u16; 15] = [
+    0x0100, 0x0101, 0x0102, 0x0103, 0x0104, 0x0105, 0x0106, 0x0107, 0x0108, 0x0130, 0x0131, 0x0132,
+    0x0133, 0x0134, 0x0135,
+];
 /// Whether `kind` signs a container (a derived single key).
 pub(super) fn is_sender_kind(kind: u16) -> bool {
     SENDER_KINDS.contains(&kind)
@@ -114,27 +119,44 @@ pub struct Sealed {
 impl Sealed {
     /// `version ‖ scheme ‖ mlkemCt ‖ x25519Eph ‖ ciphertext`.
     pub fn to_wire(&self) -> Vec<u8> {
-        [&[self.version, self.scheme][..], &self.mlkem_ct, &self.x25519_eph, &self.ciphertext].concat()
+        [
+            &[self.version, self.scheme][..],
+            &self.mlkem_ct,
+            &self.x25519_eph,
+            &self.ciphertext,
+        ]
+        .concat()
     }
 
     /// The named fields of a wire form: `SealOpen` for one shorter than its fixed fields and a tag, `SealVersion` for a version
     /// or scheme other than 1.
     pub fn from_wire(w: &[u8]) -> Result<Sealed> {
         let short = w.len() < 2 + CT + 32 + TAG;
-        let (head, rest) = w.split_at_checked(2).filter(|_| !short).ok_or(Error::SealOpen)?;
+        let (head, rest) = w
+            .split_at_checked(2)
+            .filter(|_| !short)
+            .ok_or(Error::SealOpen)?;
         if head != [1, 1] {
             return Err(Error::SealVersion);
         }
         let (ct, rest) = rest.split_at_checked(CT).ok_or(Error::SealOpen)?;
         let (eph, ciphertext) = rest.split_at_checked(32).ok_or(Error::SealOpen)?;
         let x25519_eph = eph.try_into().map_err(|_| Error::SealOpen)?;
-        Ok(Sealed { version: 1, scheme: 1, mlkem_ct: ct.to_vec(), x25519_eph, ciphertext: ciphertext.to_vec() })
+        Ok(Sealed {
+            version: 1,
+            scheme: 1,
+            mlkem_ct: ct.to_vec(),
+            x25519_eph,
+            ciphertext: ciphertext.to_vec(),
+        })
     }
 }
 
 /// `purpose` as bytes: ASCII `[a-z0-9./-]`, 1–64 bytes, else `Argument`.
 fn purpose_bytes(p: &str) -> Result<&[u8]> {
-    let ok = (1..=64).contains(&p.len()) && p.bytes().all(|b| matches!(b, b'a'..=b'z' | b'0'..=b'9' | b'.' | b'/' | b'-'));
+    let ok = (1..=64).contains(&p.len())
+        && p.bytes()
+            .all(|b| matches!(b, b'a'..=b'z' | b'0'..=b'9' | b'.' | b'/' | b'-'));
     ok.then_some(p.as_bytes()).ok_or(Error::Argument)
 }
 
@@ -146,10 +168,18 @@ fn be16(n: usize) -> Result<[u8; 2]> {
 fn seal_key(ss: &[u8; 32], p: &[u8], kem_pk: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
     let info = [SEAL_INFO, &[1], &be16(p.len())?, p, &keccak256(kem_pk)].concat();
     let okm = hkdf_sha256(ss, &[], &info, 32)?;
-    Ok(Zeroizing::new(okm.as_slice().try_into().map_err(|_| Error::Argument)?))
+    Ok(Zeroizing::new(
+        okm.as_slice().try_into().map_err(|_| Error::Argument)?,
+    ))
 }
 
-fn seal_with(kem_pk: &[u8], purpose: &str, aad: &[u8], pt: &[u8], encaps: impl FnOnce(&[u8]) -> Result<Encapsulated>) -> Result<Sealed> {
+fn seal_with(
+    kem_pk: &[u8],
+    purpose: &str,
+    aad: &[u8],
+    pt: &[u8],
+    encaps: impl FnOnce(&[u8]) -> Result<Encapsulated>,
+) -> Result<Sealed> {
     let p = purpose_bytes(purpose)?;
     if pt.len() > MAX_PT {
         return Err(Error::Argument);
@@ -157,7 +187,13 @@ fn seal_with(kem_pk: &[u8], purpose: &str, aad: &[u8], pt: &[u8], encaps: impl F
     let (mlkem_ct, x25519_eph, ss) = encaps(kem_pk)?;
     let key = seal_key(&ss, p, kem_pk)?;
     let ciphertext = aead_seal(Alg::Aes256Gcm, &key, &[0; 12], aad, pt)?;
-    Ok(Sealed { version: 1, scheme: 1, mlkem_ct, x25519_eph, ciphertext })
+    Ok(Sealed {
+        version: 1,
+        scheme: 1,
+        mlkem_ct,
+        x25519_eph,
+        ciphertext,
+    })
 }
 
 /// [`Sealed`] of `pt` (at most 1 MiB, may be empty) to `kem_pk` under `purpose` (`[a-z0-9./-]{1,64}`) with `aad`; `m` and `e`
@@ -181,7 +217,13 @@ impl KemKeyPair {
             return Err(Error::SealOpen);
         }
         let _lease = self.lease();
-        let ss = self.decaps(&s.mlkem_ct, &s.x25519_eph).map_err(|e| if e == Error::KemCheck { Error::SealOpen } else { e })?;
+        let ss = self.decaps(&s.mlkem_ct, &s.x25519_eph).map_err(|e| {
+            if e == Error::KemCheck {
+                Error::SealOpen
+            } else {
+                e
+            }
+        })?;
         super::store::copied();
         let key = seal_key(&ss, p, &self.kem_pk())?;
         aead_open(Alg::Aes256Gcm, &key, &[0; 12], aad, &s.ciphertext).map_err(|_| Error::SealOpen)
@@ -198,7 +240,11 @@ impl KemKeyPair {
     /// `SealOpen`. A link container needs its session's short code ([`Wallet::from_link`]): here `Argument`. **No replay
     /// protection.**
     pub fn open_container(
-        &self, c: &SealedContainer, expect: &ContainerExpect, members: &Members, accepted: Option<&Accepted>,
+        &self,
+        c: &SealedContainer,
+        expect: &ContainerExpect,
+        members: &Members,
+        accepted: Option<&Accepted>,
     ) -> Result<Zeroizing<Vec<u8>>> {
         open_container_with(self, c, expect, members, accepted, None)
     }
@@ -239,12 +285,18 @@ impl Recipient {
             return Err(Error::KemHolder);
         }
         let ua = derive_ua(kind, key_data, false)?;
-        Ok(Recipient { id: RecipientId::Ua { ua, version }, kem_pk: kem_pk.to_vec() })
+        Ok(Recipient {
+            id: RecipientId::Ua { ua, version },
+            kem_pk: kem_pk.to_vec(),
+        })
     }
 
     /// An ephemeral key (a link session's `kem_pk`), named by `keccak256(kem_pk)`.
     pub fn ephemeral(kem_pk: &[u8]) -> Recipient {
-        Recipient { id: RecipientId::KemPkHash(keccak256(kem_pk)), kem_pk: kem_pk.to_vec() }
+        Recipient {
+            id: RecipientId::KemPkHash(keccak256(kem_pk)),
+            kem_pk: kem_pk.to_vec(),
+        }
     }
 
     pub fn id(&self) -> RecipientId {
@@ -293,15 +345,28 @@ impl SealedContainer {
     /// The container JSON, fields in clientkeys' order.
     pub fn to_json(&self) -> String {
         let recipient = match self.recipient {
-            RecipientId::Ua { ua, version } => format!("{{\"ua\":\"{}\",\"version\":{version}}}", b64(&ua)),
+            RecipientId::Ua { ua, version } => {
+                format!("{{\"ua\":\"{}\",\"version\":{version}}}", b64(&ua))
+            }
             RecipientId::KemPkHash(h) => format!("{{\"kemPkHash\":\"{}\"}}", b64(&h)),
         };
-        let inner = |l: &[InnerSig]| l.iter().map(|x| format!("{{\"index\":{},\"sig\":\"{}\"}}", x.index, b64(&x.sig))).collect::<Vec<_>>();
+        let inner = |l: &[InnerSig]| {
+            l.iter()
+                .map(|x| format!("{{\"index\":{},\"sig\":\"{}\"}}", x.index, b64(&x.sig)))
+                .collect::<Vec<_>>()
+        };
         let members = self
             .auth
             .members
             .iter()
-            .map(|m| format!("{{\"index\":{},\"members\":[{}],\"sig\":\"{}\"}}", m.index, inner(&m.members).join(","), b64(&m.sig)))
+            .map(|m| {
+                format!(
+                    "{{\"index\":{},\"members\":[{}],\"sig\":\"{}\"}}",
+                    m.index,
+                    inner(&m.members).join(","),
+                    b64(&m.sig)
+                )
+            })
             .collect::<Vec<_>>();
         let s = &self.sealed;
         format!(
@@ -344,7 +409,10 @@ fn index_of(v: &Value) -> Option<u16> {
 fn list_of(v: &Value) -> Option<&[Value]> {
     match v.get("members") {
         None => Some(&[]),
-        Some(l) => l.as_array().map(Vec::as_slice).filter(|l| l.len() <= LIST_MAX),
+        Some(l) => l
+            .as_array()
+            .map(Vec::as_slice)
+            .filter(|l| l.len() <= LIST_MAX),
     }
 }
 
@@ -352,7 +420,10 @@ fn parse_container(v: &Value) -> Option<SealedContainer> {
     let r = v.get("recipient")?;
     let recipient = match (r.get("kemPkHash"), r.get("ua")) {
         (Some(h), None) => RecipientId::KemPkHash(b32_of(h)?),
-        (None, Some(ua)) => RecipientId::Ua { ua: b32_of(ua)?, version: r.get("version")?.as_u64()? },
+        (None, Some(ua)) => RecipientId::Ua {
+            ua: b32_of(ua)?,
+            version: r.get("version")?.as_u64()?,
+        },
         _ => return None,
     };
     let sender = v.get("sender")?;
@@ -363,11 +434,18 @@ fn parse_container(v: &Value) -> Option<SealedContainer> {
             let inner = list_of(m)?
                 .iter()
                 .map(|x| match list_of(x)? {
-                    [] => Some(InnerSig { index: index_of(x)?, sig: bytes_of(x.get("sig")?)? }),
+                    [] => Some(InnerSig {
+                        index: index_of(x)?,
+                        sig: bytes_of(x.get("sig")?)?,
+                    }),
                     _ => None, // a third level (CTR-UA-38)
                 })
                 .collect::<Option<Vec<_>>>()?;
-            Some(MemberSig { index: index_of(m)?, members: inner, sig: bytes_of(m.get("sig")?)? })
+            Some(MemberSig {
+                index: index_of(m)?,
+                members: inner,
+                sig: bytes_of(m.get("sig")?)?,
+            })
         })
         .collect::<Option<Vec<_>>>()?;
     let s = v.get("sealed")?;
@@ -376,7 +454,11 @@ fn parse_container(v: &Value) -> Option<SealedContainer> {
         recipient,
         created: v.get("created")?.as_u64()?,
         sender_ua: b32_of(sender.get("ua")?)?,
-        auth: UASig { key_data: bytes_of(auth.get("keyData")?)?, signature: bytes_of(auth.get("signature")?)?, members },
+        auth: UASig {
+            key_data: bytes_of(auth.get("keyData")?)?,
+            signature: bytes_of(auth.get("signature")?)?,
+            members,
+        },
         sealed: Sealed {
             version: 1,
             scheme: 1,
@@ -389,12 +471,29 @@ fn parse_container(v: &Value) -> Option<SealedContainer> {
 
 /// The container's AEAD `aad`: `u8 1 ‖ be16 len(purpose) ‖ purpose ‖ recipientId ‖ be64 version ‖ senderUa ‖ be64 created`, for
 /// `scaas/link/v1` followed by `sha256(shortCode)` (the code both screens show; `Argument` without one).
-fn container_aad(purpose: &str, recipient: &RecipientId, sender_ua: &[u8; 32], created: u64, short_code: Option<&str>) -> Result<Vec<u8>> {
+fn container_aad(
+    purpose: &str,
+    recipient: &RecipientId,
+    sender_ua: &[u8; 32],
+    created: u64,
+    short_code: Option<&str>,
+) -> Result<Vec<u8>> {
     let p = purpose_bytes(purpose)?;
     let (id, version) = recipient.parts();
-    let mut aad = [&[1u8][..], &be16(p.len())?, p, &id, &version.to_be_bytes(), sender_ua, &created.to_be_bytes()].concat();
+    let mut aad = [
+        &[1u8][..],
+        &be16(p.len())?,
+        p,
+        &id,
+        &version.to_be_bytes(),
+        sender_ua,
+        &created.to_be_bytes(),
+    ]
+    .concat();
     if purpose == PURPOSE_LINK {
-        let code = short_code.filter(|c| !c.is_empty()).ok_or(Error::Argument)?;
+        let code = short_code
+            .filter(|c| !c.is_empty())
+            .ok_or(Error::Argument)?;
         aad.extend(Sha256::digest(code.as_bytes()));
     }
     Ok(aad)
@@ -409,17 +508,25 @@ fn sealed_digest(aad: &[u8], s: &Sealed) -> [u8; 32] {
 /// (`inner` gives an `msig` member's key data); a native or group key does not sign a container.
 pub enum ContainerSigner<'a> {
     Key(&'a dyn Signer),
-    Msig { key_data: &'a [u8], inner: &'a Inner<'a>, slots: &'a [Slot<'a>] },
+    Msig {
+        key_data: &'a [u8],
+        inner: &'a Inner<'a>,
+        slots: &'a [Slot<'a>],
+    },
 }
 
 /// `(sender UA, its key data)`: `Argument` for a key of no sender kind.
 fn sender_of(sender: &ContainerSigner) -> Result<([u8; 32], Vec<u8>)> {
     match sender {
         ContainerSigner::Key(k) => match k.key_ref() {
-            KeyRef::Ua { kind, key_data } if SENDER_KINDS.contains(&kind) => Ok((derive_ua(kind, &key_data, false)?, key_data)),
+            KeyRef::Ua { kind, key_data } if SENDER_KINDS.contains(&kind) => {
+                Ok((derive_ua(kind, &key_data, false)?, key_data))
+            }
             _ => Err(Error::Argument),
         },
-        ContainerSigner::Msig { key_data, .. } => Ok((derive_ua(MSIG, key_data, false)?, key_data.to_vec())),
+        ContainerSigner::Msig { key_data, .. } => {
+            Ok((derive_ua(MSIG, key_data, false)?, key_data.to_vec()))
+        }
     }
 }
 
@@ -429,43 +536,83 @@ fn sender_of(sender: &ContainerSigner) -> Result<([u8; 32], Vec<u8>)> {
 fn container_sig(sender: &ContainerSigner, key_data: Vec<u8>, digest: &[u8; 32]) -> Result<UASig> {
     match sender {
         ContainerSigner::Key(k) => {
-            let KeyRef::Ua { kind, .. } = k.key_ref() else { return Err(Error::Argument) };
+            let KeyRef::Ua { kind, .. } = k.key_ref() else {
+                return Err(Error::Argument);
+            };
             let signature = k.sign_request(&seal_request(kind, digest)?)?;
-            Ok(UASig { key_data, signature, members: vec![] })
+            Ok(UASig {
+                key_data,
+                signature,
+                members: vec![],
+            })
         }
-        ContainerSigner::Msig { key_data: d, inner, slots } => {
+        ContainerSigner::Msig {
+            key_data: d,
+            inner,
+            slots,
+        } => {
             let s = msig_members(d, inner, &seal_purpose_tag(), digest, None, None, slots)?;
-            Ok(UASig { key_data, signature: vec![], members: s.members })
+            Ok(UASig {
+                key_data,
+                signature: vec![],
+                members: s.members,
+            })
         }
     }
 }
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn seal_container_with(
-    recipient: &Recipient, purpose: &str, sender: &ContainerSigner, created: u64, pt: &[u8], short_code: Option<&str>,
+    recipient: &Recipient,
+    purpose: &str,
+    sender: &ContainerSigner,
+    created: u64,
+    pt: &[u8],
+    short_code: Option<&str>,
     encaps: impl FnOnce(&[u8]) -> Result<Encapsulated>,
 ) -> Result<SealedContainer> {
     let (sender_ua, key_data) = sender_of(sender)?;
     let aad = container_aad(purpose, &recipient.id, &sender_ua, created, short_code)?;
     let sealed = seal_with(&recipient.kem_pk, purpose, &aad, pt, encaps)?;
     let auth = container_sig(sender, key_data, &sealed_digest(&aad, &sealed))?;
-    Ok(SealedContainer { purpose: purpose.to_owned(), recipient: recipient.id, created, sender_ua, auth, sealed })
+    Ok(SealedContainer {
+        purpose: purpose.to_owned(),
+        recipient: recipient.id,
+        created,
+        sender_ua,
+        auth,
+        sealed,
+    })
 }
 
 /// A container of `pt` to `recipient` under `purpose`, signed by `sender` over the `aad` and wire form; `created` the sender's
 /// clock (seconds); `short_code` the code the new device shows (`scaas/link/v1` only, required there). `m` and `e` from the OS
 /// RNG inside. Errors as [`seal`], and `Argument` for a sender that does not sign containers.
 pub fn seal_container(
-    recipient: &Recipient, purpose: &str, sender: &ContainerSigner, created: u64, pt: &[u8], short_code: Option<&str>,
+    recipient: &Recipient,
+    purpose: &str,
+    sender: &ContainerSigner,
+    created: u64,
+    pt: &[u8],
+    short_code: Option<&str>,
 ) -> Result<SealedContainer> {
-    seal_container_with(recipient, purpose, sender, created, pt, short_code, kem_encaps)
+    seal_container_with(
+        recipient, purpose, sender, created, pt, short_code, kem_encaps,
+    )
 }
 
 fn open_container_with(
-    kk: &KemKeyPair, c: &SealedContainer, expect: &ContainerExpect, members: &Members, accepted: Option<&Accepted>,
+    kk: &KemKeyPair,
+    c: &SealedContainer,
+    expect: &ContainerExpect,
+    members: &Members,
+    accepted: Option<&Accepted>,
     short_code: Option<&str>,
 ) -> Result<Zeroizing<Vec<u8>>> {
-    if c.purpose != expect.purpose || c.recipient != expect.recipient || kk.recipient() != expect.recipient {
+    if c.purpose != expect.purpose
+        || c.recipient != expect.recipient
+        || kk.recipient() != expect.recipient
+    {
         return Err(Error::ContainerSender);
     }
     let allowed = match &expect.sender {
@@ -478,14 +625,32 @@ fn open_container_with(
     }
     let auth = &c.auth;
     let derives = |k: &u16| derive_ua(*k, &auth.key_data, false).ok() == Some(c.sender_ua);
-    let kind = *core::iter::once(&MSIG).chain(&SENDER_KINDS).find(|k| derives(k)).ok_or(Error::ContainerSender)?;
-    let aad = container_aad(&c.purpose, &c.recipient, &c.sender_ua, c.created, short_code)?;
+    let kind = *core::iter::once(&MSIG)
+        .chain(&SENDER_KINDS)
+        .find(|k| derives(k))
+        .ok_or(Error::ContainerSender)?;
+    let aad = container_aad(
+        &c.purpose,
+        &c.recipient,
+        &c.sender_ua,
+        c.created,
+        short_code,
+    )?;
     let m0 = ua_message(kind, &seal_purpose_tag(), &sealed_digest(&aad, &c.sealed))?;
     let ok = if kind == MSIG {
         let accepted = accepted.ok_or(Error::ContainerSender)?;
-        auth.signature.is_empty() && msig_ok(&c.sender_ua, &auth.key_data, &m0, &auth.members, members, accepted)?
+        auth.signature.is_empty()
+            && msig_ok(
+                &c.sender_ua,
+                &auth.key_data,
+                &m0,
+                &auth.members,
+                members,
+                accepted,
+            )?
     } else {
-        auth.members.is_empty() && crate::verify::verify(kind, &auth.key_data, &m0, &auth.signature, false)
+        auth.members.is_empty()
+            && crate::verify::verify(kind, &auth.key_data, &m0, &auth.signature, false)
     };
     if !ok {
         return Err(Error::SealOpen);
@@ -496,11 +661,20 @@ fn open_container_with(
 /// At one level of the `msig` `id` (key data `d`): the weight of the signing slots `indexes` whose `accepted(id, index)` is
 /// `true` reaches the threshold (CTR-UA-37), else `ContainerSender`. The set is minimal, so this holds only when every signer is
 /// accepted.
-fn accepted_ok(id: &[u8; 32], d: &[u8], indexes: impl Iterator<Item = u16>, accepted: &Accepted) -> Result<()> {
+fn accepted_ok(
+    id: &[u8; 32],
+    d: &[u8],
+    indexes: impl Iterator<Item = u16>,
+    accepted: &Accepted,
+) -> Result<()> {
     let s = MsigStructure::from_key_data(d).map_err(|_| Error::ContainerSender)?;
     let w: u32 = indexes
         .filter(|i| accepted(*id, *i))
-        .map(|i| s.members.get(usize::from(i)).map_or(0, |m| u32::from(m.weight)))
+        .map(|i| {
+            s.members
+                .get(usize::from(i))
+                .map_or(0, |m| u32::from(m.weight))
+        })
         .sum();
     if w < u32::from(s.threshold) {
         return Err(Error::ContainerSender);
@@ -517,7 +691,14 @@ fn leaf_ok(kind: u16, key: &[u8], md: &[u8; 32], sig: &[u8]) -> Result<bool> {
 /// An `msig` sender's member signatures over its `ua_msg` `m0`: member keys from `members` (re-derived; unknown:
 /// `ContainerSender`), the minimal set at both levels (else `false`), each level's signers accepted ([`accepted_ok`]), a derived
 /// member over `memberDigest(id, m0)`, an `msig` member with no `sig` and its own non-empty list over `innerDigest`.
-fn msig_ok(id: &[u8; 32], d: &[u8], m0: &[u8; 32], slots: &[MemberSig], members: &Members, accepted: &Accepted) -> Result<bool> {
+fn msig_ok(
+    id: &[u8; 32],
+    d: &[u8],
+    m0: &[u8; 32],
+    slots: &[MemberSig],
+    members: &Members,
+    accepted: &Accepted,
+) -> Result<bool> {
     let cs = |_| Error::ContainerSender;
     let keys = member_keys_current(d, members, &|_| None).map_err(cs)?;
     let inner = |x: [u8; 32]| members(x).map(|(_, k)| k);
@@ -543,12 +724,19 @@ fn msig_ok(id: &[u8; 32], d: &[u8], m0: &[u8; 32], slots: &[MemberSig], members:
             let inner_keys = member_keys_current(key, members, &|_| None).map_err(cs)?;
             let imd = inner_digest(&m.id, &md)?;
             let leaf = |x: &InnerSig| -> Result<bool> {
-                match (leaves.get(usize::from(x.index)), inner_keys.get(usize::from(x.index))) {
+                match (
+                    leaves.get(usize::from(x.index)),
+                    inner_keys.get(usize::from(x.index)),
+                ) {
                     (Some(l), Some(k)) => leaf_ok(l.kind, k, &imd, &x.sig),
                     _ => Ok(false),
                 }
             };
-            s.sig.is_empty() && !s.members.is_empty() && s.members.iter().try_fold(true, |a, x| Ok::<_, Error>(a && leaf(x)?))?
+            s.sig.is_empty()
+                && !s.members.is_empty()
+                && s.members
+                    .iter()
+                    .try_fold(true, |a, x| Ok::<_, Error>(a && leaf(x)?))?
         };
         if !ok {
             return Ok(false);
@@ -572,7 +760,11 @@ pub struct LinkSession {
 impl LinkSession {
     /// A session from now.
     pub fn new() -> Result<LinkSession> {
-        Ok(LinkSession { key: KemKeyPair::generate_ephemeral()?, short_code: short_code()?, start: now()? })
+        Ok(LinkSession {
+            key: KemKeyPair::generate_ephemeral()?,
+            short_code: short_code()?,
+            start: now()?,
+        })
     }
     /// The key the existing device seals to.
     pub fn kem_pk(&self) -> Vec<u8> {
@@ -605,7 +797,9 @@ fn short_code() -> Result<String> {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn now() -> Result<u64> {
-    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|_| Error::Argument)?;
+    let t = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| Error::Argument)?;
     Ok(t.as_secs())
 }
 
@@ -620,14 +814,22 @@ pub(crate) fn now() -> Result<u64> {
 }
 
 fn link_install(
-    s: &LinkSession, c: &SealedContainer, expect: &ContainerExpect, members: &Members, accepted: Option<&Accepted>,
-    bip39_passphrase: &str, now: u64,
+    s: &LinkSession,
+    c: &SealedContainer,
+    expect: &ContainerExpect,
+    members: &Members,
+    accepted: Option<&Accepted>,
+    bip39_passphrase: &str,
+    now: u64,
 ) -> Result<Wallet> {
     if expect.purpose != PURPOSE_LINK {
         return Err(Error::Argument);
     }
     let end = s.start.saturating_add(LINK_WINDOW);
-    if now > end || c.created < s.start.saturating_sub(LINK_SKEW) || c.created > end.saturating_add(LINK_SKEW) {
+    if now > end
+        || c.created < s.start.saturating_sub(LINK_SKEW)
+        || c.created > end.saturating_add(LINK_SKEW)
+    {
         return Err(Error::ContainerReplay);
     }
     let pt = open_container_with(&s.key, c, expect, members, accepted, Some(&s.short_code))?;
@@ -643,10 +845,16 @@ impl Wallet {
     /// `ContainerSender`), imported keys, manifest entries and generation.
     /// The session is consumed and its key wiped whatever the outcome, so a second install cannot be expressed.
     pub fn from_link(
-        session: LinkSession, c: &SealedContainer, expect: &ContainerExpect, members: &Members, accepted: Option<&Accepted>,
+        session: LinkSession,
+        c: &SealedContainer,
+        expect: &ContainerExpect,
+        members: &Members,
+        accepted: Option<&Accepted>,
         bip39_passphrase: &str,
     ) -> Result<Wallet> {
-        let r = now().and_then(|t| link_install(&session, c, expect, members, accepted, bip39_passphrase, t));
+        let r = now().and_then(|t| {
+            link_install(&session, c, expect, members, accepted, bip39_passphrase, t)
+        });
         session.key.wipe_own_store();
         r
     }
@@ -691,7 +899,11 @@ impl ContainerExpectJson {
             (false, Some(u)) => ExpectedSender::Ua(*u),
             _ => ExpectedSender::Set(&self.sender),
         };
-        ContainerExpect { purpose: &self.purpose, sender, recipient: self.recipient }
+        ContainerExpect {
+            purpose: &self.purpose,
+            sender,
+            recipient: self.recipient,
+        }
     }
 }
 
@@ -709,11 +921,19 @@ fn parse_expect(v: &Value) -> Option<ContainerExpectJson> {
     };
     let r = only(o.get("recipient")?, &["ua", "version", "kemPkHash"])?;
     let recipient = match (r.get("ua"), r.get("version"), r.get("kemPkHash")) {
-        (Some(ua), Some(version), None) => RecipientId::Ua { ua: h32(ua)?, version: version.as_u64()? },
+        (Some(ua), Some(version), None) => RecipientId::Ua {
+            ua: h32(ua)?,
+            version: version.as_u64()?,
+        },
         (None, None, Some(h)) => RecipientId::KemPkHash(h32(h)?),
         _ => return None,
     };
-    Some(ContainerExpectJson { purpose, sender, set, recipient })
+    Some(ContainerExpectJson {
+        purpose,
+        sender,
+        set,
+        recipient,
+    })
 }
 
 /// An `msig` sender's member keys by id ([`Members`]) read from JSON: `{"<id>": {kind, keyData}}`. Never trusted: the opener
@@ -729,7 +949,11 @@ impl MembersJson {
         let entry = |(id, x): (&String, &Value)| {
             let x = only(x, &["kind", "keyData"])?;
             let kind = u16::try_from(x.get("kind")?.as_u64()?).ok()?;
-            Some((h32(&Value::from(id.as_str()))?, kind, from_hex(x.get("keyData")?.as_str()?)?))
+            Some((
+                h32(&Value::from(id.as_str()))?,
+                kind,
+                from_hex(x.get("keyData")?.as_str()?)?,
+            ))
         };
         v.as_object()
             .filter(|o| o.len() <= SET_MAX)
@@ -740,7 +964,10 @@ impl MembersJson {
 
     /// The [`Members`] answer for `id`.
     pub fn lookup(&self, id: [u8; 32]) -> Option<(u16, Vec<u8>)> {
-        self.0.iter().find(|(x, ..)| *x == id).map(|(_, k, d)| (*k, d.clone()))
+        self.0
+            .iter()
+            .find(|(x, ..)| *x == id)
+            .map(|(_, k, d)| (*k, d.clone()))
     }
 }
 
@@ -755,9 +982,15 @@ impl AcceptedJson {
         let v = bounded::json(json, LOOKUP_JSON, LOOKUP_DEPTH)?;
         let index = |i: &Value| u16::try_from(i.as_u64()?).ok();
         let entry = |(id, l): (&String, &Value)| {
-            Some((h32(&Value::from(id.as_str()))?, l.as_array()?.iter().map(index).collect::<Option<_>>()?))
+            Some((
+                h32(&Value::from(id.as_str()))?,
+                l.as_array()?.iter().map(index).collect::<Option<_>>()?,
+            ))
         };
-        v.as_object().and_then(|o| o.iter().map(entry).collect::<Option<_>>()).map(AcceptedJson).ok_or(Error::Argument)
+        v.as_object()
+            .and_then(|o| o.iter().map(entry).collect::<Option<_>>())
+            .map(AcceptedJson)
+            .ok_or(Error::Argument)
     }
 
     /// The [`Accepted`] answer for `(id, index)`.
@@ -773,23 +1006,42 @@ mod vectors {
     use crate::wallet::kem::vectors_encaps;
 
     /// [`seal`] with the given `m` and `e`.
-    pub fn vectors_seal(kem_pk: &[u8], purpose: &str, aad: &[u8], pt: &[u8], m: &[u8; 32], e: &[u8; 32]) -> Result<Sealed> {
+    pub fn vectors_seal(
+        kem_pk: &[u8],
+        purpose: &str,
+        aad: &[u8],
+        pt: &[u8],
+        m: &[u8; 32],
+        e: &[u8; 32],
+    ) -> Result<Sealed> {
         seal_with(kem_pk, purpose, aad, pt, |k| vectors_encaps(k, m, e))
     }
 
     /// [`seal_container`] with the given `m` and `e`.
     #[allow(clippy::too_many_arguments)]
     pub fn vectors_seal_container(
-        recipient: &Recipient, purpose: &str, sender: &ContainerSigner, created: u64, pt: &[u8], short_code: Option<&str>,
-        m: &[u8; 32], e: &[u8; 32],
+        recipient: &Recipient,
+        purpose: &str,
+        sender: &ContainerSigner,
+        created: u64,
+        pt: &[u8],
+        short_code: Option<&str>,
+        m: &[u8; 32],
+        e: &[u8; 32],
     ) -> Result<SealedContainer> {
-        seal_container_with(recipient, purpose, sender, created, pt, short_code, |k| vectors_encaps(k, m, e))
+        seal_container_with(recipient, purpose, sender, created, pt, short_code, |k| {
+            vectors_encaps(k, m, e)
+        })
     }
 
     impl LinkSession {
         /// A session from 96 given bytes (the ephemeral key), a given short code and start.
         pub fn vectors_new(seed: &[u8; 96], short_code: &str, start: u64) -> Result<LinkSession> {
-            Ok(LinkSession { key: KemKeyPair::vectors_ephemeral(seed)?, short_code: short_code.to_owned(), start })
+            Ok(LinkSession {
+                key: KemKeyPair::vectors_ephemeral(seed)?,
+                short_code: short_code.to_owned(),
+                start,
+            })
         }
         /// A second handle of the session's key, to observe its wipe.
         pub fn vectors_key(&self) -> KemKeyPair {
@@ -800,10 +1052,23 @@ mod vectors {
     impl Wallet {
         /// [`Wallet::from_link`] with the opener's clock at `now` (a vector row's).
         pub fn vectors_from_link_at(
-            session: LinkSession, c: &SealedContainer, expect: &ContainerExpect, members: &Members, accepted: Option<&Accepted>,
-            bip39_passphrase: &str, now: u64,
+            session: LinkSession,
+            c: &SealedContainer,
+            expect: &ContainerExpect,
+            members: &Members,
+            accepted: Option<&Accepted>,
+            bip39_passphrase: &str,
+            now: u64,
         ) -> Result<Wallet> {
-            let r = super::link_install(&session, c, expect, members, accepted, bip39_passphrase, now);
+            let r = super::link_install(
+                &session,
+                c,
+                expect,
+                members,
+                accepted,
+                bip39_passphrase,
+                now,
+            );
             session.key.wipe_own_store();
             r
         }

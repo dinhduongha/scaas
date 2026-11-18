@@ -11,6 +11,6 @@ here=$(cd "$(dirname "$0")" && pwd)
 out=${1:?out dir}
 export PATH="$HOME/.foundry/bin:$PATH"
 FOUNDRY_TEST=runs/2026-11-04-ua-mtx-merge/t10 FOUNDRY_SCRIPT=runs/2026-11-04-ua-mtx-merge/t10 FOUNDRY_OUT="$out/out" \
-  FOUNDRY_CACHE_PATH="$out/cache" ../../scripts/capped forge test -vv > "$here/t10-deploy-gas.log" 2>&1
-grep -E "T0DEPLOY" "$here/t10-deploy-gas.log" | sed 's/^ *//' | sort -u > "$here/t10-deploy.txt"
-echo "$(wc -l < "$here/t10-deploy.txt") rows"
+    FOUNDRY_CACHE_PATH="$out/cache" ../../scripts/capped forge test -vv >"$here/t10-deploy-gas.log" 2>&1
+grep -E "T0DEPLOY" "$here/t10-deploy-gas.log" | sed 's/^ *//' | sort -u >"$here/t10-deploy.txt"
+echo "$(wc -l <"$here/t10-deploy.txt") rows"

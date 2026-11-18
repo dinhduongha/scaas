@@ -63,7 +63,8 @@ contract MockV3Pool {
     }
 
     function swap(address recipient, bool zeroForOne, int256 amountSpecified, uint160, bytes calldata data)
-        external returns (int256 a0, int256 a1)
+        external
+        returns (int256 a0, int256 a1)
     {
         require(amountSpecified > 0, "exact input only");
         (address tIn, address tOut) = zeroForOne ? (token0, token1) : (token1, token0);

@@ -1,6 +1,7 @@
 //! zether-cli — emit calldata / proofs / vectors for tests and e2e. UNAUDITED.
 //!
 //!   zether-cli vectors <dir>      write the deterministic vector files
+//!   zether-cli auditor-pop <path> write smartcontracts/vectors/zether/auditor_pop.json (set-auditor A3)
 //!   zether-cli <command>          JSON request on stdin, JSON result on stdout
 //!
 //! Commands: keygen, encrypt, decrypt, proveTransfer, verifyTransfer, proveTransferMulti, verifyTransferMulti,
@@ -19,9 +20,25 @@ fn main() -> ExitCode {
             let dir = std::path::Path::new(args.get(2).map(String::as_str).unwrap_or("vectors"));
             for (name, v) in zether_prover::vectors::generate() {
                 let path = dir.join(&name);
-                std::fs::write(&path, serde_json::to_string_pretty(&v).unwrap() + "\n").expect("write vector");
+                std::fs::write(&path, serde_json::to_string_pretty(&v).unwrap() + "\n")
+                    .expect("write vector");
                 println!("{}", path.display());
             }
+            ExitCode::SUCCESS
+        }
+        Some("auditor-pop") => {
+            // set-auditor A3: smartcontracts/vectors/zether/auditor_pop.json (CTR-ZTH-95)
+            let path = args
+                .get(2)
+                .map(String::as_str)
+                .unwrap_or("auditor_pop.json");
+            std::fs::write(
+                path,
+                serde_json::to_string_pretty(&zether_prover::vectors::auditor_pop()).unwrap()
+                    + "\n",
+            )
+            .expect("write vector");
+            println!("{path}");
             ExitCode::SUCCESS
         }
         Some(cmd) => {

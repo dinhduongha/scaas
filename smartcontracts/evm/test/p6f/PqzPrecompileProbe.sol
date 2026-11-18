@@ -8,7 +8,11 @@ pragma solidity ^0.8.24;
 contract PqzPrecompileProbe {
     event Probed(address indexed target, bytes32 inputHash, uint256 word, uint256 gasUsed, uint256 rlen);
 
-    function call(address target, bytes calldata input) public view returns (uint256 word, uint256 gasUsed, uint256 rlen) {
+    function call(address target, bytes calldata input)
+        public
+        view
+        returns (uint256 word, uint256 gasUsed, uint256 rlen)
+    {
         bytes memory m = input;
         assembly ("memory-safe") {
             let p := add(m, 32)
@@ -30,7 +34,10 @@ contract PqzPrecompileProbe {
     }
 
     /// The same as a transaction: the result goes into the event (e2e).
-    function check(address target, bytes calldata input) external returns (uint256 word, uint256 gasUsed, uint256 rlen) {
+    function check(address target, bytes calldata input)
+        external
+        returns (uint256 word, uint256 gasUsed, uint256 rlen)
+    {
         (word, gasUsed, rlen) = call(target, input);
         emit Probed(target, keccak256(input), word, gasUsed, rlen);
     }

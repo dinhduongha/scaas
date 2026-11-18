@@ -16,23 +16,31 @@ T=$(mktemp -d)
 A=
 trap '[ -z "$A" ] || kill "$A" 2> /dev/null; rm -rf "$T"' EXIT
 trap 'exit 1' INT TERM
-anvil --chain-id 31337 --hardfork amsterdam --gas-limit 60000000 --code-size-limit 131072 --port "$PORT" > "$T/anvil.log" 2>&1 &
+anvil --chain-id 31337 --hardfork amsterdam --gas-limit 60000000 --code-size-limit 131072 --port "$PORT" >"$T/anvil.log" 2>&1 &
 A=$!
 for i in $(seq 60); do
-  cast chain-id --rpc-url "$RPC" > /dev/null 2>&1 && break
-  [ "$i" -lt 60 ] || { cat "$T/anvil.log"; echo "anvil did not start"; exit 1; }
-  sleep 1
+    cast chain-id --rpc-url "$RPC" >/dev/null 2>&1 && break
+    [ "$i" -lt 60 ] || {
+        cat "$T/anvil.log"
+        echo "anvil did not start"
+        exit 1
+    }
+    sleep 1
 done
 echo "anvil up: chain 31337, block gas limit $(cast block latest --field gasLimit --rpc-url "$RPC"), port $PORT"
 rm -f deployments/local-releasegas-testnet-releases.json
 env PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 DEPLOY_NAME=local-releasegas-testnet \
-  RELEASES_JSON=deployments/local-releasegas-testnet-releases.json RELEASES_WRITE=true \
-  FOUNDRY_OUT=out/onchain-deploy FOUNDRY_CACHE_PATH=cache/onchain-deploy RELEASE_GAS_GATE=public CHAIN_CODE_LIMIT=131072 \
-  DEPLOY_WRAPPED=1 DEPLOY_REGULATED=1 DEPLOY_ZETHER=1 DEPLOY_PQCHAT=1 NOTICE_PERIOD=0 DEMO_SUPPLY=1000000000000 VERIFY_TARGET=local \
-  DEPLOY_SALT="$(cast keccak scaas.deploy.stacked-gate.release-gas)" \
-  COMPLIANCE_ADMIN=0x0000000000000000000000004e59b44847b379578588920ca78fbf26c0b4956c \
-  ../scripts/deploy.sh evm "$RPC" > "$T/deploy.out" 2>&1 || { tail -40 "$T/deploy.out"; echo "deploy.sh failed"; exit 1; }
-grep -E '^ *(release gas|tx gas) \|' "$T/deploy.out" | sed 's/^ *//' > "$T/gas.txt"
+    RELEASES_JSON=deployments/local-releasegas-testnet-releases.json RELEASES_WRITE=true \
+    FOUNDRY_OUT=out/onchain-deploy FOUNDRY_CACHE_PATH=cache/onchain-deploy RELEASE_GAS_GATE=public CHAIN_CODE_LIMIT=131072 \
+    DEPLOY_WRAPPED=1 DEPLOY_REGULATED=1 DEPLOY_ZETHER=1 DEPLOY_PQCHAT=1 NOTICE_PERIOD=0 DEMO_SUPPLY=1000000000000 VERIFY_TARGET=local \
+    DEPLOY_SALT="$(cast keccak scaas.deploy.stacked-gate.release-gas)" \
+    COMPLIANCE_ADMIN=0x0000000000000000000000004e59b44847b379578588920ca78fbf26c0b4956c \
+    ../scripts/deploy.sh evm "$RPC" >"$T/deploy.out" 2>&1 || {
+    tail -40 "$T/deploy.out"
+    echo "deploy.sh failed"
+    exit 1
+}
+grep -E '^ *(release gas|tx gas) \|' "$T/deploy.out" | sed 's/^ *//' >"$T/gas.txt"
 python3 -I - "$T/gas.txt" broadcast/Deploy.s.sol/31337/dry-run/run-latest.json broadcast/DeploySend.s.sol/31337 "$HERE/release-gas.txt" <<'PY'
 import glob, json, os, re, sys
 gas, plan, sent, out = sys.argv[1:]

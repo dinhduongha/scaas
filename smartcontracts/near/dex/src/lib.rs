@@ -25,11 +25,16 @@
 //! The DEX holds escrow only between a leg and its callback; it has no admin and no upgrade path (§3.9).
 use near_sdk::json_types::U128;
 use near_sdk::store::LookupMap;
-use near_sdk::{borsh, env, near, require, AccountId, Gas, GasWeight, NearToken, PanicOnDefault, Promise, PromiseError};
+use near_sdk::{
+    borsh, env, near, require, AccountId, Gas, GasWeight, NearToken, PanicOnDefault, Promise,
+    PromiseError,
+};
+/// Per-signature gas and the passkey field cap (review T8-M4) live in `common::auth` (shared with the relay router).
+pub use scaas_near_common::auth::{
+    passkey_fields, sig_gas, GAS_SIG_KEY, GAS_SIG_PASSKEY, PASSKEY_FIELD_MAX,
+};
 use scaas_near_common::metaop::{MetaOp, Order, OP_TRADE};
 use scaas_near_common::{Auth, Holder};
-/// Per-signature gas and the passkey field cap (review T8-M4) live in `common::auth` (shared with the relay router).
-pub use scaas_near_common::auth::{passkey_fields, sig_gas, GAS_SIG_KEY, GAS_SIG_PASSKEY, PASSKEY_FIELD_MAX};
 
 /// Static gas per receipt (spec §3.8 sizing: the measured maximum × 1.5, near-sandbox 2026-10-28, `runs/2026-10-28-near-gas.txt`;
 /// tests `settle_gas_pin`, `settle_msig_leg_gas_limit` and `refund_expired_after_lost_callback` fail when a measurement
@@ -100,10 +105,17 @@ pub enum Event {
     /// Both legs arrived; each seller is paid the other's amount. `legs` = the two leg op digests (settle-argument order),
     /// the tokens' `order_filled.digest`.
     #[event_version("1.0.0")]
-    Matched { settle_id: String, legs: [String; 2] },
+    Matched {
+        settle_id: String,
+        legs: [String; 2],
+    },
     /// Not both legs arrived (or the callback was lost): `refunded` = the digests of the legs paid back to their sellers.
     #[event_version("1.0.0")]
-    MatchFailed { settle_id: String, legs: [String; 2], refunded: Vec<String> },
+    MatchFailed {
+        settle_id: String,
+        legs: [String; 2],
+        refunded: Vec<String>,
+    },
 }
 
 #[near(contract_state)]
@@ -117,7 +129,10 @@ pub struct Dex {
 }
 
 fn x(b: &[u8]) -> String {
-    format!("0x{}", b.iter().map(|v| format!("{v:02x}")).collect::<String>())
+    format!(
+        "0x{}",
+        b.iter().map(|v| format!("{v:02x}")).collect::<String>()
+    )
 }
 
 fn digests(s: &Settle) -> [String; 2] {
@@ -130,11 +145,25 @@ fn now_s() -> u64 {
 
 /// One leg's shape against its order (the token checks the same, and the signature). `via`: the transaction signer
 /// when the predecessor is the router's executor (the lane that relays), else `None`.
-fn leg(order: &Order, op: &MetaOp, me: &AccountId, caller: &AccountId, via: Option<&AccountId>) -> R<Leg> {
-    if order.relayer.as_ref().is_some_and(|r| r != caller && Some(r) != via) {
+fn leg(
+    order: &Order,
+    op: &MetaOp,
+    me: &AccountId,
+    caller: &AccountId,
+    via: Option<&AccountId>,
+) -> R<Leg> {
+    if order
+        .relayer
+        .as_ref()
+        .is_some_and(|r| r != caller && Some(r) != via)
+    {
         return Err("order relayer is not the predecessor");
     }
-    if op.op != OP_TRADE || op.contract != order.sell_token || op.to != Holder::Near(me.clone()) || op.relayer.as_ref() != Some(me) {
+    if op.op != OP_TRADE
+        || op.contract != order.sell_token
+        || op.to != Holder::Near(me.clone())
+        || op.relayer.as_ref() != Some(me)
+    {
         return Err("leg: op 1 for the order's sell token, to = relayer = this DEX");
     }
     if op.amount != order.sell_amount || op.amount == 0 {
@@ -146,7 +175,14 @@ fn leg(order: &Order, op: &MetaOp, me: &AccountId, caller: &AccountId, via: Opti
     if now_s() > order.expiry {
         return Err("order expired");
     }
-    Ok(Leg { token: order.sell_token.clone(), seller: op.from.clone(), lane: op.lane, nonce: op.nonce, digest: op.digest(), amount: op.amount })
+    Ok(Leg {
+        token: order.sell_token.clone(),
+        seller: op.from.clone(),
+        lane: op.lane,
+        nonce: op.nonce,
+        digest: op.digest(),
+        amount: op.amount,
+    })
 }
 
 /// A leg's static gas from its auth: `GAS_LEG_BASE` + `sig_gas` (each signature's cost; an msig: its member signatures;
@@ -158,7 +194,9 @@ pub fn leg_gas(auth: &Auth) -> Gas {
 /// What `settle` needs prepaid: itself, the callback (with its payouts) and both legs' derived gas.
 pub fn settle_gas(auth_a: &Auth, auth_b: &Auth) -> Gas {
     Gas::from_gas(
-        (GAS_SETTLE_SELF.as_gas() + GAS_ON_LEGS.as_gas()).saturating_add(leg_gas(auth_a).as_gas()).saturating_add(leg_gas(auth_b).as_gas()),
+        (GAS_SETTLE_SELF.as_gas() + GAS_ON_LEGS.as_gas())
+            .saturating_add(leg_gas(auth_a).as_gas())
+            .saturating_add(leg_gas(auth_b).as_gas()),
     )
 }
 
@@ -192,11 +230,23 @@ fn leg_ok(i: u64) -> bool {
 /// Pays `amount` of `token` to `to` from this DEX's balance: 1 yoctoNEAR, the receiver's record exists.
 fn pay(token: &AccountId, to: &Holder, amount: u128) {
     let (method, args) = match to {
-        Holder::Near(a) => ("ft_transfer", near_sdk::serde_json::json!({"receiver_id": a, "amount": U128(amount)})),
-        Holder::Ua(id) => ("transfer_to_ua", near_sdk::serde_json::json!({"id": id, "amount": U128(amount)})),
+        Holder::Near(a) => (
+            "ft_transfer",
+            near_sdk::serde_json::json!({"receiver_id": a, "amount": U128(amount)}),
+        ),
+        Holder::Ua(id) => (
+            "transfer_to_ua",
+            near_sdk::serde_json::json!({"id": id, "amount": U128(amount)}),
+        ),
     };
     Promise::new(token.clone())
-        .function_call_weight(method, args.to_string().into_bytes(), NearToken::from_yoctonear(1), GAS_PAYOUT, GasWeight(0))
+        .function_call_weight(
+            method,
+            args.to_string().into_bytes(),
+            NearToken::from_yoctonear(1),
+            GAS_PAYOUT,
+            GasWeight(0),
+        )
         .detach();
 }
 
@@ -205,7 +255,11 @@ impl Dex {
     #[init]
     #[private]
     pub fn new(#[serializer(borsh)] executor: AccountId) -> Self {
-        Self { settles: LookupMap::new(b"s"), legs: LookupMap::new(b"l"), executor }
+        Self {
+            settles: LookupMap::new(b"s"),
+            legs: LookupMap::new(b"l"),
+            executor,
+        }
     }
 
     #[payable]
@@ -224,20 +278,50 @@ impl Dex {
         let legs = leg(&order_a, &op_a, &me, &caller, via)
             .and_then(|a| Ok([a, leg(&order_b, &op_b, &me, &caller, via)?]))
             .and_then(|l| pair(&order_a, &order_b).map(|_| l))
-            .and_then(|l| passkey_fields(&auth_a).and(passkey_fields(&auth_b)).map(|_| l))
+            .and_then(|l| {
+                passkey_fields(&auth_a)
+                    .and(passkey_fields(&auth_b))
+                    .map(|_| l)
+            })
             .unwrap_or_else(|e| env::panic_str(e));
-        let first = [order_a.expiry, order_b.expiry, op_a.valid_until, op_b.valid_until].into_iter().min().unwrap();
-        require!(now_s().saturating_add(SETTLE_MARGIN_S) <= first, "an order or a leg op expires within SETTLE_MARGIN_S (60 s)");
+        let first = [
+            order_a.expiry,
+            order_b.expiry,
+            op_a.valid_until,
+            op_b.valid_until,
+        ]
+        .into_iter()
+        .min()
+        .unwrap();
+        require!(
+            now_s().saturating_add(SETTLE_MARGIN_S) <= first,
+            "an order or a leg op expires within SETTLE_MARGIN_S (60 s)"
+        );
         // Ruling T8-I2: refused before any write or promise (nothing held, no leg can run out of gas).
-        require!(env::prepaid_gas() >= settle_gas(&auth_a, &auth_b), "prepaid gas below the settle minimum (legs + callback)");
+        require!(
+            env::prepaid_gas() >= settle_gas(&auth_a, &auth_b),
+            "prepaid gas below the settle minimum (legs + callback)"
+        );
         let id = settle_id(&legs[0].digest, &legs[1].digest);
-        require!(legs.iter().all(|l| !self.legs.contains_key(&l.digest)), "a leg is already in a settle");
+        require!(
+            legs.iter().all(|l| !self.legs.contains_key(&l.digest)),
+            "a leg is already in a settle"
+        );
         let u0 = env::storage_usage();
         for l in &legs {
             self.legs.insert(l.digest, id);
         }
         let expiry = order_a.expiry.max(order_b.expiry);
-        self.settles.insert(id, Settle { legs: legs.clone(), relayer: caller, deposit: u128::MAX, expiry, done: false });
+        self.settles.insert(
+            id,
+            Settle {
+                legs: legs.clone(),
+                relayer: caller,
+                deposit: u128::MAX,
+                expiry,
+                done: false,
+            },
+        );
         self.legs.flush();
         self.settles.flush();
         let deposit = env::storage_byte_cost().as_yoctonear() * (env::storage_usage() - u0) as u128;
@@ -254,7 +338,13 @@ impl Dex {
         let call = |order: Order, op: MetaOp, auth: Auth, receiver: &Holder, d: u128| {
             let gas = leg_gas(&auth);
             let args = borsh::to_vec(&(op, auth, &order, receiver)).unwrap();
-            Promise::new(order.sell_token.clone()).function_call_weight("mtx_trade", args, NearToken::from_yoctonear(d), gas, GasWeight(1))
+            Promise::new(order.sell_token.clone()).function_call_weight(
+                "mtx_trade",
+                args,
+                NearToken::from_yoctonear(d),
+                gas,
+                GasWeight(1),
+            )
         };
         let (da, db) = (rest / 2, rest - rest / 2);
         let leg_a = call(order_a, op_a, auth_a, &legs[1].seller, da);
@@ -271,7 +361,9 @@ impl Dex {
     #[private]
     pub fn on_legs(&mut self, #[serializer(borsh)] settle_id: [u8; 32]) {
         let ok = [leg_ok(0), leg_ok(1)];
-        let Some(s) = self.settles.get_mut(&settle_id) else { return };
+        let Some(s) = self.settles.get_mut(&settle_id) else {
+            return;
+        };
         if s.done {
             return;
         }
@@ -281,7 +373,11 @@ impl Dex {
         if ok == [true, true] {
             pay(&a.token, &b.seller, a.amount);
             pay(&b.token, &a.seller, b.amount);
-            Event::Matched { settle_id: x(&settle_id), legs: digests(&s) }.emit();
+            Event::Matched {
+                settle_id: x(&settle_id),
+                legs: digests(&s),
+            }
+            .emit();
             return;
         }
         let mut refunded = vec![];
@@ -289,12 +385,21 @@ impl Dex {
             pay(&l.token, &l.seller, l.amount);
             refunded.push(x(&l.digest));
         }
-        Event::MatchFailed { settle_id: x(&settle_id), legs: digests(&s), refunded }.emit();
+        Event::MatchFailed {
+            settle_id: x(&settle_id),
+            legs: digests(&s),
+            refunded,
+        }
+        .emit();
     }
 
     /// Anyone, after both orders' expiries: prunes a done entry; refunds the legs of an unresolved one (lost callback).
     pub fn refund_expired(&mut self, #[serializer(borsh)] settle_id: [u8; 32]) {
-        let s = self.settles.get(&settle_id).cloned().unwrap_or_else(|| env::panic_str("no such settle"));
+        let s = self
+            .settles
+            .get(&settle_id)
+            .cloned()
+            .unwrap_or_else(|| env::panic_str("no such settle"));
         require!(now_s() > s.expiry, "refund before expiry");
         if s.done {
             return self.prune(settle_id, &s);
@@ -322,16 +427,34 @@ impl Dex {
     /// is pruned. A read that failed leaves the entry for another `refund_expired`.
     #[private]
     pub fn on_refund(&mut self, #[serializer(borsh)] settle_id: [u8; 32]) {
-        let Some(s) = self.settles.get(&settle_id).cloned() else { return };
+        let Some(s) = self.settles.get(&settle_id).cloned() else {
+            return;
+        };
         if !s.done {
-            let r = [env::promise_result_checked(0, 64), env::promise_result_checked(1, 64)];
-            let Some(arr) = s.legs.iter().zip(&r).map(|(l, r)| arrived(r, l)).collect::<Option<Vec<bool>>>() else { return };
+            let r = [
+                env::promise_result_checked(0, 64),
+                env::promise_result_checked(1, 64),
+            ];
+            let Some(arr) = s
+                .legs
+                .iter()
+                .zip(&r)
+                .map(|(l, r)| arrived(r, l))
+                .collect::<Option<Vec<bool>>>()
+            else {
+                return;
+            };
             let mut refunded = vec![];
             for (l, _) in s.legs.iter().zip(arr).filter(|(_, a)| *a) {
                 pay(&l.token, &l.seller, l.amount);
                 refunded.push(x(&l.digest));
             }
-            Event::MatchFailed { settle_id: x(&settle_id), legs: digests(&s), refunded }.emit();
+            Event::MatchFailed {
+                settle_id: x(&settle_id),
+                legs: digests(&s),
+                refunded,
+            }
+            .emit();
         }
         self.prune(settle_id, &s);
     }
@@ -368,7 +491,9 @@ impl Dex {
             self.legs.remove(&l.digest);
         }
         if s.deposit > 0 {
-            Promise::new(s.relayer.clone()).transfer(NearToken::from_yoctonear(s.deposit)).detach();
+            Promise::new(s.relayer.clone())
+                .transfer(NearToken::from_yoctonear(s.deposit))
+                .detach();
         }
     }
 }
@@ -386,37 +511,66 @@ mod tests {
 
     fn hx(v: &Value) -> Vec<u8> {
         let s = v.as_str().unwrap().trim_start_matches("0x");
-        (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
+        (0..s.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+            .collect()
     }
 
     #[test]
     fn settle_vectors_match() {
         let d: Value = serde_json::from_str(&std::fs::read_to_string(VECTORS).unwrap()).unwrap();
         let rows = d["metaops"]["vectors"].as_array().unwrap();
-        let row = |n: &str| rows.iter().find(|r| r["name"] == n).unwrap_or_else(|| panic!("no row {n}"));
+        let row = |n: &str| {
+            rows.iter()
+                .find(|r| r["name"] == n)
+                .unwrap_or_else(|| panic!("no row {n}"))
+        };
         let me: AccountId = d["accounts"]["dex"].as_str().unwrap().parse().unwrap();
         let relayer: AccountId = d["accounts"]["relayer"].as_str().unwrap().parse().unwrap();
-        testing_env!(VMContextBuilder::new().current_account_id(me.clone()).predecessor_account_id(relayer.clone()).build());
+        testing_env!(VMContextBuilder::new()
+            .current_account_id(me.clone())
+            .predecessor_account_id(relayer.clone())
+            .build());
         let leg_of = |n: &str| {
             let r = row(n);
-            let op: MetaOp = borsh::from_slice(&hx(&r["encoding"])[b"scaas.metaop.v1".len()..]).unwrap();
+            let op: MetaOp =
+                borsh::from_slice(&hx(&r["encoding"])[b"scaas.metaop.v1".len()..]).unwrap();
             let order: Order = borsh::from_slice(&hx(&r["order"])).unwrap();
             assert_eq!(op.digest().to_vec(), hx(&r["digest"]));
             (order, op)
         };
         let ((oa, opa), (ob, opb)) = (leg_of("trade_a"), leg_of("trade_b"));
-        let (la, lb) = (leg(&oa, &opa, &me, &relayer, None).unwrap(), leg(&ob, &opb, &me, &relayer, None).unwrap());
+        let (la, lb) = (
+            leg(&oa, &opa, &me, &relayer, None).unwrap(),
+            leg(&ob, &opb, &me, &relayer, None).unwrap(),
+        );
         pair(&oa, &ob).unwrap();
-        assert_eq!(settle_id(&la.digest, &lb.digest).to_vec(), hx(&d["dexSettle"]["settleId"]));
+        assert_eq!(
+            settle_id(&la.digest, &lb.digest).to_vec(),
+            hx(&d["dexSettle"]["settleId"])
+        );
         // order A is bound to RELAYER: another submitter is refused (CTR-DEX-09)
         let other: AccountId = "mallory.test.near".parse().unwrap();
-        assert_eq!(leg(&oa, &opa, &me, &other, None).err(), Some("order relayer is not the predecessor"));
+        assert_eq!(
+            leg(&oa, &opa, &me, &other, None).err(),
+            Some("order relayer is not the predecessor")
+        );
         assert!(leg(&ob, &opb, &me, &other, None).is_ok(), "order B is open");
         // final review I2: through the executor, the relaying lane (signer) is the one bound; another lane is refused
         let exec: AccountId = "exec.test.near".parse().unwrap();
-        assert!(leg(&oa, &opa, &me, &exec, Some(&relayer)).is_ok(), "bound lane's relay through the executor");
-        assert_eq!(leg(&oa, &opa, &me, &exec, Some(&other)).err(), Some("order relayer is not the predecessor"));
-        assert_eq!(leg(&oa, &opa, &me, &exec, None).err(), Some("order relayer is not the predecessor"));
+        assert!(
+            leg(&oa, &opa, &me, &exec, Some(&relayer)).is_ok(),
+            "bound lane's relay through the executor"
+        );
+        assert_eq!(
+            leg(&oa, &opa, &me, &exec, Some(&other)).err(),
+            Some("order relayer is not the predecessor")
+        );
+        assert_eq!(
+            leg(&oa, &opa, &me, &exec, None).err(),
+            Some("order relayer is not the predecessor")
+        );
     }
 
     /// Refund wins: a late `on_legs` on a resolved (or pruned) entry creates no payout.
@@ -425,19 +579,51 @@ mod tests {
         use near_sdk::test_utils::get_created_receipts;
         use near_sdk::PromiseResult;
         let me: AccountId = "dex.test.near".parse().unwrap();
-        let ctx = VMContextBuilder::new().current_account_id(me.clone()).predecessor_account_id(me.clone()).build();
-        let ok = vec![PromiseResult::Successful(vec![1]), PromiseResult::Successful(vec![1])];
-        testing_env!(ctx.clone(), near_sdk::test_vm_config(), near_sdk::RuntimeFeesConfig::test(), Default::default(), ok);
+        let ctx = VMContextBuilder::new()
+            .current_account_id(me.clone())
+            .predecessor_account_id(me.clone())
+            .build();
+        let ok = vec![
+            PromiseResult::Successful(vec![1]),
+            PromiseResult::Successful(vec![1]),
+        ];
+        testing_env!(
+            ctx.clone(),
+            near_sdk::test_vm_config(),
+            near_sdk::RuntimeFeesConfig::test(),
+            Default::default(),
+            ok
+        );
         let mut dex = Dex::new("exec.test.near".parse().unwrap());
-        let l = |t: &str| Leg { token: t.parse().unwrap(), seller: Holder::Ua([1; 32]), lane: [0; 32], nonce: 0, digest: [2; 32], amount: 5 };
-        let s = Settle { legs: [l("a.near"), l("b.near")], relayer: me.clone(), deposit: 0, expiry: 0, done: true };
+        let l = |t: &str| Leg {
+            token: t.parse().unwrap(),
+            seller: Holder::Ua([1; 32]),
+            lane: [0; 32],
+            nonce: 0,
+            digest: [2; 32],
+            amount: 5,
+        };
+        let s = Settle {
+            legs: [l("a.near"), l("b.near")],
+            relayer: me.clone(),
+            deposit: 0,
+            expiry: 0,
+            done: true,
+        };
         dex.settles.insert([7; 32], s.clone());
         dex.on_legs([7; 32]);
         dex.on_legs([8; 32]);
-        assert!(get_created_receipts().is_empty(), "done / missing entry: nothing paid");
+        assert!(
+            get_created_receipts().is_empty(),
+            "done / missing entry: nothing paid"
+        );
         dex.settles.insert([7; 32], Settle { done: false, ..s });
         dex.on_legs([7; 32]);
-        assert_eq!(get_created_receipts().len(), 2, "an unresolved entry pays both out");
+        assert_eq!(
+            get_created_receipts().len(),
+            2,
+            "an unresolved entry pays both out"
+        );
         assert!(dex.settles.get(&[7; 32]).unwrap().done);
     }
 
@@ -448,37 +634,104 @@ mod tests {
         use near_sdk::test_utils::get_created_receipts;
         use near_sdk::PromiseResult;
         let me: AccountId = "dex.test.near".parse().unwrap();
-        let ctx = VMContextBuilder::new().current_account_id(me.clone()).predecessor_account_id(me.clone()).build();
-        let r = |d: [u8; 32]| PromiseResult::Successful(borsh::to_vec(&Some(OrderClose::Filled(d))).unwrap());
-        testing_env!(ctx, near_sdk::test_vm_config(), near_sdk::RuntimeFeesConfig::test(), Default::default(), vec![r([2; 32]), r([3; 32])]);
+        let ctx = VMContextBuilder::new()
+            .current_account_id(me.clone())
+            .predecessor_account_id(me.clone())
+            .build();
+        let r = |d: [u8; 32]| {
+            PromiseResult::Successful(borsh::to_vec(&Some(OrderClose::Filled(d))).unwrap())
+        };
+        testing_env!(
+            ctx,
+            near_sdk::test_vm_config(),
+            near_sdk::RuntimeFeesConfig::test(),
+            Default::default(),
+            vec![r([2; 32]), r([3; 32])]
+        );
         let mut dex = Dex::new("exec.test.near".parse().unwrap());
-        let l = |t: &str, d: u8| Leg { token: t.parse().unwrap(), seller: Holder::Ua([1; 32]), lane: [0; 32], nonce: 0, digest: [d; 32], amount: 5 };
-        dex.settles.insert([7; 32], Settle { legs: [l("a.near", 2), l("b.near", 3)], relayer: me, deposit: 0, expiry: 0, done: true });
+        let l = |t: &str, d: u8| Leg {
+            token: t.parse().unwrap(),
+            seller: Holder::Ua([1; 32]),
+            lane: [0; 32],
+            nonce: 0,
+            digest: [d; 32],
+            amount: 5,
+        };
+        dex.settles.insert(
+            [7; 32],
+            Settle {
+                legs: [l("a.near", 2), l("b.near", 3)],
+                relayer: me,
+                deposit: 0,
+                expiry: 0,
+                done: true,
+            },
+        );
         dex.on_refund([7; 32]);
-        assert!(get_created_receipts().is_empty(), "done entry: on_refund must not refund");
+        assert!(
+            get_created_receipts().is_empty(),
+            "done entry: on_refund must not refund"
+        );
         assert!(dex.settles.get(&[7; 32]).is_none(), "pruned");
     }
 
     /// M4: a passkey field over 1024 bytes is refused, directly or as an msig member; 1024 is accepted.
     #[test]
     fn passkey_field_cap() {
-        let pk = |cd: usize, ad: usize| Auth::Passkey { key: [0; 64], authenticator_data: vec![0; ad], client_data_json: vec![0; cd], sig: [0; 64] };
+        let pk = |cd: usize, ad: usize| Auth::Passkey {
+            key: [0; 64],
+            authenticator_data: vec![0; ad],
+            client_data_json: vec![0; cd],
+            sig: [0; 64],
+        };
         let err = Err("passkey clientDataJSON / authenticatorData over 1024 bytes");
         assert_eq!(passkey_fields(&pk(1024, 1024)), Ok(()));
-        assert_eq!((passkey_fields(&pk(1025, 37)), passkey_fields(&pk(400, 1025))), (err, err));
-        let ed = Auth::Ed25519 { key: [0; 32], sig: [0; 64] };
-        let m = |p: Auth| Auth::Msig { key_data: vec![], sigs: vec![(0, ed.clone()), (1, p)] };
-        assert_eq!((passkey_fields(&m(pk(400, 37))), passkey_fields(&m(pk(1025, 37)))), (Ok(()), err));
+        assert_eq!(
+            (
+                passkey_fields(&pk(1025, 37)),
+                passkey_fields(&pk(400, 1025))
+            ),
+            (err, err)
+        );
+        let ed = Auth::Ed25519 {
+            key: [0; 32],
+            sig: [0; 64],
+        };
+        let m = |p: Auth| Auth::Msig {
+            key_data: vec![],
+            sigs: vec![(0, ed.clone()), (1, p)],
+        };
+        assert_eq!(
+            (
+                passkey_fields(&m(pk(400, 37))),
+                passkey_fields(&m(pk(1025, 37)))
+            ),
+            (Ok(()), err)
+        );
     }
 
     /// `leg_gas`: base + per signature by kind; an msig counts its member signatures.
     #[test]
     fn leg_gas_by_auth() {
-        let ed = Auth::Ed25519 { key: [0; 32], sig: [0; 64] };
-        let pk = Auth::Passkey { key: [0; 64], authenticator_data: vec![], client_data_json: vec![], sig: [0; 64] };
+        let ed = Auth::Ed25519 {
+            key: [0; 32],
+            sig: [0; 64],
+        };
+        let pk = Auth::Passkey {
+            key: [0; 64],
+            authenticator_data: vec![],
+            client_data_json: vec![],
+            sig: [0; 64],
+        };
         let t = |g: Gas| g.as_tgas();
         assert_eq!((t(leg_gas(&ed)), t(leg_gas(&pk))), (18, 42));
-        let m = |n: usize| Auth::Msig { key_data: vec![], sigs: (0..n as u8).map(|i| (i, pk.clone())).chain([(99, ed.clone())]).collect() };
+        let m = |n: usize| Auth::Msig {
+            key_data: vec![],
+            sigs: (0..n as u8)
+                .map(|i| (i, pk.clone()))
+                .chain([(99, ed.clone())])
+                .collect(),
+        };
         assert_eq!(t(leg_gas(&m(10))), 17 + 250 + 1);
         assert_eq!(t(settle_gas(&m(10), &ed)), 9 + 18 + 268 + 18);
     }
@@ -486,12 +739,30 @@ mod tests {
     /// The refund pays a leg back only when its order was filled by this settle's own leg op.
     #[test]
     fn refund_only_own_leg() {
-        let l = Leg { token: "t.near".parse().unwrap(), seller: Holder::Ua([1; 32]), lane: [2; 32], nonce: 3, digest: [4; 32], amount: 5 };
+        let l = Leg {
+            token: "t.near".parse().unwrap(),
+            seller: Holder::Ua([1; 32]),
+            lane: [2; 32],
+            nonce: 3,
+            digest: [4; 32],
+            amount: 5,
+        };
         let r = |c: Option<OrderClose>| Ok(borsh::to_vec(&c).unwrap());
-        assert_eq!(arrived(&r(Some(OrderClose::Filled([4; 32]))), &l), Some(true));
-        assert_eq!(arrived(&r(Some(OrderClose::Filled([9; 32]))), &l), Some(false), "filled by another leg op");
+        assert_eq!(
+            arrived(&r(Some(OrderClose::Filled([4; 32]))), &l),
+            Some(true)
+        );
+        assert_eq!(
+            arrived(&r(Some(OrderClose::Filled([9; 32]))), &l),
+            Some(false),
+            "filled by another leg op"
+        );
         assert_eq!(arrived(&r(Some(OrderClose::Cancelled)), &l), Some(false));
         assert_eq!(arrived(&r(None), &l), Some(false));
-        assert_eq!(arrived(&Err(PromiseError::Failed), &l), None, "unknown: the entry stays");
+        assert_eq!(
+            arrived(&Err(PromiseError::Failed), &l),
+            None,
+            "unknown: the entry stays"
+        );
     }
 }

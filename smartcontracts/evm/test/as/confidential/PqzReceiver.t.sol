@@ -17,7 +17,9 @@ import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 abstract contract PqzReceiverSuite is PqzRegFixture {
     address internal constant PAYER = address(0xFA1);
 
-    function _denylist() internal pure override returns (bool) { return true; }
+    function _denylist() internal pure override returns (bool) {
+        return true;
+    }
 
     function setUp() public override {
         super.setUp();
@@ -45,11 +47,23 @@ abstract contract PqzReceiverSuite is PqzRegFixture {
         vm.startStateDiffRecording();
         (bool ok,,) = _try(_opCall(4, 0, 0));
         assertTrue(ok);
-        assertEq(_registryCalls(), _lists() ? 0 : 1, "control: the unshield asks R of its recipient (the list: no call)");
+        assertEq(
+            _registryCalls(), _lists() ? 0 : 1, "control: the unshield asks R of its recipient (the list: no call)"
+        );
         vm.revertToState(snap);
         vm.startStateDiffRecording();
-        (bool ok2,,) = _try(abi.encodeWithSelector(IPqzToken.mtxUnshield.selector, _burnArgs(0, 0, 92), 0, bytes32(0), PROOF,
-            _pqAuth(), bytes(""), noVerdict()));
+        (bool ok2,,) = _try(
+            abi.encodeWithSelector(
+                IPqzToken.mtxUnshield.selector,
+                _burnArgs(0, 0, 92),
+                0,
+                bytes32(0),
+                PROOF,
+                _pqAuth(),
+                bytes(""),
+                noVerdict()
+            )
+        );
         assertTrue(ok2);
         assertEq(_registryCalls(), 0, "R is never asked of a refresh's zero recipient");
     }
@@ -130,18 +144,26 @@ abstract contract PqzReceiverSuite is PqzRegFixture {
 }
 
 contract PqzReceiver12Test is PqzReceiverSuite {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 }
 
 contract PqzReceiver13Test is PqzReceiverSuite {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 }
 
 /// Round 3s (spec 2026-11-10-token-lists.md §4.3, §13 (2)): the same suite with `DENYLIST` as the token's own list.
 contract PqzLists12Test is PqzReceiver12Test {
-    function _lists() internal pure override returns (bool) { return true; }
+    function _lists() internal pure override returns (bool) {
+        return true;
+    }
 }
 
 contract PqzLists13Test is PqzReceiver13Test {
-    function _lists() internal pure override returns (bool) { return true; }
+    function _lists() internal pure override returns (bool) {
+        return true;
+    }
 }

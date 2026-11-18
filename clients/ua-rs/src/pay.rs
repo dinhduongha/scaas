@@ -8,12 +8,14 @@
 //! `legacy/ua-mtx-merge/paymeta-v2/`. The contract decides; nothing here is a check of record. UNAUDITED.
 use crate::{address_word, keccak, keccak256, word, DOMAIN_TYPE};
 
-pub const UA_METATRANSFER_TYPE: &str = "UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,\
+pub const UA_METATRANSFER_TYPE: &str =
+    "UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,\
 uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
 pub const UA_PAY_WITH_TAX_TYPE: &str = "UAPayWithTax(UAMetaTransfer payment,uint8 taxMode,uint256 tax)UAMetaTransfer(bytes32 from,\
 bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,\
 address feeRecipient)";
-pub const UA_RELAY_FEE_TYPE: &str = "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,\
+pub const UA_RELAY_FEE_TYPE: &str =
+    "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,\
 uint256 batch,uint256 nonce,uint256 validUntil,address relayer)";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,10 +48,18 @@ fn padded(b: &[u8]) -> Vec<u8> {
 /// `metaPayId(m) = keccak256("scaas.pay.meta.v3" ‖ salt ‖ keccak256(abi.encode(bytes32 payNo, bool save, uint16 schema,
 /// bytes body)))` (CTR-MTX-26, T83), after the shape checks of `_payMeta`.
 pub fn meta_pay_id_v3(m: &PayMeta) -> Result<[u8; 32], PayError> {
-    if m.salt == [0; 32] || (m.schema == 0) != m.body.is_empty() || (m.save && m.pay_no == [0; 32]) {
+    if m.salt == [0; 32] || (m.schema == 0) != m.body.is_empty() || (m.save && m.pay_no == [0; 32])
+    {
         return Err(PayError::Shape);
     }
-    let enc = [&m.pay_no[..], &word(m.save as u64), &word(m.schema as u64), &word(0x80), &padded(&m.body)].concat();
+    let enc = [
+        &m.pay_no[..],
+        &word(m.save as u64),
+        &word(m.schema as u64),
+        &word(0x80),
+        &padded(&m.body),
+    ]
+    .concat();
     Ok(keccak(&[b"scaas.pay.meta.v3", &m.salt, &keccak256(&enc)]))
 }
 
@@ -57,7 +67,11 @@ pub fn meta_pay_id_v3(m: &PayMeta) -> Result<[u8; 32], PayError> {
 /// right-aligned in 32 bytes, the high 16 bytes zero (as an address is padded). `None` for anything else.
 pub fn pay_no_from_uuid(uuid: &str) -> Option<[u8; 32]> {
     let parts: Vec<&str> = uuid.split('-').collect();
-    if parts.iter().map(|p| p.len()).ne([8, 4, 4, 4, 12]) || !parts.iter().all(|p| p.bytes().all(|c| c.is_ascii_hexdigit())) {
+    if parts.iter().map(|p| p.len()).ne([8, 4, 4, 4, 12])
+        || !parts
+            .iter()
+            .all(|p| p.bytes().all(|c| c.is_ascii_hexdigit()))
+    {
         return None;
     }
     let h = parts.concat();
@@ -80,7 +94,14 @@ pub fn pay_no_to_uuid(pay_no: &[u8; 32]) -> Option<String> {
         return None;
     }
     let h: String = pay_no[16..].iter().map(|b| format!("{b:02x}")).collect();
-    Some(format!("{}-{}-{}-{}-{}", &h[..8], &h[8..12], &h[12..16], &h[16..20], &h[20..]))
+    Some(format!(
+        "{}-{}-{}-{}-{}",
+        &h[..8],
+        &h[8..12],
+        &h[12..16],
+        &h[16..20],
+        &h[20..]
+    ))
 }
 
 /// `MetaTxLib.PayRecord {bytes32 to, uint192 amount, uint64 blockNumber}` (T83): one payment saved under a `payNo`; `amount`
@@ -99,7 +120,13 @@ pub fn payment_count_call(pay_no: &[u8; 32]) -> Vec<u8> {
 
 /// `paymentsOf(bytes32 payNo, uint256 offset, uint256 limit)`'s calldata, for `eth_call` on the token (paged).
 pub fn payments_of_call(pay_no: &[u8; 32], offset: u64, limit: u64) -> Vec<u8> {
-    [&keccak256(b"paymentsOf(bytes32,uint256,uint256)")[..4], pay_no, &word(offset), &word(limit)].concat()
+    [
+        &keccak256(b"paymentsOf(bytes32,uint256,uint256)")[..4],
+        pay_no,
+        &word(offset),
+        &word(limit),
+    ]
+    .concat()
 }
 
 /// `paymentsOf`'s return data, `abi.encode(PayRecord[])`, read canonical only: the offset 32, the exact length for its count,
@@ -107,14 +134,21 @@ pub fn payments_of_call(pay_no: &[u8; 32], offset: u64, limit: u64) -> Vec<u8> {
 pub fn decode_pay_records(ret: &[u8]) -> Option<Vec<PayRecord>> {
     let w = |i: usize| -> Option<&[u8]> { ret.get(32 * i..32 * i + 32) };
     let n = usize::try_from(u64::from_be_bytes(w(1)?.get(24..)?.try_into().ok()?)).ok()?;
-    if w(0)? != word(32) || w(1)?[..24] != [0; 24] || ret.len() != n.checked_mul(96)?.checked_add(64)? {
+    if w(0)? != word(32)
+        || w(1)?[..24] != [0; 24]
+        || ret.len() != n.checked_mul(96)?.checked_add(64)?
+    {
         return None;
     }
     (0..n)
         .map(|i| {
             let (to, amount, block) = (w(2 + 3 * i)?, w(3 + 3 * i)?, w(4 + 3 * i)?);
             (amount[..8] == [0; 8] && block[..24] == [0; 24]).then_some(())?;
-            Some(PayRecord { to: to.try_into().ok()?, amount: amount.try_into().ok()?, block_number: u64::from_be_bytes(block[24..].try_into().ok()?) })
+            Some(PayRecord {
+                to: to.try_into().ok()?,
+                amount: amount.try_into().ok()?,
+                block_number: u64::from_be_bytes(block[24..].try_into().ok()?),
+            })
         })
         .collect()
 }
@@ -138,17 +172,37 @@ pub struct UAMetaTransfer {
 /// `hashStruct(UAMetaTransfer)`, `relayer` as 0 unless `mode & 1`, `feeRecipient` as 0 unless `mode & 2`.
 pub fn transfer_hash(t: &UAMetaTransfer) -> [u8; 32] {
     let canon = |bound: bool, a: &[u8; 20]| if bound { address_word(a) } else { [0; 32] };
-    keccak(&[&keccak256(UA_METATRANSFER_TYPE.as_bytes()), &t.from, &t.to, &t.value, &t.entry_ref, &t.batch, &t.nonce,
-        &t.valid_until, &word(t.mode as u64), &canon(t.mode & 1 != 0, &t.relayer), &t.fee,
-        &canon(t.mode & 2 != 0, &t.fee_recipient)])
+    keccak(&[
+        &keccak256(UA_METATRANSFER_TYPE.as_bytes()),
+        &t.from,
+        &t.to,
+        &t.value,
+        &t.entry_ref,
+        &t.batch,
+        &t.nonce,
+        &t.valid_until,
+        &word(t.mode as u64),
+        &canon(t.mode & 1 != 0, &t.relayer),
+        &t.fee,
+        &canon(t.mode & 2 != 0, &t.fee_recipient),
+    ])
 }
 
 /// `hashStruct(UAPayWithTax{payment, taxMode, tax})` (spec §5.2): `taxMode` 1 PERCENT or 2 AMOUNT, `tax ≤ value`.
-pub fn pay_with_tax_hash(t: &UAMetaTransfer, tax_mode: u8, tax: &[u8; 32]) -> Result<[u8; 32], PayError> {
+pub fn pay_with_tax_hash(
+    t: &UAMetaTransfer,
+    tax_mode: u8,
+    tax: &[u8; 32],
+) -> Result<[u8; 32], PayError> {
     if !(1..=2).contains(&tax_mode) || tax > &t.value {
         return Err(PayError::Tax);
     }
-    Ok(keccak(&[&keccak256(UA_PAY_WITH_TAX_TYPE.as_bytes()), &transfer_hash(t), &word(tax_mode as u64), tax]))
+    Ok(keccak(&[
+        &keccak256(UA_PAY_WITH_TAX_TYPE.as_bytes()),
+        &transfer_hash(t),
+        &word(tax_mode as u64),
+        tax,
+    ]))
 }
 
 /// `UARelayFee` (pay-meta-tax spec §4, O4): the payer's own lane `(batch, nonce)`; `relayer` the router.
@@ -166,14 +220,35 @@ pub struct RelayFee {
 }
 
 pub fn relay_fee_hash(r: &RelayFee) -> [u8; 32] {
-    keccak(&[&keccak256(UA_RELAY_FEE_TYPE.as_bytes()), &r.from, &address_word(&r.target), &r.call_data_hash, &r.payee,
-        &r.value, &r.batch, &r.nonce, &r.valid_until, &address_word(&r.relayer)])
+    keccak(&[
+        &keccak256(UA_RELAY_FEE_TYPE.as_bytes()),
+        &r.from,
+        &address_word(&r.target),
+        &r.call_data_hash,
+        &r.payee,
+        &r.value,
+        &r.batch,
+        &r.nonce,
+        &r.valid_until,
+        &address_word(&r.relayer),
+    ])
 }
 
 /// A token's domain: `(name, "1", chainId, token, salt = chainUid)`.
-pub fn token_domain_separator(name: &str, chain_id: u64, token: &[u8; 20], chain_uid: &[u8; 32]) -> [u8; 32] {
-    keccak(&[&keccak256(DOMAIN_TYPE.as_bytes()), &keccak256(name.as_bytes()), &keccak256(b"1"), &word(chain_id),
-        &address_word(token), chain_uid])
+pub fn token_domain_separator(
+    name: &str,
+    chain_id: u64,
+    token: &[u8; 20],
+    chain_uid: &[u8; 32],
+) -> [u8; 32] {
+    keccak(&[
+        &keccak256(DOMAIN_TYPE.as_bytes()),
+        &keccak256(name.as_bytes()),
+        &keccak256(b"1"),
+        &word(chain_id),
+        &address_word(token),
+        chain_uid,
+    ])
 }
 
 /// `keccak256(0x1901 ‖ domainSeparator ‖ structHash)`: what the payer signs.
@@ -187,7 +262,10 @@ pub fn percent_tax(value: u128, rate_ppm: u32) -> Option<u128> {
         return None;
     }
     // value × rate as a 160-bit product in two halves, divided by 10^6
-    let (hi, lo) = ((value >> 64) * rate_ppm as u128, (value & u64::MAX as u128) * rate_ppm as u128);
+    let (hi, lo) = (
+        (value >> 64) * rate_ppm as u128,
+        (value & u64::MAX as u128) * rate_ppm as u128,
+    );
     let q_hi = hi / 1_000_000;
     let r = ((hi % 1_000_000) << 64) + lo;
     Some((q_hi << 64) + r / 1_000_000)

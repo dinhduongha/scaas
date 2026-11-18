@@ -32,33 +32,53 @@ import {SaltedEIP712} from "../../src/common/SaltedEIP712.sol";
 contract MockNormalZether is NormalToken {
     constructor(address f_, bytes memory a) NormalToken(f_, a) {}
 
-    function kind() public pure override returns (uint8) { return TokenStore.KIND_NORMAL_ZETHER; }
+    function kind() public pure override returns (uint8) {
+        return TokenStore.KIND_NORMAL_ZETHER;
+    }
 
-    function _domainName() internal pure override returns (string memory) { return "SCaaS ZetherToken"; }
+    function _domainName() internal pure override returns (string memory) {
+        return "SCaaS ZetherToken";
+    }
 }
 
 contract MockNormalZetherP is NormalTokenP {
     constructor(address f_, bytes memory a) NormalTokenP(f_, a) {}
 
-    function _domainName() internal pure override returns (string memory) { return "SCaaS ZetherToken"; }
+    function _domainName() internal pure override returns (string memory) {
+        return "SCaaS ZetherToken";
+    }
 }
 
 contract MockNormalZetherT is NormalTokenT {
     constructor(address f_, bytes memory a) NormalTokenT(f_, a) {}
 
-    function _domainName() internal pure override returns (string memory) { return "SCaaS ZetherToken"; }
+    function _domainName() internal pure override returns (string memory) {
+        return "SCaaS ZetherToken";
+    }
 }
 
 contract MockNormalZetherA is NormalTokenA {
     constructor(address f_, bytes memory a) NormalTokenA(f_, a) {}
 
-    function _domainName() internal pure override returns (string memory) { return "SCaaS ZetherToken"; }
+    function _domainName() internal pure override returns (string memory) {
+        return "SCaaS ZetherToken";
+    }
 
     function _init(IFactoryToken.TokenConfig memory cfg) internal override {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
-        GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.admin, cfg.grantDelay, cfg.rescueTo, cfg.roles, _validBits(),
-            _roleBits(), _contractOnlyBits(), address(0));
+        GovernanceLib.init(
+            cfg.features,
+            cfg.lockedFeatures,
+            cfg.admin,
+            cfg.grantDelay,
+            cfg.rescueTo,
+            cfg.roles,
+            _validBits(),
+            _roleBits(),
+            _contractOnlyBits(),
+            address(0)
+        );
     }
 }
 
@@ -66,7 +86,9 @@ contract MockNormalZetherA is NormalTokenA {
 contract MockWrappedZether is WrappedToken {
     constructor(address f_, bytes memory a) WrappedToken(f_, a) {}
 
-    function kind() public pure override returns (uint8) { return TokenStore.KIND_WRAPPED_ZETHER; }
+    function kind() public pure override returns (uint8) {
+        return TokenStore.KIND_WRAPPED_ZETHER;
+    }
 }
 
 contract MockWrappedZetherA is WrappedTokenA {
@@ -74,8 +96,15 @@ contract MockWrappedZetherA is WrappedTokenA {
 
     function _init(IFactoryToken.TokenConfig memory cfg) internal override {
         _requireUnused(cfg, true, false, false, false);
-        WrappedLib.initToken(cfg, _hedera(), TokenStore.KIND_WRAPPED_ZETHER, GovernanceBits.WRAPPED_BITS, _roleBits(),
-            _contractOnlyBits(), address(0));
+        WrappedLib.initToken(
+            cfg,
+            _hedera(),
+            TokenStore.KIND_WRAPPED_ZETHER,
+            GovernanceBits.WRAPPED_BITS,
+            _roleBits(),
+            _contractOnlyBits(),
+            address(0)
+        );
     }
 }
 
@@ -109,7 +138,8 @@ contract FactoryZetherTest is Test {
 
     /// Release 1 of `k` from `code` on its mock modules `ms`, pinned in a plain env beside the kind's link closure (T66b).
     function _release(IOpenFactory.TokenKind k, bytes memory code, address[] memory ms) internal returns (address) {
-        uint16 v = Catalogue.env(f, k, withModules(pinned(plainEnv(address(f), address(0), UID_, address(0), false), k), ms));
+        uint16 v =
+            Catalogue.env(f, k, withModules(pinned(plainEnv(address(f), address(0), UID_, address(0), false), k), ms));
         vm.prank(registrar);
         return f.deployTokenImplementation(k, 1, v, code, abi.encode(ImplArgs(ms)), EnvKit.uidOf(address(f)));
     }
@@ -174,8 +204,9 @@ contract FactoryZetherTest is Test {
     /// A public kind refuses every `conf` field, the two modes included.
     function test_publicKinds_refuseEveryConfField() public {
         OpenFactory g = EnvKit.factory(registrar, UID_, 0);
-        Catalogue.plain(g, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0),
-            false);
+        Catalogue.plain(
+            g, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false
+        );
         IFactoryToken.TokenConfig memory c = normalInit("P", "P", 0, 0, address(0), address(0));
         c.conf.maxShielded = 1;
         vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));

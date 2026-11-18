@@ -51,18 +51,18 @@ library RegulatedLib {
     /// @custom:storage-location erc7201:scaas.regulated
     /// @dev Spec §2.3. Slot +0 is the hot slot `F` and `P` read first.
     struct RegulatedStorage {
-        address complianceRegistry;                                       // +0
+        address complianceRegistry; // +0
         uint8 controls;
         uint64 pausedUntil;
-        uint64 requiredFlags;                                             // +1
+        uint64 requiredFlags; // +1
         uint64 deniedFlags;
         uint64 pauseCooldownUntil;
-        bytes32 termsHash;                                                // +2
-        mapping(bytes32 account => IRegulatedToken.FreezeState) freezes;  // +3
-        mapping(bytes32 recordId => IRegulatedToken.OrderRecord) orders;  // +4
-        bytes32 taxRecipient;                                             // +5 (pay-meta-tax spec §6.2)
-        IRegulatedToken.TaxRate taxRate;                                  // +6
-        mapping(bytes32 account => uint8) listFlags;                      // +7 (round 3s, spec §4.1): ALLOWED | DENIED
+        bytes32 termsHash; // +2
+        mapping(bytes32 account => IRegulatedToken.FreezeState) freezes; // +3
+        mapping(bytes32 recordId => IRegulatedToken.OrderRecord) orders; // +4
+        bytes32 taxRecipient; // +5 (pay-meta-tax spec §6.2)
+        IRegulatedToken.TaxRate taxRate; // +6
+        mapping(bytes32 account => uint8) listFlags; // +7 (round 3s, spec §4.1): ALLOWED | DENIED
     }
 
     // keccak256(abi.encode(uint256(keccak256("scaas.regulated")) - 1)) & ~bytes32(uint256(0xff))
@@ -79,7 +79,8 @@ library RegulatedLib {
     function frozen(bytes32 a) internal view returns (bool) {
         RegulatedStorage storage r = $();
         uint8 c = r.controls;
-        return c & C_FREEZE != 0 && _counts(r.freezes[a], c) && GovernanceLib.$().counts[GovernanceBits.FREEZE].roots != 0;
+        return
+            c & C_FREEZE != 0 && _counts(r.freezes[a], c) && GovernanceLib.$().counts[GovernanceBits.FREEZE].roots != 0;
     }
 
     /// @notice `P`: bit 7 in `controls`, `pausedUntil > now`, a live issuer root of bit 7.
@@ -107,14 +108,20 @@ library RegulatedLib {
     ///         router could answer `subject() = admin`); it is written in slot +0. The `govRouter()` read is a plain call
     ///         made only after the code-hash check: on the canonical runtime it is a storage read, and any failure reverts
     ///         the creation (fail closed).
-    function init(bytes calldata initArgs, uint256 valid, bytes32 complianceRegistryCodehash, address uaRegistry,
-        address govRouter) public
-    {
+    function init(
+        bytes calldata initArgs,
+        uint256 valid,
+        bytes32 complianceRegistryCodehash,
+        address uaRegistry,
+        address govRouter
+    ) public {
         IFactoryToken.TokenConfig memory cfg = abi.decode(initArgs, (IFactoryToken.TokenConfig));
         uint256 f = cfg.features;
         if (f & ~valid != 0) {
             uint8 b;
-            for (uint256 x = f & ~valid; x & 1 == 0; x >>= 1) ++b;
+            for (uint256 x = f & ~valid; x & 1 == 0; x >>= 1) {
+                ++b;
+            }
             revert IGovernance.FeatureInvalidForKind(b);
         }
         IFactoryToken.RegulatedParams memory p = cfg.reg;
@@ -124,14 +131,16 @@ library RegulatedLib {
         // round 3s (spec §3): `KYC ⇒ registry`; `registry ⇔ masks` (the registry may be set while `KYC` is off, to enable
         // later); no required mask where bit 8 is not valid (10-13: a shielded receiver cannot be checked, I9); `termsHash`
         // for each bit of `TERMS_BITS` set or of 8, 9, 28 that can still be enabled (§5.5)
-        if ((f & (1 << GovernanceBits.FORCE) != 0 && !record) || (record && !freeze_)
-            || (f & (1 << GovernanceBits.KYC) != 0 && reg == address(0))
-            || (reg != address(0)) != ((p.requiredFlags | p.deniedFlags) != 0)
-            || (valid & (1 << GovernanceBits.ALLOWLIST) == 0 && p.requiredFlags != 0)
-            || (p.termsHash != 0) != (f & TERMS_BITS != 0
-                || GovernanceBits.enableable(f, cfg.lockedFeatures, valid, cfg.admin, reg != address(0)) != 0)
-            || (p.taxRecipient != 0) != (f & (1 << GovernanceBits.TAX) != 0))
-        {
+        if (
+            (f & (1 << GovernanceBits.FORCE) != 0 && !record) || (record && !freeze_)
+                || (f & (1 << GovernanceBits.KYC) != 0 && reg == address(0))
+                || (reg != address(0)) != ((p.requiredFlags | p.deniedFlags) != 0)
+                || (valid & (1 << GovernanceBits.ALLOWLIST) == 0 && p.requiredFlags != 0)
+                || (p.termsHash != 0)
+                    != (f & TERMS_BITS != 0
+                            || GovernanceBits.enableable(f, cfg.lockedFeatures, valid, cfg.admin, reg != address(0))
+                                != 0) || (p.taxRecipient != 0) != (f & (1 << GovernanceBits.TAX) != 0)
+        ) {
             revert IRegulatedToken.RegulatedConfigInvalid();
         }
         if (reg != address(0)) {
@@ -139,7 +148,9 @@ library RegulatedLib {
                 revert IRegulatedToken.ComplianceRegistryCodeMismatch(reg, reg.codehash);
             }
             address got = IComplianceRegistry(reg).govRouter();
-            if (got != address(0) && got != govRouter) revert IRegulatedToken.ComplianceRegistryRouterMismatch(reg, got);
+            if (got != address(0) && got != govRouter) {
+                revert IRegulatedToken.ComplianceRegistryRouterMismatch(reg, got);
+            }
         }
         RegulatedStorage storage s = $();
         (s.complianceRegistry, s.controls) = (reg, mirror(f));
@@ -218,9 +229,15 @@ library RegulatedLib {
 
     /// @notice `payWithTax` after its moves (lever 8): `UAPaymentSettled` gross (no fee) and `PaymentTaxed` with digest 0,
     ///         emitted here under `DELEGATECALL` (the logs carry the token's address).
-    function directTaxed(bytes32 entryRef, bytes32 to, bytes32 r, bytes32 payer, uint256 amount, uint8 taxMode, uint256 tax)
-        public
-    {
+    function directTaxed(
+        bytes32 entryRef,
+        bytes32 to,
+        bytes32 r,
+        bytes32 payer,
+        uint256 amount,
+        uint8 taxMode,
+        uint256 tax
+    ) public {
         emit IUALedger.UAPaymentSettled(payer, to, amount, 0, address(0), entryRef);
         emit IRegulatedToken.PaymentTaxed(entryRef, to, r, payer, taxMode, tax, 0);
     }
@@ -259,10 +276,12 @@ library RegulatedLib {
         bool on = _counts(s, r.controls);
         uint64 now_ = uint64(block.timestamp);
         if (recordId == 0) {
-            if (!on) { // T1
+            if (!on) {
+                // T1
                 if (now_ < s.issuerCooldownUntil) revert IRegulatedToken.FreezeCooldown(s.issuerCooldownUntil);
                 (s.episodeStart, s.until, s.recordBacked, s.recordId) = (now_, now_ + FREEZE_SPAN, false, 0);
-            } else { // T2, T3
+            } else {
+                // T2, T3
                 if (s.recordBacked) revert IRegulatedToken.AlreadyRecordFrozen(account);
                 uint64 cap = s.episodeStart + EPISODE_SPAN;
                 uint64 n = now_ + FREEZE_SPAN < cap ? now_ + FREEZE_SPAN : cap;
@@ -270,7 +289,8 @@ library RegulatedLib {
                 s.until = n;
             }
             s.issuerCooldownUntil = s.until + FREEZE_COOLDOWN;
-        } else { // T4
+        } else {
+            // T4
             IRegulatedToken.OrderRecord storage o = _live(r, recordId);
             if (o.subject != account || o.freezeUntil <= now_) revert IRegulatedToken.OrderInactive(recordId);
             if (on && o.freezeUntil < s.until) revert IRegulatedToken.RecordFreezeShorter(s.until);
@@ -308,7 +328,9 @@ library RegulatedLib {
 
     /// @dev A live record (F-02): it exists, is not revoked, and `RECORD` is in `controls`.
     function _live(RegulatedStorage storage r, bytes32 recordId)
-        private view returns (IRegulatedToken.OrderRecord storage o)
+        private
+        view
+        returns (IRegulatedToken.OrderRecord storage o)
     {
         o = r.orders[recordId];
         if (o.subject == 0) revert IRegulatedToken.OrderUnknown(recordId);
@@ -339,9 +361,15 @@ library RegulatedLib {
 
     /// @notice Bit 10, compliance (spec §3.3): refs set, two distinct ids neither a pool nor the token, an amount or a
     ///         future freeze, a fresh `recordId`.
-    function recordOrder(bytes32 orderId, bytes32 documentHash, bytes32 recordSubject, bytes32 beneficiary,
-        uint256 maxAmount, uint64 freezeUntil, bytes32 subject) public
-    {
+    function recordOrder(
+        bytes32 orderId,
+        bytes32 documentHash,
+        bytes32 recordSubject,
+        bytes32 beneficiary,
+        uint256 maxAmount,
+        uint64 freezeUntil,
+        bytes32 subject
+    ) public {
         GovernanceUse.use(GovernanceBits.RECORD, subject, 0);
         if (orderId == 0 || documentHash == 0) revert IRegulatedToken.RefRequired();
         if (recordSubject == 0 || _pool(recordSubject)) revert IRegulatedToken.ForceTargetRefused(recordSubject);
@@ -353,7 +381,9 @@ library RegulatedLib {
         IRegulatedToken.OrderRecord storage o = $().orders[id];
         if (o.subject != 0) revert IRegulatedToken.OrderExists(id);
         (o.subject, o.beneficiary, o.freezeUntil, o.maxAmount) = (recordSubject, beneficiary, freezeUntil, maxAmount);
-        emit IRegulatedToken.OrderRecorded(id, orderId, recordSubject, beneficiary, maxAmount, freezeUntil, documentHash);
+        emit IRegulatedToken.OrderRecorded(
+            id, orderId, recordSubject, beneficiary, maxAmount, freezeUntil, documentHash
+        );
     }
 
     /// @notice T6: bit 10 by `use`, or, with `RECORD` disabled, the role alone (a revoke only relaxes, T8); the record
@@ -405,15 +435,21 @@ library RegulatedLib {
     ///         (`SigCheck.isContract`: an EIP-7702 designator account is an EOA, CTR-UA-24; Fable A-2), an
     ///         unregistered or non-SIGNING derived `to` (`_checkTo`). The token then moves on `_uaMove` (hooked: `P`,
     ///         `F(from)`, `R(to)`): public balances only (CTR-GOV-13), never a confidential slot.
-    function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref, bytes32 subject, address uaRegistry)
-        public
-    {
+    function operatorTransfer(
+        bytes32 from,
+        bytes32 to,
+        uint256 amount,
+        bytes32 ref,
+        bytes32 subject,
+        address uaRegistry
+    ) public {
         GovernanceUse.use(GovernanceBits.OPERATOR_TRANSFER, subject, amount);
         if (amount == 0) revert IRegulatedToken.AmountZero();
         if (ref == 0) revert IRegulatedToken.RefRequired();
-        if (from == 0 || from == to || _pool(from)
-            || (UAKinds.inNativeSpace(from) && SigCheck.isContract(address(uint160(uint256(from))))))
-        {
+        if (
+            from == 0 || from == to || _pool(from)
+                || (UAKinds.inNativeSpace(from) && SigCheck.isContract(address(uint160(uint256(from)))))
+        ) {
             revert IRegulatedToken.OperatorTargetRefused(from);
         }
         if (to == 0 || _pool(to)) revert IRegulatedToken.OperatorTargetRefused(to);

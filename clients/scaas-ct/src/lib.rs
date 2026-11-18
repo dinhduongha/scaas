@@ -13,7 +13,13 @@
 //! Owner 2026-11-05 (option (c)): shared here, used by `scaas-ua`; `zether-prover` moves onto it in a separate task after
 //! the ua-rs-sign round. Feature `vectors` (tests only): [`trace`] records every ladder's `k'` and iteration count, per
 //! thread. UNAUDITED.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::disallowed_methods)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::disallowed_methods
+)]
 use ark_ec::short_weierstrass::{Projective, SWCurveConfig};
 use ark_ff::{AdditiveGroup, Fp, FpConfig, PrimeField, QuadExtConfig, QuadExtField, Zero};
 use rand_core::{OsRng, RngCore};
@@ -74,14 +80,21 @@ fn blind(k: &[u64], r: &[u64], rho: &[u64; 2]) -> Zeroizing<[u64; LIMBS]> {
     let mut out = Zeroizing::new([0u64; LIMBS]);
     for (i, a) in rho.iter().enumerate() {
         let mut carry = 0u128;
-        for (o, b) in out.iter_mut().skip(i).zip(r.iter().map(Some).chain(core::iter::once(None))) {
+        for (o, b) in out
+            .iter_mut()
+            .skip(i)
+            .zip(r.iter().map(Some).chain(core::iter::once(None)))
+        {
             let t = u128::from(*o) + u128::from(*a) * u128::from(b.copied().unwrap_or(0)) + carry;
             *o = t as u64;
             carry = t >> 64;
         }
     }
     let mut carry = 0u128;
-    for (o, b) in out.iter_mut().zip(k.iter().copied().chain(core::iter::repeat(0))) {
+    for (o, b) in out
+        .iter_mut()
+        .zip(k.iter().copied().chain(core::iter::repeat(0)))
+    {
         let t = u128::from(*o) + u128::from(b) + carry;
         *o = t as u64;
         carry = t >> 64;
@@ -90,7 +103,10 @@ fn blind(k: &[u64], r: &[u64], rho: &[u64; 2]) -> Zeroizing<[u64; LIMBS]> {
 }
 
 /// `secret · base`, blinded and by the fixed-width ladder (module doc). `RngError` if the OS RNG fails.
-pub fn secret_mul<P: SWCurveConfig>(base: Projective<P>, secret: &P::ScalarField) -> Result<Projective<P>, RngError>
+pub fn secret_mul<P: SWCurveConfig>(
+    base: Projective<P>,
+    secret: &P::ScalarField,
+) -> Result<Projective<P>, RngError>
 where
     P::BaseField: CtSwap,
 {

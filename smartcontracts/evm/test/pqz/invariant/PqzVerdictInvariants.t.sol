@@ -64,12 +64,19 @@ contract PqzVerdictInvariantsTest is PqzOffchainBase {
         for (uint256 i; i < 3; ++i) {
             IPqzToken.AccountState memory a = tok.pqzAccount(us[i], 0);
             IPqzToken.AccountState memory b = off.pqzAccount(us[i], 0);
-            assertEq(a.accBlob.code, b.accBlob.code, "I4: the op blob `acc` references (its own SSTORE2 pointer per token)");
+            assertEq(
+                a.accBlob.code, b.accBlob.code, "I4: the op blob `acc` references (its own SSTORE2 pointer per token)"
+            );
             (a.accBlob, b.accBlob) = (address(0), address(0));
             assertEq(abi.encode(a), abi.encode(b), "I4: the account");
             assertEq(tok.pqzAcc(us[i], 0), off.pqzAcc(us[i], 0), "I4: acc");
-            if (a.pendingCount != 0) assertEq(tok.pqzPendingCt(us[i], 0, a.pendingCount - 1),
-                off.pqzPendingCt(us[i], 0, b.pendingCount - 1), "I4: the last entry");
+            if (a.pendingCount != 0) {
+                assertEq(
+                    tok.pqzPendingCt(us[i], 0, a.pendingCount - 1),
+                    off.pqzPendingCt(us[i], 0, b.pendingCount - 1),
+                    "I4: the last entry"
+                );
+            }
         }
         assertEq(tok.totalShielded(), off.totalShielded(), "I4: totalShielded");
     }

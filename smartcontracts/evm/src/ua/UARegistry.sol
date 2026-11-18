@@ -178,7 +178,9 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         }
         // `_lib`'s DELEGATECALL would "succeed" on an empty account, every write a silent no-op; the library has no way to
         // leave once it is there (no SELFDESTRUCT, `LinkClosure.test_libraryOpcodes`)
-        if (address(UARegistryCoreLib).code.length == 0 || address(UARegistryAuxLib).code.length == 0) revert UAConfig(0);
+        if (address(UARegistryCoreLib).code.length == 0 || address(UARegistryAuxLib).code.length == 0) {
+            revert UAConfig(0);
+        }
         if (predecessor_ != address(0)) {
             IUARegistry p = IUARegistry(predecessor_);
             // D5 (owner ruling 2026-10-30): real code; a designator's delegate could change under gen 2
@@ -189,11 +191,20 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
                 revert UAConfig(0);
             }
             // review n3: gen 1 speaks the UA-8 views gen 2 forwards to (`pqzKeyOf`, `registrationOf`, `checkedOf`)
-            try p.checkedOf(0) {} catch { revert UAConfig(0); }
+            try p.checkedOf(0) {}
+            catch {
+                revert UAConfig(0);
+            }
             // and the `InnerSig` ABI of its hand-offs: on an older gen 1 every one would read as a refused signature
-            try p.memberSigHashOf(0, 0) {} catch { revert UAConfig(0); }
+            try p.memberSigHashOf(0, 0) {}
+            catch {
+                revert UAConfig(0);
+            }
             // CTR-UA-44: and the current structure of its `msig` records (`msigStateOf`), which gen 2 forwards and reads
-            try p.msigStateOf(0) {} catch { revert UAConfig(0); }
+            try p.msigStateOf(0) {}
+            catch {
+                revert UAConfig(0);
+            }
         }
         uint256[21] memory k;
         for (uint256 i; i < kinds_.length; ++i) {
@@ -363,7 +374,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         s.members = new MsigMember[](n);
         for (uint256 i; i < n; ++i) {
             uint256 o = 4 + 36 * i;
-            s.members[i] = MsigMember(uint16(UAStore.u16(d, o)), bytes32(UAStore.word(d, o + 2)), uint16(UAStore.u16(d, o + 34)));
+            s.members[i] =
+                MsigMember(uint16(UAStore.u16(d, o)), bytes32(UAStore.word(d, o + 2)), uint16(UAStore.u16(d, o + 34)));
         }
     }
 
@@ -505,21 +517,41 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         _libView(address(UARegistryAuxLib), UARegistryAuxLib.pqzScopedAt.selector, 0);
     }
 
-    function pqzScopedKeyDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid_, address token, uint64 version,
-        bytes32 pqzKeyHash) external pure returns (bytes32)
-    {
+    function pqzScopedKeyDigest(
+        bytes32 ua,
+        uint8 keyClass,
+        bytes32 chainUid_,
+        address token,
+        uint64 version,
+        bytes32 pqzKeyHash
+    ) external pure returns (bytes32) {
         _libPure(address(UARegistryAuxLib), UARegistryAuxLib.pqzScopedKeyDigest.selector);
     }
 
-    function pqzScopedKeyRecordDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid_, address token, uint64 version,
-        bytes32 pqzKeyHash, bytes32 pqzPopHash, bytes32 openKemHash, uint64 validUntilBlock) external pure returns (bytes32)
-    {
+    function pqzScopedKeyRecordDigest(
+        bytes32 ua,
+        uint8 keyClass,
+        bytes32 chainUid_,
+        address token,
+        uint64 version,
+        bytes32 pqzKeyHash,
+        bytes32 pqzPopHash,
+        bytes32 openKemHash,
+        uint64 validUntilBlock
+    ) external pure returns (bytes32) {
         _libPure(address(UARegistryAuxLib), UARegistryAuxLib.pqzScopedKeyRecordDigest.selector);
     }
 
-    function setPqzScopedKey(bytes32 ua, address scope, uint64 version, bytes calldata pqzKey, bytes32 pqzPopHash,
-        KemKey calldata openKem, uint64 validUntilBlock, UASig calldata sig) external
-    {
+    function setPqzScopedKey(
+        bytes32 ua,
+        address scope,
+        uint64 version,
+        bytes calldata pqzKey,
+        bytes32 pqzPopHash,
+        KemKey calldata openKem,
+        uint64 validUntilBlock,
+        UASig calldata sig
+    ) external {
         _lib(address(UARegistryAuxLib), UARegistryAuxLib.setPqzScopedKey.selector, _s.records[ua].kind);
     }
 
@@ -634,33 +666,51 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         _lib(address(UARegistryAuxLib), UARegistryAuxLib.cacheExpandedKey.selector, kind);
     }
 
-    function register(uint16 kind, bytes calldata keyData, UAAttrs calldata attrs, bytes calldata pop,
-        bytes calldata pqzPop) external returns (bytes32 ua)
-    {
+    function register(
+        uint16 kind,
+        bytes calldata keyData,
+        UAAttrs calldata attrs,
+        bytes calldata pop,
+        bytes calldata pqzPop
+    ) external returns (bytes32 ua) {
         _lib(address(UARegistryCoreLib), UARegistryCoreLib.register.selector, kind);
     }
 
-    function registerWebAuthn(WebAuthnKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
-        bytes calldata pqzPop) external returns (bytes32 ua)
-    {
+    function registerWebAuthn(
+        WebAuthnKey calldata key,
+        UAAttrs calldata attrs,
+        bytes calldata pop,
+        bytes calldata pqzPop
+    ) external returns (bytes32 ua) {
         _lib(address(UARegistryCoreLib), UARegistryCoreLib.registerWebAuthn.selector, UAKinds.WEBAUTHN_P256);
     }
 
-    function registerMuSig2(uint16 kind, MuSig2Key calldata key, UAAttrs calldata attrs, bytes calldata pop,
-        bytes calldata pqzPop) external returns (bytes32 ua)
-    {
+    function registerMuSig2(
+        uint16 kind,
+        MuSig2Key calldata key,
+        UAAttrs calldata attrs,
+        bytes calldata pop,
+        bytes calldata pqzPop
+    ) external returns (bytes32 ua) {
         _lib(address(UARegistryCoreLib), UARegistryCoreLib.registerMuSig2.selector, kind);
     }
 
-    function registerFrost(uint16 kind, FrostKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
-        bytes calldata pqzPop) external returns (bytes32 ua)
-    {
+    function registerFrost(
+        uint16 kind,
+        FrostKey calldata key,
+        UAAttrs calldata attrs,
+        bytes calldata pop,
+        bytes calldata pqzPop
+    ) external returns (bytes32 ua) {
         _lib(address(UARegistryCoreLib), UARegistryCoreLib.registerFrost.selector, kind);
     }
 
-    function registerMsig(MsigStructure calldata structure, UAAttrs calldata attrs, MemberSig[] calldata pop,
-        bytes calldata pqzPop) external returns (bytes32 ua)
-    {
+    function registerMsig(
+        MsigStructure calldata structure,
+        UAAttrs calldata attrs,
+        MemberSig[] calldata pop,
+        bytes calldata pqzPop
+    ) external returns (bytes32 ua) {
         _lib(address(UARegistryCoreLib), UARegistryCoreLib.registerMsig.selector, UAKinds.MSIG);
     }
 
@@ -668,7 +718,9 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         _lib(address(UARegistryAuxLib), UARegistryAuxLib.storePqzPop.selector, 0);
     }
 
-    function setPqzKey(bytes32 ua, uint64 version, bytes calldata pqzKey, bytes32 pqzPopHash, UASig calldata sig) external {
+    function setPqzKey(bytes32 ua, uint64 version, bytes calldata pqzKey, bytes32 pqzPopHash, UASig calldata sig)
+        external
+    {
         _lib(address(UARegistryAuxLib), UARegistryAuxLib.setPqzKey.selector, _s.records[ua].kind);
     }
 
@@ -680,9 +732,15 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         _lib(address(UARegistryCoreLib), UARegistryCoreLib.acceptMembership.selector, 0);
     }
 
-    function updateMsig(bytes32 ua, uint64 version, MsigStructure calldata structure, uint256 enabled,
-        uint64 validUntilBlock, MemberSig[] calldata sigs, bytes32 chainUid_) external
-    {
+    function updateMsig(
+        bytes32 ua,
+        uint64 version,
+        MsigStructure calldata structure,
+        uint256 enabled,
+        uint64 validUntilBlock,
+        MemberSig[] calldata sigs,
+        bytes32 chainUid_
+    ) external {
         _lib(address(UARegistryAuxLib), UARegistryAuxLib.updateMsig.selector, UAKinds.MSIG);
     }
 
@@ -691,6 +749,13 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     function requirePortable(bytes32 ua, bytes32 purposeTag, bytes32 typedDigest, UASig calldata auth) external view {
         if (_elsewhere(ua)) IUARegistry(predecessor).requirePortable(ua, purposeTag, typedDigest, auth);
         else _libView(address(UARegistryCoreLib), UARegistryCoreLib.requirePortable.selector, _s.records[ua].kind);
+    }
+
+    /// CTR-UA-46: as `requirePortable`, under the purpose the library derives from `appId`. Gen 2 forwards plainly: a predecessor
+    /// without this entry reverts (empty data, no fallback), a refusal of a void view.
+    function requirePortableApp(bytes32 ua, bytes32 appId, bytes32 typedDigest, UASig calldata auth) external view {
+        if (_elsewhere(ua)) IUARegistry(predecessor).requirePortableApp(ua, appId, typedDigest, auth);
+        else _libView(address(UARegistryCoreLib), UARegistryCoreLib.requirePortableApp.selector, _s.records[ua].kind);
     }
 
     /// `_lib` inside a view (`requirePortable`): the library entry writes nothing, so it runs in a STATICCALL frame too. Solidity
@@ -738,8 +803,10 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             // refusal (CTR-UA-23), asked only after a refused check, so an accepted one pays nothing for it
             uint16 kind = _s.records[ua].kind;
             uint256 cfg = _cfg(kind);
-            if (PqUA.mldsaParts(kind) != 0 && uint160(cfg) != 0 && UAStore.expanded(ua, kind).length == 0
-                && UAStore.noPrecompile(address(uint160(cfg)))) revert UAKeyNotCached(ua);
+            if (
+                PqUA.mldsaParts(kind) != 0 && uint160(cfg) != 0 && UAStore.expanded(ua, kind).length == 0
+                    && UAStore.noPrecompile(address(uint160(cfg)))
+            ) revert UAKeyNotCached(ua);
             revert UAUnauthorized(ua);
         }
     }
@@ -752,7 +819,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         returns (bool)
     {
         if (UAKinds.inNativeSpace(ua)) {
-            return auth.keyData.length == 0 && auth.members.length == 0 && _native(ua, purposeTag, digest, auth.signature);
+            return
+                auth.keyData.length == 0 && auth.members.length == 0 && _native(ua, purposeTag, digest, auth.signature);
         }
         uint16 kind = _s.records[ua].kind;
         if (kind == 0) return UAStore.via(predecessor, ua, purposeTag, digest, auth);
@@ -801,9 +869,10 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         if (uint160(cfg) == 0) {
             return UAStore.via(predecessor, id, purposeTag, digest, UASig(keyData, sig, new MemberSig[](0)));
         }
-        return _verifierCall(
-            cfg, IUAKindVerifier.verify.selector, keyData, UAKinds.uaMessage(kind, purposeTag, digest), sig
-        );
+        return
+            _verifierCall(
+                cfg, IUAKindVerifier.verify.selector, keyData, UAKinds.uaMessage(kind, purposeTag, digest), sig
+            );
     }
 
     /// accounts.md §1.9 `msig` row, a transaction authorization (the portable one: `UARegistryCoreLib._msig`): strictly increasing
@@ -842,7 +911,9 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         if (kind == UAKinds.MSIG) {
             if (s.sig.length != 0) return false;
             MemberSig[] memory inner = UAStore.lift(s.members);
-            if (_s.records[id].kind == 0) return UAStore.via(predecessor, id, UAKinds.PURPOSE_MEMBER, md, UASig("", "", inner));
+            if (_s.records[id].kind == 0) {
+                return UAStore.via(predecessor, id, UAKinds.PURPOSE_MEMBER, md, UASig("", "", inner));
+            }
             return _msig(id, UAKinds.PURPOSE_MEMBER, md, UAStore.msig(id, _s.records[id].keyPtr), inner);
         }
         if (s.members.length != 0) return false;
@@ -907,8 +978,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         for (uint16 j = 0x0100; j <= UAKinds.PQZ_MLWE; ++j) {
             if (
                 j != UAKinds.MSIG && (UAKinds.isDerived(j) || j == UAKinds.PQZ_MLWE)
-                    && keccak256(bytes(UAKinds.groupName(j))) == g
-                    && IUARegistry(pred).kindEnabled(j)
+                    && keccak256(bytes(UAKinds.groupName(j))) == g && IUARegistry(pred).kindEnabled(j)
             ) return true;
         }
         return false;

@@ -16,16 +16,23 @@ evm=$(cd "$here/../.." && pwd)
 cd "$evm" || exit 2
 export PATH="$HOME/.foundry/bin:$HOME/.cargo/bin:$PATH"
 suites='test/{as/*,governance/GovRelax,governance/PlusZero,governance/GovDeploy,v2/LinkClosure}.t.sol'
-git diff --quiet -- src script || { echo "src or script is not clean" >&2; exit 2; }
+git diff --quiet -- src script || {
+    echo "src or script is not clean" >&2
+    exit 2
+}
 
 if [ "${SKIP_T36:-0}" != 1 ]; then
-  for m in ${ONLY:-$(python3 "$here/mutants.py" --list)}; do
-    python3 "$here/mutants.py" "$m" || { echo "$m: anchor missing" >&2; echo 99 > "$here/mutant-$m.rc.log"; continue; }
-    ../../scripts/capped forge test --match-path "$suites" > "$here/mutant-$m.log" 2>&1
-    echo $? > "$here/mutant-$m.rc.log"
-    git checkout -- src script
-  done
-  python3 - "$here" <<'PY'
+    for m in ${ONLY:-$(python3 "$here/mutants.py" --list)}; do
+        python3 "$here/mutants.py" "$m" || {
+            echo "$m: anchor missing" >&2
+            echo 99 >"$here/mutant-$m.rc.log"
+            continue
+        }
+        ../../scripts/capped forge test --match-path "$suites" >"$here/mutant-$m.log" 2>&1
+        echo $? >"$here/mutant-$m.rc.log"
+        git checkout -- src script
+    done
+    python3 - "$here" <<'PY'
 import os, re, sys
 here = sys.argv[1]
 rows = ['mutant | test that went red | red in | rc']
@@ -51,18 +58,18 @@ PY
 fi
 
 if [ "${RERUN:-0}" = 1 ]; then
-  old="$evm/runs/2026-11-04-ua-mtx-merge"
-  for t in ${RERUN_ONLY:-24 25 26 27 28 29 30 31 32 33 34 35}; do
-    table="runs/2026-11-04-ua-mtx-merge-t$t-mutants.txt"
-    if [ "$t" = 35 ] && pgrep -x cargo > /dev/null; then
-      echo "t35: another cargo runs on the machine; its harness needs CAPPED_MEM=6G alone: skipped" >&2
-      continue
-    fi
-    "$old/run_t${t}_mutants.sh" > "$here/rerun-t$t.log" 2>&1
-    echo "t$t: rc $?" >&2
-    cd "$evm" || exit 2
-    cp "$table" "$here/rerun-t$t.txt"
-    git diff --quiet -- "$table" || echo "t$t: the re-run's table differs from the committed one (see rerun-t$t.txt)" >&2
-    git checkout -- "$table"
-  done
+    old="$evm/runs/2026-11-04-ua-mtx-merge"
+    for t in ${RERUN_ONLY:-24 25 26 27 28 29 30 31 32 33 34 35}; do
+        table="runs/2026-11-04-ua-mtx-merge-t$t-mutants.txt"
+        if [ "$t" = 35 ] && pgrep -x cargo >/dev/null; then
+            echo "t35: another cargo runs on the machine; its harness needs CAPPED_MEM=6G alone: skipped" >&2
+            continue
+        fi
+        "$old/run_t${t}_mutants.sh" >"$here/rerun-t$t.log" 2>&1
+        echo "t$t: rc $?" >&2
+        cd "$evm" || exit 2
+        cp "$table" "$here/rerun-t$t.txt"
+        git diff --quiet -- "$table" || echo "t$t: the re-run's table differs from the committed one (see rerun-t$t.txt)" >&2
+        git checkout -- "$table"
+    done
 fi

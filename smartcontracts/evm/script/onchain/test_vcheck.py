@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """Offline checks of vcheck.py's classification and decoding (no chain, no explorer):
-  python3 -I script/onchain/test_vcheck.py      (from smartcontracts/evm)"""
+python3 -I script/onchain/test_vcheck.py      (from smartcontracts/evm)"""
+
 import os
 import sys
 
@@ -14,7 +15,9 @@ META = "a2646970667358221220" + "11" * 32 + "64736f6c6343000825" + "0033"
 CODE = "0x6080604052" + "00" * 8 + META
 
 # classification: positive controls first, then one change at a time
-assert v.classify(CODE, {"is_verified": True, "is_partially_verified": False, "is_fully_verified": True})[0] == "verified"
+assert (
+    v.classify(CODE, {"is_verified": True, "is_partially_verified": False, "is_fully_verified": True})[0] == "verified"
+)
 assert v.classify(CODE, {"is_verified": True, "is_partially_verified": True})[0] == "unverified"  # partial match
 assert v.classify(CODE, {"is_verified": True, "is_fully_verified": False})[0] == "unverified"
 assert v.classify(CODE, {})[0] == "unverified"
@@ -25,9 +28,14 @@ assert v.classify(CODE, {}, genesis=True, ours=CODE)[0] == v.GENESIS_OURS  # con
 assert v.classify(CODE, VER, genesis=True, ours=CODE)[0] == v.GENESIS_OURS
 assert v.classify(CODE, {}, genesis=True, ours=CODE[:-1] + "1")[0] == "unverified"  # mutant: a wrong expected code
 assert v.classify(CODE, VER, genesis=True, ours="0x6080")[0] == v.GENESIS_OURS  # verified passes whatever the bytes
-assert v.classify(CODE, {"is_verified": True, "is_partially_verified": True}, genesis=True, ours="0x6080")[0] == "unverified"
+assert (
+    v.classify(CODE, {"is_verified": True, "is_partially_verified": True}, genesis=True, ours="0x6080")[0]
+    == "unverified"
+)
 rv = v.ours_at_genesis(7622)
-assert list(rv) == ["0xd33d17991f57befb4ccbb3e57c477c10bde5b465"] and v.ours_at_genesis(22776) == {} == v.ours_at_genesis(31337)
+assert list(rv) == ["0xd33d17991f57befb4ccbb3e57c477c10bde5b465"] and v.ours_at_genesis(
+    22776
+) == {} == v.ours_at_genesis(31337)
 assert v.classify("0x", {})[0] == "no code"
 assert v.classify("0x00" + "ff" * 40, {})[0] == "data"
 assert v.classify("0x363d3d37363d34f0", {})[0] == "create3 proxy"
@@ -39,20 +47,30 @@ assert v.classify(CLONE + "beef", dict(linked, proxy_type="clone_with_immutable_
 # (owner 2026-11-10) when the first 45 bytes are exactly the EIP-1167 proxy and its implementation is verified
 UNK = {"proxy_type": "unknown", "implementations": []}
 APP = "linked (clone, appended data)"
-assert v.classify(CLONE + "beef", UNK, True) == (APP, f"EIP-1167 proxy of 0x{IMPL} (verified), 2 B appended; the explorer: unknown")
+assert v.classify(CLONE + "beef", UNK, True) == (
+    APP,
+    f"EIP-1167 proxy of 0x{IMPL} (verified), 2 B appended; the explorer: unknown",
+)
 assert v.classify(CLONE + "beef", {}, True)[0] == APP
 assert v.classify(CLONE + "beef", UNK, False)[0] == "unverified"  # mutant: implementation not verified
 for k in (0, 19, 60, 89):  # mutant: one nibble of the proxy's head or tail changed
-    bad = CLONE[:2 + k] + ("0" if CLONE[2 + k] != "0" else "1") + CLONE[3 + k:]
+    bad = CLONE[: 2 + k] + ("0" if CLONE[2 + k] != "0" else "1") + CLONE[3 + k :]
     assert v.classify(bad + "beef", UNK, True)[0] == "unverified", k
 assert v.classify(CLONE, UNK, True)[0] == "unverified"  # no data appended: the explorer must link a plain clone
 assert v.classify(CLONE, linked, impl_verified=False)[0] == "unverified"  # implementation not verified
 assert v.classify(CLONE, dict(linked, proxy_type="unknown"), True)[0] == "unverified"  # not linked
 assert v.classify(CLONE, dict(linked, implementations=[]), True)[0] == "unverified"
-assert v.classify(CLONE, {"is_verified": True, "is_partially_verified": False}, True)[0] == "unverified"  # a clone is never "verified"
+assert (
+    v.classify(CLONE, {"is_verified": True, "is_partially_verified": False}, True)[0] == "unverified"
+)  # a clone is never "verified"
 # a partial match is accepted for a harness contract only (owner 2026-11-10): its metadata names a script/ artifact
 PART = {"is_verified": True, "is_partially_verified": True, "is_fully_verified": False, "name": "OnchainForwarder"}
-HIT = ("root", "out/OnchainForwarder.sol/OnchainForwarder.json", "script/onchain/OnchainForwarder.sol", "OnchainForwarder")
+HIT = (
+    "root",
+    "out/OnchainForwarder.sol/OnchainForwarder.json",
+    "script/onchain/OnchainForwarder.sol",
+    "OnchainForwarder",
+)
 assert v.harness(HIT, PART) and v.classify(CODE, PART, harness=True)[0] == "verified (partial, harness)"
 assert not v.harness(HIT[:2] + ("src/metatx/X.sol", "OnchainForwarder"), PART)  # mutant: a src contract
 assert not v.harness(HIT, dict(PART, name="Other")) and not v.harness(None, PART)  # another name; no artifact
@@ -86,7 +104,11 @@ assert v.env_addrs("0x" + env) == ["0x" + "11" * 20, "0x" + "22" * 20, f"0x{a1 +
 page = w(64) + w(2) + w(2) + w(a1) + w(0) * 7 + w(a2) + w(0) * 7
 assert v.page_addrs("0x" + page) == ["0x" + "11" * 20, "0x" + "22" * 20]
 assert v.addr_words("0x" + w(a1) + w(5) + w(0)) == ["0x" + "11" * 20]
-assert v.COMPILES.search("Compiling 3 files with Solc 0.8.37") and not v.COMPILES.search("No files changed, compilation skipped")
+assert v.COMPILES.search("Compiling 3 files with Solc 0.8.37") and not v.COMPILES.search(
+    "No files changed, compilation skipped"
+)
+
+
 # explorer config (NET-EVM-12): a remote target names its explorer, else VERIFY_NOT_CONFIGURED
 def nc(net, env):
     try:
@@ -97,10 +119,17 @@ def nc(net, env):
 
 
 c = v.config("scaas-testnet", {})
-assert (c["kind"], c["url"], c["rpc"], c["scan"]) == ("blockscout", "http://127.0.0.1:4000/api", "http://127.0.0.1:8545", True)
+assert (c["kind"], c["url"], c["rpc"], c["scan"]) == (
+    "blockscout",
+    "http://127.0.0.1:4000/api",
+    "http://127.0.0.1:8545",
+    True,
+)
 assert v.config("scaas-testnet", {"RPC_7622": "http://h:1", "VERIFY_SCAN": "0"})["rpc"] == "http://h:1"
 assert "no explorer" in nc("base-sepolia", {"VERIFY_RPC": "https://rpc.example"})
-assert "not one of" in nc("x", {"VERIFY_EXPLORER": "routescan", "VERIFY_URL": "https://e.example/api", "VERIFY_RPC": "https://r"})
+assert "not one of" in nc(
+    "x", {"VERIFY_EXPLORER": "routescan", "VERIFY_URL": "https://e.example/api", "VERIFY_RPC": "https://r"}
+)
 assert "VERIFY_URL" in nc("x", {"VERIFY_EXPLORER": "blockscout", "VERIFY_RPC": "https://r"})
 assert "VERIFY_RPC" in nc("x", {"VERIFY_EXPLORER": "blockscout", "VERIFY_URL": "https://e.example/api"})
 ES = {"VERIFY_EXPLORER": "etherscan", "VERIFY_URL": "https://api.etherscan.io/v2/api", "VERIFY_RPC": "https://r"}
@@ -109,22 +138,38 @@ assert "API key" in nc("x", dict(ES, VERIFY_API_KEY_ENV="MY_KEY"))  # the named 
 assert "not an env var name" in nc("x", dict(ES, VERIFY_API_KEY_ENV="$(id)"))
 c = v.config("x", dict(ES, VERIFY_API_KEY_ENV="MY_KEY", MY_KEY="k123"))
 assert c["key"] == "k123" and not c["scan"]
-assert nc("x", {"VERIFY_EXPLORER": "sourcify", "VERIFY_URL": "https://sourcify.dev/server/", "VERIFY_RPC": "https://r"}) is None
+assert (
+    nc("x", {"VERIFY_EXPLORER": "sourcify", "VERIFY_URL": "https://sourcify.dev/server/", "VERIFY_RPC": "https://r"})
+    is None
+)
 
 # request shapes, offline
 A = "0x" + "11" * 20
-assert v.lookup_url("blockscout", "http://127.0.0.1:4000/api", 7622, A) == f"http://127.0.0.1:4000/api/v2/smart-contracts/{A}"
+assert (
+    v.lookup_url("blockscout", "http://127.0.0.1:4000/api", 7622, A)
+    == f"http://127.0.0.1:4000/api/v2/smart-contracts/{A}"
+)
 u = v.lookup_url("etherscan", "https://api.etherscan.io/v2/api", 8453, A, "k123")
 assert u.startswith("https://api.etherscan.io/v2/api?") and "chainid=8453" in u and "module=contract" in u
 assert "action=getsourcecode" in u and f"address={A}" in u and "apikey=k123" in u
-assert v.lookup_url("sourcify", "https://sourcify.dev/server", 100, A) == f"https://sourcify.dev/server/v2/contract/100/{A}"
-for kind, url in (("blockscout", "http://127.0.0.1:4000/api"), ("etherscan", "https://api.etherscan.io/v2/api"),
-                  ("sourcify", "https://sourcify.dev/server")):
+assert (
+    v.lookup_url("sourcify", "https://sourcify.dev/server", 100, A)
+    == f"https://sourcify.dev/server/v2/contract/100/{A}"
+)
+for kind, url in (
+    ("blockscout", "http://127.0.0.1:4000/api"),
+    ("etherscan", "https://api.etherscan.io/v2/api"),
+    ("sourcify", "https://sourcify.dev/server"),
+):
     fa = v.forge_args(kind, url, 8453)
     assert fa[:2] == ["--verifier", kind] and fa[fa.index("--chain-id") + 1] == "8453" and fa[3].startswith(url)
     assert not any("k123" in x for x in fa)  # the key never on the command line
 e = v.forge_env({"PATH": "/bin", "FOUNDRY_OUT": "o", "ETHERSCAN_API_KEY": "stale"}, "k123")
-assert e["VERIFIER_API_KEY"] == e["ETHERSCAN_API_KEY"] == "k123" and "FOUNDRY_OUT" not in e and e["FOUNDRY_PROFILE"] == "scaas-testnet"
+assert (
+    e["VERIFIER_API_KEY"] == e["ETHERSCAN_API_KEY"] == "k123"
+    and "FOUNDRY_OUT" not in e
+    and e["FOUNDRY_PROFILE"] == "scaas-testnet"
+)
 assert "ETHERSCAN_API_KEY" not in v.forge_env({"ETHERSCAN_API_KEY": "stale"}, "")
 
 # answers, normalized to Blockscout's fields, then classified
@@ -132,7 +177,10 @@ es = lambda r: v.normalize("etherscan", {"status": "1", "result": [r]}, CODE)
 assert v.classify(CODE, es({"SourceCode": "pragma solidity", "ContractName": "X"}))[0] == "verified"
 assert v.classify(CODE, es({"SourceCode": "", "ContractName": ""}))[0] == "unverified"
 assert v.classify(CODE, es({"SourceCode": "pragma", "SimilarMatch": "0xabc"}))[0] == "unverified"  # similar, not exact
-assert v.classify(CODE, v.normalize("etherscan", {"status": "0", "result": "Max rate limit reached"}, CODE))[0] == "unverified"
+assert (
+    v.classify(CODE, v.normalize("etherscan", {"status": "0", "result": "Max rate limit reached"}, CODE))[0]
+    == "unverified"
+)
 so = lambda m: v.normalize("sourcify", {"match": m}, CODE)
 assert v.classify(CODE, so("exact_match"))[0] == "verified" and v.classify(CODE, so("match"))[0] == "unverified"
 assert v.classify(CODE, v.normalize("sourcify", {}, CODE))[0] == "unverified"
@@ -140,6 +188,7 @@ assert v.classify(CLONE, v.normalize("sourcify", {}, CLONE), True)[0] == "linked
 assert v.classify(CLONE, v.normalize("etherscan", {"result": [{}]}, CLONE), False)[0] == "unverified"
 # deploy sets (owner 2026-11-16): every set's entries with DEPLOY_SET all, one set's with a label, named refusals
 import deploybook as _db  # noqa: E402
+
 _h = _db.header("scaas-testnet", "SCaaS testnet", 7622, "0x" + "9a" * 32, "testnet")
 _on, _off = dict(_h, ua_registry="0x" + "0a" * 20), dict(_h, ua_registry="0x" + "0b" * 20)
 _bk = _db.set_merge(_off, _db.set_merge(_on, None, "mldsa-on", ""), "mldsa-off", "")

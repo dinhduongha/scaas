@@ -47,7 +47,8 @@ contract ZetherVerifierGasTest is Test {
 
     function _single() internal view returns (bytes memory st, bytes memory pr) {
         st = _singleSt(300);
-        ZetherProver.TransferWitness memory w = ZetherProver.TransferWitness(XF, 300, S, B - 300 - FEE, 0x77, 0x88, keccak256("t"));
+        ZetherProver.TransferWitness memory w =
+            ZetherProver.TransferWitness(XF, 300, S, B - 300 - FEE, 0x77, 0x88, keccak256("t"));
         pr = prover.proveTransfer(v, st, w);
     }
 
@@ -92,7 +93,9 @@ contract ZetherVerifierGasTest is Test {
     function _witness(uint256[] memory vs, uint256 total) internal pure returns (ZetherProver.MultiWitness memory w) {
         uint256[] memory gv = new uint256[](vs.length);
         uint256[] memory t = new uint256[](vs.length);
-        for (uint256 j; j < vs.length; ++j) (gv[j], t[j]) = (0x1234 + 7 * j, T0 + j);
+        for (uint256 j; j < vs.length; ++j) {
+            (gv[j], t[j]) = (0x1234 + 7 * j, T0 + j);
+        }
         w = ZetherProver.MultiWitness(XF, S, vs, t, B - FEE - total, gv, 0x5678, keccak256("m"));
     }
 
@@ -130,7 +133,15 @@ contract ZetherVerifierGasTest is Test {
         g -= gasleft();
     }
 
-    function test_gasTransferBls12381() public { _run(0); }
-    function test_gasMulti8Bls12381() public { _run(1); }
-    function test_gasBurnBls12381() public { _run(2); }
+    function test_gasTransferBls12381() public {
+        _run(0);
+    }
+
+    function test_gasMulti8Bls12381() public {
+        _run(1);
+    }
+
+    function test_gasBurnBls12381() public {
+        _run(2);
+    }
 }

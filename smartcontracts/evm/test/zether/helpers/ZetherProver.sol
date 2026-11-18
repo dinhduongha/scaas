@@ -71,9 +71,14 @@ contract ZetherProver {
     // ------------------------------------------------------------------ ciphertext tiện ích
 
     /// @notice `(C_out, D_out, C_deb, C_aud)` cho chuyển `v` với randomness `s` (§7.1).
-    function ciphertexts(IZetherVerifier v, bytes memory yf, bytes memory yt, bytes memory ya, uint256 amount, uint256 s)
-        external view returns (bytes memory cOut, bytes memory dOut, bytes memory cDeb, bytes memory cAud)
-    {
+    function ciphertexts(
+        IZetherVerifier v,
+        bytes memory yf,
+        bytes memory yt,
+        bytes memory ya,
+        uint256 amount,
+        uint256 s
+    ) external view returns (bytes memory cOut, bytes memory dOut, bytes memory cDeb, bytes memory cAud) {
         bytes memory g = v.g1MulBase(1);
         cOut = _m2(v, g, amount, yt, s);
         dOut = v.g1MulBase(s);
@@ -84,7 +89,9 @@ contract ZetherProver {
     /// @notice The auditor copy of a multi-recipient leg under its own randomness `t` (review C0-1, owner ruling 2026-10-27
     ///         (ii)): `C_aud = [v]G + [t]Y_a`, `D_aud = [t]G`; `O, O` when `Y_a = O`.
     function audCopy(IZetherVerifier v, bytes memory ya, uint256 amount, uint256 t)
-        external view returns (bytes memory cAud, bytes memory dAud)
+        external
+        view
+        returns (bytes memory cAud, bytes memory dAud)
     {
         if (_isZero(ya)) return (ya, ya);
         cAud = _m2(v, v.g1MulBase(1), amount, ya, t);
@@ -92,7 +99,9 @@ contract ZetherProver {
     }
 
     function _m2(IZetherVerifier v, bytes memory a, uint256 sa, bytes memory b, uint256 sb)
-        internal view returns (bytes memory)
+        internal
+        view
+        returns (bytes memory)
     {
         uint256[] memory sc = new uint256[](2);
         (sc[0], sc[1]) = (sa, sb);
@@ -102,12 +111,16 @@ contract ZetherProver {
     // ------------------------------------------------------------------ Σ + BP
 
     function proveTransfer(IZetherVerifier v, bytes calldata statement, TransferWitness calldata w)
-        external view returns (bytes memory)
+        external
+        view
+        returns (bytes memory)
     {
         Env memory e = _env(v, w.seed);
         bytes memory s = statement;
         uint256[6] memory k;
-        for (uint256 i; i < 6; ++i) k[i] = _rand(e, "sigma.k", i); // k_x k_v k_s k_b k_gv k_gb
+        for (uint256 i; i < 6; ++i) {
+            k[i] = _rand(e, "sigma.k", i); // k_x k_v k_s k_b k_gv k_gb
+        }
         bytes memory commits = _tampered(e, _transferCommits(e, s, w, k));
         bytes32 st = T.absorb(T.init(), "statement", s);
         st = T.absorb(st, "sigma.commit", commits);
@@ -125,30 +138,36 @@ contract ZetherProver {
     }
 
     function _responses(uint256 r, uint256 c, uint256[6] memory k, uint256[6] memory wit)
-        internal pure returns (bytes memory out)
+        internal
+        pure
+        returns (bytes memory out)
     {
-        for (uint256 i; i < 6; ++i) out = bytes.concat(out, abi.encodePacked(addmod(k[i], mulmod(c, wit[i], r), r)));
+        for (uint256 i; i < 6; ++i) {
+            out = bytes.concat(out, abi.encodePacked(addmod(k[i], mulmod(c, wit[i], r), r)));
+        }
     }
 
     function _transferCommits(Env memory e, bytes memory s, TransferWitness calldata w, uint256[6] memory k)
-        internal view returns (bytes memory commits)
+        internal
+        view
+        returns (bytes memory commits)
     {
         IZetherVerifier v = e.v;
         bytes memory hb = _slice(e.gens, 0, e.p);
         commits = bytes.concat(
-            _m2(v, e.g, w.v, hb, w.gammaV),                          // V_v
-            _m2(v, e.g, w.bPrime, hb, w.gammaB),                     // V_b
-            v.g1MulBase(k[0]),                                       // A_y
-            v.g1MulBase(k[2]),                                       // A_D
-            _m2(v, e.g, k[1], _sp(e, s, 1), k[2])                    // A_out
+            _m2(v, e.g, w.v, hb, w.gammaV), // V_v
+            _m2(v, e.g, w.bPrime, hb, w.gammaB), // V_b
+            v.g1MulBase(k[0]), // A_y
+            v.g1MulBase(k[2]), // A_D
+            _m2(v, e.g, k[1], _sp(e, s, 1), k[2]) // A_out
         );
         commits = bytes.concat(
             commits,
-            _m2(v, e.g, k[1], _sp(e, s, 0), k[2]),                   // A_deb
-            _abal(e, s, k[3], k[0]),                                 // A_bal
+            _m2(v, e.g, k[1], _sp(e, s, 0), k[2]), // A_deb
+            _abal(e, s, k[3], k[0]), // A_bal
             _isZero(_sp(e, s, 2)) ? new bytes(e.p) : _m2(v, e.g, k[1], _sp(e, s, 2), k[2]), // A_aud
-            _m2(v, e.g, k[1], hb, k[4]),                             // A_Vv
-            _m2(v, e.g, k[3], hb, k[5])                              // A_Vb
+            _m2(v, e.g, k[1], hb, k[4]), // A_Vv
+            _m2(v, e.g, k[3], hb, k[5]) // A_Vb
         );
     }
 
@@ -173,7 +192,9 @@ contract ZetherProver {
 
     /// @notice Σ (E1–E8, E3/E6/E6′/E7 theo từng người nhận) + BP(v_j) cho từng người + BP(b') trên một transcript.
     function proveTransferMulti(IZetherVerifier v, bytes calldata statement, MultiWitness calldata w)
-        external view returns (bytes memory)
+        external
+        view
+        returns (bytes memory)
     {
         Env memory e = _env(v, w.seed);
         uint256 m = w.v.length;
@@ -192,10 +213,14 @@ contract ZetherProver {
 
     /// @dev The Σ part (commitments ‖ responses) and the transcript after `sigma.c`.
     function _multiSigma(Env memory e, bytes calldata statement, MultiWitness calldata w)
-        internal view returns (bytes memory, bytes32 st)
+        internal
+        view
+        returns (bytes memory, bytes32 st)
     {
         uint256[] memory k = new uint256[](4 + 3 * w.v.length); // k_x k_s k_b k_gb (k_vj k_gvj k_tj)_j
-        for (uint256 i; i < k.length; ++i) k[i] = _rand(e, "multi.k", i);
+        for (uint256 i; i < k.length; ++i) {
+            k[i] = _rand(e, "multi.k", i);
+        }
         bytes memory commits = _tampered(e, _multiCommits(e, statement, w, k));
         st = T.absorb(T.absorb(T.init(), "statement", statement), "sigma.commit", commits);
         uint256 c;
@@ -205,29 +230,43 @@ contract ZetherProver {
     }
 
     /// @dev `z_x z_s z_b z_gb (z_vj z_gvj z_tj)_j`; `z_tj = 0` when the auditor is off.
-    function _multiResponses(Env memory e, uint256 c, uint256[] memory k, MultiWitness calldata w, bytes calldata statement)
-        internal pure returns (bytes memory out)
-    {
+    function _multiResponses(
+        Env memory e,
+        uint256 c,
+        uint256[] memory k,
+        MultiWitness calldata w,
+        bytes calldata statement
+    ) internal pure returns (bytes memory out) {
         uint256 r = e.r;
         bool aud = !_isZero(_sp(e, statement, 1));
         out = abi.encodePacked(
-            addmod(k[0], mulmod(c, w.x, r), r), addmod(k[1], mulmod(c, w.s, r), r),
-            addmod(k[2], mulmod(c, w.bPrime, r), r), addmod(k[3], mulmod(c, w.gammaB, r), r)
+            addmod(k[0], mulmod(c, w.x, r), r),
+            addmod(k[1], mulmod(c, w.s, r), r),
+            addmod(k[2], mulmod(c, w.bPrime, r), r),
+            addmod(k[3], mulmod(c, w.gammaB, r), r)
         );
         for (uint256 j; j < w.v.length; ++j) {
-            out = bytes.concat(out, abi.encodePacked(
-                addmod(k[4 + 3 * j], mulmod(c, w.v[j], r), r), addmod(k[5 + 3 * j], mulmod(c, w.gammaV[j], r), r),
-                aud ? addmod(k[6 + 3 * j], mulmod(c, w.t[j], r), r) : 0
-            ));
+            out = bytes.concat(
+                out,
+                abi.encodePacked(
+                    addmod(k[4 + 3 * j], mulmod(c, w.v[j], r), r),
+                    addmod(k[5 + 3 * j], mulmod(c, w.gammaV[j], r), r),
+                    aud ? addmod(k[6 + 3 * j], mulmod(c, w.t[j], r), r) : 0
+                )
+            );
         }
     }
 
     /// @dev Statement: Y_f Y_a C_acc D_acc D_out C_deb be32(M) (Y_tj C_out_j C_aud_j D_aud_j)_j.
     function _multiCommits(Env memory e, bytes memory s, MultiWitness calldata w, uint256[] memory k)
-        internal view returns (bytes memory commits)
+        internal
+        view
+        returns (bytes memory commits)
     {
         uint256 kvSum;
-        for (uint256 j; j < w.v.length; ++j) kvSum = addmod(kvSum, k[4 + 3 * j], e.r);
+        for (uint256 j; j < w.v.length; ++j) {
+            kvSum = addmod(kvSum, k[4 + 3 * j], e.r);
+        }
         commits = _multiHead(e, s, w.bPrime, w.gammaB, k, kvSum);
         for (uint256 j; j < w.v.length; ++j) {
             commits = bytes.concat(commits, _multiLeg(e, s, j, w.v[j], w.gammaV[j], k));
@@ -236,37 +275,41 @@ contract ZetherProver {
 
     /// @dev V_b A_y A_D A_deb A_bal A_Vb (k = k_x k_s k_b k_gb …).
     function _multiHead(Env memory e, bytes memory s, uint256 bPrime, uint256 gammaB, uint256[] memory k, uint256 kvSum)
-        internal view returns (bytes memory head)
+        internal
+        view
+        returns (bytes memory head)
     {
         bytes memory hb = _slice(e.gens, 0, e.p);
         head = bytes.concat(
-            _m2(e.v, e.g, bPrime, hb, gammaB),               // V_b
-            e.v.g1MulBase(k[0]),                             // A_y
-            e.v.g1MulBase(k[1]),                             // A_D
-            _m2(e.v, e.g, kvSum, _sp(e, s, 0), k[1])         // A_deb
+            _m2(e.v, e.g, bPrime, hb, gammaB), // V_b
+            e.v.g1MulBase(k[0]), // A_y
+            e.v.g1MulBase(k[1]), // A_D
+            _m2(e.v, e.g, kvSum, _sp(e, s, 0), k[1]) // A_deb
         );
         uint256[] memory sc = new uint256[](3);
         (sc[0], sc[1], sc[2]) = (k[2], k[0], k[0] == 0 ? 0 : e.r - k[0]);
         head = bytes.concat(
             head,
             e.v.g1Msm(bytes.concat(e.g, _sp(e, s, 3), _sp(e, s, 4)), sc), // A_bal = [k_b]G + [k_x](D_acc − D_out)
-            _m2(e.v, e.g, k[2], hb, k[3])                                  // A_Vb
+            _m2(e.v, e.g, k[2], hb, k[3]) // A_Vb
         );
     }
 
     /// @dev V_vj A_out_j A_aud_j A_Daud_j A_Vvj (k_vj = k[4 + 3j], k_gvj = k[5 + 3j], k_tj = k[6 + 3j]).
     function _multiLeg(Env memory e, bytes memory s, uint256 j, uint256 v, uint256 gammaV, uint256[] memory k)
-        internal view returns (bytes memory leg)
+        internal
+        view
+        returns (bytes memory leg)
     {
         bytes memory hb = _slice(e.gens, 0, e.p);
         leg = bytes.concat(
-            _m2(e.v, e.g, v, hb, gammaV),                                // V_vj
-            _m2(e.v, e.g, k[4 + 3 * j], _lp(e, s, j), k[1])              // A_out_j
+            _m2(e.v, e.g, v, hb, gammaV), // V_vj
+            _m2(e.v, e.g, k[4 + 3 * j], _lp(e, s, j), k[1]) // A_out_j
         );
         leg = bytes.concat(
             leg,
-            _audCommits(e, _sp(e, s, 1), k[4 + 3 * j], k[6 + 3 * j]),   // A_aud_j A_Daud_j
-            _m2(e.v, e.g, k[4 + 3 * j], hb, k[5 + 3 * j])                // A_Vvj
+            _audCommits(e, _sp(e, s, 1), k[4 + 3 * j], k[6 + 3 * j]), // A_aud_j A_Daud_j
+            _m2(e.v, e.g, k[4 + 3 * j], hb, k[5 + 3 * j]) // A_Vvj
         );
     }
 
@@ -288,11 +331,15 @@ contract ZetherProver {
     }
 
     function proveBurn(IZetherVerifier v, bytes calldata statement, BurnWitness calldata w)
-        external view returns (bytes memory)
+        external
+        view
+        returns (bytes memory)
     {
         Env memory e = _env(v, w.seed);
         uint256[6] memory k;
-        for (uint256 i; i < 3; ++i) k[i] = _rand(e, "burn.k", i); // k_x k_b k_gb
+        for (uint256 i; i < 3; ++i) {
+            k[i] = _rand(e, "burn.k", i); // k_x k_b k_gb
+        }
         bytes memory commits = _tampered(e, _burnCommits(e, statement, w.bPrime, w.gammaB, k));
         bytes32 st = T.absorb(T.init(), "statement", statement);
         st = T.absorb(st, "sigma.commit", commits);
@@ -306,14 +353,16 @@ contract ZetherProver {
     }
 
     function _burnCommits(Env memory e, bytes memory s, uint256 bPrime, uint256 gammaB, uint256[6] memory k)
-        internal view returns (bytes memory)
+        internal
+        view
+        returns (bytes memory)
     {
         bytes memory hb = _slice(e.gens, 0, e.p);
         return bytes.concat(
-            _m2(e.v, e.g, bPrime, hb, gammaB),          // V_b
-            e.v.g1MulBase(k[0]),                        // A_y
-            _m2(e.v, e.g, k[1], _sp(e, s, 2), k[0]),    // A_bal = [k_b]G + [k_x]D_acc
-            _m2(e.v, e.g, k[1], hb, k[2])               // A_Vb
+            _m2(e.v, e.g, bPrime, hb, gammaB), // V_b
+            e.v.g1MulBase(k[0]), // A_y
+            _m2(e.v, e.g, k[1], _sp(e, s, 2), k[0]), // A_bal = [k_b]G + [k_x]D_acc
+            _m2(e.v, e.g, k[1], hb, k[2]) // A_Vb
         );
     }
 
@@ -343,7 +392,9 @@ contract ZetherProver {
     }
 
     function _proveRange(Env memory e, bytes32 st, uint256 n, uint256 value, uint256 gamma)
-        internal view returns (bytes memory out, bytes32)
+        internal
+        view
+        returns (bytes memory out, bytes32)
     {
         RP memory q = _rpInit(e, n, value, gamma);
         if (tamperA == e.rid) q.AS = _offset(e, q.AS, 0);
@@ -429,7 +480,9 @@ contract ZetherProver {
     }
 
     function _vecCommit(Env memory e, uint256 blind, uint256[] memory av, uint256[] memory bv)
-        internal view returns (bytes memory)
+        internal
+        view
+        returns (bytes memory)
     {
         uint256 n = av.length;
         uint256[] memory sc = new uint256[](1 + 2 * n);
@@ -438,9 +491,8 @@ contract ZetherProver {
             sc[1 + i] = av[i];
             sc[1 + n + i] = bv[i];
         }
-        bytes memory pts = bytes.concat(
-            _slice(e.gens, 0, e.p), _slice(e.gens, 2 * e.p, n * e.p), _slice(e.gens, 66 * e.p, n * e.p)
-        );
+        bytes memory pts =
+            bytes.concat(_slice(e.gens, 0, e.p), _slice(e.gens, 2 * e.p, n * e.p), _slice(e.gens, 66 * e.p, n * e.p));
         return e.v.g1Msm(pts, sc);
     }
 
@@ -455,7 +507,9 @@ contract ZetherProver {
     }
 
     function _ipa(Env memory e, bytes32 st, RP memory q, uint256[] memory a, uint256[] memory b)
-        internal view returns (bytes memory LR, uint256, uint256, bytes32)
+        internal
+        view
+        returns (bytes memory LR, uint256, uint256, bytes32)
     {
         IPA memory s = _ipaSetup(e, q);
         while (s.m > 1) {
@@ -504,7 +558,9 @@ contract ZetherProver {
 
     /// @dev L = Σ[a_lo]G_hi + Σ[b_hi]H'_lo + [<a_lo,b_hi>]Q ; R = Σ[a_hi]G_lo + Σ[b_lo]H'_hi + [<a_hi,b_lo>]Q.
     function _lr(Env memory e, IPA memory s, uint256[] memory a, uint256[] memory b, bool left)
-        internal view returns (bytes memory)
+        internal
+        view
+        returns (bytes memory)
     {
         uint256 h = s.h;
         uint256 p = e.p;
@@ -518,9 +574,8 @@ contract ZetherProver {
             cross = addmod(cross, mulmod(ai, bi, e.r), e.r);
         }
         sc[2 * h] = cross;
-        bytes memory pts = bytes.concat(
-            _slice(s.G, (left ? h : 0) * p, h * p), _slice(s.H, (left ? 0 : h) * p, h * p), s.Q
-        );
+        bytes memory pts =
+            bytes.concat(_slice(s.G, (left ? h : 0) * p, h * p), _slice(s.H, (left ? 0 : h) * p, h * p), s.Q);
         return e.v.g1Msm(pts, sc);
     }
 

@@ -17,12 +17,23 @@ abstract contract ExampleApp is GovernanceBase {
         GovernanceLib.init(bits, 0, nid(owner_), delay, address(0), none, bits, bits, 0, address(0));
     }
 
-    function _guardIn() internal pure override returns (bool) { return false; }
+    function _guardIn() internal pure override returns (bool) {
+        return false;
+    }
     function _guardOut(bool) internal pure override {}
-    function _caller() internal view override returns (address) { return msg.sender; }
+
+    function _caller() internal view override returns (address) {
+        return msg.sender;
+    }
+
     /// @dev A test app has no chain word (not factory-made); its renounce is not exercised by chain (Fable recheck-2 P3-1).
-    function _govChainUid() internal pure override returns (bytes32) { return bytes32(0); }
-    function _contractOnlyBits() internal pure override returns (uint256) { return 0; }
+    function _govChainUid() internal pure override returns (bytes32) {
+        return bytes32(0);
+    }
+
+    function _contractOnlyBits() internal pure override returns (uint256) {
+        return 0;
+    }
 }
 
 /// Spec §1.9, first example: a loan approval bounded on a named argument. Bit 128, scalar and scoped: `approveLoan` passes the
@@ -33,15 +44,32 @@ contract LoanBook is ExampleApp {
 
     error WrongBranch(bytes32 scope, bytes32 branch);
 
-    struct Loan { uint128 principal; bytes32 branch; bool approved; }
+    struct Loan {
+        uint128 principal;
+        bytes32 branch;
+        bool approved;
+    }
     mapping(uint256 => Loan) public loans;
 
-    constructor(address committee, uint64 delay) { _initApp(committee, delay, BITS); }
+    constructor(address committee, uint64 delay) {
+        _initApp(committee, delay, BITS);
+    }
 
-    function _validBits() internal pure override returns (uint256) { return BITS; }
-    function _roleBits() internal pure override returns (uint256) { return BITS; }
-    function _scalarBits() internal pure override returns (uint256) { return BITS; }
-    function _scopeBits() internal pure override returns (uint256) { return BITS; }
+    function _validBits() internal pure override returns (uint256) {
+        return BITS;
+    }
+
+    function _roleBits() internal pure override returns (uint256) {
+        return BITS;
+    }
+
+    function _scalarBits() internal pure override returns (uint256) {
+        return BITS;
+    }
+
+    function _scopeBits() internal pure override returns (uint256) {
+        return BITS;
+    }
 
     function _bitLabelBody(uint8 bit) internal pure override returns (BitType, bytes4, string memory) {
         if (bit != APPROVE_LOAN) revert FeatureInvalidForKind(bit);
@@ -79,10 +107,21 @@ contract FamilyTree is ExampleApp {
         parentOf[1] = 1;
     }
 
-    function _validBits() internal pure override returns (uint256) { return BITS; }
-    function _roleBits() internal pure override returns (uint256) { return BITS; }
-    function _scalarBits() internal pure override returns (uint256) { return 0; }
-    function _scopeBits() internal pure override returns (uint256) { return BITS; }
+    function _validBits() internal pure override returns (uint256) {
+        return BITS;
+    }
+
+    function _roleBits() internal pure override returns (uint256) {
+        return BITS;
+    }
+
+    function _scalarBits() internal pure override returns (uint256) {
+        return 0;
+    }
+
+    function _scopeBits() internal pure override returns (uint256) {
+        return BITS;
+    }
 
     /// `id` is `head` or below it, within `MAX_DEPTH` steps.
     function isDescendant(uint256 head, uint256 id) public view returns (bool) {
@@ -128,12 +167,25 @@ contract GroupLedger is ExampleApp {
     mapping(uint64 member => bytes32) public groupOf;
     mapping(uint64 member => uint256) public balanceOf;
 
-    constructor(address owner_, uint64 delay) { _initApp(owner_, delay, BITS); }
+    constructor(address owner_, uint64 delay) {
+        _initApp(owner_, delay, BITS);
+    }
 
-    function _validBits() internal pure override returns (uint256) { return BITS; }
-    function _roleBits() internal pure override returns (uint256) { return BITS; }
-    function _scalarBits() internal pure override returns (uint256) { return BITS; }
-    function _scopeBits() internal pure override returns (uint256) { return BITS; }
+    function _validBits() internal pure override returns (uint256) {
+        return BITS;
+    }
+
+    function _roleBits() internal pure override returns (uint256) {
+        return BITS;
+    }
+
+    function _scalarBits() internal pure override returns (uint256) {
+        return BITS;
+    }
+
+    function _scopeBits() internal pure override returns (uint256) {
+        return BITS;
+    }
 
     function join(uint64 member, bytes32 group, uint256 balance) external {
         (groupOf[member], balanceOf[member]) = (group, balance);
@@ -183,7 +235,7 @@ contract GovExamplesTest is Test {
         b = new LoanBook(OWNER, D);
         IGovernance.GrantTerms memory g;
         (g.min, g.max, g.total, g.validUntil, g.scope, g.delegable) =
-            (1e6, 1e8, 5e8, uint64(block.timestamp + 365 days), BRANCH, true);
+        (1e6, 1e8, 5e8, uint64(block.timestamp + 365 days), BRANCH, true);
         _twice(b, 128, MANAGER, g);
         b.addLoan(1, 5e5, BRANCH);
         b.addLoan(2, 2e8, BRANCH);

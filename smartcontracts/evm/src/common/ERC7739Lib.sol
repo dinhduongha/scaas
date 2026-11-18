@@ -28,17 +28,25 @@ library ERC7739Lib {
     /// @param walletDomain    `abi.encode(keccak256(name), keccak256(version), chainId, verifyingContract, salt)` of the
     ///                        wallet's `eip712Domain()` (the `TypedDataSign` struct's last five fields)
     function unwrap(bytes32 hash, bytes calldata sig, bytes32 walletSeparator, bytes memory walletDomain)
-        internal pure returns (bytes32 message, bytes calldata inner)
+        internal
+        pure
+        returns (bytes32 message, bytes calldata inner)
     {
         (bool nested, bytes32 typed, uint256 innerEnd) = _typedDataSign(hash, sig, walletDomain);
         if (nested) return (typed, sig[:innerEnd]);
-        return (MessageHashUtils.toTypedDataHash(walletSeparator, keccak256(abi.encode(PERSONAL_SIGN_TYPEHASH, hash))), sig);
+        return
+            (
+                MessageHashUtils.toTypedDataHash(walletSeparator, keccak256(abi.encode(PERSONAL_SIGN_TYPEHASH, hash))),
+                sig
+            );
     }
 
     /// @dev The `TypedDataSign` message when `sig` carries the suffix, its app separator and contents rebuild `hash`, and
     ///      its `contentsDescription` is valid; `innerEnd` ends the inner signature.
     function _typedDataSign(bytes32 hash, bytes calldata sig, bytes memory walletDomain)
-        private pure returns (bool ok, bytes32 message, uint256 innerEnd)
+        private
+        pure
+        returns (bool ok, bytes32 message, uint256 innerEnd)
     {
         uint256 n = sig.length;
         if (n < 66) return (false, 0, 0);
@@ -57,19 +65,31 @@ library ERC7739Lib {
 
     /// @dev `hashStruct(TypedDataSign{contents, the wallet's five domain fields})`; 0 for an invalid description.
     function _typedDataSignStruct(bytes calldata descr, bytes32 contents, bytes memory walletDomain)
-        private pure returns (bytes32)
+        private
+        pure
+        returns (bytes32)
     {
         (bool ok, bytes calldata name, bytes calldata contentsType) = _contentsDescr(descr);
         if (!ok) return 0;
-        bytes32 typehash = keccak256(abi.encodePacked("TypedDataSign(", name,
-            " contents,string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)", contentsType));
+        bytes32 typehash = keccak256(
+            abi.encodePacked(
+                "TypedDataSign(",
+                name,
+                " contents,string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)",
+                contentsType
+            )
+        );
         return keccak256(abi.encodePacked(typehash, contents, walletDomain));
     }
 
     /// @notice The `walletDomain` argument of `unwrap` from a wallet's `eip712Domain()` fields.
-    function domainFields(string memory name, string memory version, uint256 chainId, address verifyingContract,
-        bytes32 salt) internal pure returns (bytes memory)
-    {
+    function domainFields(
+        string memory name,
+        string memory version,
+        uint256 chainId,
+        address verifyingContract,
+        bytes32 salt
+    ) internal pure returns (bytes memory) {
         return abi.encode(keccak256(bytes(name)), keccak256(bytes(version)), chainId, verifyingContract, salt);
     }
 
@@ -77,7 +97,9 @@ library ERC7739Lib {
     ///      explicit mode (`contentsType ‖ contentsName`). `contentsName` must be non-empty, hold none of `, )(` or NUL,
     ///      and not start with `a`-`z` (the EIP's recommended checks).
     function _contentsDescr(bytes calldata d)
-        private pure returns (bool ok, bytes calldata name, bytes calldata contentsType)
+        private
+        pure
+        returns (bool ok, bytes calldata name, bytes calldata contentsType)
     {
         uint256 n = d.length;
         name = d[:0];

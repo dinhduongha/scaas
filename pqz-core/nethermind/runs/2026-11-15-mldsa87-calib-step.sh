@@ -11,10 +11,13 @@ set -eu
 cd "$(dirname "$0")/.."
 P=${1:?pass number}
 O=runs/mldsa87-calib/pass$P
-[ ! -f "$O.log" ] || { echo "skip $O (done)"; exit 0; }
+[ ! -f "$O.log" ] || {
+    echo "skip $O (done)"
+    exit 0
+}
 mkdir -p runs/mldsa87-calib
 echo "pass $P: start $(date -u +%T)Z, load $(cut -d' ' -f1-3 /proc/loadavg)"
-sh calibrate.sh "${CALIB_LABEL:-mldsa87}" --keys 1-0 --cold 0 > /dev/null
+sh calibrate.sh "${CALIB_LABEL:-mldsa87}" --keys 1-0 --cold 0 >/dev/null
 F=runs/$(date +%F)-calib-ops100
 mv "$F-engine-pqz.json" "$O-engine-pqz.log" && mv "$F.txt" "$O.log"
 grep -E '^t_ecMul|^ML-DSA-' "$O.log"

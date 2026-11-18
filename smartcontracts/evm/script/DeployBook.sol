@@ -35,26 +35,50 @@ abstract contract DeployBook is Script {
 
     /// @notice This chain's key, name and network: the `chain-uids.json` row with (block.chainid, `uid`), else
     ///         `DEPLOY_NAME`.
-    function _bookKey(bytes32 uid) internal view returns (string memory key, string memory name, string memory network) {
+    function _bookKey(bytes32 uid)
+        internal
+        view
+        returns (string memory key, string memory name, string memory network)
+    {
         string memory dn = _deployName();
         string memory j = vm.readFile(TABLE);
         for (uint256 i;; ++i) {
             string memory p = string.concat(".chains[", vm.toString(i), "]");
             if (!vm.keyExistsJson(j, p)) break;
             string memory k = vm.parseJsonString(j, string.concat(p, ".key"));
-            if (vm.parseJsonUint(j, string.concat(p, ".chainId")) == block.chainid
-                && vm.parseJsonBytes32(j, string.concat(p, ".chainUid")) == uid) {
-                require(bytes(dn).length == 0 || _bookEq(dn, k),
-                    string.concat("DEPLOY_NAME_MISMATCH: DEPLOY_NAME=", dn, ", but this chain is ", k, " in chain-uids.json"));
-                return (k, vm.parseJsonString(j, string.concat(p, ".name")), vm.parseJsonString(j, string.concat(p, ".network")));
+            if (
+                vm.parseJsonUint(j, string.concat(p, ".chainId")) == block.chainid
+                    && vm.parseJsonBytes32(j, string.concat(p, ".chainUid")) == uid
+            ) {
+                require(
+                    bytes(dn).length == 0 || _bookEq(dn, k),
+                    string.concat(
+                        "DEPLOY_NAME_MISMATCH: DEPLOY_NAME=", dn, ", but this chain is ", k, " in chain-uids.json"
+                    )
+                );
+                return (
+                    k,
+                    vm.parseJsonString(j, string.concat(p, ".name")),
+                    vm.parseJsonString(j, string.concat(p, ".network"))
+                );
             }
-            require(!_bookEq(dn, k), string.concat("DEPLOY_NAME_TAKEN: ", dn, " names another chain in chain-uids.json"));
+            require(
+                !_bookEq(dn, k), string.concat("DEPLOY_NAME_TAKEN: ", dn, " names another chain in chain-uids.json")
+            );
         }
-        require(bytes(dn).length != 0, string.concat("DEPLOY_NAME_REQUIRED: chain ", vm.toString(block.chainid),
-            " is not in chain-uids.json; set DEPLOY_NAME=<name>-testnet or <name>-mainnet (NET-EVM-13)"));
+        require(
+            bytes(dn).length != 0,
+            string.concat(
+                "DEPLOY_NAME_REQUIRED: chain ",
+                vm.toString(block.chainid),
+                " is not in chain-uids.json; set DEPLOY_NAME=<name>-testnet or <name>-mainnet (NET-EVM-13)"
+            )
+        );
         network = _bookSuffix(dn);
-        require(bytes(network).length != 0 && _bookChars(dn),
-            string.concat("DEPLOY_NAME_INVALID: ", dn, " is not <name>-mainnet or <name>-testnet ([a-z0-9-])"));
+        require(
+            bytes(network).length != 0 && _bookChars(dn),
+            string.concat("DEPLOY_NAME_INVALID: ", dn, " is not <name>-mainnet or <name>-testnet ([a-z0-9-])")
+        );
         return (dn, dn, network);
     }
 
@@ -73,14 +97,28 @@ abstract contract DeployBook is Script {
         vm.writeJson(body, path);
         bytes memory b = bytes(vm.readFile(path));
         require(b.length >= 2 && b[0] == "{", "a book's body is a JSON object");
-        string memory h = string.concat('{\n  "key": "', k, '",\n  "name": "', n, '",\n  "chainId": ',
-            vm.toString(block.chainid), ',\n  "chainUid": "', vm.toString(uid), '",\n  "network": "', net, '"');
-        if (b[1] != "\n") { // an empty body: `{}`
+        string memory h = string.concat(
+            '{\n  "key": "',
+            k,
+            '",\n  "name": "',
+            n,
+            '",\n  "chainId": ',
+            vm.toString(block.chainid),
+            ',\n  "chainUid": "',
+            vm.toString(uid),
+            '",\n  "network": "',
+            net,
+            '"'
+        );
+        if (b[1] != "\n") {
+            // an empty body: `{}`
             vm.writeFile(path, string.concat(h, "\n}"));
             return;
         }
         bytes memory rest = new bytes(b.length - 2);
-        for (uint256 i; i < rest.length; ++i) rest[i] = b[i + 2];
+        for (uint256 i; i < rest.length; ++i) {
+            rest[i] = b[i + 2];
+        }
         vm.writeFile(path, string.concat(h, ",\n", string(rest)));
     }
 
@@ -89,8 +127,16 @@ abstract contract DeployBook is Script {
     function _readBook(bytes32 uid, string memory suffix) internal view returns (string memory) {
         string memory p = _bookPath(uid, suffix);
         string memory old = string.concat("./deployments/", vm.toString(block.chainid), suffix);
-        require(vm.exists(p) || !vm.exists(old), string.concat("BOOK_OLD_NAME: ", old,
-            " is named by chain id; rename it to ", p, " and give it its header (NET-EVM-13)"));
+        require(
+            vm.exists(p) || !vm.exists(old),
+            string.concat(
+                "BOOK_OLD_NAME: ",
+                old,
+                " is named by chain id; rename it to ",
+                p,
+                " and give it its header (NET-EVM-13)"
+            )
+        );
         return _checkBook(vm.readFile(p), p);
     }
 
@@ -102,12 +148,20 @@ abstract contract DeployBook is Script {
 
     /// @notice A book as read: its header there, its `network` the key's.
     function _checkBook(string memory j, string memory where) internal view returns (string memory) {
-        require(vm.keyExistsJson(j, ".key") && vm.keyExistsJson(j, ".name") && vm.keyExistsJson(j, ".chainId")
-            && vm.keyExistsJson(j, ".chainUid") && vm.keyExistsJson(j, ".network"),
-            string.concat("BOOK_HEADER_MISSING: ", where, " has no key, name, chainId, chainUid, network (a book from before NET-EVM-13)"));
+        require(
+            vm.keyExistsJson(j, ".key") && vm.keyExistsJson(j, ".name") && vm.keyExistsJson(j, ".chainId")
+                && vm.keyExistsJson(j, ".chainUid") && vm.keyExistsJson(j, ".network"),
+            string.concat(
+                "BOOK_HEADER_MISSING: ",
+                where,
+                " has no key, name, chainId, chainUid, network (a book from before NET-EVM-13)"
+            )
+        );
         string memory k = vm.parseJsonString(j, ".key");
         string memory net = vm.parseJsonString(j, ".network");
-        require(_bookEq(net, _networkOf(k)), string.concat("BOOK_NETWORK_MISMATCH: ", where, ": network ", net, ", key ", k));
+        require(
+            _bookEq(net, _networkOf(k)), string.concat("BOOK_NETWORK_MISMATCH: ", where, ": network ", net, ", key ", k)
+        );
         return j;
     }
 
@@ -123,14 +177,20 @@ abstract contract DeployBook is Script {
                 return vm.parseJsonString(j, string.concat(p, ".network"));
             }
         }
-        revert(string.concat("BOOK_KEY_INVALID: ", key, " ends in neither -mainnet nor -testnet and is not in chain-uids.json"));
+        revert(
+            string.concat(
+                "BOOK_KEY_INVALID: ", key, " ends in neither -mainnet nor -testnet and is not in chain-uids.json"
+            )
+        );
     }
 
     function _bookSuffix(string memory s) private pure returns (string memory) {
         bytes memory b = bytes(s);
         if (b.length <= 8) return "";
         bytes memory t = new bytes(8);
-        for (uint256 i; i < 8; ++i) t[i] = b[b.length - 8 + i];
+        for (uint256 i; i < 8; ++i) {
+            t[i] = b[b.length - 8 + i];
+        }
         if (_bookEq(string(t), "-mainnet")) return "mainnet";
         if (_bookEq(string(t), "-testnet")) return "testnet";
         return "";

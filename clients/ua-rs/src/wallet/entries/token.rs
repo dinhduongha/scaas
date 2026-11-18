@@ -10,7 +10,13 @@ const TWG: &[&str] = &["token", "zether", "pqz", "wallet", "gov_router"];
 
 /// The transfer on ids (`mtxExecuteTransfer`, `POST /v1/ua-metatx`; owner 2026-11-18, ruling 6): the struct of `mtxPay`'s row,
 /// its own entry; not a `/v1/op` row (the node's `ua_metatx` struct job), so not in [`super::entry_rows`].
-pub(super) const IDS: Def = ("UAMetaTransfer", "mtxExecuteTransfer", T, "bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,E", "$ @");
+pub(super) const IDS: Def = (
+    "UAMetaTransfer",
+    "mtxExecuteTransfer",
+    T,
+    "bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,E",
+    "$ @",
+);
 
 pub(super) const ROWS: &[Def] = &[
     ("UACancelNonce", "mtxCancelNonce", TWG, "bytes32 from,uint256 lane,E", ""),

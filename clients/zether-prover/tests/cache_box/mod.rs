@@ -10,7 +10,10 @@ fn b64url(b: &[u8]) -> String {
     const A: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     let mut s = String::new();
     for c in b.chunks(3) {
-        let n = c.iter().enumerate().fold(0u32, |a, (i, x)| a | (u32::from(*x) << (16 - 8 * i)));
+        let n = c
+            .iter()
+            .enumerate()
+            .fold(0u32, |a, (i, x)| a | (u32::from(*x) << (16 - 8 * i)));
         for i in 0..=c.len() {
             s.push(A[(n >> (18 - 6 * i) & 63) as usize] as char);
         }
@@ -22,17 +25,32 @@ fn b64url(b: &[u8]) -> String {
 pub fn seal(k: &ZetherKey<Bls12381>, entries: &Value) -> Value {
     use aes_gcm::aead::{Aead, KeyInit, Payload};
     let mut ck = [0u8; 32];
-    hkdf::Hkdf::<sha2::Sha256>::new(None, &encode_scalar::<Bls12381>(&k.x)).expand(b"scaas-zether-balance-cache-v1", &mut ck).unwrap();
+    hkdf::Hkdf::<sha2::Sha256>::new(None, &encode_scalar::<Bls12381>(&k.x))
+        .expand(b"scaas-zether-balance-cache-v1", &mut ck)
+        .unwrap();
     let iv = [7u8; 12];
     let ct = aes_gcm::Aes256Gcm::new_from_slice(&ck)
         .unwrap()
-        .encrypt(&aes_gcm::Nonce::from(iv), Payload { msg: entries.to_string().as_bytes(), aad: b"zether-cache:bls12381" })
+        .encrypt(
+            &aes_gcm::Nonce::from(iv),
+            Payload {
+                msg: entries.to_string().as_bytes(),
+                aad: b"zether-cache:bls12381",
+            },
+        )
         .unwrap();
     json!({"iv": b64url(&iv), "ct": b64url(&ct)})
 }
 
 /// The box of `k`'s one entry `<UA>:<token>`: `{balance, accSeq}`.
 pub fn entry(k: &ZetherKey<Bls12381>, token: &Value, balance: u64, acc_seq: u64) -> Value {
-    let id = format!("0x{}:{}", hex::encode(k.ua()), token.as_str().unwrap().to_lowercase());
-    seal(k, &json!({ id: {"ua": format!("0x{}", hex::encode(k.ua())), "token": token, "balance": balance.to_string(), "accSeq": acc_seq} }))
+    let id = format!(
+        "0x{}:{}",
+        hex::encode(k.ua()),
+        token.as_str().unwrap().to_lowercase()
+    );
+    seal(
+        k,
+        &json!({ id: {"ua": format!("0x{}", hex::encode(k.ua())), "token": token, "balance": balance.to_string(), "accSeq": acc_seq} }),
+    )
 }

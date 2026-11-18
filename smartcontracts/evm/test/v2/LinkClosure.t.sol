@@ -37,8 +37,21 @@ import {ITokenModules} from "../../src/metatx/ITokenModule.sol";
 contract LinkClosureTest is Test {
     IOpenFactory.TokenKind constant NORMAL = IOpenFactory.TokenKind.NORMAL;
     string[] internal names = [
-        "GovernanceLib", "HederaLib", "TradeLib", "MtxPipelineLib", "WrappedLib", "ZetherLib", "ZetherWrappedLib",
-        "PqzStateLib", "PqzTransferLib", "PqzBurnLib", "PqzViewLib", "PqzWrappedLib", "UARegistryCoreLib", "UARegistryAuxLib", "RegulatedLib"
+        "GovernanceLib",
+        "HederaLib",
+        "TradeLib",
+        "MtxPipelineLib",
+        "WrappedLib",
+        "ZetherLib",
+        "ZetherWrappedLib",
+        "PqzStateLib",
+        "PqzTransferLib",
+        "PqzBurnLib",
+        "PqzViewLib",
+        "PqzWrappedLib",
+        "UARegistryCoreLib",
+        "UARegistryAuxLib",
+        "RegulatedLib"
     ];
 
     function _addr(string memory n) internal pure returns (address a) {
@@ -74,7 +87,11 @@ contract LinkClosureTest is Test {
     }
 
     /// @dev The same for contract `n` of source file `file` (a body module sits in its kind's `<Kind>Modules.sol`).
-    function _closure(string memory file, string memory n, string[] memory acc) internal view returns (string[] memory) {
+    function _closure(string memory file, string memory n, string[] memory acc)
+        internal
+        view
+        returns (string[] memory)
+    {
         string memory j = _json(file, n);
         string memory base = ".bytecode.linkReferences";
         string[] memory files = vm.parseJsonKeys(j, base);
@@ -82,10 +99,14 @@ contract LinkClosureTest is Test {
             string[] memory libs = vm.parseJsonKeys(j, string.concat(base, "[\"", files[i], "\"]"));
             for (uint256 k; k < libs.length; ++k) {
                 bool seen;
-                for (uint256 m; m < acc.length; ++m) if (keccak256(bytes(acc[m])) == keccak256(bytes(libs[k]))) seen = true;
+                for (uint256 m; m < acc.length; ++m) {
+                    if (keccak256(bytes(acc[m])) == keccak256(bytes(libs[k]))) seen = true;
+                }
                 if (seen) continue;
                 string[] memory grown = new string[](acc.length + 1);
-                for (uint256 m; m < acc.length; ++m) grown[m] = acc[m];
+                for (uint256 m; m < acc.length; ++m) {
+                    grown[m] = acc[m];
+                }
                 grown[acc.length] = libs[k];
                 acc = _closure(libs[k], libs[k], grown);
             }
@@ -106,22 +127,33 @@ contract LinkClosureTest is Test {
     /// @dev `e.libs` is exactly `impl`'s release closure followed by `modules` (the release's `modules()`; none for a
     ///      fixture env, which `withModules` completes), each with its code hash. Its own call frame (`this.`), so the
     ///      artifacts it parses leave memory with it (12 kinds' modules in one frame ran out of memory).
-    function _assertEnvIsClosure(string memory label, string memory impl, string[] memory mods, address[] memory modules,
-        IFactoryToken.Env memory e) internal view
-    {
+    function _assertEnvIsClosure(
+        string memory label,
+        string memory impl,
+        string[] memory mods,
+        address[] memory modules,
+        IFactoryToken.Env memory e
+    ) internal view {
         this.assertEnvIsClosure(label, impl, mods, modules, e);
     }
 
-    function assertEnvIsClosure(string memory label, string memory impl, string[] memory mods, address[] memory modules,
-        IFactoryToken.Env memory e) external view
-    {
+    function assertEnvIsClosure(
+        string memory label,
+        string memory impl,
+        string[] memory mods,
+        address[] memory modules,
+        IFactoryToken.Env memory e
+    ) external view {
         string[] memory c = _releaseClosure(impl, mods);
         assertEq(e.libs.length, c.length + modules.length, string.concat(label, ": number of libraries and modules"));
         assertEq(e.libCodeHashes.length, e.libs.length, string.concat(label, ": number of pins"));
         for (uint256 k; k < c.length; ++k) {
             bool found;
             for (uint256 i; i < c.length; ++i) {
-                if (e.libs[i] == _addr(c[k])) { found = true; assertEq(e.libCodeHashes[i], e.libs[i].codehash); }
+                if (e.libs[i] == _addr(c[k])) {
+                    found = true;
+                    assertEq(e.libCodeHashes[i], e.libs[i].codehash);
+                }
             }
             assertTrue(found, string.concat(label, ": missing ", c[k]));
         }
@@ -151,24 +183,46 @@ contract LinkClosureTest is Test {
         address ska = new SmartKeyAccountFactory(ZUID).IMPLEMENTATION();
         DeployHarness h = new DeployHarness();
         (OpenFactory f,) = h.deploy(ZUID, true, ska);
-        _assertEnvIsClosure("DeployBase NONE", "NormalToken", _mods(NORMAL), _modulesOf(f, NORMAL), f.tokenEnvOf(NORMAL, 1));
+        _assertEnvIsClosure(
+            "DeployBase NONE", "NormalToken", _mods(NORMAL), _modulesOf(f, NORMAL), f.tokenEnvOf(NORMAL, 1)
+        );
         IOpenFactory.TokenKind z = IOpenFactory.TokenKind.NORMAL_ZETHER;
-        _assertEnvIsClosure("DeployBase NORMAL_ZETHER", "NormalZetherToken", _mods(z), _modulesOf(f, z), f.tokenEnvOf(z, 1));
+        _assertEnvIsClosure(
+            "DeployBase NORMAL_ZETHER", "NormalZetherToken", _mods(z), _modulesOf(f, z), f.tokenEnvOf(z, 1)
+        );
         z = IOpenFactory.TokenKind.WRAPPED_ZETHER;
-        _assertEnvIsClosure("DeployBase WRAPPED_ZETHER", "WrappedZetherToken", _mods(z), _modulesOf(f, z), f.tokenEnvOf(z, 1));
-        _assertEnvIsClosure("DeployBase DEX", "SCaaSDex", _dexMods(), ITokenModules(f.dexImplementationOf(1)).modules(),
-            f.dexEnvOf(1));
+        _assertEnvIsClosure(
+            "DeployBase WRAPPED_ZETHER", "WrappedZetherToken", _mods(z), _modulesOf(f, z), f.tokenEnvOf(z, 1)
+        );
+        _assertEnvIsClosure(
+            "DeployBase DEX", "SCaaSDex", _dexMods(), ITokenModules(f.dexImplementationOf(1)).modules(), f.dexEnvOf(1)
+        );
 
         // plan T27: the regulated kinds 9 and 13 (their base kind's closure and `RegulatedLib`); T28: kind 8; T31: kind 12
-        string[14] memory impls = ["NormalToken", "WrappedToken", "NormalZetherToken",
-            "WrappedZetherToken", "NormalPqzToken", "WrappedPqzToken", "", "", "NormalRegulatedToken", "WrappedRegulatedToken",
-            "", "", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"];
+        string[14] memory impls = [
+            "NormalToken",
+            "WrappedToken",
+            "NormalZetherToken",
+            "WrappedZetherToken",
+            "NormalPqzToken",
+            "WrappedPqzToken",
+            "",
+            "",
+            "NormalRegulatedToken",
+            "WrappedRegulatedToken",
+            "",
+            "",
+            "NormalPqzRegulatedToken",
+            "WrappedPqzRegulatedToken"
+        ];
         for (uint8 k; k < 14; ++k) {
             if (bytes(impls[k]).length == 0) continue;
             IFactoryToken.Env memory e;
             e.libs = closureLibs(IOpenFactory.TokenKind(k));
             e.libCodeHashes = new bytes32[](e.libs.length);
-            for (uint256 i; i < e.libs.length; ++i) e.libCodeHashes[i] = e.libs[i].codehash;
+            for (uint256 i; i < e.libs.length; ++i) {
+                e.libCodeHashes[i] = e.libs[i].codehash;
+            }
             _assertEnvIsClosure(impls[k], impls[k], _mods(IOpenFactory.TokenKind(k)), new address[](0), e);
         }
     }
@@ -181,8 +235,14 @@ contract LinkClosureTest is Test {
         h.setRegulated(true);
         h.setComplianceAdmin(address(this));
         (OpenFactory f,) = h.deploy(ZUID, true, new SmartKeyAccountFactory(ZUID).IMPLEMENTATION());
-        string[6] memory impls = ["NormalRegulatedToken", "WrappedRegulatedToken", "NormalZetherRegulatedToken",
-            "WrappedZetherRegulatedToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"];
+        string[6] memory impls = [
+            "NormalRegulatedToken",
+            "WrappedRegulatedToken",
+            "NormalZetherRegulatedToken",
+            "WrappedZetherRegulatedToken",
+            "NormalPqzRegulatedToken",
+            "WrappedPqzRegulatedToken"
+        ];
         for (uint8 i; i < 6; ++i) {
             IOpenFactory.TokenKind k = IOpenFactory.TokenKind(8 + i);
             IFactoryToken.Env memory e;
@@ -192,7 +252,8 @@ contract LinkClosureTest is Test {
             _assertEnvIsClosure(impls[i], impls[i], _mods(k), ms, e);
             bool lib;
             for (uint256 j; j < e.libs.length; ++j) {
-                lib = lib || (e.libs[j] == address(RegulatedLib) && e.libCodeHashes[j] == address(RegulatedLib).codehash);
+                lib =
+                    lib || (e.libs[j] == address(RegulatedLib) && e.libCodeHashes[j] == address(RegulatedLib).codehash);
             }
             assertTrue(lib, string.concat(impls[i], ": RegulatedLib and its code hash"));
         }
@@ -200,7 +261,9 @@ contract LinkClosureTest is Test {
 
     function _pins(address[] memory libs) internal view returns (bytes32[] memory h) {
         h = new bytes32[](libs.length);
-        for (uint256 i; i < libs.length; ++i) h[i] = libs[i].codehash;
+        for (uint256 i; i < libs.length; ++i) {
+            h[i] = libs[i].codehash;
+        }
     }
 
     /// typed-signing R2, T66b 3.1b: the registry's link closure is `UARegistryCoreLib` and `UARegistryAuxLib` (1 -> 2); T66b 3.1c:
@@ -211,12 +274,16 @@ contract LinkClosureTest is Test {
         string[] memory c = _closure("UARegistry", new string[](0));
         address[] memory want = registryClosureLibs();
         assertEq(c.length, want.length, "number of libraries");
-        for (uint256 i; i < c.length; ++i) assertEq(_addr(c[i]), want[i], c[i]);
+        for (uint256 i; i < c.length; ++i) {
+            assertEq(_addr(c[i]), want[i], c[i]);
+        }
         assertEq(_closure("UARegistryCoreLib", new string[](0)).length, 0, "UARegistryCoreLib links nothing");
         string[] memory aux = _closure("UARegistryAuxLib", new string[](0));
         assertEq(aux.length, 1, "UARegistryAuxLib links one library");
         assertEq(_addr(aux[0]), address(UARegistryCoreLib), "UARegistryAuxLib links the core");
-        assertTrue(_holds(address(UARegistryAuxLib).code, address(UARegistryCoreLib)), "the core is in the auxiliary code");
+        assertTrue(
+            _holds(address(UARegistryAuxLib).code, address(UARegistryCoreLib)), "the core is in the auxiliary code"
+        );
 
         DeployHarness h = new DeployHarness();
         (, string memory json) = h.deploy(ZUID, false, new SmartKeyAccountFactory(ZUID).IMPLEMENTATION());
@@ -235,7 +302,9 @@ contract LinkClosureTest is Test {
     function _holds(bytes memory code, address a) internal pure returns (bool) {
         for (uint256 i; i + 20 <= code.length; ++i) {
             bool m = true;
-            for (uint256 j; j < 20 && m; ++j) m = code[i + j] == bytes20(a)[j];
+            for (uint256 j; j < 20 && m; ++j) {
+                m = code[i + j] == bytes20(a)[j];
+            }
             if (m) return true;
         }
         return false;
@@ -260,8 +329,10 @@ contract LinkClosureTest is Test {
             // RegulatedLib: plan T28's bodies inline `GovernanceUse.use`, whose one call to `GovernanceLib.useLimited` is
             // its only DELEGATECALL (0 -> 1; its link reference, already in every regulated kind's closure); round 3s:
             // `setList` checks the role as `use` does without its feature test, its own `useLimited` call (1 -> 2)
-            uint256 want = h == keccak256("MtxPipelineLib") || h == keccak256("ZetherWrappedLib") || h == keccak256("PqzWrappedLib")
-                || h == keccak256("WrappedLib") || h == keccak256("RegulatedLib") ? 2 : h == keccak256("UARegistryAuxLib") ? 1 : 0;
+            uint256 want = h == keccak256("MtxPipelineLib") || h == keccak256("ZetherWrappedLib")
+                || h == keccak256("PqzWrappedLib") || h == keccak256("WrappedLib") || h == keccak256("RegulatedLib")
+                ? 2
+                : h == keccak256("UARegistryAuxLib") ? 1 : 0;
             assertEq(delegates, want, string.concat(name, ": DELEGATECALL count"));
         }
     }
@@ -277,7 +348,9 @@ contract LinkClosureTest is Test {
             if (k == 6 || k == 7) continue;
             (address[] memory ms,) = deployKindModules(k, address(0xFAC), k >= 8 ? regArgs() : bytes(""));
             string[] memory n = kindModuleNames(k);
-            for (uint256 i; i < ms.length; ++i) seen += _scanModule(vm.split(n[i], ":")[1], ms[i].code, closureLibs(IOpenFactory.TokenKind(k)), pins);
+            for (uint256 i; i < ms.length; ++i) {
+                seen += _scanModule(vm.split(n[i], ":")[1], ms[i].code, closureLibs(IOpenFactory.TokenKind(k)), pins);
+            }
         }
         (address[] memory d,) = deployDexModules(address(0xFAC));
         address[] memory dl = new address[](2);
@@ -288,7 +361,9 @@ contract LinkClosureTest is Test {
     }
 
     function _scanModule(string memory name, bytes memory c, address[] memory closure, string memory pins)
-        internal pure returns (uint256)
+        internal
+        pure
+        returns (uint256)
     {
         (uint256 delegates, bool destruct, bool callcode) = _walk(c);
         assertFalse(destruct, string.concat(name, ": SELFDESTRUCT"));
@@ -308,12 +383,16 @@ contract LinkClosureTest is Test {
             uint8 op = uint8(c[i]);
             if (op == 0x73) {
                 bytes20 a;
-                for (uint256 j; j < 20; ++j) a |= bytes20(c[i + 1 + j]) >> (8 * j);
+                for (uint256 j; j < 20; ++j) {
+                    a |= bytes20(c[i + 1 + j]) >> (8 * j);
+                }
                 last = address(a);
             }
             if (op == 0xf4) {
                 bool ok;
-                for (uint256 j; j < closure.length; ++j) ok = ok || closure[j] == last;
+                for (uint256 j; j < closure.length; ++j) {
+                    ok = ok || closure[j] == last;
+                }
                 if (!ok) ++n;
             }
             if (op >= 0x60 && op <= 0x7f) i += op - 0x5f;
@@ -331,7 +410,10 @@ contract LinkClosureTest is Test {
         // cut the CBOR metadata first (its length is the last two bytes): its hash bytes can hold 0xfe / 0xff (T8: the
         // `PqzStateLib` hash did after the `debit_min_gas` re-pin, which put a false SELFDESTRUCT before the last 0xfe)
         uint256 mlen = (uint256(uint8(c[end - 2])) << 8) | uint8(c[end - 1]);
-        require(end >= mlen + 2 && uint8(c[end - 2 - mlen]) >= 0xa1 && uint8(c[end - 2 - mlen]) <= 0xa3, "no CBOR metadata trailer");
+        require(
+            end >= mlen + 2 && uint8(c[end - 2 - mlen]) >= 0xa1 && uint8(c[end - 2 - mlen]) <= 0xa3,
+            "no CBOR metadata trailer"
+        );
         end -= 2 + mlen;
         // cut at the last 0xfe: assumes solc ends the runtime code with INVALID, then its data and the CBOR metadata
         while (end > 0 && c[end - 1] != 0xfe) --end;

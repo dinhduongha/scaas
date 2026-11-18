@@ -60,7 +60,8 @@ abstract contract OnchainBase is DeployBook {
     ///      `register`); false on the precompile path, where the cache is refused. A deploy JSON from before 3zh names no ML-DSA
     ///      verifier: every ML-DSA kind there is on the cache.
     function _mldsaCache(uint16 kind) internal view returns (bool) {
-        string memory key = kind == 0x0130 ? ".mldsa44_verifier" : kind == 0x0131 ? ".mldsa65_verifier" : ".mldsa87_verifier";
+        string memory key =
+            kind == 0x0130 ? ".mldsa44_verifier" : kind == 0x0131 ? ".mldsa65_verifier" : ".mldsa87_verifier";
         if (!vm.keyExistsJson(dj, key)) return true;
         return MldsaVerifier(vm.parseJsonAddress(dj, key)).PRECOMPILE() == address(0);
     }
@@ -69,14 +70,30 @@ abstract contract OnchainBase is DeployBook {
     ///      only lists it (deployments/onchain-<net>-<group>-neg.txt); `coverage.py neg` runs each by eth_call on the node
     ///      after the broadcast, against the final state, and records the refusal it got.
     function _neg(address from, address to, bytes memory data, bytes4 expected, string memory what) internal {
-        vm.writeLine(_negFile(), string.concat(vm.toString(from), " ", vm.toString(to), " ", vm.toString(data), " ",
-            vm.toString(abi.encodePacked(expected)), " ", what));
+        vm.writeLine(
+            _negFile(),
+            string.concat(
+                vm.toString(from),
+                " ",
+                vm.toString(to),
+                " ",
+                vm.toString(data),
+                " ",
+                vm.toString(abi.encodePacked(expected)),
+                " ",
+                what
+            )
+        );
     }
 
     /// @dev `_neg` with the whole revert data expected (the error and its arguments), where the arguments are fixed.
     function _negData(address from, address to, bytes memory data, bytes memory expected, string memory what) internal {
-        vm.writeLine(_negFile(), string.concat(vm.toString(from), " ", vm.toString(to), " ", vm.toString(data), " ",
-            vm.toString(expected), " ", what));
+        vm.writeLine(
+            _negFile(),
+            string.concat(
+                vm.toString(from), " ", vm.toString(to), " ", vm.toString(data), " ", vm.toString(expected), " ", what
+            )
+        );
     }
 
     /// @dev CTR-GOV-27, CTR-GOV-28: the word of a sibling chain (the same chain id, another genesis), and the refusal of it
@@ -109,11 +126,13 @@ abstract contract OnchainBase is DeployBook {
 
     /// @dev The EIP-712 domain separator of `c` from its ERC-5267 view (salted when it has a salt).
     function _domain(address c) internal view returns (bytes32) {
-        (, string memory name, string memory version, uint256 chainId, address vc, bytes32 salt,) = IERC5267(c).eip712Domain();
+        (, string memory name, string memory version, uint256 chainId, address vc, bytes32 salt,) =
+            IERC5267(c).eip712Domain();
         if (salt == 0) {
             return keccak256(abi.encode(PLAIN_DOMAIN, keccak256(bytes(name)), keccak256(bytes(version)), chainId, vc));
         }
-        return keccak256(abi.encode(SALTED_DOMAIN, keccak256(bytes(name)), keccak256(bytes(version)), chainId, vc, salt));
+        return
+            keccak256(abi.encode(SALTED_DOMAIN, keccak256(bytes(name)), keccak256(bytes(version)), chainId, vc, salt));
     }
 
     function _digest(address c, bytes32 structHash) internal view returns (bytes32) {
@@ -144,44 +163,75 @@ abstract contract OnchainBase is DeployBook {
     ///      fields between `from` and `batch` (a dynamic field already hashed), relayer / fee recipient canonical
     ///      (`MetaTxLib.canon`: 0 unless the mode binds them).
     function _named(address c, string memory typ, bytes memory args, MetaTxLib.UAEnvelope memory e)
-        internal view returns (bytes32)
+        internal
+        view
+        returns (bytes32)
     {
         return _digest(c, _namedStruct(typ, args, e));
     }
 
     /// @dev The struct hash `_named` puts in `c`'s domain.
     function _namedStruct(string memory typ, bytes memory args, MetaTxLib.UAEnvelope memory e)
-        internal pure returns (bytes32)
+        internal
+        pure
+        returns (bytes32)
     {
-        return keccak256(bytes.concat(keccak256(bytes(typ)), e.from, args, _tail(e.batch, e.nonce, e.validUntil, e.mode,
-            e.relayer, e.fee, e.feeRecipient)));
+        return keccak256(
+            bytes.concat(
+                keccak256(bytes(typ)),
+                e.from,
+                args,
+                _tail(e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient)
+            )
+        );
     }
 
     /// @dev A `SmartKeyAccount`'s key 0 (secp256k1) signs the named struct `sh` (type `typ`, a flat struct) of `app` in
     ///      ERC-7739 `TypedDataSign` (CTR-ACC-02, owner 2026-11-12): the account encoding of the ECDSA, then the suffix.
     function _sign7739(uint256 pk, address account, address app, string memory typ, bytes32 sh)
-        internal view returns (bytes memory)
+        internal
+        view
+        returns (bytes memory)
     {
         bytes32 sep = Erc7739Kit.separator(app);
         bytes memory t = bytes(typ);
         uint256 n;
         while (t[n] != "(") ++n;
         bytes memory name = new bytes(n);
-        for (uint256 i; i < n; ++i) name[i] = t[i];
+        for (uint256 i; i < n; ++i) {
+            name[i] = t[i];
+        }
         bytes32 m = Erc7739Kit.nested(account, sep, string(name), typ, sh);
         return Erc7739Kit.wrap(abi.encode(uint256(0), new bytes32[](0), _ecdsa(pk, m)), sep, sh, typ);
     }
 
     function _namedA(address c, string memory typ, bytes memory args, MetaTxLib.Envelope memory e)
-        internal view returns (bytes32)
+        internal
+        view
+        returns (bytes32)
     {
-        return _digest(c, keccak256(bytes.concat(keccak256(bytes(typ)), abi.encode(e.from), args, _tail(e.batch, e.nonce,
-            e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient))));
+        return _digest(
+            c,
+            keccak256(
+                bytes.concat(
+                    keccak256(bytes(typ)),
+                    abi.encode(e.from),
+                    args,
+                    _tail(e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient)
+                )
+            )
+        );
     }
 
-    function _tail(uint256 batch, uint256 nonce, uint256 validUntil, uint32 mode, address relayer, uint256 fee, address feeTo)
-        internal pure returns (bytes memory)
-    {
+    function _tail(
+        uint256 batch,
+        uint256 nonce,
+        uint256 validUntil,
+        uint32 mode,
+        address relayer,
+        uint256 fee,
+        address feeTo
+    ) internal pure returns (bytes memory) {
         address r = mode & MetaTxLib.MODE_RESTRICT_RELAYER != 0 ? relayer : address(0);
         address f = mode & MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT != 0 ? feeTo : address(0);
         return abi.encode(batch, nonce, validUntil, mode, r, fee, f);
@@ -194,6 +244,8 @@ abstract contract OnchainBase is DeployBook {
     }
 
     function _metaId(MetaTxLib.PayMeta memory m) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked("scaas.pay.meta.v3", m.salt, keccak256(abi.encode(m.payNo, m.save, m.schema, m.body))));
+        return keccak256(
+            abi.encodePacked("scaas.pay.meta.v3", m.salt, keccak256(abi.encode(m.payNo, m.save, m.schema, m.body)))
+        );
     }
 }

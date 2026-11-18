@@ -21,11 +21,14 @@ use pqz_ffi::stmt;
 use serde_json::{json, Value};
 use tower::ServiceExt;
 
-use scaas_pqz_verifier::abi::{IPqzToken as T, IUARegistry as R, KemKey, PqzVerdict, PqzVerifyConfig, UAAttrs};
+use scaas_pqz_verifier::abi::{
+    IPqzToken as T, IUARegistry as R, KemKey, PqzVerdict, PqzVerifyConfig, UAAttrs,
+};
 use scaas_pqz_verifier::chain::{Block, Chain, ChainError, Rpc};
 use scaas_pqz_verifier::{
-    body_limit, check_pins, http, pqz_key_hash, purpose_pqz_verdict, registry_domain, statement_lengths, verdict_auth_digest,
-    verdict_digest, Config, Pqz, ProbeRequest, Service, PROBE_STATEMENT, VALID,
+    body_limit, check_pins, http, pqz_key_hash, purpose_pqz_verdict, registry_domain,
+    statement_lengths, verdict_auth_digest, verdict_digest, Config, Pqz, ProbeRequest, Service,
+    PROBE_STATEMENT, VALID,
 };
 
 alloy::sol! {
@@ -33,7 +36,10 @@ alloy::sol! {
     function uaAuthDigest(bytes32 ua, bytes32 purposeTag, bytes32 digest) external view returns (bytes32);
 }
 
-const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/vectors/pqz/");
+const DIR: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../smartcontracts/vectors/pqz/"
+);
 const TOKEN: Address = address!("7A7a7A7a7a7a7a7A7a7a7a7A7a7a7A7A7A7a7A7a");
 const REGISTRY: Address = address!("5CA5000000000000000000000000000000000001");
 /// A registry of the attacker's (Fable C-1): it answers every view as the real one, and a forged `uaAuthDigest`.
@@ -86,19 +92,36 @@ fn word(v: &Value) -> B256 {
 }
 
 fn uint(v: &Value) -> u64 {
-    v.as_u64().unwrap_or_else(|| v.as_str().unwrap().parse().unwrap())
+    v.as_u64()
+        .unwrap_or_else(|| v.as_str().unwrap().parse().unwrap())
 }
 
 /// `(statement, proof)` of `proof_pqzl.json`'s row `form` (op 7: `case`), the statement from its file under the PQZL id.
 fn vector(form: &str, case: Option<&str>) -> (Vec<u8>, Vec<u8>) {
     static PROOFS: OnceLock<Value> = OnceLock::new();
     let p = PROOFS.get_or_init(|| json_file("n2304-kmax4096/proof_pqzl.json"));
-    let row = p["rows"].as_array().unwrap().iter()
-        .find(|r| r["form"] == form && case.is_none_or(|c| r["statement"]["case"] == c)).unwrap();
-    let f = json_file(&format!("n2304-kmax4096/{}", row["statement"]["file"].as_str().unwrap()));
-    let s = f["rows"].as_array().unwrap().iter().find(|s| s["form"] == form && case.is_none_or(|c| s["case"] == c)).unwrap();
+    let row = p["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["form"] == form && case.is_none_or(|c| r["statement"]["case"] == c))
+        .unwrap();
+    let f = json_file(&format!(
+        "n2304-kmax4096/{}",
+        row["statement"]["file"].as_str().unwrap()
+    ));
+    let s = f["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["form"] == form && case.is_none_or(|c| s["case"] == c))
+        .unwrap();
     let st = bytes(&s["stmt"]);
-    assert_eq!(hex::encode(keccak256(&st)), row["stmt_keccak"].as_str().unwrap(), "the PQZL-id statement of {form}");
+    assert_eq!(
+        hex::encode(keccak256(&st)),
+        row["stmt_keccak"].as_str().unwrap(),
+        "the PQZL-id statement of {form}"
+    );
     (st, bytes(&row["proof"]))
 }
 
@@ -113,7 +136,12 @@ struct Key {
 }
 
 fn key(pk: &[u8], pop: &[u8]) -> Key {
-    Key { pk: pk.to_vec(), pop: pop.to_vec(), pop_hash: keccak256(pop), sig: vec![] }
+    Key {
+        pk: pk.to_vec(),
+        pop: pop.to_vec(),
+        pop_hash: keccak256(pop),
+        sig: vec![],
+    }
 }
 
 #[derive(Default)]
@@ -166,14 +194,27 @@ fn tagged(name: &str, args: Vec<u8>) -> B256 {
 }
 
 fn registry_separator() -> B256 {
-    Eip712Domain::new(Some("SCaaS UARegistry".into()), Some("1".into()), Some(U256::from(CHAIN_ID)), Some(REGISTRY),
-        Some(CHAIN_UID)).separator()
+    Eip712Domain::new(
+        Some("SCaaS UARegistry".into()),
+        Some("1".into()),
+        Some(U256::from(CHAIN_ID)),
+        Some(REGISTRY),
+        Some(CHAIN_UID),
+    )
+    .separator()
 }
 
 /// `UAKinds.uaAuthDigest(sep, ua, purpose, digest)`.
 fn ua_auth_digest_at(sep: B256, ua: B256, purpose: B256, digest: B256) -> B256 {
     let th = keccak256("UAAuth(bytes32 ua,bytes32 purpose,bytes32 digest)");
-    keccak256([&[0x19, 0x01][..], sep.as_slice(), keccak256((th, ua, purpose, digest).abi_encode()).as_slice()].concat())
+    keccak256(
+        [
+            &[0x19, 0x01][..],
+            sep.as_slice(),
+            keccak256((th, ua, purpose, digest).abi_encode()).as_slice(),
+        ]
+        .concat(),
+    )
 }
 
 macro_rules! answer {
@@ -190,7 +231,9 @@ impl Fake {
     fn reach(&self, node: usize, block: Block) -> Result<(), ChainError> {
         let mut w = self.0.lock().unwrap();
         let block = match block {
-            Block::Number(_) if w.by_hash => return Err(ChainError::Rpc("a read by number alone".into())),
+            Block::Number(_) if w.by_hash => {
+                return Err(ChainError::Rpc("a read by number alone".into()))
+            }
             Block::Number(n) => n,
             Block::Hash(h) => U256::from_be_bytes(h.0).to::<u64>(),
         };
@@ -235,10 +278,17 @@ impl Chain for Fake {
             return Ok(c.into());
         }
         let k = w.keys.iter().find(|((u, v), _)| ptr(*u, *v) == at);
-        Ok(k.map(|(_, k)| [&[0u8][..], &k.pk].concat().into()).unwrap_or_default())
+        Ok(k.map(|(_, k)| [&[0u8][..], &k.pk].concat().into())
+            .unwrap_or_default())
     }
 
-    async fn call(&self, node: usize, block: Block, to: Address, data: Bytes) -> Result<Bytes, ChainError> {
+    async fn call(
+        &self,
+        node: usize,
+        block: Block,
+        to: Address,
+        data: Bytes,
+    ) -> Result<Bytes, ChainError> {
         self.reach(node, block)?;
         let w = self.0.lock().unwrap();
         let sel: [u8; 4] = data[..4].try_into().unwrap();
@@ -313,17 +363,35 @@ fn signer() -> PrivateKeySigner {
 /// An OFFCHAIN token naming this verifier at `EPOCH`; `uas[i]` holds the statement's key `i` (at `640 + i·PK`) as
 /// version 0 with stored proof bytes `[i + 1; 8]`.
 fn world(st: &[u8], uas: &[B256]) -> World {
-    let mut w = World { release: RELEASE, named: (REGISTRY, CHAIN_UID), pins: (1, CHAIN_UID), mode: 1, verifier: signer().address().into_word(), epoch: EPOCH, auditor: AUD,
-        statement: st.to_vec(), ..Default::default() };
+    let mut w = World {
+        release: RELEASE,
+        named: (REGISTRY, CHAIN_UID),
+        pins: (1, CHAIN_UID),
+        mode: 1,
+        verifier: signer().address().into_word(),
+        epoch: EPOCH,
+        auditor: AUD,
+        statement: st.to_vec(),
+        ..Default::default()
+    };
     for (i, &u) in uas.iter().enumerate() {
-        w.keys.insert((u, 0), key(&st[640 + i * PK..640 + (i + 1) * PK], &[i as u8 + 1; 8]));
+        w.keys.insert(
+            (u, 0),
+            key(&st[640 + i * PK..640 + (i + 1) * PK], &[i as u8 + 1; 8]),
+        );
     }
     w
 }
 
 /// pqz-ffi on the operation; `R_REG` accepted (the vectors hold no `R_REG` proof of the statement rows' keys)
 fn real_op() -> Pqz {
-    Arc::new(|i: &[u8]| if i[0] == stmt::OP_REGISTER { Ok(VALID) } else { pqz_ffi::precompile(i) })
+    Arc::new(|i: &[u8]| {
+        if i[0] == stmt::OP_REGISTER {
+            Ok(VALID)
+        } else {
+            pqz_ffi::precompile(i)
+        }
+    })
 }
 
 fn all_valid() -> Pqz {
@@ -345,15 +413,23 @@ fn service(w: World, pqz: Pqz) -> Svc {
     let fake = Arc::new(Fake(Mutex::new(w)));
     let cfg = Config::parse(CONFIG).unwrap();
     let svc = Arc::new(Service::new(fake.clone(), pqz, signer(), &cfg));
-    Svc { app: http::router(svc, &cfg), fake }
+    Svc {
+        app: http::router(svc, &cfg),
+        fake,
+    }
 }
 
 async fn post(s: &Svc, path: &str, body: impl Into<Body>) -> (u16, Value) {
-    let req = Request::post(path).header("content-type", "application/json")
-        .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 9)))).body(body.into()).unwrap();
+    let req = Request::post(path)
+        .header("content-type", "application/json")
+        .extension(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 9))))
+        .body(body.into())
+        .unwrap();
     let res = s.app.clone().oneshot(req).await.unwrap();
     let status = res.status().as_u16();
-    let b = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+    let b = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
     (status, serde_json::from_slice(&b).unwrap_or(Value::Null))
 }
 
@@ -362,8 +438,9 @@ async fn verdict(s: &Svc, req: &Value) -> (u16, Value) {
 }
 
 /// The empty `PqzOpening` (a token without the opening).
-static NO_OPENING: std::sync::LazyLock<Value> =
-    std::sync::LazyLock::new(|| json!({"mlkemCt": "0x", "x25519Eph": B256::ZERO, "sealedSeed": "0x"}));
+static NO_OPENING: std::sync::LazyLock<Value> = std::sync::LazyLock::new(
+    || json!({"mlkemCt": "0x", "x25519Eph": B256::ZERO, "sealedSeed": "0x"}),
+);
 
 fn hx(b: &[u8]) -> String {
     hex::encode_prefixed(b)
@@ -406,18 +483,48 @@ fn assert_signed(r: &(u16, Value), statement_hash: B256, proof_hash: B256) {
 fn assert_signed_as(r: &(u16, Value), statement_hash: B256, proof_hash: B256, psid: B256) {
     assert_eq!(r.0, 200, "{}", r.1);
     let valid_until = r.1["pqzVerdict"]["validUntil"].as_u64().unwrap();
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
-    assert!(valid_until > now && valid_until <= now + 5 * 60, "validUntil {valid_until}");
-    let v = PqzVerdict { token: TOKEN, chainId: U256::from(CHAIN_ID), proofSystemId: psid,
-        statementHash: statement_hash, proofHash: proof_hash, pqzVerifierEpoch: EPOCH, validUntil: valid_until };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    assert!(
+        valid_until > now && valid_until <= now + 5 * 60,
+        "validUntil {valid_until}"
+    );
+    let v = PqzVerdict {
+        token: TOKEN,
+        chainId: U256::from(CHAIN_ID),
+        proofSystemId: psid,
+        statementHash: statement_hash,
+        proofHash: proof_hash,
+        pqzVerifierEpoch: EPOCH,
+        validUntil: valid_until,
+    };
     assert_eq!(r.1["pqzVerdict"], serde_json::to_value(&v).unwrap());
     let sig = &r.1["pqzVerdictSig"];
-    assert_eq!((sig["keyData"].as_str(), sig["members"].as_array().map(Vec::len)), (Some("0x"), Some(0)));
-    let auth = ua_auth_digest_at(registry_separator(), signer().address().into_word(), purpose_pqz_verdict(),
-        verdict_digest(&v, CHAIN_UID));
+    assert_eq!(
+        (
+            sig["keyData"].as_str(),
+            sig["members"].as_array().map(Vec::len)
+        ),
+        (Some("0x"), Some(0))
+    );
+    let auth = ua_auth_digest_at(
+        registry_separator(),
+        signer().address().into_word(),
+        purpose_pqz_verdict(),
+        verdict_digest(&v, CHAIN_UID),
+    );
     let s = Signature::from_raw(&bytes(&sig["signature"])).unwrap();
-    assert_eq!(s.recover_address_from_prehash(&auth).unwrap(), signer().address());
-    assert_ne!(s.recover_address_from_prehash(&FORGED).ok(), Some(signer().address()), "the RPC's uaAuthDigest signed");
+    assert_eq!(
+        s.recover_address_from_prehash(&auth).unwrap(),
+        signer().address()
+    );
+    assert_ne!(
+        s.recover_address_from_prehash(&FORGED).ok(),
+        Some(signer().address()),
+        "the RPC's uaAuthDigest signed"
+    );
 }
 
 fn assert_refused(r: &(u16, Value), error: &str) {
@@ -433,10 +540,18 @@ async fn signs_valid_statement() {
     // op 1 with the auditor (the TRANSFER row) and op 7 to two legs without (M2-off), through pqz-ffi
     let (st, proof) = vector("TRANSFER", None);
     let s = service(world(&st, &[A, B, AUD]), real_op());
-    assert_signed(&verdict(&s, &request(single(A, 0, B), &st, &proof)).await, keccak256(&st), keccak256(&proof));
+    assert_signed(
+        &verdict(&s, &request(single(A, 0, B), &st, &proof)).await,
+        keccak256(&st),
+        keccak256(&proof),
+    );
     let (st, proof) = vector("TRANSFER-MULTI", Some("M2-off"));
     let s = service(world(&st, &[A, C, D]), real_op());
-    assert_signed(&verdict(&s, &request(multi(A, &[C, D], false), &st, &proof)).await, keccak256(&st), keccak256(&proof));
+    assert_signed(
+        &verdict(&s, &request(multi(A, &[C, D], false), &st, &proof)).await,
+        keccak256(&st),
+        keccak256(&proof),
+    );
 }
 
 #[tokio::test]
@@ -445,18 +560,28 @@ async fn refuses_verdict_zero() {
     let n = proof.len() / 2;
     proof[n] ^= 1;
     let s = service(world(&st, &[A, B, AUD]), real_op());
-    assert_refused(&verdict(&s, &request(single(A, 0, B), &st, &proof)).await, "VERDICT_ZERO");
+    assert_refused(
+        &verdict(&s, &request(single(A, 0, B), &st, &proof)).await,
+        "VERDICT_ZERO",
+    );
 }
 
 #[tokio::test]
 async fn refuses_tampered_statement() {
     let (st, proof) = vector("TRANSFER", None);
     let s = service(world(&st, &[A, B, AUD]), all_valid());
-    assert_signed(&verdict(&s, &request(single(A, 0, B), &st, &proof)).await, keccak256(&st), keccak256(&proof));
+    assert_signed(
+        &verdict(&s, &request(single(A, 0, B), &st, &proof)).await,
+        keccak256(&st),
+        keccak256(&proof),
+    );
     // one byte of the outputs: the token's view still builds the original
     let mut bad = st.clone();
     *bad.last_mut().unwrap() ^= 1;
-    assert_refused(&verdict(&s, &request(single(A, 0, B), &bad, &proof)).await, "STATEMENT_MISMATCH");
+    assert_refused(
+        &verdict(&s, &request(single(A, 0, B), &bad, &proof)).await,
+        "STATEMENT_MISMATCH",
+    );
 }
 
 /// Round 3t (CTR-PQZ-36, V1): a statement proved at another fee word than the token's (a fee change since) is refused by name,
@@ -465,10 +590,17 @@ async fn refuses_tampered_statement() {
 async fn refuses_stale_fee_word() {
     let (st, proof) = vector("TRANSFER", None);
     let s = service(world(&st, &[A, B, AUD]), all_valid());
-    assert_signed(&verdict(&s, &request(single(A, 0, B), &st, &proof)).await, keccak256(&st), keccak256(&proof));
+    assert_signed(
+        &verdict(&s, &request(single(A, 0, B), &st, &proof)).await,
+        keccak256(&st),
+        keccak256(&proof),
+    );
     let mut stale = st.clone();
     stale[256 + 31] ^= 1;
-    assert_refused(&verdict(&s, &request(single(A, 0, B), &stale, &proof)).await, "FEE_WORD_MISMATCH");
+    assert_refused(
+        &verdict(&s, &request(single(A, 0, B), &stale, &proof)).await,
+        "FEE_WORD_MISMATCH",
+    );
 }
 
 #[tokio::test]
@@ -494,10 +626,17 @@ async fn refuses_key_owned_by_other_ua() {
     let s = service(world(&st, &[A, B, AUD]), all_valid());
     // the receiver's key proven by another UA on chain
     s.world().owner.insert(h, C);
-    assert_refused(&verdict(&s, &request(single(A, 0, B), &st, &proof)).await, "KEY_OWNED_ELSEWHERE");
+    assert_refused(
+        &verdict(&s, &request(single(A, 0, B), &st, &proof)).await,
+        "KEY_OWNED_ELSEWHERE",
+    );
     // proven by the receiver itself
     s.world().owner.insert(h, B);
-    assert_signed(&verdict(&s, &request(single(A, 0, B), &st, &proof)).await, keccak256(&st), keccak256(&proof));
+    assert_signed(
+        &verdict(&s, &request(single(A, 0, B), &st, &proof)).await,
+        keccak256(&st),
+        keccak256(&proof),
+    );
     // the same key bytes under another UA, unproven on chain: this verifier holds them for (B, 0)
     {
         let mut w = s.world();
@@ -505,7 +644,10 @@ async fn refuses_key_owned_by_other_ua() {
         let k = w.keys[&(B, 0)].clone();
         w.keys.insert((D, 0), k);
     }
-    assert_refused(&verdict(&s, &request(single(A, 0, D), &st, &proof)).await, "KEY_OWNED_ELSEWHERE");
+    assert_refused(
+        &verdict(&s, &request(single(A, 0, D), &st, &proof)).await,
+        "KEY_OWNED_ELSEWHERE",
+    );
 }
 
 #[tokio::test]
@@ -536,32 +678,67 @@ async fn cache_keyed_by_ua_and_keyhash() {
         k.pk = st2[640 + PK..640 + 2 * PK].to_vec();
         k.pop.clear();
     }
-    assert_refused(&verdict(&s, &request(single(A, 0, B), &st2, &proof)).await, "POP_NOT_STORED");
+    assert_refused(
+        &verdict(&s, &request(single(A, 0, B), &st2, &proof)).await,
+        "POP_NOT_STORED",
+    );
 }
 
 #[tokio::test]
 async fn refuses_oversized_and_deep_body() {
     let s = service(World::default(), all_valid());
     let limit = body_limit();
-    assert_refused(&post(&s, "/v1/pqz-verdict", vec![b'x'; limit + 1]).await, "BODY_TOO_LARGE");
+    assert_refused(
+        &post(&s, "/v1/pqz-verdict", vec![b'x'; limit + 1]).await,
+        "BODY_TOO_LARGE",
+    );
     // at the limit: read, then refused as JSON (so the larger one was refused before decoding)
-    assert_refused(&post(&s, "/v1/pqz-verdict", vec![b'x'; limit]).await, "BAD_REQUEST");
+    assert_refused(
+        &post(&s, "/v1/pqz-verdict", vec![b'x'; limit]).await,
+        "BAD_REQUEST",
+    );
     let nest = |n: usize| format!("{}1{}", "{\"a\":".repeat(n), "}".repeat(n));
     assert_refused(&post(&s, "/v1/pqz-verdict", nest(5)).await, "BAD_REQUEST");
     assert_refused(&post(&s, "/v1/pqz-verdict", nest(6)).await, "JSON_TOO_DEEP");
-    assert_refused(&post(&s, "/v1/pqz-verdict/probe", nest(6)).await, "JSON_TOO_DEEP");
+    assert_refused(
+        &post(&s, "/v1/pqz-verdict/probe", nest(6)).await,
+        "JSON_TOO_DEEP",
+    );
     // brackets inside a string, escaped quotes included, do not nest
-    assert_refused(&post(&s, "/v1/pqz-verdict", format!("{{\"a\":\"\\\"{}\"}}", "[".repeat(50))).await, "BAD_REQUEST");
+    assert_refused(
+        &post(
+            &s,
+            "/v1/pqz-verdict",
+            format!("{{\"a\":\"\\\"{}\"}}", "[".repeat(50)),
+        )
+        .await,
+        "BAD_REQUEST",
+    );
     // the largest operation fits: op 7, eight legs, the auditor, every part at its size
     let (st, proof) = vector("TRANSFER-MULTI", Some("M8-on"));
-    let legs = [C, D, B256::repeat_byte(1), B256::repeat_byte(2), B256::repeat_byte(3), B256::repeat_byte(4),
-        B256::repeat_byte(5), B256::repeat_byte(6)];
+    let legs = [
+        C,
+        D,
+        B256::repeat_byte(1),
+        B256::repeat_byte(2),
+        B256::repeat_byte(3),
+        B256::repeat_byte(4),
+        B256::repeat_byte(5),
+        B256::repeat_byte(6),
+    ];
     let uas: Vec<B256> = [A].into_iter().chain(legs).chain([AUD]).collect();
     *s.world() = world(&st, &uas);
     let body = request(multi(A, &legs, true), &st, &proof).to_string();
     let largest = *statement_lengths().iter().max().unwrap();
-    assert!(body.len() > 2 * (largest + stmt::MAX_PROOF_PQZL) + 4096, "op.args repeats the statement's parts");
-    assert_signed(&post(&s, "/v1/pqz-verdict", body).await, keccak256(&st), keccak256(&proof));
+    assert!(
+        body.len() > 2 * (largest + stmt::MAX_PROOF_PQZL) + 4096,
+        "op.args repeats the statement's parts"
+    );
+    assert_signed(
+        &post(&s, "/v1/pqz-verdict", body).await,
+        keccak256(&st),
+        keccak256(&proof),
+    );
 }
 
 #[tokio::test]
@@ -570,12 +747,23 @@ async fn refuses_wrong_set_length() {
     let s = service(world(&st, &[A, B, AUD]), all_valid());
     // the view builds the same bytes each time: only the set's lengths refuse. A word more; R_REG's length (no token
     // builds it); op 1's length at n2048-kmax1024
-    for bad in [[&st[..], &[0; 32]].concat(), st[..stmt::Form::Register.stmt_len()].to_vec(), st[..83_072].to_vec()] {
+    for bad in [
+        [&st[..], &[0; 32]].concat(),
+        st[..stmt::Form::Register.stmt_len()].to_vec(),
+        st[..83_072].to_vec(),
+    ] {
         s.world().statement = bad.clone();
-        assert_refused(&verdict(&s, &request(single(A, 0, B), &bad, &proof)).await, "STATEMENT_LENGTH");
+        assert_refused(
+            &verdict(&s, &request(single(A, 0, B), &bad, &proof)).await,
+            "STATEMENT_LENGTH",
+        );
     }
     s.world().statement = st.clone();
-    assert_signed(&verdict(&s, &request(single(A, 0, B), &st, &proof)).await, keccak256(&st), keccak256(&proof));
+    assert_signed(
+        &verdict(&s, &request(single(A, 0, B), &st, &proof)).await,
+        keccak256(&st),
+        keccak256(&proof),
+    );
 }
 
 #[tokio::test]
@@ -584,7 +772,10 @@ async fn refuses_statement_proof_system_not_the_sets() {
     let (mut st, proof) = vector("TRANSFER", None);
     st[32..64].copy_from_slice(&stmt::PQZH_ID);
     let s = service(world(&st, &[A, B, AUD]), all_valid());
-    assert_refused(&verdict(&s, &request(single(A, 0, B), &st, &proof)).await, "STATEMENT_PROOF_SYSTEM");
+    assert_refused(
+        &verdict(&s, &request(single(A, 0, B), &st, &proof)).await,
+        "STATEMENT_PROOF_SYSTEM",
+    );
 }
 
 #[tokio::test]
@@ -623,25 +814,47 @@ async fn rreg_message_scoped_real_vector() {
     let (_, rproof) = vector("REGISTER", None);
     let (mut st, proof) = vector("BURN", None);
     st[640..640 + PK].copy_from_slice(&pk);
-    let pqz: Pqz = Arc::new(|i: &[u8]| if i[0] == stmt::OP_REGISTER { pqz_ffi::precompile(i) } else { Ok(VALID) });
+    let pqz: Pqz = Arc::new(|i: &[u8]| {
+        if i[0] == stmt::OP_REGISTER {
+            pqz_ffi::precompile(i)
+        } else {
+            Ok(VALID)
+        }
+    });
     let h = pqz_key_hash(&pk);
     let purpose = keccak256("scaas.ua.purpose.pqz-scoped-key.v1");
-    let scoped = |class: u8, token: Address, v: u64| tagged("scoped", (A, u16::from(class), CHAIN_UID, token, v, h).abi_encode());
+    let scoped = |class: u8, token: Address, v: u64| {
+        tagged(
+            "scoped",
+            (A, u16::from(class), CHAIN_UID, token, v, h).abi_encode(),
+        )
+    };
     let w = |own: bool, version: u64| {
         let mut w = world(&st, &[]);
         w.own = own;
         w.keys.insert((A, version), key(&pk, &rproof));
-        w.message.insert((purpose, scoped(2, Address::ZERO, 0)), message);
+        w.message
+            .insert((purpose, scoped(2, Address::ZERO, 0)), message);
         w
     };
     let s = service(w(false, 0), pqz.clone());
-    assert_signed(&verdict(&s, &request(unshield(A, 0), &st, &proof)).await, keccak256(&st), keccak256(&proof));
+    assert_signed(
+        &verdict(&s, &request(unshield(A, 0), &st, &proof)).await,
+        keccak256(&st),
+        keccak256(&proof),
+    );
     // class 3: the token's scope, another digest
     let s = service(w(true, 0), pqz.clone());
-    assert_refused(&verdict(&s, &request(unshield(A, 0), &st, &proof)).await, "POP_INVALID");
+    assert_refused(
+        &verdict(&s, &request(unshield(A, 0), &st, &proof)).await,
+        "POP_INVALID",
+    );
     // version 1 of the same scope
     let s = service(w(false, 1), pqz);
-    assert_refused(&verdict(&s, &request(unshield(A, 1), &st, &proof)).await, "POP_INVALID");
+    assert_refused(
+        &verdict(&s, &request(unshield(A, 1), &st, &proof)).await,
+        "POP_INVALID",
+    );
 }
 
 /// K3-4: the verdict signs the token's own `proofSystemId`: `PQZL_SPLIT_ID` on an opening token (its split statement, `u_f`
@@ -654,17 +867,32 @@ async fn split_id_follows_the_opening() {
     let open = |opening: bool, st: &[u8]| {
         let mut w = world(st, &[A, C, AUD]); // the TRANSFER row names the auditor's key too
         (w.opening, w.own) = (opening, true);
-        w.psid = B256::from(if opening { stmt::PQZL_SPLIT_ID } else { stmt::PQZL_ID });
+        w.psid = B256::from(if opening {
+            stmt::PQZL_SPLIT_ID
+        } else {
+            stmt::PQZL_ID
+        });
         w
     };
     let s = service(open(true, &st), all_valid());
     let r = verdict(&s, &request(single(A, 0, C), &st, &proof)).await;
-    assert_signed_as(&r, keccak256(&st), keccak256(&proof), stmt::PQZL_SPLIT_ID.into());
+    assert_signed_as(
+        &r,
+        keccak256(&st),
+        keccak256(&proof),
+        stmt::PQZL_SPLIT_ID.into(),
+    );
     // the split statement on a token without the opening, the plain one on an opening token: refused
     let s = service(open(false, &st), all_valid());
-    assert_refused(&verdict(&s, &request(single(A, 0, C), &st, &proof)).await, "PROOF_SYSTEM");
+    assert_refused(
+        &verdict(&s, &request(single(A, 0, C), &st, &proof)).await,
+        "PROOF_SYSTEM",
+    );
     let s = service(open(true, &st0), all_valid());
-    assert_refused(&verdict(&s, &request(single(A, 0, C), &st0, &proof)).await, "PROOF_SYSTEM");
+    assert_refused(
+        &verdict(&s, &request(single(A, 0, C), &st0, &proof)).await,
+        "PROOF_SYSTEM",
+    );
 }
 
 /// K3-4 with a real proof: the TRANSFER-SPLIT row of `proof_pqzl_split.json` verifies through the production entry
@@ -673,25 +901,43 @@ async fn split_id_follows_the_opening() {
 #[tokio::test]
 async fn signs_real_split_proof() {
     let f = json_file("n2304-kmax4096/proof_pqzl_split.json");
-    let row = f["rows"].as_array().unwrap().iter().find(|r| r["form"] == "TRANSFER-SPLIT").unwrap();
+    let row = f["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["form"] == "TRANSFER-SPLIT")
+        .unwrap();
     let (st, mut proof) = (bytes(&row["stmt"]), bytes(&row["proof"]));
     assert_eq!(st[32..64], stmt::PQZL_SPLIT_ID);
     let input = stmt::input(stmt::OP_TRANSFER, &st, &proof);
     assert_eq!(scaas_pqz_verifier::offchain(&input).unwrap(), VALID);
     assert_eq!(pqz_ffi::precompile(&input).unwrap(), pqz_ffi::INVALID);
-    let real: Pqz = Arc::new(|i: &[u8]| if i[0] == stmt::OP_REGISTER { Ok(VALID) } else { scaas_pqz_verifier::offchain(i) });
+    let real: Pqz = Arc::new(|i: &[u8]| {
+        if i[0] == stmt::OP_REGISTER {
+            Ok(VALID)
+        } else {
+            scaas_pqz_verifier::offchain(i)
+        }
+    });
     let w = |st: &[u8]| {
         let mut w = world(st, &[A, B, AUD]);
         (w.opening, w.own, w.psid) = (true, true, B256::from(stmt::PQZL_SPLIT_ID));
         w
     };
     let s = service(w(&st), real.clone());
-    assert_signed_as(&verdict(&s, &request(single(A, 0, B), &st, &proof)).await, keccak256(&st), keccak256(&proof),
-        stmt::PQZL_SPLIT_ID.into());
+    assert_signed_as(
+        &verdict(&s, &request(single(A, 0, B), &st, &proof)).await,
+        keccak256(&st),
+        keccak256(&proof),
+        stmt::PQZL_SPLIT_ID.into(),
+    );
     let n = proof.len() / 2;
     proof[n] ^= 1;
     let s = service(w(&st), real);
-    assert_refused(&verdict(&s, &request(single(A, 0, B), &st, &proof)).await, "VERDICT_ZERO");
+    assert_refused(
+        &verdict(&s, &request(single(A, 0, B), &st, &proof)).await,
+        "VERDICT_ZERO",
+    );
 }
 
 #[tokio::test]
@@ -700,29 +946,59 @@ async fn disclosure_names_the_leg_owner() {
     // (group 3h: PqzCore.rOf, _legOf)
     let group = (u64::BITS - stmt::Q.leading_zeros()) as usize / 2;
     let (pkp, vp) = (PK / 32 * group, stmt::V_BYTES / 32 * group);
-    let blob = [&[0u8; 16][..], &vec![0; pkp], &vec![0; vp], C.as_slice(), &vec![0; vp], D.as_slice(), &vec![0; vp],
-        TAG.as_slice(), &[0; 16], &[2]].concat();
+    let blob = [
+        &[0u8; 16][..],
+        &vec![0; pkp],
+        &vec![0; vp],
+        C.as_slice(),
+        &vec![0; vp],
+        D.as_slice(),
+        &vec![0; vp],
+        TAG.as_slice(),
+        &[0; 16],
+        &[2],
+    ]
+    .concat();
     let (st, proof) = vector("DISCLOSE-RECEIVER", None);
     let mut w = world(&st, &[]);
     w.blob = blob;
-    let disclosed = key(&st[stmt::DISC_WORDS * 32..stmt::DISC_WORDS * 32 + PK], &[7; 8]);
-    let op = |leg: u64, kind: u8| json!({"entry": "verifyTransferAmount",
-        "args": {"entryRef": B256::repeat_byte(0xee), "leg": leg.to_string(), "amount": "5", "kind": kind, "keyVersion": 0}});
+    let disclosed = key(
+        &st[stmt::DISC_WORDS * 32..stmt::DISC_WORDS * 32 + PK],
+        &[7; 8],
+    );
+    let op = |leg: u64, kind: u8| {
+        json!({"entry": "verifyTransferAmount",
+        "args": {"entryRef": B256::repeat_byte(0xee), "leg": leg.to_string(), "amount": "5", "kind": kind, "keyVersion": 0}})
+    };
     // leg 1's owner is D, leg 0's is C (whose record holds another key), kind 2's the auditor; each its own service, so
     // the verifier's ownership record of one does not answer for another
     w.keys.insert((D, 0), disclosed.clone());
     w.keys.insert((C, 0), key(&st[640..640 + PK], &[8; 8]));
     let (blob, keys) = (w.blob.clone(), w.keys.clone());
     let s = service(w, real_op());
-    assert_signed(&verdict(&s, &request(op(1, 1), &st, &proof)).await, keccak256(&st), keccak256(&proof));
-    assert_refused(&verdict(&s, &request(op(2, 1), &st, &proof)).await, "UNKNOWN_ENTRY");
+    assert_signed(
+        &verdict(&s, &request(op(1, 1), &st, &proof)).await,
+        keccak256(&st),
+        keccak256(&proof),
+    );
+    assert_refused(
+        &verdict(&s, &request(op(2, 1), &st, &proof)).await,
+        "UNKNOWN_ENTRY",
+    );
     let mut w = world(&st, &[]);
     (w.blob, w.keys) = (blob, keys);
     w.keys.remove(&(D, 0));
     let s2 = service(w, real_op());
-    assert_refused(&verdict(&s2, &request(op(0, 1), &st, &proof)).await, "KEY_MISMATCH");
+    assert_refused(
+        &verdict(&s2, &request(op(0, 1), &st, &proof)).await,
+        "KEY_MISMATCH",
+    );
     s2.world().keys.insert((AUD, 0), disclosed);
-    assert_signed(&verdict(&s2, &request(op(1, 2), &st, &proof)).await, keccak256(&st), keccak256(&proof));
+    assert_signed(
+        &verdict(&s2, &request(op(1, 2), &st, &proof)).await,
+        keccak256(&st),
+        keccak256(&proof),
+    );
     // a disclosure is direct: a binding is not its field
     let mut bad = request(op(1, 1), &st, &proof);
     bad["op"]["binding"] = json!(B256::repeat_byte(1));
@@ -733,9 +1009,16 @@ async fn disclosure_names_the_leg_owner() {
 async fn probe_signature() {
     let s = service(world(&[], &[]), all_valid());
     let req = json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string();
-    assert_signed(&post(&s, "/v1/pqz-verdict/probe", req.clone()).await, keccak256(PROBE_STATEMENT), keccak256(b""));
+    assert_signed(
+        &post(&s, "/v1/pqz-verdict/probe", req.clone()).await,
+        keccak256(PROBE_STATEMENT),
+        keccak256(b""),
+    );
     s.world().release = Address::repeat_byte(9);
-    assert_refused(&post(&s, "/v1/pqz-verdict/probe", req).await, "UNKNOWN_RELEASE");
+    assert_refused(
+        &post(&s, "/v1/pqz-verdict/probe", req).await,
+        "UNKNOWN_RELEASE",
+    );
 }
 
 /// Fable C-1: the probe signs only for an `OFFCHAIN` token that names this verifier (one change at a time, then back);
@@ -754,13 +1037,25 @@ async fn probe_refuses_token_not_served() {
     for other in [C, B256::ZERO] {
         s.world().verifier = other;
         assert_refused(&probe(&req).await, "NOT_THIS_VERIFIER");
-        assert_signed(&probe(&proposal).await, keccak256(PROBE_STATEMENT), keccak256(b""));
+        assert_signed(
+            &probe(&proposal).await,
+            keccak256(PROBE_STATEMENT),
+            keccak256(b""),
+        );
     }
     let wrong_chain = json!({"token": TOKEN, "chainId": 1, "proposal": true}).to_string();
     assert_refused(&probe(&wrong_chain).await, "CHAIN_MISMATCH");
     s.world().verifier = signer().address().into_word();
-    assert_signed(&probe(&req).await, keccak256(PROBE_STATEMENT), keccak256(b""));
-    assert_signed(&probe(&proposal).await, keccak256(PROBE_STATEMENT), keccak256(b""));
+    assert_signed(
+        &probe(&req).await,
+        keccak256(PROBE_STATEMENT),
+        keccak256(b""),
+    );
+    assert_signed(
+        &probe(&proposal).await,
+        keccak256(PROBE_STATEMENT),
+        keccak256(b""),
+    );
 }
 
 /// The probe's `statementHash` is no real op statement's: its 27 bytes are shorter than every statement length of the
@@ -769,11 +1064,18 @@ async fn probe_refuses_token_not_served() {
 #[test]
 fn probe_statement_is_no_op_statement() {
     assert!(PROBE_STATEMENT.len() < stmt::HEADER_BYTES && PROBE_STATEMENT.len() < 32);
-    assert!(statement_lengths().iter().all(|&n| n >= stmt::HEADER_BYTES && n != PROBE_STATEMENT.len()));
+    assert!(statement_lengths()
+        .iter()
+        .all(|&n| n >= stmt::HEADER_BYTES && n != PROBE_STATEMENT.len()));
     let rows = json_file("n2304-kmax4096/proof_pqzl.json");
     let ours = hex::encode(keccak256(PROBE_STATEMENT));
     let rows = rows["rows"].as_array().unwrap();
-    assert!(rows.len() > 10 && rows.iter().all(|r| r["stmt_keccak"].as_str().unwrap() != ours));
+    assert!(
+        rows.len() > 10
+            && rows
+                .iter()
+                .all(|r| r["stmt_keccak"].as_str().unwrap() != ours)
+    );
 }
 
 /// Fable C-1 (P0): a clone-shaped contract (proxy of the configured release) whose code names a registry or a `chainUid`
@@ -784,16 +1086,26 @@ async fn refuses_clone_naming_rogue_registry() {
     let s = service(world(&st, &[A, B, AUD]), all_valid());
     let req = request(single(A, 0, B), &st, &proof);
     let probe = json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string();
-    for (named, error) in [((ROGUE, CHAIN_UID), "FOREIGN_REGISTRY"), ((REGISTRY, B256::repeat_byte(7)), "FOREIGN_CHAIN_UID")] {
+    for (named, error) in [
+        ((ROGUE, CHAIN_UID), "FOREIGN_REGISTRY"),
+        ((REGISTRY, B256::repeat_byte(7)), "FOREIGN_CHAIN_UID"),
+    ] {
         s.world().named = named;
         assert_refused(&verdict(&s, &req).await, error);
-        assert_refused(&post(&s, "/v1/pqz-verdict/probe", probe.clone()).await, error);
+        assert_refused(
+            &post(&s, "/v1/pqz-verdict/probe", probe.clone()).await,
+            error,
+        );
         let proposal = json!({"token": TOKEN, "chainId": CHAIN_ID, "proposal": true}).to_string();
         assert_refused(&post(&s, "/v1/pqz-verdict/probe", proposal).await, error);
     }
     s.world().named = (REGISTRY, CHAIN_UID);
     assert_signed(&verdict(&s, &req).await, keccak256(&st), keccak256(&proof));
-    assert_signed(&post(&s, "/v1/pqz-verdict/probe", probe).await, keccak256(PROBE_STATEMENT), keccak256(b""));
+    assert_signed(
+        &post(&s, "/v1/pqz-verdict/probe", probe).await,
+        keccak256(PROBE_STATEMENT),
+        keccak256(b""),
+    );
 }
 
 /// Fable C-1 (P0): the registry (or the RPC) answers `uaAuthDigest` with a forged hash; the service signs the digest it
@@ -801,10 +1113,18 @@ async fn refuses_clone_naming_rogue_registry() {
 #[tokio::test]
 async fn ignores_forged_rpc_digest() {
     let s = service(world(&[], &[]), all_valid());
-    let r = post(&s, "/v1/pqz-verdict/probe", json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string()).await;
+    let r = post(
+        &s,
+        "/v1/pqz-verdict/probe",
+        json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string(),
+    )
+    .await;
     assert_signed(&r, keccak256(PROBE_STATEMENT), keccak256(b""));
     let sig = Signature::from_raw(&bytes(&r.1["pqzVerdictSig"]["signature"])).unwrap();
-    assert_ne!(sig.recover_address_from_prehash(&FORGED).ok(), Some(signer().address()));
+    assert_ne!(
+        sig.recover_address_from_prehash(&FORGED).ok(),
+        Some(signer().address())
+    );
 }
 
 /// Fable C-3 (ARCH-POS-15): a list of nodes, failover per request, one node and one block for every read of a request.
@@ -816,13 +1136,20 @@ async fn fails_over_one_node_one_block() {
     // node 0 down from the start: node 1 answers every read, at its block 101
     (s.world().nodes, s.world().down) = (3, HashMap::from([(0, 0)]));
     assert_signed(&verdict(&s, &req).await, keccak256(&st), keccak256(&proof));
-    assert!(s.world().seen.iter().all(|&r| r == (1, 101)), "{:?}", s.world().seen);
+    assert!(
+        s.world().seen.iter().all(|&r| r == (1, 101)),
+        "{:?}",
+        s.world().seen
+    );
     // node 0 answers four reads, then stops: the request starts over on node 1, never mixing its answers with node 0's
     (s.world().down, s.world().seen) = (HashMap::from([(0, 4)]), vec![]);
     assert_signed(&verdict(&s, &req).await, keccak256(&st), keccak256(&proof));
     let seen = s.world().seen.clone();
     assert_eq!(seen[..5], [(0, 100); 5], "four answered, the fifth refused");
-    assert!(seen[5..].iter().all(|&r| r == (1, 101)) && seen.len() > 5, "{seen:?}");
+    assert!(
+        seen[5..].iter().all(|&r| r == (1, 101)) && seen.len() > 5,
+        "{seen:?}"
+    );
     // a refusal on what node 0 answered is final: no failover (only an RPC that does not answer moves on)
     (s.world().down, s.world().seen, s.world().epoch) = (HashMap::new(), vec![], EPOCH + 1);
     assert_refused(&verdict(&s, &req).await, "EPOCH_MISMATCH");
@@ -831,8 +1158,15 @@ async fn fails_over_one_node_one_block() {
     // every node down
     s.world().down = HashMap::from([(0, 0), (1, 0), (2, 0)]);
     assert_refused(&verdict(&s, &req).await, "RPC_UNAVAILABLE");
-    assert_refused(&post(&s, "/v1/pqz-verdict/probe", json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string()).await,
-        "RPC_UNAVAILABLE");
+    assert_refused(
+        &post(
+            &s,
+            "/v1/pqz-verdict/probe",
+            json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string(),
+        )
+        .await,
+        "RPC_UNAVAILABLE",
+    );
 }
 
 /// Fable C-4: a client that sends its headers and then no body holds no queue place: with every place's worth of such
@@ -845,7 +1179,10 @@ async fn slow_body_holds_no_queue_place() {
     let s = service(world(&[], &[]), all_valid());
     let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let at = l.local_addr().unwrap();
-    let app = s.app.clone().into_make_service_with_connect_info::<SocketAddr>();
+    let app = s
+        .app
+        .clone()
+        .into_make_service_with_connect_info::<SocketAddr>();
     tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
     let mut slow = Vec::new();
     for _ in 0..Config::parse(CONFIG).unwrap().queue {
@@ -858,13 +1195,20 @@ async fn slow_body_holds_no_queue_place() {
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
     tokio::time::pause();
     let probe = json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string();
-    assert_signed(&post(&s, "/v1/pqz-verdict/probe", probe).await, keccak256(PROBE_STATEMENT), keccak256(b""));
+    assert_signed(
+        &post(&s, "/v1/pqz-verdict/probe", probe).await,
+        keccak256(PROBE_STATEMENT),
+        keccak256(b""),
+    );
     let start = tokio::time::Instant::now();
     for mut c in slow {
         let mut b = vec![0; 4096];
         let n = c.read(&mut b).await.unwrap();
         let answer = String::from_utf8_lossy(&b[..n]);
-        assert!(answer.starts_with("HTTP/1.1 408") && answer.contains("BODY_TIMEOUT"), "{answer}");
+        assert!(
+            answer.starts_with("HTTP/1.1 408") && answer.contains("BODY_TIMEOUT"),
+            "{answer}"
+        );
     }
     assert!(start.elapsed() + std::time::Duration::from_secs(1) >= http::BODY_TIMEOUT);
 }
@@ -873,14 +1217,19 @@ async fn slow_body_holds_no_queue_place() {
 type Answer = Arc<dyn Fn(&Value) -> Option<Value> + Send + Sync>;
 
 async fn rpc_server(answer: Answer) -> String {
-    let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
-        let answer = answer.clone();
-        async move {
-            let Some(mut a) = answer(&r) else { return std::future::pending().await };
-            (a["jsonrpc"], a["id"]) = (json!("2.0"), r["id"].clone());
-            axum::Json(a)
-        }
-    }));
+    let app = axum::Router::new().route(
+        "/",
+        axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
+            let answer = answer.clone();
+            async move {
+                let Some(mut a) = answer(&r) else {
+                    return std::future::pending().await;
+                };
+                (a["jsonrpc"], a["id"]) = (json!("2.0"), r["id"].clone());
+                axum::Json(a)
+            }
+        }),
+    );
     let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", l.local_addr().unwrap());
     tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
@@ -889,7 +1238,10 @@ async fn rpc_server(answer: Answer) -> String {
 
 /// A JSON-RPC endpoint that answers `eth_chainId` with `chain_id` (and nothing else).
 async fn rpc_answering(chain_id: u64) -> String {
-    rpc_server(Arc::new(move |r| (r["method"] == "eth_chainId").then(|| json!({"result": format!("{chain_id:#x}")})))).await
+    rpc_server(Arc::new(move |r| {
+        (r["method"] == "eth_chainId").then(|| json!({"result": format!("{chain_id:#x}")}))
+    }))
+    .await
 }
 
 /// Fable R-1: a node that accepts and never answers times out (`ChainError::Rpc`) and the request fails over: node 0 silent
@@ -898,21 +1250,48 @@ async fn rpc_answering(chain_id: u64) -> String {
 async fn silent_node_times_out_and_fails_over() {
     let chain_id = json!({"result": format!("{CHAIN_ID:#x}")});
     let c = chain_id.clone();
-    let silent = rpc_server(Arc::new(move |r| (r["method"] == "eth_chainId").then(|| c.clone()))).await;
-    let serving = rpc_server(Arc::new(move |r| Some(match r["method"].as_str().unwrap() {
-        "eth_chainId" => chain_id.clone(),
-        "eth_blockNumber" => json!({"result": "0x65"}),
-        "eth_getCode" => json!({"result": "0x"}),
-        _ => json!({"error": {"code": -32601, "message": "no such method"}}),
-    }))).await;
-    let rpc = Rpc::connect_within(&[silent, serving], CHAIN_ID, std::time::Duration::from_millis(300)).await.unwrap();
+    let silent = rpc_server(Arc::new(move |r| {
+        (r["method"] == "eth_chainId").then(|| c.clone())
+    }))
+    .await;
+    let serving = rpc_server(Arc::new(move |r| {
+        Some(match r["method"].as_str().unwrap() {
+            "eth_chainId" => chain_id.clone(),
+            "eth_blockNumber" => json!({"result": "0x65"}),
+            "eth_getCode" => json!({"result": "0x"}),
+            _ => json!({"error": {"code": -32601, "message": "no such method"}}),
+        })
+    }))
+    .await;
+    let rpc = Rpc::connect_within(
+        &[silent, serving],
+        CHAIN_ID,
+        std::time::Duration::from_millis(300),
+    )
+    .await
+    .unwrap();
     // the outer bound turns a hang into this test's failure
     let bound = std::time::Duration::from_secs(5);
-    let head = tokio::time::timeout(bound, rpc.head(0)).await.expect("a silent node times out");
+    let head = tokio::time::timeout(bound, rpc.head(0))
+        .await
+        .expect("a silent node times out");
     assert!(matches!(head, Err(ChainError::Rpc(_))), "{head:?}");
-    let svc = Service::new(Arc::new(rpc), all_valid(), signer(), &Config::parse(CONFIG).unwrap());
-    let r = tokio::time::timeout(bound, svc.probe(ProbeRequest { token: TOKEN, chain_id: CHAIN_ID, proposal: false })).await
-        .expect("the request fails over, never hangs");
+    let svc = Service::new(
+        Arc::new(rpc),
+        all_valid(),
+        signer(),
+        &Config::parse(CONFIG).unwrap(),
+    );
+    let r = tokio::time::timeout(
+        bound,
+        svc.probe(ProbeRequest {
+            token: TOKEN,
+            chain_id: CHAIN_ID,
+            proposal: false,
+        }),
+    )
+    .await
+    .expect("the request fails over, never hangs");
     assert_eq!(r.unwrap_err().error, "NOT_A_TOKEN", "node 1's answer");
 }
 
@@ -930,8 +1309,17 @@ async fn only_a_revert_is_a_revert() {
         },
     }))).await;
     let rpc = Rpc::connect(&[node], CHAIN_ID).await.unwrap();
-    let call = |n: u8| rpc.call(0, Block::Number(1), Address::with_last_byte(n), Bytes::from_static(b"\x01\x02\x03\x04"));
-    assert!(matches!(call(1).await, Err(ChainError::Revert(d)) if d[..] == [0x08, 0xc3, 0x79, 0xa0]));
+    let call = |n: u8| {
+        rpc.call(
+            0,
+            Block::Number(1),
+            Address::with_last_byte(n),
+            Bytes::from_static(b"\x01\x02\x03\x04"),
+        )
+    };
+    assert!(
+        matches!(call(1).await, Err(ChainError::Revert(d)) if d[..] == [0x08, 0xc3, 0x79, 0xa0])
+    );
     assert!(matches!(call(2).await, Err(ChainError::Revert(d)) if d.is_empty()));
     assert!(matches!(call(3).await, Err(ChainError::Rpc(_))));
     assert!(matches!(call(4).await, Err(ChainError::Rpc(_))));
@@ -971,14 +1359,42 @@ async fn rpc_with_block_0(zero: Option<B256>) -> String {
 async fn start_pins_block_0() {
     let uid = Config::parse(CONFIG).unwrap().chain_uid;
     let ours = rpc_with_block_0(Some(uid)).await;
-    assert_eq!(Rpc::connect_pinned(&[ours.clone(), rpc_with_block_0(Some(uid)).await], CHAIN_ID, uid).await.unwrap().nodes(), 2);
-    let e = Rpc::connect_pinned(&[ours.clone(), rpc_with_block_0(Some(B256::repeat_byte(7))).await], CHAIN_ID, uid).await
-        .err().expect("another genesis");
+    assert_eq!(
+        Rpc::connect_pinned(
+            &[ours.clone(), rpc_with_block_0(Some(uid)).await],
+            CHAIN_ID,
+            uid
+        )
+        .await
+        .unwrap()
+        .nodes(),
+        2
+    );
+    let e = Rpc::connect_pinned(
+        &[
+            ours.clone(),
+            rpc_with_block_0(Some(B256::repeat_byte(7))).await,
+        ],
+        CHAIN_ID,
+        uid,
+    )
+    .await
+    .err()
+    .expect("another genesis");
     assert!(e.to_string().contains("rpc_urls[1]: chain identity"), "{e}");
-    let e = Rpc::connect_pinned(&[rpc_with_block_0(Some(B256::repeat_byte(7))).await], CHAIN_ID, uid).await
-        .err().expect("every node of another genesis");
+    let e = Rpc::connect_pinned(
+        &[rpc_with_block_0(Some(B256::repeat_byte(7))).await],
+        CHAIN_ID,
+        uid,
+    )
+    .await
+    .err()
+    .expect("every node of another genesis");
     assert!(e.to_string().contains("rpc_urls[0]: chain identity"), "{e}");
-    let e = Rpc::connect_pinned(&[ours, rpc_with_block_0(None).await], CHAIN_ID, uid).await.err().expect("no block 0");
+    let e = Rpc::connect_pinned(&[ours, rpc_with_block_0(None).await], CHAIN_ID, uid)
+        .await
+        .err()
+        .expect("no block 0");
     assert!(e.to_string().contains("serves no block 0"), "{e}");
 }
 
@@ -987,11 +1403,32 @@ async fn start_pins_block_0() {
 #[tokio::test]
 async fn start_pins_chain_id() {
     let (ours, other) = (rpc_answering(CHAIN_ID).await, rpc_answering(1).await);
-    assert_eq!(Rpc::connect(std::slice::from_ref(&ours), CHAIN_ID).await.unwrap().nodes(), 1);
-    let e = Rpc::connect(&[ours.clone(), other], CHAIN_ID).await.err().expect("another chain");
-    assert!(e.to_string().contains("rpc_urls[1] answers chain 1, the config pins 7622"), "{e}");
-    assert!(Rpc::connect(&[ours, "http://127.0.0.1:1".into()], CHAIN_ID).await.is_err(), "an endpoint that does not answer");
-    assert!(Config::parse(&CONFIG.replace("chain_id = 7622\n", "")).is_err(), "chain_id is required");
+    assert_eq!(
+        Rpc::connect(std::slice::from_ref(&ours), CHAIN_ID)
+            .await
+            .unwrap()
+            .nodes(),
+        1
+    );
+    let e = Rpc::connect(&[ours.clone(), other], CHAIN_ID)
+        .await
+        .err()
+        .expect("another chain");
+    assert!(
+        e.to_string()
+            .contains("rpc_urls[1] answers chain 1, the config pins 7622"),
+        "{e}"
+    );
+    assert!(
+        Rpc::connect(&[ours, "http://127.0.0.1:1".into()], CHAIN_ID)
+            .await
+            .is_err(),
+        "an endpoint that does not answer"
+    );
+    assert!(
+        Config::parse(&CONFIG.replace("chain_id = 7622\n", "")).is_err(),
+        "chain_id is required"
+    );
 }
 
 /// Fable C-2: the views the service calls are the contract's after group 3h (`ownTag` in the three args tuples): the
@@ -1013,37 +1450,82 @@ fn views_are_the_contracts() {
 /// n2048-kmax1024): the verifier's digest and signature.
 #[test]
 fn verdict_vectors() {
-    let dir = if stmt::SET == "n2048-kmax1024" { String::new() } else { format!("{}/", stmt::SET) };
+    let dir = if stmt::SET == "n2048-kmax1024" {
+        String::new()
+    } else {
+        format!("{}/", stmt::SET)
+    };
     let v = json_file(&format!("{dir}verdict.json"));
     assert_eq!(v["set"], stmt::SET);
-    assert_eq!(word(&v["typehash"]), keccak256(PqzVerdict::eip712_encode_type().as_bytes()));
+    assert_eq!(
+        word(&v["typehash"]),
+        keccak256(PqzVerdict::eip712_encode_type().as_bytes())
+    );
     assert_eq!(word(&v["purposeTag"]), purpose_pqz_verdict());
     assert_eq!(word(&v["proofSystemId"]), B256::from(stmt::PQZL_ID));
     let (d, g) = (&v["domain"], &v["registryDomain"]);
-    assert_eq!((d["name"].as_str(), d["version"].as_str()), (Some("SCaaS PqzToken"), Some("1")));
-    let (token, chain_id, salt) = (d["verifyingContract"].as_str().unwrap().parse::<Address>().unwrap(),
-        U256::from(uint(&d["chainId"])), word(&d["salt"]));
-    let reg = Eip712Domain::new(Some("SCaaS UARegistry".into()), Some("1".into()), Some(U256::from(uint(&g["chainId"]))),
-        Some(g["verifyingContract"].as_str().unwrap().parse().unwrap()), Some(word(&g["salt"])));
+    assert_eq!(
+        (d["name"].as_str(), d["version"].as_str()),
+        (Some("SCaaS PqzToken"), Some("1"))
+    );
+    let (token, chain_id, salt) = (
+        d["verifyingContract"]
+            .as_str()
+            .unwrap()
+            .parse::<Address>()
+            .unwrap(),
+        U256::from(uint(&d["chainId"])),
+        word(&d["salt"]),
+    );
+    let reg = Eip712Domain::new(
+        Some("SCaaS UARegistry".into()),
+        Some("1".into()),
+        Some(U256::from(uint(&g["chainId"]))),
+        Some(g["verifyingContract"].as_str().unwrap().parse().unwrap()),
+        Some(word(&g["salt"])),
+    );
     assert_eq!(reg.separator(), word(&g["separator"]));
     let k = PrivateKeySigner::from_bytes(&B256::from(U256::from(uint(&v["verifierKey"])))).unwrap();
     assert_eq!(k.address().into_word(), word(&v["verifierUA"]));
     let rows = v["rows"].as_array().unwrap();
     assert!(rows.len() > 10);
     for r in rows {
-        let pv = PqzVerdict { token, chainId: chain_id, proofSystemId: word(&v["proofSystemId"]),
-            statementHash: word(&r["statementHash"]), proofHash: word(&r["proofHash"]),
-            pqzVerifierEpoch: uint(&r["pqzVerifierEpoch"]) as u32, validUntil: uint(&r["validUntil"]) };
+        let pv = PqzVerdict {
+            token,
+            chainId: chain_id,
+            proofSystemId: word(&v["proofSystemId"]),
+            statementHash: word(&r["statementHash"]),
+            proofHash: word(&r["proofHash"]),
+            pqzVerifierEpoch: uint(&r["pqzVerifierEpoch"]) as u32,
+            validUntil: uint(&r["validUntil"]),
+        };
         assert_eq!(pv.eip712_hash_struct(), word(&r["structHash"]), "{r}");
         let digest = verdict_digest(&pv, salt);
         assert_eq!(digest, word(&r["digest"]), "{r}");
-        let auth = ua_auth_digest_at(reg.separator(), k.address().into_word(), purpose_pqz_verdict(), digest);
+        let auth = ua_auth_digest_at(
+            reg.separator(),
+            k.address().into_word(),
+            purpose_pqz_verdict(),
+            digest,
+        );
         assert_eq!(auth, word(&r["uaAuthDigest"]), "{r}");
         // the service's own builder, from the configured values
-        let mine = registry_domain(g["version"].as_str().unwrap().parse().unwrap(), uint(&g["chainId"]),
-            g["verifyingContract"].as_str().unwrap().parse().unwrap(), word(&g["salt"]));
-        assert_eq!(verdict_auth_digest(&mine, k.address().into_word(), digest), auth, "{r}");
-        assert_eq!(k.sign_hash_sync(&auth).unwrap().as_bytes().to_vec(), bytes(&r["signature"]), "{r}");
+        let mine = registry_domain(
+            g["version"].as_str().unwrap().parse().unwrap(),
+            uint(&g["chainId"]),
+            g["verifyingContract"].as_str().unwrap().parse().unwrap(),
+            word(&g["salt"]),
+        );
+        assert_eq!(
+            verdict_auth_digest(&mine, k.address().into_word(), digest),
+            auth,
+            "{r}"
+        );
+        assert_eq!(
+            k.sign_hash_sync(&auth).unwrap().as_bytes().to_vec(),
+            bytes(&r["signature"]),
+            "{r}"
+        );
     }
 }
 
@@ -1051,10 +1533,17 @@ fn verdict_vectors() {
 
 /// The service over three fake nodes that answer by hash only, under `strict_majority`.
 fn strict_service(w: World, pqz: Pqz) -> Svc {
-    let fake = Arc::new(Fake(Mutex::new(World { nodes: 3, by_hash: true, ..w })));
+    let fake = Arc::new(Fake(Mutex::new(World {
+        nodes: 3,
+        by_hash: true,
+        ..w
+    })));
     let cfg = Config::parse(&strict_config()).unwrap();
     let svc = Arc::new(Service::new(fake.clone(), pqz, signer(), &cfg));
-    Svc { app: http::router(svc, &cfg), fake }
+    Svc {
+        app: http::router(svc, &cfg),
+        fake,
+    }
 }
 
 fn strict_config() -> String {
@@ -1067,12 +1556,28 @@ async fn strict_majority_signs_the_honest_answer() {
     let (st, proof) = vector("TRANSFER", None);
     let s = strict_service(world(&st, &[A, B, AUD]), all_valid());
     s.world().lie.insert(2, C);
-    assert_signed(&verdict(&s, &request(single(A, 0, B), &st, &proof)).await, keccak256(&st), keccak256(&proof));
-    assert!(s.world().seen.iter().all(|&(_, b)| b == 100), "every read at the agreed block 100 (Depth(1) of 99, 100, 101)");
+    assert_signed(
+        &verdict(&s, &request(single(A, 0, B), &st, &proof)).await,
+        keccak256(&st),
+        keccak256(&proof),
+    );
+    assert!(
+        s.world().seen.iter().all(|&(_, b)| b == 100),
+        "every read at the agreed block 100 (Depth(1) of 99, 100, 101)"
+    );
     // control: the liar alone under failover is believed when it is the first node
-    let f = service(World { nodes: 3, ..world(&st, &[A, B, AUD]) }, all_valid());
+    let f = service(
+        World {
+            nodes: 3,
+            ..world(&st, &[A, B, AUD])
+        },
+        all_valid(),
+    );
     f.world().lie.insert(0, C);
-    assert_refused(&verdict(&f, &request(single(A, 0, B), &st, &proof)).await, "KEY_OWNED_ELSEWHERE");
+    assert_refused(
+        &verdict(&f, &request(single(A, 0, B), &st, &proof)).await,
+        "KEY_OWNED_ELSEWHERE",
+    );
 }
 
 #[tokio::test]
@@ -1089,9 +1594,19 @@ async fn two_lying_nodes_refuse_rpc_no_majority_and_sign_nothing() {
 #[tokio::test]
 async fn probe_runs_under_agree_too() {
     let s = strict_service(world(&[], &[]), all_valid());
-    let probe = || post(&s, "/v1/pqz-verdict/probe", json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string());
+    let probe = || {
+        post(
+            &s,
+            "/v1/pqz-verdict/probe",
+            json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string(),
+        )
+    };
     assert_eq!(probe().await.0, 200, "three honest nodes");
-    assert!(s.world().seen.iter().all(|&(_, b)| b == 100), "{:?}", s.world().seen);
+    assert!(
+        s.world().seen.iter().all(|&(_, b)| b == 100),
+        "{:?}",
+        s.world().seen
+    );
     s.world().down = HashMap::from([(1, 0), (2, 0)]);
     assert_refused(&probe().await, "RPC_NO_MAJORITY");
 }
@@ -1110,10 +1625,19 @@ async fn no_chain_read_after_the_proof_check_under_strict_majority() {
     });
     let s = strict_service(world(&st, &[A, B, AUD]), pqz);
     let _ = cell.set(s.fake.clone());
-    assert_signed(&verdict(&s, &request(single(A, 0, B), &st, &proof)).await, keccak256(&st), keccak256(&proof));
+    assert_signed(
+        &verdict(&s, &request(single(A, 0, B), &st, &proof)).await,
+        keccak256(&st),
+        keccak256(&proof),
+    );
     let w = s.world();
     assert!(!w.proof_at.is_empty(), "the proof and every R_REG ran");
-    assert!(w.proof_at.iter().all(|&n| n == w.seen.len()), "every read before the first proof: {:?} of {}", w.proof_at, w.seen.len());
+    assert!(
+        w.proof_at.iter().all(|&n| n == w.seen.len()),
+        "every read before the first proof: {:?} of {}",
+        w.proof_at,
+        w.seen.len()
+    );
 }
 
 #[tokio::test]
@@ -1124,15 +1648,26 @@ async fn the_refusal_is_the_same_under_both_policies() {
     let n = bad_proof.len() / 2;
     bad_proof[n] ^= 1;
     let h = pqz_key_hash(&st[640 + PK..640 + 2 * PK]);
-    for (proof, owned, want) in [(&bad_proof, true, "VERDICT_ZERO"), (&proof, true, "KEY_OWNED_ELSEWHERE"), (&proof, false, "KEY_NOT_STORED")] {
+    for (proof, owned, want) in [
+        (&bad_proof, true, "VERDICT_ZERO"),
+        (&proof, true, "KEY_OWNED_ELSEWHERE"),
+        (&proof, false, "KEY_NOT_STORED"),
+    ] {
         for strict in [false, true] {
             let mut w = world(&st, &[A, B, AUD]);
             w.keys.remove(&(B, 0));
             if owned {
                 w.owner.insert(h, C);
             }
-            let s = if strict { strict_service(w, real_op()) } else { service(w, real_op()) };
-            assert_refused(&verdict(&s, &request(single(A, 0, B), &st, proof)).await, want);
+            let s = if strict {
+                strict_service(w, real_op())
+            } else {
+                service(w, real_op())
+            };
+            assert_refused(
+                &verdict(&s, &request(single(A, 0, B), &st, proof)).await,
+                want,
+            );
         }
     }
 }
@@ -1140,24 +1675,59 @@ async fn the_refusal_is_the_same_under_both_policies() {
 #[tokio::test]
 async fn failover_is_the_default() {
     let (st, proof) = vector("TRANSFER", None);
-    assert_eq!(Config::parse(CONFIG).unwrap().rpc_policy, scaas_pqz_verifier::RpcPolicy::Failover);
-    let s = service(World { nodes: 3, by_hash: true, ..world(&st, &[A, B, AUD]) }, all_valid());
-    assert_refused(&verdict(&s, &request(single(A, 0, B), &st, &proof)).await, "RPC_UNAVAILABLE");
-    let s = service(World { nodes: 3, ..world(&st, &[A, B, AUD]) }, all_valid());
-    assert_signed(&verdict(&s, &request(single(A, 0, B), &st, &proof)).await, keccak256(&st), keccak256(&proof));
-    assert!(s.world().seen.iter().all(|&r| r == (0, 100)), "today's path: node 0 at its head, by number");
+    assert_eq!(
+        Config::parse(CONFIG).unwrap().rpc_policy,
+        scaas_pqz_verifier::RpcPolicy::Failover
+    );
+    let s = service(
+        World {
+            nodes: 3,
+            by_hash: true,
+            ..world(&st, &[A, B, AUD])
+        },
+        all_valid(),
+    );
+    assert_refused(
+        &verdict(&s, &request(single(A, 0, B), &st, &proof)).await,
+        "RPC_UNAVAILABLE",
+    );
+    let s = service(
+        World {
+            nodes: 3,
+            ..world(&st, &[A, B, AUD])
+        },
+        all_valid(),
+    );
+    assert_signed(
+        &verdict(&s, &request(single(A, 0, B), &st, &proof)).await,
+        keccak256(&st),
+        keccak256(&proof),
+    );
+    assert!(
+        s.world().seen.iter().all(|&r| r == (0, 100)),
+        "today's path: node 0 at its head, by number"
+    );
 }
 
 #[tokio::test]
 async fn strict_majority_with_one_endpoint_is_refused_at_start() {
-    let one = CONFIG.replace(r#"rpc_urls = ["http://127.0.0.1:1"]"#, "rpc_urls = [\"http://127.0.0.1:1\"]\nrpc_policy = \"strict_majority\"");
-    assert!(Config::parse(&one).unwrap_err().to_string().contains("two rpc_urls or more"));
+    let one = CONFIG.replace(
+        r#"rpc_urls = ["http://127.0.0.1:1"]"#,
+        "rpc_urls = [\"http://127.0.0.1:1\"]\nrpc_policy = \"strict_majority\"",
+    );
+    assert!(Config::parse(&one)
+        .unwrap_err()
+        .to_string()
+        .contains("two rpc_urls or more"));
     assert!(Config::parse(&strict_config()).is_ok(), "control: three");
 }
 
 #[tokio::test]
 async fn an_unknown_policy_is_refused_at_start() {
-    let bad = CONFIG.replace(r#"rpc_urls = ["http://127.0.0.1:1"]"#, "rpc_urls = [\"http://127.0.0.1:1\"]\nrpc_policy = \"majority\"");
+    let bad = CONFIG.replace(
+        r#"rpc_urls = ["http://127.0.0.1:1"]"#,
+        "rpc_urls = [\"http://127.0.0.1:1\"]\nrpc_policy = \"majority\"",
+    );
     assert!(Config::parse(&bad).is_err());
 }
 
@@ -1174,8 +1744,24 @@ async fn the_classifier_is_the_crates() {
         },
     }))).await;
     let rpc = Rpc::connect(&[node], CHAIN_ID).await.unwrap();
-    let call = |n: u8| rpc.call(0, Block::Number(1), Address::with_last_byte(n), Bytes::from_static(b"\x01\x02\x03\x04"));
-    assert!(matches!(call(1).await, Err(ChainError::Revert(d)) if d.is_empty()), "an execution error: a revert now");
-    assert!(matches!(call(2).await, Err(ChainError::Rpc(_))), "a node's own limit");
-    assert!(matches!(call(3).await, Err(ChainError::Rpc(_))), "Nethermind's own timeout");
+    let call = |n: u8| {
+        rpc.call(
+            0,
+            Block::Number(1),
+            Address::with_last_byte(n),
+            Bytes::from_static(b"\x01\x02\x03\x04"),
+        )
+    };
+    assert!(
+        matches!(call(1).await, Err(ChainError::Revert(d)) if d.is_empty()),
+        "an execution error: a revert now"
+    );
+    assert!(
+        matches!(call(2).await, Err(ChainError::Rpc(_))),
+        "a node's own limit"
+    );
+    assert!(
+        matches!(call(3).await, Err(ChainError::Rpc(_))),
+        "Nethermind's own timeout"
+    );
 }

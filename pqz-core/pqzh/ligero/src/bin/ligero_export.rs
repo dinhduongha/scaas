@@ -5,11 +5,11 @@
 //! (n, k, l, t, grinding bits: five 32-byte big-endian words). neg-<case>.stmt / .proof: invalid witnesses proved without the honest prover's checks
 //! (conjectured preset), each must be rejected. A JSON line per file on stdout.
 
-use pqzh_ligero::client::{Tweak, setup, setup_with};
+use pqzh_ligero::client::{setup, setup_with, Tweak};
 use pqzh_ligero::fq::EB;
-use pqzh_ligero::ring::{K, N, Q, a_matrix, digits};
+use pqzh_ligero::ring::{a_matrix, digits, K, N, Q};
 use pqzh_ligero::set::BETA_S;
-use pqzh_ligero::{OP_REGISTER, OP_TRANSFER, Params, prove, prove_unchecked, verify};
+use pqzh_ligero::{prove, prove_unchecked, verify, Params, OP_REGISTER, OP_TRANSFER};
 
 fn put(dir: &str, name: &str, b: &[u8]) {
     std::fs::write(format!("{dir}/{name}"), b).unwrap();
@@ -18,9 +18,16 @@ fn put(dir: &str, name: &str, b: &[u8]) {
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
-    let dir = a.get(1).expect("usage: ligero_export <dir> [preset ...]").clone();
+    let dir = a
+        .get(1)
+        .expect("usage: ligero_export <dir> [preset ...]")
+        .clone();
     std::fs::create_dir_all(&dir).unwrap();
-    let presets: Vec<String> = if a.len() > 2 { a[2..].to_vec() } else { vec!["proven".into(), "conj".into()] };
+    let presets: Vec<String> = if a.len() > 2 {
+        a[2..].to_vec()
+    } else {
+        vec!["proven".into(), "conj".into()]
+    };
 
     let mut am = Vec::with_capacity(K * K * 64 * EB);
     for p in a_matrix() {
@@ -34,14 +41,25 @@ fn main() {
     for pre in &presets {
         // R_TX0 (op 1, the 66,560-byte statement) at THE preset only
         let tx0 = [(OP_TRANSFER, "tx0", &s.tx0_stmt, &s.tx0_wit)];
-        let rels = [(OP_REGISTER, "reg", &s.reg_stmt, &s.reg_wit), (OP_TRANSFER, "tx", &s.tx_stmt, &s.tx_wit)];
-        for (op, rel, st, w) in rels.into_iter().chain(if pre == "proven" { tx0.to_vec() } else { vec![] }) {
+        let rels = [
+            (OP_REGISTER, "reg", &s.reg_stmt, &s.reg_wit),
+            (OP_TRANSFER, "tx", &s.tx_stmt, &s.tx_wit),
+        ];
+        for (op, rel, st, w) in rels.into_iter().chain(if pre == "proven" {
+            tx0.to_vec()
+        } else {
+            vec![]
+        }) {
             let p = match pre.as_str() {
                 "proven" => Params::preset(op, true, true),
                 "conj" => Params::preset(op, false, true),
                 "johnson" => Params::johnson_preset(),
                 x => {
-                    let nk: Vec<usize> = x.trim_start_matches("conj-n").split("-k").map(|v| v.parse().unwrap()).collect();
+                    let nk: Vec<usize> = x
+                        .trim_start_matches("conj-n")
+                        .split("-k")
+                        .map(|v| v.parse().unwrap())
+                        .collect();
                     Params::new(nk[0], nk[1], false)
                 }
             };
@@ -68,17 +86,29 @@ fn main() {
     for k in 0..BETA_S * BETA_S + 4 {
         sv[k] = if k % 2 == 0 { 1 } else { -1 };
     }
-    let norm = setup_with(&Tweak { s_f: Some(sv), ..Default::default() });
+    let norm = setup_with(&Tweak {
+        s_f: Some(sv),
+        ..Default::default()
+    });
     let mut sv = vec![0i64; N];
     sv[5] = 100;
-    let coef = setup_with(&Tweak { s_f: Some(sv), ..Default::default() });
+    let coef = setup_with(&Tweak {
+        s_f: Some(sv),
+        ..Default::default()
+    });
     let mut d = digits(123_456);
     d[0] += 16;
     d[1] -= 1;
-    let digit = setup_with(&Tweak { d: Some(d), ..Default::default() });
+    let digit = setup_with(&Tweak {
+        d: Some(d),
+        ..Default::default()
+    });
     let mut e = vec![0i64; 16];
     e[0] = 65;
-    let e2 = setup_with(&Tweak { e2_t: Some(e), ..Default::default() });
+    let e2 = setup_with(&Tweak {
+        e2_t: Some(e),
+        ..Default::default()
+    });
     let mut over = s.tx_wit.clone();
     for i in 0..16 {
         over[6 * N + 112 + i] = 15; // d' (v3 12,400)

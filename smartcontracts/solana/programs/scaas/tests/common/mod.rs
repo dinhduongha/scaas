@@ -5,20 +5,20 @@ use anchor_lang::prelude::Pubkey;
 use anchor_lang::solana_program::instruction::{AccountMeta, Instruction};
 use anchor_lang::{AccountDeserialize, InstructionData, ToAccountMetas};
 use anchor_spl::token_2022::spl_token_2022 as t22;
-use scaas::auth::{self as A, Auth};
-use scaas::state::AuthKey;
 use ed25519_dalek::{Signer as _, SigningKey};
 use litesvm::types::{FailedTransactionMetadata, TransactionMetadata};
 use litesvm::LiteSVM;
+use scaas::auth::{self as A, Auth};
+use scaas::state::AuthKey;
 use solana_clock::Clock;
 use solana_keypair::Keypair;
 use solana_message::Message;
 use solana_signer::Signer;
 use solana_transaction::Transaction;
 
+pub mod flows;
 #[path = "../vectors.rs"]
 pub mod vectors;
-pub mod flows;
 
 pub const SO: &[u8] = include_bytes!("../../../../target/deploy/scaas.so");
 /// Test-only programs (never deployed): the `relay_fee` target and the CPI wrapper.
@@ -47,7 +47,10 @@ pub fn pk(s: &str) -> Pubkey {
 }
 
 pub fn hexd(s: &str) -> Vec<u8> {
-    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+        .collect()
 }
 
 pub fn code(e: scaas::ScaasError) -> u32 {
@@ -79,7 +82,9 @@ pub struct Ed {
 
 impl Ed {
     pub fn new(name: &str) -> Self {
-        Self { sk: SigningKey::from_bytes(&sha(&[name.as_bytes()])) }
+        Self {
+            sk: SigningKey::from_bytes(&sha(&[name.as_bytes()])),
+        }
     }
     pub fn pk(&self) -> [u8; 32] {
         self.sk.verifying_key().to_bytes()
@@ -102,8 +107,16 @@ impl Ed {
     /// (pk, sig, message) cho precompile — `kind 0` (raw) hoặc `kind 1` (OCMS).
     pub fn sign(&self, kind: u8, label: &str, digest: &[u8; 32]) -> Entry {
         let t = A::text(label, digest);
-        let msg = if kind == A::KIND_RAW { t } else { A::ocms(&self.pk(), &t) };
-        Entry { pk: self.pk().to_vec(), sig: self.sk.sign(&msg).to_bytes().to_vec(), msg }
+        let msg = if kind == A::KIND_RAW {
+            t
+        } else {
+            A::ocms(&self.pk(), &t)
+        };
+        Entry {
+            pk: self.pk().to_vec(),
+            sig: self.sk.sign(&msg).to_bytes().to_vec(),
+            msg,
+        }
     }
 }
 
@@ -114,7 +127,9 @@ pub struct Passkey {
 
 impl Passkey {
     pub fn new(name: &str) -> Self {
-        Self { sk: p256::ecdsa::SigningKey::from_slice(&sha(&[name.as_bytes()])).unwrap() }
+        Self {
+            sk: p256::ecdsa::SigningKey::from_slice(&sha(&[name.as_bytes()])).unwrap(),
+        }
     }
     pub fn pk33(&self) -> [u8; 33] {
         let p = self.sk.verifying_key().to_encoded_point(true);
@@ -124,7 +139,11 @@ impl Passkey {
         sha(&[RP_ID.as_bytes()])
     }
     pub fn key(&self) -> AuthKey {
-        AuthKey { scheme: scaas::state::SCHEME_P256, pubkey: self.pk33(), rp_id_hash: Self::rp_id_hash() }
+        AuthKey {
+            scheme: scaas::state::SCHEME_P256,
+            pubkey: self.pk33(),
+            rp_id_hash: Self::rp_id_hash(),
+        }
     }
     pub fn owner(&self) -> [u8; 32] {
         scaas::p256_owner(&self.pk33())
@@ -133,7 +152,13 @@ impl Passkey {
         account_of(&self.owner())
     }
     /// Assertion trên `challenge`: (Entry cho precompile, clientDataJSON). `high_s` = để nguyên S cao (precompile chặn).
-    pub fn assert(&self, challenge: &[u8; 32], origin: &str, flags: u8, high_s: bool) -> (Entry, Vec<u8>) {
+    pub fn assert(
+        &self,
+        challenge: &[u8; 32],
+        origin: &str,
+        flags: u8,
+        high_s: bool,
+    ) -> (Entry, Vec<u8>) {
         use p256::ecdsa::signature::Signer as _;
         let mut ad = Self::rp_id_hash().to_vec();
         ad.push(flags);
@@ -157,7 +182,14 @@ impl Passkey {
             }
             bytes[32..].copy_from_slice(&s);
         }
-        (Entry { pk: self.pk33().to_vec(), sig: bytes, msg }, cdj)
+        (
+            Entry {
+                pk: self.pk33().to_vec(),
+                sig: bytes,
+                msg,
+            },
+            cdj,
+        )
     }
 }
 
@@ -182,12 +214,24 @@ pub fn precompile_ix(program: Pubkey, entries: &[Entry], index: u16) -> Instruct
         body.extend_from_slice(&e.sig);
         let msg_off = base + body.len();
         body.extend_from_slice(&e.msg);
-        for v in [sig_off as u16, index, pk_off as u16, index, msg_off as u16, e.msg.len() as u16, index] {
+        for v in [
+            sig_off as u16,
+            index,
+            pk_off as u16,
+            index,
+            msg_off as u16,
+            e.msg.len() as u16,
+            index,
+        ] {
             head.extend_from_slice(&v.to_le_bytes());
         }
     }
     head.extend_from_slice(&body);
-    Instruction { program_id: program, accounts: vec![], data: head }
+    Instruction {
+        program_id: program,
+        accounts: vec![],
+        data: head,
+    }
 }
 
 pub fn ed_ix(entries: &[Entry]) -> Instruction {
@@ -199,7 +243,13 @@ pub fn r1_ix(entries: &[Entry]) -> Instruction {
 }
 
 pub fn auth(kind: u8, key_index: u8, precompile_ix: u8, sig_index: u8) -> Auth {
-    Auth { kind, key_index, precompile_ix, sig_index, cdj: vec![] }
+    Auth {
+        kind,
+        key_index,
+        precompile_ix,
+        sig_index,
+        cdj: vec![],
+    }
 }
 
 // ------------------------------------------------------------------ env
@@ -222,7 +272,12 @@ impl Env {
         svm.airdrop(&admin.pubkey(), 100_000_000_000).unwrap();
         svm.airdrop(&lane.pubkey(), 100_000_000_000).unwrap();
         let network = pk(vectors::NETWORK).to_bytes();
-        let mut env = Self { svm, admin, lane, network };
+        let mut env = Self {
+            svm,
+            admin,
+            lane,
+            network,
+        };
         env.set_upgrade_authority(&env.admin.pubkey());
         env.set_time(NOW);
         let a = env.admin.insecure_clone();
@@ -231,7 +286,11 @@ impl Env {
     }
 
     pub fn programdata() -> Pubkey {
-        Pubkey::find_program_address(&[scaas::ID.as_ref()], &anchor_lang::solana_program::bpf_loader_upgradeable::ID).0
+        Pubkey::find_program_address(
+            &[scaas::ID.as_ref()],
+            &anchor_lang::solana_program::bpf_loader_upgradeable::ID,
+        )
+        .0
     }
 
     /// LiteSVM nạp program với upgrade authority = None; ghi lại metadata ProgramData (bincode: tag 3, slot, Option).
@@ -254,7 +313,11 @@ impl Env {
                 system_program: SYSTEM,
             }
             .to_account_metas(None),
-            data: scaas::instruction::Initialize { network: self.network, admin: self.admin.pubkey() }.data(),
+            data: scaas::instruction::Initialize {
+                network: self.network,
+                admin: self.admin.pubkey(),
+            }
+            .data(),
         }
     }
 
@@ -300,13 +363,33 @@ impl Env {
 
     // -------------------------------------------------------------- tokens
 
-    pub fn create_mint(&mut self, kp: &Keypair, tp: Pubkey, decimals: u8, ext: &[Instruction], ext_types: &[t22::extension::ExtensionType]) {
-        let space = if tp == TOKEN { 82 } else { t22::extension::ExtensionType::try_calculate_account_len::<t22::state::Mint>(ext_types).unwrap() };
+    pub fn create_mint(
+        &mut self,
+        kp: &Keypair,
+        tp: Pubkey,
+        decimals: u8,
+        ext: &[Instruction],
+        ext_types: &[t22::extension::ExtensionType],
+    ) {
+        let space = if tp == TOKEN {
+            82
+        } else {
+            t22::extension::ExtensionType::try_calculate_account_len::<t22::state::Mint>(ext_types)
+                .unwrap()
+        };
         let rent = self.svm.minimum_balance_for_rent_exemption(space);
         let admin = self.admin.pubkey();
-        let mut ixs = vec![solana_system_interface::instruction::create_account(&admin, &kp.pubkey(), rent, space as u64, &tp)];
+        let mut ixs = vec![solana_system_interface::instruction::create_account(
+            &admin,
+            &kp.pubkey(),
+            rent,
+            space as u64,
+            &tp,
+        )];
         ixs.extend_from_slice(ext);
-        ixs.push(t22::instruction::initialize_mint2(&tp, &kp.pubkey(), &admin, None, decimals).unwrap());
+        ixs.push(
+            t22::instruction::initialize_mint2(&tp, &kp.pubkey(), &admin, None, decimals).unwrap(),
+        );
         let a = self.admin.insecure_clone();
         self.send_as(&a, &ixs, &[kp]).unwrap();
     }
@@ -325,34 +408,53 @@ impl Env {
             &admin.pubkey(), owner, mint, &tp,
         )];
         if amount > 0 {
-            ixs.push(t22::instruction::mint_to(&tp, mint, &a, &admin.pubkey(), &[], amount).unwrap());
+            ixs.push(
+                t22::instruction::mint_to(&tp, mint, &a, &admin.pubkey(), &[], amount).unwrap(),
+            );
         }
         self.send_as(&admin, &ixs, &[]).unwrap();
         a
     }
 
     /// Token account KHÔNG phải ATA, owner = `owner` (L7).
-    pub fn side_account(&mut self, owner: &Pubkey, mint: &Pubkey, tp: Pubkey, amount: u64) -> Pubkey {
+    pub fn side_account(
+        &mut self,
+        owner: &Pubkey,
+        mint: &Pubkey,
+        tp: Pubkey,
+        amount: u64,
+    ) -> Pubkey {
         let kp = Keypair::new();
         let space = if tp == TOKEN { 165 } else { 170 };
         let rent = self.svm.minimum_balance_for_rent_exemption(space);
         let admin = self.admin.insecure_clone();
         let ixs = vec![
-            solana_system_interface::instruction::create_account(&admin.pubkey(), &kp.pubkey(), rent, space as u64, &tp),
+            solana_system_interface::instruction::create_account(
+                &admin.pubkey(),
+                &kp.pubkey(),
+                rent,
+                space as u64,
+                &tp,
+            ),
             t22::instruction::initialize_account3(&tp, &kp.pubkey(), mint, owner).unwrap(),
-            t22::instruction::mint_to(&tp, mint, &kp.pubkey(), &admin.pubkey(), &[], amount).unwrap(),
+            t22::instruction::mint_to(&tp, mint, &kp.pubkey(), &admin.pubkey(), &[], amount)
+                .unwrap(),
         ];
         self.send_as(&admin, &ixs, &[&kp]).unwrap();
         kp.pubkey()
     }
 
     pub fn balance(&self, token_account: &Pubkey) -> u64 {
-        let Some(a) = self.svm.get_account(token_account) else { return 0 };
+        let Some(a) = self.svm.get_account(token_account) else {
+            return 0;
+        };
         if a.data.is_empty() {
             return 0;
         }
         use t22::extension::StateWithExtensions;
-        StateWithExtensions::<t22::state::Account>::unpack(&a.data).map(|s| s.base.amount).unwrap_or(0)
+        StateWithExtensions::<t22::state::Account>::unpack(&a.data)
+            .map(|s| s.base.amount)
+            .unwrap_or(0)
     }
 
     // -------------------------------------------------------------- scaas ixs
@@ -360,15 +462,28 @@ impl Env {
     pub fn open_ix(&self, owner: &Pubkey) -> Instruction {
         Instruction {
             program_id: scaas::ID,
-            accounts: scaas::accounts::Open { payer: self.lane.pubkey(), owner: *owner, subject: account_of(&owner.to_bytes()), system_program: SYSTEM }
-                .to_account_metas(None),
+            accounts: scaas::accounts::Open {
+                payer: self.lane.pubkey(),
+                owner: *owner,
+                subject: account_of(&owner.to_bytes()),
+                system_program: SYSTEM,
+            }
+            .to_account_metas(None),
             data: scaas::instruction::Open {}.data(),
         }
     }
 
     /// Account của `relay_pay` / `relay_pay_meta` / `relay_fee` (Account readonly nếu đã mở — RS12-2; writable chỉ khi mở
     /// lười). `recipient` = `args.to`, hoặc lane ở open mode của `relay_fee`.
-    pub fn pay_accounts(&self, owner: &[u8; 32], mint: &Pubkey, tp: Pubkey, source: Pubkey, lane_id: &[u8; 32], recipient: Pubkey) -> scaas::accounts::RelayPay {
+    pub fn pay_accounts(
+        &self,
+        owner: &[u8; 32],
+        mint: &Pubkey,
+        tp: Pubkey,
+        source: Pubkey,
+        lane_id: &[u8; 32],
+        recipient: Pubkey,
+    ) -> scaas::accounts::RelayPay {
         let subject = account_of(owner);
         scaas::accounts::RelayPay {
             lane: self.lane.pubkey(),
@@ -396,30 +511,76 @@ impl Env {
     }
 
     /// `relay_pay` (Account readonly nếu đã mở — RS12-2; writable chỉ khi mở lười).
-    pub fn pay_ix(&self, owner: &[u8; 32], mint: &Pubkey, tp: Pubkey, source: Pubkey, args: &scaas::PayArgs, auth: Auth) -> Instruction {
+    pub fn pay_ix(
+        &self,
+        owner: &[u8; 32],
+        mint: &Pubkey,
+        tp: Pubkey,
+        source: Pubkey,
+        args: &scaas::PayArgs,
+        auth: Auth,
+    ) -> Instruction {
         let to = Pubkey::new_from_array(args.to);
-        let metas = self.pay_accounts(owner, mint, tp, source, &args.lane, to).to_account_metas(None);
+        let metas = self
+            .pay_accounts(owner, mint, tp, source, &args.lane, to)
+            .to_account_metas(None);
         Instruction {
             program_id: scaas::ID,
             accounts: self.lazy(owner, metas),
-            data: scaas::instruction::RelayPay { owner: *owner, args: args.clone(), auth }.data(),
+            data: scaas::instruction::RelayPay {
+                owner: *owner,
+                args: args.clone(),
+                auth,
+            }
+            .data(),
         }
     }
 
     /// `relay_pay_meta`: cùng account với `relay_pay`.
     #[allow(clippy::too_many_arguments)]
-    pub fn pay_meta_ix(&self, owner: &[u8; 32], mint: &Pubkey, tp: Pubkey, source: Pubkey, args: &scaas::PayArgs, salt: [u8; 32], meta: &[u8], auth: Auth) -> Instruction {
+    pub fn pay_meta_ix(
+        &self,
+        owner: &[u8; 32],
+        mint: &Pubkey,
+        tp: Pubkey,
+        source: Pubkey,
+        args: &scaas::PayArgs,
+        salt: [u8; 32],
+        meta: &[u8],
+        auth: Auth,
+    ) -> Instruction {
         let mut ix = self.pay_ix(owner, mint, tp, source, args, auth.clone());
-        ix.data = scaas::instruction::RelayPayMeta { owner: *owner, args: args.clone(), salt, meta: meta.to_vec(), auth }.data();
+        ix.data = scaas::instruction::RelayPayMeta {
+            owner: *owner,
+            args: args.clone(),
+            salt,
+            meta: meta.to_vec(),
+            auth,
+        }
+        .data();
         ix
     }
 
     /// `relay_fee`: account của pay (`recipient` chọn bởi người gọi), rồi target program + account của nó.
     #[allow(clippy::too_many_arguments)]
-    pub fn relay_fee_ix(&self, owner: &[u8; 32], mint: &Pubkey, tp: Pubkey, source: Pubkey, args: &scaas::PayArgs, recipient: Pubkey,
-                        target: Pubkey, target_metas: &[AccountMeta], target_data: &[u8], auth: Auth) -> Instruction {
+    pub fn relay_fee_ix(
+        &self,
+        owner: &[u8; 32],
+        mint: &Pubkey,
+        tp: Pubkey,
+        source: Pubkey,
+        args: &scaas::PayArgs,
+        recipient: Pubkey,
+        target: Pubkey,
+        target_metas: &[AccountMeta],
+        target_data: &[u8],
+        auth: Auth,
+    ) -> Instruction {
         let pay = self.pay_accounts(owner, mint, tp, source, &args.lane, recipient);
-        let mut metas = self.lazy(owner, scaas::accounts::RelayFee { pay }.to_account_metas(None));
+        let mut metas = self.lazy(
+            owner,
+            scaas::accounts::RelayFee { pay }.to_account_metas(None),
+        );
         metas.push(AccountMeta::new_readonly(target, false));
         metas.extend_from_slice(target_metas);
         Instruction {
@@ -437,15 +598,40 @@ impl Env {
     }
 
     /// Ký + gửi một `relay_pay_meta` của ví ed25519 `who` (khoá 0, kind 0).
-    pub fn pay_meta(&mut self, who: &Ed, mint: &Pubkey, tp: Pubkey, args: &scaas::PayArgs, salt: [u8; 32], meta: &[u8]) -> Res {
+    pub fn pay_meta(
+        &mut self,
+        who: &Ed,
+        mint: &Pubkey,
+        tp: Pubkey,
+        args: &scaas::PayArgs,
+        salt: [u8; 32],
+        meta: &[u8],
+    ) -> Res {
         let source = ata(&who.account(), mint, &tp);
         let dg = self.metaop_digest(&who.account(), mint, A::OP_PAY, &who.pk(), args);
         let e = who.sign(A::KIND_RAW, A::METAOP_LABEL, &dg);
-        let ix = self.pay_meta_ix(&who.pk(), mint, tp, source, args, salt, meta, auth(A::KIND_RAW, 0, 0, 0));
+        let ix = self.pay_meta_ix(
+            &who.pk(),
+            mint,
+            tp,
+            source,
+            args,
+            salt,
+            meta,
+            auth(A::KIND_RAW, 0, 0, 0),
+        );
         self.send(&[ed_ix(&[e]), ix], &[])
     }
 
-    pub fn args(&self, to: &Pubkey, amount: u64, pay_ref: u8, lane: u8, nonce: u64, valid_until: u64) -> scaas::PayArgs {
+    pub fn args(
+        &self,
+        to: &Pubkey,
+        amount: u64,
+        pay_ref: u8,
+        lane: u8,
+        nonce: u64,
+        valid_until: u64,
+    ) -> scaas::PayArgs {
         scaas::PayArgs {
             to: to.to_bytes(),
             amount,
@@ -458,8 +644,16 @@ impl Env {
         }
     }
 
-    pub fn metaop_digest(&self, contract: &Pubkey, asset: &Pubkey, op: u8, from: &[u8; 32], a: &scaas::PayArgs) -> [u8; 32] {
-        a.metaop(self.network, *contract, *asset, op, *from).digest()
+    pub fn metaop_digest(
+        &self,
+        contract: &Pubkey,
+        asset: &Pubkey,
+        op: u8,
+        from: &[u8; 32],
+        a: &scaas::PayArgs,
+    ) -> [u8; 32] {
+        a.metaop(self.network, *contract, *asset, op, *from)
+            .digest()
     }
 
     /// Ký + gửi một `relay_pay` của ví ed25519 `who` (khoá 0, kind 0).
@@ -467,7 +661,14 @@ impl Env {
         let source = ata(&who.account(), mint, &tp);
         let dg = self.metaop_digest(&who.account(), mint, A::OP_PAY, &who.pk(), args);
         let e = who.sign(A::KIND_RAW, A::METAOP_LABEL, &dg);
-        let ix = self.pay_ix(&who.pk(), mint, tp, source, args, auth(A::KIND_RAW, 0, 0, 0));
+        let ix = self.pay_ix(
+            &who.pk(),
+            mint,
+            tp,
+            source,
+            args,
+            auth(A::KIND_RAW, 0, 0, 0),
+        );
         self.send(&[ed_ix(&[e]), ix], &[])
     }
 
@@ -475,7 +676,13 @@ impl Env {
         self.account(addr).expect("subject account")
     }
 
-    pub fn manage_ix(&self, subject: &Pubkey, op: &scaas::KeyOp, auth: Auth, to: Option<Pubkey>) -> Instruction {
+    pub fn manage_ix(
+        &self,
+        subject: &Pubkey,
+        op: &scaas::KeyOp,
+        auth: Auth,
+        to: Option<Pubkey>,
+    ) -> Instruction {
         Instruction {
             program_id: scaas::ID,
             accounts: scaas::accounts::ManageSigned {
@@ -487,7 +694,11 @@ impl Env {
                 system_program: SYSTEM,
             }
             .to_account_metas(None),
-            data: scaas::instruction::ManageSigned { op: op.clone(), auth }.data(),
+            data: scaas::instruction::ManageSigned {
+                op: op.clone(),
+                auth,
+            }
+            .data(),
         }
     }
 
@@ -496,8 +707,19 @@ impl Env {
     }
 
     /// KeyOp ký bởi khoá ed25519 `signer` (chỉ số `key_index` trong Account).
-    pub fn manage(&mut self, subject: &Pubkey, signer: &Ed, key_index: u8, op: scaas::KeyOp, to: Option<Pubkey>) -> Res {
-        let e = signer.sign(A::KIND_RAW, A::KEYOP_LABEL, &self.keyop_digest(subject, &op));
+    pub fn manage(
+        &mut self,
+        subject: &Pubkey,
+        signer: &Ed,
+        key_index: u8,
+        op: scaas::KeyOp,
+        to: Option<Pubkey>,
+    ) -> Res {
+        let e = signer.sign(
+            A::KIND_RAW,
+            A::KEYOP_LABEL,
+            &self.keyop_digest(subject, &op),
+        );
         let ix = self.manage_ix(subject, &op, auth(A::KIND_RAW, key_index, 0, 0), to);
         self.send(&[ed_ix(&[e]), ix], &[])
     }
@@ -532,7 +754,11 @@ pub fn expect_err(res: Res, e: scaas::ScaasError) {
     let want = code(e);
     match custom(&res) {
         Some(c) if c == want => {}
-        _ => panic!("expected {want} ({:?}), got {:?}", want, res.map(|m| m.logs).map_err(|f| (f.err, f.meta.logs))),
+        _ => panic!(
+            "expected {want} ({:?}), got {:?}",
+            want,
+            res.map(|m| m.logs).map_err(|f| (f.err, f.meta.logs))
+        ),
     }
 }
 
@@ -545,5 +771,9 @@ pub fn ok(res: Res) -> TransactionMetadata {
 }
 
 pub fn meta(addr: Pubkey, writable: bool) -> AccountMeta {
-    if writable { AccountMeta::new(addr, false) } else { AccountMeta::new_readonly(addr, false) }
+    if writable {
+        AccountMeta::new(addr, false)
+    } else {
+        AccountMeta::new_readonly(addr, false)
+    }
 }

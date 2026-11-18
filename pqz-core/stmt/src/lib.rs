@@ -221,12 +221,20 @@ pub const FORMS: [Form; 8] = [
 
 /// the forms of `PQZL_SPLIT_ID` (K3-4: `R_TXS`, `R_BURN` / refresh, `R_DS`; no register, no receiver or auditor
 /// disclosure, no op 7)
-pub const SPLIT_FORMS: [Form; 5] = [Form::TransferSplit, Form::TransferSplit0, Form::Burn, Form::Refresh, Form::DiscloseSender];
+pub const SPLIT_FORMS: [Form; 5] = [
+    Form::TransferSplit,
+    Form::TransferSplit0,
+    Form::Burn,
+    Form::Refresh,
+    Form::DiscloseSender,
+];
 
 impl Form {
     pub const fn op(self) -> u8 {
         match self {
-            Form::Transfer | Form::Transfer0 | Form::TransferSplit | Form::TransferSplit0 => OP_TRANSFER,
+            Form::Transfer | Form::Transfer0 | Form::TransferSplit | Form::TransferSplit0 => {
+                OP_TRANSFER
+            }
             Form::Burn | Form::Refresh => OP_BURN,
             Form::Register => OP_REGISTER,
             Form::DiscloseSender => OP_DISCLOSE_SENDER,
@@ -240,11 +248,21 @@ impl Form {
                 hex32("ef22f3d1c1fc2edc565522eb73ca8cb782e8780eaf9b1f677965dd0cd5275414")
             }
             Form::Burn => hex32("7383374d83fbb89f84ee079bff7a2742e4acb70f64b0b1e2ef40c34fb4cc1407"),
-            Form::Refresh => hex32("f118f2df0f018062e2d4c296a01707dcd7ad7c85f6981d68517ac8b2cd75eede"),
-            Form::Register => hex32("69562a9cd615eb3d906cb1934ad56c788c30228d2faf7c517e33d65b4a03c088"),
-            Form::DiscloseSender => hex32("868cc07c6ac389251ad6573f65fe35ee4dad66ee305f90c711af904bf5ceef3f"),
-            Form::DiscloseReceiver => hex32("d8356cfbd875acb80fe8a8127a57b5c549d20fd65b9acca8672186a1a4296456"),
-            Form::DiscloseAuditor => hex32("d6019aa47e04fe91c11df386ddc5bda2178a3f2506c46cdd59b16ef1d21daf81"),
+            Form::Refresh => {
+                hex32("f118f2df0f018062e2d4c296a01707dcd7ad7c85f6981d68517ac8b2cd75eede")
+            }
+            Form::Register => {
+                hex32("69562a9cd615eb3d906cb1934ad56c788c30228d2faf7c517e33d65b4a03c088")
+            }
+            Form::DiscloseSender => {
+                hex32("868cc07c6ac389251ad6573f65fe35ee4dad66ee305f90c711af904bf5ceef3f")
+            }
+            Form::DiscloseReceiver => {
+                hex32("d8356cfbd875acb80fe8a8127a57b5c549d20fd65b9acca8672186a1a4296456")
+            }
+            Form::DiscloseAuditor => {
+                hex32("d6019aa47e04fe91c11df386ddc5bda2178a3f2506c46cdd59b16ef1d21daf81")
+            }
         }
     }
     /// statement bytes (the comments: set n2048-kmax1024)
@@ -252,10 +270,10 @@ impl Form {
         match self {
             Form::Transfer => HEADER_BYTES + 3 * PK_BYTES + CT_BYTES + PK_BYTES + 3 * V_BYTES, // 83,072
             Form::Transfer0 => HEADER_BYTES + 2 * PK_BYTES + CT_BYTES + PK_BYTES + 2 * V_BYTES, // 66,560
-            Form::TransferSplit => Form::Transfer.stmt_len() + PK_BYTES,                       // 99,456
-            Form::TransferSplit0 => Form::Transfer0.stmt_len() + PK_BYTES,                     // 82,944
-            Form::Burn | Form::Refresh => HEADER_BYTES + PK_BYTES + 2 * CT_BYTES,              // 50,048
-            Form::Register => 3 * 32 + PK_BYTES,                                                // 16,480
+            Form::TransferSplit => Form::Transfer.stmt_len() + PK_BYTES, // 99,456
+            Form::TransferSplit0 => Form::Transfer0.stmt_len() + PK_BYTES, // 82,944
+            Form::Burn | Form::Refresh => HEADER_BYTES + PK_BYTES + 2 * CT_BYTES, // 50,048
+            Form::Register => 3 * 32 + PK_BYTES,                         // 16,480
             Form::DiscloseSender | Form::DiscloseReceiver | Form::DiscloseAuditor => {
                 DISC_WORDS * 32 + 2 * PK_BYTES + V_BYTES // 33,184
             }
@@ -280,7 +298,10 @@ impl Form {
     }
     /// op 1, either id
     pub const fn transfer(self) -> bool {
-        matches!(self, Form::Transfer | Form::Transfer0 | Form::TransferSplit | Form::TransferSplit0)
+        matches!(
+            self,
+            Form::Transfer | Form::Transfer0 | Form::TransferSplit | Form::TransferSplit0
+        )
     }
     /// op 1 with the auditor (`pk_a`, `v_a`)
     pub const fn audited(self) -> bool {
@@ -301,7 +322,10 @@ impl Form {
         }
     }
     fn disclose(self) -> bool {
-        matches!(self, Form::DiscloseSender | Form::DiscloseReceiver | Form::DiscloseAuditor)
+        matches!(
+            self,
+            Form::DiscloseSender | Form::DiscloseReceiver | Form::DiscloseAuditor
+        )
     }
 }
 
@@ -349,7 +373,11 @@ pub fn zero_words(form: Form) -> &'static [(usize, &'static str)] {
         Form::Transfer | Form::Transfer0 | Form::TransferSplit | Form::TransferSplit0 => {
             &[(H_AMOUNT, "amount"), (H_RECIPIENT, "recipient")]
         }
-        Form::Burn => &[(H_TO, "toUA"), (H_AUDITOR_ON, "auditorOn"), (H_SALT, "salt")],
+        Form::Burn => &[
+            (H_TO, "toUA"),
+            (H_AUDITOR_ON, "auditorOn"),
+            (H_SALT, "salt"),
+        ],
         Form::Refresh => &[
             (H_TO, "toUA"),
             (H_AMOUNT, "amount"),
@@ -385,7 +413,9 @@ fn word_at(b: &[u8], i: usize) -> Word {
 
 /// Every `be8` group of `b` is `< q` (and `b` is a whole number of groups).
 pub fn coeffs_ok(b: &[u8]) -> bool {
-    b.len() % 8 == 0 && b.chunks_exact(8).all(|c| u64::from_be_bytes(c.try_into().unwrap_or([0xff; 8])) < Q)
+    b.len() % 8 == 0
+        && b.chunks_exact(8)
+            .all(|c| u64::from_be_bytes(c.try_into().unwrap_or([0xff; 8])) < Q)
 }
 
 /// The coefficients of `b` (each `< q`) into `out` (`out.len() * 8 == b.len()`).
@@ -606,7 +636,11 @@ impl<'a> Stmt<'a> {
 /// coefficients), so both name the same reason; op 7 by `parse_multi`. Borrows `stmt`; allocates nothing.
 pub fn parse(op: u8, stmt: &[u8]) -> Result<Stmt<'_>, Reject> {
     if op == OP_SELFTEST {
-        return if stmt.is_empty() { Ok(Stmt::SelfTest) } else { Err(Reject::Op) };
+        return if stmt.is_empty() {
+            Ok(Stmt::SelfTest)
+        } else {
+            Err(Reject::Op)
+        };
     }
     if op == OP_TRANSFER_MULTI {
         return parse_multi(stmt).map(Stmt::Multi);
@@ -647,7 +681,10 @@ pub fn parse(op: u8, stmt: &[u8]) -> Result<Stmt<'_>, Reject> {
             if !coeffs_ok(pk) {
                 return Err(Reject::Coefficient);
             }
-            Ok(Stmt::Register(Register { words: [word_at(stmt, 0), word_at(stmt, 1), word_at(stmt, 2)], pk }))
+            Ok(Stmt::Register(Register {
+                words: [word_at(stmt, 0), word_at(stmt, 1), word_at(stmt, 2)],
+                pk,
+            }))
         }
         Form::DiscloseSender | Form::DiscloseReceiver | Form::DiscloseAuditor => {
             let mut words = [[0u8; 32]; DISC_WORDS];
@@ -659,7 +696,11 @@ pub fn parse(op: u8, stmt: &[u8]) -> Result<Stmt<'_>, Reject> {
             }
             // kind = OpeningKind + 256 w < 2^16: the form's OpeningKind (T-36); w = 0 but for AUDITOR, w < S_AUD
             // there (R0-1)
-            let wmax = if form == Form::DiscloseAuditor { S_AUD } else { 1 };
+            let wmax = if form == Form::DiscloseAuditor {
+                S_AUD
+            } else {
+                1
+            };
             let ok = form.opening_kind();
             if !matches!(word_u64(&words[DW_KIND]), Some(k) if k >> 16 == 0 && ((k >> 8) as usize) < wmax
                 && Some(k & 0xff) == ok)
@@ -719,14 +760,31 @@ pub fn parse(op: u8, stmt: &[u8]) -> Result<Stmt<'_>, Reject> {
             let v_t = if tr { Some(take(V_BYTES)) } else { None };
             let v_f = take(V_BYTES);
             let v_a = if aud { Some(take(V_BYTES)) } else { None };
-            let u_f = if form.split() { Some(take(PK_BYTES)) } else { None };
-            Ok(Stmt::Debit(Debit { form, header, pk_f, pk_t, pk_a, t, u, v_t, v_f, v_a, u_f }))
+            let u_f = if form.split() {
+                Some(take(PK_BYTES))
+            } else {
+                None
+            };
+            Ok(Stmt::Debit(Debit {
+                form,
+                header,
+                pk_f,
+                pk_t,
+                pk_a,
+                t,
+                u,
+                v_t,
+                v_f,
+                v_a,
+                u_f,
+            }))
         }
     }
 }
 
 /// `keccak256("SCAAS-PQZ-OP-TRANSFER-MULTI-V1")` (P6-ANON D6)
-pub const OP_TAG_TRANSFER_MULTI: Word = hex32("6f6a773a4c94af3a446a226ef43f6f5403d6a00b95de446149f484cc02726b90");
+pub const OP_TAG_TRANSFER_MULTI: Word =
+    hex32("6f6a773a4c94af3a446a226ef43f6f5403d6a00b95de446149f484cc02726b90");
 /// op 7 header: word 192 (op 1's `toUA`) = `recipientsHash = keccak256(UA_0 ‖ … ‖ UA_{M−1})`
 pub const H_RECIPIENTS_HASH: usize = H_TO;
 /// op 7 header: word 320 (op 1's `recipient`) = `M`
@@ -739,7 +797,11 @@ pub const LEGS_PER_GROUP: usize = 4;
 pub const S_AUD: usize = set::S_AUD;
 /// legs per group: [`S_AUD`] with the auditor, [`LEGS_PER_GROUP`] without
 pub const fn legs_per_group(aud: bool) -> usize {
-    if aud { S_AUD } else { LEGS_PER_GROUP }
+    if aud {
+        S_AUD
+    } else {
+        LEGS_PER_GROUP
+    }
 }
 
 /// The leg counts op 7 accepts for `id`, with or without the auditor (P6-ANON D3 / D20: PQZL {1, 2, 4, 8}, PQZH
@@ -773,7 +835,11 @@ pub const fn groups(m: usize, aud: bool) -> usize {
 /// G = [`groups`]`(M, aud)`.
 pub const fn multi_len(m: usize, aud: bool) -> usize {
     let a = aud as usize;
-    HEADER_BYTES + (1 + m + a) * PK_BYTES + CT_BYTES + groups(m, aud) * PK_BYTES + (m + 1 + a * m) * V_BYTES
+    HEADER_BYTES
+        + (1 + m + a) * PK_BYTES
+        + CT_BYTES
+        + groups(m, aud) * PK_BYTES
+        + (m + 1 + a * m) * V_BYTES
 }
 
 /// `R_TXM` (op 7): header ‖ `pk_f ‖ pks ‖ [pk_a] ‖ T ‖ us ‖ vs ‖ v_f ‖ [v_as]`; the per-leg / per-group objects are
@@ -852,10 +918,18 @@ impl<'a> Multi<'a> {
         }
         let mut out = Vec::with_capacity(multi_len(m, aud));
         self.header.iter().for_each(|w| out.extend_from_slice(w));
-        for o in [Some(self.pk_f), Some(self.pks), self.pk_a, Some(self.t), Some(self.us), Some(self.vs), Some(self.v_f)]
-            .into_iter()
-            .chain([self.v_as])
-            .flatten()
+        for o in [
+            Some(self.pk_f),
+            Some(self.pks),
+            self.pk_a,
+            Some(self.t),
+            Some(self.us),
+            Some(self.vs),
+            Some(self.v_f),
+        ]
+        .into_iter()
+        .chain([self.v_as])
+        .flatten()
         {
             out.extend_from_slice(o);
         }
@@ -926,7 +1000,18 @@ pub fn parse_multi(stmt: &[u8]) -> Result<Multi<'_>, Reject> {
     let vs = take(m * V_BYTES);
     let v_f = take(V_BYTES);
     let v_as = if aud { Some(take(m * V_BYTES)) } else { None };
-    Ok(Multi { header, m, pk_f, pks, pk_a, t, us, vs, v_f, v_as })
+    Ok(Multi {
+        header,
+        m,
+        pk_f,
+        pks,
+        pk_a,
+        t,
+        us,
+        vs,
+        v_f,
+        v_as,
+    })
 }
 
 /// Disclosure bundle `R = salt(16) ‖ u ‖ v_t ‖ [v_a] ‖ toUA(32)` (CTR-PQZ-23): 16,688 B, 16,560 B without `v_a`.
@@ -943,7 +1028,10 @@ pub const BUNDLE0_BYTES: usize = 16 + PK_BYTES + V_BYTES + 32;
 
 impl<'a> Bundle<'a> {
     pub fn encode(&self) -> Result<Vec<u8>, Reject> {
-        if self.u.len() != PK_BYTES || self.v_t.len() != V_BYTES || self.v_a.is_some_and(|v| v.len() != V_BYTES) {
+        if self.u.len() != PK_BYTES
+            || self.v_t.len() != V_BYTES
+            || self.v_a.is_some_and(|v| v.len() != V_BYTES)
+        {
             return Err(Reject::Length);
         }
         let mut out = Vec::with_capacity(BUNDLE_BYTES);
@@ -975,8 +1063,18 @@ pub fn parse_bundle(b: &[u8]) -> Result<Bundle<'_>, Reject> {
     to_ua.copy_from_slice(&b[n - 32..]);
     let u = &b[16..16 + PK_BYTES];
     let v_t = &b[16 + PK_BYTES..16 + PK_BYTES + V_BYTES];
-    let v_a = if aud { Some(&b[16 + PK_BYTES + V_BYTES..n - 32]) } else { None };
-    Ok(Bundle { salt, u, v_t, v_a, to_ua })
+    let v_a = if aud {
+        Some(&b[16 + PK_BYTES + V_BYTES..n - 32])
+    } else {
+        None
+    };
+    Ok(Bundle {
+        salt,
+        u,
+        v_t,
+        v_a,
+        to_ua,
+    })
 }
 
 fn abi_tail(out: &mut Vec<u8>, b: &[u8]) {
@@ -999,7 +1097,9 @@ pub fn opening(bundle: &[u8], proof: &[u8]) -> Vec<u8> {
 /// The canonical `abi.encode(bytes, bytes)`: head offsets 64 and 96 + padded length, zero padding, nothing after.
 pub fn parse_opening(b: &[u8]) -> Result<(&[u8], &[u8]), Reject> {
     let w = |i: usize| -> Result<usize, Reject> {
-        let s = b.get(i..i.checked_add(32).ok_or(Reject::Opening)?).ok_or(Reject::Opening)?;
+        let s = b
+            .get(i..i.checked_add(32).ok_or(Reject::Opening)?)
+            .ok_or(Reject::Opening)?;
         let v = word_u64(s.try_into().map_err(|_| Reject::Opening)?).ok_or(Reject::Opening)?;
         usize::try_from(v).map_err(|_| Reject::Opening)
     };
@@ -1007,7 +1107,10 @@ pub fn parse_opening(b: &[u8]) -> Result<(&[u8], &[u8]), Reject> {
         let n = w(at)?; // input-derived: every sum below is checked
         let start = at.checked_add(32).ok_or(Reject::Opening)?;
         let end = start.checked_add(n).ok_or(Reject::Opening)?;
-        let padded = n.checked_next_multiple_of(32).and_then(|p| start.checked_add(p)).ok_or(Reject::Opening)?;
+        let padded = n
+            .checked_next_multiple_of(32)
+            .and_then(|p| start.checked_add(p))
+            .ok_or(Reject::Opening)?;
         let data = b.get(start..end).ok_or(Reject::Opening)?;
         let pad = b.get(end..padded).ok_or(Reject::Opening)?;
         if pad.iter().any(|&x| x != 0) {
@@ -1075,7 +1178,12 @@ pub fn decode_input(b: &[u8]) -> Result<Input<'_>, Reject> {
             }
         }
     }
-    Ok(Input { op, stmt, stmt_bytes, proof })
+    Ok(Input {
+        op,
+        stmt,
+        stmt_bytes,
+        proof,
+    })
 }
 
 #[cfg(test)]

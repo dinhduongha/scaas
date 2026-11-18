@@ -67,7 +67,10 @@ fn query(j: usize, off: i64) -> (Vec<u8>, Vec<u8>) {
 
 /// Runs the 8·K (or, `windows` = 1, the 2·K) queries through `ask(u, v, w) → the decrypted value`; the recovered
 /// coefficients at `64 j + 16 w + i` (`None` where no window asked) and the number of queries.
-fn recover(windows: usize, mut ask: impl FnMut(&[u8], &[u8], usize) -> u64) -> (Vec<Option<i8>>, usize) {
+fn recover(
+    windows: usize,
+    mut ask: impl FnMut(&[u8], &[u8], usize) -> u64,
+) -> (Vec<Option<i8>>, usize) {
     let (mut rec, mut n) = (vec![None; 64 * K], 0);
     for j in 0..K {
         for w in 0..windows {
@@ -84,7 +87,13 @@ fn recover(windows: usize, mut ask: impl FnMut(&[u8], &[u8], usize) -> u64) -> (
                     d == 1
                 };
                 // M_i = [s ≤ off]: off −1 → s = −1; off 0 → s ∈ {−1, 0}; else s = 1
-                rec[64 * j + 16 * w + i] = Some(if bit(m[1]) { -1 } else if bit(m[0]) { 0 } else { 1 });
+                rec[64 * j + 16 * w + i] = Some(if bit(m[1]) {
+                    -1
+                } else if bit(m[0]) {
+                    0
+                } else {
+                    1
+                });
             }
         }
     }
@@ -92,7 +101,8 @@ fn recover(windows: usize, mut ask: impl FnMut(&[u8], &[u8], usize) -> u64) -> (
 }
 
 fn call(k: &PqzKey, cmd: &str, v: &Value) -> Result<Value, Error> {
-    k.call(cmd, v.to_string().as_bytes()).map(|s| serde_json::from_str(&s).unwrap())
+    k.call(cmd, v.to_string().as_bytes())
+        .map(|s| serde_json::from_str(&s).unwrap())
 }
 
 /// Positive control: through the `vectors`-only raw `dec`, the 8·K queries recover `s` exactly (the oracle the release build
@@ -103,10 +113,16 @@ fn positive_control_raw_dec_recovers_s() {
     let (_w, k, s) = holder();
     let (rec, n) = recover(4, |u, v, w| {
         let ct = format!("0x{}{}", hex::encode(u), hex::encode(v));
-        call(&k, "dec", &json!({"ct": ct, "window": w})).unwrap()["value"].as_u64().unwrap()
+        call(&k, "dec", &json!({"ct": ct, "window": w})).unwrap()["value"]
+            .as_u64()
+            .unwrap()
     });
     assert_eq!(n, 8 * K, "8·K queries");
-    assert_eq!(rec.iter().map(|x| x.unwrap()).collect::<Vec<_>>(), s, "the raw dec is a key-recovery oracle");
+    assert_eq!(
+        rec.iter().map(|x| x.unwrap()).collect::<Vec<_>>(),
+        s,
+        "the raw dec is a key-recovery oracle"
+    );
 }
 
 /// The bare shapes a crafted query can take: a ciphertext (with and without a window), `T` (with `p`), a statement, `u` / `v`.
@@ -138,7 +154,11 @@ fn production() -> Vec<&'static str> {
 fn production_refuses_every_crafted_query_before_the_key() {
     let (_w, k, _) = holder();
     let cmds = production();
-    assert!(cmds.contains(&"balance") && cmds.contains(&"proveTransfer") && cmds.contains(&"proveDisclose"));
+    assert!(
+        cmds.contains(&"balance")
+            && cmds.contains(&"proveTransfer")
+            && cmds.contains(&"proveDisclose")
+    );
     assert_eq!(COMMANDS.contains(&"dec"), cfg!(feature = "vectors"));
     let before = key_uses();
     let mut n = 0;
@@ -149,10 +169,18 @@ fn production_refuses_every_crafted_query_before_the_key() {
                 for s in shapes(&u, &v, w) {
                     let b = s.to_string();
                     for c in &cmds {
-                        assert_eq!(k.call(c, b.as_bytes()).err(), Some(Error::Argument), "{c} {s:.60}");
+                        assert_eq!(
+                            k.call(c, b.as_bytes()).err(),
+                            Some(Error::Argument),
+                            "{c} {s:.60}"
+                        );
                     }
                     if !cfg!(feature = "vectors") {
-                        assert_eq!(k.call("dec", b.as_bytes()).err(), Some(Error::Argument), "dec: absent");
+                        assert_eq!(
+                            k.call("dec", b.as_bytes()).err(),
+                            Some(Error::Argument),
+                            "dec: absent"
+                        );
                     }
                 }
                 n += 1;
@@ -173,36 +201,95 @@ fn a_crafted_query_beside_real_words_is_refused() {
     c.register(A, &k.pk());
     c.shield(&A, 1234);
     let words = c.own(&A, 16);
-    assert_eq!(call(&k, "balance", &c.bal(&A)).unwrap()["value"], 1234, "the words alone");
+    assert_eq!(
+        call(&k, "balance", &c.bal(&A)).unwrap()["value"],
+        1234,
+        "the words alone"
+    );
     let debit = merge(words.clone(), c.debit_fields());
     // an old entry of the holder's (an op 1 blob, structurally valid, with 3h's tail: zero tag, the receiver at version 0, n = 1):
     // `proveDiscloseSender`'s words
-    let blob = [vec![0x5a; 16], vec![0u8; PKP + VP], [0xB0; 32].to_vec(), vec![0u8; VP], vec![0u8; 32 + 8], vec![1]].concat();
+    let blob = [
+        vec![0x5a; 16],
+        vec![0u8; PKP + VP],
+        [0xB0; 32].to_vec(),
+        vec![0u8; VP],
+        vec![0u8; 32 + 8],
+        vec![1],
+    ]
+    .concat();
     let ptr = c.put(blob);
     let er = entry_ref(&A, 0);
-    c.entries.insert(er, Ent { ptr, from: A, ctr: 0, memo: vec![] });
+    c.entries.insert(
+        er,
+        Ent {
+            ptr,
+            from: A,
+            ctr: 0,
+            memo: vec![],
+        },
+    );
     // another UA and key than the holder's (group 3g: no payment to itself at the current version, a statement's keys distinct)
-    let pk = format!("0x{}", hex::encode(&pqz_ffi::pqzl::keygen(&[7; 32]).unwrap().pk[..]));
+    let pk = format!(
+        "0x{}",
+        hex::encode(&pqz_ffi::pqzl::keygen(&[7; 32]).unwrap().pk[..])
+    );
     let reqs = [
         ("balance", c.bal(&A)),
         ("proveRefresh", debit.clone()),
-        ("proveBurn", merge(debit.clone(), json!({"amount": 1, "recipient": hx(&[0x0B; 32])}))),
-        ("proveTransfer", merge(debit.clone(), json!({"toUA": hx(&[0xB0; 32]), "pkT": pk, "amount": 1, "mode": "BUNDLE"}))),
-        ("proveTransferMulti", merge(debit, json!({"legs": [{"pk": pk, "ua": hx(&[0xB0; 32]), "amount": 1}], "mode": "BUNDLE"}))),
+        (
+            "proveBurn",
+            merge(
+                debit.clone(),
+                json!({"amount": 1, "recipient": hx(&[0x0B; 32])}),
+            ),
+        ),
+        (
+            "proveTransfer",
+            merge(
+                debit.clone(),
+                json!({"toUA": hx(&[0xB0; 32]), "pkT": pk, "amount": 1, "mode": "BUNDLE"}),
+            ),
+        ),
+        (
+            "proveTransferMulti",
+            merge(
+                debit,
+                json!({"legs": [{"pk": pk, "ua": hx(&[0xB0; 32]), "amount": 1}], "mode": "BUNDLE"}),
+            ),
+        ),
         ("proveDiscloseSender", c.sender_leg(&er, 0, &A)),
     ];
     let before = key_uses();
     let (u, v) = query(0, 0);
     for (cmd, r) in &reqs {
-        assert!(PqzCmd::from_json(cmd, r.to_string().as_bytes()).is_ok(), "{cmd}: the request alone parses");
+        assert!(
+            PqzCmd::from_json(cmd, r.to_string().as_bytes()).is_ok(),
+            "{cmd}: the request alone parses"
+        );
         // T15l (Fable P2-1): the old op 4 form rode a statement and its amount; beside real words both are refused by the
         // allow-list (the right reason: the words alone parse, so no field is missing), never by a later compare
-        let guess = [json!({"amount": 1234}), json!({"amount": 1234, "stmt": format!("0x{}", hex::encode(&u))})];
-        let extra = if *cmd == "proveDiscloseSender" || *cmd == "balance" { &guess[..] } else { &[] };
+        let guess = [
+            json!({"amount": 1234}),
+            json!({"amount": 1234, "stmt": format!("0x{}", hex::encode(&u))}),
+        ];
+        let extra = if *cmd == "proveDiscloseSender" || *cmd == "balance" {
+            &guess[..]
+        } else {
+            &[]
+        };
         for s in shapes(&u, &v, 0).into_iter().chain(extra.iter().cloned()) {
             let m = merge(r.clone(), s.clone());
-            assert_eq!(PqzCmd::from_json(cmd, m.to_string().as_bytes()).err(), Some(Error::Argument), "{cmd} {s:.60}");
-            assert_eq!(call(&k, cmd, &m).err(), Some(Error::Argument), "{cmd} {s:.60}");
+            assert_eq!(
+                PqzCmd::from_json(cmd, m.to_string().as_bytes()).err(),
+                Some(Error::Argument),
+                "{cmd} {s:.60}"
+            );
+            assert_eq!(
+                call(&k, cmd, &m).err(),
+                Some(Error::Argument),
+                "{cmd} {s:.60}"
+            );
         }
     }
     assert_eq!(key_uses(), before, "the key unused");
@@ -221,14 +308,24 @@ fn residual_control_fabricated_words_are_decrypted() {
         c.register(A, &k.pk());
         let ptr = c.put([vec![0u8; 16], pack(u), pack(v)].concat());
         c.credit(&A, ptr, 16, 16 + PKP);
-        call(&k, "balance", &c.bal(&A)).unwrap()["value"].as_u64().unwrap()
+        call(&k, "balance", &c.bal(&A)).unwrap()["value"]
+            .as_u64()
+            .unwrap()
     });
     assert_eq!(n, 2 * K);
     for (i, r) in rec.iter().enumerate() {
-        assert_eq!(*r, if i % 64 < 16 { Some(s[i]) } else { None }, "coefficient {i}");
+        assert_eq!(
+            *r,
+            if i % 64 < 16 { Some(s[i]) } else { None },
+            "coefficient {i}"
+        );
     }
     if cfg!(feature = "vectors") {
-        assert_eq!(key_uses(), uses + n, "each fabricated request reached the key");
+        assert_eq!(
+            key_uses(),
+            uses + n,
+            "each fabricated request reached the key"
+        );
     }
 }
 
@@ -238,25 +335,57 @@ fn residual_control_fabricated_words_are_decrypted() {
 fn zether_refuses_a_bare_ciphertext() {
     use scaas_ua::facade::zether::COMMANDS as ZC;
     unlock();
-    let p = format!("{}/../zether-prover/vectors/r33_keys.json", env!("CARGO_MANIFEST_DIR"));
+    let p = format!(
+        "{}/../zether-prover/vectors/r33_keys.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
     let r: Value = serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap();
-    let w = Wallet::from_mnemonic(r["mnemonic"].as_str().unwrap(), r["passphrase"].as_str().unwrap()).unwrap();
+    let w = Wallet::from_mnemonic(
+        r["mnemonic"].as_str().unwrap(),
+        r["passphrase"].as_str().unwrap(),
+    )
+    .unwrap();
     let k = w.zether_key(60, 0, 7).unwrap();
-    let ct: Value = serde_json::from_str(&k.call("encrypt", json!({"Y": format!("0x{}", hex::encode(k.y())), "amount": 5}).to_string().as_bytes()).unwrap())
-        .unwrap();
+    let ct: Value = serde_json::from_str(
+        &k.call(
+            "encrypt",
+            json!({"Y": format!("0x{}", hex::encode(k.y())), "amount": 5})
+                .to_string()
+                .as_bytes(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
     let raw = |c: &str| c.starts_with("decrypt") || c.starts_with("raw");
-    let shapes = [json!({"ct": ct, "tableBits": 18, "boundBits": 20}), json!({"pending": ct}), json!({"acc": ct, "balance": 5})];
+    let shapes = [
+        json!({"ct": ct, "tableBits": 18, "boundBits": 20}),
+        json!({"pending": ct}),
+        json!({"acc": ct, "balance": 5}),
+    ];
     let before = scaas_ua_zether_key_uses();
     for c in ZC.iter().filter(|c| !raw(c)) {
         for s in &shapes {
-            assert_eq!(k.call(c, s.to_string().as_bytes()).err(), Some(Error::Argument), "{c} {s}");
+            assert_eq!(
+                k.call(c, s.to_string().as_bytes()).err(),
+                Some(Error::Argument),
+                "{c} {s}"
+            );
         }
     }
     assert_eq!(scaas_ua_zether_key_uses(), before, "the key unused");
     if cfg!(feature = "vectors") {
-        assert_eq!(serde_json::from_str::<Value>(&k.call("decrypt", shapes[0].to_string().as_bytes()).unwrap()).unwrap()["amount"], "5");
+        assert_eq!(
+            serde_json::from_str::<Value>(
+                &k.call("decrypt", shapes[0].to_string().as_bytes()).unwrap()
+            )
+            .unwrap()["amount"],
+            "5"
+        );
     } else {
-        assert!(!ZC.iter().any(|c| raw(c)), "a release build has no raw Zether form");
+        assert!(
+            !ZC.iter().any(|c| raw(c)),
+            "a release build has no raw Zether form"
+        );
     }
 }
 
@@ -289,8 +418,17 @@ fn debit(c: &mut Chain, kf: &PqzKey, from: &[u8; 32], v: u64, to: Option<(&[u8; 
     let mut d = merge(c.own_at(from, v, 16), c.debit_fields());
     let (cmd, op) = match to {
         Some((ua, pk, amount)) => {
-            let mode = scaas_ua::keccak256(&[scaas_ua::keccak256(b"SCAAS-PQZ-DIRECT-MODE-V1"), pqz_ffi::stmt::u64_word(1)].concat());
-            d = merge(d, json!({"toUA": hx(ua), "pkT": hx(pk), "amount": amount, "mode": "BUNDLE", "envelopeBinding": hx(&mode)}));
+            let mode = scaas_ua::keccak256(
+                &[
+                    scaas_ua::keccak256(b"SCAAS-PQZ-DIRECT-MODE-V1"),
+                    pqz_ffi::stmt::u64_word(1),
+                ]
+                .concat(),
+            );
+            d = merge(
+                d,
+                json!({"toUA": hx(ua), "pkT": hx(pk), "amount": amount, "mode": "BUNDLE", "envelopeBinding": hx(&mode)}),
+            );
             ("proveTransfer", 1)
         }
         None => {
@@ -332,7 +470,11 @@ fn proof_world() -> (Wallet, Chain, PqzKey, PqzKey) {
 /// The slot `i` of `(ua, v)`: its op blob and the leg's `(uOff, vOff)`.
 fn slot(c: &Chain, ua: &[u8; 32], v: u64, i: u64) -> ([u8; 20], usize, usize) {
     let w = c.accts[&(*ua, v)].pending[&i];
-    (w[..20].try_into().unwrap(), u16::from_be_bytes([w[20], w[21]]) as usize, u16::from_be_bytes([w[22], w[23]]) as usize)
+    (
+        w[..20].try_into().unwrap(),
+        u16::from_be_bytes([w[20], w[21]]) as usize,
+        u16::from_be_bytes([w[22], w[23]]) as usize,
+    )
 }
 
 /// `blob`'s stored ciphertext at `(uOff, vOff)` replaced by `(u, v)` (64-bit lanes): fabricated words; the old code returned.
@@ -356,27 +498,54 @@ fn lay(c: &mut Chain, blob: [u8; 20], at: (usize, usize), u: &[u8], v: &[u8]) ->
 #[test]
 fn proof_path_refuses_the_fabricated_words_attack() {
     let (_w, mut c, k0, k1) = proof_world();
-    let open = |c: &Chain, v: u64| merge(c.proven_open(&A, v), json!({"psid": hx(&pqz_ffi::stmt::PQZL_ID)}));
+    let open = |c: &Chain, v: u64| {
+        merge(
+            c.proven_open(&A, v),
+            json!({"psid": hx(&pqz_ffi::stmt::PQZL_ID)}),
+        )
+    };
     let o = call(&k1, "provenOpen", &open(&c, 1)).unwrap();
     assert_eq!(o["need"], json!([0, 1]));
     let quorum = |c: &Chain, cs: &[Cred]| {
-        scaas_ua::facade::pqz::check_proven(c.check_request(&A, 1, &k1.pk(), None, cs).to_string().as_bytes())
+        scaas_ua::facade::pqz::check_proven(
+            c.check_request(&A, 1, &k1.pk(), None, cs)
+                .to_string()
+                .as_bytes(),
+        )
     };
     let truth = [c.proven_credit(&A, 1, 0), c.proven_credit(&A, 1, 1)];
     assert!(quorum(&c, &truth).is_ok(), "the quorum's control");
-    assert!(call(&k0, "provenOpen", &open(&c, 0)).is_ok(), "the own v_f's control");
+    assert!(
+        call(&k0, "provenOpen", &open(&c, 0)).is_ok(),
+        "the own v_f's control"
+    );
     // a crafted query in a bare shape, alone (`checkProven`: no handle) or beside the true words of each path (B) request: refused
     // by the allow-list, the session kept
     let (u, v) = query(0, 0);
     let sid = json!({"session": o["session"]});
-    let reqs = [("provenOpen", open(&c, 1)), ("provenAdd", c.add_request(&o["session"], &truth)), ("balanceProven", sid.clone()),
-        ("provenCancel", sid)];
+    let reqs = [
+        ("provenOpen", open(&c, 1)),
+        ("provenAdd", c.add_request(&o["session"], &truth)),
+        ("balanceProven", sid.clone()),
+        ("provenCancel", sid),
+    ];
     let check = |r: &Value| scaas_ua::facade::pqz::check_proven(r.to_string().as_bytes()).err();
     for s in shapes(&u, &v, 0) {
         assert_eq!(check(&s), Some(Error::Argument), "checkProven {s:.60}");
-        assert_eq!(check(&merge(c.check_request(&A, 1, &k1.pk(), None, &truth), s.clone())), Some(Error::Argument), "checkProven {s:.60}");
+        assert_eq!(
+            check(&merge(
+                c.check_request(&A, 1, &k1.pk(), None, &truth),
+                s.clone()
+            )),
+            Some(Error::Argument),
+            "checkProven {s:.60}"
+        );
         for (cmd, r) in &reqs {
-            assert_eq!(call(&k1, cmd, &merge(r.clone(), s.clone())).err(), Some(Error::Argument), "{cmd} {s:.60}");
+            assert_eq!(
+                call(&k1, cmd, &merge(r.clone(), s.clone())).err(),
+                Some(Error::Argument),
+                "{cmd} {s:.60}"
+            );
         }
     }
     let (credit, migration) = (slot(&c, &A, 1, 0), slot(&c, &A, 1, 1));
@@ -390,22 +559,48 @@ fn proof_path_refuses_the_fabricated_words_attack() {
             for (i, (blob, uo, vo)) in [(0, credit), (1, migration)] {
                 let old = lay(&mut c, blob, (uo, vo), &u, &v);
                 let ver = verifies();
-                let r = call(&k1, "provenAdd", &c.add_request(&o["session"], &[c.proven_credit(&A, 1, i)])).unwrap();
-                assert_eq!(r, json!({"accepted": [], "refused": [i]}), "slot {i}: query ({j}, {off})");
+                let r = call(
+                    &k1,
+                    "provenAdd",
+                    &c.add_request(&o["session"], &[c.proven_credit(&A, 1, i)]),
+                )
+                .unwrap();
+                assert_eq!(
+                    r,
+                    json!({"accepted": [], "refused": [i]}),
+                    "slot {i}: query ({j}, {off})"
+                );
                 if i == 0 && cfg!(feature = "vectors") {
                     assert_eq!(verifies(), ver + 1, "refused by its P");
                 }
-                assert_eq!(call(&k1, "balanceProven", &json!({"session": o["session"]})).err(), Some(Error::Argument));
+                assert_eq!(
+                    call(&k1, "balanceProven", &json!({"session": o["session"]})).err(),
+                    Some(Error::Argument)
+                );
                 // the quorum's credit
                 if i == 0 {
-                    assert_eq!(quorum(&c, &[c.proven_credit(&A, 1, 0), truth[1].clone()]).err(), Some(Error::Argument), "quorum ({j}, {off})");
+                    assert_eq!(
+                        quorum(&c, &[c.proven_credit(&A, 1, 0), truth[1].clone()]).err(),
+                        Some(Error::Argument),
+                        "quorum ({j}, {off})"
+                    );
                 }
                 c.blobs.insert(blob, old);
                 n += 1 + (i == 0) as usize;
             }
             // the own v_f (version 0's accBlob) under its real tag
-            let old = lay(&mut c, own.acc_blob, (own.acc_u as usize, own.acc_v as usize), &u, &v);
-            assert_eq!(call(&k0, "provenOpen", &open(&c, 0)).err(), Some(Error::Argument), "own ({j}, {off})");
+            let old = lay(
+                &mut c,
+                own.acc_blob,
+                (own.acc_u as usize, own.acc_v as usize),
+                &u,
+                &v,
+            );
+            assert_eq!(
+                call(&k0, "provenOpen", &open(&c, 0)).err(),
+                Some(Error::Argument),
+                "own ({j}, {off})"
+            );
             c.blobs.insert(own.acc_blob, old);
             n += 1;
             assert_eq!(key_uses(), uses, "the key unused");
@@ -415,7 +610,10 @@ fn proof_path_refuses_the_fabricated_words_attack() {
     // the session was kept: the true credits pass, the value is the holder's
     let r = call(&k1, "provenAdd", &c.add_request(&o["session"], &truth)).unwrap();
     assert_eq!(r, json!({"accepted": [0, 1], "refused": []}));
-    assert_eq!(call(&k1, "balanceProven", &json!({"session": o["session"]})).unwrap()["value"], 350);
+    assert_eq!(
+        call(&k1, "balanceProven", &json!({"session": o["session"]})).unwrap()["value"],
+        350
+    );
 }
 
 /// The proof-path spec's negatives (C-PP-9), each refused alone over [`proof_world`] (the key unused, the session kept), then
@@ -430,7 +628,12 @@ fn proof_path_refuses_the_fabricated_words_attack() {
 fn proof_path_negatives() {
     let (_w, mut c, k0, k1) = proof_world();
     let psid = json!({"psid": hx(&pqz_ffi::stmt::PQZL_ID)});
-    let o = call(&k1, "provenOpen", &merge(c.proven_open(&A, 1), psid.clone())).unwrap();
+    let o = call(
+        &k1,
+        "provenOpen",
+        &merge(c.proven_open(&A, 1), psid.clone()),
+    )
+    .unwrap();
     let (c0, c1) = (c.proven_credit(&A, 1, 0), c.proven_credit(&A, 1, 1));
     let set = |x: &Cred, f: &dyn Fn(&mut Value)| {
         let mut x = x.clone();
@@ -438,7 +641,9 @@ fn proof_path_negatives() {
         x
     };
     // a key of another version of S (pending version 1) in place of version 0's
-    let mut other_key = set(&c0, &|x| x["keyRecords"][0]["word"] = json!(hx(&c.key_record_at(&S, 1))));
+    let mut other_key = set(&c0, &|x| {
+        x["keyRecords"][0]["word"] = json!(hx(&c.key_record_at(&S, 1)))
+    });
     other_key.1.push(c.keys[&(S, 1)]);
     // a coefficient of the leg stored at or above q: the first of `u ‖ v_t` with `c + q < 2^B` as `c + q` (the same value mod q),
     // where none fits (q close to 2^B: every set but the default) `v_t`'s first as `2^B − 1`
@@ -447,9 +652,13 @@ fn proof_path_negatives() {
     let mut nc = code.clone();
     let fit = [(uo, PKP), (vo, VP)].into_iter().find_map(|(at, n)| {
         let lanes = unpack_lanes(&code[1 + at..1 + at + n]);
-        lanes.iter().position(|x| (x + Q) >> B == 0).map(|i| (at, n, lanes, i, true))
+        lanes
+            .iter()
+            .position(|x| (x + Q) >> B == 0)
+            .map(|i| (at, n, lanes, i, true))
     });
-    let (at, n, mut lanes, i, same) = fit.unwrap_or_else(|| (vo, VP, unpack_lanes(&code[1 + vo..1 + vo + VP]), 0, false));
+    let (at, n, mut lanes, i, same) =
+        fit.unwrap_or_else(|| (vo, VP, unpack_lanes(&code[1 + vo..1 + vo + VP]), 0, false));
     lanes[i] = if same { lanes[i] + Q } else { (1 << B) - 1 };
     assert!(lanes[i] >= Q && lanes[i] >> B == 0);
     let lanes: Vec<u8> = lanes.iter().flat_map(|x| x.to_be_bytes()).collect();
@@ -458,13 +667,21 @@ fn proof_path_negatives() {
         assert!(same, "the default set: the same value mod q");
     }
     let cases: Vec<(&str, Cred, Option<Vec<u8>>)> = vec![
-        ("a forged T (the sender's window word)", set(&c0, &|x| {
-            let mut e = h(&x["senderPending"][0]["word"]);
-            e[19] ^= 1;
-            x["senderPending"][0]["word"] = json!(hx(&e));
-        }), None),
+        (
+            "a forged T (the sender's window word)",
+            set(&c0, &|x| {
+                let mut e = h(&x["senderPending"][0]["word"]);
+                e[19] ^= 1;
+                x["senderPending"][0]["word"] = json!(hx(&e));
+            }),
+            None,
+        ),
         ("a key of another historical version", other_key, None),
-        ("P of another debit", set(&c0, &|x| x["proof"] = c1.0["proof"].clone()), None),
+        (
+            "P of another debit",
+            set(&c0, &|x| x["proof"] = c1.0["proof"].clone()),
+            None,
+        ),
         ("a non-canonical coefficient", c0.clone(), Some(nc)),
     ];
     for (what, x, forged) in cases {
@@ -472,7 +689,12 @@ fn proof_path_negatives() {
             c.blobs.insert(blob, f);
         }
         let (uses, ver) = (key_uses(), verifies());
-        let r = call(&k1, "provenAdd", &c.add_request(&o["session"], std::slice::from_ref(&x))).unwrap();
+        let r = call(
+            &k1,
+            "provenAdd",
+            &c.add_request(&o["session"], std::slice::from_ref(&x)),
+        )
+        .unwrap();
         assert_eq!(r, json!({"accepted": [], "refused": [0]}), "{what}");
         assert_eq!(key_uses(), uses, "{what}: the key unused");
         if what == "a non-canonical coefficient" && cfg!(feature = "vectors") {
@@ -482,9 +704,17 @@ fn proof_path_negatives() {
         c.blobs.insert(blob, code.clone());
     }
     // the session kept: the true words pass, the value is the holder's
-    let r = call(&k1, "provenAdd", &c.add_request(&o["session"], &[c0.clone(), c1])).unwrap();
+    let r = call(
+        &k1,
+        "provenAdd",
+        &c.add_request(&o["session"], &[c0.clone(), c1]),
+    )
+    .unwrap();
     assert_eq!(r, json!({"accepted": [0, 1], "refused": []}));
-    assert_eq!(call(&k1, "balanceProven", &json!({"session": o["session"]})).unwrap()["value"], 350);
+    assert_eq!(
+        call(&k1, "balanceProven", &json!({"session": o["session"]})).unwrap()["value"],
+        350
+    );
     // a swapped leg: the holder's slot names the sender's own v_f (another owner's leg of the same blob)
     let mut swapped = merge(c.proven_open(&A, 1), psid.clone());
     let mut e = h(&swapped["pending"][0]["word"]);
@@ -492,7 +722,12 @@ fn proof_path_negatives() {
     e[22..24].copy_from_slice(&own_v.to_be_bytes());
     swapped["pending"][0]["word"] = json!(hx(&e));
     let s = call(&k1, "provenOpen", &swapped).unwrap();
-    let r = call(&k1, "provenAdd", &c.add_request(&s["session"], std::slice::from_ref(&c0))).unwrap();
+    let r = call(
+        &k1,
+        "provenAdd",
+        &c.add_request(&s["session"], std::slice::from_ref(&c0)),
+    )
+    .unwrap();
     assert_eq!(r["refused"], json!([0]), "a swapped leg");
     // more than K_MAX parts: the account's units at K_MAX (no window: the bound alone refuses it, not the window's length)
     let mut wide = merge(c.proven_open(&A, 1), psid.clone());
@@ -500,7 +735,11 @@ fn proof_path_negatives() {
     s1[4..8].copy_from_slice(&(K_MAX as u32).to_be_bytes());
     wide["account"][1] = json!(hx(&s1));
     wide["pending"] = json!([]);
-    assert_eq!(call(&k1, "provenOpen", &wide).err(), Some(Error::Argument), "more than K_MAX parts");
+    assert_eq!(
+        call(&k1, "provenOpen", &wide).err(),
+        Some(Error::Argument),
+        "more than K_MAX parts"
+    );
     // a forged ownTag (version 0's accBlob, one bit of its tag)
     let ok = merge(c.proven_open(&A, 0), psid.clone());
     let acc = c.accts[&(A, 0)].acc_blob;
@@ -514,13 +753,21 @@ fn proof_path_negatives() {
         }
     }
     let uses = key_uses();
-    assert_eq!(call(&k0, "provenOpen", &forged).err(), Some(Error::Argument), "a forged ownTag");
+    assert_eq!(
+        call(&k0, "provenOpen", &forged).err(),
+        Some(Error::Argument),
+        "a forged ownTag"
+    );
     assert_eq!(key_uses(), uses);
     assert!(call(&k0, "provenOpen", &ok).is_ok(), "the true tag");
 }
 
 fn unpack_lanes(stored: &[u8]) -> Vec<u64> {
-    scaas_ua::facade::pqz_pack::unpack(stored).unwrap().chunks_exact(8).map(|c| u64::from_be_bytes(c.try_into().unwrap())).collect()
+    scaas_ua::facade::pqz_pack::unpack(stored)
+        .unwrap()
+        .chunks_exact(8)
+        .map(|c| u64::from_be_bytes(c.try_into().unwrap()))
+        .collect()
 }
 
 /// T21 O5 (b) (ARCH-POS-13 on the three-key handle, spec §14.18): the 2·K crafted queries, laid out wherever a ciphertext enters
@@ -537,24 +784,90 @@ fn three_key_handle_refuses_the_crafted_query() {
     unlock();
     let w = Wallet::from_mnemonic(WORDS, "").unwrap();
     let (cu, token) = ([0xC1u8; 32], [0x70u8; 20]);
-    let h = w.pqz_scoped_key(&Scope { account: 0, index: 0, ua: A, chain_uid: cu, token: None, version: 0 }).unwrap();
+    let h = w
+        .pqz_scoped_key(&Scope {
+            account: 0,
+            index: 0,
+            ua: A,
+            chain_uid: cu,
+            token: None,
+            version: 0,
+        })
+        .unwrap();
     let mut slot = [0u8; 32]; // a credit at the op 1 offsets (16, 16 + P(u)), unmarked
     slot[21] = 16;
     slot[22..24].copy_from_slice(&((16 + PKP) as u16).to_be_bytes());
-    let reads = Reads { block: 1, finalized: true, strict_majority: true };
+    let reads = Reads {
+        block: 1,
+        finalized: true,
+        strict_majority: true,
+    };
     let mut n = 0;
     for j in 0..K {
         for off in [0, -1] {
             let (u, v) = query(j, off);
             let (pu, pv) = (pack(&u).unwrap(), pack(&v).unwrap());
-            let own = |own_tag| Debit { token, last_debit: 1, own: Some(Own { pu: &pu, pvf: &pv, own_tag }), window: &[], shield_in: 0 };
-            assert_eq!(h.open_debit(&own([0; 32])).err(), Some(Refused::OwnTag), "a zero tag");
-            let code = [&[0u8][..], &[0x5a; 16], &pu, &pv, &A, &pu, &pv, &[0x33; scaas_ua::pqz3k::OPENING], &[0; 32], &0u64.to_be_bytes(), &[1]].concat();
-            let win = [WindowEntry { token, index: 0, slot, code: Some(&code), accepted: None }];
-            let d = Debit { token, last_debit: 0, own: None, window: &win, shield_in: 0 };
-            assert_eq!(h.open_debit(&d).err(), Some(Refused::Window), "an unaccepted window entry");
-            let c = Credit { token, index: 0, slot, code: &code, auditor: None, reads };
-            assert!(matches!(h.check(&c), Ok(Checked::Skip(_))), "a credit holding the query is a skip, never a decryption");
+            let own = |own_tag| Debit {
+                token,
+                last_debit: 1,
+                own: Some(Own {
+                    pu: &pu,
+                    pvf: &pv,
+                    own_tag,
+                }),
+                window: &[],
+                shield_in: 0,
+            };
+            assert_eq!(
+                h.open_debit(&own([0; 32])).err(),
+                Some(Refused::OwnTag),
+                "a zero tag"
+            );
+            let code = [
+                &[0u8][..],
+                &[0x5a; 16],
+                &pu,
+                &pv,
+                &A,
+                &pu,
+                &pv,
+                &[0x33; scaas_ua::pqz3k::OPENING],
+                &[0; 32],
+                &0u64.to_be_bytes(),
+                &[1],
+            ]
+            .concat();
+            let win = [WindowEntry {
+                token,
+                index: 0,
+                slot,
+                code: Some(&code),
+                accepted: None,
+            }];
+            let d = Debit {
+                token,
+                last_debit: 0,
+                own: None,
+                window: &win,
+                shield_in: 0,
+            };
+            assert_eq!(
+                h.open_debit(&d).err(),
+                Some(Refused::Window),
+                "an unaccepted window entry"
+            );
+            let c = Credit {
+                token,
+                index: 0,
+                slot,
+                code: &code,
+                auditor: None,
+                reads,
+            };
+            assert!(
+                matches!(h.check(&c), Ok(Checked::Skip(_))),
+                "a credit holding the query is a skip, never a decryption"
+            );
             n += 1;
         }
     }
@@ -566,19 +879,57 @@ fn three_key_handle_refuses_the_crafted_query() {
         let seed32 = h.with_secret_keygen(|s| *s).unwrap();
         let tag = |pu: &[u8], pvf: &[u8], ctr: u32| {
             let k = hkdf_sha256(&seed32, &[], b"PQZ/owntag/v1", 32).unwrap();
-            hmac_sha256(&k, &[&cu[..], &token, &A, &ctr.to_be_bytes(), &scaas_ua::keccak256(&[pu, pvf].concat())].concat())
+            hmac_sha256(
+                &k,
+                &[
+                    &cu[..],
+                    &token,
+                    &A,
+                    &ctr.to_be_bytes(),
+                    &scaas_ua::keccak256(&[pu, pvf].concat()),
+                ]
+                .concat(),
+            )
         };
         let (u, v) = query(0, 0);
         let (pu, pv) = (pack(&u).unwrap(), pack(&v).unwrap());
-        let d = Debit { token, last_debit: 1, own: Some(Own { pu: &pu, pvf: &pv, own_tag: tag(&pu, &pv, 1) }), window: &[], shield_in: 0 };
-        assert_eq!(h.open_debit(&d).err(), Some(Refused::OwnTag), "the holder's tag of another counter");
+        let d = Debit {
+            token,
+            last_debit: 1,
+            own: Some(Own {
+                pu: &pu,
+                pvf: &pv,
+                own_tag: tag(&pu, &pv, 1),
+            }),
+            window: &[],
+            shield_in: 0,
+        };
+        assert_eq!(
+            h.open_debit(&d).err(),
+            Some(Refused::OwnTag),
+            "the holder's tag of another counter"
+        );
         let pk: Box<[u8; PK_BYTES]> = h.pk().into_boxed_slice().try_into().unwrap();
         let mut dg = [0u8; 16];
         dg[0] = 9;
         let e = pqz_ffi::pqzl::enc(&[&pk], &[dg], &[0x44; 32]).unwrap();
         let (pu, pv) = (pack(&e.u[..]).unwrap(), pack(&e.vs[0]).unwrap());
-        let d = Debit { token, last_debit: 1, own: Some(Own { pu: &pu, pvf: &pv, own_tag: tag(&pu, &pv, 0) }), window: &[], shield_in: 0 };
-        assert_eq!(h.open_debit(&d).map(|o| o.balance), Ok(9), "control: the holder's own ciphertext under its true tag decrypts");
+        let d = Debit {
+            token,
+            last_debit: 1,
+            own: Some(Own {
+                pu: &pu,
+                pvf: &pv,
+                own_tag: tag(&pu, &pv, 0),
+            }),
+            window: &[],
+            shield_in: 0,
+        };
+        assert_eq!(
+            h.open_debit(&d).map(|o| o.balance),
+            Ok(9),
+            "control: the holder's own ciphertext under its true tag decrypts"
+        );
         assert_eq!(h.secret_loads(), 1);
     }
 }

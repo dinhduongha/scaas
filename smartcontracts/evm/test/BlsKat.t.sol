@@ -17,13 +17,11 @@ contract BlsKatTest is Test {
     bytes constant DST = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
     bytes constant MSG = "bamboo"; // message of the external py_ecc KAT (verified on chain 7622, formerly 9000), not a tag
 
-    bytes constant HM =
-        hex"000000000000000000000000000000000a8420a64f75971be4bccf69a1adcec1"
+    bytes constant HM = hex"000000000000000000000000000000000a8420a64f75971be4bccf69a1adcec1"
         hex"b4ea93950ed374ca9c2a507652a85c2fb43dc69e073d0f1154eb2a76242ba01c"
         hex"000000000000000000000000000000001908f9979abcce991413bed5427be350"
         hex"17c2df468ea509ce53a0eb96d7a1b280c789d40836eb369ab4bbb48762c111cb";
-    bytes constant PK =
-        hex"000000000000000000000000000000000dbc474120cea5caa2db02317ed526b0"
+    bytes constant PK = hex"000000000000000000000000000000000dbc474120cea5caa2db02317ed526b0"
         hex"ed38fc0125a744152ef14fe150276f33e16c5c77a970133623a56f1bfd4d75de"
         hex"0000000000000000000000000000000007b3eeb42b85620997c97be990474d7c"
         hex"0d3633a18f65b17e4a9e099d0e4aff0a53e96ca4b6a8c115cae7616f47b24db1"
@@ -31,8 +29,7 @@ contract BlsKatTest is Test {
         hex"c2e3b0f3a10440927123d3547bc05121dbf4a7bcfb5ae03a327fcb42bd443547"
         hex"000000000000000000000000000000000c8d230abb5492b20107d5ddd01ecb2a"
         hex"6b70d242958d37fbbc52da22c6d0b38fb9be19e363b6836dada0415f5f16f2ee";
-    bytes constant SIG =
-        hex"0000000000000000000000000000000018fda64dabe2222133fb2ee16080d9be"
+    bytes constant SIG = hex"0000000000000000000000000000000018fda64dabe2222133fb2ee16080d9be"
         hex"1ffe8b76ca2acc36c2c0d7e8b3252b5b9451f2116351a588915dd0a080495d4e"
         hex"00000000000000000000000000000000161955658b4d1b4374de8dda63509e4a"
         hex"7eb4d89e35085937ce891ab030f48f946dd03663a313deecf2fb306193f0e258";
@@ -57,13 +54,13 @@ contract BlsKatTest is Test {
 
     /// Thông điệp khác ⇒ H(m) khác ⇒ pairing ra 0. Không revert — trả về false.
     /// C1-3: the library refuses the identity for the signature and for the key (the pairing would be 1 = 1).
-function test_C1_3_identityRefused() public onlyWithEip2537 {
-assertFalse(Bls12381.verifyMinSig(HM, new bytes(256), new bytes(128)));
-assertFalse(Bls12381.verifyMinSig(HM, PK, new bytes(128)));
-assertFalse(Bls12381.verifyMinSig(HM, new bytes(256), SIG));
-}
+    function test_C1_3_identityRefused() public onlyWithEip2537 {
+        assertFalse(Bls12381.verifyMinSig(HM, new bytes(256), new bytes(128)));
+        assertFalse(Bls12381.verifyMinSig(HM, PK, new bytes(128)));
+        assertFalse(Bls12381.verifyMinSig(HM, new bytes(256), SIG));
+    }
 
-function test_wrongMessageFails() public onlyWithEip2537 {
+    function test_wrongMessageFails() public onlyWithEip2537 {
         bytes memory other = HashToCurve.hashToG1("bamboo2", DST);
         assertFalse(Bls12381.verifyMinSig(other, PK, SIG));
     }

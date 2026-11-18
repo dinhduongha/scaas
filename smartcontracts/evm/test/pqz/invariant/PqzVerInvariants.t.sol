@@ -30,7 +30,9 @@ contract PqzVerInvariantsTest is PqzFixture {
             bytes32 u = h.uas(i);
             (uint64 cur,,,) = reg.pqzKeyOf(u);
             uint64 latest = reg.pqzKeyLatest(u);
-            for (uint64 v; v <= latest; ++v) f(u, v, cur);
+            for (uint64 v; v <= latest; ++v) {
+                f(u, v, cur);
+            }
         }
     }
 
@@ -58,7 +60,9 @@ contract PqzVerInvariantsTest is PqzFixture {
                 assertTrue(q.codehash != hv, "J4: one key per (ua, version), across UAs too");
             }
         }
-        if (proven) assertEq(reg.keyOwner(UAKinds.keyHashOf(UAKinds.PQZ_MLWE, _code(p))), u, "J4: keyOwner of a proven version");
+        if (proven) {
+            assertEq(reg.keyOwner(UAKinds.keyHashOf(UAKinds.PQZ_MLWE, _code(p))), u, "J4: keyOwner of a proven version");
+        }
     }
 
     function _code(address p) internal view returns (bytes memory c) {

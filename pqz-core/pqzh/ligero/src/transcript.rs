@@ -5,8 +5,8 @@
 //! The one-byte role tags (merkle.rs; T-35, PQZH_ID v4) replace v3's untagged absorb, the 0xff squeeze byte after the
 //! state and the "PoW" string.
 
-use crate::fq::{F4, Fq, Q};
-use crate::merkle::{H, TAG_ABSORB, TAG_POW, TAG_SQUEEZE, keccak};
+use crate::fq::{Fq, F4, Q};
+use crate::merkle::{keccak, H, TAG_ABSORB, TAG_POW, TAG_SQUEEZE};
 
 pub struct Tr {
     st: H,
@@ -16,8 +16,17 @@ pub struct Tr {
 
 impl Tr {
     pub fn new(op: u8, stmt: &[u8]) -> Tr {
-        let st = keccak(&[b"SCAAS-PQZH-LIGERO-V1", &[op], &(stmt.len() as u32).to_be_bytes(), stmt]);
-        Tr { st, ctr: 0, buf: Vec::new() }
+        let st = keccak(&[
+            b"SCAAS-PQZH-LIGERO-V1",
+            &[op],
+            &(stmt.len() as u32).to_be_bytes(),
+            stmt,
+        ]);
+        Tr {
+            st,
+            ctr: 0,
+            buf: Vec::new(),
+        }
     }
     pub fn absorb(&mut self, data: &[u8]) {
         self.st = keccak(&[&[TAG_ABSORB], &self.st, data]);
@@ -28,7 +37,11 @@ impl Tr {
         if self.buf.is_empty() {
             let h = keccak(&[&[TAG_SQUEEZE], &self.st, &self.ctr.to_be_bytes()]);
             self.ctr += 1;
-            self.buf = h.chunks(8).rev().map(|c| u64::from_be_bytes(c.try_into().unwrap())).collect();
+            self.buf = h
+                .chunks(8)
+                .rev()
+                .map(|c| u64::from_be_bytes(c.try_into().unwrap()))
+                .collect();
         }
         self.buf.pop().unwrap()
     }
@@ -80,6 +93,12 @@ mod tests {
         let h = keccak(&[&[TAG_SQUEEZE], &t.st, &0u64.to_be_bytes()]);
         assert_eq!(w, u64::from_be_bytes(h[..8].try_into().unwrap()));
         let pow = keccak(&[&[TAG_POW], &t.st, &5u64.to_be_bytes()]);
-        assert_eq!(t.pow_ok(5, u64::from_be_bytes(pow[..8].try_into().unwrap()).leading_zeros()), true);
+        assert_eq!(
+            t.pow_ok(
+                5,
+                u64::from_be_bytes(pow[..8].try_into().unwrap()).leading_zeros()
+            ),
+            true
+        );
     }
 }

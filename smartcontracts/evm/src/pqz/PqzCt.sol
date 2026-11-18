@@ -47,6 +47,7 @@ library PqzCt {
     uint256 private constant MLO = MB << 128 | MB; // c1, c3 of a word / the low field of each half of a record
     // the rollover accumulators: c1, c3 of a group as loaded; c0, c2 after `shr(B)`; each field keeps B bits above it
     uint256 private constant MEA = MB << (256 - 2 * B) | MB << SH;
+
     // pack:   w = c0 ‖ c1 ‖ c2 ‖ c3 (64-bit lanes) → h = or(shl(B, and(shr(64, w), MLO)), and(w, MLO)) (two halves of
     //         c_{2i} ‖ c_{2i+1} at bits 128 and 0) → r = or(shl(2B, shr(128, h)), and(h, M2B)) (4B bits) → shl(SH, r)
     // expand: the inverse, h = or(shl(128, shr(2B, r)), and(r, M2B)), w = or(shl(64, and(shr(B, h), MLO)), and(h, MLO))
@@ -59,8 +60,10 @@ library PqzCt {
             let end := add(b.offset, b.length)
             for { let p := b.offset } and(ok, lt(p, end)) { p := add(p, 32) } {
                 let w := calldataload(p)
-                ok := and(and(lt(shr(192, w), q), lt(and(shr(128, w), M64), q)),
-                    and(lt(and(shr(64, w), M64), q), lt(and(w, M64), q)))
+                ok := and(
+                    and(lt(shr(192, w), q), lt(and(shr(128, w), M64), q)),
+                    and(lt(and(shr(64, w), M64), q), lt(and(w, M64), q))
+                )
             }
         }
     }
@@ -189,8 +192,13 @@ library PqzCt {
             for { let i := 0 } lt(i, n) { i := add(i, 32) } {
                 let p := add(d, i)
                 let w := mload(p)
-                mstore(p, or(or(shl(192, mod(shr(192, w), q)), shl(128, mod(and(shr(128, w), M64), q))),
-                    or(shl(64, mod(and(shr(64, w), M64), q)), mod(and(w, M64), q))))
+                mstore(
+                    p,
+                    or(
+                        or(shl(192, mod(shr(192, w), q)), shl(128, mod(and(shr(128, w), M64), q))),
+                        or(shl(64, mod(and(shr(64, w), M64), q)), mod(and(w, M64), q))
+                    )
+                )
             }
         }
     }
@@ -318,7 +326,8 @@ library PqzCt {
     ///         `A` and `c0`, `c2` into `B_` (each field keeps a `B`-bit gap above it for the carries: ≤ 2^B terms).
     ///         `combineEO` adds the sums into `c` once at the end. `A`, `B_` zeroed ciphertext-size buffers, `x` scratch.
     function addBlobEO(bytes memory A, bytes memory B_, bytes memory x, address blob, uint256 uOff, uint256 vOff)
-        internal view
+        internal
+        view
     {
         uint256 s = fetch(x, blob, uOff, vOff);
         uint256 a;
@@ -367,8 +376,16 @@ library PqzCt {
                 let a := mload(add(pa, i))
                 let b := mload(add(pb, i))
                 let p := add(d, i)
-                mstore(p, add(mload(p), or(or(shl(192, shr(hi, b)), shl(128, shr(hi, a))),
-                    or(shl(64, and(shr(sh, b), m2b)), and(shr(sh, a), m2b)))))
+                mstore(
+                    p,
+                    add(
+                        mload(p),
+                        or(
+                            or(shl(192, shr(hi, b)), shl(128, shr(hi, a))),
+                            or(shl(64, and(shr(sh, b), m2b)), and(shr(sh, a), m2b))
+                        )
+                    )
+                )
             }
         }
     }

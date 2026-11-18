@@ -3,7 +3,10 @@
 //! verdicts on every input, same keys / Enc / Dec. The API mirrors the C ABI `pqzl/src/pqz.h` (plan D3); every size,
 //! layout and return code is copied from it. No globals: a [`Ctx`] holds what the C core keeps in static storage.
 #![no_std]
-#![cfg_attr(not(any(feature = "c-oracle", feature = "ctgrind")), forbid(unsafe_code))]
+#![cfg_attr(
+    not(any(feature = "c-oracle", feature = "ctgrind")),
+    forbid(unsafe_code)
+)]
 // only the dev-only C oracle module and the test-only memcheck client requests (ct.rs, feature ctgrind) allow it
 #![cfg_attr(any(feature = "c-oracle", feature = "ctgrind"), deny(unsafe_code))]
 
@@ -32,10 +35,11 @@ mod coder;
 pub mod ct; // the ctgrind check's `secret` (src/bin/ct.rs): test entry point, not API
 #[cfg(not(feature = "ctgrind"))]
 mod ct;
-#[allow(dead_code)]
-mod rand;
 mod keys;
 #[allow(dead_code)]
+mod rand;
+#[allow(dead_code)]
+#[rustfmt::skip]
 mod params; // generated (plan D8): pqzl/params/to_rust.py; the parameter set's modules and `params::set`
 mod proof;
 mod rel;
@@ -96,7 +100,11 @@ pub const fn txm_groups(m: usize, aud: usize) -> usize {
 /// enough, raise it"; run `d6`: the M = 8 wasm32 prove peaks at 117.4 MiB, under the 255.6 MiB the C core's M = 4
 /// takes; the C core keeps 4, CTR-PQZ-09). Feature `wasm-m8` (bench builds only) lifts it to `TXM_MAX_LEGS` (16 with
 /// `oversize`)
-pub const WASM_MAX_LEGS: usize = if cfg!(feature = "wasm-m8") { TXM_MAX_LEGS } else { 8 };
+pub const WASM_MAX_LEGS: usize = if cfg!(feature = "wasm-m8") {
+    TXM_MAX_LEGS
+} else {
+    8
+};
 /// the set's PQZL proofSystemId: keccak256 of its set.toml label `pqzl_id` (gen_set.py, rust/set.rs; plan 5h Task 8d:
 /// one id per set, `.../mlwe-d64k<k>-q<log2q>l4/v4`; v3 and v2 are retired, CTR-PQZ-09). The core only hashes it
 pub const PROOF_SYSTEM_ID: [u8; 32] = params::set::PQZL_ID;
@@ -228,7 +236,13 @@ impl Ctx {
 
     /// `pqz_prove`: the proof for `(op, stmt, wit)` with the hedged masks from `rnd32` (CTR-PQZ-19). On wasm32, op 7
     /// with more than [`WASM_MAX_LEGS`] legs is `Error::Input`.
-    pub fn prove(&mut self, op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8>, Error> {
+    pub fn prove(
+        &mut self,
+        op: u8,
+        stmt: &[u8],
+        wit: &[u8],
+        rnd32: &[u8; 32],
+    ) -> Result<Vec<u8>, Error> {
         self.prove_rel(op, stmt, wit, rnd32)
     }
 
@@ -265,7 +279,11 @@ impl Ctx {
     }
 
     /// [`keypair_from_secret`] with this `Ctx`'s A: same arguments, same result.
-    pub fn keypair_from_secret(&mut self, s: &[i8; N], e: &[i16; N]) -> Result<Box<[u8; POLYVEC_BYTES]>, Error> {
+    pub fn keypair_from_secret(
+        &mut self,
+        s: &[i8; N],
+        e: &[i16; N],
+    ) -> Result<Box<[u8; POLYVEC_BYTES]>, Error> {
         keys::keypair_from_secret(&mut self.a, s, e)
     }
 
@@ -295,8 +313,20 @@ impl Ctx {
     }
 
     /// [`enc_seed`] with this `Ctx`'s A: same arguments, same result.
-    pub fn enc_seed(&mut self, pks: &[&[u8; POLYVEC_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> Result<Enc, Error> {
-        keys::enc_seed(&mut self.a, pks, None, msgs, seed_enc, (keys::BS, keys::BE, keys::B2))
+    pub fn enc_seed(
+        &mut self,
+        pks: &[&[u8; POLYVEC_BYTES]],
+        msgs: &[[u8; 16]],
+        seed_enc: &[u8; 32],
+    ) -> Result<Enc, Error> {
+        keys::enc_seed(
+            &mut self.a,
+            pks,
+            None,
+            msgs,
+            seed_enc,
+            (keys::BS, keys::BE, keys::B2),
+        )
     }
 
     /// [`enc_seed_win`] with this `Ctx`'s A: same arguments, same result.
@@ -307,7 +337,14 @@ impl Ctx {
         msgs: &[[u8; 16]],
         seed_enc: &[u8; 32],
     ) -> Result<Enc, Error> {
-        keys::enc_seed(&mut self.a, pks, Some(win), msgs, seed_enc, (keys::BS, keys::BE, keys::B2))
+        keys::enc_seed(
+            &mut self.a,
+            pks,
+            Some(win),
+            msgs,
+            seed_enc,
+            (keys::BS, keys::BE, keys::B2),
+        )
     }
 }
 
@@ -351,14 +388,37 @@ pub fn keygen(seed32: &[u8; 32]) -> Result<Key, Error> {
 }
 
 /// `pqz_enc_seed`: one encryption of `msgs[j]` (16 digits < 16) to `pks[j]` from `seed_enc`.
-pub fn enc_seed(pks: &[&[u8; POLYVEC_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> Result<Enc, Error> {
-    keys::enc_seed(&mut None, pks, None, msgs, seed_enc, (keys::BS, keys::BE, keys::B2))
+pub fn enc_seed(
+    pks: &[&[u8; POLYVEC_BYTES]],
+    msgs: &[[u8; 16]],
+    seed_enc: &[u8; 32],
+) -> Result<Enc, Error> {
+    keys::enc_seed(
+        &mut None,
+        pks,
+        None,
+        msgs,
+        seed_enc,
+        (keys::BS, keys::BE, keys::B2),
+    )
 }
 
 /// `pqz_enc_seed_win`: [`enc_seed`] with recipient j's v at window `win[j]` < 4 (the coefficients [16 win, 16 win + 16)
 /// of pk_j^T r: an R_TXM auditor copy, R0-1).
-pub fn enc_seed_win(pks: &[&[u8; POLYVEC_BYTES]], win: &[u8], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> Result<Enc, Error> {
-    keys::enc_seed(&mut None, pks, Some(win), msgs, seed_enc, (keys::BS, keys::BE, keys::B2))
+pub fn enc_seed_win(
+    pks: &[&[u8; POLYVEC_BYTES]],
+    win: &[u8],
+    msgs: &[[u8; 16]],
+    seed_enc: &[u8; 32],
+) -> Result<Enc, Error> {
+    keys::enc_seed(
+        &mut None,
+        pks,
+        Some(win),
+        msgs,
+        seed_enc,
+        (keys::BS, keys::BE, keys::B2),
+    )
 }
 
 /// `pqz_enc_group_seed`: R_TXM group `g`'s seed (seed_enc for g = 0, else SHAKE256("SCAAS-PQZ-ENC-GROUP-V1" ||
@@ -397,12 +457,21 @@ pub fn encrypt_win(
 }
 
 /// `pqz_decrypt_raw`: w_i = centre(v_i - (u^T s)_i).
-pub fn decrypt_raw(s: &[i8; N], u: &[u8; POLYVEC_BYTES], v: &[u8; V_BYTES]) -> Result<[i64; 16], Error> {
+pub fn decrypt_raw(
+    s: &[i8; N],
+    u: &[u8; POLYVEC_BYTES],
+    v: &[u8; V_BYTES],
+) -> Result<[i64; 16], Error> {
     keys::decrypt_raw(s, &u[..], &v[..], 0)
 }
 
 /// `pqz_decrypt_raw_win`: w_i = centre(v_i - (u^T s)_{16 win + i}), win < 4 (R0-1).
-pub fn decrypt_raw_win(s: &[i8; N], u: &[u8; POLYVEC_BYTES], v: &[u8; V_BYTES], win: usize) -> Result<[i64; 16], Error> {
+pub fn decrypt_raw_win(
+    s: &[i8; N],
+    u: &[u8; POLYVEC_BYTES],
+    v: &[u8; V_BYTES],
+    win: usize,
+) -> Result<[i64; 16], Error> {
     keys::decrypt_raw(s, &u[..], &v[..], win)
 }
 
@@ -412,7 +481,11 @@ pub fn dec(s: &[i8; N], ct: &[u8; CT_BYTES]) -> Result<([i64; 16], [i64; 16]), E
 }
 
 /// `pqz_dec_win`: [`dec`] of a v at window win < 4 (the auditor's copy of an R_TXM leg j: win = j mod S_AUD; R0-1).
-pub fn dec_win(s: &[i8; N], ct: &[u8; CT_BYTES], win: usize) -> Result<([i64; 16], [i64; 16]), Error> {
+pub fn dec_win(
+    s: &[i8; N],
+    ct: &[u8; CT_BYTES],
+    win: usize,
+) -> Result<([i64; 16], [i64; 16]), Error> {
     keys::dec(s, ct, win)
 }
 
@@ -420,7 +493,13 @@ pub fn dec_win(s: &[i8; N], ct: &[u8; CT_BYTES], win: usize) -> Result<([i64; 16
 /// change one field (`kind` 0..15 with `r1` / `r2`; any other kind re-encodes only) and re-encode. `Ok(None)` where
 /// C returns 0: an unknown relation, a proof that does not decode, an encoding that does not fit 2 MAX_PROOF bytes.
 #[cfg(feature = "test-hooks")]
-pub fn test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Result<Option<Vec<u8>>, Error> {
+pub fn test_mutate(
+    rel: u8,
+    proof: &[u8],
+    kind: u32,
+    r1: u64,
+    r2: u64,
+) -> Result<Option<Vec<u8>>, Error> {
     coder::test_mutate(rel, proof, kind, r1, r2)
 }
 
@@ -428,7 +507,10 @@ pub fn test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Result
 #[cfg(feature = "test-hooks")]
 pub fn test_tb_layout(code: u8) -> Option<(usize, usize)> {
     let p = rel::tbox_by_code(code)?;
-    Some(((p.tbox.l + p.tbox.lext) as usize, p.quad_eval.quad_many.l as usize))
+    Some((
+        (p.tbox.l + p.tbox.lext) as usize,
+        p.quad_eval.quad_many.l as usize,
+    ))
 }
 
 /// The P6-FS trace (test hook, lazer#28; = the C core's `pqz_sz_trace_fn` kinds under `PQZ_SZ_TRACE`): which seed

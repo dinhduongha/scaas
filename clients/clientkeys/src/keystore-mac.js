@@ -6,20 +6,38 @@
 //   canonical = JSON.stringify of exactly INDEX_FIELDS in that order (no white space; the accounts rows as given; `vaults` the
 //               label → vault text object with its keys sorted)
 // ua-rs `Wallet::index_mac` computes the same bytes. UNAUDITED.
-import { hkdf } from '@noble/hashes/hkdf.js';
-import { hmac } from '@noble/hashes/hmac.js';
-import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, utf8ToBytes, wipe } from './bytes.js';
+import { hkdf } from "@noble/hashes/hkdf.js";
+import { hmac } from "@noble/hashes/hmac.js";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex, utf8ToBytes, wipe } from "./bytes.js";
 
-const INFO = utf8ToBytes('scaas.keystore.index.v2');
-export const INDEX_FIELDS = Object.freeze(['id', 'label', 'words', 'fingerprint', 'origin', 'class', 'warnings', 'backup', 'accounts', 'vaults']);
+const INFO = utf8ToBytes("scaas.keystore.index.v2");
+export const INDEX_FIELDS = Object.freeze([
+  "id",
+  "label",
+  "words",
+  "fingerprint",
+  "origin",
+  "class",
+  "warnings",
+  "backup",
+  "accounts",
+  "vaults",
+]);
 
 /** The MAC's input: the entry's fields of INDEX_FIELDS, in that order, every one present (an `Error` otherwise). */
 export function indexCanonical(fields) {
   const o = {};
   for (const k of INDEX_FIELDS) {
     if (!Object.hasOwn(fields, k)) throw new Error(`index field missing: ${k}`);
-    o[k] = k === 'vaults' ? Object.fromEntries(Object.keys(fields.vaults).sort().map((l) => [l, fields.vaults[l]])) : fields[k];
+    o[k] =
+      k === "vaults"
+        ? Object.fromEntries(
+            Object.keys(fields.vaults)
+              .sort()
+              .map((l) => [l, fields.vaults[l]]),
+          )
+        : fields[k];
   }
   return JSON.stringify(o);
 }

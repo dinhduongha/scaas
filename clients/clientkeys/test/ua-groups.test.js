@@ -4,38 +4,58 @@
 // verify + DKG PoKs + Y = Σ C_i0 (frost-secp256k1), every negative refused for its stated reason, the official BIP-327
 // KeyAgg rows, RFC 9591 E.5, the ZF DKG vector and T-FROST. musig2-bn254 and frost-bn254 have no second implementation
 // (single-implementation kinds, accounts.md §1.16): not re-verified here.
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { dir } from './ua-vectors-dir.js';
-import { secp256k1, schnorr } from '@noble/curves/secp256k1.js';
-import { hash_to_field } from '@noble/curves/abstract/hash-to-curve.js';
-import { sha256 } from '@noble/hashes/sha2.js';
-import * as ua from '../src/ua.js';
-import { hex, fromHex, concatBytes, utf8ToBytes, word } from '../src/bytes.js';
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dir } from "./ua-vectors-dir.js";
+import { secp256k1, schnorr } from "@noble/curves/secp256k1.js";
+import { hash_to_field } from "@noble/curves/abstract/hash-to-curve.js";
+import { sha256 } from "@noble/hashes/sha2.js";
+import * as ua from "../src/ua.js";
+import { hex, fromHex, concatBytes, utf8ToBytes, word } from "../src/bytes.js";
 
-const V = JSON.parse(readFileSync(new URL('groups.json', dir)));
+const V = JSON.parse(readFileSync(new URL("groups.json", dir)));
 const Pt = secp256k1.Point;
 const N = Pt.Fn.ORDER;
 const G = Pt.BASE;
 const B = (h) => fromHex(h);
 const int = (b) => BigInt(hex(b));
 const eq = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
-const attempt = (f) => { try { return f(); } catch { return false; } };
+const attempt = (f) => {
+  try {
+    return f();
+  } catch {
+    return false;
+  }
+};
 const u16 = (d, o) => (d[o] << 8) | d[o + 1];
 const mul = (P, k) => P.multiplyUnsafe(((k % N) + N) % N);
-const tagged = (tag, ...parts) => { const t = sha256(utf8ToBytes(tag)); return sha256(concatBytes(t, t, ...parts)); };
+const tagged = (tag, ...parts) => {
+  const t = sha256(utf8ToBytes(tag));
+  return sha256(concatBytes(t, t, ...parts));
+};
 /** SEC1 compressed, prefix 02/03 only. */
-const point = (b) => { if (b.length !== 33 || (b[0] !== 2 && b[0] !== 3)) throw new Error('prefix'); return Pt.fromBytes(b); };
+const point = (b) => {
+  if (b.length !== 33 || (b[0] !== 2 && b[0] !== 3)) throw new Error("prefix");
+  return Pt.fromBytes(b);
+};
 const enc = (P) => (P.equals(Pt.ZERO) ? new Uint8Array(33) : P.toBytes(true));
 /** RFC 9591 §6.5: hash_to_field, expand_message_xmd SHA-256, DST "FROST-secp256k1-SHA256-v1" ‖ label, 48 bytes, mod N. */
-const H = (label, m) => hash_to_field(m, 1, { DST: utf8ToBytes(`FROST-secp256k1-SHA256-v1${label}`), p: N, m: 1, k: 128, expand: 'xmd', hash: sha256 })[0][0];
+const H = (label, m) =>
+  hash_to_field(m, 1, {
+    DST: utf8ToBytes(`FROST-secp256k1-SHA256-v1${label}`),
+    p: N,
+    m: 1,
+    k: 128,
+    expand: "xmd",
+    hash: sha256,
+  })[0][0];
 
 // --- musig2-secp256k1 (BIP-327 KeyAgg, §1.6.1) ---
 function keyAgg(pks) {
-  const L = tagged('KeyAgg list', ...pks);
+  const L = tagged("KeyAgg list", ...pks);
   const second = pks.find((p) => !eq(p, pks[0]));
-  const a = pks.map((p) => (second && eq(p, second) ? 1n : int(tagged('KeyAgg coefficient', L, p)) % N));
+  const a = pks.map((p) => (second && eq(p, second) ? 1n : int(tagged("KeyAgg coefficient", L, p)) % N));
   const Q = pks.reduce((acc, p, i) => acc.add(mul(point(p), a[i])), Pt.ZERO);
   return { L, a, Q };
 }
@@ -61,18 +81,21 @@ function frostVerify(Y, msg, sig) {
   const R = point(sig.subarray(0, 33));
   const z = int(sig.subarray(33));
   if (z >= N) return false;
-  const c = H('chal', concatBytes(sig.subarray(0, 33), Y, msg));
+  const c = H("chal", concatBytes(sig.subarray(0, 33), Y, msg));
   return mul(G, z).equals(R.add(mul(point(Y), c)));
 }
 /** frost-core keys::dkg: c_i = HDKG(id_i (32 B) ‖ C_i0 ‖ R_i), R_i == μ_i·G − c_i·C_i0; Y == Σ C_i0, refusing a C_i0 that
  *  shares its x with the partial sum (repeated or cancelling: FrostSecp256k1Verifier's mixed addition refuses it). */
 function frostDkg(kd) {
-  const t = u16(kd, 33), n = u16(kd, 35), per = (t + 1) * 33 + 32;
+  const t = u16(kd, 33),
+    n = u16(kd, 35),
+    per = (t + 1) * 33 + 32;
   let S = Pt.ZERO;
   for (let i = 0; i < n; i++) {
     const b = kd.subarray(37 + i * per, 37 + (i + 1) * per);
-    const C0 = b.subarray(0, 33), R = b.subarray(t * 33, (t + 1) * 33);
-    const c = H('dkg', concatBytes(word(i + 1), C0, R));
+    const C0 = b.subarray(0, 33),
+      R = b.subarray(t * 33, (t + 1) * 33);
+    const c = H("dkg", concatBytes(word(i + 1), C0, R));
     if (!point(R).equals(mul(G, int(b.subarray((t + 1) * 33))).subtract(mul(point(C0), c)))) return false;
     if (i > 0 && S.x === point(C0).x) return false;
     S = S.add(point(C0));
@@ -82,10 +105,15 @@ function frostDkg(kd) {
 
 const SECP = [0x0110, 0x0111];
 const valid = (kind, kd) => attempt(() => (ua.validateKeyData(kind, kd), true));
-const verifyPop = (kind, kd, msg, pop) => valid(kind, kd) && attempt(() =>
-  (kind === 0x0110 ? musigPop(kd, msg, pop) : frostDkg(kd) && frostVerify(kd.subarray(0, 33), msg, pop)));
-const verify = (kind, vk, msg, sig) => attempt(() =>
-  (kind === 0x0110 ? sig.length === 64 && schnorr.verify(sig, msg, point(vk).toBytes(true).subarray(1)) : frostVerify(vk, msg, sig)));
+const verifyPop = (kind, kd, msg, pop) =>
+  valid(kind, kd) &&
+  attempt(() => (kind === 0x0110 ? musigPop(kd, msg, pop) : frostDkg(kd) && frostVerify(kd.subarray(0, 33), msg, pop)));
+const verify = (kind, vk, msg, sig) =>
+  attempt(() =>
+    kind === 0x0110
+      ? sig.length === 64 && schnorr.verify(sig, msg, point(vk).toBytes(true).subarray(1))
+      : frostVerify(vk, msg, sig),
+  );
 // groups.json is written by clients/ua-rs (tests/groups.rs): the PoPs are portable typed records (UA-8 P1, typed-signing
 // TS-D1 / TS-D3): popDigest = portableRecordDigest (UAPortableRecord{ua, kind, 0, UAKemRecord{ua, 0, 0, 0}}), message =
 // uaMessage(kind, POP_V2, registrationDigest); contexts.A only serves the chain-bound negative (pop-chain-bound).
@@ -95,7 +123,7 @@ const popMsg = (kind, kd) => {
 };
 const secpGroups = V.groups.filter((g) => SECP.includes(g.kind));
 
-test('secp256k1 groups: ids, KeyAgg / DKG recomputed, PoP and signatures verify', () => {
+test("secp256k1 groups: ids, KeyAgg / DKG recomputed, PoP and signatures verify", () => {
   assert.equal(secpGroups.length, 10);
   for (const g of secpGroups) {
     const kd = B(g.keyData);
@@ -109,14 +137,20 @@ test('secp256k1 groups: ids, KeyAgg / DKG recomputed, PoP and signatures verify'
       const { L, a, Q } = keyAgg(pks);
       assert.equal(hex(enc(Q)), g.vk, `${g.name}: Q`);
       assert.equal(hex(L), g.L);
-      assert.deepEqual(a.map((x) => hex(word(x))), g.coefficients);
-      assert.deepEqual(pks.map((p, i) => hex(mul(point(p), a[i]).toBytes(false).subarray(1))), g.hints);
+      assert.deepEqual(
+        a.map((x) => hex(word(x))),
+        g.coefficients,
+      );
+      assert.deepEqual(
+        pks.map((p, i) => hex(mul(point(p), a[i]).toBytes(false).subarray(1))),
+        g.hints,
+      );
       assert.equal(g.pop.blob, hex(concatBytes(B(g.pop.sig), ...g.hints.map(B))));
     } else {
       for (const r of g.dkg) {
         const pre = concatBytes(word(r.id), B(r.commitments[0]), B(r.R));
         assert.equal(hex(pre), r.preimage);
-        assert.equal(hex(word(H('dkg', pre))), r.challenge, `${g.name} participant ${r.id}`);
+        assert.equal(hex(word(H("dkg", pre))), r.challenge, `${g.name} participant ${r.id}`);
       }
       assert.equal(g.pop.blob, g.pop.sig);
     }
@@ -130,52 +164,70 @@ test('secp256k1 groups: ids, KeyAgg / DKG recomputed, PoP and signatures verify'
   }
 });
 
-test('secp256k1 negatives refused for their stated reason', () => {
+test("secp256k1 negatives refused for their stated reason", () => {
   let n = 0;
-  for (const g of secpGroups) for (const x of g.negatives) {
-    const name = `${g.name} ${x.name}`;
-    if (x.entry === 'verify') {
-      assert.equal(verify(g.kind, B(x.vk), B(x.message), B(x.sig)), false, name);
-    } else {
-      const kd = B(x.keyData);
-      const [, m] = popMsg(g.kind, kd);
-      assert.deepEqual([hex(ua.uaOf(g.kind, kd)), hex(m)], [x.ua, x.message], name);
-      const pop = B(x.pop);
-      const sig = pop.subarray(0, g.kind === 0x0110 ? 64 : 65);
-      assert.equal(verify(g.kind, kd.subarray(0, 33), m, sig), x.sigValid, `${name}: sigValid`);
-      if (x.error === 'UAKeyData') assert.equal(valid(g.kind, kd), false, name);
-      else assert.ok(x.error === 'UAPoP' && valid(g.kind, kd) && !verifyPop(g.kind, kd, m, pop), name);
+  for (const g of secpGroups)
+    for (const x of g.negatives) {
+      const name = `${g.name} ${x.name}`;
+      if (x.entry === "verify") {
+        assert.equal(verify(g.kind, B(x.vk), B(x.message), B(x.sig)), false, name);
+      } else {
+        const kd = B(x.keyData);
+        const [, m] = popMsg(g.kind, kd);
+        assert.deepEqual([hex(ua.uaOf(g.kind, kd)), hex(m)], [x.ua, x.message], name);
+        const pop = B(x.pop);
+        const sig = pop.subarray(0, g.kind === 0x0110 ? 64 : 65);
+        assert.equal(verify(g.kind, kd.subarray(0, 33), m, sig), x.sigValid, `${name}: sigValid`);
+        if (x.error === "UAKeyData") assert.equal(valid(g.kind, kd), false, name);
+        else assert.ok(x.error === "UAPoP" && valid(g.kind, kd) && !verifyPop(g.kind, kd, m, pop), name);
+      }
+      n++;
     }
-    n++;
-  }
   assert.equal(n, 40);
 });
 
-test('BIP-327 KeyAgg rows (official, incl. duplicate and unsorted lists)', () => {
+test("BIP-327 KeyAgg rows (official, incl. duplicate and unsorted lists)", () => {
   assert.equal(V.bip327.keyAgg.length, 4);
   for (const r of V.bip327.keyAgg) {
     const { L, a, Q } = keyAgg(r.keys.map(B));
     assert.equal(hex(enc(Q)), r.Q);
     assert.equal(hex(enc(Q).subarray(1)), r.expectedX.toLowerCase());
     assert.equal(hex(L), r.L);
-    assert.deepEqual(a.map((x) => hex(word(x))), r.coefficients);
-    assert.deepEqual(r.keys.map((k, i) => hex(mul(point(B(k)), a[i]).toBytes(false).subarray(1))), r.hints);
+    assert.deepEqual(
+      a.map((x) => hex(word(x))),
+      r.coefficients,
+    );
+    assert.deepEqual(
+      r.keys.map((k, i) =>
+        hex(
+          mul(point(B(k)), a[i])
+            .toBytes(false)
+            .subarray(1),
+        ),
+      ),
+      r.hints,
+    );
   }
   // and the official file's expected keys directly
   const o = V.bip327.official.key_agg_vectors;
-  for (const c of o.valid_test_cases) assert.equal(hex(enc(keyAgg(c.key_indices.map((i) => B(o.pubkeys[i]))).Q).subarray(1)), `0x${c.expected.toLowerCase()}`);
+  for (const c of o.valid_test_cases)
+    assert.equal(
+      hex(enc(keyAgg(c.key_indices.map((i) => B(o.pubkeys[i]))).Q).subarray(1)),
+      `0x${c.expected.toLowerCase()}`,
+    );
 });
 
-test('RFC 9591 E.5, the ZF DKG vector, T-FROST', () => {
+test("RFC 9591 E.5, the ZF DKG vector, T-FROST", () => {
   const e = V.rfc9591E5;
   assert.ok(frostVerify(B(e.groupPublicKey), B(e.message), B(e.sig)));
   assert.equal(hex(mul(G, int(B(e.groupSecretKey))).toBytes(true)), e.groupPublicKey);
   assert.ok(valid(0x0111, B(V.zfDkg.keyData)) && frostDkg(B(V.zfDkg.keyData)));
   assert.equal(V.tFrost.length, 10);
   for (const r of V.tFrost) {
-    const ok = r.verifier === 'bip340'
-      ? attempt(() => schnorr.verify(B(r.sig), B(r.message), B(r.key)))
-      : attempt(() => frostVerify(B(r.key), B(r.message), B(r.sig)));
+    const ok =
+      r.verifier === "bip340"
+        ? attempt(() => schnorr.verify(B(r.sig), B(r.message), B(r.key)))
+        : attempt(() => frostVerify(B(r.key), B(r.message), B(r.sig)));
     assert.equal(ok, r.valid, r.name);
   }
 });
@@ -184,17 +236,20 @@ test('RFC 9591 E.5, the ZF DKG vector, T-FROST', () => {
 // verifier and says so (UANotVerifiable, fail closed); here the msig id and member digest are recomputed with ua.js and each
 // secp256k1 group slot is checked as the registry checks a member: against its stored vk (key data's first 33 bytes), pop false.
 // The EOA is slot 0: a changed EOA signature is UAUnauthorized before any group slot is reached.
-test('group kinds as msig members: id, member digest, secp256k1 group slots; the library refuses to judge', async () => {
-  const { verifyAuthorization } = await import('../src/ua-verify.js');
+test("group kinds as msig members: id, member digest, secp256k1 group slots; the library refuses to judge", async () => {
+  const { verifyAuthorization } = await import("../src/ua-verify.js");
   const v = V.msigMembers;
   const kd = B(v.keyData);
   assert.equal(hex(ua.uaOf(0x0120, kd)), v.ua);
   const md = ua.memberDigest(B(v.ua), ua.uaMessage(0x0120, B(v.purposeTag), B(v.digest)));
   assert.equal(hex(md), v.memberDigest);
   const st = ua.msigStructure(kd);
-  assert.deepEqual(st.members.map((m) => m.kind), v.members.map((m) => m.kind));
+  assert.deepEqual(
+    st.members.map((m) => m.kind),
+    v.members.map((m) => m.kind),
+  );
   const byId = (id) => v.members.find((m) => m.ua === id);
-  const mm = (kind) => ua.uaMessage(kind, ua.purposeTag('member'), md);
+  const mm = (kind) => ua.uaMessage(kind, ua.purposeTag("member"), md);
   let n = 0;
   for (const row of [...v.authorizations, ...v.negatives]) {
     for (const s of row.slots) {
@@ -211,8 +266,17 @@ test('group kinds as msig members: id, member digest, secp256k1 group slots; the
       return m && m.kind !== 1 ? { kind: m.kind, keyData: m.keyData } : undefined;
     };
     const domain = { generation: 1, ...V.contexts.A };
-    assert.throws(() => verifyAuthorization({ ua: v.ua, purposeTag: v.purposeTag, digest: v.digest, sig: row.uaSig },
-      members, domain, () => true), (e) => e.code === (row.name.endsWith('(0x0001) signature changed') ? 'UAUnauthorized' : 'UANotVerifiable'), row.name);
+    assert.throws(
+      () =>
+        verifyAuthorization(
+          { ua: v.ua, purposeTag: v.purposeTag, digest: v.digest, sig: row.uaSig },
+          members,
+          domain,
+          () => true,
+        ),
+      (e) => e.code === (row.name.endsWith("(0x0001) signature changed") ? "UAUnauthorized" : "UANotVerifiable"),
+      row.name,
+    );
   }
   assert.equal(n, 12);
 });

@@ -33,23 +33,38 @@ contract BaseHarness is MetaTokenBaseWhole {
         return TokenStore.KIND_NORMAL;
     }
 
-    function _validBits() internal pure override returns (uint256) { return GovernanceBits.NORMAL_BITS; }
+    function _validBits() internal pure override returns (uint256) {
+        return GovernanceBits.NORMAL_BITS;
+    }
 
     function _init(IFactoryToken.TokenConfig memory cfg) internal override {
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         GovernanceLib.Roles memory none;
-        GovernanceLib.init(1 << GovernanceBits.PAYABLE, 0, bytes32(0), 0, address(0), none, _validBits(), _roleBits(), _contractOnlyBits(),
-            address(0));
+        GovernanceLib.init(
+            1 << GovernanceBits.PAYABLE,
+            0,
+            bytes32(0),
+            0,
+            address(0),
+            none,
+            _validBits(),
+            _roleBits(),
+            _contractOnlyBits(),
+            address(0)
+        );
         _mint(cfg.initialHolder, cfg.initialSupply);
     }
 
-    function mint(address to, uint256 v) external { _mint(to, v); }
+    function mint(address to, uint256 v) external {
+        _mint(to, v);
+    }
 }
 
 /// Kind-NORMAL `TokenConfig` with the behaviour built before P1c: `PAYABLE | MINTABLE | BURNABLE`, `MINTABLE` locked with a
 /// minter, no owner, `minter` (0 = none), `supply` to `holder`. Callers `abi.encode` it (after adjusting fields).
 function normalInit(string memory n, string memory s, uint8 d, uint256 supply, address holder, address minter)
-    pure returns (IFactoryToken.TokenConfig memory c)
+    pure
+    returns (IFactoryToken.TokenConfig memory c)
 {
     c.name = n;
     c.symbol = s;
@@ -72,9 +87,15 @@ struct Rate {
 
 /// `TokenConfig` of kind WRAPPED for legs `us` at `nums/dens`: `PAYABLE` (as built), `RATE_ADJUSTABLE` with `cfg.adjustable`,
 /// `WRAP_DISABLEABLE` with a non-zero `guardian`; `owner` (0 = none: then every set flag is locked, B-06).
-function wrappedInit(address[] memory us, uint256[] memory nums, uint256[] memory dens, uint8 dec, Rate memory cfg,
-    address guardian, address owner) pure returns (IFactoryToken.TokenConfig memory c)
-{
+function wrappedInit(
+    address[] memory us,
+    uint256[] memory nums,
+    uint256[] memory dens,
+    uint8 dec,
+    Rate memory cfg,
+    address guardian,
+    address owner
+) pure returns (IFactoryToken.TokenConfig memory c) {
     c.name = "Wrapped";
     c.symbol = "WRP";
     c.decimals = dec;
@@ -86,7 +107,9 @@ function wrappedInit(address[] memory us, uint256[] memory nums, uint256[] memor
     c.roles.guardian = nid(guardian);
     if (owner == address(0)) c.lockedFeatures = c.features; // no owner disables nothing; holders survive creation (B-06, GD-14)
     c.legs = new IFactoryToken.Leg[](us.length);
-    for (uint256 i; i < us.length; ++i) c.legs[i] = IFactoryToken.Leg(us[i], nums[i], dens[i]);
+    for (uint256 i; i < us.length; ++i) {
+        c.legs[i] = IFactoryToken.Leg(us[i], nums[i], dens[i]);
+    }
     c.rate = IFactoryToken.RateConfig(cfg.rateDelay, cfg.maxRateStepBps);
 }
 
@@ -109,7 +132,9 @@ abstract contract V2Fixture is Test {
 
     /// The test plays the factory: it registered no token, so the leg check (CTR-GOV-05, spec §6.1) reads every leg as an
     /// outside leg and asks it nothing.
-    function isRegisteredToken(address) external pure returns (bool) { return false; }
+    function isRegisteredToken(address) external pure returns (bool) {
+        return false;
+    }
 
     /// Chain-neutral releases (plan T72): the env the fixture appends to a clone of `impl` (as the factory would), default
     /// `UID_`, no registry, no `SmartKeyAccount`, not Hedera; `_envFor` sets another per implementation.
@@ -128,11 +153,14 @@ abstract contract V2Fixture is Test {
 
     /// `cfgData` = `abi.encode(TokenConfig)`; `us` must equal its legs (what the factory would index).
     function _clone(address impl, address creator_, address[] memory us, bytes memory cfgData)
-        internal returns (address t)
+        internal
+        returns (address t)
     {
         IFactoryToken.TokenConfig memory cfg = abi.decode(cfgData, (IFactoryToken.TokenConfig));
         assertEq(cfg.legs.length, us.length, "fixture: legs vs underlyings");
-        for (uint256 i; i < us.length; ++i) assertEq(cfg.legs[i].underlying, us[i], "fixture: leg order");
+        for (uint256 i; i < us.length; ++i) {
+            assertEq(cfg.legs[i].underlying, us[i], "fixture: leg order");
+        }
         t = _cloneEnv(impl);
         NormalToken(t).initialize(nid(creator_), 1, abi.encode(cfg));
     }
@@ -153,8 +181,14 @@ abstract contract V2Fixture is Test {
         if (normalImpl == address(0)) {
             normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
         }
-        return NormalToken(_clone(normalImpl, creator_, new address[](0),
-            abi.encode(normalInit("Points", "PTS", 0, supply, creator_, minter))));
+        return NormalToken(
+            _clone(
+                normalImpl,
+                creator_,
+                new address[](0),
+                abi.encode(normalInit("Points", "PTS", 0, supply, creator_, minter))
+            )
+        );
     }
 
     function _fixedRate() internal pure returns (Rate memory c) {}
@@ -175,7 +209,9 @@ abstract contract V2Fixture is Test {
 
     /// `abi.encode(TokenConfig)` for one leg `u`.
     function _singleInit(address u, uint8 dec, uint256 num, uint256 den, Rate memory cfg)
-        internal view returns (bytes memory)
+        internal
+        view
+        returns (bytes memory)
     {
         return abi.encode(wrappedInit(_one(u), _oneU(num), _oneU(den), dec, cfg, address(0), wrapperOwner));
     }
@@ -187,38 +223,57 @@ abstract contract V2Fixture is Test {
         return wrappedImpl;
     }
 
-    function _single(address u, uint8 dec, uint256 num, uint256 den, Rate memory cfg)
-        internal returns (WrappedToken)
-    {
+    function _single(address u, uint8 dec, uint256 num, uint256 den, Rate memory cfg) internal returns (WrappedToken) {
         return WrappedToken(_clone(_wrappedImpl(), address(this), _one(u), _singleInit(u, dec, num, den, cfg)));
     }
 
-    function _multiInit(address[] memory us, uint256[] memory nums, uint256[] memory dens, Rate memory cfg,
-        address guardian) internal view returns (bytes memory)
-    {
+    function _multiInit(
+        address[] memory us,
+        uint256[] memory nums,
+        uint256[] memory dens,
+        Rate memory cfg,
+        address guardian
+    ) internal view returns (bytes memory) {
         return abi.encode(wrappedInit(us, nums, dens, 18, cfg, guardian, wrapperOwner));
     }
 
-    function _multi(address[] memory us, uint256[] memory nums, uint256[] memory dens, Rate memory cfg,
-        address guardian) internal returns (WrappedToken)
-    {
+    function _multi(
+        address[] memory us,
+        uint256[] memory nums,
+        uint256[] memory dens,
+        Rate memory cfg,
+        address guardian
+    ) internal returns (WrappedToken) {
         return WrappedToken(_clone(_wrappedImpl(), address(this), us, _multiInit(us, nums, dens, cfg, guardian)));
     }
 
     /// A `UAMetaTransfer` from the native id `from` (zero-padded, ua-mtx-merge T2: the token's one typed struct) on lane
     /// `batch`, nonce 0, valid 300 s, relayer `relayer`, no fee.
     function _tr(address from, address to, uint256 value, bytes32 ref, uint256 batch, uint32 mode)
-        internal view returns (MetaTxLib.UAMetaTransfer memory x)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransfer memory x)
     {
         x = MetaTxLib.UAMetaTransfer({
-            from: MetaTxLib.pad(from), to: MetaTxLib.pad(to), value: value, entryRef: ref, batch: batch, nonce: 0,
-            validUntil: block.timestamp + 300, mode: mode, relayer: relayer, fee: 0, feeRecipient: address(0)
+            from: MetaTxLib.pad(from),
+            to: MetaTxLib.pad(to),
+            value: value,
+            entryRef: ref,
+            batch: batch,
+            nonce: 0,
+            validUntil: block.timestamp + 300,
+            mode: mode,
+            relayer: relayer,
+            fee: 0,
+            feeRecipient: address(0)
         });
     }
 
     /// The native signer's `UASig` (its own ECDSA signature only, R17) over `x`.
     function _signTr(uint256 pk, address t, MetaTxLib.UAMetaTransfer memory x)
-        internal view returns (IUARegistry.UASig memory a)
+        internal
+        view
+        returns (IUARegistry.UASig memory a)
     {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, NormalToken(t).mtxTransferDigest(x));
         a.signature = abi.encodePacked(r, s, v);
@@ -238,17 +293,24 @@ abstract contract V2Fixture is Test {
 
     /// A `MetaTransaction` (self-call `data`) from `from` on lane `batch`, nonce 0, valid 300 s, no fee.
     function _call(address from, bytes memory data, uint256 batch, uint32 mode)
-        internal view returns (MetaTxLib.MetaTransaction memory m)
+        internal
+        view
+        returns (MetaTxLib.MetaTransaction memory m)
     {
         m = MetaTxLib.MetaTransaction({
-            from: from, data: data, batch: batch, nonce: 0, validUntil: block.timestamp + 300,
-            mode: mode, relayer: relayer, fee: 0, feeRecipient: address(0)
+            from: from,
+            data: data,
+            batch: batch,
+            nonce: 0,
+            validUntil: block.timestamp + 300,
+            mode: mode,
+            relayer: relayer,
+            fee: 0,
+            feeRecipient: address(0)
         });
     }
 
-    function _signCall(uint256 pk, address t, MetaTxLib.MetaTransaction memory m)
-        internal view returns (bytes memory)
-    {
+    function _signCall(uint256 pk, address t, MetaTxLib.MetaTransaction memory m) internal view returns (bytes memory) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, MtxDigest.metaTx(t, m));
         return abi.encodePacked(r, s, v);
     }

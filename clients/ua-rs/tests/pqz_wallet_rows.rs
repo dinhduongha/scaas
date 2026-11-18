@@ -26,7 +26,9 @@ fn path(rel: &str) -> String {
     format!("{}/../../{rel}", env!("CARGO_MANIFEST_DIR"))
 }
 fn rows_path() -> String {
-    path(&format!("smartcontracts/vectors/pqz/{SET}/wallet_state.json"))
+    path(&format!(
+        "smartcontracts/vectors/pqz/{SET}/wallet_state.json"
+    ))
 }
 
 fn unlock() {
@@ -36,13 +38,29 @@ fn unlock() {
 
 /// The `pq_kat` wallet of `smartcontracts/vectors/ua/keys.json`.
 fn wallet() -> Wallet {
-    let keys: Value = serde_json::from_str(&std::fs::read_to_string(path("smartcontracts/vectors/ua/keys.json")).unwrap()).unwrap();
-    let m = keys["mnemonics"].as_array().unwrap().iter().find(|m| m["id"] == "pq_kat").unwrap();
-    Wallet::from_mnemonic(m["words"].as_str().unwrap(), m["passphrase"].as_str().unwrap()).unwrap()
+    let keys: Value = serde_json::from_str(
+        &std::fs::read_to_string(path("smartcontracts/vectors/ua/keys.json")).unwrap(),
+    )
+    .unwrap();
+    let m = keys["mnemonics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["id"] == "pq_kat")
+        .unwrap();
+    Wallet::from_mnemonic(
+        m["words"].as_str().unwrap(),
+        m["passphrase"].as_str().unwrap(),
+    )
+    .unwrap()
 }
 
 fn balance(k: &PqzKey, req: &Value) -> Result<u64, Error> {
-    k.call("balance", req.to_string().as_bytes()).map(|s| serde_json::from_str::<Value>(&s).unwrap()["value"].as_u64().unwrap())
+    k.call("balance", req.to_string().as_bytes()).map(|s| {
+        serde_json::from_str::<Value>(&s).unwrap()["value"]
+            .as_u64()
+            .unwrap()
+    })
 }
 
 /// The generator (feature `vectors`, ignored; `gen_wallet_state.sh` runs it): fixed draws, so two runs write the same bytes.
@@ -58,7 +76,11 @@ fn write_wallet_rows() {
     assert_eq!(st::SET, SET, "the bindings' set");
     unlock();
     let w = wallet();
-    let (ka, kb, ka1) = (w.pqz_key(0, 0).unwrap(), w.pqz_key(0, 1).unwrap(), w.pqz_key_version(0, 0, 1).unwrap());
+    let (ka, kb, ka1) = (
+        w.pqz_key(0, 0).unwrap(),
+        w.pqz_key(0, 1).unwrap(),
+        w.pqz_key_version(0, 0, 1).unwrap(),
+    );
     let mut c = Chain::new();
     c.register(A, &ka.pk());
     c.register(B, &kb.pk());
@@ -70,12 +92,20 @@ fn write_wallet_rows() {
         json!({"toUA": hx(&B), "pkT": hx(&kb.pk()), "amount": 250, "mode": "BUNDLE"}),
     );
     let p: Value = serde_json::from_str(
-        &ka.vectors_call("proveTransfer", req.to_string().as_bytes(), &Draw::vectors([0x71; 32], Some([0x72; 32]), Some([0x73; 16]), None))
-            .unwrap(),
+        &ka.vectors_call(
+            "proveTransfer",
+            req.to_string().as_bytes(),
+            &Draw::vectors([0x71; 32], Some([0x72; 32]), Some([0x73; 16]), None),
+        )
+        .unwrap(),
     )
     .unwrap();
     let (stmt, proof) = (h(&p["stmt"]), h(&p["proof"]));
-    assert_eq!(pqz_ffi::precompile(&st::input(1, &stmt, &proof)), Ok(pqz_ffi::VALID), "op 1 verifies");
+    assert_eq!(
+        pqz_ffi::precompile(&st::input(1, &stmt, &proof)),
+        Ok(pqz_ffi::VALID),
+        "op 1 verifies"
+    );
     c.own_tag = h(&p["ownTag"]).try_into().unwrap();
     c.note_proof(1, &stmt, &proof, json!({}));
     c.settle1(&stmt, None);
@@ -88,12 +118,20 @@ fn write_wallet_rows() {
         json!({"toUA": hx(&A), "pkT": hx(&ka1.pk()), "amount": 700, "mode": "BUNDLE"}),
     );
     let p: Value = serde_json::from_str(
-        &ka.vectors_call("proveTransfer", req.to_string().as_bytes(), &Draw::vectors([0x74; 32], None, Some([0x76; 16]), None))
-            .unwrap(),
+        &ka.vectors_call(
+            "proveTransfer",
+            req.to_string().as_bytes(),
+            &Draw::vectors([0x74; 32], None, Some([0x76; 16]), None),
+        )
+        .unwrap(),
     )
     .unwrap();
     let (stmt, proof) = (h(&p["stmt"]), h(&p["proof"]));
-    assert_eq!(pqz_ffi::precompile(&st::input(1, &stmt, &proof)), Ok(pqz_ffi::VALID), "the migration verifies");
+    assert_eq!(
+        pqz_ffi::precompile(&st::input(1, &stmt, &proof)),
+        Ok(pqz_ffi::VALID),
+        "the migration verifies"
+    );
     c.own_tag = h(&p["ownTag"]).try_into().unwrap();
     c.note_proof(1, &stmt, &proof, json!({}));
     c.settle1(&stmt, None);
@@ -105,22 +143,47 @@ fn write_wallet_rows() {
     let proven = |name: &str, index: u32, version: u64, ua: &[u8; 32], value: u64| {
         let open = c.proven_open(ua, version);
         let k = w.pqz_key_version(0, index, version).unwrap();
-        let o: Value = serde_json::from_str(&k.call("provenOpen", open.to_string().as_bytes()).unwrap()).unwrap();
-        let cs: Vec<_> = o["need"].as_array().unwrap().iter().map(|i| c.proven_credit(ua, version, i.as_u64().unwrap())).collect();
+        let o: Value =
+            serde_json::from_str(&k.call("provenOpen", open.to_string().as_bytes()).unwrap())
+                .unwrap();
+        let cs: Vec<_> = o["need"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|i| c.proven_credit(ua, version, i.as_u64().unwrap()))
+            .collect();
         let mut add = c.add_request(&o["session"], &cs);
         add.as_object_mut().unwrap().remove("session");
         let mut a = add.clone();
         a["session"] = o["session"].clone();
         k.call("provenAdd", a.to_string().as_bytes()).unwrap();
-        let b: Value = serde_json::from_str(&k.call("balanceProven", json!({"session": o["session"]}).to_string().as_bytes()).unwrap()).unwrap();
+        let b: Value = serde_json::from_str(
+            &k.call(
+                "balanceProven",
+                json!({"session": o["session"]}).to_string().as_bytes(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
         assert_eq!(b["value"], value, "{name}");
-        let kinds: Vec<Value> = b["parts"].as_array().unwrap().iter().map(|p| p["kind"].clone()).collect();
+        let kinds: Vec<Value> = b["parts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["kind"].clone())
+            .collect();
         json!({"name": name, "account": 0, "index": index, "version": version, "open": open, "add": add, "value": value, "kinds": kinds})
     };
-    let cs: Vec<_> = c.window_credits(&B, 0).iter().map(|i| c.proven_credit(&B, 0, *i)).collect();
+    let cs: Vec<_> = c
+        .window_credits(&B, 0)
+        .iter()
+        .map(|i| c.proven_credit(&B, 0, *i))
+        .collect();
     let check_req = c.check_request(&B, 0, &kb.pk(), None, &cs);
-    let check_out: Value =
-        serde_json::from_str(&scaas_ua::facade::pqz::check_proven(check_req.to_string().as_bytes()).unwrap()).unwrap();
+    let check_out: Value = serde_json::from_str(
+        &scaas_ua::facade::pqz::check_proven(check_req.to_string().as_bytes()).unwrap(),
+    )
+    .unwrap();
     let out = json!({
         "set": SET,
         "mnemonic": "pq_kat",
@@ -140,7 +203,11 @@ fn write_wallet_rows() {
         ],
         "check": [{"name": "B as an MPC quorum (checkProven, no handle): its credit by its P", "request": check_req, "answer": check_out}],
     });
-    std::fs::write(rows_path(), serde_json::to_string_pretty(&out).unwrap() + "\n").unwrap();
+    std::fs::write(
+        rows_path(),
+        serde_json::to_string_pretty(&out).unwrap() + "\n",
+    )
+    .unwrap();
 }
 
 /// T20d9: the committed path (B) rows through each row's own handle (`provenOpen`, `provenAdd` with the session, `balanceProven`:
@@ -154,21 +221,47 @@ fn proven_rows_through_the_facade() {
     unlock();
     let v: Value = serde_json::from_str(&std::fs::read_to_string(rows_path()).unwrap()).unwrap();
     let w = wallet();
-    let call = |k: &PqzKey, cmd: &str, r: &Value| -> Value { serde_json::from_str(&k.call(cmd, r.to_string().as_bytes()).unwrap()).unwrap() };
+    let call = |k: &PqzKey, cmd: &str, r: &Value| -> Value {
+        serde_json::from_str(&k.call(cmd, r.to_string().as_bytes()).unwrap()).unwrap()
+    };
     let rows = v["proven"].as_array().unwrap();
     assert_eq!(rows.len(), 3);
     for r in rows {
-        let k = w.pqz_key_version(0, r["index"].as_u64().unwrap() as u32, r["version"].as_u64().unwrap()).unwrap();
+        let k = w
+            .pqz_key_version(
+                0,
+                r["index"].as_u64().unwrap() as u32,
+                r["version"].as_u64().unwrap(),
+            )
+            .unwrap();
         let o = call(&k, "provenOpen", &r["open"]);
         let mut add = r["add"].clone();
         add["session"] = o["session"].clone();
-        assert_eq!(call(&k, "provenAdd", &add)["accepted"], o["need"], "{}", r["name"]);
+        assert_eq!(
+            call(&k, "provenAdd", &add)["accepted"],
+            o["need"],
+            "{}",
+            r["name"]
+        );
         let b = call(&k, "balanceProven", &json!({"session": o["session"]}));
-        let kinds: Vec<Value> = b["parts"].as_array().unwrap().iter().map(|p| p["kind"].clone()).collect();
-        assert_eq!((&b["value"], json!(kinds)), (&r["value"], r["kinds"].clone()), "{}", r["name"]);
+        let kinds: Vec<Value> = b["parts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["kind"].clone())
+            .collect();
+        assert_eq!(
+            (&b["value"], json!(kinds)),
+            (&r["value"], r["kinds"].clone()),
+            "{}",
+            r["name"]
+        );
     }
     for r in v["check"].as_array().unwrap() {
-        let got: Value = serde_json::from_str(&scaas_ua::facade::pqz::check_proven(r["request"].to_string().as_bytes()).unwrap()).unwrap();
+        let got: Value = serde_json::from_str(
+            &scaas_ua::facade::pqz::check_proven(r["request"].to_string().as_bytes()).unwrap(),
+        )
+        .unwrap();
         assert_eq!(got, r["answer"], "{}", r["name"]);
     }
 }
@@ -185,11 +278,27 @@ fn wallet_rows_decrypt() {
     let rows = rows["rows"].as_array().unwrap();
     assert_eq!(rows.len(), 3);
     for r in rows {
-        let (index, version) = (r["index"].as_u64().unwrap() as u32, r["version"].as_u64().unwrap());
+        let (index, version) = (
+            r["index"].as_u64().unwrap() as u32,
+            r["version"].as_u64().unwrap(),
+        );
         let k = w.pqz_key_version(0, index, version).unwrap();
-        assert_eq!(balance(&k, &r["request"]), Ok(r["value"].as_u64().unwrap()), "{}", r["name"]);
-        for other in [w.pqz_key_version(0, 1 - index, version).unwrap(), w.pqz_key_version(0, index, 1 - version).unwrap()] {
-            assert_eq!(balance(&other, &r["request"]), Err(Error::Argument), "{}: another handle", r["name"]);
+        assert_eq!(
+            balance(&k, &r["request"]),
+            Ok(r["value"].as_u64().unwrap()),
+            "{}",
+            r["name"]
+        );
+        for other in [
+            w.pqz_key_version(0, 1 - index, version).unwrap(),
+            w.pqz_key_version(0, index, 1 - version).unwrap(),
+        ] {
+            assert_eq!(
+                balance(&other, &r["request"]),
+                Err(Error::Argument),
+                "{}: another handle",
+                r["name"]
+            );
         }
     }
 }

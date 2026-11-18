@@ -8,16 +8,23 @@ use std::{format, vec, vec::Vec as StdVec};
 
 use serde_json::Value;
 use soroban_sdk::{
-    testutils::{storage::{Instance as _, Persistent as _}, Address as _, Events as _, Ledger as _, MockAuth, MockAuthInvoke},
+    testutils::{
+        storage::{Instance as _, Persistent as _},
+        Address as _, Events as _, Ledger as _, MockAuth, MockAuthInvoke,
+    },
     xdr::{Limits, WriteXdr},
     Address, Bytes, BytesN, Env, Event as _, IntoVal, Vec as SVec,
 };
 
 use crate::{
     digest,
-    test::{self, err, kem_key, msig, n, no_attrs, portable, portable_row, setup, structure_of, vecu8, Reg, PORTABLE},
+    test::{
+        self, err, kem_key, msig, n, no_attrs, portable, portable_row, setup, structure_of, vecu8,
+        Reg, PORTABLE,
+    },
     test_verify::{b, derived, hx, json, kind_of, n32},
-    Error, Key, RegisteredRecord, UaKemKeySet, UaPqzKeySet, UaPqzPopStored, UaRegistered, UaRegistryClient,
+    Error, Key, RegisteredRecord, UaKemKeySet, UaPqzKeySet, UaPqzPopStored, UaRegistered,
+    UaRegistryClient,
 };
 use scaas_ua_common::*;
 
@@ -25,15 +32,23 @@ const KINDS: &str = include_str!("../../../../vectors/ua/kinds.json");
 const DAY: u32 = 17_280;
 const CHAIN: [u32; 7] = [0x0100, 0x0101, 0x0102, 0x0108, 0x0120, 0x0130, 0x0131];
 /// U8S-D8: every other derived kind the off-chain verifier checks.
-const RELAYER: [u32; 12] = [0x0103, 0x0104, 0x0105, 0x0106, 0x0107, 0x0110, 0x0111, 0x0112, 0x0113, 0x0132, 0x0133, 0x0141];
+const RELAYER: [u32; 12] = [
+    0x0103, 0x0104, 0x0105, 0x0106, 0x0107, 0x0110, 0x0111, 0x0112, 0x0113, 0x0132, 0x0133, 0x0141,
+];
 const SET: &str = "n2048-kmax1024";
 
 type Entry = (Bytes, Bytes, Checked);
 type PqzEntry = (Bytes, Bytes, Checked, BytesN<32>);
-type Tried<T> = Result<Result<T, soroban_sdk::ConversionError>, Result<soroban_sdk::Error, soroban_sdk::InvokeError>>;
+type Tried<T> = Result<
+    Result<T, soroban_sdk::ConversionError>,
+    Result<soroban_sdk::Error, soroban_sdk::InvokeError>,
+>;
 type Slot = (u32, StdVec<u8>, StdVec<u8>);
 /// A host verify's failure as the caller sees it (plan finding F1): the contract cannot answer `Unauthorized` for it.
-pub(crate) const HOST_REFUSED: soroban_sdk::Error = soroban_sdk::Error::from_type_and_code(soroban_sdk::xdr::ScErrorType::Context, soroban_sdk::xdr::ScErrorCode::InvalidAction);
+pub(crate) const HOST_REFUSED: soroban_sdk::Error = soroban_sdk::Error::from_type_and_code(
+    soroban_sdk::xdr::ScErrorType::Context,
+    soroban_sdk::xdr::ScErrorCode::InvalidAction,
+);
 
 /// A registry listing one relayer, whose auth is mocked; the relayer as the entries take it.
 pub(crate) fn relayed() -> (Env, UaRegistryClient<'static>, Option<Address>) {
@@ -64,13 +79,17 @@ pub(crate) fn flipped(env: &Env, x: &Bytes) -> Bytes {
 /// The `registrations[]` rows of a U8S-D8 `Relayer` kind; the four group kinds have no row here, only `kinds.json`'s.
 fn offchain_rows() -> StdVec<Value> {
     let rows = json(PORTABLE)["registrations"].as_array().unwrap().clone();
-    rows.into_iter().filter(|r| RELAYER.contains(&kind_of(&r["kind"]))).collect()
+    rows.into_iter()
+        .filter(|r| RELAYER.contains(&kind_of(&r["kind"])))
+        .collect()
 }
 
 /// The `registrations[]` rows of a `Chain` kind (`msig-classical`, on relayer-checked members: `ua8_relayer_classical_msig_row`).
 fn chain_rows() -> StdVec<Value> {
     let rows = json(PORTABLE)["registrations"].as_array().unwrap().clone();
-    rows.into_iter().filter(|r| CHAIN.contains(&kind_of(&r["kind"])) && r["name"] != "msig-classical").collect()
+    rows.into_iter()
+        .filter(|r| CHAIN.contains(&kind_of(&r["kind"])) && r["name"] != "msig-classical")
+        .collect()
 }
 
 /// An `msig` row's members, registered first.
@@ -89,7 +108,11 @@ fn registered(name: &str) -> (Env, UaRegistryClient<'static>, Reg) {
     (env, c, r)
 }
 
-fn entry<V: soroban_sdk::TryFromVal<Env, soroban_sdk::Val>>(env: &Env, c: &UaRegistryClient, k: &Key) -> Option<V> {
+fn entry<V: soroban_sdk::TryFromVal<Env, soroban_sdk::Val>>(
+    env: &Env,
+    c: &UaRegistryClient,
+    k: &Key,
+) -> Option<V> {
     env.as_contract(&c.address, || env.storage().persistent().get(k))
 }
 
@@ -98,7 +121,10 @@ fn commit_of(env: &Env, name: &str) -> Reg {
     let row = derived(PORTABLE, "registrations", name);
     let a = &row["kemCommit"]["register"]["attrs"];
     let mut r = portable_row(env, &row);
-    r.attrs.kem = KemKey { scheme: a["kem"]["scheme"].as_u64().unwrap() as u32, ..KemKey::none(env) };
+    r.attrs.kem = KemKey {
+        scheme: a["kem"]["scheme"].as_u64().unwrap() as u32,
+        ..KemKey::none(env)
+    };
     r.attrs.kem_pk_hash = n32(env, &a["kemPkHash"]);
     r
 }
@@ -112,10 +138,31 @@ fn ua8_register_attrs_rows() {
         let name = row["name"].as_str().unwrap();
         let (env, c, r) = registered(name);
         let got = c.registration_of(&r.ua).unwrap();
-        assert_eq!(got, (r.kind, r.kd.clone(), r.attrs.clone(), r.pop.clone(), r.pqz_pop.clone()), "{name}");
+        assert_eq!(
+            got,
+            (
+                r.kind,
+                r.kd.clone(),
+                r.attrs.clone(),
+                r.pop.clone(),
+                r.pqz_pop.clone()
+            ),
+            "{name}"
+        );
         let (a, k) = (&row["args"]["attrs"], &got.2.kem);
-        assert_eq!((k.scheme as u64, vecu8(&k.mlkem_ek), k.x25519.to_array().to_vec()),
-                   (a["kem"]["scheme"].as_u64().unwrap(), hx(&a["kem"]["mlkemEk"]), hx(&a["kem"]["x25519"])), "{name}");
+        assert_eq!(
+            (
+                k.scheme as u64,
+                vecu8(&k.mlkem_ek),
+                k.x25519.to_array().to_vec()
+            ),
+            (
+                a["kem"]["scheme"].as_u64().unwrap(),
+                hx(&a["kem"]["mlkemEk"]),
+                hx(&a["kem"]["x25519"])
+            ),
+            "{name}"
+        );
         assert_eq!(got.2.kem_pk_hash, n32(&env, &a["kemPkHash"]), "{name}");
         assert_eq!(vecu8(&got.2.pqz_key), hx(&a["pqzKey"]), "{name}");
         assert_eq!(c.pop_of(&r.ua), r.pop, "{name}");
@@ -124,7 +171,10 @@ fn ua8_register_attrs_rows() {
         pqz += !r.attrs.pqz_key.is_empty() as u32;
         kem += (r.attrs.kem != KemKey::none(&env)) as u32;
         ms += (r.kind == 0x0120) as u32;
-        assert!(r.kind != 0x0120 || r.attrs.kem == KemKey::none(&env), "{name}: an `msig` has no KEM key (CTR-UA-32)");
+        assert!(
+            r.kind != 0x0120 || r.attrs.kem == KemKey::none(&env),
+            "{name}: an `msig` has no KEM key (CTR-UA-32)"
+        );
     }
     assert_eq!((all, pqz, kem, ms), (16, 8, 4, 5));
 }
@@ -164,12 +214,30 @@ fn ua8_pqz_bytes_in_state() {
     let (env, c, r) = registered(&format!("msig-pq/{SET}"));
     let rec = c.record_of(&r.ua).unwrap();
     assert!(rec.attrs.pqz_key.is_empty(), "the key only in PqzK (C12)");
-    assert_eq!((rec.attrs.kem, rec.attrs.pqz_pop_hash.clone()), (KemKey::none(&env), r.attrs.pqz_pop_hash.clone()));
+    assert_eq!(
+        (rec.attrs.kem, rec.attrs.pqz_pop_hash.clone()),
+        (KemKey::none(&env), r.attrs.pqz_pop_hash.clone())
+    );
     let none = Bytes::new(&env);
-    let pqz = (r.attrs.pqz_key.clone(), none.clone(), Checked::Chain, r.attrs.pqz_pop_hash.clone());
-    assert_eq!(entry::<PqzEntry>(&env, &c, &Key::PqzK(r.ua.clone())), Some(pqz));
-    assert_eq!(entry::<Bytes>(&env, &c, &Key::PqzP(r.ua.clone())), Some(r.pqz_pop.clone()));
-    assert_eq!(entry::<Entry>(&env, &c, &Key::Kem(r.ua.clone(), 0)), None, "an `msig` has no KEM key (CTR-UA-32)");
+    let pqz = (
+        r.attrs.pqz_key.clone(),
+        none.clone(),
+        Checked::Chain,
+        r.attrs.pqz_pop_hash.clone(),
+    );
+    assert_eq!(
+        entry::<PqzEntry>(&env, &c, &Key::PqzK(r.ua.clone())),
+        Some(pqz)
+    );
+    assert_eq!(
+        entry::<Bytes>(&env, &c, &Key::PqzP(r.ua.clone())),
+        Some(r.pqz_pop.clone())
+    );
+    assert_eq!(
+        entry::<Entry>(&env, &c, &Key::Kem(r.ua.clone(), 0)),
+        None,
+        "an `msig` has no KEM key (CTR-UA-32)"
+    );
     assert_eq!(r.attrs.pqz_key.len(), 16_384);
     assert_eq!(r.pqz_pop.len(), 28_191);
 }
@@ -179,8 +247,15 @@ fn ua8_pqz_attrs_stored_unproven() {
     for name in [format!("mldsa65/{SET}"), format!("msig-pq/{SET}")] {
         let (env, c, r) = registered(&name);
         let rec = c.record_of(&r.ua).unwrap();
-        assert!(!rec.proven && rec.pqz_pop_checked == Checked::None, "{name}");
-        assert_eq!(c.key_owner(&pqz_key_hash(&env, &r.attrs.pqz_key)), None, "{name}: no Key entry (UA8-D8)");
+        assert!(
+            !rec.proven && rec.pqz_pop_checked == Checked::None,
+            "{name}"
+        );
+        assert_eq!(
+            c.key_owner(&pqz_key_hash(&env, &r.attrs.pqz_key)),
+            None,
+            "{name}: no Key entry (UA8-D8)"
+        );
         assert_eq!(c.ua_count(&0x0142), 0, "{name}");
     }
 }
@@ -191,10 +266,17 @@ fn ua8_register_without_pqz_pop() {
     let mut r = portable(&env, &format!("mldsa65/{SET}"));
     r.pqz_pop = Bytes::new(&env);
     let ua = r.on(&c);
-    assert!(!env.as_contract(&c.address, || env.storage().persistent().has(&Key::PqzP(ua.clone()))));
+    assert!(!env.as_contract(&c.address, || env
+        .storage()
+        .persistent()
+        .has(&Key::PqzP(ua.clone()))));
     assert!(c.pqz_pop_of(&ua).is_empty());
     let got = c.registration_of(&ua).unwrap();
-    assert_eq!((got.2, got.4), (r.attrs.clone(), Bytes::new(&env)), "the key and its hash, no proof");
+    assert_eq!(
+        (got.2, got.4),
+        (r.attrs.clone(), Bytes::new(&env)),
+        "the key and its hash, no proof"
+    );
 }
 
 /// `attrs.pqz_key` comes from `PqzK` iff `register` carried one: a later key and its proof are no `register` arguments, so
@@ -204,7 +286,10 @@ fn ua8_registration_of_reassembles() {
     let (env, c, r) = registered("msig-pq-native");
     pqz_id(&env, &format!("msig-pq-native/{SET}")).set(&c);
     c.store_pqz_pop(&r.ua, &portable(&env, &format!("mldsa65/{SET}")).pqz_pop);
-    assert_eq!(c.registration_of(&r.ua), Some((r.kind, r.kd, r.attrs, r.pop, r.pqz_pop)));
+    assert_eq!(
+        c.registration_of(&r.ua),
+        Some((r.kind, r.kd, r.attrs, r.pop, r.pqz_pop))
+    );
     assert_eq!(c.registration_of(&n(&env, [0x42; 32])), None);
     assert!(c.pop_of(&n(&env, [0x42; 32])).is_empty());
     assert!(c.pqz_pop_of(&n(&env, [0x42; 32])).is_empty());
@@ -232,11 +317,17 @@ fn expect<T: core::fmt::Debug>(name: &str, want: &str, got: Tried<T>) {
     let contract = Error::try_from(e);
     let code = match want {
         "UAPoP" => {
-            assert!(e == HOST_REFUSED || contract == Ok(Error::Pop), "{name}: {e:?}");
+            assert!(
+                e == HOST_REFUSED || contract == Ok(Error::Pop),
+                "{name}: {e:?}"
+            );
             return;
         }
         "UAUnauthorized" => {
-            assert!(e == HOST_REFUSED || contract == Ok(Error::Unauthorized), "{name}: {e:?}");
+            assert!(
+                e == HOST_REFUSED || contract == Ok(Error::Unauthorized),
+                "{name}: {e:?}"
+            );
             return;
         }
         "UAPqzPopHash" => Error::PqzPopHash,
@@ -260,7 +351,10 @@ fn ua8_negatives_from_portable_json() {
     let negs = json(PORTABLE)["negatives"].as_array().unwrap().clone();
     let (mut seen, mut offchain) = (0, 0);
     for neg in negs.iter().filter(|x| x["entry"] == "register") {
-        let (name, want) = (neg["name"].as_str().unwrap(), neg["error"].as_str().unwrap());
+        let (name, want) = (
+            neg["name"].as_str().unwrap(),
+            neg["error"].as_str().unwrap(),
+        );
         seen += 1;
         let (env, c, by) = relayed();
         if neg["registration"].is_object() {
@@ -293,7 +387,11 @@ fn ua8_negatives_from_portable_json() {
         }
         expect(name, want, r.tried_by(&c, &by));
         assert_eq!(c.record_of(&r.ua), None, "{name}");
-        assert_eq!(portable(&env, &row).on_by(&c, &by), r.ua, "{name}: the row itself");
+        assert_eq!(
+            portable(&env, &row).on_by(&c, &by),
+            r.ua,
+            "{name}: the row itself"
+        );
     }
     assert_eq!((seen, offchain), (48, 3));
 }
@@ -307,17 +405,37 @@ fn ua8_pop_purpose_and_record_separated() {
     let (env, c) = setup();
     let s = test::ml(23);
     let (ua, kind, kd) = (s.ua(&env), s.kind(), s.key_data(&env));
-    let attrs = UaAttrs { kem: portable(&env, &format!("mldsa65/{SET}")).attrs.kem, ..no_attrs(&env) };
+    let attrs = UaAttrs {
+        kem: portable(&env, &format!("mldsa65/{SET}")).attrs.kem,
+        ..no_attrs(&env)
+    };
     let pk = kem_pk(&env, &attrs.kem);
     let zero = n(&env, [0; 32]);
-    let rec = portable_record_hash(&env, &ua, kind, &zero, &kem_pk_record_hash(&env, &ua, 0, &pk));
+    let rec = portable_record_hash(
+        &env,
+        &ua,
+        kind,
+        &zero,
+        &kem_pk_record_hash(&env, &ua, 0, &pk),
+    );
     let reg: BytesN<32> = registration_digest(&env, &rec, &zero).into();
     let tried = |p: [u8; 32], d: &BytesN<32>| {
         let pop = s.sign(&env, &test::msg(&env, kind, p, d));
         c.try_register(&kind, &kd, &attrs, &pop, &Bytes::new(&env), &None)
     };
-    expect("the registration under purpose kem", "UAPoP", tried(PURPOSE_KEM, &reg));
-    expect("the KEM record under purpose pop v2", "UAPoP", tried(PURPOSE_POP_V2, &kem_record_digest(&env, &ua, 0, &pk).to_bytes()));
+    expect(
+        "the registration under purpose kem",
+        "UAPoP",
+        tried(PURPOSE_KEM, &reg),
+    );
+    expect(
+        "the KEM record under purpose pop v2",
+        "UAPoP",
+        tried(
+            PURPOSE_POP_V2,
+            &kem_record_digest(&env, &ua, 0, &pk).to_bytes(),
+        ),
+    );
     assert_eq!(tried(PURPOSE_POP_V2, &reg).unwrap().unwrap(), ua);
 }
 
@@ -327,13 +445,23 @@ fn ua8_ua_of_typed() {
     let (env, c) = setup();
     let row = derived(PORTABLE, "registrations", "webauthn-p256");
     let a = &row["args"]["key"];
-    let key = WebAuthnKey { x: n32(&env, &a["x"]), y: n32(&env, &a["y"]), rp_id_hash: n32(&env, &a["rpIdHash"]) };
+    let key = WebAuthnKey {
+        x: n32(&env, &a["x"]),
+        y: n32(&env, &a["y"]),
+        rp_id_hash: n32(&env, &a["rpIdHash"]),
+    };
     assert_eq!(c.ua_of_webauthn(&key), n32(&env, &row["ua"]));
     let r = portable(&env, &format!("msig-pq/{SET}"));
     let s = structure_of(&env, &vecu8(&r.kd)).unwrap();
     assert_eq!(c.ua_of_msig(&s), r.ua);
     assert_eq!(c.ua_of(&r.kind, &r.kd), r.ua);
-    assert_eq!(err(c.try_ua_of_msig(&MsigStructure { threshold: 0x1_0002, ..s })), Error::KeyData);
+    assert_eq!(
+        err(c.try_ua_of_msig(&MsigStructure {
+            threshold: 0x1_0002,
+            ..s
+        })),
+        Error::KeyData
+    );
 }
 
 /// EVM `msigOf` and `webAuthnKeyOf` on the bytes EVM's `test_typedViewsMatchTheRows` reads: each view is its row's typed `args`, whatever form
@@ -342,22 +470,64 @@ fn ua8_ua_of_typed() {
 fn ua8_typed_views_match_the_rows() {
     let (env, c) = setup();
     let none = Bytes::new(&env);
-    let (no_key, no_msig) = (WebAuthnKey { x: n(&env, [0; 32]), y: n(&env, [0; 32]), rp_id_hash: n(&env, [0; 32]) }, MsigStructure { threshold: 0, members: SVec::new(&env) });
+    let (no_key, no_msig) = (
+        WebAuthnKey {
+            x: n(&env, [0; 32]),
+            y: n(&env, [0; 32]),
+            rp_id_hash: n(&env, [0; 32]),
+        },
+        MsigStructure {
+            threshold: 0,
+            members: SVec::new(&env),
+        },
+    );
     let row = derived(PORTABLE, "registrations", "webauthn-p256");
     let r = portable_row(&env, &row);
-    assert_eq!((c.web_authn_key_of(&r.ua), c.msig_of(&r.ua)), (no_key.clone(), no_msig.clone()), "no record");
+    assert_eq!(
+        (c.web_authn_key_of(&r.ua), c.msig_of(&r.ua)),
+        (no_key.clone(), no_msig.clone()),
+        "no record"
+    );
     r.on(&c);
     let a = &row["args"]["key"];
-    assert_eq!(c.web_authn_key_of(&r.ua), WebAuthnKey { x: n32(&env, &a["x"]), y: n32(&env, &a["y"]), rp_id_hash: n32(&env, &a["rpIdHash"]) });
+    assert_eq!(
+        c.web_authn_key_of(&r.ua),
+        WebAuthnKey {
+            x: n32(&env, &a["x"]),
+            y: n32(&env, &a["y"]),
+            rp_id_hash: n32(&env, &a["rpIdHash"])
+        }
+    );
     assert_eq!(c.msig_of(&r.ua), no_msig);
-    assert_eq!((c.mu_sig2_key_of(&r.ua).agg_key, c.frost_key_of(&r.ua).group_key), (none.clone(), none));
+    assert_eq!(
+        (
+            c.mu_sig2_key_of(&r.ua).agg_key,
+            c.frost_key_of(&r.ua).group_key
+        ),
+        (none.clone(), none)
+    );
     let (env2, c2, m) = registered(&format!("msig-pq/{SET}"));
     let row = derived(PORTABLE, "registrations", &format!("msig-pq/{SET}"));
     let want = &row["args"]["structure"];
     let got = c2.msig_of(&m.ua);
     assert_eq!(got.threshold as u64, want["threshold"].as_u64().unwrap());
-    let members: StdVec<(u32, BytesN<32>, u32)> = got.members.iter().map(|x| (x.kind, x.id, x.weight)).collect();
-    let rows: StdVec<(u32, BytesN<32>, u32)> = want["members"].as_array().unwrap().iter().map(|x| (kind_of(&x["kind"]), n32(&env2, &x["id"]), kind_of(&x["weight"]))).collect();
+    let members: StdVec<(u32, BytesN<32>, u32)> = got
+        .members
+        .iter()
+        .map(|x| (x.kind, x.id, x.weight))
+        .collect();
+    let rows: StdVec<(u32, BytesN<32>, u32)> = want["members"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| {
+            (
+                kind_of(&x["kind"]),
+                n32(&env2, &x["id"]),
+                kind_of(&x["weight"]),
+            )
+        })
+        .collect();
     assert_eq!(members, rows);
     assert_eq!(c2.web_authn_key_of(&m.ua).x, n(&env2, [0; 32]));
 }
@@ -370,13 +540,34 @@ fn ua8_register_webauthn_typed() {
     let r = portable_row(&env, &row);
     let a = &row["args"]["key"];
     assert_eq!(row["args"]["entry"], "registerWebAuthn");
-    let key = WebAuthnKey { x: n32(&env, &a["x"]), y: n32(&env, &a["y"]), rp_id_hash: n32(&env, &a["rpIdHash"]) };
+    let key = WebAuthnKey {
+        x: n32(&env, &a["x"]),
+        y: n32(&env, &a["y"]),
+        rp_id_hash: n32(&env, &a["rpIdHash"]),
+    };
     let none = Bytes::new(&env);
-    let other = WebAuthnKey { rp_id_hash: n(&env, [1; 32]), ..key.clone() };
-    expect("another rpIdHash", "UAPoP", c.try_register_webauthn(&other, &r.attrs, &r.pop, &none, &None));
-    assert_eq!(c.register_webauthn(&key, &r.attrs, &r.pop, &none, &None), r.ua);
-    assert_eq!(c.registration_of(&r.ua), Some((r.kind, r.kd.clone(), r.attrs.clone(), r.pop.clone(), none)));
-    assert_eq!(r.refused(&c), Error::AlreadyRegistered, "one record, either form");
+    let other = WebAuthnKey {
+        rp_id_hash: n(&env, [1; 32]),
+        ..key.clone()
+    };
+    expect(
+        "another rpIdHash",
+        "UAPoP",
+        c.try_register_webauthn(&other, &r.attrs, &r.pop, &none, &None),
+    );
+    assert_eq!(
+        c.register_webauthn(&key, &r.attrs, &r.pop, &none, &None),
+        r.ua
+    );
+    assert_eq!(
+        c.registration_of(&r.ua),
+        Some((r.kind, r.kd.clone(), r.attrs.clone(), r.pop.clone(), none))
+    );
+    assert_eq!(
+        r.refused(&c),
+        Error::AlreadyRegistered,
+        "one record, either form"
+    );
 }
 
 /// `classical-msig-with-kem` (its own row: `ua8_negatives_from_portable_json`) on an in-test classical-dominant `msig` of a
@@ -389,11 +580,21 @@ fn ua8_classical_msig_with_kem() {
     let m = msig(&env, 1, &[(0x0102, ua.to_array(), 1)]);
     let neg = derived(PORTABLE, "negatives", "classical-msig-with-kem");
     assert_eq!(neg["error"], "UAKemHolder");
-    let attrs = UaAttrs { kem: kem_key(&env, &hx(&neg["mutation"]["set"]["attrs.kemPk"])), ..no_attrs(&env) };
+    let attrs = UaAttrs {
+        kem: kem_key(&env, &hx(&neg["mutation"]["set"]["attrs.kemPk"])),
+        ..no_attrs(&env)
+    };
     let got = c.try_register_msig(&m.s, &attrs, &SVec::new(&env), &Bytes::new(&env), &None);
     assert_eq!(err(got), Error::KemHolder);
-    let attrs = UaAttrs { pqz_key: portable(&env, &format!("mldsa65/{SET}")).attrs.pqz_key, pqz_pop_hash: n(&env, [1; 32]), ..no_attrs(&env) };
-    assert_eq!(err(c.try_register_msig(&m.s, &attrs, &SVec::new(&env), &Bytes::new(&env), &None)), Error::PqzHolder);
+    let attrs = UaAttrs {
+        pqz_key: portable(&env, &format!("mldsa65/{SET}")).attrs.pqz_key,
+        pqz_pop_hash: n(&env, [1; 32]),
+        ..no_attrs(&env)
+    };
+    assert_eq!(
+        err(c.try_register_msig(&m.s, &attrs, &SVec::new(&env), &Bytes::new(&env), &None)),
+        Error::PqzHolder
+    );
 }
 
 /// CTR-UA-32 (owner 2026-11-05, confirmed 2026-11-07): an `msig` has no KEM key, PQ-eligible or not; a sender seals to each
@@ -403,7 +604,13 @@ fn ua8_classical_msig_with_kem() {
 #[test]
 fn ua8_msig_kem_key_refused() {
     let neg = derived(PORTABLE, "negatives", &format!("msig-with-kem/{SET}"));
-    assert_eq!((neg["mutation"]["row"].as_str().unwrap(), neg["error"].as_str().unwrap()), (format!("msig-pq/{SET}").as_str(), "UAKemHolder"));
+    assert_eq!(
+        (
+            neg["mutation"]["row"].as_str().unwrap(),
+            neg["error"].as_str().unwrap()
+        ),
+        (format!("msig-pq/{SET}").as_str(), "UAKemHolder")
+    );
     let pk = hx(&neg["mutation"]["set"]["attrs.kemPk"]);
     for name in [format!("msig-pq/{SET}"), "msig-pq-native".into()] {
         let (env, c, by) = relayed();
@@ -411,14 +618,25 @@ fn ua8_msig_kem_key_refused() {
         members(&env, &c, whole.kind);
         whole.attrs.kem = kem_key(&env, &pk);
         let mut commit = portable(&env, &name);
-        commit.attrs.kem = KemKey { scheme: 1, ..KemKey::none(&env) };
+        commit.attrs.kem = KemKey {
+            scheme: 1,
+            ..KemKey::none(&env)
+        };
         commit.attrs.kem_pk_hash = env.crypto().keccak256(&b(&env, &pk)).into();
         for (what, r) in [("whole", &whole), ("committed", &commit)] {
             for relayer in [&None, &by] {
-                assert_eq!(err(r.tried_by(&c, relayer)), Error::KemHolder, "{name}: {what}");
+                assert_eq!(
+                    err(r.tried_by(&c, relayer)),
+                    Error::KemHolder,
+                    "{name}: {what}"
+                );
             }
             assert_eq!(c.record_of(&r.ua), None, "{name}: {what}");
-            assert_eq!(entry::<Entry>(&env, &c, &Key::Kem(r.ua.clone(), 0)), None, "{name}: {what}");
+            assert_eq!(
+                entry::<Entry>(&env, &c, &Key::Kem(r.ua.clone(), 0)),
+                None,
+                "{name}: {what}"
+            );
         }
         let r = portable(&env, &name);
         assert_eq!(r.on(&c), r.ua, "{name}: the row itself");
@@ -426,7 +644,11 @@ fn ua8_msig_kem_key_refused() {
             pqz_id(&env, &format!("{name}/{SET}")).set(&c);
         }
         assert!(c.pqz_key_of(&r.ua).is_some(), "{name}: a PQZ holder");
-        assert_eq!((c.kem_key_of(&r.ua), c.checked_of(&r.ua).2), (None, Checked::None), "{name}");
+        assert_eq!(
+            (c.kem_key_of(&r.ua), c.checked_of(&r.ua).2),
+            (None, Checked::None),
+            "{name}"
+        );
     }
 }
 
@@ -437,25 +659,89 @@ fn ua8_msig_kem_key_refused() {
 fn ua8_msig_kem_record_refused() {
     let neg = derived(PORTABLE, "negatives", "msig-kem-record");
     let (m, set) = (&neg["mutation"], &neg["mutation"]["set"]);
-    assert_eq!((m["kind"].as_u64(), neg["entry"].as_str(), neg["error"].as_str()), (Some(0x0120), Some("setKemKey"), Some("UAKemHolder")));
+    assert_eq!(
+        (
+            m["kind"].as_u64(),
+            neg["entry"].as_str(),
+            neg["error"].as_str()
+        ),
+        (Some(0x0120), Some("setKemKey"), Some("UAKemHolder"))
+    );
     let (env, c, r) = registered(&format!("msig-pq/{SET}"));
     let by = Some(c.relayers().get(0).unwrap());
     let mut k = kem_id(&env, m["row"].as_str().unwrap());
     k.ua = n32(&env, &set["ua"]);
     k.kem = kem_key(&env, &hx(&set["kemPk"]));
     k.sig = UaSig::msig(&env, test::members_of(&env, &b(&env, &hx(&set["sig"]))));
-    assert_eq!((k.ua.clone(), k.version, k.sig.members.len()), (r.ua.clone(), 1, 2), "the row's `msig`, version 1, both slots");
-    assert_eq!(err(KemRow { ua: n(&env, [0x42; 32]), ..k.clone() }.tried(&c)), Error::NotRegistered);
+    assert_eq!(
+        (k.ua.clone(), k.version, k.sig.members.len()),
+        (r.ua.clone(), 1, 2),
+        "the row's `msig`, version 1, both slots"
+    );
+    assert_eq!(
+        err(KemRow {
+            ua: n(&env, [0x42; 32]),
+            ..k.clone()
+        }
+        .tried(&c)),
+        Error::NotRegistered
+    );
     for relayer in [&None, &by] {
         assert_eq!(err(k.tried_by(&c, relayer)), Error::KemHolder);
     }
     let none = UaSig::none(&env);
-    assert_eq!(err(KemRow { version: 0, sig: none.clone(), ..k.clone() }.tried(&c)), Error::KemHolder, "before the version");
-    assert_eq!(err(KemRow { kem: KemKey::none(&env), ..k.clone() }.tried(&c)), Error::KemHolder, "before the key");
-    assert_eq!(err(KemRow { sig: none, ..k.clone() }.tried(&c)), Error::KemHolder, "before the slots");
-    assert_eq!((c.kem_key_of(&r.ua), c.kem_key_at(&r.ua, &1), c.kem_key_at(&r.ua, &0)), (None, None, None));
-    assert_eq!((c.checked_of(&r.ua).2, entry::<u64>(&env, &c, &Key::KemMax(r.ua.clone()))), (Checked::None, None));
-    assert_eq!(c.pqz_key_of(&r.ua), Some((r.attrs.pqz_key.clone(), r.attrs.pqz_pop_hash.clone(), false, Checked::Chain)));
+    assert_eq!(
+        err(KemRow {
+            version: 0,
+            sig: none.clone(),
+            ..k.clone()
+        }
+        .tried(&c)),
+        Error::KemHolder,
+        "before the version"
+    );
+    assert_eq!(
+        err(KemRow {
+            kem: KemKey::none(&env),
+            ..k.clone()
+        }
+        .tried(&c)),
+        Error::KemHolder,
+        "before the key"
+    );
+    assert_eq!(
+        err(KemRow {
+            sig: none,
+            ..k.clone()
+        }
+        .tried(&c)),
+        Error::KemHolder,
+        "before the slots"
+    );
+    assert_eq!(
+        (
+            c.kem_key_of(&r.ua),
+            c.kem_key_at(&r.ua, &1),
+            c.kem_key_at(&r.ua, &0)
+        ),
+        (None, None, None)
+    );
+    assert_eq!(
+        (
+            c.checked_of(&r.ua).2,
+            entry::<u64>(&env, &c, &Key::KemMax(r.ua.clone()))
+        ),
+        (Checked::None, None)
+    );
+    assert_eq!(
+        c.pqz_key_of(&r.ua),
+        Some((
+            r.attrs.pqz_key.clone(),
+            r.attrs.pqz_pop_hash.clone(),
+            false,
+            Checked::Chain
+        ))
+    );
 }
 
 /// `KemKey.scheme` is a `u32` on Soroban: 0x101 would be scheme 1 in the assembled first byte.
@@ -470,11 +756,20 @@ fn ua8_kem_scheme_above_a_byte_refused() {
 #[test]
 fn ua8_checked_of_shape() {
     let (env, c, r) = registered(&format!("mldsa65/{SET}"));
-    assert_eq!(c.checked_of(&r.ua), (Checked::Chain, Checked::None, Checked::Chain));
+    assert_eq!(
+        c.checked_of(&r.ua),
+        (Checked::Chain, Checked::None, Checked::Chain)
+    );
     let plain = portable(&env, "mldsa65#1");
     plain.on(&c);
-    assert_eq!(c.checked_of(&plain.ua), (Checked::Chain, Checked::None, Checked::None));
-    assert_eq!(c.checked_of(&n(&env, [0x42; 32])), (Checked::None, Checked::None, Checked::None));
+    assert_eq!(
+        c.checked_of(&plain.ua),
+        (Checked::Chain, Checked::None, Checked::None)
+    );
+    assert_eq!(
+        c.checked_of(&n(&env, [0x42; 32])),
+        (Checked::None, Checked::None, Checked::None)
+    );
 }
 
 /// U8S-D4: the largest row's events fit the 16,384 B limit; `UaRegistered`'s `attrs` hold no bytes; the hashes are logged. The row
@@ -487,11 +782,21 @@ fn ua8_events_fit_and_hash() {
     r.on(&c);
     let all = env.events().all();
     let evs = all.events();
-    let size: usize = evs.iter().map(|e| e.to_xdr(Limits::none()).unwrap().len()).sum();
-    std::println!("register mldsa65/n2816-kmax65536: {} events, {size} B", evs.len());
+    let size: usize = evs
+        .iter()
+        .map(|e| e.to_xdr(Limits::none()).unwrap().len())
+        .sum();
+    std::println!(
+        "register mldsa65/n2816-kmax65536: {} events, {size} B",
+        evs.len()
+    );
     assert!(size < 16_384, "{size}");
     let sig_hash: BytesN<32> = env.crypto().keccak256(&Bytes::new(&env)).into();
-    let stored = UaAttrs { pqz_key: Bytes::new(&env), kem: KemKey::none(&env), ..r.attrs.clone() };
+    let stored = UaAttrs {
+        pqz_key: Bytes::new(&env),
+        kem: KemKey::none(&env),
+        ..r.attrs.clone()
+    };
     let rec = c.record_of(&r.ua).unwrap();
     assert_eq!(rec.attrs, stored);
     let reg = UaRegistered {
@@ -518,7 +823,10 @@ fn ua8_events_fit_and_hash() {
         sig_hash: sig_hash.clone(),
         checked: Checked::Chain,
     };
-    let proof = UaPqzPopStored { ua: r.ua.clone(), pqz_pop_hash: r.attrs.pqz_pop_hash.clone() };
+    let proof = UaPqzPopStored {
+        ua: r.ua.clone(),
+        pqz_pop_hash: r.attrs.pqz_pop_hash.clone(),
+    };
     let kem = UaKemKeySet {
         ua: r.ua.clone(),
         version: 0,
@@ -526,7 +834,12 @@ fn ua8_events_fit_and_hash() {
         sig_hash,
         checked: Checked::Chain,
     };
-    let want = [pqz.to_xdr(&env, &c.address), proof.to_xdr(&env, &c.address), kem.to_xdr(&env, &c.address), reg.to_xdr(&env, &c.address)];
+    let want = [
+        pqz.to_xdr(&env, &c.address),
+        proof.to_xdr(&env, &c.address),
+        kem.to_xdr(&env, &c.address),
+        reg.to_xdr(&env, &c.address),
+    ];
     assert_eq!(evs, want);
 }
 
@@ -535,7 +848,13 @@ fn ua8_entries_extend_ttl() {
     let (env, c, r) = registered(&format!("mldsa65/{SET}"));
     let ua = r.ua.clone();
     kem_id(&env, "mldsa65/v1").set(&c);
-    let keys = [Key::PqzK(ua.clone()), Key::PqzP(ua.clone()), Key::Kem(ua.clone(), 0), Key::Kem(ua.clone(), 1), Key::KemMax(ua.clone())];
+    let keys = [
+        Key::PqzK(ua.clone()),
+        Key::PqzP(ua.clone()),
+        Key::Kem(ua.clone(), 0),
+        Key::Kem(ua.clone(), 1),
+        Key::KemMax(ua.clone()),
+    ];
     let ttl = |k: &Key| env.as_contract(&c.address, || env.storage().persistent().get_ttl(k));
     for k in &keys {
         assert_eq!(ttl(k), 60 * DAY);
@@ -587,11 +906,32 @@ fn ua8_attrs_error_unused() {
 #[test]
 fn ua8_register_msig_typed() {
     let (env, c, r) = registered(&format!("msig-pq/{SET}"));
-    let refused = |s: &MsigStructure| err(c.try_register_msig(s, &no_attrs(&env), &SVec::new(&env), &Bytes::new(&env), &None));
-    let e = err(c.try_register(&0x0120, &r.kd, &no_attrs(&env), &Bytes::new(&env), &Bytes::new(&env), &None));
+    let refused = |s: &MsigStructure| {
+        err(c.try_register_msig(
+            s,
+            &no_attrs(&env),
+            &SVec::new(&env),
+            &Bytes::new(&env),
+            &None,
+        ))
+    };
+    let e = err(c.try_register(
+        &0x0120,
+        &r.kd,
+        &no_attrs(&env),
+        &Bytes::new(&env),
+        &Bytes::new(&env),
+        &None,
+    ));
     assert_eq!(e, Error::KeyData);
     let good = structure_of(&env, &vecu8(&r.kd)).unwrap();
-    assert_eq!(refused(&MsigStructure { threshold: 0x1_0002, ..good.clone() }), Error::KeyData);
+    assert_eq!(
+        refused(&MsigStructure {
+            threshold: 0x1_0002,
+            ..good.clone()
+        }),
+        Error::KeyData
+    );
     let member = |i: u32, f: fn(&mut MsigMember)| {
         let mut s = good.clone();
         let mut m = s.members.get(i).unwrap();
@@ -600,13 +940,26 @@ fn ua8_register_msig_typed() {
         s
     };
     assert_eq!(refused(&member(0, |m| m.kind += 0x1_0000)), Error::KeyData);
-    assert_eq!(refused(&member(1, |m| m.weight += 0x1_0000)), Error::KeyData);
+    assert_eq!(
+        refused(&member(1, |m| m.weight += 0x1_0000)),
+        Error::KeyData
+    );
     let mut many = good.clone();
     for i in 0..15u8 {
-        many.members.push_back(MsigMember { kind: 0x0131, id: n(&env, [0xa0 + i; 32]), weight: 1 });
+        many.members.push_back(MsigMember {
+            kind: 0x0131,
+            id: n(&env, [0xa0 + i; 32]),
+            weight: 1,
+        });
     }
     assert_eq!(refused(&many), Error::KeyData);
-    assert_eq!(refused(&MsigStructure { threshold: 1, members: SVec::new(&env) }), Error::KeyData);
+    assert_eq!(
+        refused(&MsigStructure {
+            threshold: 1,
+            members: SVec::new(&env)
+        }),
+        Error::KeyData
+    );
 }
 
 /// TS-D12: a single key is `signature` only; `key_data` and `members` set are `Unauthorized` before any verify.
@@ -619,14 +972,31 @@ fn ua8_require_authorized_uasig_fields() {
     let good = UaSig::single(&env, s.sign(&env, &test::msg(&env, 0x0102, p, &d)));
     let pt = n(&env, p);
     c.require_authorized(&ua, &pt, &d, &good);
-    let extra = UaSig { key_data: b(&env, &[1]), ..good.clone() };
-    assert_eq!(err(c.try_require_authorized(&ua, &pt, &d, &extra)), Error::Unauthorized);
+    let extra = UaSig {
+        key_data: b(&env, &[1]),
+        ..good.clone()
+    };
+    assert_eq!(
+        err(c.try_require_authorized(&ua, &pt, &d, &extra)),
+        Error::Unauthorized
+    );
     let mut members = SVec::new(&env);
-    members.push_back(MemberSig { index: 0, key_data: Bytes::new(&env), sig: Bytes::new(&env) });
+    members.push_back(MemberSig {
+        index: 0,
+        key_data: Bytes::new(&env),
+        sig: Bytes::new(&env),
+    });
     let extra = UaSig { members, ..good };
-    assert_eq!(err(c.try_require_authorized(&ua, &pt, &d, &extra)), Error::Unauthorized);
+    assert_eq!(
+        err(c.try_require_authorized(&ua, &pt, &d, &extra)),
+        Error::Unauthorized
+    );
     let short = UaSig::single(&env, b(&env, &[1]));
-    assert_eq!(err(c.try_require_authorized(&ua, &pt, &d, &short)), Error::Unauthorized, "the caller's error, as EVM");
+    assert_eq!(
+        err(c.try_require_authorized(&ua, &pt, &d, &short)),
+        Error::Unauthorized,
+        "the caller's error, as EVM"
+    );
 }
 
 /// TS-D5: `kind_name` is EVM's table (`kinds.json`); any other id, one above `u16` too, is `KindUnknown`.
@@ -635,13 +1005,24 @@ fn ua8_kind_name_table() {
     let (env, c) = setup();
     let v = json(KINDS);
     let mut known = StdVec::new();
-    for r in v["kinds"].as_array().unwrap().iter().chain(v["schemes"].as_array().unwrap()) {
+    for r in v["kinds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .chain(v["schemes"].as_array().unwrap())
+    {
         let kind = kind_of(&r["kind"]);
-        assert_eq!(c.kind_name(&kind), soroban_sdk::String::from_str(&env, r["name"].as_str().unwrap()));
+        assert_eq!(
+            c.kind_name(&kind),
+            soroban_sdk::String::from_str(&env, r["name"].as_str().unwrap())
+        );
         known.push(kind);
     }
     assert_eq!(known.len(), 34); // + mldsa87 (CTR-UA-39), fndsa1024 (CTR-UA-40), named though not enabled
-    for kind in (0..0x0200).chain([0x1_0120, u32::MAX]).filter(|k| !known.contains(k)) {
+    for kind in (0..0x0200)
+        .chain([0x1_0120, u32::MAX])
+        .filter(|k| !known.contains(k))
+    {
         assert_eq!(err(c.try_kind_name(&kind)), Error::KindUnknown, "{kind:#x}");
     }
 }
@@ -652,9 +1033,17 @@ fn ua8_kind_name_table() {
 fn typed_sig(env: &Env, s: &Value) -> UaSig {
     let mut members = SVec::new(env);
     for m in s["members"].as_array().unwrap() {
-        members.push_back(MemberSig { index: m["index"].as_u64().unwrap() as u32, key_data: Bytes::new(env), sig: b(env, &hx(&m["sig"])) });
+        members.push_back(MemberSig {
+            index: m["index"].as_u64().unwrap() as u32,
+            key_data: Bytes::new(env),
+            sig: b(env, &hx(&m["sig"])),
+        });
     }
-    UaSig { key_data: b(env, &hx(&s["keyData"])), signature: b(env, &hx(&s["signature"])), members }
+    UaSig {
+        key_data: b(env, &hx(&s["keyData"])),
+        signature: b(env, &hx(&s["signature"])),
+        members,
+    }
 }
 
 /// A `kemRecords[]` row: its typed arguments and the bytes stored for `sig`.
@@ -693,7 +1082,15 @@ fn kem_row(env: &Env, r: &Value) -> KemRow {
 }
 
 fn kem_id(env: &Env, id: &str) -> KemRow {
-    kem_row(env, json(PORTABLE)["kemRecords"].as_array().unwrap().iter().find(|r| r["id"] == id).unwrap())
+    kem_row(
+        env,
+        json(PORTABLE)["kemRecords"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["id"] == id)
+            .unwrap(),
+    )
 }
 
 /// A `pqzKeyRecords[]` row, likewise.
@@ -733,7 +1130,13 @@ fn pqz_id(env: &Env, name: &str) -> PqzRow {
 }
 
 fn negatives(entry: &str) -> StdVec<Value> {
-    json(PORTABLE)["negatives"].as_array().unwrap().iter().filter(|x| x["entry"] == entry).cloned().collect()
+    json(PORTABLE)["negatives"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|x| x["entry"] == entry)
+        .cloned()
+        .collect()
 }
 
 /// A registered classical-dominant `msig`: not a holder.
@@ -757,8 +1160,27 @@ fn msig_1_2(env: &Env, c: &UaRegistryClient) -> (test::Msig, test::Sk, test::Sk)
     }
     one.register(env, c);
     two.register(env, c);
-    let m = msig(env, 2, &[(0x0131, one.ua(env).to_array(), 1), (0x0131, two.ua(env).to_array(), 2)]);
-    m.register(env, c, &test::member_sigs(env, &[m.slot(env, &two, PURPOSE_POP_V2, &test::reg_digest(env, &m.ua, 0x0120))]));
+    let m = msig(
+        env,
+        2,
+        &[
+            (0x0131, one.ua(env).to_array(), 1),
+            (0x0131, two.ua(env).to_array(), 2),
+        ],
+    );
+    m.register(
+        env,
+        c,
+        &test::member_sigs(
+            env,
+            &[m.slot(
+                env,
+                &two,
+                PURPOSE_POP_V2,
+                &test::reg_digest(env, &m.ua, 0x0120),
+            )],
+        ),
+    );
     (m, one, two)
 }
 
@@ -769,26 +1191,44 @@ fn ua8_kem_any_order_write_once() {
     let (env, c, r) = registered(&format!("mldsa65/{SET}"));
     let [v1, v2, v3] = [1, 2, 3].map(|v| kem_id(&env, &format!("mldsa65/v{v}")));
     let (whole, none) = (r.attrs.kem.clone(), UaSig::none(&env));
-    let (of, no_sig) = (|v: &KemRow| Some((v.version, v.kem.clone(), v.stored.clone(), Checked::Chain)), Bytes::new(&env));
+    let (of, no_sig) = (
+        |v: &KemRow| Some((v.version, v.kem.clone(), v.stored.clone(), Checked::Chain)),
+        Bytes::new(&env),
+    );
     let register_key = (whole.clone(), no_sig.clone(), Checked::Chain);
-    assert_eq!(c.kem_key_of(&r.ua), Some((0, whole.clone(), no_sig, Checked::Chain)), "the `register` key alone");
+    assert_eq!(
+        c.kem_key_of(&r.ua),
+        Some((0, whole.clone(), no_sig, Checked::Chain)),
+        "the `register` key alone"
+    );
     assert_eq!(c.kem_key_at(&r.ua, &1), None);
     v3.set(&c);
     assert_eq!(c.kem_key_of(&r.ua), of(&v3));
     for v in [&v1, &v2] {
         v.set(&c);
-        assert_eq!(c.kem_key_of(&r.ua), of(&v3), "a lower version is stored, the highest stays");
+        assert_eq!(
+            c.kem_key_of(&r.ua),
+            of(&v3),
+            "a lower version is stored, the highest stays"
+        );
         assert_eq!(c.kem_key_at(&r.ua, &v.version), Some(v.view()));
     }
     assert_eq!(err(v2.tried(&c)), Error::KemVersion);
-    assert_eq!(err(c.try_set_kem_key(&r.ua, &0, &whole, &none, &None)), Error::KemVersion);
+    assert_eq!(
+        err(c.try_set_kem_key(&r.ua, &0, &whole, &none, &None)),
+        Error::KemVersion
+    );
     assert_eq!(c.kem_key_at(&r.ua, &0), Some(register_key));
     assert_eq!(c.kem_key_at(&r.ua, &3), Some(v3.view()));
     assert_eq!(c.checked_of(&r.ua).2, Checked::Chain);
     let plain = portable(&env, "mldsa65#1");
     plain.on(&c);
     assert_eq!(c.kem_key_of(&plain.ua), None);
-    assert_eq!(err(c.try_set_kem_key(&plain.ua, &0, &whole, &none, &None)), Error::KemVersion, "nothing committed");
+    assert_eq!(
+        err(c.try_set_kem_key(&plain.ua, &0, &whole, &none, &None)),
+        Error::KemVersion,
+        "nothing committed"
+    );
 }
 
 /// Every `kemRecords[]` row of a `Chain` holder from its typed arguments, the stored `sig` the row's signature; the `register`
@@ -803,7 +1243,12 @@ fn ua8_kem_from_vectors() {
     for row in rows.iter().filter(|x| n32(&env, &x["ua"]) == r.ua) {
         let k = kem_row(&env, row);
         k.set(&c);
-        assert_eq!(c.kem_key_at(&r.ua, &k.version), Some(k.view()), "{}", row["id"]);
+        assert_eq!(
+            c.kem_key_at(&r.ua, &k.version),
+            Some(k.view()),
+            "{}",
+            row["id"]
+        );
         assert_eq!(c.kem_key_of(&r.ua).unwrap().0, k.version, "{}", row["id"]);
         seen += 1;
     }
@@ -813,7 +1258,10 @@ fn ua8_kem_from_vectors() {
     // register_disabled_kind_refused, on their portable.json rows)
     let other = |k: u32| rows.iter().filter(|x| kind_of(&x["kind"]) == k).count();
     assert_eq!((other(0x0134), other(0x0135), other(0x0120)), (3, 3, 0));
-    assert_eq!(other(0x0132) + other(0x0134) + other(0x0135) + seen, rows.len());
+    assert_eq!(
+        other(0x0132) + other(0x0134) + other(0x0135) + seen,
+        rows.len()
+    );
 }
 
 /// `set_kem_key(ua, 0, …)` fills the `register` commit once: no signature (the `pop` signed it), open to anyone, the key
@@ -827,15 +1275,40 @@ fn ua8_kem_commit_filled_once() {
     r.on(&c);
     let (none, no_sig) = (UaSig::none(&env), Bytes::new(&env));
     let fill = |k: &KemKey, s: &UaSig| c.try_set_kem_key(&r.ua, &0, k, s, &None);
-    assert_eq!(err(fill(&kem_id(&env, "mldsa65/v1").kem, &none)), Error::KemKeyHash);
-    assert_eq!(err(fill(&KemKey { scheme: 2, ..whole.clone() }, &none)), Error::KemScheme);
-    assert_eq!(err(fill(&whole, &UaSig::single(&env, b(&env, &[1])))), Error::Unauthorized);
+    assert_eq!(
+        err(fill(&kem_id(&env, "mldsa65/v1").kem, &none)),
+        Error::KemKeyHash
+    );
+    assert_eq!(
+        err(fill(
+            &KemKey {
+                scheme: 2,
+                ..whole.clone()
+            },
+            &none
+        )),
+        Error::KemScheme
+    );
+    assert_eq!(
+        err(fill(&whole, &UaSig::single(&env, b(&env, &[1])))),
+        Error::Unauthorized
+    );
     assert_eq!(c.kem_key_of(&r.ua), None);
     fill(&whole, &none).unwrap().unwrap();
-    assert_eq!(c.kem_key_of(&r.ua), Some((0, whole.clone(), no_sig.clone(), Checked::Chain)));
-    assert_eq!(c.kem_key_at(&r.ua, &0), Some((whole.clone(), no_sig, Checked::Chain)));
+    assert_eq!(
+        c.kem_key_of(&r.ua),
+        Some((0, whole.clone(), no_sig.clone(), Checked::Chain))
+    );
+    assert_eq!(
+        c.kem_key_at(&r.ua, &0),
+        Some((whole.clone(), no_sig, Checked::Chain))
+    );
     assert_eq!(c.checked_of(&r.ua).2, Checked::Chain);
-    assert_eq!(c.registration_of(&r.ua).unwrap().2, r.attrs, "the committed form, filled or not");
+    assert_eq!(
+        c.registration_of(&r.ua).unwrap().2,
+        r.attrs,
+        "the committed form, filled or not"
+    );
     assert_eq!(err(fill(&whole, &none)), Error::KemVersion);
 }
 
@@ -846,26 +1319,70 @@ fn ua8_kem_rules() {
     let k = kem_id(&env, "mldsa65/v1");
     let refused = |kem: &KemKey| err(c.try_set_kem_key(&r.ua, &1, kem, &k.sig, &None));
     assert_eq!(refused(&KemKey::none(&env)), Error::KemKeyLength);
-    assert_eq!(refused(&KemKey { mlkem_ek: k.kem.mlkem_ek.slice(1..), ..k.kem.clone() }), Error::KemKeyLength);
+    assert_eq!(
+        refused(&KemKey {
+            mlkem_ek: k.kem.mlkem_ek.slice(1..),
+            ..k.kem.clone()
+        }),
+        Error::KemKeyLength
+    );
     let mut long = k.kem.mlkem_ek.clone();
     long.push_back(0);
-    assert_eq!(refused(&KemKey { mlkem_ek: long, ..k.kem.clone() }), Error::KemKeyLength);
+    assert_eq!(
+        refused(&KemKey {
+            mlkem_ek: long,
+            ..k.kem.clone()
+        }),
+        Error::KemKeyLength
+    );
     for scheme in [0, 2, 3, 0xff, 0x101] {
-        assert_eq!(refused(&KemKey { scheme, ..k.kem.clone() }), Error::KemScheme, "{scheme:#x}");
+        assert_eq!(
+            refused(&KemKey {
+                scheme,
+                ..k.kem.clone()
+            }),
+            Error::KemScheme,
+            "{scheme:#x}"
+        );
     }
-    assert_eq!(refused(&KemKey { scheme: 2, mlkem_ek: Bytes::new(&env), ..k.kem.clone() }), Error::KemScheme, "the scheme first");
+    assert_eq!(
+        refused(&KemKey {
+            scheme: 2,
+            mlkem_ek: Bytes::new(&env),
+            ..k.kem.clone()
+        }),
+        Error::KemScheme,
+        "the scheme first"
+    );
     let (p, m) = (non_holder(&env, &c), classical(&env, &c));
     for ua in [&p, &m] {
-        assert_eq!(err(c.try_set_kem_key(ua, &1, &k.kem, &k.sig, &None)), Error::KemHolder);
-        assert_eq!(err(c.try_set_kem_key(ua, &0, &k.kem, &k.sig, &None)), Error::KemHolder, "holder before version");
+        assert_eq!(
+            err(c.try_set_kem_key(ua, &1, &k.kem, &k.sig, &None)),
+            Error::KemHolder
+        );
+        assert_eq!(
+            err(c.try_set_kem_key(ua, &0, &k.kem, &k.sig, &None)),
+            Error::KemHolder,
+            "holder before version"
+        );
         assert_eq!(c.kem_key_of(ua), None);
     }
     let unknown = n(&env, [0x42; 32]);
-    assert_eq!(err(c.try_set_kem_key(&unknown, &1, &k.kem, &k.sig, &None)), Error::NotRegistered);
+    assert_eq!(
+        err(c.try_set_kem_key(&unknown, &1, &k.kem, &k.sig, &None)),
+        Error::NotRegistered
+    );
     k.set(&c);
-    assert_eq!(refused(&KemKey::none(&env)), Error::KemVersion, "version before key");
+    assert_eq!(
+        refused(&KemKey::none(&env)),
+        Error::KemVersion,
+        "version before key"
+    );
     // `msig-kem-record` (`mutation.kind` 288) names an `msig`: `ua8_msig_kem_record_refused`
-    for neg in negatives("setKemKey").into_iter().filter(|x| x["mutation"].get("kind").is_none()) {
+    for neg in negatives("setKemKey")
+        .into_iter()
+        .filter(|x| x["mutation"].get("kind").is_none())
+    {
         let (name, set) = (neg["name"].as_str().unwrap(), &neg["mutation"]["set"]);
         let mut k = kem_id(&env, neg["mutation"]["row"].as_str().unwrap());
         if let Some(sig) = set.get("sig") {
@@ -877,8 +1394,16 @@ fn ua8_kem_rules() {
         assert_eq!(k.ua, r.ua, "{name}");
         expect(name, neg["error"].as_str().unwrap(), k.tried(&c));
     }
-    let bad = KemRow { version: 4, sig: UaSig::single(&env, b(&env, &[1])), ..k.clone() };
-    assert_eq!(err(bad.tried(&c)), Error::Unauthorized, "a signature of the wrong length is the caller's error");
+    let bad = KemRow {
+        version: 4,
+        sig: UaSig::single(&env, b(&env, &[1])),
+        ..k.clone()
+    };
+    assert_eq!(
+        err(bad.tried(&c)),
+        Error::Unauthorized,
+        "a signature of the wrong length is the caller's error"
+    );
 }
 
 /// CTR-UA-32: anyone submits, a relayer is accepted and ignored for chain-verified parts (SOR-D6), and there is no owner
@@ -891,13 +1416,30 @@ fn ua8_kem_by_third_party() {
     let (a, z) = (test::ml(33), test::ml(34));
     let signed = |s: &test::Sk, ua: &BytesN<32>| {
         let d = kem_record_digest(&env, ua, 1, &pk).to_bytes();
-        UaSig::single(&env, s.sign(&env, &test::msg(&env, s.kind(), PURPOSE_KEM, &d)))
+        UaSig::single(
+            &env,
+            s.sign(&env, &test::msg(&env, s.kind(), PURPOSE_KEM, &d)),
+        )
     };
     let (ua, other) = (a.register(&env, &c), z.register(&env, &c));
-    expect("signed by another UA", "UAUnauthorized", c.try_set_kem_key(&ua, &1, &kem, &signed(&z, &ua), &None));
-    c.set_kem_key(&ua, &1, &kem, &signed(&a, &ua), &Some(Address::generate(&env)));
+    expect(
+        "signed by another UA",
+        "UAUnauthorized",
+        c.try_set_kem_key(&ua, &1, &kem, &signed(&z, &ua), &None),
+    );
+    c.set_kem_key(
+        &ua,
+        &1,
+        &kem,
+        &signed(&a, &ua),
+        &Some(Address::generate(&env)),
+    );
     c.set_kem_key(&other, &1, &kem, &signed(&z, &other), &None);
-    assert_eq!(c.kem_key_of(&ua).unwrap().1, c.kem_key_of(&other).unwrap().1, "one key, two UAs");
+    assert_eq!(
+        c.kem_key_of(&ua).unwrap().1,
+        c.kem_key_of(&other).unwrap().1,
+        "one key, two UAs"
+    );
 }
 
 /// U8S-D1: a stored `msig` signature is minimal; both slots verify and reach the threshold, but the weight-2 slot alone is
@@ -909,7 +1451,10 @@ fn msig_pqz_sig_not_minimal_refused() {
     let (m, one, two) = msig_1_2(&env, &c);
     let kem = kem_id(&env, "mldsa65/v1").kem;
     let d = kem_record_digest(&env, &m.ua, 1, &kem_pk(&env, &kem)).to_bytes();
-    let (s1, s2) = (m.slot(&env, &one, PURPOSE_KEM, &d), m.slot(&env, &two, PURPOSE_KEM, &d));
+    let (s1, s2) = (
+        m.slot(&env, &one, PURPOSE_KEM, &d),
+        m.slot(&env, &two, PURPOSE_KEM, &d),
+    );
     let tried = |s: &[Slot]| c.try_set_kem_key(&m.ua, &1, &kem, &test::msig_auth(&env, s), &None);
     let every: [&[Slot]; 3] = [&[s1.clone(), s2.clone()], &[s1], &[s2]];
     for s in every {
@@ -919,7 +1464,10 @@ fn msig_pqz_sig_not_minimal_refused() {
 
     let (key, ph) = (b(&env, &[7; 16_384]), n(&env, [9; 32]));
     let d = pqz_key_record_digest(&env, &m.ua, &pqz_key_hash(&env, &key), &ph).to_bytes();
-    let (s1, s2) = (m.slot(&env, &one, PURPOSE_PQZ_KEY, &d), m.slot(&env, &two, PURPOSE_PQZ_KEY, &d));
+    let (s1, s2) = (
+        m.slot(&env, &one, PURPOSE_PQZ_KEY, &d),
+        m.slot(&env, &two, PURPOSE_PQZ_KEY, &d),
+    );
     let tried = |s: &[Slot]| c.try_set_pqz_key(&m.ua, &key, &ph, &test::msig_auth(&env, s), &None);
     assert_eq!(err(tried(&[s1.clone(), s2.clone()])), Error::Unauthorized);
     assert_eq!(err(tried(&[s1])), Error::Unauthorized);
@@ -933,17 +1481,47 @@ fn ua8_portable_sig_fields() {
     let k = kem_id(&env, "mldsa65/v1");
     let slot = || {
         let mut v = SVec::new(&env);
-        v.push_back(MemberSig { index: 0, key_data: Bytes::new(&env), sig: b(&env, &[1]) });
+        v.push_back(MemberSig {
+            index: 0,
+            key_data: Bytes::new(&env),
+            sig: b(&env, &[1]),
+        });
         v
     };
-    for sig in [UaSig { key_data: b(&env, &[1]), ..k.sig.clone() }, UaSig { members: slot(), ..k.sig.clone() }, UaSig::none(&env)] {
-        assert_eq!(err(KemRow { sig, ..k.clone() }.tried(&c)), Error::Unauthorized);
+    for sig in [
+        UaSig {
+            key_data: b(&env, &[1]),
+            ..k.sig.clone()
+        },
+        UaSig {
+            members: slot(),
+            ..k.sig.clone()
+        },
+        UaSig::none(&env),
+    ] {
+        assert_eq!(
+            err(KemRow { sig, ..k.clone() }.tried(&c)),
+            Error::Unauthorized
+        );
     }
     // an `msig`: `set_pqz_key` (its `set_kem_key` is `KemHolder` before the fields, CTR-UA-32)
     let (env, c, _) = registered("msig-pq-native");
     let p = pqz_id(&env, &format!("msig-pq-native/{SET}"));
-    for sig in [UaSig { key_data: b(&env, &[1]), ..p.sig.clone() }, UaSig { signature: b(&env, &[1]), ..p.sig.clone() }, UaSig::none(&env)] {
-        assert_eq!(err(PqzRow { sig, ..p.clone() }.tried(&c)), Error::Unauthorized);
+    for sig in [
+        UaSig {
+            key_data: b(&env, &[1]),
+            ..p.sig.clone()
+        },
+        UaSig {
+            signature: b(&env, &[1]),
+            ..p.sig.clone()
+        },
+        UaSig::none(&env),
+    ] {
+        assert_eq!(
+            err(PqzRow { sig, ..p.clone() }.tried(&c)),
+            Error::Unauthorized
+        );
     }
 }
 
@@ -963,7 +1541,11 @@ fn ua8_set_pqz_key_from_vectors() {
         p.set(&c);
         assert_eq!(c.registration_of(&r.ua), args, "{name}");
         assert_eq!(c.record_of(&r.ua), rec, "{name}: `Ua(ua)` is not rewritten");
-        assert_eq!(c.pqz_key_of(&r.ua), Some((p.key.clone(), p.pop_hash.clone(), false, Checked::Chain)), "{name}");
+        assert_eq!(
+            c.pqz_key_of(&r.ua),
+            Some((p.key.clone(), p.pop_hash.clone(), false, Checked::Chain)),
+            "{name}"
+        );
         assert_eq!(c.pqz_key_sig_of(&r.ua), p.stored, "{name}");
         assert_eq!(c.checked_of(&r.ua).1, Checked::None, "{name}");
         assert_eq!(c.key_owner(&pqz_key_hash(&env, &p.key)), None, "{name}");
@@ -974,7 +1556,10 @@ fn ua8_set_pqz_key_from_vectors() {
     // the rest: fndsa512's and mldsa87's / fndsa1024's (never registered here, as in ua8_kem_from_vectors)
     let other = |k: u32| rows.iter().filter(|x| kind_of(&x["kind"]) == k).count();
     assert_eq!((other(0x0134), other(0x0135)), (4, 4));
-    assert_eq!(other(0x0132) + other(0x0134) + other(0x0135) + seen, rows.len());
+    assert_eq!(
+        other(0x0132) + other(0x0134) + other(0x0135) + seen,
+        rows.len()
+    );
 }
 
 /// U8S-D6: without a verifier nothing is ever replaced, a key of another set neither; a `register` key counts.
@@ -984,14 +1569,28 @@ fn ua8_set_pqz_key_write_once() {
     let p = pqz_id(&env, &format!("msig-pq-native/{SET}"));
     p.set(&c);
     assert_eq!(err(p.tried(&c)), Error::PqzKeySet);
-    assert_eq!(err(pqz_id(&env, "msig-pq-native/n2816-kmax65536").tried(&c)), Error::PqzKeySet);
+    assert_eq!(
+        err(pqz_id(&env, "msig-pq-native/n2816-kmax65536").tried(&c)),
+        Error::PqzKeySet
+    );
     assert_eq!(c.pqz_key_of(&r.ua).unwrap().0, p.key);
     let (env, c, r) = registered(&format!("mldsa65/{SET}"));
-    let other = PqzRow { ua: r.ua.clone(), ..pqz_id(&env, &format!("msig-pq-native/{SET}")) };
+    let other = PqzRow {
+        ua: r.ua.clone(),
+        ..pqz_id(&env, &format!("msig-pq-native/{SET}"))
+    };
     assert_eq!(err(other.tried(&c)), Error::PqzKeySet);
-    let want = (r.attrs.pqz_key.clone(), r.attrs.pqz_pop_hash.clone(), false, Checked::Chain);
+    let want = (
+        r.attrs.pqz_key.clone(),
+        r.attrs.pqz_pop_hash.clone(),
+        false,
+        Checked::Chain,
+    );
     assert_eq!(c.pqz_key_of(&r.ua), Some(want));
-    assert!(c.pqz_key_sig_of(&r.ua).is_empty(), "its consent is the `pop`");
+    assert!(
+        c.pqz_key_sig_of(&r.ua).is_empty(),
+        "its consent is the `pop`"
+    );
 }
 
 /// Every `setPqzKey` negative on its own row, a registered `fndsa512` with a listed relayer given, so the row's rule alone
@@ -1004,7 +1603,11 @@ fn ua8_set_pqz_key_negatives() {
     let negs = negatives("setPqzKey");
     assert_eq!(negs.len(), 13);
     for neg in &negs {
-        let (name, want, set) = (neg["name"].as_str().unwrap(), neg["error"].as_str().unwrap(), &neg["mutation"]["set"]);
+        let (name, want, set) = (
+            neg["name"].as_str().unwrap(),
+            neg["error"].as_str().unwrap(),
+            &neg["mutation"]["set"],
+        );
         let (env, c, by) = relayed();
         let row = neg["mutation"]["row"].as_str().unwrap();
         let good = pqz_id(&env, row);
@@ -1017,8 +1620,16 @@ fn ua8_set_pqz_key_negatives() {
             p.pop_hash = n32(&env, h);
         }
         if let Some(ua) = set.get("ua") {
-            let other = if want == "UAPqzKeySet" { format!("mldsa65/{}", row.split('/').nth(1).unwrap()) } else { "slhdsa128s".into() };
-            assert_eq!(portable(&env, &other).on_by(&c, &by), n32(&env, ua), "{name}");
+            let other = if want == "UAPqzKeySet" {
+                format!("mldsa65/{}", row.split('/').nth(1).unwrap())
+            } else {
+                "slhdsa128s".into()
+            };
+            assert_eq!(
+                portable(&env, &other).on_by(&c, &by),
+                n32(&env, ua),
+                "{name}"
+            );
             p.ua = n32(&env, ua);
         }
         if want == "UAUnauthorized" {
@@ -1028,7 +1639,11 @@ fn ua8_set_pqz_key_negatives() {
         } else {
             expect(name, want, p.tried_by(&c, &by));
         }
-        assert_eq!(c.pqz_key_of(&p.ua).is_some(), want == "UAPqzKeySet", "{name}");
+        assert_eq!(
+            c.pqz_key_of(&p.ua).is_some(),
+            want == "UAPqzKeySet",
+            "{name}"
+        );
         assert_eq!(c.pqz_key_of(&good.ua), None, "{name}");
         good.tried_by(&c, &by).unwrap().unwrap();
     }
@@ -1047,12 +1662,23 @@ fn ua8_set_pqz_key_single_key() {
         s.sign(&env, &test::msg(&env, s.kind(), PURPOSE_PQZ_KEY, &d))
     };
     let (ua, other) = (a.register(&env, &c), z.register(&env, &c));
-    let tried = |ua: &BytesN<32>, sig: &Bytes, r: &Option<Address>| c.try_set_pqz_key(ua, &key, &ph, &UaSig::single(&env, sig.clone()), r);
-    assert_eq!(tried(&ua, &signed(&z, &ua), &None), Err(Ok(HOST_REFUSED)), "signed by another UA");
+    let tried = |ua: &BytesN<32>, sig: &Bytes, r: &Option<Address>| {
+        c.try_set_pqz_key(ua, &key, &ph, &UaSig::single(&env, sig.clone()), r)
+    };
+    assert_eq!(
+        tried(&ua, &signed(&z, &ua), &None),
+        Err(Ok(HOST_REFUSED)),
+        "signed by another UA"
+    );
     assert_eq!(c.pqz_key_of(&ua), None);
     let own = signed(&a, &ua);
-    tried(&ua, &own, &Some(Address::generate(&env))).unwrap().unwrap();
-    assert_eq!(c.pqz_key_of(&ua), Some((key.clone(), ph.clone(), false, Checked::Chain)));
+    tried(&ua, &own, &Some(Address::generate(&env)))
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        c.pqz_key_of(&ua),
+        Some((key.clone(), ph.clone(), false, Checked::Chain))
+    );
     assert_eq!(c.pqz_key_sig_of(&ua), own);
     tried(&other, &signed(&z, &other), &None).unwrap().unwrap();
     assert_eq!(c.pqz_key_of(&other).unwrap().0, key, "one key, two UAs");
@@ -1063,30 +1689,65 @@ fn ua8_set_pqz_key_single_key() {
 fn ua8_set_pqz_key_rules() {
     let (env, c, r) = registered("msig-pq-native");
     let p = pqz_id(&env, &format!("msig-pq-native/{SET}"));
-    let unknown = PqzRow { ua: n(&env, [0x42; 32]), ..p.clone() };
+    let unknown = PqzRow {
+        ua: n(&env, [0x42; 32]),
+        ..p.clone()
+    };
     assert_eq!(err(unknown.tried(&c)), Error::NotRegistered);
     for len in [0, 1, 16_383, 16_385, 14_336, 24_576] {
-        let bad = PqzRow { key: b(&env, &std::vec![7; len]), pop_hash: n(&env, [0; 32]), ..p.clone() };
-        assert_eq!(err(bad.tried(&c)), Error::KeyData, "{len}: the length before the proof hash");
+        let bad = PqzRow {
+            key: b(&env, &std::vec![7; len]),
+            pop_hash: n(&env, [0; 32]),
+            ..p.clone()
+        };
+        assert_eq!(
+            err(bad.tried(&c)),
+            Error::KeyData,
+            "{len}: the length before the proof hash"
+        );
     }
-    assert_eq!(err(PqzRow { pop_hash: n(&env, [0; 32]), ..p.clone() }.tried(&c)), Error::PqzPopHash);
+    assert_eq!(
+        err(PqzRow {
+            pop_hash: n(&env, [0; 32]),
+            ..p.clone()
+        }
+        .tried(&c)),
+        Error::PqzPopHash
+    );
     let (ua, m) = (non_holder(&env, &c), classical(&env, &c));
     for ua in [ua, m] {
         assert_eq!(err(PqzRow { ua, ..p.clone() }.tried(&c)), Error::PqzHolder);
     }
     let mut key = vecu8(&p.key);
     key[0] ^= 1;
-    let tampered = PqzRow { key: b(&env, &key), ..p.clone() };
-    assert_eq!(err(tampered.tried(&c)), Error::Unauthorized, "the `evm-eoa` slot recovers another address");
+    let tampered = PqzRow {
+        key: b(&env, &key),
+        ..p.clone()
+    };
+    assert_eq!(
+        err(tampered.tried(&c)),
+        Error::Unauthorized,
+        "the `evm-eoa` slot recovers another address"
+    );
     let mut slots = p.sig.members.clone();
     let mut short = slots.get(1).unwrap();
     short.sig = b(&env, &[1]);
     slots.set(1, short);
-    let bad = PqzRow { sig: UaSig::msig(&env, slots), ..p.clone() };
-    assert_eq!(err(bad.tried(&c)), Error::Unauthorized, "a slot of the wrong length");
+    let bad = PqzRow {
+        sig: UaSig::msig(&env, slots),
+        ..p.clone()
+    };
+    assert_eq!(
+        err(bad.tried(&c)),
+        Error::Unauthorized,
+        "a slot of the wrong length"
+    );
     assert_eq!(c.pqz_key_of(&r.ua), None);
     p.set(&c);
-    let late = PqzRow { key: b(&env, &[7; 1]), ..p.clone() };
+    let late = PqzRow {
+        key: b(&env, &[7; 1]),
+        ..p.clone()
+    };
     assert_eq!(err(late.tried(&c)), Error::PqzKeySet, "before the length");
 }
 
@@ -1107,7 +1768,11 @@ fn ua8_store_pqz_pop_hash_checked() {
     let (env, c, r) = registered("msig-pq-native");
     let p = pqz_id(&env, &format!("msig-pq-native/{SET}"));
     let proof = portable(&env, &format!("mldsa65/{SET}")).pqz_pop;
-    assert_eq!(err(c.try_store_pqz_pop(&r.ua, &proof)), Error::PqzPopHash, "no key yet");
+    assert_eq!(
+        err(c.try_store_pqz_pop(&r.ua, &proof)),
+        Error::PqzPopHash,
+        "no key yet"
+    );
     p.set(&c);
     c.store_pqz_pop(&r.ua, &proof);
     assert_eq!(c.pqz_pop_of(&r.ua), proof);
@@ -1126,7 +1791,10 @@ fn ua8_store_pqz_pop_idempotent() {
     assert_eq!(events(), 1);
     c.store_pqz_pop(&r.ua, &proof);
     assert_eq!(events(), 0);
-    assert_eq!(err(c.try_store_pqz_pop(&r.ua, &b(&env, &[1]))), Error::PqzPopHash);
+    assert_eq!(
+        err(c.try_store_pqz_pop(&r.ua, &b(&env, &[1]))),
+        Error::PqzPopHash
+    );
     let (env, c, r) = registered(&format!("mldsa65/{SET}"));
     c.store_pqz_pop(&r.ua, &r.pqz_pop);
     assert_eq!(env.events().all().events().len(), 0);
@@ -1143,16 +1811,34 @@ fn ua8_store_pqz_pop_negatives() {
         let mut r = portable(&env, m["row"].as_str().unwrap());
         mutate(&env, &mut r, &m["registerWith"]);
         r.on(&c);
-        expect(name, neg["error"].as_str().unwrap(), c.try_store_pqz_pop(&r.ua, &b(&env, &hx(&m["set"]["pqzPop"]))));
+        expect(
+            name,
+            neg["error"].as_str().unwrap(),
+            c.try_store_pqz_pop(&r.ua, &b(&env, &hx(&m["set"]["pqzPop"]))),
+        );
         assert!(c.pqz_pop_of(&r.ua).is_empty(), "{name}");
     }
     let (env, c) = setup();
     let plain = portable(&env, "mldsa65#1");
     plain.on(&c);
-    let (proof, none) = (portable(&env, &format!("mldsa65/{SET}")).pqz_pop, Bytes::new(&env));
-    assert_eq!(err(c.try_store_pqz_pop(&plain.ua, &proof)), Error::PqzPopHash, "no key: the hash is 0");
-    assert_eq!(err(c.try_store_pqz_pop(&plain.ua, &none)), Error::PqzPopHash, "an empty proof is no proof");
-    assert_eq!(err(c.try_store_pqz_pop(&n(&env, [0x42; 32]), &proof)), Error::NotRegistered);
+    let (proof, none) = (
+        portable(&env, &format!("mldsa65/{SET}")).pqz_pop,
+        Bytes::new(&env),
+    );
+    assert_eq!(
+        err(c.try_store_pqz_pop(&plain.ua, &proof)),
+        Error::PqzPopHash,
+        "no key: the hash is 0"
+    );
+    assert_eq!(
+        err(c.try_store_pqz_pop(&plain.ua, &none)),
+        Error::PqzPopHash,
+        "an empty proof is no proof"
+    );
+    assert_eq!(
+        err(c.try_store_pqz_pop(&n(&env, [0x42; 32]), &proof)),
+        Error::NotRegistered
+    );
 }
 
 /// U8S-D4: the three writes log hashes, the bytes are read from the views; an `msig` signature (`set_pqz_key`'s) fits the events
@@ -1183,18 +1869,36 @@ fn ua8_set_events_hash_only() {
     };
     assert_eq!(env.events().all().events(), [key.to_xdr(&env, &c.address)]);
     c.store_pqz_pop(&r.ua, &portable(&env, &format!("mldsa65/{SET}")).pqz_pop);
-    let proof = UaPqzPopStored { ua: r.ua.clone(), pqz_pop_hash: p.pop_hash.clone() };
-    assert_eq!(env.events().all().events(), [proof.to_xdr(&env, &c.address)]);
+    let proof = UaPqzPopStored {
+        ua: r.ua.clone(),
+        pqz_pop_hash: p.pop_hash.clone(),
+    };
+    assert_eq!(
+        env.events().all().events(),
+        [proof.to_xdr(&env, &c.address)]
+    );
 }
 
 /// The views: a `register` key's PQZ attributes and KEM key, nothing for an unregistered id.
 #[test]
 fn ua8_views_of_register() {
     let (env, c, r) = registered(&format!("mldsa65/{SET}"));
-    let want = (r.attrs.pqz_key.clone(), r.attrs.pqz_pop_hash.clone(), false, Checked::Chain);
+    let want = (
+        r.attrs.pqz_key.clone(),
+        r.attrs.pqz_pop_hash.clone(),
+        false,
+        Checked::Chain,
+    );
     assert_eq!(c.pqz_key_of(&r.ua), Some(want));
     let unknown = n(&env, [0x42; 32]);
-    assert_eq!((c.pqz_key_of(&unknown), c.kem_key_of(&unknown), c.kem_key_at(&unknown, &0)), (None, None, None));
+    assert_eq!(
+        (
+            c.pqz_key_of(&unknown),
+            c.kem_key_of(&unknown),
+            c.kem_key_at(&unknown, &0)
+        ),
+        (None, None, None)
+    );
     assert!(c.pqz_key_sig_of(&unknown).is_empty());
 }
 
@@ -1206,12 +1910,35 @@ fn ua8_register_slot_fields_pop() {
     let q = test::ml(35);
     q.register(&env, &c);
     let g = [0x44; 32];
-    let m = msig(&env, 2, &[(0x0011, g, 1), (0x0131, q.ua(&env).to_array(), 2)]);
-    let refused = |s: &[Slot]| err(c.try_register_msig(&m.s, &no_attrs(&env), &test::member_sigs(&env, s), &Bytes::new(&env), &None));
-    assert_eq!(refused(&[(m.index(&g), std::vec![], std::vec![1])]), Error::Pop);
-    let (i, _, sig) = m.slot(&env, &q, PURPOSE_POP_V2, &test::reg_digest(&env, &m.ua, 0x0120));
+    let m = msig(
+        &env,
+        2,
+        &[(0x0011, g, 1), (0x0131, q.ua(&env).to_array(), 2)],
+    );
+    let refused = |s: &[Slot]| {
+        err(c.try_register_msig(
+            &m.s,
+            &no_attrs(&env),
+            &test::member_sigs(&env, s),
+            &Bytes::new(&env),
+            &None,
+        ))
+    };
+    assert_eq!(
+        refused(&[(m.index(&g), std::vec![], std::vec![1])]),
+        Error::Pop
+    );
+    let (i, _, sig) = m.slot(
+        &env,
+        &q,
+        PURPOSE_POP_V2,
+        &test::reg_digest(&env, &m.ua, 0x0120),
+    );
     assert_eq!(refused(&[(i, std::vec![1], sig.clone())]), Error::Pop);
-    assert_eq!(m.register(&env, &c, &test::member_sigs(&env, &[(i, std::vec![], sig)])), m.ua);
+    assert_eq!(
+        m.register(&env, &c, &test::member_sigs(&env, &[(i, std::vec![], sig)])),
+        m.ua
+    );
 }
 
 /// `set_pqz_key` by an n-of-n `msig` of in-test `mldsa65` keys, weight 1 each: every slot signs, so `PqzK` holds `n` of
@@ -1222,19 +1949,37 @@ fn pqz_key_by_n_of_n(len: usize, count: u8) {
     keys.iter().for_each(|k| {
         k.register(&env, &c);
     });
-    let list: StdVec<_> = keys.iter().map(|k| (0x0131u16, k.ua(&env).to_array(), 1u16)).collect();
+    let list: StdVec<_> = keys
+        .iter()
+        .map(|k| (0x0131u16, k.ua(&env).to_array(), 1u16))
+        .collect();
     let m = msig(&env, count as u16, &list);
     let slots = |purpose: [u8; 32], d: &BytesN<32>| {
         let mut v: StdVec<Slot> = keys.iter().map(|k| m.slot(&env, k, purpose, d)).collect();
         v.sort_by_key(|s| s.0);
         v
     };
-    m.register(&env, &c, &test::member_sigs(&env, &slots(PURPOSE_POP_V2, &test::reg_digest(&env, &m.ua, 0x0120))));
+    m.register(
+        &env,
+        &c,
+        &test::member_sigs(
+            &env,
+            &slots(PURPOSE_POP_V2, &test::reg_digest(&env, &m.ua, 0x0120)),
+        ),
+    );
     let (key, ph) = (b(&env, &std::vec![7; len]), n(&env, [9; 32]));
     let d = pqz_key_record_digest(&env, &m.ua, &pqz_key_hash(&env, &key), &ph).to_bytes();
-    c.set_pqz_key(&m.ua, &key, &ph, &test::msig_auth(&env, &slots(PURPOSE_PQZ_KEY, &d)), &None);
+    c.set_pqz_key(
+        &m.ua,
+        &key,
+        &ph,
+        &test::msig_auth(&env, &slots(PURPOSE_PQZ_KEY, &d)),
+        &None,
+    );
     assert_eq!(c.pqz_key_of(&m.ua).unwrap().0, key);
-    let size: usize = entry::<PqzEntry>(&env, &c, &Key::PqzK(m.ua.clone())).map(|e| (e.0.len() + e.1.len()) as usize).unwrap();
+    let size: usize = entry::<PqzEntry>(&env, &c, &Key::PqzK(m.ua.clone()))
+        .map(|e| (e.0.len() + e.1.len()) as usize)
+        .unwrap();
     std::println!("set_pqz_key {count}-of-{count}, key {len} B: key + sig {size} B");
 }
 
@@ -1270,7 +2015,13 @@ const AUTH_REFUSED: soroban_sdk::Error = HOST_REFUSED;
 
 /// `kinds.json`'s `valid[]` rows of the `Relayer` kinds.
 fn valid_rows() -> StdVec<Value> {
-    json(KINDS)["valid"].as_array().unwrap().iter().filter(|r| RELAYER.contains(&kind_of(&r["kind"]))).cloned().collect()
+    json(KINDS)["valid"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| RELAYER.contains(&kind_of(&r["kind"])))
+        .cloned()
+        .collect()
 }
 
 /// `msig-classical`'s derived members; its fourth is an `evm-eoa`.
@@ -1285,8 +2036,20 @@ fn sorted(mut s: StdVec<Slot>) -> StdVec<Slot> {
     s
 }
 
-fn msig_tried(env: &Env, c: &UaRegistryClient, m: &test::Msig, s: &[Slot], by: &Option<Address>) -> Tried<BytesN<32>> {
-    c.try_register_msig(&m.s, &no_attrs(env), &test::member_sigs(env, s), &Bytes::new(env), by)
+fn msig_tried(
+    env: &Env,
+    c: &UaRegistryClient,
+    m: &test::Msig,
+    s: &[Slot],
+    by: &Option<Address>,
+) -> Tried<BytesN<32>> {
+    c.try_register_msig(
+        &m.s,
+        &no_attrs(env),
+        &test::member_sigs(env, s),
+        &Bytes::new(env),
+        by,
+    )
 }
 
 /// A relayer-checked member's slot: bytes the chain never reads, the relayer's to check (P11.1).
@@ -1312,13 +2075,32 @@ fn ua8_relayer_unlisted_refused() {
     p.tried_by(&c, &by).unwrap().unwrap();
     assert_eq!(c.relayers(), SVec::from_array(&env, [by.unwrap()]));
     let (env, c) = setup();
-    assert_eq!(err(portable(&env, "fndsa512").tried_by(&c, &Some(Address::generate(&env)))), Error::RelayerNotListed, "an empty list");
+    assert_eq!(
+        err(portable(&env, "fndsa512").tried_by(&c, &Some(Address::generate(&env)))),
+        Error::RelayerNotListed,
+        "an empty list"
+    );
 }
 
 /// `relayer`'s auth of the one word `attest` asks for: the auth is an entry on `function`, over `digest_of`'s digest of `args`.
-pub(crate) fn authorise(env: &Env, c: &UaRegistryClient, relayer: &Address, function: &str, digest_of: &str, args: SVec<soroban_sdk::Val>) {
+pub(crate) fn authorise(
+    env: &Env,
+    c: &UaRegistryClient,
+    relayer: &Address,
+    function: &str,
+    digest_of: &str,
+    args: SVec<soroban_sdk::Val>,
+) {
     let d = attest_digest(env, &c.address, digest_of, args);
-    env.mock_auths(&[MockAuth { address: relayer, invoke: &MockAuthInvoke { contract: &c.address, fn_name: function, args: (d,).into_val(env), sub_invokes: &[] } }]);
+    env.mock_auths(&[MockAuth {
+        address: relayer,
+        invoke: &MockAuthInvoke {
+            contract: &c.address,
+            fn_name: function,
+            args: (d,).into_val(env),
+            sub_invokes: &[],
+        },
+    }]);
 }
 
 /// Listed, no auth: the host refuses. An auth for another call is no auth either; only the relayer's auth of this very call
@@ -1329,12 +2111,28 @@ fn ua8_relayer_must_authorise() {
     let relayer = Address::generate(&env);
     let c = test::deploy(&env, &[relayer.clone()]);
     let by = Some(relayer.clone());
-    let allow = |f: &str, args: soroban_sdk::Vec<soroban_sdk::Val>| authorise(&env, &c, &relayer, f, f, args);
+    let allow = |f: &str, args: soroban_sdk::Vec<soroban_sdk::Val>| {
+        authorise(&env, &c, &relayer, f, f, args)
+    };
     let r = portable(&env, "fndsa512");
-    let args = |pop: &Bytes| (r.kind, r.kd.clone(), r.attrs.clone(), pop.clone(), r.pqz_pop.clone(), by.clone()).into_val(&env);
+    let args = |pop: &Bytes| {
+        (
+            r.kind,
+            r.kd.clone(),
+            r.attrs.clone(),
+            pop.clone(),
+            r.pqz_pop.clone(),
+            by.clone(),
+        )
+            .into_val(&env)
+    };
     assert_eq!(r.tried_by(&c, &by), Err(Ok(AUTH_REFUSED)));
     allow("register", args(&flipped(&env, &r.pop)));
-    assert_eq!(r.tried_by(&c, &by), Err(Ok(AUTH_REFUSED)), "an auth of other arguments");
+    assert_eq!(
+        r.tried_by(&c, &by),
+        Err(Ok(AUTH_REFUSED)),
+        "an auth of other arguments"
+    );
     assert_eq!(c.record_of(&r.ua), None);
     allow("register", args(&r.pop));
     assert_eq!(r.on_by(&c, &by), r.ua);
@@ -1344,12 +2142,32 @@ fn ua8_relayer_must_authorise() {
     let k = kem_id(&env, "fndsa512/v1");
     env.set_auths(&[]);
     assert_eq!(k.tried_by(&c, &by), Err(Ok(AUTH_REFUSED)));
-    allow("set_kem_key", (k.ua.clone(), k.version, k.kem.clone(), k.sig.clone(), by.clone()).into_val(&env));
+    allow(
+        "set_kem_key",
+        (
+            k.ua.clone(),
+            k.version,
+            k.kem.clone(),
+            k.sig.clone(),
+            by.clone(),
+        )
+            .into_val(&env),
+    );
     k.tried_by(&c, &by).unwrap().unwrap();
     let p = pqz_id(&env, &format!("fndsa512/{SET}"));
     env.set_auths(&[]);
     assert_eq!(p.tried_by(&c, &by), Err(Ok(AUTH_REFUSED)));
-    allow("set_pqz_key", (p.ua.clone(), p.key.clone(), p.pop_hash.clone(), p.sig.clone(), by.clone()).into_val(&env));
+    allow(
+        "set_pqz_key",
+        (
+            p.ua.clone(),
+            p.key.clone(),
+            p.pop_hash.clone(),
+            p.sig.clone(),
+            by.clone(),
+        )
+            .into_val(&env),
+    );
     p.tried_by(&c, &by).unwrap().unwrap();
 }
 
@@ -1365,13 +2183,20 @@ fn ua8_relayer_checked_every_offchain_kind() {
         let r = portable_row(&env, &row);
         assert_eq!(r.on_by(&c, &by), r.ua, "{name}");
         let last = env.events().all().events().last().unwrap().clone();
-        assert_eq!((env.auths().len(), env.auths()[0].0.clone()), (1, by.clone().unwrap()), "{name}");
+        assert_eq!(
+            (env.auths().len(), env.auths()[0].0.clone()),
+            (1, by.clone().unwrap()),
+            "{name}"
+        );
         let rec = c.record_of(&r.ua).unwrap();
         let (ua, m) = (r.ua.clone(), marked(&by));
         let want = RegisteredRecord {
             kind: r.kind,
             key_data: r.kd.clone(),
-            attrs: UaAttrs { kem: KemKey::none(&env), ..r.attrs.clone() },
+            attrs: UaAttrs {
+                kem: KemKey::none(&env),
+                ..r.attrs.clone()
+            },
             pop_hash: env.crypto().keccak256(&r.pop).into(),
             pop_checked: m.clone(),
             pqz_pop_checked: Checked::None,
@@ -1380,14 +2205,59 @@ fn ua8_relayer_checked_every_offchain_kind() {
             index: 0,
             ledger: env.ledger().sequence(),
         };
-        assert_eq!(last, UaRegistered { ua, kind: r.kind, record: want, checked: m.clone() }.to_xdr(&env, &c.address), "{name}");
-        assert_eq!((rec.pop_checked, rec.pqz_pop_checked, rec.proven, rec.signable), (m.clone(), Checked::None, false, false), "{name}");
+        assert_eq!(
+            last,
+            UaRegistered {
+                ua,
+                kind: r.kind,
+                record: want,
+                checked: m.clone()
+            }
+            .to_xdr(&env, &c.address),
+            "{name}"
+        );
+        assert_eq!(
+            (
+                rec.pop_checked,
+                rec.pqz_pop_checked,
+                rec.proven,
+                rec.signable
+            ),
+            (m.clone(), Checked::None, false, false),
+            "{name}"
+        );
         assert!(!c.receivable(&r.ua), "{name}");
         assert_eq!(c.checked_of(&r.ua).0, m, "{name}");
-        assert_eq!(c.pop_of(&r.ua), r.pop, "{name}: everything to re-check is stored");
-        assert_eq!(c.registration_of(&r.ua), Some((r.kind, r.kd.clone(), r.attrs.clone(), r.pop.clone(), r.pqz_pop.clone())), "{name}");
-        assert_eq!((c.ua_of(&r.kind, &r.kd), c.ua_count(&r.kind), c.ua_at(&r.kind, &0)), (r.ua.clone(), 1, r.ua.clone()), "{name}");
-        assert_eq!(c.key_owner(&crate::key_hash(&env, r.kind, &r.kd).unwrap()), Some(r.ua.clone()), "{name}");
+        assert_eq!(
+            c.pop_of(&r.ua),
+            r.pop,
+            "{name}: everything to re-check is stored"
+        );
+        assert_eq!(
+            c.registration_of(&r.ua),
+            Some((
+                r.kind,
+                r.kd.clone(),
+                r.attrs.clone(),
+                r.pop.clone(),
+                r.pqz_pop.clone()
+            )),
+            "{name}"
+        );
+        assert_eq!(
+            (
+                c.ua_of(&r.kind, &r.kd),
+                c.ua_count(&r.kind),
+                c.ua_at(&r.kind, &0)
+            ),
+            (r.ua.clone(), 1, r.ua.clone()),
+            "{name}"
+        );
+        assert_eq!(
+            c.key_owner(&crate::key_hash(&env, r.kind, &r.kd).unwrap()),
+            Some(r.ua.clone()),
+            "{name}"
+        );
     }
 }
 
@@ -1403,10 +2273,19 @@ fn ua8_relayer_kind_without_relayer_not_verifiable() {
         assert_eq!(r.on_by(&c, &by), r.ua);
         seen.push(r.kind);
     }
-    for row in valid_rows().iter().filter(|r| (0x0110..=0x0113).contains(&kind_of(&r["kind"]))) {
+    for row in valid_rows()
+        .iter()
+        .filter(|r| (0x0110..=0x0113).contains(&kind_of(&r["kind"])))
+    {
         let (env, c, by) = relayed();
-        let (kind, kd, none) = (kind_of(&row["kind"]), b(&env, &hx(&row["keyData"])), Bytes::new(&env));
-        let tried = |r: &Option<Address>| c.try_register(&kind, &kd, &no_attrs(&env), &b(&env, &[1; 64]), &none, r);
+        let (kind, kd, none) = (
+            kind_of(&row["kind"]),
+            b(&env, &hx(&row["keyData"])),
+            Bytes::new(&env),
+        );
+        let tried = |r: &Option<Address>| {
+            c.try_register(&kind, &kd, &no_attrs(&env), &b(&env, &[1; 64]), &none, r)
+        };
         assert_eq!(err(tried(&None)), Error::NotVerifiable, "{}", row["name"]);
         tried(&by).unwrap().unwrap();
         seen.push(kind);
@@ -1419,7 +2298,14 @@ fn ua8_relayer_kind_without_relayer_not_verifiable() {
 /// relayer is refused, by the rule of its kind. The same call unflipped stores `Chain`, and the relayer is not asked.
 #[test]
 fn ua8_relayer_mode_still_verifies_chain_parts() {
-    for name in ["webauthn-p256", "p256", "ed25519", "secp256k1", "mldsa44", "mldsa65#1"] {
+    for name in [
+        "webauthn-p256",
+        "p256",
+        "ed25519",
+        "secp256k1",
+        "mldsa44",
+        "mldsa65#1",
+    ] {
         let (env, c, by) = relayed();
         let mut r = portable(&env, name);
         r.pop = flipped(&env, &r.pop);
@@ -1427,17 +2313,28 @@ fn ua8_relayer_mode_still_verifies_chain_parts() {
         assert_eq!(c.record_of(&r.ua), None, "{name}");
         assert_eq!(portable(&env, name).on_by(&c, &by), r.ua, "{name}");
         assert!(env.auths().is_empty(), "{name}");
-        assert_eq!(c.record_of(&r.ua).unwrap().pop_checked, Checked::Chain, "{name}");
+        assert_eq!(
+            c.record_of(&r.ua).unwrap().pop_checked,
+            Checked::Chain,
+            "{name}"
+        );
     }
     let (env, c, by) = relayed();
     let mut r = portable(&env, "mldsa65#2");
     r.pop = flipped(&env, &r.pop);
-    assert_eq!(r.tried_by(&c, &by), Err(Ok(HOST_REFUSED)), "`mldsa65`: the host's verify");
+    assert_eq!(
+        r.tried_by(&c, &by),
+        Err(Ok(HOST_REFUSED)),
+        "`mldsa65`: the host's verify"
+    );
 
     let (env, c, r) = registered(&format!("mldsa65/{SET}"));
     let by = Some(c.relayers().get(0).unwrap());
     let k = kem_id(&env, "mldsa65/v1");
-    let bad = KemRow { sig: UaSig::single(&env, flipped(&env, &k.sig.signature)), ..k.clone() };
+    let bad = KemRow {
+        sig: UaSig::single(&env, flipped(&env, &k.sig.signature)),
+        ..k.clone()
+    };
     assert_eq!(bad.tried_by(&c, &by), Err(Ok(HOST_REFUSED)));
     assert_eq!(c.kem_key_at(&r.ua, &1), None);
     k.tried_by(&c, &by).unwrap().unwrap();
@@ -1447,8 +2344,15 @@ fn ua8_relayer_mode_still_verifies_chain_parts() {
     let (env, c, r) = registered("msig-pq-native");
     let by = Some(c.relayers().get(0).unwrap());
     let p = pqz_id(&env, &format!("msig-pq-native/{SET}"));
-    let bad = PqzRow { key: flipped(&env, &p.key), ..p.clone() };
-    assert_eq!(err(bad.tried_by(&c, &by)), Error::Unauthorized, "the `evm-eoa` slot recovers another address");
+    let bad = PqzRow {
+        key: flipped(&env, &p.key),
+        ..p.clone()
+    };
+    assert_eq!(
+        err(bad.tried_by(&c, &by)),
+        Error::Unauthorized,
+        "the `evm-eoa` slot recovers another address"
+    );
     assert_eq!(c.pqz_key_of(&r.ua), None);
     p.tried_by(&c, &by).unwrap().unwrap();
     assert!(env.auths().is_empty());
@@ -1465,34 +2369,88 @@ fn ua8_relayer_msig_mixed_members() {
     f.on_by(&c, &by);
     let q = test::ml(61);
     q.register(&env, &c);
-    let m = msig(&env, 2, &[(0x0132, f.ua.to_array(), 1), (0x0131, q.ua(&env).to_array(), 1)]);
+    let m = msig(
+        &env,
+        2,
+        &[
+            (0x0132, f.ua.to_array(), 1),
+            (0x0131, q.ua(&env).to_array(), 1),
+        ],
+    );
     let rd = test::reg_digest(&env, &m.ua, 0x0120);
-    let (good, other) = (m.slot(&env, &q, PURPOSE_POP_V2, &rd), attested(&m, &f.ua, 666));
+    let (good, other) = (
+        m.slot(&env, &q, PURPOSE_POP_V2, &rd),
+        attested(&m, &f.ua, 666),
+    );
     let slots = sorted(vec![good.clone(), other.clone()]);
-    assert_eq!(err(msig_tried(&env, &c, &m, &slots, &None)), Error::NotVerifiable);
-    assert_eq!(err(msig_tried(&env, &c, &m, &slots, &Some(Address::generate(&env)))), Error::RelayerNotListed);
+    assert_eq!(
+        err(msig_tried(&env, &c, &m, &slots, &None)),
+        Error::NotVerifiable
+    );
+    assert_eq!(
+        err(msig_tried(
+            &env,
+            &c,
+            &m,
+            &slots,
+            &Some(Address::generate(&env))
+        )),
+        Error::RelayerNotListed
+    );
     let mut bad = good.clone();
     bad.2[0] ^= 1;
     let bad = sorted(vec![bad, other.clone()]);
-    assert_eq!(msig_tried(&env, &c, &m, &bad, &by), Err(Ok(HOST_REFUSED)), "the chain slot, whatever `relayer` says");
+    assert_eq!(
+        msig_tried(&env, &c, &m, &bad, &by),
+        Err(Ok(HOST_REFUSED)),
+        "the chain slot, whatever `relayer` says"
+    );
     assert_eq!(c.record_of(&m.ua), None);
-    assert_eq!(msig_tried(&env, &c, &m, &slots, &by).unwrap().unwrap(), m.ua);
+    assert_eq!(
+        msig_tried(&env, &c, &m, &slots, &by).unwrap().unwrap(),
+        m.ua
+    );
     let rec = c.record_of(&m.ua).unwrap();
-    assert_eq!((rec.pop_checked, rec.signable), (m_by.clone(), false), "the chain weight 1 is under the threshold 2");
-    assert_eq!(c.pop_of(&m.ua), crate::abi::encode_member_sigs(&env, &test::member_sigs(&env, &slots)));
+    assert_eq!(
+        (rec.pop_checked, rec.signable),
+        (m_by.clone(), false),
+        "the chain weight 1 is under the threshold 2"
+    );
+    assert_eq!(
+        c.pop_of(&m.ua),
+        crate::abi::encode_member_sigs(&env, &test::member_sigs(&env, &slots))
+    );
     assert!(!c.receivable(&m.ua));
 
     let kem = kem_id(&env, "mldsa65/v1").kem;
     let d = kem_record_digest(&env, &m.ua, 1, &kem_pk(&env, &kem)).to_bytes();
-    let s = test::msig_auth(&env, &sorted(vec![m.slot(&env, &q, PURPOSE_KEM, &d), attested(&m, &f.ua, 666)]));
+    let s = test::msig_auth(
+        &env,
+        &sorted(vec![
+            m.slot(&env, &q, PURPOSE_KEM, &d),
+            attested(&m, &f.ua, 666),
+        ]),
+    );
     for r in [&None, &by] {
-        assert_eq!(err(c.try_set_kem_key(&m.ua, &1, &kem, &s, r)), Error::KemHolder);
+        assert_eq!(
+            err(c.try_set_kem_key(&m.ua, &1, &kem, &s, r)),
+            Error::KemHolder
+        );
     }
     assert_eq!(c.kem_key_of(&m.ua), None);
     let (key, ph) = (b(&env, &[7; 16_384]), n(&env, [9; 32]));
     let d = pqz_key_record_digest(&env, &m.ua, &pqz_key_hash(&env, &key), &ph).to_bytes();
-    let s = test::msig_auth(&env, &sorted(vec![m.slot(&env, &q, PURPOSE_PQZ_KEY, &d), attested(&m, &f.ua, 666)]));
-    assert_eq!(err(c.try_set_pqz_key(&m.ua, &key, &ph, &s, &None)), Error::NotVerifiable);
+    let s = test::msig_auth(
+        &env,
+        &sorted(vec![
+            m.slot(&env, &q, PURPOSE_PQZ_KEY, &d),
+            attested(&m, &f.ua, 666),
+        ]),
+    );
+    assert_eq!(
+        err(c.try_set_pqz_key(&m.ua, &key, &ph, &s, &None)),
+        Error::NotVerifiable
+    );
     c.set_pqz_key(&m.ua, &key, &ph, &s, &by);
     assert_eq!(c.pqz_key_of(&m.ua).unwrap().3, m_by);
 
@@ -1514,27 +2472,84 @@ fn ua8_relayer_msig_signable_counts_chain_members() {
     let (a, q) = (test::ml(62), test::ml(63));
     a.register(&env, &c);
     q.register(&env, &c);
-    let m = msig(&env, 1, &[(0x0131, a.ua(&env).to_array(), 1), (0x0132, f.ua.to_array(), 1)]);
+    let m = msig(
+        &env,
+        1,
+        &[
+            (0x0131, a.ua(&env).to_array(), 1),
+            (0x0132, f.ua.to_array(), 1),
+        ],
+    );
     let s = [attested(&m, &f.ua, 666)];
     msig_tried(&env, &c, &m, &s, &by).unwrap().unwrap();
     let rec = c.record_of(&m.ua).unwrap();
-    assert_eq!((rec.pop_checked, rec.signable), (marked(&by), true), "the `mldsa65` member alone reaches the threshold");
+    assert_eq!(
+        (rec.pop_checked, rec.signable),
+        (marked(&by), true),
+        "the `mldsa65` member alone reaches the threshold"
+    );
     let (pt, d) = (n(&env, METATX), n(&env, [0x71; 32]));
-    assert_eq!(err(c.try_require_authorized(&m.ua, &pt, &d, &test::msig_auth(&env, &s))), Error::Unauthorized, "a relayer slot never authorises");
+    assert_eq!(
+        err(c.try_require_authorized(&m.ua, &pt, &d, &test::msig_auth(&env, &s))),
+        Error::Unauthorized,
+        "a relayer slot never authorises"
+    );
     m.accepted_by(&env, &c, &[&a]);
-    c.require_authorized(&m.ua, &pt, &d, &test::msig_auth(&env, &[m.slot(&env, &a, METATX, &d)]));
+    c.require_authorized(
+        &m.ua,
+        &pt,
+        &d,
+        &test::msig_auth(&env, &[m.slot(&env, &a, METATX, &d)]),
+    );
 
-    let m = msig(&env, 1, &[(0x0131, q.ua(&env).to_array(), 1), (0x0132, f.ua.to_array(), 1)]);
+    let m = msig(
+        &env,
+        1,
+        &[
+            (0x0131, q.ua(&env).to_array(), 1),
+            (0x0132, f.ua.to_array(), 1),
+        ],
+    );
     let rd = test::reg_digest(&env, &m.ua, 0x0120);
-    msig_tried(&env, &c, &m, &[m.slot(&env, &q, PURPOSE_POP_V2, &rd)], &None).unwrap().unwrap();
-    assert_eq!(c.record_of(&m.ua).unwrap().pop_checked, Checked::Chain, "no relayer part, no relayer");
+    msig_tried(
+        &env,
+        &c,
+        &m,
+        &[m.slot(&env, &q, PURPOSE_POP_V2, &rd)],
+        &None,
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        c.record_of(&m.ua).unwrap().pop_checked,
+        Checked::Chain,
+        "no relayer part, no relayer"
+    );
 
     // The minimal form counts a relayer slot's weight: both reach 2, the weight-2 slot alone does too.
     let (p, fa) = (test::ml(64), f.ua.to_array());
     p.register(&env, &c);
-    let m = msig(&env, 2, &[(0x0132, fa, 1), (0x0131, p.ua(&env).to_array(), 2)]);
-    let two = m.slot(&env, &p, PURPOSE_POP_V2, &test::reg_digest(&env, &m.ua, 0x0120));
-    assert_eq!(err(msig_tried(&env, &c, &m, &sorted(vec![two.clone(), attested(&m, &f.ua, 666)]), &by)), Error::Pop);
+    let m = msig(
+        &env,
+        2,
+        &[(0x0132, fa, 1), (0x0131, p.ua(&env).to_array(), 2)],
+    );
+    let two = m.slot(
+        &env,
+        &p,
+        PURPOSE_POP_V2,
+        &test::reg_digest(&env, &m.ua, 0x0120),
+    );
+    assert_eq!(
+        err(msig_tried(
+            &env,
+            &c,
+            &m,
+            &sorted(vec![two.clone(), attested(&m, &f.ua, 666)]),
+            &by
+        )),
+        Error::Pop
+    );
     msig_tried(&env, &c, &m, &[two], &by).unwrap().unwrap();
 }
 
@@ -1548,13 +2563,24 @@ fn ua8_relayer_msig_member_rules() {
     let a = test::ml(65);
     a.register(&env, &c);
     let (fa, aa) = (f.ua.to_array(), a.ua(&env).to_array());
-    for (kind, id, what) in [(0x0133, fa, "another relayer kind"), (0x0131, fa, "a chain kind"), (0x0132, aa, "a chain record"), (0x0132, [7; 32], "unregistered")] {
+    for (kind, id, what) in [
+        (0x0133, fa, "another relayer kind"),
+        (0x0131, fa, "a chain kind"),
+        (0x0132, aa, "a chain record"),
+        (0x0132, [7; 32], "unregistered"),
+    ] {
         let m = msig(&env, 1, &[(kind, id, 1)]);
         let s = [(0, vec![], vec![0xf5; 666])];
-        assert_eq!(err(msig_tried(&env, &c, &m, &s, &by)), Error::MemberUnknown, "{what}");
+        assert_eq!(
+            err(msig_tried(&env, &c, &m, &s, &by)),
+            Error::MemberUnknown,
+            "{what}"
+        );
     }
     let m = msig(&env, 1, &[(0x0132, fa, 1)]);
-    msig_tried(&env, &c, &m, &[attested(&m, &f.ua, 666)], &by).unwrap().unwrap();
+    msig_tried(&env, &c, &m, &[attested(&m, &f.ua, 666)], &by)
+        .unwrap()
+        .unwrap();
 }
 
 /// Spec §6: an `evm-contract` slot is `Relayer` with a listed relayer, `NotVerifiable` without, and never authorises.
@@ -1568,21 +2594,61 @@ fn ua8_relayer_evm_contract_slot() {
     id[12..].copy_from_slice(&[0x22; 20]);
     let m = msig(&env, 2, &[(0x0002, id, 1), (0x0131, qa, 1)]);
     let rd = test::reg_digest(&env, &m.ua, 0x0120);
-    let slots = sorted(vec![(m.index(&id), vec![], vec![1; 65]), m.slot(&env, &q, PURPOSE_POP_V2, &rd)]);
-    assert_eq!(err(msig_tried(&env, &c, &m, &slots, &None)), Error::NotVerifiable);
-    assert_eq!(err(msig_tried(&env, &c, &m, &slots, &Some(Address::generate(&env)))), Error::RelayerNotListed);
+    let slots = sorted(vec![
+        (m.index(&id), vec![], vec![1; 65]),
+        m.slot(&env, &q, PURPOSE_POP_V2, &rd),
+    ]);
+    assert_eq!(
+        err(msig_tried(&env, &c, &m, &slots, &None)),
+        Error::NotVerifiable
+    );
+    assert_eq!(
+        err(msig_tried(
+            &env,
+            &c,
+            &m,
+            &slots,
+            &Some(Address::generate(&env))
+        )),
+        Error::RelayerNotListed
+    );
     msig_tried(&env, &c, &m, &slots, &by).unwrap().unwrap();
     let rec = c.record_of(&m.ua).unwrap();
     assert_eq!((rec.pop_checked, rec.signable), (marked(&by), false));
 
     let m = msig(&env, 2, &[(0x0002, id, 1), (0x0131, qa, 2)]);
     let rd = test::reg_digest(&env, &m.ua, 0x0120);
-    msig_tried(&env, &c, &m, &[m.slot(&env, &q, PURPOSE_POP_V2, &rd)], &None).unwrap().unwrap();
+    msig_tried(
+        &env,
+        &c,
+        &m,
+        &[m.slot(&env, &q, PURPOSE_POP_V2, &rd)],
+        &None,
+    )
+    .unwrap()
+    .unwrap();
     let (pt, d) = (n(&env, METATX), n(&env, [0x72; 32]));
-    c.accept_membership(&m.ua, &MemberSig { index: m.index(&id), key_data: Bytes::new(&env), sig: b(&env, &[1; 65]) }, &by);
+    c.accept_membership(
+        &m.ua,
+        &MemberSig {
+            index: m.index(&id),
+            key_data: Bytes::new(&env),
+            sig: b(&env, &[1; 65]),
+        },
+        &by,
+    );
     let slot = test::msig_auth(&env, &[(m.index(&id), vec![], vec![1; 65])]);
-    assert_eq!(err(c.try_require_authorized(&m.ua, &pt, &d, &slot)), Error::NotVerifiable, "no attestation at signing");
-    c.require_authorized(&m.ua, &pt, &d, &test::msig_auth(&env, &[m.slot(&env, &q, METATX, &d)]));
+    assert_eq!(
+        err(c.try_require_authorized(&m.ua, &pt, &d, &slot)),
+        Error::NotVerifiable,
+        "no attestation at signing"
+    );
+    c.require_authorized(
+        &m.ua,
+        &pt,
+        &d,
+        &test::msig_auth(&env, &[m.slot(&env, &q, METATX, &d)]),
+    );
 }
 
 /// `fndsa512`'s own rows: the `register` KEM key takes `pop_checked`, every `kemRecords[]` and `pqzKeyRecords[]` row is
@@ -1593,7 +2659,10 @@ fn ua8_relayer_fndsa512_kem_and_pqz() {
     let m = marked(&by);
     let r = portable(&env, "fndsa512");
     r.on_by(&c, &by);
-    assert_eq!(c.kem_key_at(&r.ua, &0), Some((r.attrs.kem.clone(), Bytes::new(&env), m.clone())));
+    assert_eq!(
+        c.kem_key_at(&r.ua, &0),
+        Some((r.attrs.kem.clone(), Bytes::new(&env), m.clone()))
+    );
     assert_eq!(c.checked_of(&r.ua), (m.clone(), Checked::None, m.clone()));
     let before = c.registration_of(&r.ua);
     for v in 1..=3u64 {
@@ -1608,13 +2677,26 @@ fn ua8_relayer_fndsa512_kem_and_pqz() {
             sig_hash: env.crypto().keccak256(&k.stored).into(),
             checked: m.clone(),
         };
-        assert_eq!(env.events().all().events(), [ev.to_xdr(&env, &c.address)], "v{v}");
-        assert_eq!(c.kem_key_at(&r.ua, &v), Some((k.kem.clone(), k.stored.clone(), m.clone())), "v{v}");
+        assert_eq!(
+            env.events().all().events(),
+            [ev.to_xdr(&env, &c.address)],
+            "v{v}"
+        );
+        assert_eq!(
+            c.kem_key_at(&r.ua, &v),
+            Some((k.kem.clone(), k.stored.clone(), m.clone())),
+            "v{v}"
+        );
     }
     assert_eq!(c.kem_key_of(&r.ua).unwrap().3, m);
     assert_eq!(c.registration_of(&r.ua), before);
 
-    for row in json(PORTABLE)["pqzKeyRecords"].as_array().unwrap().iter().filter(|x| kind_of(&x["kind"]) == 0x0132) {
+    for row in json(PORTABLE)["pqzKeyRecords"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|x| kind_of(&x["kind"]) == 0x0132)
+    {
         let name = row["name"].as_str().unwrap();
         let (env, c, by) = relayed();
         let m = marked(&by);
@@ -1632,8 +2714,16 @@ fn ua8_relayer_fndsa512_kem_and_pqz() {
             sig_hash: env.crypto().keccak256(&p.stored).into(),
             checked: m.clone(),
         };
-        assert_eq!(env.events().all().events(), [ev.to_xdr(&env, &c.address)], "{name}");
-        assert_eq!(c.pqz_key_of(&r.ua), Some((p.key.clone(), p.pop_hash.clone(), false, m.clone())), "{name}");
+        assert_eq!(
+            env.events().all().events(),
+            [ev.to_xdr(&env, &c.address)],
+            "{name}"
+        );
+        assert_eq!(
+            c.pqz_key_of(&r.ua),
+            Some((p.key.clone(), p.pop_hash.clone(), false, m.clone())),
+            "{name}"
+        );
         assert_eq!(c.pqz_key_sig_of(&r.ua), p.stored, "{name}");
     }
 }
@@ -1656,12 +2746,21 @@ fn ua8_relayer_register_parts_take_pop_checked() {
         sig_hash: env.crypto().keccak256(&Bytes::new(&env)).into(),
         checked: m.clone(),
     };
-    assert!(env.events().all().events().contains(&pqz.to_xdr(&env, &c.address)), "the PQZ event names the relayer");
+    assert!(
+        env.events()
+            .all()
+            .events()
+            .contains(&pqz.to_xdr(&env, &c.address)),
+        "the PQZ event names the relayer"
+    );
     assert_eq!(c.pqz_key_of(&r.ua).unwrap().3, m);
     assert_eq!(c.kem_key_of(&r.ua), None);
     c.set_kem_key(&r.ua, &0, &whole, &UaSig::none(&env), &None);
     assert!(env.auths().is_empty());
-    assert_eq!(c.kem_key_of(&r.ua), Some((0, whole.clone(), Bytes::new(&env), m.clone())));
+    assert_eq!(
+        c.kem_key_of(&r.ua),
+        Some((0, whole.clone(), Bytes::new(&env), m.clone()))
+    );
     assert_eq!(c.checked_of(&r.ua), (m.clone(), Checked::None, m));
 }
 
@@ -1679,7 +2778,11 @@ fn ua8_relayer_register_kem_event_names_it() {
         sig_hash: env.crypto().keccak256(&Bytes::new(&env)).into(),
         checked: m.clone(),
     };
-    assert!(env.events().all().events().contains(&kem.to_xdr(&env, &c.address)));
+    assert!(env
+        .events()
+        .all()
+        .events()
+        .contains(&kem.to_xdr(&env, &c.address)));
     assert_eq!(c.kem_key_of(&r.ua).unwrap().3, m);
 }
 
@@ -1692,19 +2795,34 @@ fn ua8_relayer_bad_record_takes_slot_marked() {
     let good = portable(&env, "fndsa512");
     let mut bad = portable(&env, "fndsa512");
     bad.pop = flipped(&env, &bad.pop);
-    assert_eq!(bad.on_by(&c, &by), good.ua, "the id is the key: a relayer never moves it");
+    assert_eq!(
+        bad.on_by(&c, &by),
+        good.ua,
+        "the id is the key: a relayer never moves it"
+    );
     let rec = c.record_of(&good.ua).unwrap();
     assert_eq!((rec.pop, rec.pop_checked), (bad.pop.clone(), m.clone()));
     assert_eq!(err(good.tried_by(&c, &by)), Error::AlreadyRegistered);
 
     let k = kem_id(&env, "fndsa512/v1");
-    let wrong = KemRow { sig: UaSig::single(&env, flipped(&env, &k.sig.signature)), stored: flipped(&env, &k.stored), ..k.clone() };
+    let wrong = KemRow {
+        sig: UaSig::single(&env, flipped(&env, &k.sig.signature)),
+        stored: flipped(&env, &k.stored),
+        ..k.clone()
+    };
     wrong.tried_by(&c, &by).unwrap().unwrap();
-    assert_eq!(c.kem_key_at(&k.ua, &1), Some((wrong.kem.clone(), wrong.stored.clone(), m.clone())));
+    assert_eq!(
+        c.kem_key_at(&k.ua, &1),
+        Some((wrong.kem.clone(), wrong.stored.clone(), m.clone()))
+    );
     assert_eq!(err(k.tried_by(&c, &by)), Error::KemVersion);
 
     let p = pqz_id(&env, &format!("fndsa512/{SET}"));
-    let wrong = PqzRow { sig: UaSig::single(&env, flipped(&env, &p.sig.signature)), stored: flipped(&env, &p.stored), ..p.clone() };
+    let wrong = PqzRow {
+        sig: UaSig::single(&env, flipped(&env, &p.sig.signature)),
+        stored: flipped(&env, &p.stored),
+        ..p.clone()
+    };
     wrong.tried_by(&c, &by).unwrap().unwrap();
     assert_eq!(c.pqz_key_sig_of(&p.ua), wrong.stored);
     assert_eq!(c.pqz_key_of(&p.ua).unwrap().3, m);
@@ -1721,11 +2839,21 @@ fn ua8_relayer_checked_ua_authorises_nothing() {
         r.on_by(&c, &by);
         let (pt, d) = (n(&env, METATX), n(&env, [0x73; 32]));
         for sig in [Bytes::new(&env), r.pop.clone()] {
-            assert_eq!(err(c.try_require_authorized(&r.ua, &pt, &d, &UaSig::single(&env, sig))), Error::Unauthorized, "{}", row["name"]);
+            assert_eq!(
+                err(c.try_require_authorized(&r.ua, &pt, &d, &UaSig::single(&env, sig))),
+                Error::Unauthorized,
+                "{}",
+                row["name"]
+            );
         }
         let e = test::ed(67);
         let ua = e.register(&env, &c);
-        c.require_authorized(&ua, &pt, &d, &UaSig::single(&env, e.sign(&env, &test::msg(&env, 0x0102, METATX, &d))));
+        c.require_authorized(
+            &ua,
+            &pt,
+            &d,
+            &UaSig::single(&env, e.sign(&env, &test::msg(&env, 0x0102, METATX, &d))),
+        );
     }
 }
 
@@ -1735,15 +2863,41 @@ fn ua8_relayer_checked_ua_authorises_nothing() {
 fn ua8_relayer_list_immutable() {
     const SCRIPT: &str = include_str!("../../../scripts/check-registry-interface.sh");
     const SOURCE: &str = include_str!("lib.rs");
-    let want = SCRIPT.lines().find_map(|l| l.strip_prefix("want=\"")).unwrap().trim_end_matches('"');
+    let want = SCRIPT
+        .lines()
+        .find_map(|l| l.strip_prefix("want=\""))
+        .unwrap()
+        .trim_end_matches('"');
     let want: StdVec<&str> = want.split(' ').collect();
-    let imp = SOURCE.split("impl UaRegistry {").nth(1).unwrap().split("\n}\n").next().unwrap();
-    let mut got: StdVec<&str> = imp.lines().filter_map(|l| l.trim_start().strip_prefix("pub fn ")).map(|l| l.split('(').next().unwrap()).collect();
+    let imp = SOURCE
+        .split("impl UaRegistry {")
+        .nth(1)
+        .unwrap()
+        .split("\n}\n")
+        .next()
+        .unwrap();
+    let mut got: StdVec<&str> = imp
+        .lines()
+        .filter_map(|l| l.trim_start().strip_prefix("pub fn "))
+        .map(|l| l.split('(').next().unwrap())
+        .collect();
     got.sort();
     assert_eq!(got, want);
-    assert_eq!(want.iter().filter(|f| f.contains("relayer")).collect::<StdVec<_>>(), [&"relayers"], "one read, no writer");
+    assert_eq!(
+        want.iter()
+            .filter(|f| f.contains("relayer"))
+            .collect::<StdVec<_>>(),
+        [&"relayers"],
+        "one read, no writer"
+    );
     assert_eq!(SOURCE.matches("set(&Key::Relayers").count(), 1);
-    let ctor = imp.split("pub fn __constructor").nth(1).unwrap().split("pub fn ").next().unwrap();
+    let ctor = imp
+        .split("pub fn __constructor")
+        .nth(1)
+        .unwrap()
+        .split("pub fn ")
+        .next()
+        .unwrap();
     assert!(ctor.contains("set(&Key::Relayers"));
 }
 
@@ -1758,11 +2912,18 @@ fn ua8_relayer_classical_msig_row() {
     assert_eq!(r.on(&c), r.ua);
     assert!(env.auths().is_empty());
     let rec = c.record_of(&r.ua).unwrap();
-    assert_eq!((rec.pop_checked, rec.signable, rec.pop.len()), (Checked::Chain, false, 0));
+    assert_eq!(
+        (rec.pop_checked, rec.signable, rec.pop.len()),
+        (Checked::Chain, false, 0)
+    );
 }
 
 fn group_size(kind: u32) -> usize {
-    if kind == 0x0110 || kind == 0x0111 { 33 } else { 64 }
+    if kind == 0x0110 || kind == 0x0111 {
+        33
+    } else {
+        64
+    }
 }
 
 fn be16(kd: &[u8], o: usize) -> usize {
@@ -1776,7 +2937,10 @@ fn musig2_of(env: &Env, kd: &[u8], size: usize) -> MuSig2Key {
         let o = size + 2 + i * size;
         member_keys.push_back(b(env, &kd[o..o + size]));
     }
-    MuSig2Key { agg_key: b(env, &kd[..size]), member_keys }
+    MuSig2Key {
+        agg_key: b(env, &kd[..size]),
+        member_keys,
+    }
 }
 
 /// The typed form of `groupKey ‖ u16 t ‖ u16 n ‖ n × (t commitments ‖ r ‖ z)`.
@@ -1790,9 +2954,17 @@ fn frost_of(env: &Env, kd: &[u8], size: usize) -> FrostKey {
             commitments.push_back(b(env, &kd[o + j * size..o + (j + 1) * size]));
         }
         let (r, z) = (o + t * size, o + (t + 1) * size);
-        members.push_back(FrostMember { commitments, r: b(env, &kd[r..z]), z: n(env, kd[z..z + 32].try_into().unwrap()) });
+        members.push_back(FrostMember {
+            commitments,
+            r: b(env, &kd[r..z]),
+            z: n(env, kd[z..z + 32].try_into().unwrap()),
+        });
     }
-    FrostKey { group_key: b(env, &kd[..size]), threshold: t as u32, members }
+    FrostKey {
+        group_key: b(env, &kd[..size]),
+        threshold: t as u32,
+        members,
+    }
 }
 
 /// `register_musig2` / `register_frost` from `kinds.json`'s rows are the packed `register`: the same id, record and key data
@@ -1800,9 +2972,16 @@ fn frost_of(env: &Env, kd: &[u8], size: usize) -> FrostKey {
 #[test]
 fn ua8_relayer_group_kinds_typed() {
     let mut seen = 0;
-    for row in valid_rows().iter().filter(|r| (0x0110..=0x0113).contains(&kind_of(&r["kind"]))) {
+    for row in valid_rows()
+        .iter()
+        .filter(|r| (0x0110..=0x0113).contains(&kind_of(&r["kind"])))
+    {
         let (env, c, by) = relayed();
-        let (kind, kd, ua) = (kind_of(&row["kind"]), hx(&row["keyData"]), n32(&env, &row["ua"]));
+        let (kind, kd, ua) = (
+            kind_of(&row["kind"]),
+            hx(&row["keyData"]),
+            n32(&env, &row["ua"]),
+        );
         let (attrs, pop, none) = (no_attrs(&env), b(&env, &[1; 64]), Bytes::new(&env));
         let size = group_size(kind);
         let tried = |r: &Option<Address>| {
@@ -1815,16 +2994,50 @@ fn ua8_relayer_group_kinds_typed() {
         assert_eq!(err(tried(&None)), Error::NotVerifiable, "{}", row["name"]);
         assert_eq!(tried(&by).unwrap().unwrap(), ua, "{}", row["name"]);
         let rec = c.record_of(&ua).unwrap();
-        assert_eq!((rec.key_data, rec.pop_checked, rec.signable), (b(&env, &kd), marked(&by), false), "{}", row["name"]);
-        assert_eq!(c.key_owner(&n32(&env, &row["keyHash"])), Some(ua.clone()), "{}", row["name"]);
-        let empty = (MuSig2Key { agg_key: none.clone(), member_keys: SVec::new(&env) }, FrostKey { group_key: none.clone(), threshold: 0, members: SVec::new(&env) });
+        assert_eq!(
+            (rec.key_data, rec.pop_checked, rec.signable),
+            (b(&env, &kd), marked(&by), false),
+            "{}",
+            row["name"]
+        );
+        assert_eq!(
+            c.key_owner(&n32(&env, &row["keyHash"])),
+            Some(ua.clone()),
+            "{}",
+            row["name"]
+        );
+        let empty = (
+            MuSig2Key {
+                agg_key: none.clone(),
+                member_keys: SVec::new(&env),
+            },
+            FrostKey {
+                group_key: none.clone(),
+                threshold: 0,
+                members: SVec::new(&env),
+            },
+        );
         if kind == 0x0110 || kind == 0x0112 {
-            assert_eq!((c.mu_sig2_key_of(&ua), c.frost_key_of(&ua)), (musig2_of(&env, &kd, size), empty.1), "{}", row["name"]);
+            assert_eq!(
+                (c.mu_sig2_key_of(&ua), c.frost_key_of(&ua)),
+                (musig2_of(&env, &kd, size), empty.1),
+                "{}",
+                row["name"]
+            );
         } else {
-            assert_eq!((c.mu_sig2_key_of(&ua), c.frost_key_of(&ua)), (empty.0, frost_of(&env, &kd, size)), "{}", row["name"]);
+            assert_eq!(
+                (c.mu_sig2_key_of(&ua), c.frost_key_of(&ua)),
+                (empty.0, frost_of(&env, &kd, size)),
+                "{}",
+                row["name"]
+            );
         }
         let packed = c.try_register(&kind, &b(&env, &kd), &attrs, &pop, &none, &by);
-        assert_eq!(err(packed), Error::AlreadyRegistered, "one record, either form");
+        assert_eq!(
+            err(packed),
+            Error::AlreadyRegistered,
+            "one record, either form"
+        );
         if kind == 0x0110 || kind == 0x0112 {
             assert_eq!(c.ua_of_musig2(&kind, &musig2_of(&env, &kd, size)), ua);
         } else {
@@ -1846,12 +3059,19 @@ fn ua8_relayer_group_typed_rules() {
     let (env, c, by) = relayed();
     let (attrs, pop, none) = (no_attrs(&env), b(&env, &[1; 64]), Bytes::new(&env));
     let good = musig2_of(&env, &hx(&row(0x0110)["keyData"]), 33);
-    let refused = |kind: u32, k: &MuSig2Key| err(c.try_register_musig2(&kind, k, &attrs, &pop, &none, &by));
+    let refused =
+        |kind: u32, k: &MuSig2Key| err(c.try_register_musig2(&kind, k, &attrs, &pop, &none, &by));
     for kind in [0x0111, 0x0113, 0x0131, 0x0120] {
         assert_eq!(refused(kind, &good), Error::KeyData, "{kind:#x}");
     }
     let view = |k: &MuSig2Key| err(c.try_ua_of_musig2(&0x0110, k));
-    assert_eq!(view(&MuSig2Key { agg_key: b(&env, &[2; 32]), ..good.clone() }), Error::KeyData);
+    assert_eq!(
+        view(&MuSig2Key {
+            agg_key: b(&env, &[2; 32]),
+            ..good.clone()
+        }),
+        Error::KeyData
+    );
     let mut long = good.clone();
     long.member_keys.set(0, b(&env, &[2; 34]));
     assert_eq!(view(&long), Error::KeyData);
@@ -1860,17 +3080,31 @@ fn ua8_relayer_group_typed_rules() {
         many.member_keys.push_back(good.agg_key.clone());
     }
     assert_eq!(view(&many), Error::KeyData);
-    assert_eq!(c.try_register_musig2(&0x0110, &good, &attrs, &pop, &none, &by).unwrap().unwrap(), n32(&env, &row(0x0110)["ua"]));
+    assert_eq!(
+        c.try_register_musig2(&0x0110, &good, &attrs, &pop, &none, &by)
+            .unwrap()
+            .unwrap(),
+        n32(&env, &row(0x0110)["ua"])
+    );
 
     let good = frost_of(&env, &hx(&row(0x0111)["keyData"]), 33);
-    let refused = |kind: u32, k: &FrostKey| err(c.try_register_frost(&kind, k, &attrs, &pop, &none, &by));
+    let refused =
+        |kind: u32, k: &FrostKey| err(c.try_register_frost(&kind, k, &attrs, &pop, &none, &by));
     for kind in [0x0110, 0x0112, 0x0131, 0x0120] {
         assert_eq!(refused(kind, &good), Error::KeyData, "{kind:#x}");
     }
     let no_members = SVec::new(&env);
-    let wide = FrostKey { threshold: 0x1_0002, members: no_members, ..good.clone() };
+    let wide = FrostKey {
+        threshold: 0x1_0002,
+        members: no_members,
+        ..good.clone()
+    };
     let view = |k: &FrostKey| err(c.try_ua_of_frost(&0x0111, k));
-    assert_eq!(view(&wide), Error::KeyData, "no id of a truncated threshold");
+    assert_eq!(
+        view(&wide),
+        Error::KeyData,
+        "no id of a truncated threshold"
+    );
     let mut many = good.clone();
     while many.members.len() < 17 {
         many.members.push_back(good.members.get(0).unwrap());
@@ -1883,10 +3117,24 @@ fn ua8_relayer_group_typed_rules() {
         k.members.set(0, m);
         k
     };
-    assert_eq!(view(&edit(|m, _| { m.commitments.pop_back(); })), Error::KeyData, "a commitment short");
+    assert_eq!(
+        view(&edit(|m, _| {
+            m.commitments.pop_back();
+        })),
+        Error::KeyData,
+        "a commitment short"
+    );
     assert_eq!(view(&edit(|m, e| m.r = b(e, &[2; 32]))), Error::KeyData);
-    assert_eq!(view(&edit(|m, e| m.commitments.set(0, b(e, &[2; 32])))), Error::KeyData);
-    assert_eq!(c.try_register_frost(&0x0111, &good, &attrs, &pop, &none, &by).unwrap().unwrap(), n32(&env, &row(0x0111)["ua"]));
+    assert_eq!(
+        view(&edit(|m, e| m.commitments.set(0, b(e, &[2; 32])))),
+        Error::KeyData
+    );
+    assert_eq!(
+        c.try_register_frost(&0x0111, &good, &attrs, &pop, &none, &by)
+            .unwrap()
+            .unwrap(),
+        n32(&env, &row(0x0111)["ua"])
+    );
 }
 
 /// `kinds.json` `invalid[]` of the `Relayer` kinds, each on a fresh registry with a listed relayer. The chain checks length and
@@ -1895,20 +3143,54 @@ fn ua8_relayer_group_typed_rules() {
 #[test]
 fn ua8_relayer_key_data_layout() {
     const LAYOUT: [&str; 17] = [
-        "empty", "one byte short", "one byte long", "trailing byte", "n = 1", "n = 17", "n = 65535 and no members", "t = 1", "t > n",
-        "t = n = 65535 and no body", "t = 4 > n = 3", "MuSig2 n = 3 with two members", "MuSig2 header alone", "MuSig2 body one byte short",
-        "FROST with one participant missing", "FROST header alone", "FROST body one byte short",
+        "empty",
+        "one byte short",
+        "one byte long",
+        "trailing byte",
+        "n = 1",
+        "n = 17",
+        "n = 65535 and no members",
+        "t = 1",
+        "t > n",
+        "t = n = 65535 and no body",
+        "t = 4 > n = 3",
+        "MuSig2 n = 3 with two members",
+        "MuSig2 header alone",
+        "MuSig2 body one byte short",
+        "FROST with one participant missing",
+        "FROST header alone",
+        "FROST body one byte short",
     ];
     let (mut layout, mut canonical) = (0, 0);
-    for row in json(KINDS)["invalid"].as_array().unwrap().iter().filter(|r| RELAYER.contains(&kind_of(&r["kind"]))) {
+    for row in json(KINDS)["invalid"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| RELAYER.contains(&kind_of(&r["kind"])))
+    {
         let (env, c, by) = relayed();
-        let (kind, kd, reason) = (kind_of(&row["kind"]), b(&env, &hx(&row["keyData"])), row["reason"].as_str().unwrap());
-        let got = c.try_register(&kind, &kd, &no_attrs(&env), &b(&env, &[1; 64]), &Bytes::new(&env), &by);
+        let (kind, kd, reason) = (
+            kind_of(&row["kind"]),
+            b(&env, &hx(&row["keyData"])),
+            row["reason"].as_str().unwrap(),
+        );
+        let got = c.try_register(
+            &kind,
+            &kd,
+            &no_attrs(&env),
+            &b(&env, &[1; 64]),
+            &Bytes::new(&env),
+            &by,
+        );
         if LAYOUT.contains(&reason) {
             assert_eq!(err(got), Error::KeyData, "{kind:#x} {reason}");
             layout += 1;
         } else {
-            assert_eq!(c.record_of(&got.unwrap().unwrap()).unwrap().pop_checked, marked(&by), "{kind:#x} {reason}");
+            assert_eq!(
+                c.record_of(&got.unwrap().unwrap()).unwrap().pop_checked,
+                marked(&by),
+                "{kind:#x} {reason}"
+            );
             canonical += 1;
         }
     }
@@ -1924,7 +3206,15 @@ fn ua8_relayer_key_hash_groups() {
     let mut seen = 0;
     for row in valid_rows() {
         let (kind, kd) = (kind_of(&row["kind"]), b(&env, &hx(&row["keyData"])));
-        assert_eq!(crate::key_hash(&env, kind, &kd).unwrap().to_array().to_vec(), hx(&row["keyHash"]), "{}", row["name"]);
+        assert_eq!(
+            crate::key_hash(&env, kind, &kd)
+                .unwrap()
+                .to_array()
+                .to_vec(),
+            hx(&row["keyHash"]),
+            "{}",
+            row["name"]
+        );
         seen += 1;
     }
     assert!(seen >= 12, "{seen}");
@@ -1933,7 +3223,11 @@ fn ua8_relayer_key_hash_groups() {
     let (attrs, pop, none) = (no_attrs(&env), b(&env, &[1; 64]), Bytes::new(&env));
     let r = portable(&env, "schnorr-bls12381");
     r.on_by(&c, &by);
-    assert_eq!(err(c.try_register(&0x0141, &r.kd, &attrs, &pop, &none, &by)), Error::KeyInUse, "`bls12381-g1`");
+    assert_eq!(
+        err(c.try_register(&0x0141, &r.kd, &attrs, &pop, &none, &by)),
+        Error::KeyInUse,
+        "`bls12381-g1`"
+    );
     portable(&env, "zether-bls12381").on_by(&c, &by);
 }
 
@@ -1943,11 +3237,14 @@ const SECP_RELAYER: [u32; 3] = [0x0103, 0x0110, 0x0111];
 /// Key data of `kind` holding `x`, length and layout only, as a listed relayer can store it: no proof, any prefix byte.
 fn over_x(env: &Env, kind: u32, x: &[u8]) -> Bytes {
     let group = [&[7u8][..], x].concat();
-    b(env, &match kind {
-        0x0103 => x.to_vec(),
-        0x0110 => [&group[..], &[0, 2], &[2; 66]].concat(),
-        _ => [&group[..], &[0, 2, 0, 2], &vec![2; 2 * (3 * 33 + 32)]].concat(),
-    })
+    b(
+        env,
+        &match kind {
+            0x0103 => x.to_vec(),
+            0x0110 => [&group[..], &[0, 2], &[2; 66]].concat(),
+            _ => [&group[..], &[0, 2, 0, 2], &vec![2; 2 * (3 * 33 + 32)]].concat(),
+        },
+    )
 }
 
 /// A marked record proves nothing, so it blocks no `Chain` kind (controller ruling on P11.6): over a victim's `x`, on every
@@ -1961,20 +3258,53 @@ fn ua8_relayer_marked_record_blocks_no_chain_kind() {
         let kd = s.key_data(&env);
         let kh = crate::key_hash(&env, 0x0108, &kd).unwrap();
         let (pop, none) = (b(&env, &[1; 64]), Bytes::new(&env));
-        let squat = c.register(&kind, &over_x(&env, kind, &vecu8(&kd.slice(0..32))), &no_attrs(&env), &pop, &none, &by);
-        assert_eq!(c.key_owner(&kh), Some(squat.clone()), "{kind:#x}: the marked record alone");
+        let squat = c.register(
+            &kind,
+            &over_x(&env, kind, &vecu8(&kd.slice(0..32))),
+            &no_attrs(&env),
+            &pop,
+            &none,
+            &by,
+        );
+        assert_eq!(
+            c.key_owner(&kh),
+            Some(squat.clone()),
+            "{kind:#x}: the marked record alone"
+        );
 
         let ua = s.register(&env, &c);
-        assert_eq!(c.key_owner(&kh), Some(ua.clone()), "{kind:#x}: the proved record");
-        assert_eq!(c.record_of(&ua).unwrap().pop_checked, Checked::Chain, "{kind:#x}");
-        assert_eq!(c.record_of(&squat).unwrap().pop_checked, marked(&by), "{kind:#x}");
+        assert_eq!(
+            c.key_owner(&kh),
+            Some(ua.clone()),
+            "{kind:#x}: the proved record"
+        );
+        assert_eq!(
+            c.record_of(&ua).unwrap().pop_checked,
+            Checked::Chain,
+            "{kind:#x}"
+        );
+        assert_eq!(
+            c.record_of(&squat).unwrap().pop_checked,
+            marked(&by),
+            "{kind:#x}"
+        );
         assert!(c.receivable(&ua), "{kind:#x}");
         let (pt, d) = (n(&env, METATX), n(&env, [0x74; 32]));
-        c.require_authorized(&ua, &pt, &d, &UaSig::single(&env, s.sign(&env, &test::msg(&env, 0x0108, METATX, &d))));
+        c.require_authorized(
+            &ua,
+            &pt,
+            &d,
+            &UaSig::single(&env, s.sign(&env, &test::msg(&env, 0x0108, METATX, &d))),
+        );
         let m = msig(&env, 1, &[(0x0108, ua.to_array(), 1)]);
         m.register(&env, &c, &SVec::new(&env));
         m.accepted_by(&env, &c, &[&s]);
-        c.require_authorized(&m.ua, &pt, &d, &test::msig_auth(&env, &[m.slot(&env, &s, METATX, &d)]));
+        c.require_authorized(
+            &m.ua,
+            &pt,
+            &d,
+            &test::msig_auth(&env, &[m.slot(&env, &s, METATX, &d)]),
+        );
     }
 }
 
@@ -1989,27 +3319,69 @@ fn ua8_relayer_kind_refused_over_chain_key() {
         let (attrs, pop, none) = (no_attrs(&env), b(&env, &[1; 64]), Bytes::new(&env));
         let ua = s.register(&env, &c);
         let x = vecu8(&kd.slice(0..32));
-        assert_eq!(err(c.try_register(&kind, &over_x(&env, kind, &x), &attrs, &pop, &none, &by)), Error::KeyInUse, "{kind:#x}");
-        assert_eq!(c.key_owner(&crate::key_hash(&env, 0x0108, &kd).unwrap()), Some(ua.clone()), "{kind:#x}");
-        let other = c.register(&kind, &over_x(&env, kind, &[0x11; 32]), &attrs, &pop, &none, &by);
-        assert_eq!(c.record_of(&other).unwrap().pop_checked, marked(&by), "{kind:#x}");
+        assert_eq!(
+            err(c.try_register(&kind, &over_x(&env, kind, &x), &attrs, &pop, &none, &by)),
+            Error::KeyInUse,
+            "{kind:#x}"
+        );
+        assert_eq!(
+            c.key_owner(&crate::key_hash(&env, 0x0108, &kd).unwrap()),
+            Some(ua.clone()),
+            "{kind:#x}"
+        );
+        let other = c.register(
+            &kind,
+            &over_x(&env, kind, &[0x11; 32]),
+            &attrs,
+            &pop,
+            &none,
+            &by,
+        );
+        assert_eq!(
+            c.record_of(&other).unwrap().pop_checked,
+            marked(&by),
+            "{kind:#x}"
+        );
         for k in SECP_RELAYER.iter().filter(|k| **k != kind) {
-            assert_eq!(err(c.try_register(k, &over_x(&env, *k, &[0x11; 32]), &attrs, &pop, &none, &by)), Error::KeyInUse, "{kind:#x} then {k:#x}");
+            assert_eq!(
+                err(c.try_register(k, &over_x(&env, *k, &[0x11; 32]), &attrs, &pop, &none, &by)),
+                Error::KeyInUse,
+                "{kind:#x} then {k:#x}"
+            );
         }
     }
 }
 
 /// An n-of-n `msig` of `n` relayer-checked `slhdsa128s` members, its slots of 7,856 B each.
-fn slh_msig(count: u8) -> (Env, UaRegistryClient<'static>, Option<Address>, test::Msig, StdVec<Slot>) {
+fn slh_msig(
+    count: u8,
+) -> (
+    Env,
+    UaRegistryClient<'static>,
+    Option<Address>,
+    test::Msig,
+    StdVec<Slot>,
+) {
     let (env, c, by) = relayed();
     let (pop, none) = (b(&env, &[0x5a; 7_856]), Bytes::new(&env));
     let mut list = StdVec::new();
     for i in 0..count {
-        let ua = c.register(&0x0133, &b(&env, &[0x80 + i; 32]), &no_attrs(&env), &pop, &none, &by);
+        let ua = c.register(
+            &0x0133,
+            &b(&env, &[0x80 + i; 32]),
+            &no_attrs(&env),
+            &pop,
+            &none,
+            &by,
+        );
         list.push((0x0133u16, ua.to_array(), 1u16));
     }
     let m = msig(&env, count as u16, &list);
-    let slots = sorted(list.iter().map(|x| (m.index(&x.1), vec![], vec![0x5a; 7_856])).collect());
+    let slots = sorted(
+        list.iter()
+            .map(|x| (m.index(&x.1), vec![], vec![0x5a; 7_856]))
+            .collect(),
+    );
     (env, c, by, m, slots)
 }
 
@@ -2019,8 +3391,14 @@ fn pqz_key_by_slhdsa(len: usize, count: u8) {
     msig_tried(&env, &c, &m, &slots, &by).unwrap().unwrap();
     let (key, ph) = (b(&env, &vec![7; len]), n(&env, [9; 32]));
     c.set_pqz_key(&m.ua, &key, &ph, &test::msig_auth(&env, &slots), &by);
-    let size: usize = entry::<PqzEntry>(&env, &c, &Key::PqzK(m.ua.clone())).map(|e| (e.0.len() + e.1.len()) as usize).unwrap();
-    assert_eq!(size, len + 64 + count as usize * 8_064, "key + 64 + n × (192 + the signature padded to 32)");
+    let size: usize = entry::<PqzEntry>(&env, &c, &Key::PqzK(m.ua.clone()))
+        .map(|e| (e.0.len() + e.1.len()) as usize)
+        .unwrap();
+    assert_eq!(
+        size,
+        len + 64 + count as usize * 8_064,
+        "key + 64 + n × (192 + the signature padded to 32)"
+    );
     std::println!("set_pqz_key {count} slhdsa128s slots, key {len} B: key + sig {size} B");
 }
 
@@ -2051,7 +3429,11 @@ fn ua8_set_pqz_key_relayer_slots_over_limit_n2048() {
 fn ua8_register_relayer_slots_largest_fit() {
     let (env, c, by, m, slots) = slh_msig(7);
     msig_tried(&env, &c, &m, &slots, &by).unwrap().unwrap();
-    assert_eq!(env.auths().len(), 1, "one attestation for all the relayer slots: a second `require_auth` needs a second entry");
+    assert_eq!(
+        env.auths().len(),
+        1,
+        "one attestation for all the relayer slots: a second `require_auth` needs a second entry"
+    );
     assert_eq!(c.pop_of(&m.ua).len(), 64 + 7 * 8_064);
 }
 
@@ -2064,7 +3446,10 @@ fn ua8_register_relayer_slots_over_limit() {
 
 // ---------- B7 (C15): the record bytes, read back against the vector ----------
 
-const ROUND_TRIP: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../vectors/ua8-roundtrip.json");
+const ROUND_TRIP: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../vectors/ua8-roundtrip.json"
+);
 
 fn checked_code(c: &Checked) -> u32 {
     match c {
@@ -2076,23 +3461,55 @@ fn checked_code(c: &Checked) -> u32 {
 
 /// `kem` read back against a row's typed `kem`, field by field.
 fn assert_kem(k: &KemKey, row: &Value, what: &str) {
-    assert_eq!((k.scheme as u64, vecu8(&k.mlkem_ek), k.x25519.to_array().to_vec()),
-               (row["scheme"].as_u64().unwrap(), hx(&row["mlkemEk"]), hx(&row["x25519"])), "{what}");
+    assert_eq!(
+        (
+            k.scheme as u64,
+            vecu8(&k.mlkem_ek),
+            k.x25519.to_array().to_vec()
+        ),
+        (
+            row["scheme"].as_u64().unwrap(),
+            hx(&row["mlkemEk"]),
+            hx(&row["x25519"])
+        ),
+        "{what}"
+    );
 }
 
 /// A registered `row` read back through `registration_of` / `kem_key_at` / `pqz_key_of`, every byte against the vector's JSON
 /// and not the values given to `register`; then its KEM records in `order`, each read back the same way, `kem_key_of` sampled
 /// after each write. Returns the row's line of `ua8-roundtrip.json`, all of it read from the contract.
-fn round_trip(env: &Env, c: &UaRegistryClient, row: &Value, order: &[u64], relayer: &Option<Address>) -> Value {
+fn round_trip(
+    env: &Env,
+    c: &UaRegistryClient,
+    row: &Value,
+    order: &[u64],
+    relayer: &Option<Address>,
+) -> Value {
     let (name, ua) = (row["name"].as_str().unwrap(), n32(env, &row["ua"]));
     let a = &row["args"]["attrs"];
     let read = c.registration_of(&ua).unwrap();
     let (kind, kd, attrs, pop, pqz_pop) = read.clone();
-    assert_eq!((kind, vecu8(&kd)), (kind_of(&row["kind"]), hx(&row["keyData"])), "{name}");
-    assert_eq!((vecu8(&attrs.pqz_key), vecu8(&attrs.pqz_pop_hash.clone().into()), vecu8(&attrs.kem_pk_hash.clone().into())),
-               (hx(&a["pqzKey"]), hx(&a["pqzPopHash"]), hx(&a["kemPkHash"])), "{name}");
+    assert_eq!(
+        (kind, vecu8(&kd)),
+        (kind_of(&row["kind"]), hx(&row["keyData"])),
+        "{name}"
+    );
+    assert_eq!(
+        (
+            vecu8(&attrs.pqz_key),
+            vecu8(&attrs.pqz_pop_hash.clone().into()),
+            vecu8(&attrs.kem_pk_hash.clone().into())
+        ),
+        (hx(&a["pqzKey"]), hx(&a["pqzPopHash"]), hx(&a["kemPkHash"])),
+        "{name}"
+    );
     assert_kem(&attrs.kem, &a["kem"], name);
-    assert_eq!((vecu8(&pop), vecu8(&pqz_pop)), (hx(&row["pop"]), hx(&row["pqzPop"])), "{name}");
+    assert_eq!(
+        (vecu8(&pop), vecu8(&pqz_pop)),
+        (hx(&row["pop"]), hx(&row["pqzPop"])),
+        "{name}"
+    );
     if hx(&a["kem"]["mlkemEk"]).is_empty() {
         assert_eq!(c.kem_key_at(&ua, &0), None, "{name}");
     } else {
@@ -2102,7 +3519,11 @@ fn round_trip(env: &Env, c: &UaRegistryClient, row: &Value, order: &[u64], relay
     }
     let pqz = c.pqz_key_of(&ua);
     if let Some((key, hash, proven, _)) = &pqz {
-        assert_eq!((vecu8(key), vecu8(&hash.clone().into()), proven), (hx(&a["pqzKey"]), hx(&a["pqzPopHash"]), &false), "{name}");
+        assert_eq!(
+            (vecu8(key), vecu8(&hash.clone().into()), proven),
+            (hx(&a["pqzKey"]), hx(&a["pqzPopHash"]), &false),
+            "{name}"
+        );
     } else {
         assert!(hx(&a["pqzKey"]).is_empty(), "{name}: the key is in state");
     }
@@ -2110,14 +3531,21 @@ fn round_trip(env: &Env, c: &UaRegistryClient, row: &Value, order: &[u64], relay
     let rows = json(PORTABLE)["kemRecords"].as_array().unwrap().clone();
     let mut max_after = StdVec::new();
     for v in order {
-        let r = rows.iter().find(|k| k["ua"] == row["ua"] && k["version"] == *v).unwrap();
+        let r = rows
+            .iter()
+            .find(|k| k["ua"] == row["ua"] && k["version"] == *v)
+            .unwrap();
         kem_row(env, r).tried_by(c, relayer).unwrap().unwrap();
         let (kem, sig, _) = c.kem_key_at(&ua, v).unwrap();
         assert_kem(&kem, &r["args"]["kem"], name);
         assert_eq!(vecu8(&sig), hx(&r["sig"]), "{name} v{v}");
         max_after.push(c.kem_key_of(&ua).unwrap().0);
     }
-    assert_eq!(c.registration_of(&ua).unwrap(), read, "{name}: a later KEM record is no `register` argument");
+    assert_eq!(
+        c.registration_of(&ua).unwrap(),
+        read,
+        "{name}: a later KEM record is no `register` argument"
+    );
     let (p, q, k) = c.checked_of(&ua);
     serde_json::json!({
         "name": name, "ua": row["ua"], "kind": kind,
@@ -2129,13 +3557,22 @@ fn round_trip(env: &Env, c: &UaRegistryClient, row: &Value, order: &[u64], relay
 
 /// C15: the `Chain` rows with their KEM records, a `fndsa512` through the relayer mode with KEM records 3 then 1, `msig-pq`
 /// with its minimal `pop` and no KEM record among the `Chain` rows. `checked` and the KEM order are pinned in `ua8-roundtrip.json`
-/// (`UA8_WRITE=1` writes it, every other run compares), which `e2e_ua8` also takes its order from.
+/// (`UA8_WRITE=1` writes it, every other run compares), which `e2e_ua_portable_soroban` also takes its order from.
 #[test]
 fn ua8_record_bytes_round_trip() {
     let mut rows = StdVec::new();
     for row in chain_rows() {
         let (env, c, _) = registered(row["name"].as_str().unwrap());
-        let order: &[u64] = if json(PORTABLE)["kemRecords"].as_array().unwrap().iter().any(|k| k["ua"] == row["ua"]) { &[3, 1, 2] } else { &[] };
+        let order: &[u64] = if json(PORTABLE)["kemRecords"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|k| k["ua"] == row["ua"])
+        {
+            &[3, 1, 2]
+        } else {
+            &[]
+        };
         rows.push(round_trip(&env, &c, &row, order, &None));
     }
     let (env, c, by) = relayed();
@@ -2144,17 +3581,31 @@ fn ua8_record_bytes_round_trip() {
     rows.push(round_trip(&env, &c, &row, &[3, 1], &by));
     assert_eq!(rows.len(), 17);
     // `mldsa65/<set>` and `fndsa512`: an `msig` has no KEM record (CTR-UA-32)
-    assert_eq!(rows.iter().filter(|r| !r["kemOrder"].as_array().unwrap().is_empty()).count(), 5);
+    assert_eq!(
+        rows.iter()
+            .filter(|r| !r["kemOrder"].as_array().unwrap().is_empty())
+            .count(),
+        5
+    );
 
     let got = serde_json::json!({
         "note": "Generated by ua8_record_bytes_round_trip (UA8_WRITE=1), never edit by hand: what the registry answered for each row of portable.json. checked: 0 none, 1 chain, 2 relayer.",
         "rows": rows,
     });
     if std::env::var("UA8_WRITE").is_ok_and(|v| v == "1") {
-        std::fs::write(ROUND_TRIP, serde_json::to_string_pretty(&got).unwrap() + "\n").unwrap();
+        std::fs::write(
+            ROUND_TRIP,
+            serde_json::to_string_pretty(&got).unwrap() + "\n",
+        )
+        .unwrap();
     }
-    let file = std::fs::read_to_string(ROUND_TRIP).expect("vectors/ua8-roundtrip.json: run once with UA8_WRITE=1");
-    assert_eq!(got, serde_json::from_str::<Value>(&file).unwrap(), "the answers moved from ua8-roundtrip.json");
+    let file = std::fs::read_to_string(ROUND_TRIP)
+        .expect("vectors/ua8-roundtrip.json: run once with UA8_WRITE=1");
+    assert_eq!(
+        got,
+        serde_json::from_str::<Value>(&file).unwrap(),
+        "the answers moved from ua8-roundtrip.json"
+    );
 }
 
 // ---------- B7b (owner 2026-11-01): the relayer's auth is one word over every argument ----------
@@ -2162,12 +3613,51 @@ fn ua8_record_bytes_round_trip() {
 /// A relayer-mode write with all its arguments, named, so one class can change at a time.
 #[derive(Clone)]
 enum Write {
-    Register { kind: u32, key_data: Bytes, attrs: UaAttrs, pop: Bytes, pqz_pop: Bytes, by: Option<Address> },
-    Msig { structure: MsigStructure, attrs: UaAttrs, pop: SVec<MemberSig>, pqz_pop: Bytes, by: Option<Address> },
-    Musig2 { kind: u32, key: MuSig2Key, attrs: UaAttrs, pop: Bytes, pqz_pop: Bytes, by: Option<Address> },
-    Frost { kind: u32, key: FrostKey, attrs: UaAttrs, pop: Bytes, pqz_pop: Bytes, by: Option<Address> },
-    SetKem { ua: BytesN<32>, version: u64, kem: KemKey, sig: UaSig, by: Option<Address> },
-    SetPqz { ua: BytesN<32>, key: Bytes, hash: BytesN<32>, sig: UaSig, by: Option<Address> },
+    Register {
+        kind: u32,
+        key_data: Bytes,
+        attrs: UaAttrs,
+        pop: Bytes,
+        pqz_pop: Bytes,
+        by: Option<Address>,
+    },
+    Msig {
+        structure: MsigStructure,
+        attrs: UaAttrs,
+        pop: SVec<MemberSig>,
+        pqz_pop: Bytes,
+        by: Option<Address>,
+    },
+    Musig2 {
+        kind: u32,
+        key: MuSig2Key,
+        attrs: UaAttrs,
+        pop: Bytes,
+        pqz_pop: Bytes,
+        by: Option<Address>,
+    },
+    Frost {
+        kind: u32,
+        key: FrostKey,
+        attrs: UaAttrs,
+        pop: Bytes,
+        pqz_pop: Bytes,
+        by: Option<Address>,
+    },
+    SetKem {
+        ua: BytesN<32>,
+        version: u64,
+        kem: KemKey,
+        sig: UaSig,
+        by: Option<Address>,
+    },
+    SetPqz {
+        ua: BytesN<32>,
+        key: Bytes,
+        hash: BytesN<32>,
+        sig: UaSig,
+        by: Option<Address>,
+    },
 }
 
 impl Write {
@@ -2184,30 +3674,126 @@ impl Write {
     /// Every argument in the entry's order, written here and not read from the contract: the test's own account of what is bound.
     fn args(&self, env: &Env) -> SVec<soroban_sdk::Val> {
         match self.clone() {
-            Write::Register { kind, key_data, attrs, pop, pqz_pop, by } => (kind, key_data, attrs, pop, pqz_pop, by).into_val(env),
-            Write::Msig { structure, attrs, pop, pqz_pop, by } => (structure, attrs, pop, pqz_pop, by).into_val(env),
-            Write::Musig2 { kind, key, attrs, pop, pqz_pop, by } => (kind, key, attrs, pop, pqz_pop, by).into_val(env),
-            Write::Frost { kind, key, attrs, pop, pqz_pop, by } => (kind, key, attrs, pop, pqz_pop, by).into_val(env),
-            Write::SetKem { ua, version, kem, sig, by } => (ua, version, kem, sig, by).into_val(env),
-            Write::SetPqz { ua, key, hash, sig, by } => (ua, key, hash, sig, by).into_val(env),
+            Write::Register {
+                kind,
+                key_data,
+                attrs,
+                pop,
+                pqz_pop,
+                by,
+            } => (kind, key_data, attrs, pop, pqz_pop, by).into_val(env),
+            Write::Msig {
+                structure,
+                attrs,
+                pop,
+                pqz_pop,
+                by,
+            } => (structure, attrs, pop, pqz_pop, by).into_val(env),
+            Write::Musig2 {
+                kind,
+                key,
+                attrs,
+                pop,
+                pqz_pop,
+                by,
+            } => (kind, key, attrs, pop, pqz_pop, by).into_val(env),
+            Write::Frost {
+                kind,
+                key,
+                attrs,
+                pop,
+                pqz_pop,
+                by,
+            } => (kind, key, attrs, pop, pqz_pop, by).into_val(env),
+            Write::SetKem {
+                ua,
+                version,
+                kem,
+                sig,
+                by,
+            } => (ua, version, kem, sig, by).into_val(env),
+            Write::SetPqz {
+                ua,
+                key,
+                hash,
+                sig,
+                by,
+            } => (ua, key, hash, sig, by).into_val(env),
         }
     }
     fn by(&self) -> Address {
         match self {
-            Write::Register { by, .. } | Write::Msig { by, .. } | Write::Musig2 { by, .. } | Write::Frost { by, .. } | Write::SetKem { by, .. } | Write::SetPqz { by, .. } => by.clone().unwrap(),
+            Write::Register { by, .. }
+            | Write::Msig { by, .. }
+            | Write::Musig2 { by, .. }
+            | Write::Frost { by, .. }
+            | Write::SetKem { by, .. }
+            | Write::SetPqz { by, .. } => by.clone().unwrap(),
         }
     }
     fn tried(&self, c: &UaRegistryClient) -> Result<(), soroban_sdk::Error> {
-        let done = |x: bool, e: Option<soroban_sdk::Error>| if x { Ok(()) } else { Err(e.unwrap()) };
-        let id = |r: Tried<BytesN<32>>| done(r.is_ok(), r.err().map(|e| e.unwrap_or_else(|_| panic!("an invoke error"))));
-        let unit = |r: Tried<()>| done(r.is_ok(), r.err().map(|e| e.unwrap_or_else(|_| panic!("an invoke error"))));
+        let done =
+            |x: bool, e: Option<soroban_sdk::Error>| if x { Ok(()) } else { Err(e.unwrap()) };
+        let id = |r: Tried<BytesN<32>>| {
+            done(
+                r.is_ok(),
+                r.err()
+                    .map(|e| e.unwrap_or_else(|_| panic!("an invoke error"))),
+            )
+        };
+        let unit = |r: Tried<()>| {
+            done(
+                r.is_ok(),
+                r.err()
+                    .map(|e| e.unwrap_or_else(|_| panic!("an invoke error"))),
+            )
+        };
         match self {
-            Write::Register { kind, key_data, attrs, pop, pqz_pop, by } => id(c.try_register(kind, key_data, attrs, pop, pqz_pop, by)),
-            Write::Msig { structure, attrs, pop, pqz_pop, by } => id(c.try_register_msig(structure, attrs, pop, pqz_pop, by)),
-            Write::Musig2 { kind, key, attrs, pop, pqz_pop, by } => id(c.try_register_musig2(kind, key, attrs, pop, pqz_pop, by)),
-            Write::Frost { kind, key, attrs, pop, pqz_pop, by } => id(c.try_register_frost(kind, key, attrs, pop, pqz_pop, by)),
-            Write::SetKem { ua, version, kem, sig, by } => unit(c.try_set_kem_key(ua, version, kem, sig, by)),
-            Write::SetPqz { ua, key, hash, sig, by } => unit(c.try_set_pqz_key(ua, key, hash, sig, by)),
+            Write::Register {
+                kind,
+                key_data,
+                attrs,
+                pop,
+                pqz_pop,
+                by,
+            } => id(c.try_register(kind, key_data, attrs, pop, pqz_pop, by)),
+            Write::Msig {
+                structure,
+                attrs,
+                pop,
+                pqz_pop,
+                by,
+            } => id(c.try_register_msig(structure, attrs, pop, pqz_pop, by)),
+            Write::Musig2 {
+                kind,
+                key,
+                attrs,
+                pop,
+                pqz_pop,
+                by,
+            } => id(c.try_register_musig2(kind, key, attrs, pop, pqz_pop, by)),
+            Write::Frost {
+                kind,
+                key,
+                attrs,
+                pop,
+                pqz_pop,
+                by,
+            } => id(c.try_register_frost(kind, key, attrs, pop, pqz_pop, by)),
+            Write::SetKem {
+                ua,
+                version,
+                kem,
+                sig,
+                by,
+            } => unit(c.try_set_kem_key(ua, version, kem, sig, by)),
+            Write::SetPqz {
+                ua,
+                key,
+                hash,
+                sig,
+                by,
+            } => unit(c.try_set_pqz_key(ua, key, hash, sig, by)),
         }
     }
 }
@@ -2232,9 +3818,17 @@ fn binds(base: fn(&Env, &UaRegistryClient, &Option<Address>) -> Write, changes: 
         change(&env, &mut v, &other);
         let name = w.function();
         attest_write(&env, &c, &w);
-        assert_eq!(v.tried(&c), Err(AUTH_REFUSED), "{name}: {what}: the attestation of other arguments passed");
+        assert_eq!(
+            v.tried(&c),
+            Err(AUTH_REFUSED),
+            "{name}: {what}: the attestation of other arguments passed"
+        );
         attest_write(&env, &c, &v);
-        assert_eq!(v.tried(&c), Ok(()), "{name}: {what}: refused for another reason than the hash");
+        assert_eq!(
+            v.tried(&c),
+            Ok(()),
+            "{name}: {what}: refused for another reason than the hash"
+        );
     }
 }
 
@@ -2244,61 +3838,138 @@ fn set_row(env: &Env) -> Reg {
 
 /// `set_row`'s attributes without its KEM key: an `msig` has none (CTR-UA-32).
 fn msig_attrs(env: &Env) -> UaAttrs {
-    UaAttrs { kem: KemKey::none(env), ..set_row(env).attrs }
+    UaAttrs {
+        kem: KemKey::none(env),
+        ..set_row(env).attrs
+    }
 }
 
 fn fndsa_write(env: &Env, _: &UaRegistryClient, by: &Option<Address>) -> Write {
     let (r, s) = (portable(env, "fndsa512"), set_row(env));
-    Write::Register { kind: r.kind, key_data: r.kd, attrs: s.attrs, pop: r.pop, pqz_pop: s.pqz_pop, by: by.clone() }
+    Write::Register {
+        kind: r.kind,
+        key_data: r.kd,
+        attrs: s.attrs,
+        pop: r.pop,
+        pqz_pop: s.pqz_pop,
+        by: by.clone(),
+    }
 }
 
 fn attrs_of(w: &mut Write) -> &mut UaAttrs {
     match w {
-        Write::Register { attrs, .. } | Write::Msig { attrs, .. } | Write::Musig2 { attrs, .. } | Write::Frost { attrs, .. } => attrs,
+        Write::Register { attrs, .. }
+        | Write::Msig { attrs, .. }
+        | Write::Musig2 { attrs, .. }
+        | Write::Frost { attrs, .. } => attrs,
         _ => panic!("no attrs"),
     }
 }
 
 fn set_by(w: &mut Write, to: &Address) {
     match w {
-        Write::Register { by, .. } | Write::Msig { by, .. } | Write::Musig2 { by, .. } | Write::Frost { by, .. } | Write::SetKem { by, .. } | Write::SetPqz { by, .. } => *by = Some(to.clone()),
+        Write::Register { by, .. }
+        | Write::Msig { by, .. }
+        | Write::Musig2 { by, .. }
+        | Write::Frost { by, .. }
+        | Write::SetKem { by, .. }
+        | Write::SetPqz { by, .. } => *by = Some(to.clone()),
     }
 }
 
 /// Every argument class of `register`.
 #[test]
 fn ua8_attest_binds_register() {
-    binds(fndsa_write, &[
-        ("key_data", |e, w, _| if let Write::Register { key_data, .. } = w { *key_data = flipped(e, key_data) }),
-        ("pop", |e, w, _| if let Write::Register { pop, .. } = w { *pop = flipped(e, pop) }),
-        ("pqz_pop", |e, w, _| if let Write::Register { pqz_pop, .. } = w { *pqz_pop = Bytes::new(e) }),
-        ("attrs.pqz_key", |e, w, _| { let a = attrs_of(w); a.pqz_key = flipped(e, &a.pqz_key) }),
-        ("attrs.pqz_pop_hash", |e, w, _| {
-            let v = b(e, &[9; 64]);
-            let h: BytesN<32> = e.crypto().keccak256(&v).into();
-            attrs_of(w).pqz_pop_hash = h;
-            if let Write::Register { pqz_pop, .. } = w { *pqz_pop = v }
-        }),
-        ("attrs.kem.mlkem_ek", |e, w, _| { let a = attrs_of(w); a.kem.mlkem_ek = flipped(e, &a.kem.mlkem_ek) }),
-        ("attrs.kem.x25519", |e, w, _| attrs_of(w).kem.x25519 = n(e, [0x33; 32])),
-        ("attrs.kem_pk_hash", |e, w, _| { let a = attrs_of(w); a.kem = KemKey { scheme: 1, ..KemKey::none(e) }; a.kem_pk_hash = n(e, [0x44; 32]) }),
-        ("relayer", |_, w, other| set_by(w, other)),
-    ]);
+    binds(
+        fndsa_write,
+        &[
+            ("key_data", |e, w, _| {
+                if let Write::Register { key_data, .. } = w {
+                    *key_data = flipped(e, key_data)
+                }
+            }),
+            ("pop", |e, w, _| {
+                if let Write::Register { pop, .. } = w {
+                    *pop = flipped(e, pop)
+                }
+            }),
+            ("pqz_pop", |e, w, _| {
+                if let Write::Register { pqz_pop, .. } = w {
+                    *pqz_pop = Bytes::new(e)
+                }
+            }),
+            ("attrs.pqz_key", |e, w, _| {
+                let a = attrs_of(w);
+                a.pqz_key = flipped(e, &a.pqz_key)
+            }),
+            ("attrs.pqz_pop_hash", |e, w, _| {
+                let v = b(e, &[9; 64]);
+                let h: BytesN<32> = e.crypto().keccak256(&v).into();
+                attrs_of(w).pqz_pop_hash = h;
+                if let Write::Register { pqz_pop, .. } = w {
+                    *pqz_pop = v
+                }
+            }),
+            ("attrs.kem.mlkem_ek", |e, w, _| {
+                let a = attrs_of(w);
+                a.kem.mlkem_ek = flipped(e, &a.kem.mlkem_ek)
+            }),
+            ("attrs.kem.x25519", |e, w, _| {
+                attrs_of(w).kem.x25519 = n(e, [0x33; 32])
+            }),
+            ("attrs.kem_pk_hash", |e, w, _| {
+                let a = attrs_of(w);
+                a.kem = KemKey {
+                    scheme: 1,
+                    ..KemKey::none(e)
+                };
+                a.kem_pk_hash = n(e, [0x44; 32])
+            }),
+            ("relayer", |_, w, other| set_by(w, other)),
+        ],
+    );
     // `kind`: two kinds of one key length, so only the hash can tell them apart
-    binds(|e, _, by| Write::Register { kind: 0x0133, key_data: b(e, &[7; 32]), attrs: no_attrs(e), pop: b(e, &[1; 64]), pqz_pop: Bytes::new(e), by: by.clone() }, &[
-        ("kind", |_, w, _| if let Write::Register { kind, .. } = w { *kind = 0x0103 }),
-    ]);
+    binds(
+        |e, _, by| Write::Register {
+            kind: 0x0133,
+            key_data: b(e, &[7; 32]),
+            attrs: no_attrs(e),
+            pop: b(e, &[1; 64]),
+            pqz_pop: Bytes::new(e),
+            by: by.clone(),
+        },
+        &[("kind", |_, w, _| {
+            if let Write::Register { kind, .. } = w {
+                *kind = 0x0103
+            }
+        })],
+    );
 }
 
 /// `fndsa512` members of the `msig` of `register_msig`, a third registered for the change of a member.
 fn msig_write(env: &Env, c: &UaRegistryClient, by: &Option<Address>) -> Write {
-    let members: StdVec<_> = (0..3u8).map(|i| {
-        let ua = c.register(&0x0132, &b(env, &[0x70 + i; 897]), &no_attrs(env), &b(env, &[1; 666]), &Bytes::new(env), by);
-        (0x0132u16, ua.to_array(), 2u16)
-    }).collect();
+    let members: StdVec<_> = (0..3u8)
+        .map(|i| {
+            let ua = c.register(
+                &0x0132,
+                &b(env, &[0x70 + i; 897]),
+                &no_attrs(env),
+                &b(env, &[1; 666]),
+                &Bytes::new(env),
+                by,
+            );
+            (0x0132u16, ua.to_array(), 2u16)
+        })
+        .collect();
     let m = msig(env, 4, &members[..2]);
     let slots = [(0, vec![], vec![5; 666]), (1, vec![], vec![6; 666])];
-    Write::Msig { structure: m.s, attrs: no_attrs(env), pop: test::member_sigs(env, &slots), pqz_pop: Bytes::new(env), by: by.clone() }
+    Write::Msig {
+        structure: m.s,
+        attrs: no_attrs(env),
+        pop: test::member_sigs(env, &slots),
+        pqz_pop: Bytes::new(env),
+        by: by.clone(),
+    }
 }
 
 fn structure(w: &mut Write) -> &mut MsigStructure {
@@ -2310,144 +3981,277 @@ fn structure(w: &mut Write) -> &mut MsigStructure {
 
 /// The same `msig` with a third member in the structure, so a slot's `index` can move, and a PQZ key whose proof can go.
 fn msig_write_with_proof(env: &Env, c: &UaRegistryClient, by: &Option<Address>) -> Write {
-    let Write::Msig { pop, .. } = msig_write(env, c, by) else { unreachable!() };
-    let third = (0x0132u16, digest::ua_of(env, 0x0132, &b(env, &[0x72; 897])).to_array(), 2u16);
-    let first: StdVec<_> = (0..2u8).map(|i| (0x0132u16, digest::ua_of(env, 0x0132, &b(env, &[0x70 + i; 897])).to_array(), 2u16)).collect();
-    Write::Msig { structure: msig(env, 4, &[first[0], first[1], third]).s, attrs: msig_attrs(env), pop, pqz_pop: set_row(env).pqz_pop, by: by.clone() }
+    let Write::Msig { pop, .. } = msig_write(env, c, by) else {
+        unreachable!()
+    };
+    let third = (
+        0x0132u16,
+        digest::ua_of(env, 0x0132, &b(env, &[0x72; 897])).to_array(),
+        2u16,
+    );
+    let first: StdVec<_> = (0..2u8)
+        .map(|i| {
+            (
+                0x0132u16,
+                digest::ua_of(env, 0x0132, &b(env, &[0x70 + i; 897])).to_array(),
+                2u16,
+            )
+        })
+        .collect();
+    Write::Msig {
+        structure: msig(env, 4, &[first[0], first[1], third]).s,
+        attrs: msig_attrs(env),
+        pop,
+        pqz_pop: set_row(env).pqz_pop,
+        by: by.clone(),
+    }
 }
 
 /// Every argument class of `register_msig`, a structure's fields and a slot's among them.
 #[test]
 fn ua8_attest_binds_register_msig() {
-    binds(msig_write_with_proof, &[
-        ("pqz_pop", |e, w, _| if let Write::Msig { pqz_pop, .. } = w { *pqz_pop = Bytes::new(e) }),
-        ("pop.index", |_, w, _| if let Write::Msig { pop, .. } = w {
-            let mut s = pop.get(1).unwrap();
-            s.index = 2;
-            pop.set(1, s);
-        }),
-    ]);
-    binds(msig_write, &[
-        ("structure.threshold", |_, w, _| structure(w).threshold = 3),
-        ("structure.members.weight", |_, w, _| {
-            let mut m = structure(w).members.get(1).unwrap();
-            m.weight = 3;
-            structure(w).members.set(1, m);
-        }),
-        ("structure.members.id", |e, w, _| {
-            let (s, third) = (structure(w), digest::ua_of(e, 0x0132, &b(e, &[0x72; 897])));
-            let mut ids: StdVec<_> = [s.members.get(0).unwrap().id, third].iter().map(|x| (0x0132u16, x.to_array(), 2u16)).collect();
-            ids.sort_by_key(|x| x.1);
-            *s = msig(e, 4, &ids).s;
-        }),
-        ("attrs", |e, w, _| *attrs_of(w) = msig_attrs(e)),
-        ("pop.sig", |e, w, _| if let Write::Msig { pop, .. } = w {
-            let mut s = pop.get(0).unwrap();
-            s.sig = flipped(e, &s.sig);
-            pop.set(0, s);
-        }),
-        ("relayer", |_, w, other| set_by(w, other)),
-    ]);
+    binds(
+        msig_write_with_proof,
+        &[
+            ("pqz_pop", |e, w, _| {
+                if let Write::Msig { pqz_pop, .. } = w {
+                    *pqz_pop = Bytes::new(e)
+                }
+            }),
+            ("pop.index", |_, w, _| {
+                if let Write::Msig { pop, .. } = w {
+                    let mut s = pop.get(1).unwrap();
+                    s.index = 2;
+                    pop.set(1, s);
+                }
+            }),
+        ],
+    );
+    binds(
+        msig_write,
+        &[
+            ("structure.threshold", |_, w, _| structure(w).threshold = 3),
+            ("structure.members.weight", |_, w, _| {
+                let mut m = structure(w).members.get(1).unwrap();
+                m.weight = 3;
+                structure(w).members.set(1, m);
+            }),
+            ("structure.members.id", |e, w, _| {
+                let (s, third) = (structure(w), digest::ua_of(e, 0x0132, &b(e, &[0x72; 897])));
+                let mut ids: StdVec<_> = [s.members.get(0).unwrap().id, third]
+                    .iter()
+                    .map(|x| (0x0132u16, x.to_array(), 2u16))
+                    .collect();
+                ids.sort_by_key(|x| x.1);
+                *s = msig(e, 4, &ids).s;
+            }),
+            ("attrs", |e, w, _| *attrs_of(w) = msig_attrs(e)),
+            ("pop.sig", |e, w, _| {
+                if let Write::Msig { pop, .. } = w {
+                    let mut s = pop.get(0).unwrap();
+                    s.sig = flipped(e, &s.sig);
+                    pop.set(0, s);
+                }
+            }),
+            ("relayer", |_, w, other| set_by(w, other)),
+        ],
+    );
 }
 
 #[test]
 fn ua8_attest_binds_group_keys() {
-    binds(|e, _, by| {
-        let mut member_keys = SVec::new(e);
-        member_keys.push_back(b(e, &[2; 33]));
-        member_keys.push_back(b(e, &[3; 33]));
-        Write::Musig2 { kind: 0x0110, key: MuSig2Key { agg_key: b(e, &[1; 33]), member_keys }, attrs: no_attrs(e), pop: b(e, &[1; 64]), pqz_pop: Bytes::new(e), by: by.clone() }
-    }, &[
-        ("key.agg_key", |e, w, _| if let Write::Musig2 { key, .. } = w { key.agg_key = b(e, &[9; 33]) }),
-        ("key.member_keys", |e, w, _| if let Write::Musig2 { key, .. } = w { key.member_keys.set(1, b(e, &[8; 33])) }),
-        ("pop", |e, w, _| if let Write::Musig2 { pop, .. } = w { *pop = flipped(e, pop) }),
-        // a group `kind` fixes the point size, so it can only change with the points: alone it is `KeyData` before `attest`
-        ("kind, with the points its size needs", |e, w, _| if let Write::Musig2 { kind, key, .. } = w {
-            *kind = 0x0112;
-            key.agg_key = b(e, &[1; 64]);
+    binds(
+        |e, _, by| {
             let mut member_keys = SVec::new(e);
-            member_keys.push_back(b(e, &[2; 64]));
-            member_keys.push_back(b(e, &[3; 64]));
-            key.member_keys = member_keys;
-        }),
-        ("relayer", |_, w, other| set_by(w, other)),
-    ]);
-    binds(|e, _, by| {
-        let member = |x: u8| {
-            let mut commitments = SVec::new(e);
-            commitments.push_back(b(e, &[x; 33]));
-            commitments.push_back(b(e, &[x + 1; 33]));
-            FrostMember { commitments, r: b(e, &[x + 2; 33]), z: n(e, [x + 3; 32]) }
-        };
-        let mut members = SVec::new(e);
-        members.push_back(member(0x10));
-        members.push_back(member(0x20));
-        Write::Frost { kind: 0x0111, key: FrostKey { group_key: b(e, &[1; 33]), threshold: 2, members }, attrs: no_attrs(e), pop: b(e, &[1; 64]), pqz_pop: Bytes::new(e), by: by.clone() }
-    }, &[
-        ("key.group_key", |e, w, _| if let Write::Frost { key, .. } = w { key.group_key = b(e, &[9; 33]) }),
-        ("key.members.z", |e, w, _| if let Write::Frost { key, .. } = w {
-            let mut m = key.members.get(0).unwrap();
-            m.z = n(e, [0x77; 32]);
-            key.members.set(0, m);
-        }),
-        ("key.members.commitments", |e, w, _| if let Write::Frost { key, .. } = w {
-            let mut m = key.members.get(0).unwrap();
-            m.commitments.set(1, b(e, &[0x66; 33]));
-            key.members.set(0, m);
-        }),
-        ("key.members.r", |e, w, _| if let Write::Frost { key, .. } = w {
-            let mut m = key.members.get(1).unwrap();
-            m.r = b(e, &[0x55; 33]);
-            key.members.set(1, m);
-        }),
-        // `threshold` fixes each member's commitments, so it can only change with them: alone it is `KeyData` before `attest`
-        ("key.threshold, with the commitments it counts", |e, w, _| if let Write::Frost { key, .. } = w {
-            key.threshold = 3;
-            let mut members = SVec::new(e);
-            for mut m in key.members.iter() {
-                m.commitments.push_back(b(e, &[0x44; 33]));
-                members.push_back(m);
+            member_keys.push_back(b(e, &[2; 33]));
+            member_keys.push_back(b(e, &[3; 33]));
+            Write::Musig2 {
+                kind: 0x0110,
+                key: MuSig2Key {
+                    agg_key: b(e, &[1; 33]),
+                    member_keys,
+                },
+                attrs: no_attrs(e),
+                pop: b(e, &[1; 64]),
+                pqz_pop: Bytes::new(e),
+                by: by.clone(),
             }
-            members.push_back(members.get(0).unwrap());
-            key.members = members;
-        }),
-        ("pop", |e, w, _| if let Write::Frost { pop, .. } = w { *pop = flipped(e, pop) }),
-        ("relayer", |_, w, other| set_by(w, other)),
-    ]);
-    // `frost` of the other curve: as `register_musig2`, its `kind` comes with its points
-    binds(|e, _, by| {
-        let member = |x: u8| {
-            let mut commitments = SVec::new(e);
-            commitments.push_back(b(e, &[x; 33]));
-            commitments.push_back(b(e, &[x + 1; 33]));
-            FrostMember { commitments, r: b(e, &[x + 2; 33]), z: n(e, [x + 3; 32]) }
-        };
-        let mut members = SVec::new(e);
-        members.push_back(member(0x10));
-        members.push_back(member(0x20));
-        Write::Frost { kind: 0x0111, key: FrostKey { group_key: b(e, &[1; 33]), threshold: 2, members }, attrs: no_attrs(e), pop: b(e, &[1; 64]), pqz_pop: Bytes::new(e), by: by.clone() }
-    }, &[
-        ("kind, with the points its size needs", |e, w, _| if let Write::Frost { kind, key, .. } = w {
-            *kind = 0x0113;
-            key.group_key = b(e, &[1; 64]);
-            let mut members = SVec::new(e);
-            for mut m in key.members.iter() {
+        },
+        &[
+            ("key.agg_key", |e, w, _| {
+                if let Write::Musig2 { key, .. } = w {
+                    key.agg_key = b(e, &[9; 33])
+                }
+            }),
+            ("key.member_keys", |e, w, _| {
+                if let Write::Musig2 { key, .. } = w {
+                    key.member_keys.set(1, b(e, &[8; 33]))
+                }
+            }),
+            ("pop", |e, w, _| {
+                if let Write::Musig2 { pop, .. } = w {
+                    *pop = flipped(e, pop)
+                }
+            }),
+            // a group `kind` fixes the point size, so it can only change with the points: alone it is `KeyData` before `attest`
+            ("kind, with the points its size needs", |e, w, _| {
+                if let Write::Musig2 { kind, key, .. } = w {
+                    *kind = 0x0112;
+                    key.agg_key = b(e, &[1; 64]);
+                    let mut member_keys = SVec::new(e);
+                    member_keys.push_back(b(e, &[2; 64]));
+                    member_keys.push_back(b(e, &[3; 64]));
+                    key.member_keys = member_keys;
+                }
+            }),
+            ("relayer", |_, w, other| set_by(w, other)),
+        ],
+    );
+    binds(
+        |e, _, by| {
+            let member = |x: u8| {
                 let mut commitments = SVec::new(e);
-                commitments.push_back(b(e, &[0x31; 64]));
-                commitments.push_back(b(e, &[0x32; 64]));
-                m.commitments = commitments;
-                m.r = b(e, &[0x33; 64]);
-                members.push_back(m);
+                commitments.push_back(b(e, &[x; 33]));
+                commitments.push_back(b(e, &[x + 1; 33]));
+                FrostMember {
+                    commitments,
+                    r: b(e, &[x + 2; 33]),
+                    z: n(e, [x + 3; 32]),
+                }
+            };
+            let mut members = SVec::new(e);
+            members.push_back(member(0x10));
+            members.push_back(member(0x20));
+            Write::Frost {
+                kind: 0x0111,
+                key: FrostKey {
+                    group_key: b(e, &[1; 33]),
+                    threshold: 2,
+                    members,
+                },
+                attrs: no_attrs(e),
+                pop: b(e, &[1; 64]),
+                pqz_pop: Bytes::new(e),
+                by: by.clone(),
             }
-            key.members = members;
-        }),
-    ]);
+        },
+        &[
+            ("key.group_key", |e, w, _| {
+                if let Write::Frost { key, .. } = w {
+                    key.group_key = b(e, &[9; 33])
+                }
+            }),
+            ("key.members.z", |e, w, _| {
+                if let Write::Frost { key, .. } = w {
+                    let mut m = key.members.get(0).unwrap();
+                    m.z = n(e, [0x77; 32]);
+                    key.members.set(0, m);
+                }
+            }),
+            ("key.members.commitments", |e, w, _| {
+                if let Write::Frost { key, .. } = w {
+                    let mut m = key.members.get(0).unwrap();
+                    m.commitments.set(1, b(e, &[0x66; 33]));
+                    key.members.set(0, m);
+                }
+            }),
+            ("key.members.r", |e, w, _| {
+                if let Write::Frost { key, .. } = w {
+                    let mut m = key.members.get(1).unwrap();
+                    m.r = b(e, &[0x55; 33]);
+                    key.members.set(1, m);
+                }
+            }),
+            // `threshold` fixes each member's commitments, so it can only change with them: alone it is `KeyData` before `attest`
+            (
+                "key.threshold, with the commitments it counts",
+                |e, w, _| {
+                    if let Write::Frost { key, .. } = w {
+                        key.threshold = 3;
+                        let mut members = SVec::new(e);
+                        for mut m in key.members.iter() {
+                            m.commitments.push_back(b(e, &[0x44; 33]));
+                            members.push_back(m);
+                        }
+                        members.push_back(members.get(0).unwrap());
+                        key.members = members;
+                    }
+                },
+            ),
+            ("pop", |e, w, _| {
+                if let Write::Frost { pop, .. } = w {
+                    *pop = flipped(e, pop)
+                }
+            }),
+            ("relayer", |_, w, other| set_by(w, other)),
+        ],
+    );
+    // `frost` of the other curve: as `register_musig2`, its `kind` comes with its points
+    binds(
+        |e, _, by| {
+            let member = |x: u8| {
+                let mut commitments = SVec::new(e);
+                commitments.push_back(b(e, &[x; 33]));
+                commitments.push_back(b(e, &[x + 1; 33]));
+                FrostMember {
+                    commitments,
+                    r: b(e, &[x + 2; 33]),
+                    z: n(e, [x + 3; 32]),
+                }
+            };
+            let mut members = SVec::new(e);
+            members.push_back(member(0x10));
+            members.push_back(member(0x20));
+            Write::Frost {
+                kind: 0x0111,
+                key: FrostKey {
+                    group_key: b(e, &[1; 33]),
+                    threshold: 2,
+                    members,
+                },
+                attrs: no_attrs(e),
+                pop: b(e, &[1; 64]),
+                pqz_pop: Bytes::new(e),
+                by: by.clone(),
+            }
+        },
+        &[("kind, with the points its size needs", |e, w, _| {
+            if let Write::Frost { kind, key, .. } = w {
+                *kind = 0x0113;
+                key.group_key = b(e, &[1; 64]);
+                let mut members = SVec::new(e);
+                for mut m in key.members.iter() {
+                    let mut commitments = SVec::new(e);
+                    commitments.push_back(b(e, &[0x31; 64]));
+                    commitments.push_back(b(e, &[0x32; 64]));
+                    m.commitments = commitments;
+                    m.r = b(e, &[0x33; 64]);
+                    members.push_back(m);
+                }
+                key.members = members;
+            }
+        })],
+    );
 }
 
 /// A `fndsa512` holder, a second one for the change of `ua`.
 fn holder_of(env: &Env, c: &UaRegistryClient, by: &Option<Address>) -> BytesN<32> {
-    let id = c.register(&0x0132, &b(env, &[0x51; 897]), &no_attrs(env), &b(env, &[1; 666]), &Bytes::new(env), by);
-    c.register(&0x0132, &b(env, &[0x52; 897]), &no_attrs(env), &b(env, &[1; 666]), &Bytes::new(env), by);
+    let id = c.register(
+        &0x0132,
+        &b(env, &[0x51; 897]),
+        &no_attrs(env),
+        &b(env, &[1; 666]),
+        &Bytes::new(env),
+        by,
+    );
+    c.register(
+        &0x0132,
+        &b(env, &[0x52; 897]),
+        &no_attrs(env),
+        &b(env, &[1; 666]),
+        &Bytes::new(env),
+        by,
+    );
     id
 }
 
@@ -2457,32 +4261,94 @@ fn other_holder(env: &Env) -> BytesN<32> {
 
 #[test]
 fn ua8_attest_binds_set_kem_key() {
-    binds(|e, c, by| {
-        let ua = holder_of(e, c, by);
-        let k = kem_id(e, "fndsa512/v1");
-        Write::SetKem { ua, version: 1, kem: k.kem, sig: UaSig { key_data: Bytes::new(e), signature: b(e, &[1; 666]), members: SVec::new(e) }, by: by.clone() }
-    }, &[
-        ("ua", |e, w, _| if let Write::SetKem { ua, .. } = w { *ua = other_holder(e) }),
-        ("version", |_, w, _| if let Write::SetKem { version, .. } = w { *version = 2 }),
-        ("kem.mlkem_ek", |e, w, _| if let Write::SetKem { kem, .. } = w { kem.mlkem_ek = flipped(e, &kem.mlkem_ek) }),
-        ("kem.x25519", |e, w, _| if let Write::SetKem { kem, .. } = w { kem.x25519 = n(e, [0x33; 32]) }),
-        ("sig", |e, w, _| if let Write::SetKem { sig, .. } = w { sig.signature = flipped(e, &sig.signature) }),
-        ("relayer", |_, w, other| set_by(w, other)),
-    ]);
+    binds(
+        |e, c, by| {
+            let ua = holder_of(e, c, by);
+            let k = kem_id(e, "fndsa512/v1");
+            Write::SetKem {
+                ua,
+                version: 1,
+                kem: k.kem,
+                sig: UaSig {
+                    key_data: Bytes::new(e),
+                    signature: b(e, &[1; 666]),
+                    members: SVec::new(e),
+                },
+                by: by.clone(),
+            }
+        },
+        &[
+            ("ua", |e, w, _| {
+                if let Write::SetKem { ua, .. } = w {
+                    *ua = other_holder(e)
+                }
+            }),
+            ("version", |_, w, _| {
+                if let Write::SetKem { version, .. } = w {
+                    *version = 2
+                }
+            }),
+            ("kem.mlkem_ek", |e, w, _| {
+                if let Write::SetKem { kem, .. } = w {
+                    kem.mlkem_ek = flipped(e, &kem.mlkem_ek)
+                }
+            }),
+            ("kem.x25519", |e, w, _| {
+                if let Write::SetKem { kem, .. } = w {
+                    kem.x25519 = n(e, [0x33; 32])
+                }
+            }),
+            ("sig", |e, w, _| {
+                if let Write::SetKem { sig, .. } = w {
+                    sig.signature = flipped(e, &sig.signature)
+                }
+            }),
+            ("relayer", |_, w, other| set_by(w, other)),
+        ],
+    );
 }
 
 #[test]
 fn ua8_attest_binds_set_pqz_key() {
-    binds(|e, c, by| {
-        let (ua, s) = (holder_of(e, c, by), set_row(e));
-        Write::SetPqz { ua, key: s.attrs.pqz_key, hash: s.attrs.pqz_pop_hash, sig: UaSig { key_data: Bytes::new(e), signature: b(e, &[1; 666]), members: SVec::new(e) }, by: by.clone() }
-    }, &[
-        ("ua", |e, w, _| if let Write::SetPqz { ua, .. } = w { *ua = other_holder(e) }),
-        ("pqz_key", |e, w, _| if let Write::SetPqz { key, .. } = w { *key = flipped(e, key) }),
-        ("pqz_pop_hash", |e, w, _| if let Write::SetPqz { hash, .. } = w { *hash = n(e, [0x44; 32]) }),
-        ("sig", |e, w, _| if let Write::SetPqz { sig, .. } = w { sig.signature = flipped(e, &sig.signature) }),
-        ("relayer", |_, w, other| set_by(w, other)),
-    ]);
+    binds(
+        |e, c, by| {
+            let (ua, s) = (holder_of(e, c, by), set_row(e));
+            Write::SetPqz {
+                ua,
+                key: s.attrs.pqz_key,
+                hash: s.attrs.pqz_pop_hash,
+                sig: UaSig {
+                    key_data: Bytes::new(e),
+                    signature: b(e, &[1; 666]),
+                    members: SVec::new(e),
+                },
+                by: by.clone(),
+            }
+        },
+        &[
+            ("ua", |e, w, _| {
+                if let Write::SetPqz { ua, .. } = w {
+                    *ua = other_holder(e)
+                }
+            }),
+            ("pqz_key", |e, w, _| {
+                if let Write::SetPqz { key, .. } = w {
+                    *key = flipped(e, key)
+                }
+            }),
+            ("pqz_pop_hash", |e, w, _| {
+                if let Write::SetPqz { hash, .. } = w {
+                    *hash = n(e, [0x44; 32])
+                }
+            }),
+            ("sig", |e, w, _| {
+                if let Write::SetPqz { sig, .. } = w {
+                    sig.signature = flipped(e, &sig.signature)
+                }
+            }),
+            ("relayer", |_, w, other| set_by(w, other)),
+        ],
+    );
 }
 
 /// A digest of another entry over the same arguments is refused, under either entry's name: one word is not enough to confuse them.
@@ -2493,9 +4359,18 @@ fn ua8_attest_hash_of_another_entry_refused() {
     let c = test::deploy(&env, &[r.clone()]);
     env.mock_all_auths();
     let w = fndsa_write(&env, &c, &Some(r.clone()));
-    for (entry, digest_of) in [("register", "register_msig"), ("register", "set_kem_key"), ("register_msig", "register"), ("set_kem_key", "set_kem_key")] {
+    for (entry, digest_of) in [
+        ("register", "register_msig"),
+        ("register", "set_kem_key"),
+        ("register_msig", "register"),
+        ("set_kem_key", "set_kem_key"),
+    ] {
         authorise(&env, &c, &r, entry, digest_of, w.args(&env));
-        assert_eq!(w.tried(&c), Err(AUTH_REFUSED), "an auth on {entry} over a digest of {digest_of}");
+        assert_eq!(
+            w.tried(&c),
+            Err(AUTH_REFUSED),
+            "an auth on {entry} over a digest of {digest_of}"
+        );
     }
     attest_write(&env, &c, &w);
     assert_eq!(w.tried(&c), Ok(()));
@@ -2514,15 +4389,29 @@ fn ua8_attest_needs_the_named_relayer() {
     env.set_auths(&[]);
     assert_eq!(w.tried(&c), Err(AUTH_REFUSED), "no auth at all");
     let none = match w.clone() {
-        Write::Register { kind, key_data, attrs, pop, pqz_pop, .. } => c.try_register(&kind, &key_data, &attrs, &pop, &pqz_pop, &None),
+        Write::Register {
+            kind,
+            key_data,
+            attrs,
+            pop,
+            pqz_pop,
+            ..
+        } => c.try_register(&kind, &key_data, &attrs, &pop, &pqz_pop, &None),
         _ => unreachable!(),
     };
-    assert_eq!(err(none), Error::NotVerifiable, "`Some(relayer)` is still required");
+    assert_eq!(
+        err(none),
+        Error::NotVerifiable,
+        "`Some(relayer)` is still required"
+    );
     attest_write(&env, &c, &w);
     assert_eq!(w.tried(&c), Ok(()));
     let ua = digest::ua_of(&env, 0x0132, &portable(&env, "fndsa512").kd);
     assert_eq!(c.record_of(&ua).unwrap().pop_checked, Checked::Relayer(r));
-    assert!(!c.receivable(&ua), "an attestation never makes a key able to authorise");
+    assert!(
+        !c.receivable(&ua),
+        "an attestation never makes a key able to authorise"
+    );
 }
 
 /// The digest against the bytes `smartcontracts/soroban/scripts/attest-digest-vector.py` builds by hand, and `scaas-node`'s twin
@@ -2531,11 +4420,26 @@ fn ua8_attest_needs_the_named_relayer() {
 fn ua8_attest_digest_vector() {
     let env = test::new_env();
     env.ledger().set_network_id([0x11; 32]);
-    let c = Address::from_str(&env, "CARCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEVQO");
+    let c = Address::from_str(
+        &env,
+        "CARCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEVQO",
+    );
     let args: SVec<soroban_sdk::Val> = (7u32, b(&env, &[1, 2]), ()).into_val(&env);
-    let hex = |d: BytesN<32>| d.to_array().iter().map(|x| format!("{x:02x}")).collect::<StdVec<_>>().concat();
-    assert_eq!(hex(attest_digest(&env, &c, "register", args.clone())), "10c27d0f11b12ccc54ceeff725eea285795a0ea2d18bb5320b95c1c9e6e95b92");
-    assert_eq!(hex(attest_digest(&env, &c, "set_kem_key", args)), "2da85a452358a70d013d2dbe4fd4136bec2234b25380f7f222fcfff6c712aa53");
+    let hex = |d: BytesN<32>| {
+        d.to_array()
+            .iter()
+            .map(|x| format!("{x:02x}"))
+            .collect::<StdVec<_>>()
+            .concat()
+    };
+    assert_eq!(
+        hex(attest_digest(&env, &c, "register", args.clone())),
+        "10c27d0f11b12ccc54ceeff725eea285795a0ea2d18bb5320b95c1c9e6e95b92"
+    );
+    assert_eq!(
+        hex(attest_digest(&env, &c, "set_kem_key", args)),
+        "2da85a452358a70d013d2dbe4fd4136bec2234b25380f7f222fcfff6c712aa53"
+    );
 }
 
 // ---------- B7c (owner 2026-11-01, CTR-UA-33.A on Soroban): `UaRegistered` carries `key_data` unless too large ----------
@@ -2546,10 +4450,19 @@ fn event_key_data_of(env: &Env) -> StdVec<u8> {
     let all = env.events().all();
     let e = all.events().iter().rev().find(|e| matches!(&e.body, ContractEventBody::V0(b) if format!("{:?}", b.topics.first()).contains("UaRegistered"))).expect("UaRegistered").clone();
     let ContractEventBody::V0(b) = e.body;
-    let ScVal::Vec(Some(data)) = b.data else { panic!("not the event's vec") };
-    let ScVal::Map(Some(record)) = &data[0] else { panic!("not the record") };
-    let f = record.iter().find(|x| matches!(&x.key, ScVal::Symbol(k) if k.0.as_slice() == b"key_data")).unwrap();
-    let ScVal::Bytes(k) = &f.val else { panic!("key_data") };
+    let ScVal::Vec(Some(data)) = b.data else {
+        panic!("not the event's vec")
+    };
+    let ScVal::Map(Some(record)) = &data[0] else {
+        panic!("not the record")
+    };
+    let f = record
+        .iter()
+        .find(|x| matches!(&x.key, ScVal::Symbol(k) if k.0.as_slice() == b"key_data"))
+        .unwrap();
+    let ScVal::Bytes(k) = &f.val else {
+        panic!("key_data")
+    };
     k.to_vec()
 }
 
@@ -2568,9 +4481,20 @@ fn frost_bn254(env: &Env, t: u32, n_: u32) -> (FrostKey, StdVec<u8>) {
         }
         kd.extend(point(0x60 + i as u8));
         kd.extend([0x70 + i as u8; 32]);
-        members.push_back(FrostMember { commitments, r: b(env, &point(0x60 + i as u8)), z: n(env, [0x70 + i as u8; 32]) });
+        members.push_back(FrostMember {
+            commitments,
+            r: b(env, &point(0x60 + i as u8)),
+            z: n(env, [0x70 + i as u8; 32]),
+        });
     }
-    (FrostKey { group_key: b(env, &point(0x31)), threshold: t, members }, kd)
+    (
+        FrostKey {
+            group_key: b(env, &point(0x31)),
+            threshold: t,
+            members,
+        },
+        kd,
+    )
 }
 
 /// The rule, at its edge. No real key has exactly this length, a FROST key's lengths being discrete, so the edge is here and
@@ -2579,9 +4503,16 @@ fn frost_bn254(env: &Env, t: u32, n_: u32) -> (FrostKey, StdVec<u8>) {
 fn ua8_event_key_data_limit() {
     let env = test::new_env();
     let at = b(&env, &vec![7; crate::EVENT_KEY_DATA_MAX as usize]);
-    assert_eq!(crate::event_key_data(&env, &at), at, "exactly the constant is in the event");
+    assert_eq!(
+        crate::event_key_data(&env, &at),
+        at,
+        "exactly the constant is in the event"
+    );
     let over = b(&env, &vec![7; crate::EVENT_KEY_DATA_MAX as usize + 1]);
-    assert!(crate::event_key_data(&env, &over).is_empty(), "one byte more is not");
+    assert!(
+        crate::event_key_data(&env, &over).is_empty(),
+        "one byte more is not"
+    );
     assert!(crate::event_key_data(&env, &Bytes::new(&env)).is_empty());
     assert_eq!(crate::EVENT_KEY_DATA_MAX, 15_360);
 }
@@ -2589,7 +4520,10 @@ fn ua8_event_key_data_limit() {
 /// Below the limit the event is EVM's `keyData`, on every entry: the vector's bytes, not the ones given.
 #[test]
 fn ua8_event_is_evm_key_data_below_the_limit() {
-    for row in chain_rows().iter().chain(offchain_rows().iter().filter(|r| r["name"] == "fndsa512")) {
+    for row in chain_rows()
+        .iter()
+        .chain(offchain_rows().iter().filter(|r| r["name"] == "fndsa512"))
+    {
         let name = row["name"].as_str().unwrap();
         let (env, c, by) = relayed();
         let r = portable_row(&env, row);
@@ -2601,7 +4535,11 @@ fn ua8_event_is_evm_key_data_below_the_limit() {
     let (env, c, by) = relayed();
     let r = portable(&env, "webauthn-p256");
     let d = vecu8(&r.kd);
-    let key = WebAuthnKey { x: n(&env, d[..32].try_into().unwrap()), y: n(&env, d[32..64].try_into().unwrap()), rp_id_hash: n(&env, d[64..96].try_into().unwrap()) };
+    let key = WebAuthnKey {
+        x: n(&env, d[..32].try_into().unwrap()),
+        y: n(&env, d[32..64].try_into().unwrap()),
+        rp_id_hash: n(&env, d[64..96].try_into().unwrap()),
+    };
     c.register_webauthn(&key, &r.attrs, &r.pop, &r.pqz_pop, &None);
     assert_eq!(event_key_data_of(&env), d);
     let mut member_keys = SVec::new(&env);
@@ -2611,7 +4549,17 @@ fn ua8_event_is_evm_key_data_below_the_limit() {
         member_keys.push_back(b(&env, &[0x20 + i; 64]));
         kd.extend([0x20 + i; 64]);
     }
-    c.register_musig2(&0x0112, &MuSig2Key { agg_key: b(&env, &[1; 64]), member_keys }, &no_attrs(&env), &b(&env, &[1; 64]), &Bytes::new(&env), &by);
+    c.register_musig2(
+        &0x0112,
+        &MuSig2Key {
+            agg_key: b(&env, &[1; 64]),
+            member_keys,
+        },
+        &no_attrs(&env),
+        &b(&env, &[1; 64]),
+        &Bytes::new(&env),
+        &by,
+    );
     assert_eq!(event_key_data_of(&env), kd);
 }
 
@@ -2619,19 +4567,55 @@ fn ua8_event_is_evm_key_data_below_the_limit() {
 /// input, byte for byte, and `ua` is the key's.
 #[test]
 fn ua8_event_frost_sizes() {
-    for (t, count, whole) in [(2, 2, true), (13, 16, true), (14, 15, true), (15, 15, false), (14, 16, false), (15, 16, false), (16, 16, false)] {
+    for (t, count, whole) in [
+        (2, 2, true),
+        (13, 16, true),
+        (14, 15, true),
+        (15, 15, false),
+        (14, 16, false),
+        (15, 16, false),
+        (16, 16, false),
+    ] {
         let (env, c, by) = relayed();
         let (key, kd) = frost_bn254(&env, t, count);
         let (attrs, pop, none) = (no_attrs(&env), b(&env, &[1; 64]), Bytes::new(&env));
         let ua = c.register_frost(&0x0113, &key, &attrs, &pop, &none, &by);
         let got = event_key_data_of(&env);
-        assert_eq!(got, if whole { kd.clone() } else { vec![] }, "{t} of {count}: {} B", kd.len());
-        assert_eq!(ua, digest::ua_of(&env, 0x0113, &b(&env, &kd)), "{t} of {count}: the id is the key's, emptied or not");
+        assert_eq!(
+            got,
+            if whole { kd.clone() } else { vec![] },
+            "{t} of {count}: {} B",
+            kd.len()
+        );
+        assert_eq!(
+            ua,
+            digest::ua_of(&env, 0x0113, &b(&env, &kd)),
+            "{t} of {count}: the id is the key's, emptied or not"
+        );
         assert_eq!(c.ua_of_frost(&0x0113, &key), ua);
-        assert_eq!(vecu8(&c.record_of(&ua).unwrap().key_data), kd, "{t} of {count}");
-        assert_eq!(c.registration_of(&ua), Some((0x0113, b(&env, &kd), attrs, pop, none)), "{t} of {count}");
+        assert_eq!(
+            vecu8(&c.record_of(&ua).unwrap().key_data),
+            kd,
+            "{t} of {count}"
+        );
+        assert_eq!(
+            c.registration_of(&ua),
+            Some((0x0113, b(&env, &kd), attrs, pop, none)),
+            "{t} of {count}"
+        );
     }
     let (env, c, by) = relayed();
     let (key, _) = frost_bn254(&env, 1, 2);
-    assert_eq!(err(c.try_register_frost(&0x0113, &key, &no_attrs(&env), &b(&env, &[1; 64]), &Bytes::new(&env), &by)), Error::KeyData, "threshold 1: EVM and ua-rs refuse it too");
+    assert_eq!(
+        err(c.try_register_frost(
+            &0x0113,
+            &key,
+            &no_attrs(&env),
+            &b(&env, &[1; 64]),
+            &Bytes::new(&env),
+            &by
+        )),
+        Error::KeyData,
+        "threshold 1: EVM and ua-rs refuse it too"
+    );
 }

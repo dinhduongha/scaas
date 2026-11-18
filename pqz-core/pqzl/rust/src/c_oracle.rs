@@ -14,18 +14,57 @@ use std::vec::Vec;
 
 extern "C" {
     fn pqz_init(arena: *mut u8, len: usize) -> i32;
-    fn pqz_prove(op: u8, stmt: *const u8, stmt_len: usize, wit: *const u8, wit_len: usize, rnd32: *const u8,
-                 proof: *mut u8, proof_len: *mut usize) -> i32;
-    fn pqz_verify(op: u8, stmt: *const u8, stmt_len: usize, proof: *const u8, proof_len: usize) -> i32;
-    fn pqz_verify_fast(op: u8, stmt: *const u8, stmt_len: usize, proof: *const u8, proof_len: usize) -> i32;
+    fn pqz_prove(
+        op: u8,
+        stmt: *const u8,
+        stmt_len: usize,
+        wit: *const u8,
+        wit_len: usize,
+        rnd32: *const u8,
+        proof: *mut u8,
+        proof_len: *mut usize,
+    ) -> i32;
+    fn pqz_verify(
+        op: u8,
+        stmt: *const u8,
+        stmt_len: usize,
+        proof: *const u8,
+        proof_len: usize,
+    ) -> i32;
+    fn pqz_verify_fast(
+        op: u8,
+        stmt: *const u8,
+        stmt_len: usize,
+        proof: *const u8,
+        proof_len: usize,
+    ) -> i32;
     fn pqz_keygen(seed32: *const u8, pk: *mut u8, s: *mut i8, e: *mut i16, ctr: *mut u32) -> i32;
-    fn pqz_enc_seed_win(pks: *const *const u8, npk: u32, win: *const u8, msgs: *const [u8; 16], seed_enc: *const u8,
-                        u: *mut u8, vs: *mut [u8; V_BYTES], r: *mut i8, e1: *mut i16, e2: *mut [i16; 16], ctr: *mut u32)
-                        -> i32;
+    fn pqz_enc_seed_win(
+        pks: *const *const u8,
+        npk: u32,
+        win: *const u8,
+        msgs: *const [u8; 16],
+        seed_enc: *const u8,
+        u: *mut u8,
+        vs: *mut [u8; V_BYTES],
+        r: *mut i8,
+        e1: *mut i16,
+        e2: *mut [i16; 16],
+        ctr: *mut u32,
+    ) -> i32;
     fn pqz_dec_win(s: *const i8, ct: *const u8, win: u32, m: *mut i64, noise: *mut i64) -> i32;
     fn pqz_keypair_from_secret(s: *const i8, e: *const i16, pk: *mut u8) -> i32;
-    fn pqz_encrypt_win(pks: *const *const u8, npk: u32, win: *const u8, msgs: *const [u8; 16], r: *const i8,
-                       e1: *const i16, e2: *const [i16; 16], u: *mut u8, vs: *mut [u8; V_BYTES]) -> i32;
+    fn pqz_encrypt_win(
+        pks: *const *const u8,
+        npk: u32,
+        win: *const u8,
+        msgs: *const [u8; 16],
+        r: *const i8,
+        e1: *const i16,
+        e2: *const [i16; 16],
+        u: *mut u8,
+        vs: *mut [u8; V_BYTES],
+    ) -> i32;
     fn pqz_decrypt_raw_win(s: *const i8, u: *const u8, v: *const u8, win: u32, w: *mut i64) -> i32;
     fn pqz_enc_group_seed(seed_enc: *const u8, g: u32, out: *mut u8);
     fn pqz_enc_leg_seed(seed_enc: *const u8, to_ua: *const u8, pkt_hash: *const u8, out: *mut u8);
@@ -34,26 +73,79 @@ extern "C" {
     fn pqz_ntt_basemul(r: *mut u64, a: *const u64, b: *const u64);
     fn pqz_shim_polyvec_ops(input: *const i64, out: *mut u64, n: *mut usize) -> i32;
     fn pqz_shim_int_ops(input: *const u64, out: *mut u64, n: *mut usize) -> i32;
-    fn pqz_shim_rng(seed: *const u8, dom: u64, lens: *const u32, nlens: usize, out: *mut u8) -> i32;
-    fn pqz_shim_shake(which: u32, input: *const u8, alens: *const u32, na: usize, slens: *const u32, ns: usize,
-                      out: *mut u8) -> i32;
+    fn pqz_shim_rng(seed: *const u8, dom: u64, lens: *const u32, nlens: usize, out: *mut u8)
+        -> i32;
+    fn pqz_shim_shake(
+        which: u32,
+        input: *const u8,
+        alens: *const u32,
+        na: usize,
+        slens: *const u32,
+        ns: usize,
+        out: *mut u8,
+    ) -> i32;
     fn pqz_shim_grandom(seed: *const u8, dom: u32, log2o: u32, n: u32, out: *mut i64) -> i32;
-    fn pqz_shim_rej(bimodal: u32, seed: *const u8, dom: u64, z: *const i64, v: *const i64, n: u32, scm: *const u64,
-                    s2: *const u64, rej: *mut i32, next8: *mut u8) -> i32;
-    fn pqz_shim_rej_limbs(bimodal: u32, seed: *const u8, dom: u64, z: *const u64, v: *const u64, n: u32, nl: u32,
-                          scm: *const u64, s2: *const u64, rej: *mut i32, next8: *mut u8) -> i32;
-    fn pqz_shim_urandom(seed: *const u8, dom: u32, n: u32, nl: u32, m: *const u64, log2mod: u32, out: *mut u64,
-                        nout: *mut usize) -> i32;
-    fn pqz_shim_urandom_bnd(seed: *const u8, dom: u32, n: u32, nl: u32, lo: *const u64, hi: *const u64, out: *mut u64,
-                            nout: *mut usize) -> i32;
+    fn pqz_shim_rej(
+        bimodal: u32,
+        seed: *const u8,
+        dom: u64,
+        z: *const i64,
+        v: *const i64,
+        n: u32,
+        scm: *const u64,
+        s2: *const u64,
+        rej: *mut i32,
+        next8: *mut u8,
+    ) -> i32;
+    fn pqz_shim_rej_limbs(
+        bimodal: u32,
+        seed: *const u8,
+        dom: u64,
+        z: *const u64,
+        v: *const u64,
+        n: u32,
+        nl: u32,
+        scm: *const u64,
+        s2: *const u64,
+        rej: *mut i32,
+        next8: *mut u8,
+    ) -> i32;
+    fn pqz_shim_urandom(
+        seed: *const u8,
+        dom: u32,
+        n: u32,
+        nl: u32,
+        m: *const u64,
+        log2mod: u32,
+        out: *mut u64,
+        nout: *mut usize,
+    ) -> i32;
+    fn pqz_shim_urandom_bnd(
+        seed: *const u8,
+        dom: u32,
+        n: u32,
+        nl: u32,
+        lo: *const u64,
+        hi: *const u64,
+        out: *mut u64,
+        nout: *mut usize,
+    ) -> i32;
     fn pqz_shim_autostable(seed: *const u8, dom: u32, bnd: i64, log2: u32, out: *mut u64) -> i32;
     fn pqz_shim_params(i: u32, out: *mut u64, n: *mut usize) -> i32;
     fn pqz_shim_ghint(i: u32, inp: *const i64, out: *mut u64) -> i32;
     fn pqz_shim_p2r(i: u32, inp: *const i64, out: *mut u64) -> i32;
     fn pqz_shim_chal(seed: *const u8, out: *mut i64) -> i32;
     #[cfg(feature = "test-hooks")]
-    fn pqz_test_mutate(op: u8, proof: *const u8, len: usize, kind: u32, r1: u64, r2: u64, out: *mut u8,
-                       outlen: *mut usize) -> i32;
+    fn pqz_test_mutate(
+        op: u8,
+        proof: *const u8,
+        len: usize,
+        kind: u32,
+        r1: u64,
+        r2: u64,
+        out: *mut u8,
+        outlen: *mut usize,
+    ) -> i32;
 }
 
 /// 2 GiB of capacity (reserved, touched only as used), as the C bench's `PQZ_ARENA_MB=2048` for R_TXM M = 8: the C
@@ -78,10 +170,16 @@ fn with_core<T: Send>(f: impl FnOnce() -> T + Send) -> T {
             .spawn_scoped(sc, || {
                 if core.is_none() {
                     let mut arena: Vec<u128> = Vec::new();
-                    arena.try_reserve_exact(ARENA / 16).expect("c_oracle: arena");
+                    arena
+                        .try_reserve_exact(ARENA / 16)
+                        .expect("c_oracle: arena");
                     // SAFETY: the arena lives in CORE for the rest of the process, and every libpqz call runs under
                     // CORE's lock
-                    assert_eq!(unsafe { pqz_init(arena.as_mut_ptr().cast(), ARENA) }, 0, "c_oracle: pqz_init");
+                    assert_eq!(
+                        unsafe { pqz_init(arena.as_mut_ptr().cast(), ARENA) },
+                        0,
+                        "c_oracle: pqz_init"
+                    );
                     *core = Some(arena);
                 }
                 f()
@@ -108,7 +206,16 @@ pub fn c_prove(op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<
     let mut len = proof.len();
     // SAFETY: every pointer / length pair describes a live buffer; proof has room for MAX_PROOF bytes
     rc(with_core(|| unsafe {
-        pqz_prove(op, stmt.as_ptr(), stmt.len(), wit.as_ptr(), wit.len(), rnd32.as_ptr(), proof.as_mut_ptr(), &mut len)
+        pqz_prove(
+            op,
+            stmt.as_ptr(),
+            stmt.len(),
+            wit.as_ptr(),
+            wit.len(),
+            rnd32.as_ptr(),
+            proof.as_mut_ptr(),
+            &mut len,
+        )
     }))?;
     proof.truncate(len);
     Ok(proof)
@@ -116,31 +223,53 @@ pub fn c_prove(op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<
 
 pub fn c_verify(op: u8, stmt: &[u8], proof: &[u8]) -> bool {
     // SAFETY: read-only buffers with their lengths
-    with_core(|| unsafe { pqz_verify(op, stmt.as_ptr(), stmt.len(), proof.as_ptr(), proof.len()) }) == 1
+    with_core(|| unsafe { pqz_verify(op, stmt.as_ptr(), stmt.len(), proof.as_ptr(), proof.len()) })
+        == 1
 }
 
 pub fn c_verify_fast(op: u8, stmt: &[u8], proof: &[u8]) -> bool {
     // SAFETY: read-only buffers with their lengths
-    with_core(|| unsafe { pqz_verify_fast(op, stmt.as_ptr(), stmt.len(), proof.as_ptr(), proof.len()) }) == 1
+    with_core(|| unsafe {
+        pqz_verify_fast(op, stmt.as_ptr(), stmt.len(), proof.as_ptr(), proof.len())
+    }) == 1
 }
 
 pub fn c_keygen(seed32: &[u8; 32]) -> Result<Key, Error> {
-    let mut k = Key { pk: Box::new([0; POLYVEC_BYTES]), s: Box::new([0; crate::N]), e: Box::new([0; crate::N]), ctr: 0 };
+    let mut k = Key {
+        pk: Box::new([0; POLYVEC_BYTES]),
+        s: Box::new([0; crate::N]),
+        e: Box::new([0; crate::N]),
+        ctr: 0,
+    };
     // SAFETY: fixed-size outputs of the sizes pqz.h declares
     rc(with_core(|| unsafe {
-        pqz_keygen(seed32.as_ptr(), k.pk.as_mut_ptr(), k.s.as_mut_ptr(), k.e.as_mut_ptr(), &mut k.ctr)
+        pqz_keygen(
+            seed32.as_ptr(),
+            k.pk.as_mut_ptr(),
+            k.s.as_mut_ptr(),
+            k.e.as_mut_ptr(),
+            &mut k.ctr,
+        )
     }))?;
     Ok(k)
 }
 
 /// `Err(Input)` if `msgs` and `pks` differ in length (the C ABI takes one count for both).
-pub fn c_enc_seed(pks: &[&[u8; POLYVEC_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> Result<Enc, Error> {
+pub fn c_enc_seed(
+    pks: &[&[u8; POLYVEC_BYTES]],
+    msgs: &[[u8; 16]],
+    seed_enc: &[u8; 32],
+) -> Result<Enc, Error> {
     c_enc_seed_win(pks, None, msgs, seed_enc)
 }
 
 /// `pqz_enc_seed_win` (`win` None: NULL, every recipient at window 0)
-pub fn c_enc_seed_win(pks: &[&[u8; POLYVEC_BYTES]], win: Option<&[u8]>, msgs: &[[u8; 16]], seed_enc: &[u8; 32])
-                      -> Result<Enc, Error> {
+pub fn c_enc_seed_win(
+    pks: &[&[u8; POLYVEC_BYTES]],
+    win: Option<&[u8]>,
+    msgs: &[[u8; 16]],
+    seed_enc: &[u8; 32],
+) -> Result<Enc, Error> {
     let n = pks.len();
     let npk = u32::try_from(n).map_err(|_| Error::Input)?;
     if msgs.len() != n || win.is_some_and(|w| w.len() != n) {
@@ -156,10 +285,21 @@ pub fn c_enc_seed_win(pks: &[&[u8; POLYVEC_BYTES]], win: Option<&[u8]>, msgs: &[
         ctr: 0,
     };
     let ptrs: Vec<usize> = pks.iter().map(|p| p.as_ptr() as usize).collect(); // usize: Send across the thread
-    // SAFETY: n public keys of POLYVEC_BYTES, n messages, n outputs each in vs / e2
+                                                                              // SAFETY: n public keys of POLYVEC_BYTES, n messages, n outputs each in vs / e2
     rc(with_core(|| unsafe {
-        pqz_enc_seed_win(ptrs.as_ptr().cast(), npk, wp as *const u8, msgs.as_ptr(), seed_enc.as_ptr(), c.u.as_mut_ptr(),
-                         c.vs.as_mut_ptr(), c.r.as_mut_ptr(), c.e1.as_mut_ptr(), c.e2.as_mut_ptr(), &mut c.ctr)
+        pqz_enc_seed_win(
+            ptrs.as_ptr().cast(),
+            npk,
+            wp as *const u8,
+            msgs.as_ptr(),
+            seed_enc.as_ptr(),
+            c.u.as_mut_ptr(),
+            c.vs.as_mut_ptr(),
+            c.r.as_mut_ptr(),
+            c.e1.as_mut_ptr(),
+            c.e2.as_mut_ptr(),
+            &mut c.ctr,
+        )
     }))?;
     Ok(c)
 }
@@ -168,17 +308,34 @@ pub fn c_dec(s: &[i8; crate::N], ct: &[u8; CT_BYTES]) -> Result<([i64; 16], [i64
     c_dec_win(s, ct, 0)
 }
 
-pub fn c_dec_win(s: &[i8; crate::N], ct: &[u8; CT_BYTES], win: u32) -> Result<([i64; 16], [i64; 16]), Error> {
+pub fn c_dec_win(
+    s: &[i8; crate::N],
+    ct: &[u8; CT_BYTES],
+    win: u32,
+) -> Result<([i64; 16], [i64; 16]), Error> {
     let (mut m, mut noise) = ([0i64; 16], [0i64; 16]);
     // SAFETY: fixed-size inputs and outputs of the sizes pqz.h declares
-    rc(with_core(|| unsafe { pqz_dec_win(s.as_ptr(), ct.as_ptr(), win, m.as_mut_ptr(), noise.as_mut_ptr()) }))?;
+    rc(with_core(|| unsafe {
+        pqz_dec_win(
+            s.as_ptr(),
+            ct.as_ptr(),
+            win,
+            m.as_mut_ptr(),
+            noise.as_mut_ptr(),
+        )
+    }))?;
     Ok((m, noise))
 }
 
-pub fn c_keypair_from_secret(s: &[i8; crate::N], e: &[i16; crate::N]) -> Result<Box<[u8; POLYVEC_BYTES]>, Error> {
+pub fn c_keypair_from_secret(
+    s: &[i8; crate::N],
+    e: &[i16; crate::N],
+) -> Result<Box<[u8; POLYVEC_BYTES]>, Error> {
     let mut pk = Box::new([0u8; POLYVEC_BYTES]);
     // SAFETY: fixed-size inputs and output of the sizes pqz.h declares
-    rc(with_core(|| unsafe { pqz_keypair_from_secret(s.as_ptr(), e.as_ptr(), pk.as_mut_ptr()) }))?;
+    rc(with_core(|| unsafe {
+        pqz_keypair_from_secret(s.as_ptr(), e.as_ptr(), pk.as_mut_ptr())
+    }))?;
     Ok(pk)
 }
 
@@ -186,14 +343,25 @@ pub fn c_keypair_from_secret(s: &[i8; crate::N], e: &[i16; crate::N]) -> Result<
 pub type UVs = (Box<[u8; POLYVEC_BYTES]>, Vec<[u8; V_BYTES]>);
 
 /// `pqz_encrypt` -> (u, vs); `Err(Input)` if `msgs` / `e2` and `pks` differ in length (one count in the C ABI).
-pub fn c_encrypt(pks: &[&[u8; POLYVEC_BYTES]], msgs: &[[u8; 16]], r: &[i8; crate::N], e1: &[i16; crate::N], e2: &[[i16; 16]])
-                 -> Result<UVs, Error> {
+pub fn c_encrypt(
+    pks: &[&[u8; POLYVEC_BYTES]],
+    msgs: &[[u8; 16]],
+    r: &[i8; crate::N],
+    e1: &[i16; crate::N],
+    e2: &[[i16; 16]],
+) -> Result<UVs, Error> {
     c_encrypt_win(pks, None, msgs, r, e1, e2)
 }
 
 /// `pqz_encrypt_win` (`win` None: NULL)
-pub fn c_encrypt_win(pks: &[&[u8; POLYVEC_BYTES]], win: Option<&[u8]>, msgs: &[[u8; 16]], r: &[i8; crate::N],
-                     e1: &[i16; crate::N], e2: &[[i16; 16]]) -> Result<UVs, Error> {
+pub fn c_encrypt_win(
+    pks: &[&[u8; POLYVEC_BYTES]],
+    win: Option<&[u8]>,
+    msgs: &[[u8; 16]],
+    r: &[i8; crate::N],
+    e1: &[i16; crate::N],
+    e2: &[[i16; 16]],
+) -> Result<UVs, Error> {
     let n = pks.len();
     let npk = u32::try_from(n).map_err(|_| Error::Input)?;
     if msgs.len() != n || e2.len() != n || win.is_some_and(|w| w.len() != n) {
@@ -202,22 +370,42 @@ pub fn c_encrypt_win(pks: &[&[u8; POLYVEC_BYTES]], win: Option<&[u8]>, msgs: &[[
     let wp = win.map_or(0, |w| w.as_ptr() as usize);
     let (mut u, mut vs) = (Box::new([0u8; POLYVEC_BYTES]), vec![[0u8; V_BYTES]; n]);
     let ptrs: Vec<usize> = pks.iter().map(|p| p.as_ptr() as usize).collect(); // usize: Send across the thread
-    // SAFETY: n public keys of POLYVEC_BYTES, n messages / e2 vectors / vs outputs, fixed-size r, e1, u
+                                                                              // SAFETY: n public keys of POLYVEC_BYTES, n messages / e2 vectors / vs outputs, fixed-size r, e1, u
     rc(with_core(|| unsafe {
-        pqz_encrypt_win(ptrs.as_ptr().cast(), npk, wp as *const u8, msgs.as_ptr(), r.as_ptr(), e1.as_ptr(), e2.as_ptr(),
-                        u.as_mut_ptr(), vs.as_mut_ptr())
+        pqz_encrypt_win(
+            ptrs.as_ptr().cast(),
+            npk,
+            wp as *const u8,
+            msgs.as_ptr(),
+            r.as_ptr(),
+            e1.as_ptr(),
+            e2.as_ptr(),
+            u.as_mut_ptr(),
+            vs.as_mut_ptr(),
+        )
     }))?;
     Ok((u, vs))
 }
 
-pub fn c_decrypt_raw(s: &[i8; crate::N], u: &[u8; POLYVEC_BYTES], v: &[u8; V_BYTES]) -> Result<[i64; 16], Error> {
+pub fn c_decrypt_raw(
+    s: &[i8; crate::N],
+    u: &[u8; POLYVEC_BYTES],
+    v: &[u8; V_BYTES],
+) -> Result<[i64; 16], Error> {
     c_decrypt_raw_win(s, u, v, 0)
 }
 
-pub fn c_decrypt_raw_win(s: &[i8; crate::N], u: &[u8; POLYVEC_BYTES], v: &[u8; V_BYTES], win: u32) -> Result<[i64; 16], Error> {
+pub fn c_decrypt_raw_win(
+    s: &[i8; crate::N],
+    u: &[u8; POLYVEC_BYTES],
+    v: &[u8; V_BYTES],
+    win: u32,
+) -> Result<[i64; 16], Error> {
     let mut w = [0i64; 16];
     // SAFETY: fixed-size inputs and output of the sizes pqz.h declares
-    rc(with_core(|| unsafe { pqz_decrypt_raw_win(s.as_ptr(), u.as_ptr(), v.as_ptr(), win, w.as_mut_ptr()) }))?;
+    rc(with_core(|| unsafe {
+        pqz_decrypt_raw_win(s.as_ptr(), u.as_ptr(), v.as_ptr(), win, w.as_mut_ptr())
+    }))?;
     Ok(w)
 }
 
@@ -231,7 +419,14 @@ pub fn c_enc_group_seed(seed_enc: &[u8; 32], g: u32) -> [u8; 32] {
 pub fn c_enc_leg_seed(seed_enc: &[u8; 32], to_ua: &[u8; 32], pkt_hash: &[u8; 32]) -> [u8; 32] {
     let mut out = [0u8; 32];
     // SAFETY: three 32-byte inputs and a 32-byte output
-    with_core(|| unsafe { pqz_enc_leg_seed(seed_enc.as_ptr(), to_ua.as_ptr(), pkt_hash.as_ptr(), out.as_mut_ptr()) });
+    with_core(|| unsafe {
+        pqz_enc_leg_seed(
+            seed_enc.as_ptr(),
+            to_ua.as_ptr(),
+            pkt_hash.as_ptr(),
+            out.as_mut_ptr(),
+        )
+    });
     out
 }
 
@@ -244,7 +439,16 @@ pub fn c_test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Opti
     let mut n = out.len();
     // SAFETY: proof with its length; out has room for 2 * MAX_PROOF bytes
     let ok = with_core(|| unsafe {
-        pqz_test_mutate(rel, proof.as_ptr(), proof.len(), kind, r1, r2, out.as_mut_ptr(), &mut n)
+        pqz_test_mutate(
+            rel,
+            proof.as_ptr(),
+            proof.len(),
+            kind,
+            r1,
+            r2,
+            out.as_mut_ptr(),
+            &mut n,
+        )
     });
     match ok {
         1 => {
@@ -336,7 +540,9 @@ pub fn c_polyvec_ops(input: &[i64]) -> Result<Vec<u64>, Error> {
     let mut out = vec![0u64; 1 << 16]; // ~ 140 polys of 66 words
     let mut n = 0usize;
     // SAFETY: input has OPS_IN words; out has room for every word the shim writes
-    rc(with_core(|| unsafe { pqz_shim_polyvec_ops(input.as_ptr(), out.as_mut_ptr(), &mut n) }))?;
+    rc(with_core(|| unsafe {
+        pqz_shim_polyvec_ops(input.as_ptr(), out.as_mut_ptr(), &mut n)
+    }))?;
     out.truncate(n);
     Ok(out)
 }
@@ -346,7 +552,9 @@ pub fn c_int_ops(input: &[u64; crate::testkit::INT_OPS_IN]) -> Result<Vec<u64>, 
     let mut out = vec![0u64; 1024];
     let mut n = 0usize;
     // SAFETY: input has INT_OPS_IN words; out has room for every word the shim writes (~ 150)
-    rc(with_core(|| unsafe { pqz_shim_int_ops(input.as_ptr(), out.as_mut_ptr(), &mut n) }))?;
+    rc(with_core(|| unsafe {
+        pqz_shim_int_ops(input.as_ptr(), out.as_mut_ptr(), &mut n)
+    }))?;
     out.truncate(n);
     Ok(out)
 }
@@ -355,17 +563,36 @@ pub fn c_int_ops(input: &[u64; crate::testkit::INT_OPS_IN]) -> Result<Vec<u64>, 
 pub fn c_rng(seed: &[u8; 32], dom: u64, lens: &[u32]) -> Result<Vec<u8>, Error> {
     let mut out = vec![0u8; lens.iter().map(|&l| l as usize).sum()];
     // SAFETY: out has room for the sum of lens
-    rc(with_core(|| unsafe { pqz_shim_rng(seed.as_ptr(), dom, lens.as_ptr(), lens.len(), out.as_mut_ptr()) }))?;
+    rc(with_core(|| unsafe {
+        pqz_shim_rng(
+            seed.as_ptr(),
+            dom,
+            lens.as_ptr(),
+            lens.len(),
+            out.as_mut_ptr(),
+        )
+    }))?;
     Ok(out)
 }
 
 /// `pqz_shim_shake`, the C half of `testkit::rand_shake`; `alens` sum to `input.len()`
 pub fn c_shake(which: u32, input: &[u8], alens: &[u32], slens: &[u32]) -> Result<Vec<u8>, Error> {
-    assert_eq!(alens.iter().map(|&l| l as usize).sum::<usize>(), input.len());
+    assert_eq!(
+        alens.iter().map(|&l| l as usize).sum::<usize>(),
+        input.len()
+    );
     let mut out = vec![0u8; slens.iter().map(|&l| l as usize).sum()];
     // SAFETY: input holds the sum of alens, out the sum of slens
     rc(with_core(|| unsafe {
-        pqz_shim_shake(which, input.as_ptr(), alens.as_ptr(), alens.len(), slens.as_ptr(), slens.len(), out.as_mut_ptr())
+        pqz_shim_shake(
+            which,
+            input.as_ptr(),
+            alens.as_ptr(),
+            alens.len(),
+            slens.as_ptr(),
+            slens.len(),
+            out.as_mut_ptr(),
+        )
     }))?;
     Ok(out)
 }
@@ -375,57 +602,131 @@ pub fn c_grandom(seed: &[u8; 32], dom: u32, log2o: u32, n: u32) -> Result<Vec<i6
     assert!(n >= 1);
     let mut out = vec![0i64; n as usize + 128];
     // SAFETY: out has room for n + 128 values
-    rc(with_core(|| unsafe { pqz_shim_grandom(seed.as_ptr(), dom, log2o, n, out.as_mut_ptr()) }))?;
+    rc(with_core(|| unsafe {
+        pqz_shim_grandom(seed.as_ptr(), dom, log2o, n, out.as_mut_ptr())
+    }))?;
     Ok(out)
 }
 
 /// `pqz_shim_rej`, the C half of `testkit::rand_rej`: (reject, the next 8 stream bytes)
-pub fn c_rej(bimodal: bool, seed: &[u8; 32], dom: u64, z: &[i64], v: &[i64], scm: &[u64; 3], s2: &[u64; 2])
-             -> Result<(bool, [u8; 8]), Error> {
+pub fn c_rej(
+    bimodal: bool,
+    seed: &[u8; 32],
+    dom: u64,
+    z: &[i64],
+    v: &[i64],
+    scm: &[u64; 3],
+    s2: &[u64; 2],
+) -> Result<(bool, [u8; 8]), Error> {
     assert!(!z.is_empty() && z.len() == v.len());
     let (mut rej, mut next8) = (0i32, [0u8; 8]);
     // SAFETY: z and v hold n values, scm 3 and s2 2 limbs; rej and next8 are outputs of their sizes
     rc(with_core(|| unsafe {
-        pqz_shim_rej(bimodal as u32, seed.as_ptr(), dom, z.as_ptr(), v.as_ptr(), z.len() as u32, scm.as_ptr(),
-                     s2.as_ptr(), &mut rej, next8.as_mut_ptr())
+        pqz_shim_rej(
+            bimodal as u32,
+            seed.as_ptr(),
+            dom,
+            z.as_ptr(),
+            v.as_ptr(),
+            z.len() as u32,
+            scm.as_ptr(),
+            s2.as_ptr(),
+            &mut rej,
+            next8.as_mut_ptr(),
+        )
     }))?;
     Ok((rej != 0, next8))
 }
 
 /// `pqz_shim_rej_limbs`, the C half of `testkit::rand_rej_limbs`: `z`, `v` hold n elements of `nl` limbs then the sign
 #[allow(clippy::too_many_arguments)]
-pub fn c_rej_limbs(bimodal: bool, seed: &[u8; 32], dom: u64, z: &[u64], v: &[u64], nl: u32, scm: &[u64; 3],
-                   s2: &[u64; 2]) -> Result<(bool, [u8; 8]), Error> {
+pub fn c_rej_limbs(
+    bimodal: bool,
+    seed: &[u8; 32],
+    dom: u64,
+    z: &[u64],
+    v: &[u64],
+    nl: u32,
+    scm: &[u64; 3],
+    s2: &[u64; 2],
+) -> Result<(bool, [u8; 8]), Error> {
     let w = nl as usize + 1;
     assert!(nl >= 1 && !z.is_empty() && z.len() == v.len() && z.len().is_multiple_of(w));
     let (mut rej, mut next8) = (0i32, [0u8; 8]);
     // SAFETY: z and v hold n (nl + 1) words, scm 3 and s2 2 limbs; rej and next8 are outputs of their sizes
     rc(with_core(|| unsafe {
-        pqz_shim_rej_limbs(bimodal as u32, seed.as_ptr(), dom, z.as_ptr(), v.as_ptr(), (z.len() / w) as u32, nl,
-                           scm.as_ptr(), s2.as_ptr(), &mut rej, next8.as_mut_ptr())
+        pqz_shim_rej_limbs(
+            bimodal as u32,
+            seed.as_ptr(),
+            dom,
+            z.as_ptr(),
+            v.as_ptr(),
+            (z.len() / w) as u32,
+            nl,
+            scm.as_ptr(),
+            s2.as_ptr(),
+            &mut rej,
+            next8.as_mut_ptr(),
+        )
     }))?;
     Ok((rej != 0, next8))
 }
 
 /// `pqz_shim_urandom`, the C half of `testkit::rand_urandom` (`m`: 3 limbs, sign, nlimbs 1..=3)
-pub fn c_urandom(seed: &[u8; 32], dom: u32, n: u32, nl: u32, m: &[u64; 5], log2mod: u32) -> Result<Vec<u64>, Error> {
+pub fn c_urandom(
+    seed: &[u8; 32],
+    dom: u32,
+    n: u32,
+    nl: u32,
+    m: &[u64; 5],
+    log2mod: u32,
+) -> Result<Vec<u64>, Error> {
     assert!(n >= 1 && (1..=3).contains(&nl) && (1..=3).contains(&m[4]));
     let mut out = vec![0u64; n as usize * 4 + 256];
     let mut len = 0usize;
     // SAFETY: m has 5 words; out has room for n (nl + 1) + 256 words
-    rc(with_core(|| unsafe { pqz_shim_urandom(seed.as_ptr(), dom, n, nl, m.as_ptr(), log2mod, out.as_mut_ptr(), &mut len) }))?;
+    rc(with_core(|| unsafe {
+        pqz_shim_urandom(
+            seed.as_ptr(),
+            dom,
+            n,
+            nl,
+            m.as_ptr(),
+            log2mod,
+            out.as_mut_ptr(),
+            &mut len,
+        )
+    }))?;
     out.truncate(len);
     Ok(out)
 }
 
 /// `pqz_shim_urandom_bnd`, the C half of `testkit::rand_urandom_bnd` (`lo`, `hi` as `m` of [`c_urandom`])
-pub fn c_urandom_bnd(seed: &[u8; 32], dom: u32, n: u32, nl: u32, lo: &[u64; 5], hi: &[u64; 5]) -> Result<Vec<u64>, Error> {
-    assert!(n >= 1 && (1..=3).contains(&nl) && (1..=3).contains(&lo[4]) && (1..=3).contains(&hi[4]));
+pub fn c_urandom_bnd(
+    seed: &[u8; 32],
+    dom: u32,
+    n: u32,
+    nl: u32,
+    lo: &[u64; 5],
+    hi: &[u64; 5],
+) -> Result<Vec<u64>, Error> {
+    assert!(
+        n >= 1 && (1..=3).contains(&nl) && (1..=3).contains(&lo[4]) && (1..=3).contains(&hi[4])
+    );
     let mut out = vec![0u64; n as usize * 4 + 128];
     let mut len = 0usize;
     // SAFETY: lo and hi have 5 words; out has room for n (nl + 1) + 128 words
     rc(with_core(|| unsafe {
-        pqz_shim_urandom_bnd(seed.as_ptr(), dom, n, nl, lo.as_ptr(), hi.as_ptr(), out.as_mut_ptr(), &mut len)
+        pqz_shim_urandom_bnd(
+            seed.as_ptr(),
+            dom,
+            n,
+            nl,
+            lo.as_ptr(),
+            hi.as_ptr(),
+            out.as_mut_ptr(),
+            &mut len,
+        )
     }))?;
     out.truncate(len);
     Ok(out)
@@ -435,6 +736,8 @@ pub fn c_urandom_bnd(seed: &[u8; 32], dom: u32, n: u32, nl: u32, lo: &[u64; 5], 
 pub fn c_autostable(seed: &[u8; 32], dom: u32, bnd: i64, log2: u32) -> Result<Vec<u64>, Error> {
     let mut out = vec![0u64; 64];
     // SAFETY: out has room for 64 words
-    rc(with_core(|| unsafe { pqz_shim_autostable(seed.as_ptr(), dom, bnd, log2, out.as_mut_ptr()) }))?;
+    rc(with_core(|| unsafe {
+        pqz_shim_autostable(seed.as_ptr(), dom, bnd, log2, out.as_mut_ptr())
+    }))?;
     Ok(out)
 }

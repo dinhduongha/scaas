@@ -86,7 +86,16 @@ fn parse(b: &[u8]) -> Option<(&[u8; SEED], Credit<'_>)> {
         [1] => Some(f.party()?),
         _ => return None,
     };
-    f.0.is_empty().then_some((seed, Credit { chain_uid, token, u, to, auditor }))
+    f.0.is_empty().then_some((
+        seed,
+        Credit {
+            chain_uid,
+            token,
+            u,
+            to,
+            auditor,
+        },
+    ))
 }
 
 /// Runs `check` on the frame of `n` bytes, `none` for a malformed frame; zeroes the output before and the input after.

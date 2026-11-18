@@ -23,7 +23,9 @@ contract RegulatedHederaTest is RegFixture {
     uint256 constant HED_KEY = 0xA11CE5;
     address hed = address(uint160(1_234_567)); // 0.0.1234567, an ED25519 key (simulated)
 
-    function _hedera() internal pure override returns (bool) { return true; }
+    function _hedera() internal pure override returns (bool) {
+        return true;
+    }
 
     function setUp() public override {
         vm.chainId(296);
@@ -39,7 +41,9 @@ contract RegulatedHederaTest is RegFixture {
 
     /// A HIP-632 (64-byte ed25519) `UAMetaTransfer` of `hed` on lane `batch`.
     function _hip632(address t, uint256 batch)
-        internal view returns (MetaTxLib.UAMetaTransfer memory x, IUARegistry.UASig memory s)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransfer memory x, IUARegistry.UASig memory s)
     {
         (x.from, x.to, x.value, x.batch, x.validUntil) = (nid(hed), nid(bob), 10, batch, block.timestamp + 300);
         (bytes32 r, bytes32 vs) = vm.signCompact(HED_KEY, NormalToken(t).mtxTransferDigest(x));

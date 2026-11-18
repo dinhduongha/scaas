@@ -30,7 +30,8 @@ contract WrapLimitsGasTest is WrapLimitsBase {
     }
 
     function test_gas_wrapUnwrap() public {
-        (uint256 a1, uint256 a2, uint256 a3, uint256 a4) = _pair(_hybWith(1 | (uint256(1) << GovernanceBits.MINTABLE), u, 1));
+        (uint256 a1, uint256 a2, uint256 a3, uint256 a4) =
+            _pair(_hybWith(1 | (uint256(1) << GovernanceBits.MINTABLE), u, 1));
         (uint256 b1, uint256 b2, uint256 b3, uint256 b4) = _pair(_hyb());
         WrappedToken w = _hyb();
         _set(w, _cfg1(0, 730, L(1000, 0, 1 days), OFF(), L(1000, 0, 1 days), OFF()), true, false, false);

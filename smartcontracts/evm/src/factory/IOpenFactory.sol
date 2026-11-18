@@ -21,20 +21,20 @@ interface IOpenFactory is IAdmin {
     ///         `*_ZETHER_PQZ` ids, never reused: `deployTokenImplementation` refuses them (`KindRetired`). 8-13, the regulated
     ///         kinds, are off until a release is published and the kind enabled.
     enum TokenKind {
-        NORMAL,                   // 0
-        WRAPPED,                  // 1
-        NORMAL_ZETHER,            // 2
-        WRAPPED_ZETHER,           // 3
-        NORMAL_PQZ,               // 4
-        WRAPPED_PQZ,              // 5
-        RETIRED_6,                // 6, the dropped NORMAL_ZETHER_PQZ, never reused
-        RETIRED_7,                // 7, the dropped WRAPPED_ZETHER_PQZ, never reused
-        NORMAL_REGULATED,         // 8
-        WRAPPED_REGULATED,        // 9
-        NORMAL_ZETHER_REGULATED,  // 10
+        NORMAL, // 0
+        WRAPPED, // 1
+        NORMAL_ZETHER, // 2
+        WRAPPED_ZETHER, // 3
+        NORMAL_PQZ, // 4
+        WRAPPED_PQZ, // 5
+        RETIRED_6, // 6, the dropped NORMAL_ZETHER_PQZ, never reused
+        RETIRED_7, // 7, the dropped WRAPPED_ZETHER_PQZ, never reused
+        NORMAL_REGULATED, // 8
+        WRAPPED_REGULATED, // 9
+        NORMAL_ZETHER_REGULATED, // 10
         WRAPPED_ZETHER_REGULATED, // 11
-        NORMAL_PQZ_REGULATED,     // 12
-        WRAPPED_PQZ_REGULATED     // 13
+        NORMAL_PQZ_REGULATED, // 12
+        WRAPPED_PQZ_REGULATED // 13
     }
 
     /// @notice A release: the factory-deployed code, the env version it was deployed with (its `keccak256(abi.encode(env))`
@@ -70,19 +70,39 @@ interface IOpenFactory is IAdmin {
     /// @notice The release hashes (owner 2026-10-20): the env's, the init code's (without the appended arguments, a
     ///         reproducible-build check) and the deployed code's.
     event ImplementationDeployed(
-        TokenKind indexed kind, uint64 indexed version, address indexed implementation, uint16 envVersion, bytes32 envHash,
-        bytes32 initcodeHash, bytes32 codeHash, uint64 usableFrom);
+        TokenKind indexed kind,
+        uint64 indexed version,
+        address indexed implementation,
+        uint16 envVersion,
+        bytes32 envHash,
+        bytes32 initcodeHash,
+        bytes32 codeHash,
+        uint64 usableFrom
+    );
     event TokenImplementationDeprecated(TokenKind indexed kind, uint64 indexed version, string reason);
     event TokenKindEnabled(TokenKind indexed kind, bool enabled);
     /// @notice The one event of a creation; `features`, `lockedFeatures`, `underlyings` read from the token after
     ///         `initialize` (no owner, 3r R1).
     ///         `creatorId` the creator's UA id (S3; a native creator's topic is its padded address).
     event TokenCreated(
-        address indexed token, bytes32 indexed creatorId, TokenKind indexed kind, uint64 version, address implementation,
-        uint256 features, uint256 lockedFeatures, address[] underlyings);
+        address indexed token,
+        bytes32 indexed creatorId,
+        TokenKind indexed kind,
+        uint64 version,
+        address implementation,
+        uint256 features,
+        uint256 lockedFeatures,
+        address[] underlyings
+    );
     event DexImplementationDeployed(
-        uint64 indexed version, address indexed implementation, uint16 envVersion, bytes32 envHash, bytes32 initcodeHash,
-        bytes32 codeHash, uint64 usableFrom);
+        uint64 indexed version,
+        address indexed implementation,
+        uint16 envVersion,
+        bytes32 envHash,
+        bytes32 initcodeHash,
+        bytes32 codeHash,
+        uint64 usableFrom
+    );
     event DexImplementationDeprecated(uint64 indexed version, string reason);
     event DexCreated(address indexed dex, bytes32 indexed creatorId, uint64 version, address implementation);
     /// @notice The chain's one-time values (chain-neutral spec §3.1).
@@ -159,10 +179,18 @@ interface IOpenFactory is IAdmin {
 
     /// @notice An approval's state: `LIVE` from `approve*` until a deploy consumes it (`CONSUMED`) or `revokeApproval`
     ///         deletes it (`NONE`). Live means `LIVE`, the current `adminGeneration` and `block.timestamp <= until`.
-    enum ApprovalState { NONE, LIVE, CONSUMED }
+    enum ApprovalState {
+        NONE,
+        LIVE,
+        CONSUMED
+    }
 
     /// @notice The field of an approval that is not the factory's own (`ApprovalFieldMismatch`).
-    enum ApprovalField { CHAIN_UID, FACTORY, ADMIN_GENERATION }
+    enum ApprovalField {
+        CHAIN_UID,
+        FACTORY,
+        ADMIN_GENERATION
+    }
 
     /// @notice One slot: the state, the admin term that approved, the last second it may be used.
     struct Approval {
@@ -201,17 +229,43 @@ interface IOpenFactory is IAdmin {
     ///         implArgsHash`, once, until `until` (≤ 30 days ahead); `chainUid`, `factory` and `adminGeneration` must be
     ///         this factory's own. The key: `keccak256(abi.encode(keccak256("scaas.factory.release.token"), chainUid,
     ///         factory, kind, version, envVersion, initcodeHash, implArgsHash))`.
-    function approveTokenRelease(TokenKind kind, uint64 version, uint16 envVersion, bytes32 initcodeHash,
-        bytes32 implArgsHash, bytes32 chainUid, address factory, uint32 adminGeneration, uint64 until) external;
+    function approveTokenRelease(
+        TokenKind kind,
+        uint64 version,
+        uint16 envVersion,
+        bytes32 initcodeHash,
+        bytes32 implArgsHash,
+        bytes32 chainUid,
+        address factory,
+        uint32 adminGeneration,
+        uint64 until
+    ) external;
     /// @notice As `approveTokenRelease` for `deployDexImplementation`; key tag `"scaas.factory.release.dex"`, fields
     ///         `version, envVersion, initcodeHash, implArgsHash`.
-    function approveDexRelease(uint64 version, uint16 envVersion, bytes32 initcodeHash, bytes32 implArgsHash,
-        bytes32 chainUid, address factory, uint32 adminGeneration, uint64 until) external;
+    function approveDexRelease(
+        uint64 version,
+        uint16 envVersion,
+        bytes32 initcodeHash,
+        bytes32 implArgsHash,
+        bytes32 chainUid,
+        address factory,
+        uint32 adminGeneration,
+        uint64 until
+    ) external;
     /// @notice As `approveTokenRelease` for `deployImplementation`; key tag `"scaas.factory.release.class"`, fields
     ///         `contractClass, kind, version, envVersion, initSelector, interfaceId, initcodeHash, implArgsHash`.
-    function approveRelease(ReleaseId calldata id, uint16 envVersion, bytes4 initSelector, bytes4 interfaceId,
-        bytes32 initcodeHash, bytes32 implArgsHash, bytes32 chainUid, address factory, uint32 adminGeneration, uint64 until)
-        external;
+    function approveRelease(
+        ReleaseId calldata id,
+        uint16 envVersion,
+        bytes4 initSelector,
+        bytes4 interfaceId,
+        bytes32 initcodeHash,
+        bytes32 implArgsHash,
+        bytes32 chainUid,
+        address factory,
+        uint32 adminGeneration,
+        uint64 until
+    ) external;
     /// @notice Admin only, after `configureChain`: deletes a stored approval not consumed, live or not. `chainUid_` this
     ///         factory's (`ChainUidMismatch`, CTR-GOV-27), checked after the admin, before any write.
     function revokeApproval(bytes32 key, bytes32 chainUid_) external;
@@ -224,8 +278,14 @@ interface IOpenFactory is IAdmin {
     ///         `smartKeyCloneHash()` its registry's, `SmartKeyCloneHashMismatch`: spec §13.3, §13.4) and a reference block
     ///         (`refBlock ≠ 0`: its hash on this chain must be `refHash`, `RefBlockMismatch`; 0 on a chain whose
     ///         `BLOCKHASH` is not its own block hash).
-    function configureChain(bytes32 chainUid_, uint64 noticePeriod_, address govRouter_, bytes32 govRouterCodeHash,
-        uint256 refBlock, bytes32 refHash) external;
+    function configureChain(
+        bytes32 chainUid_,
+        uint64 noticePeriod_,
+        address govRouter_,
+        bytes32 govRouterCodeHash,
+        uint256 refBlock,
+        bytes32 refHash
+    ) external;
     /// @notice 0 until `configureChain`.
     function chainUid() external view returns (bytes32);
     /// @notice Seconds between a release's deployment and its first use (chain-configured: minutes on 7622, days on
@@ -313,7 +373,8 @@ interface IOpenFactory is IAdmin {
     ///         router's `smartKeyCloneHash()` (`EnvSmartKeyAccountMismatch`, spec §13.4). At most `MAX_LIBS` (32) libraries.
     ///         `chainUid_` this factory's (`ChainUidMismatch`, CTR-GOV-27), checked after the admin, before any write; the
     ///         same word on `publishDexEnv` and `publishClassEnv`.
-    function publishTokenEnv(TokenKind kind, uint16 envVersion, bytes32 chainUid_, IFactoryToken.Env calldata env) external;
+    function publishTokenEnv(TokenKind kind, uint16 envVersion, bytes32 chainUid_, IFactoryToken.Env calldata env)
+        external;
     function publishDexEnv(uint16 envVersion, bytes32 chainUid_, IFactoryToken.Env calldata env) external;
     function tokenEnvOf(TokenKind kind, uint16 envVersion) external view returns (IFactoryToken.Env memory);
     function dexEnvOf(uint16 envVersion) external view returns (IFactoryToken.Env memory);
@@ -353,17 +414,21 @@ interface IOpenFactory is IAdmin {
     /// @notice Any usable, non-deprecated release of an enabled kind; `initArgs` opaque to the factory (for the kinds of
     ///         this repository `abi.encode(IFactoryToken.TokenConfig)`), validated by the implementation.
     function createToken(TokenKind kind, uint64 version, bytes calldata initArgs, bytes32 salt)
-        external returns (address token);
+        external
+        returns (address token);
     /// @notice Plain kinds only (`UnregisteredConfidentialKind`): any implementation of `kind` for this factory, on the
     ///         kind's latest env, recorded with `version == 0` — unvetted code: clients and the gateway trust
     ///         `isRegisteredToken` only.
     function createTokenUnregistered(TokenKind kind, address implementation, bytes calldata initArgs, bytes32 salt)
-        external returns (address token);
+        external
+        returns (address token);
 
     /// @notice CREATE3 (chain-neutral spec §4.2): one view for every path; the address says nothing about the version,
     ///         the code or the configuration on a chain (read `infoOf` and the instance per chain).
     function predictAddress(bytes32 creatorId, uint16 contractClass, uint16 kind, bytes32 salt)
-        external view returns (address);
+        external
+        view
+        returns (address);
     function isToken(address token) external view returns (bool);
     /// @notice Made by this factory from a release (`version ≠ 0`).
     function isRegisteredToken(address token) external view returns (bool);
@@ -379,8 +444,13 @@ interface IOpenFactory is IAdmin {
 
     /// @notice As `deployTokenImplementation` for the DEX (approved by `approveDexRelease`) (salt `keccak256(abi.encode("dex", version))`, DEX
     ///         env `envVersion`); the release must answer `factory()` and accept the env (`validateEnv`). `chainUid_` as there.
-    function deployDexImplementation(uint64 version, uint16 envVersion, bytes calldata initcode, bytes calldata implArgs,
-        bytes32 chainUid_) external returns (address implementation);
+    function deployDexImplementation(
+        uint64 version,
+        uint16 envVersion,
+        bytes calldata initcode,
+        bytes calldata implArgs,
+        bytes32 chainUid_
+    ) external returns (address implementation);
     function dexReleaseOf(uint64 version) external view returns (Release memory);
     function dexImplementationOf(uint64 version) external view returns (address);
     /// @notice Admin only: marks a DEX version deprecated; `createDex` then refuses it (existing DEXes untouched).
@@ -405,10 +475,14 @@ interface IOpenFactory is IAdmin {
     /// @notice Every contract of `contractClass`, in creation order (oldest first), `n` (≤ `MAX_PAGE`) records from
     ///         `from`, and the list's length. `from ≥ total` is an empty page; `n = 0` answers only `total`.
     function contractsPage(uint16 contractClass, uint256 from, uint256 n)
-        external view returns (Created[] memory page, uint256 total);
+        external
+        view
+        returns (Created[] memory page, uint256 total);
     /// @notice The contracts `creatorId` created (authenticated: the direct caller).
     function contractsOfCreator(bytes32 creatorId, uint16 contractClass, uint256 from, uint256 n)
-        external view returns (Created[] memory page, uint256 total);
+        external
+        view
+        returns (Created[] memory page, uint256 total);
 
     // ------------------------------------------------------------------ the generic catalogue (factory index spec §8, CTR-TOK-28)
 
@@ -443,14 +517,32 @@ interface IOpenFactory is IAdmin {
         bool initialized;
     }
 
-    event ClassEnvPublished(uint16 indexed contractClass, uint16 indexed kind, uint16 indexed envVersion, bytes32 envHash);
-    event ReleaseDeployed(uint16 indexed contractClass, uint16 indexed kind, uint64 indexed version, address implementation,
-        uint16 envVersion, bytes32 envHash, bytes32 initcodeHash, bytes32 codeHash, bytes4 initSelector, bytes4 interfaceId,
-        uint64 usableFrom);
+    event ClassEnvPublished(
+        uint16 indexed contractClass, uint16 indexed kind, uint16 indexed envVersion, bytes32 envHash
+    );
+    event ReleaseDeployed(
+        uint16 indexed contractClass,
+        uint16 indexed kind,
+        uint64 indexed version,
+        address implementation,
+        uint16 envVersion,
+        bytes32 envHash,
+        bytes32 initcodeHash,
+        bytes32 codeHash,
+        bytes4 initSelector,
+        bytes4 interfaceId,
+        uint64 usableFrom
+    );
     event ReleaseDeprecated(uint16 indexed contractClass, uint16 indexed kind, uint64 indexed version, string reason);
     event ClassKindEnabled(uint16 indexed contractClass, uint16 indexed kind, bool enabled);
-    event InstanceCreated(address indexed instance, bytes32 indexed creatorId, uint16 indexed contractClass, uint16 kind,
-        uint64 version, address implementation);
+    event InstanceCreated(
+        address indexed instance,
+        bytes32 indexed creatorId,
+        uint16 indexed contractClass,
+        uint16 kind,
+        uint64 version,
+        address implementation
+    );
 
     /// @notice A generic entry for class 0 (not made here), 1 (`TOKEN`) or 2 (`DEX`): those keep their typed paths.
     error ClassReserved(uint16 contractClass);
@@ -472,8 +564,13 @@ interface IOpenFactory is IAdmin {
 
     /// @notice Admin only: env `envVersion` of a generic `(contractClass, kind)` (`ClassReserved` for 0-2), as
     ///         `publishTokenEnv`.
-    function publishClassEnv(uint16 contractClass, uint16 kind, uint16 envVersion, bytes32 chainUid_,
-        IFactoryToken.Env calldata env) external;
+    function publishClassEnv(
+        uint16 contractClass,
+        uint16 kind,
+        uint16 envVersion,
+        bytes32 chainUid_,
+        IFactoryToken.Env calldata env
+    ) external;
     /// @notice As `deployTokenImplementation` (approved by `approveRelease`, which also binds `initSelector` and
     ///         `interfaceId`): the release `id` from chain-neutral init code, `initcode ‖ abi.encode(id, factory, implArgs)`
     ///         `CREATE2`d (salt `keccak256(abi.encode("release", id))`) on env `envVersion`; checked: code, `factoryInfo()`,
@@ -481,13 +578,23 @@ interface IOpenFactory is IAdmin {
     ///         in the env's `libs`: `ModuleNotPinned`, CTR-TOK-30; owner 2026-11-10). The first release of a class lists it in
     ///         `classes()`, the first of a kind in `kindsOf`. Usable after `noticePeriod`; a new `(class, kind)` starts off.
     ///         `chainUid_` as `deployTokenImplementation`.
-    function deployImplementation(ReleaseId calldata id, uint16 envVersion, bytes4 initSelector, bytes4 interfaceId,
-        bytes calldata initcode, bytes calldata implArgs, bytes32 chainUid_) external returns (address implementation);
+    function deployImplementation(
+        ReleaseId calldata id,
+        uint16 envVersion,
+        bytes4 initSelector,
+        bytes4 interfaceId,
+        bytes calldata initcode,
+        bytes calldata implArgs,
+        bytes32 chainUid_
+    ) external returns (address implementation);
     /// @notice Admin only: immediate, never undone; existing instances untouched. `chainUid_` as `deprecateToken`.
     function deprecateRelease(ReleaseId calldata id, bytes32 chainUid_, string calldata reason) external;
     /// @notice Admin only: the reversible stop of every version of a `(class, kind)`. `chainUid_` as `deprecateToken`.
     function setClassKindEnabled(uint16 contractClass, uint16 kind, bool on, bytes32 chainUid_) external;
-    function classEnvOf(uint16 contractClass, uint16 kind, uint16 envVersion) external view returns (IFactoryToken.Env memory);
+    function classEnvOf(uint16 contractClass, uint16 kind, uint16 envVersion)
+        external
+        view
+        returns (IFactoryToken.Env memory);
     function latestClassEnvVersion(uint16 contractClass, uint16 kind) external view returns (uint16);
     function classReleaseOf(ReleaseId calldata id) external view returns (ClassRelease memory);
     /// @notice May name a deprecated or not yet usable release.
@@ -502,7 +609,9 @@ interface IOpenFactory is IAdmin {
     ///         and one call: `initCall`, the release's catalogued initializer (`initSelector`, its own typed arguments), value
     ///         0, to the fresh clone only; then `factoryInfo()` must name this factory, the release and `initialized`, its
     ///         `chainUid` this factory's; the record and the lists. The submitter is the creator.
-    function createInstance(ReleaseId calldata id, bytes32 salt, bytes calldata initCall) external returns (address instance);
+    function createInstance(ReleaseId calldata id, bytes32 salt, bytes calldata initCall)
+        external
+        returns (address instance);
     /// @notice The creator of the creation in progress (EIP-1153), 0 outside one; a nested creation sees its own.
     function creating() external view returns (bytes32 creatorId);
 }

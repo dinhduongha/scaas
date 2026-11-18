@@ -53,7 +53,10 @@ contract PqzStateProto {
     // ---------------------------------------------------------------- writes of one debit operation
 
     /// The op blob, one pending slot per leg (`to[j]` in group `j / 4`), the sender's fresh acc reference.
-    function writeOp(bytes calldata blob, uint8 groups, bytes32[] calldata to, bytes32 from) external returns (address p) {
+    function writeOp(bytes calldata blob, uint8 groups, bytes32[] calldata to, bytes32 from)
+        external
+        returns (address p)
+    {
         p = SSTORE2.write(blob);
         uint256 m = to.length;
         for (uint256 j; j < m; ++j) {
@@ -80,7 +83,9 @@ contract PqzStateProto {
         a.rolled = pp;
         a.floor = pp;
         uint64 c0 = a.cleared;
-        for (uint64 i = c0; i < pp; ++i) delete a.pending[i];
+        for (uint64 i = c0; i < pp; ++i) {
+            delete a.pending[i];
+        }
         a.cleared = pp;
     }
 
@@ -114,7 +119,9 @@ contract PqzStateProto {
         uint64 nr = uint64(r + n);
         a.rolled = nr;
         uint64 end = nr > INLINE_MAX ? nr - INLINE_MAX : 0;
-        for (uint64 i = a.cleared; i < end; ++i) delete a.pending[i];
+        for (uint64 i = a.cleared; i < end; ++i) {
+            delete a.pending[i];
+        }
         if (end > a.cleared) a.cleared = end;
     }
 
@@ -273,8 +280,13 @@ contract PqzStateProto {
             for { let i := 0 } lt(i, n) { i := add(i, 32) } {
                 let p := add(d, i)
                 let x := mload(p)
-                mstore(p, or(or(shl(192, mod(shr(192, x), q)), shl(128, mod(and(shr(128, x), m), q))),
-                    or(shl(64, mod(and(shr(64, x), m), q)), mod(and(x, m), q))))
+                mstore(
+                    p,
+                    or(
+                        or(shl(192, mod(shr(192, x), q)), shl(128, mod(and(shr(128, x), m), q))),
+                        or(shl(64, mod(and(shr(64, x), m), q)), mod(and(x, m), q))
+                    )
+                )
             }
         }
     }
@@ -314,7 +326,9 @@ abstract contract PqzGasBase is Test {
         for (uint256 o; o < len; o += 32) {
             uint256 h = uint256(keccak256(abi.encode(seed, o)));
             uint256 w;
-            for (uint256 k; k < 4; ++k) w |= (((h >> (64 * k)) & 0xffffffffffffffff) % qq) << (64 * (3 - k));
+            for (uint256 k; k < 4; ++k) {
+                w |= (((h >> (64 * k)) & 0xffffffffffffffff) % qq) << (64 * (3 - k));
+            }
             assembly ("memory-safe") { mstore(add(add(b, 32), o), w) }
         }
     }
@@ -353,8 +367,13 @@ abstract contract PqzGasBase is Test {
     /// non-zero 4).
     function _calldata(bytes memory b) internal pure returns (uint256 std, uint256 floor) {
         for (uint256 i; i < b.length; ++i) {
-            if (b[i] == 0) { std += 4; floor += 10; }
-            else { std += 16; floor += 40; }
+            if (b[i] == 0) {
+                std += 4;
+                floor += 10;
+            } else {
+                std += 16;
+                floor += 40;
+            }
         }
     }
 
@@ -363,8 +382,11 @@ abstract contract PqzGasBase is Test {
     function _opWrites(string memory tag, uint256 g, uint256 m, uint256 aud, bool sender) internal {
         bytes memory b = _blob(g, m, aud, 7);
         bytes32[] memory to = new bytes32[](m);
-        for (uint256 j; j < m; ++j) to[j] = keccak256(abi.encode("to", j));
-        uint256 gas = _measure(address(pr), abi.encodeCall(pr.writeOp, (b, uint8(g), to, sender ? bytes32("from") : bytes32(0))));
+        for (uint256 j; j < m; ++j) {
+            to[j] = keccak256(abi.encode("to", j));
+        }
+        uint256 gas =
+            _measure(address(pr), abi.encodeCall(pr.writeOp, (b, uint8(g), to, sender ? bytes32("from") : bytes32(0))));
         console2.log(string.concat(tag, " blob bytes / gas (blob + M credits + sender acc ref)"), b.length, gas);
     }
 
@@ -399,7 +421,9 @@ abstract contract PqzGasBase is Test {
     /// `k` pending credits for `ua`, each from its own op blob (distinct, cold accounts), all old enough to roll.
     function _fill(bytes32 ua, uint256 k, uint256 seed) internal {
         bytes memory b = _blob(1, 1, 0, 0);
-        for (uint256 i; i < k; i += 32) pr.seedOps(ua, k - i < 32 ? k - i : 32, seed + i, b);
+        for (uint256 i; i < k; i += 32) {
+            pr.seedOps(ua, k - i < 32 ? k - i : 32, seed + i, b);
+        }
         vm.roll(block.number + 100);
     }
 
@@ -413,14 +437,19 @@ abstract contract PqzGasBase is Test {
         _setup(n, qq);
         console2.log("== rollover, n =", n);
         uint256 total;
-        for (uint256 i; i < sizes.length; ++i) total += sizes[i];
+        for (uint256 i; i < sizes.length; ++i) {
+            total += sizes[i];
+        }
         // first: the acc slots never written (zero -> non-zero)
         bytes32 ua = "first";
         _fill(ua, total, 1000);
         for (uint256 i; i < sizes.length; ++i) {
             uint256 gas = _roll(ua, sizes[i]);
-            console2.log(i == 0 ? "first rollover (acc slots zero) n / gas" : "steady rollover (acc materialised) n / gas",
-                sizes[i], gas);
+            console2.log(
+                i == 0 ? "first rollover (acc slots zero) n / gas" : "steady rollover (acc materialised) n / gas",
+                sizes[i],
+                gas
+            );
         }
         // after a debit: acc = fresh blob reference, the acc slots still non-zero
         (uint64 pc,,,,,) = pr.state(ua);
@@ -434,7 +463,9 @@ abstract contract PqzGasBase is Test {
     /// big-endian uint16 list -> uint256[]
     function _arr(bytes memory b) internal pure returns (uint256[] memory a) {
         a = new uint256[](b.length / 2);
-        for (uint256 i; i < a.length; ++i) a[i] = uint256(uint8(b[2 * i])) << 8 | uint8(b[2 * i + 1]);
+        for (uint256 i; i < a.length; ++i) {
+            a[i] = uint256(uint8(b[2 * i])) << 8 | uint8(b[2 * i + 1]);
+        }
     }
 
     // ---------------------------------------------------------------- the debit's read and write
@@ -455,39 +486,56 @@ abstract contract PqzGasBase is Test {
         // materialised acc: roll 24, then T from slots vs from the calldata hint
         pr.rollOver(ua, 24);
         bytes memory accB = pr.accOf(ua);
-        console2.log("T, acc materialised, from slots, inline 0",
-            _measure(address(pr), abi.encodeCall(pr.total, (ua, 24, ""))));
-        console2.log("T, acc materialised, calldata hint, inline 0",
-            _measure(address(pr), abi.encodeCall(pr.total, (ua, 24, accB))));
+        console2.log(
+            "T, acc materialised, from slots, inline 0", _measure(address(pr), abi.encodeCall(pr.total, (ua, 24, "")))
+        );
+        console2.log(
+            "T, acc materialised, calldata hint, inline 0",
+            _measure(address(pr), abi.encodeCall(pr.total, (ua, 24, accB)))
+        );
         (uint256 std, uint256 fl) = _calldata(accB);
         console2.log("  hint calldata: standard / EIP-7623 floor", std, fl);
         _coolPending(ua, 24, 40);
-        console2.log("T, acc materialised, calldata hint, inline 16",
-            _measure(address(pr), abi.encodeCall(pr.total, (ua, 40, accB))));
+        console2.log(
+            "T, acc materialised, calldata hint, inline 16",
+            _measure(address(pr), abi.encodeCall(pr.total, (ua, 40, accB)))
+        );
         // effects: fresh reference, rolled = floor = p, consumed slots deleted (16 + 16)
         address p2 = SSTORE2.write(_blob(1, 0, 0, 6));
-        console2.log("debit effects (acc ref, counters, 32 slots deleted)",
-            _measure(address(pr), abi.encodeCall(pr.debitEffects, (ua, p2, 1, 0, 40))));
+        console2.log(
+            "debit effects (acc ref, counters, 32 slots deleted)",
+            _measure(address(pr), abi.encodeCall(pr.debitEffects, (ua, p2, 1, 0, 40)))
+        );
     }
 }
 
 /// The measurements (one transaction per test; see the note on PqzStateSteadyGasTest for slots rewritten twice).
 contract PqzStateGasTest is PqzGasBase {
-    function test_opWrites_n2048() public { _writes(2048, Q42); }
-    function test_opWrites_n2816() public { _writes(2816, Q54); }
+    function test_opWrites_n2048() public {
+        _writes(2048, Q42);
+    }
+
+    function test_opWrites_n2816() public {
+        _writes(2816, Q54);
+    }
 
     function test_rollover_n2048() public {
         _needsHighGasLimit();
-        _rollSeries(2048, Q42, _arr(hex"0020_0001_0010_0040_0080_0100_0180_01c0_0200"));
+        _rollSeries(2048, Q42, _arr(hex"002000010010004000800100018001c00200"));
     }
 
     function test_rollover_n2816() public {
         _needsHighGasLimit();
-        _rollSeries(2816, Q54, _arr(hex"0010_0001_0010_0040_0080_0100_0140_0180"));
+        _rollSeries(2816, Q54, _arr(hex"00100001001000400080010001400180"));
     }
 
-    function test_debit_n2048() public { _debitSeries(2048, Q42); }
-    function test_debit_n2816() public { _debitSeries(2816, Q54); }
+    function test_debit_n2048() public {
+        _debitSeries(2048, Q42);
+    }
+
+    function test_debit_n2816() public {
+        _debitSeries(2816, Q54);
+    }
 
     // ---------------------------------------------------------------- today's layout (calldata), n = 2048
 
@@ -509,8 +557,10 @@ contract PqzStateGasTest is PqzGasBase {
             console2.log("today rollover k / execution gas", k, gas);
             console2.log("  calldata standard / EIP-7623 floor (+21,000 intrinsic)", std, fl);
         }
-        console2.log("today credit (keccak 16,512 B + one slot)",
-            _measure(address(pr), abi.encodeCall(pr.todayCredit, (bytes32("t2"), 0, ct))));
+        console2.log(
+            "today credit (keccak 16,512 B + one slot)",
+            _measure(address(pr), abi.encodeCall(pr.todayCredit, (bytes32("t2"), 0, ct)))
+        );
         (uint256 s1, uint256 f1) = _calldata(ct);
         console2.log("one ciphertext in calldata: standard / floor", s1, f1);
     }
@@ -568,14 +618,37 @@ abstract contract SteadyBase is PqzGasBase {
         console2.log("steady rollover (own transaction) n / gas", k, _roll(UA, k));
     }
 
-    function test_steady_1() public { _one(1); }
-    function test_steady_64() public { _one(64); }
-    function test_steady_128() public { _one(128); }
-    function test_steady_256() public { _one(256); }
-    function test_steady_320() public { _one(320); }
-    function test_steady_384() public { _one(384); }
-    function test_steady_448() public { _one(448); }
-    function test_steady_512() public { _one(512); }
+    function test_steady_1() public {
+        _one(1);
+    }
+
+    function test_steady_64() public {
+        _one(64);
+    }
+
+    function test_steady_128() public {
+        _one(128);
+    }
+
+    function test_steady_256() public {
+        _one(256);
+    }
+
+    function test_steady_320() public {
+        _one(320);
+    }
+
+    function test_steady_384() public {
+        _one(384);
+    }
+
+    function test_steady_448() public {
+        _one(448);
+    }
+
+    function test_steady_512() public {
+        _one(512);
+    }
 
     /// after a debit: `acc` is the fresh blob reference, the acc slots keep their old (non-zero) words
     function test_steady_afterDebit_384() public {
@@ -586,11 +659,21 @@ abstract contract SteadyBase is PqzGasBase {
 }
 
 contract PqzStateSteadyGasTest2048 is SteadyBase {
-    function _n() internal pure override returns (uint256) { return 2048; }
-    function _q() internal pure override returns (uint256) { return Q42; }
+    function _n() internal pure override returns (uint256) {
+        return 2048;
+    }
+
+    function _q() internal pure override returns (uint256) {
+        return Q42;
+    }
 }
 
 contract PqzStateSteadyGasTest2816 is SteadyBase {
-    function _n() internal pure override returns (uint256) { return 2816; }
-    function _q() internal pure override returns (uint256) { return Q54; }
+    function _n() internal pure override returns (uint256) {
+        return 2816;
+    }
+
+    function _q() internal pure override returns (uint256) {
+        return Q54;
+    }
 }

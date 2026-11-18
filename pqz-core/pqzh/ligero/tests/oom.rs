@@ -8,7 +8,7 @@ use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use pqzh_ligero::client::setup;
-use pqzh_ligero::{Form, Oom, Params, prove, try_verify};
+use pqzh_ligero::{prove, try_verify, Form, Oom, Params};
 
 struct Cap;
 static LIMIT: AtomicUsize = AtomicUsize::new(usize::MAX);

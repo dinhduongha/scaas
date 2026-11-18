@@ -18,6 +18,7 @@ default set's statement files (keys and T sliced from the statements) and, T15e,
 under no key); T21 L48: json_calls (one byte, the call's index in JCALLS, then its JSON: portable.json's registration, record and
 msig update rows, typed_ops.json's UARelayFee, paymeta.json, servicepull.json, nested.json's `inner` maps).
 """
+
 import json
 import os
 import sys
@@ -32,8 +33,8 @@ def commands(name):
     fuzz targets are built with `vectors`); tests/fuzz_caps.rs reads the source by the same rule and compares it with COMMANDS."""
     with open(os.path.join(HERE, "../src/facade", name + ".rs"), encoding="utf-8") as f:
         src = f.read()
-    body = src[src.index("pub const COMMANDS: &[&str] = &["):]
-    return [ln.strip().strip('",') for ln in body[:body.index("];")].splitlines()[1:] if ln.strip().startswith('"')]
+    body = src[src.index("pub const COMMANDS: &[&str] = &[") :]
+    return [ln.strip().strip('",') for ln in body[: body.index("];")].splitlines()[1:] if ln.strip().startswith('"')]
 
 
 # the command index of the fuzz targets; BOX / QBOX: the index after the last, the box readers
@@ -58,12 +59,23 @@ def unhex(s):
 
 
 sign, seal, kem, keys = load("sign.json"), load("seal.json"), load("kem.json"), load("keys.json")
-manifest = {"v": 1, "entries": [{"kind": r["kind"], "account": r["account"], "index": r["index"], "ua": r["ua"]} for r in kem["keys"]],
-            "natives": [], "kem": [], "imports": [{"network": "evm", "n": 0}],
-            "importedUas": [{"kind": 264, "source": "native-import:evm:0", "ua": keys["imported"]["rows"][0]["ua"]}], "pqzHeld": [],
-            "backupGeneration": 0, "backupSenders": []}
+manifest = {
+    "v": 1,
+    "entries": [{"kind": r["kind"], "account": r["account"], "index": r["index"], "ua": r["ua"]} for r in kem["keys"]],
+    "natives": [],
+    "kem": [],
+    "imports": [{"network": "evm", "n": 0}],
+    "importedUas": [{"kind": 264, "source": "native-import:evm:0", "ua": keys["imported"]["rows"][0]["ua"]}],
+    "pqzHeld": [],
+    "backupGeneration": 0,
+    "backupSenders": [],
+}
 # the backup payloads, T20c's with manifest.importedUas among them
-payloads = [unhex(c["pt"]) for c in seal["containers"] + seal["imported"] if c["container"]["purpose"] in ("scaas/backup/v1", "scaas/link/v1")]
+payloads = [
+    unhex(c["pt"])
+    for c in seal["containers"] + seal["imported"]
+    if c["container"]["purpose"] in ("scaas/backup/v1", "scaas/link/v1")
+]
 opens = [r for k in ("containers", "acceptance", "replay") for r in seal[k]]
 nested = next(r for r in sign["msig"] if r["case"].startswith("nested minimal"))
 
@@ -71,9 +83,16 @@ nested = next(r for r in sign["msig"] if r["case"].startswith("nested minimal"))
 def uasig(r):
     """A sign.json msig row as a UaSigRequest: its keys numbered in slot order."""
     n = iter(range(64))
-    slot = lambda s: ({"index": s["index"], "members": [{"index": x["index"], "key": next(n)} for x in s["members"]]}
-                      if "members" in s else {"index": s["index"], "key": next(n)})
-    m = {"keyData": r["keyData"], "slots": [slot(s) for s in r["slots"]], **({"inner": r["inner"]} if "inner" in r else {})}
+    slot = lambda s: (
+        {"index": s["index"], "members": [{"index": x["index"], "key": next(n)} for x in s["members"]]}
+        if "members" in s
+        else {"index": s["index"], "key": next(n)}
+    )
+    m = {
+        "keyData": r["keyData"],
+        "slots": [slot(s) for s in r["slots"]],
+        **({"inner": r["inner"]} if "inner" in r else {}),
+    }
     return {"purpose": r["purposeTag"], "digest": r["digest"], "msig": m}
 
 
@@ -94,29 +113,64 @@ def zc(cmd, v):
 def zether_seeds():
     t = zreq("transfer_bls12381.json")
     out = [zc("rawProveTransfer", zreq(f)) for f in ("transfer_bls12381.json", "transfer_noaud_bls12381.json")]
-    out += [zc("rawProveTransferMulti", zreq(f)) for f in ("transfer_multi_bls12381.json", "transfer_multi_noaud_bls12381.json")]
-    out += [zc("rawProveBurn", zreq("burn_bls12381.json")), zc("rawCheckBalance", {"acc": t["acc"], "balance": t["balance"]}),
-            zc("decrypt", {"ct": t["acc"], "tableBits": 18, "boundBits": 36}), zc("encrypt", {"Y": t["yTo"], "amount": 5}),
-            zc("pop", {"curve": "bls12381"}), zc("ownerAuth", {"digest": "0x" + "11" * 32}),
-            zc("uaSig", {"purpose": "metatx", "digest": "0x" + "22" * 32}), zc("shieldCalldata", {"Y": t["yTo"], "amount": 1})]
-    out += [zc("rawOpenDisclosure", {**{k: v for k, v in c.items() if k not in ("opening", "expect")},
-                                  "kind": {1: "receiver", 2: "auditor"}.get(c["kind"], "sender")})
-            for c in zload("disclosure_bls12381.json")["cases"]]
+    out += [
+        zc("rawProveTransferMulti", zreq(f))
+        for f in ("transfer_multi_bls12381.json", "transfer_multi_noaud_bls12381.json")
+    ]
+    out += [
+        zc("rawProveBurn", zreq("burn_bls12381.json")),
+        zc("rawCheckBalance", {"acc": t["acc"], "balance": t["balance"]}),
+        zc("decrypt", {"ct": t["acc"], "tableBits": 18, "boundBits": 36}),
+        zc("encrypt", {"Y": t["yTo"], "amount": 5}),
+        zc("pop", {"curve": "bls12381"}),
+        zc("ownerAuth", {"digest": "0x" + "11" * 32}),
+        zc("uaSig", {"purpose": "metatx", "digest": "0x" + "22" * 32}),
+        zc("shieldCalldata", {"Y": t["yTo"], "amount": 1}),
+    ]
+    out += [
+        zc(
+            "rawOpenDisclosure",
+            {
+                **{k: v for k, v in c.items() if k not in ("opening", "expect")},
+                "kind": {1: "receiver", 2: "auditor"}.get(c["kind"], "sender"),
+            },
+        )
+        for c in zload("disclosure_bls12381.json")["cases"]
+    ]
     e = zload("envelope.json")
     out += [zc("envelope", {k: e[k] for k in ("chainId", "chainUid", "token", "meta")})]
     # T20b: the merged entries' `uaEnvelope`, `from` the 32-byte id (the native one padded)
-    out += [zc("uaEnvelope", {**{k: e[k] for k in ("chainId", "chainUid", "token")},
-                              "meta": {**e["meta"], "from": "0x" + "00" * 12 + e["meta"]["from"][2:]}})]
+    out += [
+        zc(
+            "uaEnvelope",
+            {
+                **{k: e[k] for k in ("chainId", "chainUid", "token")},
+                "meta": {**e["meta"], "from": "0x" + "00" * 12 + e["meta"]["from"][2:]},
+            },
+        )
+    ]
     # T14b: the words commands over the forge rows (smartcontracts/vectors/zether/state.json)
     with open(os.path.join(HERE, "../../../smartcontracts/vectors/zether/state.json"), encoding="utf-8") as f:
         st = json.load(f)
     loc = {k: st[k] for k in ("family", "chainId", "chainUid", "token", "block", "psid")}
     for a in st["accounts"]:
         w = {**loc, "ua": a["ua"], "account": a["account"], "accountData": a["accountData"]}
-        out += [zc("balance", {**w, "tableBits": 18, "boundBits": 20}), zc("checkBalance", {**w, "cacheBox": {"iv": "AAAAAAAAAAAAAAAA", "ct": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}})]
+        out += [
+            zc("balance", {**w, "tableBits": 18, "boundBits": 20}),
+            zc(
+                "checkBalance",
+                {**w, "cacheBox": {"iv": "AAAAAAAAAAAAAAAA", "ct": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}},
+            ),
+        ]
     for x in st["entries"]:
-        ent = {**loc, "fromUA": x["fromUA"], "sendCounter": x["sendCounter"], "entryWords": x["entryWords"], "entryPtr": x["entryPtr"],
-               **{k: x[k] for k in ("blob", "memoWords") if k in x}}
+        ent = {
+            **loc,
+            "fromUA": x["fromUA"],
+            "sendCounter": x["sendCounter"],
+            "entryWords": x["entryWords"],
+            "entryPtr": x["entryPtr"],
+            **{k: x[k] for k in ("blob", "memoWords") if k in x},
+        }
         out += [zc("openDisclosure", {**ent, "ua": x["to"][0], "kind": "receiver", "index": 0})]
     out += [bytes([BOX]) + js(r["box"]) for k in ("cacheBox", "cacheRefusals") for r in load("zether.json")[k]]
     return out
@@ -137,69 +191,222 @@ def pqz_seeds():
     h = lambda b: "0x" + b.hex()
     word = lambda s: h(bytes(32 - len(bytes.fromhex(s))) + bytes.fromhex(s))
     pqzl = "0x" + pload("proof_pqzl.json")["proof_system_id"]
+
     def header(r):
         f = r["header"]
         o = {k: f[k] for k in ("chainId", "fee", "sendCounter", "p", "validUntilBlock", "plainUsed")}
         o.update({k: "0x" + f[k] for k in ("token", "registry")})
         o.update({k: word(f[k]) for k in ("fromUA", "beneficiaryUA", "chainUid", "envelopeBinding") if k in f})
         return o
+
     tr = pload("statement_transfer.json")["rows"][0]
     s = bytes.fromhex(tr["stmt"])
-    pk_f, pk_t, pk_a, t = s[640:640 + PK], s[640 + PK:640 + 2 * PK], s[640 + 2 * PK:640 + 3 * PK], s[640 + 3 * PK:640 + 3 * PK + CT]
-    out = [qc("enc", {"pks": [h(pk_t)], "values": [123456]}), qc("dec", {"ct": h(t)}), qc("dec", {"ct": h(t), "window": 3}),
-           qc("proveRegister", {"proofSystemId": pqzl, "kind": 0x0131, "ua": h(bytes(range(32)))}),
-           qc("proveRegister", {"proofSystemId": pqzl, "kind": 0x0130, "ua": h(bytes(32)), "kemPk": "0x01" + "00" * 1600}),
-           qc("proveKeyRecord", {"proofSystemId": pqzl, "ua": h(bytes(range(32))), "version": 1}),
-           qc("rawProveTransfer", {**header(tr), "proofSystemId": pqzl, "toUA": word(tr["header"]["toUA"]), "pkT": h(pk_t), "pkA": h(pk_a),
-                                "T": h(t), "amount": 123456, "memoHash": word(tr["header"]["memoHash"])})]
-    for f, cmd, extra in (("statement_burn.json", "rawProveBurn", lambda r: {"amount": r["header"]["amount"], "recipient": word(r["header"]["recipient"])}),
-                          ("statement_refresh.json", "rawProveRefresh", lambda r: {})):
+    pk_f, pk_t, pk_a, t = (
+        s[640 : 640 + PK],
+        s[640 + PK : 640 + 2 * PK],
+        s[640 + 2 * PK : 640 + 3 * PK],
+        s[640 + 3 * PK : 640 + 3 * PK + CT],
+    )
+    out = [
+        qc("enc", {"pks": [h(pk_t)], "values": [123456]}),
+        qc("dec", {"ct": h(t)}),
+        qc("dec", {"ct": h(t), "window": 3}),
+        qc("proveRegister", {"proofSystemId": pqzl, "kind": 0x0131, "ua": h(bytes(range(32)))}),
+        qc("proveRegister", {"proofSystemId": pqzl, "kind": 0x0130, "ua": h(bytes(32)), "kemPk": "0x01" + "00" * 1600}),
+        qc("proveKeyRecord", {"proofSystemId": pqzl, "ua": h(bytes(range(32))), "version": 1}),
+        qc(
+            "rawProveTransfer",
+            {
+                **header(tr),
+                "proofSystemId": pqzl,
+                "toUA": word(tr["header"]["toUA"]),
+                "pkT": h(pk_t),
+                "pkA": h(pk_a),
+                "T": h(t),
+                "amount": 123456,
+                "memoHash": word(tr["header"]["memoHash"]),
+            },
+        ),
+    ]
+    for f, cmd, extra in (
+        (
+            "statement_burn.json",
+            "rawProveBurn",
+            lambda r: {"amount": r["header"]["amount"], "recipient": word(r["header"]["recipient"])},
+        ),
+        ("statement_refresh.json", "rawProveRefresh", lambda r: {}),
+    ):
         r = pload(f)["rows"][0]
         b = bytes.fromhex(r["stmt"])
-        out.append(qc(cmd, {**header(r), **extra(r), "proofSystemId": pqzl, "T": h(b[640 + PK:640 + PK + CT]), "memoHash": word(r["header"]["memoHash"])}))
+        out.append(
+            qc(
+                cmd,
+                {
+                    **header(r),
+                    **extra(r),
+                    "proofSystemId": pqzl,
+                    "T": h(b[640 + PK : 640 + PK + CT]),
+                    "memoHash": word(r["header"]["memoHash"]),
+                },
+            )
+        )
     m = next(r for r in pload("statement_transfer_multi.json")["rows"] if r["case"] == "M1-on")
     b = bytes.fromhex(m["stmt"])
-    out.append(qc("rawProveTransferMulti", {**header(m), "proofSystemId": pqzl, "pkA": h(b[640 + 2 * PK:640 + 3 * PK]),
-                                         "legs": [{"pk": h(b[640 + PK:640 + 2 * PK]), "ua": word(m["objects"]["uas"][0]), "amount": 123456}],
-                                         "T": h(b[640 + 3 * PK:640 + 3 * PK + CT]), "mode": "HASH", "memoHash": word(m["header"]["memoHash"])}))
+    out.append(
+        qc(
+            "rawProveTransferMulti",
+            {
+                **header(m),
+                "proofSystemId": pqzl,
+                "pkA": h(b[640 + 2 * PK : 640 + 3 * PK]),
+                "legs": [{"pk": h(b[640 + PK : 640 + 2 * PK]), "ua": word(m["objects"]["uas"][0]), "amount": 123456}],
+                "T": h(b[640 + 3 * PK : 640 + 3 * PK + CT]),
+                "mode": "HASH",
+                "memoHash": word(m["header"]["memoHash"]),
+            },
+        )
+    )
     for r in pload("statement_disclose.json")["rows"]:
         if r["form"] == "DISCLOSE-SENDER":
-            out.append(qc("rawProveDiscloseSender", {"stmt": "0x" + r["stmt"], "fromUA": h(b"\xa1" * 32), "sendCounter": 3, "salt": "0x" + "5a" * 16,
-                                                  "auditorOn": True}))
-            out.append(qc("rawProveDiscloseSender", {"stmt": "0x" + r["stmt"], "fromUA": h(b"\xa1" * 32), "sendCounter": 3, "salt": "0x" + "5a" * 16,
-                                                  "auditorOn": True, "M": 2, "leg": 1}))
+            out.append(
+                qc(
+                    "rawProveDiscloseSender",
+                    {
+                        "stmt": "0x" + r["stmt"],
+                        "fromUA": h(b"\xa1" * 32),
+                        "sendCounter": 3,
+                        "salt": "0x" + "5a" * 16,
+                        "auditorOn": True,
+                    },
+                )
+            )
+            out.append(
+                qc(
+                    "rawProveDiscloseSender",
+                    {
+                        "stmt": "0x" + r["stmt"],
+                        "fromUA": h(b"\xa1" * 32),
+                        "sendCounter": 3,
+                        "salt": "0x" + "5a" * 16,
+                        "auditorOn": True,
+                        "M": 2,
+                        "leg": 1,
+                    },
+                )
+            )
         else:
             out.append(qc("rawProveDisclose", {"stmt": "0x" + r["stmt"]}))
-    out.append(qc("rawOpenMemo", {"chainUid": word(m["header"]["chainUid"]), "token": "0x" + m["header"]["token"], "fromUA": word(m["header"]["fromUA"]),
-                               "sendCounter": m["header"]["sendCounter"], "memo": "0x" + m["memo"]["memo"]}))
+    out.append(
+        qc(
+            "rawOpenMemo",
+            {
+                "chainUid": word(m["header"]["chainUid"]),
+                "token": "0x" + m["header"]["token"],
+                "fromUA": word(m["header"]["fromUA"]),
+                "sendCounter": m["header"]["sendCounter"],
+                "memo": "0x" + m["memo"]["memo"],
+            },
+        )
+    )
     # T15e: the words commands from the forge state rows (state.json): an account's words, an entry leg's
     sv = pload("state.json")
     loc = {k: sv[k] for k in ("chainUid", "token", "psid")}
     for a in sv["accounts"][:2]:
-        w = {**loc, "ua": a["ua"], "block": a["block"], "account": a["account"], "pending": a["pending"], "accWords": a["accWords"],
-             "blobs": a["blobs"], "keyRecord": a["keyRecord"],
-             # group 3g (T15o): the UA's sendCounter word, version 0, pqzVersions (latest 0, current 0, listed)
-             "sendCounterWord": h(a["sendCounter"].to_bytes(32, "big")), "keyVersion": 0, "keyVersions": h((1 << 128).to_bytes(32, "big"))}
+        w = {
+            **loc,
+            "ua": a["ua"],
+            "block": a["block"],
+            "account": a["account"],
+            "pending": a["pending"],
+            "accWords": a["accWords"],
+            "blobs": a["blobs"],
+            "keyRecord": a["keyRecord"],
+            # group 3g (T15o): the UA's sendCounter word, version 0, pqzVersions (latest 0, current 0, listed)
+            "sendCounterWord": h(a["sendCounter"].to_bytes(32, "big")),
+            "keyVersion": 0,
+            "keyVersions": h((1 << 128).to_bytes(32, "big")),
+        }
         out.append(qc("balance", {**w, "forOp7": False}))
-        out.append(qc("proveRefresh", {**w, "chainId": sv["chainId"], "registry": sv["registry"], "fee": 0, "validUntilBlock": 1 << 40,
-                                       "shieldIn": a["shieldIn"], "envelopeBinding": h(bytes(32))}))
+        out.append(
+            qc(
+                "proveRefresh",
+                {
+                    **w,
+                    "chainId": sv["chainId"],
+                    "registry": sv["registry"],
+                    "fee": 0,
+                    "validUntilBlock": 1 << 40,
+                    "shieldIn": a["shieldIn"],
+                    "envelopeBinding": h(bytes(32)),
+                },
+            )
+        )
     e = next(x for x in sv["entries"] if x["legs"][0]["auditorCt"])
-    base = {**loc, "chainId": sv["chainId"], "entryRef": e["entryRef"], "fromUA": e["fromUA"], "sendCounter": e["sendCounter"],
-            "entryPtr": e["entryPtr"], "block": 1, "leg": 0}
-    out.append(qc("proveDisclose", {**base, "ua": e["legs"][0]["ua"], "kind": "RECEIVER_X", "registry": sv["registry"],
-                                    "blobs": [e["blob"], e["legs"][0]["key"]], "keyRecord": e["legs"][0]["keyRecord"]}))
+    base = {
+        **loc,
+        "chainId": sv["chainId"],
+        "entryRef": e["entryRef"],
+        "fromUA": e["fromUA"],
+        "sendCounter": e["sendCounter"],
+        "entryPtr": e["entryPtr"],
+        "block": 1,
+        "leg": 0,
+    }
+    out.append(
+        qc(
+            "proveDisclose",
+            {
+                **base,
+                "ua": e["legs"][0]["ua"],
+                "kind": "RECEIVER_X",
+                "registry": sv["registry"],
+                "blobs": [e["blob"], e["legs"][0]["key"]],
+                "keyRecord": e["legs"][0]["keyRecord"],
+            },
+        )
+    )
     snd = next(x for x in sv["accounts"] if x["ua"] == e["fromUA"])
-    out.append(qc("proveDiscloseSender", {**base, "registry": sv["registry"], "blobs": [e["blob"], snd["blobs"][0], e["legs"][0]["key"]],
-                                          "keyRecord": snd["keyRecord"], "legKeyRecords": [e["legs"][0]["keyRecord"]]}))
-    out.append(qc("auditRead", {**base, "ua": sv["auditorUA"], "auditorMode": sv["auditorMode"], "auditorUA": sv["auditorUA"],
-                                "blobs": [e["blob"], sv["auditorKey"]], "keyRecord": sv["auditorKeyRecord"]}))
+    out.append(
+        qc(
+            "proveDiscloseSender",
+            {
+                **base,
+                "registry": sv["registry"],
+                "blobs": [e["blob"], snd["blobs"][0], e["legs"][0]["key"]],
+                "keyRecord": snd["keyRecord"],
+                "legKeyRecords": [e["legs"][0]["keyRecord"]],
+            },
+        )
+    )
+    out.append(
+        qc(
+            "auditRead",
+            {
+                **base,
+                "ua": sv["auditorUA"],
+                "auditorMode": sv["auditorMode"],
+                "auditorUA": sv["auditorUA"],
+                "blobs": [e["blob"], sv["auditorKey"]],
+                "keyRecord": sv["auditorKeyRecord"],
+            },
+        )
+    )
     out.append(bytes([QBOX]) + js({"iv": "AAAAAAAAAAAAAAAA", "ct": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}))
     return out
 
 
 # fuzz/src/lib.rs JSON_CALLS, in its order: (name, depth cap)
-JCALLS = [("registration_args", 6), ("set_kem_key_args", 6), ("set_pqz_key_args", 6), ("set_pqz_key_version_args", 6),
-          ("msig_update", 6), ("pay_digest", 6), ("meta_pay_id", 6), ("service_pull", 7), ("inner", 1)]
+JCALLS = [
+    ("registration_args", 6),
+    ("set_kem_key_args", 6),
+    ("set_pqz_key_args", 6),
+    ("set_pqz_key_version_args", 6),
+    ("msig_update", 6),
+    ("pay_digest", 6),
+    ("meta_pay_id", 6),
+    ("service_pull", 7),
+    ("inner", 1),
+]
 
 
 def json_calls_seeds():
@@ -216,20 +423,61 @@ def json_calls_seeds():
 
     def pull(r):  # tests/service_pull.rs args
         t = r["t"]
-        return {"name": r["token"]["name"], "token": r["token"]["address"], "chainId": r["chainId"], "chainUid": r["token"]["salt"],
-                "entry": r["entry"], "op": r["typedData"], "from": t["from"], "amount": t["value"], "batch": t["batch"],
-                "nonce": t["nonce"], "validUntil": t["validUntil"]}
+        return {
+            "name": r["token"]["name"],
+            "token": r["token"]["address"],
+            "chainId": r["chainId"],
+            "chainUid": r["token"]["salt"],
+            "entry": r["entry"],
+            "op": r["typedData"],
+            "from": t["from"],
+            "amount": t["value"],
+            "batch": t["batch"],
+            "nonce": t["nonce"],
+            "validUntil": t["validUntil"],
+        }
 
     rows = {
-        "registration_args": [{"kind": r["kind"], "keyData": r["keyData"], "pqzKey": r["attrs"]["pqzKey"], "pqzPopHash": r["attrs"]["pqzPopHash"],
-                               "pqzPop": r["pqzPop"], "kemPk": r["attrs"]["kemPk"], "pop": r["args"]["pop"]} for r in p["registrations"]],
-        "set_kem_key_args": [{"ua": r["ua"], "version": r["version"], "kemPk": r["kemPk"], "sig": sig(r)} for r in p["kemRecords"]],
-        "set_pqz_key_args": [{"ua": r["ua"], "pqzKey": r["pqzKey"], "pqzPopHash": r["pqzPopHash"], "sig": sig(r)} for r in p["pqzKeyRecords"]],
-        "set_pqz_key_version_args": [{"ua": r["ua"], "version": r["version"], "pqzKey": r["pqzKey"], "pqzPopHash": r["pqzPopHash"],
-                                      "sig": sig(r)} for r in p["pqzKeyVersions"]],
-        "msig_update": [{k: r[k] for k in ("ua", "chainUid", "registry", "version", "threshold", "members", "enabled", "validUntilBlock")}
-                        | {"sigs": r["args"]["sigs"]} for r in p["msigUpdates"]],
-        "pay_digest": [{"struct": "UARelayFee", "domain": fee["domains"]["token"]["domain"], "message": fee["message"]}],
+        "registration_args": [
+            {
+                "kind": r["kind"],
+                "keyData": r["keyData"],
+                "pqzKey": r["attrs"]["pqzKey"],
+                "pqzPopHash": r["attrs"]["pqzPopHash"],
+                "pqzPop": r["pqzPop"],
+                "kemPk": r["attrs"]["kemPk"],
+                "pop": r["args"]["pop"],
+            }
+            for r in p["registrations"]
+        ],
+        "set_kem_key_args": [
+            {"ua": r["ua"], "version": r["version"], "kemPk": r["kemPk"], "sig": sig(r)} for r in p["kemRecords"]
+        ],
+        "set_pqz_key_args": [
+            {"ua": r["ua"], "pqzKey": r["pqzKey"], "pqzPopHash": r["pqzPopHash"], "sig": sig(r)}
+            for r in p["pqzKeyRecords"]
+        ],
+        "set_pqz_key_version_args": [
+            {
+                "ua": r["ua"],
+                "version": r["version"],
+                "pqzKey": r["pqzKey"],
+                "pqzPopHash": r["pqzPopHash"],
+                "sig": sig(r),
+            }
+            for r in p["pqzKeyVersions"]
+        ],
+        "msig_update": [
+            {
+                k: r[k]
+                for k in ("ua", "chainUid", "registry", "version", "threshold", "members", "enabled", "validUntilBlock")
+            }
+            | {"sigs": r["args"]["sigs"]}
+            for r in p["msigUpdates"]
+        ],
+        "pay_digest": [
+            {"struct": "UARelayFee", "domain": fee["domains"]["token"]["domain"], "message": fee["message"]}
+        ],
         "meta_pay_id": paymeta,
         "service_pull": [pull(r) for r in pulls],
         "inner": [r["inner"] for r in nv["eligibility"]],
@@ -239,7 +487,10 @@ def json_calls_seeds():
 
 def seeds():
     t = sign["typed"]
-    yield "typed_data", [js(r["td"]) for k in ("generic", "canon", "refusals") for r in t[k]] + [js(r["td"]) for r in sign["policy"]]
+    yield (
+        "typed_data",
+        [js(r["td"]) for k in ("generic", "canon", "refusals") for r in t[k]] + [js(r["td"]) for r in sign["policy"]],
+    )
     yield "expect", [js(r["expect"]) for r in sign["policy"] if "expect" in r]
     yield "tx", [js(r["tx"]) for k in ("rows", "published", "refusals") for r in sign["tx"][k]]
     yield "vault", [js(r["vault"]) for f in ("vault.json", "rs_vault.json") for r in load(f)["vaults"]]
@@ -251,7 +502,11 @@ def seeds():
     yield "container_expect", [js(r["expect"]) for r in opens]
     yield "members", [js(r["members"]) for r in opens if "members" in r]
     yield "accepted", [js(r["accepted"]) for r in opens if r.get("accepted") is not None]
-    yield "uasig", [js(uasig(r)) for r in sign["msig"]] + [js({"purpose": r["purposeTag"], "digest": r["digest"], "key": 0}) for r in sign["ua"][:4]]
+    yield (
+        "uasig",
+        [js(uasig(r)) for r in sign["msig"]]
+        + [js({"purpose": r["purposeTag"], "digest": r["digest"], "key": 0}) for r in sign["ua"][:4]],
+    )
     yield "zether_cmd", zether_seeds()
     yield "pqz_cmd", pqz_seeds()
     yield "json_calls", json_calls_seeds()
@@ -297,12 +552,21 @@ def regress():
         "accepted/over-depth-5.json": over(next(r["accepted"] for r in opens if r.get("accepted")), 4),
         "uasig/over-depth-7.json": over(uasig(nested), 6),
         # T14: a Zether command (1 MiB, depth 8) and a cache box (2 MiB, depth 1), each behind its index byte
-        "zether_cmd/cmd-over-depth-9.bin": bytes([ZCMDS.index("rawProveTransfer")]) + over(zreq("transfer_bls12381.json"), 8),
+        "zether_cmd/cmd-over-depth-9.bin": bytes([ZCMDS.index("rawProveTransfer")])
+        + over(zreq("transfer_bls12381.json"), 8),
         "zether_cmd/box-over-depth-2.bin": bytes([BOX]) + over(load("zether.json")["cacheBox"][0]["box"], 1),
         # T15: a PQZ command (1 MiB, depth 8) and a cache box (2 MiB, depth 1), each behind its index byte
-        "pqz_cmd/cmd-over-depth-9.bin": bytes([QCMDS.index("proveRegister")]) + over(
-            {"proofSystemId": "0x" + pload("proof_pqzl.json")["proof_system_id"], "kind": 0x0131, "ua": "0x" + "11" * 32}, 8),
-        "pqz_cmd/box-over-depth-2.bin": bytes([QBOX]) + over({"iv": "AAAAAAAAAAAAAAAA", "ct": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}, 1),
+        "pqz_cmd/cmd-over-depth-9.bin": bytes([QCMDS.index("proveRegister")])
+        + over(
+            {
+                "proofSystemId": "0x" + pload("proof_pqzl.json")["proof_system_id"],
+                "kind": 0x0131,
+                "ua": "0x" + "11" * 32,
+            },
+            8,
+        ),
+        "pqz_cmd/box-over-depth-2.bin": bytes([QBOX])
+        + over({"iv": "AAAAAAAAAAAAAAAA", "ct": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}, 1),
         # T21 L48: each JSON call one level past its depth cap, behind its index byte
         **{f"json_calls/{n}-over-depth-{d + 1}.bin": bytes([i]) + over({}, d) for i, (n, d) in enumerate(JCALLS)},
         # ua-rs-native T8b: a junction path of 16 junctions, one byte past the 512-byte cap

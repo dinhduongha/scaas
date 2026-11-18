@@ -69,7 +69,9 @@ contract PqzKeyVersionsTest is UARegistryBase {
         b = new bytes(n);
         for (uint256 i; i < n; i += 32) {
             bytes32 w = keccak256(abi.encode(salt, i));
-            for (uint256 j; j < 32 && i + j < n; ++j) b[i + j] = w[j];
+            for (uint256 j; j < 32 && i + j < n; ++j) {
+                b[i + j] = w[j];
+            }
         }
     }
 
@@ -167,7 +169,10 @@ contract PqzKeyVersionsTest is UARegistryBase {
     }
 
     /// The `msig` holder registered on `r` (members first) with version 0 `pqzKey`, by the `pop` of ml1 + ml2.
-    function _msigHolder(UARegistry r, bytes memory pqzKey, bool withPop) internal returns (bytes memory d, bytes32 ua) {
+    function _msigHolder(UARegistry r, bytes memory pqzKey, bool withPop)
+        internal
+        returns (bytes memory d, bytes32 ua)
+    {
         (_register(r, ML, ml1), _register(r, ML, ml2), _register(r, ML, ml3));
         (d, ua) = _msig();
         bytes memory proof = _regProof(ua, UAKinds.MSIG, pqzKey);
@@ -198,7 +203,9 @@ contract PqzKeyVersionsTest is UARegistryBase {
     }
 
     function _count(Vm.Log[] memory logs, bytes32 topic0) internal pure returns (uint256 n) {
-        for (uint256 i; i < logs.length; ++i) if (logs[i].topics.length != 0 && logs[i].topics[0] == topic0) ++n;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics.length != 0 && logs[i].topics[0] == topic0) ++n;
+        }
     }
 
     // ----- the records: consent (KV-1) -----
@@ -267,7 +274,8 @@ contract PqzKeyVersionsTest is UARegistryBase {
         s.signature = _sig(op, UAKinds.uaMessage(ML, UAKinds.PURPOSE_PQZ_KEY, rd));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
         pv.setPqzKey(ua, 1, x.key, x.ph, s);
-        IUARegistry.UASig memory t = _two(_mlSig(d, ml1, UAKinds.PURPOSE_PQZ_KEY, rd), _mlSig(d, ml2, UAKinds.PURPOSE_PQZ_KEY, rd));
+        IUARegistry.UASig memory t =
+            _two(_mlSig(d, ml1, UAKinds.PURPOSE_PQZ_KEY, rd), _mlSig(d, ml2, UAKinds.PURPOSE_PQZ_KEY, rd));
         IUARegistry.UASig memory u = _operatorIn(t, d, ml2, rd);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
         pv.setPqzKey(ua, 1, x.key, x.ph, u);
@@ -285,8 +293,9 @@ contract PqzKeyVersionsTest is UARegistryBase {
         u.members = new IUARegistry.MemberSig[](2);
         for (uint256 j; j < 2; ++j) {
             IUARegistry.MemberSig memory m = t.members[j];
-            u.members[j] = IUARegistry.MemberSig(m.index, m.members,
-                m.index == i ? _sig(op, UAKinds.uaMessage(ML, UAKinds.PURPOSE_MEMBER, md)) : m.sig);
+            u.members[j] = IUARegistry.MemberSig(
+                m.index, m.members, m.index == i ? _sig(op, UAKinds.uaMessage(ML, UAKinds.PURPOSE_MEMBER, md)) : m.sig
+            );
         }
     }
 
@@ -369,7 +378,8 @@ contract PqzKeyVersionsTest is UARegistryBase {
         vm.expectRevert(_versionErr(ua, 1));
         pv.setPqzKey(ua, 1, x.key, x.ph, s);
         V memory z = _ver(ua, 0, _pk(0));
-        z.proof = _sig(z.key, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_KEY, UAKinds.pqzKeyDigest(ua, z.h)));
+        z.proof =
+            _sig(z.key, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_KEY, UAKinds.pqzKeyDigest(ua, z.h)));
         z.ph = keccak256(z.proof);
         _set(pv, ml1, z);
         pv.setPqzKey(ua, 1, x.key, x.ph, s);
@@ -728,8 +738,14 @@ contract PqzKeyVersionsTest is UARegistryBase {
         assertEq(UAKinds.UA_PQZ_KEY_VERSION_TYPEHASH, th);
         assertEq(th, 0x56bb760a3968427f1aa06b0497de42c05374beae46765175b61976c12e38b158);
         (bytes32 ua, bytes32 h) = (keccak256("ua"), keccak256("h"));
-        assertEq(UAKinds.pqzKeyVersionDigest(ua, 3, h),
-            keccak256(abi.encodePacked(hex"1901", UAKinds.PORTABLE_DOMAIN_SEPARATOR, keccak256(abi.encode(th, ua, uint64(3), h)))));
+        assertEq(
+            UAKinds.pqzKeyVersionDigest(ua, 3, h),
+            keccak256(
+                abi.encodePacked(
+                    hex"1901", UAKinds.PORTABLE_DOMAIN_SEPARATOR, keccak256(abi.encode(th, ua, uint64(3), h))
+                )
+            )
+        );
     }
 
     function test_UAPqzKeyVersionRecordTypehashIsPinned() public pure {
@@ -740,8 +756,10 @@ contract PqzKeyVersionsTest is UARegistryBase {
         assertEq(th, 0x2e00b7c0ff5cfbca3f50e0445bcd02bb227e0154c239c812b38d9b8fa6e7d6e5);
         (bytes32 ua, bytes32 h, bytes32 ph) = (keccak256("ua"), keccak256("h"), keccak256("ph"));
         bytes32 k = keccak256(abi.encode(UAKinds.UA_PQZ_KEY_VERSION_TYPEHASH, ua, uint64(3), h));
-        assertEq(UAKinds.pqzKeyVersionRecordDigest(ua, 3, h, ph),
-            keccak256(abi.encodePacked(hex"1901", UAKinds.PORTABLE_DOMAIN_SEPARATOR, keccak256(abi.encode(th, k, ph)))));
+        assertEq(
+            UAKinds.pqzKeyVersionRecordDigest(ua, 3, h, ph),
+            keccak256(abi.encodePacked(hex"1901", UAKinds.PORTABLE_DOMAIN_SEPARATOR, keccak256(abi.encode(th, k, ph))))
+        );
         assertTrue(_distinctFromV0(ua, h, ph));
     }
 

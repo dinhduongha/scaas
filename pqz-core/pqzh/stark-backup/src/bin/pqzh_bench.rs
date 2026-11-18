@@ -8,8 +8,8 @@ use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicUsize, Ordering};
 use std::time::Instant;
 
-use pqzh::client::{KINDS, R, mutate};
-use pqzh::{OP_REGISTER, OP_TRANSFER, Params, client, prove, rel, verify};
+use pqzh::client::{mutate, KINDS, R};
+use pqzh::{client, prove, rel, verify, Params, OP_REGISTER, OP_TRANSFER};
 
 struct Track;
 static LIVE: AtomicIsize = AtomicIsize::new(0);
@@ -62,7 +62,12 @@ fn stats(v: &mut [f64]) -> String {
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
-    let get = |k: &str| a.iter().position(|x| x == k).and_then(|i| a.get(i + 1)).map(|s| s.as_str());
+    let get = |k: &str| {
+        a.iter()
+            .position(|x| x == k)
+            .and_then(|i| a.get(i + 1))
+            .map(|s| s.as_str())
+    };
     let num = |k: &str, d: usize| get(k).map_or(d, |s| s.parse().unwrap());
     let mut p = Params::DEFAULT;
     p.log_blowup = num("--blowup", p.log_blowup);
@@ -103,7 +108,11 @@ fn main() {
     let s = client::setup();
     // a second statement of each relation for "other_proof": another key (R_REG) / another salt-free prefix (R_TX)
     for (op, name) in rels {
-        let (st, w) = if op == OP_REGISTER { (&s.reg_stmt, &s.reg_wit) } else { (&s.tx_stmt, &s.tx_wit) };
+        let (st, w) = if op == OP_REGISTER {
+            (&s.reg_stmt, &s.reg_wit)
+        } else {
+            (&s.tx_stmt, &s.tx_wit)
+        };
         let mut st2 = st.clone();
         st2[0] ^= 0x80; // same witness, other statement prefix: a valid proof of a different statement
         let mut pt = Vec::new();
@@ -112,11 +121,17 @@ fn main() {
         for i in 0..np.max(1) {
             arm();
             let t = Instant::now();
-            pt = prove(op, st, w, [i as u8; 32], &p).unwrap_or_else(|e| { eprintln!("prove: {e}"); std::process::exit(2) });
+            pt = prove(op, st, w, [i as u8; 32], &p).unwrap_or_else(|e| {
+                eprintln!("prove: {e}");
+                std::process::exit(2)
+            });
             tp.push(t.elapsed().as_secs_f64() * 1e3);
             peak_p = peak_p.max(disarm());
         }
-        let bd: Vec<String> = rel::breakdown(&pt, &p).iter().map(|(k, v)| format!("\"{k}\": {v}")).collect();
+        let bd: Vec<String> = rel::breakdown(&pt, &p)
+            .iter()
+            .map(|(k, v)| format!("\"{k}\": {v}"))
+            .collect();
         println!(
             "{{\"rel\": \"{name}\", \"proof_bytes\": {}, \"fnv_last\": \"{:08x}\", \"within_max_proof\": {}, \"breakdown\": {{{}}}}}",
             pt.len(),
@@ -161,6 +176,9 @@ fn main() {
             println!("{{\"rel\": \"{name}\", \"kind\": \"{}\", \"cases\": {nadv}, \"accepted\": {acc}, \"panics\": {}, \"stats\": {}}}", KINDS[k], rel::VERIFY_PANICS.load(Ordering::Relaxed) - p0, stats(&mut tk));
             assert_eq!(acc, 0, "mutated input accepted");
         }
-        println!("{{\"rel\": \"{name}\", \"timing\": \"verify_adversarial\", \"stats\": {}}}", stats(&mut tall));
+        println!(
+            "{{\"rel\": \"{name}\", \"timing\": \"verify_adversarial\", \"stats\": {}}}",
+            stats(&mut tall)
+        );
     }
 }

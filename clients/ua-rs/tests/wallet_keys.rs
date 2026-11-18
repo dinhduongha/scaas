@@ -22,7 +22,11 @@ fn u32_of(v: &Value) -> u32 {
 /// The wallet of a `mnemonics` row by id.
 fn wallet(k: &Value, id: &str) -> Wallet {
     let m = arr(k, "mnemonics").iter().find(|m| m["id"] == id).unwrap();
-    Wallet::from_mnemonic(m["words"].as_str().unwrap(), m["passphrase"].as_str().unwrap()).unwrap()
+    Wallet::from_mnemonic(
+        m["words"].as_str().unwrap(),
+        m["passphrase"].as_str().unwrap(),
+    )
+    .unwrap()
 }
 const FALCON: [u16; 2] = [0x0132, 0x0135];
 
@@ -32,15 +36,28 @@ fn keys_json_ua_rows() {
     let k = keys();
     let mut n = 0;
     let mut falcon = 0;
-    for id in ["pq_kat", "bip39_test", "twelve_words", "non_ascii_passphrase"] {
+    for id in [
+        "pq_kat",
+        "bip39_test",
+        "twelve_words",
+        "non_ascii_passphrase",
+    ] {
         let w = wallet(&k, id);
         for r in arr(&k, "ua").iter().filter(|r| r["mnemonic"] == id) {
             let kind = r["kind"].as_u64().unwrap() as u16;
             let key = w.ua_key(kind, u32_of(&r["account"]), u32_of(&r["index"]));
             falcon += usize::from(FALCON.contains(&kind));
             let key = key.unwrap_or_else(|e| panic!("{r}: {e}"));
-            assert_eq!(hex::encode(key.key_data()), r["keyData"].as_str().unwrap().trim_start_matches("0x"), "{r}");
-            assert_eq!(key.ua().map(|u| format!("0x{}", hex::encode(u))), r["ua"].as_str().map(str::to_owned), "{r}");
+            assert_eq!(
+                hex::encode(key.key_data()),
+                r["keyData"].as_str().unwrap().trim_start_matches("0x"),
+                "{r}"
+            );
+            assert_eq!(
+                key.ua().map(|u| format!("0x{}", hex::encode(u))),
+                r["ua"].as_str().map(str::to_owned),
+                "{r}"
+            );
             assert_eq!(key.kind(), kind);
             n += 1;
         }
@@ -52,13 +69,22 @@ fn keys_json_ua_rows() {
 fn keys_json_native_rows() {
     let k = keys();
     let mut n = 0;
-    for id in ["pq_kat", "bip39_test", "twelve_words", "non_ascii_passphrase"] {
+    for id in [
+        "pq_kat",
+        "bip39_test",
+        "twelve_words",
+        "non_ascii_passphrase",
+    ] {
         let w = wallet(&k, id);
         for r in arr(&k, "native").iter().filter(|r| r["mnemonic"] == id) {
             let net = Network::from_name(r["network"].as_str().unwrap()).unwrap();
             let coin = r["coinType"].as_u64().map(|c| c as u32);
             let key = w.native_key(net, u32_of(&r["index"]), coin).unwrap();
-            assert_eq!(hex::encode(key.public_key()), r["publicKey"].as_str().unwrap(), "{r}");
+            assert_eq!(
+                hex::encode(key.public_key()),
+                r["publicKey"].as_str().unwrap(),
+                "{r}"
+            );
             n += 1;
         }
     }
@@ -75,10 +101,21 @@ fn keys_json_refusals_are_argument() {
     for r in rows {
         assert_eq!(r["error"], "Argument");
         let got = match r["what"].as_str().unwrap() {
-            "ua" => w.ua_key(r["kind"].as_u64().unwrap() as u16, u32_of(&r["account"]), u32_of(&r["index"])).err(),
+            "ua" => w
+                .ua_key(
+                    r["kind"].as_u64().unwrap() as u16,
+                    u32_of(&r["account"]),
+                    u32_of(&r["index"]),
+                )
+                .err(),
             _ => {
                 let net = Network::from_name(r["network"].as_str().unwrap()).unwrap();
-                w.native_key(net, u32_of(&r["index"]), r["coinType"].as_u64().map(|c| c as u32)).err()
+                w.native_key(
+                    net,
+                    u32_of(&r["index"]),
+                    r["coinType"].as_u64().map(|c| c as u32),
+                )
+                .err()
             }
         };
         assert_eq!(got.map(|e| e.code()), Some("Argument"), "{r}");
@@ -96,7 +133,11 @@ fn index_1_refused_for_eip2333_kinds() {
     let w = wallet(&keys(), "pq_kat");
     for kind in [0x0104, 0x0105, 0x0106, 0x0107, 0x0112] {
         w.ua_key(kind, 1, 0).unwrap(); // positive control: another account
-        assert_eq!(w.ua_key(kind, 0, 1).err(), Some(Error::Argument), "{kind:#06x}");
+        assert_eq!(
+            w.ua_key(kind, 0, 1).err(),
+            Some(Error::Argument),
+            "{kind:#06x}"
+        );
     }
     w.ua_key(0x0101, 0, 1).unwrap(); // a UA-tree kind has an index level
 }
@@ -105,10 +146,26 @@ fn index_1_refused_for_eip2333_kinds() {
 fn normalization_rows_nfkd() {
     let k = keys();
     for r in arr(&k, "normalization") {
-        let same = arr(&k, "mnemonics").iter().find(|m| m["id"] == r["sameAs"]).unwrap();
-        let a = Wallet::from_mnemonic(r["words"].as_str().unwrap(), r["passphrase"].as_str().unwrap()).unwrap();
-        let b = Wallet::from_mnemonic(same["words"].as_str().unwrap(), same["passphrase"].as_str().unwrap()).unwrap();
-        assert_eq!(a.ua_key(0x0102, 0, 0).unwrap().key_data(), b.ua_key(0x0102, 0, 0).unwrap().key_data(), "{}", r["id"]);
+        let same = arr(&k, "mnemonics")
+            .iter()
+            .find(|m| m["id"] == r["sameAs"])
+            .unwrap();
+        let a = Wallet::from_mnemonic(
+            r["words"].as_str().unwrap(),
+            r["passphrase"].as_str().unwrap(),
+        )
+        .unwrap();
+        let b = Wallet::from_mnemonic(
+            same["words"].as_str().unwrap(),
+            same["passphrase"].as_str().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            a.ua_key(0x0102, 0, 0).unwrap().key_data(),
+            b.ua_key(0x0102, 0, 0).unwrap().key_data(),
+            "{}",
+            r["id"]
+        );
     }
     // case and spacing as clientkeys' normalizeMnemonic: upper case, runs of blanks, leading / trailing blanks
     let m = &arr(&k, "mnemonics")[0];
@@ -116,7 +173,10 @@ fn normalization_rows_nfkd() {
     let loud = format!("  {}\t\n", words.to_uppercase().replace(' ', "   "));
     let a = Wallet::from_mnemonic(&loud, "").unwrap();
     let b = Wallet::from_mnemonic(words, "").unwrap();
-    assert_eq!(a.ua_key(0x0103, 0, 0).unwrap().key_data(), b.ua_key(0x0103, 0, 0).unwrap().key_data());
+    assert_eq!(
+        a.ua_key(0x0103, 0, 0).unwrap().key_data(),
+        b.ua_key(0x0103, 0, 0).unwrap().key_data()
+    );
 }
 
 #[test]
@@ -126,10 +186,19 @@ fn mnemonic_refusals_name_no_input() {
     let bad_checksum = words.replace("better", "bench");
     let unknown = words.replace("bench", "benchx");
     let long = format!("{words} {}", "abandon ".repeat(200));
-    for bad in [bad_checksum.as_str(), unknown.as_str(), long.as_str(), "", "bench hurt jump"] {
+    for bad in [
+        bad_checksum.as_str(),
+        unknown.as_str(),
+        long.as_str(),
+        "",
+        "bench hurt jump",
+    ] {
         let e = Wallet::from_mnemonic(bad, "").err().unwrap();
         assert_eq!(e, Error::Argument);
-        assert!(!e.to_string().contains("benchx") && !e.to_string().contains("bench"), "{e}");
+        assert!(
+            !e.to_string().contains("benchx") && !e.to_string().contains("bench"),
+            "{e}"
+        );
     }
 }
 
@@ -137,15 +206,24 @@ fn mnemonic_refusals_name_no_input() {
 fn bounded_json_refuses_depth_9() {
     let nest = |d: usize| format!("{}1{}", "[".repeat(d), "]".repeat(d));
     assert!(bounded::json(nest(8).as_bytes(), 1024, 8).is_ok());
-    assert_eq!(bounded::json(nest(9).as_bytes(), 1024, 8).err(), Some(Error::Argument));
+    assert_eq!(
+        bounded::json(nest(9).as_bytes(), 1024, 8).err(),
+        Some(Error::Argument)
+    );
     let obj = |d: usize| format!("{}1{}", "{\"a\":".repeat(d), "}".repeat(d));
     assert!(bounded::json(obj(8).as_bytes(), 1024, 8).is_ok());
-    assert_eq!(bounded::json(obj(9).as_bytes(), 1024, 8).err(), Some(Error::Argument));
+    assert_eq!(
+        bounded::json(obj(9).as_bytes(), 1024, 8).err(),
+        Some(Error::Argument)
+    );
     // brackets inside strings, escaped quotes, do not count
     let s = format!("[\"{}\\\"{}\"]", "[".repeat(20), "{".repeat(20));
     assert!(bounded::json(s.as_bytes(), 1024, 1).is_ok());
     // a deep input far past serde_json's own limit is refused before the parser recurses
-    assert_eq!(bounded::json(nest(100_000).as_bytes(), 1 << 20, 8).err(), Some(Error::Argument));
+    assert_eq!(
+        bounded::json(nest(100_000).as_bytes(), 1 << 20, 8).err(),
+        Some(Error::Argument)
+    );
     // the length bound before anything else
     assert!(bounded::json(b"[1, 2]", 6, 8).is_ok());
     assert_eq!(bounded::json(b"[1, 2]", 5, 8).err(), Some(Error::Argument));
@@ -160,7 +238,10 @@ fn lock_revokes_every_handle_and_keeps_the_wallet_locked() {
     assert_eq!(w.ua_key(0x0102, 0, 0).unwrap().key_data(), ua.key_data()); // positive control: unlocked
     w.lock();
     assert_eq!(w.ua_key(0x0102, 0, 0).err(), Some(Error::WalletLocked));
-    assert_eq!(w.native_key(Network::Solana, 0, None).err(), Some(Error::WalletLocked));
+    assert_eq!(
+        w.native_key(Network::Solana, 0, None).err(),
+        Some(Error::WalletLocked)
+    );
     // the public parts stay readable; every secret operation is KeyRevoked (checked through the hook below)
     assert_eq!(ua.key_data().len(), 32);
     assert_eq!(native.public_key().len(), 32);
@@ -190,9 +271,15 @@ fn generate_is_24_words_and_the_backup_forgets() {
     let words = bip39::Mnemonic::from_entropy(&entropy).unwrap().to_string();
     assert_eq!(words.split(' ').count(), 24);
     let again = Wallet::from_mnemonic(&words, "").unwrap();
-    assert_eq!(w.ua_key(0x0101, 0, 0).unwrap().key_data(), again.ua_key(0x0101, 0, 0).unwrap().key_data());
+    assert_eq!(
+        w.ua_key(0x0101, 0, 0).unwrap().key_data(),
+        again.ua_key(0x0101, 0, 0).unwrap().key_data()
+    );
     let (other, _) = Wallet::generate().unwrap();
-    assert_ne!(other.ua_key(0x0101, 0, 0).unwrap().key_data(), again.ua_key(0x0101, 0, 0).unwrap().key_data());
+    assert_ne!(
+        other.ua_key(0x0101, 0, 0).unwrap().key_data(),
+        again.ua_key(0x0101, 0, 0).unwrap().key_data()
+    );
 }
 
 #[cfg(feature = "vectors")]
@@ -205,7 +292,15 @@ mod vectors {
     }
 
     fn path(s: &str) -> Vec<u32> {
-        s.split('/').skip(1).map(|c| c.strip_suffix('\'').map_or_else(|| c.parse().unwrap(), |h| h.parse::<u32>().unwrap() | HARDENED)).collect()
+        s.split('/')
+            .skip(1)
+            .map(|c| {
+                c.strip_suffix('\'').map_or_else(
+                    || c.parse().unwrap(),
+                    |h| h.parse::<u32>().unwrap() | HARDENED,
+                )
+            })
+            .collect()
     }
 
     #[test]
@@ -213,12 +308,31 @@ mod vectors {
         let k = keys();
         for m in arr(&k, "mnemonics") {
             let w = wallet(&k, m["id"].as_str().unwrap());
-            assert_eq!(*w.vectors_entropy().unwrap(), unhex(m["entropy"].as_str().unwrap()), "{}", m["id"]);
-            assert_eq!(w.vectors_seed().unwrap()[..], unhex(m["seed"].as_str().unwrap())[..], "{}", m["id"]);
+            assert_eq!(
+                *w.vectors_entropy().unwrap(),
+                unhex(m["entropy"].as_str().unwrap()),
+                "{}",
+                m["id"]
+            );
+            assert_eq!(
+                w.vectors_seed().unwrap()[..],
+                unhex(m["seed"].as_str().unwrap())[..],
+                "{}",
+                m["id"]
+            );
         }
         for r in arr(&k, "normalization") {
-            let w = Wallet::from_mnemonic(r["words"].as_str().unwrap(), r["passphrase"].as_str().unwrap()).unwrap();
-            assert_eq!(w.vectors_seed().unwrap()[..], unhex(r["seed"].as_str().unwrap())[..], "{}", r["id"]);
+            let w = Wallet::from_mnemonic(
+                r["words"].as_str().unwrap(),
+                r["passphrase"].as_str().unwrap(),
+            )
+            .unwrap();
+            assert_eq!(
+                w.vectors_seed().unwrap()[..],
+                unhex(r["seed"].as_str().unwrap())[..],
+                "{}",
+                r["id"]
+            );
         }
     }
 
@@ -230,9 +344,18 @@ mod vectors {
         assert_eq!(wallet(&k, "pq_kat").vectors_entropy().unwrap().len(), 32);
         // 15, 18, 21 words: each its own length (BIP-39), never padded
         for (words, len) in [(15, 20), (18, 24), (21, 28)] {
-            let m = bip39::Mnemonic::from_entropy(&vec![0x5a; len]).unwrap().to_string();
+            let m = bip39::Mnemonic::from_entropy(&vec![0x5a; len])
+                .unwrap()
+                .to_string();
             assert_eq!(m.split(' ').count(), words);
-            assert_eq!(Wallet::from_mnemonic(&m, "").unwrap().vectors_entropy().unwrap().len(), len);
+            assert_eq!(
+                Wallet::from_mnemonic(&m, "")
+                    .unwrap()
+                    .vectors_entropy()
+                    .unwrap()
+                    .len(),
+                len
+            );
         }
     }
 
@@ -242,7 +365,10 @@ mod vectors {
     #[test]
     fn mnemonic_is_not_cloned_and_dropped_after_from_mnemonic() {
         let k = keys();
-        assert_eq!(wallet(&k, "twelve_words").vectors_arena_used().unwrap(), 16 + 64 + 32);
+        assert_eq!(
+            wallet(&k, "twelve_words").vectors_arena_used().unwrap(),
+            16 + 64 + 32
+        );
         let w = wallet(&k, "pq_kat");
         assert_eq!(w.vectors_arena_used().unwrap(), 32 + 64 + 32);
         let key = w.ua_key(0x0102, 0, 0).unwrap();
@@ -256,12 +382,17 @@ mod vectors {
     #[test]
     fn handle_holds_no_secret_bytes() {
         let w = wallet(&keys(), "pq_kat");
-        for kind in [0x0101, 0x0102, 0x0103, 0x0104, 0x0106, 0x0108, 0x0110, 0x0131, 0x0132, 0x0133, 0x0135] {
+        for kind in [
+            0x0101, 0x0102, 0x0103, 0x0104, 0x0106, 0x0108, 0x0110, 0x0131, 0x0132, 0x0133, 0x0135,
+        ] {
             let key = w.ua_key(kind, 0, 0).unwrap();
             assert!(key.vectors_secret_in_arena().unwrap(), "{kind:#06x}");
             let secret = key.vectors_with_secret(|s| s.to_vec()).unwrap();
             assert!(!secret.is_empty() && secret.iter().any(|b| *b != 0));
-            assert!(!key.key_data().windows(secret.len()).any(|x| x == secret), "{kind:#06x}");
+            assert!(
+                !key.key_data().windows(secret.len()).any(|x| x == secret),
+                "{kind:#06x}"
+            );
         }
         let native = w.native_key(Network::Evm, 0, None).unwrap();
         assert!(native.vectors_secret_in_arena().unwrap());
@@ -276,16 +407,28 @@ mod vectors {
         let native = w.native_key(Network::Evm, 0, None).unwrap();
         let before = old.vectors_with_secret(|s| s.to_vec()).unwrap();
         w.lock();
-        assert_eq!(old.vectors_with_secret(|s| s.len()).err(), Some(Error::KeyRevoked));
-        assert_eq!(native.vectors_with_secret(|s| s.len()).err(), Some(Error::KeyRevoked));
+        assert_eq!(
+            old.vectors_with_secret(|s| s.len()).err(),
+            Some(Error::KeyRevoked)
+        );
+        assert_eq!(
+            native.vectors_with_secret(|s| s.len()).err(),
+            Some(Error::KeyRevoked)
+        );
         assert_eq!(w.vectors_seed().err(), Some(Error::WalletLocked));
         w.vectors_unlock(m["words"].as_str().unwrap(), "").unwrap();
-        assert_eq!(old.vectors_with_secret(|s| s.len()).err(), Some(Error::KeyRevoked)); // still revoked, for good
+        assert_eq!(
+            old.vectors_with_secret(|s| s.len()).err(),
+            Some(Error::KeyRevoked)
+        ); // still revoked, for good
         let new = w.ua_key(0x0102, 0, 0).unwrap();
         assert_eq!(new.vectors_with_secret(|s| s.to_vec()).unwrap(), before);
         assert_eq!(new.key_data(), old.key_data());
         // unlocking an unlocked wallet is refused (it would move the slots of live handles)
-        assert_eq!(w.vectors_unlock(m["words"].as_str().unwrap(), "").err(), Some(Error::Argument));
+        assert_eq!(
+            w.vectors_unlock(m["words"].as_str().unwrap(), "").err(),
+            Some(Error::Argument)
+        );
     }
 
     #[test]
@@ -294,7 +437,10 @@ mod vectors {
         let key = w.ua_key(0x0131, 0, 0).unwrap();
         key.vectors_with_secret(|s| s.len()).unwrap();
         drop(w);
-        assert_eq!(key.vectors_with_secret(|s| s.len()).err(), Some(Error::KeyRevoked));
+        assert_eq!(
+            key.vectors_with_secret(|s| s.len()).err(),
+            Some(Error::KeyRevoked)
+        );
         assert_eq!(key.kind(), 0x0131); // valid memory, freed after
     }
 
@@ -328,7 +474,10 @@ mod vectors {
             locker.join().unwrap();
         });
         assert!(locked.load(Ordering::SeqCst));
-        assert_eq!(key.vectors_with_secret(|_| ()).err(), Some(Error::KeyRevoked));
+        assert_eq!(
+            key.vectors_with_secret(|_| ()).err(),
+            Some(Error::KeyRevoked)
+        );
     }
 
     /// BIP-32 test vector 1 (bip-0032.mediawiki), through the published extended keys.
@@ -350,26 +499,84 @@ mod vectors {
     fn slip10_published_vectors() {
         let v1 = unhex("000102030405060708090a0b0c0d0e0f");
         for (p, sk, cc) in [
-            ("m", "2b4be7f19ee27bbf30c667b642d5f4aa69fd169872f8fc3059c08ebae2eb19e7", "90046a93de5380a72b5e45010748567d5ea02bbf6522f979e05c0d8d8ca9fffb"),
-            ("m/0'", "68e0fe46dfb67e368c75379acec591dad19df3cde26e63b93a8e704f1dade7a3", "8b59aa11380b624e81507a27fedda59fea6d0b779a778918a2fd3590e16e9c69"),
-            ("m/0'/1'/2'/2'/1000000000'", "8f94d394a8e8fd6b1bc2f3f49f5c47e385281d5c17e65324b0f62483e37e8793", "68789923a0cac2cd5a29172a475fe9e0fb14cd6adb5ad98a3fa70333e7afa230"),
+            (
+                "m",
+                "2b4be7f19ee27bbf30c667b642d5f4aa69fd169872f8fc3059c08ebae2eb19e7",
+                "90046a93de5380a72b5e45010748567d5ea02bbf6522f979e05c0d8d8ca9fffb",
+            ),
+            (
+                "m/0'",
+                "68e0fe46dfb67e368c75379acec591dad19df3cde26e63b93a8e704f1dade7a3",
+                "8b59aa11380b624e81507a27fedda59fea6d0b779a778918a2fd3590e16e9c69",
+            ),
+            (
+                "m/0'/1'/2'/2'/1000000000'",
+                "8f94d394a8e8fd6b1bc2f3f49f5c47e385281d5c17e65324b0f62483e37e8793",
+                "68789923a0cac2cd5a29172a475fe9e0fb14cd6adb5ad98a3fa70333e7afa230",
+            ),
         ] {
             let out = slip10(Curve::Ed25519, &v1, &path(p)).unwrap();
-            assert_eq!((hex::encode(&out[..32]), hex::encode(&out[32..])), (sk.into(), cc.into()), "ed25519 {p}");
+            assert_eq!(
+                (hex::encode(&out[..32]), hex::encode(&out[32..])),
+                (sk.into(), cc.into()),
+                "ed25519 {p}"
+            );
         }
-        assert_eq!(slip10(Curve::Ed25519, &v1, &path("m/0")).err(), Some(Error::Argument)); // hardened only
+        assert_eq!(
+            slip10(Curve::Ed25519, &v1, &path("m/0")).err(),
+            Some(Error::Argument)
+        ); // hardened only
         let retry_seed = unhex("a7305bc8df8d0951f0cb224c0e95d7707cbdf2c6ce7e8d481fec69c7ff5e9446");
         for (seed, p, sk, cc) in [
-            (&v1, "m", "612091aaa12e22dd2abef664f8a01a82cae99ad7441b7ef8110424915c268bc2", "beeb672fe4621673f722f38529c07392fecaa61015c80c34f29ce8b41b3cb6ea"),
-            (&v1, "m/0'", "6939694369114c67917a182c59ddb8cafc3004e63ca5d3b84403ba8613debc0c", "3460cea53e6a6bb5fb391eeef3237ffd8724bf0a40e94943c98b83825342ee11"),
-            (&v1, "m/0'/1", "284e9d38d07d21e4e281b645089a94f4cf5a5a81369acf151a1c3a57f18b2129", "4187afff1aafa8445010097fb99d23aee9f599450c7bd140b6826ac22ba21d0c"),
-            (&v1, "m/0'/1/2'/2/1000000000", "21c4f269ef0a5fd1badf47eeacebeeaa3de22eb8e5b0adcd0f27dd99d34d0119", "b9b7b82d326bb9cb5b5b121066feea4eb93d5241103c9e7a18aad40f1dde8059"),
-            (&v1, "m/28578'", "06f0db126f023755d0b8d86d4591718a5210dd8d024e3e14b6159d63f53aa669", "e94c8ebe30c2250a14713212f6449b20f3329105ea15b652ca5bdfc68f6c65c2"),
-            (&v1, "m/28578'/33941", "092154eed4af83e078ff9b84322015aefe5769e31270f62c3f66c33888335f3a", "9e87fe95031f14736774cd82f25fd885065cb7c358c1edf813c72af535e83071"),
-            (&retry_seed, "m", "3b8c18469a4634517d6d0b65448f8e6c62091b45540a1743c5846be55d47d88f", "7762f9729fed06121fd13f326884c82f59aa95c57ac492ce8c9654e60efd130c"),
+            (
+                &v1,
+                "m",
+                "612091aaa12e22dd2abef664f8a01a82cae99ad7441b7ef8110424915c268bc2",
+                "beeb672fe4621673f722f38529c07392fecaa61015c80c34f29ce8b41b3cb6ea",
+            ),
+            (
+                &v1,
+                "m/0'",
+                "6939694369114c67917a182c59ddb8cafc3004e63ca5d3b84403ba8613debc0c",
+                "3460cea53e6a6bb5fb391eeef3237ffd8724bf0a40e94943c98b83825342ee11",
+            ),
+            (
+                &v1,
+                "m/0'/1",
+                "284e9d38d07d21e4e281b645089a94f4cf5a5a81369acf151a1c3a57f18b2129",
+                "4187afff1aafa8445010097fb99d23aee9f599450c7bd140b6826ac22ba21d0c",
+            ),
+            (
+                &v1,
+                "m/0'/1/2'/2/1000000000",
+                "21c4f269ef0a5fd1badf47eeacebeeaa3de22eb8e5b0adcd0f27dd99d34d0119",
+                "b9b7b82d326bb9cb5b5b121066feea4eb93d5241103c9e7a18aad40f1dde8059",
+            ),
+            (
+                &v1,
+                "m/28578'",
+                "06f0db126f023755d0b8d86d4591718a5210dd8d024e3e14b6159d63f53aa669",
+                "e94c8ebe30c2250a14713212f6449b20f3329105ea15b652ca5bdfc68f6c65c2",
+            ),
+            (
+                &v1,
+                "m/28578'/33941",
+                "092154eed4af83e078ff9b84322015aefe5769e31270f62c3f66c33888335f3a",
+                "9e87fe95031f14736774cd82f25fd885065cb7c358c1edf813c72af535e83071",
+            ),
+            (
+                &retry_seed,
+                "m",
+                "3b8c18469a4634517d6d0b65448f8e6c62091b45540a1743c5846be55d47d88f",
+                "7762f9729fed06121fd13f326884c82f59aa95c57ac492ce8c9654e60efd130c",
+            ),
         ] {
             let out = slip10(Curve::Nist256p1, seed, &path(p)).unwrap();
-            assert_eq!((hex::encode(&out[..32]), hex::encode(&out[32..])), (sk.into(), cc.into()), "nist256p1 {p}");
+            assert_eq!(
+                (hex::encode(&out[..32]), hex::encode(&out[32..])),
+                (sk.into(), cc.into()),
+                "nist256p1 {p}"
+            );
         }
     }
 
@@ -391,7 +598,10 @@ mod vectors {
             assert_eq!(hex::encode(*eip2333::<ark_bls12_381::Fr>(&seed, &[], salt).unwrap()), master);
             assert_eq!(hex::encode(*eip2333::<ark_bls12_381::Fr>(&seed, &[i], salt).unwrap()), child);
         }
-        assert_eq!(eip2333::<ark_bls12_381::Fr>(&[7; 31], &[], b"BLS-SIG-KEYGEN-SALT-").err(), Some(Error::Argument));
+        assert_eq!(
+            eip2333::<ark_bls12_381::Fr>(&[7; 31], &[], b"BLS-SIG-KEYGEN-SALT-").err(),
+            Some(Error::Argument)
+        );
     }
 
     /// zether-prover's R33 conf keys (clients/zether-prover/vectors/r33_keys.json, its own EIP-2333 copy) are this EIP-2333
@@ -399,7 +609,11 @@ mod vectors {
     #[test]
     fn eip2333_equals_zether_prover_on_the_zether_path() {
         let r = load("clients/zether-prover/vectors/r33_keys.json");
-        let w = Wallet::from_mnemonic(r["mnemonic"].as_str().unwrap(), r["passphrase"].as_str().unwrap()).unwrap();
+        let w = Wallet::from_mnemonic(
+            r["mnemonic"].as_str().unwrap(),
+            r["passphrase"].as_str().unwrap(),
+        )
+        .unwrap();
         let seed = w.vectors_seed().unwrap();
         assert_eq!(seed[..], unhex(r["seed"].as_str().unwrap())[..]);
         let coin = u32_of(&r["coin"]);
@@ -407,9 +621,18 @@ mod vectors {
         assert!(rows.len() >= 2);
         for row in rows {
             let p = path(row["path"].as_str().unwrap()); // m/12381/<coin>/<account>/<use>, no hardened step
-            assert!(p[0] == 12381 && p[1] == coin && (p[3] == 7 || p[3] == 8), "{}", row["path"]); // conf key, disclosure key
+            assert!(
+                p[0] == 12381 && p[1] == coin && (p[3] == 7 || p[3] == 8),
+                "{}",
+                row["path"]
+            ); // conf key, disclosure key
             let x = eip2333::<ark_bls12_381::Fr>(&seed[..], &p, b"BLS-SIG-KEYGEN-SALT-").unwrap();
-            assert_eq!(format!("0x{}", hex::encode(*x)), row["x"].as_str().unwrap(), "{}", row["path"]);
+            assert_eq!(
+                format!("0x{}", hex::encode(*x)),
+                row["x"].as_str().unwrap(),
+                "{}",
+                row["path"]
+            );
         }
     }
 
@@ -423,8 +646,19 @@ mod vectors {
         for (account, index) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
             let xi = hkdf_pq(&seed[..], "scaas.ua.mldsa65.v1", account, index, 32).unwrap();
             let kp = SigningKey::<MlDsa65>::from_seed(&Seed::try_from(&xi[..]).unwrap());
-            let row = arr(&k, "ua").iter().find(|r| r["mnemonic"] == "pq_kat" && r["kind"] == 0x0131 && r["account"] == account && r["index"] == index).unwrap();
-            assert_eq!(hex::encode(kp.verifying_key().encode()), row["keyData"].as_str().unwrap().trim_start_matches("0x"));
+            let row = arr(&k, "ua")
+                .iter()
+                .find(|r| {
+                    r["mnemonic"] == "pq_kat"
+                        && r["kind"] == 0x0131
+                        && r["account"] == account
+                        && r["index"] == index
+                })
+                .unwrap();
+            assert_eq!(
+                hex::encode(kp.verifying_key().encode()),
+                row["keyData"].as_str().unwrap().trim_start_matches("0x")
+            );
         }
     }
 }

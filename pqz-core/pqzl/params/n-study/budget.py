@@ -19,6 +19,7 @@ Also: Z_q-amortisation repetitions lambda = ceil(128 / log2 q), 64-bit lanes 2^6
 Stdlib only:  python3 -I pqz-core/pqzl/params/n-study/budget.py > pqz-core/pqzl/params/n-study/budget.txt
 (writes cells.json next to this file for screen.sage).
 """
+
 import json
 import math
 import os
@@ -27,8 +28,8 @@ from math import e, log, pi, sqrt
 NS = (2048, 2176, 2304, 2432, 2560)
 KS = (1024, 4096, 8192, 16384)
 MARGIN = 3.08
-RADIX = 2**3 * 19 * 43 * 431          # 2,817,016
-Q16K = 2**50 - 42_310_535             # the approved 16k prime (calibration row)
+RADIX = 2**3 * 19 * 43 * 431  # 2,817,016
+Q16K = 2**50 - 42_310_535  # the approved 16k prime (calibration row)
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -61,12 +62,27 @@ def budget(n, K, q):
     bs, be = norm_bounds(n)
     B = 2 * be * bs + 64
     m = int(15 * K).bit_length()
-    E = 2**math.ceil(math.log2(K * B))
-    D = q // 2**(m + 2)
+    E = 2 ** math.ceil(math.log2(K * B))
+    D = q // 2 ** (m + 2)
     ok = 2 * E <= D and D * (2**m - 1) + E < q // 2 and K * B <= E
-    return dict(n=n, k=n // 64, K=K, bs=bs, be=be, B=B, m=m, E=E, e_bits=int(math.log2(E)), q=q, D=D, ok=ok,
-                margin=(D - E) / ((K - 1) * B), lam=math.ceil(128 / math.log2(q)), lanes=2**64 // q,
-                bits_tx=64 + 64 + 16 * m + 15 * (m - 3) + 16 * (int(math.log2(E)) + 1))
+    return dict(
+        n=n,
+        k=n // 64,
+        K=K,
+        bs=bs,
+        be=be,
+        B=B,
+        m=m,
+        E=E,
+        e_bits=int(math.log2(E)),
+        q=q,
+        D=D,
+        ok=ok,
+        margin=(D - E) / ((K - 1) * B),
+        lam=math.ceil(128 / math.log2(q)),
+        lanes=2**64 // q,
+        bits_tx=64 + 64 + 16 * m + 15 * (m - 3) + 16 * (int(math.log2(E)) + 1),
+    )
 
 
 def smallest_q(n, K, margin):
@@ -74,10 +90,10 @@ def smallest_q(n, K, margin):
     bs, be = norm_bounds(n)
     B = 2 * be * bs + 64
     m = int(15 * K).bit_length()
-    E = 2**math.ceil(math.log2(K * B))
+    E = 2 ** math.ceil(math.log2(K * B))
     dmin = max(2 * E, E + math.ceil(margin * (K - 1) * B))
-    t = max(1, (dmin * 2**(m + 2) - 1) // RADIX)
-    t += 1 - t % 2                     # t odd: q - 1 = 8 mod 16
+    t = max(1, (dmin * 2 ** (m + 2) - 1) // RADIX)
+    t += 1 - t % 2  # t odd: q - 1 = 8 mod 16
     while True:
         q = 1 + RADIX * t
         b = budget(n, K, q)
@@ -89,7 +105,7 @@ def smallest_q(n, K, margin):
 
 # ../anon/usvp.py (ADPS16 primal uSVP, GSA), unchanged
 def delta(b):
-    return ((pi * b)**(1 / b) * b / (2 * pi * e))**(1 / (2 * (b - 1)))
+    return ((pi * b) ** (1 / b) * b / (2 * pi * e)) ** (1 / (2 * (b - 1)))
 
 
 def usvp_beta(n, q, ss, se, mmax):
@@ -106,15 +122,21 @@ def usvp_beta(n, q, ss, se, mmax):
 
 
 def shortcut(n, q):
-    return {h: usvp_beta(n - h, q, sqrt(.5), sqrt(10), n + 48) for h in (0, 32, 80)}
+    return {h: usvp_beta(n - h, q, sqrt(0.5), sqrt(10), n + 48) for h in (0, 32, 80)}
 
 
 def main():
     cells = []
-    print("Task 7c n-study: budget per (n, K_MAX), q3 = smallest admissible prime with mint margin >= 3.08, q1 = smallest")
-    print("admissible prime (2E <= Delta); uSVP shortcut = ../anon/usvp.py, h hints as h removed dimensions, m <= n + 48")
-    print("| n | k | K_MAX | b_s / b_e | B | m | log2 E | variant | q | log2 q | Delta | margin | lambda | R_TX bits"
-          " | uSVP shortcut h0 / h32 / h80 |")
+    print(
+        "Task 7c n-study: budget per (n, K_MAX), q3 = smallest admissible prime with mint margin >= 3.08, q1 = smallest"
+    )
+    print(
+        "admissible prime (2E <= Delta); uSVP shortcut = ../anon/usvp.py, h hints as h removed dimensions, m <= n + 48"
+    )
+    print(
+        "| n | k | K_MAX | b_s / b_e | B | m | log2 E | variant | q | log2 q | Delta | margin | lambda | R_TX bits"
+        " | uSVP shortcut h0 / h32 / h80 |"
+    )
     print("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     rows = [(n, K, v) for n in NS for K in KS for v in ("q3", "q1")] + [(2560, 16384, "16k")]
     for n, K, v in rows:
@@ -125,9 +147,12 @@ def main():
         b["shortcut"] = shortcut(n, q)
         cells.append(b)
         s = b["shortcut"]
-        print(f"| {n} | {b['k']} | {K:,} | {b['bs']} / {b['be']} | {b['B']:,} | {b['m']} | {b['e_bits']} | {v} | {q} | "
-              f"{math.log2(q):.3f} | 2^{math.log2(b['D']):.3f} | {b['margin']:.2f}x | {b['lam']} | {b['bits_tx']} | "
-              f"{s[0]} / {s[32]} / {s[80]} |", flush=True)
+        print(
+            f"| {n} | {b['k']} | {K:,} | {b['bs']} / {b['be']} | {b['B']:,} | {b['m']} | {b['e_bits']} | {v} | {q} | "
+            f"{math.log2(q):.3f} | 2^{math.log2(b['D']):.3f} | {b['margin']:.2f}x | {b['lam']} | {b['bits_tx']} | "
+            f"{s[0]} / {s[32]} / {s[80]} |",
+            flush=True,
+        )
     with open(os.path.join(HERE, "cells.json"), "w") as f:
         json.dump(cells, f, indent=1)
     print("\ncells.json written: %d rows" % len(cells))
@@ -138,5 +163,5 @@ if __name__ == "__main__":
     assert budget(2560, 16384, Q16K)["ok"] and abs(budget(2560, 16384, Q16K)["margin"] - 3.36) < 0.01
     assert budget(2048, 1024, 2**42 - 215)["ok"] and abs(budget(2048, 1024, 2**42 - 215)["margin"] - 4.14) < 0.01
     assert norm_bounds(2048) == (36, 164) and norm_bounds(2304) == (38, 173) and norm_bounds(2560) == (40, 182)
-    assert usvp_beta(512, 3329, sqrt(1.5), sqrt(1.5), 1024) == 406     # usvp.py's Kyber-512 calibration
+    assert usvp_beta(512, 3329, sqrt(1.5), sqrt(1.5), 1024) == 406  # usvp.py's Kyber-512 calibration
     main()

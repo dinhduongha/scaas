@@ -29,7 +29,9 @@ abstract contract PqzVerifierFeeKinds is PqzRegFixture {
     uint256 internal constant VKEY = 0xA77E57;
     uint64 internal constant F = 2;
 
-    function _denylist() internal pure override returns (bool) { return true; }
+    function _denylist() internal pure override returns (bool) {
+        return true;
+    }
 
     function setUp() public override {
         super.setUp();
@@ -47,17 +49,35 @@ abstract contract PqzVerifierFeeKinds is PqzRegFixture {
     }
 
     function _sepOf(address t) internal view returns (bytes32) {
-        (, string memory n_, string memory ver, uint256 cid, address vc, bytes32 salt_,) = NormalPqzToken(t).eip712Domain();
-        return keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256(bytes(n_)), keccak256(bytes(ver)), cid, vc, salt_));
+        (, string memory n_, string memory ver, uint256 cid, address vc, bytes32 salt_,) =
+            NormalPqzToken(t).eip712Domain();
+        return keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256(bytes(n_)),
+                keccak256(bytes(ver)),
+                cid,
+                vc,
+                salt_
+            )
+        );
     }
 
     function _sv(bytes memory st) internal view returns (IPqzToken.PqzSignedVerdict memory sv) {
-        sv.pqzVerdict = IPqzToken.PqzVerdict(address(tok), block.chainid, tok.proofSystemId(), keccak256(st), keccak256(PROOF),
-            tok.pqzVerifyConfig().pqzVerifierEpoch, uint64(block.timestamp + 600));
-        bytes32 d = MessageHashUtils.toTypedDataHash(_sepOf(address(tok)),
-            keccak256(abi.encode(PqzCore.VERDICT_TYPEHASH, sv.pqzVerdict)));
+        sv.pqzVerdict = IPqzToken.PqzVerdict(
+            address(tok),
+            block.chainid,
+            tok.proofSystemId(),
+            keccak256(st),
+            keccak256(PROOF),
+            tok.pqzVerifyConfig().pqzVerifierEpoch,
+            uint64(block.timestamp + 600)
+        );
+        bytes32 d = MessageHashUtils.toTypedDataHash(
+            _sepOf(address(tok)), keccak256(abi.encode(PqzCore.VERDICT_TYPEHASH, sv.pqzVerdict))
+        );
         (uint8 w_, bytes32 r, bytes32 s_) = vm.sign(VKEY, reg.uaAuthDigest(_v(), UAKinds.PURPOSE_PQZ_VERDICT, d));
         sv.sig.signature = abi.encodePacked(r, s_, w_);
     }
@@ -68,14 +88,16 @@ abstract contract PqzVerifierFeeKinds is PqzRegFixture {
     function _debit(uint256 shieldIn, bool verdict) internal view returns (bytes memory) {
         if (!_isWrapped()) {
             IPqzToken.PqzTransferArgs memory t = _single(false, bob, bytes32(0), shieldIn, 80);
-            IPqzToken.PqzSignedVerdict memory sv = verdict && shieldIn == 0 ? _sv(tok.transferSingleStatement(t, 0)) : noVerdict();
+            IPqzToken.PqzSignedVerdict memory sv =
+                verdict && shieldIn == 0 ? _sv(tok.transferSingleStatement(t, 0)) : noVerdict();
             return abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (t, PROOF, _pqAuth(), "", sv));
         }
         IConfidentialWrappedToken.Unwrap memory x =
             IConfidentialWrappedToken.Unwrap(address(usd), MetaTxLib.pad(address(0xD00D)), 5, 5 * SCALE);
         IPqzToken.PqzBurnArgs memory b = _burnArgs(bytes32(0), shieldIn, 81);
-        IPqzToken.PqzSignedVerdict memory sv2 =
-            verdict && shieldIn == 0 ? _sv(WrappedPqzTokenLike(address(tok)).unshieldUnwrapStatement(b, x, 0)) : noVerdict();
+        IPqzToken.PqzSignedVerdict memory sv2 = verdict && shieldIn == 0
+            ? _sv(WrappedPqzTokenLike(address(tok)).unshieldUnwrapStatement(b, x, 0))
+            : noVerdict();
         return abi.encodeCall(IPqzWrappedToken.mtxUnshieldUnwrap, (b, x, PROOF, _pqAuth(), "", sv2));
     }
 
@@ -141,9 +163,18 @@ abstract contract PqzVerifierFeeKinds is PqzRegFixture {
     /// list can leave the verifier unlisted on 12 or 13.
     function test_deniedListVerifier_haltsDebits_shieldsLand_feeZeroRestores() public {
         vm.prank(ownerA);
-        (bool okA, bytes memory rA) = address(tok).call(abi.encodeCall(IRegulatedToken.enableFeature, (GovernanceBits.ALLOWLIST, EnvKit.codeUidOf(address(tok)))));
+        (bool okA, bytes memory rA) = address(tok)
+            .call(
+                abi.encodeCall(
+                    IRegulatedToken.enableFeature, (GovernanceBits.ALLOWLIST, EnvKit.codeUidOf(address(tok)))
+                )
+            );
         assertFalse(okA);
-        assertEq(rA, abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, GovernanceBits.ALLOWLIST), "no allow list here");
+        assertEq(
+            rA,
+            abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, GovernanceBits.ALLOWLIST),
+            "no allow list here"
+        );
         vm.prank(ownerA);
         _r().enableFeature(GovernanceBits.DENYLIST, EnvKit.codeUidOf(address(_r())));
         bytes32[] memory v = new bytes32[](1);
@@ -164,9 +195,13 @@ abstract contract PqzVerifierFeeKinds is PqzRegFixture {
 }
 
 contract PqzVerifierFeeKind12Test is PqzVerifierFeeKinds {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 }
 
 contract PqzVerifierFeeKind13Test is PqzVerifierFeeKinds {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 }

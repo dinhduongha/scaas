@@ -51,7 +51,10 @@ pub fn digits(x: u64) -> [u8; 16] {
 
 /// The self-test's `R_REG` statement for `id` (its key: KeyGen(`SEED_KEY`)).
 pub fn reg_statement(id: &Word, pk: &[u8]) -> Vec<u8> {
-    let r = Register { words: [Form::Register.op_tag(), *id, message()], pk };
+    let r = Register {
+        words: [Form::Register.op_tag(), *id, message()],
+        pk,
+    };
     Stmt::Register(r).encode().unwrap_or_default()
 }
 
@@ -81,7 +84,8 @@ pub fn a_bytes() -> Option<Vec<u8>> {
     }
     let mut a = Vec::with_capacity(k * pqzl::PK_BYTES);
     for i in 0..k {
-        cols.iter().for_each(|c| a.extend_from_slice(&c[512 * i..512 * (i + 1)]));
+        cols.iter()
+            .for_each(|c| a.extend_from_slice(&c[512 * i..512 * (i + 1)]));
     }
     Some(a)
 }
@@ -96,10 +100,21 @@ pub fn report() -> Option<Report> {
     let (m, _) = pqzl::dec(&key.s, &ct)?;
     let m: [u8; 16] = core::array::from_fn(|i| m[i] as u8);
     let (fft, fft_ok) = pqzh::fft_kat();
-    let (pk_hash, ct_hash, fft_hash) = (keccak(&[&key.pk[..]]), keccak(&[&ct[..]]), keccak(&[&fft]));
-    let kat_digest = keccak(&[&a_digest, &pk_hash, &ct_hash, &m, &fft_hash, &[fft_ok as u8]]);
+    let (pk_hash, ct_hash, fft_hash) =
+        (keccak(&[&key.pk[..]]), keccak(&[&ct[..]]), keccak(&[&fft]));
+    let kat_digest = keccak(&[
+        &a_digest,
+        &pk_hash,
+        &ct_hash,
+        &m,
+        &fft_hash,
+        &[fft_ok as u8],
+    ]);
     let mut results = [false; 4];
-    for (i, (id, proof)) in [(PQZL_ID, PQZL_PROOF), (PQZH_ID, PQZH_PROOF)].into_iter().enumerate() {
+    for (i, (id, proof)) in [(PQZL_ID, PQZL_PROOF), (PQZH_ID, PQZH_PROOF)]
+        .into_iter()
+        .enumerate()
+    {
         let mut st = reg_statement(&id, &key.pk[..]);
         let mut input = pqz_stmt::input(3, &st, proof);
         results[2 * i] = crate::verify_input(&input).ok()?;
@@ -109,7 +124,17 @@ pub fn report() -> Option<Report> {
     }
     let r = results.map(|b| b as u8);
     let hash = keccak(&[&kat_digest, &r]);
-    Some(Report { a_digest, pk_hash, ct_hash, m, fft_hash, fft_ok, kat_digest, results, hash })
+    Some(Report {
+        a_digest,
+        pk_hash,
+        ct_hash,
+        m,
+        fft_hash,
+        fft_ok,
+        kat_digest,
+        results,
+        hash,
+    })
 }
 
 static CACHE: OnceLock<Word> = OnceLock::new();

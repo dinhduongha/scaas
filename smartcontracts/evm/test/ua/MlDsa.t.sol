@@ -12,13 +12,19 @@ function p87() pure returns (MlDsa.Params memory) {
 }
 
 contract MlHarness {
-    function verify(uint256 level, bytes calldata pk, bytes calldata mprime, bytes calldata sig) external pure returns (bool) {
+    function verify(uint256 level, bytes calldata pk, bytes calldata mprime, bytes calldata sig)
+        external
+        pure
+        returns (bool)
+    {
         Shake.reserve();
         return MlDsa.verify(level == 44 ? MlDsa.params44() : level == 65 ? MlDsa.params65() : p87(), pk, mprime, sig);
     }
 
     function verifyExpanded(uint256 level, bytes calldata ek, bytes calldata mprime, bytes calldata sig)
-        external pure returns (bool)
+        external
+        pure
+        returns (bool)
     {
         Shake.reserve();
         return MlDsa.verifyExpanded(level == 44 ? MlDsa.params44() : MlDsa.params65(), ek, mprime, sig);
@@ -44,17 +50,26 @@ contract MlHarness {
 /// The cached path on a formatted message `mprime` of the caller's (ACVP's): the parts read by `MlDsa.readParts`, the same library
 /// function `MldsaVerifier.verifyCached` reads them with (no copy, F-9), then the level's core on the expanded key.
 contract CachedM {
-    function verify(uint256 level, bytes calldata chunks, bytes calldata mprime, bytes calldata sig) external view returns (bool) {
+    function verify(uint256 level, bytes calldata chunks, bytes calldata mprime, bytes calldata sig)
+        external
+        view
+        returns (bool)
+    {
         MlDsa.Params memory P = level == 44 ? MlDsa.params44() : level == 65 ? MlDsa.params65() : p87();
         (bytes memory ek, bool ok) = MlDsa.readParts(P, chunks, level == 44 ? 1 : level == 65 ? 2 : 3);
         return ok && this.verifyExpanded(level, ek, mprime, sig);
     }
 
     function verifyExpanded(uint256 level, bytes calldata ek, bytes calldata mprime, bytes calldata sig)
-        external pure returns (bool)
+        external
+        pure
+        returns (bool)
     {
         Shake.reserve();
-        return MlDsa.verifyExpanded(level == 44 ? MlDsa.params44() : level == 65 ? MlDsa.params65() : p87(), ek, mprime, sig);
+        return
+            MlDsa.verifyExpanded(
+                level == 44 ? MlDsa.params44() : level == 65 ? MlDsa.params65() : p87(), ek, mprime, sig
+            );
     }
 }
 
@@ -71,7 +86,9 @@ function eip8355(bytes calldata input) pure returns (bool ok) {
 /// `VERIFY_MLDSA87` in the EIP-8355 layout (`pk ‖ sig ‖ msg`): the stand-in for `0x14` / the SCaaS testnet's `0x…5caa0014`.
 function eip8355_87(bytes calldata input) pure returns (bool ok) {
     Shake.reserve();
-    if (input.length >= 7219) ok = MlDsa.verify(p87(), input[0:2592], abi.encodePacked(bytes2(0), input[7219:]), input[2592:7219]);
+    if (input.length >= 7219) {
+        ok = MlDsa.verify(p87(), input[0:2592], abi.encodePacked(bytes2(0), input[7219:]), input[2592:7219]);
+    }
 }
 
 contract Eip8355Emulator87 {
@@ -175,8 +192,10 @@ contract MlDsaTest is PqVectors {
             assertTrue(v.verifyPop(pk, m, sig), "verifyPop = verify");
             assertFalse(v.verifyCached(chunks, ~m, sig), "other message");
             assertFalse(v.verifyCached(bytes.concat(chunks, bytes20(address(0xc0de00))), m, sig), "extra pointer");
-            assertFalse(v.verifyCached(bytes.concat(bytes20(address(0xbad)), _slice(chunks, 20, chunks.length - 20)), m, sig),
-                "a pointer without code");
+            assertFalse(
+                v.verifyCached(bytes.concat(bytes20(address(0xbad)), _slice(chunks, 20, chunks.length - 20)), m, sig),
+                "a pointer without code"
+            );
             if (parts == 2) {
                 bytes memory swapped = bytes.concat(_slice(chunks, 20, 20), _slice(chunks, 0, 20));
                 assertFalse(v.verifyCached(swapped, m, sig), "parts out of order");
@@ -199,9 +218,17 @@ contract MlDsaTest is PqVectors {
             string memory c = _case("acvp_mldsa", i);
             bytes32 set = keccak256(bytes(vm.parseJsonString(ext, string.concat(c, ".set"))));
             uint256 level = set == keccak256("ML-DSA-44") ? 44 : set == keccak256("ML-DSA-65") ? 65 : 87;
-            bool got = h.verify(level, _b(ext, string.concat(c, ".pk")), _b(ext, string.concat(c, ".mprime")),
-                _b(ext, string.concat(c, ".sig")));
-            assertEq(got, vm.parseJsonBool(ext, string.concat(c, ".valid")), vm.parseJsonString(ext, string.concat(c, ".reason")));
+            bool got = h.verify(
+                level,
+                _b(ext, string.concat(c, ".pk")),
+                _b(ext, string.concat(c, ".mprime")),
+                _b(ext, string.concat(c, ".sig"))
+            );
+            assertEq(
+                got,
+                vm.parseJsonBool(ext, string.concat(c, ".valid")),
+                vm.parseJsonString(ext, string.concat(c, ".reason"))
+            );
         }
     }
 
@@ -212,7 +239,14 @@ contract MlDsaTest is PqVectors {
         assertEq(_cases(ext, "eip8051_nist_kat"), 10);
         for (uint256 i; i < 10; ++i) {
             string memory c = _case("eip8051_nist_kat", i);
-            assertTrue(h.verify(44, _b(ext, string.concat(c, ".pk")), _b(ext, string.concat(c, ".mprime")), _b(ext, string.concat(c, ".sig"))));
+            assertTrue(
+                h.verify(
+                    44,
+                    _b(ext, string.concat(c, ".pk")),
+                    _b(ext, string.concat(c, ".mprime")),
+                    _b(ext, string.concat(c, ".sig"))
+                )
+            );
         }
     }
 
@@ -220,9 +254,15 @@ contract MlDsaTest is PqVectors {
         vm.pauseGasMetering();
         string memory ext = _ext();
         MlHarness h = new MlHarness();
-        for (uint256 i; i < 2; ++i) { // cases 1 and 2; case 3 (too short to parse) runs in the probe test
+        for (uint256 i; i < 2; ++i) {
+            // cases 1 and 2; case 3 (too short to parse) runs in the probe test
             string memory c = _case("eip8355", i);
-            bool got = h.verify(44, _b(ext, string.concat(c, ".pk")), _b(ext, string.concat(c, ".mprime")), _b(ext, string.concat(c, ".sig")));
+            bool got = h.verify(
+                44,
+                _b(ext, string.concat(c, ".pk")),
+                _b(ext, string.concat(c, ".mprime")),
+                _b(ext, string.concat(c, ".sig"))
+            );
             assertEq(got, vm.parseJsonBool(ext, string.concat(c, ".valid")));
         }
     }
@@ -343,7 +383,8 @@ contract MlDsaTest is PqVectors {
         address pc = 0x000000000000000000000000000000005caA0014; // the SCaaS testnet's MLDSA87
         vm.etch(pc, address(new Eip8355Emulator87()).code);
         MldsaVerifier v = new MldsaVerifier(
-            PqUA.MLDSA87, pc, _k(kat, "mldsa87", "eip8355_probe_valid"), _k(kat, "mldsa87", "eip8355_probe_invalid"));
+            PqUA.MLDSA87, pc, _k(kat, "mldsa87", "eip8355_probe_valid"), _k(kat, "mldsa87", "eip8355_probe_invalid")
+        );
         assertEq(v.PRECOMPILE(), pc);
         _uaVector("mldsa87", address(v), PqUA.MLDSA87);
         assertEq(abi.encode(MlDsa.params87()), abi.encode(p87()));
@@ -361,10 +402,21 @@ contract MlDsaTest is PqVectors {
         assertEq(new MldsaVerifier(PqUA.MLDSA87, address(0), "", "").PRECOMPILE(), address(0), "none");
         assertEq(new MldsaVerifier(PqUA.MLDSA87, pc, valid, invalid).PRECOMPILE(), address(0), "empty account");
         vm.etch(pc, address(new AlwaysOne()).code);
-        assertEq(new MldsaVerifier(PqUA.MLDSA87, pc, valid, invalid).PRECOMPILE(), address(0), "answers 1 to everything");
+        assertEq(
+            new MldsaVerifier(PqUA.MLDSA87, pc, valid, invalid).PRECOMPILE(), address(0), "answers 1 to everything"
+        );
         vm.etch(pc, address(new Eip8355Emulator()).code); // 44 / 65 only
-        assertEq(new MldsaVerifier(PqUA.MLDSA87, pc, _k(kat, "mldsa65", "eip8355_probe_valid"),
-            _k(kat, "mldsa65", "eip8355_probe_invalid")).PRECOMPILE(), address(0), "a probe of another level");
+        assertEq(
+            new MldsaVerifier(
+                    PqUA.MLDSA87,
+                    pc,
+                    _k(kat, "mldsa65", "eip8355_probe_valid"),
+                    _k(kat, "mldsa65", "eip8355_probe_invalid")
+                )
+                .PRECOMPILE(),
+            address(0),
+            "a probe of another level"
+        );
         vm.etch(pc, address(new Eip8355Emulator87()).code);
         assertEq(new MldsaVerifier(PqUA.MLDSA87, pc, valid, invalid).PRECOMPILE(), pc, "the precompile when it answers");
         MldsaVerifier v = new MldsaVerifier(PqUA.MLDSA87, address(0), "", "");
@@ -382,16 +434,26 @@ contract MlDsaTest is PqVectors {
         assertFalse(v.verifyCached(chunks, ~m, sig), "other message");
         assertEq(chunks.length, 60, "three pointers");
         assertFalse(v.verifyCached(_slice(chunks, 0, 40), m, sig), "parts 0 + 1 only");
-        assertFalse(v.verifyCached(bytes.concat(_slice(chunks, 0, 20), _slice(chunks, 40, 20)), m, sig), "parts 0 + 2 only");
-        assertFalse(v.verifyCached(bytes.concat(_slice(chunks, 20, 20), _slice(chunks, 0, 20), _slice(chunks, 40, 20)), m, sig),
-            "parts out of order");
+        assertFalse(
+            v.verifyCached(bytes.concat(_slice(chunks, 0, 20), _slice(chunks, 40, 20)), m, sig), "parts 0 + 2 only"
+        );
+        assertFalse(
+            v.verifyCached(bytes.concat(_slice(chunks, 20, 20), _slice(chunks, 0, 20), _slice(chunks, 40, 20)), m, sig),
+            "parts out of order"
+        );
         uint256 n;
         uint256 same;
         for (; vm.keyExistsJson(kat, string.concat(".kinds.mldsa87.mutations[", vm.toString(n), "]")); ++n) {
             string memory mu = string.concat(".kinds.mldsa87.mutations[", vm.toString(n), "]");
             if (keccak256(_b(kat, string.concat(mu, ".pk"))) != keccak256(_k(kat, "mldsa87", "pk"))) continue; // another key
-            bool got = v.verifyCached(chunks, bytes32(_b(kat, string.concat(mu, ".ua_msg"))), _b(kat, string.concat(mu, ".sig")));
-            assertEq(got, vm.parseJsonBool(kat, string.concat(mu, ".valid")), vm.parseJsonString(kat, string.concat(mu, ".what")));
+            bool got = v.verifyCached(
+                chunks, bytes32(_b(kat, string.concat(mu, ".ua_msg"))), _b(kat, string.concat(mu, ".sig"))
+            );
+            assertEq(
+                got,
+                vm.parseJsonBool(kat, string.concat(mu, ".valid")),
+                vm.parseJsonString(kat, string.concat(mu, ".what"))
+            );
             ++same;
         }
         assertEq(n, 9, "mutations");
@@ -399,7 +461,10 @@ contract MlDsaTest is PqVectors {
     }
 
     /// The registry's parts of `pk` on `v`, each at its own pointer (`0x00 ‖ part`, as SSTORE2), and their concatenation.
-    function _parts(MldsaVerifier v, bytes memory pk, uint256 at) internal returns (bytes memory chunks, bytes memory all) {
+    function _parts(MldsaVerifier v, bytes memory pk, uint256 at)
+        internal
+        returns (bytes memory chunks, bytes memory all)
+    {
         for (uint256 p; p < v.expandedKeyParts(); ++p) {
             bytes memory part = v.expandedKeyPart(pk, p);
             address ptr = address(uint160(at * 16 + p));
@@ -419,7 +484,8 @@ contract MlDsaTest is PqVectors {
         string memory kat = _kat();
         string[3] memory names = ["mldsa44", "mldsa65", "mldsa87"];
         uint16[3] memory kinds = [PqUA.MLDSA44, PqUA.MLDSA65, PqUA.MLDSA87];
-        uint256[3][3] memory len = [[uint256(20_544), 0, 0], [uint256(15_360), 21_568, 0], [uint256(21_504), 21_504, 22_592]];
+        uint256[3][3] memory len =
+            [[uint256(20_544), 0, 0], [uint256(15_360), 21_568, 0], [uint256(21_504), 21_504, 22_592]];
         for (uint256 i; i < 3; ++i) {
             MldsaVerifier v = new MldsaVerifier(kinds[i], address(0), "", "");
             bytes memory pk = _k(kat, names[i], "pk");
@@ -453,13 +519,21 @@ contract MlDsaTest is PqVectors {
         uint256 n;
         for (uint256 i; i < 3; ++i) {
             MldsaVerifier v = new MldsaVerifier(kinds[i], address(0), "", "");
-            for (uint256 r; vm.keyExistsJson(j, string.concat(".levels.", names[i], ".keys[", vm.toString(r), "]")); ++r) {
+            for (
+                uint256 r;
+                vm.keyExistsJson(j, string.concat(".levels.", names[i], ".keys[", vm.toString(r), "]"));
+                ++r
+            ) {
                 string memory row = string.concat(".levels.", names[i], ".keys[", vm.toString(r), "].");
                 bytes memory pk = vm.parseJsonBytes(j, string.concat(row, "pk"));
-                assertEq(sha256(v.expandedKey(pk)), vm.parseJsonBytes32(j, string.concat(row, "ek_sha256")), "expanded key");
+                assertEq(
+                    sha256(v.expandedKey(pk)), vm.parseJsonBytes32(j, string.concat(row, "ek_sha256")), "expanded key"
+                );
                 bytes32[] memory ps = vm.parseJsonBytes32Array(j, string.concat(row, "parts_sha256"));
                 assertEq(ps.length, v.expandedKeyParts(), "parts");
-                for (uint256 p; p < ps.length; ++p) assertEq(sha256(v.expandedKeyPart(pk, p)), ps[p], "part");
+                for (uint256 p; p < ps.length; ++p) {
+                    assertEq(sha256(v.expandedKeyPart(pk, p)), ps[p], "part");
+                }
                 ++n;
             }
         }
@@ -476,8 +550,11 @@ contract MlDsaTest is PqVectors {
         string memory ext = _ext();
         MlHarness h = new MlHarness();
         CachedM c = new CachedM();
-        MldsaVerifier[3] memory v = [new MldsaVerifier(PqUA.MLDSA44, address(0), "", ""),
-            new MldsaVerifier(PqUA.MLDSA65, address(0), "", ""), new MldsaVerifier(PqUA.MLDSA87, address(0), "", "")];
+        MldsaVerifier[3] memory v = [
+            new MldsaVerifier(PqUA.MLDSA44, address(0), "", ""),
+            new MldsaVerifier(PqUA.MLDSA65, address(0), "", ""),
+            new MldsaVerifier(PqUA.MLDSA87, address(0), "", "")
+        ];
         uint256[3] memory per;
         for (uint256 i; i < _cases(ext, "acvp_mldsa"); ++i) {
             ++per[_acvpBoth(ext, i, h, c, v)];
@@ -488,7 +565,10 @@ contract MlDsaTest is PqVectors {
     }
 
     /// One ACVP case through both paths (`test_acvp_mldsa_cachedDifferential`); returns its level index.
-    function _acvpBoth(string memory ext, uint256 i, MlHarness h, CachedM c, MldsaVerifier[3] memory v) internal returns (uint256 li) {
+    function _acvpBoth(string memory ext, uint256 i, MlHarness h, CachedM c, MldsaVerifier[3] memory v)
+        internal
+        returns (uint256 li)
+    {
         string memory cs = _case("acvp_mldsa", i);
         bytes32 set = keccak256(bytes(vm.parseJsonString(ext, string.concat(cs, ".set"))));
         li = set == keccak256("ML-DSA-44") ? 0 : set == keccak256("ML-DSA-65") ? 1 : 2;
@@ -512,8 +592,17 @@ contract MlDsaTest is PqVectors {
         uint256 n;
         for (uint256 i; i < 3; ++i) {
             MldsaVerifier v = new MldsaVerifier(kinds[i], address(0), "", "");
-            for (uint256 m; vm.keyExistsJson(kat, string.concat(".kinds.", names[i], ".mutations[", vm.toString(m), "]")); ++m) {
-                if (_mutationBoth(kat, v, string.concat(".kinds.", names[i], ".mutations[", vm.toString(m), "]"), 0xbee000 + 64 * i + m)) ++n;
+            for (
+                uint256 m;
+                vm.keyExistsJson(kat, string.concat(".kinds.", names[i], ".mutations[", vm.toString(m), "]"));
+                ++m
+            ) {
+                if (_mutationBoth(
+                        kat,
+                        v,
+                        string.concat(".kinds.", names[i], ".mutations[", vm.toString(m), "]"),
+                        0xbee000 + 64 * i + m
+                    )) ++n;
             }
         }
         assertGt(n, 18, "mutations through both paths");
@@ -543,8 +632,17 @@ contract MlDsaTest is PqVectors {
         vm.etch(pc, address(new Eip8355Emulator()).code); // answers both levels
         MldsaVerifier v = new MldsaVerifier(PqUA.MLDSA44, pc, valid44, invalid44);
         assertEq(v.PRECOMPILE(), pc);
-        assertEq(new MldsaVerifier(PqUA.MLDSA44, pc, _k(kat, "mldsa65", "eip8355_probe_valid"),
-            _k(kat, "mldsa65", "eip8355_probe_invalid")).PRECOMPILE(), address(0), "65 probe on the 44 verifier");
+        assertEq(
+            new MldsaVerifier(
+                    PqUA.MLDSA44,
+                    pc,
+                    _k(kat, "mldsa65", "eip8355_probe_valid"),
+                    _k(kat, "mldsa65", "eip8355_probe_invalid")
+                )
+                .PRECOMPILE(),
+            address(0),
+            "65 probe on the 44 verifier"
+        );
         vm.etch(pc, address(new AlwaysOne()).code); // now any call would answer 1
         bytes memory pk = _k(kat, "mldsa44", "pk");
         bytes memory sig = _k(kat, "mldsa44", "sig");
@@ -562,23 +660,33 @@ contract MlDsaTest is PqVectors {
         uint256 o = P.k * P.l * 1024;
         ek = new bytes(MlDsa.expandedLen(P));
         tr = _slice(_k(_kat(), i == 0 ? "mldsa44" : "mldsa65", "expanded_key"), o, 64);
-        for (uint256 b; b < 64; ++b) ek[o + b] = tr[b];
+        for (uint256 b; b < 64; ++b) {
+            ek[o + b] = tr[b];
+        }
     }
 
     /// Hint encoding: rows 0 .. k−2 hold indices 0 .. x−1 (x = ⌈ω/2⌉), the last row 2x − ω … x − 1 and ends at `end`.
     function _hintsUpTo(MlDsa.Params memory P, uint256 end) internal pure returns (bytes memory y) {
         uint256 x = (P.omega + 1) / 2;
         y = new bytes(P.omega + P.k);
-        for (uint256 j; j < x; ++j) y[j] = bytes1(uint8(j));
-        for (uint256 j = x; j < P.omega; ++j) y[j] = bytes1(uint8(j + x - P.omega));
-        for (uint256 r; r + 1 < P.k; ++r) y[P.omega + r] = bytes1(uint8(x));
+        for (uint256 j; j < x; ++j) {
+            y[j] = bytes1(uint8(j));
+        }
+        for (uint256 j = x; j < P.omega; ++j) {
+            y[j] = bytes1(uint8(j + x - P.omega));
+        }
+        for (uint256 r; r + 1 < P.k; ++r) {
+            y[P.omega + r] = bytes1(uint8(x));
+        }
         y[P.omega + P.k - 1] = bytes1(uint8(end));
     }
 
     /// A signature for the degenerate expanded key (`Â = 0`, `t̂1 = 0`): w' = 0, so UseHint gives m − 1 at each hint
     /// position of `y` and 0 elsewhere; c~ = H(H(tr ‖ M') ‖ w1Encode(w1)), z = 0 (v = γ1 everywhere), hints `y`.
     function _degenerate(MlHarness h, MlDsa.Params memory P, bytes memory tr, bytes memory mprime, bytes memory y)
-        internal pure returns (bytes memory sig)
+        internal
+        pure
+        returns (bytes memory sig)
     {
         uint256 m1 = (MlDsa.Q - 1) / (2 * P.gamma2) - 1;
         bytes memory w1 = new bytes(P.k * 32 * P.w1Bits);
@@ -590,7 +698,9 @@ contract MlDsaTest is PqVectors {
         }
         bytes memory ct = h.shake256(bytes.concat(h.shake256(bytes.concat(tr, mprime), 64), w1), P.ctLen);
         bytes memory z = new bytes(P.l * 32 * P.zBits);
-        for (uint256 c; c < P.l * 256; ++c) _putLe(z, c * P.zBits, P.zBits, P.gamma1);
+        for (uint256 c; c < P.l * 256; ++c) {
+            _putLe(z, c * P.zBits, P.zBits, P.gamma1);
+        }
         sig = bytes.concat(ct, z, y);
     }
 
@@ -598,7 +708,9 @@ contract MlDsaTest is PqVectors {
     function _setZ0(MlDsa.Params memory P, bytes memory sig, uint256 v) internal pure {
         bytes memory z = _slice(sig, P.ctLen, 3);
         _putLe(z, 0, P.zBits, v);
-        for (uint256 b; b < 3; ++b) sig[P.ctLen + b] = z[b];
+        for (uint256 b; b < 3; ++b) {
+            sig[P.ctLen + b] = z[b];
+        }
     }
 
     /// Writes the `n`-bit value `v` at bit position `p`, least significant bit first.
@@ -612,15 +724,21 @@ contract MlDsaTest is PqVectors {
     }
 
     function _u32(bytes memory b, uint256 o) internal pure returns (uint256) {
-        return uint256(uint8(b[o])) << 24 | uint256(uint8(b[o + 1])) << 16 | uint256(uint8(b[o + 2])) << 8 | uint8(b[o + 3]);
+        return
+            uint256(uint8(b[o])) << 24 | uint256(uint8(b[o + 1])) << 16 | uint256(uint8(b[o + 2])) << 8
+                | uint8(b[o + 3]);
     }
 
     function _setU32(bytes memory b, uint256 o, uint256 v) internal pure {
-        for (uint256 i; i < 4; ++i) b[o + i] = bytes1(uint8(v >> (24 - 8 * i)));
+        for (uint256 i; i < 4; ++i) {
+            b[o + i] = bytes1(uint8(v >> (24 - 8 * i)));
+        }
     }
 
     function _slice(bytes memory b, uint256 off, uint256 len) internal pure returns (bytes memory s) {
         s = new bytes(len);
-        for (uint256 i; i < len; ++i) s[i] = b[off + i];
+        for (uint256 i; i < len; ++i) {
+            s[i] = b[off + i];
+        }
     }
 }

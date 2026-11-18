@@ -45,7 +45,8 @@ pub fn verify(
     let mut msg = Vec::with_capacity(ad.len() + 32);
     msg.extend_from_slice(ad);
     msg.extend_from_slice(&env::sha256_array(cd));
-    vk.verify_prehash(&env::sha256_array(&msg), &sig).map_err(|_| AuthError::BadSignature)
+    vk.verify_prehash(&env::sha256_array(&msg), &sig)
+        .map_err(|_| AuthError::BadSignature)
 }
 
 /// NET-ALL-04 item 4 (WebAuthn L3 §5.8.1.2 bounded parse): clientDataJSON is exactly
@@ -53,13 +54,22 @@ pub fn verify(
 /// `,"crossOrigin":false` then `}` (end) or `,` … `}` (the object must close, as EVM C1-2); no whitespace, no member before `crossOrigin`, and neither a
 /// `topOrigin` nor a second `crossOrigin` anywhere after. Returns the origin bytes (never containing `\`).
 pub fn origin_of<'a>(cd: &'a [u8], challenge: &[u8; 32]) -> Option<&'a [u8]> {
-    let prefix = format!(r#"{{"type":"webauthn.get","challenge":"{}","origin":""#, b64url(challenge));
+    let prefix = format!(
+        r#"{{"type":"webauthn.get","challenge":"{}","origin":""#,
+        b64url(challenge)
+    );
     let rest = cd.strip_prefix(prefix.as_bytes())?;
     let end = rest.iter().position(|c| *c == b'"')?;
     let (origin, tail) = (&rest[..end], &rest[end + 1..]);
     let ok = match tail.strip_prefix(br#","crossOrigin":false"#) {
         _ if tail == b"}" => true,
-        Some(t) => t == b"}" || (t.starts_with(b",") && t.ends_with(b"}") && !has(t, br#""topOrigin""#) && !has(t, br#""crossOrigin""#)),
+        Some(t) => {
+            t == b"}"
+                || (t.starts_with(b",")
+                    && t.ends_with(b"}")
+                    && !has(t, br#""topOrigin""#)
+                    && !has(t, br#""crossOrigin""#))
+        }
         None => false,
     };
     (ok && !origin.is_empty() && !origin.contains(&b'\\')).then_some(origin)
@@ -79,7 +89,9 @@ pub fn b64url(data: &[u8]) -> String {
     const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     let mut out = String::with_capacity((data.len() * 4).div_ceil(3));
     for c in data.chunks(3) {
-        let n = (c[0] as u32) << 16 | (*c.get(1).unwrap_or(&0) as u32) << 8 | *c.get(2).unwrap_or(&0) as u32;
+        let n = (c[0] as u32) << 16
+            | (*c.get(1).unwrap_or(&0) as u32) << 8
+            | *c.get(2).unwrap_or(&0) as u32;
         for i in 0..=c.len() {
             out.push(A[(n >> (18 - 6 * i) & 63) as usize] as char);
         }
