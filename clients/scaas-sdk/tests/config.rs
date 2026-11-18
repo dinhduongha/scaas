@@ -40,6 +40,7 @@ fn profile(key: &str) -> ChainProfile {
         router: None,
         finality: Finality::Depth(12),
         tx_gas_cap: Some(1 << 24),
+        gas: vec![],
         tokens: vec![],
     }
 }

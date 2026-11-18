@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-//! Sign, write ahead, send (spec §13.4, CLI-SDK-09): sign → write the row (state `signed`) → send → state `sent`. `submit`
-//! returns once the row is written; the send runs on as a task and reports as `Event::OpState`, never as `submit`'s error. A row
-//! still `signed` after a restart is sent by `resume`; a row `sent` is sent again only by the user's `resend`, the same bytes.
+//! Sign, write ahead, send (spec §13.4, CLI-SDK-09; owner 2026-11-19, ruling A): sign → write the row (state `signed`) →
+//! simulate a self-relay's signed calldata → send → state `sent`. Nothing signed leaves the SDK before its row is written (the
+//! simulation sends the signed calldata to an endpoint). `submit` returns once the row is written; the simulation and the send
+//! run on as a task and report as `Event::OpState`, never as `submit`'s error: a refused simulation is `InFlight { SimRefused }`,
+//! the operation tracked to a chain fact like any other. A row still `signed` after a restart is sent by `resume` (unless its
+//! simulation was refused); a row `sent` is sent again only by the user's `resend`, the same bytes.
 use super::prepared::{envelope, Prepared};
-use super::quote::{check_caps, payer_address, SubmitPath, SubmitQuote};
+use super::quote::{check_caps, check_gateways, door_a, payer_address, SubmitPath, SubmitQuote};
 use super::state::{self, Row};
 use super::{dec, evm, hex, key, lane_nonce, unhex, InFlight, Op, OpState};
 use crate::events::Event;
@@ -151,10 +154,16 @@ pub(crate) fn sign_tx(
     Ok((signed.raw, id))
 }
 
-/// `submit`'s re-check of the quote it takes: a resolved path and the SDK's caps.
-fn check_quote(sdk: &Sdk, q: &SubmitQuote) -> Result<(), SdkError> {
+/// `submit`'s re-check of the quote it takes: a resolved path and the SDK's caps. A gateway quote, built by `quote` or by hand,
+/// is checked as `quote` checks it: a door-A entry and gateways that announce the profile's `chain_uid`.
+async fn check_quote(sdk: &Sdk, p: Option<&Prepared>, q: &SubmitQuote) -> Result<(), SdkError> {
     match &q.path {
-        SubmitPath::Gateway => Ok(()),
+        SubmitPath::Gateway => {
+            if p.is_some_and(|p| !door_a(p)) {
+                return Err(SdkError::SubmitPathNone);
+            }
+            Ok(())
+        }
         SubmitPath::SelfRelay { .. } => {
             let fee = q
                 .max_fee_per_gas
@@ -166,10 +175,32 @@ fn check_quote(sdk: &Sdk, q: &SubmitQuote) -> Result<(), SdkError> {
     }
 }
 
+/// Takes `p` out of the SDK's table (one `submit` of a `Prepared`: a second, concurrent or later, is `PreparedUnknown`).
+fn take(sdk: &Sdk, p: &Arc<Prepared>) -> Result<(), SdkError> {
+    let mut t = sdk.prepared.lock().unwrap_or_else(PoisonError::into_inner);
+    match t.get(&p.id()) {
+        Some(q) if Arc::ptr_eq(q, p) => {
+            t.remove(&p.id());
+            Ok(())
+        }
+        _ => Err(SdkError::PreparedUnknown),
+    }
+}
+
+/// Puts `p` back after a failure before anything was signed or written.
+fn put_back(sdk: &Sdk, p: &Arc<Prepared>) {
+    sdk.prepared
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .entry(p.id())
+        .or_insert_with(|| p.clone());
+}
+
 impl Op {
-    /// Signs `prepared` under its check, writes the operation's row (state `signed`) and returns its id (spec §13.4, R17); the
-    /// send runs on and reports as `Event::OpState`. An `Err` means nothing was signed or written: `PreparedUnknown`,
-    /// `PreparedStale`, `PolicyRefused`, `FeeAboveCap`, a store failure.
+    /// Signs `prepared` under its check, writes the operation's row (state `signed`) and returns its id (spec §13.4, R17;
+    /// owner 2026-11-19, ruling A); the simulation of a self-relay and the send run on and report as `Event::OpState`. An `Err`
+    /// means nothing was written or sent (a signature made before a failed write never leaves the SDK): `PreparedUnknown`,
+    /// `PreparedStale`, `PolicyRefused`, `FeeAboveCap`, `SubmitPathNone`, `ProfileMismatch`, a store failure.
     pub async fn submit(
         &self,
         prepared: Arc<Prepared>,
@@ -179,26 +210,30 @@ impl Op {
         self.sdk
             .spawn(async move {
                 Op::known(&sdk, &prepared)?;
-                check_quote(&sdk, &quote)?;
+                check_quote(&sdk, Some(&prepared), &quote).await?;
                 fresh(&sdk, &prepared).await?;
-                let (_, chain_id, pool) = evm(&sdk, &prepared.chain())?;
-                let (from_block, _) = super::head(&pool).await?;
-                let built = sign(&sdk, &prepared)?;
+                let (profile, chain_id, pool) = evm(&sdk, &prepared.chain())?;
+                if quote.path == SubmitPath::Gateway {
+                    check_gateways(&sdk, &prepared.chain()).await?;
+                }
+                // the first block the operation may land in: the final block now, before it is signed (P2-5)
+                let from_block = super::final_number(&pool, &profile).await?;
+                take(&sdk, &prepared)?;
+                let signed = sign(&sdk, &prepared).and_then(|b| {
+                    if quote.path == SubmitPath::Gateway && b.op.is_none() {
+                        return Err(SdkError::SubmitPathNone);
+                    }
+                    Ok(b)
+                });
+                let built = match signed {
+                    Ok(b) => b,
+                    Err(e) => {
+                        put_back(&sdk, &prepared);
+                        return Err(e);
+                    }
+                };
                 let (raw, tx_id, payer) = match &quote.path {
                     SubmitPath::SelfRelay { payer } => {
-                        // the signed calldata simulated once (ruling 1): a revert or more gas than the confirmed quote
-                        // ends here, nothing written or sent
-                        let from = payer_address(&sdk, payer)?;
-                        let to = Address::from(prepared.t.contract);
-                        let data = alloy::primitives::Bytes::from(built.calldata.clone());
-                        if pool
-                            .simulate_from(from, to, data)
-                            .await
-                            .map_err(super::sim)?
-                            > quote.gas_limit
-                        {
-                            return Err(SdkError::GasUnquoted);
-                        }
                         let (raw, id) = sign_tx(
                             &sdk,
                             chain_id,
@@ -238,6 +273,7 @@ impl Op {
                     raw,
                     tx_id,
                     tx_nonce: payer.as_ref().map(|_| quote.tx_nonce),
+                    gas_limit: payer.as_ref().map(|_| quote.gas_limit),
                     path: if payer.is_some() { "self" } else { "gateway" }.into(),
                     payer,
                     from_block,
@@ -250,11 +286,8 @@ impl Op {
                         .transpose()?
                         .is_some_and(|m| m.bit(0)),
                 };
+                // the write ahead: nothing signed has left the SDK yet (ruling A)
                 state::put(&sdk, &row).await?;
-                sdk.prepared
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .remove(&prepared.id());
                 let op = row.op.clone();
                 let s2 = sdk.clone();
                 detach(&sdk, async move { send(&s2, row).await });
@@ -271,7 +304,8 @@ impl Op {
             .spawn(async move {
                 let mut n = 0;
                 for row in state::rows(&sdk).await? {
-                    if row.state == "signed" {
+                    // a refused simulation is sent again only by the user's `resend`
+                    if row.state == "signed" && row.detail != "SimRefused" {
                         send(&sdk, row).await;
                         n += 1;
                     }
@@ -292,7 +326,7 @@ impl Op {
                 if row.state != "signed" && row.state != "sent" {
                     return Err(SdkError::Argument);
                 }
-                check_quote(&sdk, &quote)?;
+                check_quote(&sdk, None, &quote).await?;
                 match (&quote.path, row.path.as_str()) {
                     (SubmitPath::Gateway, _) if !row.op_json.is_null() => {
                         row.path = "gateway".into()
@@ -315,6 +349,7 @@ impl Op {
                         row.raw = Some(hex(&raw));
                         row.tx_id = Some(id);
                         row.tx_nonce = Some(quote.tx_nonce);
+                        row.gas_limit = Some(quote.gas_limit);
                         row.payer = Some(format!("{:#x}", payer_address(&sdk, payer)?));
                         row.path = "self".into();
                     }
@@ -342,13 +377,16 @@ pub(crate) fn detach(_: &Arc<Sdk>, f: impl std::future::Future<Output = ()> + 's
     drop(tokio::task::spawn_local(f));
 }
 
-/// One send of `row`'s bytes on its path; the row then `sent` with the outcome's detail, and the event.
+/// One send of `row`'s bytes on its path; the row then `sent` with the outcome's detail, and the event. A refused simulation
+/// sends nothing and leaves the state as it was, with the detail `SimRefused`.
 pub(crate) async fn send(sdk: &Arc<Sdk>, mut row: Row) {
     let detail = match send_once(sdk, &row).await {
         Ok(d) => d,
         Err(_) => InFlight::GivenUpByEveryNode,
     };
-    row.state = "sent".into();
+    if detail != InFlight::SimRefused {
+        row.state = "sent".into();
+    }
     row.detail = format!("{detail:?}");
     if state::put(sdk, &row).await.is_ok() {
         sdk.emit(Event::OpState {
@@ -361,6 +399,21 @@ pub(crate) async fn send(sdk: &Arc<Sdk>, mut row: Row) {
 async fn send_once(sdk: &Sdk, row: &Row) -> Result<InFlight, SdkError> {
     let (_, chain_id, pool) = evm(sdk, &row.chain)?;
     if let Some(raw) = &row.raw {
+        // a relayed operation's signed calldata simulated from the payer (ruling 1, after the write ahead: ruling A): a revert,
+        // a failed simulation or more gas than the confirmed quote sends nothing
+        if row.kind != "native" {
+            let from: Address = row
+                .payer
+                .as_deref()
+                .and_then(|p| p.parse().ok())
+                .ok_or(SdkError::Internal)?;
+            let to = Address::from(super::addr20(&row.contract)?);
+            let data = alloy::primitives::Bytes::from(unhex(&row.calldata)?);
+            match pool.simulate_from(from, to, data).await {
+                Ok(g) if row.gas_limit.is_some_and(|l| g <= l) => {}
+                _ => return Ok(InFlight::SimRefused),
+            }
+        }
         return Ok(match pool.broadcast(&unhex(raw)?, Fanout::All).await? {
             BroadcastOutcome::Sent { .. } => InFlight::Sent,
             BroadcastOutcome::Rejected { .. } => InFlight::BroadcastRejected,

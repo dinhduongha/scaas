@@ -8,7 +8,7 @@ use super::Wallet;
 use crate::op::quote::{check_caps, delegated, payer_address, self_relay};
 use crate::op::state::{self, Row};
 use crate::op::submit::{detach, send, sign_tx};
-use crate::op::{addr20, evm, hex, sim, unhex, KeyRef, SubmitQuote};
+use crate::op::{addr20, evm, hex, sim, unhex, KeyRef, SubmitPath, SubmitQuote};
 use crate::SdkError;
 use alloy::primitives::{Bytes, U256};
 
@@ -113,7 +113,10 @@ impl Wallet {
                     .parse::<u128>()
                     .map_err(|_| SdkError::Argument)?;
                 check_caps(&sdk, q.quote.gas_limit, fee)?;
-                if format!("{:#x}", payer_address(&sdk, &q.key)?) != q.from {
+                // the key that signs is the quote's payer: it must be the reviewed key and `from` (closing review P3)
+                let signs_with_key =
+                    matches!(&q.quote.path, SubmitPath::SelfRelay { payer } if *payer == q.key);
+                if !signs_with_key || format!("{:#x}", payer_address(&sdk, &q.key)?) != q.from {
                     return Err(SdkError::Argument);
                 }
                 let (_, chain_id, _) = evm(&sdk, &q.chain)?;
@@ -150,6 +153,7 @@ impl Wallet {
                     detail: "Signed".into(),
                     landed: None,
                     relayer_bound: false,
+                    gas_limit: Some(q.quote.gas_limit),
                 };
                 state::put(&sdk, &row).await?;
                 let (s2, op) = (sdk.clone(), row.op.clone());

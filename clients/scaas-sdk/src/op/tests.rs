@@ -130,6 +130,7 @@ async fn setup(gateways: usize, edit: impl FnOnce(&mut ChainProfile, &mut Limits
             symbol: "VND".into(),
             decimals: 0,
         }],
+        gas: gas_rows(100_000),
     };
     let mut limits = Limits::default();
     edit(&mut profile, &mut limits);
@@ -156,6 +157,27 @@ async fn setup(gateways: usize, edit: impl FnOnce(&mut ChainProfile, &mut Limits
         seed,
         profile,
     }
+}
+
+/// A gas row of `g` for every entry and domain kind, signed by the tests' UA (0x0101) or a native EVM key, fresh lane or not.
+fn gas_rows(g: u64) -> Vec<crate::GasRow> {
+    let mut out = vec![];
+    for r in scaas_ua::wallet::entries::entry_rows() {
+        for k in r.kinds {
+            for signer in [0x0101, gas::NATIVE_EVM] {
+                for fresh in [true, false] {
+                    out.push(crate::GasRow {
+                        entry: r.entry.into(),
+                        kind: (*k).into(),
+                        signer,
+                        fresh,
+                        gas: g,
+                    });
+                }
+            }
+        }
+    }
+    out
 }
 
 fn ua() -> String {
@@ -461,9 +483,11 @@ async fn quote_shows_and_caps() {
     let path = SubmitPath::SelfRelay { payer: payer(&t) };
     let q = t.sdk.op().quote(p.clone(), path.clone()).await.unwrap();
     let fee: u128 = q.max_fee_per_gas.parse().unwrap();
+    let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
     assert_eq!(
-        q.gas_limit, 150_000,
-        "the unsigned form's estimate plus the margin"
+        q.gas_limit,
+        gas::with_margin(100_000 + 21_000 + 64 * len),
+        "the gas row's figure, the intrinsic cost and the calldata, plus the margin"
     );
     assert_eq!(
         q.max_cost,
@@ -478,9 +502,11 @@ async fn quote_shows_and_caps() {
         "the cap is the SDK's"
     );
     t.chain.lock().unwrap().prio = 1;
-    t.chain.lock().unwrap().gas = (1 << 24) - 1;
-    let t2 = setup(0, |_, l| l.max_gas = 1_000_000).await;
-    t2.chain.lock().unwrap().gas = 2_000_000;
+    let t2 = setup(0, |p, l| {
+        l.max_gas = 1_000_000;
+        p.gas = gas_rows(2_000_000);
+    })
+    .await;
     let p2 = prepare(&t2, cancel(&t2, "token", TOKEN, "5", "0")).await;
     assert_eq!(
         code(
@@ -490,7 +516,7 @@ async fn quote_shows_and_caps() {
                 .await
         ),
         "FeeAboveCap",
-        "a huge estimate"
+        "a huge gas figure"
     );
 }
 
@@ -498,14 +524,20 @@ async fn quote_shows_and_caps() {
 async fn gas_above_tx_cap() {
     let t = setup(0, |_, _| {}).await;
     let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
-    let path = SubmitPath::SelfRelay { payer: payer(&t) };
-    // the estimate plus half: 11_184_812 → 16_777_218, above 2^24; 11_184_811 → 2^24
-    t.chain.lock().unwrap().gas = 11_184_812;
+    let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
+    // the figure (row + intrinsic + calldata) plus half: 11_184_812 → 16_777_218, above 2^24; 11_184_811 → 2^24
+    let row = |total: u64| gas_rows(total - 21_000 - 64 * len);
+    // (each SDK kept alive: a dropped wallet revokes the handles of the same seed's wallet)
+    let t1 = setup(0, |p, _| p.gas = row(11_184_812)).await;
+    let p = prepare(&t1, cancel(&t1, "token", TOKEN, "5", "0")).await;
+    let path = SubmitPath::SelfRelay { payer: payer(&t1) };
     assert_eq!(
-        code(t.sdk.op().quote(p.clone(), path.clone()).await),
+        code(t1.sdk.op().quote(p.clone(), path.clone()).await),
         "GasAboveTxCap"
     );
-    t.chain.lock().unwrap().gas = 11_184_811;
+    let t = setup(0, |p, _| p.gas = row(11_184_811)).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let path = SubmitPath::SelfRelay { payer: payer(&t) };
     let q = t.sdk.op().quote(p.clone(), path).await.unwrap(); // control: at the cap
     assert_eq!(q.gas_limit, 1 << 24);
     // the fake refuses a transaction above its cap, as the chain does: the quote stopped it before
@@ -928,16 +960,13 @@ async fn quote_makes_no_signature() {
     assert_eq!(signs(&t), 0, "no signer call at quote time");
     let wire = t.chain.lock().unwrap().requests.clone();
     assert!(
-        wire.iter().any(|b| b.contains("eth_estimateGas")),
-        "the unsigned form was estimated"
-    );
-    assert!(
         !wire.iter().any(|b| b.contains(&sig)),
         "no signature on the wire"
     );
-    // control: submit signs once, and the simulation carries that signature
+    // control: submit signs once, and the simulation (after the write) carries that signature
     t.sdk.op().submit(p, q).await.unwrap();
     assert_eq!(signs(&t), 1, "submit: exactly one signer call");
+    sent_txs(&t, 1).await;
     let wire = t.chain.lock().unwrap().requests.clone();
     assert!(
         wire.iter()
@@ -964,32 +993,169 @@ async fn submit_signs_once_on_each_path() {
     assert_eq!(signs(&t), 2, "the self-relay path: one more");
 }
 
+/// Ruling B (P2-6): the quote's gas is the table's row for the whole key; a key without one is `GasUnquoted`, nothing estimated.
 #[tokio::test(flavor = "multi_thread")]
-async fn unsigned_form_refused_is_gas_unquoted() {
-    let t = setup(0, |_, _| {}).await;
+async fn an_operation_without_a_gas_row_is_gas_unquoted() {
+    let only = |signer: u16, fresh: bool| {
+        move |p: &mut ChainProfile, _: &mut Limits| {
+            p.gas = gas_rows(100_000)
+                .into_iter()
+                .filter(|r| r.signer == signer && r.fresh == fresh)
+                .collect()
+        }
+    };
+    // rows for another signer kind only (an ML-DSA-65 UA's figure is not a P-256 one's)
+    let t = setup(0, |p, _| {
+        p.gas = gas_rows(100_000)
+            .into_iter()
+            .map(|mut r| {
+                r.signer = 0x0131;
+                r
+            })
+            .collect()
+    })
+    .await;
     let path = SubmitPath::SelfRelay { payer: payer(&t) };
-    t.chain.lock().unwrap().call_revert = true;
     let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    t.chain.lock().unwrap().requests.clear();
     assert_eq!(
         code(t.sdk.op().quote(p, path.clone()).await),
         "GasUnquoted",
-        "no pinned figure, the unsigned form refused"
+        "another signer kind's row"
     );
-    // control: a pinned operation (the router's ordered cancel) takes its figure, no estimate
-    let p = prepare(&t, cancel(&t, "gov_router", OTHER, "5", "0")).await;
-    let q = t.sdk.op().quote(p.clone(), path).await.unwrap();
-    let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
-    let want = (72_600 + 21_000 + 64 * len) * 3 / 2;
     assert!(
-        q.gas_limit == want || q.gas_limit + 1 == want,
-        "{} {want}",
-        q.gas_limit
+        !t.chain
+            .lock()
+            .unwrap()
+            .requests
+            .iter()
+            .any(|b| b.contains("eth_estimateGas")),
+        "nothing estimated"
     );
+    // rows for a used lane only: the lane's nonce is 0 here (its first use); each SDK kept alive (a dropped wallet revokes the
+    // handles of the same seed's wallet)
+    let t1 = setup(0, only(0x0101, false)).await;
+    let p = prepare(&t1, cancel(&t1, "token", TOKEN, "5", "0")).await;
+    let path = SubmitPath::SelfRelay { payer: payer(&t1) };
+    assert_eq!(
+        code(t1.sdk.op().quote(p, path).await),
+        "GasUnquoted",
+        "a used lane's row"
+    );
+    // control: the key's own row
+    let t2 = setup(0, only(0x0101, true)).await;
+    let p = prepare(&t2, cancel(&t2, "token", TOKEN, "5", "0")).await;
+    assert_eq!(
+        code(
+            t2.sdk
+                .op()
+                .quote(p, SubmitPath::SelfRelay { payer: payer(&t2) })
+                .await
+        ),
+        "Ok"
+    );
+    // the built-in table: the router's ordered cancel by a native EVM key on a used lane (`mtxCancelNonce_router`)
+    let t = setup(0, |p, _| p.gas = vec![]).await;
+    t.chain.lock().unwrap().nonces.insert(OTHER.into(), 3);
+    let mut d = cancel(&t, "gov_router", OTHER, "5", "0");
+    d.signer = payer(&t);
+    d.message["from"] = json!(format!("0x{}{}", "00".repeat(12), &evm_address()[2..]));
+    let p = prepare(&t, d).await;
+    let q = t
+        .sdk
+        .op()
+        .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+        .await
+        .unwrap();
+    let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
+    assert_eq!(q.gas_limit, gas::with_margin(73_000 + 21_000 + 64 * len));
     assert_eq!(signs(&t), 0);
 }
 
+/// Ruling A (P1-1): sign → write the row → simulate → send. A simulation that reverts (or needs more gas than the confirmed
+/// quote) after the endpoint saw the signed calldata leaves the operation tracked (`SimRefused`), never an error of `submit`
+/// with no row; it is not sent, not sent again at restart, and another relayer landing the recorded calldata makes it
+/// `Landed`.
 #[tokio::test(flavor = "multi_thread")]
-async fn submit_refuses_more_gas_than_quoted() {
+async fn sim_refused_is_written_and_followed() {
+    for revert in [true, false] {
+        let t = setup(0, |_, _| {}).await;
+        let sub = t.sdk.subscribe();
+        let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+        let q = t
+            .sdk
+            .op()
+            .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+            .await
+            .unwrap();
+        if revert {
+            t.chain.lock().unwrap().call_revert = true;
+        } else {
+            t.chain.lock().unwrap().gas = q.gas_limit + 1; // the signed form needs more than the user confirmed
+        }
+        let op = t
+            .sdk
+            .op()
+            .submit(p.clone(), q.clone())
+            .await
+            .expect("a refused simulation is no error");
+        assert_eq!(
+            event(&sub, &op).await,
+            OpState::InFlight {
+                detail: InFlight::SimRefused
+            }
+        );
+        let row = state::row(&t.sdk, &op).await.unwrap();
+        assert_eq!(
+            (row.digest.as_str(), row.state.as_str(), row.detail.as_str()),
+            (p.id().as_str(), "signed", "SimRefused")
+        );
+        // what the endpoint saw: the signed calldata, after the row was written
+        assert!(t
+            .chain
+            .lock()
+            .unwrap()
+            .requests
+            .iter()
+            .any(|b| b.contains("eth_call") && b.contains(&row.calldata[2..])));
+        assert!(t.chain.lock().unwrap().sent.is_empty(), "nothing sent");
+        let again = open(t.store.clone(), t.profile.clone(), Limits::default()).await;
+        assert_eq!(again.op().resume().await.unwrap(), 0, "not sent at restart");
+        // another relayer lands the recorded calldata: the operation follows to the chain fact
+        {
+            let mut c = t.chain.lock().unwrap();
+            let n = c.finalized;
+            c.logs.push(executed_log(TOKEN, &row.digest, n, false));
+            c.nonces.insert(TOKEN.into(), 1);
+        }
+        assert!(matches!(
+            t.sdk.op().state(op).await.unwrap(),
+            OpState::Landed { .. }
+        ));
+    }
+    // the row write fails: an error, and the signed calldata never reached an endpoint (nothing signed left the SDK)
+    let t = setup(0, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let sig = signature_of(&p);
+    let q = t
+        .sdk
+        .op()
+        .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+        .await
+        .unwrap();
+    t.store.fail_state.store(true, SeqCst);
+    assert_eq!(code(t.sdk.op().submit(p, q).await), "VaultIo");
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(
+        !t.chain
+            .lock()
+            .unwrap()
+            .requests
+            .iter()
+            .any(|b| b.contains(&sig)),
+        "the signature reached an endpoint before its row was written"
+    );
+    // control: within the quote it is sent
     let t = setup(0, |_, _| {}).await;
     let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
     let q = t
@@ -998,16 +1164,112 @@ async fn submit_refuses_more_gas_than_quoted() {
         .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
         .await
         .unwrap();
-    t.chain.lock().unwrap().gas = q.gas_limit + 1; // the signed form needs more than the user confirmed
-    assert_eq!(
-        code(t.sdk.op().submit(p.clone(), q.clone()).await),
-        "GasUnquoted"
-    );
-    assert!(
-        state::rows(&t.sdk).await.unwrap().is_empty(),
-        "nothing written"
-    );
-    t.chain.lock().unwrap().gas = q.gas_limit; // control: within the quote
+    t.chain.lock().unwrap().gas = q.gas_limit;
     t.sdk.op().submit(p, q).await.unwrap();
     sent_txs(&t, 1).await;
+}
+
+/// P2-5: the scan starts at the final block when the operation was signed, never the head: an operation landing between
+/// the two is `Landed`, not `Consumed`.
+#[tokio::test(flavor = "multi_thread")]
+async fn from_block_is_the_final_block_at_submit() {
+    let t = setup(1, |_, _| {}).await;
+    t.chain.lock().unwrap().finalized = 0x18; // the head 0x20, an endpoint ahead of the final block
+    let (op, digest) = submitted(&t, "token", TOKEN, "5").await;
+    assert_eq!(state::row(&t.sdk, &op).await.unwrap().from_block, 0x18);
+    {
+        let mut c = t.chain.lock().unwrap();
+        c.logs.push(executed_log(TOKEN, &digest, 0x1c, false));
+        c.nonces.insert(TOKEN.into(), 1);
+        c.finalized = 0x20;
+    }
+    let s = t.sdk.op().state(op).await.unwrap();
+    assert!(matches!(s, OpState::Landed { block: 0x1c, .. }), "{s:?}");
+}
+
+/// P3: one `Prepared`, two concurrent `submit`s: one signs and writes, the other is `PreparedUnknown`.
+#[tokio::test(flavor = "multi_thread")]
+async fn one_prepared_submits_once() {
+    let t = setup(1, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let q = gateway_quote(&t, &p).await;
+    let op = t.sdk.op();
+    let (a, b) = tokio::join!(
+        op.submit(p.clone(), q.clone()),
+        op.submit(p.clone(), q.clone())
+    );
+    let mut codes = [code(a), code(b)];
+    codes.sort();
+    assert_eq!(codes, ["Ok", "PreparedUnknown"]);
+    assert_eq!(signs(&t), 1, "signed once");
+    assert_eq!(state::rows(&t.sdk).await.unwrap().len(), 1, "one row");
+}
+
+/// P3: a hand-built gateway quote is checked as `quote` checks it: a non-door-A entry is `SubmitPathNone`, gateways that do not
+/// announce the profile's `chain_uid` are `ProfileMismatch`; nothing is signed.
+#[tokio::test(flavor = "multi_thread")]
+async fn hand_built_gateway_quote_is_checked() {
+    let t = setup(1, |_, _| {}).await;
+    let by_hand = |n: u32| SubmitQuote {
+        path: SubmitPath::Gateway,
+        payer: None,
+        gas_limit: 0,
+        max_fee_per_gas: "0".into(),
+        max_priority_fee_per_gas: "0".into(),
+        max_cost: "0".into(),
+        fee_to_relayer: "0".into(),
+        gateways: (0..n).collect(),
+        tx_nonce: 0,
+        tx_type: 0,
+    };
+    let p = prepare(&t, cancel(&t, "wallet", OTHER, "5", "0")).await;
+    assert_eq!(
+        code(t.sdk.op().submit(p, by_hand(1)).await),
+        "SubmitPathNone",
+        "a mandate wallet's entry"
+    );
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    t.chain.lock().unwrap().gw_info["chains"][0]["chain_uid"] =
+        json!(format!("0x{}", "61".repeat(32)));
+    assert_eq!(
+        code(t.sdk.op().submit(p.clone(), by_hand(1)).await),
+        "ProfileMismatch"
+    );
+    assert_eq!(signs(&t), 0);
+    assert!(t.chain.lock().unwrap().bodies.is_empty(), "nothing posted");
+    t.chain.lock().unwrap().gw_info["chains"][0]["chain_uid"] = json!(UID);
+    assert_eq!(
+        code(t.sdk.op().submit(p, by_hand(1)).await),
+        "Ok",
+        "control"
+    );
+}
+
+/// P2-3: one pool per chain for the session: an endpoint's identity is read once, not again by every call.
+#[tokio::test(flavor = "multi_thread")]
+async fn one_pool_per_chain_for_the_session() {
+    let t = setup(1, |_, _| {}).await;
+    let ids = |t: &T| {
+        t.chain
+            .lock()
+            .unwrap()
+            .requests
+            .iter()
+            .filter(|b| b.contains("eth_chainId"))
+            .count()
+    };
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let after_prepare = ids(&t);
+    assert!(after_prepare >= 1, "control: the identity was read");
+    gateway_quote(&t, &p).await;
+    t.sdk
+        .op()
+        .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+        .await
+        .unwrap();
+    assert_eq!(
+        ids(&t),
+        after_prepare,
+        "no second identity read in later calls"
+    );
 }

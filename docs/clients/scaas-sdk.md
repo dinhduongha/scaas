@@ -3,9 +3,11 @@
 `scaas-sdk` is the one Rust crate through which an app (scaas-app's `scaas` build, `scaas-tui`, the CLI `scaas`, an integrator's
 service) reaches every SCaaS feature: seeds and keys, Universal Accounts, tokens and payments, Zether and PQZ, the DEX, governance,
 and the generic surface that app cores above it use (`pqchat-core`, `pqvault-core`, a third party's). Every signature comes from `ua-rs` ([CLI-UAL-01](ua-libraries.md#CLI-UAL-01)), every chain read and send goes through
-`scaas-rpc` ([CLI-RPC-01](scaas-rpc.md#CLI-RPC-01)), and the bindings are generated from its one API. Status: **SPECIFIED**, nothing
-built (spec `docs/superpowers/specs/2026-11-17-scaas-sdk.md`, reviewed by Fable on 2026-11-17 with every finding applied; plan
-`docs/superpowers/plans/2026-11-17-scaas-sdk.md`; branch `scaas-sdk`). Path when built: `clients/scaas-sdk`. UNAUDITED.
+`scaas-rpc` ([CLI-RPC-01](scaas-rpc.md#CLI-RPC-01)), and the bindings are generated from its one API. Status: **SPECIFIED**, partly
+built: `vault`, `account` (rows, restore, marks), `wallet` (tokens, balances, native sends, the token and mandate-wallet operations)
+and the operations core in `clients/scaas-sdk` on branch `sdk-code` (plan tasks T0–T12 and the T13 fix round of the closing review);
+the Dart binding is still the plan's T3 spike, so no binding is BUILT (spec `docs/superpowers/specs/2026-11-17-scaas-sdk.md`, reviewed
+by Fable on 2026-11-17 with every finding applied; plan `docs/superpowers/plans/2026-11-17-scaas-sdk.md`). UNAUDITED.
 
 **Contents**
 
@@ -151,15 +153,16 @@ or relayed by the holder** (SPECIFIED). Paths: a scaas-node gateway, for the ent
 ([NODE-GW-03](../node/gateway.md#NODE-GW-03): a registered token's `mtx*` entries, the transfer on ids, the DEX routes, and UA
 registration once served), with the same body to the gateways chosen ([CLI-RPC-08](scaas-rpc.md#CLI-RPC-08)); or self-relay, for any
 entry, as a transaction (type 2 where the chain has a base fee, else 0) from the holder's own native account, which pays the gas, with the
-entry's calldata from `ua-rs`. The quote never makes or sends a signature: a pinned gas figure or the estimate of the unsigned form with a
-margin, else `GasUnquoted`; `submit` signs once and simulates the signed calldata before it writes (owner 2026-11-18, ruling 1). Before
+entry's calldata from `ua-rs`. The quote never makes or sends a signature: its gas is the gas table's row for (entry, domain kind, signer kind, fresh lane),
+rounded up to 1,000, with a margin, else `GasUnquoted` (owner 2026-11-18, ruling 1; owner 2026-11-19, ruling B); `submit` signs once,
+writes the row, then simulates the signed calldata (owner 2026-11-19, ruling A). Before
 `submit` a quote shows the payer, the gas limit, the maximum fee per gas and the maximum cost; the user confirms it; above the profile's
 caps it is `FeeAboveCap`, and the caps come from the SDK's configuration, never from the answering endpoint. A gas limit above the
 chain's per-transaction cap or the block limit is `GasAboveTxCap` (a PQ registration is split as the node splits it); a payer that is an
 EIP-7702 designator is `PayerDelegated`; the payer's address is linked on chain to the subject, and a holder without a native key has no
 self-relay path. The job API is server-side only, never in an end-user build ([NODE-ADM-06](../node/admin-auth.md#NODE-ADM-06)). With no
 gateway for the entry and no payer: `SubmitPathNone`. **Write ahead:** sign, write the operation with its signed body (public data) to
-the SDK's state, then send; from the signature on the send completes whatever happens to the caller; a row written but not sent is sent
+the SDK's state, then simulate and send (a refused simulation is tracked as `SimRefused`, never an error); from the signature on the send completes whatever happens to the caller; a row written but not sent is sent
 at restart, a row sent is never sent again automatically, only by the user's `resend` of the same bytes. **`submit` returns the operation's id once its row is written; every send result after that is an event, never an error of `submit`** (owner 2026-11-17, "OK, all four points as proposed"), so no caller reads a send error as "not paid".
 
 <a id="CLI-SDK-18"></a>**CLI-SDK-18** — **An operation ends only on a chain fact** (follows [CLI-RPC-09](scaas-rpc.md#CLI-RPC-09);

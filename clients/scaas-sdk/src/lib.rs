@@ -29,7 +29,8 @@ pub mod vault;
 pub mod wallet;
 
 pub use config::{
-    ChainProfile, EndpointConfig, Family, Finality, Limits, ListedToken, RuntimeChoice, SdkConfig,
+    ChainProfile, EndpointConfig, Family, Finality, GasRow, Limits, ListedToken, RuntimeChoice,
+    SdkConfig,
 };
 pub use error::SdkError;
 pub use events::{Event, InFlight, OpState, Subscription};
@@ -117,11 +118,14 @@ pub fn features() -> u64 {
         .fold(0, |acc, (_, bit)| acc | bit)
 }
 
-/// A chain as the SDK holds it once its profile passed `Sdk::open`'s checks: the profile and its built lists.
-#[allow(dead_code)] // read by the network tasks (T10 on)
+/// A chain as the SDK holds it once its profile passed `Sdk::open`'s checks: the profile, its EVM pool, its gateway list.
 pub(crate) struct Chain {
     pub(crate) profile: ChainProfile,
-    pub(crate) rpc: NodeList,
+    /// an EVM chain's one pool for the session (closing review P2-3): its identity checks, head floors and failover counts
+    /// hold across calls; pinned to the profile's `chain_uid`
+    #[cfg(any(feature = "account", feature = "wallet"))]
+    pub(crate) pool: Option<Arc<scaas_rpc::evm::EvmPool>>,
+    #[allow(dead_code)] // the gateways of a profile without the `wallet` feature
     pub(crate) gateways: Option<NodeList>,
 }
 
@@ -194,9 +198,24 @@ impl Sdk {
             } else {
                 Some(list(&p.gateways, scaas_rpc::Policy::Failover)?)
             };
+            #[cfg(any(feature = "account", feature = "wallet"))]
+            let pool = match (p.family, p.chain_id) {
+                (Family::Evm, Some(id)) => {
+                    let uid = p.chain_uid.parse().map_err(|_| SdkError::Argument)?;
+                    Some(Arc::new(scaas_rpc::evm::EvmPool::connect(
+                        rpc,
+                        id,
+                        Some(uid),
+                    )?))
+                }
+                _ => None,
+            };
+            #[cfg(not(any(feature = "account", feature = "wallet")))]
+            drop(rpc);
             chains.push(Chain {
                 profile: p,
-                rpc,
+                #[cfg(any(feature = "account", feature = "wallet"))]
+                pool,
                 gateways,
             });
         }
@@ -311,6 +330,22 @@ impl Sdk {
     /// The limits in force.
     pub fn limits(&self) -> &Limits {
         &self.limits
+    }
+
+    /// An EVM chain's profile, chain id and the session's pool (`ChainUnknown`; `Argument`: not an EVM profile with a chain id).
+    #[cfg(any(feature = "account", feature = "wallet"))]
+    pub(crate) fn evm(
+        &self,
+        chain: &str,
+    ) -> Result<(ChainProfile, u64, Arc<scaas_rpc::evm::EvmPool>), SdkError> {
+        let c = self
+            .chains
+            .iter()
+            .find(|c| c.profile.key == chain)
+            .ok_or(SdkError::ChainUnknown)?;
+        let id = c.profile.chain_id.ok_or(SdkError::Argument)?;
+        let pool = c.pool.clone().ok_or(SdkError::Argument)?;
+        Ok((c.profile.clone(), id, pool))
     }
 }
 

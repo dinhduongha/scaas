@@ -60,6 +60,7 @@ fn profile(urls: &[String]) -> ChainProfile {
         router: None,
         finality: Finality::Finalized,
         tx_gas_cap: None,
+        gas: vec![],
         tokens: vec![],
     }
 }
@@ -498,6 +499,48 @@ async fn delegated_eoa_marked() {
         "an EVM account whose code is 0xef0100… carries the mark"
     );
     assert!(!of(&p.id), "control: an EOA without code");
+}
+
+/// P2-3: `marks` reads through the session's pool, pinned to the profile's `chain_uid`: it runs on a `strict_majority` profile
+/// (a pool without the pinned uid is refused there).
+#[tokio::test(flavor = "multi_thread")]
+async fn marks_on_a_strict_majority_profile() {
+    let f = fake(&[], &[]);
+    let urls = [serve(f.clone()).await, serve(f).await];
+    let mut p = profile(&urls);
+    p.rpc_policy = scaas_rpc::Policy::StrictMajority;
+    let s = Sdk::open(SdkConfig {
+        profiles: vec![p],
+        store: MemoryStore::new(),
+        authenticator: None,
+        rp_id: None,
+        runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
+        limits: Limits::default(),
+    })
+    .await
+    .unwrap();
+    let req = ImportWords {
+        label: "main".into(),
+        words: sec(REPO),
+        vault_passphrase: sec(PASS),
+    };
+    let seed = s.vault().import_words(req).await.unwrap().id;
+    s.account()
+        .add_native(AddNative {
+            seed: seed.clone(),
+            network: "evm".into(),
+            index: 0,
+            name: "plain".into(),
+        })
+        .await
+        .unwrap();
+    let rows = s
+        .account()
+        .marks(seed, "local-testnet".into())
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert!(!rows[0].delegated);
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -7,7 +7,6 @@ use super::prepared::{envelope, Prepared};
 use super::{dec, evm, key, sim, KeyRef, Op};
 use crate::{Sdk, SdkError};
 use alloy::primitives::{Address, Bytes, U256};
-use scaas_rpc::evm::SimError;
 use scaas_rpc::Purpose;
 use std::sync::Arc;
 
@@ -88,9 +87,9 @@ pub(crate) fn payer_address(sdk: &Sdk, payer: &KeyRef) -> Result<Address, SdkErr
 }
 
 /// A self-relay's quote for `to` and `data` from `payer`: the code check, the gas, the chain's caps, the fees and the SDK's
-/// caps, the payer's nonce. The gas of a relayed operation (owner 2026-11-18, ruling 1: a quote never makes a signature) is
-/// `pinned` when the operation has a pinned figure, else the estimate of `data`, its unsigned form, with the margin
-/// ([`super::gas`]); an unsigned form the chain refuses is `GasUnquoted`. A native send's gas is its own estimate.
+/// caps, the payer's nonce. The gas of a relayed operation (owner 2026-11-18, ruling 1: a quote never makes a signature;
+/// owner 2026-11-19, ruling B) is the gas table's figure for its key ([`super::gas`]), `pinned`; without one `GasUnquoted`.
+/// A native send's gas is its own estimate.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn self_relay(
     sdk: &Sdk,
@@ -113,11 +112,7 @@ pub(crate) async fn self_relay(
     let gas = if let Some(g) = pinned {
         g
     } else if relayed {
-        match pool.simulate_from(from, to, data).await {
-            Ok(g) => super::gas::with_margin(g),
-            Err(SimError::Revert(_)) => return Err(SdkError::GasUnquoted),
-            Err(e) => return Err(sim(e)),
-        }
+        return Err(SdkError::GasUnquoted);
     } else if data.is_empty() && pool.code(to).await.map_err(sim)?.is_empty() {
         21_000 // a plain transfer to an account without code
     } else {
@@ -184,7 +179,7 @@ pub(crate) async fn check_gateways(sdk: &Sdk, chain: &str) -> Result<(), SdkErro
 
 impl Op {
     /// The quote of `prepared` on `path` (spec §13.3). `PreparedUnknown`, `PreparedStale` (expired or its lane nonce moved),
-    /// `SubmitPathNone`, `PayerDelegated`, `GasAboveTxCap`, `FeeAboveCap`.
+    /// `SubmitPathNone`, `PayerDelegated`, `GasUnquoted` (no gas row for the operation's key), `GasAboveTxCap`, `FeeAboveCap`.
     pub async fn quote(
         &self,
         prepared: Arc<Prepared>,
@@ -230,10 +225,26 @@ impl Op {
                     SubmitPath::Auto { payer: None } => return Err(SdkError::SubmitPathNone),
                     SubmitPath::Auto { payer: Some(p) } | SubmitPath::SelfRelay { payer: p } => p,
                 };
-                // no signature here (ruling 1): the pinned figure, else the estimate of the unsigned form
+                // no signature here (ruling 1): the gas table's figure for the operation's key (ruling B)
                 let unsigned = super::submit::unsigned(&prepared)?;
-                let pinned =
-                    super::gas::pinned(&prepared.entry(), prepared.t.kind, unsigned.calldata.len());
+                let signer = match prepared.signer() {
+                    KeyRef::Ua { kind, .. } => kind,
+                    KeyRef::Native { .. } | KeyRef::Imported { .. } => super::gas::NATIVE_EVM,
+                };
+                let fresh = prepared
+                    .t
+                    .lane
+                    .as_ref()
+                    .is_some_and(|(_, _, n)| n.is_zero());
+                let (profile, _, _) = evm(&sdk, &prepared.chain())?;
+                let pinned = super::gas::quoted(
+                    &profile.gas,
+                    &prepared.entry(),
+                    prepared.t.kind,
+                    signer,
+                    fresh,
+                    unsigned.calldata.len(),
+                );
                 self_relay(
                     &sdk,
                     &prepared.chain(),

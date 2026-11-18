@@ -76,6 +76,10 @@ pub enum InFlight {
     TxFinalFailed,
     /// the self-relay transaction was replaced
     TxReplaced,
+    /// the signed operation's simulation from the payer reverted, failed or needed more gas than the confirmed quote: not sent
+    /// by this SDK (owner 2026-11-19, ruling A). It is signed and may still land by another relayer until its nonce is spent or
+    /// `validUntil` passes; `resend` tries again, a cancel of the lane's nonce ends it.
+    SimRefused,
 }
 
 /// One subscriber's queue.

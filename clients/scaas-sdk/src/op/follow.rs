@@ -23,6 +23,7 @@ fn detail_of(s: &str) -> InFlight {
         "TxIncluded" => InFlight::TxIncluded,
         "TxFinalFailed" => InFlight::TxFinalFailed,
         "TxReplaced" => InFlight::TxReplaced,
+        "SimRefused" => InFlight::SimRefused,
         _ => InFlight::Signed,
     }
 }

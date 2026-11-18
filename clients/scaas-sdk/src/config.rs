@@ -70,6 +70,21 @@ pub struct ChainProfile {
     pub tx_gas_cap: Option<u64>,
     /// the reviewed token list (spec §8.2): a token not on it is `unlisted` wherever it is shown
     pub tokens: Vec<ListedToken>,
+    /// gas figures measured for this chain, before the SDK's built-in table (owner 2026-11-19, ruling B; spec §13.3)
+    pub gas: Vec<GasRow>,
+}
+
+/// One row of a profile's gas table: the execution gas of `entry` (`mtxCancelNonce`, `mtxExecuteTransfer`, …) on a contract of
+/// domain kind `kind` (`token`, `zether`, `pqz`, `wallet`, `account`, `dex`, `gov_router`), signed by a key of UA kind
+/// `signer` (`0`: a native EVM key), on a lane whose nonce is 0 (`fresh`) or above. The quote adds the intrinsic cost, the
+/// calldata and the margin.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GasRow {
+    pub entry: String,
+    pub kind: String,
+    pub signer: u16,
+    pub fresh: bool,
+    pub gas: u64,
 }
 
 /// A token of a profile's reviewed list (spec §8.2).

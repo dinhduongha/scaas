@@ -19,8 +19,8 @@ use scaas_sdk::op::{KeyRef, Prepared, Source, SubmitPath};
 use scaas_sdk::vault::{ImportKey, ImportWords, MemoryStore};
 use scaas_sdk::wallet::*;
 use scaas_sdk::{
-    ChainProfile, EndpointConfig, Family, Finality, Limits, ListedToken, RuntimeChoice, Sdk,
-    SdkConfig, SdkError,
+    ChainProfile, EndpointConfig, Family, Finality, GasRow, Limits, ListedToken, RuntimeChoice,
+    Sdk, SdkConfig, SdkError,
 };
 use scaas_ua::wallet::SecretBytes;
 use serde_json::{json, Value};
@@ -107,6 +107,7 @@ async fn setup(gateways: usize) -> T {
             symbol: "VND".into(),
             decimals: 0,
         }],
+        gas: gas_rows(),
     };
     let sdk = Sdk::open(SdkConfig {
         profiles: vec![profile],
@@ -479,6 +480,44 @@ fn leaves(prefix: &str, m: &Value, out: &mut Vec<(String, String)>) {
 }
 
 /// The bodies the fake got, JSON-RPC and gateway, that carry `hex` (no `0x`).
+/// A gas row for every entry and domain kind (the transfer on ids too), signed by a native EVM key (the tests' imported key),
+/// on a fresh lane or not (owner 2026-11-19, ruling B: the profile's own rows).
+fn gas_rows() -> Vec<GasRow> {
+    let mut keys: Vec<(String, String)> = scaas_ua::wallet::entries::entry_rows()
+        .into_iter()
+        .flat_map(|r| {
+            r.kinds
+                .iter()
+                .map(move |k| (r.entry.to_string(), k.to_string()))
+        })
+        .collect();
+    keys.extend(
+        ["token", "zether", "pqz"].map(|k| ("mtxExecuteTransfer".to_string(), k.to_string())),
+    );
+    keys.into_iter()
+        .flat_map(|(entry, kind)| {
+            [true, false].map(|fresh| GasRow {
+                entry: entry.clone(),
+                kind: kind.clone(),
+                signer: 0,
+                fresh,
+                gas: 100_000,
+            })
+        })
+        .collect()
+}
+
+/// `carried`, waited for (≤ 5 s): the simulation and the send run after `submit` returns (ruling A).
+async fn carried_soon(t: &T, hex: &str) -> bool {
+    for _ in 0..100 {
+        if carried(t, hex) {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    false
+}
+
 fn carried(t: &T, hex: &str) -> bool {
     let c = t.chain.lock().unwrap();
     c.requests
@@ -582,7 +621,7 @@ async fn every_wallet_pair_is_its_vector() {
                 .await
                 .unwrap_or_else(|e| panic!("{name} on {kind}: {e:?}"));
             assert!(
-                carried(&t, &d["calldata"].as_str().unwrap()[2..]),
+                carried_soon(&t, &d["calldata"].as_str().unwrap()[2..]).await,
                 "{name} on {kind}: the row's calldata"
             );
         }

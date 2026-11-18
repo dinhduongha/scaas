@@ -60,12 +60,7 @@ impl Account {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
-                let (profile, chain_id) = evm_chain(&sdk, &chain)?;
-                let pool = EvmPool::connect(
-                    crate::list(&profile.rpc, profile.rpc_policy)?,
-                    chain_id,
-                    None,
-                )?;
+                let (_, _, pool) = sdk.evm(&chain)?;
                 let e = sdk.entry(&seed).await?;
                 let verified = sdk.open_seed(&seed).is_ok();
                 let mut out = Vec::with_capacity(e.accounts.len());
@@ -98,6 +93,7 @@ impl Account {
                     return Err(SdkError::Argument);
                 }
                 let (profile, chain_id) = evm_chain(&sdk, &req.chain)?;
+                let uid = profile.chain_uid.parse().map_err(|_| SdkError::Argument)?;
                 let registry: Address = profile
                     .registry
                     .as_deref()
@@ -109,7 +105,7 @@ impl Account {
                     .iter()
                     .map(|e| {
                         let l = crate::list(std::slice::from_ref(e), scaas_rpc::Policy::Failover)?;
-                        Ok(EvmPool::connect(l, chain_id, None)?)
+                        Ok(EvmPool::connect(l, chain_id, Some(uid))?)
                     })
                     .collect::<Result<Vec<_>, SdkError>>()?;
                 let open = sdk.open_seed(&req.seed)?;

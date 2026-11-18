@@ -59,6 +59,7 @@ fn profile(rpc: Vec<String>, gateways: Vec<String>, uid: &str) -> ChainProfile {
         router: None,
         finality: Finality::Finalized,
         tx_gas_cap: Some(1 << 24),
+        gas: vec![],
         tokens: vec![
             ListedToken {
                 address: VND.into(),

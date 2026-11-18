@@ -39,7 +39,8 @@ pub(crate) struct Row {
     /// `gateway` or `self`
     pub path: String,
     pub payer: Option<String>,
-    /// the first block a log of the operation may be in (the head at submit)
+    /// the first block a log of the operation may be in: the profile's final block when it was signed (P2-5: never the
+    /// head, which an endpoint ahead on a fork may name)
     pub from_block: u64,
     pub state: String,
     /// the last `InFlight` detail's name
@@ -48,6 +49,9 @@ pub(crate) struct Row {
     pub landed: Option<(u64, String)>,
     /// the signed `relayer` is bound (mode bit 0): only that relayer may send it
     pub relayer_bound: bool,
+    /// a self-relay's confirmed gas limit: the signed calldata's simulation above it is `SimRefused`
+    #[serde(default)]
+    pub gas_limit: Option<u64>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]

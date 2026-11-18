@@ -127,25 +127,9 @@ pub(crate) async fn key_opened(sdk: &Sdk, r: &KeyRef) -> Result<Key, SdkError> {
     key(sdk, r)
 }
 
-/// An EVM chain's profile, chain id and pool (`ChainUnknown`; `Argument` without a chain id).
-pub(crate) fn evm(sdk: &Sdk, chain: &str) -> Result<(ChainProfile, u64, EvmPool), SdkError> {
-    let c = sdk
-        .chains
-        .iter()
-        .find(|c| c.profile.key == chain)
-        .ok_or(SdkError::ChainUnknown)?;
-    let id = c.profile.chain_id.ok_or(SdkError::Argument)?;
-    let uid: alloy::primitives::B256 = c
-        .profile
-        .chain_uid
-        .parse()
-        .map_err(|_| SdkError::Argument)?;
-    let pool = EvmPool::connect(
-        crate::list(&c.profile.rpc, c.profile.rpc_policy)?,
-        id,
-        Some(uid),
-    )?;
-    Ok((c.profile.clone(), id, pool))
+/// An EVM chain's profile, chain id and the session's pool (`ChainUnknown`; `Argument` without a chain id).
+pub(crate) fn evm(sdk: &Sdk, chain: &str) -> Result<(ChainProfile, u64, Arc<EvmPool>), SdkError> {
+    sdk.evm(chain)
 }
 
 pub(crate) fn sim(e: SimError) -> SdkError {
@@ -246,6 +230,18 @@ pub(crate) async fn head(pool: &EvmPool) -> Result<(u64, u64), SdkError> {
         .read_at_block(BlockChoice::Latest, Purpose::Plain, |at| async move {
             Ok((at.number, pool.timestamp_at(&at).await?))
         })
+        .await?;
+    Ok(a.value)
+}
+
+/// The number of the profile's final block now (one read): the first block an operation signed after it may land in.
+pub(crate) async fn final_number(pool: &EvmPool, p: &ChainProfile) -> Result<u64, SdkError> {
+    let a = pool
+        .read_at_block(
+            final_block(p),
+            Purpose::Plain,
+            |at| async move { Ok(at.number) },
+        )
         .await?;
     Ok(a.value)
 }
