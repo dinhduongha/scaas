@@ -43,7 +43,9 @@ STEPS=(
     "uagas|evm|smartcontracts/evm|rm -rf out/m-uagas cache/m-uagas && FOUNDRY_TEST=test/ua FOUNDRY_SCRIPT=test/ua FOUNDRY_OUT=out/m-uagas FOUNDRY_CACHE_PATH=cache/m-uagas $cap forge test -j 1 --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol' -vv"
     "clientkeys-mldsa|evm|smartcontracts/evm|export MLDSA_CLIENTKEYS=../../clients/clientkeys && $(fdir liquidity "--ffi --match-path test/liquidity/DexLiquidityMldsa.t.sol")"
     "size|evm|smartcontracts/evm|python3 ../../scripts/size_gate.py --self-test && rm -rf cache/m-sizes && mkdir -p out && FOUNDRY_OUT=out FOUNDRY_CACHE_PATH=cache/m-sizes $cap forge build -j 1 src --sizes --json > out/m-sizes.json && python3 ../../scripts/size_gate.py out/m-sizes.json size-baseline.json"
-    "testnet-build|evm|smartcontracts/evm|rm -rf out/m-testnet cache/m-testnet && FOUNDRY_PROFILE=scaas-testnet FOUNDRY_OUT=out/m-testnet FOUNDRY_CACHE_PATH=cache/m-testnet $cap forge build -j 1 && echo RESULT built"
+    # the scaas-testnet profile over src/ and script/ (CI builds the whole tree at once, on a 16 GB runner; here one solc
+    # over the 658 files was OOM-killed at 6 GB): test/ is compiled per directory by the forge-* cells, at the same settings
+    "testnet-build|evm|smartcontracts/evm|rm -rf out/m-testnet cache/m-testnet && FOUNDRY_PROFILE=scaas-testnet FOUNDRY_OUT=out/m-testnet FOUNDRY_CACHE_PATH=cache/m-testnet $cap forge build -j 1 src script && echo RESULT src and script built"
     "gen-set|other|.|python3 -I pqz-core/params/sets/gen_set.py --all --check && python3 -I pqz-core/pqzl/params/to_rust.py --check && echo RESULT generated files in sync"
     "node-test|other|scaas-node|$N cargo test $C"
     "node-clippy|other|scaas-node|$cap cargo clippy $C --all-targets -- -D warnings"
