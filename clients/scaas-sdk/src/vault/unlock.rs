@@ -199,10 +199,10 @@ impl Sdk {
     /// else through the PRF key the unlock kept (`Argument` when the seed opened by passphrase, which opens every vault at
     /// unlock). `WalletLocked`, `VaultFormat` for a label the entry has not.
     #[cfg_attr(
-        not(test),
+        not(any(test, feature = "wallet")),
         expect(
             dead_code,
-            reason = "its first callers read an import or a pqz-held key: T16 (pqz-held), T19 (native imports)"
+            reason = "its callers sign with an imported key (`wallet`, T12) or a pqz-held one (T16)"
         )
     )]
     pub(crate) async fn open_on_use(&self, seed: &str, label: &str) -> Result<(), SdkError> {

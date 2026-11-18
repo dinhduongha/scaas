@@ -10,9 +10,9 @@ use crate::events::Event;
 use crate::{Sdk, SdkError};
 use alloy::primitives::{Address, U256};
 use scaas_rpc::evm::BroadcastOutcome;
-use scaas_rpc::node::{NodeClient, SubmitOutcome};
+use scaas_rpc::node::{NodeClient, SubmitOutcome, UaMetaTxReq};
 use scaas_rpc::Fanout;
-use scaas_ua::wallet::entries::{entry, entry_rows, Built};
+use scaas_ua::wallet::entries::{entry, entry_rows, transfer_on_ids, Built};
 use scaas_ua::wallet::{sign_scaas, EvmTx};
 use serde_json::{json, Value};
 use std::sync::{Arc, PoisonError};
@@ -56,6 +56,9 @@ fn sig_json(p: &Prepared, key_data: &[u8], signature: &[u8]) -> Result<Value, Sd
 }
 
 fn build(p: &Prepared, sig: &Value) -> Result<Built, SdkError> {
+    if p.t.ids {
+        return Ok(transfer_on_ids(p.t.kind, &p.t.contract, &p.t.message, sig)?);
+    }
     Ok(entry(
         p.t.name,
         p.t.kind,
@@ -369,13 +372,25 @@ async fn send_once(sdk: &Sdk, row: &Row) -> Result<InFlight, SdkError> {
         .find(|c| c.profile.key == row.chain)
         .and_then(|c| c.gateways.clone())
         .ok_or(SdkError::SubmitPathNone)?;
-    Ok(
-        match NodeClient::new(gateways)?
-            .submit_op(chain_id, &row.op_json, Fanout::All)
-            .await?
-        {
-            SubmitOutcome::Queued { .. } => InFlight::Queued,
-            SubmitOutcome::NotQueued { .. } => InFlight::GivenUpByEveryNode,
-        },
-    )
+    let node = NodeClient::new(gateways)?;
+    let outcome = if row.entry == "mtxExecuteTransfer" {
+        // the transfer on ids: `POST /v1/ua-metatx` (owner 2026-11-18, ruling 6)
+        let o = &row.op_json;
+        let s = |k: &str| o.get(k).and_then(Value::as_str).map(String::from);
+        let req = UaMetaTxReq {
+            chain: chain_id,
+            token: s("token").ok_or(SdkError::Internal)?,
+            contract: s("contract"),
+            struct_: s("struct"),
+            m: o.get("m").cloned().unwrap_or_default(),
+            auth: o.get("auth").cloned().unwrap_or_default(),
+        };
+        node.submit_ua_metatx(&req, Fanout::All).await?
+    } else {
+        node.submit_op(chain_id, &row.op_json, Fanout::All).await?
+    };
+    Ok(match outcome {
+        SubmitOutcome::Queued { .. } => InFlight::Queued,
+        SubmitOutcome::NotQueued { .. } => InFlight::GivenUpByEveryNode,
+    })
 }

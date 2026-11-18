@@ -189,8 +189,11 @@ struct Row {
 }
 
 fn row(name: &str, kind: &str) -> Result<Row> {
-    let ((name, entry, kinds, f, plan), node) =
-        defs().find(|((n, _, k, _, _), _)| *n == name && k.contains(&kind)).ok_or(Error::Argument)?;
+    let (d, node) = defs().find(|((n, _, k, _, _), _)| *n == name && k.contains(&kind)).ok_or(Error::Argument)?;
+    row_of(d, node)
+}
+
+fn row_of((name, entry, kinds, f, plan): &'static Def, node: bool) -> Result<Row> {
     let fields = fields_of(f)?;
     let enveloped = fields.len() > ENV.len()
         && fields.iter().rev().take(ENV.len()).map(|x| x.1.as_str()).eq(ENV.iter().rev().copied());
@@ -465,7 +468,46 @@ pub struct Built {
 /// `sig`: the signature in the row's form, `0x`-hex `bytes`, a `UASig` `{keyData, signature, members}` or an `AccountSig`
 /// `{keyIndex, proof, signature}`. `Argument`: no such row, a field missing or unknown, a value its type refuses.
 pub fn entry(name: &str, kind: &str, contract: &[u8; 20], message: &Value, extra: &Value, sig: &Value) -> Result<Built> {
-    let r = row(name, kind)?;
+    build(row(name, kind)?, kind, contract, message, extra, sig)
+}
+
+/// The transfer on ids (owner 2026-11-18, ruling 6; ua-mtx-merge R44, Q7): a `UAMetaTransfer` on a token kind sent as
+/// `mtxExecuteTransfer(UAMetaTransfer, UASig)`, not as a pay (`mtxPay` takes the `PayMeta` its `entryRef` commits to). Its node
+/// form is the body of `POST /v1/ua-metatx` without `chain`: `{token, contract, struct: "transfer", m, auth}` (`scaas-node`
+/// `gateway.rs`, the `ua_metatx` struct job), `m` the canonical message, `auth` the `UASig`. `Argument` as [`entry`].
+pub fn transfer_on_ids(kind: &str, contract: &[u8; 20], message: &Value, sig: &Value) -> Result<Built> {
+    if !token::IDS.2.contains(&kind) {
+        return Err(Error::Argument);
+    }
+    let mut b = build(row_of(&token::IDS, false)?, kind, contract, message, &json!({}), sig)?;
+    let auth = to_json("UASig", &parse("UASig", sig)?)?;
+    b.op = Some(json!({"token": to_hex(contract), "contract": kind, "struct": "transfer", "m": b.message, "auth": auth}));
+    Ok(b)
+}
+
+/// A pay entry's `meta` (its named form, as [`entry`]'s `extra.meta`) as the [`crate::pay::PayMeta`] whose `metaPayId` the
+/// signed `entryRef` commits to: the body bytes built from the named body. `Argument` as the calldata refuses it.
+pub fn pay_meta_of(meta: &Value) -> Result<crate::pay::PayMeta> {
+    let Val::Tuple(t) = pay_meta(meta)? else { return Err(Error::Argument) };
+    let word = |i: usize| match t.get(i) {
+        Some(Val::Word(w)) => Ok(*w),
+        _ => Err(Error::Argument),
+    };
+    let body = match t.get(4) {
+        Some(Val::Raw(b)) => b.clone(),
+        _ => return Err(Error::Argument),
+    };
+    let schema = word(3)?;
+    Ok(crate::pay::PayMeta {
+        salt: word(0)?,
+        pay_no: word(1)?,
+        save: word(2)?[31] != 0,
+        schema: u16::from_be_bytes([schema[30], schema[31]]),
+        body,
+    })
+}
+
+fn build(r: Row, kind: &str, contract: &[u8; 20], message: &Value, extra: &Value, sig: &Value) -> Result<Built> {
     if r.entry.is_empty() {
         return Err(Error::Argument); // `PqzAuth`: attached by the PQZ facade, no entry of its own
     }

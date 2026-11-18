@@ -12,13 +12,13 @@ sdk-sets | 4196e20cd | 0 | 6 passed, 0 failed, 0 ignored (3 binaries); tree dirt
 frb-dart | 95b8646e6 | 0 | dart: +46:; tree dirty
 ck-test | 9a53e7a42 | 0 | node: 472 pass, 0 fail, 4 skipped; tree dirty
 sdk-deny | 7b8d19a00 | 0 | -; tree dirty
-ua-clippy | 24991fc64 | 0 | -; tree dirty
-ua-test | 24991fc64 | 0 | 535 passed, 0 failed, 3 ignored (55 binaries); tree dirty
-sdk-min | 523479bb7 | 0 | 63 passed, 0 failed, 0 ignored (8 binaries); tree dirty
-features | 523479bb7 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-sdk-clippy | 87cf36103 | 0 | -; tree dirty
-sdk-test | 87cf36103 | 0 | 107 passed, 0 failed, 1 ignored (12 binaries); tree dirty
-sdk-wasm | 87cf36103 | 0 | -; tree dirty
 rpc-test | 87cf36103 | 0 | 161 passed, 0 failed, 10 ignored (16 binaries); tree dirty
-bind-dart | 87cf36103 | 0 | dart: +8:; tree dirty
-docs | 87cf36103 | 0 | -; tree dirty
+sdk-min | 7c221e26f | 0 | 63 passed, 0 failed, 0 ignored (8 binaries); tree dirty
+sdk-wasm | 7c221e26f | 0 | -; tree dirty
+ua-clippy | 7c221e26f | 0 | -; tree dirty
+ua-test | 7c221e26f | 0 | 537 passed, 0 failed, 3 ignored (55 binaries); tree dirty
+features | 7c221e26f | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+bind-dart | 7c221e26f | 0 | dart: +8:; tree dirty
+docs | 7c221e26f | 0 | -; tree dirty
+sdk-clippy | 7c221e26f | 0 | -; tree dirty
+sdk-test | 7c221e26f | 0 | 113 passed, 0 failed, 1 ignored (13 binaries); tree dirty

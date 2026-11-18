@@ -52,11 +52,11 @@ pub(crate) fn selector(sig: &str) -> Vec<u8> {
         .to_vec()
 }
 
-fn word(b: &[u8], i: usize) -> Result<&[u8], SdkError> {
+pub(crate) fn word(b: &[u8], i: usize) -> Result<&[u8], SdkError> {
     b.get(i * 32..i * 32 + 32).ok_or(SdkError::Argument)
 }
 
-fn small(w: &[u8]) -> Result<u64, SdkError> {
+pub(crate) fn small(w: &[u8]) -> Result<u64, SdkError> {
     let (hi, lo) = w.split_at(24);
     if hi.iter().any(|b| *b != 0) {
         return Err(SdkError::Argument);
@@ -64,9 +64,9 @@ fn small(w: &[u8]) -> Result<u64, SdkError> {
     Ok(lo.iter().fold(0u64, |a, b| a << 8 | u64::from(*b)))
 }
 
-/// An ABI `string` return value, at most 256 bytes read.
-fn abi_string(b: &[u8]) -> Result<String, SdkError> {
-    let off = usize::try_from(small(word(b, 0)?)?).map_err(|_| SdkError::Argument)?;
+/// The ABI `string` whose offset is head word `i` of a return value, at most 256 bytes read.
+pub(crate) fn abi_string(b: &[u8], i: usize) -> Result<String, SdkError> {
+    let off = usize::try_from(small(word(b, i)?)?).map_err(|_| SdkError::Argument)?;
     let len = usize::try_from(small(b.get(off..off + 32).ok_or(SdkError::Argument)?)?)
         .map_err(|_| SdkError::Argument)?;
     let s = b
@@ -104,7 +104,7 @@ async fn metadata(
             let symbol = call(pool, &at, token, selector("symbol()")).await?;
             let decimals = call(pool, &at, token, selector("decimals()")).await?;
             let uid = call(pool, &at, token, selector("chainUid()")).await?;
-            let s = |b: &Bytes| abi_string(b).map_err(|_| bad(&at));
+            let s = |b: &Bytes| abi_string(b, 0).map_err(|_| bad(&at));
             let d = word(&decimals, 0).and_then(small).map_err(|_| bad(&at))?;
             Ok((
                 s(&name)?,

@@ -5,7 +5,9 @@
 //! calldata); and the table is the node's, both ways: this test reads `scaas-node/src/typed.rs` (`TYPED`, `NESTED`, the kind
 //! constants, the plans, `NO_NODE_ROW`) and every node row of the kind has a row here, every row here a node row (the release
 //! approvals excepted, by the node's own list). UNAUDITED.
-use scaas_ua::wallet::entries::{entry, entry_rows, EntryRow, entry_structs, init_hash, relay_fee_op, relay_fee_router_calldata, relay_ref};
+use scaas_ua::wallet::entries::{
+    entry, entry_rows, EntryRow, entry_structs, init_hash, pay_meta_of, relay_fee_op, relay_fee_router_calldata, relay_ref, transfer_on_ids,
+};
 use scaas_ua::wallet::Error;
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -520,4 +522,126 @@ fn entries_router() {
     let mut x2 = x.clone();
     x2["init_call"] = json!(format!("0x{}", "00".repeat(4097)));
     assert_eq!(init_hash("UACreateInstance", "gov_router", &x2), Err(Error::Argument), "an init_call above 4096 bytes");
+}
+
+// --- owner 2026-11-18, ruling 6: the transfer on ids (`mtxExecuteTransfer`, `POST /v1/ua-metatx`) ---
+
+/// A static ABI word of a JSON value of `ty`: `bytes32` / `address` hex, a decimal or number otherwise.
+fn word_of(ty: &str, v: &Value) -> Vec<u8> {
+    let mut w = vec![0u8; 32];
+    match ty {
+        "bytes32" | "address" => {
+            let b = bytes(v);
+            w[32 - b.len()..].copy_from_slice(&b);
+        }
+        _ => {
+            let n: u128 = v.as_str().map_or_else(|| v.as_u64().unwrap() as u128, |s| s.parse().unwrap_or(u128::MAX));
+            if n == u128::MAX {
+                // a lane wider than u128: its 32 bytes from the decimal, by long multiplication
+                let mut acc = vec![0u8; 32];
+                for d in v.as_str().unwrap().bytes() {
+                    let mut carry = u32::from(d - b'0');
+                    for x in acc.iter_mut().rev() {
+                        let t = u32::from(*x) * 10 + carry;
+                        *x = t as u8;
+                        carry = t >> 8;
+                    }
+                }
+                return acc;
+            }
+            w[16..].copy_from_slice(&n.to_be_bytes());
+        }
+    }
+    w
+}
+
+#[test]
+fn entries_transfer_on_ids() {
+    let v = load("smartcontracts/vectors/ua/metatx3.json");
+    let row = v["transfer"].as_array().unwrap().iter().find(|r| r["name"] == "native").unwrap();
+    let td = &row["typedData"];
+    let token = b20(&td["domain"]["verifyingContract"]);
+    let m = &td["message"];
+    let sig = json!({"keyData": "0x", "signature": row["auth"], "members": []});
+    let b = transfer_on_ids("token", &token, m, &sig).unwrap();
+    // the selector: the contracts' published signature on every token kind (selector_audit.json, from the build)
+    let abi = "mtxExecuteTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))";
+    assert_eq!(b.calldata[..4], scaas_ua::keccak256(abi.as_bytes())[..4]);
+    let audit = load("smartcontracts/evm/test/vectors/selector_audit.json");
+    for c in ["NormalToken", "WrappedToken", "NormalZetherToken", "NormalPqzToken"] {
+        assert!(audit[c].to_string().contains(abi), "{c}: {abi}");
+    }
+    // the digest: the vector row's, over the canonical message
+    assert_eq!(norm(&b.message), norm(m));
+    let uid: [u8; 32] = bytes(&v["chainUid"]).try_into().unwrap();
+    let t = scaas_ua::wallet::scaas_typed_data("UAMetaTransfer", Some("SCaaS MetaToken"), &token, 31337, &uid, &b.message).unwrap();
+    assert_eq!(format!("0x{}", hex::encode(t.digest().unwrap())), row["digest"].as_str().unwrap());
+    // the head: the struct's eleven words in place, then the offset of the UASig
+    let fields = ["bytes32 from", "bytes32 to", "uint256 value", "bytes32 entryRef", "uint256 batch", "uint256 nonce",
+        "uint256 validUntil", "uint32 mode", "address relayer", "uint256 fee", "address feeRecipient"];
+    for (i, f) in fields.iter().enumerate() {
+        let (ty, n) = f.split_once(' ').unwrap();
+        assert_eq!(b.calldata[4 + 32 * i..4 + 32 * (i + 1)], word_of(ty, &m[n])[..], "{n}");
+    }
+    assert_eq!(b.calldata[4 + 32 * 11..4 + 32 * 12], word_of("uint256", &json!("384"))[..], "the UASig after 12 words");
+    // the UASig's encoding: the tail of a typed_ops row whose UASig follows ten head words (UACancelNonce: 8 + lane + offset)
+    let o = ops();
+    let d = &o["ops"]["UACancelNonce"]["domains"]["token"];
+    let c = transfer_on_ids("token", &token, m, &json!({"keyData": "0x", "signature": d["signature"], "members": []})).unwrap();
+    assert_eq!(c.calldata[4 + 32 * 12..], bytes(&d["calldata"])[4 + 32 * 10..], "the UASig as the generator encodes it");
+    // the node's body of `POST /v1/ua-metatx` (gateway.rs `UaReq`, `chain` added by the client)
+    let op = b.op.unwrap();
+    assert_eq!(op, json!({"token": format!("0x{}", hex::encode(token)), "contract": "token", "struct": "transfer", "m": b.message,
+        "auth": {"keyData": "0x", "signature": row["auth"], "members": []}}));
+    let gw = std::fs::read_to_string(root("scaas-node/src/gateway.rs")).unwrap();
+    let ua_req = gw.split("pub struct UaReq {").nth(1).unwrap().split('}').next().unwrap();
+    for k in ["token", "contract", "m", "auth"] {
+        assert!(ua_req.contains(&format!("pub {k}:")), "UaReq has no {k}");
+    }
+    assert!(ua_req.contains("rename = \"struct\""));
+    // the other token kinds; never a non-token domain (control: the token kind above)
+    assert!(transfer_on_ids("zether", &token, m, &sig).is_ok() && transfer_on_ids("pqz", &token, m, &sig).is_ok());
+    assert_eq!(transfer_on_ids("wallet", &token, m, &sig), Err(Error::Argument));
+    // not a `/v1/op` row: the table's UAMetaTransfer stays `mtxPay`
+    assert!(entry_rows().iter().filter(|r| r.name == "UAMetaTransfer").all(|r| r.entry == "mtxPay"));
+}
+
+/// The named `meta` of a `paymeta.json` row (its body decoded by schema), the form `pay_meta_of` and the pay entries take.
+fn named_meta(r: &Value) -> Value {
+    let b = bytes(&r["body"]);
+    let w = |i: usize| b[32 * i..32 * (i + 1)].to_vec();
+    let num = |x: &[u8]| x.iter().fold(0u64, |a, y| a << 8 | u64::from(*y));
+    let body = match r["schema"].as_u64().unwrap() {
+        0 => Value::Null,
+        1 => json!({"note": String::from_utf8(b.clone()).unwrap()}),
+        2 => {
+            let len = num(&w(2)) as usize;
+            json!({"creditorRef": String::from_utf8(b[96..96 + len].to_vec()).unwrap(), "dueDate": num(&w(1)).to_string()})
+        }
+        3 => json!({"chainId": num(&w(0)).to_string(), "target": format!("0x{}", hex::encode(w(1))), "callHash": format!("0x{}", hex::encode(w(2)))}),
+        _ => json!({"ciphertext": r["body"]}),
+    };
+    let mut m = json!({"salt": r["salt"], "payNo": r["payNo"], "save": r["save"], "schema": r["schema"]});
+    if !body.is_null() {
+        m["body"] = body;
+    }
+    m
+}
+
+#[test]
+fn pay_meta_of_paymeta_rows() {
+    let rows = load("smartcontracts/vectors/metatx/paymeta.json");
+    let mut n = 0;
+    for r in rows.as_array().unwrap() {
+        let m = pay_meta_of(&named_meta(r)).unwrap();
+        assert_eq!(m.body, bytes(&r["body"]), "{}: the body built from its named form", r["name"]);
+        let id = scaas_ua::pay::meta_pay_id_v3(&m);
+        match r["accepted"].as_bool().unwrap() {
+            true => assert_eq!(format!("0x{}", hex::encode(id.unwrap())), r["payId"].as_str().unwrap(), "{}", r["name"]),
+            false => assert!(id.is_err(), "{}: refused", r["name"]),
+        }
+        n += 1;
+    }
+    assert_eq!(n, 9);
+    assert_eq!(pay_meta_of(&json!({"salt": "0x01", "body": "0xab"})), Err(Error::Argument), "a hex body refused");
 }

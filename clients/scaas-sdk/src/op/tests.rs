@@ -210,6 +210,7 @@ fn cancel(t: &T, kind: &'static str, contract: &str, lane: &str, fee: &str) -> D
         review: vec![],
         touched: vec![],
         opaque: false,
+        ids: false,
     }
 }
 
@@ -288,6 +289,7 @@ async fn review_lists_every_named_field_with_its_source() {
         ],
         touched: vec![addr20(OTHER).unwrap()],
         opaque: false,
+        ids: false,
     };
     let p = prepare(&t, d).await;
     let r = p.review();

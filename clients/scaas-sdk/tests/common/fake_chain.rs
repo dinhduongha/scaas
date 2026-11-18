@@ -63,6 +63,12 @@ pub struct Chain {
     pub call_revert: bool,
     /// the blocks carry no `baseFeePerGas` (a chain without EIP-1559)
     pub no_base_fee: bool,
+    /// ERC-5267 `eip712Domain()` by contract: `(name, salt)`, version "1", the fake's chain id, the contract
+    pub domains: HashMap<String, (String, String)>,
+    /// the gateway route of each body in `bodies`
+    pub gw_paths: Vec<String>,
+    /// block 0's hash (the chain's `chain_uid`), `hash_of(0)` by default
+    pub genesis: String,
 }
 
 impl Default for Chain {
@@ -93,6 +99,9 @@ impl Default for Chain {
             requests: vec![],
             call_revert: false,
             no_base_fee: false,
+            domains: HashMap::new(),
+            gw_paths: vec![],
+            genesis: hash_of(0),
         }
     }
 }
@@ -104,6 +113,14 @@ pub fn hash_of(n: u64) -> String {
         format!("0x{}", "60".repeat(32))
     } else {
         format!("0x{:064x}", 0x7000 + n)
+    }
+}
+
+fn genesis_or(c: &Chain, h: &str) -> Option<u64> {
+    if h == c.genesis {
+        Some(0)
+    } else {
+        number_of_hash(h)
     }
 }
 
@@ -123,7 +140,8 @@ fn block(c: &Chain, n: u64) -> Value {
         "gasUsed": "0x0", "logsBloom": format!("0x{}", "00".repeat(256)), "miner": format!("0x{}", "00".repeat(20)),
         "mixHash": z, "nonce": "0x0000000000000000", "receiptsRoot": z, "sha3Uncles": z, "size": "0x200", "stateRoot": z,
         "totalDifficulty": "0x0", "transactions": [], "transactionsRoot": z, "uncles": [], "number": format!("{n:#x}"),
-        "hash": hash_of(n), "parentHash": if n == 0 { z.clone() } else { hash_of(n - 1) }});
+        "hash": if n == 0 { c.genesis.clone() } else { hash_of(n) },
+        "parentHash": if n == 0 { z.clone() } else if n == 1 { c.genesis.clone() } else { hash_of(n - 1) }});
     if c.no_base_fee {
         b.as_object_mut().unwrap().remove("baseFeePerGas");
     }
@@ -180,6 +198,31 @@ pub fn abi_string(s: &str) -> String {
     format!("0x{out}")
 }
 
+/// ERC-5267's answer: `(bytes1 0x0f, name, "1", chainId, contract, salt, uint256[] [])`.
+pub fn eip712_domain(name: &str, contract: &str, salt: &str) -> String {
+    let s = |t: &str| {
+        let mut h = format!("{:064x}{}", t.len(), alloy::hex::encode(t));
+        while (h.len() / 2) % 32 != 0 {
+            h.push_str("00");
+        }
+        h
+    };
+    let (n, v) = (s(name), s("1"));
+    let off_v = 7 * 32 + n.len() / 2;
+    let off_e = off_v + v.len() / 2;
+    format!(
+        "0x0f{}{:064x}{:064x}{:064x}{:0>64}{}{:064x}{n}{v}{:064x}",
+        "00".repeat(31),
+        7 * 32,
+        off_v,
+        CHAIN_ID,
+        contract.trim_start_matches("0x"),
+        salt.trim_start_matches("0x"),
+        off_e,
+        0
+    )
+}
+
 fn rpc(c: &mut Chain, r: &Value) -> Value {
     let p = &r["params"];
     let ok = |v: Value| json!({"jsonrpc": "2.0", "id": r["id"], "result": v});
@@ -205,7 +248,7 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
             })
         }
         "eth_getBlockByHash" => {
-            ok(number_of_hash(p[0].as_str().unwrap_or_default())
+            ok(genesis_or(c, p[0].as_str().unwrap_or_default())
                 .map_or(Value::Null, |n| block(c, n)))
         }
         "eth_call" => {
@@ -219,7 +262,7 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                 Value::Object(o) => o
                     .get("blockHash")
                     .and_then(Value::as_str)
-                    .and_then(number_of_hash)
+                    .and_then(|h| genesis_or(c, h))
                     .unwrap_or(c.head),
                 t => named(c, t),
             };
@@ -231,6 +274,10 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                     "0x{:064x}",
                     c.nonces.get(&to).copied().unwrap_or(0)
                 )))
+            } else if let (Some((name, salt)), true) =
+                (c.domains.get(&to), data == sel("eip712Domain()"))
+            {
+                ok(json!(eip712_domain(name, &to, salt)))
             } else if data.starts_with(&sel("balanceOfUA(bytes32)")) {
                 ok(json!(format!(
                     "0x{:064x}",
@@ -279,7 +326,7 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                 Value::Object(o) => o
                     .get("blockHash")
                     .and_then(Value::as_str)
-                    .and_then(number_of_hash)
+                    .and_then(|h| genesis_or(c, h))
                     .unwrap_or(c.head),
                 t => named(c, t),
             };
@@ -396,9 +443,10 @@ pub async fn serve(c: Fake) -> String {
                         let mut c = c.lock().unwrap();
                         if path.ends_with("/v1/gateway") {
                             (200, c.gw_info.clone())
-                        } else if path.ends_with("/v1/op") {
+                        } else if path.ends_with("/v1/op") || path.ends_with("/v1/ua-metatx") {
                             let text = String::from_utf8_lossy(&body).to_string();
                             c.bodies.push(text.clone());
+                            c.gw_paths.push(path.clone());
                             if let (Some(f), Ok(v)) =
                                 (c.on_body, serde_json::from_str::<Value>(&text))
                             {

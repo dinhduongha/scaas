@@ -14,8 +14,7 @@ pub(crate) mod submit;
 mod tests;
 
 pub use crate::events::{InFlight, OpState};
-#[allow(unused_imports)] // the modules' `prepare_<op>` (plan T12 on)
-pub(crate) use prepared::Draft;
+pub(crate) use prepared::{domain_name, field, Draft, ExpectFn};
 pub use prepared::{Prepared, ReviewField, Source};
 pub use quote::{SubmitPath, SubmitQuote};
 
@@ -27,8 +26,8 @@ use scaas_rpc::Purpose;
 use scaas_ua::wallet::{NativeKey, Network, UaKey};
 use std::sync::Arc;
 
-/// A key the SDK signs with, by reference (spec §5): the seed's open wallet holds it. The passkey, secure-element and imported
-/// keys join with the tasks that sign with them (plan T13).
+/// A key the SDK signs with, by reference (spec §5): the seed's open wallet holds it. The passkey and secure-element keys join
+/// with the tasks that sign with them (plan T13).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KeyRef {
     Ua {
@@ -40,6 +39,12 @@ pub enum KeyRef {
     Native {
         seed: String,
         /// a `scaas-ua` network name (`evm` for a payer)
+        network: String,
+        index: u32,
+    },
+    /// an imported classical key (spec §6.7, `vault.import_key`): the seed's vault `native-import:<network>:<index>`
+    Imported {
+        seed: String,
         network: String,
         index: u32,
     },
@@ -95,7 +100,31 @@ pub(crate) fn key(sdk: &Sdk, r: &KeyRef) -> Result<Key, SdkError> {
             let k = s.wallet.native_key(n, *index, None)?;
             Key::Native(s, k)
         }
+        KeyRef::Imported {
+            seed,
+            network,
+            index,
+        } => {
+            let n = Network::from_name(network).ok_or(SdkError::Argument)?;
+            let s = sdk.open_seed(seed)?;
+            let k = s.wallet.imported_key(n, *index)?;
+            Key::Native(s, k)
+        }
     })
+}
+
+/// `r`'s key after opening its vault when the session opens vaults on first use (an imported key under passkey unlock).
+pub(crate) async fn key_opened(sdk: &Sdk, r: &KeyRef) -> Result<Key, SdkError> {
+    if let KeyRef::Imported {
+        seed,
+        network,
+        index,
+    } = r
+    {
+        sdk.open_on_use(seed, &format!("native-import:{network}:{index}"))
+            .await?;
+    }
+    key(sdk, r)
 }
 
 /// An EVM chain's profile, chain id and pool (`ChainUnknown`; `Argument` without a chain id).

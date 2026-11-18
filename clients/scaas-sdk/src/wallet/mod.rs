@@ -5,10 +5,12 @@
 //! mark. Values are decimal strings of the smallest unit; no floating point. UNAUDITED.
 mod balances;
 mod native_evm;
+mod ops;
 mod tokens;
 
 pub use balances::{Balances, TokenBalance};
 pub use native_evm::{NativeQuote, NativeSend};
+pub use ops::*;
 pub use tokens::TokenInfo;
 
 use crate::Sdk;

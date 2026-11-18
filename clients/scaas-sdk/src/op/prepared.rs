@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Prepare and review (spec §13.1, CLI-SDK-08): the typed data and its check built by `scaas-ua` from a module's named fields,
 //! kept in the SDK's table as an opaque [`Prepared`]; nothing is signed here.
-// the generic prepare is reached by the modules' `prepare_<op>` from plan T12 on; until then by the unit tests only
-#![allow(dead_code)]
-use super::{dec, evm, hex, key, lane_nonce, KeyRef, Op};
+use super::{dec, evm, hex, lane_nonce, KeyRef, Op};
 use crate::{Sdk, SdkError};
 use alloy::primitives::{Address, U256};
 use scaas_ua::wallet::entries::entry_rows;
@@ -52,6 +50,8 @@ pub(crate) struct Draft {
     /// tokens and markets the operation touches besides a token domain's own contract
     pub touched: Vec<[u8; 20]>,
     pub opaque: bool,
+    /// the transfer on ids (`mtxExecuteTransfer`, `POST /v1/ua-metatx`; owner 2026-11-18, ruling 6) instead of the row's entry
+    pub ids: bool,
 }
 
 /// The parts `submit` needs; never in a record a caller could rebuild.
@@ -66,6 +66,8 @@ pub(crate) struct Typed {
     pub extra: Value,
     /// the lane: the subject's id bytes, its batch and nonce (`None`: a struct without an envelope)
     pub lane: Option<(Vec<u8>, U256, U256)>,
+    /// the transfer on ids
+    pub ids: bool,
 }
 
 /// A prepared operation (spec §13.1): opaque, kept in the SDK's table; it holds no secret and nothing signed.
@@ -199,7 +201,7 @@ impl Op {
     /// struct refuses.
     pub(crate) async fn prepare(sdk: &Arc<Sdk>, d: Draft) -> Result<Arc<Prepared>, SdkError> {
         let (profile, chain_id, pool) = evm(sdk, &d.chain)?;
-        drop(key(sdk, &d.signer)?); // a locked seed refuses before any read
+        drop(super::key_opened(sdk, &d.signer).await?); // a locked seed refuses before any read
         let uid: [u8; 32] = super::unhex(&profile.chain_uid)?
             .try_into()
             .map_err(|_| SdkError::Argument)?;
@@ -282,11 +284,15 @@ impl Op {
             let display = listed.map_or("unlisted".to_string(), |l| format!("listed {}", l.symbol));
             review.push(field("token", &a, &display, Source::Derived));
         }
-        let entry = entry_rows()
-            .into_iter()
-            .find(|r| r.name == d.name && r.kinds.contains(&d.kind))
-            .map(|r| r.entry.to_string())
-            .ok_or(SdkError::Argument)?;
+        let entry = match d.ids {
+            true if d.name == "UAMetaTransfer" => "mtxExecuteTransfer".to_string(),
+            true => return Err(SdkError::Argument),
+            false => entry_rows()
+                .into_iter()
+                .find(|r| r.name == d.name && r.kinds.contains(&d.kind))
+                .map(|r| r.entry.to_string())
+                .ok_or(SdkError::Argument)?,
+        };
         let expires_at = env
             .get("validUntil")
             .map(dec)
@@ -309,6 +315,7 @@ impl Op {
                 message: canonical,
                 extra: d.extra,
                 lane,
+                ids: d.ids,
             },
         });
         sdk.prepared
