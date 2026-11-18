@@ -2,14 +2,14 @@ log-level: info
 retry-count: 10
 retry-delay: "1s"
 hide-banner: false
-metrics: {mode: "OFF", addr: ":9999", prefix: "conduit"}
+metrics: { mode: "OFF", addr: ":9999", prefix: "conduit" }
 importer:
   name: algod
   config:
     mode: "follower"
     netaddr: "http://algod:8081"
     token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-    catchup-config: {admin-token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+    catchup-config: { admin-token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
 processors:
 exporter:
   name: postgresql

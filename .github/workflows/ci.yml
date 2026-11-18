@@ -72,10 +72,38 @@ name: scaas-ci
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled] # labeled: a ci-full-* label reruns with that group on
-    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', 'scripts/check_test_features.py', 'pqz-core/**', 'rust-toolchain.toml', '.github/workflows/ci.yml', '.github/ci_changes.py']
+    paths:
+      [
+        "smartcontracts/**",
+        "scaas-node/**",
+        "clients/**",
+        "docs/**",
+        "scripts/docs_check.py",
+        "scripts/test_docs_check.py",
+        "scripts/size_gate.py",
+        "scripts/check_test_features.py",
+        "pqz-core/**",
+        "rust-toolchain.toml",
+        ".github/workflows/ci.yml",
+        ".github/ci_changes.py",
+      ]
   push:
     branches: [main]
-    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', 'scripts/check_test_features.py', 'pqz-core/**', 'rust-toolchain.toml', '.github/workflows/ci.yml', '.github/ci_changes.py']
+    paths:
+      [
+        "smartcontracts/**",
+        "scaas-node/**",
+        "clients/**",
+        "docs/**",
+        "scripts/docs_check.py",
+        "scripts/test_docs_check.py",
+        "scripts/size_gate.py",
+        "scripts/check_test_features.py",
+        "pqz-core/**",
+        "rust-toolchain.toml",
+        ".github/workflows/ci.yml",
+        ".github/ci_changes.py",
+      ]
   workflow_dispatch:
     inputs:
       full:
@@ -86,7 +114,7 @@ on:
       rust_toolchain:
         description: the Rust toolchain of every job (ARCH-POS-12)
         type: string
-        default: '1.97.1'
+        default: "1.97.1"
 
 # One Rust toolchain for every job (ARCH-POS-12): 1.97.1 = the root rust-toolchain.toml unless a manual run names another.
 # RUSTUP_TOOLCHAIN makes every cargo / rustc call use it (workflow env cannot read env, hence the expression twice).
@@ -274,7 +302,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       - name: build (puyapy, artifacts.json --check)
         run: ALGORAND_ARTIFACTS_CHECK=1 smartcontracts/scripts/build.sh algorand
       - name: vectors --check
@@ -419,7 +447,7 @@ jobs:
           ../../scripts/evm_libs.sh check
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       # the Algorand adapter's unit tests read the compiled apps (git-ignored smartcontracts/algorand/out)
       - name: Algorand artifacts for the adapter tests
         working-directory: .
@@ -647,7 +675,7 @@ jobs:
       matrix:
         include:
           - cell: default
-            features: ''
+            features: ""
           - cell: vectors
             features: --features vectors
           - cell: verify-only
@@ -898,7 +926,7 @@ jobs:
         run: cargo build --release --locked
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       - name: install
         run: pip install -r requirements.txt
       - name: vectors and the wallet
@@ -925,7 +953,7 @@ jobs:
         run: cargo build --release --locked
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: "1.25"
           cache-dependency-path: clients/ua-go/go.sum
       - name: vet
         run: go vet ./...
@@ -957,7 +985,7 @@ jobs:
         run: cargo build --release --locked
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: "10.0.x"
       - name: vectors
         run: dotnet test
 
