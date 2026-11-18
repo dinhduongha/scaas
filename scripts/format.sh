@@ -11,8 +11,7 @@
 # PATH, then from the git-ignored scratchpad/tools/bin.
 # Scope: the components formatted so far. Left out: generated, vendored (vendor/) and legacy/ files (.rustfmt-ignore,
 # .clang-format-ignore, .prettierignore, foundry.toml [fmt] ignore, taplo.toml exclude), and runs/ except its shell,
-# YAML and TOML. Not covered yet: the family contracts' Rust (formatted with their next redeploy: panic locations move
-# the wasm), Python and JavaScript under docs/ (research and history notes), Move and TON.
+# YAML and TOML. Not covered yet: Python and JavaScript under docs/ (research and history notes), Move and TON.
 set -u
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 cd "$root" || exit 2
@@ -40,7 +39,7 @@ ls_files() { ls_all "$@" | grep -v -E '(^|/)runs/'; }
 # it reaches is kept as it was (format) or not reported (check).
 RUST_CRATES="scaas-node scaas-pqz-verifier clients/ua-rs clients/ua-c clients/zether-prover clients/scaas-rpc
   clients/scaas-ct clients/ua-cxx clients/ua-qt clients/ua-dart-frb/rust pqz-core smartcontracts/evm/script/pqz/wallet
-  smartcontracts/soroban smartcontracts/cosmos smartcontracts/solana"
+  smartcontracts/soroban smartcontracts/cosmos smartcontracts/solana smartcontracts/near"
 rust_ignored() { grep -v -E '^\s*(#|$)' .rustfmt-ignore | sed 's/^/:(glob)/' | xargs git ls-files --; }
 if want rust; then
     ign=$(rust_ignored)

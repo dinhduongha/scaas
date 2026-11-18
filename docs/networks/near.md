@@ -422,6 +422,11 @@ funder, admin, tokens, dex, relayfee, relayexec, lanes, code hashes, time) is wr
 `devnet.sh near up|down` runs the near-sandbox binary near-workspaces downloaded (no docker; RPC 32060, p2p 32061;
 `--max-gas-burnt-view "300 Tgas"`, validity period 600, `gc_num_epochs_to_keep` 100000). BUILT.
 
+**Formatted build (2026-11-18).** The contracts' Rust was formatted (rustfmt, code-format plan F1); panic locations
+moved, so the wasm of `scaas_near_token`, `scaas_near_dex`, `scaas_near_relayfee` and the test fixtures
+(`spike_p256`, `target_fixture`, `test_receiver`) from `build.sh near` differ from the earlier build
+(`scaas_near_relayexec` unchanged); no hash of them is pinned. The next redeploy carries the formatted build.
+
 ## 13. Conformance
 
 **Contracts** (`smartcontracts/scripts/test.sh near`, near-workspaces on near-sandbox, one test thread): token, account,

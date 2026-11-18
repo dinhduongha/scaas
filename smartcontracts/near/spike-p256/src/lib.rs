@@ -17,7 +17,15 @@ pub struct PasskeyCase {
 }
 
 fn auth(c: &PasskeyCase) -> Result<(), scaas_near_common::webauthn::AuthError> {
-    verify(&c.key, &c.challenge, &c.authenticator_data, &c.client_data_json, &c.sig, &c.rp_id_hash, &c.origins)
+    verify(
+        &c.key,
+        &c.challenge,
+        &c.authenticator_data,
+        &c.client_data_json,
+        &c.sig,
+        &c.rp_id_hash,
+        &c.origins,
+    )
 }
 
 #[near(contract_state)]
@@ -42,12 +50,16 @@ impl Spike {
         let r = env::keccak256_array(&call);
         // Account record: 8 keys (kind, x ‖ y, rpIdHash, origin).
         let keys: Vec<(u16, [u8; 64], [u8; 32], String)> = (0..8)
-            .map(|i| { let c = if i % 2 == 0 { &a } else { &b }; (0x0103, c.key, c.rp_id_hash, c.origins[0].clone()) })
+            .map(|i| {
+                let c = if i % 2 == 0 { &a } else { &b };
+                (0x0103, c.key, c.rp_id_hash, c.origins[0].clone())
+            })
             .collect();
         env::storage_write(b"a:alice.test.near", &borsh::to_vec(&keys).unwrap());
         env::storage_write(&[b"l:".as_slice(), &r].concat(), &1u64.to_le_bytes());
         for who in [b"b:alice.test.near".as_slice(), b"b:relayer.test.near"] {
-            let bal = env::storage_read(who).map_or(0u128, |v| u128::from_le_bytes(v.try_into().unwrap()));
+            let bal = env::storage_read(who)
+                .map_or(0u128, |v| u128::from_le_bytes(v.try_into().unwrap()));
             env::storage_write(who, &(bal + 1_000).to_le_bytes());
         }
         let ref_hex: String = r.iter().map(|x| format!("{x:02x}")).collect();

@@ -34,7 +34,8 @@
 use near_sdk::json_types::U128;
 use near_sdk::store::LookupMap;
 use near_sdk::{
-    borsh, env, near, require, AccountId, Gas, GasWeight, NearToken, PanicOnDefault, Promise, PromiseError, PromiseOrValue,
+    borsh, env, near, require, AccountId, Gas, GasWeight, NearToken, PanicOnDefault, Promise,
+    PromiseError, PromiseOrValue,
 };
 use scaas_near_common::auth::{passkey_fields, sig_gas};
 use scaas_near_common::hash::{hex, pay_lane, relay_ref};
@@ -82,7 +83,8 @@ pub const FLOOR_YOCTO: u128 = 2;
 /// about 9 KB (estimate: ≈ 400 B per passkey assertion).
 pub const MAX_ARGS_BYTES: usize = 16_384;
 
-const SHAPE: &str = "relay pay shape (op 0, pay_ref = ref, lane = payLane(ref), nonce 0, relayer = the router)";
+const SHAPE: &str =
+    "relay pay shape (op 0, pay_ref = ref, lane = payLane(ref), nonce 0, relayer = the router)";
 
 type R<T> = Result<T, &'static str>;
 
@@ -133,13 +135,31 @@ pub struct Check {
 pub enum Event {
     /// CTR-MTX-27: the payment for the call on `target` was released to `payee` (the relayer in open mode).
     #[event_version("1.0.0")]
-    RelayFeePaid { r#ref: String, target: String, token: String, payer: String, payee: String, amount: U128 },
+    RelayFeePaid {
+        r#ref: String,
+        target: String,
+        token: String,
+        payer: String,
+        payee: String,
+        amount: U128,
+    },
 }
 
 /// Spec §2 row 8 / §3.8 step 1: `ref` with target = u8 len ‖ target id, `call = u8 len ‖ target ‖ u8 len ‖ method ‖ args`.
-pub fn call_ref(network: &[u8; 32], target: &AccountId, method: &str, args: &[u8], salt: &[u8; 32]) -> [u8; 32] {
+pub fn call_ref(
+    network: &[u8; 32],
+    target: &AccountId,
+    method: &str,
+    args: &[u8],
+    salt: &[u8; 32],
+) -> [u8; 32] {
     let t = [&[target.as_str().len() as u8][..], target.as_bytes()].concat();
-    relay_ref(network, &t, &[&t[..], &[method.len() as u8], method.as_bytes(), args].concat(), salt)
+    relay_ref(
+        network,
+        &t,
+        &[&t[..], &[method.len() as u8], method.as_bytes(), args].concat(),
+        salt,
+    )
 }
 
 /// The hold's static gas: `GAS_HOLD` + the payer's signature budget.
@@ -156,7 +176,11 @@ pub fn call_gas() -> Gas {
 /// (spec §3.8: the target can never starve the callbacks).
 pub fn relay_gas(auth: &Auth, target_gas: Gas) -> Gas {
     let fixed = GAS_RELAY.as_gas() + GAS_ON_HOLD.as_gas() + GAS_EXEC.as_gas() + call_gas().as_gas();
-    Gas::from_gas(fixed.saturating_add(hold_gas(auth).as_gas()).saturating_add(target_gas.as_gas()))
+    Gas::from_gas(
+        fixed
+            .saturating_add(hold_gas(auth).as_gas())
+            .saturating_add(target_gas.as_gas()),
+    )
 }
 
 pub fn entry_bytes(p: &Pending) -> u64 {
@@ -176,8 +200,21 @@ fn failed(i: u64) -> bool {
     matches!(env::promise_result_checked(i, 0), Err(PromiseError::Failed))
 }
 
-fn call(to: &AccountId, method: &str, args: Vec<u8>, deposit: u128, gas: Gas, weight: u64) -> Promise {
-    Promise::new(to.clone()).function_call_weight(method, args, yocto(deposit), gas, GasWeight(weight))
+fn call(
+    to: &AccountId,
+    method: &str,
+    args: Vec<u8>,
+    deposit: u128,
+    gas: Gas,
+    weight: u64,
+) -> Promise {
+    Promise::new(to.clone()).function_call_weight(
+        method,
+        args,
+        yocto(deposit),
+        gas,
+        GasWeight(weight),
+    )
 }
 
 #[near(contract_state)]
@@ -192,9 +229,20 @@ pub struct Router {
 impl Router {
     /// No write: every router-side check of `relay`, cheap first; returns `ref`.
     #[allow(clippy::too_many_arguments)]
-    fn relay_plan(&self, target: &AccountId, method: &str, args: &[u8], token: &AccountId, op: &MetaOp, auth: &Auth) -> R<[u8; 32]> {
+    fn relay_plan(
+        &self,
+        target: &AccountId,
+        method: &str,
+        args: &[u8],
+        token: &AccountId,
+        op: &MetaOp,
+        auth: &Auth,
+    ) -> R<[u8; 32]> {
         let me = env::current_account_id();
-        if [target, token].iter().any(|a| **a == me || **a == self.executor) {
+        if [target, token]
+            .iter()
+            .any(|a| **a == me || **a == self.executor)
+        {
             return Err("target or token is the router or its executor");
         }
         if method.is_empty() || method.len() > 255 {
@@ -207,7 +255,12 @@ impl Router {
             return Err("the payment op is not for this token");
         }
         let r = call_ref(&op.network, target, method, args, &op.extra);
-        if op.op != OP_PAY || op.pay_ref != r || op.lane != pay_lane(&r) || op.nonce != 0 || op.relayer.as_ref() != Some(&me) {
+        if op.op != OP_PAY
+            || op.pay_ref != r
+            || op.lane != pay_lane(&r)
+            || op.nonce != 0
+            || op.relayer.as_ref() != Some(&me)
+        {
             return Err(SHAPE);
         }
         if op.to == Holder::Near(self.executor.clone()) {
@@ -221,15 +274,36 @@ impl Router {
     }
 
     fn token_settle(p: &Pending, method: &str, r: &[u8; 32]) -> Promise {
-        call(&p.token, method, borsh::to_vec(r).unwrap(), 0, GAS_RELEASE, 0)
+        call(
+            &p.token,
+            method,
+            borsh::to_vec(r).unwrap(),
+            0,
+            GAS_RELEASE,
+            0,
+        )
     }
 
     fn return_deposit(&self, to: &AccountId, amount: u128) -> Promise {
-        call(&self.executor, "return_deposit", borsh::to_vec(&(to, U128(amount))).unwrap(), 0, GAS_RELEASE, 0)
+        call(
+            &self.executor,
+            "return_deposit",
+            borsh::to_vec(&(to, U128(amount))).unwrap(),
+            0,
+            GAS_RELEASE,
+            0,
+        )
     }
 
     fn on_settle_promise(r: &[u8; 32], id: u64, released: bool) -> Promise {
-        call(&env::current_account_id(), "on_settle", borsh::to_vec(&(r, id, released)).unwrap(), 0, GAS_ON_SETTLE, 1)
+        call(
+            &env::current_account_id(),
+            "on_settle",
+            borsh::to_vec(&(r, id, released)).unwrap(),
+            0,
+            GAS_ON_SETTLE,
+            1,
+        )
     }
 }
 
@@ -239,7 +313,11 @@ impl Router {
     #[init]
     #[private]
     pub fn new(#[serializer(borsh)] executor: AccountId) -> Self {
-        Self { executor, pending: LookupMap::new(b"p"), next_id: 0 }
+        Self {
+            executor,
+            pending: LookupMap::new(b"p"),
+            next_id: 0,
+        }
     }
 
     /// The transaction's value is `on_settle`'s: `true` = released (or `false`: refunded / hold refused).
@@ -258,8 +336,13 @@ impl Router {
         #[serializer(borsh)] auth: Auth,
     ) -> Promise {
         let (me, relayer) = (env::current_account_id(), env::predecessor_account_id());
-        let r = self.relay_plan(&target, &method, &args, &token, &op, &auth).unwrap_or_else(|e| env::panic_str(e));
-        require!(env::prepaid_gas() >= relay_gas(&auth, target_gas), "prepaid gas below the relay minimum (hold, call, callbacks)");
+        let r = self
+            .relay_plan(&target, &method, &args, &token, &op, &auth)
+            .unwrap_or_else(|e| env::panic_str(e));
+        require!(
+            env::prepaid_gas() >= relay_gas(&auth, target_gas),
+            "prepaid gas below the relay minimum (hold, call, callbacks)"
+        );
         let payee = (op.to != Holder::Near(me.clone())).then(|| op.to.clone());
         let mut p = Pending {
             id: self.next_id,
@@ -278,7 +361,9 @@ impl Router {
         let bytes = entry_bytes(&p);
         p.deposit = env::storage_byte_cost().as_yoctonear() * bytes as u128;
         let keep = p.deposit + target_deposit.0;
-        let floor = keep + env::storage_byte_cost().as_yoctonear() * PAYEE_REGISTRATION_BYTES as u128 + FLOOR_YOCTO;
+        let floor = keep
+            + env::storage_byte_cost().as_yoctonear() * PAYEE_REGISTRATION_BYTES as u128
+            + FLOOR_YOCTO;
         let attached = env::attached_deposit().as_yoctonear();
         require!(attached >= floor, "attached deposit below the escrow entry, a payee registration, 2 yoctoNEAR and target_deposit");
         self.next_id += 1;
@@ -286,10 +371,29 @@ impl Router {
         let u0 = env::storage_usage();
         self.pending.insert(r, p);
         self.pending.flush();
-        require!(env::storage_usage() - u0 == bytes, "escrow entry size differs from entry_bytes");
-        let hold = call(&token, "relay_hold", borsh::to_vec(&(&op, &auth, &relayer)).unwrap(), attached - keep, hold_gas(&auth), 0);
-        let next = Gas::from_gas(GAS_ON_HOLD.as_gas() + GAS_EXEC.as_gas() + target_gas.as_gas() + call_gas().as_gas());
-        hold.then(call(&me, "on_hold", borsh::to_vec(&(r, id, &token, &target, &method, &args, target_gas)).unwrap(), 0, next, 1))
+        require!(
+            env::storage_usage() - u0 == bytes,
+            "escrow entry size differs from entry_bytes"
+        );
+        let hold = call(
+            &token,
+            "relay_hold",
+            borsh::to_vec(&(&op, &auth, &relayer)).unwrap(),
+            attached - keep,
+            hold_gas(&auth),
+            0,
+        );
+        let next = Gas::from_gas(
+            GAS_ON_HOLD.as_gas() + GAS_EXEC.as_gas() + target_gas.as_gas() + call_gas().as_gas(),
+        );
+        hold.then(call(
+            &me,
+            "on_hold",
+            borsh::to_vec(&(r, id, &token, &target, &method, &args, target_gas)).unwrap(),
+            0,
+            next,
+            1,
+        ))
     }
 
     /// Step 3. `id`, `token`, `target`, `method`, `args`, `target_gas` come from `relay` (the call is not stored).
@@ -307,11 +411,23 @@ impl Router {
         #[serializer(borsh)] target_gas: Gas,
     ) -> PromiseOrValue<bool> {
         let held = env::promise_result_checked(0, 1).is_ok_and(|v| v == [1]);
-        let Some(p) = self.pending.get_mut(&pay_ref).filter(|p| p.id == id && p.stage == Stage::Hold) else {
+        let Some(p) = self
+            .pending
+            .get_mut(&pay_ref)
+            .filter(|p| p.id == id && p.stage == Stage::Hold)
+        else {
             // the timeout ran first (and already returned the deposits): refund wins, the hold goes back. The key (router,
             // ref) holds this relay's payment only: a newer entry's hold is refused while it is held.
             if held {
-                call(&token, "relay_refund", borsh::to_vec(&pay_ref).unwrap(), 0, GAS_RELEASE, 0).detach();
+                call(
+                    &token,
+                    "relay_refund",
+                    borsh::to_vec(&pay_ref).unwrap(),
+                    0,
+                    GAS_RELEASE,
+                    0,
+                )
+                .detach();
             }
             return PromiseOrValue::Value(false);
         };
@@ -326,9 +442,24 @@ impl Router {
         }
         p.stage = Stage::Call;
         let (relayer, td) = (p.relayer.clone(), p.target_deposit);
-        let exec = call(&self.executor, "exec", borsh::to_vec(&(&target, &method, &args, target_gas)).unwrap(), td, Gas::from_gas(GAS_EXEC.as_gas() + target_gas.as_gas()), 0);
+        let exec = call(
+            &self.executor,
+            "exec",
+            borsh::to_vec(&(&target, &method, &args, target_gas)).unwrap(),
+            td,
+            Gas::from_gas(GAS_EXEC.as_gas() + target_gas.as_gas()),
+            0,
+        );
         let me = env::current_account_id();
-        exec.then(call(&me, "on_call", borsh::to_vec(&(pay_ref, id, &relayer, U128(td))).unwrap(), 0, call_gas(), 1)).into()
+        exec.then(call(
+            &me,
+            "on_call",
+            borsh::to_vec(&(pay_ref, id, &relayer, U128(td))).unwrap(),
+            0,
+            call_gas(),
+            1,
+        ))
+        .into()
     }
 
     /// Step 4. `id`, `relayer` and `target_deposit` come from `on_hold`, so a late call (after a timeout deleted the
@@ -344,7 +475,11 @@ impl Router {
     ) -> PromiseOrValue<bool> {
         let ok = !failed(0);
         let td = target_deposit.0;
-        let Some(p) = self.pending.get_mut(&pay_ref).filter(|p| p.id == id && p.stage == Stage::Call) else {
+        let Some(p) = self
+            .pending
+            .get_mut(&pay_ref)
+            .filter(|p| p.id == id && p.stage == Stage::Call)
+        else {
             if !ok && td > 0 {
                 self.return_deposit(&relayer, td).detach();
             }
@@ -353,11 +488,17 @@ impl Router {
         p.stage = Stage::Settle;
         p.owed = !ok && td > 0;
         let p = p.clone();
-        let mut settle = Self::token_settle(&p, if ok { "relay_release" } else { "relay_refund" }, &pay_ref);
+        let mut settle = Self::token_settle(
+            &p,
+            if ok { "relay_release" } else { "relay_refund" },
+            &pay_ref,
+        );
         if p.owed {
             settle = settle.and(self.return_deposit(&relayer, td));
         }
-        settle.then(Self::on_settle_promise(&pay_ref, id, ok)).into()
+        settle
+            .then(Self::on_settle_promise(&pay_ref, id, ok))
+            .into()
     }
 
     /// Step 5 (and the timeout's settlement). Results: the token call, then the deposit return when `owed`; only the
@@ -370,7 +511,13 @@ impl Router {
         #[serializer(borsh)] id: u64,
         #[serializer(borsh)] released: bool,
     ) -> bool {
-        let Some(p) = self.pending.get_mut(&pay_ref).filter(|p| p.id == id && p.stage == Stage::Settle) else { return false };
+        let Some(p) = self
+            .pending
+            .get_mut(&pay_ref)
+            .filter(|p| p.id == id && p.stage == Stage::Settle)
+        else {
+            return false;
+        };
         let (token_ok, ret_ok) = match (env::promise_results_count(), p.owed) {
             (2, _) => (!failed(0), !failed(1)),
             (_, true) => (true, !failed(0)),
@@ -388,7 +535,9 @@ impl Router {
         }
         let p = self.pending.remove(&pay_ref).unwrap();
         if p.deposit > 0 {
-            Promise::new(p.relayer.clone()).transfer(yocto(p.deposit)).detach();
+            Promise::new(p.relayer.clone())
+                .transfer(yocto(p.deposit))
+                .detach();
         }
         if released {
             let payee = p.payee.unwrap_or(Holder::Near(p.relayer));
@@ -409,14 +558,19 @@ impl Router {
     /// back), or forwards an owed `target_deposit`. The relayer loses its gas, never the payer its fee.
     pub fn relay_timeout(&mut self, #[serializer(borsh)] pay_ref: [u8; 32]) -> Promise {
         let executor = self.executor.clone();
-        let p = self.pending.get_mut(&pay_ref).unwrap_or_else(|| env::panic_str("no such pending ref"));
+        let p = self
+            .pending
+            .get_mut(&pay_ref)
+            .unwrap_or_else(|| env::panic_str("no such pending ref"));
         require!(now_s() > p.deadline, "relay_timeout before the deadline");
         let refund = match p.stage {
             Stage::Settle => env::panic_str("a settlement is in flight"),
             Stage::Hold => {
                 // the call never left: target_deposit is still here
                 if p.target_deposit > 0 {
-                    Promise::new(p.relayer.clone()).transfer(yocto(p.target_deposit)).detach();
+                    Promise::new(p.relayer.clone())
+                        .transfer(yocto(p.target_deposit))
+                        .detach();
                 }
                 p.target_deposit = 0;
                 true
@@ -426,7 +580,16 @@ impl Router {
         };
         p.stage = Stage::Settle;
         let p = p.clone();
-        let ret = || call(&executor, "return_deposit", borsh::to_vec(&(&p.relayer, U128(p.target_deposit))).unwrap(), 0, GAS_RELEASE, 0);
+        let ret = || {
+            call(
+                &executor,
+                "return_deposit",
+                borsh::to_vec(&(&p.relayer, U128(p.target_deposit))).unwrap(),
+                0,
+                GAS_RELEASE,
+                0,
+            )
+        };
         let settle = match (refund, p.owed) {
             (true, false) => Self::token_settle(&p, "relay_refund", &pay_ref),
             (true, true) => Self::token_settle(&p, "relay_refund", &pay_ref).and(ret()),
@@ -466,7 +629,12 @@ impl Router {
     ) -> Check {
         let gas_needed = relay_gas(&auth, target_gas);
         match self.relay_plan(&target, &method, &args, &token, &op, &auth) {
-            Err(e) => Check { error: Some(e.into()), storage_needed: U128(0), deposit_needed: U128(0), gas_needed },
+            Err(e) => Check {
+                error: Some(e.into()),
+                storage_needed: U128(0),
+                deposit_needed: U128(0),
+                gas_needed,
+            },
             Ok(_) => {
                 let cost = env::storage_byte_cost().as_yoctonear();
                 let p = Pending {
@@ -474,7 +642,8 @@ impl Router {
                     token,
                     target,
                     payer: op.from.clone(),
-                    payee: (op.to != Holder::Near(env::current_account_id())).then(|| op.to.clone()),
+                    payee: (op.to != Holder::Near(env::current_account_id()))
+                        .then(|| op.to.clone()),
                     amount: op.amount,
                     relayer: "a".repeat(64).parse().unwrap(),
                     target_deposit: target_deposit.0,
@@ -484,8 +653,16 @@ impl Router {
                     owed: false,
                 };
                 let storage = cost * entry_bytes(&p) as u128;
-                let deposit = storage + cost * PAYEE_REGISTRATION_BYTES as u128 + FLOOR_YOCTO + target_deposit.0;
-                Check { error: None, storage_needed: U128(storage), deposit_needed: U128(deposit), gas_needed }
+                let deposit = storage
+                    + cost * PAYEE_REGISTRATION_BYTES as u128
+                    + FLOOR_YOCTO
+                    + target_deposit.0;
+                Check {
+                    error: None,
+                    storage_needed: U128(storage),
+                    deposit_needed: U128(deposit),
+                    gas_needed,
+                }
             }
         }
     }
@@ -505,7 +682,10 @@ mod tests {
 
     fn hx(v: &Value) -> Vec<u8> {
         let s = v.as_str().unwrap().trim_start_matches("0x");
-        (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
+        (0..s.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+            .collect()
     }
 
     fn b32(v: &Value) -> [u8; 32] {
@@ -518,7 +698,12 @@ mod tests {
         let ops = d["metaops"]["vectors"].as_array().unwrap();
         let router = d["accounts"]["router"].as_str().unwrap();
         let net = b32(&d["network"]);
-        let rows: Vec<&Value> = d["relayRefs"].as_array().unwrap().iter().filter(|r| r["kind"] == "router").collect();
+        let rows: Vec<&Value> = d["relayRefs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|r| r["kind"] == "router")
+            .collect();
         assert!(rows.len() >= 3, "router rows");
         for r in rows {
             let target: AccountId = r["target"].as_str().unwrap().parse().unwrap();
@@ -526,12 +711,39 @@ mod tests {
             let pay = &ops.iter().find(|m| m["name"] == r["payment"]).unwrap()["fields"];
             // salt = the payment op's payer-signed extra, always (spec §2 row 8)
             let salt = b32(&pay["extra"]);
-            assert_eq!(call_ref(&net, &target, method, &args, &salt), b32(&r["ref"]), "{}", r["name"]);
-            assert_ne!(call_ref(&net, &target, method, &args, &[0; 32]), b32(&r["ref"]));
-            assert_eq!((b32(&pay["pay_ref"]), b32(&pay["lane"])), (b32(&r["ref"]), pay_lane(&b32(&r["ref"]))));
-            assert_eq!(pay["relayer"].as_str(), Some(router), "{}: bound to the router", r["name"]);
-            let call = [&[target.as_str().len() as u8][..], target.as_bytes(), &[method.len() as u8], method.as_bytes(), &args].concat();
-            assert_eq!(call, hx(&r["call"]), "call = u8 len ‖ target ‖ u8 len ‖ method ‖ args");
+            assert_eq!(
+                call_ref(&net, &target, method, &args, &salt),
+                b32(&r["ref"]),
+                "{}",
+                r["name"]
+            );
+            assert_ne!(
+                call_ref(&net, &target, method, &args, &[0; 32]),
+                b32(&r["ref"])
+            );
+            assert_eq!(
+                (b32(&pay["pay_ref"]), b32(&pay["lane"])),
+                (b32(&r["ref"]), pay_lane(&b32(&r["ref"])))
+            );
+            assert_eq!(
+                pay["relayer"].as_str(),
+                Some(router),
+                "{}: bound to the router",
+                r["name"]
+            );
+            let call = [
+                &[target.as_str().len() as u8][..],
+                target.as_bytes(),
+                &[method.len() as u8],
+                method.as_bytes(),
+                &args,
+            ]
+            .concat();
+            assert_eq!(
+                call,
+                hx(&r["call"]),
+                "call = u8 len ‖ target ‖ u8 len ‖ method ‖ args"
+            );
         }
     }
 
@@ -546,11 +758,21 @@ mod tests {
             .predecessor_account_id(me)
             .block_timestamp(now_s * 1_000_000_000)
             .build();
-        testing_env!(c, near_sdk::test_vm_config(), near_sdk::RuntimeFeesConfig::test(), Default::default(), results);
+        testing_env!(
+            c,
+            near_sdk::test_vm_config(),
+            near_sdk::RuntimeFeesConfig::test(),
+            Default::default(),
+            results
+        );
     }
 
     fn router(stage: Stage, owed: bool) -> Router {
-        let mut r = Router { executor: "exec.near".parse().unwrap(), pending: LookupMap::new(b"p"), next_id: 3 };
+        let mut r = Router {
+            executor: "exec.near".parse().unwrap(),
+            pending: LookupMap::new(b"p"),
+            next_id: 3,
+        };
         let p = Pending {
             id: ID,
             token: "token.near".parse().unwrap(),
@@ -577,10 +799,18 @@ mod tests {
             .flat_map(|r| {
                 let to = r.receiver_id.to_string();
                 r.actions.into_iter().filter_map(move |a| match a {
-                    MockAction::FunctionCallWeight { method_name, attached_deposit, .. } => {
-                        Some((to.clone(), String::from_utf8(method_name).unwrap(), attached_deposit.as_yoctonear()))
+                    MockAction::FunctionCallWeight {
+                        method_name,
+                        attached_deposit,
+                        ..
+                    } => Some((
+                        to.clone(),
+                        String::from_utf8(method_name).unwrap(),
+                        attached_deposit.as_yoctonear(),
+                    )),
+                    MockAction::Transfer { deposit, .. } => {
+                        Some((to.clone(), "transfer".into(), deposit.as_yoctonear()))
                     }
-                    MockAction::Transfer { deposit, .. } => Some((to.clone(), "transfer".into(), deposit.as_yoctonear())),
                     _ => None,
                 })
             })
@@ -603,18 +833,50 @@ mod tests {
         for stage in [Stage::Hold, Stage::Settle, Stage::Owed] {
             ctx(vec![ok()], 0);
             let mut r = router(stage, false);
-            assert!(matches!(r.on_call(REF, ID, relayer.clone(), U128(5)), PromiseOrValue::Value(false)));
-            assert!(receipts().is_empty(), "{stage:?}: a late success pays nothing");
+            assert!(matches!(
+                r.on_call(REF, ID, relayer.clone(), U128(5)),
+                PromiseOrValue::Value(false)
+            ));
+            assert!(
+                receipts().is_empty(),
+                "{stage:?}: a late success pays nothing"
+            );
             ctx(vec![PromiseResult::Failed], 0);
-            assert!(matches!(r.on_call([9; 32], ID, relayer.clone(), U128(5)), PromiseOrValue::Value(false)));
-            assert_eq!(receipts(), vec![rc("exec.near", "return_deposit", 0)], "a late failure returns the deposit only");
+            assert!(matches!(
+                r.on_call([9; 32], ID, relayer.clone(), U128(5)),
+                PromiseOrValue::Value(false)
+            ));
+            assert_eq!(
+                receipts(),
+                vec![rc("exec.near", "return_deposit", 0)],
+                "a late failure returns the deposit only"
+            );
         }
         ctx(vec![PromiseResult::Successful(vec![1])], 0);
         let mut r = router(Stage::Call, false);
         let t: AccountId = "token.near".parse().unwrap();
-        assert!(matches!(r.on_hold(REF, ID, t.clone(), t.clone(), "m".into(), vec![], Gas::from_tgas(1)), PromiseOrValue::Value(false)));
-        assert_eq!(receipts(), vec![rc("token.near", "relay_refund", 0)], "a late hold is refunded");
-        assert_eq!(r.pending.get(&REF).unwrap().stage, Stage::Call, "the live entry untouched");
+        assert!(matches!(
+            r.on_hold(
+                REF,
+                ID,
+                t.clone(),
+                t.clone(),
+                "m".into(),
+                vec![],
+                Gas::from_tgas(1)
+            ),
+            PromiseOrValue::Value(false)
+        ));
+        assert_eq!(
+            receipts(),
+            vec![rc("token.near", "relay_refund", 0)],
+            "a late hold is refunded"
+        );
+        assert_eq!(
+            r.pending.get(&REF).unwrap().stage,
+            Stage::Call,
+            "the live entry untouched"
+        );
     }
 
     /// Review m1: relay 1 (its call in flight) times out and its entry is deleted; relay 2 opens the same ref on another
@@ -623,21 +885,38 @@ mod tests {
     #[test]
     fn stale_callback_leaves_a_newer_entry_alone() {
         let r1: AccountId = "relayer1.near".parse().unwrap();
-        for (res, want) in [(ok(), vec![]), (PromiseResult::Failed, vec![rc("exec.near", "return_deposit", 0)])] {
+        for (res, want) in [
+            (ok(), vec![]),
+            (
+                PromiseResult::Failed,
+                vec![rc("exec.near", "return_deposit", 0)],
+            ),
+        ] {
             ctx(vec![res], 0);
             let mut r = router(Stage::Call, false); // relay 2's entry under the same ref
             r.pending.get_mut(&REF).unwrap().token = "token2.near".parse().unwrap();
             let before = r.pending.get(&REF).cloned();
             let _ = r.on_call(REF, 1, r1.clone(), U128(7));
-            assert_eq!(receipts(), want, "relay 1's late callback acts on relay 1 only");
-            assert_eq!(r.pending.get(&REF).cloned(), before, "relay 2's entry untouched");
+            assert_eq!(
+                receipts(),
+                want,
+                "relay 1's late callback acts on relay 1 only"
+            );
+            assert_eq!(
+                r.pending.get(&REF).cloned(),
+                before,
+                "relay 2's entry untouched"
+            );
         }
         // relay 1's late on_hold (its hold succeeded, so relay 2's hold is refused): refunds relay 1, relay 2 untouched
         ctx(vec![PromiseResult::Successful(vec![1])], 0);
         let mut r = router(Stage::Hold, false);
         let before = r.pending.get(&REF).cloned();
         let t: AccountId = "token1.near".parse().unwrap();
-        assert!(matches!(r.on_hold(REF, 1, t.clone(), t, "m".into(), vec![], Gas::from_tgas(1)), PromiseOrValue::Value(false)));
+        assert!(matches!(
+            r.on_hold(REF, 1, t.clone(), t, "m".into(), vec![], Gas::from_tgas(1)),
+            PromiseOrValue::Value(false)
+        ));
         assert_eq!(receipts(), vec![rc("token1.near", "relay_refund", 0)]);
         assert_eq!(r.pending.get(&REF).cloned(), before);
         // a settle result carrying another entry's id is ignored
@@ -654,7 +933,10 @@ mod tests {
         ctx(vec![PromiseResult::Successful(vec![0])], 0);
         let mut r = router(Stage::Hold, false);
         let t: AccountId = "token.near".parse().unwrap();
-        assert!(matches!(r.on_hold(REF, ID, t.clone(), t, "m".into(), vec![], Gas::from_tgas(1)), PromiseOrValue::Value(false)));
+        assert!(matches!(
+            r.on_hold(REF, ID, t.clone(), t, "m".into(), vec![], Gas::from_tgas(1)),
+            PromiseOrValue::Value(false)
+        ));
         assert_eq!(receipts(), vec![rc("relayer.near", "transfer", 105)]);
         assert!(r.pending.get(&REF).is_none());
     }
@@ -666,10 +948,17 @@ mod tests {
         ctx(vec![PromiseResult::Failed], 0);
         let mut r = router(Stage::Settle, false);
         assert!(!r.on_settle(REF, ID, true));
-        assert_eq!((r.pending.get(&REF).unwrap().stage, receipts()), (Stage::Call, vec![]), "release failed: refund wins later");
+        assert_eq!(
+            (r.pending.get(&REF).unwrap().stage, receipts()),
+            (Stage::Call, vec![]),
+            "release failed: refund wins later"
+        );
         ctx(vec![], 51);
         let _ = r.relay_timeout(REF);
-        assert_eq!(receipts().iter().map(|x| x.1.as_str()).collect::<Vec<_>>(), ["relay_refund", "on_settle"]);
+        assert_eq!(
+            receipts().iter().map(|x| x.1.as_str()).collect::<Vec<_>>(),
+            ["relay_refund", "on_settle"]
+        );
         // refund ok, deposit return failed: owed
         ctx(vec![ok(), PromiseResult::Failed], 0);
         let mut r = router(Stage::Settle, true);
@@ -680,11 +969,24 @@ mod tests {
         assert!(e.is_err(), "before the deadline");
         ctx(vec![], 51);
         let _ = r.relay_timeout(REF);
-        assert_eq!(receipts().iter().map(|x| (x.0.as_str(), x.1.as_str())).collect::<Vec<_>>(), [("exec.near", "return_deposit"), ("router.near", "on_settle")]);
+        assert_eq!(
+            receipts()
+                .iter()
+                .map(|x| (x.0.as_str(), x.1.as_str()))
+                .collect::<Vec<_>>(),
+            [
+                ("exec.near", "return_deposit"),
+                ("router.near", "on_settle")
+            ]
+        );
         ctx(vec![ok()], 51);
         assert!(!r.on_settle(REF, ID, false));
         assert!(r.pending.get(&REF).is_none(), "settled");
-        assert_eq!(receipts(), vec![rc("relayer.near", "transfer", 100)], "the entry deposit back");
+        assert_eq!(
+            receipts(),
+            vec![rc("relayer.near", "transfer", 100)],
+            "the entry deposit back"
+        );
         // a timeout while a settlement is in flight is refused
         ctx(vec![], 51);
         let mut r = router(Stage::Settle, false);
@@ -698,7 +1000,14 @@ mod tests {
         ctx(vec![], 51);
         let mut r = router(Stage::Hold, false);
         let _ = r.relay_timeout(REF);
-        assert_eq!(receipts(), vec![rc("relayer.near", "transfer", 5), rc("token.near", "relay_refund", 0), rc("router.near", "on_settle", 0)]);
+        assert_eq!(
+            receipts(),
+            vec![
+                rc("relayer.near", "transfer", 5),
+                rc("token.near", "relay_refund", 0),
+                rc("router.near", "on_settle", 0)
+            ]
+        );
         let p = r.pending.get(&REF).unwrap();
         assert_eq!((p.stage, p.target_deposit), (Stage::Settle, 0));
         ctx(vec![PromiseResult::Successful(vec![0])], 51);

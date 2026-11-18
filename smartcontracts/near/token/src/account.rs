@@ -63,8 +63,14 @@ pub struct Check {
 /// `Check` from a plan's new bytes (every `*_check` view).
 pub(crate) fn check_of(r: R<u64>) -> Check {
     match r {
-        Ok(bytes) => Check { error: None, storage_needed: U128(env::storage_byte_cost().as_yoctonear() * bytes as u128) },
-        Err(e) => Check { error: Some(e.into()), storage_needed: U128(0) },
+        Ok(bytes) => Check {
+            error: None,
+            storage_needed: U128(env::storage_byte_cost().as_yoctonear() * bytes as u128),
+        },
+        Err(e) => Check {
+            error: Some(e.into()),
+            storage_needed: U128(0),
+        },
     }
 }
 
@@ -174,18 +180,33 @@ impl Write {
 
 impl Token {
     fn load(&self, h: &Holder) -> Option<(Subject, u64)> {
-        self.subjects.get(h).map(|s| (s.clone(), record_bytes(h, s)))
+        self.subjects
+            .get(h)
+            .map(|s| (s.clone(), record_bytes(h, s)))
     }
 
     /// `authorize`'s checks, no write: network, contract, expiry, relayer (rule 7: `None` or `relayer`), then `auth`
     /// against `op.from`'s key records; an unknown `Ua` id opens with the signing key when that key derives the id
     /// (old size 0). `caller` is the predecessor (a `near-account` msig member counts only as it).
-    pub(crate) fn signed(&self, caller: &AccountId, relayer: &AccountId, op: &MetaOp, auth: &Auth) -> R<(Subject, u64)> {
+    pub(crate) fn signed(
+        &self,
+        caller: &AccountId,
+        relayer: &AccountId,
+        op: &MetaOp,
+        auth: &Auth,
+    ) -> R<(Subject, u64)> {
         self.signed_by(caller, relayer, op, auth, &op.from)
     }
 
     /// `signed` with the signer `who` other than `op.from` (a mandate pay: `from` = the mandate, the delegate signs).
-    pub(crate) fn signed_by(&self, caller: &AccountId, relayer: &AccountId, op: &MetaOp, auth: &Auth, who: &Holder) -> R<(Subject, u64)> {
+    pub(crate) fn signed_by(
+        &self,
+        caller: &AccountId,
+        relayer: &AccountId,
+        op: &MetaOp,
+        auth: &Auth,
+        who: &Holder,
+    ) -> R<(Subject, u64)> {
         let me = env::current_account_id();
         if op.network != self.network {
             return Err("wrong network");
@@ -215,7 +236,10 @@ impl Token {
         if key.id() != *id {
             return Err("the key does not derive the UA id");
         }
-        let mut s = Subject { keys: vec![key], ..Default::default() };
+        let mut s = Subject {
+            keys: vec![key],
+            ..Default::default()
+        };
         for o in auth::verify(auth, &digest, &me, caller, None)? {
             s.add_origin(&o)?;
         }
@@ -227,7 +251,9 @@ impl Token {
     /// opened UA record is written and its storage added to the call's deposit (`charge_storage`). Returns the signer.
     pub fn authorize(&mut self, op: &MetaOp, auth: &Auth) -> Holder {
         let p = env::predecessor_account_id();
-        let (s, old) = self.signed(&p, &p, op, auth).unwrap_or_else(|e| env::panic_str(e));
+        let (s, old) = self
+            .signed(&p, &p, op, auth)
+            .unwrap_or_else(|e| env::panic_str(e));
         self.open_lazily(&op.from, s, old);
         op.from.clone()
     }
@@ -235,11 +261,21 @@ impl Token {
     /// After `signed`: a lazily opened record (`old == 0`) is written, its bytes added to the call's `storage_due`.
     pub(crate) fn open_lazily(&mut self, holder: &Holder, s: Subject, old: u64) {
         if old == 0 {
-            self.save(Write { holder: holder.clone(), subject: s, old });
+            self.save(Write {
+                holder: holder.clone(),
+                subject: s,
+                old,
+            });
         }
     }
 
-    pub(crate) fn plan(&self, caller: &AccountId, op: &MetaOp, auth: &Auth, act: &Action) -> R<Vec<Write>> {
+    pub(crate) fn plan(
+        &self,
+        caller: &AccountId,
+        op: &MetaOp,
+        auth: &Auth,
+        act: &Action,
+    ) -> R<Vec<Write>> {
         let (code, params) = act.code_and_params();
         if op.op != code || op.amount != 0 || op.pay_ref != [0; 32] || op.lane != [0; 32] {
             return Err("key op shape (op code, amount 0, pay_ref and lane zero)");
@@ -252,7 +288,11 @@ impl Token {
             return Err("wrong key nonce");
         }
         s.key_nonce += 1;
-        let signer = |s| Write { holder: op.from.clone(), subject: s, old };
+        let signer = |s| Write {
+            holder: op.from.clone(),
+            subject: s,
+            old,
+        };
         // CTR-ACC-03 (Aptos model): the guardian (`op.from`) starts, and after the delay finishes, a recovery of
         // `op.to`; finishing ADDS the key and removes none; a current key cancels meanwhile.
         if matches!(act, Action::StartRecovery(..) | Action::FinishRecovery) {
@@ -267,7 +307,11 @@ impl Token {
                 let mut after = t.clone();
                 after.add_key(k, origin)?;
                 after.check_usable()?;
-                t.recovery = Some(Recovery { key: k.clone(), origin: origin.clone(), ready_at: now_s() + RECOVERY_DELAY_S });
+                t.recovery = Some(Recovery {
+                    key: k.clone(),
+                    origin: origin.clone(),
+                    ready_at: now_s() + RECOVERY_DELAY_S,
+                });
             } else {
                 let r = t.recovery.take().ok_or("no recovery pending")?;
                 if now_s() < r.ready_at {
@@ -277,7 +321,14 @@ impl Token {
                 t.check_usable()?;
                 t.key_nonce += 1; // as Aptos: lifecycle ops signed before the recovery are void
             }
-            return Ok(vec![signer(s), Write { holder: op.to.clone(), subject: t, old: told }]);
+            return Ok(vec![
+                signer(s),
+                Write {
+                    holder: op.to.clone(),
+                    subject: t,
+                    old: told,
+                },
+            ]);
         }
         if op.to != op.from {
             return Err("to must be the subject");
@@ -289,10 +340,16 @@ impl Token {
                 s.keys.remove(i);
             }
             // final review m1 (as Aptos EKEY_OP): no charged no-op
-            Action::AddOrigin(o) if s.origins.iter().any(|x| x == o) => return Err("origin already present"),
+            Action::AddOrigin(o) if s.origins.iter().any(|x| x == o) => {
+                return Err("origin already present")
+            }
             Action::AddOrigin(o) => s.add_origin(o)?,
             Action::RemoveOrigin(o) => {
-                let i = s.origins.iter().position(|x| x == o).ok_or("unknown origin")?;
+                let i = s
+                    .origins
+                    .iter()
+                    .position(|x| x == o)
+                    .ok_or("unknown origin")?;
                 s.origins.remove(i);
             }
             Action::SetGuardian(g) => {
@@ -325,15 +382,28 @@ impl Token {
     /// A key-op entry: plan, write, charge the growth once, event.
     pub(crate) fn key_op(&mut self, op: &MetaOp, auth: &Auth, act: Action) {
         let p = env::predecessor_account_id();
-        let ws = self.plan(&p, op, auth, &act).unwrap_or_else(|e| env::panic_str(e));
+        let ws = self
+            .plan(&p, op, auth, &act)
+            .unwrap_or_else(|e| env::panic_str(e));
         let subject = ws.last().map(|w| w.holder.to_string()).unwrap_or_default();
         ws.into_iter().for_each(|w| self.save(w));
-        crate::Event::KeyOp { subject, action: act.name().into() }.emit();
+        crate::Event::KeyOp {
+            subject,
+            action: act.name().into(),
+        }
+        .emit();
     }
 
     /// A key op's checks, no write: the bytes its records grow by.
-    pub(crate) fn key_op_bytes(&self, caller: &AccountId, op: &MetaOp, auth: &Auth, act: &Action) -> R<u64> {
-        self.plan(caller, op, auth, act).map(|ws| ws.iter().map(Write::growth).sum())
+    pub(crate) fn key_op_bytes(
+        &self,
+        caller: &AccountId,
+        op: &MetaOp,
+        auth: &Auth,
+        act: &Action,
+    ) -> R<u64> {
+        self.plan(caller, op, auth, act)
+            .map(|ws| ws.iter().map(Write::growth).sum())
     }
 
     fn check(&self, caller: &AccountId, op: &MetaOp, auth: &Auth, act: Action) -> Check {
@@ -427,7 +497,11 @@ impl Token {
     }
 
     #[payable]
-    pub fn mtx_cancel_recovery(&mut self, #[serializer(borsh)] op: MetaOp, #[serializer(borsh)] auth: Auth) {
+    pub fn mtx_cancel_recovery(
+        &mut self,
+        #[serializer(borsh)] op: MetaOp,
+        #[serializer(borsh)] auth: Auth,
+    ) {
         self.key_op(&op, &auth, Action::CancelRecovery);
         self.charge_storage();
     }
@@ -435,19 +509,37 @@ impl Token {
     /// Signed by the guardian (`op.from`, `op.to` = the subject) once `ready_at` has passed: the recovery key is
     /// added (CTR-ACC-03: recovery is for a lost key; no key is removed).
     #[payable]
-    pub fn mtx_finish_recovery(&mut self, #[serializer(borsh)] op: MetaOp, #[serializer(borsh)] auth: Auth) {
+    pub fn mtx_finish_recovery(
+        &mut self,
+        #[serializer(borsh)] op: MetaOp,
+        #[serializer(borsh)] auth: Auth,
+    ) {
         self.key_op(&op, &auth, Action::FinishRecovery);
         self.charge_storage();
     }
 
     /// A native NEAR holder (the predecessor) adds a SCaaS key directly; the first one opens its record.
     #[payable]
-    pub fn add_key_native(&mut self, #[serializer(borsh)] key: KeyRecord, #[serializer(borsh)] origin: Option<String>) {
+    pub fn add_key_native(
+        &mut self,
+        #[serializer(borsh)] key: KeyRecord,
+        #[serializer(borsh)] origin: Option<String>,
+    ) {
         let h = Holder::Near(env::predecessor_account_id());
         let (mut s, old) = self.load(&h).unwrap_or_default();
-        s.add_key(&key, &origin).and_then(|_| s.check_usable()).unwrap_or_else(|e| env::panic_str(e));
-        crate::Event::KeyOp { subject: h.to_string(), action: "add_key_native".into() }.emit();
-        self.save(Write { holder: h, subject: s, old });
+        s.add_key(&key, &origin)
+            .and_then(|_| s.check_usable())
+            .unwrap_or_else(|e| env::panic_str(e));
+        crate::Event::KeyOp {
+            subject: h.to_string(),
+            action: "add_key_native".into(),
+        }
+        .emit();
+        self.save(Write {
+            holder: h,
+            subject: s,
+            old,
+        });
         self.charge_storage();
     }
 

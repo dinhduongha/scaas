@@ -4,7 +4,9 @@
 //! `(from, lane)` at `nonce` (lanes are per payer and never removed, so a `(from, pay_ref)` pays once through pay-meta and
 //! another payer's lane never blocks it), pays `to`, and charges every new record (lazy UA open, lane, receiver
 //! registration) once from the attached deposit. `extra` is payer-chosen: the relay-fee salt (spec §2 row 8).
-use crate::{record_bytes, Check, Event, Holder, Subject, Token, TokenExt, POLICY_PASSKEY_FOR_VALUE};
+use crate::{
+    record_bytes, Check, Event, Holder, Subject, Token, TokenExt, POLICY_PASSKEY_FOR_VALUE,
+};
 use near_sdk::json_types::U128;
 use near_sdk::{borsh, env, near, require, AccountId};
 use scaas_near_common::auth::Auth;
@@ -24,7 +26,8 @@ type R<T> = Result<T, &'static str>;
 
 /// `routed_plan`'s shape refusal. `relayer` must name the marker (not `None`): a payment open to any relayer could be
 /// settled by the plain `mtx_pay` without the routed call (rule 7 refuses only a relayer other than the predecessor).
-pub(crate) const ROUTED_SHAPE: &str = "routed pay shape (op 0, pay_ref = ref, lane = payLane(ref), nonce 0, relayer = the marker)";
+pub(crate) const ROUTED_SHAPE: &str =
+    "routed pay shape (op 0, pay_ref = ref, lane = payLane(ref), nonce 0, relayer = the marker)";
 
 /// `routed_plan`'s result: the signer's record and old size (for `open_lazily`), the new bytes, the resolved payee.
 #[derive(Debug)]
@@ -41,7 +44,9 @@ pub(crate) fn x(b: &[u8]) -> String {
 
 fn pay_meta_shape(op: &MetaOp, salt: &[u8; 32], meta: &[u8]) -> R<()> {
     if op.pay_ref != meta_pay_id(salt, meta) || op.lane != pay_lane(&op.pay_ref) || op.nonce != 0 {
-        return Err("pay-meta shape (pay_ref = metaPayId(salt, meta), lane = payLane(pay_ref), nonce 0)");
+        return Err(
+            "pay-meta shape (pay_ref = metaPayId(salt, meta), lane = payLane(pay_ref), nonce 0)",
+        );
     }
     Ok(())
 }
@@ -51,7 +56,8 @@ fn pay_meta_shape(op: &MetaOp, salt: &[u8; 32], meta: &[u8]) -> R<()> {
 pub(crate) fn value_policy(s: &Subject, auth: &Auth) -> R<()> {
     let passkey = match auth {
         Auth::Passkey { .. } => true,
-        Auth::Msig { key_data, .. } => parse_msig(key_data).is_ok_and(|m| m.members.iter().all(|m| m.kind == KIND_WEBAUTHN_P256)),
+        Auth::Msig { key_data, .. } => parse_msig(key_data)
+            .is_ok_and(|m| m.members.iter().all(|m| m.kind == KIND_WEBAUTHN_P256)),
         _ => false,
     };
     if s.policy & POLICY_PASSKEY_FOR_VALUE != 0 && !passkey {
@@ -74,7 +80,13 @@ impl Token {
 
     /// Every check of a plain value entry, no write, cheap first: op code and shape, then `pay_checks` with `caller` as
     /// the relayer (rule 7) and `payee = op.to`.
-    pub(crate) fn value_plan(&self, caller: &AccountId, op: &MetaOp, auth: &Auth, code: u8) -> R<(Subject, u64, u64)> {
+    pub(crate) fn value_plan(
+        &self,
+        caller: &AccountId,
+        op: &MetaOp,
+        auth: &Auth,
+        code: u8,
+    ) -> R<(Subject, u64, u64)> {
         if op.op != code {
             return Err("wrong op code");
         }
@@ -102,18 +114,39 @@ impl Token {
         pay_ref: &[u8; 32],
     ) -> R<Routed> {
         let bound = op.relayer.as_ref() == Some(marker);
-        if op.op != OP_PAY || op.pay_ref != *pay_ref || op.lane != pay_lane(pay_ref) || op.nonce != 0 || !bound {
+        if op.op != OP_PAY
+            || op.pay_ref != *pay_ref
+            || op.lane != pay_lane(pay_ref)
+            || op.nonce != 0
+            || !bound
+        {
             return Err(ROUTED_SHAPE);
         }
-        let payee = if op.to == Holder::Near(marker.clone()) { open_payee.clone() } else { op.to.clone() };
+        let payee = if op.to == Holder::Near(marker.clone()) {
+            open_payee.clone()
+        } else {
+            op.to.clone()
+        };
         let (subject, old, bytes) = self.pay_checks(caller, marker, op, auth, &payee)?;
-        Ok(Routed { subject, old, bytes, payee })
+        Ok(Routed {
+            subject,
+            old,
+            bytes,
+            payee,
+        })
     }
 
     /// Shared by both plans, no write: `payee` never the token (rule 12), `amount > 0`, `from ≠ payee`, `signed` with
     /// `relayer`, the value policy (R8), the lane nonce, the balance. Returns the signer's record, its old size (0 =
     /// opened lazily) and the bytes of the new records (lazy open, lane, payee's record).
-    pub(crate) fn pay_checks(&self, caller: &AccountId, relayer: &AccountId, op: &MetaOp, auth: &Auth, payee: &Holder) -> R<(Subject, u64, u64)> {
+    pub(crate) fn pay_checks(
+        &self,
+        caller: &AccountId,
+        relayer: &AccountId,
+        op: &MetaOp,
+        auth: &Auth,
+        payee: &Holder,
+    ) -> R<(Subject, u64, u64)> {
         if *payee == Holder::Near(env::current_account_id()) {
             return Err("token refuses a transfer to the token itself");
         }
@@ -135,8 +168,16 @@ impl Token {
                 Holder::Ua(_) => "The UA doesn't have enough balance",
             });
         }
-        let open = if old == 0 { record_bytes(&op.from, &s) } else { 0 };
-        let lane = if next.is_none() { lane_bytes(&op.from) } else { 0 };
+        let open = if old == 0 {
+            record_bytes(&op.from, &s)
+        } else {
+            0
+        };
+        let lane = if next.is_none() {
+            lane_bytes(&op.from)
+        } else {
+            0
+        };
         Ok((s, old, open + lane + self.receiver_bytes(payee)))
     }
 
@@ -144,10 +185,16 @@ impl Token {
     /// body to `op.to`, the storage charged once.
     fn value_entry(&mut self, op: &MetaOp, auth: &Auth, code: u8, meta: Option<&[u8]>) {
         let p = env::predecessor_account_id();
-        let (s, old, _) = self.value_plan(&p, op, auth, code).unwrap_or_else(|e| env::panic_str(e));
+        let (s, old, _) = self
+            .value_plan(&p, op, auth, code)
+            .unwrap_or_else(|e| env::panic_str(e));
         self.open_lazily(&op.from, s, old);
         if let Some(m) = meta {
-            Event::PaymentMeta { pay_ref: x(&op.pay_ref), meta: x(m) }.emit();
+            Event::PaymentMeta {
+                pay_ref: x(&op.pay_ref),
+                meta: x(m),
+            }
+            .emit();
         }
         self.settle_pay(op, &op.from, &op.to);
         self.charge_storage();
@@ -161,8 +208,13 @@ impl Token {
         self.consume_pay(op, from, payee);
         self.move_balance(from, payee, op.amount, None);
         if op.pay_ref != [0; 32] {
-            Event::PaymentSettled { from: from.to_string(), to: payee.to_string(), amount: U128(op.amount), pay_ref: x(&op.pay_ref) }
-                .emit();
+            Event::PaymentSettled {
+                from: from.to_string(),
+                to: payee.to_string(),
+                amount: U128(op.amount),
+                pay_ref: x(&op.pay_ref),
+            }
+            .emit();
         }
     }
 
@@ -175,7 +227,12 @@ impl Token {
         if next.is_none() {
             self.storage_due += lane_bytes(from);
         }
-        self.lanes.insert((from.clone(), op.lane), op.nonce.checked_add(1).unwrap_or_else(|| env::panic_str("lane full")));
+        self.lanes.insert(
+            (from.clone(), op.lane),
+            op.nonce
+                .checked_add(1)
+                .unwrap_or_else(|| env::panic_str("lane full")),
+        );
         self.storage_due += self.register(payee);
         Event::MetaTransactionExecuted {
             from: from.to_string(),
@@ -189,10 +246,14 @@ impl Token {
 
     fn value_check(&self, caller: &AccountId, op: &MetaOp, auth: &Auth, code: u8) -> Check {
         match self.value_plan(caller, op, auth, code) {
-            Ok((_, _, bytes)) => {
-                Check { error: None, storage_needed: U128(env::storage_byte_cost().as_yoctonear() * bytes as u128) }
-            }
-            Err(e) => Check { error: Some(e.into()), storage_needed: U128(0) },
+            Ok((_, _, bytes)) => Check {
+                error: None,
+                storage_needed: U128(env::storage_byte_cost().as_yoctonear() * bytes as u128),
+            },
+            Err(e) => Check {
+                error: Some(e.into()),
+                storage_needed: U128(0),
+            },
         }
     }
 }
@@ -219,18 +280,30 @@ impl Token {
     }
 
     #[payable]
-    pub fn mtx_transfer(&mut self, #[serializer(borsh)] op: MetaOp, #[serializer(borsh)] auth: Auth) {
+    pub fn mtx_transfer(
+        &mut self,
+        #[serializer(borsh)] op: MetaOp,
+        #[serializer(borsh)] auth: Auth,
+    ) {
         self.value_entry(&op, &auth, OP_TRANSFER, None);
     }
 
     #[payable]
-    pub fn mtx_execute_transfer(&mut self, #[serializer(borsh)] op: MetaOp, #[serializer(borsh)] auth: Auth) {
+    pub fn mtx_execute_transfer(
+        &mut self,
+        #[serializer(borsh)] op: MetaOp,
+        #[serializer(borsh)] auth: Auth,
+    ) {
         self.value_entry(&op, &auth, OP_EXECUTE_TRANSFER, None);
     }
 
     /// The nonce `holder`'s lane `lane` expects next (0 for an unused lane).
     #[result_serializer(borsh)]
-    pub fn lane_nonce(&self, #[serializer(borsh)] holder: Holder, #[serializer(borsh)] lane: [u8; 32]) -> u64 {
+    pub fn lane_nonce(
+        &self,
+        #[serializer(borsh)] holder: Holder,
+        #[serializer(borsh)] lane: [u8; 32],
+    ) -> u64 {
         self.next_nonce(&holder, &lane).unwrap_or(0)
     }
 
@@ -255,7 +328,10 @@ impl Token {
     ) -> Check {
         match pay_meta_shape(&op, &salt, &meta) {
             Ok(()) => self.value_check(&caller, &op, &auth, OP_PAY),
-            Err(e) => Check { error: Some(e.into()), storage_needed: U128(0) },
+            Err(e) => Check {
+                error: Some(e.into()),
+                storage_needed: U128(0),
+            },
         }
     }
 
@@ -284,7 +360,9 @@ impl Token {
 pub(crate) mod tests {
     //! `routed_plan` (Tasks 9–10's only entry to `settle_pay`): shape, open-mode payee, and the value policy.
     use super::*;
-    use near_contract_standards::fungible_token::metadata::{FungibleTokenMetadata, FT_METADATA_SPEC};
+    use near_contract_standards::fungible_token::metadata::{
+        FungibleTokenMetadata, FT_METADATA_SPEC,
+    };
     use near_sdk::test_utils::VMContextBuilder;
     use near_sdk::testing_env;
     use scaas_near_common::hash::nep413_hash;
@@ -294,7 +372,10 @@ pub(crate) mod tests {
 
     pub(crate) fn token() -> (Token, AccountId) {
         let me: AccountId = "token.test.near".parse().unwrap();
-        testing_env!(VMContextBuilder::new().current_account_id(me.clone()).predecessor_account_id(me.clone()).build());
+        testing_env!(VMContextBuilder::new()
+            .current_account_id(me.clone())
+            .predecessor_account_id(me.clone())
+            .build());
         let meta = FungibleTokenMetadata {
             spec: FT_METADATA_SPEC.into(),
             name: "T".into(),
@@ -306,7 +387,10 @@ pub(crate) mod tests {
         };
         let t = Token::new(NET, me.clone(), meta);
         let relayer: AccountId = "relayer.test.near".parse().unwrap();
-        testing_env!(VMContextBuilder::new().current_account_id(me.clone()).predecessor_account_id(relayer.clone()).build());
+        testing_env!(VMContextBuilder::new()
+            .current_account_id(me.clone())
+            .predecessor_account_id(relayer.clone())
+            .build());
         (t, relayer)
     }
 
@@ -314,14 +398,26 @@ pub(crate) mod tests {
 
     impl Ed {
         pub(crate) fn pk(&self) -> [u8; 32] {
-            borsh::to_vec(&self.0.public_key()).unwrap()[1..].try_into().unwrap()
+            borsh::to_vec(&self.0.public_key()).unwrap()[1..]
+                .try_into()
+                .unwrap()
         }
         pub(crate) fn ua(&self) -> Holder {
-            Holder::Ua(KeyRecord { kind: KIND_ED25519, key_data: self.pk().to_vec() }.id())
+            Holder::Ua(
+                KeyRecord {
+                    kind: KIND_ED25519,
+                    key_data: self.pk().to_vec(),
+                }
+                .id(),
+            )
         }
         pub(crate) fn sign(&self, op: &MetaOp) -> Auth {
-            let sig = borsh::to_vec(&self.0.sign(&nep413_hash(&op.digest(), &op.contract))).unwrap();
-            Auth::Ed25519 { key: self.pk(), sig: sig[1..].try_into().unwrap() }
+            let sig =
+                borsh::to_vec(&self.0.sign(&nep413_hash(&op.digest(), &op.contract))).unwrap();
+            Auth::Ed25519 {
+                key: self.pk(),
+                sig: sig[1..].try_into().unwrap(),
+            }
         }
     }
 
@@ -329,7 +425,10 @@ pub(crate) mod tests {
     fn routed_plan_shape_payee_and_policy() {
         let (mut t, relayer) = token();
         let me = env::current_account_id();
-        let erin = Ed(near_crypto::SecretKey::from_seed(near_crypto::KeyType::ED25519, "erin"));
+        let erin = Ed(near_crypto::SecretKey::from_seed(
+            near_crypto::KeyType::ED25519,
+            "erin",
+        ));
         let h = erin.ua();
         let Holder::Ua(id) = h else { unreachable!() };
         t.ua.insert(id, 100);
@@ -352,13 +451,29 @@ pub(crate) mod tests {
         let a = erin.sign(&op);
         let ok = t.routed_plan(&relayer, &me, &open, &op, &a, &r).unwrap();
         assert_eq!(ok.payee, open, "open mode pays the submitting relayer");
-        let s = Subject { keys: vec![KeyRecord { kind: KIND_ED25519, key_data: erin.pk().to_vec() }], ..Default::default() };
-        assert_eq!(ok.bytes, record_bytes(&h, &s) + lane_bytes(&h) + crate::ACCOUNT_STORAGE_BYTES);
+        let s = Subject {
+            keys: vec![KeyRecord {
+                kind: KIND_ED25519,
+                key_data: erin.pk().to_vec(),
+            }],
+            ..Default::default()
+        };
+        assert_eq!(
+            ok.bytes,
+            record_bytes(&h, &s) + lane_bytes(&h) + crate::ACCOUNT_STORAGE_BYTES
+        );
         // the plain entries refuse what the routed plan accepts (relayer = the marker, to = the token)
-        assert_eq!(t.value_plan(&relayer, &op, &a, OP_PAY).err(), Some("token refuses a transfer to the token itself"));
+        assert_eq!(
+            t.value_plan(&relayer, &op, &a, OP_PAY).err(),
+            Some("token refuses a transfer to the token itself")
+        );
         // shape: another ref, a lane other than payLane(ref), a nonce other than 0
         let shape = ROUTED_SHAPE;
-        assert_eq!(t.routed_plan(&relayer, &me, &open, &op, &a, &[0x52; 32]).err(), Some(shape));
+        assert_eq!(
+            t.routed_plan(&relayer, &me, &open, &op, &a, &[0x52; 32])
+                .err(),
+            Some(shape)
+        );
         // another lane, nonce, op code; relayer None (any relayer: a plain mtx_pay could settle it) or not the marker
         let fs: [fn(&mut MetaOp); 5] = [
             |o| o.lane = [1; 32],
@@ -370,15 +485,30 @@ pub(crate) mod tests {
         for f in fs {
             let mut o = op.clone();
             f(&mut o);
-            assert_eq!(t.routed_plan(&relayer, &me, &open, &o, &erin.sign(&o), &r).err(), Some(shape));
+            assert_eq!(
+                t.routed_plan(&relayer, &me, &open, &o, &erin.sign(&o), &r)
+                    .err(),
+                Some(shape)
+            );
         }
         // a bound payee is paid directly
         let bob = Holder::Near("bob.test.near".parse().unwrap());
         let mut o = op.clone();
         o.to = bob.clone();
-        assert_eq!(t.routed_plan(&relayer, &me, &open, &o, &erin.sign(&o), &r).unwrap().payee, bob);
+        assert_eq!(
+            t.routed_plan(&relayer, &me, &open, &o, &erin.sign(&o), &r)
+                .unwrap()
+                .payee,
+            bob
+        );
         // POLICY_PASSKEY_FOR_VALUE: the wallet-key signature is refused for a routed pay too (ruling R8)
-        t.subjects.insert(h.clone(), Subject { policy: crate::POLICY_PASSKEY_FOR_VALUE, ..s });
+        t.subjects.insert(
+            h.clone(),
+            Subject {
+                policy: crate::POLICY_PASSKEY_FOR_VALUE,
+                ..s
+            },
+        );
         assert_eq!(
             t.routed_plan(&relayer, &me, &open, &op, &a, &r).err(),
             Some("POLICY_PASSKEY_FOR_VALUE: value ops need a passkey signature")

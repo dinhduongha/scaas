@@ -33,8 +33,14 @@ mod tests {
         let n = Holder::Near("alice.test.near".parse().unwrap());
         let enc = near_sdk::borsh::to_vec(&n).unwrap();
         assert_eq!(enc, [&[0u8, 15, 0, 0, 0][..], b"alice.test.near"].concat()); // gen_vectors.py `holder`
-        assert_eq!(near_sdk::borsh::to_vec(&Holder::Ua([0xab; 32])).unwrap(), [&[1u8][..], &[0xab; 32]].concat());
+        assert_eq!(
+            near_sdk::borsh::to_vec(&Holder::Ua([0xab; 32])).unwrap(),
+            [&[1u8][..], &[0xab; 32]].concat()
+        );
         assert_eq!(n.to_string(), "alice.test.near");
-        assert_eq!(Holder::Ua([0xab; 32]).to_string(), format!("0x{}", "ab".repeat(32)));
+        assert_eq!(
+            Holder::Ua([0xab; 32]).to_string(),
+            format!("0x{}", "ab".repeat(32))
+        );
     }
 }
