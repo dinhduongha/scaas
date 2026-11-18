@@ -20,7 +20,12 @@ no-log-ix-name = []
 
 [dependencies]
 anchor-lang = { version = "=1.2.0", features = ["init-if-needed", "event-cpi"] }
-anchor-spl = { version = "=1.2.0", default-features = false, features = ["token", "token_2022", "token_2022_extensions", "associated_token"] }
+anchor-spl = { version = "=1.2.0", default-features = false, features = [
+  "token",
+  "token_2022",
+  "token_2022_extensions",
+  "associated_token",
+] }
 solana-instructions-sysvar = "=3.0.1"
 solana-sha256-hasher = "=3.1.0"
 # CTR-MTX-26/27 `payId` / `payLane` / `ref`: the keccak syscall on chain, `sha3` on the host (tests).

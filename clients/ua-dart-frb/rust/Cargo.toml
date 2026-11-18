@@ -13,7 +13,14 @@ crate-type = ["cdylib", "staticlib"]
 # never `vectors` (src/api/wallet.rs refuses it at compile time)
 [dependencies]
 flutter_rust_bridge = "=2.13.0"
-scaas-ua = { path = "../../ua-rs", default-features = false, features = ["json", "wallet", "mlock", "zether", "pqz", "pqz-set-n2304-kmax4096"] }
+scaas-ua = { path = "../../ua-rs", default-features = false, features = [
+  "json",
+  "wallet",
+  "mlock",
+  "zether",
+  "pqz",
+  "pqz-set-n2304-kmax4096",
+] }
 zeroize = "=1.8.2"
 
 # arkworks subgroup checks crawl unoptimised

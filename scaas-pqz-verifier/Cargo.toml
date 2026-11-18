@@ -11,7 +11,17 @@ description = "The reference PQZ verifier (off-chain): verifies public PQZ proof
 # default features: the Rust PQZL backend at n2304-kmax4096; `pqz_ffi::precompile` is byte for byte the precompile's verdict;
 # pqz-offchain adds the split id of opening tokens (K3-4) over the same verifiers (`offchain`).
 [dependencies]
-alloy = { version = "~1.6", default-features = false, features = ["std", "provider-http", "rpc-types", "signer-local", "signer-keystore", "sol-types", "network", "reqwest", "json-rpc"] }
+alloy = { version = "~1.6", default-features = false, features = [
+  "std",
+  "provider-http",
+  "rpc-types",
+  "signer-local",
+  "signer-keystore",
+  "sol-types",
+  "network",
+  "reqwest",
+  "json-rpc",
+] }
 anyhow = "1"
 async-trait = "0.1"
 axum = "0.8"
