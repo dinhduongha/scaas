@@ -30,6 +30,10 @@
 #                  ! git grep -nE '/[t]mp/' -- . ':!*/legacy/*' ':!docs/history/*' (no temp path, AGENTS.md Security)
 #                  python3 -I smartcontracts/evm/script/pqz/gas-inputs.py --check (the PQZ gas table's inputs = the calibrated or
 #                  provisional precompile rows and each set's proofs; T21 L67)
+#   format:        scripts/format.sh --check (check only, at the pinned versions: rustfmt of rust-toolchain.toml, forge 1.8.5, clientkeys'
+#                  Prettier 3.3.3, ruff 0.16.4, gofmt, dotnet format whitespace, dart format, clang-format 19.1.7, shfmt 3.10.0, taplo 0.9.3,
+#                  actionlint 1.7.12, hadolint 2.15.1 on errors; .rustfmt-ignore, .clang-format-ignore and foundry.toml [fmt] keep
+#                  generated and harness-read files out)
 #   clients/clientkeys:    npm ci --ignore-scripts; npm test; its ML-DSA-65 signer (script/pqz/mldsa.mjs) against the DEX:
 #                          MLDSA_CLIENTKEYS=../../clients/clientkeys forge test --ffi --match-path test/liquidity/DexLiquidityMldsa.t.sol
 #   clients/zether-prover: cargo clippy --all-targets -- -D warnings, default and --features hazmat; cargo test; cargo test --features hazmat (ARCH-POS-13: the raw commands, test-only); ./wasm-smoke.sh (wasm32 build + wasm-bindgen + node smoke: the shipped wasm refuses the raw commands) and ZETHER_HAZMAT=1 ./wasm-smoke.sh (the prover in wasm); zether-cli --features hazmat against the tokens (ZetherProverCross);
@@ -86,6 +90,16 @@ on:
         "rust-toolchain.toml",
         ".github/workflows/ci.yml",
         ".github/ci_changes.py",
+        "scripts/format.sh",
+        "rustfmt.toml",
+        ".rustfmt-ignore",
+        ".prettierrc",
+        ".prettierignore",
+        "pyproject.toml",
+        ".editorconfig",
+        ".clang-format",
+        ".clang-format-ignore",
+        "taplo.toml",
       ]
   push:
     branches: [main]
@@ -103,6 +117,16 @@ on:
         "rust-toolchain.toml",
         ".github/workflows/ci.yml",
         ".github/ci_changes.py",
+        "scripts/format.sh",
+        "rustfmt.toml",
+        ".rustfmt-ignore",
+        ".prettierrc",
+        ".prettierignore",
+        "pyproject.toml",
+        ".editorconfig",
+        ".clang-format",
+        ".clang-format-ignore",
+        "taplo.toml",
       ]
   workflow_dispatch:
     inputs:
@@ -495,6 +519,69 @@ jobs:
       # precompile rows (pqz-core/nethermind/chain/engine-pqz.json or the provisional ones) and each set's proofs
       - name: PQZ gas table inputs (gas-inputs.py --check)
         run: python3 -I smartcontracts/evm/script/pqz/gas-inputs.py --check
+
+  # Code-format plan F9: every formatter at its pinned version, check mode only (CI never rewrites code); no build, so
+  # it runs on every run. Locally: scripts/format.sh fixes, scripts/format.sh --check runs exactly this.
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }} # rustfmt of the root rust-toolchain.toml (1.97.1: rustfmt 1.9.0)
+          components: rustfmt
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.8.5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.8.1
+          cache: npm
+          cache-dependency-path: clients/clientkeys/package-lock.json
+      - name: Prettier 3.3.3 (the devDependency of clients/clientkeys)
+        working-directory: clients/clientkeys
+        run: npm ci --ignore-scripts
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: ruff 0.16.4 and clang-format 19.1.7 (pinned wheels, hashes checked)
+        run: |
+          printf '%s\n' \
+            'ruff==0.16.4 --hash=sha256:f2d812e482f5a7e02eee26cd73d2a37ebbdf47d795ea63ba1b89110ae93e9fb3' \
+            'clang-format==19.1.7 --hash=sha256:f4906fb463dd2033032978f56962caab268c9428a384126b9400543eb667f11c' \
+            > "$RUNNER_TEMP/format-req.txt"
+          pip install --require-hashes --only-binary :all: -r "$RUNNER_TEMP/format-req.txt"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.12.2
+      - name: shfmt 3.10.0, actionlint 1.7.12, hadolint 2.15.1 (release binaries, each checked against the release's sha256)
+        run: |
+          set -eu
+          b=$RUNNER_TEMP/format-bin
+          mkdir -p "$b"
+          curl -fsSL -o "$b/shfmt" https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_amd64
+          curl -fsSL -o "$b/hadolint" https://github.com/hadolint/hadolint/releases/download/v2.15.1/hadolint-linux-x86_64
+          curl -fsSL -o "$b/actionlint.tgz" \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          printf '%s  %s\n' \
+            1f57a384d59542f8fac5f503da1f3ea44242f46dff969569e80b524d64b71dbc "$b/shfmt" \
+            c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507 "$b/hadolint" \
+            8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8 "$b/actionlint.tgz" | sha256sum -c -
+          tar -xzf "$b/actionlint.tgz" -C "$b" actionlint
+          chmod +x "$b/shfmt" "$b/hadolint" "$b/actionlint"
+          echo "$b" >> "$GITHUB_PATH"
+      # the taplo 0.9.3 release publishes no checksums: built from crates.io with its lockfile
+      - name: taplo 0.9.3
+        run: cargo install taplo-cli --version 0.9.3 --locked
+      - name: format check (scripts/format.sh --check)
+        run: scripts/format.sh --check
 
   test-features:
     needs: changes

@@ -1,0 +1,14 @@
+# Rust files scripts/format.sh leaves alone (code-format plan, "Excluded"); git pathspec globs, `**` crosses `/`.
+# rustfmt's own `ignore` is unstable, so the script keeps these as they are when rustfmt reaches them through a `mod`.
+# generated: the parameter sets (gen_set.py, to_rust.py), flutter_rust_bridge
+pqz-core/params/sets/**
+pqz-core/pqzl/params/**
+pqz-core/pqzl/rust/src/params/mod.rs
+pqz-core/stmt/src/sets.rs
+clients/ua-dart-frb/rust/src/frb_generated.rs
+# text read by a harness: formatted once the harness matches the new text
+#   facade/pqz.rs: tests/facade_pqz.rs raw_requests_compile_only_under_vectors and open_memo_compares_in_constant_time
+#   find match arms and the `Req::OpenMemo { chain_uid` line by their one-line text
+clients/ua-rs/src/facade/pqz.rs
+# left unformatted by the pqz-core round (71a974bc9); formatted with the pqz-core wasm steps
+pqz-core/pqzl/rust/wasm/lib.rs
