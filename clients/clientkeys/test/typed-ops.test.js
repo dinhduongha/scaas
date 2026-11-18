@@ -430,9 +430,10 @@ test("GovernanceRouter: 53 rows equal GovRouterTypehash.t.sol, target the first 
     new URL("../../../smartcontracts/evm/test/governance/GovRouterTypehash.t.sol", import.meta.url),
     "utf8",
   );
-  const pins = [...sol.matchAll(/keccak256\(\s*((?:"[^"]*"\s*)+)\)\);\s*assertEq\(T\.\w+, (0x[0-9a-f]{64})\)/g)].map(
-    ([, lits, hash]) => [[...lits.matchAll(/"([^"]*)"/g)].map((x) => x[1]).join(""), hash],
-  );
+  // white space anywhere between the tokens (forge fmt breaks the long ones over lines)
+  const pins = [
+    ...sol.matchAll(/keccak256\(\s*((?:"[^"]*"\s*)+)\)\s*\);\s*assertEq\(\s*T\.\w+,\s*(0x[0-9a-f]{64})\s*\)/g),
+  ].map(([, lits, hash]) => [[...lits.matchAll(/"([^"]*)"/g)].map((x) => x[1]).join(""), hash]);
   // T32: + the eight regulated controls (regulated-kinds spec §3.1, CTR-GOV-20); T34 writes their rows
   // pay-meta-tax T39 / T41: + `UASetTaxRate`, `UASetTaxRecipient`; ua-mtx-merge T76: + the three creations
   // T46 (group 3f): the three PQZ verifier ops are checked against GovernanceRouterBase.sol in pqz-verdict.test.js, and here

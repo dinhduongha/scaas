@@ -422,7 +422,7 @@ test("the router's PQZ verifier ops: the type strings of GovernanceRouterBase.so
   }
   const rs = read("smartcontracts/evm/src/governance/GovernanceRouter.sol");
   for (const [, , entry] of Object.values(ROUTER_OPS))
-    assert.match(rs, new RegExp(`function ${entry}\\(MetaTxLib\\.UAEnvelope calldata e, address target,`));
+    assert.match(rs, new RegExp(`function ${entry}\\(\\s*MetaTxLib\\.UAEnvelope calldata e,\\s*address target,`));
 });
 
 test("the router's PQZ verifier ops: a non-zero unbound relayer or feeRecipient signs as 0; target and next are signed", () => {
