@@ -103,6 +103,9 @@ pub struct Manifest {
     pub backup_generation: u64,
     /// The UAs whose backups this wallet agreed to hold: a restore's approved sender set (§6.3).
     pub backup_senders: Vec<[u8; 32]>,
+    /// The next BIP-85 child index (scaas-sdk spec §6.4): a high-water mark, raised by [`Wallet::bip85_child`], never lowered;
+    /// written last and only when not zero, so every earlier manifest keeps its bytes.
+    pub bip85_next: u32,
 }
 
 /// A manifest vault's JSON (spec §9.3): 1 MiB, `{entries: [{…}]}` is depth 3.
@@ -189,9 +192,10 @@ impl Manifest {
                 .collect(),
         );
         let senders = list(self.backup_senders.iter().map(|u| format!("\"{}\"", to_hex(u))).collect());
+        let bip85 = if self.bip85_next == 0 { String::new() } else { format!(",\"bip85Next\":{}", self.bip85_next) };
         format!(
             "{{\"v\":1,\"entries\":[{entries}],\"natives\":[{natives}]{paths},\"kem\":[{kem}],\"imports\":[{imports}],\"importedUas\":[{imported_uas}],\"pqzHeld\":[{held}],\"backupGeneration\":{},\
-             \"backupSenders\":[{senders}]}}",
+             \"backupSenders\":[{senders}]{bip85}}}",
             self.backup_generation
         )
     }
@@ -294,6 +298,11 @@ fn parse_manifest(v: &Value) -> Option<Manifest> {
         },
         backup_generation: v.get("backupGeneration")?.as_u64()?,
         backup_senders: list(v, "backupSenders")?.iter().map(ua_of).collect::<Option<_>>()?,
+        // absent when zero (and in every manifest written before scaas-sdk T5); present, a non-zero index below 2^31
+        bip85_next: match v.get("bip85Next") {
+            None => 0,
+            Some(n) => u32::try_from(n.as_u64()?).ok().filter(|n| *n > 0 && *n < derive::HARDENED)?,
+        },
     })
 }
 

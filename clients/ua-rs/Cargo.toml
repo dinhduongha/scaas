@@ -317,3 +317,8 @@ required-features = ["wallet"]
 [[test]]
 name = "word_list"
 required-features = ["wallet"]
+
+# scaas-sdk T5: BIP-85 children and the manifest's bip85Next
+[[test]]
+name = "bip85"
+required-features = ["wallet"]

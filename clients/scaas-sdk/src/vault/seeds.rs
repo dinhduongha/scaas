@@ -187,6 +187,13 @@ pub struct ImportWords {
     pub vault_passphrase: Arc<SecretBytes>,
 }
 
+/// `vault.derive_child`'s request: a stored seed (never a hidden set), the child's label and vault passphrase.
+pub struct DeriveChild {
+    pub parent: String,
+    pub label: String,
+    pub vault_passphrase: Arc<SecretBytes>,
+}
+
 /// `vault.import_key`'s request (spec §6.7): a classical private key of `network` (32 bytes) as a leaf of a seed, sealed as the
 /// new label vault `native-import:<network>:<n>` under the seed's vault passphrase.
 pub struct ImportKey {
@@ -226,6 +233,76 @@ pub struct Remove {
 }
 
 impl Vault {
+    /// A BIP-85 child of the parent's main set (spec §6.4): 24 words at the parent's high-water mark `bip85Next`, raised and
+    /// persisted in the parent's manifest (re-sealed under its same DEK) with the child's entry in one write; `class` and
+    /// `warnings` inherited, `backup: pending`; the parent unlocked (`WalletLocked`), `SeedExists` (the index used up all the same:
+    /// the raised mark is written), `LabelTaken`.
+    pub async fn derive_child(&self, req: DeriveChild) -> Result<NewSeed, SdkError> {
+        let sdk = self.sdk.clone();
+        self.sdk
+            .spawn(async move {
+                if !label_ok(&req.label) {
+                    return Err(SdkError::Argument);
+                }
+                let pass = req.vault_passphrase;
+                passphrase(&pass, |p| {
+                    scaas_ua::wallet::check_passphrase(p).map_err(|_| SdkError::VaultPassphraseWeak)
+                })?;
+                let parent = sdk.open_seed(&req.parent)?;
+                let pe = sdk.entry(&req.parent).await?;
+                let (child, backup) = parent.wallet.bip85_child()?;
+                let manifest = parent.wallet.reseal_label_vault("manifest")?.to_json();
+                let (wallet, entry) = new_entry(
+                    &sdk,
+                    child,
+                    req.label,
+                    "bip85",
+                    &pe.class,
+                    pe.warnings.clone(),
+                    "pending",
+                    pass,
+                )
+                .await?;
+                // a held child (`SeedExists`) still uses up its index: the raised mark is written, so the next call
+                // derives the next child
+                let mut held = false;
+                let ks = sdk
+                    .keystore
+                    .update(|ks| {
+                        if ks.seeds.iter().any(|s| s.label == entry.label) {
+                            return Err(SdkError::LabelTaken);
+                        }
+                        held = ks.seeds.iter().any(|s| s.fingerprint == entry.fingerprint);
+                        let p = ks
+                            .seeds
+                            .iter_mut()
+                            .find(|s| s.id == req.parent)
+                            .ok_or(SdkError::SeedUnknown)?;
+                        p.vaults.insert("manifest".into(), manifest.clone());
+                        if !held {
+                            ks.seeds.push(entry.clone());
+                        }
+                        Ok(())
+                    })
+                    .await?;
+                if held {
+                    wallet.lock();
+                    sdk.emit(Event::KeystoreChanged { rev: ks.rev });
+                    return Err(SdkError::SeedExists);
+                }
+                sdk.open
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .insert(entry.id.clone(), Arc::new(OpenSeed { wallet }));
+                sdk.emit(Event::KeystoreChanged { rev: ks.rev });
+                Ok(NewSeed {
+                    info: info(&entry, true),
+                    backup: Arc::new(SeedBackup(Mutex::new(backup))),
+                })
+            })
+            .await
+    }
+
     /// Whether `word` (one word, as a secret) is on the BIP-39 English list; the list never leaves `scaas-ua` (R17).
     pub fn word_in_list(&self, word: Arc<SecretBytes>) -> bool {
         word.with(|b| std::str::from_utf8(b).is_ok_and(scaas_ua::wallet::bip39_word_in_list))

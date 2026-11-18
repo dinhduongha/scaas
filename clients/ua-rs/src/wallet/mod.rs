@@ -656,6 +656,29 @@ impl Wallet {
         self.store.with_seed(|seed| Ok(bip32::XPrv::new(seed).map_err(|_| Error::Argument)?.public_key().fingerprint()))
     }
 
+    /// The next BIP-85 child of this wallet (scaas-sdk spec §6.4; clientkeys `bip85Child`): BIP-85's BIP-39 application, 24
+    /// words, `m/83696968'/39'/0'/24'/<i>'` with `i` the manifest's `bip85Next`, which is raised under the store's lock before
+    /// the child is returned and never lowered, so a removed child's words never come back. The child's wallet (empty BIP-39
+    /// passphrase) and its backup. The caller derives from a main set (an empty BIP-39 passphrase); `Argument` once the index
+    /// would reach 2^31, `WalletLocked` while locked.
+    pub fn bip85_child(&self) -> Result<(Wallet, SeedBackup)> {
+        use hmac::Mac as _;
+        let entropy = self.store.with_all(|a, m| {
+            let i = m.bip85_next;
+            let next = i.checked_add(1).filter(|n| *n < derive::HARDENED).ok_or(Error::Argument)?;
+            let seed: Zeroizing<[u8; 64]> = Zeroizing::new(a.seed_bytes()?.try_into().map_err(|_| Error::Argument)?);
+            let path = [83696968, 39, 0, 24, i].map(|c| c | derive::HARDENED);
+            let k = derive::bip32(&*seed, &path)?;
+            let mut mac = hmac::Hmac::<sha2::Sha512>::new_from_slice(b"bip-entropy-from-k").map_err(|_| Error::Argument)?;
+            mac.update(&*k);
+            let out = Zeroizing::new(mac.finalize().into_bytes().to_vec());
+            m.bip85_next = next;
+            Ok(Zeroizing::new(out.get(..32).ok_or(Error::Argument)?.to_vec()))
+        })?;
+        let w = Wallet::from_entropy(&entropy, "")?;
+        Ok((w, SeedBackup { entropy: Some(entropy), state: BackupState::Fresh, asked: [0; 3] }))
+    }
+
     /// The number of words of this wallet's mnemonic (12, 15, 18, 21 or 24: its entropy's length), the keystore's `words` check
     /// (scaas-sdk spec §6.1). `WalletLocked` while locked.
     pub fn word_count(&self) -> Result<u32> {

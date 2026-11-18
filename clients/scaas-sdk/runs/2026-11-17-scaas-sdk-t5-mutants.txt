@@ -1,0 +1,6 @@
+# t5 mutants at commit 57ca6196d (name | outcome | test)
+24' -> 12' in the path | killed | ../../scripts/capped cargo test --locked --offline -j2 --test bip85 children_0_to_2_and_the_high_water_mark
+the index never raised (a lower one reused) | killed | ../../scripts/capped cargo test --locked --offline -j2 --test children remove_then_derive_never_reuses
+drop the warning inheritance | killed | ../../scripts/capped cargo test --locked --offline -j2 --test children derive_child_is_the_rows_child_and_inherits
+HMAC key changed | killed | ../../scripts/capped cargo test --locked --offline -j2 --test bip85 children_0_to_2_and_the_high_water_mark
+4 mutants, 4 killed, 0 survived, 0 not loaded

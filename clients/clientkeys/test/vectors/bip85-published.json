@@ -1,0 +1,9 @@
+{
+  "note": "Outside data: BIP-85's published test vectors for the BIP-39 application (https://github.com/bitcoin/bips/blob/master/bip-0085.mediawiki, section BIP39, English, index 0): the master key and the child mnemonic of 12, 18 and 24 words. Read by test/bip85.test.js and clients/ua-rs/tests/bip85.rs.",
+  "master": "xprv9s21ZrQH143K2LBWUUQRFXhucrQqBpKdRRxNVq2zBqsx8HVqFk2uYo8kmbaLLHRdqtQpUm98uKfu3vca1LqdGhUtyoFnCNkfmXRyPXLjbKb",
+  "rows": [
+    { "words": 12, "index": 0, "mnemonic": "girl mad pet galaxy egg matter matrix prison refuse sense ordinary nose" },
+    { "words": 18, "index": 0, "mnemonic": "near account window bike charge season chef number sketch tomorrow excuse sniff circle vital hockey outdoor supply token" },
+    { "words": 24, "index": 0, "mnemonic": "puppy ocean match cereal symbol another shed magic wrap hammer bulb intact gadget divorce twin tonight reason outdoor destroy simple truth cigar social volcano" }
+  ]
+}

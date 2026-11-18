@@ -11,7 +11,7 @@ pub use unlock::{SessionSet, Unlock};
 
 pub(crate) use seeds::OpenSeed;
 pub use seeds::{
-    ConfirmRemove, ConfirmRemoveUnbacked, Generate, ImportKey, ImportWords, ImportedKey, NewSeed,
+    ConfirmRemove, ConfirmRemoveUnbacked, DeriveChild, Generate, ImportKey, ImportWords, ImportedKey, NewSeed,
     Remove, SeedBackup, SeedInfo, Vault,
 };
 

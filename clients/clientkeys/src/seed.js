@@ -78,6 +78,23 @@ export function seedFromWords(text, passphrase = '') {
   return bip39.mnemonicToSeedSync(normalizeMnemonic(text), passphrase);
 }
 
+/** BIP-85's BIP-39 application (scaas-sdk spec §6.4): the child mnemonic `index` of `words` words of a BIP-32 root (`seed`, the
+ *  64-byte BIP-39 seed, or an HDKey): path m/83696968'/39'/0'/<words>'/<index>' (English, language 0), entropy = the first
+ *  words·4/3 bytes of HMAC-SHA512("bip-entropy-from-k", k). The SDK derives 24-word children only. `Argument` for an index
+ *  outside [0, 2^31) or a word count outside {12, 15, 18, 21, 24}. The caller wipes `entropy`. */
+export function bip85Child(seed, index, words = 24) {
+  if (!Number.isInteger(index) || index < 0 || index >= HARDENED) fail('Argument', 'BIP-85 index outside [0, 2^31)');
+  if (![12, 15, 18, 21, 24].includes(words)) fail('Argument', 'BIP-85 words outside 12, 15, 18, 21, 24');
+  const root = seed instanceof HDKey ? seed : HDKey.fromMasterSeed(seed);
+  const node = root.derive(`m/83696968'/39'/0'/${words}'/${index}'`);
+  try {
+    const entropy = hmac(sha512, utf8ToBytes('bip-entropy-from-k'), node.privateKey).slice(0, (words * 4) / 3);
+    return { entropy, words: entropyToWords(entropy) };
+  } finally {
+    node.wipePrivateData();
+  }
+}
+
 /** The BIP-32 master key's fingerprint (the first 4 bytes of HASH160 of its compressed public key) as 8 lower-case hex digits:
  *  a seed's name in the scaas-sdk keystore, so a second import of the same words is found without unlocking (scaas-sdk spec
  *  §6.1). `seed` is the 64-byte BIP-39 seed (the main set: the empty BIP-39 passphrase). */

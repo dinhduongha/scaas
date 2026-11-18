@@ -236,6 +236,10 @@ impl Arena {
         self.get(self.entropy)
     }
 
+    pub(crate) fn seed_bytes(&self) -> Result<&[u8]> {
+        self.get(self.seed)
+    }
+
     pub(crate) fn mini(&self) -> Result<&[u8]> {
         self.get(self.mini)
     }
