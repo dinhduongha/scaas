@@ -17,19 +17,23 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use async_trait::async_trait;
 use axum::extract::{Path, State};
 use axum::routing::post;
 use axum::{Json, Router};
-use async_trait::async_trait;
-use scaas_node::adapter::{index_step, lane_step, Built, ChainAdapter, Family, Head, Lane, Signed, TxStatus};
-use scaas_node::chain::SimError;
-use scaas_node::adapters::sui::{addr_hex, lane_address, parse_addr, personal_digest, tx_signing_digest, Addr, MetaOp};
-use scaas_node::config::{ChainCfg, FinalityCfg, ExternalPullCfg};
-use scaas_node::keys::{lane_secret, Seed};
-use scaas_node::external_pull::{Job, ExternalPull};
-use scaas_node::signer::{Curve, LocalSigner, Signer};
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
+use scaas_node::adapter::{
+    index_step, lane_step, Built, ChainAdapter, Family, Head, Lane, Signed, TxStatus,
+};
+use scaas_node::adapters::sui::{
+    addr_hex, lane_address, parse_addr, personal_digest, tx_signing_digest, Addr, MetaOp,
+};
+use scaas_node::chain::SimError;
+use scaas_node::config::{ChainCfg, ExternalPullCfg, FinalityCfg};
+use scaas_node::external_pull::{ExternalPull, Job};
+use scaas_node::keys::{lane_secret, Seed};
+use scaas_node::signer::{Curve, LocalSigner, Signer};
 use serde_json::{json, Value};
 
 const RPC: &str = "http://127.0.0.1:31970";
@@ -47,7 +51,10 @@ impl Drop for Net {
 }
 
 fn now() -> u64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
 }
 
 fn sha256(b: &[u8]) -> [u8; 32] {
@@ -57,14 +64,28 @@ fn sha256(b: &[u8]) -> [u8; 32] {
 
 async fn rpc(method: &str, params: Value) -> Value {
     let body = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
-    let v: Value = reqwest::Client::new().post(RPC).json(&body).send().await.unwrap().json().await.unwrap();
+    let v: Value = reqwest::Client::new()
+        .post(RPC)
+        .json(&body)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
     assert!(v.get("error").is_none(), "{method}: {v}");
     v["result"].clone()
 }
 
 async fn start_localnet() -> Net {
     let child = Command::new("sui")
-        .args(["start", "--force-regenesis", "--with-faucet=127.0.0.1:31971", "--fullnode-rpc-port", "31970"])
+        .args([
+            "start",
+            "--force-regenesis",
+            "--with-faucet=127.0.0.1:31971",
+            "--fullnode-rpc-port",
+            "31970",
+        ])
         .env("RUST_LOG", "error")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -93,9 +114,17 @@ async fn faucet(to: &Addr) {
         .send()
         .await
         .unwrap();
-    assert!(r.status().is_success(), "faucet: {}", r.text().await.unwrap());
+    assert!(
+        r.status().is_success(),
+        "faucet: {}",
+        r.text().await.unwrap()
+    );
     for _ in 0..60 {
-        let c = rpc("suix_getCoins", json!([addr_hex(to), "0x2::sui::SUI", null, 50])).await;
+        let c = rpc(
+            "suix_getCoins",
+            json!([addr_hex(to), "0x2::sui::SUI", null, 50]),
+        )
+        .await;
         if !c["data"].as_array().unwrap().is_empty() {
             return;
         }
@@ -110,14 +139,39 @@ async fn exec(key: &LocalSigner, tx_b64: &str) -> Value {
     let mut sig = vec![0u8];
     sig.extend(key.sign(&tx_signing_digest(&tx)).unwrap());
     sig.extend(key.public_key());
-    let r = rpc("sui_executeTransactionBlock", json!([tx_b64, [B64.encode(&sig)],
-        {"showEffects": true, "showObjectChanges": true}, "WaitForLocalExecution"])).await;
+    let r = rpc(
+        "sui_executeTransactionBlock",
+        json!([tx_b64, [B64.encode(&sig)],
+        {"showEffects": true, "showObjectChanges": true}, "WaitForLocalExecution"]),
+    )
+    .await;
     assert_eq!(r["effects"]["status"]["status"], "success", "{r}");
     r
 }
 
-async fn call(key: &LocalSigner, sender: &Addr, pkg: &str, module: &str, func: &str, tys: Value, args: Value) -> Value {
-    let t = rpc("unsafe_moveCall", json!([addr_hex(sender), pkg, module, func, tys, args, null, "100000000"])).await;
+async fn call(
+    key: &LocalSigner,
+    sender: &Addr,
+    pkg: &str,
+    module: &str,
+    func: &str,
+    tys: Value,
+    args: Value,
+) -> Value {
+    let t = rpc(
+        "unsafe_moveCall",
+        json!([
+            addr_hex(sender),
+            pkg,
+            module,
+            func,
+            tys,
+            args,
+            null,
+            "100000000"
+        ]),
+    )
+    .await;
     exec(key, t["txBytes"].as_str().unwrap()).await
 }
 
@@ -126,7 +180,9 @@ fn created(r: &Value, ty_contains: &str) -> String {
         .as_array()
         .unwrap()
         .iter()
-        .find(|c| c["type"] == "created" && c["objectType"].as_str().unwrap_or("").contains(ty_contains))
+        .find(|c| {
+            c["type"] == "created" && c["objectType"].as_str().unwrap_or("").contains(ty_contains)
+        })
         .unwrap_or_else(|| panic!("no created {ty_contains} in {r}"))["objectId"]
         .as_str()
         .unwrap()
@@ -134,16 +190,38 @@ fn created(r: &Value, ty_contains: &str) -> String {
 }
 
 async fn publish(key: &LocalSigner, sender: &Addr, dir: &str) -> Value {
-    let out = Command::new("sui").args(["move", "build", "--dump-bytecode-as-base64", "--path", dir]).output().unwrap();
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let out = Command::new("sui")
+        .args(["move", "build", "--dump-bytecode-as-base64", "--path", dir])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let text = String::from_utf8(out.stdout).unwrap();
     let b: Value = serde_json::from_str(&text[text.find('{').unwrap()..]).unwrap();
-    let t = rpc("unsafe_publish", json!([addr_hex(sender), b["modules"], b["dependencies"], null, "500000000"])).await;
+    let t = rpc(
+        "unsafe_publish",
+        json!([
+            addr_hex(sender),
+            b["modules"],
+            b["dependencies"],
+            null,
+            "500000000"
+        ]),
+    )
+    .await;
     exec(key, t["txBytes"].as_str().unwrap()).await
 }
 
 fn published(r: &Value) -> String {
-    r["objectChanges"].as_array().unwrap().iter().find(|c| c["type"] == "published").unwrap()["packageId"]
+    r["objectChanges"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["type"] == "published")
+        .unwrap()["packageId"]
         .as_str()
         .unwrap()
         .to_string()
@@ -160,8 +238,14 @@ fn allowed(from: &str, to: &str) -> bool {
         (from, to),
         ("queued", "nonce_leased")
             | ("nonce_leased", "queued" | "signed" | "dead" | "consumed")
-            | ("signed", "broadcast" | "mined" | "reverted" | "queued" | "dead" | "consumed")
-            | ("broadcast", "mined" | "reverted" | "broadcast" | "queued" | "dead" | "consumed")
+            | (
+                "signed",
+                "broadcast" | "mined" | "reverted" | "queued" | "dead" | "consumed"
+            )
+            | (
+                "broadcast",
+                "mined" | "reverted" | "broadcast" | "queued" | "dead" | "consumed"
+            )
             | ("mined", "reverted")
     )
 }
@@ -178,7 +262,11 @@ struct FakeExternalPull {
     tokens: Vec<String>,
 }
 
-async fn fake(State(s): State<Arc<Mutex<FakeExternalPull>>>, Path((model, method)): Path<(String, String)>, Json(body): Json<Value>) -> Json<Value> {
+async fn fake(
+    State(s): State<Arc<Mutex<FakeExternalPull>>>,
+    Path((model, method)): Path<(String, String)>,
+    Json(body): Json<Value>,
+) -> Json<Value> {
     let mut o = s.lock().unwrap();
     let out = match (model.as_str(), method.as_str()) {
         ("blockchain.chain", "node_config") => json!({
@@ -196,10 +284,16 @@ async fn fake(State(s): State<Arc<Mutex<FakeExternalPull>>>, Path((model, method
         ("blockchain.relay.job", "relay_report") => {
             let id = body["job_id"].as_i64().unwrap();
             let to = body["chain_state"].as_str().unwrap().to_string();
-            let from = o.states.get(&id).cloned().unwrap_or_else(|| "queued".into());
+            let from = o
+                .states
+                .get(&id)
+                .cloned()
+                .unwrap_or_else(|| "queued".into());
             if !allowed(&from, &to) {
                 o.refused.push(body.clone());
-                return Json(json!({"error": format!("Transition {from} -> {to} is not allowed.")}));
+                return Json(
+                    json!({"error": format!("Transition {from} -> {to} is not allowed.")}),
+                );
             }
             o.states.insert(id, to);
             o.reports.push(body.clone());
@@ -207,7 +301,8 @@ async fn fake(State(s): State<Arc<Mutex<FakeExternalPull>>>, Path((model, method
         }
         ("blockchain.chain.event", "chain_event_ingest") => {
             o.indexed_block = body["to_block"].as_u64().unwrap();
-            o.ingested.extend(body["events"].as_array().unwrap().iter().cloned());
+            o.ingested
+                .extend(body["events"].as_array().unwrap().iter().cloned());
             json!({"indexed_block": o.indexed_block, "created": 0})
         }
         _ => json!({"error": "unexpected"}),
@@ -216,7 +311,9 @@ async fn fake(State(s): State<Arc<Mutex<FakeExternalPull>>>, Path((model, method
 }
 
 async fn start_fake(state: Arc<Mutex<FakeExternalPull>>) -> SocketAddr {
-    let app = Router::new().route("/json/2/{model}/{method}", post(fake)).with_state(state);
+    let app = Router::new()
+        .route("/json/2/{model}/{method}", post(fake))
+        .with_state(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -224,12 +321,25 @@ async fn start_fake(state: Arc<Mutex<FakeExternalPull>>) -> SocketAddr {
 }
 
 fn external_pull_at(addr: SocketAddr) -> ExternalPull {
-    let cfg = ExternalPullCfg { url: format!("http://{addr}"), database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
+    let cfg = ExternalPullCfg {
+        url: format!("http://{addr}"),
+        database: "t".into(),
+        relay_api_key_env: String::new(),
+        indexer_api_key_env: String::new(),
+    };
     ExternalPull::with_key(&cfg, "k".into()).unwrap()
 }
 
 /// Một payment `pay` của alice đã ký (serialized ed25519) thành job `signed_op`.
-fn job(id: i64, alice: &LocalSigner, account: &str, coin_type: &str, amount: u128, ref_byte: u8, lane_byte: u8) -> (Value, [u8; 32]) {
+fn job(
+    id: i64,
+    alice: &LocalSigner,
+    account: &str,
+    coin_type: &str,
+    amount: u128,
+    ref_byte: u8,
+    lane_byte: u8,
+) -> (Value, [u8; 32]) {
     let op = MetaOp {
         network: b"localnet".to_vec(),
         contract: parse_addr(account).unwrap(),
@@ -256,12 +366,24 @@ fn job(id: i64, alice: &LocalSigner, account: &str, coin_type: &str, amount: u12
     (j, digest)
 }
 
-async fn run_job(adapter: &dyn ChainAdapter, external_pull: &ExternalPull, state: &Arc<Mutex<FakeExternalPull>>, lane: usize, j: Value) -> Vec<String> {
+async fn run_job(
+    adapter: &dyn ChainAdapter,
+    external_pull: &ExternalPull,
+    state: &Arc<Mutex<FakeExternalPull>>,
+    lane: usize,
+    j: Value,
+) -> Vec<String> {
     let id = j["id"].as_i64().unwrap();
     state.lock().unwrap().jobs.push(j);
-    assert!(lane_step(adapter, external_pull, lane, "e2e").await.unwrap());
+    assert!(lane_step(adapter, external_pull, lane, "e2e")
+        .await
+        .unwrap());
     let reports = state.lock().unwrap().reports.clone();
-    reports.iter().filter(|r| r["job_id"] == id).map(|r| r["chain_state"].as_str().unwrap().to_string()).collect()
+    reports
+        .iter()
+        .filter(|r| r["job_id"] == id)
+        .map(|r| r["chain_state"].as_str().unwrap().to_string())
+        .collect()
 }
 
 /// Adapter thật, nhưng `submit` của job `hold` chờ tới khi test thả `gate` (tx đã ký + đã journal `signed`).
@@ -312,7 +434,14 @@ impl ChainAdapter for Held {
 }
 
 fn states_of(state: &Arc<Mutex<FakeExternalPull>>, id: i64) -> Vec<String> {
-    state.lock().unwrap().reports.iter().filter(|r| r["job_id"] == id).map(|r| r["chain_state"].as_str().unwrap().to_string()).collect()
+    state
+        .lock()
+        .unwrap()
+        .reports
+        .iter()
+        .filter(|r| r["job_id"] == id)
+        .map(|r| r["chain_state"].as_str().unwrap().to_string())
+        .collect()
 }
 
 #[tokio::test]
@@ -337,30 +466,134 @@ async fn sui_payments_relay_finalize_and_never_lock_each_other() {
     let treasury = created(&d, "TreasuryCap");
     let demo_t = format!("{demo_pkg}::demo::DEMO");
 
-    call(&deployer, &dep, &pkg, "meta", "set_network", json!([]), json!([cap, root, bytes(b"localnet")])).await;
-    let r = call(&deployer, &dep, &pkg, "meta", "new_registry", json!(["0x2::sui::SUI"]), json!([root])).await;
+    call(
+        &deployer,
+        &dep,
+        &pkg,
+        "meta",
+        "set_network",
+        json!([]),
+        json!([cap, root, bytes(b"localnet")]),
+    )
+    .await;
+    let r = call(
+        &deployer,
+        &dep,
+        &pkg,
+        "meta",
+        "new_registry",
+        json!(["0x2::sui::SUI"]),
+        json!([root]),
+    )
+    .await;
     let reg_sui = created(&r, "::meta::Registry<");
-    let r = call(&deployer, &dep, &pkg, "meta", "new_registry", json!([demo_t]), json!([root])).await;
+    let r = call(
+        &deployer,
+        &dep,
+        &pkg,
+        "meta",
+        "new_registry",
+        json!([demo_t]),
+        json!([root]),
+    )
+    .await;
     let reg_demo = created(&r, "::meta::Registry<");
-    let r = call(&deployer, &dep, &pkg, "meta", "open", json!(["0x2::sui::SUI"]), json!([reg_sui, 0, bytes(&alice.public_key())])).await;
+    let r = call(
+        &deployer,
+        &dep,
+        &pkg,
+        "meta",
+        "open",
+        json!(["0x2::sui::SUI"]),
+        json!([reg_sui, 0, bytes(&alice.public_key())]),
+    )
+    .await;
     let acct_sui = created(&r, "::meta::Account<");
-    let r = call(&deployer, &dep, &pkg, "meta", "open", json!([demo_t]), json!([reg_demo, 0, bytes(&alice.public_key())])).await;
+    let r = call(
+        &deployer,
+        &dep,
+        &pkg,
+        "meta",
+        "open",
+        json!([demo_t]),
+        json!([reg_demo, 0, bytes(&alice.public_key())]),
+    )
+    .await;
     let acct_demo = created(&r, "::meta::Account<");
 
     // Nạp: SUI tách từ coin của deployer; DEMO đúc rồi nạp.
-    let coins = rpc("suix_getCoins", json!([addr_hex(&dep), "0x2::sui::SUI", null, 50])).await;
-    let big = coins["data"][0]["coinObjectId"].as_str().unwrap().to_string();
-    let t = rpc("unsafe_splitCoin", json!([addr_hex(&dep), big, ["5000000"], null, "100000000"])).await;
+    let coins = rpc(
+        "suix_getCoins",
+        json!([addr_hex(&dep), "0x2::sui::SUI", null, 50]),
+    )
+    .await;
+    let big = coins["data"][0]["coinObjectId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let t = rpc(
+        "unsafe_splitCoin",
+        json!([addr_hex(&dep), big, ["5000000"], null, "100000000"]),
+    )
+    .await;
     let r = exec(&deployer, t["txBytes"].as_str().unwrap()).await;
-    let sui_coin = r["objectChanges"].as_array().unwrap().iter()
-        .find(|c| c["type"] == "created" && c["objectType"].as_str().unwrap().contains("Coin<0x2::sui::SUI>"))
-        .unwrap()["objectId"].as_str().unwrap().to_string();
-    call(&deployer, &dep, &pkg, "meta", "deposit", json!(["0x2::sui::SUI"]), json!([acct_sui, sui_coin])).await;
-    let r = call(&deployer, &dep, "0x2", "coin", "mint_and_transfer", json!([demo_t]), json!([treasury, "1000000", addr_hex(&dep)])).await;
+    let sui_coin = r["objectChanges"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| {
+            c["type"] == "created"
+                && c["objectType"]
+                    .as_str()
+                    .unwrap()
+                    .contains("Coin<0x2::sui::SUI>")
+        })
+        .unwrap()["objectId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    call(
+        &deployer,
+        &dep,
+        &pkg,
+        "meta",
+        "deposit",
+        json!(["0x2::sui::SUI"]),
+        json!([acct_sui, sui_coin]),
+    )
+    .await;
+    let r = call(
+        &deployer,
+        &dep,
+        "0x2",
+        "coin",
+        "mint_and_transfer",
+        json!([demo_t]),
+        json!([treasury, "1000000", addr_hex(&dep)]),
+    )
+    .await;
     let demo_coin = created(&r, "::coin::Coin<");
-    call(&deployer, &dep, &pkg, "meta", "deposit", json!([demo_t]), json!([acct_demo, demo_coin])).await;
-    assert!(rpc("suix_getCoins", json!([addr_hex(&alice_addr), "0x2::sui::SUI", null, 5])).await["data"].as_array().unwrap().is_empty(),
-            "alice has no gas at all");
+    call(
+        &deployer,
+        &dep,
+        &pkg,
+        "meta",
+        "deposit",
+        json!([demo_t]),
+        json!([acct_demo, demo_coin]),
+    )
+    .await;
+    assert!(
+        rpc(
+            "suix_getCoins",
+            json!([addr_hex(&alice_addr), "0x2::sui::SUI", null, 5])
+        )
+        .await["data"]
+            .as_array()
+            .unwrap()
+            .is_empty(),
+        "alice has no gas at all"
+    );
 
     // Hai lane từ mnemonic 24 từ.
     let seed = Seed::from_words(MNEMONIC, None).unwrap();
@@ -388,7 +621,11 @@ async fn sui_payments_relay_finalize_and_never_lock_each_other() {
         private_key: None,
         lanes: vec![0, 1],
         params,
-        finality: FinalityCfg { mode: "instant".into(), depth: 0, quorum: 1 },
+        finality: FinalityCfg {
+            mode: "instant".into(),
+            depth: 0,
+            quorum: 1,
+        },
         dex: None,
         poll_ms: 200,
         stuck_after_secs: 60,
@@ -399,7 +636,10 @@ async fn sui_payments_relay_finalize_and_never_lock_each_other() {
     let adapter = scaas_node::adapters::build(&cfg, &signers).unwrap();
     assert_eq!(adapter.chain_key(), "sui:localnet");
 
-    let state = Arc::new(Mutex::new(FakeExternalPull { tokens: vec![reg_sui.clone(), reg_demo.clone()], ..Default::default() }));
+    let state = Arc::new(Mutex::new(FakeExternalPull {
+        tokens: vec![reg_sui.clone(), reg_demo.clone()],
+        ..Default::default()
+    }));
     let external_pull = external_pull_at(start_fake(state.clone()).await);
     let head0 = adapter.final_head().await.unwrap().unwrap().height;
     state.lock().unwrap().indexed_block = head0;
@@ -407,7 +647,11 @@ async fn sui_payments_relay_finalize_and_never_lock_each_other() {
     // ANTI-LOCK đồng thời (review L3): X `signed` trên lane 0 và bị giữ; Y (account DEMO) đi hết trên lane 1.
     let (x, x_digest) = job(1, &alice, &acct_sui, "0x2::sui::SUI", 1000, 0x11, 0xa1);
     let (y, y_digest) = job(2, &alice, &acct_demo, &demo_t, 500, 0x22, 0xa2);
-    let held = Held { inner: adapter.clone(), hold: 1, gate: tokio::sync::Semaphore::new(0) };
+    let held = Held {
+        inner: adapter.clone(),
+        hold: 1,
+        gate: tokio::sync::Semaphore::new(0),
+    };
     state.lock().unwrap().jobs.push(x.clone());
     let x_run = lane_step(&held, &external_pull, 0, "e2e");
     let y_run = async {
@@ -416,17 +660,28 @@ async fn sui_payments_relay_finalize_and_never_lock_each_other() {
         }
         state.lock().unwrap().jobs.push(y);
         assert!(lane_step(&held, &external_pull, 1, "e2e").await.unwrap());
-        assert_eq!(states_of(&state, 2), ["signed", "broadcast", "mined"], "Y while X is in flight");
+        assert_eq!(
+            states_of(&state, 2),
+            ["signed", "broadcast", "mined"],
+            "Y while X is in flight"
+        );
         assert_eq!(states_of(&state, 1), ["signed"], "X still held, unsent");
         held.gate.add_permits(1);
     };
-    let (x_done, ()) = tokio::time::timeout(Duration::from_secs(120), async { tokio::join!(x_run, y_run) }).await.expect("lanes stuck");
+    let (x_done, ()) = tokio::time::timeout(Duration::from_secs(120), async {
+        tokio::join!(x_run, y_run)
+    })
+    .await
+    .expect("lanes stuck");
     assert!(x_done.unwrap());
     assert_eq!(states_of(&state, 1), ["signed", "broadcast", "mined"]);
     // Phát lại X: dry-run từ chối, nonce đã dùng ⇒ `consumed` (R80), không tốn gas.
     let mut replay = x;
     replay["id"] = json!(3);
-    assert_eq!(run_job(adapter.as_ref(), &external_pull, &state, 0, replay).await, ["consumed"]);
+    assert_eq!(
+        run_job(adapter.as_ref(), &external_pull, &state, 0, replay).await,
+        ["consumed"]
+    );
     assert!(state.lock().unwrap().refused.is_empty());
 
     // KHỞI ĐỘNG LẠI (review M3): lane 0 dựng + ký W (journal ghi) rồi tiến trình "chết" trước khi gửi.
@@ -436,7 +691,11 @@ async fn sui_payments_relay_finalize_and_never_lock_each_other() {
     let w_signed = adapter.sign(built, 0, 0).await.unwrap();
     drop(adapter);
     let adapter = scaas_node::adapters::build(&cfg, &signers).unwrap(); // tiến trình mới, cùng journal
-    assert_eq!(adapter.tx_status(&w_signed.tx_id).await.unwrap(), TxStatus::Unknown, "W never sent");
+    assert_eq!(
+        adapter.tx_status(&w_signed.tx_id).await.unwrap(),
+        TxStatus::Unknown,
+        "W never sent"
+    );
     let (v, _) = job(5, &alice, &acct_sui, "0x2::sui::SUI", 300, 0x55, 0xa5);
     let mut v_states = Vec::new();
     for _ in 0..10 {
@@ -446,29 +705,61 @@ async fn sui_payments_relay_finalize_and_never_lock_each_other() {
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
-    assert_eq!(v_states.last().map(String::as_str), Some("mined"), "V: {v_states:?}");
-    assert!(matches!(adapter.tx_status(&w_signed.tx_id).await.unwrap(), TxStatus::Mined { .. }), "W re-sent from the journal");
+    assert_eq!(
+        v_states.last().map(String::as_str),
+        Some("mined"),
+        "V: {v_states:?}"
+    );
+    assert!(
+        matches!(
+            adapter.tx_status(&w_signed.tx_id).await.unwrap(),
+            TxStatus::Mined { .. }
+        ),
+        "W re-sent from the journal"
+    );
     assert!(state.lock().unwrap().refused.is_empty());
 
     // Final: index tới khi thấy cả hai thanh toán.
     for _ in 0..60 {
         while index_step(adapter.as_ref(), &external_pull).await.unwrap() {}
-        if state.lock().unwrap().ingested.iter().filter(|e| e["event"] == "PaymentSettled").count() >= 4 {
+        if state
+            .lock()
+            .unwrap()
+            .ingested
+            .iter()
+            .filter(|e| e["event"] == "PaymentSettled")
+            .count()
+            >= 4
+        {
             break;
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
     let ing = state.lock().unwrap().ingested.clone();
     let shop = addr_hex(&parse_addr(SHOP).unwrap());
-    let pay_x = ing.iter().find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == addr_hex(&[0x11u8; 32])).expect("X settled");
+    let pay_x = ing
+        .iter()
+        .find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == addr_hex(&[0x11u8; 32]))
+        .expect("X settled");
     assert_eq!(pay_x["contract"], reg_sui);
-    assert_eq!((pay_x["to"].as_str(), pay_x["amount"].as_str()), (Some(shop.as_str()), Some("1000")));
+    assert_eq!(
+        (pay_x["to"].as_str(), pay_x["amount"].as_str()),
+        (Some(shop.as_str()), Some("1000"))
+    );
     assert_eq!(pay_x["entry_ref"], addr_hex(&[0x11u8; 32]));
     assert_eq!(pay_x["from"], addr_hex(&alice_addr));
-    let pay_y = ing.iter().find(|e| e["event"] == "PaymentSettled" && e["contract"] == reg_demo).expect("Y settled");
+    let pay_y = ing
+        .iter()
+        .find(|e| e["event"] == "PaymentSettled" && e["contract"] == reg_demo)
+        .expect("Y settled");
     assert_eq!(pay_y["amount"], "500");
     for d in [x_digest, y_digest] {
-        assert!(ing.iter().any(|e| e["event"] == "MetaTransactionExecuted" && e["digest"] == addr_hex(&d)), "digest {}", addr_hex(&d));
+        assert!(
+            ing.iter()
+                .any(|e| e["event"] == "MetaTransactionExecuted" && e["digest"] == addr_hex(&d)),
+            "digest {}",
+            addr_hex(&d)
+        );
     }
     let tx = ing[0]["tx_hash"].as_str().unwrap();
     assert!(tx.len() == 66 && ing[0]["block_hash"].as_str().unwrap().len() == 66);

@@ -21,7 +21,8 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use soroban_common::*;
 use stellar_xdr::{
-    Int128Parts, InvokeContractArgs, Limits, ScSymbol, ScVal, SorobanAuthorizedFunction, SorobanAuthorizedInvocation, WriteXdr,
+    Int128Parts, InvokeContractArgs, Limits, ScSymbol, ScVal, SorobanAuthorizedFunction,
+    SorobanAuthorizedInvocation, WriteXdr,
 };
 
 /// Đúng phép dựng của ExternalPull `fam_soroban.build_terms` (vector chéo ghim ở ba phía).
@@ -31,13 +32,25 @@ struct Signed {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn sign_pay(subject: &LocalSigner, token: &str, to: &str, amount: i128, pay_ref: [u8; 32], nonce: i64, exp: u32, id: i64) -> Signed {
+fn sign_pay(
+    subject: &LocalSigner,
+    token: &str,
+    to: &str,
+    amount: i128,
+    pay_ref: [u8; 32],
+    nonce: i64,
+    exp: u32,
+    id: i64,
+) -> Signed {
     let from = g(subject);
     let valid_until = now() + 600;
     let args = vec![
         addr(&from),
         addr(to),
-        ScVal::I128(Int128Parts { hi: (amount >> 64) as i64, lo: amount as u64 }),
+        ScVal::I128(Int128Parts {
+            hi: (amount >> 64) as i64,
+            lo: amount as u64,
+        }),
         ScVal::Bytes(pay_ref.to_vec().try_into().unwrap()),
         ScVal::U64(valid_until),
     ];
@@ -46,7 +59,10 @@ fn sign_pay(subject: &LocalSigner, token: &str, to: &str, amount: i128, pay_ref:
         function_name: ScSymbol("pay".try_into().unwrap()),
         args: args.clone().try_into().unwrap(),
     };
-    let root = SorobanAuthorizedInvocation { function: SorobanAuthorizedFunction::ContractFn(call), sub_invocations: Default::default() };
+    let root = SorobanAuthorizedInvocation {
+        function: SorobanAuthorizedFunction::ContractFn(call),
+        sub_invocations: Default::default(),
+    };
     let (payload, sig) = signed_auth(subject, nonce, exp, &root);
     let dv = ScVal::Vec(Some(
         vec![
@@ -59,7 +75,10 @@ fn sign_pay(subject: &LocalSigner, token: &str, to: &str, amount: i128, pay_ref:
         .try_into()
         .unwrap(),
     ));
-    let digest = format!("0x{}", alloy::hex::encode(Sha256::digest(dv.to_xdr(Limits::none()).unwrap())));
+    let digest = format!(
+        "0x{}",
+        alloy::hex::encode(Sha256::digest(dv.to_xdr(Limits::none()).unwrap()))
+    );
     let job = json!({"id": id, "kind": "signed_op", "op": {
         "family": "soroban", "contract": token, "from": from, "op_kind": "pay",
         "payload": payload, "signature": sig, "public_key": from,
@@ -74,12 +93,31 @@ async fn soroban_payments_anti_lock_fee_bump_and_finality() {
     for k in [&lane0, &lane1, &deployer, &subject] {
         fund(&g(k)).await;
     }
-    let (t1, t2) = (deploy_token(&secret(7), &g(&deployer), None), deploy_token(&secret(7), &g(&deployer), None));
+    let (t1, t2) = (
+        deploy_token(&secret(7), &g(&deployer), None),
+        deploy_token(&secret(7), &g(&deployer), None),
+    );
     for t in [&t1, &t2] {
-        cli(&["contract", "invoke", "--id", t, "--source-account", &secret(7), "--", "mint", "--to", &g(&subject), "--amount", "1000000"]);
+        cli(&[
+            "contract",
+            "invoke",
+            "--id",
+            t,
+            "--source-account",
+            &secret(7),
+            "--",
+            "mint",
+            "--to",
+            &g(&subject),
+            "--amount",
+            "1000000",
+        ]);
     }
 
-    let state = Arc::new(Mutex::new(FakeExternalPull { tokens: vec![t1.clone(), t2.clone()], ..Default::default() }));
+    let state = Arc::new(Mutex::new(FakeExternalPull {
+        tokens: vec![t1.clone(), t2.clone()],
+        ..Default::default()
+    }));
     let start = latest_ledger().await;
     state.lock().unwrap().indexed_block = start - 1;
     let external_pull = external_pull_at(start_fake(state.clone()).await);
@@ -87,23 +125,60 @@ async fn soroban_payments_anti_lock_fee_bump_and_finality() {
     let adapter = SorobanAdapter::new(&chain_cfg(false), &signers).unwrap();
     assert_eq!(adapter.lanes()[1].address, g(&lane1));
     // a `signed_op` runs on the chain's registered tokens, the client's list (`refresh_tokens`), none in the config
-    recover_lane(&adapter, &external_pull, 0, "n#0").await.unwrap();
+    recover_lane(&adapter, &external_pull, 0, "n#0")
+        .await
+        .unwrap();
     let seq0 = adapter.sequence(0).await.unwrap();
 
     let exp = start as u32 + 1000;
-    let x = sign_pay(&subject, &t1, &g(&payee), 1_000, [0xA1; 32], 0x1111_2222, exp, 1);
-    let y = sign_pay(&subject, &t2, &g(&payee), 2_000, [0xB2; 32], -0x3333_4444, exp, 2);
+    let x = sign_pay(
+        &subject,
+        &t1,
+        &g(&payee),
+        1_000,
+        [0xA1; 32],
+        0x1111_2222,
+        exp,
+        1,
+    );
+    let y = sign_pay(
+        &subject,
+        &t2,
+        &g(&payee),
+        2_000,
+        [0xB2; 32],
+        -0x3333_4444,
+        exp,
+        2,
+    );
 
     // Anti-lock (R62): X is withheld; Y on the other contract goes through lane 1.
     state.lock().unwrap().jobs.push(y.job.clone());
     assert!(lane_step(&adapter, &external_pull, 1, "n#1").await.unwrap());
-    assert_eq!(last_state(&state.lock().unwrap(), 2), "mined", "{:?}", state.lock().unwrap().reports);
+    assert_eq!(
+        last_state(&state.lock().unwrap(), 2),
+        "mined",
+        "{:?}",
+        state.lock().unwrap().reports
+    );
     // Then X lands, on lane 0.
     state.lock().unwrap().jobs.push(x.job.clone());
     assert!(lane_step(&adapter, &external_pull, 0, "n#0").await.unwrap());
-    assert_eq!(last_state(&state.lock().unwrap(), 1), "mined", "{:?}", state.lock().unwrap().reports);
-    assert_eq!(report_of(&state.lock().unwrap(), 1, "signed")["signer_address"], json!(g(&lane0)));
-    assert_eq!(adapter.sequence(0).await.unwrap(), seq0 + 1, "the lane's own sequence advanced; the subject sent nothing");
+    assert_eq!(
+        last_state(&state.lock().unwrap(), 1),
+        "mined",
+        "{:?}",
+        state.lock().unwrap().reports
+    );
+    assert_eq!(
+        report_of(&state.lock().unwrap(), 1, "signed")["signer_address"],
+        json!(g(&lane0))
+    );
+    assert_eq!(
+        adapter.sequence(0).await.unwrap(),
+        seq0 + 1,
+        "the lane's own sequence advanced; the subject sent nothing"
+    );
 
     // Replaying X: the host refuses the spent (address, nonce) at simulation — dead, no fee spent.
     let mut replay = x.job.clone();
@@ -115,11 +190,18 @@ async fn soroban_payments_anti_lock_fee_bump_and_finality() {
 
     // Fee-bump: lane 0 pays for lane 1's tx.
     let bumped = SorobanAdapter::new(&chain_cfg(true), &signers).unwrap();
-    recover_lane(&bumped, &external_pull, 1, "n#1").await.unwrap();
+    recover_lane(&bumped, &external_pull, 1, "n#1")
+        .await
+        .unwrap();
     let z = sign_pay(&subject, &t1, &g(&payee), 3_000, [0xC3; 32], 77, exp, 4);
     state.lock().unwrap().jobs.push(z.job.clone());
     assert!(lane_step(&bumped, &external_pull, 1, "n#1").await.unwrap());
-    assert_eq!(last_state(&state.lock().unwrap(), 4), "mined", "{:?}", state.lock().unwrap().reports);
+    assert_eq!(
+        last_state(&state.lock().unwrap(), 4),
+        "mined",
+        "{:?}",
+        state.lock().unwrap().reports
+    );
 
     // Finality: index up to the head; the indexed events carry the digests the subject signed for.
     let mined = latest_ledger().await;
@@ -133,21 +215,40 @@ async fn soroban_payments_anti_lock_fee_bump_and_finality() {
     let o = state.lock().unwrap();
     assert!(o.indexed_block >= mined);
     assert!(o.refused.is_empty(), "{:?}", o.refused);
-    let paid: Vec<_> = o.ingested.iter().filter(|e| e["event"] == "PaymentSettled").collect();
-    let executed: Vec<_> = o.ingested.iter().filter(|e| e["event"] == "MetaTransactionExecuted").collect();
+    let paid: Vec<_> = o
+        .ingested
+        .iter()
+        .filter(|e| e["event"] == "PaymentSettled")
+        .collect();
+    let executed: Vec<_> = o
+        .ingested
+        .iter()
+        .filter(|e| e["event"] == "MetaTransactionExecuted")
+        .collect();
     assert_eq!(paid.len(), 3, "{:?}", o.ingested);
-    let refs: Vec<_> = paid.iter().map(|e| e["entry_ref"].as_str().unwrap().to_string()).collect();
+    let refs: Vec<_> = paid
+        .iter()
+        .map(|e| e["entry_ref"].as_str().unwrap().to_string())
+        .collect();
     for r in ["a1", "b2", "c3"] {
         assert!(refs.contains(&format!("0x{}", r.repeat(32))), "{refs:?}");
     }
-    let digests: Vec<_> = executed.iter().map(|e| e["digest"].as_str().unwrap().to_string()).collect();
+    let digests: Vec<_> = executed
+        .iter()
+        .map(|e| e["digest"].as_str().unwrap().to_string())
+        .collect();
     for d in [&x.digest, &y.digest, &z.digest] {
         assert!(digests.contains(d), "{digests:?}");
     }
     for e in o.ingested.iter() {
         assert_eq!(e["from"], json!(g(&subject)));
-        assert!(e["block_hash"].as_str().unwrap().len() == 66 && e["tx_hash"].as_str().unwrap().starts_with("0x"));
+        assert!(
+            e["block_hash"].as_str().unwrap().len() == 66
+                && e["tx_hash"].as_str().unwrap().starts_with("0x")
+        );
     }
     let y_tx = report_of(&o, 2, "signed")["tx_hash"].clone();
-    assert!(paid.iter().any(|e| e["tx_hash"] == y_tx && e["amount"] == "2000" && e["contract"] == json!(t2)));
+    assert!(paid
+        .iter()
+        .any(|e| e["tx_hash"] == y_tx && e["amount"] == "2000" && e["contract"] == json!(t2)));
 }

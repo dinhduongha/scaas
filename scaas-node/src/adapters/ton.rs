@@ -12,8 +12,8 @@ use ed25519_dalek::{Signature, VerifyingKey};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-use crate::adapters::evm::{building, BUILDING};
 use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Signed, TxStatus};
+use crate::adapters::evm::{building, BUILDING};
 use crate::chain::SimError;
 use crate::config::ChainCfg;
 use crate::external_pull::Job;
@@ -37,7 +37,14 @@ impl Cell {
         if bits > 1023 || refs.len() > 4 || data.len() != bits.div_ceil(8) {
             bail!("cell overflow");
         }
-        let mut c = Cell { data, bits, refs, exotic, hash: [0; 32], depth: 0 };
+        let mut c = Cell {
+            data,
+            bits,
+            refs,
+            exotic,
+            hash: [0; 32],
+            depth: 0,
+        };
         let mut h = Sha256::new();
         h.update(c.descriptors());
         h.update(c.padded());
@@ -69,7 +76,10 @@ impl Cell {
     }
 
     fn descriptors(&self) -> [u8; 2] {
-        [self.refs.len() as u8 + if self.exotic { 8 } else { 0 }, (self.bits / 8 + self.bits.div_ceil(8)) as u8]
+        [
+            self.refs.len() as u8 + if self.exotic { 8 } else { 0 },
+            (self.bits / 8 + self.bits.div_ceil(8)) as u8,
+        ]
     }
 
     /// Data with the completion tag (`1` then zeros) when not byte aligned.
@@ -83,7 +93,11 @@ impl Cell {
     }
 
     pub fn parser(&self) -> Reader<'_> {
-        Reader { cell: self, pos: 0, refp: 0 }
+        Reader {
+            cell: self,
+            pos: 0,
+            refp: 0,
+        }
     }
 }
 
@@ -120,7 +134,11 @@ impl Builder {
     }
 
     pub fn int(self, v: i64, n: usize) -> Self {
-        let mask = if n >= 128 { u128::MAX } else { (1u128 << n) - 1 };
+        let mask = if n >= 128 {
+            u128::MAX
+        } else {
+            (1u128 << n) - 1
+        };
         self.uint((v as i128 as u128) & mask, n)
     }
 
@@ -202,7 +220,11 @@ impl Reader<'_> {
 
     pub fn int(&mut self, n: usize) -> Result<i64> {
         let v = self.uint(n)? as i128;
-        Ok(if n > 0 && v >> (n - 1) & 1 == 1 { (v - (1i128 << n)) as i64 } else { v as i64 })
+        Ok(if n > 0 && v >> (n - 1) & 1 == 1 {
+            (v - (1i128 << n)) as i64
+        } else {
+            v as i64
+        })
     }
 
     pub fn bytes(&mut self, n: usize) -> Result<Vec<u8>> {
@@ -222,7 +244,10 @@ impl Reader<'_> {
                     bail!("anycast addresses are not supported");
                 }
                 let wc = self.int(8)? as i32;
-                Ok(Some(Addr { wc, hash: self.b256()? }))
+                Ok(Some(Addr {
+                    wc,
+                    hash: self.b256()?,
+                }))
             }
             _ => bail!("unsupported address kind"),
         }
@@ -234,7 +259,12 @@ impl Reader<'_> {
     }
 
     pub fn reference(&mut self) -> Result<Arc<Cell>> {
-        let c = self.cell.refs.get(self.refp).cloned().ok_or_else(|| anyhow!("no more refs"))?;
+        let c = self
+            .cell
+            .refs
+            .get(self.refp)
+            .cloned()
+            .ok_or_else(|| anyhow!("no more refs"))?;
         self.refp += 1;
         Ok(c)
     }
@@ -253,7 +283,12 @@ pub fn boc_serialize(root: &Arc<Cell>) -> Vec<u8> {
     // cell comes after all its parents — the same order @ton/core and fam_ton.py produce for these trees.
     let mut seen: Vec<Arc<Cell>> = Vec::new();
     let mut level: HashMap<[u8; 32], usize> = HashMap::new();
-    fn walk(c: &Arc<Cell>, d: usize, seen: &mut Vec<Arc<Cell>>, level: &mut HashMap<[u8; 32], usize>) {
+    fn walk(
+        c: &Arc<Cell>,
+        d: usize,
+        seen: &mut Vec<Arc<Cell>>,
+        level: &mut HashMap<[u8; 32], usize>,
+    ) {
         match level.get(&c.hash) {
             Some(l) if *l >= d => return,
             Some(_) => {}
@@ -267,8 +302,14 @@ pub fn boc_serialize(root: &Arc<Cell>) -> Vec<u8> {
     walk(root, 0, &mut seen, &mut level);
     seen.sort_by_key(|c| level[&c.hash]);
     let order: Vec<(usize, Arc<Cell>)> = seen.into_iter().map(|c| (0, c)).collect();
-    let index: HashMap<[u8; 32], usize> = order.iter().enumerate().map(|(i, (_, c))| (c.hash, i)).collect();
-    let size = (usize::BITS - order.len().leading_zeros()).div_ceil(8).max(1) as usize;
+    let index: HashMap<[u8; 32], usize> = order
+        .iter()
+        .enumerate()
+        .map(|(i, (_, c))| (c.hash, i))
+        .collect();
+    let size = (usize::BITS - order.len().leading_zeros())
+        .div_ceil(8)
+        .max(1) as usize;
     let mut payload = Vec::new();
     for (_, c) in &order {
         payload.extend_from_slice(&c.descriptors());
@@ -277,7 +318,9 @@ pub fn boc_serialize(root: &Arc<Cell>) -> Vec<u8> {
             payload.extend_from_slice(&index[&r.hash].to_be_bytes()[8 - size..]);
         }
     }
-    let off = (usize::BITS - payload.len().leading_zeros()).div_ceil(8).max(1) as usize;
+    let off = (usize::BITS - payload.len().leading_zeros())
+        .div_ceil(8)
+        .max(1) as usize;
     let be = |v: usize, n: usize| v.to_be_bytes()[8 - n..].to_vec();
     let mut out = vec![0xb5, 0xee, 0x9c, 0x72, size as u8, off as u8];
     out.extend(be(order.len(), size));
@@ -296,7 +339,10 @@ fn boc_uint(b: &[u8], max: usize, what: &str) -> Result<usize> {
         bail!("BOC {what}: {} bytes", b.len());
     }
     let v = b.iter().fold(0u64, |a, x| (a << 8) | u64::from(*x));
-    usize::try_from(v).ok().filter(|v| *v <= max).ok_or_else(|| anyhow!("BOC {what} {v} over {max}"))
+    usize::try_from(v)
+        .ok()
+        .filter(|v| *v <= max)
+        .ok_or_else(|| anyhow!("BOC {what} {v} over {max}"))
 }
 
 /// Parse a BOC (any flags; first root). Cells with a level (pruned/merkle) are refused.
@@ -340,7 +386,9 @@ pub fn boc_parse(data: &[u8]) -> Result<Arc<Cell>> {
             bail!("BOC cells with a level or stored hashes are not supported");
         }
         let body = take(d2.div_ceil(2))?.to_vec();
-        let refs: Vec<usize> = (0..(d1 & 7)).map(|_| bounded(take(size)?, cells - 1, "ref index")).collect::<Result<_>>()?;
+        let refs: Vec<usize> = (0..(d1 & 7))
+            .map(|_| bounded(take(size)?, cells - 1, "ref index"))
+            .collect::<Result<_>>()?;
         if refs.len() > 4 {
             bail!("too many refs");
         }
@@ -367,11 +415,25 @@ pub fn boc_parse(data: &[u8]) -> Result<Arc<Cell>> {
         };
         let children = refs
             .iter()
-            .map(|&r| if r > i { built.get(r).cloned().flatten().ok_or_else(|| anyhow!("bad ref")) } else { Err(anyhow!("BOC ref order")) })
+            .map(|&r| {
+                if r > i {
+                    built
+                        .get(r)
+                        .cloned()
+                        .flatten()
+                        .ok_or_else(|| anyhow!("bad ref"))
+                } else {
+                    Err(anyhow!("BOC ref order"))
+                }
+            })
             .collect::<Result<Vec<_>>>()?;
         built[i] = Some(Arc::new(Cell::new(body, bits, children, exotic)?));
     }
-    built.get(root).cloned().flatten().ok_or_else(|| anyhow!("bad BOC root"))
+    built
+        .get(root)
+        .cloned()
+        .flatten()
+        .ok_or_else(|| anyhow!("bad BOC root"))
 }
 
 // ====================================================================== base64, addresses
@@ -381,7 +443,10 @@ const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012
 pub fn b64encode(data: &[u8]) -> String {
     let mut out = String::new();
     for chunk in data.chunks(3) {
-        let n = chunk.iter().enumerate().fold(0u32, |a, (i, b)| a | (*b as u32) << (16 - 8 * i));
+        let n = chunk
+            .iter()
+            .enumerate()
+            .fold(0u32, |a, (i, b)| a | (*b as u32) << (16 - 8 * i));
         for i in 0..4 {
             if i <= chunk.len() {
                 out.push(B64[(n >> (18 - 6 * i) & 63) as usize] as char);
@@ -428,14 +493,21 @@ impl Addr {
     pub fn parse(s: &str) -> Result<Self> {
         if let Some((wc, h)) = s.split_once(':') {
             let wc: i32 = wc.parse().context("workchain")?;
-            let hash: [u8; 32] = alloy::hex::decode(h)?.try_into().map_err(|_| anyhow!("address hash length"))?;
+            let hash: [u8; 32] = alloy::hex::decode(h)?
+                .try_into()
+                .map_err(|_| anyhow!("address hash length"))?;
             return Ok(Self { wc, hash });
         }
         let raw = b64decode(s)?;
-        if raw.len() != 36 || crate::signer::crc16_xmodem(&raw[..34]) != u16::from_be_bytes([raw[34], raw[35]]) {
+        if raw.len() != 36
+            || crate::signer::crc16_xmodem(&raw[..34]) != u16::from_be_bytes([raw[34], raw[35]])
+        {
             bail!("bad friendly address");
         }
-        Ok(Self { wc: raw[1] as i8 as i32, hash: raw[2..34].try_into().expect("32") })
+        Ok(Self {
+            wc: raw[1] as i8 as i32,
+            hash: raw[2..34].try_into().expect("32"),
+        })
     }
 
     /// Canonical form shared with ExternalPull (`addresses.canonical('ton', …)`).
@@ -444,7 +516,10 @@ impl Addr {
     }
 
     fn of_state_init(si: &Arc<Cell>) -> Self {
-        Self { wc: 0, hash: si.hash() }
+        Self {
+            wc: 0,
+            hash: si.hash(),
+        }
     }
 }
 
@@ -509,7 +584,9 @@ pub fn parse_metaop(c: &Arc<Cell>) -> Result<MetaOp> {
     let amount = s.uint(128)?;
     let nonce = s.uint(64)? as u64;
     let valid_until = s.uint(64)? as u64;
-    let contract = s.addr()?.ok_or_else(|| anyhow!("MetaOp without contract"))?;
+    let contract = s
+        .addr()?
+        .ok_or_else(|| anyhow!("MetaOp without contract"))?;
     let parties = s.reference()?;
     let refs = s.reference()?;
     s.end()?;
@@ -521,7 +598,21 @@ pub fn parse_metaop(c: &Arc<Cell>) -> Result<MetaOp> {
     let mut r = refs.parser();
     let (pay_ref, lane, extra) = (r.b256()?, r.b256()?, r.b256()?);
     r.end()?;
-    Ok(MetaOp { network, op, amount, nonce, valid_until, contract, from, to, relayer, pay_ref, lane, extra, digest: c.hash() })
+    Ok(MetaOp {
+        network,
+        op,
+        amount,
+        nonce,
+        valid_until,
+        contract,
+        from,
+        to,
+        relayer,
+        pay_ref,
+        lane,
+        extra,
+        digest: c.hash(),
+    })
 }
 
 /// `TradeParams.forwardTon` (common.tact): the forward TON floor the payer signed for a DEX leg.
@@ -539,9 +630,21 @@ pub fn trade_forward_floor(params: &Arc<Cell>) -> Result<u128> {
 
 /// Jetton wallet of `owner` for `master` without RPC — `walletInit` of jetton.tact, same as ExternalPull's
 /// `fam_ton.jetton_wallet_address` (R20). The wallet code is known by hash and depth only.
-pub fn jetton_wallet_address(owner: &Addr, master: &Addr, code_hash: &[u8; 32], code_depth: u16) -> Result<Addr> {
+pub fn jetton_wallet_address(
+    owner: &Addr,
+    master: &Addr,
+    code_hash: &[u8; 32],
+    code_depth: u16,
+) -> Result<Addr> {
     let tail = Builder::new().uint(0, 2 + 3 * 32).end()?; // lanes oldLanes rotatedAt laneCount oldCount
-    let data = Builder::new().addr(Some(owner)).addr(Some(master)).uint(0, 4).bytes(&[0; 32]).bit(false).reference(tail).end()?;
+    let data = Builder::new()
+        .addr(Some(owner))
+        .addr(Some(master))
+        .uint(0, 4)
+        .bytes(&[0; 32])
+        .bit(false)
+        .reference(tail)
+        .end()?;
     // StateInit `00110 ^code ^data`: 2 refs, 5 bits + completion tag.
     let mut h = Sha256::new();
     h.update([2u8, 1, 0x34]);
@@ -549,19 +652,30 @@ pub fn jetton_wallet_address(owner: &Addr, master: &Addr, code_hash: &[u8; 32], 
     h.update(data.depth().to_be_bytes());
     h.update(code_hash);
     h.update(data.hash());
-    Ok(Addr { wc: 0, hash: h.finalize().into() })
+    Ok(Addr {
+        wc: 0,
+        hash: h.finalize().into(),
+    })
 }
 
 /// TEP-81 wire form used by TON Connect, as a `storeStringTail` snake (127 bytes per cell).
 pub fn domain_cell(domain: &str) -> Result<Arc<Cell>> {
-    let wire: Vec<u8> = domain.split('.').rev().flat_map(|l| l.bytes().chain(std::iter::once(0))).collect();
+    let wire: Vec<u8> = domain
+        .split('.')
+        .rev()
+        .flat_map(|l| l.bytes().chain(std::iter::once(0)))
+        .collect();
     snake(&wire)
 }
 
 /// Bytes as a snake: 127 bytes per cell along the first ref (`storeStringTail`'s chunking); empty = one empty cell.
 pub fn snake(bytes: &[u8]) -> Result<Arc<Cell>> {
     let mut cell: Option<Arc<Cell>> = None;
-    let chunks: Vec<&[u8]> = if bytes.is_empty() { vec![&[]] } else { bytes.chunks(127).collect() };
+    let chunks: Vec<&[u8]> = if bytes.is_empty() {
+        vec![&[]]
+    } else {
+        bytes.chunks(127).collect()
+    };
     for chunk in chunks.iter().rev() {
         let mut b = Builder::new().bytes(chunk);
         if let Some(c) = cell {
@@ -572,7 +686,12 @@ pub fn snake(bytes: &[u8]) -> Result<Arc<Cell>> {
     Ok(cell.expect("one chunk"))
 }
 
-pub fn envelope_hash(owner: &Addr, timestamp: u64, domain: &str, payload: &Arc<Cell>) -> Result<[u8; 32]> {
+pub fn envelope_hash(
+    owner: &Addr,
+    timestamp: u64,
+    domain: &str,
+    payload: &Arc<Cell>,
+) -> Result<[u8; 32]> {
     Ok(Builder::new()
         .uint(SIGN_DATA_PREFIX, 32)
         .uint(SCHEMA_CRC, 32)
@@ -613,18 +732,36 @@ pub fn pubkey_from_state_init(si: &Arc<Cell>, owner: &Addr) -> Result<[u8; 32]> 
 /// The connector's signature JSON (`ton.js` / ExternalPull `fam_ton.parse_signature`).
 #[derive(Debug, Clone)]
 pub enum Auth {
-    TonConnect { signature: [u8; 64], timestamp: u64, domain: String, state_init: Option<Arc<Cell>> },
-    Passkey { r: [u8; 32], s: [u8; 32], authenticator_data: Vec<u8>, client_data_json: String },
+    TonConnect {
+        signature: [u8; 64],
+        timestamp: u64,
+        domain: String,
+        state_init: Option<Arc<Cell>>,
+    },
+    Passkey {
+        r: [u8; 32],
+        s: [u8; 32],
+        authenticator_data: Vec<u8>,
+        client_data_json: String,
+    },
 }
 
 pub fn parse_auth(sig: &str) -> Result<Auth> {
     let v: Value = serde_json::from_str(sig).context("TON signature is not JSON")?;
-    let str_of = |k: &str| v.get(k).and_then(Value::as_str).ok_or_else(|| anyhow!("signature.{k} missing"));
+    let str_of = |k: &str| {
+        v.get(k)
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("signature.{k} missing"))
+    };
     match str_of("kind")? {
         "ton_connect" => {
-            let signature: [u8; 64] =
-                b64decode(str_of("signature")?)?.try_into().map_err(|_| anyhow!("signature must be 64 bytes"))?;
-            let timestamp = v.get("timestamp").and_then(Value::as_u64).ok_or_else(|| anyhow!("signature.timestamp"))?;
+            let signature: [u8; 64] = b64decode(str_of("signature")?)?
+                .try_into()
+                .map_err(|_| anyhow!("signature must be 64 bytes"))?;
+            let timestamp = v
+                .get("timestamp")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| anyhow!("signature.timestamp"))?;
             let domain = str_of("domain")?.to_string();
             if domain.len() > 255 {
                 bail!("domain too long");
@@ -633,7 +770,12 @@ pub fn parse_auth(sig: &str) -> Result<Auth> {
                 Some(s) if !s.is_empty() => Some(boc_parse(&b64decode(s)?)?),
                 _ => None,
             };
-            Ok(Auth::TonConnect { signature, timestamp, domain, state_init })
+            Ok(Auth::TonConnect {
+                signature,
+                timestamp,
+                domain,
+                state_init,
+            })
         }
         "passkey" => Ok(Auth::Passkey {
             r: b32(str_of("r")?)?,
@@ -650,13 +792,23 @@ const CDJ_PREFIX: &str = "{\"type\":\"webauthn.get\",\"challenge\":\"";
 /// `auth` cell of common.tact (kind 0 / kind 1).
 pub fn auth_cell(auth: &Auth) -> Result<Arc<Cell>> {
     match auth {
-        Auth::TonConnect { signature, timestamp, domain, .. } => Builder::new()
+        Auth::TonConnect {
+            signature,
+            timestamp,
+            domain,
+            ..
+        } => Builder::new()
             .uint(0, 8)
             .bytes(signature)
             .uint(*timestamp as u128, 64)
             .reference(domain_cell(domain)?)
             .end(),
-        Auth::Passkey { r, s, authenticator_data, client_data_json } => {
+        Auth::Passkey {
+            r,
+            s,
+            authenticator_data,
+            client_data_json,
+        } => {
             if authenticator_data.len() < 37 || authenticator_data.len() > 127 {
                 bail!("authenticator data length");
             }
@@ -727,29 +879,67 @@ pub fn pay_params(m: &MetaOp, o: &Value, max_meta: usize) -> Result<Option<Arc<C
             if m.op != 1 {
                 bail!("pay-meta: the MetaOp is op {}, not pay", m.op);
             }
-            let (salt, meta) = (hex_field(&o["salt"], "salt")?, hex_field(&o["meta"], "meta")?);
-            let salt: [u8; 32] = salt.try_into().map_err(|_| anyhow!("op.salt is 32 bytes"))?;
+            let (salt, meta) = (
+                hex_field(&o["salt"], "salt")?,
+                hex_field(&o["meta"], "meta")?,
+            );
+            let salt: [u8; 32] = salt
+                .try_into()
+                .map_err(|_| anyhow!("op.salt is 32 bytes"))?;
             if meta.len() > max_meta {
-                bail!("meta is {} B, above max_pay_meta_bytes {max_meta}", meta.len());
+                bail!(
+                    "meta is {} B, above max_pay_meta_bytes {max_meta}",
+                    meta.len()
+                );
             }
             let id = meta_pay_id(&salt, &meta);
             if m.pay_ref != id || m.lane != pay_lane(&id) || m.nonce != 0 {
                 bail!("pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane(pay_ref) / 0");
             }
-            Ok(Some(Builder::new().bytes(&salt).reference(snake(&meta)?).end()?))
+            Ok(Some(
+                Builder::new().bytes(&salt).reference(snake(&meta)?).end()?,
+            ))
         }
         Some(k) => bail!("op.kind {k:?} is not a pay op's params"),
     }
 }
 
 /// `SignedOp` body exactly as Tact lays it out (trailing fields in a ref cell).
-pub fn signed_op_body(op: &Arc<Cell>, auth: &Arc<Cell>, params: Option<Arc<Cell>>, state_init: Option<Arc<Cell>>, response: &Addr, forward_ton: u128, match_with: [u8; 32]) -> Result<Arc<Cell>> {
-    let tail = Builder::new().maybe_ref(params).maybe_ref(state_init).addr(Some(response)).coins(forward_ton).bytes(&match_with).end()?;
-    Builder::new().uint(OP_SIGNED, 32).reference(op.clone()).reference(auth.clone()).reference(tail).end()
+pub fn signed_op_body(
+    op: &Arc<Cell>,
+    auth: &Arc<Cell>,
+    params: Option<Arc<Cell>>,
+    state_init: Option<Arc<Cell>>,
+    response: &Addr,
+    forward_ton: u128,
+    match_with: [u8; 32],
+) -> Result<Arc<Cell>> {
+    let tail = Builder::new()
+        .maybe_ref(params)
+        .maybe_ref(state_init)
+        .addr(Some(response))
+        .coins(forward_ton)
+        .bytes(&match_with)
+        .end()?;
+    Builder::new()
+        .uint(OP_SIGNED, 32)
+        .reference(op.clone())
+        .reference(auth.clone())
+        .reference(tail)
+        .end()
 }
 
-pub fn mandate_pay_body(op: &Arc<Cell>, signature: &[u8; 64], response: &Addr) -> Result<Arc<Cell>> {
-    Builder::new().uint(OP_MANDATE_PAY, 32).reference(op.clone()).bytes(signature).addr(Some(response)).end()
+pub fn mandate_pay_body(
+    op: &Arc<Cell>,
+    signature: &[u8; 64],
+    response: &Addr,
+) -> Result<Arc<Cell>> {
+    Builder::new()
+        .uint(OP_MANDATE_PAY, 32)
+        .reference(op.clone())
+        .bytes(signature)
+        .addr(Some(response))
+        .end()
 }
 
 // ---------------------------------------------------------------------- CTR-MTX-27 (spec §7.2 TON row, §9)
@@ -772,7 +962,14 @@ const RELAY_REFUND_RETRY_S: u64 = 120;
 const LANE_TTL_S: u64 = 2_592_000;
 
 /// The `SignedOp` fields (Tact layout, `signed_op_body`): `(op, auth, params, state_init, responseDestination, forwardTon)`.
-pub type SignedOpFields = (Arc<Cell>, Arc<Cell>, Option<Arc<Cell>>, Option<Arc<Cell>>, Addr, u128);
+pub type SignedOpFields = (
+    Arc<Cell>,
+    Arc<Cell>,
+    Option<Arc<Cell>>,
+    Option<Arc<Cell>>,
+    Addr,
+    u128,
+);
 
 /// Splits a `SignedOp` cell into its [`SignedOpFields`].
 pub fn parse_signed_op(c: &Arc<Cell>) -> Result<SignedOpFields> {
@@ -785,7 +982,9 @@ pub fn parse_signed_op(c: &Arc<Cell>) -> Result<SignedOpFields> {
     let mut t = tail.parser();
     let params = if t.bit()? { Some(t.reference()?) } else { None };
     let state_init = if t.bit()? { Some(t.reference()?) } else { None };
-    let response = t.addr()?.ok_or_else(|| anyhow!("SignedOp without responseDestination"))?;
+    let response = t
+        .addr()?
+        .ok_or_else(|| anyhow!("SignedOp without responseDestination"))?;
     let forward = t.coins()?;
     t.b256()?;
     t.end()?;
@@ -808,13 +1007,28 @@ pub fn auth_of_cell(c: &Arc<Cell>, state_init: Option<Arc<Cell>>) -> Result<Auth
                 wire.extend(p.bytes(p.remaining() / 8)?);
                 next = c.refs().first().cloned();
             }
-            let domain = String::from_utf8(wire)?.split('\0').filter(|l| !l.is_empty()).rev().collect::<Vec<_>>().join(".");
+            let domain = String::from_utf8(wire)?
+                .split('\0')
+                .filter(|l| !l.is_empty())
+                .rev()
+                .collect::<Vec<_>>()
+                .join(".");
             if domain_cell(&domain)?.hash() != d.hash() {
                 bail!("the auth domain is not a TEP-81 wire form");
             }
-            Ok(Auth::TonConnect { signature, timestamp, domain, state_init })
+            Ok(Auth::TonConnect {
+                signature,
+                timestamp,
+                domain,
+                state_init,
+            })
         }
-        1 => Ok(Auth::Passkey { r: [0; 32], s: [0; 32], authenticator_data: Vec::new(), client_data_json: String::new() }),
+        1 => Ok(Auth::Passkey {
+            r: [0; 32],
+            s: [0; 32],
+            authenticator_data: Vec::new(),
+            client_data_json: String::new(),
+        }),
         k => bail!("unknown auth kind {k}"),
     }
 }
@@ -822,7 +1036,14 @@ pub fn auth_of_cell(c: &Arc<Cell>, state_init: Option<Arc<Cell>>) -> Result<Auth
 /// `keccak256("scaas.relayfee" ‖ global id:int32 ‖ target wc:int8 ‖ target hash ‖ cellHash(call) ‖ salt)`
 /// (relayfee.tact `relayRef`): the call by its representation hash, so every ref counts.
 pub fn relay_ref(global_id: i32, target: &Addr, call: &Arc<Cell>, salt: &[u8; 32]) -> [u8; 32] {
-    keccak(&[b"scaas.relayfee", &global_id.to_be_bytes(), &[target.wc as i8 as u8], &target.hash, &call.hash(), salt])
+    keccak(&[
+        b"scaas.relayfee",
+        &global_id.to_be_bytes(),
+        &[target.wc as i8 as u8],
+        &target.hash,
+        &call.hash(),
+        salt,
+    ])
 }
 
 /// The router's escrow key of `(payer, ref)`: the hash of `from:MsgAddress ref:uint256`.
@@ -849,10 +1070,23 @@ pub struct RelayCall {
 
 impl RelayCall {
     pub fn body(&self) -> Result<Arc<Cell>> {
-        let tail = Builder::new().reference(self.call.clone()).bytes(&self.salt).addr(Some(&self.pay_wallet)).reference(self.pay_op.clone())
-            .reference(self.pay_auth.clone()).maybe_ref(self.pay_state_init.clone()).addr(Some(&self.master)).uint(self.deadline as u128, 32).end()?;
-        Builder::new().uint(OP_RELAY_CALL, 32).addr(Some(&self.target)).reference(self.target_code.clone()).reference(self.target_data.clone())
-            .reference(tail).end()
+        let tail = Builder::new()
+            .reference(self.call.clone())
+            .bytes(&self.salt)
+            .addr(Some(&self.pay_wallet))
+            .reference(self.pay_op.clone())
+            .reference(self.pay_auth.clone())
+            .maybe_ref(self.pay_state_init.clone())
+            .addr(Some(&self.master))
+            .uint(self.deadline as u128, 32)
+            .end()?;
+        Builder::new()
+            .uint(OP_RELAY_CALL, 32)
+            .addr(Some(&self.target))
+            .reference(self.target_code.clone())
+            .reference(self.target_data.clone())
+            .reference(tail)
+            .end()
     }
 
     pub fn parse(c: &Arc<Cell>) -> Result<Self> {
@@ -861,14 +1095,37 @@ impl RelayCall {
             bail!("not a RelayCall");
         }
         let need = |a: Option<Addr>| a.ok_or_else(|| anyhow!("RelayCall without an address"));
-        let (target, target_code, target_data, tail) = (need(s.addr()?)?, s.reference()?, s.reference()?, s.reference()?);
+        let (target, target_code, target_data, tail) = (
+            need(s.addr()?)?,
+            s.reference()?,
+            s.reference()?,
+            s.reference()?,
+        );
         s.end()?;
         let mut t = tail.parser();
-        let (call, salt, pay_wallet, pay_op, pay_auth) = (t.reference()?, t.b256()?, need(t.addr()?)?, t.reference()?, t.reference()?);
+        let (call, salt, pay_wallet, pay_op, pay_auth) = (
+            t.reference()?,
+            t.b256()?,
+            need(t.addr()?)?,
+            t.reference()?,
+            t.reference()?,
+        );
         let pay_state_init = if t.bit()? { Some(t.reference()?) } else { None };
         let (master, deadline) = (need(t.addr()?)?, t.uint(32)? as u32);
         t.end()?;
-        Ok(Self { target, target_code, target_data, call, salt, pay_wallet, pay_op, pay_auth, pay_state_init, master, deadline })
+        Ok(Self {
+            target,
+            target_code,
+            target_data,
+            call,
+            salt,
+            pay_wallet,
+            pay_op,
+            pay_auth,
+            pay_state_init,
+            master,
+            deadline,
+        })
     }
 }
 
@@ -885,15 +1142,22 @@ pub fn settled_event(c: &Arc<Cell>, lane: &Addr, payer: &Addr, r: &[u8; 32]) -> 
     match op {
         EV_RELAY_FEE_PAID => {
             let mut q = c.refs().first()?.parser();
-            (q.addr().ok()?.as_ref() == Some(payer) && q.addr().ok()?.as_ref() == Some(lane)).then_some(true)
+            (q.addr().ok()?.as_ref() == Some(payer) && q.addr().ok()?.as_ref() == Some(lane))
+                .then_some(true)
         }
-        EV_RELAY_FEE_REFUNDED => (p.addr().ok()?.as_ref() == Some(payer) && p.addr().ok()?.as_ref() == Some(lane)).then_some(false),
+        EV_RELAY_FEE_REFUNDED => (p.addr().ok()?.as_ref() == Some(payer)
+            && p.addr().ok()?.as_ref() == Some(lane))
+        .then_some(false),
         _ => None,
     }
 }
 
 pub fn relay_refund_body(from: &Addr, r: &[u8; 32]) -> Result<Arc<Cell>> {
-    Builder::new().uint(OP_RELAY_REFUND, 32).addr(Some(from)).bytes(r).end()
+    Builder::new()
+        .uint(OP_RELAY_REFUND, 32)
+        .addr(Some(from))
+        .bytes(r)
+        .end()
 }
 
 /// What the node accepts as a relay-fee job (controller call 2026-10-27/28, owner may override): the configured router,
@@ -916,26 +1180,46 @@ impl RelayFeePolicy {
         let t = cfg.params.get("relay_fee");
         let router = match t.and_then(|t| t.get("router")) {
             None => None,
-            Some(v) => Some(Addr::parse(v.as_str().ok_or_else(|| anyhow!("params.relay_fee.router must be a TON address string"))?)
-                .context("params.relay_fee.router")?),
+            Some(v) => Some(
+                Addr::parse(v.as_str().ok_or_else(|| {
+                    anyhow!("params.relay_fee.router must be a TON address string")
+                })?)
+                .context("params.relay_fee.router")?,
+            ),
         };
         let params = cfg.relay_params()?;
         let tokens = cfg
             .tokens
             .iter()
-            .map(|t| Addr::parse(&t.address).with_context(|| format!("tokens: {} is not a TON address", t.address)))
+            .map(|t| {
+                Addr::parse(&t.address)
+                    .with_context(|| format!("tokens: {} is not a TON address", t.address))
+            })
             .collect::<Result<_>>()?;
         let mut min_ton_value = HashMap::new();
         if let Some(v) = t.and_then(|t| t.get("min_ton_value")) {
-            let table = v.as_table().ok_or_else(|| anyhow!("params.relay_fee.min_ton_value must be a table of master = nanoton"))?;
+            let table = v.as_table().ok_or_else(|| {
+                anyhow!("params.relay_fee.min_ton_value must be a table of master = nanoton")
+            })?;
             for (k, n) in table {
-                let master = Addr::parse(k).with_context(|| format!("params.relay_fee.min_ton_value: {k} is not a TON address"))?;
-                let n = n.as_integer().and_then(|n| u128::try_from(n).ok())
-                    .ok_or_else(|| anyhow!("params.relay_fee.min_ton_value.{k} must be a non-negative integer"))?;
+                let master = Addr::parse(k).with_context(|| {
+                    format!("params.relay_fee.min_ton_value: {k} is not a TON address")
+                })?;
+                let n = n
+                    .as_integer()
+                    .and_then(|n| u128::try_from(n).ok())
+                    .ok_or_else(|| {
+                        anyhow!("params.relay_fee.min_ton_value.{k} must be a non-negative integer")
+                    })?;
                 min_ton_value.insert(master, n);
             }
         }
-        Ok(Self { router, tokens, params, min_ton_value })
+        Ok(Self {
+            router,
+            tokens,
+            params,
+            min_ton_value,
+        })
     }
 }
 
@@ -945,20 +1229,36 @@ impl RelayFeePolicy {
 /// `min_ton_value`, minimum fee), the StateInit derives the target, the call is a served entry's `SignedOp` (the router
 /// also checks the code set and the executor), and the payment commits to exactly this call: `pay_ref == relay_ref(global
 /// id, target, call, salt)`, `lane == payLane(ref)`, `nonce == 0`, `relayer == to == router`.
-pub fn relay_fee_job(policy: &RelayFeePolicy, global_id: i32, cell: &Arc<Cell>, o: &Value) -> Result<(Addr, RelayCall)> {
+pub fn relay_fee_job(
+    policy: &RelayFeePolicy,
+    global_id: i32,
+    cell: &Arc<Cell>,
+    o: &Value,
+) -> Result<(Addr, RelayCall)> {
     let m = &parse_metaop(cell)?;
-    let router = policy.router.ok_or_else(|| anyhow!("params.relay_fee.router is not set"))?;
+    let router = policy
+        .router
+        .ok_or_else(|| anyhow!("params.relay_fee.router is not set"))?;
     if Addr::parse(o["contract"].as_str().unwrap_or_default()).ok() != Some(router) {
         bail!("op.contract is not params.relay_fee.router");
     }
     let x = &o["extra"];
-    let addr = |k: &str| Addr::parse(x[k].as_str().ok_or_else(|| anyhow!("op.extra.{k} missing"))?).with_context(|| format!("op.extra.{k}"));
+    let addr = |k: &str| {
+        Addr::parse(
+            x[k].as_str()
+                .ok_or_else(|| anyhow!("op.extra.{k} missing"))?,
+        )
+        .with_context(|| format!("op.extra.{k}"))
+    };
     let master = addr("master")?;
     if !policy.tokens.contains(&master) {
         bail!("token {} is not registered on this chain", master.raw());
     }
     if !policy.min_ton_value.contains_key(&master) {
-        bail!("params.relay_fee.min_ton_value has no price for token {}", master.raw());
+        bail!(
+            "params.relay_fee.min_ton_value has no price for token {}",
+            master.raw()
+        );
     }
     if m.op != 1 {
         bail!("the relay-fee payment is not a pay op");
@@ -966,29 +1266,61 @@ pub fn relay_fee_job(policy: &RelayFeePolicy, global_id: i32, cell: &Arc<Cell>, 
     // always open mode on TON (`to == router`, checked below: the escrow releases to the relaying lane)
     crate::adapter::relay_fee_ours(true, false, m.amount, &policy.params)?;
     let target = addr("target")?;
-    let boc = |k: &str| hex_field(&x[k], &format!("extra.{k}")).and_then(|b| boc_parse(&b)).with_context(|| format!("op.extra.{k}"));
+    let boc = |k: &str| {
+        hex_field(&x[k], &format!("extra.{k}"))
+            .and_then(|b| boc_parse(&b))
+            .with_context(|| format!("op.extra.{k}"))
+    };
     let (target_code, target_data) = (boc("target_code")?, boc("target_data")?);
-    let si = Builder::new().uint(0b00110, 5).reference(target_code.clone()).reference(target_data.clone()).end()?;
+    let si = Builder::new()
+        .uint(0b00110, 5)
+        .reference(target_code.clone())
+        .reference(target_data.clone())
+        .end()?;
     if Addr::of_state_init(&si) != target {
         bail!("op.extra.target_code / target_data do not derive op.extra.target");
     }
     let call = boc("call")?;
     let mut cs = call.parser();
-    let inner = (cs.uint(32).ok() == Some(OP_SIGNED)).then(|| call.refs().first().cloned()).flatten().and_then(|op| parse_metaop(&op).ok());
-    if !inner.as_ref().is_some_and(|i| SERVED_OPS.contains(&i.op) && i.relayer != Some(router)) {
+    let inner = (cs.uint(32).ok() == Some(OP_SIGNED))
+        .then(|| call.refs().first().cloned())
+        .flatten()
+        .and_then(|op| parse_metaop(&op).ok());
+    if !inner
+        .as_ref()
+        .is_some_and(|i| SERVED_OPS.contains(&i.op) && i.relayer != Some(router))
+    {
         bail!("op.extra.call is not a served fee-less entry (a SignedOp revoke / set_key not bound to the router)");
     }
-    let salt: [u8; 32] = hex_field(&x["salt"], "extra.salt")?.try_into().map_err(|_| anyhow!("op.extra.salt is 32 bytes"))?;
+    let salt: [u8; 32] = hex_field(&x["salt"], "extra.salt")?
+        .try_into()
+        .map_err(|_| anyhow!("op.extra.salt is 32 bytes"))?;
     let r = relay_ref(global_id, &target, &call, &salt);
-    if m.pay_ref != r || m.lane != pay_lane(&r) || m.nonce != 0 || m.relayer != Some(router) || m.to != router {
+    if m.pay_ref != r
+        || m.lane != pay_lane(&r)
+        || m.nonce != 0
+        || m.relayer != Some(router)
+        || m.to != router
+    {
         bail!("the payment is not bound to this call (ref, payLane(ref), nonce 0, relayer = to = router)");
     }
     if !o["ref"].is_null() && hex_field(&o["ref"], "ref")? != r {
         bail!("op.ref != relay_ref(target, call, salt)");
     }
     // `pay_auth`, `pay_state_init` and `deadline` are the builder's (the signature JSON, the clock).
-    let rc = RelayCall { target, target_code, target_data, call, salt, pay_wallet: m.contract, pay_op: cell.clone(),
-        pay_auth: Builder::new().end()?, pay_state_init: None, master, deadline: 0 };
+    let rc = RelayCall {
+        target,
+        target_code,
+        target_data,
+        call,
+        salt,
+        pay_wallet: m.contract,
+        pay_op: cell.clone(),
+        pay_auth: Builder::new().end()?,
+        pay_state_init: None,
+        master,
+        deadline: 0,
+    };
     Ok((router, rc))
 }
 
@@ -1002,12 +1334,26 @@ pub struct W5 {
 
 impl W5 {
     pub fn new(pubkey: [u8; 32], global_id: i32) -> Result<Self> {
-        Ok(Self { code: boc_parse(&alloy::hex::decode(W5R1_CODE)?)?, wallet_id: (global_id as u32) ^ 0x8000_0000, pubkey })
+        Ok(Self {
+            code: boc_parse(&alloy::hex::decode(W5R1_CODE)?)?,
+            wallet_id: (global_id as u32) ^ 0x8000_0000,
+            pubkey,
+        })
     }
 
     pub fn state_init(&self) -> Result<Arc<Cell>> {
-        let data = Builder::new().bit(true).uint(0, 32).uint(self.wallet_id as u128, 32).bytes(&self.pubkey).bit(false).end()?;
-        Builder::new().uint(0b00110, 5).reference(self.code.clone()).reference(data).end()
+        let data = Builder::new()
+            .bit(true)
+            .uint(0, 32)
+            .uint(self.wallet_id as u128, 32)
+            .bytes(&self.pubkey)
+            .bit(false)
+            .end()?;
+        Builder::new()
+            .uint(0b00110, 5)
+            .reference(self.code.clone())
+            .reference(data)
+            .end()
     }
 
     pub fn address(&self) -> Result<Addr> {
@@ -1016,7 +1362,12 @@ impl W5 {
 
     /// Bytes the lane key signs (hash of the signing cell) and the body builder to append the signature to.
     fn signing(&self, seqno: u32, valid_until: u32, msg: Arc<Cell>) -> Result<Builder> {
-        let out_list = Builder::new().reference(Builder::new().end()?).uint(0x0ec3c86d, 32).uint(3, 8).reference(msg).end()?;
+        let out_list = Builder::new()
+            .reference(Builder::new().end()?)
+            .uint(0x0ec3c86d, 32)
+            .uint(3, 8)
+            .reference(msg)
+            .end()?;
         Ok(Builder::new()
             .uint(0x7369676e, 32)
             .uint(self.wallet_id as u128, 32)
@@ -1050,7 +1401,11 @@ pub fn internal_message(to: &Addr, value: u128, body: Arc<Cell>) -> Result<Arc<C
 
 /// External-in message (`init` included only for the first message of an undeployed lane wallet).
 pub fn external_message(to: &Addr, init: Option<Arc<Cell>>, body: Arc<Cell>) -> Result<Arc<Cell>> {
-    let mut b = Builder::new().uint(0b10, 2).addr(None).addr(Some(to)).coins(0);
+    let mut b = Builder::new()
+        .uint(0b10, 2)
+        .addr(None)
+        .addr(Some(to))
+        .coins(0);
     b = match init {
         Some(i) => b.bit(true).bit(true).reference(i),
         None => b.bit(false),
@@ -1060,12 +1415,24 @@ pub fn external_message(to: &Addr, init: Option<Arc<Cell>>, body: Arc<Cell>) -> 
 
 /// Signed W5R1 external message ⇒ (BOC, message hash). The hash is the tx id: TON Center indexes the
 /// inbound message of the lane wallet's transaction under it, and we always send these exact bytes.
-pub fn w5_transfer(w5: &W5, signer: &dyn Signer, seqno: u32, valid_until: u32, to: &Addr, value: u128, body: Arc<Cell>) -> Result<(Vec<u8>, [u8; 32])> {
+pub fn w5_transfer(
+    w5: &W5,
+    signer: &dyn Signer,
+    seqno: u32,
+    valid_until: u32,
+    to: &Addr,
+    value: u128,
+    body: Arc<Cell>,
+) -> Result<(Vec<u8>, [u8; 32])> {
     let signing = w5.signing(seqno, valid_until, internal_message(to, value, body)?)?;
     let to_sign = signing.clone().end()?.hash();
     let sig = signer.sign(&to_sign)?;
     let w5body = signing.bytes(&sig).end()?;
-    let init = if seqno == 0 { Some(w5.state_init()?) } else { None };
+    let init = if seqno == 0 {
+        Some(w5.state_init()?)
+    } else {
+        None
+    };
     let ext = external_message(&w5.address()?, init, w5body)?;
     Ok((boc_serialize(&ext), ext.hash()))
 }
@@ -1078,10 +1445,23 @@ pub type WalletCode = ([u8; 32], u16);
 /// One external-out message body of ours, decoded.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TonEvent {
-    Executed { master: Addr, from: Addr, digest: [u8; 32] },
-    Paid { from: Addr, to: Addr, amount: u128, pay_ref: [u8; 32] },
+    Executed {
+        master: Addr,
+        from: Addr,
+        digest: [u8; 32],
+    },
+    Paid {
+        from: Addr,
+        to: Addr,
+        amount: u128,
+        pay_ref: [u8; 32],
+    },
     /// CTR-MTX-26 (`EV_META`): no `from`; the payer is the same transaction's `Executed` (`meta_payer`).
-    Meta { master: Addr, pay_id: [u8; 32], meta: Vec<u8> },
+    Meta {
+        master: Addr,
+        pay_id: [u8; 32],
+        meta: Vec<u8>,
+    },
 }
 
 /// The bytes of a snake chain (each cell whole bytes, at most one ref). A cell with more than one ref is refused:
@@ -1092,10 +1472,16 @@ pub fn snake_bytes(c: &Arc<Cell>) -> Result<Vec<u8>> {
     let mut cur = c.clone();
     loop {
         if cur.refs().len() > 1 || !cur.bits.is_multiple_of(8) {
-            bail!("meta is not a snake chain (a cell with {} refs, {} bits)", cur.refs().len(), cur.bits);
+            bail!(
+                "meta is not a snake chain (a cell with {} refs, {} bits)",
+                cur.refs().len(),
+                cur.bits
+            );
         }
         out.extend_from_slice(&cur.data[..cur.bits / 8]);
-        let Some(next) = cur.refs().first().cloned() else { return Ok(out) };
+        let Some(next) = cur.refs().first().cloned() else {
+            return Ok(out);
+        };
         cur = next;
     }
 }
@@ -1111,14 +1497,22 @@ pub fn decode_event(body: &Arc<Cell>) -> Result<Option<TonEvent>> {
             let from = s.addr()?.ok_or_else(|| anyhow!("event from"))?;
             let digest = s.b256()?;
             s.end()?;
-            Some(TonEvent::Executed { master, from, digest })
+            Some(TonEvent::Executed {
+                master,
+                from,
+                digest,
+            })
         }
         EV_META => {
             let master = s.addr()?.ok_or_else(|| anyhow!("event master"))?;
             let pay_id = s.b256()?;
             let meta = snake_bytes(&s.reference()?)?;
             s.end()?;
-            Some(TonEvent::Meta { master, pay_id, meta })
+            Some(TonEvent::Meta {
+                master,
+                pay_id,
+                meta,
+            })
         }
         EV_PAID => {
             let from = s.addr()?.ok_or_else(|| anyhow!("event from"))?;
@@ -1126,7 +1520,12 @@ pub fn decode_event(body: &Arc<Cell>) -> Result<Option<TonEvent>> {
             let amount = s.coins()?;
             let pay_ref = s.b256()?;
             s.end()?;
-            Some(TonEvent::Paid { from, to, amount, pay_ref })
+            Some(TonEvent::Paid {
+                from,
+                to,
+                amount,
+                pay_ref,
+            })
         }
         _ => None,
     })
@@ -1170,16 +1569,26 @@ impl Api {
             keys.get(i)
                 .cloned()
                 .flatten()
-                .map(|k| scaas_rpc::EndpointAuth::Header { name: "X-API-Key".into(), value: scaas_rpc::Secret::new(&k) })
+                .map(|k| scaas_rpc::EndpointAuth::Header {
+                    name: "X-API-Key".into(),
+                    value: scaas_rpc::Secret::new(&k),
+                })
         })
         .map_err(|e| anyhow!("rpc_urls: {e}"))?;
-        Ok(Self { net: Arc::new(scaas_rpc::ton::Ton::new(c)) })
+        Ok(Self {
+            net: Arc::new(scaas_rpc::ton::Ton::new(c)),
+        })
     }
 
     /// A family error as before: `"{what}: HTTP {status}: {text}"` for a status other than 2xx, typed ([`HttpStatus`]).
     fn error(what: &str, e: scaas_rpc::family::FamilyError) -> anyhow::Error {
         match e {
-            scaas_rpc::family::FamilyError::Status { status, message } => HttpStatus { what: what.into(), status, message }.into(),
+            scaas_rpc::family::FamilyError::Status { status, message } => HttpStatus {
+                what: what.into(),
+                status,
+                message,
+            }
+            .into(),
             e => anyhow!("{what}: {e}"),
         }
     }
@@ -1188,7 +1597,11 @@ impl Api {
     /// sequence).
     pub async fn get(&self, path: &str, query: &[(&str, String)]) -> Result<Value> {
         if !building() {
-            return self.net.get(0, path, query).await.map_err(|e| Self::error(path, e));
+            return self
+                .net
+                .get(0, path, query)
+                .await
+                .map_err(|e| Self::error(path, e));
         }
         self.failover(path, |i| self.net.get(i, path, query)).await
     }
@@ -1196,7 +1609,11 @@ impl Api {
     /// POST: inside `build` failed over (its getters), any other endpoint 0's (the sends, the escrow's getters).
     pub async fn post(&self, path: &str, body: Value) -> Result<Value> {
         if !building() {
-            return self.net.post(0, path, &body).await.map_err(|e| Self::error(path, e));
+            return self
+                .net
+                .post(0, path, &body)
+                .await
+                .map_err(|e| Self::error(path, e));
         }
         self.failover(path, |i| self.net.post(i, path, &body)).await
     }
@@ -1209,27 +1626,49 @@ impl Api {
     async fn failover<F, Fut>(&self, what: &str, f: F) -> Result<Value>
     where
         F: Fn(usize) -> Fut,
-        Fut: std::future::Future<Output = std::result::Result<Value, scaas_rpc::family::FamilyError>>,
+        Fut: std::future::Future<
+            Output = std::result::Result<Value, scaas_rpc::family::FamilyError>,
+        >,
     {
         use scaas_rpc::family::FamilyError;
         use scaas_rpc::pool::ReadError;
-        let a = self.net.client.failover(&*self.net, |i| {
-            let r = f(i);
-            async move {
-                r.await.map_err(|e| match e {
-                    // T24.3: TON Center's 404 (no such account or block) is endpoint 0's answer; any other status (a rate
-                    // limit, a 5xx) is the endpoint's failure and fails over
-                    FamilyError::Status { status: 404, message } => ReadError::Revert { data: vec![], reason: format!("404\n{message}") },
-                    FamilyError::Failure(f) => ReadError::Failure(f),
-                    e => ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string())),
-                })
-            }
-        }).await;
+        let a = self
+            .net
+            .client
+            .failover(&*self.net, |i| {
+                let r = f(i);
+                async move {
+                    r.await.map_err(|e| match e {
+                        // T24.3: TON Center's 404 (no such account or block) is endpoint 0's answer; any other status (a rate
+                        // limit, a 5xx) is the endpoint's failure and fails over
+                        FamilyError::Status {
+                            status: 404,
+                            message,
+                        } => ReadError::Revert {
+                            data: vec![],
+                            reason: format!("404\n{message}"),
+                        },
+                        FamilyError::Failure(f) => ReadError::Failure(f),
+                        e => ReadError::Failure(scaas_rpc::EndpointFailure::new(
+                            i,
+                            scaas_rpc::FailureKind::Transport,
+                            &e.to_string(),
+                        )),
+                    })
+                }
+            })
+            .await;
         match a {
             Ok(a) => Ok(a.value),
             Err(scaas_rpc::RpcError::Revert { reason, .. }) => {
                 let (status, message) = reason.split_once('\n').unwrap_or(("0", &reason));
-                Err(Self::error(what, FamilyError::Status { status: status.parse().unwrap_or(0), message: message.into() }))
+                Err(Self::error(
+                    what,
+                    FamilyError::Status {
+                        status: status.parse().unwrap_or(0),
+                        message: message.into(),
+                    },
+                ))
             }
             Err(e) => Err(crate::adapters::evm::all_failed(what, &e)),
         }
@@ -1237,7 +1676,11 @@ impl Api {
 
     /// A send (`message`): endpoint 0's only, inside `build`'s scope too (scaas-rpc T24.7, never failed over).
     pub async fn send(&self, body: Value) -> Result<()> {
-        self.net.post(0, "message", &body).await.map(|_| ()).map_err(|e| Self::error("message", e))
+        self.net
+            .post(0, "message", &body)
+            .await
+            .map(|_| ())
+            .map_err(|e| Self::error("message", e))
     }
 
     /// Answers of an endpoint after the first (the failover count).
@@ -1257,18 +1700,34 @@ impl Api {
     }
 
     /// Get-method; numeric results only (`num` entries, `0x…` hex or decimal).
-    pub async fn run_get(&self, addr: &Addr, method: &str, stack: Vec<Value>) -> Result<Vec<Value>> {
-        let v = self.post("runGetMethod", json!({"address": addr.raw(), "method": method, "stack": stack})).await?;
+    pub async fn run_get(
+        &self,
+        addr: &Addr,
+        method: &str,
+        stack: Vec<Value>,
+    ) -> Result<Vec<Value>> {
+        let v = self
+            .post(
+                "runGetMethod",
+                json!({"address": addr.raw(), "method": method, "stack": stack}),
+            )
+            .await?;
         let code = v.get("exit_code").and_then(Value::as_i64).unwrap_or(0);
         if code != 0 {
             bail!("{method}: exit code {code}");
         }
-        Ok(v.get("stack").and_then(Value::as_array).cloned().unwrap_or_default())
+        Ok(v.get("stack")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default())
     }
 }
 
 pub fn stack_num(v: &Value) -> Result<u128> {
-    let s = v.get("value").and_then(Value::as_str).ok_or_else(|| anyhow!("stack entry without value"))?;
+    let s = v
+        .get("value")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("stack entry without value"))?;
     let neg = s.starts_with('-');
     let t = s.trim_start_matches('-');
     let n = match t.strip_prefix("0x") {
@@ -1282,27 +1741,49 @@ pub fn stack_num(v: &Value) -> Result<u128> {
 }
 
 pub fn stack_cell(v: &Value) -> Result<Arc<Cell>> {
-    boc_parse(&b64decode(v.get("value").and_then(Value::as_str).ok_or_else(|| anyhow!("stack entry without value"))?)?)
+    boc_parse(&b64decode(
+        v.get("value")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("stack entry without value"))?,
+    )?)
 }
 
 /// Hash fields of TON Center: base64 (any alphabet) or hex ⇒ 32 bytes.
 pub fn api_hash(v: &Value) -> Result<[u8; 32]> {
     let s = v.as_str().ok_or_else(|| anyhow!("hash is not a string"))?;
-    let bytes = if s.len() == 64 && s.bytes().all(|c| c.is_ascii_hexdigit()) { alloy::hex::decode(s)? } else { b64decode(s)? };
-    bytes.try_into().map_err(|_| anyhow!("hash is not 32 bytes"))
+    let bytes = if s.len() == 64 && s.bytes().all(|c| c.is_ascii_hexdigit()) {
+        alloy::hex::decode(s)?
+    } else {
+        b64decode(s)?
+    };
+    bytes
+        .try_into()
+        .map_err(|_| anyhow!("hash is not 32 bytes"))
 }
 
 /// Events of one TON Center transaction, before source authentication: (log_index, emitter, event).
 pub fn tx_events(tx: &Value) -> Result<Vec<(usize, Addr, TonEvent)>> {
-    let account = Addr::parse(tx.get("account").and_then(Value::as_str).ok_or_else(|| anyhow!("tx.account"))?)?;
+    let account = Addr::parse(
+        tx.get("account")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("tx.account"))?,
+    )?;
     let mut out = Vec::new();
-    let msgs = tx.get("out_msgs").and_then(Value::as_array).cloned().unwrap_or_default();
+    let msgs = tx
+        .get("out_msgs")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     for (i, m) in msgs.iter().enumerate() {
         if !m.get("destination").is_none_or(Value::is_null) {
             continue; // internal: not an event
         }
-        let Some(body) = m.pointer("/message_content/body").and_then(Value::as_str) else { continue };
-        let Ok(cell) = b64decode(body).and_then(|b| boc_parse(&b)) else { continue };
+        let Some(body) = m.pointer("/message_content/body").and_then(Value::as_str) else {
+            continue;
+        };
+        let Ok(cell) = b64decode(body).and_then(|b| boc_parse(&b)) else {
+            continue;
+        };
         if let Ok(Some(ev)) = decode_event(&cell) {
             out.push((i, account, ev));
             if out.len() == MAX_EVENTS_PER_TX {
@@ -1314,11 +1795,14 @@ pub fn tx_events(tx: &Value) -> Result<Vec<(usize, Addr, TonEvent)>> {
 }
 
 fn exit_code(tx: &Value) -> Option<i64> {
-    tx.pointer("/description/compute_ph/exit_code").and_then(Value::as_i64)
+    tx.pointer("/description/compute_ph/exit_code")
+        .and_then(Value::as_i64)
 }
 
 fn out_body(out_msg: &Value) -> Option<Arc<Cell>> {
-    let body = out_msg.pointer("/message_content/body").and_then(Value::as_str)?;
+    let body = out_msg
+        .pointer("/message_content/body")
+        .and_then(Value::as_str)?;
     boc_parse(&b64decode(body).ok()?).ok()
 }
 
@@ -1330,11 +1814,19 @@ fn carried_digest(out_msg: &Value) -> Option<[u8; 32]> {
 fn compute_ok(tx: &Value) -> std::result::Result<(), String> {
     let d = tx.get("description").cloned().unwrap_or(Value::Null);
     if d.get("aborted").and_then(Value::as_bool).unwrap_or(false) {
-        let code = d.pointer("/compute_ph/exit_code").and_then(Value::as_i64).unwrap_or(-1);
+        let code = d
+            .pointer("/compute_ph/exit_code")
+            .and_then(Value::as_i64)
+            .unwrap_or(-1);
         return Err(format!("aborted (exit code {code})"));
     }
     if d.pointer("/compute_ph/success").and_then(Value::as_bool) == Some(false) {
-        return Err(format!("compute failed (exit code {})", d.pointer("/compute_ph/exit_code").and_then(Value::as_i64).unwrap_or(-1)));
+        return Err(format!(
+            "compute failed (exit code {})",
+            d.pointer("/compute_ph/exit_code")
+                .and_then(Value::as_i64)
+                .unwrap_or(-1)
+        ));
     }
     if d.pointer("/action/success").and_then(Value::as_bool) == Some(false) {
         return Err("action phase failed".into());
@@ -1364,11 +1856,18 @@ pub struct TonAdapter {
 }
 
 fn param_str(cfg: &ChainCfg, k: &str) -> Option<String> {
-    cfg.params.get(k).and_then(|v| v.as_str()).map(str::to_string)
+    cfg.params
+        .get(k)
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
 }
 
 fn param_u128(cfg: &ChainCfg, k: &str, default: u128) -> u128 {
-    cfg.params.get(k).and_then(|v| v.as_integer()).map(|v| v as u128).unwrap_or(default)
+    cfg.params
+        .get(k)
+        .and_then(|v| v.as_integer())
+        .map(|v| v as u128)
+        .unwrap_or(default)
 }
 
 impl TonAdapter {
@@ -1379,17 +1878,31 @@ impl TonAdapter {
         let net = cfg.network.clone().unwrap_or_default();
         let global_id = match cfg.params.get("global_id").and_then(|v| v.as_integer()) {
             Some(g) => g as i32,
-            None => net.parse::<i32>().map_err(|_| anyhow!("chain {}: params.global_id is required for {net}", cfg.chain_key()))?,
+            None => net.parse::<i32>().map_err(|_| {
+                anyhow!(
+                    "chain {}: params.global_id is required for {net}",
+                    cfg.chain_key()
+                )
+            })?,
         };
         let mut w5 = Vec::new();
         let mut lanes = Vec::new();
         for (s, &i) in signers.iter().zip(&cfg.lanes) {
-            let pk: [u8; 32] = s.public_key().try_into().map_err(|_| anyhow!("TON lanes need ed25519 keys"))?;
+            let pk: [u8; 32] = s
+                .public_key()
+                .try_into()
+                .map_err(|_| anyhow!("TON lanes need ed25519 keys"))?;
             let w = W5::new(pk, global_id)?;
-            lanes.push(Lane { index: i, address: w.address()?.raw() });
+            lanes.push(Lane {
+                index: i,
+                address: w.address()?.raw(),
+            });
             w5.push(w);
         }
-        let signers = signers.iter().map(clone_signer).collect::<Result<Vec<_>>>()?;
+        let signers = signers
+            .iter()
+            .map(clone_signer)
+            .collect::<Result<Vec<_>>>()?;
         let keys = crate::adapters::endpoint_keys(cfg, "api_key_env", false)?;
         // the node sets it under its store directory (`main`); unset (tests, the example) = in memory only
         let meta_journal = param_str(cfg, "meta_journal").map(std::path::PathBuf::from);
@@ -1398,14 +1911,19 @@ impl TonAdapter {
             lanes,
             signers,
             w5,
-            api: Api::of(&cfg.rpc_urls, &keys).map_err(|e| anyhow!("chain {}: {e}", cfg.chain_key()))?,
+            api: Api::of(&cfg.rpc_urls, &keys)
+                .map_err(|e| anyhow!("chain {}: {e}", cfg.chain_key()))?,
             global_id,
             attach: param_u128(cfg, "attach_nanoton", 150_000_000),
             forward: param_u128(cfg, "forward_nanoton", 0),
             codes: RwLock::new(HashMap::new()),
-            relay_fee: RelayFeePolicy::from_cfg(cfg).with_context(|| format!("chain {}", cfg.chain_key()))?,
+            relay_fee: RelayFeePolicy::from_cfg(cfg)
+                .with_context(|| format!("chain {}", cfg.chain_key()))?,
             refunds: RwLock::new(HashMap::new()),
-            metas: std::sync::Mutex::new(match &meta_journal { Some(f) => load_meta_wait(f)?, None => MetaWait::new() }),
+            metas: std::sync::Mutex::new(match &meta_journal {
+                Some(f) => load_meta_wait(f)?,
+                None => MetaWait::new(),
+            }),
             meta_journal,
         })
     }
@@ -1420,10 +1938,19 @@ impl TonAdapter {
         if let Some(c) = self.codes.read().ok().and_then(|m| m.get(master).copied()) {
             return Ok(c);
         }
-        let v = self.api.post("runGetMethod", json!({"address": master.raw(), "method": "get_jetton_data", "stack": []})).await?;
+        let v = self
+            .api
+            .post(
+                "runGetMethod",
+                json!({"address": master.raw(), "method": "get_jetton_data", "stack": []}),
+            )
+            .await?;
         let code = match v.get("exit_code").and_then(Value::as_i64).unwrap_or(0) {
             0 => {
-                let c = stack_cell(v.pointer("/stack/4").ok_or_else(|| anyhow!("get_jetton_data: no wallet code"))?)?;
+                let c = stack_cell(
+                    v.pointer("/stack/4")
+                        .ok_or_else(|| anyhow!("get_jetton_data: no wallet code"))?,
+                )?;
                 Some((c.hash(), c.depth()))
             }
             _ => None,
@@ -1435,18 +1962,60 @@ impl TonAdapter {
     }
 
     async fn tx_by_in_msg(&self, hash: &[u8; 32]) -> Result<Option<Value>> {
-        let v = self.api.get("transactionsByMessage", &[("msg_hash", alloy::hex::encode(hash)), ("direction", "in".into())]).await?;
-        Ok(v.get("transactions").and_then(Value::as_array).and_then(|a| a.first().cloned()))
+        let v = self
+            .api
+            .get(
+                "transactionsByMessage",
+                &[
+                    ("msg_hash", alloy::hex::encode(hash)),
+                    ("direction", "in".into()),
+                ],
+            )
+            .await?;
+        Ok(v.get("transactions")
+            .and_then(Value::as_array)
+            .and_then(|a| a.first().cloned()))
     }
 
     /// Masterchain height of the contract's recent transaction that executed `digest`, if any.
-    async fn executed_by_copy(&self, child: &Value, digest: Option<[u8; 32]>) -> Result<Option<u64>> {
-        let (Some(digest), Some(account)) = (digest, child.get("account").and_then(Value::as_str)) else { return Ok(None) };
+    async fn executed_by_copy(
+        &self,
+        child: &Value,
+        digest: Option<[u8; 32]>,
+    ) -> Result<Option<u64>> {
+        let (Some(digest), Some(account)) = (digest, child.get("account").and_then(Value::as_str))
+        else {
+            return Ok(None);
+        };
         let contract = Addr::parse(account)?;
-        let v = self.api.get("transactions", &[("account", contract.raw()), ("limit", "64".into()), ("sort", "desc".into())]).await?;
-        for tx in v.get("transactions").and_then(Value::as_array).into_iter().flatten() {
-            if compute_ok(tx).is_ok() && tx_events(tx)?.iter().any(|(_, e, ev)| *e == contract && matches!(ev, TonEvent::Executed { digest: d, .. } if *d == digest)) {
-                return Ok(Some(tx.get("mc_block_seqno").and_then(Value::as_u64).unwrap_or_default()));
+        let v = self
+            .api
+            .get(
+                "transactions",
+                &[
+                    ("account", contract.raw()),
+                    ("limit", "64".into()),
+                    ("sort", "desc".into()),
+                ],
+            )
+            .await?;
+        for tx in v
+            .get("transactions")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            if compute_ok(tx).is_ok()
+                && tx_events(tx)?.iter().any(|(_, e, ev)| {
+                    *e == contract
+                        && matches!(ev, TonEvent::Executed { digest: d, .. } if *d == digest)
+                })
+            {
+                return Ok(Some(
+                    tx.get("mc_block_seqno")
+                        .and_then(Value::as_u64)
+                        .unwrap_or_default(),
+                ));
             }
         }
         Ok(None)
@@ -1454,25 +2023,65 @@ impl TonAdapter {
 
     /// Simulation by getters (R27) of a signed op on its contract: lane/nonce unused, key bound or provable, signature
     /// valid. Returns the lane's next nonce.
-    async fn simulate_signed(&self, contract: &Addr, m: &MetaOp, cell: &Arc<Cell>, auth: &Auth) -> std::result::Result<u64, SimError> {
+    async fn simulate_signed(
+        &self,
+        contract: &Addr,
+        m: &MetaOp,
+        cell: &Arc<Cell>,
+        auth: &Auth,
+    ) -> std::result::Result<u64, SimError> {
         let revert = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
         let transport = |e: anyhow::Error| SimError::Transport(format!("{e:#}"));
-        let next = self.api.run_get(contract, "get_lane_nonce", vec![json!({"type": "num", "value": hex0x(&m.lane)})]).await.map_err(transport)?;
-        let next = next.first().map(stack_num).transpose().map_err(transport)?.unwrap_or(0) as u64;
+        let next = self
+            .api
+            .run_get(
+                contract,
+                "get_lane_nonce",
+                vec![json!({"type": "num", "value": hex0x(&m.lane)})],
+            )
+            .await
+            .map_err(transport)?;
+        let next = next
+            .first()
+            .map(stack_num)
+            .transpose()
+            .map_err(transport)?
+            .unwrap_or(0) as u64;
         if next != m.nonce && !(m.op == 4 && next == m.nonce + 1) {
-            return Err(SimError::Revert(format!("lane nonce is {next}, payload has {}", m.nonce)));
+            return Err(SimError::Revert(format!(
+                "lane nonce is {next}, payload has {}",
+                m.nonce
+            )));
         }
-        if let Auth::TonConnect { signature, timestamp, domain, state_init } = auth {
-            let bound = self.api.run_get(contract, "get_owner_pubkey", vec![]).await.map_err(transport)?;
-            let bound = bound.first().and_then(|v| v.get("value")).and_then(Value::as_str).unwrap_or("0x0");
+        if let Auth::TonConnect {
+            signature,
+            timestamp,
+            domain,
+            state_init,
+        } = auth
+        {
+            let bound = self
+                .api
+                .run_get(contract, "get_owner_pubkey", vec![])
+                .await
+                .map_err(transport)?;
+            let bound = bound
+                .first()
+                .and_then(|v| v.get("value"))
+                .and_then(Value::as_str)
+                .unwrap_or("0x0");
             let mut pk = left_pad32(bound).map_err(revert)?;
             if pk == [0; 32] {
-                let si = state_init.as_ref().ok_or_else(|| SimError::Revert("owner key not bound and no StateInit".into()))?;
+                let si = state_init.as_ref().ok_or_else(|| {
+                    SimError::Revert("owner key not bound and no StateInit".into())
+                })?;
                 pk = pubkey_from_state_init(si, &m.from).map_err(revert)?;
             }
             let h = envelope_hash(&m.from, *timestamp, domain, cell).map_err(revert)?;
-            let vk = VerifyingKey::from_bytes(&pk).map_err(|_| SimError::Revert("bad owner key".into()))?;
-            vk.verify_strict(&h, &Signature::from_bytes(signature)).map_err(|_| SimError::Revert("signature does not verify".into()))?;
+            let vk = VerifyingKey::from_bytes(&pk)
+                .map_err(|_| SimError::Revert("bad owner key".into()))?;
+            vk.verify_strict(&h, &Signature::from_bytes(signature))
+                .map_err(|_| SimError::Revert("signature does not verify".into()))?;
         }
         Ok(next)
     }
@@ -1487,33 +2096,74 @@ impl TonAdapter {
     /// passkey record) and cancel rules. The Mandate: an owner revoke, TON Connect-signed, at `get_lane_nonce`, verified
     /// against `get_state`'s `ownerPubkey`; a revoke of a revoked Mandate is a no-op and refused as such (owner rulings
     /// list item 6), not because it would fail.
-    async fn check_relayed_call(&self, rc: &RelayCall, router: &Addr, payer: &Addr, now: u64) -> std::result::Result<(), SimError> {
+    async fn check_relayed_call(
+        &self,
+        rc: &RelayCall,
+        router: &Addr,
+        payer: &Addr,
+        now: u64,
+    ) -> std::result::Result<(), SimError> {
         let refuse = |why: &str| SimError::Revert(format!("RELAY_CALL_REFUSED: {why}"));
         let revert = |e: anyhow::Error| refuse(&format!("{e:#}"));
         let transport = |e: anyhow::Error| SimError::Transport(format!("{e:#}"));
-        let (op, auth, params, state_init, response, forward) = parse_signed_op(&rc.call).map_err(revert)?;
+        let (op, auth, params, state_init, response, forward) =
+            parse_signed_op(&rc.call).map_err(revert)?;
         let m = parse_metaop(&op).map_err(revert)?;
         let auth = auth_of_cell(&auth, state_init).map_err(revert)?;
-        if m.contract != rc.target || m.network != self.global_id || rc.target_data.parser().addr().ok().flatten() != Some(m.from) {
+        if m.contract != rc.target
+            || m.network != self.global_id
+            || rc.target_data.parser().addr().ok().flatten() != Some(m.from)
+        {
             return Err(refuse("the call's contract, network or from is not the target, this chain or the target's owner"));
         }
         if m.valid_until <= rc.deadline as u64 {
             return Err(refuse("the call expires before the relay's deadline"));
         }
         if m.relayer.is_some_and(|r| r != response) {
-            return Err(refuse("the call is bound to a relayer other than its executor"));
+            return Err(refuse(
+                "the call is bound to a relayer other than its executor",
+            ));
         }
-        let addr_arg = |a: &Addr| Builder::new().addr(Some(a)).end().map(|c| json!({"type": "slice", "value": b64encode(&boc_serialize(&c))}));
-        let args = vec![addr_arg(payer).map_err(revert)?, json!({"type": "num", "value": hex0x(&rc.salt)})];
-        let exec = self.api.run_get(router, "get_executor", args).await.map_err(transport)?;
-        let exec = exec.first().ok_or_else(|| anyhow!("get_executor: empty")).and_then(|v| stack_cell(v)?.parser().addr()).map_err(transport)?;
+        let addr_arg = |a: &Addr| {
+            Builder::new()
+                .addr(Some(a))
+                .end()
+                .map(|c| json!({"type": "slice", "value": b64encode(&boc_serialize(&c))}))
+        };
+        let args = vec![
+            addr_arg(payer).map_err(revert)?,
+            json!({"type": "num", "value": hex0x(&rc.salt)}),
+        ];
+        let exec = self
+            .api
+            .run_get(router, "get_executor", args)
+            .await
+            .map_err(transport)?;
+        let exec = exec
+            .first()
+            .ok_or_else(|| anyhow!("get_executor: empty"))
+            .and_then(|v| stack_cell(v)?.parser().addr())
+            .map_err(transport)?;
         if exec != Some(response) {
-            return Err(refuse("the call's responseDestination is not the payer's executor"));
+            return Err(refuse(
+                "the call's responseDestination is not the payer's executor",
+            ));
         }
         // CodeSet { wallet, mandate }, flattened
-        let codes = self.api.run_get(router, "get_codes", vec![]).await.map_err(transport)?;
-        let code = |i: usize| codes.get(i).and_then(|v| v.get("value")).and_then(Value::as_str).ok_or_else(|| anyhow!("get_codes: no field {i}"))
-            .and_then(left_pad32).map_err(transport);
+        let codes = self
+            .api
+            .run_get(router, "get_codes", vec![])
+            .await
+            .map_err(transport)?;
+        let code = |i: usize| {
+            codes
+                .get(i)
+                .and_then(|v| v.get("value"))
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow!("get_codes: no field {i}"))
+                .and_then(left_pad32)
+                .map_err(transport)
+        };
         let (wallet, mandate) = (code(0)?, code(1)?);
         if rc.target_code.hash() == wallet {
             if matches!(auth, Auth::Passkey { .. }) {
@@ -1522,22 +2172,40 @@ impl TonAdapter {
             if m.valid_until > now + LANE_TTL_S {
                 return Err(refuse("the call is valid further ahead than LANE_TTL"));
             }
-            if m.op == 5 && m.extra != [0; 32] && !params.as_ref().is_some_and(|p| p.hash() == m.extra && p.bit_len() == 520 && p.refs().len() == 1) {
-                return Err(refuse("set_key: params must hash to extra and be a passkey record (520 bits, 1 ref)"));
+            if m.op == 5
+                && m.extra != [0; 32]
+                && !params.as_ref().is_some_and(|p| {
+                    p.hash() == m.extra && p.bit_len() == 520 && p.refs().len() == 1
+                })
+            {
+                return Err(refuse(
+                    "set_key: params must hash to extra and be a passkey record (520 bits, 1 ref)",
+                ));
             }
-            let next = self.simulate_signed(&rc.target, &m, &op, &auth).await.map_err(|e| match e {
-                SimError::Revert(r) => refuse(&r),
-                t => t,
-            })?;
+            let next = self
+                .simulate_signed(&rc.target, &m, &op, &auth)
+                .await
+                .map_err(|e| match e {
+                    SimError::Revert(r) => refuse(&r),
+                    t => t,
+                })?;
             if m.op == 4 && next == m.nonce + 1 && forward < CANCEL_TON {
                 return Err(refuse("a cancel carries less than CANCEL_TON forward"));
             }
             return Ok(());
         }
         if rc.target_code.hash() != mandate {
-            return Err(refuse("unknown target code: neither the SCaaS jetton wallet nor the Mandate"));
+            return Err(refuse(
+                "unknown target code: neither the SCaaS jetton wallet nor the Mandate",
+            ));
         }
-        let Auth::TonConnect { signature, timestamp, domain, .. } = &auth else {
+        let Auth::TonConnect {
+            signature,
+            timestamp,
+            domain,
+            ..
+        } = &auth
+        else {
             return Err(refuse("a Mandate owner op is TON Connect-signed"));
         };
         if m.op != 4 {
@@ -1545,20 +2213,50 @@ impl TonAdapter {
         }
         // MandateState, flattened: revoked periodStart spent balance perPayment perPeriod periodSeconds expiresAt
         // ownerPubkey delegatePubkey
-        let st = self.api.run_get(&rc.target, "get_state", vec![]).await.map_err(transport)?;
-        let field = |i: usize| st.get(i).and_then(|v| v.get("value")).and_then(Value::as_str).ok_or_else(|| SimError::Transport(format!("get_state: no field {i}")));
+        let st = self
+            .api
+            .run_get(&rc.target, "get_state", vec![])
+            .await
+            .map_err(transport)?;
+        let field = |i: usize| {
+            st.get(i)
+                .and_then(|v| v.get("value"))
+                .and_then(Value::as_str)
+                .ok_or_else(|| SimError::Transport(format!("get_state: no field {i}")))
+        };
         if !matches!(field(0)?, "0" | "0x0") {
             return Err(refuse("the Mandate is already revoked: the revoke would change nothing (a no-op is not relayed)"));
         }
-        let next = self.api.run_get(&rc.target, "get_lane_nonce", vec![json!({"type": "num", "value": hex0x(&m.lane)})]).await.map_err(transport)?;
-        let next = next.first().map(stack_num).transpose().map_err(transport)?.unwrap_or(0);
+        let next = self
+            .api
+            .run_get(
+                &rc.target,
+                "get_lane_nonce",
+                vec![json!({"type": "num", "value": hex0x(&m.lane)})],
+            )
+            .await
+            .map_err(transport)?;
+        let next = next
+            .first()
+            .map(stack_num)
+            .transpose()
+            .map_err(transport)?
+            .unwrap_or(0);
         if next != m.nonce as u128 {
-            return Err(refuse(&format!("Mandate lane nonce is {next}, the call has {}", m.nonce)));
+            return Err(refuse(&format!(
+                "Mandate lane nonce is {next}, the call has {}",
+                m.nonce
+            )));
         }
         let pk = left_pad32(field(8)?).map_err(revert)?;
         let h = envelope_hash(&m.from, *timestamp, domain, &op).map_err(revert)?;
-        if !VerifyingKey::from_bytes(&pk).is_ok_and(|vk| vk.verify_strict(&h, &Signature::from_bytes(signature)).is_ok()) {
-            return Err(refuse("the owner signature does not verify against the Mandate's ownerPubkey"));
+        if !VerifyingKey::from_bytes(&pk).is_ok_and(|vk| {
+            vk.verify_strict(&h, &Signature::from_bytes(signature))
+                .is_ok()
+        }) {
+            return Err(refuse(
+                "the owner signature does not verify against the Mandate's ownerPubkey",
+            ));
         }
         Ok(())
     }
@@ -1568,13 +2266,22 @@ impl TonAdapter {
     /// relayed call must run on its target (`check_relayed_call`, final review I1), the lane attaches what the router
     /// asks for (`get_relay_value` on this very body: every hop priced from the config), and the fee must be worth that
     /// TON at the node's floor price (`min_ton_value`, spec §9).
-    async fn build_relay_fee(&self, job: &Job, op: &Value, cell: &Arc<Cell>, m: &MetaOp) -> std::result::Result<Built, SimError> {
+    async fn build_relay_fee(
+        &self,
+        job: &Job,
+        op: &Value,
+        cell: &Arc<Cell>,
+        m: &MetaOp,
+    ) -> std::result::Result<Built, SimError> {
         let revert = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
         let transport = |e: anyhow::Error| SimError::Transport(format!("{e:#}"));
-        let (router, mut rc) = relay_fee_job(&self.relay_fee, self.global_id, cell, op).map_err(revert)?;
+        let (router, mut rc) =
+            relay_fee_job(&self.relay_fee, self.global_id, cell, op).map_err(revert)?;
         let now = crate::submit::now();
         if m.network != self.global_id {
-            return Err(SimError::Revert("payload network does not match the chain".into()));
+            return Err(SimError::Revert(
+                "payload network does not match the chain".into(),
+            ));
         }
         if m.valid_until <= now {
             return Err(SimError::Revert("signed payload expired".into()));
@@ -1582,42 +2289,87 @@ impl TonAdapter {
         // A payment that could expire in transit (two hops: lane, router, payer wallet; E_EXPIRED) bounces at the
         // relayer's cost: the same floor as the relayed call (Q1); the lane tx expires half of it before the payment.
         if m.valid_until <= now + RELAY_DEADLINE_S {
-            return Err(SimError::Revert(format!("the payment must stay valid more than {RELAY_DEADLINE_S} s")));
+            return Err(SimError::Revert(format!(
+                "the payment must stay valid more than {RELAY_DEADLINE_S} s"
+            )));
         }
         // The payer's wallet refuses it (E_TTL) after the router escrowed it: the relayer would pay the bounce (P1).
         if m.valid_until > now + LANE_TTL_S {
-            return Err(SimError::Revert("the payment is valid further ahead than LANE_TTL".into()));
+            return Err(SimError::Revert(
+                "the payment is valid further ahead than LANE_TTL".into(),
+            ));
         }
         pay_forward_floor(m).map_err(revert)?; // the router prices the signed floor into get_relay_value
         let auth = parse_auth(op["signature"].as_str().unwrap_or_default()).map_err(revert)?;
-        let (h, d) = self.wallet_code(&rc.master).await.map_err(transport)?
-            .ok_or_else(|| SimError::Revert(format!("{} is not a jetton master", rc.master.raw())))?;
+        let (h, d) = self
+            .wallet_code(&rc.master)
+            .await
+            .map_err(transport)?
+            .ok_or_else(|| {
+                SimError::Revert(format!("{} is not a jetton master", rc.master.raw()))
+            })?;
         if jetton_wallet_address(&m.from, &rc.master, &h, d).map_err(revert)? != m.contract {
-            return Err(SimError::Revert("the payment's contract is not the payer's wallet of op.extra.master".into()));
+            return Err(SimError::Revert(
+                "the payment's contract is not the payer's wallet of op.extra.master".into(),
+            ));
         }
         self.simulate_signed(&m.contract, m, cell, &auth).await?;
         // ... and refuses more than it holds (E_BALANCE, P1); a payer that moves its tokens away after this check pays a
         // direct transfer each time. JettonWalletData { balance, owner, master, code }, flattened.
-        let data = self.api.run_get(&m.contract, "get_wallet_data", vec![]).await.map_err(transport)?;
-        let balance = data.first().map(stack_num).transpose().map_err(transport)?.unwrap_or(0);
+        let data = self
+            .api
+            .run_get(&m.contract, "get_wallet_data", vec![])
+            .await
+            .map_err(transport)?;
+        let balance = data
+            .first()
+            .map(stack_num)
+            .transpose()
+            .map_err(transport)?
+            .unwrap_or(0);
         if balance < m.amount {
-            return Err(SimError::Revert(format!("the payer's wallet holds {balance}, the payment is {}", m.amount)));
+            return Err(SimError::Revert(format!(
+                "the payer's wallet holds {balance}, the payment is {}",
+                m.amount
+            )));
         }
         rc.pay_auth = auth_cell(&auth).map_err(revert)?;
         rc.pay_state_init = auth_state_init(&auth);
         rc.deadline = (now + RELAY_DEADLINE_S) as u32;
         self.check_relayed_call(&rc, &router, &m.from, now).await?;
         let body = rc.body().map_err(revert)?;
-        let v = self.api.run_get(&router, "get_relay_value", vec![json!({"type": "cell", "value": b64encode(&boc_serialize(&body))})]).await.map_err(transport)?;
-        let value = v.first().map(stack_num).transpose().map_err(transport)?.ok_or_else(|| SimError::Transport("get_relay_value: empty".into()))?;
+        let v = self
+            .api
+            .run_get(
+                &router,
+                "get_relay_value",
+                vec![json!({"type": "cell", "value": b64encode(&boc_serialize(&body))})],
+            )
+            .await
+            .map_err(transport)?;
+        let value = v
+            .first()
+            .map(stack_num)
+            .transpose()
+            .map_err(transport)?
+            .ok_or_else(|| SimError::Transport("get_relay_value: empty".into()))?;
         let value = self.attach.max(value);
-        let price = self.relay_fee.min_ton_value.get(&rc.master).copied().unwrap_or(0);
+        let price = self
+            .relay_fee
+            .min_ton_value
+            .get(&rc.master)
+            .copied()
+            .unwrap_or(0);
         if m.amount.saturating_mul(price) < value {
             return Err(SimError::Revert(format!("fee {} × min_ton_value {price} is below the {value} nanoton the relay puts at risk", m.amount)));
         }
         // The lane tx expires before the RelayCall's deadline would (the router refuses a past deadline).
-        Ok(Built { job_id: job.id, body: boc_serialize(&body), valid_until: (m.valid_until - RELAY_DEADLINE_S / 2).min(rc.deadline as u64),
-            meta: built_meta(&router, value) })
+        Ok(Built {
+            job_id: job.id,
+            body: boc_serialize(&body),
+            valid_until: (m.valid_until - RELAY_DEADLINE_S / 2).min(rc.deadline as u64),
+            meta: built_meta(&router, value),
+        })
     }
 
     /// A relay-fee job's lane tx: the router's transaction, then the escrow (`get_escrow_state`). Open: pending; past the
@@ -1625,33 +2377,71 @@ impl TonAdapter {
     /// may), again after `RELAY_REFUND_RETRY_S`. Closed: identified positively by the router's event for this
     /// `(payer, ref)`: `RelayFeePaid` = mined, `RelayFeeRefunded` = reverted (the payer was not charged); neither seen
     /// yet = pending, never "refunded" by absence.
-    async fn escrow_status(&self, lane_tx: &Value, out: &Value, rc: &RelayCall) -> Result<TxStatus> {
-        let Some(rt) = self.tx_by_in_msg(&api_hash(out.get("hash").unwrap_or(&Value::Null))?).await? else { return Ok(TxStatus::Pending) };
+    async fn escrow_status(
+        &self,
+        lane_tx: &Value,
+        out: &Value,
+        rc: &RelayCall,
+    ) -> Result<TxStatus> {
+        let Some(rt) = self
+            .tx_by_in_msg(&api_hash(out.get("hash").unwrap_or(&Value::Null))?)
+            .await?
+        else {
+            return Ok(TxStatus::Pending);
+        };
         if let Err(why) = compute_ok(&rt) {
-            return Ok(TxStatus::Reverted { reason: format!("router: {why}") });
+            return Ok(TxStatus::Reverted {
+                reason: format!("router: {why}"),
+            });
         }
-        let router = Addr::parse(rt.get("account").and_then(Value::as_str).ok_or_else(|| anyhow!("tx.account"))?)?;
+        let router = Addr::parse(
+            rt.get("account")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow!("tx.account"))?,
+        )?;
         let m = parse_metaop(&rc.pay_op)?;
         let key = escrow_key(&m.from, &m.pay_ref)?;
-        let st = self.api.run_get(&router, "get_escrow_state", vec![json!({"type": "num", "value": hex0x(&key)})]).await?;
+        let st = self
+            .api
+            .run_get(
+                &router,
+                "get_escrow_state",
+                vec![json!({"type": "num", "value": hex0x(&key)})],
+            )
+            .await?;
         let st = st.first().map(stack_num).transpose()?.unwrap_or(0);
         if st != 0 {
             let now = crate::submit::now();
             let due = (st >= 3 || (st == 2 && now >= rc.deadline as u64))
-                && self.refunds.read().ok().and_then(|r| r.get(&key).copied()).is_none_or(|at| now >= at + RELAY_REFUND_RETRY_S);
+                && self
+                    .refunds
+                    .read()
+                    .ok()
+                    .and_then(|r| r.get(&key).copied())
+                    .is_none_or(|at| now >= at + RELAY_REFUND_RETRY_S);
             if due {
-                match self.send_refund(lane_tx, &router, &m.from, &m.pay_ref).await {
+                match self
+                    .send_refund(lane_tx, &router, &m.from, &m.pay_ref)
+                    .await
+                {
                     Ok(()) => {
                         if let Ok(mut r) = self.refunds.write() {
                             r.insert(key, now);
                         }
                     }
-                    Err(e) => tracing::warn!(chain = %self.key, "RelayRefund not sent; retry: {e:#}"),
+                    Err(e) => {
+                        tracing::warn!(chain = %self.key, "RelayRefund not sent; retry: {e:#}")
+                    }
                 }
             }
             return Ok(TxStatus::Pending);
         }
-        let lane = Addr::parse(lane_tx.get("account").and_then(Value::as_str).unwrap_or_default())?;
+        let lane = Addr::parse(
+            lane_tx
+                .get("account")
+                .and_then(Value::as_str)
+                .unwrap_or_default(),
+        )?;
         Ok(match self.escrow_outcome(&router, &lane, &m.from, &m.pay_ref).await? {
             Some((true, height, tx_hash)) => TxStatus::Mined { height, tx_hash: Some(tx_hash) },
             Some((false, _, _)) => TxStatus::Reverted { reason: "relay fee refunded: the call failed, bounced or timed out (the payer was not charged)".into() },
@@ -1663,19 +2453,54 @@ impl TonAdapter {
     /// `RelayFeePaid` / `RelayFeeRefunded` naming our lane. A release wins over a refund (a `(payer, ref)` is paid at most
     /// once: a refund of ours next to it is an earlier attempt whose payment never arrived). ponytail: the router's last
     /// 128 transactions; a busier router needs the indexer's view (T17).
-    async fn escrow_outcome(&self, router: &Addr, lane: &Addr, payer: &Addr, r: &[u8; 32]) -> Result<Option<(bool, u64, String)>> {
-        let v = self.api.get("transactions", &[("account", router.raw()), ("limit", "128".into()), ("sort", "desc".into())]).await?;
+    async fn escrow_outcome(
+        &self,
+        router: &Addr,
+        lane: &Addr,
+        payer: &Addr,
+        r: &[u8; 32],
+    ) -> Result<Option<(bool, u64, String)>> {
+        let v = self
+            .api
+            .get(
+                "transactions",
+                &[
+                    ("account", router.raw()),
+                    ("limit", "128".into()),
+                    ("sort", "desc".into()),
+                ],
+            )
+            .await?;
         let mut found: Option<(bool, u64, String)> = None;
-        for tx in v.get("transactions").and_then(Value::as_array).into_iter().flatten() {
+        for tx in v
+            .get("transactions")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
             if compute_ok(tx).is_err() {
                 continue;
             }
-            let msgs = tx.get("out_msgs").and_then(Value::as_array).cloned().unwrap_or_default();
-            for c in msgs.iter().filter(|m| m.get("destination").is_none_or(Value::is_null)).filter_map(out_body) {
+            let msgs = tx
+                .get("out_msgs")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            for c in msgs
+                .iter()
+                .filter(|m| m.get("destination").is_none_or(Value::is_null))
+                .filter_map(out_body)
+            {
                 if let Some(released) = settled_event(&c, lane, payer, r) {
                     if released || found.is_none() {
                         let h = hex0x(&api_hash(tx.get("hash").unwrap_or(&Value::Null))?);
-                        found = Some((released, tx.get("mc_block_seqno").and_then(Value::as_u64).unwrap_or_default(), h));
+                        found = Some((
+                            released,
+                            tx.get("mc_block_seqno")
+                                .and_then(Value::as_u64)
+                                .unwrap_or_default(),
+                            h,
+                        ));
                     }
                     if released {
                         return Ok(found);
@@ -1687,46 +2512,99 @@ impl TonAdapter {
     }
 
     /// `RelayRefund { from, ref }` from the lane that sent the relay (the lane runner holds it until the job ends).
-    async fn send_refund(&self, lane_tx: &Value, router: &Addr, from: &Addr, r: &[u8; 32]) -> Result<()> {
-        let account = Addr::parse(lane_tx.get("account").and_then(Value::as_str).unwrap_or_default())?;
-        let lane = self.w5.iter().position(|w| w.address().ok() == Some(account)).ok_or_else(|| anyhow!("the relay was not sent by one of our lanes"))?;
+    async fn send_refund(
+        &self,
+        lane_tx: &Value,
+        router: &Addr,
+        from: &Addr,
+        r: &[u8; 32],
+    ) -> Result<()> {
+        let account = Addr::parse(
+            lane_tx
+                .get("account")
+                .and_then(Value::as_str)
+                .unwrap_or_default(),
+        )?;
+        let lane = self
+            .w5
+            .iter()
+            .position(|w| w.address().ok() == Some(account))
+            .ok_or_else(|| anyhow!("the relay was not sent by one of our lanes"))?;
         let seqno = self.sequence(lane).await? as u32;
-        let signer = self.signers.get(lane).ok_or_else(|| anyhow!("no lane {lane}"))?;
+        let signer = self
+            .signers
+            .get(lane)
+            .ok_or_else(|| anyhow!("no lane {lane}"))?;
         let vu = (crate::submit::now() + 300) as u32;
         let v = self.api.run_get(router, "get_refund_value", vec![]).await?;
-        let value = v.first().map(stack_num).transpose()?.ok_or_else(|| anyhow!("get_refund_value: empty"))?;
-        let (raw, _) = w5_transfer(&self.w5[lane], signer, seqno, vu, router, value, relay_refund_body(from, r)?)?;
+        let value = v
+            .first()
+            .map(stack_num)
+            .transpose()?
+            .ok_or_else(|| anyhow!("get_refund_value: empty"))?;
+        let (raw, _) = w5_transfer(
+            &self.w5[lane],
+            signer,
+            seqno,
+            vu,
+            router,
+            value,
+            relay_refund_body(from, r)?,
+        )?;
         self.api.send(json!({"boc": b64encode(&raw)})).await
     }
 
     async fn build_on(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let revert = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
         let transport = |e: anyhow::Error| SimError::Transport(format!("{e:#}"));
-        let op = job.op.as_ref().ok_or_else(|| SimError::Revert("not a signed_op job".into()))?;
-        let s = |k: &str| op.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
-        let cell = alloy::hex::decode(s("payload").trim_start_matches("0x")).map_err(|e| revert(e.into())).and_then(|b| boc_parse(&b).map_err(revert))?;
+        let op = job
+            .op
+            .as_ref()
+            .ok_or_else(|| SimError::Revert("not a signed_op job".into()))?;
+        let s = |k: &str| {
+            op.get(k)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
+        let cell = alloy::hex::decode(s("payload").trim_start_matches("0x"))
+            .map_err(|e| revert(e.into()))
+            .and_then(|b| boc_parse(&b).map_err(revert))?;
         let m = parse_metaop(&cell).map_err(revert)?;
         if hex0x(&m.digest) != s("digest").to_lowercase() {
-            return Err(SimError::Revert("payload does not hash to the job digest".into()));
+            return Err(SimError::Revert(
+                "payload does not hash to the job digest".into(),
+            ));
         }
         if op["kind"] == "relay_fee" {
             return self.build_relay_fee(job, op, &cell, &m).await;
         }
         let contract = Addr::parse(&s("contract")).map_err(revert)?;
         if contract != m.contract || m.network != self.global_id {
-            return Err(SimError::Revert("payload contract/network does not match the job".into()));
+            return Err(SimError::Revert(
+                "payload contract/network does not match the job".into(),
+            ));
         }
         if m.valid_until <= crate::submit::now() {
             return Err(SimError::Revert("signed payload expired".into()));
         }
-        let me = self.lane_wallet(lane).and_then(|w| w.address()).map_err(transport)?;
+        let me = self
+            .lane_wallet(lane)
+            .and_then(|w| w.address())
+            .map_err(transport)?;
         if m.relayer.is_some_and(|r| r != me) {
-            return Err(SimError::Revert("payload is bound to another relayer".into()));
+            return Err(SimError::Revert(
+                "payload is bound to another relayer".into(),
+            ));
         }
-        let pay_meta = pay_params(&m, op, self.relay_fee.params.max_pay_meta_bytes).map_err(revert)?;
+        let pay_meta =
+            pay_params(&m, op, self.relay_fee.params.max_pay_meta_bytes).map_err(revert)?;
         if m.op == 1 && self.relay_fee.router == Some(m.to) {
             // CTR-MTX-27: never pay the router outside a relay (a transfer without a notification would stay there).
-            return Err(SimError::Revert(format!("a plain pay to the relay-fee router {} is refused", m.to.raw())));
+            return Err(SimError::Revert(format!(
+                "a plain pay to the relay-fee router {} is refused",
+                m.to.raw()
+            )));
         }
         let extra = op.get("extra").cloned().unwrap_or(Value::Null);
         let mut forward = 0u128;
@@ -1742,7 +2620,13 @@ impl TonAdapter {
             let state_init = auth_state_init(&auth);
             let params = match (pay_meta, extra.get("params").and_then(Value::as_str)) {
                 (Some(p), _) => Some(p),
-                (None, Some(p)) => Some(boc_parse(&alloy::hex::decode(p.trim_start_matches("0x")).map_err(|e| revert(e.into()))?).map_err(revert)?),
+                (None, Some(p)) => Some(
+                    boc_parse(
+                        &alloy::hex::decode(p.trim_start_matches("0x"))
+                            .map_err(|e| revert(e.into()))?,
+                    )
+                    .map_err(revert)?,
+                ),
                 (None, None) => None,
             };
             let match_with = match extra.get("match_with").and_then(Value::as_str) {
@@ -1752,32 +2636,72 @@ impl TonAdapter {
             // The payer signed a floor for the forward TON (review H2); the wallet refuses less.
             let floor = match m.op {
                 1 => pay_forward_floor(&m).map_err(revert)?,
-                2 => trade_forward_floor(params.as_ref().ok_or_else(|| SimError::Revert("trade without params".into()))?).map_err(revert)?.max(MIN_LEG_TON),
+                2 => trade_forward_floor(
+                    params
+                        .as_ref()
+                        .ok_or_else(|| SimError::Revert("trade without params".into()))?,
+                )
+                .map_err(revert)?
+                .max(MIN_LEG_TON),
                 4 if next == m.nonce + 1 => CANCEL_TON,
                 _ => 0,
             };
-            forward = extra.get("forward_nanoton").and_then(Value::as_u64).map(u128::from).unwrap_or(self.forward).max(floor);
-            signed_op_body(&cell, &auth_cell(&auth).map_err(revert)?, params, state_init, &me, forward, match_with).map_err(revert)?
+            forward = extra
+                .get("forward_nanoton")
+                .and_then(Value::as_u64)
+                .map(u128::from)
+                .unwrap_or(self.forward)
+                .max(floor);
+            signed_op_body(
+                &cell,
+                &auth_cell(&auth).map_err(revert)?,
+                params,
+                state_init,
+                &me,
+                forward,
+                match_with,
+            )
+            .map_err(revert)?
         };
         // Sized from THIS job's forward (review L8): the wallet wants 0.05 TON + forward.
         let value = self.attach.max(forward + 100_000_000);
-        Ok(Built { job_id: job.id, body: boc_serialize(&body), valid_until: m.valid_until, meta: built_meta(&contract, value) })
+        Ok(Built {
+            job_id: job.id,
+            body: boc_serialize(&body),
+            valid_until: m.valid_until,
+            meta: built_meta(&contract, value),
+        })
     }
 
     async fn mc_block(&self, seqno: u64) -> Result<String> {
         let v = self
             .api
-            .get("blocks", &[("workchain", "-1".into()), ("shard", "8000000000000000".into()), ("seqno", seqno.to_string())])
+            .get(
+                "blocks",
+                &[
+                    ("workchain", "-1".into()),
+                    ("shard", "8000000000000000".into()),
+                    ("seqno", seqno.to_string()),
+                ],
+            )
             .await?;
-        let b = v.pointer("/blocks/0").ok_or_else(|| anyhow!("no masterchain block {seqno}"))?;
-        Ok(hex0x(&api_hash(b.get("root_hash").unwrap_or(&Value::Null))?))
+        let b = v
+            .pointer("/blocks/0")
+            .ok_or_else(|| anyhow!("no masterchain block {seqno}"))?;
+        Ok(hex0x(&api_hash(
+            b.get("root_hash").unwrap_or(&Value::Null),
+        )?))
     }
 }
 
 /// Normalized event for ExternalPull, or `None` when the emitter is not one of ours (R10-10). No network call: the
 /// emitter must be the wallet `walletInit(owner, master)` derives to (review M3); a Mandate only when ExternalPull lists
 /// its address (review L10). `masters` = ExternalPull's contracts with their wallet code (`None`: not a master).
-pub fn authenticate(emitter: &Addr, ev: &TonEvent, masters: &[(Addr, Option<WalletCode>)]) -> Option<(Addr, TonEvent)> {
+pub fn authenticate(
+    emitter: &Addr,
+    ev: &TonEvent,
+    masters: &[(Addr, Option<WalletCode>)],
+) -> Option<(Addr, TonEvent)> {
     let wallet_of = |master: &Addr, owner: &Addr| {
         let (_, code) = masters.iter().find(|(m, _)| m == master)?;
         let (h, d) = (*code)?;
@@ -1787,10 +2711,17 @@ pub fn authenticate(emitter: &Addr, ev: &TonEvent, masters: &[(Addr, Option<Wall
         TonEvent::Executed { master, from, .. } => {
             masters.iter().find(|(m, c)| m == master && c.is_some())?;
             // A Mandate emits for itself (`from` = the mandate) or for its owner's withdrawals.
-            let registered = masters.iter().any(|(m, code)| m == emitter && code.is_none());
-            (wallet_of(master, from).as_ref() == Some(emitter) || registered).then(|| (*master, ev.clone()))
+            let registered = masters
+                .iter()
+                .any(|(m, code)| m == emitter && code.is_none());
+            (wallet_of(master, from).as_ref() == Some(emitter) || registered)
+                .then(|| (*master, ev.clone()))
         }
-        TonEvent::Paid { to, .. } => masters.iter().map(|(m, _)| m).find(|m| wallet_of(m, to).as_ref() == Some(emitter)).map(|m| (*m, ev.clone())),
+        TonEvent::Paid { to, .. } => masters
+            .iter()
+            .map(|(m, _)| m)
+            .find(|m| wallet_of(m, to).as_ref() == Some(emitter))
+            .map(|m| (*m, ev.clone())),
         // authenticated through its transaction's `Executed` (`meta_payer`)
         TonEvent::Meta { .. } => None,
     }
@@ -1798,11 +2729,16 @@ pub fn authenticate(emitter: &Addr, ev: &TonEvent, masters: &[(Addr, Option<Wall
 
 /// The payer of a `PaymentMeta`: the `Executed` of the same transaction, same emitter (the payer's jetton wallet) and
 /// master, authenticated like any `Executed` (the wallet derives from `(from, master)`). `PaymentMeta` has no `from`.
-pub fn meta_payer(evs: &[(usize, Addr, TonEvent)], emitter: &Addr, master: &Addr, masters: &[(Addr, Option<WalletCode>)]) -> Option<Addr> {
+pub fn meta_payer(
+    evs: &[(usize, Addr, TonEvent)],
+    emitter: &Addr,
+    master: &Addr,
+    masters: &[(Addr, Option<WalletCode>)],
+) -> Option<Addr> {
     evs.iter().find_map(|(_, e, ev)| match ev {
-        TonEvent::Executed { master: m, from, .. } if e == emitter && m == master => {
-            authenticate(e, ev, masters).map(|_| *from)
-        }
+        TonEvent::Executed {
+            master: m, from, ..
+        } if e == emitter && m == master => authenticate(e, ev, masters).map(|_| *from),
         _ => None,
     })
 }
@@ -1831,18 +2767,36 @@ const META_WAIT_MAX: usize = 4_096;
 /// from the same transaction's `Executed`) waits in `wait`, and the `Paid` of the same `(master, from, pay_ref)` takes
 /// its `meta`. Never by `pay_ref` alone; a `PaymentMeta` is never sent as a row (without its payment it proves nothing).
 /// The flag: `wait` changed (persist it).
-pub fn ton_tx_events(evs: Vec<(usize, Addr, TonEvent)>, masters: &[(Addr, Option<WalletCode>)], wait: &mut MetaWait, seqno: u64)
-    -> (Vec<JoinedEvent>, bool)
-{
+pub fn ton_tx_events(
+    evs: Vec<(usize, Addr, TonEvent)>,
+    masters: &[(Addr, Option<WalletCode>)],
+    wait: &mut MetaWait,
+    seqno: u64,
+) -> (Vec<JoinedEvent>, bool) {
     let n = wait.len();
     wait.retain(|_, w| w.seqno.saturating_add(META_WAIT_BLOCKS) >= seqno);
     let mut changed = wait.len() != n;
     for (_, emitter, ev) in &evs {
-        if let TonEvent::Meta { master, pay_id, meta } = ev {
+        if let TonEvent::Meta {
+            master,
+            pay_id,
+            meta,
+        } = ev
+        {
             if let Some(from) = meta_payer(&evs, emitter, master, masters) {
                 // a re-read of the same transaction keeps the entry (and its `joined`) as it is
-                if wait.get(&(*master, from, *pay_id)).is_none_or(|w| w.meta != *meta) {
-                    wait.insert((*master, from, *pay_id), Waiting { meta: meta.clone(), seqno, joined: false });
+                if wait
+                    .get(&(*master, from, *pay_id))
+                    .is_none_or(|w| w.meta != *meta)
+                {
+                    wait.insert(
+                        (*master, from, *pay_id),
+                        Waiting {
+                            meta: meta.clone(),
+                            seqno,
+                            joined: false,
+                        },
+                    );
                     changed = true;
                 }
             }
@@ -1850,13 +2804,17 @@ pub fn ton_tx_events(evs: Vec<(usize, Addr, TonEvent)>, masters: &[(Addr, Option
     }
     let mut out = Vec::new();
     for (i, emitter, ev) in &evs {
-        let Some((master, ev)) = authenticate(emitter, ev, masters) else { continue };
+        let Some((master, ev)) = authenticate(emitter, ev, masters) else {
+            continue;
+        };
         let meta = match &ev {
-            TonEvent::Paid { from, pay_ref, .. } => wait.get_mut(&(master, *from, *pay_ref)).map(|w| {
-                changed |= !w.joined;
-                w.joined = true;
-                w.meta.clone()
-            }),
+            TonEvent::Paid { from, pay_ref, .. } => {
+                wait.get_mut(&(master, *from, *pay_ref)).map(|w| {
+                    changed |= !w.joined;
+                    w.joined = true;
+                    w.meta.clone()
+                })
+            }
             _ => None,
         };
         out.push((*i, master, ev, meta));
@@ -1864,7 +2822,13 @@ pub fn ton_tx_events(evs: Vec<(usize, Addr, TonEvent)>, masters: &[(Addr, Option
     // over the cap: entries whose payment was already seen leave first (only a re-read range would still need them),
     // then the oldest still waiting (its payment would reach the client without meta)
     while wait.len() > META_WAIT_MAX {
-        let Some((k, joined)) = wait.iter().min_by_key(|(_, w)| (!w.joined, w.seqno)).map(|(k, w)| (*k, w.joined)) else { break };
+        let Some((k, joined)) = wait
+            .iter()
+            .min_by_key(|(_, w)| (!w.joined, w.seqno))
+            .map(|(k, w)| (*k, w.joined))
+        else {
+            break;
+        };
         wait.remove(&k);
         changed = true;
         if joined {
@@ -1883,14 +2847,31 @@ pub fn load_meta_wait(path: &std::path::Path) -> Result<MetaWait> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(MetaWait::new()),
         Err(e) => return Err(e).with_context(|| format!("meta journal {}", path.display())),
     };
-    let rows: Vec<Value> = serde_json::from_slice(&raw).with_context(|| format!("meta journal {}", path.display()))?;
-    rows.iter().map(|r| {
-        let s = |k: &str| r[k].as_str().ok_or_else(|| anyhow!("meta journal: {k} missing"));
-        let pay_id: [u8; 32] = alloy::hex::decode(s("pay_id")?.trim_start_matches("0x"))?.try_into().map_err(|_| anyhow!("pay_id is 32 bytes"))?;
-        let seqno = r["seqno"].as_u64().ok_or_else(|| anyhow!("meta journal: seqno missing"))?;
-        let w = Waiting { meta: alloy::hex::decode(s("meta")?.trim_start_matches("0x"))?, seqno, joined: r["joined"].as_bool().unwrap_or(false) };
-        Ok(((Addr::parse(s("master")?)?, Addr::parse(s("from")?)?, pay_id), w))
-    }).collect()
+    let rows: Vec<Value> =
+        serde_json::from_slice(&raw).with_context(|| format!("meta journal {}", path.display()))?;
+    rows.iter()
+        .map(|r| {
+            let s = |k: &str| {
+                r[k].as_str()
+                    .ok_or_else(|| anyhow!("meta journal: {k} missing"))
+            };
+            let pay_id: [u8; 32] = alloy::hex::decode(s("pay_id")?.trim_start_matches("0x"))?
+                .try_into()
+                .map_err(|_| anyhow!("pay_id is 32 bytes"))?;
+            let seqno = r["seqno"]
+                .as_u64()
+                .ok_or_else(|| anyhow!("meta journal: seqno missing"))?;
+            let w = Waiting {
+                meta: alloy::hex::decode(s("meta")?.trim_start_matches("0x"))?,
+                seqno,
+                joined: r["joined"].as_bool().unwrap_or(false),
+            };
+            Ok((
+                (Addr::parse(s("master")?)?, Addr::parse(s("from")?)?, pay_id),
+                w,
+            ))
+        })
+        .collect()
 }
 
 /// Writes `wait` to `path` atomically: a temporary file written in full and synced to disk, then renamed over the
@@ -1906,8 +2887,13 @@ pub fn save_meta_wait(path: &std::path::Path, wait: &MetaWait) -> Result<()> {
     f.write_all(&serde_json::to_vec(&rows)?).with_context(ctx)?;
     f.sync_all().with_context(ctx)?;
     std::fs::rename(&tmp, path).with_context(|| format!("meta journal {}", path.display()))?;
-    let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(std::path::Path::new("."));
-    std::fs::File::open(dir).and_then(|d| d.sync_all()).with_context(|| format!("meta journal directory {}", dir.display()))
+    let dir = path
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())
+        .unwrap_or(std::path::Path::new("."));
+    std::fs::File::open(dir)
+        .and_then(|d| d.sync_all())
+        .with_context(|| format!("meta journal directory {}", dir.display()))
 }
 
 /// The forward TON floor a pay op signed (`MetaOp.extra`, review H2).
@@ -1948,13 +2934,33 @@ impl ChainAdapter for TonAdapter {
     /// là còn chờ) và mandate không trả lời (review M6).
     async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
         // A relay-fee payment's lane is spent by a refunded escrow too: its outcome is the escrow's (tx_status).
-        let Some(op) = job.op.as_ref().filter(|o| o["op_kind"] == "pay" && o["kind"] != "relay_fee") else { return Ok(None) };
-        let s = |k: &str| op.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
-        let m = parse_metaop(&boc_parse(&alloy::hex::decode(s("payload").trim_start_matches("0x"))?)?)?;
+        let Some(op) = job
+            .op
+            .as_ref()
+            .filter(|o| o["op_kind"] == "pay" && o["kind"] != "relay_fee")
+        else {
+            return Ok(None);
+        };
+        let s = |k: &str| {
+            op.get(k)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
+        let m = parse_metaop(&boc_parse(&alloy::hex::decode(
+            s("payload").trim_start_matches("0x"),
+        )?)?)?;
         if m.op != 1 {
             return Ok(None);
         }
-        let next = self.api.run_get(&Addr::parse(&s("contract"))?, "get_lane_nonce", vec![json!({"type": "num", "value": hex0x(&m.lane)})]).await?;
+        let next = self
+            .api
+            .run_get(
+                &Addr::parse(&s("contract"))?,
+                "get_lane_nonce",
+                vec![json!({"type": "num", "value": hex0x(&m.lane)})],
+            )
+            .await?;
         let next = next.first().map(stack_num).transpose()?.unwrap_or(0) as u64;
         Ok(Some(next > m.nonce))
     }
@@ -1964,7 +2970,9 @@ impl ChainAdapter for TonAdapter {
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let mark = self.api.failovers();
         match BUILDING.scope((), self.build_on(job, lane)).await {
-            Err(SimError::Revert(r)) if self.api.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),
+            Err(SimError::Revert(r)) if self.api.failovers() != mark => Err(SimError::Transport(
+                crate::adapters::evm::failover_answer(&r),
+            )),
             r => r,
         }
     }
@@ -1974,11 +2982,20 @@ impl ChainAdapter for TonAdapter {
         let value: u128 = built.meta["value"].as_str().unwrap_or("0").parse()?;
         let body = boc_parse(&built.body)?;
         let w5 = self.lane_wallet(lane)?;
-        let signer = self.signers.get(lane).ok_or_else(|| anyhow!("no lane {lane}"))?;
+        let signer = self
+            .signers
+            .get(lane)
+            .ok_or_else(|| anyhow!("no lane {lane}"))?;
         // The lane tx expires with the subject's payload (review S14): a stuck tx never pins the seqno.
         let vu = u32::try_from(built.valid_until).unwrap_or(u32::MAX);
         let (raw, id) = w5_transfer(w5, signer, sequence as u32, vu, &to, value, body)?;
-        Ok(Signed { job_id: built.job_id, tx_id: hex0x(&id), raw, valid_until: built.valid_until, sequence })
+        Ok(Signed {
+            job_id: built.job_id,
+            tx_id: hex0x(&id),
+            raw,
+            valid_until: built.valid_until,
+            sequence,
+        })
     }
 
     async fn submit(&self, signed: &Signed) -> Result<()> {
@@ -1987,44 +3004,90 @@ impl ChainAdapter for TonAdapter {
 
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
         let st: Result<TxStatus> = async {
-            let Some(tx) = self.tx_by_in_msg(&b32(tx_id)?).await? else { return Ok(TxStatus::Unknown) };
+            let Some(tx) = self.tx_by_in_msg(&b32(tx_id)?).await? else {
+                return Ok(TxStatus::Unknown);
+            };
             if let Err(why) = compute_ok(&tx) {
-                return Ok(TxStatus::Reverted { reason: format!("lane wallet: {why}") });
+                return Ok(TxStatus::Reverted {
+                    reason: format!("lane wallet: {why}"),
+                });
             }
             let Some(out) = tx.pointer("/out_msgs/0") else {
-                return Ok(TxStatus::Reverted { reason: "lane wallet sent nothing (insufficient TON?)".into() });
+                return Ok(TxStatus::Reverted {
+                    reason: "lane wallet sent nothing (insufficient TON?)".into(),
+                });
             };
             if let Some(rc) = out_body(out).and_then(|c| RelayCall::parse(&c).ok()) {
                 return self.escrow_status(&tx, out, &rc).await;
             }
-            let Some(child) = self.tx_by_in_msg(&api_hash(out.get("hash").unwrap_or(&Value::Null))?).await? else { return Ok(TxStatus::Pending) };
+            let Some(child) = self
+                .tx_by_in_msg(&api_hash(out.get("hash").unwrap_or(&Value::Null))?)
+                .await?
+            else {
+                return Ok(TxStatus::Pending);
+            };
             if let Err(why) = compute_ok(&child) {
                 // Anyone may relay a signed op (`relayer` = addr_none): if a copy got there first, the op ran (review L6).
                 if exit_code(&child) == Some(E_NONCE) {
-                    if let Some(height) = self.executed_by_copy(&child, carried_digest(out)).await? {
+                    if let Some(height) = self.executed_by_copy(&child, carried_digest(out)).await?
+                    {
                         // Not our tx: ExternalPull keeps ours and flags `landed_elsewhere`.
-                        return Ok(TxStatus::Mined { height, tx_hash: None });
+                        return Ok(TxStatus::Mined {
+                            height,
+                            tx_hash: None,
+                        });
                     }
                 }
-                return Ok(TxStatus::Reverted { reason: format!("contract: {why}") });
+                return Ok(TxStatus::Reverted {
+                    reason: format!("contract: {why}"),
+                });
             }
             // The payer's wallet (or Mandate) emits `MetaTransactionExecuted`: its tx is the hash the indexer reports.
-            let tx_hash = api_hash(child.get("hash").unwrap_or(&Value::Null)).ok().map(|h| hex0x(&h));
+            let tx_hash = api_hash(child.get("hash").unwrap_or(&Value::Null))
+                .ok()
+                .map(|h| hex0x(&h));
             // Follow the bounceable hops (where the tokens go) to the end: a bounce there sends them back (review L7).
             let mut last = child;
             for _ in 0..4 {
-                let Some(next) = last.get("out_msgs").and_then(Value::as_array).and_then(|o| {
-                    o.iter().find(|m| m.get("bounce").and_then(Value::as_bool) == Some(true) && !m.get("destination").is_none_or(Value::is_null)).cloned()
-                }) else {
+                let Some(next) = last
+                    .get("out_msgs")
+                    .and_then(Value::as_array)
+                    .and_then(|o| {
+                        o.iter()
+                            .find(|m| {
+                                m.get("bounce").and_then(Value::as_bool) == Some(true)
+                                    && !m.get("destination").is_none_or(Value::is_null)
+                            })
+                            .cloned()
+                    })
+                else {
                     break;
                 };
-                let Some(t) = self.tx_by_in_msg(&api_hash(next.get("hash").unwrap_or(&Value::Null))?).await? else { return Ok(TxStatus::Pending) };
+                let Some(t) = self
+                    .tx_by_in_msg(&api_hash(next.get("hash").unwrap_or(&Value::Null))?)
+                    .await?
+                else {
+                    return Ok(TxStatus::Pending);
+                };
                 if let Err(why) = compute_ok(&t) {
-                    return Ok(TxStatus::Reverted { reason: format!("{}: {why}", t.get("account").and_then(Value::as_str).unwrap_or("next hop")) });
+                    return Ok(TxStatus::Reverted {
+                        reason: format!(
+                            "{}: {why}",
+                            t.get("account")
+                                .and_then(Value::as_str)
+                                .unwrap_or("next hop")
+                        ),
+                    });
                 }
                 last = t;
             }
-            Ok(TxStatus::Mined { height: last.get("mc_block_seqno").and_then(Value::as_u64).unwrap_or_default(), tx_hash })
+            Ok(TxStatus::Mined {
+                height: last
+                    .get("mc_block_seqno")
+                    .and_then(Value::as_u64)
+                    .unwrap_or_default(),
+                tx_hash,
+            })
         }
         .await;
         // scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed raises the failover reads' floor
@@ -2036,10 +3099,21 @@ impl ChainAdapter for TonAdapter {
 
     async fn sequence(&self, lane: usize) -> Result<u64> {
         let me = self.lane_wallet(lane)?.address()?;
-        let v = self.api.get("walletInformation", &[("address", me.raw()), ("use_v2", "false".into())]).await;
+        let v = self
+            .api
+            .get(
+                "walletInformation",
+                &[("address", me.raw()), ("use_v2", "false".into())],
+            )
+            .await;
         Ok(match v {
             Ok(v) => v.get("seqno").and_then(Value::as_u64).unwrap_or(0),
-            Err(e) if e.downcast_ref::<HttpStatus>().is_some_and(|s| s.status == 404) => 0, // never deployed (T24.12: by its status)
+            Err(e)
+                if e.downcast_ref::<HttpStatus>()
+                    .is_some_and(|s| s.status == 404) =>
+            {
+                0
+            } // never deployed (T24.12: by its status)
             Err(e) => return Err(e),
         })
     }
@@ -2047,11 +3121,24 @@ impl ChainAdapter for TonAdapter {
     async fn final_head(&self) -> Result<Option<Head>> {
         // Masterchain blocks are final once committed (BFT).
         let v = self.api.get("masterchainInfo", &[]).await?;
-        let last = v.get("last").ok_or_else(|| anyhow!("masterchainInfo.last"))?;
-        let height = last.get("seqno").and_then(Value::as_u64).ok_or_else(|| anyhow!("masterchainInfo.last.seqno"))?;
+        let last = v
+            .get("last")
+            .ok_or_else(|| anyhow!("masterchainInfo.last"))?;
+        let height = last
+            .get("seqno")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| anyhow!("masterchainInfo.last.seqno"))?;
         // the failover reads' floor and a later endpoint's identity reference (T24.6): endpoint 0's masterchain block
-        self.api.saw_head(height, last.get("root_hash").and_then(Value::as_str).unwrap_or_default());
-        Ok(Some(Head { height, hash: hex0x(&api_hash(last.get("root_hash").unwrap_or(&Value::Null))?) }))
+        self.api.saw_head(
+            height,
+            last.get("root_hash")
+                .and_then(Value::as_str)
+                .unwrap_or_default(),
+        );
+        Ok(Some(Head {
+            height,
+            hash: hex0x(&api_hash(last.get("root_hash").unwrap_or(&Value::Null))?),
+        }))
     }
 
     async fn block_hash(&self, height: u64) -> Result<String> {
@@ -2075,9 +3162,21 @@ impl ChainAdapter for TonAdapter {
             loop {
                 let v = self
                     .api
-                    .get("transactionsByMasterchainBlock", &[("seqno", seqno.to_string()), ("limit", "256".into()), ("offset", offset.to_string()), ("sort", "asc".into())])
+                    .get(
+                        "transactionsByMasterchainBlock",
+                        &[
+                            ("seqno", seqno.to_string()),
+                            ("limit", "256".into()),
+                            ("offset", offset.to_string()),
+                            ("sort", "asc".into()),
+                        ],
+                    )
                     .await?;
-                let txs = v.get("transactions").and_then(Value::as_array).cloned().unwrap_or_default();
+                let txs = v
+                    .get("transactions")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
                 for tx in &txs {
                     let evs = tx_events(tx)?;
                     if evs.is_empty() {
@@ -2085,7 +3184,10 @@ impl ChainAdapter for TonAdapter {
                     }
                     let tx_hash = hex0x(&api_hash(tx.get("hash").unwrap_or(&Value::Null))?);
                     let evs = {
-                        let mut wait = self.metas.lock().map_err(|_| anyhow!("meta wait poisoned"))?;
+                        let mut wait = self
+                            .metas
+                            .lock()
+                            .map_err(|_| anyhow!("meta wait poisoned"))?;
                         let (evs, changed) = ton_tx_events(evs, &masters, &mut wait, seqno);
                         if let (true, Some(f)) = (changed, &self.meta_journal) {
                             save_meta_wait(f, &wait)?; // a failed write fails the range, which is read again
@@ -2106,7 +3208,12 @@ impl ChainAdapter for TonAdapter {
                                 e["from"] = json!(from.raw());
                                 e["digest"] = json!(hex0x(&digest));
                             }
-                            TonEvent::Paid { from, to, amount, pay_ref } => {
+                            TonEvent::Paid {
+                                from,
+                                to,
+                                amount,
+                                pay_ref,
+                            } => {
                                 e["event"] = json!("PaymentSettled");
                                 e["from"] = json!(from.raw());
                                 e["to"] = json!(to.raw());
@@ -2147,7 +3254,11 @@ fn left_pad32(v: &str) -> Result<[u8; 32]> {
         return Ok(out);
     }
     let h = v.trim_start_matches("0x");
-    let h = if h.len() % 2 == 1 { format!("0{h}") } else { h.to_string() };
+    let h = if h.len() % 2 == 1 {
+        format!("0{h}")
+    } else {
+        h.to_string()
+    };
     let b = alloy::hex::decode(h)?;
     if b.len() > 32 {
         bail!("value wider than 32 bytes");
@@ -2163,7 +3274,10 @@ mod tests {
     use crate::signer::Curve;
 
     fn vectors() -> Value {
-        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/ton/vectors/ton-vectors.json");
+        let p = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../smartcontracts/ton/vectors/ton-vectors.json"
+        );
         serde_json::from_str(&std::fs::read_to_string(p).expect("vectors")).expect("json")
     }
 
@@ -2201,17 +3315,36 @@ mod tests {
         let v = vectors();
         let b = alloy::hex::decode(s(&v, "/metaop/boc")).unwrap();
         let (size, off) = (b[4] as usize, b[5] as usize);
-        let field = |at: usize, n: usize| b[at..at + n].iter().fold(0u64, |a, x| a << 8 | u64::from(*x));
+        let field = |at: usize, n: usize| {
+            b[at..at + n]
+                .iter()
+                .fold(0u64, |a, x| a << 8 | u64::from(*x))
+        };
         let total = field(6 + 3 * size, off);
         let tail = &b[6 + 3 * size + off..];
-        let wide = |t: u64| [&b[..4], &[size as u8, 8], &b[6..6 + 3 * size], &t.to_be_bytes()[..], tail].concat();
-        assert_eq!(boc_parse(&wide(total)).unwrap().hash(), boc_parse(&b).unwrap().hash());
+        let wide = |t: u64| {
+            [
+                &b[..4],
+                &[size as u8, 8],
+                &b[6..6 + 3 * size],
+                &t.to_be_bytes()[..],
+                tail,
+            ]
+            .concat()
+        };
+        assert_eq!(
+            boc_parse(&wide(total)).unwrap().hash(),
+            boc_parse(&b).unwrap().hash()
+        );
         for t in [total + 1, total - 1, total | 1 << 40] {
             let e = boc_parse(&wide(t)).unwrap_err().to_string();
             assert!(e.contains("cells size"), "{t}: {e}");
         }
         #[cfg(target_pointer_width = "64")]
-        assert_eq!(boc_uint(&[1, 0, 0, 0, 0], usize::MAX, "x").unwrap(), 1 << 32);
+        assert_eq!(
+            boc_uint(&[1, 0, 0, 0, 0], usize::MAX, "x").unwrap(),
+            1 << 32
+        );
         assert!(boc_uint(&[1, 0, 0, 0, 0], u32::MAX as usize, "x").is_err());
         assert!(boc_uint(&[0; 9], usize::MAX, "x").is_err());
     }
@@ -2221,54 +3354,118 @@ mod tests {
         let v = vectors();
         let op = cell(&v, "/metaop/boc");
         let owner = Addr::parse(s(&v, "/payer_w5/address")).unwrap();
-        assert_eq!(hex0x(&domain_cell(s(&v, "/sign_data/domain")).unwrap().hash()), s(&v, "/sign_data/domain_cell_hash"));
+        assert_eq!(
+            hex0x(&domain_cell(s(&v, "/sign_data/domain")).unwrap().hash()),
+            s(&v, "/sign_data/domain_cell_hash")
+        );
         let ts = v.pointer("/sign_data/timestamp").unwrap().as_u64().unwrap();
         let h = envelope_hash(&owner, ts, s(&v, "/sign_data/domain"), &op).unwrap();
         assert_eq!(hex0x(&h), s(&v, "/sign_data/envelope_hash"));
         let pk = pubkey_from_state_init(&cell(&v, "/payer_w5/state_init_boc"), &owner).unwrap();
         assert_eq!(alloy::hex::encode(pk), s(&v, "/sign_data/pubkey"));
-        assert!(pubkey_from_state_init(&cell(&v, "/payer_w5/state_init_boc"), &Addr::parse(s(&v, "/metaop/to")).unwrap()).is_err());
-        let sig: [u8; 64] = alloy::hex::decode(s(&v, "/sign_data/signature")).unwrap().try_into().unwrap();
-        VerifyingKey::from_bytes(&pk).unwrap().verify_strict(&h, &Signature::from_bytes(&sig)).unwrap();
+        assert!(pubkey_from_state_init(
+            &cell(&v, "/payer_w5/state_init_boc"),
+            &Addr::parse(s(&v, "/metaop/to")).unwrap()
+        )
+        .is_err());
+        let sig: [u8; 64] = alloy::hex::decode(s(&v, "/sign_data/signature"))
+            .unwrap()
+            .try_into()
+            .unwrap();
+        VerifyingKey::from_bytes(&pk)
+            .unwrap()
+            .verify_strict(&h, &Signature::from_bytes(&sig))
+            .unwrap();
         // the auth cell the relayer builds from the connector JSON equals the contract test's
         let json = json!({"kind": "ton_connect", "signature": b64encode(&sig), "timestamp": ts,
                           "domain": s(&v, "/sign_data/domain"), "state_init": b64encode(&alloy::hex::decode(s(&v, "/payer_w5/state_init_boc")).unwrap())});
         let auth = parse_auth(&json.to_string()).unwrap();
-        assert_eq!(hex0x(&auth_cell(&auth).unwrap().hash()), s(&v, "/sign_data/auth_cell_hash"));
-        let Auth::TonConnect { state_init, .. } = &auth else { panic!() };
+        assert_eq!(
+            hex0x(&auth_cell(&auth).unwrap().hash()),
+            s(&v, "/sign_data/auth_cell_hash")
+        );
+        let Auth::TonConnect { state_init, .. } = &auth else {
+            panic!()
+        };
         // SignedOp body (Tact layout) equals the @ton/core one
         let lane = Addr::parse(s(&v, "/lane_w5/address")).unwrap();
-        let body = signed_op_body(&op, &auth_cell(&auth).unwrap(), None, state_init.clone(), &lane, 0, [0; 32]).unwrap();
+        let body = signed_op_body(
+            &op,
+            &auth_cell(&auth).unwrap(),
+            None,
+            state_init.clone(),
+            &lane,
+            0,
+            [0; 32],
+        )
+        .unwrap();
         assert_eq!(hex0x(&body.hash()), s(&v, "/signed_op/hash"));
     }
 
     #[test]
     fn w5r1_lane_wallet_and_external_message_match_ton_core() {
         let v = vectors();
-        let seed: [u8; 32] = alloy::hex::decode(s(&v, "/lane_w5/seed")).unwrap().try_into().unwrap();
+        let seed: [u8; 32] = alloy::hex::decode(s(&v, "/lane_w5/seed"))
+            .unwrap()
+            .try_into()
+            .unwrap();
         let signer = LocalSigner::new(Curve::Ed25519, &seed).unwrap();
-        assert_eq!(alloy::hex::encode(signer.public_key()), s(&v, "/lane_w5/pubkey"));
+        assert_eq!(
+            alloy::hex::encode(signer.public_key()),
+            s(&v, "/lane_w5/pubkey")
+        );
         let w5 = W5::new(signer.public_key().try_into().unwrap(), -239).unwrap();
-        assert_eq!(w5.wallet_id as u64, v.pointer("/lane_w5/wallet_id").unwrap().as_u64().unwrap());
+        assert_eq!(
+            w5.wallet_id as u64,
+            v.pointer("/lane_w5/wallet_id").unwrap().as_u64().unwrap()
+        );
         assert_eq!(w5.address().unwrap().raw(), s(&v, "/lane_w5/address"));
         let to = Addr::parse(s(&v, "/jetton/payer_wallet")).unwrap();
         let body = cell(&v, "/signed_op/boc");
         let value: u128 = s(&v, "/lane_w5/value").parse().unwrap();
-        assert_eq!(hex0x(&internal_message(&to, value, body.clone()).unwrap().hash()), s(&v, "/lane_w5/relaxed_hash"));
+        assert_eq!(
+            hex0x(&internal_message(&to, value, body.clone()).unwrap().hash()),
+            s(&v, "/lane_w5/relaxed_hash")
+        );
         let (boc, id) = w5_transfer(&w5, &signer, 0, 1_800_000_300, &to, value, body).unwrap();
-        assert_eq!(hex0x(&boc_parse(&boc).unwrap().hash()), s(&v, "/lane_w5/ext_hash"));
+        assert_eq!(
+            hex0x(&boc_parse(&boc).unwrap().hash()),
+            s(&v, "/lane_w5/ext_hash")
+        );
         assert_eq!(hex0x(&id), s(&v, "/lane_w5/ext_hash"));
     }
 
     #[test]
     fn events_decode() {
         let v = vectors();
-        let Some(TonEvent::Executed { master, from, digest }) = decode_event(&cell(&v, "/events/mte_boc")).unwrap() else { panic!() };
+        let Some(TonEvent::Executed {
+            master,
+            from,
+            digest,
+        }) = decode_event(&cell(&v, "/events/mte_boc")).unwrap()
+        else {
+            panic!()
+        };
         assert_eq!(master.raw(), s(&v, "/jetton/master"));
         assert_eq!(from.raw(), s(&v, "/payer_w5/address"));
         assert_eq!(hex0x(&digest), s(&v, "/metaop/digest"));
-        let Some(TonEvent::Paid { amount, pay_ref, to, .. }) = decode_event(&cell(&v, "/events/ps_boc")).unwrap() else { panic!() };
-        assert_eq!((amount, hex0x(&pay_ref), to.raw()), (1_234_567, s(&v, "/metaop/pay_ref").to_string(), s(&v, "/metaop/to").to_string()));
+        let Some(TonEvent::Paid {
+            amount,
+            pay_ref,
+            to,
+            ..
+        }) = decode_event(&cell(&v, "/events/ps_boc")).unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(
+            (amount, hex0x(&pay_ref), to.raw()),
+            (
+                1_234_567,
+                s(&v, "/metaop/pay_ref").to_string(),
+                s(&v, "/metaop/to").to_string()
+            )
+        );
         // a TON Center transaction carrying it as an external-out message
         let tx = json!({"account": s(&v, "/jetton/payer_wallet").to_uppercase(), "out_msgs": [
             {"destination": "0:" .to_string() + &"11".repeat(32), "message_content": {"body": b64encode(&alloy::hex::decode(s(&v, "/events/ps_boc")).unwrap())}},
@@ -2284,9 +3481,18 @@ mod tests {
         let v = vectors();
         let code = cell(&v, "/jetton/wallet_code_boc");
         assert_eq!(hex0x(&code.hash()), s(&v, "/jetton/wallet_code_hash"));
-        assert_eq!(code.depth() as u64, v.pointer("/jetton/wallet_code_depth").unwrap().as_u64().unwrap());
+        assert_eq!(
+            code.depth() as u64,
+            v.pointer("/jetton/wallet_code_depth")
+                .unwrap()
+                .as_u64()
+                .unwrap()
+        );
         let f = Addr::parse("EQCD39VS5jcptHL8vMjEXrzGaRcCVYto7HUn4bpAOg8xqB2N").unwrap();
-        assert_eq!(f.raw(), "0:83dfd552e63729b472fcbcc8c45ebcc6691702558b68ec7527e1ba403a0f31a8");
+        assert_eq!(
+            f.raw(),
+            "0:83dfd552e63729b472fcbcc8c45ebcc6691702558b68ec7527e1ba403a0f31a8"
+        );
         assert!(Addr::parse("EQCD39VS5jcptHL8vMjEXrzGaRcCVYto7HUn4bpAOg8xqB2A").is_err());
     }
 
@@ -2297,7 +3503,10 @@ mod tests {
             assert_eq!(b64decode(&b64encode(&d)).unwrap(), d);
         }
         assert_eq!(b64encode(b"foobar"), "Zm9vYmFy");
-        assert_eq!(stack_num(&json!({"type": "num", "value": "0x1f"})).unwrap(), 31);
+        assert_eq!(
+            stack_num(&json!({"type": "num", "value": "0x1f"})).unwrap(),
+            31
+        );
         assert_eq!(stack_num(&json!({"type": "num", "value": "7"})).unwrap(), 7);
         assert_eq!(left_pad32("0x1").unwrap()[31], 1);
         assert_eq!(api_hash(&json!(b64encode(&[7u8; 32]))).unwrap(), [7u8; 32]);
@@ -2308,20 +3517,43 @@ mod tests {
         let digest = [0xffu8; 32];
         let challenge = "_".repeat(43);
         let cdj = format!("{CDJ_PREFIX}{challenge}\",\"origin\":\"https://pay.example\",\"crossOrigin\":false{}}}", ",\"x\":\"".to_string() + &"y".repeat(120) + "\"");
-        let a = Auth::Passkey { r: [1; 32], s: [2; 32], authenticator_data: vec![0; 37], client_data_json: cdj };
+        let a = Auth::Passkey {
+            r: [1; 32],
+            s: [2; 32],
+            authenticator_data: vec![0; 37],
+            client_data_json: cdj,
+        };
         let c = auth_cell(&a).unwrap();
         assert_eq!(c.refs().len(), 2);
-        assert_eq!(c.refs()[1].refs().len(), 1, "long client data spills into a second cell");
+        assert_eq!(
+            c.refs()[1].refs().len(),
+            1,
+            "long client data spills into a second cell"
+        );
         let _ = digest;
-        assert!(auth_cell(&Auth::Passkey { r: [1; 32], s: [2; 32], authenticator_data: vec![0; 37], client_data_json: "{}".into() }).is_err());
+        assert!(auth_cell(&Auth::Passkey {
+            r: [1; 32],
+            s: [2; 32],
+            authenticator_data: vec![0; 37],
+            client_data_json: "{}".into()
+        })
+        .is_err());
     }
 
     #[test]
     fn wallet_address_without_rpc_matches_the_contract() {
         let v = vectors();
         let code = cell(&v, "/jetton/wallet_code_boc");
-        let (owner, master) = (Addr::parse(s(&v, "/metaop/from")).unwrap(), Addr::parse(s(&v, "/jetton/master")).unwrap());
-        assert_eq!(jetton_wallet_address(&owner, &master, &code.hash(), code.depth()).unwrap().raw(), s(&v, "/jetton/payer_wallet"));
+        let (owner, master) = (
+            Addr::parse(s(&v, "/metaop/from")).unwrap(),
+            Addr::parse(s(&v, "/jetton/master")).unwrap(),
+        );
+        assert_eq!(
+            jetton_wallet_address(&owner, &master, &code.hash(), code.depth())
+                .unwrap()
+                .raw(),
+            s(&v, "/jetton/payer_wallet")
+        );
     }
 
     /// Review M3 + L10: authentication is local (no RPC per event), a forged emitter, an unregistered master and an
@@ -2334,34 +3566,118 @@ mod tests {
     fn ton_indexer_joins_payment_meta_by_payer() {
         let v = vectors();
         let code = cell(&v, "/jetton/wallet_code_boc");
-        let (payer, master) = (Addr::parse(s(&v, "/metaop/from")).unwrap(), Addr::parse(s(&v, "/jetton/master")).unwrap());
+        let (payer, master) = (
+            Addr::parse(s(&v, "/metaop/from")).unwrap(),
+            Addr::parse(s(&v, "/jetton/master")).unwrap(),
+        );
         let wallet = Addr::parse(s(&v, "/jetton/payer_wallet")).unwrap();
         let masters = vec![(master, Some((code.hash(), code.depth())))];
-        let payee = Addr { wc: 0, hash: [0x5e; 32] };
-        let payee_wallet = jetton_wallet_address(&payee, &master, &code.hash(), code.depth()).unwrap();
-        let two = Builder::new().bytes(&[1]).reference(snake(&[2]).unwrap()).reference(snake(&[3]).unwrap()).end().unwrap();
-        let bad = Builder::new().uint(EV_META, 32).addr(Some(&master)).bytes(&[4; 32]).reference(two).end().unwrap();
+        let payee = Addr {
+            wc: 0,
+            hash: [0x5e; 32],
+        };
+        let payee_wallet =
+            jetton_wallet_address(&payee, &master, &code.hash(), code.depth()).unwrap();
+        let two = Builder::new()
+            .bytes(&[1])
+            .reference(snake(&[2]).unwrap())
+            .reference(snake(&[3]).unwrap())
+            .end()
+            .unwrap();
+        let bad = Builder::new()
+            .uint(EV_META, 32)
+            .addr(Some(&master))
+            .bytes(&[4; 32])
+            .reference(two)
+            .end()
+            .unwrap();
         assert!(decode_event(&bad).is_err(), "a meta cell with two refs");
         let pid = [4u8; 32];
-        let exe = TonEvent::Executed { master, from: payer, digest: [1; 32] };
-        let pm = |m: Vec<u8>| TonEvent::Meta { master, pay_id: pid, meta: m };
+        let exe = TonEvent::Executed {
+            master,
+            from: payer,
+            digest: [1; 32],
+        };
+        let pm = |m: Vec<u8>| TonEvent::Meta {
+            master,
+            pay_id: pid,
+            meta: m,
+        };
         let mut wait = MetaWait::new();
-        let forger = Addr { wc: 0, hash: [9; 32] };
-        let (forged, changed) = ton_tx_events(vec![(0, forger, exe.clone()), (1, forger, pm(vec![0xff]))], &masters, &mut wait, 10);
-        assert!(forged.is_empty() && wait.is_empty() && !changed, "a meta from a wallet that is not the payer's");
-        let (a, changed) = ton_tx_events(vec![(0, wallet, exe.clone()), (1, wallet, pm(vec![0xab]))], &masters, &mut wait, 10);
-        assert_eq!(a.iter().map(|e| matches!(e.2, TonEvent::Executed { .. })).collect::<Vec<_>>(), [true], "never a row");
+        let forger = Addr {
+            wc: 0,
+            hash: [9; 32],
+        };
+        let (forged, changed) = ton_tx_events(
+            vec![(0, forger, exe.clone()), (1, forger, pm(vec![0xff]))],
+            &masters,
+            &mut wait,
+            10,
+        );
+        assert!(
+            forged.is_empty() && wait.is_empty() && !changed,
+            "a meta from a wallet that is not the payer's"
+        );
+        let (a, changed) = ton_tx_events(
+            vec![(0, wallet, exe.clone()), (1, wallet, pm(vec![0xab]))],
+            &masters,
+            &mut wait,
+            10,
+        );
+        assert_eq!(
+            a.iter()
+                .map(|e| matches!(e.2, TonEvent::Executed { .. }))
+                .collect::<Vec<_>>(),
+            [true],
+            "never a row"
+        );
         assert!(changed, "persist");
-        let paid = |from: Addr, amount| TonEvent::Paid { from, to: payee, amount, pay_ref: pid };
-        let payment = || vec![(0, payee_wallet, paid(Addr { wc: 0, hash: [0x77; 32] }, 0)), (1, payee_wallet, paid(payer, 100))];
+        let paid = |from: Addr, amount| TonEvent::Paid {
+            from,
+            to: payee,
+            amount,
+            pay_ref: pid,
+        };
+        let payment = || {
+            vec![
+                (
+                    0,
+                    payee_wallet,
+                    paid(
+                        Addr {
+                            wc: 0,
+                            hash: [0x77; 32],
+                        },
+                        0,
+                    ),
+                ),
+                (1, payee_wallet, paid(payer, 100)),
+            ]
+        };
         let (b, _) = ton_tx_events(payment(), &masters, &mut wait, 11);
-        assert_eq!((b[0].3.clone(), b[1].3.clone()), (None, Some(vec![0xab])), "joined by (master, from, pay_ref)");
+        assert_eq!(
+            (b[0].3.clone(), b[1].3.clone()),
+            (None, Some(vec![0xab])),
+            "joined by (master, from, pay_ref)"
+        );
         assert!(wait.values().all(|w| w.joined), "marked joined");
         // fix 1: a range that failed after the join is read again: the payment still carries its meta
         let (again, changed) = ton_tx_events(payment(), &masters, &mut wait, 11);
-        assert_eq!((again[1].3.clone(), changed), (Some(vec![0xab]), false), "looked up, never taken");
-        ton_tx_events(vec![(0, wallet, exe.clone()), (1, wallet, pm(vec![0xab]))], &masters, &mut wait, 10);
-        assert!(wait.values().all(|w| w.joined), "re-reading the meta's own transaction keeps it joined");
+        assert_eq!(
+            (again[1].3.clone(), changed),
+            (Some(vec![0xab]), false),
+            "looked up, never taken"
+        );
+        ton_tx_events(
+            vec![(0, wallet, exe.clone()), (1, wallet, pm(vec![0xab]))],
+            &masters,
+            &mut wait,
+            10,
+        );
+        assert!(
+            wait.values().all(|w| w.joined),
+            "re-reading the meta's own transaction keeps it joined"
+        );
         // fix 1: a restart reloads the wait from the journal
         let f = std::env::temp_dir().join(format!("ton-meta-{}.json", std::process::id()));
         save_meta_wait(&f, &wait).unwrap();
@@ -2370,43 +3686,136 @@ mod tests {
         let (after, _) = ton_tx_events(payment(), &masters, &mut reloaded, 12);
         assert_eq!(after[1].3, Some(vec![0xab]), "after a restart");
         let _ = std::fs::remove_file(&f);
-        assert!(load_meta_wait(&f).unwrap().is_empty(), "no journal yet: an empty wait");
+        assert!(
+            load_meta_wait(&f).unwrap().is_empty(),
+            "no journal yet: an empty wait"
+        );
         let (_, changed) = ton_tx_events(vec![], &masters, &mut wait, 10 + META_WAIT_BLOCKS + 1);
-        assert!(wait.is_empty() && changed, "a payment that never settled (payee bounce) stops waiting");
+        assert!(
+            wait.is_empty() && changed,
+            "a payment that never settled (payee bounce) stops waiting"
+        );
         // the cap (fix 2): an entry already joined leaves before any still waiting, then the oldest waiting one
-        let id = |k: u64| { let mut b = [0u8; 32]; b[24..].copy_from_slice(&k.to_be_bytes()); b };
+        let id = |k: u64| {
+            let mut b = [0u8; 32];
+            b[24..].copy_from_slice(&k.to_be_bytes());
+            b
+        };
         for k in 0..META_WAIT_MAX as u64 + 1 {
-            wait.insert((master, payer, id(k)), Waiting { meta: vec![], seqno: 20_000 + k, joined: k == 7 });
+            wait.insert(
+                (master, payer, id(k)),
+                Waiting {
+                    meta: vec![],
+                    seqno: 20_000 + k,
+                    joined: k == 7,
+                },
+            );
         }
         ton_tx_events(vec![], &masters, &mut wait, 20_000);
         assert_eq!(wait.len(), META_WAIT_MAX);
-        assert!(!wait.contains_key(&(master, payer, id(7))) && wait.contains_key(&(master, payer, id(0))), "the joined one first");
-        wait.insert((master, payer, id(10_000)), Waiting { meta: vec![], seqno: 30_000, joined: false });
+        assert!(
+            !wait.contains_key(&(master, payer, id(7)))
+                && wait.contains_key(&(master, payer, id(0))),
+            "the joined one first"
+        );
+        wait.insert(
+            (master, payer, id(10_000)),
+            Waiting {
+                meta: vec![],
+                seqno: 30_000,
+                joined: false,
+            },
+        );
         ton_tx_events(vec![], &masters, &mut wait, 20_000);
-        assert!(!wait.contains_key(&(master, payer, id(0))), "then the oldest waiting");
+        assert!(
+            !wait.contains_key(&(master, payer, id(0))),
+            "then the oldest waiting"
+        );
     }
 
     #[test]
     fn events_are_authenticated_locally_and_capped() {
         let v = vectors();
         let code = cell(&v, "/jetton/wallet_code_boc");
-        let (payer, master) = (Addr::parse(s(&v, "/metaop/from")).unwrap(), Addr::parse(s(&v, "/jetton/master")).unwrap());
+        let (payer, master) = (
+            Addr::parse(s(&v, "/metaop/from")).unwrap(),
+            Addr::parse(s(&v, "/jetton/master")).unwrap(),
+        );
         let wallet = Addr::parse(s(&v, "/jetton/payer_wallet")).unwrap();
-        let mandate = Addr { wc: 0, hash: [0x4d; 32] };
+        let mandate = Addr {
+            wc: 0,
+            hash: [0x4d; 32],
+        };
         let masters = vec![(master, Some((code.hash(), code.depth())))];
-        let exe = TonEvent::Executed { master, from: payer, digest: [1; 32] };
-        assert_eq!(authenticate(&wallet, &exe, &masters), Some((master, exe.clone())));
-        assert_eq!(authenticate(&Addr { wc: 0, hash: [9; 32] }, &exe, &masters), None, "forged emitter");
-        assert_eq!(authenticate(&wallet, &TonEvent::Executed { master: mandate, from: payer, digest: [1; 32] }, &masters), None, "unregistered master");
-        assert_eq!(authenticate(&mandate, &exe, &masters), None, "unregistered mandate");
+        let exe = TonEvent::Executed {
+            master,
+            from: payer,
+            digest: [1; 32],
+        };
+        assert_eq!(
+            authenticate(&wallet, &exe, &masters),
+            Some((master, exe.clone()))
+        );
+        assert_eq!(
+            authenticate(
+                &Addr {
+                    wc: 0,
+                    hash: [9; 32]
+                },
+                &exe,
+                &masters
+            ),
+            None,
+            "forged emitter"
+        );
+        assert_eq!(
+            authenticate(
+                &wallet,
+                &TonEvent::Executed {
+                    master: mandate,
+                    from: payer,
+                    digest: [1; 32]
+                },
+                &masters
+            ),
+            None,
+            "unregistered master"
+        );
+        assert_eq!(
+            authenticate(&mandate, &exe, &masters),
+            None,
+            "unregistered mandate"
+        );
         let with_mandate = vec![masters[0], (mandate, None)];
-        assert_eq!(authenticate(&mandate, &exe, &with_mandate), Some((master, exe.clone())));
-        let paid = TonEvent::Paid { from: mandate, to: payer, amount: 5, pay_ref: [2; 32] };
-        assert_eq!(authenticate(&wallet, &paid, &masters), Some((master, paid.clone())));
-        assert_eq!(authenticate(&mandate, &paid, &with_mandate), None, "a Mandate never emits PaymentSettled");
+        assert_eq!(
+            authenticate(&mandate, &exe, &with_mandate),
+            Some((master, exe.clone()))
+        );
+        let paid = TonEvent::Paid {
+            from: mandate,
+            to: payer,
+            amount: 5,
+            pay_ref: [2; 32],
+        };
+        assert_eq!(
+            authenticate(&wallet, &paid, &masters),
+            Some((master, paid.clone()))
+        );
+        assert_eq!(
+            authenticate(&mandate, &paid, &with_mandate),
+            None,
+            "a Mandate never emits PaymentSettled"
+        );
         let body = b64encode(&alloy::hex::decode(s(&v, "/events/mte_boc")).unwrap());
-        let flood: Vec<Value> = (0..255).map(|_| json!({"destination": null, "message_content": {"body": body}})).collect();
-        assert_eq!(tx_events(&json!({"account": wallet.raw(), "out_msgs": flood})).unwrap().len(), MAX_EVENTS_PER_TX);
+        let flood: Vec<Value> = (0..255)
+            .map(|_| json!({"destination": null, "message_content": {"body": body}}))
+            .collect();
+        assert_eq!(
+            tx_events(&json!({"account": wallet.raw(), "out_msgs": flood}))
+                .unwrap()
+                .len(),
+            MAX_EVENTS_PER_TX
+        );
     }
 
     // ------------------------------------------------------------ a TON Center v3 stand-in for build/tx_status
@@ -2432,12 +3841,24 @@ mod tests {
 
     async fn fake_api_shared(f: Fake) -> (String, Shared) {
         use axum::extract::{Path, Query, State};
-        async fn h(State(s): State<Shared>, Path(path): Path<String>, Query(q): Query<HashMap<String, String>>, headers: axum::http::HeaderMap,
-                   body: String) -> axum::Json<Value> {
+        async fn h(
+            State(s): State<Shared>,
+            Path(path): Path<String>,
+            Query(q): Query<HashMap<String, String>>,
+            headers: axum::http::HeaderMap,
+            body: String,
+        ) -> axum::Json<Value> {
             let mut f = s.lock().unwrap();
-            f.keys.push(headers.get("x-api-key").and_then(|v| v.to_str().ok()).map(str::to_string));
+            f.keys.push(
+                headers
+                    .get("x-api-key")
+                    .and_then(|v| v.to_str().ok())
+                    .map(str::to_string),
+            );
             axum::Json(match path.as_str() {
-                "masterchainInfo" => json!({"last": {"seqno": 1, "root_hash": b64encode(&[0; 32])}}),
+                "masterchainInfo" => {
+                    json!({"last": {"seqno": 1, "root_hash": b64encode(&[0; 32])}})
+                }
                 // T24.6: a masterchain block's root hash (a later endpoint's identity read)
                 "blocks" => json!({"blocks": [{"root_hash": b64encode(&[0; 32])}]}),
                 "runGetMethod" => {
@@ -2446,9 +3867,15 @@ mod tests {
                     f.ran.push(method.clone());
                     // `<method>@<raw address>` answers for that contract only, before `<method>` for every contract
                     let at = format!("{method}@{}", b["address"].as_str().unwrap_or_default());
-                    f.getters.get(&at).or_else(|| f.getters.get(&method)).cloned().unwrap_or(json!({"exit_code": 11, "stack": []}))
+                    f.getters
+                        .get(&at)
+                        .or_else(|| f.getters.get(&method))
+                        .cloned()
+                        .unwrap_or(json!({"exit_code": 11, "stack": []}))
                 }
-                "transactionsByMessage" => json!({"transactions": f.by_msg.get(&q["msg_hash"]).into_iter().collect::<Vec<_>>()}),
+                "transactionsByMessage" => {
+                    json!({"transactions": f.by_msg.get(&q["msg_hash"]).into_iter().collect::<Vec<_>>()})
+                }
                 "transactions" => json!({"transactions": f.by_account}),
                 "walletInformation" => json!({"seqno": 3}),
                 "message" => {
@@ -2459,7 +3886,9 @@ mod tests {
             })
         }
         let shared: Shared = Arc::new(std::sync::Mutex::new(f));
-        let app = axum::Router::new().route("/api/v3/{path}", axum::routing::any(h)).with_state(shared.clone());
+        let app = axum::Router::new()
+            .route("/api/v3/{path}", axum::routing::any(h))
+            .with_state(shared.clone());
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
@@ -2470,11 +3899,19 @@ mod tests {
         adapter_with(url, toml::Table::new(), vec![]).unwrap()
     }
 
-    fn adapter_with(url: &str, params: toml::Table, tokens: Vec<crate::config::TokenCfg>) -> Result<TonAdapter> {
+    fn adapter_with(
+        url: &str,
+        params: toml::Table,
+        tokens: Vec<crate::config::TokenCfg>,
+    ) -> Result<TonAdapter> {
         adapter_with_urls(&[url.to_string()], params, tokens)
     }
 
-    fn adapter_with_urls(urls: &[String], params: toml::Table, tokens: Vec<crate::config::TokenCfg>) -> Result<TonAdapter> {
+    fn adapter_with_urls(
+        urls: &[String],
+        params: toml::Table,
+        tokens: Vec<crate::config::TokenCfg>,
+    ) -> Result<TonAdapter> {
         let cfg = ChainCfg {
             family: "ton".into(),
             network: Some("-239".into()),
@@ -2484,7 +3921,11 @@ mod tests {
             private_key: None,
             lanes: vec![0],
             params,
-            finality: crate::config::FinalityCfg { mode: "depth".into(), depth: 0, quorum: 1 },
+            finality: crate::config::FinalityCfg {
+                mode: "depth".into(),
+                depth: 0,
+                quorum: 1,
+            },
             dex: None,
             poll_ms: 200,
             stuck_after_secs: 60,
@@ -2493,7 +3934,10 @@ mod tests {
             tokens,
             ..Default::default()
         };
-        TonAdapter::new(&cfg, &[LocalSigner::new(Curve::Ed25519, &[0x11; 32]).unwrap()])
+        TonAdapter::new(
+            &cfg,
+            &[LocalSigner::new(Curve::Ed25519, &[0x11; 32]).unwrap()],
+        )
     }
 
     fn num(n: u128) -> Value {
@@ -2511,18 +3955,34 @@ mod tests {
             t.reference().unwrap();
         }
         t.addr().unwrap();
-        (t.coins().unwrap(), b.meta["value"].as_str().unwrap().parse().unwrap())
+        (
+            t.coins().unwrap(),
+            b.meta["value"].as_str().unwrap().parse().unwrap(),
+        )
     }
 
     /// Review H2 + L8: the node attaches at least the forward TON the payer signed, a job's own `forward_nanoton`
     /// when larger, and sizes the lane's TON from that job's forward (not the node default).
     #[tokio::test]
     async fn build_attaches_the_signed_forward_floor_and_sizes_value_per_job() {
-        let url = fake_api(Fake { getters: HashMap::from([("get_lane_nonce".into(), num(0)), ("get_owner_pubkey".into(), num(0))]), ..Default::default() }).await;
+        let url = fake_api(Fake {
+            getters: HashMap::from([
+                ("get_lane_nonce".into(), num(0)),
+                ("get_owner_pubkey".into(), num(0)),
+            ]),
+            ..Default::default()
+        })
+        .await;
         let a = adapter(&url);
         let key = LocalSigner::new(Curve::Ed25519, &[1; 32]).unwrap();
         let w5 = W5::new(key.public_key().try_into().unwrap(), -239).unwrap();
-        let (from, contract) = (w5.address().unwrap(), Addr { wc: 0, hash: [0xc0; 32] });
+        let (from, contract) = (
+            w5.address().unwrap(),
+            Addr {
+                wc: 0,
+                hash: [0xc0; 32],
+            },
+        );
         let floor: u128 = 300_000_000;
         let mut extra = [0u8; 32];
         extra[16..].copy_from_slice(&floor.to_be_bytes());
@@ -2535,12 +3995,31 @@ mod tests {
             .uint(0, 64)
             .uint(vu as u128, 64)
             .addr(Some(&contract))
-            .reference(Builder::new().addr(Some(&from)).addr(Some(&Addr { wc: 0, hash: [2; 32] })).addr(None).end().unwrap())
-            .reference(Builder::new().bytes(&[3; 32]).bytes(&[4; 32]).bytes(&extra).end().unwrap())
+            .reference(
+                Builder::new()
+                    .addr(Some(&from))
+                    .addr(Some(&Addr {
+                        wc: 0,
+                        hash: [2; 32],
+                    }))
+                    .addr(None)
+                    .end()
+                    .unwrap(),
+            )
+            .reference(
+                Builder::new()
+                    .bytes(&[3; 32])
+                    .bytes(&[4; 32])
+                    .bytes(&extra)
+                    .end()
+                    .unwrap(),
+            )
             .end()
             .unwrap();
         let ts = 1_800_000_000u64;
-        let sig = key.sign(&envelope_hash(&from, ts, "pay.example", &op).unwrap()).unwrap();
+        let sig = key
+            .sign(&envelope_hash(&from, ts, "pay.example", &op).unwrap())
+            .unwrap();
         let signature = json!({"kind": "ton_connect", "signature": b64encode(&sig), "timestamp": ts, "domain": "pay.example",
                                "state_init": b64encode(&boc_serialize(&w5.state_init().unwrap()))});
         let job = |extra: Value| -> Job {
@@ -2549,20 +4028,60 @@ mod tests {
             .unwrap()
         };
         let b = a.build(&job(json!({})), 0).await.unwrap();
-        assert_eq!(forward_and_value(&b), (floor, floor + 100_000_000), "the signed floor, not the node default 0");
-        let b = a.build(&job(json!({"forward_nanoton": 500_000_000u64})), 0).await.unwrap();
-        assert_eq!(forward_and_value(&b), (500_000_000, 600_000_000), "this job's forward sizes the value");
+        assert_eq!(
+            forward_and_value(&b),
+            (floor, floor + 100_000_000),
+            "the signed floor, not the node default 0"
+        );
+        let b = a
+            .build(&job(json!({"forward_nanoton": 500_000_000u64})), 0)
+            .await
+            .unwrap();
+        assert_eq!(
+            forward_and_value(&b),
+            (500_000_000, 600_000_000),
+            "this job's forward sizes the value"
+        );
     }
 
     /// R80 + review M6: only `pay` (op 1) answers from `get_lane_nonce`; revoke and mandate ops are unknown (None).
     #[tokio::test]
     async fn op_consumed_reads_the_lane_nonce_for_pay_only() {
-        let contract = Addr { wc: 0, hash: [0xc0; 32] };
+        let contract = Addr {
+            wc: 0,
+            hash: [0xc0; 32],
+        };
         let op = |code: u128| {
-            Builder::new().bytes(b"scaas.metaop.v1").int(-239, 32).uint(code, 8).uint(10, 128).uint(5, 64).uint(1 << 40, 64)
+            Builder::new()
+                .bytes(b"scaas.metaop.v1")
+                .int(-239, 32)
+                .uint(code, 8)
+                .uint(10, 128)
+                .uint(5, 64)
+                .uint(1 << 40, 64)
                 .addr(Some(&contract))
-                .reference(Builder::new().addr(Some(&Addr { wc: 0, hash: [1; 32] })).addr(Some(&Addr { wc: 0, hash: [2; 32] })).addr(None).end().unwrap())
-                .reference(Builder::new().bytes(&[3; 32]).bytes(&[4; 32]).bytes(&[0; 32]).end().unwrap())
+                .reference(
+                    Builder::new()
+                        .addr(Some(&Addr {
+                            wc: 0,
+                            hash: [1; 32],
+                        }))
+                        .addr(Some(&Addr {
+                            wc: 0,
+                            hash: [2; 32],
+                        }))
+                        .addr(None)
+                        .end()
+                        .unwrap(),
+                )
+                .reference(
+                    Builder::new()
+                        .bytes(&[3; 32])
+                        .bytes(&[4; 32])
+                        .bytes(&[0; 32])
+                        .end()
+                        .unwrap(),
+                )
                 .end()
                 .unwrap()
         };
@@ -2571,8 +4090,18 @@ mod tests {
                 "payload": alloy::hex::encode(boc_serialize(&op(code)))}})).unwrap()
         };
         for (next, want) in [(6, Some(true)), (5, Some(false))] {
-            let a = adapter(&fake_api(Fake { getters: HashMap::from([("get_lane_nonce".into(), num(next))]), ..Default::default() }).await);
-            assert_eq!(a.op_consumed(&job("pay", 1)).await.unwrap(), want, "next {next}");
+            let a = adapter(
+                &fake_api(Fake {
+                    getters: HashMap::from([("get_lane_nonce".into(), num(next))]),
+                    ..Default::default()
+                })
+                .await,
+            );
+            assert_eq!(
+                a.op_consumed(&job("pay", 1)).await.unwrap(),
+                want,
+                "next {next}"
+            );
             assert_eq!(a.op_consumed(&job("pay", 4)).await.unwrap(), None, "revoke");
             assert_eq!(a.op_consumed(&job("mandate_pay", 1)).await.unwrap(), None);
         }
@@ -2591,30 +4120,89 @@ mod tests {
         let lane = json!({"account": "0:".to_string() + &"11".repeat(32), "description": ok, "out_msgs": [
             {"hash": b64encode(&h1), "destination": wallet, "bounce": true, "message_content": {"body": signed_op}}]});
         let payer_tx = [0x0bu8; 32];
-        let payer = |d: Value| json!({"account": wallet, "hash": b64encode(&payer_tx), "description": d, "mc_block_seqno": 5, "out_msgs": [
+        let payer = |d: Value| {
+            json!({"account": wallet, "hash": b64encode(&payer_tx), "description": d, "mc_block_seqno": 5, "out_msgs": [
             {"hash": b64encode(&h2), "destination": "0:".to_string() + &"22".repeat(32), "bounce": true},
-            {"hash": b64encode(&[3; 32]), "destination": "0:".to_string() + &"11".repeat(32), "bounce": false}]});
-        let payee = |d: Value| json!({"account": "0:".to_string() + &"22".repeat(32), "description": d, "mc_block_seqno": 6, "out_msgs": [
-            {"hash": b64encode(&[4; 32]), "destination": "0:".to_string() + &"33".repeat(32), "bounce": false}]});
+            {"hash": b64encode(&[3; 32]), "destination": "0:".to_string() + &"11".repeat(32), "bounce": false}]})
+        };
+        let payee = |d: Value| {
+            json!({"account": "0:".to_string() + &"22".repeat(32), "description": d, "mc_block_seqno": 6, "out_msgs": [
+            {"hash": b64encode(&[4; 32]), "destination": "0:".to_string() + &"33".repeat(32), "bounce": false}]})
+        };
         let id = hex0x(&lane_tx);
-        let at = |m: Vec<(&[u8; 32], Value)>| m.into_iter().map(|(k, t)| (alloy::hex::encode(k), t)).collect::<HashMap<_, _>>();
+        let at = |m: Vec<(&[u8; 32], Value)>| {
+            m.into_iter()
+                .map(|(k, t)| (alloy::hex::encode(k), t))
+                .collect::<HashMap<_, _>>()
+        };
 
         let id = id.as_str();
         let st = |f: Fake| async move { adapter(&fake_api(f).await).tx_status(id).await.unwrap() };
-        let pending = st(Fake { by_msg: at(vec![(&lane_tx, lane.clone()), (&h1, payer(ok.clone()))]), ..Default::default() }).await;
-        assert!(matches!(pending, TxStatus::Pending), "payee hop not seen yet: {pending:?}");
-        let bounced = st(Fake { by_msg: at(vec![(&lane_tx, lane.clone()), (&h1, payer(ok.clone())), (&h2, payee(failed(-14)))]), ..Default::default() }).await;
-        assert!(matches!(bounced, TxStatus::Reverted { .. }), "payee hop bounced: {bounced:?}");
-        let mined = st(Fake { by_msg: at(vec![(&lane_tx, lane.clone()), (&h1, payer(ok.clone())), (&h2, payee(ok.clone()))]), ..Default::default() }).await;
+        let pending = st(Fake {
+            by_msg: at(vec![(&lane_tx, lane.clone()), (&h1, payer(ok.clone()))]),
+            ..Default::default()
+        })
+        .await;
+        assert!(
+            matches!(pending, TxStatus::Pending),
+            "payee hop not seen yet: {pending:?}"
+        );
+        let bounced = st(Fake {
+            by_msg: at(vec![
+                (&lane_tx, lane.clone()),
+                (&h1, payer(ok.clone())),
+                (&h2, payee(failed(-14))),
+            ]),
+            ..Default::default()
+        })
+        .await;
+        assert!(
+            matches!(bounced, TxStatus::Reverted { .. }),
+            "payee hop bounced: {bounced:?}"
+        );
+        let mined = st(Fake {
+            by_msg: at(vec![
+                (&lane_tx, lane.clone()),
+                (&h1, payer(ok.clone())),
+                (&h2, payee(ok.clone())),
+            ]),
+            ..Default::default()
+        })
+        .await;
         // The tx id is the lane wallet's external message; ExternalPull hears of the payer wallet's tx (it emits the event).
-        assert_eq!(mined, TxStatus::Mined { height: 6, tx_hash: Some(hex0x(&payer_tx)) });
+        assert_eq!(
+            mined,
+            TxStatus::Mined {
+                height: 6,
+                tx_hash: Some(hex0x(&payer_tx))
+            }
+        );
 
         let mte = b64encode(&alloy::hex::decode(s(&v, "/events/mte_boc")).unwrap());
         let copy = json!({"account": wallet, "description": ok, "mc_block_seqno": 4, "out_msgs": [{"destination": null, "message_content": {"body": mte}}]});
-        let nonce_used = at(vec![(&lane_tx, lane.clone()), (&h1, payer(failed(E_NONCE)))]);
-        let r = st(Fake { by_msg: nonce_used.clone(), by_account: vec![copy], ..Default::default() }).await;
-        assert_eq!(r, TxStatus::Mined { height: 4, tx_hash: None }, "a copy executed our digest: not our tx");
-        let r = st(Fake { by_msg: nonce_used, ..Default::default() }).await;
+        let nonce_used = at(vec![
+            (&lane_tx, lane.clone()),
+            (&h1, payer(failed(E_NONCE))),
+        ]);
+        let r = st(Fake {
+            by_msg: nonce_used.clone(),
+            by_account: vec![copy],
+            ..Default::default()
+        })
+        .await;
+        assert_eq!(
+            r,
+            TxStatus::Mined {
+                height: 4,
+                tx_hash: None
+            },
+            "a copy executed our digest: not our tx"
+        );
+        let r = st(Fake {
+            by_msg: nonce_used,
+            ..Default::default()
+        })
+        .await;
         assert!(matches!(r, TxStatus::Reverted { .. }), "{r:?}");
     }
 
@@ -2625,25 +4213,66 @@ mod tests {
     }
 
     /// A signed `OP_PAY` of `from` (the W5R1 of key `[1; 32]`) with these refs, as the job JSON the node receives.
-    fn pay_job(pay_ref: [u8; 32], lane: [u8; 32], nonce: u64, op_code: u128, more: Value) -> (Job, MetaOp) {
+    fn pay_job(
+        pay_ref: [u8; 32],
+        lane: [u8; 32],
+        nonce: u64,
+        op_code: u128,
+        more: Value,
+    ) -> (Job, MetaOp) {
         let key = LocalSigner::new(Curve::Ed25519, &[1; 32]).unwrap();
         let w5 = W5::new(key.public_key().try_into().unwrap(), -239).unwrap();
-        let (from, contract) = (w5.address().unwrap(), Addr { wc: 0, hash: [0xc0; 32] });
+        let (from, contract) = (
+            w5.address().unwrap(),
+            Addr {
+                wc: 0,
+                hash: [0xc0; 32],
+            },
+        );
         let op = Builder::new()
-            .bytes(b"scaas.metaop.v1").int(-239, 32).uint(op_code, 8).uint(10, 128).uint(nonce as u128, 64)
-            .uint((crate::submit::now() + 600) as u128, 64).addr(Some(&contract))
-            .reference(Builder::new().addr(Some(&from)).addr(Some(&Addr { wc: 0, hash: [2; 32] })).addr(None).end().unwrap())
-            .reference(Builder::new().bytes(&pay_ref).bytes(&lane).bytes(&[0; 32]).end().unwrap())
+            .bytes(b"scaas.metaop.v1")
+            .int(-239, 32)
+            .uint(op_code, 8)
+            .uint(10, 128)
+            .uint(nonce as u128, 64)
+            .uint((crate::submit::now() + 600) as u128, 64)
+            .addr(Some(&contract))
+            .reference(
+                Builder::new()
+                    .addr(Some(&from))
+                    .addr(Some(&Addr {
+                        wc: 0,
+                        hash: [2; 32],
+                    }))
+                    .addr(None)
+                    .end()
+                    .unwrap(),
+            )
+            .reference(
+                Builder::new()
+                    .bytes(&pay_ref)
+                    .bytes(&lane)
+                    .bytes(&[0; 32])
+                    .end()
+                    .unwrap(),
+            )
             .end()
             .unwrap();
         let ts = 1_800_000_000u64;
-        let sig = key.sign(&envelope_hash(&from, ts, "pay.example", &op).unwrap()).unwrap();
+        let sig = key
+            .sign(&envelope_hash(&from, ts, "pay.example", &op).unwrap())
+            .unwrap();
         let signature = json!({"kind": "ton_connect", "signature": b64encode(&sig), "timestamp": ts, "domain": "pay.example",
                                "state_init": b64encode(&boc_serialize(&w5.state_init().unwrap()))});
         let mut o = json!({"contract": contract.raw(), "op_kind": "pay", "payload": alloy::hex::encode(boc_serialize(&op)),
                            "signature": signature.to_string(), "digest": hex0x(&op.hash())});
-        o.as_object_mut().unwrap().extend(more.as_object().unwrap().clone());
-        (serde_json::from_value(json!({"id": 1, "kind": "signed_op", "op": o})).unwrap(), parse_metaop(&op).unwrap())
+        o.as_object_mut()
+            .unwrap()
+            .extend(more.as_object().unwrap().clone());
+        (
+            serde_json::from_value(json!({"id": 1, "kind": "signed_op", "op": o})).unwrap(),
+            parse_metaop(&op).unwrap(),
+        )
     }
 
     /// `SignedOp.params` of a built body (tail ref: `params:Maybe ^Cell`).
@@ -2657,31 +4286,61 @@ mod tests {
     /// the cell `vectors.spec.ts` built with @ton/core (`/pay_meta/params_boc`), checked before any getter.
     #[tokio::test]
     async fn ton_pay_meta_job_builds_params() {
-        let rows: Vec<Value> = serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json")).unwrap();
+        let rows: Vec<Value> = serde_json::from_str(include_str!(
+            "../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json"
+        ))
+        .unwrap();
         assert_eq!(rows.len(), 6);
         for r in &rows {
             let id = meta_pay_id(&hexv(&r["salt"]), &hexv(&r["meta"]));
-            assert_eq!((id.to_vec(), pay_lane(&id).to_vec()), (hexv(&r["payId"]), hexv(&r["payLane"])), "{}", r["name"]);
+            assert_eq!(
+                (id.to_vec(), pay_lane(&id).to_vec()),
+                (hexv(&r["payId"]), hexv(&r["payLane"])),
+                "{}",
+                r["name"]
+            );
         }
         let v = vectors();
         let pm = &v["pay_meta"];
         let (salt, meta) = (hexv(&pm["salt"]), hexv(&pm["meta"]));
-        assert_eq!(snake(&meta).unwrap().hash(), cell(&v, "/pay_meta/meta_boc").hash(), "snake chunking = @ton/core's");
+        assert_eq!(
+            snake(&meta).unwrap().hash(),
+            cell(&v, "/pay_meta/meta_boc").hash(),
+            "snake chunking = @ton/core's"
+        );
         let id: [u8; 32] = hexv(&pm["pay_id"]).try_into().unwrap();
         assert_eq!(hex0x(&pay_lane(&id)), s(&v, "/pay_meta/pay_lane"));
         let more = json!({"kind": "pay_meta", "salt": pm["salt"], "meta": pm["meta"]});
 
-        let url = fake_api(Fake { getters: HashMap::from([("get_lane_nonce".into(), num(0)), ("get_owner_pubkey".into(), num(0))]), ..Default::default() }).await;
+        let url = fake_api(Fake {
+            getters: HashMap::from([
+                ("get_lane_nonce".into(), num(0)),
+                ("get_owner_pubkey".into(), num(0)),
+            ]),
+            ..Default::default()
+        })
+        .await;
         let a = adapter(&url);
         let (job, _) = pay_job(id, pay_lane(&id), 0, 1, more.clone());
         let b = a.build(&job, 0).await.unwrap();
-        assert_eq!(hex0x(&built_params(&b).unwrap().hash()), s(&v, "/pay_meta/params_hash"));
-        assert_eq!(alloy::hex::encode(boc_serialize(&built_params(&b).unwrap())), s(&v, "/pay_meta/params_boc"));
+        assert_eq!(
+            hex0x(&built_params(&b).unwrap().hash()),
+            s(&v, "/pay_meta/params_hash")
+        );
+        assert_eq!(
+            alloy::hex::encode(boc_serialize(&built_params(&b).unwrap())),
+            s(&v, "/pay_meta/params_boc")
+        );
         // the plain pay still sends params = null
         let (plain, _) = pay_job(id, pay_lane(&id), 0, 1, json!({}));
         assert!(built_params(&a.build(&plain, 0).await.unwrap()).is_none());
         // the `PaymentMeta` event decodes (T17): the vector's payment id and meta
-        let Some(TonEvent::Meta { pay_id, meta: m, .. }) = decode_event(&cell(&v, "/events/pm_boc")).unwrap() else { panic!("pm_boc") };
+        let Some(TonEvent::Meta {
+            pay_id, meta: m, ..
+        }) = decode_event(&cell(&v, "/events/pm_boc")).unwrap()
+        else {
+            panic!("pm_boc")
+        };
         assert_eq!((pay_id, m), (id, meta.clone()));
 
         // fail closed before any getter: an adapter whose API is unreachable still refuses each with its reason
@@ -2701,44 +4360,147 @@ mod tests {
             m
         };
         let tail = format!("{}00", pm["meta"].as_str().unwrap());
-        assert!(refused(pay_job(id, pay_lane(&id), 0, 1, with("meta", json!(tail))).0).await.contains("metaPayId"), "meta does not hash to pay_ref");
-        assert!(refused(pay_job(id, pay_lane(&id), 0, 1, with("salt", json!("0x01"))).0).await.contains("32 bytes"));
-        assert!(refused(pay_job(id, [9; 32], 0, 1, more.clone()).0).await.contains("payLane"), "lane");
-        assert!(refused(pay_job(id, pay_lane(&id), 1, 1, more.clone()).0).await.contains("payLane"), "nonce");
-        assert!(refused(pay_job(id, pay_lane(&id), 0, 2, more.clone()).0).await.contains("not pay"), "a trade op");
-        assert!(refused(pay_job(id, pay_lane(&id), 0, 1, json!({"kind": "pay_meta", "meta": pm["meta"]})).0).await.contains("op.salt missing"));
+        assert!(
+            refused(pay_job(id, pay_lane(&id), 0, 1, with("meta", json!(tail))).0)
+                .await
+                .contains("metaPayId"),
+            "meta does not hash to pay_ref"
+        );
+        assert!(
+            refused(pay_job(id, pay_lane(&id), 0, 1, with("salt", json!("0x01"))).0)
+                .await
+                .contains("32 bytes")
+        );
+        assert!(
+            refused(pay_job(id, [9; 32], 0, 1, more.clone()).0)
+                .await
+                .contains("payLane"),
+            "lane"
+        );
+        assert!(
+            refused(pay_job(id, pay_lane(&id), 1, 1, more.clone()).0)
+                .await
+                .contains("payLane"),
+            "nonce"
+        );
+        assert!(
+            refused(pay_job(id, pay_lane(&id), 0, 2, more.clone()).0)
+                .await
+                .contains("not pay"),
+            "a trade op"
+        );
+        assert!(refused(
+            pay_job(
+                id,
+                pay_lane(&id),
+                0,
+                1,
+                json!({"kind": "pay_meta", "meta": pm["meta"]})
+            )
+            .0
+        )
+        .await
+        .contains("op.salt missing"));
         // the cap: a meta that hashes right but is one byte above it
         let big = vec![0x61u8; MAX_PAY_META_BYTES + 1];
         let big_id = meta_pay_id(&salt, &big);
-        let e = refused(pay_job(big_id, pay_lane(&big_id), 0, 1, with("meta", json!(alloy::hex::encode(&big)))).0).await;
+        let e = refused(
+            pay_job(
+                big_id,
+                pay_lane(&big_id),
+                0,
+                1,
+                with("meta", json!(alloy::hex::encode(&big))),
+            )
+            .0,
+        )
+        .await;
         assert!(e.contains("above max_pay_meta_bytes 2048"), "{e}");
-        let (job, m) = pay_job(big_id, pay_lane(&big_id), 0, 1, with("meta", json!(alloy::hex::encode(&big))));
-        assert!(pay_params(&m, job.op.as_ref().unwrap(), 4096).is_ok(), "params.max_pay_meta_bytes raises it");
+        let (job, m) = pay_job(
+            big_id,
+            pay_lane(&big_id),
+            0,
+            1,
+            with("meta", json!(alloy::hex::encode(&big))),
+        );
+        assert!(
+            pay_params(&m, job.op.as_ref().unwrap(), 4096).is_ok(),
+            "params.max_pay_meta_bytes raises it"
+        );
         let mut kindless = with("meta", json!("00"));
         kindless.as_object_mut().unwrap().remove("kind");
-        assert!(refused(pay_job(id, pay_lane(&id), 0, 1, kindless).0).await.contains("no salt / meta"), "a kind-less pay with meta");
+        assert!(
+            refused(pay_job(id, pay_lane(&id), 0, 1, kindless).0)
+                .await
+                .contains("no salt / meta"),
+            "a kind-less pay with meta"
+        );
         let at_cap = vec![0x61u8; MAX_PAY_META_BYTES];
         let cap_id = meta_pay_id(&salt, &at_cap);
-        let (job, m) = pay_job(cap_id, pay_lane(&cap_id), 0, 1, with("meta", json!(alloy::hex::encode(&at_cap))));
-        assert_eq!(pay_params(&m, job.op.as_ref().unwrap(), MAX_PAY_META_BYTES).unwrap().unwrap().refs()[0].hash(), snake(&at_cap).unwrap().hash());
+        let (job, m) = pay_job(
+            cap_id,
+            pay_lane(&cap_id),
+            0,
+            1,
+            with("meta", json!(alloy::hex::encode(&at_cap))),
+        );
+        assert_eq!(
+            pay_params(&m, job.op.as_ref().unwrap(), MAX_PAY_META_BYTES)
+                .unwrap()
+                .unwrap()
+                .refs()[0]
+                .hash(),
+            snake(&at_cap).unwrap().hash()
+        );
         // unknown kinds and a plain pay with params are refused, never sent as a plain pay
-        for k in [json!("pay-meta"), json!("pay"), json!(""), json!(7), json!(true), json!({"k": 1}), json!(["pay_meta"])] {
+        for k in [
+            json!("pay-meta"),
+            json!("pay"),
+            json!(""),
+            json!(7),
+            json!(true),
+            json!({"k": 1}),
+            json!(["pay_meta"]),
+        ] {
             let e = refused(pay_job(id, pay_lane(&id), 0, 1, with("kind", k.clone())).0).await;
             assert!(e.contains("unknown op.kind"), "{k}: {e}");
         }
-        let e = refused(pay_job(id, pay_lane(&id), 0, 1, json!({"extra": {"params": s(&v, "/pay_meta/params_boc")}})).0).await;
+        let e = refused(
+            pay_job(
+                id,
+                pay_lane(&id),
+                0,
+                1,
+                json!({"extra": {"params": s(&v, "/pay_meta/params_boc")}}),
+            )
+            .0,
+        )
+        .await;
         assert!(e.contains("plain pay carries no params"), "{e}");
     }
 
     // ---------------------------------------------------------------- CTR-MTX-27 (spec §7.2 TON row, §9)
 
-    const ROUTER: Addr = Addr { wc: 0, hash: [0x5e; 32] };
-    const MASTER: Addr = Addr { wc: 0, hash: [0x33; 32] };
+    const ROUTER: Addr = Addr {
+        wc: 0,
+        hash: [0x5e; 32],
+    };
+    const MASTER: Addr = Addr {
+        wc: 0,
+        hash: [0x33; 32],
+    };
     const ROUTER_RAW: &str = "0:5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e";
 
     fn policy() -> RelayFeePolicy {
-        RelayFeePolicy { router: Some(ROUTER), tokens: vec![MASTER], params: crate::config::RelayParams { min_amount: 5, ..Default::default() },
-                         min_ton_value: HashMap::from([(MASTER, 100_000_000)]) }
+        RelayFeePolicy {
+            router: Some(ROUTER),
+            tokens: vec![MASTER],
+            params: crate::config::RelayParams {
+                min_amount: 5,
+                ..Default::default()
+            },
+            min_ton_value: HashMap::from([(MASTER, 100_000_000)]),
+        }
     }
 
     fn relay_params(price: u64) -> toml::Table {
@@ -2746,7 +4508,13 @@ mod tests {
         let mut t = toml::Table::new();
         t.insert("router".into(), ROUTER_RAW.into());
         t.insert("min_amount".into(), 5.into());
-        t.insert("min_ton_value".into(), toml::Value::Table(toml::Table::from_iter([(MASTER.raw(), toml::Value::Integer(price as i64))])));
+        t.insert(
+            "min_ton_value".into(),
+            toml::Value::Table(toml::Table::from_iter([(
+                MASTER.raw(),
+                toml::Value::Integer(price as i64),
+            )])),
+        );
         p.insert("relay_fee".into(), toml::Value::Table(t));
         p
     }
@@ -2765,8 +4533,18 @@ mod tests {
     /// A target of `code` owned by the payer (data `owner master …`, the owner first as Tact lays it out), at the
     /// address its StateInit derives.
     fn target_of(code: Arc<Cell>) -> (Arc<Cell>, Arc<Cell>, Addr) {
-        let data = Builder::new().addr(Some(&payer().1.address().unwrap())).addr(Some(&MASTER)).uint(0x77, 8).end().unwrap();
-        let si = Builder::new().uint(0b00110, 5).reference(code.clone()).reference(data.clone()).end().unwrap();
+        let data = Builder::new()
+            .addr(Some(&payer().1.address().unwrap()))
+            .addr(Some(&MASTER))
+            .uint(0x77, 8)
+            .end()
+            .unwrap();
+        let si = Builder::new()
+            .uint(0b00110, 5)
+            .reference(code.clone())
+            .reference(data.clone())
+            .end()
+            .unwrap();
         (code, data, Addr::of_state_init(&si))
     }
 
@@ -2776,34 +4554,103 @@ mod tests {
     }
 
     fn metaop_cell(m: &MetaOp) -> Arc<Cell> {
-        Builder::new().bytes(b"scaas.metaop.v1").int(m.network as i64, 32).uint(m.op as u128, 8).uint(m.amount, 128)
-            .uint(m.nonce as u128, 64).uint(m.valid_until as u128, 64).addr(Some(&m.contract))
-            .reference(Builder::new().addr(Some(&m.from)).addr(Some(&m.to)).addr(m.relayer.as_ref()).end().unwrap())
-            .reference(Builder::new().bytes(&m.pay_ref).bytes(&m.lane).bytes(&m.extra).end().unwrap())
-            .end().unwrap()
+        Builder::new()
+            .bytes(b"scaas.metaop.v1")
+            .int(m.network as i64, 32)
+            .uint(m.op as u128, 8)
+            .uint(m.amount, 128)
+            .uint(m.nonce as u128, 64)
+            .uint(m.valid_until as u128, 64)
+            .addr(Some(&m.contract))
+            .reference(
+                Builder::new()
+                    .addr(Some(&m.from))
+                    .addr(Some(&m.to))
+                    .addr(m.relayer.as_ref())
+                    .end()
+                    .unwrap(),
+            )
+            .reference(
+                Builder::new()
+                    .bytes(&m.pay_ref)
+                    .bytes(&m.lane)
+                    .bytes(&m.extra)
+                    .end()
+                    .unwrap(),
+            )
+            .end()
+            .unwrap()
     }
 
     /// A served call on target `t` as its owner (the payer) would send it: a TON Connect-signed `SignedOp` (signed by
     /// `key`, the payer's StateInit attached) whose MetaOp is a set_key dropping the passkey (`extra` 0) until `f` edits it.
     fn signed_call_at(t: &Addr, key: &[u8; 32], f: impl Fn(&mut MetaOp)) -> Arc<Cell> {
         let owner = payer().1.address().unwrap();
-        let mut m = MetaOp { network: -239, op: 5, amount: 0, nonce: 0, valid_until: crate::submit::now() + 3600, contract: *t, from: owner,
-            to: owner, relayer: None, pay_ref: [0; 32], lane: [7; 32], extra: [0; 32], digest: [0; 32] };
+        let mut m = MetaOp {
+            network: -239,
+            op: 5,
+            amount: 0,
+            nonce: 0,
+            valid_until: crate::submit::now() + 3600,
+            contract: *t,
+            from: owner,
+            to: owner,
+            relayer: None,
+            pay_ref: [0; 32],
+            lane: [7; 32],
+            extra: [0; 32],
+            digest: [0; 32],
+        };
         f(&mut m);
         let op = metaop_cell(&m);
         let ts = 1_800_000_000u64;
-        let sig = LocalSigner::new(Curve::Ed25519, key).unwrap().sign(&envelope_hash(&owner, ts, "pay.example", &op).unwrap()).unwrap();
-        let auth = Auth::TonConnect { signature: sig.try_into().unwrap(), timestamp: ts, domain: "pay.example".into(), state_init: None };
-        signed_op_body(&op, &auth_cell(&auth).unwrap(), None, Some(payer().1.state_init().unwrap()), &EXECUTOR, 0, [0; 32]).unwrap()
+        let sig = LocalSigner::new(Curve::Ed25519, key)
+            .unwrap()
+            .sign(&envelope_hash(&owner, ts, "pay.example", &op).unwrap())
+            .unwrap();
+        let auth = Auth::TonConnect {
+            signature: sig.try_into().unwrap(),
+            timestamp: ts,
+            domain: "pay.example".into(),
+            state_init: None,
+        };
+        signed_op_body(
+            &op,
+            &auth_cell(&auth).unwrap(),
+            None,
+            Some(payer().1.state_init().unwrap()),
+            &EXECUTOR,
+            0,
+            [0; 32],
+        )
+        .unwrap()
     }
 
     /// The payer's executor as the fake router's `get_executor` names it (the call's `responseDestination`).
-    const EXECUTOR: Addr = Addr { wc: 0, hash: [0xec; 32] };
+    const EXECUTOR: Addr = Addr {
+        wc: 0,
+        hash: [0xec; 32],
+    };
 
     /// `call` with its `SignedOp` tail or auth replaced (the MetaOp and its signature unchanged).
-    fn resign(call: &Arc<Cell>, params: Option<Arc<Cell>>, auth: Option<Arc<Cell>>, response: Option<Addr>, forward: Option<u128>) -> Arc<Cell> {
+    fn resign(
+        call: &Arc<Cell>,
+        params: Option<Arc<Cell>>,
+        auth: Option<Arc<Cell>>,
+        response: Option<Addr>,
+        forward: Option<u128>,
+    ) -> Arc<Cell> {
         let (op, a, p, si, r, f) = parse_signed_op(call).unwrap();
-        signed_op_body(&op, &auth.unwrap_or(a), params.or(p), si, &response.unwrap_or(r), forward.unwrap_or(f), [0; 32]).unwrap()
+        signed_op_body(
+            &op,
+            &auth.unwrap_or(a),
+            params.or(p),
+            si,
+            &response.unwrap_or(r),
+            forward.unwrap_or(f),
+            [0; 32],
+        )
+        .unwrap()
     }
 
     /// The Mandate target: a code other than the jetton wallet's, owned by the payer.
@@ -2818,11 +4665,22 @@ mod tests {
         let n = |v: &str| json!({"type": "num", "value": v});
         let exec = Builder::new().addr(Some(&EXECUTOR)).end().unwrap();
         HashMap::from([
-            ("get_jetton_data".to_string(), json!({"exit_code": 0, "stack": [num(0), num(0), num(0), num(0),
-                json!({"type": "cell", "value": b64encode(&boc_serialize(&code))})]})),
-            ("get_lane_nonce".into(), num(0)), ("get_owner_pubkey".into(), num(0)), ("get_relay_value".into(), num(306_666_673)),
-            ("get_executor".into(), json!({"exit_code": 0, "stack": [{"type": "slice", "value": b64encode(&boc_serialize(&exec))}]})),
-            ("get_codes".into(), json!({"exit_code": 0, "stack": [n(&hex0x(&code.hash())), n(&hex0x(&mandate_init().0.hash()))]})),
+            (
+                "get_jetton_data".to_string(),
+                json!({"exit_code": 0, "stack": [num(0), num(0), num(0), num(0),
+                json!({"type": "cell", "value": b64encode(&boc_serialize(&code))})]}),
+            ),
+            ("get_lane_nonce".into(), num(0)),
+            ("get_owner_pubkey".into(), num(0)),
+            ("get_relay_value".into(), num(306_666_673)),
+            (
+                "get_executor".into(),
+                json!({"exit_code": 0, "stack": [{"type": "slice", "value": b64encode(&boc_serialize(&exec))}]}),
+            ),
+            (
+                "get_codes".into(),
+                json!({"exit_code": 0, "stack": [n(&hex0x(&code.hash())), n(&hex0x(&mandate_init().0.hash()))]}),
+            ),
             ("get_state".into(), mandate_state(false)),
             ("get_wallet_data".into(), num(1_000_000)),
         ])
@@ -2841,21 +4699,65 @@ mod tests {
 
     /// A served call: a `SignedOp` whose MetaOp is `op` (5 = set_key) with `relayer`.
     fn served_call(op: u8, relayer: Option<&Addr>) -> Arc<Cell> {
-        let a = Addr { wc: 0, hash: [0x61; 32] };
-        let m = Builder::new().bytes(b"scaas.metaop.v1").int(-239, 32).uint(op as u128, 8).uint(0, 128).uint(0, 64).uint(1 << 40, 64)
-            .addr(Some(&target())).reference(Builder::new().addr(Some(&a)).addr(Some(&a)).addr(relayer).end().unwrap())
-            .reference(Builder::new().bytes(&[0; 32]).bytes(&[1; 32]).bytes(&[0; 32]).end().unwrap()).end().unwrap();
-        signed_op_body(&m, &Builder::new().uint(0, 8).end().unwrap(), None, None, &a, 0, [0; 32]).unwrap()
+        let a = Addr {
+            wc: 0,
+            hash: [0x61; 32],
+        };
+        let m = Builder::new()
+            .bytes(b"scaas.metaop.v1")
+            .int(-239, 32)
+            .uint(op as u128, 8)
+            .uint(0, 128)
+            .uint(0, 64)
+            .uint(1 << 40, 64)
+            .addr(Some(&target()))
+            .reference(
+                Builder::new()
+                    .addr(Some(&a))
+                    .addr(Some(&a))
+                    .addr(relayer)
+                    .end()
+                    .unwrap(),
+            )
+            .reference(
+                Builder::new()
+                    .bytes(&[0; 32])
+                    .bytes(&[1; 32])
+                    .bytes(&[0; 32])
+                    .end()
+                    .unwrap(),
+            )
+            .end()
+            .unwrap();
+        signed_op_body(
+            &m,
+            &Builder::new().uint(0, 8).end().unwrap(),
+            None,
+            None,
+            &a,
+            0,
+            [0; 32],
+        )
+        .unwrap()
     }
 
     /// A relay-fee job: the payer (W5R1 of key `[1; 32]`) pays `amount` from its wallet of `MASTER`, bound to
     /// (target, call, salt); `f` edits the MetaOp fields before signing.
-    fn relay_job_with(amount: u128, call: Arc<Cell>, f: impl Fn(&mut MetaOp)) -> (Value, MetaOp, Arc<Cell>, [u8; 32]) {
+    fn relay_job_with(
+        amount: u128,
+        call: Arc<Cell>,
+        f: impl Fn(&mut MetaOp),
+    ) -> (Value, MetaOp, Arc<Cell>, [u8; 32]) {
         relay_job_at(amount, target_init(), call, f)
     }
 
     /// `relay_job_with` on the target `(code, data, address)`.
-    fn relay_job_at(amount: u128, tgt: (Arc<Cell>, Arc<Cell>, Addr), call: Arc<Cell>, f: impl Fn(&mut MetaOp)) -> (Value, MetaOp, Arc<Cell>, [u8; 32]) {
+    fn relay_job_at(
+        amount: u128,
+        tgt: (Arc<Cell>, Arc<Cell>, Addr),
+        call: Arc<Cell>,
+        f: impl Fn(&mut MetaOp),
+    ) -> (Value, MetaOp, Arc<Cell>, [u8; 32]) {
         let v = vectors();
         let code = wallet_code(&v);
         let (key, w5) = payer();
@@ -2864,14 +4766,26 @@ mod tests {
         let (tcode, tdata, t) = tgt;
         let r = relay_ref(-239, &t, &call, &salt);
         let mut m = MetaOp {
-            network: -239, op: 1, amount, nonce: 0, valid_until: crate::submit::now() + 3600,
-            contract: jetton_wallet_address(&from, &MASTER, &code.hash(), code.depth()).unwrap(), from, to: ROUTER,
-            relayer: Some(ROUTER), pay_ref: r, lane: pay_lane(&r), extra: [0; 32], digest: [0; 32],
+            network: -239,
+            op: 1,
+            amount,
+            nonce: 0,
+            valid_until: crate::submit::now() + 3600,
+            contract: jetton_wallet_address(&from, &MASTER, &code.hash(), code.depth()).unwrap(),
+            from,
+            to: ROUTER,
+            relayer: Some(ROUTER),
+            pay_ref: r,
+            lane: pay_lane(&r),
+            extra: [0; 32],
+            digest: [0; 32],
         };
         f(&mut m);
         let op = metaop_cell(&m);
         let ts = 1_800_000_000u64;
-        let sig = key.sign(&envelope_hash(&from, ts, "pay.example", &op).unwrap()).unwrap();
+        let sig = key
+            .sign(&envelope_hash(&from, ts, "pay.example", &op).unwrap())
+            .unwrap();
         let signature = json!({"kind": "ton_connect", "signature": b64encode(&sig), "timestamp": ts, "domain": "pay.example",
                                "state_init": b64encode(&boc_serialize(&w5.state_init().unwrap()))});
         let hx = |c: &Arc<Cell>| alloy::hex::encode(boc_serialize(c));
@@ -2892,8 +4806,19 @@ mod tests {
 
     fn relay_call_of(m: &MetaOp, op: Arc<Cell>, deadline: u32) -> RelayCall {
         let (target_code, target_data, target) = target_init();
-        RelayCall { target, target_code, target_data, call: served_call(5, None), salt: [0x5a; 32], pay_wallet: m.contract, pay_op: op,
-            pay_auth: Builder::new().end().unwrap(), pay_state_init: None, master: MASTER, deadline }
+        RelayCall {
+            target,
+            target_code,
+            target_data,
+            call: served_call(5, None),
+            salt: [0x5a; 32],
+            pay_wallet: m.contract,
+            pay_op: op,
+            pay_auth: Builder::new().end().unwrap(),
+            pay_state_init: None,
+            master: MASTER,
+            deadline,
+        }
     }
 
     /// Rule 2: the router's `ref`, escrow key and message bodies, byte for byte the Tact contract's (@ton/core vectors).
@@ -2906,17 +4831,39 @@ mod tests {
         let call = cell(&v, "/relay_fee/call_boc");
         let r = relay_ref(-239, &a("target"), &call, &salt);
         assert_eq!(hex0x(&r), rf["ref"].as_str().unwrap());
-        assert_eq!(hex0x(&escrow_key(&a("from"), &r).unwrap()), rf["escrow_key"].as_str().unwrap());
+        assert_eq!(
+            hex0x(&escrow_key(&a("from"), &r).unwrap()),
+            rf["escrow_key"].as_str().unwrap()
+        );
         let body = cell(&v, "/relay_fee/relay_call_boc");
         let rc = RelayCall::parse(&body).unwrap();
-        assert_eq!((rc.target, rc.salt, rc.deadline, rc.call.hash()), (a("target"), salt, 1_800_000_600, call.hash()));
+        assert_eq!(
+            (rc.target, rc.salt, rc.deadline, rc.call.hash()),
+            (a("target"), salt, 1_800_000_600, call.hash())
+        );
         assert_eq!(rc.target_code.parser().uint(16).unwrap(), 0xc0de);
-        assert_eq!(hex0x(&rc.body().unwrap().hash()), rf["relay_call_hash"].as_str().unwrap(), "our RelayCall layout = Tact's");
+        assert_eq!(
+            hex0x(&rc.body().unwrap().hash()),
+            rf["relay_call_hash"].as_str().unwrap(),
+            "our RelayCall layout = Tact's"
+        );
         assert_eq!(parse_metaop(&rc.pay_op).unwrap().pay_ref, r);
-        assert_eq!(alloy::hex::encode(boc_serialize(&relay_refund_body(&a("from"), &r).unwrap())), rf["relay_refund_boc"].as_str().unwrap());
+        assert_eq!(
+            alloy::hex::encode(boc_serialize(&relay_refund_body(&a("from"), &r).unwrap())),
+            rf["relay_refund_boc"].as_str().unwrap()
+        );
         // every ref of the call counts: a change two levels down moves the ref
-        let other = Builder::new().uint(0x5b0a1d01, 32).reference(Builder::new().reference(Builder::new().uint(9, 8).end().unwrap()).end().unwrap())
-            .reference(Builder::new().uint(2, 8).end().unwrap()).end().unwrap();
+        let other = Builder::new()
+            .uint(0x5b0a1d01, 32)
+            .reference(
+                Builder::new()
+                    .reference(Builder::new().uint(9, 8).end().unwrap())
+                    .end()
+                    .unwrap(),
+            )
+            .reference(Builder::new().uint(2, 8).end().unwrap())
+            .end()
+            .unwrap();
         assert_ne!(relay_ref(-239, &a("target"), &other, &salt), r);
     }
 
@@ -2926,52 +4873,159 @@ mod tests {
     async fn ton_relay_fee_job_checks_ref() {
         let (o, _, cell0, r) = relay_job(25, |_| {});
         let (router, rc) = relay_fee_job(&policy(), -239, &cell0, &o).unwrap();
-        assert_eq!((router, rc.target, rc.master, rc.salt), (ROUTER, target(), MASTER, [0x5a; 32]));
+        assert_eq!(
+            (router, rc.target, rc.master, rc.salt),
+            (ROUTER, target(), MASTER, [0x5a; 32])
+        );
         let err = |o: &Value, p: &RelayFeePolicy| {
-            let c = boc_parse(&alloy::hex::decode(o["payload"].as_str().unwrap()).unwrap()).unwrap();
+            let c =
+                boc_parse(&alloy::hex::decode(o["payload"].as_str().unwrap()).unwrap()).unwrap();
             relay_fee_job(p, -239, &c, o).unwrap_err().to_string()
         };
-        assert_eq!(err(&o, &RelayFeePolicy { router: None, ..policy() }), "params.relay_fee.router is not set");
-        assert_eq!(err(&o, &RelayFeePolicy { router: Some(target()), ..policy() }), "op.contract is not params.relay_fee.router");
-        assert_eq!(err(&o, &RelayFeePolicy { tokens: vec![], ..policy() }), format!("token {} is not registered on this chain", MASTER.raw()));
-        assert_eq!(err(&o, &RelayFeePolicy { min_ton_value: HashMap::new(), ..policy() }),
-                   format!("params.relay_fee.min_ton_value has no price for token {}", MASTER.raw()));
-        assert_eq!(err(&relay_job(4, |_| {}).0, &policy()), "fee 4 is below relay_fee.min_amount 5");
+        assert_eq!(
+            err(
+                &o,
+                &RelayFeePolicy {
+                    router: None,
+                    ..policy()
+                }
+            ),
+            "params.relay_fee.router is not set"
+        );
+        assert_eq!(
+            err(
+                &o,
+                &RelayFeePolicy {
+                    router: Some(target()),
+                    ..policy()
+                }
+            ),
+            "op.contract is not params.relay_fee.router"
+        );
+        assert_eq!(
+            err(
+                &o,
+                &RelayFeePolicy {
+                    tokens: vec![],
+                    ..policy()
+                }
+            ),
+            format!("token {} is not registered on this chain", MASTER.raw())
+        );
+        assert_eq!(
+            err(
+                &o,
+                &RelayFeePolicy {
+                    min_ton_value: HashMap::new(),
+                    ..policy()
+                }
+            ),
+            format!(
+                "params.relay_fee.min_ton_value has no price for token {}",
+                MASTER.raw()
+            )
+        );
+        assert_eq!(
+            err(&relay_job(4, |_| {}).0, &policy()),
+            "fee 4 is below relay_fee.min_amount 5"
+        );
         const BOUND: &str = "the payment is not bound to this call (ref, payLane(ref), nonce 0, relayer = to = router)";
-        assert_eq!(err(&relay_job(25, |m| m.lane = [1; 32]).0, &policy()), BOUND);
+        assert_eq!(
+            err(&relay_job(25, |m| m.lane = [1; 32]).0, &policy()),
+            BOUND
+        );
         assert_eq!(err(&relay_job(25, |m| m.nonce = 1).0, &policy()), BOUND);
-        assert_eq!(err(&relay_job(25, |m| m.relayer = None).0, &policy()), BOUND);
+        assert_eq!(
+            err(&relay_job(25, |m| m.relayer = None).0, &policy()),
+            BOUND
+        );
         assert_eq!(err(&relay_job(25, |m| m.to = MASTER).0, &policy()), BOUND);
-        assert_eq!(err(&relay_job(25, |m| m.op = 2).0, &policy()), "the relay-fee payment is not a pay op");
+        assert_eq!(
+            err(&relay_job(25, |m| m.op = 2).0, &policy()),
+            "the relay-fee payment is not a pay op"
+        );
         // the call: a served fee-less entry, never a pay, never bound to the router (R18)
         const SERVED: &str = "op.extra.call is not a served fee-less entry (a SignedOp revoke / set_key not bound to the router)";
-        assert_eq!(err(&relay_job_with(25, served_call(1, None), |_| {}).0, &policy()), SERVED);
-        assert_eq!(err(&relay_job_with(25, served_call(5, Some(&ROUTER)), |_| {}).0, &policy()), SERVED);
-        assert_eq!(err(&relay_job_with(25, Builder::new().uint(1, 32).end().unwrap(), |_| {}).0, &policy()), SERVED);
-        assert!(relay_fee_job(&policy(), -239, &relay_job_with(25, served_call(4, None), |_| {}).2, &relay_job_with(25, served_call(4, None), |_| {}).0).is_ok());
+        assert_eq!(
+            err(
+                &relay_job_with(25, served_call(1, None), |_| {}).0,
+                &policy()
+            ),
+            SERVED
+        );
+        assert_eq!(
+            err(
+                &relay_job_with(25, served_call(5, Some(&ROUTER)), |_| {}).0,
+                &policy()
+            ),
+            SERVED
+        );
+        assert_eq!(
+            err(
+                &relay_job_with(25, Builder::new().uint(1, 32).end().unwrap(), |_| {}).0,
+                &policy()
+            ),
+            SERVED
+        );
+        assert!(relay_fee_job(
+            &policy(),
+            -239,
+            &relay_job_with(25, served_call(4, None), |_| {}).2,
+            &relay_job_with(25, served_call(4, None), |_| {}).0
+        )
+        .is_ok());
         let with = |k: &str, val: Value| {
             let mut x = o.clone();
             x["extra"][k] = val;
             x
         };
-        assert_eq!(err(&with("salt", json!("5b".repeat(32))), &policy()), BOUND, "a different salt");
-        assert_eq!(err(&with("target", json!(MASTER.raw())), &policy()), "op.extra.target_code / target_data do not derive op.extra.target");
-        assert_eq!(err(&with("target_data", json!(alloy::hex::encode(boc_serialize(&Builder::new().end().unwrap())))), &policy()),
-                   "op.extra.target_code / target_data do not derive op.extra.target");
-        assert_eq!(err(&with("target_code", json!("zz")), &policy()), "op.extra.target_code");
+        assert_eq!(
+            err(&with("salt", json!("5b".repeat(32))), &policy()),
+            BOUND,
+            "a different salt"
+        );
+        assert_eq!(
+            err(&with("target", json!(MASTER.raw())), &policy()),
+            "op.extra.target_code / target_data do not derive op.extra.target"
+        );
+        assert_eq!(
+            err(
+                &with(
+                    "target_data",
+                    json!(alloy::hex::encode(boc_serialize(
+                        &Builder::new().end().unwrap()
+                    )))
+                ),
+                &policy()
+            ),
+            "op.extra.target_code / target_data do not derive op.extra.target"
+        );
+        assert_eq!(
+            err(&with("target_code", json!("zz")), &policy()),
+            "op.extra.target_code"
+        );
         assert!(err(&with("salt", json!("5a")), &policy()).contains("32 bytes"));
         assert_eq!(err(&with("call", json!("zz")), &policy()), "op.extra.call");
-        assert_eq!(err(&with("call", json!("b5ee")), &policy()), "op.extra.call");
+        assert_eq!(
+            err(&with("call", json!("b5ee")), &policy()),
+            "op.extra.call"
+        );
         assert!(err(&with("master", json!("nope")), &policy()).contains("op.extra.master"));
         let mut bad_ref = o.clone();
         bad_ref["ref"] = json!(hex0x(&[0; 32]));
-        assert_eq!(err(&bad_ref, &policy()), "op.ref != relay_ref(target, call, salt)");
+        assert_eq!(
+            err(&bad_ref, &policy()),
+            "op.ref != relay_ref(target, call, salt)"
+        );
         let mut good_ref = o.clone();
         good_ref["ref"] = json!(hex0x(&r));
         assert!(relay_fee_job(&policy(), -239, &cell0, &good_ref).is_ok());
 
         // through `build` on an adapter whose API is unreachable: refused before any getter
-        let tok = vec![crate::config::TokenCfg { address: MASTER.raw(), decimals: 9 }];
+        let tok = vec![crate::config::TokenCfg {
+            address: MASTER.raw(),
+            decimals: 9,
+        }];
         let dead = adapter_with("http://127.0.0.1:9", relay_params(100_000_000), tok).unwrap();
         let refused = |o: Value| {
             let dead = &dead;
@@ -2982,16 +5036,24 @@ mod tests {
                 }
             }
         };
-        assert!(refused(relay_job(4, |_| {}).0).await.contains("below relay_fee.min_amount"));
-        assert!(refused(relay_job(25, |m| m.lane = [1; 32]).0).await.contains("not bound"));
-        assert!(refused(relay_job(25, |m| m.valid_until = 1).0).await.contains("expired"));
+        assert!(refused(relay_job(4, |_| {}).0)
+            .await
+            .contains("below relay_fee.min_amount"));
+        assert!(refused(relay_job(25, |m| m.lane = [1; 32]).0)
+            .await
+            .contains("not bound"));
+        assert!(refused(relay_job(25, |m| m.valid_until = 1).0)
+            .await
+            .contains("expired"));
         // the router-bound payment sent as a plain pay is refused (only the router may submit it), so is a non-string kind
         let (plain, _) = pay_job([3; 32], [4; 32], 0, 1, json!({}));
         let mut to_router = plain.op.clone().unwrap();
         let mut plain_to_router = o.clone();
         plain_to_router.as_object_mut().unwrap().remove("kind");
         plain_to_router["contract"] = json!(parse_metaop(&cell0).unwrap().contract.raw());
-        assert!(refused(plain_to_router).await.contains("bound to another relayer"));
+        assert!(refused(plain_to_router)
+            .await
+            .contains("bound to another relayer"));
         to_router["kind"] = json!(7);
         assert!(refused(to_router).await.contains("unknown op.kind 7"));
     }
@@ -3004,7 +5066,9 @@ mod tests {
         let dead = adapter_with("http://127.0.0.1:9", params, vec![]).unwrap();
         let (job, _) = pay_job([3; 32], [4; 32], 0, 1, json!({})); // pay_job pays 0:0202…02
         match dead.build(&job, 0).await {
-            Err(SimError::Revert(e)) => assert!(e.contains("plain pay to the relay-fee router"), "{e}"),
+            Err(SimError::Revert(e)) => {
+                assert!(e.contains("plain pay to the relay-fee router"), "{e}")
+            }
             other => panic!("{other:?}"),
         }
     }
@@ -3016,30 +5080,98 @@ mod tests {
         let cfg = |t: toml::Table, tokens: Vec<&str>| {
             let mut p = toml::Table::new();
             p.insert("relay_fee".into(), toml::Value::Table(t));
-            adapter_with("http://127.0.0.1:9", p, tokens.into_iter().map(|a| crate::config::TokenCfg { address: a.into(), decimals: 9 }).collect())
+            adapter_with(
+                "http://127.0.0.1:9",
+                p,
+                tokens
+                    .into_iter()
+                    .map(|a| crate::config::TokenCfg {
+                        address: a.into(),
+                        decimals: 9,
+                    })
+                    .collect(),
+            )
         };
-        assert!(adapter("http://127.0.0.1:9").relay_fee.router.is_none(), "no relay_fee: relay-fee jobs refused");
-        let ok = adapter_with("http://127.0.0.1:9", relay_params(7), vec![crate::config::TokenCfg { address: MASTER.raw(), decimals: 9 }]).unwrap();
-        assert_eq!((ok.relay_fee.router, ok.relay_fee.params.min_amount, ok.relay_fee.tokens.clone()), (Some(ROUTER), 5, vec![MASTER]));
+        assert!(
+            adapter("http://127.0.0.1:9").relay_fee.router.is_none(),
+            "no relay_fee: relay-fee jobs refused"
+        );
+        let ok = adapter_with(
+            "http://127.0.0.1:9",
+            relay_params(7),
+            vec![crate::config::TokenCfg {
+                address: MASTER.raw(),
+                decimals: 9,
+            }],
+        )
+        .unwrap();
+        assert_eq!(
+            (
+                ok.relay_fee.router,
+                ok.relay_fee.params.min_amount,
+                ok.relay_fee.tokens.clone()
+            ),
+            (Some(ROUTER), 5, vec![MASTER])
+        );
         assert_eq!(ok.relay_fee.min_ton_value.get(&MASTER), Some(&7));
-        for (t, what) in [(toml::toml! { router = "0:zz" }, "router"), (toml::toml! { router = 7 }, "router"),
-                          (toml::toml! { min_amount = "9" }, "min_amount"), (toml::toml! { min_amount = -1 }, "min_amount"),
-                          (toml::toml! { min_ton_value = 5 }, "min_ton_value"), (toml::toml! { min_ton_value = { nope = 5 } }, "min_ton_value"),
-                          (toml::toml! { min_ton_value = { "0:5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e" = -5 } }, "min_ton_value")] {
-            let e = cfg(t, vec![]).err().map(|e| format!("{e:#}")).unwrap_or_default();
-            assert!(e.contains(&format!("params.relay_fee.{what}")), "{what}: {e}");
+        for (t, what) in [
+            (toml::toml! { router = "0:zz" }, "router"),
+            (toml::toml! { router = 7 }, "router"),
+            (toml::toml! { min_amount = "9" }, "min_amount"),
+            (toml::toml! { min_amount = -1 }, "min_amount"),
+            (toml::toml! { min_ton_value = 5 }, "min_ton_value"),
+            (
+                toml::toml! { min_ton_value = { nope = 5 } },
+                "min_ton_value",
+            ),
+            (
+                toml::toml! { min_ton_value = { "0:5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e" = -5 } },
+                "min_ton_value",
+            ),
+        ] {
+            let e = cfg(t, vec![])
+                .err()
+                .map(|e| format!("{e:#}"))
+                .unwrap_or_default();
+            assert!(
+                e.contains(&format!("params.relay_fee.{what}")),
+                "{what}: {e}"
+            );
         }
-        let e = cfg(toml::Table::new(), vec!["wasm1nope"]).err().map(|e| format!("{e:#}")).unwrap_or_default();
+        let e = cfg(toml::Table::new(), vec!["wasm1nope"])
+            .err()
+            .map(|e| format!("{e:#}"))
+            .unwrap_or_default();
         assert!(e.contains("tokens: wasm1nope"), "{e}");
     }
 
     fn paid_event(r: &[u8; 32], payer: &Addr, payee: &Addr) -> Arc<Cell> {
-        Builder::new().uint(EV_RELAY_FEE_PAID, 32).bytes(r).addr(Some(&target())).addr(Some(&MASTER))
-            .reference(Builder::new().addr(Some(payer)).addr(Some(payee)).coins(25).end().unwrap()).end().unwrap()
+        Builder::new()
+            .uint(EV_RELAY_FEE_PAID, 32)
+            .bytes(r)
+            .addr(Some(&target()))
+            .addr(Some(&MASTER))
+            .reference(
+                Builder::new()
+                    .addr(Some(payer))
+                    .addr(Some(payee))
+                    .coins(25)
+                    .end()
+                    .unwrap(),
+            )
+            .end()
+            .unwrap()
     }
 
     fn refunded_event(r: &[u8; 32], payer: &Addr, relayer: &Addr, amount: u128) -> Arc<Cell> {
-        Builder::new().uint(EV_RELAY_FEE_REFUNDED, 32).bytes(r).addr(Some(payer)).addr(Some(relayer)).coins(amount).end().unwrap()
+        Builder::new()
+            .uint(EV_RELAY_FEE_REFUNDED, 32)
+            .bytes(r)
+            .addr(Some(payer))
+            .addr(Some(relayer))
+            .coins(amount)
+            .end()
+            .unwrap()
     }
 
     /// The router's event layouts, byte for byte the Tact contract's (@ton/core vectors).
@@ -3051,16 +5183,52 @@ mod tests {
         let r: [u8; 32] = hexv(&rf["ref"]).try_into().unwrap();
         let paid = cell(&v, "/relay_fee/paid_boc");
         let refunded = cell(&v, "/relay_fee/refunded_boc");
-        assert_eq!(paid.hash(), paid_event_at(&r, &a("target"), &a("token"), &a("from"), &a("relayer")).hash());
-        assert_eq!(settled_event(&paid, &a("relayer"), &a("from"), &r), Some(true));
-        assert_eq!(settled_event(&refunded, &a("relayer"), &a("from"), &r), Some(false));
-        assert_eq!(settled_event(&paid, &a("from"), &a("from"), &r), None, "another payee");
-        assert_eq!(settled_event(&refunded, &a("from"), &a("from"), &r), None, "another relayer");
+        assert_eq!(
+            paid.hash(),
+            paid_event_at(&r, &a("target"), &a("token"), &a("from"), &a("relayer")).hash()
+        );
+        assert_eq!(
+            settled_event(&paid, &a("relayer"), &a("from"), &r),
+            Some(true)
+        );
+        assert_eq!(
+            settled_event(&refunded, &a("relayer"), &a("from"), &r),
+            Some(false)
+        );
+        assert_eq!(
+            settled_event(&paid, &a("from"), &a("from"), &r),
+            None,
+            "another payee"
+        );
+        assert_eq!(
+            settled_event(&refunded, &a("from"), &a("from"), &r),
+            None,
+            "another relayer"
+        );
     }
 
-    fn paid_event_at(r: &[u8; 32], target: &Addr, token: &Addr, payer: &Addr, payee: &Addr) -> Arc<Cell> {
-        Builder::new().uint(EV_RELAY_FEE_PAID, 32).bytes(r).addr(Some(target)).addr(Some(token))
-            .reference(Builder::new().addr(Some(payer)).addr(Some(payee)).coins(25).end().unwrap()).end().unwrap()
+    fn paid_event_at(
+        r: &[u8; 32],
+        target: &Addr,
+        token: &Addr,
+        payer: &Addr,
+        payee: &Addr,
+    ) -> Arc<Cell> {
+        Builder::new()
+            .uint(EV_RELAY_FEE_PAID, 32)
+            .bytes(r)
+            .addr(Some(target))
+            .addr(Some(token))
+            .reference(
+                Builder::new()
+                    .addr(Some(payer))
+                    .addr(Some(payee))
+                    .coins(25)
+                    .end()
+                    .unwrap(),
+            )
+            .end()
+            .unwrap()
     }
 
     /// §9: the relay-fee job builds the router's `RelayCall` (deadline inside RELAY_TIMEOUT, the TON the router prices
@@ -3073,8 +5241,17 @@ mod tests {
         let (o, m, _, r) = relay_job_with(25, call.clone(), |_| {});
         let mut getters = relay_getters();
         getters.insert("get_escrow_state".into(), num(2));
-        let (url, shared) = fake_api_shared(Fake { getters, ..Default::default() }).await;
-        let tok = || vec![crate::config::TokenCfg { address: MASTER.raw(), decimals: 9 }];
+        let (url, shared) = fake_api_shared(Fake {
+            getters,
+            ..Default::default()
+        })
+        .await;
+        let tok = || {
+            vec![crate::config::TokenCfg {
+                address: MASTER.raw(),
+                decimals: 9,
+            }]
+        };
         // the fee must be worth the TON the relay puts at risk: 25 units × 12,266,666 < 306,666,673
         let cheap = adapter_with(&url, relay_params(12_266_666), tok()).unwrap();
         match cheap.build(&job_of(&o), 0).await {
@@ -3085,12 +5262,30 @@ mod tests {
         let now = crate::submit::now();
         let b = a.build(&job_of(&o), 0).await.unwrap();
         let rc = RelayCall::parse(&boc_parse(&b.body).unwrap()).unwrap();
-        assert_eq!((rc.target, rc.master, rc.pay_wallet, rc.salt), (target(), MASTER, m.contract, [0x5a; 32]));
-        assert_eq!((rc.target_code.hash(), rc.call.hash()), (target_init().0.hash(), call.hash()));
+        assert_eq!(
+            (rc.target, rc.master, rc.pay_wallet, rc.salt),
+            (target(), MASTER, m.contract, [0x5a; 32])
+        );
+        assert_eq!(
+            (rc.target_code.hash(), rc.call.hash()),
+            (target_init().0.hash(), call.hash())
+        );
         assert_eq!(rc.pay_op.hash(), m.digest);
-        assert!(rc.pay_state_init.is_some(), "the payer's StateInit binds its key on first use");
-        assert!((now + RELAY_DEADLINE_S..=now + RELAY_DEADLINE_S + 5).contains(&(rc.deadline as u64)) && RELAY_DEADLINE_S < 3600);
-        assert_eq!((b.meta["to"].as_str().unwrap(), b.meta["value"].as_str().unwrap()), (ROUTER.raw().as_str(), "306666673"));
+        assert!(
+            rc.pay_state_init.is_some(),
+            "the payer's StateInit binds its key on first use"
+        );
+        assert!(
+            (now + RELAY_DEADLINE_S..=now + RELAY_DEADLINE_S + 5).contains(&(rc.deadline as u64))
+                && RELAY_DEADLINE_S < 3600
+        );
+        assert_eq!(
+            (
+                b.meta["to"].as_str().unwrap(),
+                b.meta["value"].as_str().unwrap()
+            ),
+            (ROUTER.raw().as_str(), "306666673")
+        );
         assert!(b.valid_until <= rc.deadline as u64);
 
         // the lane tx carries the RelayCall to the router; the router's tx ran
@@ -3099,43 +5294,113 @@ mod tests {
         let ok = json!({"compute_ph": {"success": true, "exit_code": 0}});
         let lane = json!({"account": me.raw(), "description": ok, "out_msgs": [
             {"hash": b64encode(&h1), "destination": ROUTER.raw(), "bounce": true, "message_content": {"body": b64encode(&b.body)}}]});
-        let router_tx = |d: Value| json!({"account": ROUTER.raw(), "description": d, "out_msgs": []});
+        let router_tx =
+            |d: Value| json!({"account": ROUTER.raw(), "description": d, "out_msgs": []});
         let at = |k: &[u8; 32]| alloy::hex::encode(k);
         let id = hex0x(&lane_tx);
-        shared.lock().unwrap().by_msg.insert(at(&lane_tx), lane.clone());
-        assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending, "router tx not seen yet");
-        shared.lock().unwrap().by_msg.insert(at(&h1), router_tx(json!({"aborted": true, "compute_ph": {"success": false, "exit_code": 742}})));
-        assert!(matches!(a.tx_status(&id).await.unwrap(), TxStatus::Reverted { reason } if reason.contains("742")), "the router refused it");
-        shared.lock().unwrap().by_msg.insert(at(&h1), router_tx(ok.clone()));
-        assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending, "escrow open (funded, the call is out)");
-        assert!(shared.lock().unwrap().posted.is_empty(), "no refund before the deadline");
+        shared
+            .lock()
+            .unwrap()
+            .by_msg
+            .insert(at(&lane_tx), lane.clone());
+        assert_eq!(
+            a.tx_status(&id).await.unwrap(),
+            TxStatus::Pending,
+            "router tx not seen yet"
+        );
+        shared.lock().unwrap().by_msg.insert(
+            at(&h1),
+            router_tx(json!({"aborted": true, "compute_ph": {"success": false, "exit_code": 742}})),
+        );
+        assert!(
+            matches!(a.tx_status(&id).await.unwrap(), TxStatus::Reverted { reason } if reason.contains("742")),
+            "the router refused it"
+        );
+        shared
+            .lock()
+            .unwrap()
+            .by_msg
+            .insert(at(&h1), router_tx(ok.clone()));
+        assert_eq!(
+            a.tx_status(&id).await.unwrap(),
+            TxStatus::Pending,
+            "escrow open (funded, the call is out)"
+        );
+        assert!(
+            shared.lock().unwrap().posted.is_empty(),
+            "no refund before the deadline"
+        );
         // closed, but no event of OUR relay of this (payer, ref) seen yet: another payer's, another ref's, another
         // relayer's release, a griefer's copied RelayCall refunded with amount 0 to itself: still pending
-        shared.lock().unwrap().getters.insert("get_escrow_state".into(), num(0));
-        let ev = |c: &Arc<Cell>, h: u8, seq: u64| json!({"hash": b64encode(&[h; 32]), "description": ok, "mc_block_seqno": seq,
-            "out_msgs": [{"destination": null, "message_content": {"body": b64encode(&boc_serialize(c))}}]});
-        let griefer = Addr { wc: 0, hash: [0x6e; 32] };
-        shared.lock().unwrap().by_account = vec![ev(&refunded_event(&r, &m.from, &griefer, 0), 0x0a, 11), ev(&paid_event(&r, &MASTER, &me), 0x0d, 10),
-            ev(&refunded_event(&[9; 32], &m.from, &me, 25), 0x0e, 9), ev(&paid_event(&r, &m.from, &griefer), 0x0b, 8)];
-        assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending, "never refunded by absence, never another relayer's outcome");
+        shared
+            .lock()
+            .unwrap()
+            .getters
+            .insert("get_escrow_state".into(), num(0));
+        let ev = |c: &Arc<Cell>, h: u8, seq: u64| {
+            json!({"hash": b64encode(&[h; 32]), "description": ok, "mc_block_seqno": seq,
+            "out_msgs": [{"destination": null, "message_content": {"body": b64encode(&boc_serialize(c))}}]})
+        };
+        let griefer = Addr {
+            wc: 0,
+            hash: [0x6e; 32],
+        };
+        shared.lock().unwrap().by_account = vec![
+            ev(&refunded_event(&r, &m.from, &griefer, 0), 0x0a, 11),
+            ev(&paid_event(&r, &MASTER, &me), 0x0d, 10),
+            ev(&refunded_event(&[9; 32], &m.from, &me, 25), 0x0e, 9),
+            ev(&paid_event(&r, &m.from, &griefer), 0x0b, 8),
+        ];
+        assert_eq!(
+            a.tx_status(&id).await.unwrap(),
+            TxStatus::Pending,
+            "never refunded by absence, never another relayer's outcome"
+        );
         // ours refunded, positively
-        shared.lock().unwrap().by_account.push(ev(&refunded_event(&r, &m.from, &me, 25), 0x0f, 7));
+        shared
+            .lock()
+            .unwrap()
+            .by_account
+            .push(ev(&refunded_event(&r, &m.from, &me, 25), 0x0f, 7));
         let refunded = a.tx_status(&id).await.unwrap();
-        assert!(matches!(&refunded, TxStatus::Reverted { reason } if reason.contains("refunded")), "{refunded:?}");
+        assert!(
+            matches!(&refunded, TxStatus::Reverted { reason } if reason.contains("refunded")),
+            "{refunded:?}"
+        );
         // ours released: a release wins over a refund of ours (an earlier attempt), whatever the order
-        shared.lock().unwrap().by_account = vec![ev(&refunded_event(&r, &m.from, &me, 0), 0x0f, 8), ev(&paid_event(&r, &m.from, &me), 0x0c, 7)];
-        assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Mined { height: 7, tx_hash: Some(hex0x(&[0x0c; 32])) });
+        shared.lock().unwrap().by_account = vec![
+            ev(&refunded_event(&r, &m.from, &me, 0), 0x0f, 8),
+            ev(&paid_event(&r, &m.from, &me), 0x0c, 7),
+        ];
+        assert_eq!(
+            a.tx_status(&id).await.unwrap(),
+            TxStatus::Mined {
+                height: 7,
+                tx_hash: Some(hex0x(&[0x0c; 32]))
+            }
+        );
         // a relay-fee job is never "consumed" by its spent pay lane (a refunded escrow spends it too)
         assert_eq!(a.op_consumed(&job_of(&o)).await.unwrap(), None);
     }
 
-    async fn try_relay(a: &TonAdapter, tgt: (Arc<Cell>, Arc<Cell>, Addr), call: Arc<Cell>) -> std::result::Result<Built, SimError> {
-        a.build(&job_of(&relay_job_at(25, tgt, call, |_| {}).0), 0).await
+    async fn try_relay(
+        a: &TonAdapter,
+        tgt: (Arc<Cell>, Arc<Cell>, Addr),
+        call: Arc<Cell>,
+    ) -> std::result::Result<Built, SimError> {
+        a.build(&job_of(&relay_job_at(25, tgt, call, |_| {}).0), 0)
+            .await
     }
 
     /// The relay is refused for `why` by the call check, before the router is asked to price it (`get_relay_value`,
     /// the step before the lane sends).
-    async fn refused_before_send(a: &TonAdapter, f: &Shared, tgt: (Arc<Cell>, Arc<Cell>, Addr), call: Arc<Cell>, why: &str) {
+    async fn refused_before_send(
+        a: &TonAdapter,
+        f: &Shared,
+        tgt: (Arc<Cell>, Arc<Cell>, Addr),
+        call: Arc<Cell>,
+        why: &str,
+    ) {
         let e = job_refused_before_send(a, f, &relay_job_at(25, tgt, call, |_| {}).0, why).await;
         assert!(e.starts_with("RELAY_CALL_REFUSED"), "{why}: {e}");
     }
@@ -3149,7 +5414,10 @@ mod tests {
         };
         assert!(e.contains(why), "{why}: {e}");
         let ran = f.lock().unwrap().ran.clone();
-        assert!(!ran.iter().any(|m| m == "get_relay_value"), "{why}: priced for sending after the refusal: {ran:?}");
+        assert!(
+            !ran.iter().any(|m| m == "get_relay_value"),
+            "{why}: priced for sending after the refusal: {ran:?}"
+        );
         e
     }
 
@@ -3157,28 +5425,65 @@ mod tests {
     /// wallet after the router escrowed it: valid at most LANE_TTL ahead (E_TTL), within the wallet's balance (E_BALANCE).
     #[tokio::test]
     async fn ton_relay_fee_refuses_failing_payment_before_send() {
-        let (url, sh) = fake_api_shared(Fake { getters: relay_getters(), ..Default::default() }).await;
-        let a = adapter_with(&url, relay_params(12_266_667), vec![crate::config::TokenCfg { address: MASTER.raw(), decimals: 9 }]).unwrap();
+        let (url, sh) = fake_api_shared(Fake {
+            getters: relay_getters(),
+            ..Default::default()
+        })
+        .await;
+        let a = adapter_with(
+            &url,
+            relay_params(12_266_667),
+            vec![crate::config::TokenCfg {
+                address: MASTER.raw(),
+                decimals: 9,
+            }],
+        )
+        .unwrap();
         let call = || signed_call_at(&target(), &[1; 32], |_| {});
         let (o, m, _, _) = relay_job_with(25, call(), |_| {});
-        assert!(a.build(&job_of(&o), 0).await.is_ok(), "a payment within the balance and LANE_TTL");
-        let far = relay_job_with(25, call(), |m| m.valid_until = crate::submit::now() + LANE_TTL_S + 600).0;
+        assert!(
+            a.build(&job_of(&o), 0).await.is_ok(),
+            "a payment within the balance and LANE_TTL"
+        );
+        let far = relay_job_with(25, call(), |m| {
+            m.valid_until = crate::submit::now() + LANE_TTL_S + 600
+        })
+        .0;
         job_refused_before_send(&a, &sh, &far, "LANE_TTL").await;
         // Q1: valid for at most the floor: it could expire in transit
-        let soon = relay_job_with(25, call(), |m| m.valid_until = crate::submit::now() + RELAY_DEADLINE_S - 1).0;
+        let soon = relay_job_with(25, call(), |m| {
+            m.valid_until = crate::submit::now() + RELAY_DEADLINE_S - 1
+        })
+        .0;
         job_refused_before_send(&a, &sh, &soon, "stay valid more than 600 s").await;
         // the lane tx expires half the floor before the payment, and never after the relay's deadline
         let now = crate::submit::now();
-        let (near, nm, _, _) = relay_job_with(25, call(), |m| m.valid_until = now + RELAY_DEADLINE_S + 100);
+        let (near, nm, _, _) =
+            relay_job_with(25, call(), |m| m.valid_until = now + RELAY_DEADLINE_S + 100);
         let b = a.build(&job_of(&near), 0).await.unwrap();
-        assert_eq!(b.valid_until, nm.valid_until - RELAY_DEADLINE_S / 2, "min(valid_until - 300, deadline): the payment's side");
+        assert_eq!(
+            b.valid_until,
+            nm.valid_until - RELAY_DEADLINE_S / 2,
+            "min(valid_until - 300, deadline): the payment's side"
+        );
         let b = a.build(&job_of(&o), 0).await.unwrap();
-        assert_eq!(b.valid_until, RelayCall::parse(&boc_parse(&b.body).unwrap()).unwrap().deadline as u64,
-            "min(valid_until - 300, deadline): the deadline's side (valid for an hour)");
+        assert_eq!(
+            b.valid_until,
+            RelayCall::parse(&boc_parse(&b.body).unwrap())
+                .unwrap()
+                .deadline as u64,
+            "min(valid_until - 300, deadline): the deadline's side (valid for an hour)"
+        );
         // q1: a balance equal to the amount pays
-        sh.lock().unwrap().getters.insert(format!("get_wallet_data@{}", m.contract.raw()), num(25));
+        sh.lock()
+            .unwrap()
+            .getters
+            .insert(format!("get_wallet_data@{}", m.contract.raw()), num(25));
         assert!(a.build(&job_of(&o), 0).await.is_ok(), "balance == amount");
-        sh.lock().unwrap().getters.insert(format!("get_wallet_data@{}", m.contract.raw()), num(24));
+        sh.lock()
+            .unwrap()
+            .getters
+            .insert(format!("get_wallet_data@{}", m.contract.raw()), num(24));
         job_refused_before_send(&a, &sh, &o, "holds 24, the payment is 25").await;
     }
 
@@ -3186,55 +5491,258 @@ mod tests {
     /// so the relayer never pays the bounce of a call bound to fail. Every check has a case that fails without it.
     #[tokio::test]
     async fn ton_relay_fee_refuses_failing_call_before_send() {
-        let (url, sh) = fake_api_shared(Fake { getters: relay_getters(), ..Default::default() }).await;
-        let a = adapter_with(&url, relay_params(12_266_667), vec![crate::config::TokenCfg { address: MASTER.raw(), decimals: 9 }]).unwrap();
+        let (url, sh) = fake_api_shared(Fake {
+            getters: relay_getters(),
+            ..Default::default()
+        })
+        .await;
+        let a = adapter_with(
+            &url,
+            relay_params(12_266_667),
+            vec![crate::config::TokenCfg {
+                address: MASTER.raw(),
+                decimals: 9,
+            }],
+        )
+        .unwrap();
         let (w, t) = (target_init(), target());
-        let ok = |r: std::result::Result<Built, SimError>, what: &str| assert!(r.is_ok(), "{what}: {r:?}");
+        let ok = |r: std::result::Result<Built, SimError>, what: &str| {
+            assert!(r.is_ok(), "{what}: {r:?}")
+        };
         let call = |f: &dyn Fn(&mut MetaOp)| signed_call_at(&t, &[1; 32], f);
-        let other = Addr { wc: 0, hash: [0x99; 32] };
+        let other = Addr {
+            wc: 0,
+            hash: [0x99; 32],
+        };
         // a passkey record: pubkey:264 rpIdHash:256 ^origin (jetton.tact set_key)
-        let record = Builder::new().bytes(&[2; 33]).bytes(&[3; 32]).reference(Builder::new().bytes(b"https://x").end().unwrap()).end().unwrap();
+        let record = Builder::new()
+            .bytes(&[2; 33])
+            .bytes(&[3; 32])
+            .reference(Builder::new().bytes(b"https://x").end().unwrap())
+            .end()
+            .unwrap();
         let junk = Builder::new().uint(1, 8).end().unwrap();
-        let passkey = auth_cell(&Auth::Passkey { r: [1; 32], s: [2; 32], authenticator_data: vec![0; 37],
-            client_data_json: format!("{CDJ_PREFIX}{}\",\"origin\":\"https://x\"}}", "A".repeat(43)) }).unwrap();
+        let passkey = auth_cell(&Auth::Passkey {
+            r: [1; 32],
+            s: [2; 32],
+            authenticator_data: vec![0; 37],
+            client_data_json: format!(
+                "{CDJ_PREFIX}{}\",\"origin\":\"https://x\"}}",
+                "A".repeat(43)
+            ),
+        })
+        .unwrap();
 
-        ok(try_relay(&a, w.clone(), call(&|_| {})).await, "the owner's own set_key (drop the passkey)");
-        ok(try_relay(&a, w.clone(), resign(&call(&|m| m.extra = record.hash()), Some(record.clone()), None, None, None)).await, "set_key of a record");
+        ok(
+            try_relay(&a, w.clone(), call(&|_| {})).await,
+            "the owner's own set_key (drop the passkey)",
+        );
+        ok(
+            try_relay(
+                &a,
+                w.clone(),
+                resign(
+                    &call(&|m| m.extra = record.hash()),
+                    Some(record.clone()),
+                    None,
+                    None,
+                    None,
+                ),
+            )
+            .await,
+            "set_key of a record",
+        );
         // the envelope
-        refused_before_send(&a, &sh, w.clone(), call(&|m| m.contract = other), "contract, network or from").await;
-        refused_before_send(&a, &sh, w.clone(), call(&|m| m.network = -3), "contract, network or from").await;
-        refused_before_send(&a, &sh, w.clone(), call(&|m| m.from = other), "contract, network or from").await;
-        refused_before_send(&a, &sh, w.clone(), call(&|m| m.valid_until = crate::submit::now() + 60), "deadline").await;
-        refused_before_send(&a, &sh, w.clone(), call(&|m| m.relayer = Some(other)), "relayer other than its executor").await;
-        refused_before_send(&a, &sh, w.clone(), resign(&call(&|_| {}), None, None, Some(other), None), "not the payer's executor").await;
+        refused_before_send(
+            &a,
+            &sh,
+            w.clone(),
+            call(&|m| m.contract = other),
+            "contract, network or from",
+        )
+        .await;
+        refused_before_send(
+            &a,
+            &sh,
+            w.clone(),
+            call(&|m| m.network = -3),
+            "contract, network or from",
+        )
+        .await;
+        refused_before_send(
+            &a,
+            &sh,
+            w.clone(),
+            call(&|m| m.from = other),
+            "contract, network or from",
+        )
+        .await;
+        refused_before_send(
+            &a,
+            &sh,
+            w.clone(),
+            call(&|m| m.valid_until = crate::submit::now() + 60),
+            "deadline",
+        )
+        .await;
+        refused_before_send(
+            &a,
+            &sh,
+            w.clone(),
+            call(&|m| m.relayer = Some(other)),
+            "relayer other than its executor",
+        )
+        .await;
+        refused_before_send(
+            &a,
+            &sh,
+            w.clone(),
+            resign(&call(&|_| {}), None, None, Some(other), None),
+            "not the payer's executor",
+        )
+        .await;
         refused_before_send(&a, &sh, w.clone(), served_call(5, None), "").await;
         // the jetton wallet
-        refused_before_send(&a, &sh, w.clone(), signed_call_at(&t, &[3; 32], |_| {}), "signature does not verify").await;
-        refused_before_send(&a, &sh, w.clone(), call(&|m| m.valid_until = crate::submit::now() + LANE_TTL_S + 600), "LANE_TTL").await;
-        refused_before_send(&a, &sh, w.clone(), resign(&call(&|m| m.op = 4), None, Some(passkey.clone()), None, None), "passkey").await;
-        refused_before_send(&a, &sh, w.clone(), resign(&call(&|_| {}), None, Some(passkey.clone()), None, None), "passkey").await;
+        refused_before_send(
+            &a,
+            &sh,
+            w.clone(),
+            signed_call_at(&t, &[3; 32], |_| {}),
+            "signature does not verify",
+        )
+        .await;
+        refused_before_send(
+            &a,
+            &sh,
+            w.clone(),
+            call(&|m| m.valid_until = crate::submit::now() + LANE_TTL_S + 600),
+            "LANE_TTL",
+        )
+        .await;
+        refused_before_send(
+            &a,
+            &sh,
+            w.clone(),
+            resign(
+                &call(&|m| m.op = 4),
+                None,
+                Some(passkey.clone()),
+                None,
+                None,
+            ),
+            "passkey",
+        )
+        .await;
+        refused_before_send(
+            &a,
+            &sh,
+            w.clone(),
+            resign(&call(&|_| {}), None, Some(passkey.clone()), None, None),
+            "passkey",
+        )
+        .await;
         refused_before_send(&a, &sh, w.clone(), call(&|m| m.extra = [9; 32]), "set_key").await;
-        refused_before_send(&a, &sh, w.clone(), resign(&call(&|m| m.extra = [9; 32]), Some(record.clone()), None, None, None), "set_key").await;
-        refused_before_send(&a, &sh, w.clone(), resign(&call(&|m| m.extra = junk.hash()), Some(junk.clone()), None, None, None), "set_key").await;
+        refused_before_send(
+            &a,
+            &sh,
+            w.clone(),
+            resign(
+                &call(&|m| m.extra = [9; 32]),
+                Some(record.clone()),
+                None,
+                None,
+                None,
+            ),
+            "set_key",
+        )
+        .await;
+        refused_before_send(
+            &a,
+            &sh,
+            w.clone(),
+            resign(
+                &call(&|m| m.extra = junk.hash()),
+                Some(junk.clone()),
+                None,
+                None,
+                None,
+            ),
+            "set_key",
+        )
+        .await;
         // a revoke of an order already out (the lane is at n + 1) forwards its cancel
-        sh.lock().unwrap().getters.insert(format!("get_lane_nonce@{}", t.raw()), num(1));
+        sh.lock()
+            .unwrap()
+            .getters
+            .insert(format!("get_lane_nonce@{}", t.raw()), num(1));
         refused_before_send(&a, &sh, w.clone(), call(&|m| m.op = 4), "CANCEL_TON").await;
-        ok(try_relay(&a, w.clone(), resign(&call(&|m| m.op = 4), None, None, None, Some(CANCEL_TON))).await, "a cancel with CANCEL_TON");
-        sh.lock().unwrap().getters.remove(&format!("get_lane_nonce@{}", t.raw()));
+        ok(
+            try_relay(
+                &a,
+                w.clone(),
+                resign(&call(&|m| m.op = 4), None, None, None, Some(CANCEL_TON)),
+            )
+            .await,
+            "a cancel with CANCEL_TON",
+        );
+        sh.lock()
+            .unwrap()
+            .getters
+            .remove(&format!("get_lane_nonce@{}", t.raw()));
         // a code that is neither the wallet's nor the Mandate's: refused for good, never retried
         let unknown = target_of(Builder::new().uint(0xbad, 16).end().unwrap());
-        refused_before_send(&a, &sh, unknown.clone(), signed_call_at(&unknown.2, &[1; 32], |m| m.op = 4), "unknown target code").await;
+        refused_before_send(
+            &a,
+            &sh,
+            unknown.clone(),
+            signed_call_at(&unknown.2, &[1; 32], |m| m.op = 4),
+            "unknown target code",
+        )
+        .await;
         // the Mandate: an owner revoke, TON Connect, at its lane nonce, by the owner key, of a live Mandate
         let md = mandate_init();
         let revoke = |key: &[u8; 32]| signed_call_at(&md.2, key, |m| m.op = 4);
-        ok(try_relay(&a, md.clone(), revoke(&[1; 32])).await, "the owner's revoke");
+        ok(
+            try_relay(&a, md.clone(), revoke(&[1; 32])).await,
+            "the owner's revoke",
+        );
         refused_before_send(&a, &sh, md.clone(), revoke(&[3; 32]), "ownerPubkey").await;
-        refused_before_send(&a, &sh, md.clone(), signed_call_at(&md.2, &[1; 32], |_| {}), "only the owner's revoke").await;
-        refused_before_send(&a, &sh, md.clone(), resign(&revoke(&[1; 32]), None, Some(passkey.clone()), None, None), "TON Connect").await;
-        sh.lock().unwrap().getters.insert(format!("get_lane_nonce@{}", md.2.raw()), num(1));
-        refused_before_send(&a, &sh, md.clone(), revoke(&[1; 32]), "Mandate lane nonce is 1").await;
-        sh.lock().unwrap().getters.remove(&format!("get_lane_nonce@{}", md.2.raw()));
-        sh.lock().unwrap().getters.insert("get_state".into(), mandate_state(true));
+        refused_before_send(
+            &a,
+            &sh,
+            md.clone(),
+            signed_call_at(&md.2, &[1; 32], |_| {}),
+            "only the owner's revoke",
+        )
+        .await;
+        refused_before_send(
+            &a,
+            &sh,
+            md.clone(),
+            resign(&revoke(&[1; 32]), None, Some(passkey.clone()), None, None),
+            "TON Connect",
+        )
+        .await;
+        sh.lock()
+            .unwrap()
+            .getters
+            .insert(format!("get_lane_nonce@{}", md.2.raw()), num(1));
+        refused_before_send(
+            &a,
+            &sh,
+            md.clone(),
+            revoke(&[1; 32]),
+            "Mandate lane nonce is 1",
+        )
+        .await;
+        sh.lock()
+            .unwrap()
+            .getters
+            .remove(&format!("get_lane_nonce@{}", md.2.raw()));
+        sh.lock()
+            .unwrap()
+            .getters
+            .insert("get_state".into(), mandate_state(true));
         refused_before_send(&a, &sh, md.clone(), revoke(&[1; 32]), "already revoked").await;
     }
 
@@ -3244,19 +5752,31 @@ mod tests {
     #[tokio::test]
     async fn ton_relay_fee_refunds_after_deadline() {
         let (_, m, op, r) = relay_job(25, |_| {});
-        let getters = HashMap::from([("get_escrow_state".into(), num(2)), ("get_refund_value".into(), num(41_000_000))]);
-        let (url, shared) = fake_api_shared(Fake { getters, ..Default::default() }).await;
+        let getters = HashMap::from([
+            ("get_escrow_state".into(), num(2)),
+            ("get_refund_value".into(), num(41_000_000)),
+        ]);
+        let (url, shared) = fake_api_shared(Fake {
+            getters,
+            ..Default::default()
+        })
+        .await;
         let a = adapter(&url);
         let rc = relay_call_of(&m, op, (crate::submit::now() - 1) as u32);
         let me = a.lane_wallet(0).unwrap().address().unwrap();
         let (lane_tx, h1) = ([0x0au8; 32], [0x01u8; 32]);
         let ok = json!({"compute_ph": {"success": true, "exit_code": 0}});
-        let carry = |rc: &RelayCall| json!({"account": me.raw(), "description": ok, "out_msgs": [
-            {"hash": b64encode(&h1), "destination": ROUTER.raw(), "bounce": true, "message_content": {"body": b64encode(&boc_serialize(&rc.body().unwrap()))}}]});
+        let carry = |rc: &RelayCall| {
+            json!({"account": me.raw(), "description": ok, "out_msgs": [
+            {"hash": b64encode(&h1), "destination": ROUTER.raw(), "bounce": true, "message_content": {"body": b64encode(&boc_serialize(&rc.body().unwrap()))}}]})
+        };
         {
             let mut f = shared.lock().unwrap();
             f.by_msg.insert(alloy::hex::encode(lane_tx), carry(&rc));
-            f.by_msg.insert(alloy::hex::encode(h1), json!({"account": ROUTER.raw(), "description": ok, "out_msgs": []}));
+            f.by_msg.insert(
+                alloy::hex::encode(h1),
+                json!({"account": ROUTER.raw(), "description": ok, "out_msgs": []}),
+            );
         }
         let id = hex0x(&lane_tx);
         assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending);
@@ -3269,20 +5789,35 @@ mod tests {
             c.hash() == *h || c.refs().iter().any(|x| find(x, h))
         }
         assert!(find(&ext, &relay_refund_body(&m.from, &r).unwrap().hash()));
-        let relaxed = internal_message(&ROUTER, 41_000_000, relay_refund_body(&m.from, &r).unwrap()).unwrap();
+        let relaxed =
+            internal_message(&ROUTER, 41_000_000, relay_refund_body(&m.from, &r).unwrap()).unwrap();
         assert!(find(&ext, &relaxed.hash()), "sent with get_refund_value");
         // the retry window passed: sent again
-        a.refunds.write().unwrap().insert(escrow_key(&m.from, &r).unwrap(), crate::submit::now() - RELAY_REFUND_RETRY_S);
+        a.refunds.write().unwrap().insert(
+            escrow_key(&m.from, &r).unwrap(),
+            crate::submit::now() - RELAY_REFUND_RETRY_S,
+        );
         assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending);
         assert_eq!(shared.lock().unwrap().posted.len(), 2);
         // before the deadline nothing is sent while funded…
-        let early = RelayCall { deadline: (crate::submit::now() + 60) as u32, ..rc };
-        shared.lock().unwrap().by_msg.insert(alloy::hex::encode(lane_tx), carry(&early));
+        let early = RelayCall {
+            deadline: (crate::submit::now() + 60) as u32,
+            ..rc
+        };
+        shared
+            .lock()
+            .unwrap()
+            .by_msg
+            .insert(alloy::hex::encode(lane_tx), carry(&early));
         a.refunds.write().unwrap().clear();
         assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending);
         assert_eq!(shared.lock().unwrap().posted.len(), 2);
         // …but an owed settlement (state 3 / 4) is sent again at once
-        shared.lock().unwrap().getters.insert("get_escrow_state".into(), num(3));
+        shared
+            .lock()
+            .unwrap()
+            .getters
+            .insert("get_escrow_state".into(), num(3));
         assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending);
         assert_eq!(shared.lock().unwrap().posted.len(), 3);
     }
@@ -3378,7 +5913,11 @@ mod tests {
         let app = axum::Router::new().fallback(move |h: axum::http::HeaderMap| {
             let s2 = s2.clone();
             async move {
-                s2.lock().unwrap().push(h.get("x-api-key").and_then(|v| v.to_str().ok()).map(str::to_string));
+                s2.lock().unwrap().push(
+                    h.get("x-api-key")
+                        .and_then(|v| v.to_str().ok())
+                        .map(str::to_string),
+                );
                 axum::Json(json!({"seqno": 3}))
             }
         });
@@ -3386,10 +5925,22 @@ mod tests {
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
         std::env::set_var("SCAAS_T22_TON_KEY", "k");
-        let a = adapter_with(&url, toml::Table::from_iter([("api_key_env".to_string(), toml::Value::from("SCAAS_T22_TON_KEY"))]), vec![]).unwrap();
+        let a = adapter_with(
+            &url,
+            toml::Table::from_iter([(
+                "api_key_env".to_string(),
+                toml::Value::from("SCAAS_T22_TON_KEY"),
+            )]),
+            vec![],
+        )
+        .unwrap();
         assert_eq!(a.sequence(0).await.unwrap(), 3);
         assert_eq!(adapter(&url).sequence(0).await.unwrap(), 3);
-        assert_eq!(*seen.lock().unwrap(), [Some("k".to_string()), None], "the key, then control: none configured");
+        assert_eq!(
+            *seen.lock().unwrap(),
+            [Some("k".to_string()), None],
+            "the key, then control: none configured"
+        );
     }
 
     // ---- scaas-rpc T22b: ARCH-POS-15 failover, the first-endpoint carve-out first (F3) ----
@@ -3404,7 +5955,13 @@ mod tests {
     fn signed_pay() -> Job {
         let key = LocalSigner::new(Curve::Ed25519, &[1; 32]).unwrap();
         let w5 = W5::new(key.public_key().try_into().unwrap(), -239).unwrap();
-        let (from, contract) = (w5.address().unwrap(), Addr { wc: 0, hash: [0xc0; 32] });
+        let (from, contract) = (
+            w5.address().unwrap(),
+            Addr {
+                wc: 0,
+                hash: [0xc0; 32],
+            },
+        );
         let vu = crate::submit::now() + 600;
         let op = Builder::new()
             .bytes(b"scaas.metaop.v1")
@@ -3414,12 +5971,31 @@ mod tests {
             .uint(0, 64)
             .uint(vu as u128, 64)
             .addr(Some(&contract))
-            .reference(Builder::new().addr(Some(&from)).addr(Some(&Addr { wc: 0, hash: [2; 32] })).addr(None).end().unwrap())
-            .reference(Builder::new().bytes(&[3; 32]).bytes(&[4; 32]).bytes(&[0; 32]).end().unwrap())
+            .reference(
+                Builder::new()
+                    .addr(Some(&from))
+                    .addr(Some(&Addr {
+                        wc: 0,
+                        hash: [2; 32],
+                    }))
+                    .addr(None)
+                    .end()
+                    .unwrap(),
+            )
+            .reference(
+                Builder::new()
+                    .bytes(&[3; 32])
+                    .bytes(&[4; 32])
+                    .bytes(&[0; 32])
+                    .end()
+                    .unwrap(),
+            )
             .end()
             .unwrap();
         let ts = 1_800_000_000u64;
-        let sig = key.sign(&envelope_hash(&from, ts, "pay.example", &op).unwrap()).unwrap();
+        let sig = key
+            .sign(&envelope_hash(&from, ts, "pay.example", &op).unwrap())
+            .unwrap();
         let signature = json!({"kind": "ton_connect", "signature": b64encode(&sig), "timestamp": ts, "domain": "pay.example",
                                "state_init": b64encode(&boc_serialize(&w5.state_init().unwrap()))});
         serde_json::from_value(json!({"id": 1, "kind": "signed_op", "op": {"contract": contract.raw(), "op_kind": "pay",
@@ -3428,7 +6004,13 @@ mod tests {
     }
 
     fn lane_at(next: u128) -> Fake {
-        Fake { getters: HashMap::from([("get_lane_nonce".into(), num(next)), ("get_owner_pubkey".into(), num(0))]), ..Default::default() }
+        Fake {
+            getters: HashMap::from([
+                ("get_lane_nonce".into(), num(next)),
+                ("get_owner_pubkey".into(), num(0)),
+            ]),
+            ..Default::default()
+        }
     }
 
     /// F3: a status, `op_consumed` and the lane sequence are endpoint 0's only: with it down each is unread (asked again;
@@ -3441,16 +6023,28 @@ mod tests {
         // the round-end matrix: endpoint 0's head recorded (seqno 1, the fake's root hash), so endpoint 1 is an endpoint of this
         // network (T24.6) and only the endpoint-0 carve-out keeps it unasked
         a.api.saw_head(1, &b64encode(&[0; 32]));
-        assert!(a.tx_status(&format!("0x{}", "11".repeat(32))).await.is_err(), "unread, never Unknown from endpoint 1");
+        assert!(
+            a.tx_status(&format!("0x{}", "11".repeat(32)))
+                .await
+                .is_err(),
+            "unread, never Unknown from endpoint 1"
+        );
         assert!(a.op_consumed(&signed_pay()).await.is_err());
         assert!(a.sequence(0).await.is_err());
         {
             let g = f.lock().unwrap();
-            assert!(g.ran.is_empty() && g.posted.is_empty() && g.keys.is_empty(), "endpoint 1 never asked");
+            assert!(
+                g.ran.is_empty() && g.posted.is_empty() && g.keys.is_empty(),
+                "endpoint 1 never asked"
+            );
         }
         assert_eq!(a.api.failovers(), 0);
         let a = adapter(&url);
-        assert_eq!(a.op_consumed(&signed_pay()).await.unwrap(), Some(true), "control");
+        assert_eq!(
+            a.op_consumed(&signed_pay()).await.unwrap(),
+            Some(true),
+            "control"
+        );
         assert_eq!(a.sequence(0).await.unwrap(), 3);
     }
 
@@ -3460,30 +6054,51 @@ mod tests {
     #[tokio::test]
     async fn ton_build_reads_fail_over_and_a_failover_refusal_is_no_verdict() {
         std::env::set_var("SCAAS_T22B_TON_KEY", "k");
-        let key = toml::Table::from_iter([("api_key_env".to_string(), toml::Value::from("SCAAS_T22B_TON_KEY"))]);
+        let key = toml::Table::from_iter([(
+            "api_key_env".to_string(),
+            toml::Value::from("SCAAS_T22B_TON_KEY"),
+        )]);
         let (url, f) = fake_api_shared(lane_at(0)).await;
         let a = adapter_on(&[DOWN.to_string(), url], key.clone());
         // T24.6 (fixture correction): endpoint 0's head seen while it was up (seqno 1, the fake's root hash): a later endpoint is checked against it
         a.api.saw_head(1, &b64encode(&[0; 32]));
         a.build(&signed_pay(), 0).await.unwrap();
         assert!(a.api.failovers() > 0);
-        assert!(f.lock().unwrap().keys.iter().all(Option::is_none), "endpoint 0's key never reaches endpoint 1");
+        assert!(
+            f.lock().unwrap().keys.iter().all(Option::is_none),
+            "endpoint 0's key never reaches endpoint 1"
+        );
         let (url, _) = fake_api_shared(lane_at(1)).await;
         let a = adapter_on(&[DOWN.to_string(), url.clone()], key);
         a.api.saw_head(1, &b64encode(&[0; 32])); // T24.6 (fixture correction): endpoint 0's head seen while it was up (seqno 1, the fake's root hash): a later endpoint is checked against it
         match a.build(&signed_pay(), 0).await {
-            Err(SimError::Transport(m)) => assert!(m.starts_with("FAILOVER_ANSWER") && m.contains("lane nonce is 1"), "{m}"),
+            Err(SimError::Transport(m)) => assert!(
+                m.starts_with("FAILOVER_ANSWER") && m.contains("lane nonce is 1"),
+                "{m}"
+            ),
             r => panic!("{r:?}"),
         }
-        assert!(matches!(adapter(&url).build(&signed_pay(), 0).await, Err(SimError::Revert(m)) if m.contains("lane nonce is 1")), "control");
+        assert!(
+            matches!(adapter(&url).build(&signed_pay(), 0).await, Err(SimError::Revert(m)) if m.contains("lane nonce is 1")),
+            "control"
+        );
     }
 
     /// scaas-rpc T24.3: endpoint 0's status other than a 404 (a rate limit) is its failure, never its verdict: the getters fail
     /// over and endpoint 1 builds the job.
     #[tokio::test]
     async fn ton_endpoint_0_rate_limited_fails_over() {
-        let first = crate::adapters::testkit::refusing(&fake_api_shared(lane_at(0)).await.0, |_, _| false, 429, json!({"error": "rate limited"})).await;
-        let a = adapter_on(&[first, fake_api_shared(lane_at(0)).await.0], toml::Table::new());
+        let first = crate::adapters::testkit::refusing(
+            &fake_api_shared(lane_at(0)).await.0,
+            |_, _| false,
+            429,
+            json!({"error": "rate limited"}),
+        )
+        .await;
+        let a = adapter_on(
+            &[first, fake_api_shared(lane_at(0)).await.0],
+            toml::Table::new(),
+        );
         a.api.saw_head(1, &b64encode(&[0; 32])); // T24.6 (fixture correction): endpoint 0's head seen while it was up (seqno 1, the fake's root hash): a later endpoint is checked against it
         a.build(&signed_pay(), 0).await.unwrap();
         assert!(a.api.failovers() > 0);
@@ -3493,37 +6108,73 @@ mod tests {
     /// at masterchain seqno 6 (or its head there), endpoint 1, at seqno 1, is skipped by `build`. Control: before that, endpoint 1 builds.
     #[tokio::test]
     async fn ton_a_mined_status_and_the_head_raise_the_floor() {
-        let first = || crate::adapters::testkit::scripted(false, |p, _| match p {
-            // the lane's transaction, its message's and every next hop's: one transaction, mined at seqno 6
-            "/api/v3/transactionsByMessage" => Some(json!({"transactions": [{"account": format!("0:{}", "11".repeat(32)),
+        let first = || {
+            crate::adapters::testkit::scripted(false, |p, _| match p {
+                // the lane's transaction, its message's and every next hop's: one transaction, mined at seqno 6
+                "/api/v3/transactionsByMessage" => Some(
+                    json!({"transactions": [{"account": format!("0:{}", "11".repeat(32)),
                 "hash": b64encode(&[0x0b; 32]), "description": {"compute_ph": {"success": true, "exit_code": 0}}, "mc_block_seqno": 6,
-                "out_msgs": [{"hash": b64encode(&[1; 32]), "destination": format!("0:{}", "22".repeat(32)), "bounce": true}]}]})),
-            "/api/v3/masterchainInfo" => Some(json!({"last": {"seqno": 6, "root_hash": b64encode(&[0; 32])}})),
-            _ => None,
-        });
-        let a = adapter_on(&[first().await, fake_api_shared(lane_at(0)).await.0], toml::Table::new());
+                "out_msgs": [{"hash": b64encode(&[1; 32]), "destination": format!("0:{}", "22".repeat(32)), "bounce": true}]}]}),
+                ),
+                "/api/v3/masterchainInfo" => {
+                    Some(json!({"last": {"seqno": 6, "root_hash": b64encode(&[0; 32])}}))
+                }
+                _ => None,
+            })
+        };
+        let a = adapter_on(
+            &[first().await, fake_api_shared(lane_at(0)).await.0],
+            toml::Table::new(),
+        );
         a.api.saw_head(1, &b64encode(&[0; 32])); // T24.6 (fixture correction): endpoint 0's head seen while it was up (seqno 1, the fake's root hash): a later endpoint is checked against it
         a.build(&signed_pay(), 0).await.unwrap();
-        assert!(matches!(a.tx_status(&hex0x(&[0x0a; 32])).await.unwrap(), TxStatus::Mined { height: 6, .. }));
-        assert!(matches!(a.build(&signed_pay(), 0).await, Err(SimError::Transport(_))), "endpoint 1 below seqno 6: skipped");
-        let a = adapter_on(&[first().await, fake_api_shared(lane_at(0)).await.0], toml::Table::new());
+        assert!(matches!(
+            a.tx_status(&hex0x(&[0x0a; 32])).await.unwrap(),
+            TxStatus::Mined { height: 6, .. }
+        ));
+        assert!(
+            matches!(a.build(&signed_pay(), 0).await, Err(SimError::Transport(_))),
+            "endpoint 1 below seqno 6: skipped"
+        );
+        let a = adapter_on(
+            &[first().await, fake_api_shared(lane_at(0)).await.0],
+            toml::Table::new(),
+        );
         let _ = a.final_head().await;
-        assert!(matches!(a.build(&signed_pay(), 0).await, Err(SimError::Transport(_))), "the head: the same floor");
+        assert!(
+            matches!(a.build(&signed_pay(), 0).await, Err(SimError::Transport(_))),
+            "the head: the same floor"
+        );
     }
 
     /// scaas-rpc T24.7: `submit` sends to endpoint 0 only, inside `build`'s scope too: with it down the send fails and endpoint 1
     /// is sent nothing. Control: endpoint 0 up takes it.
     #[tokio::test]
     async fn ton_submit_inside_build_asks_endpoint_0_only() {
-        let s = Signed { job_id: 1, tx_id: format!("0x{}", "11".repeat(32)), raw: vec![1, 2, 3], valid_until: u64::MAX / 2, sequence: 0 };
+        let s = Signed {
+            job_id: 1,
+            tx_id: format!("0x{}", "11".repeat(32)),
+            raw: vec![1, 2, 3],
+            valid_until: u64::MAX / 2,
+            sequence: 0,
+        };
         let (url, f) = fake_api_shared(lane_at(0)).await;
         let a = adapter_on(&[DOWN.to_string(), url.clone()], toml::Table::new());
         // the round-end matrix: endpoint 0's head recorded (seqno 1, the fake's root hash), so endpoint 1 is an endpoint of this
         // network (T24.6) and only the endpoint-0 carve-out keeps it unasked
         a.api.saw_head(1, &b64encode(&[0; 32]));
-        assert!(crate::adapters::evm::BUILDING.scope((), a.submit(&s)).await.is_err());
-        assert!(f.lock().unwrap().posted.is_empty(), "endpoint 1 is sent nothing");
-        crate::adapters::evm::BUILDING.scope((), adapter(&url).submit(&s)).await.unwrap();
+        assert!(crate::adapters::evm::BUILDING
+            .scope((), a.submit(&s))
+            .await
+            .is_err());
+        assert!(
+            f.lock().unwrap().posted.is_empty(),
+            "endpoint 1 is sent nothing"
+        );
+        crate::adapters::evm::BUILDING
+            .scope((), adapter(&url).submit(&s))
+            .await
+            .unwrap();
         assert_eq!(f.lock().unwrap().posted.len(), 1, "control");
     }
 
@@ -3532,9 +6183,21 @@ mod tests {
     #[tokio::test]
     async fn ton_a_404_is_read_from_the_status_never_the_text() {
         let (url, _) = fake_api_shared(lane_at(0)).await;
-        let limited = crate::adapters::testkit::refusing(&url, |_, _| false, 429, json!({"error": "rate limited, retry in 404 ms"})).await;
+        let limited = crate::adapters::testkit::refusing(
+            &url,
+            |_, _| false,
+            429,
+            json!({"error": "rate limited, retry in 404 ms"}),
+        )
+        .await;
         assert!(adapter(&limited).sequence(0).await.is_err());
-        let gone = crate::adapters::testkit::refusing(&url, |_, _| false, 404, json!({"error": "not found"})).await;
+        let gone = crate::adapters::testkit::refusing(
+            &url,
+            |_, _| false,
+            404,
+            json!({"error": "not found"}),
+        )
+        .await;
         assert_eq!(adapter(&gone).sequence(0).await.unwrap(), 0, "control");
     }
 
@@ -3544,15 +6207,30 @@ mod tests {
     #[tokio::test]
     async fn ton_a_later_endpoint_is_checked_against_endpoint_0s_head() {
         let first = |root: u8| match root {
-            0 => crate::adapters::testkit::scripted(false, |p, _| (p == "/api/v3/masterchainInfo").then(|| json!({"last": {"seqno": 1, "root_hash": b64encode(&[0; 32])}}))),
-            _ => crate::adapters::testkit::scripted(false, |p, _| (p == "/api/v3/masterchainInfo").then(|| json!({"last": {"seqno": 1, "root_hash": b64encode(&[1; 32])}}))),
+            0 => crate::adapters::testkit::scripted(false, |p, _| {
+                (p == "/api/v3/masterchainInfo")
+                    .then(|| json!({"last": {"seqno": 1, "root_hash": b64encode(&[0; 32])}}))
+            }),
+            _ => crate::adapters::testkit::scripted(false, |p, _| {
+                (p == "/api/v3/masterchainInfo")
+                    .then(|| json!({"last": {"seqno": 1, "root_hash": b64encode(&[1; 32])}}))
+            }),
         };
-        let a = adapter_on(&[first(0).await, fake_api_shared(lane_at(0)).await.0], toml::Table::new());
+        let a = adapter_on(
+            &[first(0).await, fake_api_shared(lane_at(0)).await.0],
+            toml::Table::new(),
+        );
         a.final_head().await.unwrap();
         a.build(&signed_pay(), 0).await.unwrap();
-        let a = adapter_on(&[first(1).await, fake_api_shared(lane_at(0)).await.0], toml::Table::new());
+        let a = adapter_on(
+            &[first(1).await, fake_api_shared(lane_at(0)).await.0],
+            toml::Table::new(),
+        );
         a.final_head().await.unwrap();
-        assert!(matches!(a.build(&signed_pay(), 0).await, Err(SimError::Transport(_))), "another root hash: dropped");
+        assert!(
+            matches!(a.build(&signed_pay(), 0).await, Err(SimError::Transport(_))),
+            "another root hash: dropped"
+        );
     }
 
     /// scaas-rpc T24.10 (spec §5.3, owner 2026-11-18): the TON Center key per endpoint: the list form gives each endpoint its own
@@ -3560,11 +6238,23 @@ mod tests {
     #[tokio::test]
     async fn ton_the_key_goes_to_its_own_endpoint_only() {
         std::env::set_var("SCAAS_T24_10_TON_1", "key-one");
-        let ((u0, f0), (u1, f1)) = (fake_api_shared(lane_at(0)).await, fake_api_shared(lane_at(0)).await);
+        let ((u0, f0), (u1, f1)) = (
+            fake_api_shared(lane_at(0)).await,
+            fake_api_shared(lane_at(0)).await,
+        );
         let keys = toml::Value::Array(vec!["".into(), "SCAAS_T24_10_TON_1".into()]);
-        let a = adapter_on(&[u0, u1], toml::Table::from_iter([("api_key_env".to_string(), keys)]));
+        let a = adapter_on(
+            &[u0, u1],
+            toml::Table::from_iter([("api_key_env".to_string(), keys)]),
+        );
         a.api.net.get(0, "masterchainInfo", &[]).await.unwrap();
         a.api.net.get(1, "masterchainInfo", &[]).await.unwrap();
-        assert_eq!((f0.lock().unwrap().keys.clone(), f1.lock().unwrap().keys.clone()), (vec![None], vec![Some("key-one".to_string())]));
+        assert_eq!(
+            (
+                f0.lock().unwrap().keys.clone(),
+                f1.lock().unwrap().keys.clone()
+            ),
+            (vec![None], vec![Some("key-one".to_string())])
+        );
     }
 }

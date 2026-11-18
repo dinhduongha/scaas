@@ -30,7 +30,9 @@ pub enum LocalSigner {
 impl LocalSigner {
     pub fn new(curve: Curve, secret: &[u8; 32]) -> Result<Self> {
         Ok(match curve {
-            Curve::Secp256k1 => Self::Secp(K256Key::from_bytes(secret.into()).map_err(|_| anyhow!("invalid secp256k1 key"))?),
+            Curve::Secp256k1 => Self::Secp(
+                K256Key::from_bytes(secret.into()).map_err(|_| anyhow!("invalid secp256k1 key"))?,
+            ),
             Curve::Ed25519 => Self::Ed(ed25519_dalek::SigningKey::from_bytes(secret)),
         })
     }
@@ -40,7 +42,10 @@ impl LocalSigner {
         match self {
             Self::Secp(k) => {
                 let pt = k.verifying_key().to_encoded_point(false);
-                format!("0x{}", alloy::hex::encode(&keccak256(&pt.as_bytes()[1..])[12..]))
+                format!(
+                    "0x{}",
+                    alloy::hex::encode(&keccak256(&pt.as_bytes()[1..])[12..])
+                )
             }
             Self::Ed(_) => String::new(),
         }
@@ -49,7 +54,9 @@ impl LocalSigner {
     /// `alloy` signer cho đường EVM (cùng khoá).
     pub fn evm(&self) -> Result<alloy::signers::local::PrivateKeySigner> {
         match self {
-            Self::Secp(k) => Ok(alloy::signers::local::PrivateKeySigner::from_signing_key(k.clone())),
+            Self::Secp(k) => Ok(alloy::signers::local::PrivateKeySigner::from_signing_key(
+                k.clone(),
+            )),
             Self::Ed(_) => bail!("an ed25519 key cannot sign EVM transactions"),
         }
     }
@@ -76,9 +83,15 @@ impl Signer for LocalSigner {
                 if msg.len() != 32 {
                     bail!("secp256k1 signs a 32-byte prehash");
                 }
-                let (sig, rid) = k.sign_prehash_recoverable(msg).map_err(|e| anyhow!("sign: {e}"))?;
+                let (sig, rid) = k
+                    .sign_prehash_recoverable(msg)
+                    .map_err(|e| anyhow!("sign: {e}"))?;
                 let (sig, rid) = match sig.normalize_s() {
-                    Some(low) => (low, alloy::signers::k256::ecdsa::RecoveryId::from_byte(rid.to_byte() ^ 1).expect("rid")),
+                    Some(low) => (
+                        low,
+                        alloy::signers::k256::ecdsa::RecoveryId::from_byte(rid.to_byte() ^ 1)
+                            .expect("rid"),
+                    ),
                     None => (sig, rid),
                 };
                 let mut out = sig.to_bytes().to_vec();
@@ -102,7 +115,11 @@ pub fn crc16_xmodem(data: &[u8]) -> u16 {
     for &b in data {
         crc ^= (b as u16) << 8;
         for _ in 0..8 {
-            crc = if crc & 0x8000 != 0 { (crc << 1) ^ 0x1021 } else { crc << 1 };
+            crc = if crc & 0x8000 != 0 {
+                (crc << 1) ^ 0x1021
+            } else {
+                crc << 1
+            };
         }
     }
     crc
@@ -142,10 +159,11 @@ mod tests {
 
     #[test]
     fn secp256k1_signature_recovers_and_is_low_s() {
-        let k: [u8; 32] = alloy::hex::decode("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
-            .unwrap()
-            .try_into()
-            .unwrap();
+        let k: [u8; 32] =
+            alloy::hex::decode("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
+                .unwrap()
+                .try_into()
+                .unwrap();
         let s = LocalSigner::new(Curve::Secp256k1, &k).unwrap();
         let digest = [0x11u8; 32];
         let sig = s.sign(&digest).unwrap();
@@ -154,7 +172,10 @@ mod tests {
         let rec = parsed.recover_address_from_prehash(&digest.into()).unwrap();
         assert_eq!(format!("{rec:#x}"), s.address_hex());
         let n_half = alloy::primitives::U256::from_str_radix(
-            "7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a0", 16).unwrap();
+            "7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a0",
+            16,
+        )
+        .unwrap();
         assert!(parsed.s() <= n_half);
         // `cast wallet sign --no-hash 0x11..11` (RFC 6979) gives the same signature.
         assert_eq!(alloy::hex::encode(&sig),
@@ -164,12 +185,16 @@ mod tests {
 
     #[test]
     fn ed25519_rfc8032_test_1() {
-        let k: [u8; 32] = alloy::hex::decode("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
-            .unwrap()
-            .try_into()
-            .unwrap();
+        let k: [u8; 32] =
+            alloy::hex::decode("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
+                .unwrap()
+                .try_into()
+                .unwrap();
         let s = LocalSigner::new(Curve::Ed25519, &k).unwrap();
-        assert_eq!(alloy::hex::encode(s.public_key()), "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a");
+        assert_eq!(
+            alloy::hex::encode(s.public_key()),
+            "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+        );
         assert_eq!(alloy::hex::encode(s.sign(b"").unwrap()),
             "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b");
     }

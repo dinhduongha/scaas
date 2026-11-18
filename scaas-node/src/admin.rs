@@ -69,7 +69,9 @@ pub struct Snapshot {
 }
 
 fn esc(v: &str) -> String {
-    v.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n")
+    v.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
 }
 
 /// Thuần: số đọc ⇒ sẵn sàng + lý do + văn bản Prometheus (viết tay, không thêm crate).
@@ -83,7 +85,8 @@ pub fn render(readings: &[Reading]) -> Snapshot {
         }
     };
     let mut jobs = Vec::new();
-    let (mut attention, mut lag, mut drift, mut balance, mut open, mut unread) = (vec![], vec![], vec![], vec![], vec![], vec![]);
+    let (mut attention, mut lag, mut drift, mut balance, mut open, mut unread) =
+        (vec![], vec![], vec![], vec![], vec![], vec![]);
     let mut failover = vec![];
     for r in readings {
         let c = esc(&r.key);
@@ -92,10 +95,16 @@ pub fn render(readings: &[Reading]) -> Snapshot {
             reasons.push(crate::chain::redact_urls(&format!("{}: rpc: {e}", r.key)));
         }
         match &r.stats {
-            Err(e) => reasons.push(crate::chain::redact_urls(&format!("{}: external_pull: {e}", r.key))),
+            Err(e) => reasons.push(crate::chain::redact_urls(&format!(
+                "{}: external_pull: {e}",
+                r.key
+            ))),
             Ok(s) => {
                 for (state, n) in &s.jobs {
-                    jobs.push((format!("chain=\"{c}\",state=\"{}\"", esc(state)), n.to_string()));
+                    jobs.push((
+                        format!("chain=\"{c}\",state=\"{}\"", esc(state)),
+                        n.to_string(),
+                    ));
                 }
                 attention.push((format!("chain=\"{c}\""), s.attention.to_string()));
                 drift.push((format!("chain=\"{c}\""), s.drift_alerts.to_string()));
@@ -114,22 +123,71 @@ pub fn render(readings: &[Reading]) -> Snapshot {
                 balance.push((format!("chain=\"{c}\",lane=\"{l}\""), b.to_string()));
             }
             for (name, on) in NAMES.iter().zip(states) {
-                open.push((format!("chain=\"{c}\",lane=\"{l}\",breaker=\"{name}\""), u8::from(*on).to_string()));
+                open.push((
+                    format!("chain=\"{c}\",lane=\"{l}\",breaker=\"{name}\""),
+                    u8::from(*on).to_string(),
+                ));
             }
-            unread.push((format!("chain=\"{c}\",lane=\"{l}\""), fees_unread.to_string()));
+            unread.push((
+                format!("chain=\"{c}\",lane=\"{l}\""),
+                fees_unread.to_string(),
+            ));
         }
     }
-    fam("scaas_relay_jobs", "Relay jobs by chain state.", "gauge", jobs);
-    fam("scaas_payment_requests_attention", "Payment requests needing attention.", "gauge", attention);
-    fam("scaas_indexer_lag_blocks", "Final head minus the indexed block.", "gauge", lag);
-    fam("scaas_relayer_balance", "Relayer lane balance in the smallest gas-coin unit.", "gauge", balance);
-    fam("scaas_breaker_open", "Gas circuit breaker open (1) per lane.", "gauge", open);
-    fam("scaas_fee_unread_total", "Landed transactions whose fee could not be read, so the gas budget missed it.", "counter", unread);
-    fam("scaas_drift_alerts", "Unmatched inbound transfers plus balance mismatches.", "gauge", drift);
-    fam("scaas_rpc_failover_answers_total", "Chain reads answered by an rpc_urls endpoint other than the first (no job dead on them).",
-        "counter", failover);
+    fam(
+        "scaas_relay_jobs",
+        "Relay jobs by chain state.",
+        "gauge",
+        jobs,
+    );
+    fam(
+        "scaas_payment_requests_attention",
+        "Payment requests needing attention.",
+        "gauge",
+        attention,
+    );
+    fam(
+        "scaas_indexer_lag_blocks",
+        "Final head minus the indexed block.",
+        "gauge",
+        lag,
+    );
+    fam(
+        "scaas_relayer_balance",
+        "Relayer lane balance in the smallest gas-coin unit.",
+        "gauge",
+        balance,
+    );
+    fam(
+        "scaas_breaker_open",
+        "Gas circuit breaker open (1) per lane.",
+        "gauge",
+        open,
+    );
+    fam(
+        "scaas_fee_unread_total",
+        "Landed transactions whose fee could not be read, so the gas budget missed it.",
+        "counter",
+        unread,
+    );
+    fam(
+        "scaas_drift_alerts",
+        "Unmatched inbound transfers plus balance mismatches.",
+        "gauge",
+        drift,
+    );
+    fam(
+        "scaas_rpc_failover_answers_total",
+        "Chain reads answered by an rpc_urls endpoint other than the first (no job dead on them).",
+        "counter",
+        failover,
+    );
     let ready = reasons.is_empty() && !readings.is_empty();
-    Snapshot { ready, reasons, metrics: m }
+    Snapshot {
+        ready,
+        reasons,
+        metrics: m,
+    }
 }
 
 async fn read(p: &ChainProbe, external_pull: &ExternalPull) -> Reading {
@@ -141,7 +199,11 @@ async fn read(p: &ChainProbe, external_pull: &ExternalPull) -> Reading {
     };
     let stats = match tokio::time::timeout(
         PROBE_TIMEOUT,
-        external_pull.call::<Stats>("blockchain.chain", "relay_stats", json!({"chain_key": p.key})),
+        external_pull.call::<Stats>(
+            "blockchain.chain",
+            "relay_stats",
+            json!({"chain_key": p.key}),
+        ),
     )
     .await
     {
@@ -154,11 +216,22 @@ async fn read(p: &ChainProbe, external_pull: &ExternalPull) -> Reading {
         .lanes
         .iter()
         .map(|l| {
-            let (bal, st, unread) = l.breaker.lock().map(|mut k| (k.last_balance(), k.states(t), k.fees_unread())).unwrap_or((None, [false; 3], 0));
+            let (bal, st, unread) = l
+                .breaker
+                .lock()
+                .map(|mut k| (k.last_balance(), k.states(t), k.fees_unread()))
+                .unwrap_or((None, [false; 3], 0));
             (l.lane.clone(), bal, st, unread)
         })
         .collect();
-    Reading { key: p.key.clone(), head, stats, max_lag: p.max_lag, lanes, failover: p.failover.load(std::sync::atomic::Ordering::Relaxed) }
+    Reading {
+        key: p.key.clone(),
+        head,
+        stats,
+        max_lag: p.max_lag,
+        lanes,
+        failover: p.failover.load(std::sync::atomic::Ordering::Relaxed),
+    }
 }
 
 /// Tuần tự theo chain, mỗi lần đọc có trần 3 s.
@@ -171,7 +244,11 @@ pub async fn refresh(probes: &[ChainProbe], external_pull: &ExternalPull) -> Sna
     render(&readings)
 }
 
-pub async fn refresh_loop(probes: Vec<ChainProbe>, external_pull: ExternalPull, snap: Arc<RwLock<Snapshot>>) {
+pub async fn refresh_loop(
+    probes: Vec<ChainProbe>,
+    external_pull: ExternalPull,
+    snap: Arc<RwLock<Snapshot>>,
+) {
     loop {
         let s = refresh(&probes, &external_pull).await;
         if let Ok(mut w) = snap.write() {
@@ -183,8 +260,16 @@ pub async fn refresh_loop(probes: Vec<ChainProbe>, external_pull: ExternalPull, 
 
 async fn readyz(State(snap): State<Arc<RwLock<Snapshot>>>) -> impl IntoResponse {
     let s = snap.read().map(|s| s.clone()).unwrap_or_default();
-    let code = if s.ready { StatusCode::OK } else { StatusCode::SERVICE_UNAVAILABLE };
-    let reasons = if s.ready || !s.reasons.is_empty() { s.reasons } else { vec!["starting".into()] };
+    let code = if s.ready {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
+    let reasons = if s.ready || !s.reasons.is_empty() {
+        s.reasons
+    } else {
+        vec!["starting".into()]
+    };
     (code, Json(json!({"ready": s.ready, "reasons": reasons})))
 }
 
@@ -223,7 +308,9 @@ mod tests {
             head: Ok(120),
             stats: Ok(Stats {
                 indexed_block: 100,
-                jobs: [("dead".to_string(), 2), ("queued".to_string(), 5)].into_iter().collect(),
+                jobs: [("dead".to_string(), 2), ("queued".to_string(), 5)]
+                    .into_iter()
+                    .collect(),
                 attention: 1,
                 drift_alerts: 3,
             }),
@@ -240,7 +327,10 @@ mod tests {
         let mut r = ok_reading();
         r.head = Err("timeout for url (http://10.0.0.7:8545/KEY)".into());
         let s = render(&[r]);
-        assert!(!s.ready && s.reasons[0].contains("rpc") && !s.reasons[0].contains("KEY"), "recheck R-7: no URL in /readyz");
+        assert!(
+            !s.ready && s.reasons[0].contains("rpc") && !s.reasons[0].contains("KEY"),
+            "recheck R-7: no URL in /readyz"
+        );
         let mut r = ok_reading();
         r.stats = Err("HTTP 500".into());
         let s = render(&[r]);
@@ -291,17 +381,27 @@ scaas_rpc_failover_answers_total{chain=\"evm:7622\"} 4
         let snap = Arc::new(RwLock::new(Snapshot::default()));
         let app = router(snap.clone());
         let get = |p: &str| Request::builder().uri(p).body(Body::empty()).unwrap();
-        assert_eq!(app.clone().oneshot(get("/healthz")).await.unwrap().status(), StatusCode::OK);
+        assert_eq!(
+            app.clone().oneshot(get("/healthz")).await.unwrap().status(),
+            StatusCode::OK
+        );
         let r = app.clone().oneshot(get("/readyz")).await.unwrap();
         assert_eq!(r.status(), StatusCode::SERVICE_UNAVAILABLE);
         let body = to_bytes(r.into_body(), 4096).await.unwrap();
         assert!(String::from_utf8_lossy(&body).contains("starting"));
         *snap.write().unwrap() = render(&[ok_reading()]);
-        assert_eq!(app.clone().oneshot(get("/readyz")).await.unwrap().status(), StatusCode::OK);
+        assert_eq!(
+            app.clone().oneshot(get("/readyz")).await.unwrap().status(),
+            StatusCode::OK
+        );
         let r = app.oneshot(get("/metrics")).await.unwrap();
-        assert!(r.headers()[header::CONTENT_TYPE].to_str().unwrap().starts_with("text/plain"));
+        assert!(r.headers()[header::CONTENT_TYPE]
+            .to_str()
+            .unwrap()
+            .starts_with("text/plain"));
         let body = to_bytes(r.into_body(), 1 << 16).await.unwrap();
         assert!(String::from_utf8_lossy(&body).contains("scaas_breaker_open"));
-        assert!(String::from_utf8_lossy(&body).contains("\n# TYPE scaas_config_toml_drift gauge\nscaas_config_toml_drift "));
+        assert!(String::from_utf8_lossy(&body)
+            .contains("\n# TYPE scaas_config_toml_drift gauge\nscaas_config_toml_drift "));
     }
 }

@@ -7,7 +7,10 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection, SqliteJournalMode, SqlitePool, SqlitePoolOptions, SqliteSynchronous};
+use sqlx::sqlite::{
+    SqliteConnectOptions, SqliteConnection, SqliteJournalMode, SqlitePool, SqlitePoolOptions,
+    SqliteSynchronous,
+};
 use sqlx::{Sqlite, Transaction};
 
 use super::*;
@@ -48,7 +51,9 @@ impl SqliteStore {
 
     async fn open_with(url: &str, owner: &str, create: bool) -> Result<Self> {
         if url.contains(":memory:") || url.contains("mode=memory") {
-            return Err(StoreError::Invalid("an in-memory store has no owner lock".into()));
+            return Err(StoreError::Invalid(
+                "an in-memory store has no owner lock".into(),
+            ));
         }
         let opts = SqliteConnectOptions::from_str(url)?
             .create_if_missing(false)
@@ -57,10 +62,17 @@ impl SqliteStore {
             .foreign_keys(true)
             .busy_timeout(Duration::from_secs(5));
         let file = opts.get_filename().to_path_buf();
-        let io = |p: &std::path::Path, e: std::io::Error| StoreError::Invalid(format!("{}: {e}", p.display()));
+        let io = |p: &std::path::Path, e: std::io::Error| {
+            StoreError::Invalid(format!("{}: {e}", p.display()))
+        };
         if create {
             // -wal/-shm inherit the database file's mode (SQLite unix VFS).
-            File::options().write(true).create_new(true).mode(0o600).open(&file).map_err(|e| io(&file, e))?;
+            File::options()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .open(&file)
+                .map_err(|e| io(&file, e))?;
         } else if !file.exists() {
             return Err(StoreError::Invalid(format!(
                 "store {} not found; run `scaas-node store init --config <node.toml>` for a new node", file.display())));
@@ -71,34 +83,61 @@ impl SqliteStore {
         let mut lock_path = file.into_os_string();
         lock_path.push(".lock");
         let lock_path = PathBuf::from(lock_path);
-        let lock = File::options().read(true).write(true).create(true).truncate(false).mode(0o600).open(&lock_path)
+        let lock = File::options()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .mode(0o600)
+            .open(&lock_path)
             .map_err(|e| io(&lock_path, e))?;
-        lock.try_lock().map_err(|e| StoreError::Owned(format!("{}: {e}", lock_path.display())))?;
-        let lock_id = lock.metadata().map(|m| (m.dev(), m.ino())).map_err(|e| io(&lock_path, e))?;
-        let pool = SqlitePoolOptions::new().max_connections(1).connect_with(opts).await?;
+        lock.try_lock()
+            .map_err(|e| StoreError::Owned(format!("{}: {e}", lock_path.display())))?;
+        let lock_id = lock
+            .metadata()
+            .map(|m| (m.dev(), m.ino()))
+            .map_err(|e| io(&lock_path, e))?;
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(opts)
+            .await?;
         sqlx::migrate!("migrations/sqlite").run(&pool).await?;
         let now = now_ms();
         let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
-        sqlx::query("INSERT INTO meta (name, value) VALUES ('store_id', ?) ON CONFLICT (name) DO NOTHING")
-            .bind(hex16()).execute(&mut *tx).await?;
+        sqlx::query(
+            "INSERT INTO meta (name, value) VALUES ('store_id', ?) ON CONFLICT (name) DO NOTHING",
+        )
+        .bind(hex16())
+        .execute(&mut *tx)
+        .await?;
         let incarnation = hex16();
         let epoch: i64 = sqlx::query_scalar(
             "UPDATE store_owner SET epoch = epoch + 1, incarnation = ?, owner = ?, since = ? WHERE id = 1 RETURNING epoch")
             .bind(&incarnation).bind(owner).bind(now).fetch_one(&mut *tx).await?;
         let store_id: String = sqlx::query_scalar("SELECT value FROM meta WHERE name = 'store_id'")
-            .fetch_one(&mut *tx).await?;
-        let restore: String = sqlx::query_scalar("SELECT value FROM meta WHERE name = 'restore_epoch'")
-            .fetch_one(&mut *tx).await?;
+            .fetch_one(&mut *tx)
+            .await?;
+        let restore: String =
+            sqlx::query_scalar("SELECT value FROM meta WHERE name = 'restore_epoch'")
+                .fetch_one(&mut *tx)
+                .await?;
         for ns in RESERVED {
             sqlx::query("INSERT INTO namespace (name, state, created_at, updated_at) VALUES (?, 'active', ?, ?) \
                          ON CONFLICT (name) DO NOTHING")
                 .bind(ns).bind(now).bind(now).execute(&mut *tx).await?;
         }
         tx.commit().await?;
-        let restore_epoch = restore.parse().map_err(|_| StoreError::Invalid(format!("meta restore_epoch {restore}")))?;
+        let restore_epoch = restore
+            .parse()
+            .map_err(|_| StoreError::Invalid(format!("meta restore_epoch {restore}")))?;
         Ok(Self {
             pool,
-            id: Identity { store_id, incarnation, epoch, restore_epoch },
+            id: Identity {
+                store_id,
+                incarnation,
+                epoch,
+                restore_epoch,
+            },
             _lock: lock,
             lock_path,
             lock_id,
@@ -115,43 +154,77 @@ impl SqliteStore {
     /// Lần commit kế tiếp của `transition` thành công nhưng báo `Unknown` (mất kết nối sau COMMIT).
     #[cfg(test)]
     pub(crate) fn inject_commit_unknown(&self) {
-        self.commit_unknown.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.commit_unknown
+            .store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
     async fn begin(&self) -> Result<Transaction<'static, Sqlite>> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let epoch: i64 = sqlx::query_scalar("SELECT epoch FROM store_owner WHERE id = 1").fetch_one(&mut *tx).await?;
+        let epoch: i64 = sqlx::query_scalar("SELECT epoch FROM store_owner WHERE id = 1")
+            .fetch_one(&mut *tx)
+            .await?;
         if epoch != self.id.epoch {
             return Err(StoreError::NotOwner);
         }
         Ok(tx)
     }
 
-    async fn transition_tx(&self, uid: i64, from: State, to: State, f: &Fields, now: i64) -> Result<Transition> {
+    async fn transition_tx(
+        &self,
+        uid: i64,
+        from: State,
+        to: State,
+        f: &Fields,
+        now: i64,
+    ) -> Result<Transition> {
         let mut tx = self.begin().await?;
-        type Row = (String, Option<String>, bool, Option<String>, Option<String>, String);
-        let row: Option<Row> =
-            sqlx::query_as("SELECT state, tx_hash, hold, lane_hint, lane_label, chain_key FROM job WHERE uid = ?")
-                .bind(uid).fetch_optional(&mut *tx).await?;
+        type Row = (
+            String,
+            Option<String>,
+            bool,
+            Option<String>,
+            Option<String>,
+            String,
+        );
+        let row: Option<Row> = sqlx::query_as(
+            "SELECT state, tx_hash, hold, lane_hint, lane_label, chain_key FROM job WHERE uid = ?",
+        )
+        .bind(uid)
+        .fetch_optional(&mut *tx)
+        .await?;
         let (state, tx_hash, hold, hint, leased_by, chain_key) = row.ok_or(StoreError::NotFound)?;
         let state = State::try_from(state).map_err(StoreError::Invalid)?;
         let moved = Transition::Moved { state, tx_hash };
         if late_noop(from, to) || state != from {
             return Ok(moved);
         }
-        let lane = if to == Leased { f.lane_label.as_deref() } else { None };
+        let lane = if to == Leased {
+            f.lane_label.as_deref()
+        } else {
+            None
+        };
         if to == Leased && (hold || hint.is_some_and(|h| Some(h.as_str()) != lane)) {
             return Ok(moved);
         }
         if to == Leased {
-            let known: Option<i64> = sqlx::query_scalar("SELECT 1 FROM lane WHERE chain_key = ? AND label = ?")
-                .bind(&chain_key).bind(lane).fetch_optional(&mut *tx).await?;
+            let known: Option<i64> =
+                sqlx::query_scalar("SELECT 1 FROM lane WHERE chain_key = ? AND label = ?")
+                    .bind(&chain_key)
+                    .bind(lane)
+                    .fetch_optional(&mut *tx)
+                    .await?;
             if known.is_none() {
-                return Err(StoreError::Invalid(format!("lane {chain_key}/{} is not in the store", lane.unwrap_or(""))));
+                return Err(StoreError::Invalid(format!(
+                    "lane {chain_key}/{} is not in the store",
+                    lane.unwrap_or("")
+                )));
             }
         }
         if to == Signed && f.lane_label.is_some() && f.lane_label != leased_by {
-            return Err(StoreError::Invalid(format!("job {uid} is leased by {}, not by this lane", leased_by.unwrap_or_default())));
+            return Err(StoreError::Invalid(format!(
+                "job {uid} is leased by {}, not by this lane",
+                leased_by.unwrap_or_default()
+            )));
         }
         let n = sqlx::query(
             "UPDATE job SET state = ?1, updated_at = ?2,
@@ -161,10 +234,20 @@ impl SqliteStore {
                tx_hash     = CASE WHEN ?1 = 'queued' THEN NULL ELSE COALESCE(?6, tx_hash) END,
                last_error  = COALESCE(?7, last_error),
                attempt_count = attempt_count + (CASE WHEN ?1 = 'leased' THEN 1 ELSE 0 END)
-             WHERE uid = ?8 AND state = ?9")
-            .bind(to.as_str()).bind(now).bind(lane).bind(if to == Leased { f.claim_block } else { None })
-            .bind(f.outer_nonce).bind(&f.tx_hash).bind(&f.error).bind(uid).bind(from.as_str())
-            .execute(&mut *tx).await?.rows_affected();
+             WHERE uid = ?8 AND state = ?9",
+        )
+        .bind(to.as_str())
+        .bind(now)
+        .bind(lane)
+        .bind(if to == Leased { f.claim_block } else { None })
+        .bind(f.outer_nonce)
+        .bind(&f.tx_hash)
+        .bind(&f.error)
+        .bind(uid)
+        .bind(from.as_str())
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
         if n == 0 {
             return Ok(moved);
         }
@@ -174,13 +257,18 @@ impl SqliteStore {
                                  WHERE (chain_key, label) = (SELECT chain_key, lane_label FROM job WHERE uid = ?2)")
                 .bind(nonce).bind(uid).execute(&mut *tx).await?.rows_affected();
             if n == 0 {
-                return Err(StoreError::Invalid(format!("job {uid}: its lane is not in the store")));
+                return Err(StoreError::Invalid(format!(
+                    "job {uid}: its lane is not in the store"
+                )));
             }
         }
         let seq = event(&mut tx, uid, f.error.as_deref(), now).await?;
         tx.commit().await?;
         #[cfg(test)]
-        if self.commit_unknown.swap(false, std::sync::atomic::Ordering::SeqCst) {
+        if self
+            .commit_unknown
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
             return Err(StoreError::Db(sqlx::Error::PoolClosed));
         }
         Ok(Transition::Ok { seq })
@@ -189,7 +277,9 @@ impl SqliteStore {
     async fn accept_once(&self, j: &NewJob, now: i64) -> Result<Option<Accept>> {
         let mut tx = self.begin().await?;
         let max: i64 = sqlx::query_scalar("SELECT max_live_jobs FROM namespace WHERE name = ?")
-            .bind(&j.namespace).fetch_optional(&mut *tx).await?
+            .bind(&j.namespace)
+            .fetch_optional(&mut *tx)
+            .await?
             .ok_or_else(|| StoreError::Invalid(format!("unknown namespace {}", j.namespace)))?;
         let rows: Vec<JobRow> = sqlx::query_as(
             "SELECT * FROM job WHERE namespace = ? AND origin_scope = ? AND origin_producer = ? AND origin_key = ? \
@@ -197,8 +287,13 @@ impl SqliteStore {
             .bind(&j.namespace).bind(&j.origin.scope).bind(&j.origin.producer).bind(&j.origin.key)
             .fetch_all(&mut *tx).await?;
         if let Some(r) = rows.iter().find(|r| r.generation == j.origin.generation) {
-            let same = r.kind == "tombstone" || r.payload_hash.as_deref() == Some(&j.payload_hash[..]);
-            return Ok(Some(if same { Accept::Existing(r.clone()) } else { Accept::IdempotencyMismatch { uid: r.uid } }));
+            let same =
+                r.kind == "tombstone" || r.payload_hash.as_deref() == Some(&j.payload_hash[..]);
+            return Ok(Some(if same {
+                Accept::Existing(r.clone())
+            } else {
+                Accept::IdempotencyMismatch { uid: r.uid }
+            }));
         }
         // rows are ordered by generation DESC: the first one above ours is the newest.
         if let Some(r) = rows.iter().find(|r| r.generation > j.origin.generation) {
@@ -208,11 +303,18 @@ impl SqliteStore {
         if j.valid_until.saturating_mul(1000) <= now {
             return Ok(Some(Accept::Expired));
         }
-        if let Some(r) = rows.iter().find(|r| r.generation < j.origin.generation && r.state.is_live()) {
+        if let Some(r) = rows
+            .iter()
+            .find(|r| r.generation < j.origin.generation && r.state.is_live())
+        {
             return Ok(Some(Accept::PreviousGenerationLive { uid: r.uid }));
         }
-        let live: i64 = sqlx::query_scalar(&format!("SELECT count(*) FROM job WHERE namespace = ? AND state IN {LIVE_SQL}"))
-            .bind(&j.namespace).fetch_one(&mut *tx).await?;
+        let live: i64 = sqlx::query_scalar(&format!(
+            "SELECT count(*) FROM job WHERE namespace = ? AND state IN {LIVE_SQL}"
+        ))
+        .bind(&j.namespace)
+        .fetch_one(&mut *tx)
+        .await?;
         if live >= max {
             return Ok(Some(Accept::Quota));
         }
@@ -240,9 +342,19 @@ impl SqliteStore {
         Ok(Some(Accept::Created(row)))
     }
 
-    async fn cancel_in(&self, tx: &mut Transaction<'static, Sqlite>, uid: i64, now: i64) -> Result<Cancel> {
-        let Some(row) = sqlx::query_as::<_, JobRow>("SELECT * FROM job WHERE uid = ?").bind(uid)
-            .fetch_optional(&mut **tx).await? else { return Ok(Cancel::NotFound) };
+    async fn cancel_in(
+        &self,
+        tx: &mut Transaction<'static, Sqlite>,
+        uid: i64,
+        now: i64,
+    ) -> Result<Cancel> {
+        let Some(row) = sqlx::query_as::<_, JobRow>("SELECT * FROM job WHERE uid = ?")
+            .bind(uid)
+            .fetch_optional(&mut **tx)
+            .await?
+        else {
+            return Ok(Cancel::NotFound);
+        };
         Ok(match (row.state, row.published_at) {
             (Cancelled, _) => Cancel::Cancelled(row),
             (Queued | Leased, None) => {
@@ -252,11 +364,20 @@ impl SqliteStore {
                 Cancel::Cancelled(job_row(tx, uid).await?)
             }
             (Queued, Some(_)) => {
-                sqlx::query("UPDATE job SET hold = 1, updated_at = ? WHERE uid = ?").bind(now).bind(uid)
-                    .execute(&mut **tx).await?;
-                Cancel::TooLate { state: Queued, published: true }
+                sqlx::query("UPDATE job SET hold = 1, updated_at = ? WHERE uid = ?")
+                    .bind(now)
+                    .bind(uid)
+                    .execute(&mut **tx)
+                    .await?;
+                Cancel::TooLate {
+                    state: Queued,
+                    published: true,
+                }
             }
-            (state, published) => Cancel::TooLate { state, published: published.is_some() },
+            (state, published) => Cancel::TooLate {
+                state,
+                published: published.is_some(),
+            },
         })
     }
 }
@@ -270,7 +391,9 @@ pub(crate) fn unique_constraint(e: &sqlx::Error) -> Option<&'static str> {
     let m = db.message();
     if m.contains("job_live_digest") || m.ends_with("job.chain_key, job.digest") {
         Some("job_live_digest")
-    } else if m.ends_with("job.namespace, job.origin_scope, job.origin_producer, job.origin_key, job.generation") {
+    } else if m.ends_with(
+        "job.namespace, job.origin_scope, job.origin_producer, job.origin_key, job.generation",
+    ) {
         Some("job_origin")
     } else {
         None
@@ -278,8 +401,12 @@ pub(crate) fn unique_constraint(e: &sqlx::Error) -> Option<&'static str> {
 }
 
 async fn next(tx: &mut SqliteConnection, counter: &str) -> Result<i64> {
-    Ok(sqlx::query_scalar("UPDATE seq_counter SET value = value + 1 WHERE name = ? RETURNING value")
-        .bind(counter).fetch_one(tx).await?)
+    Ok(sqlx::query_scalar(
+        "UPDATE seq_counter SET value = value + 1 WHERE name = ? RETURNING value",
+    )
+    .bind(counter)
+    .fetch_one(tx)
+    .await?)
 }
 
 /// `job_event` = snapshot của dòng sau chuyển trạng thái; cùng transaction cập nhật `job.last_seq`.
@@ -288,17 +415,27 @@ async fn event(tx: &mut SqliteConnection, uid: i64, error: Option<&str>, now: i6
     sqlx::query("INSERT INTO job_event (seq, job_uid, namespace, state, tx_hash, outer_nonce, signer, error, at) \
                  SELECT ?1, uid, namespace, state, tx_hash, outer_nonce, lane_label, ?3, ?4 FROM job WHERE uid = ?2")
         .bind(seq).bind(uid).bind(error).bind(now).execute(&mut *tx).await?;
-    sqlx::query("UPDATE job SET last_seq = ? WHERE uid = ?").bind(seq).bind(uid).execute(&mut *tx).await?;
+    sqlx::query("UPDATE job SET last_seq = ? WHERE uid = ?")
+        .bind(seq)
+        .bind(uid)
+        .execute(&mut *tx)
+        .await?;
     Ok(seq)
 }
 
 async fn job_row(tx: &mut SqliteConnection, uid: i64) -> Result<JobRow> {
-    Ok(sqlx::query_as("SELECT * FROM job WHERE uid = ?").bind(uid).fetch_one(tx).await?)
+    Ok(sqlx::query_as("SELECT * FROM job WHERE uid = ?")
+        .bind(uid)
+        .fetch_one(tx)
+        .await?)
 }
 
 async fn audit_in(tx: &mut SqliteConnection, e: &AuditEntry, now: i64) -> Result<AuditRow> {
-    let prev: Vec<u8> = sqlx::query_scalar("SELECT row_hash FROM audit_log ORDER BY seq DESC LIMIT 1")
-        .fetch_optional(&mut *tx).await?.unwrap_or_else(|| vec![0; 32]);
+    let prev: Vec<u8> =
+        sqlx::query_scalar("SELECT row_hash FROM audit_log ORDER BY seq DESC LIMIT 1")
+            .fetch_optional(&mut *tx)
+            .await?
+            .unwrap_or_else(|| vec![0; 32]);
     let seq = next(&mut *tx, "audit").await?;
     let hash = audit_hash(&prev, seq, now, e);
     sqlx::query("INSERT INTO audit_log (seq, at, actor_kind, iss, sub, roles, method, route, target, before, after, \
@@ -306,7 +443,10 @@ async fn audit_in(tx: &mut SqliteConnection, e: &AuditEntry, now: i64) -> Result
         .bind(seq).bind(now).bind(&e.actor_kind).bind(&e.iss).bind(&e.sub).bind(&e.roles).bind(&e.method)
         .bind(&e.route).bind(&e.target).bind(&e.before).bind(&e.after).bind(e.result).bind(&e.request_id)
         .bind(&prev).bind(&hash[..]).execute(&mut *tx).await?;
-    Ok(sqlx::query_as("SELECT * FROM audit_log WHERE seq = ?").bind(seq).fetch_one(tx).await?)
+    Ok(sqlx::query_as("SELECT * FROM audit_log WHERE seq = ?")
+        .bind(seq)
+        .fetch_one(tx)
+        .await?)
 }
 
 fn boot_audit(target: String, after: &impl Serialize) -> AuditEntry {
@@ -328,7 +468,12 @@ impl Backend for SqliteStore {
     }
 
     async fn head_seq(&self, counter: &str) -> Result<i64> {
-        Ok(sqlx::query_scalar("SELECT value FROM seq_counter WHERE name = ?").bind(counter).fetch_one(&self.pool).await?)
+        Ok(
+            sqlx::query_scalar("SELECT value FROM seq_counter WHERE name = ?")
+                .bind(counter)
+                .fetch_one(&self.pool)
+                .await?,
+        )
     }
 
     async fn accept(&self, job: &NewJob, now_ms: i64) -> Result<Accept> {
@@ -337,10 +482,19 @@ impl Backend for SqliteStore {
                 return Ok(a);
             }
         }
-        Err(StoreError::Invalid("accept: the origin race did not settle in 3 tries".into()))
+        Err(StoreError::Invalid(
+            "accept: the origin race did not settle in 3 tries".into(),
+        ))
     }
 
-    async fn transition(&self, uid: i64, from: State, to: State, f: &Fields, now_ms: i64) -> Result<Transition> {
+    async fn transition(
+        &self,
+        uid: i64,
+        from: State,
+        to: State,
+        f: &Fields,
+        now_ms: i64,
+    ) -> Result<Transition> {
         check_transition(from, to, f)?;
         match self.transition_tx(uid, from, to, f, now_ms).await {
             Err(StoreError::Db(e)) => Ok(Transition::Unknown(e.to_string())),
@@ -355,7 +509,13 @@ impl Backend for SqliteStore {
         Ok(c)
     }
 
-    async fn cancel_by_origin(&self, namespace: &str, o: &Origin, valid_until: i64, now_ms: i64) -> Result<Cancel> {
+    async fn cancel_by_origin(
+        &self,
+        namespace: &str,
+        o: &Origin,
+        valid_until: i64,
+        now_ms: i64,
+    ) -> Result<Cancel> {
         let mut tx = self.begin().await?;
         let uid: Option<i64> = sqlx::query_scalar(
             "SELECT uid FROM job WHERE namespace = ? AND origin_scope = ? AND origin_producer = ? AND origin_key = ? \
@@ -381,25 +541,43 @@ impl Backend for SqliteStore {
 
     async fn publish(&self, uid: i64, now_ms: i64) -> Result<bool> {
         let mut tx = self.begin().await?;
-        let n = sqlx::query("UPDATE job SET published_at = ?1, updated_at = ?1 \
-                             WHERE uid = ?2 AND state = 'queued' AND published_at IS NULL")
-            .bind(now_ms).bind(uid).execute(&mut *tx).await?.rows_affected();
+        let n = sqlx::query(
+            "UPDATE job SET published_at = ?1, updated_at = ?1 \
+                             WHERE uid = ?2 AND state = 'queued' AND published_at IS NULL",
+        )
+        .bind(now_ms)
+        .bind(uid)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
         tx.commit().await?;
         Ok(n > 0)
     }
 
     async fn job(&self, uid: i64) -> Result<Option<JobRow>> {
-        Ok(sqlx::query_as("SELECT * FROM job WHERE uid = ?").bind(uid).fetch_optional(&self.pool).await?)
+        Ok(sqlx::query_as("SELECT * FROM job WHERE uid = ?")
+            .bind(uid)
+            .fetch_optional(&self.pool)
+            .await?)
     }
 
     async fn job_events(&self, after: i64, limit: i64) -> Result<Vec<JobEvent>> {
-        Ok(sqlx::query_as("SELECT * FROM job_event WHERE seq > ? ORDER BY seq LIMIT ?")
-            .bind(after).bind(limit).fetch_all(&self.pool).await?)
+        Ok(
+            sqlx::query_as("SELECT * FROM job_event WHERE seq > ? ORDER BY seq LIMIT ?")
+                .bind(after)
+                .bind(limit)
+                .fetch_all(&self.pool)
+                .await?,
+        )
     }
 
     async fn journal_max(&self, chain_key: &str, lane: &str) -> Result<Option<i64>> {
-        let v: Option<Option<i64>> = sqlx::query_scalar("SELECT journal_max FROM lane WHERE chain_key = ? AND label = ?")
-            .bind(chain_key).bind(lane).fetch_optional(&self.pool).await?;
+        let v: Option<Option<i64>> =
+            sqlx::query_scalar("SELECT journal_max FROM lane WHERE chain_key = ? AND label = ?")
+                .bind(chain_key)
+                .bind(lane)
+                .fetch_optional(&self.pool)
+                .await?;
         Ok(v.flatten())
     }
 
@@ -411,17 +589,32 @@ impl Backend for SqliteStore {
 
     async fn bump_journal_max(&self, chain_key: &str, lane: &str, nonce: i64) -> Result<()> {
         let mut tx = self.begin().await?;
-        let n = sqlx::query("UPDATE lane SET journal_max = MAX(COALESCE(journal_max, ?1), ?1) \
-                             WHERE chain_key = ?2 AND label = ?3")
-            .bind(nonce).bind(chain_key).bind(lane).execute(&mut *tx).await?.rows_affected();
+        let n = sqlx::query(
+            "UPDATE lane SET journal_max = MAX(COALESCE(journal_max, ?1), ?1) \
+                             WHERE chain_key = ?2 AND label = ?3",
+        )
+        .bind(nonce)
+        .bind(chain_key)
+        .bind(lane)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
         if n == 0 {
-            return Err(StoreError::Invalid(format!("lane {chain_key}/{lane} is not in the store")));
+            return Err(StoreError::Invalid(format!(
+                "lane {chain_key}/{lane} is not in the store"
+            )));
         }
         tx.commit().await?;
         Ok(())
     }
 
-    async fn hold_auditor(&self, chain_key: &str, job_id: i64, held: &AuditorHold, now_ms: i64) -> Result<()> {
+    async fn hold_auditor(
+        &self,
+        chain_key: &str,
+        job_id: i64,
+        held: &AuditorHold,
+        now_ms: i64,
+    ) -> Result<()> {
         let mut tx = self.begin().await?;
         sqlx::query("INSERT INTO auditor_hold (chain_key, job_id, token, pending, proposer, held_at) VALUES (?, ?, ?, ?, ?, ?) \
                      ON CONFLICT (chain_key, job_id) DO UPDATE SET token = excluded.token, pending = excluded.pending, \
@@ -433,24 +626,41 @@ impl Backend for SqliteStore {
     }
 
     async fn auditor_hold(&self, chain_key: &str, job_id: i64) -> Result<Option<AuditorHold>> {
-        Ok(sqlx::query_as("SELECT token, pending, proposer FROM auditor_hold WHERE chain_key = ? AND job_id = ?")
-            .bind(chain_key).bind(job_id).fetch_optional(&self.pool).await?)
+        Ok(sqlx::query_as(
+            "SELECT token, pending, proposer FROM auditor_hold WHERE chain_key = ? AND job_id = ?",
+        )
+        .bind(chain_key)
+        .bind(job_id)
+        .fetch_optional(&self.pool)
+        .await?)
     }
 
     async fn release_auditor(&self, chain_key: &str, job_id: i64) -> Result<()> {
         let mut tx = self.begin().await?;
         sqlx::query("DELETE FROM auditor_hold WHERE chain_key = ? AND job_id = ?")
-            .bind(chain_key).bind(job_id).execute(&mut *tx).await?;
+            .bind(chain_key)
+            .bind(job_id)
+            .execute(&mut *tx)
+            .await?;
         tx.commit().await?;
         Ok(())
     }
 
-    async fn purge(&self, now_ms: i64, job_retention_secs: i64, feed_retention_secs: i64) -> Result<u64> {
+    async fn purge(
+        &self,
+        now_ms: i64,
+        job_retention_secs: i64,
+        feed_retention_secs: i64,
+    ) -> Result<u64> {
         let mut tx = self.begin().await?;
         let n = sqlx::query(&format!(
-            "DELETE FROM job WHERE state NOT IN {LIVE_SQL} AND updated_at < ? AND valid_until < ?"))
-            .bind(now_ms.saturating_sub(job_retention_secs.saturating_mul(1000))).bind(now_ms / 1000 - 86_400)
-            .execute(&mut *tx).await?.rows_affected();
+            "DELETE FROM job WHERE state NOT IN {LIVE_SQL} AND updated_at < ? AND valid_until < ?"
+        ))
+        .bind(now_ms.saturating_sub(job_retention_secs.saturating_mul(1000)))
+        .bind(now_ms / 1000 - 86_400)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
         let feed = now_ms.saturating_sub(feed_retention_secs.saturating_mul(1000));
         for table in FEEDS {
             // R93: the floor (highest purged seq) tells `410 CURSOR_EXPIRED` from "nothing new"; it never falls.
@@ -458,7 +668,10 @@ impl Backend for SqliteStore {
                 "UPDATE meta SET value = CAST(MAX(CAST(value AS INTEGER), \
                    COALESCE((SELECT max(seq) FROM {table} WHERE at < ?1), 0)) AS TEXT) WHERE name = '{table}_floor'"))
                 .bind(feed).execute(&mut *tx).await?;
-            sqlx::query(&format!("DELETE FROM {table} WHERE at < ?")).bind(feed).execute(&mut *tx).await?;
+            sqlx::query(&format!("DELETE FROM {table} WHERE at < ?"))
+                .bind(feed)
+                .execute(&mut *tx)
+                .await?;
         }
         tx.commit().await?;
         Ok(n)
@@ -468,16 +681,26 @@ impl Backend for SqliteStore {
         if !FEEDS.contains(&feed) {
             return Err(StoreError::Invalid(format!("unknown feed {feed}")));
         }
-        Ok(sqlx::query_scalar("SELECT CAST(value AS INTEGER) FROM meta WHERE name = ?").bind(format!("{feed}_floor"))
-            .fetch_one(&self.pool).await?)
+        Ok(
+            sqlx::query_scalar("SELECT CAST(value AS INTEGER) FROM meta WHERE name = ?")
+                .bind(format!("{feed}_floor"))
+                .fetch_one(&self.pool)
+                .await?,
+        )
     }
 
     async fn check_owner(&self) -> Result<()> {
-        let held = std::fs::metadata(&self.lock_path).is_ok_and(|m| (m.dev(), m.ino()) == self.lock_id);
+        let held =
+            std::fs::metadata(&self.lock_path).is_ok_and(|m| (m.dev(), m.ino()) == self.lock_id);
         if !held {
-            return Err(StoreError::Owned(format!("{}: the lock file was removed or replaced", self.lock_path.display())));
+            return Err(StoreError::Owned(format!(
+                "{}: the lock file was removed or replaced",
+                self.lock_path.display()
+            )));
         }
-        let epoch: i64 = sqlx::query_scalar("SELECT epoch FROM store_owner WHERE id = 1").fetch_one(&self.pool).await?;
+        let epoch: i64 = sqlx::query_scalar("SELECT epoch FROM store_owner WHERE id = 1")
+            .fetch_one(&self.pool)
+            .await?;
         if epoch != self.id.epoch {
             return Err(StoreError::NotOwner);
         }
@@ -492,7 +715,9 @@ impl Backend for SqliteStore {
     }
 
     async fn audit_log(&self) -> Result<Vec<AuditRow>> {
-        Ok(sqlx::query_as("SELECT * FROM audit_log ORDER BY seq").fetch_all(&self.pool).await?)
+        Ok(sqlx::query_as("SELECT * FROM audit_log ORDER BY seq")
+            .fetch_all(&self.pool)
+            .await?)
     }
 
     async fn mark_restored(&self, entry: &AuditEntry, now_ms: i64) -> Result<i64> {
@@ -500,12 +725,20 @@ impl Backend for SqliteStore {
         let v: String = sqlx::query_scalar(
             "UPDATE meta SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT) WHERE name = 'restore_epoch' RETURNING value")
             .fetch_one(&mut *tx).await?;
-        let n: i64 = v.parse().map_err(|_| StoreError::Invalid(format!("meta restore_epoch {v}")))?;
+        let n: i64 = v
+            .parse()
+            .map_err(|_| StoreError::Invalid(format!("meta restore_epoch {v}")))?;
         // A pre-restore process can never share an epoch with the post-restore owner (the epoch rewound with
         // the restore): jump past every counter value a stale process could hold.
-        sqlx::query("UPDATE store_owner SET epoch = MAX(epoch + 1, ?) WHERE id = 1").bind(now_ms).execute(&mut *tx).await?;
-        let e = AuditEntry { before: Some(format!("{{\"restore_epoch\":{}}}", n - 1)),
-                             after: Some(format!("{{\"restore_epoch\":{n}}}")), ..entry.clone() };
+        sqlx::query("UPDATE store_owner SET epoch = MAX(epoch + 1, ?) WHERE id = 1")
+            .bind(now_ms)
+            .execute(&mut *tx)
+            .await?;
+        let e = AuditEntry {
+            before: Some(format!("{{\"restore_epoch\":{}}}", n - 1)),
+            after: Some(format!("{{\"restore_epoch\":{n}}}")),
+            ..entry.clone()
+        };
         audit_in(&mut tx, &e, now_ms).await?;
         tx.commit().await?;
         Ok(n)
@@ -514,24 +747,48 @@ impl Backend for SqliteStore {
     async fn load_config(&self) -> Result<ConfigSet> {
         let p = &self.pool;
         let mut namespaces: Vec<NamespaceRow> = sqlx::query_as::<_, (String, String, bool, i64)>(
-            "SELECT name, state, allow_call, max_live_jobs FROM namespace ORDER BY name")
-            .fetch_all(p).await?.into_iter()
-            .map(|(name, state, allow_call, max_live_jobs)| NamespaceRow { name, state, allow_call, max_live_jobs, chains: vec![] })
-            .collect();
+            "SELECT name, state, allow_call, max_live_jobs FROM namespace ORDER BY name",
+        )
+        .fetch_all(p)
+        .await?
+        .into_iter()
+        .map(|(name, state, allow_call, max_live_jobs)| NamespaceRow {
+            name,
+            state,
+            allow_call,
+            max_live_jobs,
+            chains: vec![],
+        })
+        .collect();
         let grants: Vec<(String, String)> = sqlx::query_as(
-            "SELECT namespace, chain_key FROM namespace_chain ORDER BY namespace, chain_key").fetch_all(p).await?;
+            "SELECT namespace, chain_key FROM namespace_chain ORDER BY namespace, chain_key",
+        )
+        .fetch_all(p)
+        .await?;
         for (ns, chain) in grants {
             if let Some(n) = namespaces.iter_mut().find(|n| n.name == ns) {
                 n.chains.push(chain);
             }
         }
         Ok(ConfigSet {
-            chains: sqlx::query_as("SELECT * FROM chain ORDER BY chain_key").fetch_all(p).await?,
-            tokens: sqlx::query_as("SELECT * FROM token ORDER BY chain_key, address").fetch_all(p).await?,
-            lanes: sqlx::query_as("SELECT * FROM lane ORDER BY chain_key, label").fetch_all(p).await?,
+            chains: sqlx::query_as("SELECT * FROM chain ORDER BY chain_key")
+                .fetch_all(p)
+                .await?,
+            tokens: sqlx::query_as("SELECT * FROM token ORDER BY chain_key, address")
+                .fetch_all(p)
+                .await?,
+            lanes: sqlx::query_as("SELECT * FROM lane ORDER BY chain_key, label")
+                .fetch_all(p)
+                .await?,
             namespaces,
-            peers: sqlx::query_as("SELECT * FROM mesh_peer ORDER BY name").fetch_all(p).await?,
-            policy: sqlx::query_as("SELECT * FROM mesh_policy ORDER BY chain_key, contract, selector").fetch_all(p).await?,
+            peers: sqlx::query_as("SELECT * FROM mesh_peer ORDER BY name")
+                .fetch_all(p)
+                .await?,
+            policy: sqlx::query_as(
+                "SELECT * FROM mesh_policy ORDER BY chain_key, contract, selector",
+            )
+            .fetch_all(p)
+            .await?,
         })
     }
 
@@ -551,13 +808,24 @@ impl Backend for SqliteStore {
             audit_in(&mut tx, &boot_audit(c.label(), c), now).await?;
         }
         for t in &set.tokens {
-            sqlx::query("INSERT INTO token (chain_key, address, decimals, active) VALUES (?, ?, ?, ?)")
-                .bind(&t.chain_key).bind(&t.address).bind(t.decimals).bind(t.active).execute(&mut *tx).await?;
+            sqlx::query(
+                "INSERT INTO token (chain_key, address, decimals, active) VALUES (?, ?, ?, ?)",
+            )
+            .bind(&t.chain_key)
+            .bind(&t.address)
+            .bind(t.decimals)
+            .bind(t.active)
+            .execute(&mut *tx)
+            .await?;
             audit_in(&mut tx, &boot_audit(t.label(), t), now).await?;
         }
         for l in &set.lanes {
             sqlx::query("INSERT INTO lane (chain_key, label, account_index) VALUES (?, ?, ?)")
-                .bind(&l.chain_key).bind(&l.label).bind(l.account_index).execute(&mut *tx).await?;
+                .bind(&l.chain_key)
+                .bind(&l.label)
+                .bind(l.account_index)
+                .execute(&mut *tx)
+                .await?;
             audit_in(&mut tx, &boot_audit(l.label(), l), now).await?;
         }
         for n in &set.namespaces {
@@ -567,7 +835,10 @@ impl Backend for SqliteStore {
                 .execute(&mut *tx).await?;
             for c in &n.chains {
                 sqlx::query("INSERT INTO namespace_chain (namespace, chain_key) VALUES (?, ?)")
-                    .bind(&n.name).bind(c).execute(&mut *tx).await?;
+                    .bind(&n.name)
+                    .bind(c)
+                    .execute(&mut *tx)
+                    .await?;
             }
             audit_in(&mut tx, &boot_audit(n.label(), n), now).await?;
         }

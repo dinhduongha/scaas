@@ -67,8 +67,13 @@ pub struct PqzVerifierCfg {
 
 impl Default for PqzVerifierCfg {
     fn default() -> Self {
-        Self { endpoints: vec![], refuse_shield_when_unserved: false, timeout_ms: default_pqz_timeout_ms(),
-            max_response_bytes: default_pqz_max_response(), valid_margin_secs: default_pqz_margin() }
+        Self {
+            endpoints: vec![],
+            refuse_shield_when_unserved: false,
+            timeout_ms: default_pqz_timeout_ms(),
+            max_response_bytes: default_pqz_max_response(),
+            valid_margin_secs: default_pqz_margin(),
+        }
     }
 }
 
@@ -428,10 +433,16 @@ pub struct BreakerCfg {
     #[serde(default = "one_u64")]
     pub spike_min_base_fee_gwei: u64,
     #[serde(default, deserialize_with = "amount")]
-    #[serde(serialize_with = "amount_text", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        serialize_with = "amount_text",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub gas_budget_per_hour: Option<u128>,
     #[serde(default, deserialize_with = "amount")]
-    #[serde(serialize_with = "amount_text", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        serialize_with = "amount_text",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub min_relayer_balance: Option<u128>,
     /// Soroban: `call` jobs stop at this share (%) of `gas_budget_per_hour`, every other kind runs to 100 %, so free registry
     /// writes cannot spend the whole hour's budget and stop payments. EVM: the ML-DSA cache parts the lane sends for a `register`
@@ -442,7 +453,13 @@ pub struct BreakerCfg {
 
 impl Default for BreakerCfg {
     fn default() -> Self {
-        Self { spike_ratio: default_spike(), spike_min_base_fee_gwei: 1, gas_budget_per_hour: None, min_relayer_balance: None, call_budget_pct: default_call_pct() }
+        Self {
+            spike_ratio: default_spike(),
+            spike_min_base_fee_gwei: 1,
+            gas_budget_per_hour: None,
+            min_relayer_balance: None,
+            call_budget_pct: default_call_pct(),
+        }
     }
 }
 
@@ -463,7 +480,10 @@ fn amount<'de, D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Option<
     }
 }
 
-fn amount_text<S: serde::Serializer>(v: &Option<u128>, s: S) -> std::result::Result<S::Ok, S::Error> {
+fn amount_text<S: serde::Serializer>(
+    v: &Option<u128>,
+    s: S,
+) -> std::result::Result<S::Ok, S::Error> {
     s.serialize_str(&v.unwrap_or_default().to_string()) // None is skipped
 }
 
@@ -522,7 +542,11 @@ fn lane0() -> Vec<u32> {
     vec![0]
 }
 fn default_finality() -> FinalityCfg {
-    FinalityCfg { mode: "instant".into(), depth: 0, quorum: 1 }
+    FinalityCfg {
+        mode: "instant".into(),
+        depth: 0,
+        quorum: 1,
+    }
 }
 fn one() -> usize {
     1
@@ -604,22 +628,38 @@ impl Config {
     /// The directory of the sqlite store (`sqlite:///var/lib/scaas/node.db` ⇒ `/var/lib/scaas`): where the node keeps its
     /// other small state files (the TON `PaymentMeta` wait, T17 fix 1).
     pub fn store_dir(&self) -> std::path::PathBuf {
-        let path = self.store.url.strip_prefix("sqlite://").or_else(|| self.store.url.strip_prefix("sqlite:")).unwrap_or("");
+        let path = self
+            .store
+            .url
+            .strip_prefix("sqlite://")
+            .or_else(|| self.store.url.strip_prefix("sqlite:"))
+            .unwrap_or("");
         let path = path.split('?').next().unwrap_or("");
-        std::path::Path::new(path).parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(std::path::Path::new(".")).to_path_buf()
+        std::path::Path::new(path)
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(std::path::Path::new("."))
+            .to_path_buf()
     }
 
     /// The config an adapter is built from: the TON `params.meta_journal` defaults to a file under `store_dir`.
     pub fn adapter_cfg(&self, c: &ChainCfg) -> ChainCfg {
         let mut c = c.clone();
         if c.family == "ton" && !c.params.contains_key("meta_journal") {
-            let f = self.store_dir().join(format!("ton-meta-{}.json", c.chain_key().replace([':', '/'], "_")));
-            c.params.insert("meta_journal".into(), f.to_string_lossy().into_owned().into());
+            let f = self.store_dir().join(format!(
+                "ton-meta-{}.json",
+                c.chain_key().replace([':', '/'], "_")
+            ));
+            c.params.insert(
+                "meta_journal".into(),
+                f.to_string_lossy().into_owned().into(),
+            );
         }
         c
     }
     pub fn load(path: &Path) -> Result<Self> {
-        let raw = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+        let raw =
+            std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
         let mut cfg: Config = toml::from_str(&raw).context("parse config")?;
         for c in &mut cfg.chains {
             c.pqz_verifier = cfg.pqz_verifier.clone();
@@ -633,14 +673,25 @@ impl Config {
             bail!("no [[chains]]");
         }
         if self.modules.gateway && self.modules.gateway_auth == "none" {
-            let host = self.modules.gateway_bind.rsplit_once(':').map(|(h, _)| h).unwrap_or("");
+            let host = self
+                .modules
+                .gateway_bind
+                .rsplit_once(':')
+                .map(|(h, _)| h)
+                .unwrap_or("");
             let loopback = matches!(host, "127.0.0.1" | "localhost" | "[::1]" | "::1");
             if !loopback {
-                bail!("gateway on {} without authentication: set gateway_auth = bearer|hmac", self.modules.gateway_bind);
+                bail!(
+                    "gateway on {} without authentication: set gateway_auth = bearer|hmac",
+                    self.modules.gateway_bind
+                );
             }
         }
         if self.modules.gateway_auth != "none" && self.modules.gateway_secret_env.is_none() {
-            bail!("gateway_auth {} needs gateway_secret_env", self.modules.gateway_auth);
+            bail!(
+                "gateway_auth {} needs gateway_secret_env",
+                self.modules.gateway_auth
+            );
         }
         let mut seen = std::collections::HashSet::new();
         for c in &self.chains {
@@ -648,9 +699,14 @@ impl Config {
             if !seen.insert(key.clone()) {
                 bail!("chain {key} configured twice");
             }
-            keys::lane_path_coin(&c.family, 0, c.coin_type).with_context(|| format!("chain {key}"))?;
+            keys::lane_path_coin(&c.family, 0, c.coin_type)
+                .with_context(|| format!("chain {key}"))?;
             if c.rpc_urls.is_empty() || c.rpc_urls.len() < c.finality.quorum {
-                bail!("chain {key}: {} rpc_urls < quorum {}", c.rpc_urls.len(), c.finality.quorum);
+                bail!(
+                    "chain {key}: {} rpc_urls < quorum {}",
+                    c.rpc_urls.len(),
+                    c.finality.quorum
+                );
             }
             if c.compliance_registry.is_some() != c.compliance_registry_codehash.is_some() {
                 bail!("chain {key}: compliance_registry and compliance_registry_codehash are set together");
@@ -676,7 +732,9 @@ impl Config {
             }
             let raw = c.private_key.is_some() || !c.signer_key_env.is_empty();
             if raw && c.lanes.len() > 1 {
-                bail!("chain {key}: a raw private key is one lane; use [keys].mnemonic for several");
+                bail!(
+                    "chain {key}: a raw private key is one lane; use [keys].mnemonic for several"
+                );
             }
             if raw && c.coin_type.is_some() {
                 bail!("chain {key}: coin_type applies to [keys].mnemonic lanes, not to a raw private key");
@@ -691,7 +749,8 @@ impl Config {
                 bail!("chain {key}: a private chain never gossips (MESH §9 rule 3)");
             }
             for t in &c.tokens {
-                c.canonical(&t.address).with_context(|| format!("chain {key}: token {}", t.address))?;
+                c.canonical(&t.address)
+                    .with_context(|| format!("chain {key}: token {}", t.address))?;
             }
             c.relay_params().with_context(|| format!("chain {key}"))?;
             c.check_services().with_context(|| format!("chain {key}"))?;
@@ -700,15 +759,29 @@ impl Config {
             }
             // NET-SOR-14: a Soroban job is free to the client and its fee is the lane's, so the limits are the operator's to name.
             let set = |v: Option<u128>| v.is_some_and(|v| v > 0);
-            if c.family == "soroban" && self.modules.submit && !(set(c.breaker.gas_budget_per_hour) && set(c.breaker.min_relayer_balance)) {
+            if c.family == "soroban"
+                && self.modules.submit
+                && !(set(c.breaker.gas_budget_per_hour) && set(c.breaker.min_relayer_balance))
+            {
                 bail!("chain {key}: a soroban lane needs breaker.gas_budget_per_hour and breaker.min_relayer_balance, both above 0 (stroops; node.example.toml)");
             }
-            if c.family == "soroban" && self.modules.submit && !c.params.get("max_resource_fee_per_job").and_then(|v| v.as_integer()).is_some_and(|n| n > 0) {
+            if c.family == "soroban"
+                && self.modules.submit
+                && !c
+                    .params
+                    .get("max_resource_fee_per_job")
+                    .and_then(|v| v.as_integer())
+                    .is_some_and(|n| n > 0)
+            {
                 bail!("chain {key}: a soroban lane needs params.max_resource_fee_per_job above 0 (stroops; node.example.toml)");
             }
         }
         let v = &self.pqz_verifier;
-        if let Some(e) = v.endpoints.iter().find(|e| !(e.starts_with("https://") || e.starts_with("http://"))) {
+        if let Some(e) = v
+            .endpoints
+            .iter()
+            .find(|e| !(e.starts_with("https://") || e.starts_with("http://")))
+        {
             bail!("pqz_verifier.endpoints: {e:?} is not an http(s) URL");
         }
         if v.timeout_ms == 0 || v.max_response_bytes == 0 {
@@ -720,7 +793,8 @@ impl Config {
     /// `[store]`, `[api]`, danh sách bootstrap và `[gossip]` (P1: chỉ cấu hình, chưa có listener).
     fn validate_store_sections(&self, chains: &std::collections::HashSet<String>) -> Result<()> {
         // legacy(R104): submit, indexer and the admin refresh still run on the external pull path.
-        let legacy = self.modules.submit || self.modules.indexer || !self.modules.admin_bind.is_empty();
+        let legacy =
+            self.modules.submit || self.modules.indexer || !self.modules.admin_bind.is_empty();
         if legacy && self.external_pull.is_none() {
             bail!("[external_pull] is required while submit/indexer/admin run on the legacy path (R104)");
         }
@@ -728,8 +802,10 @@ impl Config {
             bail!("[store] url: only sqlite: is built (PostgreSQL/MySQL arrive in P1b)");
         }
         const TEN_YEARS: u64 = 10 * 365 * 86_400;
-        for (name, v) in [("job_retention_secs", self.store.job_retention_secs),
-                          ("feed_retention_secs", self.store.feed_retention_secs)] {
+        for (name, v) in [
+            ("job_retention_secs", self.store.job_retention_secs),
+            ("feed_retention_secs", self.store.feed_retention_secs),
+        ] {
             if v > TEN_YEARS {
                 bail!("[store] {name} = {v}: at most 10 years ({TEN_YEARS})");
             }
@@ -764,9 +840,14 @@ impl Config {
         let mut names = std::collections::HashSet::new();
         for n in &self.namespaces {
             let ok = (3..=40).contains(&n.name.len())
-                && n.name.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
+                && n.name
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
             if !ok {
-                bail!("namespace {:?}: [a-z0-9-]{{3,40}} (names starting with ~ are reserved)", n.name);
+                bail!(
+                    "namespace {:?}: [a-z0-9-]{{3,40}} (names starting with ~ are reserved)",
+                    n.name
+                );
             }
             if !names.insert(&n.name) {
                 bail!("namespace {} configured twice", n.name);
@@ -775,18 +856,30 @@ impl Config {
                 bail!("namespace {}: chain {c} is not in [[chains]]", n.name);
             }
         }
-        let public = |k: &str| self.chains.iter().any(|c| c.chain_key() == k && c.profile == "public");
+        let public = |k: &str| {
+            self.chains
+                .iter()
+                .any(|c| c.chain_key() == k && c.profile == "public")
+        };
         for p in self.mesh.iter().flat_map(|m| &m.peers) {
             if !p.url.starts_with("https://") {
                 bail!("mesh peer {}: url must be https://", p.name);
             }
-            if p.spki_sha256.len() != 64 || !p.spki_sha256.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+            if p.spki_sha256.len() != 64
+                || !p
+                    .spki_sha256
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            {
                 bail!("mesh peer {}: spki_sha256 is 64 lowercase hex", p.name);
             }
             match p.class.as_str() {
                 "open" => {}
                 "private" if !p.chains.is_empty() => {}
-                "private" => bail!("mesh peer {}: a private peer lists the chains it may receive", p.name),
+                "private" => bail!(
+                    "mesh peer {}: a private peer lists the chains it may receive",
+                    p.name
+                ),
                 other => bail!("mesh peer {}: class {other} is not open|private", p.name),
             }
             if let Some(c) = p.chains.iter().find(|c| !chains.contains(*c)) {
@@ -812,11 +905,19 @@ impl Config {
             }
             // The mesh compares the family's canonical form byte-exact: a checksummed or short spelling would be
             // a row that never matches, and a deny would fall through to `(*, *)` (review F2).
-            if let Some(c) = self.chains.iter().find(|c| c.chain_key() == p.chain).filter(|_| p.contract != "*") {
-                c.canonical(&p.contract).with_context(|| format!("{at}: contract"))?;
+            if let Some(c) = self
+                .chains
+                .iter()
+                .find(|c| c.chain_key() == p.chain)
+                .filter(|_| p.contract != "*")
+            {
+                c.canonical(&p.contract)
+                    .with_context(|| format!("{at}: contract"))?;
             }
             let sel = p.selector.as_str();
-            let hex8 = sel.len() == 10 && sel.starts_with("0x") && sel[2..].bytes().all(|b| b.is_ascii_hexdigit());
+            let hex8 = sel.len() == 10
+                && sel.starts_with("0x")
+                && sel[2..].bytes().all(|b| b.is_ascii_hexdigit());
             if !(hex8 || matches!(sel, "*" | "0x" | "pay")) {
                 bail!("{at}: selector is 0x + 8 hex, 0x, pay or *");
             }
@@ -851,24 +952,45 @@ impl Config {
             for t in &c.tokens {
                 // One spelling per family (ExternalPull `addresses.canonical`), so byte-exact keys never split one token
                 // in two and R95 client token subsets match. `validate` refused anything that does not parse.
-                let address = c.canonical(&t.address).unwrap_or_else(|_| t.address.clone());
-                set.tokens.push(store::TokenRow { chain_key: key.clone(), address, decimals: t.decimals.into(), active: true });
+                let address = c
+                    .canonical(&t.address)
+                    .unwrap_or_else(|_| t.address.clone());
+                set.tokens.push(store::TokenRow {
+                    chain_key: key.clone(),
+                    address,
+                    decimals: t.decimals.into(),
+                    active: true,
+                });
             }
             for (label, &i) in labels.iter().zip(&c.lanes) {
-                set.lanes.push(store::LaneRow { chain_key: key.clone(), label: label.clone(), account_index: i.into(),
-                                                journal_max: None });
+                set.lanes.push(store::LaneRow {
+                    chain_key: key.clone(),
+                    label: label.clone(),
+                    account_index: i.into(),
+                    journal_max: None,
+                });
             }
         }
         for n in &self.namespaces {
             let mut chains = n.chains.clone();
             chains.sort();
             chains.dedup();
-            set.namespaces.push(store::NamespaceRow { name: n.name.clone(), state: "active".into(),
-                                                      allow_call: n.allow_call, max_live_jobs: n.max_live_jobs.into(), chains });
+            set.namespaces.push(store::NamespaceRow {
+                name: n.name.clone(),
+                state: "active".into(),
+                allow_call: n.allow_call,
+                max_live_jobs: n.max_live_jobs.into(),
+                chains,
+            });
         }
         for p in self.mesh.iter().flat_map(|m| &m.peers) {
-            set.peers.push(store::PeerRow { name: p.name.clone(), url: p.url.clone(), spki_sha256: p.spki_sha256.clone(),
-                                            class: p.class.clone(), chains: p.chains.join(" ") });
+            set.peers.push(store::PeerRow {
+                name: p.name.clone(),
+                url: p.url.clone(),
+                spki_sha256: p.spki_sha256.clone(),
+                class: p.class.clone(),
+                chains: p.chains.join(" "),
+            });
         }
         for p in self.mesh.iter().flat_map(|m| &m.policy) {
             // `as i64` above: TOML integers are i64, so a u64 read from toml never exceeds i64::MAX.
@@ -900,15 +1022,23 @@ impl Config {
             return Ok(vec![LocalSigner::new(curve, &key)?]);
         }
         if !c.signer_key_env.is_empty() {
-            let src = SecretSource { env: Some(c.signer_key_env.clone()), ..Default::default() };
+            let src = SecretSource {
+                env: Some(c.signer_key_env.clone()),
+                ..Default::default()
+            };
             let key = keys::parse_raw_key(&src.read()?)?;
             let (curve, _) = keys::lane_path(&c.family, 0)?;
             return Ok(vec![LocalSigner::new(curve, &key)?]);
         }
-        let k = self.keys.as_ref().ok_or_else(|| anyhow::anyhow!("no [keys] section"))?;
+        let k = self
+            .keys
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("no [keys] section"))?;
         let phrase = k.mnemonic.read()?;
         let pass = match &k.bip39_passphrase_env {
-            Some(v) => Some(std::env::var(v).with_context(|| format!("environment variable {v} is not set"))?),
+            Some(v) => Some(
+                std::env::var(v).with_context(|| format!("environment variable {v} is not set"))?,
+            ),
             None => None,
         };
         let seed = Seed::from_phrase(&phrase, pass.as_deref())?;
@@ -924,8 +1054,14 @@ impl Config {
 
 /// Two listeners on one port: same host, or either on the wildcard address.
 fn same_port(a: &str, b: &str) -> bool {
-    match (a.parse::<std::net::SocketAddr>(), b.parse::<std::net::SocketAddr>()) {
-        (Ok(x), Ok(y)) => x.port() == y.port() && (x.ip() == y.ip() || x.ip().is_unspecified() || y.ip().is_unspecified()),
+    match (
+        a.parse::<std::net::SocketAddr>(),
+        b.parse::<std::net::SocketAddr>(),
+    ) {
+        (Ok(x), Ok(y)) => {
+            x.port() == y.port()
+                && (x.ip() == y.ip() || x.ip().is_unspecified() || y.ip().is_unspecified())
+        }
         _ => a == b,
     }
 }
@@ -956,16 +1092,24 @@ pub const DEFAULT_MAX_PAY_META_BYTES: usize = 2048;
 impl Default for RelayParams {
     /// The defaults of an unset key set: no router, `min_amount` 1, no bound-payee relays, 2,048 B of meta.
     fn default() -> Self {
-        Self { router: None, min_amount: 1, relay_bound_payee: false, max_pay_meta_bytes: DEFAULT_MAX_PAY_META_BYTES,
-            max_service_op_bytes: crate::service::DEFAULT_MAX_OP_BYTES }
+        Self {
+            router: None,
+            min_amount: 1,
+            relay_bound_payee: false,
+            max_pay_meta_bytes: DEFAULT_MAX_PAY_META_BYTES,
+            max_service_op_bytes: crate::service::DEFAULT_MAX_OP_BYTES,
+        }
     }
 }
 
 impl ChainCfg {
     /// [`RelayParams`] from `params`.
     pub fn relay_params(&self) -> Result<RelayParams> {
-        let uint = |v: &toml::Value, k: &str| v.as_integer().and_then(|n| u64::try_from(n).ok())
-            .with_context(|| format!("params.{k} must be a non-negative integer, not {v}"));
+        let uint = |v: &toml::Value, k: &str| {
+            v.as_integer()
+                .and_then(|n| u64::try_from(n).ok())
+                .with_context(|| format!("params.{k} must be a non-negative integer, not {v}"))
+        };
         let max_pay_meta_bytes = match self.params.get("max_pay_meta_bytes") {
             None => DEFAULT_MAX_PAY_META_BYTES,
             Some(v) => uint(v, "max_pay_meta_bytes")? as usize,
@@ -1006,7 +1150,11 @@ impl ChainCfg {
         let get = |k: &str| t.and_then(|t| t.get(k));
         let router = match get("router") {
             None => None,
-            Some(v) => Some(v.as_str().with_context(|| format!("params.relay_fee.router must be a string, not {v}"))?.to_string()),
+            Some(v) => Some(
+                v.as_str()
+                    .with_context(|| format!("params.relay_fee.router must be a string, not {v}"))?
+                    .to_string(),
+            ),
         };
         let min_amount = match get("min_amount") {
             None => 1,
@@ -1014,15 +1162,26 @@ impl ChainCfg {
         };
         let relay_bound_payee = match get("relay_bound_payee") {
             None => false,
-            Some(v) => v.as_bool().with_context(|| format!("params.relay_fee.relay_bound_payee must be true or false, not {v}"))?,
+            Some(v) => v.as_bool().with_context(|| {
+                format!("params.relay_fee.relay_bound_payee must be true or false, not {v}")
+            })?,
         };
-        Ok(RelayParams { router, min_amount, relay_bound_payee, max_pay_meta_bytes, max_service_op_bytes })
+        Ok(RelayParams {
+            router,
+            min_amount,
+            relay_bound_payee,
+            max_pay_meta_bytes,
+            max_service_op_bytes,
+        })
     }
 
     /// Dạng chuẩn của một địa chỉ trên chain này (`addresses::canonical`, như ExternalPull `canonical_for_chain`).
     pub fn canonical(&self, value: &str) -> Result<String> {
         let prefix = self.params.get("prefix").and_then(|v| v.as_str());
-        let ton_testnet = (self.family == "ton").then_some(()).and(self.network.as_deref()).map(|n| n == "-3");
+        let ton_testnet = (self.family == "ton")
+            .then_some(())
+            .and(self.network.as_deref())
+            .map(|n| n == "-3");
         crate::addresses::canonical(&self.family, value, prefix, ton_testnet)
     }
 
@@ -1037,10 +1196,18 @@ impl ChainCfg {
         if !self.is_evm() {
             bail!("[[chains.services]] is EVM only (spec §9: each family's form in its own round)");
         }
-        let router = self.relay_params()?.router.map(|r| crate::metatx::addr(&r)).transpose()?;
+        let router = self
+            .relay_params()?
+            .router
+            .map(|r| crate::metatx::addr(&r))
+            .transpose()?;
         let mut others: Vec<(Address, &str)> = vec![];
         others.extend(self.dex.map(|a| (a, "dex")));
-        others.extend(self.governance_routers.iter().map(|a| (*a, "governance_routers")));
+        others.extend(
+            self.governance_routers
+                .iter()
+                .map(|a| (*a, "governance_routers")),
+        );
         others.extend(self.ua_registry.map(|a| (a, "ua_registry")));
         others.extend(self.account_factory.map(|a| (a, "account_factory")));
         others.extend(self.token_factory.map(|a| (a, "token_factory")));
@@ -1049,7 +1216,10 @@ impl ChainCfg {
         crate::service::Types::from_cfg(&self.services, crate::service::DEFAULT_MAX_OP_BYTES)?;
         for s in &self.services {
             if let Some((_, k)) = others.iter().find(|(a, _)| *a == s.address) {
-                bail!("service {:#x} is also {k} (one kind per address)", s.address);
+                bail!(
+                    "service {:#x} is also {k} (one kind per address)",
+                    s.address
+                );
             }
         }
         Ok(())
@@ -1130,7 +1300,11 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
     #[test]
     fn pqz_verifier_section_reaches_every_chain() {
         let load = |extra: &str| -> Result<Config> {
-            let p = std::env::temp_dir().join(format!("pqz-verifier-{}-{}.toml", std::process::id(), extra.len()));
+            let p = std::env::temp_dir().join(format!(
+                "pqz-verifier-{}-{}.toml",
+                std::process::id(),
+                extra.len()
+            ));
             std::fs::write(&p, format!("{OK}{extra}"))?;
             let c = Config::load(&p);
             let _ = std::fs::remove_file(&p);
@@ -1140,10 +1314,22 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         assert_eq!(c.chains[0].pqz_verifier, PqzVerifierCfg::default());
         assert!(!c.pqz_verifier.refuse_shield_when_unserved && c.pqz_verifier.endpoints.is_empty());
         let c = load("[pqz_verifier]\nendpoints = [\"https://v.example\", \"http://127.0.0.1:7\"]\nrefuse_shield_when_unserved = true\n").unwrap();
-        assert_eq!((c.chains[0].pqz_verifier.endpoints.len(), c.chains[0].pqz_verifier.refuse_shield_when_unserved), (2, true));
+        assert_eq!(
+            (
+                c.chains[0].pqz_verifier.endpoints.len(),
+                c.chains[0].pqz_verifier.refuse_shield_when_unserved
+            ),
+            (2, true)
+        );
         assert_eq!(c.chains[0].pqz_verifier.timeout_ms, 5_000);
-        for bad in ["[pqz_verifier]\nendpoints = [\"v.example\"]\n", "[pqz_verifier]\ntimeout_ms = 0\n"] {
-            assert!(load(bad).unwrap_err().to_string().contains("pqz_verifier"), "{bad}");
+        for bad in [
+            "[pqz_verifier]\nendpoints = [\"v.example\"]\n",
+            "[pqz_verifier]\ntimeout_ms = 0\n",
+        ] {
+            assert!(
+                load(bad).unwrap_err().to_string().contains("pqz_verifier"),
+                "{bad}"
+            );
         }
     }
 
@@ -1152,14 +1338,35 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
     #[test]
     fn compliance_registry_and_its_code_hash_together() {
         let with = |extra: &str| -> Result<Config> {
-            let c: Config = toml::from_str(&OK.replace("signer_key_env = \"K\"", &format!("signer_key_env = \"K\"\n{extra}")))?;
+            let c: Config = toml::from_str(&OK.replace(
+                "signer_key_env = \"K\"",
+                &format!("signer_key_env = \"K\"\n{extra}"),
+            ))?;
             c.validate().map(|_| c)
         };
-        let (a, h) = (format!("{:#x}", Address::repeat_byte(0xc0)), format!("{:#x}", B256::repeat_byte(1)));
-        assert!(with(&format!("compliance_registry = \"{a}\"")).unwrap_err().to_string().contains("set together"));
-        assert!(with(&format!("compliance_registry_codehash = \"{h}\"")).unwrap_err().to_string().contains("set together"));
-        let c = with(&format!("compliance_registry = \"{a}\"\ncompliance_registry_codehash = \"{h}\"")).unwrap();
-        assert_eq!((c.chains[0].compliance_registry, c.chains[0].compliance_registry_codehash), (Some(Address::repeat_byte(0xc0)), Some(B256::repeat_byte(1))));
+        let (a, h) = (
+            format!("{:#x}", Address::repeat_byte(0xc0)),
+            format!("{:#x}", B256::repeat_byte(1)),
+        );
+        assert!(with(&format!("compliance_registry = \"{a}\""))
+            .unwrap_err()
+            .to_string()
+            .contains("set together"));
+        assert!(with(&format!("compliance_registry_codehash = \"{h}\""))
+            .unwrap_err()
+            .to_string()
+            .contains("set together"));
+        let c = with(&format!(
+            "compliance_registry = \"{a}\"\ncompliance_registry_codehash = \"{h}\""
+        ))
+        .unwrap();
+        assert_eq!(
+            (
+                c.chains[0].compliance_registry,
+                c.chains[0].compliance_registry_codehash
+            ),
+            (Some(Address::repeat_byte(0xc0)), Some(B256::repeat_byte(1)))
+        );
         assert_eq!(with("").unwrap().chains[0].compliance_registry, None);
     }
 
@@ -1167,14 +1374,32 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
     #[test]
     fn rpc_timeouts_default_and_refuse_zero() {
         let with = |extra: &str| -> Result<Config> {
-            let c: Config = toml::from_str(&OK.replace("signer_key_env = \"K\"", &format!("signer_key_env = \"K\"\n{extra}")))?;
+            let c: Config = toml::from_str(&OK.replace(
+                "signer_key_env = \"K\"",
+                &format!("signer_key_env = \"K\"\n{extra}"),
+            ))?;
             c.validate().map(|_| c)
         };
         let c = with("").unwrap();
-        assert_eq!((c.chains[0].rpc_timeout_ms, c.chains[0].rpc_simulate_timeout_ms), (30_000, 120_000));
-        assert_eq!(with("rpc_timeout_ms = 5000").unwrap().chains[0].rpc_timeout_ms, 5000);
+        assert_eq!(
+            (
+                c.chains[0].rpc_timeout_ms,
+                c.chains[0].rpc_simulate_timeout_ms
+            ),
+            (30_000, 120_000)
+        );
+        assert_eq!(
+            with("rpc_timeout_ms = 5000").unwrap().chains[0].rpc_timeout_ms,
+            5000
+        );
         for zero in ["rpc_timeout_ms = 0", "rpc_simulate_timeout_ms = 0"] {
-            assert!(with(zero).unwrap_err().to_string().contains("must be above 0"), "{zero}");
+            assert!(
+                with(zero)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("must be above 0"),
+                "{zero}"
+            );
         }
     }
 
@@ -1182,38 +1407,92 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
     #[test]
     fn relay_params_default_and_refuse_invalid_values() {
         let c: Config = toml::from_str(OK).unwrap();
-        assert_eq!(c.chains[0].relay_params().unwrap(),
-            RelayParams { router: None, min_amount: 1, relay_bound_payee: false, max_pay_meta_bytes: 2048, max_service_op_bytes: 2048 });
+        assert_eq!(
+            c.chains[0].relay_params().unwrap(),
+            RelayParams {
+                router: None,
+                min_amount: 1,
+                relay_bound_payee: false,
+                max_pay_meta_bytes: 2048,
+                max_service_op_bytes: 2048
+            }
+        );
         let with = |p: &str| -> Result<RelayParams> {
-            let c: Config = toml::from_str(&OK.replace("signer_key_env = \"K\"", &format!("signer_key_env = \"K\"\nparams = {{ {p} }}")))?;
+            let c: Config = toml::from_str(&OK.replace(
+                "signer_key_env = \"K\"",
+                &format!("signer_key_env = \"K\"\nparams = {{ {p} }}"),
+            ))?;
             c.validate()?;
             c.chains[0].relay_params()
         };
         let p = with(r#"max_pay_meta_bytes = 4096, max_service_op_bytes = 512, relay_fee = { router = "0x7f", min_amount = 0, relay_bound_payee = true }"#).unwrap();
-        assert_eq!(p, RelayParams { router: Some("0x7f".into()), min_amount: 0, relay_bound_payee: true, max_pay_meta_bytes: 4096,
-            max_service_op_bytes: 512 });
-        for bad in ["max_pay_meta_bytes = -1", "max_service_op_bytes = -1", r#"max_service_op_bytes = "2048""#, r#"max_pay_meta_bytes = "2048""#, "relay_fee = 7", "relay_fee = { router = 7 }",
-                    "relay_fee = { min_amount = -1 }", r#"relay_fee = { min_amount = "9" }"#, "relay_fee = { min_amount = 1.5 }",
-                    r#"relay_fee = { relay_bound_payee = "yes" }"#, "relay_fee = { min_ammount = 5 }",
-                    "relay_fee = { min_ton_value = {} }", "relay_fee = { min_lamports_value = {} }"] {
+        assert_eq!(
+            p,
+            RelayParams {
+                router: Some("0x7f".into()),
+                min_amount: 0,
+                relay_bound_payee: true,
+                max_pay_meta_bytes: 4096,
+                max_service_op_bytes: 512
+            }
+        );
+        for bad in [
+            "max_pay_meta_bytes = -1",
+            "max_service_op_bytes = -1",
+            r#"max_service_op_bytes = "2048""#,
+            r#"max_pay_meta_bytes = "2048""#,
+            "relay_fee = 7",
+            "relay_fee = { router = 7 }",
+            "relay_fee = { min_amount = -1 }",
+            r#"relay_fee = { min_amount = "9" }"#,
+            "relay_fee = { min_amount = 1.5 }",
+            r#"relay_fee = { relay_bound_payee = "yes" }"#,
+            "relay_fee = { min_ammount = 5 }",
+            "relay_fee = { min_ton_value = {} }",
+            "relay_fee = { min_lamports_value = {} }",
+        ] {
             assert!(with(bad).is_err(), "{bad}");
         }
         let e = format!("{:#}", with("relay_fee = { min_ammount = 5 }").unwrap_err());
         assert!(e.contains("params.relay_fee.min_ammount"), "{e}");
-        let fam = |family: &str, k: &str| ChainCfg { family: family.into(),
-            params: toml::from_str(&format!("relay_fee = {{ {k} = {{}} }}")).unwrap(), ..Default::default() }.relay_params();
-        assert!(fam("ton", "min_ton_value").is_ok() && fam("solana", "min_lamports_value").is_ok(), "each on its own family");
-        assert!(fam("solana", "min_ton_value").is_err() && fam("ton", "min_lamports_value").is_err(), "never on another");
+        let fam = |family: &str, k: &str| {
+            ChainCfg {
+                family: family.into(),
+                params: toml::from_str(&format!("relay_fee = {{ {k} = {{}} }}")).unwrap(),
+                ..Default::default()
+            }
+            .relay_params()
+        };
+        assert!(
+            fam("ton", "min_ton_value").is_ok() && fam("solana", "min_lamports_value").is_ok(),
+            "each on its own family"
+        );
+        assert!(
+            fam("solana", "min_ton_value").is_err() && fam("ton", "min_lamports_value").is_err(),
+            "never on another"
+        );
     }
 
     #[test]
     fn the_ton_meta_journal_lives_in_the_store_dir() {
         let mut c: Config = toml::from_str(OK).unwrap();
         assert_eq!(c.store_dir(), std::path::PathBuf::from("/var/lib/scaas"));
-        let ton = ChainCfg { family: "ton".into(), network: Some("-239".into()), ..Default::default() };
+        let ton = ChainCfg {
+            family: "ton".into(),
+            network: Some("-239".into()),
+            ..Default::default()
+        };
         let a = c.adapter_cfg(&ton);
-        assert_eq!(a.params["meta_journal"].as_str(), Some("/var/lib/scaas/ton-meta-ton_-239.json"));
-        assert!(!c.adapter_cfg(&c.chains[0].clone()).params.contains_key("meta_journal"), "TON only");
+        assert_eq!(
+            a.params["meta_journal"].as_str(),
+            Some("/var/lib/scaas/ton-meta-ton_-239.json")
+        );
+        assert!(
+            !c.adapter_cfg(&c.chains[0].clone())
+                .params
+                .contains_key("meta_journal"),
+            "TON only"
+        );
         c.store.url = "sqlite:node.db".into();
         assert_eq!(c.store_dir(), std::path::PathBuf::from("."));
     }
@@ -1239,12 +1518,19 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
             abandon abandon art");
         let signers = c.lane_signers(&c.chains[1]).unwrap();
         assert_eq!(signers.len(), 2);
-        assert_eq!(crate::signer::Signer::curve(&signers[0]), crate::signer::Curve::Ed25519);
+        assert_eq!(
+            crate::signer::Signer::curve(&signers[0]),
+            crate::signer::Curve::Ed25519
+        );
     }
 
     #[test]
     fn raw_key_is_one_lane_and_keys_are_required() {
-        let c: Config = toml::from_str(&OK.replace("signer_key_env = \"K\"", "signer_key_env = \"K\"\nlanes = [0, 1]")).unwrap();
+        let c: Config = toml::from_str(&OK.replace(
+            "signer_key_env = \"K\"",
+            "signer_key_env = \"K\"\nlanes = [0, 1]",
+        ))
+        .unwrap();
         assert!(c.validate().is_err());
         let c: Config = toml::from_str(&OK.replace("signer_key_env = \"K\"\n", "")).unwrap();
         assert!(c.validate().is_err(), "no key at all");
@@ -1254,13 +1540,22 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
 
     #[test]
     fn open_gateway_must_be_authenticated() {
-        let raw = OK.replace("[[chains]]", "[modules]\ngateway = true\ngateway_bind = \"0.0.0.0:8547\"\n[[chains]]");
+        let raw = OK.replace(
+            "[[chains]]",
+            "[modules]\ngateway = true\ngateway_bind = \"0.0.0.0:8547\"\n[[chains]]",
+        );
         let c: Config = toml::from_str(&raw).unwrap();
         assert!(c.validate().is_err());
-        let c: Config = toml::from_str(&raw.replace("gateway = true", "gateway = true\ngateway_auth = \"hmac\"\ngateway_secret_env = \"S\"")).unwrap();
+        let c: Config = toml::from_str(&raw.replace(
+            "gateway = true",
+            "gateway = true\ngateway_auth = \"hmac\"\ngateway_secret_env = \"S\"",
+        ))
+        .unwrap();
         c.validate().unwrap();
-        let c: Config = toml::from_str(&OK.replace("[[chains]]", "[modules]\ngateway = true\n[[chains]]")).unwrap();
-        c.validate().unwrap();  // loopback default bind may stay open
+        let c: Config =
+            toml::from_str(&OK.replace("[[chains]]", "[modules]\ngateway = true\n[[chains]]"))
+                .unwrap();
+        c.validate().unwrap(); // loopback default bind may stay open
     }
 
     #[test]
@@ -1275,28 +1570,54 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         assert_eq!(c.chains[0].breaker.min_relayer_balance, None);
         assert_eq!(c.chains[0].max_index_lag, 100);
         assert_eq!(c.modules.admin_bind, "127.0.0.1:9108");
-        assert!(toml::from_str::<Config>(&OK.replace("finality =", "breaker = { gas_budget_per_hour = \"x\" }\nfinality =")).is_err());
+        assert!(toml::from_str::<Config>(&OK.replace(
+            "finality =",
+            "breaker = { gas_budget_per_hour = \"x\" }\nfinality ="
+        ))
+        .is_err());
     }
 
     /// NET-SOR-14: a Soroban lane does not start without both spend limits, a job being free to the client. One key differs per
     /// case; an indexer-only node has no lane to limit.
     #[test]
     fn soroban_lanes_need_both_spend_limits() {
-        let raw = |modules: &str, params: &str, breaker: &str| format!("{modules}{OK}\n[keys]\nmnemonic = {{ env = \"SCAAS_TEST_MNEMONIC\" }}\n\
+        let raw = |modules: &str, params: &str, breaker: &str| {
+            format!("{modules}{OK}\n[keys]\nmnemonic = {{ env = \"SCAAS_TEST_MNEMONIC\" }}\n\
             [[chains]]\nfamily = \"soroban\"\nnetwork = \"local\"\nrpc_urls = [\"http://p\"]\nlanes = [0]\n\
-            params = {{ network_passphrase = \"x\"{params} }}\n{breaker}\n");
+            params = {{ network_passphrase = \"x\"{params} }}\n{breaker}\n")
+        };
         let fee_cap = ", max_resource_fee_per_job = 1";
-        let with_cap = |modules: &str, params: &str, breaker: &str| toml::from_str::<Config>(&raw(modules, params, breaker)).unwrap().validate();
+        let with_cap = |modules: &str, params: &str, breaker: &str| {
+            toml::from_str::<Config>(&raw(modules, params, breaker))
+                .unwrap()
+                .validate()
+        };
         let check = |modules: &str, breaker: &str| with_cap(modules, fee_cap, breaker);
-        check("", "breaker = { gas_budget_per_hour = 1, min_relayer_balance = 1 }").unwrap();
-        for bad in ["", "breaker = { gas_budget_per_hour = 1 }", "breaker = { min_relayer_balance = 1 }",
-                    "breaker = { gas_budget_per_hour = 1, min_relayer_balance = 0 }", "breaker = { gas_budget_per_hour = 0, min_relayer_balance = 1 }"] {
+        check(
+            "",
+            "breaker = { gas_budget_per_hour = 1, min_relayer_balance = 1 }",
+        )
+        .unwrap();
+        for bad in [
+            "",
+            "breaker = { gas_budget_per_hour = 1 }",
+            "breaker = { min_relayer_balance = 1 }",
+            "breaker = { gas_budget_per_hour = 1, min_relayer_balance = 0 }",
+            "breaker = { gas_budget_per_hour = 0, min_relayer_balance = 1 }",
+        ] {
             let e = check("", bad).unwrap_err().to_string();
-            assert!(e.contains("gas_budget_per_hour") && e.contains("min_relayer_balance"), "{bad}: {e}");
+            assert!(
+                e.contains("gas_budget_per_hour") && e.contains("min_relayer_balance"),
+                "{bad}: {e}"
+            );
         }
         // the third limit, the per-job cap: as the budget, the amount is the operator's, so no default
         let limits = "breaker = { gas_budget_per_hour = 1, min_relayer_balance = 1 }";
-        for bad in ["", ", max_resource_fee_per_job = 0", ", max_resource_fee_per_job = \"x\""] {
+        for bad in [
+            "",
+            ", max_resource_fee_per_job = 0",
+            ", max_resource_fee_per_job = \"x\"",
+        ] {
             let e = with_cap("", bad, limits).unwrap_err().to_string();
             assert!(e.contains("max_resource_fee_per_job"), "{bad}: {e}");
         }
@@ -1323,18 +1644,38 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         std::env::set_var("SCAAS_TEST_MNEMONIC", "abandon abandon abandon abandon abandon abandon abandon abandon \
             abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
             abandon abandon art");
-        let strkeys: Vec<String> = c.lane_signers(&c.chains[1]).unwrap().iter()
+        let strkeys: Vec<String> = c
+            .lane_signers(&c.chains[1])
+            .unwrap()
+            .iter()
             .map(|s| crate::signer::stellar_account_strkey(&s.public_key()))
             .collect();
-        assert_eq!(strkeys, ["GC34MI42VEGPVUDNHHM3FCVAQ2P6I2B4D3NANHXNDPFCWXQRX73S4DOB",
-                             "GAUCCGUGT4FQU2USKSZWZXGGRGIWVA6LTDZLNSIXVR4RZTB6LS7VTI4E"]);
+        assert_eq!(
+            strkeys,
+            [
+                "GC34MI42VEGPVUDNHHM3FCVAQ2P6I2B4D3NANHXNDPFCWXQRX73S4DOB",
+                "GAUCCGUGT4FQU2USKSZWZXGGRGIWVA6LTDZLNSIXVR4RZTB6LS7VTI4E"
+            ]
+        );
         let stellar: Config = toml::from_str(&raw.replace("coin_type = 314159\n", "")).unwrap();
-        let s0 = crate::signer::stellar_account_strkey(&stellar.lane_signers(&stellar.chains[1]).unwrap()[0].public_key());
-        assert_eq!(s0, "GB3TCCIC6KLYKM72PX7KA6RNYC2BHC7DQYDMEAAN7PDMUZQD7UKJGSSY", "no coin_type: Stellar 148");
+        let s0 = crate::signer::stellar_account_strkey(
+            &stellar.lane_signers(&stellar.chains[1]).unwrap()[0].public_key(),
+        );
+        assert_eq!(
+            s0, "GB3TCCIC6KLYKM72PX7KA6RNYC2BHC7DQYDMEAAN7PDMUZQD7UKJGSSY",
+            "no coin_type: Stellar 148"
+        );
         let bad: Config = toml::from_str(&raw.replace("314159", "2147483648")).unwrap();
-        assert!(bad.validate().is_err(), "coin type must be a hardened SLIP-44 index");
-        let raw_key: Config = toml::from_str(&OK.replace("signer_key_env", "coin_type = 1\nsigner_key_env")).unwrap();
-        assert!(raw_key.validate().is_err(), "coin_type only applies to mnemonic lanes");
+        assert!(
+            bad.validate().is_err(),
+            "coin type must be a hardened SLIP-44 index"
+        );
+        let raw_key: Config =
+            toml::from_str(&OK.replace("signer_key_env", "coin_type = 1\nsigner_key_env")).unwrap();
+        assert!(
+            raw_key.validate().is_err(),
+            "coin_type only applies to mnemonic lanes"
+        );
     }
 
     #[test]
@@ -1345,41 +1686,80 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
 
     const EXTERNAL_PULL: &str = "[external_pull]\nurl = \"http://external-pull:8069\"\ndatabase = \"pulldb\"\nrelay_api_key_env = \"R\"\n\
                         indexer_api_key_env = \"I\"\n";
-    const NO_LEGACY: &str = "[modules]\nsubmit = false\nindexer = false\nadmin_bind = \"\"\n[[chains]]";
+    const NO_LEGACY: &str =
+        "[modules]\nsubmit = false\nindexer = false\nadmin_bind = \"\"\n[[chains]]";
 
     fn bad(raw: &str) -> bool {
-        toml::from_str::<Config>(raw).map(|c| c.validate().is_err()).unwrap_or(true)
+        toml::from_str::<Config>(raw)
+            .map(|c| c.validate().is_err())
+            .unwrap_or(true)
     }
 
     #[test]
     fn store_is_required_and_external_pull_is_legacy() {
         assert!(OK.starts_with(&format!("\n{EXTERNAL_PULL}")));
-        assert!(toml::from_str::<Config>(&OK.replace("[store]\nurl = \"sqlite:///var/lib/scaas/node.db\"\n", "")).is_err(),
-                "[store] is required");
+        assert!(
+            toml::from_str::<Config>(
+                &OK.replace("[store]\nurl = \"sqlite:///var/lib/scaas/node.db\"\n", "")
+            )
+            .is_err(),
+            "[store] is required"
+        );
         let no_external_pull = OK.replace(EXTERNAL_PULL, "");
-        assert!(bad(&no_external_pull), "submit/indexer/admin still need [external_pull] (R104)");
+        assert!(
+            bad(&no_external_pull),
+            "submit/indexer/admin still need [external_pull] (R104)"
+        );
         let c: Config = toml::from_str(&no_external_pull.replace("[[chains]]", NO_LEGACY)).unwrap();
         c.validate().unwrap();
         assert!(c.external_pull.is_none());
-        assert!(bad(&OK.replace("sqlite:///var/lib/scaas/node.db", "postgres://u@h/db")), "P1b");
+        assert!(
+            bad(&OK.replace("sqlite:///var/lib/scaas/node.db", "postgres://u@h/db")),
+            "P1b"
+        );
         let c: Config = toml::from_str(OK).unwrap();
-        assert_eq!((c.store.job_retention_secs, c.store.feed_retention_secs), (30 * 86_400, 7 * 86_400));
-        assert_eq!((c.api.bind.as_str(), c.api.lease_hold_after_start_secs), ("127.0.0.1:8548", 15));
+        assert_eq!(
+            (c.store.job_retention_secs, c.store.feed_retention_secs),
+            (30 * 86_400, 7 * 86_400)
+        );
+        assert_eq!(
+            (c.api.bind.as_str(), c.api.lease_hold_after_start_secs),
+            ("127.0.0.1:8548", 15)
+        );
         assert_eq!(c.api.admin_auth.modes, ["builtin"]);
-        assert_eq!((c.api.admin_auth.session_ttl_secs, c.api.admin_auth.login_max_failures), (900, 10));
+        assert_eq!(
+            (
+                c.api.admin_auth.session_ttl_secs,
+                c.api.admin_auth.login_max_failures
+            ),
+            (900, 10)
+        );
         assert!(!c.gossip.enabled && c.transport.quic && c.identity.is_none());
-        assert_eq!((c.chains[0].profile.as_str(), c.chains[0].gossip, c.chains[0].exclusive_ms), ("private", false, 7000));
+        assert_eq!(
+            (
+                c.chains[0].profile.as_str(),
+                c.chains[0].gossip,
+                c.chains[0].exclusive_ms
+            ),
+            ("private", false, 7000)
+        );
     }
 
     #[test]
     fn admin_auth_modes_are_validated() {
         let with = |t: &str| OK.replace("[[chains]]", &format!("{t}\n[[chains]]"));
         assert!(bad(&with("[api.admin_auth]\nmodes = []")));
-        assert!(bad(&with("[api.admin_auth]\nmodes = [\"oidc\"]")), "no issuers before P2b");
+        assert!(
+            bad(&with("[api.admin_auth]\nmodes = [\"oidc\"]")),
+            "no issuers before P2b"
+        );
         assert!(bad(&with("[api.admin_auth]\nmodes = [\"password\"]")));
         assert!(bad(&with("[api]\nadmin_cors_origins = [\"*\"]")));
-        let c: Config = toml::from_str(&with("[api]\nbind = \"127.0.0.1:8600\"\nmaster_key = { env = \"M\" }\n\
-                                              admin_cors_origins = [\"https://app.example.com\"]")).unwrap();
+        let c: Config = toml::from_str(&with(
+            "[api]\nbind = \"127.0.0.1:8600\"\nmaster_key = { env = \"M\" }\n\
+                                              admin_cors_origins = [\"https://app.example.com\"]",
+        ))
+        .unwrap();
         c.validate().unwrap();
         assert_eq!(c.api.bind, "127.0.0.1:8600");
     }
@@ -1389,44 +1769,114 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
     #[test]
     fn bootstrap_lists_are_validated() {
         let ns = |t: &str| format!("{OK}\n[[namespaces]]\n{t}\n");
-        toml::from_str::<Config>(&ns("name = \"external-pull-prod\"\nchains = [\"evm:7622\"]\nallow_call = true")).unwrap()
-            .validate().unwrap();
+        toml::from_str::<Config>(&ns(
+            "name = \"external-pull-prod\"\nchains = [\"evm:7622\"]\nallow_call = true",
+        ))
+        .unwrap()
+        .validate()
+        .unwrap();
         assert!(bad(&ns("name = \"~gateway\"")), "reserved");
         assert!(bad(&ns("name = \"External-Pull\"")));
         assert!(bad(&ns("name = \"ab\"")));
-        assert!(bad(&ns("name = \"external-pull\"\nchains = [\"evm:1\"]")), "chain not configured");
-        assert!(bad(&format!("{}\n[[namespaces]]\nname = \"external-pull\"\n", ns("name = \"external-pull\""))), "twice");
-        let peer = |t: &str| format!("{OK}\n[[mesh.peers]]\nname = \"a\"\nurl = \"https://a.example.net:8550\"\n\
-                                      spki_sha256 = \"{}\"\n{t}\n", "9f".repeat(32));
-        toml::from_str::<Config>(&peer("class = \"open\"")).unwrap().validate().unwrap();
-        toml::from_str::<Config>(&peer("class = \"private\"\nchains = [\"evm:7622\"]")).unwrap().validate().unwrap();
-        assert!(bad(&peer("class = \"private\"")), "private peer without chains");
+        assert!(
+            bad(&ns("name = \"external-pull\"\nchains = [\"evm:1\"]")),
+            "chain not configured"
+        );
+        assert!(
+            bad(&format!(
+                "{}\n[[namespaces]]\nname = \"external-pull\"\n",
+                ns("name = \"external-pull\"")
+            )),
+            "twice"
+        );
+        let peer = |t: &str| {
+            format!(
+                "{OK}\n[[mesh.peers]]\nname = \"a\"\nurl = \"https://a.example.net:8550\"\n\
+                                      spki_sha256 = \"{}\"\n{t}\n",
+                "9f".repeat(32)
+            )
+        };
+        toml::from_str::<Config>(&peer("class = \"open\""))
+            .unwrap()
+            .validate()
+            .unwrap();
+        toml::from_str::<Config>(&peer("class = \"private\"\nchains = [\"evm:7622\"]"))
+            .unwrap()
+            .validate()
+            .unwrap();
+        assert!(
+            bad(&peer("class = \"private\"")),
+            "private peer without chains"
+        );
         assert!(bad(&peer("class = \"open\"").replace("https://", "http://")));
-        assert!(bad(&peer("class = \"open\"").replace(&"9f".repeat(32), &"9F".repeat(32))));
-        let pol = |t: &str| format!("{OK}\n[[mesh.policy]]\nchain = \"evm:7622\"\nsupport = \"full\"\n\
-                                     pool_visibility = \"open\"\n{t}\n");
-        toml::from_str::<Config>(&pol(&format!("contract = \"{C0}\"\nselector = \"0x12345678\"\nsubmit = true"))).unwrap()
-            .validate().unwrap();
-        toml::from_str::<Config>(&pol("contract = \"*\"\nselector = \"*\"")).unwrap().validate().unwrap();
-        assert!(bad(&pol("contract = \"*\"\nselector = \"*\"\nsubmit = true")), "MESH R86");
-        assert!(bad(&pol(&format!("contract = \"{C0}\"\nselector = \"0x1234\""))));
-        assert!(bad(&pol(&format!("contract = \"{C0}\"\nselector = \"*\"\nmin_fee = \"1e3\""))));
-        assert!(bad(&pol(&format!("contract = \"{C0}\"\nselector = \"*\"\ngossip = true"))), "private chain");
-        assert!(bad(&pol("contract = \"0xC0\"\nselector = \"*\"")), "not an address of the chain's family");
+        assert!(bad(
+            &peer("class = \"open\"").replace(&"9f".repeat(32), &"9F".repeat(32))
+        ));
+        let pol = |t: &str| {
+            format!(
+                "{OK}\n[[mesh.policy]]\nchain = \"evm:7622\"\nsupport = \"full\"\n\
+                                     pool_visibility = \"open\"\n{t}\n"
+            )
+        };
+        toml::from_str::<Config>(&pol(&format!(
+            "contract = \"{C0}\"\nselector = \"0x12345678\"\nsubmit = true"
+        )))
+        .unwrap()
+        .validate()
+        .unwrap();
+        toml::from_str::<Config>(&pol("contract = \"*\"\nselector = \"*\""))
+            .unwrap()
+            .validate()
+            .unwrap();
+        assert!(
+            bad(&pol("contract = \"*\"\nselector = \"*\"\nsubmit = true")),
+            "MESH R86"
+        );
+        assert!(bad(&pol(&format!(
+            "contract = \"{C0}\"\nselector = \"0x1234\""
+        ))));
+        assert!(bad(&pol(&format!(
+            "contract = \"{C0}\"\nselector = \"*\"\nmin_fee = \"1e3\""
+        ))));
+        assert!(
+            bad(&pol(&format!(
+                "contract = \"{C0}\"\nselector = \"*\"\ngossip = true"
+            ))),
+            "private chain"
+        );
+        assert!(
+            bad(&pol("contract = \"0xC0\"\nselector = \"*\"")),
+            "not an address of the chain's family"
+        );
     }
 
     #[test]
     fn gossip_sections_parse_without_networking() {
-        let g = format!("{OK}\n[gossip]\nenabled = true\nlisten = [\"/ip4/0.0.0.0/udp/4001/quic-v1\"]\n");
+        let g = format!(
+            "{OK}\n[gossip]\nenabled = true\nlisten = [\"/ip4/0.0.0.0/udp/4001/quic-v1\"]\n"
+        );
         assert!(bad(&g), "needs [identity]");
-        let c: Config = toml::from_str(&format!("{g}[identity]\nkey = {{ file = \"/etc/scaas/node.key\" }}\n\
-                                                [transport]\ntcp = false\n")).unwrap();
+        let c: Config = toml::from_str(&format!(
+            "{g}[identity]\nkey = {{ file = \"/etc/scaas/node.key\" }}\n\
+                                                [transport]\ntcp = false\n"
+        ))
+        .unwrap();
         c.validate().unwrap();
         assert!(c.transport.quic && !c.transport.tcp && c.gossip.max_established == 50);
-        assert!(bad(&OK.replace("finality =", "gossip = true\nfinality =")), "a private chain never gossips");
-        toml::from_str::<Config>(&OK.replace("finality =", "profile = \"public\"\ngossip = true\nfinality ="))
-            .unwrap().validate().unwrap();
-        assert!(bad(&OK.replace("finality =", "profile = \"open\"\nfinality =")));
+        assert!(
+            bad(&OK.replace("finality =", "gossip = true\nfinality =")),
+            "a private chain never gossips"
+        );
+        toml::from_str::<Config>(&OK.replace(
+            "finality =",
+            "profile = \"public\"\ngossip = true\nfinality =",
+        ))
+        .unwrap()
+        .validate()
+        .unwrap();
+        assert!(bad(
+            &OK.replace("finality =", "profile = \"open\"\nfinality =")
+        ));
     }
 
     #[test]
@@ -1439,12 +1889,25 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         let set = c.boot_set(&[vec!["0xAA".into()]]);
         assert_eq!(set.chains[0].chain_key, "evm:7622");
         assert_eq!(set.chains[0].state, "active");
-        assert_eq!(set.tokens[0].address, "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd", "one spelling per EVM token");
-        assert_eq!(set.lanes, [store::LaneRow { chain_key: "evm:7622".into(), label: "0xAA".into(), account_index: 0,
-                                                journal_max: None }]);
+        assert_eq!(
+            set.tokens[0].address, "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+            "one spelling per EVM token"
+        );
+        assert_eq!(
+            set.lanes,
+            [store::LaneRow {
+                chain_key: "evm:7622".into(),
+                label: "0xAA".into(),
+                account_index: 0,
+                journal_max: None
+            }]
+        );
         assert_eq!(set.namespaces[0].chains, ["evm:7622"]);
         let b: serde_json::Value = serde_json::from_str(&set.chains[0].breaker).unwrap();
-        assert_eq!(b["gas_budget_per_hour"], "100000000000000000000", "u128 amounts as decimal text");
+        assert_eq!(
+            b["gas_budget_per_hour"], "100000000000000000000",
+            "u128 amounts as decimal text"
+        );
         let back: BreakerCfg = serde_json::from_value(b).unwrap();
         assert_eq!(back.gas_budget_per_hour, Some(100_000_000_000_000_000_000));
     }
@@ -1453,7 +1916,8 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
     fn addresses_and_selectors_take_one_spelling() {
         let ck = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"; // EIP-55, pasted from an explorer
         let low = "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed";
-        let hedera = "[[chains]]\nfamily = \"hedera\"\nevm_chain_number = 296\nrpc_urls = [\"http://h\"]\n\
+        let hedera =
+            "[[chains]]\nfamily = \"hedera\"\nevm_chain_number = 296\nrpc_urls = [\"http://h\"]\n\
                       signer_key_env = \"K\"\nfinality = { mode = \"instant\" }\n\
                       tokens = [{ address = \"0.0.1234\", decimals = 6 }]\n";
         let raw = OK.replace("finality =", &format!("tokens = [{{ address = \"{ck}\", decimals = 6 }}]\nfinality ="))
@@ -1466,34 +1930,83 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         c.validate().unwrap();
         let set = c.boot_set(&[vec!["0xaa".into()], vec!["0xbb".into()]]);
         assert_eq!(set.tokens[0].address, low);
-        assert_eq!(set.tokens[1].address, "0x00000000000000000000000000000000000004d2", "Hedera 0.0.N = long-zero");
-        assert_eq!((set.policy[0].contract.as_str(), set.policy[0].selector.as_str()), (low, "0xa9059cbb"));
-        let rows: Vec<crate::mesh::accept::PolicyRow> = serde_json::from_value(serde_json::to_value(&set.policy).unwrap()).unwrap();
+        assert_eq!(
+            set.tokens[1].address, "0x00000000000000000000000000000000000004d2",
+            "Hedera 0.0.N = long-zero"
+        );
+        assert_eq!(
+            (
+                set.policy[0].contract.as_str(),
+                set.policy[0].selector.as_str()
+            ),
+            (low, "0xa9059cbb")
+        );
+        let rows: Vec<crate::mesh::accept::PolicyRow> =
+            serde_json::from_value(serde_json::to_value(&set.policy).unwrap()).unwrap();
         let hit = crate::mesh::accept::lookup(&rows, "evm:7622", low, "0xa9059cbb");
-        assert_eq!(hit.map(|r| r.support), Some(crate::mesh::accept::Support::None),
-                   "the deny row matches; no fall-through to (*, *)");
-        assert!(bad(&raw.replace(ck, "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD")), "bad EIP-55 checksum (ExternalPull refuses it)");
+        assert_eq!(
+            hit.map(|r| r.support),
+            Some(crate::mesh::accept::Support::None),
+            "the deny row matches; no fall-through to (*, *)"
+        );
+        assert!(
+            bad(&raw.replace(ck, "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD")),
+            "bad EIP-55 checksum (ExternalPull refuses it)"
+        );
         assert!(bad(&raw.replace("0.0.1234", "0.1.1234")));
     }
 
     #[test]
     fn listener_binds_never_collide() {
         let with = |t: &str| OK.replace("[[chains]]", &format!("{t}\n[[chains]]"));
-        toml::from_str::<Config>(&with("[modules]\ngateway = true")).unwrap().validate().unwrap(); // distinct defaults
+        toml::from_str::<Config>(&with("[modules]\ngateway = true"))
+            .unwrap()
+            .validate()
+            .unwrap(); // distinct defaults
         assert!(bad(&with("[api]\nbind = \"127.0.0.1:9108\"")), "admin_bind");
-        assert!(bad(&with("[api]\nbind = \"127.0.0.1:8547\"\n[modules]\ngateway = true")), "gateway_bind");
-        assert!(bad(&with("[api]\nbind = \"0.0.0.0:8547\"\n[modules]\ngateway = true")), "the wildcard takes the port");
-        assert!(bad(&with("[modules]\ngateway = true\ngateway_bind = \"127.0.0.1:9108\"")), "gateway vs admin");
-        toml::from_str::<Config>(&with("[api]\nbind = \"127.0.0.1:8547\"")).unwrap().validate().unwrap(); // gateway off
-        toml::from_str::<Config>(&with("[api]\nbind = \"127.0.0.2:9108\"")).unwrap().validate().unwrap(); // other host
+        assert!(
+            bad(&with(
+                "[api]\nbind = \"127.0.0.1:8547\"\n[modules]\ngateway = true"
+            )),
+            "gateway_bind"
+        );
+        assert!(
+            bad(&with(
+                "[api]\nbind = \"0.0.0.0:8547\"\n[modules]\ngateway = true"
+            )),
+            "the wildcard takes the port"
+        );
+        assert!(
+            bad(&with(
+                "[modules]\ngateway = true\ngateway_bind = \"127.0.0.1:9108\""
+            )),
+            "gateway vs admin"
+        );
+        toml::from_str::<Config>(&with("[api]\nbind = \"127.0.0.1:8547\""))
+            .unwrap()
+            .validate()
+            .unwrap(); // gateway off
+        toml::from_str::<Config>(&with("[api]\nbind = \"127.0.0.2:9108\""))
+            .unwrap()
+            .validate()
+            .unwrap(); // other host
     }
 
     #[test]
     fn retention_is_bounded() {
-        assert!(bad(&OK.replace("[store]\n", "[store]\njob_retention_secs = 999999999999\n")));
-        assert!(bad(&OK.replace("[store]\n", "[store]\nfeed_retention_secs = 999999999999\n")));
-        toml::from_str::<Config>(&OK.replace("[store]\n", "[store]\njob_retention_secs = 315360000\n")).unwrap()
-            .validate().unwrap();
+        assert!(bad(&OK.replace(
+            "[store]\n",
+            "[store]\njob_retention_secs = 999999999999\n"
+        )));
+        assert!(bad(&OK.replace(
+            "[store]\n",
+            "[store]\nfeed_retention_secs = 999999999999\n"
+        )));
+        toml::from_str::<Config>(
+            &OK.replace("[store]\n", "[store]\njob_retention_secs = 315360000\n"),
+        )
+        .unwrap()
+        .validate()
+        .unwrap();
     }
-
 }

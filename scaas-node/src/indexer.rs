@@ -9,10 +9,13 @@ use alloy::sol_types::SolEvent;
 use serde_json::{json, Value};
 use tracing::{info, warn};
 
-use crate::abi::{IGovernance, IPqzEvents, IPqzToken, IRegulatedToken, IRelayFeeRouter, IToken, IUALedger, IUARegistry};
+use crate::abi::{
+    IGovernance, IPqzEvents, IPqzToken, IRegulatedToken, IRelayFeeRouter, IToken, IUALedger,
+    IUARegistry,
+};
 use crate::chain::Chain;
-use crate::finality::{next_range, quorum_ok, safe_head, Mode};
 use crate::external_pull::ExternalPull;
+use crate::finality::{next_range, quorum_ok, safe_head, Mode};
 
 const MAX_SPAN: u64 = 1000;
 
@@ -31,7 +34,10 @@ fn put_id(v: &mut Value, k: &str, w: B256) {
 
 /// The id of row field `k`: `<k>_ua` for a derived UA, else the address (joins compare ids, never `UA_POOL`).
 fn who(v: &Value, k: &str) -> Option<String> {
-    v[format!("{k}_ua")].as_str().or_else(|| v[k].as_str()).map(str::to_string)
+    v[format!("{k}_ua")]
+        .as_str()
+        .or_else(|| v[k].as_str())
+        .map(str::to_string)
 }
 
 /// Log đã giải mã theo đúng khoá ExternalPull đọc (`dms_blockchain` `_decode`). None = không phải
@@ -74,7 +80,11 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         v["meta_body"] = json!(format!("0x{}", alloy::hex::encode(&e.body)));
     } else if topic0 == crate::abi::IRegulatedToken::PaymentTaxed::SIGNATURE_HASH {
         // joined to its PaymentSettled (spec §5.4), never sent alone
-        let e = log.log_decode::<crate::abi::IRegulatedToken::PaymentTaxed>().ok()?.inner.data;
+        let e = log
+            .log_decode::<crate::abi::IRegulatedToken::PaymentTaxed>()
+            .ok()?
+            .inner
+            .data;
         v["event"] = json!("PaymentTaxed");
         v["entry_ref"] = json!(format!("{:#x}", e.entryRef));
         put_id(&mut v, "from", e.from);
@@ -85,7 +95,11 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         v["digest"] = json!(format!("{:#x}", e.digest));
     } else if topic0 == IUALedger::UAPaymentSettled::SIGNATURE_HASH {
         // the UA ledger's payment is a `PaymentSettled` row with ids, as on NEAR and Algorand
-        let e = log.log_decode::<IUALedger::UAPaymentSettled>().ok()?.inner.data;
+        let e = log
+            .log_decode::<IUALedger::UAPaymentSettled>()
+            .ok()?
+            .inner
+            .data;
         v["event"] = json!("PaymentSettled");
         put_id(&mut v, "from", e.from);
         put_id(&mut v, "to", e.to);
@@ -94,7 +108,11 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         v["fee_recipient"] = json!(format!("{:#x}", e.feeRecipient));
         v["entry_ref"] = json!(format!("{:#x}", e.entryRef));
     } else if topic0 == IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH {
-        let e = log.log_decode::<IUALedger::UAMetaTransactionExecuted>().ok()?.inner.data;
+        let e = log
+            .log_decode::<IUALedger::UAMetaTransactionExecuted>()
+            .ok()?
+            .inner
+            .data;
         v["event"] = json!("MetaTransactionExecuted");
         put_id(&mut v, "from", e.from);
         v["relayer"] = json!(format!("{:#x}", e.relayer));
@@ -104,7 +122,11 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         v["fee_recipient"] = json!(format!("{:#x}", e.feeRecipient));
         v["fee"] = json!(e.fee.to_string());
     } else if topic0 == IRelayFeeRouter::RelayFeePaid::SIGNATURE_HASH {
-        let e = log.log_decode::<IRelayFeeRouter::RelayFeePaid>().ok()?.inner.data;
+        let e = log
+            .log_decode::<IRelayFeeRouter::RelayFeePaid>()
+            .ok()?
+            .inner
+            .data;
         v["event"] = json!("RelayFeePaid");
         v["entry_ref"] = json!(format!("{:#x}", e.r#ref));
         v["target"] = json!(format!("{:#x}", e.target));
@@ -113,7 +135,11 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         put_id(&mut v, "to", e.payee);
         v["amount"] = json!(e.amount.to_string());
     } else if topic0 == IToken::MetaTransactionExecuted::SIGNATURE_HASH {
-        let e = log.log_decode::<IToken::MetaTransactionExecuted>().ok()?.inner.data;
+        let e = log
+            .log_decode::<IToken::MetaTransactionExecuted>()
+            .ok()?
+            .inner
+            .data;
         v["event"] = json!("MetaTransactionExecuted");
         v["from"] = json!(format!("{:#x}", e.from));
         v["relayer"] = json!(format!("{:#x}", e.relayer));
@@ -122,7 +148,10 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         v["digest"] = json!(format!("{:#x}", e.digest));
         v["fee_recipient"] = json!(format!("{:#x}", e.feeRecipient));
         v["fee"] = json!(e.fee.to_string());
-    } else if !regulated_event(log, topic0, &mut v) && !pqz_key_event(log, topic0, &mut v) && !pqz_verifier_event(log, topic0, &mut v) {
+    } else if !regulated_event(log, topic0, &mut v)
+        && !pqz_key_event(log, topic0, &mut v)
+        && !pqz_verifier_event(log, topic0, &mut v)
+    {
         return None;
     }
     Some(v)
@@ -130,15 +159,21 @@ pub fn encode_event(log: &Log) -> Option<Value> {
 
 /// The topics of [`pqz_key_event`] (group 3g, spec §7.3): the registry's version events and a PQZ token's per-version state events.
 pub const PQZ_KEY_TOPICS: [B256; 6] = [
-    IUARegistry::UAPqzKeyAdded::SIGNATURE_HASH, IUARegistry::UAPqzPopStored::SIGNATURE_HASH, IUARegistry::UAPqzKeyCurrent::SIGNATURE_HASH,
-    IPqzToken::Credited::SIGNATURE_HASH, IPqzToken::Debited::SIGNATURE_HASH, IPqzToken::PqzRolledOver::SIGNATURE_HASH,
+    IUARegistry::UAPqzKeyAdded::SIGNATURE_HASH,
+    IUARegistry::UAPqzPopStored::SIGNATURE_HASH,
+    IUARegistry::UAPqzKeyCurrent::SIGNATURE_HASH,
+    IPqzToken::Credited::SIGNATURE_HASH,
+    IPqzToken::Debited::SIGNATURE_HASH,
+    IPqzToken::PqzRolledOver::SIGNATURE_HASH,
 ];
 
 /// The registry's version events only from the registry, a token's per-version events only from a token (never the registry).
 pub fn pqz_key_origin(events: Vec<Value>, registry: Option<Address>) -> Vec<Value> {
     let reg = registry.map(|r| format!("{r:#x}"));
     let ours = |v: &Value| {
-        let from_reg = reg.as_deref().is_some_and(|r| v["contract"].as_str() == Some(r));
+        let from_reg = reg
+            .as_deref()
+            .is_some_and(|r| v["contract"].as_str() == Some(r));
         match v["event"].as_str() {
             Some("UAPqzKeyAdded" | "UAPqzPopStored" | "UAPqzKeyCurrent") => from_reg,
             Some("Credited" | "Debited" | "PqzRolledOver") => !from_reg,
@@ -157,32 +192,80 @@ fn pqz_key_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
     use IUARegistry as R;
     let h = |b: B256| json!(format!("{b:#x}"));
     if topic0 == R::UAPqzKeyAdded::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<R::UAPqzKeyAdded>() else { return false };
+        let Ok(e) = log.log_decode::<R::UAPqzKeyAdded>() else {
+            return false;
+        };
         let e = e.inner.data;
-        (v["event"], v["feed"], v["ua"], v["version"]) = (json!("UAPqzKeyAdded"), json!("pqz_pending"), h(e.ua), json!(e.version));
+        (v["event"], v["feed"], v["ua"], v["version"]) = (
+            json!("UAPqzKeyAdded"),
+            json!("pqz_pending"),
+            h(e.ua),
+            json!(e.version),
+        );
         (v["pqz_key_hash"], v["pqz_pop_hash"]) = (h(e.pqzKeyHash), h(e.pqzPopHash));
     } else if topic0 == R::UAPqzPopStored::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<R::UAPqzPopStored>() else { return false };
+        let Ok(e) = log.log_decode::<R::UAPqzPopStored>() else {
+            return false;
+        };
         let e = e.inner.data;
-        (v["event"], v["ua"], v["version"], v["checked"]) = (json!("UAPqzPopStored"), h(e.ua), json!(e.version), json!(e.checkedPqzPop));
+        (v["event"], v["ua"], v["version"], v["checked"]) = (
+            json!("UAPqzPopStored"),
+            h(e.ua),
+            json!(e.version),
+            json!(e.checkedPqzPop),
+        );
     } else if topic0 == R::UAPqzKeyCurrent::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<R::UAPqzKeyCurrent>() else { return false };
+        let Ok(e) = log.log_decode::<R::UAPqzKeyCurrent>() else {
+            return false;
+        };
         let e = e.inner.data;
-        (v["event"], v["feed"], v["ua"], v["version"]) = (json!("UAPqzKeyCurrent"), json!("pqz_current"), h(e.ua), json!(e.version));
+        (v["event"], v["feed"], v["ua"], v["version"]) = (
+            json!("UAPqzKeyCurrent"),
+            json!("pqz_current"),
+            h(e.ua),
+            json!(e.version),
+        );
     } else if topic0 == T::Credited::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<T::Credited>() else { return false };
+        let Ok(e) = log.log_decode::<T::Credited>() else {
+            return false;
+        };
         let e = e.inner.data;
-        (v["event"], v["ua"], v["index"], v["key_version"]) = (json!("Credited"), h(e.ua), json!(e.index), json!(e.keyVersion));
+        (v["event"], v["ua"], v["index"], v["key_version"]) = (
+            json!("Credited"),
+            h(e.ua),
+            json!(e.index),
+            json!(e.keyVersion),
+        );
         v["entry_ref"] = h(e.entryRef);
     } else if topic0 == T::Debited::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<T::Debited>() else { return false };
+        let Ok(e) = log.log_decode::<T::Debited>() else {
+            return false;
+        };
         let e = e.inner.data;
-        (v["event"], v["ua"], v["key_version"], v["rolled"], v["floor"]) =
-            (json!("Debited"), h(e.ua), json!(e.keyVersion), json!(e.rolled), json!(e.floor));
+        (
+            v["event"],
+            v["ua"],
+            v["key_version"],
+            v["rolled"],
+            v["floor"],
+        ) = (
+            json!("Debited"),
+            h(e.ua),
+            json!(e.keyVersion),
+            json!(e.rolled),
+            json!(e.floor),
+        );
     } else if topic0 == T::PqzRolledOver::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<T::PqzRolledOver>() else { return false };
+        let Ok(e) = log.log_decode::<T::PqzRolledOver>() else {
+            return false;
+        };
         let e = e.inner.data;
-        (v["event"], v["ua"], v["key_version"], v["rolled"]) = (json!("PqzRolledOver"), h(e.ua), json!(e.keyVersion), json!(e.rolled));
+        (v["event"], v["ua"], v["key_version"], v["rolled"]) = (
+            json!("PqzRolledOver"),
+            h(e.ua),
+            json!(e.keyVersion),
+            json!(e.rolled),
+        );
     } else {
         return false;
     }
@@ -192,12 +275,18 @@ fn pqz_key_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
 /// Group 3f (spec §11.1): the topics of [`pqz_verifier_event`]: the PQZ verifier mode's events and the op events a `PqzVerified`
 /// joins; group 3h: `ProofStoreSet` (never `PqzDebitProof`).
 pub const PQZ_VERIFIER_TOPICS: [B256; 11] = [
-    IPqzToken::PqzVerified::SIGNATURE_HASH, IPqzToken::PqzVerifierProposed::SIGNATURE_HASH, IPqzToken::PqzVerifierSet::SIGNATURE_HASH,
-    IPqzToken::PqzVerifierCancelled::SIGNATURE_HASH, IPqzEvents::PqzVerifierRevoked::SIGNATURE_HASH,
-    IPqzEvents::ConfidentialTransfer::SIGNATURE_HASH, IPqzEvents::ConfidentialTransferMulti::SIGNATURE_HASH,
-    IPqzEvents::Unshielded::SIGNATURE_HASH, IPqzToken::ProofStoreSet::SIGNATURE_HASH,
+    IPqzToken::PqzVerified::SIGNATURE_HASH,
+    IPqzToken::PqzVerifierProposed::SIGNATURE_HASH,
+    IPqzToken::PqzVerifierSet::SIGNATURE_HASH,
+    IPqzToken::PqzVerifierCancelled::SIGNATURE_HASH,
+    IPqzEvents::PqzVerifierRevoked::SIGNATURE_HASH,
+    IPqzEvents::ConfidentialTransfer::SIGNATURE_HASH,
+    IPqzEvents::ConfidentialTransferMulti::SIGNATURE_HASH,
+    IPqzEvents::Unshielded::SIGNATURE_HASH,
+    IPqzToken::ProofStoreSet::SIGNATURE_HASH,
     // round 3t (CTR-PQZ-36): the verifier fee's proposal (an alert: the hostage notice, T29) and its change
-    IPqzToken::VerifierFeeProposed::SIGNATURE_HASH, IPqzToken::VerifierFeeSet::SIGNATURE_HASH,
+    IPqzToken::VerifierFeeProposed::SIGNATURE_HASH,
+    IPqzToken::VerifierFeeSet::SIGNATURE_HASH,
 ];
 
 /// Group 3f: a PQZ verifier mode event or a confidential op event into `v`, ids as `bytes32` hex (never `from` / `to`, which the
@@ -208,62 +297,171 @@ fn pqz_verifier_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
     use IPqzToken as P;
     let h = |w: B256| json!(format!("{w:#x}"));
     if topic0 == P::PqzVerified::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<P::PqzVerified>() else { return false };
+        let Ok(e) = log.log_decode::<P::PqzVerified>() else {
+            return false;
+        };
         let e = e.inner.data;
-        (v["event"], v["statement_hash"], v["proof_hash"], v["verifier"], v["pqz_verifier_epoch"]) =
-            (json!("PqzVerified"), h(e.statementHash), h(e.proofHash), h(e.verifier), json!(e.pqzVerifierEpoch));
+        (
+            v["event"],
+            v["statement_hash"],
+            v["proof_hash"],
+            v["verifier"],
+            v["pqz_verifier_epoch"],
+        ) = (
+            json!("PqzVerified"),
+            h(e.statementHash),
+            h(e.proofHash),
+            h(e.verifier),
+            json!(e.pqzVerifierEpoch),
+        );
     } else if topic0 == P::PqzVerifierProposed::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<P::PqzVerifierProposed>() else { return false };
+        let Ok(e) = log.log_decode::<P::PqzVerifierProposed>() else {
+            return false;
+        };
         let e = e.inner.data;
-        (v["event"], v["current"], v["next"], v["eta"]) = (json!("PqzVerifierProposed"), h(e.current), h(e.next), json!(e.eta));
+        (v["event"], v["current"], v["next"], v["eta"]) = (
+            json!("PqzVerifierProposed"),
+            h(e.current),
+            h(e.next),
+            json!(e.eta),
+        );
     } else if topic0 == P::PqzVerifierSet::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<P::PqzVerifierSet>() else { return false };
+        let Ok(e) = log.log_decode::<P::PqzVerifierSet>() else {
+            return false;
+        };
         let e = e.inner.data;
-        (v["event"], v["previous"], v["next"], v["pqz_verifier_epoch"]) = (json!("PqzVerifierSet"), h(e.previous), h(e.next), json!(e.pqzVerifierEpoch));
+        (
+            v["event"],
+            v["previous"],
+            v["next"],
+            v["pqz_verifier_epoch"],
+        ) = (
+            json!("PqzVerifierSet"),
+            h(e.previous),
+            h(e.next),
+            json!(e.pqzVerifierEpoch),
+        );
     } else if topic0 == P::ProofStoreSet::SIGNATURE_HASH {
         // group 3h (spec §10): bit 24's change of what each later debit leaves in history; an alert (no PqzDebitProof is indexed)
-        let Ok(e) = log.log_decode::<P::ProofStoreSet>() else { return false };
-        (v["event"], v["previous"], v["next"]) = (json!("ProofStoreSet"), json!(e.inner.data.previous), json!(e.inner.data.next));
+        let Ok(e) = log.log_decode::<P::ProofStoreSet>() else {
+            return false;
+        };
+        (v["event"], v["previous"], v["next"]) = (
+            json!("ProofStoreSet"),
+            json!(e.inner.data.previous),
+            json!(e.inner.data.next),
+        );
     } else if topic0 == P::VerifierFeeProposed::SIGNATURE_HASH {
         // round 3t (spec §10, T29): an increase proposed, confirmable from `eta`: an alert
-        let Ok(e) = log.log_decode::<P::VerifierFeeProposed>() else { return false };
+        let Ok(e) = log.log_decode::<P::VerifierFeeProposed>() else {
+            return false;
+        };
         let e = e.inner.data;
-        (v["event"], v["current"], v["next"], v["eta"]) = (json!("VerifierFeeProposed"), json!(e.current), json!(e.next), json!(e.eta));
+        (v["event"], v["current"], v["next"], v["eta"]) = (
+            json!("VerifierFeeProposed"),
+            json!(e.current),
+            json!(e.next),
+            json!(e.eta),
+        );
     } else if topic0 == P::VerifierFeeSet::SIGNATURE_HASH {
         // round 3t: the fee written; `previous == next` is the cancel of a pending increase (spec §7.1). Operator note (Fable
         // P3-6): a `ConfidentialTransfer*.fee` is the whole word, three payees; the split is in the pool moves of the transaction
-        let Ok(e) = log.log_decode::<P::VerifierFeeSet>() else { return false };
-        (v["event"], v["previous"], v["next"]) = (json!("VerifierFeeSet"), json!(e.inner.data.previous), json!(e.inner.data.next));
+        let Ok(e) = log.log_decode::<P::VerifierFeeSet>() else {
+            return false;
+        };
+        (v["event"], v["previous"], v["next"]) = (
+            json!("VerifierFeeSet"),
+            json!(e.inner.data.previous),
+            json!(e.inner.data.next),
+        );
     } else if topic0 == P::PqzVerifierCancelled::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<P::PqzVerifierCancelled>() else { return false };
+        let Ok(e) = log.log_decode::<P::PqzVerifierCancelled>() else {
+            return false;
+        };
         (v["event"], v["next"]) = (json!("PqzVerifierCancelled"), h(e.inner.data.next));
     } else if topic0 == C::PqzVerifierRevoked::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<C::PqzVerifierRevoked>() else { return false };
+        let Ok(e) = log.log_decode::<C::PqzVerifierRevoked>() else {
+            return false;
+        };
         let e = e.inner.data;
-        (v["event"], v["previous"], v["pqz_verifier_epoch"]) = (json!("PqzVerifierRevoked"), h(e.previous), json!(e.pqzVerifierEpoch));
+        (v["event"], v["previous"], v["pqz_verifier_epoch"]) = (
+            json!("PqzVerifierRevoked"),
+            h(e.previous),
+            json!(e.pqzVerifierEpoch),
+        );
     } else if topic0 == C::ConfidentialTransfer::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<C::ConfidentialTransfer>() else { return false };
+        let Ok(e) = log.log_decode::<C::ConfidentialTransfer>() else {
+            return false;
+        };
         let e = e.inner.data;
-        (v["event"], v["entry_ref"], v["from_ua"], v["to_ua"], v["beneficiary"]) =
-            (json!("ConfidentialTransfer"), h(e.entryRef), h(e.fromUA), h(e.toUA), h(e.beneficiary));
-        (v["fee"], v["send_counter"], v["blob"]) = (json!(e.fee.to_string()), json!(e.sendCounter), json!(format!("{:#x}", e.blob)));
+        (
+            v["event"],
+            v["entry_ref"],
+            v["from_ua"],
+            v["to_ua"],
+            v["beneficiary"],
+        ) = (
+            json!("ConfidentialTransfer"),
+            h(e.entryRef),
+            h(e.fromUA),
+            h(e.toUA),
+            h(e.beneficiary),
+        );
+        (v["fee"], v["send_counter"], v["blob"]) = (
+            json!(e.fee.to_string()),
+            json!(e.sendCounter),
+            json!(format!("{:#x}", e.blob)),
+        );
     } else if topic0 == C::ConfidentialTransferMulti::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<C::ConfidentialTransferMulti>() else { return false };
+        let Ok(e) = log.log_decode::<C::ConfidentialTransferMulti>() else {
+            return false;
+        };
         let e = e.inner.data;
-        (v["event"], v["entry_ref"], v["from_ua"], v["beneficiary"], v["fee"]) =
-            (json!("ConfidentialTransferMulti"), h(e.entryRef), h(e.fromUA), h(e.beneficiary), json!(e.fee.to_string()));
-        (v["send_counter"], v["recipients"], v["mode"], v["blob"]) = (json!(e.sendCounter),
-            json!(e.recipients.iter().map(|r| format!("{r:#x}")).collect::<Vec<_>>()), json!(e.mode), json!(format!("{:#x}", e.blob)));
+        (
+            v["event"],
+            v["entry_ref"],
+            v["from_ua"],
+            v["beneficiary"],
+            v["fee"],
+        ) = (
+            json!("ConfidentialTransferMulti"),
+            h(e.entryRef),
+            h(e.fromUA),
+            h(e.beneficiary),
+            json!(e.fee.to_string()),
+        );
+        (v["send_counter"], v["recipients"], v["mode"], v["blob"]) = (
+            json!(e.sendCounter),
+            json!(e
+                .recipients
+                .iter()
+                .map(|r| format!("{r:#x}"))
+                .collect::<Vec<_>>()),
+            json!(e.mode),
+            json!(format!("{:#x}", e.blob)),
+        );
     } else if topic0 == C::Unshielded::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<C::Unshielded>() else { return false };
+        let Ok(e) = log.log_decode::<C::Unshielded>() else {
+            return false;
+        };
         let e = e.inner.data;
-        (v["event"], v["ua"], v["amount"], v["recipient"], v["blob"]) =
-            (json!("Unshielded"), h(e.ua), json!(e.amount.to_string()), h(e.recipient), json!(format!("{:#x}", e.blob)));
+        (v["event"], v["ua"], v["amount"], v["recipient"], v["blob"]) = (
+            json!("Unshielded"),
+            h(e.ua),
+            json!(e.amount.to_string()),
+            h(e.recipient),
+            json!(format!("{:#x}", e.blob)),
+        );
     } else {
         return false;
     }
     v["tx_index"] = json!(log.transaction_index);
-    if matches!(v["event"].as_str(), Some("PqzVerifierProposed" | "PqzVerifierRevoked" | "ProofStoreSet" | "VerifierFeeProposed")) {
+    if matches!(
+        v["event"].as_str(),
+        Some(
+            "PqzVerifierProposed" | "PqzVerifierRevoked" | "ProofStoreSet" | "VerifierFeeProposed"
+        )
+    ) {
         v["alert"] = json!(true);
     }
     true
@@ -276,15 +474,26 @@ fn pqz_verifier_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
 pub fn join_pqz_verified(mut events: Vec<Value>) -> Vec<Value> {
     let key = |v: &Value, k: &str| v[k].as_str().map(str::to_string);
     let at = |v: &Value| v["log_index"].as_u64().unwrap_or(0);
-    const OPS: [&str; 3] = ["ConfidentialTransfer", "ConfidentialTransferMulti", "Unshielded"];
-    let verified: Vec<usize> = (0..events.len()).filter(|&i| events[i]["event"] == "PqzVerified").collect();
+    const OPS: [&str; 3] = [
+        "ConfidentialTransfer",
+        "ConfidentialTransferMulti",
+        "Unshielded",
+    ];
+    let verified: Vec<usize> = (0..events.len())
+        .filter(|&i| events[i]["event"] == "PqzVerified")
+        .collect();
     for i in verified {
         let p = events[i].clone();
-        let j = (0..events.len()).filter(|&j| {
-            let o = &events[j];
-            OPS.iter().any(|e| o["event"] == *e) && o["pqz_verified"].is_null() && key(o, "tx_hash") == key(&p, "tx_hash")
-                && key(o, "contract") == key(&p, "contract") && at(o) > at(&p)
-        }).min_by_key(|&j| at(&events[j]));
+        let j = (0..events.len())
+            .filter(|&j| {
+                let o = &events[j];
+                OPS.iter().any(|e| o["event"] == *e)
+                    && o["pqz_verified"].is_null()
+                    && key(o, "tx_hash") == key(&p, "tx_hash")
+                    && key(o, "contract") == key(&p, "contract")
+                    && at(o) > at(&p)
+            })
+            .min_by_key(|&j| at(&events[j]));
         if let Some(j) = j {
             events[j]["pqz_verified"] = json!({"statement_hash": p["statement_hash"], "proof_hash": p["proof_hash"],
                 "verifier": p["verifier"], "pqz_verifier_epoch": p["pqz_verifier_epoch"]});
@@ -302,23 +511,45 @@ pub type PqzHealth = std::collections::HashMap<String, Value>;
 /// round 3t (CTR-PQZ-36, spec §10): `pqz_verifier_fee`, the fee the last `VerifierFeeSet` wrote (`null` until one is seen);
 /// stamped on the token's verified op rows and verifier rows, kept in `state` for the next range.
 pub fn pqz_health(state: &mut PqzHealth, rows: &mut [Value]) {
-    const KEYS: [&str; 4] = ["pqz_last_verdict_at", "pqz_verifier_epoch", "pqz_verifier_revoked", "pqz_verifier_fee"];
+    const KEYS: [&str; 4] = [
+        "pqz_last_verdict_at",
+        "pqz_verifier_epoch",
+        "pqz_verifier_revoked",
+        "pqz_verifier_fee",
+    ];
     for r in rows.iter_mut() {
         let ev = r["event"].as_str().unwrap_or_default().to_string();
         let verified = !r["pqz_verified"].is_null();
-        let (Some(c), true) = (r["contract"].as_str().map(str::to_string), verified || ev.starts_with("PqzVerifier") || ev.starts_with("VerifierFee"))
-        else { continue };
+        let (Some(c), true) = (
+            r["contract"].as_str().map(str::to_string),
+            verified || ev.starts_with("PqzVerifier") || ev.starts_with("VerifierFee"),
+        ) else {
+            continue;
+        };
         // Fable E N-9: unknown until seen (this state lives in memory: after a restart a revoked verifier is never "not revoked")
         let s = state.entry(c).or_insert_with(|| json!({"pqz_last_verdict_at": null, "pqz_verifier_epoch": null, "pqz_verifier_revoked": null,
             "pqz_verifier_fee": null}));
         if verified {
             // a verdict was checked: its verifier was not revoked then
-            (s["pqz_last_verdict_at"], s["pqz_verifier_epoch"], s["pqz_verifier_revoked"]) =
-                (r["block_number"].clone(), r["pqz_verified"]["pqz_verifier_epoch"].clone(), json!(false));
+            (
+                s["pqz_last_verdict_at"],
+                s["pqz_verifier_epoch"],
+                s["pqz_verifier_revoked"],
+            ) = (
+                r["block_number"].clone(),
+                r["pqz_verified"]["pqz_verifier_epoch"].clone(),
+                json!(false),
+            );
         }
         match ev.as_str() {
-            "PqzVerifierRevoked" => (s["pqz_verifier_revoked"], s["pqz_verifier_epoch"]) = (json!(true), r["pqz_verifier_epoch"].clone()),
-            "PqzVerifierSet" => (s["pqz_verifier_revoked"], s["pqz_verifier_epoch"]) = (json!(false), r["pqz_verifier_epoch"].clone()),
+            "PqzVerifierRevoked" => {
+                (s["pqz_verifier_revoked"], s["pqz_verifier_epoch"]) =
+                    (json!(true), r["pqz_verifier_epoch"].clone())
+            }
+            "PqzVerifierSet" => {
+                (s["pqz_verifier_revoked"], s["pqz_verifier_epoch"]) =
+                    (json!(false), r["pqz_verifier_epoch"].clone())
+            }
             "VerifierFeeSet" => s["pqz_verifier_fee"] = r["next"].clone(),
             _ => {}
         }
@@ -332,17 +563,31 @@ pub fn pqz_health(state: &mut PqzHealth, rows: &mut [Value]) {
 /// orders, so every record is shown).
 /// Round 3s (spec 2026-11-10-token-lists.md §5.4): + `FeatureEnabled` and the restricting list edits (`DeniedSet` with `on`,
 /// `AllowedSet` without), alerted in [`regulated_event`].
-pub const ALERTS: [&str; 5] = ["OrderRecorded", "RelaxProposed", "AccountFrozen", "Paused", "FeatureEnabled"];
+pub const ALERTS: [&str; 5] = [
+    "OrderRecorded",
+    "RelaxProposed",
+    "AccountFrozen",
+    "Paused",
+    "FeatureEnabled",
+];
 
 /// The topics of [`regulated_event`]: the regulated kinds' §3.1 events and the governance events the indexer derives from.
 pub const REGULATED_TOPICS: [B256; 14] = [
-    IRegulatedToken::AccountFrozen::SIGNATURE_HASH, IRegulatedToken::AccountUnfrozen::SIGNATURE_HASH,
-    IRegulatedToken::ForcedTransfer::SIGNATURE_HASH, IRegulatedToken::Paused::SIGNATURE_HASH, IRegulatedToken::Unpaused::SIGNATURE_HASH,
-    IRegulatedToken::OrderRecorded::SIGNATURE_HASH, IRegulatedToken::OrderRevoked::SIGNATURE_HASH,
-    IRegulatedToken::OperatorTransfer::SIGNATURE_HASH, IGovernance::RelaxProposed::SIGNATURE_HASH,
-    IGovernance::FeatureDisabled::SIGNATURE_HASH, IGovernance::RoleRevoked::SIGNATURE_HASH,
+    IRegulatedToken::AccountFrozen::SIGNATURE_HASH,
+    IRegulatedToken::AccountUnfrozen::SIGNATURE_HASH,
+    IRegulatedToken::ForcedTransfer::SIGNATURE_HASH,
+    IRegulatedToken::Paused::SIGNATURE_HASH,
+    IRegulatedToken::Unpaused::SIGNATURE_HASH,
+    IRegulatedToken::OrderRecorded::SIGNATURE_HASH,
+    IRegulatedToken::OrderRevoked::SIGNATURE_HASH,
+    IRegulatedToken::OperatorTransfer::SIGNATURE_HASH,
+    IGovernance::RelaxProposed::SIGNATURE_HASH,
+    IGovernance::FeatureDisabled::SIGNATURE_HASH,
+    IGovernance::RoleRevoked::SIGNATURE_HASH,
     // round 3s (CTR-GOV-24): the lists and the enable
-    IGovernance::FeatureEnabled::SIGNATURE_HASH, IRegulatedToken::AllowedSet::SIGNATURE_HASH, IRegulatedToken::DeniedSet::SIGNATURE_HASH,
+    IGovernance::FeatureEnabled::SIGNATURE_HASH,
+    IRegulatedToken::AllowedSet::SIGNATURE_HASH,
+    IRegulatedToken::DeniedSet::SIGNATURE_HASH,
 ];
 
 /// A regulated kind's event (spec §3.1) or a governance one into `v`, ids as `bytes32` hex but `from` / `to`, which the client's
@@ -353,49 +598,118 @@ fn regulated_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
     use IRegulatedToken as R;
     let h = |w: B256| json!(format!("{w:#x}"));
     if topic0 == R::AccountFrozen::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<R::AccountFrozen>() else { return false };
+        let Ok(e) = log.log_decode::<R::AccountFrozen>() else {
+            return false;
+        };
         let e = e.inner.data;
-        (v["event"], v["account"], v["ref"], v["record_id"], v["until"]) = (json!("AccountFrozen"), h(e.account), h(e.r#ref), h(e.recordId), json!(e.until));
+        (
+            v["event"],
+            v["account"],
+            v["ref"],
+            v["record_id"],
+            v["until"],
+        ) = (
+            json!("AccountFrozen"),
+            h(e.account),
+            h(e.r#ref),
+            h(e.recordId),
+            json!(e.until),
+        );
     } else if topic0 == R::AccountUnfrozen::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<R::AccountUnfrozen>() else { return false };
+        let Ok(e) = log.log_decode::<R::AccountUnfrozen>() else {
+            return false;
+        };
         let e = e.inner.data;
         (v["event"], v["account"], v["ref"]) = (json!("AccountUnfrozen"), h(e.account), h(e.r#ref));
     } else if topic0 == R::ForcedTransfer::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<R::ForcedTransfer>() else { return false };
+        let Ok(e) = log.log_decode::<R::ForcedTransfer>() else {
+            return false;
+        };
         let e = e.inner.data;
-        (v["event"], v["record_id"], v["amount"]) = (json!("ForcedTransfer"), h(e.recordId), json!(e.amount.to_string()));
+        (v["event"], v["record_id"], v["amount"]) = (
+            json!("ForcedTransfer"),
+            h(e.recordId),
+            json!(e.amount.to_string()),
+        );
         put_id(v, "from", e.from);
         put_id(v, "to", e.to);
     } else if topic0 == R::Paused::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<R::Paused>() else { return false };
+        let Ok(e) = log.log_decode::<R::Paused>() else {
+            return false;
+        };
         let e = e.inner.data;
         (v["event"], v["ref"], v["until"]) = (json!("Paused"), h(e.r#ref), json!(e.until));
     } else if topic0 == R::Unpaused::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<R::Unpaused>() else { return false };
+        let Ok(e) = log.log_decode::<R::Unpaused>() else {
+            return false;
+        };
         (v["event"], v["ref"]) = (json!("Unpaused"), h(e.inner.data.r#ref));
     } else if topic0 == R::OrderRecorded::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<R::OrderRecorded>() else { return false };
+        let Ok(e) = log.log_decode::<R::OrderRecorded>() else {
+            return false;
+        };
         let e = e.inner.data;
-        (v["event"], v["record_id"], v["order_id"], v["subject"], v["beneficiary"]) =
-            (json!("OrderRecorded"), h(e.recordId), h(e.orderId), h(e.subject), h(e.beneficiary));
-        (v["max_amount"], v["freeze_until"], v["document_hash"]) = (json!(e.maxAmount.to_string()), json!(e.freezeUntil), h(e.documentHash));
+        (
+            v["event"],
+            v["record_id"],
+            v["order_id"],
+            v["subject"],
+            v["beneficiary"],
+        ) = (
+            json!("OrderRecorded"),
+            h(e.recordId),
+            h(e.orderId),
+            h(e.subject),
+            h(e.beneficiary),
+        );
+        (v["max_amount"], v["freeze_until"], v["document_hash"]) = (
+            json!(e.maxAmount.to_string()),
+            json!(e.freezeUntil),
+            h(e.documentHash),
+        );
     } else if topic0 == R::OrderRevoked::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<R::OrderRevoked>() else { return false };
+        let Ok(e) = log.log_decode::<R::OrderRevoked>() else {
+            return false;
+        };
         let e = e.inner.data;
-        (v["event"], v["record_id"], v["reason_ref"]) = (json!("OrderRevoked"), h(e.recordId), h(e.reasonRef));
+        (v["event"], v["record_id"], v["reason_ref"]) =
+            (json!("OrderRevoked"), h(e.recordId), h(e.reasonRef));
     } else if topic0 == R::OperatorTransfer::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<R::OperatorTransfer>() else { return false };
+        let Ok(e) = log.log_decode::<R::OperatorTransfer>() else {
+            return false;
+        };
         let e = e.inner.data;
-        (v["event"], v["amount"], v["ref"]) = (json!("OperatorTransfer"), json!(e.amount.to_string()), h(e.r#ref));
+        (v["event"], v["amount"], v["ref"]) = (
+            json!("OperatorTransfer"),
+            json!(e.amount.to_string()),
+            h(e.r#ref),
+        );
         put_id(v, "from", e.from);
         put_id(v, "to", e.to);
     } else if topic0 == IGovernance::RelaxProposed::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<IGovernance::RelaxProposed>() else { return false };
+        let Ok(e) = log.log_decode::<IGovernance::RelaxProposed>() else {
+            return false;
+        };
         let e = e.inner.data;
-        (v["event"], v["bit"], v["account"], v["action"], v["proposer"], v["eta"]) =
-            (json!("RelaxProposed"), json!(e.bit), h(e.account), json!(e.action), h(e.proposer), json!(e.eta));
+        (
+            v["event"],
+            v["bit"],
+            v["account"],
+            v["action"],
+            v["proposer"],
+            v["eta"],
+        ) = (
+            json!("RelaxProposed"),
+            json!(e.bit),
+            h(e.account),
+            json!(e.action),
+            h(e.proposer),
+            json!(e.eta),
+        );
     } else if topic0 == IGovernance::FeatureDisabled::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<IGovernance::FeatureDisabled>() else { return false };
+        let Ok(e) = log.log_decode::<IGovernance::FeatureDisabled>() else {
+            return false;
+        };
         let e = e.inner.data;
         (v["event"], v["bit"], v["by"]) = (json!("FeatureDisabled"), json!(e.bit), h(e.by));
         match e.bit {
@@ -405,7 +719,9 @@ fn regulated_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
             _ => {}
         }
     } else if topic0 == IGovernance::FeatureEnabled::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<IGovernance::FeatureEnabled>() else { return false };
+        let Ok(e) = log.log_decode::<IGovernance::FeatureEnabled>() else {
+            return false;
+        };
         let e = e.inner.data;
         (v["event"], v["bit"], v["by"]) = (json!("FeatureEnabled"), json!(e.bit), h(e.by));
         match e.bit {
@@ -417,21 +733,43 @@ fn regulated_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
     } else if topic0 == R::AllowedSet::SIGNATURE_HASH || topic0 == R::DeniedSet::SIGNATURE_HASH {
         let allow = topic0 == R::AllowedSet::SIGNATURE_HASH;
         let (account, by, on) = if allow {
-            let Ok(e) = log.log_decode::<R::AllowedSet>() else { return false };
+            let Ok(e) = log.log_decode::<R::AllowedSet>() else {
+                return false;
+            };
             (e.inner.data.account, e.inner.data.by, e.inner.data.on)
         } else {
-            let Ok(e) = log.log_decode::<R::DeniedSet>() else { return false };
+            let Ok(e) = log.log_decode::<R::DeniedSet>() else {
+                return false;
+            };
             (e.inner.data.account, e.inner.data.by, e.inner.data.on)
         };
-        (v["event"], v["account"], v["by"], v["on"]) = (json!(if allow { "AllowedSet" } else { "DeniedSet" }), h(account), h(by), json!(on));
+        (v["event"], v["account"], v["by"], v["on"]) = (
+            json!(if allow { "AllowedSet" } else { "DeniedSet" }),
+            h(account),
+            h(by),
+            json!(on),
+        );
         if on != allow {
             v["alert"] = json!(true); // a restricting edit: denied, or taken off the allow list
         }
     } else if topic0 == IGovernance::RoleRevoked::SIGNATURE_HASH {
-        let Ok(e) = log.log_decode::<IGovernance::RoleRevoked>() else { return false };
+        let Ok(e) = log.log_decode::<IGovernance::RoleRevoked>() else {
+            return false;
+        };
         let e = e.inner.data;
-        (v["event"], v["bit"], v["account"], v["sender"], v["derived"]) =
-            (json!("RoleRevoked"), json!(e.bit), h(e.account), h(e.sender), json!("holder_lost_bit"));
+        (
+            v["event"],
+            v["bit"],
+            v["account"],
+            v["sender"],
+            v["derived"],
+        ) = (
+            json!("RoleRevoked"),
+            json!(e.bit),
+            h(e.account),
+            h(e.sender),
+            json!("holder_lost_bit"),
+        );
     } else {
         return false;
     }
@@ -458,21 +796,42 @@ fn regulated_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
 pub fn join_pay_events(mut events: Vec<Value>) -> Vec<Value> {
     let key = |v: &Value, k: &str| v[k].as_str().map(str::to_string);
     let at = |v: &Value| v["log_index"].as_u64().unwrap_or(0);
-    let of = |events: &[Value], e: &str| events.iter().enumerate().filter(|(_, v)| v["event"] == e).map(|(i, _)| i).collect::<Vec<_>>();
-    let (settled, metas, fees) = (of(&events, "PaymentSettled"), of(&events, "PaymentMeta"), of(&events, "RelayFeePaid"));
+    let of = |events: &[Value], e: &str| {
+        events
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| v["event"] == e)
+            .map(|(i, _)| i)
+            .collect::<Vec<_>>()
+    };
+    let (settled, metas, fees) = (
+        of(&events, "PaymentSettled"),
+        of(&events, "PaymentMeta"),
+        of(&events, "RelayFeePaid"),
+    );
     let mut taken = vec![false; events.len()];
     for i in metas {
         let m = events[i].clone();
-        let j = settled.iter().copied().filter(|&j| {
-            let p = &events[j];
-            !taken[j] && key(p, "tx_hash") == key(&m, "tx_hash") && key(p, "contract") == key(&m, "contract")
-                && key(p, "entry_ref") == key(&m, "entry_ref") && at(p) > at(&m)
-                && (m["from"].is_null() || who(p, "from") == who(&m, "from"))
-        }).min_by_key(|&j| at(&events[j]));
+        let j = settled
+            .iter()
+            .copied()
+            .filter(|&j| {
+                let p = &events[j];
+                !taken[j]
+                    && key(p, "tx_hash") == key(&m, "tx_hash")
+                    && key(p, "contract") == key(&m, "contract")
+                    && key(p, "entry_ref") == key(&m, "entry_ref")
+                    && at(p) > at(&m)
+                    && (m["from"].is_null() || who(p, "from") == who(&m, "from"))
+            })
+            .min_by_key(|&j| at(&events[j]));
         if let Some(j) = j {
             taken[j] = true;
             // EVM: the named fields (spec §3.2); the non-EVM families' decoders keep `meta` hex until their round (spec §8)
-            for k in ["meta", "pay_no", "meta_save", "meta_schema", "meta_body"].into_iter().filter(|k| !m[*k].is_null()) {
+            for k in ["meta", "pay_no", "meta_save", "meta_schema", "meta_body"]
+                .into_iter()
+                .filter(|k| !m[*k].is_null())
+            {
                 events[j][k] = m[k].clone();
             }
         }
@@ -483,16 +842,30 @@ pub fn join_pay_events(mut events: Vec<Value>) -> Vec<Value> {
     let mut taxed = vec![false; events.len()];
     for i in taxes {
         let t = events[i].clone();
-        let j = settled.iter().copied().filter(|&j| {
-            let p = &events[j];
-            !taxed[j] && key(p, "tx_hash") == key(&t, "tx_hash") && key(p, "contract") == key(&t, "contract")
-                && key(p, "entry_ref") == key(&t, "entry_ref") && at(p) < at(&t) && who(p, "from") == who(&t, "from")
-                && who(p, "to") == who(&t, "to")
-        }).max_by_key(|&j| at(&events[j]));
+        let j = settled
+            .iter()
+            .copied()
+            .filter(|&j| {
+                let p = &events[j];
+                !taxed[j]
+                    && key(p, "tx_hash") == key(&t, "tx_hash")
+                    && key(p, "contract") == key(&t, "contract")
+                    && key(p, "entry_ref") == key(&t, "entry_ref")
+                    && at(p) < at(&t)
+                    && who(p, "from") == who(&t, "from")
+                    && who(p, "to") == who(&t, "to")
+            })
+            .max_by_key(|&j| at(&events[j]));
         if let Some(j) = j {
             taxed[j] = true;
-            let amount = events[j]["amount"].as_str().and_then(|a| a.parse::<alloy::primitives::U256>().ok()).unwrap_or_default();
-            let tax = t["tax"].as_str().and_then(|a| a.parse::<alloy::primitives::U256>().ok()).unwrap_or_default();
+            let amount = events[j]["amount"]
+                .as_str()
+                .and_then(|a| a.parse::<alloy::primitives::U256>().ok())
+                .unwrap_or_default();
+            let tax = t["tax"]
+                .as_str()
+                .and_then(|a| a.parse::<alloy::primitives::U256>().ok())
+                .unwrap_or_default();
             events[j]["tax"] = t["tax"].clone();
             events[j]["tax_mode"] = t["tax_mode"].clone();
             events[j]["tax_recipient"] = t["tax_recipient"].clone();
@@ -504,9 +877,13 @@ pub fn join_pay_events(mut events: Vec<Value>) -> Vec<Value> {
         let f = events[i].clone();
         if let Some(&j) = settled.iter().find(|&&j| {
             let p = &events[j];
-            p["relay_payee"].is_null() && key(p, "tx_hash") == key(&f, "tx_hash") && key(p, "contract") == key(&f, "token")
-                && key(p, "entry_ref") == key(&f, "entry_ref") && who(p, "from") == who(&f, "from")
-                && key(p, "amount") == key(&f, "amount") && (who(p, "to") == who(&f, "to") || who(p, "to") == key(&f, "contract"))
+            p["relay_payee"].is_null()
+                && key(p, "tx_hash") == key(&f, "tx_hash")
+                && key(p, "contract") == key(&f, "token")
+                && key(p, "entry_ref") == key(&f, "entry_ref")
+                && who(p, "from") == who(&f, "from")
+                && key(p, "amount") == key(&f, "amount")
+                && (who(p, "to") == who(&f, "to") || who(p, "to") == key(&f, "contract"))
         }) {
             events[j]["relay_target"] = f["target"].clone();
             events[j]["relay_payee"] = f["to"].clone();
@@ -515,7 +892,9 @@ pub fn join_pay_events(mut events: Vec<Value>) -> Vec<Value> {
             }
         }
     }
-    events.retain(|v| v["event"] != "PaymentMeta" && v["event"] != "RelayFeePaid" && v["event"] != "PaymentTaxed");
+    events.retain(|v| {
+        v["event"] != "PaymentMeta" && v["event"] != "RelayFeePaid" && v["event"] != "PaymentTaxed"
+    });
     events
 }
 
@@ -526,7 +905,13 @@ pub fn pay_filter(from: u64, to: u64, mut addrs: Vec<Address>, router: Option<Ad
 }
 
 /// [`pay_filter`] with the chain's UA registry (`ua_registry`), whose PQZ key-version events ([`PQZ_KEY_TOPICS`]) it reads too.
-pub fn pay_filter_with(from: u64, to: u64, addrs: &mut Vec<Address>, router: Option<Address>, registry: Option<Address>) -> Filter {
+pub fn pay_filter_with(
+    from: u64,
+    to: u64,
+    addrs: &mut Vec<Address>,
+    router: Option<Address>,
+    registry: Option<Address>,
+) -> Filter {
     addrs.extend(router);
     addrs.extend(registry);
     let mut topics = vec![
@@ -541,14 +926,20 @@ pub fn pay_filter_with(from: u64, to: u64, addrs: &mut Vec<Address>, router: Opt
     topics.extend(REGULATED_TOPICS);
     topics.extend(PQZ_KEY_TOPICS);
     topics.extend(PQZ_VERIFIER_TOPICS);
-    Filter::new().from_block(from).to_block(to).address(addrs.clone()).event_signature(topics)
+    Filter::new()
+        .from_block(from)
+        .to_block(to)
+        .address(addrs.clone())
+        .event_signature(topics)
 }
 
 /// `pay_filter`'s logs ⇒ ExternalPull's events: a `RelayFeePaid` only from the router, a token event only from a token.
 pub fn pay_events(logs: &[Log], router: Option<Address>) -> Vec<Value> {
     let rf = IRelayFeeRouter::RelayFeePaid::SIGNATURE_HASH;
     let ours = |l: &&Log| (l.topic0() == Some(&rf)) == (Some(l.address()) == router);
-    join_pqz_verified(join_pay_events(logs.iter().filter(ours).filter_map(encode_event).collect()))
+    join_pqz_verified(join_pay_events(
+        logs.iter().filter(ours).filter_map(encode_event).collect(),
+    ))
 }
 
 /// Cặp (token, ví nhận) đã duyệt; ExternalPull gửi dạng chuẩn, cặp nào không parse được thì bỏ.
@@ -573,7 +964,14 @@ const DRIFT_ERR_BACKOFF: Duration = Duration::from_secs(300);
 
 /// Vòng indexer. Drift C chạy TRONG vòng này, giữa hai bước ingest: cursor đứng yên trong lúc đọc số dư nên
 /// `height == indexed_block` luôn đúng (review S1-2: task riêng đua với indexer và có thể không bao giờ ghi được).
-pub async fn run(chain: Arc<Chain>, external_pull: ExternalPull, poll: Duration, chain_key: String, router: Option<Address>, registry: Option<Address>) {
+pub async fn run(
+    chain: Arc<Chain>,
+    external_pull: ExternalPull,
+    poll: Duration,
+    chain_key: String,
+    router: Option<Address>,
+    registry: Option<Address>,
+) {
     let mut drift_due = std::time::Instant::now();
     let mut health = PqzHealth::default();
     loop {
@@ -585,7 +983,10 @@ pub async fn run(chain: Arc<Chain>, external_pull: ExternalPull, poll: Duration,
         if std::time::Instant::now() >= drift_due {
             match crate::drift::step(&chain, &external_pull, &chain_key).await {
                 Ok(true) => drift_due = std::time::Instant::now() + crate::drift::EVERY,
-                Ok(false) => warn!(chain = chain.number, "drift: cursor moved under the balance read; retrying"),
+                Ok(false) => warn!(
+                    chain = chain.number,
+                    "drift: cursor moved under the balance read; retrying"
+                ),
                 Err(e) => {
                     warn!(chain = chain.number, "drift: {e:#}");
                     drift_due = std::time::Instant::now() + DRIFT_ERR_BACKOFF; // không dội RPC/ExternalPull mỗi vòng poll
@@ -597,42 +998,98 @@ pub async fn run(chain: Arc<Chain>, external_pull: ExternalPull, poll: Duration,
 }
 
 /// Một vòng: đọc cursor + token từ ExternalPull, tính vùng final, kiểm quorum, gửi. `true` = đã tiến.
-pub async fn step(chain: &Chain, external_pull: &ExternalPull, router: Option<Address>) -> anyhow::Result<bool> {
+pub async fn step(
+    chain: &Chain,
+    external_pull: &ExternalPull,
+    router: Option<Address>,
+) -> anyhow::Result<bool> {
     step_with(chain, external_pull, router, None).await
 }
 
 /// [`step`] reading the registry's PQZ key-version events too (group 3g).
-pub async fn step_with(chain: &Chain, external_pull: &ExternalPull, router: Option<Address>, registry: Option<Address>) -> anyhow::Result<bool> {
-    step_health(chain, external_pull, router, registry, &mut PqzHealth::default()).await
+pub async fn step_with(
+    chain: &Chain,
+    external_pull: &ExternalPull,
+    router: Option<Address>,
+    registry: Option<Address>,
+) -> anyhow::Result<bool> {
+    step_health(
+        chain,
+        external_pull,
+        router,
+        registry,
+        &mut PqzHealth::default(),
+    )
+    .await
 }
 
 /// [`step_with`] keeping the PQZ verifier state (group 3f, [`pqz_health`]) across ranges in `health`.
-pub async fn step_health(chain: &Chain, external_pull: &ExternalPull, router: Option<Address>, registry: Option<Address>, health: &mut PqzHealth)
-    -> anyhow::Result<bool>
-{
+pub async fn step_health(
+    chain: &Chain,
+    external_pull: &ExternalPull,
+    router: Option<Address>,
+    registry: Option<Address>,
+    health: &mut PqzHealth,
+) -> anyhow::Result<bool> {
     let nc = external_pull.node_config(chain.number, None).await?;
     // Không token nào đăng ký: không ai lọc được vùng này ⇒ giữ con trỏ (recipe M1), đọc lại khi có token.
-    let addrs: Vec<Address> = nc.tokens.iter().filter_map(crate::external_pull::TokenCfg::evm).collect();
+    let addrs: Vec<Address> = nc
+        .tokens
+        .iter()
+        .filter_map(crate::external_pull::TokenCfg::evm)
+        .collect();
     if addrs.is_empty() {
         return Ok(false);
     }
-    let mode = if nc.finality_mode == "tag" { Mode::Tag } else { Mode::Depth(nc.finality_depth) };
+    let mode = if nc.finality_mode == "tag" {
+        Mode::Tag
+    } else {
+        Mode::Depth(nc.finality_depth)
+    };
     let latest = chain.primary().get_block_number().await?;
     chain.saw_block(latest); // Fable recheck 3 R3-1: the first endpoint's head feeds the chain's shared head
-    let finalized = if mode == Mode::Tag { chain.finalized_number().await? } else { None };
-    let Some(safe) = safe_head(&mode, latest, finalized) else { return Ok(false) };
-    let Some((from, to)) = next_range(nc.indexed_block, safe, MAX_SPAN) else { return Ok(false) };
-    let Some(hash) = Chain::block_hash(chain.primary(), to).await else { return Ok(false) };
+    let finalized = if mode == Mode::Tag {
+        chain.finalized_number().await?
+    } else {
+        None
+    };
+    let Some(safe) = safe_head(&mode, latest, finalized) else {
+        return Ok(false);
+    };
+    let Some((from, to)) = next_range(nc.indexed_block, safe, MAX_SPAN) else {
+        return Ok(false);
+    };
+    let Some(hash) = Chain::block_hash(chain.primary(), to).await else {
+        return Ok(false);
+    };
     let mut others = Vec::new();
     for p in chain.others() {
         others.push(Chain::block_hash(p, to).await);
     }
     if !quorum_ok(hash, &others, nc.finality_quorum) {
-        warn!(chain = chain.number, block = to, "quorum not reached; not advancing");
+        warn!(
+            chain = chain.number,
+            block = to,
+            "quorum not reached; not advancing"
+        );
         return Ok(false);
     }
     let mut events = pqz_key_origin(
-        pay_events(&chain.primary().get_logs(&pay_filter_with(from, to, &mut addrs.clone(), router, registry)).await?, router), registry);
+        pay_events(
+            &chain
+                .primary()
+                .get_logs(&pay_filter_with(
+                    from,
+                    to,
+                    &mut addrs.clone(),
+                    router,
+                    registry,
+                ))
+                .await?,
+            router,
+        ),
+        registry,
+    );
     let pairs = receiving_pairs(&nc);
     if !pairs.is_empty() {
         let tokens: Vec<Address> = pairs.iter().map(|p| p.0).collect();
@@ -644,14 +1101,25 @@ pub async fn step_health(chain: &Chain, external_pull: &ExternalPull, router: Op
             .event_signature(IToken::Transfer::SIGNATURE_HASH)
             .topic2(wallets);
         let logs = chain.primary().get_logs(&f).await?;
-        events.extend(inbound(logs.iter().filter_map(encode_event).collect(), &pairs));
+        events.extend(inbound(
+            logs.iter().filter_map(encode_event).collect(),
+            &pairs,
+        ));
     }
     pqz_health(health, &mut events);
     for e in events.iter().filter(|e| e["alert"] == true) {
         warn!(chain = chain.number, alert = %e["event"], contract = %e["contract"], tx = %e["tx_hash"], "alert: {e}");
     }
-    let r = external_pull.ingest(chain.number, from, to, &format!("{hash:#x}"), &events).await?;
-    info!(chain = chain.number, from, to, created = r.created, "ingested");
+    let r = external_pull
+        .ingest(chain.number, from, to, &format!("{hash:#x}"), &events)
+        .await?;
+    info!(
+        chain = chain.number,
+        from,
+        to,
+        created = r.created,
+        "ingested"
+    );
     Ok(r.indexed_block >= to)
 }
 
@@ -662,7 +1130,10 @@ mod tests {
 
     fn log_of(data: LogData) -> Log {
         Log {
-            inner: alloy::primitives::Log { address: Address::repeat_byte(9), data },
+            inner: alloy::primitives::Log {
+                address: Address::repeat_byte(9),
+                data,
+            },
             block_hash: Some(B256::repeat_byte(0xb)),
             block_number: Some(5),
             transaction_hash: Some(B256::repeat_byte(0xe)),
@@ -710,21 +1181,38 @@ mod tests {
     fn transfers_are_kept_only_to_the_receiving_wallet_of_that_token() {
         let (token, shop) = (Address::repeat_byte(9), Address::repeat_byte(0x5a));
         let ev = |to: Address| {
-            let t = IToken::Transfer { from: Address::repeat_byte(7), to, value: U256::from(5u64) };
+            let t = IToken::Transfer {
+                from: Address::repeat_byte(7),
+                to,
+                value: U256::from(5u64),
+            };
             encode_event(&log_of(t.encode_log_data())).unwrap()
         };
         let v = ev(shop);
-        assert_eq!((v["event"].as_str(), v["amount"].as_str()), (Some("Transfer"), Some("5")));
+        assert_eq!(
+            (v["event"].as_str(), v["amount"].as_str()),
+            (Some("Transfer"), Some("5"))
+        );
         assert_eq!(v["to"], format!("{shop:#x}"));
-        let kept = inbound(vec![ev(shop), ev(Address::repeat_byte(1))], &[(token, shop)]);
+        let kept = inbound(
+            vec![ev(shop), ev(Address::repeat_byte(1))],
+            &[(token, shop)],
+        );
         assert_eq!(kept.len(), 1);
-        assert!(inbound(vec![ev(shop)], &[(Address::repeat_byte(8), shop)]).is_empty(), "other token's wallet");
+        assert!(
+            inbound(vec![ev(shop)], &[(Address::repeat_byte(8), shop)]).is_empty(),
+            "other token's wallet"
+        );
         let nc: crate::external_pull::NodeConfig = serde_json::from_value(json!({
             "finality_mode": "depth", "finality_depth": 1, "finality_quorum": 1, "indexed_block": 0,
             "journal_max_nonce": null, "tokens": [],
             "receiving_addresses": [{"token": format!("{token:#x}"), "address": format!("{shop:#x}")},
                                     {"token": "CABC", "address": "GXYZ"}]})).unwrap();
-        assert_eq!(receiving_pairs(&nc), vec![(token, shop)], "non-EVM forms are skipped, not fatal");
+        assert_eq!(
+            receiving_pairs(&nc),
+            vec![(token, shop)],
+            "non-EVM forms are skipped, not fatal"
+        );
     }
 
     #[test]
@@ -740,7 +1228,10 @@ mod tests {
         let mut pending = log_of(ev.encode_log_data());
         pending.block_number = None;
         assert!(encode_event(&pending).is_none());
-        let foreign = log_of(LogData::new_unchecked(vec![B256::repeat_byte(7)], Default::default()));
+        let foreign = log_of(LogData::new_unchecked(
+            vec![B256::repeat_byte(7)],
+            Default::default(),
+        ));
         assert!(encode_event(&foreign).is_none());
     }
 
@@ -751,21 +1242,91 @@ mod tests {
     fn lists_and_enable_rows() {
         use crate::abi::{IGovernance as G, IRegulatedToken as R};
         let (a, r) = (B256::repeat_byte(0xa1), B256::repeat_byte(0x7e));
-        let enc = |d: LogData| pay_events(&[log_of(d)], None).pop().unwrap_or_else(|| panic!("not read"));
+        let enc = |d: LogData| {
+            pay_events(&[log_of(d)], None)
+                .pop()
+                .unwrap_or_else(|| panic!("not read"))
+        };
         for (bit, d) in [(8u8, "allow_list_on"), (9, "deny_list_on"), (28, "kyc_on")] {
             let v = enc(G::FeatureEnabled { bit, by: r }.encode_log_data());
-            assert_eq!((v["event"].as_str(), v["alert"].as_bool(), v["derived"].as_str()), (Some("FeatureEnabled"), Some(true), Some(d)));
+            assert_eq!(
+                (
+                    v["event"].as_str(),
+                    v["alert"].as_bool(),
+                    v["derived"].as_str()
+                ),
+                (Some("FeatureEnabled"), Some(true), Some(d))
+            );
         }
         let v = enc(G::FeatureDisabled { bit: 28, by: r }.encode_log_data());
         assert_eq!(v["derived"].as_str(), Some("kyc_off"));
         let alert = |d: LogData| enc(d)["alert"].as_bool();
-        assert_eq!(alert(R::DeniedSet { account: a, by: r, on: true }.encode_log_data()), Some(true));
-        assert_eq!(alert(R::AllowedSet { account: a, by: r, on: false }.encode_log_data()), Some(true));
-        assert_eq!(alert(R::DeniedSet { account: a, by: r, on: false }.encode_log_data()), None);
-        assert_eq!(alert(R::AllowedSet { account: a, by: r, on: true }.encode_log_data()), None);
-        let v = enc(R::DeniedSet { account: a, by: r, on: true }.encode_log_data());
-        assert_eq!((v["event"].as_str(), v["account"].as_str(), v["on"].as_bool()), (Some("DeniedSet"), Some(format!("{a:#x}").as_str()), Some(true)));
-        assert!(REGULATED_TOPICS.contains(&R::DeniedSet::SIGNATURE_HASH) && REGULATED_TOPICS.contains(&G::FeatureEnabled::SIGNATURE_HASH));
+        assert_eq!(
+            alert(
+                R::DeniedSet {
+                    account: a,
+                    by: r,
+                    on: true
+                }
+                .encode_log_data()
+            ),
+            Some(true)
+        );
+        assert_eq!(
+            alert(
+                R::AllowedSet {
+                    account: a,
+                    by: r,
+                    on: false
+                }
+                .encode_log_data()
+            ),
+            Some(true)
+        );
+        assert_eq!(
+            alert(
+                R::DeniedSet {
+                    account: a,
+                    by: r,
+                    on: false
+                }
+                .encode_log_data()
+            ),
+            None
+        );
+        assert_eq!(
+            alert(
+                R::AllowedSet {
+                    account: a,
+                    by: r,
+                    on: true
+                }
+                .encode_log_data()
+            ),
+            None
+        );
+        let v = enc(R::DeniedSet {
+            account: a,
+            by: r,
+            on: true,
+        }
+        .encode_log_data());
+        assert_eq!(
+            (
+                v["event"].as_str(),
+                v["account"].as_str(),
+                v["on"].as_bool()
+            ),
+            (
+                Some("DeniedSet"),
+                Some(format!("{a:#x}").as_str()),
+                Some(true)
+            )
+        );
+        assert!(
+            REGULATED_TOPICS.contains(&R::DeniedSet::SIGNATURE_HASH)
+                && REGULATED_TOPICS.contains(&G::FeatureEnabled::SIGNATURE_HASH)
+        );
     }
 
     /// Regulated-kinds spec §7 (M-08): the §3.1 events and `RelaxProposed` are rows of the range with ids as `bytes32` hex; an
@@ -775,84 +1336,295 @@ mod tests {
     fn alert_on_relax_proposed() {
         use crate::abi::{IGovernance as G, IRegulatedToken as R};
         let (a, r) = (B256::repeat_byte(0xa1), B256::repeat_byte(0x7e));
-        let enc = |d: LogData| pay_events(&[log_of(d)], None).pop().unwrap_or_else(|| panic!("not read"));
-        let v = enc(G::RelaxProposed { bit: 5, account: a, action: 3, proposer: r, eta: 1_800_000_000 }.encode_log_data());
-        assert_eq!((v["event"].as_str(), v["alert"].as_bool()), (Some("RelaxProposed"), Some(true)), "{v}");
-        assert_eq!((v["bit"].as_u64(), v["action"].as_u64(), v["eta"].as_u64()), (Some(5), Some(3), Some(1_800_000_000)));
-        assert_eq!((v["account"].as_str(), v["proposer"].as_str()), (Some(format!("{a:#x}").as_str()), Some(format!("{r:#x}").as_str())));
+        let enc = |d: LogData| {
+            pay_events(&[log_of(d)], None)
+                .pop()
+                .unwrap_or_else(|| panic!("not read"))
+        };
+        let v = enc(G::RelaxProposed {
+            bit: 5,
+            account: a,
+            action: 3,
+            proposer: r,
+            eta: 1_800_000_000,
+        }
+        .encode_log_data());
+        assert_eq!(
+            (v["event"].as_str(), v["alert"].as_bool()),
+            (Some("RelaxProposed"), Some(true)),
+            "{v}"
+        );
+        assert_eq!(
+            (v["bit"].as_u64(), v["action"].as_u64(), v["eta"].as_u64()),
+            (Some(5), Some(3), Some(1_800_000_000))
+        );
+        assert_eq!(
+            (v["account"].as_str(), v["proposer"].as_str()),
+            (
+                Some(format!("{a:#x}").as_str()),
+                Some(format!("{r:#x}").as_str())
+            )
+        );
         let alerts = [
-            enc(R::OrderRecorded { recordId: r, orderId: a, subject: a, beneficiary: r, maxAmount: U256::from(5), freezeUntil: 9, documentHash: r }.encode_log_data()),
-            enc(R::AccountFrozen { account: a, r#ref: r, recordId: B256::ZERO, until: 9 }.encode_log_data()),
+            enc(R::OrderRecorded {
+                recordId: r,
+                orderId: a,
+                subject: a,
+                beneficiary: r,
+                maxAmount: U256::from(5),
+                freezeUntil: 9,
+                documentHash: r,
+            }
+            .encode_log_data()),
+            enc(R::AccountFrozen {
+                account: a,
+                r#ref: r,
+                recordId: B256::ZERO,
+                until: 9,
+            }
+            .encode_log_data()),
             enc(R::Paused { r#ref: r, until: 9 }.encode_log_data()),
         ];
-        for (v, e) in alerts.iter().zip(["OrderRecorded", "AccountFrozen", "Paused"]) {
-            assert_eq!((v["event"].as_str(), v["alert"].as_bool()), (Some(e), Some(true)), "{v}");
+        for (v, e) in alerts
+            .iter()
+            .zip(["OrderRecorded", "AccountFrozen", "Paused"])
+        {
+            assert_eq!(
+                (v["event"].as_str(), v["alert"].as_bool()),
+                (Some(e), Some(true)),
+                "{v}"
+            );
         }
         assert_eq!(alerts[1]["until"].as_u64(), Some(9));
         let quiet = [
-            enc(R::AccountUnfrozen { account: a, r#ref: r }.encode_log_data()),
+            enc(R::AccountUnfrozen {
+                account: a,
+                r#ref: r,
+            }
+            .encode_log_data()),
             enc(R::Unpaused { r#ref: r }.encode_log_data()),
-            enc(R::OrderRevoked { recordId: r, reasonRef: a }.encode_log_data()),
-            enc(R::ForcedTransfer { recordId: r, from: a, to: r, amount: U256::from(3) }.encode_log_data()),
-            enc(R::OperatorTransfer { from: a, to: r, amount: U256::from(3), r#ref: r }.encode_log_data()),
+            enc(R::OrderRevoked {
+                recordId: r,
+                reasonRef: a,
+            }
+            .encode_log_data()),
+            enc(R::ForcedTransfer {
+                recordId: r,
+                from: a,
+                to: r,
+                amount: U256::from(3),
+            }
+            .encode_log_data()),
+            enc(R::OperatorTransfer {
+                from: a,
+                to: r,
+                amount: U256::from(3),
+                r#ref: r,
+            }
+            .encode_log_data()),
         ];
         for v in &quiet {
             assert!(v["alert"].is_null(), "{v}");
         }
         // `from` / `to` in the client's address form: a native id its address, a derived one `UA_POOL` and `<k>_ua`
         let native = Address::repeat_byte(3).into_word();
-        let ft = enc(R::ForcedTransfer { recordId: r, from: native, to: a, amount: U256::from(3) }.encode_log_data());
-        assert_eq!((ft["from"].as_str(), ft["to_ua"].as_str()), (Some(format!("{:#x}", Address::repeat_byte(3)).as_str()), Some(format!("{a:#x}").as_str())));
+        let ft = enc(R::ForcedTransfer {
+            recordId: r,
+            from: native,
+            to: a,
+            amount: U256::from(3),
+        }
+        .encode_log_data());
+        assert_eq!(
+            (ft["from"].as_str(), ft["to_ua"].as_str()),
+            (
+                Some(format!("{:#x}", Address::repeat_byte(3)).as_str()),
+                Some(format!("{a:#x}").as_str())
+            )
+        );
         assert_eq!(ft["to"].as_str().map(str::len), Some(42));
         let derived = |d: LogData| enc(d)["derived"].as_str().map(str::to_string);
-        assert_eq!(derived(G::FeatureDisabled { bit: 5, by: a }.encode_log_data()).as_deref(), Some("every_freeze_ended"));
-        assert_eq!(derived(G::FeatureDisabled { bit: 10, by: a }.encode_log_data()).as_deref(), Some("every_record_backed_freeze_ended"));
-        assert_eq!(derived(G::FeatureDisabled { bit: 7, by: a }.encode_log_data()), None);
-        assert_eq!(derived(G::RoleRevoked { bit: 6, account: a, sender: r }.encode_log_data()).as_deref(), Some("holder_lost_bit"));
+        assert_eq!(
+            derived(G::FeatureDisabled { bit: 5, by: a }.encode_log_data()).as_deref(),
+            Some("every_freeze_ended")
+        );
+        assert_eq!(
+            derived(G::FeatureDisabled { bit: 10, by: a }.encode_log_data()).as_deref(),
+            Some("every_record_backed_freeze_ended")
+        );
+        assert_eq!(
+            derived(G::FeatureDisabled { bit: 7, by: a }.encode_log_data()),
+            None
+        );
+        assert_eq!(
+            derived(
+                G::RoleRevoked {
+                    bit: 6,
+                    account: a,
+                    sender: r
+                }
+                .encode_log_data()
+            )
+            .as_deref(),
+            Some("holder_lost_bit")
+        );
         let f = pay_filter(1, 2, vec![Address::repeat_byte(9)], None);
-        for t in [R::AccountFrozen::SIGNATURE_HASH, R::AccountUnfrozen::SIGNATURE_HASH, R::ForcedTransfer::SIGNATURE_HASH,
-            R::Paused::SIGNATURE_HASH, R::Unpaused::SIGNATURE_HASH, R::OrderRecorded::SIGNATURE_HASH, R::OrderRevoked::SIGNATURE_HASH,
-            R::OperatorTransfer::SIGNATURE_HASH, G::RelaxProposed::SIGNATURE_HASH, G::FeatureDisabled::SIGNATURE_HASH,
-            G::RoleRevoked::SIGNATURE_HASH] {
+        for t in [
+            R::AccountFrozen::SIGNATURE_HASH,
+            R::AccountUnfrozen::SIGNATURE_HASH,
+            R::ForcedTransfer::SIGNATURE_HASH,
+            R::Paused::SIGNATURE_HASH,
+            R::Unpaused::SIGNATURE_HASH,
+            R::OrderRecorded::SIGNATURE_HASH,
+            R::OrderRevoked::SIGNATURE_HASH,
+            R::OperatorTransfer::SIGNATURE_HASH,
+            G::RelaxProposed::SIGNATURE_HASH,
+            G::FeatureDisabled::SIGNATURE_HASH,
+            G::RoleRevoked::SIGNATURE_HASH,
+        ] {
             assert!(f.topics[0].matches(&t), "{t:#x} not asked");
         }
     }
 
     fn log_at(address: Address, tx: u8, log_index: u64, data: LogData) -> Log {
-        Log { inner: alloy::primitives::Log { address, data }, transaction_hash: Some(B256::repeat_byte(tx)), log_index: Some(log_index),
-              ..log_of(LogData::new_unchecked(vec![], Default::default())) }
+        Log {
+            inner: alloy::primitives::Log { address, data },
+            transaction_hash: Some(B256::repeat_byte(tx)),
+            log_index: Some(log_index),
+            ..log_of(LogData::new_unchecked(vec![], Default::default()))
+        }
     }
 
     /// Group 3g (spec §7.3): the registry's version events and the token's per-version events reach the client as rows, the
     /// current and the pending feed by name, each event only from its own contract; the filter reads the registry.
     #[test]
     fn indexer_current_feed() {
-        let (reg, tok, ua) = (Address::repeat_byte(0x5e), Address::repeat_byte(0x70), B256::repeat_byte(0xd1));
+        let (reg, tok, ua) = (
+            Address::repeat_byte(0x5e),
+            Address::repeat_byte(0x70),
+            B256::repeat_byte(0xd1),
+        );
         let ev = |at: Address, i: u64, d: LogData| log_at(at, 3, i, d);
         let logs = vec![
-            ev(reg, 0, IUARegistry::UAPqzKeyAdded { ua, version: 1, pqzKeyHash: B256::repeat_byte(1), pqzPopHash: B256::repeat_byte(2),
-                pqzKey: vec![7; 4].into(), sig: vec![].into() }.encode_log_data()),
-            ev(reg, 1, IUARegistry::UAPqzPopStored { ua, version: 1, checkedPqzPop: 2, pqzPop: vec![9].into() }.encode_log_data()),
-            ev(reg, 2, IUARegistry::UAPqzKeyCurrent { ua, version: 1 }.encode_log_data()),
-            ev(tok, 3, IPqzToken::Credited { ua, index: 4, keyVersion: 1, entryRef: B256::repeat_byte(3) }.encode_log_data()),
-            ev(tok, 4, IPqzToken::Debited { ua, keyVersion: 0, rolled: 2, floor: 2, blob: Address::ZERO }.encode_log_data()),
-            ev(tok, 5, IPqzToken::PqzRolledOver { ua, keyVersion: 0, rolled: 3, accUnits: 1, accHash: B256::ZERO }.encode_log_data()),
+            ev(
+                reg,
+                0,
+                IUARegistry::UAPqzKeyAdded {
+                    ua,
+                    version: 1,
+                    pqzKeyHash: B256::repeat_byte(1),
+                    pqzPopHash: B256::repeat_byte(2),
+                    pqzKey: vec![7; 4].into(),
+                    sig: vec![].into(),
+                }
+                .encode_log_data(),
+            ),
+            ev(
+                reg,
+                1,
+                IUARegistry::UAPqzPopStored {
+                    ua,
+                    version: 1,
+                    checkedPqzPop: 2,
+                    pqzPop: vec![9].into(),
+                }
+                .encode_log_data(),
+            ),
+            ev(
+                reg,
+                2,
+                IUARegistry::UAPqzKeyCurrent { ua, version: 1 }.encode_log_data(),
+            ),
+            ev(
+                tok,
+                3,
+                IPqzToken::Credited {
+                    ua,
+                    index: 4,
+                    keyVersion: 1,
+                    entryRef: B256::repeat_byte(3),
+                }
+                .encode_log_data(),
+            ),
+            ev(
+                tok,
+                4,
+                IPqzToken::Debited {
+                    ua,
+                    keyVersion: 0,
+                    rolled: 2,
+                    floor: 2,
+                    blob: Address::ZERO,
+                }
+                .encode_log_data(),
+            ),
+            ev(
+                tok,
+                5,
+                IPqzToken::PqzRolledOver {
+                    ua,
+                    keyVersion: 0,
+                    rolled: 3,
+                    accUnits: 1,
+                    accHash: B256::ZERO,
+                }
+                .encode_log_data(),
+            ),
             // a registry event from a token, a token event from the registry: dropped
-            ev(tok, 6, IUARegistry::UAPqzKeyCurrent { ua, version: 9 }.encode_log_data()),
-            ev(reg, 7, IPqzToken::Credited { ua, index: 9, keyVersion: 9, entryRef: B256::ZERO }.encode_log_data()),
+            ev(
+                tok,
+                6,
+                IUARegistry::UAPqzKeyCurrent { ua, version: 9 }.encode_log_data(),
+            ),
+            ev(
+                reg,
+                7,
+                IPqzToken::Credited {
+                    ua,
+                    index: 9,
+                    keyVersion: 9,
+                    entryRef: B256::ZERO,
+                }
+                .encode_log_data(),
+            ),
         ];
         let rows = pqz_key_origin(pay_events(&logs, None), Some(reg));
-        let got: Vec<(String, Value, Value)> = rows.iter().map(|r| (r["event"].as_str().unwrap().to_string(),
-            r["version"].clone(), r["key_version"].clone())).collect();
+        let got: Vec<(String, Value, Value)> = rows
+            .iter()
+            .map(|r| {
+                (
+                    r["event"].as_str().unwrap().to_string(),
+                    r["version"].clone(),
+                    r["key_version"].clone(),
+                )
+            })
+            .collect();
         let n = |e: &str, v: Value, k: Value| (e.to_string(), v, k);
-        assert_eq!(got, vec![n("UAPqzKeyAdded", json!(1), Value::Null), n("UAPqzPopStored", json!(1), Value::Null),
-            n("UAPqzKeyCurrent", json!(1), Value::Null), n("Credited", Value::Null, json!(1)), n("Debited", Value::Null, json!(0)),
-            n("PqzRolledOver", Value::Null, json!(0))]);
-        assert_eq!((rows[0]["feed"].as_str(), rows[2]["feed"].as_str()), (Some("pqz_pending"), Some("pqz_current")));
+        assert_eq!(
+            got,
+            vec![
+                n("UAPqzKeyAdded", json!(1), Value::Null),
+                n("UAPqzPopStored", json!(1), Value::Null),
+                n("UAPqzKeyCurrent", json!(1), Value::Null),
+                n("Credited", Value::Null, json!(1)),
+                n("Debited", Value::Null, json!(0)),
+                n("PqzRolledOver", Value::Null, json!(0))
+            ]
+        );
+        assert_eq!(
+            (rows[0]["feed"].as_str(), rows[2]["feed"].as_str()),
+            (Some("pqz_pending"), Some("pqz_current"))
+        );
         assert!(rows.iter().all(|r| r["ua"] == json!(format!("{ua:#x}"))));
-        assert_eq!(rows[3]["entry_ref"], json!(format!("{:#x}", B256::repeat_byte(3))));
+        assert_eq!(
+            rows[3]["entry_ref"],
+            json!(format!("{:#x}", B256::repeat_byte(3)))
+        );
         let f = pay_filter_with(0, 9, &mut vec![tok], None, Some(reg));
-        assert!(f.address.iter().any(|a| *a == reg) && f.address.iter().any(|a| *a == tok), "the registry is read");
+        assert!(
+            f.address.iter().any(|a| *a == reg) && f.address.iter().any(|a| *a == tok),
+            "the registry is read"
+        );
         for t in PQZ_KEY_TOPICS {
             assert!(f.topics[0].iter().any(|x| *x == t), "{t:#x}");
         }
@@ -863,15 +1635,51 @@ mod tests {
     /// join by id alone, an unjoined one proves nothing, and neither reaches ExternalPull as a row.
     #[test]
     fn indexer_joins_payment_meta() {
-        let (token, fake, router) = (Address::repeat_byte(9), Address::repeat_byte(0x66), Address::repeat_byte(0x7f));
-        let (alice, shop, mallory) = (Address::repeat_byte(1), Address::repeat_byte(2), Address::repeat_byte(3));
+        let (token, fake, router) = (
+            Address::repeat_byte(9),
+            Address::repeat_byte(0x66),
+            Address::repeat_byte(0x7f),
+        );
+        let (alice, shop, mallory) = (
+            Address::repeat_byte(1),
+            Address::repeat_byte(2),
+            Address::repeat_byte(3),
+        );
         let (p, r) = (B256::repeat_byte(4), B256::repeat_byte(5));
-        let settled = |from: Address, to: Address, amount: u64, entry_ref: B256| IToken::PaymentSettled { from, to,
-            amount: U256::from(amount), feeAmount: U256::ZERO, feeRecipient: Address::ZERO, entryRef: entry_ref }.encode_log_data();
-        let no = B256::left_padding_from(&[0x01, 0x9a, 0x6e, 0x3c, 0x5f, 0x00, 0x7a, 0x3b, 0x8c, 0x4d, 0x5e, 0x6f, 0x70, 0x81, 0x92, 0xa3]);
-        let meta = IToken::PaymentMeta { payId: p, payNo: no, save: true, schema: 1, body: vec![0xab, 0xcd].into() }.encode_log_data();
-        let fee_by = |token: Address, payer: Address, amount: u64| IRelayFeeRouter::RelayFeePaid { r#ref: r, target: shop, token,
-            payer: payer.into_word(), payee: Address::repeat_byte(0x1a).into_word(), amount: U256::from(amount) }.encode_log_data();
+        let settled = |from: Address, to: Address, amount: u64, entry_ref: B256| {
+            IToken::PaymentSettled {
+                from,
+                to,
+                amount: U256::from(amount),
+                feeAmount: U256::ZERO,
+                feeRecipient: Address::ZERO,
+                entryRef: entry_ref,
+            }
+            .encode_log_data()
+        };
+        let no = B256::left_padding_from(&[
+            0x01, 0x9a, 0x6e, 0x3c, 0x5f, 0x00, 0x7a, 0x3b, 0x8c, 0x4d, 0x5e, 0x6f, 0x70, 0x81,
+            0x92, 0xa3,
+        ]);
+        let meta = IToken::PaymentMeta {
+            payId: p,
+            payNo: no,
+            save: true,
+            schema: 1,
+            body: vec![0xab, 0xcd].into(),
+        }
+        .encode_log_data();
+        let fee_by = |token: Address, payer: Address, amount: u64| {
+            IRelayFeeRouter::RelayFeePaid {
+                r#ref: r,
+                target: shop,
+                token,
+                payer: payer.into_word(),
+                payee: Address::repeat_byte(0x1a).into_word(),
+                amount: U256::from(amount),
+            }
+            .encode_log_data()
+        };
         let fee = |token: Address, amount: u64| fee_by(token, alice, amount);
         let logs = vec![
             // tx 1: a 0-amount spoof with the same id before the meta, then the meta and its payment
@@ -900,27 +1708,78 @@ mod tests {
         let out = pay_events(&logs, Some(router));
         assert!(out.iter().all(client_ingest_accepts));
         let names: Vec<&str> = out.iter().map(|v| v["event"].as_str().unwrap()).collect();
-        assert_eq!(names, ["PaymentSettled"; 8], "PaymentMeta / RelayFeePaid never reach ExternalPull as rows");
-        let with_meta: Vec<(&str, u64)> = out.iter().filter(|v| !v["meta_body"].is_null())
-            .map(|v| (v["tx_hash"].as_str().unwrap(), v["log_index"].as_u64().unwrap())).collect();
-        assert_eq!(with_meta, [(format!("{:#x}", B256::repeat_byte(1)).as_str(), 2)], "only the payment right after its meta");
-        assert_eq!((out[1]["meta_body"].as_str(), out[1]["meta_schema"].as_u64(), out[1]["meta_save"].as_bool()), (Some("0xabcd"), Some(1), Some(true)));
-        assert_eq!(out[1]["pay_no"], "0x00000000000000000000000000000000019a6e3c5f007a3b8c4d5e6f708192a3", "plan T83: the bytes32, 0x-hex");
+        assert_eq!(
+            names, ["PaymentSettled"; 8],
+            "PaymentMeta / RelayFeePaid never reach ExternalPull as rows"
+        );
+        let with_meta: Vec<(&str, u64)> = out
+            .iter()
+            .filter(|v| !v["meta_body"].is_null())
+            .map(|v| {
+                (
+                    v["tx_hash"].as_str().unwrap(),
+                    v["log_index"].as_u64().unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            with_meta,
+            [(format!("{:#x}", B256::repeat_byte(1)).as_str(), 2)],
+            "only the payment right after its meta"
+        );
+        assert_eq!(
+            (
+                out[1]["meta_body"].as_str(),
+                out[1]["meta_schema"].as_u64(),
+                out[1]["meta_save"].as_bool()
+            ),
+            (Some("0xabcd"), Some(1), Some(true))
+        );
+        assert_eq!(
+            out[1]["pay_no"], "0x00000000000000000000000000000000019a6e3c5f007a3b8c4d5e6f708192a3",
+            "plan T83: the bytes32, 0x-hex"
+        );
         assert_eq!(out[1]["from"], format!("{alice:#x}"));
-        let relayed: Vec<&str> = out.iter().filter(|v| !v["relay_payee"].is_null()).map(|v| v["tx_hash"].as_str().unwrap()).collect();
-        assert_eq!(relayed, [format!("{:#x}", B256::repeat_byte(4))], "the expected token's payment, same (from, ref), amount and payee or router");
+        let relayed: Vec<&str> = out
+            .iter()
+            .filter(|v| !v["relay_payee"].is_null())
+            .map(|v| v["tx_hash"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            relayed,
+            [format!("{:#x}", B256::repeat_byte(4))],
+            "the expected token's payment, same (from, ref), amount and payee or router"
+        );
         let j = out.iter().find(|v| !v["relay_payee"].is_null()).unwrap();
-        assert_eq!((j["relay_target"].as_str(), j["relay_payee"].as_str()),
-            (Some(format!("{shop:#x}").as_str()), Some(format!("{:#x}", Address::repeat_byte(0x1a)).as_str())));
-        assert!(pay_events(&logs, None).iter().all(|v| v["relay_payee"].is_null()), "no router: no relay fee joins");
+        assert_eq!(
+            (j["relay_target"].as_str(), j["relay_payee"].as_str()),
+            (
+                Some(format!("{shop:#x}").as_str()),
+                Some(format!("{:#x}", Address::repeat_byte(0x1a)).as_str())
+            )
+        );
+        assert!(
+            pay_events(&logs, None)
+                .iter()
+                .all(|v| v["relay_payee"].is_null()),
+            "no router: no relay fee joins"
+        );
     }
 
     /// The client's ingest (`dms_blockchain` `chain_event_ingest` `_decode`, bamboo-dms 81cea08): on an EVM chain
     /// `contract`, `from`, `to`, `fee_recipient` and `relayer` must each be `0x` + 40 hex, or the whole range is refused
     /// (review C1). Every row the indexer sends must pass it.
     pub(crate) fn client_ingest_accepts(row: &Value) -> bool {
-        let addr = |v: &Value| v.as_str().is_some_and(|s| s.len() == 42 && s.starts_with("0x") && s[2..].bytes().all(|b| b.is_ascii_hexdigit()));
-        ["contract", "from", "to", "fee_recipient", "relayer"].iter().all(|k| row[*k].is_null() || addr(&row[*k]))
+        let addr = |v: &Value| {
+            v.as_str().is_some_and(|s| {
+                s.len() == 42
+                    && s.starts_with("0x")
+                    && s[2..].bytes().all(|b| b.is_ascii_hexdigit())
+            })
+        };
+        ["contract", "from", "to", "fee_recipient", "relayer"]
+            .iter()
+            .all(|k| row[*k].is_null() || addr(&row[*k]))
     }
 
     /// pay-meta-tax T42 (`indexer_joins_payment_taxed`, spec §5.4): a `PaymentTaxed` joins the `PaymentSettled` before it of the
@@ -930,28 +1789,72 @@ mod tests {
     fn indexer_joins_payment_taxed() {
         use crate::abi::{IRegulatedToken, IUALedger};
         let token = Address::repeat_byte(9);
-        let (payer, shop, authority) = (Address::repeat_byte(0xaa).into_word(), Address::repeat_byte(0xbb).into_word(), B256::repeat_byte(0x7a));
+        let (payer, shop, authority) = (
+            Address::repeat_byte(0xaa).into_word(),
+            Address::repeat_byte(0xbb).into_word(),
+            B256::repeat_byte(0x7a),
+        );
         let p = B256::repeat_byte(4);
-        let settled = |from: B256, amount: u64| IUALedger::UAPaymentSettled { from, to: shop, amount: U256::from(amount),
-            feeAmount: U256::ZERO, feeRecipient: Address::ZERO, entryRef: p }.encode_log_data();
-        let taxed = |from: B256, tax: u64| IRegulatedToken::PaymentTaxed { entryRef: p, payee: shop, taxRecipient: authority, from,
-            taxMode: 2, tax: U256::from(tax), digest: B256::repeat_byte(0xd1) }.encode_log_data();
+        let settled = |from: B256, amount: u64| {
+            IUALedger::UAPaymentSettled {
+                from,
+                to: shop,
+                amount: U256::from(amount),
+                feeAmount: U256::ZERO,
+                feeRecipient: Address::ZERO,
+                entryRef: p,
+            }
+            .encode_log_data()
+        };
+        let taxed = |from: B256, tax: u64| {
+            IRegulatedToken::PaymentTaxed {
+                entryRef: p,
+                payee: shop,
+                taxRecipient: authority,
+                from,
+                taxMode: 2,
+                tax: U256::from(tax),
+                digest: B256::repeat_byte(0xd1),
+            }
+            .encode_log_data()
+        };
         let logs = vec![
             log_at(token, 1, 0, settled(payer, 1_000)),
             log_at(token, 1, 1, taxed(payer, 100)),
             log_at(token, 2, 0, settled(payer, 500)),
-            log_at(token, 2, 1, taxed(Address::repeat_byte(0xcc).into_word(), 50)),
+            log_at(
+                token,
+                2,
+                1,
+                taxed(Address::repeat_byte(0xcc).into_word(), 50),
+            ),
             log_at(token, 3, 0, taxed(payer, 7)),
             log_at(token, 3, 1, settled(payer, 70)),
         ];
         let out = pay_events(&logs, None);
-        assert!(out.iter().all(|v| v["event"] == "PaymentSettled"), "PaymentTaxed is never a row: {out:?}");
+        assert!(
+            out.iter().all(|v| v["event"] == "PaymentSettled"),
+            "PaymentTaxed is never a row: {out:?}"
+        );
         assert_eq!(out.len(), 3);
-        assert_eq!((out[0]["tax"].as_str(), out[0]["tax_mode"].as_u64(), out[0]["net"].as_str()), (Some("100"), Some(2), Some("900")));
+        assert_eq!(
+            (
+                out[0]["tax"].as_str(),
+                out[0]["tax_mode"].as_u64(),
+                out[0]["net"].as_str()
+            ),
+            (Some("100"), Some(2), Some("900"))
+        );
         assert_eq!(out[0]["tax_recipient"], format!("{authority:#x}"));
         assert_eq!(out[0]["withheld_by"], out[0]["from"]);
-        assert!(out[1]["tax"].is_null(), "another payer's PaymentTaxed joins nothing");
-        assert!(out[2]["tax"].is_null(), "a PaymentTaxed before its payment joins nothing");
+        assert!(
+            out[1]["tax"].is_null(),
+            "another payer's PaymentTaxed joins nothing"
+        );
+        assert!(
+            out[2]["tax"].is_null(),
+            "a PaymentTaxed before its payment joins nothing"
+        );
     }
 
     /// The UA ledger's payment (`UAPaymentSettled`) and execution (`UAMetaTransactionExecuted`) are the same rows as the
@@ -961,18 +1864,63 @@ mod tests {
     #[test]
     fn ua_payments_are_payment_rows_and_join_their_meta_and_relay_fee() {
         use crate::abi::IUALedger;
-        let (token, router, lane) = (Address::repeat_byte(9), Address::repeat_byte(0x7f), Address::repeat_byte(0x1a));
-        let (ua, shop, other) = (B256::repeat_byte(0xaa), B256::repeat_byte(0xbb), B256::repeat_byte(0xcc));
+        let (token, router, lane) = (
+            Address::repeat_byte(9),
+            Address::repeat_byte(0x7f),
+            Address::repeat_byte(0x1a),
+        );
+        let (ua, shop, other) = (
+            B256::repeat_byte(0xaa),
+            B256::repeat_byte(0xbb),
+            B256::repeat_byte(0xcc),
+        );
         let (p, r) = (B256::repeat_byte(4), B256::repeat_byte(5));
         let pool = format!("{:#x}", crate::metatx::ua_pool());
-        assert_eq!(crate::metatx::ua_pool(), Address::from_word(alloy::primitives::keccak256("scaas.ua.pool.v1")), "MetaTxLib.UA_POOL");
-        let settled = |from: B256, to: B256, amount: u64, entry_ref: B256| IUALedger::UAPaymentSettled { from, to,
-            amount: U256::from(amount), feeAmount: U256::from(1u64), feeRecipient: lane, entryRef: entry_ref }.encode_log_data();
-        let meta = IToken::PaymentMeta { payId: p, payNo: B256::ZERO, save: false, schema: 1, body: vec![0xab].into() }.encode_log_data();
-        let fee = |payer: B256, payee: B256| IRelayFeeRouter::RelayFeePaid { r#ref: r, target: token, token, payer, payee,
-            amount: U256::from(5u64) }.encode_log_data();
-        let exec = IUALedger::UAMetaTransactionExecuted { from: ua, relayer: lane, batch: U256::from(7u64), nonce: U256::ZERO,
-            digest: B256::repeat_byte(0xd1), feeRecipient: lane, fee: U256::from(1u64) }.encode_log_data();
+        assert_eq!(
+            crate::metatx::ua_pool(),
+            Address::from_word(alloy::primitives::keccak256("scaas.ua.pool.v1")),
+            "MetaTxLib.UA_POOL"
+        );
+        let settled = |from: B256, to: B256, amount: u64, entry_ref: B256| {
+            IUALedger::UAPaymentSettled {
+                from,
+                to,
+                amount: U256::from(amount),
+                feeAmount: U256::from(1u64),
+                feeRecipient: lane,
+                entryRef: entry_ref,
+            }
+            .encode_log_data()
+        };
+        let meta = IToken::PaymentMeta {
+            payId: p,
+            payNo: B256::ZERO,
+            save: false,
+            schema: 1,
+            body: vec![0xab].into(),
+        }
+        .encode_log_data();
+        let fee = |payer: B256, payee: B256| {
+            IRelayFeeRouter::RelayFeePaid {
+                r#ref: r,
+                target: token,
+                token,
+                payer,
+                payee,
+                amount: U256::from(5u64),
+            }
+            .encode_log_data()
+        };
+        let exec = IUALedger::UAMetaTransactionExecuted {
+            from: ua,
+            relayer: lane,
+            batch: U256::from(7u64),
+            nonce: U256::ZERO,
+            digest: B256::repeat_byte(0xd1),
+            feeRecipient: lane,
+            fee: U256::from(1u64),
+        }
+        .encode_log_data();
         let logs = vec![
             log_at(token, 1, 0, meta.clone()),
             log_at(token, 1, 1, settled(ua, shop, 100, p)),
@@ -987,23 +1935,77 @@ mod tests {
             log_at(token, 4, 0, settled(ua, shop, 5, r)),
             log_at(router, 4, 1, fee(ua, shop)),
         ];
-        assert!(pay_filter(0, 1, vec![token], Some(router)).topics[0].matches(&IUALedger::UAPaymentSettled::SIGNATURE_HASH));
-        assert!(pay_filter(0, 1, vec![token], None).topics[0].matches(&IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH));
+        assert!(pay_filter(0, 1, vec![token], Some(router)).topics[0]
+            .matches(&IUALedger::UAPaymentSettled::SIGNATURE_HASH));
+        assert!(pay_filter(0, 1, vec![token], None).topics[0]
+            .matches(&IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH));
         let out = pay_events(&logs, Some(router));
-        assert!(out.iter().all(client_ingest_accepts), "every row passes the client's ingest: {out:?}");
+        assert!(
+            out.iter().all(client_ingest_accepts),
+            "every row passes the client's ingest: {out:?}"
+        );
         let names: Vec<&str> = out.iter().map(|v| v["event"].as_str().unwrap()).collect();
-        assert_eq!(names, ["PaymentSettled", "MetaTransactionExecuted", "PaymentSettled", "PaymentSettled", "PaymentSettled"]);
+        assert_eq!(
+            names,
+            [
+                "PaymentSettled",
+                "MetaTransactionExecuted",
+                "PaymentSettled",
+                "PaymentSettled",
+                "PaymentSettled"
+            ]
+        );
         let id = |b: B256| format!("{b:#x}");
-        assert_eq!((out[0]["from"].as_str(), out[0]["to"].as_str()), (Some(pool.as_str()), Some(pool.as_str())));
-        assert_eq!((out[0]["from_ua"].as_str(), out[0]["to_ua"].as_str()), (Some(id(ua).as_str()), Some(id(shop).as_str())));
-        assert_eq!((out[0]["amount"].as_str(), out[0]["fee"].as_str(), out[0]["meta_body"].as_str()), (Some("100"), Some("1"), Some("0xab")));
-        assert_eq!((out[1]["from"].as_str(), out[1]["from_ua"].as_str(), out[1]["digest"].as_str()),
-            (Some(pool.as_str()), Some(id(ua).as_str()), Some(id(B256::repeat_byte(0xd1)).as_str())));
-        assert_eq!(out[2]["to"], format!("{router:#x}"), "a native id is its address");
+        assert_eq!(
+            (out[0]["from"].as_str(), out[0]["to"].as_str()),
+            (Some(pool.as_str()), Some(pool.as_str()))
+        );
+        assert_eq!(
+            (out[0]["from_ua"].as_str(), out[0]["to_ua"].as_str()),
+            (Some(id(ua).as_str()), Some(id(shop).as_str()))
+        );
+        assert_eq!(
+            (
+                out[0]["amount"].as_str(),
+                out[0]["fee"].as_str(),
+                out[0]["meta_body"].as_str()
+            ),
+            (Some("100"), Some("1"), Some("0xab"))
+        );
+        assert_eq!(
+            (
+                out[1]["from"].as_str(),
+                out[1]["from_ua"].as_str(),
+                out[1]["digest"].as_str()
+            ),
+            (
+                Some(pool.as_str()),
+                Some(id(ua).as_str()),
+                Some(id(B256::repeat_byte(0xd1)).as_str())
+            )
+        );
+        assert_eq!(
+            out[2]["to"],
+            format!("{router:#x}"),
+            "a native id is its address"
+        );
         assert!(out[2]["to_ua"].is_null(), "and carries no id key");
-        assert_eq!(out[2]["relay_payee"], format!("{lane:#x}"), "the UA payer's relay fee joins");
-        assert!(out[3]["relay_payee"].is_null(), "by (from, ref) on the id, never by ref or UA_POOL alone");
-        assert_eq!((out[4]["relay_payee"].as_str(), out[4]["relay_payee_ua"].as_str()), (Some(pool.as_str()), Some(id(shop).as_str())));
+        assert_eq!(
+            out[2]["relay_payee"],
+            format!("{lane:#x}"),
+            "the UA payer's relay fee joins"
+        );
+        assert!(
+            out[3]["relay_payee"].is_null(),
+            "by (from, ref) on the id, never by ref or UA_POOL alone"
+        );
+        assert_eq!(
+            (
+                out[4]["relay_payee"].as_str(),
+                out[4]["relay_payee_ua"].as_str()
+            ),
+            (Some(pool.as_str()), Some(id(shop).as_str()))
+        );
     }
 
     /// R18 (ua-mtx-merge): a merged entry emits the `UA…` events only, an EOA's too. With a native id they are the address rows the
@@ -1011,21 +2013,70 @@ mod tests {
     #[test]
     fn indexer_reads_ua_topics_for_an_eoa() {
         use crate::abi::IUALedger;
-        let (token, eoa, shop) = (Address::repeat_byte(9), Address::repeat_byte(0x11), Address::repeat_byte(0x22));
-        let exec = IUALedger::UAMetaTransactionExecuted { from: eoa.into_word(), relayer: Address::repeat_byte(0x1a), batch: U256::from(7u64),
-            nonce: U256::from(1u64), digest: B256::repeat_byte(0xd1), feeRecipient: Address::ZERO, fee: U256::ZERO }.encode_log_data();
-        let paid = IUALedger::UAPaymentSettled { from: eoa.into_word(), to: shop.into_word(), amount: U256::from(10u64), feeAmount: U256::ZERO,
-            feeRecipient: Address::ZERO, entryRef: B256::repeat_byte(4) }.encode_log_data();
-        for t in [IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH, IUALedger::UAPaymentSettled::SIGNATURE_HASH] {
+        let (token, eoa, shop) = (
+            Address::repeat_byte(9),
+            Address::repeat_byte(0x11),
+            Address::repeat_byte(0x22),
+        );
+        let exec = IUALedger::UAMetaTransactionExecuted {
+            from: eoa.into_word(),
+            relayer: Address::repeat_byte(0x1a),
+            batch: U256::from(7u64),
+            nonce: U256::from(1u64),
+            digest: B256::repeat_byte(0xd1),
+            feeRecipient: Address::ZERO,
+            fee: U256::ZERO,
+        }
+        .encode_log_data();
+        let paid = IUALedger::UAPaymentSettled {
+            from: eoa.into_word(),
+            to: shop.into_word(),
+            amount: U256::from(10u64),
+            feeAmount: U256::ZERO,
+            feeRecipient: Address::ZERO,
+            entryRef: B256::repeat_byte(4),
+        }
+        .encode_log_data();
+        for t in [
+            IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH,
+            IUALedger::UAPaymentSettled::SIGNATURE_HASH,
+        ] {
             assert!(pay_filter(0, 1, vec![token], None).topics[0].matches(&t));
         }
-        let out = pay_events(&[log_at(token, 1, 0, paid), log_at(token, 1, 1, exec)], None);
+        let out = pay_events(
+            &[log_at(token, 1, 0, paid), log_at(token, 1, 1, exec)],
+            None,
+        );
         assert!(out.iter().all(client_ingest_accepts), "{out:?}");
-        assert_eq!((out[0]["event"].as_str(), out[0]["from"].as_str(), out[0]["to"].as_str()),
-            (Some("PaymentSettled"), Some(format!("{eoa:#x}").as_str()), Some(format!("{shop:#x}").as_str())));
-        assert_eq!((out[1]["event"].as_str(), out[1]["from"].as_str(), out[1]["nonce"].as_str()),
-            (Some("MetaTransactionExecuted"), Some(format!("{eoa:#x}").as_str()), Some("1")));
-        assert!(out.iter().all(|v| v["from_ua"].is_null() && v["to_ua"].is_null()), "a native id carries no id key");
+        assert_eq!(
+            (
+                out[0]["event"].as_str(),
+                out[0]["from"].as_str(),
+                out[0]["to"].as_str()
+            ),
+            (
+                Some("PaymentSettled"),
+                Some(format!("{eoa:#x}").as_str()),
+                Some(format!("{shop:#x}").as_str())
+            )
+        );
+        assert_eq!(
+            (
+                out[1]["event"].as_str(),
+                out[1]["from"].as_str(),
+                out[1]["nonce"].as_str()
+            ),
+            (
+                Some("MetaTransactionExecuted"),
+                Some(format!("{eoa:#x}").as_str()),
+                Some("1")
+            )
+        );
+        assert!(
+            out.iter()
+                .all(|v| v["from_ua"].is_null() && v["to_ua"].is_null()),
+            "a native id carries no id key"
+        );
     }
 
     /// The payment reference of an EOA's payment (`entry_ref`, the `pay_ref` a client matches) comes from `UAPaymentSettled`: its
@@ -1033,23 +2084,76 @@ mod tests {
     #[test]
     fn pay_ref_reads_ua_payment_settled() {
         use crate::abi::IUALedger;
-        let (token, router, lane) = (Address::repeat_byte(9), Address::repeat_byte(0x7f), Address::repeat_byte(0x1a));
+        let (token, router, lane) = (
+            Address::repeat_byte(9),
+            Address::repeat_byte(0x7f),
+            Address::repeat_byte(0x1a),
+        );
         let (eoa, shop) = (Address::repeat_byte(0x11), Address::repeat_byte(0x22));
         let (p, r) = (B256::repeat_byte(4), B256::repeat_byte(5));
-        let settled = |to: Address, amount: u64, entry_ref: B256| IUALedger::UAPaymentSettled { from: eoa.into_word(), to: to.into_word(),
-            amount: U256::from(amount), feeAmount: U256::ZERO, feeRecipient: Address::ZERO, entryRef: entry_ref }.encode_log_data();
+        let settled = |to: Address, amount: u64, entry_ref: B256| {
+            IUALedger::UAPaymentSettled {
+                from: eoa.into_word(),
+                to: to.into_word(),
+                amount: U256::from(amount),
+                feeAmount: U256::ZERO,
+                feeRecipient: Address::ZERO,
+                entryRef: entry_ref,
+            }
+            .encode_log_data()
+        };
         let logs = vec![
-            log_at(token, 1, 0, IToken::PaymentMeta { payId: p, payNo: B256::ZERO, save: false, schema: 1, body: vec![0xab].into() }.encode_log_data()),
+            log_at(
+                token,
+                1,
+                0,
+                IToken::PaymentMeta {
+                    payId: p,
+                    payNo: B256::ZERO,
+                    save: false,
+                    schema: 1,
+                    body: vec![0xab].into(),
+                }
+                .encode_log_data(),
+            ),
             log_at(token, 1, 1, settled(shop, 100, p)),
             log_at(token, 2, 0, settled(router, 5, r)),
-            log_at(router, 2, 1, IRelayFeeRouter::RelayFeePaid { r#ref: r, target: shop, token, payer: eoa.into_word(), payee: lane.into_word(),
-                amount: U256::from(5u64) }.encode_log_data()),
+            log_at(
+                router,
+                2,
+                1,
+                IRelayFeeRouter::RelayFeePaid {
+                    r#ref: r,
+                    target: shop,
+                    token,
+                    payer: eoa.into_word(),
+                    payee: lane.into_word(),
+                    amount: U256::from(5u64),
+                }
+                .encode_log_data(),
+            ),
         ];
         let out = pay_events(&logs, Some(router));
         assert_eq!(out.len(), 2);
-        assert_eq!((out[0]["entry_ref"].as_str(), out[0]["meta_body"].as_str(), out[0]["from"].as_str()),
-            (Some(format!("{p:#x}").as_str()), Some("0xab"), Some(format!("{eoa:#x}").as_str())));
-        assert_eq!((out[1]["entry_ref"].as_str(), out[1]["relay_payee"].as_str()), (Some(format!("{r:#x}").as_str()), Some(format!("{lane:#x}").as_str())));
+        assert_eq!(
+            (
+                out[0]["entry_ref"].as_str(),
+                out[0]["meta_body"].as_str(),
+                out[0]["from"].as_str()
+            ),
+            (
+                Some(format!("{p:#x}").as_str()),
+                Some("0xab"),
+                Some(format!("{eoa:#x}").as_str())
+            )
+        );
+        assert_eq!(
+            (out[1]["entry_ref"].as_str(), out[1]["relay_payee"].as_str()),
+            (
+                Some(format!("{r:#x}").as_str()),
+                Some(format!("{lane:#x}").as_str())
+            )
+        );
     }
 
     /// Merge TODO a (recipe M1 on the EVM indexer): no registered token ⇒ nobody can filter this range, so the
@@ -1057,9 +2161,18 @@ mod tests {
     #[tokio::test]
     async fn no_tokens_holds_the_cursor() {
         use crate::adapter::tests::{fake_external_pull, Fake};
-        let (external_pull, o) = fake_external_pull(Fake { tokens: json!([]), ..Default::default() }).await;
-        let cfg = crate::config::ChainCfg { evm_chain_number: 7, rpc_urls: vec!["http://127.0.0.1:9".into()], ..Default::default() };
-        let chain = Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap();
+        let (external_pull, o) = fake_external_pull(Fake {
+            tokens: json!([]),
+            ..Default::default()
+        })
+        .await;
+        let cfg = crate::config::ChainCfg {
+            evm_chain_number: 7,
+            rpc_urls: vec!["http://127.0.0.1:9".into()],
+            ..Default::default()
+        };
+        let chain =
+            Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap();
         assert!(!step(&chain, &external_pull, None).await.unwrap());
         assert_eq!(o.lock().unwrap().ingests, 0, "cursor not advanced");
     }
@@ -1069,15 +2182,25 @@ mod tests {
     #[tokio::test]
     async fn the_indexer_head_feeds_the_shared_head() {
         use crate::adapter::tests::{fake_external_pull, Fake};
-        let (external_pull, _) = fake_external_pull(Fake { tokens: json!([{"address": format!("{:#x}", Address::repeat_byte(1)), "decimals": 6}]),
-            ..Default::default() }).await;
+        let (external_pull, _) = fake_external_pull(Fake {
+            tokens: json!([{"address": format!("{:#x}", Address::repeat_byte(1)), "decimals": 6}]),
+            ..Default::default()
+        })
+        .await;
         let (url, _) = crate::chain::tests::fake_rpc(|r| match r["method"].as_str() {
             Some("eth_blockNumber") => json!({"result": "0x64"}),
             _ => json!({"error": {"code": -32000, "message": "busy"}}),
-        }).await;
-        let cfg = crate::config::ChainCfg { evm_chain_number: 296, rpc_urls: vec![url], ..Default::default() };
-        let (chain, lane) = (Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap(),
-            Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap());
+        })
+        .await;
+        let cfg = crate::config::ChainCfg {
+            evm_chain_number: 296,
+            rpc_urls: vec![url],
+            ..Default::default()
+        };
+        let (chain, lane) = (
+            Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap(),
+            Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap(),
+        );
         assert_eq!(lane.seen_head(), 0, "control");
         let _ = step(&chain, &external_pull, None).await;
         assert_eq!((chain.seen_head(), lane.seen_head()), (0x64, 0x64));
@@ -1091,17 +2214,49 @@ mod tests {
         use crate::abi::IPqzToken as P;
         let tok = Address::repeat_byte(0x70);
         let logs = vec![
-            log_at(tok, 1, 0, P::ProofStoreSet { previous: 0, next: 1 }.encode_log_data()),
-            log_at(tok, 2, 0, P::PqzDebitProof { blob: Address::repeat_byte(0xb0), ua: B256::repeat_byte(0xd1), sendCounter: 3,
-                header: vec![0x11; 640].into(), proof: vec![0x22; 9].into() }.encode_log_data()),
+            log_at(
+                tok,
+                1,
+                0,
+                P::ProofStoreSet {
+                    previous: 0,
+                    next: 1,
+                }
+                .encode_log_data(),
+            ),
+            log_at(
+                tok,
+                2,
+                0,
+                P::PqzDebitProof {
+                    blob: Address::repeat_byte(0xb0),
+                    ua: B256::repeat_byte(0xd1),
+                    sendCounter: 3,
+                    header: vec![0x11; 640].into(),
+                    proof: vec![0x22; 9].into(),
+                }
+                .encode_log_data(),
+            ),
         ];
         let rows = pay_events(&logs, None);
         assert!(rows.iter().all(client_ingest_accepts));
         assert_eq!(rows.len(), 1, "{rows:?}");
-        assert_eq!((rows[0]["event"].as_str(), rows[0]["previous"].as_u64(), rows[0]["next"].as_u64(), rows[0]["alert"].as_bool()),
-            (Some("ProofStoreSet"), Some(0), Some(1), Some(true)), "{}", rows[0]);
+        assert_eq!(
+            (
+                rows[0]["event"].as_str(),
+                rows[0]["previous"].as_u64(),
+                rows[0]["next"].as_u64(),
+                rows[0]["alert"].as_bool()
+            ),
+            (Some("ProofStoreSet"), Some(0), Some(1), Some(true)),
+            "{}",
+            rows[0]
+        );
         assert!(PQZ_VERIFIER_TOPICS.contains(&P::ProofStoreSet::SIGNATURE_HASH));
-        assert!(!PQZ_VERIFIER_TOPICS.contains(&P::PqzDebitProof::SIGNATURE_HASH), "no PqzDebitProof data indexed");
+        assert!(
+            !PQZ_VERIFIER_TOPICS.contains(&P::PqzDebitProof::SIGNATURE_HASH),
+            "no PqzDebitProof data indexed"
+        );
     }
 
     /// Round 3t (spec §10): `VerifierFeeProposed` a row with `alert` (the hostage notice, T29), `VerifierFeeSet` a row without
@@ -1110,25 +2265,107 @@ mod tests {
     fn verifier_fee_rows() {
         use crate::abi::IPqzToken as P;
         let t = Address::repeat_byte(0x7a);
-        let logs = vec![log_at(t, 1, 0, P::VerifierFeeProposed { current: 2, next: 5, eta: 1_800_000_000 }.encode_log_data()),
-            log_at(t, 2, 0, P::VerifierFeeSet { previous: 2, next: 2 }.encode_log_data())];
+        let logs = vec![
+            log_at(
+                t,
+                1,
+                0,
+                P::VerifierFeeProposed {
+                    current: 2,
+                    next: 5,
+                    eta: 1_800_000_000,
+                }
+                .encode_log_data(),
+            ),
+            log_at(
+                t,
+                2,
+                0,
+                P::VerifierFeeSet {
+                    previous: 2,
+                    next: 2,
+                }
+                .encode_log_data(),
+            ),
+        ];
         let rows = pay_events(&logs, None);
         assert!(rows.iter().all(client_ingest_accepts));
         assert_eq!(rows.len(), 2, "{rows:?}");
-        assert_eq!((rows[0]["event"].as_str(), rows[0]["next"].as_u64(), rows[0]["eta"].as_u64(), rows[0]["alert"].as_bool()),
-            (Some("VerifierFeeProposed"), Some(5), Some(1_800_000_000), Some(true)), "{}", rows[0]);
-        assert_eq!((rows[1]["event"].as_str(), rows[1]["previous"].as_u64(), rows[1]["next"].as_u64(), rows[1]["alert"].as_bool()),
-            (Some("VerifierFeeSet"), Some(2), Some(2), None), "{}", rows[1]);
+        assert_eq!(
+            (
+                rows[0]["event"].as_str(),
+                rows[0]["next"].as_u64(),
+                rows[0]["eta"].as_u64(),
+                rows[0]["alert"].as_bool()
+            ),
+            (
+                Some("VerifierFeeProposed"),
+                Some(5),
+                Some(1_800_000_000),
+                Some(true)
+            ),
+            "{}",
+            rows[0]
+        );
+        assert_eq!(
+            (
+                rows[1]["event"].as_str(),
+                rows[1]["previous"].as_u64(),
+                rows[1]["next"].as_u64(),
+                rows[1]["alert"].as_bool()
+            ),
+            (Some("VerifierFeeSet"), Some(2), Some(2), None),
+            "{}",
+            rows[1]
+        );
         assert!(PQZ_VERIFIER_TOPICS.contains(&P::VerifierFeeProposed::SIGNATURE_HASH));
         assert!(PQZ_VERIFIER_TOPICS.contains(&P::VerifierFeeSet::SIGNATURE_HASH));
         // the health stamp `pqz_verifier_fee`: unknown before the first `VerifierFeeSet`, its `next` after, kept across ranges
         let (mut rows, mut state) = (rows, PqzHealth::default());
         pqz_health(&mut state, &mut rows);
-        assert_eq!((rows[0]["pqz_verifier_fee"].is_null(), rows[1]["pqz_verifier_fee"].as_u64()), (true, Some(2)), "{rows:?}");
-        let mut later = pay_events(&[log_at(t, 3, 0, P::VerifierFeeSet { previous: 2, next: 0 }.encode_log_data()),
-            log_at(t, 4, 0, P::VerifierFeeProposed { current: 0, next: 4, eta: 1 }.encode_log_data())], None);
+        assert_eq!(
+            (
+                rows[0]["pqz_verifier_fee"].is_null(),
+                rows[1]["pqz_verifier_fee"].as_u64()
+            ),
+            (true, Some(2)),
+            "{rows:?}"
+        );
+        let mut later = pay_events(
+            &[
+                log_at(
+                    t,
+                    3,
+                    0,
+                    P::VerifierFeeSet {
+                        previous: 2,
+                        next: 0,
+                    }
+                    .encode_log_data(),
+                ),
+                log_at(
+                    t,
+                    4,
+                    0,
+                    P::VerifierFeeProposed {
+                        current: 0,
+                        next: 4,
+                        eta: 1,
+                    }
+                    .encode_log_data(),
+                ),
+            ],
+            None,
+        );
         pqz_health(&mut state, &mut later);
-        assert_eq!((later[0]["pqz_verifier_fee"].as_u64(), later[1]["pqz_verifier_fee"].as_u64()), (Some(0), Some(0)), "{later:?}");
+        assert_eq!(
+            (
+                later[0]["pqz_verifier_fee"].as_u64(),
+                later[1]["pqz_verifier_fee"].as_u64()
+            ),
+            (Some(0), Some(0)),
+            "{later:?}"
+        );
     }
 
     /// Fable E N-9: a fresh state (a restart) knows nothing: a token's first verifier rows before anything that sets them are stamped
@@ -1138,14 +2375,69 @@ mod tests {
         use crate::abi::{IPqzEvents as C, IPqzToken as P};
         let tok = Address::repeat_byte(0x70);
         let (ver, next) = (B256::repeat_byte(0x0e), B256::repeat_byte(0x0f));
-        let mut rows = pay_events(&[log_at(tok, 1, 0, P::PqzVerifierProposed { current: ver, next, eta: 1 }.encode_log_data()),
-            log_at(tok, 2, 0, P::PqzVerifierCancelled { next }.encode_log_data()),
-            log_at(tok, 3, 0, C::PqzVerifierRevoked { previous: ver, pqzVerifierEpoch: 3 }.encode_log_data()),
-            log_at(tok, 4, 0, P::PqzVerifierSet { previous: B256::ZERO, next, pqzVerifierEpoch: 4 }.encode_log_data())], None);
+        let mut rows = pay_events(
+            &[
+                log_at(
+                    tok,
+                    1,
+                    0,
+                    P::PqzVerifierProposed {
+                        current: ver,
+                        next,
+                        eta: 1,
+                    }
+                    .encode_log_data(),
+                ),
+                log_at(
+                    tok,
+                    2,
+                    0,
+                    P::PqzVerifierCancelled { next }.encode_log_data(),
+                ),
+                log_at(
+                    tok,
+                    3,
+                    0,
+                    C::PqzVerifierRevoked {
+                        previous: ver,
+                        pqzVerifierEpoch: 3,
+                    }
+                    .encode_log_data(),
+                ),
+                log_at(
+                    tok,
+                    4,
+                    0,
+                    P::PqzVerifierSet {
+                        previous: B256::ZERO,
+                        next,
+                        pqzVerifierEpoch: 4,
+                    }
+                    .encode_log_data(),
+                ),
+            ],
+            None,
+        );
         pqz_health(&mut PqzHealth::default(), &mut rows);
-        let st = |r: &Value| (r["pqz_verifier_revoked"].as_bool(), r["pqz_verifier_epoch"].as_u64());
-        assert_eq!(rows.iter().map(st).collect::<Vec<_>>(), [(None, None), (None, None), (Some(true), Some(3)), (Some(false), Some(4))]);
-        assert!(rows[0]["pqz_verifier_revoked"].is_null(), "unknown is null, not absent");
+        let st = |r: &Value| {
+            (
+                r["pqz_verifier_revoked"].as_bool(),
+                r["pqz_verifier_epoch"].as_u64(),
+            )
+        };
+        assert_eq!(
+            rows.iter().map(st).collect::<Vec<_>>(),
+            [
+                (None, None),
+                (None, None),
+                (Some(true), Some(3)),
+                (Some(false), Some(4))
+            ]
+        );
+        assert!(
+            rows[0]["pqz_verifier_revoked"].is_null(),
+            "unknown is null, not absent"
+        );
         assert!(rows.iter().all(client_ingest_accepts));
     }
 
@@ -1159,64 +2451,241 @@ mod tests {
     fn indexer_joins_proof_offchain_with_position() {
         use crate::abi::{IPqzEvents as C, IPqzToken as P};
         let (tok, other) = (Address::repeat_byte(0x70), Address::repeat_byte(0x71));
-        let (sh, ph, ver, ua, next) = (B256::repeat_byte(1), B256::repeat_byte(2), B256::repeat_byte(0x0e), B256::repeat_byte(0xd1),
-            B256::repeat_byte(0x0f));
+        let (sh, ph, ver, ua, next) = (
+            B256::repeat_byte(1),
+            B256::repeat_byte(2),
+            B256::repeat_byte(0x0e),
+            B256::repeat_byte(0xd1),
+            B256::repeat_byte(0x0f),
+        );
         let blob = Address::repeat_byte(0xb0);
-        let verified = || P::PqzVerified { statementHash: sh, proofHash: ph, verifier: ver, pqzVerifierEpoch: 2 }.encode_log_data();
+        let verified = || {
+            P::PqzVerified {
+                statementHash: sh,
+                proofHash: ph,
+                verifier: ver,
+                pqzVerifierEpoch: 2,
+            }
+            .encode_log_data()
+        };
         let at = |a: Address, tx: u8, i: u64, pos: u64, block: u64, d: LogData| {
             let mut l = log_at(a, tx, i, d);
             (l.transaction_index, l.block_number) = (Some(pos), Some(block));
             l
         };
-        let unshielded = || C::Unshielded { ua, amount: U256::from(9), recipient: B256::repeat_byte(0x99), blob }.encode_log_data();
+        let unshielded = || {
+            C::Unshielded {
+                ua,
+                amount: U256::from(9),
+                recipient: B256::repeat_byte(0x99),
+                blob,
+            }
+            .encode_log_data()
+        };
         let logs = vec![
             at(tok, 1, 0, 4, 10, verified()),
-            at(tok, 1, 1, 4, 10, C::ConfidentialTransfer { entryRef: B256::repeat_byte(3), fromUA: ua, toUA: B256::repeat_byte(0xd2),
-                beneficiary: B256::ZERO, fee: U256::from(3), sendCounter: 5, blob }.encode_log_data()),
+            at(
+                tok,
+                1,
+                1,
+                4,
+                10,
+                C::ConfidentialTransfer {
+                    entryRef: B256::repeat_byte(3),
+                    fromUA: ua,
+                    toUA: B256::repeat_byte(0xd2),
+                    beneficiary: B256::ZERO,
+                    fee: U256::from(3),
+                    sendCounter: 5,
+                    blob,
+                }
+                .encode_log_data(),
+            ),
             at(tok, 2, 0, 0, 11, verified()),
-            at(tok, 2, 1, 0, 11, C::ConfidentialTransferMulti { entryRef: B256::repeat_byte(4), fromUA: ua, beneficiary: B256::ZERO,
-                fee: U256::from(3), sendCounter: 6, recipients: vec![B256::repeat_byte(0xd2), B256::repeat_byte(0xd3)], mode: 1, blob }.encode_log_data()),
+            at(
+                tok,
+                2,
+                1,
+                0,
+                11,
+                C::ConfidentialTransferMulti {
+                    entryRef: B256::repeat_byte(4),
+                    fromUA: ua,
+                    beneficiary: B256::ZERO,
+                    fee: U256::from(3),
+                    sendCounter: 6,
+                    recipients: vec![B256::repeat_byte(0xd2), B256::repeat_byte(0xd3)],
+                    mode: 1,
+                    blob,
+                }
+                .encode_log_data(),
+            ),
             at(tok, 3, 0, 2, 12, verified()),
             at(tok, 3, 1, 2, 12, unshielded()),
             // another token's verdict beside this token's op: no join
             at(other, 4, 0, 1, 12, verified()),
             at(tok, 4, 1, 1, 12, unshielded()),
-            at(tok, 5, 0, 0, 13, P::PqzVerifierProposed { current: ver, next, eta: 1_800_000_000 }.encode_log_data()),
-            at(tok, 5, 1, 0, 13, P::PqzVerifierCancelled { next }.encode_log_data()),
-            at(tok, 6, 0, 0, 14, C::PqzVerifierRevoked { previous: ver, pqzVerifierEpoch: 3 }.encode_log_data()),
-            at(tok, 7, 0, 0, 15, P::PqzVerifierSet { previous: B256::ZERO, next, pqzVerifierEpoch: 4 }.encode_log_data()),
+            at(
+                tok,
+                5,
+                0,
+                0,
+                13,
+                P::PqzVerifierProposed {
+                    current: ver,
+                    next,
+                    eta: 1_800_000_000,
+                }
+                .encode_log_data(),
+            ),
+            at(
+                tok,
+                5,
+                1,
+                0,
+                13,
+                P::PqzVerifierCancelled { next }.encode_log_data(),
+            ),
+            at(
+                tok,
+                6,
+                0,
+                0,
+                14,
+                C::PqzVerifierRevoked {
+                    previous: ver,
+                    pqzVerifierEpoch: 3,
+                }
+                .encode_log_data(),
+            ),
+            at(
+                tok,
+                7,
+                0,
+                0,
+                15,
+                P::PqzVerifierSet {
+                    previous: B256::ZERO,
+                    next,
+                    pqzVerifierEpoch: 4,
+                }
+                .encode_log_data(),
+            ),
         ];
         let mut rows = pay_events(&logs, None);
         assert!(rows.iter().all(client_ingest_accepts));
         let names: Vec<&str> = rows.iter().map(|r| r["event"].as_str().unwrap()).collect();
-        assert_eq!(names, ["ConfidentialTransfer", "ConfidentialTransferMulti", "Unshielded", "Unshielded", "PqzVerifierProposed",
-            "PqzVerifierCancelled", "PqzVerifierRevoked", "PqzVerifierSet"], "PqzVerified is never a row of its own");
+        assert_eq!(
+            names,
+            [
+                "ConfidentialTransfer",
+                "ConfidentialTransferMulti",
+                "Unshielded",
+                "Unshielded",
+                "PqzVerifierProposed",
+                "PqzVerifierCancelled",
+                "PqzVerifierRevoked",
+                "PqzVerifierSet"
+            ],
+            "PqzVerified is never a row of its own"
+        );
         let h = |w: B256| json!(format!("{w:#x}"));
         let joined = json!({"statement_hash": h(sh), "proof_hash": h(ph), "verifier": h(ver), "pqz_verifier_epoch": 2});
         for (i, pos) in [(0, 4), (1, 0), (2, 2)] {
-            assert_eq!((&rows[i]["pqz_verified"], rows[i]["tx_index"].as_u64()), (&joined, Some(pos)), "{}", rows[i]);
+            assert_eq!(
+                (&rows[i]["pqz_verified"], rows[i]["tx_index"].as_u64()),
+                (&joined, Some(pos)),
+                "{}",
+                rows[i]
+            );
         }
-        assert!(rows[3]["pqz_verified"].is_null(), "another token's verdict joins nothing");
-        assert_eq!((rows[0]["entry_ref"].as_str(), rows[0]["from_ua"].as_str()), (Some(h(B256::repeat_byte(3)).as_str().unwrap()), Some(h(ua).as_str().unwrap())));
-        assert_eq!(rows[1]["recipients"], json!([h(B256::repeat_byte(0xd2)), h(B256::repeat_byte(0xd3))]));
-        assert_eq!((rows[2]["amount"].as_str(), rows[2]["recipient"].as_str()), (Some("9"), Some(h(B256::repeat_byte(0x99)).as_str().unwrap())));
-        assert_eq!((rows[4]["alert"].as_bool(), rows[4]["eta"].as_u64(), rows[4]["next"].as_str()), (Some(true), Some(1_800_000_000), Some(h(next).as_str().unwrap())));
-        assert_eq!((rows[6]["alert"].as_bool(), rows[6]["pqz_verifier_epoch"].as_u64()), (Some(true), Some(3)));
+        assert!(
+            rows[3]["pqz_verified"].is_null(),
+            "another token's verdict joins nothing"
+        );
+        assert_eq!(
+            (rows[0]["entry_ref"].as_str(), rows[0]["from_ua"].as_str()),
+            (
+                Some(h(B256::repeat_byte(3)).as_str().unwrap()),
+                Some(h(ua).as_str().unwrap())
+            )
+        );
+        assert_eq!(
+            rows[1]["recipients"],
+            json!([h(B256::repeat_byte(0xd2)), h(B256::repeat_byte(0xd3))])
+        );
+        assert_eq!(
+            (rows[2]["amount"].as_str(), rows[2]["recipient"].as_str()),
+            (
+                Some("9"),
+                Some(h(B256::repeat_byte(0x99)).as_str().unwrap())
+            )
+        );
+        assert_eq!(
+            (
+                rows[4]["alert"].as_bool(),
+                rows[4]["eta"].as_u64(),
+                rows[4]["next"].as_str()
+            ),
+            (
+                Some(true),
+                Some(1_800_000_000),
+                Some(h(next).as_str().unwrap())
+            )
+        );
+        assert_eq!(
+            (
+                rows[6]["alert"].as_bool(),
+                rows[6]["pqz_verifier_epoch"].as_u64()
+            ),
+            (Some(true), Some(3))
+        );
         assert!(rows[5]["alert"].is_null() && rows[7]["alert"].is_null());
         let mut state = PqzHealth::default();
         pqz_health(&mut state, &mut rows);
-        let st = |r: &Value| (r["pqz_last_verdict_at"].as_u64(), r["pqz_verifier_epoch"].as_u64(), r["pqz_verifier_revoked"].as_bool());
+        let st = |r: &Value| {
+            (
+                r["pqz_last_verdict_at"].as_u64(),
+                r["pqz_verifier_epoch"].as_u64(),
+                r["pqz_verifier_revoked"].as_bool(),
+            )
+        };
         assert_eq!(st(&rows[0]), (Some(10), Some(2), Some(false)));
         assert_eq!(st(&rows[2]), (Some(12), Some(2), Some(false)));
         assert_eq!(st(&rows[6]), (Some(12), Some(3), Some(true)), "revoked");
-        assert_eq!(st(&rows[7]), (Some(12), Some(4), Some(false)), "a new verifier");
-        let mut later = pay_events(&[at(tok, 8, 0, 0, 20, P::PqzVerifierCancelled { next }.encode_log_data())], None);
+        assert_eq!(
+            st(&rows[7]),
+            (Some(12), Some(4), Some(false)),
+            "a new verifier"
+        );
+        let mut later = pay_events(
+            &[at(
+                tok,
+                8,
+                0,
+                0,
+                20,
+                P::PqzVerifierCancelled { next }.encode_log_data(),
+            )],
+            None,
+        );
         pqz_health(&mut state, &mut later);
-        assert_eq!(st(&later[0]), (Some(12), Some(4), Some(false)), "kept across ranges");
+        assert_eq!(
+            st(&later[0]),
+            (Some(12), Some(4), Some(false)),
+            "kept across ranges"
+        );
         let f = pay_filter(1, 2, vec![tok], None);
-        for t in [P::PqzVerified::SIGNATURE_HASH, P::PqzVerifierProposed::SIGNATURE_HASH, P::PqzVerifierSet::SIGNATURE_HASH,
-            P::PqzVerifierCancelled::SIGNATURE_HASH, C::PqzVerifierRevoked::SIGNATURE_HASH, C::ConfidentialTransfer::SIGNATURE_HASH,
-            C::ConfidentialTransferMulti::SIGNATURE_HASH, C::Unshielded::SIGNATURE_HASH] {
+        for t in [
+            P::PqzVerified::SIGNATURE_HASH,
+            P::PqzVerifierProposed::SIGNATURE_HASH,
+            P::PqzVerifierSet::SIGNATURE_HASH,
+            P::PqzVerifierCancelled::SIGNATURE_HASH,
+            C::PqzVerifierRevoked::SIGNATURE_HASH,
+            C::ConfidentialTransfer::SIGNATURE_HASH,
+            C::ConfidentialTransferMulti::SIGNATURE_HASH,
+            C::Unshielded::SIGNATURE_HASH,
+        ] {
             assert!(f.topics[0].matches(&t), "{t:#x} not asked");
         }
     }

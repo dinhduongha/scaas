@@ -47,7 +47,10 @@ pub struct Envelope {
 
 impl Envelope {
     pub fn body(&self) -> &Value {
-        self.evm.as_ref().or(self.op.as_ref()).expect("parse() checked the body")
+        self.evm
+            .as_ref()
+            .or(self.op.as_ref())
+            .expect("parse() checked the body")
     }
 
     pub fn network(&self) -> &str {
@@ -60,7 +63,10 @@ impl Envelope {
 
     /// The minor of `spec` (`parse()` checked major 1, minor ≥ 2).
     pub fn minor(&self) -> u32 {
-        self.spec.strip_prefix("scaas-intent/1.").and_then(|m| m.parse().ok()).unwrap_or(0)
+        self.spec
+            .strip_prefix("scaas-intent/1.")
+            .and_then(|m| m.parse().ok())
+            .unwrap_or(0)
     }
 }
 
@@ -75,7 +81,11 @@ pub struct Parsed {
 /// Hex chữ thường đúng `n` byte; `0x` bắt buộc hoặc cấm theo `prefixed` (§4.2).
 pub fn hex_n(s: &str, n: usize, prefixed: bool) -> Option<Vec<u8>> {
     let h = if prefixed { s.strip_prefix("0x")? } else { s };
-    if h.len() != 2 * n || !h.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+    if h.len() != 2 * n
+        || !h
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    {
         return None;
     }
     alloy::hex::decode(h).ok()
@@ -106,7 +116,9 @@ pub fn canonical_body(v: &Value) -> Result<Vec<u8>, Code> {
 }
 
 fn spec_ok(s: &str) -> bool {
-    let Some((major, minor)) = s.strip_prefix(SPEC_PREFIX).and_then(|v| v.split_once('.')) else { return false };
+    let Some((major, minor)) = s.strip_prefix(SPEC_PREFIX).and_then(|v| v.split_once('.')) else {
+        return false;
+    };
     major == "1" && minor.parse::<u32>().is_ok_and(|m| m >= 2)
 }
 
@@ -116,26 +128,46 @@ pub fn parse(bytes: &[u8]) -> Result<Parsed, Code> {
         return Err(Code::BadEnvelope);
     }
     let v: Value = serde_json::from_slice(bytes).map_err(|_| Code::BadEnvelope)?;
-    let spec = v.get("spec").and_then(Value::as_str).ok_or(Code::BadEnvelope)?;
+    let spec = v
+        .get("spec")
+        .and_then(Value::as_str)
+        .ok_or(Code::BadEnvelope)?;
     if !spec_ok(spec) {
         return Err(Code::UnsupportedSpec);
     }
-    let family = v.get("family").and_then(Value::as_str).ok_or(Code::BadEnvelope)?.to_string();
-    let fam = Family::parse(&family).filter(|f| *f != Family::Soroban).ok_or(Code::FamilyNotSupported)?;
+    let family = v
+        .get("family")
+        .and_then(Value::as_str)
+        .ok_or(Code::BadEnvelope)?
+        .to_string();
+    let fam = Family::parse(&family)
+        .filter(|f| *f != Family::Soroban)
+        .ok_or(Code::FamilyNotSupported)?;
     let envelope: Envelope = serde_json::from_value(v).map_err(|_| Code::BadEnvelope)?;
     let e = &envelope;
     let evm = matches!(fam, Family::Evm | Family::Hedera);
-    let well_formed = e.chain_key.split_once(':').is_some_and(|(f, n)| f == family && !n.is_empty() && e.chain_key.len() <= 255)
+    let well_formed = e
+        .chain_key
+        .split_once(':')
+        .is_some_and(|(f, n)| f == family && !n.is_empty() && e.chain_key.len() <= 255)
         && matches!(e.visibility.as_str(), "open" | "private")
         && e.evm.is_some() == evm
         && e.op.is_some() != evm
         && b32(&e.hub.id, false).is_some()
         && b32(&e.hub.pubkey, false).is_some()
         && hex_n(&e.hub.sig, 64, false).is_some()
-        && e.exclusive.as_ref().is_none_or(|x| b32(&x.relayer_id, false).is_some());
-    let claimed_id = b32(&e.intent_id, true).filter(|_| well_formed).ok_or(Code::BadEnvelope)?;
+        && e.exclusive
+            .as_ref()
+            .is_none_or(|x| b32(&x.relayer_id, false).is_some());
+    let claimed_id = b32(&e.intent_id, true)
+        .filter(|_| well_formed)
+        .ok_or(Code::BadEnvelope)?;
     let body_hash = Sha256::digest(canonical_body(e.body())?).into();
-    Ok(Parsed { envelope, claimed_id, body_hash })
+    Ok(Parsed {
+        envelope,
+        claimed_id,
+        body_hash,
+    })
 }
 
 #[cfg(test)]
@@ -145,18 +177,36 @@ mod tests {
 
     #[test]
     fn canonical_body_bytes_are_pinned() {
-        let v: Value = serde_json::from_str(r#"{"b":{"z":1,"a":"x"},"a":[true,null,-3],"B":"\"q\\"}"#).unwrap();
-        assert_eq!(canonical_body(&v).unwrap(), br#"{"B":"\"q\\","a":[true,null,-3],"b":{"a":"x","z":1}}"#);
-        for bad in [json!({"a": 1.5}), json!({"a": u64::MAX}), json!({"a": "é"}), json!({"a": "\n"}), json!({"é": 1})] {
+        let v: Value =
+            serde_json::from_str(r#"{"b":{"z":1,"a":"x"},"a":[true,null,-3],"B":"\"q\\"}"#)
+                .unwrap();
+        assert_eq!(
+            canonical_body(&v).unwrap(),
+            br#"{"B":"\"q\\","a":[true,null,-3],"b":{"a":"x","z":1}}"#
+        );
+        for bad in [
+            json!({"a": 1.5}),
+            json!({"a": u64::MAX}),
+            json!({"a": "é"}),
+            json!({"a": "\n"}),
+            json!({"é": 1}),
+        ] {
             assert_eq!(canonical_body(&bad), Err(Code::BadEnvelope), "{bad}");
         }
     }
 
     #[test]
     fn spec_versions() {
-        for (s, ok) in [("scaas-intent/1.2", true), ("scaas-intent/1.3", true), ("scaas-intent/1.10", true),
-                        ("scaas-intent/1.1", false), ("scaas-intent/2.0", false), ("legacy-intent/1.2", false),
-                        ("scaas-intent/1", false), ("scaas-intent/1.x", false)] {
+        for (s, ok) in [
+            ("scaas-intent/1.2", true),
+            ("scaas-intent/1.3", true),
+            ("scaas-intent/1.10", true),
+            ("scaas-intent/1.1", false),
+            ("scaas-intent/2.0", false),
+            ("legacy-intent/1.2", false),
+            ("scaas-intent/1", false),
+            ("scaas-intent/1.x", false),
+        ] {
             assert_eq!(spec_ok(s), ok, "{s}");
         }
     }
@@ -174,7 +224,10 @@ mod tests {
         let p = parse(&serde_json::to_vec(&v).unwrap()).unwrap();
         assert_eq!(serde_json::to_value(&p.envelope).unwrap(), v);
         v["later"] = json!({"x": 1});
-        assert_eq!(parse(&serde_json::to_vec(&v).unwrap()).unwrap().envelope, p.envelope);
+        assert_eq!(
+            parse(&serde_json::to_vec(&v).unwrap()).unwrap().envelope,
+            p.envelope
+        );
     }
 
     #[test]
@@ -185,19 +238,57 @@ mod tests {
             parse(&serde_json::to_vec(&v).unwrap()).err()
         };
         assert_eq!(parse(b"[1]").err(), Some(Code::BadEnvelope));
-        assert_eq!(parse(&vec![b' '; MAX_BYTES + 1]).err(), Some(Code::BadEnvelope));
-        assert_eq!(code(&|v| v["spec"] = json!("scaas-intent/2.0")), Some(Code::UnsupportedSpec));
+        assert_eq!(
+            parse(&vec![b' '; MAX_BYTES + 1]).err(),
+            Some(Code::BadEnvelope)
+        );
+        assert_eq!(
+            code(&|v| v["spec"] = json!("scaas-intent/2.0")),
+            Some(Code::UnsupportedSpec)
+        );
         assert_eq!(code(&|v| v["spec"] = json!(12)), Some(Code::BadEnvelope));
-        assert_eq!(code(&|v| v["family"] = json!("soroban")), Some(Code::FamilyNotSupported));
-        assert_eq!(code(&|v| v["family"] = json!("btc")), Some(Code::FamilyNotSupported));
-        assert_eq!(code(&|v| v["chain_key"] = json!("aptos:4")), Some(Code::BadEnvelope), "family != chain_key prefix");
-        assert_eq!(code(&|v| v["visibility"] = json!("public")), Some(Code::BadEnvelope));
-        assert_eq!(code(&|v| v["intent_id"] = json!(format!("0x{}", "AB".repeat(32)))), Some(Code::BadEnvelope));
-        assert_eq!(code(&|v| v["hub"]["sig"] = json!("33".repeat(63))), Some(Code::BadEnvelope));
-        assert_eq!(code(&|v| v["evm"] = json!({})), Some(Code::BadEnvelope), "two bodies");
-        assert_eq!(code(&|v| v["exclusive"] = json!({"relayer_id": "zz", "until": 1})), Some(Code::BadEnvelope));
-        assert_eq!(code(&|v| v["op"]["extra"] = json!("ü")), Some(Code::BadEnvelope));
-        assert_eq!(code(&|v| v["hop_count"] = json!(-1)), Some(Code::BadEnvelope));
+        assert_eq!(
+            code(&|v| v["family"] = json!("soroban")),
+            Some(Code::FamilyNotSupported)
+        );
+        assert_eq!(
+            code(&|v| v["family"] = json!("btc")),
+            Some(Code::FamilyNotSupported)
+        );
+        assert_eq!(
+            code(&|v| v["chain_key"] = json!("aptos:4")),
+            Some(Code::BadEnvelope),
+            "family != chain_key prefix"
+        );
+        assert_eq!(
+            code(&|v| v["visibility"] = json!("public")),
+            Some(Code::BadEnvelope)
+        );
+        assert_eq!(
+            code(&|v| v["intent_id"] = json!(format!("0x{}", "AB".repeat(32)))),
+            Some(Code::BadEnvelope)
+        );
+        assert_eq!(
+            code(&|v| v["hub"]["sig"] = json!("33".repeat(63))),
+            Some(Code::BadEnvelope)
+        );
+        assert_eq!(
+            code(&|v| v["evm"] = json!({})),
+            Some(Code::BadEnvelope),
+            "two bodies"
+        );
+        assert_eq!(
+            code(&|v| v["exclusive"] = json!({"relayer_id": "zz", "until": 1})),
+            Some(Code::BadEnvelope)
+        );
+        assert_eq!(
+            code(&|v| v["op"]["extra"] = json!("ü")),
+            Some(Code::BadEnvelope)
+        );
+        assert_eq!(
+            code(&|v| v["hop_count"] = json!(-1)),
+            Some(Code::BadEnvelope)
+        );
         assert_eq!(code(&|_| {}), None);
     }
 

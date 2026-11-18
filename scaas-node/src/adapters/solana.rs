@@ -55,8 +55,11 @@ pub fn b58(k: &[u8]) -> String {
 }
 
 pub fn key(s: &str) -> Result<Key> {
-    let v = bs58::decode(s.trim()).into_vec().with_context(|| format!("not base58: {s}"))?;
-    v.try_into().map_err(|_| anyhow!("a Solana address is 32 bytes: {s}"))
+    let v = bs58::decode(s.trim())
+        .into_vec()
+        .with_context(|| format!("not base58: {s}"))?;
+    v.try_into()
+        .map_err(|_| anyhow!("a Solana address is 32 bytes: {s}"))
 }
 
 fn sha(parts: &[&[u8]]) -> [u8; 32] {
@@ -126,7 +129,9 @@ pub fn event_authority(program: &Key) -> Key {
 
 /// Discriminator Anchor: sha256("global:<name>")[..8] (instruction), sha256("event:<Name>")[..8] (event).
 pub fn discriminator(namespace: &str, name: &str) -> [u8; 8] {
-    sha(&[format!("{namespace}:{name}").as_bytes()])[..8].try_into().unwrap()
+    sha(&[format!("{namespace}:{name}").as_bytes()])[..8]
+        .try_into()
+        .unwrap()
 }
 
 // ------------------------------------------------------------------ payload (spec §4.1)
@@ -232,7 +237,14 @@ pub fn parse_auth(signature: &str, public_key: &str) -> Result<Auth> {
             if !rest.is_empty() || public_key.len() != 32 {
                 bail!("an ed25519 signature blob is kind ‖ key ‖ sig64 with a 32-byte key");
             }
-            Ok(Auth { kind, key_index, sig, auth_data: vec![], cdj: vec![], public_key })
+            Ok(Auth {
+                kind,
+                key_index,
+                sig,
+                auth_data: vec![],
+                cdj: vec![],
+                public_key,
+            })
         }
         KIND_PASSKEY => {
             if rest.len() < 2 || public_key.len() != 33 || !matches!(public_key[0], 2 | 3) {
@@ -242,7 +254,14 @@ pub fn parse_auth(signature: &str, public_key: &str) -> Result<Auth> {
             if n < 37 || 2 + n > rest.len() {
                 bail!("bad authenticatorData length");
             }
-            Ok(Auth { kind, key_index, sig, auth_data: rest[2..2 + n].to_vec(), cdj: rest[2 + n..].to_vec(), public_key })
+            Ok(Auth {
+                kind,
+                key_index,
+                sig,
+                auth_data: rest[2..2 + n].to_vec(),
+                cdj: rest[2 + n..].to_vec(),
+                public_key,
+            })
         }
         _ => bail!("unknown signature kind {kind}"),
     }
@@ -258,7 +277,11 @@ pub struct Meta {
 }
 
 fn m(key: Key, signer: bool, writable: bool) -> Meta {
-    Meta { key, signer, writable }
+    Meta {
+        key,
+        signer,
+        writable,
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -274,13 +297,25 @@ pub fn precompile_ix(program: Key, pk: &[u8], sig: &[u8], msg: &[u8]) -> Ix {
     let (pk_off, sig_off) = (base, base + pk.len() as u16);
     let msg_off = sig_off + 64;
     let mut data = vec![1u8, 0];
-    for v in [sig_off, u16::MAX, pk_off, u16::MAX, msg_off, msg.len() as u16, u16::MAX] {
+    for v in [
+        sig_off,
+        u16::MAX,
+        pk_off,
+        u16::MAX,
+        msg_off,
+        msg.len() as u16,
+        u16::MAX,
+    ] {
         data.extend_from_slice(&v.to_le_bytes());
     }
     data.extend_from_slice(pk);
     data.extend_from_slice(sig);
     data.extend_from_slice(msg);
-    Ix { program, accounts: vec![], data }
+    Ix {
+        program,
+        accounts: vec![],
+        data,
+    }
 }
 
 /// Instruction precompile cho blob: ed25519 ký `T` (kind 0) / OCMS (kind 1); P-256 ký `authData ‖ sha256(cdj)`.
@@ -293,7 +328,11 @@ pub fn auth_ix(a: &Auth, digest: &[u8; 32]) -> Ix {
         }
         kind => {
             let t = text(digest);
-            let msg = if kind == KIND_RAW { t } else { ocms(&a.public_key, &t) };
+            let msg = if kind == KIND_RAW {
+                t
+            } else {
+                ocms(&a.public_key, &t)
+            };
             precompile_ix(k(ED25519_PROGRAM), &a.public_key, &a.sig, &msg)
         }
     }
@@ -318,17 +357,38 @@ pub fn relay_pay_ix(p: &Pay) -> Ix {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Entry {
     Pay,
-    PayMeta { salt: Key, meta: Vec<u8> },
-    Fee { target: Key, accounts: Vec<Meta>, data: Vec<u8>, recipient: Key },
+    PayMeta {
+        salt: Key,
+        meta: Vec<u8>,
+    },
+    Fee {
+        target: Key,
+        accounts: Vec<Meta>,
+        data: Vec<u8>,
+        recipient: Key,
+    },
     /// Static wrapper `relay_fee_<entry>` (owner 2026-10-27): the inner entry's own instruction data (`data`, its
     /// `auth` naming precompile instruction 2) and declared accounts, its remaining accounts, its signature's
     /// precompile instruction (`sig`, instruction 2 of the transaction).
-    Wrapped { entry: String, data: Vec<u8>, accounts: Vec<Meta>, rest: Vec<Meta>, recipient: Key, sig: Ix },
+    Wrapped {
+        entry: String,
+        data: Vec<u8>,
+        accounts: Vec<Meta>,
+        rest: Vec<Meta>,
+        recipient: Key,
+        sig: Ix,
+    },
 }
 
 /// The fee-less signed entries of `scaas` with a `relay_fee_<entry>` wrapper.
-pub const WRAPPED_ENTRIES: [&str; 6] =
-    ["manage_signed", "mandate_open", "mandate_revoke_signed", "mandate_close_signed", "cancel_signed", "invalidate_nonces_signed"];
+pub const WRAPPED_ENTRIES: [&str; 6] = [
+    "manage_signed",
+    "mandate_open",
+    "mandate_revoke_signed",
+    "mandate_close_signed",
+    "cancel_signed",
+    "invalidate_nonces_signed",
+];
 
 /// Instruction data = Borsh của Anchor: `disc ‖ owner ‖ PayArgs ‖ [salt ‖ u32 len ‖ meta | u32 len ‖ target_data ‖
 /// u8 target_accounts] ‖ Auth` (precompile ở chỉ số 1).
@@ -361,7 +421,9 @@ pub fn pay_ix(p: &Pay, e: &Entry) -> Ix {
             data.extend_from_slice(&(meta.len() as u32).to_le_bytes());
             data.extend_from_slice(meta);
         }
-        Entry::Fee { accounts, data: d, .. } => {
+        Entry::Fee {
+            accounts, data: d, ..
+        } => {
             data.extend_from_slice(&(d.len() as u32).to_le_bytes());
             data.extend_from_slice(d);
             data.push(accounts.len() as u8);
@@ -384,7 +446,11 @@ pub fn pay_ix(p: &Pay, e: &Entry) -> Ix {
         m(find_pda(&[b"config"], &p.program).0, false, false),
         // RS12-2: readonly unless this pay opens the Account lazily.
         m(subject, false, !p.subject_exists),
-        m(find_pda(&[b"lane", &subject, &op.lane], &p.program).0, false, true),
+        m(
+            find_pda(&[b"lane", &subject, &op.lane], &p.program).0,
+            false,
+            true,
+        ),
         m(ata(&subject, &op.asset, &p.token_program), false, true),
         m(recipient, false, false),
         m(ata(&recipient, &op.asset, &p.token_program), false, true),
@@ -397,14 +463,22 @@ pub fn pay_ix(p: &Pay, e: &Entry) -> Ix {
         m(p.program, false, false),
     ]);
     match e {
-        Entry::Fee { target, accounts: t, .. } => {
+        Entry::Fee {
+            target,
+            accounts: t,
+            ..
+        } => {
             accounts.push(m(*target, false, false));
             accounts.extend(t.iter().cloned());
         }
         Entry::Wrapped { rest, .. } => accounts.extend(rest.iter().cloned()),
         _ => {}
     }
-    Ix { program: p.program, accounts, data }
+    Ix {
+        program: p.program,
+        accounts,
+        data,
+    }
 }
 
 // ------------------------------------------------------------------ CTR-MTX-26 / -27 (spec §6.2, §7.2)
@@ -469,11 +543,23 @@ pub const LANE_PDA_SPACE: u64 = 8 + 8 + 8 + 32;
 /// such job. A sponsored job (bound elsewhere, `relay_bound_payee`) is the node's own choice.
 /// ponytail: the lane PDA only (the program refunds it to `rent_payer` on prune); a first-use recipient ATA or a
 /// lazily opened Account is not priced, add them here when they matter.
-pub fn rent_covered(policy: &RelayFeePolicy, op: &MetaOp, program: &Key, lane: &Key, rent: Option<u64>) -> Result<()> {
+pub fn rent_covered(
+    policy: &RelayFeePolicy,
+    op: &MetaOp,
+    program: &Key,
+    lane: &Key,
+    rent: Option<u64>,
+) -> Result<()> {
     let ours = op.to == relay_fee_marker(program) || op.to == *lane;
-    let Some(rent) = rent.filter(|_| ours) else { return Ok(()) };
-    let price = policy.min_lamports_value.get(&op.asset)
-        .ok_or_else(|| anyhow!("params.relay_fee.min_lamports_value has no price for token {}", b58(&op.asset)))?;
+    let Some(rent) = rent.filter(|_| ours) else {
+        return Ok(());
+    };
+    let price = policy.min_lamports_value.get(&op.asset).ok_or_else(|| {
+        anyhow!(
+            "params.relay_fee.min_lamports_value has no price for token {}",
+            b58(&op.asset)
+        )
+    })?;
     let value = op.amount.saturating_mul(*price);
     if value < u128::from(rent) {
         bail!("fee {} × min_lamports_value {price} = {value} lamports is below the {rent} lamports rent of the new lane PDA", op.amount);
@@ -487,21 +573,43 @@ impl RelayFeePolicy {
     /// is a config error, never a silently disabled router.
     pub fn from_cfg(cfg: &ChainCfg) -> Result<Self> {
         let params = cfg.relay_params()?;
-        let router = params.router.as_deref().map(|r| key(r).context("params.relay_fee.router")).transpose()?;
+        let router = params
+            .router
+            .as_deref()
+            .map(|r| key(r).context("params.relay_fee.router"))
+            .transpose()?;
         let mut min_lamports_value = HashMap::new();
-        if let Some(v) = cfg.params.get("relay_fee").and_then(|t| t.get("min_lamports_value")) {
-            let table = v.as_table().ok_or_else(|| anyhow!("params.relay_fee.min_lamports_value must be a table of mint = lamports"))?;
+        if let Some(v) = cfg
+            .params
+            .get("relay_fee")
+            .and_then(|t| t.get("min_lamports_value"))
+        {
+            let table = v.as_table().ok_or_else(|| {
+                anyhow!("params.relay_fee.min_lamports_value must be a table of mint = lamports")
+            })?;
             for (m, n) in table {
-                let mint = key(m).with_context(|| format!("params.relay_fee.min_lamports_value: {m} is not a mint"))?;
+                let mint = key(m).with_context(|| {
+                    format!("params.relay_fee.min_lamports_value: {m} is not a mint")
+                })?;
                 let n = n.as_integer().and_then(|n| u128::try_from(n).ok())
                     .ok_or_else(|| anyhow!("params.relay_fee.min_lamports_value.{m} must be a non-negative integer"))?;
                 min_lamports_value.insert(mint, n);
             }
         }
-        let tokens = cfg.tokens.iter()
-            .map(|t| key(&t.address).with_context(|| format!("tokens: {} is not a Solana mint", t.address)))
+        let tokens = cfg
+            .tokens
+            .iter()
+            .map(|t| {
+                key(&t.address)
+                    .with_context(|| format!("tokens: {} is not a Solana mint", t.address))
+            })
             .collect::<Result<_>>()?;
-        Ok(Self { router, tokens, params, min_lamports_value })
+        Ok(Self {
+            router,
+            tokens,
+            params,
+            min_lamports_value,
+        })
     }
 }
 
@@ -511,7 +619,9 @@ fn hex_field(v: &Value, what: &str) -> Result<Vec<u8>> {
 }
 
 fn key_field(v: &Value, what: &str) -> Result<Key> {
-    hex_field(v, what)?.try_into().map_err(|_| anyhow!("op.{what} is 32 bytes"))
+    hex_field(v, what)?
+        .try_into()
+        .map_err(|_| anyhow!("op.{what} is 32 bytes"))
 }
 
 /// The entry a job runs, checked before simulation (fail closed). `op.kind`: `"pay_meta"` (`op.salt`, `op.meta`:
@@ -521,39 +631,68 @@ fn key_field(v: &Value, what: &str) -> Result<Key> {
 /// only signer and would lend its signature to the target), the target is not the program, and the payment commits
 /// to exactly this call: `pay_ref == ref`, `lane == payLane(ref)`, `nonce == 0`, `relayer == marker`); anything else
 /// is the plain `relay_pay`.
-pub fn entry(program: &Key, network: &Key, lane: &Key, policy: &RelayFeePolicy, op: &MetaOp, o: &Value) -> Result<Entry> {
+pub fn entry(
+    program: &Key,
+    network: &Key,
+    lane: &Key,
+    policy: &RelayFeePolicy,
+    op: &MetaOp,
+    o: &Value,
+) -> Result<Entry> {
     let kind = crate::adapter::op_kind(o, &crate::adapter::PAY_KINDS)?;
     let marker = relay_fee_marker(program);
     if kind != Some("relay_fee") && (op.to == marker || op.to == *program) {
         // CTR-MTX-27: nobody signs for the marker PDA or the program id, so coins paid there are stranded
-        bail!("a plain pay to the relay-fee router / marker {} is refused", b58(&op.to));
+        bail!(
+            "a plain pay to the relay-fee router / marker {} is refused",
+            b58(&op.to)
+        );
     }
     match kind {
         Some("pay_meta") => {
-            let (salt, meta) = (key_field(&o["salt"], "salt")?, hex_field(&o["meta"], "meta")?);
+            let (salt, meta) = (
+                key_field(&o["salt"], "salt")?,
+                hex_field(&o["meta"], "meta")?,
+            );
             if meta.len() > policy.params.max_pay_meta_bytes {
-                bail!("meta is {} B, above max_pay_meta_bytes {}", meta.len(), policy.params.max_pay_meta_bytes);
+                bail!(
+                    "meta is {} B, above max_pay_meta_bytes {}",
+                    meta.len(),
+                    policy.params.max_pay_meta_bytes
+                );
             }
             let id = meta_pay_id(&salt, &meta);
             if op.pay_ref != id || op.lane != pay_lane(&id) || op.nonce != 0 {
-                bail!("pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane / 0");
+                bail!(
+                    "pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane / 0"
+                );
             }
             Ok(Entry::PayMeta { salt, meta })
         }
         Some("relay_fee") => {
             if policy.router != Some(*program) {
-                bail!("relay-fee router {} is not the configured params.relay_fee.router", b58(program));
+                bail!(
+                    "relay-fee router {} is not the configured params.relay_fee.router",
+                    b58(program)
+                );
             }
             if !policy.tokens.contains(&op.asset) {
                 bail!("token {} is not registered on this chain", b58(&op.asset));
             }
             // open mode (`to` = the marker) pays this lane; a bound payee is `to` itself
-            crate::adapter::relay_fee_ours(op.to == marker, op.to == *lane, op.amount, &policy.params)?;
+            crate::adapter::relay_fee_ours(
+                op.to == marker,
+                op.to == *lane,
+                op.amount,
+                &policy.params,
+            )?;
             let x = &o["extra"];
             if !x["entry"].is_null() {
                 return wrapped(program, network, lane, op, o);
             }
-            let target = key(x["target"].as_str().ok_or_else(|| anyhow!("op.extra.target missing"))?)?;
+            let target = key(x["target"]
+                .as_str()
+                .ok_or_else(|| anyhow!("op.extra.target missing"))?)?;
             let accounts = metas(&x["target_accounts"], "target_accounts")?;
             if accounts.iter().any(|a| a.key == *lane) {
                 bail!("a target account is this lane: the target call must not touch the relayer's account");
@@ -565,7 +704,12 @@ pub fn entry(program: &Key, network: &Key, lane: &Key, policy: &RelayFeePolicy, 
                 bail!("the target is the scaas program itself");
             }
             let data = hex_field(&x["target_data"], "extra.target_data")?;
-            let r = relay_ref(network, &target, &relay_call(&target, &accounts, &data), &op.extra);
+            let r = relay_ref(
+                network,
+                &target,
+                &relay_call(&target, &accounts, &data),
+                &op.extra,
+            );
             if op.pay_ref != r || op.lane != pay_lane(&r) || op.nonce != 0 || op.relayer != marker {
                 bail!("the payment is not bound to this call (ref, payLane(ref), nonce 0, relayer = marker)");
             }
@@ -573,7 +717,12 @@ pub fn entry(program: &Key, network: &Key, lane: &Key, policy: &RelayFeePolicy, 
                 bail!("op.ref != relay_ref(target, call, salt)");
             }
             let recipient = if op.to == marker { *lane } else { op.to };
-            Ok(Entry::Fee { target, accounts, data, recipient })
+            Ok(Entry::Fee {
+                target,
+                accounts,
+                data,
+                recipient,
+            })
         }
         _ => Ok(Entry::Pay),
     }
@@ -581,15 +730,23 @@ pub fn entry(program: &Key, network: &Key, lane: &Key, policy: &RelayFeePolicy, 
 
 /// `[{pubkey, is_signer, is_writable}]`, at most 255.
 fn metas(v: &Value, what: &str) -> Result<Vec<Meta>> {
-    let list = v.as_array().ok_or_else(|| anyhow!("op.extra.{what} missing"))?;
+    let list = v
+        .as_array()
+        .ok_or_else(|| anyhow!("op.extra.{what} missing"))?;
     if list.len() > 255 {
         bail!("more than 255 {what}");
     }
     list.iter()
         .map(|a| {
             let flag = |k: &str| a[k].as_bool().ok_or_else(|| anyhow!("{what}: {k} missing"));
-            let pubkey = key(a["pubkey"].as_str().ok_or_else(|| anyhow!("{what}: pubkey missing"))?)?;
-            Ok(Meta { key: pubkey, signer: flag("is_signer")?, writable: flag("is_writable")? })
+            let pubkey = key(a["pubkey"]
+                .as_str()
+                .ok_or_else(|| anyhow!("{what}: pubkey missing"))?)?;
+            Ok(Meta {
+                key: pubkey,
+                signer: flag("is_signer")?,
+                writable: flag("is_writable")?,
+            })
         })
         .collect()
 }
@@ -600,13 +757,20 @@ fn metas(v: &Value, what: &str) -> Result<Vec<Meta>> {
 /// signature, message}`. The payment must commit to exactly this call (`ref` over target = the program).
 fn wrapped(program: &Key, network: &Key, lane: &Key, op: &MetaOp, o: &Value) -> Result<Entry> {
     let x = &o["extra"];
-    let entry = x["entry"].as_str().filter(|e| WRAPPED_ENTRIES.contains(e)).ok_or_else(|| anyhow!("op.extra.entry is not a wrapped entry"))?;
+    let entry = x["entry"]
+        .as_str()
+        .filter(|e| WRAPPED_ENTRIES.contains(e))
+        .ok_or_else(|| anyhow!("op.extra.entry is not a wrapped entry"))?;
     let data = hex_field(&x["inner_data"], "extra.inner_data")?;
     if data.get(..8) != Some(&discriminator("global", entry)[..]) {
         bail!("inner_data is not a {entry} instruction");
     }
     let accounts = metas(&x["inner_accounts"], "inner_accounts")?;
-    let rest = if x["inner_remaining"].is_null() { vec![] } else { metas(&x["inner_remaining"], "inner_remaining")? };
+    let rest = if x["inner_remaining"].is_null() {
+        vec![]
+    } else {
+        metas(&x["inner_remaining"], "inner_remaining")?
+    };
     if accounts.first().map(|a| (a.key, a.signer)) != Some((*lane, true)) {
         bail!("the inner entry's first account must be this lane, as its signer");
     }
@@ -617,15 +781,26 @@ fn wrapped(program: &Key, network: &Key, lane: &Key, op: &MetaOp, o: &Value) -> 
     // the lane slot hashes as the marker (lane-agnostic ref, T11 fix 3); the transaction carries this lane
     let mut all: Vec<Meta> = accounts.iter().chain(&rest).cloned().collect();
     all[0].key = marker;
-    let r = relay_ref(network, program, &relay_call(program, &all, &data), &op.extra);
+    let r = relay_ref(
+        network,
+        program,
+        &relay_call(program, &all, &data),
+        &op.extra,
+    );
     if op.pay_ref != r || op.lane != pay_lane(&r) || op.nonce != 0 || op.relayer != marker {
-        bail!("the payment is not bound to this call (ref, payLane(ref), nonce 0, relayer = marker)");
+        bail!(
+            "the payment is not bound to this call (ref, payLane(ref), nonce 0, relayer = marker)"
+        );
     }
     if !o["ref"].is_null() && key_field(&o["ref"], "ref")? != r {
         bail!("op.ref != relay_ref(scaas, call, salt)");
     }
     let s = &x["inner_sig"];
-    let (pk, sig, msg) = (hex_field(&s["public_key"], "inner_sig.public_key")?, hex_field(&s["signature"], "inner_sig.signature")?, hex_field(&s["message"], "inner_sig.message")?);
+    let (pk, sig, msg) = (
+        hex_field(&s["public_key"], "inner_sig.public_key")?,
+        hex_field(&s["signature"], "inner_sig.signature")?,
+        hex_field(&s["message"], "inner_sig.message")?,
+    );
     let (prog, pk_len) = match s["program"].as_str() {
         Some("ed25519") => (k(ED25519_PROGRAM), 32),
         Some("secp256r1") => (k(SECP256R1_PROGRAM), 33),
@@ -635,13 +810,24 @@ fn wrapped(program: &Key, network: &Key, lane: &Key, op: &MetaOp, o: &Value) -> 
         bail!("inner_sig: bad key / signature / message length");
     }
     let recipient = if op.to == marker { *lane } else { op.to };
-    Ok(Entry::Wrapped { entry: entry.to_string(), data, accounts, rest, recipient, sig: precompile_ix(prog, &pk, &sig, &msg) })
+    Ok(Entry::Wrapped {
+        entry: entry.to_string(),
+        data,
+        accounts,
+        rest,
+        recipient,
+        sig: precompile_ix(prog, &pk, &sig, &msg),
+    })
 }
 
 pub fn advance_nonce_ix(nonce: &Key, authority: &Key) -> Ix {
     Ix {
         program: SYSTEM,
-        accounts: vec![m(*nonce, false, true), m(k(RECENT_BLOCKHASHES), false, false), m(*authority, true, false)],
+        accounts: vec![
+            m(*nonce, false, true),
+            m(k(RECENT_BLOCKHASHES), false, false),
+            m(*authority, true, false),
+        ],
         data: 4u32.to_le_bytes().to_vec(),
     }
 }
@@ -656,7 +842,11 @@ pub fn create_nonce_ixs(lane: &Key, rent: u64, existing: u64) -> Vec<Ix> {
     if top > 0 {
         let mut d = 2u32.to_le_bytes().to_vec();
         d.extend_from_slice(&top.to_le_bytes());
-        ixs.push(Ix { program: SYSTEM, accounts: vec![m(*lane, true, true), m(nonce, false, true)], data: d });
+        ixs.push(Ix {
+            program: SYSTEM,
+            accounts: vec![m(*lane, true, true), m(nonce, false, true)],
+            data: d,
+        });
     }
     let mut d = 9u32.to_le_bytes().to_vec();
     d.extend_from_slice(lane);
@@ -664,12 +854,20 @@ pub fn create_nonce_ixs(lane: &Key, rent: u64, existing: u64) -> Vec<Ix> {
     d.extend_from_slice(NONCE_SEED.as_bytes());
     d.extend_from_slice(&NONCE_SPACE.to_le_bytes());
     d.extend_from_slice(&SYSTEM);
-    ixs.push(Ix { program: SYSTEM, accounts: vec![m(nonce, false, true), m(*lane, true, false)], data: d });
+    ixs.push(Ix {
+        program: SYSTEM,
+        accounts: vec![m(nonce, false, true), m(*lane, true, false)],
+        data: d,
+    });
     let mut d = 6u32.to_le_bytes().to_vec();
     d.extend_from_slice(lane);
     let init = Ix {
         program: SYSTEM,
-        accounts: vec![m(nonce, false, true), m(k(RECENT_BLOCKHASHES), false, false), m(k(RENT_SYSVAR), false, false)],
+        accounts: vec![
+            m(nonce, false, true),
+            m(k(RECENT_BLOCKHASHES), false, false),
+            m(k(RENT_SYSVAR), false, false),
+        ],
         data: d,
     };
     ixs.push(init);
@@ -687,7 +885,12 @@ pub struct Budget {
 /// Message v1: `0x81 ‖ header ‖ config mask u32 ‖ lifetime ‖ n_ix ‖ n_keys ‖ keys ‖ config values ‖ ix headers ‖ ix
 /// payloads`. Thứ tự account: fee payer, rồi signer ghi/đọc, rồi ghi/đọc — trong nhóm theo lần xuất hiện đầu (program
 /// trước account của nó). Trả (message, số chữ ký).
-pub fn message_v1(payer: &Key, lifetime: &[u8; 32], ixs: &[Ix], b: &Budget) -> Result<(Vec<u8>, usize)> {
+pub fn message_v1(
+    payer: &Key,
+    lifetime: &[u8; 32],
+    ixs: &[Ix],
+    b: &Budget,
+) -> Result<(Vec<u8>, usize)> {
     let mut keys: Vec<Meta> = vec![m(*payer, true, true)];
     let mut add = |x: &Meta| match keys.iter_mut().find(|e| e.key == x.key) {
         Some(e) => {
@@ -703,7 +906,10 @@ pub fn message_v1(payer: &Key, lifetime: &[u8; 32], ixs: &[Ix], b: &Budget) -> R
     let rank = |e: &Meta| (e.key != *payer, !e.signer, !e.writable);
     keys.sort_by_key(rank); // stable: first appearance inside each group
     if keys.len() > 64 {
-        bail!("a v1 transaction holds at most 64 accounts, got {}", keys.len());
+        bail!(
+            "a v1 transaction holds at most 64 accounts, got {}",
+            keys.len()
+        );
     }
     let n_sig = keys.iter().filter(|e| e.signer).count();
     let ro_signed = keys.iter().filter(|e| e.signer && !e.writable).count();
@@ -759,7 +965,8 @@ fn account_of_answer(v: &Value) -> Result<Option<(Vec<u8>, Key)>> {
     if a.is_null() {
         return Ok(None);
     }
-    let data = base64::engine::general_purpose::STANDARD.decode(a["data"][0].as_str().unwrap_or_default())?;
+    let data = base64::engine::general_purpose::STANDARD
+        .decode(a["data"][0].as_str().unwrap_or_default())?;
     Ok(Some((data, key(a["owner"].as_str().unwrap_or_default())?)))
 }
 
@@ -801,11 +1008,18 @@ const BUDGET_ERRORS: &[&str] = &["ComputationalBudgetExceeded", "ProgramFailedTo
 /// lỗi cấp tx ⇒ `Rejected` (mọi thay đổi đã rollback trừ phí + nonce lane; lane PDA người trả còn nguyên ⇒ dựng lại).
 pub fn classify_landed(err: &Value, slot: u64) -> Result<TxStatus> {
     if err.is_null() {
-        return Ok(TxStatus::Mined { height: slot, tx_hash: None });
+        return Ok(TxStatus::Mined {
+            height: slot,
+            tx_hash: None,
+        });
     }
     match instruction_error(err) {
-        Some((_, e)) if BUDGET_ERRORS.contains(&err_name(e).as_str()) => Err(Rejected(err.to_string()).into()),
-        Some((i, _)) if i >= 1 => Ok(TxStatus::Reverted { reason: err.to_string() }),
+        Some((_, e)) if BUDGET_ERRORS.contains(&err_name(e).as_str()) => {
+            Err(Rejected(err.to_string()).into())
+        }
+        Some((i, _)) if i >= 1 => Ok(TxStatus::Reverted {
+            reason: err.to_string(),
+        }),
         _ => Err(Rejected(err.to_string()).into()),
     }
 }
@@ -817,8 +1031,12 @@ pub fn classify_landed(err: &Value, slot: u64) -> Result<TxStatus> {
 pub fn classify_sim(err: &Value, logs: &[String]) -> SimError {
     let text = format!("{err} {}", logs.join(" | "));
     match instruction_error(err) {
-        Some(_) if logs.iter().any(|l| l.contains("insufficient lamports")) => SimError::Transport(format!("lane short of rent: {text}")),
-        Some((i, e)) if i >= 1 && !BUDGET_ERRORS.contains(&err_name(e).as_str()) => SimError::Revert(text),
+        Some(_) if logs.iter().any(|l| l.contains("insufficient lamports")) => {
+            SimError::Transport(format!("lane short of rent: {text}"))
+        }
+        Some((i, e)) if i >= 1 && !BUDGET_ERRORS.contains(&err_name(e).as_str()) => {
+            SimError::Revert(text)
+        }
         _ => SimError::Transport(format!("simulation: {text}")),
     }
 }
@@ -832,9 +1050,16 @@ pub fn classify_submit(e: &RpcError) -> Result<()> {
     }
     let rejected = e.code == -32002
         || e.code == -32003
-        || ["BlockhashNotFound", "InsufficientFundsForFee", "InsufficientFundsForRent", "SignatureFailure", "AccountNotFound", "InstructionError"]
-            .iter()
-            .any(|n| name == *n || e.message.contains(n));
+        || [
+            "BlockhashNotFound",
+            "InsufficientFundsForFee",
+            "InsufficientFundsForRent",
+            "SignatureFailure",
+            "AccountNotFound",
+            "InstructionError",
+        ]
+        .iter()
+        .any(|n| name == *n || e.message.contains(n));
     if rejected {
         return Err(Rejected(e.to_string()).into());
     }
@@ -845,7 +1070,15 @@ pub fn classify_submit(e: &RpcError) -> Result<()> {
 
 /// Event `emit_cpi!` trong inner instruction ⇒ event chuẩn hoá cho ExternalPull; `None` nếu không phải của program/event
 /// authority này, không phải event ExternalPull đọc, hoặc mint chưa đăng ký.
-pub fn normalize(data: &[u8], router: &str, tokens: &[String], slot: u64, block_hash: &str, tx_hash: &str, log_index: usize) -> Option<Value> {
+pub fn normalize(
+    data: &[u8],
+    router: &str,
+    tokens: &[String],
+    slot: u64,
+    block_hash: &str,
+    tx_hash: &str,
+    log_index: usize,
+) -> Option<Value> {
     if data.len() < 16 || data[..8] != EVENT_IX_TAG {
         return None;
     }
@@ -894,14 +1127,23 @@ pub fn normalize(data: &[u8], router: &str, tokens: &[String], slot: u64, block_
 
 /// Mọi event của một tx `getTransaction` (encoding json): chỉ khi `meta.err = null`, chỉ inner instruction gọi đúng
 /// `program` với account đầu = event authority của nó (L2: program sao chép ở id khác không ký được).
-pub fn tx_events(program: &Key, tokens: &[String], tx: &Value, block_hash: &str) -> Result<Vec<Value>> {
+pub fn tx_events(
+    program: &Key,
+    tokens: &[String],
+    tx: &Value,
+    block_hash: &str,
+) -> Result<Vec<Value>> {
     let meta = &tx["meta"];
     if !meta["err"].is_null() {
         return Ok(vec![]);
     }
-    let sig = tx["transaction"]["signatures"][0].as_str().ok_or_else(|| anyhow!("tx without signature"))?;
+    let sig = tx["transaction"]["signatures"][0]
+        .as_str()
+        .ok_or_else(|| anyhow!("tx without signature"))?;
     let tx_hash = hx(&bs58::decode(sig).into_vec()?);
-    let slot = tx["slot"].as_u64().ok_or_else(|| anyhow!("tx without slot"))?;
+    let slot = tx["slot"]
+        .as_u64()
+        .ok_or_else(|| anyhow!("tx without slot"))?;
     let mut keys: Vec<String> = tx["transaction"]["message"]["accountKeys"]
         .as_array()
         .ok_or_else(|| anyhow!("tx without account keys"))?
@@ -909,7 +1151,13 @@ pub fn tx_events(program: &Key, tokens: &[String], tx: &Value, block_hash: &str)
         .filter_map(|v| v.as_str().map(String::from))
         .collect();
     for part in ["writable", "readonly"] {
-        keys.extend(meta["loadedAddresses"][part].as_array().into_iter().flatten().filter_map(|v| v.as_str().map(String::from)));
+        keys.extend(
+            meta["loadedAddresses"][part]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|v| v.as_str().map(String::from)),
+        );
     }
     let (prog, auth) = (b58(program), b58(&event_authority(program)));
     let mut out = Vec::new();
@@ -917,7 +1165,9 @@ pub fn tx_events(program: &Key, tokens: &[String], tx: &Value, block_hash: &str)
     for group in meta["innerInstructions"].as_array().into_iter().flatten() {
         for ix in group["instructions"].as_array().into_iter().flatten() {
             let key_at = |v: &Value| v.as_u64().and_then(|i| keys.get(i as usize)).cloned();
-            if key_at(&ix["programIdIndex"]).as_deref() != Some(&prog) || key_at(&ix["accounts"][0]).as_deref() != Some(&auth) {
+            if key_at(&ix["programIdIndex"]).as_deref() != Some(&prog)
+                || key_at(&ix["accounts"][0]).as_deref() != Some(&auth)
+            {
                 continue;
             }
             let data = bs58::decode(ix["data"].as_str().unwrap_or_default()).into_vec()?;
@@ -977,37 +1227,59 @@ fn transport(e: anyhow::Error) -> SimError {
 }
 
 fn now() -> u64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 impl SolanaAdapter {
     pub fn new(cfg: &ChainCfg, signers: &[LocalSigner]) -> Result<Self> {
         if cfg.rpc_urls.is_empty() || signers.is_empty() {
-            bail!("chain {}: needs rpc_urls and at least one lane", cfg.chain_key());
+            bail!(
+                "chain {}: needs rpc_urls and at least one lane",
+                cfg.chain_key()
+            );
         }
         let p = |k: &str| cfg.params.get(k).and_then(|v| v.as_str());
-        let n = |k: &str, d: u64| cfg.params.get(k).and_then(|v| v.as_integer()).map_or(d, |v| v.max(0) as u64);
-        let network = key(cfg.network.as_deref().unwrap_or_default()).context("solana: network must be the genesis hash (base58)")?;
-        let program = key(p("program_id").ok_or_else(|| anyhow!("solana: params.program_id is required"))?)?;
+        let n = |k: &str, d: u64| {
+            cfg.params
+                .get(k)
+                .and_then(|v| v.as_integer())
+                .map_or(d, |v| v.max(0) as u64)
+        };
+        let network = key(cfg.network.as_deref().unwrap_or_default())
+            .context("solana: network must be the genesis hash (base58)")?;
+        let program =
+            key(p("program_id").ok_or_else(|| anyhow!("solana: params.program_id is required"))?)?;
         if b58(&program) == TEST_PROGRAM_ID && PUBLIC_GENESIS.contains(&b58(&network).as_str()) {
             bail!("solana: {TEST_PROGRAM_ID} is the test-only program id (its key is public); deploy your own (smartcontracts/solana/scripts/deploy.sh)");
         }
         let mut lanes = Vec::new();
         let mut own = Vec::new();
         for (s, &i) in signers.iter().zip(&cfg.lanes) {
-            let LocalSigner::Ed(sk) = s else { bail!("solana lanes are ed25519") };
-            lanes.push(Lane { index: i, address: b58(&sk.verifying_key().to_bytes()) });
+            let LocalSigner::Ed(sk) = s else {
+                bail!("solana lanes are ed25519")
+            };
+            lanes.push(Lane {
+                index: i,
+                address: b58(&sk.verifying_key().to_bytes()),
+            });
             own.push(LocalSigner::Ed(sk.clone()));
         }
         Ok(Self {
             key: cfg.chain_key(),
             network,
-            net: scaas_rpc::solana::Solana::new(scaas_rpc::family::Client::of_urls(&cfg.rpc_urls, None)
-                .map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?, &b58(&network)),
+            net: scaas_rpc::solana::Solana::new(
+                scaas_rpc::family::Client::of_urls(&cfg.rpc_urls, None)
+                    .map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?,
+                &b58(&network),
+            ),
             program,
             max_cu: n("max_cu", DEFAULT_MAX_CU as u64).clamp(10_000, 1_400_000) as u32,
             max_priority: n("max_priority_lamports", DEFAULT_MAX_PRIORITY),
-            loaded_bytes: n("max_loaded_bytes", DEFAULT_LOADED_BYTES as u64).clamp(64 * 1024, 64 * 1024 * 1024) as u32,
+            loaded_bytes: n("max_loaded_bytes", DEFAULT_LOADED_BYTES as u64)
+                .clamp(64 * 1024, 64 * 1024 * 1024) as u32,
             quorum: cfg.finality.quorum.max(1),
             lanes,
             signers: own,
@@ -1043,34 +1315,70 @@ impl SolanaAdapter {
 
     /// [`ChainAdapter::build`]'s body (scaas-rpc T16b: the wrapper compares the failover counter). Dựng + mô phỏng.
     async fn build_on(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
-        let w = self.work(job).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
+        let w = self
+            .work(job)
+            .map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
         if w.op.valid_until <= now() {
             return Err(SimError::Revert("payload expired".into()));
         }
         self.check_domain().await.map_err(transport)?;
         let lk = self.lane_key(lane).map_err(transport)?;
         let subject = account_of(&self.program, &w.op.from);
-        let subject_exists = self.read_account(&subject, "confirmed").await.map_err(transport)?.is_some();
-        let o = job.op.as_ref().ok_or_else(|| SimError::Revert("not a signed_op job".into()))?;
-        let e = entry(&self.program, &self.network, &lk, &self.relay_fee, &w.op, o).map_err(|e| SimError::Revert(format!("{e:#}")))?;
+        let subject_exists = self
+            .read_account(&subject, "confirmed")
+            .await
+            .map_err(transport)?
+            .is_some();
+        let o = job
+            .op
+            .as_ref()
+            .ok_or_else(|| SimError::Revert("not a signed_op job".into()))?;
+        let e = entry(&self.program, &self.network, &lk, &self.relay_fee, &w.op, o)
+            .map_err(|e| SimError::Revert(format!("{e:#}")))?;
         if matches!(e, Entry::Fee { .. } | Entry::Wrapped { .. }) {
             let pda = find_pda(&[b"lane", &subject, &w.op.lane], &self.program).0;
-            let rent = match self.read_account(&pda, "confirmed").await.map_err(transport)? {
+            let rent = match self
+                .read_account(&pda, "confirmed")
+                .await
+                .map_err(transport)?
+            {
                 Some(_) => None,
-                None => Some(self.read("getMinimumBalanceForRentExemption", json!([LANE_PDA_SPACE])).await.map_err(transport)?
-                    .as_u64().ok_or_else(|| SimError::Transport("bad rent".into()))?),
+                None => Some(
+                    self.read("getMinimumBalanceForRentExemption", json!([LANE_PDA_SPACE]))
+                        .await
+                        .map_err(transport)?
+                        .as_u64()
+                        .ok_or_else(|| SimError::Transport("bad rent".into()))?,
+                ),
             };
-            rent_covered(&self.relay_fee, &w.op, &self.program, &lk, rent).map_err(|e| SimError::Revert(format!("{e:#}")))?;
+            rent_covered(&self.relay_fee, &w.op, &self.program, &lk, rent)
+                .map_err(|e| SimError::Revert(format!("{e:#}")))?;
         }
-        let pay = Pay { program: self.program, lane: lk, op: &w.op, auth: &w.auth, token_program: w.token_program, subject_exists };
+        let pay = Pay {
+            program: self.program,
+            lane: lk,
+            op: &w.op,
+            auth: &w.auth,
+            token_program: w.token_program,
+            subject_exists,
+        };
         let mut ixs = vec![auth_ix(&w.auth, &w.op.digest())];
         if let Entry::Wrapped { sig, .. } = &e {
             ixs.push(sig.clone()); // instruction 2: the inner entry's own signature
         }
         ixs.push(pay_ix(&pay, &e));
         let nonce = self.read_nonce(lane).await.map_err(transport)?;
-        let plan = Plan { ixs, budget: Budget { priority_lamports: 0, cu: self.max_cu, loaded_bytes: self.loaded_bytes } };
-        let (raw, _) = self.sign_message(lane, &nonce, &plan).map_err(|e| SimError::Revert(format!("{e:#}")))?;
+        let plan = Plan {
+            ixs,
+            budget: Budget {
+                priority_lamports: 0,
+                cu: self.max_cu,
+                loaded_bytes: self.loaded_bytes,
+            },
+        };
+        let (raw, _) = self
+            .sign_message(lane, &nonce, &plan)
+            .map_err(|e| SimError::Revert(format!("{e:#}")))?;
         let b64 = base64::engine::general_purpose::STANDARD.encode(&raw);
         let sim = self
             .read("simulateTransaction", json!([b64, {"encoding": "base64", "sigVerify": false, "replaceRecentBlockhash": false,
@@ -1079,31 +1387,63 @@ impl SolanaAdapter {
             .map_err(transport)?;
         let v = &sim["value"];
         if !v["err"].is_null() {
-            let logs: Vec<String> = v["logs"].as_array().into_iter().flatten().filter_map(|x| x.as_str().map(String::from)).collect();
+            let logs: Vec<String> = v["logs"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|x| x.as_str().map(String::from))
+                .collect();
             return Err(classify_sim(&v["err"], &logs));
         }
         let used = v["unitsConsumed"].as_u64().unwrap_or(self.max_cu as u64);
         let cu = (used + used.div_ceil(5)).clamp(1_000, self.max_cu as u64) as u32;
-        let writable: Vec<Key> = plan.ixs.iter().flat_map(|ix| ix.accounts.iter().filter(|a| a.writable).map(|a| a.key)).collect();
-        let budget = Budget { priority_lamports: self.priority_fee(&writable, cu).await, cu, loaded_bytes: self.loaded_bytes };
-        let plan = Plan { ixs: plan.ixs, budget };
+        let writable: Vec<Key> = plan
+            .ixs
+            .iter()
+            .flat_map(|ix| ix.accounts.iter().filter(|a| a.writable).map(|a| a.key))
+            .collect();
+        let budget = Budget {
+            priority_lamports: self.priority_fee(&writable, cu).await,
+            cu,
+            loaded_bytes: self.loaded_bytes,
+        };
+        let plan = Plan {
+            ixs: plan.ixs,
+            budget,
+        };
         let body = serde_json::to_vec(&plan).map_err(|e| SimError::Revert(e.to_string()))?;
-        Ok(Built { job_id: job.id, body, valid_until: w.op.valid_until, meta: json!({"units": used, "subject_exists": subject_exists}) })
+        Ok(Built {
+            job_id: job.id,
+            body,
+            valid_until: w.op.valid_until,
+            meta: json!({"units": used, "subject_exists": subject_exists}),
+        })
     }
 
     /// ARCH-POS-15 (CLI-RPC-04, scaas-rpc T16b): `build`'s reads, failed over: endpoint 0, then each next endpoint of this
     /// cluster (`getGenesisHash`) not behind the slot endpoint 0 last showed. Any error answer is the endpoint's failure, as
     /// endpoint 0's was in `build`; what a failover endpoint's simulation refuses `build` requeues.
     async fn read(&self, method: &str, params: Value) -> Result<Value> {
-        let a = self.net.client.failover(&self.net, |i| {
-            let params = params.clone();
-            async move {
-                self.net.call(i, method, params).await.map_err(|e| scaas_rpc::pool::ReadError::Failure(match e {
-                    scaas_rpc::family::FamilyError::Failure(f) => f,
-                    e => scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string()),
-                }))
-            }
-        }).await.map_err(|e| crate::adapters::evm::all_failed(method, &e))?;
+        let a = self
+            .net
+            .client
+            .failover(&self.net, |i| {
+                let params = params.clone();
+                async move {
+                    self.net.call(i, method, params).await.map_err(|e| {
+                        scaas_rpc::pool::ReadError::Failure(match e {
+                            scaas_rpc::family::FamilyError::Failure(f) => f,
+                            e => scaas_rpc::EndpointFailure::new(
+                                i,
+                                scaas_rpc::FailureKind::Transport,
+                                &e.to_string(),
+                            ),
+                        })
+                    })
+                }
+            })
+            .await
+            .map_err(|e| crate::adapters::evm::all_failed(method, &e))?;
         Ok(a.value)
     }
 
@@ -1114,7 +1454,12 @@ impl SolanaAdapter {
 
     /// [`Self::account_data`] failed over (`build`'s reads only).
     async fn read_account(&self, k: &Key, commitment: &str) -> Result<Option<(Vec<u8>, Key)>> {
-        let v = self.read("getAccountInfo", json!([b58(k), {"encoding": "base64", "commitment": commitment}])).await?;
+        let v = self
+            .read(
+                "getAccountInfo",
+                json!([b58(k), {"encoding": "base64", "commitment": commitment}]),
+            )
+            .await?;
         account_of_answer(&v)
     }
 
@@ -1126,7 +1471,10 @@ impl SolanaAdapter {
             Some((data, owner)) if owner == SYSTEM && !data.is_empty() => {
                 let (value, authority) = parse_nonce(&data)?;
                 if authority != lk {
-                    bail!("nonce account {} is not this lane's", b58(&nonce_account(&lk)));
+                    bail!(
+                        "nonce account {} is not this lane's",
+                        b58(&nonce_account(&lk))
+                    );
                 }
                 Ok(value)
             }
@@ -1135,7 +1483,12 @@ impl SolanaAdapter {
     }
 
     async fn account_data(&self, k: &Key, commitment: &str) -> Result<Option<(Vec<u8>, Key)>> {
-        let v = self.rpc("getAccountInfo", json!([b58(k), {"encoding": "base64", "commitment": commitment}])).await?;
+        let v = self
+            .rpc(
+                "getAccountInfo",
+                json!([b58(k), {"encoding": "base64", "commitment": commitment}]),
+            )
+            .await?;
         account_of_answer(&v)
     }
 
@@ -1143,12 +1496,23 @@ impl SolanaAdapter {
     async fn check_domain(&self) -> Result<()> {
         self.domain_checked
             .get_or_try_init(|| async {
-                let g = key(self.rpc("getGenesisHash", json!([])).await?.as_str().unwrap_or_default())?;
+                let g = key(self
+                    .rpc("getGenesisHash", json!([]))
+                    .await?
+                    .as_str()
+                    .unwrap_or_default())?;
                 if g != self.network {
-                    bail!("RPC genesis {} is not the configured network {}", b58(&g), b58(&self.network));
+                    bail!(
+                        "RPC genesis {} is not the configured network {}",
+                        b58(&g),
+                        b58(&self.network)
+                    );
                 }
                 let config = find_pda(&[b"config"], &self.program).0;
-                let (data, owner) = self.account_data(&config, "confirmed").await?.ok_or_else(|| anyhow!("program Config not initialized"))?;
+                let (data, owner) = self
+                    .account_data(&config, "confirmed")
+                    .await?
+                    .ok_or_else(|| anyhow!("program Config not initialized"))?;
                 if owner != self.program || data.get(40..72) != Some(&self.network[..]) {
                     bail!("program Config.network is not {}", b58(&self.network));
                 }
@@ -1159,16 +1523,30 @@ impl SolanaAdapter {
     }
 
     fn work(&self, job: &Job) -> Result<Work> {
-        let o = job.op.as_ref().ok_or_else(|| anyhow!("not a signed_op job"))?;
-        let payload = alloy::hex::decode(o["payload"].as_str().unwrap_or_default().trim_start_matches("0x"))?;
+        let o = job
+            .op
+            .as_ref()
+            .ok_or_else(|| anyhow!("not a signed_op job"))?;
+        let payload = alloy::hex::decode(
+            o["payload"]
+                .as_str()
+                .unwrap_or_default()
+                .trim_start_matches("0x"),
+        )?;
         let op = MetaOp::decode(&payload)?;
         if op.op != OP_PAY {
             bail!("only pay ops are relayed on Solana");
         }
         if op.network != self.network {
-            bail!("payload is for network {}, this chain is {}", b58(&op.network), b58(&self.network));
+            bail!(
+                "payload is for network {}, this chain is {}",
+                b58(&op.network),
+                b58(&self.network)
+            );
         }
-        if key(o["contract"].as_str().unwrap_or_default())? != op.contract || account_of(&self.program, &op.from) != op.contract {
+        if key(o["contract"].as_str().unwrap_or_default())? != op.contract
+            || account_of(&self.program, &op.from) != op.contract
+        {
             bail!("payload contract is not the payer's Account under this program");
         }
         if key(o["extra"]["asset"].as_str().unwrap_or_default())? != op.asset {
@@ -1177,16 +1555,29 @@ impl SolanaAdapter {
         if op.amount > u64::MAX as u128 {
             bail!("amount above u64");
         }
-        let token_program = key(o["extra"]["token_program"].as_str().unwrap_or(TOKEN_PROGRAM))?;
+        let token_program = key(o["extra"]["token_program"]
+            .as_str()
+            .unwrap_or(TOKEN_PROGRAM))?;
         if token_program != k(TOKEN_PROGRAM) && token_program != k(TOKEN_2022) {
             bail!("unknown token program {}", b58(&token_program));
         }
-        let auth = parse_auth(o["signature"].as_str().unwrap_or_default(), o["public_key"].as_str().unwrap_or_default())?;
-        Ok(Work { op, auth, token_program })
+        let auth = parse_auth(
+            o["signature"].as_str().unwrap_or_default(),
+            o["public_key"].as_str().unwrap_or_default(),
+        )?;
+        Ok(Work {
+            op,
+            auth,
+            token_program,
+        })
     }
 
     fn lane_key(&self, lane: usize) -> Result<Key> {
-        key(&self.lanes.get(lane).ok_or_else(|| anyhow!("no lane {lane}"))?.address)
+        key(&self
+            .lanes
+            .get(lane)
+            .ok_or_else(|| anyhow!("no lane {lane}"))?
+            .address)
     }
 
     /// Giá trị nonce hiện tại của lane (commitment `confirmed`); tạo nonce account nếu chưa có (một tx setup do lane trả).
@@ -1207,12 +1598,29 @@ impl SolanaAdapter {
                 return Ok(value);
             }
             // pre-funded by someone (M1): keep its lamports, allocate in place
-            existing = self.rpc("getBalance", json!([b58(&addr), {"commitment": "confirmed"}])).await?["value"].as_u64().unwrap_or(0);
+            existing = self
+                .rpc(
+                    "getBalance",
+                    json!([b58(&addr), {"commitment": "confirmed"}]),
+                )
+                .await?["value"]
+                .as_u64()
+                .unwrap_or(0);
         }
-        let rent = self.rpc("getMinimumBalanceForRentExemption", json!([NONCE_SPACE])).await?.as_u64().ok_or_else(|| anyhow!("bad rent"))?;
-        let bh = self.rpc("getLatestBlockhash", json!([{"commitment": "confirmed"}])).await?;
+        let rent = self
+            .rpc("getMinimumBalanceForRentExemption", json!([NONCE_SPACE]))
+            .await?
+            .as_u64()
+            .ok_or_else(|| anyhow!("bad rent"))?;
+        let bh = self
+            .rpc("getLatestBlockhash", json!([{"commitment": "confirmed"}]))
+            .await?;
         let bh = key(bh["value"]["blockhash"].as_str().unwrap_or_default())?;
-        let budget = Budget { priority_lamports: 0, cu: 10_000, loaded_bytes: 64 * 1024 };
+        let budget = Budget {
+            priority_lamports: 0,
+            cu: 10_000,
+            loaded_bytes: 64 * 1024,
+        };
         let (msg, _) = message_v1(&lk, &bh, &create_nonce_ixs(&lk, rent, existing), &budget)?;
         let tx = wire_v1(&msg, &self.signers[lane].sign(&msg)?);
         tracing::info!(chain = %self.key, lane, nonce = %b58(&addr), "creating the lane's durable nonce account");
@@ -1230,8 +1638,13 @@ impl SolanaAdapter {
 
     async fn send_raw(&self, raw: &[u8]) -> Result<()> {
         let b64 = base64::engine::general_purpose::STANDARD.encode(raw);
-        let r = self.rpc("sendTransaction", json!([b64, {"encoding": "base64", "skipPreflight": false,
-            "preflightCommitment": "confirmed", "maxRetries": 0}])).await;
+        let r = self
+            .rpc(
+                "sendTransaction",
+                json!([b64, {"encoding": "base64", "skipPreflight": false,
+            "preflightCommitment": "confirmed", "maxRetries": 0}]),
+            )
+            .await;
         match r {
             Ok(_) => Ok(()),
             Err(e) => match e.downcast_ref::<RpcError>() {
@@ -1241,7 +1654,12 @@ impl SolanaAdapter {
         }
     }
 
-    fn sign_message(&self, lane: usize, nonce: &[u8; 32], plan: &Plan) -> Result<(Vec<u8>, Vec<u8>)> {
+    fn sign_message(
+        &self,
+        lane: usize,
+        nonce: &[u8; 32],
+        plan: &Plan,
+    ) -> Result<(Vec<u8>, Vec<u8>)> {
         let lk = self.lane_key(lane)?;
         let mut ixs = vec![advance_nonce_ix(&nonce_account(&lk), &lk)];
         ixs.extend(plan.ixs.iter().cloned());
@@ -1262,8 +1680,18 @@ impl SolanaAdapter {
 
     async fn priority_fee(&self, writable: &[Key], cu: u32) -> u64 {
         let keys: Vec<String> = writable.iter().map(|k| b58(k)).collect();
-        let Ok(v) = self.read("getRecentPrioritizationFees", json!([keys])).await else { return 0 };
-        let mut fees: Vec<u64> = v.as_array().into_iter().flatten().filter_map(|f| f["prioritizationFee"].as_u64()).collect();
+        let Ok(v) = self
+            .read("getRecentPrioritizationFees", json!([keys]))
+            .await
+        else {
+            return 0;
+        };
+        let mut fees: Vec<u64> = v
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|f| f["prioritizationFee"].as_u64())
+            .collect();
         if fees.is_empty() {
             return 0;
         }
@@ -1289,11 +1717,15 @@ impl ChainAdapter for SolanaAdapter {
 
     /// R80: `pay` ⇒ `LanePda.next` (8 byte sau discriminator; chưa tạo hoặc đã dọn = 0) so với nonce đã ký.
     async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
-        let Ok(w) = self.work(job) else { return Ok(None) };
+        let Ok(w) = self.work(job) else {
+            return Ok(None);
+        };
         let pda = find_pda(&[b"lane", &w.op.contract, &w.op.lane], &self.program).0;
         let next = match self.account_data(&pda, "confirmed").await? {
             None => 0,
-            Some((d, owner)) if owner == self.program && d.len() >= 16 => u64::from_le_bytes(d[8..16].try_into().expect("8")),
+            Some((d, owner)) if owner == self.program && d.len() >= 16 => {
+                u64::from_le_bytes(d[8..16].try_into().expect("8"))
+            }
             Some(_) => bail!("lane PDA {} is not this program's", b58(&pda)),
         };
         Ok(Some(next > w.op.nonce))
@@ -1305,7 +1737,9 @@ impl ChainAdapter for SolanaAdapter {
         // scaas-rpc T16b (R4): a refusal read while a failover endpoint answered is no verdict
         let mark = self.failovers();
         match self.build_on(job, lane).await {
-            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),
+            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(
+                crate::adapters::evm::failover_answer(&r),
+            )),
             r => r,
         }
     }
@@ -1318,14 +1752,25 @@ impl ChainAdapter for SolanaAdapter {
             bail!("lane {lane} nonce moved while signing");
         }
         let (raw, sig) = self.sign_message(lane, &nonce, &plan)?;
-        Ok(Signed { job_id: built.job_id, tx_id: hx(&sig), raw, valid_until: built.valid_until, sequence })
+        Ok(Signed {
+            job_id: built.job_id,
+            tx_id: hx(&sig),
+            raw,
+            valid_until: built.valid_until,
+            sequence,
+        })
     }
 
     async fn submit(&self, signed: &Signed) -> Result<()> {
         let lane = self.lane_of(&signed.raw).unwrap_or(0);
         self.sent.lock().map_err(|_| anyhow!("poisoned"))?.insert(
             signed.tx_id.clone(),
-            Sent { raw: signed.raw.clone(), lane, sequence: signed.sequence, last: Instant::now() },
+            Sent {
+                raw: signed.raw.clone(),
+                lane,
+                sequence: signed.sequence,
+                last: Instant::now(),
+            },
         );
         self.send_raw(&signed.raw).await
     }
@@ -1333,7 +1778,12 @@ impl ChainAdapter for SolanaAdapter {
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
         let st: Result<TxStatus> = async {
             let sig = b58(&alloy::hex::decode(tx_id.trim_start_matches("0x"))?);
-            let v = self.rpc("getSignatureStatuses", json!([[sig], {"searchTransactionHistory": true}])).await?;
+            let v = self
+                .rpc(
+                    "getSignatureStatuses",
+                    json!([[sig], {"searchTransactionHistory": true}]),
+                )
+                .await?;
             let st = &v["value"][0];
             if st.is_null() {
                 // Tự rebroadcast (RPC rớt tx khi nghẽn): cùng bytes, ≤ 1 lần / 2 s, chỉ khi nonce lane chưa đổi.
@@ -1355,7 +1805,10 @@ impl ChainAdapter for SolanaAdapter {
             if st["confirmationStatus"].as_str().unwrap_or("processed") == "processed" {
                 return Ok(TxStatus::Pending);
             }
-            self.sent.lock().map_err(|_| anyhow!("poisoned"))?.remove(tx_id);
+            self.sent
+                .lock()
+                .map_err(|_| anyhow!("poisoned"))?
+                .remove(tx_id);
             classify_landed(&st["err"], st["slot"].as_u64().unwrap_or(0))
         }
         .await;
@@ -1371,14 +1824,26 @@ impl ChainAdapter for SolanaAdapter {
     }
 
     async fn lane_balance(&self, lane: usize) -> Result<Option<u128>> {
-        let v = self.rpc("getBalance", json!([b58(&self.lane_key(lane)?), {"commitment": "confirmed"}])).await?;
+        let v = self
+            .rpc(
+                "getBalance",
+                json!([b58(&self.lane_key(lane)?), {"commitment": "confirmed"}]),
+            )
+            .await?;
         Ok(v["value"].as_u64().map(u128::from))
     }
 
     async fn tx_fee(&self, tx_id: &str) -> Result<Option<u128>> {
         let sig = b58(&alloy::hex::decode(tx_id.trim_start_matches("0x"))?);
-        let v = self.rpc("getTransaction", json!([sig, {"commitment": "confirmed", "maxSupportedTransactionVersion": 1}])).await?;
-        Ok(Some(v["meta"]["fee"].as_u64().map(u128::from).ok_or_else(|| anyhow!("getTransaction {tx_id}: no fee"))?))
+        let v = self
+            .rpc(
+                "getTransaction",
+                json!([sig, {"commitment": "confirmed", "maxSupportedTransactionVersion": 1}]),
+            )
+            .await?;
+        Ok(Some(v["meta"]["fee"].as_u64().map(u128::from).ok_or_else(
+            || anyhow!("getTransaction {tx_id}: no fee"),
+        )?))
     }
 
     /// Restart: không còn bytes cũ ⇒ advance nonce của lane một lần để mọi tx đã ký trước crash không bao giờ vào sổ nữa;
@@ -1387,9 +1852,22 @@ impl ChainAdapter for SolanaAdapter {
     async fn resend_journaled(&self, lane: usize) -> Result<()> {
         let lk = self.lane_key(lane)?;
         let before = self.nonce(lane).await?;
-        let plan = Plan { ixs: vec![], budget: Budget { priority_lamports: 0, cu: 10_000, loaded_bytes: 64 * 1024 } };
+        let plan = Plan {
+            ixs: vec![],
+            budget: Budget {
+                priority_lamports: 0,
+                cu: 10_000,
+                loaded_bytes: 64 * 1024,
+            },
+        };
         let (raw, _) = self.sign_message(lane, &before, &plan)?;
-        self.send_raw(&raw).await.or_else(|e| if e.downcast_ref::<Rejected>().is_some() { Ok(()) } else { Err(e) })?;
+        self.send_raw(&raw).await.or_else(|e| {
+            if e.downcast_ref::<Rejected>().is_some() {
+                Ok(())
+            } else {
+                Err(e)
+            }
+        })?;
         for _ in 0..60 {
             if self.nonce(lane).await? != before {
                 return Ok(());
@@ -1433,10 +1911,17 @@ impl ChainAdapter for SolanaAdapter {
     /// ponytail: mỗi bước phân trang từ đỉnh xuống `to` — O(độ tụt hậu) khi bắt kịp trên mainnet; nhớ chữ ký biên hoặc
     /// Geyser khi tải cao (owner OQ2).
     async fn events(&self, from: u64, to: u64, contracts: &[String]) -> Result<Vec<Value>> {
-        let tokens: Vec<String> = contracts.iter().filter_map(|c| key(c).ok()).map(|k| b58(&k)).collect();
+        let tokens: Vec<String> = contracts
+            .iter()
+            .filter_map(|c| key(c).ok())
+            .map(|k| b58(&k))
+            .collect();
         if tokens.is_empty() && !contracts.is_empty() {
             // L1: Ok([]) here would let index_step move the cursor past real events
-            bail!("none of the {} registered tokens is a Solana address", contracts.len());
+            bail!(
+                "none of the {} registered tokens is a Solana address",
+                contracts.len()
+            );
         }
         if tokens.is_empty() || from > to {
             return Ok(vec![]);
@@ -1448,11 +1933,16 @@ impl ChainAdapter for SolanaAdapter {
             if let Some(b) = &before {
                 opts["before"] = json!(b);
             }
-            let page = self.rpc("getSignaturesForAddress", json!([b58(&self.program), opts])).await?;
+            let page = self
+                .rpc("getSignaturesForAddress", json!([b58(&self.program), opts]))
+                .await?;
             let page = page.as_array().cloned().unwrap_or_default();
             let mut reached = false;
             for item in &page {
-                let (Some(slot), Some(sig)) = (item["slot"].as_u64(), item["signature"].as_str()) else { bail!("bad signature page") };
+                let (Some(slot), Some(sig)) = (item["slot"].as_u64(), item["signature"].as_str())
+                else {
+                    bail!("bad signature page")
+                };
                 before = Some(sig.to_string());
                 if slot > to {
                     continue;
@@ -1470,7 +1960,11 @@ impl ChainAdapter for SolanaAdapter {
             }
             // L2: a short page is NOT the end (providers cap `limit`, bigtable/ledger seams); only an empty page is
             if page.is_empty() {
-                let first = self.rpc("getFirstAvailableBlock", json!([])).await?.as_u64().unwrap_or(u64::MAX);
+                let first = self
+                    .rpc("getFirstAvailableBlock", json!([]))
+                    .await?
+                    .as_u64()
+                    .unwrap_or(u64::MAX);
                 if first > from {
                     bail!("RPC history starts at slot {first}, after the range start {from}");
                 }
@@ -1481,8 +1975,13 @@ impl ChainAdapter for SolanaAdapter {
         let mut hashes: HashMap<u64, String> = HashMap::new();
         let mut out = Vec::new();
         for (slot, sig) in sigs {
-            let tx = self.rpc("getTransaction", json!([sig, {"commitment": "finalized", "maxSupportedTransactionVersion": 1,
-                "encoding": "json"}])).await?;
+            let tx = self
+                .rpc(
+                    "getTransaction",
+                    json!([sig, {"commitment": "finalized", "maxSupportedTransactionVersion": 1,
+                "encoding": "json"}]),
+                )
+                .await?;
             if tx.is_null() {
                 bail!("finalized transaction {sig} not served");
             }
@@ -1574,12 +2073,18 @@ mod tests {
         let op = MetaOp::decode(&b).unwrap();
         assert_eq!(op.encode(), b);
         assert_eq!(alloy::hex::encode(op.digest()), DIGEST);
-        assert_eq!((b58(&op.network), b58(&op.from), b58(&op.to), b58(&op.asset)), (NETWORK.into(), ALICE.into(), BOB.into(), USD.into()));
+        assert_eq!(
+            (b58(&op.network), b58(&op.from), b58(&op.to), b58(&op.asset)),
+            (NETWORK.into(), ALICE.into(), BOB.into(), USD.into())
+        );
         assert_eq!((op.amount, op.nonce, op.valid_until), (100, 0, 1000));
         let program = key(PROGRAM).unwrap();
         assert_eq!(b58(&account_of(&program, &op.from)), ALICE_ACCOUNT);
         assert_eq!(b58(&op.contract), ALICE_ACCOUNT);
-        assert_eq!(b58(&find_pda(&[b"lane", &op.contract, &op.lane], &program).0), ALICE_LANE_PDA);
+        assert_eq!(
+            b58(&find_pda(&[b"lane", &op.contract, &op.lane], &program).0),
+            ALICE_LANE_PDA
+        );
         assert_eq!(b58(&ata(&op.to, &op.asset, &k(TOKEN_PROGRAM))), BOB_ATA_USD);
         assert!(on_curve(&op.from) && !on_curve(&op.contract));
     }
@@ -1615,19 +2120,51 @@ mod tests {
         let lane: Key = s.public_key().try_into().unwrap();
         let op = MetaOp::decode(&alloy::hex::decode(PAYLOAD.trim()).unwrap()).unwrap();
         let a = parse_auth(BLOB_RAW.trim(), &alloy::hex::encode(op.from)).unwrap();
-        let pay = Pay { program: key(PROGRAM).unwrap(), lane, op: &op, auth: &a, token_program: k(TOKEN_PROGRAM), subject_exists: true };
-        let ixs = vec![advance_nonce_ix(&nonce_account(&lane), &lane), auth_ix(&a, &op.digest()), relay_pay_ix(&pay)];
-        let budget = Budget { priority_lamports: 5_000, cu: 200_000, loaded_bytes: 4 * 1024 * 1024 };
+        let pay = Pay {
+            program: key(PROGRAM).unwrap(),
+            lane,
+            op: &op,
+            auth: &a,
+            token_program: k(TOKEN_PROGRAM),
+            subject_exists: true,
+        };
+        let ixs = vec![
+            advance_nonce_ix(&nonce_account(&lane), &lane),
+            auth_ix(&a, &op.digest()),
+            relay_pay_ix(&pay),
+        ];
+        let budget = Budget {
+            priority_lamports: 5_000,
+            cu: 200_000,
+            loaded_bytes: 4 * 1024 * 1024,
+        };
         let (msg, n) = message_v1(&lane, &[0x42; 32], &ixs, &budget).unwrap();
         assert_eq!(n, 1);
         let tx = wire_v1(&msg, &s.sign(&msg).unwrap());
         assert_eq!(alloy::hex::encode(&tx), TX_V1.trim());
-        assert!(tx.len() <= 1232, "fits even the legacy packet size: {} bytes", tx.len());
+        assert!(
+            tx.len() <= 1232,
+            "fits even the legacy packet size: {} bytes",
+            tx.len()
+        );
         // the subject is read-only unless this pay opens it
-        assert_eq!(relay_pay_ix(&pay).accounts.iter().filter(|a| a.writable).count(), 4);
-        let lazy = Pay { subject_exists: false, ..pay };
+        assert_eq!(
+            relay_pay_ix(&pay)
+                .accounts
+                .iter()
+                .filter(|a| a.writable)
+                .count(),
+            4
+        );
+        let lazy = Pay {
+            subject_exists: false,
+            ..pay
+        };
         assert!(relay_pay_ix(&lazy).accounts[2].writable);
-        assert_eq!(&discriminator("global", "relay_pay"), &relay_pay_ix(&lazy).data[..8]);
+        assert_eq!(
+            &discriminator("global", "relay_pay"),
+            &relay_pay_ix(&lazy).data[..8]
+        );
     }
 
     /// Review M3: the test program id's key is public (it was in the repo) ⇒ refused on mainnet-beta/devnet/testnet.
@@ -1636,14 +2173,26 @@ mod tests {
         let cfg = |network: &str, program: &str| {
             let mut params = toml::Table::new();
             params.insert("program_id".into(), program.into());
-            ChainCfg { family: "solana".into(), network: Some(network.into()), rpc_urls: vec!["http://rpc".into()], lanes: vec![0], params, ..Default::default() }
+            ChainCfg {
+                family: "solana".into(),
+                network: Some(network.into()),
+                rpc_urls: vec!["http://rpc".into()],
+                lanes: vec![0],
+                params,
+                ..Default::default()
+            }
         };
         for net in PUBLIC_GENESIS {
-            let e = SolanaAdapter::new(&cfg(net, TEST_PROGRAM_ID), &[lane0()]).err().expect("refused");
+            let e = SolanaAdapter::new(&cfg(net, TEST_PROGRAM_ID), &[lane0()])
+                .err()
+                .expect("refused");
             assert!(format!("{e:#}").contains("test-only"), "{e:#}");
             assert!(SolanaAdapter::new(&cfg(net, ALICE), &[lane0()]).is_ok());
         }
-        assert!(SolanaAdapter::new(&cfg(NETWORK, TEST_PROGRAM_ID), &[lane0()]).is_ok(), "localnet");
+        assert!(
+            SolanaAdapter::new(&cfg(NETWORK, TEST_PROGRAM_ID), &[lane0()]).is_ok(),
+            "localnet"
+        );
     }
 
     /// A configured but unparsable `params.relay_fee.router` fails at startup instead of disabling the router.
@@ -1657,21 +2206,57 @@ mod tests {
                 t.insert("router".into(), r);
                 params.insert("relay_fee".into(), toml::Value::Table(t));
             }
-            ChainCfg { family: "solana".into(), network: Some(NETWORK.into()), rpc_urls: vec!["http://rpc".into()], lanes: vec![0], params, ..Default::default() }
+            ChainCfg {
+                family: "solana".into(),
+                network: Some(NETWORK.into()),
+                rpc_urls: vec!["http://rpc".into()],
+                lanes: vec![0],
+                params,
+                ..Default::default()
+            }
         };
-        for bad in [toml::Value::from("not-base58-0OIl"), toml::Value::from(7), toml::Value::from(b58(&[1; 31]))] {
-            let e = SolanaAdapter::new(&cfg(Some(bad.clone())), &[lane0()]).err().unwrap_or_else(|| panic!("{bad} accepted"));
+        for bad in [
+            toml::Value::from("not-base58-0OIl"),
+            toml::Value::from(7),
+            toml::Value::from(b58(&[1; 31])),
+        ] {
+            let e = SolanaAdapter::new(&cfg(Some(bad.clone())), &[lane0()])
+                .err()
+                .unwrap_or_else(|| panic!("{bad} accepted"));
             assert!(format!("{e:#}").contains("relay_fee.router"), "{e:#}");
         }
-        assert_eq!(RelayFeePolicy::from_cfg(&cfg(Some(PROGRAM.into()))).unwrap().router, Some(key(PROGRAM).unwrap()));
-        assert_eq!(RelayFeePolicy::from_cfg(&cfg(None)).unwrap().router, None, "no relay_fee: relay-fee jobs refused");
+        assert_eq!(
+            RelayFeePolicy::from_cfg(&cfg(Some(PROGRAM.into())))
+                .unwrap()
+                .router,
+            Some(key(PROGRAM).unwrap())
+        );
+        assert_eq!(
+            RelayFeePolicy::from_cfg(&cfg(None)).unwrap().router,
+            None,
+            "no relay_fee: relay-fee jobs refused"
+        );
         // T17 fix 1: a router that parses but is not the program, a malformed mint: startup errors
-        let e = SolanaAdapter::new(&cfg(Some(b58(&[3; 32]).into())), &[lane0()]).err().expect("another router accepted");
-        assert!(format!("{e:#}").contains("must be the scaas program id"), "{e:#}");
+        let e = SolanaAdapter::new(&cfg(Some(b58(&[3; 32]).into())), &[lane0()])
+            .err()
+            .expect("another router accepted");
+        assert!(
+            format!("{e:#}").contains("must be the scaas program id"),
+            "{e:#}"
+        );
         assert!(SolanaAdapter::new(&cfg(Some(PROGRAM.into())), &[lane0()]).is_ok());
         let mut bad = cfg(None);
-        bad.tokens = vec![crate::config::TokenCfg { address: "not-a-mint-0OIl".into(), decimals: 6 }];
-        assert!(format!("{:#}", SolanaAdapter::new(&bad, &[lane0()]).err().expect("bad mint accepted")).contains("tokens"));
+        bad.tokens = vec![crate::config::TokenCfg {
+            address: "not-a-mint-0OIl".into(),
+            decimals: 6,
+        }];
+        assert!(format!(
+            "{:#}",
+            SolanaAdapter::new(&bad, &[lane0()])
+                .err()
+                .expect("bad mint accepted")
+        )
+        .contains("tokens"));
     }
 
     /// T17 (fee covers cost): a relay fee that is the node's pays the rent of a first-use lane PDA at the node's floor
@@ -1682,33 +2267,76 @@ mod tests {
         let (program, lane) = (key(PROGRAM).unwrap(), lane0_key());
         let (op, _) = fee_op(); // open mode, 100 units
         let mut pol = fee_policy(&op);
-        assert!(rent_covered(&pol, &op, &program, &lane, None).is_ok(), "the lane PDA exists");
+        assert!(
+            rent_covered(&pol, &op, &program, &lane, None).is_ok(),
+            "the lane PDA exists"
+        );
         let rent = 1_280_640; // rent-exempt minimum of 56 B at the default rent
-        assert!(format!("{:#}", rent_covered(&pol, &op, &program, &lane, Some(rent)).unwrap_err()).contains("no price"));
+        assert!(format!(
+            "{:#}",
+            rent_covered(&pol, &op, &program, &lane, Some(rent)).unwrap_err()
+        )
+        .contains("no price"));
         pol.min_lamports_value.insert(op.asset, 12_806);
-        assert!(format!("{:#}", rent_covered(&pol, &op, &program, &lane, Some(rent)).unwrap_err()).contains("below the 1280640 lamports"));
+        assert!(format!(
+            "{:#}",
+            rent_covered(&pol, &op, &program, &lane, Some(rent)).unwrap_err()
+        )
+        .contains("below the 1280640 lamports"));
         pol.min_lamports_value.insert(op.asset, 12_807);
-        assert!(rent_covered(&pol, &op, &program, &lane, Some(rent)).is_ok(), "100 × 12,807 ≥ the rent");
-        let mine = MetaOp { to: lane, ..op.clone() };
+        assert!(
+            rent_covered(&pol, &op, &program, &lane, Some(rent)).is_ok(),
+            "100 × 12,807 ≥ the rent"
+        );
+        let mine = MetaOp {
+            to: lane,
+            ..op.clone()
+        };
         pol.min_lamports_value.clear();
-        assert!(rent_covered(&pol, &mine, &program, &lane, Some(rent)).is_err(), "bound to the lane: still the node's fee");
-        let elsewhere = MetaOp { to: key(BOB).unwrap(), ..op.clone() };
-        assert!(rent_covered(&pol, &elsewhere, &program, &lane, Some(rent)).is_ok(), "sponsored");
+        assert!(
+            rent_covered(&pol, &mine, &program, &lane, Some(rent)).is_err(),
+            "bound to the lane: still the node's fee"
+        );
+        let elsewhere = MetaOp {
+            to: key(BOB).unwrap(),
+            ..op.clone()
+        };
+        assert!(
+            rent_covered(&pol, &elsewhere, &program, &lane, Some(rent)).is_ok(),
+            "sponsored"
+        );
         let cfg = |price: toml::Value| {
             let mut t = toml::Table::new();
             t.insert("router".into(), PROGRAM.into());
             t.insert("min_lamports_value".into(), price);
             let mut params = toml::Table::new();
             params.insert("relay_fee".into(), toml::Value::Table(t));
-            ChainCfg { family: "solana".into(), params, ..Default::default() }
+            ChainCfg {
+                family: "solana".into(),
+                params,
+                ..Default::default()
+            }
         };
         let mint = b58(&op.asset);
-        let ok = RelayFeePolicy::from_cfg(&cfg(toml::Value::Table(toml::Table::from_iter([(mint.clone(), 9.into())])))).unwrap();
+        let ok = RelayFeePolicy::from_cfg(&cfg(toml::Value::Table(toml::Table::from_iter([(
+            mint.clone(),
+            9.into(),
+        )]))))
+        .unwrap();
         assert_eq!(ok.min_lamports_value.get(&op.asset), Some(&9));
-        for bad in [toml::Value::from(5), toml::Value::Table(toml::Table::from_iter([("not-a-mint-0OIl".to_string(), 9.into())])),
-                    toml::Value::Table(toml::Table::from_iter([(mint.clone(), (-1).into())])),
-                    toml::Value::Table(toml::Table::from_iter([(mint, "9".into())]))] {
-            assert!(RelayFeePolicy::from_cfg(&cfg(bad.clone())).is_err(), "{bad}");
+        for bad in [
+            toml::Value::from(5),
+            toml::Value::Table(toml::Table::from_iter([(
+                "not-a-mint-0OIl".to_string(),
+                9.into(),
+            )])),
+            toml::Value::Table(toml::Table::from_iter([(mint.clone(), (-1).into())])),
+            toml::Value::Table(toml::Table::from_iter([(mint, "9".into())])),
+        ] {
+            assert!(
+                RelayFeePolicy::from_cfg(&cfg(bad.clone())).is_err(),
+                "{bad}"
+            );
         }
         assert_eq!(LANE_PDA_SPACE, 56);
     }
@@ -1717,10 +2345,16 @@ mod tests {
     fn nonce_account_and_sequence() {
         let lane = key("3Cy3YNTFywCmxoxt8n7UH6hg6dLo5uACowX3CFceaSnx").unwrap();
         // `solana create-address-with-seed --from <lane> scaas-nonce-v1 11111111111111111111111111111111` (Agave 4.3.0)
-        assert_eq!(b58(&nonce_account(&lane)), "6uMgpkiUFY2teooJc1jjCPbXzAFWT2fxVgP4BcmioQVJ");
+        assert_eq!(
+            b58(&nonce_account(&lane)),
+            "6uMgpkiUFY2teooJc1jjCPbXzAFWT2fxVgP4BcmioQVJ"
+        );
         // kit `createAddressWithSeed` for the vector lane sha256("lane0")
         let lane0: Key = lane0().public_key().try_into().unwrap();
-        assert_eq!(b58(&nonce_account(&lane0)), "4naw8K74hiLb7SSpnVG72VRYJrkgum61Cr6A1nJZV5EX");
+        assert_eq!(
+            b58(&nonce_account(&lane0)),
+            "4naw8K74hiLb7SSpnVG72VRYJrkgum61Cr6A1nJZV5EX"
+        );
         let mut data = vec![0u8; 80];
         data[0..4].copy_from_slice(&1u32.to_le_bytes());
         data[4..8].copy_from_slice(&1u32.to_le_bytes());
@@ -1734,24 +2368,65 @@ mod tests {
 
     #[test]
     fn landed_and_submit_errors_are_classified() {
-        assert_eq!(classify_landed(&Value::Null, 9).unwrap(), TxStatus::Mined { height: 9, tx_hash: None });
+        assert_eq!(
+            classify_landed(&Value::Null, 9).unwrap(),
+            TxStatus::Mined {
+                height: 9,
+                tx_hash: None
+            }
+        );
         let custom = json!({"InstructionError": [2, {"Custom": 6013}]});
-        assert!(matches!(classify_landed(&custom, 9).unwrap(), TxStatus::Reverted { .. }));
+        assert!(matches!(
+            classify_landed(&custom, 9).unwrap(),
+            TxStatus::Reverted { .. }
+        ));
         let token = json!({"InstructionError": [2, {"Custom": 1}]});
-        assert!(matches!(classify_landed(&token, 9).unwrap(), TxStatus::Reverted { .. }), "insufficient funds in the token CPI");
+        assert!(
+            matches!(
+                classify_landed(&token, 9).unwrap(),
+                TxStatus::Reverted { .. }
+            ),
+            "insufficient funds in the token CPI"
+        );
         let cu = json!({"InstructionError": [2, "ComputationalBudgetExceeded"]});
-        assert!(classify_landed(&cu, 9).unwrap_err().downcast_ref::<Rejected>().is_some());
+        assert!(classify_landed(&cu, 9)
+            .unwrap_err()
+            .downcast_ref::<Rejected>()
+            .is_some());
         let rent = json!({"InsufficientFundsForRent": {"account_index": 3}});
-        assert!(classify_landed(&rent, 9).unwrap_err().downcast_ref::<Rejected>().is_some());
+        assert!(classify_landed(&rent, 9)
+            .unwrap_err()
+            .downcast_ref::<Rejected>()
+            .is_some());
         let nonce = json!({"InstructionError": [0, {"Custom": 0}]});
-        assert!(classify_landed(&nonce, 9).unwrap_err().downcast_ref::<Rejected>().is_some());
-        let e = |code, msg: &str, data| RpcError { code, message: msg.into(), data };
-        let preflight = e(-32002, "Transaction simulation failed: Blockhash not found", json!({"err": "BlockhashNotFound"}));
-        assert!(classify_submit(&preflight).unwrap_err().downcast_ref::<Rejected>().is_some());
+        assert!(classify_landed(&nonce, 9)
+            .unwrap_err()
+            .downcast_ref::<Rejected>()
+            .is_some());
+        let e = |code, msg: &str, data| RpcError {
+            code,
+            message: msg.into(),
+            data,
+        };
+        let preflight = e(
+            -32002,
+            "Transaction simulation failed: Blockhash not found",
+            json!({"err": "BlockhashNotFound"}),
+        );
+        assert!(classify_submit(&preflight)
+            .unwrap_err()
+            .downcast_ref::<Rejected>()
+            .is_some());
         let fee = e(-32002, "Transaction simulation failed: Attempt to debit an account but found no record of a prior credit.", json!({"err": "AccountNotFound"}));
-        assert!(classify_submit(&fee).unwrap_err().downcast_ref::<Rejected>().is_some());
+        assert!(classify_submit(&fee)
+            .unwrap_err()
+            .downcast_ref::<Rejected>()
+            .is_some());
         assert!(classify_submit(&e(-32002, "x", json!({"err": "AlreadyProcessed"}))).is_ok());
-        assert!(classify_submit(&e(-32005, "Node is behind", Value::Null)).unwrap_err().downcast_ref::<Rejected>().is_none());
+        assert!(classify_submit(&e(-32005, "Node is behind", Value::Null))
+            .unwrap_err()
+            .downcast_ref::<Rejected>()
+            .is_none());
     }
 
     fn event(name: &str, body: &[u8]) -> Vec<u8> {
@@ -1769,9 +2444,21 @@ mod tests {
         let usd = key(USD).unwrap();
         let tokens = vec![USD.to_string()];
         let (alice, bob, lane) = (key(ALICE).unwrap(), key(BOB).unwrap(), lane0_key());
-        let settled = |to: &Key, amount: u64, r: [u8; 32]| [&usd[..], &alice, to, &amount.to_le_bytes(), &r].concat();
+        let settled = |to: &Key, amount: u64, r: [u8; 32]| {
+            [&usd[..], &alice, to, &amount.to_le_bytes(), &r].concat()
+        };
         let pm = [&usd[..], &[4; 32], &2u32.to_le_bytes(), &[0xab, 0xcd]].concat();
-        let fee = |mint: &Key| [&mint[..], &[5; 32], &[0x7a; 32], &alice, &lane, &5u64.to_le_bytes()].concat();
+        let fee = |mint: &Key| {
+            [
+                &mint[..],
+                &[5; 32],
+                &[0x7a; 32],
+                &alice,
+                &lane,
+                &5u64.to_le_bytes(),
+            ]
+            .concat()
+        };
         let ea = b58(&event_authority(&program));
         let ix = |d: Vec<u8>| json!({"programIdIndex": 1, "accounts": [2], "data": b58(&d)});
         let tx = json!({"slot": 77, "meta": {"err": null, "innerInstructions": [{"index": 2, "instructions": [
@@ -1783,8 +2470,18 @@ mod tests {
         let out = tx_events(&program, &tokens, &tx, "0xbb").unwrap();
         assert_eq!(out.len(), 2);
         assert!(out.iter().all(|e| e["event"] == "PaymentSettled"));
-        assert_eq!((out[0]["meta"].as_str(), out[1]["meta"].as_str()), (Some("0xabcd"), None), "a malformed meta event decodes to nothing");
-        assert_eq!((out[1]["relay_target"].as_str(), out[1]["relay_payee"].as_str()), (Some(b58(&[0x7a; 32]).as_str()), Some(b58(&lane).as_str())));
+        assert_eq!(
+            (out[0]["meta"].as_str(), out[1]["meta"].as_str()),
+            (Some("0xabcd"), None),
+            "a malformed meta event decodes to nothing"
+        );
+        assert_eq!(
+            (
+                out[1]["relay_target"].as_str(),
+                out[1]["relay_payee"].as_str()
+            ),
+            (Some(b58(&[0x7a; 32]).as_str()), Some(b58(&lane).as_str()))
+        );
     }
 
     #[test]
@@ -1805,25 +2502,100 @@ mod tests {
         exec.extend_from_slice(&0u64.to_le_bytes());
         let ea = b58(&event_authority(&program));
         let copy = "Copy111111111111111111111111111111111111111";
-        let tx = |prog_idx: u64, auth_idx: u64, data: &[u8], err: Value| json!({
+        let tx = |prog_idx: u64, auth_idx: u64, data: &[u8], err: Value| {
+            json!({
             "slot": 77, "meta": {"err": err, "innerInstructions": [{"index": 2, "instructions": [
                 {"programIdIndex": prog_idx, "accounts": [auth_idx], "data": b58(data)}]}],
                 "loadedAddresses": {"writable": [], "readonly": []}},
-            "transaction": {"signatures": [b58(&[7; 64])], "message": {"accountKeys": [ALICE, PROGRAM, ea, copy]}}});
+            "transaction": {"signatures": [b58(&[7; 64])], "message": {"accountKeys": [ALICE, PROGRAM, ea, copy]}}})
+        };
         let bh = format!("0x{}", "bb".repeat(32));
-        let ok = tx_events(&program, &tokens, &tx(1, 2, &event("PaymentSettled", &settled), Value::Null), &bh).unwrap();
+        let ok = tx_events(
+            &program,
+            &tokens,
+            &tx(1, 2, &event("PaymentSettled", &settled), Value::Null),
+            &bh,
+        )
+        .unwrap();
         assert_eq!(ok.len(), 1);
         let e = &ok[0];
-        assert_eq!((e["event"].as_str(), e["amount"].as_str(), e["to"].as_str(), e["block_number"].as_u64()), (Some("PaymentSettled"), Some("100"), Some(BOB), Some(77)));
+        assert_eq!(
+            (
+                e["event"].as_str(),
+                e["amount"].as_str(),
+                e["to"].as_str(),
+                e["block_number"].as_u64()
+            ),
+            (Some("PaymentSettled"), Some("100"), Some(BOB), Some(77))
+        );
         assert_eq!(e["tx_hash"], json!(format!("0x{}", "07".repeat(64))));
         assert_eq!(e["entry_ref"], json!(format!("0x{}", "01".repeat(32))));
-        let x = tx_events(&program, &tokens, &tx(1, 2, &event("MetaTransactionExecuted", &exec), Value::Null), &bh).unwrap();
-        assert_eq!((x[0]["digest"].clone(), x[0]["from"].clone()), (json!(format!("0x{}", "d1".repeat(32))), json!(ALICE)));
-        assert!(tx_events(&program, &tokens, &tx(3, 2, &event("PaymentSettled", &settled), Value::Null), &bh).unwrap().is_empty(), "copy program");
-        assert!(tx_events(&program, &tokens, &tx(1, 0, &event("PaymentSettled", &settled), Value::Null), &bh).unwrap().is_empty(), "not the event authority");
-        assert!(tx_events(&program, &[], &tx(1, 2, &event("PaymentSettled", &settled), Value::Null), &bh).unwrap().is_empty(), "unregistered mint");
-        assert!(tx_events(&program, &tokens, &tx(1, 2, &event("PaymentSettled", &settled), json!("x")), &bh).unwrap().is_empty(), "failed tx");
-        assert!(tx_events(&program, &tokens, &tx(1, 2, &event("PaidUnderMandate", &settled), Value::Null), &bh).unwrap().is_empty(), "ExternalPull does not ingest it");
+        let x = tx_events(
+            &program,
+            &tokens,
+            &tx(1, 2, &event("MetaTransactionExecuted", &exec), Value::Null),
+            &bh,
+        )
+        .unwrap();
+        assert_eq!(
+            (x[0]["digest"].clone(), x[0]["from"].clone()),
+            (json!(format!("0x{}", "d1".repeat(32))), json!(ALICE))
+        );
+        assert!(
+            tx_events(
+                &program,
+                &tokens,
+                &tx(3, 2, &event("PaymentSettled", &settled), Value::Null),
+                &bh
+            )
+            .unwrap()
+            .is_empty(),
+            "copy program"
+        );
+        assert!(
+            tx_events(
+                &program,
+                &tokens,
+                &tx(1, 0, &event("PaymentSettled", &settled), Value::Null),
+                &bh
+            )
+            .unwrap()
+            .is_empty(),
+            "not the event authority"
+        );
+        assert!(
+            tx_events(
+                &program,
+                &[],
+                &tx(1, 2, &event("PaymentSettled", &settled), Value::Null),
+                &bh
+            )
+            .unwrap()
+            .is_empty(),
+            "unregistered mint"
+        );
+        assert!(
+            tx_events(
+                &program,
+                &tokens,
+                &tx(1, 2, &event("PaymentSettled", &settled), json!("x")),
+                &bh
+            )
+            .unwrap()
+            .is_empty(),
+            "failed tx"
+        );
+        assert!(
+            tx_events(
+                &program,
+                &tokens,
+                &tx(1, 2, &event("PaidUnderMandate", &settled), Value::Null),
+                &bh
+            )
+            .unwrap()
+            .is_empty(),
+            "ExternalPull does not ingest it"
+        );
     }
 
     /// Review M1: the deterministic nonce address may already hold lamports (anyone can send them) — creation tops up
@@ -1835,10 +2607,21 @@ mod tests {
         let nonce = nonce_account(&lane);
         let fresh = create_nonce_ixs(&lane, 1_447_680, 0);
         assert_eq!(fresh.len(), 3);
-        assert_eq!(fresh[0].data, [&2u32.to_le_bytes()[..], &1_447_680u64.to_le_bytes()].concat(), "transfer the rent");
-        assert_eq!((fresh[0].accounts[0].key, fresh[0].accounts[1].key), (lane, nonce));
+        assert_eq!(
+            fresh[0].data,
+            [&2u32.to_le_bytes()[..], &1_447_680u64.to_le_bytes()].concat(),
+            "transfer the rent"
+        );
+        assert_eq!(
+            (fresh[0].accounts[0].key, fresh[0].accounts[1].key),
+            (lane, nonce)
+        );
         let squatted = create_nonce_ixs(&lane, 1_447_680, 1_000_000);
-        assert_eq!(squatted[0].data, [&2u32.to_le_bytes()[..], &447_680u64.to_le_bytes()].concat(), "top up only");
+        assert_eq!(
+            squatted[0].data,
+            [&2u32.to_le_bytes()[..], &447_680u64.to_le_bytes()].concat(),
+            "top up only"
+        );
         let rich = create_nonce_ixs(&lane, 1_447_680, 5_000_000);
         assert_eq!(rich.len(), 2, "no transfer");
         let alloc = &rich[0];
@@ -1849,7 +2632,14 @@ mod tests {
         want.extend_from_slice(&NONCE_SPACE.to_le_bytes());
         want.extend_from_slice(&SYSTEM);
         assert_eq!(alloc.data, want);
-        assert_eq!(alloc.accounts.iter().map(|a| (a.key, a.signer, a.writable)).collect::<Vec<_>>(), vec![(nonce, false, true), (lane, true, false)]);
+        assert_eq!(
+            alloc
+                .accounts
+                .iter()
+                .map(|a| (a.key, a.signer, a.writable))
+                .collect::<Vec<_>>(),
+            vec![(nonce, false, true), (lane, true, false)]
+        );
         assert_eq!(&rich[1].data[..4], &6u32.to_le_bytes());
     }
 
@@ -1859,12 +2649,36 @@ mod tests {
     fn simulation_errors_are_classified() {
         let ix1 = json!({"InstructionError": [2, {"Custom": 1}]});
         let logs = |l: &str| vec![l.to_string()];
-        assert!(matches!(classify_sim(&ix1, &logs("Transfer: insufficient lamports 5, need 1447680")), SimError::Transport(_)));
-        assert!(matches!(classify_sim(&ix1, &logs("Program log: Error: insufficient funds")), SimError::Revert(_)));
-        assert!(matches!(classify_sim(&json!({"InstructionError": [2, {"Custom": 6013}]}), &[]), SimError::Revert(_)));
-        assert!(matches!(classify_sim(&json!({"InstructionError": [2, "ComputationalBudgetExceeded"]}), &[]), SimError::Transport(_)));
-        assert!(matches!(classify_sim(&json!({"InstructionError": [0, {"Custom": 1}]}), &[]), SimError::Transport(_)));
-        assert!(matches!(classify_sim(&json!("BlockhashNotFound"), &[]), SimError::Transport(_)));
+        assert!(matches!(
+            classify_sim(
+                &ix1,
+                &logs("Transfer: insufficient lamports 5, need 1447680")
+            ),
+            SimError::Transport(_)
+        ));
+        assert!(matches!(
+            classify_sim(&ix1, &logs("Program log: Error: insufficient funds")),
+            SimError::Revert(_)
+        ));
+        assert!(matches!(
+            classify_sim(&json!({"InstructionError": [2, {"Custom": 6013}]}), &[]),
+            SimError::Revert(_)
+        ));
+        assert!(matches!(
+            classify_sim(
+                &json!({"InstructionError": [2, "ComputationalBudgetExceeded"]}),
+                &[]
+            ),
+            SimError::Transport(_)
+        ));
+        assert!(matches!(
+            classify_sim(&json!({"InstructionError": [0, {"Custom": 1}]}), &[]),
+            SimError::Transport(_)
+        ));
+        assert!(matches!(
+            classify_sim(&json!("BlockhashNotFound"), &[]),
+            SimError::Transport(_)
+        ));
     }
 
     /// Fake JSON-RPC: `getSignaturesForAddress` serves SHORT pages (a provider capping `limit`); records every
@@ -1881,9 +2695,15 @@ mod tests {
                 // scaas-rpc T24.8 (fixture correction): endpoint 0's identity read comes before its reads
                 "getGenesisHash" => json!(NETWORK),
                 "getSignaturesForAddress" => match p[1]["before"].as_str() {
-                    None => json!([{"slot": 90, "signature": sig(1), "err": null}, {"slot": 80, "signature": sig(2), "err": null}]),
-                    Some(s) if s == sig(2) => json!([{"slot": 60, "signature": sig(3), "err": null}]),
-                    Some(s) if s == sig(3) => json!([{"slot": 5, "signature": sig(4), "err": null}]),
+                    None => {
+                        json!([{"slot": 90, "signature": sig(1), "err": null}, {"slot": 80, "signature": sig(2), "err": null}])
+                    }
+                    Some(s) if s == sig(2) => {
+                        json!([{"slot": 60, "signature": sig(3), "err": null}])
+                    }
+                    Some(s) if s == sig(3) => {
+                        json!([{"slot": 5, "signature": sig(4), "err": null}])
+                    }
                     _ => json!([]),
                 },
                 "getTransaction" => {
@@ -1898,7 +2718,9 @@ mod tests {
             };
             Json(json!({"jsonrpc": "2.0", "id": 1, "result": r}))
         }
-        let app = axum::Router::new().route("/", axum::routing::post(h)).with_state(fetched);
+        let app = axum::Router::new()
+            .route("/", axum::routing::post(h))
+            .with_state(fetched);
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
@@ -1911,9 +2733,19 @@ mod tests {
         let url = fake_rpc(Arc::new(Mutex::new(Vec::new()))).await;
         let mut params = toml::Table::new();
         params.insert("program_id".into(), PROGRAM.into());
-        let cfg = ChainCfg { family: "solana".into(), network: Some(NETWORK.into()), rpc_urls: vec![url], lanes: vec![0], params, ..Default::default() };
+        let cfg = ChainCfg {
+            family: "solana".into(),
+            network: Some(NETWORK.into()),
+            rpc_urls: vec![url],
+            lanes: vec![0],
+            params,
+            ..Default::default()
+        };
         let a = SolanaAdapter::new(&cfg, &[lane0()]).unwrap();
-        assert_eq!(a.tx_fee(&alloy::hex::encode([1u8; 64])).await.unwrap(), Some(5_000));
+        assert_eq!(
+            a.tx_fee(&alloy::hex::encode([1u8; 64])).await.unwrap(),
+            Some(5_000)
+        );
         assert!(a.tx_fee(&alloy::hex::encode([2u8; 64])).await.is_err());
     }
 
@@ -1925,12 +2757,26 @@ mod tests {
         let url = fake_rpc(fetched.clone()).await;
         let mut params = toml::Table::new();
         params.insert("program_id".into(), PROGRAM.into());
-        let cfg = ChainCfg { family: "solana".into(), network: Some(NETWORK.into()), rpc_urls: vec![url], lanes: vec![0], params, ..Default::default() };
+        let cfg = ChainCfg {
+            family: "solana".into(),
+            network: Some(NETWORK.into()),
+            rpc_urls: vec![url],
+            lanes: vec![0],
+            params,
+            ..Default::default()
+        };
         let a = SolanaAdapter::new(&cfg, &[lane0()]).unwrap();
         assert!(a.events(10, 100, &[USD.into()]).await.unwrap().is_empty());
-        assert_eq!(*fetched.lock().unwrap(), vec![b58(&[3; 64]), b58(&[2; 64]), b58(&[1; 64])], "slot 60 is on the second page");
+        assert_eq!(
+            *fetched.lock().unwrap(),
+            vec![b58(&[3; 64]), b58(&[2; 64]), b58(&[1; 64])],
+            "slot 60 is on the second page"
+        );
         assert!(a.events(10, 100, &["0xnot-a-mint".into()]).await.is_err());
-        assert!(a.events(10, 100, &[]).await.unwrap().is_empty(), "no tokens at all: index_step holds the cursor");
+        assert!(
+            a.events(10, 100, &[]).await.unwrap().is_empty(),
+            "no tokens at all: index_step holds the cursor"
+        );
     }
 
     // CTR-MTX-26 / -27 vectors: `smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json` and `programs/scaas/tests/vectors.rs`
@@ -1945,8 +2791,10 @@ mod tests {
     const RELAY_REF: &str = "249ae7174454dace542a9cb3b1454ec743234ff0909d8e6d4fc3f3d6f8870e9d";
     const RELAY_LANE: &str = "b639636317daa6c63d022351faeede402f3e4e5c23e2fa1e9e1ab196519f644b";
     /// sha256 of the `relay_pay_meta` / `relay_fee` instruction data of the vectors below (Anchor Borsh in the program test).
-    const PAY_META_IX_SHA: &str = "ba205082adb76c44a6f3937e80ab6d9686d99756e0423ddb071425ed25fd3e15";
-    const RELAY_FEE_IX_SHA: &str = "d33e8ca18314c4cda621124ad04b154060820f1b8acf66b78fcca807e09b216b";
+    const PAY_META_IX_SHA: &str =
+        "ba205082adb76c44a6f3937e80ab6d9686d99756e0423ddb071425ed25fd3e15";
+    const RELAY_FEE_IX_SHA: &str =
+        "d33e8ca18314c4cda621124ad04b154060820f1b8acf66b78fcca807e09b216b";
 
     // Static wrapper vector (`gen_vectors.py` `relay_fee_vectors`, program `tests/wrappers.rs::wrapper_ref_vectors`):
     // `relay_fee_invalidate_nonces_signed`, accounts sha256("wrap.<name>"), min_nonce 5, salt 0a…, Alice pays 100.
@@ -1957,7 +2805,10 @@ mod tests {
     const WRAP_IX_SHA: &str = "20f4568ccb15c76a7fbdad15b2cf6d2117adfd3a407be9d016f61877af60796a";
 
     fn meta_rows() -> Vec<Value> {
-        serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json")).unwrap()
+        serde_json::from_str(include_str!(
+            "../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json"
+        ))
+        .unwrap()
     }
 
     fn h(v: &Value) -> Vec<u8> {
@@ -1982,27 +2833,62 @@ mod tests {
         let mut op = vector_op();
         op.pay_ref = h(&r["payId"]).try_into().unwrap();
         op.lane = h(&r["payLane"]).try_into().unwrap();
-        (op, json!({"kind": "pay_meta", "salt": r["salt"], "meta": r["meta"]}))
+        (
+            op,
+            json!({"kind": "pay_meta", "salt": r["salt"], "meta": r["meta"]}),
+        )
     }
 
     #[test]
     fn solana_pay_meta_job_builds_ix() {
         let (program, network, lane) = (key(PROGRAM).unwrap(), key(NETWORK).unwrap(), lane0_key());
         for r in meta_rows() {
-            assert_eq!(meta_pay_id(&h(&r["salt"]), &h(&r["meta"])).to_vec(), h(&r["payId"]), "{}", r["name"]);
-            assert_eq!(pay_lane(&h(&r["payId"]).try_into().unwrap()).to_vec(), h(&r["payLane"]), "{}", r["name"]);
+            assert_eq!(
+                meta_pay_id(&h(&r["salt"]), &h(&r["meta"])).to_vec(),
+                h(&r["payId"]),
+                "{}",
+                r["name"]
+            );
+            assert_eq!(
+                pay_lane(&h(&r["payId"]).try_into().unwrap()).to_vec(),
+                h(&r["payLane"]),
+                "{}",
+                r["name"]
+            );
         }
         let pol = RelayFeePolicy::default();
         let (op, job) = meta_op();
         let e = entry(&program, &network, &lane, &pol, &op, &job).unwrap();
-        assert_eq!(e, Entry::PayMeta { salt: h(&job["salt"]).try_into().unwrap(), meta: h(&job["meta"]) });
+        assert_eq!(
+            e,
+            Entry::PayMeta {
+                salt: h(&job["salt"]).try_into().unwrap(),
+                meta: h(&job["meta"])
+            }
+        );
         let a = parse_auth(BLOB_RAW.trim(), &alloy::hex::encode(op.from)).unwrap();
-        let pay = Pay { program, lane, op: &op, auth: &a, token_program: k(TOKEN_PROGRAM), subject_exists: true };
+        let pay = Pay {
+            program,
+            lane,
+            op: &op,
+            auth: &a,
+            token_program: k(TOKEN_PROGRAM),
+            subject_exists: true,
+        };
         let ix = pay_ix(&pay, &e);
         assert_eq!(&ix.data[..8], &discriminator("global", "relay_pay_meta"));
-        assert_eq!(ix.accounts, relay_pay_ix(&pay).accounts, "the same accounts as relay_pay");
-        assert_eq!(alloy::hex::encode(sha(&[&ix.data])), PAY_META_IX_SHA, "the program's Borsh encoding");
-        let bad = |op: &MetaOp, job: &Value| entry(&program, &network, &lane, &pol, op, job).is_err();
+        assert_eq!(
+            ix.accounts,
+            relay_pay_ix(&pay).accounts,
+            "the same accounts as relay_pay"
+        );
+        assert_eq!(
+            alloy::hex::encode(sha(&[&ix.data])),
+            PAY_META_IX_SHA,
+            "the program's Borsh encoding"
+        );
+        let bad =
+            |op: &MetaOp, job: &Value| entry(&program, &network, &lane, &pol, op, job).is_err();
         let mut j = job.clone();
         j["meta"] = json!(format!("{}00", job["meta"].as_str().unwrap()));
         assert!(bad(&op, &j), "meta does not hash to pay_ref");
@@ -2019,29 +2905,83 @@ mod tests {
         let mut o = op.clone();
         o.pay_ref = meta_pay_id(&[1; 32], &big);
         o.lane = pay_lane(&o.pay_ref);
-        assert!(bad(&o, &json!({"kind": "pay_meta", "salt": alloy::hex::encode([1; 32]), "meta": alloy::hex::encode(&big)})), "over the cap");
-        assert!(bad(&op, &json!({"kind": "pay_meta", "meta": job["meta"]})), "no salt");
+        assert!(
+            bad(
+                &o,
+                &json!({"kind": "pay_meta", "salt": alloy::hex::encode([1; 32]), "meta": alloy::hex::encode(&big)})
+            ),
+            "over the cap"
+        );
+        assert!(
+            bad(&op, &json!({"kind": "pay_meta", "meta": job["meta"]})),
+            "no salt"
+        );
         // the node's cap fits a v1 transaction (nonce advance, precompile, a lazily opened Account)
-        let cap = Entry::PayMeta { salt: [1; 32], meta: vec![7; crate::config::DEFAULT_MAX_PAY_META_BYTES] };
-        let lazy = Pay { subject_exists: false, ..pay };
-        let ixs = vec![advance_nonce_ix(&nonce_account(&lane), &lane), auth_ix(&a, &op.digest()), pay_ix(&lazy, &cap)];
-        let budget = Budget { priority_lamports: 0, cu: 200_000, loaded_bytes: 4 * 1024 * 1024 };
-        assert!(message_v1(&lane, &[0x42; 32], &ixs, &budget).is_ok(), "2,048 B of meta in one v1 transaction");
+        let cap = Entry::PayMeta {
+            salt: [1; 32],
+            meta: vec![7; crate::config::DEFAULT_MAX_PAY_META_BYTES],
+        };
+        let lazy = Pay {
+            subject_exists: false,
+            ..pay
+        };
+        let ixs = vec![
+            advance_nonce_ix(&nonce_account(&lane), &lane),
+            auth_ix(&a, &op.digest()),
+            pay_ix(&lazy, &cap),
+        ];
+        let budget = Budget {
+            priority_lamports: 0,
+            cu: 200_000,
+            loaded_bytes: 4 * 1024 * 1024,
+        };
+        assert!(
+            message_v1(&lane, &[0x42; 32], &ixs, &budget).is_ok(),
+            "2,048 B of meta in one v1 transaction"
+        );
         let mut plain = op.clone();
         (plain.pay_ref, plain.lane) = ([5; 32], [6; 32]);
-        assert_eq!(entry(&program, &network, &lane, &pol, &plain, &json!({})).unwrap(), Entry::Pay, "a job without kind is a plain pay");
+        assert_eq!(
+            entry(&program, &network, &lane, &pol, &plain, &json!({})).unwrap(),
+            Entry::Pay,
+            "a job without kind is a plain pay"
+        );
         // T17: the one kind rule; never a plain pay to the marker or the program; the cap from the config
         for k in [json!(7), json!(true), json!({}), json!("pay")] {
-            assert!(format!("{:#}", entry(&program, &network, &lane, &pol, &plain, &json!({"kind": k})).unwrap_err()).contains("unknown op.kind"), "{k}");
+            assert!(
+                format!(
+                    "{:#}",
+                    entry(&program, &network, &lane, &pol, &plain, &json!({"kind": k}))
+                        .unwrap_err()
+                )
+                .contains("unknown op.kind"),
+                "{k}"
+            );
         }
-        assert!(bad(&plain, &json!({"meta": job["meta"]})), "a kind-less job with meta");
+        assert!(
+            bad(&plain, &json!({"meta": job["meta"]})),
+            "a kind-less job with meta"
+        );
         for to in [relay_fee_marker(&program), program] {
-            let o = MetaOp { to, ..plain.clone() };
-            assert!(format!("{:#}", entry(&program, &network, &lane, &pol, &o, &json!({})).unwrap_err()).contains("refused"));
+            let o = MetaOp {
+                to,
+                ..plain.clone()
+            };
+            assert!(format!(
+                "{:#}",
+                entry(&program, &network, &lane, &pol, &o, &json!({})).unwrap_err()
+            )
+            .contains("refused"));
             let o = MetaOp { to, ..op.clone() };
             assert!(bad(&o, &job), "nor a pay-meta");
         }
-        let wide = RelayFeePolicy { params: crate::config::RelayParams { max_pay_meta_bytes: 4096, ..Default::default() }, ..pol.clone() };
+        let wide = RelayFeePolicy {
+            params: crate::config::RelayParams {
+                max_pay_meta_bytes: 4096,
+                ..Default::default()
+            },
+            ..pol.clone()
+        };
         let mut o = op.clone();
         o.pay_ref = meta_pay_id(&[1; 32], &big);
         o.lane = pay_lane(&o.pay_ref);
@@ -2049,11 +2989,19 @@ mod tests {
     }
 
     fn min_amount(min_amount: u128) -> crate::config::RelayParams {
-        crate::config::RelayParams { min_amount, ..Default::default() }
+        crate::config::RelayParams {
+            min_amount,
+            ..Default::default()
+        }
     }
 
     fn fee_policy(op: &MetaOp) -> RelayFeePolicy {
-        RelayFeePolicy { router: Some(key(PROGRAM).unwrap()), tokens: vec![op.asset], params: min_amount(100), ..Default::default() }
+        RelayFeePolicy {
+            router: Some(key(PROGRAM).unwrap()),
+            tokens: vec![op.asset],
+            params: min_amount(100),
+            ..Default::default()
+        }
     }
 
     /// Alice pays 100 USD for the vector call (`relay_target`, record writable, data `00 "hello"`, salt 09…), open mode.
@@ -2075,46 +3023,136 @@ mod tests {
     fn solana_relay_fee_job_checks_ref() {
         let (program, network, lane) = (key(PROGRAM).unwrap(), key(NETWORK).unwrap(), lane0_key());
         let marker = relay_fee_marker(&program);
-        assert_eq!(b58(&marker), MARKER, "the program's Pubkey::find_program_address([b\"relayfee\"])");
+        assert_eq!(
+            b58(&marker),
+            MARKER,
+            "the program's Pubkey::find_program_address([b\"relayfee\"])"
+        );
         let (target, record) = (k32(RELAY_TARGET), k32(RELAY_RECORD));
-        let call = relay_call(&target, &[m(record, false, true)], &alloy::hex::decode(RELAY_DATA).unwrap());
+        let call = relay_call(
+            &target,
+            &[m(record, false, true)],
+            &alloy::hex::decode(RELAY_DATA).unwrap(),
+        );
         assert_eq!(alloy::hex::encode(&call), RELAY_CALL);
         let r = relay_ref(&network, &target, &call, &k32(RELAY_SALT));
-        assert_eq!((alloy::hex::encode(r), alloy::hex::encode(pay_lane(&r))), (RELAY_REF.into(), RELAY_LANE.into()));
-        assert_ne!(relay_ref(&network, &target, &call, &[8; 32]), r, "the salt is in the ref");
+        assert_eq!(
+            (alloy::hex::encode(r), alloy::hex::encode(pay_lane(&r))),
+            (RELAY_REF.into(), RELAY_LANE.into())
+        );
+        assert_ne!(
+            relay_ref(&network, &target, &call, &[8; 32]),
+            r,
+            "the salt is in the ref"
+        );
 
         let (op, job) = fee_op();
         let pol = fee_policy(&op);
         let e = entry(&program, &network, &lane, &pol, &op, &job).unwrap();
-        let Entry::Fee { recipient, .. } = &e else { panic!("{e:?}") };
+        let Entry::Fee { recipient, .. } = &e else {
+            panic!("{e:?}")
+        };
         assert_eq!(*recipient, lane, "open mode pays the lane");
         let a = parse_auth(BLOB_RAW.trim(), &alloy::hex::encode(op.from)).unwrap();
-        let pay = Pay { program, lane, op: &op, auth: &a, token_program: k(TOKEN_PROGRAM), subject_exists: true };
+        let pay = Pay {
+            program,
+            lane,
+            op: &op,
+            auth: &a,
+            token_program: k(TOKEN_PROGRAM),
+            subject_exists: true,
+        };
         let ix = pay_ix(&pay, &e);
         assert_eq!(&ix.data[..8], &discriminator("global", "relay_fee"));
-        assert_eq!(alloy::hex::encode(sha(&[&ix.data])), RELAY_FEE_IX_SHA, "the program's Borsh encoding");
+        assert_eq!(
+            alloy::hex::encode(sha(&[&ix.data])),
+            RELAY_FEE_IX_SHA,
+            "the program's Borsh encoding"
+        );
         assert_eq!(ix.accounts.len(), 16);
-        assert_eq!((ix.accounts[5].key, ix.accounts[6].key), (lane, ata(&lane, &op.asset, &k(TOKEN_PROGRAM))));
-        assert_eq!((&ix.accounts[14], &ix.accounts[15]), (&m(target, false, false), &m(record, false, true)));
+        assert_eq!(
+            (ix.accounts[5].key, ix.accounts[6].key),
+            (lane, ata(&lane, &op.asset, &k(TOKEN_PROGRAM)))
+        );
+        assert_eq!(
+            (&ix.accounts[14], &ix.accounts[15]),
+            (&m(target, false, false), &m(record, false, true))
+        );
         // bound payee: the recipient is `to`
         // T17: a fee bound to anyone but this lane only with relay_bound_payee (sponsored: no min_amount)
         let mut bound = op.clone();
         bound.to = key(BOB).unwrap();
-        assert!(format!("{:#}", entry(&program, &network, &lane, &pol, &bound, &job).unwrap_err()).contains("relay_bound_payee"));
-        let sponsored = RelayFeePolicy { params: crate::config::RelayParams { relay_bound_payee: true, min_amount: 1 << 100, ..Default::default() }, ..pol.clone() };
-        let Entry::Fee { recipient, .. } = entry(&program, &network, &lane, &sponsored, &bound, &job).unwrap() else { panic!() };
+        assert!(format!(
+            "{:#}",
+            entry(&program, &network, &lane, &pol, &bound, &job).unwrap_err()
+        )
+        .contains("relay_bound_payee"));
+        let sponsored = RelayFeePolicy {
+            params: crate::config::RelayParams {
+                relay_bound_payee: true,
+                min_amount: 1 << 100,
+                ..Default::default()
+            },
+            ..pol.clone()
+        };
+        let Entry::Fee { recipient, .. } =
+            entry(&program, &network, &lane, &sponsored, &bound, &job).unwrap()
+        else {
+            panic!()
+        };
         assert_eq!(recipient, key(BOB).unwrap());
         let mut mine = op.clone();
         mine.to = lane;
-        let Entry::Fee { recipient, .. } = entry(&program, &network, &lane, &pol, &mine, &job).unwrap() else { panic!() };
+        let Entry::Fee { recipient, .. } =
+            entry(&program, &network, &lane, &pol, &mine, &job).unwrap()
+        else {
+            panic!()
+        };
         assert_eq!(recipient, lane, "bound to this lane");
 
-        let err = |op: &MetaOp, job: &Value, pol: &RelayFeePolicy| format!("{:#}", entry(&program, &network, &lane, pol, op, job).unwrap_err());
+        let err = |op: &MetaOp, job: &Value, pol: &RelayFeePolicy| {
+            format!(
+                "{:#}",
+                entry(&program, &network, &lane, pol, op, job).unwrap_err()
+            )
+        };
         // policy (rule 8): router, registered token, minimum fee
-        assert!(err(&op, &job, &RelayFeePolicy { router: None, ..pol.clone() }).contains("router"));
-        assert!(err(&op, &job, &RelayFeePolicy { router: Some(lane), ..pol.clone() }).contains("router"));
-        assert!(err(&op, &job, &RelayFeePolicy { tokens: vec![], ..pol.clone() }).contains("registered"));
-        assert!(err(&op, &job, &RelayFeePolicy { params: min_amount(101), ..pol.clone() }).contains("min_amount"));
+        assert!(err(
+            &op,
+            &job,
+            &RelayFeePolicy {
+                router: None,
+                ..pol.clone()
+            }
+        )
+        .contains("router"));
+        assert!(err(
+            &op,
+            &job,
+            &RelayFeePolicy {
+                router: Some(lane),
+                ..pol.clone()
+            }
+        )
+        .contains("router"));
+        assert!(err(
+            &op,
+            &job,
+            &RelayFeePolicy {
+                tokens: vec![],
+                ..pol.clone()
+            }
+        )
+        .contains("registered"));
+        assert!(err(
+            &op,
+            &job,
+            &RelayFeePolicy {
+                params: min_amount(101),
+                ..pol.clone()
+            }
+        )
+        .contains("min_amount"));
         // the lane never lends its signature to the target
         let mut j = job.clone();
         j["extra"]["target_accounts"][0]["is_signer"] = json!(true);
@@ -2133,8 +3171,12 @@ mod tests {
         let mut j = job.clone();
         j["extra"]["target_accounts"][0]["is_writable"] = json!(false);
         assert!(err(&op, &j, &pol).contains("not bound"), "other flags");
-        for f in [|o: &mut MetaOp| o.extra = [8; 32], |o: &mut MetaOp| o.lane = [0xa1; 32], |o: &mut MetaOp| o.nonce = 1,
-                  |o: &mut MetaOp| o.relayer = [0; 32]] {
+        for f in [
+            |o: &mut MetaOp| o.extra = [8; 32],
+            |o: &mut MetaOp| o.lane = [0xa1; 32],
+            |o: &mut MetaOp| o.nonce = 1,
+            |o: &mut MetaOp| o.relayer = [0; 32],
+        ] {
             let mut o = op.clone();
             f(&mut o);
             assert!(err(&o, &job, &pol).contains("not bound"));
@@ -2164,7 +3206,8 @@ mod tests {
         op.lane = k32(WRAP_LANE);
         op.relayer = marker;
         op.extra = k32(WRAP_SALT);
-        let acct = |k: Key, s: bool, w: bool| json!({"pubkey": b58(&k), "is_signer": s, "is_writable": w});
+        let acct =
+            |k: Key, s: bool, w: bool| json!({"pubkey": b58(&k), "is_signer": s, "is_writable": w});
         let mut data = discriminator("global", "invalidate_nonces_signed").to_vec();
         data.extend_from_slice(&5u64.to_le_bytes());
         data.extend_from_slice(&[0, 0, 2, 0, 0, 0, 0, 0]);
@@ -2183,44 +3226,128 @@ mod tests {
         let (op, job, lane) = wrap_job();
         let pol = fee_policy(&op);
         let e = entry(&program, &network, &lane, &pol, &op, &job).unwrap();
-        let Entry::Wrapped { accounts, rest, recipient, sig, .. } = &e else { panic!("{e:?}") };
+        let Entry::Wrapped {
+            accounts,
+            rest,
+            recipient,
+            sig,
+            ..
+        } = &e
+        else {
+            panic!("{e:?}")
+        };
         assert!(rest.is_empty());
         assert_eq!(*recipient, lane, "open mode pays the lane");
         let mut hashed = accounts.clone();
         hashed[0].key = relay_fee_marker(&program); // the lane slot hashes as the marker
-        let call = relay_call(&program, &hashed, &hex_field(&job["extra"]["inner_data"], "d").unwrap());
+        let call = relay_call(
+            &program,
+            &hashed,
+            &hex_field(&job["extra"]["inner_data"], "d").unwrap(),
+        );
         assert_eq!(alloy::hex::encode(&call), WRAP_CALL);
-        assert_eq!(alloy::hex::encode(relay_ref(&network, &program, &call, &k32(WRAP_SALT))), WRAP_REF);
+        assert_eq!(
+            alloy::hex::encode(relay_ref(&network, &program, &call, &k32(WRAP_SALT))),
+            WRAP_REF
+        );
         assert_eq!(sig.program, k(ED25519_PROGRAM));
         let a = parse_auth(BLOB_RAW.trim(), &alloy::hex::encode(op.from)).unwrap();
-        let pay = Pay { program, lane, op: &op, auth: &a, token_program: k(TOKEN_PROGRAM), subject_exists: true };
+        let pay = Pay {
+            program,
+            lane,
+            op: &op,
+            auth: &a,
+            token_program: k(TOKEN_PROGRAM),
+            subject_exists: true,
+        };
         let ix = pay_ix(&pay, &e);
-        assert_eq!(&ix.data[..8], &discriminator("global", "relay_fee_invalidate_nonces_signed"));
-        assert_eq!(alloy::hex::encode(sha(&[&ix.data])), WRAP_IX_SHA, "the program's Borsh encoding");
+        assert_eq!(
+            &ix.data[..8],
+            &discriminator("global", "relay_fee_invalidate_nonces_signed")
+        );
+        assert_eq!(
+            alloy::hex::encode(sha(&[&ix.data])),
+            WRAP_IX_SHA,
+            "the program's Borsh encoding"
+        );
         assert_eq!(ix.accounts.len(), 7 + 14);
-        assert_eq!((ix.accounts[0].key, ix.accounts[7].key, ix.accounts[7 + 5].key), (lane, lane, lane));
+        assert_eq!(
+            (
+                ix.accounts[0].key,
+                ix.accounts[7].key,
+                ix.accounts[7 + 5].key
+            ),
+            (lane, lane, lane)
+        );
         // the whole transaction: nonce advance, the payer's precompile (1), the inner signature (2), the wrapper
-        let ixs = vec![advance_nonce_ix(&nonce_account(&lane), &lane), auth_ix(&a, &op.digest()), sig.clone(), ix];
-        let budget = Budget { priority_lamports: 0, cu: 200_000, loaded_bytes: 4 * 1024 * 1024 };
+        let ixs = vec![
+            advance_nonce_ix(&nonce_account(&lane), &lane),
+            auth_ix(&a, &op.digest()),
+            sig.clone(),
+            ix,
+        ];
+        let budget = Budget {
+            priority_lamports: 0,
+            cu: 200_000,
+            loaded_bytes: 4 * 1024 * 1024,
+        };
         assert!(message_v1(&lane, &[0x42; 32], &ixs, &budget).is_ok());
 
-        let err = |op: &MetaOp, job: &Value| format!("{:#}", entry(&program, &network, &lane, &pol, op, job).unwrap_err());
+        let err = |op: &MetaOp, job: &Value| {
+            format!(
+                "{:#}",
+                entry(&program, &network, &lane, &pol, op, job).unwrap_err()
+            )
+        };
         let set = |f: &dyn Fn(&mut Value)| {
             let mut j = job.clone();
             f(&mut j);
             j
         };
-        assert!(err(&op, &set(&|j| j["extra"]["entry"] = json!("relay_pay"))).contains("wrapped entry"));
-        assert!(err(&op, &set(&|j| j["extra"]["entry"] = json!("cancel_signed"))).contains("not a cancel_signed"));
+        assert!(
+            err(&op, &set(&|j| j["extra"]["entry"] = json!("relay_pay"))).contains("wrapped entry")
+        );
+        assert!(
+            err(&op, &set(&|j| j["extra"]["entry"] = json!("cancel_signed")))
+                .contains("not a cancel_signed")
+        );
         assert!(err(&op, &job_with_lane_unsigned()).contains("first account"));
-        assert!(err(&op, &set(&|j| j["extra"]["inner_accounts"][3]["is_signer"] = json!(true))).contains("only the lane"));
-        assert!(err(&op, &set(&|j| j["extra"]["inner_remaining"] = json!([{"pubkey": b58(&[3; 32]), "is_signer": true, "is_writable": false}]))).contains("only the lane"));
-        assert!(err(&op, &set(&|j| j["extra"]["inner_accounts"][4]["is_writable"] = json!(false))).contains("not bound"));
-        let longer = set(&|j| j["extra"]["inner_data"] = json!(format!("{}06", j["extra"]["inner_data"].as_str().unwrap())));
+        assert!(err(
+            &op,
+            &set(&|j| j["extra"]["inner_accounts"][3]["is_signer"] = json!(true))
+        )
+        .contains("only the lane"));
+        assert!(err(
+            &op,
+            &set(&|j| j["extra"]["inner_remaining"] =
+                json!([{"pubkey": b58(&[3; 32]), "is_signer": true, "is_writable": false}]))
+        )
+        .contains("only the lane"));
+        assert!(err(
+            &op,
+            &set(&|j| j["extra"]["inner_accounts"][4]["is_writable"] = json!(false))
+        )
+        .contains("not bound"));
+        let longer = set(&|j| {
+            j["extra"]["inner_data"] =
+                json!(format!("{}06", j["extra"]["inner_data"].as_str().unwrap()))
+        });
         assert!(err(&op, &longer).contains("not bound"));
-        assert!(err(&op, &set(&|j| j["extra"]["inner_sig"]["program"] = json!("secp256k1"))).contains("inner_sig"));
-        assert!(err(&op, &set(&|j| j["extra"]["inner_sig"]["signature"] = json!("ab"))).contains("inner_sig"));
-        for f in [|o: &mut MetaOp| o.extra = [8; 32], |o: &mut MetaOp| o.nonce = 1, |o: &mut MetaOp| o.relayer = [0; 32]] {
+        assert!(err(
+            &op,
+            &set(&|j| j["extra"]["inner_sig"]["program"] = json!("secp256k1"))
+        )
+        .contains("inner_sig"));
+        assert!(err(
+            &op,
+            &set(&|j| j["extra"]["inner_sig"]["signature"] = json!("ab"))
+        )
+        .contains("inner_sig"));
+        for f in [
+            |o: &mut MetaOp| o.extra = [8; 32],
+            |o: &mut MetaOp| o.nonce = 1,
+            |o: &mut MetaOp| o.relayer = [0; 32],
+        ] {
             let mut o = op.clone();
             f(&mut o);
             assert!(err(&o, &job).contains("not bound"));
@@ -2231,10 +3358,25 @@ mod tests {
         // pays that lane
         let bob = key(BOB).unwrap();
         let other = set(&|j| j["extra"]["inner_accounts"][0]["pubkey"] = json!(b58(&bob)));
-        let Entry::Wrapped { recipient, .. } = entry(&program, &network, &bob, &pol, &op, &other).unwrap() else { panic!() };
+        let Entry::Wrapped { recipient, .. } =
+            entry(&program, &network, &bob, &pol, &op, &other).unwrap()
+        else {
+            panic!()
+        };
         assert_eq!(recipient, bob);
         // the policy applies to wrappers too
-        assert!(entry(&program, &network, &lane, &RelayFeePolicy { params: min_amount(101), ..pol.clone() }, &op, &job).is_err());
+        assert!(entry(
+            &program,
+            &network,
+            &lane,
+            &RelayFeePolicy {
+                params: min_amount(101),
+                ..pol.clone()
+            },
+            &op,
+            &job
+        )
+        .is_err());
     }
 
     fn job_with_lane_unsigned() -> Value {
@@ -2334,11 +3476,27 @@ mod tests {
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
         let mut params = toml::Table::new();
         params.insert("program_id".into(), PROGRAM.into());
-        let cfg = ChainCfg { family: "solana".into(), network: Some(NETWORK.into()), rpc_urls: vec![url], lanes: vec![0], params, ..Default::default() };
+        let cfg = ChainCfg {
+            family: "solana".into(),
+            network: Some(NETWORK.into()),
+            rpc_urls: vec![url],
+            lanes: vec![0],
+            params,
+            ..Default::default()
+        };
         let a = SolanaAdapter::new(&cfg, &[lane0()]).unwrap();
         let e = a.rpc("sendTransaction", json!([])).await.unwrap_err();
-        let r = e.downcast_ref::<RpcError>().expect("the classifier's RpcError");
-        assert_eq!((r.code, r.message.as_str(), &r.data), (-32002, "Transaction simulation failed", &json!({"err": "BlockhashNotFound"})));
+        let r = e
+            .downcast_ref::<RpcError>()
+            .expect("the classifier's RpcError");
+        assert_eq!(
+            (r.code, r.message.as_str(), &r.data),
+            (
+                -32002,
+                "Transaction simulation failed",
+                &json!({"err": "BlockhashNotFound"})
+            )
+        );
     }
 
     // ---- scaas-rpc T16b: ARCH-POS-15 failover, the first-endpoint carve-out first (F3) ----
@@ -2350,7 +3508,10 @@ mod tests {
     async fn cluster(genesis: &'static str, sim_err: Value) -> (String, Arc<Mutex<Vec<String>>>) {
         use axum::extract::State;
         type S = (Arc<Mutex<Vec<String>>>, Value, &'static str);
-        async fn h(State((asked, sim_err, genesis)): State<S>, axum::Json(b): axum::Json<Value>) -> axum::Json<Value> {
+        async fn h(
+            State((asked, sim_err, genesis)): State<S>,
+            axum::Json(b): axum::Json<Value>,
+        ) -> axum::Json<Value> {
             use base64::Engine as _;
             let m = b["method"].as_str().unwrap_or_default().to_string();
             asked.lock().unwrap().push(m.clone());
@@ -2376,16 +3537,24 @@ mod tests {
                     }
                 }
                 "getMinimumBalanceForRentExemption" => json!(1_000_000),
-                "simulateTransaction" => json!({"value": {"err": sim_err, "logs": [], "unitsConsumed": 5_000}}),
+                "simulateTransaction" => {
+                    json!({"value": {"err": sim_err, "logs": [], "unitsConsumed": 5_000}})
+                }
                 "getRecentPrioritizationFees" => json!([]),
                 "getSignatureStatuses" => json!({"value": [null]}),
                 "getTransaction" => json!({"meta": {"fee": 5_000}}),
-                _ => return axum::Json(json!({"jsonrpc": "2.0", "id": 1, "error": {"code": -32601, "message": "Method not found"}})),
+                _ => {
+                    return axum::Json(
+                        json!({"jsonrpc": "2.0", "id": 1, "error": {"code": -32601, "message": "Method not found"}}),
+                    )
+                }
             };
             axum::Json(json!({"jsonrpc": "2.0", "id": 1, "result": r}))
         }
         let asked: Arc<Mutex<Vec<String>>> = Default::default();
-        let app = axum::Router::new().route("/", axum::routing::post(h)).with_state((asked.clone(), sim_err, genesis));
+        let app = axum::Router::new()
+            .route("/", axum::routing::post(h))
+            .with_state((asked.clone(), sim_err, genesis));
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
@@ -2395,8 +3564,14 @@ mod tests {
     fn adapter_on(urls: &[&str]) -> SolanaAdapter {
         let mut params = toml::Table::new();
         params.insert("program_id".into(), PROGRAM.into());
-        let cfg = ChainCfg { family: "solana".into(), network: Some(NETWORK.into()), rpc_urls: urls.iter().map(|u| u.to_string()).collect(),
-            lanes: vec![0], params, ..Default::default() };
+        let cfg = ChainCfg {
+            family: "solana".into(),
+            network: Some(NETWORK.into()),
+            rpc_urls: urls.iter().map(|u| u.to_string()).collect(),
+            lanes: vec![0],
+            params,
+            ..Default::default()
+        };
         SolanaAdapter::new(&cfg, &[lane0()]).unwrap()
     }
 
@@ -2417,15 +3592,34 @@ mod tests {
         let (one, asked) = cluster(NETWORK, Value::Null).await;
         let a = adapter_on(&[DOWN, &one]);
         let tx = alloy::hex::encode([1u8; 64]);
-        assert!(a.tx_status(&tx).await.is_err(), "unread, never Unknown from endpoint 1");
+        assert!(
+            a.tx_status(&tx).await.is_err(),
+            "unread, never Unknown from endpoint 1"
+        );
         assert!(a.tx_fee(&tx).await.is_err());
         assert!(a.op_consumed(&pay_job()).await.is_err());
         assert!(a.sequence(0).await.is_err());
-        assert!(asked.lock().unwrap().is_empty(), "endpoint 1 is never asked: {:?}", asked.lock().unwrap());
+        assert!(
+            asked.lock().unwrap().is_empty(),
+            "endpoint 1 is never asked: {:?}",
+            asked.lock().unwrap()
+        );
         let a = adapter_on(&[&one]);
-        assert_eq!(a.tx_status(&tx).await.unwrap(), TxStatus::Unknown, "control");
-        assert_eq!(a.op_consumed(&pay_job()).await.unwrap(), Some(false), "control");
-        assert_eq!(a.sequence(0).await.unwrap(), nonce_sequence(&[0x42; 32]), "control");
+        assert_eq!(
+            a.tx_status(&tx).await.unwrap(),
+            TxStatus::Unknown,
+            "control"
+        );
+        assert_eq!(
+            a.op_consumed(&pay_job()).await.unwrap(),
+            Some(false),
+            "control"
+        );
+        assert_eq!(
+            a.sequence(0).await.unwrap(),
+            nonce_sequence(&[0x42; 32]),
+            "control"
+        );
     }
 
     /// ARCH-POS-15: `build`'s reads fail over: endpoint 0 down, endpoint 1 answers and the job is built; endpoint 1 of another
@@ -2442,26 +3636,46 @@ mod tests {
         let (one, _) = cluster(NETWORK, Value::Null).await;
         let r = checked(&[DOWN, &one]).build(&pay_job(), 0).await;
         assert!(r.is_ok(), "{r:?}");
-        let (other, asked) = cluster("Another1111111111111111111111111111111111111", Value::Null).await;
-        assert!(matches!(checked(&[DOWN, &other]).build(&pay_job(), 0).await, Err(SimError::Transport(_))));
-        assert_eq!(*asked.lock().unwrap(), ["getGenesisHash"], "another cluster: its genesis only");
+        let (other, asked) =
+            cluster("Another1111111111111111111111111111111111111", Value::Null).await;
+        assert!(matches!(
+            checked(&[DOWN, &other]).build(&pay_job(), 0).await,
+            Err(SimError::Transport(_))
+        ));
+        assert_eq!(
+            *asked.lock().unwrap(),
+            ["getGenesisHash"],
+            "another cluster: its genesis only"
+        );
         let refused = json!({"InstructionError": [2, {"Custom": 6013}]});
         let (r, _) = cluster(NETWORK, refused.clone()).await;
-        assert!(matches!(checked(&[DOWN, &r]).build(&pay_job(), 0).await, Err(SimError::Transport(e)) if e.contains("FAILOVER_ANSWER")));
+        assert!(
+            matches!(checked(&[DOWN, &r]).build(&pay_job(), 0).await, Err(SimError::Transport(e)) if e.contains("FAILOVER_ANSWER"))
+        );
         let (r, _) = cluster(NETWORK, refused).await;
-        assert!(matches!(checked(&[&r]).build(&pay_job(), 0).await, Err(SimError::Revert(_))), "control: endpoint 0's refusal");
+        assert!(
+            matches!(
+                checked(&[&r]).build(&pay_job(), 0).await,
+                Err(SimError::Revert(_))
+            ),
+            "control: endpoint 0's refusal"
+        );
     }
 
     /// scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed is the failover reads' floor: once it reported a transaction mined
     /// at confirmed slot 200 (or its head there), endpoint 1, at slot 100, is skipped by `build`. Control: before that, endpoint 1 builds.
     #[tokio::test]
     async fn solana_a_mined_status_and_the_head_raise_the_floor() {
-        let first = || crate::adapters::testkit::scripted(true, |m, _| match m {
-            "getGenesisHash" => Some(json!(NETWORK)),
-            "getSignatureStatuses" => Some(json!({"value": [{"slot": 200, "confirmationStatus": "confirmed", "err": null}]})),
-            "getSlot" => Some(json!(200)),
-            _ => None,
-        });
+        let first = || {
+            crate::adapters::testkit::scripted(true, |m, _| match m {
+                "getGenesisHash" => Some(json!(NETWORK)),
+                "getSignatureStatuses" => Some(
+                    json!({"value": [{"slot": 200, "confirmationStatus": "confirmed", "err": null}]}),
+                ),
+                "getSlot" => Some(json!(200)),
+                _ => None,
+            })
+        };
         let tx = alloy::hex::encode([1u8; 64]);
         let one = cluster(NETWORK, Value::Null).await.0;
         // the domain is checked once, on the first endpoint, at the node's first build (as the failover test above)
@@ -2472,11 +3686,20 @@ mod tests {
         };
         let a = on(&[&first().await, &one]);
         a.build(&pay_job(), 0).await.unwrap();
-        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { height: 200, .. }));
-        assert!(matches!(a.build(&pay_job(), 0).await, Err(SimError::Transport(_))), "endpoint 1 below slot 200: skipped");
+        assert!(matches!(
+            a.tx_status(&tx).await.unwrap(),
+            TxStatus::Mined { height: 200, .. }
+        ));
+        assert!(
+            matches!(a.build(&pay_job(), 0).await, Err(SimError::Transport(_))),
+            "endpoint 1 below slot 200: skipped"
+        );
         let a = on(&[&first().await, &one]);
         let _ = a.final_head().await;
-        assert!(matches!(a.build(&pay_job(), 0).await, Err(SimError::Transport(_))), "the head: the same floor");
+        assert!(
+            matches!(a.build(&pay_job(), 0).await, Err(SimError::Transport(_))),
+            "the head: the same floor"
+        );
     }
 
     /// scaas-rpc T24.8 (CLI-RPC-03): endpoint 0 passes its identity before its own reads: one of another network (another genesis hash) answers
@@ -2486,14 +3709,25 @@ mod tests {
         fn rpc(m: &str, genesis: &str) -> Option<Value> {
             match m {
                 "getGenesisHash" => Some(json!(genesis)),
-                "getSignatureStatuses" => Some(json!({"value": [{"slot": 9, "confirmationStatus": "finalized", "err": null}]})),
+                "getSignatureStatuses" => Some(
+                    json!({"value": [{"slot": 9, "confirmationStatus": "finalized", "err": null}]}),
+                ),
                 _ => None,
             }
         }
         let tx = alloy::hex::encode([1u8; 64]);
-        let other = crate::adapters::testkit::scripted(true, |m, _| rpc(m, "Another1111111111111111111111111111111111111")).await;
+        let other = crate::adapters::testkit::scripted(true, |m, _| {
+            rpc(m, "Another1111111111111111111111111111111111111")
+        })
+        .await;
         assert!(adapter_on(&[&other]).tx_status(&tx).await.is_err());
         let this = crate::adapters::testkit::scripted(true, |m, _| rpc(m, NETWORK)).await;
-        assert!(matches!(adapter_on(&[&this]).tx_status(&tx).await.unwrap(), TxStatus::Mined { .. }), "control");
+        assert!(
+            matches!(
+                adapter_on(&[&this]).tx_status(&tx).await.unwrap(),
+                TxStatus::Mined { .. }
+            ),
+            "control"
+        );
     }
 }

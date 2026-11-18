@@ -39,11 +39,17 @@ pub struct HederaAdapter {
 impl HederaAdapter {
     pub fn new(cfg: &ChainCfg, chains: Vec<Chain>) -> Result<Self> {
         if cfg.family != "hedera" || !CHAIN_IDS.contains(&cfg.evm_chain_number) {
-            bail!("chain {}: Hedera needs family=hedera and evm_chain_number 295..298", cfg.chain_key());
+            bail!(
+                "chain {}: Hedera needs family=hedera and evm_chain_number 295..298",
+                cfg.chain_key()
+            );
         }
         // scaas-rpc T14: the Relay is read through the chain's EvmPool (bounded, its timeout), no provider of its own
         let lane_addrs = chains.iter().map(Chain::address).collect();
-        Ok(Self { inner: EvmAdapter::new(cfg, chains, Default::default())?, lane_addrs })
+        Ok(Self {
+            inner: EvmAdapter::new(cfg, chains, Default::default())?,
+            lane_addrs,
+        })
     }
 
     /// Từ config: một `Chain` mỗi lane (khoá secp256k1 coin 3030).
@@ -57,10 +63,21 @@ pub fn decode_receipt(rc: &Value) -> Option<TxStatus> {
     if rc.is_null() {
         return None;
     }
-    let height = rc.get("blockNumber").and_then(Value::as_str).and_then(hex_u64);
-    match (rc.get("status").and_then(Value::as_str).and_then(hex_u64), height) {
-        (Some(1), Some(height)) => Some(TxStatus::Mined { height, tx_hash: None }),
-        (Some(0), _) => Some(TxStatus::Reverted { reason: revert_reason(rc.get("revertReason")) }),
+    let height = rc
+        .get("blockNumber")
+        .and_then(Value::as_str)
+        .and_then(hex_u64);
+    match (
+        rc.get("status").and_then(Value::as_str).and_then(hex_u64),
+        height,
+    ) {
+        (Some(1), Some(height)) => Some(TxStatus::Mined {
+            height,
+            tx_hash: None,
+        }),
+        (Some(0), _) => Some(TxStatus::Reverted {
+            reason: revert_reason(rc.get("revertReason")),
+        }),
         _ => None, // receipt dở dang: coi như chưa có
     }
 }
@@ -97,8 +114,12 @@ pub fn requeues(reason: &str) -> bool {
 
 /// `revertReason` của Relay: dữ liệu revert ABI (lỗi của contract) hoặc mã Hedera ASCII hex (`WRONG_NONCE`…).
 pub fn revert_reason(v: Option<&Value>) -> String {
-    let Some(s) = v.and_then(Value::as_str) else { return "execution reverted".into() };
-    let Ok(bytes) = alloy::hex::decode(s.strip_prefix("0x").unwrap_or(s)) else { return s.chars().take(200).collect() };
+    let Some(s) = v.and_then(Value::as_str) else {
+        return "execution reverted".into();
+    };
+    let Ok(bytes) = alloy::hex::decode(s.strip_prefix("0x").unwrap_or(s)) else {
+        return s.chars().take(200).collect();
+    };
     if bytes.is_empty() {
         return "execution reverted".into();
     }
@@ -113,7 +134,10 @@ pub fn revert_reason(v: Option<&Value>) -> String {
 /// đã vào ⇒ coi như đã gửi. Lỗi đường truyền ⇒ giữ nguyên (runner gửi lại cùng bytes).
 pub fn submit_outcome(r: Result<()>) -> Result<()> {
     let Err(e) = r else { return Ok(()) };
-    let Some(resp) = e.downcast_ref::<alloy::transports::TransportError>().and_then(|t| t.as_error_resp()) else {
+    let Some(resp) = e
+        .downcast_ref::<alloy::transports::TransportError>()
+        .and_then(|t| t.as_error_resp())
+    else {
         return Err(e);
     };
     let msg = resp.message.to_string();
@@ -148,7 +172,12 @@ impl ChainAdapter for HederaAdapter {
 
     /// R80: meta-tx ⇒ `mtxNonce(from, batch)` (both structs share the lane); job `call` ⇒ không biết.
     async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
-        let Some(m) = work_from_job(job, self.inner.fee_recipient).ok().and_then(|w| w.meta) else { return Ok(None) };
+        let Some(m) = work_from_job(job, self.inner.fee_recipient)
+            .ok()
+            .and_then(|w| w.meta)
+        else {
+            return Ok(None);
+        };
         // scaas-rpc T14b (F3): a verdict rests on endpoint 0 only; any failover answer behind it is unread
         let chain = self.inner.lane(0)?;
         let mark = chain.failover_answers();
@@ -189,18 +218,31 @@ impl ChainAdapter for HederaAdapter {
     }
 
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
-        let w = work_from_job(job, self.inner.fee_recipient).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
+        let w = work_from_job(job, self.inner.fee_recipient)
+            .map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
         if now() > w.valid_until {
             return Err(SimError::Revert("expired before inclusion".into()));
         }
-        let addr = *self.lane_addrs.get(lane).ok_or_else(|| SimError::Transport(format!("no lane {lane}")))?;
+        let addr = *self
+            .lane_addrs
+            .get(lane)
+            .ok_or_else(|| SimError::Transport(format!("no lane {lane}")))?;
         // scaas-rpc T14b (ARCH-POS-15): the balance fails over like the build's other reads; a balance 0 is transport either way
-        let chain = self.inner.lane(lane).map_err(|e| SimError::Transport(e.to_string()))?;
+        let chain = self
+            .inner
+            .lane(lane)
+            .map_err(|e| SimError::Transport(e.to_string()))?;
         let bal = chain
-            .read(|p| async move { p.get_balance(addr).await.map_err(|e| SimError::Transport(e.to_string())) })
+            .read(|p| async move {
+                p.get_balance(addr)
+                    .await
+                    .map_err(|e| SimError::Transport(e.to_string()))
+            })
             .await?;
         if bal == U256::ZERO {
-            return Err(SimError::Transport(format!("lane {addr:#x} is not a funded Hedera account")));
+            return Err(SimError::Transport(format!(
+                "lane {addr:#x} is not a funded Hedera account"
+            )));
         }
         self.inner.build(job, lane).await
     }
@@ -208,10 +250,20 @@ impl ChainAdapter for HederaAdapter {
     async fn sign(&self, built: Built, lane: usize, sequence: u64) -> Result<Signed> {
         let chain = self.inner.lane(lane)?;
         let to: Address = built.meta["to"].as_str().unwrap_or_default().parse()?;
-        let gas = built.meta["gas"].as_u64().ok_or_else(|| anyhow!("built tx without gas"))?;
+        let gas = built.meta["gas"]
+            .as_u64()
+            .ok_or_else(|| anyhow!("built tx without gas"))?;
         let fees = fees(self.inner.lane(0)?.pool().first_gas_price().await?);
-        let (raw, hash) = chain.sign(sequence, to, Bytes::from(built.body), gas, fees).await?;
-        Ok(Signed { job_id: built.job_id, tx_id: format!("{hash:#x}"), raw: raw.to_vec(), valid_until: built.valid_until, sequence })
+        let (raw, hash) = chain
+            .sign(sequence, to, Bytes::from(built.body), gas, fees)
+            .await?;
+        Ok(Signed {
+            job_id: built.job_id,
+            tx_id: format!("{hash:#x}"),
+            raw: raw.to_vec(),
+            valid_until: built.valid_until,
+            sequence,
+        })
     }
 
     async fn submit(&self, signed: &Signed) -> Result<()> {
@@ -230,7 +282,11 @@ impl ChainAdapter for HederaAdapter {
                 }
                 return Ok(st);
             }
-            Ok(if pool.first_tx_known(id).await? { TxStatus::Pending } else { TxStatus::Unknown })
+            Ok(if pool.first_tx_known(id).await? {
+                TxStatus::Pending
+            } else {
+                TxStatus::Unknown
+            })
         }
         .await;
         // scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed raises the failover reads' floor
@@ -280,20 +336,34 @@ mod tests {
     fn recorded_relay_responses_parse_with_alloy_types() {
         let v = relay();
         let b: Block = serde_json::from_value(v["block"].clone()).expect("block");
-        assert_eq!(format!("{:#x}", b.header.hash), v["block"]["hash"].as_str().unwrap());
-        assert_eq!(b.header.number, hex_u64(v["block"]["number"].as_str().unwrap()).unwrap());
+        assert_eq!(
+            format!("{:#x}", b.header.hash),
+            v["block"]["hash"].as_str().unwrap()
+        );
+        assert_eq!(
+            b.header.number,
+            hex_u64(v["block"]["number"].as_str().unwrap()).unwrap()
+        );
         let rc: TransactionReceipt = serde_json::from_value(v["receipt"].clone()).expect("receipt");
         assert!(rc.status());
         let logs: Vec<Log> = serde_json::from_value(v["logs"].clone()).expect("logs");
         assert!(!logs.is_empty());
-        assert!(logs.iter().all(|l| l.block_hash.is_some() && l.log_index.is_some()));
+        assert!(logs
+            .iter()
+            .all(|l| l.block_hash.is_some() && l.log_index.is_some()));
     }
 
     #[test]
     fn recorded_receipt_decodes() {
         let v = relay();
         let h = hex_u64(v["receipt"]["blockNumber"].as_str().unwrap()).unwrap();
-        assert_eq!(decode_receipt(&v["receipt"]), Some(TxStatus::Mined { height: h, tx_hash: None }));
+        assert_eq!(
+            decode_receipt(&v["receipt"]),
+            Some(TxStatus::Mined {
+                height: h,
+                tx_hash: None
+            })
+        );
         assert_eq!(decode_receipt(&v["receipt_unknown"]["result"]), None);
     }
 
@@ -302,29 +372,54 @@ mod tests {
         let mut rc = relay()["receipt"].clone();
         rc["status"] = json!("0x0");
         rc["revertReason"] = json!("0x57524f4e475f4e4f4e4345"); // "WRONG_NONCE"
-        assert_eq!(decode_receipt(&rc), Some(TxStatus::Reverted { reason: "WRONG_NONCE".into() }));
+        assert_eq!(
+            decode_receipt(&rc),
+            Some(TxStatus::Reverted {
+                reason: "WRONG_NONCE".into()
+            })
+        );
         rc["revertReason"] = json!("0x0bdf5a6b"); // MetaTxBadSignature()
-        assert_eq!(decode_receipt(&rc), Some(TxStatus::Reverted { reason: "MetaTxBadSignature(MetaTxBadSignature)".into() }));
+        assert_eq!(
+            decode_receipt(&rc),
+            Some(TxStatus::Reverted {
+                reason: "MetaTxBadSignature(MetaTxBadSignature)".into()
+            })
+        );
         rc.as_object_mut().unwrap().remove("revertReason");
-        assert_eq!(decode_receipt(&rc), Some(TxStatus::Reverted { reason: "execution reverted".into() }));
+        assert_eq!(
+            decode_receipt(&rc),
+            Some(TxStatus::Reverted {
+                reason: "execution reverted".into()
+            })
+        );
     }
 
     /// Low: dữ liệu revert ABI toàn byte `[A-Z0-9_]` (selector `ABCD`) không phải mã Hedera.
     #[test]
     fn only_known_hedera_codes_read_as_status() {
         assert_ne!(revert_reason(Some(&json!("0x41424344"))), "ABCD");
-        assert_eq!(revert_reason(Some(&json!(format!("0x{}", alloy::hex::encode("BUSY"))))), "BUSY");
-        assert!(requeues("WRONG_NONCE") && requeues("INSUFFICIENT_PAYER_BALANCE") && requeues("DUPLICATE_TRANSACTION"));
-        assert!(!requeues("CONTRACT_REVERT_EXECUTED") && !requeues("MetaTxBadSignature(MetaTxBadSignature)"));
+        assert_eq!(
+            revert_reason(Some(&json!(format!("0x{}", alloy::hex::encode("BUSY"))))),
+            "BUSY"
+        );
+        assert!(
+            requeues("WRONG_NONCE")
+                && requeues("INSUFFICIENT_PAYER_BALANCE")
+                && requeues("DUPLICATE_TRANSACTION")
+        );
+        assert!(
+            !requeues("CONTRACT_REVERT_EXECUTED")
+                && !requeues("MetaTxBadSignature(MetaTxBadSignature)")
+        );
     }
 
     // ---- lane_step over a fake JSON-RPC Relay + fake ExternalPull (Hedera outcomes anvil cannot produce) ----
 
-    use axum::extract::{Path, State};
-    use alloy::sol_types::SolError;
     use crate::abi::IToken;
     use crate::guard;
     use crate::submit::InflightSet;
+    use alloy::sol_types::SolError;
+    use axum::extract::{Path, State};
     use axum::routing::post;
     use std::sync::{Arc, Mutex};
 
@@ -353,7 +448,10 @@ mod tests {
     type Shared = Arc<Mutex<Net>>;
     const GAS_PRICE: u128 = 0xca900a7c00; // testnet eth_gasPrice (spec §4)
 
-    async fn fake_relay(State(s): State<Shared>, axum::Json(b): axum::Json<Value>) -> axum::Json<Value> {
+    async fn fake_relay(
+        State(s): State<Shared>,
+        axum::Json(b): axum::Json<Value>,
+    ) -> axum::Json<Value> {
         let mut n = s.lock().unwrap();
         let id = b["id"].clone();
         let ok = |r: Value| json!({"jsonrpc": "2.0", "id": id, "result": r});
@@ -364,7 +462,9 @@ mod tests {
             // scaas-rpc T14b: a failover endpoint's head (the pool checks it against the highest seen)
             "eth_blockNumber" => ok(json!("0x10")),
             // the recorded testnet block's gasLimit (tests/vectors/hedera_testnet.json): the gas cap reads `latest`
-            "eth_getBlockByNumber" if b["params"][0] == "latest" => ok(json!({"gasLimit": "0x8f0d180"})),
+            "eth_getBlockByNumber" if b["params"][0] == "latest" => {
+                ok(json!({"gasLimit": "0x8f0d180"}))
+            }
             "eth_getBlockByNumber" => {
                 n.block0_reads += 1;
                 match n.block0_err.clone() {
@@ -372,7 +472,11 @@ mod tests {
                     // scaas-rpc T13 S16: unset, block 0 is the pinned word's (a fixture correction: a node that serves no block 0
                     // is refused now, never trusted on the pin alone)
                     None if n.block0.is_null() => {
-                        let mut b = serde_json::from_str::<Value>(include_str!("../../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
+                        let mut b = serde_json::from_str::<Value>(include_str!(
+                            "../../tests/vectors/hedera_testnet.json"
+                        ))
+                        .unwrap()["block"]
+                            .clone();
                         b["hash"] = json!(format!("{:#x}", B256::from(U256::from(n.mtx_nonce))));
                         ok(b)
                     }
@@ -381,13 +485,31 @@ mod tests {
             }
             "eth_getCode" => ok(json!("0x")),
             "eth_call" => {
-                let input = b["params"][0]["input"].as_str().or(b["params"][0]["data"].as_str()).unwrap_or_default().to_string();
-                if let Some(d) = crate::typed::testkit::domain_answer(&input, b["params"][0]["to"].as_str().unwrap_or_default().parse().unwrap_or_default()) {
+                let input = b["params"][0]["input"]
+                    .as_str()
+                    .or(b["params"][0]["data"].as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                if let Some(d) = crate::typed::testkit::domain_answer(
+                    &input,
+                    b["params"][0]["to"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .parse()
+                        .unwrap_or_default(),
+                ) {
                     return axum::Json(json!({"jsonrpc": "2.0", "id": id, "result": d}));
                 }
                 match &n.invalidate_revert {
-                    Some(d) if input.starts_with(&format!("0x{}", alloy::hex::encode(guard::SEL_TOKEN_INVALIDATE_NONCES))) => json!(
-                        {"jsonrpc": "2.0", "id": id, "error": {"code": 3, "message": "execution reverted", "data": format!("0x{}", alloy::hex::encode(d))}}),
+                    Some(d)
+                        if input.starts_with(&format!(
+                            "0x{}",
+                            alloy::hex::encode(guard::SEL_TOKEN_INVALIDATE_NONCES)
+                        )) =>
+                    {
+                        json!(
+                        {"jsonrpc": "2.0", "id": id, "error": {"code": 3, "message": "execution reverted", "data": format!("0x{}", alloy::hex::encode(d))}})
+                    }
                     _ => ok(json!(format!("0x{:064x}", n.mtx_nonce))),
                 }
             }
@@ -406,11 +528,17 @@ mod tests {
                 ok(n.receipt.clone())
             }
             "eth_getTransactionByHash" => ok(Value::Null),
-            m => json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32601, "message": format!("unexpected {m}")}}),
+            m => {
+                json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32601, "message": format!("unexpected {m}")}})
+            }
         })
     }
 
-    async fn external_pull(State(s): State<Shared>, Path((_m, method)): Path<(String, String)>, axum::Json(b): axum::Json<Value>) -> axum::Json<Value> {
+    async fn external_pull(
+        State(s): State<Shared>,
+        Path((_m, method)): Path<(String, String)>,
+        axum::Json(b): axum::Json<Value>,
+    ) -> axum::Json<Value> {
         let mut n = s.lock().unwrap();
         axum::Json(match method.as_str() {
             "relay_poll" => Value::Array(std::mem::take(&mut n.jobs)),
@@ -422,9 +550,11 @@ mod tests {
                 n.reports.push(b);
                 json!({"ok": true})
             }
-            "node_config" => json!({"evm_chain_number": 296, "finality_mode": "instant", "finality_depth": 0,
+            "node_config" => {
+                json!({"evm_chain_number": 296, "finality_mode": "instant", "finality_depth": 0,
                 "finality_quorum": 1, "indexed_block": 0, "journal_max_nonce": null, "inflight": [],
-                "tokens": [{"address": format!("{:#x}", Address::repeat_byte(0x70)), "decimals": 6}]}),
+                "tokens": [{"address": format!("{:#x}", Address::repeat_byte(0x70)), "decimals": 6}]})
+            }
             _ => json!({"error": "unexpected"}),
         })
     }
@@ -452,14 +582,27 @@ mod tests {
     }
 
     /// [`adapter`] with `first` endpoints before the fake Relay in `rpc_urls` (scaas-rpc T14b: the failover tests).
-    async fn adapter_after(net: Net, first: &[&str]) -> (HederaAdapter, crate::external_pull::ExternalPull, Shared) {
+    async fn adapter_after(
+        net: Net,
+        first: &[&str],
+    ) -> (HederaAdapter, crate::external_pull::ExternalPull, Shared) {
         let s: Shared = Arc::new(Mutex::new(net));
-        let app = axum::Router::new().route("/", post(fake_relay)).route("/json/2/{m}/{method}", post(external_pull)).with_state(s.clone());
+        let app = axum::Router::new()
+            .route("/", post(fake_relay))
+            .route("/json/2/{m}/{method}", post(external_pull))
+            .with_state(s.clone());
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
-        let mut cfg: ChainCfg = toml::from_str("family = \"hedera\"\nevm_chain_number = 296\nrpc_urls = [\"http://x\"]\n").unwrap();
-        cfg.rpc_urls = first.iter().map(|u| u.to_string()).chain([url.clone()]).collect();
+        let mut cfg: ChainCfg = toml::from_str(
+            "family = \"hedera\"\nevm_chain_number = 296\nrpc_urls = [\"http://x\"]\n",
+        )
+        .unwrap();
+        cfg.rpc_urls = first
+            .iter()
+            .map(|u| u.to_string())
+            .chain([url.clone()])
+            .collect();
         // every `eth_call` of the fake answers the same word: `chainUid()` too, so the pinned chain_uid is that word
         cfg.chain_uid = Some(B256::from(U256::from(s.lock().unwrap().mtx_nonce)));
         let signer = LocalSigner::new(crate::signer::Curve::Secp256k1, &[7u8; 32]).unwrap();
@@ -468,16 +611,36 @@ mod tests {
             "finality_depth": 0, "finality_quorum": 1, "indexed_block": 0, "journal_max_nonce": null,
             "tokens": [{"address": format!("{:#x}", Address::repeat_byte(0x70)), "decimals": 6}]})).unwrap();
         a.refresh_tokens(&nc);
-        let oc = crate::config::ExternalPullCfg { url, database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
-        (a, crate::external_pull::ExternalPull::with_key(&oc, "k".into()).unwrap(), s)
+        let oc = crate::config::ExternalPullCfg {
+            url,
+            database: "t".into(),
+            relay_api_key_env: String::new(),
+            indexer_api_key_env: String::new(),
+        };
+        (
+            a,
+            crate::external_pull::ExternalPull::with_key(&oc, "k".into()).unwrap(),
+            s,
+        )
     }
 
     async fn step_with(mut net: Net, job: Value) -> (Vec<String>, Shared) {
         net.jobs = vec![job];
         let (a, o, s) = adapter(net).await;
         let fut = crate::adapter::lane_step(&a, &o, 0, "t#0");
-        assert!(tokio::time::timeout(std::time::Duration::from_secs(10), fut).await.expect("lane held").unwrap());
-        let states = s.lock().unwrap().reports.iter().map(|r| r["chain_state"].as_str().unwrap().to_string()).collect();
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_secs(10), fut)
+                .await
+                .expect("lane held")
+                .unwrap()
+        );
+        let states = s
+            .lock()
+            .unwrap()
+            .reports
+            .iter()
+            .map(|r| r["chain_state"].as_str().unwrap().to_string())
+            .collect();
         (states, s)
     }
 
@@ -486,14 +649,21 @@ mod tests {
     }
 
     fn last_error(s: &Shared) -> String {
-        s.lock().unwrap().reports.last().unwrap()["error"].as_str().unwrap_or_default().to_string()
+        s.lock().unwrap().reports.last().unwrap()["error"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string()
     }
 
     /// Review M2: WRONG_NONCE (và mọi mã Hedera mà meta-tx không chạy) ⇒ `queued`, không `reverted` vĩnh viễn.
     /// Low (phí): tx gửi đi là type-2 với `maxFee = gasPrice × 1.2`, priority 0.
     #[tokio::test]
     async fn hedera_refusal_without_execution_requeues() {
-        let net = Net { balance: "0x1", receipt: receipt("0x0", "WRONG_NONCE"), ..Default::default() };
+        let net = Net {
+            balance: "0x1",
+            receipt: receipt("0x0", "WRONG_NONCE"),
+            ..Default::default()
+        };
         let (states, s) = step(net, now() + 600).await;
         assert_eq!(states, ["signed", "broadcast", "queued"]);
         assert!(last_error(&s).contains("WRONG_NONCE"));
@@ -501,43 +671,87 @@ mod tests {
         use alloy::eips::eip2718::Decodable2718;
         let raw = alloy::hex::decode(&s.lock().unwrap().sent[0]).unwrap();
         let tx = TxEnvelope::decode_2718(&mut raw.as_slice()).unwrap();
-        assert_eq!((tx.max_fee_per_gas(), tx.max_priority_fee_per_gas()), (GAS_PRICE * 12 / 10, Some(0)));
+        assert_eq!(
+            (tx.max_fee_per_gas(), tx.max_priority_fee_per_gas()),
+            (GAS_PRICE * 12 / 10, Some(0))
+        );
         assert_eq!((tx.nonce(), tx.chain_id()), (7, Some(296)));
     }
 
     #[tokio::test]
     async fn contract_revert_stays_terminal() {
-        let net = Net { balance: "0x1", receipt: receipt("0x0", "CONTRACT_REVERT_EXECUTED"), ..Default::default() };
-        assert_eq!(step(net, now() + 600).await.0, ["signed", "broadcast", "reverted"]);
+        let net = Net {
+            balance: "0x1",
+            receipt: receipt("0x0", "CONTRACT_REVERT_EXECUTED"),
+            ..Default::default()
+        };
+        assert_eq!(
+            step(net, now() + 600).await.0,
+            ["signed", "broadcast", "reverted"]
+        );
     }
 
     /// R80/H3: revert vì relayer khác đã dùng nonce chủ thể (`mtxNonce` đã qua) ⇒ `consumed`, không `reverted`.
     #[tokio::test]
     async fn revert_after_a_lost_race_is_consumed() {
-        let net = Net { balance: "0x1", receipt: receipt("0x0", "CONTRACT_REVERT_EXECUTED"), mtx_nonce: 1, ..Default::default() };
-        assert_eq!(step(net, now() + 600).await.0, ["signed", "broadcast", "consumed"]);
+        let net = Net {
+            balance: "0x1",
+            receipt: receipt("0x0", "CONTRACT_REVERT_EXECUTED"),
+            mtx_nonce: 1,
+            ..Default::default()
+        };
+        assert_eq!(
+            step(net, now() + 600).await.0,
+            ["signed", "broadcast", "consumed"]
+        );
     }
 
     /// Precheck từ chối khi gửi ⇒ lane nhả ngay, job về hàng đợi; trùng = tx đã vào ⇒ theo dõi tới mined.
     #[tokio::test]
     async fn relay_precheck_rejection_requeues_and_duplicate_counts_as_sent() {
         let err = json!({"code": -32000, "message": "transaction precheck failed: INSUFFICIENT_PAYER_BALANCE"});
-        let net = Net { balance: "0x1", send_error: Some(err), ..Default::default() };
+        let net = Net {
+            balance: "0x1",
+            send_error: Some(err),
+            ..Default::default()
+        };
         let (states, s) = step(net, now() + 600).await;
         assert_eq!(states, ["signed", "queued"]);
         assert!(last_error(&s).contains("INSUFFICIENT_PAYER_BALANCE"));
         let dup = json!({"code": -32000, "message": "DUPLICATE_TRANSACTION"});
-        let net = Net { balance: "0x1", send_error: Some(dup), receipt: receipt("0x1", ""), ..Default::default() };
-        assert_eq!(step(net, now() + 600).await.0, ["signed", "broadcast", "mined"]);
+        let net = Net {
+            balance: "0x1",
+            send_error: Some(dup),
+            receipt: receipt("0x1", ""),
+            ..Default::default()
+        };
+        assert_eq!(
+            step(net, now() + 600).await.0,
+            ["signed", "broadcast", "mined"]
+        );
     }
 
     /// Low: lane chưa nạp tiền + payload đã hết hạn ⇒ `dead`, không quay lại hàng đợi mãi.
     #[tokio::test]
     async fn expired_job_on_unfunded_lane_is_dead() {
-        let (states, s) = step(Net { balance: "0x0", ..Default::default() }, now() - 10).await;
+        let (states, s) = step(
+            Net {
+                balance: "0x0",
+                ..Default::default()
+            },
+            now() - 10,
+        )
+        .await;
         assert_eq!(states, ["dead"]);
         assert!(last_error(&s).contains("expired"));
-        let (states, _) = step(Net { balance: "0x0", ..Default::default() }, now() + 600).await;
+        let (states, _) = step(
+            Net {
+                balance: "0x0",
+                ..Default::default()
+            },
+            now() + 600,
+        )
+        .await;
         assert_eq!(states, ["queued"]);
     }
 
@@ -547,9 +761,20 @@ mod tests {
     async fn the_hedera_lane_keeps_the_job_kind_rule() {
         let mut j = job(now() + 300);
         j["kind"] = json!("signed_op");
-        let (states, s) = step_with(Net { balance: "0x1", ..Default::default() }, j).await;
+        let (states, s) = step_with(
+            Net {
+                balance: "0x1",
+                ..Default::default()
+            },
+            j,
+        )
+        .await;
         assert_eq!(states, ["dead"]);
-        assert!(last_error(&s).contains("unknown job kind"), "{}", last_error(&s));
+        assert!(
+            last_error(&s).contains("unknown job kind"),
+            "{}",
+            last_error(&s)
+        );
     }
 
     /// G2 on the one EVM-style family of the generic runner: an op whose bytes fly under another claimed `contract` has another
@@ -559,25 +784,51 @@ mod tests {
     async fn the_hedera_lane_skips_bytes_already_in_flight() {
         let bound = std::time::Duration::from_secs(2);
         let z = format!("{:#x}", Address::ZERO);
-        let ua = |contract: &str| json!({"id": 9, "kind": "ua_metatx", "op": {"entry": "mtxBurn", "contract": contract,
+        let ua = |contract: &str| {
+            json!({"id": 9, "kind": "ua_metatx", "op": {"entry": "mtxBurn", "contract": contract,
             "token": format!("{:#x}", Address::repeat_byte(0x70)), "args": {"amount": "5"},
             "envelope": {"from": format!("{:#x}", B256::repeat_byte(0xaa)), "batch": "9", "nonce": "0", "validUntil": "4000000000",
                 "mode": 0, "relayer": z, "fee": "0", "feeRecipient": z},
-            "auth": {"keyData": "0x", "signature": format!("0x{}", "22".repeat(96)), "members": []}}});
-        let net = |j: Value| Net { balance: "0x1", jobs: vec![j], ..Default::default() };
+            "auth": {"keyData": "0x", "signature": format!("0x{}", "22".repeat(96)), "members": []}}})
+        };
+        let net = |j: Value| Net {
+            balance: "0x1",
+            jobs: vec![j],
+            ..Default::default()
+        };
         let (a, o, s) = adapter(net(ua("pqz"))).await;
         let job: Job = serde_json::from_value(ua("pqz")).unwrap();
-        let key = work_from_job(&serde_json::from_value(ua("token")).unwrap(), None).unwrap().call_key();
-        assert_eq!(a.call_key(&job), Some(key), "the claim moves the digest, not the bytes");
+        let key = work_from_job(&serde_json::from_value(ua("token")).unwrap(), None)
+            .unwrap()
+            .call_key();
+        assert_eq!(
+            a.call_key(&job),
+            Some(key),
+            "the claim moves the digest, not the bytes"
+        );
         let held = InflightSet::default();
         let _flying = held.try_acquire_op(B256::repeat_byte(0x71), key).unwrap();
-        tokio::time::timeout(bound, crate::adapter::step_once(&a, &o, 0, "n#0", None, &held)).await.expect("nothing to wait on").unwrap();
+        tokio::time::timeout(
+            bound,
+            crate::adapter::step_once(&a, &o, 0, "n#0", None, &held),
+        )
+        .await
+        .expect("nothing to wait on")
+        .unwrap();
         {
             let n = s.lock().unwrap();
-            assert_eq!((n.claims, n.reports.len()), (0, 0), "skipped before the claim");
+            assert_eq!(
+                (n.claims, n.reports.len()),
+                (0, 0),
+                "skipped before the claim"
+            );
         }
         let (a, o, s) = adapter(net(ua("pqz"))).await;
-        let _ = tokio::time::timeout(bound, crate::adapter::step_once(&a, &o, 0, "n#0", None, &InflightSet::default())).await;
+        let _ = tokio::time::timeout(
+            bound,
+            crate::adapter::step_once(&a, &o, 0, "n#0", None, &InflightSet::default()),
+        )
+        .await;
         assert_eq!(s.lock().unwrap().claims, 1, "the control");
     }
 
@@ -585,26 +836,75 @@ mod tests {
     /// whose RPC block 0 is not the pinned chain_uid never starts) and I1 (only registered tokens).
     #[tokio::test]
     async fn the_hedera_lane_keeps_n6_n2_and_registration() {
-        let inv = |token: Address| json!({"id": 8, "kind": "ua_metatx", "op": {"entry": "mtxInvalidateNonces", "contract": "token",
+        let inv = |token: Address| {
+            json!({"id": 8, "kind": "ua_metatx", "op": {"entry": "mtxInvalidateNonces", "contract": "token",
             "token": format!("{token:#x}"), "args": {"from": format!("{:#x}", Address::repeat_byte(1).into_word()), "batch": "1", "minNonce": "9"},
-            "auth": {"keyData": "0x", "signature": format!("0x{}", "ab".repeat(64)), "members": []}, "validUntil": (now() + 300).to_string()}});
-        let already = IToken::MinNonceNotIncreasing { current: U256::from(9), requested: U256::from(9) }.abi_encode();
-        let net = || Net { balance: "0x1", invalidate_revert: Some(already.clone()), ..Default::default() };
+            "auth": {"keyData": "0x", "signature": format!("0x{}", "ab".repeat(64)), "members": []}, "validUntil": (now() + 300).to_string()}})
+        };
+        let already = IToken::MinNonceNotIncreasing {
+            current: U256::from(9),
+            requested: U256::from(9),
+        }
+        .abi_encode();
+        let net = || Net {
+            balance: "0x1",
+            invalidate_revert: Some(already.clone()),
+            ..Default::default()
+        };
         let (states, s) = step_with(net(), inv(Address::repeat_byte(0x70))).await;
-        assert_eq!((states, last_error(&s)), (vec!["consumed".to_string()], "already_invalidated".to_string()));
+        assert_eq!(
+            (states, last_error(&s)),
+            (
+                vec!["consumed".to_string()],
+                "already_invalidated".to_string()
+            )
+        );
         let (states, s) = step_with(net(), inv(Address::repeat_byte(0x71))).await;
         assert_eq!(states, ["dead"]);
-        assert!(last_error(&s).contains("TOKEN_NOT_SERVED"), "{}", last_error(&s));
+        assert!(
+            last_error(&s).contains("TOKEN_NOT_SERVED"),
+            "{}",
+            last_error(&s)
+        );
         // N2: the recorded testnet block 0 is not the pinned word: the lane never takes a job (and its task, so the
         // node, keeps running: review P5 m1)
-        let block: Value = serde_json::from_str::<Value>(include_str!("../../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
-        let (a, o, s) = adapter(Net { balance: "0x1", block0: block, jobs: vec![job(now() + 300)], ..Default::default() }).await;
+        let block: Value =
+            serde_json::from_str::<Value>(include_str!("../../tests/vectors/hedera_testnet.json"))
+                .unwrap()["block"]
+                .clone();
+        let (a, o, s) = adapter(Net {
+            balance: "0x1",
+            block0: block,
+            jobs: vec![job(now() + 300)],
+            ..Default::default()
+        })
+        .await;
         assert!(a.start_check().await.is_err());
-        let run = crate::adapter::lane_runner(Arc::new(a), o, 0, "t#0".into(), std::time::Duration::from_millis(10),
-            Arc::new(Mutex::new(crate::breaker::Breaker::new(Default::default()))), Default::default());
-        assert!(tokio::time::timeout(std::time::Duration::from_millis(1500), run).await.is_err(), "the lane task keeps running");
-        assert_eq!(s.lock().unwrap().jobs.len(), 1, "a lane on the wrong chain takes no job");
-        let (a, _, _) = adapter(Net { balance: "0x1", ..Default::default() }).await;
+        let run = crate::adapter::lane_runner(
+            Arc::new(a),
+            o,
+            0,
+            "t#0".into(),
+            std::time::Duration::from_millis(10),
+            Arc::new(Mutex::new(crate::breaker::Breaker::new(Default::default()))),
+            Default::default(),
+        );
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(1500), run)
+                .await
+                .is_err(),
+            "the lane task keeps running"
+        );
+        assert_eq!(
+            s.lock().unwrap().jobs.len(),
+            1,
+            "a lane on the wrong chain takes no job"
+        );
+        let (a, _, _) = adapter(Net {
+            balance: "0x1",
+            ..Default::default()
+        })
+        .await;
         a.start_check().await.expect("a pruned RPC trusts the pin");
     }
 
@@ -613,13 +913,30 @@ mod tests {
     #[tokio::test]
     async fn a_block_zero_rpc_error_keeps_the_lane_stopped_and_retries() {
         let err = json!({"code": -32603, "message": "block 0 unavailable"});
-        let (a, o, s) = adapter(Net { balance: "0x1", block0_err: Some(err), jobs: vec![job(now() + 300)], ..Default::default() }).await;
-        let run = tokio::spawn(crate::adapter::lane_runner(Arc::new(a), o, 0, "t#0".into(), std::time::Duration::from_millis(10),
-            Arc::new(Mutex::new(crate::breaker::Breaker::new(Default::default()))), Default::default()));
+        let (a, o, s) = adapter(Net {
+            balance: "0x1",
+            block0_err: Some(err),
+            jobs: vec![job(now() + 300)],
+            ..Default::default()
+        })
+        .await;
+        let run = tokio::spawn(crate::adapter::lane_runner(
+            Arc::new(a),
+            o,
+            0,
+            "t#0".into(),
+            std::time::Duration::from_millis(10),
+            Arc::new(Mutex::new(crate::breaker::Breaker::new(Default::default()))),
+            Default::default(),
+        ));
         tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
         {
             let mut n = s.lock().unwrap();
-            assert_eq!((n.jobs.len(), n.block0_reads), (1, 2), "stopped, asked again after 1 s");
+            assert_eq!(
+                (n.jobs.len(), n.block0_reads),
+                (1, 2),
+                "stopped, asked again after 1 s"
+            );
             n.block0_err = None;
         }
         for _ in 0..50 {
@@ -628,7 +945,10 @@ mod tests {
             }
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
-        assert!(s.lock().unwrap().jobs.is_empty(), "the lane started once block 0 read");
+        assert!(
+            s.lock().unwrap().jobs.is_empty(),
+            "the lane started once block 0 read"
+        );
         assert!(!run.is_finished());
         run.abort();
     }
@@ -648,8 +968,15 @@ mod tests {
             "batch": s("batch"), "nonce": s("nonce"), "validUntil": s("valid_until"), "mode": s("mode").parse::<u32>().unwrap(),
             "relayer": s("relayer"), "fee": s("fee"), "feeRecipient": s("fee_recipient")});
         let m = UaMtx::from_wire(Some("transfer"), &wire).unwrap();
-        assert_eq!(s("type_hash").parse::<B256>().unwrap(), alloy::primitives::keccak256(UAMetaTransfer::eip712_encode_type().as_bytes()));
-        assert_eq!(m.struct_hash(), s("struct_hash").parse::<B256>().unwrap(), "the unbound 0xFEE fee recipient hashed as 0");
+        assert_eq!(
+            s("type_hash").parse::<B256>().unwrap(),
+            alloy::primitives::keccak256(UAMetaTransfer::eip712_encode_type().as_bytes())
+        );
+        assert_eq!(
+            m.struct_hash(),
+            s("struct_hash").parse::<B256>().unwrap(),
+            "the unbound 0xFEE fee recipient hashed as 0"
+        );
         let d = Domain {
             name: "SCaaS MetaToken".into(),
             version: "1".into(),
@@ -659,14 +986,29 @@ mod tests {
         };
         let dg = m.digest(&d);
         assert_eq!(dg, s("digest").parse::<B256>().unwrap());
-        let pk: [u8; 32] = alloy::hex::decode(&s("ed25519_public_key")[2..]).unwrap().try_into().unwrap();
-        let sig: [u8; 64] = alloy::hex::decode(&s("ed25519_signature")[2..]).unwrap().try_into().unwrap();
+        let pk: [u8; 32] = alloy::hex::decode(&s("ed25519_public_key")[2..])
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let sig: [u8; 64] = alloy::hex::decode(&s("ed25519_signature")[2..])
+            .unwrap()
+            .try_into()
+            .unwrap();
         let vk = VerifyingKey::from_bytes(&pk).unwrap();
-        vk.verify(dg.as_slice(), &Signature::from_bytes(&sig)).expect("ed25519 over the digest");
+        vk.verify(dg.as_slice(), &Signature::from_bytes(&sig))
+            .expect("ed25519 over the digest");
         // Hedera account 0.0.1234567 (ED25519) ⇒ its long-zero address, zero-padded: a native id (R42)
-        assert_eq!(m.from(), Address::left_padding_from(&1_234_567u64.to_be_bytes()).into_word());
-        assert_eq!(crate::metatx::native(&m.from()), crate::addresses::canonical("hedera", &s("hedera_account"), None, None)
-            .unwrap().parse().ok());
+        assert_eq!(
+            m.from(),
+            Address::left_padding_from(&1_234_567u64.to_be_bytes()).into_word()
+        );
+        assert_eq!(
+            crate::metatx::native(&m.from()),
+            crate::addresses::canonical("hedera", &s("hedera_account"), None, None)
+                .unwrap()
+                .parse()
+                .ok()
+        );
     }
 
     /// Review H1/M1: a Hedera chain from `node.toml` (EVM-style: `evm_chain_number`, no `network`, finality
@@ -683,15 +1025,24 @@ mod tests {
         let c: crate::config::Config = toml::from_str(raw).unwrap();
         c.validate().unwrap();
         let cc = &c.chains[0];
-        assert!(cc.uses_adapter(), "hedera must not take the EVM submit.rs path");
+        assert!(
+            cc.uses_adapter(),
+            "hedera must not take the EVM submit.rs path"
+        );
         assert_eq!(cc.chain_key(), "hedera:296");
         let mut with_net = cc.clone();
         with_net.network = Some("testnet".into());
-        assert_eq!(with_net.chain_key(), "hedera:296", "ExternalPull keys Hedera by chain id");
+        assert_eq!(
+            with_net.chain_key(),
+            "hedera:296",
+            "ExternalPull keys Hedera by chain id"
+        );
         let a = crate::adapters::build(cc, &c.lane_signers(cc).unwrap()).unwrap();
         assert_eq!((a.family(), a.chain_key()), (Family::Hedera, "hedera:296"));
-        let evm: crate::config::ChainCfg =
-            toml::from_str("evm_chain_number = 1\nrpc_urls = [\"http://a\"]\nfinality = { mode = \"instant\" }\n").unwrap();
+        let evm: crate::config::ChainCfg = toml::from_str(
+            "evm_chain_number = 1\nrpc_urls = [\"http://a\"]\nfinality = { mode = \"instant\" }\n",
+        )
+        .unwrap();
         assert!(!evm.uses_adapter());
         let mut bad = c.clone();
         bad.chains[0] = evm;
@@ -705,7 +1056,8 @@ mod tests {
             "family = \"hedera\"\nevm_chain_number = 1\nrpc_urls = [\"http://127.0.0.1:7546\"]\n",
         )
         .unwrap();
-        let s = crate::signer::LocalSigner::new(crate::signer::Curve::Secp256k1, &[7u8; 32]).unwrap();
+        let s =
+            crate::signer::LocalSigner::new(crate::signer::Curve::Secp256k1, &[7u8; 32]).unwrap();
         assert!(HederaAdapter::from_cfg(&cfg, &[s]).is_err());
     }
 
@@ -739,11 +1091,33 @@ mod tests {
     #[tokio::test]
     async fn hedera_tx_status_never_fails_over() {
         let tx = format!("{:#x}", B256::repeat_byte(0x11));
-        let (a, _, s) = adapter_after(Net { balance: "0x1", ..Default::default() }, &[DOWN]).await;
-        assert!(a.tx_status(&tx).await.is_err(), "unread, never Unknown from endpoint 1");
-        assert_eq!(s.lock().unwrap().receipt_reads, 0, "endpoint 1 is never asked");
-        let (a, _, s) = adapter(Net { balance: "0x1", ..Default::default() }).await;
-        assert_eq!(a.tx_status(&tx).await.unwrap(), TxStatus::Unknown, "control");
+        let (a, _, s) = adapter_after(
+            Net {
+                balance: "0x1",
+                ..Default::default()
+            },
+            &[DOWN],
+        )
+        .await;
+        assert!(
+            a.tx_status(&tx).await.is_err(),
+            "unread, never Unknown from endpoint 1"
+        );
+        assert_eq!(
+            s.lock().unwrap().receipt_reads,
+            0,
+            "endpoint 1 is never asked"
+        );
+        let (a, _, s) = adapter(Net {
+            balance: "0x1",
+            ..Default::default()
+        })
+        .await;
+        assert_eq!(
+            a.tx_status(&tx).await.unwrap(),
+            TxStatus::Unknown,
+            "control"
+        );
         assert_eq!(s.lock().unwrap().receipt_reads, 1);
     }
 
@@ -752,19 +1126,43 @@ mod tests {
     #[tokio::test]
     async fn hedera_op_consumed_never_rests_on_a_failover_answer() {
         let job: Job = serde_json::from_value(job(now() + 600)).unwrap();
-        let (a, _, _) = adapter_after(Net { balance: "0x1", mtx_nonce: 1, ..Default::default() }, &[DOWN]).await;
+        let (a, _, _) = adapter_after(
+            Net {
+                balance: "0x1",
+                mtx_nonce: 1,
+                ..Default::default()
+            },
+            &[DOWN],
+        )
+        .await;
         let e = a.op_consumed(&job).await.unwrap_err().to_string();
         assert!(e.contains("FAILOVER_ANSWER"), "{e}");
-        let (a, _, _) = adapter(Net { balance: "0x1", mtx_nonce: 1, ..Default::default() }).await;
+        let (a, _, _) = adapter(Net {
+            balance: "0x1",
+            mtx_nonce: 1,
+            ..Default::default()
+        })
+        .await;
         assert_eq!(a.op_consumed(&job).await.unwrap(), Some(true), "control");
     }
 
     /// F3: the lane sequence is endpoint 0's only. Control: endpoint 0 up answers 7.
     #[tokio::test]
     async fn hedera_the_lane_sequence_never_fails_over() {
-        let (a, _, _) = adapter_after(Net { balance: "0x1", ..Default::default() }, &[DOWN]).await;
+        let (a, _, _) = adapter_after(
+            Net {
+                balance: "0x1",
+                ..Default::default()
+            },
+            &[DOWN],
+        )
+        .await;
         assert!(a.sequence(0).await.is_err());
-        let (a, _, _) = adapter(Net { balance: "0x1", ..Default::default() }).await;
+        let (a, _, _) = adapter(Net {
+            balance: "0x1",
+            ..Default::default()
+        })
+        .await;
         assert_eq!(a.sequence(0).await.unwrap(), 7, "control");
     }
 
@@ -773,10 +1171,27 @@ mod tests {
     #[tokio::test]
     async fn hedera_build_reads_fail_over_when_the_first_endpoint_is_down() {
         let job: Job = serde_json::from_value(job(now() + 600)).unwrap();
-        let (a, _, _) = adapter_after(Net { balance: "0x1", ..Default::default() }, &[DOWN]).await;
+        let (a, _, _) = adapter_after(
+            Net {
+                balance: "0x1",
+                ..Default::default()
+            },
+            &[DOWN],
+        )
+        .await;
         assert!(a.build(&job, 0).await.is_ok());
-        let (a, _, _) = adapter_after(Net { balance: "0x0", ..Default::default() }, &[DOWN]).await;
-        assert!(matches!(a.build(&job, 0).await, Err(SimError::Transport(e)) if e.contains("not a funded")), "control");
+        let (a, _, _) = adapter_after(
+            Net {
+                balance: "0x0",
+                ..Default::default()
+            },
+            &[DOWN],
+        )
+        .await;
+        assert!(
+            matches!(a.build(&job, 0).await, Err(SimError::Transport(e)) if e.contains("not a funded")),
+            "control"
+        );
     }
 
     /// scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed is the failover reads' floor: once it reported a transaction mined
@@ -784,20 +1199,41 @@ mod tests {
     #[tokio::test]
     async fn hedera_a_mined_status_raises_the_floor() {
         let job: Job = serde_json::from_value(job(now() + 600)).unwrap();
-        let first = || crate::adapters::testkit::scripted(true, |m, p| match m {
-            "eth_chainId" => Some(json!("0x128")),
-            "eth_getBlockByNumber" if p["params"][0] == "0x0" => {
-                let mut b = serde_json::from_str::<Value>(include_str!("../../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
-                b["hash"] = json!(format!("{:#x}", B256::ZERO));
-                Some(b)
-            }
-            "eth_getTransactionReceipt" => Some(json!({"status": "0x1", "blockNumber": "0x20", "transactionHash": format!("{:#x}", B256::repeat_byte(0x11))})),
-            _ => None,
-        });
+        let first = || {
+            crate::adapters::testkit::scripted(true, |m, p| match m {
+                "eth_chainId" => Some(json!("0x128")),
+                "eth_getBlockByNumber" if p["params"][0] == "0x0" => {
+                    let mut b = serde_json::from_str::<Value>(include_str!(
+                        "../../tests/vectors/hedera_testnet.json"
+                    ))
+                    .unwrap()["block"]
+                        .clone();
+                    b["hash"] = json!(format!("{:#x}", B256::ZERO));
+                    Some(b)
+                }
+                "eth_getTransactionReceipt" => Some(
+                    json!({"status": "0x1", "blockNumber": "0x20", "transactionHash": format!("{:#x}", B256::repeat_byte(0x11))}),
+                ),
+                _ => None,
+            })
+        };
         let tx = format!("{:#x}", B256::repeat_byte(0x11));
-        let (a, _, _) = adapter_after(Net { balance: "0x1", ..Default::default() }, &[&first().await]).await;
+        let (a, _, _) = adapter_after(
+            Net {
+                balance: "0x1",
+                ..Default::default()
+            },
+            &[&first().await],
+        )
+        .await;
         assert!(a.build(&job, 0).await.is_ok());
-        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { height: 0x20, .. }));
-        assert!(matches!(a.build(&job, 0).await, Err(SimError::Transport(_))), "endpoint 1 below block 0x20: skipped");
+        assert!(matches!(
+            a.tx_status(&tx).await.unwrap(),
+            TxStatus::Mined { height: 0x20, .. }
+        ));
+        assert!(
+            matches!(a.build(&job, 0).await, Err(SimError::Transport(_))),
+            "endpoint 1 below block 0x20: skipped"
+        );
     }
 }

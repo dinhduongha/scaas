@@ -37,7 +37,10 @@ async fn open_with(url: &str, owner: &str, create: bool) -> Result<Store> {
         return Ok(Arc::new(s));
     }
     let _ = (owner, create);
-    Err(StoreError::Invalid(format!("unsupported store url scheme: {}", url.split(':').next().unwrap_or(""))))
+    Err(StoreError::Invalid(format!(
+        "unsupported store url scheme: {}",
+        url.split(':').next().unwrap_or("")
+    )))
 }
 
 // ------------------------------------------------------------------ errors
@@ -49,7 +52,10 @@ pub enum StoreError {
     /// Fencing epoch đã đổi: process này không còn là chủ, không được ghi journal (và vì vậy không broadcast).
     NotOwner,
     /// Cặp chuyển trạng thái không có trong `TRANSITIONS`.
-    Illegal { from: State, to: State },
+    Illegal {
+        from: State,
+        to: State,
+    },
     NotFound,
     Invalid(String),
     Db(sqlx::Error),
@@ -60,7 +66,12 @@ impl std::fmt::Display for StoreError {
         match self {
             Self::Owned(m) => write!(f, "store is owned by another process: {m}"),
             Self::NotOwner => f.write_str("NOT_OWNER: fencing epoch changed"),
-            Self::Illegal { from, to } => write!(f, "transition {} -> {} is not allowed", from.as_str(), to.as_str()),
+            Self::Illegal { from, to } => write!(
+                f,
+                "transition {} -> {} is not allowed",
+                from.as_str(),
+                to.as_str()
+            ),
             Self::NotFound => f.write_str("job not found"),
             Self::Invalid(m) => f.write_str(m),
             Self::Db(e) => write!(f, "store: {e}"),
@@ -103,7 +114,9 @@ pub enum State {
 use State::*;
 
 impl State {
-    pub const ALL: [State; 9] = [Queued, Leased, Signed, Broadcast, Mined, Reverted, Dead, Consumed, Cancelled];
+    pub const ALL: [State; 9] = [
+        Queued, Leased, Signed, Broadcast, Mined, Reverted, Dead, Consumed, Cancelled,
+    ];
     /// Trạng thái giữ `job_live_digest` (G2 bền).
     pub const LIVE: [State; 4] = [Queued, Leased, Signed, Broadcast];
 
@@ -129,7 +142,10 @@ impl State {
 impl TryFrom<String> for State {
     type Error = String;
     fn try_from(s: String) -> std::result::Result<Self, String> {
-        Self::ALL.into_iter().find(|x| x.as_str() == s).ok_or_else(|| format!("unknown job state {s}"))
+        Self::ALL
+            .into_iter()
+            .find(|x| x.as_str() == s)
+            .ok_or_else(|| format!("unknown job state {s}"))
     }
 }
 
@@ -138,8 +154,14 @@ impl TryFrom<String> for State {
 pub const TRANSITIONS: &[(State, &[State])] = &[
     (Queued, &[Leased, Cancelled, Dead]),
     (Leased, &[Queued, Signed, Dead, Consumed, Cancelled]),
-    (Signed, &[Broadcast, Mined, Reverted, Queued, Dead, Consumed]),
-    (Broadcast, &[Broadcast, Mined, Reverted, Queued, Dead, Consumed]),
+    (
+        Signed,
+        &[Broadcast, Mined, Reverted, Queued, Dead, Consumed],
+    ),
+    (
+        Broadcast,
+        &[Broadcast, Mined, Reverted, Queued, Dead, Consumed],
+    ),
     (Mined, &[Reverted]),
 ];
 /// Báo cáo muộn sau `consumed`: no-op, không ghi.
@@ -166,7 +188,13 @@ pub fn check_transition(from: State, to: State, f: &Fields) -> Result<()> {
     if to == Cancelled || !(allowed(from, to) || late_noop(from, to)) {
         return Err(StoreError::Illegal { from, to });
     }
-    let refuse = |m: &str| Err(StoreError::Invalid(format!("{} -> {}: {m}", from.as_str(), to.as_str())));
+    let refuse = |m: &str| {
+        Err(StoreError::Invalid(format!(
+            "{} -> {}: {m}",
+            from.as_str(),
+            to.as_str()
+        )))
+    };
     if to == Leased && f.lane_label.is_none() {
         return refuse("a lease names its lane");
     }
@@ -253,10 +281,16 @@ pub enum Accept {
     Created(JobRow),
     /// Cùng khoá + cùng hash, hoặc tombstone (`state = cancelled`): trả snapshot hiện tại.
     Existing(JobRow),
-    IdempotencyMismatch { uid: i64 },
-    PreviousGenerationLive { uid: i64 },
+    IdempotencyMismatch {
+        uid: i64,
+    },
+    PreviousGenerationLive {
+        uid: i64,
+    },
     /// Có generation cao hơn dưới cùng khoá (`409 SUPERSEDED`): một push cũ, không bao giờ tạo lại.
-    Superseded { uid: i64 },
+    Superseded {
+        uid: i64,
+    },
     /// `valid_until` đã qua (`422 EXPIRED`): khoá đã purge không bao giờ được nhận lại (§4).
     Expired,
     DuplicateDigest,
@@ -282,7 +316,10 @@ pub enum Transition {
     Ok { seq: i64 },
     /// Dòng không ở `from` (người khác đã chuyển, hoặc job bị hold / ghim lane khác): không ghi gì.
     /// `Moved{signed, tx_hash của ta}` sau một lần thử lại = journal của ta đã có, gửi được.
-    Moved { state: State, tx_hash: Option<String> },
+    Moved {
+        state: State,
+        tx_hash: Option<String>,
+    },
     /// Không biết commit có thành không (mất kết nối sau COMMIT): đọc lại dòng trước mọi hành động.
     Unknown(String),
 }
@@ -292,7 +329,10 @@ pub enum Transition {
 pub enum Cancel {
     Cancelled(JobRow),
     /// `409 TOO_LATE`. `published` ⇒ nếu còn `queued`, job đã bị `hold` (không bao giờ lease ở đây).
-    TooLate { state: State, published: bool },
+    TooLate {
+        state: State,
+        published: bool,
+    },
     NotFound,
 }
 
@@ -363,8 +403,17 @@ pub fn audit_hash(prev: &[u8], seq: i64, at: i64, e: &AuditEntry) -> [u8; 32] {
     h.update(prev);
     h.update(seq.to_be_bytes());
     h.update(at.to_be_bytes());
-    let texts = [Some(&e.actor_kind), e.iss.as_ref(), e.sub.as_ref(), Some(&e.roles), Some(&e.method),
-                 Some(&e.route), e.target.as_ref(), e.before.as_ref(), e.after.as_ref()];
+    let texts = [
+        Some(&e.actor_kind),
+        e.iss.as_ref(),
+        e.sub.as_ref(),
+        Some(&e.roles),
+        Some(&e.method),
+        Some(&e.route),
+        e.target.as_ref(),
+        e.before.as_ref(),
+        e.after.as_ref(),
+    ];
     for t in texts {
         match t {
             Some(s) => {
@@ -567,7 +616,10 @@ impl Label for PeerRow {
 }
 impl Label for PolicyRow {
     fn label(&self) -> String {
-        format!("policy:{}/{}/{}", self.chain_key, self.contract, self.selector)
+        format!(
+            "policy:{}/{}/{}",
+            self.chain_key, self.contract, self.selector
+        )
     }
 }
 
@@ -575,17 +627,60 @@ impl Label for PolicyRow {
 pub fn plan_bootstrap(stored: &ConfigSet, toml: &ConfigSet) -> (ConfigSet, BootReport) {
     let mut r = BootReport::default();
     let set = ConfigSet {
-        chains: split(&stored.chains, &toml.chains, |c| c.chain_key.clone(),
-                      |c| ChainRow { state: String::new(), ..c.clone() }, &mut r),
-        tokens: split(&stored.tokens, &toml.tokens, |t| (t.chain_key.clone(), t.address.clone()),
-                      |t| TokenRow { active: true, ..t.clone() }, &mut r),
-        lanes: split(&stored.lanes, &toml.lanes, |l| (l.chain_key.clone(), l.label.clone()),
-                     |l| LaneRow { journal_max: None, ..l.clone() }, &mut r),
-        namespaces: split(&stored.namespaces, &toml.namespaces, |n| n.name.clone(),
-                          |n| NamespaceRow { state: String::new(), ..n.clone() }, &mut r),
-        peers: split(&stored.peers, &toml.peers, |p| p.name.clone(), Clone::clone, &mut r),
-        policy: split(&stored.policy, &toml.policy, |p| (p.chain_key.clone(), p.contract.clone(), p.selector.clone()),
-                      Clone::clone, &mut r),
+        chains: split(
+            &stored.chains,
+            &toml.chains,
+            |c| c.chain_key.clone(),
+            |c| ChainRow {
+                state: String::new(),
+                ..c.clone()
+            },
+            &mut r,
+        ),
+        tokens: split(
+            &stored.tokens,
+            &toml.tokens,
+            |t| (t.chain_key.clone(), t.address.clone()),
+            |t| TokenRow {
+                active: true,
+                ..t.clone()
+            },
+            &mut r,
+        ),
+        lanes: split(
+            &stored.lanes,
+            &toml.lanes,
+            |l| (l.chain_key.clone(), l.label.clone()),
+            |l| LaneRow {
+                journal_max: None,
+                ..l.clone()
+            },
+            &mut r,
+        ),
+        namespaces: split(
+            &stored.namespaces,
+            &toml.namespaces,
+            |n| n.name.clone(),
+            |n| NamespaceRow {
+                state: String::new(),
+                ..n.clone()
+            },
+            &mut r,
+        ),
+        peers: split(
+            &stored.peers,
+            &toml.peers,
+            |p| p.name.clone(),
+            Clone::clone,
+            &mut r,
+        ),
+        policy: split(
+            &stored.policy,
+            &toml.policy,
+            |p| (p.chain_key.clone(), p.contract.clone(), p.selector.clone()),
+            Clone::clone,
+            &mut r,
+        ),
     };
     (set, r)
 }
@@ -620,13 +715,26 @@ pub trait Backend: Send + Sync {
     /// Trước hết `check_transition` (không bao giờ vào `cancelled`). `queued → leased` cần `hold = 0`, `lane_hint`
     /// rỗng hoặc bằng `fields.lane_label`, và lane có trong store.
     /// Lỗi DB ⇒ `Transition::Unknown` (người gọi đọc lại dòng); `NotOwner`/`Illegal`/`NotFound` là `Err`.
-    async fn transition(&self, uid: i64, from: State, to: State, fields: &Fields, now_ms: i64) -> Result<Transition>;
+    async fn transition(
+        &self,
+        uid: i64,
+        from: State,
+        to: State,
+        fields: &Fields,
+        now_ms: i64,
+    ) -> Result<Transition>;
 
     /// R98: `queued`/`leased` chưa publish ⇒ `cancelled`; `queued` đã publish ⇒ `hold = 1` + `TooLate`.
     async fn cancel(&self, uid: i64, now_ms: i64) -> Result<Cancel>;
 
     /// Huỷ theo origin; không có job ⇒ ghi tombstone `cancelled` hết hạn ở `valid_until` (unix s).
-    async fn cancel_by_origin(&self, namespace: &str, origin: &Origin, valid_until: i64, now_ms: i64) -> Result<Cancel>;
+    async fn cancel_by_origin(
+        &self,
+        namespace: &str,
+        origin: &Origin,
+        valid_until: i64,
+        now_ms: i64,
+    ) -> Result<Cancel>;
 
     /// Đặt `published_at` cho job còn `queued` chưa publish (R99, node tự publish). `false` nếu không đổi gì.
     async fn publish(&self, uid: i64, now_ms: i64) -> Result<bool>;
@@ -648,7 +756,13 @@ pub trait Backend: Send + Sync {
 
     /// Set-auditor closing review C2b (store.md §4 `auditor_hold`): hold job `job_id`'s bit-32 confirm for `held`, with
     /// fencing; a later hold of the same job replaces it.
-    async fn hold_auditor(&self, chain_key: &str, job_id: i64, held: &AuditorHold, now_ms: i64) -> Result<()>;
+    async fn hold_auditor(
+        &self,
+        chain_key: &str,
+        job_id: i64,
+        held: &AuditorHold,
+        now_ms: i64,
+    ) -> Result<()>;
 
     /// The proposal job `job_id`'s confirm is held for, if any.
     async fn auditor_hold(&self, chain_key: &str, job_id: i64) -> Result<Option<AuditorHold>>;
@@ -658,7 +772,12 @@ pub trait Backend: Send + Sync {
 
     /// Janitor: job kết thúc với `updated_at < now − job_retention` VÀ `valid_until < now − 86 400`;
     /// `job_event`/`feed_item` cũ hơn `feed_retention`. Trả số dòng job đã xoá.
-    async fn purge(&self, now_ms: i64, job_retention_secs: i64, feed_retention_secs: i64) -> Result<u64>;
+    async fn purge(
+        &self,
+        now_ms: i64,
+        job_retention_secs: i64,
+        feed_retention_secs: i64,
+    ) -> Result<u64>;
 
     /// `seq` cao nhất đã purge của `job_event`/`feed_item` (0 = chưa purge gì). R93: `cursor < floor` ⇒ `410`.
     async fn purge_floor(&self, feed: &str) -> Result<i64>;
@@ -680,14 +799,22 @@ pub trait Backend: Send + Sync {
 }
 
 pub fn now_ms() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 /// Janitor: `check_owner` mỗi `check_every` (A1.1, 2 s ở `main.rs`), purge mỗi `purge_every` (60 s). Mất quyền
 /// chủ (`NotOwner`, `Owned`) là lỗi chết: trả `Err`, `main` thoát, supervisor khởi động lại — process bị fence
 /// không chạy tiếp các đường legacy. Lỗi DB khác chỉ cảnh báo.
-pub async fn janitor(store: Store, check_every: Duration, purge_every: Duration, job_retention_secs: i64,
-                     feed_retention_secs: i64) -> Result<()> {
+pub async fn janitor(
+    store: Store,
+    check_every: Duration,
+    purge_every: Duration,
+    job_retention_secs: i64,
+    feed_retention_secs: i64,
+) -> Result<()> {
     let fatal = |e: StoreError| match e {
         StoreError::NotOwner | StoreError::Owned(_) => Err(e),
         e => {
@@ -705,7 +832,10 @@ pub async fn janitor(store: Store, check_every: Duration, purge_every: Duration,
             continue;
         }
         last_purge = tokio::time::Instant::now();
-        match store.purge(now_ms(), job_retention_secs, feed_retention_secs).await {
+        match store
+            .purge(now_ms(), job_retention_secs, feed_retention_secs)
+            .await
+        {
             Ok(n) if n > 0 => tracing::info!(purged = n, "store janitor"),
             Ok(_) => {}
             Err(e) => fatal(e)?,

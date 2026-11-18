@@ -12,15 +12,15 @@ pub mod venue;
 use std::collections::HashMap;
 
 use alloy::primitives::{keccak256, Address, Bytes, B256, U256, U512};
-use alloy::sol_types::{Eip712Domain, SolStruct};
 use alloy::sol_types::SolValue;
+use alloy::sol_types::{Eip712Domain, SolStruct};
 use anyhow::{anyhow, bail, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub use crate::abi::{
-    CancelDexOrder, CancelUAOrder, DexLeg, DexOrder, ISCaaSDex, InvalidateNonces, Settlement, TradeOrder, UAInvalidateNonces, UASig,
-    UATradeOrder,
+    CancelDexOrder, CancelUAOrder, DexLeg, DexOrder, ISCaaSDex, InvalidateNonces, Settlement,
+    TradeOrder, UAInvalidateNonces, UASig, UATradeOrder,
 };
 use crate::metatx::{addr, b32, uint};
 
@@ -38,7 +38,10 @@ pub const CLOSED_MARKETS: u8 = 29;
 
 /// The DEX's market rule now (CTR-DEX-32): `true` when bit 29 `CLOSED_MARKETS` is set. Unreadable is the caller's error, never
 /// "open" (fail closed).
-pub async fn dex_closed(chain: &crate::chain::Chain, dex: Address) -> std::result::Result<bool, crate::chain::SimError> {
+pub async fn dex_closed(
+    chain: &crate::chain::Chain,
+    dex: Address,
+) -> std::result::Result<bool, crate::chain::SimError> {
     let f = chain.call_view(dex, ISCaaSDex::featuresCall {}).await?;
     Ok(f.bit(CLOSED_MARKETS as usize))
 }
@@ -46,11 +49,19 @@ pub async fn dex_closed(chain: &crate::chain::Chain, dex: Address) -> std::resul
 /// A token's leg shape by the factory (CTR-DEX-18, CTR-DEX-32): SCaaS (shape 1) iff the factory made it from a registered
 /// release, `versionOf(token).version != 0`; else outside (shape 0). Never the DEX's `tokenKind` (0 for a pair never listed)
 /// and never a release's deprecation.
-pub async fn kind_by_factory(chain: &crate::chain::Chain, factory: Address, token: Address)
-    -> std::result::Result<u8, crate::chain::SimError>
-{
-    let v = chain.call_view(factory, crate::abi::IOpenFactory::versionOfCall { token }).await?;
-    Ok(if v.version != 0 { KIND_SCAAS } else { KIND_OUTSIDE })
+pub async fn kind_by_factory(
+    chain: &crate::chain::Chain,
+    factory: Address,
+    token: Address,
+) -> std::result::Result<u8, crate::chain::SimError> {
+    let v = chain
+        .call_view(factory, crate::abi::IOpenFactory::versionOfCall { token })
+        .await?;
+    Ok(if v.version != 0 {
+        KIND_SCAAS
+    } else {
+        KIND_OUTSIDE
+    })
 }
 /// Whole-book cap of resting orders: a valid order is almost free for its signer (gasless).
 pub const MAX_RESTING: usize = 10_000;
@@ -72,7 +83,8 @@ pub fn domain(name: &str, chain_id: u64, contract: Address, chain_uid: B256) -> 
 }
 
 /// `UAKinds.PURPOSE_TRADE`: the purpose a SCaaS token's order, its cancel and its invalidation are authorized under.
-pub const PURPOSE_TRADE: B256 = alloy::primitives::b256!("c9e1f4425dfd623d47306639b52fc06a544c0894eddfea71bd35af4fa4fdc29f");
+pub const PURPOSE_TRADE: B256 =
+    alloy::primitives::b256!("c9e1f4425dfd623d47306639b52fc06a544c0894eddfea71bd35af4fa4fdc29f");
 
 /// A SCaaS sell token's order hash: the `UATradeOrder` in the token's own domain (`tradeOrderDigest`).
 pub fn trade_order_hash(token_domain: &Eip712Domain, o: &UATradeOrder) -> B256 {
@@ -87,7 +99,11 @@ pub fn liquidity_order_hash(dex_domain: &Eip712Domain, o: &crate::abi::Liquidity
 }
 
 pub fn dex_order_hash(dex_domain: &Eip712Domain, sell: Address, o: &TradeOrder) -> B256 {
-    DexOrder { sellToken: sell, order: o.clone() }.eip712_signing_hash(dex_domain)
+    DexOrder {
+        sellToken: sell,
+        order: o.clone(),
+    }
+    .eip712_signing_hash(dex_domain)
 }
 
 /// `CancelUAOrder(UATradeOrder order)` (typed-signing C6, nested) in the sell token's domain.
@@ -97,25 +113,51 @@ pub fn cancel_digest(d: &Eip712Domain, o: &UATradeOrder) -> B256 {
 
 /// `CancelDexOrder(DexOrder order)` in the DEX's domain: an outside-token order.
 pub fn cancel_dex_digest(d: &Eip712Domain, sell: Address, o: &TradeOrder) -> B256 {
-    CancelDexOrder { order: DexOrder { sellToken: sell, order: o.clone() } }.eip712_signing_hash(d)
+    CancelDexOrder {
+        order: DexOrder {
+            sellToken: sell,
+            order: o.clone(),
+        },
+    }
+    .eip712_signing_hash(d)
 }
 
 /// The DEX's `InvalidateNonces` (outside-token orders, an address).
 pub fn invalidate_digest(d: &Eip712Domain, from: Address, batch: U256, min: U256) -> B256 {
-    InvalidateNonces { from, batch, minNonce: min }.eip712_signing_hash(d)
+    InvalidateNonces {
+        from,
+        batch,
+        minNonce: min,
+    }
+    .eip712_signing_hash(d)
 }
 
 /// A SCaaS token's `UAInvalidateNonces` (its orders, an id).
 pub fn ua_invalidate_digest(d: &Eip712Domain, from: B256, batch: U256, min: U256) -> B256 {
-    UAInvalidateNonces { from, batch, minNonce: min }.eip712_signing_hash(d)
+    UAInvalidateNonces {
+        from,
+        batch,
+        minNonce: min,
+    }
+    .eip712_signing_hash(d)
 }
 
 /// A leg's order in the one form (`SCaaSDex._decode`): a `TradeOrder`'s `from` and `destination` zero-padded, the same words.
 pub fn canon(o: &TradeOrder) -> UATradeOrder {
     UATradeOrder {
-        from: o.from.into_word(), receiveToken: o.receiveToken, amount: o.amount, receiveAmount: o.receiveAmount,
-        minFill: o.minFill, fee: o.fee, relayer: o.relayer, dex: o.dex, destination: o.destination.into_word(), flags: o.flags,
-        batch: o.batch, nonce: o.nonce, validUntil: o.validUntil,
+        from: o.from.into_word(),
+        receiveToken: o.receiveToken,
+        amount: o.amount,
+        receiveAmount: o.receiveAmount,
+        minFill: o.minFill,
+        fee: o.fee,
+        relayer: o.relayer,
+        dex: o.dex,
+        destination: o.destination.into_word(),
+        flags: o.flags,
+        batch: o.batch,
+        nonce: o.nonce,
+        validUntil: o.validUntil,
     }
 }
 
@@ -123,9 +165,19 @@ pub fn canon(o: &TradeOrder) -> UATradeOrder {
 /// addresses zero-padded.
 pub fn trade_of(o: &UATradeOrder) -> TradeOrder {
     TradeOrder {
-        from: Address::from_word(o.from), receiveToken: o.receiveToken, amount: o.amount, receiveAmount: o.receiveAmount,
-        minFill: o.minFill, fee: o.fee, relayer: o.relayer, dex: o.dex, destination: Address::from_word(o.destination),
-        flags: o.flags, batch: o.batch, nonce: o.nonce, validUntil: o.validUntil,
+        from: Address::from_word(o.from),
+        receiveToken: o.receiveToken,
+        amount: o.amount,
+        receiveAmount: o.receiveAmount,
+        minFill: o.minFill,
+        fee: o.fee,
+        relayer: o.relayer,
+        dex: o.dex,
+        destination: Address::from_word(o.destination),
+        flags: o.flags,
+        batch: o.batch,
+        nonce: o.nonce,
+        validUntil: o.validUntil,
     }
 }
 
@@ -174,8 +226,13 @@ pub fn ua_sig(j: &Value) -> Result<UASig> {
 
 /// The inverse of [`ua_sig`].
 pub fn ua_sig_json(a: &UASig) -> Value {
-    let ty: alloy::dyn_abi::DynSolType = "(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])".parse().expect("the UASig type");
-    crate::typed::to_json("UASig", &ty.abi_decode(&a.abi_encode()).expect("its own encoding"))
+    let ty: alloy::dyn_abi::DynSolType = "(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])"
+        .parse()
+        .expect("the UASig type");
+    crate::typed::to_json(
+        "UASig",
+        &ty.abi_decode(&a.abi_encode()).expect("its own encoding"),
+    )
 }
 
 // ---------------------------------------------------------------------------------- wire
@@ -221,12 +278,25 @@ impl WireOrder {
 
     /// A `UATradeOrder`: `from` and `destination` exactly 32 bytes (an address is a `TradeOrder`'s, refused here).
     pub fn to_ua(&self) -> Result<UATradeOrder> {
-        let o = Self { from: format!("{:#x}", Address::ZERO), destination: format!("{:#x}", Address::ZERO), ..self.clone() }.to_sol()?;
-        Ok(UATradeOrder { from: b32(&self.from)?, destination: b32(&self.destination)?, ..canon(&o) })
+        let o = Self {
+            from: format!("{:#x}", Address::ZERO),
+            destination: format!("{:#x}", Address::ZERO),
+            ..self.clone()
+        }
+        .to_sol()?;
+        Ok(UATradeOrder {
+            from: b32(&self.from)?,
+            destination: b32(&self.destination)?,
+            ..canon(&o)
+        })
     }
 
     pub fn from_ua(o: &UATradeOrder) -> Self {
-        Self { from: format!("{:#x}", o.from), destination: format!("{:#x}", o.destination), ..Self::from_sol(&trade_of(o)) }
+        Self {
+            from: format!("{:#x}", o.from),
+            destination: format!("{:#x}", o.destination),
+            ..Self::from_sol(&trade_of(o))
+        }
     }
 
     pub fn from_sol(o: &TradeOrder) -> Self {
@@ -282,7 +352,11 @@ fn zero() -> String {
 }
 
 pub fn pair(a: Address, b: Address) -> (Address, Address) {
-    if a < b { (a, b) } else { (b, a) }
+    if a < b {
+        (a, b)
+    } else {
+        (b, a)
+    }
 }
 
 // ---------------------------------------------------------------------------------- book
@@ -344,7 +418,10 @@ impl Row {
     pub fn resting(&self) -> Result<Resting> {
         let (order, auth) = match &self.auth {
             Some(a) if self.signature.is_empty() => (self.order.to_ua()?, Auth::Ua(ua_sig(a)?)),
-            None => (canon(&self.order.to_sol()?), Auth::Sig(hex_bytes(&self.signature)?)),
+            None => (
+                canon(&self.order.to_sol()?),
+                Auth::Sig(hex_bytes(&self.signature)?),
+            ),
             Some(_) => bail!("a row carries auth (shape 1) or signature (shape 0), not both"),
         };
         Ok(Resting {
@@ -376,12 +453,26 @@ impl PlannedSettlement {
         // (`SCaaSDex` reads the pair of the shape)
         let leg = |r: &Resting, fill: U256| match &r.auth {
             Auth::Ua(a) => DexLeg {
-                sellToken: r.sell, shape: 1, order: trade_of(&empty_ua_order()), uaOrder: r.order.clone(), sig: Bytes::new(),
-                auth: a.clone(), fill,
+                sellToken: r.sell,
+                shape: 1,
+                order: trade_of(&empty_ua_order()),
+                uaOrder: r.order.clone(),
+                sig: Bytes::new(),
+                auth: a.clone(),
+                fill,
             },
             Auth::Sig(s) => DexLeg {
-                sellToken: r.sell, shape: 0, order: trade_of(&r.order), uaOrder: empty_ua_order(), sig: s.clone(),
-                auth: UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] }, fill,
+                sellToken: r.sell,
+                shape: 0,
+                order: trade_of(&r.order),
+                uaOrder: empty_ua_order(),
+                sig: s.clone(),
+                auth: UASig {
+                    keyData: Bytes::new(),
+                    signature: Bytes::new(),
+                    members: vec![],
+                },
+                fill,
             },
         };
         Settlement {
@@ -397,14 +488,31 @@ impl PlannedSettlement {
     }
 
     pub fn valid_until(&self) -> U256 {
-        self.makers.iter().map(|(m, _, _)| m.order.validUntil).chain([self.taker.order.validUntil]).min().unwrap_or_default()
+        self.makers
+            .iter()
+            .map(|(m, _, _)| m.order.validUntil)
+            .chain([self.taker.order.validUntil])
+            .min()
+            .unwrap_or_default()
     }
 }
 
 fn empty_ua_order() -> UATradeOrder {
-    UATradeOrder { from: B256::ZERO, receiveToken: Address::ZERO, amount: U256::ZERO, receiveAmount: U256::ZERO, minFill: U256::ZERO,
-        fee: U256::ZERO, relayer: Address::ZERO, dex: Address::ZERO, destination: B256::ZERO, flags: 0, batch: U256::ZERO,
-        nonce: U256::ZERO, validUntil: U256::ZERO }
+    UATradeOrder {
+        from: B256::ZERO,
+        receiveToken: Address::ZERO,
+        amount: U256::ZERO,
+        receiveAmount: U256::ZERO,
+        minFill: U256::ZERO,
+        fee: U256::ZERO,
+        relayer: Address::ZERO,
+        dex: Address::ZERO,
+        destination: B256::ZERO,
+        flags: 0,
+        batch: U256::ZERO,
+        nonce: U256::ZERO,
+        validUntil: U256::ZERO,
+    }
 }
 
 #[derive(Debug, Default, PartialEq)]
@@ -432,7 +540,11 @@ struct MarketBook {
 
 impl MarketBook {
     fn side_mut(&mut self, sell: Address) -> &mut Vec<Resting> {
-        if sell == self.cfg.base { &mut self.asks } else { &mut self.bids }
+        if sell == self.cfg.base {
+            &mut self.asks
+        } else {
+            &mut self.bids
+        }
     }
 }
 
@@ -519,7 +631,9 @@ fn tag(taker: &Resting, salt: u64, n: u64) -> B256 {
 
 fn random_u64() -> u64 {
     use std::hash::{BuildHasher, Hasher};
-    std::collections::hash_map::RandomState::new().build_hasher().finish()
+    std::collections::hash_map::RandomState::new()
+        .build_hasher()
+        .finish()
 }
 
 #[derive(Debug, Clone, Default)]
@@ -537,9 +651,24 @@ impl Book {
     pub fn new(markets: Vec<MarketCfg>) -> Self {
         let markets = markets
             .into_iter()
-            .map(|cfg| (pair(cfg.base, cfg.quote), MarketBook { cfg, asks: vec![], bids: vec![] }))
+            .map(|cfg| {
+                (
+                    pair(cfg.base, cfg.quote),
+                    MarketBook {
+                        cfg,
+                        asks: vec![],
+                        bids: vec![],
+                    },
+                )
+            })
             .collect();
-        Self { markets, next_seq: 1, salt: random_u64(), made: 0, pending: HashMap::new() }
+        Self {
+            markets,
+            next_seq: 1,
+            salt: random_u64(),
+            made: 0,
+            pending: HashMap::new(),
+        }
     }
 
     /// What of `h` is planned and not yet final or failed.
@@ -606,7 +735,9 @@ impl Book {
     }
 
     fn all(&self) -> impl Iterator<Item = &Resting> {
-        self.markets.values().flat_map(|m| m.asks.iter().chain(m.bids.iter()))
+        self.markets
+            .values()
+            .flat_map(|m| m.asks.iter().chain(m.bids.iter()))
     }
 
     pub fn len(&self) -> usize {
@@ -629,12 +760,17 @@ impl Book {
 
     /// Σ of `sell` the open orders of `from` can still pull (NODE-DEX-07; the fee is on the received side).
     pub fn committed(&self, from: B256, sell: Address) -> U256 {
-        self.all().filter(|r| r.order.from == from && r.sell == sell).map(|r| r.remaining).sum()
+        self.all()
+            .filter(|r| r.order.from == from && r.sell == sell)
+            .map(|r| r.remaining)
+            .sum()
     }
 
     /// Insert by (best price, `seq`). The same hash already there ⇒ add `remaining` (a failed fill handed back).
     fn insert(&mut self, r: Resting) {
-        let Some(mb) = self.markets.get_mut(&pair(r.sell, r.order.receiveToken)) else { return };
+        let Some(mb) = self.markets.get_mut(&pair(r.sell, r.order.receiveToken)) else {
+            return;
+        };
         let side = mb.side_mut(r.sell);
         if let Some(e) = side.iter_mut().find(|e| e.hash == r.hash) {
             e.remaining = (e.remaining + r.remaining).min(e.order.amount);
@@ -642,7 +778,9 @@ impl Book {
         }
         let at = side
             .iter()
-            .position(|e| better(&r.order, &e.order) || (!better(&e.order, &r.order) && r.seq < e.seq))
+            .position(|e| {
+                better(&r.order, &e.order) || (!better(&e.order, &r.order) && r.seq < e.seq)
+            })
             .unwrap_or(side.len());
         side.insert(at, r);
     }
@@ -663,7 +801,11 @@ impl Book {
     /// never handed back.
     pub fn restore(&mut self, r: Resting, fill: U256) -> Placement {
         if r.order.flags & FLAG_IOC != 0 {
-            return Placement { dropped: fill, seq: r.seq, ..Default::default() };
+            return Placement {
+                dropped: fill,
+                seq: r.seq,
+                ..Default::default()
+            };
         }
         let current = self.remove(r.hash).map(|x| x.remaining).unwrap_or_default();
         let remaining = (current + fill).min(r.order.amount);
@@ -689,10 +831,21 @@ impl Book {
 
     /// Drop the orders an `InvalidateNonces(from, batch, min)` closed: `from`'s orders on that lane with `nonce < min`,
     /// selling one of `sells` (the token's own orders, or every outside token for the DEX's lane).
-    pub fn drop_below(&mut self, from: B256, batch: U256, min: U256, sells: &dyn Fn(Address) -> bool) -> Vec<Resting> {
+    pub fn drop_below(
+        &mut self,
+        from: B256,
+        batch: U256,
+        min: U256,
+        sells: &dyn Fn(Address) -> bool,
+    ) -> Vec<Resting> {
         let hs: Vec<B256> = self
             .all()
-            .filter(|r| r.order.from == from && r.order.batch == batch && r.order.nonce < min && sells(r.sell))
+            .filter(|r| {
+                r.order.from == from
+                    && r.order.batch == batch
+                    && r.order.nonce < min
+                    && sells(r.sell)
+            })
             .map(|r| r.hash)
             .collect();
         hs.iter().filter_map(|h| self.remove(*h)).collect()
@@ -713,13 +866,19 @@ impl Book {
         now: u64,
     ) -> Result<()> {
         let cap = U256::from(1u8) << 128;
-        if o.amount.is_zero() || o.receiveAmount.is_zero() || o.amount >= cap || o.receiveAmount >= cap {
+        if o.amount.is_zero()
+            || o.receiveAmount.is_zero()
+            || o.amount >= cap
+            || o.receiveAmount >= cap
+        {
             bail!("amounts must be in (0, 2^128)");
         }
         if o.nonce >= cap {
             bail!("nonce must be below 2^128 (no lane floor can reach a larger one)");
         }
-        if o.validUntil <= U256::from(now + MIN_TTL_SECS) || o.validUntil > U256::from(now + MAX_TTL_SECS) {
+        if o.validUntil <= U256::from(now + MIN_TTL_SECS)
+            || o.validUntil > U256::from(now + MAX_TTL_SECS)
+        {
             bail!("validUntil must be within ({MIN_TTL_SECS} s, {MAX_TTL_SECS} s] from now");
         }
         if o.flags & !(FLAG_IOC | FLAG_LISTED_POOLS) != 0 {
@@ -738,7 +897,9 @@ impl Book {
         if o.from == sell.into_word() || o.dex == sell {
             bail!("an order cannot sell its own signer or the DEX");
         }
-        let Some(m) = self.market_of(sell, o.receiveToken) else { bail!("no market for this pair") };
+        let Some(m) = self.market_of(sell, o.receiveToken) else {
+            bail!("no market for this pair")
+        };
         if sell == o.receiveToken {
             bail!("sell and receive token are the same");
         }
@@ -748,13 +909,24 @@ impl Book {
         // A fee below a role's rate is never selected in that role (NODE-DEX-15): an IOC order only takes; a GTC order
         // rests and makes, and takes when it crosses on arrival.
         let rests = o.flags & FLAG_IOC == 0;
-        let (maker_ok, taker_ok) = (o.fee >= U256::from(m.maker_fee_ppm), o.fee >= U256::from(m.taker_fee_ppm));
-        let fee_ok = if rests { maker_ok && (taker_ok || !self.would_cross(sell, o)) } else { taker_ok };
+        let (maker_ok, taker_ok) = (
+            o.fee >= U256::from(m.maker_fee_ppm),
+            o.fee >= U256::from(m.taker_fee_ppm),
+        );
+        let fee_ok = if rests {
+            maker_ok && (taker_ok || !self.would_cross(sell, o))
+        } else {
+            taker_ok
+        };
         if !fee_ok {
             bail!("FEE_TOO_LOW: the signed fee is below the market's rate for the role this order would play");
         }
         let min = uint(&m.min_base_amount)?;
-        let base_amt = if sell == m.base { o.amount } else { o.receiveAmount };
+        let base_amt = if sell == m.base {
+            o.amount
+        } else {
+            o.receiveAmount
+        };
         if base_amt < min {
             bail!("below the market minimum {min}");
         }
@@ -780,32 +952,62 @@ impl Book {
 
     /// An order of another signer on the opposite side crosses `o` (it would take on arrival).
     fn would_cross(&self, sell: Address, o: &UATradeOrder) -> bool {
-        self.markets.get(&pair(sell, o.receiveToken)).is_some_and(|mb| {
-            let opposite = if sell == mb.cfg.base { &mb.bids } else { &mb.asks };
-            opposite.iter().any(|r| r.order.from != o.from && crosses(&r.order, o))
-        })
+        self.markets
+            .get(&pair(sell, o.receiveToken))
+            .is_some_and(|mb| {
+                let opposite = if sell == mb.cfg.base {
+                    &mb.bids
+                } else {
+                    &mb.asks
+                };
+                opposite
+                    .iter()
+                    .any(|r| r.order.from != o.from && crosses(&r.order, o))
+            })
     }
 
     /// Match `taker` (hash and on-chain `remaining` known) into the book. Changes the book: resting makers shrink or
     /// leave, a GTC remainder rests. Call it on a COPY to try first.
-    pub fn place(&mut self, hash: B256, sell: Address, order: UATradeOrder, auth: Auth, remaining: U256) -> Placement {
+    pub fn place(
+        &mut self,
+        hash: B256,
+        sell: Address,
+        order: UATradeOrder,
+        auth: Auth,
+        remaining: U256,
+    ) -> Placement {
         let seq = self.next_seq;
         self.next_seq += 1;
-        self.matching(Resting { hash, sell, order, auth, remaining, seq })
+        self.matching(Resting {
+            hash,
+            sell,
+            order,
+            auth,
+            remaining,
+            seq,
+        })
     }
 
     fn matching(&mut self, mut t: Resting) -> Placement {
-        let mut out = Placement { seq: t.seq, ..Default::default() };
+        let mut out = Placement {
+            seq: t.seq,
+            ..Default::default()
+        };
         let Some(mb) = self.markets.get_mut(&pair(t.sell, t.order.receiveToken)) else {
             out.dropped = t.remaining;
             return out;
         };
         let pending = &self.pending;
         let unmined = |h: B256| pending.get(&h).is_some_and(|p| !p.is_zero());
-        let (market_id, maker_ppm, taker_ppm) = (mb.cfg.id, mb.cfg.maker_fee_ppm, mb.cfg.taker_fee_ppm);
+        let (market_id, maker_ppm, taker_ppm) =
+            (mb.cfg.id, mb.cfg.maker_fee_ppm, mb.cfg.taker_fee_ppm);
         let base = mb.cfg.base;
         let min_base = uint(&mb.cfg.min_base_amount).unwrap_or_default();
-        let opposite = if t.sell == base { &mut mb.bids } else { &mut mb.asks };
+        let opposite = if t.sell == base {
+            &mut mb.bids
+        } else {
+            &mut mb.asks
+        };
         let mut makers: Vec<(Resting, U256, U256)> = vec![];
         let mut taken = U256::ZERO;
         let can_take = t.order.fee >= U256::from(taker_ppm);
@@ -818,12 +1020,16 @@ impl Book {
                 if r.order.from == t.order.from || r.order.fee < U256::from(maker_ppm) {
                     continue;
                 }
-                if maker_receives(&r.order, r.remaining).is_zero() || mul(r.remaining, r.order.receiveAmount) < U512::from(r.order.amount) {
+                if maker_receives(&r.order, r.remaining).is_zero()
+                    || mul(r.remaining, r.order.receiveAmount) < U512::from(r.order.amount)
+                {
                     out.dust.push(r.clone()); // NODE-DEX-05: cannot receive one unit for its whole remainder
                     continue;
                 }
                 let left = t.remaining - taken;
-                let x = r.remaining.min(to256(mul(left, r.order.amount) / U512::from(r.order.receiveAmount)));
+                let x = r.remaining.min(to256(
+                    mul(left, r.order.amount) / U512::from(r.order.receiveAmount),
+                ));
                 if x.is_zero() {
                     break; // the taker's rest buys less than one unit here
                 }
@@ -832,10 +1038,20 @@ impl Book {
                 // unless this fill closes it ON CHAIN (nothing of it still unmined: `amount − pulled` counts only
                 // mined fills); a deeper maker may still fit
                 let leg_base = if r.sell == base { x } else { y };
-                if (x < min_fill(&r.order) || leg_base < min_base) && (x < r.remaining || unmined(r.hash)) {
+                if (x < min_fill(&r.order) || leg_base < min_base)
+                    && (x < r.remaining || unmined(r.hash))
+                {
                     continue;
                 }
-                if !limits_ok(r, &Resting { remaining: left, ..t.clone() }, x, y) {
+                if !limits_ok(
+                    r,
+                    &Resting {
+                        remaining: left,
+                        ..t.clone()
+                    },
+                    x,
+                    y,
+                ) {
                     break; // rounding at tiny amounts: never a leg the contract would refuse
                 }
                 makers.push((r.clone(), x, y));
@@ -850,8 +1066,8 @@ impl Book {
                 opposite.remove(i);
             }
         }
-        let settles =
-            !makers.is_empty() && (taken >= min_fill(&t.order) || (taken == t.remaining && !unmined(t.hash)));
+        let settles = !makers.is_empty()
+            && (taken >= min_fill(&t.order) || (taken == t.remaining && !unmined(t.hash)));
         if settles {
             for (m, x, _) in &makers {
                 *self.pending.entry(m.hash).or_default() += *x;
@@ -878,7 +1094,10 @@ impl Book {
         }
         // A remainder that still crosses could not meet a crossing order's minimum fill: it would sit there locked, so
         // it is cancelled. One that may not take (a fee under the taker rate, only on a hand-back) rests.
-        let crossed = can_take && opposite.iter().any(|r| r.order.from != t.order.from && crosses(&r.order, &t.order));
+        let crossed = can_take
+            && opposite
+                .iter()
+                .any(|r| r.order.from != t.order.from && crosses(&r.order, &t.order));
         if t.order.flags & FLAG_IOC != 0 || crossed {
             out.dropped = t.remaining;
             return out;
@@ -895,7 +1114,11 @@ impl Book {
     }
 
     /// The `min_fill` bucket: the same levels for the orders `depth` leaves out.
-    pub fn depth_min_fill(&self, market_id: i64, levels: usize) -> Option<(Vec<Level>, Vec<Level>)> {
+    pub fn depth_min_fill(
+        &self,
+        market_id: i64,
+        levels: usize,
+    ) -> Option<(Vec<Level>, Vec<Level>)> {
         self.levels(market_id, levels, true)
     }
 
@@ -910,7 +1133,10 @@ impl Book {
                 let min_in_base = if is_ask {
                     r.order.minFill
                 } else {
-                    to256(div_ceil(mul(r.order.minFill, r.order.receiveAmount), U512::from(r.order.amount)))
+                    to256(div_ceil(
+                        mul(r.order.minFill, r.order.receiveAmount),
+                        U512::from(r.order.amount),
+                    ))
                 };
                 if (min_in_base > min_base) != big {
                     continue;
@@ -932,7 +1158,11 @@ impl Book {
                 } else if out.len() == levels {
                     break;
                 } else {
-                    out.push(Level { price, base_amount: base_rem, orders: 1 });
+                    out.push(Level {
+                        price,
+                        base_amount: base_rem,
+                        orders: 1,
+                    });
                 }
             }
             out
@@ -960,7 +1190,11 @@ pub fn price_str(quote: U256, base: U256, base_dec: u8, quote_dec: u8) -> String
     let v = format!("{v:0>19}");
     let (int, frac) = v.split_at(v.len() - 18);
     let frac = frac.trim_end_matches('0');
-    if frac.is_empty() { int.to_string() } else { format!("{int}.{frac}") }
+    if frac.is_empty() {
+        int.to_string()
+    } else {
+        format!("{int}.{frac}")
+    }
 }
 
 #[cfg(test)]
@@ -976,8 +1210,16 @@ mod tests {
     const NOW: u64 = 1_800_000_000;
 
     fn market() -> MarketCfg {
-        MarketCfg { id: 1, base: BASE, quote: QUOTE, base_decimals: 18, quote_decimals: 6, maker_fee_ppm: 0,
-                    taker_fee_ppm: 0, min_base_amount: "0".into() }
+        MarketCfg {
+            id: 1,
+            base: BASE,
+            quote: QUOTE,
+            base_decimals: 18,
+            quote_decimals: 6,
+            maker_fee_ppm: 0,
+            taker_fee_ppm: 0,
+            min_base_amount: "0".into(),
+        }
     }
 
     fn o(from: u8, receive: Address, amount: u64, receive_amount: u64, nonce: u64) -> UATradeOrder {
@@ -1004,7 +1246,11 @@ mod tests {
 
     /// The pure book never reads a signature: an empty shape-1 one.
     fn none() -> Auth {
-        Auth::Ua(UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] })
+        Auth::Ua(UASig {
+            keyData: Bytes::new(),
+            signature: Bytes::new(),
+            members: vec![],
+        })
     }
 
     fn hash_of(o: &UATradeOrder) -> B256 {
@@ -1012,7 +1258,11 @@ mod tests {
     }
 
     fn sell_of(o: &UATradeOrder) -> Address {
-        if o.receiveToken == QUOTE { BASE } else { QUOTE }
+        if o.receiveToken == QUOTE {
+            BASE
+        } else {
+            QUOTE
+        }
     }
 
     fn put(book: &mut Book, o: UATradeOrder) -> Placement {
@@ -1032,11 +1282,19 @@ mod tests {
 
     /// The old fixed floor, now signed: `minFill = amount − amount/2`.
     fn half(o: UATradeOrder) -> UATradeOrder {
-        UATradeOrder { minFill: o.amount - o.amount / U256::from(2u8), ..o }
+        UATradeOrder {
+            minFill: o.amount - o.amount / U256::from(2u8),
+            ..o
+        }
     }
 
     fn makers(p: &Placement) -> Vec<(B256, U256, U256)> {
-        p.settlement.as_ref().map_or(vec![], |s| s.makers.iter().map(|(m, x, y)| (m.order.from, *x, *y)).collect())
+        p.settlement.as_ref().map_or(vec![], |s| {
+            s.makers
+                .iter()
+                .map(|(m, x, y)| (m.order.from, *x, *y))
+                .collect()
+        })
     }
 
     fn word(k: &serde_json::Value, f: &str) -> String {
@@ -1049,45 +1307,112 @@ mod tests {
     /// calldata the venue sends: the maker leg shape 0, the taker leg shape 1.
     #[test]
     fn kat_hashes_and_calldata_match_forge() {
-        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm/test/vectors/dex_order_kat.json");
-        let k: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let p = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../smartcontracts/evm/test/vectors/dex_order_kat.json"
+        );
+        let k: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
         let a = |f: &str| Address::from_str(&word(&k, f)).unwrap();
         let uid = B256::from_str(&word(&k, "salt")).unwrap();
-        let maker = TradeOrder::abi_decode(&hex_bytes(&word(&k, "maker_order_abi")).unwrap()).unwrap();
-        let taker = canon(&TradeOrder::abi_decode(&hex_bytes(&word(&k, "taker_order_abi")).unwrap()).unwrap());
-        assert_ne!(taker.destination, B256::ZERO, "the taker's destination is signed: a non-zero one");
+        let maker =
+            TradeOrder::abi_decode(&hex_bytes(&word(&k, "maker_order_abi")).unwrap()).unwrap();
+        let taker = canon(
+            &TradeOrder::abi_decode(&hex_bytes(&word(&k, "taker_order_abi")).unwrap()).unwrap(),
+        );
+        assert_ne!(
+            taker.destination,
+            B256::ZERO,
+            "the taker's destination is signed: a non-zero one"
+        );
         let dd = domain("SCaaS Dex", 7622, a("dex"), uid);
         let hm = dex_order_hash(&dd, a("outside_token"), &maker);
         assert_eq!(format!("{hm:#x}"), word(&k, "dex_order_hash"));
         let td = domain("SCaaS MetaToken", 7622, a("token"), uid);
-        assert_eq!(format!("{:#x}", trade_order_hash(&td, &taker)), word(&k, "taker_order_hash"));
-        assert_eq!(format!("{:#x}", cancel_dex_digest(&dd, a("outside_token"), &maker)), word(&k, "cancel_digest"));
-        assert_eq!(format!("{:#x}", invalidate_digest(&dd, maker.from, U256::from(1), U256::from(5))),
-            word(&k, "invalidate_digest"));
+        assert_eq!(
+            format!("{:#x}", trade_order_hash(&td, &taker)),
+            word(&k, "taker_order_hash")
+        );
+        assert_eq!(
+            format!("{:#x}", cancel_dex_digest(&dd, a("outside_token"), &maker)),
+            word(&k, "cancel_digest")
+        );
+        assert_eq!(
+            format!(
+                "{:#x}",
+                invalidate_digest(&dd, maker.from, U256::from(1), U256::from(5))
+            ),
+            word(&k, "invalidate_digest")
+        );
         // the calldata: decode forge's, re-encode it here, byte for byte
         let settle = hex_bytes(&word(&k, "settle_calldata")).unwrap();
         let c = ISCaaSDex::mtxSettleCall::abi_decode(&settle).unwrap();
-        assert_eq!((c.s[0].makers[0].shape, c.s[0].taker.shape), (0, 1), "an outside maker, a SCaaS taker");
+        assert_eq!(
+            (c.s[0].makers[0].shape, c.s[0].taker.shape),
+            (0, 1),
+            "an outside maker, a SCaaS taker"
+        );
         assert_eq!(c.s[0].makers[0].order, maker);
         assert_eq!(c.s[0].taker.uaOrder, taker);
-        assert_eq!(ISCaaSDex::mtxSettleCall { s: c.s.clone() }.abi_encode(), settle.to_vec());
+        assert_eq!(
+            ISCaaSDex::mtxSettleCall { s: c.s.clone() }.abi_encode(),
+            settle.to_vec()
+        );
         // the venue's legs from parsed fields only (each in its one form, its signature in its shape's field): forge's bytes
         let rest = |l: &DexLeg| {
-            let (order, auth) =
-                if l.shape == 1 { (l.uaOrder.clone(), Auth::Ua(l.auth.clone())) } else { (canon(&l.order), Auth::Sig(l.sig.clone())) };
-            Resting { hash: B256::ZERO, sell: l.sellToken, order, auth, remaining: l.fill, seq: 0 }
+            let (order, auth) = if l.shape == 1 {
+                (l.uaOrder.clone(), Auth::Ua(l.auth.clone()))
+            } else {
+                (canon(&l.order), Auth::Sig(l.sig.clone()))
+            };
+            Resting {
+                hash: B256::ZERO,
+                sell: l.sellToken,
+                order,
+                auth,
+                remaining: l.fill,
+                seq: 0,
+            }
         };
         assert_eq!(c.s.len(), 1);
-        let planned = PlannedSettlement { tag: c.s[0].r#ref, market_id: 1, taker: rest(&c.s[0].taker), taker_fill: c.s[0].taker.fill,
-            makers: c.s[0].makers.iter().map(|m| (rest(m), m.fill, U256::ZERO)).collect() };
-        assert_eq!(ISCaaSDex::mtxSettleCall { s: vec![planned.to_settlement()] }.abi_encode(), settle.to_vec());
+        let planned = PlannedSettlement {
+            tag: c.s[0].r#ref,
+            market_id: 1,
+            taker: rest(&c.s[0].taker),
+            taker_fill: c.s[0].taker.fill,
+            makers: c.s[0]
+                .makers
+                .iter()
+                .map(|m| (rest(m), m.fill, U256::ZERO))
+                .collect(),
+        };
+        assert_eq!(
+            ISCaaSDex::mtxSettleCall {
+                s: vec![planned.to_settlement()]
+            }
+            .abi_encode(),
+            settle.to_vec()
+        );
         let cancel = hex_bytes(&word(&k, "cancel_orders_calldata")).unwrap();
         let c = ISCaaSDex::mtxCancelOrdersCall::abi_decode(&cancel).unwrap();
-        assert_eq!((c.orders[0].sellToken, &c.orders[0].order), (a("outside_token"), &maker));
-        assert_eq!(ISCaaSDex::mtxCancelOrdersCall { orders: c.orders, sigs: c.sigs }.abi_encode(), cancel.to_vec());
+        assert_eq!(
+            (c.orders[0].sellToken, &c.orders[0].order),
+            (a("outside_token"), &maker)
+        );
+        assert_eq!(
+            ISCaaSDex::mtxCancelOrdersCall {
+                orders: c.orders,
+                sigs: c.sigs
+            }
+            .abi_encode(),
+            cancel.to_vec()
+        );
         let inv = hex_bytes(&word(&k, "invalidate_calldata")).unwrap();
         let c = ISCaaSDex::mtxInvalidateNoncesCall::abi_decode(&inv).unwrap();
-        assert_eq!((c.from, c.batch, c.newMin), (maker.from, U256::from(1), U256::from(5)));
+        assert_eq!(
+            (c.from, c.batch, c.newMin),
+            (maker.from, U256::from(1), U256::from(5))
+        );
     }
 
     /// The token side of a SCaaS order (`uatrade_kat.json`, clientkeys, cross-checked by forge's `UATradeVectors.t.sol`): every
@@ -1095,36 +1420,81 @@ mod tests {
     /// purpose they are authorized under. Replaces the address rows of `legacy/ua-mtx-merge/trade_kat.json` (no token has them).
     #[test]
     fn ua_trade_kat_rows_match_the_vectors() {
-        let k: serde_json::Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/ua/uatrade_kat.json")).unwrap();
-        assert_eq!(format!("{PURPOSE_TRADE:#x}"), k["purposeTag"].as_str().unwrap());
+        let k: serde_json::Value = serde_json::from_str(include_str!(
+            "../../smartcontracts/vectors/ua/uatrade_kat.json"
+        ))
+        .unwrap();
+        assert_eq!(
+            format!("{PURPOSE_TRADE:#x}"),
+            k["purposeTag"].as_str().unwrap()
+        );
         assert_eq!(PURPOSE_TRADE, keccak256("scaas.ua.purpose.trade.v1"));
         let rows = k["rows"].as_array().unwrap();
         assert!(rows.len() > 5);
         for r in rows {
             let d = &r["order"]["domain"];
             let s = |v: &serde_json::Value| v.as_str().unwrap().to_string();
-            let td = domain(&s(&d["name"]), s(&d["chainId"]).parse().unwrap(), s(&d["verifyingContract"]).parse().unwrap(),
-                s(&d["salt"]).parse().unwrap());
+            let td = domain(
+                &s(&d["name"]),
+                s(&d["chainId"]).parse().unwrap(),
+                s(&d["verifyingContract"]).parse().unwrap(),
+                s(&d["salt"]).parse().unwrap(),
+            );
             let w: WireOrder = serde_json::from_value(r["order"]["message"].clone()).unwrap();
             let o = w.to_ua().unwrap();
             assert_eq!(WireOrder::from_ua(&o), w, "{}", r["name"]);
-            assert_eq!(format!("{:#x}", trade_order_hash(&td, &o)), s(&r["orderHash"]), "{}", r["name"]);
-            assert_eq!(format!("{:#x}", cancel_digest(&td, &o)), s(&r["cancelDigest"]), "{}", r["name"]);
+            assert_eq!(
+                format!("{:#x}", trade_order_hash(&td, &o)),
+                s(&r["orderHash"]),
+                "{}",
+                r["name"]
+            );
+            assert_eq!(
+                format!("{:#x}", cancel_digest(&td, &o)),
+                s(&r["cancelDigest"]),
+                "{}",
+                r["name"]
+            );
             let m = &r["invalidate"]["message"];
-            let h = ua_invalidate_digest(&td, s(&m["from"]).parse().unwrap(), U256::from_str(&s(&m["batch"])).unwrap(),
-                U256::from_str(&s(&m["minNonce"])).unwrap());
-            assert_eq!(format!("{h:#x}"), s(&r["invalidateDigest"]), "{}", r["name"]);
+            let h = ua_invalidate_digest(
+                &td,
+                s(&m["from"]).parse().unwrap(),
+                U256::from_str(&s(&m["batch"])).unwrap(),
+                U256::from_str(&s(&m["minNonce"])).unwrap(),
+            );
+            assert_eq!(
+                format!("{h:#x}"),
+                s(&r["invalidateDigest"]),
+                "{}",
+                r["name"]
+            );
             // a derived signer's `auth` is `abi.encode(keyData, signature)`: as a `UASig`, its explicit JSON round-trips it
             if r["name"] != "native" {
-                let (key_data, signature) = <(Bytes, Bytes)>::abi_decode_params(&hex_bytes(&s(&r["auth"])).unwrap()).unwrap();
-                let a = UASig { keyData: key_data, signature, members: vec![] };
+                let (key_data, signature) =
+                    <(Bytes, Bytes)>::abi_decode_params(&hex_bytes(&s(&r["auth"])).unwrap())
+                        .unwrap();
+                let a = UASig {
+                    keyData: key_data,
+                    signature,
+                    members: vec![],
+                };
                 assert_eq!(ua_sig(&ua_sig_json(&a)).unwrap(), a, "{}", r["name"]);
             }
         }
         // an msig's members, both levels
-        let inner = crate::abi::InnerSig { index: 2, sig: Bytes::from_static(&[7]) };
-        let m = UASig { keyData: Bytes::new(), signature: Bytes::new(),
-            members: vec![crate::abi::MemberSig { index: 1, members: vec![inner], sig: Bytes::from_static(&[8]) }] };
+        let inner = crate::abi::InnerSig {
+            index: 2,
+            sig: Bytes::from_static(&[7]),
+        };
+        let m = UASig {
+            keyData: Bytes::new(),
+            signature: Bytes::new(),
+            members: vec![crate::abi::MemberSig {
+                index: 1,
+                members: vec![inner],
+                sig: Bytes::from_static(&[8]),
+            }],
+        };
         assert_eq!(ua_sig(&ua_sig_json(&m)).unwrap(), m);
     }
 
@@ -1135,66 +1505,170 @@ mod tests {
         let o = ask(1, 100, 200, 1);
         let ua = WireOrder::from_ua(&o);
         let addr_form = WireOrder::from_sol(&trade_of(&o));
-        let auth = ua_sig_json(&UASig { keyData: Bytes::new(), signature: Bytes::from(vec![0x11; 65]), members: vec![] });
+        let auth = ua_sig_json(&UASig {
+            keyData: Bytes::new(),
+            signature: Bytes::from(vec![0x11; 65]),
+            members: vec![],
+        });
         let sig = hex_of(&[0x11; 65]);
         assert_eq!(order_of(KIND_SCAAS, &ua).unwrap(), o);
-        assert!(matches!(auth_of(KIND_SCAAS, None, Some(&auth)).unwrap(), Auth::Ua(_)));
-        let e = auth_of(KIND_SCAAS, Some(&sig), None).unwrap_err().to_string();
+        assert!(matches!(
+            auth_of(KIND_SCAAS, None, Some(&auth)).unwrap(),
+            Auth::Ua(_)
+        ));
+        let e = auth_of(KIND_SCAAS, Some(&sig), None)
+            .unwrap_err()
+            .to_string();
         assert!(e.starts_with("LEG_SHAPE"), "{e}");
-        assert!(auth_of(KIND_SCAAS, Some(&sig), Some(&auth)).unwrap_err().to_string().starts_with("LEG_SHAPE"), "both forms");
-        assert!(order_of(KIND_SCAAS, &addr_form).unwrap_err().to_string().contains("not a bytes32"), "an address from");
-        assert!(auth_of(0, None, Some(&auth)).unwrap_err().to_string().starts_with("TOKEN_NOT_SERVED"));
+        assert!(
+            auth_of(KIND_SCAAS, Some(&sig), Some(&auth))
+                .unwrap_err()
+                .to_string()
+                .starts_with("LEG_SHAPE"),
+            "both forms"
+        );
+        assert!(
+            order_of(KIND_SCAAS, &addr_form)
+                .unwrap_err()
+                .to_string()
+                .contains("not a bytes32"),
+            "an address from"
+        );
+        assert!(auth_of(0, None, Some(&auth))
+            .unwrap_err()
+            .to_string()
+            .starts_with("TOKEN_NOT_SERVED"));
         // the auth is the explicit UASig, strictly
         let mut extra = auth.clone();
         extra["sig"] = serde_json::json!("0x00");
-        assert!(auth_of(KIND_SCAAS, None, Some(&extra)).is_err(), "an unknown field");
+        assert!(
+            auth_of(KIND_SCAAS, None, Some(&extra)).is_err(),
+            "an unknown field"
+        );
     }
 
     /// An outside token's leg keeps the `TradeOrder` (shape 0, `signature`), signed as a `DexOrder` in the DEX's domain; its
     /// `auth` form is refused by name; in a settlement it is a shape-0 leg beside a shape-1 SCaaS leg.
     #[test]
     fn outside_leg_keeps_trade_order() {
-        let t = TradeOrder { from: Address::repeat_byte(1), receiveToken: QUOTE, amount: U256::from(10), receiveAmount: U256::from(20),
-            minFill: U256::ZERO, fee: U256::ZERO, relayer: RELAYER, dex: DEX, destination: Address::repeat_byte(7), flags: 0,
-            batch: U256::from(1), nonce: U256::from(1), validUntil: U256::from(NOW + 300) };
+        let t = TradeOrder {
+            from: Address::repeat_byte(1),
+            receiveToken: QUOTE,
+            amount: U256::from(10),
+            receiveAmount: U256::from(20),
+            minFill: U256::ZERO,
+            fee: U256::ZERO,
+            relayer: RELAYER,
+            dex: DEX,
+            destination: Address::repeat_byte(7),
+            flags: 0,
+            batch: U256::from(1),
+            nonce: U256::from(1),
+            validUntil: U256::from(NOW + 300),
+        };
         let w = WireOrder::from_sol(&t);
         assert_eq!(order_of(KIND_OUTSIDE, &w).unwrap(), canon(&t));
         assert_eq!(trade_of(&canon(&t)), t, "the same words");
-        assert!(order_of(KIND_OUTSIDE, &WireOrder::from_ua(&canon(&t))).is_err(), "a 32-byte from is no address");
+        assert!(
+            order_of(KIND_OUTSIDE, &WireOrder::from_ua(&canon(&t))).is_err(),
+            "a 32-byte from is no address"
+        );
         let sig = hex_of(&[0x22; 65]);
-        assert_eq!(auth_of(KIND_OUTSIDE, Some(&sig), None).unwrap(), Auth::Sig(Bytes::from(vec![0x22; 65])));
-        let auth = ua_sig_json(&UASig { keyData: Bytes::new(), signature: Bytes::from(vec![0x22; 65]), members: vec![] });
-        assert!(auth_of(KIND_OUTSIDE, None, Some(&auth)).unwrap_err().to_string().starts_with("LEG_SHAPE"));
-        assert!(auth_of(KIND_OUTSIDE, Some("0x1122"), None).is_err(), "signature length");
+        assert_eq!(
+            auth_of(KIND_OUTSIDE, Some(&sig), None).unwrap(),
+            Auth::Sig(Bytes::from(vec![0x22; 65]))
+        );
+        let auth = ua_sig_json(&UASig {
+            keyData: Bytes::new(),
+            signature: Bytes::from(vec![0x22; 65]),
+            members: vec![],
+        });
+        assert!(auth_of(KIND_OUTSIDE, None, Some(&auth))
+            .unwrap_err()
+            .to_string()
+            .starts_with("LEG_SHAPE"));
+        assert!(
+            auth_of(KIND_OUTSIDE, Some("0x1122"), None).is_err(),
+            "signature length"
+        );
         let mut b = Book::new(vec![market()]);
         let ask = canon(&t);
-        b.place(hash_of(&ask), BASE, ask.clone(), Auth::Sig(Bytes::from(vec![0x22; 65])), ask.amount);
-        let s = put(&mut b, bid(2, 20, 10, 1)).settlement.unwrap().to_settlement();
-        assert_eq!((s.makers[0].shape, &s.makers[0].order, &s.makers[0].sig), (0, &t, &Bytes::from(vec![0x22; 65])));
-        assert_eq!(s.makers[0].uaOrder, empty_ua_order(), "the other shape's pair zero");
-        assert_eq!((s.taker.shape, s.taker.order.from), (1, Address::ZERO), "the SCaaS taker: shape 1, its TradeOrder zero");
+        b.place(
+            hash_of(&ask),
+            BASE,
+            ask.clone(),
+            Auth::Sig(Bytes::from(vec![0x22; 65])),
+            ask.amount,
+        );
+        let s = put(&mut b, bid(2, 20, 10, 1))
+            .settlement
+            .unwrap()
+            .to_settlement();
+        assert_eq!(
+            (s.makers[0].shape, &s.makers[0].order, &s.makers[0].sig),
+            (0, &t, &Bytes::from(vec![0x22; 65]))
+        );
+        assert_eq!(
+            s.makers[0].uaOrder,
+            empty_ua_order(),
+            "the other shape's pair zero"
+        );
+        assert_eq!(
+            (s.taker.shape, s.taker.order.from),
+            (1, Address::ZERO),
+            "the SCaaS taker: shape 1, its TradeOrder zero"
+        );
         // the row keeps each form: rebuilt as it came in
         let mut b = Book::new(vec![market()]);
-        b.place(hash_of(&ask), BASE, ask.clone(), Auth::Sig(Bytes::from(vec![0x22; 65])), ask.amount);
+        b.place(
+            hash_of(&ask),
+            BASE,
+            ask.clone(),
+            Auth::Sig(Bytes::from(vec![0x22; 65])),
+            ask.amount,
+        );
         put(&mut b, bid(3, 10, 20, 1));
         let rows = b.rows();
-        assert_eq!((rows[0].auth.is_none(), rows[1].signature.is_empty()), (true, true));
-        let back = Book::load(vec![market()], &serde_json::from_str::<Vec<Row>>(&serde_json::to_string(&rows).unwrap()).unwrap()).unwrap();
+        assert_eq!(
+            (rows[0].auth.is_none(), rows[1].signature.is_empty()),
+            (true, true)
+        );
+        let back = Book::load(
+            vec![market()],
+            &serde_json::from_str::<Vec<Row>>(&serde_json::to_string(&rows).unwrap()).unwrap(),
+        )
+        .unwrap();
         assert_eq!(back.rows(), rows);
-        assert_eq!(back.get(hash_of(&ask)).unwrap().auth, Auth::Sig(Bytes::from(vec![0x22; 65])));
+        assert_eq!(
+            back.get(hash_of(&ask)).unwrap().auth,
+            Auth::Sig(Bytes::from(vec![0x22; 65]))
+        );
     }
 
     #[test]
     fn wire_round_trips_and_rejects_garbage() {
-        let x = UATradeOrder { destination: B256::repeat_byte(0x5e), ..ask(1, 100, 200, 1) };
-        assert_eq!(WireOrder::from_ua(&x).to_ua().unwrap(), x, "a derived destination too");
-        assert!(WireOrder::from_ua(&x).to_sol().is_err(), "an id is no address");
+        let x = UATradeOrder {
+            destination: B256::repeat_byte(0x5e),
+            ..ask(1, 100, 200, 1)
+        };
+        assert_eq!(
+            WireOrder::from_ua(&x).to_ua().unwrap(),
+            x,
+            "a derived destination too"
+        );
+        assert!(
+            WireOrder::from_ua(&x).to_sol().is_err(),
+            "an id is no address"
+        );
         let mut w = WireOrder::from_ua(&x);
         w.amount = "01".into();
         assert!(w.to_ua().is_err());
         let mut v = serde_json::to_value(WireOrder::from_ua(&x)).unwrap();
         v["maker"] = serde_json::json!("0x00");
-        assert!(serde_json::from_value::<WireOrder>(v).is_err(), "the built DEX's fields are refused");
+        assert!(
+            serde_json::from_value::<WireOrder>(v).is_err(),
+            "the built DEX's fields are refused"
+        );
     }
 
     #[test]
@@ -1209,7 +1683,10 @@ mod tests {
         assert!(settlement_ok(p.settlement.as_ref().unwrap()));
         assert_eq!(p.settlement.as_ref().unwrap().taker_fill, U256::from(40));
         // 20 quote left, still crossing nothing at <= 2.0: rests
-        assert_eq!(p.rested.expect("bid remainder rests").remaining, U256::from(20));
+        assert_eq!(
+            p.rested.expect("bid remainder rests").remaining,
+            U256::from(20)
+        );
         assert_eq!(b.len(), 2);
     }
 
@@ -1229,8 +1706,8 @@ mod tests {
     fn the_minimum_fill_binds_makers_and_takers() {
         let mut b = Book::new(vec![market()]);
         put(&mut b, half(ask(1, 100, 200, 1))); // min 50 base
-        // a bid that can take only 20 base cannot partially fill a 100 ask: no settlement, and its remainder would
-        // rest crossed, so it is cancelled
+                                                // a bid that can take only 20 base cannot partially fill a 100 ask: no settlement, and its remainder would
+                                                // rest crossed, so it is cancelled
         let p = put(&mut b, bid(2, 40, 20, 1));
         assert!(p.settlement.is_none());
         assert_eq!((p.dropped, p.rested.is_none()), (U256::from(40), true));
@@ -1240,7 +1717,10 @@ mod tests {
         put(&mut b, ask(1, 10, 20, 1));
         let p = put(&mut b, half(bid(3, 200, 100, 1))); // min 100 quote; the ask fills only 20 quote
         assert!(p.settlement.is_none());
-        assert!(p.dropped == U256::from(200), "crossing remainder never rests");
+        assert!(
+            p.dropped == U256::from(200),
+            "crossing remainder never rests"
+        );
         // the same taker with a deeper maker: one settlement of two makers reaches its minimum
         let mut b = Book::new(vec![market()]);
         put(&mut b, ask(1, 10, 20, 1));
@@ -1255,7 +1735,7 @@ mod tests {
     fn a_maker_too_large_for_the_taker_is_skipped_for_a_deeper_one() {
         let mut b = Book::new(vec![market()]);
         put(&mut b, half(ask(1, 100, 200, 1))); // best price, min 50
-        put(&mut b, ask(2, 10, 21, 1));   // worse price, closes whole
+        put(&mut b, ask(2, 10, 21, 1)); // worse price, closes whole
         let p = put(&mut b, bid(3, 25, 10, 1)); // pays up to 2.5, buys ~10 base
         assert_eq!(makers(&p), vec![(id(2), U256::from(10), U256::from(21))]);
         assert!(settlement_ok(p.settlement.as_ref().unwrap()));
@@ -1264,7 +1744,13 @@ mod tests {
     #[test]
     fn min_fill_is_the_signed_min_fill() {
         assert_eq!(min_fill(&ask(1, 101, 202, 1)), U256::ZERO);
-        assert_eq!(min_fill(&UATradeOrder { minFill: U256::from(7), ..ask(1, 101, 202, 1) }), U256::from(7));
+        assert_eq!(
+            min_fill(&UATradeOrder {
+                minFill: U256::from(7),
+                ..ask(1, 101, 202, 1)
+            }),
+            U256::from(7)
+        );
     }
 
     #[test]
@@ -1290,7 +1776,10 @@ mod tests {
         m.min_base_amount = "10".into();
         let mut b = Book::new(vec![m]);
         put(&mut b, bid(1, 200, 100, 1));
-        assert!(put(&mut b, ask(2, 5, 10, 1)).settlement.is_none(), "5 base from a 100-base bid is junk");
+        assert!(
+            put(&mut b, ask(2, 5, 10, 1)).settlement.is_none(),
+            "5 base from a 100-base bid is junk"
+        );
     }
 
     #[test]
@@ -1299,15 +1788,36 @@ mod tests {
         m.min_base_amount = "10".into();
         let mut b = Book::new(vec![m]);
         put(&mut b, ask(1, 100, 200, 1));
-        put(&mut b, UATradeOrder { minFill: U256::from(50), ..ask(2, 100, 210, 1) });
-        put(&mut b, UATradeOrder { minFill: U256::from(10), ..bid(3, 100, 100, 1) }); // 10 quote = 10 base: normal
-        put(&mut b, UATradeOrder { minFill: U256::from(30), ..bid(4, 100, 100, 2) }); // 30 quote = 30 base: bucket
+        put(
+            &mut b,
+            UATradeOrder {
+                minFill: U256::from(50),
+                ..ask(2, 100, 210, 1)
+            },
+        );
+        put(
+            &mut b,
+            UATradeOrder {
+                minFill: U256::from(10),
+                ..bid(3, 100, 100, 1)
+            },
+        ); // 10 quote = 10 base: normal
+        put(
+            &mut b,
+            UATradeOrder {
+                minFill: U256::from(30),
+                ..bid(4, 100, 100, 2)
+            },
+        ); // 30 quote = 30 base: bucket
         let (bids, asks) = b.depth(1, 10).unwrap();
         assert_eq!((bids.len(), asks.len()), (1, 1));
         assert_eq!(asks[0].base_amount, U256::from(100));
         let (bb, ba) = b.depth_min_fill(1, 10).unwrap();
         assert_eq!((bb.len(), ba.len()), (1, 1));
-        assert_eq!(ba[0].price, price_str(U256::from(210), U256::from(100), 18, 6));
+        assert_eq!(
+            ba[0].price,
+            price_str(U256::from(210), U256::from(100), 18, 6)
+        );
     }
 
     /// The bucket rule's edge: `min_in_base == min_base_amount` is a normal order, one more is in the bucket.
@@ -1316,12 +1826,27 @@ mod tests {
         let mut m = market();
         m.min_base_amount = "10".into();
         let mut b = Book::new(vec![m]);
-        put(&mut b, UATradeOrder { minFill: U256::from(10), ..ask(1, 100, 200, 1) });
-        put(&mut b, UATradeOrder { minFill: U256::from(11), ..ask(2, 100, 210, 1) });
+        put(
+            &mut b,
+            UATradeOrder {
+                minFill: U256::from(10),
+                ..ask(1, 100, 200, 1)
+            },
+        );
+        put(
+            &mut b,
+            UATradeOrder {
+                minFill: U256::from(11),
+                ..ask(2, 100, 210, 1)
+            },
+        );
         let (_, asks) = b.depth(1, 10).unwrap();
         let (_, big) = b.depth_min_fill(1, 10).unwrap();
         assert_eq!((asks.len(), big.len()), (1, 1));
-        assert_eq!(big[0].price, price_str(U256::from(210), U256::from(100), 18, 6));
+        assert_eq!(
+            big[0].price,
+            price_str(U256::from(210), U256::from(100), 18, 6)
+        );
     }
 
     #[test]
@@ -1355,7 +1880,11 @@ mod tests {
         let mut x = bid(2, 60, 30, 1);
         x.minFill = x.amount; // FOK
         let p = put(&mut b, x);
-        assert_eq!(makers(&p).len(), 2, "one atomic settlement may aggregate makers");
+        assert_eq!(
+            makers(&p).len(),
+            2,
+            "one atomic settlement may aggregate makers"
+        );
         assert_eq!(p.settlement.as_ref().unwrap().taker_fill, U256::from(60));
         let mut y = bid(4, 1_000, 500, 1);
         y.minFill = y.amount;
@@ -1363,7 +1892,11 @@ mod tests {
         put(&mut b, ask(1, 10, 20, 1));
         let p = put(&mut b, y);
         assert!(p.settlement.is_none());
-        assert_eq!(p.dropped, U256::from(1_000), "a FOK remainder that crosses never rests");
+        assert_eq!(
+            p.dropped,
+            U256::from(1_000),
+            "a FOK remainder that crosses never rests"
+        );
     }
 
     #[test]
@@ -1377,7 +1910,14 @@ mod tests {
         own.fee = U256::from(1_000);
         let mut fair = ask(2, 10, 20, 1);
         fair.fee = U256::from(1_000);
-        b.insert(Resting { hash: hash_of(&cheap), sell: BASE, order: cheap, auth: none(), remaining: U256::from(10), seq: 1 });
+        b.insert(Resting {
+            hash: hash_of(&cheap),
+            sell: BASE,
+            order: cheap,
+            auth: none(),
+            remaining: U256::from(10),
+            seq: 1,
+        });
         put(&mut b, own);
         put(&mut b, fair);
         let p = put(&mut b, bid(1, 20, 10, 2));
@@ -1389,7 +1929,14 @@ mod tests {
         let mut b = Book::new(vec![market()]);
         // 1 base left of an order pricing 1 base at 1/3 quote: it can never receive one unit
         let dust = ask(1, 3, 1, 1);
-        b.insert(Resting { hash: hash_of(&dust), sell: BASE, order: dust, auth: none(), remaining: U256::from(1), seq: 1 });
+        b.insert(Resting {
+            hash: hash_of(&dust),
+            sell: BASE,
+            order: dust,
+            auth: none(),
+            remaining: U256::from(1),
+            seq: 1,
+        });
         put(&mut b, ask(2, 10, 20, 1));
         let p = put(&mut b, bid(3, 20, 10, 1));
         assert_eq!(p.dust.len(), 1);
@@ -1400,53 +1947,153 @@ mod tests {
     #[test]
     fn limits_and_the_settlement_mirror_the_contract_including_rounding() {
         // maker 3 base for 10 quote (3.33); the taker sells 10 quote for 3 base (same price)
-        let m = Resting { hash: B256::ZERO, sell: BASE, order: ask(1, 3, 10, 1), auth: none(), remaining: U256::from(3), seq: 1 };
-        let t = Resting { hash: B256::repeat_byte(1), sell: QUOTE, order: bid(2, 10, 3, 1), auth: none(), remaining: U256::from(10), seq: 2 };
+        let m = Resting {
+            hash: B256::ZERO,
+            sell: BASE,
+            order: ask(1, 3, 10, 1),
+            auth: none(),
+            remaining: U256::from(3),
+            seq: 1,
+        };
+        let t = Resting {
+            hash: B256::repeat_byte(1),
+            sell: QUOTE,
+            order: bid(2, 10, 3, 1),
+            auth: none(),
+            remaining: U256::from(10),
+            seq: 2,
+        };
         assert!(limits_ok(&m, &t, U256::from(3), U256::from(10)));
         // 1 base costs ceil(10/3) = 4 quote: 4/1 > 10/3 breaks the taker's limit
         assert!(!limits_ok(&m, &t, U256::from(1), U256::from(4)));
-        assert!(!limits_ok(&m, &t, U256::from(4), U256::from(14)), "overfill");
-        assert!(!limits_ok(&m, &t, U256::from(3), U256::from(9)), "y is the maker's ceiling receive, not less");
+        assert!(
+            !limits_ok(&m, &t, U256::from(4), U256::from(14)),
+            "overfill"
+        );
+        assert!(
+            !limits_ok(&m, &t, U256::from(3), U256::from(9)),
+            "y is the maker's ceiling receive, not less"
+        );
         // a taker that would pay more than the maker's ceiling: within both price limits, yet the DEX computes the
         // maker's receive itself (FillMismatch), so the leg is refused here too
-        let rich = Resting { order: bid(2, 12, 3, 1), remaining: U256::from(12), ..t.clone() };
+        let rich = Resting {
+            order: bid(2, 12, 3, 1),
+            remaining: U256::from(12),
+            ..t.clone()
+        };
         assert!(limits_ok(&m, &rich, U256::from(3), U256::from(10)));
         assert!(!limits_ok(&m, &rich, U256::from(3), U256::from(11)));
         let s = |makers: Vec<(Resting, U256, U256)>, fill: u64| PlannedSettlement {
-            tag: B256::ZERO, market_id: 1, taker: t.clone(), taker_fill: U256::from(fill), makers };
-        assert!(settlement_ok(&s(vec![(m.clone(), U256::from(3), U256::from(10))], 10)));
-        assert!(!settlement_ok(&s(vec![(m.clone(), U256::from(3), U256::from(10))], 9)), "FillMismatch");
+            tag: B256::ZERO,
+            market_id: 1,
+            taker: t.clone(),
+            taker_fill: U256::from(fill),
+            makers,
+        };
+        assert!(settlement_ok(&s(
+            vec![(m.clone(), U256::from(3), U256::from(10))],
+            10
+        )));
+        assert!(
+            !settlement_ok(&s(vec![(m.clone(), U256::from(3), U256::from(10))], 9)),
+            "FillMismatch"
+        );
         assert!(!settlement_ok(&s(vec![], 0)), "NoMakers");
         // DuplicateOrder: each leg alone is within every limit (2 ≥ ceil(4/2), receive ceil(2·8/4) = 4, both prices
         // hold, Σ = the taker's whole remainder); only the repeated hash refuses it
-        let dm = Resting { order: ask(1, 4, 8, 1), remaining: U256::from(4), ..m.clone() };
-        let dt = Resting { order: bid(2, 8, 4, 1), remaining: U256::from(8), ..t.clone() };
+        let dm = Resting {
+            order: ask(1, 4, 8, 1),
+            remaining: U256::from(4),
+            ..m.clone()
+        };
+        let dt = Resting {
+            order: bid(2, 8, 4, 1),
+            remaining: U256::from(8),
+            ..t.clone()
+        };
         let ds = |makers: Vec<(Resting, U256, U256)>| PlannedSettlement {
-            tag: B256::ZERO, market_id: 1, taker: dt.clone(), taker_fill: U256::from(8), makers };
+            tag: B256::ZERO,
+            market_id: 1,
+            taker: dt.clone(),
+            taker_fill: U256::from(8),
+            makers,
+        };
         let leg = (dm.clone(), U256::from(2), U256::from(4));
-        let other = (Resting { hash: B256::repeat_byte(9), ..dm.clone() }, U256::from(2), U256::from(4));
-        assert!(settlement_ok(&ds(vec![leg.clone(), other])), "two distinct makers settle");
-        assert!(!settlement_ok(&ds(vec![leg.clone(), leg.clone()])), "DuplicateOrder");
-        let wrong_token = (Resting { hash: B256::repeat_byte(9), sell: QUOTE, ..dm.clone() }, U256::from(2), U256::from(4));
-        assert!(!settlement_ok(&ds(vec![leg.clone(), wrong_token])), "TokenMismatch");
+        let other = (
+            Resting {
+                hash: B256::repeat_byte(9),
+                ..dm.clone()
+            },
+            U256::from(2),
+            U256::from(4),
+        );
+        assert!(
+            settlement_ok(&ds(vec![leg.clone(), other])),
+            "two distinct makers settle"
+        );
+        assert!(
+            !settlement_ok(&ds(vec![leg.clone(), leg.clone()])),
+            "DuplicateOrder"
+        );
+        let wrong_token = (
+            Resting {
+                hash: B256::repeat_byte(9),
+                sell: QUOTE,
+                ..dm.clone()
+            },
+            U256::from(2),
+            U256::from(4),
+        );
+        assert!(
+            !settlement_ok(&ds(vec![leg.clone(), wrong_token])),
+            "TokenMismatch"
+        );
         // the taker's minimum: 4 of 8 quote with minFill 0 settles; with minFill 8 it is below the taker's minimum
-        let fok = PlannedSettlement { taker: Resting { order: UATradeOrder { minFill: U256::from(8), ..dt.order.clone() }, ..dt.clone() },
-            taker_fill: U256::from(4), ..ds(vec![leg.clone()]) };
-        assert!(settlement_ok(&PlannedSettlement { taker_fill: U256::from(4), ..ds(vec![leg.clone()]) }));
+        let fok = PlannedSettlement {
+            taker: Resting {
+                order: UATradeOrder {
+                    minFill: U256::from(8),
+                    ..dt.order.clone()
+                },
+                ..dt.clone()
+            },
+            taker_fill: U256::from(4),
+            ..ds(vec![leg.clone()])
+        };
+        assert!(settlement_ok(&PlannedSettlement {
+            taker_fill: U256::from(4),
+            ..ds(vec![leg.clone()])
+        }));
         assert!(!settlement_ok(&fok), "below the taker's minimum");
         // the maker's receive is the CEILING (a floor would silently stop matching non-multiples)
-        assert_eq!(maker_receives(&m.order, U256::from(1)), U256::from(4), "ceil(1 · 10 / 3)");
+        assert_eq!(
+            maker_receives(&m.order, U256::from(1)),
+            U256::from(4),
+            "ceil(1 · 10 / 3)"
+        );
         assert_eq!(maker_receives(&m.order, U256::from(3)), U256::from(10));
         // no 50 % floor: the minimum is the signed `minFill` (0 = any amount)
         assert_eq!(min_fill(&ask(1, 101, 202, 1)), U256::ZERO);
-        assert_eq!(min_fill(&UATradeOrder { minFill: U256::from(70), ..ask(1, 101, 202, 1) }), U256::from(70));
+        assert_eq!(
+            min_fill(&UATradeOrder {
+                minFill: U256::from(70),
+                ..ask(1, 101, 202, 1)
+            }),
+            U256::from(70)
+        );
         let mut me = m.clone();
         me.order.from = t.order.from;
-        assert!(!settlement_ok(&s(vec![(me, U256::from(3), U256::from(10))], 10)), "SelfTrade");
+        assert!(
+            !settlement_ok(&s(vec![(me, U256::from(3), U256::from(10))], 10)),
+            "SelfTrade"
+        );
         let mut big = m.clone();
         big.order = half(ask(1, 30, 100, 1));
         big.remaining = U256::from(30);
-        assert!(!settlement_ok(&s(vec![(big, U256::from(3), U256::from(10))], 10)), "maker below its minimum");
+        assert!(
+            !settlement_ok(&s(vec![(big, U256::from(3), U256::from(10))], 10)),
+            "maker below its minimum"
+        );
     }
 
     #[test]
@@ -1483,10 +2130,17 @@ mod tests {
         let mut ioc = s.taker.clone();
         ioc.order.flags = FLAG_IOC;
         let p = b.restore(ioc, s.taker_fill);
-        assert!(p.settlement.is_none(), "an IOC hand-back never takes the resting maker again");
+        assert!(
+            p.settlement.is_none(),
+            "an IOC hand-back never takes the resting maker again"
+        );
         assert_eq!(p.dropped, s.taker_fill);
         assert!(b.open_of(id(2)).is_empty());
-        assert_eq!(b.open_of(id(1))[0].remaining, U256::from(10), "the maker still rests whole");
+        assert_eq!(
+            b.open_of(id(1))[0].remaining,
+            U256::from(10),
+            "the maker still rests whole"
+        );
     }
 
     #[test]
@@ -1496,8 +2150,14 @@ mod tests {
         let s = put(&mut b, bid(2, 20, 10, 1)).settlement.unwrap();
         let (m, x, _) = s.makers[0].clone();
         assert!(b.restore(m, x).settlement.is_none());
-        let again = b.restore(s.taker.clone(), s.taker_fill).settlement.expect("the two healthy sides trade again");
-        assert_eq!((again.taker_fill, again.makers[0].1), (s.taker_fill, s.makers[0].1));
+        let again = b
+            .restore(s.taker.clone(), s.taker_fill)
+            .settlement
+            .expect("the two healthy sides trade again");
+        assert_eq!(
+            (again.taker_fill, again.makers[0].1),
+            (s.taker_fill, s.makers[0].1)
+        );
         assert_ne!(again.tag, s.tag, "a re-match is a new trade, not a replay");
         assert!(b.is_empty());
     }
@@ -1507,7 +2167,16 @@ mod tests {
         let mut b = Book::new(vec![market()]);
         let good = ask(1, 100, 200, 1);
         let ok = |b: &Book, x: &UATradeOrder, fundable: u64| {
-            b.admit(hash_of(x), sell_of(x), x, x.amount, U256::from(fundable), RELAYER, DEX, NOW)
+            b.admit(
+                hash_of(x),
+                sell_of(x),
+                x,
+                x.amount,
+                U256::from(fundable),
+                RELAYER,
+                DEX,
+                NOW,
+            )
         };
         ok(&b, &good, 100).unwrap();
         // committed balance: the same 100 cannot back two orders (review D6)
@@ -1522,16 +2191,34 @@ mod tests {
         assert!(bad(&|x| x.relayer = Address::ZERO), "RS5-9: home-bound");
         assert!(bad(&|x| x.dex = Address::repeat_byte(0xd1)), "NODE-DEX-16");
         assert!(bad(&|x| x.validUntil = U256::from(NOW + 2)), "too short");
-        assert!(bad(&|x| x.validUntil = U256::from(NOW + MAX_TTL_SECS + 1)), "too long");
+        assert!(
+            bad(&|x| x.validUntil = U256::from(NOW + MAX_TTL_SECS + 1)),
+            "too long"
+        );
         assert!(bad(&|x| x.amount = U256::from(1u8) << 128), "2^128");
-        assert!(bad(&|x| x.nonce = U256::from(1u8) << 128), "C6-5: the chain refuses nonce >= 2^128");
-        assert!(!bad(&|x| x.nonce = (U256::from(1u8) << 128) - U256::from(1u8)), "2^128 - 1 is the largest nonce");
-        assert!(bad(&|x| x.flags = FLAG_ESCROW | FLAG_IOC), "Path B not served");
+        assert!(
+            bad(&|x| x.nonce = U256::from(1u8) << 128),
+            "C6-5: the chain refuses nonce >= 2^128"
+        );
+        assert!(
+            !bad(&|x| x.nonce = (U256::from(1u8) << 128) - U256::from(1u8)),
+            "2^128 - 1 is the largest nonce"
+        );
+        assert!(
+            bad(&|x| x.flags = FLAG_ESCROW | FLAG_IOC),
+            "Path B not served"
+        );
         assert!(bad(&|x| x.flags = 8), "unknown flag");
         assert!(bad(&|x| x.minFill = U256::from(2)), "minFill above amount");
         assert!(bad(&|x| x.fee = U256::from(10_001)), "fee above 1 %");
-        assert!(bad(&|x| x.receiveToken = Address::repeat_byte(0xcc)), "no market");
-        assert!(!bad(&|x| x.flags = FLAG_LISTED_POOLS), "LISTED_POOLS is fine on the book");
+        assert!(
+            bad(&|x| x.receiveToken = Address::repeat_byte(0xcc)),
+            "no market"
+        );
+        assert!(
+            !bad(&|x| x.flags = FLAG_LISTED_POOLS),
+            "LISTED_POOLS is fine on the book"
+        );
         assert!(ok(&b, &good, 1_000).is_err(), "duplicate");
         for n in 10..(10 + MAX_OPEN_PER_MAKER as u64) {
             put(&mut b, ask(7, 1, 2, n));
@@ -1541,10 +2228,55 @@ mod tests {
         let mut m = market();
         m.min_base_amount = "10".into();
         let b2 = Book::new(vec![m]);
-        assert!(b2.admit(B256::ZERO, BASE, &ask(1, 5, 10, 1), U256::from(5), U256::from(99), RELAYER, DEX, NOW).is_err());
-        assert!(b2.admit(B256::ZERO, QUOTE, &bid(1, 50, 5, 1), U256::from(50), U256::from(99), RELAYER, DEX, NOW).is_err());
-        b2.admit(B256::ZERO, QUOTE, &bid(1, 50, 10, 1), U256::from(50), U256::from(99), RELAYER, DEX, NOW).unwrap();
-        assert!(b2.admit(B256::ZERO, QUOTE, &bid(1, 50, 10, 1), U256::ZERO, U256::from(99), RELAYER, DEX, NOW).is_err(), "closed");
+        assert!(b2
+            .admit(
+                B256::ZERO,
+                BASE,
+                &ask(1, 5, 10, 1),
+                U256::from(5),
+                U256::from(99),
+                RELAYER,
+                DEX,
+                NOW
+            )
+            .is_err());
+        assert!(b2
+            .admit(
+                B256::ZERO,
+                QUOTE,
+                &bid(1, 50, 5, 1),
+                U256::from(50),
+                U256::from(99),
+                RELAYER,
+                DEX,
+                NOW
+            )
+            .is_err());
+        b2.admit(
+            B256::ZERO,
+            QUOTE,
+            &bid(1, 50, 10, 1),
+            U256::from(50),
+            U256::from(99),
+            RELAYER,
+            DEX,
+            NOW,
+        )
+        .unwrap();
+        assert!(
+            b2.admit(
+                B256::ZERO,
+                QUOTE,
+                &bid(1, 50, 10, 1),
+                U256::ZERO,
+                U256::from(99),
+                RELAYER,
+                DEX,
+                NOW
+            )
+            .is_err(),
+            "closed"
+        );
     }
 
     #[test]
@@ -1552,20 +2284,37 @@ mod tests {
         let mut m = market();
         (m.maker_fee_ppm, m.taker_fee_ppm) = (1_000, 2_000);
         let mut b = Book::new(vec![m]);
-        let ok = |b: &Book, x: &UATradeOrder| b.admit(hash_of(x), sell_of(x), x, x.amount, U256::from(1_000), RELAYER, DEX, NOW);
+        let ok = |b: &Book, x: &UATradeOrder| {
+            b.admit(
+                hash_of(x),
+                sell_of(x),
+                x,
+                x.amount,
+                U256::from(1_000),
+                RELAYER,
+                DEX,
+                NOW,
+            )
+        };
         let with = |fee: u64, flags: u8| {
             let mut x = ask(1, 100, 200, 1);
             (x.fee, x.flags) = (U256::from(fee), flags);
             x
         };
-        assert!(ok(&b, &with(999, 0)).is_err(), "a GTC order below the maker rate never fills");
+        assert!(
+            ok(&b, &with(999, 0)).is_err(),
+            "a GTC order below the maker rate never fills"
+        );
         ok(&b, &with(1_000, 0)).unwrap();
         assert!(ok(&b, &with(1_999, FLAG_IOC)).is_err(), "IOC only takes");
         ok(&b, &with(2_000, FLAG_IOC)).unwrap();
         let mut cross = bid(9, 200, 100, 1);
         cross.fee = U256::from(2_000);
         put(&mut b, cross);
-        assert!(ok(&b, &with(1_000, 0)).is_err(), "a GTC order that takes on arrival pays the taker rate");
+        assert!(
+            ok(&b, &with(1_000, 0)).is_err(),
+            "a GTC order that takes on arrival pays the taker rate"
+        );
         ok(&b, &with(2_000, 0)).unwrap();
     }
 
@@ -1580,13 +2329,26 @@ mod tests {
         x.fee = U256::from(1_000);
         let mut y = bid(2, 20, 10, 1);
         y.fee = U256::from(2_000);
-        let mk = |o: &UATradeOrder| Resting { hash: hash_of(o), sell: sell_of(o), order: o.clone(), auth: none(), remaining: o.amount, seq: 1 };
+        let mk = |o: &UATradeOrder| Resting {
+            hash: hash_of(o),
+            sell: sell_of(o),
+            order: o.clone(),
+            auth: none(),
+            remaining: o.amount,
+            seq: 1,
+        };
         assert!(b.restore(mk(&y), y.amount).rested.is_some());
         let p = b.restore(mk(&x), x.amount);
-        assert!(p.settlement.is_none() && p.rested.is_some(), "the cheap ask may not take: it rests crossed");
+        assert!(
+            p.settlement.is_none() && p.rested.is_some(),
+            "the cheap ask may not take: it rests crossed"
+        );
         let mut c = Book::new(vec![b.markets().next().unwrap().clone()]);
         assert!(c.restore(mk(&x), x.amount).rested.is_some());
-        assert!(c.restore(mk(&y), y.amount).settlement.is_some(), "makers first: the bid takes again");
+        assert!(
+            c.restore(mk(&y), y.amount).settlement.is_some(),
+            "makers first: the bid takes again"
+        );
     }
 
     #[test]
@@ -1602,19 +2364,42 @@ mod tests {
         put(&mut b, other_lane);
         assert_eq!(b.purge(NOW + 11).len(), 1);
         let all = |_: Address| true;
-        assert_eq!(b.drop_below(id(2), U256::from(1), U256::from(6), &all).len(), 1, "lane 1 only");
-        assert!(b.drop_below(id(2), U256::from(1), U256::from(9), &all).is_empty(),
-            "nonce == minNonce is still valid");
-        assert_eq!(b.drop_below(id(2), U256::from(1), U256::from(99), &|s| s == QUOTE).len(), 0,
-            "another sell token's lane");
+        assert_eq!(
+            b.drop_below(id(2), U256::from(1), U256::from(6), &all)
+                .len(),
+            1,
+            "lane 1 only"
+        );
+        assert!(
+            b.drop_below(id(2), U256::from(1), U256::from(9), &all)
+                .is_empty(),
+            "nonce == minNonce is still valid"
+        );
+        assert_eq!(
+            b.drop_below(id(2), U256::from(1), U256::from(99), &|s| s == QUOTE)
+                .len(),
+            0,
+            "another sell token's lane"
+        );
         assert_eq!(b.len(), 2);
     }
 
     #[test]
     fn price_is_scaled_by_decimals() {
         // 2 000 quote (6 dec) for 1 base (18 dec)
-        assert_eq!(price_str(U256::from(2_000_000_000u64), U256::from(10u64).pow(U256::from(18)), 18, 6), "2000");
-        assert_eq!(price_str(U256::from(1u8), U256::from(3u8), 0, 0), "0.333333333333333333");
+        assert_eq!(
+            price_str(
+                U256::from(2_000_000_000u64),
+                U256::from(10u64).pow(U256::from(18)),
+                18,
+                6
+            ),
+            "2000"
+        );
+        assert_eq!(
+            price_str(U256::from(1u8), U256::from(3u8), 0, 0),
+            "0.333333333333333333"
+        );
     }
 
     /// A SCaaS leg goes as it came in (CTR-DEX-26): shape 1, `uaOrder` + `auth`, the `TradeOrder` and `sig` zero.
@@ -1624,14 +2409,34 @@ mod tests {
         put(&mut b, ask(1, 10, 20, 1));
         let s = put(&mut b, bid(2, 20, 10, 1)).settlement.unwrap();
         let st = s.to_settlement();
-        assert_eq!((st.r#ref, st.taker.sellToken, st.taker.fill), (s.tag, QUOTE, U256::from(20)));
-        assert_eq!((st.makers[0].sellToken, st.makers[0].fill), (BASE, U256::from(10)));
-        assert_eq!((st.taker.shape, st.makers[0].shape), (1, 1), "shape 1: `uaOrder` + `auth`");
-        assert_eq!((&st.taker.uaOrder, &st.makers[0].uaOrder), (&s.taker.order, &s.makers[0].0.order));
+        assert_eq!(
+            (st.r#ref, st.taker.sellToken, st.taker.fill),
+            (s.tag, QUOTE, U256::from(20))
+        );
+        assert_eq!(
+            (st.makers[0].sellToken, st.makers[0].fill),
+            (BASE, U256::from(10))
+        );
+        assert_eq!(
+            (st.taker.shape, st.makers[0].shape),
+            (1, 1),
+            "shape 1: `uaOrder` + `auth`"
+        );
+        assert_eq!(
+            (&st.taker.uaOrder, &st.makers[0].uaOrder),
+            (&s.taker.order, &s.makers[0].0.order)
+        );
         assert_eq!(Auth::Ua(st.taker.auth.clone()), s.taker.auth);
-        assert_eq!(st.makers[0].order, trade_of(&empty_ua_order()), "the pair of the other shape stays zero");
+        assert_eq!(
+            st.makers[0].order,
+            trade_of(&empty_ua_order()),
+            "the pair of the other shape stays zero"
+        );
         assert!(st.taker.sig.is_empty() && st.makers[0].sig.is_empty());
-        assert_eq!(ISCaaSDex::mtxSettleCall { s: vec![st] }.abi_encode()[..4], crate::guard::SEL_MTX_SETTLE);
+        assert_eq!(
+            ISCaaSDex::mtxSettleCall { s: vec![st] }.abi_encode()[..4],
+            crate::guard::SEL_MTX_SETTLE
+        );
     }
 
     /// Review T3 I1 (the reviewer's PoC `poc_second_fill_of_an_unmined_remainder`): a remainder whose first settlement
@@ -1646,12 +2451,25 @@ mod tests {
         let p1 = put(&mut b, bid(2, 120, 60, 1));
         assert_eq!(makers(&p1)[0].1, U256::from(60));
         assert_eq!(b.pending_of(ah), U256::from(60));
-        assert_eq!(b.pending_of(hash_of(&bid(2, 120, 60, 1))), U256::from(120), "the taker's fill is pending too");
+        assert_eq!(
+            b.pending_of(hash_of(&bid(2, 120, 60, 1))),
+            U256::from(120),
+            "the taker's fill is pending too"
+        );
         let p2 = put(&mut b, bid(3, 80, 40, 1));
-        assert!(p2.settlement.is_none(), "40 != 100 − 0 and 40 < 50 on chain: BelowMinFill, so never planned");
-        assert_eq!(b.get(ah).unwrap().remaining, U256::from(40), "the honest maker stays");
+        assert!(
+            p2.settlement.is_none(),
+            "40 != 100 − 0 and 40 < 50 on chain: BelowMinFill, so never planned"
+        );
+        assert_eq!(
+            b.get(ah).unwrap().remaining,
+            U256::from(40),
+            "the honest maker stays"
+        );
         b.settled(ah, U256::from(60)); // the watcher's LegSettled
-        let s3 = put(&mut b, bid(4, 80, 40, 1)).settlement.expect("the remainder now closes on chain");
+        let s3 = put(&mut b, bid(4, 80, 40, 1))
+            .settlement
+            .expect("the remainder now closes on chain");
         assert_eq!(s3.makers[0].1, a.amount - U256::from(60));
         assert!(settlement_ok(&s3));
         assert_eq!(b.pending_of(ah), U256::from(40));
@@ -1663,8 +2481,14 @@ mod tests {
         put(&mut b, bid(2, 120, 60, 1));
         let rest = b.remove(ah).unwrap();
         put(&mut b, bid(5, 80, 40, 1));
-        assert!(b.place(ah, BASE, a.clone(), none(), rest.remaining).settlement.is_none());
+        assert!(b
+            .place(ah, BASE, a.clone(), none(), rest.remaining)
+            .settlement
+            .is_none());
         b.settled(ah, U256::from(60));
-        assert!(b.place(ah, BASE, a, none(), rest.remaining).settlement.is_some());
+        assert!(b
+            .place(ah, BASE, a, none(), rest.remaining)
+            .settlement
+            .is_some());
     }
 }

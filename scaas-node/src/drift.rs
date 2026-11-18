@@ -14,8 +14,8 @@ use tracing::info;
 
 use crate::abi::IToken;
 use crate::chain::Chain;
-use crate::indexer::receiving_pairs;
 use crate::external_pull::ExternalPull;
+use crate::indexer::receiving_pairs;
 
 pub const EVERY: Duration = Duration::from_secs(3600);
 
@@ -40,15 +40,30 @@ pub async fn step(chain: &Chain, external_pull: &ExternalPull, chain_key: &str) 
             .with_to(token)
             .with_input(IToken::balanceOfCall { who }.abi_encode());
         // Fable recheck 2 P3-4: through `Chain::read` (failover); at a fixed height, so a stale endpoint answers the same
-        let out = chain.read(|p| {
-            let tx = tx.clone();
-            async move { p.call(tx).block(BlockId::number(height)).await.map_err(|e| crate::chain::SimError::Transport(e.to_string())) }
-        }).await.map_err(|e| anyhow::anyhow!("{e}"))?;
+        let out = chain
+            .read(|p| {
+                let tx = tx.clone();
+                async move {
+                    p.call(tx)
+                        .block(BlockId::number(height))
+                        .await
+                        .map_err(|e| crate::chain::SimError::Transport(e.to_string()))
+                }
+            })
+            .await
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
         rows.push((token, who, IToken::balanceOfCall::abi_decode_returns(&out)?));
     }
-    let r = external_pull.balance_report(chain_key, height, &report_rows(&rows)).await?;
+    let r = external_pull
+        .balance_report(chain_key, height, &report_rows(&rows))
+        .await?;
     if !r.stale {
-        info!(chain = chain.number, height, mismatch = r.mismatch, "balance drift reported");
+        info!(
+            chain = chain.number,
+            height,
+            mismatch = r.mismatch,
+            "balance drift reported"
+        );
     }
     Ok(!r.stale)
 }
@@ -63,6 +78,9 @@ mod tests {
         let rows = report_rows(&[(Address::repeat_byte(1), Address::repeat_byte(2), big)]);
         assert_eq!(rows[0]["balance"], "1000000000000000000000000000000");
         assert_eq!(rows[0]["token"], format!("{:#x}", Address::repeat_byte(1)));
-        assert_eq!(rows[0]["address"], format!("{:#x}", Address::repeat_byte(2)));
+        assert_eq!(
+            rows[0]["address"],
+            format!("{:#x}", Address::repeat_byte(2))
+        );
     }
 }

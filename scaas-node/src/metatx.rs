@@ -10,8 +10,8 @@ use anyhow::{anyhow, bail, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub use crate::abi::{MetaTransaction, MetaTransfer, UAMetaTransaction, UAMetaTransfer, UASig};
 use crate::abi::{IMtxIds, IToken};
+pub use crate::abi::{MetaTransaction, MetaTransfer, UAMetaTransaction, UAMetaTransfer, UASig};
 
 pub const MODE_RESTRICT_RELAYER: u32 = 0x01;
 pub const MODE_RESTRICT_FEE_RECIPIENT: u32 = 0x02;
@@ -25,7 +25,14 @@ pub const MODE_KNOWN_MASK: u32 = 0xF3;
 pub fn meta_pay_id(m: &crate::abi::PayMeta) -> B256 {
     use alloy::sol_types::SolValue;
     let inner = (m.payNo, m.save, m.schema, m.body.clone()).abi_encode_params();
-    keccak256([&b"scaas.pay.meta.v3"[..], m.salt.as_slice(), keccak256(inner).as_slice()].concat())
+    keccak256(
+        [
+            &b"scaas.pay.meta.v3"[..],
+            m.salt.as_slice(),
+            keccak256(inner).as_slice(),
+        ]
+        .concat(),
+    )
 }
 
 /// The contract's `_payMeta` shape (spec §3.2, plan T83), by name before any encoding or simulation: a non-zero salt, `schema
@@ -44,7 +51,15 @@ pub fn pay_lane(p: &B256) -> U256 {
 
 /// CTR-MTX-27: `relayRef(target, callData) = keccak256("scaas.relayfee" ‖ uint256 chainid ‖ target ‖ keccak256(callData))`.
 pub fn relay_ref(chain_id: u64, target: Address, call: &[u8]) -> B256 {
-    keccak256([&b"scaas.relayfee"[..], &U256::from(chain_id).to_be_bytes::<32>(), target.as_slice(), keccak256(call).as_slice()].concat())
+    keccak256(
+        [
+            &b"scaas.relayfee"[..],
+            &U256::from(chain_id).to_be_bytes::<32>(),
+            target.as_slice(),
+            keccak256(call).as_slice(),
+        ]
+        .concat(),
+    )
 }
 
 /// The 9 fields of `MetaTransaction` (camelCase, decimal strings).
@@ -142,7 +157,10 @@ pub(crate) fn check_mode(mode: u32) -> Result<()> {
 
 impl WireMetaTx {
     pub fn to_sol(&self) -> Result<MetaTransaction> {
-        let hex = self.data.strip_prefix("0x").ok_or_else(|| anyhow!("data must be 0x-hex"))?;
+        let hex = self
+            .data
+            .strip_prefix("0x")
+            .ok_or_else(|| anyhow!("data must be 0x-hex"))?;
         let data = alloy::hex::decode(hex).map_err(|e| anyhow!("data: {e}"))?;
         check_mode(self.mode)?;
         Ok(MetaTransaction {
@@ -213,8 +231,12 @@ impl Mtx {
     /// structs refuse unknown fields, so a body of the other struct never parses as this one.
     pub fn from_wire(kind: Option<&str>, m: &Value) -> Result<Self> {
         match kind.unwrap_or("transfer") {
-            "call" => Ok(Self::Call(serde_json::from_value::<WireMetaTx>(m.clone())?.to_sol()?)),
-            "transfer" => Ok(Self::Transfer(serde_json::from_value::<WireMetaTransfer>(m.clone())?.to_sol()?)),
+            "call" => Ok(Self::Call(
+                serde_json::from_value::<WireMetaTx>(m.clone())?.to_sol()?,
+            )),
+            "transfer" => Ok(Self::Transfer(
+                serde_json::from_value::<WireMetaTransfer>(m.clone())?.to_sol()?,
+            )),
             k => bail!("unknown struct {k:?} (call | transfer)"),
         }
     }
@@ -222,8 +244,14 @@ impl Mtx {
     /// `(struct, wire)`, the inverse of `from_wire`.
     pub fn to_wire(&self) -> (&'static str, Value) {
         match self {
-            Self::Call(m) => ("call", serde_json::to_value(WireMetaTx::from_sol(m)).expect("plain struct")),
-            Self::Transfer(t) => ("transfer", serde_json::to_value(WireMetaTransfer::from_sol(t)).expect("plain struct")),
+            Self::Call(m) => (
+                "call",
+                serde_json::to_value(WireMetaTx::from_sol(m)).expect("plain struct"),
+            ),
+            Self::Transfer(t) => (
+                "transfer",
+                serde_json::to_value(WireMetaTransfer::from_sol(t)).expect("plain struct"),
+            ),
         }
     }
 
@@ -295,8 +323,18 @@ impl Mtx {
     pub fn canonical(&self) -> Self {
         let mut c = self.clone();
         let mode = self.mode();
-        c.set_unbound(if mode & MODE_RESTRICT_RELAYER == 0 { Some(Address::ZERO) } else { None },
-            if mode & MODE_RESTRICT_FEE_RECIPIENT == 0 { Some(Address::ZERO) } else { None });
+        c.set_unbound(
+            if mode & MODE_RESTRICT_RELAYER == 0 {
+                Some(Address::ZERO)
+            } else {
+                None
+            },
+            if mode & MODE_RESTRICT_FEE_RECIPIENT == 0 {
+                Some(Address::ZERO)
+            } else {
+                None
+            },
+        );
         c
     }
 
@@ -318,8 +356,18 @@ impl Mtx {
     /// The digest is unchanged.
     pub fn normalize(&mut self, fee_recipient: Option<Address>) {
         let mode = self.mode();
-        self.set_unbound(if mode & MODE_RESTRICT_RELAYER == 0 { Some(Address::ZERO) } else { None },
-            if mode & MODE_RESTRICT_FEE_RECIPIENT == 0 { Some(fee_recipient.unwrap_or(Address::ZERO)) } else { None });
+        self.set_unbound(
+            if mode & MODE_RESTRICT_RELAYER == 0 {
+                Some(Address::ZERO)
+            } else {
+                None
+            },
+            if mode & MODE_RESTRICT_FEE_RECIPIENT == 0 {
+                Some(fee_recipient.unwrap_or(Address::ZERO))
+            } else {
+                None
+            },
+        );
     }
 
     pub fn digest(&self, domain: &Domain) -> B256 {
@@ -341,7 +389,9 @@ impl Mtx {
     pub fn calldata(&self, signature: Bytes) -> Bytes {
         match self.clone() {
             Self::Call(m) => IToken::mtxExecuteCall { m, signature }.abi_encode().into(),
-            Self::Transfer(t) => IToken::mtxExecuteTransferCall { t, signature }.abi_encode().into(),
+            Self::Transfer(t) => IToken::mtxExecuteTransferCall { t, signature }
+                .abi_encode()
+                .into(),
         }
     }
 
@@ -350,7 +400,9 @@ impl Mtx {
         if let Ok(c) = IToken::mtxExecuteCall::abi_decode(data) {
             return Some((Self::Call(c.m), c.signature));
         }
-        IToken::mtxExecuteTransferCall::abi_decode(data).ok().map(|c| (Self::Transfer(c.t), c.signature))
+        IToken::mtxExecuteTransferCall::abi_decode(data)
+            .ok()
+            .map(|c| (Self::Transfer(c.t), c.signature))
     }
 }
 
@@ -371,18 +423,47 @@ pub type WireUAMetaTransfer = WireMetaTransfer;
 
 impl WireMetaTx {
     pub fn to_ua_sol(&self) -> Result<UAMetaTransaction> {
-        let m = Self { from: format!("{:#x}", Address::ZERO), ..self.clone() }.to_sol()?;
-        Ok(UAMetaTransaction { from: b32(&self.from)?, data: m.data, batch: m.batch, nonce: m.nonce, validUntil: m.validUntil,
-            mode: m.mode, relayer: m.relayer, fee: m.fee, feeRecipient: m.feeRecipient })
+        let m = Self {
+            from: format!("{:#x}", Address::ZERO),
+            ..self.clone()
+        }
+        .to_sol()?;
+        Ok(UAMetaTransaction {
+            from: b32(&self.from)?,
+            data: m.data,
+            batch: m.batch,
+            nonce: m.nonce,
+            validUntil: m.validUntil,
+            mode: m.mode,
+            relayer: m.relayer,
+            fee: m.fee,
+            feeRecipient: m.feeRecipient,
+        })
     }
 }
 
 impl WireMetaTransfer {
     pub fn to_ua_sol(&self) -> Result<UAMetaTransfer> {
         let z = format!("{:#x}", Address::ZERO);
-        let t = Self { from: z.clone(), to: z, ..self.clone() }.to_sol()?;
-        Ok(UAMetaTransfer { from: b32(&self.from)?, to: b32(&self.to)?, value: t.value, entryRef: t.entryRef, batch: t.batch,
-            nonce: t.nonce, validUntil: t.validUntil, mode: t.mode, relayer: t.relayer, fee: t.fee, feeRecipient: t.feeRecipient })
+        let t = Self {
+            from: z.clone(),
+            to: z,
+            ..self.clone()
+        }
+        .to_sol()?;
+        Ok(UAMetaTransfer {
+            from: b32(&self.from)?,
+            to: b32(&self.to)?,
+            value: t.value,
+            entryRef: t.entryRef,
+            batch: t.batch,
+            nonce: t.nonce,
+            validUntil: t.validUntil,
+            mode: t.mode,
+            relayer: t.relayer,
+            fee: t.fee,
+            feeRecipient: t.feeRecipient,
+        })
     }
 }
 
@@ -409,8 +490,12 @@ impl UaMtx {
     /// As [`Mtx::from_wire`]; `from` (and `to`) are `bytes32` ids.
     pub fn from_wire(kind: Option<&str>, m: &Value) -> Result<Self> {
         match kind.unwrap_or("transfer") {
-            "call" => Ok(Self::Call(serde_json::from_value::<WireMetaTx>(m.clone())?.to_ua_sol()?)),
-            "transfer" => Ok(Self::Transfer(serde_json::from_value::<WireMetaTransfer>(m.clone())?.to_ua_sol()?)),
+            "call" => Ok(Self::Call(
+                serde_json::from_value::<WireMetaTx>(m.clone())?.to_ua_sol()?,
+            )),
+            "transfer" => Ok(Self::Transfer(
+                serde_json::from_value::<WireMetaTransfer>(m.clone())?.to_ua_sol()?,
+            )),
             k => bail!("unknown struct {k:?} (call | transfer)"),
         }
     }
@@ -418,16 +503,38 @@ impl UaMtx {
     pub fn to_wire(&self) -> (&'static str, Value) {
         let id = |b: &B256| format!("{b:#x}");
         match self {
-            Self::Call(m) => ("call", serde_json::to_value(WireMetaTx {
-                from: id(&m.from), data: format!("0x{}", alloy::hex::encode(&m.data)), batch: m.batch.to_string(),
-                nonce: m.nonce.to_string(), valid_until: m.validUntil.to_string(), mode: m.mode,
-                relayer: format!("{:#x}", m.relayer), fee: m.fee.to_string(), fee_recipient: format!("{:#x}", m.feeRecipient),
-            }).expect("plain struct")),
-            Self::Transfer(t) => ("transfer", serde_json::to_value(WireMetaTransfer {
-                from: id(&t.from), to: id(&t.to), value: t.value.to_string(), entry_ref: id(&t.entryRef),
-                batch: t.batch.to_string(), nonce: t.nonce.to_string(), valid_until: t.validUntil.to_string(), mode: t.mode,
-                relayer: format!("{:#x}", t.relayer), fee: t.fee.to_string(), fee_recipient: format!("{:#x}", t.feeRecipient),
-            }).expect("plain struct")),
+            Self::Call(m) => (
+                "call",
+                serde_json::to_value(WireMetaTx {
+                    from: id(&m.from),
+                    data: format!("0x{}", alloy::hex::encode(&m.data)),
+                    batch: m.batch.to_string(),
+                    nonce: m.nonce.to_string(),
+                    valid_until: m.validUntil.to_string(),
+                    mode: m.mode,
+                    relayer: format!("{:#x}", m.relayer),
+                    fee: m.fee.to_string(),
+                    fee_recipient: format!("{:#x}", m.feeRecipient),
+                })
+                .expect("plain struct"),
+            ),
+            Self::Transfer(t) => (
+                "transfer",
+                serde_json::to_value(WireMetaTransfer {
+                    from: id(&t.from),
+                    to: id(&t.to),
+                    value: t.value.to_string(),
+                    entry_ref: id(&t.entryRef),
+                    batch: t.batch.to_string(),
+                    nonce: t.nonce.to_string(),
+                    valid_until: t.validUntil.to_string(),
+                    mode: t.mode,
+                    relayer: format!("{:#x}", t.relayer),
+                    fee: t.fee.to_string(),
+                    fee_recipient: format!("{:#x}", t.feeRecipient),
+                })
+                .expect("plain struct"),
+            ),
         }
     }
 
@@ -507,7 +614,9 @@ impl UaMtx {
     pub fn calldata(&self, auth: UASig) -> Bytes {
         match self.clone() {
             Self::Call(m) => IMtxIds::mtxExecuteCall { m, auth }.abi_encode().into(),
-            Self::Transfer(t) => IMtxIds::mtxExecuteTransferCall { t, auth }.abi_encode().into(),
+            Self::Transfer(t) => IMtxIds::mtxExecuteTransferCall { t, auth }
+                .abi_encode()
+                .into(),
         }
     }
 
@@ -520,7 +629,9 @@ impl UaMtx {
         if let Ok(c) = IMtxIds::mtxPayCall::abi_decode(data) {
             return Some((Self::Transfer(c.t), c.auth));
         }
-        IMtxIds::mtxExecuteTransferCall::abi_decode(data).ok().map(|c| (Self::Transfer(c.t), c.auth))
+        IMtxIds::mtxExecuteTransferCall::abi_decode(data)
+            .ok()
+            .map(|c| (Self::Transfer(c.t), c.auth))
     }
 }
 
@@ -530,7 +641,10 @@ mod tests {
     use serde_json::json;
 
     fn kat(name: &str) -> Value {
-        let p = format!("{}/../smartcontracts/evm/test/vectors/{name}", env!("CARGO_MANIFEST_DIR"));
+        let p = format!(
+            "{}/../smartcontracts/evm/test/vectors/{name}",
+            env!("CARGO_MANIFEST_DIR")
+        );
         serde_json::from_str(&std::fs::read_to_string(p).expect("KAT file")).expect("KAT json")
     }
 
@@ -546,7 +660,9 @@ mod tests {
     }
 
     fn sig_of(k: &Value) -> Bytes {
-        alloy::hex::decode(&k["signature"].as_str().unwrap()[2..]).unwrap().into()
+        alloy::hex::decode(&k["signature"].as_str().unwrap()[2..])
+            .unwrap()
+            .into()
     }
 
     /// Byte-identical with forge (`TokenKat.t.sol`): struct hash, digest and the relayed `mtxExecute` calldata.
@@ -560,11 +676,27 @@ mod tests {
             "validUntil": s("valid_until"), "mode": s("mode").parse::<u32>().unwrap(), "relayer": s("relayer"),
             "fee": s("fee"), "feeRecipient": s("fee_recipient")});
         let m = Mtx::from_wire(Some("call"), &wire).unwrap();
-        assert_eq!(format!("{:#x}", m.struct_hash()), s("struct_hash").to_lowercase());
-        assert_eq!(format!("{:#x}", m.digest(&domain_of(&k))), s("digest").to_lowercase());
-        assert_eq!(format!("0x{}", alloy::hex::encode(m.calldata(sig_of(&k)))), s("calldata").to_lowercase());
-        assert_eq!(Mtx::from_calldata(&m.calldata(sig_of(&k))), Some((m.clone(), sig_of(&k))));
-        assert_eq!(m.selector(), Some([0xcf, 0xdd, 0x7a, 0xea]), "cancelNonce(uint256)");
+        assert_eq!(
+            format!("{:#x}", m.struct_hash()),
+            s("struct_hash").to_lowercase()
+        );
+        assert_eq!(
+            format!("{:#x}", m.digest(&domain_of(&k))),
+            s("digest").to_lowercase()
+        );
+        assert_eq!(
+            format!("0x{}", alloy::hex::encode(m.calldata(sig_of(&k)))),
+            s("calldata").to_lowercase()
+        );
+        assert_eq!(
+            Mtx::from_calldata(&m.calldata(sig_of(&k))),
+            Some((m.clone(), sig_of(&k)))
+        );
+        assert_eq!(
+            m.selector(),
+            Some([0xcf, 0xdd, 0x7a, 0xea]),
+            "cancelNonce(uint256)"
+        );
     }
 
     #[test]
@@ -577,9 +709,18 @@ mod tests {
             "feeRecipient": s("fee_recipient")});
         let t = Mtx::from_wire(None, &wire).unwrap();
         assert!(matches!(t, Mtx::Transfer(_)), "absent struct = transfer");
-        assert_eq!(format!("{:#x}", t.struct_hash()), s("struct_hash").to_lowercase());
-        assert_eq!(format!("{:#x}", t.digest(&domain_of(&k))), s("digest").to_lowercase());
-        assert_eq!(format!("0x{}", alloy::hex::encode(t.calldata(sig_of(&k)))), s("calldata").to_lowercase());
+        assert_eq!(
+            format!("{:#x}", t.struct_hash()),
+            s("struct_hash").to_lowercase()
+        );
+        assert_eq!(
+            format!("{:#x}", t.digest(&domain_of(&k))),
+            s("digest").to_lowercase()
+        );
+        assert_eq!(
+            format!("0x{}", alloy::hex::encode(t.calldata(sig_of(&k)))),
+            s("calldata").to_lowercase()
+        );
         assert_eq!(t.selector(), None);
     }
 
@@ -598,33 +739,52 @@ mod tests {
     }
 
     fn domain() -> Domain {
-        Domain { name: "SCaaS MetaToken".into(), version: "1".into(), chain_id: 7622,
-                 verifying_contract: Address::repeat_byte(0xcd), salt: B256::repeat_byte(0x24) }
+        Domain {
+            name: "SCaaS MetaToken".into(),
+            version: "1".into(),
+            chain_id: 7622,
+            verifying_contract: Address::repeat_byte(0xcd),
+            salt: B256::repeat_byte(0x24),
+        }
     }
 
     #[test]
     fn unflagged_fields_do_not_change_the_digest_and_the_salt_does() {
         let d = domain();
         let a = call().digest(&d);
-        let Mtx::Call(mut m) = call() else { unreachable!() };
+        let Mtx::Call(mut m) = call() else {
+            unreachable!()
+        };
         m.feeRecipient = Address::repeat_byte(0x11);
         assert_eq!(a, Mtx::Call(m.clone()).digest(&d));
         m.mode |= MODE_RESTRICT_FEE_RECIPIENT;
         assert_ne!(a, Mtx::Call(m).digest(&d));
-        assert_ne!(a, call().digest(&Domain { salt: B256::repeat_byte(0x25), ..d }), "chain_uid is signed");
+        assert_ne!(
+            a,
+            call().digest(&Domain {
+                salt: B256::repeat_byte(0x25),
+                ..d
+            }),
+            "chain_uid is signed"
+        );
     }
 
     #[test]
     fn normalize_zeroes_unbound_fields_and_keeps_the_digest() {
         let d = domain();
-        let Mtx::Call(mut m) = call() else { unreachable!() };
+        let Mtx::Call(mut m) = call() else {
+            unreachable!()
+        };
         m.mode = 0x20;
         m.relayer = Address::repeat_byte(0x66);
         m.feeRecipient = Address::repeat_byte(0x77);
         let wire = Mtx::Call(m.clone());
         let mut x = wire.clone();
         x.normalize(Some(Address::repeat_byte(0x99)));
-        assert_eq!((x.relayer(), x.fee_recipient()), (Address::ZERO, Address::repeat_byte(0x99)));
+        assert_eq!(
+            (x.relayer(), x.fee_recipient()),
+            (Address::ZERO, Address::repeat_byte(0x99))
+        );
         assert_eq!(x.digest(&d), wire.digest(&d));
         let mut bound = Mtx::Call(MetaTransaction { mode: 0x23, ..m });
         let before = bound.clone();
@@ -646,16 +806,31 @@ mod tests {
         assert!(bad("mode", json!(0x30)), "fee nibble 3 (ModeFeeInvalid)");
         assert!(bad("data", json!("zz")));
         assert!(bad("value", json!("1")), "a transfer field in a call");
-        assert!(Mtx::from_wire(None, &good).is_err(), "a call body is not a transfer");
+        assert!(
+            Mtx::from_wire(None, &good).is_err(),
+            "a call body is not a transfer"
+        );
         assert!(Mtx::from_wire(Some("ua"), &good).is_err());
         let (_, mut transfer) = Mtx::Transfer(MetaTransfer {
-            from: Address::repeat_byte(0xab), to: Address::repeat_byte(0x5e), value: U256::from(1), entryRef: B256::ZERO,
-            batch: U256::ZERO, nonce: U256::ZERO, validUntil: U256::from(1), mode: 0, relayer: Address::ZERO,
-            fee: U256::ZERO, feeRecipient: Address::ZERO,
-        }).to_wire();
+            from: Address::repeat_byte(0xab),
+            to: Address::repeat_byte(0x5e),
+            value: U256::from(1),
+            entryRef: B256::ZERO,
+            batch: U256::ZERO,
+            nonce: U256::ZERO,
+            validUntil: U256::from(1),
+            mode: 0,
+            relayer: Address::ZERO,
+            fee: U256::ZERO,
+            feeRecipient: Address::ZERO,
+        })
+        .to_wire();
         assert!(Mtx::from_wire(None, &transfer).is_ok());
         transfer["data"] = json!("0x");
-        assert!(Mtx::from_wire(None, &transfer).is_err(), "a call field in a transfer (N1, the reverse)");
+        assert!(
+            Mtx::from_wire(None, &transfer).is_err(),
+            "a call field in a transfer (N1, the reverse)"
+        );
     }
 
     #[test]
@@ -668,21 +843,49 @@ mod tests {
     /// signer kind, both structs), the wire round-trips, and the relayed calldata decodes back to its struct.
     #[test]
     fn ua_digests_match_the_metatx3_vectors() {
-        let v: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/ua/metatx3.json")).unwrap();
+        let v: Value =
+            serde_json::from_str(include_str!("../../smartcontracts/vectors/ua/metatx3.json"))
+                .unwrap();
         let s = |k: &Value| k.as_str().unwrap().to_string();
-        let d = Domain { name: "SCaaS MetaToken".into(), version: "1".into(), chain_id: v["chainId"].as_u64().unwrap(),
-            verifying_contract: s(&v["token"]).parse().unwrap(), salt: s(&v["chainUid"]).parse().unwrap() };
+        let d = Domain {
+            name: "SCaaS MetaToken".into(),
+            version: "1".into(),
+            chain_id: v["chainId"].as_u64().unwrap(),
+            verifying_contract: s(&v["token"]).parse().unwrap(),
+            salt: s(&v["chainUid"]).parse().unwrap(),
+        };
         let mut n = 0;
         for (sec, kind) in [("call", "call"), ("transfer", "transfer")] {
             for x in v[sec].as_array().unwrap() {
                 let m = UaMtx::from_wire(Some(kind), &x["typedData"]["message"]).unwrap();
-                assert_eq!(format!("{:#x}", m.digest(&d)), s(&x["digest"]), "{sec} {}", x["name"]);
+                assert_eq!(
+                    format!("{:#x}", m.digest(&d)),
+                    s(&x["digest"]),
+                    "{sec} {}",
+                    x["name"]
+                );
                 assert_eq!(m.from(), s(&x["from"]).parse::<B256>().unwrap());
                 let (k, w) = m.to_wire();
-                assert_eq!((k, UaMtx::from_wire(Some(k), &w).unwrap()), (kind, m.clone()), "wire round-trip");
-                let auth = UASig { keyData: Bytes::new(), signature: alloy::hex::decode(&s(&x["auth"])[2..]).unwrap().into(), members: vec![] };
-                assert_eq!(format!("{:#x}", m.struct_hash()), s(&x["structHash"]), "{sec} {}", x["name"]);
-                assert_eq!(UaMtx::from_calldata(&m.calldata(auth.clone())), Some((m, auth)));
+                assert_eq!(
+                    (k, UaMtx::from_wire(Some(k), &w).unwrap()),
+                    (kind, m.clone()),
+                    "wire round-trip"
+                );
+                let auth = UASig {
+                    keyData: Bytes::new(),
+                    signature: alloy::hex::decode(&s(&x["auth"])[2..]).unwrap().into(),
+                    members: vec![],
+                };
+                assert_eq!(
+                    format!("{:#x}", m.struct_hash()),
+                    s(&x["structHash"]),
+                    "{sec} {}",
+                    x["name"]
+                );
+                assert_eq!(
+                    UaMtx::from_calldata(&m.calldata(auth.clone())),
+                    Some((m, auth))
+                );
                 n += 1;
             }
         }
@@ -693,22 +896,49 @@ mod tests {
     /// struct; unbound fields are normalized as on the address path and leave the digest alone.
     #[test]
     fn ua_wire_needs_bytes32_ids_and_normalizes() {
-        let v: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/ua/metatx3.json")).unwrap();
+        let v: Value =
+            serde_json::from_str(include_str!("../../smartcontracts/vectors/ua/metatx3.json"))
+                .unwrap();
         let msg = v["transfer"][0]["typedData"]["message"].clone();
         let mut addr_from = msg.clone();
         addr_from["from"] = json!("0xfc7e9498d8035077f1705eb85be95d66f31a89f9");
-        assert!(UaMtx::from_wire(None, &addr_from).is_err(), "from is a bytes32 id");
-        assert!(UaMtx::from_wire(Some("call"), &msg).is_err(), "a transfer body is no call");
+        assert!(
+            UaMtx::from_wire(None, &addr_from).is_err(),
+            "from is a bytes32 id"
+        );
+        assert!(
+            UaMtx::from_wire(Some("call"), &msg).is_err(),
+            "a transfer body is no call"
+        );
         assert!(UaMtx::from_wire(Some("ua"), &msg).is_err());
-        let UaMtx::Transfer(t) = UaMtx::from_wire(None, &msg).unwrap() else { panic!() };
-        assert_eq!(native(&t.from), Some("0xfc7e9498d8035077f1705eb85be95d66f31a89f9".parse().unwrap()));
+        let UaMtx::Transfer(t) = UaMtx::from_wire(None, &msg).unwrap() else {
+            panic!()
+        };
+        assert_eq!(
+            native(&t.from),
+            Some(
+                "0xfc7e9498d8035077f1705eb85be95d66f31a89f9"
+                    .parse()
+                    .unwrap()
+            )
+        );
         assert_eq!(native(&B256::repeat_byte(1)), None, "a derived id");
         let d = domain();
-        let mut free = UaMtx::Transfer(UAMetaTransfer { mode: 0x20, relayer: Address::repeat_byte(6), feeRecipient: Address::repeat_byte(7), ..t });
+        let mut free = UaMtx::Transfer(UAMetaTransfer {
+            mode: 0x20,
+            relayer: Address::repeat_byte(6),
+            feeRecipient: Address::repeat_byte(7),
+            ..t
+        });
         let before = free.digest(&d);
         free.normalize(Some(Address::repeat_byte(9)));
-        let UaMtx::Transfer(n) = &free else { unreachable!() };
-        assert_eq!((n.relayer, n.feeRecipient), (Address::ZERO, Address::repeat_byte(9)));
+        let UaMtx::Transfer(n) = &free else {
+            unreachable!()
+        };
+        assert_eq!(
+            (n.relayer, n.feeRecipient),
+            (Address::ZERO, Address::repeat_byte(9))
+        );
         assert_eq!(free.digest(&d), before, "the digest is unchanged");
     }
 
@@ -716,36 +946,109 @@ mod tests {
     /// rows; the shape (`save` without a `payNo` too) refused by name; `save` and the v2 tag differ.
     #[test]
     fn mtx_pay_decodes_and_meta_pay_id_v3_rows() {
-        let t = UAMetaTransfer { from: B256::repeat_byte(0xaa), to: B256::repeat_byte(0x5e), value: U256::from(10), entryRef: B256::ZERO,
-            batch: U256::from(7), nonce: U256::ZERO, validUntil: U256::from(1_800_000_300u64), mode: MODE_RESTRICT_RELAYER,
-            relayer: Address::repeat_byte(2), fee: U256::ZERO, feeRecipient: Address::ZERO };
-        let auth = UASig { keyData: Bytes::new(), signature: Bytes::from_static(&[7; 65]), members: vec![] };
-        let meta = crate::abi::PayMeta { salt: B256::repeat_byte(0x51), payNo: B256::repeat_byte(1), save: true, schema: 0,
-            body: Bytes::new() };
-        let cd = IMtxIds::mtxPayCall { t: t.clone(), auth: auth.clone(), meta: meta.clone() }.abi_encode();
+        let t = UAMetaTransfer {
+            from: B256::repeat_byte(0xaa),
+            to: B256::repeat_byte(0x5e),
+            value: U256::from(10),
+            entryRef: B256::ZERO,
+            batch: U256::from(7),
+            nonce: U256::ZERO,
+            validUntil: U256::from(1_800_000_300u64),
+            mode: MODE_RESTRICT_RELAYER,
+            relayer: Address::repeat_byte(2),
+            fee: U256::ZERO,
+            feeRecipient: Address::ZERO,
+        };
+        let auth = UASig {
+            keyData: Bytes::new(),
+            signature: Bytes::from_static(&[7; 65]),
+            members: vec![],
+        };
+        let meta = crate::abi::PayMeta {
+            salt: B256::repeat_byte(0x51),
+            payNo: B256::repeat_byte(1),
+            save: true,
+            schema: 0,
+            body: Bytes::new(),
+        };
+        let cd = IMtxIds::mtxPayCall {
+            t: t.clone(),
+            auth: auth.clone(),
+            meta: meta.clone(),
+        }
+        .abi_encode();
         assert_eq!(UaMtx::from_calldata(&cd), Some((UaMtx::Transfer(t), auth)));
-        let rows: Vec<serde_json::Value> =
-            serde_json::from_str(include_str!("../../smartcontracts/vectors/metatx/paymeta.json")).unwrap();
+        let rows: Vec<serde_json::Value> = serde_json::from_str(include_str!(
+            "../../smartcontracts/vectors/metatx/paymeta.json"
+        ))
+        .unwrap();
         assert_eq!(rows.len(), 9);
         for r in &rows {
-            let h = |k: &str| alloy::hex::decode(r[k].as_str().unwrap().trim_start_matches("0x")).unwrap();
-            let m = crate::abi::PayMeta { salt: B256::from_slice(&h("salt")), payNo: B256::from_slice(&h("payNo")),
-                save: r["save"].as_bool().unwrap(), schema: r["schema"].as_u64().unwrap() as u16, body: h("body").into() };
+            let h = |k: &str| {
+                alloy::hex::decode(r[k].as_str().unwrap().trim_start_matches("0x")).unwrap()
+            };
+            let m = crate::abi::PayMeta {
+                salt: B256::from_slice(&h("salt")),
+                payNo: B256::from_slice(&h("payNo")),
+                save: r["save"].as_bool().unwrap(),
+                schema: r["schema"].as_u64().unwrap() as u16,
+                body: h("body").into(),
+            };
             if r["accepted"].as_bool().unwrap() {
                 check_pay_meta(&m).unwrap();
-                assert_eq!(meta_pay_id(&m), B256::from_slice(&h("payId")), "{}", r["name"]);
+                assert_eq!(
+                    meta_pay_id(&m),
+                    B256::from_slice(&h("payId")),
+                    "{}",
+                    r["name"]
+                );
             } else {
-                assert!(check_pay_meta(&m).unwrap_err().to_string().starts_with("PAY_META_SHAPE"), "{}", r["name"]);
+                assert!(
+                    check_pay_meta(&m)
+                        .unwrap_err()
+                        .to_string()
+                        .starts_with("PAY_META_SHAPE"),
+                    "{}",
+                    r["name"]
+                );
             }
             if let Some(off) = r["saveOffPayId"].as_str() {
-                assert_eq!(format!("{:#x}", meta_pay_id(&crate::abi::PayMeta { save: false, ..m.clone() })), off, "save is committed");
+                assert_eq!(
+                    format!(
+                        "{:#x}",
+                        meta_pay_id(&crate::abi::PayMeta {
+                            save: false,
+                            ..m.clone()
+                        })
+                    ),
+                    off,
+                    "save is committed"
+                );
             }
             if let Some(v2) = r["v2TagPayId"].as_str() {
                 assert_ne!(format!("{:#x}", meta_pay_id(&m)), v2, "the v3 tag");
             }
         }
-        assert!(check_pay_meta(&crate::abi::PayMeta { payNo: B256::ZERO, ..meta.clone() }).unwrap_err().to_string().starts_with("PAY_META_SHAPE"));
-        assert!(check_pay_meta(&crate::abi::PayMeta { salt: B256::ZERO, ..meta.clone() }).unwrap_err().to_string().starts_with("PAY_META_SHAPE"));
-        assert!(check_pay_meta(&crate::abi::PayMeta { body: Bytes::from_static(b"x"), ..meta }).unwrap_err().to_string().starts_with("PAY_META_SHAPE"));
+        assert!(check_pay_meta(&crate::abi::PayMeta {
+            payNo: B256::ZERO,
+            ..meta.clone()
+        })
+        .unwrap_err()
+        .to_string()
+        .starts_with("PAY_META_SHAPE"));
+        assert!(check_pay_meta(&crate::abi::PayMeta {
+            salt: B256::ZERO,
+            ..meta.clone()
+        })
+        .unwrap_err()
+        .to_string()
+        .starts_with("PAY_META_SHAPE"));
+        assert!(check_pay_meta(&crate::abi::PayMeta {
+            body: Bytes::from_static(b"x"),
+            ..meta
+        })
+        .unwrap_err()
+        .to_string()
+        .starts_with("PAY_META_SHAPE"));
     }
 }
