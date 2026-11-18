@@ -24,9 +24,10 @@ import {EnvKit} from "../helpers/EnvKit.sol";
 contract RegistryTest is RegFixture {
     /// The canonical registry runtime's code hash (a pin: it moves with the registry's source, its interface or the
     /// compiler settings, old -> new in the commit).
-    ///      Fix3 CTR-GOV-28 (`setKycProvider` and `setCompliance` take `chainUid_`): 0x1dc2f8a7…8da4 -> this.
+    ///      Fix3 CTR-GOV-28 (`setKycProvider` and `setCompliance` take `chainUid_`): 0x1dc2f8a7…8da4 -> 0x368a66a3…0383.
+    ///      code-format F2 (`bytecode_hash = "none"`: the metadata hash leaves the runtime; its code unchanged) -> this.
     bytes32 internal constant COMPLIANCE_REGISTRY_CODEHASH =
-        0x368a66a3d8e30f2147f5298b21b315e63c62b40555d17d7671aafa4e4de40383;
+        0xfed7b10bb56d6e48e0edd634cc61d7960686cb10a2c1479cd64fe5ee59cde225;
     uint64 internal constant ACCR = 2;
     uint64 internal constant MAX = type(uint64).max;
     bytes32 internal constant ACC = bytes32(uint256(0xACC));
