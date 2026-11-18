@@ -554,9 +554,10 @@ contract GovDeployTest is Test {
         // 19,366 -> 19,532 B; Fable review fixes 2026-11-11 (B P3-1, B P2-1 in the ERC-20 core): 19,532 -> 19,626 B;
         // fix2 CTR-GOV-27's Change (`transferAdmin(bytes32,bytes32)`'s stub in the dispatcher): 19,626 -> 19,652 B; fix3
         // CTR-GOV-28 (the five admin stubs take `chainUid_`): 19,652 -> 19,743 B; round 3zb + 3zc (the six supply-cap stubs,
-        // the holder entries' chain word, CTR-GOV-28 Change / -30): 19,743 -> 19,988 B
-        h.limitCode(19_987);
-        vm.expectRevert(bytes("WrappedToken runtime 19988 B > chain code limit 19987 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        // the holder entries' chain word, CTR-GOV-28 Change / -30): 19,743 -> 19,988 B; code-format F2 (`bytecode_hash =
+        // "none"`, the metadata hash leaves the code): 19,988 -> 19,947 B
+        h.limitCode(19_946);
+        vm.expectRevert(bytes("WrappedToken runtime 19947 B > chain code limit 19946 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
         h.requireGas("WrappedToken");
     }
 

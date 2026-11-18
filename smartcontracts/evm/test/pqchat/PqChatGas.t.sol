@@ -40,16 +40,20 @@ contract PqChatGasTest is PqTopicsBase {
     // PqChat unchanged): regular 1,971,175 -> 1,973,256
     // pqvault R3 (CTR-PQV-12: the group code in `PqGroupBase`, its errors through `_fail`; behaviour unchanged, CTR-PQV-15):
     // 28,776 -> 29,152 B; regular 1,973,256 -> 1,998,222; state 44,602,560 -> 45,177,840 (+376 x 1,530)
-    uint256 internal constant RUNTIME = 29_152;
-    uint256 internal constant RELEASE_REGULAR = 1_998_222;
-    uint256 internal constant RELEASE_STATE = 45_177_840;
+    // code-format F2 (`bytecode_hash = "none"`: the metadata hash leaves runtime and init code, 41 B each; code unchanged):
+    // 29,152 -> 29,111 B; regular 1,998,222 -> 1,996,141; state 45,177,840 -> 45,115,110 (-41 x 1,530)
+    uint256 internal constant RUNTIME = 29_111;
+    uint256 internal constant RELEASE_REGULAR = 1_996_141;
+    uint256 internal constant RELEASE_STATE = 45_115_110;
     // owner 2026-11-10 (group 3p): the topic `name` bound 128 -> 512 B, one PUSH2 for a PUSH1 twice: 16,396 -> 16,398 B, state
     // 25,269,480 -> 25,272,540 (+2 x 1,530), regular unchanged
     // pqvault R3 (CTR-PQV-12: the shared code from `PqGroupBase`, the env and nonce errors through `PqChatCore._fail`): 16,398 ->
     // 16,449 B; regular 1,099,442 -> 1,101,523; state 25,272,540 -> 25,350,570 (+51 x 1,530)
-    uint256 internal constant MODULE_RUNTIME = 16_449;
-    uint256 internal constant MODULE_REGULAR = 1_101_523;
-    uint256 internal constant MODULE_STATE = 25_350_570;
+    // code-format F2 (`bytecode_hash = "none"`, 41 B less runtime and init code; code unchanged): 16,449 -> 16,408 B; regular
+    // 1,101,523 -> 1,099,442; state 25,350,570 -> 25,287,840 (-41 x 1,530)
+    uint256 internal constant MODULE_RUNTIME = 16_408;
+    uint256 internal constant MODULE_REGULAR = 1_099_442;
+    uint256 internal constant MODULE_STATE = 25_287_840;
 
     function _row(string memory what, uint256 regular, uint256 state) internal {
         Vm.Gas memory g = vm.lastCallGas();
