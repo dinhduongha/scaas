@@ -41,14 +41,14 @@ STEPS=(
     "forge-top|evm|smartcontracts/evm|rm -rf test-m-top out/m-top cache/m-top && mkdir test-m-top && cp test/*.t.sol test-m-top/ && FOUNDRY_TEST=test-m-top FOUNDRY_SCRIPT=test-m-top FOUNDRY_OUT=out/m-top FOUNDRY_CACHE_PATH=cache/m-top $cap forge test -j 1; r=\$?; rm -rf test-m-top; exit \$r"
     "forge-modules|evm|smartcontracts/evm|rm -rf out/t66b-legacy && python3 script/modules/legacy_artifacts.py build && $(fdir modules "--match-contract '^(Diff|Modules|Paths|Groups)'")"
     "uagas|evm|smartcontracts/evm|rm -rf out/m-uagas cache/m-uagas && FOUNDRY_TEST=test/ua FOUNDRY_SCRIPT=test/ua FOUNDRY_OUT=out/m-uagas FOUNDRY_CACHE_PATH=cache/m-uagas $cap forge test -j 1 --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol' -vv"
-    "clientkeys-mldsa|evm|smartcontracts/evm|MLDSA_CLIENTKEYS=../../clients/clientkeys $(fdir liquidity "--ffi --match-path test/liquidity/DexLiquidityMldsa.t.sol")"
+    "clientkeys-mldsa|evm|smartcontracts/evm|export MLDSA_CLIENTKEYS=../../clients/clientkeys && $(fdir liquidity "--ffi --match-path test/liquidity/DexLiquidityMldsa.t.sol")"
     "size|evm|smartcontracts/evm|python3 ../../scripts/size_gate.py --self-test && rm -rf cache/m-sizes && mkdir -p out && FOUNDRY_OUT=out FOUNDRY_CACHE_PATH=cache/m-sizes $cap forge build -j 1 src --sizes --json > out/m-sizes.json && python3 ../../scripts/size_gate.py out/m-sizes.json size-baseline.json"
     "testnet-build|evm|smartcontracts/evm|rm -rf out/m-testnet cache/m-testnet && FOUNDRY_PROFILE=scaas-testnet FOUNDRY_OUT=out/m-testnet FOUNDRY_CACHE_PATH=cache/m-testnet $cap forge build -j 1 && echo RESULT built"
     "gen-set|other|.|python3 -I pqz-core/params/sets/gen_set.py --all --check && python3 -I pqz-core/pqzl/params/to_rust.py --check && echo RESULT generated files in sync"
     "node-test|other|scaas-node|$N cargo test $C"
     "node-clippy|other|scaas-node|$cap cargo clippy $C --all-targets -- -D warnings"
-    "node-e2e|other|scaas-node|$N cargo test $C --test e2e -- --ignored --test-threads=1"
-    "node-e2e-ua8|other|scaas-node|$N cargo test $C --test e2e_ua8 -- --ignored --test-threads=1"
+    "node-e2e|other|scaas-node|(cd ../clients/zether-prover && $cap cargo build $C --release --bin zether-cli) && $N cargo test $C --test e2e -- --ignored --test-threads=1"
+    "node-e2e-ua8|other|.|smartcontracts/soroban/scripts/e2e-ua8-local.sh"
     "node-e2e-hedera|other|scaas-node|(cd ../smartcontracts/evm && $cap forge build test/hedera/HederaMocks.sol) && $N cargo test $C --test e2e_hedera -- --ignored --test-threads=1"
     "node-e2e-soroban|other|scaas-node|CARGO_BUILD_JOBS=2 $cap ../smartcontracts/scripts/build.sh soroban && ../smartcontracts/soroban/scripts/quickstart.sh up && trap '../smartcontracts/soroban/scripts/quickstart.sh down' EXIT && ../smartcontracts/soroban/scripts/quickstart.sh wait && $N cargo test $C --test e2e_soroban -- --ignored --test-threads=1 && $N cargo test $C --test e2e_soroban_ua -- --ignored --test-threads=1"
     "node-e2e-solana|other|scaas-node|CARGO_BUILD_JOBS=2 $cap ../smartcontracts/scripts/build.sh solana && $N bash -c \"../smartcontracts/solana/scripts/devnet.sh up --upgradeable-program BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d ../smartcontracts/solana/target/deploy/scaas.so 73VoVWyfxmaWC6gUjsse6xzNTLLoEhazMCcKakXWbebm --bpf-program A4PasPZEK899MesXpT3MSA4ufnpHcyfxjKuxRXmcZnRJ ../smartcontracts/solana/target/deploy/cpi_wrapper.so && trap '../smartcontracts/solana/scripts/devnet.sh down' EXIT && cargo test $C --test e2e_solana -- --ignored --test-threads=1\""
@@ -176,6 +176,7 @@ row() { # replace the step's summary row (flock: two runner processes share the 
 worst=0
 for s in "${WANT[@]}"; do
     IFS='|' read -r name grp dir cmd <<<"$(cmd_of "$s")"
+    sha=$(git rev-parse --short=9 HEAD)
     log=$L/$name.log
     if [[ $FORCE != --force && -f $log ]] && clean && [[ $(head -1 "$log") == "# $name at commit $sha" ]] && [[ $(tail -1 "$log") == rc=0 ]]; then
         echo "[M] $name: done at $sha (clean tree), skipped"
