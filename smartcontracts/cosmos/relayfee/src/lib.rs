@@ -10,8 +10,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    from_json, instantiate2_address, to_json_binary, Addr, Binary, Deps, DepsMut, Empty, Env, Event, HexBinary,
-    MessageInfo, Reply, Response, StdResult, SubMsg, WasmMsg,
+    from_json, instantiate2_address, to_json_binary, Addr, Binary, Deps, DepsMut, Empty, Env,
+    Event, HexBinary, MessageInfo, Reply, Response, StdResult, SubMsg, WasmMsg,
 };
 use cw_storage_plus::Item;
 use serde::{Deserialize, Serialize};
@@ -30,7 +30,13 @@ pub struct InstantiateMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum ExecuteMsg {
-    Relay { target: String, msg: Binary, token: String, payload: Binary, auth: Auth },
+    Relay {
+        target: String,
+        msg: Binary,
+        token: String,
+        payload: Binary,
+        auth: Auth,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -38,15 +44,24 @@ pub enum ExecuteMsg {
 pub enum QueryMsg {
     Executor {},
     /// `relay_ref(chain id, target, msg)` (hex).
-    RelayRef { target: String, msg: Binary },
+    RelayRef {
+        target: String,
+        msg: Binary,
+    },
 }
 
 /// Token messages the router sends (the `scaas_token::ExecuteMsg` arms, without depending on the token crate).
 #[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
 enum TokenMsg<'a> {
-    Relay { payload: &'a Binary, auth: &'a Auth },
-    Transfer { recipient: &'a str, amount: cosmwasm_std::Uint128 },
+    Relay {
+        payload: &'a Binary,
+        auth: &'a Auth,
+    },
+    Transfer {
+        recipient: &'a str,
+        amount: cosmwasm_std::Uint128,
+    },
 }
 
 #[derive(Serialize)]
@@ -61,8 +76,16 @@ const LOCK: Item<bool> = Item::new("lock");
 /// Instantiates the executor (`Instantiate2`, fixed salt: its address follows from the router's and the code's
 /// checksum; the router is its creator and so its only caller).
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn instantiate(deps: DepsMut, env: Env, _info: MessageInfo, msg: InstantiateMsg) -> StdResult<Response> {
-    let checksum = deps.querier.query_wasm_code_info(msg.executor_code_id)?.checksum;
+pub fn instantiate(
+    deps: DepsMut,
+    env: Env,
+    _info: MessageInfo,
+    msg: InstantiateMsg,
+) -> StdResult<Response> {
+    let checksum = deps
+        .querier
+        .query_wasm_code_info(msg.executor_code_id)?
+        .checksum;
     let me = deps.api.addr_canonicalize(env.contract.address.as_str())?;
     let exec = instantiate2_address(checksum.as_slice(), &me, EXECUTOR_SALT).map_err(err)?;
     EXECUTOR.save(deps.storage, &deps.api.addr_humanize(&exec)?)?;
@@ -77,12 +100,22 @@ pub fn instantiate(deps: DepsMut, env: Env, _info: MessageInfo, msg: Instantiate
 }
 
 fn target_ref(deps: Deps, env: &Env, target: &Addr, msg: &[u8]) -> StdResult<[u8; 32]> {
-    Ok(relay_ref(&env.block.chain_id, deps.api.addr_canonicalize(target.as_str())?.as_slice(), msg))
+    Ok(relay_ref(
+        &env.block.chain_id,
+        deps.api.addr_canonicalize(target.as_str())?.as_slice(),
+        msg,
+    ))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
-    let ExecuteMsg::Relay { target, msg, token, payload, auth } = msg;
+    let ExecuteMsg::Relay {
+        target,
+        msg,
+        token,
+        payload,
+        auth,
+    } = msg;
     if !info.funds.is_empty() {
         return Err(err("relayfee: funds are not accepted"));
     }
@@ -91,7 +124,12 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
     }
     // CTR-MTX-13: an admin could migrate the router (the bound relayer of every payment signed to it) into code
     // that settles without the call. Deploy with `--no-admin`; a failed query fails closed.
-    if deps.querier.query_wasm_contract_info(env.contract.address.as_str())?.admin.is_some() {
+    if deps
+        .querier
+        .query_wasm_contract_info(env.contract.address.as_str())?
+        .admin
+        .is_some()
+    {
         return Err(err("relayfee: the router has an admin"));
     }
     let target = deps.api.addr_validate(&target)?;
@@ -110,20 +148,47 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         return Err(err("relayfee: the payment is not bound to this call"));
     }
     // CTR-MTX-27: a call to an address with no contract would "succeed" and burn the payment.
-    if deps.querier.query_wasm_contract_info(target.as_str()).is_err() {
+    if deps
+        .querier
+        .query_wasm_contract_info(target.as_str())
+        .is_err()
+    {
         return Err(err("relayfee: target is not an instantiated contract"));
     }
     let payer = deps.api.addr_validate(&op.from)?;
     let open = op.to == me;
-    let payee = if open { info.sender.clone() } else { deps.api.addr_validate(&op.to)? };
+    let payee = if open {
+        info.sender.clone()
+    } else {
+        deps.api.addr_validate(&op.to)?
+    };
     LOCK.save(deps.storage, &true)?;
-    let wasm = |contract: &Addr, m: Binary| WasmMsg::Execute { contract_addr: contract.to_string(), msg: m, funds: vec![] };
+    let wasm = |contract: &Addr, m: Binary| WasmMsg::Execute {
+        contract_addr: contract.to_string(),
+        msg: m,
+        funds: vec![],
+    };
     let mut msgs = vec![
-        SubMsg::new(wasm(&exec, to_json_binary(&ExecMsg::Exec { target: target.as_str(), msg: &msg })?)),
-        SubMsg::new(wasm(&token, to_json_binary(&TokenMsg::Relay { payload: &payload, auth: &auth })?)),
+        SubMsg::new(wasm(
+            &exec,
+            to_json_binary(&ExecMsg::Exec {
+                target: target.as_str(),
+                msg: &msg,
+            })?,
+        )),
+        SubMsg::new(wasm(
+            &token,
+            to_json_binary(&TokenMsg::Relay {
+                payload: &payload,
+                auth: &auth,
+            })?,
+        )),
     ];
     if open {
-        let t = TokenMsg::Transfer { recipient: info.sender.as_str(), amount: op.amount };
+        let t = TokenMsg::Transfer {
+            recipient: info.sender.as_str(),
+            amount: op.amount,
+        };
         msgs.push(SubMsg::new(wasm(&token, to_json_binary(&t)?)));
     }
     // The last message's reply clears the re-entry flag; any failure reverts it with everything else.

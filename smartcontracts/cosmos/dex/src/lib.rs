@@ -6,8 +6,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    from_json, to_json_binary, Addr, Binary, Deps, DepsMut, Env, Event, HexBinary, MessageInfo, Response,
-    StdResult, Uint128, WasmMsg,
+    from_json, to_json_binary, Addr, Binary, Deps, DepsMut, Env, Event, HexBinary, MessageInfo,
+    Response, StdResult, Uint128, WasmMsg,
 };
 use cw_storage_plus::{Item, Map};
 use serde::{Deserialize, Serialize};
@@ -54,10 +54,21 @@ pub struct Market {
 // Deserialized once per execute call; boxing a Leg would only add an allocation.
 #[allow(clippy::large_enum_variant)]
 pub enum ExecuteMsg {
-    SetMarket { token_a: String, token_b: String, market: Market },
-    Settle { maker: Leg, taker: Leg },
+    SetMarket {
+        token_a: String,
+        token_b: String,
+        market: Market,
+    },
+    Settle {
+        maker: Leg,
+        taker: Leg,
+    },
     /// Anti-lock: DEX không giữ số dư giữa các tx (lệnh mở chỉ là chữ ký), nên mọi số dư là token gửi nhầm.
-    Sweep { token: String, recipient: String, amount: Uint128 },
+    Sweep {
+        token: String,
+        recipient: String,
+        amount: Uint128,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -85,19 +96,35 @@ const MARKETS: Map<(&str, &str), Market> = Map::new("market");
 const FILLED: Map<&[u8], bool> = Map::new("filled");
 
 fn pair<'a>(a: &'a str, b: &'a str) -> (&'a str, &'a str) {
-    if a <= b { (a, b) } else { (b, a) }
+    if a <= b {
+        (a, b)
+    } else {
+        (b, a)
+    }
 }
 
 fn exec(contract: &str, msg: &TokenMsg) -> StdResult<WasmMsg> {
-    Ok(WasmMsg::Execute { contract_addr: contract.to_string(), msg: to_json_binary(msg)?, funds: vec![] })
+    Ok(WasmMsg::Execute {
+        contract_addr: contract.to_string(),
+        msg: to_json_binary(msg)?,
+        funds: vec![],
+    })
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn instantiate(deps: DepsMut, _env: Env, _info: MessageInfo, msg: InstantiateMsg) -> StdResult<Response> {
-    CONFIG.save(deps.storage, &Config {
-        admin: deps.api.addr_validate(&msg.admin)?,
-        fee_recipient: deps.api.addr_validate(&msg.fee_recipient)?,
-    })?;
+pub fn instantiate(
+    deps: DepsMut,
+    _env: Env,
+    _info: MessageInfo,
+    msg: InstantiateMsg,
+) -> StdResult<Response> {
+    CONFIG.save(
+        deps.storage,
+        &Config {
+            admin: deps.api.addr_validate(&msg.admin)?,
+            fee_recipient: deps.api.addr_validate(&msg.fee_recipient)?,
+        },
+    )?;
     Ok(Response::new())
 }
 
@@ -117,35 +144,64 @@ fn order(env: &Env, leg: &Leg) -> StdResult<Order> {
     if op.extra != HexBinary::from(sha256(&leg.params)).to_hex() {
         return Err(err("dex: params do not match the signed order"));
     }
-    Ok(Order { op, params, digest: sha256(&leg.payload) })
+    Ok(Order {
+        op,
+        params,
+        digest: sha256(&leg.payload),
+    })
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     match msg {
-        ExecuteMsg::SetMarket { token_a, token_b, market } => {
+        ExecuteMsg::SetMarket {
+            token_a,
+            token_b,
+            market,
+        } => {
             if info.sender != CONFIG.load(deps.storage)?.admin {
                 return Err(err("unauthorized"));
             }
             if market.maker_ppm > MAX_FEE_PPM || market.taker_ppm > MAX_FEE_PPM {
                 return Err(err("dex: fee above 1%"));
             }
-            let (a, b) = (deps.api.addr_validate(&token_a)?, deps.api.addr_validate(&token_b)?);
+            let (a, b) = (
+                deps.api.addr_validate(&token_a)?,
+                deps.api.addr_validate(&token_b)?,
+            );
             MARKETS.save(deps.storage, pair(a.as_str(), b.as_str()), &market)?;
             Ok(Response::new().add_attribute("action", "set_market"))
         }
-        ExecuteMsg::Sweep { token, recipient, amount } => {
+        ExecuteMsg::Sweep {
+            token,
+            recipient,
+            amount,
+        } => {
             if info.sender != CONFIG.load(deps.storage)?.admin {
                 return Err(err("unauthorized"));
             }
-            let (token, recipient) = (deps.api.addr_validate(&token)?, deps.api.addr_validate(&recipient)?);
-            let msg = exec(token.as_str(), &TokenMsg::Transfer { recipient: recipient.to_string(), amount })?;
-            Ok(Response::new().add_message(msg).add_attribute("action", "sweep"))
+            let (token, recipient) = (
+                deps.api.addr_validate(&token)?,
+                deps.api.addr_validate(&recipient)?,
+            );
+            let msg = exec(
+                token.as_str(),
+                &TokenMsg::Transfer {
+                    recipient: recipient.to_string(),
+                    amount,
+                },
+            )?;
+            Ok(Response::new()
+                .add_message(msg)
+                .add_attribute("action", "sweep"))
         }
         ExecuteMsg::Settle { maker, taker } => {
             let cfg = CONFIG.load(deps.storage)?;
             let (m, t) = (order(&env, &maker)?, order(&env, &taker)?);
-            if m.op.contract == t.op.contract || m.params.buy_token != t.op.contract || t.params.buy_token != m.op.contract {
+            if m.op.contract == t.op.contract
+                || m.params.buy_token != t.op.contract
+                || t.params.buy_token != m.op.contract
+            {
                 return Err(err("dex: orders do not cross"));
             }
             let market = MARKETS
@@ -157,7 +213,11 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
                 }
                 FILLED.save(deps.storage, &o.digest, &true)?;
             }
-            let (maker_ppm, taker_ppm) = if market.fee_on { (market.maker_ppm, market.taker_ppm) } else { (0, 0) };
+            let (maker_ppm, taker_ppm) = if market.fee_on {
+                (market.maker_ppm, market.taker_ppm)
+            } else {
+                (0, 0)
+            };
             if maker_ppm > m.params.max_fee_ppm || taker_ppm > t.params.max_fee_ppm {
                 return Err(err("dex: fee above the signed maximum"));
             }
@@ -170,21 +230,63 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
                 return Err(err("dex: price limit"));
             }
             let mut msgs = vec![
-                exec(&m.op.contract, &TokenMsg::Relay { payload: maker.payload, auth: maker.auth })?,
-                exec(&t.op.contract, &TokenMsg::Relay { payload: taker.payload, auth: taker.auth })?,
-                exec(&t.op.contract, &TokenMsg::Transfer { recipient: m.op.from.clone(), amount: to_maker })?,
-                exec(&m.op.contract, &TokenMsg::Transfer { recipient: t.op.from.clone(), amount: to_taker })?,
+                exec(
+                    &m.op.contract,
+                    &TokenMsg::Relay {
+                        payload: maker.payload,
+                        auth: maker.auth,
+                    },
+                )?,
+                exec(
+                    &t.op.contract,
+                    &TokenMsg::Relay {
+                        payload: taker.payload,
+                        auth: taker.auth,
+                    },
+                )?,
+                exec(
+                    &t.op.contract,
+                    &TokenMsg::Transfer {
+                        recipient: m.op.from.clone(),
+                        amount: to_maker,
+                    },
+                )?,
+                exec(
+                    &m.op.contract,
+                    &TokenMsg::Transfer {
+                        recipient: t.op.from.clone(),
+                        amount: to_taker,
+                    },
+                )?,
             ];
             if !fee_m.is_zero() {
-                msgs.push(exec(&t.op.contract, &TokenMsg::Transfer { recipient: cfg.fee_recipient.to_string(), amount: fee_m })?);
+                msgs.push(exec(
+                    &t.op.contract,
+                    &TokenMsg::Transfer {
+                        recipient: cfg.fee_recipient.to_string(),
+                        amount: fee_m,
+                    },
+                )?);
             }
             if !fee_t.is_zero() {
-                msgs.push(exec(&m.op.contract, &TokenMsg::Transfer { recipient: cfg.fee_recipient.to_string(), amount: fee_t })?);
+                msgs.push(exec(
+                    &m.op.contract,
+                    &TokenMsg::Transfer {
+                        recipient: cfg.fee_recipient.to_string(),
+                        amount: fee_t,
+                    },
+                )?);
             }
             Ok(Response::new().add_messages(msgs).add_event(
                 Event::new("trade_settled")
-                    .add_attribute("maker_digest", format!("0x{}", HexBinary::from(m.digest).to_hex()))
-                    .add_attribute("taker_digest", format!("0x{}", HexBinary::from(t.digest).to_hex()))
+                    .add_attribute(
+                        "maker_digest",
+                        format!("0x{}", HexBinary::from(m.digest).to_hex()),
+                    )
+                    .add_attribute(
+                        "taker_digest",
+                        format!("0x{}", HexBinary::from(t.digest).to_hex()),
+                    )
                     .add_attribute("maker_fee", fee_m)
                     .add_attribute("taker_fee", fee_t),
             ))
@@ -195,7 +297,9 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::Market { token_a, token_b } => to_json_binary(&MARKETS.may_load(deps.storage, pair(&token_a, &token_b))?),
+        QueryMsg::Market { token_a, token_b } => {
+            to_json_binary(&MARKETS.may_load(deps.storage, pair(&token_a, &token_b))?)
+        }
         QueryMsg::Filled { digest } => to_json_binary(&FILLED.has(deps.storage, digest.as_slice())),
     }
 }

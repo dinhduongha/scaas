@@ -334,6 +334,11 @@ unchanged. Deploy tooling is PLANNED (`deploy.sh` exits 2 for Cosmos); older cla
 the node's duplicate-chain-id refusal. Tests: the deploy script yields different addresses on two devnets with the
 same chain id and different genesis; the node refuses a duplicate chain id.
 
+**Formatted build (2026-11-18).** The contracts' Rust was formatted (rustfmt, code-format plan F1); panic locations
+moved, so `scaas_mandate.wasm`, `scaas_relayfee.wasm` and `scaas_token.wasm` from `build-wasm.sh` differ from the
+earlier build (`scaas_dex.wasm`, `scaas_relayexec.wasm` unchanged); no hash of them is pinned. The next redeploy carries
+the formatted build.
+
 ## 9. Conformance
 
 <a id="conformance"></a>
