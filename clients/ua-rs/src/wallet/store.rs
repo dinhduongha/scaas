@@ -19,7 +19,7 @@
 // the readers of secrets (`Handle::with`, the entropy for the vault) are the signers (T3a–T3d) and the vault (T9)
 #![cfg_attr(not(feature = "vectors"), allow(dead_code))]
 use super::manifest::{entry_ua, Manifest};
-use super::{Error, KeyId, Result};
+use super::{Error, KeyId, Result, Vault};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Condvar, Mutex, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use zeroize::{Zeroize, Zeroizing};
@@ -184,6 +184,12 @@ pub(crate) struct Arena {
     keys: HashMap<KeyId, (Slot, Vec<u8>)>, // a derived key: its slot and its public key data
     tested: HashSet<KeyId>,                // the keys whose self-test ran in this store (a KEM key: FIPS 203 §7.3)
     self_tests: usize,                     // self-tests run in this store
+    /// The DEK of each label vault opened or sealed while this arena is open, and that vault as it stands (its public
+    /// envelopes): what `Wallet::reseal_label_vault` re-seals under the same DEK (scaas-sdk spec §6.10). Wiped with the arena.
+    deks: HashMap<String, (Slot, Vault)>,
+    /// The PRF key-encryption key retained at a passkey or platform unlock (scaas-sdk spec §6.10, owner 2026-11-18 (b)): label
+    /// vaults open with it on first use. In the arena's locked pages, so `lock` and drop zero it with them.
+    prf_kek: Option<Slot>,
 }
 
 impl Arena {
@@ -191,7 +197,7 @@ impl Arena {
     fn empty() -> Arena {
         let empty = Slot { chunk: 0, start: 0, len: 0 };
         let (keys, tested) = (HashMap::new(), HashSet::new());
-        Arena { chunks: Vec::new(), used: 0, total: 0, entropy: empty, seed: empty, mini: empty, keys, tested, self_tests: 0 }
+        Arena { chunks: Vec::new(), used: 0, total: 0, entropy: empty, seed: empty, mini: empty, keys, tested, self_tests: 0, deks: HashMap::new(), prf_kek: None }
     }
 
     fn new(entropy: &[u8], seed: &[u8; 64], mini: &[u8; 32]) -> Result<Arena> {
@@ -230,6 +236,10 @@ impl Arena {
         self.get(self.entropy)
     }
 
+    pub(crate) fn seed_bytes(&self) -> Result<&[u8]> {
+        self.get(self.seed)
+    }
+
     pub(crate) fn mini(&self) -> Result<&[u8]> {
         self.get(self.mini)
     }
@@ -237,6 +247,44 @@ impl Arena {
     /// The secret of key `id`, if the arena holds it.
     pub(crate) fn secret(&self, id: KeyId) -> Option<&[u8]> {
         self.get(self.keys.get(&id)?.0).ok()
+    }
+
+    /// Holds `dek` as the DEK of label vault `vault` (opened or sealed anew), replacing what the label held.
+    // ponytail: a replaced DEK's slot stays in the arena (wiped with it at `lock`); 32 bytes per vault opened again.
+    pub(crate) fn hold_dek(&mut self, dek: &[u8; 32], vault: Vault) -> Result<()> {
+        let slot = self.put(dek)?;
+        self.deks.insert(vault.label().to_owned(), (slot, vault));
+        Ok(())
+    }
+
+    /// Records `vault` (re-sealed under the DEK its label holds) as the label's vault; `Argument` if the label holds none.
+    pub(crate) fn resealed(&mut self, vault: Vault) -> Result<()> {
+        let (_, v) = self.deks.get_mut(vault.label()).ok_or(Error::Argument)?;
+        *v = vault;
+        Ok(())
+    }
+
+    /// Retains `kek` as the PRF key-encryption key (replacing one retained before).
+    pub(crate) fn hold_prf_kek(&mut self, kek: &[u8; 32]) -> Result<()> {
+        self.prf_kek = Some(self.put(kek)?);
+        Ok(())
+    }
+
+    /// The retained PRF key-encryption key, if any.
+    pub(crate) fn prf_kek(&self) -> Option<Zeroizing<[u8; 32]>> {
+        Some(Zeroizing::new(self.get(self.prf_kek?).ok()?.try_into().ok()?))
+    }
+
+    /// Whether label vault `label` is open in this arena (its DEK held).
+    pub(crate) fn holds_label(&self, label: &str) -> bool {
+        self.deks.contains_key(label)
+    }
+
+    /// The DEK held for label vault `label` and that vault, if any.
+    pub(crate) fn dek(&self, label: &str) -> Option<(Zeroizing<[u8; 32]>, Vault)> {
+        let (slot, v) = self.deks.get(label)?;
+        let dek: [u8; 32] = self.get(*slot).ok()?.try_into().ok()?;
+        Some((Zeroizing::new(dek), v.clone()))
     }
 
     /// `secret` (and its public key data) as key `id`, a key not derived from the seed (an imported key).

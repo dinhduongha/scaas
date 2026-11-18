@@ -1,0 +1,5 @@
+# t9b mutants at commit e99b7be81 (name | outcome | test)
+a duplicate row is Argument again (Q1) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account one_index_per_wallet
+account names refuse control characters only (Q2) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account names_bounded
+the helper forgets category Cf (Q2) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib text::
+3 mutants, 3 killed, 0 survived, 0 not loaded

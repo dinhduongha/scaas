@@ -1,0 +1,8 @@
+# t13a mutants at commit 96c30abfe (name | outcome | test)
+with2 locks one secret twice | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib with2_one_secret_twice_and_both_orders
+with2 locks in call order, not id order | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib with2_one_secret_twice_and_both_orders
+secret_dispose holds the registry over the secret's lock | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib dispose_of_a_secret_in_use_does_not_hold_the_registry
+change_passphrase nests the two passphrases | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test passkey change_passphrase_one_secret_for_both
+root (d) nests the key and the passphrase | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test roots one_secret_for_two_parameters_does_not_hang
+root (c) nests the two signatures | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test roots one_secret_for_two_parameters_does_not_hang
+6 mutants, 6 killed, 0 survived, 0 not loaded

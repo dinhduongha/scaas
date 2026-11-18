@@ -14,7 +14,6 @@ use scaas_ua::facade::{pqz as fpqz, zether as fzether};
 use scaas_ua::wallet as uw;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
-use zeroize::Zeroize;
 
 type R<T> = Result<T, UAError>;
 
@@ -78,18 +77,10 @@ pub struct UaPqzKey(fpqz::PqzKey, Live);
 
 // --- secrets ---------------------------------------------------------------------------------------------------------------
 
-/// ua-rs's arena chunk: 16 KiB, page-aligned (the largest page of a listed target).
-const BLOCK: usize = 16384;
-#[repr(C, align(16384))]
-struct Block([u8; BLOCK]);
-/// The largest secret (16 MiB; the PQZ facade's output is at most 1,052,672 bytes).
-const SECRET_MAX: usize = 1 << 24;
-
-/// A secret in Rust-owned memory: `len` bytes at the start of whole 16 KiB page-aligned blocks of its own (at least one),
-/// allocated once at their final size and never moved or grown, so no stale copy; locked in RAM and no-dump with ua-rs's
-/// [`uw::protect`] (feature `mlock`, best effort, as the wallet's arena: a refusal fails nothing); on drop zeroed, then
-/// unmarked and unlocked. Dart writes an input and reads an output in place (`addr`, `size`, `dart:ffi`), never through
-/// frb's codec. `SecretBytes.take(src)` (Dart) allocates, writes and zeroes `src`; `dispose()` drops this side.
+/// A secret in Rust-owned memory: ua-rs's `SecretBytes` (scaas-sdk plan T2a: the one implementation, lifted from here), whole
+/// 16 KiB page-aligned blocks of its own, allocated once at their final size and never moved, locked in RAM and no-dump best
+/// effort, zeroed on drop. Dart writes an input and reads an output in place (`addr`, `size`, `dart:ffi`), never through frb's
+/// codec. `SecretBytes.take(src)` (Dart) allocates, writes and zeroes `src`; `dispose()` drops this side.
 #[frb(opaque, dart_code = "
 import 'dart:ffi' as ffi;
 
@@ -115,47 +106,30 @@ import 'dart:ffi' as ffi;
 
   static final _views = Expando<SecretBytes>();
 ")]
-pub struct SecretBytes {
-    mem: Box<[Block]>,
-    len: usize,
-    locked: bool,
-    no_dump: bool,
-}
+pub struct SecretBytes(uw::SecretBytes);
 impl SecretBytes {
     fn alloc(len: usize) -> R<SecretBytes> {
-        if len > SECRET_MAX {
-            return Err(arg());
-        }
-        let mut mem: Box<[Block]> = (0..len.div_ceil(BLOCK).max(1)).map(|_| Block([0; BLOCK])).collect();
-        let (locked, no_dump) = uw::protect::on(mem.as_mut_ptr().cast(), mem.len() * BLOCK);
-        Ok(SecretBytes { mem, len, locked, no_dump })
+        Ok(SecretBytes(uw::SecretBytes::new(len)?))
     }
     fn get(&self) -> &[u8] {
-        // SAFETY: `mem` is `mem.len() * BLOCK` contiguous initialised bytes (`Block` is `repr(C)`, its size its alignment), and
-        // `len` is at most that
-        unsafe { std::slice::from_raw_parts(self.mem.as_ptr().cast::<u8>(), self.len) }
+        // SAFETY: ua-rs's blocks stay at `addr` for the secret's life, `len` bytes initialised; they are freed only by its
+        // `dispose` or drop, which this wrapper reaches only through its own drop (it never hands out the registry id), so not
+        // while `&self` is borrowed
+        unsafe { std::slice::from_raw_parts(self.0.addr() as *const u8, self.0.len()) }
     }
     fn get_mut(&mut self) -> &mut [u8] {
         // SAFETY: as in `get`, borrowed mutably through `self`
-        unsafe { std::slice::from_raw_parts_mut(self.mem.as_mut_ptr().cast::<u8>(), self.len) }
+        unsafe { std::slice::from_raw_parts_mut(self.0.addr() as *mut u8, self.0.len()) }
     }
     /// The address of the first byte, for Dart's in-place write or read; the same for the buffer's life.
     #[frb(sync)]
     pub fn addr(&mut self) -> usize {
-        self.mem.as_mut_ptr() as usize
+        self.0.addr()
     }
     /// The secret's length in bytes.
     #[frb(sync)]
     pub fn size(&self) -> u32 {
-        u32::try_from(self.len).unwrap_or(u32::MAX)
-    }
-}
-impl Drop for SecretBytes {
-    fn drop(&mut self) {
-        self.mem.iter_mut().for_each(|b| b.0.zeroize());
-        #[cfg(test)]
-        tests::released(&self.mem);
-        uw::protect::off(self.mem.as_mut_ptr().cast(), self.mem.len() * BLOCK, self.locked, self.no_dump);
+        u32::try_from(self.0.len()).unwrap_or(u32::MAX)
     }
 }
 /// A new secret of `len` zero bytes (`UAArgument` above 16 MiB); Dart's `SecretBytes.take` fills it.
@@ -752,44 +726,25 @@ impl UaPqzKey {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::Cell;
 
-    thread_local! {
-        /// Buffers released on this thread, and those released with a non-zero byte (ua-rs's `vectors::released` pattern).
-        static RELEASED: Cell<(usize, usize)> = const { Cell::new((0, 0)) };
-    }
-    pub(super) fn released(mem: &[Block]) {
-        let nonzero = mem.iter().any(|b| b.0.iter().any(|x| *x != 0));
-        RELEASED.with(|r| r.set((r.get().0 + 1, r.get().1 + usize::from(nonzero))));
-    }
-
+    /// The in-place path over ua-rs's `SecretBytes` (its blocks, zeroing and locking: ua-rs's `secret_bytes_zeroed_on_dispose`).
     #[test]
-    fn secret_fixed_locked_and_zeroed_on_drop() {
+    fn secret_in_place_write_and_read() {
         let mut s = secret_alloc(100).unwrap();
         let p = s.addr();
-        assert_eq!((p % BLOCK, s.size(), s.mem.len()), (0, 100, 1));
+        assert_eq!((p % 16384, s.size()), (0, 100));
         // Dart's in-place write
         // SAFETY: `p` is the first of `s`'s 100 bytes, `s` alive and not borrowed
         unsafe { std::ptr::write_bytes(p as *mut u8, 0xa5, 100) };
         assert_eq!(s.get(), &[0xa5; 100][..]);
         assert_eq!(s.addr(), p, "never moved");
-        assert!(s.mem[0].0[100..].iter().all(|x| *x == 0), "the tail stays zero");
-        assert_eq!(s.locked, cfg!(unix), "mlock (best effort; RLIMIT_MEMLOCK here is above 16 KiB)");
-        let before = RELEASED.with(Cell::get);
-        drop(s);
-        assert_eq!(RELEASED.with(Cell::get), (before.0 + 1, before.1), "released once, every byte zero");
-        // a positive control: the hook sees a non-zero block
-        released(&[Block([1; BLOCK])]);
-        assert_eq!(RELEASED.with(Cell::get), (before.0 + 2, before.1 + 1));
     }
 
     #[test]
     fn secret_sizes_and_outputs() {
         let e = secret_alloc(0).unwrap();
-        assert_eq!((e.size(), e.mem.len(), e.get().len()), (0, 1, 0), "an empty secret: one block, nothing in it");
-        let big = secret_alloc(i64::try_from(BLOCK).unwrap() + 1).unwrap();
-        assert_eq!(big.mem.len(), 2);
-        assert_eq!(secret_alloc(i64::try_from(SECRET_MAX + 1).unwrap()).err().map(|e| e.code), Some("UAArgument".into()));
+        assert_eq!((e.size(), e.get().len()), (0, 0), "an empty secret");
+        assert_eq!(secret_alloc(i64::try_from(uw::SECRET_MAX + 1).unwrap()).err().map(|e| e.code), Some("UAArgument".into()));
         assert_eq!(secret_alloc(-1).err().map(|e| e.code), Some("UAArgument".into()), "a negative length (T13 C4)");
         assert_eq!(out(b"words").unwrap().get(), b"words");
     }

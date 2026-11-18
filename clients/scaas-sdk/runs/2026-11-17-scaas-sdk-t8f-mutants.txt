@@ -1,0 +1,5 @@
+# t8f mutants at commit dbc8a55de (name | outcome | test)
+swap two arguments of mtxInvalidateNonces | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_dex
+a wrong selector on mtxCancelOrders | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_dex
+the signature out of its one-element list | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_dex
+3 mutants, 3 killed, 0 survived, 0 not loaded

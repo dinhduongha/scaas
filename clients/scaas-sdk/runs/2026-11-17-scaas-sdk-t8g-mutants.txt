@@ -1,0 +1,8 @@
+# t8g mutants at commit 364e8b6a6 (name | outcome | test)
+swap two arguments of mtxSetFeeSplit | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_router
+a wrong selector on mtxMintToUA | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_router
+drop the unsigned config of mtxCreateToken | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_router
+a creation's initHash not filled from its config | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_router
+a release approval given a job op | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_router
+the approval's release words flat | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_router
+6 mutants, 6 killed, 0 survived, 0 not loaded

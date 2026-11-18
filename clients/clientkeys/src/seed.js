@@ -12,8 +12,11 @@ import { sha512, sha256 } from '@noble/hashes/sha2.js';
 import { blake2b } from '@noble/hashes/blake2.js';
 import { sha3_256 } from '@noble/hashes/sha3.js';
 import { ripemd160 } from '@noble/hashes/legacy.js';
+import { argon2id } from '@noble/hashes/argon2.js';
+import { hkdf } from '@noble/hashes/hkdf.js';
+import { bytesToNumberBE, numberToBytesBE, equalBytes } from '@noble/curves/utils.js';
 import { bech32, bech32m, base32, base58 } from '@scure/base';
-import { concatBytes, utf8ToBytes, bytesToHex, hex, wipe } from './bytes.js';
+import { concatBytes, utf8ToBytes, bytesToHex, hex, fromHex, keccak_256, wipe } from './bytes.js';
 import { evmAddress, hashTypedData, keyProofMessage, evmTransaction, signedTransaction } from './evm.js';
 import { UAError } from './ua.js';
 import { sr25519Sign } from './substrate.js';
@@ -76,6 +79,30 @@ export function seedFromEntropy(entropy, passphrase = '') {
 
 export function seedFromWords(text, passphrase = '') {
   return bip39.mnemonicToSeedSync(normalizeMnemonic(text), passphrase);
+}
+
+/** BIP-85's BIP-39 application (scaas-sdk spec §6.4): the child mnemonic `index` of `words` words of a BIP-32 root (`seed`, the
+ *  64-byte BIP-39 seed, or an HDKey): path m/83696968'/39'/0'/<words>'/<index>' (English, language 0), entropy = the first
+ *  words·4/3 bytes of HMAC-SHA512("bip-entropy-from-k", k). The SDK derives 24-word children only. `Argument` for an index
+ *  outside [0, 2^31) or a word count outside {12, 15, 18, 21, 24}. The caller wipes `entropy`. */
+export function bip85Child(seed, index, words = 24) {
+  if (!Number.isInteger(index) || index < 0 || index >= HARDENED) fail('Argument', 'BIP-85 index outside [0, 2^31)');
+  if (![12, 15, 18, 21, 24].includes(words)) fail('Argument', 'BIP-85 words outside 12, 15, 18, 21, 24');
+  const root = seed instanceof HDKey ? seed : HDKey.fromMasterSeed(seed);
+  const node = root.derive(`m/83696968'/39'/0'/${words}'/${index}'`);
+  try {
+    const entropy = hmac(sha512, utf8ToBytes('bip-entropy-from-k'), node.privateKey).slice(0, (words * 4) / 3);
+    return { entropy, words: entropyToWords(entropy) };
+  } finally {
+    node.wipePrivateData();
+  }
+}
+
+/** The BIP-32 master key's fingerprint (the first 4 bytes of HASH160 of its compressed public key) as 8 lower-case hex digits:
+ *  a seed's name in the scaas-sdk keystore, so a second import of the same words is found without unlocking (scaas-sdk spec
+ *  §6.1). `seed` is the 64-byte BIP-39 seed (the main set: the empty BIP-39 passphrase). */
+export function masterFingerprint(seed) {
+  return HDKey.fromMasterSeed(seed).fingerprint.toString(16).padStart(8, '0');
 }
 
 // ------------------------------------------------------------------ derivation
@@ -350,4 +377,138 @@ function sign(key, digest) {
     return concatBytes(rec.subarray(1), new Uint8Array([27 + rec[0]]));
   }
   return ed25519.sign(digest, key.privateKey);
+}
+
+// ------------------------------------------------------------------ classical roots (c) and (d) (scaas-sdk spec §6.6, plan T6)
+// Owner 2026-11-17 (spec §25): Q-K4 Argon2id v0x13, m = 128 MiB, t = 3, p = 4, empty secret and data, 32 bytes, pinned by the
+// tag; Q-K5 the chain-free EIP-712 message; Q-K18 root (d) a secp256k1 EVM key, the Argon2id salt from its address, `index` the
+// seed-set number. Fixed here (T6): the labels below, root (d)'s empty-passphrase HKDF salt SHA-256(label), `u32` big-endian.
+
+export const ROOT_EOA_SIG_TAG = 'scaas.sdk.root.eoa-sig.v1';
+export const ROOT_RAW_KEY_TAG = 'scaas.sdk.root.raw-key.v1';
+export const ROOT_ARGON2 = Object.freeze({ version: 0x13, m: 131072, t: 3, p: 4, dkLen: 32 });
+export const ROOT_PASSPHRASE_MIN = 10;
+export const KEY_DERIVATION_WARNING = 'This signature creates secret keys. Any site that obtains it, with your passphrase, '
+  + 'controls those keys. Sign it only inside your SCaaS app.';
+
+const u32be = (n) => {
+  if (!Number.isInteger(n) || n < 0 || n > 0xffffffff) fail('Argument', 'set / index outside u32');
+  return new Uint8Array([n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255]);
+};
+
+/** The NFKC passphrase as bytes, `DerivationPassphraseShort` under ROOT_PASSPHRASE_MIN code points (empty allowed when
+ *  `optional`, giving null). */
+function rootPassphrase(passphrase, optional) {
+  const p = String(passphrase ?? '').normalize('NFKC');
+  if (optional && p.length === 0) return null;
+  if ([...p].length < ROOT_PASSPHRASE_MIN) fail('DerivationPassphraseShort', `a derivation passphrase of at least ${ROOT_PASSPHRASE_MIN} characters`);
+  return utf8ToBytes(p);
+}
+
+/** Argon2id of spec §25 Q-K4 over `pass` with salt keccak256(tag ‖ address). */
+function rootStretch(pass, tag, address) {
+  const salt = keccak_256(concatBytes(utf8ToBytes(tag), addressBytes(address)));
+  return argon2id(pass, salt, { ...ROOT_ARGON2, maxmem: 2 ** 31 });
+}
+
+/** The 20 bytes of a 0x-address (any case). */
+function addressBytes(address) {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(String(address))) fail('Argument', 'an EVM address');
+  return fromHex(address.slice(2));
+}
+
+/** Root (c)'s EIP-712 typed data (spec §6.6, Q-K5): chain-free domain {name, version, salt}, `KeyDerivation(string warning,
+ *  address account, uint32 set)`. */
+export function keyDerivationTypedData(account, set) {
+  u32be(set);
+  addressBytes(account);
+  return {
+    types: {
+      EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'version', type: 'string' }, { name: 'salt', type: 'bytes32' }],
+      KeyDerivation: [{ name: 'warning', type: 'string' }, { name: 'account', type: 'address' }, { name: 'set', type: 'uint32' }],
+    },
+    primaryType: 'KeyDerivation',
+    domain: { name: 'SCaaS key derivation', version: '1', salt: hex(keccak_256(utf8ToBytes(ROOT_EOA_SIG_TAG))) },
+    message: { warning: KEY_DERIVATION_WARNING, account, set },
+  };
+}
+
+/** A 65-byte `r ‖ s ‖ v` signature from 65 bytes, or from a 64-byte EIP-2098 compact `r ‖ yParityAndS` converted explicitly
+ *  (`compact: true`). `OriginSignature` otherwise. */
+export function signature65(sig, { compact = false } = {}) {
+  if (sig.length === 65) return Uint8Array.from(sig);
+  if (sig.length === 64 && compact) {
+    const out = new Uint8Array(65);
+    out.set(sig.subarray(0, 32), 0);
+    out.set(sig.subarray(32, 64), 32);
+    const parity = out[32] >> 7;
+    out[32] &= 0x7f;
+    out[64] = 27 + parity;
+    return out;
+  }
+  fail('OriginSignature', 'a 65-byte signature (a 64-byte compact one converted explicitly)');
+}
+
+/** Root (c) (spec §6.6): the two signatures of `keyDerivationTypedData(account, set)` by the external wallet, byte-equal, 65
+ *  bytes, `r`, `s` in [1, n), `v` in {0, 1, 27, 28}, recovering to `account`; then `r ‖ low-s s` → HKDF-SHA256 with the
+ *  Argon2id-stretched passphrase (mandatory, ≥ 10 code points after NFKC) as salt and `tag ‖ u32 set` as info. Returns the
+ *  32-byte root (the 24-word entropy). `OriginSignature` for a failed check, `DerivationPassphraseShort`. The caller wipes. */
+export function rootFromEoaSignature({ account, set, sig1, sig2, passphrase }) {
+  const pass = rootPassphrase(passphrase, false);
+  if (sig1.length !== 65 || sig2.length !== 65) fail('OriginSignature', 'two 65-byte signatures');
+  if (!equalBytes(sig1, sig2)) fail('OriginSignature', 'the two signatures differ: the wallet does not sign deterministically');
+  const r = bytesToNumberBE(sig1.subarray(0, 32));
+  let s = bytesToNumberBE(sig1.subarray(32, 64));
+  const v = sig1[64];
+  if (r === 0n || r >= SECP_N || s === 0n || s >= SECP_N || ![0, 1, 27, 28].includes(v)) fail('OriginSignature', 'r, s or v out of range');
+  const digest = hashTypedData(keyDerivationTypedData(account, set));
+  // low-s first (the same public key with the recovery bit flipped), then recover
+  let bit = v >= 27 ? v - 27 : v;
+  if (s > SECP_N / 2n) {
+    s = SECP_N - s;
+    bit ^= 1;
+  }
+  const ikm = concatBytes(numberToBytesBE(r, 32), numberToBytesBE(s, 32));
+  let recovered = '';
+  try {
+    const pub = secp256k1.recoverPublicKey(concatBytes(Uint8Array.of(bit), ikm), digest, { prehash: false });
+    recovered = evmAddress(secp256k1.Point.fromBytes(pub).toBytes(false));
+  } catch {
+    wipe(ikm);
+    fail('OriginSignature', 'the signature does not recover');
+  }
+  if (recovered.toLowerCase() !== String(account).toLowerCase()) {
+    wipe(ikm);
+    fail('OriginSignature', 'the signature recovers to another address');
+  }
+  const pw = rootStretch(pass, ROOT_EOA_SIG_TAG, account);
+  try {
+    return hkdf(sha256, ikm, pw, concatBytes(utf8ToBytes(ROOT_EOA_SIG_TAG), u32be(set)), 32);
+  } finally {
+    wipe(ikm);
+    wipe(pw);
+    wipe(pass);
+  }
+}
+
+/** Root (d) (spec §6.6, Q-K18): a secp256k1 EVM private key (32 bytes), an optional passphrase (empty, or ≥ 10 code points
+ *  after NFKC) and `index` the seed-set number (`network` other than `evm`: `Argument`). Empty: HKDF-SHA256(key, SHA-256(label), label ‖ u32 index); non-empty: the salt
+ *  is Argon2id(passphrase, keccak256(label ‖ address)). Returns the 32-byte root. `Argument` for a key outside [1, n),
+ *  `DerivationPassphraseShort`. The caller wipes. */
+export function rootFromKey({ key, passphrase = '', index, network = 'evm' }) {
+  if (network !== 'evm') fail('Argument', 'root (d) takes a secp256k1 EVM key only');
+  if (!(key instanceof Uint8Array) || key.length !== 32) fail('Argument', 'a 32-byte secp256k1 key');
+  const d = bytesToNumberBE(key);
+  if (d === 0n || d >= SECP_N) fail('Argument', 'a secp256k1 key in [1, n)');
+  const pass = rootPassphrase(passphrase, true);
+  const label = utf8ToBytes(ROOT_RAW_KEY_TAG);
+  const info = concatBytes(label, u32be(index));
+  if (pass === null) return hkdf(sha256, key, sha256(label), info, 32);
+  const pw = rootStretch(pass, ROOT_RAW_KEY_TAG, evmAddress(secp256k1.getPublicKey(key, false)));
+  try {
+    return hkdf(sha256, key, pw, info, 32);
+  } finally {
+    wipe(pw);
+    wipe(pass);
+  }
 }

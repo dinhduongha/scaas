@@ -25,6 +25,7 @@ pub mod bounded;
 #[cfg(feature = "vectors")]
 pub mod derive;
 mod eip712;
+pub mod entries;
 #[cfg(feature = "vectors")]
 pub mod kem;
 #[cfg(not(feature = "vectors"))]
@@ -37,6 +38,9 @@ pub mod pairing;
 mod pairing;
 mod manifest;
 mod policy;
+#[cfg(feature = "roots")]
+pub mod roots;
+mod secret;
 mod service_pull;
 #[cfg(feature = "vectors")]
 pub mod seal;
@@ -72,7 +76,7 @@ pub use manifest::{AllowRollback, ImportEntry, ImportedUaEntry, KemEntry, Manife
 pub use pairing::{FrostSession, Musig2Session};
 #[cfg(feature = "vectors")]
 pub use pairing::NonceSlotProbe;
-pub use policy::{sign_typed_by, AllowAnyTypedData, AllowRow, Expect, Invalidate, SubjectKey};
+pub use policy::{fee_due, sign_scaas, sign_typed_by, AllowAnyTypedData, AllowRow, DecodedCall, Expect, Invalidate, SubjectKey};
 pub use service_pull::{service_pull, RelayFeeWrap, ServicePull};
 #[cfg(feature = "pqz")]
 pub(crate) use seal::now;
@@ -86,6 +90,7 @@ pub use signer::TestExternalKey;
 pub use signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
 pub use tx::{sign_transaction_by, AccessListItem, EvmTx, SignedTx};
 pub use uasig::{membership_sig, membership_sig_current, msig_sig, msig_sig_current, msig_update_typed_data, ua_sig, Slot, UaSigRequest};
+pub use secret::{secret_dispose, secret_read, secret_write, secrets_live, SecretBytes, SECRET_MAX};
 pub use vault::{check_passphrase, PrfEnvelope, Unlock, Vault};
 pub use webauthn::{webauthn_assertion, webauthn_challenge};
 pub use zeroize::ZeroizeOnDrop;
@@ -385,6 +390,59 @@ pub(crate) fn sized<I: Iterator<Item = char>>(chars: impl Fn() -> I) -> Zeroizin
     s
 }
 
+/// Whether `word` is one word of the BIP-39 English list (NFKD, lower case, surrounding white space ignored): an import
+/// screen's per-word check (scaas-sdk spec §6.4, R17), so the list never leaves `ua-rs`.
+pub fn bip39_word_in_list(word: &str) -> bool {
+    let nfkd = sized(|| word.trim().nfkd());
+    let lower = sized(|| nfkd.chars().flat_map(char::to_lowercase));
+    bip39::Language::English.find_word(&lower).is_some()
+}
+
+const INDEX_INFO: &[u8] = b"scaas.keystore.index.v2";
+/// The longest `accounts` array an index MAC covers: 1,024 rows of a few hundred bytes.
+const INDEX_ACCOUNTS_MAX: usize = 1 << 20;
+
+/// The public fields of a keystore seed entry the index MAC covers (scaas-sdk spec §6.2), in its canonical order.
+/// `accounts_json` is the entry's `accounts` array as the container holds it: compact JSON, each row's fields in the order
+/// clientkeys writes them; `vaults` the entry's vault texts by label (scaas-sdk T13b ruling 3: the MAC covers them).
+pub struct IndexFields<'a> {
+    pub id: &'a str,
+    pub label: &'a str,
+    pub words: u32,
+    pub fingerprint: &'a str,
+    pub origin: &'a str,
+    pub class: &'a str,
+    pub warnings: &'a [String],
+    pub backup: &'a str,
+    pub accounts_json: &'a str,
+    pub vaults: &'a std::collections::BTreeMap<String, String>,
+}
+
+/// The MAC's input (clientkeys `indexCanonical`): `{"id":…,"label":…,"words":…,"fingerprint":…,"origin":…,"class":…,
+/// "warnings":[…],"backup":…,"accounts":[…],"vaults":{label:text,…}}`, the vaults by sorted label, strings as `JSON.stringify`
+/// writes them. `Argument` when `accounts_json` is not one JSON array (1 MiB, depth 3) written without white space outside its
+/// strings.
+pub fn index_canonical(f: &IndexFields) -> Result<String> {
+    let v = bounded::json(f.accounts_json.as_bytes(), INDEX_ACCOUNTS_MAX, 3)?;
+    if !v.is_array() || serde_json::to_string(&v).map_or(0, |t| t.len()) != f.accounts_json.len() {
+        return Err(Error::Argument);
+    }
+    let s = |x: &str| serde_json::Value::from(x).to_string();
+    let warnings = serde_json::Value::from(f.warnings.to_vec()).to_string();
+    let vaults = serde_json::to_string(f.vaults).map_err(|_| Error::Argument)?; // a BTreeMap: keys sorted
+    Ok(format!(
+        "{{\"id\":{},\"label\":{},\"words\":{},\"fingerprint\":{},\"origin\":{},\"class\":{},\"warnings\":{warnings},\"backup\":{},\"accounts\":{},\"vaults\":{vaults}}}",
+        s(f.id),
+        s(f.label),
+        f.words,
+        s(f.fingerprint),
+        s(f.origin),
+        s(f.class),
+        s(f.backup),
+        f.accounts_json
+    ))
+}
+
 /// The 64-byte BIP-39 seed of `entropy` with the passphrase (NFKD).
 fn seed_of(entropy: &[u8], bip39_passphrase: &str) -> Result<Zeroizing<[u8; 64]>> {
     let m = bip39::Mnemonic::from_entropy(entropy).map_err(|_| Error::Argument)?;
@@ -568,6 +626,8 @@ impl SeedBackup {
 )]
 pub struct Wallet {
     store: Arc<SecretStore>,
+    /// the id every vault of this wallet carries (scaas-sdk T13b ruling 3): its seed vault's, else drawn at its first seal
+    vault_id: std::sync::OnceLock<String>,
 }
 
 impl Wallet {
@@ -587,7 +647,7 @@ impl Wallet {
 
     /// The store from the entropy, its BIP-39 seed and its `substrate-bip39` mini-secret (the passphrase as given; spec §4.3).
     fn from_entropy(entropy: &[u8], bip39_passphrase: &str) -> Result<Wallet> {
-        let w = Wallet { store: SecretStore::new() };
+        let w = Wallet { store: SecretStore::new(), vault_id: std::sync::OnceLock::new() };
         w.store.open(entropy, &*seed_of(entropy, bip39_passphrase)?, &substrate::mini_secret(entropy, bip39_passphrase))?;
         Ok(w)
     }
@@ -595,6 +655,59 @@ impl Wallet {
     /// Waits for every operation in flight, wipes every secret and revokes every handle made before (spec §8.2).
     pub fn lock(&self) {
         self.store.lock();
+    }
+
+    /// The BIP-32 master key's fingerprint of this wallet's seed (clientkeys `masterFingerprint`; scaas-sdk spec §6.1): the
+    /// first 4 bytes of HASH160 of the master public key. A wallet of the empty BIP-39 passphrase gives its seed's main-set
+    /// fingerprint, the keystore's duplicate check. `WalletLocked` while locked.
+    pub fn fingerprint(&self) -> Result<[u8; 4]> {
+        self.store.with_seed(|seed| Ok(bip32::XPrv::new(seed).map_err(|_| Error::Argument)?.public_key().fingerprint()))
+    }
+
+    /// The next BIP-85 child of this wallet (scaas-sdk spec §6.4; clientkeys `bip85Child`): BIP-85's BIP-39 application, 24
+    /// words, `m/83696968'/39'/0'/24'/<i>'` with `i` the manifest's `bip85Next`, which is raised under the store's lock before
+    /// the child is returned and never lowered, so a removed child's words never come back. The child's wallet (empty BIP-39
+    /// passphrase) and its backup. The caller derives from a main set (an empty BIP-39 passphrase); `Argument` once the index
+    /// would reach 2^31, `WalletLocked` while locked.
+    pub fn bip85_child(&self) -> Result<(Wallet, SeedBackup)> {
+        use hmac::Mac as _;
+        let entropy = self.store.with_all(|a, m| {
+            let i = m.bip85_next;
+            let next = i.checked_add(1).filter(|n| *n < derive::HARDENED).ok_or(Error::Argument)?;
+            let seed: Zeroizing<[u8; 64]> = Zeroizing::new(a.seed_bytes()?.try_into().map_err(|_| Error::Argument)?);
+            let path = [83696968, 39, 0, 24, i].map(|c| c | derive::HARDENED);
+            let k = derive::bip32(&*seed, &path)?;
+            let mut mac = hmac::Hmac::<sha2::Sha512>::new_from_slice(b"bip-entropy-from-k").map_err(|_| Error::Argument)?;
+            mac.update(&*k);
+            let out = Zeroizing::new(mac.finalize().into_bytes().to_vec());
+            m.bip85_next = next;
+            Ok(Zeroizing::new(out.get(..32).ok_or(Error::Argument)?.to_vec()))
+        })?;
+        let w = Wallet::from_entropy(&entropy, "")?;
+        Ok((w, SeedBackup { entropy: Some(entropy), state: BackupState::Fresh, asked: [0; 3] }))
+    }
+
+    /// The number of words of this wallet's mnemonic (12, 15, 18, 21 or 24: its entropy's length), the keystore's `words` check
+    /// (scaas-sdk spec §6.1). `WalletLocked` while locked.
+    pub fn word_count(&self) -> Result<u32> {
+        self.store.with_arena(|a| u32::try_from(a.entropy()?.len() * 3 / 4).map_err(|_| Error::Argument))
+    }
+
+    /// The keystore index MAC of a seed entry (clientkeys `indexMac`; scaas-sdk spec §6.2): `HMAC-SHA256(HKDF-SHA256(entropy,
+    /// "", "scaas.keystore.index.v2", 32), canonical)` under this wallet's BIP-39 entropy. `Argument` for fields outside their
+    /// form ([`index_canonical`]); `WalletLocked` while locked.
+    pub fn index_mac(&self, fields: &IndexFields) -> Result<[u8; 32]> {
+        let canonical = index_canonical(fields)?;
+        self.store.with_arena(|a| {
+            let k = hkdf_sha256(a.entropy()?, &[], INDEX_INFO, 32)?;
+            Ok(hmac_sha256(&k, canonical.as_bytes()))
+        })
+    }
+
+    /// Whether `mac` is [`Wallet::index_mac`] of `fields` (compared in constant time); errors as `index_mac`.
+    pub fn verify_index_mac(&self, fields: &IndexFields, mac: &[u8; 32]) -> Result<bool> {
+        let want = self.index_mac(fields)?;
+        Ok(want.iter().zip(mac).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0)
     }
 
     /// The arena's memory protection now (spec §8.2, feature `mlock`, best effort): all zero while locked.

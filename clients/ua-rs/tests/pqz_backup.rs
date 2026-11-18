@@ -491,7 +491,7 @@ fn a_held_vault_is_checked_against_its_key_hash() {
     let other = g.op.export_pqz_leaf_raw(7, 1, scaas_ua::facade::pqz::AllowSecretExport).unwrap();
     let label = held_label(&g.msig_ua, 0, &kh);
     let w = Wallet::generate().unwrap().0;
-    let open = |l: &str, s: &[u8]| w.open_label_vault(&Vault::vectors_seal(l, s, PIN).unwrap(), Unlock::VaultPassphrase(PIN));
+    let open = |l: &str, s: &[u8]| w.open_label_vault(&Vault::vectors_seal(&w.vault_id().unwrap(), l, s, PIN).unwrap(), Unlock::VaultPassphrase(PIN));
     assert_eq!(open(&label, &*other).err(), Some(Error::Argument), "another key under this hash");
     assert_eq!(open(&label, &seed32[..31]).err(), Some(Error::Argument), "31 bytes");
     assert!(w.manifest().pqz_held.is_empty() && w.pqz_held_key(&kh).is_err(), "nothing held or listed");

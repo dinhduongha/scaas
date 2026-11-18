@@ -111,13 +111,13 @@ fn vault_json_vaults_open() {
     }
 }
 
-/// vault.json `refusals`: wrong passphrase and altered AAD label `VaultOpen`; N = 2^31, N = 3, r = 16, p = 2 `VaultParams`
-/// (before scrypt runs: N = 2^31 would ask 256 GiB); `v: 2` and its tombstone `VaultVersion`; payloads of 31 and 64 bytes
-/// `VaultOpen`; a label other than `seed` `Argument`.
+/// vault.json `refusals`: wrong passphrase, altered AAD label and altered AAD id `VaultOpen`; N = 2^31, N = 3, r = 16, p = 2
+/// `VaultParams` (before scrypt runs: N = 2^31 would ask 256 GiB); `v: 1` and the tombstone `{v: 2, moved}` `VaultVersion`; an
+/// id not a UUID v4 `Argument`; payloads of 31 and 64 bytes `VaultOpen`; a label other than `seed` `Argument`.
 #[test]
 fn vault_json_refusals() {
     let f = load("vault.json");
-    assert_eq!(arr(&f, "refusals").len(), 11);
+    assert_eq!(arr(&f, "refusals").len(), 13);
     for r in arr(&f, "refusals") {
         let got = vault(&r["vault"]).and_then(|v| with_unlock(&r["unlock"], |u| Wallet::open_vault(&v, u, "")));
         assert_eq!(code(got), r["error"].as_str().unwrap(), "{}", r["id"]);
@@ -146,7 +146,7 @@ fn vault_seal_open_round_trip() {
     assert_eq!(v.label(), "seed");
     assert!(!v.needs_rewrap());
     let j: Value = serde_json::from_str(&v.to_json()).unwrap();
-    assert_eq!((num(&j["v"]), j["pin"]["kdf"].as_str().unwrap()), (1, "scrypt"));
+    assert_eq!((num(&j["v"]), j["pin"]["kdf"].as_str().unwrap()), (2, "scrypt"));
     assert_eq!((num(&j["pin"]["N"]), num(&j["pin"]["r"]), num(&j["pin"]["p"])), (1 << 17, 8, 1));
     assert_eq!(Vault::from_json(v.to_json().as_bytes()).unwrap(), v);
     let back = Wallet::open_vault(&v, Unlock::VaultPassphrase("river-otter-7 ünï"), "").unwrap();
@@ -778,4 +778,24 @@ fn reveal_writes_into_a_reserved_buffer() {
         assert_eq!(words.split(' ').count(), 24);
         assert_eq!(words.capacity(), 24 * 9);
     }
+}
+
+/// Vault v2 (scaas-sdk T13b ruling 3): every vault a wallet seals carries its id (its seed vault's at open); a label vault of
+/// another wallet (another id) is `WalletMismatch` in it, never opened; its own opens (the control).
+#[test]
+fn a_label_vault_of_another_seed_is_refused() {
+    let pass = "river-otter-7 ünï";
+    let (a, _) = Wallet::generate().unwrap();
+    let (b, _) = Wallet::generate().unwrap();
+    let seed = a.seal_vault(pass, None).unwrap();
+    assert_eq!(seed.id(), a.vault_id().unwrap());
+    let opened = Wallet::open_vault(&seed, Unlock::VaultPassphrase(pass), "").unwrap();
+    assert_eq!(opened.vault_id().unwrap(), a.vault_id().unwrap(), "the id read from the seed vault");
+    let theirs = b.seal_label_vault("manifest", pass, None).unwrap();
+    assert_ne!(theirs.id(), seed.id());
+    assert_eq!(code(opened.open_label_vault(&theirs, Unlock::VaultPassphrase(pass))), "WalletMismatch");
+    let mine = a.seal_label_vault("manifest", pass, None).unwrap();
+    assert!(opened.open_label_vault(&mine, Unlock::VaultPassphrase(pass)).is_ok(), "control: its own");
+    // the JSON carries v 2 and the id, before the label
+    assert!(mine.to_json().starts_with(&format!("{{\"v\":2,\"id\":\"{}\",\"label\":\"manifest\"", seed.id())));
 }

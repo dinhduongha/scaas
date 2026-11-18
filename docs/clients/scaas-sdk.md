@@ -3,9 +3,11 @@
 `scaas-sdk` is the one Rust crate through which an app (scaas-app's `scaas` build, `scaas-tui`, the CLI `scaas`, an integrator's
 service) reaches every SCaaS feature: seeds and keys, Universal Accounts, tokens and payments, Zether and PQZ, the DEX, governance,
 and the generic surface that app cores above it use (`pqchat-core`, `pqvault-core`, a third party's). Every signature comes from `ua-rs` ([CLI-UAL-01](ua-libraries.md#CLI-UAL-01)), every chain read and send goes through
-`scaas-rpc` ([CLI-RPC-01](scaas-rpc.md#CLI-RPC-01)), and the bindings are generated from its one API. Status: **SPECIFIED**, nothing
-built (spec `docs/superpowers/specs/2026-11-17-scaas-sdk.md`, reviewed by Fable on 2026-11-17 with every finding applied; plan
-`docs/superpowers/plans/2026-11-17-scaas-sdk.md`; branch `scaas-sdk`). Path when built: `clients/scaas-sdk`. UNAUDITED.
+`scaas-rpc` ([CLI-RPC-01](scaas-rpc.md#CLI-RPC-01)), and the bindings are generated from its one API. Status: **SPECIFIED**, partly
+built: `vault`, `account` (rows, restore, marks), `wallet` (tokens, balances, native sends, the token and mandate-wallet operations)
+and the operations core in `clients/scaas-sdk` on branch `sdk-code` (plan tasks T0–T12 and the T13 fix round of the closing review);
+the Dart binding is still the plan's T3 spike, so no binding is BUILT (spec `docs/superpowers/specs/2026-11-17-scaas-sdk.md`, reviewed
+by Fable on 2026-11-17 with every finding applied; plan `docs/superpowers/plans/2026-11-17-scaas-sdk.md`). UNAUDITED.
 
 **Contents**
 
@@ -52,12 +54,14 @@ a raw key. No error, event, log line or `Debug` output carries a secret, an inpu
 
 ## 3. The vault
 
-<a id="CLI-SDK-03"></a>**CLI-SDK-03** — **The keystore holds several seeds, each as clientkeys / `ua-rs` vault v1 objects byte for
+<a id="CLI-SDK-03"></a>**CLI-SDK-03** — **The keystore holds several seeds, each as clientkeys / `ua-rs` vault v2 objects byte for
 byte, in one authenticated `scaas.keystore` container** (owner 2026-11-11, 2026-11-17; container and integrity controller calls;
-SPECIFIED). The container is one item `{format: "scaas.keystore", v: 1, rev, seeds: [...]}`. Each seed entry has a UUID `id`, the
+SPECIFIED; vault v2 and container v 2 BUILT, owner 2026-11-19, T13b ruling 3: every vault's AAD binds its seed's id, the index MAC
+covers the vault texts, v 1 refused by name, no migration). The container is one item `{format: "scaas.keystore", v: 2, rev, seeds:
+[...]}`. Each seed entry has a UUID `id`, the
 user's `label` (1 to 64 scalar values, NFC, unique), `words`, the main set's BIP-32 master `fingerprint`, `origin`, `class` (`full` or
 `classical-rooted`), `warnings` (`short_seed`, `imported_key`), `backup` (`pending` or `verified`), `vaults` (label → the exact vault
-v1 JSON text of [CLI-SGN-02](signers-clientkeys.md#CLI-SGN-02): `seed`, and `manifest`, `native-import:…`, `pqz-held:…` as `ua-rs`
+v2 JSON text, its `id` the seed's of [CLI-SGN-02](signers-clientkeys.md#CLI-SGN-02): `seed`, and `manifest`, `native-import:…`, `pqz-held:…` as `ua-rs`
 seals them; [CLI-UAL-18](ua-libraries.md#CLI-UAL-18)), the `accounts` the user named, and `indexMac`. It records no parent seed, no
 child index, no origin address and no hidden set. Bounds: 16 MiB, depth 5, 64 seeds, 64 vaults and 1,024 accounts per seed; an unknown
 field or a broken rule is `VaultFormat`, another `format` or `v` `VaultVersion`, and a reader that refuses a container never writes
@@ -85,7 +89,7 @@ session-only hidden set: nothing about it is written, emitted or logged; its ope
 Removing a seed whose backup is `pending` needs a second confirmation. A seed import may check one word at a time against the BIP-39 list inside `ua-rs` (`word_in_list`, the word as `SecretBytes`); no list leaves the SDK (owner 2026-11-17, "OK, all four points as proposed").
 
 <a id="CLI-SDK-05"></a>**CLI-SDK-05** — **A seed set derived from a classical key is marked classical-rooted and may carry every
-kind** (owner 2026-11-11; SPECIFIED). Root (c), an external EVM wallet's EIP-712 signature over typed data `ua-rs` builds: signed twice
+kind** (owner 2026-11-11; BUILT in plan T6). Root (c), an external EVM wallet's EIP-712 signature over typed data `ua-rs` builds: signed twice
 and required byte-equal, 65 bytes (a 64-byte compact form converted explicitly), `r` and `s` in range, recovering to the named account,
 low-s, `r ‖ s` only, with a user-chosen derivation passphrase of at least 10 code points after NFKC, mandatory; no RPC call names the
 origin. Root (d), a secp256k1 EVM private key: `KDF(privkey, passphrase, label, index)`, the passphrase empty or at least 10 code
@@ -94,8 +98,9 @@ points, `index` the seed-set number. Both are built in `ua-rs`; a failed check i
 inherited by its children); it may hold PQ, PQZ and KEM keys (the owner accepted the risk that they are only as strong as the
 passphrase against a quantum attacker), and the UI says so when such a key is made. The mark is advisory across devices: the same
 words imported elsewhere carry none. The exact constructions follow the owner's answers of 2026-11-17 (spec §25 Q-K4: Argon2id `0x13`,
-`m = 128 MiB`, `t = 3`, `p = 4`; Q-K5; Q-K18); until plan T6 builds them with their vectors the feature that holds both calls
-does not exist in any build.
+`m = 128 MiB`, `t = 3`, `p = 4`; Q-K5; Q-K18), with the labels `scaas.sdk.root.eoa-sig.v1` / `scaas.sdk.root.raw-key.v1`, root (d)'s
+empty-passphrase HKDF salt SHA-256 of its label and the numbers as 4-byte big-endian (plan T6, pinned by
+`smartcontracts/vectors/keys/roots.json`); both calls are in the feature `classical-roots` (bit 24, off by default; BUILT, UNAUDITED).
 
 <a id="CLI-SDK-06"></a>**CLI-SDK-06** — **Seeds unlock and lock one by one; changes are re-sealed under the same data key;
 biometrics only gate** (SPECIFIED). A seed unlocks with its vault passphrase, its passkey's PRF output or a platform secret (the
@@ -108,7 +113,8 @@ and `SecureStore` are never trusted for policy. The passkey RP ID is the deploym
 `ua-rs` under the vault's same data key, both envelopes kept, so a passkey session persists its changes; a new vault (an imported
 key) takes the vault passphrase and, with a passkey set, its PRF output. A biometric is a platform gate; nothing is derived from it. A
 passphrase change keeps the data key and removing the passkey unlock revokes nothing from an earlier copy of the container: the UI
-says to move the funds if the old passphrase may have leaked. Scrypt, Argon2id and proofs run one at a time by default. `lock` calls
+says to move the funds if the old passphrase may have leaked. A passkey or platform unlock keeps the PRF key-encryption key, derived once, in `ua-rs`'s locked memory until lock (zeroed at lock, drop and `disable_prf_unlock`; never written, never across the FFI) and opens the seed's other vaults with it on first use, the unlock not asked again (owner 2026-11-18): the kept key opens every vault of the seed, so a memory read in the session exposes as much as opening them all, with fewer plaintext secrets resident. The exception (owner 2026-11-18): a passphrase unlock opens every vault at unlock and never keeps the passphrase, since
+vault v1 derives a key per vault salt (no single key to keep) and keeping the passphrase would be worse. Scrypt, Argon2id and proofs run one at a time by default. `lock` calls
 `ua-rs` `lock()`, which revokes every handle of that seed for good ([CLI-UAL-09](ua-libraries.md#CLI-UAL-09)), refusing new calls at
 once and waiting at most for the calls in flight. Export between devices is the sealed backup or the device link only; the container
 is not an export and the words are never shown again.
@@ -148,21 +154,24 @@ allow-list; an undecoded call exists only behind its own feature and marker, fla
 or relayed by the holder** (SPECIFIED). Paths: a scaas-node gateway, for the entries the gateway takes
 ([NODE-GW-03](../node/gateway.md#NODE-GW-03): a registered token's `mtx*` entries, the transfer on ids, the DEX routes, and UA
 registration once served), with the same body to the gateways chosen ([CLI-RPC-08](scaas-rpc.md#CLI-RPC-08)); or self-relay, for any
-entry, as an EIP-1559 transaction from the holder's own native account, which pays the gas, with the entry's calldata from `ua-rs`. Before
+entry, as a transaction (type 2 where the chain has a base fee, else 0) from the holder's own native account, which pays the gas, with the
+entry's calldata from `ua-rs`. The quote never makes or sends a signature: its gas is the gas table's row for (entry, domain kind, signer kind, fresh lane),
+rounded up to 1,000, with a margin, else `GasUnquoted` (owner 2026-11-18, ruling 1; owner 2026-11-19, ruling B); `submit` signs once,
+writes the row, then simulates the signed calldata (owner 2026-11-19, ruling A). Before
 `submit` a quote shows the payer, the gas limit, the maximum fee per gas and the maximum cost; the user confirms it; above the profile's
 caps it is `FeeAboveCap`, and the caps come from the SDK's configuration, never from the answering endpoint. A gas limit above the
 chain's per-transaction cap or the block limit is `GasAboveTxCap` (a PQ registration is split as the node splits it); a payer that is an
 EIP-7702 designator is `PayerDelegated`; the payer's address is linked on chain to the subject, and a holder without a native key has no
 self-relay path. The job API is server-side only, never in an end-user build ([NODE-ADM-06](../node/admin-auth.md#NODE-ADM-06)). With no
 gateway for the entry and no payer: `SubmitPathNone`. **Write ahead:** sign, write the operation with its signed body (public data) to
-the SDK's state, then send; from the signature on the send completes whatever happens to the caller; a row written but not sent is sent
+the SDK's state, then simulate and send (a refused simulation is tracked as `SimRefused`, never an error); from the signature on the send completes whatever happens to the caller; a row written but not sent is sent
 at restart, a row sent is never sent again automatically, only by the user's `resend` of the same bytes. **`submit` returns the operation's id once its row is written; every send result after that is an event, never an error of `submit`** (owner 2026-11-17, "OK, all four points as proposed"), so no caller reads a send error as "not paid".
 
 <a id="CLI-SDK-18"></a>**CLI-SDK-18** — **An operation ends only on a chain fact** (follows [CLI-RPC-09](scaas-rpc.md#CLI-RPC-09);
 SPECIFIED). Terminal, from a decisive read at the profile's final block only: `Landed` (the executed event of the operation's digest,
 `UAMetaTransactionExecuted` on tokens, mandate wallets and the governance router, `MetaTransactionExecuted` on `SmartKeyAccount`; for a
 registry write, its record present), `Consumed` (the lane nonce spent without that event), `Expired` (`validUntil` passed with the nonce
-unspent). Everything else is `InFlight` with its detail: queued or sent, the gateways' merged state (never terminal, every node `dead`
+unspent), and for an EVM native send `Reverted` (final and reverted; owner 2026-11-18, ruling 4). Everything else is `InFlight` with its detail: queued or sent, the gateways' merged state (never terminal, every node `dead`
 included), a self-relay transaction that failed or was replaced (not a failed operation: the signed operation is public and may still
 land). While in flight the user may wait, resend the same bytes, or cancel the lane's nonce, which makes the operation `Consumed`.
 After a restart every operation resumes from the chain.
@@ -244,9 +253,9 @@ thing in both (`VaultOpen`, `VaultParams`, `VaultVersion`, `VaultFormat`, `Vault
 `EndpointScheme`, `EndpointAllFailed`, `EndpointNoMajority`, `AbiMismatch`, `Internal`). `BroadcastRejected` is not an error: it is the
 code of a send outcome, never final ([CLI-RPC-08](scaas-rpc.md#CLI-RPC-08)). A node's `detail` text is untrusted: a UI shows a message
 by `code`. The SDK's own names include `StoreConflict`, `KeystoreMismatch`, `KeystoreRollback`, `AccountUnverified`, `SeedUnknown`,
-`SeedExists`, `LabelTaken`, `ConfirmationMissing`, `VaultPassphraseWeak`, `DerivationPassphraseShort`, `OriginSignature`,
+`SeedExists`, `AccountExists`, `LabelTaken`, `ConfirmationMissing`, `VaultPassphraseWeak`, `DerivationPassphraseShort`, `OriginSignature`,
 `AuthenticatorRefused`, `ProfileMismatch`, `FeatureMissing`, `PreparedStale`, `PreparedUnknown`, `OpaqueCallRefused`, `FeeAboveCap`,
-`GasAboveTxCap`, `PayerDelegated`, `SubmitPathNone`, `VerdictRefused`, `TxTypeRefused`, `RawDigestRefused`, `AppDomainRefused`,
+`GasAboveTxCap`, `GasUnquoted`, `PayerDelegated`, `SubmitPathNone`, `VerdictRefused`, `TxTypeRefused`, `RawDigestRefused`, `AppDomainRefused`,
 `AppPurposeRefused`, `AppSaltMismatch`, `AppHandleForeign`, `AppLabelRefused`, `AppKeyUsage`, `AppArenaFull`, `KemKeyGone`,
 `ReceiverUnregistered`, `RegistrationUaMismatch`, `RegistrationKindDisabled`, `RegistrationPopInvalid`, `RegistrationKemMissing`. A
 warning (`short_seed`, `imported_key`) comes beside a success, never as an error.
@@ -257,9 +266,16 @@ warning (`short_seed`, `imported_key`) comes beside a success, never as an error
 2026-11-11; generators and the C point controller calls; SPECIFIED). The public Rust API is the binding surface: module objects
 shared by reference, owned strings, byte vectors, integers, records and enums, string ids, no fixed-size arrays, lifetimes or generics,
 secrets only as `SecretBytes`, every async call on the SDK's runtime. Generators: `flutter_rust_bridge` 2 for Dart and Flutter (the
-two platform interfaces as one generated record of async closures); UniFFI with `uniffi-bindgen-cpp` for C++ (and Kotlin, Swift,
-Python when an app asks), confirmed by a spike before the API grows; `wasm-bindgen` for the browser (PLANNED). UniFFI's internal
-`extern "C"` layer is not a C API: the SDK has no C ABI of its own in this round, and `ua-c` stays the signer's C surface. No binding is
+two platform interfaces as one generated record of async closures); official UniFFI for Python, Kotlin and Swift over the async API;
+`wasm-bindgen` for JS / TS in the browser over the async API; `uniffi-bindgen-go` for Go, `uniffi-bindgen-cs` for C# and `uniffi-bindgen-java` for Java
+(fallback: a Java facade over the Kotlin binding) after a spike each (async if the generator carries it, else `sync-api`); all in this round (owner 2026-11-18). **C++ / Qt** (owner 2026-11-18, Q-B1 (b), after the spike showed `uniffi-bindgen-cpp`
+refusing every async item): no C++ binding is generated from the SDK; Qt reaches it through the app's one library's own C ABI
+(scaas-app's `app-core-rust`, cbindgen, as `app-matrix`), whose Rust side owns the one tokio runtime and returns each async call
+through a completion callback that the Qt side posts to its GUI thread. **Third-party C++ apps, and every UniFFI generator without async** (owner 2026-11-18, (a′): C++, C#, maybe Go; Kotlin, Swift and
+Python use the async API): a sync surface behind the feature `sync-api` (off by default), generated to C++ by UniFFI with
+`uniffi-bindgen-cpp` (C# after its own generator spike): each exported async call has a `*_blocking` twin over the same
+body (one macro, a test that none is missing), cancellation by an explicit cancel token, the platform interfaces sync, events
+the same pull subscription. The SDK has no C ABI of its own in this round, and `ua-c` stays the signer's C surface. No binding is
 written by hand per language, and no app-facing binding wraps `ua-rs` directly. No panic crosses the boundary (unwinding builds, every
 call caught, a failed task `Internal`). An app links one Rust static library that holds the SDK and its app cores (scaas-app's
 `app-core-rust`, [CLI-SDK-19](#CLI-SDK-19)); two Rust libraries in one process are not allowed. Each generated binding refuses, at load, a library
@@ -281,8 +297,9 @@ bounded and stripped of control and direction-override characters. Fees, gas lim
 profile's caps; a gas price of 0 is a value like any other; no block limit is configured.
 
 <a id="CLI-SDK-16"></a>**CLI-SDK-16** — **EVM keys sign only built transactions; other native chains sign through one guarded entry**
-(owner 2026-11-17; SPECIFIED). EVM native sends (`evm`, `hedera_ecdsa`) are EIP-1559 transactions built and signed in `ua-rs`, quoted
-and capped; no EVM key signs a raw digest. For another chain an app's own encoder builds the transaction and the SDK signs it through
+(owner 2026-11-17; SPECIFIED). EVM native sends (`evm`, `hedera_ecdsa`) are transactions of type 0, 1 or 2 built and signed in `ua-rs`
+(3 and 4 refused; 0 by default where the chain has no base fee; owner 2026-11-18, ruling 3), quoted and capped, a delegated sender's
+quote carrying the delegation mark (ruling 5); no EVM key signs a raw digest. For another chain an app's own encoder builds the transaction and the SDK signs it through
 one entry that exists only behind its own feature and marker and is absent from the default generated surface. The entry, not
 `ua-rs`'s existing calls, enforces the restrictions (`ua-rs` keeps its native-key digest signing for other uses): native keys only,
 never a UA key or a SCaaS kind, never an EVM-address key; NEAR, Sui, Stellar and Hedera Ed25519 through `ua-rs`'s envelope-building

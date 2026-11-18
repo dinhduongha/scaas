@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+# scaas-sdk plan T3, the bindings spike (spec §16.1, §25 Q-B1): the smallest UniFFI library with the shapes the SDK's surface
+# needs, to see what uniffi-bindgen-cpp generates for each. Not part of the SDK; kept as the spike's evidence.
+[package]
+name = "sdk-spike-probe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+license-file = "../../../../../LICENSE"
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+# the uniffi-rs release uniffi-bindgen-cpp v0.10.0+v0.31.0 (its latest tag) targets
+uniffi = "=0.31.0"
+async-trait = "0.1"
+tokio = { version = "1", features = ["rt-multi-thread", "time"] }
+
+# each async shape behind its own feature, so the generator sees one at a time (the control: none)
+[features]
+async-fn = []
+async-callback = []
+
+[workspace]

@@ -5,20 +5,21 @@
       "id": "ua-rs 24 words",
       "mnemonic": "pq_kat",
       "vault": {
-        "v": 1,
+        "v": 2,
+        "id": "2ae71bc5-e405-4cec-87b4-bf2c5a0ac7a3",
         "label": "seed",
         "data": {
-          "iv": "LlWLLAxlIoX62dXB",
-          "ct": "yytkGe4Kazh6dd2ECKVxz5z9vdML48R9grVECWFPklTJQlY_NRs8PqqLHFvd9FB3"
+          "iv": "gITUSuzzD_mO1sDj",
+          "ct": "Y7o6FQvWGf-UbWFee-fR1JAYw4e3yzVnpt5pa5pjq3CZypeL92y8RoWSl46MIDFB"
         },
         "pin": {
           "kdf": "scrypt",
           "N": 131072,
           "r": 8,
           "p": 1,
-          "salt": "FGP_tOC-LHmDWKlvjvfNJg",
-          "iv": "1icoVsRhsaVdMaRq",
-          "ct": "hMgfO2TAhjEELszz77odF8KihY2PSXEFAvQ65Pol4XDVaDu_jBLgEf2eZ77H0eIn"
+          "salt": "jglu636_zjByiBaktAN6YQ",
+          "iv": "gW6QlCeJHQuGeXOx",
+          "ct": "ukk-c8XHM5_O6sKAWQzbsYZoalN0Mmtx20_dVNp4xM7DL1dZdGRP_KX4MLbAwtCw"
         }
       },
       "unlock": {
@@ -30,20 +31,21 @@
       "id": "ua-rs 12 words",
       "mnemonic": "twelve_words",
       "vault": {
-        "v": 1,
+        "v": 2,
+        "id": "91253040-e92b-4064-999c-8386b4ac5daf",
         "label": "seed",
         "data": {
-          "iv": "dZTHYgjDduzqaKY9",
-          "ct": "Bn8Avp8BkJB-AjAxPlCPLh3FZb7KKTTYDkiJ0P7Fz5E"
+          "iv": "3cxwwzZS2NK7ccwo",
+          "ct": "J8j_c1BAOde3HqvDofLOvFZDRpbr0MdbOObQoU56Eg4"
         },
         "pin": {
           "kdf": "scrypt",
           "N": 131072,
           "r": 8,
           "p": 1,
-          "salt": "y4BTGBFIoHeCPNU6i4QkEg",
-          "iv": "B97gYuO8W45FYKah",
-          "ct": "ctfUm9Sw3UQuIx5y1abn_csd_R8mPWI6ZxGoqwf5K24zHtlARH1eNB6bxgR6ZiDz"
+          "salt": "-h90xX1EPvoEnPgWcp3Eeg",
+          "iv": "dbedV7OHxDifIxYL",
+          "ct": "imBbRv1pj9Q7VQ2jCR2RRDUtrwOdL7bIpW8inqFcTgO1yJKBu-1HFjA-VDaglJm5"
         }
       },
       "unlock": {
@@ -55,26 +57,27 @@
       "id": "ua-rs PRF envelope",
       "mnemonic": "pq_kat",
       "vault": {
-        "v": 1,
+        "v": 2,
+        "id": "56bf4e83-c6e0-45bb-80df-58cfc6541739",
         "label": "seed",
         "data": {
-          "iv": "F3UT8LTg1Zjobve4",
-          "ct": "6Ef0Kyz0lK1TLpG9mlvBi637ko_8916yM9GQldSrNb3WFFuB_4sC3k0t2K9IwDmJ"
+          "iv": "b2E5npPPUo1yJUJT",
+          "ct": "MWRz569CBA4NWgdyvgy_zoq1NSZ-t7_TFjZN7BWz_0bUYOVJNdhzZ39UfNKdeHCD"
         },
         "pin": {
           "kdf": "scrypt",
           "N": 131072,
           "r": 8,
           "p": 1,
-          "salt": "ARo8E-fsn8masf6jRb_-XQ",
-          "iv": "ZzEKnrknofNc4ijA",
-          "ct": "ysWAKtZcp0lA0etf1rJ8McFeT20qy02rcU6hBBMxTyrd4r9WBoENvmjZ3V9exhpq"
+          "salt": "g1n5FaFH-aBnC4Re2cnzOA",
+          "iv": "K-2gPXppuXTAtWTM",
+          "ct": "IVjV01GLvTtyS8O999TQAntBSfI60aNnfsgLDnYTXB3U0dojv0H-AeHCaIPgAYcs"
         },
         "prf": {
           "credentialId": "ua-rs-credential",
           "salt": "MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
-          "iv": "yJA25WyZ_x3ai2tI",
-          "ct": "-lM79xw1ReL6ixW3yqqzYI5Le5t0oIFt_Xb2PwK1ux9xdpBj0pN1g-PHr76sYsi3"
+          "iv": "uDBLBC5WhkGxnFN5",
+          "ct": "xtaqU-JTLoi0dXkkDZzMmhLK7iTvMWj6xbGrTiqLRwqm38hrTwZbSy_dpS_Xh4Cx"
         }
       },
       "unlock": {
@@ -86,20 +89,21 @@
       "id": "ua-rs rewrapped pin",
       "mnemonic": "twelve_words",
       "vault": {
-        "v": 1,
+        "v": 2,
+        "id": "44e5fddc-de9e-4161-b723-1fd69614e509",
         "label": "seed",
         "data": {
-          "iv": "CzWS2k3yud3IUiwy",
-          "ct": "zyn8ghMDjQFqsFbsFYkM0ygMUkdMKmqWEJqtVmWs_KA"
+          "iv": "ysfhWr_FnQbrsHaw",
+          "ct": "fCttVfEctkNMt9S_RxElnCpRikMjp4KuVdo5uIb7R64"
         },
         "pin": {
           "kdf": "scrypt",
           "N": 131072,
           "r": 8,
           "p": 1,
-          "salt": "wC48xTD80gx5vPNKLBq2DQ",
-          "iv": "m80E2HXpjKFgP1Cv",
-          "ct": "501j0-HktLw3TKy_H9hR1K9ZP9vtzCDCSqkKElOk_nXwR91zizAbQ5KK6EdLIbCY"
+          "salt": "gIQX6Po5-vXy8FiTt41Clw",
+          "iv": "CMXne_TicjNnn5eg",
+          "ct": "sbRjeiNy8W_OSElF3CpUV4TUQ7mekdEAoTVtOApEAubsuV3WhWxCHIfFPvIFcBdx"
         }
       },
       "unlock": {

@@ -1,0 +1,104 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+[package]
+name = "scaas-sdk"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97.1"
+publish = false
+license-file = "../../LICENSE"
+description = "SCaaS SDK: the one API apps call (CLI-SDK-01). Signs only through scaas-ua, talks only through scaas-rpc; no cryptography of its own. UNAUDITED."
+
+# docs/clients/scaas-sdk.md (CLI-SDK-*), spec docs/superpowers/specs/2026-11-17-scaas-sdk.md §3.2, §3.3. Each feature's bit is
+# the table's (`Sdk::features`, src/lib.rs): appended only, never reused (bit 12, the withdrawn `chat`, stays unused).
+# Not defined yet, by the plan: `native-networks` (3) and `raw-native` (23) in T19, `app-core` (26) and `pqchat-records` (27) in
+# T21.
+[features]
+default = ["vault", "account", "wallet", "file-store", "mlock"]
+vault = ["scaas-ua/wallet"]
+account = ["vault", "scaas-rpc/evm", "dep:alloy"]
+wallet = ["vault", "scaas-rpc/evm", "scaas-rpc/node-client", "dep:alloy"]
+zether = ["vault", "scaas-ua/zether"]
+pqz = ["vault", "scaas-ua/pqz"]
+pqz-set-n2048-kmax1024 = ["scaas-ua/pqz-set-n2048-kmax1024"]
+pqz-set-n2304-kmax4096 = ["scaas-ua/pqz-set-n2304-kmax4096"]
+pqz-set-n2560-kmax16384 = ["scaas-ua/pqz-set-n2560-kmax16384"]
+pqz-set-n2816-kmax65536 = ["scaas-ua/pqz-set-n2816-kmax65536"]
+dex = ["wallet"]
+admin = ["wallet"]
+mlock = ["vault", "scaas-ua/mlock"]
+soroban = ["scaas-rpc/soroban"]
+solana = ["scaas-rpc/solana"]
+near = ["scaas-rpc/near"]
+algorand = ["scaas-rpc/algorand"]
+aptos = ["scaas-rpc/aptos"]
+sui = ["scaas-rpc/sui"]
+cosmos = ["scaas-rpc/cosmos"]
+ton = ["scaas-rpc/ton"]
+file-store = ["vault"]
+# roots (c) and (d) (spec §6.6; T6): scaas-ua's Argon2id roots
+classical-roots = ["vault", "scaas-ua/roots"]
+opaque-calls = []
+# the Dart adapter (src/frb.rs): the platform interfaces as records of async closures; no dependency of its own
+frb = []
+
+[dependencies]
+# default-features = false: scaas-ua's defaults enable `pqz` with one set, so a build asking for another would carry two (§3.2)
+scaas-ua = { path = "../ua-rs", default-features = false }
+scaas-rpc = { path = "../scaas-rpc", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+async-trait = "0.1"
+# the keystore label's NFC check (spec §6.1), the pin of scaas-ua
+unicode-normalization = "=0.1.26"
+zeroize = "=1.8.2"
+# ids (seed, account, operation): a UUID v4 from 16 bytes of the OS generator (not a key)
+uuid = { version = "1", default-features = false }
+getrandom = "0.2"
+# T9: the EVM reads of `account` (the restore scan); T10: the operations of `wallet` (logs, blocks, `U256`); the version and
+# features scaas-rpc takes
+alloy = { version = "~1.6", default-features = false, features = ["std", "rpc-types", "network", "providers"], optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
+getrandom = { version = "0.2", features = ["js"] }
+# the page's event loop (closing review P2-9): tasks by spawn_local, timers by the JS clock; both already in the tree through alloy
+wasm-bindgen-futures = "0.4"
+wasmtimer = "0.4"
+
+
+[dev-dependencies]
+# "net", "io-util": tests/account.rs's fake JSON-RPC endpoints on 127.0.0.1:0
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros", "net", "io-util"] }
+# the tests' mnemonics of every length (the reference outside the SDK; the pin of scaas-ua)
+bip39 = { version = "=2.2.2", default-features = false, features = ["alloc"] }
+
+# scrypt (N = 2^17) and the ML-KEM / arkworks code crawl unoptimised: the dependencies built at opt-level 3, as ua-rs
+[profile.dev.package."*"]
+opt-level = 3
+
+[[test]]
+name = "sets"
+required-features = ["pqz"]
+
+[[test]]
+name = "roots"
+required-features = ["classical-roots"]
+
+[[test]]
+name = "account"
+required-features = ["account"]
+
+[[test]]
+name = "wallet"
+required-features = ["wallet"]
+
+[[test]]
+name = "wallet_ops"
+required-features = ["wallet"]
+
+[[test]]
+name = "e2e"
+required-features = ["wallet"]

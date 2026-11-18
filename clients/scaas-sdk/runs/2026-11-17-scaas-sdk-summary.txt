@@ -1,0 +1,43 @@
+# scaas-sdk build plan: gate summary (step | commit | rc | counts). Logs: 2026-11-17-scaas-sdk-<step>.log, git-ignored.
+# `tree dirty`: the step ran with uncommitted changes of this round in the tree (the commit named is HEAD at its start).
+# T0 baselines (frozen; a task's "same counts" are these plus its new tests):
+baseline docs | 4de8a5604 | 0 | -
+baseline ck-test | 4de8a5604 | 0 | node: 455 pass, 0 fail, 4 skipped
+baseline rpc-test | 4de8a5604 | 0 | 130 passed, 0 failed, 10 ignored (7 binaries)
+baseline ua-test | 4de8a5604 | 0 | 503 passed, 0 failed, 3 ignored (47 binaries)
+baseline ua-clippy | 4de8a5604 | 0 | -
+baseline features | 4de8a5604 | 0 | feature_tree not run (crate absent)
+# latest runs:
+docs | 81a8cbcf2 | 0 | -
+features | 81a8cbcf2 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+ck-test | 81a8cbcf2 | 0 | node: 472 pass, 0 fail, 4 skipped
+ua-test | 81a8cbcf2 | 0 | 543 passed, 0 failed, 3 ignored (55 binaries)
+ua-clippy | 81a8cbcf2 | 0 | -
+ua-vectors | 81a8cbcf2 | 0 | 647 passed, 0 failed, 6 ignored (62 binaries)
+ua-verify-only | 81a8cbcf2 | 0 | 84 passed, 0 failed, 0 ignored (18 binaries)
+ua-wallet-rows | 81a8cbcf2 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+rpc-test | 81a8cbcf2 | 0 | 162 passed, 0 failed, 10 ignored (16 binaries)
+rpc-clippy | 81a8cbcf2 | 0 | -
+rpc-wasm | 81a8cbcf2 | 0 | -
+sdk-test | 81a8cbcf2 | 0 | 142 passed, 0 failed, 2 ignored (14 binaries)
+sdk-opaque | 81a8cbcf2 | 0 | 9 passed, 0 failed, 0 ignored (1 binaries)
+sdk-min | 81a8cbcf2 | 0 | 69 passed, 0 failed, 0 ignored (8 binaries)
+sdk-sets | 81a8cbcf2 | 0 | 6 passed, 0 failed, 0 ignored (3 binaries)
+sdk-clippy | 81a8cbcf2 | 0 | -
+sdk-wasm | 81a8cbcf2 | 0 | -
+sdk-deny | 81a8cbcf2 | 0 | -
+sdk-e2e | 81a8cbcf2 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+ua-c | 81a8cbcf2 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
+ua-c-release | 81a8cbcf2 | 0 | -
+ua-py | 81a8cbcf2 | 0 | -
+ua-go | 81a8cbcf2 | 0 | -
+ua-cs | 81a8cbcf2 | 0 | -
+ua-cxx | 81a8cbcf2 | 0 | ctest: 0 tests failed out of 43
+frb-dart | 81a8cbcf2 | 0 | dart: +46:
+bind-dart | 81a8cbcf2 | 0 | dart: +6:
+# SDK round-end matrix (T0-T13b) at 81a8cbcf2: the 27 rows above, clean tree, every rc 0. The first full run at f1a93439a
+# started from `cargo clean` of scaas-sdk, its ffi, ua-rs, scaas-rpc, ua-c, ua-cxx and ua-dart-frb; it had two reds (sdk-min:
+# tests/e2e.rs without `wallet`; ua-go: the runner's library path), fixed at 81a8cbcf2, whose run reused that build.
+# Counts the runner does not parse: ua-c python 101 tests OK, ua-py 99 OK, ua-go 2 packages ok, ua-cs 61 passed.
+# Not applicable: `sync-api` (feature not built: plan T20b), bind-cpp (no bindings/cpp: T20b). wasm32: `cargo check` only
+# (sdk-wasm, rpc-wasm); no wasm32 test ran (wasm-bindgen-test is not in the offline tree).

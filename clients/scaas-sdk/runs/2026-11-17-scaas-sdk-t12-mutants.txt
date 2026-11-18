@@ -1,0 +1,9 @@
+# t12 mutants at commit 7c221e26f (name | outcome | test)
+drop save from the review | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet_ops pay_with_paymeta_v3
+sign UAPayeeFee with the payment's Expect | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet_ops every_wallet_pair_is_its_vector
+accept an undecoded UAExecute | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet_ops ua_execute_decoded_only
+the domain's salt not compared | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet_ops domain_kind_from_the_contract
+the transfer on ids posted to /v1/op (ruling 6) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet_ops transfer_on_ids_is_its_vector_and_posts_ua_metatx
+the transfer on ids signs bytes (ruling 6) | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_transfer_on_ids
+an id not padded: the address as from | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet_ops unbound_relayer_is_zero
+7 mutants, 7 killed, 0 survived, 0 not loaded

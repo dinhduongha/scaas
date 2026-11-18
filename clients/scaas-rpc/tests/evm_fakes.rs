@@ -1955,3 +1955,43 @@ async fn a_block_0_gone_after_the_identity_is_never_trusted_on_the_pin() {
         "control"
     );
 }
+
+/// scaas-sdk T13b ruling 5: `simulate_value` sends the value with the call and the estimate (a payable path costs what it costs;
+/// a value to a non-payable target reverts), `simulate_from` none (the control).
+#[tokio::test]
+async fn simulate_value_carries_the_value() {
+    let (url, _) = fake_rpc(|r| {
+        let v = r["params"][0]["value"].as_str().unwrap_or("0x0");
+        match r["method"].as_str() {
+            Some("eth_call") if v == "0x0" => json!({"result": "0x"}),
+            Some("eth_call") => {
+                json!({"error": {"code": 3, "message": "execution reverted", "data": "0x"}})
+            }
+            Some("eth_estimateGas") => json!({"result": "0x5208"}),
+            _ => json!({"result": null}),
+        }
+    })
+    .await;
+    let c = sdk_pool(&[&url], 10_000);
+    assert_eq!(
+        c.simulate_from(Address::ZERO, Address::ZERO, Bytes::new())
+            .await
+            .unwrap(),
+        21_000,
+        "control: no value"
+    );
+    assert!(
+        matches!(
+            c.simulate_value(Address::ZERO, Address::ZERO, U256::from(5), Bytes::new())
+                .await,
+            Err(SimError::Revert(_))
+        ),
+        "the value reached the call"
+    );
+    assert_eq!(
+        c.simulate_value(Address::ZERO, Address::ZERO, U256::ZERO, Bytes::new())
+            .await
+            .unwrap(),
+        21_000
+    );
+}

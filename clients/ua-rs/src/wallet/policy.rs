@@ -126,6 +126,39 @@ pub enum Expect {
         now: u64,
         max_window: u64,
     },
+    /// A plain transfer on ids (scaas-sdk; owner 2026-11-19, ruling D): a `UAMetaTransfer` from `account` to `payee` of `amount` (in
+    /// `decimals`) with `entryRef = 0` on the caller-named lane `batch` (decimal; any nonce, the lane's), in `expected_token`'s
+    /// domain: not a payment. No clientkeys counterpart and no JSON form (built by the SDK).
+    Transfer {
+        account: [u8; 32],
+        chain_id: u64,
+        chain_uid: [u8; 32],
+        amount: String,
+        decimals: u32,
+        payee: [u8; 32],
+        batch: String,
+        expected_token: [u8; 20],
+        max_fee: String,
+        fee_recipient: Option<[u8; 20]>,
+        relayer: Option<[u8; 20]>,
+        now: u64,
+        max_window: u64,
+    },
+    /// A mandate wallet's `UAExecute` of a decoded call (scaas-sdk spec §13.2; owner 2026-11-19, ruling C): `checkOp` over `message`
+    /// with `target`, `value` and `data` rebuilt from `call`, so only the decoded call is signed. No clientkeys counterpart and no
+    /// JSON form (built by the SDK).
+    Execute {
+        wallet: [u8; 20],
+        chain_id: u64,
+        chain_uid: [u8; 32],
+        message: Value,
+        call: DecodedCall,
+        max_fee: String,
+        fee_recipient: Option<[u8; 20]>,
+        relayer: Option<[u8; 20]>,
+        now: u64,
+        max_window: u64,
+    },
     /// `checkCall`: a self-call `MetaTransaction` of exactly `data` on `contract`, its selector on `allowlist`.
     Call {
         account: [u8; 20],
@@ -209,6 +242,29 @@ pub enum Expect {
     },
     /// No SCaaS check: the standard digest of the values as supplied.
     Any(AllowAnyTypedData),
+}
+
+/// A decoded call of [`Expect::Execute`]: `ua-rs` builds its `(target, value, data)`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DecodedCall {
+    /// `token.transfer(to, amount)`, `amount` a decimal string of the token's smallest unit, value 0
+    Erc20Transfer { token: [u8; 20], to: [u8; 20], amount: String },
+}
+
+impl DecodedCall {
+    /// The call's `(target, value, data)` as the struct signs them.
+    pub fn encode(&self) -> Result<([u8; 20], U256, Vec<u8>)> {
+        match self {
+            DecodedCall::Erc20Transfer { token, to, amount } => {
+                let n = u256_dec(amount).ok_or(Error::Argument)?;
+                let mut data = keccak256(b"transfer(address,uint256)").get(..4).ok_or(Error::Argument)?.to_vec();
+                data.extend_from_slice(&[0u8; 12]);
+                data.extend_from_slice(to);
+                data.extend_from_slice(&n);
+                Ok((*token, [0u8; 32], data))
+            }
+        }
+    }
 }
 
 /// The named inputs of one `Expect` JSON object; every key read once, an unread key is refused.
@@ -532,6 +588,30 @@ pub fn sign_typed_by(key: &dyn Signer, td: &TypedData, expect: Expect) -> Result
     key.sign_request(&req)
 }
 
+/// scaas-sdk spec §13.2: the `UASig` of the typed SCaaS struct `td` for its named entry, once `expect` approves it (the same check
+/// as [`sign_typed_by`]; `PolicyRefused`, nothing signed, otherwise). A native EVM key: `{"", r ‖ s ‖ v over the digest, []}` (a
+/// native id signs the digest itself on a named entry, CTR-MTX-28); a UA key: [`super::ua_sig`] over the digest under the entry's
+/// purpose, `payee-fee` for `UAPayeeFee`, `trade` for the orders and their cancels (`TradeLib`), `metatx` for every other
+/// envelope. `Expect::Any` is `Argument` here: a SCaaS entry is always signed under its check.
+pub fn sign_scaas(key: &dyn Signer, td: &TypedData, expect: Expect) -> Result<crate::ua8::UASig> {
+    if matches!(expect, Expect::Any(_)) {
+        return Err(Error::Argument);
+    }
+    if let super::signer::KeyRef::Native { .. } = key.key_ref() {
+        return Ok(crate::ua8::UASig { key_data: vec![], signature: sign_typed_by(key, td, expect)?, members: vec![] });
+    }
+    let digest = td.digest()?;
+    if check(td, &expect)? != digest {
+        return Err(Error::PolicyRefused);
+    }
+    let purpose = match td.primary_type() {
+        "UAPayeeFee" => "payee-fee",
+        "UAWrapOrder" | "UATradeOrder" | "CancelUAOrder" | "CancelUAWrapOrder" | "UAInvalidateNonces" => "trade",
+        _ => "metatx",
+    };
+    super::uasig::ua_sig(key, None, &crate::purpose_tag(purpose)?, &digest)
+}
+
 // --- the ports of clientkeys `evm.js` (same order of checks; every refusal is `PolicyRefused`) ---
 
 fn refuse<T>() -> Result<T> {
@@ -567,6 +647,20 @@ fn check(td: &TypedData, e: &Expect) -> Result<[u8; 32]> {
         }
         Expect::Op { op, contract, chain_id, chain_uid, message, max_fee, fee_recipient, relayer, now, max_window } => {
             check_op(td, op, contract, *chain_id, chain_uid, message, max_fee, fee_recipient.as_ref(), relayer.as_ref(), *now, *max_window)
+        }
+        Expect::Transfer {
+            account, chain_id, chain_uid, amount, decimals, payee, batch, expected_token, max_fee, fee_recipient, relayer, now,
+            max_window,
+        } => plain_transfer(td, &Pay { account, chain_id: *chain_id, chain_uid, amount, decimals: *decimals, payee, expected_token,
+            max_fee, fee_recipient: fee_recipient.as_ref(), relayer: relayer.as_ref(), now: *now, max_window: *max_window }, batch),
+        Expect::Execute { wallet, chain_id, chain_uid, message, call, max_fee, fee_recipient, relayer, now, max_window } => {
+            let (target, value, data) = call.encode()?;
+            let mut m = message.as_object().cloned().ok_or(Error::PolicyRefused)?;
+            m.insert("target".into(), to_hex(&target).into());
+            m.insert("value".into(), dec(&value));
+            m.insert("data".into(), to_hex(&data).into());
+            check_op(td, "UAExecute", wallet, *chain_id, chain_uid, &Value::Object(m), max_fee, fee_recipient.as_ref(), relayer.as_ref(),
+                *now, *max_window)
         }
         Expect::Call {
             account, chain_id, chain_uid, allowlist, contract, data, max_fee, fee_recipient, relayer, now, max_window,
@@ -670,22 +764,7 @@ fn name_of(td: &TypedData) -> Option<&str> {
 /// amount) ⌊basis · fee / 10^6⌋, at most `max_fee`; a bound fee recipient is the one named, a bound relayer the one named if any.
 fn fee_policy(m: &Map<String, Value>, max_fee: &str, fee_recipient: Option<&[u8; 20]>, relayer: Option<&[u8; 20]>, basis: Option<&U256>) -> Result<()> {
     let mode = small(&uint(get(m, "mode"))?).ok_or(Error::PolicyRefused)?;
-    let kind = mode >> 4;
-    if mode & !0xf3 != 0 || kind > 2 {
-        return refuse();
-    }
-    let rate = uint(get(m, "fee"))?;
-    if kind == 0 && !zero(&rate) {
-        return refuse();
-    }
-    let fee = if kind == 1 {
-        let (Some(basis), Some(r)) = (basis, small_u64(&rate).filter(|r| *r <= 10_000)) else { return refuse() };
-        let (q, rem) = u256_div(basis, 1_000_000);
-        let hi = u256_mul_add(&q, r, 0).ok_or(Error::PolicyRefused)?;
-        u256_add(&hi, &u256_from(rem * r / 1_000_000)).ok_or(Error::PolicyRefused)?
-    } else {
-        rate
-    };
+    let fee = fee_of(m, basis)?;
     if fee > uint_str(max_fee)? {
         return refuse();
     }
@@ -697,6 +776,47 @@ fn fee_policy(m: &Map<String, Value>, max_fee: &str, fee_recipient: Option<&[u8;
     }
     Ok(())
 }
+/// The fee an envelope pays its relayer (`feePolicy`'s amount): NONE 0 (any other `fee` refused), FIXED `fee`, PERCENT (≤ 1 %, only
+/// with an amount) ⌊basis · fee / 10^6⌋.
+fn fee_of(m: &Map<String, Value>, basis: Option<&U256>) -> Result<U256> {
+    let mode = small(&uint(get(m, "mode"))?).ok_or(Error::PolicyRefused)?;
+    let kind = mode >> 4;
+    if mode & !0xf3 != 0 || kind > 2 {
+        return refuse();
+    }
+    let rate = uint(get(m, "fee"))?;
+    if kind == 0 && !zero(&rate) {
+        return refuse();
+    }
+    if kind != 1 {
+        return Ok(rate);
+    }
+    let (Some(basis), Some(r)) = (basis, small_u64(&rate).filter(|r| *r <= 10_000)) else { return refuse() };
+    let (q, rem) = u256_div(basis, 1_000_000);
+    let hi = u256_mul_add(&q, r, 0).ok_or(Error::PolicyRefused)?;
+    u256_add(&hi, &u256_from(rem * r / 1_000_000)).ok_or(Error::PolicyRefused)
+}
+
+/// The fee the relayer takes under the envelope of struct `op`'s `message`, decimal, as the signing check computes it (scaas-sdk
+/// closing review P2-4): the amount a review shows and the `max_fee` a check is given. For a PERCENT envelope the basis is the
+/// struct's amount field (its op row's, else `value`), a nested `payment`'s `value` for the structs that carry one.
+/// A struct without a fee form is 0. `PolicyRefused`: an unknown fee kind, a fee on NONE, PERCENT above 1 % or without an amount.
+pub fn fee_due(op: &str, message: &Value) -> Result<String> {
+    let m = obj(message);
+    let (env, basis) = match get(&m, "payment") {
+        Some(Value::Object(p)) => (p.clone(), get(p, "value").map(|v| uint(Some(v))).transpose()?),
+        _ => {
+            let field = op_row(op).and_then(|o| o.amount).unwrap_or("value");
+            let basis = get(&m, field).map(|v| uint(Some(v))).transpose()?;
+            (m.clone(), basis)
+        }
+    };
+    if get(&env, "mode").is_none() && get(&env, "fee").is_none() {
+        return Ok("0".into()); // a struct without a fee form (`UARelayFee` pays its fee as its value)
+    }
+    Ok(u256_to_dec(&fee_of(&env, basis.as_ref())?))
+}
+
 fn small_u64(x: &U256) -> Option<u64> {
     let (hi, lo) = x.split_at(24);
     hi.iter().all(|b| *b == 0).then(|| lo.iter().fold(0u64, |a, b| a << 8 | u64::from(*b)))
@@ -744,6 +864,32 @@ fn payment(td: &TypedData, p: &Pay, entry_ref: &[u8; 32]) -> Result<[u8; 32]> {
     msg.insert("entryRef".into(), to_hex(entry_ref).into());
     msg.insert("batch".into(), dec(&batch));
     msg.insert("nonce".into(), 0.into());
+    build("UAMetaTransfer", name_of(td), p.expected_token, p.chain_id, p.chain_uid, msg)
+}
+
+/// A plain transfer on ids (ruling D): `checkPayment`'s rules with `entryRef = 0` on the named lane `batch`, the lane's nonce.
+fn plain_transfer(td: &TypedData, p: &Pay, batch: &str) -> Result<[u8; 32]> {
+    if td.primary_type() != "UAMetaTransfer" {
+        return refuse();
+    }
+    let (m, d) = (obj(td.message()), td.domain());
+    if !same(d.get("verifyingContract"), p.expected_token) || !same(get(&m, "to"), p.payee) {
+        return refuse();
+    }
+    let value = to_base(p.amount, p.decimals)?;
+    let lane = uint_str(batch)?;
+    if uint(get(&m, "value"))? != value || zero(&value) || !same(get(&m, "entryRef"), &[0u8; 32]) || uint(get(&m, "batch"))? != lane {
+        return refuse();
+    }
+    fee_policy(&m, p.max_fee, p.fee_recipient, p.relayer, Some(&value))?;
+    deadline(get(&m, "validUntil"), p.now, p.max_window)?;
+    let mut msg = m.clone();
+    msg.insert("from".into(), to_hex(p.account).into());
+    msg.insert("to".into(), to_hex(p.payee).into());
+    msg.insert("value".into(), dec(&value));
+    msg.insert("entryRef".into(), to_hex(&[0u8; 32]).into());
+    msg.insert("batch".into(), dec(&lane));
+    msg.insert("nonce".into(), dec(&uint(get(&m, "nonce"))?));
     build("UAMetaTransfer", name_of(td), p.expected_token, p.chain_id, p.chain_uid, msg)
 }
 

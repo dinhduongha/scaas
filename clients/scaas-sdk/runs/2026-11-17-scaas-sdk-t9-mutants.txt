@@ -1,0 +1,10 @@
+# t9 mutants at commit 7b8d19a00 (name | outcome | test)
+reuse account 0 for the second wallet | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin --test account one_index_per_wallet
+gap 20 -> 0 | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin --test account restore_gap_scan
+the scan not extended past a found index | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin --test account restore_gap_scan
+drop the seed id from the row | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin --test account add_ua_row_names_its_seed
+every read to the first endpoint | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin --test account restore_reads_spread_over_the_list
+an EIP-2333 kind at index 1 (scaas-ua's rule) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin --test account eip2333_kinds_index_0_only
+a watch row signs | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin --test account watch_row_signs_nothing
+no delegation mark | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin --test account delegated_eoa_marked
+8 mutants, 8 killed, 0 survived, 0 not loaded

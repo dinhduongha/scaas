@@ -1078,6 +1078,25 @@ pub fn rescue_vault_typed_data(vault: &[u8; 20], op: RescueVaultOp) -> Result<Ty
     Ok(td)
 }
 
+/// Root (c)'s derivation message (scaas-sdk spec §6.6; `wallet::roots::key_derivation_typed_data` gives the fixed fields):
+/// `KeyDerivation(string warning,address account,uint32 set)` in the chain-free domain `("SCaaS key derivation", "1", salt)`.
+#[cfg(feature = "roots")]
+pub(crate) fn key_derivation_typed_data(account: &[u8; 20], set: u32, warning: &str, salt: &[u8; 32]) -> Result<TypedData> {
+    let mut types = BTreeMap::new();
+    types.insert("KeyDerivation".to_string(), parse_fields("string warning,address account,uint32 set")?);
+    let mut domain = Map::new();
+    domain.insert("name".into(), "SCaaS key derivation".into());
+    domain.insert("version".into(), "1".into());
+    domain.insert("salt".into(), to_hex(salt).into());
+    let mut message = Map::new();
+    message.insert("warning".into(), warning.into());
+    message.insert("account".into(), to_hex(account).into());
+    message.insert("set".into(), set.to_string().into());
+    let td = TypedData { types, primary_type: "KeyDerivation".into(), domain, message: Value::Object(message) };
+    td.validate()?;
+    Ok(td)
+}
+
 /// [`scaas_typed_data`] of one struct (a row of the op table: `checkOp` builds the op it was asked for, never another struct of the
 /// same primary type).
 pub(crate) fn typed_data_of(
