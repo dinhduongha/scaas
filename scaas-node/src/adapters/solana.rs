@@ -1103,7 +1103,7 @@ impl SolanaAdapter {
                     e => scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string()),
                 }))
             }
-        }).await.map_err(|e| anyhow!("{method}: {e}"))?;
+        }).await.map_err(|e| crate::adapters::evm::all_failed(method, &e))?;
         Ok(a.value)
     }
 

@@ -1,0 +1,4 @@
+# t24-1 mutants at commit 311b2bc05 (name | outcome | test)
+1: the all-failed error carries the endpoints' text | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::aptos::tests::aptos_a_later_endpoints_forged_abort_never_kills_the_job
+1: the abort read from the error's text | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::aptos::tests::aptos_the_abort_is_read_from_endpoint_0s_typed_answer
+2 mutants, 2 killed, 0 survived, 0 not loaded

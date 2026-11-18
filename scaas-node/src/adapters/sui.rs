@@ -1021,10 +1021,7 @@ impl SuiAdapter {
             Ok(a) => Ok(a.value),
             // endpoint 0's error answer: as before
             Err(scaas_rpc::RpcError::Revert { reason, .. }) => bail!("{method}: {}", scaas_rpc::error::endpoint_text(&reason)),
-            Err(scaas_rpc::RpcError::EndpointAllFailed { failover_revert: Some(_), .. }) => {
-                bail!("{method}: no endpoint answered (a failover endpoint's error decides nothing)")
-            }
-            Err(e) => bail!("{method}: {e}"),
+            Err(e) => Err(crate::adapters::evm::all_failed(method, &e)),
         }
     }
 

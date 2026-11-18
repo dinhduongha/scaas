@@ -683,6 +683,29 @@ pub struct AptosAdapter {
     relay_fee: RelayFeePolicy,
 }
 
+/// A view the first endpoint answered with a status other than 2xx: its status and body as it sent them (scaas-rpc T24.1).
+#[derive(Debug)]
+struct ViewRefused {
+    function: String,
+    status: u16,
+    body: Value,
+}
+
+impl ViewRefused {
+    /// The Move VM's abort: a 400 whose message names it.
+    fn is_abort(&self) -> bool {
+        self.status == 400 && self.body["message"].as_str().is_some_and(|m| m.contains("Move abort"))
+    }
+}
+
+impl std::fmt::Display for ViewRefused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "view {}: HTTP {}: {}", self.function, self.status, scaas_rpc::error::endpoint_text(&self.body.to_string()))
+    }
+}
+
+impl std::error::Error for ViewRefused {}
+
 struct Work {
     op: MetaOp,
     auth: Auth,
@@ -791,10 +814,7 @@ impl AptosAdapter {
                 let (s, v) = reason.split_once('\n').unwrap_or(("0", "null"));
                 Ok((s.parse().unwrap_or(0), serde_json::from_str(v).unwrap_or(Value::Null)))
             }
-            Err(scaas_rpc::RpcError::EndpointAllFailed { failover_revert: Some(_), .. }) => {
-                bail!("{path}: no endpoint answered (a failover endpoint's refusal decides nothing)")
-            }
-            Err(e) => bail!("{path}: {e}"),
+            Err(e) => Err(crate::adapters::evm::all_failed(path, &e)),
         }
     }
 
@@ -806,7 +826,7 @@ impl AptosAdapter {
         let body = serde_json::to_vec(&json!({"function": function, "type_arguments": type_args, "arguments": args}))?;
         let (status, v) = self.request("/view", Some((&body, "application/json"))).await.map_err(|e| anyhow!("view {function}: {e}"))?;
         if !(200..300).contains(&status) {
-            bail!("view {function}: HTTP {status}: {v}");
+            return Err(ViewRefused { function: function.into(), status, body: v }.into());
         }
         Ok(v[0].clone())
     }
@@ -865,7 +885,8 @@ impl AptosAdapter {
         args.extend([op.valid_until.to_string(), addr_hex(&op.relayer), hx(&op.extra), hx(&a.public_key), hx(&a.sig), hx(&a.envelope)]);
         match self.view(&format!("{}::meta::{function}", addr_hex(&self.package)), &[], &args).await {
             Ok(_) => Ok(()),
-            Err(e) if format!("{e:#}").contains("Move abort") => Err(SimError::Revert(format!("{e:#}"))),
+            // T24.1: the abort is read only from endpoint 0's own answer (a typed `ViewRefused`), never from an error's text
+            Err(e) if e.downcast_ref::<ViewRefused>().is_some_and(ViewRefused::is_abort) => Err(SimError::Revert(format!("{e:#}"))),
             Err(e) => Err(transport(e)),
         }
     }
@@ -1652,6 +1673,8 @@ mod tests {
         check_ok: bool,
         sim_ok: bool,
         check_down: bool,
+        /// T24.1: `GET /` (ledger info, the failover's identity read) answers 400 "Move abort…"
+        ledger_abort: bool,
     }
 
     /// A fullnode for `build` and the lane reads: ledger info, views (sequence 0, `exists_at`, `pay_check`, `lane_nonce` 1,
@@ -1662,6 +1685,7 @@ mod tests {
             let ok = |v: Value| (axum::http::StatusCode::OK, axum::Json(v));
             let f = serde_json::from_slice::<Value>(&body).ok().and_then(|b| b["function"].as_str().map(str::to_string)).unwrap_or_default();
             match p.as_str() {
+                "" if n.ledger_abort => (axum::http::StatusCode::BAD_REQUEST, axum::Json(json!({"message": "Move abort in 0xb0b::meta: E_FORGED(0x1)"}))),
                 "" => ok(json!({"chain_id": 4, "block_height": "3", "ledger_version": "9"})),
                 "/estimate_gas_price" => ok(json!({"gas_estimate": 100})),
                 "/view" if f.ends_with("::get_sequence_number") => ok(json!(["0"])),
@@ -1708,7 +1732,7 @@ mod tests {
             "contract": addr_hex(&op.contract), "signature": BLOB, "public_key": ALICE_PK}})).unwrap()
     }
 
-    const OPEN: Node = Node { open: true, check_ok: true, sim_ok: true, check_down: false };
+    const OPEN: Node = Node { open: true, check_ok: true, sim_ok: true, check_down: false, ledger_abort: false };
 
     /// F3: a status, `op_consumed`, the lane sequence, the landed fee and the lane balance are endpoint 0's only: with it down
     /// each is unread (asked again; a lagging endpoint 1's "unknown" is never read, so never `dead`), though endpoint 1 holds
@@ -1757,5 +1781,41 @@ mod tests {
             r => panic!("a failover endpoint's abort became a verdict: {r:?}"),
         }
         assert_eq!(a.failovers(), 0);
+    }
+
+    /// scaas-rpc T24.1 (P1): a later endpoint's "Move abort" never kills a job. Endpoint 0 answers every read but the pay check
+    /// (503); endpoint 1's identity read (`GET /`) answers 400 "Move abort…": the failover finds no endpoint, and the error the
+    /// pay check reads carries no endpoint's text, so the unsent job is requeued (Transport), never `dead`.
+    #[tokio::test]
+    async fn aptos_a_later_endpoints_forged_abort_never_kills_the_job() {
+        let first = fullnode(Node { open: false, check_down: true, ..OPEN }).await;
+        let forger = fullnode(Node { open: false, check_ok: false, ledger_abort: true, ..OPEN }).await;
+        match adapter_on(&[first, forger]).build(&pay_job(), 0).await {
+            Err(SimError::Transport(m)) => assert!(!m.contains("Move abort"), "{m}"),
+            r => panic!("a later endpoint's text became a verdict: {r:?}"),
+        }
+    }
+
+    /// scaas-rpc T24.1: the abort is endpoint 0's typed answer (a 400 whose `message` is a Move abort), never a text search:
+    /// a 400 whose message is something else is no verdict even when its body quotes "Move abort". Control: the abort.
+    #[tokio::test]
+    async fn aptos_the_abort_is_read_from_endpoint_0s_typed_answer() {
+        let app = axum::Router::new().fallback(|uri: axum::http::Uri, body: axum::body::Bytes| async move {
+            let f = serde_json::from_slice::<Value>(&body).ok().and_then(|b| b["function"].as_str().map(str::to_string)).unwrap_or_default();
+            let ok = |v: Value| (axum::http::StatusCode::OK, axum::Json(v));
+            match uri.path().trim_start_matches("/v1") {
+                "" => ok(json!({"chain_id": 4, "block_height": "3", "ledger_version": "9"})),
+                "/estimate_gas_price" => ok(json!({"gas_estimate": 100})),
+                "/view" if f.ends_with("::get_sequence_number") => ok(json!(["0"])),
+                "/view" if f.ends_with("::exists_at") => ok(json!([false])),
+                _ => (axum::http::StatusCode::BAD_REQUEST, axum::Json(json!({"message": "Invalid input: no such view", "hint": "not a Move abort"}))),
+            }
+        });
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/v1", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        assert!(matches!(adapter_on(&[url]).build(&pay_job(), 0).await, Err(SimError::Transport(_))), "not an abort: no verdict");
+        let aborts = Node { open: false, check_ok: false, ..OPEN };
+        assert!(matches!(adapter_after(aborts, &[]).await.build(&pay_job(), 0).await, Err(SimError::Revert(m)) if m.contains("Move abort")), "control");
     }
 }

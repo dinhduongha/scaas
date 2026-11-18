@@ -1639,7 +1639,7 @@ impl NearAdapter {
                 let error = serde_json::from_str(&reason).unwrap_or(json!({"name": "UNKNOWN", "message": reason}));
                 Err(near_error(scaas_rpc::family::FamilyError::Rpc { method: method.into(), error }))
             }
-            Err(e) => Err(anyhow!("{method}: {e}")),
+            Err(e) => Err(crate::adapters::evm::all_failed(method, &e)),
         }
     }
 

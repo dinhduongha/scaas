@@ -47,7 +47,7 @@ node-e2e-ton | ef4c78a40 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree 
 rpc-test | 1bc22f83c | 0 | 159 passed, 0 failed, 10 ignored (16 binaries); tree dirty
 rpc-clippy | 1bc22f83c | 0 | -; tree dirty
 rpc-wasm | 1bc22f83c | 0 | -; tree dirty
-node-test | 66b9b90d9 | 0 | 818 passed, 0 failed, 72 ignored (18 binaries); tree dirty
-node-clippy | 66b9b90d9 | 0 | -; tree dirty
 node-e2e-cosmos | 66b9b90d9 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 docs | cb5fc860c | 0 | -
+node-test | 311b2bc05 | 0 | 820 passed, 0 failed, 72 ignored (18 binaries); tree dirty
+node-clippy | 311b2bc05 | 0 | -; tree dirty

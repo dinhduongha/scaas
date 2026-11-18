@@ -1210,10 +1210,7 @@ impl Api {
                 let (status, message) = reason.split_once('\n').unwrap_or(("0", &reason));
                 Err(Self::error(what, FamilyError::Status { status: status.parse().unwrap_or(0), message: message.into() }))
             }
-            Err(scaas_rpc::RpcError::EndpointAllFailed { failover_revert: Some(_), .. }) => {
-                bail!("{what}: no endpoint answered (a failover endpoint's refusal decides nothing)")
-            }
-            Err(e) => bail!("{what}: {e}"),
+            Err(e) => Err(crate::adapters::evm::all_failed(what, &e)),
         }
     }
 

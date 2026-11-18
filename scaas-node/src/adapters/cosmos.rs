@@ -602,10 +602,7 @@ impl CosmosAdapter {
                 let (s, v) = reason.split_once('\n').unwrap_or(("0", "null"));
                 Ok((s.parse().unwrap_or(0), serde_json::from_str(v).unwrap_or(Value::Null)))
             }
-            Err(scaas_rpc::RpcError::EndpointAllFailed { failover_revert: Some(_), .. }) => {
-                bail!("{path}: no gateway answered (a failover gateway's refusal decides nothing)")
-            }
-            Err(e) => bail!("{path}: {e}"),
+            Err(e) => Err(crate::adapters::evm::all_failed(path, &e)),
         }
     }
 

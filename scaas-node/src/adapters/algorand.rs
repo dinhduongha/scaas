@@ -1719,7 +1719,7 @@ impl AlgorandAdapter {
                 let (status, message) = reason.split_once('\n').unwrap_or(("0", &reason));
                 Err(AlgodError { status: status.parse().unwrap_or(0), message: message.into() }.into())
             }
-            Err(e) => Err(anyhow!("{e}")),
+            Err(e) => Err(crate::adapters::evm::all_failed("algod", &e)),
         }
     }
 
