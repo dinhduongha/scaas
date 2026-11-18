@@ -283,8 +283,9 @@ request; a JSON answer deeper than 64 refused, a msgpack block bounded by the ad
 configured, sent to each endpoint). `build`'s reads (the parameters, the round times, the boxes and apps, the query and
 group simulates) fail over ([CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04)): the next endpoint must answer
 `/v2/transactions/params` with the configured genesis hash and a round at or above the one the first endpoint last
-showed; a status other than 2xx from it decides nothing and a refusal read while it answered requeues the job. The
-transaction status, the send, the round taken as the lane sequence, the lane balance, `op_consumed` and the start checks
+showed; a status other than 2xx from it decides nothing and a refusal read while it answered requeues the job. From the
+first endpoint only a 404 (an absent box or app) or a 400 to a simulate is its verdict; any other status (a rate limit, a
+5xx) fails over (scaas-rpc T24.3). The transaction status, the send, the round taken as the lane sequence, the lane balance, `op_consumed` and the start checks
 (the apps' programs, the router's executor) are the first endpoint's only.
 
 ## 9. Finality and events

@@ -259,7 +259,9 @@ longer in the message enum; settle/cancel tests unchanged.
   20 s a request). `build`'s REST reads (the lane's account, the simulate) fail over across `rest`
   ([CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04)): the next gateway must answer `node_info` with the configured chain id and
   a latest block at or above the height the first CometBFT endpoint last showed; an answer other than 2xx from it decides
-  nothing and a refusal read while it answered requeues the job. The transaction status (REST `GetTx` and the block scan), the
+  nothing and a refusal read while it answered requeues the job. From the first gateway only an error with gRPC code 2 or 3 (a
+  refused simulate, a smart query's error) is its verdict; any other answer (503 code 14, a rate limit, a 404) fails over
+  (scaas-rpc T24.3). The transaction status (REST `GetTx` and the block scan), the
   send, `op_consumed`, the lane sequence and the router's executor (kept for the process) are the first gateway's only; the
   CometBFT reads (`status`, `block`, `block_results`) are the first endpoint's, as before.
 

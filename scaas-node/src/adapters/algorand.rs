@@ -1677,7 +1677,7 @@ impl AlgorandAdapter {
         if !building() {
             return self.get_raw_at(0, path, query).await;
         }
-        self.read(|i| self.net.get_raw(i, path, query)).await
+        self.read(false, |i| self.net.get_raw(i, path, query)).await
     }
 
     async fn get(&self, path: &str) -> Result<Value> {
@@ -1689,14 +1689,15 @@ impl AlgorandAdapter {
         if !building() {
             return self.net.post(0, path, body, ctype).await.map_err(algod_error);
         }
-        self.read(|i| self.net.post(i, path, body.clone(), ctype)).await
+        self.read(true, |i| self.net.post(i, path, body.clone(), ctype)).await
     }
 
     /// ARCH-POS-15 (CLI-RPC-04, scaas-rpc T18b): endpoint 0, then each next endpoint of this network (its genesis hash) not
-    /// behind the round endpoint 0 last showed. A status other than 2xx (an absent box or app, a refused group) is endpoint
-    /// 0's to classify as before (`AlgodError`), a later endpoint's no verdict (the next is asked); a transport failure moves
-    /// on; what a failover endpoint's answer refuses `build` requeues.
-    async fn read<T, F, Fut>(&self, f: F) -> Result<T>
+    /// behind the round endpoint 0 last showed. A 404 (an absent box or app) or a 400 to a POST (a refused simulate) is
+    /// endpoint 0's to classify as before (`AlgodError`), a later endpoint's no verdict (the next is asked); any other status
+    /// (a rate limit, a 5xx) and a transport failure move on (T24.3); what a failover endpoint's answer refuses `build`
+    /// requeues.
+    async fn read<T, F, Fut>(&self, post: bool, f: F) -> Result<T>
     where
         F: Fn(usize) -> Fut,
         Fut: std::future::Future<Output = std::result::Result<T, scaas_rpc::family::FamilyError>>,
@@ -1707,7 +1708,9 @@ impl AlgorandAdapter {
             let r = f(i);
             async move {
                 r.await.map_err(|e| match e {
-                    FamilyError::Status { status, message } => ReadError::Revert { data: vec![], reason: format!("{status}\n{message}") },
+                    FamilyError::Status { status, message } if status == 404 || (post && status == 400) => {
+                        ReadError::Revert { data: vec![], reason: format!("{status}\n{message}") }
+                    }
                     FamilyError::Failure(f) => ReadError::Failure(f),
                     e => ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string())),
                 })
@@ -3700,5 +3703,16 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         }
         let (a, _) = adapter_after(failing(), &[]).await;
         assert!(matches!(a.build(&j, 0).await, Err(SimError::Revert(m)) if m.contains("assert failed")), "control: endpoint 0's verdict");
+    }
+
+    /// scaas-rpc T24.3: endpoint 0's answer other than a 404 or a refused simulate's 400 (a rate limit) is its failure, never
+    /// its verdict: the read fails over and endpoint 1 builds the group (endpoint 0 passes its identity read).
+    #[tokio::test]
+    async fn algorand_endpoint_0_rate_limited_fails_over() {
+        let j = job(o_op(&pay_op(), &auth_of("pay"), json!({})));
+        let first = crate::adapters::testkit::refusing(&serve(Arc::new(M::new(world()))).await, |p, _| p == "/v2/transactions/params", 429, json!({"message": "rate limited"})).await;
+        let (a, _) = adapter_after(world(), &[&first]).await;
+        a.build(&j, 0).await.unwrap();
+        assert!(a.failovers() > 0);
     }
 }

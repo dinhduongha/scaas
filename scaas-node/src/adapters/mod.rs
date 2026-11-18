@@ -42,6 +42,43 @@ pub fn build(cfg: &ChainCfg, signers: &[LocalSigner]) -> Result<Arc<dyn ChainAda
     }
 }
 
+/// Test endpoints shared by the families' adapter tests.
+#[cfg(test)]
+pub(crate) mod testkit {
+    use axum::response::IntoResponse;
+    use serde_json::Value;
+
+    /// scaas-rpc T24.3: an endpoint in front of the fake at `upstream` that passes the requests `pass` names (its identity
+    /// read: path, JSON body) and answers every other one `status` with `body` (a rate limit, an unavailable gateway). Its URL
+    /// keeps `upstream`'s path.
+    pub(crate) async fn refusing(upstream: &str, pass: fn(&str, &Value) -> bool, status: u16, body: Value) -> String {
+        let u = reqwest::Url::parse(upstream).unwrap();
+        let origin = u.origin().ascii_serialization();
+        let app = axum::Router::new().fallback(
+            move |m: axum::http::Method, uri: axum::http::Uri, h: axum::http::HeaderMap, b: axum::body::Bytes| {
+                let (origin, body) = (origin.clone(), body.clone());
+                async move {
+                    let j = serde_json::from_slice(&b).unwrap_or(Value::Null);
+                    if !pass(uri.path(), &j) {
+                        return (axum::http::StatusCode::from_u16(status).unwrap(), axum::Json(body)).into_response();
+                    }
+                    let pq = uri.path_and_query().map_or("", |p| p.as_str());
+                    let mut r = reqwest::Client::new().request(m, format!("{origin}{pq}")).body(b.to_vec());
+                    if let Some(c) = h.get("content-type") {
+                        r = r.header("content-type", c);
+                    }
+                    let r = r.send().await.unwrap();
+                    (axum::http::StatusCode::from_u16(r.status().as_u16()).unwrap(), r.bytes().await.unwrap().to_vec()).into_response()
+                }
+            },
+        );
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}{}", l.local_addr().unwrap(), u.path().trim_end_matches('/'));
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        url
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;

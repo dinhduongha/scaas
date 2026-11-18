@@ -1011,7 +1011,9 @@ impl SuiAdapter {
             let params = params.clone();
             async move {
                 self.net.call(i, method, params).await.map_err(|e| match e {
-                    FamilyError::Rpc { error, .. } => ReadError::Revert { data: vec![], reason: error.to_string() },
+                    // T24.3: invalid params (-32602: the node's answer to this request) is endpoint 0's; any other error
+                    // object (a rate limit, a server error) is the endpoint's failure and fails over
+                    FamilyError::Rpc { error, .. } if error["code"] == -32602 => ReadError::Revert { data: vec![], reason: error.to_string() },
                     FamilyError::Failure(f) => ReadError::Failure(f),
                     e => ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string())),
                 })
@@ -2052,5 +2054,17 @@ mod tests {
         assert!(a.build(&pay_job(), 0).await.is_err());
         let g = f.lock().unwrap();
         assert_eq!((g.status_reads, g.executed.len()), (0, 0));
+    }
+
+    /// scaas-rpc T24.3: endpoint 0's error other than invalid params (a rate limit) is its failure, never its verdict: the read
+    /// fails over and endpoint 1 builds the job (endpoint 0 passes its identity read).
+    #[tokio::test]
+    async fn sui_endpoint_0_rate_limited_fails_over() {
+        let dir = tmp_dir("t24-3");
+        let first = crate::adapters::testkit::refusing(&fake_sui(coin()).await.0, |_, b| b["method"] == "sui_getChainIdentifier", 429,
+            json!({"jsonrpc": "2.0", "id": 1, "error": {"code": -32000, "message": "rate limited"}})).await;
+        let a = adapter_on(&[first, fake_sui(coin()).await.0], &dir);
+        a.build(&pay_job(), 0).await.unwrap();
+        assert!(a.failovers() > 0);
     }
 }

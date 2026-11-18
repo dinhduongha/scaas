@@ -357,7 +357,8 @@ Endpoints (BUILT, scaas-rpc T20): `rpc_urls` are read through the crate's family
 ([CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04)): the next endpoint must answer `sui_getChainIdentifier` as the first
 endpoint did (no chain identifier is configured, so none is taken before the first endpoint's was read once) and a latest
 checkpoint at or above the one the first endpoint last showed; an error answer from it decides nothing and a refusal read
-while it answered requeues the job. The transaction status, the send, the lane journal's checks and re-send (inside `build`
+while it answered requeues the job. From the first endpoint only an invalid-params error (-32602) is its answer; any other
+error (a rate limit, a server error) fails over (scaas-rpc T24.3). The transaction status, the send, the lane journal's checks and re-send (inside `build`
 too), and `op_consumed` are the first endpoint's only; the lane sequence is 0.
 
 ## 10. Finality and events

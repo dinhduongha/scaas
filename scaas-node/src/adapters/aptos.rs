@@ -790,8 +790,8 @@ impl AptosAdapter {
     /// A request (GET, or POST `post`'s body and type): `build`'s fail over, any other is endpoint 0's (F3: a status,
     /// `op_consumed`, the lane sequence, the landed fee, the lane balance). ARCH-POS-15 (CLI-RPC-04, scaas-rpc T19b):
     /// endpoint 0, then each next endpoint of this network (ledger info `chain_id`) not behind the block height endpoint 0 last
-    /// showed. An answer other than 2xx (a view's abort, a refused simulate) is endpoint 0's to classify as before, a later
-    /// endpoint's no verdict (the next is asked); every endpoint failing is a transport error that carries no later
+    /// showed. A 400 (a view's abort, a refused simulate) is endpoint 0's to classify as before, a later endpoint's no verdict
+    /// (the next is asked); any other status fails over (T24.3); every endpoint failing is a transport error that carries no later
     /// endpoint's refusal (no classifier may read it as the job's); what a failover endpoint's answer refuses `build`
     /// requeues.
     async fn request(&self, path: &str, post: Option<(&[u8], &str)>) -> Result<(u16, Value)> {
@@ -802,7 +802,10 @@ impl AptosAdapter {
         let a = self.net.client.failover(&self.net, |i| async move {
             match self.request_at(i, path, post).await {
                 Ok((s, v)) if (200..300).contains(&s) => Ok((s, v)),
-                Ok((s, v)) => Err(ReadError::Revert { data: vec![], reason: format!("{s}\n{v}") }),
+                // T24.3: a 400 (the Move VM's answer: a view's abort, a refused simulate) is endpoint 0's to classify;
+                // any other status (a rate limit, a 404, a 5xx) is the endpoint's failure and fails over
+                Ok((400, v)) => Err(ReadError::Revert { data: vec![], reason: format!("400\n{v}") }),
+                Ok((s, _)) => Err(ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Http, &format!("{path}: HTTP {s}")))),
                 Err(FamilyError::Failure(f)) => Err(ReadError::Failure(f)),
                 Err(e) => Err(ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string()))),
             }
@@ -1817,5 +1820,15 @@ mod tests {
         assert!(matches!(adapter_on(&[url]).build(&pay_job(), 0).await, Err(SimError::Transport(_))), "not an abort: no verdict");
         let aborts = Node { open: false, check_ok: false, ..OPEN };
         assert!(matches!(adapter_after(aborts, &[]).await.build(&pay_job(), 0).await, Err(SimError::Revert(m)) if m.contains("Move abort")), "control");
+    }
+
+    /// scaas-rpc T24.3: endpoint 0's answer other than a 400 (a rate limit) is its failure, never its verdict: the read fails
+    /// over and endpoint 1 builds the job (endpoint 0 passes its identity read).
+    #[tokio::test]
+    async fn aptos_endpoint_0_rate_limited_fails_over() {
+        let first = crate::adapters::testkit::refusing(&fullnode(OPEN).await, |p, _| p.trim_end_matches('/') == "/v1", 429, json!({"message": "rate limited"})).await;
+        let a = adapter_on(&[first, fullnode(OPEN).await]);
+        a.build(&pay_job(), 0).await.unwrap();
+        assert!(a.failovers() > 0);
     }
 }

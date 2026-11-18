@@ -1514,19 +1514,21 @@ fn sim(e: anyhow::Error) -> SimError {
     }
 }
 
-/// `(height, 0x hash)` of a block.
+/// A JSON-RPC error object's cause: `cause.name`, else `name`.
+fn cause_name(error: &Value) -> &str {
+    error.pointer("/cause/name").or_else(|| error.get("name")).and_then(Value::as_str).unwrap_or("UNKNOWN")
+}
+
 /// A family client's error as the classifier reads it: a JSON-RPC error object is `RpcError { cause, body }` (`cause/name`,
 /// else `name`), anything else the endpoint's failure.
 fn near_error(e: scaas_rpc::family::FamilyError) -> anyhow::Error {
     match e {
-        scaas_rpc::family::FamilyError::Rpc { error, .. } => {
-            let cause = error.pointer("/cause/name").or_else(|| error.get("name")).and_then(Value::as_str).unwrap_or("UNKNOWN").to_string();
-            RpcError { cause, body: error }.into()
-        }
+        scaas_rpc::family::FamilyError::Rpc { error, .. } => RpcError { cause: cause_name(&error).to_string(), body: error }.into(),
         e => e.into(),
     }
 }
 
+/// `(height, 0x hash)` of a block.
 fn header(b: &Value) -> Result<(u64, String)> {
     let height = b["header"]["height"].as_u64().ok_or_else(|| anyhow!("block without height"))?;
     let hash = b58_32(b["header"]["hash"].as_str().ok_or_else(|| anyhow!("block without hash"))?)?;
@@ -1626,7 +1628,11 @@ impl NearAdapter {
             let params = params.clone();
             async move {
                 self.net.call(i, method, params).await.map_err(|e| match e {
-                    scaas_rpc::family::FamilyError::Rpc { error, .. } => ReadError::Revert { data: vec![], reason: error.to_string() },
+                    // T24.3: a contract's refusal or an unknown account (`sim`, `has_code_at`) is endpoint 0's to classify;
+                    // any other error (a rate limit, an unknown block, a server error) fails over
+                    scaas_rpc::family::FamilyError::Rpc { error, .. } if matches!(cause_name(&error), "CONTRACT_EXECUTION_ERROR" | "UNKNOWN_ACCOUNT") => {
+                        ReadError::Revert { data: vec![], reason: error.to_string() }
+                    }
                     scaas_rpc::family::FamilyError::Failure(f) => ReadError::Failure(f),
                     e => ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string())),
                 })
@@ -4483,5 +4489,18 @@ mod tests {
         assert!(matches!(&r, Err(SimError::Transport(e)) if e.contains("FAILOVER_ANSWER")), "{r:?}");
         let (a, _) = adapter_after(says_no(), &[]).await;
         assert!(matches!(a.build(&job, 0).await, Err(SimError::Revert(_))), "control");
+    }
+
+    /// scaas-rpc T24.3: endpoint 0's error other than a contract's refusal or an unknown account (a rate limit) is its failure,
+    /// never its verdict: the read fails over and endpoint 1 builds the job (endpoint 0 passes its identity read).
+    #[tokio::test]
+    async fn near_endpoint_0_rate_limited_fails_over() {
+        let job = job(o_of("pay", json!({})));
+        let first = crate::adapters::testkit::refusing(&serve(Arc::new(Mutex::new(pay_world()))).await, |_, b| b["method"] == "status", 429,
+            json!({"jsonrpc": "2.0", "id": 1, "error": {"code": -429, "name": "TOO_MANY_REQUESTS", "message": "rate limited"}})).await;
+        let (a, _) = adapter_after(pay_world(), &[&first]).await;
+        let r = a.build(&job, 0).await;
+        assert!(r.is_ok(), "{r:?}");
+        assert!(a.failovers() > 0);
     }
 }

@@ -228,7 +228,8 @@ Endpoints (BUILT, scaas-rpc T22): `rpc_urls` are read through the crate's family
 ([CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04)): TON Center names no network, so every listed endpoint is this network
 (the profile constant, [NET-ALL-22](README.md#NET-ALL-22)); the next endpoint must show a masterchain seqno at or above the
 one the first endpoint last showed; a status other than 2xx from it decides nothing and a refusal read while it answered
-requeues the job. The transaction status and its escrow follow-up (refund included), the sends, `op_consumed` and the
+requeues the job. From the first endpoint only TON Center's 404 is its answer; any other status (a rate limit, a 5xx)
+fails over (scaas-rpc T24.3). The transaction status and its escrow follow-up (refund included), the sends, `op_consumed` and the
 lane's `seqno` are the first endpoint's only.
 
 - Minimal cell/BOC code (representation hash, single-root BOC, multi-root BOC read when needed), base64, no new crate.

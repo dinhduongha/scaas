@@ -575,8 +575,8 @@ impl CosmosAdapter {
     }
 
     /// ARCH-POS-15 (CLI-RPC-04, scaas-rpc T21b): the first gateway, then each next REST gateway of this chain (`node_info`'s
-    /// network) not behind the height the first CometBFT endpoint last showed. An answer other than 2xx (a refused simulate,
-    /// a smart query's error) is the first gateway's to classify as before (its status and body handed back), a later
+    /// network) not behind the height the first CometBFT endpoint last showed. An error with gRPC code 2 or 3 (a refused
+    /// simulate, a smart query's error) is the first gateway's to classify as before (any other fails over, T24.3) (its status and body handed back), a later
     /// gateway's no verdict (the next is asked); every gateway failing after a later one's refusal is a transport error
     /// without its text; what a failover gateway's answer refuses `build` requeues.
     async fn failover<F, Fut>(&self, path: &str, f: F) -> Result<(u16, Value)>
@@ -590,7 +590,10 @@ impl CosmosAdapter {
             async move {
                 match r.await {
                     Ok((s, v)) if (200..300).contains(&s) => Ok((s, v)),
-                    Ok((s, v)) => Err(ReadError::Revert { data: vec![], reason: format!("{s}\n{v}") }),
+                    // T24.3: gRPC code 2 or 3 (a refused simulate, a smart query's error: `sim_error`'s verdicts) is the
+                    // first gateway's to classify; any other answer (503 code 14, a rate limit, a 404) fails over
+                    Ok((s, v)) if matches!(v["code"].as_u64(), Some(2 | 3)) => Err(ReadError::Revert { data: vec![], reason: format!("{s}\n{v}") }),
+                    Ok((s, _)) => Err(ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Http, &format!("{path}: HTTP {s}")))),
                     Err(FamilyError::Failure(f)) => Err(ReadError::Failure(f)),
                     Err(e) => Err(ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string()))),
                 }
@@ -1456,5 +1459,16 @@ mod tests {
         let fee = Job { id: 2, op: Some(fee), ..serde_json::from_value(json!({"id": 2})).unwrap() };
         assert!(matches!(a.build(&fee, 0).await, Err(SimError::Transport(m)) if m.contains("executor")));
         assert_eq!((n.load(std::sync::atomic::Ordering::SeqCst), a.executor.get()), (0, None));
+    }
+
+    /// scaas-rpc T24.3: the first gateway's answer other than code 2 or 3 (503 code 14, unavailable) is its failure, never its
+    /// verdict: the read fails over and endpoint 1 builds the job (endpoint 0 passes its identity read).
+    #[tokio::test]
+    async fn cosmos_gateway_0_unavailable_fails_over() {
+        let first = crate::adapters::testkit::refusing(&gateway(Some("100000")).await.0, |p, _| p.ends_with("/node_info"), 503, json!({"code": 14, "message": "unavailable"})).await;
+        let (url, _) = gateway(Some("100000")).await;
+        let a = adapter_on(&[&first, &url]);
+        a.build(&plain_pay(), 0).await.unwrap();
+        assert!(a.failovers() > 0);
     }
 }

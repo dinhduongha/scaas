@@ -506,8 +506,9 @@ no redirect, 20 s a request; the Indexer API's key to the indexer only). `build`
 simulated transaction, the Account, `pay_check`, the simulate) fail over ([CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04)):
 the next endpoint must answer ledger info with the configured chain id and a block height at or above the one the first endpoint
 last showed; an answer other than 2xx from it (an abort, a refused simulate) decides nothing and a refusal read while it answered
-requeues the job. The transaction status, the send, the lane's sequence, its balance, the landed fee and `op_consumed` are the
-first endpoint's only.
+requeues the job. From the first endpoint only a 400 (the Move VM's answer: an abort, a refused simulate) is its verdict;
+any other status (a rate limit, a 404, a 5xx) fails over (scaas-rpc T24.3). The transaction status, the send, the lane's
+sequence, its balance, the landed fee and `op_consumed` are the first endpoint's only.
 
 ## 9. Finality and events
 

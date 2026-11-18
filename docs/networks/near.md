@@ -323,8 +323,9 @@ Endpoints (BUILT, scaas-rpc T17): `rpc_urls` are read through the crate's family
 20 s a request). `build`'s views (the entry's `*_check`, `relay_check`, `relay_hold_check`, the subject, the target's
 code and checks, balances) and the gas price fail over ([CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04)): the next
 endpoint must answer `status` with the configured genesis hash and a final height at or above the one the first endpoint
-last showed; an error answer from it decides nothing and a refusal read while it answered requeues the job. The
-transaction status and its escrow follow-up, the landed fee, the lane's access-key nonce, `op_consumed`, the action fees
+last showed; an error answer from it decides nothing and a refusal read while it answered requeues the job. From the
+first endpoint only `CONTRACT_EXECUTION_ERROR` and `UNKNOWN_ACCOUNT` are its verdict; any other error (a rate limit, an
+unknown block) fails over (scaas-rpc T24.3). The transaction status and its escrow follow-up, the landed fee, the lane's access-key nonce, `op_consumed`, the action fees
 (kept a while) and the start checks are the first endpoint's only.
 
 ## 9. Finality and events

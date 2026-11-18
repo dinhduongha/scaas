@@ -1198,7 +1198,9 @@ impl Api {
             let r = f(i);
             async move {
                 r.await.map_err(|e| match e {
-                    FamilyError::Status { status, message } => ReadError::Revert { data: vec![], reason: format!("{status}\n{message}") },
+                    // T24.3: TON Center's 404 (no such account or block) is endpoint 0's answer; any other status (a rate
+                    // limit, a 5xx) is the endpoint's failure and fails over
+                    FamilyError::Status { status: 404, message } => ReadError::Revert { data: vec![], reason: format!("404\n{message}") },
                     FamilyError::Failure(f) => ReadError::Failure(f),
                     e => ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string())),
                 })
@@ -3426,5 +3428,15 @@ mod tests {
             r => panic!("{r:?}"),
         }
         assert!(matches!(adapter(&url).build(&signed_pay(), 0).await, Err(SimError::Revert(m)) if m.contains("lane nonce is 1")), "control");
+    }
+
+    /// scaas-rpc T24.3: endpoint 0's status other than a 404 (a rate limit) is its failure, never its verdict: the getters fail
+    /// over and endpoint 1 builds the job.
+    #[tokio::test]
+    async fn ton_endpoint_0_rate_limited_fails_over() {
+        let first = crate::adapters::testkit::refusing(&fake_api_shared(lane_at(0)).await.0, |_, _| false, 429, json!({"error": "rate limited"})).await;
+        let a = adapter_on(&[first, fake_api_shared(lane_at(0)).await.0], toml::Table::new());
+        a.build(&signed_pay(), 0).await.unwrap();
+        assert!(a.api.failovers() > 0);
     }
 }
