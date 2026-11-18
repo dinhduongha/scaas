@@ -86,3 +86,7 @@ required-features = ["classical-roots"]
 [[test]]
 name = "account"
 required-features = ["account"]
+
+[[test]]
+name = "wallet"
+required-features = ["wallet"]

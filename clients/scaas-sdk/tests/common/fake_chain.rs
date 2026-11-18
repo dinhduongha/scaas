@@ -47,6 +47,16 @@ pub struct Chain {
     pub bodies: Vec<String>,
     /// called with each gateway body before the answer (a test's chain logic)
     pub on_body: Option<fn(&mut Chain, &Value)>,
+    /// `GET /v1/gateway`'s answer
+    pub gw_info: Value,
+    /// token metadata by address: `(name, symbol, decimals, chainUid)`
+    pub tokens: HashMap<String, (String, String, u8, String)>,
+    /// `balanceOfUA` by token and the native balance: the base, plus the number of the block read at (so a read at another
+    /// block shows)
+    pub balances: HashMap<String, u64>,
+    pub native_balance: u64,
+    /// the factory's token index (`contractsPage(1, …)`)
+    pub index: Vec<String>,
 }
 
 impl Default for Chain {
@@ -68,6 +78,12 @@ impl Default for Chain {
             gw: Gw::Queue,
             bodies: vec![],
             on_body: None,
+            gw_info: json!({"api": 1, "chains": [{"chain": CHAIN_ID, "chain_key": "evm:31337", "chain_uid": hash_of(0),
+                "family": "evm", "routes": ["ops"]}]}),
+            tokens: HashMap::new(),
+            balances: HashMap::new(),
+            native_balance: 0,
+            index: vec![],
         }
     }
 }
@@ -141,6 +157,16 @@ pub fn keccak_hex(b: &[u8]) -> String {
     format!("0x{}", alloy::hex::encode(scaas_ua::keccak256(b)))
 }
 
+/// An ABI-encoded `string` return value.
+pub fn abi_string(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = format!("{:064x}{:064x}{}", 32, b.len(), alloy::hex::encode(b));
+    while (out.len() / 2) % 32 != 0 {
+        out.push_str("00");
+    }
+    format!("0x{out}")
+}
+
 fn rpc(c: &mut Chain, r: &Value) -> Value {
     let p = &r["params"];
     let ok = |v: Value| json!({"jsonrpc": "2.0", "id": r["id"], "result": v});
@@ -176,6 +202,15 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                 .or(p[0]["data"].as_str())
                 .unwrap_or_default();
             let sel = |s: &str| keccak_hex(s.as_bytes())[..10].to_string();
+            let at = match &p[1] {
+                Value::Object(o) => o
+                    .get("blockHash")
+                    .and_then(Value::as_str)
+                    .and_then(number_of_hash)
+                    .unwrap_or(c.head),
+                t => named(c, t),
+            };
+            let meta = c.tokens.get(&to).cloned();
             if data.starts_with(&sel("mtxNonce(bytes32,uint256)"))
                 || data.starts_with(&sel("mtxNonce(address,uint256)"))
             {
@@ -183,6 +218,35 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                     "0x{:064x}",
                     c.nonces.get(&to).copied().unwrap_or(0)
                 )))
+            } else if data.starts_with(&sel("balanceOfUA(bytes32)")) {
+                ok(json!(format!(
+                    "0x{:064x}",
+                    c.balances.get(&to).copied().unwrap_or(0) + at
+                )))
+            } else if let (Some((name, symbol, decimals, uid)), true) = (meta, data.len() == 10) {
+                if data == sel("name()") {
+                    ok(json!(abi_string(&name)))
+                } else if data == sel("symbol()") {
+                    ok(json!(abi_string(&symbol)))
+                } else if data == sel("decimals()") {
+                    ok(json!(format!("0x{decimals:064x}")))
+                } else if data == sel("chainUid()") {
+                    ok(json!(uid))
+                } else {
+                    err("execution reverted")
+                }
+            } else if data.starts_with(&sel("contractsPage(uint16,uint256,uint256)")) {
+                let from = usize::from_str_radix(&data[74..138], 16).unwrap();
+                let page: Vec<&String> = c.index.iter().skip(from).take(100).collect();
+                let mut out = format!("{:064x}{:064x}{:064x}", 0x40, c.index.len(), page.len());
+                for a in page {
+                    out.push_str(&format!("{:0>64}", a.trim_start_matches("0x")));
+                    out.push_str(&format!(
+                        "{:064x}{:064x}{:064x}{:064x}{:064x}{:064x}",
+                        0, 1, 1, 1, 1, 1
+                    ));
+                }
+                ok(json!(format!("0x{out}")))
             } else {
                 ok(json!("0x"))
             }
@@ -194,6 +258,17 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
             .cloned()
             .unwrap_or("0x".into()))),
         "eth_getTransactionCount" => ok(json!("0x0")),
+        "eth_getBalance" => {
+            let at = match &p[1] {
+                Value::Object(o) => o
+                    .get("blockHash")
+                    .and_then(Value::as_str)
+                    .and_then(number_of_hash)
+                    .unwrap_or(c.head),
+                t => named(c, t),
+            };
+            ok(json!(format!("{:#x}", c.native_balance + at)))
+        }
         "eth_feeHistory" => ok(
             json!({"oldestBlock": "0x1", "baseFeePerGas": [format!("{:#x}", c.base_fee), format!("{:#x}", c.base_fee)],
             "gasUsedRatio": [0.5], "reward": [[format!("{:#x}", c.prio)]]}),
@@ -303,7 +378,9 @@ pub async fn serve(c: Fake) -> String {
                     buf.drain(..end + 4 + len);
                     let (status, out) = {
                         let mut c = c.lock().unwrap();
-                        if path.ends_with("/v1/op") {
+                        if path.ends_with("/v1/gateway") {
+                            (200, c.gw_info.clone())
+                        } else if path.ends_with("/v1/op") {
                             let text = String::from_utf8_lossy(&body).to_string();
                             c.bodies.push(text.clone());
                             if let (Some(f), Ok(v)) =

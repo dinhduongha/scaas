@@ -70,71 +70,75 @@ impl Op {
                 }
                 let (profile, _, pool) = evm(&sdk, &row.chain)?;
                 let choice = final_block(&profile);
-                let contract: Address = row.contract.parse().map_err(|_| SdkError::Argument)?;
-                let digest: B256 = row.digest.parse().map_err(|_| SdkError::Argument)?;
-                let lane = if row.from.is_empty() {
-                    None
+                let now = if row.kind == "native" {
+                    native_state(&pool, &row, choice).await
                 } else {
-                    Some((
-                        unhex(&row.from)?,
-                        dec(&row.batch.clone().into())?,
-                        dec(&row.nonce.clone().into())?,
-                    ))
-                };
-                let filter = Filter::new()
-                    .address(contract)
-                    .event_signature(executed_topic(&row.kind));
-                let (kind, from_block) = (row.kind.clone(), row.from_block);
-                let (lane, filter, kind) = (&lane, &filter, kind.as_str());
-                let pool = &pool;
-                let a = pool
-                    .read_at_block(choice, Purpose::Plain, |at| async move {
-                        let mut landed = None;
-                        let mut lo = from_block.min(at.number);
-                        while lo <= at.number && landed.is_none() {
-                            let hi = at.number.min(lo.saturating_add(LOG_RANGE_MAX - 1));
-                            for l in pool.logs_at(&at, lo, hi, filter).await? {
-                                if l.data.get(32..64) == Some(digest.as_slice()) {
-                                    landed = Some((
-                                        l.block_number.unwrap_or(at.number),
-                                        format!("{:#x}", l.block_hash.unwrap_or_default()),
-                                    ));
+                    let contract: Address = row.contract.parse().map_err(|_| SdkError::Argument)?;
+                    let digest: B256 = row.digest.parse().map_err(|_| SdkError::Argument)?;
+                    let lane = if row.from.is_empty() {
+                        None
+                    } else {
+                        Some((
+                            unhex(&row.from)?,
+                            dec(&row.batch.clone().into())?,
+                            dec(&row.nonce.clone().into())?,
+                        ))
+                    };
+                    let filter = Filter::new()
+                        .address(contract)
+                        .event_signature(executed_topic(&row.kind));
+                    let (kind, from_block) = (row.kind.clone(), row.from_block);
+                    let (lane, filter, kind) = (&lane, &filter, kind.as_str());
+                    let pool = &pool;
+                    let a = pool
+                        .read_at_block(choice, Purpose::Plain, |at| async move {
+                            let mut landed = None;
+                            let mut lo = from_block.min(at.number);
+                            while lo <= at.number && landed.is_none() {
+                                let hi = at.number.min(lo.saturating_add(LOG_RANGE_MAX - 1));
+                                for l in pool.logs_at(&at, lo, hi, filter).await? {
+                                    if l.data.get(32..64) == Some(digest.as_slice()) {
+                                        landed = Some((
+                                            l.block_number.unwrap_or(at.number),
+                                            format!("{:#x}", l.block_hash.unwrap_or_default()),
+                                        ));
+                                    }
                                 }
+                                lo = hi.saturating_add(1);
                             }
-                            lo = hi.saturating_add(1);
-                        }
-                        let spent = match lane {
-                            Some((from, batch, nonce)) => {
-                                let w = pool
-                                    .call_at(&at, contract, nonce_call(kind, from, *batch))
-                                    .await?;
-                                if w.len() != 32 {
-                                    return Err(ReadError::Failure(
-                                        scaas_rpc::EndpointFailure::new(
-                                            at.endpoint,
-                                            scaas_rpc::FailureKind::AnswerMalformed,
-                                            "a nonce view of no word",
-                                        ),
-                                    ));
+                            let spent = match lane {
+                                Some((from, batch, nonce)) => {
+                                    let w = pool
+                                        .call_at(&at, contract, nonce_call(kind, from, *batch))
+                                        .await?;
+                                    if w.len() != 32 {
+                                        return Err(ReadError::Failure(
+                                            scaas_rpc::EndpointFailure::new(
+                                                at.endpoint,
+                                                scaas_rpc::FailureKind::AnswerMalformed,
+                                                "a nonce view of no word",
+                                            ),
+                                        ));
+                                    }
+                                    U256::from_be_slice(&w) > *nonce
                                 }
-                                U256::from_be_slice(&w) > *nonce
-                            }
-                            None => false,
-                        };
-                        Ok::<Facts, ReadError>((landed, spent, pool.timestamp_at(&at).await?))
-                    })
-                    .await?;
-                let strict = pool.pool().policy() == Policy::StrictMajority;
-                let decisive =
-                    strict || (a.members == [0] && pool.pool().class(0) != Class::Discovered);
-                let (landed, spent, ts) = a.value;
-                let now = match landed {
-                    Some((block, hash)) if decisive => OpState::Landed { block, hash },
-                    _ if decisive && lane.is_some() && spent => OpState::Consumed,
-                    _ if decisive && lane.is_some() && row.valid_until < ts => OpState::Expired,
-                    _ => OpState::InFlight {
-                        detail: tx_detail(pool, &row, choice).await,
-                    },
+                                None => false,
+                            };
+                            Ok::<Facts, ReadError>((landed, spent, pool.timestamp_at(&at).await?))
+                        })
+                        .await?;
+                    let strict = pool.pool().policy() == Policy::StrictMajority;
+                    let decisive =
+                        strict || (a.members == [0] && pool.pool().class(0) != Class::Discovered);
+                    let (landed, spent, ts) = a.value;
+                    match landed {
+                        Some((block, hash)) if decisive => OpState::Landed { block, hash },
+                        _ if decisive && lane.is_some() && spent => OpState::Consumed,
+                        _ if decisive && lane.is_some() && row.valid_until < ts => OpState::Expired,
+                        _ => OpState::InFlight {
+                            detail: tx_detail(pool, &row, choice).await,
+                        },
+                    }
                 };
                 if now != was {
                     match &now {
@@ -155,6 +159,37 @@ impl Op {
                 Ok(now)
             })
             .await
+    }
+}
+
+/// An EVM native send (no operation nonce) by `tx_state`'s own terminal facts (spec §13.5): final and successful is
+/// `Landed`; final and failed, or replaced, is `Consumed` (the account's nonce spent without the transfer).
+async fn native_state(
+    pool: &scaas_rpc::evm::EvmPool,
+    row: &Row,
+    choice: scaas_rpc::pool::BlockChoice,
+) -> OpState {
+    let (Some(id), Some(payer), Some(nonce)) = (
+        row.tx_id.as_deref().and_then(|t| t.parse::<B256>().ok()),
+        row.payer.as_deref().and_then(|p| p.parse::<Address>().ok()),
+        row.tx_nonce,
+    ) else {
+        return stored(row);
+    };
+    match pool.tx_state(id, payer, nonce, choice).await {
+        Ok(TxState::Final {
+            success: true,
+            number,
+            hash,
+        }) => OpState::Landed {
+            block: number,
+            hash: format!("{hash:#x}"),
+        },
+        Ok(TxState::Final { .. } | TxState::Replaced { .. }) => OpState::Consumed,
+        Ok(TxState::Included { .. }) => OpState::InFlight {
+            detail: InFlight::TxIncluded,
+        },
+        _ => stored(row),
     }
 }
 

@@ -851,3 +851,43 @@ async fn cancel_nonce_ends_it() {
     bodies(&t, 2).await;
     assert_eq!(t.sdk.op().state(first).await.unwrap(), OpState::Consumed);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn gateway_chain_uid_mismatch_is_refused() {
+    let t = setup(1, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    assert_eq!(
+        code(t.sdk.op().quote(p.clone(), SubmitPath::Gateway).await),
+        "Ok",
+        "control: the gateway's chain_uid is the profile's"
+    );
+    t.chain.lock().unwrap().gw_info["chains"][0]["chain_uid"] =
+        format!("0x{}", "61".repeat(32)).into();
+    assert_eq!(
+        code(t.sdk.op().quote(p.clone(), SubmitPath::Gateway).await),
+        "ProfileMismatch"
+    );
+    assert_eq!(
+        code(
+            t.sdk
+                .op()
+                .quote(p.clone(), SubmitPath::Auto { payer: None })
+                .await
+        ),
+        "ProfileMismatch",
+        "Auto too"
+    );
+    t.chain.lock().unwrap().gw_info["chains"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("chain_uid");
+    assert_eq!(
+        code(t.sdk.op().quote(p, SubmitPath::Gateway).await),
+        "ProfileMismatch",
+        "none announced: refused too"
+    );
+    assert!(
+        t.chain.lock().unwrap().bodies.is_empty(),
+        "the gateway unused"
+    );
+}

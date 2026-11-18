@@ -6,9 +6,9 @@
 //! the send runs on as a task and reports as `Event::OpState`. An operation ends only on a chain fact. UNAUDITED.
 mod follow;
 mod prepared;
-mod quote;
-mod state;
-mod submit;
+pub(crate) mod quote;
+pub(crate) mod state;
+pub(crate) mod submit;
 #[cfg(test)]
 mod tests;
 

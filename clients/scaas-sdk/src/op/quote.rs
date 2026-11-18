@@ -86,6 +86,7 @@ pub(crate) fn payer_address(sdk: &Sdk, payer: &KeyRef) -> Result<Address, SdkErr
 
 /// A self-relay's quote for `to` and `data` from `payer`: the code check, the gas (simulated, failed over, head), the chain's
 /// caps, the fees and the SDK's caps, the payer's nonce.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn self_relay(
     sdk: &Sdk,
     chain: &str,
@@ -94,10 +95,13 @@ pub(crate) async fn self_relay(
     value: U256,
     data: Bytes,
     fee_to_relayer: String,
+    relayed: bool,
 ) -> Result<SubmitQuote, SdkError> {
     let (profile, _, pool) = evm(sdk, chain)?;
     let from = payer_address(sdk, payer)?;
-    if delegated(&pool.code(from).await.map_err(sim)?) {
+    // a delegated direct caller of a relayed entry reverts `CallerDelegated` after spending the gas; a native send from a
+    // delegated EOA is the EOA's own transaction
+    if relayed && delegated(&pool.code(from).await.map_err(sim)?) {
         return Err(SdkError::PayerDelegated);
     }
     let gas = if data.is_empty() && pool.code(to).await.map_err(sim)?.is_empty() {
@@ -129,6 +133,38 @@ pub(crate) async fn self_relay(
         gateways: vec![],
         tx_nonce,
     })
+}
+
+/// Every gateway of `chain` announces the profile's `chain_uid` for its chain id (`GET /v1/gateway`; NODE-GW-05), else
+/// `ProfileMismatch` and none is used (spec §8; a gateway that announces none is refused too).
+pub(crate) async fn check_gateways(sdk: &Sdk, chain: &str) -> Result<(), SdkError> {
+    let c = sdk
+        .chains
+        .iter()
+        .find(|c| c.profile.key == chain)
+        .ok_or(SdkError::ChainUnknown)?;
+    let (Some(list), Some(id)) = (c.gateways.clone(), c.profile.chain_id) else {
+        return Err(SdkError::SubmitPathNone);
+    };
+    let client = scaas_rpc::node::NodeClient::new(list)?;
+    for i in 0..client.list().len() {
+        let v = client.gateway_at(i).await?;
+        let ok = v
+            .get("chains")
+            .and_then(|c| c.as_array())
+            .is_some_and(|cs| {
+                cs.iter().any(|x| {
+                    x.get("chain").and_then(|n| n.as_u64()) == Some(id)
+                        && x.get("chain_uid")
+                            .and_then(|u| u.as_str())
+                            .is_some_and(|u| u.eq_ignore_ascii_case(&c.profile.chain_uid))
+                })
+            });
+        if !ok {
+            return Err(SdkError::ProfileMismatch);
+        }
+    }
+    Ok(())
 }
 
 impl Op {
@@ -168,13 +204,13 @@ impl Op {
                     tx_nonce: 0,
                 };
                 let payer = match path {
-                    SubmitPath::Gateway if gateways > 0 && door_a(&prepared) => {
-                        return Ok(gateway())
+                    SubmitPath::Gateway | SubmitPath::Auto { .. }
+                        if gateways > 0 && door_a(&prepared) =>
+                    {
+                        check_gateways(&sdk, &prepared.chain()).await?;
+                        return Ok(gateway());
                     }
                     SubmitPath::Gateway => return Err(SdkError::SubmitPathNone),
-                    SubmitPath::Auto { .. } if gateways > 0 && door_a(&prepared) => {
-                        return Ok(gateway())
-                    }
                     SubmitPath::Auto { payer: None } => return Err(SdkError::SubmitPathNone),
                     SubmitPath::Auto { payer: Some(p) } | SubmitPath::SelfRelay { payer: p } => p,
                 };
@@ -189,6 +225,7 @@ impl Op {
                     U256::ZERO,
                     Bytes::from(built.calldata),
                     fee,
+                    true,
                 )
                 .await
             })

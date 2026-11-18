@@ -165,6 +165,36 @@ impl NodeClient {
             .await
     }
 
+    /// `GET /v1/gateway` of gateway `i` alone (NODE-GW-05): what it announces, never another gateway's answer (a client checks
+    /// each gateway's `chain_uid` against its own pinned profile before it posts there).
+    pub async fn gateway_at(&self, i: usize) -> Result<Value, RpcError> {
+        let failed = |f| RpcError::EndpointAllFailed {
+            last: Some(f),
+            failover_revert: None,
+        };
+        match self
+            .http
+            .request(
+                &self.list,
+                i,
+                reqwest::Method::GET,
+                "/v1/gateway",
+                None,
+                ANSWER_MAX,
+                None,
+            )
+            .await
+        {
+            Ok((s, v)) if (200..300).contains(&s) => Ok(v),
+            Ok((s, v)) => match answer(i, s, v) {
+                NodeOutcome::Refused(e) => Err(e),
+                NodeOutcome::Unreachable(f) => Err(failed(f)),
+                NodeOutcome::Queued { .. } => Err(RpcError::argument("not a 2xx")),
+            },
+            Err(f) => Err(failed(f)),
+        }
+    }
+
     /// One submit to gateway `i`: the body cap first (nothing sent above it), then the answer by the node's contract.
     async fn submit_at(
         &self,

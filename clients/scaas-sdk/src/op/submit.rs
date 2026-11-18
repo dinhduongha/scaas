@@ -264,7 +264,7 @@ impl Op {
 
 /// Runs `f` on as a task of the SDK's runtime, whatever happens to the caller (spec §13.4); on wasm32, where it is awaited.
 #[cfg(not(target_arch = "wasm32"))]
-fn detach(sdk: &Arc<Sdk>, f: impl std::future::Future<Output = ()> + Send + 'static) {
+pub(crate) fn detach(sdk: &Arc<Sdk>, f: impl std::future::Future<Output = ()> + Send + 'static) {
     match &sdk.rt {
         Some(rt) => drop(rt.handle.spawn(f)),
         None => drop(tokio::spawn(f)),
@@ -272,7 +272,7 @@ fn detach(sdk: &Arc<Sdk>, f: impl std::future::Future<Output = ()> + Send + 'sta
 }
 
 #[cfg(target_arch = "wasm32")]
-fn detach(_: &Arc<Sdk>, f: impl std::future::Future<Output = ()> + 'static) {
+pub(crate) fn detach(_: &Arc<Sdk>, f: impl std::future::Future<Output = ()> + 'static) {
     drop(tokio::task::spawn_local(f));
 }
 
