@@ -882,8 +882,9 @@ contract GovDeployTest is Test {
         // metadata hash: `IUARegistry` gains `updateMsig`, `msigStateOf`; its code unchanged): 0x3a77CAC88eeFa96E89CA64154D20dc8efcaE082C;
         // 3zh-mldsa (the metadata hash: `IUARegistry`'s `UAKeyNotCached` and `expandedKeyOf` returning `address[3]`, owner
         // 2026-11-15; its code unchanged): 0x93690B9A678b7D37221D41625563fe3f2939c1be; pqvault R1 (the metadata hash: `IUARegistry`
-        // gains `requirePortableApp`, CTR-UA-46; its code unchanged): -> this
-        assertEq(rf, 0x4321eD19C728Ad11767c4514a5f089E876D7De73, "RelayFeeRouter");
+        // gains `requirePortableApp`, CTR-UA-46; its code unchanged): 0x4321eD19C728Ad11767c4514a5f089E876D7De73; code-format F2
+        // (`bytecode_hash = "none"`: the metadata hash leaves the creation code; its code unchanged): -> this
+        assertEq(rf, 0x0426BdbC5334305366A944b80dC739809e24CF3E, "RelayFeeRouter");
         // ua-mtx-merge T24: 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750 -> 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 (the
         // router's metadata hash: `IGovernance`); T26: -> this (the two empty hooks `UAMetaTxBase` adds, its
         // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
@@ -960,8 +961,10 @@ contract GovDeployTest is Test {
         // unchanged): 0x25e38E5af7B8aeF469B92cc357f56F46898FCe70. The merge pre-reset4 (both; the metadata hash):
         // 0xEf29EBaCe18B161338a8a0f8cF34839b233127F9; 3zh-mldsa (the metadata hash: `IUARegistry`, `UAStore`, `PqUA`; owner
         // 2026-11-15; its code unchanged): 0xFf149718D2757d1afD4435AdD5c8bA80A14C2Fa4; pqvault R1 (the metadata hash: `IUARegistry`
-        // gains `requirePortableApp` and `UAKinds` `appPurpose`, CTR-UA-46; its code unchanged): -> this
-        assertEq(router, 0x36Ebc0Ab03EB1B67D37b6443FD04C06a4E3AB091, "GovernanceRouter");
+        // gains `requirePortableApp` and `UAKinds` `appPurpose`, CTR-UA-46; its code unchanged):
+        // 0x36Ebc0Ab03EB1B67D37b6443FD04C06a4E3AB091; setAuditor A1-A8 (bit 32 AUDITOR: the router's `mtxSetAuditorKey` /
+        // `mtxSetAuditorUA` ops and their typehashes) and code-format F2 (`bytecode_hash = "none"`: no metadata hash) -> this
+        assertEq(router, 0x7dABB8aA4F869fCC1449eF2f999af56C94058c56, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;
