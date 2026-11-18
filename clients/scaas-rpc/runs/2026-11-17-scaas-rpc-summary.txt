@@ -25,30 +25,35 @@ family cosmos | 66b9b90d9 | cb5fc860c | node-e2e-cosmos 1 -> 1 (the Docker cap 1
 family ton | ef4c78a40 | 58ff9b172 | node-e2e-ton 1 -> 1 | 10 killed
 lock | 983d63b8e | - | rustls-webpki 0.103.17, webpki-roots 1.0.12, tokio 1.54.1; rpc-deny | -
 # latest runs:
-ua-json | 82d9754cd | 0 | 8 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-ua-verify | 82d9754cd | 0 | 84 passed, 0 failed, 0 ignored (18 binaries); tree dirty
-ua-default | 82d9754cd | 0 | 25 passed, 0 failed, 0 ignored (2 binaries); tree dirty
 eip1898 | 0557f5ea0 | 0 | nethermind: canonical answered 5/5, made-up refused 5/5: PASS; anvil: canonical answered 5/5, made-up refused 5/5: PASS; hedera-relay: not verified (no local relay); tree dirty
-ver-test | 435318aa3 | 0 | 41 passed, 0 failed, 1 ignored (6 binaries)
-ver-clippy | 435318aa3 | 0 | -
-ver-anvil | 435318aa3 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-features | 435318aa3 | 0 | -
-node-e2e | 4ee72cfcc | 0 | 24 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-rpc-anvil | 2633740cb | 0 | 10 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-rpc-deny | 2633740cb | 0 | -; tree dirty
-rpc-test | 75b243fba | 0 | 161 passed, 0 failed, 10 ignored (16 binaries); tree dirty
-rpc-clippy | 75b243fba | 0 | -; tree dirty
-rpc-wasm | 75b243fba | 0 | -; tree dirty
-node-test | c4a30b7d7 | 0 | 857 passed, 0 failed, 72 ignored (18 binaries); tree dirty
-node-clippy | c4a30b7d7 | 0 | -; tree dirty
-docs | c4a30b7d7 | 0 | -; tree dirty
-node-e2e-sui | 9b0b437fa | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-node-e2e-ton | 9b0b437fa | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-node-e2e-hedera | 9b0b437fa | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-node-e2e-cosmos | 9b0b437fa | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-node-e2e-algorand | 9b0b437fa | 0 | 8 passed, 0 failed, 0 ignored (1 binaries)
-node-e2e-aptos | 9b0b437fa | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-node-e2e-near | 9b0b437fa | 0 | 12 passed, 0 failed, 0 ignored (1 binaries)
-node-e2e-solana | 9b0b437fa | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-node-e2e-soroban | 9b0b437fa | 0 | 11 passed, 0 failed, 0 ignored (2 binaries)
 review-families | 9b0b437fa | 0 | findings closed: T24.1-T24.12, T24.14, T24.15 (P3 #13 left as is, noted in algorand.md); mutants 57 killed of 57 (t24-<k>); node-e2e-<family> at 9b0b437fa: sui 1, ton 1, hedera 1, cosmos 1, algorand 8, aptos 1, near 12, solana 1, soroban 11 (a first soroban run hit friendbot 502 before any job ran; re-run green)
+rpc-test | d5ca7080d | 0 | 161 passed, 0 failed, 10 ignored (16 binaries)
+rpc-clippy | d5ca7080d | 0 | -
+rpc-anvil | d5ca7080d | 0 | 10 passed, 0 failed, 0 ignored (1 binaries)
+rpc-wasm | d5ca7080d | 0 | -
+rpc-deny | d5ca7080d | 0 | -
+ver-test | d5ca7080d | 0 | 41 passed, 0 failed, 1 ignored (6 binaries)
+ver-clippy | d5ca7080d | 0 | -
+ver-anvil | d5ca7080d | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+ua-json | d5ca7080d | 0 | 8 passed, 0 failed, 0 ignored (1 binaries)
+ua-verify | d5ca7080d | 0 | 84 passed, 0 failed, 0 ignored (18 binaries)
+ua-default | d5ca7080d | 0 | 26 passed, 0 failed, 0 ignored (2 binaries)
+features | d5ca7080d | 0 | -
+node-e2e | d5ca7080d | 0 | 24 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-hedera | d5ca7080d | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-sui | d5ca7080d | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-cosmos | d5ca7080d | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-algorand | d5ca7080d | 0 | 8 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-aptos | d5ca7080d | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-near | d5ca7080d | 0 | 12 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-solana | d5ca7080d | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-soroban | d5ca7080d | 0 | 11 passed, 0 failed, 0 ignored (2 binaries)
+node-test | a7370a3b2 | 0 | 857 passed, 0 failed, 72 ignored (18 binaries)
+node-clippy | a7370a3b2 | 0 | -
+node-e2e-ton | a7370a3b2 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+docs | a7370a3b2 | 0 | -
+mutants-families | a7370a3b2 | 0 | t14-t22 and t24-<k>: 129 mutants, 129 killed (t22, t24-2, t24-7 re-run after 18f83a95b: two TON tests record endpoint 0's head, t24-2's TON anchor)
+# round-end matrix (2026-11-18): ua-rs-sign (5f4ad2ac7) already in the branch (merged as acbbacd2f), `git merge --no-ff ua-rs-sign` = already up to date;
+# clean builds (cargo clean: clients/scaas-rpc, scaas-pqz-verifier, clients/ua-rs, scaas-node); node-test at -j1; the rows at d5ca7080d ran on a tree whose
+# code differs from a7370a3b2 only in two TON test fixtures (18f83a95b), re-run there: node-test, node-clippy, node-e2e-ton, docs; eip1898 not re-run
+# (needs a Nethermind node; no change to the EIP-1898 path)
