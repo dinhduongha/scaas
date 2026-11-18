@@ -68,6 +68,17 @@ pub struct ChainProfile {
     pub finality: Finality,
     /// the chain's per-transaction gas cap (EIP-7825) when it has one, from the release data
     pub tx_gas_cap: Option<u64>,
+    /// the reviewed token list (spec §8.2): a token not on it is `unlisted` wherever it is shown
+    pub tokens: Vec<ListedToken>,
+}
+
+/// A token of a profile's reviewed list (spec §8.2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListedToken {
+    /// `0x` + 40 hex
+    pub address: String,
+    pub symbol: String,
+    pub decimals: u8,
 }
 
 /// The SDK's caps and queues (spec §4). The fee caps are the app's to set for its chains; the defaults below are a floor
@@ -84,6 +95,8 @@ pub struct Limits {
     pub max_watch: u32,
     /// scrypt, Argon2id, proofs, slow key generation at once
     pub max_concurrent_heavy: u32,
+    /// the longest an operation's `validUntil` may lie ahead of the chain's time, in seconds (the signing check's window)
+    pub max_valid_secs: u64,
     pub event_queue: u32,
 }
 
@@ -96,6 +109,7 @@ impl Default for Limits {
             watch_poll_ms: 15_000,
             max_watch: 256,
             max_concurrent_heavy: 1,
+            max_valid_secs: 86_400,
             event_queue: 1_024,
         }
     }

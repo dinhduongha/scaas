@@ -16,7 +16,7 @@ description = "SCaaS SDK: the one API apps call (CLI-SDK-01). Signs only through
 default = ["vault", "account", "wallet", "file-store", "mlock"]
 vault = ["scaas-ua/wallet"]
 account = ["vault", "scaas-rpc/evm", "dep:alloy"]
-wallet = ["vault", "scaas-rpc/evm", "scaas-rpc/node-client"]
+wallet = ["vault", "scaas-rpc/evm", "scaas-rpc/node-client", "dep:alloy"]
 zether = ["vault", "scaas-ua/zether"]
 pqz = ["vault", "scaas-ua/pqz"]
 pqz-set-n2048-kmax1024 = ["scaas-ua/pqz-set-n2048-kmax1024"]
@@ -54,8 +54,9 @@ zeroize = "=1.8.2"
 # ids (seed, account, operation): a UUID v4 from 16 bytes of the OS generator (not a key)
 uuid = { version = "1", default-features = false }
 getrandom = "0.2"
-# T9: the EVM reads of `account` (the restore scan) and later the operations; the version and features scaas-rpc takes
-alloy = { version = "~1.6", default-features = false, features = ["std", "rpc-types", "network"], optional = true }
+# T9: the EVM reads of `account` (the restore scan); T10: the operations of `wallet` (logs, blocks, `U256`); the version and
+# features scaas-rpc takes
+alloy = { version = "~1.6", default-features = false, features = ["std", "rpc-types", "network", "providers"], optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }

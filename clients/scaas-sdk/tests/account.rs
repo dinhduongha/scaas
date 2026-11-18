@@ -60,6 +60,7 @@ fn profile(urls: &[String]) -> ChainProfile {
         router: None,
         finality: Finality::Finalized,
         tx_gas_cap: None,
+        tokens: vec![],
     }
 }
 

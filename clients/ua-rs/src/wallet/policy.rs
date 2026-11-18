@@ -532,6 +532,30 @@ pub fn sign_typed_by(key: &dyn Signer, td: &TypedData, expect: Expect) -> Result
     key.sign_request(&req)
 }
 
+/// scaas-sdk spec §13.2: the `UASig` of the typed SCaaS struct `td` for its named entry, once `expect` approves it (the same check
+/// as [`sign_typed_by`]; `PolicyRefused`, nothing signed, otherwise). A native EVM key: `{"", r ‖ s ‖ v over the digest, []}` (a
+/// native id signs the digest itself on a named entry, CTR-MTX-28); a UA key: [`super::ua_sig`] over the digest under the entry's
+/// purpose, `payee-fee` for `UAPayeeFee`, `trade` for the orders and their cancels (`TradeLib`), `metatx` for every other
+/// envelope. `Expect::Any` is `Argument` here: a SCaaS entry is always signed under its check.
+pub fn sign_scaas(key: &dyn Signer, td: &TypedData, expect: Expect) -> Result<crate::ua8::UASig> {
+    if matches!(expect, Expect::Any(_)) {
+        return Err(Error::Argument);
+    }
+    if let super::signer::KeyRef::Native { .. } = key.key_ref() {
+        return Ok(crate::ua8::UASig { key_data: vec![], signature: sign_typed_by(key, td, expect)?, members: vec![] });
+    }
+    let digest = td.digest()?;
+    if check(td, &expect)? != digest {
+        return Err(Error::PolicyRefused);
+    }
+    let purpose = match td.primary_type() {
+        "UAPayeeFee" => "payee-fee",
+        "UAWrapOrder" | "UATradeOrder" | "CancelUAOrder" | "CancelUAWrapOrder" | "UAInvalidateNonces" => "trade",
+        _ => "metatx",
+    };
+    super::uasig::ua_sig(key, None, &crate::purpose_tag(purpose)?, &digest)
+}
+
 // --- the ports of clientkeys `evm.js` (same order of checks; every refusal is `PolicyRefused`) ---
 
 fn refuse<T>() -> Result<T> {

@@ -839,6 +839,7 @@ pub const LOG_RANGE_MAX: u64 = 10_000;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LogAt {
     pub block_hash: Option<B256>,
+    pub block_number: Option<u64>,
     pub tx_hash: Option<B256>,
     pub log_index: Option<u64>,
     pub address: Address,
@@ -850,6 +851,7 @@ impl From<&Log> for LogAt {
     fn from(l: &Log) -> Self {
         Self {
             block_hash: l.block_hash,
+            block_number: l.block_number,
             tx_hash: l.transaction_hash,
             log_index: l.log_index,
             address: l.address(),
@@ -983,6 +985,47 @@ impl EvmPool {
             .block_id(pinned(at))
             .await
             .map_err(|e| read_error(at.endpoint, &e, self.decode))
+    }
+    /// The read's block's timestamp (scaas-sdk spec §13.5: `Expired` against the final block's time).
+    pub async fn timestamp_at(&self, at: &ReadAt<B256>) -> Result<u64, ReadError> {
+        self.at(at.endpoint, at.deadline)
+            .get_block_by_hash(at.hash)
+            .await
+            .map_err(|e| read_error(at.endpoint, &e, self.decode))?
+            .map(|b| b.header.timestamp)
+            .ok_or_else(|| {
+                ReadError::Failure(EndpointFailure::new(
+                    at.endpoint,
+                    FailureKind::Transport,
+                    "no such block",
+                ))
+            })
+    }
+    /// The logs of `filter` in blocks `[from, to]`, `to` at most the read's block, from the read's endpoint (scaas-sdk spec §13.5:
+    /// an operation's executed event by its digest; the caller pages): at most [`LOG_RANGE_MAX`] blocks, else that endpoint's
+    /// failure, nothing asked.
+    pub async fn logs_at(
+        &self,
+        at: &ReadAt<B256>,
+        from: u64,
+        to: u64,
+        filter: &Filter,
+    ) -> Result<Vec<LogAt>, ReadError> {
+        if to > at.number || to < from || to - from >= LOG_RANGE_MAX {
+            return Err(ReadError::Failure(EndpointFailure::new(
+                at.endpoint,
+                FailureKind::BehindHead,
+                &format!(
+                    "a log range within block {} and {LOG_RANGE_MAX} blocks",
+                    at.number
+                ),
+            )));
+        }
+        self.at(at.endpoint, at.deadline)
+            .get_logs(&filter.clone().from_block(from).to_block(to))
+            .await
+            .map(|l| l.iter().map(LogAt::from).collect())
+            .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))
     }
     /// The committed nonce of `who` at the read's block.
     pub async fn nonce_at_block(&self, at: &ReadAt<B256>, who: Address) -> Result<u64, ReadError> {

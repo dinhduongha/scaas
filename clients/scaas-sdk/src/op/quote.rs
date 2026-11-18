@@ -1,0 +1,197 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+//! Submission paths and the quote (spec §13.3, CLI-SDK-09): the user reviews the payer, gas limit, maximum fee per gas and
+//! maximum cost beside the operation's own fee; above the profile's caps (from the SDK's configuration, never the answering
+//! endpoint) `FeeAboveCap`; a gas limit above the chain's per-transaction cap or block limit `GasAboveTxCap`; a payer that is an
+//! EIP-7702 designator `PayerDelegated`.
+use super::prepared::{envelope, Prepared};
+use super::{dec, evm, key, sim, KeyRef, Op};
+use crate::{Sdk, SdkError};
+use alloy::primitives::{Address, Bytes, U256};
+use scaas_rpc::Purpose;
+use std::sync::Arc;
+
+/// How an operation reaches the chain (spec §13.3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SubmitPath {
+    /// a gateway when the profile has one and the entry is one a gateway takes (door A), else a self-relay by `payer` when
+    /// given, else `SubmitPathNone`
+    Auto { payer: Option<KeyRef> },
+    /// the profile's gateways, the same body to each
+    Gateway,
+    /// an EIP-1559 transaction from the holder's own native EVM key, which pays the gas
+    SelfRelay { payer: KeyRef },
+}
+
+/// A quote the user confirms (spec §13.3); `submit` takes exactly it. Amounts are decimal strings of wei.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubmitQuote {
+    /// `Gateway` or `SelfRelay`, never `Auto`
+    pub path: SubmitPath,
+    /// the payer's address (a self-relay): linked on chain to the subject
+    pub payer: Option<String>,
+    pub gas_limit: u64,
+    pub max_fee_per_gas: String,
+    pub max_priority_fee_per_gas: String,
+    pub max_cost: String,
+    /// the operation's own fee to its relayer, as signed
+    pub fee_to_relayer: String,
+    /// the gateways the body goes to, by index in the profile's list
+    pub gateways: Vec<u32>,
+    /// the payer's transaction nonce
+    pub tx_nonce: u64,
+}
+
+/// A gateway takes it (NODE-GW-03 door A: a registered token's `mtx*` entries on `POST /v1/op`).
+pub(crate) fn door_a(p: &Prepared) -> bool {
+    matches!(p.t.kind, "token" | "zether" | "pqz")
+}
+
+fn cap(s: &str) -> Result<U256, SdkError> {
+    U256::from_str_radix(s, 10).map_err(|_| SdkError::Argument)
+}
+
+/// The caps of the SDK's configuration over a self-relay's numbers (`FeeAboveCap`).
+pub(crate) fn check_caps(sdk: &Sdk, gas: u64, max_fee: u128) -> Result<U256, SdkError> {
+    let l = &sdk.limits;
+    let cost = U256::from(gas)
+        .checked_mul(U256::from(max_fee))
+        .ok_or(SdkError::FeeAboveCap)?;
+    if gas > l.max_gas || U256::from(max_fee) > cap(&l.max_fee_per_gas)? || cost > cap(&l.max_cost)?
+    {
+        return Err(SdkError::FeeAboveCap);
+    }
+    Ok(cost)
+}
+
+/// An EIP-7702 designator: `0xef0100 ‖ address`.
+pub(crate) fn delegated(code: &[u8]) -> bool {
+    code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00])
+}
+
+/// The native EVM payer's address (`Argument` for any other key).
+pub(crate) fn payer_address(sdk: &Sdk, payer: &KeyRef) -> Result<Address, SdkError> {
+    let KeyRef::Native { network, .. } = payer else {
+        return Err(SdkError::Argument);
+    };
+    if network != "evm" {
+        return Err(SdkError::Argument);
+    }
+    let super::Key::Native(_, k) = key(sdk, payer)? else {
+        return Err(SdkError::Argument);
+    };
+    k.address()
+        .and_then(|a| a.parse().ok())
+        .ok_or(SdkError::Argument)
+}
+
+/// A self-relay's quote for `to` and `data` from `payer`: the code check, the gas (simulated, failed over, head), the chain's
+/// caps, the fees and the SDK's caps, the payer's nonce.
+pub(crate) async fn self_relay(
+    sdk: &Sdk,
+    chain: &str,
+    payer: &KeyRef,
+    to: Address,
+    value: U256,
+    data: Bytes,
+    fee_to_relayer: String,
+) -> Result<SubmitQuote, SdkError> {
+    let (profile, _, pool) = evm(sdk, chain)?;
+    let from = payer_address(sdk, payer)?;
+    if delegated(&pool.code(from).await.map_err(sim)?) {
+        return Err(SdkError::PayerDelegated);
+    }
+    let gas = if data.is_empty() && pool.code(to).await.map_err(sim)?.is_empty() {
+        21_000 // a plain transfer to an account without code
+    } else {
+        // ponytail: simulated without `value` (the reader's simulate takes none); a value-aware estimate when it has one
+        let _ = value;
+        pool.simulate_from(from, to, data).await.map_err(sim)?
+    };
+    let block = pool.block_gas().await.map_err(sim)?;
+    if profile.tx_gas_cap.is_some_and(|c| gas > c) || gas > block.limit {
+        return Err(SdkError::GasAboveTxCap);
+    }
+    let fees = pool.fees(Purpose::Plain).await?;
+    let cost = check_caps(sdk, gas, fees.max_fee_per_gas)?;
+    // ponytail: under `strict_majority` the agreed committed nonce, without the SDK's own count of what it sent since (rpc
+    // F14); two self-relays from one payer before the first lands need that count
+    let tx_nonce = pool.pending_nonce(from, Purpose::Plain).await?;
+    Ok(SubmitQuote {
+        path: SubmitPath::SelfRelay {
+            payer: payer.clone(),
+        },
+        payer: Some(format!("{from:#x}")),
+        gas_limit: gas,
+        max_fee_per_gas: fees.max_fee_per_gas.to_string(),
+        max_priority_fee_per_gas: fees.max_priority_fee_per_gas.to_string(),
+        max_cost: cost.to_string(),
+        fee_to_relayer,
+        gateways: vec![],
+        tx_nonce,
+    })
+}
+
+impl Op {
+    /// The quote of `prepared` on `path` (spec §13.3). `PreparedUnknown`, `PreparedStale` (expired or its lane nonce moved),
+    /// `SubmitPathNone`, `PayerDelegated`, `GasAboveTxCap`, `FeeAboveCap`.
+    pub async fn quote(
+        &self,
+        prepared: Arc<Prepared>,
+        path: SubmitPath,
+    ) -> Result<SubmitQuote, SdkError> {
+        let sdk = self.sdk.clone();
+        self.sdk
+            .spawn(async move {
+                Op::known(&sdk, &prepared)?;
+                super::submit::fresh(&sdk, &prepared).await?;
+                let fee = envelope(&prepared.t.message)
+                    .and_then(|e| e.get("fee"))
+                    .map(dec)
+                    .transpose()?
+                    .unwrap_or_default()
+                    .to_string();
+                let gateways = sdk
+                    .chains
+                    .iter()
+                    .find(|c| c.profile.key == prepared.chain())
+                    .and_then(|c| c.gateways.as_ref())
+                    .map_or(0, |g| g.len());
+                let gateway = || SubmitQuote {
+                    path: SubmitPath::Gateway,
+                    payer: None,
+                    gas_limit: 0,
+                    max_fee_per_gas: "0".into(),
+                    max_priority_fee_per_gas: "0".into(),
+                    max_cost: "0".into(),
+                    fee_to_relayer: fee.clone(),
+                    gateways: (0..gateways as u32).collect(),
+                    tx_nonce: 0,
+                };
+                let payer = match path {
+                    SubmitPath::Gateway if gateways > 0 && door_a(&prepared) => {
+                        return Ok(gateway())
+                    }
+                    SubmitPath::Gateway => return Err(SdkError::SubmitPathNone),
+                    SubmitPath::Auto { .. } if gateways > 0 && door_a(&prepared) => {
+                        return Ok(gateway())
+                    }
+                    SubmitPath::Auto { payer: None } => return Err(SdkError::SubmitPathNone),
+                    SubmitPath::Auto { payer: Some(p) } | SubmitPath::SelfRelay { payer: p } => p,
+                };
+                // the gas is simulated on the signed calldata (a throwaway signature: the bytes of the submit's are the same
+                // length); nothing is kept
+                let built = super::submit::sign(&sdk, &prepared)?;
+                self_relay(
+                    &sdk,
+                    &prepared.chain(),
+                    &payer,
+                    Address::from(prepared.t.contract),
+                    U256::ZERO,
+                    Bytes::from(built.calldata),
+                    fee,
+                )
+                .await
+            })
+            .await
+    }
+}

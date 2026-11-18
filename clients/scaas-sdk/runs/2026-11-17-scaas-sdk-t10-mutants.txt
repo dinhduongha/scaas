@@ -1,0 +1,17 @@
+# t10 mutants at commit 24991fc64 (name | outcome | test)
+report a terminal state on GivenUpByEveryNode | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib op::tests::all_gateways_dead_is_in_flight
+send before writing the row | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib op::tests::submit_returns_after_the_row_write
+take the fee cap from the endpoint | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib op::tests::quote_shows_and_caps
+let Auto pick a gateway for a non-door-A entry | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib op::tests::submit_path_none
+re-send a sent row at restart | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib op::tests::write_ahead_then_send
+no stale check on a moved nonce | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib op::tests::prepared_stale_on_nonce_move
+the account's event for every contract | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib op::tests::executed_event_per_contract
+any log of the event lands it | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib op::tests::executed_event_per_contract
+Expired without the timestamp check | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib op::tests::all_gateways_dead_is_in_flight
+a designator not seen | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib op::tests::payer_delegated
+the chain's per-transaction cap not applied | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib op::tests::gas_above_tx_cap
+an unlisted token shown as listed | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib op::tests::review_lists_every_named_field_with_its_source
+a gateway body to the first gateway only | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib op::tests::gateway_path_posts_the_same_bytes
+scaas-ua: the payee's co-sign under metatx | killed | ../../scripts/capped cargo test --locked --offline -j2 --test sign_scaas
+scaas-ua: a UA key signs without the check | killed | ../../scripts/capped cargo test --locked --offline -j2 --test sign_scaas
+15 mutants, 15 killed, 0 survived, 0 not loaded

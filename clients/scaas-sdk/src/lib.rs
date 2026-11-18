@@ -20,15 +20,17 @@ pub mod error;
 pub mod events;
 #[cfg(feature = "frb")]
 pub mod frb;
+#[cfg(feature = "wallet")]
+pub mod op;
 pub mod platform;
 pub(crate) mod text;
 pub mod vault;
 
 pub use config::{
-    ChainProfile, EndpointConfig, Family, Finality, Limits, RuntimeChoice, SdkConfig,
+    ChainProfile, EndpointConfig, Family, Finality, Limits, ListedToken, RuntimeChoice, SdkConfig,
 };
 pub use error::SdkError;
-pub use events::{Event, Subscription};
+pub use events::{Event, InFlight, OpState, Subscription};
 pub use vault::Vault;
 
 use scaas_rpc::endpoint::{READ_TIMEOUT_MS, SLOW_TIMEOUT_MS, TIMEOUT_MS};
@@ -156,6 +158,12 @@ pub struct Sdk {
     pub(crate) open: Mutex<HashMap<String, Arc<vault::OpenSeed>>>,
     /// hidden sets of this session: session id -> (its seed's id, its wallet); never written
     pub(crate) hidden: Mutex<HashMap<String, (String, Arc<vault::OpenSeed>)>>,
+    /// the store of the keystore and of `sdk.state` (spec §6.9)
+    #[allow(dead_code)]
+    pub(crate) store: Arc<dyn vault::SecureStore>,
+    /// the operations prepared in this session, by id (spec §13.1: a `Prepared` not here is `PreparedUnknown`)
+    #[cfg(feature = "wallet")]
+    pub(crate) prepared: Mutex<HashMap<String, Arc<op::Prepared>>>,
 }
 
 impl Sdk {
@@ -205,6 +213,9 @@ impl Sdk {
             heavy_max: Arc::default(),
             open: Mutex::new(HashMap::new()),
             hidden: Mutex::new(HashMap::new()),
+            store: config.store,
+            #[cfg(feature = "wallet")]
+            prepared: Mutex::new(HashMap::new()),
         }))
     }
 
