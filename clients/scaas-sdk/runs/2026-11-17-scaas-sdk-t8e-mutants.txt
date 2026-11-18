@@ -1,0 +1,7 @@
+# t8e mutants at commit 3527b2a3b (name | outcome | test)
+swap two arguments of mtxRotateKey | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_account
+a wrong selector on mtxSetGuardian | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_account
+the account's own entries signed as bytes (no AccountSig) | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_account
+the guardian left-aligned in the salt | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries smart_key_account_address
+another EIP-1167 head | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries smart_key_account_address
+5 mutants, 5 killed, 0 survived, 0 not loaded

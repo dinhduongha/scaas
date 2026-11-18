@@ -436,3 +436,44 @@ fn entries_wallet() {
     refusals("wallet", "UASetMandate");
     refusals("wallet", "UAPayUnderMandate");
 }
+
+#[test]
+fn entries_account() {
+    table_both_ways("account");
+    assert_eq!(vector_pairs("account"), 7, "every SmartKeyAccount pair of typed_ops.json");
+    canon_unbound("account");
+    refusals("account", "AddKey");
+    refusals("account", "CancelNonce");
+}
+
+/// T8e (CTR-ACC-01): the counterfactual `SmartKeyAccount`, the EIP-1167 clone by CREATE2 under
+/// `keccak256(abi.encode(firstKey, guardian))`, against the forge-pinned row (`SmartKeyAccount.t.sol`
+/// `test_pinned_create2_vector`; clientkeys `predictAccount` reads the same file); one change at a time moves it.
+#[test]
+fn smart_key_account_address() {
+    use k256::ecdsa::SigningKey;
+    use scaas_ua::factory::{account_address, account_salt};
+    let v = load("smartcontracts/evm/test/vectors/smart_key_account_create2.json");
+    let mut sk = [0u8; 32];
+    let k = bytes(&json!(format!("0x{:0>64}", v["seedPrivateKey"].as_str().unwrap().trim_start_matches("0x"))));
+    sk.copy_from_slice(&k);
+    let point = SigningKey::from_slice(&sk).unwrap().verifying_key().to_sec1_point(false);
+    let addr = &scaas_ua::keccak256(&point.as_bytes()[1..])[12..];
+    let mut x = [0u8; 32];
+    x[12..].copy_from_slice(addr);
+    let z = [0u8; 32];
+    let guardian = b20(&v["guardian"]);
+    let salt = account_salt(2, &x, &z, &z, &z, &guardian);
+    assert_eq!(format!("0x{}", hex::encode(salt)), v["salt"].as_str().unwrap(), "salt");
+    let (factory, implementation) = (b20(&v["factory"]), b20(&v["implementation"]));
+    let want = v["account"].as_str().unwrap().to_ascii_lowercase();
+    assert_eq!(format!("0x{}", hex::encode(account_address(&factory, &implementation, &salt))), want, "the clone address");
+    let mut other = guardian;
+    other[19] ^= 1;
+    assert_ne!(account_salt(2, &x, &z, &z, &z, &other), salt, "another guardian, another salt");
+    assert_ne!(account_salt(1, &x, &z, &z, &z, &guardian), salt, "another key kind, another salt");
+    let mut f2 = factory;
+    f2[0] ^= 1;
+    assert_ne!(format!("0x{}", hex::encode(account_address(&f2, &implementation, &salt))), want, "another factory");
+    assert_ne!(format!("0x{}", hex::encode(account_address(&factory, &factory, &salt))), want, "another implementation");
+}

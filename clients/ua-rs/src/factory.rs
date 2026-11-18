@@ -108,3 +108,23 @@ pub fn clone_env(runtime: &[u8]) -> Option<([u8; 20], ChainEnv)> {
     (at == runtime.len()).then_some(())?;
     Some((implementation, ChainEnv { chain_uid, registry, gov_router, smart_key_account_impl, hedera, deps, params }))
 }
+
+/// `SmartKeyAccountFactory.salt(firstKey, guardian) = keccak256(abi.encode(SubjectKey firstKey, address guardian))` (CTR-ACC-01;
+/// clientkeys `accountSalt`): the first key `(kind, x, y, rpIdHash, originHash)`, five static words.
+pub fn account_salt(kind: u8, x: &[u8; 32], y: &[u8; 32], rp_id_hash: &[u8; 32], origin_hash: &[u8; 32], guardian: &[u8; 20]) -> [u8; 32] {
+    let mut g = [0u8; 32];
+    g[12..].copy_from_slice(guardian);
+    keccak(&[&word(u64::from(kind)), x, y, rp_id_hash, origin_hash, &g])
+}
+
+/// The counterfactual `SmartKeyAccount` (OZ `Clones.predictDeterministicAddress`, clientkeys `predictAccount`): the EIP-1167
+/// clone of `implementation` created by `factory` with CREATE2 under `salt`,
+/// `keccak256(0xff ‖ factory ‖ salt ‖ keccak256(3d602d80600a3d3981f3363d3d373d3d3d363d73 ‖ implementation ‖ 5af43d82803e903d91602b57fd5bf3))[12..]`.
+pub fn account_address(factory: &[u8; 20], implementation: &[u8; 20], salt: &[u8; 32]) -> [u8; 20] {
+    const HEAD: [u8; 20] = [0x3d, 0x60, 0x2d, 0x80, 0x60, 0x0a, 0x3d, 0x39, 0x81, 0xf3, 0x36, 0x3d, 0x3d, 0x37, 0x3d, 0x3d, 0x3d, 0x36, 0x3d, 0x73];
+    let code = keccak(&[&HEAD, implementation, &PROXY_TAIL]);
+    let h = keccak(&[&[0xff], factory, salt, &code]);
+    let mut a = [0u8; 20];
+    a.copy_from_slice(&h[12..]);
+    a
+}
