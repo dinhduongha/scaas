@@ -20,4 +20,4 @@ bind-dart | 9a53e7a42 | 0 | dart: +8:; tree dirty
 sdk-deny | 9a53e7a42 | 0 | -; tree dirty
 ua-test | 7204182f6 | 0 | 526 passed, 0 failed, 3 ignored (54 binaries); tree dirty
 features | 7204182f6 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-ua-clippy | 3527b2a3b | 0 | -; tree dirty
+ua-clippy | dbc8a55de | 0 | -; tree dirty

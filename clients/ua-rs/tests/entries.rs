@@ -477,3 +477,22 @@ fn smart_key_account_address() {
     assert_ne!(format!("0x{}", hex::encode(account_address(&f2, &implementation, &salt))), want, "another factory");
     assert_ne!(format!("0x{}", hex::encode(account_address(&factory, &factory, &salt))), want, "another implementation");
 }
+
+#[test]
+fn entries_dex() {
+    table_both_ways("dex");
+    assert_eq!(vector_pairs("dex"), 1, "the DEX pair of typed_ops.json");
+    refusals("dex", "CancelDexOrder");
+    // the DEX's nonce invalidation (no row of typed_ops.json): forge's `dex_order_kat.json` `invalidate_calldata`
+    let k = load("smartcontracts/evm/test/vectors/dex_order_kat.json");
+    let want = bytes(&k["invalidate_calldata"]);
+    let word = |i: usize| &want[4 + 32 * i..4 + 32 * (i + 1)];
+    let from = format!("0x{}", hex::encode(&word(0)[12..]));
+    let (batch, min) = (word(1)[31], word(2)[31]);
+    let len = word(4)[31] as usize;
+    let sig = format!("0x{}", hex::encode(&want[4 + 160..4 + 160 + len]));
+    let msg = json!({"from": from, "batch": batch.to_string(), "minNonce": min.to_string()});
+    let b = entry("InvalidateNonces", "dex", &b20(&k["dex"]), &msg, &json!({}), &json!(sig)).unwrap();
+    assert_eq!(b.calldata, want, "mtxInvalidateNonces on the DEX");
+    assert_eq!(b.op.unwrap()["signature"], json!(sig));
+}
