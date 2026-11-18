@@ -956,3 +956,42 @@ fn credits_from_interleaved_sender_versions() {
     let b = wd.proven(wd.key(&BOB), &BOB, 0);
     assert_eq!((b["value"].as_u64(), b["value"].as_u64()), (Some(61), Some(wd.balance(&BOB))));
 }
+
+/// Fable C1 (set-auditor, CTR-PQZ-43): after the auditor is replaced (epoch 0 to 1), the proof path reads each audited record by
+/// its own epoch's auditor (its `auditor` words, as `pqz-read` resolves them): an audited credit and the own audited debit made at
+/// epoch 0 are accepted by `provenOpen` / `provenAdd` / `balanceProven` and by `checkProven`; the same records read by the current
+/// auditor (no `auditor` words) are refused.
+#[test]
+fn proven_path_reads_each_entry_by_its_epoch() {
+    let mut wd = World::new(0);
+    wd.c.shield(&A, 1000);
+    wd.pay(&A, &BOB, 300, true, "BUNDLE", LOG);
+    wd.pay(&BOB, &X, 10, true, "HASH", LOG);
+    wd.pay(&A, &BOB, 40, true, "BUNDLE", NONE);
+    wd.c.replace_auditor(Z);
+    let current = |c: &Cred| {
+        let mut x = c.clone();
+        assert!(x.0.as_object_mut().unwrap().remove("auditor").is_some(), "an audited record carries its auditor");
+        x
+    };
+    // path (B)
+    let kb = wd.key(&BOB);
+    let o = call(kb, "provenOpen", &wd.open(&BOB, 0)).unwrap();
+    let cs = wd.credits(&BOB, 0, &o["need"]);
+    assert_eq!(cs.len(), 1, "the epoch-0 audited credit after the own debit");
+    let r = call(kb, "provenAdd", &wd.c.add_request(&o["session"], &[current(&cs[0])])).unwrap();
+    assert_eq!(r["accepted"], json!([]), "the current auditor in its place: refused");
+    let r = call(kb, "provenAdd", &wd.c.add_request(&o["session"], &cs)).unwrap();
+    assert_eq!(r, json!({"accepted": o["need"], "refused": []}), "read by its epoch's auditor: accepted");
+    call(kb, "balanceProven", &json!({"session": o["session"]})).unwrap();
+    // checkProven: the own audited debit and the credit
+    let pk = h(&json!(wd.pk(&BOB)));
+    let own = wd.c.proven_own(&BOB, 0);
+    let ix = wd.c.window_credits(&BOB, 0);
+    let cs: Vec<Cred> = ix.iter().map(|i| wd.c.proven_credit(&BOB, 0, *i)).collect();
+    let r = check(&wd.c.check_request(&BOB, 0, &pk, Some(&own), &cs)).unwrap();
+    assert_eq!(kinds(&r), ["own", "credit"]);
+    assert_eq!(check(&wd.c.check_request(&BOB, 0, &pk, Some(&current(&own)), &cs)).err(), Some(Error::Argument), "own by the current auditor");
+    assert_eq!(check(&wd.c.check_request(&BOB, 0, &pk, Some(&own), &[current(&cs[0])])).err(), Some(Error::Argument),
+        "a credit by the current auditor");
+}

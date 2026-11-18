@@ -609,8 +609,8 @@ fn reading_layer_against_anvil() {
         no(audit(on(t, WALLET_REG, &saud), &sa, "0"), Some(2), "R5: the token is of a release before 3h");
     }
     no(audit(on(CW_TOKEN, WALLET_REG, &saud), &sa, "0"), Some(2), "R6: --registry is not the token's registry");
-    no(audit(on(CW_TOKEN, CW_REG, &sb), &sa, "0"), Some(1), "R6: --ua is not the token's auditor");
-    no(audit(head(on(CW_TOKEN, CW_REG, &saud)), &sa, "0"), Some(2), "R6: --ua is not the token's auditor");
+    no(audit(on(CW_TOKEN, CW_REG, &sb), &sa, "0"), Some(1), "R6: --ua is not the entry's auditor");
+    no(audit(head(on(CW_TOKEN, CW_REG, &saud)), &sa, "0"), Some(2), "R6: --ua is not the entry's auditor");
     no(audit(on(CW_TOKEN, CW_REG, &saud), &sa, "1"), Some(2), "no entry of --from-ua");
     no(audit(on(CW_TOKEN, CW_REG, &saud), &sa, "0"), Some(1), "R6: the registry's PQZ key");
     // ua-rs's own refusal after the reading layer's checks: the auditor reads a leg the entry does not have
@@ -1152,6 +1152,20 @@ fn balance_proven_against_anvil() {
     assert_eq!(cs[2]["call"]["binding"], json!(hx(&env_binding)), "the relayed call's envelope binding");
     assert_eq!(cs[1]["call"]["mode"], "HASH");
     assert_eq!((&cs[1]["call"]["verificationMode"], &cs[1]["call"]["verifierFee"]), (&json!("PRECOMPILE"), &json!(0)), "the token's verification");
+    assert_eq!(cs.iter().map(|c| c.get("auditor").is_some()).collect::<Vec<_>>(), [true, false, false, true], "the LOG op 1 and the op 7 audited");
+    // Fable C1 (set-auditor, CTR-PQZ-43): the auditor replaced (epoch 0 to 1, a new auditor at slot 7, the outgoing one at
+    // `auditorUAs[0]`, slot 25): the epoch-0 audited credit keeps its own auditor, read at its epoch's slot, and the value holds
+    let aud0 = k(&be(0), &add(&root, 25));
+    c.replace_auditor([0x5A; 32]);
+    n.set(&token, &root, &w32(&c.auditor_words(1)["auditorMode"]));
+    n.set(&token, &add(&root, 7), &[0x5A; 32]);
+    n.set(&token, &aud0, &ua_aud);
+    rpc(&url, "anvil_mine", json!(["0x1"]));
+    let after = cli(&wa, None).unwrap();
+    let x = &after["credits"]["credits"][3]["auditor"];
+    assert_eq!((&x["auditorUA"], &x["auditorUASlot"]), (&json!(hx(&ua_aud)), &json!(hx(&aud0))), "the entry's epoch-0 auditor");
+    let b2 = cli(&args(&url, "balanceProven"), Some(&kat(1))).unwrap();
+    assert_eq!(b2["value"], a["value"], "path (B) after the replacement");
     // a node that hides the proof logs; a credit's transaction sent to another contract (its `to` rewritten)
     let hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let ev = hx(&scaas_ua::keccak256(b"PqzDebitProof(address,bytes32,uint64,bytes,bytes)"));

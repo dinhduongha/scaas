@@ -43,6 +43,16 @@ NS = ("@scaas-node", "--lib auditor_verdicts")
 
 # task -> id -> (file, old, new, test dir, match-path glob)
 MUTANTS = {
+    # Fable C1 (the closing review): the proof path reads each audited record by its own epoch's auditor
+    "c1": {
+        "credit-current-auditor": ("../../clients/ua-rs/src/facade/pqz/proven.rs", "    let a = c.auditor.unwrap_or(o.auditor_ua);\n",
+                                   "    let a = o.auditor_ua;\n", "@clients/ua-rs", "--test facade_pqz_proof proven_path_reads_each_entry_by_its_epoch"),
+        "own-current-auditor": ("../../clients/ua-rs/src/facade/pqz/proven.rs", "            let a = w.auditor.unwrap_or(o.auditor_ua);\n",
+                                "            let a = o.auditor_ua;\n", "@clients/ua-rs", "--test facade_pqz_proof proven_path_reads_each_entry_by_its_epoch"),
+        "reader-current-auditor": ("../../clients/ua-rs/src/bin/pqz-read.rs", "        let slot = if epoch == field(mode, \"auditorEpoch\")? {\n",
+                                   "        let slot = if epoch == epoch {\n", "@clients/ua-rs",
+                                   "--test pqz_read balance_proven_against_anvil -- --include-ignored"),
+    },
     "a8": {
         "requeue-dropped": (NG, '    if reason.starts_with("AuditorNotReady") {\n', '    if reason.starts_with("AuditorNotReady-") {\n', *NS),
     },

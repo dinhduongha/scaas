@@ -409,6 +409,15 @@ impl Chain {
         }
         x
     }
+    /// The auditor of entry `er` (its epoch's: the current `auditor`, or `auditor_hist`) and the `auditor` words a proven-path
+    /// record carries for it (`auditor_words_of` without `keyVersion`; Fable C1).
+    pub fn record_auditor(&self, er: &Word) -> (Word, Value) {
+        let at = self.entry_epoch.get(er).copied().unwrap_or(0);
+        let ua = if at == self.auditor_epoch { self.auditor.unwrap() } else { self.auditor_hist[at as usize] };
+        let mut x = self.auditor_words_of(er, 2, 0);
+        x.as_object_mut().unwrap().remove("keyVersion");
+        (ua, x)
+    }
     /// `PqzLayer` / `PqzStateLib.setAuditorUA`'s apply: the outgoing auditor enters the history, `next` from the next epoch.
     pub fn replace_auditor(&mut self, next: Word) {
         self.auditor_hist.push(self.auditor.unwrap());
@@ -603,14 +612,18 @@ impl Chain {
                 keys.push((*u, kv[j]));
             }
         }
-        if aud {
-            keys.push((self.auditor.unwrap(), kv[uas.len()]));
+        let rec_aud = aud.then(|| self.record_auditor(&entry_ref(&e.from, e.ctr)));
+        if let Some((a, _)) = &rec_aud {
+            keys.push((*a, kv[uas.len()]));
         }
         blobs.extend(keys.iter().map(|k| self.keys[k]));
         let krs: Vec<Value> = keys.iter().map(|(u, x)| json!({"ua": hx(u), "version": x, "word": hx(&self.key_record_at(u, *x))})).collect();
         let (_, stmt, proof, call) = &self.proofs[&(e.from, e.ctr)];
         let mut c = json!({"index": i, "fromUA": hx(&e.from), "sendCounter": e.ctr, "form": if op == 7 { "transferMulti" } else { "transfer" },
             "record": {"w0": hx(&r.0), "w1": hx(&r.1)}, "senderPending": window, "keyRecords": krs, "proof": hx(proof)});
+        if let Some((_, x)) = rec_aud {
+            c["auditor"] = x;
+        }
         if ps == 1 {
             c["header"] = json!((0..20).map(|x| hx(&stmt[32 * x..32 * x + 32])).collect::<Vec<_>>());
         } else {
@@ -649,6 +662,7 @@ impl Chain {
             .collect();
         let (op, stmt, proof, call) = &self.proofs[&(*ua, k)];
         let mut keys = vec![];
+        let mut rec_aud = None;
         let form = match op {
             2 => {
                 let st::Stmt::Debit(d) = st::parse(2, stmt).unwrap() else { panic!() };
@@ -667,7 +681,9 @@ impl Chain {
                 let (_, uas, aud) = self.legs_of(ua, k);
                 keys.extend(uas.iter().enumerate().map(|(j, u)| (*u, kv[j])));
                 if aud {
-                    keys.push((self.auditor.unwrap(), kv[uas.len()]));
+                    let (a, x) = self.record_auditor(&entry_ref(ua, k));
+                    keys.push((a, kv[uas.len()]));
+                    rec_aud = Some(x);
                 }
                 if *op == 7 { "transferMulti" } else { "transfer" }
             }
@@ -675,6 +691,9 @@ impl Chain {
         blobs.extend(keys.iter().map(|x| self.keys[x]));
         let krs: Vec<Value> = keys.iter().map(|(u, x)| json!({"ua": hx(u), "version": x, "word": hx(&self.key_record_at(u, *x))})).collect();
         let mut c = json!({"form": form, "senderPending": window, "keyRecords": krs, "proof": hx(proof)});
+        if let Some(x) = rec_aud {
+            c["auditor"] = x;
+        }
         if ps == 1 {
             c["header"] = json!((0..20).map(|x| hx(&stmt[32 * x..32 * x + 32])).collect::<Vec<_>>());
         } else {

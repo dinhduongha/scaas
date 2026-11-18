@@ -107,6 +107,18 @@ pub(super) struct Credit {
     proof: Option<Vec<u8>>,
     header: Option<[Word; 20]>,
     call: Option<Call>,
+    /// The entry's auditor (CTR-PQZ-43), resolved from the record's `auditor` words by [`entry_auditor`]; none: the open's
+    /// `auditorUA` (the current epoch's).
+    auditor: Option<Word>,
+}
+
+/// A record's `auditor` words (`auditorMode`, `entryAuditorEpoch`, `auditorUASlot`, `auditorUA`): the entry's auditor at its
+/// epoch's slot, checked as the R6 reader checks it (Fable C1: an entry audited before a replacement keeps its own auditor).
+fn record_auditor(f: &Fields<'_>) -> Result<Option<Word>> {
+    f.has("auditor")
+        .then(|| entry_auditor(&Fields::new(f.get("auditor")?.as_object().ok_or(Error::Argument)?,
+            &["auditorMode", "entryAuditorEpoch", "auditorUASlot", "auditorUA"])?))
+        .transpose()
 }
 
 /// A NONE debit's call fields (§4.14.4 step 4: op 1, op 7).
@@ -293,7 +305,7 @@ pub(super) fn credits(f: &Fields<'_>) -> Result<(Codes, Vec<Credit>)> {
         .map(|c| {
             let c = Fields::new(
                 c.as_object().ok_or(Error::Argument)?,
-                &["index", "fromUA", "sendCounter", "form", "record", "senderPending", "keyRecords", "proof", "header", "call"],
+                &["index", "fromUA", "sendCounter", "form", "record", "senderPending", "keyRecords", "proof", "header", "call", "auditor"],
             )?;
             let r = Fields::new(c.get("record")?.as_object().ok_or(Error::Argument)?, &["w0", "w1"])?;
             let multi = match c.get("form")?.as_str() {
@@ -350,6 +362,7 @@ pub(super) fn credits(f: &Fields<'_>) -> Result<(Codes, Vec<Credit>)> {
                 proof: c.has("proof").then(|| c.bytes("proof")).transpose()?,
                 header,
                 call,
+                auditor: record_auditor(&c)?,
             })
         })
         .collect::<Result<_>>()?;
@@ -646,7 +659,8 @@ fn verified(
     for j in 0..m {
         pks.push(if j == l.j { holder.to_vec() } else { key_of(keys, blobs, &l.e.owner(j)?, *l.t.kv.get(j).ok_or(Error::Argument)?)? });
     }
-    let pk_a = if aud { Some(key_of(keys, blobs, &o.auditor_ua, *l.t.kv.get(m).ok_or(Error::Argument)?)?) } else { None };
+    let a = c.auditor.unwrap_or(o.auditor_ua);
+    let pk_a = if aud { Some(key_of(keys, blobs, &a, *l.t.kv.get(m).ok_or(Error::Argument)?)?) } else { None };
     // step 4: the header, the event's (LOG) or built from the call (NONE)
     let hd = match (&c.header, &c.call) {
         (Some(h), _) => *h,
@@ -927,6 +941,8 @@ pub(super) struct OwnDebit {
     header: Option<[Word; 20]>,
     call: Option<Call>,
     burn_call: Option<BurnCall>,
+    /// The debit entry's auditor, as [`Credit`]'s.
+    auditor: Option<Word>,
 }
 
 /// `checkProven`'s request: the account's words (no key word of the quorum), `pk`, `own`, the codes and the credits.
@@ -967,7 +983,7 @@ fn key_records(l: &[Value]) -> Result<Vec<(Word, u64, Word)>> {
 
 /// `own`'s fields: `{form, senderPending, keyRecords, proof, header | call}`.
 fn own_debit(v: &Value) -> Result<OwnDebit> {
-    let f = Fields::new(v.as_object().ok_or(Error::Argument)?, &["form", "senderPending", "keyRecords", "proof", "header", "call"])?;
+    let f = Fields::new(v.as_object().ok_or(Error::Argument)?, &["form", "senderPending", "keyRecords", "proof", "header", "call", "auditor"])?;
     let form = match f.get("form")?.as_str() {
         Some("transfer") => OwnForm::Transfer,
         Some("transferMulti") => OwnForm::Multi,
@@ -993,6 +1009,7 @@ fn own_debit(v: &Value) -> Result<OwnDebit> {
         header,
         call,
         burn_call,
+        auditor: record_auditor(&f)?,
     })
 }
 
@@ -1078,7 +1095,8 @@ fn own_proven(pk: &[u8], o: &Open, rec: &Record, k: u64, w: &OwnDebit, blobs: &m
                 return Err(Error::Argument);
             }
             let pks = (0..e.m).map(|j| key_of(&w.key_records, blobs, &e.owner(j)?, *tl.kv.get(j).ok_or(Error::Argument)?)).collect::<Result<Vec<_>>>()?;
-            let pk_a = if e.aud { Some(key_of(&w.key_records, blobs, &o.auditor_ua, *tl.kv.get(e.m).ok_or(Error::Argument)?)?) } else { None };
+            let a = w.auditor.unwrap_or(o.auditor_ua);
+            let pk_a = if e.aud { Some(key_of(&w.key_records, blobs, &a, *tl.kv.get(e.m).ok_or(Error::Argument)?)?) } else { None };
             let hd = match (&w.header, &w.call) {
                 (Some(h), _) => *h,
                 (None, Some(call)) => transfer_header(o, rec, &o.ua, k, multi, call, &tl, &e)?,

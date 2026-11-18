@@ -924,6 +924,15 @@ impl Entry {
 /// `auditorUA` read at `auditorUASlot`, which must be that epoch's slot (7 for the current epoch, `auditorUAs[epoch]` at 25
 /// otherwise), and `keyVersion` the auditor's version in the entry's tail (`kv_a`). Public data: no key is used.
 fn auditor(f: &Fields<'_>, e: &Entry) -> Result<Word> {
+    if Some(f.u64("keyVersion")?) != e.kv_a {
+        return Err(Error::Argument);
+    }
+    entry_auditor(f)
+}
+
+/// [`auditor`]'s words without the key version: `auditorMode`, `entryAuditorEpoch`, `auditorUASlot`, `auditorUA`, checked the
+/// same way. The proven path (no-oracle §4.14.4) resolves each audited credit's and the own debit's auditor by it (Fable C1).
+fn entry_auditor(f: &Fields<'_>) -> Result<Word> {
     let w = f.word("auditorMode")?;
     only_low(&w, 30)?;
     if !matches!(lo_u64(&w, 21, 1)?, 1 | 2) {
@@ -933,7 +942,7 @@ fn auditor(f: &Fields<'_>, e: &Entry) -> Result<Word> {
     let ew = f.word("entryAuditorEpoch")?;
     only_low(&ew, 4)?;
     let at = lo_u64(&ew, 0, 4)?;
-    if at > current || Some(f.u64("keyVersion")?) != e.kv_a {
+    if at > current {
         return Err(Error::Argument);
     }
     let slot = if at == current {

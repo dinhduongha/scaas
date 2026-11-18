@@ -7,7 +7,7 @@
 //!            [--command balance] --key-version <v> --for-op7 <true|false>               (the holder's own balance of version v)
 //!            --command balanceProven --key-version <v> --for-op7 <true|false>          (the same by the proof path, path (B))
 //!            --command auditRead --key-version <v> --from-ua <bytes32> --send-counter <n> --leg <j>
-//!                                                                     (an audited leg, the token's auditor at its version v)
+//!                                                                     (an audited leg, the entry's auditor at its version v)
 //!            [--words]                                                                  (print the request read; no key)
 //!            --command decoys --count <n> [--exclude <ua>,…] [--recipient <ua>] [--sync-block <n>]   (op 7's decoys; no key,
 //!            [--decoy-filter activity|holder --window <blocks>] [--words]                              no stdin)
@@ -44,8 +44,10 @@
 //!   Change, §4.14.1).
 //! - **R6** `--registry` is the registry the token's `ChainEnv` names (owner 2026-11-08); `keyRecord` is `--registry`'s `pqzKey[--ua][--key-version]` (`UAStore.Layout` slot 2, per version) and its code
 //!   must hold this handle's key; `keyVersions` its `pqzVersions[--ua]` (slot 17: `latest ‖ current ‖ listed`, which `ua-rs`
-//!   checks against `--key-version`); for `auditRead` `--ua` must be the token's `auditorUA` and its `auditorMode` not NONE
-//!   (`ua-rs` checks the entry's copy; a copy made under another auditor version is found by trying each).
+//!   checks against `--key-version`); for `auditRead` `--ua` must be the entry's auditor, the one of its epoch
+//!   (`entryAuditorEpoch[entryRef]`: `auditorUA` at slot 7 for the token's current `auditorEpoch`, `auditorUAs[epoch]` at 25
+//!   otherwise; CTR-PQZ-43), and `auditorMode` not NONE (`ua-rs` checks those words and the auditor's key version in the entry's
+//!   tail); `balanceProven` resolves each audited credit's auditor the same way.
 //! - **R7** every read on every node, the R3 re-checks included, happens before the key is used; nothing after it goes back to
 //!   any node (a failover never follows a key use).
 //!
@@ -581,7 +583,7 @@ fn read(a: &Args, url: &str, block_at: Option<u64>, pk: Option<&[u8]>) -> Result
             if e[22..24] != [0, 0] && !proven {
                 ptrs.push(low_addr(&e, 12));
             } else if let (true, Some(pp)) = (e[22..24] != [0, 0], proof_path.as_mut()) {
-                let (c, x) = credit(a, url, block, &root, &mut pp.codes, i, &e, &pp.auditor, pp.fee, pp.verification, pp.compact)?;
+                let (c, x) = credit(a, url, block, &root, &mut pp.codes, i, &e, &pp.mode, pp.fee, pp.verification, pp.compact)?;
                 pp.credits.push(c);
                 pp.ptrs.extend(x);
             }
@@ -1007,6 +1009,8 @@ fn entry_ref_of(a: &Args, from: &Word, counter: u64) -> Word {
 /// `balanceProven`'s state while the window is read: the token's words a credit needs, the codes fetched once, the credits.
 struct ProofPath<'r, 'u> {
     auditor: Word,
+    /// The token's `auditorMode` word (slot 0: the mode and `auditorEpoch`), each audited credit's auditor resolved by it.
+    mode: Word,
     fee: u64,
     verification: Verification,
     compact: bool,
@@ -1016,8 +1020,8 @@ struct ProofPath<'r, 'u> {
 }
 
 impl<'r, 'u> ProofPath<'r, 'u> {
-    /// The token's `auditorUA`, `confidentialFee` (a NONE header's fee; a `uint64` here) and `disclosureMode` (COMPACT: its
-    /// default entries commit-reveal).
+    /// The token's `auditorUA` (the current epoch's), `auditorMode`, `confidentialFee` (a NONE header's fee; a `uint64` here)
+    /// and `disclosureMode` (COMPACT: its default entries commit-reveal).
     fn of(r: &'r Reader<'u>, tok: &dyn Fn(&str) -> Result<Word, String>) -> Result<Self, String> {
         let (auditor, mode, fee) = (tok("auditorUA")?, tok("disclosureMode")?, tok("confidentialFee")?);
         if fee[..24] != [0; 24] {
@@ -1025,6 +1029,7 @@ impl<'r, 'u> ProofPath<'r, 'u> {
         }
         Ok(ProofPath {
             auditor,
+            mode: tok("auditorMode")?,
             fee: u64::from_be_bytes(fee[24..].try_into().map_err(|_| "fee")?),
             verification: verification(tok)?,
             compact: field(&mode, "disclosureMode")? == 1,
@@ -1056,7 +1061,7 @@ fn last_record(a: &Args, r: &Reader<'_>, root: &Word, account: &[Word], acc_blob
 /// whose `entryRef` the log names), then from state its record, the sender's window, the keys by the tail's `kv` (the holder's own
 /// leg left out) and their codes.
 #[allow(clippy::too_many_arguments)]
-fn credit(a: &Args, url: &str, block: u64, root: &Word, codes: &mut Codes<'_, '_>, i: u64, e: &Word, auditor: &Word, fee: u64,
+fn credit(a: &Args, url: &str, block: u64, root: &Word, codes: &mut Codes<'_, '_>, i: u64, e: &Word, mode: &Word, fee: u64,
     ver: Verification, compact: bool)
     -> Result<(Value, Vec<[u8; 20]>), String> {
     let r = codes.r;
@@ -1137,8 +1142,21 @@ fn credit(a: &Args, url: &str, block: u64, root: &Word, codes: &mut Codes<'_, '_
             keys.push((ua, kv));
         }
     }
+    // the entry's auditor (CTR-PQZ-43, Fable C1): its epoch (`entryAuditorEpoch[entryRef]`), the auditor of that epoch at its
+    // slot (7 for the token's current `auditorEpoch`, `auditorUAs[epoch]` at 25 otherwise), never the current one for an older entry
+    let mut auditor = None;
     if aud {
-        keys.push((*auditor, *tail.kv.get(m).ok_or("the auditor's kv")?));
+        let entry_ref = entry_ref_of(a, &from, k);
+        let ew = r.word(&a.token, &keccak256(&[entry_ref, add(root, at("entryAuditorEpoch[V]")?.0)].concat()))?;
+        let epoch = field(&ew, "entryAuditorEpoch[V]")?;
+        let slot = if epoch == field(mode, "auditorEpoch")? {
+            add(root, at("auditorUA")?.0)
+        } else {
+            keccak256(&[be(epoch), add(root, at("auditorUAs[E]")?.0)].concat())
+        };
+        let ua = r.word(&a.token, &slot)?;
+        keys.push((ua, *tail.kv.get(m).ok_or("the auditor's kv")?));
+        auditor = Some(json!({"auditorMode": hx(mode), "entryAuditorEpoch": hx(&ew), "auditorUASlot": hx(&slot), "auditorUA": hx(&ua)}));
     }
     let mut records = Vec::new();
     for (ua, x) in &keys {
@@ -1153,6 +1171,9 @@ fn credit(a: &Args, url: &str, block: u64, root: &Word, codes: &mut Codes<'_, '_
         "record": {"w0": hx(&w0), "w1": hx(&w1)}, "senderPending": window, "keyRecords": records});
     for (key, val) in how.as_object().ok_or("credit")? {
         c[key] = val.clone();
+    }
+    if let Some(x) = auditor {
+        c["auditor"] = x;
     }
     Ok((c, ptrs))
 }
