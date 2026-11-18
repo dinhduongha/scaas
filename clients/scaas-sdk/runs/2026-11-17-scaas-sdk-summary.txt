@@ -18,6 +18,6 @@ sdk-test | 9a53e7a42 | 0 | 67 passed, 0 failed, 0 ignored (10 binaries); tree di
 sdk-clippy | 9a53e7a42 | 0 | -; tree dirty
 bind-dart | 9a53e7a42 | 0 | dart: +8:; tree dirty
 sdk-deny | 9a53e7a42 | 0 | -; tree dirty
-ua-test | 7204182f6 | 0 | 526 passed, 0 failed, 3 ignored (54 binaries); tree dirty
-features | 7204182f6 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-ua-clippy | dbc8a55de | 0 | -; tree dirty
+ua-clippy | 364e8b6a6 | 0 | -; tree dirty
+ua-test | 364e8b6a6 | 0 | 533 passed, 0 failed, 3 ignored (54 binaries); tree dirty
+features | 364e8b6a6 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty

@@ -234,6 +234,7 @@ fn vector_pairs(kind: &str) -> usize {
         assert_eq!(norm(&b.message), norm(&o["message"]), "{name} on {kind}: the canonical message");
         match &b.op {
             Some(op) => {
+                assert!(r.node, "{name}: no node row, no job op");
                 let want = op_of(r, kind, &o["message"], &x, d);
                 if name == "UARelayFee" {
                     relay_fee(kind, o, d, &sig);
@@ -495,4 +496,28 @@ fn entries_dex() {
     let b = entry("InvalidateNonces", "dex", &b20(&k["dex"]), &msg, &json!({}), &json!(sig)).unwrap();
     assert_eq!(b.calldata, want, "mtxInvalidateNonces on the DEX");
     assert_eq!(b.op.unwrap()["signature"], json!(sig));
+}
+
+#[test]
+fn entries_router() {
+    table_both_ways("gov_router");
+    assert_eq!(vector_pairs("gov_router"), 60, "every GovernanceRouter pair of typed_ops.json");
+    canon_unbound("gov_router");
+    refusals("gov_router", "UASetGrant");
+    refusals("gov_router", "UAApproveRelease");
+    // the release approvals: calldata for self-relay, no job op (the node's NO_NODE_ROW); every other router row has one
+    let rows = entry_rows();
+    let no_op: BTreeSet<_> = rows.iter().filter(|r| r.kinds.contains(&"gov_router") && !r.node).map(|r| r.name).collect();
+    assert_eq!(no_op, BTreeSet::from(["UAApproveTokenRelease", "UAApproveDexRelease", "UAApproveRelease", "UARevokeApproval"]));
+    // a generic creation by its initializer call: initHash = keccak256(init_call), the job names init_call, never initHash
+    let v = ops();
+    let o = &v["ops"]["UACreateInstance"];
+    let d = &o["domains"]["gov_router"];
+    let x = json!({"init_call": d["extra"]["initCall"]});
+    let h = init_hash("UACreateInstance", "gov_router", &x).unwrap().unwrap();
+    assert_eq!(h, scaas_ua::keccak256(&bytes(&d["extra"]["initCall"])));
+    assert_eq!(format!("0x{}", hex::encode(h)), o["message"]["initHash"].as_str().unwrap());
+    let mut x2 = x.clone();
+    x2["init_call"] = json!(format!("0x{}", "00".repeat(4097)));
+    assert_eq!(init_hash("UACreateInstance", "gov_router", &x2), Err(Error::Argument), "an init_call above 4096 bytes");
 }
