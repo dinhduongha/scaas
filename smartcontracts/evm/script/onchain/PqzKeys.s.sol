@@ -71,6 +71,8 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
     bytes32 internal bob;
     bytes32 internal carol;
     bytes32 internal mu; // a PQ-eligible msig of bob and carol (threshold 1; bob signs)
+    bytes32 internal daveSeed; // set-auditor: the replacement auditor (`_auditorPqz`)
+    bytes32 internal dave;
     address internal c2; // kind 4, class 2 (scope 0, the opening)
     address internal c3o; // kind 4, class 3 with the opening
     address internal c3; // kind 4, class 3 without the opening
@@ -130,7 +132,7 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
     }
 
     function _seedOf(bytes32 ua) internal view returns (bytes32) {
-        return ua == uaM ? mlSeed : ua == bob ? bobSeed : carolSeed;
+        return ua == uaM ? mlSeed : ua == bob ? bobSeed : ua == dave ? daveSeed : carolSeed;
     }
 
     // ------------------------------------------------------------------ the client's bytes
@@ -479,6 +481,7 @@ contract PqzKeysSetup is PqzKeysKit {
         _registryKeys();
         _burnerPqz(4);
         _burnerPqz(12);
+        _auditorPqz();
         _registryNegatives();
         _save();
         _writeBook();
@@ -948,6 +951,70 @@ contract PqzKeysSetup is PqzKeysKit {
         IPqzToken(t).mtxPrepareAcc(uaM, 0, 0);
         IPqzToken(t).mtxPrepareAcc(uaM, 0, 1);
         vm.stopBroadcast();
+    }
+
+    // ------------------------------------------------------------------ AUDITOR (set-auditor: CTR-GOV-31, CTR-PQZ-43)
+
+    /// Bit 32 on a kind-4 token of class 2 with the opening (the scope-0 records of `_confidential`; anvil's registry has no
+    /// 0x0142 verifier, so no proven check, spec §5.2), OPTIONAL auditor carol, admin test key 1's native id, grantDelay 0 and
+    /// this group's factory notice 0 (the delay 0). Bit 32 granted to bob (a single ML-DSA key) and to the msig `mu`. An audited
+    /// op 1 (bob -> uaM) at epoch 0; bob, through the router (his ML-DSA signature over `UASetAuditorUA`, test key 2 relays at
+    /// fee 0), names dave (a fresh holder with its scope-0 record and opening KEM key) with dave's consent under
+    /// `PURPOSE_AUDITOR_CONSENT` over the token's `AuditorConsent`: applied at once; an audited op 1 at epoch 1; `auditorUAOf`
+    /// answers carol for the first entry and dave for the second. Then the msig names carol back (epoch 2), bob signing for it.
+    function _auditorPqz() internal {
+        (daveSeed, dave) = _holder("dave");
+        _scoped(dave, address(0), 0, true);
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.decimals, c.admin) = ("Onchain PQZ auditor", "oPQA", 6, _pad(a1));
+        c.features = 1 << GovernanceBits.PAYABLE | uint256(1) << GovernanceBits.AUDITOR;
+        (c.initialSupply, c.initialHolder) = (1e15, a1);
+        c.conf = _conf(false, true);
+        (c.conf.auditorKey, c.conf.auditorMode) = (abi.encode(carol), 2); // OPTIONAL
+        address t = _create(4, c, "pqzkeys-auditor");
+        bytes32 uid = NormalPqzToken(t).chainUid();
+        vm.startBroadcast(k1);
+        IGovernance(t).grantRole(GovernanceBits.AUDITOR, bob, uid);
+        IGovernance(t).grantRole(GovernanceBits.AUDITOR, mu, uid);
+        vm.stopBroadcast();
+        require(IGovernance(t).hasRole(GovernanceBits.AUDITOR, bob) && IGovernance(t).hasRole(GovernanceBits.AUDITOR, mu),
+            "auditor token: bit 32 granted to bob and to the msig");
+        _shield(t, bob, 100);
+        bytes32 r0 = _audited1(t, 0x7e01);
+        _setAuditorUA(t, bob, dave, 1, uid);
+        (uint32 epoch,,,, uint8 st) = IPqzToken(t).auditorState();
+        require(epoch == 1 && st == 0 && NormalPqzToken(t).auditorUA() == dave, "auditor token: dave applied at once (delay 0)");
+        bytes32 r1 = _audited1(t, 0x7e11);
+        require(IPqzToken(t).auditorUAOf(r0) == carol && IPqzToken(t).auditorUAOf(r1) == dave, "auditor token: auditorUAOf by epoch");
+        _setAuditorUA(t, mu, carol, 2, uid);
+        require(NormalPqzToken(t).auditorUA() == carol, "auditor token: the msig's op applied (epoch 2)");
+        console2.log(string.concat("pqzkeys auditor ", vm.toString(t), ": bit 32 to bob and the msig; dave at epoch 1, carol back at 2"));
+    }
+
+    /// An audited op 1 of bob to uaM (the auditor's ciphertext and opening as filler; OPTIONAL: the sender's choice); its entry ref.
+    function _audited1(address t, uint256 seed) internal returns (bytes32 ref) {
+        IPqzToken.PqzTransferArgs memory a = _op1(t, bob, uaM, seed);
+        (a.vAuditor, a.openingAuditor) = (_blob(seed + 5, PqzCt.V), _opening(seed + 6));
+        bytes memory st = NormalPqzToken(t).transferSingleStatement(a, 0);
+        IUARegistry.UASig memory au = _auth(t, bob, 1, st);
+        IPqzToken.PqzSignedVerdict memory sv = _sv(t, st);
+        vm.broadcast(k2);
+        ref = IPqzToken(t).mtxConfidentialTransferSingle(a, VPROOF, au, "", sv);
+    }
+
+    /// `holder` (bob, or the msig with bob's member signature) names `next` at `epoch` through the router, with `next`'s consent
+    /// (its ML-DSA signature under `PURPOSE_AUDITOR_CONSENT` over the token's `AuditorConsent` digest); test key 2 relays.
+    function _setAuditorUA(address t, bytes32 holder, bytes32 next, uint32 epoch, bytes32 uid) internal {
+        GovernanceRouter gr = GovernanceRouter(_dep("governance_router"));
+        bytes32 cd = _digest(t, keccak256(abi.encode(keccak256("AuditorConsent(address token,bytes32 auditor,uint32 epoch,bytes32 chainUid)"),
+            t, next, epoch, uid)));
+        IUARegistry.UASig memory consent = _uaSig(_seedOf(next), UAKinds.PURPOSE_AUDITOR_CONSENT, cd);
+        MetaTxLib.UAEnvelope memory e;
+        (e.from, e.nonce, e.validUntil) = (holder, gr.mtxNonce(holder, 0), vu);
+        bytes32 d = _named(address(gr), _typ("UASetAuditorUA"), abi.encode(t, next, epoch, uid), e);
+        IUARegistry.UASig memory s = holder == mu ? _msigSig(UAKinds.PURPOSE_METATX, d) : _uaSig(_seedOf(holder), UAKinds.PURPOSE_METATX, d);
+        vm.broadcast(k2);
+        gr.mtxSetAuditorUA(e, t, next, epoch, consent, uid, s);
     }
 
     /// Round 3zb (CTR-GOV-29, O1): a Normal PQZ token of `kind` with bit 30 (`BURNABLE` off), the seat test key 1's native

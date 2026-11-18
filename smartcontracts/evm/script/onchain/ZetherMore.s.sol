@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {ZetherE2E} from "../ZetherE2E.s.sol";
 import {console} from "forge-std/Script.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
@@ -17,6 +18,10 @@ import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
 import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {IConfidentialWrappedToken} from "../../src/confidential/IConfidentialToken.sol";
+import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
+import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
+import {GovernanceRouterTypes} from "../../src/governance/GovernanceRouterBase.sol";
+import {UAKinds} from "../../src/ua/UAKinds.sol";
 
 /// @notice T66b Step 5b, group `zether`: the Zether entries `ZetherE2E.run()` does not reach, on a NORMAL_ZETHER and a
 ///         WRAPPED_ZETHER token of its own (the e2e's `_normal` / `_wrapped`: alice shielded and rolled over first), each
@@ -27,7 +32,10 @@ import {IConfidentialWrappedToken} from "../../src/confidential/IConfidentialTok
 ///         entry's own struct in the token's domain), the account-owner ops `mtxRollOverSigned` / `mtxSetRollOverMode`
 ///         (Schnorr by the Zether key, `zether-cli ownerAuth`), the direct shield of the wrapped kind and its named
 ///         `mtxWrapShield` (address `WrapShield` envelope). The regulated twin (kinds 10, 11) is generated from this file by
-///         zether_reg.py. Writes `deployments/<key>-zether-more.json` (its header first, NET-EVM-13). Needs --ffi, `PRIVATE_KEY` (the sender).
+///         zether_reg.py. Set-auditor (CTR-GOV-31, CTR-ZTH-95, plan A9): bit 32 on an OPTIONAL-auditor token of its own
+///         (`_auditor`): granted to the sender's native id and to an `msig` of the sender and the payer, the new key's proof of
+///         possession (`zether-cli auditorPop`), propose and apply, an audited transfer at epochs 0 and 1, an `AUDITOR`
+///         disclosure of each by its epoch's key (the other key refused), then the msig's replacement through the router. Writes `deployments/<key>-zether-more.json` (its header first, NET-EVM-13). Needs --ffi, `PRIVATE_KEY` (the sender).
 ///         UNAUDITED contracts.
 contract ZetherMore is ZetherE2E {
     using stdJson for string;
@@ -71,9 +79,11 @@ contract ZetherMore is ZetherE2E {
         vm.stopBroadcast();
         _wrapShieldNamed(pk, payer);
         address tb = _burner(pk, payer);
+        address ta = _auditor(pk, payer);
 
         string memory k = "more";
         vm.serializeAddress(k, "burner_zether_token", tb);
+        vm.serializeAddress(k, "auditor_zether_token", ta);
         vm.serializeAddress(k, "normal_zether_token", tn);
         vm.serializeAddress(k, "wrapped_zether_token", wt);
         string memory j = vm.serializeAddress(k, "underlying_erc20", und);
@@ -135,6 +145,177 @@ contract ZetherMore is ZetherE2E {
             vm.toString(abi.encodeCall(NormalZetherToken.burn, (uint256(1)))), " ",
             vm.toString(abi.encodeWithSelector(IGovernance.MissingRole.selector, GovernanceBits.BURNER, bytes32(uint256(uint160(payer))))),
             " burn by a non-holder with a balance (Zether, BURNER): MissingRole(30, id)"));
+    }
+
+    // ------------------------------------------------------------------ AUDITOR (set-auditor: CTR-GOV-31, CTR-ZTH-95)
+
+    uint256 internal constant XA0 = uint256(keccak256("scaas.onchain.zether.auditor.0")) >> 8; // test keys, < r
+    uint256 internal constant XA1 = uint256(keccak256("scaas.onchain.zether.auditor.1")) >> 8;
+
+    /// @dev A NORMAL_ZETHER token of its own: OPTIONAL auditor with key A0, bit 32, admin the sender, grantDelay 0. Bit 32
+    ///      granted to the sender's native id and to an `msig` of the sender and the payer (threshold 1, both accepted). The
+    ///      sender proposes A1 with A1's proof of possession over the token's `AuditorConsent`; the delay is
+    ///      `max(noticePeriod, 0)`: 0 on a local chain, where the proposal applies at once (the same call confirms it after a
+    ///      delay, CTR-ZTH-95); on a chain with a notice period the proposal is checked waiting and the rest is reported not run.
+    ///      An audited transfer at epoch 0 (before) and one at epoch 1 (after): `auditorKeyOf` answers each entry's key, an
+    ///      `AUDITOR` opening by that key verifies and one by the other key does not. Then the msig proposes A0 back through
+    ///      the router (`mtxSetAuditorKey`, its native member's signature over the router's typed struct, fee 0): epoch 2.
+    function _auditor(uint256 pk, address payer) internal returns (address ta) {
+        bytes memory y0 = _cli("keygen", string.concat('{"curve":"bls12381","key":{', _q("x", vm.toString(bytes32(XA0))), "}}")).readBytes(".Y");
+        bytes memory y1 = _cli("keygen", string.concat('{"curve":"bls12381","key":{', _q("x", vm.toString(bytes32(XA1))), "}}")).readBytes(".Y");
+        bytes32 uid = dep.readBytes32(".chain_uid");
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.decimals) = ("Zether auditor", "zAUD", 6);
+        c.features = 1 << GovernanceBits.PAYABLE | uint256(1) << GovernanceBits.AUDITOR;
+        (c.admin, c.initialSupply, c.initialHolder) = (bytes32(uint256(uint160(me))), 1_000_000, me);
+        c.conf = _conf(); // the auditor token's conf
+        (c.conf.auditorKey, c.conf.auditorMode) = (y0, uint8(ZetherTypes.AuditorMode.OPTIONAL));
+        vm.startBroadcast(pk);
+        ta = fac.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), keccak256(abi.encode(salt, "auditor")));
+        console.log(string.concat("      AUDITOR Zether token at ", vm.toString(ta)));
+        bytes32 mu = _auditorMsig(pk, payer);
+        IGovernance(ta).grantRole(GovernanceBits.AUDITOR, bytes32(uint256(uint160(me))), uid);
+        IGovernance(ta).grantRole(GovernanceBits.AUDITOR, mu, uid);
+        NormalZetherToken(ta).mtxShield(uas[0], 100);
+        NormalZetherToken(ta).mtxRollOver(uas[0], 1);
+        vm.stopBroadcast();
+        require(IGovernance(ta).hasRole(GovernanceBits.AUDITOR, mu), "AUDITOR token: the msig holds bit 32");
+        console.log("ok    AUDITOR token: bit 32 granted to the sender's native id and to the msig");
+        (t, aAcc, aPend) = (ta, 100, 0); // shielded 100 and rolled over: nothing pending
+        bytes32 r0 = _audSend(y0, 10, "AUDITOR token: audited transfer at epoch 0");
+        bytes memory pop = _auditorPop(XA1, ta, uid, 1);
+        vm.broadcast(pk);
+        NormalZetherToken(ta).setAuditorKey(y1, 1, pop, uid);
+        (uint32 epoch,, uint64 eta,, uint8 st) = NormalZetherToken(ta).auditorState();
+        if (epoch == 0) {
+            require(st == 1, "AUDITOR token: the proposal waits");
+            console.log(string.concat("ok    AUDITOR token: setAuditorKey proposed, waiting until ", vm.toString(eta),
+                " (the factory's notice period); not run here: the confirm, the epoch-1 transfer and disclosures, the msig's op"));
+            return ta;
+        }
+        require(epoch == 1 && keccak256(NormalZetherToken(ta).auditorKey()) == keccak256(y1), "AUDITOR token: applied at once");
+        console.log("ok    AUDITOR token: setAuditorKey(A1, epoch 1) applied at once (delay 0)");
+        bytes32 r1 = _audSend(y1, 10, "AUDITOR token: audited transfer at epoch 1");
+        require(keccak256(NormalZetherToken(ta).auditorKeyOf(r0)) == keccak256(y0)
+            && keccak256(NormalZetherToken(ta).auditorKeyOf(r1)) == keccak256(y1), "AUDITOR token: auditorKeyOf by epoch");
+        require(_audOpens(ta, r0, 10, XA0) && !_audOpens(ta, r0, 10, XA1), "AUDITOR token: epoch 0's entry opens by A0 only");
+        require(_audOpens(ta, r1, 10, XA1) && !_audOpens(ta, r1, 10, XA0), "AUDITOR token: epoch 1's entry opens by A1 only");
+        console.log("ok    AUDITOR token: AUDITOR disclosure at epochs 0 and 1, each by its epoch's key only");
+        _auditorRouter(ta, mu, y0, uid);
+        require(keccak256(NormalZetherToken(ta).auditorKey()) == keccak256(y0), "AUDITOR token: the msig's op applied");
+        console.log("ok    AUDITOR token: the msig's mtxSetAuditorKey(A0, epoch 2) through the router applied");
+    }
+
+    /// @dev The new key's proof of possession over the token's `AuditorConsent` at `epoch` (`zether-cli auditorPop`, BLS12-381).
+    function _auditorPop(uint256 x, address ta, bytes32 uid, uint32 epoch) internal returns (bytes memory) {
+        return _cli("auditorPop", string.concat('{"curve":"bls12381","key":{', _q("x", vm.toString(bytes32(x))), '},"chainId":',
+            vm.toString(block.chainid), ",", _q("chainUid", vm.toString(uid)), ",", _q("token", vm.toString(ta)), ',"epoch":',
+            vm.toString(epoch), "}")).readBytes(".pop");
+    }
+
+    /// @dev An msig of the sender and the payer (native ids, ascending), threshold 1, both slots accepted by their own keys;
+    ///      registered once per chain (the regulated twin runs on the same chain: it reuses the record and its accepted slots).
+    function _auditorMsig(uint256 pk, address payer) internal returns (bytes32 mu) {
+        (address lo, address hi) = me < payer ? (me, payer) : (payer, me);
+        IUARegistry.MsigStructure memory ms;
+        ms.threshold = 1;
+        ms.members = new IUARegistry.MsigMember[](2);
+        ms.members[0] = IUARegistry.MsigMember(UAKinds.EVM_EOA, bytes32(uint256(uint160(lo))), 1);
+        ms.members[1] = IUARegistry.MsigMember(UAKinds.EVM_EOA, bytes32(uint256(uint160(hi))), 1);
+        IUARegistry.UAAttrs memory none;
+        IUARegistry.MemberSig[] memory nopop;
+        mu = UAKinds.uaOf(UAKinds.MSIG, abi.encodePacked(uint16(1), uint16(2), UAKinds.EVM_EOA, ms.members[0].id, uint16(1),
+            UAKinds.EVM_EOA, ms.members[1].id, uint16(1)));
+        if (!reg.isRegistered(mu)) require(reg.registerMsig(ms, none, nopop, "") == mu, "AUDITOR token: the msig's id");
+        for (uint16 i; i < 2; ++i) {
+            if (reg.memberAccepted(mu, i)) continue;
+            address a = i == 0 ? lo : hi;
+            IUARegistry.MemberSig memory s;
+            (uint8 v, bytes32 r, bytes32 ss) = vm.sign(a == me ? pk : PAYER_PK, UAKinds.membershipDigest(mu, bytes32(uint256(uint160(a)))));
+            (s.index, s.sig) = (i, abi.encodePacked(r, ss, v));
+            reg.acceptMembership(mu, s);
+        }
+    }
+
+    /// @dev alice -> bob `v` on `t` audited by `y` (OPTIONAL mode, the sender's choice), checked by decryption.
+    function _audSend(bytes memory y, uint256 v, string memory what) internal returns (bytes32 ref) {
+        (bAcc, bPend) = _balances(t, 1);
+        string memory out = _cli("proveTransfer", _req(t, aAcc, string.concat(",", _q("yTo", vm.toString(ys[1])), ',"amount":',
+            vm.toString(v), ',"auditorMode":"optional",', _q("yAud", vm.toString(y)))));
+        vm.broadcast(vm.envUint("PRIVATE_KEY"));
+        ref = _send(t, out, what);
+        _moved(v, v, what);
+    }
+
+    /// @dev Does an `AUDITOR` opening of leg 0 of `ref` for `amount` by the key `x` (`zether-cli openDisclosure`) verify?
+    function _audOpens(address ta, bytes32 ref, uint256 amount, uint256 x) internal returns (bool) {
+        (bytes memory ct, bytes memory yt) = dis.transferCiphertext(ta, ref, 0);
+        string memory r = string.concat('{"curve":"bls12381","key":{', _q("x", vm.toString(bytes32(x))), '},"kind":"auditor","chainId":',
+            vm.toString(block.chainid), ",", _q("chainUid", vm.toString(dep.readBytes32(".chain_uid"))), ",", _q("token", vm.toString(ta)),
+            ",", _q("entryRef", vm.toString(ref)), ',"index":0,"amount":', vm.toString(amount));
+        r = string.concat(r, ",", _audParts(ct, yt, NormalZetherToken(ta).auditorKeyOf(ref)), "}");
+        (bool built, bytes memory o) = _openOrRefused(r);
+        if (!built) return false;
+        try dis.verifyTransferAmount(ta, ref, 0, amount, ITransferDisclosure.OpeningKind.AUDITOR, o) returns (bool ok) {
+            return ok;
+        } catch {
+            return false;
+        }
+    }
+
+    /// @dev `zether-cli openDisclosure` on `r`: the opening, or `built` false when the CLI refuses a key that is not the entry's
+    ///      auditor key (that refusal only; any other CLI error stops the script).
+    function _openOrRefused(string memory r) internal returns (bool built, bytes memory o) {
+        string[] memory a = new string[](6);
+        (a[0], a[1], a[2]) = ("bash", "-c", "printf '%s' \"$2\" | \"$0\" \"$1\"");
+        (a[3], a[4], a[5]) = (cli, "openDisclosure", r);
+        Vm.FfiResult memory f = vm.tryFfi(a);
+        if (f.exitCode != 0) {
+            require(vm.contains(string(f.stderr), "opening key does not match the entry"), string(f.stderr));
+            return (false, o);
+        }
+        return (true, string(f.stdout).readBytes(".opening"));
+    }
+
+    /// @dev The opening request's points: the recipient key, the leg's outgoing and auditor ciphertext parts, the auditor key.
+    function _audParts(bytes memory ct, bytes memory yt, bytes memory ya) internal returns (string memory r) {
+        r = string.concat(_q("Yt", vm.toString(yt)), ",", _q("Cout", vm.toString(_part(ct, 0))), ",",
+            _q("Dout", vm.toString(_part(ct, 1))), ",");
+        r = string.concat(r, _q("Ya", vm.toString(ya)), ",", _q("Caud", vm.toString(_part(ct, 2))), ",",
+            _q("Daud", vm.toString(_part(ct, 3))));
+    }
+
+    function _part(bytes memory ct, uint256 i) internal pure returns (bytes memory p) {
+        p = new bytes(128);
+        for (uint256 j; j < 128; ++j) p[j] = ct[128 * i + j];
+    }
+
+    /// @dev The msig's `mtxSetAuditorKey(key, epoch 2)` on the router: its lower native member signs the router's typed
+    ///      `UASetAuditorKey` (fee mode NONE, relayer and fee recipient unbound), the sender relays at fee 0.
+    function _auditorRouter(address ta, bytes32 mu, bytes memory key, bytes32 uid) internal {
+        GovernanceRouter gr = GovernanceRouter(dep.readAddress(".governance_router"));
+        bytes memory pop = _auditorPop(XA0, ta, uid, 2);
+        MetaTxLib.UAEnvelope memory u = MetaTxLib.UAEnvelope(mu, 0, gr.mtxNonce(mu, 0), block.timestamp + 1 days, 0, address(0), 0,
+            address(0));
+        bytes32 sh = keccak256(bytes.concat(abi.encode(GovernanceRouterTypes.UA_SET_AUDITOR_KEY, u.from, ta, keccak256(key),
+            uint32(2), uid), abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))));
+        IUARegistry.UASig memory a = _auditorSig(address(gr), mu, sh);
+        vm.broadcast(vm.envUint("PRIVATE_KEY"));
+        gr.mtxSetAuditorKey(u, ta, key, 2, pop, uid, a);
+    }
+
+    /// @dev The msig's `UASig`: its lower native member (slot 0) signs the registry's `uaAuthDigest(member, member purpose, md)`,
+    ///      `md = memberDigest(mu, uaMessage(msig, metatx, d))`, `d` the router's typed digest of the struct hash `sh` (a native
+    ///      member's rule, UARegistry._memberOk / _native).
+    function _auditorSig(address gr, bytes32 mu, bytes32 sh) internal returns (IUARegistry.UASig memory a) {
+        address payer = vm.addr(PAYER_PK);
+        bool meLow = me < payer;
+        bytes32 md = UAKinds.memberDigest(mu, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_METATX,
+            keccak256(abi.encodePacked(hex"1901", _dom(gr), sh))));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(meLow ? vm.envUint("PRIVATE_KEY") : PAYER_PK,
+            reg.uaAuthDigest(bytes32(uint256(uint160(meLow ? me : payer))), UAKinds.PURPOSE_MEMBER, md));
+        a.members = new IUARegistry.MemberSig[](1);
+        (a.members[0].index, a.members[0].sig) = (0, abi.encodePacked(r, s, v));
     }
 
     // ------------------------------------------------------------------ the sequence on `t`

@@ -176,3 +176,5 @@ a6 mutant | typehash-string | test_UASetAuditorTypehashesArePinned | 1
 a8 mutant | requeue-dropped | submit::tests::auditor_verdicts | 101
 proof | proof-forge | lane mutants | 0 | proof-forge: 304 artifacts compared, 0 differ
 proof | proof-cargo | lane mutants | 0 | proof-cargo: 47 test binaries, outcomes identical
+a9 | matrix local zether (kinds 2, 10; set-auditor rows) | local anvil, A1-A8 tree + A9 | 0 | txs 197/197, negatives 2/2
+a9 | matrix local pqzkeys (kind 4 AUDITOR token; set-auditor rows) | local anvil, A1-A8 tree + A9 | 0 | txs 734/734, negatives 29/29

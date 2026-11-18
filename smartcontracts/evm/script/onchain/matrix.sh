@@ -282,6 +282,15 @@ if [ "$tgt" = scaas-testnet ] && [ ! -f "broadcast/Deploy.s.sol/$CHAIN/dry-run/r
   NOTE=runs/2026-11-10-ua-mtx-merge-t66b-step5-7622.txt
   export NOTE
 fi
+# the zether group's prover (zether.sh, e2e-zether.sh, the forge scripts' ffi): zether-cli of this checkout with `hazmat`
+# (`decrypt`); a local target runs wholly under scripts/capped and builds it here, a remote one in the compile stage below
+# (cargo does nothing when it is current); zether.sh refuses a missing, stale or non-hazmat binary by name
+if [ -z "$SCOPE" ]; then
+  case " $GROUPS " in *" zether "*)
+    step "/zether" "" "" sh -c "cd ../../clients/zether-prover && cargo build --release --offline -j 2 --features hazmat --bin zether-cli" \
+      || fail "cargo build zether-cli" ;;
+  esac
+fi
 if [ -n "$SCOPE" ]; then
   STAGE=compile
   say "" "compile (scripts/capped) …"
@@ -330,7 +339,7 @@ if [ -n "$SCOPE" ]; then
         --cache-path cache/onchain-pqchat || fail "forge build PqChat.s.sol"
       say "/$g" "compiled (${SECS}s)" ;;
     zether)  # zether.sh's prover, clients/zether-prover's zether-cli (cargo does nothing when it is current)
-      step "/$g" "" "" ../../scripts/capped sh -c "cd ../../clients/zether-prover && cargo build --release --offline -j 2 --bin zether-cli" \
+      step "/$g" "" "" ../../scripts/capped sh -c "cd ../../clients/zether-prover && cargo build --release --offline -j 2 --features hazmat --bin zether-cli" \
         || fail "cargo build zether-cli"
       step "/$g" "" "" ../../scripts/capped env FOUNDRY_OUT=out/onchain-zether FOUNDRY_CACHE_PATH=cache/onchain-zether \
         forge build src script/ZetherE2E.s.sol script/onchain/ZetherMore.s.sol script/onchain/build/ZetherRegE2E.s.sol \

@@ -29,6 +29,15 @@ rc=0
 PARTS=" ${ZETHER_PARTS:-plain reg more} "
 has() { case "$PARTS" in *" $1 "*) return 0 ;; esac; return 1; }
 python3 -I script/onchain/zether_reg.py gen
+# the prover every part calls (ZETHER_CLI, as ZetherE2E and e2e-zether.sh): refused by name when missing, older than its
+# sources (clients/zether-prover, clients/scaas-ct) or built without `hazmat` (`decrypt` refused)
+ZCLI=${ZETHER_CLI:-../../clients/zether-prover/target/release/zether-cli}
+ZB="cargo build --release --features hazmat --bin zether-cli (clients/zether-prover)"
+[ -x "$ZCLI" ] || { echo "ZETHER_CLI_MISSING: $ZCLI; $ZB"; exit 2; }
+[ -z "$(find ../../clients/zether-prover/src ../../clients/zether-prover/Cargo.toml ../../clients/zether-prover/Cargo.lock \
+  ../../clients/scaas-ct/src ../../clients/scaas-ct/Cargo.toml -newer "$ZCLI" | head -1)" ] \
+  || { echo "ZETHER_CLI_STALE: $ZCLI is older than its sources; $ZB"; exit 2; }
+case $(printf '{}' | "$ZCLI" decrypt 2>&1) in *hazmat*) echo "ZETHER_CLI_NO_HAZMAT: $ZCLI; $ZB"; exit 2 ;; esac
 if has plain; then
   rm -f "broadcast/ZetherE2E.s.sol/$CHAIN/run-latest.json"
   remote_fee "$RPC"
