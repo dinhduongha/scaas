@@ -32,6 +32,7 @@ async fn sdk() -> Arc<Sdk> {
         rp_id: None,
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: Limits::default(),
+        clock: None,
     })
     .await
     .unwrap()

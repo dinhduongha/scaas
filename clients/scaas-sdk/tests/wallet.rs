@@ -60,6 +60,7 @@ fn profile(rpc: Vec<String>, gateways: Vec<String>, uid: &str) -> ChainProfile {
         finality: Finality::Finalized,
         tx_gas_cap: Some(1 << 24),
         gas: vec![],
+        max_valid_secs: None,
         tokens: vec![
             ListedToken {
                 address: VND.into(),
@@ -98,6 +99,7 @@ async fn sdk(p: ChainProfile) -> (Arc<Sdk>, String) {
         rp_id: None,
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: Limits::default(),
+        clock: None,
     })
     .await
     .unwrap();
@@ -524,4 +526,31 @@ async fn native_send_signs_with_the_reviewed_key_only() {
     );
     assert!(c.lock().unwrap().sent.is_empty());
     s.wallet().submit_native_send(q).await.unwrap();
+}
+
+/// Owner 2026-11-19, T13b ruling 5: a native send's estimate carries its value (`scaas-rpc` `simulate_value`): a value to a
+/// non-payable contract is refused at quote time; the same call without a value quotes (the control).
+#[tokio::test(flavor = "multi_thread")]
+async fn native_send_estimate_carries_the_value() {
+    let (s, seed, c) = one(0).await;
+    {
+        let mut c = c.lock().unwrap();
+        c.value_reverts = true;
+        c.code.insert(TO.to_ascii_lowercase(), "0x6001".into());
+    }
+    let mut req = native_send(&seed, Some(2));
+    req.data = Some("0xdeadbeef".into());
+    assert_eq!(
+        s.wallet()
+            .prepare_native_send(req.clone())
+            .await
+            .unwrap_err()
+            .code(),
+        "Revert"
+    );
+    req.value = "0".into();
+    assert!(
+        s.wallet().prepare_native_send(req).await.is_ok(),
+        "control: no value"
+    );
 }

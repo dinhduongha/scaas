@@ -29,8 +29,8 @@ pub mod vault;
 pub mod wallet;
 
 pub use config::{
-    ChainProfile, EndpointConfig, Family, Finality, GasRow, Limits, ListedToken, RuntimeChoice,
-    SdkConfig,
+    ChainProfile, Clock, EndpointConfig, Family, Finality, GasRow, Limits, ListedToken,
+    RuntimeChoice, SdkConfig,
 };
 pub use error::SdkError;
 pub use events::{Event, InFlight, OpState, Subscription};
@@ -151,6 +151,7 @@ pub struct Sdk {
     #[allow(dead_code)]
     pub(crate) chains: Vec<Chain>,
     pub(crate) limits: Limits,
+    clock: Option<Clock>,
     pub(crate) rt: Option<Rt>,
     pub(crate) authenticator: Option<Arc<dyn platform::Authenticator>>,
     pub(crate) rp_id: Option<String>,
@@ -234,6 +235,7 @@ impl Sdk {
         Ok(Arc::new(Sdk {
             chains,
             limits: config.limits,
+            clock: config.clock,
             rt,
             authenticator: config.authenticator,
             rp_id: config.rp_id,
@@ -341,6 +343,29 @@ impl Sdk {
     /// The limits in force.
     pub fn limits(&self) -> &Limits {
         &self.limits
+    }
+
+    /// Unix seconds now on the SDK's clock (the configured one, else the device's; 0 when the device's is unreadable, which
+    /// refuses every window: fail closed).
+    pub(crate) fn now(&self) -> u64 {
+        if let Some(c) = &self.clock {
+            return c();
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+        #[cfg(target_arch = "wasm32")]
+        let t = wasmtimer::std::SystemTime::now().duration_since(wasmtimer::std::UNIX_EPOCH);
+        t.map_or(0, |d| d.as_secs())
+    }
+
+    /// The signing window of chain `chain`: its profile's, else `Limits::max_valid_secs`.
+    #[cfg(feature = "wallet")]
+    pub(crate) fn window(&self, chain: &str) -> u64 {
+        self.chains
+            .iter()
+            .find(|c| c.profile.key == chain)
+            .and_then(|c| c.profile.max_valid_secs)
+            .unwrap_or(self.limits.max_valid_secs)
     }
 
     /// An EVM chain's profile, chain id and the session's pool (`ChainUnknown`; `Argument`: not an EVM profile with a chain id).

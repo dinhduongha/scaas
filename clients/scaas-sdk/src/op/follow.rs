@@ -146,6 +146,9 @@ impl Op {
                     }
                 };
                 if now != was {
+                    if now.is_terminal() {
+                        row.ended_at = Some(sdk.now());
+                    }
                     match &now {
                         OpState::Landed { block, hash } => {
                             row.state = "landed".into();

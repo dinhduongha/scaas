@@ -12,7 +12,7 @@ pub use crate::pool::{Agreed, BlockChoice, ReadAt};
 use crate::pool::{Answer, Pool, Probe, ReadError};
 use alloy::eips::BlockNumberOrTag;
 use alloy::network::TransactionBuilder;
-use alloy::primitives::{Address, Bytes, B256};
+use alloy::primitives::{Address, Bytes, B256, U256};
 use alloy::providers::{DynProvider, Provider, ProviderBuilder};
 use alloy::rpc::client::ClientBuilder;
 use alloy::rpc::types::{Filter, Log, TransactionRequest};
@@ -389,9 +389,22 @@ impl EvmPool {
         to: Address,
         data: Bytes,
     ) -> Result<u64, SimError> {
+        self.simulate_value(from, to, U256::ZERO, data).await
+    }
+
+    /// [`EvmPool::simulate_from`] of a call that sends `value` wei (a native send's estimate: a payable path's cost, a
+    /// non-payable one's revert; scaas-sdk T13b ruling 5).
+    pub async fn simulate_value(
+        &self,
+        from: Address,
+        to: Address,
+        value: U256,
+        data: Bytes,
+    ) -> Result<u64, SimError> {
         let tx = TransactionRequest::default()
             .with_from(from)
             .with_to(to)
+            .with_value(value)
             .with_input(data);
         let d = self.decode;
         self.read_within(true, |p| {

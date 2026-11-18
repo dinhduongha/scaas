@@ -221,6 +221,7 @@ pub async fn sdk_open(
         rp_id: Some("example.invalid".into()),
         runtime: RuntimeChoice::Own,
         limits: Limits::default(),
+        clock: None,
     };
     Ok(SdkHandle(Sdk::open(config).await?))
 }

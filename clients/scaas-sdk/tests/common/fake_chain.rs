@@ -69,6 +69,8 @@ pub struct Chain {
     pub gw_paths: Vec<String>,
     /// block 0's hash (the chain's `chain_uid`), `hash_of(0)` by default
     pub genesis: String,
+    /// `eth_call` and `eth_estimateGas` that send a value revert (a non-payable target)
+    pub value_reverts: bool,
 }
 
 impl Default for Chain {
@@ -102,6 +104,7 @@ impl Default for Chain {
             domains: HashMap::new(),
             gw_paths: vec![],
             genesis: hash_of(0),
+            value_reverts: false,
         }
     }
 }
@@ -236,7 +239,11 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
             h => u64::from_str_radix(h.trim_start_matches("0x"), 16).unwrap(),
         }
     };
+    let sends_value = p[0]["value"].as_str().is_some_and(|v| v != "0x0");
     match r["method"].as_str().unwrap_or_default() {
+        "eth_call" | "eth_estimateGas" if c.value_reverts && sends_value => {
+            err("execution reverted")
+        }
         "eth_chainId" => ok(json!(format!("{CHAIN_ID:#x}"))),
         "eth_blockNumber" => ok(json!(format!("{:#x}", c.head))),
         "eth_getBlockByNumber" => {

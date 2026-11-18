@@ -109,6 +109,7 @@ async fn setup(gateways: usize) -> T {
             decimals: 0,
         }],
         gas: gas_rows(),
+        max_valid_secs: None,
     };
     let store = MemoryStore::new();
     let sdk = Sdk::open(SdkConfig {
@@ -118,6 +119,7 @@ async fn setup(gateways: usize) -> T {
         rp_id: None,
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: Limits::default(),
+        clock: Some(std::sync::Arc::new(|| 1_800_000_000)),
     })
     .await
     .unwrap();

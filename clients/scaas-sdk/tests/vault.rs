@@ -32,6 +32,7 @@ async fn open_limits(store: Arc<dyn SecureStore>, limits: Limits) -> Arc<Sdk> {
         rp_id: None,
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits,
+        clock: None,
     })
     .await
     .unwrap()
@@ -701,29 +702,37 @@ async fn heavy_work_one_at_a_time() {
     }
 }
 
-/// Owner 2026-11-18 (i): the passphrase is never retained: once `unlock` returns the SDK holds no reference to the caller's
-/// secret, so dropping it zeroes and frees it (`SecretBytes` zeroes on drop; the copy call then finds no such id).
+/// Owner 2026-11-18 (i), checked by the bytes (owner 2026-11-19, T13b ruling 6): after a passphrase unlock and the caller's drop of
+/// its secret, no secret of the process holds the passphrase's bytes: every id of the registry is read through the copy call
+/// (a copy kept in a new secret, not only a kept handle, is found). A passphrase of its own, so no other test's secret matches;
+/// the positive control: the scan finds the caller's secret while it is alive.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn passphrase_not_retained_after_unlock() {
+    const MINE: &str = "retained-otter-91 ünï only here";
     let (s, _) = sdk().await;
-    let id = import(&s, "Main", REPO).await.unwrap();
+    let req = ImportWords {
+        label: "Main".into(),
+        words: sec(REPO),
+        vault_passphrase: sec(MINE),
+    };
+    let id = s.vault().import_words(req).await.unwrap().id;
     s.vault().lock(id.clone()).await;
-    let pass = sec(PASS);
-    let sid = pass.id();
+    let holding = || {
+        let top = SecretBytes::new(0).unwrap().id(); // ids count up: every live secret's id is below
+        let mut buf = vec![0u8; 1 << 16];
+        (1..top).filter(|i| matches!(scaas_ua::wallet::secret_read(*i, &mut buf), Ok(n) if buf.get(..n) == Some(MINE.as_bytes()))).count()
+    };
+    let pass = sec(MINE);
     s.vault()
         .unlock(id, Unlock::Passphrase(pass.clone()))
         .await
         .unwrap();
-    assert_eq!(Arc::strong_count(&pass), 1, "no copy of the handle kept");
-    let mut buf = [0u8; 64];
-    assert!(
-        scaas_ua::wallet::secret_read(sid, &mut buf).is_ok(),
-        "control: alive while held"
-    );
+    assert_eq!(holding(), 1, "control: the caller's own secret is found");
     drop(pass);
-    assert!(
-        scaas_ua::wallet::secret_read(sid, &mut buf).is_err(),
-        "gone (zeroed and freed) once dropped"
+    assert_eq!(
+        holding(),
+        0,
+        "no secret holds the passphrase's bytes once the caller's is gone"
     );
 }
 

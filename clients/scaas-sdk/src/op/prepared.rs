@@ -265,7 +265,7 @@ impl Op {
                     .flatten(),
                 relayer: (mode.bit(0)).then(|| address_of(&env, "relayer")).flatten(),
                 now,
-                max_window: sdk.limits.max_valid_secs,
+                max_window: sdk.window(&d.chain),
             },
         };
         let mut review = Vec::new();
@@ -307,6 +307,14 @@ impl Op {
             .map(dec)
             .transpose()?
             .map_or(u64::MAX, |v| u64::try_from(v).unwrap_or(u64::MAX));
+        // the signing window on the SDK's clock (T13b ruling 1): not already past, not further than the chain's window, so an
+        // endpoint's clock cannot stretch a signature's life
+        if env.contains_key("validUntil") {
+            let wall = sdk.now();
+            if expires_at <= wall || expires_at > wall.saturating_add(sdk.window(&d.chain)) {
+                return Err(SdkError::ValidUntilRefused);
+            }
+        }
         let p = Arc::new(Prepared {
             id: id.clone(),
             chain: d.chain,

@@ -213,6 +213,48 @@ fn take(sdk: &Sdk, p: &Arc<Prepared>) -> Result<(), SdkError> {
     }
 }
 
+/// The message without its `validUntil` (the envelope's, or its `payment`'s): what a retry repeats.
+fn retried(m: &Value) -> Value {
+    let mut m = m.clone();
+    if let Some(o) = m.as_object_mut() {
+        o.remove("validUntil");
+        if let Some(p) = o.get_mut("payment").and_then(Value::as_object_mut) {
+            p.remove("validUntil");
+        }
+    }
+    m
+}
+
+/// An earlier operation of this SDK that `p` retries (the same struct and message on the same lane and nonce, another
+/// `validUntil`) and that is not over (owner 2026-11-19, T13b ruling 7): a retry after its `validUntil` lapsed signs again on
+/// the same lane only once it is `Expired` by a chain fact; before that the retry is that operation. Its id, after following
+/// it once; `None`: none, or the earlier one `Expired`.
+async fn earlier_on_lane(sdk: &Arc<Sdk>, p: &Prepared) -> Result<Option<String>, SdkError> {
+    let Some((from, batch, nonce)) = &p.t.lane else {
+        return Ok(None);
+    };
+    let (from, batch, nonce) = (hex(from), batch.to_string(), nonce.to_string());
+    let contract = hex(&p.t.contract);
+    let mine = retried(&p.t.message);
+    for row in state::rows(sdk).await? {
+        let same = row.chain == p.chain()
+            && row.name == p.t.name
+            && row.contract.eq_ignore_ascii_case(&contract)
+            && row.from.eq_ignore_ascii_case(&from)
+            && row.batch == batch
+            && row.nonce == nonce
+            && retried(&row.message) == mine;
+        if !same || row.state == "expired" {
+            continue;
+        }
+        let op = Op { sdk: sdk.clone() };
+        if op.state(row.op.clone()).await? != OpState::Expired {
+            return Ok(Some(row.op));
+        }
+    }
+    Ok(None)
+}
+
 /// Puts `p` back after a failure before anything was signed or written.
 fn put_back(sdk: &Sdk, p: &Arc<Prepared>) {
     sdk.prepared
@@ -244,6 +286,10 @@ impl Op {
                 }
                 // the first block the operation may land in: the final block now, before it is signed (P2-5)
                 let from_block = super::final_number(&pool, &profile).await?;
+                // a retry on the lane of an operation not yet `Expired` by a chain fact is that operation (T13b ruling 7)
+                if let Some(op) = earlier_on_lane(&sdk, &prepared).await? {
+                    return Ok(op);
+                }
                 take(&sdk, &prepared)?;
                 let signed = sign(&sdk, &prepared).and_then(|b| {
                     if quote.path == SubmitPath::Gateway && b.op.is_none() {
@@ -300,6 +346,8 @@ impl Op {
                     tx_id,
                     tx_nonce: payer.as_ref().map(|_| quote.tx_nonce),
                     gas_limit: payer.as_ref().map(|_| quote.gas_limit),
+                    ended_at: None,
+                    message: prepared.t.message.clone(),
                     path: if payer.is_some() { "self" } else { "gateway" }.into(),
                     payer,
                     from_block,

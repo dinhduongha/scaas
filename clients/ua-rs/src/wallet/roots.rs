@@ -95,20 +95,25 @@ pub fn root_from_eoa_signature(
         [1] | [28] => 1u8,
         _ => return Err(Error::ExternalSignature),
     };
-    let s = Signature::from_slice(rs).map_err(|_| Error::ExternalSignature)?;
-    let low = s.normalize_s();
-    if low != s {
-        bit ^= 1; // the same public key with the other recovery bit
-    }
+    // the signature is the root's secret: into a `Zeroizing<[u8; 64]>` at once, its low-s form (scaas-sdk T13b ruling 4); k256's
+    // `Signature` values while parsing and recovering are the stated residual (they have no `Zeroize`)
+    let ikm: Zeroizing<[u8; 64]> = {
+        let s = Signature::from_slice(rs).map_err(|_| Error::ExternalSignature)?;
+        let low = s.normalize_s();
+        if low != s {
+            bit ^= 1; // the same public key with the other recovery bit
+        }
+        Zeroizing::new(low.to_bytes().into())
+    };
     let digest = key_derivation_typed_data(account, set)?.digest()?;
     let rec = RecoveryId::from_byte(bit).ok_or(Error::ExternalSignature)?;
+    let low = Signature::from_slice(&ikm[..]).map_err(|_| Error::ExternalSignature)?;
     let vk = VerifyingKey::recover_from_prehash(&digest, &low, rec).map_err(|_| Error::ExternalSignature)?;
     if address_of(&vk)? != *account {
         return Err(Error::ExternalSignature);
     }
-    let ikm = Zeroizing::new(low.to_bytes());
     let pw = stretch(passphrase, ROOT_EOA_SIG_TAG, account)?;
-    let root = hkdf_sha256(&ikm, &*pw, &info(ROOT_EOA_SIG_TAG, set), 32)?;
+    let root = hkdf_sha256(&ikm[..], &*pw, &info(ROOT_EOA_SIG_TAG, set), 32)?;
     Ok(Zeroizing::new(root.as_slice().try_into().map_err(|_| Error::Argument)?))
 }
 

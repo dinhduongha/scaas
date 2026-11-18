@@ -90,6 +90,9 @@ own_codes! {
     /// A relayed operation's quote found no row of the gas table for its key (entry, domain kind, signer kind, fresh lane;
     /// owner 2026-11-18, ruling 1; owner 2026-11-19, ruling B).
     GasUnquoted,
+    /// An operation's `validUntil` already past on the SDK's clock, or further ahead than the chain's window (owner 2026-11-19,
+    /// T13b ruling 1).
+    ValidUntilRefused,
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).

@@ -39,6 +39,7 @@ async fn sdk() -> Arc<Sdk> {
         rp_id: None,
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: Limits::default(),
+        clock: None,
     })
     .await
     .unwrap()
@@ -225,6 +226,7 @@ async fn one_secret_for_two_parameters_does_not_hang() {
             max_concurrent_heavy: 1,
             ..Limits::default()
         },
+        clock: None,
     })
     .await
     .unwrap();

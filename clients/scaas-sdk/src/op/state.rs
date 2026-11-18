@@ -52,6 +52,22 @@ pub(crate) struct Row {
     /// a self-relay's confirmed gas limit: the signed calldata's simulation above it is `SimRefused`
     #[serde(default)]
     pub gas_limit: Option<u64>,
+    /// when the row became terminal, on the SDK's clock (unix seconds): kept `Limits::state_retention_secs` after it
+    #[serde(default)]
+    pub ended_at: Option<u64>,
+    /// the signed message, canonical (public: the calldata holds it): a retry is the same message but its `validUntil`
+    #[serde(default)]
+    pub message: serde_json::Value,
+}
+
+impl Row {
+    /// `landed`, `reverted`, `consumed` or `expired`: a chain fact ended it.
+    pub(crate) fn terminal(&self) -> bool {
+        matches!(
+            self.state.as_str(),
+            "landed" | "reverted" | "consumed" | "expired"
+        )
+    }
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -97,7 +113,8 @@ pub(crate) async fn row(sdk: &Sdk, op: &str) -> Result<Row, SdkError> {
         .ok_or(SdkError::Argument)
 }
 
-/// Writes `row` (replacing the row of its `op`), under the lock at the read `rev`.
+/// Writes `row` (replacing the row of its `op`), under the lock at the read `rev`; the terminal rows past their retention are
+/// pruned in the same write, never a non-terminal one (T13b ruling 2).
 pub(crate) async fn put(sdk: &Sdk, row: &Row) -> Result<(), SdkError> {
     for _ in 0..TRIES {
         let _lock = sdk.store.lock(STATE.into()).await.map_err(io)?;
@@ -106,6 +123,9 @@ pub(crate) async fn put(sdk: &Sdk, row: &Row) -> Result<(), SdkError> {
             Some(r) => *r = row.clone(),
             None => st.ops.push(row.clone()),
         }
+        let (now, keep) = (sdk.now(), sdk.limits.state_retention_secs);
+        st.ops
+            .retain(|r| !r.terminal() || r.ended_at.is_none_or(|e| e.saturating_add(keep) > now));
         st.rev = st.rev.checked_add(1).ok_or(SdkError::Argument)?;
         let bytes = serde_json::to_vec(&st).map_err(|_| SdkError::Internal)?;
         if bytes.len() > STATE_MAX {

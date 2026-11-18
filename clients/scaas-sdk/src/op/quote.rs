@@ -116,9 +116,10 @@ pub(crate) async fn self_relay(
     } else if data.is_empty() && pool.code(to).await.map_err(sim)?.is_empty() {
         21_000 // a plain transfer to an account without code
     } else {
-        // ponytail: simulated without `value` (the reader's simulate takes none); a value-aware estimate when it has one
-        let _ = value;
-        pool.simulate_from(from, to, data).await.map_err(sim)?
+        // the estimate with the value sent (T13b ruling 5): a payable path's cost, a non-payable target's revert
+        pool.simulate_value(from, to, value, data)
+            .await
+            .map_err(sim)?
     };
     let block = pool.block_gas().await.map_err(sim)?;
     if profile.tx_gas_cap.is_some_and(|c| gas > c) || gas > block.limit {

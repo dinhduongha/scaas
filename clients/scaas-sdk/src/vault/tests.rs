@@ -362,6 +362,7 @@ async fn passphrase_unlock_opens_every_vault() {
         rp_id: None,
         runtime: crate::RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: crate::Limits::default(),
+        clock: None,
     })
     .await
     .unwrap();
@@ -457,6 +458,7 @@ async fn platform_session() -> (Arc<crate::Sdk>, String) {
         rp_id: None,
         runtime: crate::RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: crate::Limits::default(),
+        clock: None,
     })
     .await
     .unwrap();
@@ -551,6 +553,7 @@ async fn import_key_failed_write_leaves_no_ghost_import() {
         rp_id: None,
         runtime: crate::RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: crate::Limits::default(),
+        clock: None,
     })
     .await
     .unwrap();

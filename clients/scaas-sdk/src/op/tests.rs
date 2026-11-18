@@ -92,6 +92,11 @@ fn endpoint(url: &str) -> EndpointConfig {
 }
 
 async fn open(store: Arc<Flaky>, profile: ChainProfile, limits: Limits) -> Arc<Sdk> {
+    open_at(store, profile, limits, 1_800_000_000).await
+}
+
+/// `open` on a clock fixed at `now`.
+async fn open_at(store: Arc<Flaky>, profile: ChainProfile, limits: Limits, now: u64) -> Arc<Sdk> {
     Sdk::open(SdkConfig {
         profiles: vec![profile],
         store,
@@ -99,6 +104,7 @@ async fn open(store: Arc<Flaky>, profile: ChainProfile, limits: Limits) -> Arc<S
         rp_id: None,
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits,
+        clock: Some(std::sync::Arc::new(move || now)),
     })
     .await
     .unwrap()
@@ -131,6 +137,7 @@ async fn setup(gateways: usize, edit: impl FnOnce(&mut ChainProfile, &mut Limits
             decimals: 0,
         }],
         gas: gas_rows(100_000),
+        max_valid_secs: None,
     };
     let mut limits = Limits::default();
     edit(&mut profile, &mut limits);
@@ -1205,9 +1212,16 @@ async fn one_prepared_submits_once() {
         op.submit(p.clone(), q.clone()),
         op.submit(p.clone(), q.clone())
     );
-    let mut codes = [code(a), code(b)];
-    codes.sort();
-    assert_eq!(codes, ["Ok", "PreparedUnknown"]);
+    // the second is `PreparedUnknown`, or (when the first's row is written by then) that same operation (T13b ruling 7)
+    let (a, b) = (a.map_err(|e| e.code()), b.map_err(|e| e.code()));
+    assert!(
+        matches!((&a, &b), (Ok(x), Ok(y)) if x == y)
+            || matches!(
+                (&a, &b),
+                (Ok(_), Err("PreparedUnknown")) | (Err("PreparedUnknown"), Ok(_))
+            ),
+        "{a:?} {b:?}"
+    );
     assert_eq!(signs(&t), 1, "signed once");
     assert_eq!(state::rows(&t.sdk).await.unwrap().len(), 1, "one row");
 }
@@ -1378,4 +1392,143 @@ async fn the_prepared_table_drops_expired_entries() {
     let table = t.sdk.prepared.lock().unwrap();
     assert!(!table.contains_key(&old.id()), "expired: dropped");
     assert!(table.contains_key(&live.id()), "control: kept");
+}
+
+/// Owner 2026-11-19, T13b ruling 1: an operation's `validUntil` is held to the SDK's clock (a fixed one here): one already past,
+/// or further ahead than the chain's window (the profile's, else the limits' default), is `ValidUntilRefused`, so an
+/// endpoint whose clock runs ahead cannot stretch a signature's life; inside the window it prepares (the controls).
+#[tokio::test(flavor = "multi_thread")]
+async fn valid_until_is_held_to_the_sdk_clock() {
+    const NOW: u64 = 1_800_000_000; // the tests' fixed clock
+    let until = |t: &T, v: u64| {
+        let mut d = cancel(t, "token", TOKEN, "5", "0");
+        d.message["validUntil"] = json!(v.to_string());
+        d
+    };
+    let t = setup(1, |_, _| {}).await;
+    assert_eq!(
+        code(Op::prepare(&t.sdk, until(&t, NOW)).await),
+        "ValidUntilRefused",
+        "already past"
+    );
+    assert_eq!(
+        code(Op::prepare(&t.sdk, until(&t, NOW + 86_401)).await),
+        "ValidUntilRefused",
+        "beyond the default day"
+    );
+    assert_eq!(
+        code(Op::prepare(&t.sdk, until(&t, NOW + 86_400)).await),
+        "Ok",
+        "control: the day's edge"
+    );
+    // an endpoint a month ahead: its own `now` would let a month-long validUntil through; the SDK's clock does not
+    t.chain.lock().unwrap().timestamp = NOW + 30 * 86_400;
+    assert_eq!(
+        code(Op::prepare(&t.sdk, until(&t, NOW + 30 * 86_400 + 60)).await),
+        "ValidUntilRefused"
+    );
+    // the profile's own window
+    let t2 = setup(1, |p, _| p.max_valid_secs = Some(600)).await;
+    assert_eq!(
+        code(Op::prepare(&t2.sdk, until(&t2, NOW + 601)).await),
+        "ValidUntilRefused",
+        "the profile's window"
+    );
+    assert_eq!(
+        code(Op::prepare(&t2.sdk, until(&t2, NOW + 600)).await),
+        "Ok",
+        "control"
+    );
+}
+
+/// Owner 2026-11-19, T13b ruling 2: a terminal row is kept `state_retention_secs` (90 days by default) after it ended, then
+/// pruned by the next write; a non-terminal row is never pruned, however old (the control beside it).
+#[tokio::test(flavor = "multi_thread")]
+async fn terminal_rows_pruned_after_retention() {
+    let t = setup(1, |_, _| {}).await;
+    let (ended, digest) = submitted(&t, "token", TOKEN, "5").await;
+    let (open_op, _) = submitted(&t, "token", TOKEN, "6").await;
+    {
+        let mut c = t.chain.lock().unwrap();
+        let n = c.finalized;
+        c.logs.push(executed_log(TOKEN, &digest, n, false));
+    }
+    assert!(t.sdk.op().state(ended.clone()).await.unwrap().is_terminal());
+    assert_eq!(
+        state::row(&t.sdk, &ended).await.unwrap().ended_at,
+        Some(1_800_000_000)
+    );
+    // 90 days less a second later: kept; 90 days later: pruned at the next write; the open row stays
+    let day = 86_400;
+    let soon = open_at(
+        t.store.clone(),
+        t.profile.clone(),
+        Limits::default(),
+        1_800_000_000 + 90 * day - 1,
+    )
+    .await;
+    state::put(&soon, &state::row(&soon, &open_op).await.unwrap())
+        .await
+        .unwrap();
+    assert!(
+        state::row(&soon, &ended).await.is_ok(),
+        "control: inside the retention"
+    );
+    let late = open_at(
+        t.store.clone(),
+        t.profile.clone(),
+        Limits::default(),
+        1_800_000_000 + 90 * day,
+    )
+    .await;
+    state::put(&late, &state::row(&late, &open_op).await.unwrap())
+        .await
+        .unwrap();
+    assert!(state::row(&late, &ended).await.is_err(), "pruned");
+    let much_later = open_at(
+        t.store.clone(),
+        t.profile.clone(),
+        Limits::default(),
+        1_800_000_000 + 900 * day,
+    )
+    .await;
+    state::put(
+        &much_later,
+        &state::row(&much_later, &open_op).await.unwrap(),
+    )
+    .await
+    .unwrap();
+    assert!(
+        state::row(&much_later, &open_op).await.is_ok(),
+        "a non-terminal row is never pruned"
+    );
+}
+
+/// Owner 2026-11-19, T13b ruling 7: a retry on the lane of an operation whose `validUntil` lapsed is that operation until a chain
+/// fact makes it `Expired`; then the retry signs on the same lane (a new operation).
+#[tokio::test(flavor = "multi_thread")]
+async fn retry_on_a_lane_waits_for_expired() {
+    let t = setup(1, |_, _| {}).await;
+    let (first, _) = submitted(&t, "token", TOKEN, "5").await;
+    let retry = |t: &T| {
+        let mut d = cancel(t, "token", TOKEN, "5", "0");
+        d.message["validUntil"] = json!("1800007200");
+        d
+    };
+    let p = prepare(&t, retry(&t)).await;
+    let q = gateway_quote(&t, &p).await;
+    assert_eq!(
+        t.sdk.op().submit(p, q).await.unwrap(),
+        first,
+        "the earlier operation, not yet Expired"
+    );
+    assert_eq!(signs(&t), 1, "nothing signed again");
+    // the chain passes the first's validUntil with its nonce unspent: Expired by a chain fact; the retry signs on the lane
+    t.chain.lock().unwrap().timestamp += 3_601;
+    let p = prepare(&t, retry(&t)).await;
+    let q = gateway_quote(&t, &p).await;
+    let second = t.sdk.op().submit(p, q).await.unwrap();
+    assert_ne!(second, first);
+    assert_eq!(t.sdk.op().state(first).await.unwrap(), OpState::Expired);
+    assert_eq!(signs(&t), 2);
 }

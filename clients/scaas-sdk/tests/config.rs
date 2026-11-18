@@ -41,6 +41,7 @@ fn profile(key: &str) -> ChainProfile {
         finality: Finality::Depth(12),
         tx_gas_cap: Some(1 << 24),
         gas: vec![],
+        max_valid_secs: None,
         tokens: vec![],
     }
 }
@@ -53,6 +54,7 @@ fn config(profiles: Vec<ChainProfile>) -> SdkConfig {
         rp_id: None,
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: Limits::default(),
+        clock: None,
     }
 }
 

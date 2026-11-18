@@ -72,6 +72,9 @@ pub struct ChainProfile {
     pub tokens: Vec<ListedToken>,
     /// gas figures measured for this chain, before the SDK's built-in table (owner 2026-11-19, ruling B; spec §13.3)
     pub gas: Vec<GasRow>,
+    /// the longest an operation's `validUntil` may lie ahead of the SDK's clock on this chain, in seconds; `None`:
+    /// `Limits::max_valid_secs` (default 86 400, one day) (owner 2026-11-19, T13b ruling 1)
+    pub max_valid_secs: Option<u64>,
 }
 
 /// One row of a profile's gas table: the execution gas of `entry` (`mtxCancelNonce`, `mtxExecuteTransfer`, …) on a contract of
@@ -110,9 +113,13 @@ pub struct Limits {
     pub max_watch: u32,
     /// scrypt, Argon2id, proofs, slow key generation at once
     pub max_concurrent_heavy: u32,
-    /// the longest an operation's `validUntil` may lie ahead of the chain's time, in seconds (the signing check's window)
+    /// the longest an operation's `validUntil` may lie ahead of the SDK's clock, in seconds (the signing check's window), where
+    /// a profile names none
     pub max_valid_secs: u64,
     pub event_queue: u32,
+    /// how long a terminal operation row stays in `sdk.state` after it ended, in seconds (default 90 days); a non-terminal row
+    /// is never pruned (owner 2026-11-19, T13b ruling 2)
+    pub state_retention_secs: u64,
 }
 
 impl Default for Limits {
@@ -126,6 +133,7 @@ impl Default for Limits {
             max_concurrent_heavy: 1,
             max_valid_secs: 86_400,
             event_queue: 1_024,
+            state_retention_secs: 90 * 86_400,
         }
     }
 }
@@ -136,6 +144,10 @@ pub enum RuntimeChoice {
     Adopt(tokio::runtime::Handle),
     Own,
 }
+
+/// The SDK's clock: unix seconds now. `None` in [`SdkConfig::clock`] is the device's clock; a test gives a fixed one (owner
+/// 2026-11-19, T13b ruling 1).
+pub type Clock = std::sync::Arc<dyn Fn() -> u64 + Send + Sync>;
 
 /// Everything `Sdk::open` takes.
 #[derive(Clone)]
@@ -149,6 +161,8 @@ pub struct SdkConfig {
     pub rp_id: Option<String>,
     pub runtime: RuntimeChoice,
     pub limits: Limits,
+    /// the clock an operation's `validUntil` is held to; `None`: the device's
+    pub clock: Option<Clock>,
 }
 
 impl std::fmt::Debug for SdkConfig {
@@ -159,6 +173,7 @@ impl std::fmt::Debug for SdkConfig {
             .field("rp_id", &self.rp_id)
             .field("runtime", &self.runtime)
             .field("limits", &self.limits)
+            .field("clock", &self.clock.is_some())
             .finish()
     }
 }

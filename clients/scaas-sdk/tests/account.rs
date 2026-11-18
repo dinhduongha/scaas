@@ -61,6 +61,7 @@ fn profile(urls: &[String]) -> ChainProfile {
         finality: Finality::Finalized,
         tx_gas_cap: None,
         gas: vec![],
+        max_valid_secs: None,
         tokens: vec![],
     }
 }
@@ -78,6 +79,7 @@ async fn open(store: Arc<dyn SecureStore>, urls: &[String]) -> Arc<Sdk> {
         rp_id: None,
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: Limits::default(),
+        clock: None,
     })
     .await
     .unwrap()
@@ -523,6 +525,7 @@ async fn marks_on_a_strict_majority_profile() {
         rp_id: None,
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: Limits::default(),
+        clock: None,
     })
     .await
     .unwrap();

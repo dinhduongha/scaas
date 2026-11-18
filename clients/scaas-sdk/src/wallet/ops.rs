@@ -549,7 +549,7 @@ fn payment_expect(
     entry_ref: [u8; 32],
 ) -> Result<crate::op::ExpectFn, SdkError> {
     let (chain_id, chain_uid) = ids(sdk, chain)?;
-    let max_window = sdk.limits.max_valid_secs;
+    let max_window = sdk.window(chain);
     Ok(Box::new(move |now, m: &Value| {
         let o = m.as_object().ok_or(SdkError::Argument)?;
         let s = |k: &str| {
@@ -609,7 +609,7 @@ fn transfer_expect(
     batch: String,
 ) -> Result<crate::op::ExpectFn, SdkError> {
     let (chain_id, chain_uid) = ids(sdk, chain)?;
-    let max_window = sdk.limits.max_valid_secs;
+    let max_window = sdk.window(chain);
     Ok(Box::new(move |now, m: &Value| {
         let o = m.as_object().ok_or(SdkError::Argument)?;
         let s = |k: &str| {
@@ -784,7 +784,7 @@ impl Wallet {
                 m.insert("validUntil".into(), json!(req.valid_until.to_string()));
                 let mut d = draft(req.chain.clone(), "UAPayeeFee", kind, token, m, req.signer);
                 let (chain_id, chain_uid) = ids(&sdk, &req.chain)?;
-                let (amount, fee, max_window) = (pm.value.clone(), req.fee.clone(), sdk.limits.max_valid_secs);
+                let (amount, fee, max_window) = (pm.value.clone(), req.fee.clone(), sdk.window(&req.chain));
                 let fee_recipient = addr20(&req.fee_recipient.to_ascii_lowercase())?;
                 d.expect = Some(Box::new(move |now, _| {
                     Ok(Expect::PayeeFee {
@@ -960,7 +960,7 @@ impl Wallet {
                 put_envelope(&mut m, &req.batch, &req.envelope);
                 if let Some(call) = decoded {
                     let (chain_id, chain_uid) = ids(&sdk, &req.chain)?;
-                    let max_window = sdk.limits.max_valid_secs;
+                    let max_window = sdk.window(&req.chain);
                     let mut d = draft(req.chain, "UAExecute", kind, wallet, m, req.signer);
                     d.expect = Some(Box::new(move |now, msg: &Value| {
                         let o = msg.as_object().ok_or(SdkError::Argument)?;

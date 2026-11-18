@@ -103,6 +103,7 @@ async fn sdk() -> (Arc<Sdk>, Arc<MemoryStore>, Arc<Fake>) {
         rp_id: Some("wallet.example".into()),
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: Limits::default(),
+        clock: None,
     })
     .await
     .unwrap();
@@ -435,6 +436,7 @@ async fn change_passphrase_one_secret_for_both() {
             max_concurrent_heavy: 1,
             ..Limits::default()
         },
+        clock: None,
     })
     .await
     .unwrap();
