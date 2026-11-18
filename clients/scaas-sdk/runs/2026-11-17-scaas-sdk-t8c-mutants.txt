@@ -1,0 +1,7 @@
+# t8c mutants at commit 19f0f9ce1 (name | outcome | test)
+swap two arguments of mtxUnshield (PQZ) | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_pqz
+a wrong selector on mtxPrepareAcc | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_pqz
+drop the unsigned pqzAuth of the debits | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_pqz
+drop the verdict of the debits | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_pqz
+a signed verdict left out of the job | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_pqz
+5 mutants, 5 killed, 0 survived, 0 not loaded

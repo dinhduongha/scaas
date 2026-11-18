@@ -393,3 +393,37 @@ fn entries_zether() {
     refusals("zether", "UAZetherTransfer");
     refusals("zether", "ZetherRollOver");
 }
+
+#[test]
+fn entries_pqz() {
+    table_both_ways("pqz");
+    assert_eq!(vector_pairs("pqz"), 26, "every pqz pair of typed_ops.json with an entry (PqzAuth has none)");
+    canon_unbound("pqz");
+    refusals("pqz", "UAPqzTransferSingle");
+    refusals("pqz", "PqzRollOver");
+    let v = ops();
+    let o = &v["ops"]["UAPqzUnshield"];
+    let d = &o["domains"]["pqz"];
+    let r = entry_rows().into_iter().find(|r| r.name == "UAPqzUnshield").unwrap();
+    let mut x = extra_of("UAPqzUnshield", r.plan, d);
+    let sig = sig_of("UASig", &d["signature"]);
+    let at = b20(&d["domain"]["verifyingContract"]);
+    // a debit takes its verdict: without it, refused (the node never fills a job's)
+    let none: Map<String, Value> = x.iter().filter(|(k, _)| *k != "pqzVerdict").map(|(k, v)| (k.clone(), v.clone())).collect();
+    assert_eq!(entry("UAPqzUnshield", "pqz", &at, &o["message"], &Value::Object(none), &sig), Err(Error::Argument));
+    // a signed verdict (an OFFCHAIN token): the calldata carries it, the job names the verifier's part, never the verdict
+    x["pqzVerdict"]["pqzVerdict"]["pqzVerifierEpoch"] = json!(2);
+    x["pqzVerdict"]["pqzVerdict"]["validUntil"] = json!("1800000000");
+    x["pqzVerdict"]["sig"]["signature"] = d["signature"].clone();
+    x.insert("pqz_fee".into(), json!("7"));
+    let b = entry("UAPqzUnshield", "pqz", &at, &o["message"], &Value::Object(x), &sig).unwrap();
+    let op = b.op.unwrap();
+    assert_eq!(norm(&op["args"]["pqz_verdict"]), norm(&json!({"pqzVerifierEpoch": 2, "validUntil": "1800000000",
+        "auth": {"keyData": "0x", "signature": d["signature"], "members": []}})));
+    assert_eq!(op["args"]["pqz_fee"], json!("7"));
+    assert!(op["args"].get("pqzVerdict").is_none());
+    assert_ne!(hex::encode(&b.calldata), d["calldata"].as_str().unwrap()[2..], "the signed verdict is in the calldata");
+    // PqzAuth: no entry of its own
+    let pa = &v["ops"]["PqzAuth"];
+    assert_eq!(entry("PqzAuth", "pqz", &at, &pa["message"], &json!({}), &Value::Null), Err(Error::Argument));
+}
