@@ -11,7 +11,10 @@ const MAX_MEMBERS: u32 = 16;
 
 /// The 32-byte big-endian word at `off` as a `u32`; a word above `u32::MAX` is refused.
 pub fn word(env: &Env, b: &Bytes, off: u32, e: Error) -> u32 {
-    let end = off.checked_add(32).filter(|e| *e <= b.len()).unwrap_or_else(|| panic_with_error!(env, e));
+    let end = off
+        .checked_add(32)
+        .filter(|e| *e <= b.len())
+        .unwrap_or_else(|| panic_with_error!(env, e));
     let mut w = [0u8; 32];
     b.slice(off..end).copy_into_slice(&mut w);
     if w[..28] != [0u8; 28] {
@@ -22,9 +25,14 @@ pub fn word(env: &Env, b: &Bytes, off: u32, e: Error) -> u32 {
 
 /// The dynamic `bytes` whose offset word sits at `head`, the offset relative to `base`; bounds-checked.
 pub fn bytes_at(env: &Env, b: &Bytes, base: u32, head: u32, e: Error) -> Bytes {
-    let o = base.checked_add(word(env, b, head, e)).unwrap_or_else(|| panic_with_error!(env, e));
+    let o = base
+        .checked_add(word(env, b, head, e))
+        .unwrap_or_else(|| panic_with_error!(env, e));
     let n = word(env, b, o, e);
-    let end = (o + 32).checked_add(n).filter(|e| *e <= b.len()).unwrap_or_else(|| panic_with_error!(env, e));
+    let end = (o + 32)
+        .checked_add(n)
+        .filter(|e| *e <= b.len())
+        .unwrap_or_else(|| panic_with_error!(env, e));
     b.slice(o + 32..end)
 }
 
@@ -83,7 +91,11 @@ pub fn decode_member_sigs(env: &Env, b: &Bytes) -> Vec<MemberSig> {
         if index > 0xFFFF || (index as i64) <= last {
             panic_with_error!(env, Error::Pop);
         }
-        out.push_back(MemberSig { index, key_data: bytes_at(env, b, t, t + 32, Error::Pop), sig: bytes_at(env, b, t, t + 64, Error::Pop) });
+        out.push_back(MemberSig {
+            index,
+            key_data: bytes_at(env, b, t, t + 32, Error::Pop),
+            sig: bytes_at(env, b, t, t + 64, Error::Pop),
+        });
     }
     if encode_member_sigs(env, &out) != *b {
         panic_with_error!(env, Error::Pop);

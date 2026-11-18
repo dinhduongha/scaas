@@ -5,8 +5,9 @@
 #![no_std]
 use soroban_sdk::{
     auth::{Context, CustomAccountInterface},
-    contract, contracterror, contractimpl, contracttype, crypto::Hash, panic_with_error, Bytes, BytesN, Env, Map,
-    Vec,
+    contract, contracterror, contractimpl, contracttype,
+    crypto::Hash,
+    panic_with_error, Bytes, BytesN, Env, Map, Vec,
 };
 
 const DAY: u32 = 17_280;
@@ -69,7 +70,10 @@ enum DataKey {
 }
 
 fn keys(env: &Env) -> Map<u32, Key> {
-    env.storage().instance().get(&DataKey::Keys).unwrap_or_else(|| Map::new(env))
+    env.storage()
+        .instance()
+        .get(&DataKey::Keys)
+        .unwrap_or_else(|| Map::new(env))
 }
 
 fn save(env: &Env, m: &Map<u32, Key>) {
@@ -133,7 +137,11 @@ fn has_field(hay: &[u8], field: &[u8], value: &[u8]) -> bool {
 }
 
 fn verify_webauthn(env: &Env, pk: &Passkey, payload: &BytesN<32>, sig: &WebAuthnSig) {
-    let challenge = if sig.proof.is_empty() { payload.clone() } else { merkle_root(env, payload, &sig.proof) };
+    let challenge = if sig.proof.is_empty() {
+        payload.clone()
+    } else {
+        merkle_root(env, payload, &sig.proof)
+    };
     let cd_len = sig.client_data_json.len() as usize;
     if cd_len > MAX_CLIENT_DATA || pk.origin.len() as usize > 200 {
         panic_with_error!(env, Error::BadClientData);
@@ -146,7 +154,8 @@ fn verify_webauthn(env: &Env, pk: &Passkey, payload: &BytesN<32>, sig: &WebAuthn
     let olen = pk.origin.len() as usize;
     pk.origin.copy_into_slice(&mut origin[..olen]);
     let cd = &cd[..cd_len];
-    if !has_field(cd, b"type", b"webauthn.get") || !has_field(cd, b"challenge", &b64)
+    if !has_field(cd, b"type", b"webauthn.get")
+        || !has_field(cd, b"challenge", &b64)
         || !has_field(cd, b"origin", &origin[..olen])
     {
         panic_with_error!(env, Error::BadClientData);
@@ -162,7 +171,8 @@ fn verify_webauthn(env: &Env, pk: &Passkey, payload: &BytesN<32>, sig: &WebAuthn
     let mut msg = ad.clone();
     msg.append(&env.crypto().sha256(&sig.client_data_json).into());
     let digest: Hash<32> = env.crypto().sha256(&msg);
-    env.crypto().secp256r1_verify(&pk.public_key, &digest, &sig.signature);
+    env.crypto()
+        .secp256r1_verify(&pk.public_key, &digest, &sig.signature);
 }
 
 #[contract]
@@ -212,7 +222,12 @@ impl CustomAccountInterface for SmartKeyAccount {
     type Error = Error;
 
     #[allow(non_snake_case)]
-    fn __check_auth(env: Env, signature_payload: Hash<32>, signature: Signature, _contexts: Vec<Context>) -> Result<(), Error> {
+    fn __check_auth(
+        env: Env,
+        signature_payload: Hash<32>,
+        signature: Signature,
+        _contexts: Vec<Context>,
+    ) -> Result<(), Error> {
         let m = keys(&env);
         let payload: BytesN<32> = signature_payload.into();
         match signature {

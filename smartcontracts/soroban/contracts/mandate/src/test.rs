@@ -7,7 +7,10 @@ use std::vec::Vec as StdVec;
 use super::*;
 use ed25519_dalek::Signer as _;
 use scaas_token::{Token, TokenClient};
-use scaas_ua_common::{h32, MemberSig, MsigMember, MsigStructure, UaAttrs, UaSig, PURPOSE_POP_V2, kem_record_hash, portable_record_hash, registration_digest};
+use scaas_ua_common::{
+    h32, kem_record_hash, portable_record_hash, registration_digest, MemberSig, MsigMember,
+    MsigStructure, UaAttrs, UaSig, PURPOSE_POP_V2,
+};
 use scaas_ua_registry::{UaRegistry, UaRegistryClient as RegClient};
 use serde_json::Value;
 use soroban_sdk::testutils::{Address as _, Ledger as _, MockAuth, MockAuthInvoke};
@@ -25,7 +28,10 @@ const ED_TAG: [u8; 32] = h32("65ca73d2d290503a4785188712dd0b971b5fbf3113c1dc8718
 
 fn hx(v: &Value) -> StdVec<u8> {
     let s = v.as_str().unwrap().trim_start_matches("0x");
-    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+        .collect()
 }
 
 fn n(env: &Env, a: [u8; 32]) -> BytesN<32> {
@@ -38,7 +44,15 @@ fn ops() -> Value {
 
 /// Mocks exactly `who`'s authorisation of `contract.f(args)` for the next call.
 fn allow(env: &Env, who: &Address, contract: &Address, f: &str, args: SVec<Val>) {
-    env.mock_auths(&[MockAuth { address: who, invoke: &MockAuthInvoke { contract, fn_name: f, args, sub_invokes: &[] } }]);
+    env.mock_auths(&[MockAuth {
+        address: who,
+        invoke: &MockAuthInvoke {
+            contract,
+            fn_name: f,
+            args,
+            sub_invokes: &[],
+        },
+    }]);
 }
 
 type Res = Result<(), soroban_sdk::Error>;
@@ -49,7 +63,9 @@ fn ce(e: Error) -> Res {
 }
 
 /// The contract error of a failed call.
-fn err<V: core::fmt::Debug, C: core::fmt::Debug>(r: Result<V, Result<soroban_sdk::Error, C>>) -> Error {
+fn err<V: core::fmt::Debug, C: core::fmt::Debug>(
+    r: Result<V, Result<soroban_sdk::Error, C>>,
+) -> Error {
     match r {
         Err(Ok(e)) => Error::try_from(e).unwrap_or_else(|_| panic!("host error {e:?}")),
         other => panic!("not a contract error: {other:?}"),
@@ -104,11 +120,29 @@ fn base() -> T {
         l.network_id = hx(&o["network"]["networkId"]).try_into().unwrap();
     });
     let id = |k: &str| Address::from_str(&env, o["contracts"][k].as_str().unwrap());
-    let reg = RegClient::new(&env, &env.register_at(&id("registry"), UaRegistry, (SVec::<Address>::new(&env),)));
+    let reg = RegClient::new(
+        &env,
+        &env.register_at(&id("registry"), UaRegistry, (SVec::<Address>::new(&env),)),
+    );
     let admin = Address::generate(&env);
     let s = |x: &str| String::from_str(&env, x);
-    let t = env.register_at(&id("token"), Token, (admin.clone(), 7u32, s("SCaaS"), s("BMB"), Some(reg.address.clone())));
-    T { t: TokenClient::new(&env, &t), reg, admin, env }
+    let t = env.register_at(
+        &id("token"),
+        Token,
+        (
+            admin.clone(),
+            7u32,
+            s("SCaaS"),
+            s("BMB"),
+            Some(reg.address.clone()),
+        ),
+    );
+    T {
+        t: TokenClient::new(&env, &t),
+        reg,
+        admin,
+        env,
+    }
 }
 
 impl T {
@@ -120,8 +154,20 @@ impl T {
         let z = BytesN::from_array(env, &[0u8; 32]);
         let rec = portable_record_hash(env, &id, ED25519, &z, &kem_record_hash(env, &id, 0, 0, &z));
         let reg_digest = registration_digest(env, &rec, &z).to_array();
-        let pop = sk.sign(&keccak(env, &[&MSG_TAG, &ED_TAG, &PURPOSE_POP_V2, &reg_digest])).to_bytes();
-        self.reg.register(&ED25519, &kd, &no_attrs(env), &Bytes::from_array(env, &pop), &Bytes::new(env), &None);
+        let pop = sk
+            .sign(&keccak(
+                env,
+                &[&MSG_TAG, &ED_TAG, &PURPOSE_POP_V2, &reg_digest],
+            ))
+            .to_bytes();
+        self.reg.register(
+            &ED25519,
+            &kd,
+            &no_attrs(env),
+            &Bytes::from_array(env, &pop),
+            &Bytes::new(env),
+            &None,
+        );
         Ua { sk, id }
     }
 
@@ -129,8 +175,21 @@ impl T {
     fn mandate(&self, owner: &Holder, funds: i128) -> MandateWalletClient<'static> {
         let env = &self.env;
         let at = Address::from_str(env, ops()["contracts"]["mandate"].as_str().unwrap());
-        let w = MandateWalletClient::new(env, &env.register_at(&at, MandateWallet, (owner.clone(), Some(self.reg.address.clone()))));
-        allow(env, &self.admin, &self.t.address, "mint", (&w.address, funds).into_val(env));
+        let w = MandateWalletClient::new(
+            env,
+            &env.register_at(
+                &at,
+                MandateWallet,
+                (owner.clone(), Some(self.reg.address.clone())),
+            ),
+        );
+        allow(
+            env,
+            &self.admin,
+            &self.t.address,
+            "mint",
+            (&w.address, funds).into_val(env),
+        );
         self.t.mint(&w.address, &funds);
         w
     }
@@ -154,7 +213,15 @@ impl T {
             }
             Who::Ua(u) => {
                 let d = scaas_ua_common::op_digest(env, &w.address, f, args.clone()).to_array();
-                UaSig::single(env, Bytes::from_array(env, &u.sk.sign(&keccak(env, &[&MSG_TAG, &ED_TAG, &PURPOSE_METATX, &d])).to_bytes()))
+                UaSig::single(
+                    env,
+                    Bytes::from_array(
+                        env,
+                        &u.sk
+                            .sign(&keccak(env, &[&MSG_TAG, &ED_TAG, &PURPOSE_METATX, &d]))
+                            .to_bytes(),
+                    ),
+                )
             }
         };
         let mut all = args;
@@ -164,7 +231,11 @@ impl T {
 
     fn invoke(&self, w: &MandateWalletClient, f: &str, all: SVec<Val>) -> Res {
         let env = &self.env;
-        match env.try_invoke_contract::<(), soroban_sdk::Error>(&w.address, &Symbol::new(env, f), all) {
+        match env.try_invoke_contract::<(), soroban_sdk::Error>(
+            &w.address,
+            &Symbol::new(env, f),
+            all,
+        ) {
             Ok(Ok(())) => Ok(()),
             Err(Ok(e)) => Err(e),
             other => panic!("{f}: {other:?}"),
@@ -172,37 +243,134 @@ impl T {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn set_mandate(&self, w: &MandateWalletClient, who: Who, delegate: &Holder, per_pay: i128, per_period: i128, period: u64, expiry: u64, lane: u8, nonce: u64) -> Res {
-        let a = (&self.t.address, delegate, per_pay, per_period, period, expiry, n(&self.env, [lane; 32]), nonce, NOW + 60, None::<Address>);
+    fn set_mandate(
+        &self,
+        w: &MandateWalletClient,
+        who: Who,
+        delegate: &Holder,
+        per_pay: i128,
+        per_period: i128,
+        period: u64,
+        expiry: u64,
+        lane: u8,
+        nonce: u64,
+    ) -> Res {
+        let a = (
+            &self.t.address,
+            delegate,
+            per_pay,
+            per_period,
+            period,
+            expiry,
+            n(&self.env, [lane; 32]),
+            nonce,
+            NOW + 60,
+            None::<Address>,
+        );
         self.call(w, who, "mtx_set_mandate", a.into_val(&self.env))
     }
 
-    fn set_payee(&self, w: &MandateWalletClient, who: Who, payee: &Holder, allowed: bool, lane: u8, nonce: u64) -> Res {
-        let a = (&self.t.address, payee, allowed, n(&self.env, [lane; 32]), nonce, NOW + 60, None::<Address>);
+    fn set_payee(
+        &self,
+        w: &MandateWalletClient,
+        who: Who,
+        payee: &Holder,
+        allowed: bool,
+        lane: u8,
+        nonce: u64,
+    ) -> Res {
+        let a = (
+            &self.t.address,
+            payee,
+            allowed,
+            n(&self.env, [lane; 32]),
+            nonce,
+            NOW + 60,
+            None::<Address>,
+        );
         self.call(w, who, "mtx_set_payee", a.into_val(&self.env))
     }
 
     /// At the current epoch.
     fn revoke(&self, w: &MandateWalletClient, who: Who, by: &Holder, lane: u8, nonce: u64) -> Res {
-        self.call(w, who, "mtx_revoke", self.revoke_args(w.epoch(&self.t.address), by, lane, nonce))
+        self.call(
+            w,
+            who,
+            "mtx_revoke",
+            self.revoke_args(w.epoch(&self.t.address), by, lane, nonce),
+        )
     }
 
     fn revoke_args(&self, epoch: u64, by: &Holder, lane: u8, nonce: u64) -> SVec<Val> {
-        (&self.t.address, by, epoch, n(&self.env, [lane; 32]), nonce, NOW + 60, None::<Address>).into_val(&self.env)
+        (
+            &self.t.address,
+            by,
+            epoch,
+            n(&self.env, [lane; 32]),
+            nonce,
+            NOW + 60,
+            None::<Address>,
+        )
+            .into_val(&self.env)
     }
 
-    fn withdraw(&self, w: &MandateWalletClient, who: Who, to: &Holder, amount: i128, lane: u8, nonce: u64) -> Res {
-        let a = (&self.t.address, to, amount, n(&self.env, [lane; 32]), nonce, NOW + 60, None::<Address>);
+    fn withdraw(
+        &self,
+        w: &MandateWalletClient,
+        who: Who,
+        to: &Holder,
+        amount: i128,
+        lane: u8,
+        nonce: u64,
+    ) -> Res {
+        let a = (
+            &self.t.address,
+            to,
+            amount,
+            n(&self.env, [lane; 32]),
+            nonce,
+            NOW + 60,
+            None::<Address>,
+        );
         self.call(w, who, "mtx_withdraw", a.into_val(&self.env))
     }
 
     /// At the current epoch.
-    fn pay(&self, w: &MandateWalletClient, who: Who, payee: &Holder, amount: i128, pay_ref: u8, vu: u64) -> Res {
-        self.call(w, who, "mtx_mandate_pay", self.pay_args(w.epoch(&self.t.address), payee, amount, pay_ref, vu))
+    fn pay(
+        &self,
+        w: &MandateWalletClient,
+        who: Who,
+        payee: &Holder,
+        amount: i128,
+        pay_ref: u8,
+        vu: u64,
+    ) -> Res {
+        self.call(
+            w,
+            who,
+            "mtx_mandate_pay",
+            self.pay_args(w.epoch(&self.t.address), payee, amount, pay_ref, vu),
+        )
     }
 
-    fn pay_args(&self, epoch: u64, payee: &Holder, amount: i128, pay_ref: u8, vu: u64) -> SVec<Val> {
-        (&self.t.address, payee, amount, n(&self.env, [pay_ref; 32]), epoch, vu, None::<Address>).into_val(&self.env)
+    fn pay_args(
+        &self,
+        epoch: u64,
+        payee: &Holder,
+        amount: i128,
+        pay_ref: u8,
+        vu: u64,
+    ) -> SVec<Val> {
+        (
+            &self.t.address,
+            payee,
+            amount,
+            n(&self.env, [pay_ref; 32]),
+            epoch,
+            vu,
+            None::<Address>,
+        )
+            .into_val(&self.env)
     }
 }
 
@@ -215,68 +383,181 @@ impl T {
 fn mandate_native_owner_unchanged_semantics() {
     let s = base();
     let e = &s.env;
-    let (owner, delegate, payee) = (Address::generate(e), Address::generate(e), Address::generate(e));
-    let (o, d, p) = (Holder::Addr(owner.clone()), Holder::Addr(delegate.clone()), Holder::Addr(payee.clone()));
+    let (owner, delegate, payee) = (
+        Address::generate(e),
+        Address::generate(e),
+        Address::generate(e),
+    );
+    let (o, d, p) = (
+        Holder::Addr(owner.clone()),
+        Holder::Addr(delegate.clone()),
+        Holder::Addr(payee.clone()),
+    );
     let w = s.mandate(&o, 1_000);
     assert_eq!(w.owner(), o);
-    s.set_mandate(&w, Who::Native(&owner), &d, 100, 150, 3600, NOW + 86_400, 1, 0).unwrap();
-    s.set_payee(&w, Who::Native(&owner), &p, true, 1, 0).unwrap();
+    s.set_mandate(
+        &w,
+        Who::Native(&owner),
+        &d,
+        100,
+        150,
+        3600,
+        NOW + 86_400,
+        1,
+        0,
+    )
+    .unwrap();
+    s.set_payee(&w, Who::Native(&owner), &p, true, 1, 0)
+        .unwrap();
     // Caps, ref once, payee list.
-    s.pay(&w, Who::Native(&delegate), &p, 100, 1, NOW + 60).unwrap();
-    assert_eq!(e.auths()[0].0, delegate, "the delegate authorises, not the owner");
+    s.pay(&w, Who::Native(&delegate), &p, 100, 1, NOW + 60)
+        .unwrap();
+    assert_eq!(
+        e.auths()[0].0,
+        delegate,
+        "the delegate authorises, not the owner"
+    );
     assert_eq!(s.t.balance(&payee), 100);
     assert!(s.t.ref_used(&w.address, &n(e, [1; 32])) && w.paid(&n(e, [1; 32])));
-    assert_eq!(s.pay(&w, Who::Native(&delegate), &p, 101, 2, NOW + 60), ce(Error::OverPaymentCap));
-    assert_eq!(s.pay(&w, Who::Native(&delegate), &p, 60, 2, NOW + 60), ce(Error::OverPeriodCap));
-    assert_eq!(s.pay(&w, Who::Native(&delegate), &p, 10, 1, NOW + 60), ce(Error::RefAlreadyPaid));
+    assert_eq!(
+        s.pay(&w, Who::Native(&delegate), &p, 101, 2, NOW + 60),
+        ce(Error::OverPaymentCap)
+    );
+    assert_eq!(
+        s.pay(&w, Who::Native(&delegate), &p, 60, 2, NOW + 60),
+        ce(Error::OverPeriodCap)
+    );
+    assert_eq!(
+        s.pay(&w, Who::Native(&delegate), &p, 10, 1, NOW + 60),
+        ce(Error::RefAlreadyPaid)
+    );
     let stranger = Address::generate(e);
-    assert_eq!(s.pay(&w, Who::Native(&delegate), &Holder::Addr(stranger.clone()), 10, 3, NOW + 60), ce(Error::PayeeNotAllowed));
+    assert_eq!(
+        s.pay(
+            &w,
+            Who::Native(&delegate),
+            &Holder::Addr(stranger.clone()),
+            10,
+            3,
+            NOW + 60
+        ),
+        ce(Error::PayeeNotAllowed)
+    );
     // Only the delegate pays: the owner's host auth is not the delegate's.
     assert!(s.pay(&w, Who::Native(&owner), &p, 10, 3, NOW + 60).is_err());
     // The period resets.
     e.ledger().with_mut(|l| l.timestamp = NOW + 3600);
-    s.pay(&w, Who::Native(&delegate), &p, 60, 2, NOW + 3700).unwrap();
+    s.pay(&w, Who::Native(&delegate), &p, 60, 2, NOW + 3700)
+        .unwrap();
     assert_eq!(s.t.balance(&payee), 160);
     // Signature expiry (`valid_until`) is checked by the mandate itself.
-    assert_eq!(s.pay(&w, Who::Native(&delegate), &p, 1, 4, NOW + 10), ce(Error::Expired));
+    assert_eq!(
+        s.pay(&w, Who::Native(&delegate), &p, 1, 4, NOW + 10),
+        ce(Error::Expired)
+    );
     e.ledger().with_mut(|l| l.timestamp = NOW + 86_401);
-    assert_eq!(s.pay(&w, Who::Native(&delegate), &p, 1, 5, NOW + 90_000), ce(Error::MandateExpired));
+    assert_eq!(
+        s.pay(&w, Who::Native(&delegate), &p, 1, 5, NOW + 90_000),
+        ce(Error::MandateExpired)
+    );
     e.ledger().with_mut(|l| l.timestamp = NOW);
 
     // SOR-D9: a native holder's `auth` must be empty; its lane is not consumed (same lane and nonce again).
-    let a = (&s.t.address, &p, false, n(e, [1; 32]), 0u64, NOW + 60, None::<Address>, UaSig::single(e, Bytes::from_array(e, &[1])));
-    allow(e, &owner, &w.address, "mtx_set_payee", a.clone().into_val(e));
-    assert_eq!(err(w.try_mtx_set_payee(a.0, a.1, &a.2, &a.3, &a.4, &a.5, &a.6, &a.7)), Error::BadAuth);
-    s.set_payee(&w, Who::Native(&owner), &p, false, 1, 0).unwrap();
-    assert_eq!(s.pay(&w, Who::Native(&delegate), &p, 1, 6, NOW + 60), ce(Error::PayeeNotAllowed));
+    let a = (
+        &s.t.address,
+        &p,
+        false,
+        n(e, [1; 32]),
+        0u64,
+        NOW + 60,
+        None::<Address>,
+        UaSig::single(e, Bytes::from_array(e, &[1])),
+    );
+    allow(
+        e,
+        &owner,
+        &w.address,
+        "mtx_set_payee",
+        a.clone().into_val(e),
+    );
+    assert_eq!(
+        err(w.try_mtx_set_payee(a.0, a.1, &a.2, &a.3, &a.4, &a.5, &a.6, &a.7)),
+        Error::BadAuth
+    );
+    s.set_payee(&w, Who::Native(&owner), &p, false, 1, 0)
+        .unwrap();
+    assert_eq!(
+        s.pay(&w, Who::Native(&delegate), &p, 1, 6, NOW + 60),
+        ce(Error::PayeeNotAllowed)
+    );
     assert_eq!(w.ua_nonce(&n(e, [0; 32]), &n(e, [1; 32])), 0);
 
     // Revoke: a stranger no, the delegate yes (kill switch), then the owner.
-    assert_eq!(s.revoke(&w, Who::Native(&stranger), &Holder::Addr(stranger.clone()), 1, 0), ce(Error::NotAllowed));
+    assert_eq!(
+        s.revoke(
+            &w,
+            Who::Native(&stranger),
+            &Holder::Addr(stranger.clone()),
+            1,
+            0
+        ),
+        ce(Error::NotAllowed)
+    );
     s.revoke(&w, Who::Native(&delegate), &d, 1, 0).unwrap();
     assert_eq!(w.mandate(&s.t.address), None);
-    assert_eq!(s.pay(&w, Who::Native(&delegate), &p, 1, 7, NOW + 60), ce(Error::NoMandate));
-    s.set_mandate(&w, Who::Native(&owner), &d, 10, 10, 60, NOW + 60, 1, 0).unwrap();
+    assert_eq!(
+        s.pay(&w, Who::Native(&delegate), &p, 1, 7, NOW + 60),
+        ce(Error::NoMandate)
+    );
+    s.set_mandate(&w, Who::Native(&owner), &d, 10, 10, 60, NOW + 60, 1, 0)
+        .unwrap();
     s.revoke(&w, Who::Native(&owner), &o, 1, 0).unwrap();
     assert_eq!(e.auths()[0].0, owner);
     // The delegate cannot set a mandate.
-    assert!(s.set_mandate(&w, Who::Native(&delegate), &d, 10, 10, 60, NOW + 60, 1, 0).is_err());
+    assert!(s
+        .set_mandate(&w, Who::Native(&delegate), &d, 10, 10, 60, NOW + 60, 1, 0)
+        .is_err());
 
     // Bad mandates.
-    assert_eq!(s.set_mandate(&w, Who::Native(&owner), &d, 10, 10, 0, NOW + 60, 1, 0), ce(Error::BadMandate));
-    assert_eq!(s.set_mandate(&w, Who::Native(&owner), &d, 11, 10, 60, NOW + 60, 1, 0), ce(Error::BadMandate));
+    assert_eq!(
+        s.set_mandate(&w, Who::Native(&owner), &d, 10, 10, 0, NOW + 60, 1, 0),
+        ce(Error::BadMandate)
+    );
+    assert_eq!(
+        s.set_mandate(&w, Who::Native(&owner), &d, 11, 10, 60, NOW + 60, 1, 0),
+        ce(Error::BadMandate)
+    );
 
     // Withdraw by the owner only.
     assert!(s.withdraw(&w, Who::Native(&delegate), &d, 1, 1, 0).is_err());
     s.withdraw(&w, Who::Native(&owner), &o, 400, 1, 0).unwrap();
-    assert_eq!((s.t.balance(&owner), s.t.balance(&w.address)), (400, 1_000 - 160 - 400));
+    assert_eq!(
+        (s.t.balance(&owner), s.t.balance(&w.address)),
+        (400, 1_000 - 160 - 400)
+    );
 
     // An unbounded period never overflows.
-    s.set_mandate(&w, Who::Native(&owner), &d, 100, 150, u64::MAX, NOW + 86_400, 1, 0).unwrap();
-    s.set_payee(&w, Who::Native(&owner), &p, true, 1, 0).unwrap();
-    s.pay(&w, Who::Native(&delegate), &p, 100, 8, NOW + 60).unwrap();
+    s.set_mandate(
+        &w,
+        Who::Native(&owner),
+        &d,
+        100,
+        150,
+        u64::MAX,
+        NOW + 86_400,
+        1,
+        0,
+    )
+    .unwrap();
+    s.set_payee(&w, Who::Native(&owner), &p, true, 1, 0)
+        .unwrap();
+    s.pay(&w, Who::Native(&delegate), &p, 100, 8, NOW + 60)
+        .unwrap();
     e.ledger().with_mut(|l| l.timestamp = NOW + 80_000);
-    assert_eq!(s.pay(&w, Who::Native(&delegate), &p, 60, 9, NOW + 80_060), ce(Error::OverPeriodCap));
+    assert_eq!(
+        s.pay(&w, Who::Native(&delegate), &p, 60, 9, NOW + 80_060),
+        ce(Error::OverPeriodCap)
+    );
 }
 
 // ---------- UA holders ----------
@@ -289,28 +570,73 @@ fn mandate_ua_owner_delegate_payee() {
     let (owner, delegate, payee) = (s.ua(1), s.ua(2), s.ua(3));
     let w = s.mandate(&owner.h(), 1_000);
     assert_eq!(w.owner(), owner.h());
-    s.set_mandate(&w, Who::Ua(&owner), &delegate.h(), 100, 150, 3600, NOW + 86_400, 1, 0).unwrap();
-    s.set_payee(&w, Who::Ua(&owner), &payee.h(), true, 1, 1).unwrap();
+    s.set_mandate(
+        &w,
+        Who::Ua(&owner),
+        &delegate.h(),
+        100,
+        150,
+        3600,
+        NOW + 86_400,
+        1,
+        0,
+    )
+    .unwrap();
+    s.set_payee(&w, Who::Ua(&owner), &payee.h(), true, 1, 1)
+        .unwrap();
     assert_eq!(w.ua_nonce(&owner.id, &n(e, [1; 32])), 2);
     assert_eq!(w.mandate(&s.t.address).unwrap().delegate, delegate.h());
     // Only the delegate's signature pays: the owner's is refused by the registry.
-    assert!(s.pay(&w, Who::Ua(&owner), &payee.h(), 100, 1, NOW + 60).is_err());
-    s.pay(&w, Who::Ua(&delegate), &payee.h(), 100, 1, NOW + 60).unwrap();
+    assert!(s
+        .pay(&w, Who::Ua(&owner), &payee.h(), 100, 1, NOW + 60)
+        .is_err());
+    s.pay(&w, Who::Ua(&delegate), &payee.h(), 100, 1, NOW + 60)
+        .unwrap();
     assert_eq!(s.t.ua_balance(&payee.id), 100);
     assert_eq!(s.t.balance(&w.address), 900);
     assert!(w.paid(&n(e, [1; 32])) && s.t.ref_used(&w.address, &n(e, [1; 32])));
     // Caps hold for a UA delegate too; a payee not on the list is refused.
-    assert_eq!(s.pay(&w, Who::Ua(&delegate), &payee.h(), 60, 2, NOW + 60), ce(Error::OverPeriodCap));
-    assert_eq!(s.pay(&w, Who::Ua(&delegate), &owner.h(), 10, 2, NOW + 60), ce(Error::PayeeNotAllowed));
+    assert_eq!(
+        s.pay(&w, Who::Ua(&delegate), &payee.h(), 60, 2, NOW + 60),
+        ce(Error::OverPeriodCap)
+    );
+    assert_eq!(
+        s.pay(&w, Who::Ua(&delegate), &owner.h(), 10, 2, NOW + 60),
+        ce(Error::PayeeNotAllowed)
+    );
     // A UA signer with a non-matching nonce or an expired signature is refused before its signature is checked.
-    assert_eq!(s.set_payee(&w, Who::Ua(&owner), &owner.h(), true, 1, 5), ce(Error::BadNonce));
-    let a = (&s.t.address, owner.h(), true, n(e, [1; 32]), 2u64, NOW - 1, None::<Address>);
-    assert_eq!(s.call(&w, Who::Ua(&owner), "mtx_set_payee", a.into_val(e)), ce(Error::Expired));
+    assert_eq!(
+        s.set_payee(&w, Who::Ua(&owner), &owner.h(), true, 1, 5),
+        ce(Error::BadNonce)
+    );
+    let a = (
+        &s.t.address,
+        owner.h(),
+        true,
+        n(e, [1; 32]),
+        2u64,
+        NOW - 1,
+        None::<Address>,
+    );
+    assert_eq!(
+        s.call(&w, Who::Ua(&owner), "mtx_set_payee", a.into_val(e)),
+        ce(Error::Expired)
+    );
     // The UA delegate revokes its own mandate (kill switch) on its own lane; a third UA cannot.
     let stranger = s.ua(4);
-    assert_eq!(s.revoke(&w, Who::Ua(&stranger), &stranger.h(), 1, 0), ce(Error::NotAllowed));
-    s.revoke(&w, Who::Ua(&delegate), &delegate.h(), 7, 0).unwrap();
-    assert_eq!((w.ua_nonce(&delegate.id, &n(e, [7; 32])), w.mandate(&s.t.address)), (1, None));
+    assert_eq!(
+        s.revoke(&w, Who::Ua(&stranger), &stranger.h(), 1, 0),
+        ce(Error::NotAllowed)
+    );
+    s.revoke(&w, Who::Ua(&delegate), &delegate.h(), 7, 0)
+        .unwrap();
+    assert_eq!(
+        (
+            w.ua_nonce(&delegate.id, &n(e, [7; 32])),
+            w.mandate(&s.t.address)
+        ),
+        (1, None)
+    );
     // The UA owner's lane is the mandate's own, not the token's.
     assert_eq!(s.t.ua_nonce(&owner.id, &n(e, [1; 32])), 0);
 }
@@ -323,26 +649,111 @@ fn mandate_ua_owner_lane_replay_refused() {
     let e = &s.env;
     let (owner, delegate) = (s.ua(1), s.ua(2));
     let w = s.mandate(&owner.h(), 1_000);
-    let a = (&s.t.address, delegate.h(), 100i128, 150i128, 3600u64, NOW + 86_400, n(e, [1; 32]), 0u64, NOW + 60, None::<Address>);
+    let a = (
+        &s.t.address,
+        delegate.h(),
+        100i128,
+        150i128,
+        3600u64,
+        NOW + 86_400,
+        n(e, [1; 32]),
+        0u64,
+        NOW + 60,
+        None::<Address>,
+    );
     let args: SVec<Val> = a.into_val(e);
-    s.call(&w, Who::Ua(&owner), "mtx_set_mandate", args.clone()).unwrap();
+    s.call(&w, Who::Ua(&owner), "mtx_set_mandate", args.clone())
+        .unwrap();
     // The same signed call again: refused, the mandate unchanged in between.
     s.revoke(&w, Who::Ua(&owner), &owner.h(), 2, 0).unwrap();
-    assert_eq!(s.call(&w, Who::Ua(&owner), "mtx_set_mandate", args), ce(Error::BadNonce));
+    assert_eq!(
+        s.call(&w, Who::Ua(&owner), "mtx_set_mandate", args),
+        ce(Error::BadNonce)
+    );
     assert_eq!(w.mandate(&s.t.address), None);
-    assert_eq!((w.ua_nonce(&owner.id, &n(e, [1; 32])), w.ua_nonce(&owner.id, &n(e, [2; 32]))), (1, 1));
+    assert_eq!(
+        (
+            w.ua_nonce(&owner.id, &n(e, [1; 32])),
+            w.ua_nonce(&owner.id, &n(e, [2; 32]))
+        ),
+        (1, 1)
+    );
     // A signature over different arguments (another nonce) does not authorise this call: the digest differs.
-    let d1 = scaas_ua_common::op_digest(e, &w.address, "mtx_revoke", (&s.t.address, owner.h(), 3u64, n(e, [2; 32]), 1u64, NOW + 61, None::<Address>).into_val(e));
-    let sig = owner.sk.sign(&keccak(e, &[&MSG_TAG, &ED_TAG, &PURPOSE_METATX, &d1.to_array()])).to_bytes();
-    s.set_mandate(&w, Who::Ua(&owner), &delegate.h(), 10, 10, 60, NOW + 60, 3, 0).unwrap();
-    assert!(w.try_mtx_revoke(&s.t.address, &owner.h(), &3, &n(e, [2; 32]), &1, &(NOW + 60), &None, &UaSig::single(e, Bytes::from_array(e, &sig))).is_err());
+    let d1 = scaas_ua_common::op_digest(
+        e,
+        &w.address,
+        "mtx_revoke",
+        (
+            &s.t.address,
+            owner.h(),
+            3u64,
+            n(e, [2; 32]),
+            1u64,
+            NOW + 61,
+            None::<Address>,
+        )
+            .into_val(e),
+    );
+    let sig = owner
+        .sk
+        .sign(&keccak(
+            e,
+            &[&MSG_TAG, &ED_TAG, &PURPOSE_METATX, &d1.to_array()],
+        ))
+        .to_bytes();
+    s.set_mandate(
+        &w,
+        Who::Ua(&owner),
+        &delegate.h(),
+        10,
+        10,
+        60,
+        NOW + 60,
+        3,
+        0,
+    )
+    .unwrap();
+    assert!(w
+        .try_mtx_revoke(
+            &s.t.address,
+            &owner.h(),
+            &3,
+            &n(e, [2; 32]),
+            &1,
+            &(NOW + 60),
+            &None,
+            &UaSig::single(e, Bytes::from_array(e, &sig))
+        )
+        .is_err());
     assert_eq!(w.ua_nonce(&owner.id, &n(e, [2; 32])), 1);
     // A bound relayer: without its authorisation refused, with it the entry runs.
     let r = Address::generate(e);
-    let ra = (&s.t.address, owner.h(), w.epoch(&s.t.address), n(e, [2; 32]), 1u64, NOW + 60, Some(r.clone()));
+    let ra = (
+        &s.t.address,
+        owner.h(),
+        w.epoch(&s.t.address),
+        n(e, [2; 32]),
+        1u64,
+        NOW + 60,
+        Some(r.clone()),
+    );
     let d = scaas_ua_common::op_digest(e, &w.address, "mtx_revoke", ra.clone().into_val(e));
-    let sig = UaSig::single(e, Bytes::from_array(e, &owner.sk.sign(&keccak(e, &[&MSG_TAG, &ED_TAG, &PURPOSE_METATX, &d.to_array()])).to_bytes()));
-    assert!(w.try_mtx_revoke(ra.0, &ra.1, &ra.2, &ra.3, &ra.4, &ra.5, &ra.6, &sig).is_err());
+    let sig = UaSig::single(
+        e,
+        Bytes::from_array(
+            e,
+            &owner
+                .sk
+                .sign(&keccak(
+                    e,
+                    &[&MSG_TAG, &ED_TAG, &PURPOSE_METATX, &d.to_array()],
+                ))
+                .to_bytes(),
+        ),
+    );
+    assert!(w
+        .try_mtx_revoke(ra.0, &ra.1, &ra.2, &ra.3, &ra.4, &ra.5, &ra.6, &sig)
+        .is_err());
     let mut full: SVec<Val> = ra.clone().into_val(e);
     full.push_back(sig.into_val(e));
     allow(e, &r, &w.address, "mtx_revoke", full);
@@ -359,21 +770,84 @@ fn mandate_pay_ref_once() {
     let (owner, delegate, payee) = (s.ua(1), s.ua(2), s.ua(3));
     let native = Address::generate(e);
     let w = s.mandate(&owner.h(), 1_000);
-    s.set_mandate(&w, Who::Ua(&owner), &delegate.h(), 100, 1_000, 3600, NOW + 86_400, 1, 0).unwrap();
-    s.set_payee(&w, Who::Ua(&owner), &payee.h(), true, 1, 1).unwrap();
-    s.set_payee(&w, Who::Ua(&owner), &Holder::Addr(native.clone()), true, 1, 2).unwrap();
+    s.set_mandate(
+        &w,
+        Who::Ua(&owner),
+        &delegate.h(),
+        100,
+        1_000,
+        3600,
+        NOW + 86_400,
+        1,
+        0,
+    )
+    .unwrap();
+    s.set_payee(&w, Who::Ua(&owner), &payee.h(), true, 1, 1)
+        .unwrap();
+    s.set_payee(
+        &w,
+        Who::Ua(&owner),
+        &Holder::Addr(native.clone()),
+        true,
+        1,
+        2,
+    )
+    .unwrap();
     assert!(!w.paid(&n(e, [9; 32])));
-    s.pay(&w, Who::Ua(&delegate), &payee.h(), 10, 9, NOW + 60).unwrap();
+    s.pay(&w, Who::Ua(&delegate), &payee.h(), 10, 9, NOW + 60)
+        .unwrap();
     assert!(w.paid(&n(e, [9; 32])));
     // The identical signed call again, another payee, another delegate: the ref is spent.
-    assert_eq!(s.pay(&w, Who::Ua(&delegate), &payee.h(), 10, 9, NOW + 60), ce(Error::RefAlreadyPaid));
-    assert_eq!(s.pay(&w, Who::Ua(&delegate), &Holder::Addr(native.clone()), 10, 9, NOW + 60), ce(Error::RefAlreadyPaid));
+    assert_eq!(
+        s.pay(&w, Who::Ua(&delegate), &payee.h(), 10, 9, NOW + 60),
+        ce(Error::RefAlreadyPaid)
+    );
+    assert_eq!(
+        s.pay(
+            &w,
+            Who::Ua(&delegate),
+            &Holder::Addr(native.clone()),
+            10,
+            9,
+            NOW + 60
+        ),
+        ce(Error::RefAlreadyPaid)
+    );
     let other = Address::generate(e);
-    s.set_mandate(&w, Who::Ua(&owner), &Holder::Addr(other.clone()), 100, 1_000, 3600, NOW + 86_400, 1, 3).unwrap();
-    assert_eq!(s.pay(&w, Who::Native(&other), &payee.h(), 10, 9, NOW + 60), ce(Error::RefAlreadyPaid));
+    s.set_mandate(
+        &w,
+        Who::Ua(&owner),
+        &Holder::Addr(other.clone()),
+        100,
+        1_000,
+        3600,
+        NOW + 86_400,
+        1,
+        3,
+    )
+    .unwrap();
+    assert_eq!(
+        s.pay(&w, Who::Native(&other), &payee.h(), 10, 9, NOW + 60),
+        ce(Error::RefAlreadyPaid)
+    );
     // A native payee through `token.pay` with a fresh ref.
-    s.pay(&w, Who::Native(&other), &Holder::Addr(native.clone()), 15, 10, NOW + 60).unwrap();
-    assert_eq!((s.t.ua_balance(&payee.id), s.t.balance(&native), s.t.balance(&w.address)), (10, 15, 975));
+    s.pay(
+        &w,
+        Who::Native(&other),
+        &Holder::Addr(native.clone()),
+        15,
+        10,
+        NOW + 60,
+    )
+    .unwrap();
+    assert_eq!(
+        (
+            s.t.ua_balance(&payee.id),
+            s.t.balance(&native),
+            s.t.balance(&w.address)
+        ),
+        (10, 15, 975)
+    );
 }
 
 /// A UA owner withdraws to a UA (`transfer_to_ua`) and to a native address; a native owner to a UA too.
@@ -383,21 +857,32 @@ fn mandate_withdraw_to_ua() {
     let e = &s.env;
     let (owner, other) = (s.ua(1), s.ua(2));
     let w = s.mandate(&owner.h(), 1_000);
-    s.withdraw(&w, Who::Ua(&owner), &owner.h(), 300, 1, 0).unwrap();
-    assert_eq!((s.t.ua_balance(&owner.id), s.t.balance(&w.address)), (300, 700));
+    s.withdraw(&w, Who::Ua(&owner), &owner.h(), 300, 1, 0)
+        .unwrap();
+    assert_eq!(
+        (s.t.ua_balance(&owner.id), s.t.balance(&w.address)),
+        (300, 700)
+    );
     let a = Address::generate(e);
-    s.withdraw(&w, Who::Ua(&owner), &Holder::Addr(a.clone()), 200, 1, 1).unwrap();
+    s.withdraw(&w, Who::Ua(&owner), &Holder::Addr(a.clone()), 200, 1, 1)
+        .unwrap();
     assert_eq!((s.t.balance(&a), s.t.balance(&w.address)), (200, 500));
     // Only the owner: another UA's signature is refused, nothing moves.
-    assert!(s.withdraw(&w, Who::Ua(&other), &other.h(), 1, 1, 0).is_err());
+    assert!(s
+        .withdraw(&w, Who::Ua(&other), &other.h(), 1, 1, 0)
+        .is_err());
     // A replay of the first withdrawal: its lane moved on.
-    assert_eq!(s.withdraw(&w, Who::Ua(&owner), &owner.h(), 300, 1, 0), ce(Error::BadNonce));
+    assert_eq!(
+        s.withdraw(&w, Who::Ua(&owner), &owner.h(), 300, 1, 0),
+        ce(Error::BadNonce)
+    );
     assert_eq!(s.t.balance(&w.address), 500);
 
     let s = base();
     let (u, native) = (s.ua(1), Address::generate(&s.env));
     let w = s.mandate(&Holder::Addr(native.clone()), 100);
-    s.withdraw(&w, Who::Native(&native), &u.h(), 40, 1, 0).unwrap();
+    s.withdraw(&w, Who::Native(&native), &u.h(), 40, 1, 0)
+        .unwrap();
     assert_eq!((s.t.ua_balance(&u.id), s.t.balance(&w.address)), (40, 60));
 }
 
@@ -412,7 +897,18 @@ fn mandate_instance_ttl_on_every_entry() {
     let o = Holder::Addr(owner.clone());
     let w = s.mandate(&o, 0);
     assert_eq!(w.registry(), Some(s.reg.address.clone()));
-    s.set_mandate(&w, Who::Native(&owner), &o, 10, 100, 3600, NOW + 86_400, 1, 0).unwrap();
+    s.set_mandate(
+        &w,
+        Who::Native(&owner),
+        &o,
+        10,
+        100,
+        3600,
+        NOW + 86_400,
+        1,
+        0,
+    )
+    .unwrap();
     e.ledger().with_mut(|l| l.sequence_number += 35 * DAY);
     let ttl = || e.as_contract(&w.address, || e.storage().instance().get_ttl());
     assert_eq!(ttl(), TTL_BUMP - 35 * DAY);
@@ -425,7 +921,10 @@ fn mandate_instance_ttl_on_every_entry() {
 #[should_panic(expected = "Error(Contract, #12)")]
 fn mandate_ua_owner_needs_registry() {
     let env = Env::default();
-    env.register(MandateWallet, (Holder::Ua(n(&env, [0x42; 32])), None::<Address>));
+    env.register(
+        MandateWallet,
+        (Holder::Ua(n(&env, [0x42; 32])), None::<Address>),
+    );
 }
 
 // ---------- epoch (CTR-ACC-07, owner 2026-10-30) ----------
@@ -441,16 +940,56 @@ fn mandate_epoch_increments() {
     let w = s.mandate(&o, 0);
     let ep = || w.epoch(&s.t.address);
     assert_eq!(ep(), 0);
-    s.set_mandate(&w, Who::Native(&owner), &delegate.h(), 10, 100, 3600, NOW + 86_400, 1, 0).unwrap();
+    s.set_mandate(
+        &w,
+        Who::Native(&owner),
+        &delegate.h(),
+        10,
+        100,
+        3600,
+        NOW + 86_400,
+        1,
+        0,
+    )
+    .unwrap();
     assert_eq!(ep(), 1);
-    s.set_mandate(&w, Who::Native(&owner), &delegate.h(), 10, 200, 3600, NOW + 86_400, 1, 0).unwrap();
+    s.set_mandate(
+        &w,
+        Who::Native(&owner),
+        &delegate.h(),
+        10,
+        200,
+        3600,
+        NOW + 86_400,
+        1,
+        0,
+    )
+    .unwrap();
     assert_eq!(ep(), 2);
     // The owner's revoke names any epoch.
-    s.call(&w, Who::Native(&owner), "mtx_revoke", s.revoke_args(99, &o, 1, 0)).unwrap();
+    s.call(
+        &w,
+        Who::Native(&owner),
+        "mtx_revoke",
+        s.revoke_args(99, &o, 1, 0),
+    )
+    .unwrap();
     assert_eq!((ep(), w.mandate(&s.t.address)), (3, None));
-    s.set_mandate(&w, Who::Native(&owner), &delegate.h(), 10, 100, 3600, NOW + 86_400, 1, 0).unwrap();
+    s.set_mandate(
+        &w,
+        Who::Native(&owner),
+        &delegate.h(),
+        10,
+        100,
+        3600,
+        NOW + 86_400,
+        1,
+        0,
+    )
+    .unwrap();
     assert_eq!(ep(), 4);
-    s.revoke(&w, Who::Ua(&delegate), &delegate.h(), 7, 0).unwrap();
+    s.revoke(&w, Who::Ua(&delegate), &delegate.h(), 7, 0)
+        .unwrap();
     assert_eq!((ep(), w.mandate(&s.t.address)), (5, None));
     // Another token's epoch is its own.
     assert_eq!(w.epoch(&Address::generate(e)), 0);
@@ -466,12 +1005,37 @@ fn mandate_revoke_stale_epoch_refused() {
     let native = Address::generate(e);
     let o = Holder::Addr(owner.clone());
     let w = s.mandate(&o, 0);
-    for (who, d) in [(Who::Ua(&ua), ua.h()), (Who::Native(&native), Holder::Addr(native.clone()))] {
-        s.set_mandate(&w, Who::Native(&owner), &d, 10, 100, 3600, NOW + 86_400, 1, 0).unwrap();
+    for (who, d) in [
+        (Who::Ua(&ua), ua.h()),
+        (Who::Native(&native), Holder::Addr(native.clone())),
+    ] {
+        s.set_mandate(
+            &w,
+            Who::Native(&owner),
+            &d,
+            10,
+            100,
+            3600,
+            NOW + 86_400,
+            1,
+            0,
+        )
+        .unwrap();
         let ep = w.epoch(&s.t.address);
         let stale = s.sign(&w, who, "mtx_revoke", s.revoke_args(ep, &d, 7, 0));
         s.revoke(&w, Who::Native(&owner), &o, 1, 0).unwrap();
-        s.set_mandate(&w, Who::Native(&owner), &d, 10, 100, 3600, NOW + 86_400, 1, 0).unwrap();
+        s.set_mandate(
+            &w,
+            Who::Native(&owner),
+            &d,
+            10,
+            100,
+            3600,
+            NOW + 86_400,
+            1,
+            0,
+        )
+        .unwrap();
         assert_eq!(w.epoch(&s.t.address), ep + 2);
         if let Holder::Addr(a) = &d {
             // The native delegate's host auth of exactly the stale call.
@@ -498,13 +1062,44 @@ fn mandate_pay_stale_epoch_refused() {
     let native = Address::generate(e);
     let o = Holder::Addr(owner.clone());
     let w = s.mandate(&o, 1_000);
-    s.set_payee(&w, Who::Native(&owner), &payee.h(), true, 1, 0).unwrap();
-    for (who, d, r) in [(Who::Ua(&ua), ua.h(), 1u8), (Who::Native(&native), Holder::Addr(native.clone()), 2)] {
-        s.set_mandate(&w, Who::Native(&owner), &d, 10, 100, 3600, NOW + 86_400, 1, 0).unwrap();
+    s.set_payee(&w, Who::Native(&owner), &payee.h(), true, 1, 0)
+        .unwrap();
+    for (who, d, r) in [
+        (Who::Ua(&ua), ua.h(), 1u8),
+        (Who::Native(&native), Holder::Addr(native.clone()), 2),
+    ] {
+        s.set_mandate(
+            &w,
+            Who::Native(&owner),
+            &d,
+            10,
+            100,
+            3600,
+            NOW + 86_400,
+            1,
+            0,
+        )
+        .unwrap();
         let ep = w.epoch(&s.t.address);
-        let stale = s.sign(&w, who, "mtx_mandate_pay", s.pay_args(ep, &payee.h(), 10, r, NOW + 60));
+        let stale = s.sign(
+            &w,
+            who,
+            "mtx_mandate_pay",
+            s.pay_args(ep, &payee.h(), 10, r, NOW + 60),
+        );
         s.revoke(&w, Who::Native(&owner), &o, 1, 0).unwrap();
-        s.set_mandate(&w, Who::Native(&owner), &d, 10, 100, 3600, NOW + 86_400, 1, 0).unwrap();
+        s.set_mandate(
+            &w,
+            Who::Native(&owner),
+            &d,
+            10,
+            100,
+            3600,
+            NOW + 86_400,
+            1,
+            0,
+        )
+        .unwrap();
         assert_eq!(w.epoch(&s.t.address), ep + 2);
         let who = || match &d {
             Holder::Ua(_) => Who::Ua(&ua),
@@ -513,9 +1108,20 @@ fn mandate_pay_stale_epoch_refused() {
         if let Holder::Addr(a) = &d {
             allow(e, a, &w.address, "mtx_mandate_pay", stale.clone());
         }
-        assert_eq!(s.invoke(&w, "mtx_mandate_pay", stale.clone()), ce(Error::StaleEpoch));
+        assert_eq!(
+            s.invoke(&w, "mtx_mandate_pay", stale.clone()),
+            ce(Error::StaleEpoch)
+        );
         // A future epoch: refused as well.
-        assert_eq!(s.call(&w, who(), "mtx_mandate_pay", s.pay_args(ep + 3, &payee.h(), 10, r, NOW + 60)), ce(Error::StaleEpoch));
+        assert_eq!(
+            s.call(
+                &w,
+                who(),
+                "mtx_mandate_pay",
+                s.pay_args(ep + 3, &payee.h(), 10, r, NOW + 60)
+            ),
+            ce(Error::StaleEpoch)
+        );
         if let Holder::Ua(_) = &d {
             // The stale UA signature with the epoch restamped to the current one: the digest differs.
             let mut restamped = stale.clone();
@@ -541,8 +1147,16 @@ fn register_row(env: &Env, reg: &RegClient, r: &Value) -> BytesN<32> {
 /// Every `memberships` row of a registration: the member's own `accept_membership`.
 fn accept_row(env: &Env, reg: &RegClient, r: &Value) {
     for m in r["memberships"].as_array().into_iter().flatten() {
-        let slot = MemberSig { index: m["index"].as_u64().unwrap() as u32, key_data: Bytes::new(env), sig: Bytes::from_slice(env, &hx(&m["sig"])) };
-        reg.accept_membership(&BytesN::from_array(env, &hx(&r["ua"]).try_into().unwrap()), &slot, &None);
+        let slot = MemberSig {
+            index: m["index"].as_u64().unwrap() as u32,
+            key_data: Bytes::new(env),
+            sig: Bytes::from_slice(env, &hx(&m["sig"])),
+        };
+        reg.accept_membership(
+            &BytesN::from_array(env, &hx(&r["ua"]).try_into().unwrap()),
+            &slot,
+            &None,
+        );
     }
 }
 
@@ -550,20 +1164,38 @@ fn accept_row(env: &Env, reg: &RegClient, r: &Value) {
 fn register_listed(env: &Env, reg: &RegClient, r: &Value) -> BytesN<32> {
     let (kind, none) = (r["kind"].as_u64().unwrap() as u32, Bytes::new(env));
     if kind != 0x0120 {
-        return reg.register(&kind, &Bytes::from_slice(env, &hx(&r["keyData"])), &UaAttrs::none(env), &Bytes::from_slice(env, &hx(&r["pop"])), &none, &None);
+        return reg.register(
+            &kind,
+            &Bytes::from_slice(env, &hx(&r["keyData"])),
+            &UaAttrs::none(env),
+            &Bytes::from_slice(env, &hx(&r["pop"])),
+            &none,
+            &None,
+        );
     }
     let mut members = SVec::new(env);
     for m in r["members"].as_array().unwrap() {
-        let (kind, weight) = (m["kind"].as_u64().unwrap() as u32, m["weight"].as_u64().unwrap() as u32);
-        members.push_back(MsigMember { kind, id: BytesN::from_array(env, &hx(&m["id"]).try_into().unwrap()), weight });
+        let (kind, weight) = (
+            m["kind"].as_u64().unwrap() as u32,
+            m["weight"].as_u64().unwrap() as u32,
+        );
+        members.push_back(MsigMember {
+            kind,
+            id: BytesN::from_array(env, &hx(&m["id"]).try_into().unwrap()),
+            weight,
+        });
     }
-    let s = MsigStructure { threshold: r["threshold"].as_u64().unwrap() as u32, members };
+    let s = MsigStructure {
+        threshold: r["threshold"].as_u64().unwrap() as u32,
+        members,
+    };
     reg.register_msig(&s, &UaAttrs::none(env), &SVec::new(env), &none, &None)
 }
 
 /// A vector's `authXdr`: the `UaSig` the entry takes.
 fn auth_of(env: &Env, p: &Value) -> UaSig {
-    <UaSig as soroban_sdk::xdr::FromXdr>::from_xdr(env, &Bytes::from_slice(env, &hx(&p["authXdr"]))).unwrap()
+    <UaSig as soroban_sdk::xdr::FromXdr>::from_xdr(env, &Bytes::from_slice(env, &hx(&p["authXdr"])))
+        .unwrap()
 }
 
 /// The `Address` inside a `Holder::Addr` arg.
@@ -596,7 +1228,17 @@ fn ua_ops_vectors_mandate_rows() {
             continue;
         }
         let f = e["fn"].as_str().unwrap();
-        assert!(["mtx_set_mandate", "mtx_set_payee", "mtx_withdraw", "mtx_revoke", "mtx_mandate_pay"].contains(&f), "{f}");
+        assert!(
+            [
+                "mtx_set_mandate",
+                "mtx_set_payee",
+                "mtx_withdraw",
+                "mtx_revoke",
+                "mtx_mandate_pay"
+            ]
+            .contains(&f),
+            "{f}"
+        );
         for p in e["perKind"].as_array().unwrap() {
             let s = base();
             let env = &s.env;
@@ -616,16 +1258,39 @@ fn ua_ops_vectors_mandate_rows() {
                 s.mandate(&ua, 1_000_000)
             } else {
                 let w = s.mandate(&Holder::Addr(native.clone()), 1_000_000);
-                s.set_mandate(&w, Who::Native(&native), &ua, 1_000_000, 1_000_000, 3600, NOW + 86_400, 1, 0).unwrap();
+                s.set_mandate(
+                    &w,
+                    Who::Native(&native),
+                    &ua,
+                    1_000_000,
+                    1_000_000,
+                    3600,
+                    NOW + 86_400,
+                    1,
+                    0,
+                )
+                .unwrap();
                 let payee = Holder::try_from_val(env, &args.get(1).unwrap()).unwrap();
-                s.set_payee(&w, Who::Native(&native), &payee, true, 1, 0).unwrap();
+                s.set_payee(&w, Who::Native(&native), &payee, true, 1, 0)
+                    .unwrap();
                 w
             };
-            assert_eq!(scaas_ua_common::op_digest(env, &w.address, f, args.clone()).to_array().to_vec(), hx(&p["digest"]), "{f} {}", p["kind"]);
+            assert_eq!(
+                scaas_ua_common::op_digest(env, &w.address, f, args.clone())
+                    .to_array()
+                    .to_vec(),
+                hx(&p["digest"]),
+                "{f} {}",
+                p["kind"]
+            );
             digests += 1;
             let mut all = args.clone();
             all.push_back(auth_of(env, p).into_val(env));
-            let r = env.try_invoke_contract::<(), soroban_sdk::Error>(&w.address, &Symbol::new(env, f), all);
+            let r = env.try_invoke_contract::<(), soroban_sdk::Error>(
+                &w.address,
+                &Symbol::new(env, f),
+                all,
+            );
             assert!(r.is_ok(), "{f} {}: {r:?}", p["kind"]);
             calls += 1;
             if f == "mtx_set_mandate" {
@@ -633,9 +1298,13 @@ fn ua_ops_vectors_mandate_rows() {
                 assert_eq!(w.mandate(&s.t.address).unwrap().delegate, delegate);
             } else if f == "mtx_set_payee" {
                 let payee = Holder::try_from_val(env, &args.get(1).unwrap()).unwrap();
-                assert!(env.as_contract(&w.address, || env.storage().persistent().has(&Key::Payee(s.t.address.clone(), payee))));
+                assert!(env.as_contract(&w.address, || env
+                    .storage()
+                    .persistent()
+                    .has(&Key::Payee(s.t.address.clone(), payee))));
             } else if f == "mtx_withdraw" {
-                let to = Address::try_from_val(env, &sc_holder_addr(env, &args.get(1).unwrap())).unwrap();
+                let to = Address::try_from_val(env, &sc_holder_addr(env, &args.get(1).unwrap()))
+                    .unwrap();
                 assert_eq!(s.t.balance(&to), 700);
                 assert_eq!(s.t.balance(&w.address), 1_000_000 - 700);
             } else if f == "mtx_revoke" {
@@ -644,7 +1313,11 @@ fn ua_ops_vectors_mandate_rows() {
             } else {
                 let pay_ref = BytesN::<32>::try_from_val(env, &args.get(3).unwrap()).unwrap();
                 assert!(w.paid(&pay_ref));
-                assert_eq!(u64::try_from_val(env, &args.get(4).unwrap()).unwrap(), w.epoch(&s.t.address), "the row's epoch");
+                assert_eq!(
+                    u64::try_from_val(env, &args.get(4).unwrap()).unwrap(),
+                    w.epoch(&s.t.address),
+                    "the row's epoch"
+                );
             }
         }
     }
@@ -655,19 +1328,41 @@ fn ua_ops_vectors_mandate_rows() {
 #[test]
 fn ua_ops_msig_mandate_owner_refused_until_accepted() {
     let o = ops();
-    let (mandate, regs) = (&o["contracts"]["mandate"], o["registrations"].as_array().unwrap());
-    let e = o["entries"].as_array().unwrap().iter().find(|e| e["contract"] == *mandate && e["fn"] == "mtx_set_mandate").unwrap();
-    let p = e["perKind"].as_array().unwrap().iter().find(|p| p["kind"] == "msig").unwrap();
+    let (mandate, regs) = (
+        &o["contracts"]["mandate"],
+        o["registrations"].as_array().unwrap(),
+    );
+    let e = o["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["contract"] == *mandate && e["fn"] == "mtx_set_mandate")
+        .unwrap();
+    let p = e["perKind"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["kind"] == "msig")
+        .unwrap();
     let ms = regs.iter().find(|r| r["kind"] == 0x0120).unwrap();
     let s = base();
     let env = &s.env;
     for r in regs {
         register_listed(env, &s.reg, r);
     }
-    let w = s.mandate(&Holder::Ua(BytesN::from_array(env, &hx(&ms["ua"]).try_into().unwrap())), 0);
+    let w = s.mandate(
+        &Holder::Ua(BytesN::from_array(env, &hx(&ms["ua"]).try_into().unwrap())),
+        0,
+    );
     let mut all = arg_vals(env, p);
     all.push_back(auth_of(env, p).into_val(env));
-    let set = |all: &soroban_sdk::Vec<soroban_sdk::Val>| env.try_invoke_contract::<(), soroban_sdk::Error>(&w.address, &Symbol::new(env, "mtx_set_mandate"), all.clone());
+    let set = |all: &soroban_sdk::Vec<soroban_sdk::Val>| {
+        env.try_invoke_contract::<(), soroban_sdk::Error>(
+            &w.address,
+            &Symbol::new(env, "mtx_set_mandate"),
+            all.clone(),
+        )
+    };
     assert!(set(&all).is_err());
     assert!(w.mandate(&s.t.address).is_none());
     accept_row(env, &s.reg, ms);

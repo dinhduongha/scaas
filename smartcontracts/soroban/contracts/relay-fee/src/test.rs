@@ -4,16 +4,20 @@ use super::*;
 use ed25519_dalek::Signer as _;
 use scaas_mandate::{Holder, MandateWallet, MandateWalletClient};
 use scaas_relay_executor::{RelayExecutor, RelayExecutorClient};
-use scaas_ua_common::{h32, MemberSig, op_digest, MsigMember, MsigStructure, UaAttrs, UaSig, PURPOSE_METATX, PURPOSE_METATX_CANCEL, PURPOSE_POP_V2, kem_record_hash, portable_record_hash, registration_digest};
-use scaas_ua_registry::{UaRegistry, UaRegistryClient as RegClient};
 use scaas_token::{Token, TokenClient};
+use scaas_ua_common::{
+    h32, kem_record_hash, op_digest, portable_record_hash, registration_digest, MemberSig,
+    MsigMember, MsigStructure, UaAttrs, UaSig, PURPOSE_METATX, PURPOSE_METATX_CANCEL,
+    PURPOSE_POP_V2,
+};
+use scaas_ua_registry::{UaRegistry, UaRegistryClient as RegClient};
 use sha2::{Digest, Sha256};
 use soroban_sdk::testutils::{Address as _, Events as _, Ledger, MockAuth, MockAuthInvoke};
 use soroban_sdk::xdr::{
-    self, AccountId, HashIdPreimage, HashIdPreimageSorobanAuthorization, InvokeContractArgs, Limits, PublicKey,
-    ScAddress, ScErrorCode, ScErrorType, ScMap, ScMapEntry, ScSymbol, ScVal, SorobanAddressCredentials,
-    ReadXdr as _, SorobanAuthorizationEntry, SorobanAuthorizedFunction, SorobanAuthorizedInvocation, SorobanCredentials,
-    Uint256, WriteXdr,
+    self, AccountId, HashIdPreimage, HashIdPreimageSorobanAuthorization, InvokeContractArgs,
+    Limits, PublicKey, ReadXdr as _, ScAddress, ScErrorCode, ScErrorType, ScMap, ScMapEntry,
+    ScSymbol, ScVal, SorobanAddressCredentials, SorobanAuthorizationEntry,
+    SorobanAuthorizedFunction, SorobanAuthorizedInvocation, SorobanCredentials, Uint256, WriteXdr,
 };
 use soroban_sdk::{IntoVal, String, Symbol, TryFromVal, Val};
 
@@ -66,37 +70,82 @@ fn setup_with(env: Env) -> T {
     let tid = env.register_at(
         &Address::from_str(&env, TOKEN),
         Token,
-        (admin, 7u32, String::from_str(&env, "SCaaS"), String::from_str(&env, "BMB"), None::<Address>),
+        (
+            admin,
+            7u32,
+            String::from_str(&env, "SCaaS"),
+            String::from_str(&env, "BMB"),
+            None::<Address>,
+        ),
     );
     let token = TokenClient::new(&env, &tid);
     let owner = Address::generate(&env);
-    let wid = env.register_at(&Address::from_str(&env, WALLET), MandateWallet, (Holder::Addr(owner.clone()), None::<Address>));
+    let wid = env.register_at(
+        &Address::from_str(&env, WALLET),
+        MandateWallet,
+        (Holder::Addr(owner.clone()), None::<Address>),
+    );
     let wallet = MandateWalletClient::new(&env, &wid);
     // The mandate is the target's state: the fee-less call revokes it.
     set_mandate(&env, &wallet, &tid);
     let router = deploy_router(&env, &Address::generate(&env));
     token.mint(&owner, &100);
-    T { env: env.clone(), token, wallet, router, owner, relayer: Address::generate(&env) }
+    T {
+        env: env.clone(),
+        token,
+        wallet,
+        router,
+        owner,
+        relayer: Address::generate(&env),
+    }
 }
 
 type Res = Result<(), soroban_sdk::Error>;
 
 /// A native owner's `mtx_*` tail: lane 0x01 x 32, nonce 0 (not consumed for a native holder), no relayer, empty auth.
 fn tail(env: &Env) -> (BytesN<32>, u64, u64, Option<Address>, UaSig) {
-    (BytesN::from_array(env, &[1; 32]), 0, NOW + 60, None, UaSig::none(env))
+    (
+        BytesN::from_array(env, &[1; 32]),
+        0,
+        NOW + 60,
+        None,
+        UaSig::none(env),
+    )
 }
 
 /// `wallet.mtx_revoke(token, by, epoch 0, tail)` arguments (`by` is the owner: its epoch is not checked).
 fn revoke_args(env: &Env, token: &Address, by: &Address) -> soroban_sdk::Vec<Val> {
     let (lane, nonce, vu, relayer, auth) = tail(env);
-    (token.clone(), Holder::Addr(by.clone()), 0u64, lane, nonce, vu, relayer, auth).into_val(env)
+    (
+        token.clone(),
+        Holder::Addr(by.clone()),
+        0u64,
+        lane,
+        nonce,
+        vu,
+        relayer,
+        auth,
+    )
+        .into_val(env)
 }
 
 /// A native owner sets a mandate for a fresh native delegate (host auth mocked by the caller).
 fn set_mandate(env: &Env, wallet: &MandateWalletClient, token: &Address) {
     let (lane, nonce, vu, relayer, auth) = tail(env);
     let d = Holder::Addr(Address::generate(env));
-    wallet.mtx_set_mandate(token, &d, &100, &150, &3600, &(NOW + 86_400), &lane, &nonce, &vu, &relayer, &auth);
+    wallet.mtx_set_mandate(
+        token,
+        &d,
+        &100,
+        &150,
+        &3600,
+        &(NOW + 86_400),
+        &lane,
+        &nonce,
+        &vu,
+        &relayer,
+        &auth,
+    );
 }
 
 impl T {
@@ -110,33 +159,123 @@ impl T {
         BytesN::from_array(&self.env, &[n; 32])
     }
     fn rf(&self, n: u8) -> BytesN<32> {
-        self.router.relay_ref(&self.wallet.address, &self.func(), &self.args(), &self.salt(n))
+        self.router.relay_ref(
+            &self.wallet.address,
+            &self.func(),
+            &self.args(),
+            &self.salt(n),
+        )
     }
     fn relay(&self, to: &Address, amount: i128) -> Res {
-        self.relay_call(&self.wallet.address, &self.func(), &self.args(), 1, to, amount)
+        self.relay_call(
+            &self.wallet.address,
+            &self.func(),
+            &self.args(),
+            1,
+            to,
+            amount,
+        )
     }
     /// `router.relay(payer, target, f, args, salt n, token, to, amount, NOW + 60, relayer)` with exactly the payer's
     /// entry (rooted at this `relay`, `token.pay` its sub-invocation), the relayer's, and `extra` (no `mock_all_auths`).
-    fn relay_as(&self, payer: &Address, target: &Address, f: &str, args: &soroban_sdk::Vec<Val>, n: u8, to: &Address, amount: i128, extra: &[MockAuth]) -> Res {
+    fn relay_as(
+        &self,
+        payer: &Address,
+        target: &Address,
+        f: &str,
+        args: &soroban_sdk::Vec<Val>,
+        n: u8,
+        to: &Address,
+        amount: i128,
+        extra: &[MockAuth],
+    ) -> Res {
         let (e, tk, vu, salt) = (&self.env, &self.token.address, NOW + 60, self.salt(n));
         let f = Symbol::new(e, f);
         let rf = self.router.relay_ref(target, &f, args, &salt);
-        let signed: soroban_sdk::Vec<Val> = (target, &f, args, &salt, tk, to, amount, vu).into_val(e);
-        let all: soroban_sdk::Vec<Val> = (payer, target, &f, args, &salt, tk, to, amount, vu, &self.relayer).into_val(e);
-        let pay = [MockAuthInvoke { contract: tk, fn_name: "pay", args: (payer, to, amount, &rf, vu).into_val(e), sub_invokes: &[] }];
-        let root = MockAuthInvoke { contract: &self.router.address, fn_name: "relay", args: signed, sub_invokes: &pay };
-        let rroot = MockAuthInvoke { contract: &self.router.address, fn_name: "relay", args: all, sub_invokes: &[] };
-        let mut auths = std::vec![MockAuth { address: payer, invoke: &root }, MockAuth { address: &self.relayer, invoke: &rroot }];
-        auths.extend(extra.iter().map(|a| MockAuth { address: a.address, invoke: a.invoke }));
+        let signed: soroban_sdk::Vec<Val> =
+            (target, &f, args, &salt, tk, to, amount, vu).into_val(e);
+        let all: soroban_sdk::Vec<Val> = (
+            payer,
+            target,
+            &f,
+            args,
+            &salt,
+            tk,
+            to,
+            amount,
+            vu,
+            &self.relayer,
+        )
+            .into_val(e);
+        let pay = [MockAuthInvoke {
+            contract: tk,
+            fn_name: "pay",
+            args: (payer, to, amount, &rf, vu).into_val(e),
+            sub_invokes: &[],
+        }];
+        let root = MockAuthInvoke {
+            contract: &self.router.address,
+            fn_name: "relay",
+            args: signed,
+            sub_invokes: &pay,
+        };
+        let rroot = MockAuthInvoke {
+            contract: &self.router.address,
+            fn_name: "relay",
+            args: all,
+            sub_invokes: &[],
+        };
+        let mut auths = std::vec![
+            MockAuth {
+                address: payer,
+                invoke: &root
+            },
+            MockAuth {
+                address: &self.relayer,
+                invoke: &rroot
+            }
+        ];
+        auths.extend(extra.iter().map(|a| MockAuth {
+            address: a.address,
+            invoke: a.invoke,
+        }));
         e.mock_auths(&auths);
-        match self.router.try_relay(payer, target, &f, args, &salt, tk, to, &amount, &vu, &self.relayer) {
+        match self.router.try_relay(
+            payer,
+            target,
+            &f,
+            args,
+            &salt,
+            tk,
+            to,
+            &amount,
+            &vu,
+            &self.relayer,
+        ) {
             Ok(r) => Ok(r.unwrap()),
             Err(e) => Err(e.unwrap()),
         }
     }
-    fn relay_call(&self, target: &Address, f: &Symbol, a: &soroban_sdk::Vec<Val>, salt: u8, to: &Address, amount: i128) -> Res {
+    fn relay_call(
+        &self,
+        target: &Address,
+        f: &Symbol,
+        a: &soroban_sdk::Vec<Val>,
+        salt: u8,
+        to: &Address,
+        amount: i128,
+    ) -> Res {
         match self.router.try_relay(
-            &self.owner, target, f, a, &self.salt(salt), &self.token.address, to, &amount, &(NOW + 60), &self.relayer,
+            &self.owner,
+            target,
+            f,
+            a,
+            &self.salt(salt),
+            &self.token.address,
+            to,
+            &amount,
+            &(NOW + 60),
+            &self.relayer,
         ) {
             Ok(r) => Ok(r.unwrap()),
             Err(e) => Err(e.unwrap()),
@@ -172,7 +311,9 @@ fn event_data(all: &soroban_sdk::testutils::ContractEvents, name: &str) -> std::
         .collect();
     assert_eq!(ev.len(), 1);
     let xdr::ContractEventBody::V0(b) = &ev[0].body;
-    let ScVal::Vec(Some(d)) = &b.data else { panic!() };
+    let ScVal::Vec(Some(d)) = &b.data else {
+        panic!()
+    };
     d.to_vec()
 }
 
@@ -182,8 +323,18 @@ fn relay_open_mode_pays_relayer() {
     let rf = t.rf(1);
     t.relay(&t.router.address, 7).unwrap();
     let all = t.env.events().all();
-    assert!(t.wallet.mandate(&t.token.address).is_none(), "the target call ran");
-    assert_eq!((t.token.balance(&t.owner), t.token.balance(&t.relayer), t.token.balance(&t.router.address)), (93, 7, 0));
+    assert!(
+        t.wallet.mandate(&t.token.address).is_none(),
+        "the target call ran"
+    );
+    assert_eq!(
+        (
+            t.token.balance(&t.owner),
+            t.token.balance(&t.relayer),
+            t.token.balance(&t.router.address)
+        ),
+        (93, 7, 0)
+    );
     assert_eq!(t.token.balance(&t.router.executor()), 0);
     assert!(t.token.ref_used(&t.owner, &rf));
     // RelayFeePaid names the relayer, not the router, as payee (SOR-D11: both as a `Holder`).
@@ -197,7 +348,14 @@ fn relay_bound_payee() {
     let t = setup();
     let treasury = Address::generate(&t.env);
     t.relay(&treasury, 7).unwrap();
-    assert_eq!((t.token.balance(&t.owner), t.token.balance(&treasury), t.token.balance(&t.relayer)), (93, 7, 0));
+    assert_eq!(
+        (
+            t.token.balance(&t.owner),
+            t.token.balance(&treasury),
+            t.token.balance(&t.relayer)
+        ),
+        (93, 7, 0)
+    );
     assert!(t.wallet.mandate(&t.token.address).is_none());
 }
 
@@ -208,17 +366,35 @@ fn relay_same_call_with_different_salts_and_replay() {
     let t = setup();
     let payee = Address::generate(&t.env);
     let (lane, nonce, vu, relayer, auth) = tail(&t.env);
-    let a = (t.token.address.clone(), Holder::Addr(payee), true, lane, nonce, vu, relayer, auth).into_val(&t.env);
+    let a = (
+        t.token.address.clone(),
+        Holder::Addr(payee),
+        true,
+        lane,
+        nonce,
+        vu,
+        relayer,
+        auth,
+    )
+        .into_val(&t.env);
     let f = Symbol::new(&t.env, "mtx_set_payee");
-    t.relay_call(&t.wallet.address, &f, &a, 1, &t.router.address, 5).unwrap();
-    t.relay_call(&t.wallet.address, &f, &a, 2, &t.router.address, 5).unwrap();
-    assert_eq!((t.token.balance(&t.owner), t.token.balance(&t.relayer)), (90, 10));
+    t.relay_call(&t.wallet.address, &f, &a, 1, &t.router.address, 5)
+        .unwrap();
+    t.relay_call(&t.wallet.address, &f, &a, 2, &t.router.address, 5)
+        .unwrap();
+    assert_eq!(
+        (t.token.balance(&t.owner), t.token.balance(&t.relayer)),
+        (90, 10)
+    );
     assert_ne!(
         t.router.relay_ref(&t.wallet.address, &f, &a, &t.salt(1)),
         t.router.relay_ref(&t.wallet.address, &f, &a, &t.salt(2))
     );
     // Same call, same salt: the (payer, ref) is spent, nothing moves.
-    assert_eq!(t.relay_call(&t.wallet.address, &f, &a, 1, &t.router.address, 5), err(scaas_token::Error::RefUsed));
+    assert_eq!(
+        t.relay_call(&t.wallet.address, &f, &a, 1, &t.router.address, 5),
+        err(scaas_token::Error::RefUsed)
+    );
     assert_eq!(t.token.balance(&t.relayer), 10);
 }
 
@@ -239,13 +415,29 @@ fn relay_target_failure_reverts_all() {
     // The call fails (a revoke by a stranger): the payment must not happen.
     let stranger = Address::generate(&t.env);
     let bad = revoke_args(&t.env, &t.token.address, &stranger);
-    assert_eq!(t.relay_call(&t.wallet.address, &t.func(), &bad, 1, &t.router.address, 7), err(scaas_mandate::Error::NotAllowed));
-    assert_eq!((t.token.balance(&t.owner), t.token.balance(&t.relayer)), (100, 0));
-    assert!(!t.token.ref_used(&t.owner, &t.router.relay_ref(&t.wallet.address, &t.func(), &bad, &t.salt(1))));
+    assert_eq!(
+        t.relay_call(&t.wallet.address, &t.func(), &bad, 1, &t.router.address, 7),
+        err(scaas_mandate::Error::NotAllowed)
+    );
+    assert_eq!(
+        (t.token.balance(&t.owner), t.token.balance(&t.relayer)),
+        (100, 0)
+    );
+    assert!(!t.token.ref_used(
+        &t.owner,
+        &t.router
+            .relay_ref(&t.wallet.address, &t.func(), &bad, &t.salt(1))
+    ));
     assert!(t.wallet.mandate(&t.token.address).is_some());
     // The payment fails (too little balance) on a fresh mandate: the call is rolled back.
-    assert_eq!(t.relay(&t.router.address, 1_000), err(scaas_token::Error::InsufficientBalance));
-    assert!(t.wallet.mandate(&t.token.address).is_some(), "the target call is rolled back with the payment");
+    assert_eq!(
+        t.relay(&t.router.address, 1_000),
+        err(scaas_token::Error::InsufficientBalance)
+    );
+    assert!(
+        t.wallet.mandate(&t.token.address).is_some(),
+        "the target call is rolled back with the payment"
+    );
     assert!(!t.token.ref_used(&t.owner, &t.rf(1)));
 }
 
@@ -254,14 +446,24 @@ fn relay_target_failure_reverts_all() {
 fn relay_refuses_target_without_contract() {
     let t = setup();
     // A contract id with nothing deployed, an account address built from a G strkey, and the payer's account.
-    for ghost in [Address::generate(&t.env), Address::from_str(&t.env, ACCOUNT), Address::from_str(&t.env, OWNER)] {
+    for ghost in [
+        Address::generate(&t.env),
+        Address::from_str(&t.env, ACCOUNT),
+        Address::from_str(&t.env, OWNER),
+    ] {
         assert_eq!(
             t.relay_call(&ghost, &t.func(), &t.args(), 1, &t.router.address, 7),
             err(Error::TargetNoCode)
         );
-        assert!(!t.token.ref_used(&t.owner, &t.router.relay_ref(&ghost, &t.func(), &t.args(), &t.salt(1))));
+        assert!(!t.token.ref_used(
+            &t.owner,
+            &t.router.relay_ref(&ghost, &t.func(), &t.args(), &t.salt(1))
+        ));
     }
-    assert_eq!((t.token.balance(&t.owner), t.token.balance(&t.relayer)), (100, 0));
+    assert_eq!(
+        (t.token.balance(&t.owner), t.token.balance(&t.relayer)),
+        (100, 0)
+    );
 }
 
 /// Review focus 3: a payment signed for the router (auth entry rooted at `relay`) never settles through the
@@ -271,27 +473,67 @@ fn soroban_router_bound_pay_refused_direct() {
     let t = setup();
     let rf = t.rf(1);
     let to = t.router.address.clone();
-    let pay_args: soroban_sdk::Vec<Val> = (t.owner.clone(), to.clone(), 7i128, rf.clone(), NOW + 60).into_val(&t.env);
+    let pay_args: soroban_sdk::Vec<Val> =
+        (t.owner.clone(), to.clone(), 7i128, rf.clone(), NOW + 60).into_val(&t.env);
     let signed: soroban_sdk::Vec<Val> = (
-        t.wallet.address.clone(), t.func(), t.args(), t.salt(1), t.token.address.clone(), to.clone(), 7i128, NOW + 60,
+        t.wallet.address.clone(),
+        t.func(),
+        t.args(),
+        t.salt(1),
+        t.token.address.clone(),
+        to.clone(),
+        7i128,
+        NOW + 60,
     )
         .into_val(&t.env);
     let relay_args: soroban_sdk::Vec<Val> = (
-        t.owner.clone(), t.wallet.address.clone(), t.func(), t.args(), t.salt(1), t.token.address.clone(), to.clone(),
-        7i128, NOW + 60, t.relayer.clone(),
+        t.owner.clone(),
+        t.wallet.address.clone(),
+        t.func(),
+        t.args(),
+        t.salt(1),
+        t.token.address.clone(),
+        to.clone(),
+        7i128,
+        NOW + 60,
+        t.relayer.clone(),
     )
         .into_val(&t.env);
     let (pay, revoke) = (
-        MockAuthInvoke { contract: &t.token.address, fn_name: "pay", args: pay_args.clone(), sub_invokes: &[] },
-        MockAuthInvoke { contract: &t.wallet.address, fn_name: "mtx_revoke", args: t.args(), sub_invokes: &[] },
+        MockAuthInvoke {
+            contract: &t.token.address,
+            fn_name: "pay",
+            args: pay_args.clone(),
+            sub_invokes: &[],
+        },
+        MockAuthInvoke {
+            contract: &t.wallet.address,
+            fn_name: "mtx_revoke",
+            args: t.args(),
+            sub_invokes: &[],
+        },
     );
     let relay_root = MockAuthInvoke {
-        contract: &t.router.address, fn_name: "relay", args: signed, sub_invokes: &[revoke, pay],
+        contract: &t.router.address,
+        fn_name: "relay",
+        args: signed,
+        sub_invokes: &[revoke, pay],
     };
-    let relayer_root = MockAuthInvoke { contract: &t.router.address, fn_name: "relay", args: relay_args, sub_invokes: &[] };
+    let relayer_root = MockAuthInvoke {
+        contract: &t.router.address,
+        fn_name: "relay",
+        args: relay_args,
+        sub_invokes: &[],
+    };
     t.env.mock_auths(&[
-        MockAuth { address: &t.owner, invoke: &relay_root },
-        MockAuth { address: &t.relayer, invoke: &relayer_root },
+        MockAuth {
+            address: &t.owner,
+            invoke: &relay_root,
+        },
+        MockAuth {
+            address: &t.relayer,
+            invoke: &relayer_root,
+        },
     ]);
     // The payer's signature (rooted at `relay`) does not authorise a direct pay.
     let r = t.token.try_pay(&t.owner, &to, &7, &rf, &(NOW + 60));
@@ -303,7 +545,16 @@ fn soroban_router_bound_pay_refused_direct() {
     assert_eq!(t.token.balance(&t.relayer), 7);
     // A relay whose signed amount differs from the executed one has no matching auth: refused.
     let r = t.router.try_relay(
-        &t.owner, &t.wallet.address, &t.func(), &t.args(), &t.salt(1), &t.token.address, &to, &8, &(NOW + 60), &t.relayer,
+        &t.owner,
+        &t.wallet.address,
+        &t.func(),
+        &t.args(),
+        &t.salt(1),
+        &t.token.address,
+        &to,
+        &8,
+        &(NOW + 60),
+        &t.relayer,
     );
     assert_eq!(r.err().unwrap().unwrap(), auth_err());
 }
@@ -320,13 +571,55 @@ fn relay_victim_pay_as_target_then_drain_refused() {
     let (victim, attacker) = (Address::generate(e), Address::generate(e));
     t.token.mint(&victim, &50);
     t.token.mint(&attacker, &10);
-    let vargs: soroban_sdk::Vec<Val> = (&victim, &router, 20i128, BytesN::from_array(e, &[0x77; 32]), NOW + 60).into_val(e);
-    let vpay = MockAuthInvoke { contract: &tk, fn_name: "pay", args: vargs.clone(), sub_invokes: &[] };
-    t.relay_as(&attacker, &tk, "pay", &vargs, 1, &router, 1, &[MockAuth { address: &victim, invoke: &vpay }]).unwrap();
-    assert_eq!((t.token.balance(&victim), t.token.balance(&router), t.token.balance(&t.relayer)), (30, 20, 1));
+    let vargs: soroban_sdk::Vec<Val> = (
+        &victim,
+        &router,
+        20i128,
+        BytesN::from_array(e, &[0x77; 32]),
+        NOW + 60,
+    )
+        .into_val(e);
+    let vpay = MockAuthInvoke {
+        contract: &tk,
+        fn_name: "pay",
+        args: vargs.clone(),
+        sub_invokes: &[],
+    };
+    t.relay_as(
+        &attacker,
+        &tk,
+        "pay",
+        &vargs,
+        1,
+        &router,
+        1,
+        &[MockAuth {
+            address: &victim,
+            invoke: &vpay,
+        }],
+    )
+    .unwrap();
+    assert_eq!(
+        (
+            t.token.balance(&victim),
+            t.token.balance(&router),
+            t.token.balance(&t.relayer)
+        ),
+        (30, 20, 1)
+    );
     let targs: soroban_sdk::Vec<Val> = (&router, &attacker, 20i128).into_val(e);
-    assert_eq!(t.relay_as(&attacker, &tk, "transfer", &targs, 2, &router, 1, &[]), Err(auth_err()));
-    assert_eq!((t.token.balance(&router), t.token.balance(&attacker), t.token.balance(&t.relayer)), (20, 9, 1));
+    assert_eq!(
+        t.relay_as(&attacker, &tk, "transfer", &targs, 2, &router, 1, &[]),
+        Err(auth_err())
+    );
+    assert_eq!(
+        (
+            t.token.balance(&router),
+            t.token.balance(&attacker),
+            t.token.balance(&t.relayer)
+        ),
+        (20, 9, 1)
+    );
 }
 
 #[test]
@@ -346,7 +639,9 @@ fn relay_ref_vectors() {
     b.append(&e.crypto().keccak256(&call).to_bytes().into());
     b.append(&Bytes::from_array(e, &[9; 32]));
     let want = e.crypto().keccak256(&b).to_array();
-    let rf = |a: &soroban_sdk::Vec<Val>, s: u8| t.router.relay_ref(&t.wallet.address, &func, a, &t.salt(s));
+    let rf = |a: &soroban_sdk::Vec<Val>, s: u8| {
+        t.router.relay_ref(&t.wallet.address, &func, a, &t.salt(s))
+    };
     assert_eq!(rf(&args, 9).to_array(), want);
     std::println!("ref {}", hex(&want));
     assert_eq!(hex(&want), VEC_REF);
@@ -354,8 +649,18 @@ fn relay_ref_vectors() {
     let other: soroban_sdk::Vec<Val> = (t.token.address.clone(), t.relayer.clone()).into_val(e);
     assert_ne!(rf(&other, 9).to_array(), want);
     assert_ne!(rf(&args, 8).to_array(), want);
-    assert_ne!(t.router.relay_ref(&t.token.address, &func, &args, &t.salt(9)).to_array(), want);
-    assert_ne!(t.router.relay_ref(&t.wallet.address, &Symbol::new(e, "pay"), &args, &t.salt(9)).to_array(), want);
+    assert_ne!(
+        t.router
+            .relay_ref(&t.token.address, &func, &args, &t.salt(9))
+            .to_array(),
+        want
+    );
+    assert_ne!(
+        t.router
+            .relay_ref(&t.wallet.address, &Symbol::new(e, "pay"), &args, &t.salt(9))
+            .to_array(),
+        want
+    );
     e.ledger().with_mut(|l| l.network_id = [8; 32]);
     assert_ne!(rf(&args, 9).to_array(), want);
 }
@@ -367,18 +672,33 @@ fn account(env: &Env, pk: [u8; 32]) -> Address {
     Address::try_from_val(env, &ScVal::Address(sc)).unwrap()
 }
 
-fn inv(env: &Env, contract: &Address, f: &str, args: soroban_sdk::Vec<Val>, subs: std::vec::Vec<SorobanAuthorizedInvocation>) -> SorobanAuthorizedInvocation {
+fn inv(
+    env: &Env,
+    contract: &Address,
+    f: &str,
+    args: soroban_sdk::Vec<Val>,
+    subs: std::vec::Vec<SorobanAuthorizedInvocation>,
+) -> SorobanAuthorizedInvocation {
     SorobanAuthorizedInvocation {
         function: SorobanAuthorizedFunction::ContractFn(InvokeContractArgs {
             contract_address: contract.into(),
             function_name: f.try_into().unwrap(),
-            args: args.iter().map(|v| ScVal::try_from_val(env, &v).unwrap()).collect::<std::vec::Vec<_>>().try_into().unwrap(),
+            args: args
+                .iter()
+                .map(|v| ScVal::try_from_val(env, &v).unwrap())
+                .collect::<std::vec::Vec<_>>()
+                .try_into()
+                .unwrap(),
         }),
         sub_invocations: subs.try_into().unwrap(),
     }
 }
 
-fn signed_entry(sk: &ed25519_dalek::SigningKey, nonce: i64, root: SorobanAuthorizedInvocation) -> SorobanAuthorizationEntry {
+fn signed_entry(
+    sk: &ed25519_dalek::SigningKey,
+    nonce: i64,
+    root: SorobanAuthorizedInvocation,
+) -> SorobanAuthorizationEntry {
     let pre = HashIdPreimage::SorobanAuthorization(HashIdPreimageSorobanAuthorization {
         network_id: xdr::Hash(NETWORK),
         nonce,
@@ -389,8 +709,15 @@ fn signed_entry(sk: &ed25519_dalek::SigningKey, nonce: i64, root: SorobanAuthori
     .unwrap();
     let sig = sk.sign(&Sha256::digest(pre)).to_bytes();
     let pk = sk.verifying_key().to_bytes();
-    let kv = |k: &str, v: &[u8]| ScMapEntry { key: ScVal::Symbol(ScSymbol(k.try_into().unwrap())), val: ScVal::Bytes(v.to_vec().try_into().unwrap()) };
-    let map = ScMap(std::vec![kv("public_key", &pk), kv("signature", &sig)].try_into().unwrap());
+    let kv = |k: &str, v: &[u8]| ScMapEntry {
+        key: ScVal::Symbol(ScSymbol(k.try_into().unwrap())),
+        val: ScVal::Bytes(v.to_vec().try_into().unwrap()),
+    };
+    let map = ScMap(
+        std::vec![kv("public_key", &pk), kv("signature", &sig)]
+            .try_into()
+            .unwrap(),
+    );
     SorobanAuthorizationEntry {
         credentials: SorobanCredentials::Address(SorobanAddressCredentials {
             address: ScAddress::Account(AccountId(PublicKey::PublicKeyTypeEd25519(Uint256(pk)))),
@@ -406,13 +733,21 @@ fn signed_entry(sk: &ed25519_dalek::SigningKey, nonce: i64, root: SorobanAuthori
 /// and the same signature does not authorise a direct `token.pay`.
 #[test]
 fn relay_g_account_payer_real_signed_entries() {
-    let (psk, rsk) = (ed25519_dalek::SigningKey::from_bytes(&[3; 32]), ed25519_dalek::SigningKey::from_bytes(&[4; 32]));
-    let (ppk, rpk) = (psk.verifying_key().to_bytes(), rsk.verifying_key().to_bytes());
+    let (psk, rsk) = (
+        ed25519_dalek::SigningKey::from_bytes(&[3; 32]),
+        ed25519_dalek::SigningKey::from_bytes(&[4; 32]),
+    );
+    let (ppk, rpk) = (
+        psk.verifying_key().to_bytes(),
+        rsk.verifying_key().to_bytes(),
+    );
     // Both accounts must exist in the ledger: the host loads their signers to check the entries.
     let ledger_account = |pk: [u8; 32]| {
         let id = AccountId(PublicKey::PublicKeyTypeEd25519(Uint256(pk)));
         (
-            std::boxed::Box::new(xdr::LedgerKey::Account(xdr::LedgerKeyAccount { account_id: id.clone() })),
+            std::boxed::Box::new(xdr::LedgerKey::Account(xdr::LedgerKeyAccount {
+                account_id: id.clone(),
+            })),
             (
                 std::boxed::Box::new(xdr::LedgerEntry {
                     last_modified_ledger_seq: 0,
@@ -435,27 +770,77 @@ fn relay_g_account_payer_real_signed_entries() {
         )
     };
     let mut snap: soroban_ledger_snapshot::LedgerSnapshot = Env::default().to_ledger_snapshot();
-    snap.ledger_entries.extend([ledger_account(ppk), ledger_account(rpk)]);
+    snap.ledger_entries
+        .extend([ledger_account(ppk), ledger_account(rpk)]);
     let t = setup_with(Env::from_ledger_snapshot(snap));
     let e = &t.env;
     let (payer, relayer) = (account(e, ppk), account(e, rpk));
-    let wallet = MandateWalletClient::new(e, &e.register(MandateWallet, (Holder::Addr(payer.clone()), None::<Address>)));
+    let wallet = MandateWalletClient::new(
+        e,
+        &e.register(
+            MandateWallet,
+            (Holder::Addr(payer.clone()), None::<Address>),
+        ),
+    );
     set_mandate(e, &wallet, &t.token.address);
     t.token.mint(&payer, &100);
-    let (f, to, salt) = (Symbol::new(e, "mtx_revoke"), t.router.address.clone(), t.salt(5));
+    let (f, to, salt) = (
+        Symbol::new(e, "mtx_revoke"),
+        t.router.address.clone(),
+        t.salt(5),
+    );
     let args = revoke_args(e, &t.token.address, &payer);
     let rf = t.router.relay_ref(&wallet.address, &f, &args, &salt);
-    let signed: soroban_sdk::Vec<Val> = (wallet.address.clone(), f.clone(), args.clone(), salt.clone(), t.token.address.clone(), to.clone(), 7i128, NOW + 60).into_val(e);
-    let pay_args: soroban_sdk::Vec<Val> = (payer.clone(), to.clone(), 7i128, rf.clone(), NOW + 60).into_val(e);
+    let signed: soroban_sdk::Vec<Val> = (
+        wallet.address.clone(),
+        f.clone(),
+        args.clone(),
+        salt.clone(),
+        t.token.address.clone(),
+        to.clone(),
+        7i128,
+        NOW + 60,
+    )
+        .into_val(e);
+    let pay_args: soroban_sdk::Vec<Val> =
+        (payer.clone(), to.clone(), 7i128, rf.clone(), NOW + 60).into_val(e);
     let tree = |nonce: i64| {
         let subs = std::vec![
             inv(e, &wallet.address, "mtx_revoke", args.clone(), std::vec![]),
             inv(e, &t.token.address, "pay", pay_args.clone(), std::vec![]),
         ];
-        signed_entry(&psk, nonce, inv(e, &t.router.address, "relay", signed.clone(), subs))
+        signed_entry(
+            &psk,
+            nonce,
+            inv(e, &t.router.address, "relay", signed.clone(), subs),
+        )
     };
-    let relay_args: soroban_sdk::Vec<Val> = (payer.clone(), wallet.address.clone(), f.clone(), args.clone(), salt.clone(), t.token.address.clone(), to.clone(), 7i128, NOW + 60, relayer.clone()).into_val(e);
-    let relayer_entry = |nonce: i64| signed_entry(&rsk, nonce, inv(e, &t.router.address, "relay", relay_args.clone(), std::vec![]));
+    let relay_args: soroban_sdk::Vec<Val> = (
+        payer.clone(),
+        wallet.address.clone(),
+        f.clone(),
+        args.clone(),
+        salt.clone(),
+        t.token.address.clone(),
+        to.clone(),
+        7i128,
+        NOW + 60,
+        relayer.clone(),
+    )
+        .into_val(e);
+    let relayer_entry = |nonce: i64| {
+        signed_entry(
+            &rsk,
+            nonce,
+            inv(
+                e,
+                &t.router.address,
+                "relay",
+                relay_args.clone(),
+                std::vec![],
+            ),
+        )
+    };
     // Direct pay with the router-rooted signature: refused.
     e.set_auths(&[tree(10)]);
     let r = t.token.try_pay(&payer, &to, &7, &rf, &(NOW + 60));
@@ -463,19 +848,61 @@ fn relay_g_account_payer_real_signed_entries() {
     assert!(!t.token.ref_used(&payer, &rf));
     // Through the router with both signatures.
     e.set_auths(&[tree(11), relayer_entry(12)]);
-    t.router.relay(&payer, &wallet.address, &f, &args, &salt, &t.token.address, &to, &7, &(NOW + 60), &relayer);
+    t.router.relay(
+        &payer,
+        &wallet.address,
+        &f,
+        &args,
+        &salt,
+        &t.token.address,
+        &to,
+        &7,
+        &(NOW + 60),
+        &relayer,
+    );
     assert!(wallet.mandate(&t.token.address).is_none());
-    assert_eq!((t.token.balance(&payer), t.token.balance(&relayer)), (93, 7));
+    assert_eq!(
+        (t.token.balance(&payer), t.token.balance(&relayer)),
+        (93, 7)
+    );
     // Without the relayer's entry the router refuses (source auth is not implicit).
     e.mock_all_auths();
     set_mandate(e, &wallet, &t.token.address);
     let salt2 = t.salt(6);
     let rf2 = t.router.relay_ref(&wallet.address, &f, &args, &salt2);
-    let signed2: soroban_sdk::Vec<Val> = (wallet.address.clone(), f.clone(), args.clone(), salt2.clone(), t.token.address.clone(), to.clone(), 7i128, NOW + 60).into_val(e);
+    let signed2: soroban_sdk::Vec<Val> = (
+        wallet.address.clone(),
+        f.clone(),
+        args.clone(),
+        salt2.clone(),
+        t.token.address.clone(),
+        to.clone(),
+        7i128,
+        NOW + 60,
+    )
+        .into_val(e);
     let pay2: soroban_sdk::Vec<Val> = (payer.clone(), to.clone(), 7i128, rf2, NOW + 60).into_val(e);
-    let subs = std::vec![inv(e, &wallet.address, "mtx_revoke", args.clone(), std::vec![]), inv(e, &t.token.address, "pay", pay2, std::vec![])];
-    e.set_auths(&[signed_entry(&psk, 13, inv(e, &t.router.address, "relay", signed2, subs))]);
-    let r = t.router.try_relay(&payer, &wallet.address, &f, &args, &salt2, &t.token.address, &to, &7, &(NOW + 60), &relayer);
+    let subs = std::vec![
+        inv(e, &wallet.address, "mtx_revoke", args.clone(), std::vec![]),
+        inv(e, &t.token.address, "pay", pay2, std::vec![])
+    ];
+    e.set_auths(&[signed_entry(
+        &psk,
+        13,
+        inv(e, &t.router.address, "relay", signed2, subs),
+    )]);
+    let r = t.router.try_relay(
+        &payer,
+        &wallet.address,
+        &f,
+        &args,
+        &salt2,
+        &t.token.address,
+        &to,
+        &7,
+        &(NOW + 60),
+        &relayer,
+    );
     assert!(r.is_err());
 }
 
@@ -497,7 +924,10 @@ fn ops() -> serde_json::Value {
 
 fn hx(v: &serde_json::Value) -> std::vec::Vec<u8> {
     let s = v.as_str().unwrap().trim_start_matches("0x");
-    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+        .collect()
 }
 
 /// `register_listed`, and every slot of an `msig` row accepts (CTR-UA-37): until then it authorizes nothing.
@@ -510,8 +940,16 @@ fn register_row(env: &Env, reg: &RegClient, r: &serde_json::Value) -> BytesN<32>
 /// Every `memberships` row of a registration: the member's own `accept_membership`.
 fn accept_row(env: &Env, reg: &RegClient, r: &serde_json::Value) {
     for m in r["memberships"].as_array().into_iter().flatten() {
-        let slot = MemberSig { index: m["index"].as_u64().unwrap() as u32, key_data: Bytes::new(env), sig: Bytes::from_slice(env, &hx(&m["sig"])) };
-        reg.accept_membership(&BytesN::from_array(env, &hx(&r["ua"]).try_into().unwrap()), &slot, &None);
+        let slot = MemberSig {
+            index: m["index"].as_u64().unwrap() as u32,
+            key_data: Bytes::new(env),
+            sig: Bytes::from_slice(env, &hx(&m["sig"])),
+        };
+        reg.accept_membership(
+            &BytesN::from_array(env, &hx(&r["ua"]).try_into().unwrap()),
+            &slot,
+            &None,
+        );
     }
 }
 
@@ -519,20 +957,44 @@ fn accept_row(env: &Env, reg: &RegClient, r: &serde_json::Value) {
 fn register_listed(env: &Env, reg: &RegClient, r: &serde_json::Value) -> BytesN<32> {
     let (kind, none) = (r["kind"].as_u64().unwrap() as u32, Bytes::new(env));
     if kind != 0x0120 {
-        return reg.register(&kind, &Bytes::from_slice(env, &hx(&r["keyData"])), &UaAttrs::none(env), &Bytes::from_slice(env, &hx(&r["pop"])), &none, &None);
+        return reg.register(
+            &kind,
+            &Bytes::from_slice(env, &hx(&r["keyData"])),
+            &UaAttrs::none(env),
+            &Bytes::from_slice(env, &hx(&r["pop"])),
+            &none,
+            &None,
+        );
     }
     let mut members = soroban_sdk::Vec::new(env);
     for m in r["members"].as_array().unwrap() {
-        let (kind, weight) = (m["kind"].as_u64().unwrap() as u32, m["weight"].as_u64().unwrap() as u32);
-        members.push_back(MsigMember { kind, id: BytesN::from_array(env, &hx(&m["id"]).try_into().unwrap()), weight });
+        let (kind, weight) = (
+            m["kind"].as_u64().unwrap() as u32,
+            m["weight"].as_u64().unwrap() as u32,
+        );
+        members.push_back(MsigMember {
+            kind,
+            id: BytesN::from_array(env, &hx(&m["id"]).try_into().unwrap()),
+            weight,
+        });
     }
-    let s = MsigStructure { threshold: r["threshold"].as_u64().unwrap() as u32, members };
-    reg.register_msig(&s, &UaAttrs::none(env), &soroban_sdk::Vec::new(env), &none, &None)
+    let s = MsigStructure {
+        threshold: r["threshold"].as_u64().unwrap() as u32,
+        members,
+    };
+    reg.register_msig(
+        &s,
+        &UaAttrs::none(env),
+        &soroban_sdk::Vec::new(env),
+        &none,
+        &None,
+    )
 }
 
 /// A vector's `authXdr`: the `UaSig` the entry takes.
 fn auth_of(env: &Env, p: &serde_json::Value) -> UaSig {
-    <UaSig as soroban_sdk::xdr::FromXdr>::from_xdr(env, &Bytes::from_slice(env, &hx(&p["authXdr"]))).unwrap()
+    <UaSig as soroban_sdk::xdr::FromXdr>::from_xdr(env, &Bytes::from_slice(env, &hx(&p["authXdr"])))
+        .unwrap()
 }
 
 fn arg_vals(env: &Env, p: &serde_json::Value) -> soroban_sdk::Vec<Val> {
@@ -581,22 +1043,59 @@ fn ua_setup() -> U {
         l.network_id = hx(&o["network"]["networkId"]).try_into().unwrap();
     });
     let id = |k: &str| Address::from_str(&env, o["contracts"][k].as_str().unwrap());
-    let reg = RegClient::new(&env, &env.register_at(&id("registry"), UaRegistry, (soroban_sdk::Vec::<Address>::new(&env),)));
+    let reg = RegClient::new(
+        &env,
+        &env.register_at(
+            &id("registry"),
+            UaRegistry,
+            (soroban_sdk::Vec::<Address>::new(&env),),
+        ),
+    );
     let admin = Address::generate(&env);
     let s = |x: &str| String::from_str(&env, x);
-    let tid = env.register_at(&id("token"), Token, (admin.clone(), 7u32, s("SCaaS"), s("BMB"), Some(reg.address.clone())));
+    let tid = env.register_at(
+        &id("token"),
+        Token,
+        (
+            admin.clone(),
+            7u32,
+            s("SCaaS"),
+            s("BMB"),
+            Some(reg.address.clone()),
+        ),
+    );
     let router = deploy_router(&env, &id("router"));
-    U { token: TokenClient::new(&env, &tid), reg, router, admin, relayer: Address::generate(&env), env }
+    U {
+        token: TokenClient::new(&env, &tid),
+        reg,
+        router,
+        admin,
+        relayer: Address::generate(&env),
+        env,
+    }
 }
 
 impl U {
     /// Mocks exactly `who`'s authorisation of `contract.f(args)` for the next call.
     fn allow(&self, who: &Address, contract: &Address, f: &str, args: soroban_sdk::Vec<Val>) {
-        self.env.mock_auths(&[MockAuth { address: who, invoke: &MockAuthInvoke { contract, fn_name: f, args, sub_invokes: &[] } }]);
+        self.env.mock_auths(&[MockAuth {
+            address: who,
+            invoke: &MockAuthInvoke {
+                contract,
+                fn_name: f,
+                args,
+                sub_invokes: &[],
+            },
+        }]);
     }
 
     fn mint_ua(&self, ua: &BytesN<32>, amount: i128) {
-        self.allow(&self.admin, &self.token.address, "mint_to_ua", (ua, amount).into_val(&self.env));
+        self.allow(
+            &self.admin,
+            &self.token.address,
+            "mint_to_ua",
+            (ua, amount).into_val(&self.env),
+        );
         self.token.mint_to_ua(ua, &amount);
     }
 
@@ -609,8 +1108,20 @@ impl U {
         let z = BytesN::from_array(env, &[0u8; 32]);
         let rec = portable_record_hash(env, &id, ED25519, &z, &kem_record_hash(env, &id, 0, 0, &z));
         let reg_digest = registration_digest(env, &rec, &z).to_array();
-        let pop = sk.sign(&keccak(env, &[&MSG_TAG, &ED_TAG, &PURPOSE_POP_V2, &reg_digest])).to_bytes();
-        self.reg.register(&ED25519, &kd, &UaAttrs::none(env), &Bytes::from_array(env, &pop), &Bytes::new(env), &None);
+        let pop = sk
+            .sign(&keccak(
+                env,
+                &[&MSG_TAG, &ED_TAG, &PURPOSE_POP_V2, &reg_digest],
+            ))
+            .to_bytes();
+        self.reg.register(
+            &ED25519,
+            &kd,
+            &UaAttrs::none(env),
+            &Bytes::from_array(env, &pop),
+            &Bytes::new(env),
+            &None,
+        );
         if funds > 0 {
             self.mint_ua(&id, funds);
         }
@@ -620,44 +1131,109 @@ impl U {
     /// The UA's signature over `op_digest(token, f, args)` under `purpose`.
     fn sign(&self, u: &Ua, purpose: [u8; 32], f: &str, args: soroban_sdk::Vec<Val>) -> UaSig {
         let d = op_digest(&self.env, &self.token.address, f, args).to_array();
-        UaSig::single(&self.env, Bytes::from_array(&self.env, &u.sk.sign(&keccak(&self.env, &[&MSG_TAG, &ED_TAG, &purpose, &d])).to_bytes()))
+        UaSig::single(
+            &self.env,
+            Bytes::from_array(
+                &self.env,
+                &u.sk
+                    .sign(&keccak(&self.env, &[&MSG_TAG, &ED_TAG, &purpose, &d]))
+                    .to_bytes(),
+            ),
+        )
     }
 
     /// `token.ua_cancel_nonce(u, lane, …, auth)` arguments, signed by `u`.
     fn cancel_args(&self, u: &Ua, lane: u8) -> soroban_sdk::Vec<Val> {
         let (e, lane) = (&self.env, b32(&self.env, lane));
-        let auth = self.sign(u, PURPOSE_METATX_CANCEL, CANCEL, (&u.id, &lane, NOW + 60).into_val(e));
+        let auth = self.sign(
+            u,
+            PURPOSE_METATX_CANCEL,
+            CANCEL,
+            (&u.id, &lane, NOW + 60).into_val(e),
+        );
         (&u.id, &lane, NOW + 60, auth).into_val(e)
     }
 
     fn rf(&self, args: &soroban_sdk::Vec<Val>, salt: u8) -> BytesN<32> {
-        self.router.relay_ref(&self.token.address, &Symbol::new(&self.env, CANCEL), args, &b32(&self.env, salt))
+        self.router.relay_ref(
+            &self.token.address,
+            &Symbol::new(&self.env, CANCEL),
+            args,
+            &b32(&self.env, salt),
+        )
     }
 
     /// The payer's UA signature of the inner `token.ua_pay` of a `ua_relay` with `ref = rf` (`relayer = Some(router)`).
     fn fee_auth(&self, u: &Ua, to: &Holder, amount: i128, rf: &BytesN<32>) -> UaSig {
-        let a = (&u.id, to, amount, rf, NOW + 60, Some(self.router.address.clone()));
+        let a = (
+            &u.id,
+            to,
+            amount,
+            rf,
+            NOW + 60,
+            Some(self.router.address.clone()),
+        );
         self.sign(u, PURPOSE_METATX, "ua_pay", a.into_val(&self.env))
     }
 
     /// `router.ua_relay(payer, token, f, args, salt, token, to, amount, valid_until, relayer, auth)`; the relayer's
     /// host auth is mocked for exactly that call.
     #[allow(clippy::too_many_arguments)]
-    fn relay_ua(&self, payer: &BytesN<32>, f: &str, args: &soroban_sdk::Vec<Val>, salt: &BytesN<32>, to: &Holder, amount: i128, vu: u64, auth: &UaSig) -> Res {
+    fn relay_ua(
+        &self,
+        payer: &BytesN<32>,
+        f: &str,
+        args: &soroban_sdk::Vec<Val>,
+        salt: &BytesN<32>,
+        to: &Holder,
+        amount: i128,
+        vu: u64,
+        auth: &UaSig,
+    ) -> Res {
         let (e, tk) = (&self.env, &self.token.address);
         let f = Symbol::new(e, f);
-        let mut all: soroban_sdk::Vec<Val> = (payer, tk, &f, args, salt, tk, to, amount, vu, &self.relayer).into_val(e);
+        let mut all: soroban_sdk::Vec<Val> =
+            (payer, tk, &f, args, salt, tk, to, amount, vu, &self.relayer).into_val(e);
         all.push_back(auth.into_val(e));
         self.allow(&self.relayer, &self.router.address, "ua_relay", all);
-        match self.router.try_ua_relay(payer, tk, &f, args, salt, tk, to, &amount, &vu, &self.relayer, auth) {
+        match self.router.try_ua_relay(
+            payer,
+            tk,
+            &f,
+            args,
+            salt,
+            tk,
+            to,
+            &amount,
+            &vu,
+            &self.relayer,
+            auth,
+        ) {
             Ok(r) => Ok(r.unwrap()),
             Err(e) => Err(e.unwrap()),
         }
     }
 
     /// `relay_ua` of `u`'s cancel of `lane` with salt `salt`.
-    fn relay_cancel(&self, u: &Ua, args: &soroban_sdk::Vec<Val>, salt: u8, to: &Holder, amount: i128, auth: &UaSig) -> Res {
-        self.relay_ua(&u.id, CANCEL, args, &b32(&self.env, salt), to, amount, NOW + 60, auth)
+    fn relay_cancel(
+        &self,
+        u: &Ua,
+        args: &soroban_sdk::Vec<Val>,
+        salt: u8,
+        to: &Holder,
+        amount: i128,
+        auth: &UaSig,
+    ) -> Res {
+        self.relay_ua(
+            &u.id,
+            CANCEL,
+            args,
+            &b32(&self.env, salt),
+            to,
+            amount,
+            NOW + 60,
+            auth,
+        )
     }
 
     fn open(&self) -> Holder {
@@ -665,24 +1241,73 @@ impl U {
     }
 
     fn mint(&self, to: &Address, amount: i128) {
-        self.allow(&self.admin, &self.token.address, "mint", (to, amount).into_val(&self.env));
+        self.allow(
+            &self.admin,
+            &self.token.address,
+            "mint",
+            (to, amount).into_val(&self.env),
+        );
         self.token.mint(to, &amount);
     }
 
     /// Native `router.relay(payer, token, f, args, salt, token, to, amount, NOW + 60, relayer)` with exactly the
     /// payer's entry (rooted at this `relay`, `token.pay` its sub-invocation) and the relayer's.
-    fn relay_native(&self, payer: &Address, f: &str, args: &soroban_sdk::Vec<Val>, salt: &BytesN<32>, to: &Address, amount: i128) -> Res {
+    fn relay_native(
+        &self,
+        payer: &Address,
+        f: &str,
+        args: &soroban_sdk::Vec<Val>,
+        salt: &BytesN<32>,
+        to: &Address,
+        amount: i128,
+    ) -> Res {
         let (e, tk, vu) = (&self.env, &self.token.address, NOW + 60);
         let f = Symbol::new(e, f);
         let rf = self.router.relay_ref(tk, &f, args, salt);
         let signed: soroban_sdk::Vec<Val> = (tk, &f, args, salt, tk, to, amount, vu).into_val(e);
-        let all: soroban_sdk::Vec<Val> = (payer, tk, &f, args, salt, tk, to, amount, vu, &self.relayer).into_val(e);
-        let pay = MockAuthInvoke { contract: tk, fn_name: "pay", args: (payer, to, amount, &rf, vu).into_val(e), sub_invokes: &[] };
+        let all: soroban_sdk::Vec<Val> =
+            (payer, tk, &f, args, salt, tk, to, amount, vu, &self.relayer).into_val(e);
+        let pay = MockAuthInvoke {
+            contract: tk,
+            fn_name: "pay",
+            args: (payer, to, amount, &rf, vu).into_val(e),
+            sub_invokes: &[],
+        };
         let pay = [pay];
-        let root = MockAuthInvoke { contract: &self.router.address, fn_name: "relay", args: signed, sub_invokes: &pay };
-        let rroot = MockAuthInvoke { contract: &self.router.address, fn_name: "relay", args: all, sub_invokes: &[] };
-        e.mock_auths(&[MockAuth { address: payer, invoke: &root }, MockAuth { address: &self.relayer, invoke: &rroot }]);
-        match self.router.try_relay(payer, tk, &f, args, salt, tk, to, &amount, &vu, &self.relayer) {
+        let root = MockAuthInvoke {
+            contract: &self.router.address,
+            fn_name: "relay",
+            args: signed,
+            sub_invokes: &pay,
+        };
+        let rroot = MockAuthInvoke {
+            contract: &self.router.address,
+            fn_name: "relay",
+            args: all,
+            sub_invokes: &[],
+        };
+        e.mock_auths(&[
+            MockAuth {
+                address: payer,
+                invoke: &root,
+            },
+            MockAuth {
+                address: &self.relayer,
+                invoke: &rroot,
+            },
+        ]);
+        match self.router.try_relay(
+            payer,
+            tk,
+            &f,
+            args,
+            salt,
+            tk,
+            to,
+            &amount,
+            &vu,
+            &self.relayer,
+        ) {
             Ok(r) => Ok(r.unwrap()),
             Err(e) => Err(e.unwrap()),
         }
@@ -692,7 +1317,19 @@ impl U {
     fn victim_ua_pay(&self, u: &Ua) -> (soroban_sdk::Vec<Val>, BytesN<32>) {
         let (open, rf) = (self.open(), self.rf(&self.cancel_args(u, 3), 1));
         let auth = self.fee_auth(u, &open, 7, &rf);
-        ((&u.id, &open, 7i128, &rf, NOW + 60, Some(self.router.address.clone()), auth).into_val(&self.env), rf)
+        (
+            (
+                &u.id,
+                &open,
+                7i128,
+                &rf,
+                NOW + 60,
+                Some(self.router.address.clone()),
+                auth,
+            )
+                .into_val(&self.env),
+            rf,
+        )
     }
 }
 
@@ -705,13 +1342,30 @@ fn ua_relay_router_only() {
     let args = s.cancel_args(&u, 3);
     let (rf, open) = (s.rf(&args, 1), s.open());
     let auth = s.fee_auth(&u, &open, 7, &rf);
-    let r = s.token.try_ua_pay(&u.id, &open, &7, &rf, &(NOW + 60), &Some(s.router.address.clone()), &auth);
+    let r = s.token.try_ua_pay(
+        &u.id,
+        &open,
+        &7,
+        &rf,
+        &(NOW + 60),
+        &Some(s.router.address.clone()),
+        &auth,
+    );
     assert_eq!(r.err().unwrap().unwrap(), auth_err());
     assert!(!s.token.ua_ref_used(&u.id, &rf));
-    assert_eq!((s.token.ua_balance(&u.id), s.token.balance(&s.router.address)), (100, 0));
+    assert_eq!(
+        (
+            s.token.ua_balance(&u.id),
+            s.token.balance(&s.router.address)
+        ),
+        (100, 0)
+    );
     // The same signature settles through the router.
     s.relay_cancel(&u, &args, 1, &open, 7, &auth).unwrap();
-    assert_eq!((s.token.ua_balance(&u.id), s.token.balance(&s.relayer)), (93, 7));
+    assert_eq!(
+        (s.token.ua_balance(&u.id), s.token.balance(&s.relayer)),
+        (93, 7)
+    );
 }
 
 /// Open mode (`to == Holder::Addr(router)`): the fee reaches the submitting relayer, never rests on the router.
@@ -722,14 +1376,32 @@ fn ua_relay_open_mode_pays_submitter() {
     let u = s.ua(1, 100);
     let args = s.cancel_args(&u, 3);
     let (rf, open) = (s.rf(&args, 1), s.open());
-    s.relay_cancel(&u, &args, 1, &open, 7, &s.fee_auth(&u, &open, 7, &rf)).unwrap();
+    s.relay_cancel(&u, &args, 1, &open, 7, &s.fee_auth(&u, &open, 7, &rf))
+        .unwrap();
     let all = e.events().all();
-    assert_eq!(s.token.ua_nonce(&u.id, &b32(e, 3)), 1, "the target call ran");
-    assert_eq!((s.token.ua_balance(&u.id), s.token.balance(&s.relayer), s.token.balance(&s.router.address)), (93, 7, 0));
+    assert_eq!(
+        s.token.ua_nonce(&u.id, &b32(e, 3)),
+        1,
+        "the target call ran"
+    );
+    assert_eq!(
+        (
+            s.token.ua_balance(&u.id),
+            s.token.balance(&s.relayer),
+            s.token.balance(&s.router.address)
+        ),
+        (93, 7, 0)
+    );
     assert_eq!(s.token.balance(&s.router.executor()), 0);
     assert!(s.token.ua_ref_used(&u.id, &rf));
     let d = event_data(&all, "RelayFeePaid");
-    assert_eq!((d[0].clone(), d[1].clone()), (hv(e, Holder::Ua(u.id.clone())), hv(e, Holder::Addr(s.relayer.clone()))));
+    assert_eq!(
+        (d[0].clone(), d[1].clone()),
+        (
+            hv(e, Holder::Ua(u.id.clone())),
+            hv(e, Holder::Addr(s.relayer.clone()))
+        )
+    );
 }
 
 /// A bound UA payee is credited in the UA ledger; a relayer cannot redirect it to itself.
@@ -743,12 +1415,28 @@ fn ua_relay_bound_ua_payee() {
     let auth = s.fee_auth(&u, &to, 7, &rf);
     // The relayer names itself (or the open marker) as payee with the payer's signature: refused, nothing moves.
     for other in [Holder::Addr(s.relayer.clone()), s.open()] {
-        assert_eq!(s.relay_cancel(&u, &args, 1, &other, 7, &auth), Err(auth_err()));
+        assert_eq!(
+            s.relay_cancel(&u, &args, 1, &other, 7, &auth),
+            Err(auth_err())
+        );
     }
-    assert_eq!((s.token.ua_balance(&u.id), s.token.ua_nonce(&u.id, &b32(e, 3))), (100, 0));
+    assert_eq!(
+        (
+            s.token.ua_balance(&u.id),
+            s.token.ua_nonce(&u.id, &b32(e, 3))
+        ),
+        (100, 0)
+    );
     s.relay_cancel(&u, &args, 1, &to, 7, &auth).unwrap();
     let all = e.events().all();
-    assert_eq!((s.token.ua_balance(&u.id), s.token.ua_balance(&p.id), s.token.balance(&s.relayer)), (93, 7, 0));
+    assert_eq!(
+        (
+            s.token.ua_balance(&u.id),
+            s.token.ua_balance(&p.id),
+            s.token.balance(&s.relayer)
+        ),
+        (93, 7, 0)
+    );
     assert_eq!(s.token.balance(&s.router.address), 0);
     assert_eq!(event_data(&all, "RelayFeePaid")[1], hv(e, to));
 }
@@ -766,8 +1454,18 @@ fn ua_relay_ref_commits_to_call() {
     assert_eq!(s.relay_cancel(&u, &a4, 1, &open, 7, &auth), Err(auth_err()));
     assert_eq!(s.relay_cancel(&u, &a3, 2, &open, 7, &auth), Err(auth_err()));
     assert_eq!(s.relay_cancel(&u, &a3, 1, &open, 8, &auth), Err(auth_err()));
-    assert_eq!((s.token.ua_nonce(&u.id, &b32(e, 3)), s.token.ua_nonce(&u.id, &b32(e, 4))), (0, 0), "the target rolled back");
-    assert_eq!((s.token.ua_balance(&u.id), s.token.balance(&s.relayer)), (100, 0));
+    assert_eq!(
+        (
+            s.token.ua_nonce(&u.id, &b32(e, 3)),
+            s.token.ua_nonce(&u.id, &b32(e, 4))
+        ),
+        (0, 0),
+        "the target rolled back"
+    );
+    assert_eq!(
+        (s.token.ua_balance(&u.id), s.token.balance(&s.relayer)),
+        (100, 0)
+    );
     // The call it was signed for.
     s.relay_cancel(&u, &a3, 1, &open, 7, &auth).unwrap();
     assert_eq!(s.token.balance(&s.relayer), 7);
@@ -777,22 +1475,41 @@ fn ua_relay_ref_commits_to_call() {
 /// and `ua_relay`.
 #[test]
 fn relay_fee_paid_holder_fields() {
-    let amount = |e: &Env| ScVal::try_from_val(e, &IntoVal::<Env, Val>::into_val(&7i128, e)).unwrap();
+    let amount =
+        |e: &Env| ScVal::try_from_val(e, &IntoVal::<Env, Val>::into_val(&7i128, e)).unwrap();
     // `relay`: a native payer, a bound native payee.
     let t = setup();
     let treasury = Address::generate(&t.env);
     t.relay(&treasury, 7).unwrap();
     let d = event_data(&t.env.events().all(), "RelayFeePaid");
-    assert_eq!(d, std::vec![hv(&t.env, Holder::Addr(t.owner.clone())), hv(&t.env, Holder::Addr(treasury)), amount(&t.env)]);
+    assert_eq!(
+        d,
+        std::vec![
+            hv(&t.env, Holder::Addr(t.owner.clone())),
+            hv(&t.env, Holder::Addr(treasury)),
+            amount(&t.env)
+        ]
+    );
     // `ua_relay`: a UA payer, a bound native payee.
     let s = ua_setup();
     let e = &s.env;
     let u = s.ua(1, 100);
     let args = s.cancel_args(&u, 3);
     let to = Holder::Addr(Address::generate(e));
-    s.relay_cancel(&u, &args, 1, &to, 7, &s.fee_auth(&u, &to, 7, &s.rf(&args, 1))).unwrap();
+    s.relay_cancel(
+        &u,
+        &args,
+        1,
+        &to,
+        7,
+        &s.fee_auth(&u, &to, 7, &s.rf(&args, 1)),
+    )
+    .unwrap();
     let d = event_data(&e.events().all(), "RelayFeePaid");
-    assert_eq!(d, std::vec![hv(e, Holder::Ua(u.id.clone())), hv(e, to), amount(e)]);
+    assert_eq!(
+        d,
+        std::vec![hv(e, Holder::Ua(u.id.clone())), hv(e, to), amount(e)]
+    );
 }
 
 /// SOR-D12: `ua-ops.json`'s `ua_relay` row. The router at the row's id recomputes `relay.ref` from the row's call; each
@@ -806,31 +1523,64 @@ fn ua_ops_vectors_ua_relay_row() {
         assert_eq!(ua.to_array().to_vec(), hx(&r["ua"]), "{}", r["name"]);
         s.mint_ua(&ua, 1_000);
     }
-    let row = o["entries"].as_array().unwrap().iter().find(|x| x["name"] == "ua_relay").unwrap();
+    let row = o["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["name"] == "ua_relay")
+        .unwrap();
     let rl = &row["relay"];
-    assert_eq!((&row["contract"], &row["fn"]), (&o["contracts"]["token"], &serde_json::json!("ua_pay")));
-    assert_eq!((&rl["router"], &rl["target"]), (&o["contracts"]["router"], &o["contracts"]["token"]));
+    assert_eq!(
+        (&row["contract"], &row["fn"]),
+        (&o["contracts"]["token"], &serde_json::json!("ua_pay"))
+    );
+    assert_eq!(
+        (&rl["router"], &rl["target"]),
+        (&o["contracts"]["router"], &o["contracts"]["token"])
+    );
     let (f, call) = (rl["func"].as_str().unwrap(), arg_vals(e, rl));
     let salt = BytesN::from_array(e, &hx(&rl["salt"]).try_into().unwrap());
-    let rf = s.router.relay_ref(&s.token.address, &Symbol::new(e, f), &call, &salt);
+    let rf = s
+        .router
+        .relay_ref(&s.token.address, &Symbol::new(e, f), &call, &salt);
     assert_eq!(rf.to_array().to_vec(), hx(&rl["ref"]));
     let mut n = 0;
     for p in row["perKind"].as_array().unwrap() {
         let a = arg_vals(e, p);
-        assert_eq!(op_digest(e, &s.token.address, "ua_pay", a.clone()).to_array().to_vec(), hx(&p["digest"]), "{}", p["kind"]);
+        assert_eq!(
+            op_digest(e, &s.token.address, "ua_pay", a.clone())
+                .to_array()
+                .to_vec(),
+            hx(&p["digest"]),
+            "{}",
+            p["kind"]
+        );
         let from = BytesN::<32>::try_from_val(e, &a.get(0).unwrap()).unwrap();
         let to = Holder::try_from_val(e, &a.get(1).unwrap()).unwrap();
         let amount = i128::try_from_val(e, &a.get(2).unwrap()).unwrap();
         let vu = u64::try_from_val(e, &a.get(4).unwrap()).unwrap();
-        assert_eq!(BytesN::<32>::try_from_val(e, &a.get(3).unwrap()).unwrap(), rf);
-        assert_eq!(Option::<Address>::try_from_val(e, &a.get(5).unwrap()).unwrap(), Some(s.router.address.clone()));
+        assert_eq!(
+            BytesN::<32>::try_from_val(e, &a.get(3).unwrap()).unwrap(),
+            rf
+        );
+        assert_eq!(
+            Option::<Address>::try_from_val(e, &a.get(5).unwrap()).unwrap(),
+            Some(s.router.address.clone())
+        );
         assert_eq!(to, s.open());
         let r = s.relay_ua(&from, f, &call, &salt, &to, amount, vu, &auth_of(e, p));
         assert!(r.is_ok(), "{}: {r:?}", p["kind"]);
         assert!(s.token.ua_ref_used(&from, &rf));
         n += 1;
     }
-    assert_eq!((n, s.token.balance(&s.relayer), s.token.balance(&s.router.address)), (7, 700, 0));
+    assert_eq!(
+        (
+            n,
+            s.token.balance(&s.relayer),
+            s.token.balance(&s.router.address)
+        ),
+        (7, 700, 0)
+    );
 }
 
 /// CTR-UA-37: a listed `msig` pays no relay fee: its `ua_relay` is refused, nothing moves, and the same call settles once its slots accepted.
@@ -843,9 +1593,19 @@ fn ua_ops_msig_relay_refused_until_accepted() {
         let ua = register_listed(e, &s.reg, r);
         s.mint_ua(&ua, 1_000);
     }
-    let row = o["entries"].as_array().unwrap().iter().find(|x| x["name"] == "ua_relay").unwrap();
+    let row = o["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["name"] == "ua_relay")
+        .unwrap();
     let rl = &row["relay"];
-    let p = row["perKind"].as_array().unwrap().iter().find(|p| p["kind"] == "msig").unwrap();
+    let p = row["perKind"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["kind"] == "msig")
+        .unwrap();
     let (f, call) = (rl["func"].as_str().unwrap(), arg_vals(e, rl));
     let salt = BytesN::from_array(e, &hx(&rl["salt"]).try_into().unwrap());
     let a = arg_vals(e, p);
@@ -853,9 +1613,15 @@ fn ua_ops_msig_relay_refused_until_accepted() {
     let to = Holder::try_from_val(e, &a.get(1).unwrap()).unwrap();
     let amount = i128::try_from_val(e, &a.get(2).unwrap()).unwrap();
     let vu = u64::try_from_val(e, &a.get(4).unwrap()).unwrap();
-    assert!(s.relay_ua(&from, f, &call, &salt, &to, amount, vu, &auth_of(e, p)).is_err());
+    assert!(s
+        .relay_ua(&from, f, &call, &salt, &to, amount, vu, &auth_of(e, p))
+        .is_err());
     assert_eq!(s.token.ua_balance(&from), 1_000);
-    accept_row(e, &s.reg, regs.iter().find(|r| r["kind"] == 0x0120).unwrap());
+    accept_row(
+        e,
+        &s.reg,
+        regs.iter().find(|r| r["kind"] == 0x0120).unwrap(),
+    );
     let r = s.relay_ua(&from, f, &call, &salt, &to, amount, vu, &auth_of(e, p));
     assert!(r.is_ok(), "{r:?}");
     assert_eq!(s.token.ua_balance(&from), 1_000 - amount);
@@ -871,17 +1637,52 @@ fn ua_relay_victim_ua_pay_as_target_refused() {
     let (u, a, open) = (s.ua(1, 100), s.ua(2, 100), s.open());
     let (vargs, vref) = s.victim_ua_pay(&u);
     let (f, salt) = (Symbol::new(e, "ua_pay"), b32(e, 9));
-    let aauth = s.fee_auth(&a, &open, 1, &s.router.relay_ref(&s.token.address, &f, &vargs, &salt));
-    assert_eq!(s.relay_ua(&a.id, "ua_pay", &vargs, &salt, &open, 1, NOW + 60, &aauth), Err(auth_err()));
+    let aauth = s.fee_auth(
+        &a,
+        &open,
+        1,
+        &s.router.relay_ref(&s.token.address, &f, &vargs, &salt),
+    );
+    assert_eq!(
+        s.relay_ua(&a.id, "ua_pay", &vargs, &salt, &open, 1, NOW + 60, &aauth),
+        Err(auth_err())
+    );
     assert!(!s.token.ua_ref_used(&u.id, &vref));
-    assert_eq!((s.token.ua_balance(&u.id), s.token.ua_balance(&a.id)), (100, 100));
-    assert_eq!((s.token.balance(&s.router.address), s.token.balance(&s.relayer)), (0, 0));
+    assert_eq!(
+        (s.token.ua_balance(&u.id), s.token.ua_balance(&a.id)),
+        (100, 100)
+    );
+    assert_eq!(
+        (
+            s.token.balance(&s.router.address),
+            s.token.balance(&s.relayer)
+        ),
+        (0, 0)
+    );
     // A balance on the router (sent by mistake) is not drained by a target `transfer(router, …)`.
     s.mint(&s.router.address, 5);
-    let (targs, salt): (soroban_sdk::Vec<Val>, _) = ((&s.router.address, &s.relayer, 5i128).into_val(e), b32(e, 10));
-    let tauth = s.fee_auth(&a, &open, 1, &s.router.relay_ref(&s.token.address, &Symbol::new(e, "transfer"), &targs, &salt));
-    assert_eq!(s.relay_ua(&a.id, "transfer", &targs, &salt, &open, 1, NOW + 60, &tauth), Err(auth_err()));
-    assert_eq!((s.token.balance(&s.router.address), s.token.balance(&s.relayer)), (5, 0));
+    let (targs, salt): (soroban_sdk::Vec<Val>, _) = (
+        (&s.router.address, &s.relayer, 5i128).into_val(e),
+        b32(e, 10),
+    );
+    let tauth = s.fee_auth(
+        &a,
+        &open,
+        1,
+        &s.router
+            .relay_ref(&s.token.address, &Symbol::new(e, "transfer"), &targs, &salt),
+    );
+    assert_eq!(
+        s.relay_ua(&a.id, "transfer", &targs, &salt, &open, 1, NOW + 60, &tauth),
+        Err(auth_err())
+    );
+    assert_eq!(
+        (
+            s.token.balance(&s.router.address),
+            s.token.balance(&s.relayer)
+        ),
+        (5, 0)
+    );
 }
 
 /// The same attack through native `relay` (any payer may front it): refused, the victim's fee untouched.
@@ -893,10 +1694,29 @@ fn relay_victim_ua_pay_as_target_refused() {
     let attacker = Address::generate(e);
     s.mint(&attacker, 10);
     let (vargs, vref) = s.victim_ua_pay(&u);
-    assert_eq!(s.relay_native(&attacker, "ua_pay", &vargs, &b32(e, 9), &s.router.address, 1), Err(auth_err()));
+    assert_eq!(
+        s.relay_native(
+            &attacker,
+            "ua_pay",
+            &vargs,
+            &b32(e, 9),
+            &s.router.address,
+            1
+        ),
+        Err(auth_err())
+    );
     assert!(!s.token.ua_ref_used(&u.id, &vref));
-    assert_eq!((s.token.ua_balance(&u.id), s.token.balance(&attacker)), (100, 10));
-    assert_eq!((s.token.balance(&s.router.address), s.token.balance(&s.relayer)), (0, 0));
+    assert_eq!(
+        (s.token.ua_balance(&u.id), s.token.balance(&attacker)),
+        (100, 10)
+    );
+    assert_eq!(
+        (
+            s.token.balance(&s.router.address),
+            s.token.balance(&s.relayer)
+        ),
+        (0, 0)
+    );
 }
 
 /// Controller ruling 2026-10-31: `exec` serves only its router; anyone else calling it directly is refused, so a
@@ -915,8 +1735,19 @@ fn executor_exec_refuses_all_but_router() {
     // A caller that authorises itself does not stand in for the router.
     let other = Address::generate(e);
     let (f, bargs): (_, soroban_sdk::Vec<Val>) = (Symbol::new(e, "balance"), (&other,).into_val(e));
-    s.allow(&other, &x.address, "exec", (&s.token.address, &f, &bargs).into_val(e));
-    assert_eq!(x.try_exec(&s.token.address, &f, &bargs).err().unwrap().unwrap(), auth_err());
+    s.allow(
+        &other,
+        &x.address,
+        "exec",
+        (&s.token.address, &f, &bargs).into_val(e),
+    );
+    assert_eq!(
+        x.try_exec(&s.token.address, &f, &bargs)
+            .err()
+            .unwrap()
+            .unwrap(),
+        auth_err()
+    );
 }
 
 /// Controller ruling 2026-10-31: the fee never rests on the router or the executor; a `to` naming the executor is
@@ -928,11 +1759,31 @@ fn relay_payee_never_router_or_executor() {
     let (u, x) = (s.ua(1, 100), s.router.executor());
     let args = s.cancel_args(&u, 3);
     let to = Holder::Addr(x.clone());
-    assert_eq!(s.relay_cancel(&u, &args, 1, &to, 7, &s.fee_auth(&u, &to, 7, &s.rf(&args, 1))), err(Error::BadPayee));
+    assert_eq!(
+        s.relay_cancel(
+            &u,
+            &args,
+            1,
+            &to,
+            7,
+            &s.fee_auth(&u, &to, 7, &s.rf(&args, 1))
+        ),
+        err(Error::BadPayee)
+    );
     let payer = Address::generate(e);
     s.mint(&payer, 10);
-    assert_eq!(s.relay_native(&payer, CANCEL, &args, &b32(e, 1), &x, 1), err(Error::BadPayee));
+    assert_eq!(
+        s.relay_native(&payer, CANCEL, &args, &b32(e, 1), &x, 1),
+        err(Error::BadPayee)
+    );
     // Open mode with the router or the executor as the relayer cannot happen: neither has `__check_auth`, so
     // `relayer.require_auth()` fails first (the `BadPayee` check still covers it).
-    assert_eq!((s.token.ua_balance(&u.id), s.token.balance(&payer), s.token.balance(&x)), (100, 10, 0));
+    assert_eq!(
+        (
+            s.token.ua_balance(&u.id),
+            s.token.balance(&payer),
+            s.token.balance(&x)
+        ),
+        (100, 10, 0)
+    );
 }

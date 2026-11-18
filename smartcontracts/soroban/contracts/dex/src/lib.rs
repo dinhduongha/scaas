@@ -12,12 +12,12 @@
 //! bounded by `filled[order_hash]` here and by the token's own `UaPulled`. Every leg is pulled into the DEX, then paid
 //! to the other order's `destination` (`transfer`, or `transfer_to_ua` for a UA) and the fee recipient.
 #![no_std]
+use scaas_ua_common::{op_digest, UaRegistryClient, PURPOSE_TRADE};
 /// The order, holder and signature types of the DEX's interface.
 pub use scaas_ua_common::{Holder, Order, UaSig};
-use scaas_ua_common::{op_digest, UaRegistryClient, PURPOSE_TRADE};
 use soroban_sdk::{
-    contract, contractclient, contracterror, contractevent, contractimpl, contracttype, panic_with_error,
-    xdr::ToXdr, Address, BytesN, Env, IntoVal, I256,
+    contract, contractclient, contracterror, contractevent, contractimpl, contracttype,
+    panic_with_error, xdr::ToXdr, Address, BytesN, Env, IntoVal, I256,
 };
 
 const DAY: u32 = 17_280;
@@ -99,17 +99,26 @@ pub fn order_hash(env: &Env, o: &Order) -> BytesN<32> {
 }
 
 fn market_key(a: &Address, b: &Address) -> Key {
-    if a < b { Key::Market(a.clone(), b.clone()) } else { Key::Market(b.clone(), a.clone()) }
+    if a < b {
+        Key::Market(a.clone(), b.clone())
+    } else {
+        Key::Market(b.clone(), a.clone())
+    }
 }
 
 fn filled(env: &Env, h: &BytesN<32>) -> i128 {
-    env.storage().persistent().get(&Key::Filled(h.clone())).unwrap_or(0)
+    env.storage()
+        .persistent()
+        .get(&Key::Filled(h.clone()))
+        .unwrap_or(0)
 }
 
 fn set_filled(env: &Env, h: &BytesN<32>, v: i128) {
     let k = Key::Filled(h.clone());
     env.storage().persistent().set(&k, &v);
-    env.storage().persistent().extend_ttl(&k, 30 * DAY, 60 * DAY);
+    env.storage()
+        .persistent()
+        .extend_ttl(&k, 30 * DAY, 60 * DAY);
 }
 
 /// Every entry keeps the instance (fee recipient, markets, registry) alive (S11).
@@ -134,7 +143,10 @@ fn authorize(env: &Env, o: &Order, auth: &UaSig) {
 
 /// `amount` of `o.sell_token` from its maker into the DEX.
 fn pull(env: &Env, o: &Order, auth: &UaSig, amount: i128) {
-    let (t, me) = (DexTokenClient::new(env, &o.sell_token), env.current_contract_address());
+    let (t, me) = (
+        DexTokenClient::new(env, &o.sell_token),
+        env.current_contract_address(),
+    );
     match &o.maker {
         Holder::Addr(a) => t.transfer_from(&me, a, &me, &amount),
         Holder::Ua(_) => t.ua_trade(&me, o, auth, &amount),
@@ -143,7 +155,10 @@ fn pull(env: &Env, o: &Order, auth: &UaSig, amount: i128) {
 
 /// `amount` of `token` from the DEX to `to`.
 fn pay(env: &Env, token: &Address, to: &Holder, amount: i128) {
-    let (t, me) = (DexTokenClient::new(env, token), env.current_contract_address());
+    let (t, me) = (
+        DexTokenClient::new(env, token),
+        env.current_contract_address(),
+    );
     match to {
         Holder::Addr(a) => t.transfer(&me, a, &amount),
         Holder::Ua(u) => t.transfer_to_ua(&me, u, &amount),
@@ -153,7 +168,11 @@ fn pay(env: &Env, token: &Address, to: &Holder, amount: i128) {
 fn cancelled(env: &Env, order: Order) {
     let h = order_hash(env, &order);
     set_filled(env, &h, order.sell_amount);
-    Cancelled { maker: order.maker, order_hash: h }.publish(env);
+    Cancelled {
+        maker: order.maker,
+        order_hash: h,
+    }
+    .publish(env);
 }
 
 #[contract]
@@ -161,9 +180,16 @@ pub struct Dex;
 
 #[contractimpl]
 impl Dex {
-    pub fn __constructor(env: Env, admin: Address, fee_recipient: Address, registry: Option<Address>) {
+    pub fn __constructor(
+        env: Env,
+        admin: Address,
+        fee_recipient: Address,
+        registry: Option<Address>,
+    ) {
         env.storage().instance().set(&Key::Admin, &admin);
-        env.storage().instance().set(&Key::FeeRecipient, &fee_recipient);
+        env.storage()
+            .instance()
+            .set(&Key::FeeRecipient, &fee_recipient);
         env.storage().instance().set(&Key::Registry, &registry);
     }
 
@@ -172,12 +198,16 @@ impl Dex {
         if market.maker_fee_ppm > MAX_FEE_PPM || market.taker_fee_ppm > MAX_FEE_PPM {
             panic_with_error!(&env, Error::FeeAboveCap);
         }
-        env.storage().instance().set(&market_key(&token_a, &token_b), &market);
+        env.storage()
+            .instance()
+            .set(&market_key(&token_a, &token_b), &market);
         env.storage().instance().extend_ttl(30 * DAY, 60 * DAY);
     }
 
     pub fn market(env: Env, token_a: Address, token_b: Address) -> Option<Market> {
-        env.storage().instance().get(&market_key(&token_a, &token_b))
+        env.storage()
+            .instance()
+            .get(&market_key(&token_a, &token_b))
     }
 
     pub fn filled(env: Env, order_hash: BytesN<32>) -> i128 {
@@ -191,7 +221,9 @@ impl Dex {
     /// Lệnh huỷ không bao giờ settle: đánh dấu đã khớp hết. Maker uỷ quyền (meta-tx qua relayer). A native maker only.
     pub fn cancel(env: Env, order: Order) {
         bump(&env);
-        let Holder::Addr(a) = &order.maker else { panic_with_error!(&env, Error::BadAuth) };
+        let Holder::Addr(a) = &order.maker else {
+            panic_with_error!(&env, Error::BadAuth)
+        };
         a.require_auth();
         cancelled(&env, order);
     }
@@ -200,23 +232,50 @@ impl Dex {
     /// through the registry bound at construction.
     pub fn ua_cancel(env: Env, order: Order, auth: UaSig) {
         bump(&env);
-        let Holder::Ua(ua) = &order.maker else { panic_with_error!(&env, Error::BadAuth) };
-        let reg = match env.storage().instance().get::<_, Option<Address>>(&Key::Registry).flatten() {
+        let Holder::Ua(ua) = &order.maker else {
+            panic_with_error!(&env, Error::BadAuth)
+        };
+        let reg = match env
+            .storage()
+            .instance()
+            .get::<_, Option<Address>>(&Key::Registry)
+            .flatten()
+        {
             Some(r) => UaRegistryClient::new(&env, &r),
             None => panic_with_error!(&env, Error::UaLedgerOff),
         };
-        let digest = op_digest(&env, &env.current_contract_address(), "ua_cancel", (order.clone(),).into_val(&env));
-        reg.require_authorized(ua, &BytesN::from_array(&env, &PURPOSE_TRADE), &digest, &auth);
+        let digest = op_digest(
+            &env,
+            &env.current_contract_address(),
+            "ua_cancel",
+            (order.clone(),).into_val(&env),
+        );
+        reg.require_authorized(
+            ua,
+            &BytesN::from_array(&env, &PURPOSE_TRADE),
+            &digest,
+            &auth,
+        );
         cancelled(&env, order);
     }
 
     /// `maker_fill` = lượng `maker.sell_token` maker bán trong lần khớp này. Taker trả theo giá của maker
     /// (làm tròn lên — maker không bao giờ nhận dưới giới hạn), và phải nhận ít nhất giá của chính taker.
     /// `maker_auth` / `taker_auth`: a UA maker's order signature, empty for a native maker (`BadAuth`).
-    pub fn settle(env: Env, maker: Order, taker: Order, maker_fill: i128, maker_auth: UaSig, taker_auth: UaSig) {
+    pub fn settle(
+        env: Env,
+        maker: Order,
+        taker: Order,
+        maker_fill: i128,
+        maker_auth: UaSig,
+        taker_auth: UaSig,
+    ) {
         bump(&env);
         // Cùng token ⇒ một lệnh có thể khớp chính nó (mh == th) và ghi đè `filled`.
-        if maker.sell_token != taker.buy_token || maker.buy_token != taker.sell_token || maker.sell_token == maker.buy_token {
+        if maker.sell_token != taker.buy_token
+            || maker.buy_token != taker.sell_token
+            || maker.sell_token == maker.buy_token
+        {
             panic_with_error!(&env, Error::TokenMismatch);
         }
         // NET-SOR-10: each order's relayer submits it (once when both name the same one).
@@ -230,19 +289,30 @@ impl Dex {
         if now > maker.expiry || now > taker.expiry {
             panic_with_error!(&env, Error::Expired);
         }
-        if maker_fill <= 0 || maker.sell_amount <= 0 || maker.buy_amount <= 0 || taker.sell_amount <= 0 || taker.buy_amount <= 0 {
+        if maker_fill <= 0
+            || maker.sell_amount <= 0
+            || maker.buy_amount <= 0
+            || taker.sell_amount <= 0
+            || taker.buy_amount <= 0
+        {
             panic_with_error!(&env, Error::BadAmount);
         }
         // Tích hai lượng 18 số lẻ vượt i128 ⇒ nhân trong I256 của host.
         let w = |v: i128| I256::from_i128(&env, v);
-        let taker_fill = w(maker_fill).mul(&w(maker.buy_amount)).add(&w(maker.sell_amount - 1)).div(&w(maker.sell_amount))
+        let taker_fill = w(maker_fill)
+            .mul(&w(maker.buy_amount))
+            .add(&w(maker.sell_amount - 1))
+            .div(&w(maker.sell_amount))
             .to_i128()
             .unwrap_or_else(|| panic_with_error!(&env, Error::BadAmount));
         if w(maker_fill).mul(&w(taker.sell_amount)) < w(taker_fill).mul(&w(taker.buy_amount)) {
             panic_with_error!(&env, Error::PriceLimit);
         }
         let (mh, th) = (order_hash(&env, &maker), order_hash(&env, &taker));
-        let (mf, tf) = (filled(&env, &mh) + maker_fill, filled(&env, &th) + taker_fill);
+        let (mf, tf) = (
+            filled(&env, &mh) + maker_fill,
+            filled(&env, &th) + taker_fill,
+        );
         if mf > maker.sell_amount || tf > taker.sell_amount {
             panic_with_error!(&env, Error::Overfill);
         }
@@ -254,7 +324,11 @@ impl Dex {
             .instance()
             .get(&market_key(&maker.sell_token, &maker.buy_token))
             .unwrap_or_else(|| panic_with_error!(&env, Error::UnknownMarket));
-        let (mppm, tppm) = if m.fee_on { (m.maker_fee_ppm, m.taker_fee_ppm) } else { (0, 0) };
+        let (mppm, tppm) = if m.fee_on {
+            (m.maker_fee_ppm, m.taker_fee_ppm)
+        } else {
+            (0, 0)
+        };
         if mppm > maker.max_fee_ppm || tppm > taker.max_fee_ppm {
             panic_with_error!(&env, Error::FeeAboveSigned);
         }
@@ -268,16 +342,33 @@ impl Dex {
         let fee_to = Holder::Addr(env.storage().instance().get(&Key::FeeRecipient).unwrap());
         pull(&env, &maker, &maker_auth, maker_fill);
         pull(&env, &taker, &taker_auth, taker_fill);
-        pay(&env, &maker.sell_token, &taker.destination, maker_fill - taker_fee);
-        pay(&env, &maker.buy_token, &maker.destination, taker_fill - maker_fee);
+        pay(
+            &env,
+            &maker.sell_token,
+            &taker.destination,
+            maker_fill - taker_fee,
+        );
+        pay(
+            &env,
+            &maker.buy_token,
+            &maker.destination,
+            taker_fill - maker_fee,
+        );
         if taker_fee > 0 {
             pay(&env, &maker.sell_token, &fee_to, taker_fee);
         }
         if maker_fee > 0 {
             pay(&env, &maker.buy_token, &fee_to, maker_fee);
         }
-        Settled { maker_hash: mh, taker_hash: th, maker_sold: maker_fill, taker_sold: taker_fill, maker_fee, taker_fee }
-            .publish(&env);
+        Settled {
+            maker_hash: mh,
+            taker_hash: th,
+            maker_sold: maker_fill,
+            taker_sold: taker_fill,
+            maker_fee,
+            taker_fee,
+        }
+        .publish(&env);
     }
 }
 

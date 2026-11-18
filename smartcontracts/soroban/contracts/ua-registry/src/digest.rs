@@ -33,7 +33,8 @@ pub const STELLAR_ACCOUNT: u32 = 0x0011;
 pub const SOROBAN_CONTRACT: u32 = 0x0012;
 
 /// `keccak256("scaas.ua.msg.v1")`.
-pub const MSG_TAG: [u8; 32] = h32("30a5cfd6b1d0889ef4a90d8488fa5e6e615322735899e23243d69087b6b66349");
+pub const MSG_TAG: [u8; 32] =
+    h32("30a5cfd6b1d0889ef4a90d8488fa5e6e615322735899e23243d69087b6b66349");
 
 /// `TAG(kind) = keccak256("scaas.ua.<name>.v1")` of the S3 kinds and the U8S-D8 kinds, whose ids need it (pinned by
 /// `kinds.json`); any other kind is `KindDisabled` on Soroban (spec S3).
@@ -127,7 +128,15 @@ pub fn ua_of(env: &Env, kind: u32, key_data: &Bytes) -> BytesN<32> {
 
 /// CTR-UA-12: `ua_msg = keccak256(MSG_TAG ‖ TAG(kind) ‖ purposeTag ‖ digest)`.
 pub fn ua_message(env: &Env, kind: u32, purpose: &BytesN<32>, digest: &BytesN<32>) -> Hash<32> {
-    keccak(env, &[&MSG_TAG, &tag(env, kind), &purpose.to_array(), &digest.to_array()])
+    keccak(
+        env,
+        &[
+            &MSG_TAG,
+            &tag(env, kind),
+            &purpose.to_array(),
+            &digest.to_array(),
+        ],
+    )
 }
 
 /// CTR-UA-23: the PQ kinds sign `pq_msg = keccak256(TAG(kind) ‖ ua_msg)` (empty context).

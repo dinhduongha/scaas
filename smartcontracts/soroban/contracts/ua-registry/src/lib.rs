@@ -5,13 +5,16 @@
 //! id (P11, U8S-D8): such an attestation is never a signature, so it never makes a key able to authorise.
 #![no_std]
 use scaas_ua_common::{
-    attest_digest, h32, kem_pk, kem_pk_record_hash, kem_record_digest, kem_record_hash, membership_digest, portable_record_hash,
-    pqz_key_hash, pqz_key_record_digest, registration_digest, Checked, FrostKey, FrostMember, KemKey, MemberSig, MsigMember, MsigStructure, MuSig2Key,
-    Registration, UaAttrs, UaSig, WebAuthnKey, PURPOSE_KEM, PURPOSE_MEMBER, PURPOSE_MEMBERSHIP, PURPOSE_POP_V2, PURPOSE_PQZ_KEY,
+    attest_digest, h32, kem_pk, kem_pk_record_hash, kem_record_digest, kem_record_hash,
+    membership_digest, portable_record_hash, pqz_key_hash, pqz_key_record_digest,
+    registration_digest, Checked, FrostKey, FrostMember, KemKey, MemberSig, MsigMember,
+    MsigStructure, MuSig2Key, Registration, UaAttrs, UaSig, WebAuthnKey, PURPOSE_KEM,
+    PURPOSE_MEMBER, PURPOSE_MEMBERSHIP, PURPOSE_POP_V2, PURPOSE_PQZ_KEY,
 };
 use soroban_sdk::{
-    contract, contracterror, contractevent, contractimpl, contracttype, crypto::Hash, panic_with_error, xdr::FromXdr,
-    Address, Bytes, BytesN, Env, IntoVal, Map, String, TryFromVal, Val, Vec,
+    contract, contracterror, contractevent, contractimpl, contracttype, crypto::Hash,
+    panic_with_error, xdr::FromXdr, Address, Bytes, BytesN, Env, IntoVal, Map, String, TryFromVal,
+    Val, Vec,
 };
 
 pub(crate) mod abi;
@@ -159,22 +162,35 @@ pub struct UaMembershipAccepted {
 }
 
 /// `keccak256("scaas.ua.group.<g>.v1")` (pinned by `kinds.json` `groups`).
-const GROUP_P256: [u8; 32] = h32("42536053999ec2faea9af0b9b0ddeca9a126a2f05231603786f112854f12c1df");
-const GROUP_ED25519: [u8; 32] = h32("68b4870b8635a91eb90f5a22ac6c350df50d0ca1f9ba92db6b38b0718ea5b25c");
-const GROUP_SECP256K1: [u8; 32] = h32("c9cbec9e3b9b4bf3014d4b68eb88e8d49c151a734c4c73503f7cadf2c8ff2b6e");
-const GROUP_MLDSA44: [u8; 32] = h32("97a431380a20af85ba723ef86a2744e0b7f438ae5ef677d03c595ab697478065");
-const GROUP_MLDSA65: [u8; 32] = h32("ce664790de9584777bd32d6bbce84b26b1a479d86be05f03ba5120eae90d40b2");
-const GROUP_BN254_G1: [u8; 32] = h32("8cf87f06e45b58fb9da912f12ece897bac88c2018da2c7b86056b954f5a1727b");
-const GROUP_BN254_G2: [u8; 32] = h32("68a782d8ba5132c00f8b1f53883b465e3b7b14fcca363ab84ff92754c752aa8d");
-const GROUP_BLS12381_G1: [u8; 32] = h32("b99dd1845a1f879279bd9b2cc7716250b1d33bb76a8c4fc8d449681842ed3bf2");
-const GROUP_BLS12381_G2: [u8; 32] = h32("3d6646a6b9ee5a5cd8d394330578fb341709fd60ed2650b50f03e40a49b4a46a");
-const GROUP_FNDSA512: [u8; 32] = h32("98ab6b49ea930e51296f1a3c6c172339d24402fcdb5b58ff37ddc0e28f450f7a");
-const GROUP_SLHDSA128S: [u8; 32] = h32("863cfc243666ba3fca5731a5e7092d62b8cc0f35807b62e9115a270d99fcb2de");
+const GROUP_P256: [u8; 32] =
+    h32("42536053999ec2faea9af0b9b0ddeca9a126a2f05231603786f112854f12c1df");
+const GROUP_ED25519: [u8; 32] =
+    h32("68b4870b8635a91eb90f5a22ac6c350df50d0ca1f9ba92db6b38b0718ea5b25c");
+const GROUP_SECP256K1: [u8; 32] =
+    h32("c9cbec9e3b9b4bf3014d4b68eb88e8d49c151a734c4c73503f7cadf2c8ff2b6e");
+const GROUP_MLDSA44: [u8; 32] =
+    h32("97a431380a20af85ba723ef86a2744e0b7f438ae5ef677d03c595ab697478065");
+const GROUP_MLDSA65: [u8; 32] =
+    h32("ce664790de9584777bd32d6bbce84b26b1a479d86be05f03ba5120eae90d40b2");
+const GROUP_BN254_G1: [u8; 32] =
+    h32("8cf87f06e45b58fb9da912f12ece897bac88c2018da2c7b86056b954f5a1727b");
+const GROUP_BN254_G2: [u8; 32] =
+    h32("68a782d8ba5132c00f8b1f53883b465e3b7b14fcca363ab84ff92754c752aa8d");
+const GROUP_BLS12381_G1: [u8; 32] =
+    h32("b99dd1845a1f879279bd9b2cc7716250b1d33bb76a8c4fc8d449681842ed3bf2");
+const GROUP_BLS12381_G2: [u8; 32] =
+    h32("3d6646a6b9ee5a5cd8d394330578fb341709fd60ed2650b50f03e40a49b4a46a");
+const GROUP_FNDSA512: [u8; 32] =
+    h32("98ab6b49ea930e51296f1a3c6c172339d24402fcdb5b58ff37ddc0e28f450f7a");
+const GROUP_SLHDSA128S: [u8; 32] =
+    h32("863cfc243666ba3fca5731a5e7092d62b8cc0f35807b62e9115a270d99fcb2de");
 /// The field primes, big-endian: key coordinates must be canonical (`< p`).
 const P256_P: [u8; 32] = h32("ffffffff00000001000000000000000000000000ffffffffffffffffffffffff");
-const SECP256K1_P: [u8; 32] = h32("fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f");
+const SECP256K1_P: [u8; 32] =
+    h32("fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f");
 /// `keccak256("")`: refused as a `pqz_pop_hash`, the hash of no proof (EVM `EMPTY_PROOF_HASH`).
-const EMPTY_HASH: [u8; 32] = h32("c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470");
+const EMPTY_HASH: [u8; 32] =
+    h32("c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470");
 /// CTR-UA-32: scheme 1 = ML-KEM-1024 + X25519, `scheme ‖ ek ‖ x25519` (2 is reserved).
 const KEM_SCHEME: u32 = 1;
 const KEM_PK_LENGTH: u32 = 1_601;
@@ -224,7 +240,9 @@ fn u16_at(d: &Bytes, o: u32) -> u32 {
 
 /// The kind and key data of a record of one of `kinds`; the typed views' read.
 fn key_data_of(env: &Env, ua: BytesN<32>, kinds: &[u32]) -> Option<(u32, Bytes)> {
-    get::<Registration>(env, &Key::Ua(ua)).filter(|r| kinds.contains(&r.kind)).map(|r| (r.kind, r.key_data))
+    get::<Registration>(env, &Key::Ua(ua))
+        .filter(|r| kinds.contains(&r.kind))
+        .map(|r| (r.kind, r.key_data))
 }
 
 /// One point of a group kind: 33 B secp256k1, 64 B bn254.
@@ -385,7 +403,9 @@ fn check_members(env: &Env, d: &Bytes) -> bool {
             STELLAR_ACCOUNT => weight += w,
             SOROBAN_CONTRACT => fail(env, Error::MemberUnknown),
             k if relayer_checked(k) => {
-                if !get::<Registration>(env, &Key::Ua(BytesN::from_array(env, &id))).is_some_and(|r| r.kind == k) {
+                if !get::<Registration>(env, &Key::Ua(BytesN::from_array(env, &id)))
+                    .is_some_and(|r| r.kind == k)
+                {
                     fail(env, Error::MemberUnknown);
                 }
             }
@@ -410,7 +430,12 @@ fn stellar_account(env: &Env, id: &[u8; 32]) -> Address {
 type By = Option<(Address, BytesN<32>)>;
 
 fn by(env: &Env, function: &str, relayer: &Option<Address>, args: impl FnOnce() -> Vec<Val>) -> By {
-    relayer.as_ref().map(|r| (r.clone(), attest_digest(env, &env.current_contract_address(), function, args())))
+    relayer.as_ref().map(|r| {
+        (
+            r.clone(),
+            attest_digest(env, &env.current_contract_address(), function, args()),
+        )
+    })
 }
 
 /// P11 rules 2, 3 (U8S-D8): a part the chain cannot verify, on the authority of `relayer`: `NotVerifiable` without one,
@@ -418,7 +443,9 @@ fn by(env: &Env, function: &str, relayer: &Option<Address>, args: impl FnOnce() 
 /// covers one word, the digest of every argument (owner 2026-11-01), so an entry does not carry them all a second time. A part
 /// the chain verifies never comes here: it stays open to anyone, and `relayer` is not asked.
 fn attest(env: &Env, by: &By) -> Checked {
-    let Some((r, digest)) = by else { fail(env, Error::NotVerifiable) };
+    let Some((r, digest)) = by else {
+        fail(env, Error::NotVerifiable)
+    };
     let list: Vec<Address> = env.storage().instance().get(&Key::Relayers).unwrap();
     if !list.contains(r) {
         fail(env, Error::RelayerNotListed);
@@ -445,7 +472,20 @@ fn attested_slot(kind: u32) -> bool {
 /// (U8S-D8): `attest` once per signature, `checked` keeps the mark. Outside `portable` nothing attests: an `evm-contract` slot is
 /// `NotVerifiable`, a relayer-checked member has no `Signer`, so `short`. A refused slot signature is `short`.
 #[allow(clippy::too_many_arguments)]
-fn check_slot(env: &Env, ua: &BytesN<32>, s: &MemberSig, kind: u32, id: &[u8; 32], purpose: &BytesN<32>, digest: &BytesN<32>, md: &BytesN<32>, portable: Option<&Hash<32>>, relayer: &By, checked: &mut Checked, short: Error) {
+fn check_slot(
+    env: &Env,
+    ua: &BytesN<32>,
+    s: &MemberSig,
+    kind: u32,
+    id: &[u8; 32],
+    purpose: &BytesN<32>,
+    digest: &BytesN<32>,
+    md: &BytesN<32>,
+    portable: Option<&Hash<32>>,
+    relayer: &By,
+    checked: &mut Checked,
+    short: Error,
+) {
     if !s.key_data.is_empty() {
         fail(env, short);
     }
@@ -472,7 +512,14 @@ fn check_slot(env: &Env, ua: &BytesN<32>, s: &MemberSig, kind: u32, id: &[u8; 32
             let (_, key) = get::<(u32, Bytes)>(env, &Key::Signer(BytesN::from_array(env, id)))
                 .unwrap_or_else(|| fail(env, short));
             let pm = BytesN::from_array(env, &PURPOSE_MEMBER);
-            verify::check(env, kind, &key, &ua_message(env, kind, &pm, md), &s.sig, short);
+            verify::check(
+                env,
+                kind,
+                &key,
+                &ua_message(env, kind, &pm, md),
+                &s.sig,
+                short,
+            );
         }
     }
 }
@@ -484,9 +531,23 @@ fn check_slot(env: &Env, ua: &BytesN<32>, s: &MemberSig, kind: u32, id: &[u8; 32
 /// 2026-10-31, U8S-D1, every slot's weight counts, native ones included): with T the slots' total weight and N the threshold,
 /// T - min(weight) < N, else `short`. Returns who checked the signature.
 #[allow(clippy::too_many_arguments)]
-fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, digest: &BytesN<32>, sigs: &Vec<MemberSig>, portable: Option<&Hash<32>>, relayer: &By, short: Error) -> Checked {
+fn check_msig(
+    env: &Env,
+    ua: &BytesN<32>,
+    d: &Bytes,
+    purpose: &BytesN<32>,
+    digest: &BytesN<32>,
+    sigs: &Vec<MemberSig>,
+    portable: Option<&Hash<32>>,
+    relayer: &By,
+    short: Error,
+) -> Checked {
     let md = member_digest(env, ua, &ua_message(env, MSIG, purpose, digest));
-    let yes = if purpose.to_array() == PURPOSE_POP_V2 { u32::MAX } else { accepted(env, ua).0 };
+    let yes = if purpose.to_array() == PURPOSE_POP_V2 {
+        u32::MAX
+    } else {
+        accepted(env, ua).0
+    };
     let (threshold, count) = (u16_at(d, 0), u16_at(d, 2));
     let (mut acc, mut w_min, mut next, mut checked) = (0, u32::MAX, 0, Checked::Chain);
     for s in sigs.iter() {
@@ -495,7 +556,20 @@ fn check_msig(env: &Env, ua: &BytesN<32>, d: &Bytes, purpose: &BytesN<32>, diges
         }
         next = s.index + 1;
         let (kind, id, w) = member(d, s.index);
-        check_slot(env, ua, &s, kind, &id, purpose, digest, &md, portable, relayer, &mut checked, short);
+        check_slot(
+            env,
+            ua,
+            &s,
+            kind,
+            &id,
+            purpose,
+            digest,
+            &md,
+            portable,
+            relayer,
+            &mut checked,
+            short,
+        );
         acc += w;
         w_min = w_min.min(w);
     }
@@ -536,26 +610,57 @@ fn kem_holder(kind: u32) -> bool {
 
 /// TS-D12: a single key only `signature`, an `msig` only `members`, `key_data` never.
 fn sig_fields_ok(kind: u32, s: &UaSig) -> bool {
-    s.key_data.is_empty() && if kind == MSIG { s.signature.is_empty() } else { s.members.is_empty() }
+    s.key_data.is_empty()
+        && if kind == MSIG {
+            s.signature.is_empty()
+        } else {
+            s.members.is_empty()
+        }
 }
 
 /// EVM `_portableOk` + `_portableBytes` for a later portable record (`set_kem_key` ≥ 1, `set_pqz_key`): its signature over
 /// `(ua, purpose, rd)`, `Unauthorized`, an `msig` under `check_msig`'s portable rule (U8S-D1), a relayer-checked kind on
 /// `attest`; returns the bytes stored for it, the `signature` or EVM's `abi.encode(MemberSig[])`, and who checked them.
 #[allow(clippy::too_many_arguments)]
-fn check_portable(env: &Env, kind: u32, d: &Bytes, ua: &BytesN<32>, purpose: [u8; 32], rd: &Hash<32>, sig: &UaSig, relayer: &By) -> (Bytes, Checked) {
+fn check_portable(
+    env: &Env,
+    kind: u32,
+    d: &Bytes,
+    ua: &BytesN<32>,
+    purpose: [u8; 32],
+    rd: &Hash<32>,
+    sig: &UaSig,
+    relayer: &By,
+) -> (Bytes, Checked) {
     if !sig_fields_ok(kind, sig) {
         fail(env, Error::Unauthorized);
     }
     let (p, digest) = (BytesN::from_array(env, &purpose), rd.to_bytes());
     if kind == MSIG {
-        let checked = check_msig(env, ua, d, &p, &digest, &sig.members, Some(rd), relayer, Error::Unauthorized);
+        let checked = check_msig(
+            env,
+            ua,
+            d,
+            &p,
+            &digest,
+            &sig.members,
+            Some(rd),
+            relayer,
+            Error::Unauthorized,
+        );
         return (abi::encode_member_sigs(env, &sig.members), checked);
     }
     if relayer_checked(kind) {
         return (sig.signature.clone(), attest(env, relayer));
     }
-    verify::check(env, kind, d, &ua_message(env, kind, &p, &digest), &sig.signature, Error::Unauthorized);
+    verify::check(
+        env,
+        kind,
+        d,
+        &ua_message(env, kind, &p, &digest),
+        &sig.signature,
+        Error::Unauthorized,
+    );
     (sig.signature.clone(), Checked::Chain)
 }
 
@@ -580,19 +685,37 @@ fn check_kem_pk(env: &Env, scheme: u32, pk: &Bytes) {
 
 /// A stored `kem_pk` as its fields (EVM `_kemAt`; scheme 1 is the only stored form).
 fn kem_of(pk: &Bytes) -> KemKey {
-    let (ek, x) = (pk.slice(1..KEM_PK_LENGTH - 32), pk.slice(KEM_PK_LENGTH - 32..KEM_PK_LENGTH));
-    KemKey { scheme: KEM_SCHEME, mlkem_ek: ek, x25519: x.try_into().unwrap() }
+    let (ek, x) = (
+        pk.slice(1..KEM_PK_LENGTH - 32),
+        pk.slice(KEM_PK_LENGTH - 32..KEM_PK_LENGTH),
+    );
+    KemKey {
+        scheme: KEM_SCHEME,
+        mlkem_ek: ek,
+        x25519: x.try_into().unwrap(),
+    }
 }
 
 /// Step 5, EVM `_attrs` in its order: holders (a PQZ key `holder`, a KEM key `kem_holder`: never an `msig`), the proof hash,
 /// the PQZ key's length (one of the four sets), the KEM key (whole or committed; `register` takes no version: it is version
 /// 0). Returns the whole KEM key (empty when none or committed), `pqzKeyHash` (0 without a key) and the `UAPortableRecord`
 /// struct hash.
-fn check_attrs(env: &Env, kind: u32, d: &Bytes, ua: &BytesN<32>, attrs: &UaAttrs, pqz_pop: &Bytes) -> (Bytes, BytesN<32>, BytesN<32>) {
+fn check_attrs(
+    env: &Env,
+    kind: u32,
+    d: &Bytes,
+    ua: &BytesN<32>,
+    attrs: &UaAttrs,
+    pqz_pop: &Bytes,
+) -> (Bytes, BytesN<32>, BytesN<32>) {
     let none = zero(env);
     let pqz = !attrs.pqz_key.is_empty();
     let commit = attrs.kem_pk_hash != none;
-    let pk = if commit { Bytes::new(env) } else { kem_pk(env, &attrs.kem) };
+    let pk = if commit {
+        Bytes::new(env)
+    } else {
+        kem_pk(env, &attrs.kem)
+    };
     if pqz && !holder(kind, d) {
         fail(env, Error::PqzHolder);
     }
@@ -608,7 +731,11 @@ fn check_attrs(env: &Env, kind: u32, d: &Bytes, ua: &BytesN<32>, attrs: &UaAttrs
     if pqz {
         check_pqz_key(env, &attrs.pqz_key);
     }
-    let h = if pqz { pqz_key_hash(env, &attrs.pqz_key) } else { none.clone() };
+    let h = if pqz {
+        pqz_key_hash(env, &attrs.pqz_key)
+    } else {
+        none.clone()
+    };
     let kh = if commit {
         if !attrs.kem.mlkem_ek.is_empty() || attrs.kem.x25519 != none {
             fail(env, Error::KemKeyLength);
@@ -717,8 +844,28 @@ fn webauthn_key_data(env: &Env, key: &WebAuthnKey) -> Bytes {
 /// kind, and an `msig` slot the chain cannot verify, is `attest`ed instead; the `pop`'s `Checked` marks the attributes it
 /// signed too; such a kind is never `signable` and keeps its key in `KeyR` (U8S-D8, P11.5).
 #[allow(clippy::too_many_arguments)]
-fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: Bytes, members: Vec<MemberSig>, pqz_pop: Bytes, relayer: &By) -> BytesN<32> {
-    if ![WEBAUTHN_P256, P256, ED25519, SECP256K1, MSIG, MLDSA44, MLDSA65].contains(&kind) && !relayer_checked(kind) {
+fn register_record(
+    env: &Env,
+    kind: u32,
+    key_data: Bytes,
+    attrs: UaAttrs,
+    sig: Bytes,
+    members: Vec<MemberSig>,
+    pqz_pop: Bytes,
+    relayer: &By,
+) -> BytesN<32> {
+    if ![
+        WEBAUTHN_P256,
+        P256,
+        ED25519,
+        SECP256K1,
+        MSIG,
+        MLDSA44,
+        MLDSA65,
+    ]
+    .contains(&kind)
+        && !relayer_checked(kind)
+    {
         fail(env, Error::KindDisabled);
     }
     check_key_data(env, kind, &key_data);
@@ -731,7 +878,9 @@ fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: B
     }
     let kh = key_hash(env, kind, &key_data);
     if let Some(kh) = &kh {
-        if has(env, &Key::Key(kh.clone())) || (relayer_checked(kind) && has(env, &Key::KeyR(kh.clone()))) {
+        if has(env, &Key::Key(kh.clone()))
+            || (relayer_checked(kind) && has(env, &Key::KeyR(kh.clone())))
+        {
             fail(env, Error::KeyInUse);
         }
     }
@@ -743,22 +892,51 @@ fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: B
     let checked = if relayer_checked(kind) {
         attest(env, relayer)
     } else if kind != MSIG {
-        verify::check(env, kind, &key_data, &ua_message(env, kind, &pv2, &reg), &sig, Error::Pop);
+        verify::check(
+            env,
+            kind,
+            &key_data,
+            &ua_message(env, kind, &pv2, &reg),
+            &sig,
+            Error::Pop,
+        );
         Checked::Chain
     } else if pq_eligible(&key_data) {
-        check_msig(env, &ua, &key_data, &pv2, &reg, &members, Some(&typed), relayer, Error::Pop)
+        check_msig(
+            env,
+            &ua,
+            &key_data,
+            &pv2,
+            &reg,
+            &members,
+            Some(&typed),
+            relayer,
+            Error::Pop,
+        )
     } else if members.is_empty() {
         Checked::Chain
     } else {
         fail(env, Error::Pop) // classical-dominant: its members proved theirs, as EVM (U8S-D2)
     };
-    let pop = if kind == MSIG { abi::encode_member_sigs(env, &members) } else { sig };
+    let pop = if kind == MSIG {
+        abi::encode_member_sigs(env, &members)
+    } else {
+        sig
+    };
 
     let index = get::<u32>(env, &Key::Count(kind)).unwrap_or(0);
     put(env, &Key::List(kind, index), &ua);
     put(env, &Key::Count(kind), &(index + 1));
     if let Some(kh) = kh {
-        put(env, &if relayer_checked(kind) { Key::KeyR(kh) } else { Key::Key(kh) }, &ua);
+        put(
+            env,
+            &if relayer_checked(kind) {
+                Key::KeyR(kh)
+            } else {
+                Key::Key(kh)
+            },
+            &ua,
+        );
     }
     if signable {
         put(env, &Key::Signer(ua.clone()), &(kind, key_data.clone()));
@@ -767,7 +945,9 @@ fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: B
         let (mut bits, mut marks) = (0u32, Map::new(env));
         for s in members.iter() {
             bits |= 1 << s.index;
-            if let (Checked::Relayer(r), true) = (&checked, attested_slot(member(&key_data, s.index).0)) {
+            if let (Checked::Relayer(r), true) =
+                (&checked, attested_slot(member(&key_data, s.index).0))
+            {
                 marks.set(s.index, r.clone());
             }
         }
@@ -780,19 +960,61 @@ fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: B
     let sig_hash = BytesN::from_array(env, &EMPTY_HASH);
     if !attrs.pqz_key.is_empty() {
         let pqz_pop_hash = attrs.pqz_pop_hash.clone();
-        put(env, &Key::PqzK(ua.clone()), &(attrs.pqz_key.clone(), no_sig.clone(), checked.clone(), pqz_pop_hash.clone()));
-        UaPqzKeySet { ua: ua.clone(), pqz_key_hash: pqz_hash, pqz_pop_hash, sig_hash: sig_hash.clone(), checked: checked.clone() }.publish(env);
+        put(
+            env,
+            &Key::PqzK(ua.clone()),
+            &(
+                attrs.pqz_key.clone(),
+                no_sig.clone(),
+                checked.clone(),
+                pqz_pop_hash.clone(),
+            ),
+        );
+        UaPqzKeySet {
+            ua: ua.clone(),
+            pqz_key_hash: pqz_hash,
+            pqz_pop_hash,
+            sig_hash: sig_hash.clone(),
+            checked: checked.clone(),
+        }
+        .publish(env);
     }
     if !pqz_pop.is_empty() {
         put(env, &Key::PqzP(ua.clone()), &pqz_pop);
-        UaPqzPopStored { ua: ua.clone(), pqz_pop_hash: attrs.pqz_pop_hash.clone() }.publish(env);
+        UaPqzPopStored {
+            ua: ua.clone(),
+            pqz_pop_hash: attrs.pqz_pop_hash.clone(),
+        }
+        .publish(env);
     }
     if !pk.is_empty() {
-        put(env, &Key::Kem(ua.clone(), 0), &(pk.clone(), no_sig, checked.clone()));
-        UaKemKeySet { ua: ua.clone(), version: 0, kem_pk_hash: env.crypto().keccak256(&pk).into(), sig_hash, checked: checked.clone() }.publish(env);
+        put(
+            env,
+            &Key::Kem(ua.clone(), 0),
+            &(pk.clone(), no_sig, checked.clone()),
+        );
+        UaKemKeySet {
+            ua: ua.clone(),
+            version: 0,
+            kem_pk_hash: env.crypto().keccak256(&pk).into(),
+            sig_hash,
+            checked: checked.clone(),
+        }
+        .publish(env);
     }
-    let kem = KemKey { scheme: if attrs.kem_pk_hash != zero(env) { attrs.kem.scheme } else { 0 }, ..KemKey::none(env) };
-    let attrs = UaAttrs { pqz_key: Bytes::new(env), kem, ..attrs };
+    let kem = KemKey {
+        scheme: if attrs.kem_pk_hash != zero(env) {
+            attrs.kem.scheme
+        } else {
+            0
+        },
+        ..KemKey::none(env)
+    };
+    let attrs = UaAttrs {
+        pqz_key: Bytes::new(env),
+        kem,
+        ..attrs
+    };
     let ledger = env.ledger().sequence();
     let record = RegisteredRecord {
         kind,
@@ -820,7 +1042,13 @@ fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: B
     };
     put(env, &Key::Ua(ua.clone()), &r);
     bump_instance(env);
-    UaRegistered { ua: ua.clone(), kind, record, checked }.publish(env);
+    UaRegistered {
+        ua: ua.clone(),
+        kind,
+        record,
+        checked,
+    }
+    .publish(env);
     ua
 }
 
@@ -853,7 +1081,17 @@ impl UaRegistry {
         if kind == MSIG {
             fail(&env, Error::KeyData);
         }
-        let by = by(&env, "register", &relayer, || (kind, key_data.clone(), attrs.clone(), pop.clone(), pqz_pop.clone(), relayer.clone()).into_val(&env));
+        let by = by(&env, "register", &relayer, || {
+            (
+                kind,
+                key_data.clone(),
+                attrs.clone(),
+                pop.clone(),
+                pqz_pop.clone(),
+                relayer.clone(),
+            )
+                .into_val(&env)
+        });
         let members = Vec::new(&env);
         register_record(&env, kind, key_data, attrs, pop, members, pqz_pop, &by)
     }
@@ -868,7 +1106,16 @@ impl UaRegistry {
         pqz_pop: Bytes,
         relayer: Option<Address>,
     ) -> BytesN<32> {
-        let by = by(&env, "register_webauthn", &relayer, || (key.clone(), attrs.clone(), pop.clone(), pqz_pop.clone(), relayer.clone()).into_val(&env));
+        let by = by(&env, "register_webauthn", &relayer, || {
+            (
+                key.clone(),
+                attrs.clone(),
+                pop.clone(),
+                pqz_pop.clone(),
+                relayer.clone(),
+            )
+                .into_val(&env)
+        });
         let d = webauthn_key_data(&env, &key);
         let members = Vec::new(&env);
         register_record(&env, WEBAUTHN_P256, d, attrs, pop, members, pqz_pop, &by)
@@ -884,23 +1131,68 @@ impl UaRegistry {
         pqz_pop: Bytes,
         relayer: Option<Address>,
     ) -> BytesN<32> {
-        let by = by(&env, "register_msig", &relayer, || (structure.clone(), attrs.clone(), pop.clone(), pqz_pop.clone(), relayer.clone()).into_val(&env));
+        let by = by(&env, "register_msig", &relayer, || {
+            (
+                structure.clone(),
+                attrs.clone(),
+                pop.clone(),
+                pqz_pop.clone(),
+                relayer.clone(),
+            )
+                .into_val(&env)
+        });
         let d = msig_key_data(&env, &structure);
         register_record(&env, MSIG, d, attrs, Bytes::new(&env), pop, pqz_pop, &by)
     }
 
     /// `register` of `musig2-secp256k1` / `musig2-bn254` from its typed key (EVM `registerMuSig2`, TS-D13; U8S-D8): `aggKey ‖
     /// u16 n ‖ n × key` is assembled here, the same id and record as the packed `register`, which stays, as EVM.
-    pub fn register_musig2(env: Env, kind: u32, key: MuSig2Key, attrs: UaAttrs, pop: Bytes, pqz_pop: Bytes, relayer: Option<Address>) -> BytesN<32> {
-        let by = by(&env, "register_musig2", &relayer, || (kind, key.clone(), attrs.clone(), pop.clone(), pqz_pop.clone(), relayer.clone()).into_val(&env));
+    pub fn register_musig2(
+        env: Env,
+        kind: u32,
+        key: MuSig2Key,
+        attrs: UaAttrs,
+        pop: Bytes,
+        pqz_pop: Bytes,
+        relayer: Option<Address>,
+    ) -> BytesN<32> {
+        let by = by(&env, "register_musig2", &relayer, || {
+            (
+                kind,
+                key.clone(),
+                attrs.clone(),
+                pop.clone(),
+                pqz_pop.clone(),
+                relayer.clone(),
+            )
+                .into_val(&env)
+        });
         let d = musig2_key_data(&env, kind, &key);
         let members = Vec::new(&env);
         register_record(&env, kind, d, attrs, pop, members, pqz_pop, &by)
     }
 
     /// `register` of `frost-secp256k1` / `frost-bn254` from its typed key (EVM `registerFrost`, TS-D13; U8S-D8), likewise.
-    pub fn register_frost(env: Env, kind: u32, key: FrostKey, attrs: UaAttrs, pop: Bytes, pqz_pop: Bytes, relayer: Option<Address>) -> BytesN<32> {
-        let by = by(&env, "register_frost", &relayer, || (kind, key.clone(), attrs.clone(), pop.clone(), pqz_pop.clone(), relayer.clone()).into_val(&env));
+    pub fn register_frost(
+        env: Env,
+        kind: u32,
+        key: FrostKey,
+        attrs: UaAttrs,
+        pop: Bytes,
+        pqz_pop: Bytes,
+        relayer: Option<Address>,
+    ) -> BytesN<32> {
+        let by = by(&env, "register_frost", &relayer, || {
+            (
+                kind,
+                key.clone(),
+                attrs.clone(),
+                pop.clone(),
+                pqz_pop.clone(),
+                relayer.clone(),
+            )
+                .into_val(&env)
+        });
         let d = frost_key_data(&env, kind, &key);
         let members = Vec::new(&env);
         register_record(&env, kind, d, attrs, pop, members, pqz_pop, &by)
@@ -910,30 +1202,66 @@ impl UaRegistry {
     /// one (`pop` v2, `kem`, `pqz-key`, `membership`), then the kind's check over `ua_message(kind, purpose, digest)`; `msig` members
     /// under purpose `member` until the threshold, accepted slots only (CTR-UA-37). `auth` (TS-D12): a single key only `signature`, an `msig` only
     /// `members`, any other field set is `Unauthorized`. Extends `Ua(ua)`.
-    pub fn require_authorized(env: Env, ua: BytesN<32>, purpose: BytesN<32>, digest: BytesN<32>, auth: UaSig) {
+    pub fn require_authorized(
+        env: Env,
+        ua: BytesN<32>,
+        purpose: BytesN<32>,
+        digest: BytesN<32>,
+        auth: UaSig,
+    ) {
         let Some((kind, key)) = get::<(u32, Bytes)>(&env, &Key::Signer(ua.clone())) else {
-            let e = if has(&env, &Key::Ua(ua.clone())) { Error::Unauthorized } else { Error::NotRegistered };
+            let e = if has(&env, &Key::Ua(ua.clone())) {
+                Error::Unauthorized
+            } else {
+                Error::NotRegistered
+            };
             fail(&env, e)
         };
         let p = purpose.to_array();
-        if p == PURPOSE_POP_V2 || p == PURPOSE_KEM || p == PURPOSE_PQZ_KEY || p == PURPOSE_MEMBERSHIP {
+        if p == PURPOSE_POP_V2
+            || p == PURPOSE_KEM
+            || p == PURPOSE_PQZ_KEY
+            || p == PURPOSE_MEMBERSHIP
+        {
             fail(&env, Error::Unauthorized);
         }
         if !sig_fields_ok(kind, &auth) {
             fail(&env, Error::Unauthorized);
         }
-        env.storage().persistent().extend_ttl(&Key::Ua(ua.clone()), TTL_MIN, TTL_BUMP);
+        env.storage()
+            .persistent()
+            .extend_ttl(&Key::Ua(ua.clone()), TTL_MIN, TTL_BUMP);
         bump_instance(&env);
         if kind == MSIG {
-            check_msig(&env, &ua, &key, &purpose, &digest, &auth.members, None, &None, Error::Unauthorized);
+            check_msig(
+                &env,
+                &ua,
+                &key,
+                &purpose,
+                &digest,
+                &auth.members,
+                None,
+                &None,
+                Error::Unauthorized,
+            );
         } else {
-            verify::check(&env, kind, &key, &ua_message(&env, kind, &purpose, &digest), &auth.signature, Error::Unauthorized);
+            verify::check(
+                &env,
+                kind,
+                &key,
+                &ua_message(&env, kind, &purpose, &digest),
+                &auth.signature,
+                Error::Unauthorized,
+            );
         }
     }
 
     /// Exactly the `register` arguments `(kind, key_data, attrs, pop, pqz_pop)`, EVM `registrationOf` line by line
     /// (U8S-D3): the PQZ key and proof iff `register` carried them, the KEM key at version 0 or its hash commit.
-    pub fn registration_of(env: Env, ua: BytesN<32>) -> Option<(u32, Bytes, UaAttrs, Bytes, Bytes)> {
+    pub fn registration_of(
+        env: Env,
+        ua: BytesN<32>,
+    ) -> Option<(u32, Bytes, UaAttrs, Bytes, Bytes)> {
         let r = get::<Registration>(&env, &Key::Ua(ua.clone()))?;
         let mut a = r.attrs;
         let mut pqz_pop = Bytes::new(&env);
@@ -976,7 +1304,14 @@ impl UaRegistry {
     /// `NotRegistered` → `KemHolder` → `KemVersion` → the key (`KemScheme`, `KemKeyLength`) → signature (`Unauthorized`) /
     /// the commit (`KemKeyHash`). `relayer` as in `register`; a filled commit keeps `pop_checked`: the chain compares the
     /// hash, the `pop` signed it. `KemHolder` for any `msig` (CTR-UA-32: a sender seals to each accepted member's own key).
-    pub fn set_kem_key(env: Env, ua: BytesN<32>, version: u64, kem: KemKey, sig: UaSig, relayer: Option<Address>) {
+    pub fn set_kem_key(
+        env: Env,
+        ua: BytesN<32>,
+        version: u64,
+        kem: KemKey,
+        sig: UaSig,
+        relayer: Option<Address>,
+    ) {
         let r = record(&env, &ua);
         if !kem_holder(r.kind) {
             fail(&env, Error::KemHolder);
@@ -1002,7 +1337,16 @@ impl UaRegistry {
             (Bytes::new(&env), r.pop_checked)
         } else {
             let rd = kem_record_digest(&env, &ua, version, &pk);
-            let by = by(&env, "set_kem_key", &relayer, || (ua.clone(), version, kem.clone(), sig.clone(), relayer.clone()).into_val(&env));
+            let by = by(&env, "set_kem_key", &relayer, || {
+                (
+                    ua.clone(),
+                    version,
+                    kem.clone(),
+                    sig.clone(),
+                    relayer.clone(),
+                )
+                    .into_val(&env)
+            });
             let part = check_portable(&env, r.kind, &r.key_data, &ua, PURPOSE_KEM, &rd, &sig, &by);
             if version > get::<u64>(&env, &Key::KemMax(ua.clone())).unwrap_or(0) {
                 put(&env, &Key::KemMax(ua.clone()), &version);
@@ -1012,7 +1356,14 @@ impl UaRegistry {
         let sig_hash = env.crypto().keccak256(&stored).into();
         put(&env, &k, &(pk, stored, checked.clone()));
         bump_instance(&env);
-        UaKemKeySet { ua, version, kem_pk_hash, sig_hash, checked }.publish(&env);
+        UaKemKeySet {
+            ua,
+            version,
+            kem_pk_hash,
+            sig_hash,
+            checked,
+        }
+        .publish(&env);
     }
 
     /// EVM `setPqzKey` without a verifier (U8S-D6): anyone, a holder without a key gets one, unproven, write-once, no `Key`
@@ -1021,7 +1372,14 @@ impl UaRegistry {
     /// hash (`PqzPopHash`) → signature (`Unauthorized`). `relayer` as in `register`. `PqzK` holds key and signature in one
     /// entry of 65,536 B (B0), so an `msig`'s signing slots are bounded in bytes, `key + 64 + Σ (192 + sig padded to 32)`: 13 /
     /// 12 ML-DSA-65 slots, 6 / 5 relayer-checked `slhdsa128s` slots.
-    pub fn set_pqz_key(env: Env, ua: BytesN<32>, pqz_key: Bytes, pqz_pop_hash: BytesN<32>, sig: UaSig, relayer: Option<Address>) {
+    pub fn set_pqz_key(
+        env: Env,
+        ua: BytesN<32>,
+        pqz_key: Bytes,
+        pqz_pop_hash: BytesN<32>,
+        sig: UaSig,
+        relayer: Option<Address>,
+    ) {
         let r = record(&env, &ua);
         if !holder(r.kind, &r.key_data) {
             fail(&env, Error::PqzHolder);
@@ -1036,12 +1394,41 @@ impl UaRegistry {
         }
         let pqz_key_hash = pqz_key_hash(&env, &pqz_key);
         let rd = pqz_key_record_digest(&env, &ua, &pqz_key_hash, &pqz_pop_hash);
-        let by = by(&env, "set_pqz_key", &relayer, || (ua.clone(), pqz_key.clone(), pqz_pop_hash.clone(), sig.clone(), relayer.clone()).into_val(&env));
-        let (stored, checked) = check_portable(&env, r.kind, &r.key_data, &ua, PURPOSE_PQZ_KEY, &rd, &sig, &by);
+        let by = by(&env, "set_pqz_key", &relayer, || {
+            (
+                ua.clone(),
+                pqz_key.clone(),
+                pqz_pop_hash.clone(),
+                sig.clone(),
+                relayer.clone(),
+            )
+                .into_val(&env)
+        });
+        let (stored, checked) = check_portable(
+            &env,
+            r.kind,
+            &r.key_data,
+            &ua,
+            PURPOSE_PQZ_KEY,
+            &rd,
+            &sig,
+            &by,
+        );
         let sig_hash = env.crypto().keccak256(&stored).into();
-        put(&env, &k, &(pqz_key, stored, checked.clone(), pqz_pop_hash.clone()));
+        put(
+            &env,
+            &k,
+            &(pqz_key, stored, checked.clone(), pqz_pop_hash.clone()),
+        );
         bump_instance(&env);
-        UaPqzKeySet { ua, pqz_key_hash, pqz_pop_hash, sig_hash, checked }.publish(&env);
+        UaPqzKeySet {
+            ua,
+            pqz_key_hash,
+            pqz_pop_hash,
+            sig_hash,
+            checked,
+        }
+        .publish(&env);
     }
 
     /// EVM `storePqzPop` without a verifier (U8S-D6): anyone, `NotRegistered`, then `PqzPopHash` for an empty proof or one
@@ -1075,12 +1462,14 @@ impl UaRegistry {
 
     /// `(kem, sig, checked)` of a stored version.
     pub fn kem_key_at(env: Env, ua: BytesN<32>, version: u64) -> Option<(KemKey, Bytes, Checked)> {
-        get::<KemEntry>(&env, &Key::Kem(ua, version)).map(|(pk, sig, checked)| (kem_of(&pk), sig, checked))
+        get::<KemEntry>(&env, &Key::Kem(ua, version))
+            .map(|(pk, sig, checked)| (kem_of(&pk), sig, checked))
     }
 
     /// `(key, pqz_pop_hash, proven, checked)`: `proven` is `false` on Soroban, nothing verifies `R_REG` (U8S-D6).
     pub fn pqz_key_of(env: Env, ua: BytesN<32>) -> Option<(Bytes, BytesN<32>, bool, Checked)> {
-        get::<PqzEntry>(&env, &Key::PqzK(ua)).map(|(key, _, checked, hash)| (key, hash, false, checked))
+        get::<PqzEntry>(&env, &Key::PqzK(ua))
+            .map(|(key, _, checked, hash)| (key, hash, false, checked))
     }
 
     /// `set_pqz_key`'s stored signature; empty when the key came with `register` (its consent is the `pop`) or there is none.
@@ -1096,8 +1485,16 @@ impl UaRegistry {
     /// empty. No threshold, no minimal form: one slot speaks for itself. A slot the chain cannot verify takes `relayer` (`attest`, the
     /// digest of these three arguments), keeps its mark in `Accepted(ua)` and its signature in `AcceptSig(ua, index)`, for a client to
     /// re-check (CTR-UA-34 rule 4). No revoke, no decline: the id derives from the structure.
-    pub fn accept_membership(env: Env, ua: BytesN<32>, member_sig: MemberSig, relayer: Option<Address>) {
-        let Some(r) = get::<Registration>(&env, &Key::Ua(ua.clone())).filter(|r| r.kind == MSIG) else { fail(&env, Error::Unauthorized) };
+    pub fn accept_membership(
+        env: Env,
+        ua: BytesN<32>,
+        member_sig: MemberSig,
+        relayer: Option<Address>,
+    ) {
+        let Some(r) = get::<Registration>(&env, &Key::Ua(ua.clone())).filter(|r| r.kind == MSIG)
+        else {
+            fail(&env, Error::Unauthorized)
+        };
         let index = member_sig.index;
         if index >= u16_at(&r.key_data, 2) {
             fail(&env, Error::Unauthorized);
@@ -1109,25 +1506,57 @@ impl UaRegistry {
         let (kind, id, _) = member(&r.key_data, index);
         let member_id = BytesN::from_array(&env, &id);
         let typed = membership_digest(&env, &ua, &member_id);
-        let (p, digest) = (BytesN::from_array(&env, &PURPOSE_MEMBERSHIP), typed.to_bytes());
+        let (p, digest) = (
+            BytesN::from_array(&env, &PURPOSE_MEMBERSHIP),
+            typed.to_bytes(),
+        );
         let md = member_digest(&env, &ua, &ua_message(&env, MSIG, &p, &digest));
-        let by = by(&env, "accept_membership", &relayer, || (ua.clone(), member_sig.clone(), relayer.clone()).into_val(&env));
+        let by = by(&env, "accept_membership", &relayer, || {
+            (ua.clone(), member_sig.clone(), relayer.clone()).into_val(&env)
+        });
         let mut checked = Checked::Chain;
-        check_slot(&env, &ua, &member_sig, kind, &id, &p, &digest, &md, Some(&typed), &by, &mut checked, Error::Unauthorized);
+        check_slot(
+            &env,
+            &ua,
+            &member_sig,
+            kind,
+            &id,
+            &p,
+            &digest,
+            &md,
+            Some(&typed),
+            &by,
+            &mut checked,
+            Error::Unauthorized,
+        );
         if let Checked::Relayer(r) = &checked {
             marks.set(index, r.clone());
             put(&env, &Key::AcceptSig(ua.clone(), index), &member_sig.sig);
         }
-        put(&env, &Key::Accepted(ua.clone()), &(bits | 1 << index, marks));
+        put(
+            &env,
+            &Key::Accepted(ua.clone()),
+            &(bits | 1 << index, marks),
+        );
         bump_instance(&env);
         let sig_hash = env.crypto().keccak256(&member_sig.sig).into();
-        UaMembershipAccepted { ua, member: member_id, index, sig_hash, checked }.publish(&env);
+        UaMembershipAccepted {
+            ua,
+            member: member_id,
+            index,
+            sig_hash,
+            checked,
+        }
+        .publish(&env);
     }
 
     /// Has slot `index` of `ua` agreed (CTR-UA-37: it signed the `pop` here, or `accept_membership`)? False for a slot that is only
     /// listed, past the members and for any other id. Only accepted slots count at verify.
     pub fn member_accepted(env: Env, ua: BytesN<32>, index: u32) -> bool {
-        accepted(&env, &ua).0.checked_shr(index).is_some_and(|b| b & 1 != 0)
+        accepted(&env, &ua)
+            .0
+            .checked_shr(index)
+            .is_some_and(|b| b & 1 != 0)
     }
 
     /// EVM `popSlotsOf` (CTR-UA-33 Change 2026-11-08): the slots that signed the `pop` of the `msig` `ua`, in index order, each with
@@ -1139,7 +1568,11 @@ impl UaRegistry {
             let pop = record(&env, &ua).pop;
             for i in (0..32).filter(|i| bits >> i & 1 != 0) {
                 let t = 64 + abi::word(&env, &pop, 64 + 32 * index.len(), Error::Pop);
-                hash.push_back(env.crypto().keccak256(&abi::bytes_at(&env, &pop, t, t + 64, Error::Pop)).into());
+                hash.push_back(
+                    env.crypto()
+                        .keccak256(&abi::bytes_at(&env, &pop, t, t + 64, Error::Pop))
+                        .into(),
+                );
                 index.push_back(i);
             }
         }
@@ -1173,12 +1606,19 @@ impl UaRegistry {
 
     /// EVM `msigOf`: the typed form of a stored `msig`, empty (threshold 0, no member) for any other id. Reads `Ua(ua)` as `record_of`.
     pub fn msig_of(env: Env, ua: BytesN<32>) -> MsigStructure {
-        let mut s = MsigStructure { threshold: 0, members: Vec::new(&env) };
+        let mut s = MsigStructure {
+            threshold: 0,
+            members: Vec::new(&env),
+        };
         if let Some((_, d)) = key_data_of(&env, ua, &[MSIG]) {
             s.threshold = u16_at(&d, 0);
             for i in 0..u16_at(&d, 2) {
                 let (kind, id, weight) = member(&d, i);
-                s.members.push_back(MsigMember { kind, id: BytesN::from_array(&env, &id), weight });
+                s.members.push_back(MsigMember {
+                    kind,
+                    id: BytesN::from_array(&env, &id),
+                    weight,
+                });
             }
         }
         s
@@ -1188,14 +1628,25 @@ impl UaRegistry {
     pub fn web_authn_key_of(env: Env, ua: BytesN<32>) -> WebAuthnKey {
         let at = |d: &Bytes, o| BytesN::from_array(&env, &word(d, o));
         match key_data_of(&env, ua, &[WEBAUTHN_P256]) {
-            Some((_, d)) => WebAuthnKey { x: at(&d, 0), y: at(&d, 32), rp_id_hash: at(&d, 64) },
-            None => WebAuthnKey { x: zero(&env), y: zero(&env), rp_id_hash: zero(&env) },
+            Some((_, d)) => WebAuthnKey {
+                x: at(&d, 0),
+                y: at(&d, 32),
+                rp_id_hash: at(&d, 64),
+            },
+            None => WebAuthnKey {
+                x: zero(&env),
+                y: zero(&env),
+                rp_id_hash: zero(&env),
+            },
         }
     }
 
     /// EVM `muSig2KeyOf`: the typed key of a stored MuSig2 kind, empty for any other id.
     pub fn mu_sig2_key_of(env: Env, ua: BytesN<32>) -> MuSig2Key {
-        let mut k = MuSig2Key { agg_key: Bytes::new(&env), member_keys: Vec::new(&env) };
+        let mut k = MuSig2Key {
+            agg_key: Bytes::new(&env),
+            member_keys: Vec::new(&env),
+        };
         if let Some((kind, d)) = key_data_of(&env, ua, &[MUSIG2_SECP256K1, MUSIG2_BN254]) {
             let size = point_size(kind);
             k.agg_key = d.slice(..size);
@@ -1209,7 +1660,11 @@ impl UaRegistry {
 
     /// EVM `frostKeyOf`: the typed key of a stored FROST kind, empty for any other id.
     pub fn frost_key_of(env: Env, ua: BytesN<32>) -> FrostKey {
-        let mut k = FrostKey { group_key: Bytes::new(&env), threshold: 0, members: Vec::new(&env) };
+        let mut k = FrostKey {
+            group_key: Bytes::new(&env),
+            threshold: 0,
+            members: Vec::new(&env),
+        };
         if let Some((kind, d)) = key_data_of(&env, ua, &[FROST_SECP256K1, FROST_BN254]) {
             let size = point_size(kind);
             k.group_key = d.slice(..size);
@@ -1222,7 +1677,11 @@ impl UaRegistry {
                     commitments.push_back(d.slice(o + j * size..o + (j + 1) * size));
                 }
                 let r = o + k.threshold * size;
-                k.members.push_back(FrostMember { commitments, r: d.slice(r..r + size), z: BytesN::from_array(&env, &word(&d, r + size)) });
+                k.members.push_back(FrostMember {
+                    commitments,
+                    r: d.slice(r..r + size),
+                    z: BytesN::from_array(&env, &word(&d, r + size)),
+                });
             }
         }
         k

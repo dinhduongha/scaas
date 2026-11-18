@@ -29,7 +29,14 @@ struct Harness;
 
 #[contractimpl]
 impl Harness {
-    pub fn check(env: Env, kind: u32, key_data: Bytes, purpose: BytesN<32>, digest: BytesN<32>, sig: Bytes) {
+    pub fn check(
+        env: Env,
+        kind: u32,
+        key_data: Bytes,
+        purpose: BytesN<32>,
+        digest: BytesN<32>,
+        sig: Bytes,
+    ) {
         let m = digest::ua_message(&env, kind, &purpose, &digest);
         verify::check(&env, kind, &key_data, &m, &sig, crate::Error::Pop);
     }
@@ -46,7 +53,13 @@ impl Harness {
     pub fn eoa(env: Env, id20: BytesN<20>, ua: BytesN<32>, kind: u32, sig: Bytes) {
         let z = BytesN::from_array(&env, &[0; 32]);
         let rec = portable_record_hash(&env, &ua, kind, &z, &kem_record_hash(&env, &ua, 0, 0, &z));
-        verify::check_evm_eoa(&env, &id20, &registration_digest(&env, &rec, &z), &sig, crate::Error::Pop);
+        verify::check_evm_eoa(
+            &env,
+            &id20,
+            &registration_digest(&env, &rec, &z),
+            &sig,
+            crate::Error::Pop,
+        );
     }
 
     /// `(index, keyData length, sig length)` of each decoded member.
@@ -72,7 +85,10 @@ pub(super) fn json(s: &str) -> Value {
 
 pub(super) fn hx(v: &Value) -> StdVec<u8> {
     let s = v.as_str().unwrap().trim_start_matches("0x");
-    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+        .collect()
 }
 
 pub(super) fn b(env: &Env, v: &[u8]) -> Bytes {
@@ -84,24 +100,42 @@ pub(super) fn n32(env: &Env, v: &Value) -> BytesN<32> {
 }
 
 pub(super) fn kind_of(v: &Value) -> u32 {
-    v.as_u64().map(|k| k as u32).unwrap_or_else(|| v.as_str().unwrap().parse().unwrap())
+    v.as_u64()
+        .map(|k| k as u32)
+        .unwrap_or_else(|| v.as_str().unwrap().parse().unwrap())
 }
 
 pub(super) fn derived(file: &str, list: &str, name: &str) -> Value {
-    json(file)[list].as_array().unwrap().iter().find(|r| r["name"] == name).unwrap().clone()
+    json(file)[list]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["name"] == name)
+        .unwrap()
+        .clone()
 }
 
 /// Every (purpose, digest) a row signs: its `sigs[]` and its `pop` / `popOther` / `popPqz` (purpose `pop` v2).
 fn signed_pairs(env: &Env, row: &Value) -> StdVec<(BytesN<32>, BytesN<32>, Value, Value)> {
     let mut out = StdVec::new();
     for s in row["sigs"].as_array().unwrap() {
-        out.push((n32(env, &s["purposeTag"]), n32(env, &s["digest"]), s["message"].clone(), s["sig"].clone()));
+        out.push((
+            n32(env, &s["purposeTag"]),
+            n32(env, &s["digest"]),
+            s["message"].clone(),
+            s["sig"].clone(),
+        ));
     }
     for p in ["pop", "popOther", "popPqz"] {
         if row[p].is_object() {
             let x = &row[p];
             let pv2 = BytesN::from_array(env, &PURPOSE_POP_V2);
-            out.push((pv2, n32(env, &x["registrationDigest"]), x["message"].clone(), x["sig"].clone()));
+            out.push((
+                pv2,
+                n32(env, &x["registrationDigest"]),
+                x["message"].clone(),
+                x["sig"].clone(),
+            ));
         }
     }
     out
@@ -115,7 +149,12 @@ fn kind_vectors(row: &Value, negatives: bool) {
     let pairs = signed_pairs(&env, row);
     if !negatives {
         for (p, d, m, sig) in &pairs {
-            assert_eq!(digest::ua_message(&env, kind, p, d).to_array().to_vec(), hx(m), "message of {}", row["name"]);
+            assert_eq!(
+                digest::ua_message(&env, kind, p, d).to_array().to_vec(),
+                hx(m),
+                "message of {}",
+                row["name"]
+            );
             c.check(&kind, &kd, p, d, &b(&env, &hx(sig)));
         }
         return;
@@ -125,9 +164,22 @@ fn kind_vectors(row: &Value, negatives: bool) {
     for n in negs {
         let (p, d, _, _) = pairs
             .iter()
-            .find(|(p, d, _, _)| digest::ua_message(&env, kind, p, d).to_array().to_vec() == hx(&n["message"]))
-            .unwrap_or_else(|| panic!("negative {} of {}: message not a signed pair", n["name"], row["name"]));
-        assert!(c.try_check(&kind, &kd, p, d, &b(&env, &hx(&n["sig"]))).is_err(), "negative {} of {}", n["name"], row["name"]);
+            .find(|(p, d, _, _)| {
+                digest::ua_message(&env, kind, p, d).to_array().to_vec() == hx(&n["message"])
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "negative {} of {}: message not a signed pair",
+                    n["name"], row["name"]
+                )
+            });
+        assert!(
+            c.try_check(&kind, &kd, p, d, &b(&env, &hx(&n["sig"])))
+                .is_err(),
+            "negative {} of {}",
+            n["name"],
+            row["name"]
+        );
     }
 }
 
@@ -147,7 +199,12 @@ fn tags_match_kinds_json() {
     for row in k["kinds"].as_array().unwrap() {
         let kind = kind_of(&row["kind"]);
         if S3.contains(&kind) {
-            assert_eq!(digest::TAG(&env, kind).to_array().to_vec(), hx(&row["TAG"]), "TAG of {}", row["name"]);
+            assert_eq!(
+                digest::TAG(&env, kind).to_array().to_vec(),
+                hx(&row["TAG"]),
+                "TAG of {}",
+                row["name"]
+            );
             seen += 1;
         }
     }
@@ -159,11 +216,19 @@ fn tags_match_kinds_json() {
 fn purpose_tags_match_kinds_json() {
     let k = json(KINDS);
     let tag = |name: &str| {
-        let r = k["purposes"].as_array().unwrap().iter().find(|p| p["tag"] == name).unwrap();
+        let r = k["purposes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["tag"] == name)
+            .unwrap();
         hx(&r["purposeTag"])
     };
     assert_eq!(PURPOSE_METATX.to_vec(), tag("scaas.ua.purpose.metatx.v1"));
-    assert_eq!(PURPOSE_METATX_CANCEL.to_vec(), tag("scaas.ua.purpose.metatx-cancel.v1"));
+    assert_eq!(
+        PURPOSE_METATX_CANCEL.to_vec(),
+        tag("scaas.ua.purpose.metatx-cancel.v1")
+    );
     assert_eq!(PURPOSE_TRADE.to_vec(), tag("scaas.ua.purpose.trade.v1"));
     assert_eq!(PURPOSE_MEMBER.to_vec(), tag("scaas.ua.purpose.member.v1"));
     assert_eq!(PURPOSE_POP_V2.to_vec(), tag("scaas.ua.purpose.pop.v2"));
@@ -180,8 +245,18 @@ fn ua_message_matches_kinds_json() {
         if !S3.contains(&kind) {
             continue;
         }
-        let got = digest::ua_message(&env, kind, &n32(&env, &m["purposeTag"]), &n32(&env, &m["digest"]));
-        assert_eq!(got.to_array().to_vec(), hx(&m["uaMsg"]), "{kind} {}", m["purpose"]);
+        let got = digest::ua_message(
+            &env,
+            kind,
+            &n32(&env, &m["purposeTag"]),
+            &n32(&env, &m["digest"]),
+        );
+        assert_eq!(
+            got.to_array().to_vec(),
+            hx(&m["uaMsg"]),
+            "{kind} {}",
+            m["purpose"]
+        );
         seen += 1;
     }
     assert!(seen >= S3.len());
@@ -204,22 +279,62 @@ fn portable_digests_match_portable_json() {
             let h = env.crypto().keccak256(&b(&env, &kem_pk)).into();
             kem_record_hash(&env, &ua, 0, kem_pk[0], &h)
         };
-        assert_eq!(kem.to_array().to_vec(), hx(&r["kemRecordHash"]), "kemRecordHash of {}", r["name"]);
+        assert_eq!(
+            kem.to_array().to_vec(),
+            hx(&r["kemRecordHash"]),
+            "kemRecordHash of {}",
+            r["name"]
+        );
         let rec = portable_record_hash(&env, &ua, kind, &n32(&env, &r["pqzKeyHash"]), &kem);
-        assert_eq!(portable_digest(&env, &rec).to_array().to_vec(), hx(&r["portableRecordDigest"]), "portableRecordDigest of {}", r["name"]);
+        assert_eq!(
+            portable_digest(&env, &rec).to_array().to_vec(),
+            hx(&r["portableRecordDigest"]),
+            "portableRecordDigest of {}",
+            r["name"]
+        );
         let pqz_pop = hx(&r["pqzPop"]);
-        let pqz_pop_hash = if pqz_pop.is_empty() { [0u8; 32] } else { env.crypto().keccak256(&b(&env, &pqz_pop)).to_array() };
-        assert_eq!(pqz_pop_hash.to_vec(), hx(&r["attrs"]["pqzPopHash"]), "pqzPopHash of {}", r["name"]);
-        let reg: BytesN<32> = registration_digest(&env, &rec, &BytesN::from_array(&env, &pqz_pop_hash)).into();
-        assert_eq!(reg.to_array().to_vec(), hx(&r["registrationDigest"]), "registrationDigest of {}", r["name"]);
+        let pqz_pop_hash = if pqz_pop.is_empty() {
+            [0u8; 32]
+        } else {
+            env.crypto().keccak256(&b(&env, &pqz_pop)).to_array()
+        };
+        assert_eq!(
+            pqz_pop_hash.to_vec(),
+            hx(&r["attrs"]["pqzPopHash"]),
+            "pqzPopHash of {}",
+            r["name"]
+        );
+        let reg: BytesN<32> =
+            registration_digest(&env, &rec, &BytesN::from_array(&env, &pqz_pop_hash)).into();
+        assert_eq!(
+            reg.to_array().to_vec(),
+            hx(&r["registrationDigest"]),
+            "registrationDigest of {}",
+            r["name"]
+        );
         all += 1;
         if S3.contains(&kind) {
-            assert_eq!(digest::ua_of(&env, kind, &b(&env, &hx(&r["keyData"]))), ua, "ua of {}", r["name"]);
+            assert_eq!(
+                digest::ua_of(&env, kind, &b(&env, &hx(&r["keyData"]))),
+                ua,
+                "ua of {}",
+                r["name"]
+            );
             let pv2 = BytesN::from_array(&env, &PURPOSE_POP_V2);
             let m = digest::ua_message(&env, kind, &pv2, &reg);
-            assert_eq!(m.to_array().to_vec(), hx(&r["popMessage"]), "popMessage of {}", r["name"]);
+            assert_eq!(
+                m.to_array().to_vec(),
+                hx(&r["popMessage"]),
+                "popMessage of {}",
+                r["name"]
+            );
             if r["memberDigest"].is_string() {
-                assert_eq!(digest::member_digest(&env, &ua, &m).to_array().to_vec(), hx(&r["memberDigest"]), "{}", r["name"]);
+                assert_eq!(
+                    digest::member_digest(&env, &ua, &m).to_array().to_vec(),
+                    hx(&r["memberDigest"]),
+                    "{}",
+                    r["name"]
+                );
             }
             s3 += 1;
         }
@@ -233,15 +348,40 @@ fn portable_digests_match_portable_json() {
 #[test]
 fn op_digest_matches_token_cross_vector() {
     let env = Env::default();
-    let net = env.crypto().sha256(&b(&env, b"Standalone Network ; February 2017")).to_array();
+    let net = env
+        .crypto()
+        .sha256(&b(&env, b"Standalone Network ; February 2017"))
+        .to_array();
     env.ledger().with_mut(|l| l.network_id = net);
-    let contract = Address::from_str(&env, "CARCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEVQO");
-    let from = Address::from_str(&env, "GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6");
-    let to = Address::from_str(&env, "GAZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTHCM6");
-    let args: SVec<Val> = (from, to, 12_345i128, BytesN::from_array(&env, &[0x11; 32]), 1_800_000_300u64).into_val(&env);
+    let contract = Address::from_str(
+        &env,
+        "CARCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEVQO",
+    );
+    let from = Address::from_str(
+        &env,
+        "GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6",
+    );
+    let to = Address::from_str(
+        &env,
+        "GAZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTHCM6",
+    );
+    let args: SVec<Val> = (
+        from,
+        to,
+        12_345i128,
+        BytesN::from_array(&env, &[0x11; 32]),
+        1_800_000_300u64,
+    )
+        .into_val(&env);
     let d = op_digest(&env, &contract, "pay", args);
     let want = "0bb4e9123b86f99303e03cfd8aacb1eecd3b8ccb10d572907e1228a715369b00";
-    assert_eq!(d.to_array().iter().map(|x| std::format!("{x:02x}")).collect::<String>(), want);
+    assert_eq!(
+        d.to_array()
+            .iter()
+            .map(|x| std::format!("{x:02x}"))
+            .collect::<String>(),
+        want
+    );
 }
 
 /// `meta_pay_id` and `pay_lane` against `vectors/metatx/legacy/ua-mtx-merge/paymeta.json` (`payId`, `payLane = payLane(payId)`).
@@ -251,7 +391,12 @@ fn pay_ids_match_paymeta_json() {
     for r in json(PAYMETA).as_array().unwrap() {
         let id = meta_pay_id(&env, &n32(&env, &r["salt"]), &b(&env, &hx(&r["meta"])));
         assert_eq!(id.to_array().to_vec(), hx(&r["payId"]), "{}", r["name"]);
-        assert_eq!(pay_lane(&env, &id).to_array().to_vec(), hx(&r["payLane"]), "{}", r["name"]);
+        assert_eq!(
+            pay_lane(&env, &id).to_array().to_vec(),
+            hx(&r["payLane"]),
+            "{}",
+            r["name"]
+        );
     }
 }
 
@@ -308,12 +453,23 @@ fn kind_mldsa65_negatives_fail() {
 #[test]
 fn kind_ed25519_rfc8032_vectors() {
     let (env, c) = setup();
-    let rows = json(SIGNATURES)["ed25519Rfc8032"].as_array().unwrap().clone();
+    let rows = json(SIGNATURES)["ed25519Rfc8032"]
+        .as_array()
+        .unwrap()
+        .clone();
     assert!(rows.len() >= 11);
     for r in rows {
         let pk = n32(&env, &r["publicKey"]);
-        let ok = c.try_ed25519(&pk, &b(&env, &hx(&r["message"])), &b(&env, &hx(&r["sig"]))).is_ok();
-        assert_eq!(ok, r["valid"].as_bool().unwrap(), "{}: {}", r["name"], r["comment"]);
+        let ok = c
+            .try_ed25519(&pk, &b(&env, &hx(&r["message"])), &b(&env, &hx(&r["sig"])))
+            .is_ok();
+        assert_eq!(
+            ok,
+            r["valid"].as_bool().unwrap(),
+            "{}: {}",
+            r["name"],
+            r["comment"]
+        );
     }
 }
 
@@ -323,11 +479,21 @@ fn kind_ed25519_rfc8032_vectors() {
 fn ed25519_key_check_matches_kinds_json() {
     let (env, c) = setup();
     let k = json(KINDS);
-    for r in k["valid"].as_array().unwrap().iter().filter(|r| kind_of(&r["kind"]) == 0x0102) {
+    for r in k["valid"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| kind_of(&r["kind"]) == 0x0102)
+    {
         assert!(c.ed25519_key_ok(&n32(&env, &r["keyData"])));
     }
     let mut refused = 0;
-    for r in k["invalid"].as_array().unwrap().iter().filter(|r| kind_of(&r["kind"]) == 0x0102) {
+    for r in k["invalid"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| kind_of(&r["kind"]) == 0x0102)
+    {
         let kd = hx(&r["keyData"]);
         if kd.len() != 32 {
             continue;
@@ -359,9 +525,13 @@ fn member_sigs_abi_canonical_only() {
     padded[31] = 64; // outer offset 64 with a zero word in between: decodes in a lax decoder, not canonical
     padded.extend_from_slice(&[0u8; 32]);
     padded.extend_from_slice(&pop[32..]);
-    assert!(c.try_decode(&b(&env, &padded)).is_err(), "non-minimal offset");
+    assert!(
+        c.try_decode(&b(&env, &padded)).is_err(),
+        "non-minimal offset"
+    );
 
-    let word = |v: &[u8], o: usize| u32::from_be_bytes(v[o + 28..o + 32].try_into().unwrap()) as usize;
+    let word =
+        |v: &[u8], o: usize| u32::from_be_bytes(v[o + 28..o + 32].try_into().unwrap()) as usize;
     let (t0, t1) = (64 + word(&pop, 64), 64 + word(&pop, 96));
     for (i0, i1) in [(1u8, 0u8), (1, 1)] {
         let mut bad = pop.clone();
@@ -381,16 +551,29 @@ fn evm_eoa_member_typed_recovers() {
     let (env, c) = setup();
     let r = derived(PORTABLE, "registrations", "msig-pq-native");
     let pop = b(&env, &hx(&r["pop"]));
-    let m0 = env.as_contract(&c.address, || abi::decode_member_sigs(&env, &pop).get(0).unwrap());
+    let m0 = env.as_contract(&c.address, || {
+        abi::decode_member_sigs(&env, &pop).get(0).unwrap()
+    });
     assert_eq!(m0.index, 0);
     let id = hx(&r["keyData"])[6..38].to_vec(); // member 0: u16 kind ‖ bytes32 id ‖ u16 weight after the u16 header pair
     assert_eq!(id[..12], [0u8; 12]);
     let id20 = BytesN::from_array(&env, &id[12..].try_into().unwrap());
     let ua = n32(&env, &r["ua"]);
     c.eoa(&id20, &ua, &0x0120, &m0.sig);
-    assert!(c.try_eoa(&id20, &BytesN::from_array(&env, &[7; 32]), &0x0120, &m0.sig).is_err(), "another record");
-    assert!(c.try_eoa(&id20, &ua, &0x0131, &m0.sig).is_err(), "another kind");
-    assert!(c.try_eoa(&BytesN::from_array(&env, &[9; 20]), &ua, &0x0120, &m0.sig).is_err(), "another address");
+    assert!(
+        c.try_eoa(&id20, &BytesN::from_array(&env, &[7; 32]), &0x0120, &m0.sig)
+            .is_err(),
+        "another record"
+    );
+    assert!(
+        c.try_eoa(&id20, &ua, &0x0131, &m0.sig).is_err(),
+        "another kind"
+    );
+    assert!(
+        c.try_eoa(&BytesN::from_array(&env, &[9; 20]), &ua, &0x0120, &m0.sig)
+            .is_err(),
+        "another address"
+    );
 }
 
 /// TS-D1: the portable typehashes are `keccak256` of their EIP-712 type strings, as `portable.json` `typed.types`.
@@ -404,7 +587,11 @@ fn portable_typehashes_pinned() {
         ("UARegistration", UA_REGISTRATION_TYPEHASH),
     ] {
         let ty = t[name]["type"].as_str().unwrap();
-        assert_eq!(env.crypto().keccak256(&b(&env, ty.as_bytes())).to_array(), th, "{name}");
+        assert_eq!(
+            env.crypto().keccak256(&b(&env, ty.as_bytes())).to_array(),
+            th,
+            "{name}"
+        );
         assert_eq!(th.to_vec(), hx(&t[name]["typehash"]), "{name}");
     }
 }
@@ -415,12 +602,26 @@ fn domain_separator_pinned() {
     let env = Env::default();
     let p = json(PORTABLE);
     let k = |s: &str| env.crypto().keccak256(&b(&env, s.as_bytes())).to_array();
-    assert_eq!(p["typed"]["domainType"], "EIP712Domain(string name,string version)");
+    assert_eq!(
+        p["typed"]["domainType"],
+        "EIP712Domain(string name,string version)"
+    );
     assert_eq!(p["typed"]["domain"]["name"], "SCaaS UA Portable");
     assert_eq!(p["typed"]["domain"]["version"], "1");
-    let ds = [k("EIP712Domain(string name,string version)"), k("SCaaS UA Portable"), k("1")].concat();
-    assert_eq!(env.crypto().keccak256(&b(&env, &ds)).to_array(), PORTABLE_DOMAIN_SEPARATOR);
-    assert_eq!(PORTABLE_DOMAIN_SEPARATOR.to_vec(), hx(&p["typed"]["domainSeparator"]));
+    let ds = [
+        k("EIP712Domain(string name,string version)"),
+        k("SCaaS UA Portable"),
+        k("1"),
+    ]
+    .concat();
+    assert_eq!(
+        env.crypto().keccak256(&b(&env, &ds)).to_array(),
+        PORTABLE_DOMAIN_SEPARATOR
+    );
+    assert_eq!(
+        PORTABLE_DOMAIN_SEPARATOR.to_vec(),
+        hx(&p["typed"]["domainSeparator"])
+    );
 }
 
 // --- WebAuthn: in-test P-256 signatures over clientDataJSON variants ---
@@ -434,7 +635,13 @@ fn passkey(env: &Env, digest: &BytesN<32>, tail: &str) -> (Bytes, Bytes) {
     let mut kd = pt.as_bytes()[1..].to_vec();
     kd.extend_from_slice(&RP_ID_HASH);
     let kd = b(env, &kd);
-    let m = digest::ua_message(env, 0x0100, &BytesN::from_array(env, &PURPOSE_METATX), digest).to_array();
+    let m = digest::ua_message(
+        env,
+        0x0100,
+        &BytesN::from_array(env, &PURPOSE_METATX),
+        digest,
+    )
+    .to_array();
     let challenge = String::from_utf8(webauthn::b64url32(&m).to_vec()).unwrap();
     let cdj = std::format!("{{\"type\":\"webauthn.get\",\"challenge\":\"{challenge}\"{tail}");
     let mut auth_data = RP_ID_HASH.to_vec();
@@ -443,7 +650,10 @@ fn passkey(env: &Env, digest: &BytesN<32>, tail: &str) -> (Bytes, Bytes) {
     signed.extend_from_slice(&env.crypto().sha256(&b(env, cdj.as_bytes())).to_array());
     let sig: Signature = sk.sign(&signed);
     let sig = sig.normalize_s().unwrap_or(sig).to_bytes();
-    (kd, b(env, &abi_encode_webauthn(&auth_data, cdj.as_bytes(), &sig)))
+    (
+        kd,
+        b(env, &abi_encode_webauthn(&auth_data, cdj.as_bytes(), &sig)),
+    )
 }
 
 /// `abi.encode(bytes authenticatorData, bytes clientDataJSON, bytes32 r, bytes32 s)`.
@@ -479,7 +689,11 @@ fn webauthn_origin_not_compared() {
         let (kd, auth) = passkey(&env, &digest, &std::format!(",\"origin\":\"{origin}\"}}"));
         c.check(&0x0100, &kd, &p, &digest, &auth);
     }
-    let (kd, auth) = passkey(&env, &digest, ",\"origin\":\"https://a.example\",\"crossOrigin\":false}");
+    let (kd, auth) = passkey(
+        &env,
+        &digest,
+        ",\"origin\":\"https://a.example\",\"crossOrigin\":false}",
+    );
     c.check(&0x0100, &kd, &p, &digest, &auth);
 }
 
@@ -515,7 +729,10 @@ fn webauthn_blob_canonical_only() {
     let (c_len, c_off) = (w(&v, a_end), a_end);
     let c_end = c_off + 32 + c_len.div_ceil(32) * 32;
     assert_eq!(c_end, v.len());
-    assert!(a_len % 32 != 0 && c_len % 32 != 0, "need padding bytes to corrupt");
+    assert!(
+        a_len % 32 != 0 && c_len % 32 != 0,
+        "need padding bytes to corrupt"
+    );
     let a = v[a_off + 32..a_off + 32 + a_len].to_vec();
     let cd = v[c_off + 32..c_off + 32 + c_len].to_vec();
     let put = |v: &mut StdVec<u8>, at: usize, x: usize| {
@@ -566,7 +783,11 @@ fn webauthn_blob_canonical_only() {
     }
     bad.push(("fields swapped", t));
     for (name, blob) in bad {
-        assert!(c.try_check(&0x0100, &kd, &p, &digest, &b(&env, &blob)).is_err(), "{name}");
+        assert!(
+            c.try_check(&0x0100, &kd, &p, &digest, &b(&env, &blob))
+                .is_err(),
+            "{name}"
+        );
     }
 }
 
@@ -575,9 +796,17 @@ fn webauthn_blob_canonical_only() {
 /// signature off chain.
 fn msg_of(env: &Env, kind: u32, purpose: [u8; 32], d: &BytesN<32>) -> StdVec<u8> {
     if S3.contains(&kind) {
-        return digest::ua_message(env, kind, &BytesN::from_array(env, &purpose), d).to_array().to_vec();
+        return digest::ua_message(env, kind, &BytesN::from_array(env, &purpose), d)
+            .to_array()
+            .to_vec();
     }
-    let tag = json(KINDS)["kinds"].as_array().unwrap().iter().find(|k| k["kind"] == kind).unwrap()["TAG"].clone();
+    let tag = json(KINDS)["kinds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|k| k["kind"] == kind)
+        .unwrap()["TAG"]
+        .clone();
     let mut m = Bytes::from_array(env, &digest::MSG_TAG);
     m.append(&b(env, &hx(&tag)));
     m.extend_from_array(&purpose);
@@ -593,9 +822,25 @@ fn kem_record_digests_match_portable_json() {
     assert!(!rows.is_empty());
     for r in &rows {
         let (ua, kind) = (n32(&env, &r["ua"]), kind_of(&r["kind"]));
-        let d = kem_record_digest(&env, &ua, r["version"].as_u64().unwrap(), &b(&env, &hx(&r["kemPk"]))).to_bytes();
-        assert_eq!(d.to_array().to_vec(), hx(&r["digest"]), "digest of {}", r["id"]);
-        assert_eq!(msg_of(&env, kind, PURPOSE_KEM, &d), hx(&r["message"]), "message of {}", r["id"]);
+        let d = kem_record_digest(
+            &env,
+            &ua,
+            r["version"].as_u64().unwrap(),
+            &b(&env, &hx(&r["kemPk"])),
+        )
+        .to_bytes();
+        assert_eq!(
+            d.to_array().to_vec(),
+            hx(&r["digest"]),
+            "digest of {}",
+            r["id"]
+        );
+        assert_eq!(
+            msg_of(&env, kind, PURPOSE_KEM, &d),
+            hx(&r["message"]),
+            "message of {}",
+            r["id"]
+        );
     }
 }
 
@@ -608,10 +853,25 @@ fn pqz_key_record_digests_match_portable_json() {
     for r in &rows {
         let (ua, kind) = (n32(&env, &r["ua"]), kind_of(&r["kind"]));
         let (kh, ph) = (n32(&env, &r["pqzKeyHash"]), n32(&env, &r["pqzPopHash"]));
-        assert_eq!(pqz_key_digest(&env, &ua, &kh).to_array().to_vec(), hx(&r["pqzKeyDigest"]), "pqzKeyDigest of {}", r["name"]);
+        assert_eq!(
+            pqz_key_digest(&env, &ua, &kh).to_array().to_vec(),
+            hx(&r["pqzKeyDigest"]),
+            "pqzKeyDigest of {}",
+            r["name"]
+        );
         let d = pqz_key_record_digest(&env, &ua, &kh, &ph).to_bytes();
-        assert_eq!(d.to_array().to_vec(), hx(&r["recordDigest"]), "recordDigest of {}", r["name"]);
-        assert_eq!(msg_of(&env, kind, PURPOSE_PQZ_KEY, &d), hx(&r["message"]), "message of {}", r["name"]);
+        assert_eq!(
+            d.to_array().to_vec(),
+            hx(&r["recordDigest"]),
+            "recordDigest of {}",
+            r["name"]
+        );
+        assert_eq!(
+            msg_of(&env, kind, PURPOSE_PQZ_KEY, &d),
+            hx(&r["message"]),
+            "message of {}",
+            r["name"]
+        );
     }
 }
 
@@ -629,7 +889,12 @@ fn portable_digests_with_attrs_match() {
         }
         if !pqz_key.is_empty() {
             // keccak256(PQZ_KEY_GROUP ‖ pqzKey): the keyHash of scheme 0x0142, not a plain keccak (`portable.json` note)
-            assert_eq!(pqz_key_hash(&env, &b(&env, &pqz_key)), n32(&env, &r["pqzKeyHash"]), "pqzKeyHash of {}", r["name"]);
+            assert_eq!(
+                pqz_key_hash(&env, &b(&env, &pqz_key)),
+                n32(&env, &r["pqzKeyHash"]),
+                "pqzKeyHash of {}",
+                r["name"]
+            );
             let plain: BytesN<32> = env.crypto().keccak256(&b(&env, &pqz_key)).into();
             assert_ne!(plain, n32(&env, &r["pqzKeyHash"]), "{}", r["name"]);
         }
@@ -638,14 +903,46 @@ fn portable_digests_with_attrs_match() {
         let kem = if kem_pk.is_empty() {
             kem_record_hash(&env, &ua, 0, 0, &zero)
         } else {
-            kem_record_hash(&env, &ua, 0, kem_pk[0], &env.crypto().keccak256(&b(&env, &kem_pk)).into())
+            kem_record_hash(
+                &env,
+                &ua,
+                0,
+                kem_pk[0],
+                &env.crypto().keccak256(&b(&env, &kem_pk)).into(),
+            )
         };
-        assert_eq!(kem_pk_record_hash(&env, &ua, 0, &b(&env, &kem_pk)), kem, "{}", r["name"]);
-        assert_eq!(kem.to_array().to_vec(), hx(&r["kemRecordHash"]), "kemRecordHash of {}", r["name"]);
-        let rec = portable_record_hash(&env, &ua, kind_of(&r["kind"]), &n32(&env, &r["pqzKeyHash"]), &kem);
-        assert_eq!(portable_digest(&env, &rec).to_array().to_vec(), hx(&r["portableRecordDigest"]), "{}", r["name"]);
+        assert_eq!(
+            kem_pk_record_hash(&env, &ua, 0, &b(&env, &kem_pk)),
+            kem,
+            "{}",
+            r["name"]
+        );
+        assert_eq!(
+            kem.to_array().to_vec(),
+            hx(&r["kemRecordHash"]),
+            "kemRecordHash of {}",
+            r["name"]
+        );
+        let rec = portable_record_hash(
+            &env,
+            &ua,
+            kind_of(&r["kind"]),
+            &n32(&env, &r["pqzKeyHash"]),
+            &kem,
+        );
+        assert_eq!(
+            portable_digest(&env, &rec).to_array().to_vec(),
+            hx(&r["portableRecordDigest"]),
+            "{}",
+            r["name"]
+        );
         let reg = registration_digest(&env, &rec, &n32(&env, &a["pqzPopHash"]));
-        assert_eq!(reg.to_array().to_vec(), hx(&r["registrationDigest"]), "registrationDigest of {}", r["name"]);
+        assert_eq!(
+            reg.to_array().to_vec(),
+            hx(&r["registrationDigest"]),
+            "registrationDigest of {}",
+            r["name"]
+        );
         seen += 1;
     }
     assert!(seen > 0);
@@ -658,14 +955,43 @@ fn kem_record_of_no_key_is_the_zero_record() {
     let env = Env::default();
     let (none, zero) = (Bytes::new(&env), BytesN::from_array(&env, &[0; 32]));
     let mut seen = 0;
-    for r in json(PORTABLE)["registrations"].as_array().unwrap().iter().filter(|r| hx(&r["attrs"]["kemPk"]).is_empty()) {
+    for r in json(PORTABLE)["registrations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| hx(&r["attrs"]["kemPk"]).is_empty())
+    {
         let ua = n32(&env, &r["ua"]);
-        assert_eq!(kem_pk_record_hash(&env, &ua, 0, &none), n32(&env, &r["kemRecordHash"]), "{}", r["name"]);
+        assert_eq!(
+            kem_pk_record_hash(&env, &ua, 0, &none),
+            n32(&env, &r["kemRecordHash"]),
+            "{}",
+            r["name"]
+        );
         let typed: BytesN<32> = portable_digest(&env, &n32(&env, &r["kemRecordHash"])).into();
-        assert_eq!(kem_record_digest(&env, &ua, 0, &none).to_bytes(), typed, "{}", r["name"]);
-        let raw: BytesN<32> = portable_digest(&env, &kem_record_hash(&env, &ua, 0, 0, &env.crypto().keccak256(&none).into())).into();
-        assert_ne!(kem_record_digest(&env, &ua, 0, &none).to_bytes(), raw, "{}", r["name"]);
-        assert_ne!(kem_pk_record_hash(&env, &ua, 1, &none), kem_record_hash(&env, &ua, 1, 0, &zero), "{}", r["name"]);
+        assert_eq!(
+            kem_record_digest(&env, &ua, 0, &none).to_bytes(),
+            typed,
+            "{}",
+            r["name"]
+        );
+        let raw: BytesN<32> = portable_digest(
+            &env,
+            &kem_record_hash(&env, &ua, 0, 0, &env.crypto().keccak256(&none).into()),
+        )
+        .into();
+        assert_ne!(
+            kem_record_digest(&env, &ua, 0, &none).to_bytes(),
+            raw,
+            "{}",
+            r["name"]
+        );
+        assert_ne!(
+            kem_pk_record_hash(&env, &ua, 1, &none),
+            kem_record_hash(&env, &ua, 1, 0, &zero),
+            "{}",
+            r["name"]
+        );
         seen += 1;
     }
     assert!(seen >= 12, "{seen}");
