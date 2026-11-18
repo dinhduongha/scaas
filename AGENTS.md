@@ -156,6 +156,10 @@ notes start with the research banner. Prefer Mermaid for flows; SVG overviews wh
 State what you ran and its result. Report a failure with its output; do not edit a pin, a bound or a test to go green. A small change: edit, one
 test, the touched gates. Multi-step gates log per step and resume. Full output stays in git-ignored `.log` files; commit one
 `step | commit | rc | counts` summary and short evidence a doc quotes, with no absolute paths.
+A round of several tasks on one branch (owner 2026-11-18): each task runs its own suites at the default set, its mutants and
+every pin it moves (old → new); the full matrix (every forge directory, the set-sensitive tests at the four sets, node and e2e,
+clients, vectors) runs once at the round's end, before the merge, on the final tree. The rules above still decide what that
+matrix holds.
 
 ## Git
 

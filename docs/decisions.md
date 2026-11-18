@@ -5347,6 +5347,8 @@ Change (2026-11-17, owner, the code-format round; status: in force, AGENTS.md): 
 
 Change (2026-11-17, owner, the code-format round, contracts; status: in force, AGENTS.md): a format-only Solidity commit, with `bytecode_hash = "none"` in force, rebuilds `src` before and after and requires every contract's runtime and init bytecode byte-identical, plus the size gate, instead of the forge suites; a format-only commit to a family contract (Rust) runs that family's own tests, since panic locations move its wasm. PR CI still runs every job.
 
+Change (2026-11-18, owner, the setAuditor round; status: in force, AGENTS.md Verify): "Theo đề xuất". A round of several tasks on one branch no longer runs the full forge sweep and the per-set sweep after every task: each task runs its own suites at the default set, its mutants and every pin it moves (old → new figures); the full matrix (every forge directory, the set-sensitive tests at the four PQZ sets, node and e2e, clients, vectors) runs once at the round's end, on the final tree, before the merge. Why: setAuditor's per-task sweeps repeated the bundle gate the code-format plan already schedules. Planned tooling, not yet built: test selection by changed runtime bytecode, an explicit list of set-sensitive suites, a build output shared between snapshots, generated code-hash pins.
+
 ### CTR-UA-40 — `fndsa1024` (0x0135): Falcon-1024 (round-3 specification v1.2) as a UA kind, pure Solidity on every EVM chain
 - old: — · status: current · owner: yes · date: 2026-11-04 · normative: contracts/accounts.md#CTR-UA-40 · superseded-by: —
 
