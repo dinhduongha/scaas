@@ -496,7 +496,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
 
 ### Recorded, not scheduled
 
-- [ ] **Family redeploys carry the formatted build** (code-format round, 2026-11-18): the family contracts' Rust was formatted (rustfmt); panic locations moved, so these artifacts differ from the deployed ones: Cosmos `scaas_mandate`, `scaas_relayfee`, `scaas_token` (docs/networks/cosmos.md §8). No hash of them is pinned.
+- [ ] **Family redeploys carry the formatted build** (code-format round, 2026-11-18): the family contracts' Rust was formatted (rustfmt); panic locations moved, so these artifacts differ from the deployed ones: Cosmos `scaas_mandate`, `scaas_relayfee`, `scaas_token` (docs/networks/cosmos.md §8); Solana `scaas.so` (docs/networks/solana.md §12). No hash of them is pinned.
 - [ ] **A gen-1 UA registry without `zether-bls12381` can never add it** (found 2026-10-31 on the SCaaS testnet, branch
   `zether-testnet`; a finding, not a ruling; **owner decision before the SCaaS mainnet 22776 deploys its gen-1 registry**;
   note it for the contracts audit). Kinds are constructor immutables (CTR-UA-15), and `UARegistry._groupInPredecessor`

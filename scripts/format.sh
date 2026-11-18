@@ -40,7 +40,7 @@ ls_files() { ls_all "$@" | grep -v -E '(^|/)runs/'; }
 # it reaches is kept as it was (format) or not reported (check).
 RUST_CRATES="scaas-node scaas-pqz-verifier clients/ua-rs clients/ua-c clients/zether-prover clients/scaas-rpc
   clients/scaas-ct clients/ua-cxx clients/ua-qt clients/ua-dart-frb/rust pqz-core smartcontracts/evm/script/pqz/wallet
-  smartcontracts/soroban smartcontracts/cosmos"
+  smartcontracts/soroban smartcontracts/cosmos smartcontracts/solana"
 rust_ignored() { grep -v -E '^\s*(#|$)' .rustfmt-ignore | sed 's/^/:(glob)/' | xargs git ls-files --; }
 if want rust; then
     ign=$(rust_ignored)

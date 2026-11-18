@@ -6,17 +6,26 @@ use std::collections::BTreeSet;
 
 use anchor_lang::prelude::Pubkey;
 use anchor_lang::solana_program::instruction::Instruction;
-use scaas::auth as A;
 use common::flows::*;
 use common::*;
+use scaas::auth as A;
 use solana_signer::Signer;
 
 fn writable(ix: &Instruction, lane: &Pubkey) -> BTreeSet<Pubkey> {
-    ix.accounts.iter().filter(|m| m.is_writable && m.pubkey != *lane).map(|m| m.pubkey).collect()
+    ix.accounts
+        .iter()
+        .filter(|m| m.is_writable && m.pubkey != *lane)
+        .map(|m| m.pubkey)
+        .collect()
 }
 
 fn readonly(ix: &Instruction, keys: &[Pubkey]) -> bool {
-    keys.iter().all(|k| ix.accounts.iter().filter(|m| m.pubkey == *k).all(|m| !m.is_writable))
+    keys.iter().all(|k| {
+        ix.accounts
+            .iter()
+            .filter(|m| m.pubkey == *k)
+            .all(|m| !m.is_writable)
+    })
 }
 
 struct W {
@@ -43,12 +52,27 @@ fn setup() -> W {
     ok(env.pay(&alice, &usd, TOKEN, &env.args(&mandate, 100, 9, 9, 0, 1000)));
     let fees = Ed::new("fees").pubkey();
     ok(env.list_market(&usd, &eur, 0, &fees));
-    W { env, alice, delegate, usd, eur, mandate, market: market_addr(&usd, &eur) }
+    W {
+        env,
+        alice,
+        delegate,
+        usd,
+        eur,
+        mandate,
+        market: market_addr(&usd, &eur),
+    }
 }
 
 fn signed_pay(env: &Env, who: &Ed, mint: &Pubkey, args: &scaas::PayArgs) -> Vec<Instruction> {
     let dg = env.metaop_digest(&who.account(), mint, A::OP_PAY, &who.pk(), args);
-    let ix = env.pay_ix(&who.pk(), mint, TOKEN, ata(&who.account(), mint, &TOKEN), args, auth(A::KIND_RAW, 0, 0, 0));
+    let ix = env.pay_ix(
+        &who.pk(),
+        mint,
+        TOKEN,
+        ata(&who.account(), mint, &TOKEN),
+        args,
+        auth(A::KIND_RAW, 0, 0, 0),
+    );
     vec![ed_ix(&[who.sign(A::KIND_RAW, A::METAOP_LABEL, &dg)]), ix]
 }
 
@@ -57,8 +81,19 @@ fn signed_pay(env: &Env, who: &Ed, mint: &Pubkey, args: &scaas::PayArgs) -> Vec<
 fn withheld_payment_blocks_nothing_else_of_the_subject() {
     let mut w = setup();
     let bob = Ed::new("bob").pubkey();
-    let x = signed_pay(&w.env, &w.alice, &w.usd, &w.env.args(&bob, 7, 1, 0x11, 0, 1000));
-    ok(w.env.mandate_pay(&w.delegate, &w.alice, &w.mandate, &w.usd, &w.env.args(&bob, 5, 2, 0x22, 0, 1000)));
+    let x = signed_pay(
+        &w.env,
+        &w.alice,
+        &w.usd,
+        &w.env.args(&bob, 7, 1, 0x11, 0, 1000),
+    );
+    ok(w.env.mandate_pay(
+        &w.delegate,
+        &w.alice,
+        &w.mandate,
+        &w.usd,
+        &w.env.args(&bob, 5, 2, 0x22, 0, 1000),
+    ));
     let o = order(&w.alice, &w.usd, &w.eur, 10, 9, 0);
     ok(w.env.cancel(&w.market, &o, &w.alice));
     ok(w.env.send(&x, &[]));
@@ -70,11 +105,27 @@ fn withheld_payment_blocks_nothing_else_of_the_subject() {
 fn two_assets_two_lanes_in_any_order() {
     let mut w = setup();
     let bob = Ed::new("bob").pubkey();
-    let x = signed_pay(&w.env, &w.alice, &w.usd, &w.env.args(&bob, 7, 1, 0xa1, 0, 1000));
-    let y = signed_pay(&w.env, &w.alice, &w.eur, &w.env.args(&bob, 3, 2, 0xb2, 0, 1000));
+    let x = signed_pay(
+        &w.env,
+        &w.alice,
+        &w.usd,
+        &w.env.args(&bob, 7, 1, 0xa1, 0, 1000),
+    );
+    let y = signed_pay(
+        &w.env,
+        &w.alice,
+        &w.eur,
+        &w.env.args(&bob, 3, 2, 0xb2, 0, 1000),
+    );
     ok(w.env.send(&y, &[]));
     ok(w.env.send(&x, &[]));
-    assert_eq!((w.env.balance(&ata(&bob, &w.usd, &TOKEN)), w.env.balance(&ata(&bob, &w.eur, &TOKEN))), (7, 3));
+    assert_eq!(
+        (
+            w.env.balance(&ata(&bob, &w.usd, &TOKEN)),
+            w.env.balance(&ata(&bob, &w.eur, &TOKEN))
+        ),
+        (7, 3)
+    );
 }
 
 /// L12: tập account GHI của hai thao tác khác contract (trừ lane) rời nhau; Config/Market/SmartKeyAccount readonly.
@@ -84,11 +135,31 @@ fn hot_path_write_sets_are_disjoint() {
     let env = &w.env;
     let lane = env.lane.pubkey();
     let bob = Ed::new("bob");
-    let x = signed_pay(env, &w.alice, &w.usd, &env.args(&bob.pubkey(), 7, 1, 0xa1, 0, 1000)).pop().unwrap();
-    let x2 = signed_pay(env, &w.alice, &w.eur, &env.args(&bob.pubkey(), 7, 1, 0xb2, 0, 1000)).pop().unwrap();
+    let x = signed_pay(
+        env,
+        &w.alice,
+        &w.usd,
+        &env.args(&bob.pubkey(), 7, 1, 0xa1, 0, 1000),
+    )
+    .pop()
+    .unwrap();
+    let x2 = signed_pay(
+        env,
+        &w.alice,
+        &w.eur,
+        &env.args(&bob.pubkey(), 7, 1, 0xb2, 0, 1000),
+    )
+    .pop()
+    .unwrap();
     // a different payee: the recipient's ATA is the one unavoidable shared write (spec §3.5)
     let carol = Ed::new("carol").pubkey();
-    let y = env.mandate_pay_ix(&w.mandate, &w.usd, TOKEN, &env.args(&carol, 5, 2, 0x22, 0, 1000), auth(A::KIND_RAW, 0, 0, 0));
+    let y = env.mandate_pay_ix(
+        &w.mandate,
+        &w.usd,
+        TOKEN,
+        &env.args(&carol, 5, 2, 0x22, 0, 1000),
+        auth(A::KIND_RAW, 0, 0, 0),
+    );
     let o = order(&w.alice, &w.usd, &w.eur, 10, 9, 0);
     let b = order(&bob, &w.eur, &w.usd, 9, 10, 0);
     let z = {
@@ -112,16 +183,46 @@ fn hot_path_write_sets_are_disjoint() {
         }
     };
     let s = env.settle_ix(&w.market, &o, &b, 10, 9, TOKEN, false, 0, 0, 1);
-    let (wx, wx2, wy, wz) = (writable(&x, &lane), writable(&x2, &lane), writable(&y, &lane), writable(&z, &lane));
-    assert!(wx.is_disjoint(&wy), "pay vs mandate_pay: {:?}", wx.intersection(&wy).collect::<Vec<_>>());
-    assert!(wx.is_disjoint(&wz) && wy.is_disjoint(&wz), "cancel writes only its Fill");
+    let (wx, wx2, wy, wz) = (
+        writable(&x, &lane),
+        writable(&x2, &lane),
+        writable(&y, &lane),
+        writable(&z, &lane),
+    );
+    assert!(
+        wx.is_disjoint(&wy),
+        "pay vs mandate_pay: {:?}",
+        wx.intersection(&wy).collect::<Vec<_>>()
+    );
+    assert!(
+        wx.is_disjoint(&wz) && wy.is_disjoint(&wz),
+        "cancel writes only its Fill"
+    );
     assert!(wx.is_disjoint(&wx2), "two assets of one Account");
-    let fixed = [env.config(), w.market, w.alice.account(), account_of(&bob.pk())];
-    for (name, ix) in [("pay", &x), ("pay2", &x2), ("mandate_pay", &y), ("cancel", &z), ("settle", &s)] {
-        assert!(readonly(ix, &fixed), "{name} writes Config/Market/SmartKeyAccount");
+    let fixed = [
+        env.config(),
+        w.market,
+        w.alice.account(),
+        account_of(&bob.pk()),
+    ];
+    for (name, ix) in [
+        ("pay", &x),
+        ("pay2", &x2),
+        ("mandate_pay", &y),
+        ("cancel", &z),
+        ("settle", &s),
+    ] {
+        assert!(
+            readonly(ix, &fixed),
+            "{name} writes Config/Market/SmartKeyAccount"
+        );
     }
     assert_eq!(wz.len(), 1);
-    println!("pay writes {} accounts besides the lane: {:?}", wx.len(), wx);
+    println!(
+        "pay writes {} accounts besides the lane: {:?}",
+        wx.len(),
+        wx
+    );
 }
 
 /// L7: SPL gửi tới ATA của Account trước khi nó tồn tại (Python vector test) và SAU khi tồn tại đều chi được.
@@ -130,6 +231,11 @@ fn deposits_after_the_account_exists_are_spendable() {
     let mut w = setup();
     let bob = Ed::new("bob").pubkey();
     w.env.fund(&w.alice.account(), &w.usd, TOKEN, 50);
-    ok(w.env.pay(&w.alice, &w.usd, TOKEN, &w.env.args(&bob, 950, 3, 3, 0, 1000)));
+    ok(w.env.pay(
+        &w.alice,
+        &w.usd,
+        TOKEN,
+        &w.env.args(&bob, 950, 3, 3, 0, 1000),
+    ));
     assert_eq!(w.env.balance(&ata(&w.alice.account(), &w.usd, &TOKEN)), 0);
 }

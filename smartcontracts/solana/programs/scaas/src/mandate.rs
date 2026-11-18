@@ -5,10 +5,12 @@ use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 use crate::account::{PayArgs, INSTRUCTIONS_ID};
-use crate::auth::{self, Auth, MetaOp, MANDATE_LABEL, MCLOSE_LABEL, METAOP_LABEL, OP_MANDATE_PAY, OP_REVOKE};
+use crate::auth::{
+    self, Auth, MetaOp, MANDATE_LABEL, MCLOSE_LABEL, METAOP_LABEL, OP_MANDATE_PAY, OP_REVOKE,
+};
 use crate::state::*;
 use crate::util;
-use crate::{ScaasError, MetaTransactionExecuted, PaidUnderMandate, PaymentSettled};
+use crate::{MetaTransactionExecuted, PaidUnderMandate, PaymentSettled, ScaasError};
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, PartialEq, Eq)]
 pub struct MandateInit {
@@ -38,11 +40,18 @@ impl MandateInit {
         b.push(self.delegate.scheme);
         b.extend_from_slice(&self.delegate.pubkey);
         b.extend_from_slice(&self.delegate.rp_id_hash);
-        for v in [self.max_per_payment, self.max_per_period, self.period_s, self.expiry] {
+        for v in [
+            self.max_per_payment,
+            self.max_per_period,
+            self.period_s,
+            self.expiry,
+        ] {
             b.extend_from_slice(&v.to_le_bytes());
         }
         b.push(self.payees.len() as u8);
-        self.payees.iter().for_each(|p| b.extend_from_slice(p.as_ref()));
+        self.payees
+            .iter()
+            .for_each(|p| b.extend_from_slice(p.as_ref()));
         b.extend_from_slice(&self.nonce.to_le_bytes());
         b.extend_from_slice(&self.valid_until.to_le_bytes());
         b
@@ -74,12 +83,31 @@ pub fn mandate_open(ctx: Context<MandateOpen>, init: MandateInit, auth: Auth) ->
     s.check_policy()?;
     require!(init.nonce == s.key_nonce, ScaasError::BadNonce);
     // Delegate là khoá dịch vụ/HSM của nền tảng ⇒ ed25519 (passkey không chạy trên server) — RS12-11a.
-    require!(init.delegate.scheme == SCHEME_ED25519 && init.delegate.well_formed(), ScaasError::BadKey);
+    require!(
+        init.delegate.scheme == SCHEME_ED25519 && init.delegate.well_formed(),
+        ScaasError::BadKey
+    );
     require!(init.payees.len() <= MAX_PAYEES, ScaasError::TooMany);
-    require!(init.period_s > 0 && init.max_per_payment > 0 && init.max_per_payment <= init.max_per_period, ScaasError::BadMandate);
-    require!(init.expiry > util::now()?.max(0) as u64, ScaasError::Expired);
+    require!(
+        init.period_s > 0
+            && init.max_per_payment > 0
+            && init.max_per_payment <= init.max_per_period,
+        ScaasError::BadMandate
+    );
+    require!(
+        init.expiry > util::now()?.max(0) as u64,
+        ScaasError::Expired
+    );
     let digest = auth::sha256(&[&init.bytes(&a.config.network, &s.key(), &a.mandate.key())]);
-    auth::verify(&a.instructions, &auth, &s.keys, &s.origins, MANDATE_LABEL, &digest, None)?;
+    auth::verify(
+        &a.instructions,
+        &auth,
+        &s.keys,
+        &s.origins,
+        MANDATE_LABEL,
+        &digest,
+        None,
+    )?;
 
     let (account, owner, rent_payer) = (a.subject.key(), a.subject.owner, a.lane.key());
     ctx.accounts.subject.key_nonce += 1;
@@ -145,21 +173,44 @@ pub fn mandate_pay(ctx: Context<MandatePay>, args: PayArgs, auth: Auth) -> Resul
     require!(args.nonce == m.generation, ScaasError::BadNonce);
     require!(now <= m.expiry, ScaasError::Expired);
     let to = Pubkey::new_from_array(args.to);
-    require!(m.payees.is_empty() || m.payees.contains(&to), ScaasError::PayeeNotAllowed);
+    require!(
+        m.payees.is_empty() || m.payees.contains(&to),
+        ScaasError::PayeeNotAllowed
+    );
     require!(args.amount <= m.max_per_payment, ScaasError::OverCap);
-    let op = args.metaop(a.config.network, m.key(), a.mint.key(), OP_MANDATE_PAY, m.owner);
+    let op = args.metaop(
+        a.config.network,
+        m.key(),
+        a.mint.key(),
+        OP_MANDATE_PAY,
+        m.owner,
+    );
     let digest = op.digest();
     require!(auth.key_index == 0, ScaasError::UnknownKey);
-    auth::verify(&a.instructions, &auth, std::slice::from_ref(&m.delegate), &[], METAOP_LABEL, &digest, None)?;
+    auth::verify(
+        &a.instructions,
+        &auth,
+        std::slice::from_ref(&m.delegate),
+        &[],
+        METAOP_LABEL,
+        &digest,
+        None,
+    )?;
     util::check_mint(&a.mint.to_account_info(), args.amount)?;
 
     let m = &mut ctx.accounts.mandate;
-    if now >= m.period_start.saturating_add(m.period_s.min(i64::MAX as u64) as i64) {
+    if now
+        >= m.period_start
+            .saturating_add(m.period_s.min(i64::MAX as u64) as i64)
+    {
         m.period_start = now;
         m.spent = 0;
     }
     // So bằng phép trừ: không tràn ở `spent + amount` (Sui L6).
-    require!(args.amount <= m.max_per_period - m.spent, ScaasError::OverCap);
+    require!(
+        args.amount <= m.max_per_period - m.spent,
+        ScaasError::OverCap
+    );
     m.spent += args.amount;
     let (owner, account, seed, bump) = (m.owner, m.account, m.seed, m.bump);
     let r = &mut ctx.accounts.mref;
@@ -187,9 +238,28 @@ pub fn mandate_pay(ctx: Context<MandatePay>, args: PayArgs, auth: Auth) -> Resul
         a.mint.decimals,
     )?;
     let (mint, mandate, from) = (a.mint.key(), a.mandate.key(), Pubkey::new_from_array(owner));
-    emit_cpi!(MetaTransactionExecuted { contract: mint, account: mandate, from, digest, lane: args.lane, nonce: args.nonce });
-    emit_cpi!(PaymentSettled { contract: mint, from, to, amount: args.amount, pay_ref: args.pay_ref });
-    emit_cpi!(PaidUnderMandate { mandate, contract: mint, to, amount: args.amount, pay_ref: args.pay_ref });
+    emit_cpi!(MetaTransactionExecuted {
+        contract: mint,
+        account: mandate,
+        from,
+        digest,
+        lane: args.lane,
+        nonce: args.nonce
+    });
+    emit_cpi!(PaymentSettled {
+        contract: mint,
+        from,
+        to,
+        amount: args.amount,
+        pay_ref: args.pay_ref
+    });
+    emit_cpi!(PaidUnderMandate {
+        mandate,
+        contract: mint,
+        to,
+        amount: args.amount,
+        pay_ref: args.pay_ref
+    });
     Ok(())
 }
 
@@ -207,7 +277,11 @@ pub struct MandateRevoke<'info> {
 
 /// Kill switch của delegate: `MetaOp{op: revoke, contract: mandate, from: owner, nonce: generation}`, mọi trường khác 0
 /// trừ `valid_until`.
-pub fn mandate_revoke_signed(ctx: Context<MandateRevoke>, valid_until: u64, auth: Auth) -> Result<()> {
+pub fn mandate_revoke_signed(
+    ctx: Context<MandateRevoke>,
+    valid_until: u64,
+    auth: Auth,
+) -> Result<()> {
     util::check_deadline(valid_until)?;
     let a = &ctx.accounts;
     let m = &a.mandate;
@@ -227,7 +301,15 @@ pub fn mandate_revoke_signed(ctx: Context<MandateRevoke>, valid_until: u64, auth
         extra: [0; 32],
     };
     require!(auth.key_index == 0, ScaasError::UnknownKey);
-    auth::verify(&a.instructions, &auth, std::slice::from_ref(&m.delegate), &[], METAOP_LABEL, &op.digest(), None)?;
+    auth::verify(
+        &a.instructions,
+        &auth,
+        std::slice::from_ref(&m.delegate),
+        &[],
+        METAOP_LABEL,
+        &op.digest(),
+        None,
+    )?;
     ctx.accounts.mandate.revoked = true;
     Ok(())
 }
@@ -272,22 +354,48 @@ pub fn mandate_close_signed<'info>(
         &nonce.to_le_bytes(),
         &valid_until.to_le_bytes(),
     ]);
-    auth::verify(&a.instructions, &auth, &s.keys, &s.origins, MCLOSE_LABEL, &digest, None)?;
+    auth::verify(
+        &a.instructions,
+        &auth,
+        &s.keys,
+        &s.origins,
+        MCLOSE_LABEL,
+        &digest,
+        None,
+    )?;
     let rest = ctx.remaining_accounts;
     require!(rest.len() % 4 == 0, ScaasError::BadAccounts);
     let m = &a.mandate;
     let seeds: &[&[u8]] = &[b"mandate", m.account.as_ref(), &m.seed, &[m.bump]];
     for q in rest.chunks(4) {
         let (src, mint, dst, tp) = (&q[0], &q[1], &q[2], &q[3]);
-        require!(tp.key() == anchor_spl::token::ID || tp.key() == anchor_spl::token_2022::ID, ScaasError::BadAccounts);
+        require!(
+            tp.key() == anchor_spl::token::ID || tp.key() == anchor_spl::token_2022::ID,
+            ScaasError::BadAccounts
+        );
         require_keys_eq!(*src.owner, tp.key(), ScaasError::BadAccounts);
         require_keys_eq!(*dst.owner, tp.key(), ScaasError::BadAccounts);
         let from = InterfaceAccount::<TokenAccount>::try_from(src)?;
         let to = InterfaceAccount::<TokenAccount>::try_from(dst)?;
         let mt = InterfaceAccount::<Mint>::try_from(mint)?;
-        require!(from.owner == m.key() && to.owner == s.key(), ScaasError::BadAccounts);
-        require!(from.mint == mint.key() && to.mint == mint.key(), ScaasError::BadAccounts);
-        util::transfer(tp, src, mint, dst, &a.mandate.to_account_info(), seeds, from.amount, mt.decimals)?;
+        require!(
+            from.owner == m.key() && to.owner == s.key(),
+            ScaasError::BadAccounts
+        );
+        require!(
+            from.mint == mint.key() && to.mint == mint.key(),
+            ScaasError::BadAccounts
+        );
+        util::transfer(
+            tp,
+            src,
+            mint,
+            dst,
+            &a.mandate.to_account_info(),
+            seeds,
+            from.amount,
+            mt.decimals,
+        )?;
     }
     ctx.accounts.subject.key_nonce += 1;
     Ok(())
