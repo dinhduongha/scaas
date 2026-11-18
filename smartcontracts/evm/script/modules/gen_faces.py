@@ -15,6 +15,7 @@ GENERATED files: edit the entries table or this script, then regenerate. UNAUDIT
 
 import json
 import os
+import subprocess
 import sys
 
 from post3 import HOOKS, hook  # the pipeline hooks of rule 4
@@ -500,12 +501,23 @@ abstract contract {top}Whole is {top} {{
     )
 
 
+def fmt(txt):
+    """The files as committed: forge fmt over the generated text (foundry.toml [fmt]; FORGE, default `forge` on PATH)."""
+    r = subprocess.run(
+        [os.environ.get("FORGE", "forge"), "fmt", "--raw", "-"], input=txt, capture_output=True, text=True
+    )
+    if r.returncode:
+        sys.exit("forge fmt failed: " + r.stderr)
+    return r.stdout
+
+
 bad = 0
 for path, txt in (
     helper(),
     whole(),
     whole("ERC20MetaTx", ("ERC20MetaTx", "UAMetaTxBase", "MetaTxBase", "SaltedEIP712"), "src/metatx/ERC20MetaTx.sol"),
 ):
+    txt = fmt(txt)
     if CHECK:
         if not os.path.exists(path) or open(path).read() != txt:
             print("differs:", path)
@@ -514,6 +526,7 @@ for path, txt in (
         open(path, "w").write(txt)
 for k in KFILE:
     for path, txt in (face(k), modules(k)):
+        txt = fmt(txt)
         if CHECK:
             if not os.path.exists(path) or open(path).read() != txt:
                 print("differs:", path)
