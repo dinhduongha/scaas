@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! The keystore container (spec §6.1, CLI-SDK-03): the reader and writer of clientkeys `src/keystore.js`, held to
 //! `smartcontracts/vectors/keystore/keystore.json`. Only the canonical text is accepted (compact JSON, the fields in their
-//! written order, the vaults by key): every refusal is `VaultFormat`, a `format` or `v` other than `scaas.keystore` / 1
-//! `VaultVersion`. The size and depth are checked before anything is parsed; a vault text is read only to compare its `label`.
+//! written order, the vaults by key): every refusal is `VaultFormat`, a `format` or `v` other than `scaas.keystore` / 2
+//! `VaultVersion` (container v 2 holds vault v2 texts; owner 2026-11-19, T13b ruling 3: v 1 refused, no migration). The size
+//! and depth are checked before anything is parsed; a vault text is read only to compare its `label` with its key, its `v` with
+//! 2 and its `id` with the seed's.
 
 use crate::error::SdkError;
 use serde_json::{Map, Value};
@@ -248,15 +250,17 @@ fn row(v: &Value) -> Result<AccountRow, SdkError> {
     })
 }
 
-fn vault_label_ok(key: &str, text: &str) -> bool {
+fn vault_label_ok(key: &str, text: &str, seed_id: &str) -> bool {
     let printable =
         (1..=128).contains(&key.len()) && key.bytes().all(|b| (0x21..=0x7e).contains(&b));
     printable
         && text.len() <= MAX_VAULT_BYTES
         && scaas_ua::json::depth_within(text.as_bytes(), 2).is_ok()
-        && serde_json::from_str::<Value>(text)
-            .ok()
-            .is_some_and(|v| v.get("label").and_then(Value::as_str) == Some(key))
+        && serde_json::from_str::<Value>(text).ok().is_some_and(|v| {
+            v.get("label").and_then(Value::as_str) == Some(key)
+                && v.get("v").and_then(Value::as_f64) == Some(2.0)
+                && v.get("id").and_then(Value::as_str) == Some(seed_id)
+        })
 }
 
 fn seed(v: &Value) -> Result<SeedEntry, SdkError> {
@@ -299,7 +303,7 @@ fn seed(v: &Value) -> Result<SeedEntry, SdkError> {
     let mut vaults = BTreeMap::new();
     for (k, t) in vo {
         let t = t.as_str().ok_or_else(bad)?;
-        if !vault_label_ok(k, t) {
+        if !vault_label_ok(k, t, &id) {
             return Err(bad());
         }
         vaults.insert(k.clone(), t.to_owned());
@@ -339,7 +343,7 @@ impl Keystore {
         let top = v.as_object().ok_or_else(bad)?;
         let format_ok = top.get("format").and_then(Value::as_str) == Some(FORMAT);
         // clientkeys compares numbers (`1.0 === 1`): a `v` of 1.0 passes here and fails the canonical form below
-        if !format_ok || top.get("v").and_then(Value::as_f64) != Some(1.0) {
+        if !format_ok || top.get("v").and_then(Value::as_f64) != Some(2.0) {
             return Err(SdkError::VaultVersion);
         }
         let top = only(&v, &TOP)?;
@@ -377,7 +381,7 @@ impl Keystore {
     fn serialize_unchecked(&self) -> String {
         let seeds: Vec<String> = self.seeds.iter().map(seed_json).collect();
         format!(
-            "{{\"format\":{},\"v\":1,\"rev\":{},\"seeds\":[{}]}}",
+            "{{\"format\":{},\"v\":2,\"rev\":{},\"seeds\":[{}]}}",
             js(FORMAT),
             self.rev,
             seeds.join(",")

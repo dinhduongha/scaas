@@ -54,12 +54,14 @@ a raw key. No error, event, log line or `Debug` output carries a secret, an inpu
 
 ## 3. The vault
 
-<a id="CLI-SDK-03"></a>**CLI-SDK-03** — **The keystore holds several seeds, each as clientkeys / `ua-rs` vault v1 objects byte for
+<a id="CLI-SDK-03"></a>**CLI-SDK-03** — **The keystore holds several seeds, each as clientkeys / `ua-rs` vault v2 objects byte for
 byte, in one authenticated `scaas.keystore` container** (owner 2026-11-11, 2026-11-17; container and integrity controller calls;
-SPECIFIED). The container is one item `{format: "scaas.keystore", v: 1, rev, seeds: [...]}`. Each seed entry has a UUID `id`, the
+SPECIFIED; vault v2 and container v 2 BUILT, owner 2026-11-19, T13b ruling 3: every vault's AAD binds its seed's id, the index MAC
+covers the vault texts, v 1 refused by name, no migration). The container is one item `{format: "scaas.keystore", v: 2, rev, seeds:
+[...]}`. Each seed entry has a UUID `id`, the
 user's `label` (1 to 64 scalar values, NFC, unique), `words`, the main set's BIP-32 master `fingerprint`, `origin`, `class` (`full` or
 `classical-rooted`), `warnings` (`short_seed`, `imported_key`), `backup` (`pending` or `verified`), `vaults` (label → the exact vault
-v1 JSON text of [CLI-SGN-02](signers-clientkeys.md#CLI-SGN-02): `seed`, and `manifest`, `native-import:…`, `pqz-held:…` as `ua-rs`
+v2 JSON text, its `id` the seed's of [CLI-SGN-02](signers-clientkeys.md#CLI-SGN-02): `seed`, and `manifest`, `native-import:…`, `pqz-held:…` as `ua-rs`
 seals them; [CLI-UAL-18](ua-libraries.md#CLI-UAL-18)), the `accounts` the user named, and `indexMac`. It records no parent seed, no
 child index, no origin address and no hidden set. Bounds: 16 MiB, depth 5, 64 seeds, 64 vaults and 1,024 accounts per seed; an unknown
 field or a broken rule is `VaultFormat`, another `format` or `v` `VaultVersion`, and a reader that refuses a container never writes

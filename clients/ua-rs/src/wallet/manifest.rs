@@ -573,7 +573,7 @@ impl Wallet {
         let _lease = self.store.lease(); // the secret's copy, through the seal (T21 L82)
         let secret = self.label_secret(label)?;
         super::store::copied();
-        let (vault, dek) = Vault::seal_dek(label, &secret, vault_passphrase, prf)?;
+        let (vault, dek) = Vault::seal_dek(&self.vault_id()?, label, &secret, vault_passphrase, prf)?;
         self.hold_dek(&dek, &vault);
         Ok(vault)
     }
@@ -606,6 +606,15 @@ impl Wallet {
         }
     }
 
+    /// `WalletMismatch` for a label vault of another seed (another vault id; scaas-sdk T13b ruling 3); a wallet without an id
+    /// yet (never sealed, not opened from a seed vault) takes the vault's.
+    fn same_vault_id(&self, vault: &Vault) -> Result<()> {
+        if *self.vault_id.get_or_init(|| vault.id().to_owned()) != vault.id() {
+            return Err(Error::WalletMismatch);
+        }
+        Ok(())
+    }
+
     /// Holds `dek` for `vault` while the arena is open (nothing while locked).
     fn hold_dek(&self, dek: &[u8; 32], vault: &Vault) {
         let _ = self.store.with_all(|a, _| a.hold_dek(dek, vault.clone()));
@@ -619,6 +628,7 @@ impl Wallet {
     /// seed vault opens with [`Wallet::open_vault`]); errors of the vault as [`Wallet::open_vault`].
     /// The vault's DEK is held in the arena while it is open (scaas-sdk spec §6.10), for [`Wallet::reseal_label_vault`].
     pub fn open_label_vault(&self, vault: &Vault, unlock: Unlock) -> Result<()> {
+        self.same_vault_id(vault)?;
         if vault.label() == "manifest" {
             let (secret, dek) = vault.open_dek(unlock)?;
             self.store.set_manifest(Manifest::from_json(&secret)?)?;
@@ -644,6 +654,7 @@ impl Wallet {
     /// [`Wallet::open_label_vault`] through the vault's PRF envelope with the key [`Wallet::retain_prf_key`] kept: `Argument`
     /// when none is kept or the vault has no PRF envelope, `VaultOpen` for a vault of another key, `WalletLocked` while locked.
     pub fn open_label_vault_retained(&self, vault: &Vault) -> Result<()> {
+        self.same_vault_id(vault)?;
         let kek = self.store.with_arena(|a| a.prf_kek().ok_or(Error::Argument))?;
         let (secret, dek) = vault.open_dek_prf_kek(&kek)?;
         if vault.label() == "manifest" {

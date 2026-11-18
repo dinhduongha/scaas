@@ -228,6 +228,7 @@ fn fields_of<'a>(e: &'a SeedEntry, accounts: &'a str) -> IndexFields<'a> {
         warnings: &e.warnings,
         backup: &e.backup,
         accounts_json: accounts,
+        vaults: &e.vaults,
     }
 }
 
@@ -330,6 +331,8 @@ impl Vault {
                             .find(|s| s.id == req.parent)
                             .ok_or(SdkError::SeedUnknown)?;
                         p.vaults.insert("manifest".into(), manifest.clone());
+                        // the MAC covers the vault texts (T13b ruling 3)
+                        p.index_mac = mac(&parent.wallet, p)?;
                         if !held {
                             ks.seeds.push(entry.clone());
                         }
@@ -585,11 +588,12 @@ pub(crate) async fn new_entry(
     backup: &str,
     pass: Arc<SecretBytes>,
 ) -> Result<(Wallet, SeedEntry), SdkError> {
-    let id = uuid4()?;
     let (origin, class, backup) = (origin.to_owned(), class.to_owned(), backup.to_owned());
     sdk.heavy(move || {
         let seed = passphrase(&pass, |p| Ok(wallet.seal_vault(p, None)?))?;
         let manifest = passphrase(&pass, |p| Ok(wallet.seal_label_vault("manifest", p, None)?))?;
+        // the seed's id is its vaults' (vault v2: every AAD binds it; owner 2026-11-19, T13b ruling 3)
+        let id = wallet.vault_id()?;
         let fp: String = wallet
             .fingerprint()?
             .iter()

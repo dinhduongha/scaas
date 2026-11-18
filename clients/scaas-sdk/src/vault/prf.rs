@@ -128,23 +128,50 @@ impl Sdk {
         .await
     }
 
-    /// Rewrites every vault of seed `seed` by `f` (vault texts only: no index field moves, so no MAC either).
+    /// Rewrites every vault of seed `seed` by `f`, and the index MAC, which covers the vault texts (owner 2026-11-19, T13b
+    /// ruling 3): under the open seed's wallet, else under the wallet `pass` opens from the seed vault (`WalletLocked` with
+    /// neither).
     async fn rewrite_vaults(
         &self,
         seed: &str,
+        pass: Option<Arc<SecretBytes>>,
         f: impl Fn(&V1) -> Result<V1, SdkError> + Send + Sync + 'static,
     ) -> Result<(), SdkError> {
         let e = self.entry(seed).await?;
         let old = e.vaults.clone();
+        let open = self.open_seed(seed).ok();
+        if open.is_none() && pass.is_none() {
+            return Err(SdkError::Ua(scaas_ua::wallet::Error::WalletLocked));
+        }
         let f = Arc::new(f);
-        let new = self
+        let (new, index_mac) = self
             .heavy({
                 let f = f.clone();
                 move || {
-                    vaults(&e)?
+                    let new = vaults(&e)?
                         .iter()
                         .map(|(k, v)| Ok((k.clone(), f(v)?.to_json())))
-                        .collect::<Result<BTreeMap<_, _>, SdkError>>()
+                        .collect::<Result<BTreeMap<_, _>, SdkError>>()?;
+                    let mut ne = e.clone();
+                    ne.vaults = new.clone();
+                    let index_mac = match (&open, &pass) {
+                        (Some(o), _) => super::seeds::mac(&o.wallet, &ne)?,
+                        (None, Some(p)) => {
+                            let seed_vault = super::unlock::vault_of(&e, "seed")?;
+                            let w = passphrase(p, |p| {
+                                Ok(scaas_ua::wallet::Wallet::open_vault(
+                                    &seed_vault,
+                                    scaas_ua::wallet::Unlock::VaultPassphrase(p),
+                                    "",
+                                )?)
+                            })?;
+                            let m = super::seeds::mac(&w, &ne);
+                            w.lock();
+                            m?
+                        }
+                        (None, None) => return Err(SdkError::Internal),
+                    };
+                    Ok((new, index_mac))
                 }
             })
             .await?;
@@ -160,6 +187,7 @@ impl Sdk {
                     return Err(SdkError::StoreConflict);
                 }
                 e.vaults = new.clone();
+                e.index_mac = index_mac.clone();
                 Ok(())
             })
             .await?;
@@ -243,13 +271,15 @@ impl Vault {
             .await
     }
 
-    /// Drops the PRF envelope of every vault of the seed (the passphrase still opens; an earlier copy keeps its envelope). An
-    /// unlocked seed is locked (its wallet holds the old envelopes, which a later re-seal would write back).
+    /// Drops the PRF envelope of every vault of the seed (the passphrase still opens; an earlier copy keeps its envelope). The
+    /// seed must be unlocked (`WalletLocked`): the index MAC covers the vault texts (T13b ruling 3), so its wallet rewrites it;
+    /// then the seed is locked (its wallet holds the old envelopes, which a later re-seal would write back).
     pub async fn disable_prf_unlock(&self, seed: String) -> Result<(), SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
-                sdk.rewrite_vaults(&seed, |v| Ok(v.without_prf())).await?;
+                sdk.rewrite_vaults(&seed, None, |v| Ok(v.without_prf()))
+                    .await?;
                 sdk.lock_seed(&seed).await;
                 Ok(())
             })
@@ -270,8 +300,8 @@ impl Vault {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
-                let n2 = new.clone();
-                sdk.rewrite_vaults(&seed, move |v| {
+                let (n2, o2) = (new.clone(), old.clone());
+                sdk.rewrite_vaults(&seed, Some(o2), move |v| {
                     passphrases(&old, &n2, |o, n| Ok(v.rewrap_pin(o, n)?))
                 })
                 .await?;
@@ -290,7 +320,7 @@ async fn enable(
     pass: Arc<SecretBytes>,
 ) -> Result<(), SdkError> {
     let p2 = pass.clone();
-    sdk.rewrite_vaults(seed, move |v| {
+    sdk.rewrite_vaults(seed, Some(pass.clone()), move |v| {
         out.with(|b| {
             let output: &[u8; 32] = b.try_into().map_err(|_| SdkError::AuthenticatorRefused)?;
             let env = PrfEnvelope {

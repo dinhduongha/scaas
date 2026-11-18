@@ -120,7 +120,8 @@ test('vault.json: seed vaults at N = 2^15, 2^16, 2^17, 12 words, NFC sealed / NF
   assert.deepEqual(VJ.vaults.map((r) => r.vault.pin.N).slice(0, 3), [2 ** 15, 2 ** 16, 2 ** 17]);
   for (const r of VJ.vaults) {
     assert.equal(bytesToHex(await V.openSeedVault(r.vault, unlockOf(r.unlock))), r.plaintext.slice(2), r.id);
-    assert.equal(r.vault.v, 1);
+    assert.equal(r.vault.v, 2);
+    assert.match(r.vault.id, V.VAULT_ID);
     assert.equal(r.vault.label, 'seed');
   }
   const nfd = VJ.vaults.find((r) => r.id.startsWith('passphrase in NFD'));
@@ -128,10 +129,10 @@ test('vault.json: seed vaults at N = 2^15, 2^16, 2^17, 12 words, NFC sealed / NF
   assert.equal(fromHex(VJ.vaults.find((r) => r.id.startsWith('twelve')).plaintext).length, 16);
 });
 
-test('vault.json refusals: wrong passphrase, altered AAD label, N = 2^31 / 3, r = 16, p = 2, v 2 and its tombstone, 31 and 64-byte payloads, label', async () => {
-  assert.equal(VJ.refusals.length, 11);
+test('vault.json refusals: wrong passphrase, altered AAD label and id, N = 2^31 / 3, r = 16, p = 2, v 1 and the tombstone, an id not a UUID, 31 and 64-byte payloads, label', async () => {
+  assert.equal(VJ.refusals.length, 13);
   for (const x of VJ.refusals) assert.equal(await codeOf(() => V.openSeedVault(x.vault, unlockOf(x.unlock))), x.error, x.id);
-  // v 2 is never reported as a wrong passphrase, and the parameters are refused before scrypt runs (a 2^31 N would not return)
+  // v 1 is never reported as a wrong passphrase, and the parameters are refused before scrypt runs (a 2^31 N would not return)
   assert.ok(VJ.refusals.filter((x) => x.error === 'VaultVersion').length === 2);
 });
 
@@ -144,7 +145,7 @@ test('rs_vault.json: ua-rs vaults (24 and 12 words, PRF envelope, rewrapped pin)
   assert.equal(RS.vaults.length, 4);
   for (const r of RS.vaults) {
     assert.equal(bytesToHex(await V.openSeedVault(r.vault, unlockOf(r.unlock))), r.plaintext.slice(2), r.id);
-    assert.deepEqual([r.vault.v, r.vault.label, r.vault.pin.kdf, r.vault.pin.N, r.vault.pin.r, r.vault.pin.p], [1, 'seed', 'scrypt', 2 ** 17, 8, 1], r.id);
+    assert.deepEqual([r.vault.v, r.vault.label, r.vault.pin.kdf, r.vault.pin.N, r.vault.pin.r, r.vault.pin.p], [2, 'seed', 'scrypt', 2 ** 17, 8, 1], r.id);
     assert.equal(V.needsRewrap(r.vault), false);
   }
   assert.deepEqual(RS.vaults.map((r) => fromHex(r.plaintext).length), [32, 16, 32, 16]);

@@ -4,11 +4,12 @@
   {
    "id": "manifest with a PRF envelope",
    "vault": {
-    "v": 1,
+    "v": 2,
+    "id": "5a417c5d-ac5d-4fa6-8280-bf6dbdbd7f65",
     "label": "manifest",
     "data": {
      "iv": "Vl4q6E1Ct5AK8MHD",
-     "ct": "uC4SOiYWFF8k20Ngb_txkI8HIc0TJTM2fvF2IbUjgBDobTFOeyYe9v4SY_Yy2tWPlM2xbPjTGbwntU7u0VqHFdkitoHiHqCQgrnkHyyhYqVuZAlleU-texnbQr_uQCyAjGwo2AR8XpjKh_fuogccUxr3E6KqFwzFNw2I0G_AbdsRamavFzmLYHUavFxJ"
+     "ct": "uC4SOiYWFF8k20Ngb_txkI8HIc0TJTM2fvF2IbUjgBDobTFOeyYe9v4SY_Yy2tWPlM2xbPjTGbwntU7u0VqHFdkitoHiHqCQgrnkHyyhYqVuZAlleU-texnbQr_uQCyAjGwo2AR8XpjKh_fuogccUxr3E6KqFwzFNw2I0G9a84Dcj62I7Yrg3RbkZUj4"
     },
     "pin": {
      "kdf": "scrypt",
@@ -17,21 +18,22 @@
      "p": 1,
      "salt": "VhU2rl1CZS2d0r1SX1wzmA",
      "iv": "FDiKM0KIn0heyLF3",
-     "ct": "K5Braao708-r2dVK9Bo8On2zBrLol7fBfHucoOzxU5RMd4FgDdqZ8o3tt41Rw4OO"
+     "ct": "K5Braao708-r2dVK9Bo8On2zBrLol7fBfHucoOzxU5QR3f3Y4tOldsFdfqzRRwDz"
     },
     "prf": {
      "credentialId": "Y3JlZGVudGlhbC0x",
      "salt": "azuOdbWNElaTbKPSlyypmYzZcEKeUR5_J3StqmuiRM4",
      "iv": "gfDkEY30hIhek2EO",
-     "ct": "BL0o4TN_FNhViX3HXSlV2QQ-qcsWIFbrIVy31y0uxPraAln7tUzqMzEdfEMMoUTn"
+     "ct": "BL0o4TN_FNhViX3HXSlV2QQ-qcsWIFbrIVy31y0uxPoJulWh0HcB13bjQIRLrpJ8"
     }
    },
    "resealed": {
-    "v": 1,
+    "v": 2,
+    "id": "5a417c5d-ac5d-4fa6-8280-bf6dbdbd7f65",
     "label": "manifest",
     "data": {
      "iv": "kf6MD2cQX6o_VOYm",
-     "ct": "dCJNfh3Z65eiewN80oCmr4nMtDV_x2ltX_epfibHuZuz5aLUqfW9wigaeUmM1EXGKNmsmMbTgfdVQeOhFuwFxtBmCx5u61ftdK8lrdsClCHuLoiRgKF6Rx85czl8nFrZoQud7CvjZZu3aJK5BTwGsfAOx3_xnarAMDGDECDxm3849BXkn-QE2Hj-ScCn"
+     "ct": "dCJNfh3Z65eiewN80oCmr4nMtDV_x2ltX_epfibHuZuz5aLUqfW9wigaeUmM1EXGKNmsmMbTgfdVQeOhFuwFxtBmCx5u61ftdK8lrdsClCHuLoiRgKF6Rx85czl8nFrZoQud7CvjZZu3aJK5BTwGsfAOx3_xnarAMDGDECBrBST1Ed7DZVdvZRsAkNQW"
     },
     "pin": {
      "kdf": "scrypt",
@@ -40,13 +42,13 @@
      "p": 1,
      "salt": "VhU2rl1CZS2d0r1SX1wzmA",
      "iv": "FDiKM0KIn0heyLF3",
-     "ct": "K5Braao708-r2dVK9Bo8On2zBrLol7fBfHucoOzxU5RMd4FgDdqZ8o3tt41Rw4OO"
+     "ct": "K5Braao708-r2dVK9Bo8On2zBrLol7fBfHucoOzxU5QR3f3Y4tOldsFdfqzRRwDz"
     },
     "prf": {
      "credentialId": "Y3JlZGVudGlhbC0x",
      "salt": "azuOdbWNElaTbKPSlyypmYzZcEKeUR5_J3StqmuiRM4",
      "iv": "gfDkEY30hIhek2EO",
-     "ct": "BL0o4TN_FNhViX3HXSlV2QQ-qcsWIFbrIVy31y0uxPraAln7tUzqMzEdfEMMoUTn"
+     "ct": "BL0o4TN_FNhViX3HXSlV2QQ-qcsWIFbrIVy31y0uxPoJulWh0HcB13bjQIRLrpJ8"
     }
    },
    "pin": "river-otter-7 ünï",
@@ -57,11 +59,12 @@
   {
    "id": "manifest, passphrase only",
    "vault": {
-    "v": 1,
+    "v": 2,
+    "id": "5a417c5d-ac5d-4fa6-8280-bf6dbdbd7f65",
     "label": "manifest",
     "data": {
      "iv": "POce8c_lZOorubDY",
-     "ct": "OYPpE_xkzbhQX_MlZL3KIO8pYx67NxnJH4ZsQj4ydIf1g7MWQfKIrq2qzC3aE_44fZqLArQOC2kZdOXp142j6Pm-3lb2netnpwgT0eehF7d7kPy_gLVI-Vgp8G1-F-RezZAesnSxd2c3zhO0-SPIwXHRuqy0GYD75ay7qW8aa6Q13Py3dLLaoUli44zq"
+     "ct": "OYPpE_xkzbhQX_MlZL3KIO8pYx67NxnJH4ZsQj4ydIf1g7MWQfKIrq2qzC3aE_44fZqLArQOC2kZdOXp142j6Pm-3lb2netnpwgT0eehF7d7kPy_gLVI-Vgp8G1-F-RezZAesnSxd2c3zhO0-SPIwXHRuqy0GYD75ay7qW-pyMeNHvtlmgflDzl3imPY"
     },
     "pin": {
      "kdf": "scrypt",
@@ -70,15 +73,16 @@
      "p": 1,
      "salt": "uhAwjz7Zsh9w4aDf1Dcazw",
      "iv": "_OMlVxXSQMDCJG80",
-     "ct": "EGkkvrZrgmwtB8p4T9sfSWStkUhirVDM9TPmH0KmIUXcjOSbUSmNDfQAtn-zuMfy"
+     "ct": "EGkkvrZrgmwtB8p4T9sfSWStkUhirVDM9TPmH0KmIUWS5VQqf9POKmi1PN5JuYWM"
     }
    },
    "resealed": {
-    "v": 1,
+    "v": 2,
+    "id": "5a417c5d-ac5d-4fa6-8280-bf6dbdbd7f65",
     "label": "manifest",
     "data": {
      "iv": "Ge-wjuM7BshBXwjZ",
-     "ct": "Gd1j2yEntNZghJiviZNlKcWVa0_2ss97wHeacEGG6iSLAKEPBZxU_8Tm89t4Rz4-BIXV63Fa-FAH0UrplxH3amJ72lTJjQB-JA4f7F8URexIMK93FVs2ts5tVeSJmUJVZaByolCSXGkAW9P3A7A4tv-UH8vsGvXCl2QUYJWQB_PqBLI6Ne0ZJR7RqLjD"
+     "ct": "Gd1j2yEntNZghJiviZNlKcWVa0_2ss97wHeacEGG6iSLAKEPBZxU_8Tm89t4Rz4-BIXV63Fa-FAH0UrplxH3amJ72lTJjQB-JA4f7F8URexIMK93FVs2ts5tVeSJmUJVZaByolCSXGkAW9P3A7A4tv-UH8vsGvXCl2QUYJUjpJBSxrXo21gmi27EwVfx"
     },
     "pin": {
      "kdf": "scrypt",
@@ -87,7 +91,7 @@
      "p": 1,
      "salt": "uhAwjz7Zsh9w4aDf1Dcazw",
      "iv": "_OMlVxXSQMDCJG80",
-     "ct": "EGkkvrZrgmwtB8p4T9sfSWStkUhirVDM9TPmH0KmIUXcjOSbUSmNDfQAtn-zuMfy"
+     "ct": "EGkkvrZrgmwtB8p4T9sfSWStkUhirVDM9TPmH0KmIUWS5VQqf9POKmi1PN5JuYWM"
     }
    },
    "pin": "river-otter-7 ünï",

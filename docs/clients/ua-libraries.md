@@ -159,7 +159,7 @@ Claude), no external audit.
 | WebAuthn | `webauthn.rs` | `webauthn_challenge`, `webauthn_assertion` |
 | Factory addresses | `factory.rs` | `create3_salt`, `create3_address`: a creation's chain-neutral CREATE3 address (chain-neutral spec §4, `vectors/factory/create3_kat.json`), shown before a router create op |
 | KEM, seal, containers | `kem.rs`, `seal.rs`, `aead.rs` | `UaKey::kem_key`, `kem_encaps`, `KemKeyPair`, `seal`, `open_container`, `LinkSession`, `from_link`; AEAD, HKDF, HMAC ([§9.1](signers-clientkeys.md#91-the-ua-kem-key-seal-and-containers)) |
-| Vault, manifest, backup | `vault.rs`, `manifest.rs` | clientkeys vault v1 byte for byte, `discover_candidates`, `import_native_key`, `imported_ua_key` (an imported key's own derived kind, [CLI-SGN-29](signers-clientkeys.md#CLI-SGN-29)), `SeedBackup`, `backup_seal`, `link_seal`, `restore_backup`, label vaults |
+| Vault, manifest, backup | `vault.rs`, `manifest.rs` | clientkeys vault v2 byte for byte, `discover_candidates`, `import_native_key`, `imported_ua_key` (an imported key's own derived kind, [CLI-SGN-29](signers-clientkeys.md#CLI-SGN-29)), `SeedBackup`, `backup_seal`, `link_seal`, `restore_backup`, label vaults |
 | Facades | `facade/zether.rs`, `pqz.rs`, `pqz_pack.rs`, `pqz_backup.rs`, `decoys.rs` | `ZetherKey`, `PqzKey`, each one JSON `call` ([below](#confidential-token-facades-no-decryption-oracle)); `pqz_set`, `export_pqz_leaf_raw` |
 | Bounded readers | `wallet/bounded.rs` | [CLI-UAL-03](#CLI-UAL-03) |
 
@@ -400,8 +400,9 @@ external signer reads it. BUILT.
 <a id="CLI-UAL-18"></a>**CLI-UAL-18** — **A `seed` vault holds the BIP-39 entropy at its own length.** Exactly 16, 20, 24, 28 or 32 bytes
 (12 to 24 words; a new wallet 32), never the 64-byte seed, never padded. Another length is `VaultOpen` before a `Wallet` is built;
 `open_vault` needs the label `seed` (`Argument`). The BIP-39 passphrase is never stored: it is asked at every unlock. The format is
-clientkeys vault v1 ([CLI-SGN-02](signers-clientkeys.md#CLI-SGN-02)) byte for byte, both ways; vault v2 and its tombstone are
-`VaultVersion` by name. BUILT.
+clientkeys vault v2 ([CLI-SGN-02](signers-clientkeys.md#CLI-SGN-02)) byte for byte, both ways (owner 2026-11-19, scaas-sdk T13b
+ruling 3: the vault's `id`, a wallet's, bound into every AAD; a label vault of another id `WalletMismatch`); vault v1 and the
+tombstone `{v: 2, moved}` are `VaultVersion` by name. BUILT.
 
 <a id="CLI-UAL-19"></a>**CLI-UAL-19** — **`rewrap_pin` is not a DEK rotation.** It replaces the passphrase envelope and keeps the DEK, so it
 revokes nothing from someone who learnt the DEK. Recovery from a DEK compromise is `seal_vault` anew: a fresh DEK, every envelope rebuilt. A

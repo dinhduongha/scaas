@@ -37,7 +37,12 @@ fn entries() -> Vec<SeedEntry> {
 
 fn entry(n: u32) -> SeedEntry {
     let mut e = entries()[0].clone();
-    e.id = format!("{n:08x}-0000-4000-8000-000000000000");
+    let id = format!("{n:08x}-0000-4000-8000-000000000000");
+    // vault v2: each vault text carries its seed's id (the parse checks it; the AAD no longer opens, which these tests never do)
+    for t in e.vaults.values_mut() {
+        *t = t.replace(&e.id, &id);
+    }
+    e.id = id;
     e.label = format!("Seed {n}");
     e
 }

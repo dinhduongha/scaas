@@ -478,9 +478,10 @@ virtual authenticator per family.
 
 <a id="vault"></a>
 
-Several seeds on one device, each a set of v1 vaults below, are kept in the `scaas.keystore` container of
+Several seeds on one device, each a set of v2 vaults below, are kept in the `scaas.keystore` container of
 [CLI-SDK-03](scaas-sdk.md#CLI-SDK-03) (SPECIFIED): the same bytes in clientkeys, `ua-rs`, `scaas-sdk` and scaas-app, each seed's public
-fields authenticated by an index MAC computed in clientkeys and `ua-rs`. The vault v1 format itself does not change.
+fields and vault texts authenticated by an index MAC computed in clientkeys and `ua-rs`; each vault's AAD binds its seed's id
+(vault v2, owner 2026-11-19, scaas-sdk T13b ruling 3).
 
 <a id="CLI-SGN-11"></a>**CLI-SGN-11** — **A non-custodial seed wallet lives on the client, and one subject account holds
 several keys (passkey + seed).** Owner decision ("both passkeys and seed words"). A 24-word BIP-39 mnemonic (256 bits;
@@ -499,8 +500,11 @@ refuses to reuse it in another, so one key never signs raw digests for two famil
 envelope and, when available, a passkey PRF envelope.** A random DEK encrypts the seed with AES-256-GCM (a fresh 12-byte
 IV each time); the DEK is wrapped by the passphrase through scrypt (16-byte salt) **always**, and additionally by a PRF
 envelope (`extensions.prf`) when the passkey supports it — PRF is the **default** when a passkey of the account offers it
-(the passphrase envelope still always exists). Wrapping keys are never stored. v1 format (`vault.js`):
-`{ v: 1, label, data: {iv, ct}, pin: {kdf: 'scrypt', N, r, p, salt, iv, ct}, prf?: {credentialId, salt, iv, ct} }`. BUILT.
+(the passphrase envelope still always exists). Wrapping keys are never stored. v2 format (`vault.js`; owner 2026-11-19,
+scaas-sdk T13b ruling 3): `{ v: 2, id, label, data: {iv, ct}, pin: {kdf: 'scrypt', N, r, p, salt, iv, ct}, prf?: {credentialId,
+salt, iv, ct} }`, `id` a lower-case UUID v4 (a keystore seed's id, else a fresh one), every AAD `<id>|<label>|<part>`; v1 is
+`VaultVersion`, no migration. BUILT. (The device-bound outer layer of [CLI-SGN-17](#CLI-SGN-17), SPECIFIED, was also called "v2";
+it takes another number when built: an open question for the owner.)
 
 <a id="CLI-SGN-21"></a>**CLI-SGN-21** — **New passphrase envelopes use scrypt `N = 2^17, r = 8, p = 1` (128 MiB; `clients/clientkeys/src/vault.js:14,40-45`; helpers
 `needsRewrap`/`rewrapPin`), replacing the earlier `N = 2^15`; a new

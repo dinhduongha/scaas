@@ -313,6 +313,16 @@ async fn disable_prf_unlock() {
         .enable_passkey_unlock(id.clone(), sec(PASS))
         .await
         .unwrap();
+    // vault v2 (T13b ruling 3): the MAC covers the vault texts, so a locked seed cannot drop its envelopes
+    s.vault().lock(id.clone()).await;
+    assert_eq!(
+        code(s.vault().disable_prf_unlock(id.clone()).await),
+        "WalletLocked"
+    );
+    s.vault()
+        .unlock(id.clone(), Unlock::Passphrase(sec(PASS)))
+        .await
+        .unwrap();
     s.vault().disable_prf_unlock(id.clone()).await.unwrap();
     assert!(
         !s.vault().seed(id.clone()).await.unwrap().unlocked,

@@ -57,6 +57,8 @@ const BASE = {
     { id: '6f1d1f4e-58b5-4d0c-8a6e-1a2b3c4d5e6f', name: 'Daily', kind: 305, account: 0, index: 0, ua: '0x' + '11'.repeat(32) },
     { id: '7a2e2a5f-69c6-4e1d-9b7f-2b3c4d5e6f70', name: 'DOT', network: 'polkadot', index: 0, path: '//polkadot', ss58Prefix: 0, address: '1xyz' },
   ],
+  // the vault texts the MAC covers (T13b ruling 3): opaque strings to it, in any key order (the canonical form sorts them)
+  vaults: { seed: '{"v":2,"label":"seed"}', manifest: '{"v":2,"label":"manifest"}' },
 };
 const changes = [
   ['id', '1c0d3f1f-6e1f-4b62-8e4c-7b2f7f7f3b21'],
@@ -68,6 +70,7 @@ const changes = [
   ['warnings', ['short_seed']],
   ['backup', 'pending'],
   ['accounts', BASE.accounts.slice(0, 1)],
+  ['vaults', { ...BASE.vaults, seed: '{"v":2,"label":"seed","x":1}' }],
 ];
 const macRow = (id, entropy, fields) => ({ id, entropy: hex(entropy), fields, canonical: indexCanonical(fields), mac: indexMac(entropy, fields) });
 const macs = [
@@ -84,7 +87,8 @@ const resealRow = async (id, label, withPrf) => {
   // ua-rs's manifest form (Manifest::to_json), so a reader can open the vault into a wallet; the change: backupGeneration
   const manifest = (g) => utf8ToBytes(`{"v":1,"entries":[],"natives":[],"kem":[],"imports":[],"importedUas":[],"pqzHeld":[],"backupGeneration":${g},"backupSenders":[]}`);
   const [before, after] = withPrf ? [manifest(0), manifest(1)] : [manifest(2), manifest(3)];
-  const vault = await withStream(`${id}.seal`, () => createVault(before, { label, pin: PASS, prf: withPrf ? prf : undefined }));
+  const vault = await withStream(`${id}.seal`, () => createVault(before, { label, pin: PASS, prf: withPrf ? prf : undefined,
+    id: '5a417c5d-ac5d-4fa6-8280-bf6dbdbd7f65' }));
   const resealed = await withStream(`${id}.reseal`, () => resealData(vault, { pin: PASS }, after));
   must(JSON.stringify(resealed.pin) === JSON.stringify(vault.pin), `${id}: pin kept`);
   must(JSON.stringify(resealed.prf) === JSON.stringify(vault.prf), `${id}: prf kept`);
@@ -99,15 +103,15 @@ const reseals = [
 
 // --- keystore.json (T2b): containers. Every vault sealed under PASS by src/vault.js from a stream; every entry's MAC under its
 // seed's entropy.
-const vaultText = async (label, secret, id) => JSON.stringify(await withStream(`ks.${id}.${label}`, () => createVault(secret, { label, pin: PASS })));
+const vaultText = async (label, secret, id) => JSON.stringify(await withStream(`ks.${id}.${label}`, () => createVault(secret, { label, pin: PASS, id })));
 const emptyManifest = utf8ToBytes('{"v":1,"entries":[],"natives":[],"kem":[],"imports":[],"importedUas":[],"pqzHeld":[],"backupGeneration":0,"backupSenders":[]}');
 const macOf = (entropy, e) => ({ ...e, indexMac: indexMac(entropy, e) });
 const entry = async ({ id, label, entropy, origin, warnings = [], backup, accounts = [], extraVaults = {} }) => {
   const vaults = { seed: await vaultText('seed', entropy, id), manifest: await vaultText('manifest', emptyManifest, id) };
   for (const [k, v] of Object.entries(extraVaults)) vaults[k] = await vaultText(k, v, id);
   const e = { id, label, words: entropy.length * 3 / 4, fingerprint: masterFingerprint(seedFromEntropy(entropy)), origin, class: 'full',
-    warnings, backup, accounts };
-  return { ...macOf(entropy, e), vaults, accounts, indexMac: macOf(entropy, e).indexMac };
+    warnings, backup, accounts, vaults };
+  return macOf(entropy, e);
 };
 const ordered = (e) => ({ id: e.id, label: e.label, words: e.words, fingerprint: e.fingerprint, origin: e.origin, class: e.class,
   warnings: e.warnings, backup: e.backup, vaults: Object.fromEntries(Object.keys(e.vaults).sort().map((k) => [k, e.vaults[k]])),
@@ -128,7 +132,7 @@ const withImport = ordered(await entry({ id: '3e2f5b3b-8a3b-4d84-a06e-9d4b9b9b5d
   accounts: [{ id: '9c4a4c71-8be8-4a3f-9d91-4d5e6f708192', name: 'Imported EVM', network: 'evm', index: 0, address: imported.address }] }));
 const polkadot = ordered(await entry({ id: '4f306c4c-9b4c-4e95-b17f-ae5cacac6e54', label: 'Polkadot', entropy: ENTROPY, origin: 'generated', backup: 'verified',
   accounts: [{ id: 'ad5b5d82-9cf9-4b40-ae02-5e6f708192a3', name: 'DOT', network: 'polkadot', index: 0, path: '//polkadot', ss58Prefix: 0, address: dot.address }] }));
-const ks = (rev, seeds) => ({ format: 'scaas.keystore', v: 1, rev, seeds });
+const ks = (rev, seeds) => ({ format: 'scaas.keystore', v: 2, rev, seeds });
 const validRows = [
   { id: 'an empty keystore', container: ks(0, []) },
   { id: 'one 24-word seed with seed and manifest vaults', container: ks(1, [main]) },
@@ -143,7 +147,9 @@ const mutate = (f) => { const c = base(); f(c); return JSON.stringify(c); };
 const sixtyFive = () => { const c = base(); c.seeds = Array.from({ length: 65 }, (_, i) => ({ ...structuredClone(main), id: `${String(i).padStart(8, '0')}-0000-4000-8000-000000000000`, label: `S${i}` })); return JSON.stringify(c); };
 const refusedRows = [
   ['another format', 'VaultVersion', mutate((c) => { c.format = 'scaas.keystore2'; })],
-  ['v: 2', 'VaultVersion', mutate((c) => { c.v = 2; })],
+  ['v: 1 (vault v1, no migration)', 'VaultVersion', mutate((c) => { c.v = 1; })],
+  ['a vault of another seed\'s id', 'VaultFormat', mutate((c) => { c.seeds[0].vaults.manifest = c.seeds[1].vaults.manifest; })],
+  ['a vault v 1 text', 'VaultFormat', mutate((c) => { c.seeds[0].vaults.manifest = c.seeds[0].vaults.manifest.replace('"v":2', '"v":1'); })],
   ['an unknown top-level field', 'VaultFormat', mutate((c) => { c.extra = 1; })],
   ['an unknown seed field', 'VaultFormat', mutate((c) => { c.seeds[0].parent = 'x'; })],
   ['an unknown account field', 'VaultFormat', mutate((c) => { c.seeds[0].accounts[0].note = 'x'; })],
@@ -191,9 +197,10 @@ const write = (name, obj) => {
 write('index_mac.json', {
   note: 'Generated by clients/clientkeys/scripts/keystore-vectors.mjs (scaas-sdk plan T2a) from src/seed.js masterFingerprint and '
     + 'src/keystore-mac.js indexMac; never edit by hand. fingerprint: the BIP-32 master key fingerprint of the seed of the entropy '
-    + 'and the BIP-39 passphrase (8 lower-case hex). mac: HMAC-SHA256(HKDF-SHA256(entropy, "", "scaas.keystore.index.v1", 32), '
-    + 'canonical), canonical the JSON of exactly id, label, words, fingerprint, origin, class, warnings, backup, accounts in that '
-    + 'order without white space (given here as well); every row a different MAC.',
+    + 'and the BIP-39 passphrase (8 lower-case hex). mac: HMAC-SHA256(HKDF-SHA256(entropy, "", "scaas.keystore.index.v2", 32), '
+    + 'canonical), canonical the JSON of exactly id, label, words, fingerprint, origin, class, warnings, backup, accounts, vaults '
+    + '(the label → vault text object, keys sorted) in that order without white space (given here as well); every row a '
+    + 'different MAC (owner 2026-11-19, T13b ruling 3: the MAC covers the vault texts).',
   fingerprints,
   macs,
 });
@@ -206,6 +213,7 @@ write('reseal.json', {
 });
 write('keystore.json', {
   note: 'Generated by clients/clientkeys/scripts/keystore-vectors.mjs (scaas-sdk plan T2b) from src/keystore.js; never edit by hand. '
+    + 'Container v 2 holding vault v2 texts, each of its seed\'s id (owner 2026-11-19, T13b ruling 3). '
     + 'valid: canonical containers (serialize(parse(text)) === text); refused: the base container (rev 7, the first two seeds of '
     + '"four seeds") with one rule broken each, and the error a reader names. Vaults sealed by src/vault.js under the passphrase '
     + '"river-otter-7 ünï" from a fixed stream; each entry\'s indexMac under its seed\'s entropy (the repository mnemonic, or the '

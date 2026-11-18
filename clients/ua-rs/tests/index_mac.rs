@@ -21,6 +21,8 @@ fn with_fields<R>(f: &Value, g: impl FnOnce(&IndexFields) -> R) -> R {
     let s = |k: &str| f[k].as_str().unwrap();
     let warnings: Vec<String> = f["warnings"].as_array().unwrap().iter().map(|w| w.as_str().unwrap().to_owned()).collect();
     let accounts = serde_json::to_string(&f["accounts"]).unwrap(); // dev serde_json keeps the order (preserve_order)
+    let vaults: std::collections::BTreeMap<String, String> =
+        f["vaults"].as_object().unwrap().iter().map(|(k, v)| (k.clone(), v.as_str().unwrap().to_owned())).collect();
     g(&IndexFields {
         id: s("id"),
         label: s("label"),
@@ -31,6 +33,7 @@ fn with_fields<R>(f: &Value, g: impl FnOnce(&IndexFields) -> R) -> R {
         warnings: &warnings,
         backup: s("backup"),
         accounts_json: &accounts,
+        vaults: &vaults,
     })
 }
 

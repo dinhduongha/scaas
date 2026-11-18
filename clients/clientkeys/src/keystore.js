@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-// The scaas-sdk keystore container (scaas-sdk spec §6.1, CLI-SDK-03): one item holding several seeds, each as vault v1 texts
-// byte for byte (src/vault.js), with the integrity fields `rev`, `backup` and `indexMac` (src/keystore-mac.js) from v 1 on.
-//   {format: "scaas.keystore", v: 1, rev, seeds: [{id, label, words, fingerprint, origin, class, warnings, backup, vaults,
+// The scaas-sdk keystore container (scaas-sdk spec §6.1, CLI-SDK-03): one item holding several seeds, each as vault v2 texts
+// byte for byte (src/vault.js), with the integrity fields `rev`, `backup` and `indexMac` (src/keystore-mac.js, which covers the
+// vault texts too). Container v 2 (owner 2026-11-19, T13b ruling 3: vault v2; v 1 is `VaultVersion`, no migration).
+//   {format: "scaas.keystore", v: 2, rev, seeds: [{id, label, words, fingerprint, origin, class, warnings, backup, vaults,
 //    accounts, indexMac}]}
 // `parse` refuses by name: `VaultVersion` (format, v), `VaultFormat` (every other rule, and any text other than the canonical
 // form `serialize` writes: compact JSON, the field orders below), so serialize(parse(x)) === x. A vault text is
-// parsed only to compare its `label` with its key. No cryptography here (the MAC is checked at unlock, by the seed's owner).
+// parsed only to compare its `label` with its key, its `v` with 2 and its `id` with the seed's id. No cryptography here (the MAC is checked at unlock, by the seed's owner).
 // The scaas-sdk Rust parser refuses the same files with the same names (smartcontracts/vectors/keystore/keystore.json).
 // UNAUDITED.
 import { utf8ToBytes } from './bytes.js';
 
 export const FORMAT = 'scaas.keystore';
+export const VERSION = 2;
 export const MAX_BYTES = 16 << 20;
 export const MAX_DEPTH = 5;
 export const MAX_SEEDS = 64;
@@ -110,6 +112,7 @@ function checkSeed(s) {
     let inner;
     try { inner = JSON.parse(t); } catch { format(`vault ${k} not JSON`); }
     if (!isObj(inner) || inner.label !== k) format(`vault key ${k} is not its vault's label`);
+    if (inner.v !== 2 || inner.id !== s.id) format(`vault ${k} is not a v 2 vault of this seed's id`);
   }
   if (!Array.isArray(s.accounts) || s.accounts.length > MAX_ACCOUNTS) format('accounts not a list of at most 1024');
   s.accounts.forEach(checkRow);
@@ -125,7 +128,7 @@ function wellFormed(v) {
 
 function check(c) {
   if (!isObj(c)) format('not an object');
-  if (c.format !== FORMAT || c.v !== 1) refuse('VaultVersion', 'keystore: another format or version');
+  if (c.format !== FORMAT || c.v !== VERSION) refuse('VaultVersion', 'keystore: another format or version');
   only(c, TOP, 'top-level');
   if (!isUint(c.rev)) format('rev not an integer');
   if (!Array.isArray(c.seeds) || c.seeds.length > MAX_SEEDS) format('seeds not a list of at most 64');

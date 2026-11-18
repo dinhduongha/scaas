@@ -340,11 +340,16 @@ async fn mac_mismatch_keeps_the_seed_locked() {
                     })
             }),
         ),
+        // vault v2 (T13b ruling 3): a vault moved under another entry carries another id, refused at parse
+        // (keystore.json's "a vault of another seed's id"); a vault text changed in place is the MAC's (it covers the texts)
         (
-            "a seed vault moved under another entry",
+            "a vault text changed in place",
             Box::new(|k: &mut Keystore| {
-                let other = k.seeds[1].vaults["seed"].clone();
-                k.seeds[0].vaults.insert("seed".into(), other);
+                let t = k.seeds[0].vaults["manifest"].clone();
+                let v: serde_json::Value = serde_json::from_str(&t).unwrap();
+                let changed = v.to_string(); // the same vault, its fields in another order: another text
+                assert_ne!(changed, t);
+                k.seeds[0].vaults.insert("manifest".into(), changed);
             }),
         ),
     ];

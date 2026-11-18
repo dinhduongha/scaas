@@ -341,7 +341,7 @@ fn manifest_listing_is_no_trust_anchor() {
     assert!(forged.contains(&hex::encode(wrong)));
     let m = Manifest::from_json(forged.as_bytes()).unwrap();
     assert_eq!(m.imported_uas[0].ua, wrong);
-    w.open_label_vault(&scaas_ua::wallet::Vault::vectors_seal("manifest", forged.as_bytes(), pass).unwrap(), Unlock::VaultPassphrase(pass)).unwrap();
+    w.open_label_vault(&scaas_ua::wallet::Vault::vectors_seal(&w.vault_id().unwrap(), "manifest", forged.as_bytes(), pass).unwrap(), Unlock::VaultPassphrase(pass)).unwrap();
     assert_eq!(w.manifest().imported_uas[0].ua, wrong, "the forged listing is loaded");
     let again = w.imported_ua_key(Network::Evm, n, 0x0108).unwrap();
     assert_eq!(again.ua(), Some(truth), "the id is the secret's");

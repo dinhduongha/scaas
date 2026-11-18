@@ -398,13 +398,13 @@ pub fn bip39_word_in_list(word: &str) -> bool {
     bip39::Language::English.find_word(&lower).is_some()
 }
 
-const INDEX_INFO: &[u8] = b"scaas.keystore.index.v1";
+const INDEX_INFO: &[u8] = b"scaas.keystore.index.v2";
 /// The longest `accounts` array an index MAC covers: 1,024 rows of a few hundred bytes.
 const INDEX_ACCOUNTS_MAX: usize = 1 << 20;
 
 /// The public fields of a keystore seed entry the index MAC covers (scaas-sdk spec §6.2), in its canonical order.
 /// `accounts_json` is the entry's `accounts` array as the container holds it: compact JSON, each row's fields in the order
-/// clientkeys writes them.
+/// clientkeys writes them; `vaults` the entry's vault texts by label (scaas-sdk T13b ruling 3: the MAC covers them).
 pub struct IndexFields<'a> {
     pub id: &'a str,
     pub label: &'a str,
@@ -415,11 +415,13 @@ pub struct IndexFields<'a> {
     pub warnings: &'a [String],
     pub backup: &'a str,
     pub accounts_json: &'a str,
+    pub vaults: &'a std::collections::BTreeMap<String, String>,
 }
 
 /// The MAC's input (clientkeys `indexCanonical`): `{"id":…,"label":…,"words":…,"fingerprint":…,"origin":…,"class":…,
-/// "warnings":[…],"backup":…,"accounts":[…]}`, strings as `JSON.stringify` writes them. `Argument` when `accounts_json` is not
-/// one JSON array (1 MiB, depth 3) written without white space outside its strings.
+/// "warnings":[…],"backup":…,"accounts":[…],"vaults":{label:text,…}}`, the vaults by sorted label, strings as `JSON.stringify`
+/// writes them. `Argument` when `accounts_json` is not one JSON array (1 MiB, depth 3) written without white space outside its
+/// strings.
 pub fn index_canonical(f: &IndexFields) -> Result<String> {
     let v = bounded::json(f.accounts_json.as_bytes(), INDEX_ACCOUNTS_MAX, 3)?;
     if !v.is_array() || serde_json::to_string(&v).map_or(0, |t| t.len()) != f.accounts_json.len() {
@@ -427,8 +429,9 @@ pub fn index_canonical(f: &IndexFields) -> Result<String> {
     }
     let s = |x: &str| serde_json::Value::from(x).to_string();
     let warnings = serde_json::Value::from(f.warnings.to_vec()).to_string();
+    let vaults = serde_json::to_string(f.vaults).map_err(|_| Error::Argument)?; // a BTreeMap: keys sorted
     Ok(format!(
-        "{{\"id\":{},\"label\":{},\"words\":{},\"fingerprint\":{},\"origin\":{},\"class\":{},\"warnings\":{warnings},\"backup\":{},\"accounts\":{}}}",
+        "{{\"id\":{},\"label\":{},\"words\":{},\"fingerprint\":{},\"origin\":{},\"class\":{},\"warnings\":{warnings},\"backup\":{},\"accounts\":{},\"vaults\":{vaults}}}",
         s(f.id),
         s(f.label),
         f.words,
@@ -623,6 +626,8 @@ impl SeedBackup {
 )]
 pub struct Wallet {
     store: Arc<SecretStore>,
+    /// the id every vault of this wallet carries (scaas-sdk T13b ruling 3): its seed vault's, else drawn at its first seal
+    vault_id: std::sync::OnceLock<String>,
 }
 
 impl Wallet {
@@ -642,7 +647,7 @@ impl Wallet {
 
     /// The store from the entropy, its BIP-39 seed and its `substrate-bip39` mini-secret (the passphrase as given; spec §4.3).
     fn from_entropy(entropy: &[u8], bip39_passphrase: &str) -> Result<Wallet> {
-        let w = Wallet { store: SecretStore::new() };
+        let w = Wallet { store: SecretStore::new(), vault_id: std::sync::OnceLock::new() };
         w.store.open(entropy, &*seed_of(entropy, bip39_passphrase)?, &substrate::mini_secret(entropy, bip39_passphrase))?;
         Ok(w)
     }
@@ -689,7 +694,7 @@ impl Wallet {
     }
 
     /// The keystore index MAC of a seed entry (clientkeys `indexMac`; scaas-sdk spec §6.2): `HMAC-SHA256(HKDF-SHA256(entropy,
-    /// "", "scaas.keystore.index.v1", 32), canonical)` under this wallet's BIP-39 entropy. `Argument` for fields outside their
+    /// "", "scaas.keystore.index.v2", 32), canonical)` under this wallet's BIP-39 entropy. `Argument` for fields outside their
     /// form ([`index_canonical`]); `WalletLocked` while locked.
     pub fn index_mac(&self, fields: &IndexFields) -> Result<[u8; 32]> {
         let canonical = index_canonical(fields)?;

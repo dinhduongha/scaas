@@ -35,7 +35,7 @@ test('keystore.json refused rows: each by its name; the base with the rule fixed
     assert.equal(codeOf(r.text), r.error, r.id);
     names.add(r.id);
   }
-  for (const want of ['another format', 'v: 2', 'an unknown top-level field', 'an unknown seed field', 'an unknown account field',
+  for (const want of ['another format', 'v: 1 (vault v1, no migration)', 'a vault of another seed\'s id', 'a vault v 1 text', 'an unknown top-level field', 'an unknown seed field', 'an unknown account field',
     'a duplicate id', 'a duplicate label', 'a label of 0 scalar values', 'a label of 65 scalar values', 'a label with a control character',
     'a label not NFC', 'words 13', 'backup lost', 'a vaults key unequal to its vault\'s label', 'no seed vault', 'no rev', 'no indexMac',
     '65 seeds', 'depth 6']) assert.ok(names.has(want), want);
@@ -53,14 +53,16 @@ test('keystore.json refused rows: each by its name; the base with the rule fixed
   assert.equal(depthOf(JSON.stringify(base)), 5);
 });
 
-test('keystore.json: each entry\'s indexMac is its seed\'s, the seed vaults open with the passphrase', async () => {
+test('keystore.json: each entry\'s indexMac is its seed\'s over its fields and vault texts, the seed vaults open with the passphrase', async () => {
   const four = parse(K.valid.find((r) => r.id === 'four seeds').text);
   for (const s of four.seeds) {
     const entropy = await openSeedVault(JSON.parse(s.vaults.seed), { pin: K.passphrase });
     assert.equal(entropy.length * 3 / 4, s.words);
-    const { vaults, indexMac: mac, ...fields } = s;
-    assert.ok(vaults);
+    const { indexMac: mac, ...fields } = s;
     assert.equal(indexMac(entropy, fields), mac, s.label);
+    // the MAC covers the vault texts (T13b ruling 3): another manifest text is another MAC
+    const swapped = { ...fields, vaults: { ...fields.vaults, manifest: four.seeds.find((x) => x !== s).vaults.manifest } };
+    assert.notEqual(indexMac(entropy, swapped), mac, `${s.label}: the vaults are covered`);
   }
 });
 
