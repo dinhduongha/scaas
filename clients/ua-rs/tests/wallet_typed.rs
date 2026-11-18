@@ -1119,7 +1119,8 @@ fn rescue_vault_kat() {
 /// Set-auditor (spec §5.2, plan A7): `typed_ops.json`'s `AuditorConsent` consent rows, in both token domains: the native id's
 /// ECDSA over the registry's `uaAuthDigest` under `auditor-consent` (context A, generation 1) recovers to it, the derived
 /// secp256k1 UA's signature over `uaMessage(0x0108, purpose, digest)` verifies under its key data; each digest is ua-rs's
-/// `AuditorConsent` naming that signer's own UA.
+/// `AuditorConsent` naming that signer's own UA; the 2-of-2 `msig` of the two (closing review C3.6) by its members' signatures over
+/// its member digest.
 #[test]
 fn auditor_consent_rows() {
     let t = load("typed/typed_ops.json");
@@ -1151,5 +1152,40 @@ fn auditor_consent_rows() {
         let mut bad = m;
         bad[0] ^= 1;
         assert!(!scaas_ua::verify::verify(k, &bytes(&x["keyData"]), &bad, &bytes(&x["signature"]), false), "{kind}: control");
+        // closing review C3.6: the 2-of-2 msig of those two signers over the consent naming the msig's own UA; each member signs
+        // `memberDigest(msig, uaMessage(0x0120, purpose, digest))` under `member` (the native one over the registry's `uaAuthDigest`)
+        let g = &d["consent"]["msig"];
+        let slots: Vec<(u16, [u8; 32], u16)> = g["members"].as_array().unwrap().iter()
+            .map(|y| (y["kind"].as_u64().unwrap() as u16, b32(&y["id"]), y["weight"].as_u64().unwrap() as u16)).collect();
+        let key = scaas_ua::encode_msig(g["threshold"].as_u64().unwrap() as u16, &slots);
+        assert_eq!(key, bytes(&g["keyData"]), "{kind}: msig key data");
+        assert_eq!(scaas_ua::ua_of(0x0120, &key).unwrap(), b32(&g["ua"]), "{kind}: msig id");
+        let mut ids: Vec<[u8; 32]> = slots.iter().map(|s| s.1).collect();
+        ids.sort();
+        let mut want = [b32(&n["ua"]), b32(&x["ua"])];
+        want.sort();
+        assert_eq!(ids, want, "{kind}: its members are the two signers");
+        assert_eq!(typed(&g["ua"]), b32(&g["digest"]), "{kind}: msig");
+        let gm = scaas_ua::ua_message(0x0120, &purpose, &b32(&g["digest"])).unwrap();
+        assert_eq!(gm, b32(&g["uaMessage"]), "{kind}");
+        let md = scaas_ua::member_digest(&b32(&g["ua"]), &gm);
+        assert_eq!(md, b32(&g["memberDigest"]), "{kind}");
+        let member = purpose_tag("member").unwrap();
+        let sigs = g["uaSig"]["members"].as_array().unwrap();
+        assert_eq!(sigs.len(), 2, "{kind}: both slots");
+        for s in sigs {
+            let (sk, id, _) = slots[s["index"].as_u64().unwrap() as usize];
+            assert!(s["members"].as_array().unwrap().is_empty(), "{kind}");
+            if sk == 0x0001 {
+                let auth = ua_auth_digest(&reg, &id, &member, &md);
+                assert!(native_ecdsa(&id[12..].try_into().unwrap(), &auth, &bytes(&s["sig"])), "{kind}: native member");
+            } else {
+                let mm = scaas_ua::ua_message(sk, &member, &md).unwrap();
+                assert!(scaas_ua::verify::verify(sk, &bytes(&x["keyData"]), &mm, &bytes(&s["sig"]), false), "{kind}: secp256k1 member");
+                let mut bad = mm;
+                bad[0] ^= 1;
+                assert!(!scaas_ua::verify::verify(sk, &bytes(&x["keyData"]), &bad, &bytes(&s["sig"]), false), "{kind}: control");
+            }
+        }
     }
 }

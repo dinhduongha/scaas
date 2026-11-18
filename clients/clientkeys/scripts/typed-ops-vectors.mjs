@@ -214,10 +214,27 @@ function consentRows(op, at) {
   const id = ua.uaOf(0x0108, keyData);
   const d1 = typed(hex(id));
   const m = ua.uaMessage(0x0108, tag, d1);
+  // closing review C3.6: a 2-of-2 `msig` of those two signers (each weight 1), over the consent naming the msig's own UA: each
+  // member signs `md = memberDigest(msig, uaMessage(0x0120, purpose, digest))` under `member`, the native one over the registry's
+  // `uaAuthDigest(member, md)` (context A, generation 1), the secp256k1 one over `uaMessage(0x0108, member, md)` (its record's key)
+  const member = ua.purposeTag('member');
+  const ms = [{ kind: 0x0001, id: nativeUa, weight: 1 }, { kind: 0x0108, id, weight: 1 }]
+    .sort((x, y) => (hex(x.id) < hex(y.id) ? -1 : 1));
+  const msigKey = ua.encodeMsig(2, ms);
+  const msigUa = ua.uaOf(0x0120, msigKey);
+  const d2 = typed(hex(msigUa));
+  const msgM = ua.uaMessage(0x0120, tag, d2);
+  const md = ua.memberDigest(msigUa, msgM);
+  const sigs = ms.map((x, index) => ({ index, members: [], sig: x.kind === 0x0001
+    ? ecdsa(nativeSk, ua.uaAuthDigest({ generation: 1, ...contexts.A }, nativeUa, member, md))
+    : SCHEMES.secp256k1.sign(CONSENT_SK, ua.uaMessage(0x0108, member, md)) }));
   return {
     native: { ua: hex(nativeUa), digest: hex(d0), uaAuthDigest: hex(h), signature: hex(ecdsa(nativeSk, h)) },
     derived: { ua: hex(id), kind: 0x0108, keyData: hex(keyData), digest: hex(d1), uaMessage: hex(m),
       signature: hex(SCHEMES.secp256k1.sign(CONSENT_SK, m)) },
+    msig: { ua: hex(msigUa), kind: 0x0120, keyData: hex(msigKey), threshold: 2,
+      members: ms.map((x, index) => ({ index, kind: x.kind, id: hex(x.id), weight: x.weight })),
+      digest: hex(d2), uaMessage: hex(msgM), memberDigest: hex(md), uaSig: ua.uaSig({ members: sigs }) },
   };
 }
 ROW.UASetMaxSupply = { maxSupply: 1000000000, mode: 0, fee: 0 };

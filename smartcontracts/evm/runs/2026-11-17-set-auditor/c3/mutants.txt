@@ -1,0 +1,8 @@
+consent-token-zeroed | test_consent_exactAndRefusedAtBothSteps, test_consent_realSigner_oneChangeAtATime, test_offchainToken_noVerifier_unprovenAccepted | 1
+consent-epoch-fixed | test_consent_exactAndRefusedAtBothSteps, test_consent_realSigner_oneChangeAtATime, test_offchainToken_noVerifier_unprovenAccepted | 1
+consent-word-flipped | test_consent_exactAndRefusedAtBothSteps, test_consent_realSigner_oneChangeAtATime, test_offchainToken_noVerifier_unprovenAccepted | 1
+pqz-none-check-dropped | test_bit32_init_refusals | 1
+pqz-admin-check-dropped | test_bit32_init_refusals | 1
+zether-admin-check-dropped | test_bit32_init_zether | 1
+vector-msig-native-member | auditor_consent_rows | 101
+vector-msig-member-digest | auditor_consent_rows | 101

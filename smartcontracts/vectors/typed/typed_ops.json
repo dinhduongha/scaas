@@ -14920,6 +14920,45 @@
               "digest": "0x7b055c8cb1164eda46a3a1d35c92d06b14177b636271c6560d1061c0f08902a2",
               "uaMessage": "0x5268800c0b74519d91944aed4dea9a825366bd3ab003c7cb7e1ca97e76f0637d",
               "signature": "0x2c493a55ec03732f464e24e2c168572a1f4ccc1fedfb2d48ab5c11290ec3830c15b73911490b9d7073e0321187c147fcf63ba63a201b92b6da9de33b0aef68981c"
+            },
+            "msig": {
+              "ua": "0x3fb6e8cd99ce1cce4732386a8c95e942f5dfbc95760aeb8700cd8a1bf2e5fd95",
+              "kind": 288,
+              "keyData": "0x000200020001000000000000000000000000fc7e9498d8035077f1705eb85be95d66f31a89f9000101083e327b8f294e24ecbc8e832196d351073c4299cea959992076b2f6e6195582850001",
+              "threshold": 2,
+              "members": [
+                {
+                  "index": 0,
+                  "kind": 1,
+                  "id": "0x000000000000000000000000fc7e9498d8035077f1705eb85be95d66f31a89f9",
+                  "weight": 1
+                },
+                {
+                  "index": 1,
+                  "kind": 264,
+                  "id": "0x3e327b8f294e24ecbc8e832196d351073c4299cea959992076b2f6e619558285",
+                  "weight": 1
+                }
+              ],
+              "digest": "0x3e273cedf035bf2f2f2439dc5f6f71638b03d586ba49b182d34ee18cd91eae1b",
+              "uaMessage": "0x6e7970941b18f69839266125716d2727e37ab5aee2f28b28f600ca3a6bebd9b5",
+              "memberDigest": "0xc2f7e3e11f4b8d115b5933007cee417b45804afdeec24a7ea57170cd33a14ba2",
+              "uaSig": {
+                "keyData": "0x",
+                "signature": "0x",
+                "members": [
+                  {
+                    "index": 0,
+                    "members": [],
+                    "sig": "0x077659ddb91a549ddcf443195dec9da8ca3877655abae8395a5dd2c2550737851d5cead263ee7b7fd829a84495be1ef59608d41508764d13e6700628ab98b8381b"
+                  },
+                  {
+                    "index": 1,
+                    "members": [],
+                    "sig": "0xdd24f8f2785f2ffed67154e98569ffda795abd0ab657abbb0e7164bbdbad08b84ac576717dccf03b1f3355426fee4a661fe98e4e51eb81ea58b0be9b4aa1c6771c"
+                  }
+                ]
+              }
             }
           }
         },
@@ -14948,6 +14987,45 @@
               "digest": "0x3e48b11f63a00e61f52787f7e810f21ac12e3975454d8d626e2e8e1348b724d1",
               "uaMessage": "0x96f2743667ed082dc27e5234f696346ff1e68ec3998e61e81e68089445598629",
               "signature": "0x55fe12d073167e703348ef7cd8292e6dce9a2acf04274e399ea7494095ed0b921f443250b57d4cfc7ca07bc0d6b6a3d351407ff326cbeee8559f9b11e15414b91c"
+            },
+            "msig": {
+              "ua": "0x3fb6e8cd99ce1cce4732386a8c95e942f5dfbc95760aeb8700cd8a1bf2e5fd95",
+              "kind": 288,
+              "keyData": "0x000200020001000000000000000000000000fc7e9498d8035077f1705eb85be95d66f31a89f9000101083e327b8f294e24ecbc8e832196d351073c4299cea959992076b2f6e6195582850001",
+              "threshold": 2,
+              "members": [
+                {
+                  "index": 0,
+                  "kind": 1,
+                  "id": "0x000000000000000000000000fc7e9498d8035077f1705eb85be95d66f31a89f9",
+                  "weight": 1
+                },
+                {
+                  "index": 1,
+                  "kind": 264,
+                  "id": "0x3e327b8f294e24ecbc8e832196d351073c4299cea959992076b2f6e619558285",
+                  "weight": 1
+                }
+              ],
+              "digest": "0x46c163b5496b1c98faec71d307df3e9a0541d2e9ca3149f77448e1760bcc7ad2",
+              "uaMessage": "0x1c5eafc76f95e85bb7abfe3fb1d3bd590bb272b55b921a800c9cbf099e6181b1",
+              "memberDigest": "0x479655e134a9651bd6bd44f1fe7ea33c2b8d1081dc9ff1f96d051d7d401ed6b3",
+              "uaSig": {
+                "keyData": "0x",
+                "signature": "0x",
+                "members": [
+                  {
+                    "index": 0,
+                    "members": [],
+                    "sig": "0xea19d104c20b2dbfd1786cac8852f56ebd10ac9175ff45bd2ed9d5ee5a55d50a6fefff8b7fa21f982d93945bf28ab648ff2e15ef325820f0fea637b7fd8e0a891c"
+                  },
+                  {
+                    "index": 1,
+                    "members": [],
+                    "sig": "0xb14b8c901180f34578002652766b41f399507be98f27501bd4b5ac02ecee778569667b351eff880c4d462a7962c1c80e1b4b51adb15bab06a8db16e699ad86e61c"
+                  }
+                ]
+              }
             }
           }
         }

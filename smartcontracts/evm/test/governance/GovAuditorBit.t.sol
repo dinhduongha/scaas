@@ -130,8 +130,7 @@ contract GovAuditorBitTest is PqzOffchainBase {
         // admin 0: the minter's bit 1 locked, so the seat survives creation (B-06), as the fixture's own tokens
         (c.admin, c.grantDelay, c.lockedFeatures) = (admin ? owner_ : bytes32(0), delay, admin ? 0 : c.lockedFeatures);
         if (k == 5 || k == 13) {
-            c.features = 1 << GovernanceBits.PAYABLE;
-            c.roles.minter = 0;
+            (c.features, c.roles.minter, c.lockedFeatures) = (1 << GovernanceBits.PAYABLE, 0, 0); // no minter seat to keep
             c.legs = new IFactoryToken.Leg[](1);
             c.legs[0] = IFactoryToken.Leg(address(0xD011A5), 1, 1);
         }
@@ -140,8 +139,13 @@ contract GovAuditorBitTest is PqzOffchainBase {
     }
 
     function _create(uint8 k, IFactoryToken.TokenConfig memory c, bytes32 salt) internal returns (IGovernance) {
+        return IGovernance(f.createToken(IOpenFactory.TokenKind(k), 1, abi.encode(_leg(k, c)), salt));
+    }
+
+    /// A wrapped kind's leg on a fresh ERC-20 (made before any `expectRevert`).
+    function _leg(uint8 k, IFactoryToken.TokenConfig memory c) internal returns (IFactoryToken.TokenConfig memory) {
         if (k == 5 || k == 13) c.legs[0] = IFactoryToken.Leg(address(new MockERC20("USD", "USD", 6)), 1, 1);
-        return IGovernance(f.createToken(IOpenFactory.TokenKind(k), 1, abi.encode(c), salt));
+        return c;
     }
 
     function _tok32(uint8 k, uint64 delay) internal returns (IGovernance) {
@@ -216,23 +220,26 @@ contract GovAuditorBitTest is PqzOffchainBase {
     }
 
     /// `init` refuses bit 32 on a token without an auditor (`BadAuditorMode(0)`) and with admin 0 (`FeatureNeedsAdmin(32)`),
-    /// each next to its control (the same config with the auditor and the admin).
+    /// on each PQZ kind (4, 5, 12, 13; closing review C3.5), each next to its controls (the same config with the auditor and
+    /// the admin; the same config without the bit).
     function test_bit32_init_refusals() public {
-        IFactoryToken.TokenConfig memory c = _cfg32(4, true, true, 0);
-        _create(4, c, "control");
-        uint8 keep = aMode;
-        aMode = uint8(ZetherTypes.AuditorMode.NONE);
-        c = _cfg32(4, true, true, 0);
-        vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadAuditorMode.selector, uint8(0)));
-        f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "none");
-        c = _cfg32(4, false, true, 0); // without the bit a NONE token is created as before
-        _create(4, c, "none without the bit");
-        aMode = keep;
-        c = _cfg32(12, true, false, 0);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNeedsAdmin.selector, BIT));
-        f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, 1, abi.encode(c), "no admin");
-        c = _cfg32(12, false, false, 0);
-        _create(12, c, "no admin without the bit");
+        uint8[4] memory ks = [4, 5, 12, 13];
+        for (uint256 i; i < 4; ++i) {
+            uint8 k = ks[i];
+            _create(k, _cfg32(k, true, true, 0), keccak256(abi.encode("control", k)));
+            uint8 keep = aMode;
+            aMode = uint8(ZetherTypes.AuditorMode.NONE);
+            IFactoryToken.TokenConfig memory c = _leg(k, _cfg32(k, true, true, 0));
+            vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadAuditorMode.selector, uint8(0)));
+            f.createToken(IOpenFactory.TokenKind(k), 1, abi.encode(c), keccak256(abi.encode("none", k)));
+            // without the bit a NONE token is created as before
+            _create(k, _cfg32(k, false, true, 0), keccak256(abi.encode("none without the bit", k)));
+            aMode = keep;
+            c = _leg(k, _cfg32(k, true, false, 0));
+            vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNeedsAdmin.selector, BIT));
+            f.createToken(IOpenFactory.TokenKind(k), 1, abi.encode(c), keccak256(abi.encode("no admin", k)));
+            _create(k, _cfg32(k, false, false, 0), keccak256(abi.encode("no admin without the bit", k)));
+        }
     }
 
     // ------------------------------------------------------------------ the holders (owner ruling 4: any UA)
@@ -310,35 +317,65 @@ contract GovAuditorBitTest is PqzOffchainBase {
     }
 }
 
-/// The Zether side of A1: kind 2's `init` takes bit 32 with an auditor and an admin and refuses it without either.
+/// The Zether side of A1: each Zether kind's `init` (2, 3, 10, 11; kinds 3, 10, 11 closing review C3.5) takes bit 32 with an
+/// auditor and an admin and refuses it without either.
 contract GovAuditorBitZetherTest is ZetherFixture {
     uint256 internal constant M = uint256(1) << 32;
     bool internal withBit;
     bool internal withAdmin;
+    MockERC20 internal usd;
 
     function setUp() public {
         _stack();
         _users();
+        usd = new MockERC20("USD", "USD", 6);
+        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode);
+        Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, 1, _zenv(),
+            type(NormalZetherRegulatedToken).creationCode, regArgs());
+        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, 1, _zenv(),
+            type(WrappedZetherRegulatedToken).creationCode, regArgs());
+        vm.startPrank(registrar);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory)));
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory)));
+        vm.stopPrank();
     }
 
-    function _c32(bool auditor) internal view returns (IFactoryToken.TokenConfig memory c) {
+    /// Kind `k`'s config: the fixture's; a wrapped kind (3, 11) one leg `usd` 1:1, `PAYABLE`, no minter; a regulated kind (10,
+    /// 11) `DENYLIST` locked, as the PQZ side's.
+    function _c32(uint8 k, bool auditor) internal view returns (IFactoryToken.TokenConfig memory c) {
         c = _cfg(auditor, uint256(1) << 40);
+        if (k == 3 || k == 11) {
+            (c.features, c.roles.minter, c.lockedFeatures) = (1 << GovernanceBits.PAYABLE, 0, 0);
+            c.legs = new IFactoryToken.Leg[](1);
+            c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
+        }
         if (withBit) c.features |= M;
         if (withAdmin) (c.admin, c.lockedFeatures) = (nid(address(this)), 0);
+        if (k >= 10) c.lockedFeatures |= uint256(1) << GovernanceBits.DENYLIST;
+    }
+
+    function _create(uint8 k, bool auditor, bytes32 salt) internal returns (address) {
+        return factory.createToken(IOpenFactory.TokenKind(k), 1, abi.encode(_c32(k, auditor)), salt);
     }
 
     function test_bit32_init_zether() public {
-        (withBit, withAdmin) = (true, true);
-        address t = factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(_c32(true)), "control");
-        assertTrue(IGovernance(t).features() & M != 0);
-        IFactoryToken.TokenConfig memory c = _c32(false);
-        vm.expectRevert(abi.encodeWithSelector(IZetherToken.BadAuditorMode.selector, uint8(0)));
-        factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "none");
-        withAdmin = false;
-        c = _c32(true);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNeedsAdmin.selector, uint8(32)));
-        factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "no admin");
-        withBit = false;
-        factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(_c32(true)), "no bit, no admin"); // as before
+        uint8[4] memory ks = [2, 3, 10, 11];
+        for (uint256 i; i < 4; ++i) {
+            uint8 k = ks[i];
+            (withBit, withAdmin) = (true, true);
+            address t = _create(k, true, keccak256(abi.encode("control", k)));
+            assertTrue(IGovernance(t).features() & M != 0, vm.toString(k));
+            IFactoryToken.TokenConfig memory c = _c32(k, false);
+            vm.expectRevert(abi.encodeWithSelector(IZetherToken.BadAuditorMode.selector, uint8(0)));
+            factory.createToken(IOpenFactory.TokenKind(k), 1, abi.encode(c), keccak256(abi.encode("none", k)));
+            withBit = false;
+            _create(k, false, keccak256(abi.encode("none without the bit", k))); // as before
+            (withBit, withAdmin) = (true, false);
+            c = _c32(k, true);
+            vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNeedsAdmin.selector, uint8(32)));
+            factory.createToken(IOpenFactory.TokenKind(k), 1, abi.encode(c), keccak256(abi.encode("no admin", k)));
+            withBit = false;
+            _create(k, true, keccak256(abi.encode("no bit, no admin", k))); // as before
+        }
     }
 }

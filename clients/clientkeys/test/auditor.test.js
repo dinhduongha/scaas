@@ -67,7 +67,7 @@ test('AuditorConsent: typed under each confidential token domain, no entry of it
   }
 });
 
-test('AuditorConsent: the consent rows, a native and a derived signer, each over the consent naming its own UA', () => {
+test('AuditorConsent: the consent rows, a native, a derived and an msig signer, each over the consent naming its own UA', () => {
   const r = V.ops.AuditorConsent;
   const tag = ua.purposeTag('auditor-consent');
   const S = JSON.parse(read('smartcontracts/vectors/ua/structures.json')).contexts.A;
@@ -92,6 +92,34 @@ test('AuditorConsent: the consent rows, a native and a derived signer, each over
     assert.ok(secp256k1.verify(fromHex(x.signature).subarray(0, 64), fromHex(x.uaMessage), concatBytes(Uint8Array.of(4), fromHex(x.keyData)),
       { prehash: false }), `${kind}: derived signer`);
     assert.notEqual(x.digest, n.digest, 'two consents, two digests');
+    // closing review C3.6: the 2-of-2 msig of those two signers over the consent naming the msig's own UA
+    const m = d.consent.msig;
+    assert.equal(hex(ua.encodeMsig(m.threshold, m.members.map((y) => ({ ...y, id: fromHex(y.id) })))), m.keyData, kind);
+    assert.equal(hex(ua.uaOf(m.kind, fromHex(m.keyData))), m.ua, `${kind}: the msig id`);
+    assert.deepEqual(m.members.map((y) => y.id).sort(), [n.ua, x.ua].sort(), `${kind}: its members are the two signers`);
+    assert.equal(m.digest, typed(m.ua), `${kind}: the msig consent names its own UA`);
+    assert.equal(hex(ua.uaMessage(0x0120, tag, fromHex(m.digest))), m.uaMessage, kind);
+    assert.equal(hex(ua.memberDigest(fromHex(m.ua), fromHex(m.uaMessage))), m.memberDigest, kind);
+    const member = ua.purposeTag('member');
+    assert.equal(m.uaSig.keyData, '0x', kind);
+    assert.equal(m.uaSig.signature, '0x', kind);
+    assert.deepEqual(m.uaSig.members.map((y) => y.index), [0, 1], `${kind}: both slots, in order`);
+    for (const s of m.uaSig.members) {
+      const slot = m.members[s.index];
+      assert.deepEqual(s.members, [], kind);
+      if (slot.kind === 0x0001) {
+        const h = ua.uaAuthDigest({ generation: 1, ...S }, fromHex(slot.id), member, fromHex(m.memberDigest));
+        assert.equal('0x' + '00'.repeat(12) + recover(s.sig, h).slice(2), slot.id, `${kind}: the native member`);
+      } else {
+        const mm = ua.uaMessage(slot.kind, member, fromHex(m.memberDigest));
+        assert.ok(secp256k1.verify(fromHex(s.sig).subarray(0, 64), mm, concatBytes(Uint8Array.of(4), fromHex(x.keyData)),
+          { prehash: false }), `${kind}: the secp256k1 member`);
+        const bad = Uint8Array.from(mm);
+        bad[0] ^= 1;
+        assert.ok(!secp256k1.verify(fromHex(s.sig).subarray(0, 64), bad, concatBytes(Uint8Array.of(4), fromHex(x.keyData)),
+          { prehash: false }), `${kind}: control`);
+      }
+    }
   }
 });
 

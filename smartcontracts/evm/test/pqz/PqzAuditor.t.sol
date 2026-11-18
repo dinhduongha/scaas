@@ -21,6 +21,7 @@ import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
+import {PqUA} from "../../src/ua/PqUA.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
@@ -241,6 +242,63 @@ contract PqzAuditorTest is PqzOffchainBase {
         vm.expectCall(address(reg), call_);
         _set(holder, a1, 1);
         assertEq(tok.auditorUA(), a1);
+    }
+
+    /// Closing review C3.1: the consent checked by a real signer path. `a1` is an `mldsa65` UA (a native or secp256k1 UA cannot
+    /// hold a PQZ key, `UARegistryCoreLib._holder`), its consent goes through the registry's own `requireAuthorized` to its
+    /// `MldsaVerifier`, and the precompile accepts exactly one input: `a1`'s key, `a1`'s signature and the `pq_msg` of the
+    /// signed digest. The signed struct moves one field at a time (token, epoch, word), then the signer (`a2`'s key and
+    /// signature over `a1`'s digest): each `UAUnauthorized(a1)`, nothing written; the positive control proposes and applies.
+    function test_consent_realSigner_oneChangeAtATime() public {
+        _go(1 days, 0);
+        NormalPqzToken tok2 = _newToken("aud2");
+        bytes32 uid = _uid();
+        bytes memory refusal = abi.encodeWithSignature("UAUnauthorized(bytes32)", a1);
+        bytes32[4] memory signed = [_digestOf(address(tok2), a1, 1, uid), _digestOf(address(tok), a1, 2, uid),
+            _digestOf(address(tok), a1, 1, bytes32(uint256(uid) ^ 1)), _digestOf(address(tok), a1, 1, uid)];
+        string[4] memory what = ["another token", "another epoch", "another word", "another signer"];
+        for (uint256 i; i < 4; ++i) {
+            uint8 seed = i == 3 ? 12 : 11; // a2's key and signature, else a1's
+            _acceptOnly(seed, signed[i]);
+            IUARegistry.UASig memory c;
+            c.signature = _sigOf(seed);
+            vm.prank(holder);
+            vm.expectRevert(refusal);
+            tok.setAuditorUA(a1, 1, c, uid);
+            assertEq(_status(), 0, what[i]);
+        }
+        _acceptOnly(11, signed[3]);
+        IUARegistry.UASig memory ok;
+        ok.signature = _sigOf(11);
+        vm.prank(holder);
+        tok.setAuditorUA(a1, 1, ok, uid);
+        assertEq(_status(), 1, "proposed");
+        vm.warp(block.timestamp + 1 days);
+        vm.prank(holder);
+        tok.setAuditorUA(a1, 1, ok, uid);
+        assertEq(tok.auditorUA(), a1, "applied");
+    }
+
+    /// The typed `AuditorConsent` of `ua` for `epoch` and `word` under `t`'s domain.
+    function _digestOf(address t, bytes32 ua, uint32 epoch, bytes32 word) internal view returns (bytes32) {
+        return MessageHashUtils.toTypedDataHash(_sepOf(t), keccak256(abi.encode(CONSENT_TYPEHASH, t, ua, epoch, word)));
+    }
+
+    /// A filler ML-DSA-65 signature that names its key's seed.
+    function _sigOf(uint8 seed) internal pure returns (bytes memory sig) {
+        sig = new bytes(ML65_SIG);
+        sig[0] = bytes1(seed);
+    }
+
+    /// The mocked ML-DSA-65 precompile answers 1 for exactly `_mlPk(seed) ‖ _sigOf(seed) ‖ pq_msg(d)`, the consent of `d`
+    /// signed by the key `seed`, and 0 for every other input.
+    function _acceptOnly(uint8 seed, bytes32 d) internal {
+        vm.clearMockedCalls();
+        _mockOps();
+        vm.mockCall(ML65, bytes(""), abi.encode(uint256(0)));
+        bytes32 pq = keccak256(abi.encodePacked(PqUA.tag(UAKinds.MLDSA65),
+            UAKinds.uaMessage(UAKinds.MLDSA65, UAKinds.PURPOSE_AUDITOR_CONSENT, d)));
+        vm.mockCall(ML65, abi.encodePacked(_mlPk(seed), _sigOf(seed), pq), abi.encode(uint256(1)));
     }
 
     /// `clearMockedCalls` drops the fixture's mocked precompiles too: put them back.
