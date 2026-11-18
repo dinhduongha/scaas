@@ -871,11 +871,20 @@ def digest_ok(sol):
 BEGIN, END = "# BEGIN gen_set.py sets", "# END gen_set.py sets"
 
 
+def taplo_line(x, width=120):
+    """`key = [a, b, ...]` as taplo 0.9.3 writes it with the root taplo.toml (column_width 120): one line when it fits,
+    else one element a line, two spaces in, a trailing comma (scripts/format.sh formats the TOML files)"""
+    if len(x) <= width or " = [" not in x or not x.endswith("]"):
+        return x
+    key, items = x[: x.index(" = [")], x[x.index(" = [") + 4 : -1].split(", ")
+    return key + " = [\n" + "".join(f"  {e},\n" for e in items) + "]"
+
+
 def cargo_block(path, lines):
     """the Cargo.toml text of `path` with the lines between BEGIN and END replaced"""
     s = open(path, encoding="utf-8").read()
     i, j = s.index(BEGIN), s.index(END)
-    return s[: s.index("\n", i) + 1] + "".join(x + "\n" for x in lines) + s[j:]
+    return s[: s.index("\n", i) + 1] + "".join(taplo_line(x) + "\n" for x in lines) + s[j:]
 
 
 def wiring():
