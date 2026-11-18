@@ -13,16 +13,23 @@ use web_time::Instant;
 /// The family client of one Sui network.
 pub struct Sui {
     pub client: Client,
-    /// the first endpoint's chain identifier, once read
+    /// the reference chain identifier: the configured one (T24.11), else the first endpoint's, once read
     first: OnceLock<String>,
 }
 
 impl Sui {
     pub fn new(client: Client) -> Self {
-        Self {
-            client,
-            first: OnceLock::new(),
+        Self::pinned(client, None)
+    }
+
+    /// The client of a network named by its chain identifier (T24.11, owner 2026-11-18): every endpoint, the first included, is
+    /// checked against `chain_identifier` before its first read; `None` is [`Sui::new`] (the first endpoint's is the reference).
+    pub fn pinned(client: Client, chain_identifier: Option<&str>) -> Self {
+        let first = OnceLock::new();
+        if let Some(c) = chain_identifier {
+            let _ = first.set(c.to_string());
         }
+        Self { client, first }
     }
 
     /// One JSON-RPC call to endpoint `i`.
@@ -79,7 +86,8 @@ fn num(v: &Value) -> Option<u64> {
 
 impl Probe for Sui {
     type Hash = String;
-    /// `sui_getChainIdentifier` against the first endpoint's (read first; unread, no later endpoint is this network yet).
+    /// `sui_getChainIdentifier` against the configured one (T24.11), else against the first endpoint's (read first; unread, no
+    /// later endpoint is this network yet; the first endpoint is then its own reference).
     async fn same_chain(&self, i: usize, _: Option<Instant>) -> Result<bool, EndpointFailure> {
         let want = match self.first.get() {
             Some(w) => w.clone(),

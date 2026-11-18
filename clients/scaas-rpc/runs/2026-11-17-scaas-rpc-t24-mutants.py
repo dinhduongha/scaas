@@ -117,6 +117,11 @@ MUTANTS = [
      "cd clients/scaas-rpc && ../../scripts/capped cargo test --locked --offline -j2 --all-features --test ton a_later_endpoint_is_checked_by_endpoint_0s_root_hash"),
     ("6: TON: the polled head not kept as the reference", [(A + "ton.rs", 'self.api.saw_head(height, last.get("root_hash").and_then(Value::as_str).unwrap_or_default());', "self.api.saw(height);")],
      NT + "ton::tests::ton_a_later_endpoint_is_checked_against_endpoint_0s_head"),
+    # T24.11 (owner 2026-11-18): Sui's configured chain identifier checks every endpoint, endpoint 0 included
+    ("11: Sui: the configured identifier ignored (crate)", [(C + "sui.rs", "if let Some(c) = chain_identifier {", "if let Some(c) = None::<&str> {")],
+     NT + "sui::tests::sui_a_configured_chain_identifier_checks_endpoint_0_too"),
+    ("11: Sui: the configured identifier not passed (node)", [(A + "sui.rs", '                param_str(cfg, "chain_identifier"),\n', "                None,\n")],
+     NT + "sui::tests::sui_a_configured_chain_identifier_checks_endpoint_0_too"),
 ]
 
 if __name__ == "__main__":

@@ -50,7 +50,7 @@ log line, an error or a `Debug` output (§5). A list also names its read policy:
 <a id="CLI-RPC-03"></a>**CLI-RPC-03** — **An endpoint answers only for the configured chain** (BUILT for EVM and Hedera, plan T3, T4,
 T13 point 6 and S16: `the_first_endpoint_is_identity_checked_too`, `a_wrong_chain_endpoint_is_dropped_for_good`,
 `chain_uid_is_block_zero_and_a_wrong_pin_is_refused`; for Soroban, Solana, NEAR, Algorand, Aptos and Sui by their network id
-(Sui's chain identifier, which no configuration names, compared with the first endpoint's), TON's endpoint 0 by the profile constant and a later endpoint by its masterchain root hash at the seqno endpoint 0 last showed (T24.6, owner 2026-11-18), plan
+(Sui's chain identifier compared with `params.chain_identifier` when configured, every endpoint the first included, else with the first endpoint's: T24.11, owner 2026-11-18), TON's endpoint 0 by the profile constant and a later endpoint by its masterchain root hash at the seqno endpoint 0 last showed (T24.6, owner 2026-11-18), plan
 T15–T22 (`the_failover_drops_another_network_and_skips_an_endpoint_behind` per family), Cosmos's REST gateways by `node_info`'s network (T21) and its first CometBFT endpoint by `status`'s `node_info.network`; endpoint 0's own reads, outside the failover, in every family too (T24.8: `<family>_endpoint_0_of_another_network_answers_no_read`); lifted from the node,
 [submit-lanes.md](../node/submit-lanes.md#rpc-failover), and [NET-ALL-22](../networks/README.md#NET-ALL-22)). Before any endpoint,
 the first included, answers its first read, its identity is read and compared with the configuration: EVM and Hedera

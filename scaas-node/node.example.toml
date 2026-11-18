@@ -245,7 +245,8 @@ lanes = [0, 1]
 finality = { mode = "instant", quorum = 1 }      # a certified checkpoint is final
 # package: the scaas package id (after an upgrade: the NEW id, and type_package = the ORIGINAL id that event
 # types keep). lane_journal (required): a directory that survives restarts; the last signed tx of each lane
-# is kept there and re-sent on start-up so its gas coin is never equivocated.
+# is kept there and re-sent on start-up so its gas coin is never equivocated. chain_identifier (optional,
+# `sui_getChainIdentifier`): every endpoint, the first included, must answer it; unset, the first endpoint's is the reference.
 params = { package = "0x<package id>", lane_journal = "/var/lib/scaas/sui-journal", max_gas_budget = 50000000 }
 
 [[chains]]                                       # TON (TON Center v3 API)

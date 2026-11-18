@@ -1,0 +1,4 @@
+# t24-11 mutants at commit 75b243fba (name | outcome | test)
+11: Sui: the configured identifier ignored (crate) | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_a_configured_chain_identifier_checks_endpoint_0_too
+11: Sui: the configured identifier not passed (node) | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_a_configured_chain_identifier_checks_endpoint_0_too
+2 mutants, 2 killed, 0 survived, 0 not loaded

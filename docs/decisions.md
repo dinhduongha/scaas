@@ -10791,6 +10791,8 @@ Change (2026-11-17, plan T13 S16, Fable code review; the controller's call, the 
 
 Change (owner 2026-11-18, "as proposed", on the families' review, plan T24.6; owner: yes; status: BUILT on branch `scaas-sdk`, UNAUDITED): TON's later endpoints are checked, no longer taken on the profile constant: a later endpoint is this network when its masterchain block at the last seqno endpoint 0 showed (its polled head) has endpoint 0's root hash (`Probe::header` reads it). Unreadable, or nothing seen yet: the endpoint is skipped and asked again; another hash: dropped for the process. Endpoint 0 stays the profile constant (NET-ALL-22: TON Center names no network). Old: every listed endpoint was this network.
 
+Change (owner 2026-11-18, "as proposed", on the families' review, plan T24.11; owner: yes; status: BUILT on branch `scaas-sdk`, UNAUDITED): Sui takes an optional `params.chain_identifier`. Set, every endpoint, endpoint 0 included, is checked against it before its first read (one of another identifier answers nothing); unset, the first endpoint's identifier stays the reference, as before.
+
 ### CLI-RPC-04 — Failover: one endpoint answers a whole read; status reads stay on the first endpoint
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-04 · superseded-by: —
 

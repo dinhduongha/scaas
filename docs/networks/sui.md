@@ -355,7 +355,8 @@ transaction aborts `EBadNonce` after dry-run ⇒ counted in `subject_grief` and 
 Endpoints (BUILT, scaas-rpc T20): `rpc_urls` are read through the crate's family client (16 MiB, depth 64, no redirect,
 20 s a request). `build`'s reads (the Account's shared version, the gas price, the lane's coins, the dry run) fail over
 ([CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04)): the next endpoint must answer `sui_getChainIdentifier` as the first
-endpoint did (no chain identifier is configured, so none is taken before the first endpoint's was read once) and a latest
+endpoint did (with no `params.chain_identifier` configured, none is taken before the first endpoint's was read once; with one,
+every endpoint, the first included, must answer it before its first read: scaas-rpc T24.11, owner 2026-11-18) and a latest
 checkpoint at or above the one the first endpoint last showed; an error answer from it decides nothing and a refusal read
 while it answered requeues the job. From the first endpoint only an invalid-params error (-32602) is its answer; any other
 error (a rate limit, a server error) fails over (scaas-rpc T24.3). The transaction status, the send, the lane journal's checks and re-send (inside `build`

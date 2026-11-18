@@ -925,8 +925,10 @@ impl SuiAdapter {
         }
         Ok(Self {
             key: cfg.chain_key(),
-            net: scaas_rpc::sui::Sui::new(
+            // T24.11 (owner 2026-11-18): `params.chain_identifier`, when set, checks every endpoint, endpoint 0 included
+            net: scaas_rpc::sui::Sui::pinned(
                 scaas_rpc::family::Client::of_urls(&cfg.rpc_urls, None).map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?,
+                param_str(cfg, "chain_identifier"),
             ),
             package,
             type_package,
@@ -2126,5 +2128,27 @@ mod tests {
         assert!(adapter_on(&[busy], &dir).tx_status(&tx).await.is_err());
         let gone = crate::adapters::testkit::refusing(&url, pass, 200, err(-32602)).await;
         assert_eq!(adapter_on(&[gone], &dir).tx_status(&tx).await.unwrap(), TxStatus::Unknown, "control");
+    }
+
+    /// scaas-rpc T24.11 (owner 2026-11-18): with `params.chain_identifier` set, every endpoint, endpoint 0 included, is checked
+    /// against it before its first read: endpoint 0 of another identifier answers nothing. Controls: its own identifier, and
+    /// unset (endpoint 0's identifier is the reference, as before).
+    #[tokio::test]
+    async fn sui_a_configured_chain_identifier_checks_endpoint_0_too() {
+        let dir = tmp_dir("t24-11");
+        let tx = addr_hex(&[0x11; 32]);
+        let (url, _) = fake_sui(FakeSui { status: Some("success"), ..coin() }).await;
+        let on = |id: &str| {
+            let cfg: ChainCfg = toml::from_str(&format!(
+                "family = \"sui\"\nnetwork = \"localnet\"\nrpc_urls = [\"{url}\"]\nlanes = [0]\nfinality = {{ mode = \"instant\" }}\n\
+                 params = {{ package = \"0xb\", lane_journal = \"{}\"{id} }}",
+                dir.display()
+            ))
+            .unwrap();
+            SuiAdapter::new(&cfg, &[LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()]).unwrap()
+        };
+        assert!(on(", chain_identifier = \"deadbeef\"").tx_status(&tx).await.is_err(), "endpoint 0 of another identifier");
+        assert!(matches!(on(", chain_identifier = \"4c78adac\"").tx_status(&tx).await.unwrap(), TxStatus::Mined { .. }), "control");
+        assert!(matches!(on("").tx_status(&tx).await.unwrap(), TxStatus::Mined { .. }), "unset: as before");
     }
 }
