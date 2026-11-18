@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-# UA-8 local e2e on the pinned Protocol 30 quickstart (plan ua8-soroban B7, C15): a UA record copied EVM -> Soroban -> EVM.
+# UA portable registration local e2e on the pinned Protocol 30 quickstart (round ua-portable-soroban; plan ua8-soroban
+# B7, C15): a UA record copied EVM -> Soroban -> EVM.
 # Build the Wasm and the EVM deploy (capped), start the quickstart and two anvil chains (taken down on every exit), then
-# the node's `e2e_ua8` (capped, one slot, -j2). Refuses to start under 6 GB available (oomd kills the terminal).
+# the node's `e2e_ua_portable_soroban` (capped, one slot, -j2). Refuses to start under 6 GB available (oomd kills the terminal).
 # env: STELLAR_URL, STELLAR_PASSPHRASE, STELLAR_FRIENDBOT, STELLAR_BIN (as e2e-local.sh); QS_PORT (quickstart.sh);
-# UA8_ANVIL_PORT (first of two, default 31981; each port is its chain id). usage: e2e-ua8-local.sh [cargo test filter]
+# UA8_ANVIL_PORT (first of two, default 31981; each port is its chain id). usage: e2e-ua-portable-local.sh [cargo test filter]
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$here/../../.." && pwd)"
@@ -25,19 +26,19 @@ chain_id() {
 }
 for p in "$a" "$b"; do
     if [ -n "$(chain_id "$p")" ] || ss -ltn "sport = :$p" | grep -q LISTEN; then
-        echo "e2e-ua8-local: port $p is taken: a stale anvil would answer for ours, not started" >&2
+        echo "e2e-ua-portable-local: port $p is taken: a stale anvil would answer for ours, not started" >&2
         exit 5
     fi
 done
 avail=$(awk '/MemAvailable/ {print int($2 / 1048576)}' /proc/meminfo)
 if [ "$avail" -lt 6 ]; then
-    echo "e2e-ua8-local: ${avail} GB available, under 6 GB: not started" >&2
+    echo "e2e-ua-portable-local: ${avail} GB available, under 6 GB: not started" >&2
     exit 4
 fi
 # the commit under test; "+uncommitted" when the tree (run logs aside) differs from it
 rev="$(git -C "$ROOT" rev-parse --short HEAD)"
 git -C "$ROOT" diff --quiet HEAD -- . ':!smartcontracts/soroban/runs' || rev="$rev+uncommitted"
-echo "== e2e-ua8-local: $rev $(date -u +%FT%TZ); $("$STELLAR_BIN" --version | head -1); ${avail} GB available"
+echo "== e2e-ua-portable-local: $rev $(date -u +%FT%TZ); $("$STELLAR_BIN" --version | head -1); ${avail} GB available"
 echo "== build Wasm"
 CARGO_BUILD_JOBS=2 "$ROOT/scripts/capped" "$ROOT/smartcontracts/scripts/build.sh" soroban
 echo "== EVM deploy build"
@@ -47,7 +48,7 @@ pids=()
 down() {
     [ ${#pids[@]} -eq 0 ] || kill "${pids[@]}" 2>/dev/null || true
     "$QS" down
-    # the anvils' books (NET-EVM-13: e2e_ua8.rs deploys each with DEPLOY_NAME=local-<chain id>-testnet)
+    # the anvils' books (NET-EVM-13: e2e_ua_portable_soroban.rs deploys each with DEPLOY_NAME=local-<chain id>-testnet)
     rm -f "$ROOT/smartcontracts/evm/deployments/local-$a-testnet.json" "$ROOT/smartcontracts/evm/deployments/local-$b-testnet.json"
 }
 echo "== quickstart"
@@ -68,12 +69,12 @@ for p in "$a" "$b"; do
         sleep 0.2
     done
     [ -n "$up" ] || {
-        echo "e2e-ua8-local: anvil on $p did not answer as chain $p" >&2
+        echo "e2e-ua-portable-local: anvil on $p did not answer as chain $p" >&2
         exit 6
     }
 done
 
 cd "$ROOT/scaas-node"
-echo "== cargo test --test e2e_ua8"
-CAPPED_SLOTS=1 "$ROOT/scripts/capped" cargo test -j2 --test e2e_ua8 -- --ignored --test-threads=1 --nocapture "$@"
-echo "== e2e-ua8-local: PASS"
+echo "== cargo test --test e2e_ua_portable_soroban"
+CAPPED_SLOTS=1 "$ROOT/scripts/capped" cargo test -j2 --test e2e_ua_portable_soroban -- --ignored --test-threads=1 --nocapture "$@"
+echo "== e2e-ua-portable-local: PASS"

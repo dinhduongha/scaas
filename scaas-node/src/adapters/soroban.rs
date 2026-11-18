@@ -616,7 +616,7 @@ impl SorobanAdapter {
     }
 
     /// The bytes `tx_max_size_bytes` counts for `tx`, known with no key used: its V1 envelope with a blank signature of ed25519's
-    /// length. A fee bump around it is not counted (measured, `e2e_ua8_tx_size_limit`).
+    /// length. A fee bump around it is not counted (measured, `ua_portable_tx_size_limit`).
     fn envelope_size(tx: &Transaction) -> Result<usize> {
         let blank = DecoratedSignature {
             hint: SignatureHint([0; 4]),
@@ -1120,7 +1120,7 @@ impl ChainAdapter for SorobanAdapter {
     }
 
     /// NET-SOR-14: `feeCharged` of a transaction that landed, `SUCCESS` or `FAILED`. Under a fee bump the outer result, the fee
-    /// that left the fee account (`e2e_ua8_spend_stop` compares both with the balances). What this cannot read is an `Err`, never 0.
+    /// that left the fee account (`ua_portable_spend_stop` compares both with the balances). What this cannot read is an `Err`, never 0.
     async fn tx_fee(&self, tx_id: &str) -> Result<Option<u128>> {
         let r = self
             .rpc(
@@ -2501,7 +2501,7 @@ pub fn ua_metatx_job(
 /// that is not rooted at exactly `call` (with nothing below), or at another `SourceAccount` entry of the job's `own`, fails the job
 /// before submission: the node never lends a lane's authority to another call. Only `own`'s `SourceAccount` entries count: a
 /// subject's `Address` entry has a root the client chose. Unreadable entries fail closed. The RPC records only for a transaction with no auth
-/// entry; with one it enforces (`e2e_ua8_simulation_auth_mode`), so for a job carrying the lane's entry this reads back that
+/// entry; with one it enforces (`ua_portable_simulation_auth_mode`), so for a job carrying the lane's entry this reads back that
 /// entry alone, and the refusal of anything else is the host's, at simulation.
 fn check_recorded_auth(
     sim: &Value,
@@ -2557,7 +2557,7 @@ fn restores(data: &SorobanTransactionData) -> bool {
 }
 
 /// The largest `ContractData` entry a simulation would write: its whole `LedgerEntry`, `stateChanges[].after`, the size the host
-/// compares (measured, `e2e_ua8_spend_stop`: 65,536 B lands, 65,540 B fails). `None` = it names none it can read: the job goes on.
+/// compares (measured, `ua_portable_spend_stop`: 65,536 B lands, 65,540 B fails). `None` = it names none it can read: the job goes on.
 fn largest_data_write(sim: &Value) -> Option<usize> {
     sim["stateChanges"]
         .as_array()?
@@ -6660,7 +6660,7 @@ mod tests {
 
     /// The quickstart's `tx_max_size_bytes`.
     const TX_MAX: u32 = 132_096;
-    /// `errorResultXdr` as the real host answers a transaction over that limit (`e2e_ua8_tx_size_limit`, `EDGE`): `txSOROBAN_INVALID`,
+    /// `errorResultXdr` as the real host answers a transaction over that limit (`ua_portable_tx_size_limit`, `EDGE`): `txSOROBAN_INVALID`,
     /// and under a fee bump `txFEE_BUMP_INNER_FAILED` around it.
     const ERROR_SOROBAN_INVALID: &str = "AAAAAAALbzj////vAAAAAA==";
     const ERROR_BUMP_SOROBAN_INVALID: &str =
@@ -8172,7 +8172,7 @@ mod tests {
     }
 
     /// The compared size is what `sign` sends, less a fee bump's 128 B: exactly the limit is sent, 4 B more (XDR's step) is refused
-    /// here. Core's reading of both edges is `e2e_ua8_tx_size_limit`.
+    /// here. Core's reading of both edges is `ua_portable_tx_size_limit`.
     #[tokio::test]
     async fn transaction_of_exactly_the_limit_passes() {
         for (fee_bump, wrap) in [(false, 0), (true, 128)] {
@@ -9124,7 +9124,7 @@ mod tests {
 
     // ---- the spend stop (NET-SOR-14)
 
-    /// `resultXdr` as the real host answers it (Protocol 30 quickstart, `e2e_ua8_spend_stop`, whose `FEE` lines compare each
+    /// `resultXdr` as the real host answers it (Protocol 30 quickstart, `ua_portable_spend_stop`, whose `FEE` lines compare each
     /// `feeCharged` with what left the payer's balance): SUCCESS, FAILED, and both under a fee bump.
     const RESULT_SUCCESS: &str =
         "AAAAAAAOmaUAAAAAAAAAAQAAAAAAAAAYAAAAAFAt8yW35C2zFXeWHaVy2MCn80yeTkoeh6LYx/OWZwfwAAAAAA==";
@@ -9641,7 +9641,7 @@ mod tests {
         )
     }
 
-    /// Measured on the real host (`e2e_ua8_spend_stop`, `BOUNDARY`): an `after` of the limit lands, 4 B more (XDR's step) fails on
+    /// Measured on the real host (`ua_portable_spend_stop`, `BOUNDARY`): an `after` of the limit lands, 4 B more (XDR's step) fails on
     /// chain, on the lane's fee. So over it is refused here, `dead` on the one claim, nothing sent, and a smaller entry beside it
     /// does not hide it.
     #[tokio::test]

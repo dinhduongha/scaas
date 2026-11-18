@@ -3557,7 +3557,7 @@ fn round_trip(
 
 /// C15: the `Chain` rows with their KEM records, a `fndsa512` through the relayer mode with KEM records 3 then 1, `msig-pq`
 /// with its minimal `pop` and no KEM record among the `Chain` rows. `checked` and the KEM order are pinned in `ua8-roundtrip.json`
-/// (`UA8_WRITE=1` writes it, every other run compares), which `e2e_ua8` also takes its order from.
+/// (`UA8_WRITE=1` writes it, every other run compares), which `e2e_ua_portable_soroban` also takes its order from.
 #[test]
 fn ua8_record_bytes_round_trip() {
     let mut rows = StdVec::new();

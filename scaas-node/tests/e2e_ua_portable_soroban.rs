@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! UA-8 on Soroban (plan ua8-soroban B7, C15): a UA record copied EVM → Soroban → EVM byte for byte on a real Protocol 30
-//! host and two anvil chains, and what only a real host can answer. `smartcontracts/soroban/scripts/e2e-ua8-local.sh` runs it
+//! host and two anvil chains, and what only a real host can answer. `smartcontracts/soroban/scripts/e2e-ua-portable-local.sh` runs it
 //! (env: see `soroban_common`, `UA8_EVM_A` / `UA8_EVM_B` = `<chain id>,<rpc url>`); `#[ignore]`, one test at a time.
 //!
 //! Every comparison is between independent sources: a chain's read against the vector or against the other chain's read,
 //! never a value against its own copy. The registry writes go through the node's `call` jobs (`lane_step` on Soroban, the
-//! outbox on EVM); only the published byte limits of `e2e_ua8_network_fit` use `raw_send`, junk `slhdsa128s` signatures the
+//! outbox on EVM); only the published byte limits of `ua_portable_network_fit` use `raw_send`, junk `slhdsa128s` signatures the
 //! off-chain check would refuse and the chain never reads. Log prefixes: `COPY`, `FIT`, `EDGE`, `FEE`, `BOUNDARY`, `ENTRY`, `P1` … `P5` (the brief's proofs).
 mod soroban_common;
 
@@ -955,8 +955,9 @@ struct Evm {
 }
 
 fn evm_of(env_name: &str) -> (u64, String) {
-    let v = std::env::var(env_name)
-        .unwrap_or_else(|_| panic!("{env_name} = <chain id>,<rpc url> (e2e-ua8-local.sh sets it)"));
+    let v = std::env::var(env_name).unwrap_or_else(|_| {
+        panic!("{env_name} = <chain id>,<rpc url> (e2e-ua-portable-local.sh sets it)")
+    });
     let (id, rpc) = v.split_once(',').unwrap();
     (id.parse().unwrap(), rpc.to_string())
 }
@@ -1689,7 +1690,7 @@ async fn copy_pqz(
 
 #[tokio::test]
 #[ignore]
-async fn e2e_ua8_copy_evm_soroban_evm() {
+async fn ua_portable_copy_evm_soroban_evm() {
     let c = copy_stack().await;
     let (lane, none) = (json!(g(&key(0))), Value::Null);
     // `fndsa512`: chain-verified on both EVM chains, relayer-checked here (S3, U8S-D8), KEM records 3 then 1
@@ -1805,7 +1806,7 @@ fn sim_answer(sim: &Value) -> String {
 /// cannot fire. With `None` they read a real recording, and they do fire.
 #[tokio::test]
 #[ignore]
-async fn e2e_ua8_simulation_auth_mode() {
+async fn ua_portable_simulation_auth_mode() {
     let n = fresh_node().await;
     let (registry, lane) = (sc(&n.registry), sc(&g(&key(0))));
     let ml = Ml::new(0x31);
@@ -1918,7 +1919,7 @@ async fn e2e_ua8_simulation_auth_mode() {
 /// P2: `relayer = Some(lane)` on a part the chain verifies: the contract never reads the entry the node adds.
 #[tokio::test]
 #[ignore]
-async fn e2e_ua8_unused_source_account_entry() {
+async fn ua_portable_unused_source_account_entry() {
     let n = fresh_node().await;
     let ml = Ml::new(0x32);
     let lane = g(&key(0));
@@ -1994,7 +1995,7 @@ fn pqz_args(ua: &[u8; 32], a: &UAAttrs, sig: Value) -> Value {
 /// the split is a STOP (C12); everything `data_row` runs is published data.
 #[tokio::test]
 #[ignore]
-async fn e2e_ua8_network_fit() {
+async fn ua_portable_network_fit() {
     network_limits().await;
     let n = fresh_node().await;
     let none = Value::Null;
@@ -2408,7 +2409,7 @@ async fn sized(n: &Node, target: usize) -> scaas_node::adapter::Signed {
 /// simulation knows of a write over the entry limit.
 #[tokio::test]
 #[ignore]
-async fn e2e_ua8_tx_size_limit() {
+async fn ua_portable_tx_size_limit() {
     let s = fresh_node().await;
     let limit = 132_096;
     // a fee bump wraps the same envelope in 128 B more, which the limit does not count
@@ -2587,7 +2588,7 @@ async fn pop_job(n: &Node, seed: u8, size: usize) -> Value {
 /// unfunded account; the entry limit's exact edge; a job over it refused at build.
 #[tokio::test]
 #[ignore]
-async fn e2e_ua8_spend_stop() {
+async fn ua_portable_spend_stop() {
     let s = fresh_node().await;
     let registry = sc(&s.registry);
     let mut seed = 0x30;
@@ -2949,7 +2950,7 @@ fn key_of_lane() -> scaas_node::signer::LocalSigner {
 /// B8's table: every relayer-mode write's transaction, and the slot limits per set per kind, the edge and one refused, asserted.
 #[tokio::test]
 #[ignore]
-async fn e2e_ua8_relayer_table() {
+async fn ua_portable_relayer_table() {
     network_limits().await;
     let n = fresh_node().await;
     let me = json!(g(&key(0)));
@@ -3210,7 +3211,7 @@ fn flip_field(v: &mut Value) {
 /// registry and network: `SourceAccount` signs nothing of its own, the transaction's signature covers it.
 #[tokio::test]
 #[ignore]
-async fn e2e_ua8_attestation_binds() {
+async fn ua_portable_attestation_binds() {
     let n = fresh_node().await;
     let me = json!(g(&key(0)));
     let (lane, registry) = (sc(&g(&key(0))), sc(&n.registry));
@@ -3526,7 +3527,7 @@ async fn e2e_ua8_attestation_binds() {
 /// event and nothing else: its `ua` is the key's, `registration_of` returns it byte for byte. Threshold 1 exists on no chain.
 #[tokio::test]
 #[ignore]
-async fn e2e_ua8_frost_every_size() {
+async fn ua_portable_frost_every_size() {
     let n = fresh_node().await;
     let me = json!(g(&key(0)));
     let (lane, registry) = (sc(&g(&key(0))), sc(&n.registry));
@@ -3673,7 +3674,7 @@ impl Slh {
 /// accepted by EVM, which verifies both slots itself, so the node's positive is not its own opinion.
 #[tokio::test]
 #[ignore]
-async fn e2e_ua8_relayer_checked_msig_slot() {
+async fn ua_portable_relayer_checked_msig_slot() {
     let c = copy_stack().await;
     // this test's own fake ExternalPull: the stack's runs on the runtime of the test that made it
     let n = Node::new(c.s.registry.clone()).await;
