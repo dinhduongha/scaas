@@ -459,7 +459,10 @@ async fn quote_shows_and_caps() {
     let path = SubmitPath::SelfRelay { payer: payer(&t) };
     let q = t.sdk.op().quote(p.clone(), path.clone()).await.unwrap();
     let fee: u128 = q.max_fee_per_gas.parse().unwrap();
-    assert_eq!(q.gas_limit, 100_000);
+    assert_eq!(
+        q.gas_limit, 150_000,
+        "the unsigned form's estimate plus the margin"
+    );
     assert_eq!(
         q.max_cost,
         (u128::from(q.gas_limit) * fee).to_string(),
@@ -494,12 +497,13 @@ async fn gas_above_tx_cap() {
     let t = setup(0, |_, _| {}).await;
     let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
     let path = SubmitPath::SelfRelay { payer: payer(&t) };
-    t.chain.lock().unwrap().gas = (1 << 24) + 1;
+    // the estimate plus half: 11_184_812 → 16_777_218, above 2^24; 11_184_811 → 2^24
+    t.chain.lock().unwrap().gas = 11_184_812;
     assert_eq!(
         code(t.sdk.op().quote(p.clone(), path.clone()).await),
         "GasAboveTxCap"
     );
-    t.chain.lock().unwrap().gas = 1 << 24;
+    t.chain.lock().unwrap().gas = 11_184_811;
     let q = t.sdk.op().quote(p.clone(), path).await.unwrap(); // control: at the cap
     assert_eq!(q.gas_limit, 1 << 24);
     // the fake refuses a transaction above its cap, as the chain does: the quote stopped it before
@@ -890,4 +894,118 @@ async fn gateway_chain_uid_mismatch_is_refused() {
         t.chain.lock().unwrap().bodies.is_empty(),
         "the gateway unused"
     );
+}
+
+// --- owner 2026-11-18, ruling 1: a quote never makes or sends a signature; submit signs once ---
+
+fn signs(t: &T) -> u32 {
+    t.sdk.signs.load(SeqCst)
+}
+
+/// The signature `submit` would make for `p` (deterministic): its hex without `0x`.
+fn signature_of(p: &Prepared) -> String {
+    let w = Wallet::from_mnemonic(REPO, "").unwrap();
+    let k = w.ua_key(0x0101, 0, 0).unwrap();
+    let s = scaas_ua::wallet::sign_scaas(&k, &p.t.td, p.t.expect.clone()).unwrap();
+    hex(&s.signature)[2..].to_string()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn quote_makes_no_signature() {
+    let t = setup(1, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let sig = signature_of(&p);
+    t.chain.lock().unwrap().requests.clear();
+    let q = t
+        .sdk
+        .op()
+        .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+        .await
+        .unwrap();
+    gateway_quote(&t, &p).await;
+    assert_eq!(signs(&t), 0, "no signer call at quote time");
+    let wire = t.chain.lock().unwrap().requests.clone();
+    assert!(
+        wire.iter().any(|b| b.contains("eth_estimateGas")),
+        "the unsigned form was estimated"
+    );
+    assert!(
+        !wire.iter().any(|b| b.contains(&sig)),
+        "no signature on the wire"
+    );
+    // control: submit signs once, and the simulation carries that signature
+    t.sdk.op().submit(p, q).await.unwrap();
+    assert_eq!(signs(&t), 1, "submit: exactly one signer call");
+    let wire = t.chain.lock().unwrap().requests.clone();
+    assert!(
+        wire.iter()
+            .any(|b| b.contains("eth_estimateGas") && b.contains(&sig)),
+        "submit simulates the signed calldata"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn submit_signs_once_on_each_path() {
+    let t = setup(1, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let q = gateway_quote(&t, &p).await;
+    t.sdk.op().submit(p, q).await.unwrap();
+    assert_eq!(signs(&t), 1, "the gateway path");
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "6", "0")).await;
+    let q = t
+        .sdk
+        .op()
+        .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+        .await
+        .unwrap();
+    t.sdk.op().submit(p, q).await.unwrap();
+    assert_eq!(signs(&t), 2, "the self-relay path: one more");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn unsigned_form_refused_is_gas_unquoted() {
+    let t = setup(0, |_, _| {}).await;
+    let path = SubmitPath::SelfRelay { payer: payer(&t) };
+    t.chain.lock().unwrap().call_revert = true;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    assert_eq!(
+        code(t.sdk.op().quote(p, path.clone()).await),
+        "GasUnquoted",
+        "no pinned figure, the unsigned form refused"
+    );
+    // control: a pinned operation (the router's ordered cancel) takes its figure, no estimate
+    let p = prepare(&t, cancel(&t, "gov_router", OTHER, "5", "0")).await;
+    let q = t.sdk.op().quote(p.clone(), path).await.unwrap();
+    let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
+    let want = (72_600 + 21_000 + 64 * len) * 3 / 2;
+    assert!(
+        q.gas_limit == want || q.gas_limit + 1 == want,
+        "{} {want}",
+        q.gas_limit
+    );
+    assert_eq!(signs(&t), 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn submit_refuses_more_gas_than_quoted() {
+    let t = setup(0, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let q = t
+        .sdk
+        .op()
+        .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+        .await
+        .unwrap();
+    t.chain.lock().unwrap().gas = q.gas_limit + 1; // the signed form needs more than the user confirmed
+    assert_eq!(
+        code(t.sdk.op().submit(p.clone(), q.clone()).await),
+        "GasUnquoted"
+    );
+    assert!(
+        state::rows(&t.sdk).await.unwrap().is_empty(),
+        "nothing written"
+    );
+    t.chain.lock().unwrap().gas = q.gas_limit; // control: within the quote
+    t.sdk.op().submit(p, q).await.unwrap();
+    sent_txs(&t, 1).await;
 }

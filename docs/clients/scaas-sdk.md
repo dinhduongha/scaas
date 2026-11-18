@@ -248,7 +248,7 @@ code of a send outcome, never final ([CLI-RPC-08](scaas-rpc.md#CLI-RPC-08)). A n
 by `code`. The SDK's own names include `StoreConflict`, `KeystoreMismatch`, `KeystoreRollback`, `AccountUnverified`, `SeedUnknown`,
 `SeedExists`, `AccountExists`, `LabelTaken`, `ConfirmationMissing`, `VaultPassphraseWeak`, `DerivationPassphraseShort`, `OriginSignature`,
 `AuthenticatorRefused`, `ProfileMismatch`, `FeatureMissing`, `PreparedStale`, `PreparedUnknown`, `OpaqueCallRefused`, `FeeAboveCap`,
-`GasAboveTxCap`, `PayerDelegated`, `SubmitPathNone`, `VerdictRefused`, `TxTypeRefused`, `RawDigestRefused`, `AppDomainRefused`,
+`GasAboveTxCap`, `GasUnquoted`, `PayerDelegated`, `SubmitPathNone`, `VerdictRefused`, `TxTypeRefused`, `RawDigestRefused`, `AppDomainRefused`,
 `AppPurposeRefused`, `AppSaltMismatch`, `AppHandleForeign`, `AppLabelRefused`, `AppKeyUsage`, `AppArenaFull`, `KemKeyGone`,
 `ReceiverUnregistered`, `RegistrationUaMismatch`, `RegistrationKindDisabled`, `RegistrationPopInvalid`, `RegistrationKemMissing`. A
 warning (`short_seed`, `imported_key`) comes beside a success, never as an error.

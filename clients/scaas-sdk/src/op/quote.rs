@@ -7,6 +7,7 @@ use super::prepared::{envelope, Prepared};
 use super::{dec, evm, key, sim, KeyRef, Op};
 use crate::{Sdk, SdkError};
 use alloy::primitives::{Address, Bytes, U256};
+use scaas_rpc::evm::SimError;
 use scaas_rpc::Purpose;
 use std::sync::Arc;
 
@@ -84,8 +85,10 @@ pub(crate) fn payer_address(sdk: &Sdk, payer: &KeyRef) -> Result<Address, SdkErr
         .ok_or(SdkError::Argument)
 }
 
-/// A self-relay's quote for `to` and `data` from `payer`: the code check, the gas (simulated, failed over, head), the chain's
-/// caps, the fees and the SDK's caps, the payer's nonce.
+/// A self-relay's quote for `to` and `data` from `payer`: the code check, the gas, the chain's caps, the fees and the SDK's
+/// caps, the payer's nonce. The gas of a relayed operation (owner 2026-11-18, ruling 1: a quote never makes a signature) is
+/// `pinned` when the operation has a pinned figure, else the estimate of `data`, its unsigned form, with the margin
+/// ([`super::gas`]); an unsigned form the chain refuses is `GasUnquoted`. A native send's gas is its own estimate.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn self_relay(
     sdk: &Sdk,
@@ -96,6 +99,7 @@ pub(crate) async fn self_relay(
     data: Bytes,
     fee_to_relayer: String,
     relayed: bool,
+    pinned: Option<u64>,
 ) -> Result<SubmitQuote, SdkError> {
     let (profile, _, pool) = evm(sdk, chain)?;
     let from = payer_address(sdk, payer)?;
@@ -104,7 +108,15 @@ pub(crate) async fn self_relay(
     if relayed && delegated(&pool.code(from).await.map_err(sim)?) {
         return Err(SdkError::PayerDelegated);
     }
-    let gas = if data.is_empty() && pool.code(to).await.map_err(sim)?.is_empty() {
+    let gas = if let Some(g) = pinned {
+        g
+    } else if relayed {
+        match pool.simulate_from(from, to, data).await {
+            Ok(g) => super::gas::with_margin(g),
+            Err(SimError::Revert(_)) => return Err(SdkError::GasUnquoted),
+            Err(e) => return Err(sim(e)),
+        }
+    } else if data.is_empty() && pool.code(to).await.map_err(sim)?.is_empty() {
         21_000 // a plain transfer to an account without code
     } else {
         // ponytail: simulated without `value` (the reader's simulate takes none); a value-aware estimate when it has one
@@ -214,18 +226,20 @@ impl Op {
                     SubmitPath::Auto { payer: None } => return Err(SdkError::SubmitPathNone),
                     SubmitPath::Auto { payer: Some(p) } | SubmitPath::SelfRelay { payer: p } => p,
                 };
-                // the gas is simulated on the signed calldata (a throwaway signature: the bytes of the submit's are the same
-                // length); nothing is kept
-                let built = super::submit::sign(&sdk, &prepared)?;
+                // no signature here (ruling 1): the pinned figure, else the estimate of the unsigned form
+                let unsigned = super::submit::unsigned(&prepared)?;
+                let pinned =
+                    super::gas::pinned(&prepared.entry(), prepared.t.kind, unsigned.calldata.len());
                 self_relay(
                     &sdk,
                     &prepared.chain(),
                     &payer,
                     Address::from(prepared.t.contract),
                     U256::ZERO,
-                    Bytes::from(built.calldata),
+                    Bytes::from(unsigned.calldata),
                     fee,
                     true,
+                    pinned,
                 )
                 .await
             })

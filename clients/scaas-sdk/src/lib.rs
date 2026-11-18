@@ -169,6 +169,9 @@ pub struct Sdk {
     /// tokens read in this session, by (chain, address) (spec §8.2: metadata read once per session)
     #[cfg(feature = "wallet")]
     pub(crate) tokens: Mutex<HashMap<(String, String), wallet::TokenInfo>>,
+    /// the tests' count of SCaaS signatures made (`op::submit::sign`)
+    #[cfg(all(test, feature = "wallet"))]
+    pub(crate) signs: std::sync::atomic::AtomicU32,
 }
 
 impl Sdk {
@@ -223,6 +226,8 @@ impl Sdk {
             prepared: Mutex::new(HashMap::new()),
             #[cfg(feature = "wallet")]
             tokens: Mutex::new(HashMap::new()),
+            #[cfg(all(test, feature = "wallet"))]
+            signs: std::sync::atomic::AtomicU32::new(0),
         }))
     }
 

@@ -33,33 +33,54 @@ pub(crate) async fn fresh(sdk: &Sdk, p: &Prepared) -> Result<(), SdkError> {
     Ok(())
 }
 
-/// The signature of `p` under its check, and the entry built with it (calldata and job op from one parse).
-pub(crate) fn sign(sdk: &Sdk, p: &Prepared) -> Result<Built, SdkError> {
-    let k = key(sdk, &p.signer())?;
-    let s = sign_scaas(k.signer(), &p.t.td, p.t.expect.clone())?;
+/// A signature in the entry's form (`scaas-ua`'s rows): `bytes` for `@bytes` and the address entries, a `UASig` for `@ua` and
+/// the `UA*` / `CancelUA*` structs, `SmartKeyAccount`'s own an `AccountSig{keyIndex, proof, signature}` (plan T13 adds the key
+/// tree's proof).
+fn sig_json(p: &Prepared, key_data: &[u8], signature: &[u8]) -> Result<Value, SdkError> {
     let plan = entry_rows()
         .into_iter()
         .find(|r| r.name == p.t.name && r.kinds.contains(&p.t.kind))
         .map(|r| r.plan)
         .ok_or(SdkError::Argument)?;
-    let sig = match p.t.kind {
-        // the row's signature form: `bytes` (`@bytes`), `SmartKeyAccount`'s `AccountSig{keyIndex, proof, signature}` (plan T13
-        // adds the key tree's proof), else a `UASig`
-        _ if plan.contains("@bytes") => json!(hex(&s.signature)),
-        "account" => json!({"keyIndex": "0", "proof": [], "signature": hex(&s.signature)}),
-        _ => json!({"keyData": hex(&s.key_data), "signature": hex(&s.signature), "members": []}),
-    };
-    if !s.members.is_empty() {
-        return Err(SdkError::Argument);
-    }
+    let name = p.t.name;
+    let ua = plan.contains("@ua") || name.starts_with("UA") || name.starts_with("CancelUA");
+    Ok(if plan.contains("@bytes") {
+        json!(hex(signature))
+    } else if ua {
+        json!({"keyData": hex(key_data), "signature": hex(signature), "members": []})
+    } else if p.t.kind == "account" {
+        json!({"keyIndex": "0", "proof": [], "signature": hex(signature)})
+    } else {
+        json!(hex(signature))
+    })
+}
+
+fn build(p: &Prepared, sig: &Value) -> Result<Built, SdkError> {
     Ok(entry(
         p.t.name,
         p.t.kind,
         &p.t.contract,
         &p.t.message,
         &p.t.extra,
-        &sig,
+        sig,
     )?)
+}
+
+/// The entry of `p` with an empty signature: the unsigned form a quote estimates (owner 2026-11-18, ruling 1).
+pub(crate) fn unsigned(p: &Prepared) -> Result<Built, SdkError> {
+    build(p, &sig_json(p, &[], &[])?)
+}
+
+/// The signature of `p` under its check, and the entry built with it (calldata and job op from one parse).
+pub(crate) fn sign(sdk: &Sdk, p: &Prepared) -> Result<Built, SdkError> {
+    let k = key(sdk, &p.signer())?;
+    #[cfg(test)]
+    sdk.signs.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let s = sign_scaas(k.signer(), &p.t.td, p.t.expect.clone())?;
+    if !s.members.is_empty() {
+        return Err(SdkError::Argument);
+    }
+    build(p, &sig_json(p, &s.key_data, &s.signature)?)
 }
 
 /// An EIP-1559 transaction of `quote` from its payer to `to` with `data`, signed by `scaas-ua`: the raw bytes and the id.
@@ -133,6 +154,19 @@ impl Op {
                 let built = sign(&sdk, &prepared)?;
                 let (raw, tx_id, payer) = match &quote.path {
                     SubmitPath::SelfRelay { payer } => {
+                        // the signed calldata simulated once (ruling 1): a revert or more gas than the confirmed quote
+                        // ends here, nothing written or sent
+                        let from = payer_address(&sdk, payer)?;
+                        let to = Address::from(prepared.t.contract);
+                        let data = alloy::primitives::Bytes::from(built.calldata.clone());
+                        if pool
+                            .simulate_from(from, to, data)
+                            .await
+                            .map_err(super::sim)?
+                            > quote.gas_limit
+                        {
+                            return Err(SdkError::GasUnquoted);
+                        }
                         let (raw, id) = sign_tx(
                             &sdk,
                             chain_id,

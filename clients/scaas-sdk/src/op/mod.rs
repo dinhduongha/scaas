@@ -5,6 +5,7 @@
 //! exactly that value under its `scaas-ua` check, writes the row (state `signed`) to `sdk.state`, and returns the operation's id;
 //! the send runs on as a task and reports as `Event::OpState`. An operation ends only on a chain fact. UNAUDITED.
 mod follow;
+pub(crate) mod gas;
 mod prepared;
 pub(crate) mod quote;
 pub(crate) mod state;

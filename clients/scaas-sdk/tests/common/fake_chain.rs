@@ -57,6 +57,10 @@ pub struct Chain {
     pub native_balance: u64,
     /// the factory's token index (`contractsPage(1, …)`)
     pub index: Vec<String>,
+    /// every JSON-RPC request body, as received
+    pub requests: Vec<String>,
+    /// `eth_call` and `eth_estimateGas` of a contract revert (an unsigned form the contract refuses)
+    pub call_revert: bool,
 }
 
 impl Default for Chain {
@@ -84,6 +88,8 @@ impl Default for Chain {
             balances: HashMap::new(),
             native_balance: 0,
             index: vec![],
+            requests: vec![],
+            call_revert: false,
         }
     }
 }
@@ -247,10 +253,13 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                     ));
                 }
                 ok(json!(format!("0x{out}")))
+            } else if c.call_revert {
+                err("execution reverted")
             } else {
                 ok(json!("0x"))
             }
         }
+        "eth_estimateGas" if c.call_revert => err("execution reverted"),
         "eth_estimateGas" => ok(json!(format!("{:#x}", c.gas))),
         "eth_getCode" => ok(json!(c
             .code
@@ -395,6 +404,7 @@ pub async fn serve(c: Fake) -> String {
                                 }
                             }
                         } else {
+                            c.requests.push(String::from_utf8_lossy(&body).to_string());
                             let req: Value = serde_json::from_slice(&body).unwrap();
                             (
                                 200,

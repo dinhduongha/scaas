@@ -72,6 +72,7 @@ impl Wallet {
                     Bytes::from(data.clone()),
                     "0".into(),
                     false,
+                    None,
                 )
                 .await?;
                 Ok(NativeQuote {
