@@ -384,3 +384,12 @@ fn entries_token() {
     let rows: BTreeSet<_> = entry_rows().into_iter().filter(|r| r.kinds.contains(&"token")).map(|r| r.name).collect();
     assert!(rows.contains("UAMetaTransfer") && rows.contains("UAInvalidateNonces"));
 }
+
+#[test]
+fn entries_zether() {
+    table_both_ways("zether");
+    assert_eq!(vector_pairs("zether"), 28, "every zether pair of typed_ops.json");
+    canon_unbound("zether");
+    refusals("zether", "UAZetherTransfer");
+    refusals("zether", "ZetherRollOver");
+}
