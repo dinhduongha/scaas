@@ -31,6 +31,17 @@ impl Algorand {
         path: &str,
         query: &[(&str, String)],
     ) -> Result<Vec<u8>, FamilyError> {
+        crate::family::admit_first(&self.client, self, i).await?;
+        self.fetch(i, path, query).await
+    }
+
+    /// [`Algorand::get_raw`] without the identity check (the probe's own reads).
+    async fn fetch(
+        &self,
+        i: usize,
+        path: &str,
+        query: &[(&str, String)],
+    ) -> Result<Vec<u8>, FamilyError> {
         let mut p = path.to_string();
         if !query.is_empty() {
             let q: String = url::form_urlencoded::Serializer::new(String::new())
@@ -65,6 +76,7 @@ impl Algorand {
         body: Vec<u8>,
         ctype: &str,
     ) -> Result<Value, FamilyError> {
+        crate::family::admit_first(&self.client, self, i).await?;
         let (status, b) = self
             .client
             .raw_at(
@@ -116,10 +128,14 @@ impl Probe for Algorand {
     type Hash = String;
     /// `/v2/transactions/params`'s `genesis-hash` against the configured network.
     async fn same_chain(&self, i: usize, _: Option<Instant>) -> Result<bool, EndpointFailure> {
-        let v = self
-            .get(i, "/v2/transactions/params")
-            .await
-            .map_err(|e| unread(i, e))?;
+        let v = json(
+            i,
+            &self
+                .fetch(i, "/v2/transactions/params", &[])
+                .await
+                .map_err(|e| unread(i, e))?,
+        )
+        .map_err(|e| unread(i, e))?;
         match v["genesis-hash"].as_str() {
             Some(g) => Ok(g == self.genesis),
             None => Err(EndpointFailure::new(

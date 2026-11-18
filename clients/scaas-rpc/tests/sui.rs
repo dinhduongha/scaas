@@ -78,8 +78,9 @@ async fn a_sui_answer_above_16_mib_is_refused() {
         ))
         .await
     }
-    let e = sui(&[&big((16 << 20) + 1).await])
-        .checkpoint_digest(0, 1)
+    // T24.8 (fixture correction): endpoint 0 passes its identity before its reads; the bound is read on endpoint 1
+    let e = sui(&[DOWN, &big((16 << 20) + 1).await])
+        .checkpoint_digest(1, 1)
         .await
         .unwrap_err();
     assert!(
@@ -87,8 +88,8 @@ async fn a_sui_answer_above_16_mib_is_refused() {
         "{e}"
     );
     assert_eq!(
-        sui(&[&big(100).await])
-            .checkpoint_digest(0, 1)
+        sui(&[DOWN, &big(100).await])
+            .checkpoint_digest(1, 1)
             .await
             .unwrap(),
         "D",

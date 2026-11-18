@@ -27,6 +27,7 @@ impl Near {
 
     /// One JSON-RPC call to endpoint `i`.
     pub async fn call(&self, i: usize, method: &str, params: Value) -> Result<Value, FamilyError> {
+        crate::family::admit_first(&self.client, self, i).await?;
         self.client.rpc_at(i, method, params).await
     }
 
@@ -89,7 +90,8 @@ impl Probe for Near {
     /// `status`'s `genesis_hash` against the configured network.
     async fn same_chain(&self, i: usize, _: Option<Instant>) -> Result<bool, EndpointFailure> {
         let s = self
-            .call(i, "status", json!([]))
+            .client
+            .rpc_at(i, "status", json!([]))
             .await
             .map_err(|e| unread(i, e))?;
         match s["genesis_hash"].as_str() {

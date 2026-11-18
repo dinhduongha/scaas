@@ -87,15 +87,25 @@ async fn a_cosmos_answer_above_16_mib_is_refused() {
         }))
         .await
     }
+    // T24.8 (fixture correction): endpoint 0 passes its identity before its reads; the bound is read on endpoint 1
     let u = big((16 << 20) + 1).await;
-    let e = cosmos(&[&u], &[&u]).rest.get(0, "/x").await.unwrap_err();
+    let e = cosmos(&[&u], &[DOWN, &u])
+        .rest
+        .get(1, "/x")
+        .await
+        .unwrap_err();
     assert!(
         e.to_string().contains("AnswerTooLarge") || e.to_string().contains("above"),
         "{e}"
     );
     let u = big(100).await;
     assert_eq!(
-        cosmos(&[&u], &[&u]).rest.get(0, "/x").await.unwrap().0,
+        cosmos(&[&u], &[DOWN, &u])
+            .rest
+            .get(1, "/x")
+            .await
+            .unwrap()
+            .0,
         200,
         "control"
     );

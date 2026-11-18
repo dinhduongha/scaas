@@ -68,6 +68,20 @@ impl From<EndpointFailure> for FamilyError {
     }
 }
 
+/// CLI-RPC-03 (T24.8): endpoint 0 passes its identity (`probe.same_chain`, cached once read) before any read of it outside the
+/// failover, which checks every endpoint itself; a later endpoint's read here (a quorum read) is not checked: its answer only
+/// counts towards agreement with endpoint 0's.
+pub async fn admit_first<P: Probe>(
+    client: &Client,
+    probe: &P,
+    i: usize,
+) -> Result<(), FamilyError> {
+    if i == 0 {
+        client.pool.admit(probe, 0, None).await?;
+    }
+    Ok(())
+}
+
 /// One family's endpoint list and its client.
 pub struct Client {
     list: Arc<NodeList>,

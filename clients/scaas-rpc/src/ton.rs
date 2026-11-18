@@ -61,6 +61,7 @@ impl Ton {
         path: &str,
         body: Option<Vec<u8>>,
     ) -> Result<Value, FamilyError> {
+        crate::family::admit_first(&self.client, self, i).await?;
         let (status, b) = self
             .client
             .raw_at(i, method, path, body, "application/json", ANSWER_MAX)

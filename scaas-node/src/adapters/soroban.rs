@@ -6017,4 +6017,22 @@ mod tests {
         assert_eq!(a.tx_max_size().await.unwrap(), TX_MAX as usize, "control: endpoint 0's answer kept");
         assert_eq!(a.entry_max_size().await, Some(ENTRY_MAX as usize));
     }
+
+    /// scaas-rpc T24.8 (CLI-RPC-03): endpoint 0 passes its identity before its own reads: one of another network (another passphrase) answers
+    /// no status read (refused unread). Control: the same endpoint of this network answers it.
+    #[tokio::test]
+    async fn soroban_endpoint_0_of_another_network_answers_no_read() {
+        fn rpc(m: &str, passphrase: &str) -> Option<Value> {
+            match m {
+                "getNetwork" => Some(json!({"passphrase": passphrase, "protocolVersion": 30})),
+                "getTransaction" => Some(json!({"status": "SUCCESS", "ledger": 5})),
+                _ => None,
+            }
+        }
+        let other = crate::adapters::testkit::scripted(true, |m, _| rpc(m, "another network")).await;
+        assert!(failover_adapter(void_answer(), Net::default(), &[&other]).await.0.tx_status("0xab").await.is_err());
+        let this = crate::adapters::testkit::scripted(true, |m, _| rpc(m, "x")).await;
+        let a = failover_adapter(void_answer(), Net::default(), &[&this]).await.0;
+        assert!(matches!(a.tx_status("0xab").await.unwrap(), TxStatus::Mined { .. }), "control");
+    }
 }

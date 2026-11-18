@@ -36,6 +36,12 @@ impl Cosmos {
     /// CometBFT RPC `path` (with its query) on endpoint `i`: its `result`; a status other than 200 or an `error` member is
     /// `FamilyError::Rpc` (the error, else the answer, whole).
     pub async fn rpc_at(&self, i: usize, path: &str) -> Result<Value, FamilyError> {
+        crate::family::admit_first(&self.rpc, self, i).await?;
+        self.comet(i, path).await
+    }
+
+    /// [`Cosmos::rpc_at`] without the identity check (the CometBFT probe's own reads).
+    async fn comet(&self, i: usize, path: &str) -> Result<Value, FamilyError> {
         let (status, v) = json_at(&self.rpc, i, reqwest::Method::GET, path, None).await?;
         if status != 200 || v.get("error").is_some_and(|e| !e.is_null()) {
             return Err(FamilyError::Rpc {
@@ -50,6 +56,7 @@ impl Cosmos {
 impl Rest {
     /// GET `path` on gateway `i`: the status and the JSON (`null` for no body).
     pub async fn get(&self, i: usize, path: &str) -> Result<(u16, Value), FamilyError> {
+        crate::family::admit_first(&self.client, self, i).await?;
         json_at(&self.client, i, reqwest::Method::GET, path, None).await
     }
 
@@ -67,12 +74,13 @@ impl Rest {
                 &e.to_string(),
             ))
         })?;
+        crate::family::admit_first(&self.client, self, i).await?;
         json_at(&self.client, i, reqwest::Method::POST, path, Some(b)).await
     }
 
     /// A 2xx answer of gateway `i` to `path`, else the endpoint's failure `kind`.
     async fn ok(&self, i: usize, path: &str, kind: FailureKind) -> Result<Value, EndpointFailure> {
-        match self.get(i, path).await {
+        match json_at(&self.client, i, reqwest::Method::GET, path, None).await {
             Ok((200..=299, v)) => Ok(v),
             Ok((s, _)) => Err(EndpointFailure::new(i, kind, &format!("{path}: HTTP {s}"))),
             Err(FamilyError::Failure(f)) => Err(f),
@@ -158,5 +166,70 @@ impl Probe for Rest {
             .ok_or_else(|| {
                 EndpointFailure::new(i, FailureKind::AnswerMalformed, "a block without hash")
             })
+    }
+}
+
+/// The CometBFT endpoints' probe (T24.8: endpoint 0 is checked before its reads, spec §5.3): `status`'s `node_info.network`
+/// against the configured chain id, its latest block height, a block's hash.
+impl Probe for Cosmos {
+    type Hash = String;
+    async fn same_chain(&self, i: usize, _: Option<Instant>) -> Result<bool, EndpointFailure> {
+        let s = self
+            .comet(i, "status")
+            .await
+            .map_err(|e| comet_unread(i, e))?;
+        match s["node_info"]["network"].as_str() {
+            Some(n) => Ok(n == self.rest.chain_id),
+            None => Err(EndpointFailure::new(
+                i,
+                FailureKind::IdentityUnread,
+                "status without node_info.network",
+            )),
+        }
+    }
+    async fn head(&self, i: usize, _: Option<Instant>) -> Result<u64, EndpointFailure> {
+        let s = self
+            .comet(i, "status")
+            .await
+            .map_err(|e| comet_unread(i, e))?;
+        s["sync_info"]["latest_block_height"]
+            .as_str()
+            .and_then(|h| h.parse().ok())
+            .ok_or_else(|| {
+                EndpointFailure::new(i, FailureKind::AnswerMalformed, "status without a height")
+            })
+    }
+    async fn named(
+        &self,
+        i: usize,
+        _: BlockChoice,
+        d: Option<Instant>,
+    ) -> Result<u64, EndpointFailure> {
+        self.head(i, d).await
+    }
+    async fn header(
+        &self,
+        i: usize,
+        n: u64,
+        _: Option<Instant>,
+    ) -> Result<String, EndpointFailure> {
+        let b = self
+            .comet(i, &format!("block?height={n}"))
+            .await
+            .map_err(|e| comet_unread(i, e))?;
+        b["block_id"]["hash"]
+            .as_str()
+            .map(str::to_string)
+            .ok_or_else(|| {
+                EndpointFailure::new(i, FailureKind::AnswerMalformed, "a block without hash")
+            })
+    }
+}
+
+/// A CometBFT error as the pool's endpoint failure.
+fn comet_unread(i: usize, e: FamilyError) -> EndpointFailure {
+    match e {
+        FamilyError::Failure(f) => f,
+        e => EndpointFailure::new(i, FailureKind::Transport, &e.to_string()),
     }
 }

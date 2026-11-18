@@ -263,7 +263,9 @@ longer in the message enum; settle/cancel tests unchanged.
   refused simulate, a smart query's error) is its verdict; any other answer (503 code 14, a rate limit, a 404) fails over
   (scaas-rpc T24.3). The transaction status (REST `GetTx` and the block scan), the
   send, `op_consumed`, the lane sequence and the router's executor (kept for the process) are the first gateway's only; the
-  CometBFT reads (`status`, `block`, `block_results`) are the first endpoint's, as before.
+  CometBFT reads (`status`, `block`, `block_results`) are the first endpoint's, as before. Before its first read each first
+  endpoint passes its identity (CLI-RPC-03, scaas-rpc T24.8): the first gateway `node_info`'s network, the first CometBFT
+  endpoint `status`'s `node_info.network`, each the configured chain id; another network answers nothing.
 
 <a id="NET-COS-08"></a>**NET-COS-08** — **`contract` and `valid_until` come from the signed payload**
 ([NODE-LANE-16](../node/submit-lanes.md#NODE-LANE-16)): `relay_msg` parses the payload; a job whose JSON differs ⇒

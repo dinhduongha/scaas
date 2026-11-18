@@ -1529,4 +1529,29 @@ mod tests {
         let _ = crate::adapters::evm::BUILDING.scope((), adapter_rpc(&comet, &[&url]).submit(&s)).await;
         assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst), 1, "control");
     }
+
+    /// scaas-rpc T24.8 (CLI-RPC-03): endpoint 0 passes its identity before its own reads: one of another network (a REST gateway and a CometBFT endpoint of chain c-2) answers
+    /// no status read (refused unread). Control: the same endpoint of this network answers it.
+    #[tokio::test]
+    async fn cosmos_endpoint_0_of_another_network_answers_no_read() {
+        fn rest(p: &str, net: &str) -> Option<Value> {
+            match p {
+                "/cosmos/base/tendermint/v1beta1/node_info" => Some(json!({"default_node_info": {"network": net}})),
+                p if p.starts_with("/cosmwasm/wasm/v1/contract/") => Some(json!({"data": 1})),
+                _ => None,
+            }
+        }
+        fn status(p: &str, net: &str) -> Option<Value> {
+            (p == "/status").then(|| json!({"result": {"node_info": {"network": net},
+                "sync_info": {"latest_block_height": "9", "latest_block_hash": "AA".repeat(32)}}}))
+        }
+        let other = crate::adapters::testkit::scripted(false, |p, _| rest(p, "c-2")).await;
+        assert!(adapter_on(&[&other]).op_consumed(&plain_pay()).await.is_err(), "the REST gateway");
+        let this = crate::adapters::testkit::scripted(false, |p, _| rest(p, "c-1")).await;
+        assert_eq!(adapter_on(&[&this]).op_consumed(&plain_pay()).await.unwrap(), Some(true), "control");
+        let other = crate::adapters::testkit::scripted(false, |p, _| status(p, "c-2")).await;
+        assert!(adapter_rpc(&other, &[&this]).final_head().await.is_err(), "the CometBFT endpoint: status's node_info.network");
+        let comet = crate::adapters::testkit::scripted(false, |p, _| status(p, "c-1")).await;
+        assert_eq!(adapter_rpc(&comet, &[&this]).final_head().await.unwrap().map(|h| h.height), Some(9), "control");
+    }
 }

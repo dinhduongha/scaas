@@ -27,6 +27,7 @@ impl Sui {
 
     /// One JSON-RPC call to endpoint `i`.
     pub async fn call(&self, i: usize, method: &str, params: Value) -> Result<Value, FamilyError> {
+        crate::family::admit_first(&self.client, self, i).await?;
         self.client.rpc_at(i, method, params).await
     }
 
@@ -60,7 +61,8 @@ impl Sui {
 
     async fn chain_identifier(&self, i: usize) -> Result<String, EndpointFailure> {
         let v = self
-            .call(i, "sui_getChainIdentifier", json!([]))
+            .client
+            .rpc_at(i, "sui_getChainIdentifier", json!([]))
             .await
             .map_err(|e| unread(i, e))?;
         v.as_str().map(str::to_string).ok_or_else(|| {

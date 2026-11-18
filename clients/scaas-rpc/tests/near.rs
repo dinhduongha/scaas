@@ -86,8 +86,9 @@ async fn a_near_answer_above_16_mib_is_refused() {
         ))
         .await
     }
-    let e = near(&[&big((16 << 20) + 1).await])
-        .final_header(0)
+    // T24.8 (fixture correction): endpoint 0 passes its identity before its reads; the bound is read on endpoint 1
+    let e = near(&[DOWN, &big((16 << 20) + 1).await])
+        .final_header(1)
         .await
         .unwrap_err();
     assert!(
@@ -95,7 +96,10 @@ async fn a_near_answer_above_16_mib_is_refused() {
         "{e}"
     );
     assert_eq!(
-        near(&[&big(100).await]).final_header(0).await.unwrap(),
+        near(&[DOWN, &big(100).await])
+            .final_header(1)
+            .await
+            .unwrap(),
         (1, "h".into()),
         "control"
     );

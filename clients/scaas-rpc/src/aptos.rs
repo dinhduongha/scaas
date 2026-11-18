@@ -29,6 +29,12 @@ impl Aptos {
     /// GET `path` of endpoint `i`: a 2xx's JSON (bounded: 16 MiB, depth 64), `None` for a 404 (whatever its body), any other
     /// 4xx `FamilyError::Status` with its body's text.
     pub async fn get_at(&self, i: usize, path: &str) -> Result<Option<Value>, FamilyError> {
+        crate::family::admit_first(&self.client, self, i).await?;
+        self.fetch(i, path).await
+    }
+
+    /// [`Aptos::get_at`] without the identity check (the probe's own reads).
+    async fn fetch(&self, i: usize, path: &str) -> Result<Option<Value>, FamilyError> {
         let (status, b) = self
             .client
             .raw_at(
@@ -61,6 +67,7 @@ impl Aptos {
         body: Vec<u8>,
         ctype: &str,
     ) -> Result<(u16, Value), FamilyError> {
+        crate::family::admit_first(&self.client, self, i).await?;
         let (status, b) = self
             .client
             .raw_at(
@@ -85,6 +92,7 @@ impl Aptos {
         body: Vec<u8>,
         ctype: &str,
     ) -> Result<(u16, String), FamilyError> {
+        crate::family::admit_first(&self.client, self, i).await?;
         let (status, b) = self
             .client
             .raw_at(
@@ -215,7 +223,7 @@ impl Probe for Aptos {
 impl Aptos {
     /// Ledger info (`GET` the REST root) of endpoint `i`.
     async fn ledger(&self, i: usize) -> Result<Value, EndpointFailure> {
-        self.get_at(i, "")
+        self.fetch(i, "")
             .await
             .and_then(|v| v.ok_or_else(not_found))
             .map_err(|e| unread(i, e))

@@ -45,9 +45,9 @@ node-e2e-algorand | 6a0e68b1a | 0 | 8 passed, 0 failed, 0 ignored (1 binaries); 
 node-e2e-sui | 118d28867 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 node-e2e-ton | ef4c78a40 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 node-e2e-cosmos | 66b9b90d9 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-rpc-test | 2d68aaf2d | 0 | 160 passed, 0 failed, 10 ignored (16 binaries); tree dirty
-rpc-clippy | 2d68aaf2d | 0 | -; tree dirty
-rpc-wasm | 2d68aaf2d | 0 | -; tree dirty
-docs | 9ac4304ca | 0 | -; tree dirty
-node-test | 0e328eea3 | 0 | 839 passed, 0 failed, 72 ignored (18 binaries); tree dirty
-node-clippy | 0e328eea3 | 0 | -; tree dirty
+rpc-wasm | bcbce2c38 | 0 | -; tree dirty
+node-test | bcbce2c38 | 0 | 846 passed, 0 failed, 72 ignored (18 binaries); tree dirty
+node-clippy | bcbce2c38 | 0 | -; tree dirty
+docs | bcbce2c38 | 0 | -; tree dirty
+rpc-test | bcbce2c38 | 0 | 160 passed, 0 failed, 10 ignored (16 binaries); tree dirty
+rpc-clippy | bcbce2c38 | 0 | -; tree dirty

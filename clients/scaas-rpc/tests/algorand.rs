@@ -114,8 +114,9 @@ async fn an_algod_answer_above_16_mib_is_refused() {
         }))
         .await
     }
-    let e = algorand(&[&big((16 << 20) + 1).await], None)
-        .block_hash(0, 1)
+    // T24.8 (fixture correction): endpoint 0 passes its identity before its reads; the bound is read on endpoint 1
+    let e = algorand(&[DOWN, &big((16 << 20) + 1).await], None)
+        .block_hash(1, 1)
         .await
         .unwrap_err();
     assert!(
@@ -123,8 +124,8 @@ async fn an_algod_answer_above_16_mib_is_refused() {
         "{e}"
     );
     assert_eq!(
-        algorand(&[&big(100).await], None)
-            .block_hash(0, 1)
+        algorand(&[DOWN, &big(100).await], None)
+            .block_hash(1, 1)
             .await
             .unwrap(),
         "h1",

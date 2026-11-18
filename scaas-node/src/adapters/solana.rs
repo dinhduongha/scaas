@@ -1878,6 +1878,8 @@ mod tests {
         async fn h(State(f): State<Arc<Mutex<Vec<String>>>>, Json(b): Json<Value>) -> Json<Value> {
             let p = &b["params"];
             let r = match b["method"].as_str().unwrap_or_default() {
+                // scaas-rpc T24.8 (fixture correction): endpoint 0's identity read comes before its reads
+                "getGenesisHash" => json!(NETWORK),
                 "getSignaturesForAddress" => match p[1]["before"].as_str() {
                     None => json!([{"slot": 90, "signature": sig(1), "err": null}, {"slot": 80, "signature": sig(2), "err": null}]),
                     Some(s) if s == sig(2) => json!([{"slot": 60, "signature": sig(3), "err": null}]),
@@ -2320,6 +2322,10 @@ mod tests {
     #[tokio::test]
     async fn an_error_answer_reaches_the_classifier_whole() {
         let app = axum::Router::new().route("/", axum::routing::post(|axum::Json(b): axum::Json<Value>| async move {
+            // scaas-rpc T24.8 (fixture correction): endpoint 0's identity read comes before its reads
+            if b["method"] == "getGenesisHash" {
+                return axum::Json(json!({"jsonrpc": "2.0", "id": b["id"], "result": NETWORK}));
+            }
             axum::Json(json!({"jsonrpc": "2.0", "id": b["id"], "error": {"code": -32002, "message": "Transaction simulation failed",
                 "data": {"err": "BlockhashNotFound"}}}))
         }));
@@ -2471,5 +2477,23 @@ mod tests {
         let a = on(&[&first().await, &one]);
         let _ = a.final_head().await;
         assert!(matches!(a.build(&pay_job(), 0).await, Err(SimError::Transport(_))), "the head: the same floor");
+    }
+
+    /// scaas-rpc T24.8 (CLI-RPC-03): endpoint 0 passes its identity before its own reads: one of another network (another genesis hash) answers
+    /// no status read (refused unread). Control: the same endpoint of this network answers it.
+    #[tokio::test]
+    async fn solana_endpoint_0_of_another_network_answers_no_read() {
+        fn rpc(m: &str, genesis: &str) -> Option<Value> {
+            match m {
+                "getGenesisHash" => Some(json!(genesis)),
+                "getSignatureStatuses" => Some(json!({"value": [{"slot": 9, "confirmationStatus": "finalized", "err": null}]})),
+                _ => None,
+            }
+        }
+        let tx = alloy::hex::encode([1u8; 64]);
+        let other = crate::adapters::testkit::scripted(true, |m, _| rpc(m, "Another1111111111111111111111111111111111111")).await;
+        assert!(adapter_on(&[&other]).tx_status(&tx).await.is_err());
+        let this = crate::adapters::testkit::scripted(true, |m, _| rpc(m, NETWORK)).await;
+        assert!(matches!(adapter_on(&[&this]).tx_status(&tx).await.unwrap(), TxStatus::Mined { .. }), "control");
     }
 }

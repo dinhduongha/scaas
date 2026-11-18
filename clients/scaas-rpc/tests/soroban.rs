@@ -105,8 +105,9 @@ async fn a_soroban_answer_above_16_mib_is_refused() {
         ))
         .await
     }
-    let e = soroban(&[&big((16 << 20) + 1).await])
-        .ledger_hash(0, 1)
+    // T24.8 (fixture correction): endpoint 0 passes its identity before its reads; the bound is read on endpoint 1
+    let e = soroban(&[DOWN, &big((16 << 20) + 1).await])
+        .ledger_hash(1, 1)
         .await
         .unwrap_err();
     assert!(
@@ -114,7 +115,10 @@ async fn a_soroban_answer_above_16_mib_is_refused() {
         "{e}"
     );
     assert_eq!(
-        soroban(&[&big(100).await]).ledger_hash(0, 1).await.unwrap(),
+        soroban(&[DOWN, &big(100).await])
+            .ledger_hash(1, 1)
+            .await
+            .unwrap(),
         "0xab",
         "control"
     );

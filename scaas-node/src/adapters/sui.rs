@@ -2095,4 +2095,18 @@ mod tests {
         let _ = a.final_head().await;
         assert!(matches!(a.build(&pay_job(), 0).await, Err(SimError::Transport(_))), "the head: the same floor");
     }
+
+    /// scaas-rpc T24.8 (CLI-RPC-03): endpoint 0 passes its identity before its own reads: one of another network (here its chain identifier unreadable) answers
+    /// no status read (refused unread). Control: the same endpoint of this network answers it.
+    #[tokio::test]
+    async fn sui_endpoint_0_of_another_network_answers_no_read() {
+        let dir = tmp_dir("t24-8");
+        fn tx(m: &str) -> Option<Value> {
+            (m == "sui_getTransactionBlock").then(|| json!({"checkpoint": "9", "effects": {"status": {"status": "success"}}}))
+        }
+        let unread = crate::adapters::testkit::scripted(true, |m, _| tx(m)).await;
+        assert!(adapter_on(&[unread], &dir).tx_status(&addr_hex(&[0x11; 32])).await.is_err());
+        let this = crate::adapters::testkit::scripted(true, |m, _| if m == "sui_getChainIdentifier" { Some(json!("4c78adac")) } else { tx(m) }).await;
+        assert!(matches!(adapter_on(&[this], &dir).tx_status(&addr_hex(&[0x11; 32])).await.unwrap(), TxStatus::Mined { .. }), "control");
+    }
 }

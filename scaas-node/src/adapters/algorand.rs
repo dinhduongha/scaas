@@ -3759,4 +3759,24 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         crate::adapters::evm::BUILDING.scope((), a.submit(&s)).await.unwrap();
         assert_eq!(w.lock().unwrap().submitted.len(), 1, "control");
     }
+
+    /// scaas-rpc T24.8 (CLI-RPC-03): endpoint 0 passes its identity before its own reads: one of another network (another genesis hash) answers
+    /// no status read (refused unread). Control: the same endpoint of this network answers it.
+    #[tokio::test]
+    async fn algorand_endpoint_0_of_another_network_answers_no_read() {
+        fn algod(p: &str, g: [u8; 32]) -> Option<Value> {
+            match p {
+                "/v2/transactions/params" => Some(json!({"genesis-hash": base64::engine::general_purpose::STANDARD.encode(g), "genesis-id": "x",
+                    "last-round": 5_000, "min-fee": 1_000, "fee": 0})),
+                p if p.starts_with("/v2/transactions/pending/") => Some(json!({"confirmed-round": 5})),
+                _ => None,
+            }
+        }
+        let tx = format!("0x{}", "11".repeat(32));
+        let other = crate::adapters::testkit::scripted(false, |p, _| algod(p, [7; 32])).await;
+        assert!(AlgorandAdapter::new(&cfg(&other, FEE_CFG), &[lane0()]).unwrap().tx_status(&tx).await.is_err());
+        let this = crate::adapters::testkit::scripted(false, |p, _| algod(p, network())).await;
+        let a = AlgorandAdapter::new(&cfg(&this, FEE_CFG), &[lane0()]).unwrap();
+        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { .. }), "control");
+    }
 }

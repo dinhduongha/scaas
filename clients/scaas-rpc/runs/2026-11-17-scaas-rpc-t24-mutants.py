@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from mutants_lib import main
 
 A = "scaas-node/src/adapters/"
+C = "clients/scaas-rpc/src/"
 EVM = A + "evm.rs"
 NT = "cd scaas-node && CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::"
 MUTANTS = [
@@ -78,6 +79,15 @@ MUTANTS = [
     ("7: TON: the send through the failover helper", [(A + "ton.rs", 'self.net.post(0, "message", &body).await.map(|_| ()).map_err(|e| Self::error("message", e))',
        'self.post("message", body).await.map(|_| ())')],
      NT + "ton::tests::ton_submit_inside_build_asks_endpoint_0_only"),
+    # T24.8 (CLI-RPC-03): endpoint 0 passes its identity before its own reads, in every family
+    ("8: Aptos: endpoint 0 read unchecked", [(C + "aptos.rs", "crate::family::admit_first(&self.client, self, i).await?;\n        self.fetch(i, path).await", "self.fetch(i, path).await")], NT + "aptos::tests::aptos_endpoint_0_of_another_network_answers_no_read"),
+    ("8: sui: endpoint 0 read unchecked", [(C + "sui.rs", "crate::family::admit_first(&self.client, self, i).await?;\n        self.client.rpc_at(i, method, params).await", "self.client.rpc_at(i, method, params).await")], NT + "sui::tests::sui_endpoint_0_of_another_network_answers_no_read"),
+    ("8: near: endpoint 0 read unchecked", [(C + "near.rs", "crate::family::admit_first(&self.client, self, i).await?;\n        self.client.rpc_at(i, method, params).await", "self.client.rpc_at(i, method, params).await")], NT + "near::tests::near_endpoint_0_of_another_network_answers_no_read"),
+    ("8: soroban: endpoint 0 read unchecked", [(C + "soroban.rs", "crate::family::admit_first(&self.client, self, i).await?;\n        self.client.rpc_at(i, method, params).await", "self.client.rpc_at(i, method, params).await")], NT + "soroban::tests::soroban_endpoint_0_of_another_network_answers_no_read"),
+    ("8: solana: endpoint 0 read unchecked", [(C + "solana.rs", "crate::family::admit_first(&self.client, self, i).await?;\n        self.client.rpc_at(i, method, params).await", "self.client.rpc_at(i, method, params).await")], NT + "solana::tests::solana_endpoint_0_of_another_network_answers_no_read"),
+    ("8: Algorand: endpoint 0 read unchecked", [(C + "algorand.rs", "crate::family::admit_first(&self.client, self, i).await?;\n        self.fetch(i, path, query).await", "self.fetch(i, path, query).await")], NT + "algorand::tests::algorand_endpoint_0_of_another_network_answers_no_read"),
+    ("8: Cosmos: REST gateway 0 read unchecked", [(C + "cosmos.rs", "crate::family::admit_first(&self.client, self, i).await?;\n        json_at(&self.client, i, reqwest::Method::GET, path, None).await", "json_at(&self.client, i, reqwest::Method::GET, path, None).await")], NT + "cosmos::tests::cosmos_endpoint_0_of_another_network_answers_no_read"),
+    ("8: Cosmos: CometBFT endpoint 0 read unchecked", [(C + "cosmos.rs", "crate::family::admit_first(&self.rpc, self, i).await?;\n        self.comet(i, path).await", "self.comet(i, path).await")], NT + "cosmos::tests::cosmos_endpoint_0_of_another_network_answers_no_read"),
 ]
 
 if __name__ == "__main__":

@@ -3205,7 +3205,8 @@ mod tests {
         let mut w = world();
         w.genesis = "3JF3sEqM796hk5WFqA6EtmEwJQ9quALszsfJyvXNQKy3".into();
         let (a, _) = adapter(w, &fee_cfg("1")).await;
-        assert!(format!("{:#}", a.start_check().await.unwrap_err()).contains("genesis"));
+        // T24.8 (an expectation corrected): endpoint 0 of another genesis is refused by the identity check, before any read
+        assert!(format!("{:#}", a.start_check().await.unwrap_err()).contains("WrongChain"));
         let mut w = world();
         w.views.insert((TOKEN.into(), "network".into()), serde_json::to_vec(&[7u8; 32].to_vec()).unwrap());
         let (a, _) = adapter(w, &fee_cfg("1")).await;
@@ -4532,5 +4533,25 @@ mod tests {
         let (a, _) = adapter_after(pay_world(), &[&first().await]).await;
         let _ = a.final_head().await;
         assert!(matches!(a.build(&job, 0).await, Err(SimError::Transport(_))), "the head: the same floor");
+    }
+
+    /// scaas-rpc T24.8 (CLI-RPC-03): endpoint 0 passes its identity before its own reads: one of another network (another genesis hash) answers
+    /// no status read (refused unread). Control: the same endpoint of this network answers it.
+    #[tokio::test]
+    async fn near_endpoint_0_of_another_network_answers_no_read() {
+        fn rpc(m: &str, genesis: &str) -> Option<Value> {
+            match m {
+                "status" => Some(json!({"chain_id": "localnet", "genesis_hash": genesis})),
+                "EXPERIMENTAL_tx_status" => Some(outcome(TOKEN, json!({"FunctionCall": {"method_name": "mtx_pay", "args": ""}}), json!({"SuccessValue": ""}), vec![])),
+                "block" => Some(json!({"header": {"height": 100, "hash": "29d2S7vB453rNYFdR5Ycwt7y9haRT5fwVwL9zTmBhfV2"}, "chunks": []})),
+                _ => None,
+            }
+        }
+        let tx = format!("0x{}", "11".repeat(32));
+        let other = crate::adapters::testkit::scripted(true, |m, _| rpc(m, "11111111111111111111111111111111")).await;
+        assert!(NearAdapter::new(&cfg(&other, ""), &[lane0()]).unwrap().tx_status(&tx).await.is_err());
+        let this = crate::adapters::testkit::scripted(true, |m, _| rpc(m, NET_B58)).await;
+        let a = NearAdapter::new(&cfg(&this, ""), &[lane0()]).unwrap();
+        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { .. }), "control");
     }
 }

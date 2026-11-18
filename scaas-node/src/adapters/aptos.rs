@@ -1231,7 +1231,10 @@ mod tests {
         use axum::http::Uri;
         async fn h(State(amount): State<&'static str>, uri: Uri, body: String) -> axum::Json<Value> {
             let p = uri.path();
-            axum::Json(if p == "/graphql" && body.contains("processor_status") {
+            axum::Json(if p == "/" {
+                // scaas-rpc T24.8 (fixture correction): endpoint 0's identity read comes before its reads
+                json!({"chain_id": 4, "block_height": "5"})
+            } else if p == "/graphql" && body.contains("processor_status") {
                 json!({"data": {"processor_status": [{"last_success_version": 1000}]}})
             } else if p == "/graphql" {
                 json!({"data": {"user_transactions": [{"version": 101, "block_height": 5}]}})
@@ -1269,6 +1272,8 @@ mod tests {
     #[tokio::test]
     async fn tx_fee_reads_the_fee_or_fails() {
         let app = axum::Router::new()
+            // scaas-rpc T24.8 (fixture correction): endpoint 0's identity read comes before its reads
+            .route("/", axum::routing::get(|| async { axum::Json(json!({"chain_id": 4, "block_height": "5"})) }))
             .route("/transactions/by_hash/0xaa", axum::routing::get(|| async { axum::Json(json!({"gas_used": "7", "gas_unit_price": "100"})) }))
             .route("/transactions/by_hash/0xbb", axum::routing::get(|| async { axum::Json(json!({"gas_used": "7"})) }));
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1666,7 +1671,8 @@ mod tests {
         assert_eq!(a.indexed_version().await.unwrap(), 7);
         a.get("").await.unwrap();
         let got = std::mem::take(&mut *seen.lock().unwrap());
-        assert_eq!(got, [("/graphql".to_string(), Some("Bearer ikey".to_string())), ("/v1".to_string(), None)]);
+        // T24.8 (an expectation corrected, not weakened): endpoint 0's identity read (ledger info, `/v1`) precedes its read
+        assert_eq!(got, [("/graphql".to_string(), Some("Bearer ikey".to_string())), ("/v1".to_string(), None), ("/v1".to_string(), None)]);
         let a = AptosAdapter::new(&cfg(""), &[LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()]).unwrap();
         a.indexed_version().await.unwrap();
         assert_eq!(seen.lock().unwrap()[0].1, None, "control: no key configured");
@@ -1857,5 +1863,23 @@ mod tests {
         let a = adapter_on(&[format!("{}/v1", first().await), fullnode(OPEN).await]);
         let _ = a.final_head().await;
         assert!(matches!(a.build(&pay_job(), 0).await, Err(SimError::Transport(_))), "the head: the same floor");
+    }
+
+    /// scaas-rpc T24.8 (CLI-RPC-03): endpoint 0 passes its identity before its own reads: one of another network (chain id 5) answers
+    /// no status read (refused unread). Control: the same endpoint of this network answers it.
+    #[tokio::test]
+    async fn aptos_endpoint_0_of_another_network_answers_no_read() {
+        fn tx(p: &str, id: u64) -> Option<Value> {
+            match p {
+                "/v1" | "/v1/" => Some(json!({"chain_id": id, "block_height": "3"})),
+                "/v1/transactions/by_hash/0xaa" => Some(json!({"type": "user_transaction", "version": "5", "success": true, "vm_status": "Executed successfully"})),
+                "/v1/blocks/by_version/5" => Some(json!({"block_height": "3"})),
+                _ => None,
+            }
+        }
+        let other = crate::adapters::testkit::scripted(false, |p, _| tx(p, 5)).await;
+        assert!(adapter_on(&[format!("{other}/v1")]).tx_status("0xaa").await.is_err());
+        let this = crate::adapters::testkit::scripted(false, |p, _| tx(p, 4)).await;
+        assert!(matches!(adapter_on(&[format!("{this}/v1")]).tx_status("0xaa").await.unwrap(), TxStatus::Mined { .. }), "control");
     }
 }

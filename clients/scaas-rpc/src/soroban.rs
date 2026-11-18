@@ -31,6 +31,7 @@ impl Soroban {
 
     /// One JSON-RPC call to endpoint `i`.
     pub async fn call(&self, i: usize, method: &str, params: Value) -> Result<Value, FamilyError> {
+        crate::family::admit_first(&self.client, self, i).await?;
         self.client.rpc_at(i, method, params).await
     }
 
@@ -94,7 +95,8 @@ impl Probe for Soroban {
     /// `getNetwork`'s passphrase against the configured one.
     async fn same_chain(&self, i: usize, _: Option<Instant>) -> Result<bool, EndpointFailure> {
         let r = self
-            .call(i, "getNetwork", json!({}))
+            .client
+            .rpc_at(i, "getNetwork", json!({}))
             .await
             .map_err(|e| unread(i, e))?;
         match r["passphrase"].as_str() {

@@ -77,8 +77,9 @@ async fn a_solana_answer_above_16_mib_is_refused() {
         ))
         .await
     }
-    let e = solana(&[&big((16 << 20) + 1).await])
-        .blockhash_at(0, 1)
+    // T24.8 (fixture correction): endpoint 0 passes its identity before its reads; the bound is read on endpoint 1
+    let e = solana(&[DOWN, &big((16 << 20) + 1).await])
+        .blockhash_at(1, 1)
         .await
         .unwrap_err();
     assert!(
@@ -86,7 +87,10 @@ async fn a_solana_answer_above_16_mib_is_refused() {
         "{e}"
     );
     assert_eq!(
-        solana(&[&big(100).await]).blockhash_at(0, 1).await.unwrap(),
+        solana(&[DOWN, &big(100).await])
+            .blockhash_at(1, 1)
+            .await
+            .unwrap(),
         "h1",
         "control"
     );
@@ -126,7 +130,10 @@ async fn the_head_is_the_confirmed_slot() {
     s.client.pool().saw_block(101);
     let a = s
         .client
-        .failover(&s, |i| async move { Ok::<usize, scaas_rpc::pool::ReadError>(i) })
+        .failover(
+            &s,
+            |i| async move { Ok::<usize, scaas_rpc::pool::ReadError>(i) },
+        )
         .await
         .unwrap();
     assert_eq!(a.endpoint, 1);

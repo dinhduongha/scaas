@@ -32,6 +32,7 @@ impl Solana {
 
     /// One JSON-RPC call to endpoint `i`.
     pub async fn call(&self, i: usize, method: &str, params: Value) -> Result<Value, FamilyError> {
+        crate::family::admit_first(&self.client, self, i).await?;
         self.client.rpc_at(i, method, params).await
     }
 
@@ -90,7 +91,8 @@ impl Probe for Solana {
     /// `getGenesisHash` against the configured cluster.
     async fn same_chain(&self, i: usize, _: Option<Instant>) -> Result<bool, EndpointFailure> {
         let v = self
-            .call(i, "getGenesisHash", json!([]))
+            .client
+            .rpc_at(i, "getGenesisHash", json!([]))
             .await
             .map_err(|e| unread(i, e))?;
         match v.as_str() {
