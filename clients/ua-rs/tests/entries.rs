@@ -427,3 +427,12 @@ fn entries_pqz() {
     let pa = &v["ops"]["PqzAuth"];
     assert_eq!(entry("PqzAuth", "pqz", &at, &pa["message"], &json!({}), &Value::Null), Err(Error::Argument));
 }
+
+#[test]
+fn entries_wallet() {
+    table_both_ways("wallet");
+    assert_eq!(vector_pairs("wallet"), 7, "every MandateWallet pair of typed_ops.json");
+    canon_unbound("wallet");
+    refusals("wallet", "UASetMandate");
+    refusals("wallet", "UAPayUnderMandate");
+}
