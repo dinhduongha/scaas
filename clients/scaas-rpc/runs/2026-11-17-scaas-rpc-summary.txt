@@ -34,20 +34,21 @@ ver-clippy | 435318aa3 | 0 | -
 ver-anvil | 435318aa3 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 features | 435318aa3 | 0 | -
 node-e2e | 4ee72cfcc | 0 | 24 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-node-e2e-hedera | 4ee72cfcc | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-node-e2e-soroban | 0ed608c33 | 0 | 11 passed, 0 failed, 0 ignored (2 binaries); tree dirty
-node-e2e-solana | 23748267c | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-node-e2e-near | 9a31ccf1d | 0 | 12 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 rpc-anvil | 2633740cb | 0 | 10 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 rpc-deny | 2633740cb | 0 | -; tree dirty
-node-e2e-aptos | 6a0e68b1a | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-node-e2e-algorand | 6a0e68b1a | 0 | 8 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-node-e2e-sui | 118d28867 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-node-e2e-ton | ef4c78a40 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-node-e2e-cosmos | 66b9b90d9 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 rpc-test | 75b243fba | 0 | 161 passed, 0 failed, 10 ignored (16 binaries); tree dirty
 rpc-clippy | 75b243fba | 0 | -; tree dirty
 rpc-wasm | 75b243fba | 0 | -; tree dirty
 node-test | c4a30b7d7 | 0 | 857 passed, 0 failed, 72 ignored (18 binaries); tree dirty
 node-clippy | c4a30b7d7 | 0 | -; tree dirty
 docs | c4a30b7d7 | 0 | -; tree dirty
+node-e2e-sui | 9b0b437fa | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-ton | 9b0b437fa | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-hedera | 9b0b437fa | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-cosmos | 9b0b437fa | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-algorand | 9b0b437fa | 0 | 8 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-aptos | 9b0b437fa | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-near | 9b0b437fa | 0 | 12 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-solana | 9b0b437fa | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+node-e2e-soroban | 9b0b437fa | 0 | 11 passed, 0 failed, 0 ignored (2 binaries)
+review-families | 9b0b437fa | 0 | findings closed: T24.1-T24.12, T24.14, T24.15 (P3 #13 left as is, noted in algorand.md); mutants 57 killed of 57 (t24-<k>); node-e2e-<family> at 9b0b437fa: sui 1, ton 1, hedera 1, cosmos 1, algorand 8, aptos 1, near 12, solana 1, soroban 11 (a first soroban run hit friendbot 502 before any job ran; re-run green)
