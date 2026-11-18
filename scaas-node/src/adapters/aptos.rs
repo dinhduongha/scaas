@@ -24,6 +24,9 @@ const DOMAIN: &[u8] = b"scaas.metaop.v1";
 const OP_PAY: u8 = 0;
 const DEFAULT_TTL: u64 = 600;
 const DEFAULT_MAX_GAS: u64 = 200_000;
+/// `params.max_gas_unit_price`'s default (octas per gas unit; mainnet's minimum is 100): the most a lane pays per gas unit,
+/// whatever an endpoint quotes (CLI-RPC-05, scaas-rpc T24.4).
+const DEFAULT_MAX_GAS_PRICE: u64 = 10_000;
 const PROCESSOR: &str = "user_transaction_processor";
 const BCS_SIGNED_TX: &str = "application/x.aptos.signed_transaction+bcs";
 /// Lỗi validation (trước khi chạy): gửi lại cùng bytes không bao giờ qua ⇒ `Rejected` (RS11-8, spec §6.4).
@@ -677,6 +680,8 @@ pub struct AptosAdapter {
     package: Addr,
     ttl: u64,
     max_gas: u64,
+    /// the gas unit price cap (CLI-RPC-05, T24.4)
+    max_gas_price: u64,
     quorum: usize,
     lanes: Vec<Lane>,
     signers: Vec<LocalSigner>,
@@ -754,6 +759,7 @@ impl AptosAdapter {
             package,
             ttl: n("tx_ttl_s", DEFAULT_TTL).max(30),
             max_gas: n("max_gas_amount", DEFAULT_MAX_GAS),
+            max_gas_price: n("max_gas_unit_price", DEFAULT_MAX_GAS_PRICE),
             quorum: cfg.finality.quorum.max(1),
             lanes,
             signers: own,
@@ -894,6 +900,15 @@ impl AptosAdapter {
         }
     }
 
+    /// CLI-RPC-05 (scaas-rpc T24.4): a gas unit price above `params.max_gas_unit_price` is never paid: `Transport` (no verdict,
+    /// the job is requeued), whichever endpoint quoted it.
+    fn capped_price(&self, price: u64) -> std::result::Result<u64, SimError> {
+        if price > self.max_gas_price {
+            return Err(SimError::Transport(format!("gas unit price {price} above params.max_gas_unit_price {}", self.max_gas_price)));
+        }
+        Ok(price)
+    }
+
     fn lane_addr(&self, lane: usize) -> Result<Addr> {
         parse_addr(&self.lanes.get(lane).ok_or_else(|| anyhow!("no lane {lane}"))?.address)
     }
@@ -930,7 +945,7 @@ impl AptosAdapter {
             relay_payee(&self.relay_fee, &w.op, &sender).map_err(|e| SimError::Revert(format!("{e:#}")))?;
         }
         let seq = self.sequence(lane).await.map_err(transport)?;
-        let price = self.gas_price().await.map_err(transport)?;
+        let price = self.capped_price(self.gas_price().await.map_err(transport)?)?;
         let payload = match &w.entry {
             Entry::Pay => relay_pay_payload(&self.package, &w.op, &w.auth),
             Entry::PayMeta { salt, meta } => relay_pay_meta_payload(&self.package, &w.op, &w.auth, salt, meta),
@@ -964,7 +979,7 @@ impl AptosAdapter {
         }
         let used = num(&sim["gas_used"]).unwrap_or(0);
         let max_gas = (used + used.div_ceil(10) * 3).max(used + 10).min(self.max_gas);
-        let price = num(&sim["gas_unit_price"]).unwrap_or(price).max(price);
+        let price = self.capped_price(num(&sim["gas_unit_price"]).unwrap_or(price).max(price))?;
         let meta = json!({"max_gas": max_gas, "gas_price": price, "expiration": exp});
         Ok(Built { job_id: job.id, body: payload, valid_until: w.op.valid_until, meta })
     }
@@ -1881,5 +1896,27 @@ mod tests {
         assert!(adapter_on(&[format!("{other}/v1")]).tx_status("0xaa").await.is_err());
         let this = crate::adapters::testkit::scripted(false, |p, _| tx(p, 4)).await;
         assert!(matches!(adapter_on(&[format!("{this}/v1")]).tx_status("0xaa").await.unwrap(), TxStatus::Mined { .. }), "control");
+    }
+
+    /// scaas-rpc T24.4 (CLI-RPC-05, owner 2026-11-18): a gas unit price above `params.max_gas_unit_price` is no verdict
+    /// (`Transport`); at the cap the job is built.
+    #[tokio::test]
+    async fn aptos_a_gas_price_above_the_cap_is_refused() {
+        let on = |cap: u64| {
+            let url = fullnode(OPEN);
+            async move {
+                let cfg: ChainCfg = toml::from_str(&format!(
+                    "family = \"aptos\"\nnetwork = \"4\"\nrpc_urls = [\"{}\"]\nlanes = [0]\nparams = {{ package = \"0xb0b\", indexer_url = \"{DOWN}/graphql\", max_gas_unit_price = {cap} }}",
+                    url.await
+                ))
+                .unwrap();
+                AptosAdapter::new(&cfg, &[LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()]).unwrap()
+            }
+        };
+        match on(99).await.build(&pay_job(), 0).await {
+            Err(SimError::Transport(m)) => assert!(m.contains("max_gas_unit_price"), "{m}"),
+            r => panic!("{r:?}"),
+        }
+        assert_eq!(on(100).await.build(&pay_job(), 0).await.unwrap().meta["gas_price"], 100, "at the cap");
     }
 }

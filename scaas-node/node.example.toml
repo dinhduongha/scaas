@@ -279,7 +279,8 @@ finality = { mode = "instant", quorum = 1 }      # AptosBFT: a committed block i
 # package: the scaas package (object code deployment). indexer_url: Aptos Indexer API (GraphQL) — events are
 # hinted there and re-read from the full node; the cursor never passes what its user_transaction_processor has
 # processed. indexer_api_key_env names the env var holding an API key (optional). tx_ttl_s caps a lane tx's life.
-params = { package = "0x<package address>", indexer_url = "https://api.testnet.aptoslabs.com/v1/graphql", tx_ttl_s = 600, max_gas_amount = 200000 }
+# max_gas_unit_price (octas, default 10000) caps the gas unit price any endpoint quotes (CLI-RPC-05): above it a job waits.
+params = { package = "0x<package address>", indexer_url = "https://api.testnet.aptoslabs.com/v1/graphql", tx_ttl_s = 600, max_gas_amount = 200000, max_gas_unit_price = 10000 }
 
 [[chains]]                                       # NEAR (near-sandbox / localnet; no public network yet)
 family = "near"
@@ -295,9 +296,10 @@ finality = { mode = "instant", quorum = 1 }      # the adapter reads `final` blo
 # Router targets: the tokens and the DEX (their call is checked first), plus `targets = { "<account>" = ["method", …] }`
 # the operator vouches for (only those methods). Every job's payment, a target / wrapped op, a mandate's expiry and DEX
 # orders must stay valid >= 120 s. target_gas / target_deposit of a token or DEX target are set by the node.
-# A view stopped by the RPC's max_gas_burnt_view is retried, never fatal.
+# A view stopped by the RPC's max_gas_burnt_view is retried, never fatal. max_deposit_per_job (yoctoNEAR, a decimal string,
+# default 1 NEAR) caps what one job attaches, whichever endpoint's check reported it (CLI-RPC-05): above it a job waits.
 tokens = [{ address = "token.test.near", decimals = 6 }]
-params = { dex = "dex.test.near", relay_fee = { router = "relayfee.test.near", executor = "relayexec.test.near", min_amount = 1, min_yocto_value = { "token.test.near" = "1000000000000000000" } } }
+params = { max_deposit_per_job = "1000000000000000000000000", dex = "dex.test.near", relay_fee = { router = "relayfee.test.near", executor = "relayexec.test.near", min_amount = 1, min_yocto_value = { "token.test.near" = "1000000000000000000" } } }
 
 [[chains]]                                       # Algorand (the repo's localnet; no public network yet)
 family = "algorand"
@@ -316,5 +318,7 @@ finality = { mode = "instant", quorum = 1 }      # one-round finality: a block i
 # MBR payments. Router targets: the tokens', account app's, mandate's and DEX's relayable entries, plus `targets =
 # { "<app id>" = ["method(args)ret", …] }` the operator vouches for (only those methods). Every job's payment, a target
 # op, a mandate's expiry and DEX orders must stay valid >= 120 s. A pay-meta `meta` is at most 507 B (the log limit).
+# max_min_fee (µALGO, default 10000) and max_fee_per_byte (µALGO, default 100) cap algod's min-fee and fee, whichever
+# endpoint quoted them (CLI-RPC-05): above either a job waits.
 tokens = [{ address = "1001", decimals = 6 }]
-params = { account_app = 1004, mandate_app = 1005, dex_app = 1006, relayfee_app = 1002, relay_fee = { min_amount = 1, min_microalgo_value = { "1001" = 1000 } } }
+params = { max_min_fee = 10000, max_fee_per_byte = 100, account_app = 1004, mandate_app = 1005, dex_app = 1006, relayfee_app = 1002, relay_fee = { min_amount = 1, min_microalgo_value = { "1001" = 1000 } } }

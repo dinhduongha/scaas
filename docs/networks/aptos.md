@@ -404,8 +404,9 @@ Simulation, fees, balances:
 - `POST /v1/transactions/simulate?estimate_gas_unit_price=true&estimate_max_gas_amount=true` with an **all-zero**
   signature (the API refuses to simulate a validly signed transaction); `success=false` from a `scaas` abort ⇒
   `SimError::Revert` (job dies); HTTP/5xx ⇒ `Transport`.
-- `gas_unit_price` = `GET /v1/estimate_gas_price` (`gas_estimate`); `max_gas_amount = ceil(gas_used × 1.3)`, capped by
-  `params.max_gas_amount`. `lane_balance` = view `0x1::coin::balance<0x1::aptos_coin::AptosCoin>(lane)` (octa, including
+- `gas_unit_price` = `GET /v1/estimate_gas_price` (`gas_estimate`), the simulate's own figure when higher, never above
+  `params.max_gas_unit_price` (octas, default 10,000; above it the job is `Transport`, no verdict: CLI-RPC-05, scaas-rpc
+  T24.4, owner 2026-11-18); `max_gas_amount = ceil(gas_used × 1.3)`, capped by `params.max_gas_amount`. `lane_balance` = view `0x1::coin::balance<0x1::aptos_coin::AptosCoin>(lane)` (octa, including
   the paired FA after AIP-63). `tx_fee` = `gas_used × gas_unit_price` of a landed transaction.
 - `sequence(lane)` = view `0x1::account::get_sequence_number(lane)` (0 for stateless) — the **committed** value.
 - `tx_fee` is reported for **every** committed transaction, including `success=false` (storage fee included, storage

@@ -101,6 +101,15 @@ MUTANTS = [
     # T24.14: the signing account number kept from gateway 0 only
     ("14: Cosmos: the account number kept from any gateway", [(A + "cosmos.rs", "        if !building() {\n            if let Ok(mut m) = self.account_numbers.lock() {", "        if true {\n            if let Ok(mut m) = self.account_numbers.lock() {")],
      NT + "cosmos::tests::cosmos_the_account_number_is_kept_from_gateway_0_only"),
+    # T24.4 (owner 2026-11-18): per-family fee caps (CLI-RPC-05)
+    ("4: Aptos: the gas price cap off", [(A + "aptos.rs", "        if price > self.max_gas_price {", "        if false {")],
+     NT + "aptos::tests::aptos_a_gas_price_above_the_cap_is_refused"),
+    ("4: Algorand: the min-fee cap off", [(A + "algorand.rs", '        ensure!(min_fee <= self.max_min_fee, "min-fee {min_fee} above params.max_min_fee {}", self.max_min_fee);\n', "")],
+     NT + "algorand::tests::algorand_a_fee_above_the_caps_is_refused"),
+    ("4: Algorand: the fee-per-byte cap off", [(A + "algorand.rs", '        ensure!(fpb <= self.max_fee_per_byte, "fee {fpb} per byte above params.max_fee_per_byte {}", self.max_fee_per_byte);\n', "")],
+     NT + "algorand::tests::algorand_a_fee_above_the_caps_is_refused"),
+    ("4: NEAR: the deposit cap off", [(A + "near.rs", "        if call.deposit > self.max_deposit {", "        if false {")],
+     NT + "near::tests::near_a_deposit_above_the_cap_is_refused"),
 ]
 
 if __name__ == "__main__":

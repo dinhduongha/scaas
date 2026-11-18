@@ -62,6 +62,11 @@ pub const DISCOVERY_CREDIT: u64 = 64;
 const ROUND_SAMPLE: u64 = 100;
 /// `simulate` extra budget of a read-only query (as the contract tests' `sim`): no inner budget call, no fee credit.
 const QUERY_BUDGET: u64 = 20_000;
+/// `params.max_min_fee`'s default, µALGO (ten times the protocol's 1,000): the most a lane pays as algod's `min-fee`
+/// (CLI-RPC-05, scaas-rpc T24.4).
+const DEFAULT_MAX_MIN_FEE: u64 = 10_000;
+/// `params.max_fee_per_byte`'s default, µALGO per byte (algod's `fee` is 0 outside congestion).
+const DEFAULT_MAX_FEE_PER_BYTE: u64 = 100;
 const BOX_FLAT: u64 = 2_500;
 const BOX_BYTE: u64 = 400;
 pub const MBR_AMOUNT_BOX: u64 = BOX_FLAT + BOX_BYTE * (33 + 32);
@@ -1611,6 +1616,9 @@ pub struct AlgorandAdapter {
     pks: Vec<[u8; 32]>,
     signers: Vec<LocalSigner>,
     policy: RelayFeePolicy,
+    /// algod's `min-fee` and `fee` (per byte) caps, µALGO (CLI-RPC-05, scaas-rpc T24.4)
+    max_min_fee: u64,
+    max_fee_per_byte: u64,
     /// Derived at `start_check` from the router's salt global.
     exec: Mutex<Option<Executor>>,
     /// tx id ⇒ what the lane paid (fee + MBR payments), for `tx_fee`.
@@ -1642,6 +1650,12 @@ impl AlgorandAdapter {
                 Some(std::env::var(name).with_context(|| format!("params.algod_token_env: {name} is not set"))?)
             }
         };
+        let cap = |k: &str, d: u64| -> Result<u64> {
+            match cfg.params.get(k) {
+                None => Ok(d),
+                Some(v) => v.as_integer().and_then(|n| u64::try_from(n).ok()).ok_or_else(|| anyhow!("params.{k} must be a number of µALGO")),
+            }
+        };
         let (mut lanes, mut pks, mut own) = (Vec::new(), Vec::new(), Vec::new());
         for (s, &i) in signers.iter().zip(&cfg.lanes) {
             let LocalSigner::Ed(k) = s else { bail!("algorand lanes are ed25519") };
@@ -1666,6 +1680,8 @@ impl AlgorandAdapter {
             pks,
             signers: own,
             policy: RelayFeePolicy::from_cfg(cfg)?,
+            max_min_fee: cap("max_min_fee", DEFAULT_MAX_MIN_FEE)?,
+            max_fee_per_byte: cap("max_fee_per_byte", DEFAULT_MAX_FEE_PER_BYTE)?,
             exec: Mutex::new(None),
             spent: Mutex::new(HashMap::new()),
         })
@@ -1742,7 +1758,11 @@ impl AlgorandAdapter {
             bail!("algod's genesis hash {} is not the configured network {}", b64(&gh), b64(&self.network));
         }
         let n = |k: &str| v[k].as_u64().ok_or_else(|| anyhow!("params without {k}"));
-        Ok(Params { min_fee: n("min-fee")?, fpb: n("fee")?, last_round: n("last-round")?,
+        // CLI-RPC-05 (scaas-rpc T24.4): the lane never pays a fee above the configured caps, whichever endpoint quoted it
+        let (min_fee, fpb) = (n("min-fee")?, n("fee")?);
+        ensure!(min_fee <= self.max_min_fee, "min-fee {min_fee} above params.max_min_fee {}", self.max_min_fee);
+        ensure!(fpb <= self.max_fee_per_byte, "fee {fpb} per byte above params.max_fee_per_byte {}", self.max_fee_per_byte);
+        Ok(Params { min_fee, fpb, last_round: n("last-round")?,
                     chain: Chain { gen: v["genesis-id"].as_str().unwrap_or_default().to_string(), gh } })
     }
 
@@ -3804,5 +3824,23 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         let shallow = AlgorandAdapter::new(&cfg(&crate::adapters::testkit::scripted(false, |p, _| algod(p, 3)).await, FEE_CFG), &[lane0()]).unwrap();
         assert_eq!(shallow.get("/v2/status").await.unwrap()["last-round"], 5, "control");
         assert_eq!(shallow.box_value(1, b"x").await.unwrap(), Some(vec![1]));
+    }
+
+    /// scaas-rpc T24.4 (CLI-RPC-05, owner 2026-11-18): algod's `min-fee` above `params.max_min_fee`, or its `fee` above
+    /// `params.max_fee_per_byte`, is no verdict (`Transport`); at the caps the group is built.
+    #[tokio::test]
+    async fn algorand_a_fee_above_the_caps_is_refused() {
+        let j = job(o_op(&pay_op(), &auth_of("pay"), json!({})));
+        let on = |caps: &'static str| async move {
+            let url = serve(Arc::new(M::new(World { fpb: 2, ..world() }))).await;
+            AlgorandAdapter::new(&cfg(&url, &format!("{FEE_CFG}, {caps}")), &[lane0()]).unwrap()
+        };
+        for caps in ["max_min_fee = 999, max_fee_per_byte = 2", "max_min_fee = 1000, max_fee_per_byte = 1"] {
+            match on(caps).await.build(&j, 0).await {
+                Err(SimError::Transport(m)) => assert!(m.contains("above params.max_"), "{caps}: {m}"),
+                r => panic!("{caps}: {r:?}"),
+            }
+        }
+        on("max_min_fee = 1000, max_fee_per_byte = 2").await.build(&j, 0).await.unwrap();
     }
 }

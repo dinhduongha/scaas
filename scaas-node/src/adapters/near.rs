@@ -76,6 +76,8 @@ pub const PASSKEY_FIELD_MAX: usize = 1024;
 pub const RELAY_EXPIRY_MARGIN_S: u64 = 120;
 /// The action fees are re-read this often (review m2).
 const FEES_TTL_S: u64 = 3_600;
+/// `params.max_deposit_per_job`'s default, yoctoNEAR (1 NEAR): the most one job attaches (CLI-RPC-05, scaas-rpc T24.4).
+const DEFAULT_MAX_DEPOSIT: u128 = 1_000_000_000_000_000_000_000_000;
 /// `relay_timeout(ref)`: its receipt, a token settle and a deposit return (`GAS_RELEASE` 5 each), `on_settle` 3; one
 /// `IMPLICIT_TRANSFER_GAS` each for its own `target_deposit` return, the two settlements and `on_settle` (ruling A).
 const GAS_RELAY_TIMEOUT: u64 = 30 * TGAS + 4 * IMPLICIT_TRANSFER_GAS;
@@ -1546,6 +1548,8 @@ pub struct NearAdapter {
     pks: Vec<[u8; 32]>,
     signers: Vec<LocalSigner>,
     relay_fee: RelayFeePolicy,
+    /// the most a job attaches, yoctoNEAR (CLI-RPC-05, scaas-rpc T24.4)
+    max_deposit: u128,
     /// `ref` ⇒ when this node last sent `relay_timeout` for it.
     timeouts: Mutex<HashMap<[u8; 32], u64>>,
     /// The chain's action fees, read once (`start_check`, ruling B).
@@ -1585,6 +1589,10 @@ impl NearAdapter {
             pks,
             signers: own,
             relay_fee: RelayFeePolicy::from_cfg(cfg)?,
+            max_deposit: match cfg.params.get("max_deposit_per_job") {
+                None => DEFAULT_MAX_DEPOSIT,
+                Some(v) => dec_u128(&serde_json::to_value(v)?, "params.max_deposit_per_job (yoctoNEAR)")?,
+            },
             timeouts: Mutex::new(HashMap::new()),
             fees: Mutex::new(None),
         })
@@ -1726,6 +1734,11 @@ impl NearAdapter {
                 decode_check(&c).map_err(transport)?.map_err(|e| SimError::Revert(format!("{}_check: {e}", call.method)))?
             }
         };
+        // CLI-RPC-05 (scaas-rpc T24.4): the lane never attaches more than the configured cap, whichever endpoint's check
+        // (`relay_check`, `relay_hold_check`, an entry's `*_check`) reported it
+        if call.deposit > self.max_deposit {
+            return Err(SimError::Transport(format!("deposit {} above params.max_deposit_per_job {}", call.deposit, self.max_deposit)));
+        }
         if fee.as_ref().is_some_and(|m| pays(&w.op, Some(m)) || w.op.to == Holder::Near(lane_id.clone())) {
             let price = self.gas_price().await.map_err(transport)?;
             let fees = self.fees().await.map_err(transport)?;
@@ -3178,7 +3191,9 @@ mod tests {
         assert_eq!(MetaOp::decode(&op.encode()).unwrap().amount, big);
         let mut w = world();
         w.views.insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(big));
-        let (a, w) = adapter(w, "").await;
+        let (mut a, w) = adapter(w, "").await;
+        // T24.4 (fixture correction): this deposit tests the u128 round trip, far above the default cap (1 NEAR)
+        a.max_deposit = u128::MAX;
         let b = a.build(&job(o_op(&op, &auth_bytes(&row("pay")["auth"]), json!({}))), 0).await.unwrap();
         assert!(contains(&view_args(&w, "mtx_pay_check"), &big.to_le_bytes()), "check args");
         assert_eq!(b.meta["deposit"], json!(big.to_string()), "the deposit as a decimal string");
@@ -4553,5 +4568,23 @@ mod tests {
         let this = crate::adapters::testkit::scripted(true, |m, _| rpc(m, NET_B58)).await;
         let a = NearAdapter::new(&cfg(&this, ""), &[lane0()]).unwrap();
         assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { .. }), "control");
+    }
+
+    /// scaas-rpc T24.4 (CLI-RPC-05, owner 2026-11-18): a deposit a check reports above `params.max_deposit_per_job` is no
+    /// verdict (`Transport`); at the cap the job is built.
+    #[tokio::test]
+    async fn near_a_deposit_above_the_cap_is_refused() {
+        let job = job(o_of("pay", json!({})));
+        let on = |cap: &'static str| async move {
+            let url = serve(Arc::new(Mutex::new(pay_world()))).await;
+            let mut c = cfg(&url, "");
+            c.params.insert("max_deposit_per_job".into(), cap.into());
+            NearAdapter::new(&c, &[lane0()]).unwrap()
+        };
+        match on("1234566").await.build(&job, 0).await {
+            Err(SimError::Transport(m)) => assert!(m.contains("max_deposit_per_job"), "{m}"),
+            r => panic!("{r:?}"),
+        }
+        assert_eq!(on("1234567").await.build(&job, 0).await.unwrap().meta["deposit"], "1234567", "at the cap");
     }
 }

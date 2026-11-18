@@ -262,7 +262,10 @@ present → pending, and past the deadline the relaying lane sends `relay_timeou
 flight, `INCLUDED_FINAL` with status `Started`; `wait_until = INCLUDED`; retried every 120 s); 3,600 s past the
 deadline the job is reported reverted to free the lane. Price key `params.relay_fee.min_yocto_value = { "<token>" =
 "<yocto per base unit>" }`; router targets: configured tokens, `params.dex`, and `params.relay_fee.targets = { "<id>" =
-["method", …] }` (strict, per method). The adapter logs a subject's key set per token for account key-op jobs. BUILT.
+["method", …] }` (strict, per method). What a job attaches, as its check reports it (`relay_check` + `relay_hold_check`,
+an entry's `*_check`), is capped by `params.max_deposit_per_job` (yoctoNEAR, a decimal string, default 1 NEAR): above it
+`Transport`, no verdict, whichever endpoint answered (CLI-RPC-05, scaas-rpc T24.4, owner 2026-11-18). The adapter logs a
+subject's key set per token for account key-op jobs. BUILT.
 
 <a id="NET-NEAR-26"></a>**NET-NEAR-26** — **Relay-fee jobs are checked against every known relayer-loss path before
 the call.** Fee shape (ref from the call bytes, lane, nonce 0, relayer = the marker, payee ≠ executor); router target ∈

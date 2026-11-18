@@ -101,7 +101,9 @@ through `max_lag`) and tolerates no failure,
 tolerance of one needs `n ≥ 3`, an even `n` adds nothing over `n − 1`. Simulations and gas estimates stay failover; under this policy
 a new transaction's nonce is the agreed committed nonce at `b` plus the caller's own count, and fee data is the (⌊n/2⌋ + 1)-th highest
 of the endpoints' values. Under `failover` the caller caps fee and gas from its own configuration, never from the answering
-endpoint. BUILT for EVM, plan T3, T6, T13 S1, S2: `three_honest_agree`, `one_altered_storage_slot_is_outvoted`,
+endpoint; in the node every family has its caps (Soroban `max_resource_fee_per_job`, Solana `max_cu` and
+`max_priority_lamports`, Sui `max_gas_budget`, Cosmos `max_gas_per_tx`, Aptos `max_gas_unit_price`, Algorand `max_min_fee` and
+`max_fee_per_byte`, NEAR `max_deposit_per_job`; owner 2026-11-18, plan T24.4), and a figure above its cap is no verdict. BUILT for EVM, plan T3, T6, T13 S1, S2: `three_honest_agree`, `one_altered_storage_slot_is_outvoted`,
 `two_altered_differently_is_no_majority` against three anvils, EIP-1898 verified against anvil and a local Nethermind 2.2.0
 (plan T0; Hedera's relay not verified); on another family PLANNED.
 

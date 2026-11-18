@@ -1,0 +1,6 @@
+# t24-4 mutants at commit 5acedfac1 (name | outcome | test)
+4: Aptos: the gas price cap off | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::aptos::tests::aptos_a_gas_price_above_the_cap_is_refused
+4: Algorand: the min-fee cap off | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::algorand::tests::algorand_a_fee_above_the_caps_is_refused
+4: Algorand: the fee-per-byte cap off | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::algorand::tests::algorand_a_fee_above_the_caps_is_refused
+4: NEAR: the deposit cap off | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::near::tests::near_a_deposit_above_the_cap_is_refused
+4 mutants, 4 killed, 0 survived, 0 not loaded
