@@ -83,7 +83,7 @@ fn hex(b: &[u8]) -> String {
 }
 
 fn name_ok(n: &str) -> bool {
-    !n.is_empty() && n.len() <= NAME_MAX && !n.chars().any(char::is_control)
+    !n.is_empty() && n.len() <= NAME_MAX && !n.chars().any(crate::text::hidden)
 }
 
 fn info(seed: &str, row: &AccountRow, verified: bool) -> AccountInfo {
@@ -164,7 +164,8 @@ impl Account {
 
     /// Adds the UA key `kind` of wallet `account` at `index` to seed `seed` (unlocked: `WalletLocked`), its UA the one
     /// `scaas-ua` derives; the MAC rewritten. `Argument`: an EIP-2333 kind at an index other than 0 (CLI-UAL-15, `scaas-ua`'s
-    /// rule), a kind with no UA of its own, the same key twice, a name empty, above 64 bytes or with a control character.
+    /// rule), a kind with no UA of its own, a name empty, above 64 bytes or with a control or format (`Cf`, bidi) character;
+    /// `AccountExists`: the same key twice.
     pub async fn add_ua(&self, req: AddUa) -> Result<AccountInfo, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
@@ -189,7 +190,8 @@ impl Account {
     }
 
     /// Adds the native key of `network` at `index` (the address `scaas-ua` derives, as clientkeys `describe` prints it).
-    /// `Argument`: an unknown network, a network without an address here (`ton`, `hedera_ed25519`), the same key twice.
+    /// `Argument`: an unknown network, a network without an address here (`ton`, `hedera_ed25519`); `AccountExists`:
+    /// the same key twice.
     pub async fn add_native(&self, req: AddNative) -> Result<AccountInfo, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
@@ -309,7 +311,7 @@ async fn add_row(sdk: &Arc<Sdk>, seed: &str, row: AccountRow) -> Result<AccountI
         .ok_or(SdkError::Internal)
 }
 
-/// Adds `rows` to seed `seed` in one change (the MAC rewritten): a row whose key is listed already is `Argument`, or with
+/// Adds `rows` to seed `seed` in one change (the MAC rewritten): a row whose key is listed already is `AccountExists`, or with
 /// `skip_known` left out (the restore scan). Returns the rows added.
 pub(crate) async fn add_rows(
     sdk: &Arc<Sdk>,
@@ -325,7 +327,7 @@ pub(crate) async fn add_rows(
                 if skip_known {
                     continue;
                 }
-                return Err(SdkError::Argument);
+                return Err(SdkError::AccountExists);
             }
             new.push(row.clone());
         }

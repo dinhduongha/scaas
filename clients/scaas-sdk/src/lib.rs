@@ -21,6 +21,7 @@ pub mod events;
 #[cfg(feature = "frb")]
 pub mod frb;
 pub mod platform;
+pub(crate) mod text;
 pub mod vault;
 
 pub use config::{

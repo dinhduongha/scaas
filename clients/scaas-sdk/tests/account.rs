@@ -302,8 +302,8 @@ async fn one_index_per_wallet() {
     assert_eq!(a.next_account(seed.clone()).await.unwrap(), 2);
     assert_eq!(
         code(a.add_ua(ua_req(&seed, 0x0101, 0, 0)).await),
-        "Argument",
-        "the same key twice"
+        "AccountExists",
+        "the same key twice (owner 2026-11-18, Q1)"
     );
     assert_eq!(a.accounts(seed).await.unwrap().len(), 3);
 }
@@ -508,6 +508,33 @@ async fn names_bounded() {
         code(s.account().add_ua(r.clone()).await),
         "Argument",
         "a control character"
+    );
+    // owner 2026-11-18, Q2: each bidi or format (`Cf`) character alone refuses the name
+    for c in [
+        '\u{200E}', '\u{200F}', '\u{202A}', '\u{202E}', '\u{2066}', '\u{2069}', '\u{200B}',
+        '\u{FEFF}',
+    ] {
+        r.name = format!("pay{c}ee");
+        assert_eq!(
+            code(s.account().add_ua(r.clone()).await),
+            "Argument",
+            "{:#x}",
+            u32::from(c)
+        );
+    }
+    r.name = "payée 中".into();
+    assert_eq!(
+        code(
+            s.account()
+                .add_watch(AddWatch {
+                    seed: seed.clone(),
+                    watch: format!("0x{}", "ab".repeat(20)),
+                    name: r.name.clone()
+                })
+                .await
+        ),
+        "Ok",
+        "control: letters with accents and CJK"
     );
     r.name = "x".repeat(65);
     assert_eq!(

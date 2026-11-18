@@ -85,6 +85,8 @@ own_codes! {
     AbiMismatch,
     /// No better name (a failed task included); carries nothing.
     Internal,
+    /// An account row whose key (the same UA, native key or watched id) the seed lists already (owner 2026-11-18, Q1).
+    AccountExists,
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).

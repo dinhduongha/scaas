@@ -246,7 +246,7 @@ thing in both (`VaultOpen`, `VaultParams`, `VaultVersion`, `VaultFormat`, `Vault
 `EndpointScheme`, `EndpointAllFailed`, `EndpointNoMajority`, `AbiMismatch`, `Internal`). `BroadcastRejected` is not an error: it is the
 code of a send outcome, never final ([CLI-RPC-08](scaas-rpc.md#CLI-RPC-08)). A node's `detail` text is untrusted: a UI shows a message
 by `code`. The SDK's own names include `StoreConflict`, `KeystoreMismatch`, `KeystoreRollback`, `AccountUnverified`, `SeedUnknown`,
-`SeedExists`, `LabelTaken`, `ConfirmationMissing`, `VaultPassphraseWeak`, `DerivationPassphraseShort`, `OriginSignature`,
+`SeedExists`, `AccountExists`, `LabelTaken`, `ConfirmationMissing`, `VaultPassphraseWeak`, `DerivationPassphraseShort`, `OriginSignature`,
 `AuthenticatorRefused`, `ProfileMismatch`, `FeatureMissing`, `PreparedStale`, `PreparedUnknown`, `OpaqueCallRefused`, `FeeAboveCap`,
 `GasAboveTxCap`, `PayerDelegated`, `SubmitPathNone`, `VerdictRefused`, `TxTypeRefused`, `RawDigestRefused`, `AppDomainRefused`,
 `AppPurposeRefused`, `AppSaltMismatch`, `AppHandleForeign`, `AppLabelRefused`, `AppKeyUsage`, `AppArenaFull`, `KemKeyGone`,
