@@ -24,13 +24,26 @@ pub fn webauthn_challenge(purpose: &[u8; 32], digest: &[u8; 32]) -> Result<[u8; 
 /// `verify(0x0100, key_data, expected_challenge, …)` (flags, `rpIdHash`, P-256) before it is returned. Any failure:
 /// `WebAuthnAssertion`, nothing returned.
 pub fn webauthn_assertion(
-    key_data: &[u8], expected_challenge: &[u8; 32], auth_data: &[u8], client_data_json: &[u8], r: &[u8; 32], s: &[u8; 32],
+    key_data: &[u8],
+    expected_challenge: &[u8; 32],
+    auth_data: &[u8],
+    client_data_json: &[u8],
+    r: &[u8; 32],
+    s: &[u8; 32],
 ) -> Result<Vec<u8>> {
-    let sig = p256::ecdsa::Signature::from_scalars(*r, *s).map_err(|_| Error::WebAuthnAssertion)?.normalize_s();
-    if core::str::from_utf8(client_data_json).is_err() || !client_data_ok(client_data_json, expected_challenge) {
+    let sig = p256::ecdsa::Signature::from_scalars(*r, *s)
+        .map_err(|_| Error::WebAuthnAssertion)?
+        .normalize_s();
+    if core::str::from_utf8(client_data_json).is_err()
+        || !client_data_ok(client_data_json, expected_challenge)
+    {
         return Err(Error::WebAuthnAssertion);
     }
-    let mut blob = [crate::word(0x80), crate::word(0xa0 + auth_data.len().next_multiple_of(32) as u64)].concat();
+    let mut blob = [
+        crate::word(0x80),
+        crate::word(0xa0 + auth_data.len().next_multiple_of(32) as u64),
+    ]
+    .concat();
     blob.extend_from_slice(&sig.to_bytes());
     crate::ua8::abi_bytes(&mut blob, auth_data);
     crate::ua8::abi_bytes(&mut blob, client_data_json);

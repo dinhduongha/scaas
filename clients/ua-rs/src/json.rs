@@ -10,7 +10,10 @@
 //! `kemRecords[i].args` / `pqzKeyRecords[i].args`.
 //! Every input is read by `bounded` (spec §9.3): [`JSON_MAX`] / [`JSON_DEPTH`], `inner` [`INNER_JSON_MAX`] / depth 1, a service pull
 //! [`SERVICE_PULL_MAX`] / [`SERVICE_PULL_DEPTH`]; past a cap `Argument` before any parse.
-use crate::ua8::{registration_args, replayed_member_sig, InnerSig, KemKey, MemberSig, RegisterArgs, RegistrationInput, SetKemKeyArgs, UASig, UAAttrs};
+use crate::ua8::{
+    registration_args, replayed_member_sig, InnerSig, KemKey, MemberSig, RegisterArgs,
+    RegistrationInput, SetKemKeyArgs, UAAttrs, UASig,
+};
 use crate::UAError;
 use serde_json::{json, Value};
 
@@ -33,30 +36,59 @@ fn unhex(v: &Value) -> JsonResult<Vec<u8>> {
     if v.is_null() {
         return Ok(vec![]);
     }
-    let h = v.as_str().and_then(|s| s.strip_prefix("0x")).ok_or(Argument)?;
+    let h = v
+        .as_str()
+        .and_then(|s| s.strip_prefix("0x"))
+        .ok_or(Argument)?;
     if h.len() % 2 != 0 || !h.bytes().all(|c| c.is_ascii_hexdigit()) {
         return Err(Argument);
     }
-    Ok((0..h.len()).step_by(2).map(|i| u8::from_str_radix(&h[i..i + 2], 16).unwrap()).collect())
+    Ok((0..h.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&h[i..i + 2], 16).unwrap())
+        .collect())
 }
 fn u16_of(v: &Value) -> JsonResult<u16> {
-    v.as_u64().and_then(|n| u16::try_from(n).ok()).ok_or(Argument)
+    v.as_u64()
+        .and_then(|n| u16::try_from(n).ok())
+        .ok_or(Argument)
 }
 /// At most 256 entries, the `msig` member bound of [`msig_update_json`] (`Argument` otherwise).
 fn members_in(v: &Value) -> JsonResult<Vec<MemberSig>> {
     if v.is_null() {
         return Ok(vec![]);
     }
-    let m = |s: &Value| Ok(MemberSig { index: u16_of(&s["index"])?, members: inner_in(&s["members"])?, sig: unhex(&s["sig"])? });
-    v.as_array().filter(|a| a.len() <= 256).ok_or(Argument)?.iter().map(m).collect()
+    let m = |s: &Value| {
+        Ok(MemberSig {
+            index: u16_of(&s["index"])?,
+            members: inner_in(&s["members"])?,
+            sig: unhex(&s["sig"])?,
+        })
+    };
+    v.as_array()
+        .filter(|a| a.len() <= 256)
+        .ok_or(Argument)?
+        .iter()
+        .map(m)
+        .collect()
 }
 /// At most 16 entries, the type's two levels: nothing here recurses.
 fn inner_in(v: &Value) -> JsonResult<Vec<InnerSig>> {
     if v.is_null() {
         return Ok(vec![]);
     }
-    let m = |s: &Value| Ok(InnerSig { index: u16_of(&s["index"])?, sig: unhex(&s["sig"])? });
-    v.as_array().filter(|a| a.len() <= 16).ok_or(Argument)?.iter().map(m).collect()
+    let m = |s: &Value| {
+        Ok(InnerSig {
+            index: u16_of(&s["index"])?,
+            sig: unhex(&s["sig"])?,
+        })
+    };
+    v.as_array()
+        .filter(|a| a.len() <= 16)
+        .ok_or(Argument)?
+        .iter()
+        .map(m)
+        .collect()
 }
 /// `{id: keyData}`: at most 16 entries of at most `4 + 36 × 16` bytes each, an `msig` of 16 members (`Argument` otherwise). A value is a
 /// string, so the object is the one level.
@@ -64,9 +96,26 @@ pub(crate) fn inners_in(v: &Value) -> JsonResult<Vec<([u8; 32], Vec<u8>)>> {
     if v.is_null() {
         return Ok(vec![]);
     }
-    let id = |k: &String| unhex(&Value::from(k.as_str()))?.try_into().map_err(|_| Argument);
-    let data = |d: &Value| unhex(d).and_then(|d| if d.len() <= 4 + 36 * 16 { Ok(d) } else { Err(Argument) });
-    v.as_object().filter(|o| o.len() <= 16).ok_or(Argument)?.iter().map(|(k, d)| Ok((id(k)?, data(d)?))).collect()
+    let id = |k: &String| {
+        unhex(&Value::from(k.as_str()))?
+            .try_into()
+            .map_err(|_| Argument)
+    };
+    let data = |d: &Value| {
+        unhex(d).and_then(|d| {
+            if d.len() <= 4 + 36 * 16 {
+                Ok(d)
+            } else {
+                Err(Argument)
+            }
+        })
+    };
+    v.as_object()
+        .filter(|o| o.len() <= 16)
+        .ok_or(Argument)?
+        .iter()
+        .map(|(k, d)| Ok((id(k)?, data(d)?)))
+        .collect()
 }
 /// The longest `inner` text [`inner_json`] reads: 16 entries in hex are about 20 KB, the rest is room for whitespace.
 pub const INNER_JSON_MAX: usize = 65_536;
@@ -173,7 +222,11 @@ fn sig_in(v: &Value) -> JsonResult<UASig> {
     if !v.is_null() && !v.is_object() {
         return Err(Argument); // indexing it would read as an empty signature
     }
-    Ok(UASig { key_data: unhex(&v["keyData"])?, signature: unhex(&v["signature"])?, members: members_in(&v["members"])? })
+    Ok(UASig {
+        key_data: unhex(&v["keyData"])?,
+        signature: unhex(&v["signature"])?,
+        members: members_in(&v["members"])?,
+    })
 }
 fn input(t: &str) -> JsonResult<RegistrationInput> {
     let v = parse(t)?;
@@ -184,7 +237,11 @@ fn input(t: &str) -> JsonResult<RegistrationInput> {
         kind,
         key_data: unhex(&v["keyData"])?,
         pqz_key: unhex(&v["pqzKey"])?,
-        pqz_pop_hash: if hash.is_empty() { [0; 32] } else { hash.try_into().map_err(|_| UAError::PqzPopHash)? },
+        pqz_pop_hash: if hash.is_empty() {
+            [0; 32]
+        } else {
+            hash.try_into().map_err(|_| UAError::PqzPopHash)?
+        },
         pqz_pop: unhex(&v["pqzPop"])?,
         kem_pk: unhex(&v["kemPk"])?,
         pop: if msig { vec![] } else { unhex(&v["pop"])? },
@@ -199,7 +256,10 @@ fn input(t: &str) -> JsonResult<RegistrationInput> {
 }
 
 fn hx(b: &[u8]) -> String {
-    format!("0x{}", b.iter().map(|x| format!("{x:02x}")).collect::<String>())
+    format!(
+        "0x{}",
+        b.iter().map(|x| format!("{x:02x}")).collect::<String>()
+    )
 }
 fn hxs(l: &[Vec<u8>]) -> Vec<String> {
     l.iter().map(|b| hx(b)).collect()
@@ -208,8 +268,14 @@ fn kem_json(k: &KemKey) -> Value {
     json!({ "scheme": k.scheme, "mlkemEk": hx(&k.mlkem_ek), "x25519": hx(&k.x25519) })
 }
 fn members_json(m: &[MemberSig]) -> Value {
-    let inner = |l: &[InnerSig]| l.iter().map(|x| json!({ "index": x.index, "sig": hx(&x.sig) })).collect::<Vec<_>>();
-    m.iter().map(|s| json!({ "index": s.index, "members": inner(&s.members), "sig": hx(&s.sig) })).collect()
+    let inner = |l: &[InnerSig]| {
+        l.iter()
+            .map(|x| json!({ "index": x.index, "sig": hx(&x.sig) }))
+            .collect::<Vec<_>>()
+    };
+    m.iter()
+        .map(|s| json!({ "index": s.index, "members": inner(&s.members), "sig": hx(&s.sig) }))
+        .collect()
 }
 fn attrs_json(a: &UAAttrs) -> Value {
     json!({ "pqzKey": hx(&a.pqz_key), "pqzPopHash": hx(&a.pqz_pop_hash), "kem": kem_json(&a.kem), "kemPkHash": hx(&a.kem_pk_hash) })
@@ -217,31 +283,82 @@ fn attrs_json(a: &UAAttrs) -> Value {
 fn args_json(r: &RegisterArgs) -> Value {
     let tail = |entry: &str, attrs: &UAAttrs, pqz_pop: &[u8]| json!({ "entry": entry, "attrs": attrs_json(attrs), "pqzPop": hx(pqz_pop) });
     let (mut o, extra) = match r {
-        RegisterArgs::Register { kind, key_data, attrs, pop, pqz_pop } => {
-            (tail("register", attrs, pqz_pop), json!({ "kind": kind, "keyData": hx(key_data), "pop": hx(pop) }))
-        }
-        RegisterArgs::RegisterMsig { structure, attrs, pop, pqz_pop } => {
-            let members: Vec<Value> =
-                structure.members.iter().map(|m| json!({ "kind": m.kind, "id": hx(&m.id), "weight": m.weight })).collect();
+        RegisterArgs::Register {
+            kind,
+            key_data,
+            attrs,
+            pop,
+            pqz_pop,
+        } => (
+            tail("register", attrs, pqz_pop),
+            json!({ "kind": kind, "keyData": hx(key_data), "pop": hx(pop) }),
+        ),
+        RegisterArgs::RegisterMsig {
+            structure,
+            attrs,
+            pop,
+            pqz_pop,
+        } => {
+            let members: Vec<Value> = structure
+                .members
+                .iter()
+                .map(|m| json!({ "kind": m.kind, "id": hx(&m.id), "weight": m.weight }))
+                .collect();
             let structure = json!({ "threshold": structure.threshold, "members": members });
-            (tail("registerMsig", attrs, pqz_pop), json!({ "structure": structure, "pop": members_json(pop) }))
+            (
+                tail("registerMsig", attrs, pqz_pop),
+                json!({ "structure": structure, "pop": members_json(pop) }),
+            )
         }
-        RegisterArgs::RegisterWebAuthn { key, attrs, pop, pqz_pop } => {
+        RegisterArgs::RegisterWebAuthn {
+            key,
+            attrs,
+            pop,
+            pqz_pop,
+        } => {
             let key = json!({ "x": hx(&key.x), "y": hx(&key.y), "rpIdHash": hx(&key.rp_id_hash) });
-            (tail("registerWebAuthn", attrs, pqz_pop), json!({ "key": key, "pop": hx(pop) }))
+            (
+                tail("registerWebAuthn", attrs, pqz_pop),
+                json!({ "key": key, "pop": hx(pop) }),
+            )
         }
-        RegisterArgs::RegisterMuSig2 { kind, key, attrs, pop, pqz_pop } => {
+        RegisterArgs::RegisterMuSig2 {
+            kind,
+            key,
+            attrs,
+            pop,
+            pqz_pop,
+        } => {
             let key = json!({ "aggKey": hx(&key.agg_key), "memberKeys": hxs(&key.member_keys) });
-            (tail("registerMuSig2", attrs, pqz_pop), json!({ "kind": kind, "key": key, "pop": hx(pop) }))
+            (
+                tail("registerMuSig2", attrs, pqz_pop),
+                json!({ "kind": kind, "key": key, "pop": hx(pop) }),
+            )
         }
-        RegisterArgs::RegisterFrost { kind, key, attrs, pop, pqz_pop } => {
-            let members: Vec<Value> =
-                key.members.iter().map(|m| json!({ "commitments": hxs(&m.commitments), "r": hx(&m.r), "z": hx(&m.z) })).collect();
+        RegisterArgs::RegisterFrost {
+            kind,
+            key,
+            attrs,
+            pop,
+            pqz_pop,
+        } => {
+            let members: Vec<Value> = key
+                .members
+                .iter()
+                .map(
+                    |m| json!({ "commitments": hxs(&m.commitments), "r": hx(&m.r), "z": hx(&m.z) }),
+                )
+                .collect();
             let key = json!({ "groupKey": hx(&key.group_key), "threshold": key.threshold, "members": members });
-            (tail("registerFrost", attrs, pqz_pop), json!({ "kind": kind, "key": key, "pop": hx(pop) }))
+            (
+                tail("registerFrost", attrs, pqz_pop),
+                json!({ "kind": kind, "key": key, "pop": hx(pop) }),
+            )
         }
     };
-    o.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+    o.as_object_mut()
+        .unwrap()
+        .extend(extra.as_object().unwrap().clone());
     o
 }
 fn sig_json(s: &UASig) -> Value {
@@ -271,13 +388,21 @@ pub fn set_kem_key_args_json(t: &str) -> JsonResult<String> {
     if kem_pk.is_empty() {
         return Err(UAError::KemKeyLength.into()); // the empty key is `register`'s "none", never a `setKemKey`
     }
-    Ok(fill_json(&SetKemKeyArgs { ua, version, kem: KemKey::from_kem_pk(&kem_pk)?, sig }).to_string())
+    Ok(fill_json(&SetKemKeyArgs {
+        ua,
+        version,
+        kem: KemKey::from_kem_pk(&kem_pk)?,
+        sig,
+    })
+    .to_string())
 }
 
 pub fn set_pqz_key_args_json(t: &str) -> JsonResult<String> {
     let v = parse(t)?;
     let ua = ua_in(&v["ua"])?;
-    let hash: [u8; 32] = unhex(&v["pqzPopHash"])?.try_into().map_err(|_| UAError::PqzPopHash)?;
+    let hash: [u8; 32] = unhex(&v["pqzPopHash"])?
+        .try_into()
+        .map_err(|_| UAError::PqzPopHash)?;
     let sig = sig_json(&sig_in(&v["sig"])?);
     Ok(json!({ "ua": hx(&ua), "pqzKey": hx(&unhex(&v["pqzKey"])?), "pqzPopHash": hx(&hash), "sig": sig }).to_string())
 }
@@ -288,13 +413,37 @@ pub fn set_pqz_key_args_json(t: &str) -> JsonResult<String> {
 /// At most 256 members (`Argument`).
 pub fn msig_update_json(t: &str) -> JsonResult<String> {
     let v = parse(t)?;
-    let m = v["members"].as_array().filter(|a| a.len() <= 256).ok_or(Argument)?;
-    let member = |x: &Value| Ok(crate::ua8::MsigMember { kind: u16_of(&x["kind"])?, id: ua_in(&x["id"])?, weight: u16_of(&x["weight"])? });
-    let structure = crate::ua8::MsigStructure { threshold: u16_of(&v["threshold"])?, members: m.iter().map(member).collect::<JsonResult<_>>()? };
-    let u = crate::ua8::MsigUpdate { ua: ua_in(&v["ua"])?, chain_uid: ua_in(&v["chainUid"])?, registry: addr_in(&v["registry"])?,
-        version: small_in(&v["version"])?, structure, enabled: uint_in(&v["enabled"])?, valid_until_block: small_in(&v["validUntilBlock"])? };
+    let m = v["members"]
+        .as_array()
+        .filter(|a| a.len() <= 256)
+        .ok_or(Argument)?;
+    let member = |x: &Value| {
+        Ok(crate::ua8::MsigMember {
+            kind: u16_of(&x["kind"])?,
+            id: ua_in(&x["id"])?,
+            weight: u16_of(&x["weight"])?,
+        })
+    };
+    let structure = crate::ua8::MsigStructure {
+        threshold: u16_of(&v["threshold"])?,
+        members: m.iter().map(member).collect::<JsonResult<_>>()?,
+    };
+    let u = crate::ua8::MsigUpdate {
+        ua: ua_in(&v["ua"])?,
+        chain_uid: ua_in(&v["chainUid"])?,
+        registry: addr_in(&v["registry"])?,
+        version: small_in(&v["version"])?,
+        structure,
+        enabled: uint_in(&v["enabled"])?,
+        valid_until_block: small_in(&v["validUntilBlock"])?,
+    };
     let (digest, message, md) = crate::ua8::msig_update_message(&u)?;
-    let members: Vec<Value> = u.structure.members.iter().map(|m| json!({ "kind": m.kind, "id": hx(&m.id), "weight": m.weight })).collect();
+    let members: Vec<Value> = u
+        .structure
+        .members
+        .iter()
+        .map(|m| json!({ "kind": m.kind, "id": hx(&m.id), "weight": m.weight }))
+        .collect();
     let mut en = u.enabled.to_vec();
     let mut dec = String::new(); // the uint256 in decimal, as the node's JSON takes it
     while en.iter().any(|b| *b != 0) {
@@ -318,7 +467,9 @@ pub fn set_pqz_key_version_args_json(t: &str) -> JsonResult<String> {
     let v = parse(t)?;
     let ua = ua_in(&v["ua"])?;
     let version = v["version"].as_u64().ok_or(Argument)?;
-    let hash: [u8; 32] = unhex(&v["pqzPopHash"])?.try_into().map_err(|_| UAError::PqzPopHash)?;
+    let hash: [u8; 32] = unhex(&v["pqzPopHash"])?
+        .try_into()
+        .map_err(|_| UAError::PqzPopHash)?;
     let sig = sig_json(&sig_in(&v["sig"])?);
     Ok(json!({ "ua": hx(&ua), "version": version, "pqzKey": hx(&unhex(&v["pqzKey"])?), "pqzPopHash": hx(&hash), "sig": sig }).to_string())
 }
@@ -329,7 +480,11 @@ pub fn set_pqz_key_version_args_json(t: &str) -> JsonResult<String> {
 fn uint_in(v: &Value) -> JsonResult<[u8; 32]> {
     let s = match v {
         Value::Number(n) => n.as_u64().ok_or(Argument)?.to_string(),
-        Value::String(s) if !s.is_empty() && s.len() <= 78 && s.bytes().all(|c| c.is_ascii_digit()) => s.clone(),
+        Value::String(s)
+            if !s.is_empty() && s.len() <= 78 && s.bytes().all(|c| c.is_ascii_digit()) =>
+        {
+            s.clone()
+        }
         _ => return Err(Argument),
     };
     let mut w = [0u8; 32];
@@ -353,7 +508,9 @@ fn addr_in(v: &Value) -> JsonResult<[u8; 20]> {
 fn small_in<T: TryFrom<u64>>(v: &Value) -> JsonResult<T> {
     let n = match v {
         Value::Number(n) => n.as_u64(),
-        Value::String(s) if !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit()) => s.parse().ok(),
+        Value::String(s) if !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit()) => {
+            s.parse().ok()
+        }
         _ => None,
     };
     n.and_then(|n| T::try_from(n).ok()).ok_or(Argument)
@@ -379,21 +536,39 @@ fn transfer_in(m: &Value) -> JsonResult<crate::pay::UAMetaTransfer> {
 /// callDataHash, payee, value, batch, nonce, validUntil, relayer}`); uints as numbers or decimal strings, an unbound
 /// `relayer` / `feeRecipient` hashed as 0. `Argument` for anything else, a tax mode not 1 or 2, or `tax > value`.
 pub fn pay_digest_json(t: &str) -> JsonResult<String> {
-    use crate::pay::{pay_with_tax_hash, relay_fee_hash, token_domain_separator, transfer_hash, typed_digest, RelayFee};
+    use crate::pay::{
+        pay_with_tax_hash, relay_fee_hash, token_domain_separator, transfer_hash, typed_digest,
+        RelayFee,
+    };
     let v = parse(t)?;
     let (d, m) = (&v["domain"], &v["message"]);
     let sh = match v["struct"].as_str() {
         Some("UAMetaTransfer") => transfer_hash(&transfer_in(m)?),
-        Some("UAPayWithTax") => pay_with_tax_hash(&transfer_in(&m["payment"])?, small_in(&m["taxMode"])?, &uint_in(&m["tax"])?)
-            .map_err(|_| Argument)?,
-        Some("UARelayFee") => relay_fee_hash(&RelayFee { from: ua_in(&m["from"])?, target: addr_in(&m["target"])?,
-            call_data_hash: ua_in(&m["callDataHash"])?, payee: ua_in(&m["payee"])?, value: uint_in(&m["value"])?,
-            batch: uint_in(&m["batch"])?, nonce: uint_in(&m["nonce"])?, valid_until: uint_in(&m["validUntil"])?,
-            relayer: addr_in(&m["relayer"])? }),
+        Some("UAPayWithTax") => pay_with_tax_hash(
+            &transfer_in(&m["payment"])?,
+            small_in(&m["taxMode"])?,
+            &uint_in(&m["tax"])?,
+        )
+        .map_err(|_| Argument)?,
+        Some("UARelayFee") => relay_fee_hash(&RelayFee {
+            from: ua_in(&m["from"])?,
+            target: addr_in(&m["target"])?,
+            call_data_hash: ua_in(&m["callDataHash"])?,
+            payee: ua_in(&m["payee"])?,
+            value: uint_in(&m["value"])?,
+            batch: uint_in(&m["batch"])?,
+            nonce: uint_in(&m["nonce"])?,
+            valid_until: uint_in(&m["validUntil"])?,
+            relayer: addr_in(&m["relayer"])?,
+        }),
         _ => return Err(Argument),
     };
-    let ds = token_domain_separator(d["name"].as_str().ok_or(Argument)?, small_in(&d["chainId"])?,
-        &addr_in(&d["verifyingContract"])?, &ua_in(&d["salt"])?);
+    let ds = token_domain_separator(
+        d["name"].as_str().ok_or(Argument)?,
+        small_in(&d["chainId"])?,
+        &addr_in(&d["verifyingContract"])?,
+        &ua_in(&d["salt"])?,
+    );
     Ok(json!({ "structHash": hx(&sh), "digest": hx(&typed_digest(&ds, &sh)) }).to_string())
 }
 
@@ -403,13 +578,23 @@ pub fn pay_digest_json(t: &str) -> JsonResult<String> {
 pub fn meta_pay_id_json(t: &str) -> JsonResult<String> {
     use crate::pay::{meta_pay_id_v3, pay_no_to_uuid, PayMeta};
     let v = parse(t)?;
-    let pay_no = if v["payNo"].is_null() { [0; 32] } else { ua_in(&v["payNo"])? };
+    let pay_no = if v["payNo"].is_null() {
+        [0; 32]
+    } else {
+        ua_in(&v["payNo"])?
+    };
     let save = match &v["save"] {
         Value::Null => false,
         Value::Bool(b) => *b,
         _ => return Err(Argument),
     };
-    let m = PayMeta { salt: ua_in(&v["salt"])?, pay_no, save, schema: small_in(&v["schema"])?, body: unhex(&v["body"])? };
+    let m = PayMeta {
+        salt: ua_in(&v["salt"])?,
+        pay_no,
+        save,
+        schema: small_in(&v["schema"])?,
+        body: unhex(&v["body"])?,
+    };
     let id = meta_pay_id_v3(&m).map_err(|_| Argument)?;
     Ok(json!({ "payId": hx(&id), "payNo": hx(&pay_no), "payNoUuid": pay_no_to_uuid(&pay_no), "save": save }).to_string())
 }
@@ -443,7 +628,8 @@ pub fn service_pull_json(t: &str) -> JsonResult<String> {
         out["relayFee"] = json!({ "relayRef": hx(&w.relay_ref), "callDataHash": hx(&w.call_data_hash),
             "typedData": w.fee.to_value(), "digest": hx(&w.digest) });
         if let Some(fa) = fee_auth {
-            out["relayFee"]["relayCalldata"] = json!(hx(&w.calldata(&sig_in(&fa)?).map_err(|_| Argument)?));
+            out["relayFee"]["relayCalldata"] =
+                json!(hx(&w.calldata(&sig_in(&fa)?).map_err(|_| Argument)?));
         }
     }
     Ok(out.to_string())

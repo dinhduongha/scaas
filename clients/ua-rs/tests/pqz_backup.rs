@@ -8,11 +8,13 @@
 //! rebuilder's `pqz-held:` vault, manifest and backup, and is checked against `pqzKeyHash` when reopened. UNAUDITED.
 #![allow(non_snake_case)]
 use scaas_ua::facade::pqz::PqzKey;
-use scaas_ua::facade::pqz_backup::{seed_backup_warning, PqzSeedBackup, PURPOSE_PQZ_SHARE, SEED_BACKUP_MISSING};
+use scaas_ua::facade::pqz_backup::{
+    seed_backup_warning, PqzSeedBackup, PURPOSE_PQZ_SHARE, SEED_BACKUP_MISSING,
+};
 use scaas_ua::ua8::{MsigMember, MsigStructure};
 use scaas_ua::wallet::{
-    ContainerExpect, Error, ExpectedSender, KemKeyPair, Manifest, Recipient, SealedContainer, UaKey, Unlock, Vault, Wallet,
-    PURPOSE_BACKUP,
+    ContainerExpect, Error, ExpectedSender, KemKeyPair, Manifest, Recipient, SealedContainer,
+    UaKey, Unlock, Vault, Wallet, PURPOSE_BACKUP,
 };
 use serde_json::Value;
 
@@ -55,11 +57,25 @@ fn group(t: u16) -> Group {
     members.sort_by_key(|(_, k, _)| k.ua().unwrap()); // CTR-UA-09: members in id order
     let st = MsigStructure {
         threshold: t,
-        members: members.iter().map(|(_, k, _)| MsigMember { kind: PQ, id: k.ua().unwrap(), weight: 1 }).collect(),
+        members: members
+            .iter()
+            .map(|(_, k, _)| MsigMember {
+                kind: PQ,
+                id: k.ua().unwrap(),
+                weight: 1,
+            })
+            .collect(),
     };
     let msig_kd = st.key_data();
     let msig_ua = scaas_ua::derive_ua(MSIG, &msig_kd, false).unwrap();
-    Group { op, op_key, pqz, members, msig_kd, msig_ua }
+    Group {
+        op,
+        op_key,
+        pqz,
+        members,
+        msig_kd,
+        msig_ua,
+    }
 }
 
 impl Group {
@@ -71,14 +87,20 @@ impl Group {
         (0..3).map(|i| self.recipient(i)).collect()
     }
     fn key_hash(&self) -> [u8; 32] {
-        scaas_ua::key_hash_of(scaas_ua::PQZ_SCHEME, &self.pqz.pk()).unwrap().unwrap()
+        scaas_ua::key_hash_of(scaas_ua::PQZ_SCHEME, &self.pqz.pk())
+            .unwrap()
+            .unwrap()
     }
     fn deal(&self, k: Option<u8>) -> PqzSeedBackup {
-        self.pqz.seal_seed_backup(&self.op_key, &self.msig_kd, 0, k, &self.recipients()).unwrap()
+        self.pqz
+            .seal_seed_backup(&self.op_key, &self.msig_kd, 0, k, &self.recipients())
+            .unwrap()
     }
     /// The senders a share container may come from: the operator and the members.
     fn senders(&self) -> Vec<[u8; 32]> {
-        std::iter::once(self.op_key.ua().unwrap()).chain(self.members.iter().map(|(_, k, _)| k.ua().unwrap())).collect()
+        std::iter::once(self.op_key.ua().unwrap())
+            .chain(self.members.iter().map(|(_, k, _)| k.ua().unwrap()))
+            .collect()
     }
     /// Share `i` of `b` as member 0 (who rebuilds) receives it: its own as dealt, another member's sealed on by that member.
     fn to_rebuilder(&self, b: &PqzSeedBackup, i: usize) -> SealedContainer {
@@ -88,13 +110,28 @@ impl Group {
         }
         let (_, k, kk) = &self.members[i];
         let set = self.senders();
-        let e = ContainerExpect { purpose: PURPOSE_PQZ_SHARE, sender: ExpectedSender::Set(&set), recipient: kk.recipient() };
-        kk.reseal_pqz_share(c, &e, &none, None, &self.recipient(0), k).unwrap()
+        let e = ContainerExpect {
+            purpose: PURPOSE_PQZ_SHARE,
+            sender: ExpectedSender::Set(&set),
+            recipient: kk.recipient(),
+        };
+        kk.reseal_pqz_share(c, &e, &none, None, &self.recipient(0), k)
+            .unwrap()
     }
-    fn rebuild(&self, cs: &[SealedContainer], msig_ua: &[u8; 32], version: u64, kh: &[u8; 32]) -> Result<PqzKey, Error> {
+    fn rebuild(
+        &self,
+        cs: &[SealedContainer],
+        msig_ua: &[u8; 32],
+        version: u64,
+        kh: &[u8; 32],
+    ) -> Result<PqzKey, Error> {
         let (w, _, kk) = &self.members[0];
         let set = self.senders();
-        let e = ContainerExpect { purpose: PURPOSE_PQZ_SHARE, sender: ExpectedSender::Set(&set), recipient: kk.recipient() };
+        let e = ContainerExpect {
+            purpose: PURPOSE_PQZ_SHARE,
+            sender: ExpectedSender::Set(&set),
+            recipient: kk.recipient(),
+        };
         w.reconstruct_pqz_seed(kk, cs, &e, &none, None, msig_ua, version, kh)
     }
 }
@@ -106,7 +143,11 @@ fn refused_before_combining<T>(what: &str, f: impl FnOnce() -> Result<T, Error>)
     let before = scaas_ua::facade::pqz_backup::vectors_combined();
     assert_eq!(f().err(), Some(Error::Argument), "{what}");
     #[cfg(feature = "vectors")]
-    assert_eq!(scaas_ua::facade::pqz_backup::vectors_combined(), before, "{what}: refused before combining");
+    assert_eq!(
+        scaas_ua::facade::pqz_backup::vectors_combined(),
+        before,
+        "{what}: refused before combining"
+    );
 }
 
 /// k of n shares (every pair of a 2-of-3) rebuild a key of the registered `pqzKeyHash`, held by the rebuilder's wallet: it
@@ -116,18 +157,38 @@ fn k_shares_rebuild_a_key_matching_pqzKeyHash() {
     unlock();
     let g = group(2);
     let b = g.deal(None);
-    assert_eq!((b.header.k, b.header.n, b.header.version, b.header.msig_ua), (2, 3, 0, g.msig_ua), "k = the threshold, n = 3");
+    assert_eq!(
+        (b.header.k, b.header.n, b.header.version, b.header.msig_ua),
+        (2, 3, 0, g.msig_ua),
+        "k = the threshold, n = 3"
+    );
     assert_eq!(b.header.pqz_key_hash, g.key_hash());
     let cs: Vec<SealedContainer> = (0..3).map(|i| g.to_rebuilder(&b, i)).collect();
     for (i, j) in [(0, 1), (0, 2), (1, 2)] {
-        let k = g.rebuild(&[cs[i].clone(), cs[j].clone()], &g.msig_ua, 0, &g.key_hash()).unwrap();
+        let k = g
+            .rebuild(
+                &[cs[i].clone(), cs[j].clone()],
+                &g.msig_ua,
+                0,
+                &g.key_hash(),
+            )
+            .unwrap();
         assert_eq!(k.pk(), g.pqz.pk(), "shares {i}, {j}");
         assert_eq!((k.account(), k.index()), (u32::MAX, u32::MAX));
     }
     let k = g.rebuild(&cs, &g.msig_ua, 0, &g.key_hash()).unwrap(); // all three
-    assert_eq!(decrypts(&g, &k).unwrap(), 4242, "the new operator sees the balance");
-    let again = k.seal_seed_backup(&g.members[0].1, &g.msig_kd, 0, None, &g.recipients()).unwrap();
-    assert!(again.covers(&g.msig_ua, 0, &g.key_hash()), "the new operator deals new shares of the same key");
+    assert_eq!(
+        decrypts(&g, &k).unwrap(),
+        4242,
+        "the new operator sees the balance"
+    );
+    let again = k
+        .seal_seed_backup(&g.members[0].1, &g.msig_kd, 0, None, &g.recipients())
+        .unwrap();
+    assert!(
+        again.covers(&g.msig_ua, 0, &g.key_hash()),
+        "the new operator deals new shares of the same key"
+    );
     g.members[0].0.lock();
     assert_eq!(decrypts(&g, &k).err(), Some(Error::KeyRevoked));
     drop(g.op);
@@ -142,8 +203,13 @@ fn k_minus_1_shares_refused() {
         let b = g.deal(None);
         let cs: Vec<SealedContainer> = (0..3).map(|i| g.to_rebuilder(&b, i)).collect();
         let k = usize::from(t);
-        assert!(g.rebuild(&cs[..k], &g.msig_ua, 0, &g.key_hash()).is_ok(), "control: k = {k}");
-        refused_before_combining(&format!("k − 1 of k = {k}"), || g.rebuild(&cs[..k - 1], &g.msig_ua, 0, &g.key_hash()));
+        assert!(
+            g.rebuild(&cs[..k], &g.msig_ua, 0, &g.key_hash()).is_ok(),
+            "control: k = {k}"
+        );
+        refused_before_combining(&format!("k − 1 of k = {k}"), || {
+            g.rebuild(&cs[..k - 1], &g.msig_ua, 0, &g.key_hash())
+        });
         refused_before_combining("no share", || g.rebuild(&[], &g.msig_ua, 0, &g.key_hash()));
     }
 }
@@ -157,31 +223,67 @@ fn a_share_for_another_msig_key_or_version_refused() {
     let b = g.deal(None);
     let cs: Vec<SealedContainer> = (0..3).map(|i| g.to_rebuilder(&b, i)).collect();
     let pair = [cs[0].clone(), cs[1].clone()];
-    assert!(g.rebuild(&pair, &g.msig_ua, 0, &g.key_hash()).is_ok(), "control");
+    assert!(
+        g.rebuild(&pair, &g.msig_ua, 0, &g.key_hash()).is_ok(),
+        "control"
+    );
     let mut other = g.msig_ua;
     other[0] ^= 1;
-    refused_before_combining("another msig", || g.rebuild(&pair, &other, 0, &g.key_hash()));
-    refused_before_combining("another version", || g.rebuild(&pair, &g.msig_ua, 1, &g.key_hash()));
+    refused_before_combining("another msig", || {
+        g.rebuild(&pair, &other, 0, &g.key_hash())
+    });
+    refused_before_combining("another version", || {
+        g.rebuild(&pair, &g.msig_ua, 1, &g.key_hash())
+    });
     let mut kh = g.key_hash();
     kh[31] ^= 1;
     refused_before_combining("another key hash", || g.rebuild(&pair, &g.msig_ua, 0, &kh));
-    refused_before_combining("an index twice", || g.rebuild(&[cs[0].clone(), cs[0].clone()], &g.msig_ua, 0, &g.key_hash()));
+    refused_before_combining("an index twice", || {
+        g.rebuild(
+            &[cs[0].clone(), cs[0].clone()],
+            &g.msig_ua,
+            0,
+            &g.key_hash(),
+        )
+    });
     // a second backup of another key of the same msig (another index of the operator): its shares do not mix with the first's
     let pqz2 = g.op.pqz_key(7, 1).unwrap();
-    let b2 = pqz2.seal_seed_backup(&g.op_key, &g.msig_kd, 0, None, &g.recipients()).unwrap();
+    let b2 = pqz2
+        .seal_seed_backup(&g.op_key, &g.msig_kd, 0, None, &g.recipients())
+        .unwrap();
     let c2 = g.to_rebuilder(&b2, 1);
-    let kh2 = scaas_ua::key_hash_of(scaas_ua::PQZ_SCHEME, &pqz2.pk()).unwrap().unwrap();
-    assert!(g.rebuild(&[cs[0].clone(), c2.clone()], &g.msig_ua, 0, &g.key_hash()).is_err(), "mixed: first header expected");
-    refused_before_combining("mixed keys", || g.rebuild(&[cs[0].clone(), c2.clone()], &g.msig_ua, 0, &g.key_hash()));
-    refused_before_combining("mixed keys, the second's hash", || g.rebuild(&[c2.clone(), cs[0].clone()], &g.msig_ua, 0, &kh2));
+    let kh2 = scaas_ua::key_hash_of(scaas_ua::PQZ_SCHEME, &pqz2.pk())
+        .unwrap()
+        .unwrap();
+    assert!(
+        g.rebuild(&[cs[0].clone(), c2.clone()], &g.msig_ua, 0, &g.key_hash())
+            .is_err(),
+        "mixed: first header expected"
+    );
+    refused_before_combining("mixed keys", || {
+        g.rebuild(&[cs[0].clone(), c2.clone()], &g.msig_ua, 0, &g.key_hash())
+    });
+    refused_before_combining("mixed keys, the second's hash", || {
+        g.rebuild(&[c2.clone(), cs[0].clone()], &g.msig_ua, 0, &kh2)
+    });
     // another version of the same key: the header binds it
-    let bv = g.pqz.seal_seed_backup(&g.op_key, &g.msig_kd, 1, None, &g.recipients()).unwrap();
+    let bv = g
+        .pqz
+        .seal_seed_backup(&g.op_key, &g.msig_kd, 1, None, &g.recipients())
+        .unwrap();
     let cv = g.to_rebuilder(&bv, 1);
-    refused_before_combining("mixed versions", || g.rebuild(&[cs[0].clone(), cv.clone()], &g.msig_ua, 0, &g.key_hash()));
+    refused_before_combining("mixed versions", || {
+        g.rebuild(&[cs[0].clone(), cv.clone()], &g.msig_ua, 0, &g.key_hash())
+    });
     // the key-hash check alone: a share whose index is right but whose value is another backup's (same header otherwise)
     let b3 = g.deal(None); // fresh coefficients, same header
     let c3 = g.to_rebuilder(&b3, 1);
-    assert_eq!(g.rebuild(&[cs[0].clone(), c3], &g.msig_ua, 0, &g.key_hash()).err(), Some(Error::Argument), "points of two polynomials");
+    assert_eq!(
+        g.rebuild(&[cs[0].clone(), c3], &g.msig_ua, 0, &g.key_hash())
+            .err(),
+        Some(Error::Argument),
+        "points of two polynomials"
+    );
 }
 
 /// A share container carries exactly the header and 32 bytes of the share: no wallet entropy, no `seed32` (k ≥ 2).
@@ -190,7 +292,9 @@ fn shares_never_carry_wallet_entropy() {
     unlock();
     let g = group(2);
     let b = g.deal(None);
-    let seed32 = g.op.export_pqz_leaf_raw(7, 0, scaas_ua::facade::pqz::AllowSecretExport).unwrap();
+    let seed32 =
+        g.op.export_pqz_leaf_raw(7, 0, scaas_ua::facade::pqz::AllowSecretExport)
+            .unwrap();
     #[cfg(feature = "vectors")]
     let entropy = g.op.vectors_entropy().unwrap().to_vec();
     #[cfg(not(feature = "vectors"))]
@@ -199,12 +303,28 @@ fn shares_never_carry_wallet_entropy() {
     for (i, c) in b.shares.iter().enumerate() {
         assert_eq!(c.purpose, PURPOSE_PQZ_SHARE);
         let (_, _, kk) = &g.members[i];
-        let e = ContainerExpect { purpose: PURPOSE_PQZ_SHARE, sender: ExpectedSender::Set(&set), recipient: kk.recipient() };
+        let e = ContainerExpect {
+            purpose: PURPOSE_PQZ_SHARE,
+            sender: ExpectedSender::Set(&set),
+            recipient: kk.recipient(),
+        };
         let pt = kk.open_container(c, &e, &none, None).unwrap();
         let v: Value = serde_json::from_slice(&pt).unwrap();
         let mut keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
         keys.sort_unstable();
-        assert_eq!(keys, ["index", "k", "msigUa", "n", "pqzKeyHash", "share", "v", "version"]);
+        assert_eq!(
+            keys,
+            [
+                "index",
+                "k",
+                "msigUa",
+                "n",
+                "pqzKeyHash",
+                "share",
+                "v",
+                "version"
+            ]
+        );
         assert_eq!(v["index"], i as u64 + 1);
         let share = hex::decode(v["share"].as_str().unwrap().trim_start_matches("0x")).unwrap();
         assert_eq!(share.len(), 32);
@@ -222,22 +342,52 @@ fn shares_never_carry_wallet_entropy() {
 fn recipients_and_k_checked() {
     unlock();
     let g = group(2);
-    let ok = |k, rs: &[Recipient]| g.pqz.seal_seed_backup(&g.op_key, &g.msig_kd, 0, k, rs).map(|b| (b.header.k, b.header.n));
+    let ok = |k, rs: &[Recipient]| {
+        g.pqz
+            .seal_seed_backup(&g.op_key, &g.msig_kd, 0, k, rs)
+            .map(|b| (b.header.k, b.header.n))
+    };
     assert_eq!(ok(None, &g.recipients()), Ok((2, 3)), "control");
     assert_eq!(ok(Some(1), &g.recipients()), Ok((1, 3)));
     assert_eq!(ok(Some(3), &g.recipients()), Ok((3, 3)));
     assert_eq!(ok(Some(0), &g.recipients()).err(), Some(Error::Argument));
     assert_eq!(ok(Some(4), &g.recipients()).err(), Some(Error::Argument));
-    assert_eq!(ok(None, &g.recipients()[..1]).err(), Some(Error::Argument), "k = 2 > n = 1");
+    assert_eq!(
+        ok(None, &g.recipients()[..1]).err(),
+        Some(Error::Argument),
+        "k = 2 > n = 1"
+    );
     assert_eq!(ok(None, &[]).err(), Some(Error::Argument));
-    assert_eq!(ok(None, &[g.recipient(0), g.recipient(1), g.recipient(0)]).err(), Some(Error::Argument), "a member twice");
+    assert_eq!(
+        ok(None, &[g.recipient(0), g.recipient(1), g.recipient(0)]).err(),
+        Some(Error::Argument),
+        "a member twice"
+    );
     let ow = Wallet::generate().unwrap().0;
     let outsider = ow.ua_key(PQ, 0, 0).unwrap();
-    let r = Recipient::ua(PQ, &outsider.key_data(), 0, &outsider.kem_key(0).unwrap().kem_pk()).unwrap();
-    assert_eq!(ok(None, &[g.recipient(0), r]).err(), Some(Error::Argument), "not a member");
+    let r = Recipient::ua(
+        PQ,
+        &outsider.key_data(),
+        0,
+        &outsider.kem_key(0).unwrap().kem_pk(),
+    )
+    .unwrap();
+    assert_eq!(
+        ok(None, &[g.recipient(0), r]).err(),
+        Some(Error::Argument),
+        "not a member"
+    );
     let eph = Recipient::ephemeral(&g.members[1].2.kem_pk());
-    assert_eq!(ok(None, &[g.recipient(0), eph]).err(), Some(Error::Argument), "an ephemeral key");
-    assert_eq!(Recipient::ua(MSIG, &g.msig_kd, 0, &g.members[0].2.kem_pk()).err(), Some(Error::KemHolder), "MD-11");
+    assert_eq!(
+        ok(None, &[g.recipient(0), eph]).err(),
+        Some(Error::Argument),
+        "an ephemeral key"
+    );
+    assert_eq!(
+        Recipient::ua(MSIG, &g.msig_kd, 0, &g.members[0].2.kem_pk()).err(),
+        Some(Error::KemHolder),
+        "MD-11"
+    );
     assert_eq!(ok(None, &[]).err(), Some(Error::Argument));
 }
 
@@ -248,7 +398,10 @@ fn a_missing_backup_warns_and_never_refuses() {
     unlock();
     let g = group(2);
     let pk = g.pqz.pk();
-    assert_eq!(seed_backup_warning(MSIG, &g.msig_ua, 0, &pk, &[]), Some(SEED_BACKUP_MISSING));
+    assert_eq!(
+        seed_backup_warning(MSIG, &g.msig_ua, 0, &pk, &[]),
+        Some(SEED_BACKUP_MISSING)
+    );
     let args = format!(
         "{{\"ua\":\"0x{}\",\"pqzKey\":\"0x{}\",\"pqzPopHash\":\"0x{}\",\"sig\":{{\"keyData\":\"0x{}\",\"signature\":\"0x\",\"members\":[]}}}}",
         hex::encode(g.msig_ua),
@@ -256,24 +409,58 @@ fn a_missing_backup_warns_and_never_refuses() {
         hex::encode([0x11; 32]),
         hex::encode(&g.msig_kd)
     );
-    assert!(scaas_ua::json::set_pqz_key_args_json(&args).is_ok(), "setPqzKey still builds without a backup");
+    assert!(
+        scaas_ua::json::set_pqz_key_args_json(&args).is_ok(),
+        "setPqzKey still builds without a backup"
+    );
     let b = g.deal(None);
-    assert_eq!(seed_backup_warning(MSIG, &g.msig_ua, 0, &pk, std::slice::from_ref(&b)), None);
-    assert_eq!(seed_backup_warning(MSIG, &g.msig_ua, 1, &pk, std::slice::from_ref(&b)), Some(SEED_BACKUP_MISSING), "another version");
+    assert_eq!(
+        seed_backup_warning(MSIG, &g.msig_ua, 0, &pk, std::slice::from_ref(&b)),
+        None
+    );
+    assert_eq!(
+        seed_backup_warning(MSIG, &g.msig_ua, 1, &pk, std::slice::from_ref(&b)),
+        Some(SEED_BACKUP_MISSING),
+        "another version"
+    );
     let mut other = g.msig_ua;
     other[0] ^= 1;
-    assert_eq!(seed_backup_warning(MSIG, &other, 0, &pk, std::slice::from_ref(&b)), Some(SEED_BACKUP_MISSING), "another msig");
+    assert_eq!(
+        seed_backup_warning(MSIG, &other, 0, &pk, std::slice::from_ref(&b)),
+        Some(SEED_BACKUP_MISSING),
+        "another msig"
+    );
     let pk2 = g.op.pqz_key(7, 1).unwrap().pk();
-    assert_eq!(seed_backup_warning(MSIG, &g.msig_ua, 0, &pk2, std::slice::from_ref(&b)), Some(SEED_BACKUP_MISSING), "another key");
+    assert_eq!(
+        seed_backup_warning(MSIG, &g.msig_ua, 0, &pk2, std::slice::from_ref(&b)),
+        Some(SEED_BACKUP_MISSING),
+        "another key"
+    );
     let mut short = b.clone();
     short.shares.pop();
-    assert_eq!(seed_backup_warning(MSIG, &g.msig_ua, 0, &pk, &[short]), Some(SEED_BACKUP_MISSING), "a share missing");
-    assert_eq!(seed_backup_warning(PQ, &g.members[0].1.ua().unwrap(), 0, &pk, &[]), None, "a single key needs none");
+    assert_eq!(
+        seed_backup_warning(MSIG, &g.msig_ua, 0, &pk, &[short]),
+        Some(SEED_BACKUP_MISSING),
+        "a share missing"
+    );
+    assert_eq!(
+        seed_backup_warning(PQ, &g.members[0].1.ua().unwrap(), 0, &pk, &[]),
+        None,
+        "a single key needs none"
+    );
     // the record round-trips through its JSON; a malformed one is Argument
     let j = b.to_json();
     assert_eq!(PqzSeedBackup::from_json(j.as_bytes()).unwrap(), b);
-    assert_eq!(PqzSeedBackup::from_json(j.replace("\"k\":2", "\"k\":4").as_bytes()).err(), Some(Error::Argument), "k > n");
-    assert_eq!(PqzSeedBackup::from_json(j.replace("\"n\":3", "\"n\":2").as_bytes()).err(), Some(Error::Argument), "n ≠ shares");
+    assert_eq!(
+        PqzSeedBackup::from_json(j.replace("\"k\":2", "\"k\":4").as_bytes()).err(),
+        Some(Error::Argument),
+        "k > n"
+    );
+    assert_eq!(
+        PqzSeedBackup::from_json(j.replace("\"n\":3", "\"n\":2").as_bytes()).err(),
+        Some(Error::Argument),
+        "n ≠ shares"
+    );
 }
 
 /// A share is sealed on only from a share container: a container of another purpose is `Argument`.
@@ -283,9 +470,17 @@ fn reseal_takes_share_containers_only() {
     let g = group(2);
     let (_, k1, kk1) = &g.members[1];
     let set = g.senders();
-    let e = ContainerExpect { purpose: PURPOSE_PQZ_SHARE, sender: ExpectedSender::Set(&set), recipient: kk1.recipient() };
+    let e = ContainerExpect {
+        purpose: PURPOSE_PQZ_SHARE,
+        sender: ExpectedSender::Set(&set),
+        recipient: kk1.recipient(),
+    };
     let b = g.deal(None);
-    assert!(kk1.reseal_pqz_share(&b.shares[1], &e, &none, None, &g.recipient(0), k1).is_ok(), "control");
+    assert!(
+        kk1.reseal_pqz_share(&b.shares[1], &e, &none, None, &g.recipient(0), k1)
+            .is_ok(),
+        "control"
+    );
     // a container of another purpose that carries a well-formed share: only the purpose refuses it
     let share_pt = kk1.open_container(&b.shares[1], &e, &none, None).unwrap();
     let other = scaas_ua::wallet::seal_container(
@@ -297,10 +492,30 @@ fn reseal_takes_share_containers_only() {
         None,
     )
     .unwrap();
-    let e2 = ContainerExpect { purpose: "scaas/backup/v1", ..e };
-    assert_eq!(kk1.reseal_pqz_share(&other, &e2, &none, None, &g.recipient(0), k1).err(), Some(Error::Argument));
-    let bad = scaas_ua::wallet::seal_container(&g.recipient(1), PURPOSE_PQZ_SHARE, &scaas_ua::wallet::ContainerSigner::Key(&g.op_key), 1, b"{}", None).unwrap();
-    assert_eq!(kk1.reseal_pqz_share(&bad, &e, &none, None, &g.recipient(0), k1).err(), Some(Error::Argument), "malformed payload");
+    let e2 = ContainerExpect {
+        purpose: "scaas/backup/v1",
+        ..e
+    };
+    assert_eq!(
+        kk1.reseal_pqz_share(&other, &e2, &none, None, &g.recipient(0), k1)
+            .err(),
+        Some(Error::Argument)
+    );
+    let bad = scaas_ua::wallet::seal_container(
+        &g.recipient(1),
+        PURPOSE_PQZ_SHARE,
+        &scaas_ua::wallet::ContainerSigner::Key(&g.op_key),
+        1,
+        b"{}",
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        kk1.reseal_pqz_share(&bad, &e, &none, None, &g.recipient(0), k1)
+            .err(),
+        Some(Error::Argument),
+        "malformed payload"
+    );
 }
 
 /// The field (FIPS 197 §4.2) and a 3-of-5 split at fixed coefficients, against an independent exp / log implementation; the
@@ -322,21 +537,50 @@ fn field_and_split_known_answers() {
         "c6d9b91293386ec56cc7a7b88d4a706f22e55df6af048a2150fb4384b1ae9453",
         "611ba4aa404ee7e9232d92e87654d1ab5577909e2c22d3dd4f41a6841a60e5c7",
     ];
-    let got: Vec<String> = vectors_split(&secret, &[c1, c2], 5).iter().map(hex::encode).collect();
+    let got: Vec<String> = vectors_split(&secret, &[c1, c2], 5)
+        .iter()
+        .map(hex::encode)
+        .collect();
     assert_eq!(got, want);
-    assert_eq!(vectors_split(&secret, &[], 2), vec![secret; 2], "k = 1: every share is the secret");
+    assert_eq!(
+        vectors_split(&secret, &[], 2),
+        vec![secret; 2],
+        "k = 1: every share is the secret"
+    );
     // the same through a dealt backup: share 2 of a 2-of-3 at coefficient c1 is seed32 ^ mul(c1, 2) per byte
     let g = group(2);
-    let b = g.pqz.vectors_seal_seed_backup(&g.op_key, &g.msig_kd, 0, None, &g.recipients(), &[c1]).unwrap();
-    let seed32 = g.op.export_pqz_leaf_raw(7, 0, scaas_ua::facade::pqz::AllowSecretExport).unwrap();
+    let b = g
+        .pqz
+        .vectors_seal_seed_backup(&g.op_key, &g.msig_kd, 0, None, &g.recipients(), &[c1])
+        .unwrap();
+    let seed32 =
+        g.op.export_pqz_leaf_raw(7, 0, scaas_ua::facade::pqz::AllowSecretExport)
+            .unwrap();
     let (_, _, kk) = &g.members[1];
     let set = g.senders();
-    let e = ContainerExpect { purpose: PURPOSE_PQZ_SHARE, sender: ExpectedSender::Set(&set), recipient: kk.recipient() };
-    let v: Value = serde_json::from_slice(&kk.open_container(&b.shares[1], &e, &none, None).unwrap()).unwrap();
-    let want2: Vec<u8> = seed32.iter().zip(c1).map(|(s, c)| s ^ vectors_gf_mul(c, 2)).collect();
-    assert_eq!(v["share"].as_str().unwrap(), format!("0x{}", hex::encode(want2)));
+    let e = ContainerExpect {
+        purpose: PURPOSE_PQZ_SHARE,
+        sender: ExpectedSender::Set(&set),
+        recipient: kk.recipient(),
+    };
+    let v: Value =
+        serde_json::from_slice(&kk.open_container(&b.shares[1], &e, &none, None).unwrap()).unwrap();
+    let want2: Vec<u8> = seed32
+        .iter()
+        .zip(c1)
+        .map(|(s, c)| s ^ vectors_gf_mul(c, 2))
+        .collect();
+    assert_eq!(
+        v["share"].as_str().unwrap(),
+        format!("0x{}", hex::encode(want2))
+    );
     let cs: Vec<SealedContainer> = (0..3).map(|i| g.to_rebuilder(&b, i)).collect();
-    assert_eq!(g.rebuild(&cs[1..], &g.msig_ua, 0, &g.key_hash()).unwrap().pk(), g.pqz.pk());
+    assert_eq!(
+        g.rebuild(&cs[1..], &g.msig_ua, 0, &g.key_hash())
+            .unwrap()
+            .pk(),
+        g.pqz.pk()
+    );
 }
 
 /// A backup record is outside input (the client's storage, the C ABI's `backups_json`): past 1 MiB or deeper than 9 it is
@@ -359,7 +603,11 @@ fn a_backup_record_past_its_caps_is_refused_unparsed() {
     assert_eq!(PqzSeedBackup::from_json(&long).err(), Some(Error::Argument));
     let deep = format!("{}{}{}", "[".repeat(10), "", "]".repeat(10)).into_bytes();
     assert_eq!(PqzSeedBackup::from_json(&deep).err(), Some(Error::Argument));
-    assert_eq!(bounded::vectors_parsed(), before, "refused before serde_json");
+    assert_eq!(
+        bounded::vectors_parsed(),
+        before,
+        "refused before serde_json"
+    );
 }
 
 // --- T16b (owner 2026-11-06): the rebuilt key persists in the rebuilder's vault and backup ---
@@ -368,13 +616,20 @@ const PIN: &str = "correct horse 9";
 
 /// `pqz-held:<ua>:<version>:<pqzKeyHash>`.
 fn held_label(ua: &[u8; 32], version: u64, kh: &[u8; 32]) -> String {
-    format!("pqz-held:0x{}:{version}:0x{}", hex::encode(ua), hex::encode(kh))
+    format!(
+        "pqz-held:0x{}:{version}:0x{}",
+        hex::encode(ua),
+        hex::encode(kh)
+    )
 }
 
 /// `seed32` in hex and base64url: what a persisted copy in the clear would show.
 fn clear_forms(seed32: &[u8; 32]) -> [String; 2] {
     use base64ct::{Base64UrlUnpadded, Encoding};
-    [hex::encode(seed32), Base64UrlUnpadded::encode_string(seed32)]
+    [
+        hex::encode(seed32),
+        Base64UrlUnpadded::encode_string(seed32),
+    ]
 }
 
 /// The operator's balance-cache box of `4242` opened by `k` (the same `seed32`). Not `dec`: a release build has no raw decrypt
@@ -394,49 +649,128 @@ fn a_rebuilt_key_survives_lock_and_unlock_through_its_vault() {
     let g = group(2);
     let b = g.deal(None);
     let kh = g.key_hash();
-    let seed32 = g.op.export_pqz_leaf_raw(7, 0, scaas_ua::facade::pqz::AllowSecretExport).unwrap();
+    let seed32 =
+        g.op.export_pqz_leaf_raw(7, 0, scaas_ua::facade::pqz::AllowSecretExport)
+            .unwrap();
     let cs: Vec<SealedContainer> = (0..2).map(|i| g.to_rebuilder(&b, i)).collect();
     let k = g.rebuild(&cs, &g.msig_ua, 0, &kh).unwrap();
     let w = &g.members[0].0;
-    let entry = scaas_ua::wallet::PqzHeldEntry { ua: g.msig_ua, version: 0, pqz_key_hash: kh };
+    let entry = scaas_ua::wallet::PqzHeldEntry {
+        ua: g.msig_ua,
+        version: 0,
+        pqz_key_hash: kh,
+    };
     assert_eq!(w.manifest().pqz_held, [entry]);
-    assert_eq!(w.pqz_held_key(&kh).unwrap().pk(), g.pqz.pk(), "by its key hash");
-    assert_eq!(w.pqz_held_key(&[0; 32]).err(), Some(Error::Argument), "another hash");
+    assert_eq!(
+        w.pqz_held_key(&kh).unwrap().pk(),
+        g.pqz.pk(),
+        "by its key hash"
+    );
+    assert_eq!(
+        w.pqz_held_key(&[0; 32]).err(),
+        Some(Error::Argument),
+        "another hash"
+    );
     let label = held_label(&g.msig_ua, 0, &kh);
     let seed_v = w.seal_vault(PIN, None).unwrap();
-    let held_v = Vault::from_json(w.seal_label_vault(&label, PIN, None).unwrap().to_json().as_bytes()).unwrap();
+    let held_v = Vault::from_json(
+        w.seal_label_vault(&label, PIN, None)
+            .unwrap()
+            .to_json()
+            .as_bytes(),
+    )
+    .unwrap();
     assert_eq!(held_v.label(), label);
-    assert_eq!(w.seal_label_vault(&held_label(&g.msig_ua, 1, &kh), PIN, None).err(), Some(Error::Argument), "another version: not held");
+    assert_eq!(
+        w.seal_label_vault(&held_label(&g.msig_ua, 1, &kh), PIN, None)
+            .err(),
+        Some(Error::Argument),
+        "another version: not held"
+    );
     for clear in clear_forms(&seed32) {
-        assert!(!held_v.to_json().contains(&clear), "the vault holds seed32 sealed");
-        assert!(!w.manifest().to_json().contains(&clear), "the manifest holds no seed32");
+        assert!(
+            !held_v.to_json().contains(&clear),
+            "the vault holds seed32 sealed"
+        );
+        assert!(
+            !w.manifest().to_json().contains(&clear),
+            "the manifest holds no seed32"
+        );
     }
     let mut m = Manifest::from_json(w.manifest().to_json().as_bytes()).unwrap();
-    assert_eq!(m.pqz_held, [entry], "the manifest JSON round-trips the entry");
+    assert_eq!(
+        m.pqz_held,
+        [entry],
+        "the manifest JSON round-trips the entry"
+    );
     m.pqz_held.clear();
-    assert_eq!(Manifest::from_json(m.to_json().replace(",\"pqzHeld\":[]", "").as_bytes()).unwrap(), m, "absent: none");
-    let bad = w.manifest().to_json().replace("\"version\":0,", "\"version\":\"0\",");
-    assert_eq!(Manifest::from_json(bad.as_bytes()).err(), Some(Error::Argument), "a malformed entry");
+    assert_eq!(
+        Manifest::from_json(m.to_json().replace(",\"pqzHeld\":[]", "").as_bytes()).unwrap(),
+        m,
+        "absent: none"
+    );
+    let bad = w
+        .manifest()
+        .to_json()
+        .replace("\"version\":0,", "\"version\":\"0\",");
+    assert_eq!(
+        Manifest::from_json(bad.as_bytes()).err(),
+        Some(Error::Argument),
+        "a malformed entry"
+    );
 
     w.lock();
-    assert_eq!(decrypts(&g, &k).err(), Some(Error::KeyRevoked), "lock revokes the handle");
+    assert_eq!(
+        decrypts(&g, &k).err(),
+        Some(Error::KeyRevoked),
+        "lock revokes the handle"
+    );
     assert_eq!(w.pqz_held_key(&kh).err(), Some(Error::WalletLocked));
     assert_eq!(w.manifest().pqz_held, [entry], "lock keeps the manifest");
     w.unlock(&seed_v, Unlock::VaultPassphrase(PIN), "").unwrap();
-    assert_eq!(w.pqz_held_key(&kh).err(), Some(Error::Argument), "listed, not held before its vault opens");
+    assert_eq!(
+        w.pqz_held_key(&kh).err(),
+        Some(Error::Argument),
+        "listed, not held before its vault opens"
+    );
     let wk = w.ua_key(PQ, 0, 0).unwrap(); // the old handle is revoked
-    assert!(w.seal_label_vault("manifest", PIN, None).is_ok(), "control: the new handle and the store work");
-    assert_eq!(w.backup_seal(&wk, &[g.recipient(1)]).err(), Some(Error::Argument), "a backup without the listed key is refused");
-    assert_eq!(w.open_label_vault(&held_v, Unlock::VaultPassphrase("wrong horse 9")).err(), Some(Error::VaultOpen));
-    w.open_label_vault(&held_v, Unlock::VaultPassphrase(PIN)).unwrap();
+    assert!(
+        w.seal_label_vault("manifest", PIN, None).is_ok(),
+        "control: the new handle and the store work"
+    );
+    assert_eq!(
+        w.backup_seal(&wk, &[g.recipient(1)]).err(),
+        Some(Error::Argument),
+        "a backup without the listed key is refused"
+    );
+    assert_eq!(
+        w.open_label_vault(&held_v, Unlock::VaultPassphrase("wrong horse 9"))
+            .err(),
+        Some(Error::VaultOpen)
+    );
+    w.open_label_vault(&held_v, Unlock::VaultPassphrase(PIN))
+        .unwrap();
     let k2 = w.pqz_held_key(&kh).unwrap();
-    assert_eq!((k2.pk(), k2.account(), k2.index()), (g.pqz.pk(), u32::MAX, u32::MAX));
-    assert_eq!(decrypts(&g, &k2).unwrap(), 4242, "the reopened key sees the balance");
+    assert_eq!(
+        (k2.pk(), k2.account(), k2.index()),
+        (g.pqz.pk(), u32::MAX, u32::MAX)
+    );
+    assert_eq!(
+        decrypts(&g, &k2).unwrap(),
+        4242,
+        "the reopened key sees the balance"
+    );
     assert_eq!(w.manifest().pqz_held, [entry], "listed once");
     for clear in clear_forms(&seed32) {
-        assert!(!w.manifest().to_json().contains(&clear), "the manifest holds no seed32 after the reopen");
+        assert!(
+            !w.manifest().to_json().contains(&clear),
+            "the manifest holds no seed32 after the reopen"
+        );
     }
-    assert!(w.backup_seal(&wk, &[g.recipient(1)]).is_ok(), "held again: the backup builds");
+    assert!(
+        w.backup_seal(&wk, &[g.recipient(1)]).is_ok(),
+        "held again: the backup builds"
+    );
 }
 
 /// T21 L74: a manifest sealed before the rebuild leaves the held key out: `WalletMismatch`, the key stays listed and held (so
@@ -452,10 +786,15 @@ fn an_older_manifest_cannot_drop_a_rebuilt_key() {
     let cs: Vec<SealedContainer> = (0..2).map(|i| g.to_rebuilder(&b, i)).collect();
     g.rebuild(&cs, &g.msig_ua, 0, &kh).unwrap();
     let own = w.seal_label_vault("manifest", PIN, None).unwrap();
-    assert_eq!(w.open_label_vault(&older, Unlock::VaultPassphrase(PIN)).err(), Some(Error::WalletMismatch));
+    assert_eq!(
+        w.open_label_vault(&older, Unlock::VaultPassphrase(PIN))
+            .err(),
+        Some(Error::WalletMismatch)
+    );
     assert_eq!(w.manifest().pqz_held.len(), 1);
     assert!(w.pqz_held_key(&kh).is_ok());
-    w.open_label_vault(&own, Unlock::VaultPassphrase(PIN)).unwrap();
+    w.open_label_vault(&own, Unlock::VaultPassphrase(PIN))
+        .unwrap();
 }
 
 /// The rebuilder's backup (and so its link) carries the key under its label: the restored wallet holds and lists it.
@@ -471,10 +810,17 @@ fn the_rebuilders_backup_carries_the_key() {
     let c = w.backup_seal(wk, &[g.recipient(1)]).unwrap().remove(0);
     let kk1 = &g.members[1].2;
     let s = [wk.ua().unwrap()];
-    let e = ContainerExpect { purpose: PURPOSE_BACKUP, sender: ExpectedSender::Set(&s), recipient: kk1.recipient() };
-    let pt: Value = serde_json::from_slice(&kk1.open_container(&c, &e, &none, None).unwrap()).unwrap();
+    let e = ContainerExpect {
+        purpose: PURPOSE_BACKUP,
+        sender: ExpectedSender::Set(&s),
+        recipient: kk1.recipient(),
+    };
+    let pt: Value =
+        serde_json::from_slice(&kk1.open_container(&c, &e, &none, None).unwrap()).unwrap();
     assert_eq!(pt["secrets"][0]["label"], held_label(&g.msig_ua, 0, &kh));
-    let r = Wallet::restore_backup(kk1, &c, &e, &none, None, None, None, "").unwrap().unwrap();
+    let r = Wallet::restore_backup(kk1, &c, &e, &none, None, None, None, "")
+        .unwrap()
+        .unwrap();
     assert_eq!(r.manifest().pqz_held, w.manifest().pqz_held);
     assert_eq!(decrypts(&g, &r.pqz_held_key(&kh).unwrap()).unwrap(), 4242);
 }
@@ -487,14 +833,34 @@ fn a_held_vault_is_checked_against_its_key_hash() {
     unlock();
     let g = group(2);
     let kh = g.key_hash();
-    let seed32 = g.op.export_pqz_leaf_raw(7, 0, scaas_ua::facade::pqz::AllowSecretExport).unwrap();
-    let other = g.op.export_pqz_leaf_raw(7, 1, scaas_ua::facade::pqz::AllowSecretExport).unwrap();
+    let seed32 =
+        g.op.export_pqz_leaf_raw(7, 0, scaas_ua::facade::pqz::AllowSecretExport)
+            .unwrap();
+    let other =
+        g.op.export_pqz_leaf_raw(7, 1, scaas_ua::facade::pqz::AllowSecretExport)
+            .unwrap();
     let label = held_label(&g.msig_ua, 0, &kh);
     let w = Wallet::generate().unwrap().0;
-    let open = |l: &str, s: &[u8]| w.open_label_vault(&Vault::vectors_seal(l, s, PIN).unwrap(), Unlock::VaultPassphrase(PIN));
-    assert_eq!(open(&label, &*other).err(), Some(Error::Argument), "another key under this hash");
-    assert_eq!(open(&label, &seed32[..31]).err(), Some(Error::Argument), "31 bytes");
-    assert!(w.manifest().pqz_held.is_empty() && w.pqz_held_key(&kh).is_err(), "nothing held or listed");
+    let open = |l: &str, s: &[u8]| {
+        w.open_label_vault(
+            &Vault::vectors_seal(l, s, PIN).unwrap(),
+            Unlock::VaultPassphrase(PIN),
+        )
+    };
+    assert_eq!(
+        open(&label, &*other).err(),
+        Some(Error::Argument),
+        "another key under this hash"
+    );
+    assert_eq!(
+        open(&label, &seed32[..31]).err(),
+        Some(Error::Argument),
+        "31 bytes"
+    );
+    assert!(
+        w.manifest().pqz_held.is_empty() && w.pqz_held_key(&kh).is_err(),
+        "nothing held or listed"
+    );
     let hx = hex::encode(kh);
     for bad in [
         label.replace(&hx, &hx.to_uppercase()),
@@ -507,5 +873,12 @@ fn a_held_vault_is_checked_against_its_key_hash() {
     }
     open(&label, &*seed32).unwrap();
     assert_eq!(w.pqz_held_key(&kh).unwrap().pk(), g.pqz.pk(), "control");
-    assert_eq!(w.manifest().pqz_held, [scaas_ua::wallet::PqzHeldEntry { ua: g.msig_ua, version: 0, pqz_key_hash: kh }]);
+    assert_eq!(
+        w.manifest().pqz_held,
+        [scaas_ua::wallet::PqzHeldEntry {
+            ua: g.msig_ua,
+            version: 0,
+            pqz_key_hash: kh
+        }]
+    );
 }

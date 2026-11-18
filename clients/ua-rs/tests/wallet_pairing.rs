@@ -10,9 +10,9 @@
 use scaas_ua::frost::{dkg, id, Bn254Keccak256, Secp256K1Sha256};
 use scaas_ua::musig2::{self as mu, Bn254, Curve, Secp256k1};
 use scaas_ua::verify::verify;
-use scaas_ua::wallet::{Error, Wallet};
 #[cfg(feature = "vectors")]
 use scaas_ua::wallet::FrostSession;
+use scaas_ua::wallet::{Error, Wallet};
 use scaas_ua::{purpose_tag, purpose_tag_v, ua_message};
 use serde_json::Value;
 #[cfg(feature = "vectors")]
@@ -20,7 +20,10 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 
 fn load(path: &str) -> Value {
-    let path = format!("{}/../../smartcontracts/vectors/ua/{path}", env!("CARGO_MANIFEST_DIR"));
+    let path = format!(
+        "{}/../../smartcontracts/vectors/ua/{path}",
+        env!("CARGO_MANIFEST_DIR")
+    );
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 fn arr<'a>(v: &'a Value, k: &str) -> &'a Vec<Value> {
@@ -41,7 +44,11 @@ fn kind_of(r: &Value) -> u16 {
 fn wallet(id: &str) -> Wallet {
     let k = load("keys.json");
     let m = arr(&k, "mnemonics").iter().find(|m| m["id"] == id).unwrap();
-    Wallet::from_mnemonic(m["words"].as_str().unwrap(), m["passphrase"].as_str().unwrap()).unwrap()
+    Wallet::from_mnemonic(
+        m["words"].as_str().unwrap(),
+        m["passphrase"].as_str().unwrap(),
+    )
+    .unwrap()
 }
 /// The pairing-curve kinds: schnorr-bn254, schnorr-bls12381, bls12381-minsig, bls-bn254-minsig.
 const PAIRING: [u16; 4] = [0x0104, 0x0105, 0x0106, 0x0107];
@@ -54,20 +61,38 @@ fn sign_json_pairing_rows() {
     let s = load("sign.json");
     let mut wallets = HashMap::new();
     let (mut n, mut bls) = (0, 0);
-    for r in arr(&s, "ua").iter().filter(|r| PAIRING.contains(&kind_of(r))) {
+    for r in arr(&s, "ua")
+        .iter()
+        .filter(|r| PAIRING.contains(&kind_of(r)))
+    {
         let kind = kind_of(r);
-        let w = wallets.entry(r["mnemonic"].as_str().unwrap().to_string()).or_insert_with(|| wallet(r["mnemonic"].as_str().unwrap()));
-        let key = w.ua_key(kind, u32_of(&r["account"]), u32_of(&r["index"])).unwrap();
-        assert_eq!(hex::encode(key.key_data()), hex::encode(bytes(&r["keyData"])), "{r}");
+        let w = wallets
+            .entry(r["mnemonic"].as_str().unwrap().to_string())
+            .or_insert_with(|| wallet(r["mnemonic"].as_str().unwrap()));
+        let key = w
+            .ua_key(kind, u32_of(&r["account"]), u32_of(&r["index"]))
+            .unwrap();
+        assert_eq!(
+            hex::encode(key.key_data()),
+            hex::encode(bytes(&r["keyData"])),
+            "{r}"
+        );
         let (purpose, digest) = (b32(&r["purposeTag"]), b32(&r["digest"]));
         let ua_msg = ua_message(kind, &purpose, &digest).unwrap();
         assert_eq!(ua_msg, b32(&r["uaMsg"]), "{r}");
         let pop = r["role"] == "pop";
-        assert!(verify(kind, &key.key_data(), &ua_msg, &bytes(&r["signature"]), pop), "{r}");
+        assert!(
+            verify(kind, &key.key_data(), &ua_msg, &bytes(&r["signature"]), pop),
+            "{r}"
+        );
         let mine = key.sign_ua(&purpose, &digest).unwrap();
         assert!(verify(kind, &key.key_data(), &ua_msg, &mine, pop), "{r}");
         if matches!(kind, 0x0106 | 0x0107) {
-            assert_eq!(hex::encode(&mine), hex::encode(bytes(&r["signature"])), "{r}");
+            assert_eq!(
+                hex::encode(&mine),
+                hex::encode(bytes(&r["signature"])),
+                "{r}"
+            );
             bls += 1;
         }
         n += 1;
@@ -81,9 +106,21 @@ fn sign_json_pairing_rows() {
 fn bls_wrong_dst_refusal_rows() {
     let s = load("sign.json");
     let mut n = 0;
-    for r in arr(&s, "refusals").iter().filter(|r| r["case"] == "bls-wrong-dst") {
-        let (kind, kd, m, sig) = (kind_of(r), bytes(&r["keyData"]), b32(&r["uaMsg"]), bytes(&r["signature"]));
-        assert_eq!(verify(kind, &kd, &m, &sig, r["pop"].as_bool().unwrap()), r["valid"].as_bool().unwrap(), "{r}");
+    for r in arr(&s, "refusals")
+        .iter()
+        .filter(|r| r["case"] == "bls-wrong-dst")
+    {
+        let (kind, kd, m, sig) = (
+            kind_of(r),
+            bytes(&r["keyData"]),
+            b32(&r["uaMsg"]),
+            bytes(&r["signature"]),
+        );
+        assert_eq!(
+            verify(kind, &kd, &m, &sig, r["pop"].as_bool().unwrap()),
+            r["valid"].as_bool().unwrap(),
+            "{r}"
+        );
         assert!(verify(kind, &kd, &m, &sig, r["signedAs"] == "pop"), "{r}");
         n += 1;
     }
@@ -98,13 +135,31 @@ fn right_message_wrong_dst_refused() {
     let d = [5u8; 32];
     for kind in [0x0106, 0x0107] {
         let key = w.ua_key(kind, 0, 0).unwrap();
-        let (auth, pop) = (purpose_tag("metatx").unwrap(), purpose_tag_v("pop", 2).unwrap());
-        let (sa, sp) = (key.sign_ua(&auth, &d).unwrap(), key.sign_ua(&pop, &d).unwrap());
-        let (ma, mp) = (ua_message(kind, &auth, &d).unwrap(), ua_message(kind, &pop, &d).unwrap());
-        assert!(verify(kind, &key.key_data(), &ma, &sa, false), "{kind:#06x}");
-        assert!(!verify(kind, &key.key_data(), &ma, &sa, true), "{kind:#06x}");
+        let (auth, pop) = (
+            purpose_tag("metatx").unwrap(),
+            purpose_tag_v("pop", 2).unwrap(),
+        );
+        let (sa, sp) = (
+            key.sign_ua(&auth, &d).unwrap(),
+            key.sign_ua(&pop, &d).unwrap(),
+        );
+        let (ma, mp) = (
+            ua_message(kind, &auth, &d).unwrap(),
+            ua_message(kind, &pop, &d).unwrap(),
+        );
+        assert!(
+            verify(kind, &key.key_data(), &ma, &sa, false),
+            "{kind:#06x}"
+        );
+        assert!(
+            !verify(kind, &key.key_data(), &ma, &sa, true),
+            "{kind:#06x}"
+        );
         assert!(verify(kind, &key.key_data(), &mp, &sp, true), "{kind:#06x}");
-        assert!(!verify(kind, &key.key_data(), &mp, &sp, false), "{kind:#06x}");
+        assert!(
+            !verify(kind, &key.key_data(), &mp, &sp, false),
+            "{kind:#06x}"
+        );
     }
 }
 
@@ -119,7 +174,11 @@ fn release_randomness_per_kind() {
         let (a, b) = (key.sign_ua(&p, &d).unwrap(), key.sign_ua(&p, &d).unwrap());
         assert_eq!(a == b, matches!(kind, 0x0106 | 0x0107), "{kind:#06x}");
         let m = ua_message(kind, &p, &d).unwrap();
-        assert!(verify(kind, &key.key_data(), &m, &a, false) && verify(kind, &key.key_data(), &m, &b, false), "{kind:#06x}");
+        assert!(
+            verify(kind, &key.key_data(), &m, &a, false)
+                && verify(kind, &key.key_data(), &m, &b, false),
+            "{kind:#06x}"
+        );
     }
 }
 
@@ -127,12 +186,21 @@ fn release_randomness_per_kind() {
 #[test]
 fn locked_wallet_pairing_handles_sign_nothing() {
     let w = wallet("pq_kat");
-    let keys: Vec<_> = PAIRING.iter().map(|k| w.ua_key(*k, 0, 0).unwrap()).collect();
-    let (a, b) = (w.ua_key(0x0112, 0, 0).unwrap(), w.ua_key(0x0112, 1, 0).unwrap());
+    let keys: Vec<_> = PAIRING
+        .iter()
+        .map(|k| w.ua_key(*k, 0, 0).unwrap())
+        .collect();
+    let (a, b) = (
+        w.ua_key(0x0112, 0, 0).unwrap(),
+        w.ua_key(0x0112, 1, 0).unwrap(),
+    );
     let mut pks = vec![a.key_data(), b.key_data()];
     mu::key_sort(&mut pks); // a registrable list (T21 L16)
     let msg = [6u8; 32];
-    let (mut sa, sb) = (a.musig2_session(&pks, &msg).unwrap(), b.musig2_session(&pks, &msg).unwrap());
+    let (mut sa, sb) = (
+        a.musig2_session(&pks, &msg).unwrap(),
+        b.musig2_session(&pks, &msg).unwrap(),
+    );
     let agg = mu::nonce_agg::<Bn254>(&[sa.pubnonce(), sb.pubnonce()]).unwrap();
     let (p, d) = (purpose_tag("metatx").unwrap(), [1u8; 32]);
     w.lock();
@@ -153,27 +221,54 @@ fn second_sign_on_a_session_errors() {
         let mut pks = vec![a.key_data(), b.key_data()];
         mu::key_sort(&mut pks);
         let msg = [8u8; 32];
-        let (mut sa, mut sb) = (a.musig2_session(&pks, &msg).unwrap(), b.musig2_session(&pks, &msg).unwrap());
+        let (mut sa, mut sb) = (
+            a.musig2_session(&pks, &msg).unwrap(),
+            b.musig2_session(&pks, &msg).unwrap(),
+        );
         let pubnonces = vec![sa.pubnonce(), sb.pubnonce()];
         let agg = mu::nonce_agg::<C>(&pubnonces).unwrap();
         let (pa, pb) = (sa.sign(&agg).unwrap(), sb.sign(&agg).unwrap());
-        assert_eq!(sa.sign(&agg).err(), Some(Error::Argument), "{kind:#06x}: the nonce is spent");
+        assert_eq!(
+            sa.sign(&agg).err(),
+            Some(Error::Argument),
+            "{kind:#06x}: the nonce is spent"
+        );
         assert_eq!(sb.sign(&agg).err(), Some(Error::Argument), "{kind:#06x}");
         let ia = pks.iter().position(|k| *k == a.key_data()).unwrap();
-        let ordered: Vec<Vec<u8>> = if ia == 0 { pubnonces.clone() } else { vec![pubnonces[1].clone(), pubnonces[0].clone()] };
+        let ordered: Vec<Vec<u8>> = if ia == 0 {
+            pubnonces.clone()
+        } else {
+            vec![pubnonces[1].clone(), pubnonces[0].clone()]
+        };
         let (p0, p1) = if ia == 0 { (pa, pb) } else { (pb, pa) };
-        assert!(mu::partial_sig_verify::<C>(&p0, &ordered, &pks, &msg, 0).unwrap(), "{kind:#06x}");
-        assert!(mu::partial_sig_verify::<C>(&p1, &ordered, &pks, &msg, 1).unwrap(), "{kind:#06x}");
+        assert!(
+            mu::partial_sig_verify::<C>(&p0, &ordered, &pks, &msg, 0).unwrap(),
+            "{kind:#06x}"
+        );
+        assert!(
+            mu::partial_sig_verify::<C>(&p1, &ordered, &pks, &msg, 1).unwrap(),
+            "{kind:#06x}"
+        );
         let sig = mu::partial_sig_agg::<C>(&[p0, p1], &agg, &pks, &msg).unwrap();
         let q = C::ser(&mu::key_agg::<C>(&pks).unwrap().q);
-        assert!(verify(kind, &q, &msg, &sig, false), "{kind:#06x}: the aggregate");
-        assert_eq!(a.musig2_session(&[b.key_data()], &msg).err(), Some(Error::Argument), "{kind:#06x}: own key missing");
+        assert!(
+            verify(kind, &q, &msg, &sig, false),
+            "{kind:#06x}: the aggregate"
+        );
+        assert_eq!(
+            a.musig2_session(&[b.key_data()], &msg).err(),
+            Some(Error::Argument),
+            "{kind:#06x}: own key missing"
+        );
     }
     let w = wallet("pq_kat");
     run::<Secp256k1>(0x0110, &w);
     run::<Bn254>(0x0112, &w);
     let other = w.ua_key(0x0104, 0, 0).unwrap();
-    assert_eq!(other.musig2_session(&[other.key_data()], &[0u8; 32]).err(), Some(Error::Argument));
+    assert_eq!(
+        other.musig2_session(&[other.key_data()], &[0u8; 32]).err(),
+        Some(Error::Argument)
+    );
 }
 
 /// A MuSig2 session takes only a key list the registry takes (T21 L16; `validate_key_data`'s MuSig2 rule): 2 <= n <= 16,
@@ -181,12 +276,23 @@ fn second_sign_on_a_session_errors() {
 #[test]
 fn musig2_session_refuses_lists_the_registry_refuses() {
     fn run(kind: u16, w: &Wallet) {
-        let mut all: Vec<Vec<u8>> = (0..17).map(|i| w.ua_key(kind, i, 0).unwrap().key_data()).collect();
+        let mut all: Vec<Vec<u8>> = (0..17)
+            .map(|i| w.ua_key(kind, i, 0).unwrap().key_data())
+            .collect();
         mu::key_sort(&mut all);
-        let a = (0..17).map(|i| w.ua_key(kind, i, 0).unwrap()).find(|k| k.key_data() == all[0]).unwrap();
+        let a = (0..17)
+            .map(|i| w.ua_key(kind, i, 0).unwrap())
+            .find(|k| k.key_data() == all[0])
+            .unwrap();
         let msg = [8u8; 32];
-        assert!(a.musig2_session(&all[..2], &msg).is_ok(), "{kind:#06x}: sorted pair");
-        assert!(a.musig2_session(&all[..16], &msg).is_ok(), "{kind:#06x}: n = 16");
+        assert!(
+            a.musig2_session(&all[..2], &msg).is_ok(),
+            "{kind:#06x}: sorted pair"
+        );
+        assert!(
+            a.musig2_session(&all[..16], &msg).is_ok(),
+            "{kind:#06x}: n = 16"
+        );
         let refused: [(&str, Vec<Vec<u8>>); 5] = [
             ("n = 1", all[..1].to_vec()),
             ("n = 17", all.clone()),
@@ -195,7 +301,11 @@ fn musig2_session_refuses_lists_the_registry_refuses() {
             ("empty", vec![]),
         ];
         for (what, pks) in refused {
-            assert_eq!(a.musig2_session(&pks, &msg).err(), Some(Error::Argument), "{kind:#06x}: {what}");
+            assert_eq!(
+                a.musig2_session(&pks, &msg).err(),
+                Some(Error::Argument),
+                "{kind:#06x}: {what}"
+            );
         }
     }
     let w = wallet("pq_kat");
@@ -213,14 +323,24 @@ fn frost_session_nonce_signs_once() {
         let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(3);
         let g = dkg::<C, _>(2, 3, &mut rng).unwrap();
         let signers = [id::<C>(1), id::<C>(3)];
-        let mut sessions: BTreeMap<_, FrostSession<C>> = signers.iter().map(|i| (*i, w.frost_session(&g.keys[i]).unwrap())).collect();
-        let commitments = sessions.iter().map(|(i, s)| (*i, s.commitments())).collect();
+        let mut sessions: BTreeMap<_, FrostSession<C>> = signers
+            .iter()
+            .map(|i| (*i, w.frost_session(&g.keys[i]).unwrap()))
+            .collect();
+        let commitments = sessions
+            .iter()
+            .map(|(i, s)| (*i, s.commitments()))
+            .collect();
         let msg = b"frost session";
         let package = frost_core::SigningPackage::new(commitments, msg);
         let mut shares = BTreeMap::new();
         for (i, s) in sessions.iter_mut() {
             shares.insert(*i, s.sign(&package, &g.keys[i]).unwrap());
-            assert_eq!(s.sign(&package, &g.keys[i]).err(), Some(Error::Argument), "the nonces are spent");
+            assert_eq!(
+                s.sign(&package, &g.keys[i]).err(),
+                Some(Error::Argument),
+                "the nonces are spent"
+            );
         }
         let sig = frost_core::aggregate(&package, &shares, &g.public).unwrap();
         g.public.verifying_key().verify(msg, &sig).unwrap();
@@ -241,11 +361,23 @@ fn frost_session_after_lock_signs_nothing() {
         let w = wallet("pq_kat");
         let g = dkg::<C, _>(2, 2, &mut rand_chacha::ChaCha20Rng::seed_from_u64(6)).unwrap();
         let (i1, i2) = (id::<C>(1), id::<C>(2));
-        let (mut s1, s2) = (w.frost_session(&g.keys[&i1]).unwrap(), w.frost_session(&g.keys[&i2]).unwrap());
-        let package = frost_core::SigningPackage::new([(i1, s1.commitments()), (i2, s2.commitments())].into(), b"after lock");
+        let (mut s1, s2) = (
+            w.frost_session(&g.keys[&i1]).unwrap(),
+            w.frost_session(&g.keys[&i2]).unwrap(),
+        );
+        let package = frost_core::SigningPackage::new(
+            [(i1, s1.commitments()), (i2, s2.commitments())].into(),
+            b"after lock",
+        );
         w.lock();
-        assert_eq!(s1.sign(&package, &g.keys[&i1]).err(), Some(Error::KeyRevoked));
-        assert_eq!(w.frost_session(&g.keys[&i1]).err(), Some(Error::WalletLocked));
+        assert_eq!(
+            s1.sign(&package, &g.keys[&i1]).err(),
+            Some(Error::KeyRevoked)
+        );
+        assert_eq!(
+            w.frost_session(&g.keys[&i1]).err(),
+            Some(Error::WalletLocked)
+        );
     }
     run::<Bn254Keccak256>();
     run::<Secp256K1Sha256>();
@@ -264,9 +396,20 @@ mod vectors {
         let s = load("sign.json");
         let w = wallet("pq_kat");
         let mut n = 0;
-        for r in arr(&s, "ua").iter().filter(|r| matches!(kind_of(r), 0x0104 | 0x0105) && r["compare"] == "bytes") {
-            let key = w.ua_key(kind_of(r), u32_of(&r["account"]), u32_of(&r["index"])).unwrap();
-            let sig = key.vectors_sign_ua_fixed(&b32(&r["purposeTag"]), &b32(&r["digest"]), &bytes(&r["fixed"]["aux"])).unwrap();
+        for r in arr(&s, "ua")
+            .iter()
+            .filter(|r| matches!(kind_of(r), 0x0104 | 0x0105) && r["compare"] == "bytes")
+        {
+            let key = w
+                .ua_key(kind_of(r), u32_of(&r["account"]), u32_of(&r["index"]))
+                .unwrap();
+            let sig = key
+                .vectors_sign_ua_fixed(
+                    &b32(&r["purposeTag"]),
+                    &b32(&r["digest"]),
+                    &bytes(&r["fixed"]["aux"]),
+                )
+                .unwrap();
             assert_eq!(hex::encode(sig), hex::encode(bytes(&r["signature"])), "{r}");
             n += 1;
         }
@@ -294,17 +437,32 @@ mod vectors {
             assert_eq!(sk.to_vec(), bytes(&r["skBytes"]), "{r}");
             assert_eq!(key.key_data(), bytes(&r["keyData"]), "{r}");
             let (m, aux) = (b32(&r["uaMsg"]), b32(&r["aux"]));
-            let input = [&b"scaas.ua.schnorr.nonce.v1"[..], &sk, &key.key_data(), &m, &aux].concat();
+            let input = [
+                &b"scaas.ua.schnorr.nonce.v1"[..],
+                &sk,
+                &key.key_data(),
+                &m,
+                &aux,
+            ]
+            .concat();
             assert_eq!(input, bytes(&r["input"]), "{r}");
             assert_eq!(scaas_ua::keccak256(&input), b32(&r["seed"]), "{r}");
             let (k, k256) = match kind {
-                0x0104 => (dec::<ark_bn254::Fr>(&r["k"]), dec::<ark_bn254::Fr>(&r["k256"])),
-                _ => (dec::<ark_bls12_381::Fr>(&r["k"]), dec::<ark_bls12_381::Fr>(&r["k256"])),
+                0x0104 => (
+                    dec::<ark_bn254::Fr>(&r["k"]),
+                    dec::<ark_bn254::Fr>(&r["k256"]),
+                ),
+                _ => (
+                    dec::<ark_bls12_381::Fr>(&r["k"]),
+                    dec::<ark_bls12_381::Fr>(&r["k256"]),
+                ),
             };
             let mine = pairing::schnorr_nonce(kind, &sk, &key.key_data(), &m, &aux).unwrap();
             assert_eq!(mine, k, "{r}");
             assert_ne!(mine, k256, "{r}");
-            let sig = key.vectors_sign_ua_fixed(&b32(&r["purposeTag"]), &b32(&r["digest"]), &aux).unwrap();
+            let sig = key
+                .vectors_sign_ua_fixed(&b32(&r["purposeTag"]), &b32(&r["digest"]), &aux)
+                .unwrap();
             assert_eq!(hex::encode(sig), hex::encode(bytes(&r["signature"])), "{r}");
             n += 1;
         }
@@ -319,14 +477,25 @@ mod vectors {
         let d = [9u8; 32];
         for kind in [0x0106, 0x0107] {
             let key = w.ua_key(kind, 0, 0).unwrap();
-            for (purpose, want) in [(purpose_tag_v("pop", 2).unwrap(), SigRole::Pop), (purpose_tag("metatx").unwrap(), SigRole::Authorization)] {
+            for (purpose, want) in [
+                (purpose_tag_v("pop", 2).unwrap(), SigRole::Pop),
+                (purpose_tag("metatx").unwrap(), SigRole::Authorization),
+            ] {
                 let req = key.vectors_request(&purpose, &d).unwrap();
-                let SignRequest::UaMsg { ua_msg, role, .. } = req.clone() else { panic!() };
+                let SignRequest::UaMsg { ua_msg, role, .. } = req.clone() else {
+                    panic!()
+                };
                 assert_eq!(role, want);
                 let sig = Signer::sign_request(&key, &req).unwrap();
                 let pop = want == SigRole::Pop;
-                assert!(verify(kind, &key.key_data(), &ua_msg, &sig, pop), "{kind:#06x} {want:?}");
-                assert!(!verify(kind, &key.key_data(), &ua_msg, &sig, !pop), "{kind:#06x} {want:?}");
+                assert!(
+                    verify(kind, &key.key_data(), &ua_msg, &sig, pop),
+                    "{kind:#06x} {want:?}"
+                );
+                assert!(
+                    !verify(kind, &key.key_data(), &ua_msg, &sig, !pop),
+                    "{kind:#06x} {want:?}"
+                );
             }
         }
     }
@@ -338,9 +507,15 @@ mod vectors {
         let (p, d) = (purpose_tag("metatx").unwrap(), [2u8; 32]);
         let key = w.ua_key(0x0104, 0, 0).unwrap();
         assert!(key.vectors_sign_ua_fixed(&p, &d, &[1u8; 32]).is_ok());
-        assert_eq!(key.vectors_sign_ua_fixed(&p, &d, &[1u8; 31]).err(), Some(Error::Argument));
+        assert_eq!(
+            key.vectors_sign_ua_fixed(&p, &d, &[1u8; 31]).err(),
+            Some(Error::Argument)
+        );
         let bls = w.ua_key(0x0106, 0, 0).unwrap();
-        assert_eq!(bls.vectors_sign_ua_fixed(&p, &d, &[1u8; 32]).err(), Some(Error::Argument));
+        assert_eq!(
+            bls.vectors_sign_ua_fixed(&p, &d, &[1u8; 32]).err(),
+            Some(Error::Argument)
+        );
     }
 
     // --- the structural test (spec §12) ---
@@ -351,20 +526,31 @@ mod vectors {
 
     /// Two ladder records of one secret path (`a`, `b`: one call each, same secret): same count, every integer `≥ r`, `≡`
     /// the expected scalar `(mod r)`, 384 iterations, the two calls' integers different. Returns the reduced scalars.
-    fn blinded<F: PrimeField>(path: &str, a: &[trace::Entry], b: &[trace::Entry], want: Option<&[[u8; 32]]>) -> Vec<F> {
+    fn blinded<F: PrimeField>(
+        path: &str,
+        a: &[trace::Entry],
+        b: &[trace::Entry],
+        want: Option<&[[u8; 32]]>,
+    ) -> Vec<F> {
         assert!(!a.is_empty(), "{path}: no ladder ran (secret_mul bypassed)");
         assert_eq!(a.len(), b.len(), "{path}");
         let r = F::MODULUS.to_bytes_be();
         let mut out = Vec::new();
         for (i, (x, y)) in a.iter().zip(b).enumerate() {
             assert_ne!(x.k, y.k, "{path} #{i}: one blinded integer for two calls");
-            let (fx, fy) = (F::from_be_bytes_mod_order(&be(&x.k)), F::from_be_bytes_mod_order(&be(&y.k)));
+            let (fx, fy) = (
+                F::from_be_bytes_mod_order(&be(&x.k)),
+                F::from_be_bytes_mod_order(&be(&y.k)),
+            );
             assert_eq!(fx, fy, "{path} #{i}: k' ≢ k");
             for e in [x, y] {
                 assert_eq!(e.iterations, 384, "{path} #{i}");
                 let k = be(&e.k);
                 let (hi, lo) = k.split_at(k.len() - r.len());
-                assert!(hi.iter().any(|b| *b != 0) || lo >= &r[..], "{path} #{i}: k' < r");
+                assert!(
+                    hi.iter().any(|b| *b != 0) || lo >= &r[..],
+                    "{path} #{i}: k' < r"
+                );
             }
             if let Some(w) = want {
                 assert_eq!(be32(fx), w[i], "{path} #{i}: k' ≢ the secret (mod r)");
@@ -417,7 +603,14 @@ mod vectors {
         let (p, d, aux) = (purpose_tag("metatx").unwrap(), [4u8; 32], [7u8; 32]);
         for kind in [0x0104, 0x0105] {
             let key = w.ua_key(kind, 0, 0).unwrap();
-            let k = pairing::schnorr_nonce(kind, &secret(&key), &key.key_data(), &ua_message(kind, &p, &d).unwrap(), &aux).unwrap();
+            let k = pairing::schnorr_nonce(
+                kind,
+                &secret(&key),
+                &key.key_data(),
+                &ua_message(kind, &p, &d).unwrap(),
+                &aux,
+            )
+            .unwrap();
             trace::take();
             let s1 = key.vectors_sign_ua_fixed(&p, &d, &aux).unwrap();
             let a = trace::take();
@@ -462,13 +655,27 @@ mod vectors {
     #[test]
     fn structural_musig2_bn254() {
         let w = wallet("pq_kat");
-        let (a, b) = (w.ua_key(0x0112, 0, 0).unwrap(), w.ua_key(0x0112, 1, 0).unwrap());
+        let (a, b) = (
+            w.ua_key(0x0112, 0, 0).unwrap(),
+            w.ua_key(0x0112, 1, 0).unwrap(),
+        );
         let mut pks = vec![a.key_data(), b.key_data()];
         mu::key_sort(&mut pks); // a registrable list (T21 L16)
         let (msg, rand) = ([3u8; 32], [11u8; 32]);
         let agg_pk = Bn254::agg_bytes(&mu::key_agg::<Bn254>(&pks).unwrap().q);
-        let (sec, _) = mu::nonce_gen::<Bn254>(&rand, Some(&secret(&a)), &a.key_data(), Some(&agg_pk), Some(&msg), None).unwrap();
-        let want: [[u8; 32]; 2] = [sec[..32].try_into().unwrap(), sec[32..64].try_into().unwrap()];
+        let (sec, _) = mu::nonce_gen::<Bn254>(
+            &rand,
+            Some(&secret(&a)),
+            &a.key_data(),
+            Some(&agg_pk),
+            Some(&msg),
+            None,
+        )
+        .unwrap();
+        let want: [[u8; 32]; 2] = [
+            sec[..32].try_into().unwrap(),
+            sec[32..64].try_into().unwrap(),
+        ];
         trace::take();
         let mut s1 = a.vectors_musig2_session(&pks, &msg, &rand).unwrap();
         let t1 = trace::take();
@@ -493,14 +700,23 @@ mod vectors {
     #[test]
     fn dropped_musig2_session_wipes_its_nonce() {
         let w = wallet("pq_kat");
-        let (a, b) = (w.ua_key(0x0110, 0, 0).unwrap(), w.ua_key(0x0110, 1, 0).unwrap());
+        let (a, b) = (
+            w.ua_key(0x0110, 0, 0).unwrap(),
+            w.ua_key(0x0110, 1, 0).unwrap(),
+        );
         let mut pks = vec![a.key_data(), b.key_data()];
         mu::key_sort(&mut pks);
         let s = a.musig2_session(&pks, &[1u8; 32]).unwrap();
         let probe = s.vectors_nonce_probe().unwrap();
-        assert!(probe.bytes().unwrap().iter().any(|x| *x != 0), "control: the slot holds the nonce");
+        assert!(
+            probe.bytes().unwrap().iter().any(|x| *x != 0),
+            "control: the slot holds the nonce"
+        );
         drop(s);
-        assert!(probe.bytes().unwrap().iter().all(|x| *x == 0), "the dropped session's slot is wiped");
+        assert!(
+            probe.bytes().unwrap().iter().all(|x| *x == 0),
+            "the dropped session's slot is wiped"
+        );
     }
 
     /// T21 L73: a `lock()` during round 2 waits for it (the nonces are used under the store's write lock), and the wallet
@@ -515,9 +731,15 @@ mod vectors {
         let w = wallet("pq_kat");
         let g = dkg::<C, _>(2, 2, &mut rand_chacha::ChaCha20Rng::seed_from_u64(8)).unwrap();
         let (i1, i2) = (id::<C>(1), id::<C>(2));
-        let (mut s1, mut s2) = (w.frost_session(&g.keys[&i1]).unwrap(), w.frost_session(&g.keys[&i2]).unwrap());
+        let (mut s1, mut s2) = (
+            w.frost_session(&g.keys[&i1]).unwrap(),
+            w.frost_session(&g.keys[&i2]).unwrap(),
+        );
         let msg = b"lock during round 2";
-        let package = frost_core::SigningPackage::new([(i1, s1.commitments()), (i2, s2.commitments())].into(), msg);
+        let package = frost_core::SigningPackage::new(
+            [(i1, s1.commitments()), (i2, s2.commitments())].into(),
+            msg,
+        );
         let share2 = s2.sign(&package, &g.keys[&i2]).unwrap();
         let (in_tx, in_rx) = mpsc::channel();
         let (go_tx, go_rx) = mpsc::channel::<()>();
@@ -546,9 +768,13 @@ mod vectors {
         });
         let (share1, early) = share1;
         assert!(!early, "lock() returned while round 2 ran");
-        let sig = frost_core::aggregate(&package, &[(i1, share1), (i2, share2)].into(), &g.public).unwrap();
+        let sig = frost_core::aggregate(&package, &[(i1, share1), (i2, share2)].into(), &g.public)
+            .unwrap();
         g.public.verifying_key().verify(msg, &sig).unwrap();
-        assert_eq!(w.frost_session(&g.keys[&i1]).err(), Some(Error::WalletLocked));
+        assert_eq!(
+            w.frost_session(&g.keys[&i1]).err(),
+            Some(Error::WalletLocked)
+        );
     }
 
     /// An unsigned FROST session wipes its nonces' arena slot when dropped.
@@ -556,12 +782,19 @@ mod vectors {
     fn dropped_frost_session_wipes_its_nonces() {
         use rand_chacha::rand_core::SeedableRng;
         let w = wallet("pq_kat");
-        let g = dkg::<Secp256K1Sha256, _>(2, 2, &mut rand_chacha::ChaCha20Rng::seed_from_u64(7)).unwrap();
+        let g = dkg::<Secp256K1Sha256, _>(2, 2, &mut rand_chacha::ChaCha20Rng::seed_from_u64(7))
+            .unwrap();
         let s = w.frost_session(&g.keys[&id::<Secp256K1Sha256>(1)]).unwrap();
         let probe = s.vectors_nonce_probe().unwrap();
-        assert!(probe.bytes().unwrap().iter().any(|x| *x != 0), "control: the slot holds the nonces");
+        assert!(
+            probe.bytes().unwrap().iter().any(|x| *x != 0),
+            "control: the slot holds the nonces"
+        );
         drop(s);
-        assert!(probe.bytes().unwrap().iter().all(|x| *x == 0), "the dropped session's slot is wiped");
+        assert!(
+            probe.bytes().unwrap().iter().all(|x| *x == 0),
+            "the dropped session's slot is wiped"
+        );
     }
 
     /// FROST-BN254 through the `Bn254Group` element newtype: two sessions of one fixed RNG give one pair of commitments
@@ -576,15 +809,25 @@ mod vectors {
         let key = &g.keys[&id::<Bn254Keccak256>(1)];
         let w = wallet("pq_kat");
         trace::take();
-        let s1 = w.vectors_frost_session_with_rng(key, &mut rand_chacha::ChaCha20Rng::seed_from_u64(5)).unwrap();
+        let s1 = w
+            .vectors_frost_session_with_rng(key, &mut rand_chacha::ChaCha20Rng::seed_from_u64(5))
+            .unwrap();
         let t1 = trace::take();
-        let s2 = w.vectors_frost_session_with_rng(key, &mut rand_chacha::ChaCha20Rng::seed_from_u64(5)).unwrap();
+        let s2 = w
+            .vectors_frost_session_with_rng(key, &mut rand_chacha::ChaCha20Rng::seed_from_u64(5))
+            .unwrap();
         let t2 = trace::take();
         assert_eq!(s1.commitments(), s2.commitments());
         let ks = blinded::<ark_bn254::Fr>("FROST-BN254 commitments", &t1, &t2, None);
         assert_eq!(ks.len(), 2);
         let c = s1.commitments();
-        assert_eq!(G::serialize(&(G::generator() * ks[0])).unwrap(), c.hiding().serialize().unwrap()[..]);
-        assert_eq!(G::serialize(&(G::generator() * ks[1])).unwrap(), c.binding().serialize().unwrap()[..]);
+        assert_eq!(
+            G::serialize(&(G::generator() * ks[0])).unwrap(),
+            c.hiding().serialize().unwrap()[..]
+        );
+        assert_eq!(
+            G::serialize(&(G::generator() * ks[1])).unwrap(),
+            c.binding().serialize().unwrap()[..]
+        );
     }
 }

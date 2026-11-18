@@ -101,7 +101,11 @@ pub fn type_string(op: &str) -> Option<String> {
     params_of(op).map(|p| {
         let sep = if p.is_empty() { "" } else { "," };
         let env = if p.contains("Env env") { ENV_TYPE } else { "" };
-        let ce = if p.contains("ChainEntries entries") { CHAIN_ENTRIES_TYPE } else { "" };
+        let ce = if p.contains("ChainEntries entries") {
+            CHAIN_ENTRIES_TYPE
+        } else {
+            ""
+        };
         format!("{op}(bytes32 from,address target,{p}{sep}{ENVELOPE}){env}{ce}")
     })
 }
@@ -113,8 +117,16 @@ fn words_hash(ws: &[[u8; 32]]) -> [u8; 32] {
 /// `hashStruct(Env)`.
 pub fn env_hash(e: &Env) -> [u8; 32] {
     let addrs = |a: &[[u8; 20]]| words_hash(&a.iter().map(address_word).collect::<Vec<_>>());
-    keccak(&[&keccak256(ENV_TYPE.as_bytes()), &address_word(&e.registry), &address_word(&e.smart_key_account_impl),
-        &word(e.hedera as u64), &addrs(&e.deps), &words_hash(&e.params), &addrs(&e.libs), &words_hash(&e.lib_code_hashes)])
+    keccak(&[
+        &keccak256(ENV_TYPE.as_bytes()),
+        &address_word(&e.registry),
+        &address_word(&e.smart_key_account_impl),
+        &word(e.hedera as u64),
+        &addrs(&e.deps),
+        &words_hash(&e.params),
+        &addrs(&e.libs),
+        &words_hash(&e.lib_code_hashes),
+    ])
 }
 impl FieldWord for Env {
     fn field_word(&self) -> [u8; 32] {
@@ -124,10 +136,18 @@ impl FieldWord for Env {
 
 /// `hashStruct(ChainEntries)`: its typehash and the nine fields' words.
 pub fn chain_entries_hash(c: &ChainEntries) -> [u8; 32] {
-    words_hash(&[keccak256(CHAIN_ENTRIES_TYPE.as_bytes()), c.relay_fee_router.field_word(), c.relay_fee_router_code_hash,
-        c.relay_fee_executor_code_hash, c.compliance_registry.field_word(), c.compliance_registry_code_hash,
-        c.smart_key_account_factory.field_word(), c.smart_key_account_factory_code_hash, c.zether_statements.field_word(),
-        c.zether_statements_code_hash])
+    words_hash(&[
+        keccak256(CHAIN_ENTRIES_TYPE.as_bytes()),
+        c.relay_fee_router.field_word(),
+        c.relay_fee_router_code_hash,
+        c.relay_fee_executor_code_hash,
+        c.compliance_registry.field_word(),
+        c.compliance_registry_code_hash,
+        c.smart_key_account_factory.field_word(),
+        c.smart_key_account_factory_code_hash,
+        c.zether_statements.field_word(),
+        c.zether_statements_code_hash,
+    ])
 }
 impl FieldWord for ChainEntries {
     fn field_word(&self) -> [u8; 32] {
@@ -138,19 +158,34 @@ impl FieldWord for ChainEntries {
 /// `hashStruct(UA<Op>)` of one of the 18 typed admin ops, `relayer` hashed as 0 unless `mode & 1`, `feeRecipient` as 0
 /// unless `mode & 2` (`MetaTxLib.canon`).
 pub fn struct_hash<O: AdminOp>(op: &O, e: &Envelope, target: &[u8; 20]) -> [u8; 32] {
-    router_struct_hash(&type_string(O::NAME).expect("an AdminOp is in ADMIN_OPS"), e, target, op.field_words())
+    router_struct_hash(
+        &type_string(O::NAME).expect("an AdminOp is in ADMIN_OPS"),
+        e,
+        target,
+        op.field_words(),
+    )
 }
 
 /// `keccak256(0x1901 ‖ domainSeparator ‖ structHash)`, the router's domain (`regulated::router_domain_separator`).
-pub fn digest<O: AdminOp>(op: &O, domain_separator: &[u8; 32], e: &Envelope, target: &[u8; 20]) -> [u8; 32] {
+pub fn digest<O: AdminOp>(
+    op: &O,
+    domain_separator: &[u8; 32],
+    e: &Envelope,
+    target: &[u8; 20],
+) -> [u8; 32] {
     keccak(&[&[0x19, 0x01], domain_separator, &struct_hash(op, e, target)])
 }
 
 /// The factory's approval key (spec §5.6 table): `keccak256(abi.encode(tag, chainUid, factory, <fields>, initcodeHash,
 /// implArgsHash))`, one tag per deploy domain.
-fn release_key(tag: &str, chain_uid: &[u8; 32], factory: &[u8; 20], fields: &[[u8; 32]], initcode_hash: &[u8; 32],
-    impl_args_hash: &[u8; 32]) -> [u8; 32]
-{
+fn release_key(
+    tag: &str,
+    chain_uid: &[u8; 32],
+    factory: &[u8; 20],
+    fields: &[[u8; 32]],
+    initcode_hash: &[u8; 32],
+    impl_args_hash: &[u8; 32],
+) -> [u8; 32] {
     let mut w = vec![keccak256(tag.as_bytes()), *chain_uid, address_word(factory)];
     w.extend_from_slice(fields);
     w.extend([*initcode_hash, *impl_args_hash]);
@@ -158,33 +193,76 @@ fn release_key(tag: &str, chain_uid: &[u8; 32], factory: &[u8; 20], fields: &[[u
 }
 
 /// `deployTokenImplementation`'s key (`kind` the `TokenKind`).
-pub fn token_release_key(chain_uid: &[u8; 32], factory: &[u8; 20], kind: u8, version: u64, env_version: u16,
-    initcode_hash: &[u8; 32], impl_args_hash: &[u8; 32]) -> [u8; 32]
-{
-    release_key("scaas.factory.release.token", chain_uid, factory,
-        &[word(kind as u64), word(version), word(env_version as u64)], initcode_hash, impl_args_hash)
+pub fn token_release_key(
+    chain_uid: &[u8; 32],
+    factory: &[u8; 20],
+    kind: u8,
+    version: u64,
+    env_version: u16,
+    initcode_hash: &[u8; 32],
+    impl_args_hash: &[u8; 32],
+) -> [u8; 32] {
+    release_key(
+        "scaas.factory.release.token",
+        chain_uid,
+        factory,
+        &[word(kind as u64), word(version), word(env_version as u64)],
+        initcode_hash,
+        impl_args_hash,
+    )
 }
 
 /// `deployDexImplementation`'s key.
-pub fn dex_release_key(chain_uid: &[u8; 32], factory: &[u8; 20], version: u64, env_version: u16, initcode_hash: &[u8; 32],
-    impl_args_hash: &[u8; 32]) -> [u8; 32]
-{
-    release_key("scaas.factory.release.dex", chain_uid, factory, &[word(version), word(env_version as u64)], initcode_hash,
-        impl_args_hash)
+pub fn dex_release_key(
+    chain_uid: &[u8; 32],
+    factory: &[u8; 20],
+    version: u64,
+    env_version: u16,
+    initcode_hash: &[u8; 32],
+    impl_args_hash: &[u8; 32],
+) -> [u8; 32] {
+    release_key(
+        "scaas.factory.release.dex",
+        chain_uid,
+        factory,
+        &[word(version), word(env_version as u64)],
+        initcode_hash,
+        impl_args_hash,
+    )
 }
 
 /// `deployImplementation`'s key (the `ReleaseId` in place, then `initSelector` and `interfaceId` left-aligned).
 #[allow(clippy::too_many_arguments)]
-pub fn class_release_key(chain_uid: &[u8; 32], factory: &[u8; 20], contract_class: u16, kind: u16, version: u64,
-    env_version: u16, init_selector: [u8; 4], interface_id: [u8; 4], initcode_hash: &[u8; 32], impl_args_hash: &[u8; 32])
-    -> [u8; 32]
-{
+pub fn class_release_key(
+    chain_uid: &[u8; 32],
+    factory: &[u8; 20],
+    contract_class: u16,
+    kind: u16,
+    version: u64,
+    env_version: u16,
+    init_selector: [u8; 4],
+    interface_id: [u8; 4],
+    initcode_hash: &[u8; 32],
+    impl_args_hash: &[u8; 32],
+) -> [u8; 32] {
     let left = |b: [u8; 4]| {
         let mut w = [0u8; 32];
         w[..4].copy_from_slice(&b);
         w
     };
-    release_key("scaas.factory.release.class", chain_uid, factory,
-        &[word(contract_class as u64), word(kind as u64), word(version), word(env_version as u64), left(init_selector),
-            left(interface_id)], initcode_hash, impl_args_hash)
+    release_key(
+        "scaas.factory.release.class",
+        chain_uid,
+        factory,
+        &[
+            word(contract_class as u64),
+            word(kind as u64),
+            word(version),
+            word(env_version as u64),
+            left(init_selector),
+            left(interface_id),
+        ],
+        initcode_hash,
+        impl_args_hash,
+    )
 }

@@ -10,7 +10,10 @@ fn bytes(v: &Value) -> Vec<u8> {
 
 #[test]
 fn dalek_verify_strict_matches_every_case() {
-    let path = format!("{}/../../smartcontracts/vectors/ua/ed25519_fuzz.json", env!("CARGO_MANIFEST_DIR"));
+    let path = format!(
+        "{}/../../smartcontracts/vectors/ua/ed25519_fuzz.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
     let v: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     let cases = v["cases"].as_array().unwrap();
     assert!(cases.len() >= 2000);
@@ -27,6 +30,14 @@ fn dalek_verify_strict_matches_every_case() {
         e.0 += 1;
         e.1 += got as usize;
     }
-    println!("{} cases, per class (cases, dalek-valid): {per_class:?}", cases.len());
-    assert!(bad.is_empty(), "{} disagreements:\n{}", bad.len(), bad.join("\n"));
+    println!(
+        "{} cases, per class (cases, dalek-valid): {per_class:?}",
+        cases.len()
+    );
+    assert!(
+        bad.is_empty(),
+        "{} disagreements:\n{}",
+        bad.len(),
+        bad.join("\n")
+    );
 }

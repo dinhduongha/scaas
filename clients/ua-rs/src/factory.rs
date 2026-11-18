@@ -7,11 +7,13 @@
 use crate::{keccak, word};
 
 /// `PUSH8 363d3d37363d34f0 RETURNDATASIZE MSTORE PUSH1 8 PUSH1 24 RETURN`: deposits the proxy's runtime.
-pub const PROXY_INITCODE: [u8; 16] = [0x67, 0x36, 0x3d, 0x3d, 0x37, 0x36, 0x3d, 0x34, 0xf0, 0x3d, 0x52, 0x60, 0x08, 0x60, 0x18, 0xf3];
+pub const PROXY_INITCODE: [u8; 16] = [
+    0x67, 0x36, 0x3d, 0x3d, 0x37, 0x36, 0x3d, 0x34, 0xf0, 0x3d, 0x52, 0x60, 0x08, 0x60, 0x18, 0xf3,
+];
 /// `keccak256(PROXY_INITCODE)`.
 pub const PROXY_INITCODE_HASH: [u8; 32] = [
-    0x21, 0xc3, 0x5d, 0xbe, 0x1b, 0x34, 0x4a, 0x24, 0x88, 0xcf, 0x33, 0x21, 0xd6, 0xce, 0x54, 0x2f, 0x8e, 0x9f, 0x30, 0x55, 0x44,
-    0xff, 0x09, 0xe4, 0x99, 0x3a, 0x62, 0x31, 0x9a, 0x49, 0x7c, 0x1f,
+    0x21, 0xc3, 0x5d, 0xbe, 0x1b, 0x34, 0x4a, 0x24, 0x88, 0xcf, 0x33, 0x21, 0xd6, 0xce, 0x54, 0x2f,
+    0x8e, 0x9f, 0x30, 0x55, 0x44, 0xff, 0x09, 0xe4, 0x99, 0x3a, 0x62, 0x31, 0x9a, 0x49, 0x7c, 0x1f,
 ];
 /// The factory's classes (`OpenFactory.CLASS_TOKEN`, `CLASS_DEX`; generic classes from 3, T70).
 pub const CLASS_TOKEN: u16 = 1;
@@ -26,13 +28,29 @@ pub struct Create3 {
 }
 
 /// `s = keccak256(abi.encode(creatorId, contractClass, kind, salt))`.
-pub fn create3_salt(creator_id: &[u8; 32], contract_class: u16, kind: u16, salt: &[u8; 32]) -> [u8; 32] {
-    keccak(&[creator_id, &word(u64::from(contract_class)), &word(u64::from(kind)), salt])
+pub fn create3_salt(
+    creator_id: &[u8; 32],
+    contract_class: u16,
+    kind: u16,
+    salt: &[u8; 32],
+) -> [u8; 32] {
+    keccak(&[
+        creator_id,
+        &word(u64::from(contract_class)),
+        &word(u64::from(kind)),
+        salt,
+    ])
 }
 
 /// The address of a creation by `factory`: the proxy `keccak256(0xff ‖ factory ‖ s ‖ keccak256(PROXY_INITCODE))[12..]`, the
 /// instance `keccak256(rlp([proxy, 1]))[12..] = keccak256(0xd6 0x94 ‖ proxy ‖ 0x01)[12..]`.
-pub fn create3_address(factory: &[u8; 20], creator_id: &[u8; 32], contract_class: u16, kind: u16, salt: &[u8; 32]) -> Create3 {
+pub fn create3_address(
+    factory: &[u8; 20],
+    creator_id: &[u8; 32],
+    contract_class: u16,
+    kind: u16,
+    salt: &[u8; 32],
+) -> Create3 {
     let s = create3_salt(creator_id, contract_class, kind, salt);
     let last20 = |h: [u8; 32]| -> [u8; 20] {
         let mut a = [0u8; 20];
@@ -47,7 +65,9 @@ pub fn create3_address(factory: &[u8; 20], creator_id: &[u8; 32], contract_class
 /// The EIP-1167 proxy every clone of a chain-neutral release starts with: `363d3d373d3d3d363d73 ‖ implementation ‖
 /// 5af43d82803e903d91602b57fd5bf3`, 45 bytes; its `ChainEnv` follows (chain-neutral spec §2; `create3_kat.json` pins both).
 pub const PROXY_HEAD: [u8; 10] = [0x36, 0x3d, 0x3d, 0x37, 0x3d, 0x3d, 0x3d, 0x36, 0x3d, 0x73];
-pub const PROXY_TAIL: [u8; 15] = [0x5a, 0xf4, 0x3d, 0x82, 0x80, 0x3e, 0x90, 0x3d, 0x91, 0x60, 0x2b, 0x57, 0xfd, 0x5b, 0xf3];
+pub const PROXY_TAIL: [u8; 15] = [
+    0x5a, 0xf4, 0x3d, 0x82, 0x80, 0x3e, 0x90, 0x3d, 0x91, 0x60, 0x2b, 0x57, 0xfd, 0x5b, 0xf3,
+];
 const MAX_DEPS: usize = 4;
 const MAX_PARAMS: usize = 2;
 
@@ -66,7 +86,14 @@ pub struct ChainEnv {
 
 /// The env's bytes as the factory appends them (clientkeys `chainEnvBytes`).
 pub fn env_bytes(e: &ChainEnv) -> Vec<u8> {
-    let mut b = [&e.chain_uid[..], &e.registry, &e.gov_router, &e.smart_key_account_impl, &[u8::from(e.hedera), e.deps.len() as u8]].concat();
+    let mut b = [
+        &e.chain_uid[..],
+        &e.registry,
+        &e.gov_router,
+        &e.smart_key_account_impl,
+        &[u8::from(e.hedera), e.deps.len() as u8],
+    ]
+    .concat();
     e.deps.iter().for_each(|d| b.extend_from_slice(d));
     b.push(e.params.len() as u8);
     e.params.iter().for_each(|p| b.extend_from_slice(p));
@@ -101,10 +128,25 @@ pub fn clone_env(runtime: &[u8]) -> Option<([u8; 20], ChainEnv)> {
     };
     let n_deps = usize::from(*take(&mut at, 1)?.first()?);
     (n_deps <= MAX_DEPS).then_some(())?;
-    let deps = (0..n_deps).map(|_| take(&mut at, 20)?.try_into().ok()).collect::<Option<Vec<[u8; 20]>>>()?;
+    let deps = (0..n_deps)
+        .map(|_| take(&mut at, 20)?.try_into().ok())
+        .collect::<Option<Vec<[u8; 20]>>>()?;
     let n_params = usize::from(*take(&mut at, 1)?.first()?);
     (n_params <= MAX_PARAMS).then_some(())?;
-    let params = (0..n_params).map(|_| take(&mut at, 32)?.try_into().ok()).collect::<Option<Vec<[u8; 32]>>>()?;
+    let params = (0..n_params)
+        .map(|_| take(&mut at, 32)?.try_into().ok())
+        .collect::<Option<Vec<[u8; 32]>>>()?;
     (at == runtime.len()).then_some(())?;
-    Some((implementation, ChainEnv { chain_uid, registry, gov_router, smart_key_account_impl, hedera, deps, params }))
+    Some((
+        implementation,
+        ChainEnv {
+            chain_uid,
+            registry,
+            gov_router,
+            smart_key_account_impl,
+            hedera,
+            deps,
+            params,
+        },
+    ))
 }

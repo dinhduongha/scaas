@@ -8,7 +8,8 @@
 use scaas_ua::musig2::{self as mu, Bn254};
 use scaas_ua::verify::verify;
 use scaas_ua::wallet::{
-    kem_encaps, seal, AllowRawDigest, Error, KemKeyPair, MemoryProtection, Network, Recipient, UaKey, Unlock, Wallet,
+    kem_encaps, seal, AllowRawDigest, Error, KemKeyPair, MemoryProtection, Network, Recipient,
+    UaKey, Unlock, Wallet,
 };
 use scaas_ua::{purpose_tag, ua_message};
 use serde_json::Value;
@@ -18,9 +19,17 @@ use std::sync::mpsc;
 const PASS: &str = "river-otter-7 custody";
 
 fn words() -> String {
-    let path = format!("{}/../../smartcontracts/vectors/ua/keys.json", env!("CARGO_MANIFEST_DIR"));
+    let path = format!(
+        "{}/../../smartcontracts/vectors/ua/keys.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
     let k: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-    let m = k["mnemonics"].as_array().unwrap().iter().find(|m| m["id"] == "pq_kat").unwrap();
+    let m = k["mnemonics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["id"] == "pq_kat")
+        .unwrap();
     m["words"].as_str().unwrap().to_owned()
 }
 fn wallet() -> Wallet {
@@ -33,7 +42,8 @@ fn md() -> ([u8; 32], [u8; 32]) {
 fn signs(key: &UaKey) -> bool {
     let (p, d) = md();
     let m = ua_message(key.kind(), &p, &d).unwrap();
-    key.sign_ua(&p, &d).is_ok_and(|s| verify(key.kind(), &key.key_data(), &m, &s, false))
+    key.sign_ua(&p, &d)
+        .is_ok_and(|s| verify(key.kind(), &key.key_data(), &m, &s, false))
 }
 
 #[test]
@@ -57,14 +67,21 @@ fn lock_keeps_manifest_drops_secrets() {
     assert_eq!(after.backup_generation, before.backup_generation + 1); // the backup_seal above
     after.backup_generation = before.backup_generation;
     assert_eq!(after, before, "lock() keeps the public manifest");
-    assert_eq!(w.memory_protection(), MemoryProtection::default(), "no arena while locked");
+    assert_eq!(
+        w.memory_protection(),
+        MemoryProtection::default(),
+        "no arena while locked"
+    );
     let locked = Some(Error::WalletLocked);
     assert_eq!(w.ua_key(0x0102, 0, 0).err(), locked);
     assert_eq!(w.native_key(Network::Evm, 0, None).err(), locked);
     assert_eq!(w.imported_key(Network::Evm, 0).err(), locked);
     assert_eq!(w.import_native_key(Network::Evm, &[0x12; 32]).err(), locked);
     assert_eq!(w.seal_vault(PASS, None).err(), locked);
-    assert_eq!(w.seal_label_vault("native-import:evm:0", PASS, None).err(), locked);
+    assert_eq!(
+        w.seal_label_vault("native-import:evm:0", PASS, None).err(),
+        locked
+    );
     assert_eq!(w.discover_candidates(0x0102, 0, 1).err(), locked);
     assert_eq!(w.backup_seal(&key, &[r]).err(), locked);
     #[cfg(feature = "vectors")]
@@ -81,13 +98,27 @@ fn unlock_reopens_the_vault() {
     let vault = w.seal_vault(PASS, None).unwrap();
     let key = w.ua_key(0x0108, 0, 0).unwrap();
     let imported = w.import_native_key(Network::Evm, &[0x11; 32]).unwrap();
-    let import_vault = w.seal_label_vault("native-import:evm:0", PASS, None).unwrap();
+    let import_vault = w
+        .seal_label_vault("native-import:evm:0", PASS, None)
+        .unwrap();
     let manifest_vault = w.seal_label_vault("manifest", PASS, None).unwrap();
-    assert_eq!(w.unlock(&vault, Unlock::VaultPassphrase(PASS), "").err(), Some(Error::Argument), "unlocked: refused");
+    assert_eq!(
+        w.unlock(&vault, Unlock::VaultPassphrase(PASS), "").err(),
+        Some(Error::Argument),
+        "unlocked: refused"
+    );
     w.lock();
     // the checks of open_vault: the label, the passphrase; a failed unlock leaves the wallet locked
-    assert_eq!(w.unlock(&manifest_vault, Unlock::VaultPassphrase(PASS), "").err(), Some(Error::Argument));
-    assert_eq!(w.unlock(&vault, Unlock::VaultPassphrase("river-otter-8 custody"), "").err(), Some(Error::VaultOpen));
+    assert_eq!(
+        w.unlock(&manifest_vault, Unlock::VaultPassphrase(PASS), "")
+            .err(),
+        Some(Error::Argument)
+    );
+    assert_eq!(
+        w.unlock(&vault, Unlock::VaultPassphrase("river-otter-8 custody"), "")
+            .err(),
+        Some(Error::VaultOpen)
+    );
     assert_eq!(w.ua_key(0x0108, 0, 0).err(), Some(Error::WalletLocked));
     w.unlock(&vault, Unlock::VaultPassphrase(PASS), "").unwrap();
     let new = w.ua_key(0x0108, 0, 0).unwrap();
@@ -97,7 +128,8 @@ fn unlock_reopens_the_vault() {
     // imported keys: listed, not held until their own vault is reopened (unlock takes the seed vault only)
     assert!(w.manifest().imports.iter().any(|i| i.n == 0));
     assert_eq!(w.imported_key(Network::Evm, 0).err(), Some(Error::Argument));
-    w.open_label_vault(&import_vault, Unlock::VaultPassphrase(PASS)).unwrap();
+    w.open_label_vault(&import_vault, Unlock::VaultPassphrase(PASS))
+        .unwrap();
     let back = w.imported_key(Network::Evm, 0).unwrap();
     assert_eq!(back.public_key(), imported.public_key());
     assert!(back.sign_key_proof(b"c").is_ok());
@@ -114,15 +146,35 @@ fn unlock_refuses_a_vault_of_another_wallet() {
     w.lock();
     let before = w.manifest();
     // another wallet's seed vault, and this vault with another BIP-39 passphrase: another seed under the kept manifest
-    assert_eq!(w.unlock(&foreign, Unlock::VaultPassphrase(PASS), "pass-a").err(), Some(Error::WalletMismatch));
-    assert_eq!(w.unlock(&vault, Unlock::VaultPassphrase(PASS), "").err(), Some(Error::WalletMismatch));
-    assert_eq!(w.unlock(&vault, Unlock::VaultPassphrase(PASS), "pass-b").err(), Some(Error::WalletMismatch));
-    assert_eq!(w.ua_key(0x0102, 0, 0).err(), Some(Error::WalletLocked), "a refused unlock leaves the wallet locked");
+    assert_eq!(
+        w.unlock(&foreign, Unlock::VaultPassphrase(PASS), "pass-a")
+            .err(),
+        Some(Error::WalletMismatch)
+    );
+    assert_eq!(
+        w.unlock(&vault, Unlock::VaultPassphrase(PASS), "").err(),
+        Some(Error::WalletMismatch)
+    );
+    assert_eq!(
+        w.unlock(&vault, Unlock::VaultPassphrase(PASS), "pass-b")
+            .err(),
+        Some(Error::WalletMismatch)
+    );
+    assert_eq!(
+        w.ua_key(0x0102, 0, 0).err(),
+        Some(Error::WalletLocked),
+        "a refused unlock leaves the wallet locked"
+    );
     assert_eq!(w.manifest(), before, "and its manifest as it was");
     #[cfg(feature = "vectors")]
-    assert_eq!(w.vectors_unlock(&words(), "").err(), Some(Error::WalletMismatch), "the hook takes the same check");
+    assert_eq!(
+        w.vectors_unlock(&words(), "").err(),
+        Some(Error::WalletMismatch),
+        "the hook takes the same check"
+    );
     // positive control: this wallet's vault and passphrase
-    w.unlock(&vault, Unlock::VaultPassphrase(PASS), "pass-a").unwrap();
+    w.unlock(&vault, Unlock::VaultPassphrase(PASS), "pass-a")
+        .unwrap();
     assert_eq!(w.ua_key(0x0102, 0, 0).unwrap().key_data(), key.key_data());
 }
 
@@ -132,17 +184,37 @@ fn unlock_refuses_a_vault_of_another_wallet() {
 fn manifest_vault_refuses_another_seed() {
     let w = Wallet::from_mnemonic(&words(), "pass-a").unwrap();
     w.ua_key(0x0102, 0, 0).unwrap();
-    let (vs, vm) = (w.seal_vault(PASS, None).unwrap(), w.seal_label_vault("manifest", PASS, None).unwrap());
+    let (vs, vm) = (
+        w.seal_vault(PASS, None).unwrap(),
+        w.seal_label_vault("manifest", PASS, None).unwrap(),
+    );
     let wrong = Wallet::open_vault(&vs, Unlock::VaultPassphrase(PASS), "pass-b").unwrap();
-    assert_eq!(wrong.open_label_vault(&vm, Unlock::VaultPassphrase(PASS)).err(), Some(Error::WalletMismatch));
-    assert!(wrong.manifest().entries.is_empty(), "the refused manifest is not installed");
+    assert_eq!(
+        wrong
+            .open_label_vault(&vm, Unlock::VaultPassphrase(PASS))
+            .err(),
+        Some(Error::WalletMismatch)
+    );
+    assert!(
+        wrong.manifest().entries.is_empty(),
+        "the refused manifest is not installed"
+    );
     let right = Wallet::open_vault(&vs, Unlock::VaultPassphrase(PASS), "pass-a").unwrap();
-    right.open_label_vault(&vm, Unlock::VaultPassphrase(PASS)).unwrap();
+    right
+        .open_label_vault(&vm, Unlock::VaultPassphrase(PASS))
+        .unwrap();
     assert_eq!(right.manifest(), w.manifest());
     // locked, the manifest is kept and the next unlock checks it
     right.lock();
-    right.open_label_vault(&vm, Unlock::VaultPassphrase(PASS)).unwrap();
-    assert_eq!(right.unlock(&vs, Unlock::VaultPassphrase(PASS), "pass-b").err(), Some(Error::WalletMismatch));
+    right
+        .open_label_vault(&vm, Unlock::VaultPassphrase(PASS))
+        .unwrap();
+    assert_eq!(
+        right
+            .unlock(&vs, Unlock::VaultPassphrase(PASS), "pass-b")
+            .err(),
+        Some(Error::WalletMismatch)
+    );
 }
 
 /// T21 L29 (scenario C): a manifest listing `{evm, 0}` over a held ed25519 import 0 is `WalletMismatch`; the held key keeps its
@@ -157,10 +229,18 @@ fn manifest_vault_refuses_another_network_for_a_held_import() {
     let foreign = evm.seal_label_vault("manifest", PASS, None).unwrap();
     w.import_native_key(Network::Solana, &[3; 32]).unwrap();
     let own = w.seal_label_vault("manifest", PASS, None).unwrap();
-    assert_eq!(w.open_label_vault(&foreign, Unlock::VaultPassphrase(PASS)).err(), Some(Error::WalletMismatch));
+    assert_eq!(
+        w.open_label_vault(&foreign, Unlock::VaultPassphrase(PASS))
+            .err(),
+        Some(Error::WalletMismatch)
+    );
     assert_eq!(w.imported_key(Network::Evm, 0).err(), Some(Error::Argument));
-    assert_eq!(w.imported_key(Network::Solana, 0).unwrap().network(), Network::Solana);
-    w.open_label_vault(&own, Unlock::VaultPassphrase(PASS)).unwrap();
+    assert_eq!(
+        w.imported_key(Network::Solana, 0).unwrap().network(),
+        Network::Solana
+    );
+    w.open_label_vault(&own, Unlock::VaultPassphrase(PASS))
+        .unwrap();
 }
 
 /// T21 L74: a manifest sealed before an import leaves the held key out: `WalletMismatch`, the key stays listed (so every later
@@ -172,10 +252,18 @@ fn manifest_vault_refuses_to_leave_out_a_held_import() {
     let older = w.seal_label_vault("manifest", PASS, None).unwrap();
     w.import_native_key(Network::Solana, &[3; 32]).unwrap();
     let own = w.seal_label_vault("manifest", PASS, None).unwrap();
-    assert_eq!(w.open_label_vault(&older, Unlock::VaultPassphrase(PASS)).err(), Some(Error::WalletMismatch));
+    assert_eq!(
+        w.open_label_vault(&older, Unlock::VaultPassphrase(PASS))
+            .err(),
+        Some(Error::WalletMismatch)
+    );
     assert_eq!(w.manifest().imports.len(), 1);
-    assert_eq!(w.imported_key(Network::Solana, 0).unwrap().network(), Network::Solana);
-    w.open_label_vault(&own, Unlock::VaultPassphrase(PASS)).unwrap();
+    assert_eq!(
+        w.imported_key(Network::Solana, 0).unwrap().network(),
+        Network::Solana
+    );
+    w.open_label_vault(&own, Unlock::VaultPassphrase(PASS))
+        .unwrap();
 }
 
 #[test]
@@ -186,7 +274,8 @@ fn unlock_with_an_empty_manifest_has_nothing_to_compare() {
     let foreign = other.seal_vault(PASS, None).unwrap();
     w.lock();
     assert!(w.manifest().entries.is_empty());
-    w.unlock(&foreign, Unlock::VaultPassphrase(PASS), "").unwrap();
+    w.unlock(&foreign, Unlock::VaultPassphrase(PASS), "")
+        .unwrap();
 }
 
 #[test]
@@ -198,10 +287,16 @@ fn derive_lock_then_sign_decaps_open_prove_are_KeyRevoked() {
     let holder = w.ua_key(0x0130, 0, 0).unwrap();
     let kk = holder.kem_key(0).unwrap();
     let native = w.native_key(Network::Evm, 0, None).unwrap();
-    let (a, b) = (w.ua_key(0x0112, 0, 0).unwrap(), w.ua_key(0x0112, 1, 0).unwrap());
+    let (a, b) = (
+        w.ua_key(0x0112, 0, 0).unwrap(),
+        w.ua_key(0x0112, 1, 0).unwrap(),
+    );
     let mut pks = vec![a.key_data(), b.key_data()];
     mu::key_sort(&mut pks); // a registrable list (T21 L16)
-    let (mut sa, sb) = (a.musig2_session(&pks, &[6; 32]).unwrap(), b.musig2_session(&pks, &[6; 32]).unwrap());
+    let (mut sa, sb) = (
+        a.musig2_session(&pks, &[6; 32]).unwrap(),
+        b.musig2_session(&pks, &[6; 32]).unwrap(),
+    );
     let agg = mu::nonce_agg::<Bn254>(&[sa.pubnonce(), sb.pubnonce()]).unwrap();
     let (ct, eph, ss) = kem_encaps(&kk.kem_pk()).unwrap();
     let sealed = seal(&kk.kem_pk(), "scaas/test/v1", b"aad", b"pt").unwrap();
@@ -241,7 +336,11 @@ fn unlock_does_not_revive_old_handles() {
     let used = w.vectors_arena_used().unwrap();
     assert_eq!(holder.kem_key(0).err(), Some(Error::KeyRevoked));
     #[cfg(feature = "vectors")]
-    assert_eq!(w.vectors_arena_used().unwrap(), used, "a revoked handle wrote the new arena");
+    assert_eq!(
+        w.vectors_arena_used().unwrap(),
+        used,
+        "a revoked handle wrote the new arena"
+    );
     // the same derivations again: the new arena has the old slots at the same places; the generation alone refuses
     let new = w.ua_key(0x0108, 0, 0).unwrap();
     let fresh = w.ua_key(0x0130, 0, 0).unwrap().kem_key(0).unwrap();
@@ -264,10 +363,19 @@ fn ua_key_on_locked_wallet_is_WalletLocked() {
     let w = wallet();
     assert!(w.ua_key(0x0101, 0, 0).is_ok());
     w.lock();
-    for kind in [0x0100, 0x0101, 0x0102, 0x0103, 0x0104, 0x0108, 0x0110, 0x0112, 0x0130, 0x0131] {
-        assert_eq!(w.ua_key(kind, 0, 0).err(), Some(Error::WalletLocked), "{kind:#06x}");
+    for kind in [
+        0x0100, 0x0101, 0x0102, 0x0103, 0x0104, 0x0108, 0x0110, 0x0112, 0x0130, 0x0131,
+    ] {
+        assert_eq!(
+            w.ua_key(kind, 0, 0).err(),
+            Some(Error::WalletLocked),
+            "{kind:#06x}"
+        );
     }
-    assert_eq!(w.native_key(Network::Solana, 0, None).err(), Some(Error::WalletLocked));
+    assert_eq!(
+        w.native_key(Network::Solana, 0, None).err(),
+        Some(Error::WalletLocked)
+    );
 }
 
 #[test]
@@ -278,10 +386,16 @@ fn wallet_dropped_with_children_retained() {
     let kk = w.ua_key(0x0130, 0, 0).unwrap().kem_key(0).unwrap();
     let native = w.native_key(Network::Evm, 0, None).unwrap();
     let imported = w.import_native_key(Network::Stellar, &[1; 32]).unwrap();
-    let (a, b) = (w.ua_key(0x0112, 0, 0).unwrap(), w.ua_key(0x0112, 1, 0).unwrap());
+    let (a, b) = (
+        w.ua_key(0x0112, 0, 0).unwrap(),
+        w.ua_key(0x0112, 1, 0).unwrap(),
+    );
     let mut pks = vec![a.key_data(), b.key_data()];
     mu::key_sort(&mut pks); // a registrable list (T21 L16)
-    let (mut sa, sb) = (a.musig2_session(&pks, &[6; 32]).unwrap(), b.musig2_session(&pks, &[6; 32]).unwrap());
+    let (mut sa, sb) = (
+        a.musig2_session(&pks, &[6; 32]).unwrap(),
+        b.musig2_session(&pks, &[6; 32]).unwrap(),
+    );
     let agg = mu::nonce_agg::<Bn254>(&[sa.pubnonce(), sb.pubnonce()]).unwrap();
     let (ct, eph, _) = kem_encaps(&kk.kem_pk()).unwrap();
     assert!(signs(&ua) && kk.decaps(&ct, &eph).is_ok() && imported.sign_key_proof(b"c").is_ok());
@@ -293,7 +407,10 @@ fn wallet_dropped_with_children_retained() {
     assert_eq!(imported.sign_key_proof(b"c").err(), revoked);
     assert_eq!(sa.sign(&agg).err(), revoked);
     // the public parts are valid memory; each child is freed after, in any order
-    assert_eq!((ua.kind(), kk.kem_pk().len(), native.public_key().len()), (0x0108, 1601, 33));
+    assert_eq!(
+        (ua.kind(), kk.kem_pk().len(), native.public_key().len()),
+        (0x0108, 1601, 33)
+    );
     drop(kk);
     drop(sa);
     drop(ua);
@@ -325,7 +442,10 @@ fn concurrent_lock_and_sign() {
                         let started_after_lock = locked.load(Ordering::SeqCst);
                         match key.sign_ua(&p, &d) {
                             Ok(sig) => {
-                                assert!(!started_after_lock, "a call started after lock() returned signed");
+                                assert!(
+                                    !started_after_lock,
+                                    "a call started after lock() returned signed"
+                                );
                                 assert_eq!(revoked, 0, "a signature after KeyRevoked");
                                 assert!(verify(0x0108, &kd, &m, &sig, false));
                                 ok += 1;
@@ -394,9 +514,15 @@ fn lock_returns_only_after_operations_in_flight() {
         release_tx.send(()).unwrap();
         assert_eq!(op.join().unwrap(), Ok(true));
         locker.join().unwrap();
-        assert!(early.is_err(), "lock() returned while an operation held the read guard");
+        assert!(
+            early.is_err(),
+            "lock() returned while an operation held the read guard"
+        );
     });
-    assert_eq!(key.vectors_with_secret(|_| ()).err(), Some(Error::KeyRevoked));
+    assert_eq!(
+        key.vectors_with_secret(|_| ()).err(),
+        Some(Error::KeyRevoked)
+    );
 }
 
 /// T21 L82: runs `op` on its own thread, paused (the `vectors` hook) where it holds its copy of a store secret, before it uses
@@ -421,7 +547,9 @@ fn lock_during<R: Send>(w: &Wallet, op: impl FnOnce() -> R + Send) -> R {
             locked_tx.send(()).unwrap();
         });
         // read, not asserted here: a failed assert inside the scope would leave `op` waiting for `go` forever
-        let early = locked_rx.recv_timeout(std::time::Duration::from_millis(500)).is_ok();
+        let early = locked_rx
+            .recv_timeout(std::time::Duration::from_millis(500))
+            .is_ok();
         go_tx.send(()).unwrap();
         let r = a.join().unwrap();
         locker.join().unwrap();
@@ -449,11 +577,19 @@ fn lock_waits_for_a_leased_seal_vault() {
 fn lock_waits_for_a_leased_label_vault() {
     let w = wallet();
     let seed_vault = w.seal_vault(PASS, None).unwrap();
-    let pk = w.import_native_key(Network::Evm, &[0x11; 32]).unwrap().public_key();
+    let pk = w
+        .import_native_key(Network::Evm, &[0x11; 32])
+        .unwrap()
+        .public_key();
     let v = lock_during(&w, || w.seal_label_vault("native-import:evm:0", PASS, None)).unwrap();
-    assert_eq!(w.seal_label_vault("native-import:evm:0", PASS, None).err(), Some(Error::WalletLocked));
-    w.unlock(&seed_vault, Unlock::VaultPassphrase(PASS), "").unwrap();
-    w.open_label_vault(&v, Unlock::VaultPassphrase(PASS)).unwrap();
+    assert_eq!(
+        w.seal_label_vault("native-import:evm:0", PASS, None).err(),
+        Some(Error::WalletLocked)
+    );
+    w.unlock(&seed_vault, Unlock::VaultPassphrase(PASS), "")
+        .unwrap();
+    w.open_label_vault(&v, Unlock::VaultPassphrase(PASS))
+        .unwrap();
     assert_eq!(w.imported_key(Network::Evm, 0).unwrap().public_key(), pk);
 }
 
@@ -467,7 +603,10 @@ fn lock_waits_for_a_leased_kem_open() {
     let sealed = seal(&kk.kem_pk(), "scaas/test/v1", b"aad", b"pt").unwrap();
     let pt = lock_during(&w, || kk.open("scaas/test/v1", b"aad", &sealed)).unwrap();
     assert_eq!(*pt, b"pt");
-    assert_eq!(kk.open("scaas/test/v1", b"aad", &sealed).err(), Some(Error::KeyRevoked));
+    assert_eq!(
+        kk.open("scaas/test/v1", b"aad", &sealed).err(),
+        Some(Error::KeyRevoked)
+    );
 }
 
 /// T21 L82: `lock()` during a MuSig2 partial signature (the nonce's copy) waits for it; the partial signature is checked by
@@ -476,13 +615,22 @@ fn lock_waits_for_a_leased_kem_open() {
 #[test]
 fn lock_waits_for_a_leased_musig2_sign() {
     let w = wallet();
-    let (a, b) = (w.ua_key(0x0112, 0, 0).unwrap(), w.ua_key(0x0112, 1, 0).unwrap());
+    let (a, b) = (
+        w.ua_key(0x0112, 0, 0).unwrap(),
+        w.ua_key(0x0112, 1, 0).unwrap(),
+    );
     let mut pks = vec![a.key_data(), b.key_data()];
     mu::key_sort(&mut pks);
-    let (mut sa, sb) = (a.musig2_session(&pks, &[6; 32]).unwrap(), b.musig2_session(&pks, &[6; 32]).unwrap());
+    let (mut sa, sb) = (
+        a.musig2_session(&pks, &[6; 32]).unwrap(),
+        b.musig2_session(&pks, &[6; 32]).unwrap(),
+    );
     let agg = mu::nonce_agg::<Bn254>(&[sa.pubnonce(), sb.pubnonce()]).unwrap();
     assert!(lock_during(&w, || sa.sign(&agg)).is_ok());
-    assert_eq!(a.musig2_session(&pks, &[6; 32]).err(), Some(Error::KeyRevoked));
+    assert_eq!(
+        a.musig2_session(&pks, &[6; 32]).err(),
+        Some(Error::KeyRevoked)
+    );
 }
 
 /// T21 L82: leases do not wait for each other: two KEM opens are both inside their lease at once (each paused at its copy
@@ -512,7 +660,12 @@ fn leased_opens_run_at_once() {
         let t = std::time::Duration::from_secs(10);
         let both = in_rx.recv_timeout(t).is_ok() && in_rx.recv_timeout(t).is_ok();
         go_tx.iter().for_each(|g| g.send(()).unwrap());
-        (both, ops.into_iter().map(|h| h.join().unwrap()).collect::<Vec<_>>())
+        (
+            both,
+            ops.into_iter()
+                .map(|h| h.join().unwrap())
+                .collect::<Vec<_>>(),
+        )
     });
     assert!(both, "a lease waited for another");
     for pt in pts {

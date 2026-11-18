@@ -156,19 +156,32 @@ fn unhex(s: &str) -> Result<Vec<u8>, String> {
     if !s.len().is_multiple_of(2) {
         return Err(format!("not hex: {s}"));
     }
-    (0..s.len()).step_by(2).map(|i| s.get(i..i + 2).and_then(|b| u8::from_str_radix(b, 16).ok()).ok_or(format!("not hex: {s}"))).collect()
+    (0..s.len())
+        .step_by(2)
+        .map(|i| {
+            s.get(i..i + 2)
+                .and_then(|b| u8::from_str_radix(b, 16).ok())
+                .ok_or(format!("not hex: {s}"))
+        })
+        .collect()
 }
 
 fn hx(b: &[u8]) -> String {
-    b.iter().fold(String::from("0x"), |s, x| s + &format!("{x:02x}"))
+    b.iter()
+        .fold(String::from("0x"), |s, x| s + &format!("{x:02x}"))
 }
 
 fn fixed<const L: usize>(flag: &str, s: &str) -> Result<[u8; L], String> {
-    unhex(s)?.try_into().map_err(|_| format!("{flag}: {L} bytes"))
+    unhex(s)?
+        .try_into()
+        .map_err(|_| format!("{flag}: {L} bytes"))
 }
 
 fn parse() -> Result<Args, String> {
-    let mut a = Args { command: "balance".into(), ..Args::default() };
+    let mut a = Args {
+        command: "balance".into(),
+        ..Args::default()
+    };
     let mut seen = std::collections::BTreeSet::new();
     let mut it = std::env::args().skip(1);
     while let Some(f) = it.next() {
@@ -195,27 +208,58 @@ fn parse() -> Result<Args, String> {
             "--depth" => a.depth = Some(int(val()?)?),
             "--finalized" => a.finalized = true,
             "--command" => a.command = val()?,
-            "--for-op7" => a.for_op7 = Some(val()?.parse().map_err(|_| "--for-op7: true or false")?),
+            "--for-op7" => {
+                a.for_op7 = Some(val()?.parse().map_err(|_| "--for-op7: true or false")?)
+            }
             "--key-version" => a.key_version = Some(int(val()?)?),
             "--from-ua" => a.from_ua = Some(fixed("--from-ua", &val()?)?),
             "--send-counter" => a.send_counter = Some(int(val()?)?),
             "--leg" => a.leg = Some(int(val()?)?),
             "--words" => a.words = true,
             "--count" => a.count = Some(int(val()?)?),
-            "--exclude" => a.exclude = val()?.split(',').map(|u| fixed("--exclude", u)).collect::<Result<_, _>>()?,
+            "--exclude" => {
+                a.exclude = val()?
+                    .split(',')
+                    .map(|u| fixed("--exclude", u))
+                    .collect::<Result<_, _>>()?
+            }
             "--recipient" => a.recipient = Some(fixed("--recipient", &val()?)?),
             "--sync-block" => a.sync_block = Some(int(val()?)?),
-            "--decoy-filter" => a.filter = Some(val()?).filter(|v| v == "activity" || v == "holder").ok_or("--decoy-filter: activity or holder")?.into(),
+            "--decoy-filter" => {
+                a.filter = Some(val()?)
+                    .filter(|v| v == "activity" || v == "holder")
+                    .ok_or("--decoy-filter: activity or holder")?
+                    .into()
+            }
             "--window" => a.window = Some(int(val()?)?),
             _ => return Err(format!("unknown argument {f}")),
         }
     }
-    let need = ["--rpc", "--chain-id", "--chain-uid", "--factory", "--registry", "--token", "--ua"];
+    let need = [
+        "--rpc",
+        "--chain-id",
+        "--chain-uid",
+        "--factory",
+        "--registry",
+        "--token",
+        "--ua",
+    ];
     if need.iter().any(|n| !seen.contains(*n)) || a.finalized == a.depth.is_some() {
         return Err("needs --rpc, --chain-id, --chain-uid, --factory, --registry, --token, --ua and one of --depth / --finalized (R1–R6)".into());
     }
-    let entry = u8::from(a.from_ua.is_some()) + u8::from(a.send_counter.is_some()) + u8::from(a.leg.is_some());
-    let decoy = ["--count", "--exclude", "--recipient", "--sync-block", "--decoy-filter", "--window"].iter().any(|f| seen.contains(*f));
+    let entry = u8::from(a.from_ua.is_some())
+        + u8::from(a.send_counter.is_some())
+        + u8::from(a.leg.is_some());
+    let decoy = [
+        "--count",
+        "--exclude",
+        "--recipient",
+        "--sync-block",
+        "--decoy-filter",
+        "--window",
+    ]
+    .iter()
+    .any(|f| seen.contains(*f));
     if decoy && a.command != "decoys" {
         return Err("--count, --exclude, --recipient, --sync-block, --decoy-filter and --window go with --command decoys only".into());
     }
@@ -235,7 +279,14 @@ fn parse() -> Result<Args, String> {
 
 /// A curl config file (read from curl's stdin): URL and body stay out of argv.
 fn curl_config(url: &str, body: &str) -> String {
-    let q = |s: &str| format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"").replace(['\n', '\r'], ""));
+    let q = |s: &str| {
+        format!(
+            "\"{}\"",
+            s.replace('\\', "\\\\")
+                .replace('"', "\\\"")
+                .replace(['\n', '\r'], "")
+        )
+    };
     format!(
         "silent\nshow-error\nmax-filesize = {MAX_ANSWER}\nrequest = \"POST\"\nheader = \"content-type: application/json\"\nurl = {}\ndata-binary = {}\n",
         q(url),
@@ -253,15 +304,26 @@ fn rpc(url: &str, method: &str, params: Value) -> Result<Value, String> {
         .spawn()
         .map_err(|e| format!("curl: {e}"))?;
     let mut stdin = child.stdin.take().ok_or("curl: no stdin")?;
-    std::io::Write::write_all(&mut stdin, curl_config(url, &body.to_string()).as_bytes()).map_err(|e| e.to_string())?;
+    std::io::Write::write_all(&mut stdin, curl_config(url, &body.to_string()).as_bytes())
+        .map_err(|e| e.to_string())?;
     drop(stdin);
     let out = child.wait_with_output().map_err(|e| e.to_string())?;
-    let v: Value = serde_json::from_slice(&out.stdout).map_err(|_| format!("{method}: the node returned no JSON"))?;
-    v.get("result").filter(|r| !r.is_null()).cloned().ok_or(format!("{method}: {}", v["error"]))
+    let v: Value = serde_json::from_slice(&out.stdout)
+        .map_err(|_| format!("{method}: the node returned no JSON"))?;
+    v.get("result")
+        .filter(|r| !r.is_null())
+        .cloned()
+        .ok_or(format!("{method}: {}", v["error"]))
 }
 
 fn qty(v: &Value) -> Result<u64, String> {
-    u64::from_str_radix(v.as_str().ok_or("a quantity expected")?.trim_start_matches("0x"), 16).map_err(|_| "a quantity expected".into())
+    u64::from_str_radix(
+        v.as_str()
+            .ok_or("a quantity expected")?
+            .trim_start_matches("0x"),
+        16,
+    )
+    .map_err(|_| "a quantity expected".into())
 }
 
 /// `a + i` (mod 2^256), big-endian.
@@ -306,13 +368,19 @@ fn erc7201(id: &str) -> Word {
 
 /// `STATE_LAYOUT`'s `(slot, inner, byte, width)` of `label` (the pinned layout of `scaas.pqz`).
 fn at(label: &str) -> Result<(u64, u64, usize, usize), String> {
-    STATE_LAYOUT.iter().find(|r| r.0 == label).map(|r| (r.1, r.2, r.3, r.4)).ok_or(format!("{label}: not in STATE_LAYOUT"))
+    STATE_LAYOUT
+        .iter()
+        .find(|r| r.0 == label)
+        .map(|r| (r.1, r.2, r.3, r.4))
+        .ok_or(format!("{label}: not in STATE_LAYOUT"))
 }
 
 /// The field `label` of word `w` (bytes counted from the low end, solc's packing), as an integer (width ≤ 8).
 fn field(w: &Word, label: &str) -> Result<u64, String> {
     let (_, _, byte, width) = at(label)?;
-    Ok(w[32 - byte - width..32 - byte].iter().fold(0u64, |a, b| a << 8 | u64::from(*b)))
+    Ok(w[32 - byte - width..32 - byte]
+        .iter()
+        .fold(0u64, |a, b| a << 8 | u64::from(*b)))
 }
 
 fn low_addr(w: &Word, byte: usize) -> [u8; 20] {
@@ -323,12 +391,20 @@ fn low_addr(w: &Word, byte: usize) -> [u8; 20] {
 
 /// `acct[ua][v]` of `scaas.pqz` (group 3g KV-6): `keccak256(v ‖ keccak256(ua ‖ root + slot))`.
 fn acct_base(root: &Word, ua: &Word, v: u64) -> Result<Word, String> {
-    Ok(keccak256(&[be(v), keccak256(&[*ua, add(root, at("acct[U][7].pendingCount")?.0)].concat())].concat()))
+    Ok(keccak256(
+        &[
+            be(v),
+            keccak256(&[*ua, add(root, at("acct[U][7].pendingCount")?.0)].concat()),
+        ]
+        .concat(),
+    ))
 }
 
 /// `sendCounter[ua]` of `scaas.pqz` (one per UA since group 3g).
 fn counter_slot(root: &Word, ua: &Word) -> Result<Word, String> {
-    Ok(keccak256(&[*ua, add(root, at("sendCounter[U]")?.0)].concat()))
+    Ok(keccak256(
+        &[*ua, add(root, at("sendCounter[U]")?.0)].concat(),
+    ))
 }
 
 /// The registry's `pqzKey[ua][v]` and `pqzVersions[ua]`.
@@ -350,22 +426,36 @@ impl Reader<'_> {
         json!({"blockHash": self.hash, "requireCanonical": true})
     }
     fn word(&self, address: &[u8; 20], slot: &Word) -> Result<Word, String> {
-        let w = rpc(self.url, "eth_getStorageAt", json!([hx(address), hx(slot), self.at()]))?;
+        let w = rpc(
+            self.url,
+            "eth_getStorageAt",
+            json!([hx(address), hx(slot), self.at()]),
+        )?;
         let b = unhex(w.as_str().ok_or("eth_getStorageAt: not a word")?)?;
         let mut o = [0u8; 32];
-        o.get_mut(32usize.checked_sub(b.len()).ok_or("eth_getStorageAt: longer than a word")?..)
-            .ok_or("word")?
-            .copy_from_slice(&b);
+        o.get_mut(
+            32usize
+                .checked_sub(b.len())
+                .ok_or("eth_getStorageAt: longer than a word")?..,
+        )
+        .ok_or("word")?
+        .copy_from_slice(&b);
         Ok(o)
     }
     fn code(&self, address: &[u8; 20]) -> Result<Vec<u8>, String> {
-        unhex(rpc(self.url, "eth_getCode", json!([hx(address), self.at()]))?.as_str().ok_or("eth_getCode: not bytes")?)
+        unhex(
+            rpc(self.url, "eth_getCode", json!([hx(address), self.at()]))?
+                .as_str()
+                .ok_or("eth_getCode: not bytes")?,
+        )
     }
     /// R5 (owner 2026-11-09): the token answers `proofStore()` with 0 (NONE) or 1 (LOG) at this block, so it is of release 3h or
     /// later (proof-path spec C9); a revert, an empty or any other answer is a release before 3h.
     fn release_3h(&self, token: &[u8; 20]) -> Result<(), String> {
         let call = json!({"to": hx(token), "data": hx(&keccak256(b"proofStore()")[..4])});
-        let answer = rpc(self.url, "eth_call", json!([call, self.at()])).ok().and_then(|v| v.as_str().map(unhex));
+        let answer = rpc(self.url, "eth_call", json!([call, self.at()]))
+            .ok()
+            .and_then(|v| v.as_str().map(unhex));
         match answer {
             Some(Ok(w)) if w.len() == 32 && w[..31] == [0; 31] && w[31] <= 1 => Ok(()),
             _ => Err("R5: the token is of a release before 3h (proofStore() does not answer); ua-rs reads release 3h only".into()),
@@ -412,7 +502,9 @@ fn configured(a: &Args, url: &str) -> Result<(), String> {
 fn chosen(a: &Args, url: &str) -> Result<u64, String> {
     configured(a, url)?;
     match a.depth {
-        Some(d) => qty(&rpc(url, "eth_blockNumber", json!([]))?)?.checked_sub(d).ok_or("R3: the chain is shorter than the confirmation depth".into()),
+        Some(d) => qty(&rpc(url, "eth_blockNumber", json!([]))?)?
+            .checked_sub(d)
+            .ok_or("R3: the chain is shorter than the confirmation depth".into()),
         None => qty(&rpc(url, "eth_getBlockByNumber", json!(["finalized", false]))?["number"]),
     }
 }
@@ -425,7 +517,9 @@ fn open<'u>(a: &Args, url: &'u str, block_at: Option<u64>) -> Result<(Reader<'u>
     let (tag, want) = match (block_at, a.depth) {
         (Some(n), _) => (format!("0x{n:x}"), Some(n)),
         (None, Some(d)) => {
-            let n = qty(&rpc(url, "eth_blockNumber", json!([]))?)?.checked_sub(d).ok_or("R3: the chain is shorter than the confirmation depth")?;
+            let n = qty(&rpc(url, "eth_blockNumber", json!([]))?)?
+                .checked_sub(d)
+                .ok_or("R3: the chain is shorter than the confirmation depth")?;
             (format!("0x{n:x}"), Some(n))
         }
         (None, None) => ("finalized".to_string(), None),
@@ -435,9 +529,15 @@ fn open<'u>(a: &Args, url: &'u str, block_at: Option<u64>) -> Result<(Reader<'u>
     if want.is_some_and(|n| n != block) {
         return Err("R3: the node answered another block than the one asked for".into());
     }
-    let r = Reader { url, hash: b["hash"].as_str().ok_or("R3: no block hash")?.to_string() };
+    let r = Reader {
+        url,
+        hash: b["hash"].as_str().ok_or("R3: no block hash")?.to_string(),
+    };
     // R5: `_rec[token]`'s word 1 (round 3r R1: two words, no `ownerUA`)
-    let rec = r.word(&a.factory, &add(&keccak256(&[addr_word(&a.token), be(REC_SLOT)].concat()), 1))?;
+    let rec = r.word(
+        &a.factory,
+        &add(&keccak256(&[addr_word(&a.token), be(REC_SLOT)].concat()), 1),
+    )?;
     if !catalogued(&rec) {
         return Err("R5: the token is not a PQZ token catalogued by this factory".into());
     }
@@ -463,9 +563,15 @@ fn catalogued(rec: &Word) -> bool {
 
 /// R3: block `n` still has `hash` (no reorg, a consistent node).
 fn recheck(url: &str, n: u64, hash: &str) -> Result<(), String> {
-    let again = rpc(url, "eth_getBlockByNumber", json!([format!("0x{n:x}"), false]))?;
+    let again = rpc(
+        url,
+        "eth_getBlockByNumber",
+        json!([format!("0x{n:x}"), false]),
+    )?;
     if again["hash"].as_str() != Some(hash) {
-        return Err("R3: the block changed during the read (a reorg or an inconsistent node)".into());
+        return Err(
+            "R3: the block changed during the read (a reorg or an inconsistent node)".into(),
+        );
     }
     Ok(())
 }
@@ -481,7 +587,11 @@ fn failover<T>(a: &Args, read: impl Fn(&str) -> Result<T, String>) -> Result<T, 
             Err(e) => last = e,
         }
     }
-    Err(if a.rpc.len() == 1 { last } else { format!("R1: no --rpc answered the whole read (the last: {last})") })
+    Err(if a.rpc.len() == 1 {
+        last
+    } else {
+        format!("R1: no --rpc answered the whole read (the last: {last})")
+    })
 }
 
 /// `--rpc-agree` with two or more nodes.
@@ -496,16 +606,33 @@ fn majority(a: &Args) -> usize {
 
 /// `--rpc-agree`: the block number every node reads, the smallest the answering nodes choose (R2 on each).
 fn agreed_block(a: &Args) -> Result<u64, String> {
-    a.rpc.iter().filter_map(|u| chosen(a, u).ok()).min().ok_or_else(|| "R1: no --rpc answered".into())
+    a.rpc
+        .iter()
+        .filter_map(|u| chosen(a, u).ok())
+        .min()
+        .ok_or_else(|| "R1: no --rpc answered".into())
 }
 
 /// `--rpc-agree`: `read` runs whole on every node of `urls`; the result is the one at least `need` of them returned identically,
 /// compared over the whole read (never word by word), with the nodes that returned it; a node that fails is outvoted.
-fn agree<'u, T: PartialEq>(urls: &[&'u str], need: usize, read: impl Fn(&str) -> Result<T, String>) -> Result<(T, Vec<&'u str>), String> {
-    let mut got: Vec<(&'u str, T)> = urls.iter().filter_map(|u| read(u).ok().map(|t| (*u, t))).collect();
+fn agree<'u, T: PartialEq>(
+    urls: &[&'u str],
+    need: usize,
+    read: impl Fn(&str) -> Result<T, String>,
+) -> Result<(T, Vec<&'u str>), String> {
+    let mut got: Vec<(&'u str, T)> = urls
+        .iter()
+        .filter_map(|u| read(u).ok().map(|t| (*u, t)))
+        .collect();
     let count = |t: &T| got.iter().filter(|g| g.1 == *t).count();
-    let best = (0..got.len()).max_by_key(|i| got.get(*i).map_or(0, |g| count(&g.1))).ok_or("R1: no --rpc answered the read")?;
-    let members: Vec<&'u str> = got.iter().filter(|g| Some(&g.1) == got.get(best).map(|b| &b.1)).map(|g| g.0).collect();
+    let best = (0..got.len())
+        .max_by_key(|i| got.get(*i).map_or(0, |g| count(&g.1)))
+        .ok_or("R1: no --rpc answered the read")?;
+    let members: Vec<&'u str> = got
+        .iter()
+        .filter(|g| Some(&g.1) == got.get(best).map(|b| &b.1))
+        .map(|g| g.0)
+        .collect();
     if members.len() < need {
         return Err("R1: no strict majority of the --rpc nodes returned the same read".into());
     }
@@ -514,7 +641,12 @@ fn agree<'u, T: PartialEq>(urls: &[&'u str], need: usize, read: impl Fn(&str) ->
 
 /// `--rpc-agree`, R3 after every node's read: at least `need` of the majority's nodes still carry every pinned block's hash.
 fn rechecked(members: &[&str], pins: &[(u64, String)], need: usize) -> Result<(), String> {
-    if members.iter().filter(|u| pins.iter().all(|(n, h)| recheck(u, *n, h).is_ok())).count() < need {
+    if members
+        .iter()
+        .filter(|u| pins.iter().all(|(n, h)| recheck(u, *n, h).is_ok()))
+        .count()
+        < need
+    {
         return Err("R1: no strict majority of the --rpc nodes kept the read block (R3)".into());
     }
     Ok(())
@@ -550,10 +682,18 @@ fn read(a: &Args, url: &str, block_at: Option<u64>, pk: Option<&[u8]>) -> Result
         let proven = a.command == "balanceProven";
         let base = acct_base(&root, &a.ua, v)?;
         // the 4 slots of `acct[ua][v]` (3h: `lastDebit` in slot 2; `accHash` 3, the pending map 4, `accWords` from 5)
-        let account = (0..4).map(|i| r.word(&a.token, &add(&base, i))).collect::<Result<Vec<_>, _>>()?;
+        let account = (0..4)
+            .map(|i| r.word(&a.token, &add(&base, i)))
+            .collect::<Result<Vec<_>, _>>()?;
         let (s0, s1) = (&account[0], &account[1]);
-        let (count, rolled) = (field(s0, "acct[U][7].pendingCount")?, field(s0, "acct[U][7].rolled")?);
-        let (units, flags) = (field(s1, "acct[U][7].accUnits")?, field(s1, "acct[U][7].flags")?);
+        let (count, rolled) = (
+            field(s0, "acct[U][7].pendingCount")?,
+            field(s0, "acct[U][7].rolled")?,
+        );
+        let (units, flags) = (
+            field(s1, "acct[U][7].accUnits")?,
+            field(s1, "acct[U][7].flags")?,
+        );
         let acc_blob = low_addr(s1, at("acct[U][7].accBlob")?.2);
         let mut ptrs = vec![key_ptr];
         let mut acc_words = Vec::new();
@@ -565,17 +705,31 @@ fn read(a: &Args, url: &str, block_at: Option<u64>, pk: Option<&[u8]>) -> Result
         } else if acc_blob != [0; 20] && !proven {
             ptrs.push(acc_blob);
         }
-        let from = if proven { last_record(a, &r, &root, &account, acc_blob, &mut ptrs, &mut request)? } else { rolled };
+        let from = if proven {
+            last_record(a, &r, &root, &account, acc_blob, &mut ptrs, &mut request)?
+        } else {
+            rolled
+        };
         // the facade's `p` (CTR-PQZ-06): the pending window `[rolled, p)` (path (B): `[p_last, p)`) is read by index only
-        let room = (K_MAX as u64).checked_sub(units + 1).ok_or("the account's accUnits are past K_MAX")?;
-        let inline = if a.for_op7 == Some(true) && psid == PQZH_ID { INLINE_MAX_PQZH } else { INLINE_MAX };
+        let room = (K_MAX as u64)
+            .checked_sub(units + 1)
+            .ok_or("the account's accUnits are past K_MAX")?;
+        let inline = if a.for_op7 == Some(true) && psid == PQZH_ID {
+            INLINE_MAX_PQZH
+        } else {
+            INLINE_MAX
+        };
         let p = count.min(rolled.saturating_add(inline.min(room)));
         if from > p {
             return Err("the account's last record is past its window".into());
         }
         let map = add(&base, at("acct[U][7].pending[3]")?.1);
         let mut pending = Vec::new();
-        let mut proof_path = if proven { Some(ProofPath::of(&r, &tok)?) } else { None };
+        let mut proof_path = if proven {
+            Some(ProofPath::of(&r, &tok)?)
+        } else {
+            None
+        };
         for i in from..p {
             let e = r.word(&a.token, &keccak256(&[be(i), map].concat()))?;
             // `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`: a credit (`vOff ≠ 0`) reads its blob (path (B): its history); a
@@ -583,7 +737,19 @@ fn read(a: &Args, url: &str, block_at: Option<u64>, pk: Option<&[u8]>) -> Result
             if e[22..24] != [0, 0] && !proven {
                 ptrs.push(low_addr(&e, 12));
             } else if let (true, Some(pp)) = (e[22..24] != [0, 0], proof_path.as_mut()) {
-                let (c, x) = credit(a, url, block, &root, &mut pp.codes, i, &e, &pp.mode, pp.fee, pp.verification, pp.compact)?;
+                let (c, x) = credit(
+                    a,
+                    url,
+                    block,
+                    &root,
+                    &mut pp.codes,
+                    i,
+                    &e,
+                    &pp.mode,
+                    pp.fee,
+                    pp.verification,
+                    pp.compact,
+                )?;
                 pp.credits.push(c);
                 pp.ptrs.extend(x);
             }
@@ -604,18 +770,31 @@ fn read(a: &Args, url: &str, block_at: Option<u64>, pk: Option<&[u8]>) -> Result
         request["forOp7"] = json!(a.for_op7 == Some(true));
         r.blobs(&ptrs)?
     } else {
-        let (from, counter, leg) = (a.from_ua.ok_or("--from-ua")?, a.send_counter.ok_or("--send-counter")?, a.leg.ok_or("--leg")?);
+        let (from, counter, leg) = (
+            a.from_ua.ok_or("--from-ua")?,
+            a.send_counter.ok_or("--send-counter")?,
+            a.leg.ok_or("--leg")?,
+        );
         // `PqzCore.entryRefOf`, then `entryPtr[entryRef]`
         let entry_ref = entry_ref_of(a, &from, counter);
-        let entry_ptr = r.word(&a.token, &keccak256(&[entry_ref, add(&root, at("entryPtr[V]")?.0)].concat()))?;
+        let entry_ptr = r.word(
+            &a.token,
+            &keccak256(&[entry_ref, add(&root, at("entryPtr[V]")?.0)].concat()),
+        )?;
         if entry_ptr == [0; 32] {
             return Err("no entry of --from-ua at --send-counter on this token".into());
         }
         // the entry's auditor (CTR-PQZ-43): its epoch (`entryAuditorEpoch[entryRef]`, slot 26), the auditor of that epoch at
         // its slot (7 for the token's current `auditorEpoch`, `auditorUAs[epoch]` at 25 otherwise)
         let mode = tok("auditorMode")?;
-        let entry_epoch = r.word(&a.token, &keccak256(&[entry_ref, add(&root, at("entryAuditorEpoch[V]")?.0)].concat()))?;
-        let (current, epoch) = (field(&mode, "auditorEpoch")?, field(&entry_epoch, "entryAuditorEpoch[V]")?);
+        let entry_epoch = r.word(
+            &a.token,
+            &keccak256(&[entry_ref, add(&root, at("entryAuditorEpoch[V]")?.0)].concat()),
+        )?;
+        let (current, epoch) = (
+            field(&mode, "auditorEpoch")?,
+            field(&entry_epoch, "entryAuditorEpoch[V]")?,
+        );
         let aud_slot = if epoch == current {
             add(&root, at("auditorUA")?.0)
         } else {
@@ -638,19 +817,36 @@ fn read(a: &Args, url: &str, block_at: Option<u64>, pk: Option<&[u8]>) -> Result
         request["keyVersion"] = json!(a.key_version.ok_or("--key-version")?);
         r.blobs(&[low_addr(&entry_ptr, 0), key_ptr])?
     };
-    let key_code = blobs.iter().find(|b| b["address"] == json!(hx(&key_ptr))).and_then(|b| b["code"].as_str()).map(unhex).transpose()?;
+    let key_code = blobs
+        .iter()
+        .find(|b| b["address"] == json!(hx(&key_ptr)))
+        .and_then(|b| b["code"].as_str())
+        .map(unhex)
+        .transpose()?;
     request["blobs"] = json!(blobs);
     // R3: the block still the one read (no reorg, a consistent node), before anything else happens
-    let again = rpc(url, "eth_getBlockByNumber", json!([format!("0x{block:x}"), false]))?;
+    let again = rpc(
+        url,
+        "eth_getBlockByNumber",
+        json!([format!("0x{block:x}"), false]),
+    )?;
     if again["hash"].as_str() != Some(r.hash.as_str()) {
-        return Err("R3: the block changed during the read (a reorg or an inconsistent node)".into());
+        return Err(
+            "R3: the block changed during the read (a reorg or an inconsistent node)".into(),
+        );
     }
     let key_code = key_code.unwrap_or_default();
     // R6: the registry's key of --ua is this handle's (SSTORE2: `0x00 ‖ pk`); ua-rs checks it again, with `proven`
     if pk.is_some_and(|pk| key_code.split_first() != Some((&0, pk))) {
         return Err("R6: the registry's PQZ key of --ua is not this key".into());
     }
-    Ok(Words { request, adds, block, hash: r.hash, key_code })
+    Ok(Words {
+        request,
+        adds,
+        block,
+        hash: r.hash,
+        key_code,
+    })
 }
 
 /// The stdin key JSON's cap: a mnemonic (1 KiB at most), its passphrase and two numbers.
@@ -659,13 +855,25 @@ const KEY_JSON_MAX: usize = 8 << 10;
 /// The wallet and the key's `account`, `index` of the stdin JSON `{mnemonic, passphrase?, account, index}`.
 fn key(v: &Value) -> Result<(scaas_ua::wallet::Wallet, u32, u32), String> {
     let o = v.as_object().ok_or("stdin: a JSON object")?;
-    if !o.keys().all(|k| ["mnemonic", "passphrase", "account", "index"].contains(&k.as_str())) {
+    if !o
+        .keys()
+        .all(|k| ["mnemonic", "passphrase", "account", "index"].contains(&k.as_str()))
+    {
         return Err("stdin: only mnemonic, passphrase, account, index".into());
     }
-    let n = |k: &str| o.get(k).and_then(Value::as_u64).and_then(|x| u32::try_from(x).ok()).ok_or(format!("stdin: {k}"));
+    let n = |k: &str| {
+        o.get(k)
+            .and_then(Value::as_u64)
+            .and_then(|x| u32::try_from(x).ok())
+            .ok_or(format!("stdin: {k}"))
+    };
     let w = scaas_ua::wallet::Wallet::from_mnemonic(
-        o.get("mnemonic").and_then(Value::as_str).ok_or("stdin: mnemonic")?,
-        o.get("passphrase").map_or(Some(""), Value::as_str).ok_or("stdin: passphrase")?,
+        o.get("mnemonic")
+            .and_then(Value::as_str)
+            .ok_or("stdin: mnemonic")?,
+        o.get("passphrase")
+            .map_or(Some(""), Value::as_str)
+            .ok_or("stdin: passphrase")?,
     )
     .map_err(|e| format!("the wallet: {e:?}"))?;
     Ok((w, n("account")?, n("index")?))
@@ -690,7 +898,11 @@ fn decoy_read(a: &Args, url: &str, block_at: Option<u64>) -> Result<DecoyRead, S
     // another block of the same chain, by hash, the node's answer checked (R3); re-checked after the last read
     let mut pins = vec![(block, r.hash.clone())];
     let mut pin = |n: u64| -> Result<Reader<'_>, String> {
-        let b = rpc(url, "eth_getBlockByNumber", json!([format!("0x{n:x}"), false]))?;
+        let b = rpc(
+            url,
+            "eth_getBlockByNumber",
+            json!([format!("0x{n:x}"), false]),
+        )?;
         if qty(&b["number"])? != n {
             return Err("R3: the node answered another block than the one asked for".into());
         }
@@ -702,8 +914,13 @@ fn decoy_read(a: &Args, url: &str, block_at: Option<u64>) -> Result<DecoyRead, S
     if sync > block {
         return Err("--sync-block is past the read block".into());
     }
-    let n = pin(sync)?.word(&a.registry, &keccak256(&[be(PQZ_LIST), be(REG_COUNT_SLOT)].concat()))?;
-    let n = (n[..24] == [0; 24]).then(|| u64::from_be_bytes(n[24..].try_into().unwrap_or_default())).filter(|n| *n <= MAX_LIST)
+    let n = pin(sync)?.word(
+        &a.registry,
+        &keccak256(&[be(PQZ_LIST), be(REG_COUNT_SLOT)].concat()),
+    )?;
+    let n = (n[..24] == [0; 24])
+        .then(|| u64::from_be_bytes(n[24..].try_into().unwrap_or_default()))
+        .filter(|n| *n <= MAX_LIST)
         .ok_or("the registry's list is longer than this tool reads")?;
     let list = keccak256(&[be(PQZ_LIST), be(REG_AT_SLOT)].concat());
     let mut exclude = a.exclude.clone();
@@ -718,7 +935,10 @@ fn decoy_read(a: &Args, url: &str, block_at: Option<u64>) -> Result<DecoyRead, S
             continue;
         }
         let vw = r.word(&a.registry, &versions_slot(&u))?;
-        let (latest, cur) = (u64::from_be_bytes(vw[24..].try_into().unwrap_or_default()), u64::from_be_bytes(vw[16..24].try_into().unwrap_or_default()));
+        let (latest, cur) = (
+            u64::from_be_bytes(vw[24..].try_into().unwrap_or_default()),
+            u64::from_be_bytes(vw[16..24].try_into().unwrap_or_default()),
+        );
         if latest > cur {
             let rec = r.word(&a.registry, &pqz_key_slot(&u, latest))?;
             if r.code(&low_addr(&rec, 0))?.len() == 1 + PK_BYTES {
@@ -728,12 +948,16 @@ fn decoy_read(a: &Args, url: &str, block_at: Option<u64>) -> Result<DecoyRead, S
         current.insert(u, cur);
         candidates.push(u);
     }
-    let mut request = json!({"exclude": exclude.iter().map(|u| hx(u)).collect::<Vec<_>>(), "count": a.count});
+    let mut request =
+        json!({"exclude": exclude.iter().map(|u| hx(u)).collect::<Vec<_>>(), "count": a.count});
     if let Some(u) = a.recipient {
         request["recipient"] = json!(hx(&u));
     }
     if let Some(w) = a.window {
-        let old = block.checked_sub(w).filter(|_| w >= 2).ok_or("--window: at least 2 and at most the read block")?;
+        let old = block
+            .checked_sub(w)
+            .filter(|_| w >= 2)
+            .ok_or("--window: at least 2 and at most the read block")?;
         let (old, mid) = (pin(old)?, pin(block - w / 2)?);
         let root = erc7201("scaas.pqz");
         let s0 = at("acct[U][7].pendingCount")?.1;
@@ -745,15 +969,26 @@ fn decoy_read(a: &Args, url: &str, block_at: Option<u64>) -> Result<DecoyRead, S
             if a.filter.as_deref() == Some("holder") || debit {
                 return Ok(debit);
             }
-            let (x0, y0) = (x.word(&a.token, &add(base, s0))?, y.word(&a.token, &add(base, s0))?);
-            Ok(field(&x0, "acct[U][7].pendingCount")? != field(&y0, "acct[U][7].pendingCount")?
-                || field(&x0, "acct[U][7].rolled")? != field(&y0, "acct[U][7].rolled")?)
+            let (x0, y0) = (
+                x.word(&a.token, &add(base, s0))?,
+                y.word(&a.token, &add(base, s0))?,
+            );
+            Ok(
+                field(&x0, "acct[U][7].pendingCount")? != field(&y0, "acct[U][7].pendingCount")?
+                    || field(&x0, "acct[U][7].rolled")? != field(&y0, "acct[U][7].rolled")?,
+            )
         };
         let (mut kept, mut weights) = (Vec::new(), Vec::new());
         for u in candidates {
             // ponytail: the current version of the read block; a rotation inside the window reads the new account's counters
             let (base, ctr) = (acct_base(&root, &u, current[&u])?, counter_slot(&root, &u)?);
-            let w = if moved(&mid, &r, &base, &ctr)? { 2 } else if moved(&old, &mid, &base, &ctr)? { 1 } else { 0 };
+            let w = if moved(&mid, &r, &base, &ctr)? {
+                2
+            } else if moved(&old, &mid, &base, &ctr)? {
+                1
+            } else {
+                0
+            };
             if w > 0 {
                 kept.push(u);
                 weights.push(w);
@@ -764,27 +999,57 @@ fn decoy_read(a: &Args, url: &str, block_at: Option<u64>) -> Result<DecoyRead, S
     }
     request["candidates"] = json!(candidates.iter().map(|u| hx(u)).collect::<Vec<_>>());
     let hash = r.hash.clone();
-    Ok(DecoyRead { request, current, sync, count: n, block, hash, pins })
+    Ok(DecoyRead {
+        request,
+        current,
+        sync,
+        count: n,
+        block,
+        hash,
+        pins,
+    })
 }
 
 /// `pickDecoys` (`facade::decoys`, the OS CSPRNG) over the candidates: once per result, never per node.
 fn pick(d: &DecoyRead) -> Result<Value, String> {
-    serde_json::from_str(&scaas_ua::facade::decoys::pick_json(d.request.to_string().as_bytes()).map_err(|e| format!("pickDecoys: {e:?}"))?)
-        .map_err(|_| "pickDecoys: not JSON".into())
+    serde_json::from_str(
+        &scaas_ua::facade::decoys::pick_json(d.request.to_string().as_bytes())
+            .map_err(|e| format!("pickDecoys: {e:?}"))?,
+    )
+    .map_err(|_| "pickDecoys: not JSON".into())
 }
 
 /// The chosen decoys' keys on node `url`, at the read block of `d`.
 fn decoy_legs(a: &Args, url: &str, d: &DecoyRead, picked: &Value) -> Result<Value, String> {
-    let r = Reader { url, hash: d.hash.clone() };
+    let r = Reader {
+        url,
+        hash: d.hash.clone(),
+    };
     let mut legs = Vec::new();
     for u in picked["decoys"].as_array().ok_or("pickDecoys: no decoys")? {
         let ua: Word = fixed("decoy", u.as_str().ok_or("pickDecoys: a UA")?)?;
         // `pqzKey[ua][current]`: `ptr(160) ‖ proven(8) ‖ added(8)`; the code `0x00 ‖ pk`
-        let rec = r.word(&a.registry, &pqz_key_slot(&ua, d.current.get(&ua).copied().ok_or("pickDecoys: not a candidate")?))?;
+        let rec = r.word(
+            &a.registry,
+            &pqz_key_slot(
+                &ua,
+                d.current
+                    .get(&ua)
+                    .copied()
+                    .ok_or("pickDecoys: not a candidate")?,
+            ),
+        )?;
         let code = r.code(&low_addr(&rec, 0))?;
         match code.split_first() {
-            Some((0, pk)) if rec[11] == 1 && pk.len() == PK_BYTES => legs.push(json!({"ua": hx(&ua), "pk": hx(pk)})),
-            _ => return Err(format!("the PQZ key of listed UA {} is not a proven key of this set", hx(&ua))),
+            Some((0, pk)) if rec[11] == 1 && pk.len() == PK_BYTES => {
+                legs.push(json!({"ua": hx(&ua), "pk": hx(pk)}))
+            }
+            _ => {
+                return Err(format!(
+                    "the PQZ key of listed UA {} is not a proven key of this set",
+                    hx(&ua)
+                ))
+            }
         }
     }
     let mut out = json!({"decoys": legs});
@@ -802,7 +1067,11 @@ fn decoys(a: &Args) -> Result<Value, String> {
     let (d, mut out) = if !agreeing(a) {
         failover(a, |url| {
             let d = decoy_read(a, url, None)?;
-            let out = if a.words { words(&d) } else { decoy_legs(a, url, &d, &pick(&d)?)? };
+            let out = if a.words {
+                words(&d)
+            } else {
+                decoy_legs(a, url, &d, &pick(&d)?)?
+            };
             for (n, h) in &d.pins {
                 recheck(url, *n, h)?;
             }
@@ -821,12 +1090,16 @@ fn decoys(a: &Args) -> Result<Value, String> {
         rechecked(&members, &d.pins, majority(a))?;
         (d, out)
     };
-    for (k, v) in [("syncBlock", json!(d.sync)), ("listCount", json!(d.count)), ("block", json!(d.block)), ("blockHash", json!(d.hash))] {
+    for (k, v) in [
+        ("syncBlock", json!(d.sync)),
+        ("listCount", json!(d.count)),
+        ("block", json!(d.block)),
+        ("blockHash", json!(d.hash)),
+    ] {
         out[k] = v;
     }
     Ok(out)
 }
-
 
 // ------------------------------------------------------------------------------------------------------------------------------
 // `--command balanceProven` (no-oracle spec §4.14.11; ua-rs-sign T20d8): path (B)'s words and each credit's history
@@ -858,9 +1131,16 @@ struct Entry {
 /// The selector of each transfer entry, direct and relayed (a call through any other function is not read here).
 fn entries() -> Vec<([u8; 4], Entry)> {
     let mut out = Vec::new();
-    for (multi, name, args) in [(false, "mtxConfidentialTransferSingle", PA), (true, "mtxConfidentialTransfer", MA)] {
+    for (multi, name, args) in [
+        (false, "mtxConfidentialTransferSingle", PA),
+        (true, "mtxConfidentialTransfer", MA),
+    ] {
         for compact in [false, true] {
-            let n = if compact { format!("{name}Compact") } else { name.to_string() };
+            let n = if compact {
+                format!("{name}Compact")
+            } else {
+                name.to_string()
+            };
             for relayed in [false, true] {
                 let sig = if relayed {
                     format!("{n}({UA_ENV},{args},bytes,{UA_SIG},bytes,{UA_SIG},{VERDICT})")
@@ -868,7 +1148,14 @@ fn entries() -> Vec<([u8; 4], Entry)> {
                     format!("{n}({args},bytes,{UA_SIG},bytes,{VERDICT})")
                 };
                 let h = keccak256(sig.as_bytes());
-                out.push(([h[0], h[1], h[2], h[3]], Entry { multi, compact, relayed }));
+                out.push((
+                    [h[0], h[1], h[2], h[3]],
+                    Entry {
+                        multi,
+                        compact,
+                        relayed,
+                    },
+                ));
             }
         }
     }
@@ -877,7 +1164,9 @@ fn entries() -> Vec<([u8; 4], Entry)> {
 
 /// ABI: the word at byte `at`.
 fn aw(d: &[u8], at: usize) -> Result<Word, String> {
-    d.get(at..at + 32).and_then(|w| w.try_into().ok()).ok_or_else(|| "ABI: short".into())
+    d.get(at..at + 32)
+        .and_then(|w| w.try_into().ok())
+        .ok_or_else(|| "ABI: short".into())
 }
 /// ABI: a word that must be a `uint64` (an offset, a length, a counter).
 fn au(d: &[u8], at: usize) -> Result<u64, String> {
@@ -892,9 +1181,13 @@ fn ao(d: &[u8], at: usize) -> Result<usize, String> {
 }
 /// ABI: the `bytes` whose offset (from `base`) is the word at `base + head`.
 fn ab(d: &[u8], base: usize, head: usize) -> Result<Vec<u8>, String> {
-    let off = base.checked_add(ao(d, base + head)?).ok_or("ABI: an offset")?;
+    let off = base
+        .checked_add(ao(d, base + head)?)
+        .ok_or("ABI: an offset")?;
     let n = ao(d, off)?;
-    d.get(off + 32..off.checked_add(32 + n).ok_or("ABI: a length")?).map(<[u8]>::to_vec).ok_or_else(|| "ABI: short bytes".into())
+    d.get(off + 32..off.checked_add(32 + n).ok_or("ABI: a length")?)
+        .map(<[u8]>::to_vec)
+        .ok_or_else(|| "ABI: short bytes".into())
 }
 
 /// A NONE credit's debit as its call carries it: `fromUA`, the call fields of §4.14.4 step 4 (`fee` without the token's part)
@@ -917,13 +1210,24 @@ struct Called {
 /// `data`, `relayer` and `feeRecipient` zero unless the mode restricts them). `compact_token`: the token's `disclosureMode` is
 /// COMPACT (its default entries commit-reveal).
 fn called(a: &Args, input: &[u8], compact_token: bool) -> Result<Called, String> {
-    let sel: [u8; 4] = input.get(..4).and_then(|s| s.try_into().ok()).ok_or("NONE: no selector")?;
-    let e = entries().into_iter().find(|x| x.0 == sel).ok_or("NONE: the debit's call is not a PQZ transfer entry of this token")?.1;
+    let sel: [u8; 4] = input
+        .get(..4)
+        .and_then(|s| s.try_into().ok())
+        .ok_or("NONE: no selector")?;
+    let e = entries()
+        .into_iter()
+        .find(|x| x.0 == sel)
+        .ok_or("NONE: the debit's call is not a PQZ transfer entry of this token")?
+        .1;
     let d = input.get(4..).ok_or("ABI")?;
     let (t_head, proof_head, binding) = if e.relayed {
         let env: Vec<Word> = (0..8).map(|i| aw(d, 32 * i)).collect::<Result<_, _>>()?;
         au(d, 32 * 4)?; // the mode is a uint32
-        (32 * 8, 32 * 9, envelope_binding(a.chain_id, &a.chain_uid, &a.token, &envelope_of(&env)?))
+        (
+            32 * 8,
+            32 * 9,
+            envelope_binding(a.chain_id, &a.chain_uid, &a.token, &envelope_of(&env)?),
+        )
     } else {
         (0, 32, [0; 32])
     };
@@ -938,25 +1242,59 @@ fn called(a: &Args, input: &[u8], compact_token: bool) -> Result<Called, String>
         (w(6)?, 0, 14, 1) // `sealedMemo` after `uFrom` (the three-key model)
     };
     let sealed_memo = ab(d, t, 32 * memo_at)?;
-    Ok(Called { from: w(3)?, multi: e.multi, beneficiary, valid_until, hash: e.compact || compact_token, sealed_memo, binding, decoy_fee, m, proof })
+    Ok(Called {
+        from: w(3)?,
+        multi: e.multi,
+        beneficiary,
+        valid_until,
+        hash: e.compact || compact_token,
+        sealed_memo,
+        binding,
+        decoy_fee,
+        m,
+        proof,
+    })
 }
 
 /// A relayed debit's envelope words `(from, batch, nonce, validUntil, mode, relayer, fee, feeRecipient)` by name; its binding is
 /// the library's [`envelope_binding`] (`PqzLayer._uaEnvelopeBinding`, T21 L44: one copy). T62a's rows pin it.
 fn envelope_of(env: &[Word]) -> Result<PqzEnvelope, String> {
-    let [from, batch, nonce, valid_until, mode, relayer, fee, fee_recipient] = *env else { return Err("an envelope of other than 8 words".into()) };
-    Ok(PqzEnvelope { from, batch, nonce, valid_until, mode, relayer, fee, fee_recipient })
+    let [from, batch, nonce, valid_until, mode, relayer, fee, fee_recipient] = *env else {
+        return Err("an envelope of other than 8 words".into());
+    };
+    Ok(PqzEnvelope {
+        from,
+        batch,
+        nonce,
+        valid_until,
+        mode,
+        relayer,
+        fee,
+        fee_recipient,
+    })
 }
 
 /// A NONE debit's header `fee` (§4.14.4 step 4, `PqzCore._common`): the token's `confidentialFee` when the debit names a
 /// beneficiary, else 0, plus `OFFCHAIN`'s `verifierFee` (round 3t; T21 L83), plus `M · decoyFee` on op 7. T62a's rows and
 /// `verifier_fee.json` pin it.
-fn call_fee(beneficiary: &Word, token_fee: u64, m: u64, decoy_fee: u64, v: Verification) -> Option<u64> {
+fn call_fee(
+    beneficiary: &Word,
+    token_fee: u64,
+    m: u64,
+    decoy_fee: u64,
+    v: Verification,
+) -> Option<u64> {
     let vf = match v {
         Verification::Precompile => 0,
         Verification::Offchain { verifier_fee } => verifier_fee,
     };
-    (if *beneficiary == [0; 32] { 0 } else { token_fee }).checked_add(vf)?.checked_add(m.checked_mul(decoy_fee)?)
+    (if *beneficiary == [0; 32] {
+        0
+    } else {
+        token_fee
+    })
+    .checked_add(vf)?
+    .checked_add(m.checked_mul(decoy_fee)?)
 }
 
 /// The token's verification from its words: `pqzVerifyMode` (slot 0) and, on `OFFCHAIN` only (the contract reads it there
@@ -964,8 +1302,12 @@ fn call_fee(beneficiary: &Word, token_fee: u64, m: u64, decoy_fee: u64, v: Verif
 fn verification(tok: &dyn Fn(&str) -> Result<Word, String>) -> Result<Verification, String> {
     match field(&tok("pqzVerifyMode")?, "pqzVerifyMode")? {
         0 => Ok(Verification::Precompile),
-        1 => Ok(Verification::Offchain { verifier_fee: field(&tok("verifierFee")?, "verifierFee")? }),
-        m => Err(format!("pqzVerifyMode {m}: neither PRECOMPILE nor OFFCHAIN")),
+        1 => Ok(Verification::Offchain {
+            verifier_fee: field(&tok("verifierFee")?, "verifierFee")?,
+        }),
+        m => Err(format!(
+            "pqzVerifyMode {m}: neither PRECOMPILE nor OFFCHAIN"
+        )),
     }
 }
 
@@ -975,7 +1317,13 @@ fn proof_log(data: &[u8]) -> Result<(Vec<Word>, Vec<u8>), String> {
     if header.len() != 640 {
         return Err("LOG: a header of other than 640 bytes".into());
     }
-    Ok((header.chunks_exact(32).map(|c| c.try_into().map_err(|_| "LOG".to_string())).collect::<Result<_, _>>()?, ab(data, 0, 32)?))
+    Ok((
+        header
+            .chunks_exact(32)
+            .map(|c| c.try_into().map_err(|_| "LOG".to_string()))
+            .collect::<Result<_, _>>()?,
+        ab(data, 0, 32)?,
+    ))
 }
 
 /// One SSTORE2 code per address and read (a shared op 7 blob fetched once: C-PP-7).
@@ -990,20 +1338,44 @@ impl Codes<'_, '_> {
             let c = self.r.code(a)?;
             self.got.insert(*a, c);
         }
-        self.got.get(a).map(Vec::as_slice).ok_or_else(|| "code".into())
+        self.got
+            .get(a)
+            .map(Vec::as_slice)
+            .ok_or_else(|| "code".into())
     }
     fn json(&self, ptrs: &[[u8; 20]]) -> Vec<Value> {
         let mut seen = Vec::new();
         ptrs.iter()
-            .filter(|p| if seen.contains(*p) { false } else { seen.push(**p); true })
-            .filter_map(|p| self.got.get(p).map(|c| json!({"address": hx(p), "code": hx(c)})))
+            .filter(|p| {
+                if seen.contains(*p) {
+                    false
+                } else {
+                    seen.push(**p);
+                    true
+                }
+            })
+            .filter_map(|p| {
+                self.got
+                    .get(p)
+                    .map(|c| json!({"address": hx(p), "code": hx(c)}))
+            })
             .collect()
     }
 }
 
 /// `PqzCore.entryRefOf` on the configured chain and token: `keccak256(abi.encode(TAG_ENTRY, chainId, chainUid, token, fromUA, k))`.
 fn entry_ref_of(a: &Args, from: &Word, counter: u64) -> Word {
-    keccak256(&[keccak256(b"SCAAS-PQZ-ENTRY-V1"), be(a.chain_id), a.chain_uid, addr_word(&a.token), *from, be(counter)].concat())
+    keccak256(
+        &[
+            keccak256(b"SCAAS-PQZ-ENTRY-V1"),
+            be(a.chain_id),
+            a.chain_uid,
+            addr_word(&a.token),
+            *from,
+            be(counter),
+        ]
+        .concat(),
+    )
 }
 
 /// `balanceProven`'s state while the window is read: the token's words a credit needs, the codes fetched once, the credits.
@@ -1023,7 +1395,11 @@ impl<'r, 'u> ProofPath<'r, 'u> {
     /// The token's `auditorUA` (the current epoch's), `auditorMode`, `confidentialFee` (a NONE header's fee; a `uint64` here)
     /// and `disclosureMode` (COMPACT: its default entries commit-reveal).
     fn of(r: &'r Reader<'u>, tok: &dyn Fn(&str) -> Result<Word, String>) -> Result<Self, String> {
-        let (auditor, mode, fee) = (tok("auditorUA")?, tok("disclosureMode")?, tok("confidentialFee")?);
+        let (auditor, mode, fee) = (
+            tok("auditorUA")?,
+            tok("disclosureMode")?,
+            tok("confidentialFee")?,
+        );
         if fee[..24] != [0; 24] {
             return Err("confidentialFee past 64 bits".into());
         }
@@ -1033,7 +1409,10 @@ impl<'r, 'u> ProofPath<'r, 'u> {
             fee: u64::from_be_bytes(fee[24..].try_into().map_err(|_| "fee")?),
             verification: verification(tok)?,
             compact: field(&mode, "disclosureMode")? == 1,
-            codes: Codes { r, got: std::collections::BTreeMap::new() },
+            codes: Codes {
+                r,
+                got: std::collections::BTreeMap::new(),
+            },
             credits: Vec::new(),
             ptrs: Vec::new(),
         })
@@ -1042,17 +1421,35 @@ impl<'r, 'u> ProofPath<'r, 'u> {
 
 /// `balanceProven`'s start: the last own debit's record `debitRec[--ua][lastDebit − 1]` (slot 19) into `request` as
 /// `lastRecord`, `accBlob` (its `v_f`, checked by its tag) among the codes; its `p` (`p_last`; 0 when never debited).
-fn last_record(a: &Args, r: &Reader<'_>, root: &Word, account: &[Word], acc_blob: [u8; 20], ptrs: &mut Vec<[u8; 20]>, request: &mut Value)
-    -> Result<u64, String> {
+fn last_record(
+    a: &Args,
+    r: &Reader<'_>,
+    root: &Word,
+    account: &[Word],
+    acc_blob: [u8; 20],
+    ptrs: &mut Vec<[u8; 20]>,
+    request: &mut Value,
+) -> Result<u64, String> {
     let last = field(account.get(2).ok_or("the account")?, "acct[U][7].lastDebit")?;
     if last == 0 {
         return Ok(0);
     }
     ptrs.push(acc_blob);
-    let rb = keccak256(&[be(last - 1), keccak256(&[a.ua, add(root, at("debitRec[U][7].w0")?.0)].concat())].concat());
-    let (w0, w1) = (r.word(&a.token, &rb)?, r.word(&a.token, &add(&rb, at("debitRec[U][7].w1")?.1))?);
+    let rb = keccak256(
+        &[
+            be(last - 1),
+            keccak256(&[a.ua, add(root, at("debitRec[U][7].w0")?.0)].concat()),
+        ]
+        .concat(),
+    );
+    let (w0, w1) = (
+        r.word(&a.token, &rb)?,
+        r.word(&a.token, &add(&rb, at("debitRec[U][7].w1")?.1))?,
+    );
     request["lastRecord"] = json!({"w0": hx(&w0), "w1": hx(&w1)});
-    Ok(scaas_ua::facade::pqz_path::record(&w0, &w1, last - 1).map_err(|_| "the account's last record")?.p)
+    Ok(scaas_ua::facade::pqz_path::record(&w0, &w1, last - 1)
+        .map_err(|_| "the account's last record")?
+        .p)
 }
 
 /// The token's words of `balanceProven`'s credits (§4.14.11), read at the block `r` names: for pending index `i` of `--ua`'s
@@ -1061,41 +1458,82 @@ fn last_record(a: &Args, r: &Reader<'_>, root: &Word, account: &[Word], acc_blob
 /// whose `entryRef` the log names), then from state its record, the sender's window, the keys by the tail's `kv` (the holder's own
 /// leg left out) and their codes.
 #[allow(clippy::too_many_arguments)]
-fn credit(a: &Args, url: &str, block: u64, root: &Word, codes: &mut Codes<'_, '_>, i: u64, e: &Word, mode: &Word, fee: u64,
-    ver: Verification, compact: bool)
-    -> Result<(Value, Vec<[u8; 20]>), String> {
+fn credit(
+    a: &Args,
+    url: &str,
+    block: u64,
+    root: &Word,
+    codes: &mut Codes<'_, '_>,
+    i: u64,
+    e: &Word,
+    mode: &Word,
+    fee: u64,
+    ver: Verification,
+    compact: bool,
+) -> Result<(Value, Vec<[u8; 20]>), String> {
     let r = codes.r;
     let v = a.key_version.ok_or("--key-version")?;
     let ptr = low_addr(e, 12);
     let to = format!("0x{block:x}");
-    let logs = rpc(url, "eth_getLogs", json!([{"address": hx(&a.token), "fromBlock": "0x0", "toBlock": to,
-        "topics": [hx(&keccak256(EV_PROOF.as_bytes())), hx(&addr_word(&ptr))]}]))?;
+    let logs = rpc(
+        url,
+        "eth_getLogs",
+        json!([{"address": hx(&a.token), "fromBlock": "0x0", "toBlock": to,
+        "topics": [hx(&keccak256(EV_PROOF.as_bytes())), hx(&addr_word(&ptr))]}]),
+    )?;
     let logs = logs.as_array().ok_or("eth_getLogs: not a list")?;
     let (from, k, multi, how): (Word, u64, bool, Value) = match logs.as_slice() {
         [l] => {
             let t = l["topics"].as_array().ok_or("LOG: topics")?;
-            let word = |j: usize| -> Result<Word, String> { fixed("LOG topic", t.get(j).and_then(Value::as_str).ok_or("LOG: topics")?) };
+            let word = |j: usize| -> Result<Word, String> {
+                fixed(
+                    "LOG topic",
+                    t.get(j).and_then(Value::as_str).ok_or("LOG: topics")?,
+                )
+            };
             let (header, proof) = proof_log(&unhex(l["data"].as_str().ok_or("LOG: data")?)?)?;
             let multi = header.first() == Some(&pqz_ffi::stmt::OP_TAG_TRANSFER_MULTI);
             let k = u64::from_be_bytes(word(3)?[24..].try_into().map_err(|_| "LOG")?);
-            (word(2)?, k, multi, json!({"proof": hx(&proof), "header": header.iter().map(|w| hx(w)).collect::<Vec<_>>()}))
+            (
+                word(2)?,
+                k,
+                multi,
+                json!({"proof": hx(&proof), "header": header.iter().map(|w| hx(w)).collect::<Vec<_>>()}),
+            )
         }
         [] => {
-            let cl = rpc(url, "eth_getLogs", json!([{"address": hx(&a.token), "fromBlock": "0x0", "toBlock": to,
-                "topics": [hx(&keccak256(EV_CREDITED.as_bytes())), hx(&a.ua), hx(&be(i))]}]))?;
+            let cl = rpc(
+                url,
+                "eth_getLogs",
+                json!([{"address": hx(&a.token), "fromBlock": "0x0", "toBlock": to,
+                "topics": [hx(&keccak256(EV_CREDITED.as_bytes())), hx(&a.ua), hx(&be(i))]}]),
+            )?;
             let [l] = cl.as_array().ok_or("eth_getLogs: not a list")?.as_slice() else {
                 return Err(format!("NONE: no single Credited log of pending index {i}"));
             };
             let data = unhex(l["data"].as_str().ok_or("NONE: data")?)?;
             let entry_ref = aw(&data, 32)?;
-            let tx = rpc(url, "eth_getTransactionByHash", json!([l["transactionHash"]]))?;
+            let tx = rpc(
+                url,
+                "eth_getTransactionByHash",
+                json!([l["transactionHash"]]),
+            )?;
             if tx["to"].as_str().map(|t| t.to_ascii_lowercase()) != Some(hx(&a.token)) {
                 return Err(format!("NONE: pending index {i} was credited by a call through another contract (it needs a trace; take path (A))"));
             }
-            let c = called(a, &unhex(tx["input"].as_str().ok_or("NONE: input")?)?, compact)?;
+            let c = called(
+                a,
+                &unhex(tx["input"].as_str().ok_or("NONE: input")?)?,
+                compact,
+            )?;
             let er = |n: u64| entry_ref_of(a, &c.from, n);
-            let counter = field(&r.word(&a.token, &counter_slot(root, &c.from)?)?, "sendCounter[U]")?;
-            let k = (counter.saturating_sub(MAX_COUNTER_SEARCH)..counter).rev().find(|n| er(*n) == entry_ref)
+            let counter = field(
+                &r.word(&a.token, &counter_slot(root, &c.from)?)?,
+                "sendCounter[U]",
+            )?;
+            let k = (counter.saturating_sub(MAX_COUNTER_SEARCH)..counter)
+                .rev()
+                .find(|n| er(*n) == entry_ref)
                 .ok_or("NONE: no sendCounter of the call's fromUA gives the Credited entryRef")?;
             let fee = call_fee(&c.beneficiary, fee, c.m, c.decoy_fee, ver).ok_or("fee")?;
             let (vm, vf) = match ver {
@@ -1107,14 +1545,33 @@ fn credit(a: &Args, url: &str, block: u64, root: &Word, codes: &mut Codes<'_, '_
             if c.hash {
                 call["sealedMemo"] = json!(hx(&c.sealed_memo));
             }
-            (c.from, k, c.multi, json!({"proof": hx(&c.proof), "call": call}))
+            (
+                c.from,
+                k,
+                c.multi,
+                json!({"proof": hx(&c.proof), "call": call}),
+            )
         }
-        _ => return Err(format!("LOG: several PqzDebitProof logs of pending index {i}'s blob")),
+        _ => {
+            return Err(format!(
+                "LOG: several PqzDebitProof logs of pending index {i}'s blob"
+            ))
+        }
     };
     // the record and the sender's window, from state
-    let rec_base = keccak256(&[be(k), keccak256(&[from, add(root, at("debitRec[U][7].w0")?.0)].concat())].concat());
-    let (w0, w1) = (r.word(&a.token, &rec_base)?, r.word(&a.token, &add(&rec_base, at("debitRec[U][7].w1")?.1))?);
-    let rec = scaas_ua::facade::pqz_path::record(&w0, &w1, k).map_err(|_| format!("the record of the debit of pending index {i}"))?;
+    let rec_base = keccak256(
+        &[
+            be(k),
+            keccak256(&[from, add(root, at("debitRec[U][7].w0")?.0)].concat()),
+        ]
+        .concat(),
+    );
+    let (w0, w1) = (
+        r.word(&a.token, &rec_base)?,
+        r.word(&a.token, &add(&rec_base, at("debitRec[U][7].w1")?.1))?,
+    );
+    let rec = scaas_ua::facade::pqz_path::record(&w0, &w1, k)
+        .map_err(|_| format!("the record of the debit of pending index {i}"))?;
     let sender = acct_base(root, &from, rec.key_version)?;
     let map = add(&sender, at("acct[U][7].pending[3]")?.1);
     let mut ptrs = vec![ptr];
@@ -1130,13 +1587,21 @@ fn credit(a: &Args, url: &str, block: u64, root: &Word, codes: &mut Codes<'_, '_
         window.push(json!({"index": x, "word": hx(&w)}));
     }
     // the keys: the sender's at its version, every other leg's and the auditor's by `kv`
-    let d = codes.get(&ptr)?.get(1..).ok_or("an empty op blob")?.to_vec();
+    let d = codes
+        .get(&ptr)?
+        .get(1..)
+        .ok_or("an empty op blob")?
+        .to_vec();
     let tail = scaas_ua::facade::pqz_path::tail(&d).map_err(|_| "an op blob's tail")?;
-    let (g, m, aud) = scaas_ua::facade::pqz_path::bundle_shape(tail.r_len, PKP, VP).map_err(|_| "an op blob's shape")?;
+    let (g, m, aud) = scaas_ua::facade::pqz_path::bundle_shape(tail.r_len, PKP, VP)
+        .map_err(|_| "an op blob's shape")?;
     let mut keys = vec![(from, rec.key_version)];
     for j in 0..m {
         let end = 16 + PKP * g + (32 + VP * (1 + aud as usize)) * (j + 1);
-        let ua: Word = d.get(end - 32..end).and_then(|x| x.try_into().ok()).ok_or("a leg's UA")?;
+        let ua: Word = d
+            .get(end - 32..end)
+            .and_then(|x| x.try_into().ok())
+            .ok_or("a leg's UA")?;
         let kv = *tail.kv.get(j).ok_or("a leg's kv")?;
         if !(ua == a.ua && kv == v) {
             keys.push((ua, kv));
@@ -1147,7 +1612,10 @@ fn credit(a: &Args, url: &str, block: u64, root: &Word, codes: &mut Codes<'_, '_
     let mut auditor = None;
     if aud {
         let entry_ref = entry_ref_of(a, &from, k);
-        let ew = r.word(&a.token, &keccak256(&[entry_ref, add(root, at("entryAuditorEpoch[V]")?.0)].concat()))?;
+        let ew = r.word(
+            &a.token,
+            &keccak256(&[entry_ref, add(root, at("entryAuditorEpoch[V]")?.0)].concat()),
+        )?;
         let epoch = field(&ew, "entryAuditorEpoch[V]")?;
         let slot = if epoch == field(mode, "auditorEpoch")? {
             add(root, at("auditorUA")?.0)
@@ -1156,7 +1624,9 @@ fn credit(a: &Args, url: &str, block: u64, root: &Word, codes: &mut Codes<'_, '_
         };
         let ua = r.word(&a.token, &slot)?;
         keys.push((ua, *tail.kv.get(m).ok_or("the auditor's kv")?));
-        auditor = Some(json!({"auditorMode": hx(mode), "entryAuditorEpoch": hx(&ew), "auditorUASlot": hx(&slot), "auditorUA": hx(&ua)}));
+        auditor = Some(
+            json!({"auditorMode": hx(mode), "entryAuditorEpoch": hx(&ew), "auditorUASlot": hx(&slot), "auditorUA": hx(&ua)}),
+        );
     }
     let mut records = Vec::new();
     for (ua, x) in &keys {
@@ -1191,24 +1661,34 @@ fn run(a: &Args) -> Result<Value, String> {
         return Ok(out);
     }
     if std::io::stdin().is_terminal() {
-        return Err("pipe the key JSON on stdin (pqz-read … < key.json); a terminal would echo it".into());
+        return Err(
+            "pipe the key JSON on stdin (pqz-read … < key.json); a terminal would echo it".into(),
+        );
     }
     // T21 L78 (CLI-UAL-03): bounded while read (one byte past the cap is the refusal; the buffer never grows), then the
     // shared length / depth reader: the envelope is one flat object
     let mut input = Zeroizing::new(Vec::with_capacity(KEY_JSON_MAX + 1));
-    std::io::stdin().take(KEY_JSON_MAX as u64 + 1).read_to_end(&mut input).map_err(|e| e.to_string())?;
+    std::io::stdin()
+        .take(KEY_JSON_MAX as u64 + 1)
+        .read_to_end(&mut input)
+        .map_err(|e| e.to_string())?;
     if input.len() > KEY_JSON_MAX {
         return Err(format!("stdin: the key JSON is over {KEY_JSON_MAX} bytes"));
     }
-    let mut kv = scaas_ua::wallet::bounded::json(&input, KEY_JSON_MAX, 1).map_err(|_| "stdin: key JSON expected".to_string())?;
+    let mut kv = scaas_ua::wallet::bounded::json(&input, KEY_JSON_MAX, 1)
+        .map_err(|_| "stdin: key JSON expected".to_string())?;
     let handle = key(&kv);
     wipe(&mut kv);
     let (wallet, account, index) = handle?;
-    let k = wallet.pqz_key_version(account, index, a.key_version.ok_or("--key-version")?).map_err(|e| format!("the key: {e:?}"))?;
+    let k = wallet
+        .pqz_key_version(account, index, a.key_version.ok_or("--key-version")?)
+        .map_err(|e| format!("the key: {e:?}"))?;
     let r = read_words(a, Some(k.pk().as_slice()))?;
     // R7: no request after this line
     let call = |cmd: &str, req: &Value| -> Result<Value, String> {
-        let out = k.call(cmd, req.to_string().as_bytes()).map_err(|e| format!("ua-rs refused the words: {e:?}"))?;
+        let out = k
+            .call(cmd, req.to_string().as_bytes())
+            .map_err(|e| format!("ua-rs refused the words: {e:?}"))?;
         serde_json::from_str(&out).map_err(|_| "ua-rs: not JSON".to_string())
     };
     let mut v = if a.command == "balanceProven" {
@@ -1261,9 +1741,15 @@ mod tests {
     fn helpers() {
         let c = curl_config("https://node/x?key=a\"b", r#"{"a":"\\"}"#);
         assert!(c.contains(r#"url = "https://node/x?key=a\"b""#), "{c}");
-        assert!(!curl_config("-o out/x", "{}\nurl = \"evil\"").contains("\nurl = \"evil"), "no injected lines");
+        assert!(
+            !curl_config("-o out/x", "{}\nurl = \"evil\"").contains("\nurl = \"evil"),
+            "no injected lines"
+        );
         assert_eq!(add(&[0xff; 32], 1), [0; 32]);
-        assert_eq!(hx(&erc7201("scaas.pqz")), "0xda865ec17214f25b93cdb133d719c79392c290a4b9089fd0bba156256c521500");
+        assert_eq!(
+            hx(&erc7201("scaas.pqz")),
+            "0xda865ec17214f25b93cdb133d719c79392c290a4b9089fd0bba156256c521500"
+        );
         assert_eq!(unhex("0x0aFf").unwrap(), [10, 255]);
         assert!(unhex("0x0").is_err() && unhex("zz").is_err());
         let mut v: Value = serde_json::from_str(r#"{"mnemonic":"abc","n":["ab"]}"#).unwrap();
@@ -1277,20 +1763,52 @@ mod tests {
     #[test]
     fn proof_log_rows_decode() {
         for f in ["state.json", "n2304-kmax4096/state.json"] {
-            let p = format!("{}/../../smartcontracts/vectors/pqz/{f}", env!("CARGO_MANIFEST_DIR"));
+            let p = format!(
+                "{}/../../smartcontracts/vectors/pqz/{f}",
+                env!("CARGO_MANIFEST_DIR")
+            );
             let v: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
             let rows = v["proofLogs"].as_array().unwrap();
             assert!(!rows.is_empty());
             for r in rows {
-                let (header, proof) = proof_log(&unhex(r["data"].as_str().unwrap()).unwrap()).unwrap();
-                assert_eq!(hx(&header.concat()), r["header"].as_str().unwrap(), "{}", r["name"]);
+                let (header, proof) =
+                    proof_log(&unhex(r["data"].as_str().unwrap()).unwrap()).unwrap();
+                assert_eq!(
+                    hx(&header.concat()),
+                    r["header"].as_str().unwrap(),
+                    "{}",
+                    r["name"]
+                );
                 assert_eq!(hx(&proof), r["proof"].as_str().unwrap());
-                let t: Vec<&str> = r["topics"].as_array().unwrap().iter().map(|x| x.as_str().unwrap()).collect();
-                let blob: [u8; 20] = unhex(r["blob"].as_str().unwrap()).unwrap().try_into().unwrap();
-                assert_eq!(t, [hx(&keccak256(EV_PROOF.as_bytes())), hx(&addr_word(&blob)), r["ua"].as_str().unwrap().to_string(),
-                    hx(&be(r["sendCounter"].as_u64().unwrap()))]);
+                let t: Vec<&str> = r["topics"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|x| x.as_str().unwrap())
+                    .collect();
+                let blob: [u8; 20] = unhex(r["blob"].as_str().unwrap())
+                    .unwrap()
+                    .try_into()
+                    .unwrap();
+                assert_eq!(
+                    t,
+                    [
+                        hx(&keccak256(EV_PROOF.as_bytes())),
+                        hx(&addr_word(&blob)),
+                        r["ua"].as_str().unwrap().to_string(),
+                        hx(&be(r["sendCounter"].as_u64().unwrap()))
+                    ]
+                );
             }
-            let short = [be(64).to_vec(), be(64 + 32 + 640).to_vec(), be(608).to_vec(), vec![0; 608], be(1).to_vec(), vec![0; 32]].concat();
+            let short = [
+                be(64).to_vec(),
+                be(64 + 32 + 640).to_vec(),
+                be(608).to_vec(),
+                vec![0; 608],
+                be(1).to_vec(),
+                vec![0; 32],
+            ]
+            .concat();
             assert!(proof_log(&short).is_err(), "a header of 608 bytes");
         }
     }
@@ -1301,7 +1819,10 @@ mod tests {
     #[test]
     fn none_header_rows_envelope_and_fee() {
         for f in ["state.json", "n2304-kmax4096/state.json"] {
-            let p = format!("{}/../../smartcontracts/vectors/pqz/{f}", env!("CARGO_MANIFEST_DIR"));
+            let p = format!(
+                "{}/../../smartcontracts/vectors/pqz/{f}",
+                env!("CARGO_MANIFEST_DIR")
+            );
             let v: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
             let rows = v["noneHeaders"].as_array().unwrap();
             assert_eq!(rows.len(), 10);
@@ -1310,20 +1831,56 @@ mod tests {
             let mut relayed = 0;
             for r in rows {
                 let name = r["name"].as_str().unwrap();
-                let token: [u8; 20] = unhex(r["token"].as_str().unwrap()).unwrap().try_into().unwrap();
+                let token: [u8; 20] = unhex(r["token"].as_str().unwrap())
+                    .unwrap()
+                    .try_into()
+                    .unwrap();
                 if r["path"] == "relayed" {
                     let e = &r["envelope"];
-                    let env = [w(&e["from"]), be(n(&e["batch"])), be(n(&e["nonce"])), be(n(&e["validUntil"])), be(n(&e["mode"])),
-                        addr_word(&unhex(e["relayer"].as_str().unwrap()).unwrap().try_into().unwrap()), be(n(&e["fee"])),
-                        addr_word(&unhex(e["feeRecipient"].as_str().unwrap()).unwrap().try_into().unwrap())];
-                    let got = envelope_binding(n(&r["chainId"]), &w(&r["chainUid"]), &token, &envelope_of(&env).unwrap());
+                    let env = [
+                        w(&e["from"]),
+                        be(n(&e["batch"])),
+                        be(n(&e["nonce"])),
+                        be(n(&e["validUntil"])),
+                        be(n(&e["mode"])),
+                        addr_word(
+                            &unhex(e["relayer"].as_str().unwrap())
+                                .unwrap()
+                                .try_into()
+                                .unwrap(),
+                        ),
+                        be(n(&e["fee"])),
+                        addr_word(
+                            &unhex(e["feeRecipient"].as_str().unwrap())
+                                .unwrap()
+                                .try_into()
+                                .unwrap(),
+                        ),
+                    ];
+                    let got = envelope_binding(
+                        n(&r["chainId"]),
+                        &w(&r["chainUid"]),
+                        &token,
+                        &envelope_of(&env).unwrap(),
+                    );
                     assert_eq!(hx(&got), r["envelopeBinding"].as_str().unwrap(), "{name}");
                     relayed += 1;
                 }
                 let m = r["legs"].as_array().map_or(1, |l| l.len() as u64);
-                let fee = call_fee(&w(&r["beneficiaryUA"]), n(&r["confidentialFee"]), m, n(&r["decoyFee"]), Verification::Precompile).unwrap();
+                let fee = call_fee(
+                    &w(&r["beneficiaryUA"]),
+                    n(&r["confidentialFee"]),
+                    m,
+                    n(&r["decoyFee"]),
+                    Verification::Precompile,
+                )
+                .unwrap();
                 let header = unhex(r["header"].as_str().unwrap()).unwrap();
-                assert_eq!(be(fee).as_slice(), &header[32 * 8..32 * 9], "{name}: the fee word");
+                assert_eq!(
+                    be(fee).as_slice(),
+                    &header[32 * 8..32 * 9],
+                    "{name}: the fee word"
+                );
             }
             assert_eq!(relayed, 5, "every form relayed once");
             assert!(envelope_of(&[[0; 32]; 7]).is_err());
@@ -1336,39 +1893,78 @@ mod tests {
     /// mode 0 does not, any other mode is refused.
     #[test]
     fn call_fee_adds_the_verifier_fee() {
-        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/vectors/pqz/n2304-kmax4096/verifier_fee.json");
+        let p = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../smartcontracts/vectors/pqz/n2304-kmax4096/verifier_fee.json"
+        );
         let v: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
         let n = |x: &Value| x.as_u64().unwrap();
         let ben = [0x5a; 32];
         let rows = v["rows"].as_array().unwrap();
         assert_eq!(rows.len(), 108);
         for r in rows {
-            let b = if r["beneficiary"].as_bool().unwrap() { ben } else { [0; 32] };
-            let ver = Verification::Offchain { verifier_fee: n(&r["verifierFee"]) };
-            assert_eq!(call_fee(&b, n(&r["confidentialFee"]), n(&r["legs"]), n(&r["decoyFee"]), ver), Some(n(&r["feeWord"])), "{r}");
+            let b = if r["beneficiary"].as_bool().unwrap() {
+                ben
+            } else {
+                [0; 32]
+            };
+            let ver = Verification::Offchain {
+                verifier_fee: n(&r["verifierFee"]),
+            };
+            assert_eq!(
+                call_fee(
+                    &b,
+                    n(&r["confidentialFee"]),
+                    n(&r["legs"]),
+                    n(&r["decoyFee"]),
+                    ver
+                ),
+                Some(n(&r["feeWord"])),
+                "{r}"
+            );
         }
         let mut seven = 0;
         for b in v["binding"].as_array().unwrap() {
             let ver = match b["pqzVerifyMode"].as_str().unwrap() {
-                "OFFCHAIN" => Verification::Offchain { verifier_fee: n(&b["verifierFee"]) },
+                "OFFCHAIN" => Verification::Offchain {
+                    verifier_fee: n(&b["verifierFee"]),
+                },
                 _ => Verification::Precompile,
             };
-            assert_eq!(call_fee(&[0; 32], 5, 1, 0, ver), Some(n(&b["op1FeeWord"])), "{b}");
+            assert_eq!(
+                call_fee(&[0; 32], 5, 1, 0, ver),
+                Some(n(&b["op1FeeWord"])),
+                "{b}"
+            );
             seven += usize::from(n(&b["op1FeeWord"]) == 7);
         }
         assert_eq!(seven, 2, "the fee-7 rows, both modes");
         assert_eq!(call_fee(&ben, 3, 2, 1, Verification::Precompile), Some(5));
-        assert_eq!(call_fee(&ben, u64::MAX, 0, 0, Verification::Offchain { verifier_fee: 1 }), None);
-        let word = |mode: u8, fee: u64| move |l: &str| -> Result<Word, String> {
-            let mut w = [0u8; 32];
-            match l {
-                "pqzVerifyMode" => w[32 - 22 - 1] = mode,
-                "verifierFee" => w[24..].copy_from_slice(&fee.to_be_bytes()),
-                _ => return Err(l.into()),
+        assert_eq!(
+            call_fee(
+                &ben,
+                u64::MAX,
+                0,
+                0,
+                Verification::Offchain { verifier_fee: 1 }
+            ),
+            None
+        );
+        let word = |mode: u8, fee: u64| {
+            move |l: &str| -> Result<Word, String> {
+                let mut w = [0u8; 32];
+                match l {
+                    "pqzVerifyMode" => w[32 - 22 - 1] = mode,
+                    "verifierFee" => w[24..].copy_from_slice(&fee.to_be_bytes()),
+                    _ => return Err(l.into()),
+                }
+                Ok(w)
             }
-            Ok(w)
         };
-        assert_eq!(verification(&word(1, 7)), Ok(Verification::Offchain { verifier_fee: 7 }));
+        assert_eq!(
+            verification(&word(1, 7)),
+            Ok(Verification::Offchain { verifier_fee: 7 })
+        );
         assert_eq!(verification(&word(0, 7)), Ok(Verification::Precompile));
         assert!(verification(&word(2, 7)).is_err());
     }
@@ -1377,20 +1973,50 @@ mod tests {
     /// entries' `abi` and `selector`); the direct ones are the same types without the envelope and `auth`.
     #[test]
     fn transfer_entries_are_the_typed_rows() {
-        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/vectors/typed/typed_ops.json");
+        let p = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../smartcontracts/vectors/typed/typed_ops.json"
+        );
         let v: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
         let sels = entries();
         assert_eq!(sels.len(), 8);
-        for (op, multi, compact) in [("UAPqzTransferSingle", false, false), ("UAPqzTransferSingleCompact", false, true),
-            ("UAPqzTransfer", true, false), ("UAPqzTransferCompact", true, true)]
-        {
-            let d = v["ops"][op]["domains"].as_object().unwrap().values().next().unwrap();
-            let name = d["abi"].as_str().unwrap().split('(').next().unwrap().to_string();
+        for (op, multi, compact) in [
+            ("UAPqzTransferSingle", false, false),
+            ("UAPqzTransferSingleCompact", false, true),
+            ("UAPqzTransfer", true, false),
+            ("UAPqzTransferCompact", true, true),
+        ] {
+            let d = v["ops"][op]["domains"]
+                .as_object()
+                .unwrap()
+                .values()
+                .next()
+                .unwrap();
+            let name = d["abi"]
+                .as_str()
+                .unwrap()
+                .split('(')
+                .next()
+                .unwrap()
+                .to_string();
             let args = if multi { MA } else { PA };
-            assert_eq!(d["abi"], json!(format!("{name}({UA_ENV},{args},bytes,{UA_SIG},bytes,{UA_SIG},{VERDICT})")), "{op}");
+            assert_eq!(
+                d["abi"],
+                json!(format!(
+                    "{name}({UA_ENV},{args},bytes,{UA_SIG},bytes,{UA_SIG},{VERDICT})"
+                )),
+                "{op}"
+            );
             let sel = unhex(d["selector"].as_str().unwrap()).unwrap();
-            let e = sels.iter().find(|x| x.0[..] == sel[..]).unwrap_or_else(|| panic!("{op}: selector")).1;
-            assert!(e.relayed && e.multi == multi && e.compact == compact, "{op}");
+            let e = sels
+                .iter()
+                .find(|x| x.0[..] == sel[..])
+                .unwrap_or_else(|| panic!("{op}: selector"))
+                .1;
+            assert!(
+                e.relayed && e.multi == multi && e.compact == compact,
+                "{op}"
+            );
         }
     }
 
@@ -1399,7 +2025,12 @@ mod tests {
         pin.lines().find_map(|l| {
             let rest = l.trim().strip_prefix("s.")?.strip_prefix(field)?;
             rest.starts_with(['[', '.', ' ']).then_some(())?;
-            rest.rsplit_once("// ")?.1.split_whitespace().next()?.parse().ok()
+            rest.rsplit_once("// ")?
+                .1
+                .split_whitespace()
+                .next()?
+                .parse()
+                .ok()
         })
     }
 
@@ -1408,15 +2039,27 @@ mod tests {
     /// `ptr ‖ proven ‖ added`, `pqzVersions[ua]` `latest ‖ current ‖ listed`).
     #[test]
     fn registry_slots_are_the_layout_pin() {
-        let pin = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/evm/test/ua/UAStoreLayout.t.sol"))
-            .unwrap();
-        for (field, slot) in [("pqzKey", REG_PQZ_KEY_SLOT), ("pqzVersions", REG_PQZ_VERSIONS_SLOT), ("uaCount", REG_COUNT_SLOT),
-            ("uaAt", REG_AT_SLOT)]
-        {
+        let pin = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../smartcontracts/evm/test/ua/UAStoreLayout.t.sol"
+        ))
+        .unwrap();
+        for (field, slot) in [
+            ("pqzKey", REG_PQZ_KEY_SLOT),
+            ("pqzVersions", REG_PQZ_VERSIONS_SLOT),
+            ("uaCount", REG_COUNT_SLOT),
+            ("uaAt", REG_AT_SLOT),
+        ] {
             assert_eq!(pin_slot(&pin, field), Some(slot), "{field}");
         }
-        assert_eq!(pin_slot(&pin, "pqzKeyUsed"), Some(18), "a longer name is another field");
-        assert!(pin.contains(r#"uint256(0x73) | 1 << 160 | 1 << 168, "2 pqzKey[ua][version]: ptr, proven, added""#));
+        assert_eq!(
+            pin_slot(&pin, "pqzKeyUsed"),
+            Some(18),
+            "a longer name is another field"
+        );
+        assert!(pin.contains(
+            r#"uint256(0x73) | 1 << 160 | 1 << 168, "2 pqzKey[ua][version]: ptr, proven, added""#
+        ));
         assert!(pin.contains(r#"uint256(0x82) | uint256(0x83) << 64 | 1 << 128, "17 pqzVersions: latest, current, listed""#));
     }
 
@@ -1425,8 +2068,11 @@ mod tests {
     /// version(64)`; R5 takes class TOKEN with one of this reader's kinds, never the old one-word `_info` packing.
     #[test]
     fn factory_record_is_the_layout_pin() {
-        let pin = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/evm/test/zether/ZetherStateVectors.t.sol"))
-            .unwrap();
+        let pin = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../smartcontracts/evm/test/zether/ZetherStateVectors.t.sol"
+        ))
+        .unwrap();
         for a in [
             &format!("uint256 internal constant REC = {REC_SLOT};")[..],
             "uint256 base = uint256(keccak256(abi.encode(address(tok), REC)));",
@@ -1444,8 +2090,14 @@ mod tests {
             w
         };
         assert!(catalogued(&word(1, PQZ_KINDS[0])), "positive control");
-        assert!(PQZ_KINDS.iter().all(|k| catalogued(&word(1, *k))), "every kind of this reader");
-        assert!(!catalogued(&word(0, PQZ_KINDS[0])), "class 0: not made here");
+        assert!(
+            PQZ_KINDS.iter().all(|k| catalogued(&word(1, *k))),
+            "every kind of this reader"
+        );
+        assert!(
+            !catalogued(&word(0, PQZ_KINDS[0])),
+            "class 0: not made here"
+        );
         assert!(!catalogued(&word(2, PQZ_KINDS[0])), "class DEX");
         assert!(!catalogued(&word(1, 2)), "the other confidential family");
         let mut wide = word(1, PQZ_KINDS[0]);

@@ -6,7 +6,10 @@ use scaas_ua::*;
 use serde_json::Value;
 
 fn load() -> Value {
-    let path = format!("{}/../../smartcontracts/vectors/ua/signatures.json", env!("CARGO_MANIFEST_DIR"));
+    let path = format!(
+        "{}/../../smartcontracts/vectors/ua/signatures.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 fn bytes(v: &Value) -> Vec<u8> {
@@ -44,7 +47,12 @@ fn derived_positives_verify() {
     let mut n = 0;
     for r in arr(&v["derived"]) {
         let (kind, kd) = (num(&r["kind"]) as u16, bytes(&r["keyData"]));
-        assert_eq!(derive_ua(kind, &kd, false).unwrap(), b32(&r["ua"]), "{}", r["name"]);
+        assert_eq!(
+            derive_ua(kind, &kd, false).unwrap(),
+            b32(&r["ua"]),
+            "{}",
+            r["name"]
+        );
         for p in [&r["pop"], &r["popOther"]] {
             // portable (UA-8): no chain context; message = ua_message(kind, POP_V2, registrationDigest)
             // typed (typed-signing TS-D1): popDigest = typed(UAPortableRecord{ua, kind, 0, UAKemRecord{ua, 0, 0, 0}})
@@ -56,13 +64,29 @@ fn derived_positives_verify() {
             assert_eq!(rd, b32(&p["registrationDigest"]));
             let m = ua_message(kind, &ua8::pop_v2_tag(), &rd).unwrap();
             assert_eq!(m, b32(&p["message"]));
-            assert!(verify(kind, &kd, &m, &bytes(&p["sig"]), true), "{} pop {}", r["name"], p["context"]);
+            assert!(
+                verify(kind, &kd, &m, &bytes(&p["sig"]), true),
+                "{} pop {}",
+                r["name"],
+                p["context"]
+            );
             n += 1;
         }
         for x in arr(&r["sigs"]) {
-            let m = ua_message(kind, &purpose_tag(s(&x["purpose"])).unwrap(), &b32(&x["digest"])).unwrap();
+            let m = ua_message(
+                kind,
+                &purpose_tag(s(&x["purpose"])).unwrap(),
+                &b32(&x["digest"]),
+            )
+            .unwrap();
             assert_eq!(m, b32(&x["message"]));
-            assert!(verify(kind, &kd, &m, &bytes(&x["sig"]), false), "{} {} {}", r["name"], x["purpose"], x["variant"]);
+            assert!(
+                verify(kind, &kd, &m, &bytes(&x["sig"]), false),
+                "{} {} {}",
+                r["name"],
+                x["purpose"],
+                x["variant"]
+            );
             n += 1;
         }
     }
@@ -96,13 +120,28 @@ fn native_uaauth() {
     assert_eq!(ua, b32(&nat["ua"]));
     for x in arr(&nat["sigs"]) {
         let d = domain(&v, s(&x["context"]), num(&x["generation"]) as u32);
-        let h = ua_auth_digest(&d, &ua, &purpose_tag(s(&x["purpose"])).unwrap(), &b32(&x["digest"]));
+        let h = ua_auth_digest(
+            &d,
+            &ua,
+            &purpose_tag(s(&x["purpose"])).unwrap(),
+            &b32(&x["digest"]),
+        );
         assert_eq!(h, b32(&x["uaAuthDigest"]));
-        assert!(native_ecdsa(&addr, &h, &bytes(&x["sig"])), "{} {}", x["context"], x["generation"]);
+        assert!(
+            native_ecdsa(&addr, &h, &bytes(&x["sig"])),
+            "{} {}",
+            x["context"],
+            x["generation"]
+        );
     }
     for x in arr(&nat["negatives"]) {
         let d = domain(&v, s(&x["context"]), num(&x["generation"]) as u32);
-        let h = ua_auth_digest(&d, &ua, &purpose_tag(s(&x["purpose"])).unwrap(), &b32(&x["digest"]));
+        let h = ua_auth_digest(
+            &d,
+            &ua,
+            &purpose_tag(s(&x["purpose"])).unwrap(),
+            &b32(&x["digest"]),
+        );
         assert!(!native_ecdsa(&addr, &h, &bytes(&x["sig"])), "{}", x["name"]);
     }
 }
@@ -113,7 +152,11 @@ fn native_uaauth() {
 fn word(b: &[u8], o: usize) -> Option<usize> {
     let w = b.get(o..o + 32)?;
     // the full low 8 bytes, any usize width (the class of T21 L04)
-    w[..24].iter().all(|x| *x == 0).then(|| usize::try_from(u64::from_be_bytes(w[24..].try_into().unwrap())).ok()).flatten()
+    w[..24]
+        .iter()
+        .all(|x| *x == 0)
+        .then(|| usize::try_from(u64::from_be_bytes(w[24..].try_into().unwrap())).ok())
+        .flatten()
 }
 fn dyn_bytes(b: &[u8], base: usize, head: usize) -> Option<&[u8]> {
     let o = base + word(b, head)?;
@@ -123,7 +166,13 @@ fn u16_at(d: &[u8], o: usize) -> usize {
     ((d[o] as usize) << 8) | d[o + 1] as usize
 }
 
-fn msig_ok(v: &Value, ua: &[u8; 32], purpose: &[u8; 32], digest: &[u8; 32], auth: &[u8]) -> Option<bool> {
+fn msig_ok(
+    v: &Value,
+    ua: &[u8; 32],
+    purpose: &[u8; 32],
+    digest: &[u8; 32],
+    auth: &[u8],
+) -> Option<bool> {
     let key = dyn_bytes(auth, 0, 0)?;
     let sigs = dyn_bytes(auth, 0, 32)?;
     if ua_of(0x0120, key).ok()? != *ua {
@@ -151,8 +200,17 @@ fn msig_ok(v: &Value, ua: &[u8; 32], purpose: &[u8; 32], digest: &[u8; 32], auth
         let (mkd, sig) = (dyn_bytes(sigs, t, t + 32)?, dyn_bytes(sigs, t, t + 64)?);
         let ok = if is_native(kind) {
             // a native member's MemberSig carries no list: `mkd` reads its length as bytes
-            let d = domain(v, s(&v["msig"]["context"]), num(&v["msig"]["generation"]) as u32);
-            mkd.is_empty() && native_ecdsa(&id[12..].try_into().ok()?, &ua_auth_digest(&d, &id, &member, &md), sig)
+            let d = domain(
+                v,
+                s(&v["msig"]["context"]),
+                num(&v["msig"]["generation"]) as u32,
+            );
+            mkd.is_empty()
+                && native_ecdsa(
+                    &id[12..].try_into().ok()?,
+                    &ua_auth_digest(&d, &id, &member, &md),
+                    sig,
+                )
         } else {
             // CTR-UA-33: a registered member's MemberSig carries no list; the key is its record's (the derived rows)
             let rec = arr(&v["derived"])
@@ -160,7 +218,15 @@ fn msig_ok(v: &Value, ua: &[u8; 32], purpose: &[u8; 32], digest: &[u8; 32], auth
                 .find(|r| b32(&r["ua"]) == id && num(&r["kind"]) as u16 == kind) // by (kind, id), as `_derived`
                 .map(|r| bytes(&r["keyData"]));
             mkd.is_empty()
-                && rec.is_some_and(|k| verify(kind, &k, &ua_message(kind, &member, &md).unwrap(), sig, false))
+                && rec.is_some_and(|k| {
+                    verify(
+                        kind,
+                        &k,
+                        &ua_message(kind, &member, &md).unwrap(),
+                        sig,
+                        false,
+                    )
+                })
         };
         if !ok {
             return Some(false);
@@ -174,8 +240,16 @@ fn msig_ok(v: &Value, ua: &[u8; 32], purpose: &[u8; 32], digest: &[u8; 32], auth
 fn msig_sets() {
     let v = load();
     let m = &v["msig"];
-    let members: Vec<(u16, [u8; 32], u16)> =
-        arr(&m["members"]).iter().map(|x| (num(&x["kind"]) as u16, b32(&x["id"]), num(&x["weight"]) as u16)).collect();
+    let members: Vec<(u16, [u8; 32], u16)> = arr(&m["members"])
+        .iter()
+        .map(|x| {
+            (
+                num(&x["kind"]) as u16,
+                b32(&x["id"]),
+                num(&x["weight"]) as u16,
+            )
+        })
+        .collect();
     let key = encode_msig(num(&m["threshold"]) as u16, &members);
     assert_eq!(key, bytes(&m["keyData"]));
     let ua = derive_ua(0x0120, &key, false).unwrap();
@@ -184,7 +258,10 @@ fn msig_sets() {
     for x in arr(&m["sets"]) {
         let p = purpose_tag(s(&x["purpose"])).unwrap();
         let d = b32(&x["digest"]);
-        assert_eq!(member_digest(&ua, &ua_message(0x0120, &p, &d).unwrap()), b32(&x["memberDigest"]));
+        assert_eq!(
+            member_digest(&ua, &ua_message(0x0120, &p, &d).unwrap()),
+            b32(&x["memberDigest"])
+        );
         let got = msig_ok(&v, &ua, &p, &d, &bytes(&x["auth"])).unwrap_or(false);
         assert_eq!(got, x["valid"].as_bool().unwrap(), "{}", x["name"]);
     }
@@ -195,7 +272,13 @@ fn bip340_official_vectors() {
     let v = load();
     assert_eq!(arr(&v["bip340Official"]).len(), 15);
     for t in arr(&v["bip340Official"]) {
-        let ok = verify(0x0103, &bytes(&t["publicKey"]), &b32(&t["message"]), &bytes(&t["sig"]), false);
+        let ok = verify(
+            0x0103,
+            &bytes(&t["publicKey"]),
+            &b32(&t["message"]),
+            &bytes(&t["sig"]),
+            false,
+        );
         assert_eq!(ok, t["valid"].as_bool().unwrap(), "vector {}", t["index"]);
     }
 }
@@ -206,8 +289,15 @@ fn ed25519_rfc8032_section() {
     let t = arr(&v["ed25519Rfc8032"]);
     assert_eq!(t.len(), 11);
     for x in t {
-        let ok = ed25519(&bytes(&x["publicKey"]), &bytes(&x["message"]), &bytes(&x["sig"]));
+        let ok = ed25519(
+            &bytes(&x["publicKey"]),
+            &bytes(&x["message"]),
+            &bytes(&x["sig"]),
+        );
         assert_eq!(ok, x["valid"].as_bool().unwrap(), "{}", x["name"]);
     }
-    assert_eq!(t.iter().filter(|x| x["valid"].as_bool().unwrap()).count(), 6);
+    assert_eq!(
+        t.iter().filter(|x| x["valid"].as_bool().unwrap()).count(),
+        6
+    );
 }

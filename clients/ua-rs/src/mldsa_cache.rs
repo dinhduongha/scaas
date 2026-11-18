@@ -45,7 +45,9 @@ impl core::fmt::Display for CacheError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             CacheError::Registration(e) => write!(f, "{e}"),
-            CacheError::KeyCache(k) | CacheError::KeyData(k) => write!(f, "{}({k:#06x})", self.code()),
+            CacheError::KeyCache(k) | CacheError::KeyData(k) => {
+                write!(f, "{}({k:#06x})", self.code())
+            }
         }
     }
 }
@@ -77,7 +79,9 @@ pub fn part_call(kind: u16, pk: &[u8], part: u64) -> Result<Vec<u8>, CacheError>
 
 /// Every part's calldata of `pk`, in part order.
 pub fn part_calls(kind: u16, pk: &[u8]) -> Result<Vec<Vec<u8>>, CacheError> {
-    (0..parts(kind).max(1)).map(|p| part_call(kind, pk, p)).collect()
+    (0..parts(kind).max(1))
+        .map(|p| part_call(kind, pk, p))
+        .collect()
 }
 
 /// The cache-then-register order: send `parts` in order (each after the last landed), then `registration` (its `kem_fill` after
@@ -92,14 +96,24 @@ pub struct CacheThenRegister {
 /// [`CacheThenRegister`] of `i`: an ML-DSA key's parts, then its registration; any other kind its registration alone.
 pub fn cache_then_register(i: &RegistrationInput) -> Result<CacheThenRegister, CacheError> {
     let registration = registration_args(i).map_err(CacheError::Registration)?;
-    let parts = if parts(i.kind) == 0 { Vec::new() } else { part_calls(i.kind, &i.key_data)? };
-    Ok(CacheThenRegister { parts, registration })
+    let parts = if parts(i.kind) == 0 {
+        Vec::new()
+    } else {
+        part_calls(i.kind, &i.key_data)?
+    };
+    Ok(CacheThenRegister {
+        parts,
+        registration,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     #[test]
     fn selector_is_the_signature_hash() {
-        assert_eq!(crate::keccak256(b"cacheExpandedKey(uint16,bytes,uint256)")[..4], super::CACHE_EXPANDED_KEY_SELECTOR);
+        assert_eq!(
+            crate::keccak256(b"cacheExpandedKey(uint16,bytes,uint256)")[..4],
+            super::CACHE_EXPANDED_KEY_SELECTOR
+        );
     }
 }

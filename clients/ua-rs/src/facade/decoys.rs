@@ -21,7 +21,13 @@
 //! `Argument` for a field not on the list, a missing one, a UA not 32 bytes, a candidate given twice, `weights` of another
 //! length, or fewer eligible candidates (not excluded, weight > 0) than `count`. The request is read by the bounded reader
 //! ([`MAX`] bytes, about 55,000 candidates). UNAUDITED.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::disallowed_methods)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::disallowed_methods
+)]
 
 use crate::wallet::{bounded, from_hex, to_hex, Error, Result};
 use rand_core::{OsRng, RngCore};
@@ -34,11 +40,18 @@ const DEPTH: usize = 2;
 type Ua = [u8; 32];
 
 fn ua(x: &Value) -> Result<Ua> {
-    x.as_str().and_then(from_hex).and_then(|b| b.try_into().ok()).ok_or(Error::Argument)
+    x.as_str()
+        .and_then(from_hex)
+        .and_then(|b| b.try_into().ok())
+        .ok_or(Error::Argument)
 }
 
 fn uas(v: Option<&Value>) -> Result<Vec<Ua>> {
-    v.and_then(Value::as_array).ok_or(Error::Argument)?.iter().map(ua).collect()
+    v.and_then(Value::as_array)
+        .ok_or(Error::Argument)?
+        .iter()
+        .map(ua)
+        .collect()
 }
 
 /// A `pickDecoys` request, its named fields parsed (module doc).
@@ -54,16 +67,33 @@ pub struct Request {
 impl Request {
     /// The request's fields, each on the list and of its type, else `Argument`.
     pub fn from_map(o: &Map<String, Value>) -> Result<Request> {
-        if !o.keys().all(|k| ["candidates", "exclude", "count", "weights", "recipient"].contains(&k.as_str())) {
+        if !o.keys().all(|k| {
+            ["candidates", "exclude", "count", "weights", "recipient"].contains(&k.as_str())
+        }) {
             return Err(Error::Argument);
         }
         let weights = match o.get("weights") {
             None => None,
-            Some(w) => Some(w.as_array().ok_or(Error::Argument)?.iter().map(|x| x.as_u64().ok_or(Error::Argument)).collect::<Result<_>>()?),
+            Some(w) => Some(
+                w.as_array()
+                    .ok_or(Error::Argument)?
+                    .iter()
+                    .map(|x| x.as_u64().ok_or(Error::Argument))
+                    .collect::<Result<_>>()?,
+            ),
         };
-        let count = o.get("count").and_then(Value::as_u64).ok_or(Error::Argument)?;
+        let count = o
+            .get("count")
+            .and_then(Value::as_u64)
+            .ok_or(Error::Argument)?;
         let recipient = o.get("recipient").map(ua).transpose()?;
-        Ok(Request { candidates: uas(o.get("candidates"))?, exclude: uas(o.get("exclude"))?, count, weights, recipient })
+        Ok(Request {
+            candidates: uas(o.get("candidates"))?,
+            exclude: uas(o.get("exclude"))?,
+            count,
+            weights,
+            recipient,
+        })
     }
 
     /// `{decoys}`, or with `recipient` `{decoys, legs}` (module doc), drawn by the OS CSPRNG.
@@ -74,9 +104,17 @@ impl Request {
     /// [`Request::pick`] by `rng` (a seeded one in the tests only).
     fn draw(&self, rng: &mut impl RngCore) -> Result<Value> {
         let exclude = [self.exclude.as_slice(), self.recipient.as_slice()].concat();
-        let d = pick(&self.candidates, &exclude, self.count, self.weights.as_deref(), rng)?;
+        let d = pick(
+            &self.candidates,
+            &exclude,
+            self.count,
+            self.weights.as_deref(),
+            rng,
+        )?;
         let hex = |v: &[Ua]| v.iter().map(|u| to_hex(u)).collect::<Vec<_>>();
-        let Some(r) = self.recipient else { return Ok(json!({"decoys": hex(&d)})) };
+        let Some(r) = self.recipient else {
+            return Ok(json!({"decoys": hex(&d)}));
+        };
         let mut legs = [d.as_slice(), &[r]].concat();
         shuffle(&mut legs, rng)?;
         Ok(json!({"decoys": hex(&d), "legs": hex(&legs)}))
@@ -106,7 +144,13 @@ fn below(rng: &mut impl RngCore, n: u128) -> Result<u128> {
 }
 
 /// `count` distinct candidates, never an excluded one, drawn by `rng` (uniform, or weighted by `weights`).
-fn pick(candidates: &[Ua], exclude: &[Ua], count: u64, weights: Option<&[u64]>, rng: &mut impl RngCore) -> Result<Vec<Ua>> {
+fn pick(
+    candidates: &[Ua],
+    exclude: &[Ua],
+    count: u64,
+    weights: Option<&[u64]>,
+    rng: &mut impl RngCore,
+) -> Result<Vec<Ua>> {
     if weights.is_some_and(|w| w.len() != candidates.len()) {
         return Err(Error::Argument);
     }
@@ -117,7 +161,12 @@ fn pick(candidates: &[Ua], exclude: &[Ua], count: u64, weights: Option<&[u64]>, 
     let mut pool: Vec<(Ua, u128)> = candidates
         .iter()
         .enumerate()
-        .map(|(i, c)| (*c, weights.and_then(|w| w.get(i)).map_or(1, |w| u128::from(*w))))
+        .map(|(i, c)| {
+            (
+                *c,
+                weights.and_then(|w| w.get(i)).map_or(1, |w| u128::from(*w)),
+            )
+        })
         .filter(|(c, w)| *w > 0 && !exclude.contains(c))
         .collect();
     if (pool.len() as u64) < count {
@@ -141,7 +190,9 @@ fn pick(candidates: &[Ua], exclude: &[Ua], count: u64, weights: Option<&[u64]>, 
 
 /// The command `pickDecoys` on its JSON (the bounded reader, [`MAX`] bytes): `{decoys}` (module doc).
 pub fn pick_json(request_json: &[u8]) -> Result<String> {
-    let Value::Object(o) = bounded::json(request_json, MAX, DEPTH)? else { return Err(Error::Argument) };
+    let Value::Object(o) = bounded::json(request_json, MAX, DEPTH)? else {
+        return Err(Error::Argument);
+    };
     Request::from_map(&o)?.pick()
 }
 
@@ -158,7 +209,10 @@ mod tests {
 
     /// Pearson's chi-square of `seen` against `want` (each expected count).
     fn chi2(seen: &[u64], want: &[f64]) -> f64 {
-        seen.iter().zip(want).map(|(o, e)| (*o as f64 - e).powi(2) / e).sum()
+        seen.iter()
+            .zip(want)
+            .map(|(o, e)| (*o as f64 - e).powi(2) / e)
+            .sum()
     }
 
     /// Uniform by default: over 40,000 draws of 3 decoys from 10 candidates less 2 excluded (a fixed seed, so the test is
@@ -185,11 +239,17 @@ mod tests {
         let pick_of = |t: &[u64; 11]| eligible.iter().map(|i| t[*i]).collect::<Vec<_>>();
         let x_any = chi2(&pick_of(&any), &[(n * k) as f64 / 8.0; 8]);
         let x_first = chi2(&pick_of(&first), &[n as f64 / 8.0; 8]);
-        assert!(x_any < 24.32 && x_first < 24.32, "chi-square {x_any} / {x_first}");
+        assert!(
+            x_any < 24.32 && x_first < 24.32,
+            "chi-square {x_any} / {x_first}"
+        );
         // the control: a biased draw (the lowest index twice as often) fails the same bound
         let mut biased = pick_of(&any);
         biased[0] *= 2;
-        assert!(chi2(&biased, &[(n * k) as f64 / 8.0; 8]) > 24.32, "the test can fail");
+        assert!(
+            chi2(&biased, &[(n * k) as f64 / 8.0; 8]) > 24.32,
+            "the test can fail"
+        );
     }
 
     /// Weighted (the activity filter): one draw lands on a candidate in proportion to its weight (chi-square, 3 degrees of
@@ -205,7 +265,10 @@ mod tests {
             seen[pick(&c, &[], 1, Some(&w), &mut rng).unwrap()[0][0] as usize] += 1;
         }
         assert_eq!(seen[3], 0, "weight 0");
-        let x = chi2(&[seen[1], seen[2], seen[4], seen[5]], &[1.0, 2.0, 3.0, 4.0].map(|f| f * n as f64 / 10.0));
+        let x = chi2(
+            &[seen[1], seen[2], seen[4], seen[5]],
+            &[1.0, 2.0, 3.0, 4.0].map(|f| f * n as f64 / 10.0),
+        );
         assert!(x < 16.27, "chi-square {x}");
         // all eligible, distinct, when every positive weight is needed
         let d = pick(&c, &[], 4, Some(&w), &mut rng).unwrap();
@@ -236,16 +299,34 @@ mod tests {
             let out = q.draw(&mut rng).unwrap();
             let (d, legs) = (strs(&out["decoys"]), strs(&out["legs"]));
             assert_eq!((d.len(), legs.len()), (4, 5));
-            assert_eq!(legs.iter().filter(|u| **u == h(9)).count(), 1, "the recipient exactly once");
-            assert!(!d.contains(&h(9)) && !legs.contains(&h(3)), "the recipient no decoy, never excluded");
-            assert_eq!(legs.iter().collect::<std::collections::BTreeSet<_>>().len(), 5, "no duplicates");
-            assert!(d.iter().all(|u| legs.contains(u)), "the legs are the decoys and the recipient");
+            assert_eq!(
+                legs.iter().filter(|u| **u == h(9)).count(),
+                1,
+                "the recipient exactly once"
+            );
+            assert!(
+                !d.contains(&h(9)) && !legs.contains(&h(3)),
+                "the recipient no decoy, never excluded"
+            );
+            assert_eq!(
+                legs.iter().collect::<std::collections::BTreeSet<_>>().len(),
+                5,
+                "no duplicates"
+            );
+            assert!(
+                d.iter().all(|u| legs.contains(u)),
+                "the legs are the decoys and the recipient"
+            );
             pos[legs.iter().position(|u| *u == h(9)).unwrap()] += 1;
         }
         let x = chi2(&pos, &[n as f64 / 5.0; 5]);
         assert!(x < 18.47, "chi-square {x}: {pos:?}");
         let out = req(None).draw(&mut rng).unwrap();
-        assert_eq!(out.as_object().unwrap().keys().collect::<Vec<_>>(), ["decoys"], "unchanged without recipient");
+        assert_eq!(
+            out.as_object().unwrap().keys().collect::<Vec<_>>(),
+            ["decoys"],
+            "unchanged without recipient"
+        );
     }
 
     /// The shuffle itself: over 60,000 shuffles of 3 legs each of the 6 orders passes chi-square at p = 0.001 (5 degrees of
@@ -262,10 +343,16 @@ mod tests {
             *seen.entry(v.map(|u| u[0])).or_insert(0u64) += 1;
         }
         assert_eq!(seen.len(), 6);
-        let x = chi2(&seen.values().copied().collect::<Vec<_>>(), &[n as f64 / 6.0; 6]);
+        let x = chi2(
+            &seen.values().copied().collect::<Vec<_>>(),
+            &[n as f64 / 6.0; 6],
+        );
         assert!(x < 20.52, "chi-square {x}: {seen:?}");
         let naive = [4.0, 5.0, 5.0, 5.0, 4.0, 4.0].map(|f| (f * n as f64 / 27.0) as u64);
-        assert!(chi2(&naive, &[n as f64 / 6.0; 6]) > 20.52, "the test can fail");
+        assert!(
+            chi2(&naive, &[n as f64 / 6.0; 6]) > 20.52,
+            "the test can fail"
+        );
     }
 
     /// An RNG that yields `0xff` bytes first, then zeros.
@@ -301,14 +388,46 @@ mod tests {
     fn refusals() {
         let mut rng = ChaCha20Rng::seed_from_u64(1);
         let c: Vec<Ua> = (1..=4).map(ua).collect();
-        assert_eq!(pick(&c, &[ua(1)], 3, None, &mut rng).unwrap().len(), 3, "exactly enough");
-        assert_eq!(pick(&c, &[ua(1)], 4, None, &mut rng), Err(Error::Argument), "too few after the exclusions");
-        assert_eq!(pick(&c, &[], 4, Some(&[1, 1, 1, 0]), &mut rng), Err(Error::Argument), "too few with weight > 0");
-        assert_eq!(pick(&c, &[], 1, Some(&[1, 1, 1]), &mut rng), Err(Error::Argument), "weights of another length");
-        assert_eq!(pick(&[ua(1), ua(1)], &[], 1, None, &mut rng), Err(Error::Argument), "a candidate twice");
-        assert_eq!(pick(&c, &[], 0, None, &mut rng).unwrap(), Vec::<Ua>::new(), "count 0");
-        let ok = format!(r#"{{"candidates": ["{}", "{}"], "exclude": ["{}"], "count": 1}}"#, to_hex(&ua(1)), to_hex(&ua(2)), to_hex(&ua(1)));
-        assert_eq!(pick_json(ok.as_bytes()).unwrap(), format!(r#"{{"decoys":["{}"]}}"#, to_hex(&ua(2))));
+        assert_eq!(
+            pick(&c, &[ua(1)], 3, None, &mut rng).unwrap().len(),
+            3,
+            "exactly enough"
+        );
+        assert_eq!(
+            pick(&c, &[ua(1)], 4, None, &mut rng),
+            Err(Error::Argument),
+            "too few after the exclusions"
+        );
+        assert_eq!(
+            pick(&c, &[], 4, Some(&[1, 1, 1, 0]), &mut rng),
+            Err(Error::Argument),
+            "too few with weight > 0"
+        );
+        assert_eq!(
+            pick(&c, &[], 1, Some(&[1, 1, 1]), &mut rng),
+            Err(Error::Argument),
+            "weights of another length"
+        );
+        assert_eq!(
+            pick(&[ua(1), ua(1)], &[], 1, None, &mut rng),
+            Err(Error::Argument),
+            "a candidate twice"
+        );
+        assert_eq!(
+            pick(&c, &[], 0, None, &mut rng).unwrap(),
+            Vec::<Ua>::new(),
+            "count 0"
+        );
+        let ok = format!(
+            r#"{{"candidates": ["{}", "{}"], "exclude": ["{}"], "count": 1}}"#,
+            to_hex(&ua(1)),
+            to_hex(&ua(2)),
+            to_hex(&ua(1))
+        );
+        assert_eq!(
+            pick_json(ok.as_bytes()).unwrap(),
+            format!(r#"{{"decoys":["{}"]}}"#, to_hex(&ua(2)))
+        );
         for bad in [
             r#"{"candidates": [], "exclude": [], "count": 1}"#,
             r#"{"candidates": ["0x01"], "exclude": [], "count": 1}"#,

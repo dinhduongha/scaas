@@ -18,14 +18,18 @@ pub fn native_id(account: &str) -> Result<[u8; 32]> {
     let b = account.as_bytes();
     let sep = |c: u8| matches!(c, b'-' | b'_' | b'.');
     let ok = (2..=64).contains(&b.len())
-        && b.iter().all(|&c| c.is_ascii_lowercase() || c.is_ascii_digit() || sep(c))
+        && b.iter()
+            .all(|&c| c.is_ascii_lowercase() || c.is_ascii_digit() || sep(c))
         && !sep(b[0])
         && !sep(b[b.len() - 1])
         && !b.windows(2).any(|w| sep(w[0]) && sep(w[1]));
     if !ok {
         return Err(UAError::IdFormat);
     }
-    if b.len() == 64 && b.iter().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(c)) {
+    if b.len() == 64
+        && b.iter()
+            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(c))
+    {
         let mut k = [0u8; 32];
         for (o, p) in k.iter_mut().zip(b.chunks(2)) {
             *o = u8::from_str_radix(core::str::from_utf8(p).unwrap(), 16).unwrap();

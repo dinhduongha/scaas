@@ -56,7 +56,12 @@ pub(crate) fn keypair(kind: u16, seed: &[u8]) -> Result<(Zeroizing<Vec<u8>>, Vec
             let mut b = sk.to_bytes();
             let secret = Zeroizing::new(b.to_vec());
             b.as_mut_slice().zeroize();
-            Ok((secret, AsRef::<VerifyingKey<Sha2_128s>>::as_ref(&sk).to_bytes().to_vec()))
+            Ok((
+                secret,
+                AsRef::<VerifyingKey<Sha2_128s>>::as_ref(&sk)
+                    .to_bytes()
+                    .to_vec(),
+            ))
         }
         0x0132 | 0x0135 => {
             let p = falcon_params(kind)?;
@@ -76,14 +81,22 @@ pub(crate) fn keypair(kind: u16, seed: &[u8]) -> Result<(Zeroizing<Vec<u8>>, Vec
 fn mldsa_keypair<P: MlDsaParams>(seed: &[u8]) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>)> {
     use ml_dsa::Keypair;
     let xi = Zeroizing::new(ml_dsa::Seed::try_from(seed).map_err(|_| Error::Argument)?);
-    let vk = ml_dsa::SigningKey::<P>::from_seed(&xi).verifying_key().encode().to_vec();
+    let vk = ml_dsa::SigningKey::<P>::from_seed(&xi)
+        .verifying_key()
+        .encode()
+        .to_vec();
     Ok((Zeroizing::new(seed.to_vec()), vk))
 }
 
 /// The signature of `ua_msg` with `secret` (as [`keypair`] keeps it): randomness from the OS RNG, or `fixed` (feature
 /// `vectors` only: exactly the kind's length; ML-DSA zero = the deterministic variant, SLH-DSA `PK.seed` = its deterministic
 /// variant).
-pub(crate) fn sign(kind: u16, secret: &[u8], ua_msg: &[u8; 32], fixed: Option<&[u8]>) -> Result<Vec<u8>> {
+pub(crate) fn sign(
+    kind: u16,
+    secret: &[u8],
+    ua_msg: &[u8; 32],
+    fixed: Option<&[u8]>,
+) -> Result<Vec<u8>> {
     let mut rnd = Zeroizing::new(vec![0u8; rnd_len(kind)?]);
     match fixed {
         None => OsRng.try_fill_bytes(&mut rnd).map_err(|_| Error::Rng)?,
@@ -137,9 +150,13 @@ fn slhdsa(secret: &[u8], mp: &[&[u8]], opt_rand: Option<&[u8]>) -> Result<Vec<u8
 pub fn sign_internal(kind: u16, sk: &[u8], mprime: &[u8], rnd: Option<&[u8]>) -> Result<Vec<u8>> {
     #[allow(deprecated)] // the expanded encoding: the form ACVP gives its keys in
     fn expanded<P: MlDsaParams>(sk: &[u8], mprime: &[u8], rnd: &[u8]) -> Result<Vec<u8>> {
-        let enc = ml_dsa::ExpandedSigningKeyBytes::<P>::try_from(sk).map_err(|_| Error::Argument)?;
+        let enc =
+            ml_dsa::ExpandedSigningKeyBytes::<P>::try_from(sk).map_err(|_| Error::Argument)?;
         let rnd = ml_dsa::B32::try_from(rnd).map_err(|_| Error::Argument)?;
-        Ok(ml_dsa::ExpandedSigningKey::<P>::from_expanded(&enc).sign_internal(&[mprime], &rnd).encode().to_vec())
+        Ok(ml_dsa::ExpandedSigningKey::<P>::from_expanded(&enc)
+            .sign_internal(&[mprime], &rnd)
+            .encode()
+            .to_vec())
     }
     let zero = [0u8; 32];
     match kind {

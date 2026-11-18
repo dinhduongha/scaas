@@ -8,7 +8,10 @@ use scaas_ua::pq;
 use serde_json::Value;
 
 fn load(name: &str) -> Value {
-    let path = format!("{}/../../smartcontracts/vectors/ua/{name}", env!("CARGO_MANIFEST_DIR"));
+    let path = format!(
+        "{}/../../smartcontracts/vectors/ua/{name}",
+        env!("CARGO_MANIFEST_DIR")
+    );
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 fn bytes(v: &Value) -> Vec<u8> {
@@ -21,7 +24,12 @@ fn arr<'a>(v: &'a Value, k: &str) -> &'a Vec<Value> {
     v[k].as_array().unwrap()
 }
 const KINDS: [(&str, u16); 6] = [
-    ("mldsa44", 0x0130), ("mldsa65", 0x0131), ("fndsa512", 0x0132), ("slhdsa128s", 0x0133), ("mldsa87", 0x0134), ("fndsa1024", 0x0135),
+    ("mldsa44", 0x0130),
+    ("mldsa65", 0x0131),
+    ("fndsa512", 0x0132),
+    ("slhdsa128s", 0x0133),
+    ("mldsa87", 0x0134),
+    ("fndsa1024", 0x0135),
 ];
 
 #[test]
@@ -31,14 +39,23 @@ fn pq_kat_verifies() {
     for (name, kind) in KINDS {
         let k = &v["kinds"][name];
         let (pk, msg, sig) = (bytes(&k["pk"]), b32(&k["ua_msg"]), bytes(&k["sig"]));
-        assert_eq!(pq::signed_message(kind, &msg), bytes(&k["signed_message"]), "{name}");
+        assert_eq!(
+            pq::signed_message(kind, &msg),
+            bytes(&k["signed_message"]),
+            "{name}"
+        );
         assert!(pq::verify(kind, &pk, &msg, &sig), "{name}");
         // another kind's key length, another kind's tag: never accepted
         for (other, okind) in KINDS.into_iter().filter(|(_, o)| *o != kind) {
             assert!(!pq::verify(okind, &pk, &msg, &sig), "{name} as {other}");
         }
         for m in arr(k, "mutations") {
-            let got = pq::verify(kind, &bytes(&m["pk"]), &b32(&m["ua_msg"]), &bytes(&m["sig"]));
+            let got = pq::verify(
+                kind,
+                &bytes(&m["pk"]),
+                &b32(&m["ua_msg"]),
+                &bytes(&m["sig"]),
+            );
             assert_eq!(got, m["valid"].as_bool().unwrap(), "{name}: {}", m["what"]);
             mutations += 1;
         }
@@ -70,23 +87,55 @@ fn pq_external_verifies() {
     let (mut good, mut bad) = (0, 0);
     let mut one = |kind: u16, pk: &[u8], m: &[u8], sig: &[u8], valid: bool, what: &str| {
         assert_eq!(pq::verify_raw(kind, pk, m, sig), valid, "{what}");
-        if valid { good += 1 } else { bad += 1 }
+        if valid {
+            good += 1
+        } else {
+            bad += 1
+        }
     };
     for set in ["acvp_mldsa", "acvp_slhdsa", "eip8051_nist_kat", "eip8355"] {
-        for c in arr(&v[set], "cases").iter().filter(|c| c.get("pk").is_some()) {
+        for c in arr(&v[set], "cases")
+            .iter()
+            .filter(|c| c.get("pk").is_some())
+        {
             let what = format!("{set} {} {} {}", c["set"], c["tc"], c["name"]);
-            one(kind_of(c), &bytes(&c["pk"]), &bytes(&c["mprime"]), &bytes(&c["sig"]), c["valid"].as_bool().unwrap(), &what);
+            one(
+                kind_of(c),
+                &bytes(&c["pk"]),
+                &bytes(&c["mprime"]),
+                &bytes(&c["sig"]),
+                c["valid"].as_bool().unwrap(),
+                &what,
+            );
         }
     }
     for c in arr(&v["falcon_kat"], "cases") {
-        one(0x0132, &bytes(&c["pk"]), &bytes(&c["msg"]), &bytes(&c["sig"]), c["valid"].as_bool().unwrap(), &format!("falcon {}", c["count"]));
+        one(
+            0x0132,
+            &bytes(&c["pk"]),
+            &bytes(&c["msg"]),
+            &bytes(&c["sig"]),
+            c["valid"].as_bool().unwrap(),
+            &format!("falcon {}", c["count"]),
+        );
     }
     for c in arr(&v["falcon1024_kat"], "cases") {
         let what = format!("falcon1024 {}", c["count"]);
-        one(0x0135, &bytes(&c["pk"]), &bytes(&c["msg"]), &bytes(&c["sig"]), c["valid"].as_bool().unwrap(), &what);
+        one(
+            0x0135,
+            &bytes(&c["pk"]),
+            &bytes(&c["msg"]),
+            &bytes(&c["sig"]),
+            c["valid"].as_bool().unwrap(),
+            &what,
+        );
     }
     // + ACVP ML-DSA-87: 6 / 24; + the NIST round-3 Falcon-1024 KATs: 10 / 0
-    assert_eq!((good, bad), (53, 97), "accepted, refused: every row with a key");
+    assert_eq!(
+        (good, bad),
+        (53, 97),
+        "accepted, refused: every row with a key"
+    );
     println!("{good} accepted, {bad} refused");
 }
 
@@ -100,14 +149,36 @@ fn pq_signatures_verify() {
     rows.extend(arr(&v, "extraKeys"));
     for k in rows {
         let (kind, pk) = (k["kind"].as_u64().unwrap() as u16, bytes(&k["keyData"]));
-        let mut good: Vec<&Value> = ["pop", "popOther", "popPqz"].iter().filter_map(|f| k.get(f)).collect();
-        good.extend(k.get("sigs").and_then(Value::as_array).into_iter().flatten());
+        let mut good: Vec<&Value> = ["pop", "popOther", "popPqz"]
+            .iter()
+            .filter_map(|f| k.get(f))
+            .collect();
+        good.extend(
+            k.get("sigs")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten(),
+        );
         for s in good {
-            assert!(pq::verify(kind, &pk, &b32(&s["message"]), &bytes(&s["sig"])), "{} {s}", k["name"]);
+            assert!(
+                pq::verify(kind, &pk, &b32(&s["message"]), &bytes(&s["sig"])),
+                "{} {s}",
+                k["name"]
+            );
             ok += 1;
         }
-        for n in k.get("negatives").and_then(Value::as_array).into_iter().flatten() {
-            assert!(!pq::verify(kind, &pk, &b32(&n["message"]), &bytes(&n["sig"])), "{} {}", k["name"], n["name"]);
+        for n in k
+            .get("negatives")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            assert!(
+                !pq::verify(kind, &pk, &b32(&n["message"]), &bytes(&n["sig"])),
+                "{} {}",
+                k["name"],
+                n["name"]
+            );
             no += 1;
         }
     }
@@ -118,8 +189,14 @@ fn pq_signatures_verify() {
 /// Only the PQ kinds: the positive control is every row above.
 #[test]
 fn pq_other_kinds_refused() {
-    assert!(!pq::verify(0x0136, &[0; 32], &[0; 32], &[0; 64]), "not a PQ kind");
-    assert!(!pq::verify(0x0120, &[0; 32], &[0; 32], &[0; 64]), "not a PQ kind");
+    assert!(
+        !pq::verify(0x0136, &[0; 32], &[0; 32], &[0; 64]),
+        "not a PQ kind"
+    );
+    assert!(
+        !pq::verify(0x0120, &[0; 32], &[0; 32], &[0; 64]),
+        "not a PQ kind"
+    );
 }
 
 /// CTR-UA-39: `mldsa87` (0x0134) in the table (2,592 B, group `mldsa87`), a PQZ holder (Q2) and PQ weight in an `msig` (Q3); the
@@ -127,8 +204,15 @@ fn pq_other_kinds_refused() {
 #[test]
 fn mldsa87_kind_holder_and_weight() {
     let k = scaas_ua::kind_info(0x0134).unwrap();
-    assert_eq!((k.name, k.lengths, k.group), ("mldsa87", &[2592usize][..], Some("mldsa87")));
-    assert!(scaas_ua::is_signing(0x0134) && scaas_ua::is_pqz_holder(0x0134) && !scaas_ua::is_pqz_holder(0x0133));
+    assert_eq!(
+        (k.name, k.lengths, k.group),
+        ("mldsa87", &[2592usize][..], Some("mldsa87"))
+    );
+    assert!(
+        scaas_ua::is_signing(0x0134)
+            && scaas_ua::is_pqz_holder(0x0134)
+            && !scaas_ua::is_pqz_holder(0x0133)
+    );
     let v = load("pq_kat.json");
     let r = &v["kinds"]["mldsa87"];
     let (pk, msg, sig) = (bytes(&r["pk"]), b32(&r["ua_msg"]), bytes(&r["sig"]));
@@ -145,18 +229,32 @@ fn mldsa87_kind_holder_and_weight() {
 #[test]
 fn fndsa1024_kind_holder_and_weight() {
     let k = scaas_ua::kind_info(0x0135).unwrap();
-    assert_eq!((k.name, k.lengths, k.group), ("fndsa1024", &[1793usize][..], Some("fndsa1024")));
-    assert!(scaas_ua::is_signing(0x0135) && scaas_ua::is_pqz_holder(0x0135) && !scaas_ua::is_pqz_holder(0x0136));
+    assert_eq!(
+        (k.name, k.lengths, k.group),
+        ("fndsa1024", &[1793usize][..], Some("fndsa1024"))
+    );
+    assert!(
+        scaas_ua::is_signing(0x0135)
+            && scaas_ua::is_pqz_holder(0x0135)
+            && !scaas_ua::is_pqz_holder(0x0136)
+    );
     let v = load("pq_kat.json");
     let r = &v["kinds"]["fndsa1024"];
     let (pk, msg, sig) = (bytes(&r["pk"]), b32(&r["ua_msg"]), bytes(&r["sig"]));
-    assert_eq!(pq::signed_message(0x0135, &msg), msg.to_vec(), "Falcon signs ua_msg");
+    assert_eq!(
+        pq::signed_message(0x0135, &msg),
+        msg.to_vec(),
+        "Falcon signs ua_msg"
+    );
     assert!(pq::verify(0x0135, &pk, &msg, &sig));
     assert!(!pq::verify(0x0132, &pk, &msg, &sig) && !pq::verify(0x0135, &pk, &msg, &sig[..666]));
     assert_eq!(scaas_ua::validate_key_data(0x0135, &pk, false), Ok(()));
     let mut bad = pk.clone();
     bad[0] = 0x09;
-    assert_eq!(scaas_ua::validate_key_data(0x0135, &bad, false), Err(scaas_ua::UAError::KeyData("header")));
+    assert_eq!(
+        scaas_ua::validate_key_data(0x0135, &bad, false),
+        Err(scaas_ua::UAError::KeyData("header"))
+    );
     let d = scaas_ua::encode_msig(2, &[(0x0101, [0x11; 32], 1), (0x0135, [0x22; 32], 1)]);
     assert_eq!(scaas_ua::msig_pqz_eligible(&d), Ok(true));
     let d = scaas_ua::encode_msig(1, &[(0x0101, [0x11; 32], 1), (0x0135, [0x22; 32], 1)]);

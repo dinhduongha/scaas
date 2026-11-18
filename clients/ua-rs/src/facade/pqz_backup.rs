@@ -29,13 +29,19 @@
 //! split known answers of `tests/pqz_backup.rs`. Old versions' backups are the caller's to keep: nothing here deletes one.
 //! Residual: the JSON strings of an opened share are wiped after the read, `serde_json`'s own copies while parsing are not.
 //! UNAUDITED.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::disallowed_methods)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::disallowed_methods
+)]
 
 use super::pqz::PqzKey;
 use crate::ua8::{Accepted, Members, MsigStructure};
 use crate::wallet::{
-    bounded, from_hex, seal_container, to_hex, ContainerExpect, ContainerSigner, Error, KemKeyPair, Recipient, RecipientId, Result,
-    SealedContainer, SecretStore, UaKey,
+    bounded, from_hex, seal_container, to_hex, ContainerExpect, ContainerSigner, Error, KemKeyPair,
+    Recipient, RecipientId, Result, SealedContainer, SecretStore, UaKey,
 };
 use rand_core::{OsRng, RngCore};
 use serde_json::Value;
@@ -100,8 +106,14 @@ fn split_with(secret: &[u8; 32], coeffs: &[[u8; 32]], n: u8) -> Vec<Zeroizing<[u
 fn combine(shares: &[(u8, &[u8; 32])]) -> Zeroizing<[u8; 32]> {
     let mut s = Zeroizing::new([0u8; 32]);
     for (i, (xi, yi)) in shares.iter().enumerate() {
-        let l = shares.iter().enumerate().filter(|(j, _)| *j != i).fold(1u8, |l, (_, (xj, _))| mul(l, mul(*xj, inv(xj ^ xi))));
-        s.iter_mut().zip(yi.iter()).for_each(|(o, y)| *o ^= mul(l, *y));
+        let l = shares
+            .iter()
+            .enumerate()
+            .filter(|(j, _)| *j != i)
+            .fold(1u8, |l, (_, (xj, _))| mul(l, mul(*xj, inv(xj ^ xi))));
+        s.iter_mut()
+            .zip(yi.iter())
+            .for_each(|(o, y)| *o ^= mul(l, *y));
     }
     s
 }
@@ -154,16 +166,38 @@ impl Share {
         let word = |k: &str| -> Option<[u8; 32]> { from_hex(o.get(k)?.as_str()?)?.try_into().ok() };
         let small = |k: &str| u8::try_from(o.get(k)?.as_u64()?).ok();
         let (k, n, index) = (small("k")?, small("n")?, small("index")?);
-        if o.get("v")?.as_u64()? != 1 || k == 0 || k > n || usize::from(n) > N_MAX || index == 0 || index > n {
+        if o.get("v")?.as_u64()? != 1
+            || k == 0
+            || k > n
+            || usize::from(n) > N_MAX
+            || index == 0
+            || index > n
+        {
             return None;
         }
-        let h = ShareHeader { msig_ua: word("msigUa")?, version: o.get("version")?.as_u64()?, pqz_key_hash: word("pqzKeyHash")?, k, n };
-        Some(Share { h, index, y: Zeroizing::new(word("share")?) })
+        let h = ShareHeader {
+            msig_ua: word("msigUa")?,
+            version: o.get("version")?.as_u64()?,
+            pqz_key_hash: word("pqzKeyHash")?,
+            k,
+            n,
+        };
+        Some(Share {
+            h,
+            index,
+            y: Zeroizing::new(word("share")?),
+        })
     }
 }
 
 /// The plaintext of a share container, accepted as `expect` says (purpose [`PURPOSE_PQZ_SHARE`], else `Argument`).
-fn open_share(kk: &KemKeyPair, c: &SealedContainer, expect: &ContainerExpect, members: &Members, accepted: Option<&Accepted>) -> Result<Share> {
+fn open_share(
+    kk: &KemKeyPair,
+    c: &SealedContainer,
+    expect: &ContainerExpect,
+    members: &Members,
+    accepted: Option<&Accepted>,
+) -> Result<Share> {
     if expect.purpose != PURPOSE_PQZ_SHARE {
         return Err(Error::Argument);
     }
@@ -184,7 +218,10 @@ impl PqzSeedBackup {
     /// Whether this backup is of key `pqz_key_hash` at `version` of the `msig` `msig_ua`, with all `n` shares.
     pub fn covers(&self, msig_ua: &[u8; 32], version: u64, pqz_key_hash: &[u8; 32]) -> bool {
         let h = &self.header;
-        h.msig_ua == *msig_ua && h.version == version && h.pqz_key_hash == *pqz_key_hash && self.shares.len() == usize::from(h.n)
+        h.msig_ua == *msig_ua
+            && h.version == version
+            && h.pqz_key_hash == *pqz_key_hash
+            && self.shares.len() == usize::from(h.n)
     }
 
     pub fn to_json(&self) -> String {
@@ -204,21 +241,45 @@ impl PqzSeedBackup {
     /// of purpose [`PURPOSE_PQZ_SHARE`].
     pub fn from_json(json: &[u8]) -> Result<PqzSeedBackup> {
         let v = bounded::json(json, BACKUP_JSON, BACKUP_DEPTH)?;
-        let o = v.as_object().filter(|o| o.len() == 7 && o.get("v").and_then(Value::as_u64) == Some(1)).ok_or(Error::Argument)?;
+        let o = v
+            .as_object()
+            .filter(|o| o.len() == 7 && o.get("v").and_then(Value::as_u64) == Some(1))
+            .ok_or(Error::Argument)?;
         let word = |k: &str| -> Result<[u8; 32]> {
-            o.get(k).and_then(Value::as_str).and_then(from_hex).and_then(|b| b.try_into().ok()).ok_or(Error::Argument)
+            o.get(k)
+                .and_then(Value::as_str)
+                .and_then(from_hex)
+                .and_then(|b| b.try_into().ok())
+                .ok_or(Error::Argument)
         };
-        let small = |k: &str| o.get(k).and_then(Value::as_u64).and_then(|x| u8::try_from(x).ok()).ok_or(Error::Argument);
+        let small = |k: &str| {
+            o.get(k)
+                .and_then(Value::as_u64)
+                .and_then(|x| u8::try_from(x).ok())
+                .ok_or(Error::Argument)
+        };
         let header = ShareHeader {
             msig_ua: word("msigUa")?,
-            version: o.get("version").and_then(Value::as_u64).ok_or(Error::Argument)?,
+            version: o
+                .get("version")
+                .and_then(Value::as_u64)
+                .ok_or(Error::Argument)?,
             pqz_key_hash: word("pqzKeyHash")?,
             k: small("k")?,
             n: small("n")?,
         };
-        let list = o.get("shares").and_then(Value::as_array).ok_or(Error::Argument)?;
-        let shares = list.iter().map(|c| SealedContainer::from_json(c.to_string().as_bytes())).collect::<Result<Vec<_>>>()?;
-        let ok = header.k >= 1 && header.k <= header.n && usize::from(header.n) <= N_MAX && shares.len() == usize::from(header.n);
+        let list = o
+            .get("shares")
+            .and_then(Value::as_array)
+            .ok_or(Error::Argument)?;
+        let shares = list
+            .iter()
+            .map(|c| SealedContainer::from_json(c.to_string().as_bytes()))
+            .collect::<Result<Vec<_>>>()?;
+        let ok = header.k >= 1
+            && header.k <= header.n
+            && usize::from(header.n) <= N_MAX
+            && shares.len() == usize::from(header.n);
         if !ok || shares.iter().any(|c| c.purpose != PURPOSE_PQZ_SHARE) {
             return Err(Error::Argument);
         }
@@ -230,11 +291,19 @@ impl PqzSeedBackup {
 /// `version` ([`PqzSeedBackup::covers`]); `None` otherwise (a single-key holder needs none: its key is its own seed's). The
 /// client shows it and still builds `register` / `setPqzKey` (owner 2026-11-06: a warning, never a refusal); an unhashable
 /// key warns too.
-pub fn seed_backup_warning(kind: u16, ua: &[u8; 32], version: u64, pqz_key: &[u8], backups: &[PqzSeedBackup]) -> Option<&'static str> {
+pub fn seed_backup_warning(
+    kind: u16,
+    ua: &[u8; 32],
+    version: u64,
+    pqz_key: &[u8],
+    backups: &[PqzSeedBackup],
+) -> Option<&'static str> {
     if kind != MSIG {
         return None;
     }
-    let kh = crate::key_hash_of(crate::PQZ_SCHEME, pqz_key).ok().flatten()?;
+    let kh = crate::key_hash_of(crate::PQZ_SCHEME, pqz_key)
+        .ok()
+        .flatten()?;
     (!backups.iter().any(|b| b.covers(ua, version, &kh))).then_some(SEED_BACKUP_MISSING)
 }
 
@@ -253,18 +322,31 @@ impl PqzKey {
     /// containers). `k` the `msig` threshold when `None`; `1 ≤ k ≤ n`. `Argument` otherwise (a recipient that is no member, an
     /// ephemeral one, a repeated member, `k` out of range); `KeyRevoked` once the key's wallet was locked.
     pub fn seal_seed_backup(
-        &self, sender: &UaKey, msig_key_data: &[u8], version: u64, k: Option<u8>, recipients: &[Recipient],
+        &self,
+        sender: &UaKey,
+        msig_key_data: &[u8],
+        version: u64,
+        k: Option<u8>,
+        recipients: &[Recipient],
     ) -> Result<PqzSeedBackup> {
         self.seal_seed_backup_with(sender, msig_key_data, version, k, recipients, os_coeffs)
     }
 
     fn seal_seed_backup_with(
-        &self, sender: &UaKey, msig_key_data: &[u8], version: u64, k: Option<u8>, recipients: &[Recipient],
+        &self,
+        sender: &UaKey,
+        msig_key_data: &[u8],
+        version: u64,
+        k: Option<u8>,
+        recipients: &[Recipient],
         coeffs: impl FnOnce(u8) -> Result<Zeroizing<Vec<[u8; 32]>>>,
     ) -> Result<PqzSeedBackup> {
         let st = MsigStructure::from_key_data(msig_key_data).map_err(|_| Error::Argument)?;
         let msig_ua = crate::derive_ua(MSIG, msig_key_data, false)?;
-        let n = u8::try_from(recipients.len()).ok().filter(|n| (1..=N_MAX).contains(&usize::from(*n))).ok_or(Error::Argument)?;
+        let n = u8::try_from(recipients.len())
+            .ok()
+            .filter(|n| (1..=N_MAX).contains(&usize::from(*n)))
+            .ok_or(Error::Argument)?;
         let k = match k {
             Some(k) => k,
             None => u8::try_from(st.threshold).map_err(|_| Error::Argument)?,
@@ -274,14 +356,23 @@ impl PqzKey {
         }
         let mut seen: Vec<[u8; 32]> = Vec::with_capacity(recipients.len());
         for r in recipients {
-            let RecipientId::Ua { ua, .. } = r.id() else { return Err(Error::Argument) };
+            let RecipientId::Ua { ua, .. } = r.id() else {
+                return Err(Error::Argument);
+            };
             if seen.contains(&ua) || !st.members.iter().any(|m| m.id == ua) {
                 return Err(Error::Argument);
             }
             seen.push(ua);
         }
-        let pqz_key_hash = crate::key_hash_of(crate::PQZ_SCHEME, &self.pk())?.ok_or(Error::Argument)?;
-        let header = ShareHeader { msig_ua, version, pqz_key_hash, k, n };
+        let pqz_key_hash =
+            crate::key_hash_of(crate::PQZ_SCHEME, &self.pk())?.ok_or(Error::Argument)?;
+        let header = ShareHeader {
+            msig_ua,
+            version,
+            pqz_key_hash,
+            k,
+            n,
+        };
         let _lease = self.lease(); // the leaf's copy and its shares, through the seals (T21 L82)
         let ys = split_with(&*self.leaf()?, &coeffs(k)?, n);
         crate::wallet::copied();
@@ -292,7 +383,12 @@ impl PqzKey {
             .zip(ys)
             .zip(1u8..)
             .map(|((r, y), index)| {
-                let pt = Share { h: header, index, y }.to_json();
+                let pt = Share {
+                    h: header,
+                    index,
+                    y,
+                }
+                .to_json();
                 seal_container(r, PURPOSE_PQZ_SHARE, &signer, created, pt.as_bytes(), None)
             })
             .collect::<Result<Vec<_>>>()?;
@@ -302,9 +398,17 @@ impl PqzKey {
     /// Test-only (feature `vectors`): [`PqzKey::seal_seed_backup`] with the given polynomial coefficients.
     #[cfg(feature = "vectors")]
     pub fn vectors_seal_seed_backup(
-        &self, sender: &UaKey, msig_key_data: &[u8], version: u64, k: Option<u8>, recipients: &[Recipient], coeffs: &[[u8; 32]],
+        &self,
+        sender: &UaKey,
+        msig_key_data: &[u8],
+        version: u64,
+        k: Option<u8>,
+        recipients: &[Recipient],
+        coeffs: &[[u8; 32]],
     ) -> Result<PqzSeedBackup> {
-        self.seal_seed_backup_with(sender, msig_key_data, version, k, recipients, |_| Ok(Zeroizing::new(coeffs.to_vec())))
+        self.seal_seed_backup_with(sender, msig_key_data, version, k, recipients, |_| {
+            Ok(Zeroizing::new(coeffs.to_vec()))
+        })
     }
 }
 
@@ -313,31 +417,59 @@ impl KemKeyPair {
     /// payload, to `to` (the one who rebuilds the key) and signed by `sender`. The share stays inside the library. Errors as
     /// [`KemKeyPair::open_container`] and [`seal_container`]; `Argument` for another purpose or a malformed payload.
     pub fn reseal_pqz_share(
-        &self, c: &SealedContainer, expect: &ContainerExpect, members: &Members, accepted: Option<&Accepted>, to: &Recipient,
+        &self,
+        c: &SealedContainer,
+        expect: &ContainerExpect,
+        members: &Members,
+        accepted: Option<&Accepted>,
+        to: &Recipient,
         sender: &UaKey,
     ) -> Result<SealedContainer> {
         let s = open_share(self, c, expect, members, accepted)?;
-        seal_container(to, PURPOSE_PQZ_SHARE, &ContainerSigner::Key(sender), crate::wallet::now()?, s.to_json().as_bytes(), None)
+        seal_container(
+            to,
+            PURPOSE_PQZ_SHARE,
+            &ContainerSigner::Key(sender),
+            crate::wallet::now()?,
+            s.to_json().as_bytes(),
+            None,
+        )
     }
 }
 
 /// [`crate::wallet::Wallet::reconstruct_pqz_seed`].
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn reconstruct(
-    store: &Arc<SecretStore>, kk: &KemKeyPair, containers: &[SealedContainer], expect: &ContainerExpect, members: &Members,
-    accepted: Option<&Accepted>, msig_ua: &[u8; 32], version: u64, pqz_key_hash: &[u8; 32],
+    store: &Arc<SecretStore>,
+    kk: &KemKeyPair,
+    containers: &[SealedContainer],
+    expect: &ContainerExpect,
+    members: &Members,
+    accepted: Option<&Accepted>,
+    msig_ua: &[u8; 32],
+    version: u64,
+    pqz_key_hash: &[u8; 32],
 ) -> Result<PqzKey> {
     if containers.len() > N_MAX {
         return Err(Error::Argument);
     }
-    let shares = containers.iter().map(|c| open_share(kk, c, expect, members, accepted)).collect::<Result<Vec<_>>>()?;
+    let shares = containers
+        .iter()
+        .map(|c| open_share(kk, c, expect, members, accepted))
+        .collect::<Result<Vec<_>>>()?;
     let first = shares.first().ok_or(Error::Argument)?.h;
-    let want = (first.msig_ua == *msig_ua) && first.version == version && first.pqz_key_hash == *pqz_key_hash;
+    let want = (first.msig_ua == *msig_ua)
+        && first.version == version
+        && first.pqz_key_hash == *pqz_key_hash;
     if !want || shares.iter().any(|s| s.h != first) || shares.len() < usize::from(first.k) {
         return Err(Error::Argument);
     }
     let points: Vec<(u8, &[u8; 32])> = shares.iter().map(|s| (s.index, &*s.y)).collect();
-    if points.iter().enumerate().any(|(i, p)| points.iter().skip(i + 1).any(|q| q.0 == p.0)) {
+    if points
+        .iter()
+        .enumerate()
+        .any(|(i, p)| points.iter().skip(i + 1).any(|q| q.0 == p.0))
+    {
         return Err(Error::Argument);
     }
     #[cfg(feature = "vectors")]

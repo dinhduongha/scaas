@@ -49,7 +49,9 @@ pub fn pack(lanes: &[u8]) -> Vec<u8> {
 }
 
 fn lanes(b: &[u8]) -> Vec<u64> {
-    b.chunks_exact(8).map(|c| u64::from_be_bytes(c.try_into().unwrap())).collect()
+    b.chunks_exact(8)
+        .map(|c| u64::from_be_bytes(c.try_into().unwrap()))
+        .collect()
 }
 fn bytes(c: &[u64]) -> Vec<u8> {
     c.iter().flat_map(|x| (x % Q).to_be_bytes()).collect()
@@ -60,7 +62,17 @@ pub fn entry_ref(from: &Word, counter: u64) -> Word {
     let tag = scaas_ua::keccak256(b"SCAAS-PQZ-ENTRY-V1");
     let mut tok = [0u8; 32];
     tok[12..].copy_from_slice(&TOKEN);
-    scaas_ua::keccak256(&[tag, st::u64_word(CHAIN_ID), UID, tok, *from, st::u64_word(counter)].concat())
+    scaas_ua::keccak256(
+        &[
+            tag,
+            st::u64_word(CHAIN_ID),
+            UID,
+            tok,
+            *from,
+            st::u64_word(counter),
+        ]
+        .concat(),
+    )
 }
 
 #[derive(Clone, Default)]
@@ -84,7 +96,10 @@ impl Acct {
     /// The struct's slots 0 to 3 as solc packs them (the first field in the low bytes); 3h: `lastDebit` in slot 2.
     pub fn slots(&self) -> [Word; 4] {
         let mut s = [[0u8; 32]; 4];
-        for (i, v) in [self.cleared, self.floor, self.rolled, self.count].iter().enumerate() {
+        for (i, v) in [self.cleared, self.floor, self.rolled, self.count]
+            .iter()
+            .enumerate()
+        {
             s[0][8 * i..8 * i + 8].copy_from_slice(&v.to_be_bytes());
         }
         s[1][3] = self.flags;
@@ -149,12 +164,17 @@ pub struct Chain {
 
 impl Chain {
     pub fn new() -> Chain {
-        Chain { block: 100, ..Default::default() }
+        Chain {
+            block: 100,
+            ..Default::default()
+        }
     }
     /// SSTORE2: `0x00 ‖ data` at a fresh address.
     pub fn put(&mut self, data: Vec<u8>) -> [u8; 20] {
         self.n += 1;
-        let a: [u8; 20] = scaas_ua::keccak256(&self.n.to_be_bytes())[..20].try_into().unwrap();
+        let a: [u8; 20] = scaas_ua::keccak256(&self.n.to_be_bytes())[..20]
+            .try_into()
+            .unwrap();
         self.blobs.insert(a, [vec![0u8], data].concat());
         a
     }
@@ -169,7 +189,10 @@ impl Chain {
         let a = self.put(pk.to_vec());
         let (latest, current) = self.vers[&ua];
         self.keys.insert((ua, latest + 1), a);
-        self.vers.insert(ua, (latest + 1, if eligible { latest + 1 } else { current }));
+        self.vers.insert(
+            ua,
+            (latest + 1, if eligible { latest + 1 } else { current }),
+        );
         latest + 1
     }
     pub fn cur(&self, ua: &Word) -> u64 {
@@ -206,7 +229,12 @@ impl Chain {
     }
     /// The version of `ua` whose key is `pk`.
     fn version_of(&self, ua: &Word, pk: &[u8]) -> u64 {
-        self.keys.iter().find(|((u, _), a)| u == ua && &self.blobs[*a][1..] == pk).expect("a key of the UA").0 .1
+        self.keys
+            .iter()
+            .find(|((u, _), a)| u == ua && &self.blobs[*a][1..] == pk)
+            .expect("a key of the UA")
+            .0
+             .1
     }
     /// `PqzCore._trivial` (a new block each time: always appended).
     pub fn shield(&mut self, ua: &Word, amount: u64) {
@@ -233,12 +261,25 @@ impl Chain {
     /// increment) and `lastDebit = k + 1`, then `acc` the reference and `rolled = floor = cleared = p` (no slot deleted, 3h PP-1),
     /// `sendCounter[from]++`.
     #[allow(clippy::too_many_arguments)] // the contract's own arguments, one each
-    fn debit(&mut self, from: &Word, v: u64, ptr: [u8; 20], u_off: usize, v_off: usize, p: u64, shield_in: u64) {
+    fn debit(
+        &mut self,
+        from: &Word,
+        v: u64,
+        ptr: [u8; 20],
+        u_off: usize,
+        v_off: usize,
+        p: u64,
+        shield_in: u64,
+    ) {
         let k = *self.ctrs.get(from).unwrap_or(&0);
         *self.ctrs.entry(*from).or_default() += 1;
         let a = self.accts.entry((*from, v)).or_default();
         let last = a.last_debit;
-        let p_prev = if last == 0 { 0 } else { u64::from_be_bytes(self.recs[&(*from, last - 1)].0[20..28].try_into().unwrap()) };
+        let p_prev = if last == 0 {
+            0
+        } else {
+            u64::from_be_bytes(self.recs[&(*from, last - 1)].0[20..28].try_into().unwrap())
+        };
         let prev = last.saturating_sub(1);
         let wide = shield_in != 0 || v != 0 || (last != 0 && prev + 1 != k);
         let mut w0 = [0u8; 32];
@@ -254,7 +295,8 @@ impl Chain {
         }
         self.recs.insert((*from, k), (w0, w1));
         a.last_debit = k + 1;
-        (a.acc_blob, a.acc_u, a.acc_v, a.units, a.flags) = (ptr, u_off as u64, v_off as u64, 1, a.flags & !1);
+        (a.acc_blob, a.acc_u, a.acc_v, a.units, a.flags) =
+            (ptr, u_off as u64, v_off as u64, 1, a.flags & !1);
         (a.rolled, a.floor, a.cleared) = (p, p, p);
     }
     /// The 3h tail of an op blob: `ownTag ‖ be64 kv[0..n) ‖ u8(n)`.
@@ -271,13 +313,22 @@ impl Chain {
     }
     fn ct(&self, a: &[u8; 20], u_off: usize, v_off: usize) -> Vec<u8> {
         let d = self.data(a);
-        [unpack(&d[u_off..u_off + PKP]).unwrap(), unpack(&d[v_off..v_off + VP]).unwrap()].concat()
+        [
+            unpack(&d[u_off..u_off + PKP]).unwrap(),
+            unpack(&d[v_off..v_off + VP]).unwrap(),
+        ]
+        .concat()
     }
     /// `acc` as the contract reads it (`_accOf`), at the current version.
     pub fn acc_ct(&self, ua: &Word) -> Vec<u8> {
         let a = &self.accts[&(*ua, self.cur(ua))];
         if a.flags & 1 != 0 {
-            let s: Vec<u8> = a.acc_words.iter().flat_map(|w| w.map(|b| !b)).take(CTP).collect();
+            let s: Vec<u8> = a
+                .acc_words
+                .iter()
+                .flat_map(|w| w.map(|b| !b))
+                .take(CTP)
+                .collect();
             unpack(&s).unwrap()
         } else if a.acc_blob == [0; 20] {
             vec![0; PK_BYTES + 128]
@@ -310,7 +361,10 @@ impl Chain {
         assert_eq!(stream.len(), CTP);
         let mut padded = stream.clone();
         padded.resize(ACC_WORDS * 32, 0);
-        let words = padded.chunks_exact(32).map(|w| <[u8; 32]>::try_from(w).unwrap().map(|b| !b)).collect();
+        let words = padded
+            .chunks_exact(32)
+            .map(|w| <[u8; 32]>::try_from(w).unwrap().map(|b| !b))
+            .collect();
         let a = self.acct(ua);
         (a.acc_words, a.acc_hash, a.flags) = (words, scaas_ua::keccak256(&stream), a.flags | 7);
         a.rolled += n;
@@ -319,7 +373,8 @@ impl Chain {
     /// The facade's `p` rule (CTR-PQZ-06), as a reading layer computes it to know which pending slots to read.
     pub fn p_of(&self, ua: &Word, v: u64, inline: u64) -> u64 {
         let a = &self.accts[&(*ua, v)];
-        a.count.min(a.rolled + inline.min(K_MAX as u64 - 1 - a.units))
+        a.count
+            .min(a.rolled + inline.min(K_MAX as u64 - 1 - a.units))
     }
     /// A words request for `ua`'s own account at its current version (`balance` and the debits).
     pub fn own(&self, ua: &Word, inline: u64) -> Value {
@@ -329,7 +384,9 @@ impl Chain {
     pub fn own_at(&self, ua: &Word, v: u64, inline: u64) -> Value {
         let empty = Acct::default();
         let a = self.accts.get(&(*ua, v)).unwrap_or(&empty);
-        let p = a.count.min(a.rolled + inline.min(K_MAX as u64 - 1 - a.units));
+        let p = a
+            .count
+            .min(a.rolled + inline.min(K_MAX as u64 - 1 - a.units));
         let mut blobs = vec![self.keys[&(*ua, v)]];
         if a.flags & 1 == 0 && a.acc_blob != [0; 20] {
             blobs.push(a.acc_blob);
@@ -343,7 +400,11 @@ impl Chain {
                 json!({"index": i, "word": hx(&e)})
             })
             .collect();
-        let acc_words: Vec<String> = if a.flags & 1 != 0 { a.acc_words.iter().map(|w| hx(w)).collect() } else { vec![] };
+        let acc_words: Vec<String> = if a.flags & 1 != 0 {
+            a.acc_words.iter().map(|w| hx(w)).collect()
+        } else {
+            vec![]
+        };
         json!({"chainUid": hx(&UID), "token": hx(&TOKEN), "ua": hx(ua), "block": self.block, "psid": hx(&st::PQZL_ID),
             "account": a.slots().iter().map(|w| hx(w)).collect::<Vec<_>>(), "pending": pending, "accWords": acc_words,
             "sendCounterWord": hx(&st::u64_word(self.ctrs.get(ua).copied().unwrap_or(0))), "keyVersion": v,
@@ -359,12 +420,22 @@ impl Chain {
         let e = &self.entries[er];
         let mut v = self.entry(er, &e.from);
         v["blobs"] = json!(self.blobs_json(&[e.ptr, self.key_ptr(&e.from), self.key_ptr(owner)]));
-        merge(v, json!({"leg": j, "registry": hx(&REG), "legKeyRecords": [hx(&self.key_record(owner))]}))
+        merge(
+            v,
+            json!({"leg": j, "registry": hx(&REG), "legKeyRecords": [hx(&self.key_record(owner))]}),
+        )
     }
     pub fn blobs_json(&self, list: &[[u8; 20]]) -> Vec<Value> {
         let mut seen = Vec::new();
         list.iter()
-            .filter(|a| if seen.contains(*a) { false } else { seen.push(**a); true })
+            .filter(|a| {
+                if seen.contains(*a) {
+                    false
+                } else {
+                    seen.push(**a);
+                    true
+                }
+            })
             .map(|a| json!({"address": hx(a), "code": hx(&self.blobs[a])}))
             .collect()
     }
@@ -404,7 +475,9 @@ impl Chain {
         x["entryAuditorEpoch"] = json!(hx(&e));
         x["keyVersion"] = json!(v);
         if at != self.auditor_epoch {
-            x["auditorUASlot"] = json!(hx(&scaas_ua::keccak256(&[st::u64_word(u64::from(at)), slot(25)].concat())));
+            x["auditorUASlot"] = json!(hx(&scaas_ua::keccak256(
+                &[st::u64_word(u64::from(at)), slot(25)].concat()
+            )));
             x["auditorUA"] = json!(hx(&self.auditor_hist[at as usize]));
         }
         x
@@ -413,7 +486,11 @@ impl Chain {
     /// record carries for it (`auditor_words_of` without `keyVersion`; Fable C1).
     pub fn record_auditor(&self, er: &Word) -> (Word, Value) {
         let at = self.entry_epoch.get(er).copied().unwrap_or(0);
-        let ua = if at == self.auditor_epoch { self.auditor.unwrap() } else { self.auditor_hist[at as usize] };
+        let ua = if at == self.auditor_epoch {
+            self.auditor.unwrap()
+        } else {
+            self.auditor_hist[at as usize]
+        };
         let mut x = self.auditor_words_of(er, 2, 0);
         x.as_object_mut().unwrap().remove("keyVersion");
         (ua, x)
@@ -427,10 +504,15 @@ impl Chain {
     /// Settles a verified op 1 statement (`_settleTransfer`): the op blob `salt ‖ P(u) ‖ P(v_t) ‖ [P(v_a)] ‖ toUA ‖ P(v_f) ‖ tail`,
     /// the sender's debit, the receiver's credit, the entry.
     pub fn settle1(&mut self, stmt: &[u8], memo: Option<&[u8]>) -> Word {
-        let st::Stmt::Debit(d) = st::parse(1, stmt).unwrap() else { panic!() };
+        let st::Stmt::Debit(d) = st::parse(1, stmt).unwrap() else {
+            panic!()
+        };
         let hd = &d.header;
         let (from, to) = (hd[st::H_FROM], hd[st::H_TO]);
-        let (p, ctr) = (st::word_u64(&hd[st::H_P]).unwrap(), st::word_u64(&hd[st::H_SEND_COUNTER]).unwrap());
+        let (p, ctr) = (
+            st::word_u64(&hd[st::H_P]).unwrap(),
+            st::word_u64(&hd[st::H_SEND_COUNTER]).unwrap(),
+        );
         let mut blob = [&hd[st::H_SALT][16..], &pack(d.u), &pack(d.v_t.unwrap())].concat();
         if let Some(va) = d.v_a {
             blob.extend(pack(va));
@@ -448,10 +530,26 @@ impl Chain {
         let ptr = self.put(blob);
         let audited = d.pk_a.is_some();
         let v = self.version_of(&from, d.pk_f);
-        self.debit(&from, v, ptr, 16, len - VP, p, st::word_u64(&hd[st::H_PLAIN_USED]).unwrap());
+        self.debit(
+            &from,
+            v,
+            ptr,
+            16,
+            len - VP,
+            p,
+            st::word_u64(&hd[st::H_PLAIN_USED]).unwrap(),
+        );
         self.credit(&to, ptr, 16, 16 + PKP);
         let er = entry_ref(&from, ctr);
-        self.entries.insert(er, Ent { ptr, from, ctr, memo: memo.map(<[u8]>::to_vec).unwrap_or_default() });
+        self.entries.insert(
+            er,
+            Ent {
+                ptr,
+                from,
+                ctr,
+                memo: memo.map(<[u8]>::to_vec).unwrap_or_default(),
+            },
+        );
         if audited && self.auditor_epoch != 0 {
             self.entry_epoch.insert(er, self.auditor_epoch); // `PqzCore._entry` (spec §7)
         }
@@ -459,10 +557,15 @@ impl Chain {
     }
     /// Settles a verified op 7 statement (`_bundleMulti`, `_creditLegs`).
     pub fn settle7(&mut self, stmt: &[u8], memo: Option<&[u8]>) -> Word {
-        let st::Stmt::Multi(m) = st::parse(7, stmt).unwrap() else { panic!() };
+        let st::Stmt::Multi(m) = st::parse(7, stmt).unwrap() else {
+            panic!()
+        };
         let hd = &m.header;
         let from = hd[st::H_FROM];
-        let (p, ctr) = (st::word_u64(&hd[st::H_P]).unwrap(), st::word_u64(&hd[st::H_SEND_COUNTER]).unwrap());
+        let (p, ctr) = (
+            st::word_u64(&hd[st::H_P]).unwrap(),
+            st::word_u64(&hd[st::H_SEND_COUNTER]).unwrap(),
+        );
         let (g, aud) = (m.groups(), m.pk_a.is_some());
         let uas: Vec<Word> = memo_uas(stmt, m.m);
         let mut blob = hd[st::H_SALT][16..].to_vec();
@@ -479,7 +582,11 @@ impl Chain {
         blob.extend(pack(m.v_f));
         let len = blob.len();
         // `kv`: every leg's key version in leg order, then the auditor's
-        let mut kv: Vec<u64> = uas.iter().enumerate().map(|(j, ua)| self.version_of(ua, m.pk(j))).collect();
+        let mut kv: Vec<u64> = uas
+            .iter()
+            .enumerate()
+            .map(|(j, ua)| self.version_of(ua, m.pk(j)))
+            .collect();
         if let Some(pk_a) = m.pk_a {
             kv.push(self.version_of(&self.auditor.unwrap(), pk_a));
         }
@@ -487,24 +594,55 @@ impl Chain {
         self.block += 1;
         let ptr = self.put(blob);
         let v = self.version_of(&from, m.pk_f);
-        self.debit(&from, v, ptr, 16, len - VP, p, st::word_u64(&hd[st::H_PLAIN_USED]).unwrap());
+        self.debit(
+            &from,
+            v,
+            ptr,
+            16,
+            len - VP,
+            p,
+            st::word_u64(&hd[st::H_PLAIN_USED]).unwrap(),
+        );
         let (us, ls) = (16 + PKP * g, 32 + VP * (1 + aud as usize));
         for (j, ua) in uas.iter().enumerate() {
-            self.credit(ua, ptr, 16 + PKP * (j / st::legs_per_group(aud)), us + ls * j);
+            self.credit(
+                ua,
+                ptr,
+                16 + PKP * (j / st::legs_per_group(aud)),
+                us + ls * j,
+            );
         }
         let er = entry_ref(&from, ctr);
-        self.entries.insert(er, Ent { ptr, from, ctr, memo: memo.map(<[u8]>::to_vec).unwrap_or_default() });
+        self.entries.insert(
+            er,
+            Ent {
+                ptr,
+                from,
+                ctr,
+                memo: memo.map(<[u8]>::to_vec).unwrap_or_default(),
+            },
+        );
         er
     }
     /// Settles a verified burn or refresh (`_settleBurn`): the op blob `P(u') ‖ P(v_f) ‖ tail` (`n = 0`), the debit.
     pub fn settle_burn(&mut self, stmt: &[u8]) {
-        let st::Stmt::Debit(d) = st::parse(2, stmt).unwrap() else { panic!() };
+        let st::Stmt::Debit(d) = st::parse(2, stmt).unwrap() else {
+            panic!()
+        };
         let hd = &d.header;
         let p = st::word_u64(&hd[st::H_P]).unwrap();
         self.block += 1;
         let ptr = self.put([pack(d.u), pack(d.v_f), self.tail(&[])].concat());
         let v = self.version_of(&hd[st::H_FROM], d.pk_f);
-        self.debit(&hd[st::H_FROM], v, ptr, 0, PKP, p, st::word_u64(&hd[st::H_PLAIN_USED]).unwrap());
+        self.debit(
+            &hd[st::H_FROM],
+            v,
+            ptr,
+            0,
+            PKP,
+            p,
+            st::word_u64(&hd[st::H_PLAIN_USED]).unwrap(),
+        );
     }
 }
 
@@ -513,14 +651,23 @@ static UAS: std::sync::Mutex<Vec<(Word, Vec<Word>)>> = std::sync::Mutex::new(Vec
 
 /// Records op 7's leg UAs for the statement whose `recipientsHash` they hash to.
 pub fn note_legs(uas: &[Word]) {
-    UAS.lock().unwrap().push((scaas_ua::keccak256(&uas.concat()), uas.to_vec()));
+    UAS.lock()
+        .unwrap()
+        .push((scaas_ua::keccak256(&uas.concat()), uas.to_vec()));
 }
 
 fn memo_uas(stmt: &[u8], m: usize) -> Vec<Word> {
-    let st::Stmt::Multi(x) = st::parse(7, stmt).unwrap() else { panic!() };
+    let st::Stmt::Multi(x) = st::parse(7, stmt).unwrap() else {
+        panic!()
+    };
     let rh = x.header[st::H_RECIPIENTS_HASH];
     let l = UAS.lock().unwrap();
-    let uas = l.iter().find(|(h, _)| *h == rh).expect("note_legs first").1.clone();
+    let uas = l
+        .iter()
+        .find(|(h, _)| *h == rh)
+        .expect("note_legs first")
+        .1
+        .clone();
     assert_eq!(uas.len(), m);
     uas
 }
@@ -530,8 +677,14 @@ pub fn rec_fields(r: &(Word, Word)) -> ([u8; 20], u64, u64, u8, u64, u64) {
     let (w0, w1) = r;
     let wide = w0[31] & 2 != 0;
     let be = |w: &Word, a: usize| u64::from_be_bytes(w[a..a + 8].try_into().unwrap());
-    (w0[..20].try_into().unwrap(), be(w0, 20), u16::from_be_bytes([w0[28], w0[29]]) as u64, w0[30],
-        if wide { be(w1, 0) } else { 0 }, if wide { be(w1, 8) } else { 0 })
+    (
+        w0[..20].try_into().unwrap(),
+        be(w0, 20),
+        u16::from_be_bytes([w0[28], w0[29]]) as u64,
+        w0[30],
+        if wide { be(w1, 0) } else { 0 },
+        if wide { be(w1, 8) } else { 0 },
+    )
 }
 
 impl Chain {
@@ -539,26 +692,45 @@ impl Chain {
     pub fn note_proof(&mut self, op: u8, stmt: &[u8], proof: &[u8], call: Value) {
         let w = |i: usize| -> Word { stmt[32 * i..32 * i + 32].try_into().unwrap() };
         let k = st::word_u64(&w(st::H_SEND_COUNTER)).unwrap();
-        self.proofs.insert((w(st::H_FROM), k), (op, stmt.to_vec(), proof.to_vec(), call));
+        self.proofs.insert(
+            (w(st::H_FROM), k),
+            (op, stmt.to_vec(), proof.to_vec(), call),
+        );
     }
     /// The `p` of `(ua, v)`'s last debit (`p_last`, 0 when never debited).
     pub fn p_last(&self, ua: &Word, v: u64) -> u64 {
         let a = &self.accts[&(*ua, v)];
-        if a.last_debit == 0 { 0 } else { rec_fields(&self.recs[&(*ua, a.last_debit - 1)]).1 }
+        if a.last_debit == 0 {
+            0
+        } else {
+            rec_fields(&self.recs[&(*ua, a.last_debit - 1)]).1
+        }
     }
     /// `provenOpen`'s words for `(ua, v)` (no-oracle spec §4.14.2): the account, `lastRecord`, the window `[p_last, p)`, the key's
     /// and `accBlob`'s codes, `accWords` under `MAT`, the token's `chainId`, `registry` and `auditorUA`.
     pub fn proven_open(&self, ua: &Word, v: u64) -> Value {
         let empty = Acct::default();
         let a = self.accts.get(&(*ua, v)).unwrap_or(&empty);
-        let p = a.count.min(a.rolled + 16u64.min(K_MAX as u64 - 1 - a.units));
-        let p_last = if a.last_debit == 0 { 0 } else { self.p_last(ua, v) };
+        let p = a
+            .count
+            .min(a.rolled + 16u64.min(K_MAX as u64 - 1 - a.units));
+        let p_last = if a.last_debit == 0 {
+            0
+        } else {
+            self.p_last(ua, v)
+        };
         let mut blobs = vec![self.keys[&(*ua, v)]];
         if a.last_debit > 0 {
             blobs.push(a.acc_blob);
         }
-        let pending: Vec<Value> = (p_last..p).map(|i| json!({"index": i, "word": hx(&a.pending[&i])})).collect();
-        let acc_words: Vec<String> = if a.flags & 1 != 0 { a.acc_words.iter().map(|w| hx(w)).collect() } else { vec![] };
+        let pending: Vec<Value> = (p_last..p)
+            .map(|i| json!({"index": i, "word": hx(&a.pending[&i])}))
+            .collect();
+        let acc_words: Vec<String> = if a.flags & 1 != 0 {
+            a.acc_words.iter().map(|w| hx(w)).collect()
+        } else {
+            vec![]
+        };
         let mut o = json!({"chainUid": hx(&UID), "token": hx(&TOKEN), "ua": hx(ua), "block": self.block, "psid": hx(&st::PQZL_ID),
             "account": a.slots().iter().map(|w| hx(w)).collect::<Vec<_>>(), "pending": pending, "accWords": acc_words,
             "sendCounterWord": hx(&st::u64_word(self.ctrs.get(ua).copied().unwrap_or(0))), "keyVersion": v,
@@ -585,7 +757,12 @@ impl Chain {
     pub fn proven_credit(&self, ua: &Word, v: u64, i: u64) -> (Value, Vec<[u8; 20]>) {
         let w = self.accts[&(*ua, v)].pending[&i];
         let ptr: [u8; 20] = w[..20].try_into().unwrap();
-        let e = self.entries.values().find(|e| e.ptr == ptr).expect("the slot's entry").clone();
+        let e = self
+            .entries
+            .values()
+            .find(|e| e.ptr == ptr)
+            .expect("the slot's entry")
+            .clone();
         let r = self.recs[&(e.from, e.ctr)];
         let (prev, p, dp, ps, _, kv_s) = rec_fields(&r);
         let mut blobs = vec![ptr, self.keys[&(e.from, kv_s)]];
@@ -604,7 +781,9 @@ impl Chain {
             .collect();
         let d = &self.blobs[&ptr][1..];
         let n = *d.last().unwrap() as usize;
-        let kv: Vec<u64> = (0..n).map(|j| u64::from_be_bytes(d[d.len() - 1 - 8 * (n - j)..][..8].try_into().unwrap())).collect();
+        let kv: Vec<u64> = (0..n)
+            .map(|j| u64::from_be_bytes(d[d.len() - 1 - 8 * (n - j)..][..8].try_into().unwrap()))
+            .collect();
         let (op, uas, aud) = self.legs_of(&e.from, e.ctr);
         let mut keys = vec![(e.from, kv_s)];
         for (j, u) in uas.iter().enumerate() {
@@ -617,7 +796,12 @@ impl Chain {
             keys.push((*a, kv[uas.len()]));
         }
         blobs.extend(keys.iter().map(|k| self.keys[k]));
-        let krs: Vec<Value> = keys.iter().map(|(u, x)| json!({"ua": hx(u), "version": x, "word": hx(&self.key_record_at(u, *x))})).collect();
+        let krs: Vec<Value> = keys
+            .iter()
+            .map(
+                |(u, x)| json!({"ua": hx(u), "version": x, "word": hx(&self.key_record_at(u, *x))}),
+            )
+            .collect();
         let (_, stmt, proof, call) = &self.proofs[&(e.from, e.ctr)];
         let mut c = json!({"index": i, "fromUA": hx(&e.from), "sendCounter": e.ctr, "form": if op == 7 { "transferMulti" } else { "transfer" },
             "record": {"w0": hx(&r.0), "w1": hx(&r.1)}, "senderPending": window, "keyRecords": krs, "proof": hx(proof)});
@@ -625,7 +809,9 @@ impl Chain {
             c["auditor"] = x;
         }
         if ps == 1 {
-            c["header"] = json!((0..20).map(|x| hx(&stmt[32 * x..32 * x + 32])).collect::<Vec<_>>());
+            c["header"] = json!((0..20)
+                .map(|x| hx(&stmt[32 * x..32 * x + 32]))
+                .collect::<Vec<_>>());
         } else {
             c["call"] = call.clone();
         }
@@ -665,7 +851,9 @@ impl Chain {
         let mut rec_aud = None;
         let form = match op {
             2 => {
-                let st::Stmt::Debit(d) = st::parse(2, stmt).unwrap() else { panic!() };
+                let st::Stmt::Debit(d) = st::parse(2, stmt).unwrap() else {
+                    panic!()
+                };
                 if call.get("underlying").is_some() {
                     "unwrap"
                 } else if d.header[st::H_AMOUNT] == [0; 32] {
@@ -677,7 +865,11 @@ impl Chain {
             _ => {
                 let d = &self.blobs[&a.acc_blob][1..];
                 let n = *d.last().unwrap() as usize;
-                let kv: Vec<u64> = (0..n).map(|j| u64::from_be_bytes(d[d.len() - 1 - 8 * (n - j)..][..8].try_into().unwrap())).collect();
+                let kv: Vec<u64> = (0..n)
+                    .map(|j| {
+                        u64::from_be_bytes(d[d.len() - 1 - 8 * (n - j)..][..8].try_into().unwrap())
+                    })
+                    .collect();
                 let (_, uas, aud) = self.legs_of(ua, k);
                 keys.extend(uas.iter().enumerate().map(|(j, u)| (*u, kv[j])));
                 if aud {
@@ -685,17 +877,29 @@ impl Chain {
                     keys.push((a, kv[uas.len()]));
                     rec_aud = Some(x);
                 }
-                if *op == 7 { "transferMulti" } else { "transfer" }
+                if *op == 7 {
+                    "transferMulti"
+                } else {
+                    "transfer"
+                }
             }
         };
         blobs.extend(keys.iter().map(|x| self.keys[x]));
-        let krs: Vec<Value> = keys.iter().map(|(u, x)| json!({"ua": hx(u), "version": x, "word": hx(&self.key_record_at(u, *x))})).collect();
-        let mut c = json!({"form": form, "senderPending": window, "keyRecords": krs, "proof": hx(proof)});
+        let krs: Vec<Value> = keys
+            .iter()
+            .map(
+                |(u, x)| json!({"ua": hx(u), "version": x, "word": hx(&self.key_record_at(u, *x))}),
+            )
+            .collect();
+        let mut c =
+            json!({"form": form, "senderPending": window, "keyRecords": krs, "proof": hx(proof)});
         if let Some(x) = rec_aud {
             c["auditor"] = x;
         }
         if ps == 1 {
-            c["header"] = json!((0..20).map(|x| hx(&stmt[32 * x..32 * x + 32])).collect::<Vec<_>>());
+            c["header"] = json!((0..20)
+                .map(|x| hx(&stmt[32 * x..32 * x + 32]))
+                .collect::<Vec<_>>());
         } else {
             c["call"] = call.clone();
         }
@@ -703,11 +907,22 @@ impl Chain {
     }
     /// `checkProven`'s request for `(ua, v)` (no `keyRecord`; `pk` the member's record of the quorum's key): `provenOpen`'s
     /// words, `own` and the credits, every code once.
-    pub fn check_request(&self, ua: &Word, v: u64, pk: &[u8], own: Option<&(Value, Vec<[u8; 20]>)>, cs: &[(Value, Vec<[u8; 20]>)]) -> Value {
+    pub fn check_request(
+        &self,
+        ua: &Word,
+        v: u64,
+        pk: &[u8],
+        own: Option<&(Value, Vec<[u8; 20]>)>,
+        cs: &[(Value, Vec<[u8; 20]>)],
+    ) -> Value {
         let mut o = self.proven_open(ua, v);
         o.as_object_mut().unwrap().remove("keyRecord");
         let a = self.accts.get(&(*ua, v)).cloned().unwrap_or_default();
-        let mut blobs = if a.last_debit > 0 { vec![a.acc_blob] } else { vec![] };
+        let mut blobs = if a.last_debit > 0 {
+            vec![a.acc_blob]
+        } else {
+            vec![]
+        };
         blobs.extend(own.iter().flat_map(|x| x.1.clone()));
         blobs.extend(cs.iter().flat_map(|c| c.1.clone()));
         o["blobs"] = json!(self.blobs_json(&blobs));
@@ -721,13 +936,20 @@ impl Chain {
     /// The non-TRIVIAL indexes of `(ua, v)`'s window `[p_last, p)`.
     pub fn window_credits(&self, ua: &Word, v: u64) -> Vec<u64> {
         let o = self.proven_open(ua, v);
-        o["pending"].as_array().unwrap().iter().filter(|e| h(&e["word"])[22..24] != [0, 0]).map(|e| e["index"].as_u64().unwrap()).collect()
+        o["pending"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|e| h(&e["word"])[22..24] != [0, 0])
+            .map(|e| e["index"].as_u64().unwrap())
+            .collect()
     }
 }
 
 /// `scaas.pqz`'s namespace slot `n` (the ERC-7201 root + `n`), set-auditor's auditor words.
 pub fn slot(n: u64) -> Word {
-    let mut root: Word = hex_literal("da865ec17214f25b93cdb133d719c79392c290a4b9089fd0bba156256c521500");
+    let mut root: Word =
+        hex_literal("da865ec17214f25b93cdb133d719c79392c290a4b9089fd0bba156256c521500");
     let mut carry = u128::from(n);
     for b in root.iter_mut().rev() {
         let t = u128::from(*b) + (carry & 0xff);

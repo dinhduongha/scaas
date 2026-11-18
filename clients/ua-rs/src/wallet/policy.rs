@@ -10,8 +10,9 @@
 //! the standard digest of the values as supplied (no canonical step). The ports read the same `sign.json` `policy` rows as
 //! clientkeys. `now` is an input (no clock inside `ua-rs`; wasm32 has none). UNAUDITED.
 use super::eip712::{
-    self, eip712_digest, from_hex, op_row, op_types, scaas_typed_data, to_hex, typed_data_of, u256_add, u256_dec, u256_div, u256_from,
-    u256_mul_add, u256_to_dec, liquidity_order_typed_data, Erc7739Wallet, Fields, TypedData, U256, ZERO_ADDRESS,
+    self, eip712_digest, from_hex, liquidity_order_typed_data, op_row, op_types, scaas_typed_data,
+    to_hex, typed_data_of, u256_add, u256_dec, u256_div, u256_from, u256_mul_add, u256_to_dec,
+    Erc7739Wallet, Fields, TypedData, U256, ZERO_ADDRESS,
 };
 use super::signer::{SignRequest, Signer};
 use super::{bounded, Error, NativeKey, Result};
@@ -141,7 +142,14 @@ pub enum Expect {
         max_window: u64,
     },
     /// `checkOwnerCall`: exactly `AddKey(new_key)` signed by `account` itself, lane 0, no relayer, no fee.
-    OwnerCall { account: [u8; 20], chain_id: u64, chain_uid: [u8; 32], new_key: SubjectKey, now: u64, max_window: u64 },
+    OwnerCall {
+        account: [u8; 20],
+        chain_id: u64,
+        chain_uid: [u8; 32],
+        new_key: SubjectKey,
+        now: u64,
+        max_window: u64,
+    },
     /// `checkCancel`: the cancel of the client's own stored `order`, or the nonce floor `invalidate`.
     Cancel {
         account: Vec<u8>,
@@ -221,7 +229,10 @@ impl In {
         self.take(k).ok_or(Error::Argument)
     }
     fn hex(v: &Value) -> Result<Vec<u8>> {
-        v.as_str().filter(|s| s.starts_with("0x")).and_then(from_hex).ok_or(Error::Argument)
+        v.as_str()
+            .filter(|s| s.starts_with("0x"))
+            .and_then(from_hex)
+            .ok_or(Error::Argument)
     }
     fn fixed<const N: usize>(v: &Value) -> Result<[u8; N]> {
         In::hex(v)?.try_into().map_err(|_| Error::Argument)
@@ -250,7 +261,9 @@ impl In {
     fn u64_of(v: &Value) -> Result<u64> {
         match v {
             Value::Number(n) => n.as_u64(),
-            Value::String(s) if !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit()) => s.parse().ok(),
+            Value::String(s) if !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit()) => {
+                s.parse().ok()
+            }
             _ => None,
         }
         .ok_or(Error::Argument)
@@ -283,7 +296,10 @@ impl In {
     }
     fn decimals(&mut self) -> Result<u32> {
         // 10^77 < 2^256 < 10^78: no amount has more decimals
-        u32::try_from(self.u64("decimals")?).ok().filter(|d| *d <= 77).ok_or(Error::Argument)
+        u32::try_from(self.u64("decimals")?)
+            .ok()
+            .filter(|d| *d <= 77)
+            .ok_or(Error::Argument)
     }
     fn done<T>(self, v: T) -> Result<T> {
         if self.0.is_empty() {
@@ -298,7 +314,9 @@ impl Expect {
     /// clientkeys' `expectDigest` input `{check, …inputs}` (16 KiB, JSON depth 4, spec §9.3). `Argument`: an unknown check, a
     /// missing or malformed input, a key no input of the check; `PolicyRefused`: `Any` without `allowAnyTypedData: true`.
     pub fn from_json(json: &[u8]) -> Result<Expect> {
-        let Value::Object(o) = bounded::json(json, MAX_LEN, MAX_DEPTH)? else { return Err(Error::Argument) };
+        let Value::Object(o) = bounded::json(json, MAX_LEN, MAX_DEPTH)? else {
+            return Err(Error::Argument);
+        };
         let mut x = In(o);
         let check = x.req("check")?;
         let check = check.as_str().ok_or(Error::Argument)?;
@@ -360,21 +378,29 @@ impl Expect {
                 max_window: x.opt_u64("maxWindow", 3600)?,
             },
             "Call" => {
-                let Value::Object(call) = x.req("call")? else { return Err(Error::Argument) };
+                let Value::Object(call) = x.req("call")? else {
+                    return Err(Error::Argument);
+                };
                 let mut call = In(call);
                 let (contract, data) = (call.addr("contract")?, In::hex(&call.req("data")?)?);
                 call.done(())?;
-                let Value::Array(rows) = x.req("allowlist")? else { return Err(Error::Argument) };
+                let Value::Array(rows) = x.req("allowlist")? else {
+                    return Err(Error::Argument);
+                };
                 let allowlist = rows
                     .into_iter()
                     .map(|r| {
-                        let Value::Object(r) = r else { return Err(Error::Argument) };
+                        let Value::Object(r) = r else {
+                            return Err(Error::Argument);
+                        };
                         let mut r = In(r);
                         let row = AllowRow {
                             selector: In::fixed(&r.req("selector")?)?,
                             name: r.req("name")?.as_str().ok_or(Error::Argument)?.to_string(),
-                            fee_class: u8::try_from(r.u64("feeClass")?).map_err(|_| Error::Argument)?,
-                            amount_arg: u32::try_from(r.opt_u64("amountArg", 0)?).map_err(|_| Error::Argument)?,
+                            fee_class: u8::try_from(r.u64("feeClass")?)
+                                .map_err(|_| Error::Argument)?,
+                            amount_arg: u32::try_from(r.opt_u64("amountArg", 0)?)
+                                .map_err(|_| Error::Argument)?,
                         };
                         r.done(row)
                     })
@@ -394,8 +420,12 @@ impl Expect {
                 }
             }
             "OwnerCall" => {
-                let Value::Array(k) = x.req("newKey")? else { return Err(Error::Argument) };
-                let [kind, kx, ky, rp, origin] = k.as_slice() else { return Err(Error::Argument) };
+                let Value::Array(k) = x.req("newKey")? else {
+                    return Err(Error::Argument);
+                };
+                let [kind, kx, ky, rp, origin] = k.as_slice() else {
+                    return Err(Error::Argument);
+                };
                 let new_key = SubjectKey {
                     kind: u8::try_from(In::u64_of(kind)?).map_err(|_| Error::Argument)?,
                     x: In::fixed(kx)?,
@@ -417,7 +447,10 @@ impl Expect {
                     None => None,
                     Some(Value::Object(i)) => {
                         let mut i = In(i);
-                        let v = Invalidate { batch: i.dec("batch")?, min_nonce: i.dec("minNonce")? };
+                        let v = Invalidate {
+                            batch: i.dec("batch")?,
+                            min_nonce: i.dec("minNonce")?,
+                        };
                         Some(i.done(v)?)
                     }
                     Some(_) => return Err(Error::Argument),
@@ -442,7 +475,11 @@ impl Expect {
                     sell_token: x.addr("sellToken")?,
                     outside,
                     dexes: addrs(x.take("dexes"))?,
-                    ua: if x.0.contains_key("ua") { x.flag("ua")? } else { !outside },
+                    ua: if x.0.contains_key("ua") {
+                        x.flag("ua")?
+                    } else {
+                        !outside
+                    },
                     now: x.u64("now")?,
                     max_window: x.opt_u64("maxWindow", 30 * DAY)?,
                 }
@@ -468,7 +505,12 @@ impl Expect {
                     None => vec![],
                     Some(Value::Object(m)) => m
                         .iter()
-                        .map(|(k, v)| Ok((In::fixed(&Value::from(k.as_str()))?, addrs(Some(v.clone()))?)))
+                        .map(|(k, v)| {
+                            Ok((
+                                In::fixed(&Value::from(k.as_str()))?,
+                                addrs(Some(v.clone()))?,
+                            ))
+                        })
                         .collect::<Result<_>>()?,
                     Some(_) => return Err(Error::Argument),
                 },
@@ -494,14 +536,30 @@ impl Expect {
 /// by default; `body` hex, empty by default; the salt is required here: a check holds the metadata it was shown). Its rules are
 /// `metaPayId`'s, at the check.
 fn pay_meta(v: Value) -> Result<PayMeta> {
-    let Value::Object(m) = v else { return Err(Error::Argument) };
+    let Value::Object(m) = v else {
+        return Err(Error::Argument);
+    };
     let mut m = In(m);
     let salt = m.b32("salt")?;
-    let pay_no = m.take("payNo").map(|v| In::fixed(&v)).transpose()?.unwrap_or([0; 32]);
+    let pay_no = m
+        .take("payNo")
+        .map(|v| In::fixed(&v))
+        .transpose()?
+        .unwrap_or([0; 32]);
     let save = m.flag("save")?;
     let schema = u16::try_from(m.opt_u64("schema", 0)?).map_err(|_| Error::Argument)?;
-    let body = m.take("body").map(|b| In::hex(&b)).transpose()?.unwrap_or_default();
-    m.done(PayMeta { salt, pay_no, save, schema, body })
+    let body = m
+        .take("body")
+        .map(|b| In::hex(&b))
+        .transpose()?
+        .unwrap_or_default();
+    m.done(PayMeta {
+        salt,
+        pay_no,
+        save,
+        schema,
+        body,
+    })
 }
 
 fn addrs(v: Option<Value>) -> Result<Vec<[u8; 20]>> {
@@ -524,7 +582,14 @@ impl NativeKey {
 /// [`NativeKey::sign_typed`] by any [`Signer`] (spec §9.4: an external key's typed data passes the same policy).
 pub fn sign_typed_by(key: &dyn Signer, td: &TypedData, expect: Expect) -> Result<Vec<u8>> {
     let req = eip712::request(td)?;
-    let SignRequest::Eip712 { domain_separator, struct_hash, .. } = &req else { return Err(Error::Argument) };
+    let SignRequest::Eip712 {
+        domain_separator,
+        struct_hash,
+        ..
+    } = &req
+    else {
+        return Err(Error::Argument);
+    };
     let digest = eip712_digest(domain_separator, struct_hash);
     if !matches!(expect, Expect::Any(AllowAnyTypedData)) && check(td, &expect)? != digest {
         return Err(Error::PolicyRefused);
@@ -541,17 +606,77 @@ fn refuse<T>() -> Result<T> {
 fn check(td: &TypedData, e: &Expect) -> Result<[u8; 32]> {
     match e {
         Expect::Payment {
-            account, chain_id, chain_uid, amount, decimals, payee, entry_ref, expected_token, max_fee, fee_recipient, relayer, now,
+            account,
+            chain_id,
+            chain_uid,
+            amount,
+            decimals,
+            payee,
+            entry_ref,
+            expected_token,
+            max_fee,
+            fee_recipient,
+            relayer,
+            now,
             max_window,
-        } => payment(td, &Pay { account, chain_id: *chain_id, chain_uid, amount, decimals: *decimals, payee, expected_token, max_fee,
-            fee_recipient: fee_recipient.as_ref(), relayer: relayer.as_ref(), now: *now, max_window: *max_window }, entry_ref),
+        } => payment(
+            td,
+            &Pay {
+                account,
+                chain_id: *chain_id,
+                chain_uid,
+                amount,
+                decimals: *decimals,
+                payee,
+                expected_token,
+                max_fee,
+                fee_recipient: fee_recipient.as_ref(),
+                relayer: relayer.as_ref(),
+                now: *now,
+                max_window: *max_window,
+            },
+            entry_ref,
+        ),
         Expect::PayeeFee {
-            payee, chain_id, chain_uid, amount, decimals, entry_ref, expected_token, max_fee, fee_recipient, now, max_window,
-        } => payee_fee(td, payee, *chain_id, chain_uid, &to_base(amount, *decimals)?, entry_ref, expected_token, max_fee, fee_recipient,
-            *now, *max_window),
+            payee,
+            chain_id,
+            chain_uid,
+            amount,
+            decimals,
+            entry_ref,
+            expected_token,
+            max_fee,
+            fee_recipient,
+            now,
+            max_window,
+        } => payee_fee(
+            td,
+            payee,
+            *chain_id,
+            chain_uid,
+            &to_base(amount, *decimals)?,
+            entry_ref,
+            expected_token,
+            max_fee,
+            fee_recipient,
+            *now,
+            *max_window,
+        ),
         Expect::PayMeta {
-            meta, entry_ref, account, chain_id, chain_uid, amount, decimals, payee, expected_token, max_fee, fee_recipient, relayer,
-            now, max_window,
+            meta,
+            entry_ref,
+            account,
+            chain_id,
+            chain_uid,
+            amount,
+            decimals,
+            payee,
+            expected_token,
+            max_fee,
+            fee_recipient,
+            relayer,
+            now,
+            max_window,
         } => {
             // clientkeys `payMetaParts`: the checked `PayMeta`, its commitment, the request's `entryRef`, the body read strictly
             let pay_id = meta_pay_id_v3(meta).map_err(|_| Error::PolicyRefused)?;
@@ -562,36 +687,201 @@ fn check(td: &TypedData, e: &Expect) -> Result<[u8; 32]> {
             if !same(obj(td.message()).get("entryRef"), &pay_id) {
                 return refuse();
             }
-            payment(td, &Pay { account, chain_id: *chain_id, chain_uid, amount, decimals: *decimals, payee, expected_token, max_fee,
-                fee_recipient: fee_recipient.as_ref(), relayer: relayer.as_ref(), now: *now, max_window: *max_window }, &pay_id)
+            payment(
+                td,
+                &Pay {
+                    account,
+                    chain_id: *chain_id,
+                    chain_uid,
+                    amount,
+                    decimals: *decimals,
+                    payee,
+                    expected_token,
+                    max_fee,
+                    fee_recipient: fee_recipient.as_ref(),
+                    relayer: relayer.as_ref(),
+                    now: *now,
+                    max_window: *max_window,
+                },
+                &pay_id,
+            )
         }
-        Expect::Op { op, contract, chain_id, chain_uid, message, max_fee, fee_recipient, relayer, now, max_window } => {
-            check_op(td, op, contract, *chain_id, chain_uid, message, max_fee, fee_recipient.as_ref(), relayer.as_ref(), *now, *max_window)
-        }
+        Expect::Op {
+            op,
+            contract,
+            chain_id,
+            chain_uid,
+            message,
+            max_fee,
+            fee_recipient,
+            relayer,
+            now,
+            max_window,
+        } => check_op(
+            td,
+            op,
+            contract,
+            *chain_id,
+            chain_uid,
+            message,
+            max_fee,
+            fee_recipient.as_ref(),
+            relayer.as_ref(),
+            *now,
+            *max_window,
+        ),
         Expect::Call {
-            account, chain_id, chain_uid, allowlist, contract, data, max_fee, fee_recipient, relayer, now, max_window,
-        } => call(td, account, *chain_id, chain_uid, allowlist, contract, data, max_fee, fee_recipient.as_ref(), relayer.as_ref(), *now,
-            *max_window),
-        Expect::OwnerCall { account, chain_id, chain_uid, new_key: k, now, max_window } => {
+            account,
+            chain_id,
+            chain_uid,
+            allowlist,
+            contract,
+            data,
+            max_fee,
+            fee_recipient,
+            relayer,
+            now,
+            max_window,
+        } => call(
+            td,
+            account,
+            *chain_id,
+            chain_uid,
+            allowlist,
+            contract,
+            data,
+            max_fee,
+            fee_recipient.as_ref(),
+            relayer.as_ref(),
+            *now,
+            *max_window,
+        ),
+        Expect::OwnerCall {
+            account,
+            chain_id,
+            chain_uid,
+            new_key: k,
+            now,
+            max_window,
+        } => {
             let message = serde_json::json!({"from": to_hex(account), "kind": k.kind, "x": to_hex(&k.x), "y": to_hex(&k.y),
                 "rpIdHash": to_hex(&k.rp_id_hash), "originHash": to_hex(&k.origin_hash), "batch": 0, "mode": 0,
                 "relayer": ZERO_ADDRESS, "fee": 0, "feeRecipient": ZERO_ADDRESS});
-            check_op(td, "AddKey", account, *chain_id, chain_uid, &message, "0", None, None, *now, *max_window)
+            check_op(
+                td,
+                "AddKey",
+                account,
+                *chain_id,
+                chain_uid,
+                &message,
+                "0",
+                None,
+                None,
+                *now,
+                *max_window,
+            )
         }
-        Expect::Cancel { account, chain_id, chain_uid, contract, order, invalidate, ua } => {
-            cancel(td, account, *chain_id, chain_uid, contract, order.as_ref(), invalidate.as_ref(), *ua)
-        }
-        Expect::TradeOrder { account, chain_id, chain_uid, order, sell_token, outside, dexes, ua, now, max_window } => {
-            trade_order(td, account, *chain_id, chain_uid, order, sell_token, *outside, dexes, *ua, *now, *max_window)
-        }
-        Expect::WrapOrder { account, chain_id, chain_uid, order, sell_token, wrappers, now, max_window } => {
-            wrap_order(td, account, *chain_id, chain_uid, order, sell_token, wrappers, *now, *max_window)
-        }
+        Expect::Cancel {
+            account,
+            chain_id,
+            chain_uid,
+            contract,
+            order,
+            invalidate,
+            ua,
+        } => cancel(
+            td,
+            account,
+            *chain_id,
+            chain_uid,
+            contract,
+            order.as_ref(),
+            invalidate.as_ref(),
+            *ua,
+        ),
+        Expect::TradeOrder {
+            account,
+            chain_id,
+            chain_uid,
+            order,
+            sell_token,
+            outside,
+            dexes,
+            ua,
+            now,
+            max_window,
+        } => trade_order(
+            td,
+            account,
+            *chain_id,
+            chain_uid,
+            order,
+            sell_token,
+            *outside,
+            dexes,
+            *ua,
+            *now,
+            *max_window,
+        ),
+        Expect::WrapOrder {
+            account,
+            chain_id,
+            chain_uid,
+            order,
+            sell_token,
+            wrappers,
+            now,
+            max_window,
+        } => wrap_order(
+            td,
+            account,
+            *chain_id,
+            chain_uid,
+            order,
+            sell_token,
+            wrappers,
+            *now,
+            *max_window,
+        ),
         Expect::LiquidityOrder {
-            account, chain_id, chain_uid, order, dexes, liquidity_dexes, readers, scaas_tokens, extra_tokens, partial, now, max_window,
-        } => liquidity_order(td, &Liquidity { account, chain_id: *chain_id, chain_uid, order, dexes, liquidity_dexes, readers,
-            scaas_tokens, extra_tokens, partial: *partial, now: *now, max_window: *max_window }),
-        Expect::Erc7739 { app, wallet, address, chain_id, chain_uid } => app.erc7739(*wallet, address, *chain_id, chain_uid)?.digest(),
+            account,
+            chain_id,
+            chain_uid,
+            order,
+            dexes,
+            liquidity_dexes,
+            readers,
+            scaas_tokens,
+            extra_tokens,
+            partial,
+            now,
+            max_window,
+        } => liquidity_order(
+            td,
+            &Liquidity {
+                account,
+                chain_id: *chain_id,
+                chain_uid,
+                order,
+                dexes,
+                liquidity_dexes,
+                readers,
+                scaas_tokens,
+                extra_tokens,
+                partial: *partial,
+                now: *now,
+                max_window: *max_window,
+            },
+        ),
+        Expect::Erc7739 {
+            app,
+            wallet,
+            address,
+            chain_id,
+            chain_uid,
+        } => app
+            .erc7739(*wallet, address, *chain_id, chain_uid)?
+            .digest(),
         Expect::Any(_) => td.digest(),
     }
 }
@@ -635,7 +925,9 @@ fn dec(x: &U256) -> Value {
 }
 /// A value at most `0xff`, as a byte.
 fn small(x: &U256) -> Option<u8> {
-    x.get(..31).filter(|h| h.iter().all(|b| *b == 0)).and(x.last().copied())
+    x.get(..31)
+        .filter(|h| h.iter().all(|b| *b == 0))
+        .and(x.last().copied())
 }
 /// clientkeys `deadline`: `now < validUntil ≤ now + max`.
 fn deadline(valid_until: Option<&Value>, now: u64, max: u64) -> Result<()> {
@@ -657,10 +949,24 @@ fn to_base(amount: &str, decimals: u32) -> Result<U256> {
     uint_str(&format!("{int}{frac:0<w$}", w = decimals as usize))
 }
 /// The digest of the SCaaS builder's value; a value it refuses is refused.
-fn build(primary: &str, name: Option<&str>, contract: &[u8; 20], chain_id: u64, chain_uid: &[u8; 32], message: Map<String, Value>) -> Result<[u8; 32]> {
-    scaas_typed_data(primary, name, contract, chain_id, chain_uid, &Value::Object(message))
-        .and_then(|t| t.digest())
-        .map_err(|_| Error::PolicyRefused)
+fn build(
+    primary: &str,
+    name: Option<&str>,
+    contract: &[u8; 20],
+    chain_id: u64,
+    chain_uid: &[u8; 32],
+    message: Map<String, Value>,
+) -> Result<[u8; 32]> {
+    scaas_typed_data(
+        primary,
+        name,
+        contract,
+        chain_id,
+        chain_uid,
+        &Value::Object(message),
+    )
+    .and_then(|t| t.digest())
+    .map_err(|_| Error::PolicyRefused)
 }
 fn name_of(td: &TypedData) -> Option<&str> {
     td.domain().get("name").and_then(Value::as_str)
@@ -668,7 +974,13 @@ fn name_of(td: &TypedData) -> Option<&str> {
 
 /// clientkeys `feePolicy` (CTR-MTX-13): known flags and fee kind, NONE carries no fee, FIXED `fee`, PERCENT (≤ 1 %, only with an
 /// amount) ⌊basis · fee / 10^6⌋, at most `max_fee`; a bound fee recipient is the one named, a bound relayer the one named if any.
-fn fee_policy(m: &Map<String, Value>, max_fee: &str, fee_recipient: Option<&[u8; 20]>, relayer: Option<&[u8; 20]>, basis: Option<&U256>) -> Result<()> {
+fn fee_policy(
+    m: &Map<String, Value>,
+    max_fee: &str,
+    fee_recipient: Option<&[u8; 20]>,
+    relayer: Option<&[u8; 20]>,
+    basis: Option<&U256>,
+) -> Result<()> {
     let mode = small(&uint(get(m, "mode"))?).ok_or(Error::PolicyRefused)?;
     let kind = mode >> 4;
     if mode & !0xf3 != 0 || kind > 2 {
@@ -679,7 +991,9 @@ fn fee_policy(m: &Map<String, Value>, max_fee: &str, fee_recipient: Option<&[u8;
         return refuse();
     }
     let fee = if kind == 1 {
-        let (Some(basis), Some(r)) = (basis, small_u64(&rate).filter(|r| *r <= 10_000)) else { return refuse() };
+        let (Some(basis), Some(r)) = (basis, small_u64(&rate).filter(|r| *r <= 10_000)) else {
+            return refuse();
+        };
         let (q, rem) = u256_div(basis, 1_000_000);
         let hi = u256_mul_add(&q, r, 0).ok_or(Error::PolicyRefused)?;
         u256_add(&hi, &u256_from(rem * r / 1_000_000)).ok_or(Error::PolicyRefused)?
@@ -699,7 +1013,9 @@ fn fee_policy(m: &Map<String, Value>, max_fee: &str, fee_recipient: Option<&[u8;
 }
 fn small_u64(x: &U256) -> Option<u64> {
     let (hi, lo) = x.split_at(24);
-    hi.iter().all(|b| *b == 0).then(|| lo.iter().fold(0u64, |a, b| a << 8 | u64::from(*b)))
+    hi.iter()
+        .all(|b| *b == 0)
+        .then(|| lo.iter().fold(0u64, |a, b| a << 8 | u64::from(*b)))
 }
 
 /// The payment inputs `checkPayment` and `checkPayMeta` share.
@@ -728,7 +1044,11 @@ fn payment(td: &TypedData, p: &Pay, entry_ref: &[u8; 32]) -> Result<[u8; 32]> {
         return refuse();
     }
     let value = to_base(p.amount, p.decimals)?;
-    if uint(get(&m, "value"))? != value || zero(&value) || *entry_ref == [0; 32] || !same(get(&m, "entryRef"), entry_ref) {
+    if uint(get(&m, "value"))? != value
+        || zero(&value)
+        || *entry_ref == [0; 32]
+        || !same(get(&m, "entryRef"), entry_ref)
+    {
         return refuse();
     }
     let batch = pay_lane(entry_ref);
@@ -744,14 +1064,30 @@ fn payment(td: &TypedData, p: &Pay, entry_ref: &[u8; 32]) -> Result<[u8; 32]> {
     msg.insert("entryRef".into(), to_hex(entry_ref).into());
     msg.insert("batch".into(), dec(&batch));
     msg.insert("nonce".into(), 0.into());
-    build("UAMetaTransfer", name_of(td), p.expected_token, p.chain_id, p.chain_uid, msg)
+    build(
+        "UAMetaTransfer",
+        name_of(td),
+        p.expected_token,
+        p.chain_id,
+        p.chain_uid,
+        msg,
+    )
 }
 
 /// clientkeys `checkPayeeFee`.
 #[allow(clippy::too_many_arguments)]
 fn payee_fee(
-    td: &TypedData, payee: &[u8], chain_id: u64, chain_uid: &[u8; 32], value: &U256, entry_ref: &[u8; 32], token: &[u8; 20], max_fee: &str,
-    fee_recipient: &[u8; 20], now: u64, max_window: u64,
+    td: &TypedData,
+    payee: &[u8],
+    chain_id: u64,
+    chain_uid: &[u8; 32],
+    value: &U256,
+    entry_ref: &[u8; 32],
+    token: &[u8; 20],
+    max_fee: &str,
+    fee_recipient: &[u8; 20],
+    now: u64,
+    max_window: u64,
 ) -> Result<[u8; 32]> {
     if td.primary_type() != "UAPayeeFee" {
         return refuse();
@@ -761,7 +1097,11 @@ fn payee_fee(
     if !same(d.get("verifyingContract"), token) || !same(get(&p, "to"), payee) {
         return refuse();
     }
-    if uint(get(&p, "value"))? != *value || zero(value) || *entry_ref == [0; 32] || !same(get(&p, "entryRef"), entry_ref) {
+    if uint(get(&p, "value"))? != *value
+        || zero(value)
+        || *entry_ref == [0; 32]
+        || !same(get(&p, "entryRef"), entry_ref)
+    {
         return refuse();
     }
     let batch = pay_lane(entry_ref);
@@ -772,7 +1112,11 @@ fn payee_fee(
         return refuse();
     }
     let fee = uint(get(&m, "fee"))?;
-    if zero(&fee) || fee > *value || fee > uint_str(max_fee)? || !same(get(&m, "feeRecipient"), fee_recipient) {
+    if zero(&fee)
+        || fee > *value
+        || fee > uint_str(max_fee)?
+        || !same(get(&m, "feeRecipient"), fee_recipient)
+    {
         return refuse();
     }
     deadline(get(&m, "validUntil"), now, max_window)?;
@@ -786,21 +1130,46 @@ fn payee_fee(
     msg.insert("payment".into(), Value::Object(payment));
     msg.insert("fee".into(), dec(&fee));
     msg.insert("feeRecipient".into(), to_hex(fee_recipient).into());
-    msg.insert("validUntil".into(), get(&m, "validUntil").cloned().unwrap_or(Value::Null));
+    msg.insert(
+        "validUntil".into(),
+        get(&m, "validUntil").cloned().unwrap_or(Value::Null),
+    );
     build("UAPayeeFee", name_of(td), token, chain_id, chain_uid, msg)
 }
 
-const E_FIELDS: [&str; 7] = ["batch", "nonce", "validUntil", "mode", "relayer", "fee", "feeRecipient"];
+const E_FIELDS: [&str; 7] = [
+    "batch",
+    "nonce",
+    "validUntil",
+    "mode",
+    "relayer",
+    "fee",
+    "feeRecipient",
+];
 
 /// clientkeys `requireWhole`: every field of the client's value present (on the envelope struct `open`, the `E` fields may be the
 /// server's), recursively; a relayer or fee recipient it names must be bound by its mode (the server's when the client leaves it).
-fn require_whole(types: &BTreeMap<String, Fields>, ty: &str, v: Option<&Value>, open: bool, mode: Option<&Value>) -> Result<()> {
+fn require_whole(
+    types: &BTreeMap<String, Fields>,
+    ty: &str,
+    v: Option<&Value>,
+    open: bool,
+    mode: Option<&Value>,
+) -> Result<()> {
     if let Some(elem) = ty.strip_suffix("[]") {
-        let Some(Value::Array(a)) = v else { return refuse() };
-        return a.iter().try_for_each(|x| require_whole(types, elem, Some(x), false, None));
+        let Some(Value::Array(a)) = v else {
+            return refuse();
+        };
+        return a
+            .iter()
+            .try_for_each(|x| require_whole(types, elem, Some(x), false, None));
     }
-    let Some(fields) = types.get(ty) else { return Ok(()) };
-    let Some(Value::Object(o)) = v else { return refuse() };
+    let Some(fields) = types.get(ty) else {
+        return Ok(());
+    };
+    let Some(Value::Object(o)) = v else {
+        return refuse();
+    };
     for (n, t) in fields {
         if open && E_FIELDS.contains(&n.as_str()) {
             continue;
@@ -808,11 +1177,19 @@ fn require_whole(types: &BTreeMap<String, Fields>, ty: &str, v: Option<&Value>, 
         let x = get(o, n).ok_or(Error::PolicyRefused)?;
         require_whole(types, t, Some(x), false, None)?;
     }
-    if !["mode", "relayer", "feeRecipient"].iter().all(|k| fields.iter().any(|(n, _)| n == k)) {
+    if !["mode", "relayer", "feeRecipient"]
+        .iter()
+        .all(|k| fields.iter().any(|(n, _)| n == k))
+    {
         return Ok(());
     }
-    let bits = uint(get(o, "mode").or(mode.filter(|m| !m.is_null())))?.last().copied().unwrap_or(0);
-    let dropped = |k: &str, bit: u8| get(o, k).is_some_and(|id| js_str(Some(id)) != ZERO_ADDRESS) && bits & bit == 0;
+    let bits = uint(get(o, "mode").or(mode.filter(|m| !m.is_null())))?
+        .last()
+        .copied()
+        .unwrap_or(0);
+    let dropped = |k: &str, bit: u8| {
+        get(o, k).is_some_and(|id| js_str(Some(id)) != ZERO_ADDRESS) && bits & bit == 0
+    };
     if dropped("relayer", 1) || dropped("feeRecipient", 2) {
         return refuse();
     }
@@ -822,8 +1199,17 @@ fn require_whole(types: &BTreeMap<String, Fields>, ty: &str, v: Option<&Value>, 
 /// clientkeys `checkOp` (`checkOwnerCall` through it): struct `op` on `contract`, every field of `message` the client's.
 #[allow(clippy::too_many_arguments)]
 fn check_op(
-    td: &TypedData, op: &str, contract: &[u8; 20], chain_id: u64, chain_uid: &[u8; 32], message: &Value, max_fee: &str,
-    fee_recipient: Option<&[u8; 20]>, relayer: Option<&[u8; 20]>, now: u64, max_window: u64,
+    td: &TypedData,
+    op: &str,
+    contract: &[u8; 20],
+    chain_id: u64,
+    chain_uid: &[u8; 32],
+    message: &Value,
+    max_fee: &str,
+    fee_recipient: Option<&[u8; 20]>,
+    relayer: Option<&[u8; 20]>,
+    now: u64,
+    max_window: u64,
 ) -> Result<[u8; 32]> {
     if op == "UAWrapOrder" {
         return refuse(); // `checkWrapOrder` carries its rules (CLI-SGN-36)
@@ -838,7 +1224,13 @@ fn check_op(
         return refuse();
     }
     let types = op_types(op).map_err(|_| Error::PolicyRefused)?;
-    require_whole(&types, o.primary, Some(message), o.envelope, get(&m, "mode"))?;
+    require_whole(
+        &types,
+        o.primary,
+        Some(message),
+        o.envelope,
+        get(&m, "mode"),
+    )?;
     let msg = message.as_object().ok_or(Error::PolicyRefused)?;
     let mut full = Map::new();
     if o.envelope {
@@ -846,7 +1238,11 @@ fn check_op(
         let mut merged = m.clone();
         merged.extend(msg.clone());
         fee_policy(&merged, max_fee, fee_recipient, relayer, basis.as_ref())?;
-        deadline(get(msg, "validUntil").or(get(&m, "validUntil")), now, max_window)?;
+        deadline(
+            get(msg, "validUntil").or(get(&m, "validUntil")),
+            now,
+            max_window,
+        )?;
         full.insert("batch".into(), dec(&uint(get(&m, "batch"))?));
         full.insert("nonce".into(), dec(&uint(get(&m, "nonce"))?));
         for k in ["validUntil", "mode", "relayer", "fee", "feeRecipient"] {
@@ -856,9 +1252,16 @@ fn check_op(
         }
     }
     full.extend(msg.clone());
-    typed_data_of(&o, name_of(td), contract, chain_id, chain_uid, &Value::Object(full))
-        .and_then(|t| t.digest())
-        .map_err(|_| Error::PolicyRefused)
+    typed_data_of(
+        &o,
+        name_of(td),
+        contract,
+        chain_id,
+        chain_uid,
+        &Value::Object(full),
+    )
+    .and_then(|t| t.digest())
+    .map_err(|_| Error::PolicyRefused)
 }
 
 /// The selectors never signed as a call (CLI-SGN-34, CLI-SGN-36): moving funds and approvals; clientkeys `NEVER_CALLED`, the
@@ -882,8 +1285,18 @@ fn never_called(selector: &[u8]) -> bool {
 /// clientkeys `checkCall`: the self-call `MetaTransaction` of exactly `data` on `contract`.
 #[allow(clippy::too_many_arguments)]
 fn call(
-    td: &TypedData, account: &[u8; 20], chain_id: u64, chain_uid: &[u8; 32], allowlist: &[AllowRow], contract: &[u8; 20], data: &[u8],
-    max_fee: &str, fee_recipient: Option<&[u8; 20]>, relayer: Option<&[u8; 20]>, now: u64, max_window: u64,
+    td: &TypedData,
+    account: &[u8; 20],
+    chain_id: u64,
+    chain_uid: &[u8; 32],
+    allowlist: &[AllowRow],
+    contract: &[u8; 20],
+    data: &[u8],
+    max_fee: &str,
+    fee_recipient: Option<&[u8; 20]>,
+    relayer: Option<&[u8; 20]>,
+    now: u64,
+    max_window: u64,
 ) -> Result<[u8; 32]> {
     if td.primary_type() != "MetaTransaction" {
         return refuse();
@@ -892,20 +1305,36 @@ fn call(
     if !same(d.get("verifyingContract"), contract) || !same(get(&m, "data"), data) {
         return refuse();
     }
-    let Some(selector) = data.get(..4) else { return refuse() };
+    let Some(selector) = data.get(..4) else {
+        return refuse();
+    };
     if never_called(selector) {
         return refuse();
     }
-    let Some(row) = allowlist.iter().find(|r| r.selector == selector) else { return refuse() };
+    let Some(row) = allowlist.iter().find(|r| r.selector == selector) else {
+        return refuse();
+    };
     // checked in `usize`: `32 * amountArg` wraps on a 32-bit target (wasm32); past the calldata, no basis (a PERCENT fee refused)
-    let word = usize::try_from(row.amount_arg).ok().and_then(|a| a.checked_mul(32)?.checked_add(4)).and_then(|at| data.get(at..at.checked_add(32)?));
-    let basis = (row.fee_class == 2).then(|| word.and_then(|w| <U256>::try_from(w).ok())).flatten();
+    let word = usize::try_from(row.amount_arg)
+        .ok()
+        .and_then(|a| a.checked_mul(32)?.checked_add(4))
+        .and_then(|at| data.get(at..at.checked_add(32)?));
+    let basis = (row.fee_class == 2)
+        .then(|| word.and_then(|w| <U256>::try_from(w).ok()))
+        .flatten();
     fee_policy(&m, max_fee, fee_recipient, relayer, basis.as_ref())?;
     deadline(get(&m, "validUntil"), now, max_window)?;
     let mut msg = m.clone();
     msg.insert("from".into(), to_hex(account).into());
     msg.insert("data".into(), to_hex(data).into());
-    build("MetaTransaction", name_of(td), contract, chain_id, chain_uid, msg)
+    build(
+        "MetaTransaction",
+        name_of(td),
+        contract,
+        chain_id,
+        chain_uid,
+        msg,
+    )
 }
 
 const CANCELS: [&str; 3] = ["CancelUAOrder", "CancelUAWrapOrder", "CancelDexOrder"];
@@ -913,15 +1342,32 @@ const CANCELS: [&str; 3] = ["CancelUAOrder", "CancelUAWrapOrder", "CancelDexOrde
 /// clientkeys `checkCancel`.
 #[allow(clippy::too_many_arguments)]
 fn cancel(
-    td: &TypedData, account: &[u8], chain_id: u64, chain_uid: &[u8; 32], contract: &[u8; 20], order: Option<&Value>,
-    invalidate: Option<&Invalidate>, ua: bool,
+    td: &TypedData,
+    account: &[u8],
+    chain_id: u64,
+    chain_uid: &[u8; 32],
+    contract: &[u8; 20],
+    order: Option<&Value>,
+    invalidate: Option<&Invalidate>,
+    ua: bool,
 ) -> Result<[u8; 32]> {
     if let Some(i) = invalidate {
         let mut msg = Map::new();
         msg.insert("from".into(), to_hex(account).into());
         msg.insert("batch".into(), i.batch.clone().into());
         msg.insert("minNonce".into(), i.min_nonce.clone().into());
-        return build(if ua { "UAInvalidateNonces" } else { "InvalidateNonces" }, name_of(td), contract, chain_id, chain_uid, msg);
+        return build(
+            if ua {
+                "UAInvalidateNonces"
+            } else {
+                "InvalidateNonces"
+            },
+            name_of(td),
+            contract,
+            chain_id,
+            chain_uid,
+            msg,
+        );
     }
     let primary = td.primary_type();
     if !CANCELS.contains(&primary) {
@@ -929,7 +1375,11 @@ fn cancel(
     }
     let order = order.cloned().unwrap_or(Value::Null);
     let o = obj(&order);
-    let held = if primary == "CancelDexOrder" { obj(get(&o, "order").unwrap_or(&Value::Null)) } else { o.clone() };
+    let held = if primary == "CancelDexOrder" {
+        obj(get(&o, "order").unwrap_or(&Value::Null))
+    } else {
+        o.clone()
+    };
     if !same(get(&held, "from"), account) {
         return refuse();
     }
@@ -937,23 +1387,53 @@ fn cancel(
     if primary == "CancelUAOrder" && js_str(o.get("dex")) == js_str(o.get("receiveToken")) {
         return refuse();
     }
-    check_op(td, primary, contract, chain_id, chain_uid, &serde_json::json!({"order": order}), "0", None, None, 0, 0)
+    check_op(
+        td,
+        primary,
+        contract,
+        chain_id,
+        chain_uid,
+        &serde_json::json!({"order": order}),
+        "0",
+        None,
+        None,
+        0,
+        0,
+    )
 }
 
 /// The order the client built: `order` over the defaults, `from` the account, the server's nonce, `validUntil` the client's or
 /// the server's.
-fn order_of(order: &Value, account: &[u8], got: &Map<String, Value>, ua: bool) -> Result<Map<String, Value>> {
-    let Value::Object(given) = order else { return refuse() };
+fn order_of(
+    order: &Value,
+    account: &[u8],
+    got: &Map<String, Value>,
+    ua: bool,
+) -> Result<Map<String, Value>> {
+    let Value::Object(given) = order else {
+        return refuse();
+    };
     let mut o = Map::new();
-    for (k, v) in [("minFill", "0".into()), ("fee", "0".into()), ("relayer", ZERO_ADDRESS.into()),
-        ("destination", (if ua { ZERO_ID } else { ZERO_ADDRESS }).into()), ("flags", 0.into()), ("batch", "0".into())]
-    {
+    for (k, v) in [
+        ("minFill", "0".into()),
+        ("fee", "0".into()),
+        ("relayer", ZERO_ADDRESS.into()),
+        (
+            "destination",
+            (if ua { ZERO_ID } else { ZERO_ADDRESS }).into(),
+        ),
+        ("flags", 0.into()),
+        ("batch", "0".into()),
+    ] {
         o.insert(k.to_string(), v);
     }
     o.extend(given.clone());
     o.insert("from".into(), to_hex(account).into());
     o.insert("nonce".into(), dec(&uint(get(got, "nonce"))?));
-    let valid_until = get(given, "validUntil").or(get(got, "validUntil")).cloned().unwrap_or(Value::Null);
+    let valid_until = get(given, "validUntil")
+        .or(get(got, "validUntil"))
+        .cloned()
+        .unwrap_or(Value::Null);
     o.insert("validUntil".into(), valid_until);
     Ok(o)
 }
@@ -961,7 +1441,9 @@ fn order_of(order: &Value, account: &[u8], got: &Map<String, Value>, ua: bool) -
 /// clientkeys `orderTerms` (CLI-SGN-35): a nonce below 2^128, a fee of at most 1 %, known flags (no ESCROW outside).
 fn order_terms(o: &Map<String, Value>, outside: bool) -> Result<()> {
     let nonce = uint(get(o, "nonce"))?;
-    if nonce.get(..16).is_some_and(|h| h.iter().any(|b| *b != 0)) || uint(get(o, "fee"))? > u256_from(10_000) {
+    if nonce.get(..16).is_some_and(|h| h.iter().any(|b| *b != 0))
+        || uint(get(o, "fee"))? > u256_from(10_000)
+    {
         return refuse();
     }
     let flags = small(&uint(get(o, "flags"))?).ok_or(Error::PolicyRefused)?;
@@ -1001,47 +1483,85 @@ fn liquidity_order(td: &TypedData, l: &Liquidity) -> Result<[u8; 32]> {
     if td.primary_type() != "LiquidityOrder" {
         return refuse();
     }
-    let dex: [u8; 20] = td.domain().get("verifyingContract").and_then(Value::as_str).and_then(from_hex).and_then(|b| b.try_into().ok())
+    let dex: [u8; 20] = td
+        .domain()
+        .get("verifyingContract")
+        .and_then(Value::as_str)
+        .and_then(from_hex)
+        .and_then(|b| b.try_into().ok())
         .ok_or(Error::PolicyRefused)?;
     if !l.dexes.contains(&dex) || !l.liquidity_dexes.contains(&dex) {
         return refuse();
     }
     let got = obj(td.message());
-    let Value::Object(given) = l.order else { return refuse() };
+    let Value::Object(given) = l.order else {
+        return refuse();
+    };
     let mut o = Map::new();
-    for (k, v) in [("inputs", Value::Array(vec![])), ("outputs", Value::Array(vec![])), ("positionManager", ZERO_ADDRESS.into()),
-        ("positionReader", ZERO_ADDRESS.into()), ("positionIn", "0".into()), ("positionPool", ZERO_ID.into()), ("tickLower", 0.into()),
-        ("tickUpper", 0.into()), ("minLiquidity", "0".into()), ("recipient", ZERO_ID.into()), ("fee", "0".into()),
-        ("relayer", ZERO_ADDRESS.into()), ("flags", 0.into()), ("batch", "0".into())]
-    {
+    for (k, v) in [
+        ("inputs", Value::Array(vec![])),
+        ("outputs", Value::Array(vec![])),
+        ("positionManager", ZERO_ADDRESS.into()),
+        ("positionReader", ZERO_ADDRESS.into()),
+        ("positionIn", "0".into()),
+        ("positionPool", ZERO_ID.into()),
+        ("tickLower", 0.into()),
+        ("tickUpper", 0.into()),
+        ("minLiquidity", "0".into()),
+        ("recipient", ZERO_ID.into()),
+        ("fee", "0".into()),
+        ("relayer", ZERO_ADDRESS.into()),
+        ("flags", 0.into()),
+        ("batch", "0".into()),
+    ] {
         o.insert(k.to_string(), v);
     }
     o.extend(given.clone());
     o.insert("from".into(), to_hex(l.account).into());
     let nonce = uint(get(&got, "nonce"))?;
     o.insert("nonce".into(), dec(&nonce));
-    let valid_until = get(given, "validUntil").or(get(&got, "validUntil")).cloned().unwrap_or(Value::Null);
+    let valid_until = get(given, "validUntil")
+        .or(get(&got, "validUntil"))
+        .cloned()
+        .unwrap_or(Value::Null);
     o.insert("validUntil".into(), valid_until);
-    if nonce.get(..16).is_some_and(|h| h.iter().any(|b| *b != 0)) || uint(get(&o, "fee"))? > u256_from(10_000) {
+    if nonce.get(..16).is_some_and(|h| h.iter().any(|b| *b != 0))
+        || uint(get(&o, "fee"))? > u256_from(10_000)
+    {
         return refuse();
     }
     if small(&uint(get(&o, "flags"))?).is_none_or(|f| f & !4 != 0) {
         return refuse();
     }
     let addr = |v: Option<&Value>| -> Result<[u8; 20]> {
-        v.and_then(Value::as_str).and_then(from_hex).and_then(|b| b.try_into().ok()).ok_or(Error::PolicyRefused)
+        v.and_then(Value::as_str)
+            .and_then(from_hex)
+            .and_then(|b| b.try_into().ok())
+            .ok_or(Error::PolicyRefused)
     };
     let list = |k: &str| -> Result<Vec<PlanToken>> {
-        let Some(Value::Array(a)) = o.get(k) else { return refuse() };
-        Ok(a.iter().map(|t| (addr(t.get("token")).ok(), t.get("amount"))).collect())
+        let Some(Value::Array(a)) = o.get(k) else {
+            return refuse();
+        };
+        Ok(a.iter()
+            .map(|t| (addr(t.get("token")).ok(), t.get("amount")))
+            .collect())
     };
     let (inputs, outputs) = (list("inputs")?, list("outputs")?);
     if inputs.len() > 8 || outputs.len() > 8 || l.extra_tokens.len() > 8 {
         return refuse();
     }
-    let all: Vec<[u8; 20]> = inputs.iter().chain(&outputs).map(|(t, _)| t.ok_or(Error::PolicyRefused)).chain(l.extra_tokens.iter().copied().map(Ok))
+    let all: Vec<[u8; 20]> = inputs
+        .iter()
+        .chain(&outputs)
+        .map(|(t, _)| t.ok_or(Error::PolicyRefused))
+        .chain(l.extra_tokens.iter().copied().map(Ok))
         .collect::<Result<_>>()?;
-    if all.iter().enumerate().any(|(i, t)| all.iter().take(i).any(|x| x == t)) {
+    if all
+        .iter()
+        .enumerate()
+        .any(|(i, t)| all.iter().take(i).any(|x| x == t))
+    {
         return refuse();
     }
     for (_, amount) in &inputs {
@@ -1050,7 +1570,11 @@ fn liquidity_order(td: &TypedData, l: &Liquidity) -> Result<[u8; 32]> {
         }
     }
     let pm = addr(get(&o, "positionManager"))?;
-    let pool = get(&o, "positionPool").and_then(Value::as_str).and_then(from_hex).filter(|b| b.len() == 32).ok_or(Error::PolicyRefused)?;
+    let pool = get(&o, "positionPool")
+        .and_then(Value::as_str)
+        .and_then(from_hex)
+        .filter(|b| b.len() == 32)
+        .ok_or(Error::PolicyRefused)?;
     let received = pool.iter().any(|b| *b != 0);
     let given_pos = !zero(&uint(get(&o, "positionIn"))?);
     if all.iter().any(|t| *t == [0; 20] || *t == pm) || (pm == [0; 20] && (given_pos || received)) {
@@ -1063,10 +1587,20 @@ fn liquidity_order(td: &TypedData, l: &Liquidity) -> Result<[u8; 32]> {
             _ => refuse(),
         }
     };
-    let (lower, upper, min_liquidity) = (tick("tickLower")?, tick("tickUpper")?, uint(get(&o, "minLiquidity"))?);
+    let (lower, upper, min_liquidity) = (
+        tick("tickLower")?,
+        tick("tickUpper")?,
+        uint(get(&o, "minLiquidity"))?,
+    );
     let reader = addr(get(&o, "positionReader"))?;
     if received {
-        if lower >= upper || zero(&min_liquidity) || !l.readers.iter().any(|(m, rs)| *m == pm && rs.contains(&reader)) {
+        if lower >= upper
+            || zero(&min_liquidity)
+            || !l
+                .readers
+                .iter()
+                .any(|(m, rs)| *m == pm && rs.contains(&reader))
+        {
             return refuse();
         }
     } else if reader != [0; 20] || lower != 0 || upper != 0 || !zero(&min_liquidity) {
@@ -1075,12 +1609,17 @@ fn liquidity_order(td: &TypedData, l: &Liquidity) -> Result<[u8; 32]> {
     if l.partial && given_pos && !received {
         return refuse();
     }
-    let rec: [u8; 32] = get(&o, "recipient").and_then(Value::as_str).and_then(from_hex).and_then(|b| b.try_into().ok())
+    let rec: [u8; 32] = get(&o, "recipient")
+        .and_then(Value::as_str)
+        .and_then(from_hex)
+        .and_then(|b| b.try_into().ok())
         .ok_or(Error::PolicyRefused)?;
     let recipient = if rec == [0; 32] { *l.account } else { rec };
     let pad = |a: &[u8; 20]| {
         let mut w = [0u8; 32];
-        w.get_mut(12..).into_iter().for_each(|x| x.copy_from_slice(a));
+        w.get_mut(12..)
+            .into_iter()
+            .for_each(|x| x.copy_from_slice(a));
         w
     };
     if all.iter().chain([&pm, &dex]).any(|a| pad(a) == recipient) {
@@ -1095,14 +1634,25 @@ fn liquidity_order(td: &TypedData, l: &Liquidity) -> Result<[u8; 32]> {
         return refuse();
     }
     deadline(get(&o, "validUntil"), l.now, l.max_window)?;
-    liquidity_order_typed_data(&dex, l.chain_id, l.chain_uid, &Value::Object(o)).and_then(|t| t.digest()).map_err(|_| Error::PolicyRefused)
+    liquidity_order_typed_data(&dex, l.chain_id, l.chain_uid, &Value::Object(o))
+        .and_then(|t| t.digest())
+        .map_err(|_| Error::PolicyRefused)
 }
 
 /// clientkeys `checkTradeOrder`.
 #[allow(clippy::too_many_arguments)]
 fn trade_order(
-    td: &TypedData, account: &[u8], chain_id: u64, chain_uid: &[u8; 32], order: &Value, sell_token: &[u8; 20], outside: bool,
-    dexes: &[[u8; 20]], ua: bool, now: u64, max_window: u64,
+    td: &TypedData,
+    account: &[u8],
+    chain_id: u64,
+    chain_uid: &[u8; 32],
+    order: &Value,
+    sell_token: &[u8; 20],
+    outside: bool,
+    dexes: &[[u8; 20]],
+    ua: bool,
+    now: u64,
+    max_window: u64,
 ) -> Result<[u8; 32]> {
     if ua == outside {
         return refuse(); // a UA order sells a SCaaS token only; a SCaaS sell token takes a `UATradeOrder`
@@ -1112,10 +1662,16 @@ fn trade_order(
         return refuse();
     }
     let msg = obj(td.message());
-    let got = if outside { obj(get(&msg, "order").unwrap_or(&Value::Null)) } else { msg };
+    let got = if outside {
+        obj(get(&msg, "order").unwrap_or(&Value::Null))
+    } else {
+        msg
+    };
     let o = order_of(order, account, &got, ua)?;
     order_terms(&o, outside)?;
-    if js_str(o.get("receiveToken")) == js_str(o.get("dex")) || !dexes.iter().any(|x| same(get(&o, "dex"), x)) {
+    if js_str(o.get("receiveToken")) == js_str(o.get("dex"))
+        || !dexes.iter().any(|x| same(get(&o, "dex"), x))
+    {
         return refuse();
     }
     let (amount, min_fill) = (uint(get(&o, "amount"))?, uint(get(&o, "minFill"))?);
@@ -1125,11 +1681,20 @@ fn trade_order(
     deadline(get(&o, "validUntil"), now, max_window)?;
     // the struct's own fields of the order (tradeOrderTypedData keeps those)
     let types = op_types(want).map_err(|_| Error::PolicyRefused)?;
-    let fields = types.get(if outside { "TradeOrder" } else { want }).ok_or(Error::PolicyRefused)?;
-    let picked: Map<String, Value> = fields.iter().filter_map(|(n, _)| o.get(n).map(|v| (n.clone(), v.clone()))).collect();
+    let fields = types
+        .get(if outside { "TradeOrder" } else { want })
+        .ok_or(Error::PolicyRefused)?;
+    let picked: Map<String, Value> = fields
+        .iter()
+        .filter_map(|(n, _)| o.get(n).map(|v| (n.clone(), v.clone())))
+        .collect();
     let name = name_of(td).filter(|n| !n.is_empty());
     if outside {
-        let dex: [u8; 20] = get(&o, "dex").and_then(Value::as_str).and_then(from_hex).and_then(|b| b.try_into().ok()).ok_or(Error::PolicyRefused)?;
+        let dex: [u8; 20] = get(&o, "dex")
+            .and_then(Value::as_str)
+            .and_then(from_hex)
+            .and_then(|b| b.try_into().ok())
+            .ok_or(Error::PolicyRefused)?;
         let mut m = Map::new();
         m.insert("sellToken".into(), to_hex(sell_token).into());
         m.insert("order".into(), Value::Object(picked));
@@ -1141,8 +1706,15 @@ fn trade_order(
 /// clientkeys `checkWrapOrder` (and `checkUAWrapOrder`): a `UAWrapOrder`.
 #[allow(clippy::too_many_arguments)]
 fn wrap_order(
-    td: &TypedData, account: &[u8], chain_id: u64, chain_uid: &[u8; 32], order: &Value, sell_token: &[u8; 20], wrappers: &[[u8; 20]],
-    now: u64, max_window: u64,
+    td: &TypedData,
+    account: &[u8],
+    chain_id: u64,
+    chain_uid: &[u8; 32],
+    order: &Value,
+    sell_token: &[u8; 20],
+    wrappers: &[[u8; 20]],
+    now: u64,
+    max_window: u64,
 ) -> Result<[u8; 32]> {
     let ty = "UAWrapOrder";
     if td.primary_type() != ty {
@@ -1164,7 +1736,9 @@ fn wrap_order(
 // --- CTR-MTX-26: the payment id commits to its metadata (clientkeys `payMetaParts`, `decodeMetaBody`) ---
 
 fn word_at(b: &[u8], i: usize) -> Result<U256> {
-    b.get(32 * i..32 * i + 32).and_then(|w| <U256>::try_from(w).ok()).map_or_else(refuse, Ok)
+    b.get(32 * i..32 * i + 32)
+        .and_then(|w| <U256>::try_from(w).ok())
+        .map_or_else(refuse, Ok)
 }
 fn as_usize(x: &U256) -> Option<usize> {
     small_u64(x).and_then(|v| usize::try_from(v).ok())
@@ -1176,7 +1750,9 @@ fn padded(b: &[u8]) -> Vec<u8> {
     out
 }
 fn utf8(b: &[u8]) -> Result<()> {
-    std::str::from_utf8(b).map(|_| ()).map_err(|_| Error::PolicyRefused)
+    std::str::from_utf8(b)
+        .map(|_| ())
+        .map_err(|_| Error::PolicyRefused)
 }
 /// clientkeys `decodeMetaBody` (CTR-MTX-26, `PayMeta` v3; the body rules unchanged since v2): the body of `schema` read
 /// strictly: 0 none; 1 a non-empty UTF-8 note; 2 `abi.encode(string creditorRef, uint64 dueDate)` in canonical form, UTF-8; 3
@@ -1191,7 +1767,9 @@ fn decode_meta_body(schema: u16, b: &[u8]) -> Result<()> {
             if b.len() < 96 || word_at(b, 0)? != u256_from(64) {
                 return refuse();
             }
-            let text = as_usize(&word_at(b, 2)?).and_then(|n| b.get(96..96usize.checked_add(n)?)).ok_or(Error::PolicyRefused)?;
+            let text = as_usize(&word_at(b, 2)?)
+                .and_then(|n| b.get(96..96usize.checked_add(n)?))
+                .ok_or(Error::PolicyRefused)?;
             let due = word_at(b, 1)?;
             let mut canon = u256_from(64).to_vec();
             canon.extend_from_slice(&due);

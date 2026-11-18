@@ -83,7 +83,9 @@ fn item(name: &str, n: usize, mut f: impl FnMut(usize)) {
     ms.sort_by(f64::total_cmp);
     let q = |p: f64| ms[((n - 1) as f64 * p).round() as usize];
     let round = |x: f64| (x * 10.0).round() / 10.0;
-    let hwm = proc_line("/proc/self/status", "VmHWM").and_then(|s| s.split(' ').next()?.parse::<f64>().ok()).map(|kb| round(kb / 1024.0));
+    let hwm = proc_line("/proc/self/status", "VmHWM")
+        .and_then(|s| s.split(' ').next()?.parse::<f64>().ok())
+        .map(|kb| round(kb / 1024.0));
     println!(
         "{}",
         json!({"item": name, "n": n, "first_ms": round(first), "p50_ms": round(q(0.5)), "p95_ms": round(q(0.95)), "max_ms": round(q(1.0)),
@@ -92,7 +94,11 @@ fn item(name: &str, n: usize, mut f: impl FnMut(usize)) {
 }
 
 fn r_tx(w: &Wallet, name: &str, id: &Word, n: usize) {
-    let (from, to, auditor) = (w.pqz_key(0, 0).unwrap(), w.pqz_key(1, 0).unwrap(), w.pqz_key(2, 0).unwrap());
+    let (from, to, auditor) = (
+        w.pqz_key(0, 0).unwrap(),
+        w.pqz_key(1, 0).unwrap(),
+        w.pqz_key(2, 0).unwrap(),
+    );
     let mut c = Chain::new();
     c.register(FROM, &from.pk());
     c.register(TO, &to.pk());
@@ -102,12 +108,20 @@ fn r_tx(w: &Wallet, name: &str, id: &Word, n: usize) {
     let extra = json!({"psid": hx(id), "toUA": hx(&TO), "pkT": hx(&to.pk()), "pkA": hx(&auditor.pk()), "amount": 1, "mode": "BUNDLE"});
     let req = merge(merge(c.own(&FROM, 16), c.debit_fields()), extra).to_string();
     let mut last = String::new();
-    item(name, n, |_| last = from.call("proveTransfer", req.as_bytes()).unwrap());
+    item(name, n, |_| {
+        last = from.call("proveTransfer", req.as_bytes()).unwrap()
+    });
     let p: Value = serde_json::from_str(&last).unwrap();
     let (stmt, proof) = (h(&p["stmt"]), h(&p["proof"]));
-    let Stmt::Debit(d) = st::parse(1, &stmt).unwrap() else { panic!("{name}: not a debit") };
+    let Stmt::Debit(d) = st::parse(1, &stmt).unwrap() else {
+        panic!("{name}: not a debit")
+    };
     assert_eq!(d.form, Form::Transfer, "{name}: R_TX, with the auditor");
-    assert_eq!(pqz_ffi::precompile(&st::input(1, &stmt, &proof)), Ok(pqz_ffi::VALID), "{name}: the proof verifies");
+    assert_eq!(
+        pqz_ffi::precompile(&st::input(1, &stmt, &proof)),
+        Ok(pqz_ffi::VALID),
+        "{name}: the proof verifies"
+    );
 }
 
 fn main() {
@@ -115,7 +129,11 @@ fn main() {
         eprintln!("ua_bench: a release build only (--release)");
         std::process::exit(2);
     }
-    let arg = |i: usize, default: usize| std::env::args().nth(i).map_or(default, |a| a.parse().expect("runs: a number"));
+    let arg = |i: usize, default: usize| {
+        std::env::args()
+            .nth(i)
+            .map_or(default, |a| a.parse().expect("runs: a number"))
+    };
     let (prove_runs, other_runs) = (arg(1, 21), arg(2, 21));
     println!(
         "{}",
@@ -130,10 +148,20 @@ fn main() {
         r_tx(&w, "pqz_r_tx_prove_pqzh", &PQZH_ID, prove_runs);
     }
     let vault = w.seal_vault(PIN, None).unwrap();
-    assert!(!vault.needs_rewrap(), "a new envelope is N = 2^17, r = 8, p = 1");
-    item("scrypt_n17_open_vault", other_runs, |_| drop(Wallet::open_vault(&vault, Unlock::VaultPassphrase(PIN), "").unwrap()));
+    assert!(
+        !vault.needs_rewrap(),
+        "a new envelope is N = 2^17, r = 8, p = 1"
+    );
+    item("scrypt_n17_open_vault", other_runs, |_| {
+        drop(Wallet::open_vault(&vault, Unlock::VaultPassphrase(PIN), "").unwrap())
+    });
     // a new index every run: `ua_key` caches a handle's secret by kind, account and index
-    for (name, kind) in [("falcon1024_keygen_per_handle", 0x0135u16), ("slhdsa128s_keygen_per_handle", 0x0133)] {
-        item(name, other_runs, |i| drop(w.ua_key(kind, 0, i as u32).unwrap()));
+    for (name, kind) in [
+        ("falcon1024_keygen_per_handle", 0x0135u16),
+        ("slhdsa128s_keygen_per_handle", 0x0133),
+    ] {
+        item(name, other_runs, |i| {
+            drop(w.ua_key(kind, 0, i as u32).unwrap())
+        });
     }
 }

@@ -42,13 +42,23 @@ pub fn verify_raw(kind: u16, key: &[u8], m: &[u8], sig: &[u8]) -> bool {
 }
 
 fn mldsa<P: MlDsaParams>(key: &[u8], m: &[u8], sig: &[u8]) -> bool {
-    let (Ok(k), Ok(s)) = (EncodedVerifyingKey::<P>::try_from(key), ml_dsa::Signature::<P>::try_from(sig)) else { return false };
+    let (Ok(k), Ok(s)) = (
+        EncodedVerifyingKey::<P>::try_from(key),
+        ml_dsa::Signature::<P>::try_from(sig),
+    ) else {
+        return false;
+    };
     ml_dsa::VerifyingKey::<P>::decode(&k).verify_internal(m, &s)
 }
 
 fn slhdsa128s(key: &[u8], m: &[u8], sig: &[u8]) -> bool {
     use slh_dsa::{Sha2_128s, Signature, VerifyingKey};
-    let (Ok(k), Ok(s)) = (VerifyingKey::<Sha2_128s>::try_from(key), Signature::<Sha2_128s>::try_from(sig)) else { return false };
+    let (Ok(k), Ok(s)) = (
+        VerifyingKey::<Sha2_128s>::try_from(key),
+        Signature::<Sha2_128s>::try_from(sig),
+    ) else {
+        return false;
+    };
     k.slh_verify_internal(&[m], &s).is_ok()
 }
 

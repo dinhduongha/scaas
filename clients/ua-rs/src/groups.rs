@@ -8,10 +8,10 @@ use crate::{keccak, validate_key_data};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::PrimeField;
 use k256::elliptic_curve::consts::{U16, U48};
-use k256::hash2curve::{hash_to_field, ExpandMsgXmd};
 use k256::elliptic_curve::ops::Reduce;
 use k256::elliptic_curve::sec1::{FromSec1Point, ToSec1Point};
 use k256::elliptic_curve::PrimeField as _;
+use k256::hash2curve::{hash_to_field, ExpandMsgXmd};
 use k256::{AffinePoint, ProjectivePoint, Scalar};
 
 pub const FROST_SECP256K1_CONTEXT: &[u8] = b"FROST-secp256k1-SHA256-v1";
@@ -25,9 +25,15 @@ pub(crate) fn verify(kind: u16, key: &[u8], msg: &[u8; 32], sig: &[u8], pop: boo
         return validate_key_data(kind, key, false).is_ok()
             && match kind {
                 0x0110 => musig2_secp256k1_pop(key, msg, sig),
-                0x0111 => dkg_check(key, 33, secp_point, compressed, secp_pok) && frost_secp256k1(&key[..33], msg, sig),
+                0x0111 => {
+                    dkg_check(key, 33, secp_point, compressed, secp_pok)
+                        && frost_secp256k1(&key[..33], msg, sig)
+                }
                 0x0112 => musig2_bn254_pop(key, msg, sig),
-                _ => dkg_check(key, 64, bn_point, bn_bytes, bn_pok) && schnorr::<Bn>(&key[..64], msg, sig, 32),
+                _ => {
+                    dkg_check(key, 64, bn_point, bn_bytes, bn_pok)
+                        && schnorr::<Bn>(&key[..64], msg, sig, 32)
+                }
             };
     }
     match kind {
@@ -81,8 +87,11 @@ fn address(xy: &[u8]) -> [u8; 20] {
 
 /// RFC 9591 `hash_to_field` (`expand_message_xmd` SHA-256, 48 bytes, mod N) with DST `contextString ‖ label`.
 fn secp_h(label: &[u8], m: &[u8]) -> Scalar {
-    let [u] = hash_to_field::<1, ExpandMsgXmd<k256::sha2::Sha256>, U16, Scalar, U48>(&[m], &[FROST_SECP256K1_CONTEXT, label])
-        .expect("xmd");
+    let [u] = hash_to_field::<1, ExpandMsgXmd<k256::sha2::Sha256>, U16, Scalar, U48>(
+        &[m],
+        &[FROST_SECP256K1_CONTEXT, label],
+    )
+    .expect("xmd");
     u
 }
 
@@ -91,7 +100,13 @@ pub fn frost_secp256k1(y: &[u8], msg: &[u8], sig: &[u8]) -> bool {
     if sig.len() != 65 {
         return false;
     }
-    let (Some(yp), Some(r), Some(z)) = (secp_point(y), secp_point(&sig[..33]), secp_scalar(&sig[33..])) else { return false };
+    let (Some(yp), Some(r), Some(z)) = (
+        secp_point(y),
+        secp_point(&sig[..33]),
+        secp_scalar(&sig[33..]),
+    ) else {
+        return false;
+    };
     let c = secp_h(b"chal", &[&sig[..33], y, msg].concat());
     ProjectivePoint::GENERATOR * z == r + yp * c
 }
@@ -111,11 +126,17 @@ fn musig2_secp256k1_pop(kd: &[u8], msg: &[u8; 32], pop: &[u8]) -> bool {
         let a = if Some(pk) == second {
             Scalar::ONE
         } else {
-            <Scalar as Reduce<k256::FieldBytes>>::reduce(&tagged("KeyAgg coefficient", &[&l, pk]).into())
+            <Scalar as Reduce<k256::FieldBytes>>::reduce(
+                &tagged("KeyAgg coefficient", &[&l, pk]).into(),
+            )
         };
         // ecrecover(0, v, r = x(P_i), s = a·r mod N) = r⁻¹·s·R: needs r < N; R = lift(r, v) = P_i
-        let (Some(r), Some(p)) = (secp_scalar(&pk[1..]), secp_point(pk)) else { return false };
-        let Some(r_inv) = Option::<Scalar>::from(r.invert()) else { return false }; // ecrecover refuses r = 0
+        let (Some(r), Some(p)) = (secp_scalar(&pk[1..]), secp_point(pk)) else {
+            return false;
+        };
+        let Some(r_inv) = Option::<Scalar>::from(r.invert()) else {
+            return false;
+        }; // ecrecover refuses r = 0
         let rec = p * (a * r * r_inv);
         let h = &pop[64 + 64 * i..128 + 64 * i];
         if address(&rec.to_affine().to_sec1_point(false).as_bytes()[1..]) != address(h) {
@@ -127,8 +148,13 @@ fn musig2_secp256k1_pop(kd: &[u8], msg: &[u8; 32], pop: &[u8]) -> bool {
 }
 
 fn secp_pok(id: u16, c0: &[u8], r: &[u8], mu: &[u8]) -> bool {
-    let (Some(c0p), Some(rp), Some(mu)) = (secp_point(c0), secp_point(r), secp_scalar(mu)) else { return false };
-    let c = secp_h(b"dkg", &[&Scalar::from(id as u64).to_bytes()[..], c0, r].concat());
+    let (Some(c0p), Some(rp), Some(mu)) = (secp_point(c0), secp_point(r), secp_scalar(mu)) else {
+        return false;
+    };
+    let c = secp_h(
+        b"dkg",
+        &[&Scalar::from(id as u64).to_bytes()[..], c0, r].concat(),
+    );
     rp == ProjectivePoint::GENERATOR * mu - c0p * c
 }
 
@@ -173,7 +199,9 @@ fn musig2_bn254_pop(kd: &[u8], msg: &[u8; 32], pop: &[u8]) -> bool {
 }
 
 fn bn_pok(id: u16, c0: &[u8], r: &[u8], mu: &[u8]) -> bool {
-    let (Some(c0p), Some(rp), Some(mu)) = (bn_point(c0), bn_point(r), fr(mu)) else { return false };
+    let (Some(c0p), Some(rp), Some(mu)) = (bn_point(c0), bn_point(r), fr(mu)) else {
+        return false;
+    };
     let mut idb = [0u8; 32];
     idb[30..].copy_from_slice(&id.to_be_bytes());
     let c = fr_wide(|b| keccak(&[FROST_BN254_CONTEXT, b"dkg", &idb, c0, r, &[b]]));
@@ -197,10 +225,17 @@ fn dkg_check<P: core::ops::Add<Output = P> + Copy>(
     let mut sum: Option<P> = None;
     for i in 0..n {
         let b = &kd[w + 4 + i * per..w + 4 + (i + 1) * per];
-        if !pok(i as u16 + 1, &b[..w], &b[t * w..(t + 1) * w], &b[(t + 1) * w..]) {
+        if !pok(
+            i as u16 + 1,
+            &b[..w],
+            &b[t * w..(t + 1) * w],
+            &b[(t + 1) * w..],
+        ) {
             return false;
         }
-        let Some(c0) = point(&b[..w]) else { return false };
+        let Some(c0) = point(&b[..w]) else {
+            return false;
+        };
         if w == 33 && sum.is_some_and(|s| enc(&s)[1..] == b[1..w]) {
             return false;
         }

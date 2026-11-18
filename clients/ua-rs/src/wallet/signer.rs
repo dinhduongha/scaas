@@ -87,9 +87,17 @@ pub enum SigRole {
 /// The key behind a [`Signer`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum KeyRef {
-    Ua { kind: u16, key_data: Vec<u8> },
+    Ua {
+        kind: u16,
+        key_data: Vec<u8>,
+    },
     /// `address` as the network prints it (`None`: `ton`, `hedera_ed25519`); `public_key` compressed secp256k1 or ed25519.
-    Native { network: Network, coin_type: Option<u32>, address: Option<String>, public_key: Vec<u8> },
+    Native {
+        network: Network,
+        coin_type: Option<u32>,
+        address: Option<String>,
+        public_key: Vec<u8>,
+    },
 }
 
 /// A request for one signature, built only inside `ua-rs` after its checks.
@@ -98,16 +106,28 @@ pub enum KeyRef {
 pub enum SignRequest {
     /// `ua_msg = uaMessage(kind, purpose, digest)` after the purpose and kind checks; `role` from the purpose.
     #[non_exhaustive]
-    UaMsg { kind: u16, ua_msg: [u8; 32], role: SigRole },
+    UaMsg {
+        kind: u16,
+        ua_msg: [u8; 32],
+        role: SigRole,
+    },
     /// `keccak256(0x1901 ‖ domain_separator ‖ struct_hash)`, the hashes of `typed_data`, the value shown to a clear-signing device:
     /// on the checked path after the policy (a non-zero unbound `relayer` / `feeRecipient` refused, never zeroed), through `Any`
     /// as supplied, a SCaaS builder's value as built; a native key's `UAAuth` or portable record (CTR-UA-07, CTR-UA-24).
     #[non_exhaustive]
-    Eip712 { domain_separator: [u8; 32], struct_hash: [u8; 32], typed_data: Box<TypedData> },
+    Eip712 {
+        domain_separator: [u8; 32],
+        struct_hash: [u8; 32],
+        typed_data: Box<TypedData>,
+    },
     /// An EVM transaction of type 0-3 (spec §5.5; never type 4): `sighash` of `tx`, the transaction readable for a
     /// clear-signing device; a secp256k1 native key signs it.
     #[non_exhaustive]
-    Transaction { tx_type: u8, sighash: [u8; 32], tx: Box<EvmTx> },
+    Transaction {
+        tx_type: u8,
+        sighash: [u8; 32],
+        tx: Box<EvmTx>,
+    },
     /// `keccak256("scaas-subject-key-proof-v1" ‖ challenge)`.
     #[non_exhaustive]
     KeyProof { digest: [u8; 32] },
@@ -144,24 +164,62 @@ pub trait Signer: Send + Sync {
 #[cfg_attr(not(feature = "vectors"), allow(dead_code))]
 pub(crate) fn external_answer(key: &KeyRef, req: &SignRequest, sig: Vec<u8>) -> Result<Vec<u8>> {
     let (ok, sig) = match (key, req) {
-        (KeyRef::Ua { kind, key_data }, SignRequest::UaMsg { kind: k, ua_msg, role }) if k == kind => {
+        (
+            KeyRef::Ua { kind, key_data },
+            SignRequest::UaMsg {
+                kind: k,
+                ua_msg,
+                role,
+            },
+        ) if k == kind => {
             let sig = low_s(*kind, sig);
-            (verify(*kind, key_data, ua_msg, &sig, *role == SigRole::Pop), sig)
+            (
+                verify(*kind, key_data, ua_msg, &sig, *role == SigRole::Pop),
+                sig,
+            )
         }
-        (KeyRef::Ua { kind: 0x0100, key_data }, SignRequest::WebAuthn { challenge }) => (verify(0x0100, key_data, challenge, &sig, false), sig),
-        (KeyRef::Native { network, public_key, .. }, req) => {
+        (
+            KeyRef::Ua {
+                kind: 0x0100,
+                key_data,
+            },
+            SignRequest::WebAuthn { challenge },
+        ) => (verify(0x0100, key_data, challenge, &sig, false), sig),
+        (
+            KeyRef::Native {
+                network,
+                public_key,
+                ..
+            },
+            req,
+        ) => {
             let bytes = super::sign::native_bytes(*network, req)?;
             match network.scheme() {
                 NativeScheme::Ed25519 => (crate::verify::ed25519(public_key, &bytes, &sig), sig),
                 NativeScheme::Secp256k1Ecdsa => {
-                    let digest: [u8; 32] = bytes.as_slice().try_into().map_err(|_| Error::Argument)?;
-                    let pk = k256::ecdsa::VerifyingKey::from_sec1_bytes(public_key).map_err(|_| Error::Argument)?;
+                    let digest: [u8; 32] =
+                        bytes.as_slice().try_into().map_err(|_| Error::Argument)?;
+                    let pk = k256::ecdsa::VerifyingKey::from_sec1_bytes(public_key)
+                        .map_err(|_| Error::Argument)?;
                     let (pt, sig) = (pk.to_sec1_point(false), low_s(0x0108, sig));
-                    (verify(0x0108, pt.as_bytes().get(1..).ok_or(Error::Argument)?, &digest, &sig, false), sig)
+                    (
+                        verify(
+                            0x0108,
+                            pt.as_bytes().get(1..).ok_or(Error::Argument)?,
+                            &digest,
+                            &sig,
+                            false,
+                        ),
+                        sig,
+                    )
                 }
                 NativeScheme::Bip340Taproot => {
-                    let digest: [u8; 32] = bytes.as_slice().try_into().map_err(|_| Error::Argument)?;
-                    let x: [u8; 32] = public_key.get(1..).and_then(|x| x.try_into().ok()).ok_or(Error::Argument)?;
+                    let digest: [u8; 32] =
+                        bytes.as_slice().try_into().map_err(|_| Error::Argument)?;
+                    let x: [u8; 32] = public_key
+                        .get(1..)
+                        .and_then(|x| x.try_into().ok())
+                        .ok_or(Error::Argument)?;
                     let q = super::derive::taproot_tweak(&x)?.output_key;
                     (crate::verify::bip340(&q, &digest, &sig), sig)
                 }
@@ -217,8 +275,14 @@ type Device<'a> = Box<dyn Fn(&SignRequest) -> Result<Vec<u8>> + Send + Sync + 'a
 
 #[cfg(feature = "vectors")]
 impl<'a> TestExternalKey<'a> {
-    pub fn new(key_ref: KeyRef, device: impl Fn(&SignRequest) -> Result<Vec<u8>> + Send + Sync + 'a) -> Self {
-        TestExternalKey { key_ref, device: Box::new(device) }
+    pub fn new(
+        key_ref: KeyRef,
+        device: impl Fn(&SignRequest) -> Result<Vec<u8>> + Send + Sync + 'a,
+    ) -> Self {
+        TestExternalKey {
+            key_ref,
+            device: Box::new(device),
+        }
     }
 }
 
