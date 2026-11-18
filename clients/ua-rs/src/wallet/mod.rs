@@ -76,7 +76,7 @@ pub use manifest::{AllowRollback, ImportEntry, ImportedUaEntry, KemEntry, Manife
 pub use pairing::{FrostSession, Musig2Session};
 #[cfg(feature = "vectors")]
 pub use pairing::NonceSlotProbe;
-pub use policy::{sign_scaas, sign_typed_by, AllowAnyTypedData, AllowRow, Expect, Invalidate, SubjectKey};
+pub use policy::{fee_due, sign_scaas, sign_typed_by, AllowAnyTypedData, AllowRow, DecodedCall, Expect, Invalidate, SubjectKey};
 pub use service_pull::{service_pull, RelayFeeWrap, ServicePull};
 #[cfg(feature = "pqz")]
 pub(crate) use seal::now;
