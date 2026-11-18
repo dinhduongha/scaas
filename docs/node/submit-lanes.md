@@ -561,6 +561,8 @@ never `dead` (BUILT, branch `ua-mtx-wraplimit`, group 3l; wrap limits spec 2026-
 | `FeatureNotSet(31)`, `MaxSupplyInvalid`, `MaxWrapSupplyInvalid` | the setters, a creation | `dead`, by name |
 | `MissingRole(30, from)`, `FeatureNotSet(2)` / `(30)`, `GrantExpired`, `GrantExhausted` fields 0, 1, 2, 5, 7 | `mtxBurn` | `dead`, by name (the job's own subject lacks the power) |
 | `GrantExhausted(3)` (the grant's window spent) | a token's `mtxBurn`; the router's `mtxMint`, `mtxMintToUA` | `queued`, `GRANT_WINDOW_REFUSED: <error>`: the next window lifts it |
+| `AuditorNotReady(eta)` | the router's `mtxSetAuditorKey`, `mtxSetAuditorUA` (a bit-32 confirm before its proposal's `eta`; set-auditor spec §8, [CTR-GOV-31](../decisions.md#CTR-GOV-31); BUILT) | `queued`, `AUDITOR_NOT_READY: <error>`: the clock lifts it |
+| `AuditorPending`, `AuditorSame`, `AuditorEpochMismatch`, `AuditorKeyInvalid`, `AuditorConsentInvalid`, `NotProposer(32, …)`, the registry's consent refusals | the same two ops | `dead`, by name |
 
 Two rows are a **rule change**: before 3zb + 3zc no supply-cap and no grant refusal had a class here, so a wrap or a mint
 above `maxSupply` (`MaxSupplyExceeded`) and a mint whose window was spent went `dead`; now they wait in the queue (expiry or the

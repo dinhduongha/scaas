@@ -5202,6 +5202,28 @@
     "group": "Z"
    },
    {
+    "sel": "24174abc",
+    "sig": "auditorKeyOf(bytes32)",
+    "name": "auditorKeyOf",
+    "decl": "ZetherLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 entryRef"
+    ],
+    "names": [
+     "entryRef"
+    ],
+    "returns": "bytes memory _p0",
+    "ifaces": [
+     "IZetherToken"
+    ],
+    "vis": "external",
+    "domain": "zether",
+    "group": "Z"
+   },
+   {
     "sel": "35d330fe",
     "sig": "auditorMode()",
     "name": "auditorMode",
@@ -5212,6 +5234,24 @@
     "params": [],
     "names": [],
     "returns": "ZetherTypes.AuditorMode _p0",
+    "ifaces": [
+     "IZetherToken"
+    ],
+    "vis": "external",
+    "domain": "zether",
+    "group": "Z"
+   },
+   {
+    "sel": "b5e09c0f",
+    "sig": "auditorState()",
+    "name": "auditorState",
+    "decl": "ZetherLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status",
     "ifaces": [
      "IZetherToken"
     ],
@@ -7465,6 +7505,34 @@
     "group": "Z"
    },
    {
+    "sel": "2328ce6c",
+    "sig": "setAuditorKey(bytes,uint32,bytes,bytes32)",
+    "name": "setAuditorKey",
+    "decl": "ZetherLayer",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes calldata newKey",
+     "uint32 epoch",
+     "bytes calldata pop",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "newKey",
+     "epoch",
+     "pop",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IZetherToken"
+    ],
+    "vis": "external",
+    "domain": "zether",
+    "group": "Z"
+   },
+   {
     "sel": "789a7b4b",
     "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
     "name": "setGrant",
@@ -8095,6 +8163,28 @@
     "group": "Z"
    },
    {
+    "sel": "24174abc",
+    "sig": "auditorKeyOf(bytes32)",
+    "name": "auditorKeyOf",
+    "decl": "ZetherLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 entryRef"
+    ],
+    "names": [
+     "entryRef"
+    ],
+    "returns": "bytes memory _p0",
+    "ifaces": [
+     "IZetherToken"
+    ],
+    "vis": "external",
+    "domain": "zether",
+    "group": "Z"
+   },
+   {
     "sel": "35d330fe",
     "sig": "auditorMode()",
     "name": "auditorMode",
@@ -8105,6 +8195,24 @@
     "params": [],
     "names": [],
     "returns": "ZetherTypes.AuditorMode _p0",
+    "ifaces": [
+     "IZetherToken"
+    ],
+    "vis": "external",
+    "domain": "zether",
+    "group": "Z"
+   },
+   {
+    "sel": "b5e09c0f",
+    "sig": "auditorState()",
+    "name": "auditorState",
+    "decl": "ZetherLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status",
     "ifaces": [
      "IZetherToken"
     ],
@@ -10985,6 +11093,34 @@
     "group": "Z"
    },
    {
+    "sel": "2328ce6c",
+    "sig": "setAuditorKey(bytes,uint32,bytes,bytes32)",
+    "name": "setAuditorKey",
+    "decl": "ZetherLayer",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes calldata newKey",
+     "uint32 epoch",
+     "bytes calldata pop",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "newKey",
+     "epoch",
+     "pop",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IZetherToken"
+    ],
+    "vis": "external",
+    "domain": "zether",
+    "group": "Z"
+   },
+   {
     "sel": "789a7b4b",
     "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
     "name": "setGrant",
@@ -11938,6 +12074,24 @@
     "group": "Q"
    },
    {
+    "sel": "b5e09c0f",
+    "sig": "auditorState()",
+    "name": "auditorState",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
     "sel": "0b0425bd",
     "sig": "auditorUA()",
     "name": "auditorUA",
@@ -11949,6 +12103,28 @@
     "names": [],
     "returns": "bytes32 _p0",
     "ifaces": [],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
+    "sel": "c93622ee",
+    "sig": "auditorUAOf(bytes32)",
+    "name": "auditorUAOf",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 entryRef"
+    ],
+    "names": [
+     "entryRef"
+    ],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IPqzToken"
+    ],
     "vis": "external",
     "domain": "pqz",
     "group": "Q"
@@ -14155,32 +14331,6 @@
     "group": "Q"
    },
    {
-    "sel": "2d73ee4a",
-    "sig": "pqzSkipped(bytes32,uint64,uint64)",
-    "name": "pqzSkipped",
-    "decl": "PqzLayer",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [
-     "bytes32 ua",
-     "uint64 keyVersion",
-     "uint64 index"
-    ],
-    "names": [
-     "ua",
-     "keyVersion",
-     "index"
-    ],
-    "returns": "bool _p0",
-    "ifaces": [
-     "IPqzToken"
-    ],
-    "vis": "external",
-    "domain": "pqz",
-    "group": "Q"
-   },
-   {
     "sel": "03ccd4f0",
     "sig": "pqzPendingCt(bytes32,uint64,uint64)",
     "name": "pqzPendingCt",
@@ -14245,6 +14395,32 @@
      "chainUid_"
     ],
     "returns": "",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
+    "sel": "2d73ee4a",
+    "sig": "pqzSkipped(bytes32,uint64,uint64)",
+    "name": "pqzSkipped",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 ua",
+     "uint64 keyVersion",
+     "uint64 index"
+    ],
+    "names": [
+     "ua",
+     "keyVersion",
+     "index"
+    ],
+    "returns": "bool _p0",
     "ifaces": [
      "IPqzToken"
     ],
@@ -14495,6 +14671,34 @@
     "vis": "external",
     "domain": "governance",
     "group": "A"
+   },
+   {
+    "sel": "f6f32d5d",
+    "sig": "setAuditorUA(bytes32,uint32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes32)",
+    "name": "setAuditorUA",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32 newAuditor",
+     "uint32 epoch",
+     "IUARegistry.UASig calldata consent",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "newAuditor",
+     "epoch",
+     "consent",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
    },
    {
     "sel": "789a7b4b",
@@ -15257,6 +15461,24 @@
     "group": "Q"
    },
    {
+    "sel": "b5e09c0f",
+    "sig": "auditorState()",
+    "name": "auditorState",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
     "sel": "0b0425bd",
     "sig": "auditorUA()",
     "name": "auditorUA",
@@ -15268,6 +15490,28 @@
     "names": [],
     "returns": "bytes32 _p0",
     "ifaces": [],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
+    "sel": "c93622ee",
+    "sig": "auditorUAOf(bytes32)",
+    "name": "auditorUAOf",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 entryRef"
+    ],
+    "names": [
+     "entryRef"
+    ],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IPqzToken"
+    ],
     "vis": "external",
     "domain": "pqz",
     "group": "Q"
@@ -18453,6 +18697,34 @@
     "vis": "external",
     "domain": "governance",
     "group": "A"
+   },
+   {
+    "sel": "f6f32d5d",
+    "sig": "setAuditorUA(bytes32,uint32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes32)",
+    "name": "setAuditorUA",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32 newAuditor",
+     "uint32 epoch",
+     "IUARegistry.UASig calldata consent",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "newAuditor",
+     "epoch",
+     "consent",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
    },
    {
     "sel": "789a7b4b",
@@ -25788,6 +26060,28 @@
     "group": "Z"
    },
    {
+    "sel": "24174abc",
+    "sig": "auditorKeyOf(bytes32)",
+    "name": "auditorKeyOf",
+    "decl": "ZetherLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 entryRef"
+    ],
+    "names": [
+     "entryRef"
+    ],
+    "returns": "bytes memory _p0",
+    "ifaces": [
+     "IZetherToken"
+    ],
+    "vis": "external",
+    "domain": "zether",
+    "group": "Z"
+   },
+   {
     "sel": "35d330fe",
     "sig": "auditorMode()",
     "name": "auditorMode",
@@ -25798,6 +26092,24 @@
     "params": [],
     "names": [],
     "returns": "ZetherTypes.AuditorMode _p0",
+    "ifaces": [
+     "IZetherToken"
+    ],
+    "vis": "external",
+    "domain": "zether",
+    "group": "Z"
+   },
+   {
+    "sel": "b5e09c0f",
+    "sig": "auditorState()",
+    "name": "auditorState",
+    "decl": "ZetherLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status",
     "ifaces": [
      "IZetherToken"
     ],
@@ -28461,6 +28773,34 @@
     "group": "W"
    },
    {
+    "sel": "2328ce6c",
+    "sig": "setAuditorKey(bytes,uint32,bytes,bytes32)",
+    "name": "setAuditorKey",
+    "decl": "ZetherLayer",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes calldata newKey",
+     "uint32 epoch",
+     "bytes calldata pop",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "newKey",
+     "epoch",
+     "pop",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IZetherToken"
+    ],
+    "vis": "external",
+    "domain": "zether",
+    "group": "Z"
+   },
+   {
     "sel": "095a70d0",
     "sig": "setDenied(bytes32[],bool,bytes32)",
     "name": "setDenied",
@@ -29248,6 +29588,28 @@
     "group": "Z"
    },
    {
+    "sel": "24174abc",
+    "sig": "auditorKeyOf(bytes32)",
+    "name": "auditorKeyOf",
+    "decl": "ZetherLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 entryRef"
+    ],
+    "names": [
+     "entryRef"
+    ],
+    "returns": "bytes memory _p0",
+    "ifaces": [
+     "IZetherToken"
+    ],
+    "vis": "external",
+    "domain": "zether",
+    "group": "Z"
+   },
+   {
     "sel": "35d330fe",
     "sig": "auditorMode()",
     "name": "auditorMode",
@@ -29258,6 +29620,24 @@
     "params": [],
     "names": [],
     "returns": "ZetherTypes.AuditorMode _p0",
+    "ifaces": [
+     "IZetherToken"
+    ],
+    "vis": "external",
+    "domain": "zether",
+    "group": "Z"
+   },
+   {
+    "sel": "b5e09c0f",
+    "sig": "auditorState()",
+    "name": "auditorState",
+    "decl": "ZetherLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status",
     "ifaces": [
      "IZetherToken"
     ],
@@ -32548,6 +32928,34 @@
     "group": "W"
    },
    {
+    "sel": "2328ce6c",
+    "sig": "setAuditorKey(bytes,uint32,bytes,bytes32)",
+    "name": "setAuditorKey",
+    "decl": "ZetherLayer",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes calldata newKey",
+     "uint32 epoch",
+     "bytes calldata pop",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "newKey",
+     "epoch",
+     "pop",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IZetherToken"
+    ],
+    "vis": "external",
+    "domain": "zether",
+    "group": "Z"
+   },
+   {
     "sel": "095a70d0",
     "sig": "setDenied(bytes32[],bool,bytes32)",
     "name": "setDenied",
@@ -33658,6 +34066,24 @@
     "group": "Q"
    },
    {
+    "sel": "b5e09c0f",
+    "sig": "auditorState()",
+    "name": "auditorState",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
     "sel": "0b0425bd",
     "sig": "auditorUA()",
     "name": "auditorUA",
@@ -33669,6 +34095,28 @@
     "names": [],
     "returns": "bytes32 _p0",
     "ifaces": [],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
+    "sel": "c93622ee",
+    "sig": "auditorUAOf(bytes32)",
+    "name": "auditorUAOf",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 entryRef"
+    ],
+    "names": [
+     "entryRef"
+    ],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IPqzToken"
+    ],
     "vis": "external",
     "domain": "pqz",
     "group": "Q"
@@ -36181,32 +36629,6 @@
     "group": "Q"
    },
    {
-    "sel": "2d73ee4a",
-    "sig": "pqzSkipped(bytes32,uint64,uint64)",
-    "name": "pqzSkipped",
-    "decl": "PqzLayer",
-    "kept": false,
-    "mut": "view",
-    "guard": "",
-    "params": [
-     "bytes32 ua",
-     "uint64 keyVersion",
-     "uint64 index"
-    ],
-    "names": [
-     "ua",
-     "keyVersion",
-     "index"
-    ],
-    "returns": "bool _p0",
-    "ifaces": [
-     "IPqzToken"
-    ],
-    "vis": "external",
-    "domain": "pqz",
-    "group": "Q"
-   },
-   {
     "sel": "03ccd4f0",
     "sig": "pqzPendingCt(bytes32,uint64,uint64)",
     "name": "pqzPendingCt",
@@ -36271,6 +36693,32 @@
      "chainUid_"
     ],
     "returns": "",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
+    "sel": "2d73ee4a",
+    "sig": "pqzSkipped(bytes32,uint64,uint64)",
+    "name": "pqzSkipped",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 ua",
+     "uint64 keyVersion",
+     "uint64 index"
+    ],
+    "names": [
+     "ua",
+     "keyVersion",
+     "index"
+    ],
+    "returns": "bool _p0",
     "ifaces": [
      "IPqzToken"
     ],
@@ -36625,6 +37073,34 @@
     "vis": "external",
     "domain": "regulated",
     "group": "W"
+   },
+   {
+    "sel": "f6f32d5d",
+    "sig": "setAuditorUA(bytes32,uint32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes32)",
+    "name": "setAuditorUA",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32 newAuditor",
+     "uint32 epoch",
+     "IUARegistry.UASig calldata consent",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "newAuditor",
+     "epoch",
+     "consent",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
    },
    {
     "sel": "095a70d0",
@@ -37544,6 +38020,24 @@
     "group": "Q"
    },
    {
+    "sel": "b5e09c0f",
+    "sig": "auditorState()",
+    "name": "auditorState",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [],
+    "names": [],
+    "returns": "uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
     "sel": "0b0425bd",
     "sig": "auditorUA()",
     "name": "auditorUA",
@@ -37555,6 +38049,28 @@
     "names": [],
     "returns": "bytes32 _p0",
     "ifaces": [],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
+   },
+   {
+    "sel": "c93622ee",
+    "sig": "auditorUAOf(bytes32)",
+    "name": "auditorUAOf",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "view",
+    "guard": "",
+    "params": [
+     "bytes32 entryRef"
+    ],
+    "names": [
+     "entryRef"
+    ],
+    "returns": "bytes32 _p0",
+    "ifaces": [
+     "IPqzToken"
+    ],
     "vis": "external",
     "domain": "pqz",
     "group": "Q"
@@ -41150,6 +41666,34 @@
     "vis": "external",
     "domain": "regulated",
     "group": "W"
+   },
+   {
+    "sel": "f6f32d5d",
+    "sig": "setAuditorUA(bytes32,uint32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes32)",
+    "name": "setAuditorUA",
+    "decl": "PqzLayer",
+    "kept": false,
+    "mut": "nonpayable",
+    "guard": "nonReentrant",
+    "params": [
+     "bytes32 newAuditor",
+     "uint32 epoch",
+     "IUARegistry.UASig calldata consent",
+     "bytes32 chainUid_"
+    ],
+    "names": [
+     "newAuditor",
+     "epoch",
+     "consent",
+     "chainUid_"
+    ],
+    "returns": "",
+    "ifaces": [
+     "IPqzToken"
+    ],
+    "vis": "external",
+    "domain": "pqz",
+    "group": "Q"
    },
    {
     "sel": "095a70d0",

@@ -75,6 +75,8 @@ abstract contract ZetherFixture is Test {
     /// @dev The `validUntilBlock` every payload the fixture builds carries (review C0-9, `TransferExpired`).
     uint256 internal vub = type(uint64).max;
     uint8 internal aMode = uint8(ZetherTypes.AuditorMode.OPTIONAL);
+    /// @dev The factory's `noticePeriod()` of the next `_stack()` (0 unless a test sets it: the auditor's delay, CTR-ZTH-95).
+    uint64 internal notice;
     /// @dev Public units the fixture created per token (`mint` or wrap): `totalSupply + totalShielded·SCALE` stays equal.
     mapping(address => uint256) internal minted;
 
@@ -100,7 +102,7 @@ abstract contract ZetherFixture is Test {
         // the curve's verifiers and disclosure, then the factory's env of the Zether kinds (plan 5g-Z2, CTR-ZTH-20)
         (ver, burnVer) = ZetherVerifiers.deploy();
         dis = new ZetherDisclosure();
-        factory = EnvKit.factory(registrar, ZUID, 0);
+        factory = EnvKit.factory(registrar, ZUID, notice);
         stm = new ZetherStatements();
         reg = _uaRegistry();
         prover = new ZetherProver();
@@ -191,6 +193,21 @@ abstract contract ZetherFixture is Test {
     function _setModeDigest(NormalZetherToken t, ZetherTypes.UA ua, uint8 mode, uint64 modeNonce, uint64 until) internal view returns (bytes32) {
         return _typed(t, keccak256(abi.encode(
             keccak256("ZetherSetRollOverMode(bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock)"), ua, mode, modeNonce, until)));
+    }
+
+    /// @dev Bit 32 (CTR-ZTH-95): the Schnorr proof of possession `R ‖ be32(z)` of `x` over `t`'s typed `AuditorConsent` of
+    ///      `[x]G`'s UA for `epoch` and `t`'s word (set-auditor spec §5.2; the test nonce is deterministic).
+    function _auditorPop(NormalZetherToken t, uint256 x, uint32 epoch) internal view returns (bytes memory) {
+        bytes memory y = ZetherKeys.pub(x, bls);
+        bytes32 d = _typed(t, keccak256(abi.encode(
+            keccak256("AuditorConsent(address token,bytes32 auditor,uint32 epoch,bytes32 chainUid)"), address(t),
+            ZetherTypes.UA.unwrap(ZetherTypes.toUA(y)), epoch, EnvKit.codeUidOf(address(t)))));
+        uint256 n = ver.groupOrder();
+        uint256 k = uint256(keccak256(abi.encode("pop-k", x, d))) % n;
+        bytes memory r = ver.g1MulBase(k);
+        uint256 c = ZetherTranscript.hashToScalar(
+            keccak256(abi.encodePacked("SCAAS-ZETHER-AUDITOR-POP-V1", d, ver.g1MulBase(1), y, r)), n);
+        return bytes.concat(r, bytes32(addmod(k, mulmod(c, x, n), n)));
     }
 
     function _typed(NormalZetherToken t, bytes32 structHash) internal view returns (bytes32) {

@@ -101,8 +101,8 @@ static void table_groups_purposes_constants() {
         CHECK(hx(*groupTag(g)) == r["GROUP"].get<std::string>(), g);
     }
     CHECK(!groupTag("nope") && !groupTagString("nope"), "unknown group");
-    CHECK(k["purposes"].size() == 17,
-          "purposes size"); // 16 purposes (pqz-verdict: group 3f; msig-update: CTR-UA-44), `pop` has v1 and v2
+    CHECK(k["purposes"].size() == 18,
+          "purposes size"); // 17 purposes (pqz-verdict: group 3f; msig-update: CTR-UA-44; auditor-consent: CTR-PQZ-43), `pop` has v1 and v2
     for (auto &r : k["purposes"]) {
         CHECK(hx(purposeTag(r["purpose"], r["version"].get<uint32_t>())) == r["purposeTag"].get<std::string>(),
               r["purpose"].get<std::string>());
@@ -1017,7 +1017,7 @@ static void set_key_args() {
         CHECK(code_of([&] { setPqzKeyArgs(bad.first); }) == bad.second, bad.first);
 }
 
-// governance T14: governanceBit against governance_bits.json on disk, every row; past bit 31 UAArgument (3h T61: bit 24 PQZ_PROOF; group 3l: bits 25-27)
+// governance T14: governanceBit against governance_bits.json on disk, every row; past bit 32 UAArgument (3h T61: bit 24 PQZ_PROOF; group 3l: bits 25-27)
 static void governance_bits_rows() {
     std::ifstream f(std::string(SCAAS_UA_VECTORS_DIR) + "/../governance/governance_bits.json");
     if (!f) {
@@ -1026,11 +1026,11 @@ static void governance_bits_rows() {
     }
     json v = json::parse(f);
     CHECK(
-        v["bits"].size() == 32,
-        "rows 0-31"); // round 3s: bit 28 KYC; CTR-DEX-32: bit 29 CLOSED_MARKETS; round 3zb + 3zc: bits 30 BURNER, 31 SUPPLY_CAP_ADJUSTABLE
+        v["bits"].size() == 33,
+        "rows 0-32"); // round 3s: bit 28 KYC; CTR-DEX-32: bit 29 CLOSED_MARKETS; round 3zb + 3zc: bits 30 BURNER, 31 SUPPLY_CAP_ADJUSTABLE; CTR-GOV-31: bit 32 AUDITOR
     for (auto &r : v["bits"])
         CHECK(json::parse(governanceBit(r["bit"].get<uint8_t>())) == r, std::to_string(r["bit"].get<int>()));
-    for (int bit : {32, 127, 128, 255})
+    for (int bit : {33, 127, 128, 255})
         CHECK(code_of([&] { governanceBit(uint8_t(bit)); }) == "UAArgument", std::to_string(bit));
 }
 

@@ -8,6 +8,8 @@ import {
 import {ChainEnvCode} from "../factory/ChainEnvCode.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {GovernanceLib} from "../governance/GovernanceLib.sol";
+import {GovernanceBits} from "../governance/GovernanceBits.sol";
+import {IGovernance} from "../governance/IGovernance.sol";
 import {TokenStore} from "../metatx/TokenStore.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {MtxPipelineLib} from "../metatx/MtxPipelineLib.sol";
@@ -19,6 +21,8 @@ import {IConfidentialToken, IConfidentialWrappedToken} from "../confidential/ICo
 import {IZetherVerifier, IZetherBurnVerifier} from "./IZetherVerifier.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
+import {AuditorRules} from "../confidential/AuditorRules.sol";
+import {ZetherTranscript} from "./ZetherTranscript.sol";
 
 /// @dev What the Zether env check reads from a transfer / burn verifier besides `IZetherVerifierCommon`.
 interface IInnerProductBound {
@@ -58,6 +62,9 @@ library ZetherLib {
         /// @dev Both modes share the verifier's slot (the offsets of the fields below are unchanged).
         ZetherTypes.DisclosureMode disclosureMode;
         ZetherTypes.AuditorMode auditorMode;
+        /// @dev Bit 32 (set-auditor spec §6, CTR-ZTH-95): the replacements of the auditor key so far, slot 0 byte 22 (read
+        ///      with `auditorMode` by every transfer, no extra storage read).
+        uint32 auditorEpoch;
         uint256 shieldScale;
         uint256 maxShielded;
         uint256 confidentialFee;
@@ -74,6 +81,16 @@ library ZetherLib {
         mapping(bytes32 => bytes) memos;
         /// @dev The least per-leg `decoyFee` of a multi-recipient transfer (owner 2026-10-20), immutable.
         uint256 minDecoyFee;
+        /// @dev Bit 32's stored proposal (set-auditor spec §5.1, §6): `eta` (0: none), the proposer's role epoch, the
+        ///      proposer, the proposed key's `keccak256` (the key is in `AuditorKeyProposed`).
+        uint64 auditorEta;
+        uint32 auditorProposerRoleEpoch;
+        bytes32 auditorProposer;
+        bytes32 pendingAuditorKeyHash;
+        /// @dev Epoch → the key that epoch used, for every epoch below `auditorEpoch` (written once, at the epoch's end).
+        mapping(uint32 => bytes) auditorKeys;
+        /// @dev The epoch of an audited transfer made at `auditorEpoch != 0` (absent: 0), spec §7.
+        mapping(bytes32 => uint32) entryAuditorEpoch;
     }
 
     /// @notice The token's immutables a call needs, and the statement's binding: `(ZTX_V1_DIRECT, 0)` for a direct
@@ -286,6 +303,7 @@ library ZetherLib {
             || (aud.length == 0) != (c.auditorMode == uint8(ZetherTypes.AuditorMode.NONE))) {
             revert IZetherToken.BadAuditorMode(c.auditorMode);
         }
+        auditorBitAtInit(c.auditorMode);
         ZetherStorage storage s = $();
         s.disclosureMode = ZetherTypes.DisclosureMode(c.disclosureMode);
         s.auditorMode = ZetherTypes.AuditorMode(c.auditorMode);
@@ -296,6 +314,16 @@ library ZetherLib {
         s.auditorKey = aud;
         s.psid = v.proofSystemId();
         s.p = p;
+    }
+
+    /// @notice CTR-GOV-31, after `GovernanceLib.init` wrote `features` and `admin`: bit 32 needs an auditor (a NONE token never
+    ///         gains one: `BadAuditorMode(0)`) and an admin (its holders have no `Roles` seat: `FeatureNeedsAdmin(32)`). The PQZ
+    ///         kinds' `PqzStateLib.init` makes the same check.
+    function auditorBitAtInit(uint8 auditorMode) internal view {
+        GovernanceLib.GovernanceStorage storage g = GovernanceLib.$();
+        if (g.features >> GovernanceBits.AUDITOR & 1 == 0) return;
+        if (auditorMode == uint8(ZetherTypes.AuditorMode.NONE)) revert IZetherToken.BadAuditorMode(auditorMode);
+        if (g.admin == 0) revert IGovernance.FeatureNeedsAdmin(GovernanceBits.AUDITOR);
     }
 
     /// @notice `NormalZetherToken`'s init from the factory's raw `initArgs`, part 1 (CTR-ZTH-94, size lever 1 as
@@ -390,6 +418,7 @@ library ZetherLib {
         _payFee(s, pp);
         entryRef = _sent(s, c, pp);
         s.entries[entryRef] = bytes.concat(pp.salt, abi.encode(t.yTo, t.cOut, t.dOut, t.cAud));
+        _auditorEntry(s, entryRef, abi.encode(t.cAud));
         emit IConfidentialToken.ConfidentialTransfer(entryRef, ZetherTypes.UA.unwrap(pp.from), ZetherTypes.UA.unwrap(to),
             ZetherTypes.UA.unwrap(pp.beneficiary), pp.fee, pp.sendCounter, address(0));
     }
@@ -425,6 +454,7 @@ library ZetherLib {
         _payFee(s, pp);
         entryRef = _sent(s, c, pp);
         _storeRecord(s, entryRef, t, pp, dOut, mode);
+        _auditorEntry(s, entryRef, abi.encode(t.legs[0].cAud));
         ZetherTypes.UA[] memory to = pp.to;
         bytes32[] memory rec;
         assembly ("memory-safe") { rec := to } // `UA` is `bytes32`: the same memory array
@@ -917,6 +947,104 @@ library ZetherLib {
         a.accSeq += 1;
         a.lastRolledPendingSeq = a.pendingSeq;
         emit IConfidentialToken.RolledOver(ZetherTypes.UA.unwrap(ua), a.accSeq, 0, 0);
+    }
+
+    // ------------------------------------------------------------------ the auditor's replacement (bit 32, CTR-ZTH-95)
+
+    /// @notice Bit 32 `AUDITOR`'s body (set-auditor spec §5.1), after the token's `_holderOnChain(32)` and `use(32)`:
+    ///         `setAuditorKey`'s arguments as the token got them, then `abi.encode(caller, delay, Env)` (`delay` =
+    ///         `max(factory noticePeriod, grantDelay)`, read by the token). `epoch` must be `auditorEpoch + 1`. A live proposal
+    ///         (stored, unexpired, its proposer's role epoch unchanged) takes only its own key (the proposer's confirm from
+    ///         `eta` on: the checks again, then the apply) or the current key (the proposer's cancel); anything else
+    ///         `AuditorPending`. Without one, the current key is `AuditorSame`; else the checks and a proposal that applies
+    ///         at once when `delay` is 0. An expired or void proposal is overwritten.
+    function setAuditorKey(bytes calldata newKey, uint32 epoch, bytes calldata pop, bytes32) public {
+        (bytes32 caller, uint64 delay, Env memory e) =
+            abi.decode(msg.data[msg.data.length - 64 - ENV_BYTES:], (bytes32, uint64, Env));
+        ZetherStorage storage s = $();
+        AuditorRules.requireNext(s.auditorEpoch, epoch);
+        bytes32 h = keccak256(newKey);
+        bytes32 current = keccak256(s.auditorKey);
+        if (AuditorRules.live(s.auditorEta, s.auditorProposerRoleEpoch, s.auditorProposer)) {
+            if (h == s.pendingAuditorKeyHash) {
+                AuditorRules.requireProposer(caller, s.auditorProposer);
+                if (block.timestamp < s.auditorEta) revert IConfidentialToken.AuditorNotReady(s.auditorEta);
+                _auditorChecks(s.p, newKey, epoch, pop, e);
+                _applyAuditor(s, newKey, epoch);
+            } else if (h == current) {
+                AuditorRules.requireProposer(caller, s.auditorProposer);
+                _clearAuditorProposal(s);
+                emit IConfidentialToken.AuditorProposalCancelled(epoch);
+            } else {
+                revert IConfidentialToken.AuditorPending();
+            }
+            return;
+        }
+        if (h == current) revert IConfidentialToken.AuditorSame();
+        _auditorChecks(s.p, newKey, epoch, pop, e);
+        uint64 eta = uint64(block.timestamp) + delay;
+        emit IZetherToken.AuditorKeyProposed(epoch, newKey, caller, eta);
+        if (delay == 0) {
+            _applyAuditor(s, newKey, epoch);
+            return;
+        }
+        (s.auditorEta, s.auditorProposerRoleEpoch, s.auditorProposer, s.pendingAuditorKeyHash) =
+            (eta, AuditorRules.roleEpochOf(caller), caller, h);
+    }
+
+    /// @dev Spec §5.2, at the proposal and again at the apply: `newKey` one valid point of `p` bytes, not `O`
+    ///      (`AuditorKeyInvalid`); `pop = R ‖ be32(z)` its proof of possession over the `AuditorConsent` digest of
+    ///      `toUA(newKey)`, `epoch` and the token's word (`AuditorConsentInvalid`).
+    function _auditorChecks(uint256 p, bytes calldata newKey, uint32 epoch, bytes calldata pop, Env memory e) private view {
+        IZetherVerifier v = _ver();
+        if (newKey.length != p || _isO(newKey) || !v.isValidPoint(newKey)) revert IZetherToken.AuditorKeyInvalid();
+        bytes32 d = AuditorRules.consentDigest(e.domainSeparator, ZetherTypes.UA.unwrap(ZetherTypes.toUA(newKey)), epoch,
+            e.chainUid);
+        if (pop.length != p + 32 || !popHolds(v, newKey, pop[:p], uint256(bytes32(pop[p:])), d)) {
+            revert IZetherToken.AuditorConsentInvalid();
+        }
+    }
+
+    /// @notice The Schnorr proof of possession of `x_a` for `Y_a = y` over `d` (spec §5.2): `R` a valid point, `z < r`,
+    ///         `c = hashToScalar(keccak256("SCAAS-ZETHER-AUDITOR-POP-V1" ‖ d ‖ G ‖ Y_a ‖ R), r)`, then `popEquation`.
+    function popHolds(IZetherVerifier v, bytes memory y, bytes memory r, uint256 z, bytes32 d) internal view returns (bool) {
+        uint256 n = v.groupOrder();
+        if (z >= n || !v.isValidPoint(r)) return false;
+        bytes memory g = v.g1MulBase(1);
+        uint256 c = ZetherTranscript.hashToScalar(keccak256(abi.encodePacked("SCAAS-ZETHER-AUDITOR-POP-V1", d, g, y, r)), n);
+        return popEquation(v, g, y, r, z, c);
+    }
+
+    /// @notice `c ≠ 0` and `[z]G − R − [c]Y_a == O`, one MSM.
+    function popEquation(IZetherVerifier v, bytes memory g, bytes memory y, bytes memory r, uint256 z, uint256 c)
+        internal view returns (bool)
+    {
+        if (c == 0) return false;
+        uint256 n = v.groupOrder();
+        uint256[] memory k = new uint256[](3);
+        (k[0], k[1], k[2]) = (z, n - 1, n - c);
+        return _isO(v.g1Msm(bytes.concat(g, r, y), k));
+    }
+
+    /// @dev Spec §5.4: the outgoing key enters the history at its epoch, `newKey` is current from `epoch` on.
+    function _applyAuditor(ZetherStorage storage s, bytes calldata newKey, uint32 epoch) private {
+        bytes memory previous = s.auditorKey;
+        s.auditorKeys[epoch - 1] = previous;
+        s.auditorKey = newKey;
+        s.auditorEpoch = epoch;
+        _clearAuditorProposal(s);
+        emit IZetherToken.AuditorKeySet(epoch, previous, newKey);
+    }
+
+    function _clearAuditorProposal(ZetherStorage storage s) private {
+        (s.auditorEta, s.auditorProposerRoleEpoch, s.auditorProposer, s.pendingAuditorKeyHash) = (0, 0, 0, 0);
+    }
+
+    /// @dev Spec §7: an audited transfer (`C_aud ≠ O`; one leg tells for all, `_auditorPoint`) made at `auditorEpoch ≠ 0`
+    ///      records its epoch next to its record. Epoch 0 writes nothing.
+    function _auditorEntry(ZetherStorage storage s, bytes32 entryRef, bytes memory cAud) private {
+        uint32 e = s.auditorEpoch;
+        if (e != 0 && !_isO(cAud)) s.entryAuditorEpoch[entryRef] = e;
     }
 
     /// @dev BUNDLE: the record `R` inline in state; HASH (commit-reveal): `R` by SSTORE2 (the slot holds the pointer), the

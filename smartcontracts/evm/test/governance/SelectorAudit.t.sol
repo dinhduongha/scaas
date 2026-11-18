@@ -427,13 +427,16 @@ contract SelectorAuditZetherTest is SelectorAuditRows, ZetherFixture {
 
     function setUp() public {
         _stack();
-        IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
+        // set-auditor A2 (CTR-ZTH-95): an auditor and bit 32 on, no holder: the stranger's refusal of `setAuditorKey` is the role's
+        IFactoryToken.TokenConfig memory c = _cfg(true, uint256(1) << 40);
         _govern(c, address(0));
+        c.features |= uint256(1) << GovernanceBits.AUDITOR;
         nz = factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "sa");
         Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode);
-        c = _cfg(false, uint256(1) << 40);
+        c = _cfg(true, uint256(1) << 40);
         c.features = 0;
         _govern(c, address(new MockERC20("USD", "USD", 6)));
+        c.features |= uint256(1) << GovernanceBits.AUDITOR;
         wz = factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "saw");
     }
 
@@ -458,12 +461,14 @@ contract SelectorAuditPqzTest is SelectorAuditRows, PqzFixture {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         _govern(c, address(0));
         c.features |= uint256(1) << GovernanceBits.PQZ_PROOF; // group 3h T61: bit 24 on, no holder: the stranger's MissingRole
+        c.features |= uint256(1) << GovernanceBits.AUDITOR; // set-auditor A4: bit 32 likewise (the fixture's token has an auditor)
         np = factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "sa");
         _releaseWrapped();
         c = _cfg(uint256(1) << 40);
         c.features = 0;
         _govern(c, address(new MockERC20("USD", "USD", 6)));
         c.features |= uint256(1) << GovernanceBits.PQZ_PROOF;
+        c.features |= uint256(1) << GovernanceBits.AUDITOR;
         wp = factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "saw");
     }
 

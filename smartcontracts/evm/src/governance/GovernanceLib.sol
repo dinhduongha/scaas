@@ -227,6 +227,8 @@ library GovernanceLib {
         uint256 contractOnly, uint256 scalarBits, uint256 scopeBits, address uaRegistry, uint256 delayedRelax)
         public returns (bool leaf, bytes32 parentScope)
     {
+        // CTR-GOV-31: no holder of bit 32 adds another at once and unannounced (no leaves, no delegable root)
+        if (bit == GovernanceBits.AUDITOR && t.delegable) revert IGovernance.DelegableRefused(bit);
         (leaf, parentScope) = _leafPath(bit, holder, t, caller);
         _check($(), bit, holder, roleBits, contractOnly, uaRegistry);
         _words(bit, t, scalarBits, scopeBits);

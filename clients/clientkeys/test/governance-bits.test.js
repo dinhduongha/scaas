@@ -30,7 +30,8 @@ test('governance_bits.json: the regulated rows carry their kinds and holder rule
   const want = { 5: [all, 'contractOrMsig'], 6: [all, 'contractOrMsig'], 7: [all, 'contractOrMsig'], 8: [[8, 9], 'any'],
     9: [all, 'any'], 10: [all, 'contractOrMsig'], 28: [all, undefined], 21: [all, 'contractOrMsig'], 22: [all, 'any'], 23: [all, 'any'],
     24: [[4, 5, 12, 13], 'any'], 25: [[1, 3, 5, 9, 11, 13], undefined], 26: [[1, 3, 5, 9, 11, 13], 'any'],
-    27: [[1, 3, 5, 9, 11, 13], 'any'], 30: [[0, 2, 4, 8, 10, 12], 'any'], 31: [[1, 3, 5, 9, 11, 13], undefined] };
+    27: [[1, 3, 5, 9, 11, 13], 'any'], 30: [[0, 2, 4, 8, 10, 12], 'any'], 31: [[1, 3, 5, 9, 11, 13], undefined],
+    32: [[2, 3, 4, 5, 10, 11, 12, 13], 'any'] };
   for (const row of v.bits) {
     const w = want[row.bit];
     assert.deepEqual([row.kinds, row.holder], w ?? [undefined, undefined], `bit ${row.bit}`);
@@ -40,10 +41,16 @@ test('governance_bits.json: the regulated rows carry their kinds and holder rule
   // CTR-DEX-32: bit 29 `CLOSED_MARKETS` (the DEX's capability, no kinds row) the last row
   // round 3zb + 3zc (CTR-GOV-29, CTR-GOV-30): bit 30 `BURNER` (a power), bit 31 `SUPPLY_CAP_ADJUSTABLE` (a capability) the last row;
   // `sentences.wrapCap`, selected by `maxWrapSupply() != 0`
-  assert.equal(v.bits.at(-1).bit, 31, 'bit 31 SUPPLY_CAP_ADJUSTABLE is the last row (CTR-GOV-30)');
+  // the setAuditor round (CTR-GOV-31): bit 32 `AUDITOR` (a power of the confidential kinds, any holder) the last row, its four
+  // sentences and the rule that selects them (`sentencesWhen`)
+  assert.equal(v.bits.at(-1).bit, 32, 'bit 32 AUDITOR is the last row (CTR-GOV-31)');
   assert.deepEqual(v.bits.slice(25).map((r) => r.name), ['WRAP_LIMIT', 'WRAP_LIST', 'REDEEMER', 'KYC', 'CLOSED_MARKETS', 'BURNER',
-    'SUPPLY_CAP_ADJUSTABLE']);
-  assert.deepEqual(v.bits.slice(29).map((r) => r.type), ['capability', 'power', 'capability']);
+    'SUPPLY_CAP_ADJUSTABLE', 'AUDITOR']);
+  assert.deepEqual(v.bits.slice(29).map((r) => r.type), ['capability', 'power', 'capability', 'power']);
+  assert.deepEqual(Object.keys(v.bits[32].sentences), ['all', 'atOnce', 'singleKey', 'locked']);
+  assert.ok(v.bits[32].sentences.all.includes('{auditorDelay}'), 'the delay is a value read on chain');
+  for (const k of ['atOnce', 'singleKey', 'locked']) assert.ok(v.bits[32].sentencesWhen.includes(k), k);
+  assert.ok(v.note.includes('Bits 33-127 are free'));
   for (const k of ['wrapCap', 'wrapCapWhen']) assert.ok(v.sentences[k], k);
   for (const b of [8, 9]) assert.deepEqual([v.bits[b].type, Object.keys(v.bits[b].sentences).includes('enableable')], ['power', true]);
   assert.ok(v.sentences.enableableWhen, 'enableableWhen');

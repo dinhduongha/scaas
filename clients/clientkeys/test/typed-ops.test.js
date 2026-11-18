@@ -49,6 +49,8 @@ const PLAN = {
   ZetherRollOver: '0x52e2c8f8…71768b1e', ZetherSetRollOverMode: '0x5f5a4ffa…4d55e09d', PqzAuth: '0x380b0de6…42644e6f',
   // the three-key model (CTR-PQZ-41): the holder's signed rollover, PqzCore.ROLL_OVER_TYPEHASH (PqzThreeKeys.t.sol's pin)
   PqzRollOver: '0x1517899d…625c41cb',
+  // set-auditor (spec §5.2): the new auditor's consent, AuditorRules.AUDITOR_CONSENT_TYPEHASH (GovRouterTypehash.t.sol's pin)
+  AuditorConsent: '0x74198684…7494ca32',
   UACancelNonce: '0xcd17c2129240241748e841a7f0572558b9c5a900a47bc540170a8c258d291c54',
   UASetMandate: '0x77cac4912d9b5ea899e4894cd527290f239809543c0a3604b89ef74796d88492',
   UASetPayee: '0xf0fb362dece88eadf659a55ed5c2606877293dbd69f9bb7eba806da921a77dc4',
@@ -198,8 +200,9 @@ test('the table covers every allowlisted entry of every contract, one row per op
   // round 3r: + the router's fifteen admin ops of the factory and a compliance registry: 104, 94
   // round 3s: + the router's `UASetAllowed`, `UASetDenied`, `UAEnableFeature`: 107, 97; round 3t: + `UASetVerifierFee`: 108, 98;
   // the three-key model: + the raw `PqzRollOver`: 109, 98; round 3zc: + `UASetMaxSupply`, `UASetMaxWrapSupply`: 111, 100
-  assert.equal(Object.keys(TYPED_OPS).length, 111);
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 100);
+  // set-auditor (CTR-GOV-31): + the router's `UASetAuditorKey`, `UASetAuditorUA` and the raw `AuditorConsent`: 114, 102
+  assert.equal(Object.keys(TYPED_OPS).length, 114);
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 102);
   for (const o of Object.values(TYPED_OPS)) {
     if (o.envelope) assert.ok(o.entry.startsWith('mtx'), o.primary);
     if (o.ua) assert.equal(o.fields[0].type, 'bytes32', o.primary);
@@ -229,7 +232,7 @@ test('hashTypedData(td) == row.digest; the builder rebuilds the wallet\'s JSON; 
 test('calldata decodes to the message: selector of the full signature, every parameter in place', () => {
   for (const [name, r] of rows()) {
     for (const [kind, d] of domains(r)) {
-      if (!d.abi) { assert.equal(name, 'PqzAuth'); assert.equal(d.calldata, undefined); continue; }
+      if (!d.abi) { assert.ok(['PqzAuth', 'AuditorConsent'].includes(name), name); assert.equal(d.calldata, undefined); continue; }
       const data = fromHex(d.calldata);
       assert.equal(hex(data.subarray(0, 4)), sel(d.abi), `${name} ${kind}`);
       assert.equal(d.selector, sel(d.abi));
@@ -338,9 +341,10 @@ test('GovernanceRouter: 53 rows equal GovRouterTypehash.t.sol, target the first 
   assert.ok(pqzPinned === 0 || pqzPinned === 3, `${pqzPinned} PQZ verifier pins`);
   // group 3h T61: + `UASetProofStore` (bit 24); group 3l: + `UASetWrapLimits`, `UASetWrapMember` and the two struct pins;
   // round 3s: + `UASetAllowed`, `UASetDenied`, `UAEnableFeature`; round 3t: + `UASetVerifierFee`
-  // CTR-GOV-27: + the `ChainEntries` struct pin; round 3zc: + `UASetMaxSupply`, `UASetMaxWrapSupply`
-  assert.equal(pins.length - pqzPinned, 61);
-  assert.equal(rows.length - pqzPinned, 56);
+  // CTR-GOV-27: + the `ChainEntries` struct pin; round 3zc: + `UASetMaxSupply`, `UASetMaxWrapSupply`; set-auditor: + the two
+  // bit-32 ops
+  assert.equal(pins.length - pqzPinned, 63);
+  assert.equal(rows.length - pqzPinned, 58);
   for (const [s, hash] of rows) {
     const name = s.slice(0, s.indexOf('('));
     const op = TYPED_OPS[name];
@@ -359,7 +363,7 @@ test('GovernanceRouter: 53 rows equal GovRouterTypehash.t.sol, target the first 
     const open = ['UAApproveTokenRelease', 'UASetDenied', 'UASetVerifierFee', 'UASetMaxSupply', 'UASetMaxWrapSupply'].includes(name);
     assert.deepEqual([r.message.mode, r.message.fee], [open ? 0 : 1, '0'], `${name}: fee mode NONE`);
   }
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 60); // 3h T61: + UASetProofStore; 3l: + 2; 3r: + 15; 3s: + 3; 3t: + 1; 3zc: + 2
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 62); // 3h T61: + UASetProofStore; 3l: + 2; 3r: + 15; 3s: + 3; 3t: + 1; 3zc: + 2; set-auditor: + 2
   assert.equal(V.ops.UACancelNonce.domains.gov_router.domain.name, 'SCaaS GovernanceRouter');
   assert.equal(V.ops.CancelNonce.domains.gov_router, undefined);
 });
@@ -396,10 +400,10 @@ const CHAIN_WORD_OPS = ['UAGrantRole', 'UARevokeRole', 'UASetGrant', 'UACancelGr
   'UAMint', 'UAMintToUA', 'UADisableWrap', 'UAProposeRate', 'UACancelRate', 'UAExecuteRate', 'UASetMarket', 'UASetExchangeTarget',
   'UASetListedOnly', 'UASetFeeSplit', 'UAFreeze', 'UAUnfreeze', 'UAForceTransfer', 'UAPause', 'UAUnpause', 'UARecordOrder',
   'UARevokeOrder', 'UASetTaxRate', 'UASetTaxRecipient', 'UASetProofStore', 'UAOperatorTransfer', 'UASetWrapLimits', 'UASetWrapMember',
-  'UASetAllowed', 'UASetDenied', 'UASetMaxSupply', 'UASetMaxWrapSupply'];
-test('CTR-GOV-28: the forty ops sign the chain word last', () => {
+  'UASetAllowed', 'UASetDenied', 'UASetMaxSupply', 'UASetMaxWrapSupply', 'UASetAuditorKey', 'UASetAuditorUA'];
+test('CTR-GOV-28: the forty-two ops sign the chain word last', () => {
   const ops = CHAIN_WORD_OPS;
-  assert.equal(ops.length, 40);
+  assert.equal(ops.length, 42); // set-auditor: + the two bit-32 ops
   // the only router ops without the word: the nonce cancel, the admin's accept (CTR-GOV-28's reading) and the three creations
   const without = Object.entries(TYPED_OPS).filter(([, o]) => o.on.includes('GovernanceRouter') && !o.fields.some((f) => f.name === 'chainUid'))
     .map(([n]) => n);

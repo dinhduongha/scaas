@@ -95,6 +95,11 @@ interface IZetherToken is IConfidentialToken {
     ///         for off-chain indexers, who see `keccak256(R)` as the commitment).
     event TransferBundles(bytes32 indexed entryRef, bytes bundles);
     event RollOverModeChanged(ZetherTypes.UA indexed account, ZetherTypes.RollOverMode mode);
+    /// @notice A holder of bit 32 proposed `newKey` as the auditor of `epoch` (CTR-ZTH-95); it applies at `eta` on the same
+    ///         holder's confirm, within 7 days (at once when the delay is 0).
+    event AuditorKeyProposed(uint32 epoch, bytes newKey, bytes32 proposer, uint64 eta);
+    /// @notice The auditor key from `epoch` on; `previousKey` stays the key of every earlier entry since its epoch.
+    event AuditorKeySet(uint32 epoch, bytes previousKey, bytes newKey);
 
     error AccountNotRegistered(ZetherTypes.UA account);
     /// @notice A multi-recipient `decoyFee` below the token's `minDecoyFee`, or `≥ 2^64` (owner 2026-10-20; as PQZ's).
@@ -136,6 +141,10 @@ interface IZetherToken is IConfidentialToken {
     error VerifierUnsupportedOnThisChain(address verifier, string curve);
     /// @notice A `ConfidentialConfig` the token refuses (CTR-ZTH-04, CTR-ZTH-26).
     error BadInit();
+    /// @notice `setAuditorKey`: the new key is not one valid point of the curve's encoding, or is `O` (CTR-ZTH-95).
+    error AuditorKeyInvalid();
+    /// @notice `setAuditorKey`: the proof of possession of the new key over its `AuditorConsent` digest fails (CTR-ZTH-95).
+    error AuditorConsentInvalid();
     /// @notice `mtxWrapShield`: the public-equivalent of the deposit is not a whole number of shielded units.
     error AmountNotScaled(uint256 minted, uint256 shieldScale);
     /// @notice A point the verifier or a group operation refuses: not on the curve, outside the subgroup, not canonical.
@@ -159,6 +168,14 @@ interface IZetherToken is IConfidentialToken {
     function auditorKey() external view returns (bytes memory);
     /// @notice `NONE`, `FULL` (every transfer includes the auditor) or `OPTIONAL` (the sender's choice per transfer).
     function auditorMode() external view returns (ZetherTypes.AuditorMode);
+    /// @notice The auditor key of `entryRef`'s epoch (CTR-ZTH-95): the current key for an entry of the current epoch, the
+    ///         history's otherwise. An unknown or opt-out `entryRef` answers epoch 0's; the caller checks the entry.
+    function auditorKeyOf(bytes32 entryRef) external view returns (bytes memory);
+    /// @notice The current `auditorEpoch` and the stored proposal (set-auditor spec §8): `pending` the proposed key's
+    ///         `keccak256` (the key is in `AuditorKeyProposed`); `status` 0 none, 1 waiting (before `eta`), 2 confirmable
+    ///         (`[eta, eta + 7 days]`), 3 expired (the slot is free), 4 void (its proposer lost the bit, or bit 32 is off:
+    ///         then `pending`, `eta` and `proposer` read 0).
+    function auditorState() external view returns (uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status);
     /// @notice `BUNDLE` (`mtxConfidentialTransfer` stores the record inline; `…Compact` stores it by SSTORE2) or `COMPACT`
     ///         (`mtxConfidentialTransfer` and `…Compact` are commit-reveal; single refused). Both keep `R` in state.
     function disclosureMode() external view returns (ZetherTypes.DisclosureMode);
@@ -215,6 +232,12 @@ interface IZetherToken is IConfidentialToken {
         uint64 validUntilBlock,
         IUARegistry.UASig calldata ownerSig
     ) external;
+    /// @notice Bit 32 `AUDITOR` (CTR-ZTH-95, CTR-GOV-31): a holder proposes `newKey` as the auditor of `epoch`
+    ///         (`auditorEpoch + 1`), then confirms it with the same call after `max(factory noticePeriod, grantDelay)` and
+    ///         within 7 days; the current key as `newKey` cancels the holder's own proposal. `pop` is the Schnorr proof of
+    ///         possession of the new key, `R ‖ be32(z)`, over the typed `AuditorConsent(address token,bytes32 auditor,uint32
+    ///         epoch,bytes32 chainUid)` of this token (`auditor` = the key's UA), checked at the proposal and at the apply.
+    function setAuditorKey(bytes calldata newKey, uint32 epoch, bytes calldata pop, bytes32 chainUid_) external;
     /// @notice Owner mode change: a registered Zether UA only (`AccountNotRegistered` otherwise); the typed
     ///         `ZetherSetRollOverMode`, as `mtxRollOverSigned`.
     function mtxSetRollOverMode(

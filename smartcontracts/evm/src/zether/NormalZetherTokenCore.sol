@@ -34,7 +34,11 @@ abstract contract NormalZetherTokenCore is NormalTokenCore, ZetherLayer {
     }
 
     function _validBits() internal pure virtual override(GovernanceBaseCore, NormalTokenCore) returns (uint256) {
-        return GovernanceBits.NORMAL_BITS;
+        return GovernanceBits.NORMAL_BITS | GovernanceBits.AUDITOR_BITS; // bit 32 (CTR-GOV-31)
+    }
+
+    function _roleBits() internal pure virtual override returns (uint256) {
+        return GovernanceBits.NORMAL_ROLES | GovernanceBits.AUDITOR_BITS;
     }
 
     /// @dev Never reached: `_initRaw` is the kind's init.

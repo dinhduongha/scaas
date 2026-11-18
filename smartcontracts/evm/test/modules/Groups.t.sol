@@ -25,12 +25,13 @@ contract GroupsTest is Test {
     /// entries at the end (`unshieldUnwrapStatement`, `unwrapBinding`, `underlyings`).
     // round 3t: + setVerifierFee (gen_faces.py S_SETTERS)
     // the three-key model (CTR-PQZ-41): + `pqzSkipped`
-    string[35] internal sNames = ["auditorMode", "auditorUA", "burnStatement", "confidentialFee", "disclosureMode",
+    // set-auditor A4 (CTR-PQZ-43): + `setAuditorUA`, `auditorUAOf`, `auditorState`, before the wrapped kinds' three
+    string[38] internal sNames = ["auditorMode", "auditorUA", "burnStatement", "confidentialFee", "disclosureMode",
         "disclosureStatement", "envelopeBinding", "maxShielded", "minDecoyFee", "pqzAcc", "pqzAccount", "pqzCancelVerifier",
         "pqzDebitRecord", "pqzEntryBlob", "pqzPending", "pqzPendingCt", "pqzSkipped", "pqzRevokeVerifier", "pqzSetVerifier",
         "pqzVerifyConfig", "precompile", "proofStore", "proofSystemId", "setProofStore", "setVerifierFee", "shieldScale", "totalShielded",
         "transferCiphertextHash", "transferEntry", "transferSingleStatement", "transferStatement", "verifier",
-        "unshieldUnwrapStatement", "unwrapBinding", "underlyings"];
+        "setAuditorUA", "auditorUAOf", "auditorState", "unshieldUnwrapStatement", "unwrapBinding", "underlyings"];
 
     function create(bytes memory init) external returns (address a) {
         assembly ("memory-safe") {

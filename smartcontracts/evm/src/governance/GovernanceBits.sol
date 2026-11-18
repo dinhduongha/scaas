@@ -62,6 +62,14 @@ library GovernanceBits {
     ///      admin may change `maxSupply` (a hybrid's) and `maxWrapSupply`, each after `grantDelay` (`setMaxSupply`,
     ///      `setMaxWrapSupply`); unset, or disabled (one-way), both caps are fixed for good. Never enabled later.
     uint8 internal constant SUPPLY_CAP_ADJUSTABLE = 31;
+    /// @dev The setAuditor round (spec 2026-11-17-set-auditor.md §3, CTR-GOV-31, owner 2026-11-17): a power on the confidential
+    ///      kinds 2, 3, 4, 5, 10, 11, 12, 13 only: a holder replaces the token's auditor (`setAuditorKey` / `setAuditorUA`) after
+    ///      `max(noticePeriod(), grantDelay)`, with the new auditor's consent. Any holder (a single key too), never contract-only,
+    ///      never delay-relaxed, never delegable (`DelegableRefused`); set at creation only, not on a token without an auditor
+    ///      (`BadAuditorMode(0)`) or without an admin (`FeatureNeedsAdmin`). Not in `REGULATED_ROLES` (kinds 8 and 9 refuse it).
+    uint8 internal constant AUDITOR = 32;
+    /// @dev What the confidential kinds 2, 3, 4, 5, 10, 11, 12, 13 add to their valid and role masks (bit 32).
+    uint256 internal constant AUDITOR_BITS = uint256(1) << AUDITOR;
     /// @dev The bits `enableFeature` may switch on (spec §5.2): 8, 9, 28, each only where the kind's mask holds it and not
     ///      locked. 8 and 9 are never disabled (`FeatureNotDisableable`). No plain kind's mask holds them.
     uint256 internal constant ENABLEABLE = (1 << ALLOWLIST) | (1 << DENYLIST) | (1 << KYC);

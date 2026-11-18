@@ -93,7 +93,7 @@ impl World {
     fn pay(&mut self, from: &Word, to: &Word, amount: u64, aud: bool) -> Word {
         let mut extra = json!({"toUA": hx(to), "pkT": self.pk(to), "amount": amount, "mode": "BUNDLE"});
         if aud {
-            extra["pkA"] = json!(self.pk(&AUD));
+            extra["pkA"] = json!(self.pk(&self.c.auditor.unwrap())); // the token's auditor of the current epoch
         }
         let p = call(self.key(from), "proveTransfer", &self.debit(from, extra)).unwrap();
         let stmt = h(&p["stmt"]);
@@ -106,7 +106,7 @@ impl World {
         let l: Vec<Value> = legs.iter().map(|(ua, a)| json!({"pk": self.pk(ua), "ua": hx(ua), "amount": a})).collect();
         let mut extra = json!({"legs": l, "mode": mode});
         if aud {
-            extra["pkA"] = json!(self.pk(&AUD));
+            extra["pkA"] = json!(self.pk(&self.c.auditor.unwrap()));
         }
         let p = call(self.key(from), "proveTransferMulti", &self.debit(from, extra)).unwrap();
         let stmt = h(&p["stmt"]);
@@ -229,8 +229,10 @@ fn state_rows_reproduce_the_contract() {
             assert_eq!((&b["legKeys"][0], &b["key"]), (&json!(hx(&h(&l["key"]["code"])[1..])), &json!(hx(&h(&from["blobs"][0]["code"])[1..]))), "{name}: op 4 keys");
             if l["auditorCt"] != "" {
                 let j = l["leg"].as_u64().unwrap();
+                // the forge rows' token never replaced its auditor (epoch 0): its `auditorUA` at slot 7, its version 0
                 let au = merge(base.clone(), json!({"ua": r["auditorUA"], "leg": j, "blobs": [e["blob"], r["auditorKey"]],
-                    "keyRecord": r["auditorKeyRecord"], "auditorMode": r["auditorMode"], "auditorUA": r["auditorUA"]}));
+                    "keyRecord": r["auditorKeyRecord"], "auditorMode": r["auditorMode"], "auditorUA": r["auditorUA"],
+                    "entryAuditorEpoch": hx(&[0u8; 32]), "auditorUASlot": hx(&slot(7)), "keyVersion": 0}));
                 let mut ar = au.clone();
                 ar.as_object_mut().unwrap().remove("registry");
                 let b = rebuilt("auditRead", &ar);
@@ -988,4 +990,46 @@ fn sender_at(c: &Chain, er: &Word, av: u64, bv: &[u64]) -> Value {
     v["blobs"] = json!(c.blobs_json(&ptrs));
     let recs: Vec<String> = bv.iter().map(|x| hx(&c.key_record_at(&BOB, *x))).collect();
     merge(v, json!({"leg": 0, "registry": hx(&REG), "legKeyRecords": recs}))
+}
+
+/// Set-auditor A4 (CTR-PQZ-43, spec §9, T11): each entry's auditor is its epoch's. After `AUD` is replaced by `X` (epoch 1),
+/// `AUD`'s handle reads the epoch-0 entry and refuses the epoch-1 one, `X`'s the reverse, each refusal before the key is used,
+/// on `auditRead` and `proveDisclose AUDITOR`; the current auditor's slot named for an epoch-0 entry, an entry epoch past the
+/// token's and a `keyVersion` other than the tail's are refused. First (review I1): at epoch 0 an auditor read of a token whose
+/// slot 0 also carries `pqzVerifyMode` `OFFCHAIN` (byte 22) and `proofStore` `LOG` (byte 23).
+#[test]
+fn auditor_reads_by_the_entry_epoch() {
+    let mut wd = World::new();
+    wd.c.shield(&A, 1000);
+    let e0 = wd.pay(&A, &BOB, 300, true);
+    let mut i1 = merge(merge(wd.c.entry(&e0, &AUD), wd.c.auditor_words(2)), json!({"ua": hx(&AUD), "leg": 0}));
+    set_word(&mut i1, &["auditorMode"], |w| {
+        w[9] = 1;
+        w[8] = 1;
+    });
+    assert_eq!(call(wd.key(&AUD), "auditRead", &i1).unwrap(), json!({"amount": 300}), "I1: OFFCHAIN and LOG in slot 0, epoch 0");
+    wd.c.replace_auditor(X);
+    let e1 = wd.pay(&A, &BOB, 120, true);
+    let read = |er: &Word, ua: &Word| merge(merge(wd.c.entry(er, ua), wd.c.auditor_words_of(er, 2, 0)), json!({"ua": hx(ua), "leg": 0}));
+    assert_eq!(call(wd.key(&AUD), "auditRead", &read(&e0, &AUD)).unwrap(), json!({"amount": 300}), "the old auditor, its epoch");
+    assert_eq!(call(wd.key(&X), "auditRead", &read(&e1, &X)).unwrap(), json!({"amount": 120}), "the new auditor, its epoch");
+    refused("the old auditor on an epoch-1 entry", wd.key(&AUD), "auditRead", &read(&e1, &AUD), Error::Argument);
+    refused("the new auditor on an epoch-0 entry", wd.key(&X), "auditRead", &read(&e0, &X), Error::Argument);
+    let disc = |er: &Word, ua: &Word| merge(read(er, ua), json!({"kind": "AUDITOR", "registry": hx(&REG)}));
+    for (er, ua) in [(e0, AUD), (e1, X)] {
+        let p = call(wd.key(&ua), "proveDisclose", &disc(&er, &ua)).unwrap();
+        assert!(verify(5, &h(&p["stmt"]), &h(&p["proof"])), "AUDITOR disclosure of its own epoch");
+    }
+    refused("proveDisclose: the old auditor on an epoch-1 entry", wd.key(&AUD), "proveDisclose", &disc(&e1, &AUD), Error::Argument);
+    refused("proveDisclose: the new auditor on an epoch-0 entry", wd.key(&X), "proveDisclose", &disc(&e0, &X), Error::Argument);
+    let mut cur = read(&e0, &AUD);
+    cur["auditorUASlot"] = wd.c.auditor_words(2)["auditorUASlot"].clone();
+    refused("the current auditor's slot for an epoch-0 entry", wd.key(&AUD), "auditRead", &cur, Error::Argument);
+    let mut past = read(&e1, &X);
+    set_word(&mut past, &["entryAuditorEpoch"], |w| w[31] = 2);
+    refused("an entry epoch past the token's", wd.key(&X), "auditRead", &past, Error::Argument);
+    refused("another key version than the tail's", wd.key(&X), "auditRead", &merge(read(&e1, &X), json!({"keyVersion": 1})), Error::Argument);
+    let mut no_slot = read(&e1, &X);
+    no_slot.as_object_mut().unwrap().remove("auditorUASlot");
+    refused("an auditor read without the auditor's slot", wd.key(&X), "auditRead", &no_slot, Error::Argument);
 }

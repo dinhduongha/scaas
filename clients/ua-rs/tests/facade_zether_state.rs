@@ -98,6 +98,12 @@ fn entry(rows: &Value, k: &ZetherKey, e: &Value) -> Value {
     v
 }
 
+/// The words of an entry's auditor key (CTR-ZTH-95): `modes`, the entry's `entryAuditorEpoch` word, the key words of its
+/// epoch (the main token's only epoch, 0: the current key).
+fn aud_words(rows: &Value, e: &Value) -> Value {
+    json!({"modes": rows["modes"], "entryAuditorEpoch": e["entryAuditorEpoch"], "auditorKeyWords": rows["auditorKeyWords"]})
+}
+
 fn row<'a>(rows: &'a Value, name: &str) -> &'a Value {
     rows["accounts"].as_array().unwrap().iter().find(|a| a["name"].as_str().unwrap().starts_with(name)).unwrap()
 }
@@ -180,8 +186,7 @@ fn openings_for_the_receiver_and_the_auditor_verify() {
                 opened.0 += 1;
             }
             if pt(2) != G::default() {
-                let v = with(entry(&rows, &aud, e), json!({"kind": "auditor", "index": j, "modes": rows["modes"],
-                    "auditorKeyWords": rows["auditorKeyWords"]}));
+                let v = with(with(entry(&rows, &aud, e), aud_words(&rows, e)), json!({"kind": "auditor", "index": j}));
                 let o = call(&aud, "openDisclosure", &v).unwrap();
                 assert_eq!(o["amount"], amount.to_string());
                 let y_a = decode_point::<Bls12381>(&h(&rows["auditorY"])).unwrap();
@@ -269,8 +274,7 @@ fn location_word_and_role_negatives_are_refused_with_the_key_unused() {
     let e = &rows["entries"][1]; // BUNDLE, audited, legs [bob, carol]
     let r = with(entry(&rows, &bob, e), json!({"kind": "receiver", "index": 0}));
     assert!(call(&bob, "openDisclosure", &r).is_ok(), "positive control");
-    let ra = with(entry(&rows, &aud, e), json!({"kind": "auditor", "index": 0, "modes": rows["modes"],
-        "auditorKeyWords": rows["auditorKeyWords"]}));
+    let ra = with(with(entry(&rows, &aud, e), aud_words(&rows, e)), json!({"kind": "auditor", "index": 0}));
     assert!(call(&aud, "openDisclosure", &ra).is_ok(), "positive control");
     let m = rows["modes"].as_str().unwrap();
     let none = format!("{}00{}", &m[..22], &m[24..]);
@@ -281,10 +285,9 @@ fn location_word_and_role_negatives_are_refused_with_the_key_unused() {
         ("a receiver read on the auditor handle", &aud, "openDisclosure", with(ra.clone(), json!({"kind": "receiver"}))),
         ("an auditor read on a receiver handle", &bob, "openDisclosure", with(ra.clone(), json!({"ua": hw(&bob.ua())}))),
         ("an auditor read with auditorMode NONE", &aud, "openDisclosure", with(ra.clone(), json!({"modes": none}))),
-        ("an auditor read of a leg without a copy", &aud, "openDisclosure", with(entry(&rows, &aud, &rows["entries"][2]),
-            json!({"kind": "auditor", "index": 1, "modes": rows["modes"], "auditorKeyWords": rows["auditorKeyWords"]}))),
-        ("a recipient's recovery of the sender's entry", &bob, "recoverTransfer", with(entry(&rows, &bob, e),
-            json!({"auditorKeyWords": rows["auditorKeyWords"]}))),
+        ("an auditor read of a leg without a copy", &aud, "openDisclosure", with(with(entry(&rows, &aud, &rows["entries"][2]),
+            aud_words(&rows, &rows["entries"][2])), json!({"kind": "auditor", "index": 1}))),
+        ("a recipient's recovery of the sender's entry", &bob, "recoverTransfer", with(entry(&rows, &bob, e), aud_words(&rows, e))),
         ("a raw entry", &bob, "openDisclosure", with(r.clone(), json!({"entry": e["view"]["transferEntry"]}))),
         ("an amount from the caller", &bob, "openDisclosure", with(r.clone(), json!({"amount": 30}))),
     ] {
@@ -328,4 +331,30 @@ fn residual_control_consistent_fabricated_words_are_decrypted() {
     let v = with(self::base(&rows, &alice), json!({"account": [hw(&len), hw(&len), zero, zero, zero, zero], "accountData": data,
         "tableBits": 18, "boundBits": 20}));
     assert_eq!(call(&alice, "balance", &v).unwrap()["amount"], "5");
+}
+
+/// Set-auditor A3 (CTR-ZTH-95, spec §9, T11) over the `epochs` rows (the auditor `m/12381/60/0/8` replaced by `/1/8`): each
+/// handle opens the audited legs of its own epoch, and the old auditor's handle refuses an epoch-1 entry, the new one an
+/// epoch-0 entry, with `Argument` and the key unused (feature `vectors`), before any decryption.
+#[test]
+fn auditor_handles_read_their_own_epoch_only() {
+    unlock();
+    let (rows, w) = (rows(), wallet());
+    let ep = &rows["epochs"];
+    let (old, new) = (handle(&w, "auditor"), handle(&w, "dave"));
+    let keys = |epoch: u64| if epoch == 0 { ep["auditorKeyWords0"].clone() } else { ep["auditorKeyWords"].clone() };
+    let mut opened = [0usize; 2];
+    for (i, e) in ep["entries"].as_array().unwrap().iter().enumerate() {
+        let epoch = ep["entryEpochs"][i].as_u64().unwrap();
+        let (mine, other) = if epoch == 0 { (&old, &new) } else { (&new, &old) };
+        for j in 0..e["to"].as_array().unwrap().len() {
+            let v = |k: &ZetherKey| with(with(entry(&rows, k, e), json!({"token": ep["token"], "kind": "auditor", "index": j})),
+                json!({"modes": ep["modes"], "entryAuditorEpoch": e["entryAuditorEpoch"], "auditorKeyWords": keys(epoch)}));
+            let o = call(mine, "openDisclosure", &v(mine)).unwrap();
+            assert_eq!(o["amount"], e["amounts"][j].as_u64().unwrap().to_string(), "{} leg {j}", e["name"]);
+            refused("the other epoch's auditor handle", other, "openDisclosure", &v(other));
+            opened[epoch as usize] += 1;
+        }
+    }
+    assert_eq!(opened, [1, 3]);
 }

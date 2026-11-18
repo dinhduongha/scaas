@@ -118,6 +118,10 @@ interface IGovernance is IAdmin {
     error RoleConflict(uint8 bit, bytes32 account);
     /// @notice Two exclusive flags set at creation (CTR-GOV-29: `BURNER` 30 with `BURNABLE` 2).
     error FeatureConflict(uint8 bit, uint8 other);
+    /// @notice CTR-GOV-31: a bit whose holders only the admin can seat (bit 32) set on a token whose admin is 0.
+    error FeatureNeedsAdmin(uint8 bit);
+    /// @notice CTR-GOV-31: `delegable` terms on a bit that refuses delegation (bit 32).
+    error DelegableRefused(uint8 bit);
 
     function features() external view returns (uint256);
     function lockedFeatures() external view returns (uint256);

@@ -91,15 +91,17 @@ contract UAKindsTest is Test {
         }
         // every purpose at v1 (kem, pqz-key: UA-8; membership: CTR-UA-37; msig-update: CTR-UA-44; pqz-verdict: group 3f), then pop v2
         // (UA-8 P1)
-        bytes32[17] memory p = [
+        // set-auditor (CTR-PQZ-43, spec §5.2, O10): + the PQZ auditor consent's purpose, the string form of the others
+        bytes32[18] memory p = [
             UAKinds.PURPOSE_POP, UAKinds.PURPOSE_METATX, UAKinds.PURPOSE_METATX_CANCEL,
             UAKinds.PURPOSE_MEMBER, UAKinds.PURPOSE_ZETHER_AUTH, UAKinds.PURPOSE_ZETHER_OWNER, UAKinds.PURPOSE_KEYOP,
             UAKinds.PURPOSE_PAYEE_FEE, UAKinds.PURPOSE_VP, UAKinds.PURPOSE_VC_ANCHOR, UAKinds.PURPOSE_TRADE,
             UAKinds.PURPOSE_KEM, UAKinds.PURPOSE_PQZ_KEY, UAKinds.PURPOSE_MEMBERSHIP, UAKinds.PURPOSE_MSIG_UPDATE,
-            UAKinds.PURPOSE_PQZ_VERDICT, UAKinds.PURPOSE_POP_V2
+            UAKinds.PURPOSE_PQZ_VERDICT, UAKinds.PURPOSE_AUDITOR_CONSENT, UAKinds.PURPOSE_POP_V2
         ];
-        assertEq(_count(j, "purposes"), 17);
-        for (uint256 i; i < 17; ++i) assertEq(p[i], vm.parseJsonBytes32(j, _at("purposes", i, "purposeTag")));
+        assertEq(UAKinds.PURPOSE_AUDITOR_CONSENT, keccak256("scaas.ua.purpose.auditor-consent.v1"));
+        assertEq(_count(j, "purposes"), 18);
+        for (uint256 i; i < 18; ++i) assertEq(p[i], vm.parseJsonBytes32(j, _at("purposes", i, "purposeTag")));
         assertEq(UAKinds.MSG_TAG, vm.parseJsonBytes32(j, ".constants.MSG_TAG"));
         assertEq(UAKinds.PURPOSE_POP, vm.parseJsonBytes32(j, ".constants.POP_TAG"));
         assertEq(UAKinds.DOMAIN_TYPEHASH, vm.parseJsonBytes32(j, ".constants.DOMAIN_TYPEHASH"));

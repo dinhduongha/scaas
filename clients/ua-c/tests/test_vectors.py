@@ -257,7 +257,7 @@ class Vectors(unittest.TestCase):
                 self.assertEqual(hx(opt32(L.group_tag, g)), r['GROUP'])
         self.assertIsNone(opt32(L.group_tag, b'nope'))
         self.assertIsNone(opt_text(L.group_tag_string, b'nope'))
-        self.assertEqual(len(K['purposes']), 17)  # 16 purposes (pqz-verdict: group 3f; msig-update: CTR-UA-44), `pop` has v1 and v2
+        self.assertEqual(len(K['purposes']), 18)  # 17 purposes (pqz-verdict: group 3f; msig-update: CTR-UA-44; auditor-consent: CTR-PQZ-43), `pop` has v1 and v2
         for r in K['purposes']:
             self.assertEqual(hx(out32(L.purpose_tag_v, r['purpose'].encode(), r['version'])), r['purposeTag'], r['purpose'])
             if r['version'] == 1:
@@ -913,13 +913,13 @@ class Abi(unittest.TestCase):
 
 class GovernanceBits(unittest.TestCase):
     def test_governance_bits_rows(self):
-        """governance T14: scaas_ua_governance_bit against governance_bits.json on disk, every row; past bit 31 UAArgument (round 3s; CTR-DEX-32; round 3zb + 3zc)
+        """governance T14: scaas_ua_governance_bit against governance_bits.json on disk, every row; past bit 32 UAArgument (round 3s; CTR-DEX-32; round 3zb + 3zc)
         (3h T61: bit 24 PQZ_PROOF; group 3l: bits 25-27, WRAP_LIMIT, WRAP_LIST, REDEEMER)."""
         v = json.loads((VEC.parent / 'governance' / 'governance_bits.json').read_text())
-        self.assertEqual(len(v['bits']), 32)  # round 3s: bit 28 KYC; CTR-DEX-32: bit 29 CLOSED_MARKETS; round 3zb + 3zc: bits 30 BURNER, 31 SUPPLY_CAP_ADJUSTABLE
+        self.assertEqual(len(v['bits']), 33)  # round 3s: bit 28 KYC; CTR-DEX-32: bit 29 CLOSED_MARKETS; round 3zb + 3zc: bits 30 BURNER, 31 SUPPLY_CAP_ADJUSTABLE; CTR-GOV-31: bit 32 AUDITOR
         for row in v['bits']:
             self.assertEqual(json.loads(text(L.governance_bit, row['bit'])), row, row['bit'])
-        for bit in (32, 127, 128, 255):
+        for bit in (33, 127, 128, 255):
             self.assertEqual(code_of(lambda: text(L.governance_bit, bit)), 'UAArgument', bit)
 
     def test_pay_digest_and_meta_pay_id(self):

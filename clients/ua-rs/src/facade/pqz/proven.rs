@@ -419,7 +419,8 @@ fn shape(d: &[u8]) -> Result<(Tail, Entry)> {
     if t.kv.len() != m + aud as usize {
         return Err(Error::Argument);
     }
-    Ok((t, Entry { r, g, m, aud, entry_ref: [0; 32] }))
+    let kv_a = if aud { t.kv.last().copied() } else { None };
+    Ok((t, Entry { r, g, m, aud, entry_ref: [0; 32], kv_a }))
 }
 
 /// `T_k` by the proof-path spec §2.3: `prevBlob`'s `(u, v_f)` (zero without one) `+ Σ` the sender's window `[p − Δp, p)` `+
@@ -1191,7 +1192,7 @@ mod tests {
                     };
                     let (m, aud) = (legs.len(), r["auditorOn"].as_bool().unwrap());
                     let g = m.div_ceil(legs_per_group(aud));
-                    let mut e = Entry { r: vec![0; 16 + PKP * g + (32 + VP * (1 + aud as usize)) * m], g, m, aud, entry_ref: [0; 32] };
+                    let mut e = Entry { r: vec![0; 16 + PKP * g + (32 + VP * (1 + aud as usize)) * m], g, m, aud, entry_ref: [0; 32], kv_a: None };
                     e.r[..16].copy_from_slice(&h(&r["salt"]));
                     for (j, ua) in legs.iter().enumerate() {
                         let end = e.leg_at(j + 1);

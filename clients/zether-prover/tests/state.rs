@@ -74,6 +74,12 @@ fn entry_req(rows: &Value, k: &K, e: &Value) -> Value {
     v
 }
 
+/// The words of an entry's auditor key (CTR-ZTH-95): the token's `modes`, the entry's `entryAuditorEpoch` word, and the key
+/// words of that epoch (here the current key: every entry of the main token is of epoch 0, its only epoch).
+fn aud_words(rows: &Value, e: &Value) -> Value {
+    json!({"modes": rows["modes"], "entryAuditorEpoch": e["entryAuditorEpoch"], "auditorKeyWords": rows["auditorKeyWords"]})
+}
+
 fn rng() -> ChaCha20Rng {
     ChaCha20Rng::seed_from_u64(7)
 }
@@ -181,8 +187,7 @@ fn entries_rebuild_and_open_for_the_receiver_and_the_auditor() {
             verify_opening(&entry(G::default()), amount, OpeningKind::ReceiverX, &h(&out["opening"])).unwrap();
             if leg[3] != G::default() {
                 audited += 1;
-                let v = with(entry_req(&rows, &aud, e), &json!({"kind": "auditor", "index": j, "modes": rows["modes"],
-                    "auditorKeyWords": rows["auditorKeyWords"]}));
+                let v = with(with(entry_req(&rows, &aud, e), &aud_words(&rows, e)), &json!({"kind": "auditor", "index": j}));
                 let out = call("openDisclosure", &v, &aud).unwrap();
                 assert_eq!(out["amount"], amount.to_string());
                 verify_opening(&entry(pt(&rows["auditorY"])), amount, OpeningKind::Auditor, &h(&out["opening"])).unwrap();
@@ -294,8 +299,7 @@ fn word_location_and_role_negatives_are_refused_before_the_key() {
     let r = with(entry_req(&rows, &bob, e), &json!({"kind": "receiver", "index": 0}));
     assert!(state::prepare("openDisclosure", &r, &bob.y).is_ok(), "positive control");
     let aud = key("auditor");
-    let ra = with(entry_req(&rows, &aud, e), &json!({"kind": "auditor", "index": 0, "modes": rows["modes"],
-        "auditorKeyWords": rows["auditorKeyWords"]}));
+    let ra = with(with(entry_req(&rows, &aud, e), &aud_words(&rows, e)), &json!({"kind": "auditor", "index": 0}));
     assert!(state::prepare("openDisclosure", &ra, &aud.y).is_ok(), "positive control");
     let none = {
         let m = rows["modes"].as_str().unwrap();
@@ -303,7 +307,7 @@ fn word_location_and_role_negatives_are_refused_before_the_key() {
     };
     let hash = &rows["entries"][2]; // HASH, auditor left out, legs [carol, bob]
     let alice = key("alice");
-    let own = with(entry_req(&rows, &alice, e), &json!({"auditorKeyWords": rows["auditorKeyWords"]}));
+    let own = with(entry_req(&rows, &alice, e), &aud_words(&rows, e));
     assert!(state::prepare("recoverTransfer", &own, &alice.y).is_ok(), "positive control: the sender's own entry");
     for (what, cmd, x, k) in [
         ("a foreign leg (carol's) on bob's handle", "openDisclosure", with(r.clone(), &json!({"index": 1})), &bob),
@@ -314,10 +318,9 @@ fn word_location_and_role_negatives_are_refused_before_the_key() {
         ("an auditor read on a receiver handle", "openDisclosure", with(ra.clone(), &json!({"ua": format!("0x{}", hex::encode(bob.ua()))})), &bob),
         ("a receiver read on the auditor handle", "openDisclosure", with(ra.clone(), &json!({"kind": "receiver"})), &aud),
         ("an auditor read with auditorMode NONE", "openDisclosure", with(ra.clone(), &json!({"modes": none})), &aud),
-        ("an auditor read of a leg without a copy", "openDisclosure", with(entry_req(&rows, &aud, hash), &json!({"kind": "auditor",
-            "index": 0, "modes": rows["modes"], "auditorKeyWords": rows["auditorKeyWords"]})), &aud),
-        ("a sender's command on the receiver's handle", "recoverTransfer", with(entry_req(&rows, &bob, e),
-            &json!({"auditorKeyWords": rows["auditorKeyWords"]})), &bob),
+        ("an auditor read of a leg without a copy", "openDisclosure", with(with(entry_req(&rows, &aud, hash), &aud_words(&rows, hash)),
+            &json!({"kind": "auditor", "index": 0})), &aud),
+        ("a sender's command on the receiver's handle", "recoverTransfer", with(entry_req(&rows, &bob, e), &aud_words(&rows, e)), &bob),
         ("openMemo of an inline entry", "openMemo", entry_req(&rows, &key("alice"), e), &key("alice")),
         ("a raw entry", "openDisclosure", with(r.clone(), &json!({"entry": e["view"]["transferEntry"]})), &bob),
         ("a raw leg", "openDisclosure", with(r.clone(), &json!({"Cout": e["view"]["legs"][0]["ciphertext"]})), &bob),
@@ -414,6 +417,8 @@ fn the_sender_recovers_its_own_entries_from_words() {
             assert_eq!(m["legs"][1]["toUA"], hw(&carol.ua()));
         }
         req["auditorKeyWords"] = rows["auditorKeyWords"].clone();
+        req["modes"] = rows["modes"].clone();
+        req["entryAuditorEpoch"] = json!(hw(&[0; 32]));
         let rec = call("recoverTransfer", &req, &alice).unwrap();
         assert_eq!(rec["entryRef"], out["entryRef"], "{mode}");
         assert_eq!(rec["bundles"], out["bundles"], "{mode}");
@@ -423,4 +428,70 @@ fn the_sender_recovers_its_own_entries_from_words() {
         theirs["ua"] = json!(hw(&bob.ua()));
         refused("a recipient's recovery", "recoverTransfer", &theirs, &bob);
     }
+}
+
+/// Set-auditor A3 (CTR-ZTH-95, spec §9, T11): the `epochs` rows, a token whose auditor was replaced once (epoch 0 the
+/// auditor `m/12381/60/0/8`, epoch 1 `m/12381/60/1/8`). Each entry's auditor is its epoch's key: that key opens its legs; the
+/// other epoch's key is refused by `prepare`, before any key use; the entry's key words at the other epoch's slot are refused
+/// too; an entry epoch past the token's is refused.
+#[test]
+fn auditor_epochs_bind_the_entry_key() {
+    let rows = rows();
+    let ep = &rows["epochs"];
+    let (old, new, alice) = (key("auditor"), key("dave"), key("alice"));
+    let at = |k: &K, e: &Value| with(entry_req(&rows, k, e), &json!({"token": ep["token"]}));
+    let keys = |epoch: u64| if epoch == 0 { ep["auditorKeyWords0"].clone() } else { ep["auditorKeyWords"].clone() };
+    let words = |e: &Value, epoch: u64| {
+        json!({"modes": ep["modes"], "entryAuditorEpoch": e["entryAuditorEpoch"], "auditorKeyWords": keys(epoch)})
+    };
+    let mut seen = [0usize; 2];
+    for (i, e) in ep["entries"].as_array().unwrap().iter().enumerate() {
+        let epoch = ep["entryEpochs"][i].as_u64().unwrap();
+        assert_eq!(u64::from_str_radix(&e["entryAuditorEpoch"].as_str().unwrap()[2..], 16).unwrap(), epoch, "{}", e["name"]);
+        let (mine, other) = if epoch == 0 { (&old, &new) } else { (&new, &old) };
+        for j in 0..e["to"].as_array().unwrap().len() {
+            let v = |k: &K, w: &Value| with(with(at(k, e), w), &json!({"kind": "auditor", "index": j}));
+            let out = call("openDisclosure", &v(mine, &words(e, epoch)), mine).unwrap();
+            assert_eq!(out["amount"], e["amounts"][j].as_u64().unwrap().to_string(), "{} leg {j}", e["name"]);
+            refused("the other epoch's auditor", "openDisclosure", &v(other, &words(e, epoch)), other);
+            let mut slot = words(e, epoch);
+            slot["auditorKeyWords"] = keys(1 - epoch);
+            refused("the key words of the other epoch's slot", "openDisclosure", &v(mine, &slot), mine);
+            seen[epoch as usize] += 1;
+        }
+    }
+    assert_eq!(seen, [1, 3], "one audited leg at epoch 0, three at epoch 1");
+    // an entry word past the token's epoch is refused
+    let e = &ep["entries"][1];
+    let past = with(at(&alice, e), &json!({"modes": ep["modes"], "entryAuditorEpoch": format!("0x{:064x}", 2), "auditorKeyWords": keys(1)}));
+    refused("an entry epoch past the token's", "recoverTransfer", &past, &alice);
+}
+
+/// Set-auditor A3: the sender's recovery rebuilds the auditor copies with the key of the entry's epoch. An entry the prover
+/// encrypts to the epoch-1 key (`m/12381/60/1/8`) recovers with the words of epoch 1 (`modes` of the `epochs` token, the
+/// entry word 1, the current key's words); words that name epoch 0 and its key (consistent, so `prepare` passes) fail.
+#[test]
+fn the_sender_recovers_with_the_entry_epoch_key() {
+    let rows = rows();
+    let ep = &rows["epochs"];
+    let (alice, bob, dave) = (key("alice"), key("bob"), key("dave"));
+    let y = |k: &K| hw(&encode_point::<Bls12381>(&k.y));
+    let v = with(acct_req(&rows, &alice, &rows["accounts"][0]), &json!({"validUntilBlock": 1000, "yAud": y(&dave),
+        "recipients": [{"yTo": y(&bob), "amount": 6}]}));
+    let ns = |n: u64| add(&h(&rows["layout"]["root"]).try_into().unwrap(), n);
+    let map = |k: &[u8], n: u64| kk(&[k, &ns(n)].concat());
+    let out = call("proveTransferMulti", &with(v, &json!({"mode": "bundle"})), &alice).unwrap();
+    let (r, entry_ref) = (h(&out["bundles"]), h(&out["entryRef"]));
+    let sc = rows["accounts"][0]["view"]["sendCounter"].clone();
+    let req = with(base(&rows, &alice), &json!({"fromUA": rows["accounts"][0]["ua"], "sendCounter": sc,
+        "entryWords": bytes_words(&map(&entry_ref, 9), &r), "entryPtr": hw(&[0; 32]), "modes": ep["modes"]}));
+    let mut one = [0u8; 32];
+    one[31] = 1;
+    let good = with(req.clone(), &json!({"entryAuditorEpoch": hw(&one), "auditorKeyWords": ep["auditorKeyWords"]}));
+    let rec = call("recoverTransfer", &good, &alice).unwrap();
+    assert_eq!(rec["entryRef"], out["entryRef"]);
+    assert_eq!(rec["legs"][0]["amount"], json!("6"));
+    let lie = with(req, &json!({"entryAuditorEpoch": hw(&[0; 32]), "auditorKeyWords": ep["auditorKeyWords0"]}));
+    assert!(state::prepare("recoverTransfer", &lie, &alice.y).is_ok(), "consistent words");
+    assert!(call("recoverTransfer", &lie, &alice).is_err(), "the recovery under the epoch-0 key fails");
 }

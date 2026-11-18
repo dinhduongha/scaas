@@ -251,6 +251,8 @@ abstract contract LegacyDiff is Test {
         // wrapped kinds
         if (k == 0 || k == 2 || k == 4 || k == 8 || k == 10 || k == 12) b |= uint256(1) << GovernanceBits.BURNER;
         if (k == 1 || k == 3 || k == 5 || k == 9 || k == 11 || k == 13) b |= uint256(1) << GovernanceBits.SUPPLY_CAP_ADJUSTABLE;
+        // set-auditor A1 (CTR-GOV-31): bit 32 `AUDITOR` on the confidential kinds 2-5 and 10-13
+        if ((k >= 2 && k <= 5) || (k >= 10 && k <= 13)) b |= GovernanceBits.AUDITOR_BITS;
         return abi.encode(b);
     }
 

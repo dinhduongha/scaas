@@ -3008,9 +3008,11 @@ created with bit 32:
   [CTR-PQZ-37](#CTR-PQZ-37); on an opening token also the opening KEM key in that scoped record,
   [CTR-UA-43](accounts.md#CTR-UA-43)), so a FULL token is never left with an auditor its transfers refuse; unlike `init`, this
   holds on an `offchain-token` too, so a replacement auditor has registered its key of that token (and accepted its exposure
-  there, CTR-PQZ-37) before it can be named; on an `OFFCHAIN` token the new auditor's key record must carry its `R_REG` proof
-  where the registry exposes it, else a consenting UA holding a copy of another holder's public key stops that holder's audited
-  transfers (`KeyReused`), a residual the build reports (spec §5.2, T3). `AuditorAsParty` and `KeyReused` (F-4) stay.
+  there, CTR-PQZ-37) before it can be named; where the registry has a `0x0142` verifier (`kindEnabled(0x0142)`) the new
+  auditor's current key record of the token's class and scope must be `proven` (`_usable`'s rule, "proven, or nothing"), and
+  on a chain without that verifier no proven check is made, so there a consenting UA holding a copy of another holder's
+  public key stops that holder's audited transfers (`KeyReused`) until the next replacement, the three-key model's accepted
+  risk for `OFFCHAIN` keys (spec §5.2, T3; CTR-PQZ-43's Change of 2026-11-18). `AuditorAsParty` and `KeyReused` (F-4) stay.
 - **Apply.** The outgoing UA is kept as `auditorUAs[epoch]`, `auditorUA` becomes the new one, `auditorEpoch` (a `uint32` in
   slot 0's free bytes) grows by one. The auditor's own PQZ key versions (CTR-PQZ-31) are a separate counter: the op blob's
   `kv` tail keeps recording the auditor's version ([CTR-PQZ-34](#CTR-PQZ-34)).

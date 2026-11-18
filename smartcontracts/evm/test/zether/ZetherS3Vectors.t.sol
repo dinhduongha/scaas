@@ -29,6 +29,10 @@ contract S3Token {
     }
 
     function transferEntry(bytes32) external view returns (bytes memory) { return entry; }
+
+    /// set-auditor A3 (CTR-ZTH-95): the key of the entry's auditor epoch, what `ZetherDisclosure` reads for `AUDITOR` (the
+    /// vectors' token never replaced its auditor: epoch 0's key)
+    function auditorKeyOf(bytes32) external view returns (bytes memory) { return auditorKey; }
 }
 
 /// @notice Proof do prover Rust của luồng S3 (`r3-zether-prover`, chép vào `test/vectors/zether/s3/`) —

@@ -76,5 +76,5 @@ fn every_x_multiplication_on_a_supplied_point_is_secret_mul() {
         "entryPtr": e["entryPtr"], "index": 0})), bsgs.clone());
     assert_eq!(run("openDisclosure", with(ent(&bob), json!({"kind": "receiver"})), &bob), (2, 3), "receiver opening");
     assert_eq!(run("openDisclosure", with(ent(&aud), json!({"kind": "auditor", "modes": rows["modes"],
-        "auditorKeyWords": rows["auditorKeyWords"]})), &aud), (2, 3), "auditor opening");
+        "entryAuditorEpoch": e["entryAuditorEpoch"], "auditorKeyWords": rows["auditorKeyWords"]})), &aud), (2, 3), "auditor opening");
 }

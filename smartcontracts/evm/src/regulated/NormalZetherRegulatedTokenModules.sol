@@ -492,8 +492,16 @@ contract NormalZetherRegulatedTokenZ is NormalZetherRegulatedTokenCore {
         return _auditorKeyBody();
     }
 
+    function auditorKeyOf(bytes32 entryRef) external view onlyDelegated returns (bytes memory _p0) {
+        return _auditorKeyOfBody(entryRef);
+    }
+
     function auditorMode() external view onlyDelegated returns (ZetherTypes.AuditorMode _p0) {
         return _auditorModeBody();
+    }
+
+    function auditorState() external view onlyDelegated returns (uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status) {
+        return _auditorStateBody();
     }
 
     function burnVerifier() external view onlyDelegated returns (IZetherBurnVerifier _p0) {
@@ -606,6 +614,10 @@ contract NormalZetherRegulatedTokenZ is NormalZetherRegulatedTokenCore {
 
     function sendCounter(ZetherTypes.UA ua) external view onlyDelegated returns (uint256 _p0) {
         return _sendCounterBody(ua);
+    }
+
+    function setAuditorKey(bytes calldata newKey, uint32 epoch, bytes calldata pop, bytes32 chainUid_) external onlyDelegated {
+        _setAuditorKeyBody(newKey, epoch, pop, chainUid_);
     }
 
     function shieldScale() external view onlyDelegated returns (uint256 _p0) {

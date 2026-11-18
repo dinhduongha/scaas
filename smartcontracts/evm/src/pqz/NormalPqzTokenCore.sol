@@ -37,11 +37,11 @@ abstract contract NormalPqzTokenCore is NormalTokenCore, PqzLayer {
 
     /// @dev `NormalToken`'s masks and bit 24 `PQZ_PROOF` (any holder; group 3h, PQZ proof path spec §5).
     function _validBits() internal pure virtual override(GovernanceBaseCore, NormalTokenCore) returns (uint256) {
-        return GovernanceBits.NORMAL_BITS | GovernanceBits.PQZ_KIND_BITS;
+        return GovernanceBits.NORMAL_BITS | GovernanceBits.PQZ_KIND_BITS | GovernanceBits.AUDITOR_BITS;
     }
 
     function _roleBits() internal pure virtual override returns (uint256) {
-        return GovernanceBits.NORMAL_ROLES | GovernanceBits.PQZ_KIND_BITS;
+        return GovernanceBits.NORMAL_ROLES | GovernanceBits.PQZ_KIND_BITS | GovernanceBits.AUDITOR_BITS;
     }
 
     function _init(IFactoryToken.TokenConfig memory cfg) internal override(MetaTokenBase, NormalTokenCore) {

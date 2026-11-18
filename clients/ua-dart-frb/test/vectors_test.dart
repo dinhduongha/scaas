@@ -83,8 +83,8 @@ void main() {
     expect(groupTag(group: 'nope'), isNull);
     expect(
       rows(k, 'purposes').length,
-      17,
-    ); // 16 purposes (pqz-verdict: group 3f; msig-update: CTR-UA-44), `pop` has v1 and v2
+      18,
+    ); // 17 purposes (pqz-verdict: group 3f; msig-update: CTR-UA-44; auditor-consent: CTR-PQZ-43), `pop` has v1 and v2
     for (final r in rows(k, 'purposes')) {
       expect(hx(purposeTagV(purpose: r['purpose'], version: r['version'])), r['purposeTag']);
       if (r['version'] == 1) expect(hx(purposeTag(purpose: r['purpose'])), r['purposeTag']);
@@ -1224,18 +1224,18 @@ void main() {
     }
   });
 
-  // governance T14: governanceBit against governance_bits.json on disk, every row; past bit 31 UAArgument (3h T61: bit 24 PQZ_PROOF; group 3l: bits 25-27)
+  // governance T14: governanceBit against governance_bits.json on disk, every row; past bit 32 UAArgument (3h T61: bit 24 PQZ_PROOF; group 3l: bits 25-27)
   test('governance bits rows', () {
     final v = jsonDecode(File('$vectors/../governance/governance_bits.json').readAsStringSync()) as Map;
     final rows = v['bits'] as List;
     expect(
       rows.length,
-      32,
-    ); // round 3s: bit 28 KYC; CTR-DEX-32: bit 29 CLOSED_MARKETS; round 3zb + 3zc: bits 30 BURNER, 31 SUPPLY_CAP_ADJUSTABLE
+      33,
+    ); // round 3s: bit 28 KYC; CTR-DEX-32: bit 29 CLOSED_MARKETS; round 3zb + 3zc: bits 30 BURNER, 31 SUPPLY_CAP_ADJUSTABLE; CTR-GOV-31: bit 32 AUDITOR
     for (final r in rows) {
       expect(jsonDecode(governanceBit(bit: r['bit'] as int)), r, reason: 'bit ${r['bit']}');
     }
-    for (final bit in [32, 127, 128, 255, 256, -1]) {
+    for (final bit in [33, 127, 128, 255, 256, -1]) {
       expect(errCode(() => governanceBit(bit: bit)), 'UAArgument', reason: '$bit');
     }
   });

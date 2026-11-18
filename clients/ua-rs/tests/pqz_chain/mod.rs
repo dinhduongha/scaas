@@ -136,6 +136,11 @@ pub struct Chain {
     pub proof_store: u8,
     pub block: u64,
     pub auditor: Option<Word>,
+    /// Set-auditor (CTR-PQZ-43): the token's `auditorEpoch`, the earlier epochs' auditors (`auditorUAs`), each audited entry's
+    /// epoch when not 0 (`entryAuditorEpoch`).
+    pub auditor_epoch: u32,
+    pub auditor_hist: Vec<Word>,
+    pub entry_epoch: BTreeMap<Word, u32>,
     /// Path (B)'s history (no-oracle spec §4.14.4, T20d4): each settled debit's op (1, 2, 7), statement, proof and NONE call
     /// fields, by `(fromUA, k)`; the reading layer's `eth_getLogs` (LOG) or the debit's transaction (NONE).
     pub proofs: BTreeMap<(Word, u64), Proven>,
@@ -377,12 +382,38 @@ impl Chain {
             "sendCounter": e.ctr, "entryPtr": hx(&ptr), "block": self.block, "psid": hx(&st::PQZL_ID),
             "blobs": self.blobs_json(&[e.ptr, self.key_ptr(holder)]), "keyRecord": hx(&self.key_record(holder))})
     }
-    /// The token's `auditorMode` (slot 0: `pqz ‖ disclosureMode ‖ auditorMode`, OPTIONAL) and `auditorUA` words.
+    /// The token's `auditorMode` (slot 0: `pqz ‖ disclosureMode ‖ auditorMode ‖ … ‖ auditorEpoch`, `mode`) and the auditor words
+    /// of an entry of the current epoch (CTR-PQZ-43): `entryAuditorEpoch` 0, the current `auditorUA` at slot 7, `keyVersion` 0.
     pub fn auditor_words(&self, mode: u8) -> Value {
         let mut w = [0u8; 32];
         w[10] = mode;
+        w[2..6].copy_from_slice(&self.auditor_epoch.to_be_bytes());
         w[31] = 0x0a; // the precompile's address in the low 20 bytes
-        json!({"auditorMode": hx(&w), "auditorUA": hx(&self.auditor.unwrap())})
+        let mut e = [0u8; 32];
+        e[28..].copy_from_slice(&self.auditor_epoch.to_be_bytes());
+        json!({"auditorMode": hx(&w), "entryAuditorEpoch": hx(&e), "auditorUASlot": hx(&slot(7)), "auditorUA": hx(&self.auditor.unwrap()),
+            "keyVersion": 0})
+    }
+    /// The auditor words of entry `er` (CTR-PQZ-43): its epoch's auditor at that epoch's slot (7 when current, else
+    /// `auditorUAs[e]` at 25), `keyVersion` `v`.
+    pub fn auditor_words_of(&self, er: &Word, mode: u8, v: u64) -> Value {
+        let at = self.entry_epoch.get(er).copied().unwrap_or(0);
+        let mut x = self.auditor_words(mode);
+        let mut e = [0u8; 32];
+        e[28..].copy_from_slice(&at.to_be_bytes());
+        x["entryAuditorEpoch"] = json!(hx(&e));
+        x["keyVersion"] = json!(v);
+        if at != self.auditor_epoch {
+            x["auditorUASlot"] = json!(hx(&scaas_ua::keccak256(&[st::u64_word(u64::from(at)), slot(25)].concat())));
+            x["auditorUA"] = json!(hx(&self.auditor_hist[at as usize]));
+        }
+        x
+    }
+    /// `PqzLayer` / `PqzStateLib.setAuditorUA`'s apply: the outgoing auditor enters the history, `next` from the next epoch.
+    pub fn replace_auditor(&mut self, next: Word) {
+        self.auditor_hist.push(self.auditor.unwrap());
+        self.auditor = Some(next);
+        self.auditor_epoch += 1;
     }
     /// Settles a verified op 1 statement (`_settleTransfer`): the op blob `salt ‖ P(u) ‖ P(v_t) ‖ [P(v_a)] ‖ toUA ‖ P(v_f) ‖ tail`,
     /// the sender's debit, the receiver's credit, the entry.
@@ -406,11 +437,15 @@ impl Chain {
         blob.extend(self.tail(&kv));
         self.block += 1;
         let ptr = self.put(blob);
+        let audited = d.pk_a.is_some();
         let v = self.version_of(&from, d.pk_f);
         self.debit(&from, v, ptr, 16, len - VP, p, st::word_u64(&hd[st::H_PLAIN_USED]).unwrap());
         self.credit(&to, ptr, 16, 16 + PKP);
         let er = entry_ref(&from, ctr);
         self.entries.insert(er, Ent { ptr, from, ctr, memo: memo.map(<[u8]>::to_vec).unwrap_or_default() });
+        if audited && self.auditor_epoch != 0 {
+            self.entry_epoch.insert(er, self.auditor_epoch); // `PqzCore._entry` (spec §7)
+        }
         er
     }
     /// Settles a verified op 7 statement (`_bundleMulti`, `_creditLegs`).
@@ -669,4 +704,20 @@ impl Chain {
         let o = self.proven_open(ua, v);
         o["pending"].as_array().unwrap().iter().filter(|e| h(&e["word"])[22..24] != [0, 0]).map(|e| e["index"].as_u64().unwrap()).collect()
     }
+}
+
+/// `scaas.pqz`'s namespace slot `n` (the ERC-7201 root + `n`), set-auditor's auditor words.
+pub fn slot(n: u64) -> Word {
+    let mut root: Word = hex_literal("da865ec17214f25b93cdb133d719c79392c290a4b9089fd0bba156256c521500");
+    let mut carry = u128::from(n);
+    for b in root.iter_mut().rev() {
+        let t = u128::from(*b) + (carry & 0xff);
+        *b = t as u8;
+        carry = (carry >> 8) + (t >> 8);
+    }
+    root
+}
+
+fn hex_literal(s: &str) -> Word {
+    hex::decode(s).unwrap().try_into().unwrap()
 }

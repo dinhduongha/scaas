@@ -22,6 +22,9 @@ const VERDICT = new Set(['PqzTransferSingle', 'PqzTransferSingleCompact', 'PqzTr
 const verdictTuple = ({ pqzVerdict: v, sig }) => [[v.token, v.chainId, v.proofSystemId, v.statementHash, v.proofHash, v.pqzVerifierEpoch,
   v.validUntil], uaTuple(sig)];
 const CONF = {
+  // set-auditor (CTR-GOV-31): the new auditor's consent rides unsigned between the epoch and the chain word
+  SetAuditorKey: (m, x) => [m.target, m.newKey, m.epoch, x.pop, m.chainUid],
+  SetAuditorUA: (m, x) => [m.target, m.newAuditor, m.epoch, uaTuple(x.consent), m.chainUid],
   PqzTransferSingle: (m, x) => [pqzArgsSingle(m.args), m.proof, uaTuple(x.pqzAuth), m.accHint],
   PqzTransferSingleCompact: (m, x) => [pqzArgsSingle(m.args), m.proof, uaTuple(x.pqzAuth), m.accHint],
   PqzTransfer: (m, x) => [pqzArgsMulti(m.args), m.proof, uaTuple(x.pqzAuth), m.accHint],

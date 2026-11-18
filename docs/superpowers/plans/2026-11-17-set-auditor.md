@@ -26,7 +26,33 @@ open points "Ok, theo đề xuất cả O1, O2, O4" (the delay `max(noticePeriod
   `smartcontracts/evm/runs/2026-11-17-set-auditor/` (summary lines only, no absolute paths).
 - **Heavy commands** go through `scripts/capped`, foreground, never inside `timeout`. PQZ per-set runs by
   `script/pqz/at-set.sh <set> test` (it rewrites `src/pqz/PqzSet.sol`: one run per work tree, restored after).
-- **Gates in the tasks** are the affected ones. The **one full gate** of the round runs after F2 and the re-pin (Closing).
+- **Gates in the tasks** (owner ruling 2026-11-18, "Theo đề xuất"): a task runs only its own suites at the default set, its
+  mutants, and every test that pins what it changed (code-hash, typehash, layout, gas or size pins it moves, old → new in the
+  commit). No full forge sweep and no per-set sweep per task. A task is committed once its own tests and mutants are green; its
+  commit body says "full matrix pending (bundle gate)". The **one full matrix** runs after A10, bundled with F2 (`forge fmt`,
+  `bytecode_hash = "none"`) and the re-pin: one compile, one re-pin, one full gate (Closing). After the 2026-11-18 reboot lost
+  the per-task snapshots, A1-A8 are one commit (the byte formats change in contracts, clients and node at once), A9 and A10
+  their own.
+- **Lanes** (owner ruling 2026-11-18, "Đồng ý. Làm luôn"; `runs/2026-11-17-set-auditor/gates.sh`, `LANE=<name>`): fixed
+  directories under the git-ignored `scratchpad/lanes/` on `/home`, one per PQZ set (`n2304-kmax4096`, `n2048-kmax1024`,
+  `n2560-kmax16384`, `n2816-kmax65536`, each with its own `PqzSet.sol`) and one for mutants (`mutants`). A run syncs the tree
+  under test into its lane with `rsync -a --delete`, excluding `out/`, `cache/`, `target/`, `lib/`, `node_modules/` (and `.git/`,
+  `scratchpad/`, the lane's own run logs), so forge's `cache/` + `out/` and cargo's `target/` stay and build incrementally; `lib/`,
+  `clientkeys/node_modules` and `algorand/out` are plain copies made once; no hardlinks or symlinks between lanes or with the
+  worktree. One process per lane at a time (`flock` on `scratchpad/lanes/<name>.lock`, beside `capped`). Before use, the cache
+  proof (`proof-forge`, `proof-cargo`): build in a lane, change one source file, rebuild incrementally, build the same tree clean
+  in a fresh directory; every contract's init and runtime bytecode identical (forge), the `cargo test` outcomes identical
+  (ua-rs); a failed proof stops incremental use. Incremental builds serve the per-task loop only; the full matrix after A10 and
+  every pre-merge gate build in a fresh or `forge clean`ed tree, and each summary row names its build kind.
+- **Lane sync defect and fix (2026-11-18).** The first lane runner excluded bare names (`lib/`, `out/`, `cache/`, `target/`,
+  `node_modules/`, `.git/`), which match at any depth: `lib/` also dropped the Dart clients' `lib/` sources (`ua-dart`,
+  `ua-dart-frb` failed to resolve their own package), `.git/` let the worktree's `.git` file through, and with no `build/`
+  exclude the worktree's CMake caches came along (`ua-cxx`, `ua-qt` refused them). The fix (coordinator 2026-11-18): every exclude
+  is anchored at the root (the fixed ones, and each `out/`, `cache/`, `target/`, `build/`, `node_modules/` that holds no file of
+  the tree, written to `scratchpad/lanes/<lane>.excludes`), and after the rsync every file of `git ls-files -co
+  --exclude-standard` outside them must be in the lane and byte-identical, or the sync fails. Every cell run on a lane synced
+  before the fix was run again. The cache proofs stand: they built `smartcontracts/evm` and `clients/ua-rs`, which the bare
+  excludes did not touch beyond the `smartcontracts/evm/lib/` copy.
 - **`pqz-core` stays untouched** (spec §10): no file of `pqz-core/ffi/src`, `pqzl`, `pqzh/ligero/src`, `stmt` or the set
   parameters changes; the callers pass the entry's `pk_a` into the recovery. If a task finds an `ffi` change needed after all,
   it says so in its commit and runs the affected steps of `pqz-core/gate.sh` (not the full gate, unless a core input changes).

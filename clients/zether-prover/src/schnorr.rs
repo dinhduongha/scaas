@@ -174,6 +174,58 @@ pub fn owner_auth<C: ZCurve, R: RngCore + CryptoRng>(key: &ZetherKey<C>, digest:
 }
 
 // ---------------------------------------------------------------------------------------------
+// The auditor's proof of possession (bit 32, CTR-ZTH-95; set-auditor spec §5.2)
+// ---------------------------------------------------------------------------------------------
+
+/// `c = hashToScalar(keccak256("SCAAS-ZETHER-AUDITOR-POP-V1" ‖ d ‖ G ‖ Y_a ‖ R))`: strong Fiat-Shamir over the statement points
+/// and the commitment; `d` the token's typed `AuditorConsent` digest (token, the key's UA, epoch, chain word).
+pub fn auditor_pop_challenge<C: ZCurve>(d: &[u8; 32], y: &G<C>, r: &G<C>) -> Fr<C> {
+    let mut b = b"SCAAS-ZETHER-AUDITOR-POP-V1".to_vec();
+    b.extend_from_slice(d);
+    b.extend(encode_point::<C>(&generator::<C>()));
+    b.extend(encode_point::<C>(y));
+    b.extend(encode_point::<C>(r));
+    hash_to_scalar::<C>(&keccak256(&b))
+}
+
+/// The proof with an explicit nonce: `R = [k]G`, `z = k + c·x`, `pop = R ‖ be32(z)`. Only for vectors and [`auditor_pop`].
+#[doc(hidden)]
+pub fn auditor_pop_with_k<C: ZCurve>(x: &Fr<C>, d: &[u8; 32], k: &Fr<C>) -> Vec<u8> {
+    let g = generator::<C>();
+    let r = g * k;
+    let c = auditor_pop_challenge::<C>(d, &(g * x), &r);
+    let mut pop = encode_point::<C>(&r);
+    pop.extend(encode_scalar::<C>(&(*k + c * x)));
+    pop
+}
+
+/// `setAuditorKey`'s `pop` by the new auditor's key over `d`, hedged nonce (`k = H(x ‖ d ‖ CSPRNG)`, as every opening's).
+pub fn auditor_pop<C: ZCurve, R: RngCore + CryptoRng>(key: &ZetherKey<C>, d: &[u8; 32], rng: &mut R) -> Vec<u8> {
+    let mut secret = zeroize::Zeroizing::new(encode_scalar::<C>(&key.x).to_vec());
+    secret.extend_from_slice(d);
+    let k = Nonces::new(&secret, rng).next::<C>();
+    auditor_pop_with_k::<C>(&key.x, d, &k)
+}
+
+/// `ZetherLib.popHolds`: the exact length, `R` a valid point, `z < r`, `c ≠ 0`, `[z]G − R − [c]Y_a == O`; `Y_a ≠ O`.
+pub fn verify_auditor_pop<C: ZCurve>(y: &G<C>, d: &[u8; 32], pop: &[u8]) -> Result<(), ZError> {
+    let pl = point_len::<C>();
+    if pop.len() != pl + 32 {
+        return Err(ZError::Verify("auditor pop: length"));
+    }
+    let r = decode_point::<C>(&pop[..pl])?;
+    let z = decode_scalar::<C>(&pop[pl..])?;
+    if y.is_zero() {
+        return Err(ZError::Verify("auditor pop: Y is O"));
+    }
+    let c = auditor_pop_challenge::<C>(d, y, &r);
+    if c.is_zero() || generator::<C>() * z - r - *y * c != G::<C>::zero() {
+        return Err(ZError::Verify("auditor pop"));
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------------------------
 // Disclosure (§12)
 // ---------------------------------------------------------------------------------------------
 

@@ -367,3 +367,49 @@ fn envelope_vector() -> Value {
     req["digest"] = out["digest"].clone();
     req
 }
+
+/// Set-auditor A3 (CTR-ZTH-95, spec §5.2): the auditor's proof of possession, `smartcontracts/vectors/zether/auditor_pop.json`
+/// (`zether-cli auditor-pop <path>`; never by hand). Each row: the key `x` (zether-prover `r33_keys.json`'s `m/12381/60/0/8`
+/// and `m/12381/60/1/8`), its `Y`, a digest `d`, the nonce `k` (explicit, vectors only), `R`, `c`, `z` and `pop = R ‖ be32(z)`;
+/// `refused`: the same rows' proofs broken one way each (`z + r`, `R` off the curve, another `d`, a byte too many), every one
+/// refused by `ZetherLib.popHolds` and [`schnorr::verify_auditor_pop`].
+pub fn auditor_pop() -> Value {
+    type C = Bls12381;
+    let xs = [
+        "25f771eaad146dd5c0a479073adf0bdcef837123e5e61770d13bd5f8a9e3e1d9",
+        "2592aae4a72ff35d24196d8aa5fbf03bb270d3a83056fa7a6b31fb8700bb882e",
+    ];
+    let g = crate::curve::generator::<C>();
+    let mut rows = Vec::new();
+    let mut refused = Vec::new();
+    for (i, xh) in xs.iter().enumerate() {
+        let x = decode_scalar::<C>(&hex::decode(xh).expect("hex")).expect("scalar");
+        let y = g * x;
+        let d = crate::curve::keccak256(format!("scaas set-auditor pop vector {i}").as_bytes());
+        let k = hash_to_scalar::<C>(&crate::curve::keccak256(format!("scaas set-auditor pop nonce {i}").as_bytes()));
+        let pop = schnorr::auditor_pop_with_k::<C>(&x, &d, &k);
+        let pl = crate::curve::point_len::<C>();
+        let r = crate::curve::decode_point::<C>(&pop[..pl]).expect("R");
+        let c = schnorr::auditor_pop_challenge::<C>(&d, &y, &r);
+        rows.push(json!({"x": hx(&encode_scalar::<C>(&x)), "y": hx(&encode_point::<C>(&y)), "d": hx(&d), "k": hx(&encode_scalar::<C>(&k)),
+            "R": hx(&pop[..pl]), "c": hx(&encode_scalar::<C>(&c)), "z": hx(&pop[pl..]), "pop": hx(&pop)}));
+        let order = crate::curve::order_be::<C>();
+        let mut z_high = pop.clone();
+        let mut carry = 0u16;
+        for j in (0..32).rev() {
+            let t = u16::from(z_high[pl + j]) + u16::from(order[j]) + carry;
+            z_high[pl + j] = t as u8;
+            carry = t >> 8;
+        }
+        let mut r_off = pop.clone();
+        r_off[pl - 1] ^= 1;
+        let other_d = crate::curve::keccak256(format!("scaas set-auditor pop vector {i} other").as_bytes());
+        let mut long = pop.clone();
+        long.push(0);
+        for (name, p, dd) in [("z + r", z_high, d), ("R off the curve", r_off, d), ("a proof for another d", schnorr::auditor_pop_with_k::<C>(&x, &other_d, &k), d), ("one byte too many", long, d)] {
+            refused.push(json!({"name": name, "y": hx(&encode_point::<C>(&y)), "d": hx(&dd), "pop": hx(&p)}));
+        }
+    }
+    json!({"_comment": "set-auditor A3 (CTR-ZTH-95, spec §5.2): the auditor's Schnorr proof of possession over its AuditorConsent digest d, pop = R ‖ be32(z), c = hashToScalar(keccak256(\"SCAAS-ZETHER-AUDITOR-POP-V1\" ‖ d ‖ G ‖ Y ‖ R)), [z]G − R − [c]Y = O; written by zether-cli auditor-pop (zether-prover src/vectors.rs), never by hand; read by zether-prover tests/auditor_pop.rs and smartcontracts/evm/test/zether/ZetherAuditor.t.sol. UNAUDITED.",
+        "curve": "bls12381", "rows": rows, "refused": refused})
+}

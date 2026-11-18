@@ -22,6 +22,7 @@ import {UAKinds} from "../ua/UAKinds.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {GovernanceUse} from "../governance/GovernanceBase.sol";
 import {GovernanceBits} from "../governance/GovernanceBits.sol";
+import {AuditorRules} from "../confidential/AuditorRules.sol";
 
 /// @dev The token's `disclosureStatement` entry, for the self-call of `PqzLayer` (T66b: the entry is the face's).
 interface IPqzDisclosureStatement {
@@ -106,6 +107,24 @@ abstract contract PqzLayer is MetaTokenBase {
     function _confidentialFeeBody() internal view returns (uint256) { return PqzCore.$().confidentialFee; }
     function _minDecoyFeeBody() internal view returns (uint256) { return PqzCore.$().minDecoyFee; }
     function _auditorUABody() internal view returns (bytes32) { return PqzCore.$().auditorUA; }
+    /// @notice CTR-PQZ-43: the auditor UA of `entryRef`'s epoch.
+    function _auditorUAOfBody(bytes32 entryRef) internal view returns (bytes32) { return PqzCore.auditorUAOf(entryRef); }
+
+    /// @notice Set-auditor spec §8: the epoch and the stored proposal (`pending` the proposed UA).
+    function _auditorStateBody() internal view returns (uint32, bytes32, uint64, bytes32, uint8) {
+        PqzCore.PqzStorage storage s = PqzCore.$();
+        return AuditorRules.state(s.auditorEpoch, s.pendingAuditorUA, s.auditorEta, s.auditorProposer,
+            s.auditorProposerRoleEpoch);
+    }
+
+    /// @notice Bit 32 `AUDITOR` (CTR-PQZ-43, CTR-GOV-31): the caller's bit (`MissingRole` first), its chain word
+    ///         (CTR-GOV-28), one use of its grant, then `PqzStateLib.setAuditorUA` with the caller and the delay.
+    function _setAuditorUABody(bytes32 newAuditor, uint32 epoch, IUARegistry.UASig calldata consent, bytes32 chainUid_) internal {
+        bytes32 c = _holderOnChain(GovernanceBits.AUDITOR, chainUid_);
+        GovernanceUse.use(GovernanceBits.AUDITOR, c, 0);
+        PqzCore.Env memory e = _env();
+        PqzStateLib.setAuditorUA(newAuditor, epoch, consent, c, _auditorDelay(), e.registry, e.domainSeparator, e.chainUid);
+    }
     function _auditorModeBody() internal view returns (ZetherTypes.AuditorMode) { return PqzCore.$().auditorMode; }
     function _disclosureModeBody() internal view returns (ZetherTypes.DisclosureMode) { return PqzCore.$().disclosureMode; }
     function _totalShieldedBody() internal view returns (uint256) { return PqzCore.$().totalShielded; }

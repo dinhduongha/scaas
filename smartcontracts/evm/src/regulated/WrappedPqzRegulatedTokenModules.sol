@@ -762,8 +762,16 @@ contract WrappedPqzRegulatedTokenS is WrappedPqzRegulatedTokenCore {
         return _auditorModeBody();
     }
 
+    function auditorState() external view onlyDelegated returns (uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status) {
+        return _auditorStateBody();
+    }
+
     function auditorUA() external view onlyDelegated returns (bytes32 _p0) {
         return _auditorUABody();
+    }
+
+    function auditorUAOf(bytes32 entryRef) external view onlyDelegated returns (bytes32 _p0) {
+        return _auditorUAOfBody(entryRef);
     }
 
     function burnStatement(IPqzToken.PqzBurnArgs calldata b, uint256 amount, bytes32 recipient, bytes32 binding) external view onlyDelegated returns (bytes memory _p0) {
@@ -848,6 +856,10 @@ contract WrappedPqzRegulatedTokenS is WrappedPqzRegulatedTokenCore {
 
     function proofSystemId() external view onlyDelegated returns (bytes32 _p0) {
         return _proofSystemIdBody();
+    }
+
+    function setAuditorUA(bytes32 newAuditor, uint32 epoch, IUARegistry.UASig calldata consent, bytes32 chainUid_) external onlyDelegated {
+        _setAuditorUABody(newAuditor, epoch, consent, chainUid_);
     }
 
     function setProofStore(uint8 next, bytes32 chainUid_) external onlyDelegated {

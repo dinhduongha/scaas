@@ -17,6 +17,9 @@ import {UAKinds} from "../ua/UAKinds.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {ENV_ZETHER_TRANSFER, ENV_ZETHER_BURN, ENV_ZETHER_DISCLOSURE} from "../factory/IFactoryToken.sol";
 import {ChainEnvCode} from "../factory/ChainEnvCode.sol";
+import {GovernanceUse} from "../governance/GovernanceBase.sol";
+import {GovernanceBits} from "../governance/GovernanceBits.sol";
+import {AuditorRules} from "../confidential/AuditorRules.sol";
 
 /// @title The Zether layer of the kinds `NORMAL_ZETHER` and `WRAPPED_ZETHER` (CTR-ZTH-44): the entry points of
 ///        CTR-ZTH-45 and the views; the state and the logic are `ZetherLib` (`scaas.zether`).
@@ -82,6 +85,28 @@ abstract contract ZetherLayer is MetaTokenBase {
     function _minDecoyFeeBody() internal view returns (uint256) { return ZetherLib.$().minDecoyFee; }
     function _auditorKeyBody() internal view returns (bytes memory) { return ZetherLib.$().auditorKey; }
     function _auditorModeBody() internal view returns (ZetherTypes.AuditorMode) { return ZetherLib.$().auditorMode; }
+
+    /// @notice CTR-ZTH-95: the key of `entryRef`'s epoch (the current one, or the history's).
+    function _auditorKeyOfBody(bytes32 entryRef) internal view returns (bytes memory) {
+        ZetherLib.ZetherStorage storage s = ZetherLib.$();
+        uint32 e = s.entryAuditorEpoch[entryRef];
+        return e == s.auditorEpoch ? s.auditorKey : s.auditorKeys[e];
+    }
+
+    /// @notice Set-auditor spec §8: the epoch and the stored proposal (`pending` the proposed key's `keccak256`).
+    function _auditorStateBody() internal view returns (uint32, bytes32, uint64, bytes32, uint8) {
+        ZetherLib.ZetherStorage storage s = ZetherLib.$();
+        return AuditorRules.state(s.auditorEpoch, s.pendingAuditorKeyHash, s.auditorEta, s.auditorProposer,
+            s.auditorProposerRoleEpoch);
+    }
+
+    /// @notice Bit 32 `AUDITOR` (CTR-ZTH-95, CTR-GOV-31): the caller's bit (`MissingRole` first), its chain word
+    ///         (CTR-GOV-28), one use of its grant, then `ZetherLib.setAuditorKey` with the caller and the delay.
+    function _setAuditorKeyBody(bytes calldata, uint32, bytes calldata, bytes32 chainUid_) internal {
+        bytes32 c = _holderOnChain(GovernanceBits.AUDITOR, chainUid_);
+        GovernanceUse.use(GovernanceBits.AUDITOR, c, 0);
+        _lib(address(ZetherLib), ZetherLib.setAuditorKey.selector, abi.encode(c, _auditorDelay(), _env()));
+    }
     function _disclosureModeBody() internal view returns (ZetherTypes.DisclosureMode) { return ZetherLib.$().disclosureMode; }
     function _totalShieldedBody() internal view returns (uint256) { return ZetherLib.$().totalShielded; }
     /// @notice The record `R` for `disclosure()`, always from state: inline (BUNDLE, single) or read from its SSTORE2

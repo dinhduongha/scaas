@@ -65,6 +65,8 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     // the three-key model (CTR-PQZ-37): the next token's `pqzOwnKey` and `pqzOpening` (`OFFCHAIN` only)
     bool internal vOwnKey;
     bool internal vOpening;
+    /// @dev The factory's `noticePeriod()` of the next `_stack()` (0 unless a test sets it: the auditor's delay, CTR-PQZ-43).
+    uint64 internal notice;
 
     /// the client's view of each account: `acc` and every entry ever appended (TRIVIAL amounts in `triv`)
     mapping(bytes32 => bytes) internal accOf;
@@ -76,7 +78,7 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     function _stack() internal virtual {
         _registryStack();
         ct = new PqzCtHarness();
-        factory = EnvKit.factory(registrar, PQZ_UID, 0);
+        factory = EnvKit.factory(registrar, PQZ_UID, notice);
         // plan 5g-Z2: the PQZL release, its verifier the env's (CTR-ZTH-20)
         normalImpl = NormalPqzToken(Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1,
             pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NormalPqzToken).creationCode));

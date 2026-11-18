@@ -5,7 +5,7 @@ use zether_prover::api::call;
 
 /// Rows of the vector the Zether prover does not build, each with its reason: another contract kind's domain (the row has no
 /// `zether` domain), so a Zether key never signs it. Any other row without a `zether` domain fails the test.
-const NOT_ZETHER: [&str; 83] = [
+const NOT_ZETHER: [&str; 85] = [
     // the token kind's own (non-Zether) accounts: UA prepare is a NormalToken / WrappedToken entry
     "UAPrepareAcc",
     // SmartKeyAccount: signed by its owner's keys, not by a Zether key
@@ -45,6 +45,9 @@ const NOT_ZETHER: [&str; 83] = [
     "UASetAllowed", "UASetDenied", "UAEnableFeature",
     // round 3zc (CTR-GOV-30): the admin's two supply caps on the router
     "UASetMaxSupply", "UASetMaxWrapSupply",
+    // set-auditor (CTR-GOV-31): bit 32's two router ops, signed by the holder's key (the new auditor's own consent rides
+    // beside them; on Zether its proof of possession, `auditorPop`)
+    "UASetAuditorKey", "UASetAuditorUA",
 ];
 
 fn vector() -> Value {
@@ -81,7 +84,7 @@ fn every_zether_row_digest_equals_the_vector() {
         assert_eq!(out["domainSeparator"], dom["domainSeparator"], "{op} domainSeparator");
         assert_eq!(out["digest"], dom["digest"], "{op} digest");
     }
-    assert_eq!(zether, 28, "the vector's Zether rows (pay-meta-tax T41: + UAPayWithTax)");
+    assert_eq!(zether, 29, "the vector's Zether rows (pay-meta-tax T41: + UAPayWithTax; set-auditor: + AuditorConsent)");
     assert_eq!(zether + other.len(), ops.len());
     let mut want = NOT_ZETHER.to_vec();
     want.sort_unstable();
@@ -307,4 +310,30 @@ fn named_call_encodes_a_full_ua_sig() {
     }
     let err = call("namedCall", &named_req(&v, NAMED[0], json!({"keyData": "0xaa"})).to_string()).unwrap_err();
     assert!(err.contains("`sig` is required"), "{err}");
+}
+
+/// Set-auditor (CTR-ZTH-95, spec §5.2): `auditorPop` builds the token's `AuditorConsent` digest from named fields (the vector's
+/// row for the key's own UA) and a proof of possession that verifies over it, and only over it.
+#[test]
+fn auditor_pop_over_the_consent_digest() {
+    use zether_prover::curve::{decode_point, Bls12381};
+    let v = vector();
+    let row = &v["ops"]["AuditorConsent"];
+    let dom = &row["domains"]["zether"]["domain"];
+    let x = "0x25f771eaad146dd5c0a479073adf0bdcef837123e5e61770d13bd5f8a9e3e1d9";
+    let k: Value = serde_json::from_str(&call("keygen", &json!({"curve": "bls12381", "key": {"x": x}}).to_string()).unwrap()).unwrap();
+    let r = json!({"curve": "bls12381", "key": {"x": x}, "chainId": dom["chainId"], "chainUid": dom["salt"],
+        "token": dom["verifyingContract"], "epoch": 3});
+    let out: Value = serde_json::from_str(&call("auditorPop", &r.to_string()).unwrap()).unwrap();
+    let m = json!({"token": dom["verifyingContract"], "auditor": k["UA"], "epoch": 3, "chainUid": dom["salt"]});
+    let t: Value = serde_json::from_str(&call("typedDigest", &merge(req(row), json!({"op": "AuditorConsent", "message": m})).to_string())
+        .unwrap()).unwrap();
+    assert_eq!(out["digest"], t["digest"], "the consent digest of the key's own UA");
+    let h = |s: &Value| hex::decode(&s.as_str().unwrap()[2..]).unwrap();
+    let y = decode_point::<Bls12381>(&h(&k["Y"])).unwrap();
+    let d: [u8; 32] = h(&out["digest"]).try_into().unwrap();
+    zether_prover::schnorr::verify_auditor_pop::<Bls12381>(&y, &d, &h(&out["pop"])).unwrap();
+    let mut other = d;
+    other[31] ^= 1;
+    assert!(zether_prover::schnorr::verify_auditor_pop::<Bls12381>(&y, &other, &h(&out["pop"])).is_err());
 }

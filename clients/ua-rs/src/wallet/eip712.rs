@@ -889,6 +889,9 @@ const OPS: &[Op] = &[
     op("UASetVerifierFee", "address target,uint64 next,bytes32 chainUid", &[ROUTER], None),
     // group 3h (proof-path spec §5, PP-5): bit 24 `PQZ_PROOF`'s router op, the token's `proofStore` from its next debit
     op("UASetProofStore", "address target,uint8 next,bytes32 chainUid", &[ROUTER], None),
+    // set-auditor (spec §8, CTR-GOV-31): bit 32 `AUDITOR`'s two router ops (the new auditor's consent rides beside them)
+    op("UASetAuditorKey", "address target,bytes newKey,uint32 epoch,bytes32 chainUid", &[ROUTER], None),
+    op("UASetAuditorUA", "address target,bytes32 newAuditor,uint32 epoch,bytes32 chainUid", &[ROUTER], None),
     op("UASetWrapLimits", "address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,bytes32 chainUid", &[ROUTER], None),
     op("UASetWrapMember", "address target,bytes32 account,bool canWrap,bool canUnwrap,bytes32 chainUid", &[ROUTER], None),
     op("UASetMaxSupply", "address target,uint256 maxSupply,bytes32 chainUid", &[ROUTER], None),
@@ -911,6 +914,9 @@ const OPS: &[Op] = &[
     op("UASetKycProvider", "address target,bytes32 provider,bool enabled,bytes32 chainUid", &[ROUTER], None),
     op("UASetCompliance", "address target,bytes32[] accounts,uint64[] flags,uint64[] until,bytes32 chainUid", &[ROUTER], None),
     op("UASetChainEntries", "address target,ChainEntries entries,bytes32 chainUid", &[ROUTER], None),
+    // set-auditor (spec §5.2): the new auditor's consent in a confidential token's domain (PQZ: its UA signature under
+    // `auditor-consent`; Zether: the proof of possession over the digest)
+    raw("AuditorConsent", "address token,bytes32 auditor,uint32 epoch,bytes32 chainUid", CONFIDENTIAL),
     raw("PqzAuth", "uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,bytes32 chainUid,bytes32 binding,uint128 salt,bytes32 memoHash,bytes32 bodyHash", &[P]),
 ];
 /// The generic path's builders (clientkeys `metaTxTypedData`, `uaMetaTxTypedData`, `uaMetaTransferTypedData`,

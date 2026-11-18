@@ -107,6 +107,10 @@ contract NamespaceProbe is UAMetaTxBase {
         // round 3t (CTR-PQZ-36, verifier fee spec §4): slots 20-22 appended
         (q.verifierFee, q.verifierFeeMax, q.verifierFeePending, q.verifierFeeEta) = (0xb1, 0xb2, 0xb3, 0xb4);
         (q.verifierFeeProposer, q.verifierFeeProposerGeneration) = (bytes32(uint256(0xb5)), 0xb6);
+        // set-auditor A4 (spec §6, CTR-PQZ-43): the epoch at byte 26 of slot 0, the proposal in slot 22's free bytes and after
+        (q.auditorEpoch, q.auditorEta, q.auditorProposerRoleEpoch) = (0xa1a1, 0xa1a2, 0xa1a3);
+        (q.auditorProposer, q.pendingAuditorUA) = (bytes32(uint256(0xa1a4)), bytes32(uint256(0xa1a5)));
+        (q.auditorUAs[7], q.entryAuditorEpoch[V]) = (bytes32(uint256(0xa1a6)), 0xa1a7);
         q.entryPtr[V] = A;
         (q.memos[V], q.memos[U]) = (NamespaceProbeIds.blob(58), NamespaceProbeIds.blob(21));
         ZetherLib.ZetherStorage storage z = ZetherLib.$();
@@ -122,6 +126,10 @@ contract NamespaceProbe is UAMetaTxBase {
         z.entries[V] = NamespaceProbeIds.blob(200);
         z.entryPtrs[V] = B;
         (z.memos[V], z.memos[U]) = (NamespaceProbeIds.blob(33), NamespaceProbeIds.blob(20));
+        // set-auditor A2 (spec §6, CTR-ZTH-95): the epoch at byte 22 of slot 0, the proposal and the history appended
+        (z.auditorEpoch, z.auditorEta, z.auditorProposerRoleEpoch) = (0xf9a1, 0xf9a2, 0xf9a3);
+        (z.auditorProposer, z.pendingAuditorKeyHash) = (bytes32(uint256(0xf9a4)), bytes32(uint256(0xf9a5)));
+        (z.auditorKeys[7], z.entryAuditorEpoch[V]) = (NamespaceProbeIds.blob(129), 0xf9a6);
     }
 
     /// Group 3l (wrap limits spec §5, R26): `scaas.wraplimit`, leg 1's two config words and two token-wide window words by
@@ -354,6 +362,13 @@ contract LayoutTest is V2Fixture {
         f = _more(f, F("pqzOwnKey", 0, 0, 1, 1));
         f = _more(f, F("pqzOpening", 0, 0, 1, 1));
         f = _more(f, F("acct[U][7].rollSeq", u, 0, 0xb7, 8));
+        f = _more(f, F("auditorEpoch", 0, 0, 0xa1a1, 4));
+        f = _more(f, F("auditorEta", 0, 0, 0xa1a2, 8));
+        f = _more(f, F("auditorProposerRoleEpoch", 0, 0, 0xa1a3, 4));
+        f = _more(f, F("auditorProposer", 0, 0, 0xa1a4, 32));
+        f = _more(f, F("pendingAuditorUA", 0, 0, 0xa1a5, 32));
+        f = _more(f, F("auditorUAs[E]", 7, 0, 0xa1a6, 32));
+        f = _more(f, F("entryAuditorEpoch[V]", v, 0, 0xa1a7, 4));
         _ns(address(p), "pqz", "scaas.pqz", f);
         f = new F[](25);
         f[0] = F("verifier", 0, 0, a, 20);
@@ -381,6 +396,13 @@ contract LayoutTest is V2Fixture {
         f[22] = F("memos[V]", v, 0, 33, 32);
         f[23] = F("memos[U]", u, 0, 20, 32);
         f[24] = F("minDecoyFee", 0, 0, 0xf7, 32);
+        f = _more(f, F("auditorEpoch", 0, 0, 0xf9a1, 4));
+        f = _more(f, F("auditorEta", 0, 0, 0xf9a2, 8));
+        f = _more(f, F("auditorProposerRoleEpoch", 0, 0, 0xf9a3, 4));
+        f = _more(f, F("auditorProposer", 0, 0, 0xf9a4, 32));
+        f = _more(f, F("pendingAuditorKeyHash", 0, 0, 0xf9a5, 32));
+        f = _more(f, F("auditorKeys[E]", 7, 0, 129, 32));
+        f = _more(f, F("entryAuditorEpoch[V]", v, 0, 0xf9a6, 4));
         _ns(address(p), "zether", "scaas.zether", f);
         AdminProbe ap = new AdminProbe();
         ap.poke();

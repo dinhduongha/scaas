@@ -108,6 +108,13 @@ library GovernanceRouterTypes {
     // ---- bit 24 `PQZ_PROOF` of the PQZ kinds 4, 5, 12, 13 (group 3h, PQZ proof path spec §5): any holder; fee mode `NONE`
     bytes32 internal constant UA_SET_PROOF_STORE = keccak256(
         "UASetProofStore(bytes32 from,address target,uint8 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    // ---- bit 32 `AUDITOR` of the confidential kinds (set-auditor spec §8, CTR-GOV-31): any holder; fee mode `NONE`; the new
+    //      auditor's consent (Zether `pop`, PQZ `consent`) travels beside the struct, unsigned by the holder; `newKey` hashed
+    //      into the struct as EIP-712 hashes `bytes`
+    bytes32 internal constant UA_SET_AUDITOR_KEY = keccak256(
+        "UASetAuditorKey(bytes32 from,address target,bytes newKey,uint32 epoch,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_SET_AUDITOR_UA = keccak256(
+        "UASetAuditorUA(bytes32 from,address target,bytes32 newAuditor,uint32 epoch,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_OPERATOR_TRANSFER = keccak256(
         "UAOperatorTransfer(bytes32 from,address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     // ---- group 3l (wrap limits spec 2026-11-10 §9): the admin's limits (bit 25, the lists' switches of bit 26) and bit

@@ -98,8 +98,9 @@ fn typed_ops_json_rows() {
         }
     }
     // the seventh sync (ua-mtx-merge 44cd27d2e): + 27 ops (the three-key `PqzRollOver`, the admin ops for UA*Ownership, the
-    // verifier fee, wrap limits, supply caps, lists, catalogue and chain entries ops of the router); 3h T61: + UASetProofStore
-    assert_eq!((ops, rows), (111, 145));
+    // verifier fee, wrap limits, supply caps, lists, catalogue and chain entries ops of the router); 3h T61: + UASetProofStore;
+    // set-auditor: + UASetAuditorKey, UASetAuditorUA (router) and AuditorConsent (Zether and PQZ domains)
+    assert_eq!((ops, rows), (114, 149));
 }
 
 /// `ua/portable.json` and `ua/nested.json`: the typed data of every registration, KEM record, PQZ key record and acceptance hashes
@@ -1112,5 +1113,43 @@ fn rescue_vault_kat() {
         RescueVaultOp::RotateAdmin { seq: 1, new_admin: [1; 32] },
     ] {
         assert_eq!(rescue_vault_typed_data(&vault, op).err(), Some(Error::Argument), "{op:?}");
+    }
+}
+
+/// Set-auditor (spec §5.2, plan A7): `typed_ops.json`'s `AuditorConsent` consent rows, in both token domains: the native id's
+/// ECDSA over the registry's `uaAuthDigest` under `auditor-consent` (context A, generation 1) recovers to it, the derived
+/// secp256k1 UA's signature over `uaMessage(0x0108, purpose, digest)` verifies under its key data; each digest is ua-rs's
+/// `AuditorConsent` naming that signer's own UA.
+#[test]
+fn auditor_consent_rows() {
+    let t = load("typed/typed_ops.json");
+    let a = &load("ua/structures.json")["contexts"]["A"];
+    let reg = Domain { generation: 1, chain_id: chain_id(&a["chainId"]), registry: b20(&a["registry"]), chain_uid: b32(&a["chainUid"]) };
+    let purpose = purpose_tag("auditor-consent").unwrap();
+    assert_eq!(purpose, keccak256(b"scaas.ua.purpose.auditor-consent.v1"));
+    let row = &t["ops"]["AuditorConsent"];
+    for (kind, d) in row["domains"].as_object().unwrap() {
+        let dom = &d["domain"];
+        let typed = |auditor: &Value| {
+            let mut m = row["message"].clone();
+            m["auditor"] = auditor.clone();
+            scaas_typed_data("AuditorConsent", dom["name"].as_str(), &b20(&dom["verifyingContract"]), chain_id(&dom["chainId"]),
+                &b32(&dom["salt"]), &m).unwrap().digest().unwrap()
+        };
+        let n = &d["consent"]["native"];
+        assert_eq!(typed(&n["ua"]), b32(&n["digest"]), "{kind}: native");
+        let auth = ua_auth_digest(&reg, &b32(&n["ua"]), &purpose, &b32(&n["digest"]));
+        assert_eq!(auth, b32(&n["uaAuthDigest"]), "{kind}");
+        assert!(native_ecdsa(&b32(&n["ua"])[12..].try_into().unwrap(), &auth, &bytes(&n["signature"])), "{kind}: native signer");
+        let x = &d["consent"]["derived"];
+        let k = x["kind"].as_u64().unwrap() as u16;
+        assert_eq!(scaas_ua::ua_of(k, &bytes(&x["keyData"])).unwrap(), b32(&x["ua"]), "{kind}");
+        assert_eq!(typed(&x["ua"]), b32(&x["digest"]), "{kind}: derived");
+        let m = scaas_ua::ua_message(k, &purpose, &b32(&x["digest"])).unwrap();
+        assert_eq!(m, b32(&x["uaMessage"]), "{kind}");
+        assert!(scaas_ua::verify::verify(k, &bytes(&x["keyData"]), &m, &bytes(&x["signature"]), false), "{kind}: derived signer");
+        let mut bad = m;
+        bad[0] ^= 1;
+        assert!(!scaas_ua::verify::verify(k, &bytes(&x["keyData"]), &bad, &bytes(&x["signature"]), false), "{kind}: control");
     }
 }

@@ -473,8 +473,16 @@ contract NormalPqzTokenQ is NormalPqzTokenCore {
         return _auditorModeBody();
     }
 
+    function auditorState() external view onlyDelegated returns (uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status) {
+        return _auditorStateBody();
+    }
+
     function auditorUA() external view onlyDelegated returns (bytes32 _p0) {
         return _auditorUABody();
+    }
+
+    function auditorUAOf(bytes32 entryRef) external view onlyDelegated returns (bytes32 _p0) {
+        return _auditorUAOfBody(entryRef);
     }
 
     function burnStatement(IPqzToken.PqzBurnArgs calldata b, uint256 amount, bytes32 recipient, bytes32 binding) external view onlyDelegated returns (bytes memory _p0) {
@@ -597,10 +605,6 @@ contract NormalPqzTokenQ is NormalPqzTokenCore {
         return _pqzPendingBody(ua, keyVersion, i);
     }
 
-    function pqzSkipped(bytes32 ua, uint64 keyVersion, uint64 index) external view onlyDelegated returns (bool _p0) {
-        return _pqzSkippedBody(ua, keyVersion, index);
-    }
-
     function pqzPendingCt(bytes32 ua, uint64 keyVersion, uint64 i) external view onlyDelegated returns (bytes memory _p0) {
         return _pqzPendingCtBody(ua, keyVersion, i);
     }
@@ -611,6 +615,10 @@ contract NormalPqzTokenQ is NormalPqzTokenCore {
 
     function pqzSetVerifier(bytes32 next, bytes32 chainUid_) external onlyDelegated {
         _pqzSetVerifierBody(next, chainUid_);
+    }
+
+    function pqzSkipped(bytes32 ua, uint64 keyVersion, uint64 index) external view onlyDelegated returns (bool _p0) {
+        return _pqzSkippedBody(ua, keyVersion, index);
     }
 
     function pqzVerifyConfig() external view onlyDelegated returns (IPqzToken.PqzVerifyConfig memory _p0) {
@@ -627,6 +635,10 @@ contract NormalPqzTokenQ is NormalPqzTokenCore {
 
     function proofSystemId() external view onlyDelegated returns (bytes32 _p0) {
         return _proofSystemIdBody();
+    }
+
+    function setAuditorUA(bytes32 newAuditor, uint32 epoch, IUARegistry.UASig calldata consent, bytes32 chainUid_) external onlyDelegated {
+        _setAuditorUABody(newAuditor, epoch, consent, chainUid_);
     }
 
     function setProofStore(uint8 next, bytes32 chainUid_) external onlyDelegated {

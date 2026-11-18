@@ -20,6 +20,7 @@ import {IUALedger} from "./IUALedger.sol";
 import {ILiquidityPullToken} from "../trade/ITradeToken.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {IFactoryToken, requireRegOfKind} from "../factory/IFactoryToken.sol";
+import {IOpenFactory} from "../factory/IOpenFactory.sol";
 import {ChainEnvCode} from "../factory/ChainEnvCode.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
@@ -189,6 +190,14 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
     function decimals() public view override returns (uint8) { return TokenStore.$().decimals; }
 
     function factory() external view returns (address) { return FACTORY; }
+
+    /// @dev Bit 32 `AUDITOR`'s delay (set-auditor spec §4, owner O1): `max(factory noticePeriod(), grantDelay)`, both fixed
+    ///      after creation and capped at 30 days. Never `PqzStorage.noticePeriod` (0 on a `PRECOMPILE` token).
+    function _auditorDelay() internal view returns (uint64 d) {
+        d = IOpenFactory(FACTORY).noticePeriod();
+        uint64 g = GovernanceLib.$().grantDelay;
+        if (g > d) d = g;
+    }
     function implementation() external view returns (address) { return _SELF; }
     function IS_HEDERA() external view returns (bool) { return _IS_HEDERABody(); }
     function _creatorBody() internal view returns (address) { return TokenStore.$().creator; }

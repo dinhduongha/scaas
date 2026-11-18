@@ -256,6 +256,11 @@ interface IPqzToken is IConfidentialToken {
     event PqzDebitProof(address indexed blob, bytes32 indexed ua, uint64 indexed sendCounter, bytes header, bytes proof);
     /// @notice Group 3h (spec §5, O10): a holder of bit 24 changed the mode, effective from the next debit.
     event ProofStoreSet(uint8 previous, uint8 next);
+    /// @notice Bit 32 (CTR-PQZ-43): a holder proposed `newAuditor` as the auditor of `epoch`; it applies at `eta` on the same
+    ///         holder's confirm, within 7 days (at once when the delay is 0).
+    event AuditorUAProposed(uint32 epoch, bytes32 newAuditor, bytes32 proposer, uint64 eta);
+    /// @notice The auditor UA from `epoch` on; `previousAuditor` stays the auditor of every earlier entry since its epoch.
+    event AuditorUASet(uint32 epoch, bytes32 previousAuditor, bytes32 newAuditor);
 
     // ---- group 3f, PQZ verifier mode (spec §3-§5; CTR-PQZ-27..29 drafts)
     /// @notice An accepted proof in `OFFCHAIN` mode: the verifier's verdict over `statementHash` and `proofHash` at its epoch.
@@ -342,6 +347,20 @@ interface IPqzToken is IConfidentialToken {
     /// @notice Group 3h (spec §5, O10): a holder of bit 24 `PQZ_PROOF` sets the mode the next debit runs under, `NONE` <->
     ///         `LOG`; the current value is a no-op (no event). Through the router as `mtxSetProofStore`.
     function setProofStore(uint8 next, bytes32 chainUid_) external;
+    /// @notice Bit 32 `AUDITOR` (CTR-PQZ-43, CTR-GOV-31): a holder proposes `newAuditor` as the auditor of `epoch`
+    ///         (`auditorEpoch + 1`), then confirms it with the same call after `max(factory noticePeriod, grantDelay)` and
+    ///         within 7 days; the current auditor as `newAuditor` cancels the holder's own proposal. `consent` is
+    ///         `newAuditor`'s signature (`requireAuthorized`, purpose `PURPOSE_AUDITOR_CONSENT`) over the typed
+    ///         `AuditorConsent(address token,bytes32 auditor,uint32 epoch,bytes32 chainUid)` of this token; it and the new
+    ///         auditor's key of the token's class and scope (proven where the registry has a `0x0142` verifier; on an opening
+    ///         token with its opening KEM key) are checked at the proposal and at the apply.
+    function setAuditorUA(bytes32 newAuditor, uint32 epoch, IUARegistry.UASig calldata consent, bytes32 chainUid_) external;
+    /// @notice The auditor UA of `entryRef`'s epoch (CTR-PQZ-43); an unknown or opt-out `entryRef` answers epoch 0's.
+    function auditorUAOf(bytes32 entryRef) external view returns (bytes32);
+    /// @notice The current `auditorEpoch` and the stored proposal (set-auditor spec §8): `pending` the proposed UA; `status`
+    ///         0 none, 1 waiting, 2 confirmable (`[eta, eta + 7 days]`), 3 expired, 4 void (its proposer lost the bit, or bit
+    ///         32 is off: then `pending`, `eta` and `proposer` read 0).
+    function auditorState() external view returns (uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status);
     /// @notice Pending slot `i` of `(ua, keyVersion)`: `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`, for every `i <
     ///         pendingCount` (group 3h PP-1: kept for good); 0 for an unwritten index. Bit 63 of `block` is the skip mark
     ///         (CTR-PQZ-41): the creation block is `block & (2^63 − 1)`.

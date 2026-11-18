@@ -18,7 +18,8 @@ import { TYPED_OPS, OP_BUILDERS, hashStruct, hashTypedData, uaMetaTransferTypedD
 import { confPublic, g1 } from '../src/zether.js';
 import { recordId } from '../src/regulated.js';
 import { releaseApprovalKey } from '../src/factory.js';
-import { ecdsa, nativeSk, nativeAddr, nativeUa, be } from './ua-signers.mjs';
+import { ecdsa, nativeSk, nativeAddr, nativeUa, be, secretOf, SECP_N, SCHEMES } from './ua-signers.mjs';
+import * as ua from '../src/ua.js';
 
 const VECTORS = fileURLToPath(new URL('../../../smartcontracts/vectors/', import.meta.url));
 const OUT = process.argv[2] ?? join(VECTORS, 'typed');
@@ -195,6 +196,30 @@ for (const n of ['UAGrantRole', 'UARevokeRole', 'UASetGrant', 'UACancelGrant', '
 // Round 3zc (CTR-GOV-30): the admin's two supply caps, a hybrid's `maxSupply` and its wrap cap below it; both leave the relayer
 // and the fee recipient unbound at fee 0 (mode 0): 0 in the message, as `MetaTxLib.canon` hashes them, and test/typed-ops.test.js
 // and ua-rs sign them again with a non-zero value in both.
+// Set-auditor (spec §8, CTR-GOV-31): the router's bit-32 ops at epoch 1 on context A's word; the new auditor's consent rides in
+// `extra` (`pop` a filler of a proof's 160 bytes, `consent` a UASig filler). `AuditorConsent` is typed under the token's domain.
+ROW.UASetAuditorKey = { epoch: 1, chainUid: contexts.A.chainUid };
+ROW.UASetAuditorUA = { epoch: 1, chainUid: contexts.A.chainUid };
+ROW.AuditorConsent = { token: CONTRACT.pqz, auditor: hex(nativeUa), epoch: 1, chainUid: contexts.A.chainUid };
+// the consent signatures (plan A7): a native and a derived signer, each over the `AuditorConsent` naming its own UA, under
+// `PURPOSE_AUDITOR_CONSENT` (`UASig` for `requireAuthorized`): the native id's ECDSA over the registry's `uaAuthDigest` (context A,
+// generation 1), a secp256k1 UA's over `uaMessage(0x0108, purpose, digest)`
+const CONSENT_SK = secretOf('auditor-consent', SECP_N);
+function consentRows(op, at) {
+  const tag = ua.purposeTag('auditor-consent');
+  const typed = (auditor) => hashTypedData(OP_BUILDERS[`${op.builder}TypedData`]({ ...at, message: { ...ROW.AuditorConsent, auditor } }));
+  const d0 = typed(hex(nativeUa));
+  const h = ua.uaAuthDigest({ generation: 1, ...contexts.A }, nativeUa, tag, d0);
+  const keyData = SCHEMES.secp256k1.keyData(CONSENT_SK);
+  const id = ua.uaOf(0x0108, keyData);
+  const d1 = typed(hex(id));
+  const m = ua.uaMessage(0x0108, tag, d1);
+  return {
+    native: { ua: hex(nativeUa), digest: hex(d0), uaAuthDigest: hex(h), signature: hex(ecdsa(nativeSk, h)) },
+    derived: { ua: hex(id), kind: 0x0108, keyData: hex(keyData), digest: hex(d1), uaMessage: hex(m),
+      signature: hex(SCHEMES.secp256k1.sign(CONSENT_SK, m)) },
+  };
+}
 ROW.UASetMaxSupply = { maxSupply: 1000000000, mode: 0, fee: 0 };
 ROW.UASetMaxWrapSupply = { maxWrapSupply: 500000000, mode: 0, fee: 0 };
 // The Change of CTR-GOV-28 in round 3zb + 3zc (O5, O6, owner 2026-11-13): every op of a role holder, `UASetWrapLimits` and the two
@@ -238,6 +263,8 @@ function extraOf(name, td, at) {
   if (base === 'PayWithTax' || base === 'PayUnderMandate') return { meta: META };
   if (base === 'CreateToken' || base === 'CreateDex') return { initArgs: INIT_ARGS };
   if (base === 'CreateInstance') return { initCall: INIT_CALL };
+  if (base === 'SetAuditorKey') return { pop: filler('pop', 160) };
+  if (base === 'SetAuditorUA') return { consent: { keyData: '0x', signature: filler('consent', 65), members: [] } };
   return undefined;
 }
 
@@ -266,6 +293,7 @@ for (const [name, op] of Object.entries(TYPED_OPS)) {
       Object.assign(d, { abi, selector: hex(keccak_256(utf8ToBytes(abi)).subarray(0, 4)), calldata: hex(data) });
       if (extra) d.extra = extra;
     }
+    if (name === 'AuditorConsent') d.consent = consentRows(op, at);
     if (plan) Object.assign(d, { router: ROUTER, relayedCall: callData, relayRef: plan.ref, lane: String(plan.lane),
       routerCalldata: hex(plan.calldata(signature)) });
     row.domains[kind] = d;

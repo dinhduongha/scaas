@@ -16,8 +16,11 @@
 //!   the length slot of `entries[entryRef]` then its data slots; `entryPtr` the word of `entryPtrs[entryRef]`; when that is
 //!   non-zero (commit-reveal), `blob` `{address, code}` (`eth_getCode` of the pointer: `0x00 ‖ R`) and `memoWords` (the
 //!   length slot of `memos[entryRef]`, then its data slots);
-//! - the token: `psid` (slot 6), `modes` (slot 0: `verifier(160) ‖ disclosureMode(8) ‖ auditorMode(8)`), `auditorKeyWords`
-//!   (the length slot 5, then its data slots).
+//! - the token: `psid` (slot 6), `modes` (slot 0: `verifier(160) ‖ disclosureMode(8) ‖ auditorMode(8) ‖ auditorEpoch(32)`),
+//!   and for an entry's auditor (CTR-ZTH-95, set-auditor spec §9) `entryAuditorEpoch` (the word of
+//!   `entryAuditorEpoch[entryRef]`, slot 17; 0 when absent) and `auditorKeyWords`: the words of the key of the entry's epoch,
+//!   the length slot 5 (the current key, an entry of the current epoch) or of `auditorKeys[epoch]` (slot 16, an earlier
+//!   epoch), then its data slots.
 //!
 //! UNAUDITED.
 
@@ -48,6 +51,7 @@ pub const ROOT: W = [
 pub const LAYOUT: &[(&str, u64, u64, usize, usize)] = &[
     ("disclosureMode", 0, 0, 20, 1),
     ("auditorMode", 0, 0, 21, 1),
+    ("auditorEpoch", 0, 0, 22, 4),
     ("auditorKey", 5, 0, 0, 32),
     ("psid", 6, 0, 0, 32),
     ("acct[U].accC", 8, 0, 0, 32),
@@ -61,6 +65,8 @@ pub const LAYOUT: &[(&str, u64, u64, usize, usize)] = &[
     ("entries[V]", 9, 0, 0, 32),
     ("entryPtrs[V]", 10, 0, 0, 20),
     ("memos[V]", 11, 0, 0, 32),
+    ("auditorKeys[E]", 16, 0, 0, 32),
+    ("entryAuditorEpoch[V]", 17, 0, 0, 4),
 ];
 
 /// The families whose layout parser exists (EVM first; another family's words are refused until its parser exists).
@@ -81,7 +87,12 @@ const BSGS: &[&str] = &["tableBits", "boundBits", "allowLargeTable"];
 const DEBIT: &[&str] = &["envelopeBinding", "fee", "beneficiary", "validUntilBlock", "disclosureMode", "auditorMode", "cacheBox"];
 const ENTRY: &[&str] = &["fromUA", "sendCounter", "entryWords", "entryPtr", "blob", "memoWords"];
 /// The fields that hold words (everything else is a caller field passed on to the prover).
-const WORDS: &[&str] = &["family", "block", "psid", "ua", "account", "accountData", "fromUA", "entryWords", "entryPtr", "blob", "memoWords", "modes", "auditorKeyWords"];
+const WORDS: &[&str] = &[
+    "family", "block", "psid", "ua", "account", "accountData", "fromUA", "entryWords", "entryPtr", "blob", "memoWords", "modes",
+    "entryAuditorEpoch", "auditorKeyWords",
+];
+/// The words of an entry's auditor key (CTR-ZTH-95): the token's epoch, the entry's, the key of that epoch.
+const AUDITOR: &[&str] = &["modes", "entryAuditorEpoch", "auditorKeyWords"];
 
 /// The allow-list of `cmd`'s fields: never `key`, a ciphertext (`acc`, `ct`, `pending`), an entry, a memo, a payload or a
 /// state field the words give (`accSeq`, a leg's points).
@@ -95,8 +106,8 @@ pub fn allowed(cmd: &str, field: &str) -> bool {
         "proveTransferMulti" => debit(&["yAud", "mode", "recipients", "decoyFee", "minDecoyFee", "uaSigner", "uaSignerGas"]),
         "proveBurn" => debit(&["amount", "recipient", "unwrapBinding"]),
         "openMemo" => has(LOC) || has(ENTRY),
-        "recoverTransfer" => has(LOC) || has(ENTRY) || has(BSGS) || field == "auditorKeyWords",
-        "openDisclosure" => has(LOC) || has(ENTRY) || has(BSGS) || has(&["modes", "auditorKeyWords", "kind", "index"]),
+        "recoverTransfer" => has(LOC) || has(ENTRY) || has(BSGS) || has(AUDITOR),
+        "openDisclosure" => has(LOC) || has(ENTRY) || has(BSGS) || has(AUDITOR) || has(&["kind", "index"]),
         _ => false,
     }
 }
@@ -340,9 +351,31 @@ fn entry(v: &Value, chain_id: u64, chain_uid: &W, token: &[u8; 20]) -> R<Entry> 
     Ok(Entry { entry_ref, from, send_counter, record, memo, single, m })
 }
 
-/// The token's auditor key (`auditorKeyWords`): `O` when the token has none.
-fn auditor_key(v: &Value) -> R<G<B>> {
-    point(&bytes_list(&ns("auditorKey")?, &slot_words(v, "auditorKeyWords")?)?)
+/// The auditor key of the entry's epoch (CTR-ZTH-95, set-auditor spec §9): `entryAuditorEpoch` (the word of
+/// `entryAuditorEpoch[entryRef]`, 0 when absent; which word it is, is the reading layer's duty, R1-R7) against the
+/// token's `auditorEpoch` (`modes`): the current key (slot 5) for an entry of the current epoch, else `auditorKeys[epoch]`
+/// (slot 16); `auditorKeyWords` the words of that `bytes`, `O` when empty (a token without an auditor). An entry epoch past
+/// the token's, or a word with bytes outside its field, is refused. Public data: no key is used.
+fn entry_auditor_key(v: &Value) -> R<G<B>> {
+    let current = field_u64(&wordf(v, "modes")?, "auditorEpoch")?;
+    let w = wordf(v, "entryAuditorEpoch")?;
+    let (_, _, byte, width) = lay("entryAuditorEpoch[V]")?;
+    if w[..32 - byte - width].iter().any(|b| *b != 0) {
+        return Err("not an entryAuditorEpoch word".into());
+    }
+    let at = field_u64(&w, "entryAuditorEpoch[V]")?;
+    if at > current {
+        return Err("the entry's auditor epoch is past the token's".into());
+    }
+    let slot = if at == current { ns("auditorKey")? } else { map_slot(&abi_u64(at), &ns("auditorKeys[E]")?) };
+    point(&bytes_list(&slot, &slot_words(v, "auditorKeyWords")?)?)
+}
+
+/// `abi.encode(uint256(n))`: a mapping key of a value type.
+fn abi_u64(n: u64) -> W {
+    let mut w = [0u8; 32];
+    w[24..].copy_from_slice(&n.to_be_bytes());
+    w
 }
 
 // ------------------------------------------------------------------ prepare, run
@@ -418,7 +451,7 @@ pub fn prepare(cmd: &str, v: &Value, y: &G<B>) -> R<Prepared> {
                 return Err("no memo: not a commit-reveal entry".into());
             }
             if cmd == "recoverTransfer" {
-                p.y_aud = auditor_key(v)?;
+                p.y_aud = entry_auditor_key(v)?;
             }
             if cmd == "openDisclosure" {
                 let j = usize::try_from(u64f(v, "index")?).map_err(|_| "`index`")?;
@@ -426,8 +459,10 @@ pub fn prepare(cmd: &str, v: &Value, y: &G<B>) -> R<Prepared> {
                 match get(v, "kind")?.as_str() {
                     Some("receiver") if leg[0] == *y => {}
                     Some("auditor") => {
+                        // the entry's own auditor (its epoch's key), checked against this reader's key before any key use:
+                        // an auditor of another epoch is refused here (set-auditor spec §9, T11)
                         let modes = wordf(v, "modes")?;
-                        p.y_aud = auditor_key(v)?;
+                        p.y_aud = entry_auditor_key(v)?;
                         if field_u64(&modes, "auditorMode")? == 0 || p.y_aud != *y || leg[3] == G::<B>::default() {
                             return Err("not the auditor of this leg".into());
                         }

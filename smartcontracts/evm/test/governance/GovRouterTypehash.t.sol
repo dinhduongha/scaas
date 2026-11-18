@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {AuditorRules} from "../../src/confidential/AuditorRules.sol";
 import {Test} from "forge-std/Test.sol";
 import {GovernanceRouterTypes as T} from "../../src/governance/GovernanceRouterBase.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -226,6 +227,19 @@ contract GovRouterTypehashTest is Test {
     }
 
     /// Group 3h T61 (PQZ proof path spec §5): bit 24 `PQZ_PROOF`'s router op.
+    /// Set-auditor A6 (CTR-GOV-31, spec §8): the router's two bit-32 ops and the new auditor's `AuditorConsent` (the token's
+    /// domain; `AuditorRules`), each by its type string and its value.
+    function test_UASetAuditorTypehashesArePinned() public pure {
+        assertEq(T.UA_SET_AUDITOR_KEY, keccak256(
+                "UASetAuditorKey(bytes32 from,address target,bytes newKey,uint32 epoch,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_AUDITOR_KEY, 0x92e46d81415d500572e7c762481ede767eb66a3366179308cbd2edfbef15bfcc);
+        assertEq(T.UA_SET_AUDITOR_UA, keccak256(
+                "UASetAuditorUA(bytes32 from,address target,bytes32 newAuditor,uint32 epoch,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_AUDITOR_UA, 0x094ebdb1da9876ef3e6afc44680099760fc06509c4c4e2c016d5ca98617fe276);
+        assertEq(AuditorRules.AUDITOR_CONSENT_TYPEHASH, keccak256("AuditorConsent(address token,bytes32 auditor,uint32 epoch,bytes32 chainUid)"));
+        assertEq(AuditorRules.AUDITOR_CONSENT_TYPEHASH, 0x741986841c37dbef96284f6293136235fded468291792cd33974d1027494ca32);
+    }
+
     function test_UASetProofStoreTypehashIsPinned() public pure {
         assertEq(T.UA_SET_PROOF_STORE, keccak256(
                 "UASetProofStore(bytes32 from,address target,uint8 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));

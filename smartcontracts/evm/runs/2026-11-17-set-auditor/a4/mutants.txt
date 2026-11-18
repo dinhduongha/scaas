@@ -1,0 +1,26 @@
+drop-use32 | test_refusals_holder_epoch_word | 1
+drop-chain-word | test_refusals_holder_epoch_word | 1
+read-pqz-notice | test_consent_exactAndRefusedAtBothSteps, test_delay_maxAndZero, test_precompile_keyCheckedAtBothSteps, test_precompile_waitsFactoryNotice, test_refusals_holder_epoch_word, test_strangerShield_doesNotBlock, test_window_cancel_status | 1
+drop-epoch-check | test_refusals_holder_epoch_word | 1
+confirm-before-eta | test_precompile_waitsFactoryNotice | 1
+refuse-over-expired | test_window_cancel_status | 1
+accept-over-live | test_window_cancel_status | 1
+drop-cancel | test_refusals_holder_epoch_word, test_window_cancel_status | 1
+drop-proposer-confirm | test_refusals_holder_epoch_word | 1
+drop-proposer-cancel | test_refusals_holder_epoch_word | 1
+delay0-not-at-once | test_delay_maxAndZero, test_epoch1_op7_writes, test_epochs_op1_and_disclosure, test_gas_op7_M8_epochs, test_offchainToken_keyProvenKem, test_offchainToken_noVerifier_unprovenAccepted | 1
+skip-checks-proposal | test_consent_exactAndRefusedAtBothSteps, test_offchainToken_keyProvenKem, test_offchainToken_noVerifier_unprovenAccepted, test_precompile_keyCheckedAtBothSteps | 1
+skip-checks-apply | test_consent_exactAndRefusedAtBothSteps, test_precompile_keyCheckedAtBothSteps | 1
+consent-zether-purpose | test_consent_exactAndRefusedAtBothSteps, test_offchainToken_noVerifier_unprovenAccepted | 1
+drop-opening-kem | test_offchainToken_keyProvenKem | 1
+proven-everywhere | test_offchainToken_noVerifier_unprovenAccepted | 1
+proven-never | test_offchainToken_keyProvenKem | 1
+skip-entry-write | test_epoch1_op7_writes, test_epochs_op1_and_disclosure, test_gas_op7_M8_epochs | 1
+write-at-epoch0 | test_epochs_op1_and_disclosure | 1
+write-on-optout | test_epochs_op1_and_disclosure | 1
+legof-current | test_epochs_op1_and_disclosure | 1
+uaof-current | test_epochs_op1_and_disclosure | 1
+history-overwritten | test_epochs_op1_and_disclosure | 1
+epoch-moves-pinned | test_namespaceRootsAndOffsetsArePinned | 1
+reader-current-auditor | auditor_reads_by_the_entry_epoch | 101
+reader-secret-before-epoch | auditor_reads_by_the_entry_epoch, entry_and_role_negatives_refused_before_the_key | 101

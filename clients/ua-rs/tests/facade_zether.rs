@@ -120,7 +120,7 @@ fn release_has_no_raw_decrypt() {
     unlock();
     let raw = ["decrypt", "decryptPending", "rawCheckBalance", "rawProveTransfer", "rawProveTransferMulti", "rawProveBurn", "rawOpenMemo",
         "rawRecoverTransfer", "rawOpenDisclosure"];
-    let release = ["encrypt", "pop", "ownerAuth", "uaSig", "shieldCalldata", "envelope", "uaEnvelope", "typedDigest", "namedCall", "balance",
+    let release = ["encrypt", "pop", "auditorPop", "ownerAuth", "uaSig", "shieldCalldata", "envelope", "uaEnvelope", "typedDigest", "namedCall", "balance",
         "pendingBalance", "checkBalance", "proveTransfer", "proveTransferMulti", "proveBurn", "openMemo", "recoverTransfer", "openDisclosure", "pickDecoys"];
     for cmd in release {
         assert!(COMMANDS.contains(&cmd), "{cmd}");
@@ -484,4 +484,29 @@ fn ua_envelope_through_the_facade() {
     extra["revealSecret"] = json!(true);
     assert_eq!(call(&k, "uaEnvelope", &extra).err(), Some(Error::Argument), "a field off the list");
     assert!(call(&k, "uaEnvelope", &meta(hx(&[0xaa; 20]))).is_err(), "an address from");
+}
+
+/// Set-auditor (CTR-ZTH-95, spec §5.2): the handle's `auditorPop` over the token's typed `AuditorConsent` of its own UA (from named
+/// fields; the digest the prover builds for that message), verifying under its `Y` and only over that digest; a caller's digest or
+/// key object is not a field of the command.
+#[test]
+fn auditor_pop_from_named_fields() {
+    unlock();
+    let w = wallet();
+    let k = w.zether_key(60, 0, 8).unwrap();
+    let (token, uid) = ("0x5ca00000000000000000000000000000000000a2", format!("0x{}", "c1".repeat(32)));
+    let r = json!({"curve": "bls12381", "chainId": 7622, "chainUid": uid, "token": token, "epoch": 2});
+    let out = call(&k, "auditorPop", &r).unwrap();
+    let m = json!({"token": token, "auditor": format!("0x{}", hex::encode(k.ua())), "epoch": 2, "chainUid": uid});
+    let t: Value = serde_json::from_str(&zether_prover::api::call("typedDigest", &json!({"op": "AuditorConsent", "chainId": 7622,
+        "chainUid": uid, "token": token, "message": m}).to_string()).unwrap()).unwrap();
+    assert_eq!(out["digest"], t["digest"]);
+    let y = zether_prover::curve::decode_point::<zether_prover::curve::Bls12381>(&k.y()).unwrap();
+    let d: [u8; 32] = h(&out["digest"]).try_into().unwrap();
+    zether_prover::schnorr::verify_auditor_pop::<zether_prover::curve::Bls12381>(&y, &d, &h(&out["pop"])).unwrap();
+    for bad in [json!({"digest": t["digest"]}), json!({"key": {"x": "0x01"}})] {
+        let mut x = r.clone();
+        x.as_object_mut().unwrap().extend(bad.as_object().unwrap().clone());
+        assert_eq!(call(&k, "auditorPop", &x).err(), Some(Error::Argument), "{bad}");
+    }
 }

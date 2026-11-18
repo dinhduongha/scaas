@@ -17,7 +17,9 @@ use std::collections::BTreeSet;
 type R<T> = Result<T, String>;
 
 /// Every typed op the Zether token kinds take (the rows of `typed_ops.json` with a `zether` domain).
-pub const OPS: [(&str, &str); 28] = [
+pub const OPS: [(&str, &str); 29] = [
+    // set-auditor (CTR-ZTH-95, spec §5.2): the new auditor's consent, signed by its proof of possession (`auditorPop`)
+    ("AuditorConsent", "AuditorConsent(address token,bytes32 auditor,uint32 epoch,bytes32 chainUid)"),
     ("UABurn", "UABurn(bytes32 from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("Wrap", "Wrap(address from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("WrapLeg", "WrapLeg(address from,address underlying,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),

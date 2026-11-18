@@ -294,6 +294,11 @@ pub async fn revert_verdict(chain: &Chain, w: &Work, reason: String) -> Verdict 
     {
         return Verdict::Requeue(format!("SUPPLY_CAP_REFUSED: {reason}"));
     }
+    // set-auditor (spec §8, CTR-GOV-31): a bit-32 confirm before its proposal's `eta` lands once the clock reaches it (as a cap
+    // setter's `GrantNotReady(31, …)`); every other auditor refusal stays `dead` by name below
+    if reason.starts_with("AuditorNotReady") {
+        return Verdict::Requeue(format!("AUDITOR_NOT_READY: {reason}"));
+    }
     // round 3zb (CTR-GOV-29, spec §4; NODE-LANE-09's class): a burner's or a minter's grant window spent (`GrantExhausted(3)`):
     // the next window lifts it. Every other grant refusal (the job's own subject lacks the power) stays `dead` by name.
     if crate::abi::gov_word(&reason, "GrantExhausted", "field") == Some(GRANT_WINDOW) && window_op(&w.data) {
@@ -1775,7 +1780,8 @@ mod tests {
         // owner 2026-11-12: -> (132, 3, 132), the router's `UACreateInstance` (its vector row's `init_call`)
         // the three-key model (CTR-PQZ-41): -> (133, 3, 133), `PqzRollOver` (`mtxRollOverSigned` on the PQZ token)
         // round 3zc (CTR-GOV-30): -> (135, 3, 135), the router's `UASetMaxSupply`, `UASetMaxWrapSupply`
-        assert_eq!((sent, relayed, refused), (135, 3, 135), "the walk reached every row with an entry; the relay fees: submit.rs");
+        // set-auditor (CTR-GOV-31): -> (137, 3, 137), the router's `UASetAuditorKey`, `UASetAuditorUA`
+        assert_eq!((sent, relayed, refused), (137, 3, 137), "the walk reached every row with an entry; the relay fees: submit.rs");
         // plan T32: 87 -> 95, the router's eight regulated controls; pay-meta-tax T42: -> 99, mtxPay, mtxPayWithTax, the two tax ops
         // group 3g T55: -> 100, the rollover one row per kind (`UARollOver` Zether, `UAPqzRollOver` PQZ with `keyVersion`)
         // group 3f T47: -> 103, the router's three verifier ops; group 3h T61: -> 104, `UASetProofStore`
@@ -1786,8 +1792,9 @@ mod tests {
         // walk: their vector rows carry filler `initArgs`; `typed::tests::creation_rows_encode_the_named_config`); -> 138,
         // `UACreateInstance`; the three-key model: -> 141, `PqzRollOver`, the registry's `setPqzScopedKey`, `storePqzScopedPop`;
         // round 3zc (CTR-GOV-30): -> 143, the router's two cap setters; CTR-UA-44 (TODO 3ze): -> 144, the registry's `updateMsig`
-        // NODE-JOB-29 (TODO 3zh MD-14): -> 145, the registry's `cacheExpandedKey`
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 145, "table rows: 109 typed with an entry, 36 plain");
+        // NODE-JOB-29 (TODO 3zh MD-14): -> 145, the registry's `cacheExpandedKey`; set-auditor (CTR-GOV-31): -> 147, the router's
+        // `mtxSetAuditorKey`, `mtxSetAuditorUA`
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 147, "table rows: 111 typed with an entry, 36 plain");
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
         let g = Guard::new(&ChainCfg { dex: Some(target), governance_routers: vec![target], ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
@@ -2248,8 +2255,9 @@ mod tests {
         // round 3r: -> 47, the eleven admin ops of the factory and the compliance registry (the four approvals in NOT_ROWS)
         // round 3s (CTR-GOV-24): -> 50, `mtxSetAllowed`, `mtxSetDenied`, `mtxEnableFeature`; round 3t: -> 51, `mtxSetVerifierFee`
         // owner 2026-11-12: -> 53, `mtxCreateToken`, `mtxCreateDex`; -> 54, `mtxCreateInstance`; round 3zc (CTR-GOV-30): -> 56,
-        // `mtxSetMaxSupply`, `mtxSetMaxWrapSupply` (the 25 ops of the Change of CTR-GOV-28 moved selector in place)
-        assert_eq!(router.len(), 56, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39), the three verifier ops (3f), bit 24's op (3h), the two wrap-limit ops (3l), the eleven admin ops (3r), the three creations (a token, a DEX, an instance); the four release approvals (3r) in NOT_ROWS");
+        // `mtxSetMaxSupply`, `mtxSetMaxWrapSupply` (the 25 ops of the Change of CTR-GOV-28 moved selector in place); set-auditor
+        // (CTR-GOV-31): -> 58, `mtxSetAuditorKey`, `mtxSetAuditorUA`
+        assert_eq!(router.len(), 58, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39), the three verifier ops (3f), bit 24's op (3h), the two wrap-limit ops (3l), the eleven admin ops (3r), the three creations (a token, a DEX, an instance), bit 32's two ops; the four release approvals (3r) in NOT_ROWS");
         let ours: HashSet<[u8; 4]> = typed::rows().iter().filter(|r| !r.entry.is_empty() && r.contracts.contains(&"gov_router")).map(|r| r.sent).collect();
         assert_eq!(ours, router, "the router's allow-list, both directions");
         assert_eq!((rowed, exempt, governed), (ROWED, EXEMPT, GOVERNED), "every SIGNED entry was walked");
@@ -2648,10 +2656,12 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // CTR-GOV-28 and their direct entries moved selector in place, their classes kept)
     // CTR-UA-44 (TODO 3ze): -> 306, the registry's `updateMsig` (SIGNED)
     // NODE-JOB-29 (TODO 3zh MD-14): -> 307, the registry's `cacheExpandedKey` (PERMISSIONLESS)
-    const ROWED: usize = 307;
+    // set-auditor (CTR-GOV-31): -> 309, the router's `mtxSetAuditorKey`, `mtxSetAuditorUA`; GOVERNED 309 -> 317, `setAuditorKey`
+    // BIT(32) on the Zether kinds 2, 3, 10, 11 and `setAuditorUA` BIT(32) on the PQZ kinds 4, 5, 12, 13
+    const ROWED: usize = 309;
     // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
     const EXEMPT: usize = 206;
-    const GOVERNED: usize = 309;
+    const GOVERNED: usize = 317;
 
     /// As [`bound`], `registry()` answering `registry` (`Address::ZERO`: the UA ledger off, R9).
     async fn bound_with_registry(uid: B256, registry: Address) -> ChainCfg {

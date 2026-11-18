@@ -5,7 +5,8 @@
 //!   (EIP-2333 `m/12381/<coin>/<account>/<use>`, use 7 the conf key, 8 the viewing key) into the wallet's arena; the handle
 //!   holds the store, its generation and the slot (no secret bytes), `Y` and the UA. Every secret operation runs under the
 //!   store's read guard, so `lock()` revokes the handle (`KeyRevoked`, for good; spec §8.2).
-//! - **Commands** ([`COMMANDS`]): encrypt, the PoP, the owner and UA signatures, the shield calldata, the envelope, typed
+//! - **Commands** ([`COMMANDS`]): encrypt, the PoP, the auditor's proof of possession (`auditorPop`, set-auditor: over the
+//!   token's typed `AuditorConsent` of this key, built from `chainId`, `chainUid`, `token`, `epoch`), the owner and UA signatures, the shield calldata, the envelope, typed
 //!   digests and named calls (zether-prover's `api`), and the **words commands** (zether-prover's `state`; ARCH-POS-13, T14b):
 //!   `balance`, `pendingBalance`, `checkBalance`, `proveTransfer`, `proveTransferMulti`, `proveBurn`, `openMemo`,
 //!   `recoverTransfer` (with the sender's openings `SENDER_S` / `SENDER_CP`), `openDisclosure` (the receiver's and the
@@ -17,8 +18,10 @@
 //! - **No decryption oracle** (ARCH-POS-13, owner 2026-11-06; spec no-decryption-oracle §4.3, §4.7, T14b): a command that
 //!   decrypts takes a named location (`family`, `chainId`, `chainUid`, `token`, `block`, `ua`, the entry's `fromUA` and
 //!   `sendCounter`, a leg `index`) and the **raw** storage words the reading layer read at one block (the account struct's
-//!   slots, the `bytes` data slots, `entries` / `entryPtrs` / `memos` and the SSTORE2 code, the token's `psid`, `modes` and
-//!   `auditorKey` words), never a ciphertext, an entry, a memo or a parsed state field. zether-prover's `state::prepare`
+//!   slots, the `bytes` data slots, `entries` / `entryPtrs` / `memos` and the SSTORE2 code, the token's `psid`, `modes`, the
+//!   entry's `entryAuditorEpoch` word and the words of the key of the entry's auditor epoch, CTR-ZTH-95), never a ciphertext,
+//!   an entry, a memo or a parsed state field. An auditor handle opens only the entries of its own epoch: `prepare` refuses
+//!   another epoch's entry before the key is used (set-auditor spec §9, T11). zether-prover's `state::prepare`
 //!   checks `psid` and the family, parses the words by the pinned layout (`ua-mtx-merge` T19c), checks them, binds the leg
 //!   and the role to this handle's `Y` and rebuilds the ciphertexts exactly as `ZetherLib`; only then is the key used
 //!   (`state::run`). Every refusal before that is `Argument`; after it only `KeyRevoked` and `Argument` to the caller (a
@@ -99,6 +102,7 @@ pub const COMMANDS: &[&str] = &[
     #[cfg(feature = "vectors")]
     "rawOpenDisclosure",
     "pop",
+    "auditorPop",
     "ownerAuth",
     "uaSig",
     "shieldCalldata",
@@ -169,6 +173,8 @@ fn allowed(cmd: &str, field: &str) -> bool {
         ]),
         "pickDecoys" => has(&["candidates", "exclude", "count", "weights", "recipient"]),
         "pop" => field == "curve",
+        // set-auditor (CTR-ZTH-95): this key's proof of possession over the token's `AuditorConsent`, built from named fields
+        "auditorPop" => has(&["curve", "chainId", "chainUid", "token", "epoch"]),
         "ownerAuth" => has(&["curve", "digest"]),
         "uaSig" => has(&["curve", "purpose", "digest"]),
         "envelope" | "uaEnvelope" => has(&["chainId", "chainUid", "token", "meta"]),

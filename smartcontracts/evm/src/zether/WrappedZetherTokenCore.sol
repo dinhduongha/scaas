@@ -54,12 +54,12 @@ abstract contract WrappedZetherTokenCore is WrappedTokenCore, ZetherLayer {
     }
 
     function _validBits() internal pure virtual override(GovernanceBaseCore, WrappedTokenCore) returns (uint256) {
-        return GovernanceBits.WRAPPED_BITS;
+        return GovernanceBits.WRAPPED_BITS | GovernanceBits.AUDITOR_BITS; // bit 32 (CTR-GOV-31)
     }
 
     /// @dev `WrappedToken`'s masks, restated for the second base.
     function _roleBits() internal pure virtual override(MetaTokenBase, WrappedTokenCore) returns (uint256) {
-        return GovernanceBits.WRAPPED_ROLES;
+        return GovernanceBits.WRAPPED_ROLES | GovernanceBits.AUDITOR_BITS;
     }
 
     function _contractOnlyBits() internal pure virtual override(MetaTokenBase, WrappedTokenCore) returns (uint256) {

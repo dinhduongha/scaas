@@ -203,11 +203,13 @@ holds (auditor blinding). It reads no account state, so nobody can veto it.
   the comparison is on the decoded point).
 - **PQZ:** the key checks a transfer with the auditor on makes (`PqzCore._keyPtrV`: a key of the token's class and scope,
   CTR-PQZ-37; on an opening token also the opening KEM key in that scoped record, CTR-UA-43); unlike `init`, this runs on an
-  `offchain-token` too (the token exists). On an `OFFCHAIN` token `_usable` accepts a stored key that is not proven, so a
-  consenting UA could carry a copy of a holder's public key and stop that holder's audited transfers (`KeyReused`): the setter
-  requires the new auditor's key record to carry its `R_REG` proof where the registry exposes it (`storePqzScopedPop`,
-  `checkedPqzPop`); plan A4 checks that view exists, and if it does not, the build stops and reports and the key-copy
-  residual stands (T3).
+  `offchain-token` too (the token exists). On an `OFFCHAIN` token `_usable` accepts a stored key that is not proven, so a consenting UA could carry a copy of a
+  holder's public key and stop that holder's audited transfers (`KeyReused`). **The rule (controller ruling 2026-11-18, the
+  same rule as `_usable`'s "proven, or nothing"):** where the registry has a `0x0142` verifier (`kindEnabled(0x0142)`), the
+  setter requires the new auditor's current key record of the token's class and scope to be `proven` (the flag of
+  `pqzKeyOf` / `pqzScopedKeyOf`: its `R_REG` proof checked by that verifier); on a chain without the verifier no proven check
+  is made (stored proof bytes are not a check), and the T3 key-copy residual stands there, as in the three-key model's
+  accepted risk for `OFFCHAIN` keys (CTR-PQZ-37). The consent signature is required on every chain, unchanged.
 
 Checking again at the apply matters: between the proposal and the apply the new auditor may have dropped its key, and a FULL
 token with an unusable auditor refuses every transfer.
@@ -407,7 +409,7 @@ entry's auditor and nothing else.
 |---|---|---|---|
 | T1 | **A bit holder redirects the readability of every later amount** to a key it controls; with the owner's ruling one single key can do it alone | the new auditor's consent (it can only be a party that agrees); the holder granted by the admin under `grantDelay` with `GrantProposed`, no delegation; every replacement proposed in public and applied only after `D = max(noticePeriod, grantDelay)`, by the same holder, inside a window, naming its epoch; the admin's immediate revoke and `disableFeature(32)` before the apply; a creator who wants none leaves bit 32 off; under OPTIONAL a sender may leave the auditor out per transfer (CTR-ZTH-42, publicly visible); the wallet's single-key warning | after `D` the new key reads every later audited transfer; a holder who does not leave in time accepts it. **One stolen single key does it alone**, with a consenting accomplice key. An admin that colludes with a holder needs `grantDelay + D`, nothing more. **`D = 0` (owner ruling: applies at once) gives no notice** and makes the bit a transfer stop (T4). After the apply there is no fast undo (§5.3). With bit 32 locked and the admin renounced, holders are permanent. The contract cannot tell an honest replacement from a hostile one |
 | T2 | auditor blinding: a key with no known secret | Zether: the proof of possession; PQZ: the UA's signature and its registered key | the auditor itself may later discard its secret, as today |
-| T3 | a targeted freeze by naming a holder's key or UA as auditor | consent: a holder can only be named if it signs | a holder that consents stops its own confidential transfers (it keeps unshield). On an `OFFCHAIN` token, if the registry has no proven-key view, a consenting UA carrying a copy of another holder's public key stops that holder's audited transfers (`KeyReused`) until the next replacement (§5.2) |
+| T3 | a targeted freeze by naming a holder's key or UA as auditor | consent: a holder can only be named if it signs | a holder that consents stops its own confidential transfers (it keeps unshield). On an `OFFCHAIN` token on a chain whose registry has no `0x0142` verifier, a consenting UA carrying a copy of another holder's public key stops that holder's audited transfers (`KeyReused`) until the next replacement (§5.2; with the verifier, the `proven` check closes it) |
 | T4 | transfers proven against the outgoing auditor fail after the apply; at `D = 0` a holder alternating keys stops audited transfers | the proposal event and `D`; the admin's revoke | liveness only: `dead`, prove again; at `D = 0` until the admin revokes, and the last applied key stays |
 | T5 | an old proposal applied by surprise; a held signed call replayed after the state moved; a proposal that can never be confirmed and blocks every later one | the window `[eta, eta + 7 days]`, its own constant (never empty, whatever `D`); an expired proposal frees the slot; the epoch in the entry and the struct | none |
 | T6 | a revoked holder's proposal survives a re-grant; a leaf holds the slot after its parent's revoke | the proposer's role epoch; no delegation on bit 32 | an expired grant's proposal holds the slot for at most `D + 7 days`, or until the admin revokes |

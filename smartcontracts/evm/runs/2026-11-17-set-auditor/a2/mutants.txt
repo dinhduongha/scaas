@@ -1,0 +1,29 @@
+drop-use32 | test_state_zerosAfterDisable, test_twoUsesPerReplacement, test_wayBack, test_word_and_stranger | 1
+drop-chain-word | test_word_and_stranger | 1
+drop-epoch-check | test_wrongEpoch | 1
+confirm-before-eta | test_propose_waits_then_applies | 1
+drop-window-end | test_confirmAfterWindow_proposesAfresh, test_otherValue_pendingUntilExpiry, test_status_inTurn, test_twoUsesPerReplacement | 1
+window-zero-notice | test_otherValue_pendingUntilExpiry, test_zeroNotice_grantDelay_confirmsInWindow | 1
+window-by-delay | test_otherValue_pendingUntilExpiry, test_zeroNotice_grantDelay_confirmsInWindow | 1
+refuse-over-expired | test_confirmAfterWindow_proposesAfresh, test_otherValue_pendingUntilExpiry, test_revokedProposer_deadAfterRegrant, test_status_inTurn, test_twoUsesPerReplacement | 1
+accept-over-live | test_otherHolder_cannotConfirmOrCancel, test_otherValue_pendingUntilExpiry | 1
+drop-cancel | test_cancel_byProposingCurrent, test_otherHolder_cannotConfirmOrCancel | 1
+drop-proposer-confirm | test_otherHolder_cannotConfirmOrCancel | 1
+drop-proposer-cancel | test_otherHolder_cannotConfirmOrCancel | 1
+drop-role-epoch | test_revokedProposer_deadAfterRegrant, test_status_inTurn | 1
+notice-alone | test_delay_grantDelayLonger, test_zeroNotice_grantDelay_confirmsInWindow | 1
+grantdelay-alone | test_cancel_byProposingCurrent, test_confirmAfterWindow_proposesAfresh, test_consent_refusedAtApply, test_consent_refusedAtProposal, test_delay_noticeLonger, test_otherHolder_cannotConfirmOrCancel, test_otherValue_pendingUntilExpiry, test_pop_refusals, test_propose_waits_then_applies, test_revokedProposer_deadAfterRegrant, test_same_and_keyInvalid, test_state_zerosAfterDisable, test_status_inTurn, test_twoUsesPerReplacement, test_word_and_stranger, test_wrongEpoch | 1
+delay0-not-at-once | test_delayZero_appliesAtOnce, test_epoch1_multi_bothForms, test_epoch1_writes_optOutDoesNot, test_threeEpochs_history, test_wayBack | 1
+skip-checks-proposal | test_consent_refusedAtProposal, test_pop_refusals, test_same_and_keyInvalid | 1
+skip-checks-apply | test_consent_refusedAtApply | 1
+pop-d-unbound | test_cancel_byProposingCurrent, test_confirmAfterWindow_proposesAfresh, test_consent_refusedAtApply, test_consent_refusedAtProposal, test_delayZero_appliesAtOnce, test_delay_grantDelayLonger, test_delay_noticeLonger, test_epoch1_multi_bothForms, test_epoch1_writes_optOutDoesNot, test_otherHolder_cannotConfirmOrCancel, test_otherValue_pendingUntilExpiry, test_pop_refusals, test_propose_waits_then_applies, test_revokedProposer_deadAfterRegrant, test_same_and_keyInvalid, test_state_zerosAfterDisable, test_status_inTurn, test_threeEpochs_history, test_twoUsesPerReplacement, test_wayBack, test_word_and_stranger, test_wrongEpoch, test_zeroNotice_grantDelay_confirmsInWindow | 1
+pop-drop-c-nonzero | test_pop_challengeZeroRefused | 1
+pop-drop-z-range | test_pop_refusals | 1
+pop-drop-r-valid | test_pop_refusals | 1
+skip-entry-single | test_epoch1_writes_optOutDoesNot, test_threeEpochs_history, test_wayBack | 1
+skip-entry-multi | test_epoch1_multi_bothForms | 1
+write-at-epoch0 | test_epoch0_auditedTransfer_writesNothing | 1
+write-on-optout | test_epoch1_writes_optOutDoesNot | 1
+history-overwritten | test_threeEpochs_history, test_wayBack | 1
+keyof-current | test_epoch1_writes_optOutDoesNot, test_threeEpochs_history, test_wayBack | 1
+epoch-moves-pinned | test_namespaceRootsAndOffsetsArePinned | 1

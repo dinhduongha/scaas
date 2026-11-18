@@ -1,0 +1,7 @@
+key-struct-word | test_router_setAuditorKey | 1
+ua-struct-word | test_router_setAuditorUA, test_router_setAuditorUA_refusals | 1
+key-epoch-forwarded | test_router_setAuditorKey | 1
+pop-not-forwarded | test_router_setAuditorKey | 1
+consent-not-forwarded | test_router_setAuditorUA | 1
+ua-op-key-typehash | test_router_setAuditorUA, test_router_setAuditorUA_refusals | 1
+typehash-string | test_UASetAuditorTypehashesArePinned | 1

@@ -27,6 +27,9 @@ import "../zether/ZetherTypes.sol";
 interface INormalPqzTokenAbi {
     event AdminTransferStarted(bytes32 indexed previousAdmin, bytes32 indexed newAdmin);
     event AdminTransferred(bytes32 indexed previousAdmin, bytes32 indexed newAdmin);
+    event AuditorProposalCancelled(uint32 epoch);
+    event AuditorUAProposed(uint32 epoch, bytes32 newAuditor, bytes32 proposer, uint64 eta);
+    event AuditorUASet(uint32 epoch, bytes32 previousAuditor, bytes32 newAuditor);
     event ConfidentialTransfer(bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32 indexed toUA, bytes32 beneficiary, uint256 fee, uint64 sendCounter, address blob);
     event ConfidentialTransferMulti(bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32 indexed beneficiary, uint256 fee, uint64 sendCounter, bytes32[] recipients, uint8 mode, address blob);
     event Credited(bytes32 indexed ua, uint64 indexed index, uint64 keyVersion, bytes32 entryRef);
@@ -63,8 +66,8 @@ interface INormalPqzTokenAbi {
     event UANonceCancelled(bytes32 indexed ua, uint256 indexed batch, uint256 newNonce);
     event UANoncesInvalidated(bytes32 indexed from, uint256 indexed batch, uint256 minNonce);
     event UAOrderCancelled(bytes32 indexed orderHash, bytes32 indexed from);
-    event UAPaymentSettled(bytes32 indexed from, bytes32 indexed to, uint256 amount, uint256 feeAmount, address feeRecipient, bytes32 indexed entryRef);
     event UAPayeeFeePaid(bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient, uint256 fee);
+    event UAPaymentSettled(bytes32 indexed from, bytes32 indexed to, uint256 amount, uint256 feeAmount, address feeRecipient, bytes32 indexed entryRef);
     event UATradeFilled(bytes32 indexed orderHash, bytes32 indexed from, uint256 sellFill, uint256 receiveFill, uint256 dexFee);
     event Unshielded(bytes32 indexed ua, uint256 amount, bytes32 indexed recipient, address blob);
     error AccNotPrepared(bytes32 ua);
@@ -74,8 +77,12 @@ interface INormalPqzTokenAbi {
     error AmountNotScaled(uint256 minted, uint256 shieldScale);
     error AmountOutOfRange(uint256 amount, uint256 max);
     error AuditorAsParty(bytes32 ua);
+    error AuditorEpochMismatch(uint32 expected, uint32 got);
     error AuditorForbidden();
+    error AuditorNotReady(uint64 eta);
+    error AuditorPending();
     error AuditorRequired();
+    error AuditorSame();
     error AuthRejected();
     error BadAuditorMode(uint8 mode);
     error BadDisclosureMode(uint8 mode);
@@ -89,6 +96,7 @@ interface INormalPqzTokenAbi {
     error ConfigFieldForOtherKind(uint8 field);
     error DebitRecordUnknown(bytes32 ua, uint64 counter);
     error DecoyFeeOutOfRange(uint256 decoyFee, uint256 minDecoyFee);
+    error DelegableRefused(uint8 bit);
     error DexNotContract(address dex);
     error DuplicateRecipient(bytes32 ua);
     error EnvMissing();
@@ -96,6 +104,7 @@ interface INormalPqzTokenAbi {
     error Expired(uint256 validUntilBlock);
     error FeatureInvalidForKind(uint8 bit);
     error FeatureLocked(uint8 bit);
+    error FeatureNeedsAdmin(uint8 bit);
     error FeatureNotBuilt(uint8 bit);
     error FeatureNotSet(uint8 bit);
     error FeatureReserved(uint8 bit);
@@ -152,6 +161,9 @@ interface INormalPqzTokenAbi {
     error PayMetaMismatch(bytes32 entryRef, bytes32 payId);
     error PayMetaShape();
     error PayRecordAmount(uint256 amount);
+    error PayeeFeeAmount(uint256 fee, uint256 value);
+    error PayeeFeeExpired(uint256 validUntil, uint256 nowTs);
+    error PayeeFeeShape();
     error PendingRange(uint256 p, uint256 floor, uint256 pendingCount);
     error PqzVerdictMismatch(uint8 field);
     error PqzVerdictRejected();
@@ -171,9 +183,6 @@ interface INormalPqzTokenAbi {
     error PriceLimit(bytes32 orderHash);
     error ProofRejected();
     error ProofStoreInvalid(uint8 proofStore);
-    error PayeeFeeAmount(uint256 fee, uint256 value);
-    error PayeeFeeExpired(uint256 validUntil, uint256 nowTs);
-    error PayeeFeeShape();
     error RefreshRecipient(bytes32 recipient);
     error RescueAssetInvalid(address asset);
     error RescueConfigInvalid();
@@ -279,7 +288,15 @@ contract NormalPqzToken is NormalPqzTokenCore, INormalPqzTokenAbi {
         _forwardView(_MQ);
     }
 
+    function auditorState() external view returns (uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status) {
+        _forwardView(_MQ);
+    }
+
     function auditorUA() external view returns (bytes32 _p0) {
+        _forwardView(_MQ);
+    }
+
+    function auditorUAOf(bytes32) external view returns (bytes32 _p0) {
         _forwardView(_MQ);
     }
 
@@ -607,10 +624,6 @@ contract NormalPqzToken is NormalPqzTokenCore, INormalPqzTokenAbi {
         _forwardView(_MQ);
     }
 
-    function pqzSkipped(bytes32, uint64, uint64) external view returns (bool _p0) {
-        _forwardView(_MQ);
-    }
-
     function pqzPendingCt(bytes32, uint64, uint64) external view returns (bytes memory _p0) {
         _forwardView(_MQ);
     }
@@ -621,6 +634,10 @@ contract NormalPqzToken is NormalPqzTokenCore, INormalPqzTokenAbi {
 
     function pqzSetVerifier(bytes32, bytes32) external {
         _forward(_MQ);
+    }
+
+    function pqzSkipped(bytes32, uint64, uint64) external view returns (bool _p0) {
+        _forwardView(_MQ);
     }
 
     function pqzVerifyConfig() external view returns (IPqzToken.PqzVerifyConfig memory _p0) {
@@ -665,6 +682,10 @@ contract NormalPqzToken is NormalPqzTokenCore, INormalPqzTokenAbi {
 
     function revokeRole(uint8, bytes32, bytes32) external {
         _forward(_MA);
+    }
+
+    function setAuditorUA(bytes32, uint32, IUARegistry.UASig calldata, bytes32) external {
+        _forward(_MQ);
     }
 
     function setGrant(uint8, bytes32, IGovernance.GrantTerms calldata, bytes32) external {

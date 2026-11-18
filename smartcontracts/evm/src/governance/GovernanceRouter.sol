@@ -10,6 +10,7 @@ import {RescueLib} from "../governance/RescueLib.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
 import {IPqzToken} from "../pqz/IPqzToken.sol";
+import {IZetherToken} from "../zether/IZetherToken.sol";
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
 import {IComplianceRegistry} from "../regulated/IComplianceRegistry.sol";
 
@@ -193,6 +194,26 @@ contract GovernanceRouter is GovernanceRouterBase {
         external
     {
         _ua(T.UA_SET_PROOF_STORE, e, target, IPqzToken.setProofStore.selector, abi.encode(next, chainUid), auth);
+    }
+
+    /// @notice Bit 32 `AUDITOR` (CTR-GOV-31, CTR-ZTH-95): a holder's `setAuditorKey` on a Zether token; the proposal and the
+    ///         confirm are the same signed op sent twice (two nonces, two uses of the grant). The struct signs `keccak256(newKey)`,
+    ///         `epoch` and the chain word; `pop`, the new auditor's own proof over its `AuditorConsent`, rides beside it. Fee mode
+    ///         `NONE`, relayable at fee 0.
+    function mtxSetAuditorKey(MetaTxLib.UAEnvelope calldata e, address target, bytes calldata newKey, uint32 epoch,
+        bytes calldata pop, bytes32 chainUid, IUARegistry.UASig calldata auth) external
+    {
+        _uaCall(T.UA_SET_AUDITOR_KEY, e, target, abi.encode(keccak256(newKey), epoch, chainUid),
+            abi.encodeCall(IZetherToken.setAuditorKey, (newKey, epoch, pop, chainUid)), auth);
+    }
+
+    /// @notice Bit 32 `AUDITOR` (CTR-GOV-31, CTR-PQZ-43): a holder's `setAuditorUA` on a PQZ token, as `mtxSetAuditorKey`;
+    ///         `consent`, the new auditor's own signature over its `AuditorConsent`, rides beside the struct. Fee mode `NONE`.
+    function mtxSetAuditorUA(MetaTxLib.UAEnvelope calldata e, address target, bytes32 newAuditor, uint32 epoch,
+        IUARegistry.UASig calldata consent, bytes32 chainUid, IUARegistry.UASig calldata auth) external
+    {
+        _uaCall(T.UA_SET_AUDITOR_UA, e, target, abi.encode(newAuditor, epoch, chainUid),
+            abi.encodeCall(IPqzToken.setAuditorUA, (newAuditor, epoch, consent, chainUid)), auth);
     }
 
     // ------------------------------------------------------------------ wrap limits on the hybrids (group 3l, spec 2026-11-10 §9)

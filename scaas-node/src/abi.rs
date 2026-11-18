@@ -408,6 +408,18 @@ sol! {
         error UAKeyNotCached(bytes32 ua);
     }
 
+    /// Set-auditor (spec §8, CTR-GOV-31): the refusals of bit 32's setters on both confidential families (`IConfidentialToken`'s
+    /// four, Zether's two): `AuditorNotReady` stays `queued` ([`crate::guard`]), every other one `dead` by name.
+    #[derive(Debug)]
+    interface IAuditorSetter {
+        error AuditorNotReady(uint64 eta);
+        error AuditorPending();
+        error AuditorSame();
+        error AuditorEpochMismatch(uint32 expected, uint32 got);
+        error AuditorKeyInvalid();
+        error AuditorConsentInvalid();
+    }
+
     /// A PQZ token's key-version surface (group 3g, spec 2026-11-06-pqz-key-versions §3, §7.3): the errors the node names
     /// (`PQZ_KEY_STALE`, `PQZ_KEY_VERSION_UNKNOWN`, `PQZ_KEY_REUSED`, `PQZ_KEY_ROTATED` over `ProofRejected`), the auditor a
     /// debit's copies go to, and the version events the indexer reads.
@@ -420,6 +432,7 @@ sol! {
         error SelfTransfer();
         error ProofRejected();
         error KeyReused(bytes32 ua);
+
         error StaleKeyVersion(bytes32 ua, uint64 keyVersion, uint64 current);
         error KeyVersionUnknown(bytes32 ua, uint64 keyVersion);
 
@@ -862,6 +875,9 @@ pub fn decode_revert(data: &[u8]) -> String {
         return format!("{e:?}");
     }
     if let Ok(e) = IPqzToken::IPqzTokenErrors::abi_decode(data) {
+        return format!("{e:?}");
+    }
+    if let Ok(e) = IAuditorSetter::IAuditorSetterErrors::abi_decode(data) {
         return format!("{e:?}");
     }
     if let Ok(e) = IUARegistry::IUARegistryErrors::abi_decode(data) {

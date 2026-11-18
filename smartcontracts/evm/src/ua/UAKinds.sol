@@ -81,6 +81,9 @@ library UAKinds {
     /// CTR-UA-44 (TODO 3ze, owner 2026-11-14): an `msig`'s structure update (`updateMsig`), signed by a threshold of the stored
     /// structure; not a `requirePortable` purpose (`_portablePurpose` refuses it), never any other record's signature.
     bytes32 internal constant PURPOSE_MSIG_UPDATE = keccak256("scaas.ua.purpose.msig-update.v1");
+    /// @dev Set-auditor (CTR-PQZ-43, spec §5.2, O10): a PQZ token's new auditor signs its `AuditorConsent` under this purpose
+    ///      (`requireAuthorized` takes any purpose: the registry and its closed portable list are unchanged).
+    bytes32 internal constant PURPOSE_AUDITOR_CONSENT = keccak256("scaas.ua.purpose.auditor-consent.v1");
     /// CTR-UA-46 (pqvault spec §4.1): the namespace word of an app's portable purpose, `appPurpose(appId)`, which the registry
     /// derives itself (`requirePortableApp`). Never a purpose itself. A SCaaS purpose is the hash of an ASCII
     /// `scaas.ua.purpose.<p>.v<n>` shorter than 64 bytes, an app purpose the hash of exactly 64 bytes led by this word, so the

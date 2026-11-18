@@ -28,6 +28,9 @@ interface INormalZetherRegulatedTokenAbi {
     event AccountUnfrozen(bytes32 indexed account, bytes32 indexed ref);
     event AdminTransferStarted(bytes32 indexed previousAdmin, bytes32 indexed newAdmin);
     event AdminTransferred(bytes32 indexed previousAdmin, bytes32 indexed newAdmin);
+    event AuditorKeyProposed(uint32 epoch, bytes newKey, bytes32 proposer, uint64 eta);
+    event AuditorKeySet(uint32 epoch, bytes previousKey, bytes newKey);
+    event AuditorProposalCancelled(uint32 epoch);
     event ConfidentialTransfer(bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32 indexed toUA, bytes32 beneficiary, uint256 fee, uint64 sendCounter, address blob);
     event ConfidentialTransferMulti(bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32 indexed beneficiary, uint256 fee, uint64 sendCounter, bytes32[] recipients, uint8 mode, address blob);
     event EIP712DomainChanged();
@@ -65,8 +68,8 @@ interface INormalZetherRegulatedTokenAbi {
     event UANonceCancelled(bytes32 indexed ua, uint256 indexed batch, uint256 newNonce);
     event UANoncesInvalidated(bytes32 indexed from, uint256 indexed batch, uint256 minNonce);
     event UAOrderCancelled(bytes32 indexed orderHash, bytes32 indexed from);
-    event UAPaymentSettled(bytes32 indexed from, bytes32 indexed to, uint256 amount, uint256 feeAmount, address feeRecipient, bytes32 indexed entryRef);
     event UAPayeeFeePaid(bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient, uint256 fee);
+    event UAPaymentSettled(bytes32 indexed from, bytes32 indexed to, uint256 amount, uint256 feeAmount, address feeRecipient, bytes32 indexed entryRef);
     event UATradeFilled(bytes32 indexed orderHash, bytes32 indexed from, uint256 sellFill, uint256 receiveFill, uint256 dexFee);
     event Unpaused(bytes32 indexed ref);
     event Unshielded(bytes32 indexed ua, uint256 amount, bytes32 indexed recipient, address blob);
@@ -79,10 +82,16 @@ interface INormalZetherRegulatedTokenAbi {
     error AmountNotScaled(uint256 minted, uint256 shieldScale);
     error AmountOutOfRange(uint256 amount, uint256 max);
     error AmountZero();
+    error AuditorConsentInvalid();
+    error AuditorEpochMismatch(uint32 expected, uint32 got);
     error AuditorForbidden();
     error AuditorKeyAsParty();
+    error AuditorKeyInvalid();
     error AuditorLegsMixed();
+    error AuditorNotReady(uint64 eta);
+    error AuditorPending();
     error AuditorRequired();
+    error AuditorSame();
     error BadAuditorMode(uint8 mode);
     error BadDisclosureMode(uint8 mode);
     error BadFlags(bytes32 orderHash);
@@ -92,14 +101,17 @@ interface INormalZetherRegulatedTokenAbi {
     error BadPoint();
     error BadRecipientCount(uint256 count);
     error BelowMinFill(bytes32 orderHash);
+    error ComplianceRegistryCodeMismatch(address complianceRegistry, bytes32 codehash);
     error ConfigFieldForOtherKind(uint8 field);
     error DecoyFeeOutOfRange(uint256 decoyFee, uint256 minDecoyFee);
+    error DelegableRefused(uint8 bit);
     error DexNotContract(address dex);
     error DuplicateRecipient(ZetherTypes.UA recipient);
     error EnvMissing();
     error EscrowFillShape(bytes32 orderHash);
     error FeatureInvalidForKind(uint8 bit);
     error FeatureLocked(uint8 bit);
+    error FeatureNeedsAdmin(uint8 bit);
     error FeatureNotBuilt(uint8 bit);
     error FeatureNotSet(uint8 bit);
     error FeatureReserved(uint8 bit);
@@ -166,15 +178,14 @@ interface INormalZetherRegulatedTokenAbi {
     error PayMetaMismatch(bytes32 entryRef, bytes32 payId);
     error PayMetaShape();
     error PayRecordAmount(uint256 amount);
-    error PendingSeqMismatch(uint256 expected, uint256 got);
-    error PriceLimit(bytes32 orderHash);
-    error ProofRejected();
     error PayeeFeeAmount(uint256 fee, uint256 value);
     error PayeeFeeExpired(uint256 validUntil, uint256 nowTs);
     error PayeeFeeShape();
+    error PendingSeqMismatch(uint256 expected, uint256 got);
+    error PriceLimit(bytes32 orderHash);
+    error ProofRejected();
     error RecordFreezeShorter(uint64 until);
     error RefRequired();
-    error ComplianceRegistryCodeMismatch(address complianceRegistry, bytes32 codehash);
     error RescueAssetInvalid(address asset);
     error RescueConfigInvalid();
     error RescueTouchedLeg(address leg);
@@ -301,7 +312,15 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
         _forwardView(_MZ);
     }
 
+    function auditorKeyOf(bytes32) external view returns (bytes memory _p0) {
+        _forwardView(_MZ);
+    }
+
     function auditorMode() external view returns (ZetherTypes.AuditorMode _p0) {
+        _forwardView(_MZ);
+    }
+
+    function auditorState() external view returns (uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status) {
         _forwardView(_MZ);
     }
 
@@ -711,6 +730,10 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
 
     function setAllowed(bytes32[] calldata, bool, bytes32) external {
         _forward(_MR);
+    }
+
+    function setAuditorKey(bytes calldata, uint32, bytes calldata, bytes32) external {
+        _forward(_MZ);
     }
 
     function setDenied(bytes32[] calldata, bool, bytes32) external {

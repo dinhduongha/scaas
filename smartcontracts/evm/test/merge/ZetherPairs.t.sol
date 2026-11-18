@@ -601,7 +601,8 @@ contract ZetherPairsTest is ZetherFixture {
     function test_zetherInterfaceIdsArePinned() public pure {
         // 0xaefc54bc before T4; group 3g T52: 0x66b526f6 -> 0xe65bc5f0 (`mtxRollOver(bytes32,uint256)` moved here from
         // `IConfidentialToken`, the same selector; the PQZ rollover takes a key version)
-        assertEq(type(IZetherToken).interfaceId, bytes4(0xe65bc5f0), "IZetherToken");
+        // set-auditor A2 (CTR-ZTH-95): 0xe65bc5f0 -> 0x5484dd2f (+ `setAuditorKey`, `auditorKeyOf`, `auditorState`)
+        assertEq(type(IZetherToken).interfaceId, bytes4(0x5484dd2f), "IZetherToken");
         assertEq(type(IConfidentialToken).interfaceId, IConfidentialToken.mtxShield.selector, "IConfidentialToken");
         assertEq(type(IZetherWrappedToken).interfaceId, IZetherWrappedToken.mtxUnshieldUnwrap.selector, "IZetherWrappedToken");
     }

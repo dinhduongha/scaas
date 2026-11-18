@@ -207,7 +207,7 @@ pub const GROUPS: &[&str] = &[
 /// what a PQZ verifier UA signs a `PqzVerdict` under (`wallet::pqz_verdict_typed_data`, feature `wallet`).
 pub const PURPOSES: &[&str] = &[
     "pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "payee-fee", "vp",
-    "vc-anchor", "trade", "kem", "pqz-key", "membership", "msig-update", "pqz-verdict",
+    "vc-anchor", "trade", "kem", "pqz-key", "membership", "msig-update", "pqz-verdict", "auditor-consent",
 ];
 
 /// The off-chain purpose of a sealed container's sender signature, `keccak256("scaas.ua.purpose.seal.v1")` (MD-10, ua-rs-sign
@@ -253,7 +253,7 @@ pub(crate) fn keccak(parts: &[&[u8]]) -> [u8; 32] {
 /// (`GovBitsVector.t.sol`), one row per line.
 pub const GOVERNANCE_BITS_JSON: &str = include_str!("../../../smartcontracts/vectors/governance/governance_bits.json");
 
-/// Governance bit `bit`'s row as the file's JSON object, `{bit, name, type, sentences}`: rows 0-31; `None` past them (bits 32-127
+/// Governance bit `bit`'s row as the file's JSON object, `{bit, name, type, sentences}` (bit 32's also `sentencesWhen`): rows 0-32; `None` past them (bits 33-127
 /// are free, bits 128-255 the application contract's own, labelled by its `bitLabel(bit)`).
 pub fn governance_bit(bit: u8) -> Option<&'static str> {
     let head = format!("{{\"bit\": {bit}, ");

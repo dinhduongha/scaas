@@ -10,6 +10,10 @@ import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// @notice ua-rs-sign T14b (spec no-decryption-oracle §4.7, §5): the Zether state vectors. A token with an auditor key
 ///         (OPTIONAL, BUNDLE disclosure) in several account states (`acc` debited three times, `acc` and `pending` both set,
@@ -48,6 +52,10 @@ contract ZetherStateVectorsTest is ZetherFixture {
 
     Ent[] internal ents;
     uint256 internal aliceBal;
+    /// @dev Set-auditor A3 (CTR-ZTH-95): the second token (bit 32), its entries and each one's auditor epoch.
+    NormalZetherToken internal tok2;
+    Ent[] internal eents;
+    uint32[] internal eepochs;
 
     function setUp() public {
         _stack();
@@ -58,6 +66,9 @@ contract ZetherStateVectorsTest is ZetherFixture {
         IFactoryToken.TokenConfig memory c = _cfg(true, uint256(1) << 40);
         c.conf.auditorKey = ZetherKeys.pub(XAUD, bls);
         tok = NormalZetherToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "zether-state"));
+        c.features |= uint256(1) << GovernanceBits.AUDITOR;
+        (c.admin, c.lockedFeatures) = (nid(address(this)), 0);
+        tok2 = NormalZetherToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "zether-state-epochs"));
     }
 
     // ------------------------------------------------------------------ the state
@@ -107,6 +118,41 @@ contract ZetherStateVectorsTest is ZetherFixture {
         audOut = false;
         tok.mtxRollOver(ZetherTypes.UA.unwrap(bob.ua), 1); // bob: acc 135
         _fund(tok, bob, 7); // bob: pending 7
+    }
+
+    /// Set-auditor A3 (spec §9, CTR-ZTH-95) on `tok2`: an audited single entry at epoch 0, the auditor replaced by dave's
+    /// viewing key (`m/12381/60/1/8`, delay 0), then an audited single and an audited multi-recipient BUNDLE entry at epoch 1.
+    function _buildEpochs() internal {
+        NormalZetherToken t0 = tok;
+        tok = tok2;
+        _fund(tok, alice, 1000);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
+        uint256 bal = 1000;
+        User[] memory one = new User[](1);
+        one[0] = bob;
+        uint256[] memory v1 = new uint256[](1);
+        v1[0] = 40;
+        _pushE("epoch 0: single alice->bob 40 audited (key m/12381/60/0/8)", _direct(tok, _proveTransfer(tok, alice, bob, 40, bal,
+            _none(), bytes32(0)), _none()), 0, one, v1, 0);
+        bal -= 40;
+        bytes32 uid = EnvKit.codeUidOf(address(tok));
+        IGovernance(address(tok)).grantRole(GovernanceBits.AUDITOR, nid(address(this)), uid);
+        tok.setAuditorKey(ZetherKeys.pub(XD, bls), 1, _auditorPop(tok, XD, 1), uid);
+        v1[0] = 9;
+        _pushE("epoch 1: single alice->bob 9 audited (key m/12381/60/1/8)", _direct(tok, _proveTransfer(tok, alice, bob, 9, bal,
+            _none(), bytes32(0)), _none()), 1, one, v1, 1);
+        bal -= 9;
+        Tx memory t = _proveMulti(tok, alice, _two(bob, carol), _vs(3, 4), bal, _none(), ZetherTypes.TransferMode.BUNDLE);
+        _pushE("epoch 1: multi BUNDLE alice->[bob 3, carol 4] audited", tok.mtxConfidentialTransfer(_zMulti(t.payload, _none()),
+            t.proof), 2, _two(bob, carol), _vs(3, 4), 1);
+        tok = t0;
+    }
+
+    function _pushE(string memory name, bytes32 ref, uint64 c, User[] memory to, uint256[] memory vs, uint32 epoch) internal {
+        Ent storage e = eents.push();
+        (e.name, e.ref, e.from, e.counter, e.amounts) = (name, ref, alice, c, vs);
+        for (uint256 j; j < to.length; ++j) e.to.push(ZetherTypes.UA.unwrap(to[j].ua));
+        eepochs.push(epoch);
     }
 
     // ------------------------------------------------------------------ the rows
@@ -178,7 +224,8 @@ contract ZetherStateVectorsTest is ZetherFixture {
         assertEq(x.ref, _ref(tok, x.from, x.counter), "entryRef");
         _w(string.concat("{\"name\": ", _q(x.name), ", \"entryRef\": ", _hx32(x.ref), ", \"fromUA\": ",
             _hx32(ZetherTypes.UA.unwrap(x.from.ua)), ", \"sendCounter\": ", vm.toString(uint256(x.counter)), ","));
-        _w(string.concat("\"entryWords\": [", _bytesWords(es, true), "], \"entryPtr\": ", _hx32(ptrWord), ","));
+        _w(string.concat("\"entryWords\": [", _bytesWords(es, true), "], \"entryPtr\": ", _hx32(ptrWord), ", \"entryAuditorEpoch\": ",
+            _hx32(_load(uint256(keccak256(abi.encode(x.ref, ROOT + 17))))), ","));
         if (ptr != address(0)) {
             _w(string.concat("\"blob\": {\"address\": ", _q(vm.toString(abi.encodePacked(ptr))), ", \"code\": ", _hx(ptr.code), "},"));
             _w(string.concat("\"memoWords\": [", _bytesWords(ms, true), "],"));
@@ -213,9 +260,28 @@ contract ZetherStateVectorsTest is ZetherFixture {
             ", \"widths\": ", _uints(vm.parseJsonUintArray(ns, ".zether.widths")), "},"));
     }
 
+    /// The `epochs` section (set-auditor A3): `tok2`'s words (`modes` with `auditorEpoch` 1 at byte 22, the current key's words
+    /// at slot 5, epoch 0's key at `auditorKeys[0]`, slot 16) and its entries, each with its `entryAuditorEpoch` word.
+    function _epochRows() internal {
+        NormalZetherToken t0 = tok;
+        tok = tok2;
+        _w(string.concat("\"epochs\": {\"token\": ", _q(vm.toString(abi.encodePacked(address(tok)))), ", \"modes\": ", _hx32(_load(ROOT)),
+            ", \"auditorKeyWords\": [", _bytesWords(ROOT + 5, true), "], \"auditorKeyWords0\": [",
+            _bytesWords(uint256(keccak256(abi.encode(uint256(0), ROOT + 16))), true), "],"));
+        _w(string.concat("\"auditorY\": [", _hx(tok.auditorKeyOf(eents[0].ref)), ", ", _hx(tok.auditorKey()), "], \"entryEpochs\": [",
+            vm.toString(uint256(eepochs[0])), ", ", vm.toString(uint256(eepochs[1])), ", ", vm.toString(uint256(eepochs[2])), "],"));
+        _w("\"entries\": [");
+        for (uint256 i; i < eents.length; ++i) _entry(eents[i], i + 1 == eents.length);
+        _w("]}");
+        tok = t0;
+    }
+
     /// Builds the state; with `STATE_VECTORS=1` writes the rows (two runs give the same file).
     function test_stateVectors() public {
         _build();
+        _buildEpochs();
+        assertEq(uint256(vm.load(address(tok2), bytes32(uint256(keccak256(abi.encode(eents[1].ref, ROOT + 17)))))), 1, "epoch row");
+        assertEq(tok2.auditorKeyOf(eents[0].ref), ZetherKeys.pub(XAUD, bls), "epoch 0's key");
         assertEq(bytes32(ROOT), vm.parseJsonBytes32(vm.readFile(string.concat(vm.projectRoot(), "/test/v2/layout/namespaces.json")),
             ".zether.root"), "the namespace root");
         uint256 base = uint256(keccak256(abi.encode(address(tok), REC)));
@@ -247,6 +313,8 @@ contract ZetherStateVectorsTest is ZetherFixture {
         _account("dave: never touched", dave, true);
         _w("], \"entries\": [");
         for (uint256 i; i < ents.length; ++i) _entry(ents[i], i + 1 == ents.length);
-        _w("]}");
+        _w("],");
+        _epochRows();
+        _w("}");
     }
 }

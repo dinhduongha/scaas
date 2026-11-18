@@ -204,9 +204,14 @@ pub fn enc(pks: &[Vec<u8>], values: &[u64]) -> Result<(Vec<u8>, Vec<Vec<u8>>)> {
 ///   (`proveRefresh`); `toUA` equal to the debited UA at the current version is the contract's `SelfTransfer`; every key a
 ///   statement names (`pk_f`, `pkT` or each leg's `pk`, `pkA`) differs from the others (the contract's `KeyReused`: one
 ///   randomness under one key twice would cancel the masks, and a reverted transaction's calldata is public too);
-/// - `auditRead {chainId, entryRef, fromUA, sendCounter, entryPtr, leg, auditorMode, auditorUA}` on the auditor's handle → `{amount}`;
-/// - `proveDisclose {chainId, registry, entryRef, fromUA, sendCounter, entryPtr, leg, kind, [auditorMode, auditorUA]}`, `kind`
-///   `RECEIVER_X` (the leg's owner's handle) or `AUDITOR` (the auditor's) → `{stmt, proof, amount}` (op 5);
+/// - `auditRead {chainId, entryRef, fromUA, sendCounter, entryPtr, leg, auditorMode, entryAuditorEpoch, auditorUASlot, auditorUA,
+///   keyVersion}` on the auditor's handle → `{amount}`;
+/// - `proveDisclose {chainId, registry, entryRef, fromUA, sendCounter, entryPtr, leg, kind, [auditorMode, entryAuditorEpoch,
+///   auditorUASlot, auditorUA, keyVersion]}`, `kind` `RECEIVER_X` (the leg's owner's handle) or `AUDITOR` (the auditor's) →
+///   `{stmt, proof, amount}` (op 5). An auditor read is the entry's auditor's (CTR-PQZ-43, set-auditor spec §9, T11): the
+///   entry's epoch (`entryAuditorEpoch`, at most the token's `auditorEpoch`) names the auditor UA, read at its slot
+///   (`auditorUASlot`: 7 for the current epoch, `auditorUAs[epoch]` at 25 otherwise), pinned to the auditor's key version in
+///   the entry's tail (`keyVersion` = `kv_a`); a handle that is not that auditor is refused before its key is used;
 /// - `proveDiscloseSender {chainId, registry, entryRef, fromUA, sendCounter, entryPtr, leg, legKeyRecords}` on the sender's handle
 ///   (`keyRecord` `fromUA`'s at the handle's version, `legKeyRecords` the registry's `pqzKey[UA_j][x]` of each version x the
 ///   leg may be under, 1 to 64, each code in `blobs`) → `{stmt, proof, amount, legKey}`, `legKey` the index in
@@ -291,7 +296,9 @@ pub const COMMANDS: &[&str] = &[
 /// - `keyRecord`: the registry's `pqzKey[ua][v]` word (`UAStore.Layout` slot 2, per version: `keccak256(v ‖ keccak256(ua ‖ 2))`,
 ///   `ptr(160) ‖ proven(8) ‖ added(8)`), the holder's; `keyVersions`: the registry's `pqzVersions[ua]` (slot 17,
 ///   `keccak256(ua ‖ 17)`: `latest(64) ‖ current(64) ‖ listed(8)`); `keyVersion` the `v` read;
-/// - `psid`: slot 2; `auditorMode`: slot 0 (`pqz(160) ‖ disclosureMode(8) ‖ auditorMode(8)`); `auditorUA`: slot 7;
+/// - `psid`: slot 2; `auditorMode`: slot 0 (`pqz(160) ‖ disclosureMode(8) ‖ auditorMode(8) ‖ pqzVerifyMode(8) ‖ proofStore(8) ‖
+///   pqzOwnKey(8) ‖ pqzOpening(8) ‖ auditorEpoch(32)`); `auditorUA`: slot 7, an earlier epoch's `auditorUAs[e]` slot 25
+///   (`keccak256(e ‖ root + 25)`); `entryAuditorEpoch[entryRef]`: slot 26 (CTR-PQZ-43);
 ///   `entryPtr`: `entryPtr[entryRef]` (slot 9); `memo`: the bytes of `memos[entryRef]` (slot 10).
 pub const STATE_LAYOUT: &[(&str, u64, u64, usize, usize)] = &[
     ("disclosureMode", 0, 0, 20, 1),
@@ -321,6 +328,16 @@ pub const STATE_LAYOUT: &[(&str, u64, u64, usize, usize)] = &[
     ("verifierFee", 20, 0, 0, 8),
     ("debitRec[U][7].w0", 19, 0, 0, 32),
     ("debitRec[U][7].w1", 19, 1, 0, 32),
+    // set-auditor (CTR-PQZ-43): the token's auditor epoch, an earlier epoch's auditor, the entry's epoch
+    ("auditorEpoch", 0, 0, 26, 4),
+    ("auditorUAs[E]", 25, 0, 0, 32),
+    ("entryAuditorEpoch[V]", 26, 0, 0, 4),
+];
+
+/// The ERC-7201 root of `scaas.pqz` (`keccak256(abi.encode(uint256(keccak256("scaas.pqz")) - 1)) & ~0xff`).
+const PQZ_ROOT: Word = [
+    0xda, 0x86, 0x5e, 0xc1, 0x72, 0x14, 0xf2, 0x5b, 0x93, 0xcd, 0xb1, 0x33, 0xd7, 0x19, 0xc7, 0x93, 0x92, 0xc2, 0x90, 0xa4, 0xb9,
+    0x08, 0x9f, 0xd0, 0xbb, 0xa1, 0x56, 0x25, 0x6c, 0x52, 0x15, 0x00,
 ];
 
 /// `PqzCore.INLINE_MAX`, `INLINE_MAX_PQZH` (op 7 of a PQZH token), the `MAT` flag (`acc` in `accWords`).
@@ -337,6 +354,9 @@ const ACCT: &[&str] = &["ua", "account", "pending", "accWords", "sendCounterWord
 const DEBIT: &[&str] = &["chainId", "registry", "beneficiaryUA", "fee", "validUntilBlock", "shieldIn", "envelopeBinding"];
 /// An old entry's location.
 const ENTRY: &[&str] = &["chainId", "entryRef", "fromUA", "sendCounter", "entryPtr"];
+/// An auditor read's words (CTR-PQZ-43): the token's slot 0, the entry's epoch, the auditor of that epoch at its slot, the
+/// auditor's key version the entry's tail records.
+const AUDITOR: &[&str] = &["auditorMode", "entryAuditorEpoch", "auditorUASlot", "auditorUA", "keyVersion"];
 /// The raw debits' header fields (feature `vectors`: the vector files give `T` and `p`).
 #[cfg(feature = "vectors")]
 const HEADER: &[&str] =
@@ -373,8 +393,8 @@ fn allowed(cmd: &str, field: &str) -> bool {
         "proveBurn" => debit(&["amount", "recipient"]),
         "proveRefresh" => debit(&[]),
         "proveTransferMulti" => debit(&["legs", "pkA", "mode"]),
-        "auditRead" => has(LOC) || has(ENTRY) || has(&["ua", "leg", "auditorMode", "auditorUA"]),
-        "proveDisclose" => has(LOC) || has(ENTRY) || has(&["ua", "registry", "leg", "kind", "auditorMode", "auditorUA"]),
+        "auditRead" => has(LOC) || has(ENTRY) || has(&["ua", "leg"]) || has(AUDITOR),
+        "proveDisclose" => has(LOC) || has(ENTRY) || has(&["ua", "registry", "leg", "kind"]) || has(AUDITOR),
         "openMemo" => has(LOC) || has(ENTRY) || field == "memo",
         "pickDecoys" => has(&["candidates", "exclude", "count", "weights", "recipient"]),
         "provenOpen" => has(LOC) || has(ACCT) || has(&["forOp7", "lastRecord", "auditorUA", "chainId", "registry"]),
@@ -852,6 +872,8 @@ struct Entry {
     m: usize,
     aud: bool,
     entry_ref: Word,
+    /// The auditor's key version the tail records (its last `kv`), with the copies on.
+    kv_a: Option<u64>,
 }
 
 fn entry(f: &Fields<'_>, blobs: &mut Blobs) -> Result<Entry> {
@@ -863,10 +885,12 @@ fn entry(f: &Fields<'_>, blobs: &mut Blobs) -> Result<Entry> {
     let ptr = f.word("entryPtr")?;
     only_low(&ptr, 20)?;
     let d = blobs.data(&lo_addr(&ptr, 0)?)?;
-    let r = d.get(..super::pqz_path::tail(d)?.r_len).ok_or(Error::Argument)?.to_vec();
+    let t = super::pqz_path::tail(d)?;
+    let r = d.get(..t.r_len).ok_or(Error::Argument)?.to_vec();
     // `PqzCore._bundleShape`, exactly one fit (Fable P3-6)
     let (g, m, aud) = super::pqz_path::bundle_shape(r.len(), PKP, VP)?;
-    Ok(Entry { r, g, m, aud, entry_ref: er })
+    let kv_a = if aud { Some(*t.kv.last().ok_or(Error::Argument)?) } else { None };
+    Ok(Entry { r, g, m, aud, entry_ref: er, kv_a })
 }
 
 impl Entry {
@@ -894,14 +918,45 @@ impl Entry {
     }
 }
 
-/// The auditor of the token (`auditorMode` not NONE, `auditorUA`) from its two raw words.
-fn auditor(f: &Fields<'_>) -> Result<Word> {
+/// The auditor of the entry `e` (CTR-PQZ-43, set-auditor spec §9) from raw words: `auditorMode` (slot 0, nothing above
+/// `auditorEpoch`, the mode not NONE; review I1: `pqzVerifyMode`, `proofStore`, `pqzOwnKey` and `pqzOpening` are read past),
+/// `entryAuditorEpoch` (the word of `entryAuditorEpoch[entryRef]`, 0 when absent) at most the token's `auditorEpoch`, then
+/// `auditorUA` read at `auditorUASlot`, which must be that epoch's slot (7 for the current epoch, `auditorUAs[epoch]` at 25
+/// otherwise), and `keyVersion` the auditor's version in the entry's tail (`kv_a`). Public data: no key is used.
+fn auditor(f: &Fields<'_>, e: &Entry) -> Result<Word> {
     let w = f.word("auditorMode")?;
-    only_low(&w, 22)?;
+    only_low(&w, 30)?;
     if !matches!(lo_u64(&w, 21, 1)?, 1 | 2) {
         return Err(Error::Argument);
     }
+    let current = lo_u64(&w, 26, 4)?;
+    let ew = f.word("entryAuditorEpoch")?;
+    only_low(&ew, 4)?;
+    let at = lo_u64(&ew, 0, 4)?;
+    if at > current || Some(f.u64("keyVersion")?) != e.kv_a {
+        return Err(Error::Argument);
+    }
+    let slot = if at == current {
+        slot_add(&PQZ_ROOT, 7)
+    } else {
+        crate::keccak256(&[u64_word(at), slot_add(&PQZ_ROOT, 25)].concat())
+    };
+    if f.word("auditorUASlot")? != slot {
+        return Err(Error::Argument);
+    }
     f.word("auditorUA")
+}
+
+/// `root + n` (mod 2^256), big-endian: a namespace slot.
+fn slot_add(root: &Word, n: u64) -> Word {
+    let mut o = *root;
+    let mut carry = u128::from(n);
+    for b in o.iter_mut().rev() {
+        let t = u128::from(*b) + (carry & 0xff);
+        *b = t as u8;
+        carry = (carry >> 8) + (t >> 8);
+    }
+    o
 }
 
 /// Op 1's `memoHash`: per the request's `mode` (T15k), or (feature `vectors`, the raw debits) the vector file's word.
@@ -1163,11 +1218,11 @@ fn req(cmd: &str, f: &Fields<'_>) -> Result<(Req, Option<Vec<u8>>)> {
                 _ => return Err(Error::Argument),
             };
             let auditor_read = form != Some(Form::DiscloseReceiver);
-            // the role: the leg's owner, or the token's auditor (its words only then, and the entry has the copies)
-            if f.has("auditorMode") != auditor_read || f.has("auditorUA") != auditor_read {
+            // the role: the leg's owner, or the entry's auditor (its words only then, and the entry has the copies)
+            if AUDITOR.iter().any(|x| f.has(x) != auditor_read) {
                 return Err(Error::Argument);
             }
-            let holder = if auditor_read { auditor(f)? } else { e.owner(j)? };
+            let holder = if auditor_read { auditor(f, &e)? } else { e.owner(j)? };
             let ct = e.ct(j, auditor_read)?;
             let window = if auditor_read { j % legs_per_group(true) } else { 0 };
             let mut words = Disclose::words(Form::DiscloseAuditor, &id);

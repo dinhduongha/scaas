@@ -490,6 +490,15 @@ const OPS = {
   UASetVerifierFee: { fields: 'address target,uint64 next,bytes32 chainUid', on: ROUTER },
   // bit 24 `PQZ_PROOF` of the PQZ kinds 4, 5, 12, 13 (group 3h, PQZ proof path spec §5): `NONE` or `LOG` from the next debit
   UASetProofStore: { fields: 'address target,uint8 next,bytes32 chainUid', on: ROUTER },
+  // bit 32 `AUDITOR` of the confidential kinds (set-auditor spec §8, CTR-GOV-31): any holder replaces the auditor (two calls of
+  // the same op around the delay); the struct signs `newKey` as EIP-712 hashes `bytes` (Zether) or the new UA (PQZ), the epoch and
+  // the target's chain word; the new auditor's own consent rides beside it (`extra.pop`, `extra.consent`), unsigned by the holder
+  UASetAuditorKey: { fields: 'address target,bytes newKey,uint32 epoch,bytes32 chainUid', on: ROUTER,
+    args: (m, x) => [['address', m.target], ['bytes', m.newKey], ['uint32', m.epoch], ['bytes', consentOf(x, 'pop')],
+      ['bytes32', m.chainUid]] },
+  UASetAuditorUA: { fields: 'address target,bytes32 newAuditor,uint32 epoch,bytes32 chainUid', on: ROUTER,
+    args: (m, x) => [['address', m.target], ['bytes32', m.newAuditor], ['uint32', m.epoch], ['UASig', uaSigOf(consentOf(x, 'consent'), 'consent')],
+      ['bytes32', m.chainUid]] },
   // group 3l (wrap limits spec §9): the owner's limits on a hybrid of the wrapped kinds (two calls when it relaxes the wrap side
   // or tightens the unwrap side) and bit 26's membership
   UASetWrapLimits: { fields: 'address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,bytes32 chainUid',
@@ -531,12 +540,22 @@ const OPS = {
   // CTR-GOV-27: the entries one named struct (`ChainEntries`, nested EIP-712), then the factory's chain word
   UASetChainEntries: { fields: 'address target,ChainEntries entries,bytes32 chainUid', on: ROUTER },
   // The statement's header words verbatim (purpose `zether-auth`); signed into `pqzAuth`, no entry of its own.
+  // The new auditor's consent (set-auditor spec §5.2): typed under the token's own domain, signed by the new auditor (PQZ: its
+  // `UASig` under `PURPOSE_AUDITOR_CONSENT`; Zether: the proof of possession of its key over the digest); no entry of its own
+  AuditorConsent: { raw: 'address token,bytes32 auditor,uint32 epoch,bytes32 chainUid', on: [...ZETHER, ...PQZ] },
   PqzAuth: { raw: 'uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,'
     + 'uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,'
     + 'bytes32 chainUid,bytes32 binding,uint128 salt,bytes32 memoHash,bytes32 bodyHash', on: PQZ },
 };
 
 /** The creation's init bytes from `extra[name]`, refused unless their keccak256 is the signed `initHash`. */
+/** Set-auditor: the new auditor's consent the router forwards beside the holder's struct (`pop` bytes, `consent` a `UASig`). */
+function consentOf(x, name) {
+  const c = x?.[name];
+  if (c === undefined) refuse(`the auditor op needs extra.${name}`);
+  return c;
+}
+
 function initOf(m, x, name) {
   const b = x?.[name];
   if (b === undefined) refuse(`the creation needs extra.${name}`);
@@ -1751,9 +1770,9 @@ export function bidMinBase(minFill, amount, receiveAmount) {
   return (uint(minFill, 'minFill') * uint(receiveAmount, 'the price') + a - 1n) / a;
 }
 
-// The governance bits 0-31 (spec 2026-11-02-governance §1.2; bit 22 CTR-GOV-20; bit 23 pay-meta-tax §6.1; bit 24 PQZ proof path §5; bits 25-27 wrap limits §2; bits 8, 9 the token's lists and 28 KYC, CTR-GOV-24; 29 CLOSED_MARKETS, CTR-DEX-32; 30 BURNER, CTR-GOV-29; 31 SUPPLY_CAP_ADJUSTABLE, CTR-GOV-30): name and type. The disclosure sentences are the file's,
+// The governance bits 0-32 (spec 2026-11-02-governance §1.2; bit 22 CTR-GOV-20; bit 23 pay-meta-tax §6.1; bit 24 PQZ proof path §5; bits 25-27 wrap limits §2; bits 8, 9 the token's lists and 28 KYC, CTR-GOV-24; 29 CLOSED_MARKETS, CTR-DEX-32; 30 BURNER, CTR-GOV-29; 31 SUPPLY_CAP_ADJUSTABLE, CTR-GOV-30; 32 AUDITOR, CTR-GOV-31): name and type. The disclosure sentences are the file's,
 // smartcontracts/vectors/governance/governance_bits.json, which the app reads; test/governance-bits.test.js holds this table to it.
-// Bits 32-127 are free; bits 128-255 are the application contract's own, the word is its bitLabel(bit) (CTR-GOV-10's Change).
+// Bits 33-127 are free; bits 128-255 are the application contract's own, the word is its bitLabel(bit) (CTR-GOV-10's Change).
 export const GOVERNANCE_BITS = Object.freeze([
   ['PAYABLE', 'capability'], ['MINTABLE', 'power'], ['BURNABLE', 'capability'], ['RATE_ADJUSTABLE', 'power'],
   ['WRAP_DISABLEABLE', 'power'], ['FREEZE', 'power'], ['FORCE', 'power'], ['PAUSE', 'power'], ['ALLOWLIST', 'power'],
@@ -1768,6 +1787,8 @@ export const GOVERNANCE_BITS = Object.freeze([
   ['CLOSED_MARKETS', 'capability'],
   // round 3zb + 3zc (CTR-GOV-29, CTR-GOV-30): the Normal kinds' burner role, the wrapped kinds' adjustable caps
   ['BURNER', 'power'], ['SUPPLY_CAP_ADJUSTABLE', 'capability'],
+  // the setAuditor round (CTR-GOV-31): the confidential kinds' auditor replacement
+  ['AUDITOR', 'power'],
 ].map(([name, type], bit) => Object.freeze({ bit, name, type })));
 
 // ------------------------------------------------------------------ the signing policy in front of every typed signature

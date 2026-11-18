@@ -480,7 +480,8 @@ contract PqzPairsTest is PqzNamedBase {
         // three-key model (CTR-PQZ-38, -40, -41): `PqzTransferArgs` + `uFrom` and the openings (the two single-transfer
         // selectors), `mtxRollOverSigned`, `pqzSkipped`: -> 0x0eb5f5eb
         // round 3zb + 3zc (CTR-GOV-28 Change, CTR-GOV-30: setProofStore with the holder's chain word): 0x0eb5f5eb -> 0x7c82cf40
-        assertEq(type(IPqzToken).interfaceId, bytes4(0x7c82cf40), "IPqzToken");
+        // set-auditor A4 (CTR-PQZ-43): 0x7c82cf40 -> 0xf6a75cfc (+ `setAuditorUA`, `auditorUAOf`, `auditorState`)
+        assertEq(type(IPqzToken).interfaceId, bytes4(0xf6a75cfc), "IPqzToken");
         assertEq(type(IConfidentialToken).interfaceId, IConfidentialToken.mtxShield.selector, "IConfidentialToken");
         assertEq(type(IPqzWrappedToken).interfaceId, IPqzWrappedToken.mtxUnshieldUnwrap.selector, "IPqzWrappedToken");
     }

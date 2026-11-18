@@ -9,7 +9,7 @@ import {ZetherTranscript} from "./ZetherTranscript.sol";
 
 /// @title Tiết lộ có chọn lọc cho MỌI Zether token (owner Z13): không state, không admin, không nâng cấp.
 /// @notice **UNAUDITED.** Đọc từ token qua view (`transferEntry`, `verifier`,
-///         `auditorKey`, `chainUid`); đường cong do verifier của token quyết. Tách khỏi token (CTR-ZTH-43).
+///         `auditorKeyOf(entryRef)` (the key of the entry's auditor epoch, CTR-ZTH-95), `chainUid`); đường cong do verifier của token quyết. Tách khỏi token (CTR-ZTH-43).
 ///         Challenge ràng địa chỉ TOKEN, không phải contract này: opening không phụ thuộc nơi deploy.
 contract ZetherDisclosure is ITransferDisclosure {
     bytes private constant DISCLOSE_TAG = "SCAAS-ZETHER-DISCLOSE-V2";
@@ -56,7 +56,9 @@ contract ZetherDisclosure is ITransferDisclosure {
         } else if (kind == OpeningKind.SENDER_CP) {
             (l.k, l.m, l.b) = (l.dOut, l.cOut, l.yt);
         } else {
-            bytes memory ya = IZetherToken(token).auditorKey();
+            // the key of the entry's auditor epoch (CTR-ZTH-95, set-auditor spec §9): `K` is in the challenge, so an opening made
+            // with one epoch's key never verifies against another's; the current key here would be a forgery path
+            bytes memory ya = IZetherToken(token).auditorKeyOf(entryRef);
             if (ya.length == 0 || _isO(l.cAud)) return false; // token không auditor, hoặc người gửi bỏ auditor (Z12)
             (l.k, l.m, l.b) = (ya, l.cAud, l.dAud);
         }

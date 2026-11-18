@@ -2085,6 +2085,35 @@ pub(crate) mod tests {
         }
     }
 
+    /// Set-auditor (spec §8, CTR-GOV-31): a bit-32 confirm sent before its proposal's `eta` (`AuditorNotReady(eta)`) is
+    /// `AUDITOR_NOT_READY`, back in the queue (the clock lifts it); every other auditor refusal of the job's own op is `dead` by
+    /// name (the struct, the consent or the state is wrong, no wait changes it). Both router rows, vector jobs.
+    #[tokio::test]
+    async fn auditor_verdicts() {
+        use crate::abi::{decode_revert, IAuditorSetter as A};
+        use crate::guard::{revert_verdict, Verdict};
+        use crate::typed::testkit::{op_of, vectors};
+        use alloy::sol_types::SolError;
+        let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        let chain = Chain::with_signer(&test_cfg(&url), PrivateKeySigner::random()).unwrap();
+        let v = vectors();
+        for name in ["UASetAuditorKey", "UASetAuditorUA"] {
+            let w = work_of_op(Some(1), &op_of(name, "gov_router", &v).unwrap(), None).unwrap().0;
+            let r = revert_verdict(&chain, &w, decode_revert(&A::AuditorNotReady { eta: 9 }.abi_encode())).await;
+            assert!(matches!(&r, Verdict::Requeue(e) if e.starts_with("AUDITOR_NOT_READY: AuditorNotReady(")), "{name}: {r:?}");
+            for (err, want) in [
+                (A::AuditorPending {}.abi_encode(), "AuditorPending"),
+                (A::AuditorSame {}.abi_encode(), "AuditorSame"),
+                (A::AuditorEpochMismatch { expected: 1, got: 2 }.abi_encode(), "AuditorEpochMismatch("),
+                (A::AuditorKeyInvalid {}.abi_encode(), "AuditorKeyInvalid"),
+                (A::AuditorConsentInvalid {}.abi_encode(), "AuditorConsentInvalid"),
+            ] {
+                let r = revert_verdict(&chain, &w, decode_revert(&err)).await;
+                assert!(matches!(&r, Verdict::Dead(e) if e.starts_with(want)), "{name}: {want}: {r:?}");
+            }
+        }
+    }
+
     /// As `Frozen`: `ComplianceRegistryUnavailable` (the token's bounded registry call failed) is a refusal, named, never `dead`.
     #[tokio::test]
     async fn registry_unavailable_is_refusal() {
@@ -2424,8 +2453,8 @@ pub(crate) mod tests {
         // round 3r (CTR-GOV-23): -> 127, the router's eleven admin rows; round 3s: -> 130, the router's three list / enable rows
         // round 3t: -> 131, the router's `UASetVerifierFee`; owner 2026-11-12: -> 132, the router's `UACreateInstance`
         // the three-key model (CTR-PQZ-41): -> 133, `PqzRollOver`; round 3zc (CTR-GOV-30): -> 135, the router's
-        // `UASetMaxSupply`, `UASetMaxWrapSupply`
-        assert_eq!(n, 135, "every row with an entry, but the relay fees (relay_fee_call_object)");
+        // `UASetMaxSupply`, `UASetMaxWrapSupply`; set-auditor (CTR-GOV-31): -> 137, the router's `UASetAuditorKey`, `UASetAuditorUA`
+        assert_eq!(n, 137, "every row with an entry, but the relay fees (relay_fee_call_object)");
     }
 
     /// `EvmAdapter::call_key`, which the Hedera adapter delegates to (`the_hedera_lane_skips_bytes_already_in_flight` is the

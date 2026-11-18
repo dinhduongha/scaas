@@ -161,7 +161,8 @@ export const groupTagString = (group) => {
 export const GROUP = (group) => tagHash(groupTagString(group));
 export const MSG_TAG = tagHash('scaas.ua.msg.v1');
 export const PURPOSES = Object.freeze(['pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner',
-  'keyop', 'payee-fee', 'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership', 'msig-update', 'pqz-verdict']);
+  'keyop', 'payee-fee', 'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership', 'msig-update', 'pqz-verdict',
+  'auditor-consent']); // set-auditor (CTR-PQZ-43): the PQZ auditor's consent, `UAKinds.PURPOSE_AUDITOR_CONSENT`
 /** `keccak256("scaas.ua.purpose.<p>.v<version>")`; every purpose has v1, `pop` also v2 (the portable PoP, UA-8 P1). */
 export const purposeTagString = (p, version = 1) => {
   if (!PURPOSES.includes(p) || !(version === 1 || (version === 2 && p === 'pop'))) fail('UAPurposeUnknown', `${p} v${version}`);

@@ -73,6 +73,9 @@ library PqzCore {
         // `pqzOwnKey` false: `offchain-shared`, scope 0; true: `offchain-token`, scope the token) and the sealed opening
         bool pqzOwnKey;
         bool pqzOpening;
+        /// @dev Bit 32 (set-auditor spec §6, CTR-PQZ-43): the replacements of the auditor UA so far, slot 0 byte 26 (read
+        ///      with `auditorMode` by every debit, no extra storage read).
+        uint32 auditorEpoch;
         address verifier;
         bytes32 psid;
         uint256 shieldScale;
@@ -107,6 +110,16 @@ library PqzCore {
         uint64 verifierFeeEta;
         bytes32 verifierFeeProposer;
         uint32 verifierFeeProposerGeneration;
+        /// @dev Bit 32's stored proposal (set-auditor spec §5.1, §6), in slot 22's free bytes and after: `eta` (0: none), the
+        ///      proposer's role epoch, the proposer, the proposed UA.
+        uint64 auditorEta;
+        uint32 auditorProposerRoleEpoch;
+        bytes32 auditorProposer;
+        bytes32 pendingAuditorUA;
+        /// @dev Epoch → the auditor UA of that epoch, for every epoch below `auditorEpoch` (written once, at the epoch's end).
+        mapping(uint32 => bytes32) auditorUAs;
+        /// @dev The epoch of an audited transfer (op 1, op 7 with `auditorOn = 1`) made at `auditorEpoch != 0` (absent: 0).
+        mapping(bytes32 => uint32) entryAuditorEpoch;
     }
 
     /// @dev Group 3h (pqz-proof-path spec §2.2, PP-2): `w0 = prevBlob(160) ‖ p(64) ‖ Δp(16) ‖ proofStore(8) ‖ flags(8)`
@@ -564,6 +577,19 @@ library PqzCore {
         PqzStorage storage s = $();
         s.entryPtr[ref] = ptr;
         if (o.mode == ZetherTypes.TransferMode.HASH) s.memos[ref] = abi.encodePacked(o.salt, sealedMemo);
+        // set-auditor spec §7 (CTR-PQZ-43): an audited transfer at an epoch other than 0 records its epoch; epoch 0 writes nothing
+        if (o.auditorOn == 1) {
+            uint32 e = s.auditorEpoch;
+            if (e != 0) s.entryAuditorEpoch[ref] = e;
+        }
+    }
+
+    /// @notice The auditor UA of `ref`'s epoch (CTR-PQZ-43): the current one for an entry of the current epoch, the history's
+    ///         otherwise. An unknown or opt-out `ref` answers epoch 0's; the caller checks the entry.
+    function auditorUAOf(bytes32 ref) internal view returns (bytes32) {
+        PqzStorage storage s = $();
+        uint32 e = s.entryAuditorEpoch[ref];
+        return e == s.auditorEpoch ? s.auditorUA : s.auditorUAs[e];
     }
 
     // ------------------------------------------------------------------ multi-recipient transfer (op 7, CTR-PQZ-26)
@@ -839,7 +865,7 @@ library PqzCore {
         if (kind != 0 && kind <= 2 && $().pqzOpening) revert IPqzToken.OpUnsupported();
         bytes memory bundle = _bundleOf(ref);
         if (kind > 2 || amount >= VALUE_BOUND) revert IPqzToken.BadPayload(bundle.length);
-        (uint256 uOff, uint256 vOff, bytes32 owner) = _legOf(bundle, j, kind);
+        (uint256 uOff, uint256 vOff, bytes32 owner) = _legOf(bundle, ref, j, kind);
         buf = _buffer(kind == 0 ? 4 : 5, DISCLOSE, proofLen);
         // the kind word `OpeningKind + 256·w` (R0-1, pqz-stmt DW_KIND): w = j mod S_AUD, the auditor copy's coefficient
         // window, for AUDITOR (the bundle has the copies: `_legOf`); 0 for SENDER_S / RECEIVER_X
@@ -876,8 +902,8 @@ library PqzCore {
     }
 
     /// @dev Leg `j` of a (packed) bundle: the offsets of `u_{g(j)}` (`_groupOf`) and of `v_j` (`v_{a,j}` for `AUDITOR`),
-    ///      its owner.
-    function _legOf(bytes memory bundle, uint256 j, uint8 kind)
+    ///      its owner (for `AUDITOR` the auditor of entry `ref`'s epoch, CTR-PQZ-43).
+    function _legOf(bytes memory bundle, bytes32 ref, uint256 j, uint8 kind)
         internal view returns (uint256 uOff, uint256 vOff, bytes32 owner)
     {
         uint256 bl = bundle.length;
@@ -888,7 +914,7 @@ library PqzCore {
         uOff = 16 + PqzCt.PKP * _groupOf(j, a);
         vOff = kind == 2 ? leg + PqzCt.VP : leg;
         assembly ("memory-safe") { owner := mload(add(add(bundle, 32), sub(add(leg, ls), 32))) }
-        if (kind == 2) owner = $().auditorUA;
+        if (kind == 2) owner = auditorUAOf(ref);
     }
 
     /// @dev `(G, M, auditorOn)` of a bundle `salt ‖ u_0 … u_{G−1} ‖ (v_j ‖ [v_{a,j}] ‖ UA_j)_{j<M}` from its length:

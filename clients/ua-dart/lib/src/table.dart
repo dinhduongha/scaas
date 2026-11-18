@@ -93,10 +93,11 @@ const purposes = <String>[
   'membership',
   'msig-update',
   'pqz-verdict',
+  'auditor-consent',
 ];
 
-/// The governance bits 0-31 (spec 2026-11-02-governance §1.2), (name, type) by bit. The disclosure sentences are read by the app
-/// from smartcontracts/vectors/governance/governance_bits.json; bits 32-127 are free, 128-255 the application's bitLabel(bit).
+/// The governance bits 0-32 (spec 2026-11-02-governance §1.2), (name, type) by bit. The disclosure sentences are read by the app
+/// from smartcontracts/vectors/governance/governance_bits.json; bits 33-127 are free, 128-255 the application's bitLabel(bit).
 const governanceBits = <(String, String)>[
   ('PAYABLE', 'capability'), ('MINTABLE', 'power'), ('BURNABLE', 'capability'), ('RATE_ADJUSTABLE', 'power'),
   ('WRAP_DISABLEABLE', 'power'), ('FREEZE', 'power'), ('FORCE', 'power'), ('PAUSE', 'power'), ('ALLOWLIST', 'power'),
@@ -124,6 +125,8 @@ const governanceBits = <(String, String)>[
   ('CLOSED_MARKETS', 'capability'),
   // round 3zb + 3zc (CTR-GOV-29, CTR-GOV-30): the Normal kinds' burner role, the wrapped kinds' adjustable caps
   ('BURNER', 'power'), ('SUPPLY_CAP_ADJUSTABLE', 'capability'),
+  // the setAuditor round (CTR-GOV-31): the confidential kinds' auditor replacement
+  ('AUDITOR', 'power'),
 ];
 
 /// Throws UAKindUnknown. [kind] must be 0..0xffff to match (a wider int is simply unknown).

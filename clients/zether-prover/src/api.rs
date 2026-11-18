@@ -801,6 +801,19 @@ fn by_curve<C: ZCurve, Rn: RngCore + CryptoRng>(cmd: &str, v: &Value, given: Opt
                 "pop": hx(&schnorr::zether_pop(&k, rng)),
             }))
         }
+        // Set-auditor (CTR-ZTH-95, spec §5.2): the new auditor's proof of possession for `setAuditorKey`, over the token's typed
+        // `AuditorConsent` of this key's own UA, the epoch it takes and the token's chain word: named fields only, the digest
+        // built here (never a caller's digest); `pop = R ‖ be32(z)`.
+        "auditorPop" => {
+            let k = key(v)?;
+            let (chain_id, chain_uid) = (num(v, "chainId")?, fixed::<32>(v, "chainUid")?);
+            let token = fixed::<20>(v, "token")?;
+            let epoch = num32(v, "epoch")?;
+            let m = json!({"token": hx(&token), "auditor": hx(&k.ua()), "epoch": epoch, "chainUid": hx(&chain_uid)});
+            let t = crate::typed::typed_digest("AuditorConsent", chain_id, &chain_uid, &token, &m)?;
+            let d = fixed::<32>(&t, "digest")?;
+            Ok(json!({"digest": hx(&d), "auditor": hx(&k.ua()), "pop": hx(&schnorr::auditor_pop(&k, &d, rng))}))
+        }
         // A self account's owner op (roll-over, mode): `sig` is the raw R‖z of `UASig{signature: sig}` for `mtxRollOverSigned` / `mtxSetRollOverMode`.
         "ownerAuth" => {
             let k = key(v)?;

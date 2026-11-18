@@ -43,11 +43,11 @@ abstract contract WrappedZetherRegulatedTokenCore is WrappedZetherTokenCore, Reg
     }
 
     function _validBits() internal pure override(GovernanceBaseCore, WrappedZetherTokenCore) returns (uint256) {
-        return GovernanceBits.WRAPPED_BITS | REG_BITS_CONFIDENTIAL;
+        return GovernanceBits.WRAPPED_BITS | REG_BITS_CONFIDENTIAL | GovernanceBits.AUDITOR_BITS;
     }
 
     function _roleBits() internal pure override(MetaTokenBase, WrappedZetherTokenCore) returns (uint256) {
-        return GovernanceBits.WRAPPED_ROLES | REG_ROLES_CONFIDENTIAL;
+        return GovernanceBits.WRAPPED_ROLES | REG_ROLES_CONFIDENTIAL | GovernanceBits.AUDITOR_BITS;
     }
 
     function _contractOnlyBits() internal pure override(MetaTokenBase, WrappedZetherTokenCore) returns (uint256) {

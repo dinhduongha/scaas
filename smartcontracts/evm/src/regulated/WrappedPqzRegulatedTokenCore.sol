@@ -40,11 +40,11 @@ abstract contract WrappedPqzRegulatedTokenCore is WrappedPqzTokenCore, Regulated
     }
 
     function _validBits() internal pure override(GovernanceBaseCore, WrappedPqzTokenCore) returns (uint256) {
-        return GovernanceBits.WRAPPED_BITS | REG_BITS_CONFIDENTIAL | GovernanceBits.PQZ_KIND_BITS;
+        return GovernanceBits.WRAPPED_BITS | REG_BITS_CONFIDENTIAL | GovernanceBits.PQZ_KIND_BITS | GovernanceBits.AUDITOR_BITS;
     }
 
     function _roleBits() internal pure override(MetaTokenBase, WrappedPqzTokenCore) returns (uint256) {
-        return GovernanceBits.WRAPPED_ROLES | REG_ROLES_CONFIDENTIAL | GovernanceBits.PQZ_KIND_BITS;
+        return GovernanceBits.WRAPPED_ROLES | REG_ROLES_CONFIDENTIAL | GovernanceBits.PQZ_KIND_BITS | GovernanceBits.AUDITOR_BITS;
     }
 
     function _contractOnlyBits() internal pure override(MetaTokenBase, WrappedPqzTokenCore) returns (uint256) {

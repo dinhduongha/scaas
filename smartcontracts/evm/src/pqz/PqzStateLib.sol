@@ -14,10 +14,13 @@ import {PqzCore} from "./PqzCore.sol";
 import {PqzSet, PQZ_ACC_WORDS} from "./PqzSet.sol";
 import {PqzVerifierRevoked} from "./IPqzToken.sol";
 import {GovernanceLib} from "../governance/GovernanceLib.sol";
+import {GovernanceBits} from "../governance/GovernanceBits.sol";
 import {IGovernance} from "../governance/IGovernance.sol";
 import {IAdmin} from "../governance/IAdmin.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import {UAKinds} from "../ua/UAKinds.sol";
+import {AuditorRules} from "../confidential/AuditorRules.sol";
 
 /// @title init, shield, rollover, prepare-acc and the state views (the account state; D14): one of the four `DELEGATECALL` libraries of the PQZ release (plan 5h D14), in the ERC-7201
 ///        namespace `scaas.pqz`; the shared steps are `internal` in `PqzCore`, compiled into each.
@@ -62,6 +65,14 @@ library PqzStateLib {
         if (c.auditorMode > uint8(ZetherTypes.AuditorMode.OPTIONAL)
             || (aud.length == 0) != (c.auditorMode == uint8(ZetherTypes.AuditorMode.NONE))) {
             revert IPqzToken.BadAuditorMode(c.auditorMode);
+        }
+        {
+            // CTR-GOV-31, after `GovernanceLib.init`: bit 32 needs an auditor and an admin (as `ZetherLib.auditorBitAtInit`)
+            GovernanceLib.GovernanceStorage storage g = GovernanceLib.$();
+            if (g.features >> GovernanceBits.AUDITOR & 1 != 0) {
+                if (c.auditorMode == uint8(ZetherTypes.AuditorMode.NONE)) revert IPqzToken.BadAuditorMode(c.auditorMode);
+                if (g.admin == 0) revert IGovernance.FeatureNeedsAdmin(GovernanceBits.AUDITOR);
+            }
         }
         bytes32 a = aud.length == 32 ? bytes32(aud) : bytes32(0);
         uint8 m = c.pqzVerifyMode;
@@ -245,6 +256,81 @@ library PqzStateLib {
         if (previous == next) return;
         s.proofStore = next;
         emit IPqzToken.ProofStoreSet(previous, next);
+    }
+
+    // ------------------------------------------------------------------ the auditor's replacement (bit 32, CTR-PQZ-43)
+
+    /// @notice Bit 32 `AUDITOR`'s body (set-auditor spec §5.1), after the token's `_holderOnChain(32)` and `use(32)`
+    ///         (`caller`), with `delay = max(factory noticePeriod, grantDelay)` read by the token (never `noticePeriod` of
+    ///         this namespace: 0 on every `PRECOMPILE` token). `epoch` must be `auditorEpoch + 1`. A live proposal takes only
+    ///         its own UA (the proposer's confirm from `eta` on: the checks again, then the apply) or the current one (the
+    ///         proposer's cancel); anything else `AuditorPending`. Without one, the current UA is `AuditorSame`; else the
+    ///         checks and a proposal that applies at once when `delay` is 0. An expired or void proposal is overwritten.
+    function setAuditorUA(bytes32 newAuditor, uint32 epoch, IUARegistry.UASig calldata consent, bytes32 caller, uint64 delay,
+        address registry, bytes32 domainSeparator, bytes32 chainUid) public
+    {
+        PqzCore.PqzStorage storage s = PqzCore.$();
+        AuditorRules.requireNext(s.auditorEpoch, epoch);
+        if (AuditorRules.live(s.auditorEta, s.auditorProposerRoleEpoch, s.auditorProposer)) {
+            if (newAuditor == s.pendingAuditorUA) {
+                AuditorRules.requireProposer(caller, s.auditorProposer);
+                if (block.timestamp < s.auditorEta) revert IConfidentialToken.AuditorNotReady(s.auditorEta);
+                _auditorChecks(newAuditor, epoch, consent, registry, domainSeparator, chainUid);
+                _applyAuditor(s, newAuditor, epoch);
+            } else if (newAuditor == s.auditorUA) {
+                AuditorRules.requireProposer(caller, s.auditorProposer);
+                _clearAuditorProposal(s);
+                emit IConfidentialToken.AuditorProposalCancelled(epoch);
+            } else {
+                revert IConfidentialToken.AuditorPending();
+            }
+            return;
+        }
+        if (newAuditor == s.auditorUA) revert IConfidentialToken.AuditorSame();
+        _auditorChecks(newAuditor, epoch, consent, registry, domainSeparator, chainUid);
+        uint64 eta = uint64(block.timestamp) + delay;
+        emit IPqzToken.AuditorUAProposed(epoch, newAuditor, caller, eta);
+        if (delay == 0) {
+            _applyAuditor(s, newAuditor, epoch);
+            return;
+        }
+        (s.auditorEta, s.auditorProposerRoleEpoch, s.auditorProposer, s.pendingAuditorUA) =
+            (eta, AuditorRules.roleEpochOf(caller), caller, newAuditor);
+    }
+
+    /// @dev Spec §5.2, at the proposal and again at the apply: the new auditor's current key of the token's class and scope
+    ///      under the mode's check (`_keyOf`, `_usable`; `AccountNotRegistered`); `proven` where the registry has a `0x0142`
+    ///      verifier, `_usable`'s rule ("proven, or nothing": without the verifier no proven check, the key-copy residual of
+    ///      T3 stands); on an opening token the opening KEM key of that scoped version; then its consent, a signature under
+    ///      `PURPOSE_AUDITOR_CONSENT` over the `AuditorConsent` digest (the registry's refusal).
+    function _auditorChecks(bytes32 a, uint32 epoch, IUARegistry.UASig calldata consent, address registry, bytes32 ds,
+        bytes32 chainUid) private view
+    {
+        PqzCore.PqzStorage storage s = PqzCore.$();
+        (uint64 v, address ptr, bool proven) = PqzCore._keyOf(registry, a);
+        if (!PqzCore._usable(proven, ptr) || (!proven && IUARegistry(registry).kindEnabled(UAKinds.PQZ_MLWE))) {
+            revert IPqzToken.AccountNotRegistered(a);
+        }
+        if (s.pqzOpening
+            && IUARegistry(registry).pqzOpenKemAt(a, s.pqzOwnKey ? address(this) : address(0), v).mlkemEk.length == 0) {
+            revert IPqzToken.AccountNotRegistered(a);
+        }
+        IUARegistry(registry).requireAuthorized(a, UAKinds.PURPOSE_AUDITOR_CONSENT,
+            AuditorRules.consentDigest(ds, a, epoch, chainUid), consent);
+    }
+
+    /// @dev Spec §5.4: the outgoing UA enters the history at its epoch, `next` is the auditor from `epoch` on.
+    function _applyAuditor(PqzCore.PqzStorage storage s, bytes32 next, uint32 epoch) private {
+        bytes32 previous = s.auditorUA;
+        s.auditorUAs[epoch - 1] = previous;
+        s.auditorUA = next;
+        s.auditorEpoch = epoch;
+        _clearAuditorProposal(s);
+        emit IPqzToken.AuditorUASet(epoch, previous, next);
+    }
+
+    function _clearAuditorProposal(PqzCore.PqzStorage storage s) private {
+        (s.auditorEta, s.auditorProposerRoleEpoch, s.auditorProposer, s.pendingAuditorUA) = (0, 0, 0, 0);
     }
 
     /// @notice `pqzVerifyConfig()` (spec §4.4): a dead pending reads as none. Round 3t (CTR-PQZ-36, spec §7.3): the fee, the

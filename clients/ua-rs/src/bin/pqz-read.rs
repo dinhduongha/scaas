@@ -609,9 +609,19 @@ fn read(a: &Args, url: &str, block_at: Option<u64>, pk: Option<&[u8]>) -> Result
         if entry_ptr == [0; 32] {
             return Err("no entry of --from-ua at --send-counter on this token".into());
         }
-        let (mode, auditor_ua) = (tok("auditorMode")?, tok("auditorUA")?);
+        // the entry's auditor (CTR-PQZ-43): its epoch (`entryAuditorEpoch[entryRef]`, slot 26), the auditor of that epoch at
+        // its slot (7 for the token's current `auditorEpoch`, `auditorUAs[epoch]` at 25 otherwise)
+        let mode = tok("auditorMode")?;
+        let entry_epoch = r.word(&a.token, &keccak256(&[entry_ref, add(&root, at("entryAuditorEpoch[V]")?.0)].concat()))?;
+        let (current, epoch) = (field(&mode, "auditorEpoch")?, field(&entry_epoch, "entryAuditorEpoch[V]")?);
+        let aud_slot = if epoch == current {
+            add(&root, at("auditorUA")?.0)
+        } else {
+            keccak256(&[be(epoch), add(&root, at("auditorUAs[E]")?.0)].concat())
+        };
+        let auditor_ua = r.word(&a.token, &aud_slot)?;
         if auditor_ua != a.ua || !matches!(field(&mode, "auditorMode")?, 1 | 2) {
-            return Err("R6: --ua is not the token's auditor, or the token has no auditor".into());
+            return Err("R6: --ua is not the entry's auditor, or the token has no auditor".into());
         }
         request["chainId"] = json!(a.chain_id);
         request["entryRef"] = json!(hx(&entry_ref));
@@ -620,7 +630,10 @@ fn read(a: &Args, url: &str, block_at: Option<u64>, pk: Option<&[u8]>) -> Result
         request["entryPtr"] = json!(hx(&entry_ptr));
         request["leg"] = json!(leg);
         request["auditorMode"] = json!(hx(&mode));
+        request["entryAuditorEpoch"] = json!(hx(&entry_epoch));
+        request["auditorUASlot"] = json!(hx(&aud_slot));
         request["auditorUA"] = json!(hx(&auditor_ua));
+        request["keyVersion"] = json!(a.key_version.ok_or("--key-version")?);
         r.blobs(&[low_addr(&entry_ptr, 0), key_ptr])?
     };
     let key_code = blobs.iter().find(|b| b["address"] == json!(hx(&key_ptr))).and_then(|b| b["code"].as_str()).map(unhex).transpose()?;

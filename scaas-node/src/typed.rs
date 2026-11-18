@@ -217,6 +217,9 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     // `rollSeq`, `rolled`, `entriesHash` and `chainUid` itself
     ("PqzRollOver", "mtxRollOverSigned", P, "bytes32 ua,uint64 keyVersion,uint64 rollSeq,uint64 rolled,uint64 n,uint64[] skip,bytes32 entriesHash,uint64 validUntilBlock,bytes32 chainUid", "ua keyVersion n skip validUntilBlock @ua"),
     ("ZetherSetRollOverMode", "mtxSetRollOverMode", Z, "bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock", "ua mode validUntilBlock @ua"),
+    // set-auditor (spec §5.2): the new auditor's `AuditorConsent` in a confidential token's domain, no entry (the node relays the
+    // consent a client built beside the holder's op, it never builds one)
+    ("AuditorConsent", "", ZP, "address token,bytes32 auditor,uint32 epoch,bytes32 chainUid", ""),
     ("PqzAuth", "", P, "uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,bytes32 chainUid,bytes32 binding,uint128 salt,bytes32 memoHash,bytes32 bodyHash", ""),
     // the `GovernanceRouter`'s closed table (spec §3.2, ua-mtx-merge T7): `mtx<Op>`, `target` the first op word, fee mode `NONE`;
     // the Change of CTR-GOV-28 in round 3zb + 3zc (O5, O6, owner 2026-11-13): every op of a role holder and `UASetWrapLimits`
@@ -261,6 +264,13 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("UAPqzRevokeVerifier", "mtxPqzRevokeVerifier", GR, "bytes32 from,address target,bytes32 chainUid,E", ""),
     // group 3h (PQZ proof path spec §5): bit 24 `PQZ_PROOF`, a holder's `NONE` / `LOG` from the next debit
     ("UASetProofStore", "mtxSetProofStore", GR, "bytes32 from,address target,uint8 next,bytes32 chainUid,E", ""),
+    // set-auditor (spec §8, CTR-GOV-31): bit 32 `AUDITOR`, a holder replaces a confidential token's auditor (the propose and the
+    // confirm the same op sent twice); the new auditor's consent rides unsigned beside the struct (`pop` bytes on Zether,
+    // `consent` a `UASig` on PQZ), the struct signs `keccak256(newKey)` (EIP-712 `bytes`)
+    ("UASetAuditorKey", "mtxSetAuditorKey", GR, "bytes32 from,address target,bytes newKey,uint32 epoch,bytes32 chainUid,E",
+        "E target newKey epoch pop:bytes chainUid @"),
+    ("UASetAuditorUA", "mtxSetAuditorUA", GR, "bytes32 from,address target,bytes32 newAuditor,uint32 epoch,bytes32 chainUid,E",
+        "E target newAuditor epoch consent:UASig chainUid @"),
     // round 3t (CTR-PQZ-36): the admin's verifier fee of an `OFFCHAIN` PQZ token, no bit
     ("UASetVerifierFee", "mtxSetVerifierFee", GR, "bytes32 from,address target,uint64 next,bytes32 chainUid,E", ""),
     // group 3l (wrap limits spec §9): the owner's limits on a hybrid of the wrapped kinds and bit 26's membership
@@ -1980,7 +1990,9 @@ mod tests {
         // owner 2026-11-12: -> (102, 136, 135), `UACreateInstance` (its `init_call` the vector's bytes)
         // the three-key model (CTR-PQZ-41): -> (103, 137, 136), `PqzRollOver` (`mtxRollOverSigned` on the PQZ token)
         // round 3zc (CTR-GOV-30): -> (105, 139, 138), the router's `UASetMaxSupply`, `UASetMaxWrapSupply`
-        assert_eq!((structs, domains, calldata), (105, 139, 138), "every row was walked (two creations and the approvals left out by vectors())");
+        // set-auditor (CTR-GOV-31): -> (108, 143, 140), the router's `UASetAuditorKey`, `UASetAuditorUA` and the raw
+        // `AuditorConsent` (two token domains, no entry)
+        assert_eq!((structs, domains, calldata), (108, 143, 140), "every row was walked (two creations and the approvals left out by vectors())");
         // plan T32: 70 -> 78, the router's eight regulated controls; pay-meta-tax T42: -> 82, + UAPayWithTax, the two tax ops and
         // mtxPay (its struct `UAMetaTransfer`, no row of the vector file: paymeta.json and pay_job_named_meta_builds_body pin it)
         // group 3g T55: -> 83, `UAPqzRollOver`
@@ -1991,8 +2003,8 @@ mod tests {
         // of the walk: filler `initArgs`, `creation_rows_encode_the_named_config`)
         // owner 2026-11-12: -> 107, `UACreateInstance`
         // the three-key model (CTR-PQZ-41): -> 108, `PqzRollOver`; round 3zc (CTR-GOV-30): -> 110, `UASetMaxSupply`,
-        // `UASetMaxWrapSupply`
-        assert_eq!(rows().iter().filter(|r| r.typed).count(), 110, "105 vector rows, mtxPay, the two invalidations (DEX, token), the two named creations");
+        // `UASetMaxWrapSupply`; set-auditor (CTR-GOV-31): -> 113, `UASetAuditorKey`, `UASetAuditorUA`, `AuditorConsent`
+        assert_eq!(rows().iter().filter(|r| r.typed).count(), 113, "108 vector rows, mtxPay, the two invalidations (DEX, token), the two named creations");
         // T93: 18 -> 30, `PqChat`'s twelve writes; UA-7 P48: -> 31, `remove`; ua-mtx-liquidity L6: -> 32, the DEX's `mtxLiquidity`
         // (CTR-DEX-30)
         // the three-key model (K3-3): -> 34, the registry's `setPqzScopedKey`, `storePqzScopedPop`
@@ -2575,8 +2587,9 @@ mod tests {
     fn chain_word_rows_refuse_a_missing_word() {
         let v = vectors();
         let rows: Vec<&str> = TYPED.iter().filter(|r| r.2 == GR && r.3.contains("bytes32 chainUid")).map(|r| r.0).collect();
-        // owner 2026-11-13: + UARenounceRole; round 3zb + 3zc: 24 -> 51 (the 25 rows of O5 / O6, the two cap setters)
-        assert_eq!(rows.len(), 51, "{rows:?}");
+        // owner 2026-11-13: + UARenounceRole; round 3zb + 3zc: 24 -> 51 (the 25 rows of O5 / O6, the two cap setters);
+        // set-auditor (CTR-GOV-31): -> 53, `UASetAuditorKey`, `UASetAuditorUA`
+        assert_eq!(rows.len(), 53, "{rows:?}");
         for op in rows {
             let good = op_of(op, "gov_router", &v).unwrap();
             Op::parse(&good, FEE).unwrap();

@@ -12,6 +12,14 @@ import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {n, a, h} from "../metatx/NamedEntry.t.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IZetherMergedT4} from "../merge/ZetherPairs.t.sol";
+import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
+import {ZetherKeys} from "./helpers/ZetherKeys.sol";
+import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
+import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
 import {T_G1, T_LEG, T_MULTI, typedDigest, multiJson, hexJson} from "./ZetherTyped.t.sol";
 
 /// @notice EIP-7825 (zether.md §19, CTR-ZTH-38, CTR-ZTH-34): under Amsterdam a transaction's REGULAR gas (intrinsic, the
@@ -144,6 +152,25 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
     function test_edge_compactOut() public { _edge(1); }
     function test_edge_bundleOn() public { _edge(2); }
     function test_edge_bundleOut() public { _edge(3); }
+
+    /// @dev Set-auditor A2 (spec §7, CTR-ZTH-95): a token with bit 32 whose auditor was replaced once (epoch 1, delay 0), so each
+    ///      audited transfer also writes its `entryAuditorEpoch` row; alice funded on it as in `setUp`.
+    function _epoch1() internal {
+        IFactoryToken.TokenConfig memory c = _cfg(true, uint256(1) << 40);
+        c.features |= uint256(1) << GovernanceBits.AUDITOR;
+        (c.admin, c.lockedFeatures) = (nid(address(this)), 0);
+        tok = NormalZetherToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "epoch1"));
+        bytes32 uid = EnvKit.codeUidOf(address(tok));
+        IGovernance(address(tok)).grantRole(GovernanceBits.AUDITOR, nid(address(this)), uid);
+        tok.setAuditorKey(ZetherKeys.pub(0xB0D1E5, bls), 1, _auditorPop(tok, 0xB0D1E5, 1), uid);
+        _public(tok, vm.addr(PAYER_PK), 1000);
+        _fund(tok, alice, 1_000_000);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
+    }
+
+    /// The cells with the auditor on at epoch 1: the same `M`, regular gas still within the cap less the margin.
+    function test_edge_compactOn_epoch1() public { _epoch1(); _edge(0); }
+    function test_edge_bundleOn_epoch1() public { _epoch1(); _edge(2); }
 
     /// @dev Regular and state gas per `M` (one isolated transaction each, limit `CAP + STATE_RESERVOIR`); stops at the first
     ///      `M` whose REGULAR gas passes `CAP - MARGIN` (state gas is not under the cap).
