@@ -208,3 +208,62 @@ async fn root_d_rows_and_refusals() {
         "control"
     );
 }
+
+/// T13 P2-1: one secret object given for two secret parameters is read once (a nested lock of one secret waits on itself and,
+/// inside the heavy job, holds the only permit for the session): root (c)'s two signatures, root (d)'s key and derivation
+/// passphrase. The SDK runs on its own runtime so a hang fails the timeout instead of holding the test's runtime; a later
+/// heavy job (`max_concurrent_heavy = 1`) still runs.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn one_secret_for_two_parameters_does_not_hang() {
+    let s = Sdk::open(SdkConfig {
+        profiles: vec![],
+        store: MemoryStore::new(),
+        authenticator: None,
+        rp_id: None,
+        runtime: RuntimeChoice::Own,
+        limits: Limits {
+            max_concurrent_heavy: 1,
+            ..Limits::default()
+        },
+    })
+    .await
+    .unwrap();
+    let within = std::time::Duration::from_secs(120);
+    let v = rows();
+    let e = &v["eoaSig"];
+    let sig = sec(&unhex(&e["rows"][0]["signature"]));
+    let mut req = by_sig(e, "C", vec![], vec![], e["passphrase"].as_str().unwrap());
+    (req.signature1, req.signature2) = (sig.clone(), sig);
+    let n = tokio::time::timeout(within, s.vault().derive_from_signature(req))
+        .await
+        .expect("root (c) with one signature object for both hangs")
+        .unwrap();
+    assert_eq!(words(&n), e["rows"][0]["words"].as_str().unwrap());
+    // a 32-byte key that is also a valid derivation passphrase, given once for both
+    let both = sec(b"river-otter-key-0123456789abcdef");
+    let req = DeriveFromKey {
+        label: "D".into(),
+        network: "evm".into(),
+        key: both.clone(),
+        derivation_passphrase: both,
+        index: 0,
+        vault_passphrase: sec(VAULT_PASS.as_bytes()),
+    };
+    let one = tokio::time::timeout(within, s.vault().derive_from_key(req))
+        .await
+        .expect("root (d) with one object for the key and the passphrase hangs")
+        .unwrap();
+    // the control: two equal objects give the same seed (SeedExists), and the heavy permit is free
+    let req = DeriveFromKey {
+        label: "D2".into(),
+        network: "evm".into(),
+        key: sec(b"river-otter-key-0123456789abcdef"),
+        derivation_passphrase: sec(b"river-otter-key-0123456789abcdef"),
+        index: 0,
+        vault_passphrase: sec(VAULT_PASS.as_bytes()),
+    };
+    let two = tokio::time::timeout(within, s.vault().derive_from_key(req))
+        .await
+        .expect("a later heavy job waits");
+    assert_eq!(code(two), "SeedExists", "{}", one.info.id);
+}

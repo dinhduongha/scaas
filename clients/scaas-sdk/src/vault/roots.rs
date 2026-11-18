@@ -116,11 +116,7 @@ impl Vault {
                                 Wallet::from_eoa_signature(&acct, set, a, b, p).map_err(origin)
                             })
                         };
-                        if Arc::ptr_eq(&s1, &s2) {
-                            s1.with(|a| derive(a, a))
-                        } else {
-                            s1.with(|a| s2.with(|b| derive(a, b)))
-                        }
+                        s1.with2(&s2, derive)
                     })
                     .await?;
                 store(&sdk, made, req.label, "eoa-sig", req.vault_passphrase).await
@@ -142,9 +138,10 @@ impl Vault {
                 let (key, dp, index) = (req.key, req.derivation_passphrase, req.index);
                 let made = sdk
                     .heavy(move || {
-                        key.with(|k| {
+                        key.with2(&dp, |k, p| {
                             let k: &[u8; 32] = k.try_into().map_err(|_| SdkError::Argument)?;
-                            passphrase(&dp, |p| Ok(Wallet::from_private_key(k, p, index)?))
+                            let p = std::str::from_utf8(p).map_err(|_| SdkError::Argument)?;
+                            Ok(Wallet::from_private_key(k, p, index)?)
                         })
                     })
                     .await?;

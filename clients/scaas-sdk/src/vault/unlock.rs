@@ -4,7 +4,7 @@
 //! second, session-only wallet of the same vault under a BIP-39 passphrase: nothing about it is written or emitted.
 
 use super::keystore::SeedEntry;
-use super::seeds::{info, mac, passphrase, OpenSeed};
+use super::seeds::{info, mac, passphrase, passphrases, OpenSeed};
 use super::Vault;
 use crate::error::SdkError;
 use crate::events::Event;
@@ -56,17 +56,15 @@ pub(crate) fn with_key<R>(
 /// Opens `e`'s seed vault (and, for the main set, checks its words and MAC and opens its label vaults).
 fn open_entry(e: &SeedEntry, key: &Key, bip39: Option<&SecretBytes>) -> Result<Wallet, SdkError> {
     let seed = vault_of(e, "seed")?;
-    // one secret given as both the vault and the BIP-39 passphrase: read once (a second `with` would wait on its own lock)
+    // the vault and the BIP-39 passphrase: two secrets, or one given for both (read once)
     if let (Key::Pass(p), Some(b)) = (key, bip39) {
-        if std::ptr::eq(p.as_ref(), b) {
-            return passphrase(b, |bp| {
-                Ok(Wallet::open_vault(
-                    &seed,
-                    scaas_ua::wallet::Unlock::VaultPassphrase(bp),
-                    bp,
-                )?)
-            });
-        }
+        return passphrases(p, b, |vp, bp| {
+            Ok(Wallet::open_vault(
+                &seed,
+                scaas_ua::wallet::Unlock::VaultPassphrase(vp),
+                bp,
+            )?)
+        });
     }
     with_key(key, |unlock| match bip39 {
         Some(b) => passphrase(b, |bp| Ok(Wallet::open_vault(&seed, unlock, bp)?)),

@@ -6,7 +6,7 @@
 //! pin envelope, removing the PRF unlock drops the envelope; neither revokes an earlier copy.
 
 use super::keystore::SeedEntry;
-use super::seeds::passphrase;
+use super::seeds::{passphrase, passphrases};
 use super::unlock::{Key, Unlock};
 use super::Vault;
 use crate::error::SdkError;
@@ -272,7 +272,7 @@ impl Vault {
             .spawn(async move {
                 let n2 = new.clone();
                 sdk.rewrite_vaults(&seed, move |v| {
-                    passphrase(&old, |o| passphrase(&n2, |n| Ok(v.rewrap_pin(o, n)?)))
+                    passphrases(&old, &n2, |o, n| Ok(v.rewrap_pin(o, n)?))
                 })
                 .await?;
                 sdk.refresh(&seed, new).await

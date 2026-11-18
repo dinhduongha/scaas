@@ -124,6 +124,20 @@ impl SecretBytes {
         f(g.as_ref().map_or(&[][..], Blocks::get))
     }
 
+    /// `f` over the bytes of this secret and of `other`, under both locks: the one every call over two secrets takes. The same
+    /// secret given twice is locked once (a second lock would wait on itself), and two are locked in id order (two calls naming
+    /// them in opposite orders cannot wait on each other).
+    pub fn with2<R>(&self, other: &SecretBytes, f: impl FnOnce(&[u8], &[u8]) -> R) -> R {
+        if Arc::ptr_eq(&self.cell, &other.cell) {
+            return self.with(|a| f(a, a));
+        }
+        if self.id < other.id {
+            self.with(|a| other.with(|b| f(a, b)))
+        } else {
+            other.with(|b| self.with(|a| f(a, b)))
+        }
+    }
+
     /// `f` over the bytes to write them, under this secret's lock (empty once disposed).
     pub fn with_mut<R>(&self, f: impl FnOnce(&mut [u8]) -> R) -> R {
         let mut g = cell(&self.cell);
@@ -176,7 +190,10 @@ pub fn secret_read(id: u64, dst: &mut [u8]) -> Result<usize> {
 
 /// Disposes of secret `id` (zeroed, freed); `false` for an unknown or already disposed id.
 pub fn secret_dispose(id: u64) -> bool {
-    match registry().remove(&id) {
+    // the registry's lock is dropped before the secret's: a secret in use (a running KDF) holds its own lock for long, and every
+    // secret call of the process waits on the registry's
+    let removed = registry().remove(&id);
+    match removed {
         Some(c) => {
             cell(&c).take();
             true
@@ -191,7 +208,7 @@ pub fn secrets_live() -> usize {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod tests {
     use super::*;
     use std::cell::Cell as StdCell;
@@ -230,6 +247,70 @@ mod tests {
         let t = SecretBytes::from_zeroizing(Zeroizing::new(vec![7; 3])).unwrap();
         drop(t);
         assert_eq!(RELEASED.with(StdCell::get), (before.0 + 3, before.1 + 1));
+    }
+
+    /// `with2`: one secret given twice is read once (a nested `with` would wait on its own lock), two in either order (T13 P2-1).
+    #[test]
+    fn with2_one_secret_twice_and_both_orders() {
+        let (a, b) = (SecretBytes::from_zeroizing(Zeroizing::new(vec![1])).unwrap(), SecretBytes::from_zeroizing(Zeroizing::new(vec![2])).unwrap());
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let r = (a.with2(&a, |x, y| (x[0], y[0])), a.with2(&b, |x, y| (x[0], y[0])), b.with2(&a, |x, y| (x[0], y[0])));
+            let _ = tx.send(r);
+        });
+        let r = rx.recv_timeout(std::time::Duration::from_secs(10)).expect("with2 of one secret twice waits on itself");
+        assert_eq!(r, ((1, 1), (1, 2), (2, 1)));
+        // two threads naming the two secrets in opposite orders, many times: in id order they never wait on each other
+        let (a, b) = (Arc::new(SecretBytes::new(1).unwrap()), Arc::new(SecretBytes::new(1).unwrap()));
+        let (tx, rx) = std::sync::mpsc::channel();
+        for flip in [false, true] {
+            let (x, y, tx) = (a.clone(), b.clone(), tx.clone());
+            std::thread::spawn(move || {
+                let (x, y) = if flip { (y, x) } else { (x, y) };
+                for _ in 0..20_000 {
+                    x.with2(&y, |_, _| std::hint::spin_loop());
+                }
+                let _ = tx.send(());
+            });
+        }
+        for _ in 0..2 {
+            rx.recv_timeout(std::time::Duration::from_secs(20)).expect("two with2 in opposite orders wait on each other");
+        }
+    }
+
+    /// A dispose of a secret in use (its lock held by a running KDF) leaves the registry free: `SecretBytes::new` does not wait
+    /// for the KDF (T13 P2-1). The control: the dispose itself completes once the KDF ends.
+    #[test]
+    fn dispose_of_a_secret_in_use_does_not_hold_the_registry() {
+        use std::sync::mpsc::channel;
+        use std::time::Duration;
+        let s = Arc::new(SecretBytes::new(8).unwrap());
+        let id = s.id();
+        let (in_kdf, entered) = channel();
+        let (release, until) = channel::<()>();
+        let s2 = s.clone();
+        let kdf = std::thread::spawn(move || {
+            s2.with(|_| {
+                let _ = in_kdf.send(());
+                let _ = until.recv();
+            })
+        });
+        entered.recv().unwrap();
+        let (disposed, dispose_done) = channel();
+        std::thread::spawn(move || {
+            let _ = disposed.send(secret_dispose(id));
+        });
+        // ponytail: a fixed pause for the dispose to reach the secret's lock; a slow machine only makes the check weaker
+        std::thread::sleep(Duration::from_millis(200));
+        let (made, new_done) = channel();
+        std::thread::spawn(move || {
+            let _ = made.send(SecretBytes::new(1).is_ok());
+        });
+        let fresh = new_done.recv_timeout(Duration::from_secs(5));
+        release.send(()).unwrap();
+        kdf.join().unwrap();
+        assert_eq!(fresh, Ok(true), "a new secret waited on the dispose of one in use");
+        assert_eq!(dispose_done.recv_timeout(Duration::from_secs(5)), Ok(true), "control: the dispose completes");
     }
 
     /// ua-dart-frb's `secret_sizes_and_outputs`, moved with the implementation.

@@ -413,3 +413,38 @@ async fn new_import_in_a_passkey_session_carries_the_prf_envelope() {
         .open_label_vault(&v, scaas_ua::wallet::Unlock::Prf(&out))
         .is_ok());
 }
+
+/// T13 P2-1: `change_passphrase` with one secret object for the old and the new passphrase completes (a nested lock of one
+/// secret waits on itself inside the heavy job and holds the only permit); a later unlock still runs. The SDK on its own
+/// runtime, so a hang fails the timeout.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn change_passphrase_one_secret_for_both() {
+    let s = Sdk::open(SdkConfig {
+        profiles: vec![],
+        store: MemoryStore::new(),
+        authenticator: None,
+        rp_id: None,
+        runtime: RuntimeChoice::Own,
+        limits: Limits {
+            max_concurrent_heavy: 1,
+            ..Limits::default()
+        },
+    })
+    .await
+    .unwrap();
+    let within = std::time::Duration::from_secs(120);
+    let id = seed(&s).await;
+    let p = sec(PASS);
+    tokio::time::timeout(
+        within,
+        s.vault().change_passphrase(id.clone(), p.clone(), p),
+    )
+    .await
+    .expect("change_passphrase with one object for both hangs")
+    .unwrap();
+    s.vault().lock(id.clone()).await;
+    let r = tokio::time::timeout(within, s.vault().unlock(id, Unlock::Passphrase(sec(PASS))))
+        .await
+        .expect("a later heavy job waits");
+    assert_eq!(code(r), "Ok");
+}

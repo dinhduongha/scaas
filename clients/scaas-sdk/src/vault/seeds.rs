@@ -93,6 +93,18 @@ pub(crate) fn passphrase<R>(
     s.with(|b| f(std::str::from_utf8(b).map_err(|_| SdkError::Argument)?))
 }
 
+/// `f` over two passphrases, read through `SecretBytes::with2` (one secret given for both is read once).
+pub(crate) fn passphrases<R>(
+    a: &SecretBytes,
+    b: &SecretBytes,
+    f: impl FnOnce(&str, &str) -> Result<R, SdkError>,
+) -> Result<R, SdkError> {
+    a.with2(b, |x, y| {
+        let utf8 = |s| std::str::from_utf8(s).map_err(|_| SdkError::Argument);
+        f(utf8(x)?, utf8(y)?)
+    })
+}
+
 pub(crate) fn info(e: &SeedEntry, unlocked: bool) -> SeedInfo {
     SeedInfo {
         id: e.id.clone(),
