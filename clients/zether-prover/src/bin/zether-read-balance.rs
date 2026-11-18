@@ -123,11 +123,21 @@ impl Args {
 
 /// A comma-separated list of 32-byte UAs.
 fn uas(f: &str, v: &str) -> Result<Vec<[u8; 32]>, String> {
-    v.split(',').map(|u| unhex(u)?.try_into().map_err(|_| format!("{f}: 32 bytes each"))).collect()
+    v.split(',')
+        .map(|u| {
+            unhex(u)?
+                .try_into()
+                .map_err(|_| format!("{f}: 32 bytes each"))
+        })
+        .collect()
 }
 
 fn parse() -> Result<Args, String> {
-    let mut a = Args { table_bits: 24, bound_bits: 54, ..Args::default() };
+    let mut a = Args {
+        table_bits: 24,
+        bound_bits: 54,
+        ..Args::default()
+    };
     let mut it = std::env::args().skip(1);
     while let Some(f) = it.next() {
         let mut val = || it.next().ok_or(format!("{f} needs a value"));
@@ -155,13 +165,26 @@ fn parse() -> Result<Args, String> {
             "--finalized" => a.finalized = true,
             "--cache-box" => a.cache_box = Some(val()?),
             "--registry" => a.registry = Some(val()?),
-            "--decoy-count" => a.decoy_count = Some(val()?.parse().map_err(|_| "--decoy-count: integer")?),
+            "--decoy-count" => {
+                a.decoy_count = Some(val()?.parse().map_err(|_| "--decoy-count: integer")?)
+            }
             "--decoy-keys" => a.decoy_keys = Some(uas("--decoy-keys", &val()?)?),
             "--exclude" => a.exclude = Some(uas("--exclude", &val()?)?),
-            "--recipient" => a.recipient = Some(unhex(&val()?)?.try_into().map_err(|_| "--recipient: 32 bytes")?),
-            "--sync-block" => a.sync_block = Some(val()?.parse().map_err(|_| "--sync-block: integer")?),
+            "--recipient" => {
+                a.recipient = Some(
+                    unhex(&val()?)?
+                        .try_into()
+                        .map_err(|_| "--recipient: 32 bytes")?,
+                )
+            }
+            "--sync-block" => {
+                a.sync_block = Some(val()?.parse().map_err(|_| "--sync-block: integer")?)
+            }
             "--decoy-filter" => {
-                a.filter = Some(val()?).filter(|v| v == "activity" || v == "holder").ok_or("--decoy-filter: activity or holder")?.into()
+                a.filter = Some(val()?)
+                    .filter(|v| v == "activity" || v == "holder")
+                    .ok_or("--decoy-filter: activity or holder")?
+                    .into()
             }
             "--window" => a.window = Some(val()?.parse().map_err(|_| "--window: integer")?),
             _ => return Err(format!("unknown argument {f}")),
@@ -176,15 +199,30 @@ fn parse() -> Result<Args, String> {
     #[cfg(not(feature = "hazmat"))]
     let pasted = false;
     if a.decoys() {
-        if a.rpc.is_empty() || a.registry.is_none() || a.cache_box.is_some() || a.pending || pasted {
+        if a.rpc.is_empty() || a.registry.is_none() || a.cache_box.is_some() || a.pending || pasted
+        {
             return Err("decoys: --rpc and --registry, no --cache-box, --pending or --ct".into());
         }
-        let candidates = a.decoy_count.is_some() && a.decoy_keys.is_none() && a.exclude.is_some() && a.filter.is_some() == a.window.is_some();
-        let keys = a.decoy_keys.is_some() && a.decoy_count.is_none() && a.exclude.is_none() && a.recipient.is_none() && a.filter.is_none() && a.window.is_none();
+        let candidates = a.decoy_count.is_some()
+            && a.decoy_keys.is_none()
+            && a.exclude.is_some()
+            && a.filter.is_some() == a.window.is_some();
+        let keys = a.decoy_keys.is_some()
+            && a.decoy_count.is_none()
+            && a.exclude.is_none()
+            && a.recipient.is_none()
+            && a.filter.is_none()
+            && a.window.is_none();
         if !candidates && !keys {
             return Err("decoys: --decoy-count with --exclude (--recipient, and --decoy-filter with --window, or neither), or --decoy-keys alone".into());
         }
-    } else if a.registry.is_some() || a.exclude.is_some() || a.recipient.is_some() || a.sync_block.is_some() || a.filter.is_some() || a.window.is_some() {
+    } else if a.registry.is_some()
+        || a.exclude.is_some()
+        || a.recipient.is_some()
+        || a.sync_block.is_some()
+        || a.filter.is_some()
+        || a.window.is_some()
+    {
         return Err("--registry, --exclude, --recipient, --sync-block, --decoy-filter and --window go with --decoy-count or --decoy-keys".into());
     }
     if pasted && (!a.rpc.is_empty() || a.cache_box.is_some()) {
@@ -194,7 +232,11 @@ fn parse() -> Result<Args, String> {
         return Err("give --rpc (with --chain-id, --chain-uid, --factory, --token, --depth or --finalized) and/or --cache-box".into());
     }
     if !a.rpc.is_empty()
-        && (a.chain_id.is_none() || a.chain_uid.is_none() || a.factory.is_none() || a.token.is_none() || a.finalized == a.depth.is_some())
+        && (a.chain_id.is_none()
+            || a.chain_uid.is_none()
+            || a.factory.is_none()
+            || a.token.is_none()
+            || a.finalized == a.depth.is_some())
     {
         return Err("--rpc needs --chain-id, --chain-uid, --factory, --token and one of --depth / --finalized (R1–R5)".into());
     }
@@ -217,7 +259,14 @@ fn hx(b: &[u8]) -> String {
 
 /// A curl config file (read from curl's stdin): URL and body stay out of argv.
 fn curl_config(url: &str, body: &str) -> String {
-    let q = |s: &str| format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"").replace(['\n', '\r'], ""));
+    let q = |s: &str| {
+        format!(
+            "\"{}\"",
+            s.replace('\\', "\\\\")
+                .replace('"', "\\\"")
+                .replace(['\n', '\r'], "")
+        )
+    };
     format!(
         "silent\nshow-error\nrequest = \"POST\"\nheader = \"content-type: application/json\"\nurl = {}\ndata-binary = {}\n",
         q(url),
@@ -239,12 +288,22 @@ fn rpc(url: &str, method: &str, params: Value) -> Result<Value, String> {
     std::io::Write::write_all(&mut stdin, cfg.as_bytes()).map_err(|e| e.to_string())?;
     drop(stdin);
     let out = child.wait_with_output().map_err(|e| e.to_string())?;
-    let v: Value = serde_json::from_slice(&out.stdout).map_err(|_| format!("{method}: the node returned no JSON"))?;
-    v.get("result").filter(|r| !r.is_null()).cloned().ok_or(format!("{method}: {}", v["error"]))
+    let v: Value = serde_json::from_slice(&out.stdout)
+        .map_err(|_| format!("{method}: the node returned no JSON"))?;
+    v.get("result")
+        .filter(|r| !r.is_null())
+        .cloned()
+        .ok_or(format!("{method}: {}", v["error"]))
 }
 
 fn qty(v: &Value) -> Result<u64, String> {
-    u64::from_str_radix(v.as_str().ok_or("a quantity expected")?.trim_start_matches("0x"), 16).map_err(|_| "a quantity expected".into())
+    u64::from_str_radix(
+        v.as_str()
+            .ok_or("a quantity expected")?
+            .trim_start_matches("0x"),
+        16,
+    )
+    .map_err(|_| "a quantity expected".into())
 }
 
 /// `a + i` (mod 2^256), big-endian.
@@ -274,15 +333,31 @@ struct Reader<'a> {
 
 impl Reader<'_> {
     fn code(&self, address: &[u8]) -> Result<Vec<u8>, String> {
-        unhex(rpc(self.url, "eth_getCode", json!([hx(address), {"blockHash": self.hash}]))?.as_str().ok_or("eth_getCode: not bytes")?)
+        unhex(
+            rpc(
+                self.url,
+                "eth_getCode",
+                json!([hx(address), {"blockHash": self.hash}]),
+            )?
+            .as_str()
+            .ok_or("eth_getCode: not bytes")?,
+        )
     }
     fn word(&self, address: &str, slot: &[u8; 32]) -> Result<[u8; 32], String> {
-        let w = rpc(self.url, "eth_getStorageAt", json!([address, hx(slot), {"blockHash": self.hash}]))?;
+        let w = rpc(
+            self.url,
+            "eth_getStorageAt",
+            json!([address, hx(slot), {"blockHash": self.hash}]),
+        )?;
         let b = unhex(w.as_str().ok_or("eth_getStorageAt: not a word")?)?;
         let mut o = [0u8; 32];
-        o.get_mut(32usize.checked_sub(b.len()).ok_or("eth_getStorageAt: longer than a word")?..)
-            .ok_or("word")?
-            .copy_from_slice(&b);
+        o.get_mut(
+            32usize
+                .checked_sub(b.len())
+                .ok_or("eth_getStorageAt: longer than a word")?..,
+        )
+        .ok_or("word")?
+        .copy_from_slice(&b);
         Ok(o)
     }
 }
@@ -304,7 +379,9 @@ fn configured(a: &Args, url: &str) -> Result<(), String> {
 fn chosen(a: &Args, url: &str) -> Result<u64, String> {
     configured(a, url)?;
     match a.depth {
-        Some(d) => qty(&rpc(url, "eth_blockNumber", json!([]))?)?.checked_sub(d).ok_or("R3: the chain is shorter than the confirmation depth".into()),
+        Some(d) => qty(&rpc(url, "eth_blockNumber", json!([]))?)?
+            .checked_sub(d)
+            .ok_or("R3: the chain is shorter than the confirmation depth".into()),
         None => qty(&rpc(url, "eth_getBlockByNumber", json!(["finalized", false]))?["number"]),
     }
 }
@@ -312,19 +389,30 @@ fn chosen(a: &Args, url: &str) -> Result<u64, String> {
 /// R1, R2, R3 and R5 on node `url`: the configured chain's read block (`at`: the number `--rpc-agree` fixed, else this node's
 /// own `finalized` / `head − depth`), the token catalogued with a Zether kind.
 fn open<'u>(a: &Args, url: &'u str, at: Option<u64>) -> Result<Reader<'u>, String> {
-    let (token, factory) = (a.token.as_deref().ok_or("--token")?, a.factory.as_deref().ok_or("--factory")?);
+    let (token, factory) = (
+        a.token.as_deref().ok_or("--token")?,
+        a.factory.as_deref().ok_or("--factory")?,
+    );
     configured(a, url)?;
     // R3
     let tag = match (at, a.depth) {
         (Some(n), _) => format!("0x{n:x}"),
         (None, Some(d)) => {
             let head = qty(&rpc(url, "eth_blockNumber", json!([]))?)?;
-            format!("0x{:x}", head.checked_sub(d).ok_or("R3: the chain is shorter than the confirmation depth")?)
+            format!(
+                "0x{:x}",
+                head.checked_sub(d)
+                    .ok_or("R3: the chain is shorter than the confirmation depth")?
+            )
         }
         (None, None) => "finalized".into(),
     };
     let b = rpc(url, "eth_getBlockByNumber", json!([tag, false]))?;
-    let r = Reader { url, block: qty(&b["number"])?, hash: b["hash"].as_str().ok_or("R3: no block hash")?.to_string() };
+    let r = Reader {
+        url,
+        block: qty(&b["number"])?,
+        hash: b["hash"].as_str().ok_or("R3: no block hash")?.to_string(),
+    };
     if at.is_some_and(|n| n != r.block) {
         return Err("R3: the node answered another block than the one asked for".into());
     }
@@ -339,7 +427,8 @@ fn open<'u>(a: &Args, url: &'u str, at: Option<u64>) -> Result<Reader<'u>, Strin
     }
     // R5, R6 (owner 2026-11-08): the token's code is a clone of a chain-neutral release; a `--registry` (the decoy steps) is the
     // one its `ChainEnv` names
-    let env_registry = clone_registry(&r.code(&t)?).ok_or("R5: the token is not a clone of a chain-neutral release")?;
+    let env_registry = clone_registry(&r.code(&t)?)
+        .ok_or("R5: the token is not a clone of a chain-neutral release")?;
     if let Some(reg) = a.registry.as_deref() {
         if unhex(reg)? != env_registry {
             return Err("R6: --registry is not the token's registry".into());
@@ -354,7 +443,9 @@ fn open<'u>(a: &Args, url: &'u str, at: Option<u64>) -> Result<Reader<'u>, Strin
 /// `None` for any other code. Held to `create3_kat.json` by `clone_registry_is_the_kat_layout`.
 fn clone_registry(code: &[u8]) -> Option<[u8; 20]> {
     const HEAD: [u8; 10] = [0x36, 0x3d, 0x3d, 0x37, 0x3d, 0x3d, 0x3d, 0x36, 0x3d, 0x73];
-    const TAIL: [u8; 15] = [0x5a, 0xf4, 0x3d, 0x82, 0x80, 0x3e, 0x90, 0x3d, 0x91, 0x60, 0x2b, 0x57, 0xfd, 0x5b, 0xf3];
+    const TAIL: [u8; 15] = [
+        0x5a, 0xf4, 0x3d, 0x82, 0x80, 0x3e, 0x90, 0x3d, 0x91, 0x60, 0x2b, 0x57, 0xfd, 0x5b, 0xf3,
+    ];
     (code.get(..10)? == HEAD && code.get(30..45)? == TAIL && *code.get(137)? <= 1).then_some(())?;
     let deps = usize::from(*code.get(138)?);
     let at = 139 + 20 * deps;
@@ -385,14 +476,21 @@ fn failover<T>(a: &Args, read: impl Fn(&str) -> Result<T, String>) -> Result<T, 
             Err(e) => last = e,
         }
     }
-    Err(if a.rpc.len() == 1 { last } else { format!("R1: no --rpc answered the whole read (the last: {last})") })
+    Err(if a.rpc.len() == 1 {
+        last
+    } else {
+        format!("R1: no --rpc answered the whole read (the last: {last})")
+    })
 }
 
 /// `--rpc-agree` (two or more nodes): the block number every node reads is the smallest the answering nodes choose (R2 on
 /// each); `read` runs whole on every node; the result is the one a strict majority of the named nodes returned identically,
 /// compared over the whole read (never word by word), a node that fails outvoted; that majority's nodes still carry every
 /// pinned block's hash after all the reads (R3). Else the refusal. One node, or no flag: [`failover`].
-fn on_nodes(a: &Args, read: impl Fn(&str, Option<u64>) -> Result<Pinned, String>) -> Result<Value, String> {
+fn on_nodes(
+    a: &Args,
+    read: impl Fn(&str, Option<u64>) -> Result<Pinned, String>,
+) -> Result<Value, String> {
     if !(a.agree && a.rpc.len() > 1) {
         return failover(a, |url| {
             let (v, pins) = read(url, None)?;
@@ -401,15 +499,32 @@ fn on_nodes(a: &Args, read: impl Fn(&str, Option<u64>) -> Result<Pinned, String>
         });
     }
     let need = a.rpc.len() / 2 + 1;
-    let n = a.rpc.iter().filter_map(|u| chosen(a, u).ok()).min().ok_or("R1: no --rpc answered")?;
-    let got: Vec<(&str, Pinned)> = a.rpc.iter().filter_map(|u| read(u, Some(n)).ok().map(|r| (u.as_str(), r))).collect();
+    let n = a
+        .rpc
+        .iter()
+        .filter_map(|u| chosen(a, u).ok())
+        .min()
+        .ok_or("R1: no --rpc answered")?;
+    let got: Vec<(&str, Pinned)> = a
+        .rpc
+        .iter()
+        .filter_map(|u| read(u, Some(n)).ok().map(|r| (u.as_str(), r)))
+        .collect();
     let count = |r: &Pinned| got.iter().filter(|g| g.1 == *r).count();
-    let best = got.iter().max_by_key(|g| count(&g.1)).ok_or("R1: no --rpc answered the read")?;
+    let best = got
+        .iter()
+        .max_by_key(|g| count(&g.1))
+        .ok_or("R1: no --rpc answered the read")?;
     let members: Vec<&str> = got.iter().filter(|g| g.1 == best.1).map(|g| g.0).collect();
     if members.len() < need {
         return Err("R1: no strict majority of the --rpc nodes returned the same read".into());
     }
-    if members.iter().filter(|u| best.1 .1.iter().all(|(b, h)| recheck(u, *b, h).is_ok())).count() < need {
+    if members
+        .iter()
+        .filter(|u| best.1 .1.iter().all(|(b, h)| recheck(u, *b, h).is_ok()))
+        .count()
+        < need
+    {
         return Err("R1: no strict majority of the --rpc nodes kept the read block (R3)".into());
     }
     Ok(best.1 .0.clone())
@@ -458,9 +573,15 @@ const MAX_LIST: u64 = 50_000;
 
 /// R3: block `n` still has `hash` (no reorg, a consistent node).
 fn recheck(url: &str, n: u64, hash: &str) -> Result<(), String> {
-    let again = rpc(url, "eth_getBlockByNumber", json!([format!("0x{n:x}"), false]))?;
+    let again = rpc(
+        url,
+        "eth_getBlockByNumber",
+        json!([format!("0x{n:x}"), false]),
+    )?;
     if again["hash"].as_str() != Some(hash) {
-        return Err("R3: the block changed during the read (a reorg or an inconsistent node)".into());
+        return Err(
+            "R3: the block changed during the read (a reorg or an inconsistent node)".into(),
+        );
     }
     Ok(())
 }
@@ -473,26 +594,42 @@ fn decoys(a: &Args) -> Result<Value, String> {
 
 /// The decoy read on node `url` (`at`: the agreed number), with every block read pinned for its R3 re-check.
 fn decoys_on(a: &Args, url: &str, at: Option<u64>) -> Result<Pinned, String> {
-    let (token, registry) = (a.token.as_deref().ok_or("--token")?, a.registry.as_deref().ok_or("--registry")?);
+    let (token, registry) = (
+        a.token.as_deref().ok_or("--token")?,
+        a.registry.as_deref().ok_or("--registry")?,
+    );
     let r = open(a, url, at)?;
     let block = r.block;
     let mut pins = vec![(block, r.hash.clone())];
     // another block of the same chain, by hash, the node's answer checked (R3); re-checked after the last read
     let mut pin = |n: u64| -> Result<Reader<'_>, String> {
-        let b = rpc(url, "eth_getBlockByNumber", json!([format!("0x{n:x}"), false]))?;
+        let b = rpc(
+            url,
+            "eth_getBlockByNumber",
+            json!([format!("0x{n:x}"), false]),
+        )?;
         if qty(&b["number"])? != n {
             return Err("R3: the node answered another block than the one asked for".into());
         }
         let hash = b["hash"].as_str().ok_or("R3: no block hash")?.to_string();
         pins.push((n, hash.clone()));
-        Ok(Reader { url, block: n, hash })
+        Ok(Reader {
+            url,
+            block: n,
+            hash,
+        })
     };
     let sync = a.sync_block.unwrap_or(block);
     if sync > block {
         return Err("--sync-block is past the read block".into());
     }
-    let n = pin(sync)?.word(registry, &keccak256(&[be(ZETHER_LIST), be(REG_COUNT_SLOT)].concat()))?;
-    let n = (n[..24] == [0; 24]).then(|| u64::from_be_bytes(n[24..].try_into().unwrap_or_default())).filter(|n| *n <= MAX_LIST)
+    let n = pin(sync)?.word(
+        registry,
+        &keccak256(&[be(ZETHER_LIST), be(REG_COUNT_SLOT)].concat()),
+    )?;
+    let n = (n[..24] == [0; 24])
+        .then(|| u64::from_be_bytes(n[24..].try_into().unwrap_or_default()))
+        .filter(|n| *n <= MAX_LIST)
         .ok_or("the registry's list is longer than this tool reads")?;
     let list = keccak256(&[be(ZETHER_LIST), be(REG_AT_SLOT)].concat());
     let mut out = if let Some(keys) = &a.decoy_keys {
@@ -501,14 +638,25 @@ fn decoys_on(a: &Args, url: &str, at: Option<u64>) -> Result<Pinned, String> {
             // `Record`: `kind(16) ‖ registeredAt(40) ‖ keyPtr(160) ‖ index(40)` from the low end; the code `0x00 ‖ Y`
             let rec = r.word(registry, &keccak256(&[*ua, be(REG_RECORDS_SLOT)].concat()))?;
             let index = rec[..5].iter().fold(0u64, |x, b| x << 8 | u64::from(*b));
-            let listed = rec[30..] == [0x01, 0x41] && index < n && r.word(registry, &keccak256(&[be(index), list].concat()))? == *ua;
-            let code = if listed { r.code(&rec[5..25])? } else { Vec::new() };
+            let listed = rec[30..] == [0x01, 0x41]
+                && index < n
+                && r.word(registry, &keccak256(&[be(index), list].concat()))? == *ua;
+            let code = if listed {
+                r.code(&rec[5..25])?
+            } else {
+                Vec::new()
+            };
             let y = match code.split_first() {
-                Some((0, y)) => zether_prover::curve::decode_point::<Bls12381>(y).ok().filter(|p| zether_prover::curve::ua_of::<Bls12381>(p) == *ua),
+                Some((0, y)) => zether_prover::curve::decode_point::<Bls12381>(y)
+                    .ok()
+                    .filter(|p| zether_prover::curve::ua_of::<Bls12381>(p) == *ua),
                 _ => None,
             };
             if y.is_none() {
-                return Err(format!("{} is not a registered Zether UA on the 0x0141 list up to the sync point", hx(ua)));
+                return Err(format!(
+                    "{} is not a registered Zether UA on the 0x0141 list up to the sync point",
+                    hx(ua)
+                ));
             }
             legs.push(json!({"ua": hx(ua), "yTo": hx(&code[1..])}));
         }
@@ -528,19 +676,35 @@ fn decoys_on(a: &Args, url: &str, at: Option<u64>) -> Result<Pinned, String> {
             request["recipient"] = json!(hx(&u));
         }
         if let Some(w) = a.window {
-            let old = block.checked_sub(w).filter(|_| w >= 2).ok_or("--window: at least 2 and at most the read block")?;
+            let old = block
+                .checked_sub(w)
+                .filter(|_| w >= 2)
+                .ok_or("--window: at least 2 and at most the read block")?;
             let (old, mid) = (pin(old)?, pin(block - w / 2)?);
-            let (_, _, inner, byte, width) = *state::LAYOUT.iter().find(|l| l.0 == "acct[U].sendCounter").ok_or("layout")?;
+            let (_, _, inner, byte, width) = *state::LAYOUT
+                .iter()
+                .find(|l| l.0 == "acct[U].sendCounter")
+                .ok_or("layout")?;
             let sent = |w: &[u8; 32]| w[32 - byte - width..32 - byte].to_vec();
             // the counters word (`accSeq ‖ pendingSeq ‖ lastRolledPendingSeq ‖ sendCounter`): any move, or `holder`: `sendCounter`
             let moved = |x: &Reader, y: &Reader, slot: &[u8; 32]| -> Result<bool, String> {
                 let (x, y) = (x.word(token, slot)?, y.word(token, slot)?);
-                Ok(if a.filter.as_deref() == Some("holder") { sent(&x) != sent(&y) } else { x != y })
+                Ok(if a.filter.as_deref() == Some("holder") {
+                    sent(&x) != sent(&y)
+                } else {
+                    x != y
+                })
             };
             let (mut kept, mut weights) = (Vec::new(), Vec::new());
             for u in candidates {
                 let slot = add(&keccak256(&[u, add(&state::ROOT, 8)].concat()), inner);
-                let w = if moved(&mid, &r, &slot)? { 2 } else if moved(&old, &mid, &slot)? { 1 } else { 0 };
+                let w = if moved(&mid, &r, &slot)? {
+                    2
+                } else if moved(&old, &mid, &slot)? {
+                    1
+                } else {
+                    0
+                };
                 if w > 0 {
                     kept.push(u);
                     weights.push(w);
@@ -552,7 +716,12 @@ fn decoys_on(a: &Args, url: &str, at: Option<u64>) -> Result<Pinned, String> {
         request["candidates"] = json!(candidates.iter().map(|u| hx(u)).collect::<Vec<_>>());
         json!({"request": request})
     };
-    for (k, v) in [("syncBlock", json!(sync)), ("listCount", json!(n)), ("block", json!(block)), ("blockHash", json!(r.hash))] {
+    for (k, v) in [
+        ("syncBlock", json!(sync)),
+        ("listCount", json!(n)),
+        ("block", json!(block)),
+        ("blockHash", json!(r.hash)),
+    ] {
         out[k] = v;
     }
     Ok((out, pins))
@@ -560,10 +729,19 @@ fn decoys_on(a: &Args, url: &str, at: Option<u64>) -> Result<Pinned, String> {
 
 /// The holder's cache entry `<UA>:<token>` of the box file (clientkeys `openBalanceCache`; `state::open_cache_entry`):
 /// `(balance, accSeq)` and the box.
-fn cache_entry(path: &str, k: &ZetherKey<Bls12381>, token: &str) -> Result<(u64, u64, Value), String> {
-    let b: Value = serde_json::from_slice(&std::fs::read(path).map_err(|e| format!("{path}: {e}"))?).map_err(|_| "--cache-box: JSON")?;
-    let t: [u8; 20] = unhex(token)?.try_into().map_err(|_| "--token is 20 bytes")?;
-    let (balance, seq) = state::open_cache_entry(k, &b, &t).map_err(|e| format!("--cache-box: {e}"))?;
+fn cache_entry(
+    path: &str,
+    k: &ZetherKey<Bls12381>,
+    token: &str,
+) -> Result<(u64, u64, Value), String> {
+    let b: Value =
+        serde_json::from_slice(&std::fs::read(path).map_err(|e| format!("{path}: {e}"))?)
+            .map_err(|_| "--cache-box: JSON")?;
+    let t: [u8; 20] = unhex(token)?
+        .try_into()
+        .map_err(|_| "--token is 20 bytes")?;
+    let (balance, seq) =
+        state::open_cache_entry(k, &b, &t).map_err(|e| format!("--cache-box: {e}"))?;
     Ok((balance, seq, b))
 }
 
@@ -572,7 +750,11 @@ fn table<C: ZCurve>(a: &Args) -> Result<BsgsTable<C>, String> {
         if let Ok(bytes) = std::fs::read(path) {
             let t = BsgsTable::<C>::from_bytes(&bytes).map_err(|e| format!("{path}: {e}"))?;
             if t.table_bits() != a.table_bits {
-                return Err(format!("{path} holds a 2^{} table, not 2^{}", t.table_bits(), a.table_bits));
+                return Err(format!(
+                    "{path} holds a 2^{} table, not 2^{}",
+                    t.table_bits(),
+                    a.table_bits
+                ));
             }
             return Ok(t);
         }
@@ -596,7 +778,9 @@ fn run_state(a: &Args, key_json: &Value) -> Result<Value, String> {
         if a.pending {
             return Err("--pending needs --rpc (the cache holds acc only)".into());
         }
-        return Ok(json!({"balance": balance.to_string(), "accSeq": acc_seq, "block": null, "source": "cache"}));
+        return Ok(
+            json!({"balance": balance.to_string(), "accSeq": acc_seq, "block": null, "source": "cache"}),
+        );
     }
     let mut v = read_words(a, &k.ua())?;
     let block = v["block"].clone();
@@ -605,11 +789,21 @@ fn run_state(a: &Args, key_json: &Value) -> Result<Value, String> {
         v["cacheBox"] = bx;
         let ok = state::run(&state::prepare("checkBalance", &v, &k.y)?, &k, &mut rng)?;
         if ok["ok"] == true {
-            return Ok(json!({"balance": balance.to_string(), "accSeq": seq, "block": block, "source": "cache+rpc"}));
+            return Ok(
+                json!({"balance": balance.to_string(), "accSeq": seq, "block": block, "source": "cache+rpc"}),
+            );
         }
         v.as_object_mut().ok_or("words")?.remove("cacheBox");
     }
-    let p = state::prepare(if a.pending { "pendingBalance" } else { "balance" }, &v, &k.y)?;
+    let p = state::prepare(
+        if a.pending {
+            "pendingBalance"
+        } else {
+            "balance"
+        },
+        &v,
+        &k.y,
+    )?;
     let acc_seq = p.account().ok_or("no account")?.acc_seq;
     check_ram(a.table_bits, mem_available()).map_err(|e| e.to_string())?;
     let b = state::amount_with_table(&p, &k, &table::<Bls12381>(a)?, a.bound_bits)?;
@@ -623,10 +817,19 @@ fn run_pasted<C: ZCurve>(a: &Args, key_json: &Value) -> Result<Value, String> {
     use zether_prover::elgamal::Ciphertext;
     let k = zether_prover::api::key::<C>(key_json)?;
     let point = |b: &[u8]| decode_point::<C>(b).map_err(|e| e.to_string());
-    let (c, d) = a.ct.as_deref().ok_or("--ct")?.split_once(':').ok_or("--ct is <C hex>:<D hex>")?;
-    let ct = Ciphertext { c: point(&unhex(c)?)?, d: point(&unhex(d)?)? };
+    let (c, d) =
+        a.ct.as_deref()
+            .ok_or("--ct")?
+            .split_once(':')
+            .ok_or("--ct is <C hex>:<D hex>")?;
+    let ct = Ciphertext {
+        c: point(&unhex(c)?)?,
+        d: point(&unhex(d)?)?,
+    };
     check_ram(a.table_bits, mem_available()).map_err(|e| e.to_string())?;
-    let b = table::<C>(a)?.decrypt(&ct, &k.x, a.bound_bits).map_err(|e| e.to_string())?;
+    let b = table::<C>(a)?
+        .decrypt(&ct, &k.x, a.bound_bits)
+        .map_err(|e| e.to_string())?;
     Ok(json!({"balance": b.to_string(), "accSeq": null, "block": null, "source": "pasted"}))
 }
 
@@ -693,7 +896,10 @@ mod tests {
         let c = curl_config("https://node/x?key=a\"b", r#"{"a":"\\"}"#);
         assert!(c.contains(r#"url = "https://node/x?key=a\"b""#), "{c}");
         assert!(c.contains(r#"data-binary = "{\"a\":\"\\\\\"}""#), "{c}");
-        assert!(!curl_config("-o out/x", "{}\nurl = \"evil\"").contains("\nurl = \"evil"), "no injected lines");
+        assert!(
+            !curl_config("-o out/x", "{}\nurl = \"evil\"").contains("\nurl = \"evil"),
+            "no injected lines"
+        );
         let mut v: Value = serde_json::from_str(r#"{"key":{"x":"0x1234","n":[ "ab" ]}}"#).unwrap();
         wipe(&mut v);
         assert_eq!(v["key"]["x"], json!(""));
@@ -706,8 +912,11 @@ mod tests {
     /// version(64)`; R5 takes class TOKEN with one of this reader's kinds, never the old one-word `_info` packing.
     #[test]
     fn factory_record_is_the_layout_pin() {
-        let pin = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/evm/test/zether/ZetherStateVectors.t.sol"))
-            .unwrap();
+        let pin = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../smartcontracts/evm/test/zether/ZetherStateVectors.t.sol"
+        ))
+        .unwrap();
         for a in [
             &format!("uint256 internal constant REC = {REC_SLOT};")[..],
             "uint256 base = uint256(keccak256(abi.encode(address(tok), REC)));",
@@ -725,8 +934,14 @@ mod tests {
             w
         };
         assert!(catalogued(&word(1, ZETHER_KINDS[0])), "positive control");
-        assert!(ZETHER_KINDS.iter().all(|k| catalogued(&word(1, *k))), "every kind of this reader");
-        assert!(!catalogued(&word(0, ZETHER_KINDS[0])), "class 0: not made here");
+        assert!(
+            ZETHER_KINDS.iter().all(|k| catalogued(&word(1, *k))),
+            "every kind of this reader"
+        );
+        assert!(
+            !catalogued(&word(0, ZETHER_KINDS[0])),
+            "class 0: not made here"
+        );
         assert!(!catalogued(&word(2, ZETHER_KINDS[0])), "class DEX");
         assert!(!catalogued(&word(1, 4)), "the other confidential family");
         let mut wide = word(1, ZETHER_KINDS[0]);
@@ -741,13 +956,24 @@ mod tests {
     /// its env's registry; another proxy byte, a byte short or long, five deps or the proxy alone give none.
     #[test]
     fn clone_registry_is_the_kat_layout() {
-        let kat: Value = serde_json::from_str(&std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"),
-            "/../../smartcontracts/vectors/factory/create3_kat.json")).unwrap()).unwrap();
+        let kat: Value = serde_json::from_str(
+            &std::fs::read_to_string(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../smartcontracts/vectors/factory/create3_kat.json"
+            ))
+            .unwrap(),
+        )
+        .unwrap();
         for e in kat["envs"].as_array().unwrap() {
             let init = unhex(e["cloneInitCode"].as_str().unwrap()).unwrap();
             let env = unhex(e["env"].as_str().unwrap()).unwrap();
             let rt = &init[10..];
-            assert_eq!(clone_registry(rt).map(|r| r.to_vec()), Some(env[32..52].to_vec()), "{}", e["name"]);
+            assert_eq!(
+                clone_registry(rt).map(|r| r.to_vec()),
+                Some(env[32..52].to_vec()),
+                "{}",
+                e["name"]
+            );
             let mut x = rt.to_vec();
             x[0] ^= 1;
             assert_eq!(clone_registry(&x), None, "another head");
@@ -755,7 +981,11 @@ mod tests {
             x[44] ^= 1;
             assert_eq!(clone_registry(&x), None, "another tail");
             assert_eq!(clone_registry(&rt[..rt.len() - 1]), None, "a byte short");
-            assert_eq!(clone_registry(&[rt, &[0][..]].concat()), None, "a byte long");
+            assert_eq!(
+                clone_registry(&[rt, &[0][..]].concat()),
+                None,
+                "a byte long"
+            );
             assert_eq!(clone_registry(&rt[..45]), None, "the proxy alone");
         }
         let rt = &unhex(kat["envs"][0]["cloneInitCode"].as_str().unwrap()).unwrap()[10..];
@@ -773,7 +1003,12 @@ mod tests {
         pin.lines().find_map(|l| {
             let rest = l.trim().strip_prefix("s.")?.strip_prefix(field)?;
             rest.starts_with(['[', '.', ' ']).then_some(())?;
-            rest.rsplit_once("// ")?.1.split_whitespace().next()?.parse().ok()
+            rest.rsplit_once("// ")?
+                .1
+                .split_whitespace()
+                .next()?
+                .parse()
+                .ok()
         })
     }
 
@@ -781,9 +1016,16 @@ mod tests {
     /// `test/ua/UAStoreLayout.t.sol`), as `pqz-read`'s are.
     #[test]
     fn registry_slots_are_the_layout_pin() {
-        let pin = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/evm/test/ua/UAStoreLayout.t.sol"))
-            .unwrap();
-        for (field, slot) in [("records", REG_RECORDS_SLOT), ("uaCount", REG_COUNT_SLOT), ("uaAt", REG_AT_SLOT)] {
+        let pin = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../smartcontracts/evm/test/ua/UAStoreLayout.t.sol"
+        ))
+        .unwrap();
+        for (field, slot) in [
+            ("records", REG_RECORDS_SLOT),
+            ("uaCount", REG_COUNT_SLOT),
+            ("uaAt", REG_AT_SLOT),
+        ] {
             assert_eq!(pin_slot(&pin, field), Some(slot), "{field}");
         }
     }

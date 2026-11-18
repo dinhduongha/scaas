@@ -16,26 +16,43 @@ fn h(v: &Value) -> Vec<u8> {
 }
 
 fn file() -> Value {
-    let p = format!("{}/../../smartcontracts/vectors/zether/auditor_pop.json", env!("CARGO_MANIFEST_DIR"));
-    serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|_| panic!("{p}: run zether-cli auditor-pop"))).unwrap()
+    let p = format!(
+        "{}/../../smartcontracts/vectors/zether/auditor_pop.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    serde_json::from_str(
+        &std::fs::read_to_string(&p).unwrap_or_else(|_| panic!("{p}: run zether-cli auditor-pop")),
+    )
+    .unwrap()
 }
 
 #[test]
 fn committed_rows_are_current_and_verify() {
     let v = file();
-    assert_eq!(v, zether_prover::vectors::auditor_pop(), "auditor_pop.json drifted: run zether-cli auditor-pop");
+    assert_eq!(
+        v,
+        zether_prover::vectors::auditor_pop(),
+        "auditor_pop.json drifted: run zether-cli auditor-pop"
+    );
     for r in v["rows"].as_array().unwrap() {
         let y = decode_point::<C>(&h(&r["y"])).unwrap();
         let d: [u8; 32] = h(&r["d"]).try_into().unwrap();
         verify_auditor_pop::<C>(&y, &d, &h(&r["pop"])).unwrap();
         let mut other = d;
         other[0] ^= 1;
-        assert!(verify_auditor_pop::<C>(&y, &other, &h(&r["pop"])).is_err(), "bound to d");
+        assert!(
+            verify_auditor_pop::<C>(&y, &other, &h(&r["pop"])).is_err(),
+            "bound to d"
+        );
     }
     for r in v["refused"].as_array().unwrap() {
         let y = decode_point::<C>(&h(&r["y"])).unwrap();
         let d: [u8; 32] = h(&r["d"]).try_into().unwrap();
-        assert!(verify_auditor_pop::<C>(&y, &d, &h(&r["pop"])).is_err(), "{}", r["name"]);
+        assert!(
+            verify_auditor_pop::<C>(&y, &d, &h(&r["pop"])).is_err(),
+            "{}",
+            r["name"]
+        );
     }
 }
 
@@ -51,5 +68,8 @@ fn hedged_proofs_verify_and_bind_the_key() {
     verify_auditor_pop::<C>(&k.y, &d, &a).unwrap();
     verify_auditor_pop::<C>(&k.y, &d, &b).unwrap();
     let other = decode_point::<C>(&h(&v["rows"][1]["y"])).unwrap();
-    assert!(verify_auditor_pop::<C>(&other, &d, &a).is_err(), "bound to the key");
+    assert!(
+        verify_auditor_pop::<C>(&other, &d, &a).is_err(),
+        "bound to the key"
+    );
 }

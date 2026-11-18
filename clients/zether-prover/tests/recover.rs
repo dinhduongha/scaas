@@ -48,7 +48,10 @@ fn hx(b: &[u8]) -> Value {
 
 /// A commit-reveal transfer on a COMPACT token (its default entry): three recipients, one a decoy, the auditor in.
 fn multi(curve: &str) -> Value {
-    let acc = ok("encrypt", &json!({"curve": curve, "Y": y(curve, 0), "amount": 5000}));
+    let acc = ok(
+        "encrypt",
+        &json!({"curve": curve, "Y": y(curve, 0), "amount": 5000}),
+    );
     json!({
         "curve": curve, "key": key(0), "chainId": 31337, "chainUid": UID, "token": TOKEN, "sendCounter": 4, "accSeq": 1,
         "validUntilBlock": 100, "acc": acc, "balance": 5000, "includeWitness": true, "yAud": y(curve, 9), "disclosureMode": "compact",
@@ -88,7 +91,11 @@ fn recover_from_storage_alone() {
         m[20] ^= 1;
         bad["memo"] = hx(&m);
         assert!(!err("recoverTransfer", &bad).is_empty(), "tampered memo");
-        assert!(!err("recoverTransfer", &from_storage(curve, &t, &format!("0x{}", "25".repeat(32)))).is_empty());
+        assert!(!err(
+            "recoverTransfer",
+            &from_storage(curve, &t, &format!("0x{}", "25".repeat(32)))
+        )
+        .is_empty());
         let mut bad = from_storage(curve, &t, UID);
         let mut r = hexb(&t["bundles"]);
         r[16 + 5] ^= 1;
@@ -110,8 +117,20 @@ fn open_memo_names_the_recipients() {
         let m = ok("openMemo", &from_storage(curve, &t, UID));
         assert_eq!(m["salt"], t["salt"]);
         assert_eq!(m["auditorIncluded"], json!(true));
-        assert_eq!(m["legs"].as_array().unwrap().iter().map(|l| l["toUA"].clone()).collect::<Vec<_>>(),
-            vec![json!(ua(curve, 1)), json!(ua(curve, 2)), json!(ua(curve, 3))], "{curve}: the recipients");
+        assert_eq!(
+            m["legs"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|l| l["toUA"].clone())
+                .collect::<Vec<_>>(),
+            vec![
+                json!(ua(curve, 1)),
+                json!(ua(curve, 2)),
+                json!(ua(curve, 3))
+            ],
+            "{curve}: the recipients"
+        );
         assert_eq!(m["legs"][0]["amount"], json!("1200"));
     }
 }
@@ -122,7 +141,10 @@ fn open_memo_names_the_recipients() {
 fn recover_commit_reveal_calldata_without_keys() {
     let mut req = multi(BN);
     req["balance"] = json!(1u64 << 40);
-    req["acc"] = ok("encrypt", &json!({"curve": BN, "Y": y(BN, 0), "amount": 1u64 << 40}));
+    req["acc"] = ok(
+        "encrypt",
+        &json!({"curve": BN, "Y": y(BN, 0), "amount": 1u64 << 40}),
+    );
     req["recipients"][0]["amount"] = json!(1u64 << 33);
     let t = ok("proveTransferMulti", &req);
     let q = json!({"curve": BN, "key": key(0), "chainId": 31337, "chainUid": UID, "token": TOKEN,
@@ -130,13 +152,20 @@ fn recover_commit_reveal_calldata_without_keys() {
     let r = ok("recoverTransfer", &q);
     assert_eq!(r["bundles"], t["bundles"]);
     assert_eq!(r["legs"][0]["amount"], json!((1u64 << 33).to_string()));
-    assert_eq!(ok("openMemo", &q)["legs"][2]["amount"], json!("77"), "openMemo on calldata too");
+    assert_eq!(
+        ok("openMemo", &q)["legs"][2]["amount"],
+        json!("77"),
+        "openMemo on calldata too"
+    );
     let mut bad = hexb(&t["payload"]);
     let n = bad.len();
     bad[n - 30] ^= 1; // the memo
     let mut q2 = q.clone();
     q2["payload"] = hx(&bad);
-    assert!(!err("recoverTransfer", &q2).is_empty(), "tampered memo in calldata");
+    assert!(
+        !err("recoverTransfer", &q2).is_empty(),
+        "tampered memo in calldata"
+    );
 }
 
 /// An `OPTIONAL` opt-out: the memo's flag says the auditor was left out; no `yAud` needed.
@@ -169,10 +198,17 @@ fn recover_a_record_and_calldata() {
     assert_eq!(r["legs"][0]["amount"], json!("1200"), "BSGS");
     let mut w = q.clone();
     w["yAud"] = y(BN, 8); // review T1 m1: only the record compare refuses a wrong auditor key
-    assert!(err("recoverTransfer", &w).contains("rebuilt"), "wrong yAud on a record");
+    assert!(
+        err("recoverTransfer", &w).contains("rebuilt"),
+        "wrong yAud on a record"
+    );
     let mut q = base.clone();
     q["payload"] = t["payload"].clone();
-    assert_eq!(ok("recoverTransfer", &q)["bundles"], t["bundles"], "from calldata");
+    assert_eq!(
+        ok("recoverTransfer", &q)["bundles"],
+        t["bundles"],
+        "from calldata"
+    );
     let mut one = req.clone();
     (one["yTo"], one["amount"]) = (req["recipients"][0]["yTo"].clone(), json!(1200));
     let t1 = ok("proveTransfer", &one);
@@ -190,10 +226,17 @@ fn recover_a_record_and_calldata() {
 #[test]
 fn two_builds_at_one_counter_differ() {
     let req = multi(BN);
-    let (a, b) = (ok("proveTransferMulti", &req), ok("proveTransferMulti", &req));
+    let (a, b) = (
+        ok("proveTransferMulti", &req),
+        ok("proveTransferMulti", &req),
+    );
     assert_ne!(a["salt"], b["salt"]);
     assert_ne!(a["witness"]["s"], b["witness"]["s"]);
-    assert_ne!(hexb(&a["memo"])[16..], hexb(&b["memo"])[16..], "memo keystream");
+    assert_ne!(
+        hexb(&a["memo"])[16..],
+        hexb(&b["memo"])[16..],
+        "memo keystream"
+    );
 }
 
 /// The default entry follows the token: `mtxConfidentialTransfer` stores R on a BUNDLE token (the default) and commits on a
@@ -205,24 +248,44 @@ fn modes_in_the_request() {
     let sel = |t: &Value| t["directCalldata"].as_str().unwrap()[2..10].to_string();
     let t = ok("proveTransferMulti", &req);
     assert_eq!(t["mode"], json!("bundle"));
-    let default = hex::encode(zether_prover::envelope::selector(&format!("mtxConfidentialTransfer({},bytes)", zether_prover::envelope::multi_type())));
+    let default = hex::encode(zether_prover::envelope::selector(&format!(
+        "mtxConfidentialTransfer({},bytes)",
+        zether_prover::envelope::multi_type()
+    )));
     assert_eq!(sel(&t), default, "mtxConfidentialTransfer, the default");
     let mut h = req.clone();
     h["mode"] = json!("compact");
-    let compact = hex::encode(zether_prover::envelope::selector(&format!("mtxConfidentialTransferCompact({},bytes)", zether_prover::envelope::multi_type())));
-    assert_eq!(sel(&ok("proveTransferMulti", &h)), compact, "commit-reveal on a BUNDLE token");
+    let compact = hex::encode(zether_prover::envelope::selector(&format!(
+        "mtxConfidentialTransferCompact({},bytes)",
+        zether_prover::envelope::multi_type()
+    )));
+    assert_eq!(
+        sel(&ok("proveTransferMulti", &h)),
+        compact,
+        "commit-reveal on a BUNDLE token"
+    );
     let mut c = req.clone();
     c["disclosureMode"] = json!("compact");
     let t = ok("proveTransferMulti", &c);
     assert_eq!(t["mode"], json!("compact"));
-    assert_eq!(sel(&t), default, "mtxConfidentialTransfer: commit-reveal on a COMPACT token");
+    assert_eq!(
+        sel(&t),
+        default,
+        "mtxConfidentialTransfer: commit-reveal on a COMPACT token"
+    );
     c["mode"] = json!("bundle");
     assert!(err("proveTransferMulti", &c).contains("TransferEntryDisabled"));
     c["mode"] = json!("none");
-    assert!(err("proveTransferMulti", &c).contains("compact"), "the NONE form is retired (review C0-3)");
+    assert!(
+        err("proveTransferMulti", &c).contains("compact"),
+        "the NONE form is retired (review C0-3)"
+    );
     let mut one = c.clone();
     (one["yTo"], one["amount"]) = (req["recipients"][0]["yTo"].clone(), json!(1));
-    assert!(err("proveTransfer", &one).contains("TransferEntryDisabled"), "no single format on COMPACT");
+    assert!(
+        err("proveTransfer", &one).contains("TransferEntryDisabled"),
+        "no single format on COMPACT"
+    );
     let mut a = req.clone();
     a["auditorMode"] = json!("none");
     assert!(err("proveTransferMulti", &a).contains("AuditorForbidden"));
@@ -239,19 +302,33 @@ fn modes_in_the_request() {
 #[test]
 fn gas_cap_message() {
     let mut req = multi("bls12381");
-    req["recipients"] = json!((1..=9).map(|a| json!({"yTo": y("bls12381", a), "amount": 1})).collect::<Vec<_>>());
+    req["recipients"] = json!((1..=9)
+        .map(|a| json!({"yTo": y("bls12381", a), "amount": 1}))
+        .collect::<Vec<_>>());
     let e = err("proveTransferMulti", &req);
-    for part in ["EIP-7825", "16777216", "M = 9", "17478898", "at most 8 recipients", "bls12381 compact with the auditor, direct"] {
+    for part in [
+        "EIP-7825",
+        "16777216",
+        "M = 9",
+        "17478898",
+        "at most 8 recipients",
+        "bls12381 compact with the auditor, direct",
+    ] {
         assert!(e.contains(part), "{part}: {e}");
     }
     #[cfg(feature = "bn254")]
     {
-    let mut bn = multi(BN);
-    bn["disclosureMode"] = Value::Null;
-    bn["recipients"] = json!((1..=9).map(|a| json!({"yTo": y(BN, a), "amount": 1})).collect::<Vec<_>>());
-    let e = err("proveTransferMulti", &bn);
-    assert!(e.contains("bn254 bundle with the auditor, direct, M = 9") && e.contains("at most 8"), "{e}");
-    assert!(e.contains("compact without the auditor (~16381440)"), "{e}");
+        let mut bn = multi(BN);
+        bn["disclosureMode"] = Value::Null;
+        bn["recipients"] = json!((1..=9)
+            .map(|a| json!({"yTo": y(BN, a), "amount": 1}))
+            .collect::<Vec<_>>());
+        let e = err("proveTransferMulti", &bn);
+        assert!(
+            e.contains("bn254 bundle with the auditor, direct, M = 9") && e.contains("at most 8"),
+            "{e}"
+        );
+        assert!(e.contains("compact without the auditor (~16381440)"), "{e}");
     }
 }
 
@@ -261,13 +338,18 @@ fn gas_cap_message() {
 #[test]
 fn a_relayed_build_names_its_signer_kind() {
     let mut req = multi("bls12381");
-    req["recipients"] = json!((1..=8).map(|a| json!({"yTo": y("bls12381", a), "amount": 1})).collect::<Vec<_>>());
+    req["recipients"] = json!((1..=8)
+        .map(|a| json!({"yTo": y("bls12381", a), "amount": 1}))
+        .collect::<Vec<_>>());
     req["envelopeBinding"] = json!(format!("0x{}", "33".repeat(32)));
     assert!(err("proveTransferMulti", &req).contains("needs `uaSigner`"));
     req["uaSigner"] = json!("nope");
     assert!(err("proveTransferMulti", &req).contains("must be"));
     req["uaSigner"] = json!("fndsa512");
-    assert!(err("proveTransferMulti", &req).contains("EIP-7825"), "over the cap through a UA");
+    assert!(
+        err("proveTransferMulti", &req).contains("EIP-7825"),
+        "over the cap through a UA"
+    );
     req["uaSigner"] = json!("ecdsa");
     ok("proveTransferMulti", &req);
     // the other accounts.md kinds: 15.85 M relayed + the cap builds under 16.78 M for the light kinds (ed25519 0.21 M,

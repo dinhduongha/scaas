@@ -64,7 +64,11 @@ impl Defs {
             let (body, tail) = tail.split_once(')').ok_or("bad type string")?;
             let fields = body
                 .split(',')
-                .map(|f| f.split_once(' ').map(|(t, n)| (t.to_string(), n.to_string())).ok_or("bad type string"))
+                .map(|f| {
+                    f.split_once(' ')
+                        .map(|(t, n)| (t.to_string(), n.to_string()))
+                        .ok_or("bad type string")
+                })
                 .collect::<Result<Vec<_>, _>>()?;
             defs.push((name.to_string(), fields));
             rest = tail;
@@ -87,29 +91,57 @@ impl Defs {
 
     /// EIP-712 `encodeType`: the struct, then its dependencies by name.
     fn encode_type(&self, name: &str) -> String {
-        let line = |n: &str| format!("{n}({})", self.get(n).unwrap().iter().map(|(t, f)| format!("{t} {f}")).collect::<Vec<_>>().join(","));
+        let line = |n: &str| {
+            format!(
+                "{n}({})",
+                self.get(n)
+                    .unwrap()
+                    .iter()
+                    .map(|(t, f)| format!("{t} {f}"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        };
         let mut seen = BTreeSet::new();
         self.deps(name, &mut seen);
         seen.remove(name);
-        std::iter::once(line(name)).chain(seen.iter().map(|n| line(n))).collect()
+        std::iter::once(line(name))
+            .chain(seen.iter().map(|n| line(n)))
+            .collect()
     }
 
     fn struct_hash(&self, name: &str, v: &Value) -> R<[u8; 32]> {
-        let fields = self.get(name).ok_or_else(|| format!("unknown type `{name}`"))?;
-        if let Some(extra) = v.as_object().and_then(|o| o.keys().find(|k| !fields.iter().any(|f| &f.1 == *k))) {
+        let fields = self
+            .get(name)
+            .ok_or_else(|| format!("unknown type `{name}`"))?;
+        if let Some(extra) = v
+            .as_object()
+            .and_then(|o| o.keys().find(|k| !fields.iter().any(|f| &f.1 == *k)))
+        {
             return Err(format!("`{name}` has no field `{extra}`"));
         }
         // `MetaTxLib.canon`, one place for an envelope and a nested payment: a struct with `mode`, `relayer` and `feeRecipient`
         // hashes the fields its mode does not bind as 0, as the contract, clientkeys and the node do
-        let canon = ["relayer", "feeRecipient"].iter().all(|n| fields.iter().any(|f| f.1 == *n));
-        let mode = fields.iter().find(|f| canon && f.1 == "mode").and_then(|(t, f)| v.get(f).map(|x| self.value(t, f, x)));
-        let mode = mode.transpose()?.map(|w| u32::from_be_bytes(w[28..].try_into().unwrap()));
+        let canon = ["relayer", "feeRecipient"]
+            .iter()
+            .all(|n| fields.iter().any(|f| f.1 == *n));
+        let mode = fields
+            .iter()
+            .find(|f| canon && f.1 == "mode")
+            .and_then(|(t, f)| v.get(f).map(|x| self.value(t, f, x)));
+        let mode = mode
+            .transpose()?
+            .map(|w| u32::from_be_bytes(w[28..].try_into().unwrap()));
         let mut b = keccak256(self.encode_type(name).as_bytes()).to_vec();
         for (t, f) in fields {
-            let x = v.get(f).filter(|x| !x.is_null()).ok_or_else(|| format!("missing field `{f}`"))?;
+            let x = v
+                .get(f)
+                .filter(|x| !x.is_null())
+                .ok_or_else(|| format!("missing field `{f}`"))?;
             let word = self.value(t, f, x)?;
             let unbound = mode.is_some_and(|m| {
-                (f == "relayer" && m & MODE_RESTRICT_RELAYER == 0) || (f == "feeRecipient" && m & MODE_RESTRICT_FEE_RECIPIENT == 0)
+                (f == "relayer" && m & MODE_RESTRICT_RELAYER == 0)
+                    || (f == "feeRecipient" && m & MODE_RESTRICT_FEE_RECIPIENT == 0)
             });
             b.extend(if unbound { [0; 32] } else { word });
         }
@@ -118,16 +150,24 @@ impl Defs {
 
     fn value(&self, t: &str, f: &str, x: &Value) -> R<[u8; 32]> {
         if let Some(el) = t.strip_suffix("[]") {
-            let a = x.as_array().ok_or_else(|| format!("`{f}` must be an array"))?;
-            let w = a.iter().map(|e| self.value(el, f, e)).collect::<R<Vec<_>>>()?;
+            let a = x
+                .as_array()
+                .ok_or_else(|| format!("`{f}` must be an array"))?;
+            let w = a
+                .iter()
+                .map(|e| self.value(el, f, e))
+                .collect::<R<Vec<_>>>()?;
             return Ok(keccak256(&w.concat()));
         }
         if self.get(t).is_some() {
             return self.struct_hash(t, x);
         }
         let hexv = |n: Option<usize>| -> R<Vec<u8>> {
-            let s = x.as_str().ok_or_else(|| format!("`{f}` must be a hex string"))?;
-            let b = hex::decode(s.strip_prefix("0x").unwrap_or(s)).map_err(|_| format!("`{f}` is not hex"))?;
+            let s = x
+                .as_str()
+                .ok_or_else(|| format!("`{f}` must be a hex string"))?;
+            let b = hex::decode(s.strip_prefix("0x").unwrap_or(s))
+                .map_err(|_| format!("`{f}` is not hex"))?;
             match n {
                 Some(n) if b.len() != n => Err(format!("`{f}` must be {n} bytes")),
                 _ => Ok(b),
@@ -135,19 +175,33 @@ impl Defs {
         };
         let word = |b: &[u8], left: bool| {
             let mut o = [0u8; 32];
-            if left { o[32 - b.len()..].copy_from_slice(b) } else { o[..b.len()].copy_from_slice(b) }
+            if left {
+                o[32 - b.len()..].copy_from_slice(b)
+            } else {
+                o[..b.len()].copy_from_slice(b)
+            }
             o
         };
         match t {
             "bytes" => Ok(keccak256(&hexv(None)?)),
-            "string" => Ok(keccak256(x.as_str().ok_or_else(|| format!("`{f}` must be a string"))?.as_bytes())),
+            "string" => Ok(keccak256(
+                x.as_str()
+                    .ok_or_else(|| format!("`{f}` must be a string"))?
+                    .as_bytes(),
+            )),
             "address" => Ok(word(&hexv(Some(20))?, true)),
-            "bool" => Ok(abi::u256(u64::from(x.as_bool().ok_or_else(|| format!("`{f}` must be a bool"))?))),
+            "bool" => Ok(abi::u256(u64::from(
+                x.as_bool().ok_or_else(|| format!("`{f}` must be a bool"))?,
+            ))),
             _ if t.starts_with("uint") => {
                 let bits: usize = t[4..].parse().map_err(|_| format!("bad type `{t}`"))?;
                 let w = match x {
-                    Value::Number(n) => abi::u256(n.as_u64().ok_or_else(|| format!("`{f}` must be a u64"))?),
-                    Value::String(s) => dec256(s).ok_or_else(|| format!("`{f}` must be a decimal below 2^256"))?,
+                    Value::Number(n) => {
+                        abi::u256(n.as_u64().ok_or_else(|| format!("`{f}` must be a u64"))?)
+                    }
+                    Value::String(s) => {
+                        dec256(s).ok_or_else(|| format!("`{f}` must be a decimal below 2^256"))?
+                    }
                     _ => return Err(format!("`{f}` must be a number")),
                 };
                 if w[..32 - bits / 8].iter().any(|b| *b != 0) {
@@ -184,8 +238,18 @@ fn dec256(s: &str) -> Option<[u8; 32]> {
 }
 
 /// The typed digest of op `op` with `message`: `{typehash, structHash, domainSeparator, digest}` as hex strings.
-pub fn typed_digest(op: &str, chain_id: u64, chain_uid: &[u8; 32], token: &[u8; 20], message: &Value) -> R<Value> {
-    let ts = OPS.iter().find(|o| o.0 == op).ok_or_else(|| format!("unknown typed op `{op}`"))?.1;
+pub fn typed_digest(
+    op: &str,
+    chain_id: u64,
+    chain_uid: &[u8; 32],
+    token: &[u8; 20],
+    message: &Value,
+) -> R<Value> {
+    let ts = OPS
+        .iter()
+        .find(|o| o.0 == op)
+        .ok_or_else(|| format!("unknown typed op `{op}`"))?
+        .1;
     let defs = Defs::parse(ts)?;
     let sh = defs.struct_hash(op, message)?;
     let ds = domain_separator(chain_id, chain_uid, token);
@@ -213,12 +277,18 @@ fn g1(p: &[u8]) -> Value {
 }
 
 fn head(p: &[u8]) -> R<Value> {
-    let w = |i: usize| abi::word_u64(p, 32 * i).map(|x| x.to_string()).ok_or("`payload`: a head word is not a u64");
+    let w = |i: usize| {
+        abi::word_u64(p, 32 * i)
+            .map(|x| x.to_string())
+            .ok_or("`payload`: a head word is not a u64")
+    };
     Ok(json!({"accSeq": w(0)?, "sendCounter": w(1)?, "validUntilBlock": w(2)?}))
 }
 
 fn with(mut base: Value, more: Value) -> Value {
-    base.as_object_mut().unwrap().extend(more.as_object().unwrap().clone());
+    base.as_object_mut()
+        .unwrap()
+        .extend(more.as_object().unwrap().clone());
     base
 }
 
@@ -228,8 +298,11 @@ fn single_args(p: &[u8], ben: &[u8; 32]) -> R<Value> {
         return Err("`payload` is not a single transfer's".into());
     }
     let pt = |i: usize| g1(&p[112 + 128 * i..240 + 128 * i]);
-    Ok(with(head(p)?, json!({"salt": hx(&p[96..112]), "beneficiaryUA": hx(ben), "yFrom": pt(0), "yTo": pt(1), "cOut": pt(2),
-        "dOut": pt(3), "cDeb": pt(4), "cAud": pt(5)})))
+    Ok(with(
+        head(p)?,
+        json!({"salt": hx(&p[96..112]), "beneficiaryUA": hx(ben), "yFrom": pt(0), "yTo": pt(1), "cOut": pt(2),
+        "dOut": pt(3), "cDeb": pt(4), "cAud": pt(5)}),
+    ))
 }
 
 /// `ZetherMulti` from the packed `payload` of `proveTransferMulti`.
@@ -244,9 +317,16 @@ fn multi_args(p: &[u8], ben: &[u8; 32]) -> R<Value> {
             json!({"yTo": l(0), "cOut": l(1), "cAud": l(2), "dAud": l(3)})
         })
         .collect();
-    let sealed = if p.len() > legs_end { &p[legs_end + 16..] } else { &[][..] };
-    Ok(with(head(p)?, json!({"salt": hx(&p[96..112]), "beneficiaryUA": hx(ben), "decoyFee": decoy.to_string(),
-        "yFrom": g1(&p[176..304]), "dOut": g1(&p[304..432]), "cDeb": g1(&p[432..560]), "legs": legs, "sealedMemo": hx(sealed)})))
+    let sealed = if p.len() > legs_end {
+        &p[legs_end + 16..]
+    } else {
+        &[][..]
+    };
+    Ok(with(
+        head(p)?,
+        json!({"salt": hx(&p[96..112]), "beneficiaryUA": hx(ben), "decoyFee": decoy.to_string(),
+        "yFrom": g1(&p[176..304]), "dOut": g1(&p[304..432]), "cDeb": g1(&p[432..560]), "legs": legs, "sealedMemo": hx(sealed)}),
+    ))
 }
 
 /// `ZetherBurn` from the packed `payload` of `proveBurn`.
@@ -254,16 +334,24 @@ fn burn_args(p: &[u8], ben: &[u8; 32]) -> R<Value> {
     if p.len() != 96 + 128 {
         return Err("`payload` is not a burn's".into());
     }
-    Ok(with(head(p)?, json!({"beneficiaryUA": hx(ben), "yFrom": g1(&p[96..224])})))
+    Ok(with(
+        head(p)?,
+        json!({"beneficiaryUA": hx(ben), "yFrom": g1(&p[96..224])}),
+    ))
 }
 
 fn field<'a>(v: &'a Value, k: &str) -> R<&'a Value> {
-    v.get(k).filter(|x| !x.is_null()).ok_or_else(|| format!("missing field `{k}`"))
+    v.get(k)
+        .filter(|x| !x.is_null())
+        .ok_or_else(|| format!("missing field `{k}`"))
 }
 
 fn raw(v: &Value, k: &str, n: Option<usize>) -> R<Vec<u8>> {
-    let s = field(v, k)?.as_str().ok_or_else(|| format!("`{k}` must be a hex string"))?;
-    let b = hex::decode(s.strip_prefix("0x").unwrap_or(s)).map_err(|_| format!("`{k}` is not hex"))?;
+    let s = field(v, k)?
+        .as_str()
+        .ok_or_else(|| format!("`{k}` must be a hex string"))?;
+    let b =
+        hex::decode(s.strip_prefix("0x").unwrap_or(s)).map_err(|_| format!("`{k}` is not hex"))?;
     match n {
         Some(n) if b.len() != n => Err(format!("`{k}` must be {n} bytes")),
         _ => Ok(b),
@@ -280,7 +368,10 @@ fn word(v: &Value, k: &str, n: usize) -> R<[u8; 32]> {
 /// A decimal-or-number field as its 32-byte word (`dec256`).
 fn num_word(v: &Value, k: &str) -> R<[u8; 32]> {
     match field(v, k)? {
-        Value::Number(n) => n.as_u64().map(abi::u256).ok_or_else(|| format!("`{k}` must be a u64")),
+        Value::Number(n) => n
+            .as_u64()
+            .map(abi::u256)
+            .ok_or_else(|| format!("`{k}` must be a u64")),
         Value::String(s) => dec256(s).ok_or_else(|| format!("`{k}` must be a decimal below 2^256")),
         _ => Err(format!("`{k}` must be a number")),
     }
@@ -292,26 +383,57 @@ fn num_word(v: &Value, k: &str) -> R<[u8; 32]> {
 fn ua_sig(v: &Value) -> R<UASig> {
     let s = field(v, "sig")?;
     if s.is_string() {
-        return Ok(UASig { signature: raw(v, "sig", None)?, ..Default::default() });
+        return Ok(UASig {
+            signature: raw(v, "sig", None)?,
+            ..Default::default()
+        });
     }
-    let opt = |o: &Value, k: &str| if o.get(k).is_some_and(|x| !x.is_null()) { raw(o, k, None) } else { Ok(vec![]) };
+    let opt = |o: &Value, k: &str| {
+        if o.get(k).is_some_and(|x| !x.is_null()) {
+            raw(o, k, None)
+        } else {
+            Ok(vec![])
+        }
+    };
     let index = |o: &Value| -> R<u16> {
-        field(o, "index")?.as_u64().and_then(|n| u16::try_from(n).ok()).ok_or_else(|| "`index` must be a uint16".to_string())
+        field(o, "index")?
+            .as_u64()
+            .and_then(|n| u16::try_from(n).ok())
+            .ok_or_else(|| "`index` must be a uint16".to_string())
     };
     let list = |o: &Value| -> R<Vec<Value>> {
         match o.get("members").filter(|x| !x.is_null()) {
             None => Ok(vec![]),
-            Some(a) => a.as_array().cloned().ok_or_else(|| "`members` must be an array".to_string()),
+            Some(a) => a
+                .as_array()
+                .cloned()
+                .ok_or_else(|| "`members` must be an array".to_string()),
         }
     };
     let members = list(s)?
         .iter()
         .map(|m| {
-            let inner = list(m)?.iter().map(|i| Ok(InnerSig { index: index(i)?, sig: raw(i, "sig", None)? })).collect::<R<Vec<_>>>()?;
-            Ok(MemberSig { index: index(m)?, members: inner, sig: opt(m, "sig")? })
+            let inner = list(m)?
+                .iter()
+                .map(|i| {
+                    Ok(InnerSig {
+                        index: index(i)?,
+                        sig: raw(i, "sig", None)?,
+                    })
+                })
+                .collect::<R<Vec<_>>>()?;
+            Ok(MemberSig {
+                index: index(m)?,
+                members: inner,
+                sig: opt(m, "sig")?,
+            })
         })
         .collect::<R<Vec<_>>>()?;
-    let sig = UASig { key_data: opt(s, "keyData")?, signature: opt(s, "signature")?, members };
+    let sig = UASig {
+        key_data: opt(s, "keyData")?,
+        signature: opt(s, "signature")?,
+        members,
+    };
     if sig.signature.is_empty() && sig.members.is_empty() {
         return Err("`sig` is required: a signature or members".into());
     }
@@ -328,14 +450,28 @@ fn ua_sig(v: &Value) -> R<UASig> {
 pub fn named_call(v: &Value) -> R<Value> {
     let op = field(v, "op")?.as_str().ok_or("`op` must be a string")?;
     let env = field(v, "env")?;
-    let (payload, proof, ben) = (raw(v, "payload", None)?, raw(v, "proof", None)?, word(v, "beneficiary", 32)?);
+    let (payload, proof, ben) = (
+        raw(v, "payload", None)?,
+        raw(v, "proof", None)?,
+        word(v, "beneficiary", 32)?,
+    );
     let env_toks: Vec<Tok> = [
-        word(env, "from", 32)?, num_word(env, "batch")?, num_word(env, "nonce")?, num_word(env, "validUntil")?,
-        num_word(env, "mode")?, word(env, "relayer", 20)?, num_word(env, "fee")?, word(env, "feeRecipient", 20)?,
+        word(env, "from", 32)?,
+        num_word(env, "batch")?,
+        num_word(env, "nonce")?,
+        num_word(env, "validUntil")?,
+        num_word(env, "mode")?,
+        word(env, "relayer", 20)?,
+        num_word(env, "fee")?,
+        word(env, "feeRecipient", 20)?,
     ]
     .map(Tok::Word)
     .into();
-    let sig = v.get("sig").filter(|x| !x.is_null()).map(|_| ua_sig(v)).transpose()?;
+    let sig = v
+        .get("sig")
+        .filter(|x| !x.is_null())
+        .map(|_| ua_sig(v))
+        .transpose()?;
     let lanes = json!({"batch": field(env, "batch")?, "nonce": field(env, "nonce")?, "validUntil": field(env, "validUntil")?,
         "mode": field(env, "mode")?, "relayer": field(env, "relayer")?, "fee": field(env, "fee")?, "feeRecipient": field(env, "feeRecipient")?});
     let (from, proof_h) = (field(env, "from")?, json!(hx(&proof)));
@@ -346,7 +482,11 @@ pub fn named_call(v: &Value) -> R<Value> {
             envelope::named_transfer_single_call(&env_toks, &payload, &proof, &ben, &sg),
         ),
         "UAZetherTransfer" | "UAZetherTransferCompact" => {
-            let name = if op == "UAZetherTransfer" { "mtxConfidentialTransfer" } else { "mtxConfidentialTransferCompact" };
+            let name = if op == "UAZetherTransfer" {
+                "mtxConfidentialTransfer"
+            } else {
+                "mtxConfidentialTransferCompact"
+            };
             (
                 json!({"from": from, "args": multi_args(&payload, &ben)?, "proof": proof_h}),
                 envelope::named_transfer_multi_call(name, &env_toks, &payload, &proof, &ben, &sg),
@@ -362,16 +502,31 @@ pub fn named_call(v: &Value) -> R<Value> {
         }
         "UAZetherUnshieldUnwrap" => {
             let x = field(v, "unwrap")?;
-            let w = [word(x, "underlying", 20)?, word(x, "recipient", 32)?, num_word(x, "amount")?, num_word(x, "minOut")?];
+            let w = [
+                word(x, "underlying", 20)?,
+                word(x, "recipient", 32)?,
+                num_word(x, "amount")?,
+                num_word(x, "minOut")?,
+            ];
             (
                 json!({"from": from, "args": burn_args(&payload, &ben)?, "unwrap": x, "proof": proof_h}),
                 envelope::named_unshield_unwrap_call(&env_toks, &payload, &proof, &ben, w, &sg),
             )
         }
-        _ => return Err(format!("`{op}` has no merged call builder (typedDigest takes any typed op)")),
+        _ => {
+            return Err(format!(
+                "`{op}` has no merged call builder (typedDigest takes any typed op)"
+            ))
+        }
     };
     let message = with(message, lanes);
-    let d = typed_digest(op, num_u64(v, "chainId")?, &word20_32(v, "chainUid")?, &raw20(v, "token")?, &message)?;
+    let d = typed_digest(
+        op,
+        num_u64(v, "chainId")?,
+        &word20_32(v, "chainUid")?,
+        &raw20(v, "token")?,
+        &message,
+    )?;
     let mut out = with(d, json!({"message": message}));
     if sig.is_some() {
         out["calldata"] = json!(hx(&calldata));
@@ -386,5 +541,7 @@ fn word20_32(v: &Value, k: &str) -> R<[u8; 32]> {
     word(v, k, 32)
 }
 fn raw20(v: &Value, k: &str) -> R<[u8; 20]> {
-    raw(v, k, Some(20))?.try_into().map_err(|_| format!("`{k}` must be 20 bytes"))
+    raw(v, k, Some(20))?
+        .try_into()
+        .map_err(|_| format!("`{k}` must be 20 bytes"))
 }

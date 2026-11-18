@@ -105,8 +105,16 @@ impl UAMetaTx {
 }
 
 fn canon(mode: u32, relayer: &[u8; 20], fee_recipient: &[u8; 20]) -> ([u8; 20], [u8; 20]) {
-    let r = if mode & MODE_RESTRICT_RELAYER != 0 { *relayer } else { [0; 20] };
-    let f = if mode & MODE_RESTRICT_FEE_RECIPIENT != 0 { *fee_recipient } else { [0; 20] };
+    let r = if mode & MODE_RESTRICT_RELAYER != 0 {
+        *relayer
+    } else {
+        [0; 20]
+    };
+    let f = if mode & MODE_RESTRICT_FEE_RECIPIENT != 0 {
+        *fee_recipient
+    } else {
+        [0; 20]
+    };
     (r, f)
 }
 
@@ -143,7 +151,12 @@ pub fn ua_digest(chain_id: u64, chain_uid: &[u8; 32], token: &[u8; 20], m: &UAMe
 
 /// The token's `envelopeBinding(UAMetaTransaction)` view (CTR-ZTH-51, R35): tag `SCAAS-ZETHER-UA-ENVELOPE-V1`, `from` the
 /// `bytes32` id, every other envelope field except `data`, plus `chainUid`. Every merged entry and `mtxExecute`.
-pub fn ua_envelope_binding(chain_id: u64, chain_uid: &[u8; 32], token: &[u8; 20], m: &UAMetaTx) -> [u8; 32] {
+pub fn ua_envelope_binding(
+    chain_id: u64,
+    chain_uid: &[u8; 32],
+    token: &[u8; 20],
+    m: &UAMetaTx,
+) -> [u8; 32] {
     let (r, f) = canon(m.mode, &m.relayer, &m.fee_recipient);
     keccak256(
         &[
@@ -165,7 +178,12 @@ pub fn ua_envelope_binding(chain_id: u64, chain_uid: &[u8; 32], token: &[u8; 20]
 }
 
 /// `executeMetaTransaction`'s binding (CTR-ZTH-06, the address tag) — every envelope field except `data`, plus `chainUid`.
-pub fn envelope_binding(chain_id: u64, chain_uid: &[u8; 32], token: &[u8; 20], m: &MetaTx) -> [u8; 32] {
+pub fn envelope_binding(
+    chain_id: u64,
+    chain_uid: &[u8; 32],
+    token: &[u8; 20],
+    m: &MetaTx,
+) -> [u8; 32] {
     let (r, f) = m.canon();
     keccak256(
         &[
@@ -189,7 +207,14 @@ pub fn envelope_binding(chain_id: u64, chain_uid: &[u8; 32], token: &[u8; 20], m
 /// The binding word of a direct `mtxUnshieldUnwrap` (under `ZTX_V1_DIRECT`): its leg and `minOut` (`min_out` as
 /// the 32-byte ABI word). Controller ruling, pending the owner.
 pub fn unwrap_binding(underlying: &[u8; 20], min_out: &[u8; 32]) -> [u8; 32] {
-    keccak256(&[keccak256(b"SCAAS-ZETHER-UNWRAP-V1"), abi::addr(underlying), *min_out].concat())
+    keccak256(
+        &[
+            keccak256(b"SCAAS-ZETHER-UNWRAP-V1"),
+            abi::addr(underlying),
+            *min_out,
+        ]
+        .concat(),
+    )
 }
 
 pub fn selector(sig: &str) -> [u8; 4] {
@@ -238,15 +263,21 @@ fn single_toks(payload: &[u8], beneficiary: &[u8; 32]) -> Vec<Tok> {
 pub(crate) fn multi_legs(payload: &[u8]) -> Option<(usize, usize)> {
     let m = usize::try_from(abi::word_u64(payload, 112)?).ok()?;
     let legs_end = m.checked_mul(4 * POINT)?.checked_add(176 + 3 * POINT)?;
-    (payload.len() == legs_end || payload.len() >= legs_end.checked_add(16)?).then_some((m, legs_end))
+    (payload.len() == legs_end || payload.len() >= legs_end.checked_add(16)?)
+        .then_some((m, legs_end))
 }
 
 /// `ZetherMulti` from the packed `payload` (`head ‖ salt16 ‖ be32(M) ‖ be32(decoyFee) ‖ 3 points ‖ M · 4 points [‖ salt16 ‖
 /// sealed]`); a dynamic struct, one tuple token.
 fn multi_tok(payload: &[u8], beneficiary: &[u8; 32]) -> Tok {
-    let (m, legs_end) = multi_legs(payload).expect("a multi payload (the caller's own, or checked by `multi_legs`)");
+    let (m, legs_end) = multi_legs(payload)
+        .expect("a multi payload (the caller's own, or checked by `multi_legs`)");
     let pts = 176 + 3 * POINT;
-    let sealed = if payload.len() > legs_end { payload[legs_end + 16..].to_vec() } else { Vec::new() };
+    let sealed = if payload.len() > legs_end {
+        payload[legs_end + 16..].to_vec()
+    } else {
+        Vec::new()
+    };
     let mut t = abi::words(&payload[..P_HEAD]);
     t.push(salt_word(&payload[P_HEAD..P_HEAD + 16]));
     t.push(Tok::Word(*beneficiary));
@@ -306,13 +337,26 @@ pub struct UASig {
 /// relative to the first element).
 pub fn ua_sig_tok(s: &UASig) -> Tok {
     let tuple = |t: &[Tok]| Tok::Tuple(abi::encode(t));
-    let inner = |i: &InnerSig| tuple(&[Tok::Word(abi::u256(i.index.into())), Tok::Bytes(i.sig.clone())]);
+    let inner = |i: &InnerSig| {
+        tuple(&[
+            Tok::Word(abi::u256(i.index.into())),
+            Tok::Bytes(i.sig.clone()),
+        ])
+    };
     let member = |m: &MemberSig| {
         let inners: Vec<Tok> = m.members.iter().map(inner).collect();
-        tuple(&[Tok::Word(abi::u256(m.index.into())), Tok::Array(inners.len() as u64, abi::encode(&inners)), Tok::Bytes(m.sig.clone())])
+        tuple(&[
+            Tok::Word(abi::u256(m.index.into())),
+            Tok::Array(inners.len() as u64, abi::encode(&inners)),
+            Tok::Bytes(m.sig.clone()),
+        ])
     };
     let members: Vec<Tok> = s.members.iter().map(member).collect();
-    tuple(&[Tok::Bytes(s.key_data.clone()), Tok::Bytes(s.signature.clone()), Tok::Array(members.len() as u64, abi::encode(&members))])
+    tuple(&[
+        Tok::Bytes(s.key_data.clone()),
+        Tok::Bytes(s.signature.clone()),
+        Tok::Array(members.len() as u64, abi::encode(&members)),
+    ])
 }
 
 /// Calldata of `mtxConfidentialTransferSingle(ZetherSingle t, bytes proof)` from the prover's packed `payload`
@@ -321,49 +365,125 @@ pub fn ua_sig_tok(s: &UASig) -> Tok {
 pub fn transfer_single_call(payload: &[u8], proof: &[u8], beneficiary: &[u8; 32]) -> Vec<u8> {
     let mut toks = single_toks(payload, beneficiary);
     toks.push(Tok::Bytes(proof.to_vec()));
-    call(&format!("mtxConfidentialTransferSingle({},bytes)", single_type()), &toks)
+    call(
+        &format!("mtxConfidentialTransferSingle({},bytes)", single_type()),
+        &toks,
+    )
 }
 
 /// `mtxConfidentialTransferSingle(UAEnvelope e, ZetherSingle t, bytes proof, UASig auth)`: the merged relayed entry (R35);
 /// `env` the eight `UAEnvelope` words.
-pub fn named_transfer_single_call(env: &[Tok], payload: &[u8], proof: &[u8], beneficiary: &[u8; 32], auth: &UASig) -> Vec<u8> {
+pub fn named_transfer_single_call(
+    env: &[Tok],
+    payload: &[u8],
+    proof: &[u8],
+    beneficiary: &[u8; 32],
+    auth: &UASig,
+) -> Vec<u8> {
     let mut toks = env.to_vec();
     toks.extend(single_toks(payload, beneficiary));
     toks.extend([Tok::Bytes(proof.to_vec()), ua_sig_tok(auth)]);
-    call(&format!("mtxConfidentialTransferSingle({UA_ENV_TYPE},{},bytes,{UA_SIG_TYPE})", single_type()), &toks)
+    call(
+        &format!(
+            "mtxConfidentialTransferSingle({UA_ENV_TYPE},{},bytes,{UA_SIG_TYPE})",
+            single_type()
+        ),
+        &toks,
+    )
 }
 
 /// Calldata of `mtxConfidentialTransfer` / `…Compact` (`name`) `(ZetherMulti t, bytes proof)` from the packed `payload`.
-pub fn transfer_multi_call(name: &str, payload: &[u8], proof: &[u8], beneficiary: &[u8; 32]) -> Vec<u8> {
-    call(&format!("{name}({},bytes)", multi_type()), &[multi_tok(payload, beneficiary), Tok::Bytes(proof.to_vec())])
+pub fn transfer_multi_call(
+    name: &str,
+    payload: &[u8],
+    proof: &[u8],
+    beneficiary: &[u8; 32],
+) -> Vec<u8> {
+    call(
+        &format!("{name}({},bytes)", multi_type()),
+        &[multi_tok(payload, beneficiary), Tok::Bytes(proof.to_vec())],
+    )
 }
 
 /// `{name}(UAEnvelope e, ZetherMulti t, bytes proof, UASig auth)`.
-pub fn named_transfer_multi_call(name: &str, env: &[Tok], payload: &[u8], proof: &[u8], beneficiary: &[u8; 32], auth: &UASig) -> Vec<u8> {
+pub fn named_transfer_multi_call(
+    name: &str,
+    env: &[Tok],
+    payload: &[u8],
+    proof: &[u8],
+    beneficiary: &[u8; 32],
+    auth: &UASig,
+) -> Vec<u8> {
     let mut toks = env.to_vec();
-    toks.extend([multi_tok(payload, beneficiary), Tok::Bytes(proof.to_vec()), ua_sig_tok(auth)]);
-    call(&format!("{name}({UA_ENV_TYPE},{},bytes,{UA_SIG_TYPE})", multi_type()), &toks)
+    toks.extend([
+        multi_tok(payload, beneficiary),
+        Tok::Bytes(proof.to_vec()),
+        ua_sig_tok(auth),
+    ]);
+    call(
+        &format!("{name}({UA_ENV_TYPE},{},bytes,{UA_SIG_TYPE})", multi_type()),
+        &toks,
+    )
 }
 
 /// `mtxUnshield(ZetherBurn b, uint256 amount, bytes32 recipient, bytes proof)` from the packed `payload` (`head ‖ Y_f`),
 /// `to` the recipient id: a padded address or a derived SIGNING UA (CTR-ZTH-51).
-pub fn unshield_call(payload: &[u8], proof: &[u8], beneficiary: &[u8; 32], to: &[u8; 32], amount: u64) -> Vec<u8> {
+pub fn unshield_call(
+    payload: &[u8],
+    proof: &[u8],
+    beneficiary: &[u8; 32],
+    to: &[u8; 32],
+    amount: u64,
+) -> Vec<u8> {
     let mut toks = burn_toks(payload, beneficiary);
-    toks.extend([Tok::Word(abi::u256(amount)), Tok::Word(*to), Tok::Bytes(proof.to_vec())]);
-    call(&format!("mtxUnshield({},uint256,bytes32,bytes)", burn_type()), &toks)
+    toks.extend([
+        Tok::Word(abi::u256(amount)),
+        Tok::Word(*to),
+        Tok::Bytes(proof.to_vec()),
+    ]);
+    call(
+        &format!("mtxUnshield({},uint256,bytes32,bytes)", burn_type()),
+        &toks,
+    )
 }
 
 /// `mtxUnshield(UAEnvelope e, ZetherBurn b, uint256 amount, bytes32 recipient, bytes proof, UASig auth)`.
-pub fn named_unshield_call(env: &[Tok], payload: &[u8], proof: &[u8], beneficiary: &[u8; 32], to: &[u8; 32], amount: u64, auth: &UASig) -> Vec<u8> {
+pub fn named_unshield_call(
+    env: &[Tok],
+    payload: &[u8],
+    proof: &[u8],
+    beneficiary: &[u8; 32],
+    to: &[u8; 32],
+    amount: u64,
+    auth: &UASig,
+) -> Vec<u8> {
     let mut toks = env.to_vec();
     toks.extend(burn_toks(payload, beneficiary));
-    toks.extend([Tok::Word(abi::u256(amount)), Tok::Word(*to), Tok::Bytes(proof.to_vec()), ua_sig_tok(auth)]);
-    call(&format!("mtxUnshield({UA_ENV_TYPE},{},uint256,bytes32,bytes,{UA_SIG_TYPE})", burn_type()), &toks)
+    toks.extend([
+        Tok::Word(abi::u256(amount)),
+        Tok::Word(*to),
+        Tok::Bytes(proof.to_vec()),
+        ua_sig_tok(auth),
+    ]);
+    call(
+        &format!(
+            "mtxUnshield({UA_ENV_TYPE},{},uint256,bytes32,bytes,{UA_SIG_TYPE})",
+            burn_type()
+        ),
+        &toks,
+    )
 }
 
 /// `mtxUnshieldUnwrap(UAEnvelope e, ZetherBurn b, Unwrap x, bytes proof, UASig auth)`, `Unwrap {address underlying; bytes32
 /// recipient; uint256 amount; uint256 minOut}` (a direct call's proof binds it through `unwrap_binding`).
-pub fn named_unshield_unwrap_call(env: &[Tok], payload: &[u8], proof: &[u8], beneficiary: &[u8; 32], x: [[u8; 32]; 4], auth: &UASig) -> Vec<u8> {
+pub fn named_unshield_unwrap_call(
+    env: &[Tok],
+    payload: &[u8],
+    proof: &[u8],
+    beneficiary: &[u8; 32],
+    x: [[u8; 32]; 4],
+    auth: &UASig,
+) -> Vec<u8> {
     let mut toks = env.to_vec();
     toks.extend(burn_toks(payload, beneficiary));
     toks.extend(x.map(Tok::Word));

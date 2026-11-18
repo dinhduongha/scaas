@@ -20,15 +20,24 @@ fn main() -> ExitCode {
             let dir = std::path::Path::new(args.get(2).map(String::as_str).unwrap_or("vectors"));
             for (name, v) in zether_prover::vectors::generate() {
                 let path = dir.join(&name);
-                std::fs::write(&path, serde_json::to_string_pretty(&v).unwrap() + "\n").expect("write vector");
+                std::fs::write(&path, serde_json::to_string_pretty(&v).unwrap() + "\n")
+                    .expect("write vector");
                 println!("{}", path.display());
             }
             ExitCode::SUCCESS
         }
         Some("auditor-pop") => {
             // set-auditor A3: smartcontracts/vectors/zether/auditor_pop.json (CTR-ZTH-95)
-            let path = args.get(2).map(String::as_str).unwrap_or("auditor_pop.json");
-            std::fs::write(path, serde_json::to_string_pretty(&zether_prover::vectors::auditor_pop()).unwrap() + "\n").expect("write vector");
+            let path = args
+                .get(2)
+                .map(String::as_str)
+                .unwrap_or("auditor_pop.json");
+            std::fs::write(
+                path,
+                serde_json::to_string_pretty(&zether_prover::vectors::auditor_pop()).unwrap()
+                    + "\n",
+            )
+            .expect("write vector");
             println!("{path}");
             ExitCode::SUCCESS
         }

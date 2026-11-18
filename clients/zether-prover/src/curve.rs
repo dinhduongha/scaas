@@ -88,16 +88,25 @@ impl ZCurve for ark_bls12_381::g1::Config {
 
     /// RFC 9380 `BLS12381G1_XMD:SHA-256_SSWU_RO_` (zether-design §3.2).
     fn gen(label: &[u8], index: u32) -> G<Self> {
-        hash_to_g1_bls(&gen_msg(label, index), b"SCAAS-ZETHER-GEN-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_")
+        hash_to_g1_bls(
+            &gen_msg(label, index),
+            b"SCAAS-ZETHER-GEN-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_",
+        )
     }
 }
 
 /// RFC 9380 hash_to_curve, suite `BLS12381G1_XMD:SHA-256_SSWU_RO_`.
 pub fn hash_to_g1_bls(msg: &[u8], dst: &[u8]) -> G<Bls12381> {
-    use ark_ec::hashing::{curve_maps::wb::WBMap, map_to_curve_hasher::MapToCurveBasedHasher, HashToCurve};
+    use ark_ec::hashing::{
+        curve_maps::wb::WBMap, map_to_curve_hasher::MapToCurveBasedHasher, HashToCurve,
+    };
     use ark_ff::field_hashers::DefaultFieldHasher;
-    let h = MapToCurveBasedHasher::<G<Bls12381>, DefaultFieldHasher<sha2::Sha256, 128>, WBMap<Bls12381>>::new(dst)
-        .expect("valid DST");
+    let h = MapToCurveBasedHasher::<
+        G<Bls12381>,
+        DefaultFieldHasher<sha2::Sha256, 128>,
+        WBMap<Bls12381>,
+    >::new(dst)
+    .expect("valid DST");
     h.hash(msg).expect("hash_to_curve").into()
 }
 
@@ -151,7 +160,9 @@ fn decode_fq<C: ZCurve>(b: &[u8]) -> Result<C::Fq, ZError> {
     let mut canon = vec![0u8; b.len()];
     put_be(&mut canon, &x.into_bigint().to_bytes_be());
     if canon != b {
-        return Err(ZError::BadPoint("coordinate not canonical (>= p or bad padding)"));
+        return Err(ZError::BadPoint(
+            "coordinate not canonical (>= p or bad padding)",
+        ));
     }
     Ok(x)
 }
@@ -212,7 +223,11 @@ pub fn zether_tag<C: ZCurve>() -> [u8; 32] {
 
 /// The UA kind number of this curve's Zether kind.
 pub fn zether_kind<C: ZCurve>() -> u16 {
-    if C::NAME == "bn254" { 0x0140 } else { 0x0141 }
+    if C::NAME == "bn254" {
+        0x0140
+    } else {
+        0x0141
+    }
 }
 
 /// `UA = keccak256(TAG(kind) ‖ Y)` — `ZetherTypes.toUA` (accounts.md CTR-UA-16, CTR-UA-22).
@@ -236,7 +251,10 @@ mod tests {
             assert_eq!(e.len(), point_len::<C>());
             assert_eq!(decode_point::<C>(&e).unwrap(), p);
         }
-        assert_eq!(decode_point::<C>(&vec![0u8; point_len::<C>()]).unwrap(), G::<C>::zero());
+        assert_eq!(
+            decode_point::<C>(&vec![0u8; point_len::<C>()]).unwrap(),
+            G::<C>::zero()
+        );
         let mut bad = encode_point::<C>(&generator::<C>());
         *bad.last_mut().unwrap() ^= 1;
         assert!(decode_point::<C>(&bad).is_err());
@@ -303,7 +321,10 @@ mod tests {
                     let mut enc = vec![0u8; 128];
                     put_be(&mut enc[..64], &x.into_bigint().to_bytes_be());
                     put_be(&mut enc[64..], &y.into_bigint().to_bytes_be());
-                    assert!(matches!(decode_point::<Bls12381>(&enc), Err(ZError::BadPoint(_))));
+                    assert!(matches!(
+                        decode_point::<Bls12381>(&enc),
+                        Err(ZError::BadPoint(_))
+                    ));
                     return;
                 }
             }

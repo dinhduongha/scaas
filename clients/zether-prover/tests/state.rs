@@ -17,7 +17,10 @@ mod cache_box;
 type K = ZetherKey<Bls12381>;
 
 fn rows() -> Value {
-    let p = format!("{}/../../smartcontracts/vectors/zether/state.json", env!("CARGO_MANIFEST_DIR"));
+    let p = format!(
+        "{}/../../smartcontracts/vectors/zether/state.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
     serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|_| panic!("{p}"))).unwrap()
 }
 
@@ -60,12 +63,18 @@ fn with(mut v: Value, extra: &Value) -> Value {
 }
 
 fn acct_req(rows: &Value, k: &K, a: &Value) -> Value {
-    with(base(rows, k), &json!({"account": a["account"], "accountData": a["accountData"]}))
+    with(
+        base(rows, k),
+        &json!({"account": a["account"], "accountData": a["accountData"]}),
+    )
 }
 
 fn entry_req(rows: &Value, k: &K, e: &Value) -> Value {
-    let mut v = with(base(rows, k), &json!({"fromUA": e["fromUA"], "sendCounter": e["sendCounter"], "entryWords": e["entryWords"],
-        "entryPtr": e["entryPtr"]}));
+    let mut v = with(
+        base(rows, k),
+        &json!({"fromUA": e["fromUA"], "sendCounter": e["sendCounter"], "entryWords": e["entryWords"],
+        "entryPtr": e["entryPtr"]}),
+    );
     for f in ["blob", "memoWords"] {
         if !e[f].is_null() {
             v[f] = e[f].clone();
@@ -89,7 +98,10 @@ fn call(cmd: &str, v: &Value, k: &K) -> Result<Value, String> {
 }
 
 fn refused(what: &str, cmd: &str, v: &Value, k: &K) {
-    assert!(state::prepare(cmd, v, &k.y).is_err(), "{what}: prepare must refuse");
+    assert!(
+        state::prepare(cmd, v, &k.y).is_err(),
+        "{what}: prepare must refuse"
+    );
 }
 
 #[test]
@@ -97,11 +109,28 @@ fn layout_is_the_pin_of_the_rows() {
     let l = &rows()["layout"];
     assert_eq!(l["id"], "scaas.zether");
     assert_eq!(h(&l["root"]), ROOT);
-    let labels: Vec<&str> = l["labels"].as_array().unwrap().iter().map(|x| x.as_str().unwrap()).collect();
+    let labels: Vec<&str> = l["labels"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x.as_str().unwrap())
+        .collect();
     for (label, slot, inner, byte, width) in LAYOUT {
-        let i = labels.iter().position(|x| x == label).unwrap_or_else(|| panic!("{label} not pinned"));
+        let i = labels
+            .iter()
+            .position(|x| x == label)
+            .unwrap_or_else(|| panic!("{label} not pinned"));
         let at = |k: &str| l[k][i].as_u64().unwrap();
-        assert_eq!((at("slots"), at("inner"), at("bytes") as usize, at("widths") as usize), (*slot, *inner, *byte, *width), "{label}");
+        assert_eq!(
+            (
+                at("slots"),
+                at("inner"),
+                at("bytes") as usize,
+                at("widths") as usize
+            ),
+            (*slot, *inner, *byte, *width),
+            "{label}"
+        );
     }
 }
 
@@ -114,14 +143,42 @@ fn accounts_rebuild_and_decrypt() {
         let p = state::prepare("balance", &v, &k.y).unwrap();
         let acc = p.account().unwrap();
         let view = &a["view"];
-        for (got, want) in [(acc.acc.c, "accC"), (acc.acc.d, "accD"), (acc.pending.c, "pendingC"), (acc.pending.d, "pendingD")] {
-            assert_eq!(encode_point::<Bls12381>(&got), h(&view[want]), "{}: {want}", a["name"]);
+        for (got, want) in [
+            (acc.acc.c, "accC"),
+            (acc.acc.d, "accD"),
+            (acc.pending.c, "pendingC"),
+            (acc.pending.d, "pendingD"),
+        ] {
+            assert_eq!(
+                encode_point::<Bls12381>(&got),
+                h(&view[want]),
+                "{}: {want}",
+                a["name"]
+            );
         }
-        assert_eq!((acc.acc_seq, acc.pending_seq, acc.send_counter), (view["accSeq"].as_u64().unwrap(),
-            view["pendingSeq"].as_u64().unwrap(), view["sendCounter"].as_u64().unwrap()), "{}", a["name"]);
+        assert_eq!(
+            (acc.acc_seq, acc.pending_seq, acc.send_counter),
+            (
+                view["accSeq"].as_u64().unwrap(),
+                view["pendingSeq"].as_u64().unwrap(),
+                view["sendCounter"].as_u64().unwrap()
+            ),
+            "{}",
+            a["name"]
+        );
         let b = call("balance", &v, &k).unwrap();
-        assert_eq!(b["amount"], a["balance"].as_u64().unwrap().to_string(), "{}", a["name"]);
-        assert_eq!(call("pendingBalance", &v, &k).unwrap()["amount"], a["pending"].as_u64().unwrap().to_string(), "{}", a["name"]);
+        assert_eq!(
+            b["amount"],
+            a["balance"].as_u64().unwrap().to_string(),
+            "{}",
+            a["name"]
+        );
+        assert_eq!(
+            call("pendingBalance", &v, &k).unwrap()["amount"],
+            a["pending"].as_u64().unwrap().to_string(),
+            "{}",
+            a["name"]
+        );
         let bal = a["balance"].as_u64().unwrap();
         let mut v = v.clone();
         for f in ["tableBits", "boundBits"] {
@@ -129,21 +186,67 @@ fn accounts_rebuild_and_decrypt() {
         }
         // T15l (Fable P3-1): the holder's sealed box, never a plain number; its entry only at the words' accSeq
         let seq = a["view"]["accSeq"].as_u64().unwrap();
-        let bx = |b: u64, s: u64| with(v.clone(), &json!({"cacheBox": cache_box::entry(&k, &rows["token"], b, s)}));
-        assert_eq!(call("checkBalance", &bx(bal, seq), &k).unwrap()["ok"], true, "{}", a["name"]);
-        assert_eq!(call("checkBalance", &bx(bal + 1, seq), &k).unwrap()["ok"], false);
-        assert_eq!(call("checkBalance", &bx(bal, seq + 1), &k).unwrap()["ok"], false, "a stale entry");
-        assert!(call("checkBalance", &with(v.clone(), &json!({"balance": bal})), &k).is_err(), "a plain number");
+        let bx = |b: u64, s: u64| {
+            with(
+                v.clone(),
+                &json!({"cacheBox": cache_box::entry(&k, &rows["token"], b, s)}),
+            )
+        };
+        assert_eq!(
+            call("checkBalance", &bx(bal, seq), &k).unwrap()["ok"],
+            true,
+            "{}",
+            a["name"]
+        );
+        assert_eq!(
+            call("checkBalance", &bx(bal + 1, seq), &k).unwrap()["ok"],
+            false
+        );
+        assert_eq!(
+            call("checkBalance", &bx(bal, seq + 1), &k).unwrap()["ok"],
+            false,
+            "a stale entry"
+        );
+        assert!(
+            call(
+                "checkBalance",
+                &with(v.clone(), &json!({"balance": bal})),
+                &k
+            )
+            .is_err(),
+            "a plain number"
+        );
         let other = key(if holder(a) == "alice" { "bob" } else { "alice" });
-        let foreign = with(v.clone(), &json!({"cacheBox": cache_box::entry(&other, &rows["token"], bal, seq)}));
-        assert!(call("checkBalance", &foreign, &k).is_err(), "another key's box");
-        let no_entry = with(v.clone(), &json!({"cacheBox": cache_box::seal(&k, &json!({}))}));
-        assert!(call("checkBalance", &no_entry, &k).is_err(), "no entry for this UA and token");
+        let foreign = with(
+            v.clone(),
+            &json!({"cacheBox": cache_box::entry(&other, &rows["token"], bal, seq)}),
+        );
+        assert!(
+            call("checkBalance", &foreign, &k).is_err(),
+            "another key's box"
+        );
+        let no_entry = with(
+            v.clone(),
+            &json!({"cacheBox": cache_box::seal(&k, &json!({}))}),
+        );
+        assert!(
+            call("checkBalance", &no_entry, &k).is_err(),
+            "no entry for this UA and token"
+        );
         // the holder's own box, but its only entry is another UA's (or another token's) at the right balance
         let tok = rows["token"].as_str().unwrap().to_lowercase();
-        for id in [format!("0x{}:{tok}", hex::encode(other.ua())), format!("0x{}:0x{}", hex::encode(k.ua()), "11".repeat(20))] {
-            let wrong = with(v.clone(), &json!({"cacheBox": cache_box::seal(&k, &json!({ id.clone(): {"balance": bal.to_string(), "accSeq": seq} }))}));
-            assert!(call("checkBalance", &wrong, &k).is_err(), "{id}: not this key's entry");
+        for id in [
+            format!("0x{}:{tok}", hex::encode(other.ua())),
+            format!("0x{}:0x{}", hex::encode(k.ua()), "11".repeat(20)),
+        ] {
+            let wrong = with(
+                v.clone(),
+                &json!({"cacheBox": cache_box::seal(&k, &json!({ id.clone(): {"balance": bal.to_string(), "accSeq": seq} }))}),
+            );
+            assert!(
+                call("checkBalance", &wrong, &k).is_err(),
+                "{id}: not this key's entry"
+            );
         }
     }
 }
@@ -156,16 +259,30 @@ fn entries_rebuild_and_open_for_the_receiver_and_the_auditor() {
     for e in rows["entries"].as_array().unwrap() {
         let view = &e["view"];
         for (j, ua) in e["to"].as_array().unwrap().iter().enumerate() {
-            let name = ["alice", "bob", "carol", "dave"].into_iter().find(|n| hex::encode(key(n).ua()) == ua.as_str().unwrap()[2..]).unwrap();
+            let name = ["alice", "bob", "carol", "dave"]
+                .into_iter()
+                .find(|n| hex::encode(key(n).ua()) == ua.as_str().unwrap()[2..])
+                .unwrap();
             let k = key(name);
-            let v = with(entry_req(&rows, &k, e), &json!({"kind": "receiver", "index": j}));
+            let v = with(
+                entry_req(&rows, &k, e),
+                &json!({"kind": "receiver", "index": j}),
+            );
             let p = state::prepare("openDisclosure", &v, &k.y).unwrap();
             let x = p.entry().unwrap();
             assert_eq!(x.record, h(&view["transferEntry"]), "{}", e["name"]);
-            assert_eq!(x.memo.clone().unwrap_or_default(), h(&view["transferMemo"]), "{}", e["name"]);
+            assert_eq!(
+                x.memo.clone().unwrap_or_default(),
+                h(&view["transferMemo"]),
+                "{}",
+                e["name"]
+            );
             let leg = x.leg(j).unwrap();
             let want = h(&view["legs"][j]["ciphertext"]);
-            let got: Vec<u8> = [leg[1], leg[2], leg[3], leg[4]].iter().flat_map(encode_point::<Bls12381>).collect();
+            let got: Vec<u8> = [leg[1], leg[2], leg[3], leg[4]]
+                .iter()
+                .flat_map(encode_point::<Bls12381>)
+                .collect();
             assert_eq!(got, want, "{} leg {j}", e["name"]);
             assert_eq!(encode_point::<Bls12381>(&leg[0]), h(&view["legs"][j]["Yt"]));
             let amount = e["amounts"][j].as_u64().unwrap();
@@ -184,21 +301,43 @@ fn entries_rebuild_and_open_for_the_receiver_and_the_auditor() {
             };
             let out = call("openDisclosure", &v, &k).unwrap();
             assert_eq!(out["amount"], amount.to_string());
-            verify_opening(&entry(G::default()), amount, OpeningKind::ReceiverX, &h(&out["opening"])).unwrap();
+            verify_opening(
+                &entry(G::default()),
+                amount,
+                OpeningKind::ReceiverX,
+                &h(&out["opening"]),
+            )
+            .unwrap();
             if leg[3] != G::default() {
                 audited += 1;
-                let v = with(with(entry_req(&rows, &aud, e), &aud_words(&rows, e)), &json!({"kind": "auditor", "index": j}));
+                let v = with(
+                    with(entry_req(&rows, &aud, e), &aud_words(&rows, e)),
+                    &json!({"kind": "auditor", "index": j}),
+                );
                 let out = call("openDisclosure", &v, &aud).unwrap();
                 assert_eq!(out["amount"], amount.to_string());
-                verify_opening(&entry(pt(&rows["auditorY"])), amount, OpeningKind::Auditor, &h(&out["opening"])).unwrap();
+                verify_opening(
+                    &entry(pt(&rows["auditorY"])),
+                    amount,
+                    OpeningKind::Auditor,
+                    &h(&out["opening"]),
+                )
+                .unwrap();
             }
         }
     }
-    assert_eq!(audited, 3, "the single entry and the audited BUNDLE entry's two legs");
+    assert_eq!(
+        audited, 3,
+        "the single entry and the audited BUNDLE entry's two legs"
+    );
 }
 
 fn verify(cmd: &str, out: &Value) -> bool {
-    let r = zether_prover::api::call(cmd, &json!({"curve": "bls12381", "statement": out["statement"], "proof": out["proof"]}).to_string());
+    let r = zether_prover::api::call(
+        cmd,
+        &json!({"curve": "bls12381", "statement": out["statement"], "proof": out["proof"]})
+            .to_string(),
+    );
     serde_json::from_str::<Value>(&r.unwrap()).unwrap()["ok"] == true
 }
 
@@ -208,26 +347,87 @@ fn debits_over_rebuilt_words_verify() {
     let a = &rows["accounts"][0];
     let (alice, bob, carol) = (key("alice"), key("bob"), key("carol"));
     let y = |k: &K| format!("0x{}", hex::encode(encode_point::<Bls12381>(&k.y)));
-    let v = with(acct_req(&rows, &alice, a), &json!({"validUntilBlock": 1000, "yAud": rows["auditorY"]}));
+    let v = with(
+        acct_req(&rows, &alice, a),
+        &json!({"validUntilBlock": 1000, "yAud": rows["auditorY"]}),
+    );
     let seq = a["view"]["accSeq"].as_u64().unwrap();
     let bx = |b: u64, s: u64| json!(cache_box::entry(&alice, &rows["token"], b, s));
-    let t = call("proveTransfer", &with(v.clone(), &json!({"yTo": y(&bob), "amount": 10, "cacheBox": bx(843, seq)})), &alice).unwrap();
+    let t = call(
+        "proveTransfer",
+        &with(
+            v.clone(),
+            &json!({"yTo": y(&bob), "amount": 10, "cacheBox": bx(843, seq)}),
+        ),
+        &alice,
+    )
+    .unwrap();
     assert!(verify("verifyTransfer", &t));
     // a stale entry (another accSeq): the balance by BSGS
-    let t = call("proveTransfer", &with(v.clone(), &json!({"yTo": y(&bob), "amount": 10, "cacheBox": bx(844, seq + 1)})), &alice).unwrap();
+    let t = call(
+        "proveTransfer",
+        &with(
+            v.clone(),
+            &json!({"yTo": y(&bob), "amount": 10, "cacheBox": bx(844, seq + 1)}),
+        ),
+        &alice,
+    )
+    .unwrap();
     assert!(verify("verifyTransfer", &t));
-    assert!(call("proveTransfer", &with(v.clone(), &json!({"yTo": y(&bob), "amount": 10, "balance": 843})), &alice).is_err(), "a plain number");
+    assert!(
+        call(
+            "proveTransfer",
+            &with(
+                v.clone(),
+                &json!({"yTo": y(&bob), "amount": 10, "balance": 843})
+            ),
+            &alice
+        )
+        .is_err(),
+        "a plain number"
+    );
     // the balance from the rebuilt acc by BSGS when the caller gives none
-    let t = call("proveTransfer", &with(v.clone(), &json!({"yTo": y(&bob), "amount": 10})), &alice).unwrap();
+    let t = call(
+        "proveTransfer",
+        &with(v.clone(), &json!({"yTo": y(&bob), "amount": 10})),
+        &alice,
+    )
+    .unwrap();
     assert!(verify("verifyTransfer", &t));
-    assert!(call("proveTransfer", &with(v.clone(), &json!({"yTo": y(&bob), "amount": 10, "cacheBox": bx(844, seq)})), &alice).is_err(),
-        "a balance hint that does not decrypt from the rebuilt acc");
-    let m = call("proveTransferMulti", &with(v.clone(), &json!({"mode": "bundle", "recipients": [{"yTo": y(&bob), "amount": 3},
-        {"yTo": y(&carol), "amount": 0}]})), &alice).unwrap();
+    assert!(
+        call(
+            "proveTransfer",
+            &with(
+                v.clone(),
+                &json!({"yTo": y(&bob), "amount": 10, "cacheBox": bx(844, seq)})
+            ),
+            &alice
+        )
+        .is_err(),
+        "a balance hint that does not decrypt from the rebuilt acc"
+    );
+    let m = call(
+        "proveTransferMulti",
+        &with(
+            v.clone(),
+            &json!({"mode": "bundle", "recipients": [{"yTo": y(&bob), "amount": 3},
+        {"yTo": y(&carol), "amount": 0}]}),
+        ),
+        &alice,
+    )
+    .unwrap();
     assert!(verify("verifyTransferMulti", &m));
     let mut b = v.clone();
     b.as_object_mut().unwrap().remove("yAud");
-    let u = call("proveBurn", &with(b, &json!({"amount": 5, "recipient": "0x00000000000000000000000000000000000b0c00"})), &alice).unwrap();
+    let u = call(
+        "proveBurn",
+        &with(
+            b,
+            &json!({"amount": 5, "recipient": "0x00000000000000000000000000000000000b0c00"}),
+        ),
+        &alice,
+    )
+    .unwrap();
     assert!(verify("verifyBurn", &u));
 }
 
@@ -237,7 +437,10 @@ fn word_location_and_role_negatives_are_refused_before_the_key() {
     let a = &rows["accounts"][0];
     let alice = key("alice");
     let v = acct_req(&rows, &alice, a);
-    assert!(state::prepare("balance", &v, &alice.y).is_ok(), "positive control");
+    assert!(
+        state::prepare("balance", &v, &alice.y).is_ok(),
+        "positive control"
+    );
     let set = |k: &str, x: Value| {
         let mut o = v.clone();
         o[k] = x;
@@ -252,19 +455,34 @@ fn word_location_and_role_negatives_are_refused_before_the_key() {
     let mut slot_off = a["accountData"].clone();
     slot_off[0]["slot"] = slot_off[1]["slot"].clone();
     let mut extra = a["accountData"].clone();
-    extra.as_array_mut().unwrap().push(a["accountData"][0].clone());
+    extra
+        .as_array_mut()
+        .unwrap()
+        .push(a["accountData"][0].clone());
     let mut short = a["accountData"].clone();
     short.as_array_mut().unwrap().pop();
     for (what, x) in [
         ("another family", set("family", json!("soroban"))),
-        ("another psid", set("psid", json!(format!("0x{}", "11".repeat(32))))),
-        ("another reader's ua", set("ua", rows["accounts"][1]["ua"].clone())),
+        (
+            "another psid",
+            set("psid", json!(format!("0x{}", "11".repeat(32)))),
+        ),
+        (
+            "another reader's ua",
+            set("ua", rows["accounts"][1]["ua"].clone()),
+        ),
         ("five account words", set("account", words)),
         ("data words swapped (not a point)", set("accountData", data)),
         ("a data slot out of place", set("accountData", slot_off)),
         ("an extra data word", set("accountData", extra)),
         ("a missing data word", set("accountData", short)),
-        ("a raw acc", set("acc", json!({"C": a["view"]["accC"], "D": a["view"]["accD"]}))),
+        (
+            "a raw acc",
+            set(
+                "acc",
+                json!({"C": a["view"]["accC"], "D": a["view"]["accD"]}),
+            ),
+        ),
         ("a raw sendCounter", set("sendCounter", json!(3))),
         ("a key object", set("key", json!({"x": "0x01"}))),
         ("another curve", set("curve", json!("bn254"))),
@@ -272,10 +490,22 @@ fn word_location_and_role_negatives_are_refused_before_the_key() {
         refused(what, "balance", &x, &alice);
     }
     // a raw ciphertext beside the words, on every account command
-    for cmd in ["balance", "checkBalance", "pendingBalance", "proveTransfer", "proveTransferMulti", "proveBurn"] {
+    for cmd in [
+        "balance",
+        "checkBalance",
+        "pendingBalance",
+        "proveTransfer",
+        "proveTransferMulti",
+        "proveBurn",
+    ] {
         let mut ok = v.clone();
-        ok.as_object_mut().unwrap().retain(|f, _| state::allowed(cmd, f));
-        assert!(state::prepare(cmd, &ok, &alice.y).is_ok(), "{cmd}: positive control");
+        ok.as_object_mut()
+            .unwrap()
+            .retain(|f, _| state::allowed(cmd, f));
+        assert!(
+            state::prepare(cmd, &ok, &alice.y).is_ok(),
+            "{cmd}: positive control"
+        );
         for (f, x) in [("acc", "acc"), ("ct", "acc"), ("pending", "pending")] {
             let mut r = ok.clone();
             r[f] = json!({"C": a["view"][format!("{x}C")], "D": a["view"][format!("{x}D")]});
@@ -283,7 +513,12 @@ fn word_location_and_role_negatives_are_refused_before_the_key() {
         }
     }
     // bob's account words read with alice's ua: the slots are not hers
-    refused("another account's words", "balance", &acct_req(&rows, &alice, &rows["accounts"][1]), &alice);
+    refused(
+        "another account's words",
+        "balance",
+        &acct_req(&rows, &alice, &rows["accounts"][1]),
+        &alice,
+    );
     // the words of an account whose pending was rolled cannot claim a pending point
     let bob = key("bob");
     let b = &rows["accounts"][1];
@@ -291,16 +526,33 @@ fn word_location_and_role_negatives_are_refused_before_the_key() {
     let c = w[4].as_str().unwrap().to_string();
     // big-endian hex: sendCounter [2, 18), lastRolledPendingSeq [18, 34), pendingSeq [34, 50), accSeq [50, 66)
     w[4] = json!(format!("{}{}{}", &c[..18], &c[34..50], &c[34..])); // lastRolledPendingSeq := pendingSeq
-    refused("pending set although nothing is new", "balance", &with(acct_req(&rows, &bob, b), &json!({"account": w})), &bob);
+    refused(
+        "pending set although nothing is new",
+        "balance",
+        &with(acct_req(&rows, &bob, b), &json!({"account": w})),
+        &bob,
+    );
 
     // entries
     let e = &rows["entries"][1]; // BUNDLE, audited, legs [bob, carol]
     let carol = key("carol");
-    let r = with(entry_req(&rows, &bob, e), &json!({"kind": "receiver", "index": 0}));
-    assert!(state::prepare("openDisclosure", &r, &bob.y).is_ok(), "positive control");
+    let r = with(
+        entry_req(&rows, &bob, e),
+        &json!({"kind": "receiver", "index": 0}),
+    );
+    assert!(
+        state::prepare("openDisclosure", &r, &bob.y).is_ok(),
+        "positive control"
+    );
     let aud = key("auditor");
-    let ra = with(with(entry_req(&rows, &aud, e), &aud_words(&rows, e)), &json!({"kind": "auditor", "index": 0}));
-    assert!(state::prepare("openDisclosure", &ra, &aud.y).is_ok(), "positive control");
+    let ra = with(
+        with(entry_req(&rows, &aud, e), &aud_words(&rows, e)),
+        &json!({"kind": "auditor", "index": 0}),
+    );
+    assert!(
+        state::prepare("openDisclosure", &ra, &aud.y).is_ok(),
+        "positive control"
+    );
     let none = {
         let m = rows["modes"].as_str().unwrap();
         format!("{}00{}", &m[..22], &m[24..]) // auditorMode (byte 21 from the low end) := NONE
@@ -308,43 +560,160 @@ fn word_location_and_role_negatives_are_refused_before_the_key() {
     let hash = &rows["entries"][2]; // HASH, auditor left out, legs [carol, bob]
     let alice = key("alice");
     let own = with(entry_req(&rows, &alice, e), &aud_words(&rows, e));
-    assert!(state::prepare("recoverTransfer", &own, &alice.y).is_ok(), "positive control: the sender's own entry");
+    assert!(
+        state::prepare("recoverTransfer", &own, &alice.y).is_ok(),
+        "positive control: the sender's own entry"
+    );
     for (what, cmd, x, k) in [
-        ("a foreign leg (carol's) on bob's handle", "openDisclosure", with(r.clone(), &json!({"index": 1})), &bob),
-        ("bob's leg on carol's handle", "openDisclosure", with(entry_req(&rows, &carol, e), &json!({"kind": "receiver", "index": 0})), &carol),
-        ("a leg outside the entry", "openDisclosure", with(r.clone(), &json!({"index": 2})), &bob),
-        ("another sendCounter (entryRef not recomputed to these words)", "openDisclosure", with(r.clone(), &json!({"sendCounter": 0})), &bob),
-        ("another fromUA", "openDisclosure", with(r.clone(), &json!({"fromUA": rows["accounts"][1]["ua"]})), &bob),
-        ("an auditor read on a receiver handle", "openDisclosure", with(ra.clone(), &json!({"ua": format!("0x{}", hex::encode(bob.ua()))})), &bob),
-        ("a receiver read on the auditor handle", "openDisclosure", with(ra.clone(), &json!({"kind": "receiver"})), &aud),
-        ("an auditor read with auditorMode NONE", "openDisclosure", with(ra.clone(), &json!({"modes": none})), &aud),
-        ("an auditor read of a leg without a copy", "openDisclosure", with(with(entry_req(&rows, &aud, hash), &aud_words(&rows, hash)),
-            &json!({"kind": "auditor", "index": 0})), &aud),
-        ("a sender's command on the receiver's handle", "recoverTransfer", with(entry_req(&rows, &bob, e), &aud_words(&rows, e)), &bob),
-        ("openMemo of an inline entry", "openMemo", entry_req(&rows, &key("alice"), e), &key("alice")),
-        ("a raw entry", "openDisclosure", with(r.clone(), &json!({"entry": e["view"]["transferEntry"]})), &bob),
-        ("a raw leg", "openDisclosure", with(r.clone(), &json!({"Cout": e["view"]["legs"][0]["ciphertext"]})), &bob),
-        ("an amount from the caller", "openDisclosure", with(r.clone(), &json!({"amount": 30})), &bob),
+        (
+            "a foreign leg (carol's) on bob's handle",
+            "openDisclosure",
+            with(r.clone(), &json!({"index": 1})),
+            &bob,
+        ),
+        (
+            "bob's leg on carol's handle",
+            "openDisclosure",
+            with(
+                entry_req(&rows, &carol, e),
+                &json!({"kind": "receiver", "index": 0}),
+            ),
+            &carol,
+        ),
+        (
+            "a leg outside the entry",
+            "openDisclosure",
+            with(r.clone(), &json!({"index": 2})),
+            &bob,
+        ),
+        (
+            "another sendCounter (entryRef not recomputed to these words)",
+            "openDisclosure",
+            with(r.clone(), &json!({"sendCounter": 0})),
+            &bob,
+        ),
+        (
+            "another fromUA",
+            "openDisclosure",
+            with(r.clone(), &json!({"fromUA": rows["accounts"][1]["ua"]})),
+            &bob,
+        ),
+        (
+            "an auditor read on a receiver handle",
+            "openDisclosure",
+            with(
+                ra.clone(),
+                &json!({"ua": format!("0x{}", hex::encode(bob.ua()))}),
+            ),
+            &bob,
+        ),
+        (
+            "a receiver read on the auditor handle",
+            "openDisclosure",
+            with(ra.clone(), &json!({"kind": "receiver"})),
+            &aud,
+        ),
+        (
+            "an auditor read with auditorMode NONE",
+            "openDisclosure",
+            with(ra.clone(), &json!({"modes": none})),
+            &aud,
+        ),
+        (
+            "an auditor read of a leg without a copy",
+            "openDisclosure",
+            with(
+                with(entry_req(&rows, &aud, hash), &aud_words(&rows, hash)),
+                &json!({"kind": "auditor", "index": 0}),
+            ),
+            &aud,
+        ),
+        (
+            "a sender's command on the receiver's handle",
+            "recoverTransfer",
+            with(entry_req(&rows, &bob, e), &aud_words(&rows, e)),
+            &bob,
+        ),
+        (
+            "openMemo of an inline entry",
+            "openMemo",
+            entry_req(&rows, &key("alice"), e),
+            &key("alice"),
+        ),
+        (
+            "a raw entry",
+            "openDisclosure",
+            with(r.clone(), &json!({"entry": e["view"]["transferEntry"]})),
+            &bob,
+        ),
+        (
+            "a raw leg",
+            "openDisclosure",
+            with(
+                r.clone(),
+                &json!({"Cout": e["view"]["legs"][0]["ciphertext"]}),
+            ),
+            &bob,
+        ),
+        (
+            "an amount from the caller",
+            "openDisclosure",
+            with(r.clone(), &json!({"amount": 30})),
+            &bob,
+        ),
     ] {
         refused(what, cmd, &x, k);
     }
     // commit-reveal: the blob, the pointer and the memo bound to the entry
-    let rh = with(entry_req(&rows, &carol, hash), &json!({"kind": "receiver", "index": 0}));
-    assert!(state::prepare("openDisclosure", &rh, &carol.y).is_ok(), "positive control");
+    let rh = with(
+        entry_req(&rows, &carol, hash),
+        &json!({"kind": "receiver", "index": 0}),
+    );
+    assert!(
+        state::prepare("openDisclosure", &rh, &carol.y).is_ok(),
+        "positive control"
+    );
     let mut blob = hash["blob"].clone();
     blob["address"] = json!(format!("0x{}", "11".repeat(20)));
     let mut code = hash["blob"].clone();
-    code["code"] = json!(format!("0x01{}", &hash["blob"]["code"].as_str().unwrap()[4..]));
+    code["code"] = json!(format!(
+        "0x01{}",
+        &hash["blob"]["code"].as_str().unwrap()[4..]
+    ));
     let mut memo = hash["memoWords"].clone();
     memo[1]["word"] = json!(format!("0x{}", "00".repeat(32))); // the salt no longer the record's
     for (what, x) in [
-        ("a blob of another pointer", with(rh.clone(), &json!({"blob": blob}))),
-        ("not an SSTORE2 code", with(rh.clone(), &json!({"blob": code}))),
-        ("a memo of another record", with(rh.clone(), &json!({"memoWords": memo}))),
-        ("a pointer with an inline record", with(rh.clone(), &json!({"entryWords": e["entryWords"]}))),
-        ("an inline entry with a blob", with(r.clone(), &json!({"blob": hash["blob"]}))),
+        (
+            "a blob of another pointer",
+            with(rh.clone(), &json!({"blob": blob})),
+        ),
+        (
+            "not an SSTORE2 code",
+            with(rh.clone(), &json!({"blob": code})),
+        ),
+        (
+            "a memo of another record",
+            with(rh.clone(), &json!({"memoWords": memo})),
+        ),
+        (
+            "a pointer with an inline record",
+            with(rh.clone(), &json!({"entryWords": e["entryWords"]})),
+        ),
+        (
+            "an inline entry with a blob",
+            with(r.clone(), &json!({"blob": hash["blob"]})),
+        ),
     ] {
-        refused(what, "openDisclosure", &x, if what.starts_with("an inline") { &bob } else { &carol });
+        refused(
+            what,
+            "openDisclosure",
+            &x,
+            if what.starts_with("an inline") {
+                &bob
+            } else {
+                &carol
+            },
+        );
     }
 }
 
@@ -389,16 +758,27 @@ fn the_sender_recovers_its_own_entries_from_words() {
     let rows = rows();
     let (alice, bob, carol) = (key("alice"), key("bob"), key("carol"));
     let y = |k: &K| hw(&encode_point::<Bls12381>(&k.y));
-    let v = with(acct_req(&rows, &alice, &rows["accounts"][0]), &json!({"validUntilBlock": 1000, "yAud": rows["auditorY"],
+    let v = with(
+        acct_req(&rows, &alice, &rows["accounts"][0]),
+        &json!({"validUntilBlock": 1000, "yAud": rows["auditorY"],
         "cacheBox": cache_box::entry(&alice, &rows["token"], 843, rows["accounts"][0]["view"]["accSeq"].as_u64().unwrap()),
-        "recipients": [{"yTo": y(&bob), "amount": 7}, {"yTo": y(&carol), "amount": 0}]}));
+        "recipients": [{"yTo": y(&bob), "amount": 7}, {"yTo": y(&carol), "amount": 0}]}),
+    );
     let ns = |n: u64| add(&h(&rows["layout"]["root"]).try_into().unwrap(), n);
     let map = |k: &[u8], n: u64| kk(&[k, &ns(n)].concat());
     for mode in ["bundle", "compact"] {
-        let out = call("proveTransferMulti", &with(v.clone(), &json!({"mode": mode})), &alice).unwrap();
+        let out = call(
+            "proveTransferMulti",
+            &with(v.clone(), &json!({"mode": mode})),
+            &alice,
+        )
+        .unwrap();
         let (r, entry_ref) = (h(&out["bundles"]), h(&out["entryRef"]));
         let sc = rows["accounts"][0]["view"]["sendCounter"].clone();
-        let mut req = with(base(&rows, &alice), &json!({"fromUA": rows["accounts"][0]["ua"], "sendCounter": sc}));
+        let mut req = with(
+            base(&rows, &alice),
+            &json!({"fromUA": rows["accounts"][0]["ua"], "sendCounter": sc}),
+        );
         if mode == "bundle" {
             req["entryWords"] = bytes_words(&map(&entry_ref, 9), &r);
             req["entryPtr"] = json!(hw(&[0; 32]));
@@ -422,7 +802,14 @@ fn the_sender_recovers_its_own_entries_from_words() {
         let rec = call("recoverTransfer", &req, &alice).unwrap();
         assert_eq!(rec["entryRef"], out["entryRef"], "{mode}");
         assert_eq!(rec["bundles"], out["bundles"], "{mode}");
-        assert_eq!((rec["legs"][0]["amount"].clone(), rec["legs"][1]["amount"].clone()), (json!("7"), json!("0")), "{mode}");
+        assert_eq!(
+            (
+                rec["legs"][0]["amount"].clone(),
+                rec["legs"][1]["amount"].clone()
+            ),
+            (json!("7"), json!("0")),
+            "{mode}"
+        );
         // bob, a recipient, is no sender of it
         let mut theirs = req.clone();
         theirs["ua"] = json!(hw(&bob.ua()));
@@ -440,31 +827,68 @@ fn auditor_epochs_bind_the_entry_key() {
     let ep = &rows["epochs"];
     let (old, new, alice) = (key("auditor"), key("dave"), key("alice"));
     let at = |k: &K, e: &Value| with(entry_req(&rows, k, e), &json!({"token": ep["token"]}));
-    let keys = |epoch: u64| if epoch == 0 { ep["auditorKeyWords0"].clone() } else { ep["auditorKeyWords"].clone() };
-    let words = |e: &Value, epoch: u64| {
-        json!({"modes": ep["modes"], "entryAuditorEpoch": e["entryAuditorEpoch"], "auditorKeyWords": keys(epoch)})
+    let keys = |epoch: u64| {
+        if epoch == 0 {
+            ep["auditorKeyWords0"].clone()
+        } else {
+            ep["auditorKeyWords"].clone()
+        }
     };
+    let words = |e: &Value, epoch: u64| json!({"modes": ep["modes"], "entryAuditorEpoch": e["entryAuditorEpoch"], "auditorKeyWords": keys(epoch)});
     let mut seen = [0usize; 2];
     for (i, e) in ep["entries"].as_array().unwrap().iter().enumerate() {
         let epoch = ep["entryEpochs"][i].as_u64().unwrap();
-        assert_eq!(u64::from_str_radix(&e["entryAuditorEpoch"].as_str().unwrap()[2..], 16).unwrap(), epoch, "{}", e["name"]);
-        let (mine, other) = if epoch == 0 { (&old, &new) } else { (&new, &old) };
+        assert_eq!(
+            u64::from_str_radix(&e["entryAuditorEpoch"].as_str().unwrap()[2..], 16).unwrap(),
+            epoch,
+            "{}",
+            e["name"]
+        );
+        let (mine, other) = if epoch == 0 {
+            (&old, &new)
+        } else {
+            (&new, &old)
+        };
         for j in 0..e["to"].as_array().unwrap().len() {
-            let v = |k: &K, w: &Value| with(with(at(k, e), w), &json!({"kind": "auditor", "index": j}));
+            let v =
+                |k: &K, w: &Value| with(with(at(k, e), w), &json!({"kind": "auditor", "index": j}));
             let out = call("openDisclosure", &v(mine, &words(e, epoch)), mine).unwrap();
-            assert_eq!(out["amount"], e["amounts"][j].as_u64().unwrap().to_string(), "{} leg {j}", e["name"]);
-            refused("the other epoch's auditor", "openDisclosure", &v(other, &words(e, epoch)), other);
+            assert_eq!(
+                out["amount"],
+                e["amounts"][j].as_u64().unwrap().to_string(),
+                "{} leg {j}",
+                e["name"]
+            );
+            refused(
+                "the other epoch's auditor",
+                "openDisclosure",
+                &v(other, &words(e, epoch)),
+                other,
+            );
             let mut slot = words(e, epoch);
             slot["auditorKeyWords"] = keys(1 - epoch);
-            refused("the key words of the other epoch's slot", "openDisclosure", &v(mine, &slot), mine);
+            refused(
+                "the key words of the other epoch's slot",
+                "openDisclosure",
+                &v(mine, &slot),
+                mine,
+            );
             seen[epoch as usize] += 1;
         }
     }
     assert_eq!(seen, [1, 3], "one audited leg at epoch 0, three at epoch 1");
     // an entry word past the token's epoch is refused
     let e = &ep["entries"][1];
-    let past = with(at(&alice, e), &json!({"modes": ep["modes"], "entryAuditorEpoch": format!("0x{:064x}", 2), "auditorKeyWords": keys(1)}));
-    refused("an entry epoch past the token's", "recoverTransfer", &past, &alice);
+    let past = with(
+        at(&alice, e),
+        &json!({"modes": ep["modes"], "entryAuditorEpoch": format!("0x{:064x}", 2), "auditorKeyWords": keys(1)}),
+    );
+    refused(
+        "an entry epoch past the token's",
+        "recoverTransfer",
+        &past,
+        &alice,
+    );
 }
 
 /// Set-auditor A3: the sender's recovery rebuilds the auditor copies with the key of the entry's epoch. An entry the prover
@@ -476,22 +900,45 @@ fn the_sender_recovers_with_the_entry_epoch_key() {
     let ep = &rows["epochs"];
     let (alice, bob, dave) = (key("alice"), key("bob"), key("dave"));
     let y = |k: &K| hw(&encode_point::<Bls12381>(&k.y));
-    let v = with(acct_req(&rows, &alice, &rows["accounts"][0]), &json!({"validUntilBlock": 1000, "yAud": y(&dave),
-        "recipients": [{"yTo": y(&bob), "amount": 6}]}));
+    let v = with(
+        acct_req(&rows, &alice, &rows["accounts"][0]),
+        &json!({"validUntilBlock": 1000, "yAud": y(&dave),
+        "recipients": [{"yTo": y(&bob), "amount": 6}]}),
+    );
     let ns = |n: u64| add(&h(&rows["layout"]["root"]).try_into().unwrap(), n);
     let map = |k: &[u8], n: u64| kk(&[k, &ns(n)].concat());
-    let out = call("proveTransferMulti", &with(v, &json!({"mode": "bundle"})), &alice).unwrap();
+    let out = call(
+        "proveTransferMulti",
+        &with(v, &json!({"mode": "bundle"})),
+        &alice,
+    )
+    .unwrap();
     let (r, entry_ref) = (h(&out["bundles"]), h(&out["entryRef"]));
     let sc = rows["accounts"][0]["view"]["sendCounter"].clone();
-    let req = with(base(&rows, &alice), &json!({"fromUA": rows["accounts"][0]["ua"], "sendCounter": sc,
-        "entryWords": bytes_words(&map(&entry_ref, 9), &r), "entryPtr": hw(&[0; 32]), "modes": ep["modes"]}));
+    let req = with(
+        base(&rows, &alice),
+        &json!({"fromUA": rows["accounts"][0]["ua"], "sendCounter": sc,
+        "entryWords": bytes_words(&map(&entry_ref, 9), &r), "entryPtr": hw(&[0; 32]), "modes": ep["modes"]}),
+    );
     let mut one = [0u8; 32];
     one[31] = 1;
-    let good = with(req.clone(), &json!({"entryAuditorEpoch": hw(&one), "auditorKeyWords": ep["auditorKeyWords"]}));
+    let good = with(
+        req.clone(),
+        &json!({"entryAuditorEpoch": hw(&one), "auditorKeyWords": ep["auditorKeyWords"]}),
+    );
     let rec = call("recoverTransfer", &good, &alice).unwrap();
     assert_eq!(rec["entryRef"], out["entryRef"]);
     assert_eq!(rec["legs"][0]["amount"], json!("6"));
-    let lie = with(req, &json!({"entryAuditorEpoch": hw(&[0; 32]), "auditorKeyWords": ep["auditorKeyWords0"]}));
-    assert!(state::prepare("recoverTransfer", &lie, &alice.y).is_ok(), "consistent words");
-    assert!(call("recoverTransfer", &lie, &alice).is_err(), "the recovery under the epoch-0 key fails");
+    let lie = with(
+        req,
+        &json!({"entryAuditorEpoch": hw(&[0; 32]), "auditorKeyWords": ep["auditorKeyWords0"]}),
+    );
+    assert!(
+        state::prepare("recoverTransfer", &lie, &alice.y).is_ok(),
+        "consistent words"
+    );
+    assert!(
+        call("recoverTransfer", &lie, &alice).is_err(),
+        "the recovery under the epoch-0 key fails"
+    );
 }

@@ -25,7 +25,10 @@ impl Nonces {
         h.update(secrets);
         h.update(r);
         r.zeroize();
-        Self { seed: h.finalize().into(), ctr: 0 }
+        Self {
+            seed: h.finalize().into(),
+            ctr: 0,
+        }
     }
 
     #[allow(clippy::should_implement_trait)] // generic over the curve per call: not an Iterator
