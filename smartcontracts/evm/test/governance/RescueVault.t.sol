@@ -38,12 +38,36 @@ contract RescueVaultTest is Test {
         return bytes32(uint256(uint160(a)));
     }
 
+    /// The committed creation code (`rescue-vault-init.hex` without its two constructor words): the deployed vault's bytes,
+    /// built with the metadata hash; today's compile (`bytecode_hash = "none"`) differs from it only in that metadata
+    /// (`test_artifactIsTheSource`; owner 2026-11-19, option (a)).
+    function _creation() internal view returns (bytes memory c) {
+        bytes memory init = vm.parseBytes(vm.readFile(INIT));
+        c = new bytes(init.length - 64);
+        for (uint256 i; i < c.length; ++i) {
+            c[i] = init[i];
+        }
+    }
+
+    /// The vault deployed by the CREATE2 deployer from the committed creation code: with `ADMIN` and `DEV_EOA` it is the
+    /// constant's address.
     function _deploy(bytes32 admin, address rescuer) internal returns (address a) {
         if (DEPLOYER.code.length == 0) vm.etch(DEPLOYER, DEPLOYER_CODE);
-        (bool ok, bytes memory ret) =
-            DEPLOYER.call(abi.encodePacked(SALT, type(RescueVault).creationCode, abi.encode(admin, rescuer)));
+        (bool ok, bytes memory ret) = DEPLOYER.call(abi.encodePacked(SALT, _creation(), abi.encode(admin, rescuer)));
         require(ok && ret.length == 20, "deploy");
         a = address(bytes20(ret));
+    }
+
+    /// `code` without its trailing CBOR metadata (solc appends it, its length in the last two bytes).
+    function _stripMetadata(bytes memory code) internal pure returns (bytes memory r) {
+        uint256 n = code.length;
+        require(n >= 2, "short");
+        uint256 m = (uint256(uint8(code[n - 2])) << 8) | uint8(code[n - 1]);
+        require(m + 2 <= n, "no metadata");
+        r = new bytes(n - m - 2);
+        for (uint256 i; i < r.length; ++i) {
+            r[i] = code[i];
+        }
     }
 
     function _sig(uint256 key, bytes32 digest) internal pure returns (bytes memory) {
@@ -81,19 +105,29 @@ contract RescueVaultTest is Test {
         assertFalse(ok);
     }
 
-    /// The source compiled today gives exactly the committed bytes, so every other test here (on the compiled source) tests
-    /// the deployed vault. An edit of `RescueVault.sol`, an import or a compiler setting fails here; the artifact stays the
-    /// deploy truth.
-    function test_artifactIsTheSource() public view {
-        assertEq(
-            keccak256(type(RescueVault).creationCode),
-            0xa103dbdc3ecd0a1fc6cd1c96fe8bd904a07b7c5c55cc809eb4e466dcc153dc66,
-            "creation code pin"
-        );
-        assertEq(
-            abi.encodePacked(type(RescueVault).creationCode, abi.encode(_ua(ADMIN), DEV_EOA)),
-            vm.parseBytes(vm.readFile(INIT))
-        );
+    /// The source compiled today gives the committed vault's runtime code exactly, its trailing CBOR metadata aside (owner
+    /// 2026-11-19, option (a): the committed artifact was built with the metadata hash, today's compile uses
+    /// `bytecode_hash = "none"`), so every other test here (on the compiled source) tests the deployed vault. An edit of
+    /// `RescueVault.sol` or an import that changes code fails here; the artifact stays the deploy truth.
+    function test_artifactIsTheSource() public {
+        address a = _deploy(_ua(ADMIN), DEV_EOA);
+        assertEq(a, RescueLib.SCAAS_DEV_RESCUE);
+        assertTrue(keccak256(a.code) != keccak256(type(RescueVault).runtimeCode), "the metadata differs (control)");
+        assertEq(_stripMetadata(a.code), _stripMetadata(type(RescueVault).runtimeCode), "runtime code, metadata aside");
+    }
+
+    /// Negative control of the comparison above: one opcode byte of the compiled runtime changed (its first, and one in the
+    /// middle of the code) is caught; the metadata alone is not.
+    function test_artifactCompareCatchesOneByte() public {
+        bytes memory deployed = _stripMetadata(_deploy(_ua(ADMIN), DEV_EOA).code);
+        bytes memory built = type(RescueVault).runtimeCode;
+        uint256[2] memory at = [uint256(0), _stripMetadata(built).length / 2];
+        for (uint256 j; j < 2; ++j) {
+            bytes memory m = bytes.concat(built);
+            m[at[j]] = m[at[j]] ^ 0x01;
+            assertTrue(keccak256(_stripMetadata(m)) != keccak256(deployed), "a changed opcode byte is caught");
+        }
+        assertEq(keccak256(_stripMetadata(built)), keccak256(deployed), "control: unchanged code matches");
     }
 
     /// The admin is a native UA (not 0, high 96 bits 0); the rescuer is not 0.
@@ -479,7 +513,7 @@ contract RescueVaultTest is Test {
         );
         s.deployAndCatchUp(init, "[]");
         vm.etch(DEPLOYER, DEPLOYER_CODE);
-        bytes memory other = abi.encodePacked(type(RescueVault).creationCode, abi.encode(_ua(ADMIN), PAYEE));
+        bytes memory other = abi.encodePacked(_creation(), abi.encode(_ua(ADMIN), PAYEE));
         vm.expectRevert(bytes("rescue-vault-init.hex is not RescueLib.SCAAS_DEV_RESCUE's init code"));
         s.deployAndCatchUp(other, "[]");
         s.deployAndCatchUp(init, "[]"); // control: the committed bytes deploy
