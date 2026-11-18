@@ -180,6 +180,11 @@ opt-level = 3
 name = "wallet_typed"
 required-features = ["wallet"]
 
+# scaas-sdk T8a-T8g: the named entries by domain kind, against typed_ops.json and the node's table
+[[test]]
+name = "entries"
+required-features = ["wallet"]
+
 [[test]]
 name = "service_pull"
 required-features = ["wallet"]

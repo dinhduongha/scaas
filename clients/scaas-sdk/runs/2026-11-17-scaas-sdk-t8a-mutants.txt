@@ -1,0 +1,10 @@
+# t8a mutants at commit 7204182f6 (name | outcome | test)
+swap two arguments of mtxPayWithTax | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_token
+a wrong selector on mtxBurn | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_token
+drop the unsigned meta of mtxPayWithPayeeFee | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_token
+an unbound relayer sent as given | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_token
+an unbound fee recipient sent as given | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_token
+a dynamic offset past the heads only | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_token
+relayRef without the chain id | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_token
+a relay fee's call on another target | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_token
+8 mutants, 8 killed, 0 survived, 0 not loaded

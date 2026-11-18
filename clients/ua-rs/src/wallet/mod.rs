@@ -25,6 +25,7 @@ pub mod bounded;
 #[cfg(feature = "vectors")]
 pub mod derive;
 mod eip712;
+pub mod entries;
 #[cfg(feature = "vectors")]
 pub mod kem;
 #[cfg(not(feature = "vectors"))]
