@@ -761,7 +761,8 @@ impl ChainAdapter for CosmosAdapter {
             }
         }
         let body = json!({"tx_bytes": B64.encode(&signed.raw), "mode": "BROADCAST_MODE_SYNC"});
-        let (code, v) = self.rest_post("/cosmos/tx/v1beta1/txs", &body).await?;
+        // scaas-rpc T24.7: the send is the first gateway's, inside `build`'s scope too (never failed over)
+        let (code, v) = self.net.rest.post(0, "/cosmos/tx/v1beta1/txs", &body).await.map_err(|e| anyhow!("POST /cosmos/tx/v1beta1/txs: {e}"))?;
         broadcast_outcome(code, &v)
     }
 
@@ -1406,11 +1407,17 @@ mod tests {
 
     /// The adapter on REST gateways `rest` (CometBFT unused here), with a router.
     fn adapter_on(rest: &[&str]) -> CosmosAdapter {
+        adapter_rpc("http://r", rest)
+    }
+
+    /// [`adapter_on`] with the CometBFT endpoint `rpc`.
+    fn adapter_rpc(rpc: &str, rest: &[&str]) -> CosmosAdapter {
         let rest: Vec<String> = rest.iter().map(|u| format!("\"{u}\"")).collect();
         let k = vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
         let mut cfg = chain(&format!("network = \"c-1\"\nparams = {{ rest = [{}], prefix = \"wasm\", gas_price = \"0.025\", \
                                   relay_fee = {{ router = \"{}\" }} }}", rest.join(", "), router()));
         cfg.tokens.push(crate::config::TokenCfg { address: token(), decimals: 6 });
+        cfg.rpc_urls = vec![rpc.to_string()];
         CosmosAdapter::new(&cfg, k).unwrap()
     }
 
@@ -1506,5 +1513,20 @@ mod tests {
         let a = on(comet().await, [first().await, gateway(Some("100000")).await.0]);
         let _ = a.final_head().await;
         assert!(matches!(a.build(&plain_pay(), 0).await, Err(SimError::Transport(_))), "the head: the same floor");
+    }
+
+    /// scaas-rpc T24.7: `submit` sends to the first gateway only, inside `build`'s scope too: with it down the send fails and
+    /// gateway 1 is asked nothing. Control: the first gateway up is asked.
+    #[tokio::test]
+    async fn cosmos_submit_inside_build_asks_gateway_0_only() {
+        let s = Signed { job_id: 1, tx_id: format!("0x{}", "11".repeat(32)), raw: vec![1, 2, 3], valid_until: u64::MAX / 2, sequence: 0 };
+        let comet = crate::adapters::testkit::scripted(false, |p, _| (p == "/status").then(|| json!({"result": {"node_info": {"network": "c-1"},
+            "sync_info": {"latest_block_height": "5", "latest_block_hash": "AA".repeat(32)}}}))).await;
+        // the CometBFT head (the floor `submit`'s head read raises) is gateway 1's own: only the explicit send keeps it unasked
+        let (url, n) = gateway(Some("100000")).await;
+        assert!(crate::adapters::evm::BUILDING.scope((), adapter_rpc(&comet, &[DOWN, &url]).submit(&s)).await.is_err());
+        assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst), 0, "gateway 1 is asked nothing");
+        let _ = crate::adapters::evm::BUILDING.scope((), adapter_rpc(&comet, &[&url]).submit(&s)).await;
+        assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst), 1, "control");
     }
 }

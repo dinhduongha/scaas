@@ -2194,7 +2194,8 @@ impl ChainAdapter for AlgorandAdapter {
     /// A 4xx answer (dead window, fee, overspend, a logic failure at the pool's check): the same bytes never pass ⇒
     /// `Rejected`; "already in ledger" = it landed.
     async fn submit(&self, signed: &Signed) -> Result<()> {
-        match self.post("/v2/transactions", signed.raw.clone(), "application/x-binary").await {
+        // scaas-rpc T24.7: the send is endpoint 0's, inside `build`'s scope too (never failed over)
+        match self.net.post(0, "/v2/transactions", signed.raw.clone(), "application/x-binary").await.map_err(algod_error) {
             Ok(_) => Ok(()),
             Err(e) if e.downcast_ref::<AlgodError>().is_some_and(|a| a.message.contains("already in ledger")) => Ok(()),
             Err(e) if status_of(&e).is_some_and(|s| (400..500).contains(&s)) => Err(Rejected(format!("{e:#}")).into()),
@@ -3744,5 +3745,18 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         let (a, _) = adapter_after(world(), &[&first().await]).await;
         let _ = a.final_head().await;
         assert!(matches!(a.build(&j, 0).await, Err(SimError::Transport(_))), "the head: the same floor");
+    }
+
+    /// scaas-rpc T24.7: `submit` sends to endpoint 0 only, inside `build`'s scope too: with it down the send fails and endpoint
+    /// 1 is sent nothing. Control: endpoint 0 up takes it.
+    #[tokio::test]
+    async fn algorand_submit_inside_build_asks_endpoint_0_only() {
+        let s = Signed { job_id: 1, tx_id: format!("0x{}", "11".repeat(32)), raw: vec![1, 2, 3], valid_until: u64::MAX / 2, sequence: 0 };
+        let (a, w) = adapter_after(world(), &[DOWN]).await;
+        assert!(crate::adapters::evm::BUILDING.scope((), a.submit(&s)).await.is_err());
+        assert!(w.lock().unwrap().submitted.is_empty(), "endpoint 1 is sent nothing");
+        let (a, w) = adapter_after(world(), &[]).await;
+        crate::adapters::evm::BUILDING.scope((), a.submit(&s)).await.unwrap();
+        assert_eq!(w.lock().unwrap().submitted.len(), 1, "control");
     }
 }

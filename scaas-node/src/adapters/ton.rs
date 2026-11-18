@@ -1216,6 +1216,11 @@ impl Api {
         }
     }
 
+    /// A send (`message`): endpoint 0's only, inside `build`'s scope too (scaas-rpc T24.7, never failed over).
+    pub async fn send(&self, body: Value) -> Result<()> {
+        self.net.post(0, "message", &body).await.map(|_| ()).map_err(|e| Self::error("message", e))
+    }
+
     /// Answers of an endpoint after the first (the failover count).
     pub fn failovers(&self) -> u64 {
         self.net.client.pool().failover_answers()
@@ -1666,7 +1671,7 @@ impl TonAdapter {
         let v = self.api.run_get(router, "get_refund_value", vec![]).await?;
         let value = v.first().map(stack_num).transpose()?.ok_or_else(|| anyhow!("get_refund_value: empty"))?;
         let (raw, _) = w5_transfer(&self.w5[lane], signer, seqno, vu, router, value, relay_refund_body(from, r)?)?;
-        self.api.post("message", json!({"boc": b64encode(&raw)})).await.map(|_| ())
+        self.api.send(json!({"boc": b64encode(&raw)})).await
     }
 
     async fn build_on(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
@@ -1952,7 +1957,7 @@ impl ChainAdapter for TonAdapter {
     }
 
     async fn submit(&self, signed: &Signed) -> Result<()> {
-        self.api.post("message", json!({"boc": b64encode(&signed.raw)})).await.map(|_| ())
+        self.api.send(json!({"boc": b64encode(&signed.raw)})).await
     }
 
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
@@ -3467,5 +3472,18 @@ mod tests {
         let a = adapter_on(&[first().await, fake_api_shared(lane_at(0)).await.0], toml::Table::new());
         let _ = a.final_head().await;
         assert!(matches!(a.build(&signed_pay(), 0).await, Err(SimError::Transport(_))), "the head: the same floor");
+    }
+
+    /// scaas-rpc T24.7: `submit` sends to endpoint 0 only, inside `build`'s scope too: with it down the send fails and endpoint 1
+    /// is sent nothing. Control: endpoint 0 up takes it.
+    #[tokio::test]
+    async fn ton_submit_inside_build_asks_endpoint_0_only() {
+        let s = Signed { job_id: 1, tx_id: format!("0x{}", "11".repeat(32)), raw: vec![1, 2, 3], valid_until: u64::MAX / 2, sequence: 0 };
+        let (url, f) = fake_api_shared(lane_at(0)).await;
+        let a = adapter_on(&[DOWN.to_string(), url.clone()], toml::Table::new());
+        assert!(crate::adapters::evm::BUILDING.scope((), a.submit(&s)).await.is_err());
+        assert!(f.lock().unwrap().posted.is_empty(), "endpoint 1 is sent nothing");
+        crate::adapters::evm::BUILDING.scope((), adapter(&url).submit(&s)).await.unwrap();
+        assert_eq!(f.lock().unwrap().posted.len(), 1, "control");
     }
 }

@@ -48,6 +48,6 @@ node-e2e-cosmos | 66b9b90d9 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tr
 rpc-test | 2d68aaf2d | 0 | 160 passed, 0 failed, 10 ignored (16 binaries); tree dirty
 rpc-clippy | 2d68aaf2d | 0 | -; tree dirty
 rpc-wasm | 2d68aaf2d | 0 | -; tree dirty
-node-test | 9ac4304ca | 0 | 836 passed, 0 failed, 72 ignored (18 binaries); tree dirty
-node-clippy | 9ac4304ca | 0 | -; tree dirty
 docs | 9ac4304ca | 0 | -; tree dirty
+node-test | 0e328eea3 | 0 | 839 passed, 0 failed, 72 ignored (18 binaries); tree dirty
+node-clippy | 0e328eea3 | 0 | -; tree dirty

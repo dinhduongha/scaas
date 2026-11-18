@@ -68,6 +68,16 @@ MUTANTS = [
      NT + "soroban::tests::soroban_the_last_good_limit_is_endpoint_0s_only"),
     ("5: Soroban: the entry size kept from any endpoint", [(A + "soroban.rs", "            Ok((limit, 0)) => *last = Some(limit),\n            Ok((limit, _)) => return Some(limit),", "            Ok((limit, _)) => *last = Some(limit),")],
      NT + "soroban::tests::soroban_the_last_good_limit_is_endpoint_0s_only"),
+    # T24.7: the sends go to endpoint 0 explicitly, inside `build`'s scope too
+    ("7: Algorand: the send through the failover helper", [(A + "algorand.rs", 'match self.net.post(0, "/v2/transactions", signed.raw.clone(), "application/x-binary").await.map_err(algod_error) {',
+       'match self.post("/v2/transactions", signed.raw.clone(), "application/x-binary").await {')],
+     NT + "algorand::tests::algorand_submit_inside_build_asks_endpoint_0_only"),
+    ("7: Cosmos: the send through the failover helper", [(A + "cosmos.rs", 'let (code, v) = self.net.rest.post(0, "/cosmos/tx/v1beta1/txs", &body).await.map_err(|e| anyhow!("POST /cosmos/tx/v1beta1/txs: {e}"))?;',
+       'let (code, v) = self.rest_post("/cosmos/tx/v1beta1/txs", &body).await?;')],
+     NT + "cosmos::tests::cosmos_submit_inside_build_asks_gateway_0_only"),
+    ("7: TON: the send through the failover helper", [(A + "ton.rs", 'self.net.post(0, "message", &body).await.map(|_| ()).map_err(|e| Self::error("message", e))',
+       'self.post("message", body).await.map(|_| ())')],
+     NT + "ton::tests::ton_submit_inside_build_asks_endpoint_0_only"),
 ]
 
 if __name__ == "__main__":
