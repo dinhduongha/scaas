@@ -21,7 +21,7 @@ family near | 9a31ccf1d | d091f1ca8 | node-e2e-near 12 -> 12 | 7 killed
 family algorand | 2633740cb | 7ae89ed28 | node-e2e-algorand 8 -> 8 | 7 killed
 family aptos | 6a0e68b1a | 679dda5b5 | node-e2e-aptos 1 -> 1 | 8 killed (1 survived its first run; a test case added)
 family sui | 118d28867 | ecb574968 | node-e2e-sui 1 -> 1 | 7 killed (2 survived their first run; the tests primed)
-family cosmos | - | - | not run | skipped: its e2e starts Docker without --memory (an edit of an existing test), and the adapter's unit tests do not cover its CometBFT reads (plan: step (a) only when they do); recorded, nothing moved
+family cosmos | 66b9b90d9 | cb5fc860c | node-e2e-cosmos 1 -> 1 (the Docker cap 1bc22f83c first, owner 2026-11-18) | 11 killed (params.rest a list of REST gateways, owner 2026-11-18)
 family ton | ef4c78a40 | 58ff9b172 | node-e2e-ton 1 -> 1 | 10 killed
 lock | 983d63b8e | - | rustls-webpki 0.103.17, webpki-roots 1.0.12, tokio 1.54.1; rpc-deny | -
 # latest runs:
@@ -50,4 +50,4 @@ rpc-wasm | 1bc22f83c | 0 | -; tree dirty
 node-test | 66b9b90d9 | 0 | 818 passed, 0 failed, 72 ignored (18 binaries); tree dirty
 node-clippy | 66b9b90d9 | 0 | -; tree dirty
 node-e2e-cosmos | 66b9b90d9 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-docs | 66b9b90d9 | 0 | -; tree dirty
+docs | cb5fc860c | 0 | -
