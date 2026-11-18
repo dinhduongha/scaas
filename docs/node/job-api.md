@@ -690,7 +690,7 @@ and the cache-then-register order for a subject that sends them itself: `clientk
 <a id="NODE-JOB-15"></a>**NODE-JOB-15** (open; default applied) — The namespace created for an ERP client that
 migrates from the legacy pull path gets `allow_call = true` (mandates and subject accounts need it).
 
-<a id="soroban-call-jobs"></a>**Soroban `call` jobs** (UA-8 Part B, `ua8-soroban` B6; BUILT; [NET-SOR-23](../networks/soroban.md#NET-SOR-23),
+<a id="soroban-call-jobs"></a>**Soroban `call` jobs** (UA-8 Part B, `ua-portable-soroban` B6; BUILT; [NET-SOR-23](../networks/soroban.md#NET-SOR-23),
 [NET-SOR-27](../networks/soroban.md#NET-SOR-27); the owner's explicit-parameter rule of 2026-10-31 replaced the plan's
 `op.extra.call` XDR). The Soroban `call` job has no selector table: its target is the chain's UA registry only, and its
 function one of the registry's writes. Payload: `{kind: "call", op: {contract, function, args, valid_until}}`, every
@@ -729,7 +729,7 @@ only the relayer-mode jobs, never payments. The `UA_REGISTER_SPLIT` rule is EVM'
 `pqz_pop_of` first: a proof already stored is `dead`, unsent, since on chain it is a no-op on the lane's fee. A `call` job that carries the call in a field other than `op` is `job without op` and fails closed; consumers
 follow this interface.
 
-<a id="soroban-ua-metatx-jobs"></a>**Soroban `ua_metatx` jobs** (`ua8-soroban` N2; BUILT; [NET-SOR-23](../networks/soroban.md#NET-SOR-23); the
+<a id="soroban-ua-metatx-jobs"></a>**Soroban `ua_metatx` jobs** (`ua-portable-soroban` N2; BUILT; [NET-SOR-23](../networks/soroban.md#NET-SOR-23); the
 owner's explicit-parameter rule of 2026-10-31 replaced hex XDR `op.args`). Payload: `{kind: "ua_metatx", op: {contract, function,
 args, auth?, valid_until?}}`, any other field refused. The node builds the `InvokeContractArgs` from `args`, in the contract's
 order, and takes the op digest (the job id), `valid_until` and every check from that one value.
@@ -769,7 +769,7 @@ order, and takes the op digest (the job id), `valid_until` and every check from 
 | mandate | `mtx_mandate_pay` | `token, payee, amount, pay_ref, epoch, valid_until, relayer, auth` |
 | registry | `accept_membership` | `ua, member_sig, relayer` |
 
-<a id="soroban-accept-membership"></a>`accept_membership` ([NET-SOR-28](../networks/soroban.md#NET-SOR-28), `ua8-soroban` MA-S; BUILT): a member of an `msig` accepts its
+<a id="soroban-accept-membership"></a>`accept_membership` ([NET-SOR-28](../networks/soroban.md#NET-SOR-28), `ua-portable-soroban` MA-S; BUILT): a member of an `msig` accepts its
 slot and holds no XLM: the member signs, the lane submits. `contract` must equal `params.ua_registry` (unset: refused); this function
 is a `ua_metatx` so that `op.auth` can carry a `G…` member's entry, which a `call` job cannot, and it is the only `ua_metatx` on the
 registry: a `signed_op` still never runs there, and `call` jobs stay the registry's writes. `op.valid_until` is required, after now and at most
@@ -788,7 +788,7 @@ simulation, a refused one is `dead` and nothing is sent; the lane's one entry is
 signer is refused before signing. The job has no op digest (the job's own id), is free to the client and counts in the call share
 (`call_budget_pct`, [NET-SOR-14](../networks/soroban.md#NET-SOR-14)). `build` reads `member_accepted` first: a slot already accepted is `consumed`, nothing simulated or sent, since on chain it is a no-op on the lane's fee. A relayer-checked slot beside a `G…` member is `UAKeyData`, `dead`: see [NET-SOR-28](../networks/soroban.md#NET-SOR-28).
 
-<a id="soroban-signed-op"></a>**Soroban `signed_op`** (`ua8-soroban` N2 review, owner rulings of 2026-11-02; BUILT). Payload: `{kind: "signed_op", op: {payload,
+<a id="soroban-signed-op"></a>**Soroban `signed_op`** (`ua-portable-soroban` N2 review, owner rulings of 2026-11-02; BUILT). Payload: `{kind: "signed_op", op: {payload,
 from, signature, contract, valid_until, kind?, extra?}}`.
 
 - `payload`: `{nonce, expiry, invocation}`, `nonce` the `i64` of the auth entry, `expiry` the `u32` signature expiration ledger, and

@@ -52,7 +52,7 @@ Follow a stated rule as stated; do not add assumptions or reopen it with options
 - **Nothing deployed is upgraded.** Contracts are immutable; versions live in the factory's catalogue.
 - **Backup, do not delete.** Superseded code moves to `legacy/`. Never drop an API because nothing calls it yet.
 - Keep apart in code and prose: **Zether ≠ PQZ**, **NEAR ≠ Algorand**. Name sets `n2304-kmax4096`, never "v3" or "16k". Rounds are
-  `ua-<family>`, `ua8-<family>`, `zether-<family>`. 7622 is `scaas-testnet` in ids, "SCaaS testnet" in prose.
+  `ua-<family>`, `ua-portable-<family>`, `zether-<family>`. 7622 is `scaas-testnet` in ids, "SCaaS testnet" in prose.
 
 ## Security
 

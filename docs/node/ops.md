@@ -211,7 +211,7 @@ Existing (BUILT, `admin.rs` `render()`, `submit.rs`; first-release forms `scaas_
 | `scaas_relayer_balance` | gauge | `chain`, `lane` | smallest gas-coin unit; the account that pays, so on a chain with `fee_bump_lane` every lane reports the fee account |
 | `scaas_breaker_open` | gauge | `chain`, `lane`, `breaker` | + `revert_streak`, reported on every lane of the chain |
 | `scaas_rpc_failover_answers_total` | counter | `chain` | chain reads answered by an `rpc_urls` endpoint other than the first (the first did not answer); no job is `dead` or order `invalid` on them (`FAILOVER_ANSWER`, [submit-lanes.md](submit-lanes.md#rpc-failover)); 0 on families with no EVM `Chain`. BUILT (Fable recheck 5 R5-5) |
-| `scaas_fee_unread_total` | counter | `chain`, `lane` | landed transactions (mined or reverted) whose fee `tx_fee` could not read, so the gas budget missed that fee; each is also a warning in the log naming the job. BUILT (ua8-soroban B9a) |
+| `scaas_fee_unread_total` | counter | `chain`, `lane` | landed transactions (mined or reverted) whose fee `tx_fee` could not read, so the gas budget missed that fee; each is also a warning in the log naming the job. BUILT (ua-portable-soroban B9a) |
 | `scaas_submit_bump_skipped_consumed_total` | counter | none today; `chain`, `lane` added with the metrics core | consumption check |
 | `scaas_config_toml_drift` | gauge | — | [NODE-STO-03](store.md#NODE-STO-03) |
 
@@ -642,7 +642,7 @@ month). Conversion to the reporting currency happens only in the report, with an
 no client, so the rollup is needed; cost: one small upsert per terminal job.
 
 **Soroban spend limits are mandatory** ([NET-SOR-14](../networks/soroban.md#NET-SOR-14); controller call under the owner's
-ruling of 2026-11-01, owner may override; **BUILT**, ua8-soroban B9a). A `soroban` chain with `modules.submit` on does not
+ruling of 2026-11-01, owner may override; **BUILT**, ua-portable-soroban B9a). A `soroban` chain with `modules.submit` on does not
 start unless `[chains.breaker]` sets both `gas_budget_per_hour` and `min_relayer_balance` above 0 and `params` sets
 `max_resource_fee_per_job` above 0 ([NET-SOR-29](../networks/soroban.md#NET-SOR-29), owner 2026-11-02; stroops; the error names
 the chain). Why a refusal and not a default: a job is free to the client and its fee is the lane's, the amount is a money
