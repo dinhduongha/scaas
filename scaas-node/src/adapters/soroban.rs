@@ -1,5 +1,5 @@
 //! Stellar Soroban (R65). Meta-tx cấp contract = authorization gốc: chủ thể đã ký
-//! `HashIdPreimage::SorobanAuthorization` (Odoo dựng); adapter đặt chữ ký vào `SorobanAuthorizationEntry` của một tx
+//! `HashIdPreimage::SorobanAuthorization` (ExternalPull dựng); adapter đặt chữ ký vào `SorobanAuthorizationEntry` của một tx
 //! mà **lane account** là source (sequence riêng của lane, trả phí) — chủ thể không có sequence trong đường đi (R30).
 //! Nonce auth là ngẫu nhiên (host ghi cặp (địa chỉ, nonce) đã dùng) ⇒ không head-of-line (R62).
 //! Tuỳ chọn fee-bump (CAP-15): `params.fee_bump_lane = i` ⇒ account của lane `i` trả phí cho mọi lane.
@@ -32,7 +32,7 @@ use stellar_xdr::{
 use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Refused, Rejected, Signed, TxStatus};
 use crate::chain::SimError;
 use crate::config::ChainCfg;
-use crate::odoo::Job;
+use crate::external_pull::Job;
 use crate::signer::{stellar_account_strkey, LocalSigner, Signer};
 
 const DEFAULT_BASE_FEE: u32 = 100;
@@ -882,7 +882,7 @@ impl ChainAdapter for SorobanAdapter {
     }
 
     /// Owner 2026-11-02: the client's list, as EVM's, so a token registered after the start is served without a restart.
-    fn refresh_tokens(&self, nc: &crate::odoo::NodeConfig) {
+    fn refresh_tokens(&self, nc: &crate::external_pull::NodeConfig) {
         if let Ok(mut t) = self.relay_fee.tokens.write() {
             *t = nc.tokens.iter().filter_map(|t| ScAddress::from_str(&t.address).ok()).collect();
         }
@@ -2851,10 +2851,10 @@ mod tests {
 
     /// One `lane_step` of `job`: what it sent, its last state and error.
     async fn job_step(a: &SorobanAdapter, calls: &Arc<Mutex<Vec<String>>>, job: Value) -> (usize, String, String) {
-        use crate::adapter::tests::{fake_odoo, Fake};
+        use crate::adapter::tests::{fake_external_pull, Fake};
         let before = sends(calls);
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job], tokens: json!([]), ..Default::default() }).await;
-        crate::adapter::lane_step(a, &odoo, 0, "n#0").await.unwrap();
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![job], tokens: json!([]), ..Default::default() }).await;
+        crate::adapter::lane_step(a, &external_pull, 0, "n#0").await.unwrap();
         let f = o.lock().unwrap();
         let last = f.reports.last().unwrap();
         (sends(calls) - before, last["chain_state"].as_str().unwrap().to_string(), last["error"].as_str().unwrap_or_default().to_string())
@@ -3226,14 +3226,14 @@ mod tests {
     /// restart is not `dead` at the first `Unknown` while its transaction may still land. The widest deadline a job can sign counts too.
     #[tokio::test]
     async fn restart_takes_a_ua_metatx_deadline_from_the_built_call() {
-        use crate::adapter::tests::{fake_odoo, Fake};
+        use crate::adapter::tests::{fake_external_pull, Fake};
         let (a, _, _) = spend_adapter(registry(vec![], vec![]), Net { tx: json!({"status": "NOT_FOUND"}), ..Net::default() }, false).await;
         for deadline in [crate::submit::now() + 600, u64::MAX] {
             let (c, f, mut args) = ua_ops(ScVal::Void).remove(1);
             args[4] = u64v(deadline);
             let inflight = json!([{"job_id": 8, "state": "signed", "tx_hash": "0x0a", "nonce": 123456, "payload": {"id": 8, "kind": "ua_metatx", "op": ua_op(c, f, args)}}]);
-            let (odoo, o) = fake_odoo(Fake { inflight, tokens: json!([]), ..Default::default() }).await;
-            tokio::time::timeout(std::time::Duration::from_secs(10), crate::adapter::recover_lane(a.as_ref(), &odoo, 0, "n#0")).await.expect("recovery hung").unwrap();
+            let (external_pull, o) = fake_external_pull(Fake { inflight, tokens: json!([]), ..Default::default() }).await;
+            tokio::time::timeout(std::time::Duration::from_secs(10), crate::adapter::recover_lane(a.as_ref(), &external_pull, 0, "n#0")).await.expect("recovery hung").unwrap();
             let f = o.lock().unwrap();
             assert_eq!(f.reports.last().unwrap()["chain_state"], "queued", "{deadline}: {:?}", f.reports);
         }
@@ -4549,7 +4549,7 @@ mod tests {
     /// `relay_poll` is oldest first, so a requeued job would be claimed again every round.
     #[tokio::test]
     async fn archived_record_job_does_not_hold_the_queue() {
-        use crate::adapter::tests::{fake_odoo, Fake};
+        use crate::adapter::tests::{fake_external_pull, Fake};
         let record = row_rec(row("registrations", "mldsa65/n2048-kmax1024"), true).1;
         let (a, calls) = ua8_adapter(Arc::new(move |c| match c.function_name.0.as_slice() {
             b"relayers" => view_ok(vecv(vec![])),
@@ -4560,9 +4560,9 @@ mod tests {
         let mut garbage = rec_op("set_kem_key", row("kemRecords", "mldsa65/v1"), &NONE);
         garbage["args"]["sig"]["signature"] = json!("0xdead");
         let jobs = vec![json!({"id": 7, "kind": "call", "op": garbage}), json!({"id": 8, "kind": "call", "op": ops(&NONE)[7]})];
-        let (odoo, o) = fake_odoo(Fake { jobs, repeat: true, ..Default::default() }).await;
+        let (external_pull, o) = fake_external_pull(Fake { jobs, repeat: true, ..Default::default() }).await;
         for _ in 0..4 {
-            crate::adapter::lane_step(&a, &odoo, 0, "n#0").await.unwrap();
+            crate::adapter::lane_step(&a, &external_pull, 0, "n#0").await.unwrap();
             let mut f = o.lock().unwrap();
             let last = f.reports.last().unwrap().clone();
             if last["chain_state"] != "queued" {
@@ -4609,12 +4609,12 @@ mod tests {
     /// signed, and the next job goes.
     #[tokio::test]
     async fn oversized_job_does_not_hold_the_queue() {
-        use crate::adapter::tests::{fake_odoo, Fake};
+        use crate::adapter::tests::{fake_external_pull, Fake};
         let (a, calls) = sized_adapter(false, Some(TX_MAX)).await;
         let jobs = vec![json!({"id": 7, "kind": "call", "op": sized_op(TX_MAX as usize)}), json!({"id": 8, "kind": "call", "op": sized_op(8)})];
-        let (odoo, o) = fake_odoo(Fake { jobs, repeat: true, ..Default::default() }).await;
+        let (external_pull, o) = fake_external_pull(Fake { jobs, repeat: true, ..Default::default() }).await;
         for _ in 0..4 {
-            crate::adapter::lane_step(&a, &odoo, 0, "n#0").await.unwrap();
+            crate::adapter::lane_step(&a, &external_pull, 0, "n#0").await.unwrap();
             let mut f = o.lock().unwrap();
             let last = f.reports.last().unwrap().clone();
             if last["chain_state"] != "queued" {
@@ -5326,13 +5326,13 @@ mod tests {
     /// head job goes `dead` on its one claim and the next job runs.
     #[tokio::test]
     async fn soroban_invalid_ends_the_head_job_and_the_next_runs() {
-        use crate::adapter::tests::{fake_odoo, Fake};
+        use crate::adapter::tests::{fake_external_pull, Fake};
         for error in [ERROR_SOROBAN_INVALID, ERROR_BUMP_SOROBAN_INVALID] {
             let net = Net { refuses: Some(error.to_string()), tx: json!({"status": "NOT_FOUND"}), ..Net::default() };
             let (a, calls, net) = spend_adapter(registry(vec![], vec![]), net, false).await;
             let jobs = vec![call_of(7), call_of(8)];
-            let (odoo, o) = fake_odoo(Fake { jobs, repeat: true, tokens: json!([]), ..Default::default() }).await;
-            crate::adapter::lane_step(a.as_ref(), &odoo, 0, "n#0").await.unwrap();
+            let (external_pull, o) = fake_external_pull(Fake { jobs, repeat: true, tokens: json!([]), ..Default::default() }).await;
+            crate::adapter::lane_step(a.as_ref(), &external_pull, 0, "n#0").await.unwrap();
             {
                 let mut f = o.lock().unwrap();
                 let last = f.reports.last().unwrap();
@@ -5341,7 +5341,7 @@ mod tests {
                 f.jobs.retain(|j| j["id"] != 7);
             }
             *net.lock().unwrap() = Net::default();
-            crate::adapter::lane_step(a.as_ref(), &odoo, 0, "n#0").await.unwrap();
+            crate::adapter::lane_step(a.as_ref(), &external_pull, 0, "n#0").await.unwrap();
             let f = o.lock().unwrap();
             assert_eq!((&f.reports.last().unwrap()["job_id"], &f.reports.last().unwrap()["chain_state"]), (&json!(8), &json!("mined")));
             assert_eq!(sends(&calls), 2);
@@ -5374,11 +5374,11 @@ mod tests {
 
     /// The real lane loop on `store_pqz_pop` jobs for `ms`, one job id over and over: what it sent, the states it reported and the claims.
     async fn lane_run(a: Arc<SorobanAdapter>, lane: usize, cfg: crate::config::BreakerCfg, calls: &Arc<Mutex<Vec<String>>>, ms: u64) -> (usize, Vec<String>, u32) {
-        use crate::adapter::tests::{fake_odoo, Fake};
+        use crate::adapter::tests::{fake_external_pull, Fake};
         let jobs = vec![json!({"id": 7, "kind": "call", "op": sized_op(8)})];
-        let (odoo, o) = fake_odoo(Fake { jobs, repeat: true, tokens: json!([]), ..Default::default() }).await;
+        let (external_pull, o) = fake_external_pull(Fake { jobs, repeat: true, tokens: json!([]), ..Default::default() }).await;
         let k = Arc::new(Mutex::new(crate::breaker::Breaker::new(cfg)));
-        let run = crate::adapter::lane_runner(a, odoo, lane, "n#0".into(), std::time::Duration::from_millis(10), k, Default::default());
+        let run = crate::adapter::lane_runner(a, external_pull, lane, "n#0".into(), std::time::Duration::from_millis(10), k, Default::default());
         let _ = tokio::time::timeout(std::time::Duration::from_millis(ms), run).await;
         let f = o.lock().unwrap();
         (sends(calls), f.reports.iter().map(|r| r["chain_state"].as_str().unwrap().to_string()).collect(), f.claims)
@@ -5467,10 +5467,10 @@ mod tests {
 
     /// One `lane_step` of a `store_pqz_pop` job: what it sent, the states it reported, the claims and the last error.
     async fn entry_step(a: &SorobanAdapter, calls: &Arc<Mutex<Vec<String>>>) -> (usize, Vec<String>, u32, String) {
-        use crate::adapter::tests::{fake_odoo, Fake};
+        use crate::adapter::tests::{fake_external_pull, Fake};
         let jobs = vec![json!({"id": 7, "kind": "call", "op": sized_op(8)})];
-        let (odoo, o) = fake_odoo(Fake { jobs, tokens: json!([]), ..Default::default() }).await;
-        crate::adapter::lane_step(a, &odoo, 0, "n#0").await.unwrap();
+        let (external_pull, o) = fake_external_pull(Fake { jobs, tokens: json!([]), ..Default::default() }).await;
+        crate::adapter::lane_step(a, &external_pull, 0, "n#0").await.unwrap();
         let f = o.lock().unwrap();
         let states: Vec<String> = f.reports.iter().map(|r| r["chain_state"].as_str().unwrap().to_string()).collect();
         (sends(calls), states, f.claims, f.reports.last().unwrap()["error"].as_str().unwrap_or_default().to_string())
@@ -5521,7 +5521,7 @@ mod tests {
     /// B6's rule through the real step: a `relayers()` read that fails stops no payment.
     #[tokio::test]
     async fn a_payment_runs_while_relayers_read_fails() {
-        use crate::adapter::tests::{fake_odoo, Fake};
+        use crate::adapter::tests::{fake_external_pull, Fake};
         let (a, calls) = ua8_adapter(Arc::new(|c| match c.function_name.0.as_slice() {
             b"relayers" => json!({}),
             _ => view_ok(ScVal::Void),
@@ -5529,8 +5529,8 @@ mod tests {
         a.start_check().await.unwrap();
         let pay = json!({"payload": payload(inv(CONTRACT, "pay", vec![addr(FROM), addr(WALLET), i128v(1), byt(&[3; 32]), ScVal::U64(1)], vec![])),
             "from": FROM, "signature": sig(), "contract": CONTRACT, "valid_until": crate::submit::now() + 600, "extra": {}});
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![json!({"id": 7, "kind": "signed_op", "op": pay})], tokens: json!([]), ..Default::default() }).await;
-        crate::adapter::lane_step(&a, &odoo, 0, "n#0").await.unwrap();
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![json!({"id": 7, "kind": "signed_op", "op": pay})], tokens: json!([]), ..Default::default() }).await;
+        crate::adapter::lane_step(&a, &external_pull, 0, "n#0").await.unwrap();
         let states: Vec<String> = o.lock().unwrap().reports.iter().map(|r| r["chain_state"].as_str().unwrap().to_string()).collect();
         assert_eq!(states, ["signed", "broadcast", "mined"]);
         assert_eq!(sends(&calls), 1);
@@ -5558,9 +5558,9 @@ mod tests {
 
     /// One real `lane_step` over `jobs` in queue order: the jobs it reported and how many it claimed.
     async fn budget_step(a: &SorobanAdapter, k: &Mutex<crate::breaker::Breaker>, jobs: Vec<Value>) -> (Vec<i64>, u32) {
-        use crate::adapter::tests::{fake_odoo, Fake};
-        let (odoo, o) = fake_odoo(Fake { jobs, repeat: true, tokens: json!([]), ..Default::default() }).await;
-        crate::adapter::lane_step_metered(a, &odoo, 0, "n#0", Some(k)).await.unwrap();
+        use crate::adapter::tests::{fake_external_pull, Fake};
+        let (external_pull, o) = fake_external_pull(Fake { jobs, repeat: true, tokens: json!([]), ..Default::default() }).await;
+        crate::adapter::lane_step_metered(a, &external_pull, 0, "n#0", Some(k)).await.unwrap();
         let f = o.lock().unwrap();
         let mut ids: Vec<i64> = f.reports.iter().map(|r| r["job_id"].as_i64().unwrap()).collect();
         ids.dedup();
@@ -5707,10 +5707,10 @@ mod tests {
     /// The lane account gone after the claim: `queued` and a retry, as a transport failure in `build`. The job never stays claimed with no report.
     #[tokio::test]
     async fn a_failed_sequence_read_puts_the_claimed_job_back() {
-        use crate::adapter::tests::{fake_odoo, Fake};
+        use crate::adapter::tests::{fake_external_pull, Fake};
         let (a, calls, _) = spend_adapter(void_answer(), Net { accounts: Some(vec![]), ..Net::default() }, false).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![signed_on(7, CONTRACT, "pay")], tokens: json!([]), ..Default::default() }).await;
-        let step = crate::adapter::step_once(a.as_ref(), &odoo, 0, "n#0", None, &Default::default()).await.unwrap();
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![signed_on(7, CONTRACT, "pay")], tokens: json!([]), ..Default::default() }).await;
+        let step = crate::adapter::step_once(a.as_ref(), &external_pull, 0, "n#0", None, &Default::default()).await.unwrap();
         assert!(matches!(step, crate::adapter::Step::Retry(ref why) if why.contains("does not exist")));
         let f = o.lock().unwrap();
         assert_eq!((f.claims, sends(&calls)), (1, 0));
@@ -5834,13 +5834,13 @@ mod tests {
     /// one dropped is refused, and the config's list only stands until the first answer.
     #[tokio::test]
     async fn a_token_registered_after_the_start_is_served() {
-        use crate::adapter::tests::{fake_odoo, Fake};
+        use crate::adapter::tests::{fake_external_pull, Fake};
         let (a, calls, _) = spend_adapter(void_answer(), Net::default(), false).await;
         let (sent, _, why) = job_step(&a, &calls, signed_on(7, WALLET2, "pay")).await;
         assert_eq!(sent, 0);
         assert!(why.contains(CALL_TARGET_REFUSED), "{why}");
-        let (odoo, _) = fake_odoo(Fake { tokens: json!([{"address": WALLET2, "decimals": 7}]), ..Default::default() }).await;
-        crate::adapter::recover_lane(a.as_ref(), &odoo, 0, "n#0").await.unwrap();
+        let (external_pull, _) = fake_external_pull(Fake { tokens: json!([{"address": WALLET2, "decimals": 7}]), ..Default::default() }).await;
+        crate::adapter::recover_lane(a.as_ref(), &external_pull, 0, "n#0").await.unwrap();
         assert_eq!(job_step(&a, &calls, signed_on(7, WALLET2, "pay")).await.0, 1);
         assert!(job_step(&a, &calls, signed_on(7, CONTRACT, "pay")).await.2.contains(CALL_TARGET_REFUSED), "no longer the client's");
     }

@@ -3,7 +3,7 @@
 //! Cần `sui` (1.81+) trong PATH. Localnet thật: `sui start --force-regenesis` (RPC 31970, faucet 31971 —
 //! dải cổng của luồng S7). Chứng minh:
 //! 1. publish `smartcontracts/move/sui` + coin thử, mở `Account<SUI>`/`Account<DEMO>` cho alice (alice không có gas);
-//! 2. hai lane relayer từ mnemonic 24 từ (`m/44'/784'/i'/0'/0'`), job `signed_op` (giả Odoo) đi qua
+//! 2. hai lane relayer từ mnemonic 24 từ (`m/44'/784'/i'/0'/0'`), job `signed_op` (giả ExternalPull) đi qua
 //!    `lane_step`: dry-run → ký → `signed` trước khi gửi → mined;
 //! 3. ANTI-LOCK đồng thời (review L3): alice ký X (account SUI) và Y (account DEMO); X đã `signed` trên lane 0
 //!    nhưng bị GIỮ chưa gửi; trong lúc đó Y đi hết tới `mined` trên lane 1; rồi X được thả và qua;
@@ -11,7 +11,7 @@
 //! 4. khởi động lại (review M3): lane 0 ký W rồi "chết" trước khi gửi; tiến trình mới gửi lại đúng bytes W trước
 //!    khi dựng V — W và V đều vào sổ, không equivocation;
 //! 5. `index_step` báo `PaymentSettled` + `MetaTransactionExecuted` (digest = digest đã ký) vùng final, lọc theo
-//!    id `Registry<T>` mà Odoo (giả) trả trong `node_config` (review H1/H2).
+//!    id `Registry<T>` mà ExternalPull (giả) trả trong `node_config` (review H1/H2).
 use std::net::SocketAddr;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -24,9 +24,9 @@ use async_trait::async_trait;
 use scaas_node::adapter::{index_step, lane_step, Built, ChainAdapter, Family, Head, Lane, Signed, TxStatus};
 use scaas_node::chain::SimError;
 use scaas_node::adapters::sui::{addr_hex, lane_address, parse_addr, personal_digest, tx_signing_digest, Addr, MetaOp};
-use scaas_node::config::{ChainCfg, FinalityCfg, OdooCfg};
+use scaas_node::config::{ChainCfg, FinalityCfg, ExternalPullCfg};
 use scaas_node::keys::{lane_secret, Seed};
-use scaas_node::odoo::{Job, Odoo};
+use scaas_node::external_pull::{Job, ExternalPull};
 use scaas_node::signer::{Curve, LocalSigner, Signer};
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
@@ -153,7 +153,7 @@ fn bytes(b: &[u8]) -> Value {
     json!(b.iter().map(|x| *x as u64).collect::<Vec<_>>())
 }
 
-// ------------------------------------------------------------------ fake Odoo (same transitions as e2e.rs)
+// ------------------------------------------------------------------ fake ExternalPull (same transitions as e2e.rs)
 
 fn allowed(from: &str, to: &str) -> bool {
     matches!(
@@ -167,7 +167,7 @@ fn allowed(from: &str, to: &str) -> bool {
 }
 
 #[derive(Default)]
-struct FakeOdoo {
+struct FakeExternalPull {
     states: std::collections::HashMap<i64, String>,
     refused: Vec<Value>,
     jobs: Vec<Value>,
@@ -178,7 +178,7 @@ struct FakeOdoo {
     tokens: Vec<String>,
 }
 
-async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path<(String, String)>, Json(body): Json<Value>) -> Json<Value> {
+async fn fake(State(s): State<Arc<Mutex<FakeExternalPull>>>, Path((model, method)): Path<(String, String)>, Json(body): Json<Value>) -> Json<Value> {
     let mut o = s.lock().unwrap();
     let out = match (model.as_str(), method.as_str()) {
         ("blockchain.chain", "node_config") => json!({
@@ -215,7 +215,7 @@ async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path
     Json(out)
 }
 
-async fn start_fake(state: Arc<Mutex<FakeOdoo>>) -> SocketAddr {
+async fn start_fake(state: Arc<Mutex<FakeExternalPull>>) -> SocketAddr {
     let app = Router::new().route("/json/2/{model}/{method}", post(fake)).with_state(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -223,9 +223,9 @@ async fn start_fake(state: Arc<Mutex<FakeOdoo>>) -> SocketAddr {
     addr
 }
 
-fn odoo_at(addr: SocketAddr) -> Odoo {
-    let cfg = OdooCfg { url: format!("http://{addr}"), database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
-    Odoo::with_key(&cfg, "k".into()).unwrap()
+fn external_pull_at(addr: SocketAddr) -> ExternalPull {
+    let cfg = ExternalPullCfg { url: format!("http://{addr}"), database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
+    ExternalPull::with_key(&cfg, "k".into()).unwrap()
 }
 
 /// Một payment `pay` của alice đã ký (serialized ed25519) thành job `signed_op`.
@@ -256,10 +256,10 @@ fn job(id: i64, alice: &LocalSigner, account: &str, coin_type: &str, amount: u12
     (j, digest)
 }
 
-async fn run_job(adapter: &dyn ChainAdapter, odoo: &Odoo, state: &Arc<Mutex<FakeOdoo>>, lane: usize, j: Value) -> Vec<String> {
+async fn run_job(adapter: &dyn ChainAdapter, external_pull: &ExternalPull, state: &Arc<Mutex<FakeExternalPull>>, lane: usize, j: Value) -> Vec<String> {
     let id = j["id"].as_i64().unwrap();
     state.lock().unwrap().jobs.push(j);
-    assert!(lane_step(adapter, odoo, lane, "e2e").await.unwrap());
+    assert!(lane_step(adapter, external_pull, lane, "e2e").await.unwrap());
     let reports = state.lock().unwrap().reports.clone();
     reports.iter().filter(|r| r["job_id"] == id).map(|r| r["chain_state"].as_str().unwrap().to_string()).collect()
 }
@@ -311,7 +311,7 @@ impl ChainAdapter for Held {
     }
 }
 
-fn states_of(state: &Arc<Mutex<FakeOdoo>>, id: i64) -> Vec<String> {
+fn states_of(state: &Arc<Mutex<FakeExternalPull>>, id: i64) -> Vec<String> {
     state.lock().unwrap().reports.iter().filter(|r| r["job_id"] == id).map(|r| r["chain_state"].as_str().unwrap().to_string()).collect()
 }
 
@@ -399,8 +399,8 @@ async fn sui_payments_relay_finalize_and_never_lock_each_other() {
     let adapter = scaas_node::adapters::build(&cfg, &signers).unwrap();
     assert_eq!(adapter.chain_key(), "sui:localnet");
 
-    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![reg_sui.clone(), reg_demo.clone()], ..Default::default() }));
-    let odoo = odoo_at(start_fake(state.clone()).await);
+    let state = Arc::new(Mutex::new(FakeExternalPull { tokens: vec![reg_sui.clone(), reg_demo.clone()], ..Default::default() }));
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
     let head0 = adapter.final_head().await.unwrap().unwrap().height;
     state.lock().unwrap().indexed_block = head0;
 
@@ -409,13 +409,13 @@ async fn sui_payments_relay_finalize_and_never_lock_each_other() {
     let (y, y_digest) = job(2, &alice, &acct_demo, &demo_t, 500, 0x22, 0xa2);
     let held = Held { inner: adapter.clone(), hold: 1, gate: tokio::sync::Semaphore::new(0) };
     state.lock().unwrap().jobs.push(x.clone());
-    let x_run = lane_step(&held, &odoo, 0, "e2e");
+    let x_run = lane_step(&held, &external_pull, 0, "e2e");
     let y_run = async {
         while states_of(&state, 1).last().map(String::as_str) != Some("signed") {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
         state.lock().unwrap().jobs.push(y);
-        assert!(lane_step(&held, &odoo, 1, "e2e").await.unwrap());
+        assert!(lane_step(&held, &external_pull, 1, "e2e").await.unwrap());
         assert_eq!(states_of(&state, 2), ["signed", "broadcast", "mined"], "Y while X is in flight");
         assert_eq!(states_of(&state, 1), ["signed"], "X still held, unsent");
         held.gate.add_permits(1);
@@ -426,7 +426,7 @@ async fn sui_payments_relay_finalize_and_never_lock_each_other() {
     // Phát lại X: dry-run từ chối, nonce đã dùng ⇒ `consumed` (R80), không tốn gas.
     let mut replay = x;
     replay["id"] = json!(3);
-    assert_eq!(run_job(adapter.as_ref(), &odoo, &state, 0, replay).await, ["consumed"]);
+    assert_eq!(run_job(adapter.as_ref(), &external_pull, &state, 0, replay).await, ["consumed"]);
     assert!(state.lock().unwrap().refused.is_empty());
 
     // KHỞI ĐỘNG LẠI (review M3): lane 0 dựng + ký W (journal ghi) rồi tiến trình "chết" trước khi gửi.
@@ -440,7 +440,7 @@ async fn sui_payments_relay_finalize_and_never_lock_each_other() {
     let (v, _) = job(5, &alice, &acct_sui, "0x2::sui::SUI", 300, 0x55, 0xa5);
     let mut v_states = Vec::new();
     for _ in 0..10 {
-        v_states = run_job(adapter.as_ref(), &odoo, &state, 0, v.clone()).await;
+        v_states = run_job(adapter.as_ref(), &external_pull, &state, 0, v.clone()).await;
         if v_states.last().map(String::as_str) == Some("mined") {
             break;
         }
@@ -452,7 +452,7 @@ async fn sui_payments_relay_finalize_and_never_lock_each_other() {
 
     // Final: index tới khi thấy cả hai thanh toán.
     for _ in 0..60 {
-        while index_step(adapter.as_ref(), &odoo).await.unwrap() {}
+        while index_step(adapter.as_ref(), &external_pull).await.unwrap() {}
         if state.lock().unwrap().ingested.iter().filter(|e| e["event"] == "PaymentSettled").count() >= 4 {
             break;
         }

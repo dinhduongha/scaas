@@ -22,7 +22,7 @@ use crate::config::ChainCfg;
 use crate::guard::{self, Guard, Refusal};
 use crate::metatx::{Mtx, UaMtx};
 use crate::nonce::{bump, plan, replaceable, Inflight};
-use crate::odoo::{Job, Odoo, Report};
+use crate::external_pull::{Job, ExternalPull, Report};
 use crate::store::{State, Store};
 use crate::typed::{hex_refused, parse, Op, Typed};
 
@@ -38,7 +38,7 @@ const CLASSIFY_LOOKBACK: u64 = 1_000;
 /// `scaas_submit_bump_skipped_consumed_total`: lần `track()` KHÔNG bump vì meta-tx đã bị tiêu thụ (R80).
 pub static BUMP_SKIPPED_CONSUMED: AtomicU64 = AtomicU64::new(0);
 
-/// Một việc cần lên chain: job outbox Odoo (`job_id`) hoặc việc của gateway (`None`).
+/// Một việc cần lên chain: job outbox ExternalPull (`job_id`) hoặc việc của gateway (`None`).
 #[derive(Debug, Clone)]
 pub struct Work {
     pub job_id: Option<i64>,
@@ -369,12 +369,12 @@ pub fn now() -> u64 {
 
 pub struct Submitter {
     chain: Chain,
-    odoo: Odoo,
+    external_pull: ExternalPull,
     cfg: ChainCfg,
     node_id: String,
     next: u64,
     inflight: BTreeMap<u64, Sent>,
-    /// Việc chưa ghi được journal `signed` vào Odoo: chưa gửi, thử lại vòng sau (review I5) — vẫn giữ digest.
+    /// Việc chưa ghi được journal `signed` vào ExternalPull: chưa gửi, thử lại vòng sau (review I5) — vẫn giữ digest.
     retry: VecDeque<(Work, Option<InflightGuard>)>,
     digests: InflightSet,
     breaker: Arc<Mutex<Breaker>>,
@@ -393,16 +393,16 @@ pub struct Submitter {
 
 impl Submitter {
     /// `digests`: tập in-flight CHUNG của chain (G2) — mọi lane của chain nhận cùng một bản.
-    pub async fn start(chain: Chain, odoo: Odoo, cfg: ChainCfg, node_id: String, digests: InflightSet) -> Result<Self> {
-        Self::start_with(chain, odoo, cfg, node_id, digests, None).await
+    pub async fn start(chain: Chain, external_pull: ExternalPull, cfg: ChainCfg, node_id: String, digests: InflightSet) -> Result<Self> {
+        Self::start_with(chain, external_pull, cfg, node_id, digests, None).await
     }
 
     /// [`Submitter::start`] with the lane's own journal (`store`, this lane's label there): its rows in flight are tracked too.
-    pub async fn start_with(chain: Chain, odoo: Odoo, cfg: ChainCfg, node_id: String, digests: InflightSet,
+    pub async fn start_with(chain: Chain, external_pull: ExternalPull, cfg: ChainCfg, node_id: String, digests: InflightSet,
         journal: Option<(Store, String)>) -> Result<Self>
     {
         // `worker` lọc job đã claim mà chưa ký về đúng lane này (nhiều lane cùng chain — R62).
-        let nc = odoo
+        let nc = external_pull
             .node_config_ref(serde_json::json!(cfg.evm_chain_number), Some(format!("{:#x}", chain.address())), Some(node_id.clone()))
             .await?;
         // NODE-GW-07: a lane of a chain whose block 0 is not the configured chain_uid never starts.
@@ -421,13 +421,13 @@ impl Submitter {
         let own_max = own_max.map(u64::try_from).transpose()?;
         let p = plan(pending, nc.journal_max_nonce.max(own_max), &jobs);
         let breaker = Arc::new(Mutex::new(Breaker::new(cfg.breaker.clone())));
-        let tokens = std::sync::RwLock::new(nc.tokens.iter().filter_map(crate::odoo::TokenCfg::evm).collect());
+        let tokens = std::sync::RwLock::new(nc.tokens.iter().filter_map(crate::external_pull::TokenCfg::evm).collect());
         let guard = Guard::new(&cfg, Arc::new(tokens))?;
         // proposed NODE-JOB-25: a configured service whose entries or domain are not the contract's stops the lane
         guard.load_services(&chain).await?;
         let mut me = Self {
             chain,
-            odoo,
+            external_pull,
             cfg,
             node_id,
             next: p.next,
@@ -568,10 +568,10 @@ impl Submitter {
             }
         };
         // review T4 m1: the guard's registered tokens follow the client (same cadence as the breaker sample)
-        match self.odoo.node_config(self.cfg.evm_chain_number, None).await {
+        match self.external_pull.node_config(self.cfg.evm_chain_number, None).await {
             Ok(nc) => {
                 if let Ok(mut t) = self.guard.tokens.write() {
-                    *t = nc.tokens.iter().filter_map(crate::odoo::TokenCfg::evm).collect();
+                    *t = nc.tokens.iter().filter_map(crate::external_pull::TokenCfg::evm).collect();
                 }
             }
             Err(e) => warn!("token refresh: {e:#}"),
@@ -615,7 +615,7 @@ impl Submitter {
             signer_address: nonce.map(|_| format!("{:#x}", self.chain.address())),
             error: err,
         };
-        match self.odoo.relay_report(&r).await {
+        match self.external_pull.relay_report(&r).await {
             Ok(()) => true,
             Err(e) => {
                 warn!(job, state, "relay_report failed: {e:#}");
@@ -1050,7 +1050,7 @@ impl Submitter {
         guard::consumed(&self.chain, w).await
     }
 
-    /// §8.5 — chỉ là nhãn cho `last_error` ở Odoo; `landed_elsewhere` do indexer quyết khi `final`.
+    /// §8.5 — chỉ là nhãn cho `last_error` ở ExternalPull; `landed_elsewhere` do indexer quyết khi `final`.
     async fn classify(&self, m: &MetaRef, to: Address) -> &'static str {
         match self.chain.meta_executed(m, CLASSIFY_LOOKBACK).await {
             Ok(Some((d, r))) if Some(d) == m.digest && ours(m, to, r, self.chain.address()) => "landed",
@@ -1282,7 +1282,7 @@ impl Submitter {
     }
 
     /// Hash `h` ở nonce `n` đã vào khối. Meta-tx revert ⇒ kiểm nonce chủ thể TRƯỚC (review H3): đã tiêu thụ ⇒
-    /// `consumed`, không `reverted` (Odoo đặt `failed` và chạy `_fail_dependents`); không đọc được ⇒ giữ, vòng sau.
+    /// `consumed`, không `reverted` (ExternalPull đặt `failed` và chạy `_fail_dependents`); không đọc được ⇒ giữ, vòng sau.
     async fn settle(&mut self, n: u64, h: B256, rc: TransactionReceipt) {
         let work = self.inflight.get(&n).and_then(|s| s.work.clone());
         let orphan = self.inflight.get(&n).and_then(|s| Some((s.orphan?, s.hashes.first() == Some(&h))));
@@ -1347,7 +1347,7 @@ impl Submitter {
     }
 
     pub async fn poll_outbox(&mut self) {
-        let jobs = match self.odoo.relay_poll(self.cfg.evm_chain_number, 10).await {
+        let jobs = match self.external_pull.relay_poll(self.cfg.evm_chain_number, 10).await {
             Ok(j) => j,
             Err(e) => {
                 warn!("relay_poll: {e:#}");
@@ -1359,7 +1359,7 @@ impl Submitter {
             if self.held(&job).await {
                 continue;
             }
-            match self.odoo.relay_claim(&[job.id], &self.node_id).await {
+            match self.external_pull.relay_claim(&[job.id], &self.node_id).await {
                 Ok(ids) if ids.contains(&job.id) => {}
                 Ok(_) => continue,
                 Err(e) => {
@@ -1380,7 +1380,7 @@ impl Submitter {
 pub async fn run(mut s: Submitter, mut rx: mpsc::Receiver<Work>, poll: Duration) {
     loop {
         s.sample().await;
-        // Cầu dao mở: job Odoo nằm yên `queued`, việc gateway đợi trong kênh (đầy ⇒ gateway trả 503).
+        // Cầu dao mở: job ExternalPull nằm yên `queued`, việc gateway đợi trong kênh (đầy ⇒ gateway trả 503).
         let accepting = s.accepting();
         if accepting {
             s.drain_retry().await;
@@ -1411,7 +1411,7 @@ pub(crate) mod tests {
 
     use super::*;
     use crate::abi::{IToken, MetaTransfer, UAMetaTransfer};
-    use crate::adapter::tests::{fake_odoo, Fake, Shared};
+    use crate::adapter::tests::{fake_external_pull, Fake, Shared};
 
     /// Proposed NODE-JOB-25: a service pull's `UAMetaTransactionExecuted` names the service as relayer (it called the token);
     /// any other meta-transaction is ours only from this lane.
@@ -1878,12 +1878,12 @@ pub(crate) mod tests {
                "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []}, "m": wire})
     }
 
-    async fn lane(rpc: &str, odoo: crate::odoo::Odoo, key: u8, set: InflightSet) -> Submitter {
-        lane_with(rpc, odoo, key, set, None).await
+    async fn lane(rpc: &str, external_pull: crate::external_pull::ExternalPull, key: u8, set: InflightSet) -> Submitter {
+        lane_with(rpc, external_pull, key, set, None).await
     }
 
-    async fn lane_with(rpc: &str, odoo: crate::odoo::Odoo, key: u8, set: InflightSet, dex: Option<Address>) -> Submitter {
-        lane_cfg(rpc, odoo, key, set, |c| c.dex = dex).await.unwrap()
+    async fn lane_with(rpc: &str, external_pull: crate::external_pull::ExternalPull, key: u8, set: InflightSet, dex: Option<Address>) -> Submitter {
+        lane_cfg(rpc, external_pull, key, set, |c| c.dex = dex).await.unwrap()
     }
 
     fn test_cfg(rpc: &str) -> ChainCfg {
@@ -1899,21 +1899,21 @@ pub(crate) mod tests {
         }
     }
 
-    async fn lane_cfg(rpc: &str, odoo: crate::odoo::Odoo, key: u8, set: InflightSet, tweak: impl FnOnce(&mut ChainCfg))
+    async fn lane_cfg(rpc: &str, external_pull: crate::external_pull::ExternalPull, key: u8, set: InflightSet, tweak: impl FnOnce(&mut ChainCfg))
         -> Result<Submitter>
     {
         let mut cfg = test_cfg(rpc);
         tweak(&mut cfg);
         let signer = PrivateKeySigner::from_bytes(&B256::repeat_byte(key)).unwrap();
-        Submitter::start(Chain::with_signer(&cfg, signer).unwrap(), odoo, cfg, format!("t#{key}"), set).await
+        Submitter::start(Chain::with_signer(&cfg, signer).unwrap(), external_pull, cfg, format!("t#{key}"), set).await
     }
 
     /// Một lane đã gửi job 7 (`signed`, `broadcast`).
     async fn sent_one(e: Evm) -> (Submitter, Rpc, Shared, InflightSet) {
         let (url, rpc) = fake_evm(e).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
         let set = InflightSet::default();
-        let mut s = lane(&url, odoo, 1, set.clone()).await;
+        let mut s = lane(&url, external_pull, 1, set.clone()).await;
         s.poll_outbox().await;
         assert_eq!(states(&o), ["signed", "broadcast"]);
         (s, rpc, o, set)
@@ -1992,8 +1992,8 @@ pub(crate) mod tests {
     async fn simulation_revert_is_classified_by_the_subject_nonce() {
         for (nonce, want) in [(Some(1), "consumed"), (Some(0), "dead"), (None, "queued")] {
             let (url, _) = fake_evm(Evm { sim: Some("revert"), mtx_nonce: nonce, ..Default::default() }).await;
-            let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
-            lane(&url, odoo, 1, InflightSet::default()).await.poll_outbox().await;
+            let (external_pull, o) = fake_external_pull(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+            lane(&url, external_pull, 1, InflightSet::default()).await.poll_outbox().await;
             assert_eq!(states(&o), [want], "mtxNonce {nonce:?}");
         }
     }
@@ -2005,8 +2005,8 @@ pub(crate) mod tests {
     async fn frozen_revert_is_refusal_not_dead() {
         for (nonce, want) in [(Some(0), "queued"), (Some(1), "consumed"), (None, "queued")] {
             let (url, rpc) = fake_evm(Evm { sim: Some("frozen"), mtx_nonce: nonce, ..Default::default() }).await;
-            let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
-            lane(&url, odoo, 1, InflightSet::default()).await.poll_outbox().await;
+            let (external_pull, o) = fake_external_pull(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+            lane(&url, external_pull, 1, InflightSet::default()).await.poll_outbox().await;
             assert_eq!(states(&o), [want], "mtxNonce {nonce:?}");
             assert!(rpc.lock().unwrap().sent.is_empty());
             if nonce == Some(0) {
@@ -2019,10 +2019,10 @@ pub(crate) mod tests {
     /// Fable E N-8: the one sink of every runner's job report strips endpoint URLs from the error.
     #[tokio::test]
     async fn a_job_error_carries_no_endpoint_url() {
-        let (odoo, o) = fake_odoo(Fake::default()).await;
+        let (external_pull, o) = fake_external_pull(Fake::default()).await;
         let r = Report { job_id: 7, chain_state: "queued".into(), tx_hash: None, outer_nonce: None, signer_address: None,
             error: Some("rpc: error sending request for url (https://rpc.example/v3/KEY) after http://10.0.0.7:8545/ x".into()) };
-        odoo.relay_report(&r).await.unwrap();
+        external_pull.relay_report(&r).await.unwrap();
         assert_eq!(o.lock().unwrap().reports[0]["error"], "rpc: error sending request for url (<url>) after <url> x");
         assert_eq!(crate::chain::redact_urls("no url; wss://h:1/p,ws://q"), "no url; <url>");
         assert_eq!(crate::chain::redact_urls("x http://h/p?a=1;key=SECRET,b=2 y"), "x <url> y", "recheck R-7: a key after ; or ,");
@@ -2041,7 +2041,7 @@ pub(crate) mod tests {
             (cfg.family, cfg.evm_chain_number) = ("hedera".into(), 296);
             let signer = PrivateKeySigner::from_bytes(&B256::repeat_byte(1)).unwrap();
             let a = crate::adapters::hedera::HederaAdapter::new(&cfg, vec![Chain::with_signer(&cfg, signer).unwrap()]).unwrap();
-            let nc: crate::odoo::NodeConfig = serde_json::from_value(json!({"finality_mode": "instant", "finality_depth": 0,
+            let nc: crate::external_pull::NodeConfig = serde_json::from_value(json!({"finality_mode": "instant", "finality_depth": 0,
                 "finality_quorum": 1, "indexed_block": 0, "tokens": toks(), "journal_max_nonce": null})).unwrap();
             crate::adapter::ChainAdapter::refresh_tokens(&a, &nc);
             // the payer signs over Hedera's chain id
@@ -2049,8 +2049,8 @@ pub(crate) mod tests {
             let w = work_from_job(&serde_json::from_value::<Job>(j.clone()).unwrap(), None).unwrap();
             let d = w.typed.as_ref().unwrap().digest_on(296, B256::from(U256::from(UID))).unwrap();
             j["auth"]["signature"] = json!(format!("0x{}", alloy::hex::encode(payer_key().sign_hash_sync(&d).unwrap().as_bytes())));
-            let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
-            crate::adapter::step_once(&a, &odoo, 0, "n#0", None, &InflightSet::default()).await.unwrap();
+            let (external_pull, o) = fake_external_pull(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+            crate::adapter::step_once(&a, &external_pull, 0, "n#0", None, &InflightSet::default()).await.unwrap();
             let last = o.lock().unwrap().reports.last().cloned().unwrap();
             assert_eq!(last["chain_state"], state, "{sim} {nonce}: {last}");
             assert!(last["error"].as_str().unwrap().starts_with(prefix), "{sim} {nonce}: {last}");
@@ -2073,11 +2073,11 @@ pub(crate) mod tests {
             }
             let a = crate::adapters::evm::EvmAdapter::new(&cfg, vec![Chain::with_signer(&cfg, PrivateKeySigner::random()).unwrap()],
                 Default::default()).unwrap();
-            let nc: crate::odoo::NodeConfig = serde_json::from_value(json!({"finality_mode": "depth", "finality_depth": 0,
+            let nc: crate::external_pull::NodeConfig = serde_json::from_value(json!({"finality_mode": "depth", "finality_depth": 0,
                 "finality_quorum": 1, "indexed_block": 0, "tokens": toks(), "journal_max_nonce": null})).unwrap();
             crate::adapter::ChainAdapter::refresh_tokens(&a, &nc);
-            let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
-            crate::adapter::step_once(&a, &odoo, 0, "n#0", None, &InflightSet::default()).await.unwrap();
+            let (external_pull, o) = fake_external_pull(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+            crate::adapter::step_once(&a, &external_pull, 0, "n#0", None, &InflightSet::default()).await.unwrap();
             assert!(rpc.lock().unwrap().sent.is_empty());
             let last = o.lock().unwrap().reports.last().cloned().unwrap();
             (last["chain_state"].as_str().unwrap().to_string(), last["error"].as_str().unwrap_or_default().to_string())
@@ -2236,10 +2236,10 @@ pub(crate) mod tests {
                     let (url, rpc) = fake_evm(e).await;
                     let inflight = if leased { json!([{"job_id": 9, "nonce": null, "state": "nonce_leased", "payload": job}]) }
                         else { json!([]) };
-                    let (odoo, o) = fake_odoo(Fake { jobs: vec![job], tokens: toks(), inflight, ..Default::default() }).await;
+                    let (external_pull, o) = fake_external_pull(Fake { jobs: vec![job], tokens: toks(), inflight, ..Default::default() }).await;
                     let mut cfg = test_cfg(&url);
                     cfg.governance_routers = vec![router];
-                    let mut s = Submitter::start_with(Chain::with_signer(&cfg, signer).unwrap(), odoo, cfg, "t#1".into(),
+                    let mut s = Submitter::start_with(Chain::with_signer(&cfg, signer).unwrap(), external_pull, cfg, "t#1".into(),
                         InflightSet::default(), st.map(|st| (st, label))).await.unwrap();
                     s.poll_outbox().await;
                     let r: Vec<(String, String)> = o.lock().unwrap().reports.iter()
@@ -2289,10 +2289,10 @@ pub(crate) mod tests {
             // started after a crash with the job leased (the startup requeue), gives the same verdict
             let (st, db) = new_store(url0.clone()).await;
             let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
-            let (odoo, o) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
+            let (external_pull, o) = fake_external_pull(Fake { tokens: toks(), ..Default::default() }).await;
             let mut cfg = test_cfg(&url);
             cfg.governance_routers = vec![router];
-            let s = Submitter::start_with(Chain::with_signer(&cfg, signer.clone()).unwrap(), odoo, cfg, "t#1".into(),
+            let s = Submitter::start_with(Chain::with_signer(&cfg, signer.clone()).unwrap(), external_pull, cfg, "t#1".into(),
                 InflightSet::default(), Some((st.clone(), label.clone()))).await.unwrap();
             s.refused(&w, decode_revert(&A::AuditorNotReady { eta: 9 }.abi_encode())).await;
             assert!(o.lock().unwrap().reports.iter().any(|r| r["chain_state"] == "queued"), "{name}: requeued");
@@ -2308,8 +2308,8 @@ pub(crate) mod tests {
             }
             // without a store the refusal never queues the confirm
             let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
-            let (odoo, o) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
-            let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.governance_routers = vec![router]).await.unwrap();
+            let (external_pull, o) = fake_external_pull(Fake { tokens: toks(), ..Default::default() }).await;
+            let s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| c.governance_routers = vec![router]).await.unwrap();
             s.refused(&w, decode_revert(&A::AuditorNotReady { eta: 9 }.abi_encode())).await;
             let r = o.lock().unwrap().reports.clone();
             assert!(r.len() == 1 && r[0]["chain_state"] == "dead"
@@ -2321,8 +2321,8 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn registry_unavailable_is_refusal() {
         let (url, rpc) = fake_evm(Evm { sim: Some("registry_unavailable"), mtx_nonce: Some(0), ..Default::default() }).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
-        lane(&url, odoo, 1, InflightSet::default()).await.poll_outbox().await;
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+        lane(&url, external_pull, 1, InflightSet::default()).await.poll_outbox().await;
         assert_eq!(states(&o), ["queued"]);
         let err = o.lock().unwrap().reports[0]["error"].as_str().unwrap().to_string();
         assert!(err.starts_with("REGULATED_REFUSED: ComplianceRegistryUnavailable("), "{err}");
@@ -2334,8 +2334,8 @@ pub(crate) mod tests {
     async fn the_guard_runs_before_simulation_and_signing() {
         let run = |e: Evm, jobs: Vec<Value>, dex: Option<Address>| async move {
             let (url, rpc) = fake_evm(e).await;
-            let (odoo, o) = fake_odoo(Fake { jobs, tokens: json!([{"address": format!("{TOKEN:#x}"), "decimals": 6}]), ..Default::default() }).await;
-            lane_with(&url, odoo, 1, InflightSet::default(), dex).await.poll_outbox().await;
+            let (external_pull, o) = fake_external_pull(Fake { jobs, tokens: json!([{"address": format!("{TOKEN:#x}"), "decimals": 6}]), ..Default::default() }).await;
+            lane_with(&url, external_pull, 1, InflightSet::default(), dex).await.poll_outbox().await;
             let last = o.lock().unwrap().reports.last().cloned().unwrap();
             let sent = rpc.lock().unwrap().sent.len();
             (last["chain_state"].as_str().unwrap().to_string(), last["error"].as_str().unwrap_or_default().to_string(), sent, rpc)
@@ -2421,10 +2421,10 @@ pub(crate) mod tests {
         // two ops (other digests), and the test would pass or fail by the second
         let j7 = job(7);
         let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![j7.clone()], tokens: toks(), ..Default::default() }).await;
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![j7.clone()], tokens: toks(), ..Default::default() }).await;
         let set = InflightSet::default();
-        let mut a = lane(&url, odoo.clone(), 1, set.clone()).await;
-        let mut b = lane(&url, odoo, 2, set.clone()).await;
+        let mut a = lane(&url, external_pull.clone(), 1, set.clone()).await;
+        let mut b = lane(&url, external_pull, 2, set.clone()).await;
         let mut w = work_from_job(&serde_json::from_value(resign(j7)).unwrap(), None).unwrap();
         w.job_id = None; // the gateway's path
         a.submit(w.clone()).await;
@@ -2436,13 +2436,13 @@ pub(crate) mod tests {
 
         let j8 = job(8);
         let (url, _) = fake_evm(Evm { sim: Some("transport"), ..Default::default() }).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![j8.clone()], tokens: toks(), ..Default::default() }).await;
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![j8.clone()], tokens: toks(), ..Default::default() }).await;
         let set = InflightSet::default();
         let want = {
             let j: Job = serde_json::from_value(resign(j8)).unwrap();
             work_from_job(&j, None).unwrap().typed.unwrap().digest_on(31337, B256::from(U256::from(UID))).unwrap()
         };
-        lane(&url, odoo, 1, set.clone()).await.poll_outbox().await;
+        lane(&url, external_pull, 1, set.clone()).await.poll_outbox().await;
         assert_eq!(states(&o), ["queued"]);
         assert!(!set.contains(&want), "released on a transient error");
     }
@@ -2487,9 +2487,9 @@ pub(crate) mod tests {
         assert!(work_from_job(&serde_json::from_value(raw(&t)).unwrap(), None).is_ok(), "control: the plain job is built");
         // through the lane: normalized on chain, keyed by the typed digest computed here
         let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![raw(&t)], tokens: toks(), ..Default::default() }).await;
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![raw(&t)], tokens: toks(), ..Default::default() }).await;
         let set = InflightSet::default();
-        let mut s = lane(&url, odoo, 1, set.clone()).await;
+        let mut s = lane(&url, external_pull, 1, set.clone()).await;
         s.poll_outbox().await;
         assert_eq!(states(&o), ["signed", "broadcast"]);
         let held = work_from_job(&serde_json::from_value(resign(raw(&t))).unwrap(), None).unwrap().typed.unwrap();
@@ -2504,8 +2504,8 @@ pub(crate) mod tests {
         // Fable E N-6: the token answers the domain of the kind its first job names, unless the test sets one
         e.domain = e.domain.or_else(|| jobs.first().and_then(|j| j["op"]["contract"].as_str()).and_then(crate::typed::domain_name));
         let (url, rpc) = fake_evm(e).await;
-        let (odoo, o) = fake_odoo(Fake { jobs, tokens: toks(), ..Default::default() }).await;
-        lane_cfg(&url, odoo, 1, InflightSet::default(), tweak).await.unwrap().poll_outbox().await;
+        let (external_pull, o) = fake_external_pull(Fake { jobs, tokens: toks(), ..Default::default() }).await;
+        lane_cfg(&url, external_pull, 1, InflightSet::default(), tweak).await.unwrap().poll_outbox().await;
         let r = o.lock().unwrap().reports.iter()
             .map(|r| (r["chain_state"].as_str().unwrap().to_string(), r["error"].as_str().unwrap_or_default().to_string()))
             .collect();
@@ -2682,13 +2682,13 @@ pub(crate) mod tests {
         assert_eq!(a.call_key(&of(deploy_job(9, TOKEN))), None, "no typed digest, no key");
         let held = InflightSet::default();
         let _flying = held.try_acquire_op(B256::repeat_byte(0x71), w.call_key()).unwrap();
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![ua("pqz")], tokens: toks(), ..Default::default() }).await;
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![ua("pqz")], tokens: toks(), ..Default::default() }).await;
         // bounded both ways: if `call_key` regresses the job is claimed and follows a transaction until its `validUntil`
-        let _ = tokio::time::timeout(Duration::from_secs(2), crate::adapter::step_once(&a, &odoo, 0, "n#0", None, &held)).await;
+        let _ = tokio::time::timeout(Duration::from_secs(2), crate::adapter::step_once(&a, &external_pull, 0, "n#0", None, &held)).await;
         assert_eq!(o.lock().unwrap().claims, 0, "skipped before the claim");
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![ua("pqz")], tokens: toks(), ..Default::default() }).await;
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![ua("pqz")], tokens: toks(), ..Default::default() }).await;
         // the claimed job goes on to wait for a receipt the fake never gives: only the claim is this test's
-        let _ = tokio::time::timeout(Duration::from_secs(2), crate::adapter::step_once(&a, &odoo, 0, "n#0", None, &InflightSet::default())).await;
+        let _ = tokio::time::timeout(Duration::from_secs(2), crate::adapter::step_once(&a, &external_pull, 0, "n#0", None, &InflightSet::default())).await;
         assert_eq!(o.lock().unwrap().claims, 1, "the control");
     }
 
@@ -2707,8 +2707,8 @@ pub(crate) mod tests {
         let set = InflightSet::default();
         let e = || Evm { mtx_nonce: Some(0), ..Default::default() };
         let (url, rpc) = fake_evm(e()).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![op_job(7)], tokens: toks(), ..Default::default() }).await;
-        let mut a = lane(&url, odoo.clone(), 1, set.clone()).await;
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![op_job(7)], tokens: toks(), ..Default::default() }).await;
+        let mut a = lane(&url, external_pull.clone(), 1, set.clone()).await;
         a.poll_outbox().await;
         assert_eq!(rpc.lock().unwrap().sent.len(), 1, "{:?}", o.lock().unwrap().reports);
         let job0: Job = serde_json::from_value(resign(op_job(7))).unwrap();
@@ -2724,8 +2724,8 @@ pub(crate) mod tests {
         assert!(set.contains(&d), "the key held is the typed digest");
         assert!(set.contains(&w.call_key()), "and the bytes");
         // the same op, the same digest: another lane does not sign it
-        let (odoo2, o2) = fake_odoo(Fake { jobs: vec![op_job(8)], tokens: toks(), ..Default::default() }).await;
-        let mut b = lane(&url, odoo2, 2, set.clone()).await;
+        let (external_pull2, o2) = fake_external_pull(Fake { jobs: vec![op_job(8)], tokens: toks(), ..Default::default() }).await;
+        let mut b = lane(&url, external_pull2, 2, set.clone()).await;
         b.poll_outbox().await;
         assert_eq!(rpc.lock().unwrap().sent.len(), 1, "one op, one send");
         assert_eq!(o2.lock().unwrap().claims, 0, "skipped before the claim");
@@ -2741,12 +2741,12 @@ pub(crate) mod tests {
         };
         let set = InflightSet::default();
         let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
-        let (odoo, _) = fake_odoo(Fake { jobs: vec![ua("token")], tokens: toks(), ..Default::default() }).await;
-        let mut first = lane(&url, odoo, 1, set.clone()).await;
+        let (external_pull, _) = fake_external_pull(Fake { jobs: vec![ua("token")], tokens: toks(), ..Default::default() }).await;
+        let mut first = lane(&url, external_pull, 1, set.clone()).await;
         first.poll_outbox().await;
         assert_eq!(rpc.lock().unwrap().sent.len(), 1, "the control sends");
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![ua("pqz")], tokens: toks(), ..Default::default() }).await;
-        lane(&url, odoo, 2, set).await.poll_outbox().await;
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![ua("pqz")], tokens: toks(), ..Default::default() }).await;
+        lane(&url, external_pull, 2, set).await.poll_outbox().await;
         assert_eq!(rpc.lock().unwrap().sent.len(), 1, "one call, one send");
         assert_eq!(o.lock().unwrap().claims, 0, "skipped before the claim");
     }
@@ -2790,8 +2790,8 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn unregistered_targets_are_refused() {
         let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: json!([]), ..Default::default() }).await;
-        lane(&url, odoo, 1, InflightSet::default()).await.poll_outbox().await;
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![job(7)], tokens: json!([]), ..Default::default() }).await;
+        lane(&url, external_pull, 1, InflightSet::default()).await.poll_outbox().await;
         assert_eq!(rpc.lock().unwrap().sent.len(), 0);
         assert_eq!(states(&o), ["dead"]);
         let other = Address::repeat_byte(0x99);
@@ -2808,8 +2808,8 @@ pub(crate) mod tests {
         let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
         let (first, first_rpc) = fake_evm(Evm { uid_err: Some("transport"), ..ok() }).await;
         let (other, rpc) = fake_evm(Evm { uid: Some(0x25), failover: true, ..ok() }).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
-        let mut s = lane_cfg(&first, odoo, 1, InflightSet::default(), |c| c.rpc_urls.push(other.clone())).await.unwrap();
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane_cfg(&first, external_pull, 1, InflightSet::default(), |c| c.rpc_urls.push(other.clone())).await.unwrap();
         s.poll_outbox().await;
         let reports = || -> Vec<(String, String)> { o.lock().unwrap().reports.iter()
             .map(|r| (r["chain_state"].as_str().unwrap().to_string(), r["error"].as_str().unwrap_or_default().to_string())).collect() };
@@ -2957,8 +2957,8 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn a_lane_never_starts_on_a_chain_whose_block_zero_is_not_the_pin() {
         let (url, _) = fake_evm(Evm { genesis: true, ..Default::default() }).await;
-        let (odoo, _) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
-        assert!(lane_cfg(&url, odoo, 1, InflightSet::default(), |_| {}).await.is_err());
+        let (external_pull, _) = fake_external_pull(Fake { tokens: toks(), ..Default::default() }).await;
+        assert!(lane_cfg(&url, external_pull, 1, InflightSet::default(), |_| {}).await.is_err());
     }
 
     /// The adapter path (Hedera and the generic runner) runs the same guard before simulating (review T4 I3).
@@ -2985,8 +2985,8 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn tokens_refresh_and_rebuilt_jobs_pass_the_guard() {
         let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
-        let (odoo, o) = fake_odoo(Fake { tokens: json!([]), ..Default::default() }).await;
-        let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+        let (external_pull, o) = fake_external_pull(Fake { tokens: json!([]), ..Default::default() }).await;
+        let mut s = lane(&url, external_pull, 1, InflightSet::default()).await;
         o.lock().unwrap().tokens = toks();
         s.sample().await;
         o.lock().unwrap().jobs = vec![resign(job(7))];
@@ -2996,30 +2996,30 @@ pub(crate) mod tests {
             "tx_hash": format!("{:#x}", B256::repeat_byte(0x77)), "payload": payload}]);
         let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, ..Default::default() }).await;
         for (toks, kept) in [(toks(), true), (json!([]), false)] {
-            let (odoo, _) = fake_odoo(Fake { tokens: toks, inflight: tracked(job(7)), ..Default::default() }).await;
-            let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.max_gas_per_tx = 1 << 30).await.unwrap();
+            let (external_pull, _) = fake_external_pull(Fake { tokens: toks, inflight: tracked(job(7)), ..Default::default() }).await;
+            let s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| c.max_gas_per_tx = 1 << 30).await.unwrap();
             let sent = s.inflight.get(&0).expect("tracked");
             assert_eq!((sent.work.is_some(), sent.gas), (kept, 200_000_000), "the block gas limit binds");
         }
         // the original transaction's gas limit when the RPC knows it
         let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, tx_gas: Some(0x5_5555), ..Default::default() }).await;
-        let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
-        let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.max_gas_per_tx = 1 << 30).await.unwrap();
+        let (external_pull, _) = fake_external_pull(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
+        let s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| c.max_gas_per_tx = 1 << 30).await.unwrap();
         assert_eq!(s.inflight.get(&0).expect("tracked").gas, 0x5_5555);
         // before Amsterdam the fallback stays under 2^24
         let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, osaka: true, ..Default::default() }).await;
-        let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
-        let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.max_gas_per_tx = 1 << 30).await.unwrap();
+        let (external_pull, _) = fake_external_pull(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
+        let s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| c.max_gas_per_tx = 1 << 30).await.unwrap();
         assert_eq!(s.inflight.get(&0).expect("tracked").gas, guard::MAX_TX_GAS);
         // Fable recheck 6 R6-2: the tracked transaction unread (a transport error, not "unknown"): the lane does not start
         let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, tx_err: true, ..Default::default() }).await;
-        let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
-        let e = lane_cfg(&url, odoo, 1, InflightSet::default(), |_| {}).await.err().expect("no start");
+        let (external_pull, _) = fake_external_pull(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
+        let e = lane_cfg(&url, external_pull, 1, InflightSet::default(), |_| {}).await.err().expect("no start");
         assert!(e.to_string().contains("eth_getTransactionByHash"), "{e:#}");
         // no original gas and no block: the lane does not start (retried like any start-up RPC failure)
         let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, block_err: true, ..Default::default() }).await;
-        let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
-        assert!(lane_cfg(&url, odoo, 1, InflightSet::default(), |_| {}).await.is_err());
+        let (external_pull, _) = fake_external_pull(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
+        assert!(lane_cfg(&url, external_pull, 1, InflightSet::default(), |_| {}).await.is_err());
     }
 
     /// Review P5 m7: a job tracked after a restart and refused by the guard is still reported: `mined` when its own
@@ -3030,8 +3030,8 @@ pub(crate) mod tests {
             "tx_hash": format!("{:#x}", B256::repeat_byte(0x77)), "payload": job(7)}]);
         for original in [true, false] {
             let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, ..Default::default() }).await;
-            let (odoo, o) = fake_odoo(Fake { tokens: json!([]), inflight: tracked.clone(), ..Default::default() }).await;
-            let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+            let (external_pull, o) = fake_external_pull(Fake { tokens: json!([]), inflight: tracked.clone(), ..Default::default() }).await;
+            let mut s = lane(&url, external_pull, 1, InflightSet::default()).await;
             assert!(s.inflight.get(&0).expect("tracked").work.is_none(), "refused: only gap-filled");
             if original {
                 rpc.lock().unwrap().receipts.insert(B256::repeat_byte(0x77), true);
@@ -3089,13 +3089,13 @@ pub(crate) mod tests {
         let ok = || Evm { mtx_nonce: Some(0), count: 1, ..Default::default() };
         let (first, _) = fake_evm(Evm { uid_err: Some("transport"), ..ok() }).await;
         let (other, _) = fake_evm(Evm { uid: Some(0x25), failover: true, ..ok() }).await;
-        let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked.clone(), ..Default::default() }).await;
-        let e = lane_cfg(&first, odoo, 1, InflightSet::default(), |c| c.rpc_urls.push(other.clone())).await.err().expect("no start");
+        let (external_pull, _) = fake_external_pull(Fake { tokens: toks(), inflight: tracked.clone(), ..Default::default() }).await;
+        let e = lane_cfg(&first, external_pull, 1, InflightSet::default(), |c| c.rpc_urls.push(other.clone())).await.err().expect("no start");
         assert!(e.to_string().starts_with("FAILOVER_ANSWER") && e.to_string().contains("CHAIN_UID_MISMATCH")
             && e.to_string().contains("the node exits"), "{e:#}");
         let (url, _) = fake_evm(Evm { uid: Some(0x25), ..ok() }).await;
-        let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked, ..Default::default() }).await;
-        let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |_| {}).await.unwrap();
+        let (external_pull, _) = fake_external_pull(Fake { tokens: toks(), inflight: tracked, ..Default::default() }).await;
+        let s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |_| {}).await.unwrap();
         assert!(s.inflight.get(&0).expect("tracked").work.is_none(), "control: refused on the first endpoint, only gap-filled");
     }
 
@@ -3314,8 +3314,8 @@ pub(crate) mod tests {
         let pk = crate::abi::IUARegistry::registerCall::abi_decode(&bare).unwrap().keyData;
         let part = |p: u64| cacheExpandedKeyCall { kind: 0x0131, pk: pk.clone(), part: U256::from(p) }.abi_encode();
         let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ek: Some([false; 3]), ..Default::default() }).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![call_job(9, reg, bare.clone())], tokens: toks(), repeat: true, ..Default::default() }).await;
-        let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; })
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![call_job(9, reg, bare.clone())], tokens: toks(), repeat: true, ..Default::default() }).await;
+        let mut s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; })
             .await.unwrap();
         s.poll_outbox().await;
         let last = |o: &Shared| { let r = o.lock().unwrap().reports.last().cloned().unwrap();
@@ -3436,8 +3436,8 @@ pub(crate) mod tests {
         assert!(rpc.lock().unwrap().sent.is_empty());
         // sent, then in flight on the next poll
         let (url, rpc) = fake_evm(ok()).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![call_job(9, reg, mldsa65_register())], tokens: toks(), repeat: true, ..Default::default() }).await;
-        let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), tn).await.unwrap();
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![call_job(9, reg, mldsa65_register())], tokens: toks(), repeat: true, ..Default::default() }).await;
+        let mut s = lane_cfg(&url, external_pull, 1, InflightSet::default(), tn).await.unwrap();
         for want in ["parts sent now [0, 1] of 2, in flight []", "parts sent now [] of 2, in flight [0, 1]"] {
             s.poll_outbox().await;
             let r = o.lock().unwrap().reports.last().cloned().unwrap();
@@ -3468,8 +3468,8 @@ pub(crate) mod tests {
         let start = |journal: Option<(Store, String)>, jobs: Vec<Value>| {
             let (cfg, signer) = (cfg.clone(), signer.clone());
             async move {
-                let (odoo, _) = fake_odoo(Fake { jobs, tokens: toks(), ..Default::default() }).await;
-                Submitter::start_with(Chain::with_signer(&cfg, signer).unwrap(), odoo, cfg, "t#1".into(), InflightSet::default(), journal)
+                let (external_pull, _) = fake_external_pull(Fake { jobs, tokens: toks(), ..Default::default() }).await;
+                Submitter::start_with(Chain::with_signer(&cfg, signer).unwrap(), external_pull, cfg, "t#1".into(), InflightSet::default(), journal)
                     .await.unwrap()
             }
         };
@@ -3550,8 +3550,8 @@ pub(crate) mod tests {
         let start = |jobs: Vec<Value>| {
             let (cfg, signer, journal) = (cfg.clone(), signer.clone(), Some((st.clone(), label.clone())));
             async move {
-                let (odoo, _) = fake_odoo(Fake { jobs, tokens: toks(), ..Default::default() }).await;
-                Submitter::start_with(Chain::with_signer(&cfg, signer).unwrap(), odoo, cfg, "t#1".into(), InflightSet::default(), journal)
+                let (external_pull, _) = fake_external_pull(Fake { jobs, tokens: toks(), ..Default::default() }).await;
+                Submitter::start_with(Chain::with_signer(&cfg, signer).unwrap(), external_pull, cfg, "t#1".into(), InflightSet::default(), journal)
                     .await.unwrap()
             }
         };
@@ -3622,8 +3622,8 @@ pub(crate) mod tests {
         let tn = move |c: &mut ChainCfg| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; };
         for (e, dies) in [(Some("estimate_oog"), true), (None, false)] {
             let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ek: Some([false; 3]), sim: e, ..Default::default() }).await;
-            let (odoo, o) = fake_odoo(Fake { jobs: vec![call_job(9, reg, mldsa65_register())], tokens: toks(), repeat: true, ..Default::default() }).await;
-            let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), move |c| { tn(c); if !dies { c.max_gas_per_tx = 3_000_000; } }).await.unwrap();
+            let (external_pull, o) = fake_external_pull(Fake { jobs: vec![call_job(9, reg, mldsa65_register())], tokens: toks(), repeat: true, ..Default::default() }).await;
+            let mut s = lane_cfg(&url, external_pull, 1, InflightSet::default(), move |c| { tn(c); if !dies { c.max_gas_per_tx = 3_000_000; } }).await.unwrap();
             for i in 1..=PART_CAP_WAITS + 1 {
                 s.poll_outbox().await;
                 let r = o.lock().unwrap().reports.last().cloned().unwrap();
@@ -3647,8 +3647,8 @@ pub(crate) mod tests {
         let reg = Address::repeat_byte(0x5e);
         for (spent, parts) in [(49u128, 1usize), (50, 0)] {
             let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ek: Some([false; 3]), ..Default::default() }).await;
-            let (odoo, o) = fake_odoo(Fake { jobs: vec![call_job(9, reg, mldsa65_register())], tokens: toks(), ..Default::default() }).await;
-            let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| {
+            let (external_pull, o) = fake_external_pull(Fake { jobs: vec![call_job(9, reg, mldsa65_register())], tokens: toks(), ..Default::default() }).await;
+            let mut s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| {
                 c.ua_registry = Some(reg);
                 c.max_gas_per_tx = 64_000_000;
                 c.breaker.gas_budget_per_hour = Some(100);
@@ -3674,8 +3674,8 @@ pub(crate) mod tests {
         let ok = || Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ek: Some([false; 3]), ..Default::default() };
         let run = |budget: Option<u128>| async move {
             let (url, rpc) = fake_evm(ok()).await;
-            let (odoo, o) = fake_odoo(Fake { jobs: vec![call_job(9, reg, mldsa65_register())], tokens: toks(), repeat: true, ..Default::default() }).await;
-            let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| {
+            let (external_pull, o) = fake_external_pull(Fake { jobs: vec![call_job(9, reg, mldsa65_register())], tokens: toks(), repeat: true, ..Default::default() }).await;
+            let mut s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| {
                 (c.ua_registry, c.max_gas_per_tx) = (Some(reg), 64_000_000);
                 (c.breaker.gas_budget_per_hour, c.breaker.call_budget_pct) = (budget, 50);
             }).await.unwrap();
@@ -3714,8 +3714,8 @@ pub(crate) mod tests {
         let p0 = cacheExpandedKeyCall { kind: 0x0131, pk, part: U256::ZERO }.abi_encode();
         for (spent, sent) in [(49u128, 1usize), (50, 0)] {
             let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ..Default::default() }).await;
-            let (odoo, o) = fake_odoo(Fake { jobs: vec![call_job(9, reg, p0.clone())], tokens: toks(), ..Default::default() }).await;
-            let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| {
+            let (external_pull, o) = fake_external_pull(Fake { jobs: vec![call_job(9, reg, p0.clone())], tokens: toks(), ..Default::default() }).await;
+            let mut s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| {
                 (c.ua_registry, c.max_gas_per_tx) = (Some(reg), 64_000_000);
                 (c.breaker.gas_budget_per_hour, c.breaker.call_budget_pct) = (Some(100), 50);
             }).await.unwrap();
@@ -3734,8 +3734,8 @@ pub(crate) mod tests {
             "tx_hash": format!("{:#x}", B256::repeat_byte(0x77)), "payload": payload}]);
         let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, tx_gas: Some(42_000_000), tx_max_fee: Some(1 << 50), ..Default::default() }).await;
         for (payload, reserved) in [(call_job(9, reg, p0.clone()), 42_000_000u128 << 50), (job(9), 0)] {
-            let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked(payload), ..Default::default() }).await;
-            let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; })
+            let (external_pull, _) = fake_external_pull(Fake { tokens: toks(), inflight: tracked(payload), ..Default::default() }).await;
+            let s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; })
                 .await.unwrap();
             assert_eq!((s.inflight_count(), s.reserved()), (1, reserved));
         }
@@ -3752,8 +3752,8 @@ pub(crate) mod tests {
         for (ek, sim, want, why) in [([false, true, false], None, "queued", "; UAKeyNotCached"), (done, Some("transport"), "queued", "simulate unread"),
             (done, None, "queued", "the register passes now"), (done, Some("revert"), "reverted", "")] {
             let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ek: Some([true, true, false]), ..Default::default() }).await;
-            let (odoo, o) = fake_odoo(Fake { jobs: vec![call_job(9, reg, bare.clone())], tokens: toks(), ..Default::default() }).await;
-            let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; })
+            let (external_pull, o) = fake_external_pull(Fake { jobs: vec![call_job(9, reg, bare.clone())], tokens: toks(), ..Default::default() }).await;
+            let mut s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; })
                 .await.unwrap();
             s.poll_outbox().await;
             assert_eq!(states(&o), ["signed", "broadcast"]);
@@ -4335,9 +4335,9 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
     #[tokio::test]
     async fn priced_relay_fee_replacements_stay_under_the_job_ceiling() {
         let (url, rpc) = fake_evm(Evm::default()).await;
-        let (odoo, _o) = fake_odoo(Fake { jobs: vec![call_job(9, ROUTER, ua_relay_data(ROUTER.into_word(), 1_000))],
+        let (external_pull, _o) = fake_external_pull(Fake { jobs: vec![call_job(9, ROUTER, ua_relay_data(ROUTER.into_word(), 1_000))],
             tokens: toks(), ..Default::default() }).await;
-        let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), priced(u128::MAX / 1_000)).await.unwrap();
+        let mut s = lane_cfg(&url, external_pull, 1, InflightSet::default(), priced(u128::MAX / 1_000)).await.unwrap();
         s.poll_outbox().await;
         for _ in 0..8 {
             s.track().await;
@@ -4357,8 +4357,8 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         assert_eq!(s.inflight.get(&0).unwrap().ceiling, Some(ceiling));
         // a metatx job (no quote) keeps the operator's cap
         let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
-        let (odoo, _o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
-        let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+        let (external_pull, _o) = fake_external_pull(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane(&url, external_pull, 1, InflightSet::default()).await;
         s.poll_outbox().await;
         for _ in 0..8 {
             s.track().await;
@@ -4380,8 +4380,8 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         for (tx_max_fee, price, kept) in [(Some(max_fee), quote.div_ceil(1_000), true), (Some(max_fee), (quote - 1) / 1_000, false),
                                           (None, u128::MAX / 1_000, false)] {
             let (url, _) = fake_evm(Evm { count: 1, tx_gas: Some(gas), tx_max_fee, ..Default::default() }).await;
-            let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked.clone(), ..Default::default() }).await;
-            let s = lane_cfg(&url, odoo, 1, InflightSet::default(), priced(price)).await.unwrap();
+            let (external_pull, _) = fake_external_pull(Fake { tokens: toks(), inflight: tracked.clone(), ..Default::default() }).await;
+            let s = lane_cfg(&url, external_pull, 1, InflightSet::default(), priced(price)).await.unwrap();
             let sent = s.inflight.get(&0).expect("tracked");
             assert_eq!((sent.work.is_some(), sent.ceiling), (kept, kept.then_some(max_fee)), "{tx_max_fee:?} {price}");
         }
@@ -4393,8 +4393,8 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
     #[tokio::test]
     async fn a_relay_fee_job_holds_its_payer() {
         let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
-        let (odoo, o) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
-        let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), priced(u128::MAX / 1_000)).await.unwrap();
+        let (external_pull, o) = fake_external_pull(Fake { tokens: toks(), ..Default::default() }).await;
+        let mut s = lane_cfg(&url, external_pull, 1, InflightSet::default(), priced(u128::MAX / 1_000)).await.unwrap();
         let last = |o: &Shared, id: i64| o.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap();
         o.lock().unwrap().jobs = vec![call_job(9, ROUTER, ua_relay_data(ROUTER.into_word(), 1_000))];
         s.poll_outbox().await;
@@ -4772,8 +4772,8 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         for moved in [false, true] {
             let (url, rpc) = fake_evm(offchain()).await;
             let j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
-            let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
-            let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+            let (external_pull, o) = fake_external_pull(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+            let mut s = lane(&url, external_pull, 1, InflightSet::default()).await;
             s.poll_outbox().await;
             assert_eq!(states(&o), ["signed", "broadcast"]);
             if moved {
@@ -4804,8 +4804,8 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         let (ver, _) = fake_verifier(answer_json(2, v2, 0x7f)).await;
         let (url, rpc) = fake_evm(offchain()).await;
         let j = with_verdict(pqz_job(7), verdict_json(2, now() + 2, 0x7e));
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
-        let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| {
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| {
             endpoints(vec![ver])(c);
             c.pqz_verifier.valid_margin_secs = 0;
         }).await.unwrap();
@@ -4826,8 +4826,8 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
     async fn a_retry_past_its_verdict_only_requeues() {
         for (envelope_live, state) in [(true, "queued"), (false, "dead")] {
             let (url, rpc) = fake_evm(offchain()).await;
-            let (odoo, o) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
-            let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+            let (external_pull, o) = fake_external_pull(Fake { tokens: toks(), ..Default::default() }).await;
+            let mut s = lane(&url, external_pull, 1, InflightSet::default()).await;
             let (mut w, _) = work_of_op(Some(7), &pqz_job(7)["op"], None).unwrap();
             (w.valid_until, w.envelope_until) = (now() - 1, if envelope_live { now() + 600 } else { now() - 1 });
             s.retry.push_back((w, None));
@@ -4847,8 +4847,8 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
     async fn a_refused_re_fill_requeues_never_dead() {
         let (url, rpc) = fake_evm(offchain()).await;
         let j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
-        let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane(&url, external_pull, 1, InflightSet::default()).await;
         s.poll_outbox().await;
         assert_eq!(states(&o), ["signed", "broadcast"]);
         rpc.lock().unwrap().pqz_cfg = Some((1, VERIFIER, 3));
@@ -4875,8 +4875,8 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
     async fn a_job_past_its_envelope_is_dead_before_the_fill() {
         for (expired, state) in [(true, "dead"), (false, "queued")] {
             let (url, rpc) = fake_evm(Evm { stmt_fee: Some(5), ..offchain() }).await;
-            let (odoo, o) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
-            let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+            let (external_pull, o) = fake_external_pull(Fake { tokens: toks(), ..Default::default() }).await;
+            let mut s = lane(&url, external_pull, 1, InflightSet::default()).await;
             let (mut w, _) = work_of_op(Some(7), &with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e))["op"], None).unwrap();
             if expired {
                 (w.valid_until, w.envelope_until) = (now() - 1, now() - 1);
@@ -4896,8 +4896,8 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
     async fn a_re_fill_that_renews_nothing_gap_fills() {
         let (url, rpc) = fake_evm(offchain()).await;
         let j = with_verdict(pqz_job(7), verdict_json(2, now() + 2, 0x7e));
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
-        let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.pqz_verifier.valid_margin_secs = 0).await.unwrap();
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| c.pqz_verifier.valid_margin_secs = 0).await.unwrap();
         s.poll_outbox().await;
         assert_eq!(states(&o), ["signed", "broadcast"]);
         tokio::time::sleep(Duration::from_secs(3)).await;

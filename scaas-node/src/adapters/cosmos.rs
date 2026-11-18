@@ -23,7 +23,7 @@ use sha2::{Digest, Sha256};
 use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Rejected, Signed, TxStatus};
 use crate::chain::SimError;
 use crate::config::ChainCfg;
-use crate::odoo::Job;
+use crate::external_pull::Job;
 use crate::signer::{LocalSigner, Signer};
 
 // ------------------------------------------------------------------ bech32 / địa chỉ

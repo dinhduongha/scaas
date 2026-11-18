@@ -29,7 +29,7 @@ use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Rejected, Signed, 
 use crate::addresses::near as near_id;
 use crate::chain::SimError;
 use crate::config::ChainCfg;
-use crate::odoo::Job;
+use crate::external_pull::Job;
 use crate::signer::{LocalSigner, Signer};
 
 pub use super::aptos::{meta_pay_id, pay_lane};
@@ -1324,7 +1324,7 @@ fn outcome_status(s: &Value) -> Result<std::result::Result<Option<Vec<u8>>, Stri
 
 // ------------------------------------------------------------------ events (NEP-297)
 
-/// The ids whose events count: Odoo's registered tokens (`contracts`) and the configured router and DEX.
+/// The ids whose events count: ExternalPull's registered tokens (`contracts`) and the configured router and DEX.
 #[derive(Debug, Clone, Default)]
 pub struct Ids {
     pub tokens: Vec<String>,

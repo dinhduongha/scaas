@@ -1,8 +1,8 @@
 //! R54 (GA 2.1#8, spec T15): mọi decoder nhận dữ liệu không tin cậy — body gateway, payload job từ
-//! Odoo, mã hoá meta-tx — không bao giờ panic; dữ liệu xấu là `Err`.
+//! ExternalPull, mã hoá meta-tx — không bao giờ panic; dữ liệu xấu là `Err`.
 use scaas_node::dex::WireOrder;
 use scaas_node::metatx::Mtx;
-use scaas_node::odoo::Job;
+use scaas_node::external_pull::Job;
 use scaas_node::submit::work_from_job;
 use proptest::prelude::*;
 use serde_json::{json, Value};

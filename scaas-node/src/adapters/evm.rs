@@ -15,7 +15,7 @@ use crate::config::ChainCfg;
 use crate::finality::{quorum_ok, safe_head, Mode};
 use crate::guard::{self, Guard};
 use crate::indexer::{pay_events, pay_filter};
-use crate::odoo::Job;
+use crate::external_pull::Job;
 use crate::submit::job_digest;
 
 pub struct EvmAdapter {
@@ -26,7 +26,7 @@ pub struct EvmAdapter {
     mode: Mode,
     quorum: usize,
     max_gas: u64,
-    /// Token đã đăng ký (làm mới từ `node_config`); event của contract lạ không bao giờ gửi Odoo.
+    /// Token đã đăng ký (làm mới từ `node_config`); event của contract lạ không bao giờ gửi ExternalPull.
     pub tokens: Arc<RwLock<Vec<Address>>>,
     /// PAY-FIX2, NODE-GW-07, NODE-JOB-20: checked before every simulation.
     guard: Guard,
@@ -131,9 +131,9 @@ impl ChainAdapter for EvmAdapter {
         self.guard.load_services(&self.chains[0]).await
     }
 
-    fn refresh_tokens(&self, nc: &crate::odoo::NodeConfig) {
+    fn refresh_tokens(&self, nc: &crate::external_pull::NodeConfig) {
         if let Ok(mut t) = self.tokens.write() {
-            *t = nc.tokens.iter().filter_map(crate::odoo::TokenCfg::evm).collect();
+            *t = nc.tokens.iter().filter_map(crate::external_pull::TokenCfg::evm).collect();
         }
     }
 

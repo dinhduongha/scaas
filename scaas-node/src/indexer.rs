@@ -12,7 +12,7 @@ use tracing::{info, warn};
 use crate::abi::{IGovernance, IPqzEvents, IPqzToken, IRegulatedToken, IRelayFeeRouter, IToken, IUALedger, IUARegistry};
 use crate::chain::Chain;
 use crate::finality::{next_range, quorum_ok, safe_head, Mode};
-use crate::odoo::Odoo;
+use crate::external_pull::ExternalPull;
 
 const MAX_SPAN: u64 = 1000;
 
@@ -34,7 +34,7 @@ fn who(v: &Value, k: &str) -> Option<String> {
     v[format!("{k}_ua")].as_str().or_else(|| v[k].as_str()).map(str::to_string)
 }
 
-/// Log đã giải mã theo đúng khoá Odoo đọc (`dms_blockchain` `_decode`). None = không phải
+/// Log đã giải mã theo đúng khoá ExternalPull đọc (`dms_blockchain` `_decode`). None = không phải
 /// event ta theo dõi, hoặc log thiếu vị trí (log pending) — loại.
 pub fn encode_event(log: &Log) -> Option<Value> {
     let mut v = json!({
@@ -453,7 +453,7 @@ fn regulated_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
 ///   transaction with the same `(from, entry_ref)` and `amount`, paid to the payee or to the router (open mode).
 ///
 /// A `PaymentMeta` or `RelayFeePaid` without its `PaymentSettled` proves nothing (not paid) and neither is ever sent
-/// as a row of its own: Odoo's `chain_event_ingest` knows `PaymentSettled`, `MetaTransactionExecuted`, `Transfer`, and
+/// as a row of its own: ExternalPull's `chain_event_ingest` knows `PaymentSettled`, `MetaTransactionExecuted`, `Transfer`, and
 /// reads the new fields only as fields.
 pub fn join_pay_events(mut events: Vec<Value>) -> Vec<Value> {
     let key = |v: &Value, k: &str| v[k].as_str().map(str::to_string);
@@ -544,15 +544,15 @@ pub fn pay_filter_with(from: u64, to: u64, addrs: &mut Vec<Address>, router: Opt
     Filter::new().from_block(from).to_block(to).address(addrs.clone()).event_signature(topics)
 }
 
-/// `pay_filter`'s logs ⇒ Odoo's events: a `RelayFeePaid` only from the router, a token event only from a token.
+/// `pay_filter`'s logs ⇒ ExternalPull's events: a `RelayFeePaid` only from the router, a token event only from a token.
 pub fn pay_events(logs: &[Log], router: Option<Address>) -> Vec<Value> {
     let rf = IRelayFeeRouter::RelayFeePaid::SIGNATURE_HASH;
     let ours = |l: &&Log| (l.topic0() == Some(&rf)) == (Some(l.address()) == router);
     join_pqz_verified(join_pay_events(logs.iter().filter(ours).filter_map(encode_event).collect()))
 }
 
-/// Cặp (token, ví nhận) đã duyệt; Odoo gửi dạng chuẩn, cặp nào không parse được thì bỏ.
-pub fn receiving_pairs(nc: &crate::odoo::NodeConfig) -> Vec<(Address, Address)> {
+/// Cặp (token, ví nhận) đã duyệt; ExternalPull gửi dạng chuẩn, cặp nào không parse được thì bỏ.
+pub fn receiving_pairs(nc: &crate::external_pull::NodeConfig) -> Vec<(Address, Address)> {
     nc.receiving_addresses
         .iter()
         .filter_map(|r| Some((r.token.parse().ok()?, r.address.parse().ok()?)))
@@ -573,22 +573,22 @@ const DRIFT_ERR_BACKOFF: Duration = Duration::from_secs(300);
 
 /// Vòng indexer. Drift C chạy TRONG vòng này, giữa hai bước ingest: cursor đứng yên trong lúc đọc số dư nên
 /// `height == indexed_block` luôn đúng (review S1-2: task riêng đua với indexer và có thể không bao giờ ghi được).
-pub async fn run(chain: Arc<Chain>, odoo: Odoo, poll: Duration, chain_key: String, router: Option<Address>, registry: Option<Address>) {
+pub async fn run(chain: Arc<Chain>, external_pull: ExternalPull, poll: Duration, chain_key: String, router: Option<Address>, registry: Option<Address>) {
     let mut drift_due = std::time::Instant::now();
     let mut health = PqzHealth::default();
     loop {
-        match step_health(&chain, &odoo, router, registry, &mut health).await {
+        match step_health(&chain, &external_pull, router, registry, &mut health).await {
             Ok(true) => continue, // còn tồn đọng: đi tiếp ngay
             Ok(false) => {}
             Err(e) => warn!(chain = chain.number, "indexer: {e:#}"),
         }
         if std::time::Instant::now() >= drift_due {
-            match crate::drift::step(&chain, &odoo, &chain_key).await {
+            match crate::drift::step(&chain, &external_pull, &chain_key).await {
                 Ok(true) => drift_due = std::time::Instant::now() + crate::drift::EVERY,
                 Ok(false) => warn!(chain = chain.number, "drift: cursor moved under the balance read; retrying"),
                 Err(e) => {
                     warn!(chain = chain.number, "drift: {e:#}");
-                    drift_due = std::time::Instant::now() + DRIFT_ERR_BACKOFF; // không dội RPC/Odoo mỗi vòng poll
+                    drift_due = std::time::Instant::now() + DRIFT_ERR_BACKOFF; // không dội RPC/ExternalPull mỗi vòng poll
                 }
             }
         }
@@ -596,23 +596,23 @@ pub async fn run(chain: Arc<Chain>, odoo: Odoo, poll: Duration, chain_key: Strin
     }
 }
 
-/// Một vòng: đọc cursor + token từ Odoo, tính vùng final, kiểm quorum, gửi. `true` = đã tiến.
-pub async fn step(chain: &Chain, odoo: &Odoo, router: Option<Address>) -> anyhow::Result<bool> {
-    step_with(chain, odoo, router, None).await
+/// Một vòng: đọc cursor + token từ ExternalPull, tính vùng final, kiểm quorum, gửi. `true` = đã tiến.
+pub async fn step(chain: &Chain, external_pull: &ExternalPull, router: Option<Address>) -> anyhow::Result<bool> {
+    step_with(chain, external_pull, router, None).await
 }
 
 /// [`step`] reading the registry's PQZ key-version events too (group 3g).
-pub async fn step_with(chain: &Chain, odoo: &Odoo, router: Option<Address>, registry: Option<Address>) -> anyhow::Result<bool> {
-    step_health(chain, odoo, router, registry, &mut PqzHealth::default()).await
+pub async fn step_with(chain: &Chain, external_pull: &ExternalPull, router: Option<Address>, registry: Option<Address>) -> anyhow::Result<bool> {
+    step_health(chain, external_pull, router, registry, &mut PqzHealth::default()).await
 }
 
 /// [`step_with`] keeping the PQZ verifier state (group 3f, [`pqz_health`]) across ranges in `health`.
-pub async fn step_health(chain: &Chain, odoo: &Odoo, router: Option<Address>, registry: Option<Address>, health: &mut PqzHealth)
+pub async fn step_health(chain: &Chain, external_pull: &ExternalPull, router: Option<Address>, registry: Option<Address>, health: &mut PqzHealth)
     -> anyhow::Result<bool>
 {
-    let nc = odoo.node_config(chain.number, None).await?;
+    let nc = external_pull.node_config(chain.number, None).await?;
     // Không token nào đăng ký: không ai lọc được vùng này ⇒ giữ con trỏ (recipe M1), đọc lại khi có token.
-    let addrs: Vec<Address> = nc.tokens.iter().filter_map(crate::odoo::TokenCfg::evm).collect();
+    let addrs: Vec<Address> = nc.tokens.iter().filter_map(crate::external_pull::TokenCfg::evm).collect();
     if addrs.is_empty() {
         return Ok(false);
     }
@@ -650,7 +650,7 @@ pub async fn step_health(chain: &Chain, odoo: &Odoo, router: Option<Address>, re
     for e in events.iter().filter(|e| e["alert"] == true) {
         warn!(chain = chain.number, alert = %e["event"], contract = %e["contract"], tx = %e["tx_hash"], "alert: {e}");
     }
-    let r = odoo.ingest(chain.number, from, to, &format!("{hash:#x}"), &events).await?;
+    let r = external_pull.ingest(chain.number, from, to, &format!("{hash:#x}"), &events).await?;
     info!(chain = chain.number, from, to, created = r.created, "ingested");
     Ok(r.indexed_block >= to)
 }
@@ -672,7 +672,7 @@ mod tests {
     }
 
     #[test]
-    fn payment_settled_is_encoded_for_odoo() {
+    fn payment_settled_is_encoded_for_external_pull() {
         let ev = IToken::PaymentSettled {
             from: Address::repeat_byte(1),
             to: Address::repeat_byte(2),
@@ -719,7 +719,7 @@ mod tests {
         let kept = inbound(vec![ev(shop), ev(Address::repeat_byte(1))], &[(token, shop)]);
         assert_eq!(kept.len(), 1);
         assert!(inbound(vec![ev(shop)], &[(Address::repeat_byte(8), shop)]).is_empty(), "other token's wallet");
-        let nc: crate::odoo::NodeConfig = serde_json::from_value(json!({
+        let nc: crate::external_pull::NodeConfig = serde_json::from_value(json!({
             "finality_mode": "depth", "finality_depth": 1, "finality_quorum": 1, "indexed_block": 0,
             "journal_max_nonce": null, "tokens": [],
             "receiving_addresses": [{"token": format!("{token:#x}"), "address": format!("{shop:#x}")},
@@ -860,7 +860,7 @@ mod tests {
 
     /// T17 (G): `PaymentMeta` joins its `PaymentSettled` (same token, transaction and payId, the next one), a
     /// `RelayFeePaid` of the router joins the expected token's `PaymentSettled` by `(from, ref)`, amount and payee; no
-    /// join by id alone, an unjoined one proves nothing, and neither reaches Odoo as a row.
+    /// join by id alone, an unjoined one proves nothing, and neither reaches ExternalPull as a row.
     #[test]
     fn indexer_joins_payment_meta() {
         let (token, fake, router) = (Address::repeat_byte(9), Address::repeat_byte(0x66), Address::repeat_byte(0x7f));
@@ -900,7 +900,7 @@ mod tests {
         let out = pay_events(&logs, Some(router));
         assert!(out.iter().all(client_ingest_accepts));
         let names: Vec<&str> = out.iter().map(|v| v["event"].as_str().unwrap()).collect();
-        assert_eq!(names, ["PaymentSettled"; 8], "PaymentMeta / RelayFeePaid never reach Odoo as rows");
+        assert_eq!(names, ["PaymentSettled"; 8], "PaymentMeta / RelayFeePaid never reach ExternalPull as rows");
         let with_meta: Vec<(&str, u64)> = out.iter().filter(|v| !v["meta_body"].is_null())
             .map(|v| (v["tx_hash"].as_str().unwrap(), v["log_index"].as_u64().unwrap())).collect();
         assert_eq!(with_meta, [(format!("{:#x}", B256::repeat_byte(1)).as_str(), 2)], "only the payment right after its meta");
@@ -1056,11 +1056,11 @@ mod tests {
     /// cursor stays put (a token activated later still gets its events) and no RPC is spent.
     #[tokio::test]
     async fn no_tokens_holds_the_cursor() {
-        use crate::adapter::tests::{fake_odoo, Fake};
-        let (odoo, o) = fake_odoo(Fake { tokens: json!([]), ..Default::default() }).await;
+        use crate::adapter::tests::{fake_external_pull, Fake};
+        let (external_pull, o) = fake_external_pull(Fake { tokens: json!([]), ..Default::default() }).await;
         let cfg = crate::config::ChainCfg { evm_chain_number: 7, rpc_urls: vec!["http://127.0.0.1:9".into()], ..Default::default() };
         let chain = Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap();
-        assert!(!step(&chain, &odoo, None).await.unwrap());
+        assert!(!step(&chain, &external_pull, None).await.unwrap());
         assert_eq!(o.lock().unwrap().ingests, 0, "cursor not advanced");
     }
 
@@ -1068,8 +1068,8 @@ mod tests {
     /// endpoint is checked against), for every `Chain` of the table. Control: a fresh `Chain` has seen nothing.
     #[tokio::test]
     async fn the_indexer_head_feeds_the_shared_head() {
-        use crate::adapter::tests::{fake_odoo, Fake};
-        let (odoo, _) = fake_odoo(Fake { tokens: json!([{"address": format!("{:#x}", Address::repeat_byte(1)), "decimals": 6}]),
+        use crate::adapter::tests::{fake_external_pull, Fake};
+        let (external_pull, _) = fake_external_pull(Fake { tokens: json!([{"address": format!("{:#x}", Address::repeat_byte(1)), "decimals": 6}]),
             ..Default::default() }).await;
         let (url, _) = crate::chain::tests::fake_rpc(|r| match r["method"].as_str() {
             Some("eth_blockNumber") => json!({"result": "0x64"}),
@@ -1079,7 +1079,7 @@ mod tests {
         let (chain, lane) = (Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap(),
             Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap());
         assert_eq!(lane.seen_head(), 0, "control");
-        let _ = step(&chain, &odoo, None).await;
+        let _ = step(&chain, &external_pull, None).await;
         assert_eq!((chain.seen_head(), lane.seen_head()), (0x64, 0x64));
     }
 

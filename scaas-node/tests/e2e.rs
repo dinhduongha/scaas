@@ -3,12 +3,12 @@
 //! Cần `anvil` và `forge` trong PATH. Chứng minh trên EVM thật với contract thật, on the merged entries (CTR-MTX-30,
 //! ua-mtx-merge T18): every token, router and mandate-wallet job is a `ua_metatx` job (`UAMetaTransfer` / a named `UA<Op>` on
 //! `bytes32` ids, `auth` a `UASig`); an EOA signs with its own key, no registry call (registry 0 too), fee 0 relayable.
-//! 1. job outbox (giả Odoo) → simulate → ký → `signed` trước khi gửi → broadcast → receipt → the chain's UA events
+//! 1. job outbox (giả ExternalPull) → simulate → ký → `signed` trước khi gửi → broadcast → receipt → the chain's UA events
 //!    (`UAPaymentSettled`, `UAMetaTransactionExecuted`, never the address ones, R18) → indexer gửi `PaymentSettled` +
 //!    `MetaTransactionExecuted` vùng final (the client's row names for both shapes);
 //! 2. DEX (R35, NODE-DEX-15) on a `SCaaSDex` clone: a SCaaS sell token's `UATradeOrder` in its domain (`auth`), an outside
 //!    token's `DexOrder` in the DEX's domain, through the gateway → one settlement per taker → `mtxSettle` job through
-//!    the outbox (fake Odoo) → balances, fees, relayer share; restart ⇒ same book; the UA cancels on the token (`ua_metatx`
+//!    the outbox (fake ExternalPull) → balances, fees, relayer share; restart ⇒ same book; the UA cancels on the token (`ua_metatx`
 //!    entry jobs) and on the DEX; the watcher brings final events back (`UALegSettled` for a SCaaS leg). No signer holds a wei
 //!    of gas.
 //! 3. The three gateway doors, the ordered cancel, a derived subject, an EOA to a UA, a relayed Zether proof under the UA tag
@@ -32,13 +32,13 @@ use axum::routing::post;
 use axum::{Json, Router};
 use scaas_node::abi::{IERC165, IMtxIds, IToken, IUALedger, UAMetaTransaction, UAMetaTransfer, UASig};
 use scaas_node::chain::Chain;
-use scaas_node::config::{ChainCfg, FinalityCfg, OdooCfg};
+use scaas_node::config::{ChainCfg, FinalityCfg, ExternalPullCfg};
 use scaas_node::dex::venue::Venue;
 use scaas_node::abi::TradeOrder;
 use scaas_node::dex::{cancel_digest, canon, dex_order_hash, domain, trade_order_hash, ua_invalidate_digest, WireOrder};
 use scaas_node::gateway::{router, AppState, GwChain};
 use scaas_node::metatx::{Domain, UaMtx, MODE_RESTRICT_RELAYER};
-use scaas_node::odoo::Odoo;
+use scaas_node::external_pull::ExternalPull;
 use scaas_node::submit::{work_from_job, Submitter, Work, BUMP_SKIPPED_CONSUMED};
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
@@ -127,7 +127,7 @@ fn deploy_env(rpc: &str, chain_id: u64, holder: Address, zether: bool, env: &[(&
     assert!(status.success(), "forge script failed");
     let raw = std::fs::read_to_string(format!("{sc}/deployments/{}.json", book_name(chain_id))).expect("deployments json");
     let dep: Value = serde_json::from_str(&raw).unwrap();
-    // P4: the account keys are `smart_key_account_*` (the node reads neither; Odoo seeds from them)
+    // P4: the account keys are `smart_key_account_*` (the node reads neither; ExternalPull seeds from them)
     assert!(dep["smart_key_account_factory"].is_string() && dep["smart_key_account_implementation"].is_string());
     assert!(dep.get("subject_account_factory").is_none(), "pre-P4 deploy JSON key");
     // P5: the v1 line left the deploy (`legacy/p5/`); two demo tokens from the `OpenFactory`
@@ -139,7 +139,7 @@ fn deploy_env(rpc: &str, chain_id: u64, holder: Address, zether: bool, env: &[(&
 }
 
 /// Bản sao bảng chuyển trạng thái của `dms_blockchain` (`blockchain_relay_job.TRANSITIONS`):
-/// fake Odoo từ chối đúng như Odoo thật, để e2e không xanh giả (review I12).
+/// fake ExternalPull từ chối đúng như ExternalPull thật, để e2e không xanh giả (review I12).
 fn allowed(from: &str, to: &str) -> bool {
     matches!(
         (from, to),
@@ -152,7 +152,7 @@ fn allowed(from: &str, to: &str) -> bool {
 }
 
 #[derive(Default)]
-struct FakeOdoo {
+struct FakeExternalPull {
     states: std::collections::HashMap<i64, String>,
     refused: Vec<Value>,
     jobs: Vec<Value>,
@@ -175,7 +175,7 @@ struct FakeOdoo {
 }
 
 async fn fake(
-    State(s): State<Arc<Mutex<FakeOdoo>>>,
+    State(s): State<Arc<Mutex<FakeExternalPull>>>,
     Path((model, method)): Path<(String, String)>,
     Json(body): Json<Value>,
 ) -> (StatusCode, Json<Value>) {
@@ -275,7 +275,7 @@ fn row_of(r: &Value) -> Value {
     row
 }
 
-async fn start_fake(state: Arc<Mutex<FakeOdoo>>) -> SocketAddr {
+async fn start_fake(state: Arc<Mutex<FakeExternalPull>>) -> SocketAddr {
     let app = Router::new().route("/json/2/{model}/{method}", post(fake)).with_state(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -303,14 +303,14 @@ fn chain_cfg(chain_id: u64, rpc: &str, dex: Option<Address>) -> ChainCfg {
     }
 }
 
-fn odoo_at(addr: SocketAddr) -> Odoo {
-    let cfg = OdooCfg {
+fn external_pull_at(addr: SocketAddr) -> ExternalPull {
+    let cfg = ExternalPullCfg {
         url: format!("http://{addr}"),
         database: "t".into(),
         relay_api_key_env: String::new(),
         indexer_api_key_env: String::new(),
     };
-    Odoo::with_key(&cfg, "k".into()).unwrap()
+    ExternalPull::with_key(&cfg, "k".into()).unwrap()
 }
 
 async fn balance(rpc: &str, token: Address, who: Address) -> U256 {
@@ -373,7 +373,7 @@ async fn merged_events_only(rpc: &str, tx: &str) {
 }
 
 /// The hash of job `id`'s first signed transaction.
-fn tx_of(state: &Arc<Mutex<FakeOdoo>>, id: i64) -> String {
+fn tx_of(state: &Arc<Mutex<FakeExternalPull>>, id: i64) -> String {
     state.lock().unwrap().reports.iter().find(|r| r["job_id"] == id && r["chain_state"] == "signed")
         .map(|r| r["tx_hash"].as_str().unwrap().to_string()).expect("a signed report")
 }
@@ -394,17 +394,17 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     let m = payment(payer.address(), shop, 250_000_000, entry_ref, U256::from_be_bytes(keccak256(b"lane").0),
         MODE_RESTRICT_RELAYER, relayer.address(), 0, Address::ZERO);
     let auth = sign(&payer, &d, &m);
-    let state = Arc::new(Mutex::new(FakeOdoo {
+    let state = Arc::new(Mutex::new(FakeExternalPull {
         tokens: vec![format!("{token:#x}")],
         receiving: vec![json!({"token": format!("{token:#x}"), "address": format!("{shop:#x}")})],
         ..Default::default()
     }));
     state.lock().unwrap().jobs.push(job(1, token, &m, "0x", auth));
     let addr = start_fake(state.clone()).await;
-    let odoo = odoo_at(addr);
+    let external_pull = external_pull_at(addr);
     let cfg = chain_cfg(chain_id, &rpc, None);
 
-    let mut s = Submitter::start(Chain::with_signer(&cfg, relayer.clone()).unwrap(), odoo.clone(), cfg.clone(), "e2e".into(), Default::default())
+    let mut s = Submitter::start(Chain::with_signer(&cfg, relayer.clone()).unwrap(), external_pull.clone(), cfg.clone(), "e2e".into(), Default::default())
         .await
         .unwrap();
     s.poll_outbox().await;
@@ -427,7 +427,7 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     merged_events_only(&rpc, reports[0]["tx_hash"].as_str().unwrap()).await;
 
     let ichain = Chain::with_signer(&cfg, relayer.clone()).unwrap();
-    assert!(scaas_node::indexer::step(&ichain, &odoo, None).await.unwrap());
+    assert!(scaas_node::indexer::step(&ichain, &external_pull, None).await.unwrap());
     let ingested = state.lock().unwrap().ingested.clone();
     let pay = ingested.iter().find(|e| e["event"] == "PaymentSettled").expect("PaymentSettled ingested");
     assert_eq!(pay["entry_ref"], format!("{entry_ref:#x}"));
@@ -437,18 +437,18 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     let exe = ingested.iter().find(|e| e["event"] == "MetaTransactionExecuted").expect("executed ingested");
     assert_eq!(exe["digest"], format!("{:#x}", m.digest(&d)));
     // Drift A (R56): the ERC-20 Transfer to the receiving wallet rides along with the same tx hash, so
-    // Odoo can see it is matched by the PaymentSettled.
+    // ExternalPull can see it is matched by the PaymentSettled.
     let tr = ingested.iter().find(|e| e["event"] == "Transfer").expect("Transfer to the receiving wallet");
     assert_eq!((&tr["tx_hash"], &tr["to"]), (&pay["tx_hash"], &json!(format!("{shop:#x}"))));
     // Drift C: balance at exactly the indexed height.
-    assert!(scaas_node::drift::step(&ichain, &odoo, "evm:31901").await.unwrap());
+    assert!(scaas_node::drift::step(&ichain, &external_pull, "evm:31901").await.unwrap());
     let rep = state.lock().unwrap().balance_reports.last().cloned().unwrap();
     assert_eq!(rep["height"].as_u64(), Some(state.lock().unwrap().indexed_block));
     assert_eq!(rep["balances"][0]["balance"], "250000000");
     // R55: a lane under its balance floor takes no new work.
     let mut poor = cfg.clone();
     poor.breaker.min_relayer_balance = Some(u128::MAX / 2);
-    let mut s2 = Submitter::start(Chain::with_signer(&poor, key(RELAYER)).unwrap(), odoo.clone(), poor, "e2e-2".into(), Default::default())
+    let mut s2 = Submitter::start(Chain::with_signer(&poor, key(RELAYER)).unwrap(), external_pull.clone(), poor, "e2e-2".into(), Default::default())
         .await
         .unwrap();
     assert!(s2.accepting(), "no sample yet: nothing known, nothing tripped");
@@ -539,7 +539,7 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     let reports = state.lock().unwrap().reports.clone();
     let of = |id: i64| reports.iter().rev().find(|r| r["job_id"] == id).unwrap().clone();
     assert_eq!(of(7)["chain_state"], "mined", "{}", of(7));
-    while scaas_node::indexer::step(&ichain, &odoo, None).await.unwrap() {}
+    while scaas_node::indexer::step(&ichain, &external_pull, None).await.unwrap() {}
     let ingested = state.lock().unwrap().ingested.clone();
     assert!(ingested.iter().all(|e| e["event"] != "PaymentMeta"), "never a row");
     let paid = ingested.iter().find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == format!("{pid:#x}")).expect("pay-meta settled");
@@ -565,7 +565,7 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     rcfg.params = toml::toml! { relay_fee = { min_amount = 10 } };
     rcfg.params["relay_fee"].as_table_mut().unwrap().insert("router".into(), format!("{router:#x}").into());
     let before = balance(&rpc, token, relayer.address()).await;
-    let mut s3 = Submitter::start(Chain::with_signer(&rcfg, relayer.clone()).unwrap(), odoo.clone(), rcfg.clone(), "e2e-3".into(), Default::default())
+    let mut s3 = Submitter::start(Chain::with_signer(&rcfg, relayer.clone()).unwrap(), external_pull.clone(), rcfg.clone(), "e2e-3".into(), Default::default())
         .await
         .unwrap();
     state.lock().unwrap().jobs.push(json!({"id": 9, "kind": "ua_metatx", "op": relay}));
@@ -583,7 +583,7 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     assert_eq!(balance(&rpc, token, relayer.address()).await, before + U256::from(10u64), "the fee reached the lane");
     assert_eq!(view(&rpc, token, IMtxIds::mtxNonceCall { from: payer.address().into_word(), batch: U256::from(8) }).await, U256::from(1u64),
         "the inner call ran");
-    while scaas_node::indexer::step(&ichain, &odoo, Some(router)).await.unwrap() {}
+    while scaas_node::indexer::step(&ichain, &external_pull, Some(router)).await.unwrap() {}
     let ingested = state.lock().unwrap().ingested.clone();
     assert!(ingested.iter().all(|e| e["event"] != "RelayFeePaid"), "never a row");
     assert!(ingested.iter().any(|e| e["event"] == "MetaTransactionExecuted" && e["digest"] == format!("{inner_digest:#x}")),
@@ -808,7 +808,7 @@ async fn dex_order_with_a_ua_trade_order_leg() {
     let relayer = key(RELAYER);
     let lane = relayer.address();
     let cfg = chain_cfg(chain_id, &rpc, Some(dex));
-    let state = Arc::new(Mutex::new(FakeOdoo {
+    let state = Arc::new(Mutex::new(FakeExternalPull {
         tokens: vec![format!("{token_a:#x}"), format!("{token_b:#x}")],
         dex: format!("{dex:#x}"),
         markets: vec![
@@ -819,12 +819,12 @@ async fn dex_order_with_a_ua_trade_order_leg() {
         ],
         ..Default::default()
     }));
-    let odoo = odoo_at(start_fake(state.clone()).await);
-    let mut s = Submitter::start(Chain::with_signer(&cfg, relayer.clone()).unwrap(), odoo.clone(), cfg.clone(), "e2e".into(), Default::default())
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
+    let mut s = Submitter::start(Chain::with_signer(&cfg, relayer.clone()).unwrap(), external_pull.clone(), cfg.clone(), "e2e".into(), Default::default())
         .await
         .unwrap();
     let shared = Arc::new(Chain::with_signer(&cfg, relayer.clone()).unwrap());
-    let venue = Venue::start(shared.clone(), odoo.clone(), Some(odoo.clone()), dex).await.unwrap();
+    let venue = Venue::start(shared.clone(), external_pull.clone(), Some(external_pull.clone()), dex).await.unwrap();
     assert_eq!(venue.markets().await.len(), 2, "both markets listed on the DEX, B SCaaS and USDC outside");
     let (tx, mut rx) = mpsc::channel::<Work>(16);
     let fee_wallet = Address::repeat_byte(0xfa);
@@ -896,7 +896,7 @@ async fn dex_order_with_a_ua_trade_order_leg() {
     let before = venue.rows().await;
     assert_eq!(before.len(), 1);
     assert_eq!(before[0].remaining, "40000000");
-    let venue2 = Venue::start(shared.clone(), odoo.clone(), Some(odoo.clone()), dex).await.unwrap();
+    let venue2 = Venue::start(shared.clone(), external_pull.clone(), Some(external_pull.clone()), dex).await.unwrap();
     assert_eq!(venue2.rows().await, before);
 
     // 5. A failed commit leaves the book exactly as the client has it (review D20).
@@ -991,7 +991,7 @@ async fn dex_order_with_a_ua_trade_order_leg() {
     assert_eq!((rows[0].order_hash.as_str(), rows[0].remaining.as_str()), (ask4_hash.as_str(), "10000000"));
     let stored = state.lock().unwrap().orders[&ask4_hash].clone();
     assert_eq!((stored["state"].as_str(), stored["remaining"].as_str()), (Some("open"), Some("10000000")));
-    let venue3 = Venue::start(shared.clone(), odoo.clone(), Some(odoo.clone()), dex).await.unwrap();
+    let venue3 = Venue::start(shared.clone(), external_pull.clone(), Some(external_pull.clone()), dex).await.unwrap();
     assert_eq!(venue3.rows().await, rows);
 
     // 10. Cancel-all on the token's order lane (`UAInvalidateNonces` on alice's id in A's domain, a `ua_metatx`
@@ -1054,19 +1054,19 @@ async fn dex_fill_below_half_settles_on_anvil() {
     let lane = relayer.address();
     let cfg = chain_cfg(chain_id, &rpc, Some(dex));
     // market: no fees, min_base_amount 100 (< the 200 bid, so it is not a junk leg)
-    let state = Arc::new(Mutex::new(FakeOdoo {
+    let state = Arc::new(Mutex::new(FakeExternalPull {
         tokens: vec![format!("{token_a:#x}"), format!("{token_b:#x}")],
         dex: format!("{dex:#x}"),
         markets: vec![json!({"id": 1, "base": format!("{token_a:#x}"), "quote": format!("{token_b:#x}"), "base_decimals": 6,
                              "quote_decimals": 6, "maker_fee_ppm": 0, "taker_fee_ppm": 0, "min_base_amount": "100"})],
         ..Default::default()
     }));
-    let odoo = odoo_at(start_fake(state.clone()).await);
-    let mut s = Submitter::start(Chain::with_signer(&cfg, relayer.clone()).unwrap(), odoo.clone(), cfg.clone(), "e2e".into(), Default::default())
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
+    let mut s = Submitter::start(Chain::with_signer(&cfg, relayer.clone()).unwrap(), external_pull.clone(), cfg.clone(), "e2e".into(), Default::default())
         .await
         .unwrap();
     let shared = Arc::new(Chain::with_signer(&cfg, relayer.clone()).unwrap());
-    let venue = Venue::start(shared.clone(), odoo.clone(), Some(odoo.clone()), dex).await.unwrap();
+    let venue = Venue::start(shared.clone(), external_pull.clone(), Some(external_pull.clone()), dex).await.unwrap();
     let (tx, mut rx) = mpsc::channel::<Work>(16);
     let tokens = Arc::new(RwLock::new(vec![token_a, token_b]));
     let guard = Arc::new(scaas_node::guard::Guard::new(&cfg, tokens.clone()).unwrap());
@@ -1129,11 +1129,11 @@ async fn a_peer_landing_our_intent_makes_the_job_consumed_never_dead() {
     let relayer = key(RELAYER);
     let p = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
     let peer = ProviderBuilder::new().wallet(EthereumWallet::from(key(DEPLOYER))).connect_http(rpc.parse().unwrap());
-    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
-    let odoo = odoo_at(start_fake(state.clone()).await);
+    let state = Arc::new(Mutex::new(FakeExternalPull { tokens: vec![format!("{token:#x}")], ..Default::default() }));
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
     let mut cfg = chain_cfg(chain_id, &rpc, None);
     cfg.stuck_after_secs = 1;
-    let mut s = Submitter::start(Chain::with_signer(&cfg, relayer.clone()).unwrap(), odoo, cfg, "e2e".into(), Default::default())
+    let mut s = Submitter::start(Chain::with_signer(&cfg, relayer.clone()).unwrap(), external_pull, cfg, "e2e".into(), Default::default())
         .await
         .unwrap();
     let _: Value = p.raw_request("evm_setAutomine".into(), (false,)).await.unwrap();
@@ -1241,13 +1241,13 @@ async fn evm_adapter_runs_the_generic_lane_runner_on_two_mnemonic_lanes() {
     let adapter = EvmAdapter::new(&cfg, chains, Arc::new(RwLock::new(vec![token]))).unwrap();
     assert_eq!(adapter.lanes().len(), 2);
 
-    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
-    let odoo = odoo_at(start_fake(state.clone()).await);
+    let state = Arc::new(Mutex::new(FakeExternalPull { tokens: vec![format!("{token:#x}")], ..Default::default() }));
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
     state.lock().unwrap().jobs.push(pay_job(&payer, &dep, chain_id, token, 11, b"generic-1"));
-    assert!(lane_step(&adapter, &odoo, 0, "e2e#0").await.unwrap());
+    assert!(lane_step(&adapter, &external_pull, 0, "e2e#0").await.unwrap());
     state.lock().unwrap().jobs.push(pay_job(&payer, &dep, chain_id, token, 12, b"generic-2"));
-    assert!(lane_step(&adapter, &odoo, 1, "e2e#1").await.unwrap());
-    assert!(!lane_step(&adapter, &odoo, 1, "e2e#1").await.unwrap(), "nothing left");
+    assert!(lane_step(&adapter, &external_pull, 1, "e2e#1").await.unwrap());
+    assert!(!lane_step(&adapter, &external_pull, 1, "e2e#1").await.unwrap(), "nothing left");
 
     let reports = state.lock().unwrap().reports.clone();
     let states: Vec<(i64, String)> = reports.iter()
@@ -1262,7 +1262,7 @@ async fn evm_adapter_runs_the_generic_lane_runner_on_two_mnemonic_lanes() {
     assert!(state.lock().unwrap().refused.is_empty());
     assert_eq!(balance(&rpc, token, Address::repeat_byte(0x5e)).await, U256::from(2_000u64));
 
-    while index_step(&adapter, &odoo).await.unwrap() {}
+    while index_step(&adapter, &external_pull).await.unwrap() {}
     let settled = state.lock().unwrap().ingested.iter().filter(|e| e["event"] == "PaymentSettled").count();
     assert_eq!(settled, 2);
 }
@@ -1373,14 +1373,14 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
 
     // wei per base unit: a fee of 1 is worth 10^11 wei, of 1,000 10^14 (anvil's quotes here are ~10^13)
     let price: u128 = 100_000_000_000;
-    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
-    let odoo = odoo_at(start_fake(state.clone()).await);
+    let state = Arc::new(Mutex::new(FakeExternalPull { tokens: vec![format!("{token:#x}")], ..Default::default() }));
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
     let mut cfg = chain_cfg(chain_id, &rpc, None);
     cfg.params = toml::toml! { relay_fee = { min_amount = 1 } };
     let rf = cfg.params["relay_fee"].as_table_mut().unwrap();
     rf.insert("router".into(), format!("{router:#x}").into());
     rf.insert("min_wei_value".into(), toml::Value::Table([(format!("{token:#x}"), toml::Value::from(price.to_string()))].into_iter().collect()));
-    let mut s = Submitter::start(Chain::with_signer(&cfg, relayer.clone()).unwrap(), odoo.clone(), cfg.clone(), "e2e-ua".into(), Default::default())
+    let mut s = Submitter::start(Chain::with_signer(&cfg, relayer.clone()).unwrap(), external_pull.clone(), cfg.clone(), "e2e-ua".into(), Default::default())
         .await
         .unwrap();
     let d = token_domain(&dep, chain_id, token);
@@ -1444,7 +1444,7 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
 
     // the indexer: the UA payments are PaymentSettled rows of the id, with their meta and relay fee
     let ichain = Chain::with_signer(&cfg, relayer.clone()).unwrap();
-    while scaas_node::indexer::step(&ichain, &odoo, Some(router)).await.unwrap() {}
+    while scaas_node::indexer::step(&ichain, &external_pull, Some(router)).await.unwrap() {}
     let ingested = state.lock().unwrap().ingested.clone();
     assert!(ingested.iter().all(|e| e["event"] != "PaymentMeta" && e["event"] != "RelayFeePaid"), "never rows");
     // review C1: the client's ingest (mirrored by the fake) takes every row; a derived UA is UA_POOL + its id
@@ -1467,7 +1467,7 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
     let inner = signed_op(&payer, cancel_op(payer.address(), token, 56, 13), chain_id, d.salt);
     let mut cfg2 = cfg.clone();
     cfg2.stuck_after_secs = 1;
-    let mut s2 = Submitter::start(Chain::with_signer(&cfg2, relayer.clone()).unwrap(), odoo.clone(), cfg2, "e2e-ua-2".into(), Default::default())
+    let mut s2 = Submitter::start(Chain::with_signer(&cfg2, relayer.clone()).unwrap(), external_pull.clone(), cfg2, "e2e-ua-2".into(), Default::default())
         .await
         .unwrap();
     let _: Value = p.raw_request("evm_setAutomine".into(), (false,)).await.unwrap();
@@ -1527,13 +1527,13 @@ async fn router_op_signed_by_an_eoa() {
         "args": {"target": format!("{dex:#x}"), "on": true,
             "chainUid": format!("{:#x}", view(&rpc, dex, pqz3f::chainUidCall {}).await)}, // the DEX's chain word (CTR-GOV-28 Change)
         "envelope": envelope(owner.address(), U256::from_be_slice(dex.as_slice()), 0)}), chain_id, uid);
-    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
-    let odoo = odoo_at(start_fake(state.clone()).await);
+    let state = Arc::new(Mutex::new(FakeExternalPull { tokens: vec![format!("{token:#x}")], ..Default::default() }));
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
     let relayer = key(RELAYER);
     let report = |id: i64| state.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap();
 
     let without = chain_cfg(chain_id, &rpc, None);
-    let mut s = Submitter::start(Chain::with_signer(&without, relayer.clone()).unwrap(), odoo.clone(), without.clone(), "e2e-gov-0".into(),
+    let mut s = Submitter::start(Chain::with_signer(&without, relayer.clone()).unwrap(), external_pull.clone(), without.clone(), "e2e-gov-0".into(),
         Default::default()).await.unwrap();
     state.lock().unwrap().jobs.push(json!({"id": 1, "kind": "ua_metatx", "op": op.clone()}));
     run_outbox(&mut s).await;
@@ -1542,7 +1542,7 @@ async fn router_op_signed_by_an_eoa() {
     assert!(!view(&rpc, dex, listedOnlyCall {}).await, "nothing sent");
 
     let with = ChainCfg { governance_routers: vec![router], ..without };
-    let mut s = Submitter::start(Chain::with_signer(&with, relayer.clone()).unwrap(), odoo.clone(), with.clone(), "e2e-gov-1".into(),
+    let mut s = Submitter::start(Chain::with_signer(&with, relayer.clone()).unwrap(), external_pull.clone(), with.clone(), "e2e-gov-1".into(),
         Default::default()).await.unwrap();
     state.lock().unwrap().jobs.push(json!({"id": 2, "kind": "ua_metatx", "op": op}));
     run_outbox(&mut s).await;
@@ -1595,11 +1595,11 @@ async fn router_creations_signed_by_an_eoa() {
                 "grantDelay": "0", "rescueTo": a(0), "maxSupply": "0", "maxWrapSupply": "0",
                 "reg": {"complianceRegistry": a(0), "requiredFlags": "0", "deniedFlags": "0", "termsHash": z(0), "taxRecipient": z(0)}}},
         "envelope": envelope(owner.address(), lane, 1)}), chain_id, uid);
-    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
-    let odoo = odoo_at(start_fake(state.clone()).await);
+    let state = Arc::new(Mutex::new(FakeExternalPull { tokens: vec![format!("{token:#x}")], ..Default::default() }));
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
     let report = |id: i64| state.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap();
     let cfg = ChainCfg { governance_routers: vec![router], ..chain_cfg(chain_id, &rpc, None) };
-    let mut s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), odoo.clone(), cfg.clone(), "e2e-create".into(),
+    let mut s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), external_pull.clone(), cfg.clone(), "e2e-create".into(),
         Default::default()).await.unwrap();
     let mut forged = dex_op.clone();
     forged["args"]["initHash"] = json!(z(1));
@@ -1660,11 +1660,11 @@ async fn router_instance_creations_signed_by_an_eoa() {
     let both = unsigned(with(with(base(0x73, "1"), "config", json!({"owner": me})), "init_call", init_zero), 2);
     let stranger = unsigned(with(base(0x74, "1"), "config", json!({"owner": z(0x0b)})), 2);
     let unpublished = op(with(base(0x75, "9"), "config", json!({"owner": me})), 2);
-    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
-    let odoo = odoo_at(start_fake(state.clone()).await);
+    let state = Arc::new(Mutex::new(FakeExternalPull { tokens: vec![format!("{token:#x}")], ..Default::default() }));
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
     let report = |id: i64| state.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap();
     let cfg = ChainCfg { governance_routers: vec![router], ..chain_cfg(chain_id, &rpc, None) };
-    let mut s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), odoo.clone(), cfg.clone(), "e2e-instance".into(),
+    let mut s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), external_pull.clone(), cfg.clone(), "e2e-instance".into(),
         Default::default()).await.unwrap();
     let nonce = IMtxIds::mtxNonceCall { from: owner.address().into_word(), batch: lane };
     for (id, op, want) in [(1, both, "BAD_PAYLOAD: args.config and args.init_call"), (2, stranger, "args.config.owner: 0 or the creator"),
@@ -1777,19 +1777,19 @@ async fn registry_zero_token(rpc: &str, chain_id: u64, dep: &Value, holder: Addr
 }
 
 /// The last report of job `id`.
-fn report(state: &Arc<Mutex<FakeOdoo>>, id: i64) -> Value {
+fn report(state: &Arc<Mutex<FakeExternalPull>>, id: i64) -> Value {
     state.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap_or_else(|| panic!("no report of job {id}"))
 }
 
 /// A fake client serving `tokens`, and one submitter on the `RELAYER` lane.
-async fn outbox(chain_id: u64, rpc: &str, tokens: &[Address]) -> (Arc<Mutex<FakeOdoo>>, Odoo, Submitter) {
-    let state = Arc::new(Mutex::new(FakeOdoo { tokens: tokens.iter().map(|t| format!("{t:#x}")).collect(), ..Default::default() }));
-    let odoo = odoo_at(start_fake(state.clone()).await);
+async fn outbox(chain_id: u64, rpc: &str, tokens: &[Address]) -> (Arc<Mutex<FakeExternalPull>>, ExternalPull, Submitter) {
+    let state = Arc::new(Mutex::new(FakeExternalPull { tokens: tokens.iter().map(|t| format!("{t:#x}")).collect(), ..Default::default() }));
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
     let cfg = chain_cfg(chain_id, rpc, None);
-    let s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), odoo.clone(), cfg, format!("e2e-{chain_id}"), Default::default())
+    let s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), external_pull.clone(), cfg, format!("e2e-{chain_id}"), Default::default())
         .await
         .unwrap();
-    (state, odoo, s)
+    (state, external_pull, s)
 }
 
 /// Spec §8 invariant 4, R1 / C: an EOA's `UAMetaTransfer` at fee 0 (mode `NONE`, open relayer) on a token whose `registry()` is
@@ -1803,7 +1803,7 @@ async fn eoa_mtx_transfer_relayed_at_fee_zero_registry_zero() {
     let payer = small_key(0xEE0A);
     let dep = deploy(&rpc, chain_id, payer.address());
     let token = registry_zero_token(&rpc, chain_id, &dep, payer.address(), 1_000_000).await;
-    let (state, odoo, mut s) = outbox(chain_id, &rpc, &[token]).await;
+    let (state, external_pull, mut s) = outbox(chain_id, &rpc, &[token]).await;
     let d = token_domain(&dep, chain_id, token);
     let shop = Address::repeat_byte(0x5e);
     let m = payment(payer.address(), shop, 700, keccak256(b"rz-1"), U256::from(1), 0, Address::ZERO, 0, Address::ZERO);
@@ -1820,7 +1820,7 @@ async fn eoa_mtx_transfer_relayed_at_fee_zero_registry_zero() {
     assert!(r2["chain_state"] == "dead" && r2["error"].as_str().unwrap().contains("registry() = 0"), "{r2}");
     let n1 = ProviderBuilder::new().connect_http(rpc.parse().unwrap()).get_transaction_count(key(RELAYER).address()).await.unwrap();
     assert_eq!(n1, n0 + 1, "one transaction: the EOA's");
-    while scaas_node::indexer::step(&Chain::with_signer(&chain_cfg(chain_id, &rpc, None), key(RELAYER)).unwrap(), &odoo, None).await.unwrap() {}
+    while scaas_node::indexer::step(&Chain::with_signer(&chain_cfg(chain_id, &rpc, None), key(RELAYER)).unwrap(), &external_pull, None).await.unwrap() {}
     let paid = state.lock().unwrap().ingested.iter().find(|e| e["event"] == "PaymentSettled").cloned().expect("settled");
     assert_eq!((paid["from"].as_str(), paid.get("from_ua")), (Some(format!("{:#x}", payer.address()).as_str()), None));
 }
@@ -1837,7 +1837,7 @@ async fn eoa_mtx_transfer_to_a_ua() {
     let token: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
     let registry: Address = dep["ua_registry"].as_str().unwrap().parse().unwrap();
     let ua = register_ua(&rpc, registry, &key(DEPLOYER), &small_key(0x05ed)).await;
-    let (state, odoo, mut s) = outbox(chain_id, &rpc, &[token]).await;
+    let (state, external_pull, mut s) = outbox(chain_id, &rpc, &[token]).await;
     let d = token_domain(&dep, chain_id, token);
     let m = ua_payment(payer.address().into_word(), ua, 4_200, keccak256(b"to-ua"), U256::from(3), 0, Address::ZERO, 0, Address::ZERO);
     state.lock().unwrap().jobs.push(job(1, token, &m, "0x", sign(&payer, &d, &m)));
@@ -1845,7 +1845,7 @@ async fn eoa_mtx_transfer_to_a_ua() {
     assert_eq!(report(&state, 1)["chain_state"], "mined", "{}", report(&state, 1));
     assert_eq!(view(&rpc, token, IUALedger::balanceOfUACall { ua }).await, U256::from(4_200u64));
     merged_events_only(&rpc, &tx_of(&state, 1)).await;
-    while scaas_node::indexer::step(&Chain::with_signer(&chain_cfg(chain_id, &rpc, None), key(RELAYER)).unwrap(), &odoo, None).await.unwrap() {}
+    while scaas_node::indexer::step(&Chain::with_signer(&chain_cfg(chain_id, &rpc, None), key(RELAYER)).unwrap(), &external_pull, None).await.unwrap() {}
     let paid = state.lock().unwrap().ingested.iter().find(|e| e["event"] == "PaymentSettled").cloned().expect("settled");
     assert_eq!((paid["from"].as_str(), paid["to_ua"].as_str()), (Some(format!("{:#x}", payer.address()).as_str()), Some(format!("{ua:#x}").as_str())));
 }
@@ -1863,7 +1863,7 @@ async fn derived_mtx_transfer_relayed() {
     let owner = small_key(0x05ee);
     let ua = register_ua(&rpc, registry, &key(DEPLOYER), &owner).await;
     send(&rpc, &key(DEPLOYER), token, IUALedger::transferToUACall { to: ua, amount: U256::from(10_000u64) }.abi_encode()).await;
-    let (state, odoo, mut s) = outbox(chain_id, &rpc, &[token]).await;
+    let (state, external_pull, mut s) = outbox(chain_id, &rpc, &[token]).await;
     let d = token_domain(&dep, chain_id, token);
     let shop = Address::repeat_byte(0x5e);
     let m = ua_payment(ua, shop.into_word(), 2_500, keccak256(b"derived"), U256::from(4), 0, Address::ZERO, 0, Address::ZERO);
@@ -1874,7 +1874,7 @@ async fn derived_mtx_transfer_relayed() {
     assert_eq!(balance(&rpc, token, shop).await, U256::from(2_500u64));
     assert_eq!(view(&rpc, token, IUALedger::balanceOfUACall { ua }).await, U256::from(7_500u64));
     merged_events_only(&rpc, &tx_of(&state, 1)).await;
-    while scaas_node::indexer::step(&Chain::with_signer(&chain_cfg(chain_id, &rpc, None), key(RELAYER)).unwrap(), &odoo, None).await.unwrap() {}
+    while scaas_node::indexer::step(&Chain::with_signer(&chain_cfg(chain_id, &rpc, None), key(RELAYER)).unwrap(), &external_pull, None).await.unwrap() {}
     let paid = state.lock().unwrap().ingested.iter().find(|e| e["event"] == "PaymentSettled").cloned().expect("settled");
     let pool = format!("{:#x}", scaas_node::metatx::ua_pool());
     assert_eq!((paid["from"].as_str(), paid["from_ua"].as_str()), (Some(pool.as_str()), Some(format!("{ua:#x}").as_str())));
@@ -1891,7 +1891,7 @@ async fn ordered_cancel_relayed() {
     let payer = small_key(0xEE0C);
     let dep = deploy(&rpc, chain_id, payer.address());
     let token: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
-    let (state, _odoo, mut s) = outbox(chain_id, &rpc, &[token]).await;
+    let (state, _external_pull, mut s) = outbox(chain_id, &rpc, &[token]).await;
     let d = token_domain(&dep, chain_id, token);
     let shop = Address::repeat_byte(0x5e);
     let nonce = |lane: u64| view(&rpc, token, IMtxIds::mtxNonceCall { from: payer.address().into_word(), batch: U256::from(lane) });
@@ -1907,7 +1907,7 @@ async fn ordered_cancel_relayed() {
     assert_eq!(report(&state, 1)["chain_state"], "mined", "{}", report(&state, 1));
     assert_eq!((nonce(5).await, nonce(6).await), (U256::from(1u64), U256::from(1u64)));
     // the cancelled payment: its nonce is spent by no intent of its own (R80: `consumed`, never `dead`), never sent
-    let sent = |st: &Arc<Mutex<FakeOdoo>>, id: i64| st.lock().unwrap().reports.iter().any(|r| r["job_id"] == id && r["chain_state"] == "signed");
+    let sent = |st: &Arc<Mutex<FakeExternalPull>>, id: i64| st.lock().unwrap().reports.iter().any(|r| r["job_id"] == id && r["chain_state"] == "signed");
     state.lock().unwrap().jobs.push(job(2, token, &t, "0x", sign(&payer, &d, &t)));
     // lane 6 at nonce 2 skips nonce 1: out of order, the simulation refuses it (the subject nonce is behind it: `dead`), never sent
     state.lock().unwrap().jobs.push(json!({"id": 3, "kind": "ua_metatx", "op": cancel(8, 2)}));
@@ -1934,7 +1934,7 @@ async fn gateway_doors_end_to_end() {
     let payer = small_key(0xEE0D);
     let dep = deploy(&rpc, chain_id, payer.address());
     let token: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
-    let (_state, _odoo, mut s) = outbox(chain_id, &rpc, &[token]).await;
+    let (_state, _external_pull, mut s) = outbox(chain_id, &rpc, &[token]).await;
     let cfg = chain_cfg(chain_id, &rpc, None);
     let (tx, mut rx) = mpsc::channel::<Work>(16);
     let tokens = Arc::new(RwLock::new(vec![token]));
@@ -2004,7 +2004,7 @@ async fn mandate_payment_relayed_by_an_eoa_delegate() {
     let wallet = p.send_transaction(tx).await.unwrap().get_receipt().await.unwrap().contract_address.unwrap();
     assert_eq!(view(&rpc, wallet, registryCall {}).await, Address::ZERO, "no registry");
     send(&rpc, &key(DEPLOYER), token, IToken::transferCall { to: wallet, value: U256::from(1_000_000u64) }.abi_encode()).await;
-    let (state, _odoo, mut s) = outbox(chain_id, &rpc, &[token]).await;
+    let (state, _external_pull, mut s) = outbox(chain_id, &rpc, &[token]).await;
     let shop = Address::repeat_byte(0x5e);
     let w = |entry: &str, args: Value, from: Address, batch: U256| json!({"entry": entry, "contract": "wallet", "token": format!("{wallet:#x}"),
         "args": args, "envelope": envelope(from, batch, 0)});
@@ -2146,7 +2146,7 @@ async fn relayed_zether_proof_under_the_ua_tag() {
     let op = signed_op(&payer, op, chain_id, uid);
     let node_digest = scaas_node::typed::Op::parse(&op, None).unwrap().typed.digest_on(chain_id, uid).unwrap();
     assert_eq!(format!("{node_digest:#x}"), named["digest"].as_str().unwrap().to_lowercase(), "the node's digest is the prover's");
-    let (state, _odoo, mut s) = outbox(chain_id, &rpc, &[t]).await;
+    let (state, _external_pull, mut s) = outbox(chain_id, &rpc, &[t]).await;
     let public = balance(&rpc, t, deployer.address()).await;
     state.lock().unwrap().jobs.push(json!({"id": 1, "kind": "ua_metatx", "op": op}));
     run_outbox(&mut s).await;
@@ -2259,10 +2259,10 @@ async fn regulated_freeze_relayed_by_router() {
     let a = holder.address().into_word();
     let op = issuer_op(&rpc, "mtxFreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"),
         "ref": format!("{:#x}", B256::repeat_byte(0x5e)), "recordId": format!("{:#x}", B256::ZERO)}), issuer, &owner, router, token, 0).await;
-    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
-    let odoo = odoo_at(start_fake(state.clone()).await);
+    let state = Arc::new(Mutex::new(FakeExternalPull { tokens: vec![format!("{token:#x}")], ..Default::default() }));
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
     let cfg = ChainCfg { governance_routers: vec![router], ..chain_cfg(chain_id, &rpc, None) };
-    let mut s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), odoo.clone(), cfg.clone(), "e2e-reg-0".into(),
+    let mut s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), external_pull.clone(), cfg.clone(), "e2e-reg-0".into(),
         Default::default()).await.unwrap();
     assert!(!view(&rpc, token, isFrozenCall { account: a }).await);
     state.lock().unwrap().jobs.push(json!({"id": 1, "kind": "ua_metatx", "op": op}));
@@ -2270,7 +2270,7 @@ async fn regulated_freeze_relayed_by_router() {
     assert_eq!(report(&state, 1)["chain_state"], "mined", "{}", report(&state, 1));
     assert!(view(&rpc, token, isFrozenCall { account: a }).await, "the issuer's freeze ran through the router");
     let ichain = Chain::with_signer(&cfg, key(RELAYER)).unwrap();
-    while scaas_node::indexer::step(&ichain, &odoo, Some(router)).await.unwrap() {}
+    while scaas_node::indexer::step(&ichain, &external_pull, Some(router)).await.unwrap() {}
     let ingested = state.lock().unwrap().ingested.clone();
     let f = ingested.iter().find(|e| e["event"] == "AccountFrozen").unwrap_or_else(|| panic!("no AccountFrozen in {ingested:?}"));
     assert_eq!((f["account"].as_str(), f["alert"].as_bool()), (Some(format!("{a:#x}").as_str()), Some(true)), "{f}");
@@ -2293,10 +2293,10 @@ async fn regulated_transfer_refused_frozen() {
         "recordId": format!("{:#x}", B256::ZERO)}), issuer, &owner, router, token, 0).await;
     let unfreeze = issuer_op(&rpc, "mtxUnfreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"), "ref": ref_}),
         issuer, &owner, router, token, 1).await;
-    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
-    let odoo = odoo_at(start_fake(state.clone()).await);
+    let state = Arc::new(Mutex::new(FakeExternalPull { tokens: vec![format!("{token:#x}")], ..Default::default() }));
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
     let cfg = ChainCfg { governance_routers: vec![router], ..chain_cfg(chain_id, &rpc, None) };
-    let mut s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), odoo.clone(), cfg.clone(), "e2e-reg-1".into(),
+    let mut s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), external_pull.clone(), cfg.clone(), "e2e-reg-1".into(),
         Default::default()).await.unwrap();
     state.lock().unwrap().jobs.push(json!({"id": 1, "kind": "ua_metatx", "op": freeze}));
     run_outbox(&mut s).await;
@@ -2343,12 +2343,12 @@ async fn pqz_rotation_on_anvil() {
         named("pqzKeyVersions", &format!("fndsa512/v1/{set}")));
     let ua: B256 = reg["ua"].as_str().unwrap().parse().unwrap();
 
-    let state = Arc::new(Mutex::new(FakeOdoo::default()));
-    let odoo = odoo_at(start_fake(state.clone()).await);
+    let state = Arc::new(Mutex::new(FakeExternalPull::default()));
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
     let mut cfg = chain_cfg(chain_id, &rpc, None);
     cfg.ua_registry = Some(registry);
     cfg.max_gas_per_tx = 64_000_000; // a Falcon registration with its KEM key, the SCaaS testnet's relayer cap
-    let mut s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), odoo, cfg.clone(), "e2e-pqzver".into(), Default::default())
+    let mut s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), external_pull, cfg.clone(), "e2e-pqzver".into(), Default::default())
         .await
         .unwrap();
     let until = (now() + 300).to_string();
@@ -2743,14 +2743,14 @@ impl OffchainStack {
     }
 
     /// A lane on a fake client serving the token, `[pqz_verifier]` as given.
-    async fn lane(&self, pqz: scaas_node::config::PqzVerifierCfg) -> (Arc<Mutex<FakeOdoo>>, Submitter) {
-        let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{:#x}", self.token)], ..Default::default() }));
-        let odoo = odoo_at(start_fake(state.clone()).await);
+    async fn lane(&self, pqz: scaas_node::config::PqzVerifierCfg) -> (Arc<Mutex<FakeExternalPull>>, Submitter) {
+        let state = Arc::new(Mutex::new(FakeExternalPull { tokens: vec![format!("{:#x}", self.token)], ..Default::default() }));
+        let external_pull = external_pull_at(start_fake(state.clone()).await);
         let mut cfg = chain_cfg(self.chain_id, &self.rpc, None);
         cfg.ua_registry = Some(self.registry);
         cfg.max_gas_per_tx = 64_000_000;
         cfg.pqz_verifier = pqz;
-        let s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), odoo, cfg.clone(), format!("e2e-3f-{}", self.chain_id),
+        let s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), external_pull, cfg.clone(), format!("e2e-3f-{}", self.chain_id),
             Default::default()).await.unwrap();
         (state, s)
     }
@@ -3001,9 +3001,9 @@ fn sign_liquidity(j: &mut Value, (chain_id, uid, dex): (u64, B256, Address), who
 }
 
 /// A submitter on the `RELAYER` lane for a chain whose profile lists `dex` as its DEX.
-async fn liquidity_lane(chain_id: u64, rpc: &str, odoo: &Odoo, dex: Address, name: &str) -> Submitter {
+async fn liquidity_lane(chain_id: u64, rpc: &str, external_pull: &ExternalPull, dex: Address, name: &str) -> Submitter {
     let cfg = chain_cfg(chain_id, rpc, Some(dex));
-    Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), odoo.clone(), cfg, name.into(), Default::default()).await.unwrap()
+    Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), external_pull.clone(), cfg, name.into(), Default::default()).await.unwrap()
 }
 
 /// Spec 2026-11-10-dex-liquidity.md §11 through the RPC (review P1-2 (b), P2-6, re-check P3): the deployed liquidity DEX takes a
@@ -3047,8 +3047,8 @@ async fn liquidity_pre_checks_on_a_chain() {
     let starved_dex = deploy_code(&rpc, &deployer, node_dex(ms.clone(), false)).await;
     let wrong_dex = deploy_code(&rpc, &deployer, node_dex(ms.clone(), true)).await;
 
-    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{a:#x}"), format!("{b:#x}")], ..Default::default() }));
-    let odoo = odoo_at(start_fake(state.clone()).await);
+    let state = Arc::new(Mutex::new(FakeExternalPull { tokens: vec![format!("{a:#x}"), format!("{b:#x}")], ..Default::default() }));
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
     let pr = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
     let sends = || async { pr.get_transaction_count(key(RELAYER).address()).await.unwrap() };
     let reports = |id: i64| state.lock().unwrap().reports.iter().filter(|r| r["job_id"] == id).cloned().collect::<Vec<_>>();
@@ -3059,7 +3059,7 @@ async fn liquidity_pre_checks_on_a_chain() {
     let add = add_n(100_000);
 
     // the positive control: the deployed DEX, two SCaaS inputs, mined; the node's `h` is the DEX's
-    let mut s = liquidity_lane(chain_id, &rpc, &odoo, dex, "e2e-liq-dex").await;
+    let mut s = liquidity_lane(chain_id, &rpc, &external_pull, dex, "e2e-liq-dex").await;
     let j1 = liquidity_job(1, (chain_id, uid, dex), &alice, &[(a, 100_000), (b, 100_000)], (pair, 98_000, carol), add.clone());
     let (w1, _) = scaas_node::submit::work_of_op(Some(1), &j1["op"], None).unwrap();
     let o1 = scaas_node::abi::ISCaaSDex::mtxLiquidityCall::abi_decode(&w1.data).unwrap().p.order;
@@ -3101,13 +3101,13 @@ async fn liquidity_pre_checks_on_a_chain() {
     want(7, "dead", "BAD_SIGNATURE");
     want(8, "dead", "LIQUIDITY_WRONG_RELAYER");
     want(9, "dead", "expired before submit");
-    let mut s = liquidity_lane(chain_id, &rpc, &odoo, wrong_dex, "e2e-liq-wrong").await;
+    let mut s = liquidity_lane(chain_id, &rpc, &external_pull, wrong_dex, "e2e-liq-wrong").await;
     state.lock().unwrap().jobs.push(liquidity_job(10, (chain_id, uid, wrong_dex), &alice, &two, (pair, 1, carol), add_n(1_000)));
     run_outbox(&mut s).await;
     want(10, "dead", "LIQUIDITY_DIGEST_MISMATCH");
     // the budget against the lane's per-transaction cap, below the block's 200 M: two inputs need 1.1 M, the lane allows 1 M
     let cfg = ChainCfg { max_gas_per_tx: 1_000_000, ..chain_cfg(chain_id, &rpc, Some(dex)) };
-    let mut s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), odoo.clone(), cfg, "e2e-liq-pertx".into(),
+    let mut s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), external_pull.clone(), cfg, "e2e-liq-pertx".into(),
         Default::default()).await.unwrap();
     state.lock().unwrap().jobs.push(liquidity_job(11, dom, &alice, &two, (pair, 1, carol), add_n(1_000)));
     run_outbox(&mut s).await;
@@ -3115,7 +3115,7 @@ async fn liquidity_pre_checks_on_a_chain() {
     assert!(red.is_empty(), "{red:#?}");
 
     // a DEX of the release before the liquidity module: bound, on the profile, no group 11
-    let mut s = liquidity_lane(chain_id, &rpc, &odoo, old_dex, "e2e-liq-old").await;
+    let mut s = liquidity_lane(chain_id, &rpc, &external_pull, old_dex, "e2e-liq-old").await;
     state.lock().unwrap().jobs.push(liquidity_job(2, (chain_id, uid, old_dex), &alice, &[(a, 1_000)], (pair, 1, carol), add.clone()));
     run_outbox(&mut s).await;
     let r2 = report(&state, 2);
@@ -3128,14 +3128,14 @@ async fn liquidity_pre_checks_on_a_chain() {
     let factory = view(&rpc, dex, scaas_node::abi::ISCaaSDex::factoryCall {}).await;
     assert_ne!(view(&rpc, factory, scaas_node::abi::IOpenFactory::versionOfCall { token: b }).await.version, 0,
         "still a SCaaS input to the DEX");
-    let mut s = liquidity_lane(chain_id, &rpc, &odoo, dex, "e2e-liq-earlier").await;
+    let mut s = liquidity_lane(chain_id, &rpc, &external_pull, dex, "e2e-liq-earlier").await;
     state.lock().unwrap().jobs.push(liquidity_job(3, (chain_id, uid, dex), &alice, &[(a, 1_000), (b, 1_000)], (pair, 1, carol), add.clone()));
     run_outbox(&mut s).await;
     let r3 = report(&state, 3);
     assert!(r3["chain_state"] == "dead" && r3["error"].as_str().unwrap_or_default().starts_with("LIQUIDITY_TOKEN_UNSUPPORTED"), "{r3}");
 
     // T7 starved on a marked DEX: requeued, never dead
-    let mut s = liquidity_lane(chain_id, &rpc, &odoo, starved_dex, "e2e-liq-starved").await;
+    let mut s = liquidity_lane(chain_id, &rpc, &external_pull, starved_dex, "e2e-liq-starved").await;
     state.lock().unwrap().jobs.push(liquidity_job(4, (chain_id, uid, starved_dex), &alice, &[(a, 1_000)], (pair, 1, carol), add.clone()));
     run_outbox(&mut s).await;
     let r4 = reports(4);
@@ -3146,7 +3146,7 @@ async fn liquidity_pre_checks_on_a_chain() {
     // max_gas_per_tx 3 M
     let _: Value = pr.raw_request("evm_setBlockGasLimit".into(), (U256::from(1_000_000u64),)).await.unwrap();
     let _: Value = pr.raw_request("evm_mine".into(), ()).await.unwrap();
-    let mut s = liquidity_lane(chain_id, &rpc, &odoo, dex, "e2e-liq-large").await;
+    let mut s = liquidity_lane(chain_id, &rpc, &external_pull, dex, "e2e-liq-large").await;
     state.lock().unwrap().jobs.push(liquidity_job(5, (chain_id, uid, dex), &alice, &[(a, 1_000)], (pair, 1, carol), add));
     run_outbox(&mut s).await;
     let r5 = report(&state, 5);

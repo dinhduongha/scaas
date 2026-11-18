@@ -18,7 +18,7 @@ use scaas_node::adapter::{index_runner, lane_runner};
 use scaas_node::signer::Signer;
 use scaas_node::admin::{ChainProbe, LaneProbe};
 use scaas_node::breaker::Breaker;
-use scaas_node::{admin, adapters, chain, config, dex, gateway, gwauth, indexer, keys, odoo, store, submit};
+use scaas_node::{admin, adapters, chain, config, dex, gateway, gwauth, indexer, keys, external_pull, store, submit};
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
@@ -27,10 +27,10 @@ fn arg(args: &[String], name: &str) -> Option<String> {
     args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned()
 }
 
-// legacy(R104): every module still runs on the Odoo pull path until P3/P4. `relay` picks the API key.
-fn legacy(cfg: &config::Config, relay: bool) -> Result<odoo::Odoo> {
-    let o = cfg.odoo.as_ref().context("[odoo] is required on the legacy path (R104)")?;
-    odoo::Odoo::new(o, if relay { &o.relay_api_key_env } else { &o.indexer_api_key_env })
+// legacy(R104): every module still runs on the external pull path until P3/P4. `relay` picks the API key.
+fn legacy(cfg: &config::Config, relay: bool) -> Result<external_pull::ExternalPull> {
+    let o = cfg.external_pull.as_ref().context("[external_pull] is required on the legacy path (R104)")?;
+    external_pull::ExternalPull::new(o, if relay { &o.relay_api_key_env } else { &o.indexer_api_key_env })
 }
 
 fn cli_uid() -> String {
@@ -260,7 +260,7 @@ async fn main() -> Result<()> {
         probes.push(ChainProbe { key: cc.chain_key(), adapter: Arc::new(probe), max_lag: cc.max_index_lag, lanes: probe_lanes,
             failover: cc.failover.clone() });
         if let Some(tx) = first_tx {
-            // DEX (R35): sổ lệnh bền ở Odoo + watcher riêng; settle qua outbox. Lệnh khoá `relayer` =
+            // DEX (R35): sổ lệnh bền ở ExternalPull + watcher riêng; settle qua outbox. Lệnh khoá `relayer` =
             // ví lane 0 (RS5-9) mà job outbox chưa ghim được lane (RS5-11) ⇒ DEX chỉ chạy một lane.
             let venue = match cc.dex {
                 Some(addr) if cfg.modules.gateway => {

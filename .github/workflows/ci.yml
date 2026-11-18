@@ -26,7 +26,7 @@
 #                  at PQZ_SET n2304-kmax4096: pqzl/build.sh native, kat/check.py (KAT); pqzl/check_tbox_fixes.sh, sv/check_sv_fixes.sh;
 #                  ffi pqz-vectors --check, smartcontracts/vectors/pqz/pqz_kat.py --check, ffi/vectors/tamper.py; cargo test --release (stmt, pqzh/ligero, ffi);
 #                  fuzz smoke (fuzz/run.sh precompile, mutate, codec: 60 s each on the committed corpora)
-#   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check; ... paths;
+#   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check; ... paths; ... consumer;
 #                  ! git grep -nE '/[t]mp/' -- . ':!*/legacy/*' ':!docs/history/*' (no temp path, AGENTS.md Security)
 #                  python3 -I smartcontracts/evm/script/pqz/gas-inputs.py --check (the PQZ gas table's inputs = the calibrated or
 #                  provisional precompile rows and each set's proofs; T21 L67)
@@ -457,6 +457,8 @@ jobs:
         run: python3 scripts/docs_check.py facts check
       - name: no machine paths in tracked files
         run: python3 scripts/docs_check.py paths
+      - name: no consumer name in the node's code (scaas-node/src, scaas-node/tests)
+        run: python3 scripts/docs_check.py consumer
       # AGENTS.md Security: no temp path in a committed file ([t]: the step does not match itself)
       - name: no temp paths in tracked files
         run: |

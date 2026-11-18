@@ -8,7 +8,7 @@
 //! 2. anti-lock: X (token 1) bị giữ, Y (token 2) qua `lane_step` thành công, rồi X thành công;
 //! 3. phát lại X ⇒ mô phỏng từ chối (nonce đã dùng) ⇒ job chết, không tốn phí;
 //! 4. fee-bump: lane 0 trả phí cho tx của lane 1;
-//! 5. `index_step` đưa `PaymentSettled` + `MetaTransactionExecuted` (digest khớp) về Odoo giả.
+//! 5. `index_step` đưa `PaymentSettled` + `MetaTransactionExecuted` (digest khớp) về ExternalPull giả.
 mod soroban_common;
 
 use std::sync::{Arc, Mutex};
@@ -24,7 +24,7 @@ use stellar_xdr::{
     Int128Parts, InvokeContractArgs, Limits, ScSymbol, ScVal, SorobanAuthorizedFunction, SorobanAuthorizedInvocation, WriteXdr,
 };
 
-/// Đúng phép dựng của Odoo `fam_soroban.build_terms` (vector chéo ghim ở ba phía).
+/// Đúng phép dựng của ExternalPull `fam_soroban.build_terms` (vector chéo ghim ở ba phía).
 struct Signed {
     job: Value,
     digest: String,
@@ -79,15 +79,15 @@ async fn soroban_payments_anti_lock_fee_bump_and_finality() {
         cli(&["contract", "invoke", "--id", t, "--source-account", &secret(7), "--", "mint", "--to", &g(&subject), "--amount", "1000000"]);
     }
 
-    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![t1.clone(), t2.clone()], ..Default::default() }));
+    let state = Arc::new(Mutex::new(FakeExternalPull { tokens: vec![t1.clone(), t2.clone()], ..Default::default() }));
     let start = latest_ledger().await;
     state.lock().unwrap().indexed_block = start - 1;
-    let odoo = odoo_at(start_fake(state.clone()).await);
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
     let signers = [key(0), key(1)];
     let adapter = SorobanAdapter::new(&chain_cfg(false), &signers).unwrap();
     assert_eq!(adapter.lanes()[1].address, g(&lane1));
     // a `signed_op` runs on the chain's registered tokens, the client's list (`refresh_tokens`), none in the config
-    recover_lane(&adapter, &odoo, 0, "n#0").await.unwrap();
+    recover_lane(&adapter, &external_pull, 0, "n#0").await.unwrap();
     let seq0 = adapter.sequence(0).await.unwrap();
 
     let exp = start as u32 + 1000;
@@ -96,11 +96,11 @@ async fn soroban_payments_anti_lock_fee_bump_and_finality() {
 
     // Anti-lock (R62): X is withheld; Y on the other contract goes through lane 1.
     state.lock().unwrap().jobs.push(y.job.clone());
-    assert!(lane_step(&adapter, &odoo, 1, "n#1").await.unwrap());
+    assert!(lane_step(&adapter, &external_pull, 1, "n#1").await.unwrap());
     assert_eq!(last_state(&state.lock().unwrap(), 2), "mined", "{:?}", state.lock().unwrap().reports);
     // Then X lands, on lane 0.
     state.lock().unwrap().jobs.push(x.job.clone());
-    assert!(lane_step(&adapter, &odoo, 0, "n#0").await.unwrap());
+    assert!(lane_step(&adapter, &external_pull, 0, "n#0").await.unwrap());
     assert_eq!(last_state(&state.lock().unwrap(), 1), "mined", "{:?}", state.lock().unwrap().reports);
     assert_eq!(report_of(&state.lock().unwrap(), 1, "signed")["signer_address"], json!(g(&lane0)));
     assert_eq!(adapter.sequence(0).await.unwrap(), seq0 + 1, "the lane's own sequence advanced; the subject sent nothing");
@@ -109,22 +109,22 @@ async fn soroban_payments_anti_lock_fee_bump_and_finality() {
     let mut replay = x.job.clone();
     replay["id"] = json!(3);
     state.lock().unwrap().jobs.push(replay);
-    assert!(lane_step(&adapter, &odoo, 0, "n#0").await.unwrap());
+    assert!(lane_step(&adapter, &external_pull, 0, "n#0").await.unwrap());
     assert_eq!(last_state(&state.lock().unwrap(), 3), "dead");
     assert_eq!(adapter.sequence(0).await.unwrap(), seq0 + 1);
 
     // Fee-bump: lane 0 pays for lane 1's tx.
     let bumped = SorobanAdapter::new(&chain_cfg(true), &signers).unwrap();
-    recover_lane(&bumped, &odoo, 1, "n#1").await.unwrap();
+    recover_lane(&bumped, &external_pull, 1, "n#1").await.unwrap();
     let z = sign_pay(&subject, &t1, &g(&payee), 3_000, [0xC3; 32], 77, exp, 4);
     state.lock().unwrap().jobs.push(z.job.clone());
-    assert!(lane_step(&bumped, &odoo, 1, "n#1").await.unwrap());
+    assert!(lane_step(&bumped, &external_pull, 1, "n#1").await.unwrap());
     assert_eq!(last_state(&state.lock().unwrap(), 4), "mined", "{:?}", state.lock().unwrap().reports);
 
     // Finality: index up to the head; the indexed events carry the digests the subject signed for.
     let mined = latest_ledger().await;
     for _ in 0..60 {
-        let _ = index_step(&adapter, &odoo).await.unwrap();
+        let _ = index_step(&adapter, &external_pull).await.unwrap();
         if state.lock().unwrap().indexed_block >= mined {
             break;
         }

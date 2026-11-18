@@ -18,9 +18,9 @@ use scaas_node::adapter::{index_step, lane_step, ChainAdapter};
 use scaas_node::adapters::ton::{
     b64encode, boc_serialize, envelope_hash, Addr, Api, Builder, TonAdapter, W5,
 };
-use scaas_node::config::{ChainCfg, FinalityCfg, OdooCfg};
+use scaas_node::config::{ChainCfg, FinalityCfg, ExternalPullCfg};
 use scaas_node::keys::{lane_secret, Seed};
-use scaas_node::odoo::Odoo;
+use scaas_node::external_pull::ExternalPull;
 use scaas_node::signer::{Curve, LocalSigner, Signer};
 use serde_json::{json, Value};
 
@@ -70,7 +70,7 @@ async fn shim(url: &str, path: &str, body: Value) -> Value {
     r.unwrap().json().await.unwrap()
 }
 
-// ---------------------------------------------------------------- fake Odoo (same rules as e2e.rs)
+// ---------------------------------------------------------------- fake ExternalPull (same rules as e2e.rs)
 
 fn allowed(from: &str, to: &str) -> bool {
     matches!(
@@ -84,7 +84,7 @@ fn allowed(from: &str, to: &str) -> bool {
 }
 
 #[derive(Default)]
-struct FakeOdoo {
+struct FakeExternalPull {
     tokens: Vec<String>,
     states: std::collections::HashMap<i64, String>,
     refused: Vec<Value>,
@@ -94,7 +94,7 @@ struct FakeOdoo {
     indexed_block: u64,
 }
 
-async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path<(String, String)>, Json(body): Json<Value>) -> Json<Value> {
+async fn fake(State(s): State<Arc<Mutex<FakeExternalPull>>>, Path((model, method)): Path<(String, String)>, Json(body): Json<Value>) -> Json<Value> {
     let mut o = s.lock().unwrap();
     let out = match (model.as_str(), method.as_str()) {
         // The real masters, raw `0:…` like `blockchain.chain._node_config` (review H1).
@@ -136,7 +136,7 @@ async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path
     Json(out)
 }
 
-async fn start_fake(state: Arc<Mutex<FakeOdoo>>) -> SocketAddr {
+async fn start_fake(state: Arc<Mutex<FakeExternalPull>>) -> SocketAddr {
     let app = Router::new().route("/json/2/{model}/{method}", post(fake)).with_state(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -144,12 +144,12 @@ async fn start_fake(state: Arc<Mutex<FakeOdoo>>) -> SocketAddr {
     addr
 }
 
-fn odoo_at(addr: SocketAddr) -> Odoo {
-    let cfg = OdooCfg { url: format!("http://{addr}"), database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
-    Odoo::with_key(&cfg, "k".into()).unwrap()
+fn external_pull_at(addr: SocketAddr) -> ExternalPull {
+    let cfg = ExternalPullCfg { url: format!("http://{addr}"), database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
+    ExternalPull::with_key(&cfg, "k".into()).unwrap()
 }
 
-// ---------------------------------------------------------------- subject side (what Odoo + the wallet do)
+// ---------------------------------------------------------------- subject side (what ExternalPull + the wallet do)
 
 struct Subject {
     key: LocalSigner,
@@ -164,7 +164,7 @@ fn subject(seed: u8, global_id: i32) -> Subject {
     Subject { key, w5, addr }
 }
 
-/// MetaOp v1 pay (Odoo `fam_ton.metaop_cell`) + the connector's signature JSON.
+/// MetaOp v1 pay (ExternalPull `fam_ton.metaop_cell`) + the connector's signature JSON.
 #[allow(clippy::too_many_arguments)]
 fn signed_pay(s: &Subject, global_id: i32, contract: &Addr, to: &Addr, amount: u128, lane: [u8; 32], pay_ref: [u8; 32], job: i64) -> Value {
     let valid_until = now() + 600;
@@ -262,17 +262,17 @@ async fn ton_payments_lanes_finality_and_anti_lock() {
     let x = signed_pay(&alice, global_id, &wa, &shop.addr, 400, lane, [0xa1; 32], 1);
     let y = signed_pay(&alice, global_id, &wb, &shop.addr, 250, lane, [0xb2; 32], 2);
 
-    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![ma.raw(), mb.raw()], ..Default::default() }));
-    let odoo = odoo_at(start_fake(state.clone()).await);
+    let state = Arc::new(Mutex::new(FakeExternalPull { tokens: vec![ma.raw(), mb.raw()], ..Default::default() }));
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
 
     // Anti-lock: X is withheld (never queued yet); Y goes through on lane 0.
     state.lock().unwrap().jobs.push(y.clone());
-    assert!(lane_step(&adapter, &odoo, 0, "e2e#0").await.unwrap());
+    assert!(lane_step(&adapter, &external_pull, 0, "e2e#0").await.unwrap());
     assert_eq!(balance(&api, &mb, &shop.addr).await, 250);
     assert_eq!(balance(&api, &ma, &shop.addr).await, 0);
     // Then X goes through, on lane 1.
     state.lock().unwrap().jobs.push(x.clone());
-    assert!(lane_step(&adapter, &odoo, 1, "e2e#1").await.unwrap());
+    assert!(lane_step(&adapter, &external_pull, 1, "e2e#1").await.unwrap());
     assert_eq!(balance(&api, &ma, &shop.addr).await, 400);
     assert_eq!(balance(&api, &ma, &alice.addr).await, 600);
 
@@ -286,13 +286,13 @@ async fn ton_payments_lanes_finality_and_anti_lock() {
     let mut replay = y.clone();
     replay["id"] = json!(3);
     state.lock().unwrap().jobs.push(replay);
-    assert!(lane_step(&adapter, &odoo, 0, "e2e#0").await.unwrap());
+    assert!(lane_step(&adapter, &external_pull, 0, "e2e#0").await.unwrap());
     let last = state.lock().unwrap().reports.last().cloned().unwrap();
     assert_eq!((last["job_id"].as_i64(), last["chain_state"].as_str()), (Some(3), Some("consumed")), "{last}");
 
     // A second payment on lane 0 uses seqno 1 (the lane wallet is deployed now).
     state.lock().unwrap().jobs.push(signed_pay(&alice, global_id, &wb, &shop.addr, 50, [8; 32], [0xc3; 32], 4));
-    assert!(lane_step(&adapter, &odoo, 0, "e2e#0").await.unwrap());
+    assert!(lane_step(&adapter, &external_pull, 0, "e2e#0").await.unwrap());
     let signed4 = state.lock().unwrap().reports.iter().find(|r| r["job_id"] == 4 && r["chain_state"] == "signed").cloned().unwrap();
     assert_eq!(signed4["outer_nonce"], 1);
     assert_eq!(balance(&api, &mb, &shop.addr).await, 300);
@@ -301,20 +301,20 @@ async fn ton_payments_lanes_finality_and_anti_lock() {
     let mut fwd = signed_pay(&alice, global_id, &wb, &shop.addr, 20, [9; 32], [0xd4; 32], 5);
     fwd["op"]["extra"] = json!({"forward_nanoton": 300_000_000u64});
     state.lock().unwrap().jobs.push(fwd);
-    assert!(lane_step(&adapter, &odoo, 1, "e2e#1").await.unwrap());
+    assert!(lane_step(&adapter, &external_pull, 1, "e2e#1").await.unwrap());
     let last = state.lock().unwrap().reports.last().cloned().unwrap();
     assert_eq!((last["job_id"].as_i64(), last["chain_state"].as_str()), (Some(5), Some("mined")), "{last}");
     assert_eq!(balance(&api, &mb, &shop.addr).await, 320);
 
     // Finality: the indexer walks masterchain blocks and reports authenticated events only.
-    while index_step(&adapter, &odoo).await.unwrap() {}
+    while index_step(&adapter, &external_pull).await.unwrap() {}
     let ingested = state.lock().unwrap().ingested.clone();
     let digest = |j: &Value| j["op"]["digest"].as_str().unwrap().to_string();
     for (job, master, amount, pay_ref) in [(&x, &ma, "400", [0xa1u8; 32]), (&y, &mb, "250", [0xb2; 32])] {
         let exe = ingested.iter().find(|e| e["event"] == "MetaTransactionExecuted" && e["digest"] == digest(job)).expect("executed");
         assert_eq!(exe["contract"], master.raw());
         assert_eq!(exe["from"], alice.addr.raw());
-        // Odoo's `final` matches it as ours (mesh S2): the `mined` report carries the event's tx, not the lane message.
+        // ExternalPull's `final` matches it as ours (mesh S2): the `mined` report carries the event's tx, not the lane message.
         let mined = state.lock().unwrap().reports.iter().find(|r| r["job_id"] == job["id"] && r["chain_state"] == "mined").cloned().unwrap();
         assert_eq!(mined["tx_hash"], exe["tx_hash"], "{mined}");
         let signed = state.lock().unwrap().reports.iter().find(|r| r["job_id"] == job["id"] && r["chain_state"] == "signed").cloned().unwrap();

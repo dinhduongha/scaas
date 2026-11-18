@@ -30,7 +30,7 @@ use scaas_node::adapters::soroban::{ua8_call_job, ua_metatx_job, RelayFeePolicy,
 use scaas_node::chain::Chain;
 use scaas_node::breaker::Breaker;
 use scaas_node::config::{BreakerCfg, ChainCfg, FinalityCfg};
-use scaas_node::odoo::Odoo;
+use scaas_node::external_pull::ExternalPull;
 use scaas_node::signer::Signer;
 use scaas_node::submit::Submitter;
 use scaas_ua::ua8::{self, decode_member_sigs, encode_member_sigs, KemKey, MemberSig, MsigStructure, UAAttrs};
@@ -468,11 +468,11 @@ fn accept_job(registry: &str, ua: &[u8; 32], slot: &MemberSig, relayer: &Value) 
            "args": {"ua": h(ua), "member_sig": member_sig, "relayer": relayer}}})
 }
 
-/// The node on one Soroban registry: the adapter over lanes 0 and 1, a fake Odoo.
+/// The node on one Soroban registry: the adapter over lanes 0 and 1, a fake ExternalPull.
 struct Node {
     registry: String,
-    state: Arc<Mutex<FakeOdoo>>,
-    odoo: Odoo,
+    state: Arc<Mutex<FakeExternalPull>>,
+    external_pull: ExternalPull,
     adapter: SorobanAdapter,
 }
 
@@ -482,19 +482,19 @@ impl Node {
     }
 
     async fn with_fee_bump(registry: String, fee_bump: bool) -> Node {
-        let state = Arc::new(Mutex::new(FakeOdoo::default()));
-        let odoo = odoo_at(start_fake(state.clone()).await);
+        let state = Arc::new(Mutex::new(FakeExternalPull::default()));
+        let external_pull = external_pull_at(start_fake(state.clone()).await);
         let mut cfg = chain_cfg(fee_bump);
         cfg.params.insert("ua_registry".into(), registry.clone().into());
         let adapter = SorobanAdapter::new(&cfg, &[key(0), key(1)]).unwrap();
-        Node { registry, state, odoo, adapter }
+        Node { registry, state, external_pull, adapter }
     }
 
     /// One `lane_step` of `job`: its final state, its last report and its transaction, when one was signed.
     async fn run(&self, lane: usize, job: Value) -> (String, Value, Option<String>) {
         let id = job["id"].as_i64().unwrap();
         self.state.lock().unwrap().jobs.push(job);
-        assert!(lane_step(&self.adapter, &self.odoo, lane, &format!("ua8#{lane}")).await.unwrap());
+        assert!(lane_step(&self.adapter, &self.external_pull, lane, &format!("ua8#{lane}")).await.unwrap());
         let o = self.state.lock().unwrap();
         assert!(o.refused.is_empty(), "{:?}", o.refused);
         let tx = report_of(&o, id, "signed")["tx_hash"].as_str().map(str::to_string);
@@ -703,14 +703,14 @@ impl Evm {
 
 /// Chain B's side of the node: EVM `call` jobs through the outbox, on the guard's `ua_registry` rule.
 struct EvmLane {
-    state: Arc<Mutex<FakeOdoo>>,
+    state: Arc<Mutex<FakeExternalPull>>,
     sub: AsyncMutex<Submitter>,
 }
 
 impl EvmLane {
     async fn start(e: &Evm) -> EvmLane {
-        let state = Arc::new(Mutex::new(FakeOdoo::default()));
-        let odoo = odoo_at(start_fake(state.clone()).await);
+        let state = Arc::new(Mutex::new(FakeExternalPull::default()));
+        let external_pull = external_pull_at(start_fake(state.clone()).await);
         let cfg = ChainCfg {
             family: "evm".into(),
             evm_chain_number: e.id,
@@ -725,7 +725,7 @@ impl EvmLane {
             ..Default::default()
         };
         let lane: PrivateKeySigner = LANE_KEY.parse().unwrap();
-        let sub = Submitter::start(Chain::with_signer(&cfg, lane).unwrap(), odoo, cfg, "ua8-b".into(), Default::default()).await.unwrap();
+        let sub = Submitter::start(Chain::with_signer(&cfg, lane).unwrap(), external_pull, cfg, "ua8-b".into(), Default::default()).await.unwrap();
         EvmLane { state, sub: AsyncMutex::new(sub) }
     }
 
@@ -1488,7 +1488,7 @@ async fn e2e_ua8_spend_stop() {
     s.state.lock().unwrap().jobs.push(job);
     let k = Mutex::new(Breaker::new(BreakerCfg { gas_budget_per_hour: Some(u128::MAX), ..Default::default() }));
     let before = native_balance(0).await;
-    assert!(lane_step_metered(&s.adapter, &s.odoo, 0, "ua8#0", Some(&k)).await.unwrap());
+    assert!(lane_step_metered(&s.adapter, &s.external_pull, 0, "ua8#0", Some(&k)).await.unwrap());
     let down = before - native_balance(0).await;
     let (spent, unread) = { let k = k.lock().unwrap(); (k.spent(), k.fees_unread()) };
     println!("FEE metered through the node: job {}, budget spent {spent}, lane down {down}", last_state(&s.state.lock().unwrap(), id));
@@ -1980,7 +1980,7 @@ impl Slh {
 #[ignore]
 async fn e2e_ua8_relayer_checked_msig_slot() {
     let c = copy_stack().await;
-    // this test's own fake Odoo: the stack's runs on the runtime of the test that made it
+    // this test's own fake ExternalPull: the stack's runs on the runtime of the test that made it
     let n = Node::new(c.s.registry.clone()).await;
     let (me, none) = (json!(g(&key(0))), Value::Null);
     let (fk, ml, sl) = (Falcon::new(), Ml::new(0x33), Slh::new(0x44));

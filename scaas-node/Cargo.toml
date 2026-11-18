@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.97.1"
 publish = false
-description = "Relay node: Odoo outbox submitter, finality-gated indexer, open meta-tx gateway and DEX matcher"
+description = "Relay node: external-pull outbox submitter, finality-gated indexer, open meta-tx gateway and DEX matcher"
 
 [dependencies]
 alloy = { version = "~1.6", default-features = false, features = ["std", "provider-http", "rpc-types", "signer-local", "signer-mnemonic", "signer-keystore", "sol-types", "dyn-abi", "contract", "network", "eips", "consensus", "reqwest", "json-rpc"] }

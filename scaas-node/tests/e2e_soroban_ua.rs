@@ -19,7 +19,7 @@ use std::time::Duration;
 use scaas_node::adapter::{index_step, lane_step, ChainAdapter};
 use scaas_node::adapters::soroban::{holder_addr, op_digest, relay_ref, SorobanAdapter};
 use scaas_node::config::TokenCfg;
-use scaas_node::odoo::Odoo;
+use scaas_node::external_pull::ExternalPull;
 use scaas_node::signer::Signer as _;
 use serde_json::{json, Value};
 use scaas_ua::ua8::{check_membership, MemberSig};
@@ -245,24 +245,24 @@ async fn setup() -> Stack {
     Stack { registry, token, token_b, router, executor, mandate, dex, registered }
 }
 
-/// The node under test: the adapter over lanes 0 and 1 (router, DEX and both tokens configured) and a fake Odoo whose
+/// The node under test: the adapter over lanes 0 and 1 (router, DEX and both tokens configured) and a fake ExternalPull whose
 /// index cursor starts at the current ledger.
 struct Node {
-    state: Arc<Mutex<FakeOdoo>>,
-    odoo: Odoo,
+    state: Arc<Mutex<FakeExternalPull>>,
+    external_pull: ExternalPull,
     adapter: SorobanAdapter,
 }
 
 impl Node {
     async fn new(st: &Stack) -> Node {
         let start = latest_ledger().await;
-        let state = Arc::new(Mutex::new(FakeOdoo {
+        let state = Arc::new(Mutex::new(FakeExternalPull {
             tokens: vec![st.token.clone(), st.token_b.clone()],
             others: vec![st.router.clone()],
             indexed_block: start - 1,
             ..Default::default()
         }));
-        let odoo = odoo_at(start_fake(state.clone()).await);
+        let external_pull = external_pull_at(start_fake(state.clone()).await);
         let mut cfg = chain_cfg(false);
         cfg.tokens = [&st.token, &st.token_b].iter().map(|t| TokenCfg { address: t.to_string(), decimals: 7 }).collect();
         let mut rf = toml::Table::new();
@@ -274,14 +274,14 @@ impl Node {
         cfg.params.insert("mandate_wasm_hashes".into(), toml::Value::Array(vec![wasm_hash("mandate").into()]));
         let adapter = SorobanAdapter::new(&cfg, &[key(0), key(1)]).unwrap();
         assert_eq!(adapter.lanes()[0].address, g(&key(0)));
-        Node { state, odoo, adapter }
+        Node { state, external_pull, adapter }
     }
 
     /// One `lane_step` on `lane` with `job` queued: its final state and its last report.
     async fn run(&self, lane: usize, job: Value) -> (String, Value) {
         let id = job["id"].as_i64().unwrap();
         self.state.lock().unwrap().jobs.push(job);
-        assert!(lane_step(&self.adapter, &self.odoo, lane, &format!("e2e#{lane}")).await.unwrap());
+        assert!(lane_step(&self.adapter, &self.external_pull, lane, &format!("e2e#{lane}")).await.unwrap());
         let o = self.state.lock().unwrap();
         assert!(o.refused.is_empty(), "{:?}", o.refused);
         (last_state(&o, id), o.reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap_or_default())
@@ -297,11 +297,11 @@ impl Node {
         tx
     }
 
-    /// `index_step` up to the current head (finality: instant); the rows Odoo ingested.
+    /// `index_step` up to the current head (finality: instant); the rows ExternalPull ingested.
     async fn index(&self) -> Vec<Value> {
         let head = latest_ledger().await;
         for _ in 0..60 {
-            let _ = index_step(&self.adapter, &self.odoo).await.unwrap();
+            let _ = index_step(&self.adapter, &self.external_pull).await.unwrap();
             if self.state.lock().unwrap().indexed_block >= head {
                 break;
             }

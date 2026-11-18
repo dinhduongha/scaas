@@ -11,9 +11,9 @@ use crate::store;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
-    // legacy(R104): đường pull qua Odoo, xoá ở P9. Bắt buộc khi một mô-đun còn chạy trên đường đó.
+    // legacy(R104): đường pull qua ExternalPull, xoá ở P9. Bắt buộc khi một mô-đun còn chạy trên đường đó.
     #[serde(default)]
-    pub odoo: Option<OdooCfg>,
+    pub external_pull: Option<ExternalPullCfg>,
     /// Store v2, luôn mở (R88, R111). `url` chỉ ở toml/env (R95).
     pub store: StoreCfg,
     #[serde(default)]
@@ -229,7 +229,7 @@ pub struct GossipCfg {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct OdooCfg {
+pub struct ExternalPullCfg {
     pub url: String,
     pub database: String,
     pub relay_api_key_env: String,
@@ -719,10 +719,10 @@ impl Config {
 
     /// `[store]`, `[api]`, danh sách bootstrap và `[gossip]` (P1: chỉ cấu hình, chưa có listener).
     fn validate_store_sections(&self, chains: &std::collections::HashSet<String>) -> Result<()> {
-        // legacy(R104): submit, indexer and the admin refresh still run on the Odoo pull path.
+        // legacy(R104): submit, indexer and the admin refresh still run on the external pull path.
         let legacy = self.modules.submit || self.modules.indexer || !self.modules.admin_bind.is_empty();
-        if legacy && self.odoo.is_none() {
-            bail!("[odoo] is required while submit/indexer/admin run on the legacy path (R104)");
+        if legacy && self.external_pull.is_none() {
+            bail!("[external_pull] is required while submit/indexer/admin run on the legacy path (R104)");
         }
         if !self.store.url.starts_with("sqlite:") {
             bail!("[store] url: only sqlite: is built (PostgreSQL/MySQL arrive in P1b)");
@@ -849,7 +849,7 @@ impl Config {
             let key = c.chain_key();
             set.chains.push(c.chain_row());
             for t in &c.tokens {
-                // One spelling per family (Odoo `addresses.canonical`), so byte-exact keys never split one token
+                // One spelling per family (ExternalPull `addresses.canonical`), so byte-exact keys never split one token
                 // in two and R95 client token subsets match. `validate` refused anything that does not parse.
                 let address = c.canonical(&t.address).unwrap_or_else(|_| t.address.clone());
                 set.tokens.push(store::TokenRow { chain_key: key.clone(), address, decimals: t.decimals.into(), active: true });
@@ -1019,7 +1019,7 @@ impl ChainCfg {
         Ok(RelayParams { router, min_amount, relay_bound_payee, max_pay_meta_bytes, max_service_op_bytes })
     }
 
-    /// Dạng chuẩn của một địa chỉ trên chain này (`addresses::canonical`, như Odoo `canonical_for_chain`).
+    /// Dạng chuẩn của một địa chỉ trên chain này (`addresses::canonical`, như ExternalPull `canonical_for_chain`).
     pub fn canonical(&self, value: &str) -> Result<String> {
         let prefix = self.params.get("prefix").and_then(|v| v.as_str());
         let ton_testnet = (self.family == "ton").then_some(()).and(self.network.as_deref()).map(|n| n == "-3");
@@ -1065,8 +1065,8 @@ impl ChainCfg {
         self.family != "evm"
     }
 
-    /// `evm:7622`, `hedera:296`, `sui:localnet`… — khoá chung với Odoo `blockchain.chain.chain_key`
-    /// (EVM/Hedera: luôn theo `evm_chain_number`, `network` bị bỏ qua như ở Odoo).
+    /// `evm:7622`, `hedera:296`, `sui:localnet`… — khoá chung với ExternalPull `blockchain.chain.chain_key`
+    /// (EVM/Hedera: luôn theo `evm_chain_number`, `network` bị bỏ qua như ở ExternalPull).
     /// The store's `chain` row of this chain (R95 bootstrap), `state` `active`.
     pub fn chain_row(&self) -> store::ChainRow {
         store::ChainRow {
@@ -1103,9 +1103,9 @@ mod tests {
     use super::*;
 
     const OK: &str = r#"
-[odoo]
-url = "http://odoo:8069"
-database = "odoo19"
+[external_pull]
+url = "http://external-pull:8069"
+database = "pulldb"
 relay_api_key_env = "R"
 indexer_api_key_env = "I"
 [store]
@@ -1343,7 +1343,7 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         assert!(c.validate().is_err());
     }
 
-    const ODOO: &str = "[odoo]\nurl = \"http://odoo:8069\"\ndatabase = \"odoo19\"\nrelay_api_key_env = \"R\"\n\
+    const EXTERNAL_PULL: &str = "[external_pull]\nurl = \"http://external-pull:8069\"\ndatabase = \"pulldb\"\nrelay_api_key_env = \"R\"\n\
                         indexer_api_key_env = \"I\"\n";
     const NO_LEGACY: &str = "[modules]\nsubmit = false\nindexer = false\nadmin_bind = \"\"\n[[chains]]";
 
@@ -1352,15 +1352,15 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
     }
 
     #[test]
-    fn store_is_required_and_odoo_is_legacy() {
-        assert!(OK.starts_with(&format!("\n{ODOO}")));
+    fn store_is_required_and_external_pull_is_legacy() {
+        assert!(OK.starts_with(&format!("\n{EXTERNAL_PULL}")));
         assert!(toml::from_str::<Config>(&OK.replace("[store]\nurl = \"sqlite:///var/lib/scaas/node.db\"\n", "")).is_err(),
                 "[store] is required");
-        let no_odoo = OK.replace(ODOO, "");
-        assert!(bad(&no_odoo), "submit/indexer/admin still need [odoo] (R104)");
-        let c: Config = toml::from_str(&no_odoo.replace("[[chains]]", NO_LEGACY)).unwrap();
+        let no_external_pull = OK.replace(EXTERNAL_PULL, "");
+        assert!(bad(&no_external_pull), "submit/indexer/admin still need [external_pull] (R104)");
+        let c: Config = toml::from_str(&no_external_pull.replace("[[chains]]", NO_LEGACY)).unwrap();
         c.validate().unwrap();
-        assert!(c.odoo.is_none());
+        assert!(c.external_pull.is_none());
         assert!(bad(&OK.replace("sqlite:///var/lib/scaas/node.db", "postgres://u@h/db")), "P1b");
         let c: Config = toml::from_str(OK).unwrap();
         assert_eq!((c.store.job_retention_secs, c.store.feed_retention_secs), (30 * 86_400, 7 * 86_400));
@@ -1389,13 +1389,13 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
     #[test]
     fn bootstrap_lists_are_validated() {
         let ns = |t: &str| format!("{OK}\n[[namespaces]]\n{t}\n");
-        toml::from_str::<Config>(&ns("name = \"odoo-prod\"\nchains = [\"evm:7622\"]\nallow_call = true")).unwrap()
+        toml::from_str::<Config>(&ns("name = \"external-pull-prod\"\nchains = [\"evm:7622\"]\nallow_call = true")).unwrap()
             .validate().unwrap();
         assert!(bad(&ns("name = \"~gateway\"")), "reserved");
-        assert!(bad(&ns("name = \"Odoo\"")));
+        assert!(bad(&ns("name = \"External-Pull\"")));
         assert!(bad(&ns("name = \"ab\"")));
-        assert!(bad(&ns("name = \"odoo\"\nchains = [\"evm:1\"]")), "chain not configured");
-        assert!(bad(&format!("{}\n[[namespaces]]\nname = \"odoo\"\n", ns("name = \"odoo\""))), "twice");
+        assert!(bad(&ns("name = \"external-pull\"\nchains = [\"evm:1\"]")), "chain not configured");
+        assert!(bad(&format!("{}\n[[namespaces]]\nname = \"external-pull\"\n", ns("name = \"external-pull\""))), "twice");
         let peer = |t: &str| format!("{OK}\n[[mesh.peers]]\nname = \"a\"\nurl = \"https://a.example.net:8550\"\n\
                                       spki_sha256 = \"{}\"\n{t}\n", "9f".repeat(32));
         toml::from_str::<Config>(&peer("class = \"open\"")).unwrap().validate().unwrap();
@@ -1433,7 +1433,7 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
     fn boot_set_maps_toml_to_store_rows() {
         let raw = OK.replace("finality =", "tokens = [{ address = \"0xCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCDCD\", decimals = 6 }]\n\
             breaker = { gas_budget_per_hour = \"100000000000000000000\" }\nfinality =")
-            + "\n[[namespaces]]\nname = \"odoo\"\nchains = [\"evm:7622\", \"evm:7622\"]\n";
+            + "\n[[namespaces]]\nname = \"external-pull\"\nchains = [\"evm:7622\", \"evm:7622\"]\n";
         let c: Config = toml::from_str(&raw).unwrap();
         c.validate().unwrap();
         let set = c.boot_set(&[vec!["0xAA".into()]]);
@@ -1472,7 +1472,7 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         let hit = crate::mesh::accept::lookup(&rows, "evm:7622", low, "0xa9059cbb");
         assert_eq!(hit.map(|r| r.support), Some(crate::mesh::accept::Support::None),
                    "the deny row matches; no fall-through to (*, *)");
-        assert!(bad(&raw.replace(ck, "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD")), "bad EIP-55 checksum (Odoo refuses it)");
+        assert!(bad(&raw.replace(ck, "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD")), "bad EIP-55 checksum (ExternalPull refuses it)");
         assert!(bad(&raw.replace("0.0.1234", "0.1.1234")));
     }
 

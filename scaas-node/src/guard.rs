@@ -1033,7 +1033,7 @@ impl Guard {
     }
 
     /// A job's `Work`, with this chain's services ([`crate::submit::work_from_job_with`]).
-    pub fn work(&self, job: &crate::odoo::Job, fee_recipient: Option<Address>) -> anyhow::Result<Work> {
+    pub fn work(&self, job: &crate::external_pull::Job, fee_recipient: Option<Address>) -> anyhow::Result<Work> {
         crate::submit::work_from_job_with(job, fee_recipient, &self.svc)
     }
 
@@ -2025,7 +2025,7 @@ mod tests {
         v["rows"].as_array().unwrap().clone()
     }
 
-    fn sp_job(op: serde_json::Value) -> crate::odoo::Job {
+    fn sp_job(op: serde_json::Value) -> crate::external_pull::Job {
         serde_json::from_value(serde_json::json!({"id": 1, "kind": "ua_metatx", "op": op})).unwrap()
     }
 
@@ -2750,7 +2750,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         (chain, Guard::new(&cfg, Arc::new(RwLock::new(vec![]))).unwrap())
     }
 
-    fn ua_transfer_job(from: B256, to: B256) -> crate::odoo::Job {
+    fn ua_transfer_job(from: B256, to: B256) -> crate::external_pull::Job {
         let z = format!("{:#x}", Address::ZERO);
         serde_json::from_value(serde_json::json!({"id": 1, "kind": "ua_metatx", "token": format!("{:#x}", Address::repeat_byte(0x70)),
             "struct": "transfer", "m": {"from": format!("{from:#x}"), "to": format!("{to:#x}"), "value": "1", "entryRef": format!("{:#x}", B256::ZERO),

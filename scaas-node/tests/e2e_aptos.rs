@@ -3,7 +3,7 @@
 //! Cần localnet Aptos đã chạy và đã publish: `smartcontracts/move/aptos/scripts/devnet.sh up && … publish` (REST 32010, faucet
 //! 32011, Indexer API 32015 — dải cổng của luồng S11; thư mục `$APTOS_LOCALNET_DIR`). Chứng minh:
 //! 1. hai lane relayer từ mnemonic 24 từ (`m/44'/637'/i'/0'/0'`), nạp từ faucet; alice (chủ thể) không có APT;
-//! 2. FA thử thật (`testfa`); Odoo giả trả địa chỉ metadata thật và TỪ CHỐI event của token chưa đăng ký;
+//! 2. FA thử thật (`testfa`); ExternalPull giả trả địa chỉ metadata thật và TỪ CHỐI event của token chưa đăng ký;
 //! 3. ANTI-LOCK đồng thời: X đã `signed` trên lane 0 nhưng bị GIỮ chưa gửi; Y đi hết tới `mined` trên lane 1; rồi X
 //!    được thả và qua; phát lại X ⇒ mô phỏng từ chối ⇒ `dead`; hash tx tự tính = `hash` của REST;
 //! 4. `Rejected`: tx ký với sequence cũ bị REST từ chối trước mempool ⇒ `adapter::Rejected`;
@@ -24,9 +24,9 @@ use axum::{Json, Router};
 use scaas_node::adapter::{index_step, lane_step, recover_lane, Built, ChainAdapter, Family, Head, Lane, Rejected, Signed, TxStatus};
 use scaas_node::adapters::aptos::{account_of, addr_hex, lane_address, object_address, parse_addr, sha3, Addr, MetaOp};
 use scaas_node::chain::SimError;
-use scaas_node::config::{ChainCfg, FinalityCfg, OdooCfg};
+use scaas_node::config::{ChainCfg, FinalityCfg, ExternalPullCfg};
 use scaas_node::keys::{lane_secret, Seed};
-use scaas_node::odoo::{Job, Odoo};
+use scaas_node::external_pull::{Job, ExternalPull};
 use scaas_node::signer::{Curve, LocalSigner, Signer};
 use serde_json::{json, Value};
 
@@ -86,7 +86,7 @@ fn cli(function: &str, args: &[String]) {
     assert!(out.status.success(), "{function}: {}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
 }
 
-// ------------------------------------------------------------------ fake Odoo (same transitions as e2e.rs)
+// ------------------------------------------------------------------ fake ExternalPull (same transitions as e2e.rs)
 
 fn allowed(from: &str, to: &str) -> bool {
     matches!(
@@ -100,7 +100,7 @@ fn allowed(from: &str, to: &str) -> bool {
 }
 
 #[derive(Default)]
-struct FakeOdoo {
+struct FakeExternalPull {
     states: std::collections::HashMap<i64, String>,
     refused: Vec<Value>,
     jobs: Vec<Value>,
@@ -113,7 +113,7 @@ struct FakeOdoo {
     inflight: Vec<Value>,
 }
 
-async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path<(String, String)>, Json(body): Json<Value>) -> Json<Value> {
+async fn fake(State(s): State<Arc<Mutex<FakeExternalPull>>>, Path((model, method)): Path<(String, String)>, Json(body): Json<Value>) -> Json<Value> {
     let mut o = s.lock().unwrap();
     let out = match (model.as_str(), method.as_str()) {
         ("blockchain.chain", "node_config") => json!({
@@ -140,7 +140,7 @@ async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path
             json!({"ok": true})
         }
         ("blockchain.chain.event", "chain_event_ingest") => {
-            // Như Odoo thật: event của contract chưa đăng ký bị từ chối (L2).
+            // Như ExternalPull thật: event của contract chưa đăng ký bị từ chối (L2).
             for e in body["events"].as_array().unwrap() {
                 if !o.tokens.iter().any(|t| Some(t.as_str()) == e["contract"].as_str()) {
                     o.refused.push(e.clone());
@@ -156,7 +156,7 @@ async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path
     Json(out)
 }
 
-async fn start_fake(state: Arc<Mutex<FakeOdoo>>) -> SocketAddr {
+async fn start_fake(state: Arc<Mutex<FakeExternalPull>>) -> SocketAddr {
     let app = Router::new().route("/json/2/{model}/{method}", post(fake)).with_state(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -164,9 +164,9 @@ async fn start_fake(state: Arc<Mutex<FakeOdoo>>) -> SocketAddr {
     addr
 }
 
-fn odoo_at(addr: SocketAddr) -> Odoo {
-    let cfg = OdooCfg { url: format!("http://{addr}"), database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
-    Odoo::with_key(&cfg, "k".into()).unwrap()
+fn external_pull_at(addr: SocketAddr) -> ExternalPull {
+    let cfg = ExternalPullCfg { url: format!("http://{addr}"), database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
+    ExternalPull::with_key(&cfg, "k".into()).unwrap()
 }
 
 /// Một `pay` của alice ký qua phong bì signMessage tối thiểu (ví seed R32) thành job `signed_op`.
@@ -248,14 +248,14 @@ impl ChainAdapter for Held {
     }
 }
 
-fn states_of(state: &Arc<Mutex<FakeOdoo>>, id: i64) -> Vec<String> {
+fn states_of(state: &Arc<Mutex<FakeExternalPull>>, id: i64) -> Vec<String> {
     state.lock().unwrap().reports.iter().filter(|r| r["job_id"] == id).map(|r| r["chain_state"].as_str().unwrap().to_string()).collect()
 }
 
-async fn run_job(adapter: &dyn ChainAdapter, odoo: &Odoo, state: &Arc<Mutex<FakeOdoo>>, lane: usize, j: Value) -> Vec<String> {
+async fn run_job(adapter: &dyn ChainAdapter, external_pull: &ExternalPull, state: &Arc<Mutex<FakeExternalPull>>, lane: usize, j: Value) -> Vec<String> {
     let id = j["id"].as_i64().unwrap();
     state.lock().unwrap().jobs.push(j);
-    assert!(lane_step(adapter, odoo, lane, "e2e").await.unwrap());
+    assert!(lane_step(adapter, external_pull, lane, "e2e").await.unwrap());
     states_of(state, id)
 }
 
@@ -315,8 +315,8 @@ async fn aptos_payments_relay_finalize_and_never_lock_each_other() {
     assert_eq!(adapter.lanes()[0].address, "0x226b5b5c15d19946b1fd26c3e4ad36833fd8c9c11c612b1327e608f824a5f2d4");
     assert!(adapter.lane_balance(0).await.unwrap().unwrap() > 0);
 
-    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![busd.clone()], ..Default::default() }));
-    let odoo = odoo_at(start_fake(state.clone()).await);
+    let state = Arc::new(Mutex::new(FakeExternalPull { tokens: vec![busd.clone()], ..Default::default() }));
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
     let mut head0 = None;
     for _ in 0..60 {
         head0 = adapter.final_head().await.unwrap();
@@ -327,19 +327,19 @@ async fn aptos_payments_relay_finalize_and_never_lock_each_other() {
     }
     state.lock().unwrap().indexed_block = head0.expect("indexer never reported progress").height;
 
-    // ANTI-LOCK đồng thời: X `signed` trên lane 0 và bị giữ; Y (lane Odoo khác) đi hết trên lane 1.
+    // ANTI-LOCK đồng thời: X `signed` trên lane 0 và bị giữ; Y (lane ExternalPull khác) đi hết trên lane 1.
     let vu = now() + 300;
     let (x, x_digest) = job(1, &alice, &pkg_a, &busd, 1000, 0x11, 0xa1, vu);
     let (y, y_digest) = job(2, &alice, &pkg_a, &busd, 500, 0x22, 0xa2, vu);
     let held = Held { inner: adapter.clone(), hold: 1, gate: tokio::sync::Semaphore::new(0) };
     state.lock().unwrap().jobs.push(x.clone());
-    let x_run = lane_step(&held, &odoo, 0, "e2e");
+    let x_run = lane_step(&held, &external_pull, 0, "e2e");
     let y_run = async {
         while states_of(&state, 1).last().map(String::as_str) != Some("signed") {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
         state.lock().unwrap().jobs.push(y);
-        assert!(lane_step(&held, &odoo, 1, "e2e").await.unwrap());
+        assert!(lane_step(&held, &external_pull, 1, "e2e").await.unwrap());
         assert_eq!(states_of(&state, 2), ["signed", "broadcast", "mined"], "Y while X is in flight");
         assert_eq!(states_of(&state, 1), ["signed"], "X still held, unsent");
         held.gate.add_permits(1);
@@ -357,7 +357,7 @@ async fn aptos_payments_relay_finalize_and_never_lock_each_other() {
     // Phát lại X: mô phỏng abort, nonce lane đã dùng ⇒ `consumed` (R80: có thể relayer khác đã đưa lên), không tốn gas.
     let mut replay = x;
     replay["id"] = json!(3);
-    assert_eq!(run_job(adapter.as_ref(), &odoo, &state, 0, replay).await, ["consumed"]);
+    assert_eq!(run_job(adapter.as_ref(), &external_pull, &state, 0, replay).await, ["consumed"]);
 
     // REJECTED: ký với sequence cũ ⇒ REST từ chối trước mempool.
     let (r6, _) = job(6, &alice, &pkg_a, &busd, 10, 0x66, 0xa6, vu);
@@ -388,23 +388,23 @@ async fn aptos_payments_relay_finalize_and_never_lock_each_other() {
         o.inflight = vec![json!({"job_id": 7, "state": "broadcast", "tx_hash": s7.tx_id, "nonce": s7.sequence,
             "payload": {"id": 7, "kind": "signed_op", "op": {"valid_until": vu}}})];
     }
-    tokio::time::timeout(Duration::from_secs(60), recover_lane(adapter.as_ref(), &odoo, 0, "e2e")).await.expect("recovery A").unwrap();
+    tokio::time::timeout(Duration::from_secs(60), recover_lane(adapter.as_ref(), &external_pull, 0, "e2e")).await.expect("recovery A").unwrap();
     assert_eq!(states_of(&state, 7), ["mined"]);
     state.lock().unwrap().inflight = vec![json!({"job_id": 8, "state": "signed", "tx_hash": s8.tx_id, "nonce": s8.sequence,
         "payload": {"id": 8, "kind": "signed_op", "op": {"valid_until": s8.valid_until}}})];
-    tokio::time::timeout(Duration::from_secs(90), recover_lane(adapter.as_ref(), &odoo, 1, "e2e")).await.expect("recovery B").unwrap();
+    tokio::time::timeout(Duration::from_secs(90), recover_lane(adapter.as_ref(), &external_pull, 1, "e2e")).await.expect("recovery B").unwrap();
     assert_eq!(states_of(&state, 8), ["dead"]);
 
     // L2: thanh toán qua package BẢN SAO (cùng token đã đăng ký) và qua FA chưa đăng ký đều vào sổ nhưng không được báo.
     let copy_adapter = scaas_node::adapters::build(&cfg(&copy), &signers).unwrap();
     let (c9, _) = job(9, &alice, &copy_a, &busd, 90, 0x99, 0xa9, vu);
-    assert_eq!(run_job(copy_adapter.as_ref(), &odoo, &state, 1, c9).await, ["signed", "broadcast", "mined"]);
+    assert_eq!(run_job(copy_adapter.as_ref(), &external_pull, &state, 1, c9).await, ["signed", "broadcast", "mined"]);
     let (e10, _) = job(10, &alice, &pkg_a, &evil, 33, 0xaa, 0xaa, vu);
-    assert_eq!(run_job(adapter.as_ref(), &odoo, &state, 1, e10).await, ["signed", "broadcast", "mined"]);
+    assert_eq!(run_job(adapter.as_ref(), &external_pull, &state, 1, e10).await, ["signed", "broadcast", "mined"]);
 
     // Final: index tới khi thấy X, Y, A (cursor không vượt Indexer API).
     for _ in 0..120 {
-        while index_step(adapter.as_ref(), &odoo).await.unwrap() {}
+        while index_step(adapter.as_ref(), &external_pull).await.unwrap() {}
         if state.lock().unwrap().ingested.iter().filter(|e| e["event"] == "PaymentSettled").count() >= 3 {
             break;
         }
@@ -431,7 +431,7 @@ async fn aptos_payments_relay_finalize_and_never_lock_each_other() {
         o.indexed_block = o.indexed_block.saturating_sub(5);
         (o.indexed_block, o.ingests)
     };
-    assert!(!index_step(adapter.as_ref(), &odoo).await.unwrap());
+    assert!(!index_step(adapter.as_ref(), &external_pull).await.unwrap());
     let o = state.lock().unwrap();
     assert_eq!((o.indexed_block, o.ingests), (cursor, ingests));
     println!("gas: X {} units at {} octa", x_tx["gas_used"], x_tx["gas_unit_price"]);

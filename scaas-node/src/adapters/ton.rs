@@ -16,7 +16,7 @@ use crate::adapters::evm::{building, BUILDING};
 use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Signed, TxStatus};
 use crate::chain::SimError;
 use crate::config::ChainCfg;
-use crate::odoo::Job;
+use crate::external_pull::Job;
 use crate::signer::{LocalSigner, Signer};
 
 // ====================================================================== cells
@@ -438,7 +438,7 @@ impl Addr {
         Ok(Self { wc: raw[1] as i8 as i32, hash: raw[2..34].try_into().expect("32") })
     }
 
-    /// Canonical form shared with Odoo (`addresses.canonical('ton', …)`).
+    /// Canonical form shared with ExternalPull (`addresses.canonical('ton', …)`).
     pub fn raw(&self) -> String {
         format!("{}:{}", self.wc, alloy::hex::encode(self.hash))
     }
@@ -537,7 +537,7 @@ pub fn trade_forward_floor(params: &Arc<Cell>) -> Result<u128> {
     Ok(f)
 }
 
-/// Jetton wallet of `owner` for `master` without RPC — `walletInit` of jetton.tact, same as Odoo's
+/// Jetton wallet of `owner` for `master` without RPC — `walletInit` of jetton.tact, same as ExternalPull's
 /// `fam_ton.jetton_wallet_address` (R20). The wallet code is known by hash and depth only.
 pub fn jetton_wallet_address(owner: &Addr, master: &Addr, code_hash: &[u8; 32], code_depth: u16) -> Result<Addr> {
     let tail = Builder::new().uint(0, 2 + 3 * 32).end()?; // lanes oldLanes rotatedAt laneCount oldCount
@@ -610,7 +610,7 @@ pub fn pubkey_from_state_init(si: &Arc<Cell>, owner: &Addr) -> Result<[u8; 32]> 
     d.b256()
 }
 
-/// The connector's signature JSON (`ton.js` / Odoo `fam_ton.parse_signature`).
+/// The connector's signature JSON (`ton.js` / ExternalPull `fam_ton.parse_signature`).
 #[derive(Debug, Clone)]
 pub enum Auth {
     TonConnect { signature: [u8; 64], timestamp: u64, domain: String, state_init: Option<Arc<Cell>> },
@@ -758,7 +758,7 @@ pub const OP_RELAY_CALL: u128 = 0x5b0a1d30;
 pub const OP_RELAY_REFUND: u128 = 0x5b0a1d31;
 // The router's events identify OUR relay's outcome (`settled_event`, `tx_status`); the indexer does not join them to
 // the escrow's `PaymentSettled`: the release / refund lands in a later transaction, often a later range, after that
-// row reached Odoo (T17, recorded).
+// row reached ExternalPull (T17, recorded).
 pub const EV_RELAY_FEE_PAID: u128 = 0x9b1c0d05;
 pub const EV_RELAY_FEE_REFUNDED: u128 = 0x9b1c0d06;
 /// The served fee-less entries (relayfee.tact `servedCall`): the wallet's `revoke` / `set_key`, the Mandate's `revoke`.
@@ -1374,7 +1374,7 @@ fn param_u128(cfg: &ChainCfg, k: &str, default: u128) -> u128 {
 impl TonAdapter {
     /// `params`: `global_id` (default by network: `-239`, `-3`; required otherwise), `attach_nanoton` (default
     /// 0.15 TON), `forward_nanoton` (default 0; never below the floor the payer signed), `api_key_env`.
-    /// Jetton masters are NOT configured here: they are Odoo's token list (`node_config`, review H1).
+    /// Jetton masters are NOT configured here: they are ExternalPull's token list (`node_config`, review H1).
     pub fn new(cfg: &ChainCfg, signers: &[LocalSigner]) -> Result<Self> {
         let net = cfg.network.clone().unwrap_or_default();
         let global_id = match cfg.params.get("global_id").and_then(|v| v.as_integer()) {
@@ -1415,7 +1415,7 @@ impl TonAdapter {
     }
 
     /// Wallet code of a registered master (`get_jetton_data`, cached). A contract that answers with a non-zero
-    /// exit code is not a jetton master (e.g. a Mandate Odoo registered): `None`, never a stall.
+    /// exit code is not a jetton master (e.g. a Mandate ExternalPull registered): `None`, never a stall.
     async fn wallet_code(&self, master: &Addr) -> Result<Option<WalletCode>> {
         if let Some(c) = self.codes.read().ok().and_then(|m| m.get(master).copied()) {
             return Ok(c);
@@ -1774,9 +1774,9 @@ impl TonAdapter {
     }
 }
 
-/// Normalized event for Odoo, or `None` when the emitter is not one of ours (R10-10). No network call: the
-/// emitter must be the wallet `walletInit(owner, master)` derives to (review M3); a Mandate only when Odoo lists
-/// its address (review L10). `masters` = Odoo's contracts with their wallet code (`None`: not a master).
+/// Normalized event for ExternalPull, or `None` when the emitter is not one of ours (R10-10). No network call: the
+/// emitter must be the wallet `walletInit(owner, master)` derives to (review M3); a Mandate only when ExternalPull lists
+/// its address (review L10). `masters` = ExternalPull's contracts with their wallet code (`None`: not a master).
 pub fn authenticate(emitter: &Addr, ev: &TonEvent, masters: &[(Addr, Option<WalletCode>)]) -> Option<(Addr, TonEvent)> {
     let wallet_of = |master: &Addr, owner: &Addr| {
         let (_, code) = masters.iter().find(|(m, _)| m == master)?;
@@ -2002,7 +2002,7 @@ impl ChainAdapter for TonAdapter {
                 // Anyone may relay a signed op (`relayer` = addr_none): if a copy got there first, the op ran (review L6).
                 if exit_code(&child) == Some(E_NONCE) {
                     if let Some(height) = self.executed_by_copy(&child, carried_digest(out)).await? {
-                        // Not our tx: Odoo keeps ours and flags `landed_elsewhere`.
+                        // Not our tx: ExternalPull keeps ours and flags `landed_elsewhere`.
                         return Ok(TxStatus::Mined { height, tx_hash: None });
                     }
                 }
@@ -2059,7 +2059,7 @@ impl ChainAdapter for TonAdapter {
     }
 
     async fn events(&self, from: u64, to: u64, contracts: &[String]) -> Result<Vec<Value>> {
-        // Odoo's token list (raw `0:…`); anything else is not a TON master. None left ⇒ refuse rather than let
+        // ExternalPull's token list (raw `0:…`); anything else is not a TON master. None left ⇒ refuse rather than let
         // the cursor pass over blocks nobody filtered (review H1).
         let mut masters = Vec::new();
         for c in contracts.iter().filter_map(|c| Addr::parse(c).ok()) {
@@ -2606,7 +2606,7 @@ mod tests {
         let bounced = st(Fake { by_msg: at(vec![(&lane_tx, lane.clone()), (&h1, payer(ok.clone())), (&h2, payee(failed(-14)))]), ..Default::default() }).await;
         assert!(matches!(bounced, TxStatus::Reverted { .. }), "payee hop bounced: {bounced:?}");
         let mined = st(Fake { by_msg: at(vec![(&lane_tx, lane.clone()), (&h1, payer(ok.clone())), (&h2, payee(ok.clone()))]), ..Default::default() }).await;
-        // The tx id is the lane wallet's external message; Odoo hears of the payer wallet's tx (it emits the event).
+        // The tx id is the lane wallet's external message; ExternalPull hears of the payer wallet's tx (it emits the event).
         assert_eq!(mined, TxStatus::Mined { height: 6, tx_hash: Some(hex0x(&payer_tx)) });
 
         let mte = b64encode(&alloy::hex::decode(s(&v, "/events/mte_boc")).unwrap());

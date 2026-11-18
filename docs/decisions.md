@@ -623,6 +623,12 @@ Change (2026-11-09, owner Q1 B, group 3i): a `service` row comes from operator c
 - old: R104 · status: current · owner: no · date: 2026-10-06 · normative: node/job-api.md#NODE-JOB-10 · superseded-by: —
 
 **Why.** Clients move chain by chain from pull to push; legacy code is removed in one step once all chains are on push.
+**Change (owner 2026-11-18, "rename it (pick the right moment); external_pull or similar"; TODO 8h).** The node's pull
+client carries no consumer name: module `scaas-node/src/external_pull.rs` (was `odoo.rs`), types `ExternalPull`,
+`ExternalPullCfg`, config section `[external_pull]` (was `[odoo]`); the pull path's behaviour and wire format are
+unchanged. `python3 scripts/docs_check.py consumer` (CI `docs` job) refuses the consumer's name in `scaas-node/src` and
+`scaas-node/tests`, except the HTTP header the pull source's `/json/2` API reads. `scaas-node/legacy/` is not touched.
+Status: BUILT on branch `prefreeze-contracts`.
 **Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 128.
 
 ### NODE-JOB-11 — Cancel-by-origin tombstones bounded

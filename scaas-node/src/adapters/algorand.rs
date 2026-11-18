@@ -35,7 +35,7 @@ use crate::adapters::evm::{building, BUILDING};
 use crate::addresses::{algorand_address, b32decode, b32encode};
 use crate::chain::SimError;
 use crate::config::ChainCfg;
-use crate::odoo::Job;
+use crate::external_pull::Job;
 use crate::signer::{LocalSigner, Signer};
 
 pub use super::aptos::{meta_pay_id, pay_lane};
@@ -232,7 +232,7 @@ impl Holder {
         [&[self.kind][..], &self.id].concat()
     }
 
-    /// The event / Odoo form: an Algorand address (kind 0) or `0x` ‖ 64 hex (a UA id).
+    /// The event / ExternalPull form: an Algorand address (kind 0) or `0x` ‖ 64 hex (a UA id).
     pub fn display(&self) -> String {
         if self.kind == KIND_ADDRESS { algorand_address(&self.id) } else { hex0x(&self.id) }
     }

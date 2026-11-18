@@ -33,10 +33,10 @@ use axum::{Json, Router};
 use scaas_node::abi::{IToken, IUALedger, UAMetaTransfer};
 use scaas_node::adapter::{index_step, lane_step, recover_lane, Family};
 use scaas_node::adapters;
-use scaas_node::config::{ChainCfg, FinalityCfg, OdooCfg};
+use scaas_node::config::{ChainCfg, FinalityCfg, ExternalPullCfg};
 use scaas_node::keys::{lane_secret, Seed};
 use scaas_node::metatx::{Domain, UaMtx};
-use scaas_node::odoo::Odoo;
+use scaas_node::external_pull::ExternalPull;
 use scaas_node::signer::LocalSigner;
 use serde_json::{json, Value};
 
@@ -116,19 +116,19 @@ fn allowed(from: &str, to: &str) -> bool {
 }
 
 #[derive(Default)]
-struct FakeOdoo {
+struct FakeExternalPull {
     states: std::collections::HashMap<i64, String>,
     refused: Vec<Value>,
     jobs: Vec<Value>,
     reports: Vec<Value>,
     ingested: Vec<Value>,
     indexed_block: u64,
-    /// Token Odoo đăng ký (review H2): địa chỉ thật của hai clone, như `node_config` của Odoo trả.
+    /// Token ExternalPull đăng ký (review H2): địa chỉ thật của hai clone, như `node_config` của ExternalPull trả.
     tokens: Vec<String>,
 }
 
 async fn fake(
-    State(s): State<Arc<Mutex<FakeOdoo>>>,
+    State(s): State<Arc<Mutex<FakeExternalPull>>>,
     Path((model, method)): Path<(String, String)>,
     Json(body): Json<Value>,
 ) -> Json<Value> {
@@ -167,7 +167,7 @@ async fn fake(
     Json(out)
 }
 
-async fn start_fake(state: Arc<Mutex<FakeOdoo>>) -> SocketAddr {
+async fn start_fake(state: Arc<Mutex<FakeExternalPull>>) -> SocketAddr {
     let app = Router::new().route("/json/2/{model}/{method}", post(fake)).with_state(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -175,14 +175,14 @@ async fn start_fake(state: Arc<Mutex<FakeOdoo>>) -> SocketAddr {
     addr
 }
 
-fn odoo_at(addr: SocketAddr) -> Odoo {
-    let cfg = OdooCfg {
+fn external_pull_at(addr: SocketAddr) -> ExternalPull {
+    let cfg = ExternalPullCfg {
         url: format!("http://{addr}"),
         database: "t".into(),
         relay_api_key_env: String::new(),
         indexer_api_key_env: String::new(),
     };
-    Odoo::with_key(&cfg, "k".into()).unwrap()
+    ExternalPull::with_key(&cfg, "k".into()).unwrap()
 }
 
 fn cfg(rpc: &str) -> ChainCfg {
@@ -260,12 +260,12 @@ async fn merged_events_only(rpc: &str, tx: &str) {
     }
 }
 
-fn tx_of(state: &Arc<Mutex<FakeOdoo>>, id: i64) -> String {
+fn tx_of(state: &Arc<Mutex<FakeExternalPull>>, id: i64) -> String {
     state.lock().unwrap().reports.iter().find(|r| r["job_id"] == id && r["chain_state"] == "signed")
         .map(|r| r["tx_hash"].as_str().unwrap().to_string()).expect("a signed report")
 }
 
-fn states_of(state: &Arc<Mutex<FakeOdoo>>, id: i64) -> Vec<String> {
+fn states_of(state: &Arc<Mutex<FakeExternalPull>>, id: i64) -> Vec<String> {
     state.lock().unwrap().reports.iter()
         .filter(|r| r["job_id"] == id)
         .map(|r| r["chain_state"].as_str().unwrap().to_string())
@@ -308,22 +308,22 @@ async fn hedera_ed25519_eoa_relayed() {
         .collect();
     assert_eq!(signers[0].address_hex(), "0x04d0f262432d16cea929f228f5e53df042a7d7c5");
     let cfg = cfg(&rpc);
-    // Built the way the binary builds it (review H1/H2): `adapters::build`, token list only from Odoo.
+    // Built the way the binary builds it (review H1/H2): `adapters::build`, token list only from ExternalPull.
     let built = adapters::build(&cfg, &signers).unwrap();
     let adapter = built.as_ref();
     assert_eq!((adapter.family(), adapter.chain_key()), (Family::Hedera, "hedera:298"));
 
     let tokens = vec![format!("{t1:#x}"), format!("{t2:#x}")];
-    let state = Arc::new(Mutex::new(FakeOdoo { tokens, ..Default::default() }));
-    let odoo = odoo_at(start_fake(state.clone()).await);
+    let state = Arc::new(Mutex::new(FakeExternalPull { tokens, ..Default::default() }));
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
     // as `lane_runner` starts a lane: the chain_uid check (NODE-GW-07), then recovery, which loads the registered tokens
     adapter.start_check().await.unwrap();
-    recover_lane(adapter, &odoo, 0, "e2e#0").await.unwrap();
+    recover_lane(adapter, &external_pull, 0, "e2e#0").await.unwrap();
 
     // An unfunded lane does not take the job: back to the queue (Hedera accounts must exist and hold HBAR).
     let (job, m0) = native_pay(&native_key, uid, t1, 20, b"hedera-0");
     state.lock().unwrap().jobs.push(job);
-    assert!(lane_step(adapter, &odoo, 0, "e2e#0").await.unwrap());
+    assert!(lane_step(adapter, &external_pull, 0, "e2e#0").await.unwrap());
     assert_eq!(states_of(&state, 20), ["queued"]);
     let back = state.lock().unwrap().reports.last().cloned().unwrap();
     assert!(back["error"].as_str().unwrap().contains("not a funded Hedera account"), "{back}");
@@ -333,7 +333,7 @@ async fn hedera_ed25519_eoa_relayed() {
     }
     let (job, _) = native_pay(&native_key, uid, t1, 21, b"hedera-0");
     state.lock().unwrap().jobs.push(job);
-    assert!(lane_step(adapter, &odoo, 0, "e2e#0").await.unwrap());
+    assert!(lane_step(adapter, &external_pull, 0, "e2e#0").await.unwrap());
     assert_eq!(states_of(&state, 21), ["signed", "broadcast", "mined"]);
     assert_eq!(balance(&rpc, t1, Address::repeat_byte(0x5e)).await, U256::from(1_000u64));
     merged_events_only(&rpc, &tx_of(&state, 21)).await;
@@ -342,12 +342,12 @@ async fn hedera_ed25519_eoa_relayed() {
     let (x, mx) = native_pay(&native_key, uid, t1, 31, b"hedera-x");
     let (y, my) = native_pay(&native_key, uid, t2, 32, b"hedera-y");
     state.lock().unwrap().jobs.push(y);
-    assert!(lane_step(adapter, &odoo, 1, "e2e#1").await.unwrap());
+    assert!(lane_step(adapter, &external_pull, 1, "e2e#1").await.unwrap());
     assert_eq!(states_of(&state, 32), ["signed", "broadcast", "mined"]);
     assert_eq!(balance(&rpc, t2, Address::repeat_byte(0x5e)).await, U256::from(1_000u64));
     assert_eq!(balance(&rpc, t1, Address::repeat_byte(0x5e)).await, U256::from(1_000u64), "X still withheld");
     state.lock().unwrap().jobs.push(x.clone());
-    assert!(lane_step(adapter, &odoo, 0, "e2e#0").await.unwrap());
+    assert!(lane_step(adapter, &external_pull, 0, "e2e#0").await.unwrap());
     assert_eq!(states_of(&state, 31), ["signed", "broadcast", "mined"]);
     assert_eq!(balance(&rpc, t1, Address::repeat_byte(0x5e)).await, U256::from(2_000u64));
 
@@ -360,13 +360,13 @@ async fn hedera_ed25519_eoa_relayed() {
     let mut replay = x;
     replay["id"] = json!(33);
     state.lock().unwrap().jobs.push(replay);
-    assert!(lane_step(adapter, &odoo, 1, "e2e#1").await.unwrap());
+    assert!(lane_step(adapter, &external_pull, 1, "e2e#1").await.unwrap());
     let last = state.lock().unwrap().reports.last().cloned().unwrap();
     assert_eq!((last["job_id"].as_i64(), last["chain_state"].as_str()), (Some(33), Some("consumed")), "{last}");
     assert!(state.lock().unwrap().refused.is_empty());
 
     // Finality: three payments, each with the digest the subject signed.
-    while index_step(adapter, &odoo).await.unwrap() {}
+    while index_step(adapter, &external_pull).await.unwrap() {}
     let ingested = state.lock().unwrap().ingested.clone();
     let settled: Vec<&Value> = ingested.iter().filter(|e| e["event"] == "PaymentSettled").collect();
     assert_eq!(settled.len(), 3);

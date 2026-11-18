@@ -20,7 +20,7 @@ use sha2::{Digest, Sha256};
 use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Rejected, Signed, TxStatus};
 use crate::chain::SimError;
 use crate::config::ChainCfg;
-use crate::odoo::Job;
+use crate::external_pull::Job;
 use crate::signer::{LocalSigner, Signer};
 
 pub type Key = [u8; 32];
@@ -843,8 +843,8 @@ pub fn classify_submit(e: &RpcError) -> Result<()> {
 
 // ------------------------------------------------------------------ events (spec §6.6)
 
-/// Event `emit_cpi!` trong inner instruction ⇒ event chuẩn hoá cho Odoo; `None` nếu không phải của program/event
-/// authority này, không phải event Odoo đọc, hoặc mint chưa đăng ký.
+/// Event `emit_cpi!` trong inner instruction ⇒ event chuẩn hoá cho ExternalPull; `None` nếu không phải của program/event
+/// authority này, không phải event ExternalPull đọc, hoặc mint chưa đăng ký.
 pub fn normalize(data: &[u8], router: &str, tokens: &[String], slot: u64, block_hash: &str, tx_hash: &str, log_index: usize) -> Option<Value> {
     if data.len() < 16 || data[..8] != EVENT_IX_TAG {
         return None;
@@ -1139,7 +1139,7 @@ impl SolanaAdapter {
         account_of_answer(&v)
     }
 
-    /// RS12-8: genesis của RPC = `network` của chain trong Odoo = `Config.network` của program; lệch ⇒ không chạy.
+    /// RS12-8: genesis của RPC = `network` của chain trong ExternalPull = `Config.network` của program; lệch ⇒ không chạy.
     async fn check_domain(&self) -> Result<()> {
         self.domain_checked
             .get_or_try_init(|| async {
@@ -1823,7 +1823,7 @@ mod tests {
         assert!(tx_events(&program, &tokens, &tx(1, 0, &event("PaymentSettled", &settled), Value::Null), &bh).unwrap().is_empty(), "not the event authority");
         assert!(tx_events(&program, &[], &tx(1, 2, &event("PaymentSettled", &settled), Value::Null), &bh).unwrap().is_empty(), "unregistered mint");
         assert!(tx_events(&program, &tokens, &tx(1, 2, &event("PaymentSettled", &settled), json!("x")), &bh).unwrap().is_empty(), "failed tx");
-        assert!(tx_events(&program, &tokens, &tx(1, 2, &event("PaidUnderMandate", &settled), Value::Null), &bh).unwrap().is_empty(), "Odoo does not ingest it");
+        assert!(tx_events(&program, &tokens, &tx(1, 2, &event("PaidUnderMandate", &settled), Value::Null), &bh).unwrap().is_empty(), "ExternalPull does not ingest it");
     }
 
     /// Review M1: the deterministic nonce address may already hold lamports (anyone can send them) — creation tops up
@@ -1917,7 +1917,7 @@ mod tests {
         assert!(a.tx_fee(&alloy::hex::encode([2u8; 64])).await.is_err());
     }
 
-    /// Review L2: a short page is not the end of history (paging goes on until an empty page or `from`); L1: Odoo
+    /// Review L2: a short page is not the end of history (paging goes on until an empty page or `from`); L1: ExternalPull
     /// tokens that all fail to parse are an error, so the cursor never moves past real events.
     #[tokio::test]
     async fn events_page_past_short_pages_and_refuse_unparsable_tokens() {

@@ -18,9 +18,9 @@ use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine as _;
 use scaas_node::adapter::{index_step, lane_step, ChainAdapter};
 use scaas_node::adapters::cosmos::{account_address, CosmosAdapter};
-use scaas_node::config::{ChainCfg, FinalityCfg, OdooCfg};
+use scaas_node::config::{ChainCfg, FinalityCfg, ExternalPullCfg};
 use scaas_node::keys::{lane_secret, Seed};
-use scaas_node::odoo::Odoo;
+use scaas_node::external_pull::ExternalPull;
 use scaas_node::signer::{Curve, LocalSigner, Signer};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -164,7 +164,7 @@ impl Subject {
         Self { key, addr }
     }
 
-    /// Job `signed_op` đúng như Odoo phát (payload hex, chữ ký base64 64 byte, khoá hex).
+    /// Job `signed_op` đúng như ExternalPull phát (payload hex, chữ ký base64 64 byte, khoá hex).
     fn job(&self, id: i64, token: &str, to: &str, amount: u128, lane: u8, valid_until: u64) -> (Value, String) {
         let payload = format!(
             r#"{{"amount":"{amount}","contract":"{token}","domain":"scaas.metaop.v1","extra":"","from":"{}","lane":"{}","network":"{CHAIN}","nonce":0,"op":"pay","pay_ref":"{}","relayer":"","to":"{to}","valid_until":{valid_until}}}"#,
@@ -183,7 +183,7 @@ impl Subject {
     }
 }
 
-// ------------------------------------------------------------------ fake Odoo (như tests/e2e.rs)
+// ------------------------------------------------------------------ fake ExternalPull (như tests/e2e.rs)
 
 fn allowed(from: &str, to: &str) -> bool {
     matches!(
@@ -197,18 +197,18 @@ fn allowed(from: &str, to: &str) -> bool {
 }
 
 #[derive(Default)]
-struct FakeOdoo {
+struct FakeExternalPull {
     states: std::collections::HashMap<i64, String>,
     refused: Vec<Value>,
     jobs: Vec<Value>,
     reports: Vec<Value>,
     ingested: Vec<Value>,
     indexed_block: u64,
-    /// Token đăng ký ở Odoo, dạng bech32 thật (review H1: node_config phải đọc được chúng).
+    /// Token đăng ký ở ExternalPull, dạng bech32 thật (review H1: node_config phải đọc được chúng).
     tokens: Vec<String>,
 }
 
-async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path<(String, String)>, Json(body): Json<Value>) -> Json<Value> {
+async fn fake(State(s): State<Arc<Mutex<FakeExternalPull>>>, Path((model, method)): Path<(String, String)>, Json(body): Json<Value>) -> Json<Value> {
     let mut o = s.lock().unwrap();
     let out = match (model.as_str(), method.as_str()) {
         ("blockchain.chain", "node_config") => json!({"evm_chain_number": body["evm_chain_number"], "finality_mode": "instant",
@@ -248,7 +248,7 @@ async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path
     Json(out)
 }
 
-async fn start_fake(state: Arc<Mutex<FakeOdoo>>) -> SocketAddr {
+async fn start_fake(state: Arc<Mutex<FakeExternalPull>>) -> SocketAddr {
     let app = Router::new().route("/json/2/{model}/{method}", post(fake)).with_state(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -256,9 +256,9 @@ async fn start_fake(state: Arc<Mutex<FakeOdoo>>) -> SocketAddr {
     addr
 }
 
-fn odoo_at(addr: SocketAddr) -> Odoo {
-    let cfg = OdooCfg { url: format!("http://{addr}"), database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
-    Odoo::with_key(&cfg, "k".into()).unwrap()
+fn external_pull_at(addr: SocketAddr) -> ExternalPull {
+    let cfg = ExternalPullCfg { url: format!("http://{addr}"), database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
+    ExternalPull::with_key(&cfg, "k".into()).unwrap()
 }
 
 fn cfg() -> ChainCfg {
@@ -287,7 +287,7 @@ fn cfg() -> ChainCfg {
     }
 }
 
-fn states(o: &Arc<Mutex<FakeOdoo>>, id: i64) -> Vec<String> {
+fn states(o: &Arc<Mutex<FakeExternalPull>>, id: i64) -> Vec<String> {
     let o = o.lock().unwrap();
     o.reports.iter().filter(|r| r["job_id"] == id).map(|r| r["chain_state"].as_str().unwrap().to_string()).collect()
 }
@@ -317,8 +317,8 @@ async fn cosmos_payment_lanes_finality_and_anti_lock() {
     let t1 = instantiate(&code, &init("TOKA"), "t1").await;
     let t2 = instantiate(&code, &init("TOKB"), "t2").await;
 
-    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![t1.clone(), t2.clone()], ..Default::default() }));
-    let odoo = odoo_at(start_fake(state.clone()).await);
+    let state = Arc::new(Mutex::new(FakeExternalPull { tokens: vec![t1.clone(), t2.clone()], ..Default::default() }));
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
     let adapter = CosmosAdapter::new(&cfg(), signers).unwrap();
     assert_eq!(adapter.lanes()[1].address, lane_addrs[1]);
 
@@ -327,7 +327,7 @@ async fn cosmos_payment_lanes_finality_and_anti_lock() {
     let (x, dx) = alice.job(1, &t1, &payee, 111, 1, vu);
     let (y, dy) = alice.job(2, &t2, &payee, 222, 2, vu);
     state.lock().unwrap().jobs.push(y);
-    assert!(lane_step(&adapter, &odoo, 0, "n#0").await.unwrap());
+    assert!(lane_step(&adapter, &external_pull, 0, "n#0").await.unwrap());
     assert_eq!(states(&state, 2), ["signed", "broadcast", "mined"]);
     let y_tx = state.lock().unwrap().reports.iter().find_map(|r| (r["job_id"] == 2).then(|| r["tx_hash"].as_str()).flatten().map(str::to_string)).unwrap();
     let get_tx = reqwest::get(format!("{REST}/cosmos/tx/v1beta1/txs/{}", y_tx.trim_start_matches("0x").to_uppercase())).await.unwrap();
@@ -335,7 +335,7 @@ async fn cosmos_payment_lanes_finality_and_anti_lock() {
     assert_eq!(balance(&t2, &payee).await, 222);
     assert_eq!(balance(&t1, &payee).await, 0, "X still withheld");
     state.lock().unwrap().jobs.push(x);
-    assert!(lane_step(&adapter, &odoo, 1, "n#1").await.unwrap());
+    assert!(lane_step(&adapter, &external_pull, 1, "n#1").await.unwrap());
     assert_eq!(states(&state, 1), ["signed", "broadcast", "mined"]);
     assert_eq!(balance(&t1, &payee).await, 111);
     assert_eq!(balance(&t1, &alice.addr).await, 1_000_000 - 111);
@@ -343,19 +343,19 @@ async fn cosmos_payment_lanes_finality_and_anti_lock() {
     // Payload hết hạn: mô phỏng bị contract từ chối ⇒ job chết, không gửi gì.
     let (late, _) = alice.job(3, &t1, &payee, 5, 3, now() - 3600);
     state.lock().unwrap().jobs.push(late);
-    assert!(lane_step(&adapter, &odoo, 0, "n#0").await.unwrap());
+    assert!(lane_step(&adapter, &external_pull, 0, "n#0").await.unwrap());
     assert_eq!(states(&state, 3), ["dead"]);
     let why = state.lock().unwrap().reports.last().unwrap()["error"].as_str().unwrap().to_string();
     assert!(why.contains("expired"), "{why}");
     // Replay của Y: mô phỏng từ chối, nonce đã tiêu ⇒ `consumed` (R80), không `dead`.
     let (y_again, _) = alice.job(4, &t2, &payee, 222, 2, vu);
     state.lock().unwrap().jobs.push(y_again);
-    assert!(lane_step(&adapter, &odoo, 1, "n#1").await.unwrap());
+    assert!(lane_step(&adapter, &external_pull, 1, "n#1").await.unwrap());
     assert_eq!(states(&state, 4), ["consumed"]);
 
-    // Finality: indexer đưa event của vùng đã commit vào Odoo, đúng digest/entry_ref.
+    // Finality: indexer đưa event của vùng đã commit vào ExternalPull, đúng digest/entry_ref.
     for _ in 0..20 {
-        if !index_step(&adapter, &odoo).await.unwrap() {
+        if !index_step(&adapter, &external_pull).await.unwrap() {
             break;
         }
     }

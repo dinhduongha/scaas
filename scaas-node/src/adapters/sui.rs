@@ -14,7 +14,7 @@ use crate::adapters::evm::{building, BUILDING};
 use scaas_rpc::family::FamilyError;
 use crate::chain::SimError;
 use crate::config::ChainCfg;
-use crate::odoo::Job;
+use crate::external_pull::Job;
 use crate::signer::{blake2b256, LocalSigner, Signer};
 
 pub type Addr = [u8; 32];
@@ -790,7 +790,7 @@ fn canon(v: &Value) -> Option<String> {
     v.as_str().and_then(|s| parse_addr(s).ok()).map(|a| addr_hex(&a))
 }
 
-/// Một event JSON-RPC của Sui ⇒ event chuẩn hoá cho Odoo; `None` nếu không phải của ta/registry lạ/hỏng.
+/// Một event JSON-RPC của Sui ⇒ event chuẩn hoá cho ExternalPull; `None` nếu không phải của ta/registry lạ/hỏng.
 pub fn normalize(package: &Addr, registries: &[String], ev: &Value, block: u64, block_hash: &str, tx_hash: &str) -> Option<Value> {
     let ty = ev.get("type")?.as_str()?;
     let mut it = ty.splitn(3, "::");
@@ -1232,7 +1232,7 @@ impl ChainAdapter for SuiAdapter {
         raw.extend_from_slice(&sig);
         raw.extend_from_slice(&s.public_key());
         let tx_id = addr_hex(&tx_digest(&built.body));
-        // Journal TRƯỚC khi trả (trước `signed` ở Odoo và trước khi gửi) — review M3.
+        // Journal TRƯỚC khi trả (trước `signed` ở ExternalPull và trước khi gửi) — review M3.
         let pending = Pending {
             tx: B64.encode(&built.body),
             sig: B64.encode(&raw[built.body.len()..]),
@@ -1305,7 +1305,7 @@ impl ChainAdapter for SuiAdapter {
         self.checkpoint_digest(0, height).await
     }
 
-    /// `contracts` = id `Registry<T>` các token Odoo đã đăng ký (review H2: không danh sách tĩnh trong cấu hình node).
+    /// `contracts` = id `Registry<T>` các token ExternalPull đã đăng ký (review H2: không danh sách tĩnh trong cấu hình node).
     /// `ponytail:` quét mọi tx của checkpoint trong vùng — đổi sang gRPC/GraphQL lọc theo package khi tải lớn.
     async fn events(&self, from: u64, to: u64, contracts: &[String]) -> Result<Vec<Value>> {
         let registries: Vec<String> = contracts.iter().filter_map(|c| parse_addr(c).ok()).map(|a| addr_hex(&a)).collect();

@@ -133,8 +133,8 @@ impl TryFrom<String> for State {
     }
 }
 
-/// Bảng của node, phản chiếu Odoo `TRANSITIONS` (`blockchain_relay_job.py:20-26`) + `leased`/`cancelled`.
-/// `tests/api/transitions.json` là bản chung với Odoo; test so hai bên.
+/// Bảng của node, phản chiếu ExternalPull `TRANSITIONS` (`blockchain_relay_job.py:20-26`) + `leased`/`cancelled`.
+/// `tests/api/transitions.json` là bản chung với ExternalPull; test so hai bên.
 pub const TRANSITIONS: &[(State, &[State])] = &[
     (Queued, &[Leased, Cancelled, Dead]),
     (Leased, &[Queued, Signed, Dead, Consumed, Cancelled]),

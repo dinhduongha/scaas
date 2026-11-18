@@ -1,4 +1,4 @@
-//! Dạng chuẩn địa chỉ theo họ mạng — bản Rust của Odoo `dms_blockchain/lib/addresses.py::canonical` (R61).
+//! Dạng chuẩn địa chỉ theo họ mạng — bản Rust của ExternalPull `dms_blockchain/lib/addresses.py::canonical` (R61).
 //! Khoá chung: `tests/api/addresses.json` (sinh từ bản Python). Store so byte-exact, nên mọi địa chỉ vào store
 //! (token, contract của policy) đi qua đây trước.
 //!
@@ -199,7 +199,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn matches_the_odoo_vectors() {
+    fn matches_the_external_pull_vectors() {
         let v: serde_json::Value = serde_json::from_str(include_str!("../tests/api/addresses.json")).unwrap();
         for c in v["cases"].as_array().unwrap() {
             let s = |k: &str| c[k].as_str();

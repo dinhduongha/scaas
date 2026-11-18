@@ -14,7 +14,7 @@ use crate::breaker::Breaker;
 use crate::chain::SimError;
 use crate::guard::Verdict;
 use crate::finality::next_range;
-use crate::odoo::{Job, Odoo, Report};
+use crate::external_pull::{Job, ExternalPull, Report};
 use crate::submit::{job_digest, now, InflightSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,7 +49,7 @@ impl Family {
     }
 }
 
-/// Một lane relayer: địa chỉ/khoá công khai dạng chuẩn của họ (chỉ để log và báo Odoo).
+/// Một lane relayer: địa chỉ/khoá công khai dạng chuẩn của họ (chỉ để log và báo ExternalPull).
 #[derive(Debug, Clone)]
 pub struct Lane {
     pub index: u32,
@@ -78,7 +78,7 @@ pub struct Signed {
 pub enum TxStatus {
     Pending,
     /// `tx_hash` = the transaction whose events the indexer reports, when it is not the signed tx id (TON: the
-    /// payer jetton wallet's tx, not the lane wallet's external message) — sent with `mined` so Odoo's `final`
+    /// payer jetton wallet's tx, not the lane wallet's external message) — sent with `mined` so ExternalPull's `final`
     /// matches it as ours. `None` = the tx id itself.
     Mined { height: u64, tx_hash: Option<String> },
     Reverted { reason: String },
@@ -105,11 +105,11 @@ pub trait ChainAdapter: Send + Sync {
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus>;
     /// Sequence đã COMMIT của lane (review S14) — không đoán từ bộ nhớ.
     async fn sequence(&self, lane: usize) -> Result<u64>;
-    /// Đỉnh đã final (độ sâu/tag/BFT + quorum endpoint) — chỉ vùng này được báo Odoo.
+    /// Đỉnh đã final (độ sâu/tag/BFT + quorum endpoint) — chỉ vùng này được báo ExternalPull.
     async fn final_head(&self) -> Result<Option<Head>>;
-    /// Hash (`0x` + 64 hex) của khối/ledger/checkpoint `height` — đầu cuối vùng báo Odoo.
+    /// Hash (`0x` + 64 hex) của khối/ledger/checkpoint `height` — đầu cuối vùng báo ExternalPull.
     async fn block_hash(&self, height: u64) -> Result<String>;
-    /// Event chuẩn hoá cho `chain_event_ingest` trong [from, to], CHỈ của `contracts` (token Odoo đã đăng ký,
+    /// Event chuẩn hoá cho `chain_event_ingest` trong [from, to], CHỈ của `contracts` (token ExternalPull đã đăng ký,
     /// dạng chuẩn của họ — review M1: không danh sách tĩnh trong cấu hình node); hash và địa chỉ đã ở dạng
     /// chuẩn (hash `0x`+64 hex; địa chỉ theo họ — R61).
     async fn events(&self, from: u64, to: u64, contracts: &[String]) -> Result<Vec<Value>>;
@@ -162,7 +162,7 @@ pub trait ChainAdapter: Send + Sync {
         Ok(())
     }
     /// The chain's registered tokens from the client, for the guard (review T4 I2, m1). Default: unused.
-    fn refresh_tokens(&self, _nc: &crate::odoo::NodeConfig) {}
+    fn refresh_tokens(&self, _nc: &crate::external_pull::NodeConfig) {}
     /// The job's simulation refused it because what it asks already holds (`mtxInvalidateNonces` past its minimum,
     /// MT-8): done, never dead. Default: no such job.
     fn already_done(&self, _job: &Job, _reason: &str) -> bool {
@@ -250,15 +250,15 @@ pub fn relay_fee_ours(open: bool, payee_is_lane: bool, amount: u128, p: &crate::
 }
 
 const STATUS_POLL: Duration = Duration::from_millis(500);
-/// Lùi khi lane lỗi (RPC/Odoo chết): 1 s nhân đôi tới 60 s; một vòng thành công đặt lại (merge TODO c).
+/// Lùi khi lane lỗi (RPC/ExternalPull chết): 1 s nhân đôi tới 60 s; một vòng thành công đặt lại (merge TODO c).
 const BACKOFF_MIN: Duration = Duration::from_secs(1);
 const BACKOFF_MAX: Duration = Duration::from_secs(60);
 const EXPIRY_GRACE: u64 = 30;
 /// `relay_poll`'s limit while `call` jobs are stopped: the most the client hands out, its own clamp.
 const HELD_CALLS_POLL: u32 = 50;
 
-async fn report(odoo: &Odoo, r: Report) -> bool {
-    match odoo.relay_report(&r).await {
+async fn report(external_pull: &ExternalPull, r: Report) -> bool {
+    match external_pull.relay_report(&r).await {
         Ok(()) => true,
         Err(e) => {
             warn!(job = r.job_id, state = %r.chain_state, "relay_report: {e:#}");
@@ -275,7 +275,7 @@ fn rep(job: i64, state: &str) -> Report {
 /// Cầu dao (R55) chỉ chặn việc claim job MỚI (`step_once`); job đang bay của lane được `follow` theo dõi tới cùng.
 pub async fn lane_runner(
     adapter: Arc<dyn ChainAdapter>,
-    odoo: Odoo,
+    external_pull: ExternalPull,
     lane: usize,
     worker: String,
     poll: Duration,
@@ -293,7 +293,7 @@ pub async fn lane_runner(
     }
     info!(chain = %key, lane, address = %adapter.lanes()[lane].address, "lane ready");
     backoff = BACKOFF_MIN;
-    while let Err(e) = recover_lane(adapter.as_ref(), &odoo, lane, &worker).await {
+    while let Err(e) = recover_lane(adapter.as_ref(), &external_pull, lane, &worker).await {
         warn!(chain = %key, lane, "restart recovery: {e:#}");
         tokio::time::sleep(backoff).await;
         backoff = (backoff * 2).min(BACKOFF_MAX);
@@ -303,7 +303,7 @@ pub async fn lane_runner(
     loop {
         if sampled.is_none_or(|t| t.elapsed() >= Duration::from_secs(15)) {
             sampled = Some(std::time::Instant::now());
-            match odoo.node_config_ref(key.clone().into(), None, None).await {
+            match external_pull.node_config_ref(key.clone().into(), None, None).await {
                 Ok(nc) => adapter.refresh_tokens(&nc),
                 Err(e) => warn!(chain = %key, lane, "token refresh: {e:#}"),
             }
@@ -326,7 +326,7 @@ pub async fn lane_runner(
             warn!(chain = %key, lane, held, "jobs of the `call` share at their part of the gas budget");
             calls_held = held;
         }
-        let why = match step_once(adapter.as_ref(), &odoo, lane, &worker, Some(&breaker), &inflight).await {
+        let why = match step_once(adapter.as_ref(), &external_pull, lane, &worker, Some(&breaker), &inflight).await {
             Ok(Step::Done) => {
                 backoff = BACKOFF_MIN;
                 continue;
@@ -351,21 +351,21 @@ pub async fn lane_runner(
 /// (trừ họ tự journal — `resend_journaled`), nên chỉ còn hỏi `tx_status`: vào sổ ⇒ chốt; từ chối ⇒ hàng đợi;
 /// không thấy ⇒ chờ tới khi slot sequence của nó bị dùng (không bao giờ vào được nữa ⇒ hàng đợi) hoặc payload hết
 /// hạn (`dead` ⇒ payer ký lại). Dựng lại một job mà tx cũ vẫn vào sổ không trả hai lần: contract chặn replay (R30).
-pub async fn recover_lane(adapter: &dyn ChainAdapter, odoo: &Odoo, lane: usize, worker: &str) -> Result<()> {
+pub async fn recover_lane(adapter: &dyn ChainAdapter, external_pull: &ExternalPull, lane: usize, worker: &str) -> Result<()> {
     adapter.resend_journaled(lane).await?;
     let address = adapter.lanes()[lane].address.clone();
-    let nc = odoo.node_config_ref(adapter.chain_key().into(), Some(address), Some(worker.into())).await?;
+    let nc = external_pull.node_config_ref(adapter.chain_key().into(), Some(address), Some(worker.into())).await?;
     adapter.refresh_tokens(&nc);
     for j in nc.inflight {
         let Some(tx_id) = j.tx_hash else {
             // Chưa ký ⇒ chưa gửi gì: journal `signed` luôn có trước lần gửi đầu.
-            report(odoo, Report { error: Some("node restarted before signing".into()), ..rep(j.job_id, "queued") }).await;
+            report(external_pull, Report { error: Some("node restarted before signing".into()), ..rep(j.job_id, "queued") }).await;
             continue;
         };
         info!(chain = %adapter.chain_key(), lane, job = j.job_id, tx = %tx_id, "re-checking in-flight job after restart");
         let valid_until = adapter.job_valid_until(&j.payload);
         let f = InFlight { job: &j.payload, tx_id: &tx_id, valid_until, lane, signed: None, nonce: j.nonce };
-        follow(adapter, odoo, f, Ok(()), None).await;
+        follow(adapter, external_pull, f, Ok(()), None).await;
     }
     Ok(())
 }
@@ -400,14 +400,14 @@ struct InFlight<'a> {
 /// Theo dõi tới mined/reverted/consumed/queued/dead. `sent` = kết quả lần gửi gần nhất. `Some(why)` = the job is back in the queue.
 /// R80: revert ⇒ kiểm `op_consumed` trước (review H3); trước MỖI lần gửi lại cũng vậy. Đã tiêu thụ ⇒ báo `consumed`
 /// một lần, thôi gửi lại, vẫn giữ lane theo dõi tx tới trạng thái cuối hoặc hết hạn (không báo gì thêm ngoài `mined`).
-async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut sent: Result<()>, breaker: Option<&Mutex<Breaker>>) -> Option<String> {
+async fn follow(adapter: &dyn ChainAdapter, external_pull: &ExternalPull, f: InFlight<'_>, mut sent: Result<()>, breaker: Option<&Mutex<Breaker>>) -> Option<String> {
     let job = f.job.id;
     let (mut consumed, mut metered) = (false, false);
     loop {
         match adapter.tx_status(f.tx_id).await {
             Ok(TxStatus::Mined { tx_hash, .. }) => {
                 meter(adapter, breaker, f.tx_id).await;
-                report(odoo, Report { tx_hash, ..rep(job, "mined") }).await;
+                report(external_pull, Report { tx_hash, ..rep(job, "mined") }).await;
                 return None;
             }
             Ok(TxStatus::Reverted { reason }) => {
@@ -420,11 +420,11 @@ async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut se
                 }
                 match adapter.op_consumed(f.job).await {
                     Ok(Some(true)) => {
-                        report(odoo, Report { error: Some(format!("unknown; ours reverted: {reason}")), ..rep(job, "consumed") }).await;
+                        report(external_pull, Report { error: Some(format!("unknown; ours reverted: {reason}")), ..rep(job, "consumed") }).await;
                         return None;
                     }
                     Ok(_) => {
-                        report(odoo, Report { error: Some(reason), ..rep(job, "reverted") }).await;
+                        report(external_pull, Report { error: Some(reason), ..rep(job, "reverted") }).await;
                         return None;
                     }
                     Err(e) => warn!(chain = %adapter.chain_key(), job, "reverted, op_consumed unreadable; retry: {e:#}"),
@@ -435,7 +435,7 @@ async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut se
                 if consumed {
                     return None;
                 }
-                report(odoo, Report { error: Some(e.to_string()), ..rep(job, "queued") }).await;
+                report(external_pull, Report { error: Some(e.to_string()), ..rep(job, "queued") }).await;
                 return Some(e.to_string());
             }
             // Fable recheck 6 R6-1: an unread status is no answer: asked again, never a verdict (the pipelined lane's `track`)
@@ -451,11 +451,11 @@ async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut se
                         Ok(Some(true)) => ("consumed", "unknown".to_string()),
                         Ok(_) => ("dead", r.to_string()),
                         Err(e) => {
-                            report(odoo, Report { error: Some(format!("op_consumed: {e:#}")), ..rep(job, "queued") }).await;
+                            report(external_pull, Report { error: Some(format!("op_consumed: {e:#}")), ..rep(job, "queued") }).await;
                             return Some(format!("op_consumed: {e:#}"));
                         }
                     };
-                    report(odoo, Report { error: Some(error), ..rep(job, state) }).await;
+                    report(external_pull, Report { error: Some(error), ..rep(job, state) }).await;
                     return None;
                 }
                 // Before `Rejected`: a job past its deadline back in the queue would be rejected the same way on every claim.
@@ -468,11 +468,11 @@ async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut se
                     // unreadable answer is asked again, never `dead`
                     match adapter.op_consumed(f.job).await {
                         Ok(Some(true)) => {
-                            report(odoo, Report { error: Some("unknown".into()), ..rep(job, "consumed") }).await;
+                            report(external_pull, Report { error: Some("unknown".into()), ..rep(job, "consumed") }).await;
                             return None;
                         }
                         Ok(_) => {
-                            report(odoo, Report { error: Some("expired before inclusion".into()), ..rep(job, "dead") }).await;
+                            report(external_pull, Report { error: Some("expired before inclusion".into()), ..rep(job, "dead") }).await;
                             return None;
                         }
                         Err(e) => {
@@ -486,19 +486,19 @@ async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut se
                     if consumed {
                         return None;
                     }
-                    report(odoo, Report { error: Some(r.to_string()), ..rep(job, "queued") }).await;
+                    report(external_pull, Report { error: Some(r.to_string()), ..rep(job, "queued") }).await;
                     return Some(r.to_string());
                 }
                 match f.signed {
                     Some(signed) if sent.is_err() && !consumed => match adapter.op_consumed(f.job).await {
                         Ok(Some(true)) => {
                             consumed = true;
-                            report(odoo, Report { error: Some("unknown".into()), ..rep(job, "consumed") }).await;
+                            report(external_pull, Report { error: Some("unknown".into()), ..rep(job, "consumed") }).await;
                         }
                         Ok(_) => {
                             sent = adapter.submit(signed).await;
                             if sent.is_ok() {
-                                report(odoo, rep(job, "broadcast")).await;
+                                report(external_pull, rep(job, "broadcast")).await;
                             }
                         }
                         Err(e) => warn!(chain = %adapter.chain_key(), job, "op_consumed: {e:#}; no resend this round"),
@@ -510,7 +510,7 @@ async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut se
                         let moved = matches!((f.nonce, adapter.sequence(f.lane).await), (Some(n), Ok(s)) if s != n);
                         if moved && matches!(adapter.tx_status(f.tx_id).await, Ok(TxStatus::Unknown)) {
                             let why = "lost with a node restart; its lane sequence moved on";
-                            report(odoo, Report { error: Some(why.into()), ..rep(job, "queued") }).await;
+                            report(external_pull, Report { error: Some(why.into()), ..rep(job, "queued") }).await;
                             return Some(why.into());
                         }
                     }
@@ -522,19 +522,19 @@ async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut se
 }
 
 /// `true` = đã xử lý một job (đi tiếp ngay).
-pub async fn lane_step(adapter: &dyn ChainAdapter, odoo: &Odoo, lane: usize, worker: &str) -> Result<bool> {
-    lane_step_metered(adapter, odoo, lane, worker, None).await
+pub async fn lane_step(adapter: &dyn ChainAdapter, external_pull: &ExternalPull, lane: usize, worker: &str) -> Result<bool> {
+    lane_step_metered(adapter, external_pull, lane, worker, None).await
 }
 
 /// `lane_step` + ghi phí thực trả của tx đã vào sổ (mined hoặc reverted) vào ngân sách gas của lane.
 pub async fn lane_step_metered(
     adapter: &dyn ChainAdapter,
-    odoo: &Odoo,
+    external_pull: &ExternalPull,
     lane: usize,
     worker: &str,
     breaker: Option<&Mutex<Breaker>>,
 ) -> Result<bool> {
-    Ok(!matches!(step_once(adapter, odoo, lane, worker, breaker, &InflightSet::default()).await?, Step::Idle))
+    Ok(!matches!(step_once(adapter, external_pull, lane, worker, breaker, &InflightSet::default()).await?, Step::Idle))
 }
 
 /// Kết quả một vòng lane. `Retry` = job đã về hàng đợi, every cause: the queue is oldest first, so it comes straight back, and
@@ -562,7 +562,7 @@ fn calls_stopped(adapter: &dyn ChainAdapter, breaker: Option<&Mutex<Breaker>>) -
 
 pub(crate) async fn step_once(
     adapter: &dyn ChainAdapter,
-    odoo: &Odoo,
+    external_pull: &ExternalPull,
     lane: usize,
     worker: &str,
     breaker: Option<&Mutex<Breaker>>,
@@ -574,7 +574,7 @@ pub(crate) async fn step_once(
     let held = calls_stopped(adapter, breaker);
     // ponytail: the pull path has no notion of kind, so a wider read reaches a payment behind stopped `call` jobs. A backlog over
     // 50 can hide a payment across windows here; the node's own queue claims by kind (NODE-JOB-21, SPECIFIED).
-    let jobs = odoo.relay_poll_ref(adapter.chain_key().into(), if held { HELD_CALLS_POLL } else { 5 }).await?;
+    let jobs = external_pull.relay_poll_ref(adapter.chain_key().into(), if held { HELD_CALLS_POLL } else { 5 }).await?;
     let mut job = None;
     for j in jobs {
         if held && adapter.in_call_share(&j) {
@@ -584,7 +584,7 @@ pub(crate) async fn step_once(
         if job_digest(&j).is_some_and(|d| inflight.contains(&d)) || adapter.call_key(&j).is_some_and(|c| inflight.contains(&c)) {
             continue;
         }
-        if odoo.relay_claim(&[j.id], worker).await?.contains(&j.id) {
+        if external_pull.relay_claim(&[j.id], worker).await?.contains(&j.id) {
             job = Some(j);
             break;
         }
@@ -592,7 +592,7 @@ pub(crate) async fn step_once(
     let Some(job) = job else { return Ok(Step::Idle) };
     // CTR-MTX-86, one rule on every family: a payee-fee field is refused by name before any build, never relayed without it
     if let Err(e) = crate::submit::refuse_payee_fee_fields(&job) {
-        report(odoo, Report { error: Some(e.to_string()), ..rep(job.id, "dead") }).await;
+        report(external_pull, Report { error: Some(e.to_string()), ..rep(job.id, "dead") }).await;
         return Ok(Step::Done);
     }
     // G2: giữ digest tới khi `follow` xong (guard rơi ở mọi lối ra của hàm này).
@@ -600,14 +600,14 @@ pub(crate) async fn step_once(
         Ok(d) => d,
         Err(SimError::Revert(_)) => None,
         Err(SimError::Transport(r)) => {
-            report(odoo, Report { error: Some(format!("rpc: {r}")), ..rep(job.id, "queued") }).await;
+            report(external_pull, Report { error: Some(format!("rpc: {r}")), ..rep(job.id, "queued") }).await;
             return Ok(Step::Retry(format!("rpc: {r}")));
         }
     };
     let call = adapter.call_key(&job);
     let _guard = match digest.map(|d| call.map_or_else(|| inflight.try_acquire(d), |c| inflight.try_acquire_op(d, c))) {
         Some(None) => {
-            report(odoo, Report { error: Some("in flight on another path".into()), ..rep(job.id, "queued") }).await;
+            report(external_pull, Report { error: Some("in flight on another path".into()), ..rep(job.id, "queued") }).await;
             return Ok(Step::Retry("in flight on another path".into()));
         }
         Some(g) => g,
@@ -618,7 +618,7 @@ pub(crate) async fn step_once(
         Some((key, relay)) => match inflight.hold_subject(key, relay) {
             Some(h) => Some(h),
             None => {
-                report(odoo, Report { error: Some("SUBJECT_HELD: a relay-fee job and another job of its payer are never in flight \
+                report(external_pull, Report { error: Some("SUBJECT_HELD: a relay-fee job and another job of its payer are never in flight \
                     together".into()), ..rep(job.id, "queued") }).await;
                 return Ok(Step::Retry("SUBJECT_HELD".into()));
             }
@@ -633,15 +633,15 @@ pub(crate) async fn step_once(
                 Verdict::Consumed(label) => ("consumed", label.unwrap_or_else(|| "unknown".into())),
                 Verdict::Dead(e) => ("dead", e),
                 Verdict::Requeue(e) => {
-                    report(odoo, Report { error: Some(e.clone()), ..rep(job.id, "queued") }).await;
+                    report(external_pull, Report { error: Some(e.clone()), ..rep(job.id, "queued") }).await;
                     return Ok(Step::Retry(e));
                 }
             };
-            report(odoo, Report { error: Some(error), ..rep(job.id, state) }).await;
+            report(external_pull, Report { error: Some(error), ..rep(job.id, state) }).await;
             return Ok(Step::Done);
         }
         Err(SimError::Transport(r)) => {
-            report(odoo, Report { error: Some(format!("rpc: {r}")), ..rep(job.id, "queued") }).await;
+            report(external_pull, Report { error: Some(format!("rpc: {r}")), ..rep(job.id, "queued") }).await;
             return Ok(Step::Retry(format!("rpc: {r}")));
         }
     };
@@ -653,28 +653,28 @@ pub(crate) async fn step_once(
     let (seq, signed) = match signed.await {
         Ok(s) => s,
         Err(e) => {
-            report(odoo, Report { error: Some(format!("before signing: {e:#}")), ..rep(job.id, "queued") }).await;
+            report(external_pull, Report { error: Some(format!("before signing: {e:#}")), ..rep(job.id, "queued") }).await;
             return Ok(Step::Retry(format!("before signing: {e:#}")));
         }
     };
     let signer = adapter.lanes()[lane].address.clone();
     // Journal TRƯỚC khi gửi (review I5): không ghi được thì không gửi, job về hàng đợi.
-    if !report(odoo, Report { tx_hash: Some(signed.tx_id.clone()), outer_nonce: Some(seq), signer_address: Some(signer), ..rep(job.id, "signed") }).await {
-        report(odoo, Report { error: Some("journal write failed".into()), ..rep(job.id, "queued") }).await;
+    if !report(external_pull, Report { tx_hash: Some(signed.tx_id.clone()), outer_nonce: Some(seq), signer_address: Some(signer), ..rep(job.id, "signed") }).await {
+        report(external_pull, Report { error: Some("journal write failed".into()), ..rep(job.id, "queued") }).await;
         return Ok(Step::Retry("journal write failed".into()));
     }
     let sent = adapter.submit(&signed).await;
     if sent.is_ok() {
-        report(odoo, rep(job.id, "broadcast")).await;
+        report(external_pull, rep(job.id, "broadcast")).await;
     }
     let f = InFlight { job: &job, tx_id: &signed.tx_id, valid_until: signed.valid_until, lane, signed: Some(&signed), nonce: Some(seq) };
-    Ok(follow(adapter, odoo, f, sent, breaker).await.map_or(Step::Done, Step::Retry))
+    Ok(follow(adapter, external_pull, f, sent, breaker).await.map_or(Step::Done, Step::Retry))
 }
 
 /// Indexer chung cho adapter không phải EVM: đỉnh final → event → `chain_event_ingest`.
-pub async fn index_runner(adapter: Arc<dyn ChainAdapter>, odoo: Odoo, poll: Duration) {
+pub async fn index_runner(adapter: Arc<dyn ChainAdapter>, external_pull: ExternalPull, poll: Duration) {
     loop {
-        match index_step(adapter.as_ref(), &odoo).await {
+        match index_step(adapter.as_ref(), &external_pull).await {
             Ok(true) => continue,
             Ok(false) => {}
             Err(e) => warn!(chain = %adapter.chain_key(), "indexer: {e:#}"),
@@ -683,9 +683,9 @@ pub async fn index_runner(adapter: Arc<dyn ChainAdapter>, odoo: Odoo, poll: Dura
     }
 }
 
-pub async fn index_step(adapter: &dyn ChainAdapter, odoo: &Odoo) -> Result<bool> {
+pub async fn index_step(adapter: &dyn ChainAdapter, external_pull: &ExternalPull) -> Result<bool> {
     let key: Value = adapter.chain_key().into();
-    let nc = odoo.node_config_ref(key.clone(), None, None).await?;
+    let nc = external_pull.node_config_ref(key.clone(), None, None).await?;
     let Some(head) = adapter.final_head().await? else { return Ok(false) };
     let Some((from, to)) = next_range(nc.indexed_block, head.height, 1000) else { return Ok(false) };
     // Không token nào đăng ký: không ai lọc được vùng này ⇒ giữ con trỏ (review M1), đọc lại khi có token.
@@ -695,7 +695,7 @@ pub async fn index_step(adapter: &dyn ChainAdapter, odoo: &Odoo) -> Result<bool>
     }
     let events = adapter.events(from, to, &contracts).await?;
     let hash = if to == head.height { head.hash.clone() } else { adapter.block_hash(to).await? };
-    let r = odoo.ingest_ref(key, from, to, &hash, &events).await?;
+    let r = external_pull.ingest_ref(key, from, to, &hash, &events).await?;
     Ok(r.indexed_block >= to && to < head.height)
 }
 
@@ -777,7 +777,7 @@ pub(crate) mod tests {
             self.0.lock().unwrap().push(contracts.to_vec());
             Ok(vec![])
         }
-        fn refresh_tokens(&self, _: &crate::odoo::NodeConfig) {
+        fn refresh_tokens(&self, _: &crate::external_pull::NodeConfig) {
             self.1.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         }
     }
@@ -786,10 +786,10 @@ pub(crate) mod tests {
     /// at recovery: a token registered after the lane started is served without a restart.
     #[tokio::test]
     async fn the_lane_loop_refreshes_the_registered_tokens() {
-        let (odoo, _) = fake_odoo(Fake { tokens: serde_json::json!([]), ..Default::default() }).await;
+        let (external_pull, _) = fake_external_pull(Fake { tokens: serde_json::json!([]), ..Default::default() }).await;
         let a = Arc::new(Mock::default());
         let k = Arc::new(Mutex::new(Breaker::new(crate::config::BreakerCfg::default())));
-        let run = lane_runner(a.clone(), odoo, 0, "n#0".into(), Duration::from_millis(10), k, InflightSet::default());
+        let run = lane_runner(a.clone(), external_pull, 0, "n#0".into(), Duration::from_millis(10), k, InflightSet::default());
         let _ = tokio::time::timeout(Duration::from_millis(500), run).await;
         assert_eq!(a.1.load(std::sync::atomic::Ordering::SeqCst), 2, "recovery, then the loop's first round");
     }
@@ -815,7 +815,7 @@ pub(crate) mod tests {
     }
     pub(crate) type Shared = Arc<std::sync::Mutex<Fake>>;
 
-    pub(crate) async fn fake_odoo(mut fake: Fake) -> (Odoo, Shared) {
+    pub(crate) async fn fake_external_pull(mut fake: Fake) -> (ExternalPull, Shared) {
         fake.jobs = fake.jobs.into_iter().map(crate::submit::tests::resign).collect();
         if let Some(a) = fake.inflight.as_array_mut() {
             for j in a {
@@ -859,20 +859,20 @@ pub(crate) mod tests {
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
-        let cfg = crate::config::OdooCfg { url, database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
-        (Odoo::with_key(&cfg, "k".into()).unwrap(), s)
+        let cfg = crate::config::ExternalPullCfg { url, database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
+        (ExternalPull::with_key(&cfg, "k".into()).unwrap(), s)
     }
 
-    /// Review H1+M1: tập contract đến từ Odoo (địa chỉ dạng chuẩn của họ, không phải EVM), và khi tập rỗng
+    /// Review H1+M1: tập contract đến từ ExternalPull (địa chỉ dạng chuẩn của họ, không phải EVM), và khi tập rỗng
     /// con trỏ KHÔNG tiến — event của token kích hoạt sau vẫn được đọc lại.
     #[tokio::test]
-    async fn index_step_filters_on_odoo_tokens_and_holds_the_cursor_without_them() {
+    async fn index_step_filters_on_external_pull_tokens_and_holds_the_cursor_without_them() {
         let a = Mock::default();
-        let (odoo, o) = fake_odoo(Fake { tokens: serde_json::json!([]), ..Default::default() }).await;
-        assert!(!index_step(&a, &odoo).await.unwrap());
+        let (external_pull, o) = fake_external_pull(Fake { tokens: serde_json::json!([]), ..Default::default() }).await;
+        assert!(!index_step(&a, &external_pull).await.unwrap());
         assert_eq!((o.lock().unwrap().ingests, a.0.lock().unwrap().len()), (0, 0), "no contracts => no ingest");
-        let (odoo, o) = fake_odoo(Fake { tokens: serde_json::json!([{"address": "wasm1tok", "decimals": 6}]), ..Default::default() }).await;
-        index_step(&a, &odoo).await.unwrap();
+        let (external_pull, o) = fake_external_pull(Fake { tokens: serde_json::json!([{"address": "wasm1tok", "decimals": 6}]), ..Default::default() }).await;
+        index_step(&a, &external_pull).await.unwrap();
         assert_eq!(o.lock().unwrap().ingests, 1);
         assert_eq!(a.0.lock().unwrap().as_slice(), [vec!["wasm1tok".to_string()]]);
     }
@@ -881,9 +881,9 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn rejected_broadcast_releases_the_lane_at_once() {
         let job = serde_json::json!({"id": 7, "kind": "signed_op", "op": {}});
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job], ..Default::default() }).await;
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![job], ..Default::default() }).await;
         let mock = Mock::default();
-        let step = lane_step(&mock, &odoo, 0, "n#0");
+        let step = lane_step(&mock, &external_pull, 0, "n#0");
         assert!(tokio::time::timeout(Duration::from_secs(5), step).await.expect("lane held").unwrap());
         let o = o.lock().unwrap();
         let states: Vec<&str> = o.reports.iter().filter_map(|r| r["chain_state"].as_str()).collect();
@@ -900,8 +900,8 @@ pub(crate) mod tests {
             if let Some(f) = field {
                 job[f] = serde_json::json!({"fee": "1", "feeRecipient": "0x00000000000000000000000000000000000000aa"});
             }
-            let (odoo, o) = fake_odoo(Fake { jobs: vec![job], ..Default::default() }).await;
-            lane_step(&Mock::default(), &odoo, 0, "n#0").await.unwrap();
+            let (external_pull, o) = fake_external_pull(Fake { jobs: vec![job], ..Default::default() }).await;
+            lane_step(&Mock::default(), &external_pull, 0, "n#0").await.unwrap();
             let o = o.lock().unwrap();
             let r = &o.reports[0];
             match field {
@@ -985,9 +985,9 @@ pub(crate) mod tests {
             job(5, "broadcast", Some("0x0d"), Some(4), live),  // refused without running ⇒ queued
             job(6, "broadcast", Some("0x0e"), Some(3), live),  // ran and reverted
         ]);
-        let (odoo, o) = fake_odoo(Fake { inflight, tokens: serde_json::json!([]), ..Default::default() }).await;
+        let (external_pull, o) = fake_external_pull(Fake { inflight, tokens: serde_json::json!([]), ..Default::default() }).await;
         let a = Scripted::default();
-        let run = recover_lane(&a, &odoo, 0, "n#0");
+        let run = recover_lane(&a, &external_pull, 0, "n#0");
         tokio::time::timeout(Duration::from_secs(10), run).await.expect("recovery hung").unwrap();
         assert!(a.resent.load(std::sync::atomic::Ordering::SeqCst), "journaled bytes re-sent first");
         let o = o.lock().unwrap();
@@ -1000,10 +1000,10 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn transport_errors_back_off() {
         let job = serde_json::json!({"id": 9, "kind": "signed_op", "op": {}});
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job], repeat: true, tokens: serde_json::json!([]), ..Default::default() }).await;
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![job], repeat: true, tokens: serde_json::json!([]), ..Default::default() }).await;
         let a = Arc::new(Scripted::default());
         let k = Arc::new(Mutex::new(Breaker::new(crate::config::BreakerCfg::default())));
-        let run = lane_runner(a.clone(), odoo, 0, "n#0".into(), Duration::from_millis(10), k, InflightSet::default());
+        let run = lane_runner(a.clone(), external_pull, 0, "n#0".into(), Duration::from_millis(10), k, InflightSet::default());
         let _ = tokio::time::timeout(Duration::from_millis(2500), run).await;
         let n = a.builds.load(std::sync::atomic::Ordering::SeqCst);
         assert!((1..=3).contains(&n), "{n} builds in 2.5 s");
@@ -1140,8 +1140,8 @@ pub(crate) mod tests {
 
     async fn race_metered(a: &Racy, inflight: &InflightSet, k: Option<&Mutex<Breaker>>) -> (Vec<String>, Shared) {
         let job = serde_json::json!({"id": 5, "kind": "signed_op", "op": {"op_kind": "pay", "digest": DIGEST}});
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job], tokens: serde_json::json!([]), ..Default::default() }).await;
-        let step = step_once(a, &odoo, 0, "n#0", k, inflight);
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![job], tokens: serde_json::json!([]), ..Default::default() }).await;
+        let step = step_once(a, &external_pull, 0, "n#0", k, inflight);
         tokio::time::timeout(Duration::from_secs(10), step).await.expect("lane held").unwrap();
         let states = o.lock().unwrap().reports.iter().map(|r| r["chain_state"].as_str().unwrap().to_string()).collect();
         (states, o)
@@ -1198,7 +1198,7 @@ pub(crate) mod tests {
         assert!(!set.contains(&DIGEST.parse().unwrap()), "digest released with the lane");
     }
 
-    /// Review H3: tx của ta revert vì người khác đã dùng nonce ⇒ `consumed`, không `reverted` (Odoo: failed + dependents).
+    /// Review H3: tx của ta revert vì người khác đã dùng nonce ⇒ `consumed`, không `reverted` (ExternalPull: failed + dependents).
     #[tokio::test]
     async fn reverted_status_of_a_consumed_op_reports_consumed() {
         let a = racy(false, Some(true), &[true], &[TxStatus::Reverted { reason: "nonce".into() }]);
@@ -1215,8 +1215,8 @@ pub(crate) mod tests {
         assert_eq!(race(&a, &InflightSet::default()).await.0, ["signed", "broadcast", "reverted"]);
     }
 
-    /// TON (mesh S2): `mined` carries the hash the indexer will report (payer wallet tx), so Odoo's `final` sees ours;
-    /// other families send none and Odoo keeps the signed tx id.
+    /// TON (mesh S2): `mined` carries the hash the indexer will report (payer wallet tx), so ExternalPull's `final` sees ours;
+    /// other families send none and ExternalPull keeps the signed tx id.
     #[tokio::test]
     async fn mined_report_carries_the_final_tx_hash_when_the_adapter_has_one() {
         let h = "0x".to_string() + &"ab".repeat(32);
@@ -1277,8 +1277,8 @@ pub(crate) mod tests {
         let run = |consumed: Option<bool>, unreadable: u32| async move {
             let a = Racy { refused: true, consumed_unreadable: unreadable.into(), ..racy(false, consumed, &[], &[TxStatus::Unknown]) };
             let job = serde_json::json!({"id": 5, "kind": "signed_op", "op": {}});
-            let (odoo, o) = fake_odoo(Fake { jobs: vec![job], tokens: serde_json::json!([]), ..Default::default() }).await;
-            let retry = matches!(step_once(&a, &odoo, 0, "n#0", None, &InflightSet::default()).await.unwrap(), Step::Retry(_));
+            let (external_pull, o) = fake_external_pull(Fake { jobs: vec![job], tokens: serde_json::json!([]), ..Default::default() }).await;
+            let retry = matches!(step_once(&a, &external_pull, 0, "n#0", None, &InflightSet::default()).await.unwrap(), Step::Retry(_));
             let last = o.lock().unwrap().reports.last().unwrap()["chain_state"].as_str().unwrap().to_string();
             (last, retry, a.submits.load(std::sync::atomic::Ordering::SeqCst))
         };
@@ -1294,8 +1294,8 @@ pub(crate) mod tests {
         k.lock().unwrap().spend(now(), 500);
         let a = racy(false, None, &[true], &[TxStatus::Mined { height: 1, tx_hash: None }]);
         let job = serde_json::json!({"id": 5, "kind": "call", "op": {}});
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job], tokens: serde_json::json!([]), ..Default::default() }).await;
-        step_once(&a, &odoo, 0, "n#0", Some(&k), &InflightSet::default()).await.unwrap();
+        let (external_pull, o) = fake_external_pull(Fake { jobs: vec![job], tokens: serde_json::json!([]), ..Default::default() }).await;
+        step_once(&a, &external_pull, 0, "n#0", Some(&k), &InflightSet::default()).await.unwrap();
         assert_eq!(o.lock().unwrap().reports.last().unwrap()["chain_state"], "mined");
     }
 
@@ -1305,11 +1305,11 @@ pub(crate) mod tests {
     async fn a_job_put_back_is_a_retry() {
         let a = racy(true, None, &[], &[TxStatus::Unknown]);
         let job = serde_json::json!({"id": 5, "kind": "signed_op", "op": {"digest": DIGEST}});
-        let (odoo, _) = fake_odoo(Fake { jobs: vec![job], tokens: serde_json::json!([]), ..Default::default() }).await;
+        let (external_pull, _) = fake_external_pull(Fake { jobs: vec![job], tokens: serde_json::json!([]), ..Default::default() }).await;
         let set = InflightSet::default();
         let _held = set.hold_subject(alloy::primitives::B256::repeat_byte(9), false);
         let held = Racy { subject: Some(alloy::primitives::B256::repeat_byte(9)), ..a };
-        assert!(matches!(step_once(&held, &odoo, 0, "n#0", None, &set).await.unwrap(), Step::Retry(_)));
+        assert!(matches!(step_once(&held, &external_pull, 0, "n#0", None, &set).await.unwrap(), Step::Retry(_)));
     }
 
     /// R80 (§8.4 `step_once`): mô phỏng revert vì op đã bị tiêu thụ ⇒ `consumed`, không `dead`.

@@ -14,7 +14,7 @@ url = "sqlite:///var/lib/scaas/node.db"          # created 0600 by `store init`;
 # job_retention_secs = 2592000                   # terminal jobs kept 30 d (and never before their payload expired)
 # feed_retention_secs = 604800                   # job/event feed rows kept 7 d
 
-# Job API for external clients (Odoo, other ERPs) and admin login. Served from a later release; read now.
+# Job API for external clients (ERPs and others) and admin login. Served from a later release; read now.
 [api]
 bind = "127.0.0.1:8548"                          # default; never the port of gateway_bind or admin_bind (checked)
 # master_key = { env = "SCAAS_API_MASTER_KEY" }  # >= 32 bytes; derives every client API key secret (R92)
@@ -25,7 +25,7 @@ bind = "127.0.0.1:8548"                          # default; never the port of ga
 
 # Tenants (R90). Imported once; afterwards managed in the store.
 # [[namespaces]]
-# name = "odoo-prod"
+# name = "external-pull-prod"
 # chains = ["evm:7622"]
 # allow_call = true                              # mandates / subject accounts need call jobs (R103)
 
@@ -51,10 +51,10 @@ bind = "127.0.0.1:8548"                          # default; never the port of ga
 # enabled = false
 # listen = ["/ip4/0.0.0.0/udp/4001/quic-v1", "/ip4/0.0.0.0/tcp/4001"]
 
-# legacy(R104): the Odoo pull path. Required while submit/indexer/admin run on it.
-[odoo]
-url = "http://odoo:8069"
-database = "odoo19"
+# legacy(R104): the external pull path. Required while submit/indexer/admin run on it.
+[external_pull]
+url = "http://external-pull:8069"
+database = "pulldb"
 relay_api_key_env = "SCAAS_RELAY_API_KEY"       # user in "Blockchain Relay Worker (service)"
 indexer_api_key_env = "SCAAS_INDEXER_API_KEY"   # user in "Blockchain Indexer (service)"
 
@@ -170,9 +170,9 @@ breaker = { spike_ratio = 3.0, gas_budget_per_hour = "50000000000000000", min_re
 # entries = [{ entry = "deposit", op_type = "Deposit(bytes32 payer,uint256 amount,uint64 releaseAfter,bytes32 salt)" }]
 
 # ---- Other network families (R58): one [[chains]] each; delete the ones you do not run. ----
-# They run the generic lane runner (one tx in flight per lane, `signed` journaled in Odoo before sending,
+# They run the generic lane runner (one tx in flight per lane, `signed` journaled in ExternalPull before sending,
 # in-flight jobs re-checked on restart). `network` makes the key `family:network`, which must equal
-# Odoo's blockchain.chain.chain_key. Lane addresses to fund: `scaas-node addresses --config node.toml`.
+# ExternalPull's blockchain.chain.chain_key. Lane addresses to fund: `scaas-node addresses --config node.toml`.
 
 [[chains]]                                       # Hedera: HSCS through a JSON-RPC relay; nonce lanes like EVM
 family = "hedera"
@@ -228,7 +228,7 @@ breaker = { gas_budget_per_hour = "1000000000", min_relayer_balance = "100000000
 
 [[chains]]                                       # Pi Network: Soroban family, Stellar-compatible
 family = "soroban"
-network = "pi-testnet"                           # Odoo network_key; mainnet: "pi-mainnet"
+network = "pi-testnet"                           # ExternalPull network_key; mainnet: "pi-mainnet"
 rpc_urls = ["http://pi-soroban-rpc:8000"]        # your Pi Soroban RPC
 lanes = [0, 1]
 coin_type = 314159                               # lanes m/44'/314159'/i' (SLIP-44 Pi), not Stellar's 148

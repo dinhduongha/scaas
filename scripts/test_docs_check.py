@@ -67,6 +67,26 @@ def main():
         subprocess.run(['git', '-C', str(repo), 'add', 'log.txt'], check=True)
         r = run(repo / 'docs', 'paths')
         assert r.returncode == 1 and 'log.txt:2: machine path' in r.stdout and 'legacy' not in r.stdout, r.stdout
+    # consumer: no consumer name in the node's src/ and tests/; legacy/ and other directories are not scanned; the one
+    # wire header passes, any other spelling of the name fails
+    name = 'Od' + 'oo'                                 # split: this file is outside the scanned dirs, but keep it clean
+    (repo / 'scaas-node' / 'src').mkdir(parents=True)
+    (repo / 'scaas-node' / 'legacy').mkdir()
+    (repo / 'scaas-node' / 'src' / 'a.rs').write_text('.header("X-' + name + '-Database", db)\n')
+    (repo / 'scaas-node' / 'legacy' / 'old.rs').write_text('struct ' + name + ';\n')
+    (repo / 'scaas-node' / 'README.md').write_text(name + '\n')
+    subprocess.run(['git', '-C', str(repo), 'add', 'scaas-node'], check=True)
+    r = run(repo / 'docs', 'consumer')
+    assert r.returncode == 0, r.stdout
+    for planted in ('struct ' + name + ';', 'let x = "' + name.lower() + '19";', '// ' + name.upper() + ' X-' + name + '-Database'):
+        for d in ('src', 'tests'):
+            (repo / 'scaas-node' / d).mkdir(exist_ok=True)
+            (repo / 'scaas-node' / d / 'b.rs').write_text('fn f() {}\n' + planted + '\n')
+            subprocess.run(['git', '-C', str(repo), 'add', 'scaas-node'], check=True)
+            r = run(repo / 'docs', 'consumer')
+            assert r.returncode == 1 and f'scaas-node/{d}/b.rs:2: consumer name' in r.stdout, r.stdout
+            subprocess.run(['git', '-C', str(repo), 'rm', '-q', '--cached', f'scaas-node/{d}/b.rs'], check=True)
+            (repo / 'scaas-node' / d / 'b.rs').unlink()
     sys.path.insert(0, str(SCRIPT.parent))
     import docs_check as dc
     assert dc.expand('7.1–7.3, 9') == {'7.1', '7.2', '7.3', '9'} and dc.expand('10.0–10.x') == {'10'}

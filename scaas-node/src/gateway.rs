@@ -208,7 +208,7 @@ async fn enqueue(c: &GwChain, w: Work, status: &str) -> Reply {
 /// refusals, `auth` decoded as `UASig`), before the simulation.
 fn ua_work_of(r: UaReq, fee_recipient: Option<Address>) -> Result<Work, Reply> {
     let job = json!({"id": 0, "kind": "ua_metatx", "token": r.token, "struct": r.struct_, "contract": r.contract, "m": r.m, "auth": r.auth});
-    let job: crate::odoo::Job = serde_json::from_value(job).map_err(bad)?;
+    let job: crate::external_pull::Job = serde_json::from_value(job).map_err(bad)?;
     let mut w = work_from_job(&job, fee_recipient).map_err(|e| bad(format!("{e:#}")))?;
     w.job_id = None;
     fresh(U256::from(w.valid_until))?;

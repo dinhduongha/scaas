@@ -61,7 +61,7 @@ fn base_set() -> ConfigSet {
             LaneRow { chain_key: CHAIN.into(), label: LANE.into(), account_index: 0, journal_max: None },
             LaneRow { chain_key: CHAIN.into(), label: "0xBB".into(), account_index: 1, journal_max: None },
         ],
-        namespaces: vec![NamespaceRow { name: "odoo".into(), state: "active".into(), allow_call: true,
+        namespaces: vec![NamespaceRow { name: "external-pull".into(), state: "active".into(), allow_call: true,
                                         max_live_jobs: 10_000, chains: vec![CHAIN.into()] }],
         peers: vec![],
         policy: vec![],
@@ -76,9 +76,9 @@ async fn open_seeded(url: &str) -> SqliteStore {
 
 fn new_job(key: &str, digest: u8) -> NewJob {
     NewJob {
-        namespace: "odoo".into(),
+        namespace: "external-pull".into(),
         origin: Origin { scope: "db:1".into(), producer: "blockchain.payment.request".into(), key: key.into(), generation: 0 },
-        client_ref: Some(format!("odoo:{key}")),
+        client_ref: Some(format!("external-pull:{key}")),
         chain_key: CHAIN.into(),
         kind: "metatx".into(),
         digest: Some([digest; 32]),
@@ -189,7 +189,7 @@ async fn stale_owner_cannot_journal() {
     let mut more = base_set();
     more.chains.push(chain("evm:7"));
     assert!(matches!(bootstrap(&a, &more, 12).await, Err(StoreError::NotOwner)), "import");
-    assert!(matches!(a.cancel_by_origin("odoo", &new_job("z", 4).origin, 4_000_000_000, 12).await, Err(StoreError::NotOwner)));
+    assert!(matches!(a.cancel_by_origin("external-pull", &new_job("z", 4).origin, 4_000_000_000, 12).await, Err(StoreError::NotOwner)));
     assert!(matches!(a.mark_restored(&audit("r"), 12).await, Err(StoreError::NotOwner)));
     assert!(matches!(a.check_owner().await, Err(StoreError::NotOwner)), "the cheap A1.1 check sees it too");
     b.check_owner().await.unwrap();
@@ -565,7 +565,7 @@ async fn digest_and_payload_hash_follow_the_kind() {
     assert_eq!(s.head_seq("job").await.unwrap(), 0, "rolled back");
     let raw = |kind: &str, hash: &str| format!(
         "INSERT INTO job (uid, namespace, origin_scope, origin_producer, origin_key, chain_key, kind, digest, payload, \
-         payload_hash, valid_until, state, created_at, updated_at) VALUES (900, 'odoo', 's', 'p', 'k', '', '{kind}', NULL, \
+         payload_hash, valid_until, state, created_at, updated_at) VALUES (900, 'external-pull', 's', 'p', 'k', '', '{kind}', NULL, \
          {}, {hash}, 1, 'cancelled', 1, 1)", if kind == "tombstone" { "NULL" } else { "x'00'" });
     assert!(sqlx::query(&raw("call", "NULL")).execute(&s.pool).await.is_err(), "call without payload_hash");
     assert!(sqlx::query(&raw("tombstone", "zeroblob(32)")).execute(&s.pool).await.is_err(), "tombstone with one");
@@ -577,16 +577,16 @@ async fn cancel_by_origin_without_a_job_writes_a_tombstone() {
     let t = tmp();
     let s = open_seeded(&t.url).await;
     let j = new_job("t", 1);
-    let Cancel::Cancelled(t) = s.cancel_by_origin("odoo", &j.origin, 4_000_000_000, 10).await.unwrap() else { panic!() };
+    let Cancel::Cancelled(t) = s.cancel_by_origin("external-pull", &j.origin, 4_000_000_000, 10).await.unwrap() else { panic!() };
     assert_eq!((t.kind.as_str(), t.state, t.payload.clone()), ("tombstone", Cancelled, None));
     // a late push of that key: created = false, state = cancelled
     assert_eq!(s.accept(&j, 11).await.unwrap(), Accept::Existing(t.clone()));
     // cancel by origin of an existing job = cancel by uid
     let k = created(&s, &new_job("u", 2)).await;
-    let Cancel::Cancelled(c) = s.cancel_by_origin("odoo", &new_job("u", 2).origin, 4_000_000_000, 12).await.unwrap()
+    let Cancel::Cancelled(c) = s.cancel_by_origin("external-pull", &new_job("u", 2).origin, 4_000_000_000, 12).await.unwrap()
         else { panic!() };
     assert_eq!((c.uid, c.state), (k.uid, Cancelled));
-    assert!(matches!(s.cancel_by_origin("odoo", &new_job("u", 2).origin, 4_000_000_000, 13).await.unwrap(),
+    assert!(matches!(s.cancel_by_origin("external-pull", &new_job("u", 2).origin, 4_000_000_000, 13).await.unwrap(),
                      Cancel::Cancelled(_)), "idempotent");
 }
 
@@ -624,7 +624,7 @@ async fn unique_violations_are_classified_by_constraint_name() {
     let dup = |uid: i64, key: &str, digest: Vec<u8>| {
         sqlx::query("INSERT INTO job (uid, namespace, origin_scope, origin_producer, origin_key, generation, chain_key, \
                      kind, digest, payload, payload_hash, valid_until, state, created_at, updated_at) \
-                     VALUES (?, 'odoo', 'db:1', 'blockchain.payment.request', ?, 0, 'evm:7622', 'metatx', ?, x'00', \
+                     VALUES (?, 'external-pull', 'db:1', 'blockchain.payment.request', ?, 0, 'evm:7622', 'metatx', ?, x'00', \
                      zeroblob(32), 1, 'queued', 1, 1)")
             .bind(uid).bind(key.to_string()).bind(digest)
     };

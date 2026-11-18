@@ -9,7 +9,7 @@
 //! 1. hai lane relayer từ mnemonic 24 từ (`m/44'/501'/i'/0'`), airdrop; mỗi lane tự tạo durable nonce account (địa
 //!    chỉ nonce của lane 1 bị gửi lamports trước — vẫn tạo được, review M1);
 //!    alice (chủ thể) không có SOL, tiền nằm ở ATA của Account PDA của nó (mở lười ở lần trả đầu);
-//! 2. `initialize` với genesis hash thật; mint SPL Token + mint Token-2022; Odoo giả trả mint thật và TỪ CHỐI event
+//! 2. `initialize` với genesis hash thật; mint SPL Token + mint Token-2022; ExternalPull giả trả mint thật và TỪ CHỐI event
 //!    của mint chưa đăng ký;
 //! 3. ANTI-LOCK đồng thời: X `signed` trên lane 0 nhưng bị GIỮ; Y (Token-2022) đi hết tới `mined` trên lane 1; rồi X
 //!    qua; phát lại X ⇒ mô phỏng từ chối ⇒ `dead`; chữ ký tự tính = chữ ký RPC; phí = 2 chữ ký;
@@ -34,9 +34,9 @@ use scaas_node::adapters::solana::{
     ATA_PROGRAM, SYSTEM, TOKEN_2022, TOKEN_PROGRAM,
 };
 use scaas_node::chain::SimError;
-use scaas_node::config::{ChainCfg, FinalityCfg, OdooCfg};
+use scaas_node::config::{ChainCfg, FinalityCfg, ExternalPullCfg};
 use scaas_node::keys::{lane_secret, Seed};
-use scaas_node::odoo::{Job, Odoo};
+use scaas_node::external_pull::{Job, ExternalPull};
 use scaas_node::signer::{Curve, LocalSigner, Signer};
 use serde_json::{json, Value};
 
@@ -170,7 +170,7 @@ async fn mint_to(admin: &LocalSigner, owner: &Key, mint: &Key, tp: &Key, amount:
     a
 }
 
-// ------------------------------------------------------------------ fake Odoo (same transitions as e2e.rs)
+// ------------------------------------------------------------------ fake ExternalPull (same transitions as e2e.rs)
 
 fn allowed(from: &str, to: &str) -> bool {
     matches!(
@@ -184,7 +184,7 @@ fn allowed(from: &str, to: &str) -> bool {
 }
 
 #[derive(Default)]
-struct FakeOdoo {
+struct FakeExternalPull {
     states: std::collections::HashMap<i64, String>,
     refused: Vec<Value>,
     jobs: Vec<Value>,
@@ -197,7 +197,7 @@ struct FakeOdoo {
     inflight: Vec<Value>,
 }
 
-async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path<(String, String)>, Json(body): Json<Value>) -> Json<Value> {
+async fn fake(State(s): State<Arc<Mutex<FakeExternalPull>>>, Path((model, method)): Path<(String, String)>, Json(body): Json<Value>) -> Json<Value> {
     let mut o = s.lock().unwrap();
     let out = match (model.as_str(), method.as_str()) {
         ("blockchain.chain", "node_config") => json!({
@@ -239,7 +239,7 @@ async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path
     Json(out)
 }
 
-async fn start_fake(state: Arc<Mutex<FakeOdoo>>) -> SocketAddr {
+async fn start_fake(state: Arc<Mutex<FakeExternalPull>>) -> SocketAddr {
     let app = Router::new().route("/json/2/{model}/{method}", post(fake)).with_state(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -247,9 +247,9 @@ async fn start_fake(state: Arc<Mutex<FakeOdoo>>) -> SocketAddr {
     addr
 }
 
-fn odoo_at(addr: SocketAddr) -> Odoo {
-    let cfg = OdooCfg { url: format!("http://{addr}"), database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
-    Odoo::with_key(&cfg, "k".into()).unwrap()
+fn external_pull_at(addr: SocketAddr) -> ExternalPull {
+    let cfg = ExternalPullCfg { url: format!("http://{addr}"), database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
+    ExternalPull::with_key(&cfg, "k".into()).unwrap()
 }
 
 /// `relay_pay` của alice (ví seed R32, kind 0 = ký thẳng `T`) thành job `signed_op`.
@@ -331,14 +331,14 @@ impl ChainAdapter for Held {
     }
 }
 
-fn states_of(state: &Arc<Mutex<FakeOdoo>>, id: i64) -> Vec<String> {
+fn states_of(state: &Arc<Mutex<FakeExternalPull>>, id: i64) -> Vec<String> {
     state.lock().unwrap().reports.iter().filter(|r| r["job_id"] == id).map(|r| r["chain_state"].as_str().unwrap().to_string()).collect()
 }
 
-async fn run_job(adapter: &dyn ChainAdapter, odoo: &Odoo, state: &Arc<Mutex<FakeOdoo>>, lane: usize, j: Value) -> Vec<String> {
+async fn run_job(adapter: &dyn ChainAdapter, external_pull: &ExternalPull, state: &Arc<Mutex<FakeExternalPull>>, lane: usize, j: Value) -> Vec<String> {
     let id = j["id"].as_i64().unwrap();
     state.lock().unwrap().jobs.push(j);
-    assert!(lane_step(adapter, odoo, lane, "e2e").await.unwrap());
+    assert!(lane_step(adapter, external_pull, lane, "e2e").await.unwrap());
     states_of(state, id)
 }
 
@@ -423,24 +423,24 @@ async fn solana_payments_relay_finalize_and_never_lock_each_other() {
     let n1 = rpc("getAccountInfo", json!([b58(&nonce1), {"commitment": "confirmed", "encoding": "base64"}])).await;
     assert_eq!(n1["value"]["space"].as_u64(), Some(80), "pre-funded address became the lane's nonce account");
 
-    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![b58(&usd), b58(&eur)], ..Default::default() }));
-    let odoo = odoo_at(start_fake(state.clone()).await);
+    let state = Arc::new(Mutex::new(FakeExternalPull { tokens: vec![b58(&usd), b58(&eur)], ..Default::default() }));
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
     let head0 = adapter.final_head().await.unwrap().expect("finalized head");
     state.lock().unwrap().indexed_block = head0.height;
 
-    // ANTI-LOCK: X `signed` on lane 0 and held; Y (Token-2022, another Odoo lane) goes all the way on lane 1.
+    // ANTI-LOCK: X `signed` on lane 0 and held; Y (Token-2022, another ExternalPull lane) goes all the way on lane 1.
     let vu = now() + 600;
     let (x, x_digest) = job(1, &network, &alice, &usd, TOKEN_PROGRAM, &shop, 1000, 0x11, 0xa1, vu);
     let (y, y_digest) = job(2, &network, &alice, &eur, TOKEN_2022, &shop, 500, 0x22, 0xa2, vu);
     let held = Held { inner: adapter.clone(), hold: 1, gate: tokio::sync::Semaphore::new(0) };
     state.lock().unwrap().jobs.push(x.clone());
-    let x_run = lane_step(&held, &odoo, 0, "e2e");
+    let x_run = lane_step(&held, &external_pull, 0, "e2e");
     let y_run = async {
         while states_of(&state, 1).last().map(String::as_str) != Some("signed") {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
         state.lock().unwrap().jobs.push(y);
-        assert!(lane_step(&held, &odoo, 1, "e2e").await.unwrap());
+        assert!(lane_step(&held, &external_pull, 1, "e2e").await.unwrap());
         assert_eq!(states_of(&state, 2), ["signed", "broadcast", "mined"], "Y while X is in flight");
         assert_eq!(states_of(&state, 1), ["signed"], "X still held, unsent");
         held.gate.add_permits(1);
@@ -467,14 +467,14 @@ async fn solana_payments_relay_finalize_and_never_lock_each_other() {
     // Replay X: the lane PDA nonce is used ⇒ simulation refuses ⇒ `consumed` (R80), nothing paid.
     let mut replay = x;
     replay["id"] = json!(3);
-    assert_eq!(run_job(adapter.as_ref(), &odoo, &state, 0, replay).await, ["consumed"]);
+    assert_eq!(run_job(adapter.as_ref(), &external_pull, &state, 0, replay).await, ["consumed"]);
 
     // REJECTED: bytes signed over a nonce value that has since advanced.
     let (r6, _) = job(6, &network, &alice, &usd, TOKEN_PROGRAM, &shop, 10, 0x66, 0xa6, vu);
     let r6: Job = serde_json::from_value(r6).unwrap();
     let stale = adapter.sign(adapter.build(&r6, 0).await.unwrap(), 0, adapter.sequence(0).await.unwrap()).await.unwrap();
     let (adv, _) = job(61, &network, &alice, &usd, TOKEN_PROGRAM, &shop, 10, 0x61, 0xb6, vu);
-    assert_eq!(run_job(adapter.as_ref(), &odoo, &state, 0, adv).await, ["signed", "broadcast", "mined"]);
+    assert_eq!(run_job(adapter.as_ref(), &external_pull, &state, 0, adv).await, ["signed", "broadcast", "mined"]);
     let err = adapter.submit(&stale).await.unwrap_err();
     assert!(err.downcast_ref::<Rejected>().is_some(), "{err:#}");
     assert_eq!(adapter.tx_status(&stale.tx_id).await.unwrap(), TxStatus::Unknown);
@@ -497,19 +497,19 @@ async fn solana_payments_relay_finalize_and_never_lock_each_other() {
         o.inflight = vec![json!({"job_id": 7, "state": "broadcast", "tx_hash": s7.tx_id, "nonce": s7.sequence,
             "payload": {"id": 7, "kind": "signed_op", "op": {"valid_until": vu}}})];
     }
-    tokio::time::timeout(Duration::from_secs(60), recover_lane(adapter.as_ref(), &odoo, 0, "e2e")).await.expect("recovery A").unwrap();
+    tokio::time::timeout(Duration::from_secs(60), recover_lane(adapter.as_ref(), &external_pull, 0, "e2e")).await.expect("recovery A").unwrap();
     assert_eq!(states_of(&state, 7), ["mined"]);
     state.lock().unwrap().inflight = vec![json!({"job_id": 8, "state": "signed", "tx_hash": s8.tx_id, "nonce": s8.sequence,
         "payload": {"id": 8, "kind": "signed_op", "op": {"valid_until": vu}}})];
     let t = std::time::Instant::now();
-    tokio::time::timeout(Duration::from_secs(60), recover_lane(adapter.as_ref(), &odoo, 1, "e2e")).await.expect("recovery B").unwrap();
+    tokio::time::timeout(Duration::from_secs(60), recover_lane(adapter.as_ref(), &external_pull, 1, "e2e")).await.expect("recovery B").unwrap();
     assert_eq!(states_of(&state, 8), ["queued"], "requeued at once, not held until the payload expires");
     assert!(t.elapsed() < Duration::from_secs(30));
     assert!(adapter.submit(&s8).await.unwrap_err().downcast_ref::<Rejected>().is_some(), "old bytes can never land");
 
     // L2: a payment in an unregistered mint lands but is never reported.
     let (e10, _) = job(10, &network, &alice, &evil, TOKEN_PROGRAM, &shop, 33, 0xaa, 0xaa, vu);
-    assert_eq!(run_job(adapter.as_ref(), &odoo, &state, 1, e10).await, ["signed", "broadcast", "mined"]);
+    assert_eq!(run_job(adapter.as_ref(), &external_pull, &state, 1, e10).await, ["signed", "broadcast", "mined"]);
 
     // I1: the same relay_pay wrapped in ANOTHER program's CPI (test-only forwarder) is still reported.
     let (w12, w_digest) = job(12, &network, &alice, &usd, TOKEN_PROGRAM, &shop, 12, 0xcc, 0xcc, vu);
@@ -528,7 +528,7 @@ async fn solana_payments_relay_finalize_and_never_lock_each_other() {
 
     // Finality: index until X, Y, R6-advance, A and the wrapped pay are reported (finalized lags ~32 slots).
     for _ in 0..240 {
-        while index_step(adapter.as_ref(), &odoo).await.unwrap() {}
+        while index_step(adapter.as_ref(), &external_pull).await.unwrap() {}
         if state.lock().unwrap().ingested.iter().filter(|e| e["event"] == "PaymentSettled").count() >= 5 {
             break;
         }
@@ -558,7 +558,7 @@ async fn solana_payments_relay_finalize_and_never_lock_each_other() {
         o.indexed_block = o.indexed_block.saturating_sub(5);
         (o.indexed_block, o.ingests)
     };
-    assert!(!index_step(adapter.as_ref(), &odoo).await.unwrap());
+    assert!(!index_step(adapter.as_ref(), &external_pull).await.unwrap());
     let o = state.lock().unwrap();
     assert_eq!((o.indexed_block, o.ingests), (cursor, ingests));
 }

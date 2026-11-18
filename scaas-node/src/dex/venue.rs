@@ -35,7 +35,7 @@ use crate::abi::{IComplianceRegistry, IERC165, IMtxIds, IRegulatedToken, IToken,
 use crate::metatx::native;
 use crate::chain::{classify, classify_sim, is_contract, Chain, SimError};
 use crate::finality::{next_range, quorum_ok, safe_head, Mode};
-use crate::odoo::Odoo;
+use crate::external_pull::ExternalPull;
 use crate::submit::now;
 
 /// Rounds of "drop the maker at fault and match again" before giving up (NODE-DEX-02).
@@ -197,8 +197,8 @@ struct OnChain {
 
 pub struct Venue {
     pub chain: Arc<Chain>,
-    relay: Odoo,
-    indexer: Option<Odoo>,
+    relay: ExternalPull,
+    indexer: Option<ExternalPull>,
     pub dex: Address,
     puller: Address,
     /// The leg shape per token of a served market, from the DEX's factory (`versionOf`, CTR-DEX-32; never from the order, the
@@ -232,7 +232,7 @@ impl Venue {
     /// Load the markets and the book from the client; serve the markets the DEX takes ([NODE-DEX-20]: every one when bit 29
     /// is clear, the listed ones when set), each token's shape by the factory. A closed DEX's other markets wait for its
     /// `FeatureDisabled(29)`; a market whose check is unread is read again each watcher round; neither is served meanwhile.
-    pub async fn start(chain: Arc<Chain>, relay: Odoo, indexer: Option<Odoo>, dex: Address) -> Result<Arc<Self>> {
+    pub async fn start(chain: Arc<Chain>, relay: ExternalPull, indexer: Option<ExternalPull>, dex: Address) -> Result<Arc<Self>> {
         let n = chain.number;
         let mr: MarketsReply = relay
             .call("blockchain.dex.market", "dex_markets", json!({"evm_chain_number": n}))
@@ -2295,7 +2295,7 @@ mod tests {
         let cfg = crate::config::ChainCfg { family: "evm".into(), evm_chain_number: 31337, rpc_urls: vec![url],
                                             chain_uid: Some(B256::repeat_byte(0x24)), ..Default::default() };
         let chain = Arc::new(Chain::with_signer(&cfg, relayer_key()).unwrap());
-        let (relay, _) = crate::adapter::tests::fake_odoo(Default::default()).await;
+        let (relay, _) = crate::adapter::tests::fake_external_pull(Default::default()).await;
         let mut book = Book::new(vec![market()]);
         for (i, (o, sig)) in makers.into_iter().enumerate() {
             book.insert(Resting { hash: oh(&o), sell: BASE, remaining: o.amount, order: o, auth: Auth::Ua(ua(sig)), seq: i as u64 + 1 });
@@ -2354,7 +2354,7 @@ mod tests {
         // a failed trade on the halted market waits, unacked, until the market reopens
         let row = Row::of(&Resting { hash: oh(&ask), sell: BASE, order: ask.clone(), auth: Auth::Ua(ua(sig_of(&m, oh(&ask)))),
             remaining: ask.amount, seq: 1 });
-        let (relay, store) = crate::adapter::tests::fake_odoo(crate::adapter::tests::Fake {
+        let (relay, store) = crate::adapter::tests::fake_external_pull(crate::adapter::tests::Fake {
             dex_sync: json!({"failed": [{"tag": "0x01", "taker": {"row": null, "fill": "30"}, "makers": [{"row": row, "fill": "10"}]}]}),
             ..Default::default()
         }).await;
@@ -2493,7 +2493,7 @@ mod tests {
             vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
         let ev = IRegulatedToken::DeniedSet { account: m.address().into_word(), by: B256::ZERO, on: true }.encode_log_data();
         world.lock().unwrap().logs.push(serde_json::to_value(log_at(BASE, ev)).unwrap());
-        let (idx, o) = crate::adapter::tests::fake_odoo(crate::adapter::tests::Fake { tokens: json!([]), ..Default::default() }).await;
+        let (idx, o) = crate::adapter::tests::fake_external_pull(crate::adapter::tests::Fake { tokens: json!([]), ..Default::default() }).await;
         let v = Venue { indexer: Some(idx), ..v };
         let e = v.watch_once().await.unwrap_err();
         assert!(format!("{e:#}").contains("LIST_UNREAD"), "{e:#}");
@@ -2781,7 +2781,7 @@ mod tests {
         let row = Row::of(&Resting { hash: oh(&ask), sell: BASE, order: ask.clone(), auth: Auth::Ua(ua(sig_of(&maker, oh(&ask)))),
                                      remaining: U256::from(100), seq: 1 });
         let tag = r.fills[0]["tag"].clone();
-        let (relay, _) = crate::adapter::tests::fake_odoo(crate::adapter::tests::Fake {
+        let (relay, _) = crate::adapter::tests::fake_external_pull(crate::adapter::tests::Fake {
             dex_sync: json!({"failed": [{"tag": tag, "taker": {"row": null, "fill": "120"},
                                           "makers": [{"row": row, "fill": "60"}]}]}),
             ..Default::default()
@@ -2806,7 +2806,7 @@ mod tests {
             destination: ask.from, sold: U256::from(60), received: U256::from(120), dexFee: U256::ZERO,
             refund: U256::ZERO, relayerShare: U256::ZERO, treasuryShare: U256::ZERO };
         world.lock().unwrap().logs.push(serde_json::to_value(log_at(DEX, ev.encode_log_data())).unwrap());
-        let (idx, _) = crate::adapter::tests::fake_odoo(crate::adapter::tests::Fake { tokens: json!([]), ..Default::default() }).await;
+        let (idx, _) = crate::adapter::tests::fake_external_pull(crate::adapter::tests::Fake { tokens: json!([]), ..Default::default() }).await;
         let v = Venue { indexer: Some(idx), ..v };
         assert!(v.watch_once().await.unwrap());
         assert_eq!(v.chain.seen_head(), 0xa, "Fable recheck 3 R3-1: the watcher's first-endpoint head feeds the shared head");
@@ -2949,7 +2949,7 @@ mod tests {
         let (maker, taker) = (PrivateKeySigner::random(), PrivateKeySigner::random());
         let ask = order(maker.address(), QUOTE, 10, 20, 1);
         let (v, _) = venue(World::default(), vec![(ask.clone(), sig_of(&maker, oh(&ask)))]).await;
-        let (relay, store) = crate::adapter::tests::fake_odoo(Default::default()).await;
+        let (relay, store) = crate::adapter::tests::fake_external_pull(Default::default()).await;
         let v = Venue { relay, ..v };
         let bid = order(taker.address(), BASE, 20, 10, 1);
         let sig = sig_of(&taker, oh(&bid));
@@ -2988,7 +2988,7 @@ mod tests {
         let (a1, a2) = (order(maker.address(), QUOTE, 10, 30, 1), order(maker.address(), QUOTE, 10, 40, 7));
         let made = vec![(a1.clone(), sig_of(&maker, oh(&a1))), (a2.clone(), sig_of(&maker, oh(&a2)))];
         let (v, _) = venue(World { domain: Some("SCaaS MetaToken"), ..Default::default() }, made).await;
-        let (relay, store) = crate::adapter::tests::fake_odoo(Default::default()).await;
+        let (relay, store) = crate::adapter::tests::fake_external_pull(Default::default()).await;
         let v = Venue { relay, ..v };
         let id = format!("{:#x}", a1.from);
         let digest = keccak256((a1.from, U256::from(1), U256::from(5)).abi_encode());
@@ -3136,9 +3136,9 @@ mod tests {
         let o = order(maker.address(), other, 1000, 1000, 1);
         let r = Resting { hash: oh(&o), sell: fresh, order: o.clone(), auth: Auth::Ua(ua(sig_of(&maker, oh(&o)))),
                           remaining: U256::from(600), seq: 3 };
-        use crate::adapter::tests::{fake_odoo, Fake};
-        let (relay, _) = fake_odoo(Fake { dex_book: json!([Row::of(&r)]), ..Default::default() }).await;
-        let (idx, _) = fake_odoo(Fake { tokens: json!([]), ..Default::default() }).await;
+        use crate::adapter::tests::{fake_external_pull, Fake};
+        let (relay, _) = fake_external_pull(Fake { dex_book: json!([Row::of(&r)]), ..Default::default() }).await;
+        let (idx, _) = fake_external_pull(Fake { tokens: json!([]), ..Default::default() }).await;
         let v = Venue { relay, indexer: Some(idx), ..v };
         assert!(!round(&v, &world, vec![feature_disabled(DEX, 29)], fresh, other).await, "the bit read still set: nothing opens");
         world.lock().unwrap().features = Some(U256::ZERO);
@@ -3168,10 +3168,10 @@ mod tests {
             let cfg = crate::config::ChainCfg { family: "evm".into(), evm_chain_number: 31337, rpc_urls: vec![url],
                                                 chain_uid: Some(B256::repeat_byte(0x24)), ..Default::default() };
             let chain = Arc::new(Chain::with_signer(&cfg, relayer_key()).unwrap());
-            use crate::adapter::tests::{fake_odoo, Fake};
-            let (odoo, _) = fake_odoo(Fake { tokens: json!([]), dex_book: json!([]),
+            use crate::adapter::tests::{fake_external_pull, Fake};
+            let (external_pull, _) = fake_external_pull(Fake { tokens: json!([]), dex_book: json!([]),
                 dex_markets: json!({"dex": format!("{DEX:#x}"), "markets": [market(), m.clone()]}), ..Default::default() }).await;
-            let v = Venue::start(chain, odoo.clone(), Some(odoo), DEX).await.unwrap();
+            let v = Venue::start(chain, external_pull.clone(), Some(external_pull), DEX).await.unwrap();
             assert!(v.book.lock().await.market_of(BASE, QUOTE).is_some(), "control: the read market is served");
             assert_eq!(v.unread.lock().unwrap().len(), 1, "kept, never dropped until a restart");
             assert!(!round(&v, &world, vec![], BASE, other).await, "still unread: not served (fail closed)");

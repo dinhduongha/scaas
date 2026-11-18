@@ -1,6 +1,6 @@
 //! Cổng quản trị (R51, GA 2.1#3, 2.3#12): `/healthz` `/readyz` `/metrics` trên `[modules] admin_bind`, tách khỏi
 //! gateway công khai — có cả khi không bật gateway. `/readyz` và `/metrics` trả ngay từ ảnh chụp đệm do một task
-//! nền làm mới mỗi 10 s (review S19): request không bao giờ chờ RPC/Odoo.
+//! nền làm mới mỗi 10 s (review S19): request không bao giờ chờ RPC/ExternalPull.
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::sync::{Arc, Mutex, RwLock};
@@ -16,7 +16,7 @@ use serde_json::json;
 
 use crate::adapter::ChainAdapter;
 use crate::breaker::{Breaker, NAMES};
-use crate::odoo::Odoo;
+use crate::external_pull::ExternalPull;
 use crate::submit::now;
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
@@ -37,7 +37,7 @@ pub struct ChainProbe {
     pub failover: Arc<std::sync::atomic::AtomicU64>,
 }
 
-/// `blockchain.chain.relay_stats` (Odoo).
+/// `blockchain.chain.relay_stats` (ExternalPull).
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Stats {
     pub indexed_block: u64,
@@ -92,7 +92,7 @@ pub fn render(readings: &[Reading]) -> Snapshot {
             reasons.push(crate::chain::redact_urls(&format!("{}: rpc: {e}", r.key)));
         }
         match &r.stats {
-            Err(e) => reasons.push(crate::chain::redact_urls(&format!("{}: odoo: {e}", r.key))),
+            Err(e) => reasons.push(crate::chain::redact_urls(&format!("{}: external_pull: {e}", r.key))),
             Ok(s) => {
                 for (state, n) in &s.jobs {
                     jobs.push((format!("chain=\"{c}\",state=\"{}\"", esc(state)), n.to_string()));
@@ -132,7 +132,7 @@ pub fn render(readings: &[Reading]) -> Snapshot {
     Snapshot { ready, reasons, metrics: m }
 }
 
-async fn read(p: &ChainProbe, odoo: &Odoo) -> Reading {
+async fn read(p: &ChainProbe, external_pull: &ExternalPull) -> Reading {
     let head = match tokio::time::timeout(PROBE_TIMEOUT, p.adapter.final_head()).await {
         Ok(Ok(Some(h))) => Ok(h.height),
         Ok(Ok(None)) => Err("no final head (quorum not reached)".into()),
@@ -141,7 +141,7 @@ async fn read(p: &ChainProbe, odoo: &Odoo) -> Reading {
     };
     let stats = match tokio::time::timeout(
         PROBE_TIMEOUT,
-        odoo.call::<Stats>("blockchain.chain", "relay_stats", json!({"chain_key": p.key})),
+        external_pull.call::<Stats>("blockchain.chain", "relay_stats", json!({"chain_key": p.key})),
     )
     .await
     {
@@ -163,17 +163,17 @@ async fn read(p: &ChainProbe, odoo: &Odoo) -> Reading {
 
 /// Tuần tự theo chain, mỗi lần đọc có trần 3 s.
 /// ponytail: sequential probes; spawn one per chain if a node ever serves many chains.
-pub async fn refresh(probes: &[ChainProbe], odoo: &Odoo) -> Snapshot {
+pub async fn refresh(probes: &[ChainProbe], external_pull: &ExternalPull) -> Snapshot {
     let mut readings = Vec::new();
     for p in probes {
-        readings.push(read(p, odoo).await);
+        readings.push(read(p, external_pull).await);
     }
     render(&readings)
 }
 
-pub async fn refresh_loop(probes: Vec<ChainProbe>, odoo: Odoo, snap: Arc<RwLock<Snapshot>>) {
+pub async fn refresh_loop(probes: Vec<ChainProbe>, external_pull: ExternalPull, snap: Arc<RwLock<Snapshot>>) {
     loop {
-        let s = refresh(&probes, &odoo).await;
+        let s = refresh(&probes, &external_pull).await;
         if let Ok(mut w) = snap.write() {
             *w = s;
         }
@@ -234,7 +234,7 @@ mod tests {
     }
 
     #[test]
-    fn ready_only_when_rpc_odoo_and_lag_are_fine() {
+    fn ready_only_when_rpc_external_pull_and_lag_are_fine() {
         assert!(render(&[ok_reading()]).ready);
         assert!(!render(&[]).ready, "nothing probed yet");
         let mut r = ok_reading();
@@ -244,7 +244,7 @@ mod tests {
         let mut r = ok_reading();
         r.stats = Err("HTTP 500".into());
         let s = render(&[r]);
-        assert!(!s.ready && s.reasons[0].contains("odoo"));
+        assert!(!s.ready && s.reasons[0].contains("external_pull"));
         let mut r = ok_reading();
         r.max_lag = 10;
         let s = render(&[r]);

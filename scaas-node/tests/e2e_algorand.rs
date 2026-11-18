@@ -8,7 +8,7 @@
 //! relay-fee router (its off-curve executor salt), tokens TKA and TKB, the mandate and the DEX, every app address funded
 //! with its base minimum, the hash gate; then the test-only RelayTarget fixture (the listed third party), lanes funded,
 //! TKA / TKB minted to the dispenser (their admin). The tests share that chain, each on its own lane pair with its own fake
-//! Odoo (as e2e_aptos.rs). Dev mode makes a block only per transaction group, so a ticker thread sends one every second
+//! ExternalPull (as e2e_aptos.rs). Dev mode makes a block only per transaction group, so a ticker thread sends one every second
 //! and the node measures a realistic round time (T17 review note). Proves:
 //! 1. the gate fails on an update-accepting approval program and the node halts on it; the deploy resumes after a
 //!    partial failure and adopts nothing it did not create with these parameters;
@@ -39,9 +39,9 @@ use scaas_node::adapters::algorand::{
     sign_group, Chain, Executor, Group, Holder, MetaOp, Mp, Tx, METAOP_ABI, ORDER_ABI, TERMS_ABI,
 };
 use scaas_node::addresses::{algorand_address, b32encode};
-use scaas_node::config::{ChainCfg, FinalityCfg, OdooCfg, TokenCfg};
+use scaas_node::config::{ChainCfg, FinalityCfg, ExternalPullCfg, TokenCfg};
 use scaas_node::keys::{lane_secret, Seed};
-use scaas_node::odoo::{Job, Odoo};
+use scaas_node::external_pull::{Job, ExternalPull};
 use scaas_node::signer::{LocalSigner, Signer};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -689,7 +689,7 @@ fn job(id: i64, token: u64, op: &MetaOp, auth: &[u8], extra: Value) -> Value {
     json!({"id": id, "kind": "signed_op", "op": o})
 }
 
-// ------------------------------------------------------------------ fake Odoo (as e2e_aptos.rs)
+// ------------------------------------------------------------------ fake ExternalPull (as e2e_aptos.rs)
 
 fn allowed(from: &str, to: &str) -> bool {
     matches!(
@@ -703,7 +703,7 @@ fn allowed(from: &str, to: &str) -> bool {
 }
 
 #[derive(Default)]
-struct FakeOdoo {
+struct FakeExternalPull {
     states: std::collections::HashMap<i64, String>,
     refused: Vec<Value>,
     jobs: Vec<Value>,
@@ -713,7 +713,7 @@ struct FakeOdoo {
     tokens: Vec<String>,
 }
 
-async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path<(String, String)>, Json(body): Json<Value>) -> Json<Value> {
+async fn fake(State(s): State<Arc<Mutex<FakeExternalPull>>>, Path((model, method)): Path<(String, String)>, Json(body): Json<Value>) -> Json<Value> {
     let mut o = s.lock().unwrap();
     let out = match (model.as_str(), method.as_str()) {
         ("blockchain.chain", "node_config") => json!({
@@ -740,7 +740,7 @@ async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path
             json!({"ok": true})
         }
         ("blockchain.chain.event", "chain_event_ingest") => {
-            // as the real Odoo: an event of a token it has not registered is refused (L2)
+            // as the real ExternalPull: an event of a token it has not registered is refused (L2)
             for e in body["events"].as_array().unwrap() {
                 if !o.tokens.iter().any(|t| Some(t.as_str()) == e["contract"].as_str()) {
                     o.refused.push(e.clone());
@@ -755,9 +755,9 @@ async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path
     Json(out)
 }
 
-/// A fake Odoo registering `tokens`, its cursor at the current round.
-async fn odoo(tokens: &[u64]) -> (Odoo, Arc<Mutex<FakeOdoo>>) {
-    let state = Arc::new(Mutex::new(FakeOdoo {
+/// A fake ExternalPull registering `tokens`, its cursor at the current round.
+async fn external_pull(tokens: &[u64]) -> (ExternalPull, Arc<Mutex<FakeExternalPull>>) {
+    let state = Arc::new(Mutex::new(FakeExternalPull {
         tokens: tokens.iter().map(|t| t.to_string()).collect(),
         indexed_block: params().await.last,
         ..Default::default()
@@ -766,23 +766,23 @@ async fn odoo(tokens: &[u64]) -> (Odoo, Arc<Mutex<FakeOdoo>>) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-    let cfg = OdooCfg { url: format!("http://{addr}"), database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
-    (Odoo::with_key(&cfg, "k".into()).unwrap(), state)
+    let cfg = ExternalPullCfg { url: format!("http://{addr}"), database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
+    (ExternalPull::with_key(&cfg, "k".into()).unwrap(), state)
 }
 
-fn states_of(state: &Arc<Mutex<FakeOdoo>>, id: i64) -> Vec<String> {
+fn states_of(state: &Arc<Mutex<FakeExternalPull>>, id: i64) -> Vec<String> {
     state.lock().unwrap().reports.iter().filter(|r| r["job_id"] == id).map(|r| r["chain_state"].as_str().unwrap().to_string()).collect()
 }
 
-fn report(state: &Arc<Mutex<FakeOdoo>>, id: i64, chain_state: &str) -> Value {
+fn report(state: &Arc<Mutex<FakeExternalPull>>, id: i64, chain_state: &str) -> Value {
     state.lock().unwrap().reports.iter().find(|r| r["job_id"] == id && r["chain_state"] == chain_state).cloned()
         .unwrap_or_else(|| panic!("job {id}: no {chain_state} report"))
 }
 
-async fn run_job(a: &dyn ChainAdapter, odoo: &Odoo, state: &Arc<Mutex<FakeOdoo>>, lane: usize, j: Value) -> Vec<String> {
+async fn run_job(a: &dyn ChainAdapter, external_pull: &ExternalPull, state: &Arc<Mutex<FakeExternalPull>>, lane: usize, j: Value) -> Vec<String> {
     let id = j["id"].as_i64().unwrap();
     state.lock().unwrap().jobs.push(j);
-    let ran = tokio::time::timeout(Duration::from_secs(180), lane_step(a, odoo, lane, "e2e")).await.expect("lane_step stuck");
+    let ran = tokio::time::timeout(Duration::from_secs(180), lane_step(a, external_pull, lane, "e2e")).await.expect("lane_step stuck");
     assert!(ran.unwrap());
     let st = states_of(state, id);
     if st.last().map(String::as_str) != Some("mined") {
@@ -803,10 +803,10 @@ async fn built(a: &dyn ChainAdapter, j: &Value, lane: usize) -> Group {
 /// read from algod across the job. The fee the lane earns is token units (ARC-200), not ALGO: the decrease is net of
 /// nothing. Prints a QUOTE line; returns the built group.
 #[allow(clippy::too_many_arguments)]
-async fn quoted(a: &dyn ChainAdapter, odoo: &Odoo, state: &Arc<Mutex<FakeOdoo>>, li: usize, addr: &str, j: Value, what: &str) -> Group {
+async fn quoted(a: &dyn ChainAdapter, external_pull: &ExternalPull, state: &Arc<Mutex<FakeExternalPull>>, li: usize, addr: &str, j: Value, what: &str) -> Group {
     let g = built(a, &j, li).await;
     let before = algo(addr).await;
-    assert_eq!(run_job(a, odoo, state, li, j).await, ["signed", "broadcast", "mined"], "{what}");
+    assert_eq!(run_job(a, external_pull, state, li, j).await, ["signed", "broadcast", "mined"], "{what}");
     let spent = before - algo(addr).await;
     let quote = g.fee + g.mbr;
     let inner = (g.fee / 1000).saturating_sub(g.txs.len() as u64);
@@ -820,9 +820,9 @@ async fn quoted(a: &dyn ChainAdapter, odoo: &Odoo, state: &Arc<Mutex<FakeOdoo>>,
 }
 
 /// Indexes until `done(rows)` (≤ 120 s).
-async fn index_until(a: &dyn ChainAdapter, odoo: &Odoo, state: &Arc<Mutex<FakeOdoo>>, done: impl Fn(&[Value]) -> bool) -> Vec<Value> {
+async fn index_until(a: &dyn ChainAdapter, external_pull: &ExternalPull, state: &Arc<Mutex<FakeExternalPull>>, done: impl Fn(&[Value]) -> bool) -> Vec<Value> {
     for _ in 0..240 {
-        while let Ok(true) = index_step(a, odoo).await {}
+        while let Ok(true) = index_step(a, external_pull).await {}
         let rows = state.lock().unwrap().ingested.clone();
         if done(&rows) {
             return rows;
@@ -1028,12 +1028,12 @@ async fn deploy_resumes_after_an_interruption() {
 async fn algorand_pay_relay_finalize() {
     let w = world().await;
     let a = w.adapter(1).await;
-    let (odoo, state) = odoo(&[w.tka]).await;
+    let (external_pull, state) = external_pull(&[w.tka]).await;
     let (alice, shop) = (Nat::new("pay-alice"), Nat::new("pay-shop"));
     w.fund(w.tka, &alice.h(), 100_000).await;
     let op = MetaOp { amount: 1000, pay_ref: [0x11; 32], lane: [0xa1; 32], ..w.op(w.tka, 0, alice.h(), shop.h()) };
     let j = job(1, w.tka, &op, &alice.auth(&op.digest()), json!({}));
-    let g = quoted(a.as_ref(), &odoo, &state, 0, &lane_addr(2), j.clone(), "mtx_pay (native payer)").await;
+    let g = quoted(a.as_ref(), &external_pull, &state, 0, &lane_addr(2), j.clone(), "mtx_pay (native payer)").await;
     assert_eq!((balance(w.tka, &alice.h()).await, balance(w.tka, &shop.h()).await), (99_000, 1000));
     let hash = report(&state, 1, "signed")["tx_hash"].as_str().unwrap().to_string();
     let t = get(&format!("/v2/transactions/pending/{}", b32encode(&alloy::hex::decode(&hash[2..]).unwrap()))).await;
@@ -1044,7 +1044,7 @@ async fn algorand_pay_relay_finalize() {
     // replay: the payer's lane nonce is spent ⇒ consumed (no fee)
     let mut replay = j;
     replay["id"] = json!(2);
-    assert_eq!(run_job(a.as_ref(), &odoo, &state, 0, replay).await, ["consumed"]);
+    assert_eq!(run_job(a.as_ref(), &external_pull, &state, 0, replay).await, ["consumed"]);
     // an under-fee group: algod's pool refuses it before the pool (Rejected)
     let op3 = MetaOp { amount: 10, pay_ref: [0x13; 32], lane: [0xa3; 32], ..w.op(w.tka, 0, alice.h(), shop.h()) };
     let j3 = job(3, w.tka, &op3, &alice.auth(&op3.digest()), json!({}));
@@ -1057,7 +1057,7 @@ async fn algorand_pay_relay_finalize() {
     let err = a.submit(&s).await.unwrap_err();
     println!("GATE a under-fee group submitted: {}", short(&format!("{err:#}")));
     assert!(err.downcast_ref::<Rejected>().is_some(), "{err:#}");
-    let rows = index_until(a.as_ref(), &odoo, &state, |r| !rows_of(r, "PaymentSettled", &[0x11; 32]).is_empty()
+    let rows = index_until(a.as_ref(), &external_pull, &state, |r| !rows_of(r, "PaymentSettled", &[0x11; 32]).is_empty()
         && r.iter().any(|e| e["event"] == "MetaTransactionExecuted" && e["digest"] == x(&op.digest()))).await;
     let ps = rows_of(&rows, "PaymentSettled", &[0x11; 32])[0];
     let tka = w.tka.to_string();
@@ -1077,7 +1077,7 @@ async fn algorand_pay_relay_finalize() {
 async fn algorand_pay_meta_job() {
     let w = world().await;
     let a = w.adapter(2).await;
-    let (odoo, state) = odoo(&[w.tka]).await;
+    let (external_pull, state) = external_pull(&[w.tka]).await;
     let (alice, shop) = (Ed::new("meta-alice"), Nat::new("meta-shop"));
     w.fund(w.tka, &alice.h(), 10_000).await;
     let (salt, meta) = ([0x5a; 32], b"invoice 42 / algorand e2e".to_vec());
@@ -1085,14 +1085,14 @@ async fn algorand_pay_meta_job() {
     let op = MetaOp { amount: 700, pay_ref: id, lane: pay_lane(&id), ..w.op(w.tka, 0, alice.h(), shop.h()) };
     let kind = json!({"kind": "pay_meta", "salt": hex(&salt), "meta": hex(&meta)});
     let j = job(1, w.tka, &op, &alice.auth(&op.digest()), kind.clone());
-    quoted(a.as_ref(), &odoo, &state, 0, &lane_addr(4), j, "mtx_pay_meta (ed25519 UA payer, record opened)").await;
+    quoted(a.as_ref(), &external_pull, &state, 0, &lane_addr(4), j, "mtx_pay_meta (ed25519 UA payer, record opened)").await;
     assert_eq!(balance(w.tka, &shop.h()).await, 700);
     has_box(w.account, &[&b"s"[..], &hb(&alice.h())].concat(), "account record s ‖ kind ‖ id").await;
     let bad = MetaOp { amount: 1, pay_ref: [0x77; 32], lane: pay_lane(&[0x77; 32]), ..w.op(w.tka, 0, alice.h(), shop.h()) };
     let b0 = algo(&lane_addr(5)).await;
-    assert_eq!(run_job(a.as_ref(), &odoo, &state, 1, job(2, w.tka, &bad, &alice.auth(&bad.digest()), kind)).await, ["dead"]);
+    assert_eq!(run_job(a.as_ref(), &external_pull, &state, 1, job(2, w.tka, &bad, &alice.auth(&bad.digest()), kind)).await, ["dead"]);
     assert_eq!(algo(&lane_addr(5)).await, b0, "a dead job costs the lane nothing");
-    let rows = index_until(a.as_ref(), &odoo, &state, |r| !rows_of(r, "PaymentSettled", &id).is_empty()).await;
+    let rows = index_until(a.as_ref(), &external_pull, &state, |r| !rows_of(r, "PaymentSettled", &id).is_empty()).await;
     let p = rows_of(&rows, "PaymentSettled", &id)[0];
     assert_eq!((p["meta"].as_str(), p["amount"].as_str(), p["from"].as_str()), (Some(x(&meta).as_str()), Some("700"), Some(x(&alice.h().id).as_str())));
     assert!(rows.iter().all(|e| e["event"] != "PaymentMeta"), "never a row of its own");
@@ -1107,7 +1107,7 @@ async fn algorand_pay_meta_job() {
 async fn algorand_relay_fee_job() {
     let w = world().await;
     let a = w.adapter(3).await;
-    let (odoo, state) = odoo(&[w.tka]).await;
+    let (external_pull, state) = external_pull(&[w.tka]).await;
     let ex = w.exec();
     let lane_h = Holder::addr(lane_pk(6));
     // (i) the account app's key op, the subject unopened, the payer another UA
@@ -1121,7 +1121,7 @@ async fn algorand_relay_fee_job() {
     let g = built(a.as_ref(), &j, 0).await;
     simulate_refusals(&g, &lane_signer(6), Some(&ex), params().await.min_fee).await;
     let l0 = balance(w.tka, &lane_h).await;
-    quoted(a.as_ref(), &odoo, &state, 0, &lane_addr(6), j, "router -> account.mtx_add_origin (ed25519 UA subject opened, UA payer)").await;
+    quoted(a.as_ref(), &external_pull, &state, 0, &lane_addr(6), j, "router -> account.mtx_add_origin (ed25519 UA subject opened, UA payer)").await;
     assert_eq!(balance(w.tka, &lane_h).await - l0, FEE, "open mode: the fee reaches the submitting lane");
     assert_eq!(balance(w.tka, &payer.h()).await, 10_000 - FEE);
     has_box(w.account, &[&b"s"[..], &hb(&subject.h())].concat(), "the subject's record s ‖ kind ‖ id").await;
@@ -1133,7 +1133,7 @@ async fn algorand_relay_fee_job() {
     let pp = Nat::new("ping-payer");
     w.fund(w.tka, &pp.h(), 10_000).await;
     let (j, r2) = w.relay_job(2, &pp, w.target, &[selector("ping(uint64)void").to_vec(), 7u64.to_be_bytes().to_vec()], [0x5c; 32], json!({}));
-    quoted(a.as_ref(), &odoo, &state, 0, &lane_addr(6), j, "router -> listed third party RelayTarget.ping (native payer)").await;
+    quoted(a.as_ref(), &external_pull, &state, 0, &lane_addr(6), j, "router -> listed third party RelayTarget.ping (native payer)").await;
     let gs = get(&format!("/v2/applications/{}", w.target)).await;
     let last = gs["params"]["global-state"].as_array().unwrap().iter().find(|g| g["key"] == b64(b"last")).unwrap()["value"]["bytes"].clone();
     assert_eq!(b64d(last.as_str().unwrap()), ex.address, "the target's sender is the executor, never the lane");
@@ -1151,8 +1151,8 @@ async fn algorand_relay_fee_job() {
     let gargs = vec![selector(&format!("mtx_set_guardian({METAOP_ABI},byte[],(uint8,byte[32]))void")).to_vec(), gop.arc4(),
                      abi_bytes(&subj3.auth(&gop.digest())), none.to_vec()];
     let (j5, r5) = w.relay_job(7, &pay3, w.account, &gargs, [0x5a; 32], json!({}));
-    quoted(a.as_ref(), &odoo, &state, 0, &lane_addr(6), j5, "router -> account.mtx_set_guardian (msig-3 Chrome subject + msig-3 Chrome payer)").await;
-    let g = quoted(a.as_ref(), &odoo, &state, 1, &lane_addr(7), j, "router -> RelayTarget.ping (msig-3 Chrome passkey payer)").await;
+    quoted(a.as_ref(), &external_pull, &state, 0, &lane_addr(6), j5, "router -> account.mtx_set_guardian (msig-3 Chrome subject + msig-3 Chrome payer)").await;
+    let g = quoted(a.as_ref(), &external_pull, &state, 1, &lane_addr(7), j, "router -> RelayTarget.ping (msig-3 Chrome passkey payer)").await;
     let p = params().await;
     let relay_args: usize = g.txs.iter().find_map(|t| match t {
         Tx::Call { app, args, .. } if *app == w.router => Some(args.iter().map(Vec::len).sum()),
@@ -1177,7 +1177,7 @@ async fn algorand_relay_fee_job() {
                         abi_bytes(&sub.auth(&iop.digest())), tl.to_vec(), n.to_be_bytes().to_vec()];
         let (j, _) = w.relay_job(jid, &pp, w.tka, &args, salt, json!({}));
         let what = format!("router -> token.mtx_invalidate_nonces (native subject, min_nonce {n}{})", if n == 5 { ", box new" } else { ", box exists" });
-        quoted(a.as_ref(), &odoo, &state, 0, &lane_addr(6), j, &what).await;
+        quoted(a.as_ref(), &external_pull, &state, 0, &lane_addr(6), j, &what).await;
     }
     let nbox = [&b"n"[..], &sha(&[&hb(&sub.h())[..], &tl].concat())].concat();
     has_box(w.tka, &nbox, "min_nonce n ‖ sha256(holder ‖ lane)").await;
@@ -1185,9 +1185,9 @@ async fn algorand_relay_fee_job() {
     // (v) a listed target whose call fails: refused by simulate, never sent, the lane pays nothing (lessons 15 / 16)
     let (j, _) = w.relay_job(6, &pp, w.target, &[selector("fail()void").to_vec()], [0x60; 32], json!({}));
     let b0 = algo(&lane_addr(7)).await;
-    assert_eq!(run_job(a.as_ref(), &odoo, &state, 1, j).await, ["dead"]);
+    assert_eq!(run_job(a.as_ref(), &external_pull, &state, 1, j).await, ["dead"]);
     assert_eq!(algo(&lane_addr(7)).await, b0, "a group bound to fail costs the lane nothing");
-    let rows = index_until(a.as_ref(), &odoo, &state, |rows| [r1, r2, r3, r5].iter().all(|r| rows_of(rows, "PaymentSettled", r).iter().any(|p| p["relay_payee"].is_string()))).await;
+    let rows = index_until(a.as_ref(), &external_pull, &state, |rows| [r1, r2, r3, r5].iter().all(|r| rows_of(rows, "PaymentSettled", r).iter().any(|p| p["relay_payee"].is_string()))).await;
     for (r, lane) in [(r1, 6), (r2, 6), (r3, 7)] {
         let p = rows_of(&rows, "PaymentSettled", &r)[0];
         assert_eq!((p["relay_payee"].as_str(), p["to"].as_str()), (Some(lane_addr(lane).as_str()), Some(lane_addr(lane).as_str())), "{p}");
@@ -1212,7 +1212,7 @@ fn hex_len(v: &Value) -> usize {
 async fn algorand_router_mandate() {
     let w = world().await;
     let a = w.adapter(4).await;
-    let (odoo, state) = odoo(&[w.tka]).await;
+    let (external_pull, state) = external_pull(&[w.tka]).await;
     let (owner, delegate, payee, payer) = (Nat::new("man-owner"), Ed::new("man-delegate"), Nat::new("man-payee"), Nat::new("man-payer"));
     w.fund(w.tka, &owner.h(), 10_000).await;
     w.fund(w.tka, &payer.h(), 10_000).await;
@@ -1228,7 +1228,7 @@ async fn algorand_router_mandate() {
     let open = vec![selector(&format!("mtx_mandate_open(uint64,{METAOP_ABI},byte[],{TERMS_ABI},uint64)void")).to_vec(), tka.clone(), fop.arc4(),
                     abi_bytes(&owner.auth(&fop.digest())), terms, fund_mbr.to_be_bytes().to_vec()];
     let (j, _) = w.relay_job(1, &payer, w.mandate, &open, [0x61; 32], json!({}));
-    quoted(a.as_ref(), &odoo, &state, 0, &lane_addr(8), j, "router -> mandate.mtx_mandate_open (native owner)").await;
+    quoted(a.as_ref(), &external_pull, &state, 0, &lane_addr(8), j, "router -> mandate.mtx_mandate_open (native owner)").await;
     let mid = Holder { kind: 1, id };
     assert_eq!((balance(w.tka, &Holder::addr(mapp)).await, balance(w.tka, &owner.h()).await), (1_000, 9_000), "the mandate funded");
     has_box(w.mandate, &[&b"m"[..], &tka, &id].concat(), "mandate m ‖ token ‖ id").await;
@@ -1236,14 +1236,14 @@ async fn algorand_router_mandate() {
     let pop = MetaOp { amount: 100, pay_ref: pr, lane: pay_lane(&pr), extra: sha(&tka), ..w.op(w.mandate, 2, mid, payee.h()) };
     let pay = vec![selector(&format!("mtx_mandate_pay(uint64,{METAOP_ABI},byte[])void")).to_vec(), tka.clone(), pop.arc4(), abi_bytes(&delegate.auth(&pop.digest()))];
     let (j, _) = w.relay_job(2, &payer, w.mandate, &pay, [0x62; 32], json!({}));
-    quoted(a.as_ref(), &odoo, &state, 0, &lane_addr(8), j, "router -> mandate.mtx_mandate_pay (ed25519 UA delegate, record opened)").await;
+    quoted(a.as_ref(), &external_pull, &state, 0, &lane_addr(8), j, "router -> mandate.mtx_mandate_pay (ed25519 UA delegate, record opened)").await;
     assert_eq!(balance(w.tka, &payee.h()).await, 100);
     let rop = MetaOp { extra: sha(&tka), ..w.op(w.mandate, 3, owner.h(), mid) };
     let revoke = vec![selector(&format!("mtx_revoke(uint64,{METAOP_ABI},byte[])void")).to_vec(), tka.clone(), rop.arc4(), abi_bytes(&owner.auth(&rop.digest()))];
     let (j, _) = w.relay_job(3, &payer, w.mandate, &revoke, [0x63; 32], json!({}));
-    quoted(a.as_ref(), &odoo, &state, 1, &lane_addr(9), j, "router -> mandate.mtx_revoke (native owner)").await;
+    quoted(a.as_ref(), &external_pull, &state, 1, &lane_addr(9), j, "router -> mandate.mtx_revoke (native owner)").await;
     assert_eq!((balance(w.tka, &owner.h()).await, balance(w.tka, &Holder::addr(mapp)).await), (9_900, 0), "the rest back to the owner");
-    let rows = index_until(a.as_ref(), &odoo, &state, |r| !rows_of(r, "PaymentSettled", &pr).is_empty()).await;
+    let rows = index_until(a.as_ref(), &external_pull, &state, |r| !rows_of(r, "PaymentSettled", &pr).is_empty()).await;
     let p = rows_of(&rows, "PaymentSettled", &pr)[0];
     let tka_s = w.tka.to_string();
     assert_eq!((p["contract"].as_str(), p["from"].as_str(), p["to"].as_str(), p["amount"].as_str()),
@@ -1259,7 +1259,7 @@ async fn algorand_router_mandate() {
 async fn algorand_router_dex_settle() {
     let w = world().await;
     let a = w.adapter(5).await;
-    let (odoo, state) = odoo(&[w.tka, w.tkb]).await;
+    let (external_pull, state) = external_pull(&[w.tka, w.tkb]).await;
     let (sa, sb, payer) = (Ms::new(&[41, 42, 43]), Nat::new("dex-sb"), Nat::new("dex-payer"));
     w.fund(w.tka, &sa.h(), 500).await;
     w.fund(w.tkb, &sb.h(), 300).await;
@@ -1283,12 +1283,12 @@ async fn algorand_router_dex_settle() {
     let (j, r) = w.relay_job(1, &payer, w.dex, &settle, [0x6a; 32], json!({"carries": [hex(&aa)]}));
     let lane_h = Holder::addr(lane_pk(10));
     let l0 = balance(w.tka, &lane_h).await;
-    let g = quoted(a.as_ref(), &odoo, &state, 0, &lane_addr(10), j, "router -> dex.settle (msig-3 passkey leg carried, native leg)").await;
+    let g = quoted(a.as_ref(), &external_pull, &state, 0, &lane_addr(10), j, "router -> dex.settle (msig-3 passkey leg carried, native leg)").await;
     println!("DEX settle group: {} txns, MBR parts {mbr:?}, carry auth {} B", g.txs.len(), aa.len());
     assert_eq!((balance(w.tkb, &sa.h()).await, balance(w.tka, &sb.h()).await), (300, 500), "both legs paid out");
     assert_eq!((balance(w.tka, &sa.h()).await, balance(w.tkb, &sb.h()).await), (0, 0));
     assert_eq!(balance(w.tka, &lane_h).await - l0, FEE, "open mode: the router pays the relaying lane");
-    let rows = index_until(a.as_ref(), &odoo, &state, |rows| rows_of(rows, "PaymentSettled", &r).iter().any(|p| p["relay_payee"].is_string())
+    let rows = index_until(a.as_ref(), &external_pull, &state, |rows| rows_of(rows, "PaymentSettled", &r).iter().any(|p| p["relay_payee"].is_string())
         && rows.iter().filter(|e| e["event"] == "Transfer" && e["settle_id"].is_string()).count() >= 2).await;
     let trades: Vec<&Value> = rows.iter().filter(|e| e["event"] == "Transfer" && e["settle_id"].is_string()).collect();
     let (ta, tb) = (w.tka.to_string(), w.tkb.to_string());
@@ -1298,20 +1298,20 @@ async fn algorand_router_dex_settle() {
 }
 
 /// ARC-200 moves outside the relayer: a native `arc200_transfer` and a `transfer_to_ua` of the funding account are indexed
-/// as Transfer rows; the same on a token Odoo has not registered (TKB) is not.
+/// as Transfer rows; the same on a token ExternalPull has not registered (TKB) is not.
 #[tokio::test]
 #[ignore]
 async fn algorand_events_ingested() {
     let w = world().await;
     let a = w.adapter(6).await;
-    let (odoo, state) = odoo(&[w.tka]).await;
+    let (external_pull, state) = external_pull(&[w.tka]).await;
     let to = Nat::new("native-to");
     w.transfer(w.tka, &to.h(), 77).await;
     w.transfer(w.tkb, &to.h(), 88).await;
     let u = Ed::new("native-ua").h();
     w.transfer(w.tka, &u, 99).await;
     let (to_s, u_s, me) = (algorand_address(&to.pk()), x(&u.id), algorand_address(&w.me()));
-    let rows = index_until(a.as_ref(), &odoo, &state, |rows| {
+    let rows = index_until(a.as_ref(), &external_pull, &state, |rows| {
         rows.iter().any(|e| e["event"] == "Transfer" && e["to"] == to_s.as_str() && e["amount"] == "77")
             && rows.iter().any(|e| e["event"] == "Transfer" && e["to"] == u_s.as_str())
     }).await;

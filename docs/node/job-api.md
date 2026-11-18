@@ -1230,7 +1230,7 @@ code (orientation only; line numbers as of 2026-10-07):
 
 | Concept here | Reference client name |
 |---|---|
-| Legacy node client module (Rust) | `odoo.rs` (`odoo::Odoo`, `odoo::Job`, `odoo.rs:90-108`), config section `[odoo]`, marked with `// legacy(…)` comments until removal |
+| Legacy node client module (Rust) | `external_pull.rs` (`external_pull::ExternalPull`, `external_pull::Job`; before 2026-11-18 `odoo.rs`, `odoo::Odoo`, `odoo::Job`, `odoo.rs:90-108`), config section `[external_pull]` (`[odoo]` until 2026-11-18), marked with `// legacy(…)` comments until removal |
 | Per-chain flag | `blockchain.chain.node_transport ∈ pull|push`; cutover `action_switch_to_push` sets `node_transport = 'push'`, rollback `node_transport = 'pull'` |
 | Chain, its key and profile, DEX cursor, readiness counts | `blockchain.chain`, `blockchain.chain.chain_key`, `blockchain.chain.chain_profile`, `blockchain.chain.dex_indexed_block`, `blockchain.chain.relay_stats(chain_key)` |
 | RPC endpoints (moved to `node.toml`) | `blockchain.rpc.endpoint` |

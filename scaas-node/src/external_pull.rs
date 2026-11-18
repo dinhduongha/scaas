@@ -1,14 +1,14 @@
-//! `/json/2` — đường duy nhất vào Odoo (ruling R6). Một client cho mỗi API key.
+//! `/json/2` — đường duy nhất vào ExternalPull (ruling R6). Một client cho mỗi API key.
 use alloy::primitives::Address;
 use anyhow::{anyhow, Context, Result};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::config::OdooCfg;
+use crate::config::ExternalPullCfg;
 
 #[derive(Clone)]
-pub struct Odoo {
+pub struct ExternalPull {
     http: reqwest::Client,
     base: String,
     db: String,
@@ -149,13 +149,13 @@ pub struct IngestResult {
     pub created: u64,
 }
 
-impl Odoo {
-    pub fn new(cfg: &OdooCfg, key_env: &str) -> Result<Self> {
+impl ExternalPull {
+    pub fn new(cfg: &ExternalPullCfg, key_env: &str) -> Result<Self> {
         let key = std::env::var(key_env).with_context(|| format!("env {key_env} not set"))?;
         Self::with_key(cfg, key)
     }
 
-    pub fn with_key(cfg: &OdooCfg, key: String) -> Result<Self> {
+    pub fn with_key(cfg: &ExternalPullCfg, key: String) -> Result<Self> {
         Ok(Self {
             http: reqwest::Client::builder().timeout(std::time::Duration::from_secs(30)).build()?,
             base: cfg.url.trim_end_matches('/').to_string(),
@@ -177,7 +177,7 @@ impl Odoo {
         let status = res.status();
         let text = res.text().await?;
         if !status.is_success() {
-            // Cắt ngắn: lỗi Odoo có thể kèm traceback dài.
+            // Cắt ngắn: lỗi ExternalPull có thể kèm traceback dài.
             let head: String = text.chars().take(300).collect();
             return Err(anyhow!("{model}.{method}: HTTP {status}: {head}"));
         }
@@ -257,7 +257,7 @@ mod tests {
     use alloy::sol_types::SolCall;
 
     #[test]
-    fn job_payload_from_odoo_decodes() {
+    fn job_payload_from_external_pull_decodes() {
         let raw = r#"{"id": 3, "token": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
             "digest": "0x33", "signature": "0x44", "struct": "transfer",
             "metatx": {"from": "0xabababababababababababababababababababab",
@@ -316,7 +316,7 @@ mod tests {
         assert!(mk("paused").submittable_tokens().is_empty());
     }
 
-    /// Review H1: Odoo gửi địa chỉ token dạng chuẩn của HỌ (`wasm1…`, `0.0.x`, …); chỉ đường EVM đọc thành `Address`.
+    /// Review H1: ExternalPull gửi địa chỉ token dạng chuẩn của HỌ (`wasm1…`, `0.0.x`, …); chỉ đường EVM đọc thành `Address`.
     #[test]
     fn non_evm_token_addresses_decode() {
         let nc: NodeConfig = serde_json::from_value(json!({"evm_chain_number": "cosmos:scaas-1", "finality_mode": "instant",

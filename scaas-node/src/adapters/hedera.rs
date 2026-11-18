@@ -11,8 +11,8 @@
 //! - Phí: type-2, `maxFee = eth_gasPrice × 1.2`, priority 0 (giá gas Hedera cố định theo biểu phí — spec §4).
 //! - Lane phải là tài khoản Hedera đã tồn tại và có HBAR (review S22): lane số dư 0 ⇒ job về hàng đợi; payload
 //!   đã hết hạn thì `dead` trước cả bước kiểm số dư (không xoay vòng mãi trên lane chưa nạp tiền).
-//! - Danh sách token lọc event: token Odoo đăng ký, lấy từ `node_config` mỗi vòng `index_step` (review H2;
-//!   không danh sách tĩnh trong cấu hình node — event của contract lạ không bao giờ gửi Odoo).
+//! - Danh sách token lọc event: token ExternalPull đăng ký, lấy từ `node_config` mỗi vòng `index_step` (review H2;
+//!   không danh sách tĩnh trong cấu hình node — event của contract lạ không bao giờ gửi ExternalPull).
 use alloy::primitives::{Address, Bytes, B256, U256};
 use alloy::providers::Provider;
 use anyhow::{anyhow, bail, Result};
@@ -24,7 +24,7 @@ use crate::abi::decode_revert;
 use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Rejected, Signed, TxStatus};
 use crate::chain::{Chain, SimError};
 use crate::config::ChainCfg;
-use crate::odoo::Job;
+use crate::external_pull::Job;
 use crate::signer::LocalSigner;
 use crate::submit::{now, work_from_job};
 
@@ -175,7 +175,7 @@ impl ChainAdapter for HederaAdapter {
         self.inner.start_check().await
     }
 
-    fn refresh_tokens(&self, nc: &crate::odoo::NodeConfig) {
+    fn refresh_tokens(&self, nc: &crate::external_pull::NodeConfig) {
         self.inner.refresh_tokens(nc)
     }
 
@@ -318,7 +318,7 @@ mod tests {
         assert!(!requeues("CONTRACT_REVERT_EXECUTED") && !requeues("MetaTxBadSignature(MetaTxBadSignature)"));
     }
 
-    // ---- lane_step over a fake JSON-RPC Relay + fake Odoo (Hedera outcomes anvil cannot produce) ----
+    // ---- lane_step over a fake JSON-RPC Relay + fake ExternalPull (Hedera outcomes anvil cannot produce) ----
 
     use axum::extract::{Path, State};
     use alloy::sol_types::SolError;
@@ -410,7 +410,7 @@ mod tests {
         })
     }
 
-    async fn odoo(State(s): State<Shared>, Path((_m, method)): Path<(String, String)>, axum::Json(b): axum::Json<Value>) -> axum::Json<Value> {
+    async fn external_pull(State(s): State<Shared>, Path((_m, method)): Path<(String, String)>, axum::Json(b): axum::Json<Value>) -> axum::Json<Value> {
         let mut n = s.lock().unwrap();
         axum::Json(match method.as_str() {
             "relay_poll" => Value::Array(std::mem::take(&mut n.jobs)),
@@ -447,14 +447,14 @@ mod tests {
     }
 
     /// The adapter on the fake Relay/client: `(adapter, client, network)`. The job's token 0x70… is registered.
-    async fn adapter(net: Net) -> (HederaAdapter, crate::odoo::Odoo, Shared) {
+    async fn adapter(net: Net) -> (HederaAdapter, crate::external_pull::ExternalPull, Shared) {
         adapter_after(net, &[]).await
     }
 
     /// [`adapter`] with `first` endpoints before the fake Relay in `rpc_urls` (scaas-rpc T14b: the failover tests).
-    async fn adapter_after(net: Net, first: &[&str]) -> (HederaAdapter, crate::odoo::Odoo, Shared) {
+    async fn adapter_after(net: Net, first: &[&str]) -> (HederaAdapter, crate::external_pull::ExternalPull, Shared) {
         let s: Shared = Arc::new(Mutex::new(net));
-        let app = axum::Router::new().route("/", post(fake_relay)).route("/json/2/{m}/{method}", post(odoo)).with_state(s.clone());
+        let app = axum::Router::new().route("/", post(fake_relay)).route("/json/2/{m}/{method}", post(external_pull)).with_state(s.clone());
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
@@ -464,12 +464,12 @@ mod tests {
         cfg.chain_uid = Some(B256::from(U256::from(s.lock().unwrap().mtx_nonce)));
         let signer = LocalSigner::new(crate::signer::Curve::Secp256k1, &[7u8; 32]).unwrap();
         let a = HederaAdapter::from_cfg(&cfg, &[signer]).unwrap();
-        let nc: crate::odoo::NodeConfig = serde_json::from_value(json!({"evm_chain_number": 296, "finality_mode": "instant",
+        let nc: crate::external_pull::NodeConfig = serde_json::from_value(json!({"evm_chain_number": 296, "finality_mode": "instant",
             "finality_depth": 0, "finality_quorum": 1, "indexed_block": 0, "journal_max_nonce": null,
             "tokens": [{"address": format!("{:#x}", Address::repeat_byte(0x70)), "decimals": 6}]})).unwrap();
         a.refresh_tokens(&nc);
-        let oc = crate::config::OdooCfg { url, database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
-        (a, crate::odoo::Odoo::with_key(&oc, "k".into()).unwrap(), s)
+        let oc = crate::config::ExternalPullCfg { url, database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
+        (a, crate::external_pull::ExternalPull::with_key(&oc, "k".into()).unwrap(), s)
     }
 
     async fn step_with(mut net: Net, job: Value) -> (Vec<String>, Shared) {
@@ -670,11 +670,11 @@ mod tests {
     }
 
     /// Review H1/M1: a Hedera chain from `node.toml` (EVM-style: `evm_chain_number`, no `network`, finality
-    /// `instant`) starts, keys as Odoo does (`hedera:<chainId>`) and runs on `HederaAdapter` under the lane
+    /// `instant`) starts, keys as ExternalPull does (`hedera:<chainId>`) and runs on `HederaAdapter` under the lane
     /// runner — never the pipelined EVM submitter.
     #[test]
     fn config_routes_hedera_through_the_adapter() {
-        let raw = "[odoo]\nurl = \"http://o\"\ndatabase = \"d\"\nrelay_api_key_env = \"R\"\nindexer_api_key_env = \"I\"\n\
+        let raw = "[external_pull]\nurl = \"http://o\"\ndatabase = \"d\"\nrelay_api_key_env = \"R\"\nindexer_api_key_env = \"I\"\n\
             [store]\nurl = \"sqlite:///var/lib/scaas/node.db\"\n\
             [[chains]]\nfamily = \"hedera\"\nevm_chain_number = 296\nrpc_urls = [\"http://127.0.0.1:1\"]\n\
             signer_key_env = \"SCAAS_TEST_HEDERA_KEY\"\n\
@@ -687,7 +687,7 @@ mod tests {
         assert_eq!(cc.chain_key(), "hedera:296");
         let mut with_net = cc.clone();
         with_net.network = Some("testnet".into());
-        assert_eq!(with_net.chain_key(), "hedera:296", "Odoo keys Hedera by chain id");
+        assert_eq!(with_net.chain_key(), "hedera:296", "ExternalPull keys Hedera by chain id");
         let a = crate::adapters::build(cc, &c.lane_signers(cc).unwrap()).unwrap();
         assert_eq!((a.family(), a.chain_key()), (Family::Hedera, "hedera:296"));
         let evm: crate::config::ChainCfg =

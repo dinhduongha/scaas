@@ -1,4 +1,4 @@
-//! Shared by `e2e_soroban`, `e2e_soroban_ua` and `e2e_ua8`: the network (env), keys, the stellar CLI, deploys and the fake Odoo.
+//! Shared by `e2e_soroban`, `e2e_soroban_ua` and `e2e_ua8`: the network (env), keys, the stellar CLI, deploys and the fake ExternalPull.
 //!
 //! Env (local quickstart defaults; T14 points them at the Stellar testnet):
 //! - `STELLAR_URL` — the RPC endpoint (default `http://127.0.0.1:31980/rpc`, `quickstart.sh`);
@@ -14,9 +14,9 @@ use axum::extract::{Path, State};
 use axum::routing::post;
 use axum::{Json, Router};
 use scaas_node::adapters::soroban::network_id;
-use scaas_node::config::{ChainCfg, FinalityCfg, OdooCfg};
+use scaas_node::config::{ChainCfg, FinalityCfg, ExternalPullCfg};
 use scaas_node::keys::{lane_secret, Seed};
-use scaas_node::odoo::Odoo;
+use scaas_node::external_pull::ExternalPull;
 use scaas_node::signer::{base32, crc16_xmodem, stellar_account_strkey, LocalSigner, Signer};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -277,20 +277,20 @@ pub fn allowed(from: &str, to: &str) -> bool {
 }
 
 #[derive(Default)]
-pub struct FakeOdoo {
+pub struct FakeExternalPull {
     pub states: std::collections::HashMap<i64, String>,
     pub refused: Vec<Value>,
     pub jobs: Vec<Value>,
     pub reports: Vec<Value>,
     pub ingested: Vec<Value>,
     pub indexed_block: u64,
-    /// Token contract ids registered in Odoo (strkey `C…`) — the indexer must filter on these.
+    /// Token contract ids registered in ExternalPull (strkey `C…`) — the indexer must filter on these.
     pub tokens: Vec<String>,
-    /// Other contracts whose events Odoo accepts (the relay-fee router's `RelayFeePaid`).
+    /// Other contracts whose events ExternalPull accepts (the relay-fee router's `RelayFeePaid`).
     pub others: Vec<String>,
 }
 
-async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path<(String, String)>, Json(body): Json<Value>) -> Json<Value> {
+async fn fake(State(s): State<Arc<Mutex<FakeExternalPull>>>, Path((model, method)): Path<(String, String)>, Json(body): Json<Value>) -> Json<Value> {
     let mut o = s.lock().unwrap();
     let out = match (model.as_str(), method.as_str()) {
         ("blockchain.chain", "node_config") => json!({
@@ -319,7 +319,7 @@ async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path
         ("blockchain.chain.event", "chain_event_ingest") => {
             assert_eq!(body["from_block"].as_u64().unwrap(), o.indexed_block + 1, "cursor gap");
             o.indexed_block = body["to_block"].as_u64().unwrap();
-            // Real ingest rejects events of contracts Odoo has not registered.
+            // Real ingest rejects events of contracts ExternalPull has not registered.
             for e in body["events"].as_array().unwrap() {
                 assert!(o.tokens.iter().chain(&o.others).any(|t| e["contract"] == json!(t)), "event from unregistered contract: {e}");
             }
@@ -331,7 +331,7 @@ async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path
     Json(out)
 }
 
-pub async fn start_fake(state: Arc<Mutex<FakeOdoo>>) -> SocketAddr {
+pub async fn start_fake(state: Arc<Mutex<FakeExternalPull>>) -> SocketAddr {
     let app = Router::new().route("/json/2/{model}/{method}", post(fake)).with_state(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -339,9 +339,9 @@ pub async fn start_fake(state: Arc<Mutex<FakeOdoo>>) -> SocketAddr {
     addr
 }
 
-pub fn odoo_at(addr: SocketAddr) -> Odoo {
-    let cfg = OdooCfg { url: format!("http://{addr}"), database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
-    Odoo::with_key(&cfg, "k".into()).unwrap()
+pub fn external_pull_at(addr: SocketAddr) -> ExternalPull {
+    let cfg = ExternalPullCfg { url: format!("http://{addr}"), database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
+    ExternalPull::with_key(&cfg, "k".into()).unwrap()
 }
 
 pub fn chain_cfg(fee_bump: bool) -> ChainCfg {
@@ -374,10 +374,10 @@ pub fn addr(s: &str) -> ScVal {
     ScVal::Address(s.parse::<ScAddress>().unwrap())
 }
 
-pub fn last_state(o: &FakeOdoo, id: i64) -> String {
+pub fn last_state(o: &FakeExternalPull, id: i64) -> String {
     o.states.get(&id).cloned().unwrap_or_default()
 }
 
-pub fn report_of(o: &FakeOdoo, id: i64, state: &str) -> Value {
+pub fn report_of(o: &FakeExternalPull, id: i64, state: &str) -> Value {
     o.reports.iter().rev().find(|r| r["job_id"] == id && r["chain_state"] == state).cloned().unwrap_or_default()
 }

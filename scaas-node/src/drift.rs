@@ -1,5 +1,5 @@
-//! Drift C (R56, GA 2.2#7): mỗi giờ (gọi từ vòng `indexer::run`) đọc `balanceOf(ví nhận)` tại đúng khối Odoo đã index (đã final) và báo
-//! `blockchain.chain.balance_report`. Odoo so tổng với số dư sổ của journal token; node không phán xét gì.
+//! Drift C (R56, GA 2.2#7): mỗi giờ (gọi từ vòng `indexer::run`) đọc `balanceOf(ví nhận)` tại đúng khối ExternalPull đã index (đã final) và báo
+//! `blockchain.chain.balance_report`. ExternalPull so tổng với số dư sổ của journal token; node không phán xét gì.
 use std::time::Duration;
 
 use alloy::eips::BlockId;
@@ -15,11 +15,11 @@ use tracing::info;
 use crate::abi::IToken;
 use crate::chain::Chain;
 use crate::indexer::receiving_pairs;
-use crate::odoo::Odoo;
+use crate::external_pull::ExternalPull;
 
 pub const EVERY: Duration = Duration::from_secs(3600);
 
-/// Thân báo cáo cho Odoo — số dư là chuỗi thập phân (uint256 vượt JSON number).
+/// Thân báo cáo cho ExternalPull — số dư là chuỗi thập phân (uint256 vượt JSON number).
 pub fn report_rows(rows: &[(Address, Address, U256)]) -> Vec<Value> {
     rows.iter()
         .map(|(t, a, b)| json!({"token": format!("{t:#x}"), "address": format!("{a:#x}"), "balance": b.to_string()}))
@@ -27,8 +27,8 @@ pub fn report_rows(rows: &[(Address, Address, U256)]) -> Vec<Value> {
 }
 
 /// Một lần đo. `Ok(false)` = cursor đã chạy trước lúc đọc xong (thử lại); `Ok(true)` = xong (kể cả không có ví).
-pub async fn step(chain: &Chain, odoo: &Odoo, chain_key: &str) -> Result<bool> {
-    let nc = odoo.node_config(chain.number, None).await?;
+pub async fn step(chain: &Chain, external_pull: &ExternalPull, chain_key: &str) -> Result<bool> {
+    let nc = external_pull.node_config(chain.number, None).await?;
     let pairs = receiving_pairs(&nc);
     let height = nc.indexed_block;
     if pairs.is_empty() || height == 0 {
@@ -46,7 +46,7 @@ pub async fn step(chain: &Chain, odoo: &Odoo, chain_key: &str) -> Result<bool> {
         }).await.map_err(|e| anyhow::anyhow!("{e}"))?;
         rows.push((token, who, IToken::balanceOfCall::abi_decode_returns(&out)?));
     }
-    let r = odoo.balance_report(chain_key, height, &report_rows(&rows)).await?;
+    let r = external_pull.balance_report(chain_key, height, &report_rows(&rows)).await?;
     if !r.stale {
         info!(chain = chain.number, height, mismatch = r.mismatch, "balance drift reported");
     }

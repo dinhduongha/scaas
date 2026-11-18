@@ -1,5 +1,5 @@
 //! Cold start (`_USER-DECISIONS` §23.1 + ruling R18). Thuần: đầu vào là con số của chain
-//! và journal của Odoo, đầu ra là việc phải làm.
+//! và journal của ExternalPull, đầu ra là việc phải làm.
 
 #[derive(Debug, Clone)]
 pub struct Inflight {

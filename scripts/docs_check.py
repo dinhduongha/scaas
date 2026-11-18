@@ -8,6 +8,7 @@
   docs_check.py facts extract [--reset]   (keeps existing dispositions unless --reset)
   docs_check.py facts check [--area A] | facts trace SOURCE
   docs_check.py paths                     no machine path in a tracked text file of the repo (the parent of --docs)
+  docs_check.py consumer                  no consumer name in scaas-node/src or scaas-node/tests (tracked files)
   --docs DIR                              docs root (default: <repo>/docs; tests use a temp tree)
 
 A check whose inputs do not exist yet (Phase 0: no decisions.md, no component docs) prints "pending" and
@@ -858,6 +859,32 @@ def cmd_paths():
     return 1 if hits else 0
 
 
+# ---------------------------------------------------------------------------------------------- consumer names
+# AGENTS.md "The node is open": no consumer name in the node's code (owner 2026-11-18, the pull client renamed
+# external_pull). Tracked files under scaas-node/src and scaas-node/tests; scaas-node/legacy/ is not scanned. The one
+# allowed form is the HTTP header the pull source's /json/2 API reads, a wire name the node cannot choose.
+CONSUMER_DIRS = ('scaas-node/src/', 'scaas-node/tests/')
+CONSUMER_NAME = re.compile(r'od' + r'oo', re.I)              # split: this file must not match itself
+CONSUMER_WIRE = re.compile(r'X-Od' + r'oo-Database')
+
+
+def cmd_consumer():
+    root = DOCS.parent
+    ls = subprocess.run(['git', '-C', str(root), 'ls-files', '-z', '--', *CONSUMER_DIRS], capture_output=True,
+                        check=True).stdout
+    hits = 0
+    for f in sorted(x.decode() for x in ls.split(b'\0') if x):
+        if not (root / f).is_file():
+            continue
+        for n, line in enumerate((root / f).read_text(errors='replace').split('\n'), 1):
+            m = CONSUMER_NAME.search(CONSUMER_WIRE.sub('', line))
+            if m:
+                hits += 1
+                print(f'  ERROR: {f}:{n}: consumer name {m.group(0)!r}')
+    print(f'consumer: {hits} consumer name(s) in scaas-node/src and scaas-node/tests')
+    return 1 if hits else 0
+
+
 def main(argv):
     global DOCS
     if '--docs' in argv:
@@ -879,6 +906,8 @@ def main(argv):
         return cmd_write()
     if argv == ['paths']:
         return cmd_paths()
+    if argv == ['consumer']:
+        return cmd_consumer()
     if len(argv) == 2 and argv[0] == 'resolve':
         return cmd_resolve(argv[1])
     if argv[:2] == ['facts', 'extract']:

@@ -15,7 +15,7 @@ use crate::adapters::evm::{building, BUILDING};
 use scaas_rpc::family::FamilyError;
 use crate::chain::SimError;
 use crate::config::ChainCfg;
-use crate::odoo::Job;
+use crate::external_pull::Job;
 use crate::signer::{LocalSigner, Signer};
 
 pub type Addr = [u8; 32];
@@ -614,7 +614,7 @@ fn canon(v: &Value) -> Option<String> {
     v.as_str().and_then(|s| parse_addr(s).ok()).map(|a| addr_hex(&a))
 }
 
-/// Event REST của một tx ⇒ event chuẩn hoá cho Odoo; `None` nếu không phải của package này / token lạ / hỏng.
+/// Event REST của một tx ⇒ event chuẩn hoá cho ExternalPull; `None` nếu không phải của package này / token lạ / hỏng.
 // TODO(T17): `meta::PaymentMeta` (`pay_id`, `meta`, joined by `pay_ref`) and `relayfee::RelayFeePaid` (module
 // `relayfee`; `token` filtered against the registered assets).
 pub fn normalize(package: &Addr, tokens: &[String], ev: &Value, block: u64, block_hash: &str, tx_hash: &str, log_index: usize) -> Option<Value> {
@@ -1072,7 +1072,7 @@ impl ChainAdapter for AptosAdapter {
         Ok(Some(fee.ok_or_else(|| anyhow!("{tx_id}: no gas_used or gas_unit_price"))?))
     }
 
-    /// AptosBFT: block đã commit là final. Đỉnh báo Odoo = min(đỉnh REST, block mà indexer đã xử lý TRỌN) — con trỏ
+    /// AptosBFT: block đã commit là final. Đỉnh báo ExternalPull = min(đỉnh REST, block mà indexer đã xử lý TRỌN) — con trỏ
     /// không bao giờ vượt indexer (owner OQ2); nhiều `rpc_urls` ⇒ cùng hash ở đỉnh đó (quorum).
     async fn final_head(&self) -> Result<Option<Head>> {
         let head = num(&self.get("").await?["block_height"]).ok_or_else(|| anyhow!("bad ledger info"))?;
