@@ -3438,6 +3438,9 @@ mod tests {
     async fn ton_tx_status_op_consumed_and_the_lane_sequence_never_fail_over() {
         let (url, f) = fake_api_shared(lane_at(1)).await;
         let a = adapter_on(&[DOWN.to_string(), url.clone()], toml::Table::new());
+        // the round-end matrix: endpoint 0's head recorded (seqno 1, the fake's root hash), so endpoint 1 is an endpoint of this
+        // network (T24.6) and only the endpoint-0 carve-out keeps it unasked
+        a.api.saw_head(1, &b64encode(&[0; 32]));
         assert!(a.tx_status(&format!("0x{}", "11".repeat(32))).await.is_err(), "unread, never Unknown from endpoint 1");
         assert!(a.op_consumed(&signed_pay()).await.is_err());
         assert!(a.sequence(0).await.is_err());
@@ -3515,6 +3518,9 @@ mod tests {
         let s = Signed { job_id: 1, tx_id: format!("0x{}", "11".repeat(32)), raw: vec![1, 2, 3], valid_until: u64::MAX / 2, sequence: 0 };
         let (url, f) = fake_api_shared(lane_at(0)).await;
         let a = adapter_on(&[DOWN.to_string(), url.clone()], toml::Table::new());
+        // the round-end matrix: endpoint 0's head recorded (seqno 1, the fake's root hash), so endpoint 1 is an endpoint of this
+        // network (T24.6) and only the endpoint-0 carve-out keeps it unasked
+        a.api.saw_head(1, &b64encode(&[0; 32]));
         assert!(crate::adapters::evm::BUILDING.scope((), a.submit(&s)).await.is_err());
         assert!(f.lock().unwrap().posted.is_empty(), "endpoint 1 is sent nothing");
         crate::adapters::evm::BUILDING.scope((), adapter(&url).submit(&s)).await.unwrap();
