@@ -336,7 +336,9 @@ Endpoints (BUILT, scaas-rpc T15): `rpc_urls` are read through the crate's family
 the next endpoint must answer `getNetwork` with the configured passphrase and a `getLatestLedger` at or above the ledger
 the first endpoint last showed; a refusal read while a failover endpoint answered requeues the job (`FAILOVER_ANSWER`).
 The transaction status and fee, the lane sequence and balance, `op_consumed` and the values kept for the process
-(the router's executor, the registry's relayers) are the first endpoint's only.
+(the router's executor, the registry's relayers) are the first endpoint's only; a network setting kept for a later failed
+read (`tx_max_size_bytes`, the entry size) is the first endpoint's answer only, a failover endpoint's serving its own job
+(scaas-rpc T24.5).
 
 ## 7. Finality and events
 

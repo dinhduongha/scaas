@@ -351,6 +351,11 @@ impl SorobanAdapter {
     /// one of this network (`getNetwork`'s passphrase) not behind the ledger endpoint 0 last showed. Any error answer is the
     /// endpoint's failure, as the first endpoint's was; what a failover endpoint's answer refuses `build` requeues.
     async fn read(&self, method: &str, params: Value) -> Result<Value> {
+        Ok(self.read_from(method, params).await?.0)
+    }
+
+    /// [`Self::read`] and the index of the endpoint that answered (T24.5: a value kept for later reads is endpoint 0's only).
+    async fn read_from(&self, method: &str, params: Value) -> Result<(Value, usize)> {
         let a = self.net.client.failover(&self.net, |i| {
             let params = params.clone();
             async move {
@@ -360,7 +365,7 @@ impl SorobanAdapter {
                 }))
             }
         }).await.map_err(|e| crate::adapters::evm::all_failed(method, &e))?;
-        Ok(a.value)
+        Ok((a.value, a.endpoint))
     }
 
     /// [`ChainAdapter::build`]'s body (scaas-rpc T15b: the wrapper compares the failover counter).
@@ -553,14 +558,17 @@ impl SorobanAdapter {
     }
 
     /// The network's `tx_max_size_bytes`, read for each job: a setting the validators vote, so a change is seen on the next good
-    /// read, with no restart. A read that fails uses the last good answer, so this limit never stops a chain simulation still
-    /// serves; only the first read, with no answer yet, is `Transport`, as a failed simulation.
+    /// read, with no restart. A read that fails uses the last good answer of endpoint 0 (T24.5: a failover endpoint's answer
+    /// serves its job only and is never kept), so this limit never stops a chain simulation still serves; with no such answer
+    /// yet a failed read is `Transport`, as a failed simulation.
     async fn tx_max_size(&self) -> std::result::Result<usize, SimError> {
         let read = self.read_tx_max_size().await;
         let mut last = self.tx_limit.lock().unwrap_or_else(|e| e.into_inner());
         match read {
-            Ok(limit) => {
-                *last = Some(limit);
+            Ok((limit, at)) => {
+                if at == 0 {
+                    *last = Some(limit);
+                }
                 Ok(limit)
             }
             Err(why) => (*last).inspect(|l| tracing::warn!(chain = %self.key, "tx_max_size_bytes: {why}; using the last answer, {l}"))
@@ -568,35 +576,38 @@ impl SorobanAdapter {
         }
     }
 
-    async fn read_tx_max_size(&self) -> std::result::Result<usize, String> {
+    async fn read_tx_max_size(&self) -> std::result::Result<(usize, usize), String> {
         match self.read_setting(ConfigSettingId::ContractBandwidthV0).await? {
-            ConfigSettingEntry::ContractBandwidthV0(b) => Ok(b.tx_max_size_bytes as usize),
+            (ConfigSettingEntry::ContractBandwidthV0(b), at) => Ok((b.tx_max_size_bytes as usize, at)),
             other => Err(format!("not the bandwidth setting: {other:?}")),
         }
     }
 
-    async fn read_setting(&self, id: ConfigSettingId) -> std::result::Result<ConfigSettingEntry, String> {
+    /// A network setting and the index of the endpoint that answered it.
+    async fn read_setting(&self, id: ConfigSettingId) -> std::result::Result<(ConfigSettingEntry, usize), String> {
         let k = LedgerKey::ConfigSetting(LedgerKeyConfigSetting { config_setting_id: id });
         let k = k.to_xdr_base64(Limits::none()).map_err(|e| e.to_string())?;
-        let r = self.read("getLedgerEntries", json!({"keys": [k]})).await.map_err(|e| format!("{e:#}"))?;
+        let (r, at) = self.read_from("getLedgerEntries", json!({"keys": [k]})).await.map_err(|e| format!("{e:#}"))?;
         let x = r["entries"][0]["xdr"].as_str().ok_or("no entry")?;
         match LedgerEntryData::from_xdr_base64(x, xdr_limits(1 << 16)) {
-            Ok(LedgerEntryData::ConfigSetting(c)) => Ok(c),
+            Ok(LedgerEntryData::ConfigSetting(c)) => Ok((c, at)),
             other => Err(format!("not a setting: {other:?}")),
         }
     }
 
-    /// The network's `contract_data_entry_size_bytes`, read as `tx_max_size`; a failed read uses the last answer. `None`: never
-    /// answered, so the check cannot run. That job goes on: the chain still refuses an entry over the limit.
+    /// The network's `contract_data_entry_size_bytes`, read as `tx_max_size`; a failed read uses endpoint 0's last answer (a
+    /// failover endpoint's serves its job only, T24.5). `None`: no such answer, so the check cannot run. That job goes on: the
+    /// chain still refuses an entry over the limit.
     async fn entry_max_size(&self) -> Option<usize> {
         let read = match self.read_setting(ConfigSettingId::ContractDataEntrySizeBytes).await {
-            Ok(ConfigSettingEntry::ContractDataEntrySizeBytes(n)) => Ok(n as usize),
-            Ok(other) => Err(format!("not the entry setting: {other:?}")),
+            Ok((ConfigSettingEntry::ContractDataEntrySizeBytes(n), at)) => Ok((n as usize, at)),
+            Ok((other, _)) => Err(format!("not the entry setting: {other:?}")),
             Err(why) => Err(why),
         };
         let mut last = self.entry_limit.lock().unwrap_or_else(|e| e.into_inner());
         match read {
-            Ok(limit) => *last = Some(limit),
+            Ok((limit, 0)) => *last = Some(limit),
+            Ok((limit, _)) => return Some(limit),
             Err(why) => tracing::warn!(chain = %self.key, "contract_data_entry_size_bytes: {why}; using the last answer, {:?}", *last),
         }
         *last
@@ -5986,5 +5997,24 @@ mod tests {
         let (a, _, _) = failover_adapter(void_answer(), Net::default(), &[&first().await]).await;
         let _ = a.final_head().await;
         assert!(matches!(a.build(&job, 0).await, Err(SimError::Transport(_))), "the head: the same floor");
+    }
+
+    /// scaas-rpc T24.5: the last good network limit is endpoint 0's only. Answered by endpoint 1 (endpoint 0 down), each limit
+    /// serves that job and is never kept, so a later read no endpoint answers is `Transport` (the transaction size) and unknown
+    /// (the entry size), never endpoint 1's old answer. Control: endpoint 0's answer is kept for a failed read.
+    #[tokio::test]
+    async fn soroban_the_last_good_limit_is_endpoint_0s_only() {
+        let (a, _, net) = failover_adapter(void_answer(), Net::default(), &[DOWN]).await;
+        assert_eq!(a.tx_max_size().await.unwrap(), TX_MAX as usize);
+        assert_eq!(a.entry_max_size().await, Some(ENTRY_MAX as usize));
+        net.lock().unwrap().no_entries_result = true;
+        assert!(matches!(a.tx_max_size().await, Err(SimError::Transport(_))), "endpoint 1's answer was never kept");
+        assert_eq!(a.entry_max_size().await, None);
+        let (a, _, net) = failover_adapter(void_answer(), Net::default(), &[]).await;
+        a.tx_max_size().await.unwrap();
+        a.entry_max_size().await.unwrap();
+        net.lock().unwrap().no_entries_result = true;
+        assert_eq!(a.tx_max_size().await.unwrap(), TX_MAX as usize, "control: endpoint 0's answer kept");
+        assert_eq!(a.entry_max_size().await, Some(ENTRY_MAX as usize));
     }
 }

@@ -63,6 +63,11 @@ MUTANTS = [
     ("2: hedera: a mined status leaves the floor", [(A + "hedera.rs", "                c.saw_block(*height);\n", "                let _ = (c, height);\n")], NT + "hedera::tests::hedera_a_mined_status_raises_the_floor"),
     ("2: solana: the head read at finalized", [("clients/scaas-rpc/src/solana.rs", '.call(i, "getSlot", json!([{"commitment": "confirmed"}]))', '.call(i, "getSlot", json!([{"commitment": "finalized"}]))')],
      "cd clients/scaas-rpc && ../../scripts/capped cargo test --locked --offline -j2 --all-features --test solana the_head_is_the_confirmed_slot"),
+    # T24.5: a network limit is kept from endpoint 0's answer only
+    ("5: Soroban: the tx size kept from any endpoint", [(A + "soroban.rs", "                if at == 0 {\n                    *last = Some(limit);\n                }", "                *last = Some(limit);")],
+     NT + "soroban::tests::soroban_the_last_good_limit_is_endpoint_0s_only"),
+    ("5: Soroban: the entry size kept from any endpoint", [(A + "soroban.rs", "            Ok((limit, 0)) => *last = Some(limit),\n            Ok((limit, _)) => return Some(limit),", "            Ok((limit, _)) => *last = Some(limit),")],
+     NT + "soroban::tests::soroban_the_last_good_limit_is_endpoint_0s_only"),
 ]
 
 if __name__ == "__main__":
