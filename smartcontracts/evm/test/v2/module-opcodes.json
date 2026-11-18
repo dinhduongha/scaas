@@ -1,5 +1,5 @@
 {
- "_comment": "T66b §4.5 opcode scan of every body module (LinkClosure.t.sol test_moduleOpcodes): [DELEGATECALL count, DELEGATECALLs whose last PUSH20 before it is not a closure library (ZetherLayer._lib's target passed as an argument)], from the start to the last INVALID; no SELFDESTRUCT, no CALLCODE. A pin moves only with old -> new figures. Liquidity spec 2026-11-10 (re-check P3): module T of every kind also makes one STATICCALL to its caller (T7, `liquidityOrderDigest`, capped, one word read), which M5 allows; the DEX liquidity module SCaaSDexLiquidityModule makes no DELEGATECALL. Owner 2026-11-10 (CTR-TOK-30's Change, group 3p): the W of 8, 10, 12 renamed R and the Q2 of 5, 13 renamed S, their figures unchanged; 9, 11, 13 split W into W and R: W [26, 0] -> [21, 0] on 9, [26, 0] -> [21, 0] on 11, [26, 0] -> [21, 0] on 13, R [8, 0] on each (measured by runs/2026-11-10-ua-mtx-3p/probe/Probe3p.t.sol). Round 3s (spec 2026-11-10-token-lists.md, CTR-GOV-24): R gains enableFeature, setAllowed, setDenied, listFlagsOf: R [7, 0] -> [8, 0] on 8, 10, 12, [8, 0] -> [9, 0] on 9, 11, 13 (measured on the built modules). Fable recheck-2 P3-1 (owner 2026-11-12, CTR-GOV-27): `renounceAdmin(chainUid_)` checks the admin, then the chain word, before its `GovernanceLib.renounceAdmin` call; the compiled module has one more DELEGATECALL site, to a closure library (the second figure stays 0), in every A and in SCaaSDexGovernanceModule: A [9, 0] -> [10, 0] on 0 and 8, [5, 0] -> [6, 0] on 1, [12, 0] -> [13, 0] on 2 and 10, [6, 0] -> [7, 0] on 3, 5 and 9, [10, 0] -> [11, 0] on 4 and 12, [7, 0] -> [8, 0] on 11 and 13; the DEX governance module [6, 0] -> [7, 0] (measured by runs/2026-11-12-fix2-contracts/probe/ProbeP31.t.sol). CTR-GOV-27 Change (owner 2026-11-12): `transferAdmin` and `renounceAdmin` share one \"admin, then word\" helper (`GovernanceBaseCore._adminOnChain`), so the compiled module has one DELEGATECALL site fewer than recheck-2 P3-1 left (to a closure library; the second figure stays 0), in every A and in SCaaSDexGovernanceModule: A [10, 0] -> [9, 0] on 0 and 8, [6, 0] -> [5, 0] on 1, [13, 0] -> [12, 0] on 2 and 10, [7, 0] -> [6, 0] on 3, 5 and 9, [11, 0] -> [10, 0] on 4 and 12, [8, 0] -> [7, 0] on 11 and 13; the DEX governance module [7, 0] -> [6, 0] (measured by runs/2026-11-12-fix2-contracts/probe/ProbeP31.t.sol). Fix3 CTR-GOV-28 (owner 2026-11-13): grantRole, setGrant, cancelGrant, revokeRole and disableFeature take `chainUid_`; the compiled module has two more DELEGATECALL sites, to closure libraries (the second figure stays 0), in every A and in SCaaSDexGovernanceModule: A [9, 0] -> [11, 0] on 0 and 8, [5, 0] -> [7, 0] on 1, [12, 0] -> [14, 0] on 2 and 10, [6, 0] -> [8, 0] on 3, 5 and 9, [10, 0] -> [12, 0] on 4 and 12, [7, 0] -> [9, 0] on 11 and 13; the DEX governance module [6, 0] -> [8, 0] (measured on the built modules with LinkClosure's own walk). pqz-three-keys (owner 2026-11-13, CTR-TOK-30 Change): kind 12 splits Q into Q and S like kind 13: NormalPqzRegulatedTokenQ [19, 0] -> [10, 0], NormalPqzRegulatedTokenS [8, 0] new (measured by runs/2026-11-10-ua-mtx-3p/probe/Probe3p.t.sol). Three-key model step 4 (spec 2026-11-13 pqz-three-keys, CTR-PQZ-41): the PQZ kinds gain `mtxRollOverSigned` (Q) and `pqzSkipped` (S where the kind has S, else Q), each one more DELEGATECALL site to a closure library (PqzStateLib; the second figure stays 0): NormalPqzTokenQ [19, 0] -> [21, 0], WrappedPqzTokenQ [21, 0] -> [22, 0], WrappedPqzTokenS [8, 0] -> [9, 0], NormalPqzRegulatedTokenQ [10, 0] -> [11, 0], NormalPqzRegulatedTokenS [8, 0] -> [9, 0], WrappedPqzRegulatedTokenQ [18, 0] -> [19, 0], WrappedPqzRegulatedTokenS [8, 0] -> [9, 0] (measured on the built modules). Round 3zb + 3zc (old -> new, every new DELEGATECALL to a closure library, second column unchanged): W modules of the wrapped kinds +1 WrappedLib (the two cap setters and pendingSupplyCaps), +2 on 3 and 5 with Z / Q -1 (one WrappedLib DELEGATECALL site fewer in Z / Q, which only change executeRate's signature; no entry moved between the modules, checked against the ABIs); R of 9, 11, 13 +1 WrappedLib; Q of 4 and S of 5, 12, 13 +1 PqzStateLib (setProofStore with the holder's word); SCaaSDexGovernanceModule +1 GovernanceLib (the four DEX powers moved in, O8).",
+ "_comment": "T66b §4.5 opcode scan of every body module (LinkClosure.t.sol test_moduleOpcodes): [DELEGATECALL count, DELEGATECALLs whose last PUSH20 before it is not a closure library (ZetherLayer._lib's target passed as an argument)], from the start to the last INVALID; no SELFDESTRUCT, no CALLCODE. A pin moves only with old -> new figures. Liquidity spec 2026-11-10 (re-check P3): module T of every kind also makes one STATICCALL to its caller (T7, `liquidityOrderDigest`, capped, one word read), which M5 allows; the DEX liquidity module SCaaSDexLiquidityModule makes no DELEGATECALL. Owner 2026-11-10 (CTR-TOK-30's Change, group 3p): the W of 8, 10, 12 renamed R and the Q2 of 5, 13 renamed S, their figures unchanged; 9, 11, 13 split W into W and R: W [26, 0] -> [21, 0] on 9, [26, 0] -> [21, 0] on 11, [26, 0] -> [21, 0] on 13, R [8, 0] on each (measured by runs/2026-11-10-ua-mtx-3p/probe/Probe3p.t.sol). Round 3s (spec 2026-11-10-token-lists.md, CTR-GOV-24): R gains enableFeature, setAllowed, setDenied, listFlagsOf: R [7, 0] -> [8, 0] on 8, 10, 12, [8, 0] -> [9, 0] on 9, 11, 13 (measured on the built modules). Fable recheck-2 P3-1 (owner 2026-11-12, CTR-GOV-27): `renounceAdmin(chainUid_)` checks the admin, then the chain word, before its `GovernanceLib.renounceAdmin` call; the compiled module has one more DELEGATECALL site, to a closure library (the second figure stays 0), in every A and in SCaaSDexGovernanceModule: A [9, 0] -> [10, 0] on 0 and 8, [5, 0] -> [6, 0] on 1, [12, 0] -> [13, 0] on 2 and 10, [6, 0] -> [7, 0] on 3, 5 and 9, [10, 0] -> [11, 0] on 4 and 12, [7, 0] -> [8, 0] on 11 and 13; the DEX governance module [6, 0] -> [7, 0] (measured by runs/2026-11-12-fix2-contracts/probe/ProbeP31.t.sol). CTR-GOV-27 Change (owner 2026-11-12): `transferAdmin` and `renounceAdmin` share one \"admin, then word\" helper (`GovernanceBaseCore._adminOnChain`), so the compiled module has one DELEGATECALL site fewer than recheck-2 P3-1 left (to a closure library; the second figure stays 0), in every A and in SCaaSDexGovernanceModule: A [10, 0] -> [9, 0] on 0 and 8, [6, 0] -> [5, 0] on 1, [13, 0] -> [12, 0] on 2 and 10, [7, 0] -> [6, 0] on 3, 5 and 9, [11, 0] -> [10, 0] on 4 and 12, [8, 0] -> [7, 0] on 11 and 13; the DEX governance module [7, 0] -> [6, 0] (measured by runs/2026-11-12-fix2-contracts/probe/ProbeP31.t.sol). Fix3 CTR-GOV-28 (owner 2026-11-13): grantRole, setGrant, cancelGrant, revokeRole and disableFeature take `chainUid_`; the compiled module has two more DELEGATECALL sites, to closure libraries (the second figure stays 0), in every A and in SCaaSDexGovernanceModule: A [9, 0] -> [11, 0] on 0 and 8, [5, 0] -> [7, 0] on 1, [12, 0] -> [14, 0] on 2 and 10, [6, 0] -> [8, 0] on 3, 5 and 9, [10, 0] -> [12, 0] on 4 and 12, [7, 0] -> [9, 0] on 11 and 13; the DEX governance module [6, 0] -> [8, 0] (measured on the built modules with LinkClosure's own walk). pqz-three-keys (owner 2026-11-13, CTR-TOK-30 Change): kind 12 splits Q into Q and S like kind 13: NormalPqzRegulatedTokenQ [19, 0] -> [10, 0], NormalPqzRegulatedTokenS [8, 0] new (measured by runs/2026-11-10-ua-mtx-3p/probe/Probe3p.t.sol). Three-key model step 4 (spec 2026-11-13 pqz-three-keys, CTR-PQZ-41): the PQZ kinds gain `mtxRollOverSigned` (Q) and `pqzSkipped` (S where the kind has S, else Q), each one more DELEGATECALL site to a closure library (PqzStateLib; the second figure stays 0): NormalPqzTokenQ [19, 0] -> [21, 0], WrappedPqzTokenQ [21, 0] -> [22, 0], WrappedPqzTokenS [8, 0] -> [9, 0], NormalPqzRegulatedTokenQ [10, 0] -> [11, 0], NormalPqzRegulatedTokenS [8, 0] -> [9, 0], WrappedPqzRegulatedTokenQ [18, 0] -> [19, 0], WrappedPqzRegulatedTokenS [8, 0] -> [9, 0] (measured on the built modules). Round 3zb + 3zc (old -> new, every new DELEGATECALL to a closure library, second column unchanged): W modules of the wrapped kinds +1 WrappedLib (the two cap setters and pendingSupplyCaps), +2 on 3 and 5 with Z / Q -1 (one WrappedLib DELEGATECALL site fewer in Z / Q, which only change executeRate's signature; no entry moved between the modules, checked against the ABIs); R of 9, 11, 13 +1 WrappedLib; Q of 4 and S of 5, 12, 13 +1 PqzStateLib (setProofStore with the holder's word); SCaaSDexGovernanceModule +1 GovernanceLib (the four DEX powers moved in, O8). setAuditor C3.2 (bit 32 AUDITOR: setAuditorKey / setAuditorUA and their confirm in the module of each confidential kind that carries the setter, one more DELEGATECALL site to a closure library, the second figure unchanged; measured by runs/2026-11-17-set-auditor/probe/OpcodeProbe.t.sol on the round-end tree, bytecode_hash = \"none\" moving no figure): NormalZetherTokenZ [5, 0] -> [6, 0], WrappedZetherTokenZ [12, 1] -> [13, 1], NormalPqzTokenQ [22, 0] -> [23, 0], WrappedPqzTokenS [10, 0] -> [11, 0], NormalZetherRegulatedTokenZ [5, 0] -> [6, 0], WrappedZetherRegulatedTokenZ [11, 1] -> [12, 1], NormalPqzRegulatedTokenS [10, 0] -> [11, 0], WrappedPqzRegulatedTokenS [10, 0] -> [11, 0].",
  "NormalTokenP": [
   2,
   0
@@ -41,7 +41,7 @@
   0
  ],
  "NormalZetherTokenZ": [
-  5,
+  6,
   0
  ],
  "WrappedZetherTokenP": [
@@ -61,7 +61,7 @@
   0
  ],
  "WrappedZetherTokenZ": [
-  12,
+  13,
   1
  ],
  "NormalPqzTokenP": [
@@ -77,7 +77,7 @@
   0
  ],
  "NormalPqzTokenQ": [
-  22,
+  23,
   0
  ],
  "WrappedPqzTokenP": [
@@ -101,7 +101,7 @@
   0
  ],
  "WrappedPqzTokenS": [
-  10,
+  11,
   0
  ],
  "NormalRegulatedTokenP": [
@@ -157,7 +157,7 @@
   0
  ],
  "NormalZetherRegulatedTokenZ": [
-  5,
+  6,
   0
  ],
  "WrappedZetherRegulatedTokenP": [
@@ -181,7 +181,7 @@
   0
  ],
  "WrappedZetherRegulatedTokenZ": [
-  11,
+  12,
   1
  ],
  "NormalPqzRegulatedTokenP": [
@@ -205,7 +205,7 @@
   0
  ],
  "NormalPqzRegulatedTokenS": [
-  10,
+  11,
   0
  ],
  "WrappedPqzRegulatedTokenP": [
@@ -233,7 +233,7 @@
   0
  ],
  "WrappedPqzRegulatedTokenS": [
-  10,
+  11,
   0
  ],
  "SCaaSDexGovernanceModule": [
