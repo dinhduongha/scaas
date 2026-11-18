@@ -3,6 +3,7 @@
 //! every read-modify-write under the store's lock and at the expected `rev` (`StoreConflict` after three tries), the replaced
 //! container kept as `keystore.prev`, and the anchor `keystore.head` that detects an older container put back.
 pub mod keystore;
+mod prf;
 mod seeds;
 pub mod store;
 mod unlock;
@@ -11,8 +12,8 @@ pub use unlock::{SessionSet, Unlock};
 
 pub(crate) use seeds::OpenSeed;
 pub use seeds::{
-    ConfirmRemove, ConfirmRemoveUnbacked, DeriveChild, Generate, ImportKey, ImportWords, ImportedKey, NewSeed,
-    Remove, SeedBackup, SeedInfo, Vault,
+    ConfirmRemove, ConfirmRemoveUnbacked, DeriveChild, Generate, ImportKey, ImportWords,
+    ImportedKey, NewSeed, Remove, SeedBackup, SeedInfo, Vault,
 };
 
 pub use keystore::{AccountRow, Keystore, SeedEntry};

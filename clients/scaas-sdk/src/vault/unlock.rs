@@ -33,47 +33,69 @@ pub(crate) fn vault_of(e: &SeedEntry, label: &str) -> Result<V1, SdkError> {
     })
 }
 
+/// The secret a vault opens with: its passphrase, or the 32-byte PRF output / platform secret of its PRF envelope.
+pub(crate) enum Key {
+    Pass(Arc<SecretBytes>),
+    Prf(Arc<SecretBytes>),
+}
+
+/// `f` with the `scaas-ua` unlock of `k` (`AuthenticatorRefused` for a PRF secret that is not 32 bytes).
+pub(crate) fn with_key<R>(
+    k: &Key,
+    f: impl FnOnce(scaas_ua::wallet::Unlock) -> Result<R, SdkError>,
+) -> Result<R, SdkError> {
+    match k {
+        Key::Pass(p) => passphrase(p, |p| f(scaas_ua::wallet::Unlock::VaultPassphrase(p))),
+        Key::Prf(s) => s.with(|b| {
+            let out: &[u8; 32] = b.try_into().map_err(|_| SdkError::AuthenticatorRefused)?;
+            f(scaas_ua::wallet::Unlock::Prf(out))
+        }),
+    }
+}
+
 /// Opens `e`'s seed vault (and, for the main set, checks its words and MAC and opens its label vaults).
-fn open_entry(
-    e: &SeedEntry,
-    pass: &SecretBytes,
-    bip39: Option<&SecretBytes>,
-) -> Result<Wallet, SdkError> {
+fn open_entry(e: &SeedEntry, key: &Key, bip39: Option<&SecretBytes>) -> Result<Wallet, SdkError> {
     let seed = vault_of(e, "seed")?;
-    passphrase(pass, |p| {
-        let unlock = scaas_ua::wallet::Unlock::VaultPassphrase(p);
-        match bip39 {
-            Some(b) => passphrase(b, |bp| Ok(Wallet::open_vault(&seed, unlock, bp)?)),
-            None => {
-                let w = Wallet::open_vault(&seed, unlock, "")?;
-                if w.word_count()? != e.words {
-                    return Err(SdkError::VaultFormat);
-                }
-                if mac(&w, e)? != e.index_mac {
-                    return Err(SdkError::KeystoreMismatch);
-                }
-                for label in e.vaults.keys().filter(|l| l.as_str() != "seed") {
-                    w.open_label_vault(&vault_of(e, label)?, unlock)?;
-                }
-                Ok(w)
+    with_key(key, |unlock| match bip39 {
+        Some(b) => passphrase(b, |bp| Ok(Wallet::open_vault(&seed, unlock, bp)?)),
+        None => {
+            let w = Wallet::open_vault(&seed, unlock, "")?;
+            if w.word_count()? != e.words {
+                return Err(SdkError::VaultFormat);
             }
+            if mac(&w, e)? != e.index_mac {
+                return Err(SdkError::KeystoreMismatch);
+            }
+            // a PRF unlock opens the manifest and keeps the PRF key; the other vaults open on first use (owner 2026-11-18 (b))
+            let prf = matches!(unlock, scaas_ua::wallet::Unlock::Prf(_));
+            for label in e.vaults.keys().filter(|l| l.as_str() != "seed") {
+                if prf && label.as_str() != "manifest" {
+                    continue;
+                }
+                w.open_label_vault(&vault_of(e, label)?, unlock)?;
+            }
+            // the output already borrowed by `with_key` (a second `with` on the same secret would wait on itself)
+            if let scaas_ua::wallet::Unlock::Prf(out) = unlock {
+                w.retain_prf_key(out)?;
+            }
+            Ok(w)
         }
     })
 }
 
 impl Vault {
-    /// Unlocks the seed by its vault passphrase: `VaultOpen` for a wrong one, `KeystoreMismatch` when the index MAC does not
-    /// verify (the seed stays locked, the event says so), `SeedUnknown`. `Passkey` / `Platform`: plan T7 (`FeatureMissing`).
+    /// Unlocks the seed by its vault passphrase (every vault opened now, the passphrase not kept) or by its passkey / platform
+    /// PRF envelope (the seed and manifest vaults opened, the PRF key kept for the others' first use; spec §6.10, owner
+    /// 2026-11-18): `VaultOpen` for a wrong secret, `AuthenticatorRefused` (no authenticator, no envelope, no PRF output),
+    /// `KeystoreMismatch` when the index MAC does not verify (the seed stays locked, the event says so), `SeedUnknown`.
     pub async fn unlock(&self, seed: String, unlock: Unlock) -> Result<(), SdkError> {
-        let Unlock::Passphrase(pass) = unlock else {
-            return Err(SdkError::FeatureMissing);
-        };
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
                 let e = sdk.entry(&seed).await?;
+                let key = sdk.key_of(&e, unlock).await?;
                 let id = e.id.clone();
-                let r = sdk.heavy(move || open_entry(&e, &pass, None)).await;
+                let r = sdk.heavy(move || open_entry(&e, &key, None)).await;
                 let wallet = match r {
                     Err(SdkError::KeystoreMismatch) => {
                         sdk.emit(Event::KeystoreMismatch { seed: id });
@@ -99,15 +121,13 @@ impl Vault {
         unlock: Unlock,
         bip39_passphrase: Arc<SecretBytes>,
     ) -> Result<SessionSet, SdkError> {
-        let Unlock::Passphrase(pass) = unlock else {
-            return Err(SdkError::FeatureMissing);
-        };
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
                 let e = sdk.entry(&seed).await?;
+                let key = sdk.key_of(&e, unlock).await?;
                 let wallet = sdk
-                    .heavy(move || open_entry(&e, &pass, Some(&bip39_passphrase)))
+                    .heavy(move || open_entry(&e, &key, Some(&bip39_passphrase)))
                     .await?;
                 let id = super::seeds::uuid4()?;
                 sdk.hidden
@@ -161,6 +181,25 @@ impl Sdk {
             .into_iter()
             .find(|s| s.id == seed)
             .ok_or(SdkError::SeedUnknown)
+    }
+
+    /// Opens label vault `label` of the open seed on its first use (spec §6.10, owner 2026-11-18 (b)): a no-op when it is open;
+    /// else through the PRF key the unlock kept (`Argument` when the seed opened by passphrase, which opens every vault at
+    /// unlock). `WalletLocked`, `VaultFormat` for a label the entry has not.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "its first callers read an import or a pqz-held key: T16 (pqz-held), T19 (native imports)"
+        )
+    )]
+    pub(crate) async fn open_on_use(&self, seed: &str, label: &str) -> Result<(), SdkError> {
+        let open = self.open_seed(seed)?;
+        if open.wallet.label_open(label) {
+            return Ok(());
+        }
+        let v = vault_of(&self.entry(seed).await?, label)?;
+        Ok(open.wallet.open_label_vault_retained(&v)?)
     }
 
     /// The open main set of `seed`, or `WalletLocked`.

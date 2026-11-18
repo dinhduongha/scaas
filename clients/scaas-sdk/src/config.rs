@@ -116,6 +116,8 @@ pub struct SdkConfig {
     pub store: Arc<dyn SecureStore>,
     /// passkeys, platform secrets, secure-element keys (spec §6.10); `None`: passphrase only
     pub authenticator: Option<Arc<dyn Authenticator>>,
+    /// the deployment's passkey RP ID (CLI-APP-14: never a SCaaS constant); `None`: no passkey unlock
+    pub rp_id: Option<String>,
     pub runtime: RuntimeChoice,
     pub limits: Limits,
 }
@@ -125,6 +127,7 @@ impl std::fmt::Debug for SdkConfig {
         f.debug_struct("SdkConfig")
             .field("profiles", &self.profiles)
             .field("authenticator", &self.authenticator.is_some())
+            .field("rp_id", &self.rp_id)
             .field("runtime", &self.runtime)
             .field("limits", &self.limits)
             .finish()

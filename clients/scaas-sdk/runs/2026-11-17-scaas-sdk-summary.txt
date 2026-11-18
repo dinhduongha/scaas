@@ -13,11 +13,11 @@ frb-dart | 95b8646e6 | 0 | dart: +46:; tree dirty
 sdk-min | bb075dd0f | 0 | 45 passed, 0 failed, 0 ignored (6 binaries); tree dirty
 sdk-wasm | bb075dd0f | 0 | -; tree dirty
 sdk-deny | bb075dd0f | 0 | -; tree dirty
-bind-dart | bb075dd0f | 0 | dart: +8:; tree dirty
-docs | 380c5cb8d | 0 | -; tree dirty
 ck-test | 57ca6196d | 0 | node: 468 pass, 0 fail, 4 skipped; tree dirty
 features | 57ca6196d | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 ua-test | 57ca6196d | 0 | 524 passed, 0 failed, 3 ignored (53 binaries); tree dirty
-ua-clippy | 57ca6196d | 0 | -; tree dirty
-sdk-test | 57ca6196d | 0 | 52 passed, 0 failed, 0 ignored (8 binaries); tree dirty
-sdk-clippy | 57ca6196d | 0 | -; tree dirty
+sdk-test | 35925da14 | 0 | 63 passed, 0 failed, 0 ignored (9 binaries); tree dirty
+sdk-clippy | 35925da14 | 0 | -; tree dirty
+bind-dart | 35925da14 | 0 | dart: +8:; tree dirty
+ua-clippy | 35925da14 | 0 | -; tree dirty
+docs | 35925da14 | 0 | -; tree dirty

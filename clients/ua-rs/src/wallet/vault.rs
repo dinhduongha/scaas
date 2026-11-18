@@ -239,6 +239,17 @@ impl Vault {
         Ok(Vault { prf: Some(prf_envelope(&self.label, &dek, prf)?), ..self.clone() })
     }
 
+    /// The vault without its PRF envelope (scaas-sdk spec §6.10 `disable_prf_unlock`): the data and pin envelopes unchanged. It
+    /// revokes nothing from an earlier copy of the vault that still has the envelope.
+    pub fn without_prf(&self) -> Vault {
+        Vault { prf: None, ..self.clone() }
+    }
+
+    /// Whether the vault carries a PRF envelope, and its credential id and salt (public: what the authenticator is asked with).
+    pub fn prf_params(&self) -> Option<(String, Vec<u8>)> {
+        self.prf.as_ref().map(|p| (p.credential_id.clone(), p.salt.clone()))
+    }
+
     /// The clientkeys JSON (its field order).
     pub fn to_json(&self) -> String {
         let s = |x: &str| Value::from(x).to_string();

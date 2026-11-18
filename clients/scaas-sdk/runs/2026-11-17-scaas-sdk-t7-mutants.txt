@@ -1,0 +1,7 @@
+# t7 mutants at commit 35925da14 (name | outcome | test)
+accept an answer without PRF | killed | ../../scripts/capped cargo test --locked --offline -j2 --test passkey no_prf_is_refused
+one salt per vault instead of per seed | killed | ../../scripts/capped cargo test --locked --offline -j2 --test passkey enable_then_unlock_by_passkey
+the open wallet keeps the old envelopes (no refresh) | killed | ../../scripts/capped cargo test --locked --offline -j2 --test passkey manifest_reseal_keeps_prf
+drop the PRF envelope on a new import | killed | ../../scripts/capped cargo test --locked --offline -j2 --test passkey new_import_in_a_passkey_session_carries_the_prf_envelope
+open all at unlock | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib imports_open_on_first_use
+5 mutants, 5 killed, 0 survived, 0 not loaded

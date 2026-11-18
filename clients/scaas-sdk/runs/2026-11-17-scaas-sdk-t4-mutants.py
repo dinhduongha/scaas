@@ -30,8 +30,8 @@ MUTANTS = [
     ("skip zeroize on lock", [(ST, "        self.page.0.zeroize();\n        #[cfg(feature = \"vectors\")]", "        #[cfg(feature = \"vectors\")]")],
      UAK + "lock_zeroizes_the_retained_key"),
     # owner 2026-11-18 (i): the passphrase is never retained
-    ("retain the passphrase", [(U, "let r = sdk.heavy(move || open_entry(&e, &pass, None)).await;",
-                                "Box::leak(Box::new(pass.clone()));\n                let r = sdk.heavy(move || open_entry(&e, &pass, None)).await;")],
+    ("retain the passphrase", [(U, "let r = sdk.heavy(move || open_entry(&e, &key, None)).await;",
+                                "if let Key::Pass(p) = &key {\n                    Box::leak(Box::new(p.clone()));\n                }\n                let r = sdk.heavy(move || open_entry(&e, &key, None)).await;")],
      T + "passphrase_not_retained_after_unlock"),
     ("open no label vault at a passphrase unlock", [(U, "for label in e.vaults.keys().filter(|l| l.as_str() != \"seed\") {", "for label in e.vaults.keys().filter(|l| l.as_str() == \"manifest\") {")],
      "cd clients/scaas-sdk && ../../scripts/capped cargo test --locked --offline -j2 --lib passphrase_unlock_opens_every_vault"),

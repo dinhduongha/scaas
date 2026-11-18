@@ -344,7 +344,9 @@ fn parser_property() {
 }
 
 fn secret(b: &[u8]) -> Arc<scaas_ua::wallet::SecretBytes> {
-    Arc::new(scaas_ua::wallet::SecretBytes::from_zeroizing(zeroize::Zeroizing::new(b.to_vec())).unwrap())
+    Arc::new(
+        scaas_ua::wallet::SecretBytes::from_zeroizing(zeroize::Zeroizing::new(b.to_vec())).unwrap(),
+    )
 }
 
 const PASS: &[u8] = "river-otter-7 ünï".as_bytes();
@@ -357,6 +359,7 @@ async fn passphrase_unlock_opens_every_vault() {
         profiles: vec![],
         store: MemoryStore::new(),
         authenticator: None,
+        rp_id: None,
         runtime: crate::RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: crate::Limits::default(),
     })
@@ -364,17 +367,172 @@ async fn passphrase_unlock_opens_every_vault() {
     .unwrap();
     let v = s.vault();
     let id = v
-        .import_words(ImportWords { label: "Main".into(), words: secret(REPO), vault_passphrase: secret(PASS) })
+        .import_words(ImportWords {
+            label: "Main".into(),
+            words: secret(REPO),
+            vault_passphrase: secret(PASS),
+        })
         .await
         .unwrap()
         .id;
-    let key = ImportKey { seed: id.clone(), network: "evm".into(), secret: secret(&[0x11; 32]), vault_passphrase: secret(PASS) };
+    let key = ImportKey {
+        seed: id.clone(),
+        network: "evm".into(),
+        secret: secret(&[0x11; 32]),
+        vault_passphrase: secret(PASS),
+    };
     v.import_key(key).await.unwrap();
     v.lock(id.clone()).await;
     assert!(s.open_seed(&id).is_err(), "control: locked");
-    v.unlock(id.clone(), Unlock::Passphrase(secret(PASS))).await.unwrap();
+    v.unlock(id.clone(), Unlock::Passphrase(secret(PASS)))
+        .await
+        .unwrap();
     let w = s.open_seed(&id).unwrap();
     assert!(w.wallet.label_open("manifest"));
-    assert!(w.wallet.label_open("native-import:evm:0"), "opened at unlock");
-    assert!(w.wallet.imported_key(scaas_ua::wallet::Network::Evm, 0).is_ok());
+    assert!(
+        w.wallet.label_open("native-import:evm:0"),
+        "opened at unlock"
+    );
+    assert!(w
+        .wallet
+        .imported_key(scaas_ua::wallet::Network::Evm, 0)
+        .is_ok());
+}
+
+/// A platform authenticator for the first-use tests: HMAC(handle, salt) as the platform secret.
+struct Platform;
+
+#[async_trait]
+impl crate::platform::Authenticator for Platform {
+    async fn create_passkey(
+        &self,
+        _: String,
+        _: String,
+        _: Vec<Vec<u8>>,
+    ) -> Result<crate::platform::PasskeyCreated, crate::platform::AuthError> {
+        Err(crate::platform::AuthError::Unavailable)
+    }
+    async fn get_assertion(
+        &self,
+        _: crate::platform::AssertionRequest,
+        _: Arc<scaas_ua::wallet::SecretBytes>,
+    ) -> Result<crate::platform::Assertion, crate::platform::AuthError> {
+        Err(crate::platform::AuthError::Unavailable)
+    }
+    async fn platform_secret(
+        &self,
+        handle: String,
+        salt: Vec<u8>,
+        _: String,
+        out: Arc<scaas_ua::wallet::SecretBytes>,
+    ) -> Result<(), crate::platform::AuthError> {
+        out.with_mut(|b| {
+            b.copy_from_slice(&scaas_ua::wallet::hmac_sha256(handle.as_bytes(), &salt))
+        });
+        Ok(())
+    }
+    async fn p256_generate(
+        &self,
+        _: crate::platform::KeyPolicy,
+    ) -> Result<crate::platform::SePublic, crate::platform::AuthError> {
+        Err(crate::platform::AuthError::Unavailable)
+    }
+    async fn p256_sign(
+        &self,
+        _: String,
+        _: Vec<u8>,
+        _: String,
+    ) -> Result<Vec<u8>, crate::platform::AuthError> {
+        Err(crate::platform::AuthError::Unavailable)
+    }
+}
+
+/// A seed with platform unlock and one import, locked, then unlocked by the platform secret.
+async fn platform_session() -> (Arc<crate::Sdk>, String) {
+    let s = crate::Sdk::open(crate::SdkConfig {
+        profiles: vec![],
+        store: MemoryStore::new(),
+        authenticator: Some(Arc::new(Platform)),
+        rp_id: None,
+        runtime: crate::RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
+        limits: crate::Limits::default(),
+    })
+    .await
+    .unwrap();
+    let v = s.vault();
+    let id = v
+        .import_words(ImportWords {
+            label: "Main".into(),
+            words: secret(REPO),
+            vault_passphrase: secret(PASS),
+        })
+        .await
+        .unwrap()
+        .id;
+    let policy = crate::platform::KeyPolicy {
+        biometry_current_set: true,
+        invalidated_by_enrollment: true,
+    };
+    v.enable_platform_unlock(id.clone(), secret(PASS), policy)
+        .await
+        .unwrap();
+    v.import_key(ImportKey {
+        seed: id.clone(),
+        network: "evm".into(),
+        secret: secret(&[0x11; 32]),
+        vault_passphrase: secret(PASS),
+    })
+    .await
+    .unwrap();
+    v.lock(id.clone()).await;
+    v.unlock(id.clone(), Unlock::Platform).await.unwrap();
+    (s, id)
+}
+
+/// Owner 2026-11-18 (b): a PRF unlock opens no import before its first use; the first use opens it with the retained key.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn imports_open_on_first_use() {
+    let (s, id) = platform_session().await;
+    let w = s.open_seed(&id).unwrap();
+    assert!(w.wallet.label_open("manifest"));
+    assert!(
+        !w.wallet.label_open("native-import:evm:0"),
+        "not opened at unlock"
+    );
+    assert!(w
+        .wallet
+        .imported_key(scaas_ua::wallet::Network::Evm, 0)
+        .is_err());
+    s.open_on_use(&id, "native-import:evm:0").await.unwrap();
+    assert!(
+        w.wallet.label_open("native-import:evm:0"),
+        "opened at first use"
+    );
+    assert!(w
+        .wallet
+        .imported_key(scaas_ua::wallet::Network::Evm, 0)
+        .is_ok());
+    s.open_on_use(&id, "native-import:evm:0").await.unwrap();
+}
+
+/// Lock zeroes the retained key: after lock and a passphrase unlock, no vault opens through a kept key.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn lock_drops_the_retained_key() {
+    let (s, id) = platform_session().await;
+    s.vault().lock(id.clone()).await;
+    s.vault()
+        .unlock(id.clone(), Unlock::Passphrase(secret(PASS)))
+        .await
+        .unwrap();
+    let w = s.open_seed(&id).unwrap();
+    assert!(
+        w.wallet.label_open("native-import:evm:0"),
+        "a passphrase unlock opens every vault"
+    );
+    let v = super::unlock::vault_of(&s.entry(&id).await.unwrap(), "native-import:evm:0").unwrap();
+    assert_eq!(
+        w.wallet.open_label_vault_retained(&v),
+        Err(scaas_ua::wallet::Error::Argument),
+        "no key kept across lock"
+    );
 }

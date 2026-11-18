@@ -359,6 +359,21 @@ impl Vault {
                 let open = sdk.open_seed(&req.seed)?;
                 let e = sdk.entry(&req.seed).await?;
                 let seed_vault = super::unlock::vault_of(&e, "seed")?;
+                // a seed with passkey or platform unlock: the new vault carries the PRF envelope too, one assertion
+                let prf = match seed_vault.prf_params() {
+                    None => None,
+                    Some((credential, salt)) => {
+                        let how = if credential.starts_with(super::prf::PLATFORM_PREFIX) {
+                            super::Unlock::Platform
+                        } else {
+                            super::Unlock::Passkey
+                        };
+                        let super::unlock::Key::Prf(out) = sdk.key_of(&e, how).await? else {
+                            return Err(SdkError::Internal);
+                        };
+                        Some((out, credential, salt))
+                    }
+                };
                 let pass = req.vault_passphrase;
                 let secret = req.secret;
                 let wallet = open.clone();
@@ -368,8 +383,18 @@ impl Vault {
                         let key = secret.with(|b| wallet.wallet.import_native_key(network, b))?;
                         let n = key.index();
                         let label = format!("native-import:{}:{n}", network.name());
-                        let vault = passphrase(&pass, |p| {
-                            Ok(wallet.wallet.seal_label_vault(&label, p, None)?)
+                        let vault = passphrase(&pass, |p| match &prf {
+                            None => Ok(wallet.wallet.seal_label_vault(&label, p, None)?),
+                            Some((out, credential, salt)) => out.with(|b| {
+                                let output: &[u8; 32] =
+                                    b.try_into().map_err(|_| SdkError::AuthenticatorRefused)?;
+                                let env = scaas_ua::wallet::PrfEnvelope {
+                                    output,
+                                    credential_id: credential,
+                                    salt,
+                                };
+                                Ok(wallet.wallet.seal_label_vault(&label, p, Some(&env))?)
+                            }),
                         })?;
                         let manifest = wallet.wallet.reseal_label_vault("manifest")?;
                         Ok((label, n, vault.to_json(), manifest.to_json()))

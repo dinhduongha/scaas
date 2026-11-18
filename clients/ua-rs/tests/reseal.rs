@@ -99,3 +99,16 @@ fn dek_wiped_at_lock() {
     w.open_label_vault(&v, Unlock::Prf(&PRF)).unwrap();
     assert!(w.reseal_label_vault("manifest").is_ok(), "held again once reopened");
 }
+
+/// scaas-sdk T7: `Vault::without_prf` (`disable_prf_unlock`) and `Vault::prf_params` (what the authenticator is asked with).
+#[test]
+fn without_prf_and_prf_params() {
+    let w = Wallet::from_mnemonic(MNEMONIC, "").unwrap();
+    let v = w.seal_label_vault("manifest", PASS, Some(&envelope())).unwrap();
+    assert_eq!(v.prf_params(), Some(("Yw".to_owned(), vec![9; 32])));
+    assert!(opened(&v, Unlock::Prf(&PRF)).is_ok(), "control");
+    let n = v.without_prf();
+    assert_eq!(n.prf_params(), None);
+    assert!(opened(&n, Unlock::VaultPassphrase(PASS)).is_ok());
+    assert!(opened(&n, Unlock::Prf(&PRF)).is_err());
+}

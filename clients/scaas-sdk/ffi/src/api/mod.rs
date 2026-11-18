@@ -217,6 +217,7 @@ pub async fn sdk_open(
         profiles: vec![],
         store: Arc::new(store),
         authenticator: Some(Arc::new(auth)),
+        rp_id: Some("example.invalid".into()),
         runtime: RuntimeChoice::Own,
         limits: Limits::default(),
     };

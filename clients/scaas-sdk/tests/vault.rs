@@ -29,6 +29,7 @@ async fn open_limits(store: Arc<dyn SecureStore>, limits: Limits) -> Arc<Sdk> {
         profiles: vec![],
         store,
         authenticator: None,
+        rp_id: None,
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits,
     })
@@ -707,7 +708,13 @@ async fn passphrase_not_retained_after_unlock() {
         .unwrap();
     assert_eq!(Arc::strong_count(&pass), 1, "no copy of the handle kept");
     let mut buf = [0u8; 64];
-    assert!(scaas_ua::wallet::secret_read(sid, &mut buf).is_ok(), "control: alive while held");
+    assert!(
+        scaas_ua::wallet::secret_read(sid, &mut buf).is_ok(),
+        "control: alive while held"
+    );
     drop(pass);
-    assert!(scaas_ua::wallet::secret_read(sid, &mut buf).is_err(), "gone (zeroed and freed) once dropped");
+    assert!(
+        scaas_ua::wallet::secret_read(sid, &mut buf).is_err(),
+        "gone (zeroed and freed) once dropped"
+    );
 }
