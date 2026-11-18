@@ -358,21 +358,27 @@ fn auditor_op(data: &[u8]) -> bool {
         .any(|r| matches!(r.name, "UASetAuditorKey" | "UASetAuditorUA") && r.sent[..] == *s))
 }
 
-/// Closing review C2 (set-auditor spec §13): a held bit-32 confirm (a job requeued on `AUDITOR_NOT_READY`), read before it is
-/// sent again: `Some(true)` confirmable (`auditorState()` status 2 with the job's own `pending` and `proposer`), `Some(false)`
-/// still waiting (status 1, the same), `None` gone (none, expired, void, another proposal, or not an auditor op): sent, the call
-/// would propose afresh (§5.1), so the job is never sent.
-pub async fn auditor_confirm(chain: &Chain, w: &Work) -> Result<Option<bool>, SimError> {
-    use crate::abi::{IAuditorRouter as R, IAuditorSetter as S};
-    let (from, target, pending) = if let Ok(c) = R::mtxSetAuditorKeyCall::abi_decode(&w.data) {
-        (c.e.from, c.target, alloy::primitives::keccak256(&c.newKey))
-    } else if let Ok(c) = R::mtxSetAuditorUACall::abi_decode(&w.data) {
-        (c.e.from, c.target, c.newAuditor)
+/// The proposal a bit-32 op names (closing review C2, set-auditor spec §13): its token, `pending` as `auditorState()` reads it
+/// (`keccak256(newKey)`, or the new UA) and the proposer (the envelope's `from`); `None` for any other job.
+pub fn auditor_proposal(data: &[u8]) -> Option<crate::store::AuditorHold> {
+    use crate::abi::IAuditorRouter as R;
+    let (token, pending, proposer) = if let Ok(c) = R::mtxSetAuditorKeyCall::abi_decode(data) {
+        (c.target, alloy::primitives::keccak256(&c.newKey), c.e.from)
     } else {
-        return Ok(None);
+        let c = R::mtxSetAuditorUACall::abi_decode(data).ok()?;
+        (c.target, c.newAuditor, c.e.from)
     };
-    let st = chain.call_view(target, S::auditorStateCall {}).await?;
-    Ok(match (st.status, st.pending == pending && st.proposer == from) {
+    Some(crate::store::AuditorHold { token: token.to_vec(), pending: pending.to_vec(), proposer: proposer.to_vec() })
+}
+
+/// Closing review C2 (set-auditor spec §13): a held bit-32 confirm (its hold in the node store, C2b), read on chain before it is
+/// sent again: `Some(true)` confirmable (`auditorState()` status 2 with the held `pending` and `proposer`), `Some(false)` still
+/// waiting (status 1, the same), `None` gone (none, expired, void, another proposal): sent, the call would propose afresh
+/// (§5.1), so the job is never sent.
+pub async fn auditor_confirm(chain: &Chain, held: &crate::store::AuditorHold) -> Result<Option<bool>, SimError> {
+    let Ok(token) = Address::try_from(&held.token[..]) else { return Ok(None) };
+    let st = chain.call_view(token, crate::abi::IAuditorSetter::auditorStateCall {}).await?;
+    Ok(match (st.status, st.pending[..] == held.pending[..] && st.proposer[..] == held.proposer[..]) {
         (2, true) => Some(true),
         (1, true) => Some(false),
         _ => None,

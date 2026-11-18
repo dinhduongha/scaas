@@ -55,8 +55,26 @@ MUTANTS = {
                                    "        let slot = if epoch == epoch {\n", "@clients/ua-rs",
                                    "--test pqz_read balance_proven_against_anvil -- --include-ignored"),
     },
-    # Fable C2 (the closing review): a held bit-32 confirm is sent again only while its proposal is confirmable; C3.3: only the
-    # two auditor ops requeue on AuditorNotReady
+    # Fable C2b (coordinator rework): the hold lives in the node store (auditor_hold), never in a client's row
+    "c2b": {
+        "hold-not-persisted": (NSR, "(Some((st, _)), Some(p)) => st.hold_auditor(&self.cfg.chain_key(), id, &p, crate::store::now_ms()).await\n                            .map_err(|e| e.to_string()),",
+                               "(Some((st, _)), Some(p)) => { let _ = (st, p); Ok::<(), String>(()) }", *NH),
+        "startup-requeue-clears": (NSR, '            let _ = me.report(*id, "queued", None, None, Some("requeued at node start".into())).await;\n',
+                                   '            if let Some((st, _)) = &me.journal { let _ = st.release_auditor(&me.cfg.chain_key(), *id).await; }\n'
+                                   '            let _ = me.report(*id, "queued", None, None, Some("requeued at node start".into())).await;\n', *NH),
+        "mark-from-memory-only": (NSR, "            let held = match st.auditor_hold(&self.cfg.chain_key(), id).await {",
+                                  "            let held = match { let _ = (st, id); Ok::<Option<crate::store::AuditorHold>, String>(None) } {", *NH),
+        "release-dropped": (NSR, '            if let Err(e) = match held { Ok(None) => Ok(()), _ => st.release_auditor(&self.cfg.chain_key(), job).await } {',
+                            '            if let Err(e) = match held { _ => Ok::<(), crate::store::StoreError>(()) } {', *NH),
+        "send-on-expired": (NG, "        (2, true) => Some(true),\n", "        (2 | 3, true) => Some(true),\n", *NH),
+        "ignore-proposer": (NG, "st.pending[..] == held.pending[..] && st.proposer[..] == held.proposer[..]", "st.pending[..] == held.pending[..]", *NH),
+        "gone-not-consumed": (NSR, "                    Ok(None) => return match self.consumed(&w).await {",
+                              "                    Ok(None) => return match Ok::<bool, anyhow::Error>(false) {", *NH),
+        "unstored-queued": (NSR, '                    if let Err(e) = held {\n                        return self.fail(',
+                            '                    if let Err(e) = held {\n                        return self.requeue(', *NH),
+    },
+    # Fable C2 (the closing review), as of b9276c94e (superseded by c2b: the texts below are that commit's): a held bit-32 confirm
+    # is sent again only while its proposal is confirmable; C3.3: only the two auditor ops requeue on AuditorNotReady
     "c2": {
         "send-on-expired": (NG, "        (2, true) => Some(true),\n", "        (2 | 3, true) => Some(true),\n", *NH),
         "ignore-proposer": (NG, "st.pending == pending && st.proposer == from", "st.pending == pending", *NH),

@@ -132,7 +132,7 @@ manual wallet send also trips it — the right default ([submit-lanes.md#lane-ke
 ## <a id="schema"></a>4. Schema
 
 <a id="schema"></a>Logical schema in SQLite dialect; the per-backend rules above apply. Migrations: `sqlx::migrate!`,
-one directory per backend, `meta.schema_version = '2'`; every implementing change ships one numbered migration per
+one directory per backend, `meta.schema_version = '3'` (`meta.schema_version = '2'` until `auditor_hold`, SQLite `0002_auditor_hold.sql`, BUILT); every implementing change ships one numbered migration per
 backend directory (`schema_version` + 1). Every key/hash/address column compares **byte-exact** on every backend.
 Nonces are `BIGINT` (i64); adapters refuse values > `i64::MAX` (every family fits: EVM nonce, Cosmos/Aptos sequence,
 Stellar `ledger << 32`, GRAM u32).
@@ -264,6 +264,11 @@ CREATE TABLE outer_tx (chain_key TEXT NOT NULL, lane_label TEXT NOT NULL, outer_
                                                          -- kept until terminal
   created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL,
   PRIMARY KEY (chain_key, lane_label, outer_nonce));
+-- set-auditor closing review C2b (submit-lanes.md, the AuditorNotReady row; BUILT): a bit-32 confirm requeued as
+-- AUDITOR_NOT_READY is held here with the proposal it waits for; read before every resend, kept by every requeue (the
+-- startup one too), deleted only at the job's final verdict (dead, consumed, mined, reverted)
+CREATE TABLE auditor_hold (chain_key TEXT NOT NULL, job_id BIGINT NOT NULL, token BLOB NOT NULL, pending BLOB NOT NULL,
+  proposer BLOB NOT NULL, held_at BIGINT NOT NULL, PRIMARY KEY (chain_key, job_id));
 CREATE TABLE subject_grief (chain_key TEXT NOT NULL, subject TEXT NOT NULL, day TEXT NOT NULL,  -- NODE-LANE-15, 'YYYY-MM-DD'
   billed_failures INTEGER NOT NULL DEFAULT 0, cost TEXT NOT NULL DEFAULT '0', last_at BIGINT NOT NULL,
   PRIMARY KEY (chain_key, subject, day));                                         -- rows kept 30 d

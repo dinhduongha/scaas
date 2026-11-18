@@ -389,10 +389,6 @@ pub struct Submitter {
     journal: Option<(Store, String)>,
     /// NODE-JOB-29: [`guard::rpc_cap`] refusals in a row per cache part (its call key), bounded by [`PART_CAP_WAITS`].
     cap_waits: HashMap<B256, u32>,
-    /// Closing review C2 (set-auditor spec §13): the held bit-32 confirms, checked by [`guard::auditor_confirm`] before every
-    /// send: marked by a refusal requeued as `AUDITOR_NOT_READY` and by a pulled row whose `error` carries that mark (so a
-    /// restarted node, whose set starts empty, gives the same verdict); every later requeue of a held job keeps the mark.
-    auditor_held: Mutex<HashSet<i64>>,
 }
 
 impl Submitter {
@@ -445,7 +441,6 @@ impl Submitter {
             failover_mark: 0,
             journal,
             cap_waits: HashMap::new(),
-            auditor_held: Mutex::new(HashSet::new()),
         };
         for n in &p.gap_fill {
             me.gap_fill(*n).await?;
@@ -605,6 +600,13 @@ impl Submitter {
     }
 
     async fn report(&self, job: i64, state: &str, hash: Option<B256>, nonce: Option<u64>, err: Option<String>) -> bool {
+        // closing review C2b: a final verdict drops the job's auditor hold, if any (a requeue never does)
+        if let (Some((st, _)), true) = (&self.journal, matches!(state, "dead" | "consumed" | "mined" | "reverted")) {
+            let held = st.auditor_hold(&self.cfg.chain_key(), job).await;
+            if let Err(e) = match held { Ok(None) => Ok(()), _ => st.release_auditor(&self.cfg.chain_key(), job).await } {
+                warn!(job, state, "auditor hold not released: {e}");
+            }
+        }
         let r = Report {
             job_id: job,
             chain_state: state.into(),
@@ -671,25 +673,27 @@ impl Submitter {
                 Err(e) => self.requeue(&w, format!("mtxNonce: {e:#}")).await,
             };
         }
-        // closing review C2 (set-auditor spec §13): a held bit-32 confirm is sent again only while its proposal is confirmable;
-        // still waiting stays queued; gone (cancelled, expired, void, replaced) is `dead` with zero sends: sent, it would propose
-        // afresh (§5.1)
-        if let Some(id) = w.job_id.filter(|id| self.auditor_held.lock().unwrap().contains(id)) {
-            match guard::auditor_confirm(&self.chain, &w).await {
-                Ok(Some(true)) => {}
-                Ok(Some(false)) => return self.requeue(&w, "AUDITOR_NOT_READY: the proposal still waits for its eta".into()).await,
-                Ok(None) => {
+        // closing review C2 / C2b (set-auditor spec §13): a held bit-32 confirm (its hold in the node store) is sent again only
+        // while the held proposal is confirmable; still waiting stays queued; gone (cancelled, expired, void, replaced) is `dead`
+        // with zero sends: sent, it would propose afresh (§5.1)
+        if let (Some(id), Some(p), Some((st, _))) = (w.job_id, guard::auditor_proposal(&w.data), &self.journal) {
+            let held = match st.auditor_hold(&self.cfg.chain_key(), id).await {
+                Ok(h) => h,
+                Err(e) => return self.requeue(&w, format!("auditor hold unread: {e}")).await,
+            };
+            if let Some(h) = held {
+                let verdict = if h == p { guard::auditor_confirm(&self.chain, &h).await } else { Ok(None) };
+                match verdict {
+                    Ok(Some(true)) => {}
+                    Ok(Some(false)) => return self.requeue(&w, "AUDITOR_NOT_READY: the proposal still waits for its eta".into()).await,
                     // a confirm that landed (another relayer, a lost report) is `consumed`, never `dead`
-                    return match self.consumed(&w).await {
+                    Ok(None) => return match self.consumed(&w).await {
                         Ok(true) => self.report_consumed(&w).await,
-                        Ok(false) => {
-                            self.auditor_held.lock().unwrap().remove(&id);
-                            self.fail(&w, "AUDITOR_PROPOSAL_GONE: the held confirm's proposal is no longer confirmable".into()).await
-                        }
+                        Ok(false) => self.fail(&w, "AUDITOR_PROPOSAL_GONE: the held confirm's proposal is no longer confirmable".into()).await,
                         Err(e) => self.requeue(&w, format!("mtxNonce: {e:#}")).await,
-                    };
+                    },
+                    Err(e) => return self.requeue(&w, format!("auditorState: {e:#}")).await,
                 }
-                Err(e) => return self.requeue(&w, format!("auditorState: {e:#}")).await,
             }
         }
         // group 3f (spec §11.1): a PQZ debit's verdict, rebuilt by the node, before the digest and any simulation
@@ -1022,8 +1026,17 @@ impl Submitter {
                 }
             }
             guard::Verdict::Requeue(r) => {
+                // closing review C2b: the hold is the node's own (store.md §4 `auditor_hold`), written before the requeue;
+                // unwritten, the confirm is never queued (a later send could propose afresh): `dead`, zero sends
                 if let (Some(id), true) = (w.job_id, r.starts_with("AUDITOR_NOT_READY")) {
-                    self.auditor_held.lock().unwrap().insert(id);
+                    let held = match (&self.journal, guard::auditor_proposal(&w.data)) {
+                        (Some((st, _)), Some(p)) => st.hold_auditor(&self.cfg.chain_key(), id, &p, crate::store::now_ms()).await
+                            .map_err(|e| e.to_string()),
+                        _ => Err("no node store on this lane".into()),
+                    };
+                    if let Err(e) = held {
+                        return self.fail(w, format!("AUDITOR_HOLD_UNSTORED: {e}; send the confirm at eta")).await;
+                    }
                 }
                 self.requeue(w, r).await
             }
@@ -1073,12 +1086,6 @@ impl Submitter {
     async fn requeue(&self, w: &Work, reason: String) {
         warn!(job = ?w.job_id, "transient, requeue: {reason}");
         if let Some(id) = w.job_id {
-            // closing review C2: a held confirm keeps its mark in the row's `error`, the one a restarted node reads
-            let reason = if !reason.starts_with("AUDITOR_NOT_READY") && self.auditor_held.lock().unwrap().contains(&id) {
-                format!("AUDITOR_NOT_READY (held): {reason}")
-            } else {
-                reason
-            };
             self.report(id, "queued", None, None, Some(reason)).await;
         }
     }
@@ -1359,10 +1366,6 @@ impl Submitter {
                     warn!("relay_claim: {e:#}");
                     continue;
                 }
-            }
-            // closing review C2: a row requeued as `AUDITOR_NOT_READY` is a held confirm, whatever this process remembers
-            if job.error.as_deref().is_some_and(|e| e.starts_with("AUDITOR_NOT_READY")) {
-                self.auditor_held.lock().unwrap().insert(job.id);
             }
             match self.guard.work(&job, self.cfg.fee_recipient) {
                 Ok(w) => self.submit(w).await,
@@ -2178,15 +2181,33 @@ pub(crate) mod tests {
         assert!(matches!(&r, Verdict::Dead(e) if e.starts_with("AuditorNotReady(")), "UAMint: {r:?}");
     }
 
-    /// Closing review C2 (set-auditor spec §13): a held bit-32 confirm (requeued on `AUDITOR_NOT_READY`, which marks it) is sent
-    /// again only at `auditorState()` status 2 with its own `pending` and `proposer`; status 1 with them stays `queued`; status 0,
-    /// 3, 4 or another proposal is `dead` `AUDITOR_PROPOSAL_GONE` with zero sends (sent, it would propose afresh). The same
-    /// verdicts on a fresh node process whose memory holds no mark, from the pulled row's `error` alone (a restart).
+    /// Closing review C2 / C2b (set-auditor spec §13): a held bit-32 confirm (requeued on `AUDITOR_NOT_READY`, held in the node
+    /// store's `auditor_hold`) is sent again only at `auditorState()` status 2 with the held `pending` and `proposer`; status 1
+    /// stays `queued`; status 0, 3, 4 or another proposal is `dead` `AUDITOR_PROPOSAL_GONE` with zero sends (sent, it would
+    /// propose afresh); spent, `consumed`. The hold is the node's: a fresh process on the same store file gives the same verdict,
+    /// the startup requeue of a job leased before a crash keeps it, a client row's `error` changes nothing, and only a final
+    /// verdict drops it. Without a store the refusal is `dead` `AUDITOR_HOLD_UNSTORED`, never queued.
     #[tokio::test]
     async fn a_held_confirm_is_sent_only_while_confirmable() {
         use crate::abi::{decode_revert, IAuditorRouter as R, IAuditorSetter as A};
+        use crate::store::ConfigSet;
         use alloy::sol_types::SolError;
         let v = crate::typed::testkit::vectors();
+        let signer = PrivateKeySigner::from_bytes(&B256::repeat_byte(1)).unwrap();
+        let label = format!("{:#x}", signer.address());
+        // a store file of its own, the lane known to it
+        let new_store = |url: String| async move {
+            let dir = std::env::temp_dir().join(format!("scaas-hold-{}-{:016x}", std::process::id(), rand::random::<u64>()));
+            std::fs::create_dir_all(&dir).unwrap();
+            let db = format!("sqlite://{}", dir.join("node.db").display());
+            let st = crate::store::create(&db, "test").await.unwrap();
+            let cfg = test_cfg(&url);
+            let lanes = vec![crate::store::LaneRow { chain_key: cfg.chain_key(), label: format!("{:#x}",
+                PrivateKeySigner::from_bytes(&B256::repeat_byte(1)).unwrap().address()), account_index: 0, journal_max: None }];
+            crate::store::bootstrap(st.as_ref(), &ConfigSet { chains: vec![cfg.chain_row()], lanes, ..Default::default() }, 1)
+                .await.unwrap();
+            (st, db)
+        };
         for name in ["UASetAuditorKey", "UASetAuditorUA"] {
             let mut op = crate::typed::testkit::op_of(name, "gov_router", &v).unwrap();
             // the payer signs on the fake chain ([`resign`])
@@ -2200,20 +2221,26 @@ pub(crate) mod tests {
                 Ok(c) => (alloy::primitives::keccak256(&c.newKey), c.e.from),
                 Err(_) => R::mtxSetAuditorUACall::abi_decode(&w.data).map(|c| (c.newAuditor, c.e.from)).unwrap(),
             };
-            // `mem`: this process marked the job; `row`: the pulled row carries the mark (a restarted node: memory empty)
-            let run_at = |st: Option<(u8, B256, B256)>, mem: bool, row: bool, nonce: u64| {
-                let mut job = json!({"id": 9, "kind": "ua_metatx", "op": op.clone()});
-                if row {
+            let held = guard::auditor_proposal(&w.data).unwrap();
+            let job = json!({"id": 9, "kind": "ua_metatx", "op": op.clone()});
+            // one node process on `st`: the job pulled once (`row_error`: the client row carries an `error`; `leased`: it was
+            // leased when the last process stopped, so this one requeues it at start)
+            let run = |st: Option<crate::store::Store>, state: Option<(u8, B256, B256)>, nonce: u64, row_error: bool, leased: bool| {
+                let (mut job, label, signer) = (job.clone(), label.clone(), signer.clone());
+                if row_error {
                     job["error"] = json!("AUDITOR_NOT_READY: AuditorNotReady(9)");
                 }
                 async move {
-                    let e = Evm { mtx_nonce: Some(nonce), auditor_state: st, domain: crate::typed::domain_name("gov_router"), ..Default::default() };
+                    let e = Evm { mtx_nonce: Some(nonce), auditor_state: state, domain: crate::typed::domain_name("gov_router"),
+                        ..Default::default() };
                     let (url, rpc) = fake_evm(e).await;
-                    let (odoo, o) = fake_odoo(Fake { jobs: vec![job], tokens: toks(), ..Default::default() }).await;
-                    let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.governance_routers = vec![router]).await.unwrap();
-                    if mem {
-                        s.auditor_held.lock().unwrap().insert(9);
-                    }
+                    let inflight = if leased { json!([{"job_id": 9, "nonce": null, "state": "nonce_leased", "payload": job}]) }
+                        else { json!([]) };
+                    let (odoo, o) = fake_odoo(Fake { jobs: vec![job], tokens: toks(), inflight, ..Default::default() }).await;
+                    let mut cfg = test_cfg(&url);
+                    cfg.governance_routers = vec![router];
+                    let mut s = Submitter::start_with(Chain::with_signer(&cfg, signer).unwrap(), odoo, cfg, "t#1".into(),
+                        InflightSet::default(), st.map(|st| (st, label))).await.unwrap();
                     s.poll_outbox().await;
                     let r: Vec<(String, String)> = o.lock().unwrap().reports.iter()
                         .map(|r| (r["chain_state"].as_str().unwrap().to_string(), r["error"].as_str().unwrap_or_default().to_string()))
@@ -2222,38 +2249,71 @@ pub(crate) mod tests {
                     (r, sent)
                 }
             };
-            let run = |st: Option<(u8, B256, B256)>, mem: bool, row: bool| run_at(st, mem, row, 0);
-            // the control: not held, the same call is sent (a first proposal)
-            let (r, sent) = run(None, false, false).await;
-            assert!(sent == 1, "{name}: not held: sent: {r:?}");
-            let other = B256::repeat_byte(0x99);
-            for (mem, row) in [(true, false), (false, true)] {
-                let how = if mem { "marked in memory" } else { "fresh node, marked row" };
-                for (st, what) in [((0, pending, proposer), "none"), ((3, pending, proposer), "expired"), ((4, pending, proposer), "void"),
-                    ((2, other, proposer), "another value"), ((2, pending, other), "another proposer")] {
-                    let (r, sent) = run(Some(st), mem, row).await;
-                    assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("AUDITOR_PROPOSAL_GONE"), "{name}: {how}: {what}: {r:?}");
-                    assert_eq!(sent, 0, "{name}: {how}: {what}: zero sends");
-                }
-                let (r, sent) = run(Some((1, pending, proposer)), mem, row).await;
-                assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("AUDITOR_NOT_READY"), "{name}: {how}: waiting: {r:?}");
-                assert_eq!(sent, 0);
-                // `auditorState()` unread: queued, and the requeue keeps the mark for the next process
-                let (r, sent) = run(None, mem, row).await;
-                assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("AUDITOR_NOT_READY"), "{name}: {how}: unread: {r:?}");
-                assert_eq!(sent, 0);
-                let (r, sent) = run(Some((2, pending, proposer)), mem, row).await;
-                assert_eq!(sent, 1, "{name}: {how}: confirmable: sent: {r:?}");
-                // gone, but its nonce spent (it landed through another relayer, or a report was lost): `consumed`, never `dead`
-                let (r, sent) = run_at(Some((0, B256::ZERO, B256::ZERO)), mem, row, 1).await;
-                assert!(r.len() == 1 && r[0].0 == "consumed" && sent == 0, "{name}: {how}: landed: {r:?}");
+            let last = |r: &[(String, String)]| r.last().cloned().unwrap_or_default();
+            let (url0, _) = fake_evm(Evm::default()).await;
+            let key = test_cfg(&url0).chain_key();
+            // the control: not held, the same call is sent (a first proposal), on a lane with a store and on one without;
+            // a client row's `error` alone holds nothing
+            let (st, _) = new_store(url0.clone()).await;
+            for (store, row_error) in [(Some(st.clone()), false), (None, false), (Some(st.clone()), true)] {
+                let (r, sent) = run(store, None, 0, row_error, false).await;
+                assert!(sent == 1, "{name}: not held (row error {row_error}): sent: {r:?}");
             }
-            // the mark: a refused simulation's `AuditorNotReady` holds the job
+            let other = B256::repeat_byte(0x99);
+            for (state, what) in [((0, pending, proposer), "none"), ((3, pending, proposer), "expired"), ((4, pending, proposer), "void"),
+                ((2, other, proposer), "another value"), ((2, pending, other), "another proposer")] {
+                let (st, _) = new_store(url0.clone()).await;
+                st.hold_auditor(&key, 9, &held, 1).await.unwrap();
+                let (r, sent) = run(Some(st.clone()), Some(state), 0, false, false).await;
+                assert!(last(&r).0 == "dead" && last(&r).1.starts_with("AUDITOR_PROPOSAL_GONE"), "{name}: {what}: {r:?}");
+                assert_eq!(sent, 0, "{name}: {what}: zero sends");
+                assert_eq!(st.auditor_hold(&key, 9).await.unwrap(), None, "{name}: {what}: the final verdict drops the hold");
+            }
+            let (st, _) = new_store(url0.clone()).await;
+            st.hold_auditor(&key, 9, &held, 1).await.unwrap();
+            let (r, sent) = run(Some(st.clone()), Some((1, pending, proposer)), 0, false, false).await;
+            assert!(last(&r).0 == "queued" && last(&r).1.starts_with("AUDITOR_NOT_READY") && sent == 0, "{name}: waiting: {r:?}");
+            // `auditorState()` unread: queued, the hold kept
+            let (r, sent) = run(Some(st.clone()), None, 0, false, false).await;
+            assert!(last(&r).0 == "queued" && sent == 0, "{name}: unread: {r:?}");
+            assert_eq!(st.auditor_hold(&key, 9).await.unwrap(), Some(held.clone()), "{name}: requeues keep the hold");
+            // gone, but its nonce spent (another relayer, a lost report): `consumed`, never `dead`
+            let (r, sent) = run(Some(st.clone()), Some((0, B256::ZERO, B256::ZERO)), 1, false, false).await;
+            assert!(last(&r).0 == "consumed" && sent == 0, "{name}: landed: {r:?}");
+            let (st, _) = new_store(url0.clone()).await;
+            st.hold_auditor(&key, 9, &held, 1).await.unwrap();
+            let (r, sent) = run(Some(st), Some((2, pending, proposer)), 0, false, false).await;
+            assert_eq!(sent, 1, "{name}: confirmable: sent: {r:?}");
+
+            // the hold is the node's own: a refusal writes it; a fresh process on the same store file (the first one gone),
+            // started after a crash with the job leased (the startup requeue), gives the same verdict
+            let (st, db) = new_store(url0.clone()).await;
             let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
-            let (odoo, _) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
+            let (odoo, o) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
+            let mut cfg = test_cfg(&url);
+            cfg.governance_routers = vec![router];
+            let s = Submitter::start_with(Chain::with_signer(&cfg, signer.clone()).unwrap(), odoo, cfg, "t#1".into(),
+                InflightSet::default(), Some((st.clone(), label.clone()))).await.unwrap();
+            s.refused(&w, decode_revert(&A::AuditorNotReady { eta: 9 }.abi_encode())).await;
+            assert!(o.lock().unwrap().reports.iter().any(|r| r["chain_state"] == "queued"), "{name}: requeued");
+            assert_eq!(st.auditor_hold(&key, 9).await.unwrap(), Some(held.clone()), "{name}: held in the store");
+            drop((s, st));
+            let st = crate::store::open(&db, "test").await.unwrap();
+            for state in [(0, pending, proposer), (3, pending, proposer), (4, pending, proposer)] {
+                let (r, sent) = run(Some(st.clone()), Some(state), 0, false, true).await;
+                assert!(r.iter().any(|x| x.1 == "requeued at node start"), "{name}: the startup requeue ran: {r:?}");
+                assert!(last(&r).0 == "dead" && last(&r).1.starts_with("AUDITOR_PROPOSAL_GONE") && sent == 0,
+                    "{name}: fresh process, status {}: {r:?}", state.0);
+                st.hold_auditor(&key, 9, &held, 1).await.unwrap(); // the next status, the same hold
+            }
+            // without a store the refusal never queues the confirm
+            let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+            let (odoo, o) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
             let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.governance_routers = vec![router]).await.unwrap();
             s.refused(&w, decode_revert(&A::AuditorNotReady { eta: 9 }.abi_encode())).await;
-            assert!(s.auditor_held.lock().unwrap().contains(&9), "{name}: held after AUDITOR_NOT_READY");
+            let r = o.lock().unwrap().reports.clone();
+            assert!(r.len() == 1 && r[0]["chain_state"] == "dead"
+                && r[0]["error"].as_str().unwrap().starts_with("AUDITOR_HOLD_UNSTORED"), "{name}: no store: {r:?}");
         }
     }
 

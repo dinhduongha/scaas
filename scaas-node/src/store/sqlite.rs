@@ -421,6 +421,30 @@ impl Backend for SqliteStore {
         Ok(())
     }
 
+    async fn hold_auditor(&self, chain_key: &str, job_id: i64, held: &AuditorHold, now_ms: i64) -> Result<()> {
+        let mut tx = self.begin().await?;
+        sqlx::query("INSERT INTO auditor_hold (chain_key, job_id, token, pending, proposer, held_at) VALUES (?, ?, ?, ?, ?, ?) \
+                     ON CONFLICT (chain_key, job_id) DO UPDATE SET token = excluded.token, pending = excluded.pending, \
+                     proposer = excluded.proposer, held_at = excluded.held_at")
+            .bind(chain_key).bind(job_id).bind(&held.token).bind(&held.pending).bind(&held.proposer).bind(now_ms)
+            .execute(&mut *tx).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    async fn auditor_hold(&self, chain_key: &str, job_id: i64) -> Result<Option<AuditorHold>> {
+        Ok(sqlx::query_as("SELECT token, pending, proposer FROM auditor_hold WHERE chain_key = ? AND job_id = ?")
+            .bind(chain_key).bind(job_id).fetch_optional(&self.pool).await?)
+    }
+
+    async fn release_auditor(&self, chain_key: &str, job_id: i64) -> Result<()> {
+        let mut tx = self.begin().await?;
+        sqlx::query("DELETE FROM auditor_hold WHERE chain_key = ? AND job_id = ?")
+            .bind(chain_key).bind(job_id).execute(&mut *tx).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
     async fn purge(&self, now_ms: i64, job_retention_secs: i64, feed_retention_secs: i64) -> Result<u64> {
         let mut tx = self.begin().await?;
         let n = sqlx::query(&format!(

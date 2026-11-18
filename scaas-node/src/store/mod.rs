@@ -443,6 +443,15 @@ pub struct TokenRow {
     pub active: bool,
 }
 
+/// Set-auditor closing review C2b: the proposal a held bit-32 confirm waits for (the token, `keccak256(newKey)` or the new UA,
+/// the proposer's id), byte-exact.
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
+pub struct AuditorHold {
+    pub token: Vec<u8>,
+    pub pending: Vec<u8>,
+    pub proposer: Vec<u8>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, sqlx::FromRow)]
 pub struct LaneRow {
     pub chain_key: String,
@@ -636,6 +645,16 @@ pub trait Backend: Send + Sync {
 
     /// `max(journal_max, n)` có fencing — cho báo cáo `signed` của đường legacy (R104).
     async fn bump_journal_max(&self, chain_key: &str, lane: &str, nonce: i64) -> Result<()>;
+
+    /// Set-auditor closing review C2b (store.md §4 `auditor_hold`): hold job `job_id`'s bit-32 confirm for `held`, with
+    /// fencing; a later hold of the same job replaces it.
+    async fn hold_auditor(&self, chain_key: &str, job_id: i64, held: &AuditorHold, now_ms: i64) -> Result<()>;
+
+    /// The proposal job `job_id`'s confirm is held for, if any.
+    async fn auditor_hold(&self, chain_key: &str, job_id: i64) -> Result<Option<AuditorHold>>;
+
+    /// Drop the hold at the job's final verdict (`dead`, `consumed`, `mined`, `reverted`), with fencing; none is no error.
+    async fn release_auditor(&self, chain_key: &str, job_id: i64) -> Result<()>;
 
     /// Janitor: job kết thúc với `updated_at < now − job_retention` VÀ `valid_until < now − 86 400`;
     /// `job_event`/`feed_item` cũ hơn `feed_retention`. Trả số dòng job đã xoá.

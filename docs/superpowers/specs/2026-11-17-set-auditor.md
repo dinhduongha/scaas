@@ -479,8 +479,8 @@ pass) and changes one thing.
   PQZ token with the factory notice not 0 waits it** (A8); another holder cannot confirm (`NotProposer`); a revoked proposer's
   pending is dead after a re-grant; a wrong epoch (`AuditorEpochMismatch`) on a proposal, a confirm and a cancel; a held
   confirm after the window is not sent by the node (a requeued `AUDITOR_NOT_READY` job is resent only at status 2 with the same
-  `pending` and `proposer`, else `dead` `AUDITOR_PROPOSAL_GONE` with no send, `consumed` if it landed; the mark is the
-  job row's `error`, so a restarted node gives the same verdict; the contract itself proposes afresh, §5.1, which stands: the
+  `pending` and `proposer`, else `dead` `AUDITOR_PROPOSAL_GONE` with no send, `consumed` if it landed; the hold is the
+  node store's `auditor_hold` row (C2b), so a restarted node gives the same verdict; the contract itself proposes afresh, §5.1, which stands: the
   node rule is extra; ops: sign the confirm at `eta`; closing review C2); cancel by proposing the current, then a new proposal; `AuditorPending`,
   `AuditorSame` (Zether also for another encoding of the current point, if one exists), `AuditorKeyInvalid`; consent: a missing,
   wrong-token, wrong-epoch, wrong-word and wrong-key consent refused at the proposal, and a consent valid at the proposal but

@@ -130,7 +130,7 @@ async fn migrations_create_identity_and_counters() {
     }
     let v: String = sqlx::query_scalar("SELECT value FROM meta WHERE name = 'schema_version'")
         .fetch_one(&s.pool).await.unwrap();
-    assert_eq!(v, "2");
+    assert_eq!(v, "3");
     // reserved namespaces exist (R90; `~node`, T21 L63b)
     let n: i64 = sqlx::query_scalar("SELECT count(*) FROM namespace WHERE name IN ('~gateway', '~mesh', '~dex', '~node')")
         .fetch_one(&s.pool).await.unwrap();
