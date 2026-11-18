@@ -387,6 +387,14 @@ pub(crate) fn sized<I: Iterator<Item = char>>(chars: impl Fn() -> I) -> Zeroizin
     s
 }
 
+/// Whether `word` is one word of the BIP-39 English list (NFKD, lower case, surrounding white space ignored): an import
+/// screen's per-word check (scaas-sdk spec §6.4, R17), so the list never leaves `ua-rs`.
+pub fn bip39_word_in_list(word: &str) -> bool {
+    let nfkd = sized(|| word.trim().nfkd());
+    let lower = sized(|| nfkd.chars().flat_map(char::to_lowercase));
+    bip39::Language::English.find_word(&lower).is_some()
+}
+
 const INDEX_INFO: &[u8] = b"scaas.keystore.index.v1";
 /// The longest `accounts` array an index MAC covers: 1,024 rows of a few hundred bytes.
 const INDEX_ACCOUNTS_MAX: usize = 1 << 20;
@@ -646,6 +654,12 @@ impl Wallet {
     /// fingerprint, the keystore's duplicate check. `WalletLocked` while locked.
     pub fn fingerprint(&self) -> Result<[u8; 4]> {
         self.store.with_seed(|seed| Ok(bip32::XPrv::new(seed).map_err(|_| Error::Argument)?.public_key().fingerprint()))
+    }
+
+    /// The number of words of this wallet's mnemonic (12, 15, 18, 21 or 24: its entropy's length), the keystore's `words` check
+    /// (scaas-sdk spec §6.1). `WalletLocked` while locked.
+    pub fn word_count(&self) -> Result<u32> {
+        self.store.with_arena(|a| u32::try_from(a.entropy()?.len() * 3 / 4).map_err(|_| Error::Argument))
     }
 
     /// The keystore index MAC of a seed entry (clientkeys `indexMac`; scaas-sdk spec §6.2): `HMAC-SHA256(HKDF-SHA256(entropy,

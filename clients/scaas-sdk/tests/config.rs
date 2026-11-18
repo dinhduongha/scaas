@@ -46,6 +46,8 @@ fn profile(key: &str) -> ChainProfile {
 fn config(profiles: Vec<ChainProfile>) -> SdkConfig {
     SdkConfig {
         profiles,
+        store: scaas_sdk::vault::MemoryStore::new(),
+        authenticator: None,
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: Limits::default(),
     }

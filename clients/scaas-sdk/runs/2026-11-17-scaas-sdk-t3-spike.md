@@ -6,6 +6,9 @@
 foreign interfaces, so the C++ binding cannot be generated from the SDK's surface as spec §16.1 states it. The plan stops here
 (before T4): Q-B1's fallback (b), or another option below, is the owner's to confirm.** Spec §16 is not edited.
 
+**Owner 2026-11-18:** Q-B1 (b) (Qt through scaas-app's `app-core-rust` C ABI) and (a′) a sync C++ surface for third parties
+(feature `sync-api`, plan T20b); spec §16 and the plan carry both. The FRB 2 half then ran (below): Dart holds.
+
 ## What ran
 
 | Item | Version |
@@ -39,8 +42,7 @@ cd ../cpp && cmake -B build && cmake --build build && cd build && ctest      # t
 The generator's README lists "Async functions" as its one unsupported feature, at its latest tag and on `main`. One async item
 anywhere in the library stops the whole generation, so library mode over an app's one Rust library (spec §16.2) fails as soon
 as the SDK is linked into it. Not reached therefore: the PRF return through an async `Authenticator`, `subscribe().next(timeout)`,
-the dropped future, `no_reactor_panic`, the load checks. The FRB 2 part of the spike (Dart) was not run: the plan stops at the
-C++ result.
+the dropped future, `no_reactor_panic`, the load checks. Those ran in the FRB 2 half below.
 
 What the control shows does carry over: records, errors, panics caught at the boundary and foreign exceptions as `Unexpected`
 work in the generated C++.
@@ -57,9 +59,48 @@ work in the generated C++.
 
 (c) a `cxx` bridge and (d) an SDK C header are hand wrapping, outside the spec's rule without the owner's word.
 
+## The FRB 2 half (Dart), run after the owner's ruling Q-B1 (b)
+
+| Item | Version |
+|---|---|
+| `flutter_rust_bridge` / `flutter_rust_bridge_codegen` | `=2.13.0` |
+| Dart SDK | 3.12.2 |
+| reference library | `clients/scaas-sdk/ffi` (`cdylib` + `staticlib`, the generated `frb_generated.rs`, the three secret copy calls) |
+
+FRB 2 carries Rust closures returning Dart futures (`DartFnFuture`), not foreign trait objects: the Dart side gives each platform
+interface as a record of async closures and `src/frb.rs` (feature `frb`, the one adapter) wraps them into `SecureStore` and
+`Authenticator`. Each closure answers a Dart exception as `Unexpected` on the Dart side (`lib/scaas_sdk.dart`), so no foreign
+exception reaches Rust. Secrets cross only by the copy calls (`scaas_sdk_secret_{write,read,dispose}`, plain C over `dart:ffi`
+with the caller's buffers, zeroed after); FRB sees a `Secret` as an opaque handle.
+
+```text
+cd bindings/dart && flutter_rust_bridge_codegen generate     # twice: the second run is byte-identical, no warning
+bash ./run.sh                                                 # the `bind-dart` step: build ffi, dart test
+```
+
+`bind-dart`: 8 tests, 8 passed (`test/spike_test.dart`):
+
+| Test | Shows |
+|---|---|
+| `load_check` | this library passes; another `api_version` or a missing feature bit is `AbiMismatch` |
+| generate, seeds, reveal, event | an async call with a **foreign async `SecureStore`** (Dart), a `SecretBytes` passphrase in and the reveal out by the copy calls, a record list, `subscribe().next(timeout)`, errors by code (`LabelTaken`, `VaultPassphraseWeak`); no passphrase or word in the stored container |
+| the PRF return | a **foreign async `Authenticator`** writes the PRF output into the `SecretBytes` the SDK passed; only a checksum returns |
+| a foreign exception | a Dart exception inside the store or authenticator arrives as `Unexpected` (`VaultIo` / `AuthenticatorRefused`), the SDK goes on |
+| a panic | a panic inside a call on the SDK's runtime is `Internal`, the SDK goes on |
+| an abandoned future | the caller stops waiting mid-`generate` (Dart futures are not cancelled; the caller abandons it): the call completes on the SDK runtime and writes once (spec §13.4) |
+| `no_reactor_panic` | a tokio timer and a `reqwest` call through `scaas-rpc` spawned on the SDK's runtime while FRB polls from its own |
+| `secret_never_in_the_codec` | the generated decode of `generate` takes the passphrase as an opaque `Secret`, never bytes; a plain `String` field decodes as bytes (the control); no secret-named parameter of the Rust surface has a byte type |
+
+Result: FRB 2 carries the SDK's surface rules of spec §16.1 as they stand (async calls, async foreign interfaces as closure
+records, opaque objects, owned records, error codes). The generated Dart and `frb_generated.rs` are committed, as in
+`clients/ua-dart-frb`.
+
 ## Files
 
 - `2026-11-17-scaas-sdk-t3-spike/probe/{Cargo.toml,Cargo.lock,src/lib.rs}`: the probe (its own lockfile; `uniffi` 0.31.0 and
   its graph were fetched for it, outside the SDK's lockfile).
 - `2026-11-17-scaas-sdk-t3-spike/cpp/{CMakeLists.txt,harness.cpp}`: the control's harness. The generated files are not
   committed (the commands above regenerate them).
+- `clients/scaas-sdk/ffi/{Cargo.toml,Cargo.lock,src/lib.rs,src/api/mod.rs,src/frb_generated.rs}`, `clients/scaas-sdk/src/frb.rs`,
+  `clients/scaas-sdk/bindings/dart/{pubspec.yaml,pubspec.lock,flutter_rust_bridge.yaml,run.sh,lib/,test/spike_test.dart}`: the
+  FRB half.

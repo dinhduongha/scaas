@@ -2,7 +2,10 @@
 //! The configuration (spec §4, CLI-SDK-15): chain profiles pinned by the app's release, never fetched and trusted; the runtime;
 //! the limits. An endpoint's URL and credential never appear in a `Debug` output (CLI-RPC-11).
 
+use crate::platform::Authenticator;
+use crate::vault::SecureStore;
 use scaas_rpc::{Class, EndpointAuth, Policy};
+use std::sync::Arc;
 
 /// A chain family (the `scaas-rpc` readers'). Hedera is `Evm` with its chain id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -106,11 +109,26 @@ pub enum RuntimeChoice {
 }
 
 /// Everything `Sdk::open` takes.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SdkConfig {
     pub profiles: Vec<ChainProfile>,
+    /// where the keystore and the SDK's state live (spec §6.9); `FileStore` on native by default
+    pub store: Arc<dyn SecureStore>,
+    /// passkeys, platform secrets, secure-element keys (spec §6.10); `None`: passphrase only
+    pub authenticator: Option<Arc<dyn Authenticator>>,
     pub runtime: RuntimeChoice,
     pub limits: Limits,
+}
+
+impl std::fmt::Debug for SdkConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SdkConfig")
+            .field("profiles", &self.profiles)
+            .field("authenticator", &self.authenticator.is_some())
+            .field("runtime", &self.runtime)
+            .field("limits", &self.limits)
+            .finish()
+    }
 }
 
 /// `0x` and 64 hex digits.

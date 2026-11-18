@@ -103,6 +103,58 @@ pub fn rev_of(bytes: &[u8]) -> u64 {
     serde_json::from_slice::<Rev>(bytes).map_or(u64::MAX, |r| r.rev)
 }
 
+/// Items in memory, under the same rev rule and an in-process lock: for tests and for an app's session-only use (nothing
+/// survives the process).
+#[derive(Default)]
+pub struct MemoryStore {
+    items: std::sync::Mutex<std::collections::HashMap<String, Vec<u8>>>,
+    lock: Arc<tokio::sync::Mutex<()>>,
+}
+
+impl MemoryStore {
+    pub fn new() -> Arc<MemoryStore> {
+        Arc::new(MemoryStore::default())
+    }
+    fn items(&self) -> std::sync::MutexGuard<'_, std::collections::HashMap<String, Vec<u8>>> {
+        self.items
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+}
+
+#[async_trait]
+impl SecureStore for MemoryStore {
+    async fn get(&self, name: String, _: String) -> Result<Option<StoredItem>, StoreError> {
+        Ok(self.items().get(&name).map(|b| StoredItem {
+            rev: rev_of(b),
+            bytes: b.clone(),
+        }))
+    }
+    async fn put_if(
+        &self,
+        name: String,
+        prev: Option<u64>,
+        bytes: Vec<u8>,
+        _: StorePolicy,
+    ) -> Result<(), StoreError> {
+        let mut items = self.items();
+        if items.get(&name).map(|b| rev_of(b)) != prev {
+            return Err(StoreError::Conflict);
+        }
+        items.insert(name, bytes);
+        Ok(())
+    }
+    async fn delete(&self, name: String) -> Result<(), StoreError> {
+        self.items().remove(&name);
+        Ok(())
+    }
+    async fn lock(&self, _: String) -> Result<Arc<StoreLock>, StoreError> {
+        Ok(StoreLock::new(Box::new(
+            self.lock.clone().lock_owned().await,
+        )))
+    }
+}
+
 #[cfg(feature = "file-store")]
 pub use file::FileStore;
 

@@ -15,17 +15,25 @@ compile_error!("scaas-sdk needs the feature `vault` (every module does)");
 
 pub mod config;
 pub mod error;
+pub mod events;
+#[cfg(feature = "frb")]
+pub mod frb;
+pub mod platform;
 pub mod vault;
 
 pub use config::{
     ChainProfile, EndpointConfig, Family, Finality, Limits, RuntimeChoice, SdkConfig,
 };
 pub use error::SdkError;
+pub use events::{Event, Subscription};
+pub use vault::Vault;
 
 use scaas_rpc::endpoint::{READ_TIMEOUT_MS, SLOW_TIMEOUT_MS, TIMEOUT_MS};
 use scaas_rpc::{Endpoint, NodeList};
-use std::collections::HashSet;
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
+use std::future::Future;
+use std::sync::{Arc, Mutex};
+use tokio::sync::{broadcast, Semaphore};
 
 /// The binding surface's version (§16.3): starts at 1, raised by any change a generated binding could misread.
 pub const API_VERSION: u32 = 1;
@@ -110,7 +118,6 @@ pub(crate) struct Chain {
 
 /// The runtime every exported async call is spawned on (§14). An owned one shuts down in the background when the SDK goes, so
 /// dropping the SDK from inside an async context never blocks.
-#[allow(dead_code)] // used by the exported calls (T3 on)
 pub(crate) struct Rt {
     pub(crate) handle: tokio::runtime::Handle,
     #[cfg(not(target_arch = "wasm32"))]
@@ -131,8 +138,18 @@ pub struct Sdk {
     #[allow(dead_code)]
     pub(crate) chains: Vec<Chain>,
     pub(crate) limits: Limits,
-    #[allow(dead_code)]
     pub(crate) rt: Option<Rt>,
+    pub(crate) authenticator: Option<Arc<dyn platform::Authenticator>>,
+    pub(crate) keystore: vault::KeystoreFile,
+    pub(crate) events: broadcast::Sender<Event>,
+    pub(crate) heavy: Arc<Semaphore>,
+    /// heavy jobs running now and the most seen at once (`heavy_peak`)
+    heavy_now: Arc<std::sync::atomic::AtomicU32>,
+    heavy_max: Arc<std::sync::atomic::AtomicU32>,
+    /// the seeds unlocked in this session, by id
+    pub(crate) open: Mutex<HashMap<String, Arc<vault::OpenSeed>>>,
+    /// hidden sets of this session: session id -> (its seed's id, its wallet); never written
+    pub(crate) hidden: Mutex<HashMap<String, (String, Arc<vault::OpenSeed>)>>,
 }
 
 impl Sdk {
@@ -162,11 +179,82 @@ impl Sdk {
             });
         }
         let rt = runtime(config.runtime)?;
+        let keystore = vault::KeystoreFile::new(config.store.clone());
+        // the keystore is read once here: a container this build refuses is refused at open
+        keystore.load().await?;
+        let (events, _) = broadcast::channel(config.limits.event_queue.max(1) as usize);
+        let heavy = Arc::new(Semaphore::new(
+            config.limits.max_concurrent_heavy.max(1) as usize
+        ));
         Ok(Arc::new(Sdk {
             chains,
             limits: config.limits,
             rt,
+            authenticator: config.authenticator,
+            keystore,
+            events,
+            heavy,
+            heavy_now: Arc::default(),
+            heavy_max: Arc::default(),
+            open: Mutex::new(HashMap::new()),
+            hidden: Mutex::new(HashMap::new()),
         }))
+    }
+
+    /// Runs `f` on the SDK's runtime and waits for it (spec §14): a generator that polls the caller's future from a foreign
+    /// executor never runs I/O outside a reactor, a dropped caller future leaves the task to complete, and a panic inside it is
+    /// `Internal`. Rust-only (outside the binding surface).
+    pub async fn spawn<T: Send + 'static>(
+        &self,
+        f: impl Future<Output = Result<T, SdkError>> + Send + 'static,
+    ) -> Result<T, SdkError> {
+        match &self.rt {
+            Some(rt) => rt.handle.spawn(f).await.map_err(|_| SdkError::Internal)?,
+            None => f.await,
+        }
+    }
+
+    /// `f` off the async workers, at most `Limits::max_concurrent_heavy` at once (scrypt, Argon2id, proofs, slow keygen).
+    pub(crate) async fn heavy<T: Send + 'static>(
+        &self,
+        f: impl FnOnce() -> Result<T, SdkError> + Send + 'static,
+    ) -> Result<T, SdkError> {
+        use std::sync::atomic::Ordering::SeqCst;
+        let _permit = self.heavy.acquire().await.map_err(|_| SdkError::Internal)?;
+        let (now, max) = (self.heavy_now.clone(), self.heavy_max.clone());
+        tokio::task::spawn_blocking(move || {
+            max.fetch_max(now.fetch_add(1, SeqCst) + 1, SeqCst);
+            let r = f();
+            now.fetch_sub(1, SeqCst);
+            r
+        })
+        .await
+        .map_err(|_| SdkError::Internal)?
+    }
+
+    /// The most heavy jobs (scrypt, Argon2id, proofs) seen running at once in this SDK: a check of
+    /// `Limits::max_concurrent_heavy` (Rust-only).
+    pub fn heavy_peak(&self) -> u32 {
+        self.heavy_max.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    pub(crate) fn emit(&self, e: Event) {
+        let _ = self.events.send(e);
+    }
+
+    /// A subscription to the SDK's events (spec §14).
+    pub fn subscribe(&self) -> Arc<Subscription> {
+        Subscription::new(&self.events)
+    }
+
+    /// The app's authenticator, if any (Rust-only).
+    pub fn authenticator(&self) -> Option<Arc<dyn platform::Authenticator>> {
+        self.authenticator.clone()
+    }
+
+    /// The seed module.
+    pub fn vault(self: &Arc<Self>) -> Arc<Vault> {
+        Arc::new(Vault { sdk: self.clone() })
     }
 
     /// The binding surface's version (§16.3).

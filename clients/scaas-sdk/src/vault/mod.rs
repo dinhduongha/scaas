@@ -2,16 +2,25 @@
 //! `vault` (spec §6, CLI-SDK-03 … CLI-SDK-06): the keystore container, the store it lives in, and the writers' rules of §6.3:
 //! every read-modify-write under the store's lock and at the expected `rev` (`StoreConflict` after three tries), the replaced
 //! container kept as `keystore.prev`, and the anchor `keystore.head` that detects an older container put back.
-// the container's writers are used by the vault calls (plan T4); until then only by the tests
-#![cfg_attr(not(test), allow(dead_code))]
-
 pub mod keystore;
+mod seeds;
 pub mod store;
+mod unlock;
+
+pub use unlock::{SessionSet, Unlock};
+
+pub(crate) use seeds::OpenSeed;
+pub use seeds::{
+    ConfirmRemove, ConfirmRemoveUnbacked, Generate, ImportKey, ImportWords, ImportedKey, NewSeed,
+    Remove, SeedBackup, SeedInfo, Vault,
+};
 
 pub use keystore::{AccountRow, Keystore, SeedEntry};
 #[cfg(feature = "file-store")]
 pub use store::FileStore;
-pub use store::{Presence, SecureStore, StoreError, StoreLock, StorePolicy, StoredItem};
+pub use store::{
+    MemoryStore, Presence, SecureStore, StoreError, StoreLock, StorePolicy, StoredItem,
+};
 
 use crate::error::SdkError;
 use std::sync::Arc;
@@ -29,7 +38,8 @@ const TRIES: usize = 3;
 pub(crate) struct Loaded {
     pub(crate) keystore: Keystore,
     /// `KeystoreRollback`: the container's `rev` is below the anchor's, or its hash differs at the same `rev` (shown, not
-    /// fatal)
+    /// fatal; emitted as an event by the vault calls, plan T4)
+    #[allow(dead_code)]
     pub(crate) rollback: bool,
 }
 

@@ -1,0 +1,41 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+//! The SDK's reference library (spec §16.2): the FRB surface (`api`, generated glue in `frb_generated`) and the two secret copy
+//! calls of spec §5, plain C functions a binding calls with its own buffers, so no secret byte passes a generator's codec.
+mod api;
+mod frb_generated;
+
+/// Copies `len` bytes at `src` into secret `id`: 0, or -1 (an unknown id, another length, a null pointer).
+///
+/// # Safety
+/// `src` points to `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn scaas_sdk_secret_write(id: u64, src: *const u8, len: usize) -> i32 {
+    if src.is_null() && len > 0 {
+        return -1;
+    }
+    let src = if len == 0 { &[][..] } else { std::slice::from_raw_parts(src, len) };
+    scaas_ua::wallet::secret_write(id, src).map_or(-1, |()| 0)
+}
+
+/// Copies secret `id` into `dst` (capacity `cap`): its length, or -1 (an unknown id, `cap` too small, a null pointer).
+///
+/// # Safety
+/// `dst` points to `cap` writable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn scaas_sdk_secret_read(id: u64, dst: *mut u8, cap: usize) -> i64 {
+    if dst.is_null() && cap > 0 {
+        return -1;
+    }
+    let dst = if cap == 0 { &mut [][..] } else { std::slice::from_raw_parts_mut(dst, cap) };
+    scaas_ua::wallet::secret_read(id, dst).map_or(-1, |n| i64::try_from(n).unwrap_or(-1))
+}
+
+/// Disposes of secret `id` (zeroed, freed): 0, or -1 when unknown.
+#[no_mangle]
+pub extern "C" fn scaas_sdk_secret_dispose(id: u64) -> i32 {
+    if scaas_ua::wallet::secret_dispose(id) {
+        0
+    } else {
+        -1
+    }
+}
