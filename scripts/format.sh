@@ -3,16 +3,17 @@
 # Format the repository with the pinned tools (code-format plan, F9), or check it as CI does.
 #   scripts/format.sh            format in place (every language below)
 #   scripts/format.sh --check    change nothing; exit 1 if any file differs (the CI `format` job runs exactly this)
-#   scripts/format.sh [--check] <part>...   only these parts: rust sol js yaml py go cs dart c move sh toml lint
+#   scripts/format.sh [--check] <part>...   only these parts: rust sol js yaml py go cs dart c move tact sh toml lint
 # Settings live in the committed configs (rustfmt.toml, foundry.toml [fmt], .prettierrc, pyproject.toml, .editorconfig,
 # analysis_options.yaml, .clang-format, taplo.toml), never here. Pins: rustfmt by rust-toolchain.toml, forge 1.8.5,
 # Prettier 3.3.3 (clients/clientkeys/package.json), ruff 0.16.4 (pyproject.toml), clang-format 19.1.7, movefmt 1.5.3,
-# shfmt 3.10.0, taplo 0.9.3, actionlint 1.7.12, hadolint 2.15.1; the CI job installs each at that version. Locally the tools come from
-# PATH, then from the git-ignored scratchpad/tools/bin.
+# tact-fmt of @tact-lang/compiler 1.6.13 (smartcontracts/ton/package.json), shfmt 3.10.0, taplo 0.9.3,
+# actionlint 1.7.12, hadolint 2.15.1; the CI job installs each at that version. Locally the tools come from PATH, then
+# from the git-ignored scratchpad/tools/bin.
 # Scope: the components formatted so far. Left out: generated, vendored (vendor/) and legacy/ files (.rustfmt-ignore,
 # .clang-format-ignore, .prettierignore, foundry.toml [fmt] ignore, taplo.toml exclude), and runs/ except its shell,
 # YAML and TOML. Not covered yet: Python and JavaScript under docs/ (research and history notes), Sui's Move (see the
-# move part) and TON.
+# move part).
 set -u
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 cd "$root" || exit 2
@@ -22,7 +23,7 @@ check=0
     check=1
     shift
 }
-parts=${*:-rust sol js yaml py go cs dart c move sh toml lint}
+parts=${*:-rust sol js yaml py go cs dart c move tact sh toml lint}
 bad=0
 say() { echo "[format] $*"; }
 fail() {
@@ -135,6 +136,14 @@ if want move; then
         rm -rf "$t"
         [ -z "$d" ] && say "move ok" || fail "move: $(echo $d)"
     else movefmt -q $fs >/dev/null && say "move ok" || fail move; fi
+fi
+
+# Tact (TON): tact-fmt of the pinned compiler (@tact-lang/compiler 1.6.13 in smartcontracts/ton/package-lock.json, `npm ci`
+# there); it takes no settings (no width option)
+if want tact; then
+    tf=smartcontracts/ton/node_modules/.bin/tact-fmt
+    $tf $([ $check = 1 ] && echo -c || echo -w) $(ls_files 'smartcontracts/ton/*.tact') >/dev/null &&
+        say "tact ok" || fail tact
 fi
 
 # Shell: shfmt reads .editorconfig ([*.sh]); the variant (POSIX sh or bash) comes from each shebang

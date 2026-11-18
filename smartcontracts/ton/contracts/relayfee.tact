@@ -40,7 +40,7 @@ message(0x5b0a1d33) RelayExec {
     ref: Int as uint256;
     target: Address;
     call: Cell;
-    relayer: Address;      // who gets the executor's TON that arrives after the outcome (a revoke-cancel's late excess)
+    relayer: Address; // who gets the executor's TON that arrives after the outcome (a revoke-cancel's late excess)
     callMin: Int as coins; // the least TON the call carries (callFloor, or the served entry's own floor if higher)
     keep: Int as coins; // what the executor keeps after the call and the probe (its gas, the report, the settlement)
 }
@@ -79,7 +79,7 @@ message(0x9b1c0d06) RelayFeeRefunded {
 const STAGE_PAYING: Int = 0;
 const STAGE_FUNDED: Int = 1;
 const STAGE_RELEASE_OWED: Int = 2; // the release transfer bounced: RelayRefund sends it again
-const STAGE_REFUND_OWED: Int = 3;  // the refund transfer bounced: RelayRefund sends it again
+const STAGE_REFUND_OWED: Int = 3; // the refund transfer bounced: RelayRefund sends it again
 
 struct Escrow {
     from: Address;
@@ -96,26 +96,26 @@ struct Escrow {
 }
 
 // Exit codes (stable; 72x are Mandate's, 73x the DEX's).
-const E_RELAY_SHAPE: Int = 741;    // not the router-bound pay for this call, or not a served SCaaS target / entry
-const E_RELAY_PENDING: Int = 742;  // (payer, ref) already escrowed, or the payer wallet has a payment in flight
+const E_RELAY_SHAPE: Int = 741; // not the router-bound pay for this call, or not a served SCaaS target / entry
+const E_RELAY_PENDING: Int = 742; // (payer, ref) already escrowed, or the payer wallet has a payment in flight
 const E_RELAY_DEADLINE: Int = 743; // deadline not in (now, now + RELAY_TIMEOUT]
-const E_RELAY_UNKNOWN: Int = 744;  // no escrow for (payer, ref)
-const E_RELAY_EARLY: Int = 745;    // RelayRefund of a funded escrow before the deadline
+const E_RELAY_UNKNOWN: Int = 744; // no escrow for (payer, ref)
+const E_RELAY_EARLY: Int = 745; // RelayRefund of a funded escrow before the deadline
 
 const RELAY_TIMEOUT: Int = 3600; // the latest deadline a RelayCall may set, seconds after it arrives
-const SETTLE_RING: Int = 16;     // settlements kept to undo on a bounce (it arrives in the next transaction)
-const MAX_CELLS: Int = 1024;     // the largest message tree priced (a larger call is refused, exit 8)
+const SETTLE_RING: Int = 16; // settlements kept to undo on a bounce (it arrives in the next transaction)
+const MAX_CELLS: Int = 1024; // the largest message tree priced (a larger call is refused, exit 8)
 
 // Gas units per step, about ×2 the use measured in @ton/sandbox 0.45.0 (tests/relayfee.spec.ts logs it: RelayCall
 // 61.5 k, notification 31.7 k, outcome 23.6 k, wallet transfer 9.8 k / 12.1 k, executor start 16.1 k, its bounce 6.8 k,
 // the target's probe refusal 2.3 k). Prices come from the config at run time.
-const ROUTER_CALL_GAS: Int = 120000;  // RelayCall (grows with the message: it prices every hop by size)
-const ROUTER_NOTE_GAS: Int = 64000;   // JettonNotification -> executor deploy
+const ROUTER_CALL_GAS: Int = 120000; // RelayCall (grows with the message: it prices every hop by size)
+const ROUTER_NOTE_GAS: Int = 64000; // JettonNotification -> executor deploy
 const ROUTER_SETTLE_GAS: Int = 48000; // RelayOutcome / RelayRefund, with its transfer
-const WALLET_GAS: Int = 25000;        // one jetton wallet step of a transfer
-const EXEC_GAS: Int = 32000;          // the executor's start
-const EXEC_BOUNCE_GAS: Int = 14000;   // the executor's bounce handlers and report
-const PROBE_GAS: Int = 10000;         // the target refusing the probe
+const WALLET_GAS: Int = 25000; // one jetton wallet step of a transfer
+const EXEC_GAS: Int = 32000; // the executor's start
+const EXEC_BOUNCE_GAS: Int = 14000; // the executor's bounce handlers and report
+const PROBE_GAS: Int = 10000; // the target refusing the probe
 
 fun gasFee(g: Int): Int {
     return getComputeFee(g, false);
@@ -141,8 +141,14 @@ fun escrowKey(from: Address, ref: Int): Int {
 /// payer-signed `salt` (committed through `payRef`) makes two relays of the same call distinct payments.
 fun relayRef(target: Address, call: Cell, salt: Int): Int {
     let t = parseStdAddress(target.asSlice());
-    return keccak256(beginCell().storeSlice("scaas.relayfee".asSlice()).storeInt(globalId(), 32).storeInt(t.workchain, 8)
-        .storeUint(t.address, 256).storeUint(call.hash(), 256).storeUint(salt, 256).asSlice());
+    return keccak256(beginCell()
+        .storeSlice("scaas.relayfee".asSlice())
+        .storeInt(globalId(), 32)
+        .storeInt(t.workchain, 8)
+        .storeUint(t.address, 256)
+        .storeUint(call.hash(), 256)
+        .storeUint(salt, 256)
+        .asSlice());
 }
 
 /// The TON a call carries: the largest compute fee of a basechain transaction (config param 21: gas_limit at the
@@ -200,14 +206,19 @@ fun walletCodeHash(): Int {
 
 fun mandateCodeHash(): Int {
     return (initOf Mandate(myAddress(), myAddress(), MandateState {
-        revoked: false, periodStart: 0, spent: 0, balance: 0,
-        terms: MandateTerms { perPayment: 0, perPeriod: 0, periodSeconds: 0, expiresAt: 0 }, ownerPubkey: 0, delegatePubkey: 0,
+        revoked: false,
+        periodStart: 0,
+        spent: 0,
+        balance: 0,
+        terms: MandateTerms { perPayment: 0, perPeriod: 0, periodSeconds: 0, expiresAt: 0 },
+        ownerPubkey: 0,
+        delegatePubkey: 0,
     }, emptyMap(), emptyMap(), emptyMap(), 0, emptyMap())).code.hash();
 }
 
 struct Budget {
     forward: Int; // the payment's forwardTon: the executor's whole budget
-    value: Int;   // the least TON the RelayCall carries
+    value: Int; // the least TON the RelayCall carries
 }
 
 /// Priced from the RelayCall's own message sizes and the config at the time (the getter `get_relay_value` runs it on
@@ -217,8 +228,13 @@ fun relayBudget(msg: RelayCall, extra: Int): Budget {
     let deploy = fwdOf(RelayExec { ref: 0, target: msg.target, call: msg.call, relayer: msg.target, callMin: 0, keep: 0 }.toCell()) + fwdOf(e.code) + fwdOf(e.data);
     let forward = max(extra, deploy + gasFee(ROUTER_NOTE_GAS) + execStart(msg.call, callMinOf(msg.targetInit, msg.call), execKeep()));
     let pay = SignedOp {
-        op: msg.payOp, auth: msg.payAuth, params: null, stateInit: msg.payStateInit, responseDestination: msg.target,
-        forwardTon: forward, matchWith: 0,
+        op: msg.payOp,
+        auth: msg.payAuth,
+        params: null,
+        stateInit: msg.payStateInit,
+        responseDestination: msg.target,
+        forwardTon: forward,
+        matchWith: 0,
     }.toCell();
     return Budget { forward, value: forward + MIN_SIGNED_OP_TON + gasFee(ROUTER_CALL_GAS) + fwdOf(pay) + storageKeep(msg.call) };
 }
@@ -231,7 +247,7 @@ fun storageKeep(call: Cell): Int {
 
 contract ScaasRelayFee {
     escrows: map<Int as uint256, Escrow>;
-    busy: map<Address, Int as uint256>;   // payer wallet -> escrow key while its payment is in flight (its bounce names no ref)
+    busy: map<Address, Int as uint256>; // payer wallet -> escrow key while its payment is in flight (its bounce names no ref)
     settling: map<Int as uint64, Escrow>; // recent settlement transfers by queryId, to restore on a bounce
     settled: Int as uint64 = 0;
 
@@ -242,8 +258,8 @@ contract ScaasRelayFee {
         let m = parseMetaOp(msg.payOp);
         let ref = relayRef(msg.target, msg.call, msg.salt);
         throwUnless(E_RELAY_SHAPE, m.op == OP_PAY && m.payRef == ref && m.lane == payLane(ref) && m.nonce == 0 &&
-            m.relayer != null && m.relayer!! == myAddress() && m.to == myAddress() && m.amount > 0 &&
-            msg.payWallet == walletAddress(m.from, msg.master));
+                                   m.relayer != null && m.relayer!! == myAddress() && m.to == myAddress() && m.amount > 0 &&
+                                   msg.payWallet == walletAddress(m.from, msg.master));
         self.servedCall(msg, m.from);
         throwUnless(E_RELAY_DEADLINE, msg.deadline > now() && msg.deadline <= now() + RELAY_TIMEOUT);
         let key = escrowKey(m.from, ref);
@@ -251,8 +267,17 @@ contract ScaasRelayFee {
         let b = relayBudget(msg, m.extra);
         throwUnless(E_VALUE, ctx.value >= b.value);
         self.escrows.set(key, Escrow {
-            from: m.from, ref, target: msg.target, call: msg.call, salt: msg.salt, master: msg.master,
-            relayer: ctx.sender, amount: m.amount, deadline: msg.deadline, stage: STAGE_PAYING, callMin: callMinOf(msg.targetInit, msg.call),
+            from: m.from,
+            ref,
+            target: msg.target,
+            call: msg.call,
+            salt: msg.salt,
+            master: msg.master,
+            relayer: ctx.sender,
+            amount: m.amount,
+            deadline: msg.deadline,
+            stage: STAGE_PAYING,
+            callMin: callMinOf(msg.targetInit, msg.call),
         });
         self.busy.set(msg.payWallet, key);
         // Keep this escrow's rent; everything else of the relay's TON goes on with the payment.
@@ -264,8 +289,13 @@ contract ScaasRelayFee {
             mode: SendRemainingBalance,
             bounce: true,
             body: SignedOp {
-                op: msg.payOp, auth: msg.payAuth, params: null, stateInit: msg.payStateInit,
-                responseDestination: ctx.sender, forwardTon: b.forward, matchWith: 0,
+                op: msg.payOp,
+                auth: msg.payAuth,
+                params: null,
+                stateInit: msg.payStateInit,
+                responseDestination: ctx.sender,
+                forwardTon: b.forward,
+                matchWith: 0,
             }.toCell(),
         });
     }
@@ -283,7 +313,7 @@ contract ScaasRelayFee {
         let m = parseMetaOp(so.op);
         throwIf(E_RELAYER, m.relayer != null && m.relayer!! == myAddress());
         throwUnless(E_RELAY_SHAPE, (m.op == OP_REVOKE || (wallet && m.op == OP_SET_KEY)) &&
-            so.responseDestination == contractAddress(executorInit(myAddress(), from, msg.salt)));
+                                   so.responseDestination == contractAddress(executorInit(myAddress(), from, msg.salt)));
     }
 
     /// The payment arrives through the router's own jetton wallet of the escrow's token. Never throw: anything that is
@@ -412,8 +442,13 @@ contract ScaasRelayFee {
             mode: SendRemainingBalance,
             bounce: true,
             body: JettonTransfer {
-                queryId, amount, destination: to, responseDestination: response, customPayload: null,
-                forwardTonAmount: 0, forwardPayload: emptyForwardPayload(),
+                queryId,
+                amount,
+                destination: to,
+                responseDestination: response,
+                customPayload: null,
+                forwardTonAmount: 0,
+                forwardPayload: emptyForwardPayload(),
             }.toCell(),
         });
     }

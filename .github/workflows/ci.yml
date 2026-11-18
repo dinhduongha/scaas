@@ -32,7 +32,7 @@
 #                  provisional precompile rows and each set's proofs; T21 L67)
 #   format:        scripts/format.sh --check (check only, at the pinned versions: rustfmt of rust-toolchain.toml, forge 1.8.5, clientkeys'
 #                  Prettier 3.3.3, ruff 0.16.4, gofmt, dotnet format whitespace, dart format, clang-format 19.1.7, movefmt 1.5.3 (Aptos Move),
-#                  shfmt 3.10.0, taplo 0.9.3,
+#                  tact-fmt (Tact 1.6.13), shfmt 3.10.0, taplo 0.9.3,
 #                  actionlint 1.7.12, hadolint 2.15.1 on errors; .rustfmt-ignore, .clang-format-ignore and foundry.toml [fmt] keep
 #                  generated and harness-read files out)
 #   clients/clientkeys:    npm ci --ignore-scripts; npm test; its ML-DSA-65 signer (script/pqz/mldsa.mjs) against the DEX:
@@ -538,9 +538,14 @@ jobs:
         with:
           node-version: 26.8.1
           cache: npm
-          cache-dependency-path: clients/clientkeys/package-lock.json
+          cache-dependency-path: |
+            clients/clientkeys/package-lock.json
+            smartcontracts/ton/package-lock.json
       - name: Prettier 3.3.3 (the devDependency of clients/clientkeys)
         working-directory: clients/clientkeys
+        run: npm ci --ignore-scripts
+      - name: tact-fmt (@tact-lang/compiler 1.6.13, the devDependency of smartcontracts/ton)
+        working-directory: smartcontracts/ton
         run: npm ci --ignore-scripts
       - uses: actions/setup-python@v5
         with:
