@@ -71,8 +71,10 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
     bytes32 internal bob;
     bytes32 internal carol;
     bytes32 internal mu; // a PQ-eligible msig of bob and carol (threshold 1; bob signs)
-    bytes32 internal daveSeed; // set-auditor: the replacement auditor (`_auditorPqz`)
-    bytes32 internal dave;
+    // set-auditor: the replacement auditor (`_auditorPqz`), the holder "dave"; not named `dave`: PqzWalletKit, on this kit,
+    // has its own `dave` (a recipient)
+    bytes32 internal auditor2Seed;
+    bytes32 internal auditor2;
     address internal c2; // kind 4, class 2 (scope 0, the opening)
     address internal c3o; // kind 4, class 3 with the opening
     address internal c3; // kind 4, class 3 without the opening
@@ -132,7 +134,7 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
     }
 
     function _seedOf(bytes32 ua) internal view returns (bytes32) {
-        return ua == uaM ? mlSeed : ua == bob ? bobSeed : ua == dave ? daveSeed : carolSeed;
+        return ua == uaM ? mlSeed : ua == bob ? bobSeed : ua == auditor2 ? auditor2Seed : carolSeed;
     }
 
     // ------------------------------------------------------------------ the client's bytes
@@ -1135,8 +1137,8 @@ contract PqzKeysSetup is PqzKeysKit {
     /// `PURPOSE_AUDITOR_CONSENT` over the token's `AuditorConsent`: applied at once; an audited op 1 at epoch 1; `auditorUAOf`
     /// answers carol for the first entry and dave for the second. Then the msig names carol back (epoch 2), bob signing for it.
     function _auditorPqz() internal {
-        (daveSeed, dave) = _holder("dave");
-        _scoped(dave, address(0), 0, true);
+        (auditor2Seed, auditor2) = _holder("dave");
+        _scoped(auditor2, address(0), 0, true);
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.admin) = ("Onchain PQZ auditor", "oPQA", 6, _pad(a1));
         c.features = 1 << GovernanceBits.PAYABLE | uint256(1) << GovernanceBits.AUDITOR;
@@ -1155,15 +1157,15 @@ contract PqzKeysSetup is PqzKeysKit {
         );
         _shield(t, bob, 100);
         bytes32 r0 = _audited1(t, 0x7e01);
-        _setAuditorUA(t, bob, dave, 1, uid);
+        _setAuditorUA(t, bob, auditor2, 1, uid);
         (uint32 epoch,,,, uint8 st) = IPqzToken(t).auditorState();
         require(
-            epoch == 1 && st == 0 && NormalPqzToken(t).auditorUA() == dave,
+            epoch == 1 && st == 0 && NormalPqzToken(t).auditorUA() == auditor2,
             "auditor token: dave applied at once (delay 0)"
         );
         bytes32 r1 = _audited1(t, 0x7e11);
         require(
-            IPqzToken(t).auditorUAOf(r0) == carol && IPqzToken(t).auditorUAOf(r1) == dave,
+            IPqzToken(t).auditorUAOf(r0) == carol && IPqzToken(t).auditorUAOf(r1) == auditor2,
             "auditor token: auditorUAOf by epoch"
         );
         _setAuditorUA(t, mu, carol, 2, uid);
