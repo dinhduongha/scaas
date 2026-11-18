@@ -223,6 +223,18 @@ the network's standard `wallet_id`. BUILT.
 `transactionsByMasterchainBlock`, `transactionsByMessage`, `message`, `runGetMethod`, `walletInformation`, `blocks`),
 available on mainnet/testnet and in MyLocalTon (profile `indexer`). BUILT.
 
+Endpoints (BUILT, scaas-rpc T22): `rpc_urls` are read through the crate's family client (16 MiB, depth 64, no redirect,
+20 s a request; `api_key_env` names the key's env var: a name, the first endpoint's key only, or a list of names, one per
+`rpc_urls` entry (`""` for none): a later endpoint gets no key unless one is configured for it, scaas-rpc T24.10). `build`'s getters fail over
+([CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04)): TON Center names no network, so every listed endpoint is this network
+(the profile constant, [NET-ALL-22](README.md#NET-ALL-22)) names endpoint 0's network, and a later endpoint is this network
+when its masterchain block at the last seqno endpoint 0 showed has endpoint 0's root hash (unreadable or none seen yet: skipped
+and asked again; another hash: dropped; scaas-rpc T24.6, owner 2026-11-18); the next endpoint must show a masterchain seqno at or above the
+one the first endpoint last showed; a status other than 2xx from it decides nothing and a refusal read while it answered
+requeues the job. From the first endpoint only TON Center's 404 is its answer; any other status (a rate limit, a 5xx)
+fails over (scaas-rpc T24.3). The transaction status and its escrow follow-up (refund included), the sends, `op_consumed` and the
+lane's `seqno` are the first endpoint's only.
+
 - Minimal cell/BOC code (representation hash, single-root BOC, multi-root BOC read when needed), base64, no new crate.
 - `build`: reads the `signed_op` job (`payload` = the `MetaOp` BOC, `signature` = JSON `{sig, timestamp, domain,
   state_init?, kind, …}`, `extra`), builds `SignedOp`, **simulates with getters** ([NET-TON-17](#NET-TON-17)); a failure ⇒

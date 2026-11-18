@@ -1,0 +1,35 @@
+# t13 mutants at commit b77670551 (name | outcome | test)
+S1 no freshness | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool one_endpoint_cannot_choose_an_old_block
+S2 one floor for every choice | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool reads_of_every_block_choice_mix_on_one_pool
+S3 first_* without identity | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_dropped_endpoint_is_never_asked_again
+S3 broadcast without identity | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_dropped_endpoint_is_never_asked_again
+S3 strict fee without identity | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_dropped_endpoint_is_never_asked_again
+S16 a pruned endpoint trusted on the pin | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_block_0_gone_after_the_identity_is_never_trusted_on_the_pin
+S16 a pruned endpoint admitted without its checkpoint | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes an_endpoint_without_block_0_is_refused_unless_it_names_a_checkpoint
+point 6 endpoint 0 skipped on reads | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib chain::tests::an_endpoint_0_of_another_chain_is_dropped
+point 6 endpoint 0 skipped on admit | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib chain::tests::an_endpoint_0_of_another_chain_is_dropped
+S4 a revert message kept whole | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_revert_text_is_capped_and_cleaned
+S4 a decoded reason kept whole | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_revert_text_is_capped_and_cleaned
+S4 intent_id kept whole | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node a_gateways_intent_id_and_revert_data_are_bounded
+S4 revert_data hex unchecked | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node a_gateways_intent_id_and_revert_data_are_bounded
+S4 revert_data uncapped | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node a_gateways_intent_id_and_revert_data_are_bounded
+S5 an entry prints its URL | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib endpoint::tests::debug_and_display_carry_no_url_or_secret
+S5 an entry prints its key file | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib endpoint::tests::debug_and_display_carry_no_url_or_secret
+S5 a list prints its URLs | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib endpoint::tests::debug_and_display_carry_no_url_or_secret
+S6 no timeout check | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib endpoint::tests::strict_majority_needs_a_request_timeout_below_the_read_deadline
+S6 an equal timeout passes | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib endpoint::tests::strict_majority_needs_a_request_timeout_below_the_read_deadline
+S7 Replaced at the read's own block | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes replaced_under_strict_majority_rests_on_the_finalized_block
+S7 FailedForGood at the read's own block | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes failed_for_good_under_strict_majority_rests_on_the_finalized_block
+S7 failover Replaced named a majority | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes replaced_under_strict_majority_rests_on_the_finalized_block
+S9 priority unclamped | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib evm::tests::the_agreed_priority_fee_never_exceeds_the_max_fee
+S10 any length is a nonce | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_nonce_view_of_no_word_is_no_nonce
+S11 block 0 not checked at start | killed | ../scripts/capped cargo test --locked --offline -j2 --test service start_pins_block_0
+S11 connect_pinned without the pin | killed | ../scripts/capped cargo test --locked --offline -j2 --test service start_pins_block_0
+S14 the route joined as before | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node a_route_keeps_the_gateways_prefix_and_a_submit_2xx_needs_the_status
+S14 any 2xx is queued | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node a_route_keeps_the_gateways_prefix_and_a_submit_2xx_needs_the_status
+S17 a bare revert compares by its data only | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool reverts_without_data_compare_by_their_reason
+S15 no NoTrustedEndpoint in agree | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool all_discovered_under_agreement_is_no_trusted_endpoint
+S15 no AgreementNeedsThree | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool discovered_with_n_2_under_agreement_is_refused_before_any_request
+S15 no identity inside agree | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool a_wrong_chain_endpoint_never_counts_in_an_agreement
+S15 op_state decisive ignored | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes op_state_from_a_failover_endpoint_is_pending
+33 mutants, 33 killed, 0 survived, 0 not loaded

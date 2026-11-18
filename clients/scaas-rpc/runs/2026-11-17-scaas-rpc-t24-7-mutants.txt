@@ -1,0 +1,5 @@
+# t24-7 mutants at commit d5ca7080d (name | outcome | test)
+7: Algorand: the send through the failover helper | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::algorand::tests::algorand_submit_inside_build_asks_endpoint_0_only
+7: Cosmos: the send through the failover helper | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::cosmos::tests::cosmos_submit_inside_build_asks_gateway_0_only
+7: TON: the send through the failover helper | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::ton::tests::ton_submit_inside_build_asks_endpoint_0_only
+3 mutants, 3 killed, 0 survived, 0 not loaded

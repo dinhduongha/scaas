@@ -1417,11 +1417,11 @@ pub(crate) mod tests {
         code_only: Option<Address>,
         /// This address's code is an EIP-7702 designator `0xef0100 ‖ 0x55…55` (an EOA, not a contract signer).
         designator: Option<Address>,
-        /// Block 0 is the recorded Hedera testnet block, not the pinned `UID` (default: a pruned RPC).
+        /// Block 0 is the recorded Hedera testnet block, not the pinned `UID` (default: block 0 hashed `UID`; scaas-rpc T13 S16).
         genesis: bool,
         /// Fable recheck 4 R4-1: a failover endpoint of the chain: `eth_chainId` 31337 and block 0 hashed `UID`.
         failover: bool,
-        /// Its `eth_chainId` when not 31337 (Hedera's 296).
+        /// The fake's `eth_chainId` when not 31337 (Hedera's 296); every fake answers it (scaas-rpc T13 point 6).
         failover_id: Option<u64>,
         /// Fable recheck 6 R6-2: `eth_getTransactionByHash` fails (a transport error).
         tx_err: bool,
@@ -1562,7 +1562,8 @@ pub(crate) mod tests {
                     }
                     Ok(b)
                 }
-                "eth_chainId" if e.failover => Ok(json!(format!("{:#x}", e.failover_id.unwrap_or(31337)))),
+                // scaas-rpc T13 point 6 (fixture correction): endpoint 0 is identity-checked now: every fake answers its `eth_chainId`
+                "eth_chainId" => Ok(json!(format!("{:#x}", e.failover_id.unwrap_or(31337)))),
                 "eth_getBlockByNumber" if e.failover && p[0] == "0x0" => {
                     let mut b = serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
                     b["hash"] = json!(format!("{:#x}", B256::from(U256::from(UID))));
@@ -1570,6 +1571,13 @@ pub(crate) mod tests {
                 }
                 "eth_getBlockByNumber" if e.genesis => {
                     Ok(serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone())
+                }
+                // scaas-rpc T13 S16: block 0 is the pinned chain_uid's (a fixture correction: a node that serves no block 0 is
+                // refused now, never trusted on the pin alone)
+                "eth_getBlockByNumber" if p[0] == "0x0" => {
+                    let mut b = serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
+                    b["hash"] = json!(format!("{:#x}", B256::from(U256::from(UID))));
+                    Ok(b)
                 }
                 "eth_getBlockByNumber" => Ok(Value::Null),
                 "eth_getCode" => {
@@ -1973,7 +1981,8 @@ pub(crate) mod tests {
     async fn lane_runner_requeues_a_liftable_refusal_on_hedera() {
         for (sim, nonce, state, prefix) in [("frozen", 0, "queued", "REGULATED_REFUSED: Frozen("), ("frozen", 1, "consumed", "unknown"),
             ("revert", 0, "dead", "MetaTxBadNonce(")] {
-            let (url, rpc) = fake_evm(Evm { sim: Some(sim), mtx_nonce: Some(nonce), ..Default::default() }).await;
+            // scaas-rpc T13 point 6 (fixture correction): the fake is chain 296, as the table
+            let (url, rpc) = fake_evm(Evm { sim: Some(sim), mtx_nonce: Some(nonce), failover_id: Some(296), ..Default::default() }).await;
             let mut cfg = test_cfg(&url);
             (cfg.family, cfg.evm_chain_number) = ("hedera".into(), 296);
             let signer = PrivateKeySigner::from_bytes(&B256::repeat_byte(1)).unwrap();
@@ -2869,7 +2878,9 @@ pub(crate) mod tests {
             crate::adapters::hedera::HederaAdapter::new(&c, vec![chain(&c)]).unwrap()
         };
         use crate::adapter::ChainAdapter;
-        assert_eq!(hedera(vec![first.clone()]).op_consumed(&job).await.unwrap(), Some(false), "control: Hedera");
+        // scaas-rpc T13 point 6 (fixture correction): Hedera's first endpoint is chain 296, as the table
+        let (first_h, _) = fake_evm(Evm { mtx_nonce: Some(0), failover_id: Some(296), ..Default::default() }).await;
+        assert_eq!(hedera(vec![first_h]).op_consumed(&job).await.unwrap(), Some(false), "control: Hedera");
         let e = hedera(vec!["http://127.0.0.1:9".into(), other_h]).op_consumed(&job).await.unwrap_err();
         assert!(e.to_string().starts_with("FAILOVER_ANSWER"), "{e:#}");
     }

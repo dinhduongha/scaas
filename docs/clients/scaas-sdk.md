@@ -2,7 +2,7 @@
 
 `scaas-sdk` is the one Rust crate through which an app (scaas-app's `scaas` build, `scaas-tui`, the CLI `scaas`, an integrator's
 service) reaches every SCaaS feature: seeds and keys, Universal Accounts, tokens and payments, Zether and PQZ, the DEX, governance,
-and PqChat. Every signature comes from `ua-rs` ([CLI-UAL-01](ua-libraries.md#CLI-UAL-01)), every chain read and send goes through
+and the generic surface that app cores above it use (`pqchat-core`, `pqvault-core`, a third party's). Every signature comes from `ua-rs` ([CLI-UAL-01](ua-libraries.md#CLI-UAL-01)), every chain read and send goes through
 `scaas-rpc` ([CLI-RPC-01](scaas-rpc.md#CLI-RPC-01)), and the bindings are generated from its one API. Status: **SPECIFIED**, nothing
 built (spec `docs/superpowers/specs/2026-11-17-scaas-sdk.md`, reviewed by Fable on 2026-11-17 with every finding applied; plan
 `docs/superpowers/plans/2026-11-17-scaas-sdk.md`; branch `scaas-sdk`). Path when built: `clients/scaas-sdk`. UNAUDITED.
@@ -15,7 +15,7 @@ built (spec `docs/superpowers/specs/2026-11-17-scaas-sdk.md`, reviewed by Fable 
 4. [Accounts](#4-accounts)
 5. [Operations](#5-operations)
 6. [Confidential tokens](#6-confidential-tokens)
-7. [Chat](#7-chat)
+7. [App cores above the SDK](#7-app-cores-above-the-sdk)
 8. [Runtime, events, errors](#8-runtime-events-errors)
 9. [Bindings](#9-bindings)
 10. [Chain profiles and native chains](#10-chain-profiles-and-native-chains)
@@ -26,11 +26,12 @@ built (spec `docs/superpowers/specs/2026-11-17-scaas-sdk.md`, reviewed by Fable 
 <a id="CLI-SDK-01"></a>**CLI-SDK-01** — **One crate is the only API apps call; it signs through `ua-rs`, talks through `scaas-rpc`,
 and holds no cryptography of its own** (owner 2026-11-11, 2026-11-17; SPECIFIED). Modules: `vault` (several seeds), `account` (UA,
 key references, `msig`, passkey and `SmartKeyAccount`, recovery), `wallet` (balances, tokens, history, the token and mandate-wallet
-`mtx*` entries, native keys), `confidential` (Zether and PQZ provers, verdicts, disclosure), `dex`, `admin`, and `chat` over
-`pqchat-core`; each module and each guarded entry a compile-time feature, so a build without it has none of its calls. Key
+`mtx*` entries, native keys), `confidential` (Zether and PQZ provers, verdicts, disclosure), `dex`, `admin`, and `app_core`, the
+generic surface for app cores above it ([CLI-SDK-19](#CLI-SDK-19)); each module and each guarded entry a compile-time feature,
+so a build without it has none of its calls. Key
 derivation, AEAD, KDFs, MACs, signatures and every hash a byte format fixes stay in `ua-rs`; HTTP, RPC, retries and node calls stay in
-`scaas-rpc`. `scaas-ua` is taken without its default features, so one build carries one PQZ parameter set. A future notes crate
-(`pqvault-core`) joins as its own module `pqvault`, apart from `vault`. The research's and earlier rulings' name "scaas-wallet" means
+`scaas-rpc`. `scaas-ua` is taken without its default features, so one build carries one PQZ parameter set. No module is
+named after an app: `pqchat-core` and `pqvault-core` depend on the SDK, not the reverse (owner 2026-11-17). The research's and earlier rulings' name "scaas-wallet" means
 this crate (the library) and its `wallet` module; the end-user app is scaas-app.
 
 ## 2. Secrets and references
@@ -81,7 +82,7 @@ wherever the seed is listed, with the advice to move funds to a 24-word seed, an
 generated: the vault passphrase follows vault v1's rule for a new envelope ([CLI-SGN-21](signers-clientkeys.md#CLI-SGN-21);
 `VaultPassphraseWeak`), and the BIP-39 passphrase is never stored and reaches `ua-rs` as entered. A non-empty BIP-39 passphrase opens a
 session-only hidden set: nothing about it is written, emitted or logged; its operations still in flight are listed when it is locked.
-Removing a seed whose backup is `pending` needs a second confirmation.
+Removing a seed whose backup is `pending` needs a second confirmation. A seed import may check one word at a time against the BIP-39 list inside `ua-rs` (`word_in_list`, the word as `SecretBytes`); no list leaves the SDK (owner 2026-11-17, "OK, all four points as proposed").
 
 <a id="CLI-SDK-05"></a>**CLI-SDK-05** — **A seed set derived from a classical key is marked classical-rooted and may carry every
 kind** (owner 2026-11-11; SPECIFIED). Root (c), an external EVM wallet's EIP-712 signature over typed data `ua-rs` builds: signed twice
@@ -124,7 +125,7 @@ classical key is a leaf of a seed, tagged with its network, never exported. Ever
 key, KEM key, Zether key) uses that wallet's own account index, so no two wallets share one. An EVM account whose code is an EIP-7702
 designator carries a delegation mark and a warning; the SDK builds no type-4 transaction, so it cannot offer to clear the delegation
 ([CLI-SGN-40](signers-clientkeys.md#CLI-SGN-40) rule 3's offer: a recorded exception). A derived UA has no recovery
-([CTR-ACC-09](../contracts/accounts.md#CTR-ACC-09)); guardian recovery is `SmartKeyAccount`'s ([CTR-ACC-03](../contracts/accounts.md#CTR-ACC-03)).
+([CTR-ACC-09](../contracts/accounts.md#CTR-ACC-09)); guardian recovery is `SmartKeyAccount`'s ([CTR-ACC-03](../contracts/accounts.md#CTR-ACC-03)). **Sponsored registration** (owner 2026-11-17, "OK, all four points as proposed"): a payment to an unregistered derived UA is `ReceiverUnregistered`; the receiver's app makes its portable registration blob (the `register` arguments with the PoP, which binds no caller, and the KEM record when set), the sender's app checks it (the UA equals the intended receiver and its key data, the kind is enabled on the chain, the PoP verifies locally, the KEM record is present and verifies when `kemPkHash` is set) before anything is sent, submits it paying the gas, adds the KEM key by `setKemKey`, and pays only after the registration lands.
 
 ## 5. Operations
 
@@ -141,7 +142,7 @@ moved is `PreparedStale`. `Execute` and `UAExecute` take a decoded call, built b
 allow-list; an undecoded call exists only behind its own feature and marker, flagged opaque in the review, and is otherwise
 `OpaqueCallRefused`. A fee of 0 is accepted everywhere and never replaced. No call signs a caller's digest with a UA key
 ([CLI-SGN-29](signers-clientkeys.md#CLI-SGN-29)); no EIP-7702 authorization or type-4 transaction is built
-([CLI-SGN-40](signers-clientkeys.md#CLI-SGN-40); `TxTypeRefused`).
+([CLI-SGN-40](signers-clientkeys.md#CLI-SGN-40); `TxTypeRefused`). The review lists every token or market the operation touches, with its address and its listed or unlisted mark (owner 2026-11-17, "OK, all four points as proposed").
 
 <a id="CLI-SDK-09"></a>**CLI-SDK-09** — **An operation is quoted and confirmed, written ahead, then sent to a gateway that takes it
 or relayed by the holder** (SPECIFIED). Paths: a scaas-node gateway, for the entries the gateway takes
@@ -155,7 +156,7 @@ EIP-7702 designator is `PayerDelegated`; the payer's address is linked on chain 
 self-relay path. The job API is server-side only, never in an end-user build ([NODE-ADM-06](../node/admin-auth.md#NODE-ADM-06)). With no
 gateway for the entry and no payer: `SubmitPathNone`. **Write ahead:** sign, write the operation with its signed body (public data) to
 the SDK's state, then send; from the signature on the send completes whatever happens to the caller; a row written but not sent is sent
-at restart, a row sent is never sent again automatically, only by the user's `resend` of the same bytes.
+at restart, a row sent is never sent again automatically, only by the user's `resend` of the same bytes. **`submit` returns the operation's id once its row is written; every send result after that is an event, never an error of `submit`** (owner 2026-11-17, "OK, all four points as proposed"), so no caller reads a send error as "not paid".
 
 <a id="CLI-SDK-18"></a>**CLI-SDK-18** — **An operation ends only on a chain fact** (follows [CLI-RPC-09](scaas-rpc.md#CLI-RPC-09);
 SPECIFIED). Terminal, from a decisive read at the profile's final block only: `Landed` (the executed event of the operation's digest,
@@ -183,17 +184,45 @@ through `scaas-rpc`'s verifier client, checked before it is attached; refused or
 PQZ token of another parameter set than the build's is `PqzSetMismatch`. The SDK builds no operation that drops a ciphertext from
 contract state.
 
-## 7. Chat
+## 7. App cores above the SDK
 
-<a id="CLI-SDK-14"></a>**CLI-SDK-14** — **`chat` runs `pqchat-core` over the app's live Matrix client** (owner 2026-11-17;
-PLANNED until `pqchat-core` exists). The app's one Matrix client (one login, one sync loop) is handed to `pqchat-core` as its
-Matrix store, in Rust, inside the app's one library, on the app's own runtime (the SDK refuses to start its own with `chat`,
-`RuntimeRequired`); it is released (`detach`) before the app logs out of Matrix. The SDK starts no Matrix client and links no Matrix
-SDK. Every PqChat signature, KEM operation and container opening goes through `ua-rs`, with the expected sender
-([CLI-UAL-11](ua-libraries.md#CLI-UAL-11)); chat ciphertexts read from chain state are decryption reads under
-[CLI-SDK-10](#CLI-SDK-10); envelopes that arrive while the seed is locked stay undecrypted and are processed at unlock, never dropped
-and never answered with an error the sender sees; `PqChat` contract writes are operations as [CLI-SDK-08](#CLI-SDK-08) states
-([CTR-CHAT-01](../contracts/pqchat.md#CTR-CHAT-01)).
+<a id="CLI-SDK-14"></a>**CLI-SDK-14** — **The SDK has no `chat` module: `pqchat-core` is an app core above the SDK and takes
+the app's live Matrix client itself** (owner 2026-11-17: one Matrix stack below both chat paths, then "OK, reverse pqchat-core too"; PLANNED until
+`pqchat-core` exists). The app's one Matrix
+client (one matrix-rust-sdk stack, one login, one sync loop) lives in the app's one library and is `pqchat-core`'s to use; the
+SDK starts no Matrix client, links no Matrix SDK, holds no Matrix store and requires no particular runtime. The attachment and
+its release before logout, envelopes kept while a seed is locked, and the runtime shared with the Matrix client are
+`pqchat-core`'s rules ([CTR-CHAT-01](../contracts/pqchat.md#CTR-CHAT-01)). `pqchat-core` reaches every signature, KEM operation,
+container opening and chain read through the SDK under [CLI-SDK-19](#CLI-SDK-19) and [CLI-SDK-20](#CLI-SDK-20): it signs
+`PqChat`'s records through the SDK's named `PqChat` record entries, never through the app signing call, and its ratchet
+needs the HMAC, explicit-destroy, storage-root and ephemeral-wrap calls the spec's §12.2 lists, which the `pqchat-core`
+spec confirms.
+
+<a id="CLI-SDK-19"></a>**CLI-SDK-19** — **App cores sit above the SDK: they depend on it, it names none of them, and an app links
+the SDK and its app cores in one Rust library** (owner 2026-11-17: "agreed to reverse the dependency", then "OK, reverse pqchat-core too"; SPECIFIED).
+An app core (`pqchat-core`, `pqvault-core`, a third party's) depends on `scaas-sdk` with the feature `app-core` and on nothing
+below it that touches a key or a node; the SDK names no app core and holds no app logic, while the record types of SCaaS
+contracts (`PqChat`'s among them, behind the feature `pqchat-records`) are named, typed SDK entries as every SCaaS
+contract's are under [CLI-SDK-08](#CLI-SDK-08). scaas-app's one
+library is `app-core-rust` (scaas-app's contract section 12), with the features `native-core` (on by default), `scaas`,
+`pqchat` and `pqvault` (each implying `scaas`); the SDK defines no aggregating crate.
+
+<a id="CLI-SDK-20"></a>**CLI-SDK-20** — **The `app_core` surface gives an app core account handles, app record signing on
+both paths, record verification, key handles, random bytes, reads and relayed submission, under two conditions: secrets
+stay below the SDK, and nothing SCaaS is signed blind for an app; if either cannot be met for an app core, the task stops
+and the owner decides** (coordinator conditions, controller calls, owner may override; SPECIFIED). (1) Key handles only: a
+KEM-unwrapped key, a derived key, an Argon2id output stay in `ua-rs` behind handles of one usage each (`Derive`, `Data`,
+`KeyWrap`, refused for any other use) without `Clone`, `Debug` or a byte accessor, scoped to their app core and released
+by `destroy` or at the seed's lock; wrap, unwrap, HKDF, HMAC, Argon2id, AEAD and key sealing (under a key-wrap constant no
+data seal produces) run in `ua-rs` on them; the only bytes that leave are plaintexts the app core asks to decrypt for the
+user; labels stay under the core's own declared prefixes, no two cores' prefixes overlapping. Scoping avoids collisions; it
+does not isolate: an app holding the user's unlocked seed set acts for that UA in every app namespace, so only reviewed app
+cores are linked. (2) The app signing call takes typed data, never a digest, and signs only a portable record under
+`appPurpose(appId)` whose domain is exactly `name, version, salt` with `salt = appId`, or a chain-bound record under the
+app's own purpose with the profile's `chainId` and the app's `verifyingContract`; it refuses by name every `UAKinds`
+purpose constant (the guard on the chain-bound path) and every domain of a SCaaS contract or of the registry (by name, by
+address, by chain), each refusal tested with a positive control and a mutant. Reads of ciphertexts the app core decrypts are decryption reads under
+[CLI-SDK-10](#CLI-SDK-10); writes are operations under [CLI-SDK-08](#CLI-SDK-08). Design: spec §12.
 
 ## 8. Runtime, events, errors
 
@@ -202,10 +231,10 @@ the SDK adopts the app's tokio runtime or starts its own for a binding, and ever
 generator that polls from a foreign executor never runs I/O outside a reactor. Scrypt, Argon2id, proofs and slow key generation run off
 the async workers, bounded (one at a time by default). A dropped call means: a read is abandoned, a store write completes or leaves the
 old item, a submission completes to its written state. Events (seed locked and unlocked, keystore changes, mismatches and rollbacks,
-abandoned hidden-set operations, operation states, balances, history items, dropped endpoints, chat) go to each subscriber's bounded
+abandoned hidden-set operations, operation states, balances, history items, dropped endpoints) go to each subscriber's bounded
 queue; a slow subscriber gets `Lagged` with the count missed and re-reads state, and the SDK never waits for it. Watching is bounded per
 poll. No event callback crosses a binding: the only interfaces an app implements are `SecureStore` and `Authenticator`, whose errors
-include an unexpected-callback case, so a host exception never panics the SDK.
+include an unexpected-callback case, so a host exception never panics the SDK. A change of the SDK's state by another process is the event `StateChanged` (found by a cheap read of the state's revision on each poll, or at once where the store reports changes) (owner 2026-11-17, "OK, all four points as proposed").
 
 <a id="CLI-SDK-13"></a>**CLI-SDK-13** — **Errors are named, stable codes; the layers below keep their names** (SPECIFIED). An error
 answers `code()`, the variant's name, appended and never reused. `ua-rs`'s and `scaas-rpc`'s codes pass through by their own names (a
@@ -217,7 +246,9 @@ code of a send outcome, never final ([CLI-RPC-08](scaas-rpc.md#CLI-RPC-08)). A n
 by `code`. The SDK's own names include `StoreConflict`, `KeystoreMismatch`, `KeystoreRollback`, `AccountUnverified`, `SeedUnknown`,
 `SeedExists`, `LabelTaken`, `ConfirmationMissing`, `VaultPassphraseWeak`, `DerivationPassphraseShort`, `OriginSignature`,
 `AuthenticatorRefused`, `ProfileMismatch`, `FeatureMissing`, `PreparedStale`, `PreparedUnknown`, `OpaqueCallRefused`, `FeeAboveCap`,
-`GasAboveTxCap`, `PayerDelegated`, `SubmitPathNone`, `VerdictRefused`, `TxTypeRefused`, `RawDigestRefused`, `RuntimeRequired`. A
+`GasAboveTxCap`, `PayerDelegated`, `SubmitPathNone`, `VerdictRefused`, `TxTypeRefused`, `RawDigestRefused`, `AppDomainRefused`,
+`AppPurposeRefused`, `AppSaltMismatch`, `AppHandleForeign`, `AppLabelRefused`, `AppKeyUsage`, `AppArenaFull`, `KemKeyGone`,
+`ReceiverUnregistered`, `RegistrationUaMismatch`, `RegistrationKindDisabled`, `RegistrationPopInvalid`, `RegistrationKemMissing`. A
 warning (`short_seed`, `imported_key`) comes beside a success, never as an error.
 
 ## 9. Bindings
@@ -230,8 +261,8 @@ two platform interfaces as one generated record of async closures); UniFFI with 
 Python when an app asks), confirmed by a spike before the API grows; `wasm-bindgen` for the browser (PLANNED). UniFFI's internal
 `extern "C"` layer is not a C API: the SDK has no C ABI of its own in this round, and `ua-c` stays the signer's C surface. No binding is
 written by hand per language, and no app-facing binding wraps `ua-rs` directly. No panic crosses the boundary (unwinding builds, every
-call caught, a failed task `Internal`). An app links one Rust static library that holds the SDK (and, in scaas-app's `scaas` build, its
-Matrix crate and `pqchat-core`); two Rust libraries in one process are not allowed. Each generated binding refuses, at load, a library
+call caught, a failed task `Internal`). An app links one Rust static library that holds the SDK and its app cores (scaas-app's
+`app-core-rust`, [CLI-SDK-19](#CLI-SDK-19)); two Rust libraries in one process are not allowed. Each generated binding refuses, at load, a library
 whose API version or feature bits differ from what it was generated against (`AbiMismatch`). `ua-rs`'s existing wrappers stay as they
 are for clients that use the signer without the SDK ([the wallet surface](ua-libraries.md#the-wallet-surface-of-ua-rs-built)).
 
@@ -269,7 +300,7 @@ Polkadot networks join when `ua-rs` has them (PLANNED).
 flags, JSON or a table; it shows the review and the quote and asks before submitting. Passphrases, words and keys come from the
 terminal without echo or from a file descriptor, never from the command line or the environment; nothing secret is printed except a
 new seed's one reveal. It shares its data directory with the TUI and the app under the keystore's lock, holds no logic of its own and
-serves as the reference client of the SDK's end-to-end tests.
+serves as the reference client of the SDK's end-to-end tests. Its profiles are pinned (owner 2026-11-17, "OK, all four points as proposed"): compiled in or digest-pinned in a release build; a profile file only in a development build that says so on every run; an overlay may add a credential by file and lower caps, never change a `chain_uid`, a contract or an RPC list. It shares its call and action names with `scaas-tui`; neither calls the other.
 
 The interactive terminal front-end over the SDK is `scaas-tui`, a separate program with its own rules
 ([CLI-TUI-01](scaas-tui.md#CLI-TUI-01)): a session that follows events and reviews every operation on screen, where the CLI runs one

@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+[package]
+name = "scaas-rpc"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97.1"
+publish = false
+license-file = "../../LICENSE"
+description = "SCaaS network crate: endpoint lists (ARCH-POS-15), failover and strict-majority reads, bounded transport, the scaas-node client. No keys, no signing (CLI-RPC-01). UNAUDITED."
+
+# docs/clients/scaas-rpc.md (CLI-RPC-01..12), spec docs/superpowers/specs/2026-11-17-scaas-rpc.md §3.
+[features]
+default = ["evm", "node-client"]
+evm = ["dep:alloy", "dep:tower"]
+# the nine other families: their transport and generic reads move after the EVM part (plan T14-T22)
+soroban = []
+solana = []
+near = []
+algorand = []
+aptos = []
+sui = []
+cosmos = []
+ton = []
+node-client = []
+# the node's raw reads (`raw_read`, `raw_read_at`, `connect_shared`); never enabled by the SDK (F15, F23)
+node-internal = ["evm"]
+
+[dependencies]
+# its flat JSON depth scan, `scaas_ua::json::depth_within` (spec §7, F20)
+scaas-ua = { path = "../ua-rs", default-features = false, features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+futures = "0.3"
+url = "2"
+web-time = "1"
+zeroize = "1"
+# NODE-GW-02's HMAC of a gateway endpoint (its nonce from the OS, base64url)
+hmac = "0.12"
+sha2 = "0.10"
+base64 = "0.22"
+getrandom = "0.2"
+alloy = { version = "~1.6", default-features = false, features = ["std", "provider-http", "rpc-types", "sol-types", "network", "eips", "consensus", "json-rpc"], optional = true }
+tower = { version = "0.5", optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# wasm32: the fetch backend; no `stream` on either target (`chunk()` needs none natively; its wasm-streams is not in the offline registry)
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
+# alloy's getrandom 0.2 needs its `js` backend on wasm32-unknown-unknown
+getrandom = { version = "0.2", features = ["js"] }
+
+[dev-dependencies]
+# tests/anvil.rs signs one transfer with anvil's dev key (never a normal dependency: the crate signs nothing)
+alloy = { version = "~1.6", default-features = false, features = ["signer-local", "network", "consensus"] }
+toml = "0.8"
+tokio = { version = "1", features = ["full", "test-util"] }
+axum = "0.8"
+proptest = "1"

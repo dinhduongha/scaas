@@ -1,0 +1,8 @@
+# t7 mutants at commit b77670551 (name | outcome | test)
+trust the answered hash | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes another_id_is_refused
+read a refusal as Replaced (a nonce not above) | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes all_refused_is_rejected_and_not_final
+Final without the depth | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes final_from_a_discovered_first_endpoint_is_not_terminal
+terminal from endpoint 1 | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes replaced_from_a_later_endpoint_is_pending
+Replaced without the transaction-by-hash read | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes replaced_needs_the_transaction_unknown
+the receipt's block hash not checked | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_receipt_whose_block_hash_is_not_the_header_is_not_counted
+6 mutants, 6 killed, 0 survived, 0 not loaded

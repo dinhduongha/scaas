@@ -4,7 +4,6 @@
 //! một tx bay mỗi lane, tự trả phí (RS11-6). `RawTransaction` BCS dựng TẠI ĐÂY, không crate `aptos-sdk` (RS11-7);
 //! hash tx tính trước khi gửi. Event đọc qua Aptos Indexer API (GraphQL) làm GỢI Ý tx của package, nội dung và tính
 //! thành công đọc lại từ fullnode REST (owner OQ2; RS11-9).
-use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
@@ -12,6 +11,8 @@ use serde_json::{json, Value};
 use sha3::{Digest, Sha3_256};
 
 use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Rejected, Signed, TxStatus};
+use crate::adapters::evm::{building, BUILDING};
+use scaas_rpc::family::FamilyError;
 use crate::chain::SimError;
 use crate::config::ChainCfg;
 use crate::odoo::Job;
@@ -23,6 +24,9 @@ const DOMAIN: &[u8] = b"scaas.metaop.v1";
 const OP_PAY: u8 = 0;
 const DEFAULT_TTL: u64 = 600;
 const DEFAULT_MAX_GAS: u64 = 200_000;
+/// `params.max_gas_unit_price`'s default (octas per gas unit; mainnet's minimum is 100): the most a lane pays per gas unit,
+/// whatever an endpoint quotes (CLI-RPC-05, scaas-rpc T24.4).
+const DEFAULT_MAX_GAS_PRICE: u64 = 10_000;
 const PROCESSOR: &str = "user_transaction_processor";
 const BCS_SIGNED_TX: &str = "application/x.aptos.signed_transaction+bcs";
 /// Lỗi validation (trước khi chạy): gửi lại cùng bytes không bao giờ qua ⇒ `Rejected` (RS11-8, spec §6.4).
@@ -670,18 +674,42 @@ pub fn normalize(package: &Addr, tokens: &[String], ev: &Value, block: u64, bloc
 pub struct AptosAdapter {
     key: String,
     chain_id: u8,
-    rest: Vec<String>,
-    indexer: String,
-    indexer_key: Option<String>,
-    http: reqwest::Client,
+    /// the REST endpoints and the Indexer API (scaas-rpc T19: the family client, bounded, 20 s per request; the indexer's key
+    /// to the indexer only, as before)
+    net: scaas_rpc::aptos::Aptos,
     package: Addr,
     ttl: u64,
     max_gas: u64,
+    /// the gas unit price cap (CLI-RPC-05, T24.4)
+    max_gas_price: u64,
     quorum: usize,
     lanes: Vec<Lane>,
     signers: Vec<LocalSigner>,
     relay_fee: RelayFeePolicy,
 }
+
+/// A view the first endpoint answered with a status other than 2xx: its status and body as it sent them (scaas-rpc T24.1).
+#[derive(Debug)]
+struct ViewRefused {
+    function: String,
+    status: u16,
+    body: Value,
+}
+
+impl ViewRefused {
+    /// The Move VM's abort: a 400 whose message names it.
+    fn is_abort(&self) -> bool {
+        self.status == 400 && self.body["message"].as_str().is_some_and(|m| m.contains("Move abort"))
+    }
+}
+
+impl std::fmt::Display for ViewRefused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "view {}: HTTP {}: {}", self.function, self.status, scaas_rpc::error::endpoint_text(&self.body.to_string()))
+    }
+}
+
+impl std::error::Error for ViewRefused {}
 
 struct Work {
     op: MetaOp,
@@ -722,13 +750,16 @@ impl AptosAdapter {
         Ok(Self {
             key: cfg.chain_key(),
             chain_id,
-            rest: cfg.rpc_urls.iter().map(|u| u.trim_end_matches('/').to_string()).collect(),
-            indexer: indexer.to_string(),
-            indexer_key,
-            http: reqwest::Client::builder().timeout(Duration::from_secs(20)).build()?,
+            net: scaas_rpc::aptos::Aptos::new(
+                scaas_rpc::family::Client::of_urls(&cfg.rpc_urls, None).map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?,
+                scaas_rpc::family::Client::of_urls(&[indexer.to_string()], indexer_key.map(|k| scaas_rpc::EndpointAuth::Bearer(scaas_rpc::Secret::new(&k))))
+                    .map_err(|e| anyhow!("chain {}: params.indexer_url: {e}", cfg.chain_key()))?,
+                chain_id,
+            ),
             package,
             ttl: n("tx_ttl_s", DEFAULT_TTL).max(30),
             max_gas: n("max_gas_amount", DEFAULT_MAX_GAS),
+            max_gas_price: n("max_gas_unit_price", DEFAULT_MAX_GAS_PRICE),
             quorum: cfg.finality.quorum.max(1),
             lanes,
             signers: own,
@@ -736,44 +767,84 @@ impl AptosAdapter {
         })
     }
 
-    async fn get_at(&self, base: &str, path: &str) -> Result<Option<Value>> {
-        let r = self.http.get(format!("{base}{path}")).send().await?;
-        if r.status() == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-        let status = r.status();
-        let body = r.text().await?;
-        if !status.is_success() {
-            bail!("GET {path}: HTTP {status}: {body}");
-        }
-        Ok(Some(serde_json::from_str(&body)?))
+    /// GET on endpoint `i` (scaas-rpc T19: the family client): a 404 is `None`.
+    async fn get_at(&self, i: usize, path: &str) -> Result<Option<Value>> {
+        self.net.get_at(i, path).await.map_err(|e| anyhow!("GET {path}: {e}"))
     }
 
     async fn get(&self, path: &str) -> Result<Value> {
-        self.get_at(&self.rest[0], path).await?.ok_or_else(|| anyhow!("GET {path}: not found"))
+        match self.request(path, None).await? {
+            (200..=299, v) => Ok(v),
+            (404, _) => bail!("GET {path}: not found"),
+            (status, v) => bail!("GET {path}: HTTP {status}: {}", v.as_str().unwrap_or_default()),
+        }
+    }
+
+    /// One request on endpoint `i`: its status and body (a 404's body `null`, another 4xx's its text).
+    async fn request_at(&self, i: usize, path: &str, post: Option<(&[u8], &str)>) -> std::result::Result<(u16, Value), FamilyError> {
+        match post {
+            Some((body, ctype)) => self.net.post_json(i, path, body.to_vec(), ctype).await,
+            None => match self.net.get_at(i, path).await {
+                Ok(Some(v)) => Ok((200, v)),
+                Ok(None) => Ok((404, Value::Null)),
+                Err(FamilyError::Status { status, message }) => Ok((status, Value::String(message))),
+                Err(e) => Err(e),
+            },
+        }
+    }
+
+    /// A request (GET, or POST `post`'s body and type): `build`'s fail over, any other is endpoint 0's (F3: a status,
+    /// `op_consumed`, the lane sequence, the landed fee, the lane balance). ARCH-POS-15 (CLI-RPC-04, scaas-rpc T19b):
+    /// endpoint 0, then each next endpoint of this network (ledger info `chain_id`) not behind the block height endpoint 0 last
+    /// showed. A 400 (a view's abort, a refused simulate) is endpoint 0's to classify as before, a later endpoint's no verdict
+    /// (the next is asked); any other status fails over (T24.3); every endpoint failing is a transport error that carries no later
+    /// endpoint's refusal (no classifier may read it as the job's); what a failover endpoint's answer refuses `build`
+    /// requeues.
+    async fn request(&self, path: &str, post: Option<(&[u8], &str)>) -> Result<(u16, Value)> {
+        if !building() {
+            return self.request_at(0, path, post).await.map_err(|e| anyhow!("{path}: {e}"));
+        }
+        use scaas_rpc::pool::ReadError;
+        let a = self.net.client.failover(&self.net, |i| async move {
+            match self.request_at(i, path, post).await {
+                Ok((s, v)) if (200..300).contains(&s) => Ok((s, v)),
+                // T24.3: a 400 (the Move VM's answer: a view's abort, a refused simulate) is endpoint 0's to classify;
+                // any other status (a rate limit, a 404, a 5xx) is the endpoint's failure and fails over
+                Ok((400, v)) => Err(ReadError::Revert { data: vec![], reason: format!("400\n{v}") }),
+                Ok((s, _)) => Err(ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Http, &format!("{path}: HTTP {s}")))),
+                Err(FamilyError::Failure(f)) => Err(ReadError::Failure(f)),
+                Err(e) => Err(ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string()))),
+            }
+        }).await;
+        match a {
+            Ok(a) => Ok(a.value),
+            // endpoint 0's own answer: the caller's to classify, as before
+            Err(scaas_rpc::RpcError::Revert { reason, .. }) => {
+                let (s, v) = reason.split_once('\n').unwrap_or(("0", "null"));
+                Ok((s.parse().unwrap_or(0), serde_json::from_str(v).unwrap_or(Value::Null)))
+            }
+            Err(e) => Err(crate::adapters::evm::all_failed(path, &e)),
+        }
+    }
+
+    fn failovers(&self) -> u64 {
+        self.net.client.pool().failover_answers()
     }
 
     async fn view(&self, function: &str, type_args: &[&str], args: &[impl serde::Serialize]) -> Result<Value> {
-        let body = json!({"function": function, "type_arguments": type_args, "arguments": args});
-        let r = self.http.post(format!("{}/view", self.rest[0])).json(&body).send().await?;
-        let status = r.status();
-        let v: Value = r.json().await?;
-        if !status.is_success() {
-            bail!("view {function}: HTTP {status}: {v}");
+        let body = serde_json::to_vec(&json!({"function": function, "type_arguments": type_args, "arguments": args}))?;
+        let (status, v) = self.request("/view", Some((&body, "application/json"))).await.map_err(|e| anyhow!("view {function}: {e}"))?;
+        if !(200..300).contains(&status) {
+            return Err(ViewRefused { function: function.into(), status, body: v }.into());
         }
         Ok(v[0].clone())
     }
 
     async fn graphql(&self, query: &str, variables: Value) -> Result<Value> {
-        let mut req = self.http.post(&self.indexer).json(&json!({"query": query, "variables": variables}));
-        if let Some(k) = &self.indexer_key {
-            req = req.bearer_auth(k);
-        }
-        let v: Value = req.send().await?.error_for_status()?.json().await?;
-        if let Some(e) = v.get("errors") {
-            bail!("indexer: {e}");
-        }
-        Ok(v["data"].clone())
+        self.net.graphql(query, variables).await.map_err(|e| match e {
+            scaas_rpc::family::FamilyError::Rpc { error, .. } => anyhow!("indexer: {error}"),
+            e => anyhow!("indexer: {e}"),
+        })
     }
 
     /// Phiên bản ledger cuối mà processor `user_transactions` đã xử lý (cursor không vượt nó — owner OQ2).
@@ -823,9 +894,19 @@ impl AptosAdapter {
         args.extend([op.valid_until.to_string(), addr_hex(&op.relayer), hx(&op.extra), hx(&a.public_key), hx(&a.sig), hx(&a.envelope)]);
         match self.view(&format!("{}::meta::{function}", addr_hex(&self.package)), &[], &args).await {
             Ok(_) => Ok(()),
-            Err(e) if format!("{e:#}").contains("Move abort") => Err(SimError::Revert(format!("{e:#}"))),
+            // T24.1: the abort is read only from endpoint 0's own answer (a typed `ViewRefused`), never from an error's text
+            Err(e) if e.downcast_ref::<ViewRefused>().is_some_and(ViewRefused::is_abort) => Err(SimError::Revert(format!("{e:#}"))),
             Err(e) => Err(transport(e)),
         }
+    }
+
+    /// CLI-RPC-05 (scaas-rpc T24.4): a gas unit price above `params.max_gas_unit_price` is never paid: `Transport` (no verdict,
+    /// the job is requeued), whichever endpoint quoted it.
+    fn capped_price(&self, price: u64) -> std::result::Result<u64, SimError> {
+        if price > self.max_gas_price {
+            return Err(SimError::Transport(format!("gas unit price {price} above params.max_gas_unit_price {}", self.max_gas_price)));
+        }
+        Ok(price)
     }
 
     fn lane_addr(&self, lane: usize) -> Result<Addr> {
@@ -836,31 +917,71 @@ impl AptosAdapter {
         num(&self.get("/estimate_gas_price").await?["gas_estimate"]).ok_or_else(|| anyhow!("bad gas estimate"))
     }
 
-    async fn block(&self, base: &str, height: u64) -> Result<Value> {
-        self.get_at(base, &format!("/blocks/by_height/{height}")).await?.ok_or_else(|| anyhow!("block {height} not served"))
+    async fn block(&self, i: usize, height: u64) -> Result<Value> {
+        self.get_at(i, &format!("/blocks/by_height/{height}")).await?.ok_or_else(|| anyhow!("block {height} not served"))
     }
 
     /// `path` từ `rest[0]`; `quorum > 1` ⇒ thêm endpoint phải trả cùng `pick` cho tới đủ quorum. Nội dung tx (event,
     /// thành công, hash) và block chịu cùng quy tắc với hash block ở `final_head` (review L3).
     async fn agreed(&self, path: &str, pick: fn(&Value) -> Value) -> Result<Value> {
-        let v = self.get(path).await?;
-        if self.quorum > 1 {
-            let want = pick(&v);
-            let mut agree = 1;
-            for url in &self.rest[1..] {
-                if matches!(self.get_at(url, path).await, Ok(Some(o)) if pick(&o) == want) {
-                    agree += 1;
-                }
-            }
-            if agree < self.quorum {
-                bail!("GET {path}: {agree} endpoint(s) agree, quorum is {}", self.quorum);
-            }
-        }
-        Ok(v)
+        self.net.agreed(path, pick, self.quorum).await.map_err(|e| match e {
+            scaas_rpc::family::AgreedError::First(e) => anyhow!("GET {path}: {e}"),
+            scaas_rpc::family::AgreedError::Quorum { agree, quorum } => anyhow!("GET {path}: {agree} endpoint(s) agree, quorum is {quorum}"),
+        })
     }
 
     fn block_hash_of(b: &Value) -> Result<String> {
         bytes_of(&b["block_hash"]).filter(|h| h.len() == 32).map(|h| addr_hex(&h)).ok_or_else(|| anyhow!("bad block hash"))
+    }
+
+    /// Mô phỏng với chữ ký toàn số 0 (API từ chối mô phỏng tx có chữ ký hợp lệ). Abort ⇒ `Revert` (job chết).
+    async fn build_on(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
+        let w = self.work(job).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
+        if w.op.valid_until <= now() {
+            return Err(SimError::Revert("payload expired".into()));
+        }
+        let sender = self.lane_addr(lane).map_err(transport)?;
+        if matches!(w.entry, Entry::Fee { .. }) {
+            relay_payee(&self.relay_fee, &w.op, &sender).map_err(|e| SimError::Revert(format!("{e:#}")))?;
+        }
+        let seq = self.sequence(lane).await.map_err(transport)?;
+        let price = self.capped_price(self.gas_price().await.map_err(transport)?)?;
+        let payload = match &w.entry {
+            Entry::Pay => relay_pay_payload(&self.package, &w.op, &w.auth),
+            Entry::PayMeta { salt, meta } => relay_pay_meta_payload(&self.package, &w.op, &w.auth, salt, meta),
+            Entry::Fee { call } => relay_fee_payload(&self.package, &w.op, &w.auth, call),
+        };
+        let exp = w.op.valid_until.min(now() + self.ttl);
+        if !self.account_exists(&w.op.from).await.map_err(transport)? {
+            if matches!(w.entry, Entry::Fee { .. }) {
+                // No view runs the wrapped call, and `simulate` hangs on a payment that opens the Account (below):
+                // fail closed. The payer opens its Account first (`meta::open` or any plain pay).
+                return Err(SimError::Revert("relay-fee: the payer's Account is not open yet".into()));
+            }
+            // Account chưa mở: `simulate` của aptos-node 9.6.0 treo với tx vừa tạo object vừa chi từ store có sẵn của nó
+            // (tx thật chạy bình thường — spec §16). View `pay_check` chạy đúng mọi kiểm tra của `relay_pay` thay mô
+            // phỏng; gas = trần cấu hình (lần chi đầu gồm phí lưu trữ Account).
+            self.pay_check(&sender, &w).await?;
+            let meta = json!({"max_gas": self.max_gas, "gas_price": price, "expiration": exp});
+            return Ok(Built { job_id: job.id, body: payload, valid_until: w.op.valid_until, meta });
+        }
+        let raw = raw_tx(&sender, seq, &payload, self.max_gas, price, exp, self.chain_id);
+        let pk = &self.signers[lane].public_key();
+        let body = signed_tx(&raw, pk, &[0u8; 64]);
+        let path = "/transactions/simulate?estimate_max_gas_amount=true&estimate_gas_unit_price=true";
+        let (status, v) = self.request(path, Some((&body, BCS_SIGNED_TX))).await.map_err(transport)?;
+        if !(200..300).contains(&status) {
+            return Err(SimError::Transport(format!("simulate HTTP {status}: {v}")));
+        }
+        let sim = &v[0];
+        if sim["success"].as_bool() != Some(true) {
+            return Err(SimError::Revert(sim["vm_status"].as_str().unwrap_or("simulation failed").to_string()));
+        }
+        let used = num(&sim["gas_used"]).unwrap_or(0);
+        let max_gas = (used + used.div_ceil(10) * 3).max(used + 10).min(self.max_gas);
+        let price = self.capped_price(num(&sim["gas_unit_price"]).unwrap_or(price).max(price))?;
+        let meta = json!({"max_gas": max_gas, "gas_price": price, "expiration": exp});
+        Ok(Built { job_id: job.id, body: payload, valid_until: w.op.valid_until, meta })
     }
 }
 
@@ -890,56 +1011,14 @@ impl ChainAdapter for AptosAdapter {
         Ok(Some(next > w.op.nonce))
     }
 
-    /// Mô phỏng với chữ ký toàn số 0 (API từ chối mô phỏng tx có chữ ký hợp lệ). Abort ⇒ `Revert` (job chết).
+    /// [`AptosAdapter::build_on`], its reads failed over (scaas-rpc T19b, R4: a refusal read while a failover endpoint answered
+    /// is no verdict).
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
-        let w = self.work(job).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
-        if w.op.valid_until <= now() {
-            return Err(SimError::Revert("payload expired".into()));
+        let mark = self.failovers();
+        match BUILDING.scope((), self.build_on(job, lane)).await {
+            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),
+            r => r,
         }
-        let sender = self.lane_addr(lane).map_err(transport)?;
-        if matches!(w.entry, Entry::Fee { .. }) {
-            relay_payee(&self.relay_fee, &w.op, &sender).map_err(|e| SimError::Revert(format!("{e:#}")))?;
-        }
-        let seq = self.sequence(lane).await.map_err(transport)?;
-        let price = self.gas_price().await.map_err(transport)?;
-        let payload = match &w.entry {
-            Entry::Pay => relay_pay_payload(&self.package, &w.op, &w.auth),
-            Entry::PayMeta { salt, meta } => relay_pay_meta_payload(&self.package, &w.op, &w.auth, salt, meta),
-            Entry::Fee { call } => relay_fee_payload(&self.package, &w.op, &w.auth, call),
-        };
-        let exp = w.op.valid_until.min(now() + self.ttl);
-        if !self.account_exists(&w.op.from).await.map_err(transport)? {
-            if matches!(w.entry, Entry::Fee { .. }) {
-                // No view runs the wrapped call, and `simulate` hangs on a payment that opens the Account (below):
-                // fail closed. The payer opens its Account first (`meta::open` or any plain pay).
-                return Err(SimError::Revert("relay-fee: the payer's Account is not open yet".into()));
-            }
-            // Account chưa mở: `simulate` của aptos-node 9.6.0 treo với tx vừa tạo object vừa chi từ store có sẵn của nó
-            // (tx thật chạy bình thường — spec §16). View `pay_check` chạy đúng mọi kiểm tra của `relay_pay` thay mô
-            // phỏng; gas = trần cấu hình (lần chi đầu gồm phí lưu trữ Account).
-            self.pay_check(&sender, &w).await?;
-            let meta = json!({"max_gas": self.max_gas, "gas_price": price, "expiration": exp});
-            return Ok(Built { job_id: job.id, body: payload, valid_until: w.op.valid_until, meta });
-        }
-        let raw = raw_tx(&sender, seq, &payload, self.max_gas, price, exp, self.chain_id);
-        let pk = &self.signers[lane].public_key();
-        let body = signed_tx(&raw, pk, &[0u8; 64]);
-        let url = format!("{}/transactions/simulate?estimate_max_gas_amount=true&estimate_gas_unit_price=true", self.rest[0]);
-        let r = self.http.post(url).header("content-type", BCS_SIGNED_TX).body(body).send().await.map_err(|e| transport(e.into()))?;
-        let status = r.status();
-        let v: Value = r.json().await.map_err(|e| transport(e.into()))?;
-        if !status.is_success() {
-            return Err(SimError::Transport(format!("simulate HTTP {status}: {v}")));
-        }
-        let sim = &v[0];
-        if sim["success"].as_bool() != Some(true) {
-            return Err(SimError::Revert(sim["vm_status"].as_str().unwrap_or("simulation failed").to_string()));
-        }
-        let used = num(&sim["gas_used"]).unwrap_or(0);
-        let max_gas = (used + used.div_ceil(10) * 3).max(used + 10).min(self.max_gas);
-        let price = num(&sim["gas_unit_price"]).unwrap_or(price).max(price);
-        let meta = json!({"max_gas": max_gas, "gas_price": price, "expiration": exp});
-        Ok(Built { job_id: job.id, body: payload, valid_until: w.op.valid_until, meta })
     }
 
     async fn sign(&self, built: Built, lane: usize, sequence: u64) -> Result<Signed> {
@@ -952,23 +1031,28 @@ impl ChainAdapter for AptosAdapter {
     }
 
     async fn submit(&self, signed: &Signed) -> Result<()> {
-        let r = self.http.post(format!("{}/transactions", self.rest[0]))
-            .header("content-type", BCS_SIGNED_TX).body(signed.raw.clone()).send().await?;
-        let status = r.status().as_u16();
-        let body = r.text().await?;
+        let (status, body) = self.net.post_text(0, "/transactions", signed.raw.clone(), BCS_SIGNED_TX).await?;
         classify_submit(status, &body)
     }
 
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
-        let Some(tx) = self.get_at(&self.rest[0], &format!("/transactions/by_hash/{tx_id}")).await? else {
-            return Ok(TxStatus::Unknown);
-        };
-        if tx["type"].as_str() == Some("pending_transaction") {
-            return Ok(TxStatus::Pending);
+        let st: Result<TxStatus> = async {
+            let Some(tx) = self.get_at(0, &format!("/transactions/by_hash/{tx_id}")).await? else {
+                return Ok(TxStatus::Unknown);
+            };
+            if tx["type"].as_str() == Some("pending_transaction") {
+                return Ok(TxStatus::Pending);
+            }
+            let version = num(&tx["version"]).ok_or_else(|| anyhow!("committed tx without version"))?;
+            let b = self.get(&format!("/blocks/by_version/{version}")).await?;
+            classify_committed(&tx, num(&b["block_height"]).ok_or_else(|| anyhow!("bad block height"))?)
         }
-        let version = num(&tx["version"]).ok_or_else(|| anyhow!("committed tx without version"))?;
-        let b = self.get(&format!("/blocks/by_version/{version}")).await?;
-        classify_committed(&tx, num(&b["block_height"]).ok_or_else(|| anyhow!("bad block height"))?)
+        .await;
+        // scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed raises the failover reads' floor
+        if let Ok(TxStatus::Mined { height, .. }) = &st {
+            self.net.client.pool().saw_block(*height);
+        }
+        st
     }
 
     /// Sequence ĐÃ COMMIT (0 cho tài khoản stateless — AIP-115).
@@ -983,7 +1067,7 @@ impl ChainAdapter for AptosAdapter {
     }
 
     async fn tx_fee(&self, tx_id: &str) -> Result<Option<u128>> {
-        let tx = self.get_at(&self.rest[0], &format!("/transactions/by_hash/{tx_id}")).await?.ok_or_else(|| anyhow!("{tx_id} not found"))?;
+        let tx = self.get_at(0, &format!("/transactions/by_hash/{tx_id}")).await?.ok_or_else(|| anyhow!("{tx_id} not found"))?;
         let fee = num(&tx["gas_used"]).zip(num(&tx["gas_unit_price"])).map(|(g, p)| g as u128 * p as u128);
         Ok(Some(fee.ok_or_else(|| anyhow!("{tx_id}: no gas_used or gas_unit_price"))?))
     }
@@ -992,16 +1076,17 @@ impl ChainAdapter for AptosAdapter {
     /// không bao giờ vượt indexer (owner OQ2); nhiều `rpc_urls` ⇒ cùng hash ở đỉnh đó (quorum).
     async fn final_head(&self) -> Result<Option<Head>> {
         let head = num(&self.get("").await?["block_height"]).ok_or_else(|| anyhow!("bad ledger info"))?;
+        self.net.client.pool().saw_block(head); // the failover reads' floor: endpoint 0's block height
         let done = self.indexed_version().await?;
         let b = self.get(&format!("/blocks/by_version/{done}")).await?;
         let (h, last) = (num(&b["block_height"]), num(&b["last_version"]));
         let (Some(h), Some(last)) = (h, last) else { bail!("bad block for version {done}") };
         let indexed = if last == done { Some(h) } else { h.checked_sub(1) };
         let Some(height) = indexed.map(|i| i.min(head)) else { return Ok(None) };
-        let hash = Self::block_hash_of(&self.block(&self.rest[0], height).await?)?;
+        let hash = Self::block_hash_of(&self.block(0, height).await?)?;
         let mut agree = 1;
-        for url in &self.rest[1..] {
-            if self.block(url, height).await.ok().and_then(|b| Self::block_hash_of(&b).ok()).as_deref() == Some(hash.as_str()) {
+        for i in 1..self.net.client.len() {
+            if self.block(i, height).await.ok().and_then(|b| Self::block_hash_of(&b).ok()).as_deref() == Some(hash.as_str()) {
                 agree += 1;
             }
         }
@@ -1009,7 +1094,7 @@ impl ChainAdapter for AptosAdapter {
     }
 
     async fn block_hash(&self, height: u64) -> Result<String> {
-        Self::block_hash_of(&self.block(&self.rest[0], height).await?)
+        Self::block_hash_of(&self.block(0, height).await?)
     }
 
     /// GỢI Ý từ Indexer API: tx người dùng gọi một entry function của package trong vùng block; nội dung (thành công,
@@ -1023,7 +1108,7 @@ impl ChainAdapter for AptosAdapter {
         if tokens.is_empty() || from > to {
             return Ok(vec![]);
         }
-        let last = num(&self.block(&self.rest[0], to).await?["last_version"]).ok_or_else(|| anyhow!("bad block {to}"))?;
+        let last = num(&self.block(0, to).await?["last_version"]).ok_or_else(|| anyhow!("bad block {to}"))?;
         let done = self.indexed_version().await?;
         if done < last {
             bail!("indexer has processed version {done}, block {to} ends at {last}");
@@ -1161,7 +1246,10 @@ mod tests {
         use axum::http::Uri;
         async fn h(State(amount): State<&'static str>, uri: Uri, body: String) -> axum::Json<Value> {
             let p = uri.path();
-            axum::Json(if p == "/graphql" && body.contains("processor_status") {
+            axum::Json(if p == "/" {
+                // scaas-rpc T24.8 (fixture correction): endpoint 0's identity read comes before its reads
+                json!({"chain_id": 4, "block_height": "5"})
+            } else if p == "/graphql" && body.contains("processor_status") {
                 json!({"data": {"processor_status": [{"last_success_version": 1000}]}})
             } else if p == "/graphql" {
                 json!({"data": {"user_transactions": [{"version": 101, "block_height": 5}]}})
@@ -1199,6 +1287,8 @@ mod tests {
     #[tokio::test]
     async fn tx_fee_reads_the_fee_or_fails() {
         let app = axum::Router::new()
+            // scaas-rpc T24.8 (fixture correction): endpoint 0's identity read comes before its reads
+            .route("/", axum::routing::get(|| async { axum::Json(json!({"chain_id": 4, "block_height": "5"})) }))
             .route("/transactions/by_hash/0xaa", axum::routing::get(|| async { axum::Json(json!({"gas_used": "7", "gas_unit_price": "100"})) }))
             .route("/transactions/by_hash/0xbb", axum::routing::get(|| async { axum::Json(json!({"gas_used": "7"})) }));
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1568,5 +1658,265 @@ mod tests {
             op.chain_id = chain;
             prop_assert_eq!(MetaOp::decode(&op.encode()).unwrap(), op);
         }
+    }
+
+    /// scaas-rpc T19a: the Indexer API's key (`indexer_api_key_env`) goes to the indexer only, as before, never to a
+    /// fullnode. Control: unset, the indexer gets none.
+    #[tokio::test]
+    async fn the_indexer_key_goes_to_the_indexer_only() {
+        type Seen = std::sync::Arc<std::sync::Mutex<Vec<(String, Option<String>)>>>;
+        let seen: Seen = Default::default();
+        let s2 = seen.clone();
+        let app = axum::Router::new().fallback(move |uri: axum::http::Uri, h: axum::http::HeaderMap| {
+            let s2 = s2.clone();
+            async move {
+                s2.lock().unwrap().push((uri.path().to_string(), h.get("authorization").and_then(|v| v.to_str().ok()).map(str::to_string)));
+                axum::Json(json!({"data": {"processor_status": [{"last_success_version": 7}]}, "chain_id": 4, "block_height": "3"}))
+            }
+        });
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        let cfg = |key: &str| -> ChainCfg {
+            toml::from_str(&format!("family = \"aptos\"\nnetwork = \"4\"\nrpc_urls = [\"{url}/v1\"]\nlanes = [0]\n\
+                params = {{ package = \"0xb0b\", indexer_url = \"{url}/graphql\"{key} }}")).unwrap()
+        };
+        std::env::set_var("SCAAS_T19_INDEXER_KEY", "ikey");
+        let a = AptosAdapter::new(&cfg(", indexer_api_key_env = \"SCAAS_T19_INDEXER_KEY\""), &[LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()]).unwrap();
+        assert_eq!(a.indexed_version().await.unwrap(), 7);
+        a.get("").await.unwrap();
+        let got = std::mem::take(&mut *seen.lock().unwrap());
+        // T24.8 (an expectation corrected, not weakened): endpoint 0's identity read (ledger info, `/v1`) precedes its read
+        assert_eq!(got, [("/graphql".to_string(), Some("Bearer ikey".to_string())), ("/v1".to_string(), None), ("/v1".to_string(), None)]);
+        let a = AptosAdapter::new(&cfg(""), &[LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()]).unwrap();
+        a.indexed_version().await.unwrap();
+        assert_eq!(seen.lock().unwrap()[0].1, None, "control: no key configured");
+    }
+
+    // ---- scaas-rpc T19b: ARCH-POS-15 failover, the first-endpoint carve-out first (F3) ----
+
+    const DOWN: &str = "http://127.0.0.1:9";
+
+    /// What the fake fullnode answers: the payer's Account open, its pay check and the simulate passing; `check_down`: the
+    /// pay check unanswered (503).
+    #[derive(Clone, Copy)]
+    struct Node {
+        open: bool,
+        check_ok: bool,
+        sim_ok: bool,
+        check_down: bool,
+        /// T24.1: `GET /` (ledger info, the failover's identity read) answers 400 "Move abort…"
+        ledger_abort: bool,
+    }
+
+    /// A fullnode for `build` and the lane reads: ledger info, views (sequence 0, `exists_at`, `pay_check`, `lane_nonce` 1,
+    /// coin balance 100), the gas estimate, the simulate, a landed transaction `0xaa` at version 5 in block 3.
+    async fn fullnode(n: Node) -> String {
+        let app = axum::Router::new().fallback(move |uri: axum::http::Uri, body: axum::body::Bytes| async move {
+            let p = uri.path().trim_start_matches("/v1").to_string();
+            let ok = |v: Value| (axum::http::StatusCode::OK, axum::Json(v));
+            let f = serde_json::from_slice::<Value>(&body).ok().and_then(|b| b["function"].as_str().map(str::to_string)).unwrap_or_default();
+            match p.as_str() {
+                "" if n.ledger_abort => (axum::http::StatusCode::BAD_REQUEST, axum::Json(json!({"message": "Move abort in 0xb0b::meta: E_FORGED(0x1)"}))),
+                "" => ok(json!({"chain_id": 4, "block_height": "3", "ledger_version": "9"})),
+                "/estimate_gas_price" => ok(json!({"gas_estimate": 100})),
+                "/view" if f.ends_with("::get_sequence_number") => ok(json!(["0"])),
+                "/view" if f.ends_with("::exists_at") => ok(json!([n.open])),
+                "/view" if f.ends_with("::lane_nonce") => ok(json!(["1"])),
+                "/view" if f.ends_with("::balance") => ok(json!(["100"])),
+                "/view" if f.ends_with("::pay_check") && n.check_down => (axum::http::StatusCode::SERVICE_UNAVAILABLE, axum::Json(json!({}))),
+                "/view" if f.ends_with("::pay_check") && n.check_ok => ok(json!([])),
+                "/view" => (axum::http::StatusCode::BAD_REQUEST, axum::Json(json!({"message": "Move abort in 0xb0b::meta: E_BAD_SIG(0x6)"}))),
+                "/transactions/simulate" if n.sim_ok => ok(json!([{"success": true, "vm_status": "Executed successfully", "gas_used": "10", "gas_unit_price": "100"}])),
+                "/transactions/simulate" => ok(json!([{"success": false, "vm_status": "Move abort in 0xb0b::meta: E_NONCE(0x3)"}])),
+                "/transactions/by_hash/0xaa" => ok(json!({"type": "user_transaction", "version": "5", "success": true, "vm_status": "Executed successfully",
+                                                          "gas_used": "7", "gas_unit_price": "100"})),
+                "/blocks/by_version/5" => ok(json!({"block_height": "3"})),
+                _ => (axum::http::StatusCode::NOT_FOUND, axum::Json(json!({"message": "not found"}))),
+            }
+        });
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/v1", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        url
+    }
+
+    /// The fullnode behind `first` endpoints in `rpc_urls`.
+    async fn adapter_after(n: Node, first: &[&str]) -> AptosAdapter {
+        let url = fullnode(n).await;
+        adapter_on(&first.iter().map(|u| u.to_string()).chain([url]).collect::<Vec<_>>())
+    }
+
+    fn adapter_on(urls: &[String]) -> AptosAdapter {
+        let urls: Vec<String> = urls.iter().map(|u| format!("\"{u}\"")).collect();
+        let cfg: ChainCfg = toml::from_str(&format!(
+            "family = \"aptos\"\nnetwork = \"4\"\nrpc_urls = [{}]\nlanes = [0]\nparams = {{ package = \"0xb0b\", indexer_url = \"{DOWN}/graphql\" }}",
+            urls.join(", ")
+        ))
+        .unwrap();
+        AptosAdapter::new(&cfg, &[LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()]).unwrap()
+    }
+
+    /// The vectors' plain pay, valid long enough (the adapter never checks its signature: the contract does).
+    fn pay_job() -> Job {
+        let op = MetaOp { valid_until: u64::MAX / 2, ..vector_op() };
+        serde_json::from_value(json!({"id": 7, "kind": "signed_op", "op": {"payload": alloy::hex::encode(op.encode()),
+            "contract": addr_hex(&op.contract), "signature": BLOB, "public_key": ALICE_PK}})).unwrap()
+    }
+
+    const OPEN: Node = Node { open: true, check_ok: true, sim_ok: true, check_down: false, ledger_abort: false };
+
+    /// F3: a status, `op_consumed`, the lane sequence, the landed fee and the lane balance are endpoint 0's only: with it down
+    /// each is unread (asked again; a lagging endpoint 1's "unknown" is never read, so never `dead`), though endpoint 1 holds
+    /// a landed transaction and a consumed lane. Control: endpoint 0 up, each read.
+    #[tokio::test]
+    async fn aptos_tx_status_op_consumed_and_the_lane_sequence_never_fail_over() {
+        let a = adapter_after(OPEN, &[DOWN]).await;
+        assert!(a.tx_status("0xaa").await.is_err(), "unread, never Mined from endpoint 1");
+        assert!(a.op_consumed(&pay_job()).await.is_err());
+        assert!(a.sequence(0).await.is_err());
+        assert!(a.tx_fee("0xaa").await.is_err());
+        assert!(a.lane_balance(0).await.is_err());
+        assert_eq!(a.failovers(), 0);
+        let a = adapter_after(OPEN, &[]).await;
+        assert!(matches!(a.tx_status("0xaa").await.unwrap(), TxStatus::Mined { height: 3, .. }), "control");
+        assert_eq!(a.op_consumed(&pay_job()).await.unwrap(), Some(true));
+        assert_eq!(a.sequence(0).await.unwrap(), 0);
+        assert_eq!(a.tx_fee("0xaa").await.unwrap(), Some(700));
+        assert_eq!(a.lane_balance(0).await.unwrap(), Some(100));
+    }
+
+    /// ARCH-POS-15: `build`'s reads (the sequence and gas price for the simulate, the Account, the pay check, the simulate)
+    /// fail over: endpoint 0 down, endpoint 1 builds. A refusal read while a failover endpoint answered is no verdict
+    /// (FAILOVER_ANSWER, requeued); a failover endpoint's abort decides nothing (transport); the same on endpoint 0 is the job's.
+    #[tokio::test]
+    async fn aptos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict() {
+        let a = adapter_after(OPEN, &[DOWN]).await;
+        let b = a.build(&pay_job(), 0).await.unwrap();
+        assert_eq!(b.meta["gas_price"], 100, "built on endpoint 1");
+        assert!(a.failovers() > 0);
+        let sim_fails = Node { sim_ok: false, ..OPEN };
+        match adapter_after(sim_fails, &[DOWN]).await.build(&pay_job(), 0).await {
+            Err(SimError::Transport(m)) => assert!(m.starts_with("FAILOVER_ANSWER") && m.contains("E_NONCE"), "{m}"),
+            r => panic!("{r:?}"),
+        }
+        assert!(matches!(adapter_after(sim_fails, &[]).await.build(&pay_job(), 0).await, Err(SimError::Revert(m)) if m.contains("E_NONCE")), "control");
+        // an unopened Account: the pay check's abort on a failover endpoint is no verdict
+        let check_aborts = Node { open: false, check_ok: false, ..OPEN };
+        assert!(matches!(adapter_after(check_aborts, &[DOWN]).await.build(&pay_job(), 0).await, Err(SimError::Transport(_))));
+        assert!(matches!(adapter_after(check_aborts, &[]).await.build(&pay_job(), 0).await, Err(SimError::Revert(m)) if m.contains("Move abort")), "control");
+        // endpoint 0 answers every read but the pay check (the counter never moves): endpoint 1's abort still decides nothing
+        let first = fullnode(Node { open: false, check_down: true, ..OPEN }).await;
+        let a = adapter_on(&[first, fullnode(check_aborts).await]);
+        match a.build(&pay_job(), 0).await {
+            Err(SimError::Transport(m)) => assert!(!m.contains("Move abort"), "{m}"),
+            r => panic!("a failover endpoint's abort became a verdict: {r:?}"),
+        }
+        assert_eq!(a.failovers(), 0);
+    }
+
+    /// scaas-rpc T24.1 (P1): a later endpoint's "Move abort" never kills a job. Endpoint 0 answers every read but the pay check
+    /// (503); endpoint 1's identity read (`GET /`) answers 400 "Move abort…": the failover finds no endpoint, and the error the
+    /// pay check reads carries no endpoint's text, so the unsent job is requeued (Transport), never `dead`.
+    #[tokio::test]
+    async fn aptos_a_later_endpoints_forged_abort_never_kills_the_job() {
+        let first = fullnode(Node { open: false, check_down: true, ..OPEN }).await;
+        let forger = fullnode(Node { open: false, check_ok: false, ledger_abort: true, ..OPEN }).await;
+        match adapter_on(&[first, forger]).build(&pay_job(), 0).await {
+            Err(SimError::Transport(m)) => assert!(!m.contains("Move abort"), "{m}"),
+            r => panic!("a later endpoint's text became a verdict: {r:?}"),
+        }
+    }
+
+    /// scaas-rpc T24.1: the abort is endpoint 0's typed answer (a 400 whose `message` is a Move abort), never a text search:
+    /// a 400 whose message is something else is no verdict even when its body quotes "Move abort". Control: the abort.
+    #[tokio::test]
+    async fn aptos_the_abort_is_read_from_endpoint_0s_typed_answer() {
+        let app = axum::Router::new().fallback(|uri: axum::http::Uri, body: axum::body::Bytes| async move {
+            let f = serde_json::from_slice::<Value>(&body).ok().and_then(|b| b["function"].as_str().map(str::to_string)).unwrap_or_default();
+            let ok = |v: Value| (axum::http::StatusCode::OK, axum::Json(v));
+            match uri.path().trim_start_matches("/v1") {
+                "" => ok(json!({"chain_id": 4, "block_height": "3", "ledger_version": "9"})),
+                "/estimate_gas_price" => ok(json!({"gas_estimate": 100})),
+                "/view" if f.ends_with("::get_sequence_number") => ok(json!(["0"])),
+                "/view" if f.ends_with("::exists_at") => ok(json!([false])),
+                _ => (axum::http::StatusCode::BAD_REQUEST, axum::Json(json!({"message": "Invalid input: no such view", "hint": "not a Move abort"}))),
+            }
+        });
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/v1", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        assert!(matches!(adapter_on(&[url]).build(&pay_job(), 0).await, Err(SimError::Transport(_))), "not an abort: no verdict");
+        let aborts = Node { open: false, check_ok: false, ..OPEN };
+        assert!(matches!(adapter_after(aborts, &[]).await.build(&pay_job(), 0).await, Err(SimError::Revert(m)) if m.contains("Move abort")), "control");
+    }
+
+    /// scaas-rpc T24.3: endpoint 0's answer other than a 400 (a rate limit) is its failure, never its verdict: the read fails
+    /// over and endpoint 1 builds the job (endpoint 0 passes its identity read).
+    #[tokio::test]
+    async fn aptos_endpoint_0_rate_limited_fails_over() {
+        let first = crate::adapters::testkit::refusing(&fullnode(OPEN).await, |p, _| p.trim_end_matches('/') == "/v1", 429, json!({"message": "rate limited"})).await;
+        let a = adapter_on(&[first, fullnode(OPEN).await]);
+        a.build(&pay_job(), 0).await.unwrap();
+        assert!(a.failovers() > 0);
+    }
+
+    /// scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed is the failover reads' floor: once it reported a transaction mined
+    /// at block 9 (or its head there), endpoint 1, at block 3, is skipped by `build`. Control: before that, endpoint 1 builds.
+    #[tokio::test]
+    async fn aptos_a_mined_status_and_the_head_raise_the_floor() {
+        let first = || crate::adapters::testkit::scripted(false, |p, _| match p {
+            "/v1" | "/v1/" => Some(json!({"chain_id": 4, "block_height": "9", "ledger_version": "9"})),
+            "/v1/transactions/by_hash/0xaa" => Some(json!({"type": "user_transaction", "version": "5", "success": true, "vm_status": "Executed successfully"})),
+            "/v1/blocks/by_version/5" => Some(json!({"block_height": "9"})),
+            _ => None,
+        });
+        let a = adapter_on(&[format!("{}/v1", first().await), fullnode(OPEN).await]);
+        a.build(&pay_job(), 0).await.unwrap();
+        assert!(matches!(a.tx_status("0xaa").await.unwrap(), TxStatus::Mined { height: 9, .. }));
+        assert!(matches!(a.build(&pay_job(), 0).await, Err(SimError::Transport(_))), "endpoint 1 below block 9: skipped");
+        let a = adapter_on(&[format!("{}/v1", first().await), fullnode(OPEN).await]);
+        let _ = a.final_head().await;
+        assert!(matches!(a.build(&pay_job(), 0).await, Err(SimError::Transport(_))), "the head: the same floor");
+    }
+
+    /// scaas-rpc T24.8 (CLI-RPC-03): endpoint 0 passes its identity before its own reads: one of another network (chain id 5) answers
+    /// no status read (refused unread). Control: the same endpoint of this network answers it.
+    #[tokio::test]
+    async fn aptos_endpoint_0_of_another_network_answers_no_read() {
+        fn tx(p: &str, id: u64) -> Option<Value> {
+            match p {
+                "/v1" | "/v1/" => Some(json!({"chain_id": id, "block_height": "3"})),
+                "/v1/transactions/by_hash/0xaa" => Some(json!({"type": "user_transaction", "version": "5", "success": true, "vm_status": "Executed successfully"})),
+                "/v1/blocks/by_version/5" => Some(json!({"block_height": "3"})),
+                _ => None,
+            }
+        }
+        let other = crate::adapters::testkit::scripted(false, |p, _| tx(p, 5)).await;
+        assert!(adapter_on(&[format!("{other}/v1")]).tx_status("0xaa").await.is_err());
+        let this = crate::adapters::testkit::scripted(false, |p, _| tx(p, 4)).await;
+        assert!(matches!(adapter_on(&[format!("{this}/v1")]).tx_status("0xaa").await.unwrap(), TxStatus::Mined { .. }), "control");
+    }
+
+    /// scaas-rpc T24.4 (CLI-RPC-05, owner 2026-11-18): a gas unit price above `params.max_gas_unit_price` is no verdict
+    /// (`Transport`); at the cap the job is built.
+    #[tokio::test]
+    async fn aptos_a_gas_price_above_the_cap_is_refused() {
+        let on = |cap: u64| {
+            let url = fullnode(OPEN);
+            async move {
+                let cfg: ChainCfg = toml::from_str(&format!(
+                    "family = \"aptos\"\nnetwork = \"4\"\nrpc_urls = [\"{}\"]\nlanes = [0]\nparams = {{ package = \"0xb0b\", indexer_url = \"{DOWN}/graphql\", max_gas_unit_price = {cap} }}",
+                    url.await
+                ))
+                .unwrap();
+                AptosAdapter::new(&cfg, &[LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()]).unwrap()
+            }
+        };
+        match on(99).await.build(&pay_job(), 0).await {
+            Err(SimError::Transport(m)) => assert!(m.contains("max_gas_unit_price"), "{m}"),
+            r => panic!("{r:?}"),
+        }
+        assert_eq!(on(100).await.build(&pay_job(), 0).await.unwrap().meta["gas_price"], 100, "at the cap");
     }
 }

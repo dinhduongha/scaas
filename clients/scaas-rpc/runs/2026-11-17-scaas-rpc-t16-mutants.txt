@@ -1,0 +1,10 @@
+# t16 mutants at commit d5ca7080d (name | outcome | test)
+a: the block produced at the slot itself | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test solana the_finalized_reads
+a: an error answer's code lost | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::solana::tests::an_error_answer_reaches_the_classifier_whole
+a: the identity a constant | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test solana the_failover_drops_another_cluster_and_skips_an_endpoint_behind
+b: tx_status through failover | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::solana::tests::solana_tx_status_op_consumed_and_the_lane_sequence_never_fail_over
+b: op_consumed through failover | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::solana::tests::solana_tx_status_op_consumed_and_the_lane_sequence_never_fail_over
+b: the lane sequence through failover | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::solana::tests::solana_tx_status_op_consumed_and_the_lane_sequence_never_fail_over
+b: the build's simulation on endpoint 0 only | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::solana::tests::solana_build_reads_fail_over_and_a_failover_refusal_is_no_verdict
+b: a failover refusal final (the counter not compared) | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::solana::tests::solana_build_reads_fail_over_and_a_failover_refusal_is_no_verdict
+8 mutants, 8 killed, 0 survived, 0 not loaded

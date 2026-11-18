@@ -753,6 +753,16 @@ pub fn nonce_sequence(value: &[u8; 32]) -> u64 {
     u64::from_le_bytes(value[..8].try_into().unwrap()) & 0x7FFF_FFFF_FFFF_FFFF
 }
 
+/// `getAccountInfo`'s answer: `None` for no account, else its data and owner.
+fn account_of_answer(v: &Value) -> Result<Option<(Vec<u8>, Key)>> {
+    let a = &v["value"];
+    if a.is_null() {
+        return Ok(None);
+    }
+    let data = base64::engine::general_purpose::STANDARD.decode(a["data"][0].as_str().unwrap_or_default())?;
+    Ok(Some((data, key(a["owner"].as_str().unwrap_or_default())?)))
+}
+
 // ------------------------------------------------------------------ classification (spec §6.4)
 
 /// Lỗi JSON-RPC có cấu trúc (để phân loại).
@@ -942,8 +952,8 @@ struct Plan {
 pub struct SolanaAdapter {
     key: String,
     network: Key,
-    rpcs: Vec<String>,
-    http: reqwest::Client,
+    /// the RPC endpoints (scaas-rpc T16: the family client, bounded, 20 s per request)
+    net: scaas_rpc::solana::Solana,
     program: Key,
     max_cu: u32,
     max_priority: u64,
@@ -992,8 +1002,8 @@ impl SolanaAdapter {
         Ok(Self {
             key: cfg.chain_key(),
             network,
-            rpcs: cfg.rpc_urls.clone(),
-            http: reqwest::Client::builder().timeout(Duration::from_secs(20)).build()?,
+            net: scaas_rpc::solana::Solana::new(scaas_rpc::family::Client::of_urls(&cfg.rpc_urls, None)
+                .map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?, &b58(&network)),
             program,
             max_cu: n("max_cu", DEFAULT_MAX_CU as u64).clamp(10_000, 1_400_000) as u32,
             max_priority: n("max_priority_lamports", DEFAULT_MAX_PRIORITY),
@@ -1013,32 +1023,120 @@ impl SolanaAdapter {
         })
     }
 
-    async fn rpc_at(&self, url: &str, method: &str, params: Value) -> Result<Value> {
-        let body = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
-        let v: Value = self.http.post(url).json(&body).send().await?.error_for_status()?.json().await?;
-        if let Some(e) = v.get("error") {
-            return Err(RpcError {
+    /// One JSON-RPC call to endpoint `i` (scaas-rpc T16: the family client); an error answer is the classifier's `RpcError`.
+    async fn rpc_at(&self, i: usize, method: &str, params: Value) -> Result<Value> {
+        match self.net.call(i, method, params).await {
+            Ok(v) => Ok(v),
+            Err(scaas_rpc::family::FamilyError::Rpc { error: e, .. }) => Err(RpcError {
                 code: e["code"].as_i64().unwrap_or(0),
                 message: e["message"].as_str().unwrap_or_default().to_string(),
                 data: e.get("data").cloned().unwrap_or(Value::Null),
             }
-            .into());
+            .into()),
+            Err(e) => Err(e.into()),
         }
-        Ok(v["result"].clone())
     }
 
     async fn rpc(&self, method: &str, params: Value) -> Result<Value> {
-        self.rpc_at(&self.rpcs[0], method, params).await
+        self.rpc_at(0, method, params).await
+    }
+
+    /// [`ChainAdapter::build`]'s body (scaas-rpc T16b: the wrapper compares the failover counter). Dựng + mô phỏng.
+    async fn build_on(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
+        let w = self.work(job).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
+        if w.op.valid_until <= now() {
+            return Err(SimError::Revert("payload expired".into()));
+        }
+        self.check_domain().await.map_err(transport)?;
+        let lk = self.lane_key(lane).map_err(transport)?;
+        let subject = account_of(&self.program, &w.op.from);
+        let subject_exists = self.read_account(&subject, "confirmed").await.map_err(transport)?.is_some();
+        let o = job.op.as_ref().ok_or_else(|| SimError::Revert("not a signed_op job".into()))?;
+        let e = entry(&self.program, &self.network, &lk, &self.relay_fee, &w.op, o).map_err(|e| SimError::Revert(format!("{e:#}")))?;
+        if matches!(e, Entry::Fee { .. } | Entry::Wrapped { .. }) {
+            let pda = find_pda(&[b"lane", &subject, &w.op.lane], &self.program).0;
+            let rent = match self.read_account(&pda, "confirmed").await.map_err(transport)? {
+                Some(_) => None,
+                None => Some(self.read("getMinimumBalanceForRentExemption", json!([LANE_PDA_SPACE])).await.map_err(transport)?
+                    .as_u64().ok_or_else(|| SimError::Transport("bad rent".into()))?),
+            };
+            rent_covered(&self.relay_fee, &w.op, &self.program, &lk, rent).map_err(|e| SimError::Revert(format!("{e:#}")))?;
+        }
+        let pay = Pay { program: self.program, lane: lk, op: &w.op, auth: &w.auth, token_program: w.token_program, subject_exists };
+        let mut ixs = vec![auth_ix(&w.auth, &w.op.digest())];
+        if let Entry::Wrapped { sig, .. } = &e {
+            ixs.push(sig.clone()); // instruction 2: the inner entry's own signature
+        }
+        ixs.push(pay_ix(&pay, &e));
+        let nonce = self.read_nonce(lane).await.map_err(transport)?;
+        let plan = Plan { ixs, budget: Budget { priority_lamports: 0, cu: self.max_cu, loaded_bytes: self.loaded_bytes } };
+        let (raw, _) = self.sign_message(lane, &nonce, &plan).map_err(|e| SimError::Revert(format!("{e:#}")))?;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&raw);
+        let sim = self
+            .read("simulateTransaction", json!([b64, {"encoding": "base64", "sigVerify": false, "replaceRecentBlockhash": false,
+                "commitment": "confirmed"}]))
+            .await
+            .map_err(transport)?;
+        let v = &sim["value"];
+        if !v["err"].is_null() {
+            let logs: Vec<String> = v["logs"].as_array().into_iter().flatten().filter_map(|x| x.as_str().map(String::from)).collect();
+            return Err(classify_sim(&v["err"], &logs));
+        }
+        let used = v["unitsConsumed"].as_u64().unwrap_or(self.max_cu as u64);
+        let cu = (used + used.div_ceil(5)).clamp(1_000, self.max_cu as u64) as u32;
+        let writable: Vec<Key> = plan.ixs.iter().flat_map(|ix| ix.accounts.iter().filter(|a| a.writable).map(|a| a.key)).collect();
+        let budget = Budget { priority_lamports: self.priority_fee(&writable, cu).await, cu, loaded_bytes: self.loaded_bytes };
+        let plan = Plan { ixs: plan.ixs, budget };
+        let body = serde_json::to_vec(&plan).map_err(|e| SimError::Revert(e.to_string()))?;
+        Ok(Built { job_id: job.id, body, valid_until: w.op.valid_until, meta: json!({"units": used, "subject_exists": subject_exists}) })
+    }
+
+    /// ARCH-POS-15 (CLI-RPC-04, scaas-rpc T16b): `build`'s reads, failed over: endpoint 0, then each next endpoint of this
+    /// cluster (`getGenesisHash`) not behind the slot endpoint 0 last showed. Any error answer is the endpoint's failure, as
+    /// endpoint 0's was in `build`; what a failover endpoint's simulation refuses `build` requeues.
+    async fn read(&self, method: &str, params: Value) -> Result<Value> {
+        let a = self.net.client.failover(&self.net, |i| {
+            let params = params.clone();
+            async move {
+                self.net.call(i, method, params).await.map_err(|e| scaas_rpc::pool::ReadError::Failure(match e {
+                    scaas_rpc::family::FamilyError::Failure(f) => f,
+                    e => scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string()),
+                }))
+            }
+        }).await.map_err(|e| crate::adapters::evm::all_failed(method, &e))?;
+        Ok(a.value)
+    }
+
+    /// The failover answers so far (a refusal read while it moved is no verdict).
+    fn failovers(&self) -> u64 {
+        self.net.client.pool().failover_answers()
+    }
+
+    /// [`Self::account_data`] failed over (`build`'s reads only).
+    async fn read_account(&self, k: &Key, commitment: &str) -> Result<Option<(Vec<u8>, Key)>> {
+        let v = self.read("getAccountInfo", json!([b58(k), {"encoding": "base64", "commitment": commitment}])).await?;
+        account_of_answer(&v)
+    }
+
+    /// The lane's durable nonce value for `build`'s simulation, failed over; an account not there yet is created by
+    /// [`Self::nonce`] on the first endpoint (as `sequence` does; the signed transaction always re-reads it there).
+    async fn read_nonce(&self, lane: usize) -> Result<[u8; 32]> {
+        let lk = self.lane_key(lane)?;
+        match self.read_account(&nonce_account(&lk), "confirmed").await? {
+            Some((data, owner)) if owner == SYSTEM && !data.is_empty() => {
+                let (value, authority) = parse_nonce(&data)?;
+                if authority != lk {
+                    bail!("nonce account {} is not this lane's", b58(&nonce_account(&lk)));
+                }
+                Ok(value)
+            }
+            _ => self.nonce(lane).await,
+        }
     }
 
     async fn account_data(&self, k: &Key, commitment: &str) -> Result<Option<(Vec<u8>, Key)>> {
         let v = self.rpc("getAccountInfo", json!([b58(k), {"encoding": "base64", "commitment": commitment}])).await?;
-        let a = &v["value"];
-        if a.is_null() {
-            return Ok(None);
-        }
-        let data = base64::engine::general_purpose::STANDARD.decode(a["data"][0].as_str().unwrap_or_default())?;
-        Ok(Some((data, key(a["owner"].as_str().unwrap_or_default())?)))
+        account_of_answer(&v)
     }
 
     /// RS12-8: genesis của RPC = `network` của chain trong Odoo = `Config.network` của program; lệch ⇒ không chạy.
@@ -1153,21 +1251,18 @@ impl SolanaAdapter {
     }
 
     /// Block được SẢN XUẤT cuối cùng ≤ `slot` (slot bị bỏ qua là bình thường trên Solana) và blockhash của nó.
-    async fn produced_at_or_before(&self, url: &str, slot: u64) -> Result<(u64, String)> {
-        let blocks = self.rpc_at(url, "getBlocks", json!([slot.saturating_sub(2048), slot, {"commitment": "finalized"}])).await?;
-        let s = blocks.as_array().and_then(|a| a.last()).and_then(|v| v.as_u64()).ok_or_else(|| anyhow!("no block produced in the 2048 slots up to {slot}"))?;
-        Ok((s, self.blockhash_at(url, s).await?))
+    async fn produced_at_or_before(&self, i: usize, slot: u64) -> Result<(u64, String)> {
+        let b = self.net.produced_at_or_before(i, slot).await?;
+        Ok((b.slot, hx(&key(&b.hash)?)))
     }
 
-    async fn blockhash_at(&self, url: &str, slot: u64) -> Result<String> {
-        let b = self.rpc_at(url, "getBlock", json!([slot, {"commitment": "finalized", "transactionDetails": "none",
-            "rewards": false, "maxSupportedTransactionVersion": 1}])).await?;
-        Ok(hx(&key(b["blockhash"].as_str().unwrap_or_default())?))
+    async fn blockhash_at(&self, i: usize, slot: u64) -> Result<String> {
+        Ok(hx(&key(&self.net.blockhash_at(i, slot).await?)?))
     }
 
     async fn priority_fee(&self, writable: &[Key], cu: u32) -> u64 {
         let keys: Vec<String> = writable.iter().map(|k| b58(k)).collect();
-        let Ok(v) = self.rpc("getRecentPrioritizationFees", json!([keys])).await else { return 0 };
+        let Ok(v) = self.read("getRecentPrioritizationFees", json!([keys])).await else { return 0 };
         let mut fees: Vec<u64> = v.as_array().into_iter().flatten().filter_map(|f| f["prioritizationFee"].as_u64()).collect();
         if fees.is_empty() {
             return 0;
@@ -1207,52 +1302,12 @@ impl ChainAdapter for SolanaAdapter {
     /// Dựng + mô phỏng (`sigVerify:false`, nonce thật). Lỗi ở precompile/`scaas` ⇒ `Revert` (job chết); còn lại
     /// (RPC, nonce vừa đổi, lane thiếu phí, cấu hình lệch miền) ⇒ `Transport` (thử lại, lùi dần).
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
-        let w = self.work(job).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
-        if w.op.valid_until <= now() {
-            return Err(SimError::Revert("payload expired".into()));
+        // scaas-rpc T16b (R4): a refusal read while a failover endpoint answered is no verdict
+        let mark = self.failovers();
+        match self.build_on(job, lane).await {
+            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),
+            r => r,
         }
-        self.check_domain().await.map_err(transport)?;
-        let lk = self.lane_key(lane).map_err(transport)?;
-        let subject = account_of(&self.program, &w.op.from);
-        let subject_exists = self.account_data(&subject, "confirmed").await.map_err(transport)?.is_some();
-        let o = job.op.as_ref().ok_or_else(|| SimError::Revert("not a signed_op job".into()))?;
-        let e = entry(&self.program, &self.network, &lk, &self.relay_fee, &w.op, o).map_err(|e| SimError::Revert(format!("{e:#}")))?;
-        if matches!(e, Entry::Fee { .. } | Entry::Wrapped { .. }) {
-            let pda = find_pda(&[b"lane", &subject, &w.op.lane], &self.program).0;
-            let rent = match self.account_data(&pda, "confirmed").await.map_err(transport)? {
-                Some(_) => None,
-                None => Some(self.rpc("getMinimumBalanceForRentExemption", json!([LANE_PDA_SPACE])).await.map_err(transport)?
-                    .as_u64().ok_or_else(|| SimError::Transport("bad rent".into()))?),
-            };
-            rent_covered(&self.relay_fee, &w.op, &self.program, &lk, rent).map_err(|e| SimError::Revert(format!("{e:#}")))?;
-        }
-        let pay = Pay { program: self.program, lane: lk, op: &w.op, auth: &w.auth, token_program: w.token_program, subject_exists };
-        let mut ixs = vec![auth_ix(&w.auth, &w.op.digest())];
-        if let Entry::Wrapped { sig, .. } = &e {
-            ixs.push(sig.clone()); // instruction 2: the inner entry's own signature
-        }
-        ixs.push(pay_ix(&pay, &e));
-        let nonce = self.nonce(lane).await.map_err(transport)?;
-        let plan = Plan { ixs, budget: Budget { priority_lamports: 0, cu: self.max_cu, loaded_bytes: self.loaded_bytes } };
-        let (raw, _) = self.sign_message(lane, &nonce, &plan).map_err(|e| SimError::Revert(format!("{e:#}")))?;
-        let b64 = base64::engine::general_purpose::STANDARD.encode(&raw);
-        let sim = self
-            .rpc("simulateTransaction", json!([b64, {"encoding": "base64", "sigVerify": false, "replaceRecentBlockhash": false,
-                "commitment": "confirmed"}]))
-            .await
-            .map_err(transport)?;
-        let v = &sim["value"];
-        if !v["err"].is_null() {
-            let logs: Vec<String> = v["logs"].as_array().into_iter().flatten().filter_map(|x| x.as_str().map(String::from)).collect();
-            return Err(classify_sim(&v["err"], &logs));
-        }
-        let used = v["unitsConsumed"].as_u64().unwrap_or(self.max_cu as u64);
-        let cu = (used + used.div_ceil(5)).clamp(1_000, self.max_cu as u64) as u32;
-        let writable: Vec<Key> = plan.ixs.iter().flat_map(|ix| ix.accounts.iter().filter(|a| a.writable).map(|a| a.key)).collect();
-        let budget = Budget { priority_lamports: self.priority_fee(&writable, cu).await, cu, loaded_bytes: self.loaded_bytes };
-        let plan = Plan { ixs: plan.ixs, budget };
-        let body = serde_json::to_vec(&plan).map_err(|e| SimError::Revert(e.to_string()))?;
-        Ok(Built { job_id: job.id, body, valid_until: w.op.valid_until, meta: json!({"units": used, "subject_exists": subject_exists}) })
     }
 
     /// Đọc lại nonce: phải khớp `sequence` runner đã journal (khác ⇒ lỗi thường, runner thử lại).
@@ -1276,31 +1331,39 @@ impl ChainAdapter for SolanaAdapter {
     }
 
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
-        let sig = b58(&alloy::hex::decode(tx_id.trim_start_matches("0x"))?);
-        let v = self.rpc("getSignatureStatuses", json!([[sig], {"searchTransactionHistory": true}])).await?;
-        let st = &v["value"][0];
-        if st.is_null() {
-            // Tự rebroadcast (RPC rớt tx khi nghẽn): cùng bytes, ≤ 1 lần / 2 s, chỉ khi nonce lane chưa đổi.
-            // ponytail: rebroadcast trong `tx_status`, tách task riêng khi cần nhiều RPC song song.
-            let due = self.sent.lock().ok().and_then(|mut s| {
-                let e = s.get_mut(tx_id)?;
-                (e.last.elapsed() >= REBROADCAST).then(|| {
-                    e.last = Instant::now();
-                    (e.raw.clone(), e.lane, e.sequence)
-                })
-            });
-            if let Some((raw, lane, seq)) = due {
-                if matches!(self.nonce(lane).await, Ok(n) if nonce_sequence(&n) == seq) {
-                    let _ = self.send_raw(&raw).await;
+        let st: Result<TxStatus> = async {
+            let sig = b58(&alloy::hex::decode(tx_id.trim_start_matches("0x"))?);
+            let v = self.rpc("getSignatureStatuses", json!([[sig], {"searchTransactionHistory": true}])).await?;
+            let st = &v["value"][0];
+            if st.is_null() {
+                // Tự rebroadcast (RPC rớt tx khi nghẽn): cùng bytes, ≤ 1 lần / 2 s, chỉ khi nonce lane chưa đổi.
+                // ponytail: rebroadcast trong `tx_status`, tách task riêng khi cần nhiều RPC song song.
+                let due = self.sent.lock().ok().and_then(|mut s| {
+                    let e = s.get_mut(tx_id)?;
+                    (e.last.elapsed() >= REBROADCAST).then(|| {
+                        e.last = Instant::now();
+                        (e.raw.clone(), e.lane, e.sequence)
+                    })
+                });
+                if let Some((raw, lane, seq)) = due {
+                    if matches!(self.nonce(lane).await, Ok(n) if nonce_sequence(&n) == seq) {
+                        let _ = self.send_raw(&raw).await;
+                    }
                 }
+                return Ok(TxStatus::Unknown);
             }
-            return Ok(TxStatus::Unknown);
+            if st["confirmationStatus"].as_str().unwrap_or("processed") == "processed" {
+                return Ok(TxStatus::Pending);
+            }
+            self.sent.lock().map_err(|_| anyhow!("poisoned"))?.remove(tx_id);
+            classify_landed(&st["err"], st["slot"].as_u64().unwrap_or(0))
         }
-        if st["confirmationStatus"].as_str().unwrap_or("processed") == "processed" {
-            return Ok(TxStatus::Pending);
+        .await;
+        // scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed raises the failover reads' floor
+        if let Ok(TxStatus::Mined { height, .. }) = &st {
+            self.net.client.pool().saw_block(*height);
         }
-        self.sent.lock().map_err(|_| anyhow!("poisoned"))?.remove(tx_id);
-        classify_landed(&st["err"], st["slot"].as_u64().unwrap_or(0))
+        st
     }
 
     async fn sequence(&self, lane: usize) -> Result<u64> {
@@ -1339,21 +1402,22 @@ impl ChainAdapter for SolanaAdapter {
     /// Đỉnh `finalized` (min slot giữa các endpoint) quy về block sản xuất cuối ≤ nó; quorum = cùng hash.
     async fn final_head(&self) -> Result<Option<Head>> {
         let mut slots = Vec::new();
-        for url in &self.rpcs {
-            if let Ok(v) = self.rpc_at(url, "getSlot", json!([{"commitment": "finalized"}])).await {
-                if let Some(s) = v.as_u64() {
-                    slots.push(s);
+        for i in 0..self.net.client.len() {
+            if let Ok(s) = self.net.finalized_slot(i).await {
+                if i == 0 {
+                    self.net.client.pool().saw_block(s); // the failover reads' floor: endpoint 0's slot
                 }
+                slots.push(s);
             }
         }
         if slots.len() < self.quorum {
             return Ok(None);
         }
         let slot = *slots.iter().min().unwrap();
-        let (height, hash) = self.produced_at_or_before(&self.rpcs[0], slot).await?;
+        let (height, hash) = self.produced_at_or_before(0, slot).await?;
         let mut agree = 1;
-        for url in &self.rpcs[1..] {
-            if self.blockhash_at(url, height).await.ok().as_deref() == Some(hash.as_str()) {
+        for i in 1..self.net.client.len() {
+            if self.blockhash_at(i, height).await.ok().as_deref() == Some(hash.as_str()) {
                 agree += 1;
             }
         }
@@ -1361,7 +1425,7 @@ impl ChainAdapter for SolanaAdapter {
     }
 
     async fn block_hash(&self, height: u64) -> Result<String> {
-        Ok(self.produced_at_or_before(&self.rpcs[0], height).await?.1)
+        Ok(self.produced_at_or_before(0, height).await?.1)
     }
 
     /// Phân trang lùi `getSignaturesForAddress(program)` (finalized) tới slot < `from` hoặc trang rỗng; hết lịch sử mà chưa tới `from`
@@ -1425,7 +1489,7 @@ impl ChainAdapter for SolanaAdapter {
             let bh = match hashes.get(&slot) {
                 Some(h) => h.clone(),
                 None => {
-                    let h = self.blockhash_at(&self.rpcs[0], slot).await?;
+                    let h = self.blockhash_at(0, slot).await?;
                     hashes.insert(slot, h.clone());
                     h
                 }
@@ -1814,6 +1878,8 @@ mod tests {
         async fn h(State(f): State<Arc<Mutex<Vec<String>>>>, Json(b): Json<Value>) -> Json<Value> {
             let p = &b["params"];
             let r = match b["method"].as_str().unwrap_or_default() {
+                // scaas-rpc T24.8 (fixture correction): endpoint 0's identity read comes before its reads
+                "getGenesisHash" => json!(NETWORK),
                 "getSignaturesForAddress" => match p[1]["before"].as_str() {
                     None => json!([{"slot": 90, "signature": sig(1), "err": null}, {"slot": 80, "signature": sig(2), "err": null}]),
                     Some(s) if s == sig(2) => json!([{"slot": 60, "signature": sig(3), "err": null}]),
@@ -2249,5 +2315,185 @@ mod tests {
             m.op = op;
             prop_assert_eq!(MetaOp::decode(&m.encode()).unwrap(), m);
         }
+    }
+
+    /// scaas-rpc T16a: a JSON-RPC error answer reaches the classifier as the adapter's `RpcError`, its code, message and data
+    /// whole (the family client keeps the error object).
+    #[tokio::test]
+    async fn an_error_answer_reaches_the_classifier_whole() {
+        let app = axum::Router::new().route("/", axum::routing::post(|axum::Json(b): axum::Json<Value>| async move {
+            // scaas-rpc T24.8 (fixture correction): endpoint 0's identity read comes before its reads
+            if b["method"] == "getGenesisHash" {
+                return axum::Json(json!({"jsonrpc": "2.0", "id": b["id"], "result": NETWORK}));
+            }
+            axum::Json(json!({"jsonrpc": "2.0", "id": b["id"], "error": {"code": -32002, "message": "Transaction simulation failed",
+                "data": {"err": "BlockhashNotFound"}}}))
+        }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        let mut params = toml::Table::new();
+        params.insert("program_id".into(), PROGRAM.into());
+        let cfg = ChainCfg { family: "solana".into(), network: Some(NETWORK.into()), rpc_urls: vec![url], lanes: vec![0], params, ..Default::default() };
+        let a = SolanaAdapter::new(&cfg, &[lane0()]).unwrap();
+        let e = a.rpc("sendTransaction", json!([])).await.unwrap_err();
+        let r = e.downcast_ref::<RpcError>().expect("the classifier's RpcError");
+        assert_eq!((r.code, r.message.as_str(), &r.data), (-32002, "Transaction simulation failed", &json!({"err": "BlockhashNotFound"})));
+    }
+
+    // ---- scaas-rpc T16b: ARCH-POS-15 failover, the first-endpoint carve-out first (F3) ----
+
+    const DOWN: &str = "http://127.0.0.1:9";
+
+    /// A cluster of genesis `genesis` holding the program's Config and lane 0's durable nonce account, nothing else; its
+    /// simulation answers `sim_err` (null: success); every method asked is recorded.
+    async fn cluster(genesis: &'static str, sim_err: Value) -> (String, Arc<Mutex<Vec<String>>>) {
+        use axum::extract::State;
+        type S = (Arc<Mutex<Vec<String>>>, Value, &'static str);
+        async fn h(State((asked, sim_err, genesis)): State<S>, axum::Json(b): axum::Json<Value>) -> axum::Json<Value> {
+            use base64::Engine as _;
+            let m = b["method"].as_str().unwrap_or_default().to_string();
+            asked.lock().unwrap().push(m.clone());
+            let b64 = |d: Vec<u8>| base64::engine::general_purpose::STANDARD.encode(d);
+            let (program, lane) = (key(PROGRAM).unwrap(), lane0_key());
+            let r = match m.as_str() {
+                "getGenesisHash" => json!(genesis),
+                "getSlot" => json!(100),
+                "getAccountInfo" => {
+                    let k = key(b["params"][0].as_str().unwrap()).unwrap();
+                    if k == find_pda(&[b"config"], &program).0 {
+                        let mut d = vec![0u8; 72];
+                        d[40..72].copy_from_slice(&key(NETWORK).unwrap());
+                        json!({"value": {"owner": PROGRAM, "data": [b64(d), "base64"]}})
+                    } else if k == nonce_account(&lane) {
+                        let mut d = vec![0u8; NONCE_SPACE as usize];
+                        d[4..8].copy_from_slice(&1u32.to_le_bytes());
+                        d[8..40].copy_from_slice(&lane);
+                        d[40..72].copy_from_slice(&[0x42; 32]);
+                        json!({"value": {"owner": b58(&SYSTEM), "data": [b64(d), "base64"]}})
+                    } else {
+                        json!({"value": null})
+                    }
+                }
+                "getMinimumBalanceForRentExemption" => json!(1_000_000),
+                "simulateTransaction" => json!({"value": {"err": sim_err, "logs": [], "unitsConsumed": 5_000}}),
+                "getRecentPrioritizationFees" => json!([]),
+                "getSignatureStatuses" => json!({"value": [null]}),
+                "getTransaction" => json!({"meta": {"fee": 5_000}}),
+                _ => return axum::Json(json!({"jsonrpc": "2.0", "id": 1, "error": {"code": -32601, "message": "Method not found"}})),
+            };
+            axum::Json(json!({"jsonrpc": "2.0", "id": 1, "result": r}))
+        }
+        let asked: Arc<Mutex<Vec<String>>> = Default::default();
+        let app = axum::Router::new().route("/", axum::routing::post(h)).with_state((asked.clone(), sim_err, genesis));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        (url, asked)
+    }
+
+    fn adapter_on(urls: &[&str]) -> SolanaAdapter {
+        let mut params = toml::Table::new();
+        params.insert("program_id".into(), PROGRAM.into());
+        let cfg = ChainCfg { family: "solana".into(), network: Some(NETWORK.into()), rpc_urls: urls.iter().map(|u| u.to_string()).collect(),
+            lanes: vec![0], params, ..Default::default() };
+        SolanaAdapter::new(&cfg, &[lane0()]).unwrap()
+    }
+
+    /// The vector payment, valid for ten minutes from now, as a `signed_op` job.
+    fn pay_job() -> Job {
+        let mut op = vector_op();
+        op.valid_until = now() + 600;
+        serde_json::from_value(json!({"id": 7, "kind": "signed_op", "op": {"payload": alloy::hex::encode(op.encode()),
+            "contract": b58(&op.contract), "extra": {"asset": b58(&op.asset)}, "signature": BLOB_RAW,
+            "public_key": alloy::hex::encode(key(ALICE).unwrap())}})).unwrap()
+    }
+
+    /// F3: a status, a landed fee, `op_consumed` and the lane sequence are endpoint 0's only: with it down, each is unread
+    /// (asked again; a lagging endpoint 1's "not found" is never read, so never `dead`), and endpoint 1 is never asked. Control:
+    /// endpoint 0 up answers.
+    #[tokio::test]
+    async fn solana_tx_status_op_consumed_and_the_lane_sequence_never_fail_over() {
+        let (one, asked) = cluster(NETWORK, Value::Null).await;
+        let a = adapter_on(&[DOWN, &one]);
+        let tx = alloy::hex::encode([1u8; 64]);
+        assert!(a.tx_status(&tx).await.is_err(), "unread, never Unknown from endpoint 1");
+        assert!(a.tx_fee(&tx).await.is_err());
+        assert!(a.op_consumed(&pay_job()).await.is_err());
+        assert!(a.sequence(0).await.is_err());
+        assert!(asked.lock().unwrap().is_empty(), "endpoint 1 is never asked: {:?}", asked.lock().unwrap());
+        let a = adapter_on(&[&one]);
+        assert_eq!(a.tx_status(&tx).await.unwrap(), TxStatus::Unknown, "control");
+        assert_eq!(a.op_consumed(&pay_job()).await.unwrap(), Some(false), "control");
+        assert_eq!(a.sequence(0).await.unwrap(), nonce_sequence(&[0x42; 32]), "control");
+    }
+
+    /// ARCH-POS-15: `build`'s reads fail over: endpoint 0 down, endpoint 1 answers and the job is built; endpoint 1 of another
+    /// cluster is never asked anything but its genesis. A refusal endpoint 1's simulation answers is no verdict: transport
+    /// (`FAILOVER_ANSWER`); the same refusal from endpoint 0 is the job's (`Revert`).
+    #[tokio::test]
+    async fn solana_build_reads_fail_over_and_a_failover_refusal_is_no_verdict() {
+        // the domain is checked once, on the first endpoint, at the node's first build (a value kept for the process)
+        let checked = |urls: &[&str]| {
+            let a = adapter_on(urls);
+            a.domain_checked.set(()).unwrap();
+            a
+        };
+        let (one, _) = cluster(NETWORK, Value::Null).await;
+        let r = checked(&[DOWN, &one]).build(&pay_job(), 0).await;
+        assert!(r.is_ok(), "{r:?}");
+        let (other, asked) = cluster("Another1111111111111111111111111111111111111", Value::Null).await;
+        assert!(matches!(checked(&[DOWN, &other]).build(&pay_job(), 0).await, Err(SimError::Transport(_))));
+        assert_eq!(*asked.lock().unwrap(), ["getGenesisHash"], "another cluster: its genesis only");
+        let refused = json!({"InstructionError": [2, {"Custom": 6013}]});
+        let (r, _) = cluster(NETWORK, refused.clone()).await;
+        assert!(matches!(checked(&[DOWN, &r]).build(&pay_job(), 0).await, Err(SimError::Transport(e)) if e.contains("FAILOVER_ANSWER")));
+        let (r, _) = cluster(NETWORK, refused).await;
+        assert!(matches!(checked(&[&r]).build(&pay_job(), 0).await, Err(SimError::Revert(_))), "control: endpoint 0's refusal");
+    }
+
+    /// scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed is the failover reads' floor: once it reported a transaction mined
+    /// at confirmed slot 200 (or its head there), endpoint 1, at slot 100, is skipped by `build`. Control: before that, endpoint 1 builds.
+    #[tokio::test]
+    async fn solana_a_mined_status_and_the_head_raise_the_floor() {
+        let first = || crate::adapters::testkit::scripted(true, |m, _| match m {
+            "getGenesisHash" => Some(json!(NETWORK)),
+            "getSignatureStatuses" => Some(json!({"value": [{"slot": 200, "confirmationStatus": "confirmed", "err": null}]})),
+            "getSlot" => Some(json!(200)),
+            _ => None,
+        });
+        let tx = alloy::hex::encode([1u8; 64]);
+        let one = cluster(NETWORK, Value::Null).await.0;
+        // the domain is checked once, on the first endpoint, at the node's first build (as the failover test above)
+        let on = |urls: &[&str]| {
+            let a = adapter_on(urls);
+            a.domain_checked.set(()).unwrap();
+            a
+        };
+        let a = on(&[&first().await, &one]);
+        a.build(&pay_job(), 0).await.unwrap();
+        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { height: 200, .. }));
+        assert!(matches!(a.build(&pay_job(), 0).await, Err(SimError::Transport(_))), "endpoint 1 below slot 200: skipped");
+        let a = on(&[&first().await, &one]);
+        let _ = a.final_head().await;
+        assert!(matches!(a.build(&pay_job(), 0).await, Err(SimError::Transport(_))), "the head: the same floor");
+    }
+
+    /// scaas-rpc T24.8 (CLI-RPC-03): endpoint 0 passes its identity before its own reads: one of another network (another genesis hash) answers
+    /// no status read (refused unread). Control: the same endpoint of this network answers it.
+    #[tokio::test]
+    async fn solana_endpoint_0_of_another_network_answers_no_read() {
+        fn rpc(m: &str, genesis: &str) -> Option<Value> {
+            match m {
+                "getGenesisHash" => Some(json!(genesis)),
+                "getSignatureStatuses" => Some(json!({"value": [{"slot": 9, "confirmationStatus": "finalized", "err": null}]})),
+                _ => None,
+            }
+        }
+        let tx = alloy::hex::encode([1u8; 64]);
+        let other = crate::adapters::testkit::scripted(true, |m, _| rpc(m, "Another1111111111111111111111111111111111111")).await;
+        assert!(adapter_on(&[&other]).tx_status(&tx).await.is_err());
+        let this = crate::adapters::testkit::scripted(true, |m, _| rpc(m, NETWORK)).await;
+        assert!(matches!(adapter_on(&[&this]).tx_status(&tx).await.unwrap(), TxStatus::Mined { .. }), "control");
     }
 }

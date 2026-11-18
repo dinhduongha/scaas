@@ -18,7 +18,6 @@
 //! payer): such a job fails on chain and is reported reverted, never retried blindly (Task 9 note).
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
-use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
@@ -77,6 +76,8 @@ pub const PASSKEY_FIELD_MAX: usize = 1024;
 pub const RELAY_EXPIRY_MARGIN_S: u64 = 120;
 /// The action fees are re-read this often (review m2).
 const FEES_TTL_S: u64 = 3_600;
+/// `params.max_deposit_per_job`'s default, yoctoNEAR (1 NEAR): the most one job attaches (CLI-RPC-05, scaas-rpc T24.4).
+const DEFAULT_MAX_DEPOSIT: u128 = 1_000_000_000_000_000_000_000_000;
 /// `relay_timeout(ref)`: its receipt, a token settle and a deposit return (`GAS_RELEASE` 5 each), `on_settle` 3; one
 /// `IMPLICIT_TRANSFER_GAS` each for its own `target_deposit` return, the two settlements and `on_settle` (ruling A).
 const GAS_RELAY_TIMEOUT: u64 = 30 * TGAS + 4 * IMPLICIT_TRANSFER_GAS;
@@ -1515,6 +1516,20 @@ fn sim(e: anyhow::Error) -> SimError {
     }
 }
 
+/// A JSON-RPC error object's cause: `cause.name`, else `name`.
+fn cause_name(error: &Value) -> &str {
+    error.pointer("/cause/name").or_else(|| error.get("name")).and_then(Value::as_str).unwrap_or("UNKNOWN")
+}
+
+/// A family client's error as the classifier reads it: a JSON-RPC error object is `RpcError { cause, body }` (`cause/name`,
+/// else `name`), anything else the endpoint's failure.
+fn near_error(e: scaas_rpc::family::FamilyError) -> anyhow::Error {
+    match e {
+        scaas_rpc::family::FamilyError::Rpc { error, .. } => RpcError { cause: cause_name(&error).to_string(), body: error }.into(),
+        e => e.into(),
+    }
+}
+
 /// `(height, 0x hash)` of a block.
 fn header(b: &Value) -> Result<(u64, String)> {
     let height = b["header"]["height"].as_u64().ok_or_else(|| anyhow!("block without height"))?;
@@ -1526,13 +1541,15 @@ pub struct NearAdapter {
     key: String,
     network: [u8; 32],
     network_b58: String,
-    rpc: Vec<String>,
-    http: reqwest::Client,
+    /// the RPC endpoints (scaas-rpc T17: the family client, bounded, 20 s per request)
+    net: scaas_rpc::near::Near,
     quorum: usize,
     lanes: Vec<Lane>,
     pks: Vec<[u8; 32]>,
     signers: Vec<LocalSigner>,
     relay_fee: RelayFeePolicy,
+    /// the most a job attaches, yoctoNEAR (CLI-RPC-05, scaas-rpc T24.4)
+    max_deposit: u128,
     /// `ref` ⇒ when this node last sent `relay_timeout` for it.
     timeouts: Mutex<HashMap<[u8; 32], u64>>,
     /// The chain's action fees, read once (`start_check`, ruling B).
@@ -1565,13 +1582,17 @@ impl NearAdapter {
             key: cfg.chain_key(),
             network,
             network_b58: net.to_string(),
-            rpc: cfg.rpc_urls.clone(),
-            http: reqwest::Client::builder().timeout(Duration::from_secs(20)).build()?,
+            net: scaas_rpc::near::Near::new(scaas_rpc::family::Client::of_urls(&cfg.rpc_urls, None)
+                .map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?, net),
             quorum: cfg.finality.quorum.max(1),
             lanes,
             pks,
             signers: own,
             relay_fee: RelayFeePolicy::from_cfg(cfg)?,
+            max_deposit: match cfg.params.get("max_deposit_per_job") {
+                None => DEFAULT_MAX_DEPOSIT,
+                Some(v) => dec_u128(&serde_json::to_value(v)?, "params.max_deposit_per_job (yoctoNEAR)")?,
+            },
             timeouts: Mutex::new(HashMap::new()),
             fees: Mutex::new(None),
         })
@@ -1596,42 +1617,169 @@ impl NearAdapter {
         Ok(f)
     }
 
-    async fn rpc_at(&self, url: &str, method: &str, params: Value) -> Result<Value> {
-        let body = json!({"jsonrpc": "2.0", "id": "scaas", "method": method, "params": params});
-        let v: Value = self.http.post(url).json(&body).send().await?.json().await?;
-        if let Some(e) = v.get("error").filter(|e| !e.is_null()) {
-            let cause = e.pointer("/cause/name").or_else(|| e.get("name")).and_then(Value::as_str).unwrap_or("UNKNOWN").to_string();
-            return Err(RpcError { cause, body: e.clone() }.into());
-        }
-        v.get("result").cloned().ok_or_else(|| anyhow!("{method}: no result"))
+    /// One JSON-RPC call to endpoint `i` (scaas-rpc T17: the family client); an error answer is the classifier's `RpcError`.
+    async fn rpc_at(&self, i: usize, method: &str, params: Value) -> Result<Value> {
+        self.net.call(i, method, params).await.map_err(near_error)
     }
 
     async fn rpc(&self, method: &str, params: Value) -> Result<Value> {
-        self.rpc_at(&self.rpc[0], method, params).await
+        self.rpc_at(0, method, params).await
+    }
+
+    /// ARCH-POS-15 (CLI-RPC-04, scaas-rpc T17b): `build`'s views and price, failed over: endpoint 0, then each next endpoint of
+    /// this network (`status`'s genesis) not behind the final height endpoint 0 last showed. An error answer (a contract's
+    /// refusal, an unknown account) is endpoint 0's to classify as before, a later endpoint's no verdict (the next is asked);
+    /// a transport failure moves on; what a failover endpoint's answer refuses `build` requeues.
+    async fn read(&self, method: &str, params: Value) -> Result<Value> {
+        use scaas_rpc::pool::ReadError;
+        let a = self.net.client.failover(&self.net, |i| {
+            let params = params.clone();
+            async move {
+                self.net.call(i, method, params).await.map_err(|e| match e {
+                    // T24.3: a contract's refusal or an unknown account (`sim`, `has_code_at`) is endpoint 0's to classify;
+                    // any other error (a rate limit, an unknown block, a server error) fails over
+                    scaas_rpc::family::FamilyError::Rpc { error, .. } if matches!(cause_name(&error), "CONTRACT_EXECUTION_ERROR" | "UNKNOWN_ACCOUNT") => {
+                        ReadError::Revert { data: vec![], reason: error.to_string() }
+                    }
+                    scaas_rpc::family::FamilyError::Failure(f) => ReadError::Failure(f),
+                    e => ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string())),
+                })
+            }
+        }).await;
+        match a {
+            Ok(a) => Ok(a.value),
+            // endpoint 0's error answer: the classifier's, as before
+            Err(scaas_rpc::RpcError::Revert { reason, .. }) => {
+                let error = serde_json::from_str(&reason).unwrap_or(json!({"name": "UNKNOWN", "message": reason}));
+                Err(near_error(scaas_rpc::family::FamilyError::Rpc { method: method.into(), error }))
+            }
+            Err(e) => Err(crate::adapters::evm::all_failed(method, &e)),
+        }
+    }
+
+    /// [`ChainAdapter::build`]'s body (scaas-rpc T17b: the wrapper compares the failover counter).
+    async fn build_on(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
+        let revert = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
+        let w = self.work(job).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
+        if w.op.valid_until <= now() {
+            return Err(SimError::Revert("payload expired".into()));
+        }
+        let lane_id = self.lanes.get(lane).ok_or_else(|| SimError::Transport(format!("no lane {lane}")))?.address.clone();
+        let fee = marker(&self.relay_fee, &w.op, &w.entry).cloned();
+        if fee.is_some() {
+            relay_payee(&self.relay_fee, &w.op, &w.entry, &lane_id).map_err(revert)?;
+        }
+        // fix 2 R1 / R2, fix 3 g2 / N2: the payment (every job), a wrapped entry's op and a wrapped mandate's expiry stay
+        // valid through the relay
+        let (entry_vu, mandate) = match &w.entry {
+            Entry::FeeWrapper { entry, args } => (
+                MetaOp::read(&mut Reader::new(args)).ok().map(|o| o.valid_until),
+                (entry == "mtx_mandate_open").then(|| mandate_expiry(args).ok()).flatten(),
+            ),
+            _ => (None, None),
+        };
+        let soon = now().saturating_add(RELAY_EXPIRY_MARGIN_S);
+        for (vu, what) in [(Some(w.op.valid_until), "the payment"), (entry_vu, "the wrapped entry op"), (mandate, "the mandate")] {
+            if vu.is_some_and(|vu| vu <= soon) {
+                return Err(SimError::Revert(format!("{what} expires within {RELAY_EXPIRY_MARGIN_S} s: it would expire in transit")));
+            }
+        }
+        // fix 3 N1: an unopened subject paying for its own wrapped entry: the entry opens it with its own origins, then the
+        // payment's passkey is checked against them
+        if let Entry::FeeWrapper { entry, args } = &w.entry {
+            let pay_origins = w.auth.origins();
+            let (from, origins) = entry_origins(entry, args).map_err(revert)?;
+            if from == w.op.from && !pay_origins.is_empty() {
+                let mut a = Vec::new();
+                from.write(&mut a);
+                let opened = self.view_at(false, &w.op.contract, "subject", &a).await.map_err(sim)?.first() == Some(&1);
+                if let Some(o) = pay_origins.iter().find(|o| !opened && !origins.contains(o)) {
+                    return Err(SimError::Revert(format!(
+                        "the payment's passkey origin {o} is not among the origins the entry opens the subject {} with: the payment must fail",
+                        from.display()
+                    )));
+                }
+            }
+        }
+        // fix 3 g1: a router job's target figures are the node's (relayer-chosen, not in ref)
+        let entry = match &w.entry {
+            Entry::FeeRouter { target, method, args, target_gas, target_deposit } => {
+                match self.has_code_at(false, target).await.map_err(transport)? {
+                    None => return Err(SimError::Revert(format!("relay-fee target {target} does not exist"))),
+                    Some(false) => return Err(SimError::Revert(format!("relay-fee target {target} has no code"))),
+                    Some(true) => {}
+                }
+                let (tg, td) = self.target_check(&w.op, &lane_id, target, method, args, *target_gas, *target_deposit).await?;
+                Entry::FeeRouter { target: target.clone(), method: method.clone(), args: args.clone(), target_gas: tg, target_deposit: td }
+            }
+            e => e.clone(),
+        };
+        let mut call = call_of(&self.relay_fee, &entry, &w.op, &w.auth_raw).map_err(revert)?;
+        call.deposit = match &entry {
+            Entry::FeeRouter { .. } => {
+                let rc = self.view_at(false, &call.receiver, "relay_check", &call.args).await.map_err(sim)?;
+                let (deposit, gas) = decode_router_check(&rc).map_err(transport)?.map_err(|e| SimError::Revert(format!("relay_check: {e}")))?;
+                if gas != call.gas {
+                    return Err(SimError::Revert(format!("router relay_check needs {gas} gas, the node pins {}", call.gas)));
+                }
+                let hold = [borsh_str(&call.receiver), borsh_str(&lane_id), w.op.borsh(), w.auth_raw.clone()].concat();
+                let hc = self.view_at(false, &w.op.contract, "relay_hold_check", &hold).await.map_err(sim)?;
+                let held = decode_check(&hc).map_err(transport)?.map_err(|e| SimError::Revert(format!("relay_hold_check: {e}")))?;
+                deposit.checked_add(held).ok_or_else(|| SimError::Revert("deposit overflow".into()))?
+            }
+            // + 0 yoctoNEAR: no `mtx_*` / `relay_fee_*` entry has a NEP 1-yocto rule (spec §3.2: authority is the signature)
+            _ => {
+                let args = [borsh_str(&lane_id), call.args.clone()].concat();
+                let c = self.view_at(false, &call.receiver, &format!("{}_check", call.method), &args).await.map_err(sim)?;
+                decode_check(&c).map_err(transport)?.map_err(|e| SimError::Revert(format!("{}_check: {e}", call.method)))?
+            }
+        };
+        // CLI-RPC-05 (scaas-rpc T24.4): the lane never attaches more than the configured cap, whichever endpoint's check
+        // (`relay_check`, `relay_hold_check`, an entry's `*_check`) reported it
+        if call.deposit > self.max_deposit {
+            return Err(SimError::Transport(format!("deposit {} above params.max_deposit_per_job {}", call.deposit, self.max_deposit)));
+        }
+        if fee.as_ref().is_some_and(|m| pays(&w.op, Some(m)) || w.op.to == Holder::Near(lane_id.clone())) {
+            let price = self.gas_price().await.map_err(transport)?;
+            let fees = self.fees().await.map_err(transport)?;
+            // fix 1 m5 / T19 fix 2: action fees, the lane's receipts, a router job's possible relay_timeout
+            let gas = quote_gas(&fees, &entry, &call);
+            let quote = u128::from(gas).saturating_mul(price).saturating_add(call.deposit);
+            fee_covers(&self.relay_fee, &w.op, quote).map_err(revert)?;
+        }
+        if let Entry::FeeWrapper { entry, args } = &w.entry {
+            if KEY_OPS.contains(&entry.as_str()) {
+                self.show_key_sets(args).await;
+            }
+        }
+        let meta = json!({"receiver": call.receiver, "method": call.method, "gas": call.gas, "deposit": call.deposit.to_string()});
+        Ok(Built { job_id: job.id, body: call.args, valid_until: w.op.valid_until, meta })
+    }
+
+    /// The failover answers so far (a refusal read while it moved is no verdict).
+    fn failovers(&self) -> u64 {
+        self.net.client.pool().failover_answers()
     }
 
     /// `rpc_urls[0]`'s answer; with `quorum > 1`, further endpoints must return the same `pick` (event bodies follow the
     /// same rule as block hashes, as Aptos review L3).
     async fn agreed(&self, method: &str, params: Value, pick: fn(&Value) -> Value) -> Result<Value> {
-        let v = self.rpc(method, params.clone()).await?;
-        if self.quorum > 1 {
-            let want = pick(&v);
-            let mut agree = 1;
-            for url in &self.rpc[1..] {
-                if matches!(self.rpc_at(url, method, params.clone()).await, Ok(o) if pick(&o) == want) {
-                    agree += 1;
-                }
-            }
-            if agree < self.quorum {
-                bail!("{method}: {agree} endpoint(s) agree, quorum is {}", self.quorum);
-            }
-        }
-        Ok(v)
+        use scaas_rpc::near::AgreedError;
+        self.net.agreed(method, params, pick, self.quorum).await.map_err(|e| match e {
+            AgreedError::First(e) => near_error(e),
+            AgreedError::Quorum { agree, quorum } => anyhow!("{method}: {agree} endpoint(s) agree, quorum is {quorum}"),
+        })
     }
 
     async fn view(&self, account: &str, method: &str, args: &[u8]) -> Result<Vec<u8>> {
-        let v = self.rpc("query", json!({"request_type": "call_function", "finality": "final", "account_id": account,
-                                         "method_name": method, "args_base64": b64(args)})).await?;
+        self.view_at(true, account, method, args).await
+    }
+
+    /// A view on the first endpoint only (`first`: F3, the follow-ups, the start checks) or failed over (`build`).
+    async fn view_at(&self, first: bool, account: &str, method: &str, args: &[u8]) -> Result<Vec<u8>> {
+        let q = json!({"request_type": "call_function", "finality": "final", "account_id": account,
+                       "method_name": method, "args_base64": b64(args)});
+        let v = if first { self.rpc("query", q).await? } else { self.read("query", q).await? };
         if let Some(e) = v.get("error").and_then(Value::as_str) {
             return Err(RpcError { cause: "CONTRACT_EXECUTION_ERROR".into(), body: json!(e) }.into());
         }
@@ -1642,7 +1790,14 @@ impl NearAdapter {
 
     /// `None` = no such account; `Some(code deployed)`.
     async fn has_code(&self, account: &str) -> Result<Option<bool>> {
-        match self.rpc("query", json!({"request_type": "view_account", "finality": "final", "account_id": account})).await {
+        self.has_code_at(true, account).await
+    }
+
+    /// [`Self::has_code`] on the first endpoint only or failed over (`build`).
+    async fn has_code_at(&self, first: bool, account: &str) -> Result<Option<bool>> {
+        let q = json!({"request_type": "view_account", "finality": "final", "account_id": account});
+        let r = if first { self.rpc("query", q).await } else { self.read("query", q).await };
+        match r {
             Ok(v) => Ok(Some(v["code_hash"].as_str().ok_or_else(|| anyhow!("view_account: no code_hash"))? != NO_CODE)),
             Err(e) if cause_of(&e) == Some("UNKNOWN_ACCOUNT") => Ok(None),
             Err(e) => Err(e),
@@ -1650,7 +1805,8 @@ impl NearAdapter {
     }
 
     async fn gas_price(&self) -> Result<u128> {
-        dec_u128(&self.rpc("gas_price", json!([null])).await?["gas_price"], "gas_price")
+        // `build`'s only: failed over (scaas-rpc T17b)
+        dec_u128(&self.read("gas_price", json!([null])).await?["gas_price"], "gas_price")
     }
 
     async fn final_block(&self) -> Result<[u8; 32]> {
@@ -1845,7 +2001,7 @@ impl NearAdapter {
             if method == "mtx_mandate_open" {
                 margin(mandate_expiry(args).map_err(|e| rv(format!("router target args of {method}: {e:#}")))?, "the mandate")?;
             }
-            let c = self.view(target, &format!("{method}_check"), &[borsh_str(executor), args.to_vec()].concat()).await.map_err(sim)?;
+            let c = self.view_at(false, target, &format!("{method}_check"), &[borsh_str(executor), args.to_vec()].concat()).await.map_err(sim)?;
             let need = check(c, &format!("{method}_check"))?;
             // fix 2 R3: relay_hold debits the fee before the target runs; the target's check read the balance before it
             if target == pay.contract && VALUE_ENTRIES.contains(&method) && top.from == pay.from {
@@ -1879,12 +2035,12 @@ impl NearAdapter {
             dex_pair(&legs[0], &legs[1]).map_err(|e| rv(e.into()))?;
             let settle_gas = legs.iter().fold(DEX_SETTLE_GAS, |g, l| g.saturating_add(DEX_LEG_GAS).saturating_add(l.auth.router_gas()));
             let (da, db) = (legs[0].op.digest(), legs[1].op.digest());
-            if self.view(target, "pending", &sha256(&[da, db].concat())).await.map_err(transport)?.first() != Some(&0) {
+            if self.view_at(false, target, "pending", &sha256(&[da, db].concat())).await.map_err(transport)?.first() != Some(&0) {
                 return Err(rv("this pair is already pending at the DEX (settle_id(a, b))".into()));
             }
             // fix 2 f1: a leg indexed in another settle (e.g. a failed direct settle) panics `settle`
             for d in [da, db] {
-                if self.view(target, "leg_settle", &d).await.map_err(transport)?.first() != Some(&0) {
+                if self.view_at(false, target, "leg_settle", &d).await.map_err(transport)?.first() != Some(&0) {
                     return Err(rv(format!("leg {} is already in a settle at the DEX", hex0x(&d))));
                 }
             }
@@ -1893,7 +2049,7 @@ impl NearAdapter {
                 let receiver = &legs[1 - i].op.from;
                 let mut a = [borsh_str(target), l.op.borsh(), l.auth_raw.clone(), l.order.clone()].concat();
                 receiver.write(&mut a);
-                let c = self.view(&l.sell_token, "mtx_trade_check", &a).await.map_err(sim)?;
+                let c = self.view_at(false, &l.sell_token, "mtx_trade_check", &a).await.map_err(sim)?;
                 larger = larger.max(check(c, "mtx_trade_check")?);
             }
             // Borsh(Settle): per leg token, seller, lane 32, nonce 8, digest 32, amount 16; relayer; deposit 16, expiry 8, done 1
@@ -1920,7 +2076,7 @@ impl NearAdapter {
             Holder::Near(a) => ("ft_balance_of", json!({"account_id": a})),
             Holder::Ua(id) => ("ua_balance_of", json!({"id": id})),
         };
-        let b = self.view(token, method, &serde_json::to_vec(&args).map_err(|e| transport(e.into()))?).await.map_err(sim)?;
+        let b = self.view_at(false, token, method, &serde_json::to_vec(&args).map_err(|e| transport(e.into()))?).await.map_err(sim)?;
         let v: Value = serde_json::from_slice(&b).map_err(|e| transport(e.into()))?;
         dec_u128(&v, method).map_err(transport)
     }
@@ -1996,96 +2152,12 @@ impl ChainAdapter for NearAdapter {
     /// The §5 checks, then the entry's `*_check` view as the lane (`Revert` = the job dies with the contract's reason),
     /// the attached deposit = what it reports, and, for a fee that is the node's, the fee floor.
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
-        let revert = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
-        let w = self.work(job).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
-        if w.op.valid_until <= now() {
-            return Err(SimError::Revert("payload expired".into()));
+        // scaas-rpc T17b (R4): a refusal read while a failover endpoint answered is no verdict
+        let mark = self.failovers();
+        match self.build_on(job, lane).await {
+            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),
+            r => r,
         }
-        let lane_id = self.lanes.get(lane).ok_or_else(|| SimError::Transport(format!("no lane {lane}")))?.address.clone();
-        let fee = marker(&self.relay_fee, &w.op, &w.entry).cloned();
-        if fee.is_some() {
-            relay_payee(&self.relay_fee, &w.op, &w.entry, &lane_id).map_err(revert)?;
-        }
-        // fix 2 R1 / R2, fix 3 g2 / N2: the payment (every job), a wrapped entry's op and a wrapped mandate's expiry stay
-        // valid through the relay
-        let (entry_vu, mandate) = match &w.entry {
-            Entry::FeeWrapper { entry, args } => (
-                MetaOp::read(&mut Reader::new(args)).ok().map(|o| o.valid_until),
-                (entry == "mtx_mandate_open").then(|| mandate_expiry(args).ok()).flatten(),
-            ),
-            _ => (None, None),
-        };
-        let soon = now().saturating_add(RELAY_EXPIRY_MARGIN_S);
-        for (vu, what) in [(Some(w.op.valid_until), "the payment"), (entry_vu, "the wrapped entry op"), (mandate, "the mandate")] {
-            if vu.is_some_and(|vu| vu <= soon) {
-                return Err(SimError::Revert(format!("{what} expires within {RELAY_EXPIRY_MARGIN_S} s: it would expire in transit")));
-            }
-        }
-        // fix 3 N1: an unopened subject paying for its own wrapped entry: the entry opens it with its own origins, then the
-        // payment's passkey is checked against them
-        if let Entry::FeeWrapper { entry, args } = &w.entry {
-            let pay_origins = w.auth.origins();
-            let (from, origins) = entry_origins(entry, args).map_err(revert)?;
-            if from == w.op.from && !pay_origins.is_empty() {
-                let mut a = Vec::new();
-                from.write(&mut a);
-                let opened = self.view(&w.op.contract, "subject", &a).await.map_err(sim)?.first() == Some(&1);
-                if let Some(o) = pay_origins.iter().find(|o| !opened && !origins.contains(o)) {
-                    return Err(SimError::Revert(format!(
-                        "the payment's passkey origin {o} is not among the origins the entry opens the subject {} with: the payment must fail",
-                        from.display()
-                    )));
-                }
-            }
-        }
-        // fix 3 g1: a router job's target figures are the node's (relayer-chosen, not in ref)
-        let entry = match &w.entry {
-            Entry::FeeRouter { target, method, args, target_gas, target_deposit } => {
-                match self.has_code(target).await.map_err(transport)? {
-                    None => return Err(SimError::Revert(format!("relay-fee target {target} does not exist"))),
-                    Some(false) => return Err(SimError::Revert(format!("relay-fee target {target} has no code"))),
-                    Some(true) => {}
-                }
-                let (tg, td) = self.target_check(&w.op, &lane_id, target, method, args, *target_gas, *target_deposit).await?;
-                Entry::FeeRouter { target: target.clone(), method: method.clone(), args: args.clone(), target_gas: tg, target_deposit: td }
-            }
-            e => e.clone(),
-        };
-        let mut call = call_of(&self.relay_fee, &entry, &w.op, &w.auth_raw).map_err(revert)?;
-        call.deposit = match &entry {
-            Entry::FeeRouter { .. } => {
-                let rc = self.view(&call.receiver, "relay_check", &call.args).await.map_err(sim)?;
-                let (deposit, gas) = decode_router_check(&rc).map_err(transport)?.map_err(|e| SimError::Revert(format!("relay_check: {e}")))?;
-                if gas != call.gas {
-                    return Err(SimError::Revert(format!("router relay_check needs {gas} gas, the node pins {}", call.gas)));
-                }
-                let hold = [borsh_str(&call.receiver), borsh_str(&lane_id), w.op.borsh(), w.auth_raw.clone()].concat();
-                let hc = self.view(&w.op.contract, "relay_hold_check", &hold).await.map_err(sim)?;
-                let held = decode_check(&hc).map_err(transport)?.map_err(|e| SimError::Revert(format!("relay_hold_check: {e}")))?;
-                deposit.checked_add(held).ok_or_else(|| SimError::Revert("deposit overflow".into()))?
-            }
-            // + 0 yoctoNEAR: no `mtx_*` / `relay_fee_*` entry has a NEP 1-yocto rule (spec §3.2: authority is the signature)
-            _ => {
-                let args = [borsh_str(&lane_id), call.args.clone()].concat();
-                let c = self.view(&call.receiver, &format!("{}_check", call.method), &args).await.map_err(sim)?;
-                decode_check(&c).map_err(transport)?.map_err(|e| SimError::Revert(format!("{}_check: {e}", call.method)))?
-            }
-        };
-        if fee.as_ref().is_some_and(|m| pays(&w.op, Some(m)) || w.op.to == Holder::Near(lane_id.clone())) {
-            let price = self.gas_price().await.map_err(transport)?;
-            let fees = self.fees().await.map_err(transport)?;
-            // fix 1 m5 / T19 fix 2: action fees, the lane's receipts, a router job's possible relay_timeout
-            let gas = quote_gas(&fees, &entry, &call);
-            let quote = u128::from(gas).saturating_mul(price).saturating_add(call.deposit);
-            fee_covers(&self.relay_fee, &w.op, quote).map_err(revert)?;
-        }
-        if let Entry::FeeWrapper { entry, args } = &w.entry {
-            if KEY_OPS.contains(&entry.as_str()) {
-                self.show_key_sets(args).await;
-            }
-        }
-        let meta = json!({"receiver": call.receiver, "method": call.method, "gas": call.gas, "deposit": call.deposit.to_string()});
-        Ok(Built { job_id: job.id, body: call.args, valid_until: w.op.valid_until, meta })
     }
 
     async fn sign(&self, built: Built, lane: usize, sequence: u64) -> Result<Signed> {
@@ -2116,21 +2188,29 @@ impl ChainAdapter for NearAdapter {
     /// Mined / reverted only once every receipt is in a final block (`FINAL`); a failed receipt is reported reverted with
     /// its reason, never retried (the lane nonce moved; the payer's op was not consumed).
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
-        let Some(v) = self.find_tx(tx_id).await? else { return Ok(TxStatus::Unknown) };
-        let relay = v.pointer("/transaction/actions/0/FunctionCall/method_name").and_then(Value::as_str) == Some("relay");
-        let escrow = relay && self.relay_fee.router.is_some() && v["transaction"]["receiver_id"].as_str() == self.relay_fee.router.as_deref();
-        if v["final_execution_status"].as_str() != Some("FINAL") {
-            // T19: a call in flight past its deadline keeps the transaction short of FINAL: its timeout is due now
-            return if escrow { self.escrow_in_flight(&v).await } else { Ok(TxStatus::Pending) };
+        let st: Result<TxStatus> = async {
+            let Some(v) = self.find_tx(tx_id).await? else { return Ok(TxStatus::Unknown) };
+            let relay = v.pointer("/transaction/actions/0/FunctionCall/method_name").and_then(Value::as_str) == Some("relay");
+            let escrow = relay && self.relay_fee.router.is_some() && v["transaction"]["receiver_id"].as_str() == self.relay_fee.router.as_deref();
+            if v["final_execution_status"].as_str() != Some("FINAL") {
+                // T19: a call in flight past its deadline keeps the transaction short of FINAL: its timeout is due now
+                return if escrow { self.escrow_in_flight(&v).await } else { Ok(TxStatus::Pending) };
+            }
+            let height = self.block_height_of(&v["transaction_outcome"]["block_hash"]).await?;
+            if escrow {
+                return self.escrow_status(&v, height).await;
+            }
+            Ok(match outcome_status(&v["status"])? {
+                Ok(_) => TxStatus::Mined { height, tx_hash: None },
+                Err(reason) => TxStatus::Reverted { reason },
+            })
         }
-        let height = self.block_height_of(&v["transaction_outcome"]["block_hash"]).await?;
-        if escrow {
-            return self.escrow_status(&v, height).await;
+        .await;
+        // scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed raises the failover reads' floor
+        if let Ok(TxStatus::Mined { height, .. }) = &st {
+            self.net.client.pool().saw_block(*height);
         }
-        Ok(match outcome_status(&v["status"])? {
-            Ok(_) => TxStatus::Mined { height, tx_hash: None },
-            Err(reason) => TxStatus::Reverted { reason },
-        })
+        st
     }
 
     /// The lane's next nonce: its access key's nonce + 1.
@@ -2158,9 +2238,10 @@ impl ChainAdapter for NearAdapter {
     /// The `final` block; with `quorum > 1` further endpoints must agree on its hash.
     async fn final_head(&self) -> Result<Option<Head>> {
         let (height, hash) = header(&self.rpc("block", json!({"finality": "final"})).await?)?;
+        self.net.client.pool().saw_block(height); // the failover reads' floor: endpoint 0's final height
         let mut agree = 1;
-        for url in &self.rpc[1..] {
-            if let Ok(b) = self.rpc_at(url, "block", json!({"block_id": height})).await {
+        for i in 1..self.net.client.len() {
+            if let Ok(b) = self.rpc_at(i, "block", json!({"block_id": height})).await {
                 if header(&b).ok().map(|h| h.1).as_deref() == Some(hash.as_str()) {
                     agree += 1;
                 }
@@ -3110,7 +3191,9 @@ mod tests {
         assert_eq!(MetaOp::decode(&op.encode()).unwrap().amount, big);
         let mut w = world();
         w.views.insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(big));
-        let (a, w) = adapter(w, "").await;
+        let (mut a, w) = adapter(w, "").await;
+        // T24.4 (fixture correction): this deposit tests the u128 round trip, far above the default cap (1 NEAR)
+        a.max_deposit = u128::MAX;
         let b = a.build(&job(o_op(&op, &auth_bytes(&row("pay")["auth"]), json!({}))), 0).await.unwrap();
         assert!(contains(&view_args(&w, "mtx_pay_check"), &big.to_le_bytes()), "check args");
         assert_eq!(b.meta["deposit"], json!(big.to_string()), "the deposit as a decimal string");
@@ -3137,7 +3220,8 @@ mod tests {
         let mut w = world();
         w.genesis = "3JF3sEqM796hk5WFqA6EtmEwJQ9quALszsfJyvXNQKy3".into();
         let (a, _) = adapter(w, &fee_cfg("1")).await;
-        assert!(format!("{:#}", a.start_check().await.unwrap_err()).contains("genesis"));
+        // T24.8 (an expectation corrected): endpoint 0 of another genesis is refused by the identity check, before any read
+        assert!(format!("{:#}", a.start_check().await.unwrap_err()).contains("WrongChain"));
         let mut w = world();
         w.views.insert((TOKEN.into(), "network".into()), serde_json::to_vec(&[7u8; 32].to_vec()).unwrap());
         let (a, _) = adapter(w, &fee_cfg("1")).await;
@@ -4356,5 +4440,152 @@ mod tests {
         assert!(e.contains("dex") && e.contains("executor"), "{e}");
         let (a, _) = adapter(world(), &fee_cfg("1")).await;
         a.start_check().await.unwrap();
+    }
+
+    // ---- scaas-rpc T17b: ARCH-POS-15 failover, the first-endpoint carve-out first (F3) ----
+
+    const DOWN: &str = "http://127.0.0.1:9";
+
+    /// [`adapter`] with `first` endpoints before the fake world in `rpc_urls`.
+    async fn adapter_after(w: World, first: &[&str]) -> (NearAdapter, Arc<Mutex<World>>) {
+        let w = Arc::new(Mutex::new(w));
+        let url = serve(w.clone()).await;
+        let mut c = cfg(&url, "");
+        c.rpc_urls = first.iter().map(|u| u.to_string()).chain([url]).collect();
+        (NearAdapter::new(&c, &[lane0()]).unwrap(), w)
+    }
+
+    /// The deposit test's world: the plain pay's check answers its storage.
+    fn pay_world() -> World {
+        let mut w = world();
+        w.views.insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(1_234_567));
+        w.views.insert((TOKEN.into(), "lane_nonce".into()), 0u64.to_le_bytes().to_vec());
+        w
+    }
+
+    /// F3: a status, `op_consumed` and the lane sequence are endpoint 0's only: with it down each is unread (asked again; a
+    /// lagging endpoint 1's "unknown" is never read, so never `dead`) and endpoint 1 is never asked. Control: endpoint 0 up.
+    #[tokio::test]
+    async fn near_tx_status_op_consumed_and_the_lane_sequence_never_fail_over() {
+        let job = job(o_of("pay", json!({})));
+        let tx = format!("0x{}", "11".repeat(32));
+        let (a, w) = adapter_after(pay_world(), &[DOWN]).await;
+        assert!(a.tx_status(&tx).await.is_err(), "unread, never Unknown from endpoint 1");
+        assert!(a.op_consumed(&job).await.is_err());
+        assert!(a.sequence(0).await.is_err());
+        assert!(w.lock().unwrap().calls.is_empty(), "endpoint 1 is never asked: {:?}", w.lock().unwrap().calls);
+        let (a, _) = adapter_after(pay_world(), &[]).await;
+        assert!(a.sequence(0).await.is_ok(), "control");
+        assert_eq!(a.op_consumed(&job).await.unwrap(), Some(false), "control");
+    }
+
+    /// ARCH-POS-15: `build`'s views fail over: endpoint 0 down, endpoint 1 answers and the job is built; endpoint 1 of another
+    /// network is asked its `status` only. A check refusal endpoint 1 answers is no verdict: transport (`FAILOVER_ANSWER`); the
+    /// same refusal from endpoint 0 is the job's (`Revert`).
+    #[tokio::test]
+    async fn near_build_reads_fail_over_and_a_failover_refusal_is_no_verdict() {
+        let job = job(o_of("pay", json!({})));
+        let (a, _) = adapter_after(pay_world(), &[DOWN]).await;
+        let r = a.build(&job, 0).await;
+        assert!(r.is_ok(), "{r:?}");
+        let other = World { genesis: "11111111111111111111111111111111".into(), ..pay_world() };
+        let (a, w) = adapter_after(other, &[DOWN]).await;
+        assert!(matches!(a.build(&job, 0).await, Err(SimError::Transport(_))));
+        assert!(w.lock().unwrap().calls.iter().all(|c| c.0 == "status"), "another network: its status only");
+        let refuses = || {
+            let mut w = pay_world();
+            w.view_errs.insert((TOKEN.into(), "mtx_pay_check".into()), "Smart contract panicked: bad".into());
+            w
+        };
+        let (a, _) = adapter_after(refuses(), &[DOWN]).await;
+        let r = a.build(&job, 0).await;
+        // T24.15: every endpoint failed the check (endpoint 0 down, endpoint 1's refusal no verdict): the generic all-failed text
+        assert!(matches!(&r, Err(SimError::Transport(e)) if e.contains("no endpoint answered") && !e.starts_with("FAILOVER_ANSWER")), "{r:?}");
+        let (a, _) = adapter_after(refuses(), &[]).await;
+        assert!(matches!(a.build(&job, 0).await, Err(SimError::Revert(_))), "control: endpoint 0's refusal");
+        // the check's own refusal (`Check { error }`) answered by endpoint 1: the counter moved, requeued; endpoint 0's: the job's
+        let says_no = || {
+            let mut w = pay_world();
+            w.views.insert((TOKEN.into(), "mtx_pay_check".into()), check_err("not enough balance"));
+            w
+        };
+        let (a, _) = adapter_after(says_no(), &[DOWN]).await;
+        let r = a.build(&job, 0).await;
+        assert!(matches!(&r, Err(SimError::Transport(e)) if e.contains("FAILOVER_ANSWER")), "{r:?}");
+        let (a, _) = adapter_after(says_no(), &[]).await;
+        assert!(matches!(a.build(&job, 0).await, Err(SimError::Revert(_))), "control");
+    }
+
+    /// scaas-rpc T24.3: endpoint 0's error other than a contract's refusal or an unknown account (a rate limit) is its failure,
+    /// never its verdict: the read fails over and endpoint 1 builds the job (endpoint 0 passes its identity read).
+    #[tokio::test]
+    async fn near_endpoint_0_rate_limited_fails_over() {
+        let job = job(o_of("pay", json!({})));
+        let first = crate::adapters::testkit::refusing(&serve(Arc::new(Mutex::new(pay_world()))).await, |_, b| b["method"] == "status", 429,
+            json!({"jsonrpc": "2.0", "id": 1, "error": {"code": -429, "name": "TOO_MANY_REQUESTS", "message": "rate limited"}})).await;
+        let (a, _) = adapter_after(pay_world(), &[&first]).await;
+        let r = a.build(&job, 0).await;
+        assert!(r.is_ok(), "{r:?}");
+        assert!(a.failovers() > 0);
+    }
+
+    /// scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed is the failover reads' floor: once it reported a transaction mined
+    /// at height 120 (or its head there), endpoint 1, at height 100, is skipped by `build`. Control: before that, endpoint 1 builds.
+    #[tokio::test]
+    async fn near_a_mined_status_and_the_head_raise_the_floor() {
+        let job = job(o_of("pay", json!({})));
+        let first = || crate::adapters::testkit::scripted(true, |m, _| match m {
+            "status" => Some(json!({"chain_id": "localnet", "genesis_hash": NET_B58, "sync_info": {"earliest_block_height": 0, "latest_block_height": 120}})),
+            "EXPERIMENTAL_tx_status" => Some(outcome(TOKEN, json!({"FunctionCall": {"method_name": "mtx_pay", "args": ""}}), json!({"SuccessValue": ""}), vec![])),
+            "block" => Some(json!({"header": {"height": 120, "hash": "29d2S7vB453rNYFdR5Ycwt7y9haRT5fwVwL9zTmBhfV2"}, "chunks": []})),
+            _ => None,
+        });
+        let tx = format!("0x{}", "11".repeat(32));
+        let (a, _) = adapter_after(pay_world(), &[&first().await]).await;
+        let r = a.build(&job, 0).await;
+        assert!(r.is_ok(), "{r:?}");
+        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { height: 120, .. }));
+        assert!(matches!(a.build(&job, 0).await, Err(SimError::Transport(_))), "endpoint 1 below height 120: skipped");
+        let (a, _) = adapter_after(pay_world(), &[&first().await]).await;
+        let _ = a.final_head().await;
+        assert!(matches!(a.build(&job, 0).await, Err(SimError::Transport(_))), "the head: the same floor");
+    }
+
+    /// scaas-rpc T24.8 (CLI-RPC-03): endpoint 0 passes its identity before its own reads: one of another network (another genesis hash) answers
+    /// no status read (refused unread). Control: the same endpoint of this network answers it.
+    #[tokio::test]
+    async fn near_endpoint_0_of_another_network_answers_no_read() {
+        fn rpc(m: &str, genesis: &str) -> Option<Value> {
+            match m {
+                "status" => Some(json!({"chain_id": "localnet", "genesis_hash": genesis})),
+                "EXPERIMENTAL_tx_status" => Some(outcome(TOKEN, json!({"FunctionCall": {"method_name": "mtx_pay", "args": ""}}), json!({"SuccessValue": ""}), vec![])),
+                "block" => Some(json!({"header": {"height": 100, "hash": "29d2S7vB453rNYFdR5Ycwt7y9haRT5fwVwL9zTmBhfV2"}, "chunks": []})),
+                _ => None,
+            }
+        }
+        let tx = format!("0x{}", "11".repeat(32));
+        let other = crate::adapters::testkit::scripted(true, |m, _| rpc(m, "11111111111111111111111111111111")).await;
+        assert!(NearAdapter::new(&cfg(&other, ""), &[lane0()]).unwrap().tx_status(&tx).await.is_err());
+        let this = crate::adapters::testkit::scripted(true, |m, _| rpc(m, NET_B58)).await;
+        let a = NearAdapter::new(&cfg(&this, ""), &[lane0()]).unwrap();
+        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { .. }), "control");
+    }
+
+    /// scaas-rpc T24.4 (CLI-RPC-05, owner 2026-11-18): a deposit a check reports above `params.max_deposit_per_job` is no
+    /// verdict (`Transport`); at the cap the job is built.
+    #[tokio::test]
+    async fn near_a_deposit_above_the_cap_is_refused() {
+        let job = job(o_of("pay", json!({})));
+        let on = |cap: &'static str| async move {
+            let url = serve(Arc::new(Mutex::new(pay_world()))).await;
+            let mut c = cfg(&url, "");
+            c.params.insert("max_deposit_per_job".into(), cap.into());
+            NearAdapter::new(&c, &[lane0()]).unwrap()
+        };
+        match on("1234566").await.build(&job, 0).await {
+            Err(SimError::Transport(m)) => assert!(m.contains("max_deposit_per_job"), "{m}"),
+            r => panic!("{r:?}"),
+        }
+        assert_eq!(on("1234567").await.build(&job, 0).await.unwrap().meta["deposit"], "1234567", "at the cap");
     }
 }
