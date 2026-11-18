@@ -207,6 +207,22 @@ impl Client {
             .await?)
     }
 
+    /// [`Client::raw_at`] keeping a 5xx answer too (a gateway whose error is its JSON at any status: Cosmos REST, plan T21).
+    pub async fn raw_any_at(
+        &self,
+        i: usize,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<Vec<u8>>,
+        ctype: &str,
+        cap: usize,
+    ) -> Result<(u16, Vec<u8>), FamilyError> {
+        Ok(self
+            .http
+            .raw_any(&self.list, i, method, path, body, ctype, cap, None)
+            .await?)
+    }
+
     /// POST a JSON `body` to `path` of endpoint `i` (2xx only), parsed.
     pub async fn post_at(&self, i: usize, path: &str, body: &Value) -> Result<Value, FamilyError> {
         Ok(self

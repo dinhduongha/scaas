@@ -251,21 +251,39 @@ impl Http {
         deadline: Option<Instant>,
     ) -> Result<(u16, Vec<u8>), EndpointFailure> {
         let (status, b) = self
-            .send_any(
-                list,
-                i,
-                method,
-                Some(path),
-                body,
-                cap,
-                deadline,
-                (ctype, false),
-            )
+            .raw_any(list, i, method, path, body, ctype, cap, deadline)
             .await?;
         if status >= 500 {
             return Err(self.fail(list, i, FailureKind::Http, &format!("HTTP {status}")));
         }
         Ok((status, b))
+    }
+
+    /// [`Http::raw`] keeping a 5xx answer too: a gateway whose error answer is its JSON at any status (Cosmos REST, plan
+    /// T21: a refused simulate is a 500 with its code).
+    #[allow(clippy::too_many_arguments)]
+    pub async fn raw_any(
+        &self,
+        list: &NodeList,
+        i: usize,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<Vec<u8>>,
+        ctype: &str,
+        cap: usize,
+        deadline: Option<Instant>,
+    ) -> Result<(u16, Vec<u8>), EndpointFailure> {
+        self.send_any(
+            list,
+            i,
+            method,
+            Some(path),
+            body,
+            cap,
+            deadline,
+            (ctype, false),
+        )
+        .await
     }
 
     #[allow(clippy::too_many_arguments)]

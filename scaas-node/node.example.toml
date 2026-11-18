@@ -192,9 +192,9 @@ rpc_urls = ["http://cosmos:26657"]               # CometBFT RPC
 lanes = [0, 1]
 finality = { mode = "instant", quorum = 1 }      # CometBFT: a committed block is final
 max_gas_per_tx = 3000000
-# rest = REST gateway (LCD); prefix = bech32 prefix; gas_price in denom per gas unit (> 0, or zero_fee = true
-# on a zero-fee devnet only).
-params = { rest = "http://cosmos:1317", prefix = "wasm", denom = "ustake", gas_price = "0.025", zero_fee = false }
+# rest = the REST gateways (LCD), a list like rpc_urls (ARCH-POS-15); prefix = bech32 prefix; gas_price in denom per gas
+# unit (> 0, or zero_fee = true on a zero-fee devnet only).
+params = { rest = ["http://cosmos:1317"], prefix = "wasm", denom = "ustake", gas_price = "0.025", zero_fee = false }
 
 [[chains]]                                       # Stellar Soroban
 family = "soroban"

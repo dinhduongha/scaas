@@ -2,12 +2,14 @@
 //! `MsgExecuteContract{Relay{payload, auth}}` vào `scaas-token`; chủ thể không gửi tx nào nên không có
 //! sequence chủ thể để kẹt (R30, R62). Sequence của lane đọc từ chain trước mỗi job (review S14).
 //!
-//! Mạng: CometBFT RPC (`rpc_urls[0]`: `status`, `block`, `block_results`) + REST gateway (`params.rest`:
-//! account, simulate, broadcast, tx). Protobuf (TxBody/AuthInfo/SignDoc/TxRaw, SIGN_MODE_DIRECT) viết tay:
+//! Mạng: CometBFT RPC (`rpc_urls`, read on the first: `status`, `block`, `block_results`) + REST gateways (`params.rest`, a
+//! list, owner 2026-11-18: account, simulate, broadcast, tx), both through `scaas-rpc` (plan T21). Protobuf (TxBody/AuthInfo/SignDoc/TxRaw, SIGN_MODE_DIRECT) viết tay:
 //! sáu kiểu, không kéo `cosmrs`.
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
+
+use scaas_rpc::family::FamilyError;
 
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
@@ -478,11 +480,10 @@ pub struct CosmosAdapter {
     denom: String,
     gas_price: f64,
     max_gas: u64,
-    rpc: String,
-    rest: String,
+    /// the CometBFT RPC endpoints and the REST gateways (scaas-rpc T21: the family clients, bounded, 20 s per request)
+    net: scaas_rpc::cosmos::Cosmos,
     lanes: Vec<Lane>,
     signers: Vec<LocalSigner>,
-    http: reqwest::Client,
     account_numbers: Mutex<HashMap<usize, u64>>,
     relay_fee: RelayFeePolicy,
     /// The router's `relayexec` (`QueryMsg::Executor`, fixed at the router's instantiate): never a payee.
@@ -497,7 +498,15 @@ impl CosmosAdapter {
     pub fn new(cfg: &ChainCfg, signers: Vec<LocalSigner>) -> Result<Self> {
         let p = |k: &str| cfg.params.get(k).and_then(|v| v.as_str()).map(str::to_string);
         let prefix = p("prefix").ok_or_else(|| anyhow!("chain {}: params.prefix (bech32) is required", cfg.chain_key()))?;
-        let rest = p("rest").ok_or_else(|| anyhow!("chain {}: params.rest (REST gateway URL) is required", cfg.chain_key()))?;
+        // owner 2026-11-18 (ARCH-POS-15): a list of REST gateways, no single-URL form
+        let rest: Vec<String> = match cfg.params.get("rest") {
+            Some(toml::Value::Array(a)) => a
+                .iter()
+                .map(|v| v.as_str().map(str::to_string).ok_or_else(|| anyhow!("chain {}: params.rest: a URL is not a string", cfg.chain_key())))
+                .collect::<Result<_>>()?,
+            Some(_) => bail!("chain {}: params.rest must be a list of REST gateway URLs", cfg.chain_key()),
+            None => bail!("chain {}: params.rest (a list of REST gateway URLs) is required", cfg.chain_key()),
+        };
         let lanes = signers
             .iter()
             .zip(&cfg.lanes)
@@ -515,6 +524,11 @@ impl CosmosAdapter {
             bail!("chain {}: params.gas_price must be > 0 (params.zero_fee = true only on a zero-fee devnet)", cfg.chain_key());
         }
         let relay_fee = RelayFeePolicy::from_cfg(cfg, &prefix)?;
+        let net = scaas_rpc::cosmos::Cosmos::new(
+            scaas_rpc::family::Client::of_urls(&cfg.rpc_urls, None).map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?,
+            scaas_rpc::family::Client::of_urls(&rest, None).map_err(|e| anyhow!("chain {}: params.rest: {e}", cfg.chain_key()))?,
+            &chain_id,
+        );
         Ok(Self {
             key: cfg.chain_key(),
             chain_id,
@@ -522,11 +536,9 @@ impl CosmosAdapter {
             denom: p("denom").unwrap_or_else(|| "stake".into()),
             gas_price,
             max_gas: cfg.max_gas_per_tx,
-            rpc: cfg.rpc_urls[0].trim_end_matches('/').to_string(),
-            rest: rest.trim_end_matches('/').to_string(),
+            net,
             lanes,
             signers,
-            http: reqwest::Client::builder().timeout(Duration::from_secs(20)).build()?,
             account_numbers: Mutex::new(HashMap::new()),
             relay_fee,
             executor: tokio::sync::OnceCell::new(),
@@ -539,30 +551,28 @@ impl CosmosAdapter {
         &self.prefix
     }
 
-    async fn get(&self, url: &str) -> Result<(u16, Value)> {
-        let r = self.http.get(url).send().await?;
-        let code = r.status().as_u16();
-        Ok((code, r.json().await.unwrap_or(Value::Null)))
+    /// REST GET `path` on the first gateway (scaas-rpc T21): the status and the JSON (`null` for no body).
+    async fn rest_get(&self, path: &str) -> Result<(u16, Value)> {
+        self.net.rest.get(0, path).await.map_err(|e| anyhow!("GET {path}: {e}"))
     }
 
-    async fn post(&self, url: &str, body: &Value) -> Result<(u16, Value)> {
-        let r = self.http.post(url).json(body).send().await?;
-        let code = r.status().as_u16();
-        Ok((code, r.json().await.unwrap_or(Value::Null)))
+    /// REST POST on the first gateway: the status and the JSON.
+    async fn rest_post(&self, path: &str, body: &Value) -> Result<(u16, Value)> {
+        self.net.rest.post(0, path, body).await.map_err(|e| anyhow!("POST {path}: {e}"))
     }
 
+    /// CometBFT RPC on the first endpoint: the `result`; an error answer is `rpc {path}: {error}`.
     async fn rpc(&self, path: &str) -> Result<Value> {
-        let (code, v) = self.get(&format!("{}/{path}", self.rpc)).await?;
-        if code != 200 || v.get("error").is_some_and(|e| !e.is_null()) {
-            bail!("rpc {path}: {code} {}", v.get("error").unwrap_or(&v));
-        }
-        Ok(v["result"].clone())
+        self.net.rpc_at(0, path).await.map_err(|e| match e {
+            FamilyError::Rpc { error, .. } => anyhow!("rpc {path}: {}", scaas_rpc::error::endpoint_text(&error.to_string())),
+            e => anyhow!("rpc {path}: {e}"),
+        })
     }
 
     /// (account_number, sequence đã commit).
     async fn account(&self, lane: usize) -> Result<(u64, u64)> {
         let addr = &self.lanes.get(lane).ok_or_else(|| anyhow!("no lane {lane}"))?.address;
-        let (code, v) = self.get(&format!("{}/cosmos/auth/v1beta1/accounts/{addr}", self.rest)).await?;
+        let (code, v) = self.rest_get(&format!("/cosmos/auth/v1beta1/accounts/{addr}")).await?;
         if code != 200 {
             bail!("lane {addr} not found on chain (fund it first): {code} {v}");
         }
@@ -589,7 +599,7 @@ impl CosmosAdapter {
         let Some(router) = &self.relay_fee.router else { return Ok(None) };
         let e = self.executor.get_or_try_init(|| async {
             let q = base64::engine::general_purpose::URL_SAFE.encode(json!({"executor": {}}).to_string());
-            let (code, v) = self.get(&format!("{}/cosmwasm/wasm/v1/contract/{router}/smart/{q}", self.rest)).await?;
+            let (code, v) = self.rest_get(&format!("/cosmwasm/wasm/v1/contract/{router}/smart/{q}")).await?;
             v["data"].as_str().filter(|_| code == 200).map(str::to_string).ok_or_else(|| anyhow!("router executor query: {code} {v}"))
         }).await?;
         Ok(Some(e.as_str()))
@@ -625,7 +635,7 @@ impl ChainAdapter for CosmosAdapter {
         }
         let q = json!({"nonce": {"owner": payload["from"], "lane": payload["lane"]}});
         let q = base64::engine::general_purpose::URL_SAFE.encode(q.to_string());
-        let (code, v) = self.get(&format!("{}/cosmwasm/wasm/v1/contract/{contract}/smart/{q}", self.rest)).await?;
+        let (code, v) = self.rest_get(&format!("/cosmwasm/wasm/v1/contract/{contract}/smart/{q}")).await?;
         let next = v["data"].as_u64().filter(|_| code == 200).ok_or_else(|| anyhow!("nonce query: {code} {v}"))?;
         Ok(Some(next > nonce))
     }
@@ -651,7 +661,7 @@ impl ChainAdapter for CosmosAdapter {
         let body = tx_body(&sender, &contract, &msg);
         let sim = tx_raw(&body, &auth_info(&pk, seq, &self.denom, 0, 0), &[]);
         let (code, v) = self
-            .post(&format!("{}/cosmos/tx/v1beta1/simulate", self.rest), &json!({"tx_bytes": B64.encode(&sim)}))
+            .rest_post("/cosmos/tx/v1beta1/simulate", &json!({"tx_bytes": B64.encode(&sim)}))
             .await
             .map_err(|e| SimError::Transport(format!("{e:#}")))?;
         if code != 200 {
@@ -689,7 +699,7 @@ impl ChainAdapter for CosmosAdapter {
             }
         }
         let body = json!({"tx_bytes": B64.encode(&signed.raw), "mode": "BROADCAST_MODE_SYNC"});
-        let (code, v) = self.post(&format!("{}/cosmos/tx/v1beta1/txs", self.rest), &body).await?;
+        let (code, v) = self.rest_post("/cosmos/tx/v1beta1/txs", &body).await?;
         broadcast_outcome(code, &v)
     }
 
@@ -697,7 +707,7 @@ impl ChainAdapter for CosmosAdapter {
     /// thì quét `block`/`block_results` (luôn có) từ mốc lúc gửi (review M2). RPC lỗi ⇒ `Err` ⇒ runner thử lại.
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
         let h = tx_id.trim_start_matches("0x").to_ascii_uppercase();
-        if let Ok((200, v)) = self.get(&format!("{}/cosmos/tx/v1beta1/txs/{h}", self.rest)).await {
+        if let Ok((200, v)) = self.rest_get(&format!("/cosmos/tx/v1beta1/txs/{h}")).await {
             let r = &v["tx_response"];
             let height = r["height"].as_str().and_then(|s| s.parse().ok()).unwrap_or(0);
             let st = match r["code"].as_u64() {
@@ -933,7 +943,7 @@ mod tests {
     #[test]
     fn adapter_refuses_unsafe_config() {
         let k = || vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
-        let p = "params = { rest = \"http://x\", prefix = \"wasm\"";
+        let p = "params = { rest = [\"http://x\"], prefix = \"wasm\"";
         assert!(CosmosAdapter::new(&chain(&format!("network = \"c-1\"\n{p}, gas_price = \"0.025\" }}")), k()).is_ok());
         let err = |cfg: &str| CosmosAdapter::new(&chain(cfg), k()).err().map(|e| e.to_string()).unwrap_or_default();
         assert!(err(&format!("{p}, gas_price = \"0.025\" }}")).contains("network"));
@@ -1169,7 +1179,7 @@ mod tests {
         let rest = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
         let k = vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
-        let mut cfg = chain(&format!("network = \"c-1\"\nparams = {{ rest = \"{rest}\", prefix = \"wasm\", gas_price = \"0.025\", \
+        let mut cfg = chain(&format!("network = \"c-1\"\nparams = {{ rest = [\"{rest}\"], prefix = \"wasm\", gas_price = \"0.025\", \
                                   relay_fee = {{ router = \"{}\" }} }}", router()));
         cfg.tokens.push(crate::config::TokenCfg { address: token(), decimals: 6 });
         let a = CosmosAdapter::new(&cfg, k).unwrap();
@@ -1195,7 +1205,7 @@ mod tests {
     #[test]
     fn cosmos_relay_fee_policy_config() {
         let k = || vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
-        let cfg = |rf: &str| chain(&format!("network = \"c-1\"\nparams = {{ rest = \"http://x\", prefix = \"wasm\", gas_price = \"0.025\"{rf} }}"));
+        let cfg = |rf: &str| chain(&format!("network = \"c-1\"\nparams = {{ rest = [\"http://x\"], prefix = \"wasm\", gas_price = \"0.025\"{rf} }}"));
         assert!(CosmosAdapter::new(&cfg(""), k()).unwrap().relay_fee.router.is_none());
         let ok = CosmosAdapter::new(&cfg(&format!(", relay_fee = {{ router = \"{}\", min_amount = 7 }}", router())), k()).unwrap();
         assert_eq!((ok.relay_fee.router.clone(), ok.relay_fee.params.min_amount), (Some(router()), 7));
@@ -1257,5 +1267,18 @@ mod tests {
             prop_assert_eq!(out[0]["entry_ref"].as_str().unwrap(), format!("0x{}", alloy::hex::encode(r)));
             prop_assert_eq!(out[0]["log_index"].as_u64().unwrap(), log as u64);
         }
+    }
+
+    /// Owner 2026-11-18 (ARCH-POS-15): `params.rest` is a list of REST gateways; a single URL string, an empty list or a
+    /// repeated URL is refused at start. Control: a list of two.
+    #[test]
+    fn cosmos_rest_is_a_list_of_gateways() {
+        let k = || vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
+        let cfg = |rest: &str| chain(&format!("network = \"c-1\"\nparams = {{ rest = {rest}, prefix = \"wasm\", gas_price = \"0.025\" }}"));
+        let err = |rest: &str| CosmosAdapter::new(&cfg(rest), k()).err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(err("\"http://x\"").contains("must be a list"));
+        assert!(err("[]").contains("params.rest"));
+        assert!(err("[\"http://x\", \"http://x\"]").contains("params.rest"));
+        assert!(CosmosAdapter::new(&cfg("[\"http://x\", \"http://y\"]"), k()).is_ok(), "control");
     }
 }

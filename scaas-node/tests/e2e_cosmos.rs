@@ -263,7 +263,7 @@ fn odoo_at(addr: SocketAddr) -> Odoo {
 
 fn cfg() -> ChainCfg {
     let mut params = toml::Table::new();
-    params.insert("rest".into(), REST.into());
+    params.insert("rest".into(), toml::Value::Array(vec![REST.into()]));
     params.insert("prefix".into(), "wasm".into());
     params.insert("denom".into(), "ustake".into());
     params.insert("gas_price".into(), "0".into());
