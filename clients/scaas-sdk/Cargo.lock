@@ -3857,6 +3857,7 @@ dependencies = [
 name = "scaas-sdk"
 version = "0.1.0"
 dependencies = [
+ "alloy",
  "async-trait",
  "bip39",
  "getrandom 0.2.17",

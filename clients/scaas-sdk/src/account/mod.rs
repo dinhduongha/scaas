@@ -1,0 +1,339 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+//! `account` (spec §7, CLI-SDK-07; plan T9): the account rows of a seed, their UA ids and the restore scan. Every row names its
+//! seed; a UA key is `(seed, kind, account, index)` and its UA is the one `scaas-ua` derives; one account index per wallet (a new
+//! wallet takes the next free index, so no two wallets share one); the EIP-2333 kinds at index 0 only (CLI-UAL-15). Every change
+//! rewrites the seed's index MAC (the seed unlocked). A watch row holds no key and signs nothing. UNAUDITED.
+mod restore;
+
+pub use restore::Restore;
+
+use crate::vault::{change_entry, AccountRow, SeedEntry};
+use crate::{Sdk, SdkError};
+use std::sync::Arc;
+
+/// The account module.
+pub struct Account {
+    pub(crate) sdk: Arc<Sdk>,
+}
+
+impl Sdk {
+    /// The account module (spec §7).
+    pub fn account(self: &Arc<Self>) -> Arc<Account> {
+        Arc::new(Account { sdk: self.clone() })
+    }
+}
+
+/// One account row as the app shows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountInfo {
+    pub id: String,
+    /// The seed the row belongs to (R2).
+    pub seed: String,
+    pub name: String,
+    /// `ua`, `native`, `key` or `watch`.
+    pub shape: String,
+    pub kind: Option<u16>,
+    pub account: Option<u32>,
+    pub index: Option<u32>,
+    pub network: Option<String>,
+    /// A UA row's or a key row's UA, a native row's address, a watch row's id.
+    pub id_text: String,
+    /// The seed is unlocked and its index MAC verified at unlock (spec §6.2); a locked seed's rows are unverified.
+    pub verified: bool,
+    /// An EVM row whose code is an EIP-7702 designator (`0xef0100…`), from [`Account::marks`]; the SDK builds no type-4
+    /// transaction, so it cannot offer to clear it (CLI-SDK-31).
+    pub delegated: bool,
+}
+
+/// `add_ua`: the UA key `kind` of wallet `account` at `index`.
+#[derive(Debug, Clone)]
+pub struct AddUa {
+    pub seed: String,
+    pub kind: u16,
+    pub account: u32,
+    pub index: u32,
+    pub name: String,
+}
+
+/// `add_native`: the native key of `network` (a `scaas-ua` network name) at `index`.
+#[derive(Debug, Clone)]
+pub struct AddNative {
+    pub seed: String,
+    pub network: String,
+    pub index: u32,
+    pub name: String,
+}
+
+/// `add_watch`: an id to watch (a `0x` 32-byte UA or a `0x` 20-byte address); no key.
+#[derive(Debug, Clone)]
+pub struct AddWatch {
+    pub seed: String,
+    pub watch: String,
+    pub name: String,
+}
+
+const NAME_MAX: usize = 64;
+
+fn hex(b: &[u8]) -> String {
+    let mut s = String::from("0x");
+    for x in b {
+        s.push_str(&format!("{x:02x}"));
+    }
+    s
+}
+
+fn name_ok(n: &str) -> bool {
+    !n.is_empty() && n.len() <= NAME_MAX && !n.chars().any(char::is_control)
+}
+
+fn info(seed: &str, row: &AccountRow, verified: bool) -> AccountInfo {
+    let u32_of = |n: u64| u32::try_from(n).ok();
+    let base = |id: &str, name: &str, shape: &str, id_text: &str| AccountInfo {
+        id: id.into(),
+        seed: seed.into(),
+        name: name.into(),
+        shape: shape.into(),
+        kind: None,
+        account: None,
+        index: None,
+        network: None,
+        id_text: id_text.into(),
+        verified,
+        delegated: false,
+    };
+    match row {
+        AccountRow::Ua {
+            id,
+            name,
+            kind,
+            account,
+            index,
+            ua,
+        } => AccountInfo {
+            kind: u16::try_from(*kind).ok(),
+            account: u32_of(*account),
+            index: u32_of(*index),
+            ..base(id, name, "ua", ua)
+        },
+        AccountRow::Native {
+            id,
+            name,
+            network,
+            index,
+            address,
+            ..
+        } => AccountInfo {
+            network: Some(network.clone()),
+            index: u32_of(*index),
+            ..base(id, name, "native", address)
+        },
+        AccountRow::Key {
+            id, name, kind, ua, ..
+        } => AccountInfo {
+            kind: u16::try_from(*kind).ok(),
+            ..base(id, name, "key", ua)
+        },
+        AccountRow::Watch { id, name, watch } => base(id, name, "watch", watch),
+    }
+}
+
+impl Account {
+    /// The rows of seed `seed`, in order.
+    pub async fn accounts(&self, seed: String) -> Result<Vec<AccountInfo>, SdkError> {
+        let sdk = self.sdk.clone();
+        self.sdk
+            .spawn(async move {
+                let e = sdk.entry(&seed).await?;
+                let verified = sdk.open_seed(&seed).is_ok();
+                Ok(e.accounts
+                    .iter()
+                    .map(|r| info(&seed, r, verified))
+                    .collect())
+            })
+            .await
+    }
+
+    /// The account index a new wallet of seed `seed` takes: one past the highest a UA row uses (0 for none). One index per
+    /// wallet, for every attribute it registers (CLI-SDK-07).
+    pub async fn next_account(&self, seed: String) -> Result<u32, SdkError> {
+        let sdk = self.sdk.clone();
+        self.sdk
+            .spawn(async move { Ok(next_account(&sdk.entry(&seed).await?)) })
+            .await
+    }
+
+    /// Adds the UA key `kind` of wallet `account` at `index` to seed `seed` (unlocked: `WalletLocked`), its UA the one
+    /// `scaas-ua` derives; the MAC rewritten. `Argument`: an EIP-2333 kind at an index other than 0 (CLI-UAL-15, `scaas-ua`'s
+    /// rule), a kind with no UA of its own, the same key twice, a name empty, above 64 bytes or with a control character.
+    pub async fn add_ua(&self, req: AddUa) -> Result<AccountInfo, SdkError> {
+        let sdk = self.sdk.clone();
+        self.sdk
+            .spawn(async move {
+                if !name_ok(&req.name) {
+                    return Err(SdkError::Argument);
+                }
+                let open = sdk.open_seed(&req.seed)?;
+                let key = open.wallet.ua_key(req.kind, req.account, req.index)?;
+                let ua = hex(&key.ua().ok_or(SdkError::Argument)?);
+                let row = AccountRow::Ua {
+                    id: crate::vault::uuid4()?,
+                    name: req.name.clone(),
+                    kind: u64::from(req.kind),
+                    account: u64::from(req.account),
+                    index: u64::from(req.index),
+                    ua,
+                };
+                add_row(&sdk, &req.seed, row).await
+            })
+            .await
+    }
+
+    /// Adds the native key of `network` at `index` (the address `scaas-ua` derives, as clientkeys `describe` prints it).
+    /// `Argument`: an unknown network, a network without an address here (`ton`, `hedera_ed25519`), the same key twice.
+    pub async fn add_native(&self, req: AddNative) -> Result<AccountInfo, SdkError> {
+        let sdk = self.sdk.clone();
+        self.sdk
+            .spawn(async move {
+                let network =
+                    scaas_ua::wallet::Network::from_name(&req.network).ok_or(SdkError::Argument)?;
+                if !name_ok(&req.name) {
+                    return Err(SdkError::Argument);
+                }
+                let open = sdk.open_seed(&req.seed)?;
+                let address = open
+                    .wallet
+                    .native_key(network, req.index, None)?
+                    .address()
+                    .ok_or(SdkError::Argument)?;
+                let row = AccountRow::Native {
+                    id: crate::vault::uuid4()?,
+                    name: req.name.clone(),
+                    network: network.name().into(),
+                    index: u64::from(req.index),
+                    coin_type: None,
+                    change: None,
+                    path: None,
+                    ss58_prefix: None,
+                    address,
+                };
+                add_row(&sdk, &req.seed, row).await
+            })
+            .await
+    }
+
+    /// Adds a watch row: an id, no key; nothing is ever signed for it ([`Account::signs`]).
+    pub async fn add_watch(&self, req: AddWatch) -> Result<AccountInfo, SdkError> {
+        let sdk = self.sdk.clone();
+        self.sdk
+            .spawn(async move {
+                let w = req.watch.to_ascii_lowercase();
+                let hex_ok = w.strip_prefix("0x").is_some_and(|h| {
+                    (h.len() == 40 || h.len() == 64) && h.bytes().all(|b| b.is_ascii_hexdigit())
+                });
+                if !hex_ok || !name_ok(&req.name) {
+                    return Err(SdkError::Argument);
+                }
+                let row = AccountRow::Watch {
+                    id: crate::vault::uuid4()?,
+                    name: req.name.clone(),
+                    watch: w,
+                };
+                add_row(&sdk, &req.seed, row).await
+            })
+            .await
+    }
+
+    /// Whether row `id` of seed `seed` holds a key the SDK signs with (a UA, native or key row); a watch row signs nothing.
+    /// `Argument`: no such row.
+    pub async fn signs(&self, seed: String, id: String) -> Result<bool, SdkError> {
+        let sdk = self.sdk.clone();
+        self.sdk
+            .spawn(async move {
+                let e = sdk.entry(&seed).await?;
+                let row = e
+                    .accounts
+                    .iter()
+                    .find(|r| row_id(r) == id)
+                    .ok_or(SdkError::Argument)?;
+                Ok(!matches!(row, AccountRow::Watch { .. }))
+            })
+            .await
+    }
+}
+
+fn row_id(r: &AccountRow) -> &str {
+    match r {
+        AccountRow::Ua { id, .. }
+        | AccountRow::Native { id, .. }
+        | AccountRow::Key { id, .. }
+        | AccountRow::Watch { id, .. } => id,
+    }
+}
+
+fn next_account(e: &SeedEntry) -> u32 {
+    e.accounts
+        .iter()
+        .filter_map(|r| match r {
+            AccountRow::Ua { account, .. } => u32::try_from(*account).ok(),
+            _ => None,
+        })
+        .max()
+        .map_or(0, |a| a.saturating_add(1))
+}
+
+/// The same key twice: the same UA, the same native `(network, index)`, the same watched id.
+fn same(a: &AccountRow, b: &AccountRow) -> bool {
+    match (a, b) {
+        (AccountRow::Ua { ua: x, .. }, AccountRow::Ua { ua: y, .. }) => x == y,
+        (
+            AccountRow::Native {
+                network: n,
+                index: i,
+                ..
+            },
+            AccountRow::Native {
+                network: m,
+                index: j,
+                ..
+            },
+        ) => n == m && i == j,
+        (AccountRow::Watch { watch: x, .. }, AccountRow::Watch { watch: y, .. }) => x == y,
+        _ => false,
+    }
+}
+
+async fn add_row(sdk: &Arc<Sdk>, seed: &str, row: AccountRow) -> Result<AccountInfo, SdkError> {
+    add_rows(sdk, seed, vec![row], false)
+        .await?
+        .pop()
+        .ok_or(SdkError::Internal)
+}
+
+/// Adds `rows` to seed `seed` in one change (the MAC rewritten): a row whose key is listed already is `Argument`, or with
+/// `skip_known` left out (the restore scan). Returns the rows added.
+pub(crate) async fn add_rows(
+    sdk: &Arc<Sdk>,
+    seed: &str,
+    rows: Vec<AccountRow>,
+    skip_known: bool,
+) -> Result<Vec<AccountInfo>, SdkError> {
+    let added = std::sync::Mutex::new(Vec::new());
+    change_entry(sdk, seed, |e| {
+        let mut new = Vec::new();
+        for row in &rows {
+            if e.accounts.iter().chain(new.iter()).any(|r| same(r, row)) {
+                if skip_known {
+                    continue;
+                }
+                return Err(SdkError::Argument);
+            }
+            new.push(row.clone());
+        }
+        e.accounts.extend(new.iter().cloned());
+        *added.lock().map_err(|_| SdkError::Internal)? = new;
+        Ok(())
+    })
+    .await?;
+    let rows = added.into_inner().map_err(|_| SdkError::Internal)?;
+    Ok(rows.iter().map(|r| info(seed, r, true)).collect())
+}

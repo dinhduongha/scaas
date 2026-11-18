@@ -434,7 +434,13 @@ impl Vault {
     pub async fn confirm_backup(&self, seed: String) -> Result<(), SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
-            .spawn(async move { change_entry(&sdk, &seed, |e| e.backup = "verified".into()).await })
+            .spawn(async move {
+                change_entry(&sdk, &seed, |e| {
+                    e.backup = "verified".into();
+                    Ok(())
+                })
+                .await
+            })
             .await
     }
 
@@ -445,7 +451,13 @@ impl Vault {
         }
         let sdk = self.sdk.clone();
         self.sdk
-            .spawn(async move { change_entry(&sdk, &seed, move |e| e.label = label.clone()).await })
+            .spawn(async move {
+                change_entry(&sdk, &seed, move |e| {
+                    e.label = label.clone();
+                    Ok(())
+                })
+                .await
+            })
             .await
     }
 
@@ -560,7 +572,7 @@ pub(crate) async fn store_new(
 pub(crate) async fn change_entry(
     sdk: &Arc<Sdk>,
     seed: &str,
-    mut f: impl FnMut(&mut SeedEntry),
+    mut f: impl FnMut(&mut SeedEntry) -> Result<(), SdkError>,
 ) -> Result<(), SdkError> {
     let open = sdk.open_seed(seed)?;
     let ks = sdk
@@ -572,7 +584,7 @@ pub(crate) async fn change_entry(
                 .position(|s| s.id == seed)
                 .ok_or(SdkError::SeedUnknown)?;
             let mut e = ks.seeds.get(i).cloned().ok_or(SdkError::SeedUnknown)?;
-            f(&mut e);
+            f(&mut e)?;
             if ks
                 .seeds
                 .iter()

@@ -4063,6 +4063,7 @@ dependencies = [
 name = "scaas-sdk"
 version = "0.1.0"
 dependencies = [
+ "alloy",
  "async-trait",
  "getrandom 0.2.17",
  "scaas-rpc",

@@ -13,6 +13,8 @@
 #[cfg(not(feature = "vault"))]
 compile_error!("scaas-sdk needs the feature `vault` (every module does)");
 
+#[cfg(feature = "account")]
+pub mod account;
 pub mod config;
 pub mod error;
 pub mod events;
@@ -208,6 +210,7 @@ impl Sdk {
     /// Runs `f` on the SDK's runtime and waits for it (spec §14): a generator that polls the caller's future from a foreign
     /// executor never runs I/O outside a reactor, a dropped caller future leaves the task to complete, and a panic inside it is
     /// `Internal`. Rust-only (outside the binding surface).
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn spawn<T: Send + 'static>(
         &self,
         f: impl Future<Output = Result<T, SdkError>> + Send + 'static,
@@ -216,6 +219,16 @@ impl Sdk {
             Some(rt) => rt.handle.spawn(f).await.map_err(|_| SdkError::Internal)?,
             None => f.await,
         }
+    }
+
+    /// wasm32: one thread, the page's event loop; `f` is awaited where it is called (the RPC transport's futures are not
+    /// `Send` there, so no runtime handle could take them).
+    #[cfg(target_arch = "wasm32")]
+    pub async fn spawn<T: 'static>(
+        &self,
+        f: impl Future<Output = Result<T, SdkError>> + 'static,
+    ) -> Result<T, SdkError> {
+        f.await
     }
 
     /// `f` off the async workers, at most `Limits::max_concurrent_heavy` at once (scrypt, Argon2id, proofs, slow keygen).
