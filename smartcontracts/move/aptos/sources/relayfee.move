@@ -40,13 +40,15 @@ module scaas::relayfee {
         token: address,
         payer: address,
         payee: address,
-        amount: u64,
+        amount: u64
     }
 
     #[view]
     /// The router marker, the payment's relayer: `object::create_object_address(&@scaas, b"scaas.relayfee")`. No lane
     /// is this address, so `relay_pay` / `relay_pay_meta` refuse a router-bound payment (`meta::EWRONG_RELAYER`).
-    public fun marker(): address { object::create_object_address(&@scaas, MARKER_SEED) }
+    public fun marker(): address {
+        object::create_object_address(&@scaas, MARKER_SEED)
+    }
 
     #[view]
     public fun relay_ref(call: vector<u8>, salt: vector<u8>): vector<u8> {
@@ -80,7 +82,7 @@ module scaas::relayfee {
         extra: vector<u8>,
         pay_key: vector<u8>,
         pay_sig: vector<u8>,
-        pay_envelope: vector<u8>,
+        pay_envelope: vector<u8>
     ) {
         let c = bcs::to_bytes(&b"meta::manage_signed");
         c.append(bcs::to_bytes(&owner));
@@ -92,9 +94,32 @@ module scaas::relayfee {
         c.append(bcs::to_bytes(&guardian));
         c.append(bcs::to_bytes(&valid_until));
         sig_bytes(&mut c, &signer_key, &sig, &envelope);
-        meta::manage_signed(owner, action, scheme, public_key, rp_id_hash, origin, guardian, valid_until, signer_key,
-            sig, envelope);
-        pay(lane, c, payer, asset, to, amount, pay_valid_until, extra, pay_key, pay_sig, pay_envelope);
+        meta::manage_signed(
+            owner,
+            action,
+            scheme,
+            public_key,
+            rp_id_hash,
+            origin,
+            guardian,
+            valid_until,
+            signer_key,
+            sig,
+            envelope
+        );
+        pay(
+            lane,
+            c,
+            payer,
+            asset,
+            to,
+            amount,
+            pay_valid_until,
+            extra,
+            pay_key,
+            pay_sig,
+            pay_envelope
+        );
     }
 
     /// `mandate::open`, then the payment.
@@ -120,7 +145,7 @@ module scaas::relayfee {
         extra: vector<u8>,
         pay_key: vector<u8>,
         pay_sig: vector<u8>,
-        pay_envelope: vector<u8>,
+        pay_envelope: vector<u8>
     ) {
         let c = bcs::to_bytes(&b"mandate::open");
         c.append(bcs::to_bytes(&owner));
@@ -133,9 +158,33 @@ module scaas::relayfee {
         c.append(bcs::to_bytes(&payees));
         c.append(bcs::to_bytes(&valid_until));
         sig_bytes(&mut c, &public_key, &sig, &envelope);
-        mandate::open(owner, seed, delegate_key, max_per_payment, max_per_period, period, expiry, payees, valid_until,
-            public_key, sig, envelope);
-        pay(lane, c, payer, asset, to, amount, pay_valid_until, extra, pay_key, pay_sig, pay_envelope);
+        mandate::open(
+            owner,
+            seed,
+            delegate_key,
+            max_per_payment,
+            max_per_period,
+            period,
+            expiry,
+            payees,
+            valid_until,
+            public_key,
+            sig,
+            envelope
+        );
+        pay(
+            lane,
+            c,
+            payer,
+            asset,
+            to,
+            amount,
+            pay_valid_until,
+            extra,
+            pay_key,
+            pay_sig,
+            pay_envelope
+        );
     }
 
     /// `mandate::revoke_signed` (the owner's or the delegate's kill switch), then the payment.
@@ -154,14 +203,26 @@ module scaas::relayfee {
         extra: vector<u8>,
         pay_key: vector<u8>,
         pay_sig: vector<u8>,
-        pay_envelope: vector<u8>,
+        pay_envelope: vector<u8>
     ) {
         let c = bcs::to_bytes(&b"mandate::revoke_signed");
         c.append(bcs::to_bytes(&mandate));
         c.append(bcs::to_bytes(&valid_until));
         sig_bytes(&mut c, &public_key, &sig, &envelope);
         mandate::revoke_signed(lane, mandate, valid_until, public_key, sig, envelope);
-        pay(lane, c, payer, asset, to, amount, pay_valid_until, extra, pay_key, pay_sig, pay_envelope);
+        pay(
+            lane,
+            c,
+            payer,
+            asset,
+            to,
+            amount,
+            pay_valid_until,
+            extra,
+            pay_key,
+            pay_sig,
+            pay_envelope
+        );
     }
 
     /// `dex::cancel_signed`, then the payment; a cancel of an order already closed aborts with `ECALL_REFUSED`.
@@ -180,14 +241,26 @@ module scaas::relayfee {
         extra: vector<u8>,
         pay_key: vector<u8>,
         pay_sig: vector<u8>,
-        pay_envelope: vector<u8>,
+        pay_envelope: vector<u8>
     ) {
         let c = bcs::to_bytes(&b"dex::cancel_signed");
         c.append(bcs::to_bytes(&market));
         c.append(bcs::to_bytes(&order));
         sig_bytes(&mut c, &pk, &sig, &env);
         assert!(dex::cancel(market, order, pk, sig, env), ECALL_REFUSED);
-        pay(lane, c, payer, asset, to, amount, pay_valid_until, extra, pay_key, pay_sig, pay_envelope);
+        pay(
+            lane,
+            c,
+            payer,
+            asset,
+            to,
+            amount,
+            pay_valid_until,
+            extra,
+            pay_key,
+            pay_sig,
+            pay_envelope
+        );
     }
 
     /// `dex::invalidate_nonces_signed`, then the payment.
@@ -207,7 +280,7 @@ module scaas::relayfee {
         extra: vector<u8>,
         pay_key: vector<u8>,
         pay_sig: vector<u8>,
-        pay_envelope: vector<u8>,
+        pay_envelope: vector<u8>
     ) {
         let c = bcs::to_bytes(&b"dex::invalidate_nonces_signed");
         c.append(bcs::to_bytes(&market));
@@ -215,11 +288,25 @@ module scaas::relayfee {
         c.append(bcs::to_bytes(&min_nonce));
         sig_bytes(&mut c, &pk, &sig, &env);
         dex::invalidate_nonces_signed(market, maker, min_nonce, pk, sig, env);
-        pay(lane, c, payer, asset, to, amount, pay_valid_until, extra, pay_key, pay_sig, pay_envelope);
+        pay(
+            lane,
+            c,
+            payer,
+            asset,
+            to,
+            amount,
+            pay_valid_until,
+            extra,
+            pay_key,
+            pay_sig,
+            pay_envelope
+        );
     }
 
     /// The entry's own authorisation, its last three arguments: `bcs(public_key) ‖ bcs(sig) ‖ bcs(envelope)`.
-    fun sig_bytes(c: &mut vector<u8>, public_key: &vector<u8>, sig: &vector<u8>, envelope: &vector<u8>) {
+    fun sig_bytes(
+        c: &mut vector<u8>, public_key: &vector<u8>, sig: &vector<u8>, envelope: &vector<u8>
+    ) {
         c.append(bcs::to_bytes(public_key));
         c.append(bcs::to_bytes(sig));
         c.append(bcs::to_bytes(envelope));
@@ -236,18 +323,39 @@ module scaas::relayfee {
         extra: vector<u8>,
         public_key: vector<u8>,
         sig: vector<u8>,
-        envelope: vector<u8>,
+        envelope: vector<u8>
     ) {
         let r = relay_ref(call, extra);
-        let payee = meta::pay_routed(lane, marker(), payer, asset, to, amount, r, valid_until, extra, public_key, sig,
-            envelope);
-        event::emit(RelayFeePaid {
-            ref: r, target: @scaas, token: object::object_address(&asset), payer, payee, amount: amount as u64,
-        });
+        let payee = meta::pay_routed(
+            lane,
+            marker(),
+            payer,
+            asset,
+            to,
+            amount,
+            r,
+            valid_until,
+            extra,
+            public_key,
+            sig,
+            envelope
+        );
+        event::emit(
+            RelayFeePaid {
+                ref: r,
+                target: @scaas,
+                token: object::object_address(&asset),
+                payer,
+                payee,
+                amount: amount as u64
+            }
+        );
     }
 
     #[test_only]
-    public fun relay_fee_paid_for_testing(ref: vector<u8>, token: address, payer: address, payee: address, amount: u64): RelayFeePaid {
+    public fun relay_fee_paid_for_testing(
+        ref: vector<u8>, token: address, payer: address, payee: address, amount: u64
+    ): RelayFeePaid {
         RelayFeePaid { ref, target: @scaas, token, payer, payee, amount }
     }
 }

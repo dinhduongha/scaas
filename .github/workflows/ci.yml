@@ -31,7 +31,8 @@
 #                  python3 -I smartcontracts/evm/script/pqz/gas-inputs.py --check (the PQZ gas table's inputs = the calibrated or
 #                  provisional precompile rows and each set's proofs; T21 L67)
 #   format:        scripts/format.sh --check (check only, at the pinned versions: rustfmt of rust-toolchain.toml, forge 1.8.5, clientkeys'
-#                  Prettier 3.3.3, ruff 0.16.4, gofmt, dotnet format whitespace, dart format, clang-format 19.1.7, shfmt 3.10.0, taplo 0.9.3,
+#                  Prettier 3.3.3, ruff 0.16.4, gofmt, dotnet format whitespace, dart format, clang-format 19.1.7, movefmt 1.5.3 (Aptos Move),
+#                  shfmt 3.10.0, taplo 0.9.3,
 #                  actionlint 1.7.12, hadolint 2.15.1 on errors; .rustfmt-ignore, .clang-format-ignore and foundry.toml [fmt] keep
 #                  generated and harness-read files out)
 #   clients/clientkeys:    npm ci --ignore-scripts; npm test; its ML-DSA-65 signer (script/pqz/mldsa.mjs) against the DEX:
@@ -561,21 +562,24 @@ jobs:
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: 3.12.2
-      - name: shfmt 3.10.0, actionlint 1.7.12, hadolint 2.15.1 (release binaries, each checked against the release's sha256)
+      - name: shfmt 3.10.0, actionlint 1.7.12, hadolint 2.15.1, movefmt 1.5.3 (release binaries, each checked against the release's sha256)
         run: |
           set -eu
           b=$RUNNER_TEMP/format-bin
           mkdir -p "$b"
           curl -fsSL -o "$b/shfmt" https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_amd64
+          curl -fsSL -o "$b/movefmt" \
+            https://github.com/aptos-labs/movefmt/releases/download/v1.5.3/movefmt-v1.5.3-x86_64-unknown-linux-gnu
           curl -fsSL -o "$b/hadolint" https://github.com/hadolint/hadolint/releases/download/v2.15.1/hadolint-linux-x86_64
           curl -fsSL -o "$b/actionlint.tgz" \
             https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
           printf '%s  %s\n' \
             1f57a384d59542f8fac5f503da1f3ea44242f46dff969569e80b524d64b71dbc "$b/shfmt" \
             c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507 "$b/hadolint" \
-            8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8 "$b/actionlint.tgz" | sha256sum -c -
+            8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8 "$b/actionlint.tgz" \
+            6a14ffbd9881be309609b37216d8eec2ed69dda17da6affd4423f826d6cd8d72 "$b/movefmt" | sha256sum -c -
           tar -xzf "$b/actionlint.tgz" -C "$b" actionlint
-          chmod +x "$b/shfmt" "$b/hadolint" "$b/actionlint"
+          chmod +x "$b/shfmt" "$b/hadolint" "$b/actionlint" "$b/movefmt"
           echo "$b" >> "$GITHUB_PATH"
       # the taplo 0.9.3 release publishes no checksums: built from crates.io with its lockfile
       - name: taplo 0.9.3

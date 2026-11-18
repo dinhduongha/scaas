@@ -13,10 +13,11 @@ module scaas::meta_tests {
 
     const BEEF: address = @0xbeef;
 
-    fun eur(): object::Object<Metadata> { fx::asset(b"EUR") }
+    fun eur(): object::Object<Metadata> {
+        fx::asset(b"EUR")
+    }
 
     // ------------------------------------------------------------------ địa chỉ: Move = Python
-
     #[test(f = @aptos_framework, b = @scaas)]
     fun derived_addresses_match_python(f: signer, b: signer) {
         fx::setup(&f, &b);
@@ -30,14 +31,24 @@ module scaas::meta_tests {
 
     // L7: FA gửi thẳng tới địa chỉ Account TRƯỚC khi Account tồn tại chi được; lần chi đầu mở Account (lười).
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
-    fun pay_opens_lazily_and_spends_funds_sent_before(f: signer, b: signer, lane: signer) {
+    fun pay_opens_lazily_and_spends_funds_sent_before(
+        f: signer, b: signer, lane: signer
+    ) {
         fx::setup(&f, &b);
         let e = eur();
         fx::mint(e, v::a_account(), 1000);
         assert!(!meta::exists_at(v::alice()), 0);
         v::a_pay_eur_0(&lane, e);
-        assert!(meta::exists_at(v::alice()) && bal(e, BEEF) == 100 && bal(e, v::a_account()) == 900, 1);
-        assert!(meta::lane_nonce(v::alice(), x"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1") == 1, 2);
+        assert!(
+            meta::exists_at(v::alice())
+                && bal(e, BEEF) == 100
+                && bal(e, v::a_account()) == 900,
+            1
+        );
+        assert!(
+            meta::lane_nonce(v::alice(), x"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1") == 1,
+            2
+        );
         // …và SAU khi tồn tại
         fx::mint(e, v::a_account(), 5);
         v::a_pay_eur_1(&lane, e);
@@ -53,7 +64,10 @@ module scaas::meta_tests {
         assert!(v::a_pay_eur_0_check(@0x1a, e) == v::a_pay_eur_0_digest(), 0);
         assert!(!meta::exists_at(v::alice()) && bal(e, BEEF) == 0, 1);
         fx::mint(e, v::d_account(), 1000);
-        assert!(v::d_pay_eur_check(@0x1a, e).length() == 32 && !meta::exists_at(v::dave()), 2);
+        assert!(
+            v::d_pay_eur_check(@0x1a, e).length() == 32 && !meta::exists_at(v::dave()),
+            2
+        );
     }
 
     #[test(f = @aptos_framework, b = @scaas)]
@@ -151,9 +165,10 @@ module scaas::meta_tests {
     }
 
     // ------------------------------------------------------------------ phong bì signMessage (§4.2)
-
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
-    fun envelope_line_order_does_not_matter(f: signer, b: signer, lane: signer) {
+    fun envelope_line_order_does_not_matter(
+        f: signer, b: signer, lane: signer
+    ) {
         fx::setup(&f, &b);
         let e = eur();
         fx::mint(e, v::a_account(), 1000);
@@ -196,12 +211,22 @@ module scaas::meta_tests {
         let e = eur();
         fx::mint(e, v::a_account(), 1000);
         meta::open(v::alice(), v::alice_pk());
-        meta::manage_native(&account::create_signer_for_test(v::alice()), 2, 0, vector[], vector[], v::origin(), @0x0);
+        meta::manage_native(
+            &account::create_signer_for_test(v::alice()),
+            2,
+            0,
+            vector[],
+            vector[],
+            v::origin(),
+            @0x0
+        );
         e
     }
 
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
-    fun wallet_application_in_the_origins_pays(f: signer, b: signer, lane: signer) {
+    fun wallet_application_in_the_origins_pays(
+        f: signer, b: signer, lane: signer
+    ) {
         let e = alice_with_origin(&f, &b);
         v::a_pay_eur_app(&lane, e);
         assert!(bal(e, BEEF) == 10, 0);
@@ -209,25 +234,31 @@ module scaas::meta_tests {
 
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     #[expected_failure(abort_code = 1, location = scaas::meta)]
-    fun foreign_wallet_application_is_refused(f: signer, b: signer, lane: signer) {
+    fun foreign_wallet_application_is_refused(
+        f: signer, b: signer, lane: signer
+    ) {
         let e = alice_with_origin(&f, &b);
         v::a_pay_eur_evil_app(&lane, e);
     }
 
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     #[expected_failure(abort_code = 1, location = scaas::meta)]
-    fun missing_wallet_application_is_refused_once_origins_exist(f: signer, b: signer, lane: signer) {
+    fun missing_wallet_application_is_refused_once_origins_exist(
+        f: signer, b: signer, lane: signer
+    ) {
         let e = alice_with_origin(&f, &b);
         v::a_pay_eur_0(&lane, e);
     }
 
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
-    fun account_without_origins_takes_any_application(f: signer, b: signer, lane: signer) {
+    fun account_without_origins_takes_any_application(
+        f: signer, b: signer, lane: signer
+    ) {
         fx::setup(&f, &b);
         let e = eur();
         fx::mint(e, v::a_account(), 1000);
-        v::a_pay_eur_evil_app(&lane, e);     // lazy open
-        v::a_pay_eur_app(&lane, e);          // open
+        v::a_pay_eur_evil_app(&lane, e); // lazy open
+        v::a_pay_eur_app(&lane, e); // open
         assert!(bal(e, BEEF) == 20, 0);
     }
 
@@ -255,7 +286,9 @@ module scaas::meta_tests {
     // Mở lười với khoá không dẫn ra auth key của chủ ⇒ từ chối (kẻ gian không chiếm trước Account).
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     #[expected_failure(abort_code = 8, location = scaas::meta)]
-    fun lazy_open_with_a_foreign_key_is_refused(f: signer, b: signer, lane: signer) {
+    fun lazy_open_with_a_foreign_key_is_refused(
+        f: signer, b: signer, lane: signer
+    ) {
         fx::setup(&f, &b);
         let e = eur();
         fx::mint(e, v::a_account(), 1000);
@@ -265,7 +298,9 @@ module scaas::meta_tests {
     // Account đã có: khoá không thuộc Account ⇒ từ chối.
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     #[expected_failure(abort_code = 1, location = scaas::meta)]
-    fun key_outside_the_account_is_refused(f: signer, b: signer, lane: signer) {
+    fun key_outside_the_account_is_refused(
+        f: signer, b: signer, lane: signer
+    ) {
         fx::setup(&f, &b);
         let e = eur();
         fx::mint(e, v::a_account(), 1000);
@@ -311,14 +346,18 @@ module scaas::meta_tests {
     }
 
     // ------------------------------------------------------------------ passkey (WebAuthn P-256 trong Move)
-
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
-    fun passkey_owner_pays_and_origin_is_recorded(f: signer, b: signer, lane: signer) {
+    fun passkey_owner_pays_and_origin_is_recorded(
+        f: signer, b: signer, lane: signer
+    ) {
         fx::setup(&f, &b);
         let e = eur();
         fx::mint(e, v::d_account(), 1000);
         v::d_pay_eur(&lane, e);
-        assert!(bal(e, BEEF) == 100 && meta::has_origin(v::dave(), v::origin()), 0);
+        assert!(
+            bal(e, BEEF) == 100 && meta::has_origin(v::dave(), v::origin()),
+            0
+        );
         v::d_pay_eur_1(&lane, e);
         assert!(bal(e, BEEF) == 110, 1);
     }
@@ -335,7 +374,9 @@ module scaas::meta_tests {
 
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     #[expected_failure(abort_code = 1, location = scaas::meta)]
-    fun passkey_without_user_verification_is_refused(f: signer, b: signer, lane: signer) {
+    fun passkey_without_user_verification_is_refused(
+        f: signer, b: signer, lane: signer
+    ) {
         fx::setup(&f, &b);
         let e = eur();
         fx::mint(e, v::d_account(), 1000);
@@ -346,7 +387,9 @@ module scaas::meta_tests {
 
     // L7: coin APT cũ gửi bằng `coin::deposit` tới địa chỉ Account rơi vào FA cặp (0xa) ⇒ chi được.
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
-    fun paired_coin_sent_to_the_account_is_spendable(f: signer, b: signer, lane: signer) {
+    fun paired_coin_sent_to_the_account_is_spendable(
+        f: signer, b: signer, lane: signer
+    ) {
         fx::setup(&f, &b);
         let (burn, mint) = aptos_coin::initialize_for_test(&f);
         coin::deposit(v::a_account(), coin::mint<AptosCoin>(100, &mint));
@@ -372,7 +415,9 @@ module scaas::meta_tests {
 
     // Chủ thể ký X (EUR, lane a1) và Y (USD, lane a2) trên CÙNG Account; X bị giữ; Y qua; rồi X qua.
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
-    fun withheld_op_does_not_block_another_lane_or_asset(f: signer, b: signer, lane: signer) {
+    fun withheld_op_does_not_block_another_lane_or_asset(
+        f: signer, b: signer, lane: signer
+    ) {
         fx::setup(&f, &b);
         let (e, u) = (eur(), fx::asset(b"USD"));
         fx::mint(e, v::a_account(), 1000);
@@ -395,40 +440,50 @@ module scaas::meta_tests {
         fx::setup(&f, &b);
         let e = eur();
         fx::mint(e, v::a_account(), 1000);
-        v::a_pay_eur_short(&lane, e);   // valid_until 150
-        v::a_pay_eur_0(&lane, e);       // valid_until 1000, lane a1
+        v::a_pay_eur_short(&lane, e); // valid_until 150
+        v::a_pay_eur_0(&lane, e); // valid_until 1000, lane a1
         set_now(150 + PRUNE_DELAY + 1);
         let short = x"a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8";
         let live = x"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1";
         meta::prune(v::alice(), vector[short, live]);
-        assert!(meta::lane_nonce(v::alice(), short) == 0 && meta::lane_nonce(v::alice(), live) == 1, 0);
-        v::a_pay_eur_short(&lane, e);   // expired ⇒ 2
+        assert!(
+            meta::lane_nonce(v::alice(), short) == 0 && meta::lane_nonce(v::alice(), live) == 1,
+            0
+        );
+        v::a_pay_eur_short(&lane, e); // expired ⇒ 2
     }
 
     // M2: hai op đã ký cho MỘT request (Odoo phát lại điều khoản: cùng lane, nonce 0, hạn 1000 rồi 1300). Chỉ một
     // chạy được: op kia trượt nonce khi lane còn; `prune` chờ hết hạn + PRUNE_DELAY nên lúc lane mất thì op kia hết hạn.
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     #[expected_failure(abort_code = 4, location = scaas::meta)]
-    fun reissued_op_cannot_run_while_the_lane_is_kept(f: signer, b: signer, lane: signer) {
+    fun reissued_op_cannot_run_while_the_lane_is_kept(
+        f: signer, b: signer, lane: signer
+    ) {
         fx::setup(&f, &b);
         let e = eur();
         fx::mint(e, v::a_account(), 1000);
         v::a_pay_eur_0(&lane, e);
-        set_now(1001);                  // op đã chạy hết hạn; op phát lại (1300) còn hạn
+        set_now(1001); // op đã chạy hết hạn; op phát lại (1300) còn hạn
         meta::prune(v::alice(), vector[LANE_A1]);
         set_now(1200);
-        assert!(meta::lane_nonce(v::alice(), LANE_A1) == 1 && bal(e, BEEF) == 100, 0);
+        assert!(
+            meta::lane_nonce(v::alice(), LANE_A1) == 1 && bal(e, BEEF) == 100,
+            0
+        );
         v::a_pay_eur_0_reissued(&lane, e);
     }
 
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     #[expected_failure(abort_code = 2, location = scaas::meta)]
-    fun reissued_op_is_dead_once_the_lane_is_pruned(f: signer, b: signer, lane: signer) {
+    fun reissued_op_is_dead_once_the_lane_is_pruned(
+        f: signer, b: signer, lane: signer
+    ) {
         fx::setup(&f, &b);
         let e = eur();
         fx::mint(e, v::a_account(), 1000);
         v::a_pay_eur_0(&lane, e);
-        set_now(1000 + PRUNE_DELAY);    // ranh giới: chưa xoá
+        set_now(1000 + PRUNE_DELAY); // ranh giới: chưa xoá
         meta::prune(v::alice(), vector[LANE_A1]);
         assert!(meta::lane_nonce(v::alice(), LANE_A1) == 1, 0);
         set_now(1000 + PRUNE_DELAY + 1);
@@ -438,9 +493,10 @@ module scaas::meta_tests {
     }
 
     // ------------------------------------------------------------------ vòng đời khoá (RS11-3)
-
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
-    fun added_key_pays_and_rotation_keeps_the_account(f: signer, b: signer, lane: signer) {
+    fun added_key_pays_and_rotation_keeps_the_account(
+        f: signer, b: signer, lane: signer
+    ) {
         fx::setup(&f, &b);
         let e = eur();
         fx::mint(e, v::a_account(), 1000);
@@ -448,7 +504,10 @@ module scaas::meta_tests {
         v::a_add_alice2();
         v::a2_pay_eur(&lane, e);
         v::a2_remove_alice();
-        assert!(meta::key_count(v::alice()) == 1 && meta::key_nonce(v::alice()) == 2, 0);
+        assert!(
+            meta::key_count(v::alice()) == 1 && meta::key_nonce(v::alice()) == 2,
+            0
+        );
         assert!(bal(e, BEEF) == 20, 1);
     }
 
@@ -475,7 +534,10 @@ module scaas::meta_tests {
         fx::setup(&f, &b);
         meta::open(v::alice(), v::alice_pk());
         v::a_add_dave_key();
-        assert!(meta::has_key(v::alice(), v::dave_pk()) && meta::has_origin(v::alice(), v::origin()), 0);
+        assert!(
+            meta::has_key(v::alice(), v::dave_pk()) && meta::has_origin(v::alice(), v::origin()),
+            0
+        );
     }
 
     // L5: `verify_by` lấy entry ĐẦU có cùng public_key ⇒ cùng passkey (x, y) thêm lại với rpIdHash khác sẽ không bao
@@ -487,23 +549,44 @@ module scaas::meta_tests {
         meta::open(v::alice(), v::alice_pk());
         let o = account::create_signer_for_test(v::alice());
         meta::manage_native(&o, 0, 2, v::dave_pk(), v::rp_id_hash(), v::origin(), @0x0);
-        meta::manage_native(&o, 0, 2, v::dave_pk(), x"0000000000000000000000000000000000000000000000000000000000000001",
-            vector[], @0x0);
+        meta::manage_native(
+            &o,
+            0,
+            2,
+            v::dave_pk(),
+            x"0000000000000000000000000000000000000000000000000000000000000001",
+            vector[],
+            @0x0
+        );
     }
 
     // L7: xoay auth key native KHÔNG gỡ khoá đã ở Account (khoá lộ vẫn tiêu được). Một tx native của chủ (ký bằng auth
     // key hiện tại) thay TOÀN BỘ khoá: khoá cũ hết hiệu lực ngay, KeyOp đang chờ của chúng cũng vậy.
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     #[expected_failure(abort_code = 1, location = scaas::meta)]
-    fun native_reset_drops_every_old_key(f: signer, b: signer, lane: signer) {
+    fun native_reset_drops_every_old_key(
+        f: signer, b: signer, lane: signer
+    ) {
         fx::setup(&f, &b);
         let e = eur();
         fx::mint(e, v::a_account(), 1000);
         meta::open(v::alice(), v::alice_pk());
         v::a_add_alice2();
-        meta::reset_keys(&account::create_signer_for_test(v::alice()), 0, v::carol_pk(), vector[], vector[]);
-        assert!(meta::key_count(v::alice()) == 1 && meta::has_key(v::alice(), v::carol_pk()), 0);
-        assert!(!meta::has_key(v::alice(), v::alice_pk()) && meta::key_nonce(v::alice()) == 2, 1);
+        meta::reset_keys(
+            &account::create_signer_for_test(v::alice()),
+            0,
+            v::carol_pk(),
+            vector[],
+            vector[]
+        );
+        assert!(
+            meta::key_count(v::alice()) == 1 && meta::has_key(v::alice(), v::carol_pk()),
+            0
+        );
+        assert!(
+            !meta::has_key(v::alice(), v::alice_pk()) && meta::key_nonce(v::alice()) == 2,
+            1
+        );
         v::a_pay_eur_0(&lane, e);
     }
 
@@ -511,7 +594,13 @@ module scaas::meta_tests {
     #[expected_failure(abort_code = 13, location = scaas::meta)]
     fun reset_needs_an_account(f: signer, b: signer) {
         fx::setup(&f, &b);
-        meta::reset_keys(&account::create_signer_for_test(v::alice()), 0, v::carol_pk(), vector[], vector[]);
+        meta::reset_keys(
+            &account::create_signer_for_test(v::alice()),
+            0,
+            v::carol_pk(),
+            vector[],
+            vector[]
+        );
     }
 
     // Đường 2: chủ gửi tx native (chủ keyless/passkey gắn khoá seed) — mở Account nếu chưa có.
@@ -583,10 +672,12 @@ module scaas::meta_tests {
     fun pay_meta_vectors_match() {
         let rows = v::pm_rows();
         assert!(rows.length() == 6, 0);
-        rows.for_each(|r| {
-            assert!(meta::meta_pay_id(r[0], r[1]) == r[2], 1);
-            assert!(meta::pay_lane(r[2]) == r[3], 2);
-        });
+        rows.for_each(
+            |r| {
+                assert!(meta::meta_pay_id(r[0], r[1]) == r[2], 1);
+                assert!(meta::pay_lane(r[2]) == r[3], 2);
+            }
+        );
     }
 
     // Same signed op as a plain pay of that payId; lane payLane(payId), nonce 0; `PaymentMeta` + `PaymentSettled`.
@@ -596,7 +687,10 @@ module scaas::meta_tests {
         let e = eur();
         fx::mint(e, v::a_account(), 1000);
         v::pm_a_note(&lane, e, v::pm_note_salt(), v::pm_note_meta());
-        assert!(bal(e, BEEF) == 100 && meta::lane_nonce(v::alice(), v::pm_note_lane()) == 1, 0);
+        assert!(
+            bal(e, BEEF) == 100 && meta::lane_nonce(v::alice(), v::pm_note_lane()) == 1,
+            0
+        );
         let pm = meta::payment_meta_for_testing(v::eur(), v::pm_note_id(), v::pm_note_meta());
         assert!(event::was_event_emitted(&pm), 1);
         let ps = meta::payment_settled_for_testing(v::eur(), v::alice(), BEEF, 100, v::pm_note_id());
@@ -605,12 +699,17 @@ module scaas::meta_tests {
 
     // `pay_meta_check` (twin of `pay_check`): the digest of the plain pay, no write; then the entry settles.
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
-    fun pay_meta_check_matches_relay_pay_meta(f: signer, b: signer, lane: signer) {
+    fun pay_meta_check_matches_relay_pay_meta(
+        f: signer, b: signer, lane: signer
+    ) {
         fx::setup(&f, &b);
         let e = eur();
         fx::mint(e, v::a_account(), 1000);
         let d = v::pm_a_note_check(LANE_1A, e, v::pm_note_salt(), v::pm_note_meta());
-        assert!(d == v::pm_a_note_digest() && d == v::pm_a_note_plain_check(LANE_1A, e), 0);
+        assert!(
+            d == v::pm_a_note_digest() && d == v::pm_a_note_plain_check(LANE_1A, e),
+            0
+        );
         assert!(!meta::exists_at(v::alice()) && bal(e, BEEF) == 0, 1);
         v::pm_a_note(&lane, e, v::pm_note_salt(), v::pm_note_meta());
         assert!(bal(e, BEEF) == 100, 2);
@@ -630,7 +729,9 @@ module scaas::meta_tests {
     // Review focus 4: `meta` that does not hash to the signed pay_ref (one byte more) ⇒ the digest changes.
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     #[expected_failure(abort_code = 1, location = scaas::meta)]
-    fun aptos_pay_meta_mismatch_and_replay(f: signer, b: signer, lane: signer) {
+    fun aptos_pay_meta_mismatch_and_replay(
+        f: signer, b: signer, lane: signer
+    ) {
         fx::setup(&f, &b);
         let e = eur();
         fx::mint(e, v::a_account(), 1000);
@@ -663,7 +764,9 @@ module scaas::meta_tests {
 
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     #[expected_failure(abort_code = 4, location = scaas::meta)]
-    fun aptos_pay_meta_then_plain_pay_refused(f: signer, b: signer, lane: signer) {
+    fun aptos_pay_meta_then_plain_pay_refused(
+        f: signer, b: signer, lane: signer
+    ) {
         fx::setup(&f, &b);
         let e = eur();
         fx::mint(e, v::a_account(), 1000);
@@ -699,7 +802,9 @@ module scaas::meta_tests {
     // Review focus 3: a pay-meta signed with the router marker as relayer never settles through the plain entry.
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     #[expected_failure(abort_code = 3, location = scaas::meta)]
-    fun aptos_router_bound_pay_meta_refused_direct(f: signer, b: signer, lane: signer) {
+    fun aptos_router_bound_pay_meta_refused_direct(
+        f: signer, b: signer, lane: signer
+    ) {
         fx::setup(&f, &b);
         let e = eur();
         fx::mint(e, v::a_account(), 1000);

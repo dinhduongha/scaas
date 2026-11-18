@@ -24,14 +24,22 @@ module scaas::mandate_tests {
     }
 
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
-    fun pays_within_caps_and_resets_each_period(f: signer, b: signer, lane: signer) {
+    fun pays_within_caps_and_resets_each_period(
+        f: signer, b: signer, lane: signer
+    ) {
         let e = ready(&f, &b, &lane);
         v::m_pay_60_r1(&lane, e);
         v::m_pay_60_r2(&lane, e);
-        assert!(bal(e, BEEF) == 120 && mandate::spent_in_period(v::mandate()) == 120, 0);
-        set_now(100 + 600);               // kỳ mới (period 600 s)
+        assert!(
+            bal(e, BEEF) == 120 && mandate::spent_in_period(v::mandate()) == 120,
+            0
+        );
+        set_now(100 + 600); // kỳ mới (period 600 s)
         v::m_pay_60_r3(&lane, e);
-        assert!(bal(e, BEEF) == 180 && mandate::spent_in_period(v::mandate()) == 60, 1);
+        assert!(
+            bal(e, BEEF) == 180 && mandate::spent_in_period(v::mandate()) == 60,
+            1
+        );
     }
 
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
@@ -75,7 +83,9 @@ module scaas::mandate_tests {
     // Miền: chữ ký của một `pay` qua Account (op 0, contract = Account) không qua được mandate (op 2, contract = Mandate).
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     #[expected_failure(abort_code = 8, location = scaas::mandate)]
-    fun account_op_signature_is_not_a_mandate_op(f: signer, b: signer, lane: signer) {
+    fun account_op_signature_is_not_a_mandate_op(
+        f: signer, b: signer, lane: signer
+    ) {
         let e = ready(&f, &b, &lane);
         v::m_pay_with_account_op_sig(&lane, e);
     }
@@ -99,9 +109,11 @@ module scaas::mandate_tests {
 
     // Thu hồi bằng khoá Account của chủ, rồi ai cũng hoàn được tiền về Account (tiền không kẹt).
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
-    fun owner_revokes_and_funds_return_to_the_account(f: signer, b: signer, lane: signer) {
+    fun owner_revokes_and_funds_return_to_the_account(
+        f: signer, b: signer, lane: signer
+    ) {
         let e = ready(&f, &b, &lane);
-        fx::mint(e, v::mandate(), 7);   // L7: FA gửi thẳng tới Mandate được tính
+        fx::mint(e, v::mandate(), 7); // L7: FA gửi thẳng tới Mandate được tính
         v::m_revoke_by_owner(&lane);
         mandate::refund(v::mandate(), e);
         assert!(bal(e, v::mandate()) == 0 && bal(e, v::a_account()) == 1007, 0);
@@ -131,12 +143,14 @@ module scaas::mandate_tests {
     }
 
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
-    fun spent_refs_are_pruned_after_their_op_expires(f: signer, b: signer, lane: signer) {
+    fun spent_refs_are_pruned_after_their_op_expires(
+        f: signer, b: signer, lane: signer
+    ) {
         let e = ready(&f, &b, &lane);
         v::m_pay_60_r1(&lane, e);
         mandate::prune(v::mandate(), vector[R1]);
         assert!(mandate::ref_used(v::mandate(), R1), 0);
-        set_now(1000 + 2_592_000);      // hết hạn nhưng chưa qua PRUNE_DELAY (M2)
+        set_now(1000 + 2_592_000); // hết hạn nhưng chưa qua PRUNE_DELAY (M2)
         mandate::prune(v::mandate(), vector[R1]);
         assert!(mandate::ref_used(v::mandate(), R1), 1);
         set_now(1000 + 2_592_000 + 1);
@@ -147,7 +161,9 @@ module scaas::mandate_tests {
     // M2: delegate ký hai op cho cùng pay_ref (hạn 1000 rồi 1300): op thứ hai trượt khi ref còn giữ.
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
     #[expected_failure(abort_code = 7, location = scaas::mandate)]
-    fun reissued_mandate_op_cannot_pay_twice(f: signer, b: signer, lane: signer) {
+    fun reissued_mandate_op_cannot_pay_twice(
+        f: signer, b: signer, lane: signer
+    ) {
         let e = ready(&f, &b, &lane);
         v::m_pay_60_r1(&lane, e);
         set_now(1001);
@@ -158,11 +174,13 @@ module scaas::mandate_tests {
 
     // ANTI-LOCK: chủ thể ký X (pay qua Account) và Y (mandate::pay); X bị giữ; Y qua; rồi X qua.
     #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
-    fun withheld_account_op_does_not_block_the_mandate(f: signer, b: signer, lane: signer) {
+    fun withheld_account_op_does_not_block_the_mandate(
+        f: signer, b: signer, lane: signer
+    ) {
         let e = ready(&f, &b, &lane);
-        v::m_pay_60_r1(&lane, e);          // Y
+        v::m_pay_60_r1(&lane, e); // Y
         assert!(bal(e, BEEF) == 60, 0);
-        v::a_pay_eur_0(&lane, e);          // X, đã ký trước Y
+        v::a_pay_eur_0(&lane, e); // X, đã ký trước Y
         assert!(bal(e, BEEF) == 160, 1);
     }
 }
