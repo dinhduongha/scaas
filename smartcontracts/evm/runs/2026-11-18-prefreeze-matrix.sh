@@ -49,7 +49,7 @@ STEPS=(
     "node-clippy|other|scaas-node|$cap cargo clippy $C --all-targets -- -D warnings"
     "node-e2e|other|scaas-node|(cd ../clients/zether-prover && $cap cargo build $C --release --bin zether-cli) && $N cargo test $C --test e2e -- --ignored --test-threads=1"
     # UA record copy EVM <-> Soroban on a local Protocol 30 host (round ua8-soroban, scaas-node/tests/e2e_ua8.rs)
-    "soroban-ua-copy-e2e|other|.|smartcontracts/soroban/scripts/e2e-ua8-local.sh"
+    "node-e2e-ua-copy-soroban|other|.|smartcontracts/soroban/scripts/e2e-ua8-local.sh"
     "node-e2e-hedera|other|scaas-node|(cd ../smartcontracts/evm && $cap forge build test/hedera/HederaMocks.sol) && $N cargo test $C --test e2e_hedera -- --ignored --test-threads=1"
     "node-e2e-soroban|other|scaas-node|CARGO_BUILD_JOBS=2 $cap ../smartcontracts/scripts/build.sh soroban && ../smartcontracts/soroban/scripts/quickstart.sh up && trap '../smartcontracts/soroban/scripts/quickstart.sh down' EXIT && ../smartcontracts/soroban/scripts/quickstart.sh wait && $N cargo test $C --test e2e_soroban -- --ignored --test-threads=1 && $N cargo test $C --test e2e_soroban_ua -- --ignored --test-threads=1"
     "node-e2e-solana|other|scaas-node|CARGO_BUILD_JOBS=2 $cap ../smartcontracts/scripts/build.sh solana && $N bash -c \"../smartcontracts/solana/scripts/devnet.sh up --upgradeable-program BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d ../smartcontracts/solana/target/deploy/scaas.so 73VoVWyfxmaWC6gUjsse6xzNTLLoEhazMCcKakXWbebm --bpf-program A4PasPZEK899MesXpT3MSA4ufnpHcyfxjKuxRXmcZnRJ ../smartcontracts/solana/target/deploy/cpi_wrapper.so && trap '../smartcontracts/solana/scripts/devnet.sh down' EXIT && cargo test $C --test e2e_solana -- --ignored --test-threads=1\""
