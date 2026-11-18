@@ -47,7 +47,7 @@ STEPS=(
     "gen-set|other|.|python3 -I pqz-core/params/sets/gen_set.py --all --check && python3 -I pqz-core/pqzl/params/to_rust.py --check && echo RESULT generated files in sync"
     "node-test|other|scaas-node|$N cargo test $C"
     "node-clippy|other|scaas-node|$cap cargo clippy $C --all-targets -- -D warnings"
-    "node-e2e|other|scaas-node|(cd ../clients/zether-prover && $cap cargo build $C --release --bin zether-cli) && $N cargo test $C --test e2e -- --ignored --test-threads=1"
+    "node-e2e|other|scaas-node|(cd ../clients/zether-prover && $cap cargo build $C --release --bin zether-cli --features hazmat) && $N cargo test $C --test e2e -- --ignored --test-threads=1"
     # UA portable registration: a UA record copied EVM <-> Soroban on a local Protocol 30 host (round ua-portable-soroban)
     "node-e2e-ua-portable-soroban|other|.|smartcontracts/soroban/scripts/e2e-ua-portable-local.sh"
     "node-e2e-hedera|other|scaas-node|(cd ../smartcontracts/evm && $cap forge build test/hedera/HederaMocks.sol) && $N cargo test $C --test e2e_hedera -- --ignored --test-threads=1"
