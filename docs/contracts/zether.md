@@ -1184,7 +1184,9 @@ with admin 0, CTR-GOV-31):
   [c]Y_a == O`, `z < r`, `c ≠ 0`; `AuditorConsentInvalid()`) over `d`, the token-domain digest of `AuditorConsent(address
   token,bytes32 auditor,uint32 epoch,bytes32 chainUid)` with `auditor = toUA(newKey)`; so a key nobody holds, or another
   holder's key without its consent, is never named. `newKey` is a valid point of the token's curve, not `O`, of the encoded
-  length (`AuditorKeyInvalid()`).
+  length (`AuditorKeyInvalid()`). A proof of possession is not withdrawn on chain: within its epoch any holder of the bit may
+  reuse it after a cancel or an expired window (owner 2026-11-18, accepted residual,
+  [CTR-GOV-31's Change on the consent's reuse](../decisions.md#CTR-GOV-31)).
 - **Apply.** The outgoing key is kept as `auditorKeys[epoch]` (written once, never rewritten), `auditorKey` becomes the new
   key and `auditorEpoch` (a `uint32` in slot 0's free bytes, read with `auditorMode` on every transfer) grows by one:
   `AuditorKeySet(epoch, previousKey, newKey)`. A transfer reads `auditorKey` as before; no relation, statement or

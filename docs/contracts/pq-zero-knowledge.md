@@ -3014,6 +3014,8 @@ created with bit 32:
   on a chain without that verifier no proven check is made, so there a consenting UA holding a copy of another holder's
   public key stops that holder's audited transfers (`KeyReused`) until the next replacement, the three-key model's accepted
   risk for `OFFCHAIN` keys (spec §5.2, T3; CTR-PQZ-43's Change of 2026-11-18). `AuditorAsParty` and `KeyReused` (F-4) stay.
+  A consent is not withdrawn on chain: within its epoch any holder of the bit may reuse it after a cancel or an expired
+  window (owner 2026-11-18, accepted residual, [CTR-GOV-31's Change on the consent's reuse](../decisions.md#CTR-GOV-31)).
 - **Apply.** The outgoing UA is kept as `auditorUAs[epoch]`, `auditorUA` becomes the new one, `auditorEpoch` (a `uint32` in
   slot 0's free bytes) grows by one. The auditor's own PQZ key versions (CTR-PQZ-31) are a separate counter: the op blob's
   `kv` tail keeps recording the auditor's version ([CTR-PQZ-34](#CTR-PQZ-34)).
