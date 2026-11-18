@@ -5,14 +5,33 @@
 //! wasm32, not run there. UNAUDITED.
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "algorand")]
+pub mod algorand;
+#[cfg(feature = "aptos")]
+pub mod aptos;
+#[cfg(feature = "cosmos")]
+pub mod cosmos;
 pub mod endpoint;
 pub mod error;
 #[cfg(feature = "evm")]
 pub mod evm;
+pub mod family;
+#[cfg(feature = "evm")]
+pub mod hedera;
 pub mod http;
+#[cfg(feature = "near")]
+pub mod near;
 #[cfg(feature = "node-client")]
 pub mod node;
 pub mod pool;
+#[cfg(feature = "solana")]
+pub mod solana;
+#[cfg(feature = "soroban")]
+pub mod soroban;
+#[cfg(feature = "sui")]
+pub mod sui;
+#[cfg(feature = "ton")]
+pub mod ton;
 
 pub use endpoint::{
     Class, Endpoint, EndpointAuth, Fanout, Label, ListConfig, NodeList, Policy, Purpose, Secret,

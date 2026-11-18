@@ -1,0 +1,9 @@
+# t17 mutants at commit d5ca7080d (name | outcome | test)
+a: the quorum read on endpoint 0 only | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test near the_block_reads_and_the_quorum_read
+a: an error's cause lost | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::near::tests::
+a: the identity a constant | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test near the_failover_drops_another_network_and_skips_an_endpoint_behind
+b: op_consumed through failover | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::near::tests::near_tx_status_op_consumed_and_the_lane_sequence_never_fail_over
+b: every view through failover | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::near::tests::near_tx_status_op_consumed_and_the_lane_sequence_never_fail_over
+b: the build's views on endpoint 0 only | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::near::tests::near_build_reads_fail_over_and_a_failover_refusal_is_no_verdict
+b: a failover refusal final (the counter not compared) | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::near::tests::near_build_reads_fail_over_and_a_failover_refusal_is_no_verdict
+7 mutants, 7 killed, 0 survived, 0 not loaded

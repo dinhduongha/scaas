@@ -1,0 +1,10 @@
+# t24-8 mutants at commit d5ca7080d (name | outcome | test)
+8: Aptos: endpoint 0 read unchecked | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::aptos::tests::aptos_endpoint_0_of_another_network_answers_no_read
+8: sui: endpoint 0 read unchecked | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_endpoint_0_of_another_network_answers_no_read
+8: near: endpoint 0 read unchecked | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::near::tests::near_endpoint_0_of_another_network_answers_no_read
+8: soroban: endpoint 0 read unchecked | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::soroban::tests::soroban_endpoint_0_of_another_network_answers_no_read
+8: solana: endpoint 0 read unchecked | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::solana::tests::solana_endpoint_0_of_another_network_answers_no_read
+8: Algorand: endpoint 0 read unchecked | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::algorand::tests::algorand_endpoint_0_of_another_network_answers_no_read
+8: Cosmos: REST gateway 0 read unchecked | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::cosmos::tests::cosmos_endpoint_0_of_another_network_answers_no_read
+8: Cosmos: CometBFT endpoint 0 read unchecked | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::cosmos::tests::cosmos_endpoint_0_of_another_network_answers_no_read
+8 mutants, 8 killed, 0 survived, 0 not loaded

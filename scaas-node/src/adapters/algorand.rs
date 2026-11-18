@@ -31,6 +31,7 @@ use sha2::{Digest, Sha256, Sha512_256};
 use tracing::info;
 
 use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Rejected, Signed, TxStatus};
+use crate::adapters::evm::{building, BUILDING};
 use crate::addresses::{algorand_address, b32decode, b32encode};
 use crate::chain::SimError;
 use crate::config::ChainCfg;
@@ -61,6 +62,11 @@ pub const DISCOVERY_CREDIT: u64 = 64;
 const ROUND_SAMPLE: u64 = 100;
 /// `simulate` extra budget of a read-only query (as the contract tests' `sim`): no inner budget call, no fee credit.
 const QUERY_BUDGET: u64 = 20_000;
+/// `params.max_min_fee`'s default, µALGO (ten times the protocol's 1,000): the most a lane pays as algod's `min-fee`
+/// (CLI-RPC-05, scaas-rpc T24.4).
+const DEFAULT_MAX_MIN_FEE: u64 = 10_000;
+/// `params.max_fee_per_byte`'s default, µALGO per byte (algod's `fee` is 0 outside congestion).
+const DEFAULT_MAX_FEE_PER_BYTE: u64 = 100;
 const BOX_FLAT: u64 = 2_500;
 const BOX_BYTE: u64 = 400;
 pub const MBR_AMOUNT_BOX: u64 = BOX_FLAT + BOX_BYTE * (33 + 32);
@@ -1556,6 +1562,20 @@ pub fn block_events(ids: &Ids, block: &Mp, block_hash: &str) -> Result<Vec<Value
 
 // ------------------------------------------------------------------ adapter
 
+/// algod's raw JSON answer through the crate's bounded decode (scaas-rpc T24.9, CLI-RPC-07: 16 MiB, depth 64).
+fn json_of(what: &str, b: &[u8]) -> Result<Value> {
+    scaas_rpc::http::decode(b, scaas_rpc::family::ANSWER_MAX).map_err(|k| anyhow!("{what}: the answer: {k:?}"))
+}
+
+/// A family client's error as the classifier reads it: a status other than 2xx is `AlgodError`, anything else the endpoint's
+/// failure.
+fn algod_error(e: scaas_rpc::family::FamilyError) -> anyhow::Error {
+    match e {
+        scaas_rpc::family::FamilyError::Status { status, message } => AlgodError { status, message }.into(),
+        e => e.into(),
+    }
+}
+
 /// An algod REST error: HTTP status and its `message`.
 #[derive(Debug)]
 pub struct AlgodError {
@@ -1589,14 +1609,16 @@ struct Params {
 pub struct AlgorandAdapter {
     key: String,
     network: [u8; 32],
-    rpc: Vec<String>,
-    token: Option<String>,
-    http: reqwest::Client,
+    /// the algod endpoints (scaas-rpc T18: the family client, bounded, 20 s per request; the token to each, as before)
+    net: scaas_rpc::algorand::Algorand,
     quorum: usize,
     lanes: Vec<Lane>,
     pks: Vec<[u8; 32]>,
     signers: Vec<LocalSigner>,
     policy: RelayFeePolicy,
+    /// algod's `min-fee` and `fee` (per byte) caps, µALGO (CLI-RPC-05, scaas-rpc T24.4)
+    max_min_fee: u64,
+    max_fee_per_byte: u64,
     /// Derived at `start_check` from the router's salt global.
     exec: Mutex<Option<Executor>>,
     /// tx id ⇒ what the lane paid (fee + MBR payments), for `tx_fee`.
@@ -1621,11 +1643,11 @@ impl AlgorandAdapter {
         }
         let net = cfg.network.as_deref().ok_or_else(|| anyhow!("algorand: network must be the genesis hash (base64)"))?;
         let network = arr32(&b64d(net).context("algorand: network must be the genesis hash (base64 of 32 bytes)")?)?;
-        let token = match cfg.params.get("algod_token_env") {
-            None => None,
-            Some(v) => {
-                let name = v.as_str().ok_or_else(|| anyhow!("params.algod_token_env must be an env var name"))?;
-                Some(std::env::var(name).with_context(|| format!("params.algod_token_env: {name} is not set"))?)
+        let tokens = crate::adapters::endpoint_keys(cfg, "algod_token_env", true)?;
+        let cap = |k: &str, d: u64| -> Result<u64> {
+            match cfg.params.get(k) {
+                None => Ok(d),
+                Some(v) => v.as_integer().and_then(|n| u64::try_from(n).ok()).ok_or_else(|| anyhow!("params.{k} must be a number of µALGO")),
             }
         };
         let (mut lanes, mut pks, mut own) = (Vec::new(), Vec::new(), Vec::new());
@@ -1639,48 +1661,88 @@ impl AlgorandAdapter {
         Ok(Self {
             key: cfg.chain_key(),
             network,
-            rpc: cfg.rpc_urls.iter().map(|u| u.trim_end_matches('/').to_string()).collect(),
-            token,
-            http: reqwest::Client::builder().timeout(Duration::from_secs(20)).build()?,
+            net: scaas_rpc::algorand::Algorand::new(
+                // scaas-rpc T24.10: each endpoint's own token only (a later endpoint gets none unless configured for it)
+                scaas_rpc::family::Client::of_urls_each(&cfg.rpc_urls, |i| {
+                    tokens[i].as_ref().map(|t| scaas_rpc::EndpointAuth::Header { name: "X-Algo-API-Token".into(), value: scaas_rpc::Secret::new(t) })
+                })
+                .map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?,
+                net,
+            ),
             quorum: cfg.finality.quorum.max(1),
             lanes,
             pks,
             signers: own,
             policy: RelayFeePolicy::from_cfg(cfg)?,
+            max_min_fee: cap("max_min_fee", DEFAULT_MAX_MIN_FEE)?,
+            max_fee_per_byte: cap("max_fee_per_byte", DEFAULT_MAX_FEE_PER_BYTE)?,
             exec: Mutex::new(None),
             spent: Mutex::new(HashMap::new()),
         })
     }
 
-    fn req(&self, r: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
-        match &self.token {
-            Some(t) => r.header("X-Algo-API-Token", t),
-            None => r,
-        }
+    /// GET on endpoint `i`, the answer raw (scaas-rpc T18: the family client); a status other than 2xx is `AlgodError`.
+    async fn get_raw_at(&self, i: usize, path: &str, query: &[(&str, String)]) -> Result<Vec<u8>> {
+        self.net.get_raw(i, path, query).await.map_err(algod_error)
     }
 
-    async fn answer(r: reqwest::Response) -> Result<Vec<u8>> {
-        let status = r.status().as_u16();
-        let body = r.bytes().await?.to_vec();
-        if !(200..300).contains(&status) {
-            let message = serde_json::from_slice::<Value>(&body).ok().and_then(|v| v["message"].as_str().map(str::to_string))
-                .unwrap_or_else(|| String::from_utf8_lossy(&body).chars().take(300).collect());
-            return Err(AlgodError { status, message }.into());
+    /// GET, the answer raw: `build`'s failed over, any other endpoint 0's (F3: statuses, `op_consumed`, the round, the lane
+    /// balance, `start_check`'s apps and executor).
+    async fn get_raw(&self, path: &str, query: &[(&str, String)]) -> Result<Vec<u8>> {
+        if !building() {
+            return self.get_raw_at(0, path, query).await;
         }
-        Ok(body)
-    }
-
-    async fn get_raw_at(&self, url: &str, path: &str, query: &[(&str, String)]) -> Result<Vec<u8>> {
-        Self::answer(self.req(self.http.get(format!("{url}{path}")).query(query)).send().await?).await
+        self.read(false, |i| self.net.get_raw(i, path, query)).await
     }
 
     async fn get(&self, path: &str) -> Result<Value> {
-        Ok(serde_json::from_slice(&self.get_raw_at(&self.rpc[0], path, &[]).await?)?)
+        json_of(path, &self.get_raw(path, &[]).await?)
     }
 
+    /// POST: `build`'s simulates failed over, any other (the send, `start_check`'s query) endpoint 0's.
     async fn post(&self, path: &str, body: Vec<u8>, ctype: &str) -> Result<Value> {
-        let r = self.req(self.http.post(format!("{}{path}", self.rpc[0])).header("Content-Type", ctype).body(body)).send().await?;
-        Ok(serde_json::from_slice(&Self::answer(r).await?)?)
+        if !building() {
+            return self.net.post(0, path, body, ctype).await.map_err(algod_error);
+        }
+        self.read(true, |i| self.net.post(i, path, body.clone(), ctype)).await
+    }
+
+    /// ARCH-POS-15 (CLI-RPC-04, scaas-rpc T18b): endpoint 0, then each next endpoint of this network (its genesis hash) not
+    /// behind the round endpoint 0 last showed. A 404 (an absent box or app) or a 400 to a POST (a refused simulate) is
+    /// endpoint 0's to classify as before (`AlgodError`), a later endpoint's no verdict (the next is asked); any other status
+    /// (a rate limit, a 5xx) and a transport failure move on (T24.3); what a failover endpoint's answer refuses `build`
+    /// requeues.
+    async fn read<T, F, Fut>(&self, post: bool, f: F) -> Result<T>
+    where
+        F: Fn(usize) -> Fut,
+        Fut: std::future::Future<Output = std::result::Result<T, scaas_rpc::family::FamilyError>>,
+    {
+        use scaas_rpc::family::FamilyError;
+        use scaas_rpc::pool::ReadError;
+        let a = self.net.client.failover(&self.net, |i| {
+            let r = f(i);
+            async move {
+                r.await.map_err(|e| match e {
+                    FamilyError::Status { status, message } if status == 404 || (post && status == 400) => {
+                        ReadError::Revert { data: vec![], reason: format!("{status}\n{message}") }
+                    }
+                    FamilyError::Failure(f) => ReadError::Failure(f),
+                    e => ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string())),
+                })
+            }
+        }).await;
+        match a {
+            Ok(a) => Ok(a.value),
+            Err(scaas_rpc::RpcError::Revert { reason, .. }) => {
+                let (status, message) = reason.split_once('\n').unwrap_or(("0", &reason));
+                Err(AlgodError { status: status.parse().unwrap_or(0), message: message.into() }.into())
+            }
+            Err(e) => Err(crate::adapters::evm::all_failed("algod", &e)),
+        }
+    }
+
+    fn failovers(&self) -> u64 {
+        self.net.client.pool().failover_answers()
     }
 
     async fn params(&self) -> Result<Params> {
@@ -1690,7 +1752,11 @@ impl AlgorandAdapter {
             bail!("algod's genesis hash {} is not the configured network {}", b64(&gh), b64(&self.network));
         }
         let n = |k: &str| v[k].as_u64().ok_or_else(|| anyhow!("params without {k}"));
-        Ok(Params { min_fee: n("min-fee")?, fpb: n("fee")?, last_round: n("last-round")?,
+        // CLI-RPC-05 (scaas-rpc T24.4): the lane never pays a fee above the configured caps, whichever endpoint quoted it
+        let (min_fee, fpb) = (n("min-fee")?, n("fee")?);
+        ensure!(min_fee <= self.max_min_fee, "min-fee {min_fee} above params.max_min_fee {}", self.max_min_fee);
+        ensure!(fpb <= self.max_fee_per_byte, "fee {fpb} per byte above params.max_fee_per_byte {}", self.max_fee_per_byte);
+        Ok(Params { min_fee, fpb, last_round: n("last-round")?,
                     chain: Chain { gen: v["genesis-id"].as_str().unwrap_or_default().to_string(), gh } })
     }
 
@@ -1703,9 +1769,9 @@ impl AlgorandAdapter {
     }
 
     async fn box_value(&self, app: u64, name: &[u8]) -> Result<Option<Vec<u8>>> {
-        match self.get_raw_at(&self.rpc[0], &format!("/v2/applications/{app}/box"), &[("name", format!("b64:{}", b64(name)))]).await {
+        match self.get_raw(&format!("/v2/applications/{app}/box"), &[("name", format!("b64:{}", b64(name)))]).await {
             Ok(b) => {
-                let v: Value = serde_json::from_slice(&b)?;
+                let v = json_of("box", &b)?;
                 Ok(Some(b64d(v["value"].as_str().ok_or_else(|| anyhow!("box without value"))?)?))
             }
             Err(e) if status_of(&e) == Some(404) => Ok(None),
@@ -1906,18 +1972,17 @@ impl AlgorandAdapter {
         let ts = |b: Vec<u8>| -> Result<u64> {
             mp_decode(&b)?.get("block").and_then(|b| b.get("ts")).and_then(Mp::u64).ok_or_else(|| anyhow!("block without ts"))
         };
-        let t1 = ts(self.get_raw_at(&self.rpc[0], &format!("/v2/blocks/{last}"), &[("format", "msgpack".into())]).await?)?;
+        let t1 = ts(self.get_raw(&format!("/v2/blocks/{last}"), &[("format", "msgpack".into())]).await?)?;
         let first = last.saturating_sub(ROUND_SAMPLE).max(1);
         if first >= last {
             return Ok((t1, 0, 0));
         }
-        let t0 = ts(self.get_raw_at(&self.rpc[0], &format!("/v2/blocks/{first}"), &[("format", "msgpack".into())]).await?)?;
+        let t0 = ts(self.get_raw(&format!("/v2/blocks/{first}"), &[("format", "msgpack".into())]).await?)?;
         Ok((t1, last - first, t1.saturating_sub(t0)))
     }
 
-    async fn block_hash_at(&self, url: &str, h: u64) -> Result<String> {
-        let v: Value = serde_json::from_slice(&self.get_raw_at(url, &format!("/v2/blocks/{h}/hash"), &[]).await?)?;
-        let s = v["blockHash"].as_str().ok_or_else(|| anyhow!("block {h} without blockHash"))?;
+    async fn block_hash_at(&self, i: usize, h: u64) -> Result<String> {
+        let s = self.net.block_hash(i, h).await.map_err(algod_error)?;
         Ok(hex0x(&arr32(&b32decode(s.trim_start_matches("blk-"))?)?))
     }
 
@@ -1931,39 +1996,12 @@ impl AlgorandAdapter {
         });
         Ok(self.policy.tokens.iter().map(|t| (*t, keys.clone())).collect())
     }
-}
-
-#[async_trait]
-impl ChainAdapter for AlgorandAdapter {
-    fn family(&self) -> Family {
-        Family::Algorand
-    }
-
-    fn chain_key(&self) -> &str {
-        &self.key
-    }
-
-    fn lanes(&self) -> &[Lane] {
-        &self.lanes
-    }
-
-    /// R80: the payer's lane box on the token has passed the op's nonce. Every job kind is one atomic group (no escrow,
-    /// no refund), so a consumed payment lane means the job's group landed (lesson 1).
-    async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
-        let Ok(w) = self.work(job, self.exec().as_ref()) else { return Ok(None) };
-        let name = [&b"l"[..], &sha256(&[&w.op.from.bytes()[..], &w.op.lane].concat())].concat();
-        let next = match self.box_value(w.token, &name).await? {
-            Some(v) => be_u64(&v)?,
-            None => 0,
-        };
-        Ok(Some(next > w.op.nonce))
-    }
 
     /// The §5 checks, the group with the apps' exact MBR payments, a discovery simulate (unnamed resources allowed, a
     /// generous fee credit) whose unnamed resources go onto budget calls, then the exact group simulated with every
     /// resource named and the fee = one min fee per transaction and per inner transaction (re-run until the inner count
     /// settles); `Revert` = the job dies with the group's reason. A fee that is the node's must cover fee + MBR.
-    async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
+    async fn build_on(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let revert = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
         let exec = self.exec();
         let w = self.work(job, exec.as_ref()).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
@@ -2115,6 +2153,44 @@ impl ChainAdapter for AlgorandAdapter {
         Ok(Built { job_id: job.id, body: vec![], valid_until: w.op.valid_until, meta })
     }
 
+}
+
+#[async_trait]
+impl ChainAdapter for AlgorandAdapter {
+    fn family(&self) -> Family {
+        Family::Algorand
+    }
+
+    fn chain_key(&self) -> &str {
+        &self.key
+    }
+
+    fn lanes(&self) -> &[Lane] {
+        &self.lanes
+    }
+
+    /// R80: the payer's lane box on the token has passed the op's nonce. Every job kind is one atomic group (no escrow,
+    /// no refund), so a consumed payment lane means the job's group landed (lesson 1).
+    async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
+        let Ok(w) = self.work(job, self.exec().as_ref()) else { return Ok(None) };
+        let name = [&b"l"[..], &sha256(&[&w.op.from.bytes()[..], &w.op.lane].concat())].concat();
+        let next = match self.box_value(w.token, &name).await? {
+            Some(v) => be_u64(&v)?,
+            None => 0,
+        };
+        Ok(Some(next > w.op.nonce))
+    }
+
+    /// [`AlgorandAdapter::build_on`], its reads failed over (scaas-rpc T18b, R4: a refusal read while a failover endpoint
+    /// answered is no verdict).
+    async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
+        let mark = self.failovers();
+        match BUILDING.scope((), self.build_on(job, lane)).await {
+            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),
+            r => r,
+        }
+    }
+
     /// FirstValid = `sequence` (the last round), LastValid by `last_valid` from two block timestamps; the group id set,
     /// the lane's transactions signed over `"TX"` ‖ bytes, the executor's by its program.
     async fn sign(&self, built: Built, lane: usize, sequence: u64) -> Result<Signed> {
@@ -2137,7 +2213,8 @@ impl ChainAdapter for AlgorandAdapter {
     /// A 4xx answer (dead window, fee, overspend, a logic failure at the pool's check): the same bytes never pass ⇒
     /// `Rejected`; "already in ledger" = it landed.
     async fn submit(&self, signed: &Signed) -> Result<()> {
-        match self.post("/v2/transactions", signed.raw.clone(), "application/x-binary").await {
+        // scaas-rpc T24.7: the send is endpoint 0's, inside `build`'s scope too (never failed over)
+        match self.net.post(0, "/v2/transactions", signed.raw.clone(), "application/x-binary").await.map_err(algod_error) {
             Ok(_) => Ok(()),
             Err(e) if e.downcast_ref::<AlgodError>().is_some_and(|a| a.message.contains("already in ledger")) => Ok(()),
             Err(e) if status_of(&e).is_some_and(|s| (400..500).contains(&s)) => Err(Rejected(format!("{e:#}")).into()),
@@ -2148,24 +2225,32 @@ impl ChainAdapter for AlgorandAdapter {
     /// One-round finality: confirmed = mined; a pool error (the group failed or its window closed) = reverted (lesson
     /// 16: never requeued); not in the pool = unknown.
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
-        let id = b32encode(&arr32(&alloy::hex::decode(tx_id.trim_start_matches("0x"))?)?);
-        let v = match self.get(&format!("/v2/transactions/pending/{id}")).await {
-            Ok(v) => v,
-            Err(e) if status_of(&e) == Some(404) => return Ok(TxStatus::Unknown),
-            Err(e) => return Err(e),
-        };
-        if let Some(h) = v["confirmed-round"].as_u64().filter(|h| *h > 0) {
-            return Ok(TxStatus::Mined { height: h, tx_hash: None });
-        }
-        match v["pool-error"].as_str().filter(|s| !s.is_empty()) {
-            Some(e) => {
-                if let Ok(mut m) = self.spent.lock() {
-                    m.remove(tx_id);
-                }
-                Ok(TxStatus::Reverted { reason: e.to_string() })
+        let st: Result<TxStatus> = async {
+            let id = b32encode(&arr32(&alloy::hex::decode(tx_id.trim_start_matches("0x"))?)?);
+            let v = match self.get(&format!("/v2/transactions/pending/{id}")).await {
+                Ok(v) => v,
+                Err(e) if status_of(&e) == Some(404) => return Ok(TxStatus::Unknown),
+                Err(e) => return Err(e),
+            };
+            if let Some(h) = v["confirmed-round"].as_u64().filter(|h| *h > 0) {
+                return Ok(TxStatus::Mined { height: h, tx_hash: None });
             }
-            None => Ok(TxStatus::Pending),
+            match v["pool-error"].as_str().filter(|s| !s.is_empty()) {
+                Some(e) => {
+                    if let Ok(mut m) = self.spent.lock() {
+                        m.remove(tx_id);
+                    }
+                    Ok(TxStatus::Reverted { reason: e.to_string() })
+                }
+                None => Ok(TxStatus::Pending),
+            }
         }
+        .await;
+        // scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed raises the failover reads' floor
+        if let Ok(TxStatus::Mined { height, .. }) = &st {
+            self.net.client.pool().saw_block(*height);
+        }
+        st
     }
 
     /// No account sequence on Algorand: the last round (the next group's FirstValid).
@@ -2186,10 +2271,11 @@ impl ChainAdapter for AlgorandAdapter {
     /// The last round (one-round finality); with `quorum > 1` further endpoints must agree on its hash.
     async fn final_head(&self) -> Result<Option<Head>> {
         let height = self.sequence(0).await?;
-        let hash = self.block_hash_at(&self.rpc[0], height).await?;
+        self.net.client.pool().saw_block(height); // the failover reads' floor: endpoint 0's last round
+        let hash = self.block_hash_at(0, height).await?;
         let mut agree = 1;
-        for url in &self.rpc[1..] {
-            if self.block_hash_at(url, height).await.ok().as_deref() == Some(hash.as_str()) {
+        for i in 1..self.net.client.len() {
+            if self.block_hash_at(i, height).await.ok().as_deref() == Some(hash.as_str()) {
                 agree += 1;
             }
         }
@@ -2197,7 +2283,7 @@ impl ChainAdapter for AlgorandAdapter {
     }
 
     async fn block_hash(&self, height: u64) -> Result<String> {
-        self.block_hash_at(&self.rpc[0], height).await
+        self.block_hash_at(0, height).await
     }
 
     /// Every round of [from, to] (none is ever skipped): a round algod no longer has (a non-archival node's pruned
@@ -2215,15 +2301,15 @@ impl ChainAdapter for AlgorandAdapter {
         let mut out = Vec::new();
         for h in from..=to {
             let q = [("format", "msgpack".to_string())];
-            let raw = match self.get_raw_at(&self.rpc[0], &format!("/v2/blocks/{h}"), &q).await {
+            let raw = match self.get_raw_at(0, &format!("/v2/blocks/{h}"), &q).await {
                 Ok(b) => b,
                 Err(e) if status_of(&e) == Some(404) => bail!("round {h} is not in algod's history (pruned: use an archival node): {e:#}"),
                 Err(e) => return Err(e),
             };
             if self.quorum > 1 {
                 let mut agree = 1;
-                for url in &self.rpc[1..] {
-                    if self.get_raw_at(url, &format!("/v2/blocks/{h}"), &q).await.ok().as_deref() == Some(&raw[..]) {
+                for i in 1..self.net.client.len() {
+                    if self.get_raw_at(i, &format!("/v2/blocks/{h}"), &q).await.ok().as_deref() == Some(&raw[..]) {
                         agree += 1;
                     }
                 }
@@ -3540,6 +3626,288 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
             let _ = key_op_delta(&args, None, 118, &[]);
             let pm = json!({"kind": "pay_meta", "salt": h(&bytes[..bytes.len().min(32)]), "meta": h(&bytes)});
             let _ = entry(&pol(), None, &op, &pm);
+        }
+    }
+
+    /// scaas-rpc T18a: the configured `X-Algo-API-Token` goes with each request, to every endpoint, as before (each endpoint's own
+    /// credential in the crate); an algod status other than 2xx reaches the classifier as `AlgodError`. Control: unset, none.
+    #[tokio::test]
+    async fn the_algod_token_goes_to_endpoint_0_only_and_a_status_is_algod_error() {
+        let seen: Arc<Mutex<Vec<Option<String>>>> = Default::default();
+        let s2 = seen.clone();
+        let app = axum::Router::new().fallback(move |headers: axum::http::HeaderMap| {
+            let s2 = s2.clone();
+            async move {
+                s2.lock().unwrap().push(headers.get("x-algo-api-token").and_then(|v| v.to_str().ok()).map(str::to_string));
+                (axum::http::StatusCode::NOT_FOUND, axum::Json(json!({"message": "no such thing"})))
+            }
+        });
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        std::env::set_var("SCAAS_T18_ALGOD_TOKEN", "tok");
+        let mut c = cfg(&url, "");
+        c.rpc_urls = vec![url.clone(), format!("{url}/second")];
+        c.params.insert("algod_token_env".into(), "SCAAS_T18_ALGOD_TOKEN".into());
+        let a = AlgorandAdapter::new(&c, &[lane0()]).unwrap();
+        let e = a.get_raw_at(1, "/v2/status", &[]).await.unwrap_err();
+        assert_eq!(status_of(&e), Some(404), "{e:#}");
+        assert!(a.get("/v2/status").await.is_err());
+        // T24.10 (owner 2026-11-18): the name form is endpoint 0's token only (it went to every endpoint)
+        assert_eq!(*seen.lock().unwrap(), [None, Some("tok".to_string())]);
+        let a = AlgorandAdapter::new(&cfg(&url, ""), &[lane0()]).unwrap();
+        let _ = a.get("/v2/status").await;
+        assert_eq!(seen.lock().unwrap().last().unwrap(), &None, "control: no token configured");
+    }
+
+    // ---- scaas-rpc T18b: ARCH-POS-15 failover, the first-endpoint carve-out first (F3) ----
+
+    const DOWN: &str = "http://127.0.0.1:9";
+
+    /// The fake world behind `first` endpoints in `rpc_urls`; no start_check (endpoint 0 may be down).
+    async fn adapter_after(w: World, first: &[&str]) -> (AlgorandAdapter, Arc<M<World>>) {
+        let w = Arc::new(M::new(w));
+        let url = serve(w.clone()).await;
+        let mut c = cfg(&url, FEE_CFG);
+        c.rpc_urls = first.iter().map(|u| u.to_string()).chain([url]).collect();
+        (AlgorandAdapter::new(&c, &[lane0()]).unwrap(), w)
+    }
+
+    /// The plain pay of the vectors, valid long enough.
+    fn pay_op() -> MetaOp {
+        MetaOp { valid_until: far(), ..op_of("pay") }
+    }
+
+    /// F3: a status, `op_consumed`, the round (the lane sequence), the lane balance and `start_check` (the apps' hashes, the
+    /// executor) are endpoint 0's only: with it down each is unread, never endpoint 1's answer (here a mined status and a
+    /// consumed lane box, so a failover would show). Control: endpoint 0 up, each read.
+    #[tokio::test]
+    async fn algorand_tx_status_op_consumed_the_round_and_start_check_never_fail_over() {
+        let op = pay_op();
+        let j = job(o_op(&op, &auth_of("pay"), json!({})));
+        let tx = format!("0x{}", "11".repeat(32));
+        let w = || {
+            let mut w = world();
+            let name = [&b"l"[..], &sha256(&[&op.from.bytes()[..], &op.lane[..]].concat())].concat();
+            for t in [TOKEN, TOKEN_B] {
+                w.boxes.insert((t, name.clone()), (op.nonce + 1).to_be_bytes().to_vec());
+            }
+            w.pending.insert(b32encode(&[0x11; 32]), json!({"confirmed-round": 5}));
+            w
+        };
+        let (a, _) = adapter_after(w(), &[DOWN]).await;
+        assert!(a.tx_status(&tx).await.is_err(), "unread, never Mined from endpoint 1");
+        assert!(a.op_consumed(&j).await.is_err());
+        assert!(a.sequence(0).await.is_err());
+        assert!(a.lane_balance(0).await.is_err());
+        assert!(a.start_check().await.is_err(), "the apps and the executor: endpoint 0's");
+        assert_eq!(a.failovers(), 0);
+        let (a, _) = adapter_after(w(), &[]).await;
+        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { height: 5, .. }), "control");
+        assert_eq!(a.op_consumed(&j).await.unwrap(), Some(true));
+        a.sequence(0).await.unwrap();
+        a.lane_balance(0).await.unwrap();
+        a.start_check().await.unwrap();
+    }
+
+    /// ARCH-POS-15: `build`'s reads (params, rounds, boxes, the simulates) fail over: endpoint 0 down, endpoint 1 builds the
+    /// group. A refusal read while a failover endpoint answered is no verdict (requeued, FAILOVER_ANSWER); the same refusal on
+    /// endpoint 0 is the job's, as before.
+    #[tokio::test]
+    async fn algorand_build_reads_fail_over_and_a_failover_refusal_is_no_verdict() {
+        let j = job(o_op(&pay_op(), &auth_of("pay"), json!({})));
+        let (a, _) = adapter_after(world(), &[DOWN]).await;
+        let g = group(&a.build(&j, 0).await.unwrap());
+        assert_eq!(g.main, 1, "built on endpoint 1");
+        assert!(a.failovers() > 0);
+        let failing = || {
+            let mut w = world();
+            w.fail = Some("logic eval error: assert failed".into());
+            w
+        };
+        let (a, _) = adapter_after(failing(), &[DOWN]).await;
+        match a.build(&j, 0).await {
+            Err(SimError::Transport(m)) => assert!(m.starts_with("FAILOVER_ANSWER") && m.contains("assert failed"), "{m}"),
+            r => panic!("{r:?}"),
+        }
+        let (a, _) = adapter_after(failing(), &[]).await;
+        assert!(matches!(a.build(&j, 0).await, Err(SimError::Revert(m)) if m.contains("assert failed")), "control: endpoint 0's verdict");
+    }
+
+    /// scaas-rpc T24.3: endpoint 0's answer other than a 404 or a refused simulate's 400 (a rate limit) is its failure, never
+    /// its verdict: the read fails over and endpoint 1 builds the group (endpoint 0 passes its identity read).
+    #[tokio::test]
+    async fn algorand_endpoint_0_rate_limited_fails_over() {
+        let j = job(o_op(&pay_op(), &auth_of("pay"), json!({})));
+        let first = crate::adapters::testkit::refusing(&serve(Arc::new(M::new(world()))).await, |p, _| p == "/v2/transactions/params", 429, json!({"message": "rate limited"})).await;
+        let (a, _) = adapter_after(world(), &[&first]).await;
+        a.build(&j, 0).await.unwrap();
+        assert!(a.failovers() > 0);
+    }
+
+    /// scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed is the failover reads' floor: once it reported a transaction mined
+    /// at round 5001 (or its head there), endpoint 1, at round 5000, is skipped by `build`. Control: before that, endpoint 1 builds.
+    #[tokio::test]
+    async fn algorand_a_mined_status_and_the_head_raise_the_floor() {
+        let j = job(o_op(&pay_op(), &auth_of("pay"), json!({})));
+        let first = || crate::adapters::testkit::scripted(false, |p, _| match p {
+            "/v2/transactions/params" => Some(json!({"genesis-hash": base64::engine::general_purpose::STANDARD.encode(network()),
+                "genesis-id": "scaas-localnet-v1", "last-round": 5_000, "min-fee": 1_000, "fee": 0, "consensus-version": "future"})),
+            p if p.starts_with("/v2/transactions/pending/") => Some(json!({"confirmed-round": 5_001})),
+            "/v2/status" => Some(json!({"last-round": 5_001})),
+            _ => None,
+        });
+        let tx = format!("0x{}", "11".repeat(32));
+        let (a, _) = adapter_after(world(), &[&first().await]).await;
+        a.build(&j, 0).await.unwrap();
+        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { height: 5_001, .. }));
+        assert!(matches!(a.build(&j, 0).await, Err(SimError::Transport(_))), "endpoint 1 below round 5001: skipped");
+        let (a, _) = adapter_after(world(), &[&first().await]).await;
+        let _ = a.final_head().await;
+        assert!(matches!(a.build(&j, 0).await, Err(SimError::Transport(_))), "the head: the same floor");
+    }
+
+    /// scaas-rpc T24.7: `submit` sends to endpoint 0 only, inside `build`'s scope too: with it down the send fails and endpoint
+    /// 1 is sent nothing. Control: endpoint 0 up takes it.
+    #[tokio::test]
+    async fn algorand_submit_inside_build_asks_endpoint_0_only() {
+        let s = Signed { job_id: 1, tx_id: format!("0x{}", "11".repeat(32)), raw: vec![1, 2, 3], valid_until: u64::MAX / 2, sequence: 0 };
+        let (a, w) = adapter_after(world(), &[DOWN]).await;
+        assert!(crate::adapters::evm::BUILDING.scope((), a.submit(&s)).await.is_err());
+        assert!(w.lock().unwrap().submitted.is_empty(), "endpoint 1 is sent nothing");
+        let (a, w) = adapter_after(world(), &[]).await;
+        crate::adapters::evm::BUILDING.scope((), a.submit(&s)).await.unwrap();
+        assert_eq!(w.lock().unwrap().submitted.len(), 1, "control");
+    }
+
+    /// scaas-rpc T24.8 (CLI-RPC-03): endpoint 0 passes its identity before its own reads: one of another network (another genesis hash) answers
+    /// no status read (refused unread). Control: the same endpoint of this network answers it.
+    #[tokio::test]
+    async fn algorand_endpoint_0_of_another_network_answers_no_read() {
+        fn algod(p: &str, g: [u8; 32]) -> Option<Value> {
+            match p {
+                "/v2/transactions/params" => Some(json!({"genesis-hash": base64::engine::general_purpose::STANDARD.encode(g), "genesis-id": "x",
+                    "last-round": 5_000, "min-fee": 1_000, "fee": 0})),
+                p if p.starts_with("/v2/transactions/pending/") => Some(json!({"confirmed-round": 5})),
+                _ => None,
+            }
+        }
+        let tx = format!("0x{}", "11".repeat(32));
+        let other = crate::adapters::testkit::scripted(false, |p, _| algod(p, [7; 32])).await;
+        assert!(AlgorandAdapter::new(&cfg(&other, FEE_CFG), &[lane0()]).unwrap().tx_status(&tx).await.is_err());
+        let this = crate::adapters::testkit::scripted(false, |p, _| algod(p, network())).await;
+        let a = AlgorandAdapter::new(&cfg(&this, FEE_CFG), &[lane0()]).unwrap();
+        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { .. }), "control");
+    }
+
+    /// scaas-rpc T24.9 (CLI-RPC-07): algod's raw JSON answers (`get`, a box) are decoded through the crate's bounded decode: one
+    /// nested 100 deep (which serde_json alone would read) is refused. Control: a shallow one is read.
+    #[tokio::test]
+    async fn algorand_a_raw_json_answer_deeper_than_64_is_refused() {
+        fn algod(p: &str, depth: usize) -> Option<Value> {
+            let deep = (0..depth).fold(json!(5), |v, _| json!([v]));
+            match p {
+                "/v2/transactions/params" => Some(json!({"genesis-hash": base64::engine::general_purpose::STANDARD.encode(network()), "last-round": 5})),
+                "/v2/status" => Some(json!({"last-round": 5, "deep": deep})),
+                p if p.starts_with("/v2/applications/") => Some(json!({"value": "AQ==", "deep": deep})),
+                _ => None,
+            }
+        }
+        let deep = AlgorandAdapter::new(&cfg(&crate::adapters::testkit::scripted(false, |p, _| algod(p, 100)).await, FEE_CFG), &[lane0()]).unwrap();
+        assert!(format!("{:#}", deep.get("/v2/status").await.unwrap_err()).contains("TooDeep"));
+        assert!(deep.box_value(1, b"x").await.is_err());
+        let shallow = AlgorandAdapter::new(&cfg(&crate::adapters::testkit::scripted(false, |p, _| algod(p, 3)).await, FEE_CFG), &[lane0()]).unwrap();
+        assert_eq!(shallow.get("/v2/status").await.unwrap()["last-round"], 5, "control");
+        assert_eq!(shallow.box_value(1, b"x").await.unwrap(), Some(vec![1]));
+    }
+
+    /// scaas-rpc T24.4 (CLI-RPC-05, owner 2026-11-18): algod's `min-fee` above `params.max_min_fee`, or its `fee` above
+    /// `params.max_fee_per_byte`, is no verdict (`Transport`); at the caps the group is built.
+    #[tokio::test]
+    async fn algorand_a_fee_above_the_caps_is_refused() {
+        let j = job(o_op(&pay_op(), &auth_of("pay"), json!({})));
+        let on = |caps: &'static str| async move {
+            let url = serve(Arc::new(M::new(World { fpb: 2, ..world() }))).await;
+            AlgorandAdapter::new(&cfg(&url, &format!("{FEE_CFG}, {caps}")), &[lane0()]).unwrap()
+        };
+        for caps in ["max_min_fee = 999, max_fee_per_byte = 2", "max_min_fee = 1000, max_fee_per_byte = 1"] {
+            match on(caps).await.build(&j, 0).await {
+                Err(SimError::Transport(m)) => assert!(m.contains("above params.max_"), "{caps}: {m}"),
+                r => panic!("{caps}: {r:?}"),
+            }
+        }
+        on("max_min_fee = 1000, max_fee_per_byte = 2").await.build(&j, 0).await.unwrap();
+    }
+
+    /// scaas-rpc T24.10 (spec §5.3, owner 2026-11-18): the algod token per endpoint. The name form is endpoint 0's token only
+    /// (it went to every endpoint); the list form gives each endpoint its own (`""`: none). No token appears in an error or a
+    /// log line, though endpoint 1 echoes every header it gets into its refusals.
+    #[tokio::test]
+    async fn algorand_the_token_goes_to_its_own_endpoint_only() {
+        type Seen = Arc<std::sync::Mutex<Vec<Option<String>>>>;
+        /// An algod of this network that records each request's token; `echo`: every request but the identity read answers
+        /// 400 with the request's headers.
+        async fn algod(echo: bool) -> (String, Seen) {
+            let seen: Seen = Default::default();
+            let s2 = seen.clone();
+            let app = axum::Router::new().fallback(move |uri: axum::http::Uri, h: axum::http::HeaderMap| {
+                let s2 = s2.clone();
+                async move {
+                    s2.lock().unwrap().push(h.get("x-algo-api-token").and_then(|v| v.to_str().ok()).map(str::to_string));
+                    if echo && uri.path() != "/v2/transactions/params" {
+                        let all: Vec<String> = h.iter().map(|(k, v)| format!("{k}={}", v.to_str().unwrap_or_default())).collect();
+                        return (axum::http::StatusCode::BAD_REQUEST, axum::Json(json!({"message": all.join(" ")})));
+                    }
+                    (axum::http::StatusCode::OK, axum::Json(json!({"genesis-hash": base64::engine::general_purpose::STANDARD.encode(network()),
+                        "last-round": 5})))
+                }
+            });
+            let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let url = format!("http://{}", l.local_addr().unwrap());
+            tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+            (url, seen)
+        }
+        let on = |urls: Vec<String>, tokens: toml::Value| {
+            let mut c = cfg(&urls[0], FEE_CFG);
+            c.rpc_urls = urls;
+            c.params.insert("algod_token_env".into(), tokens);
+            AlgorandAdapter::new(&c, &[lane0()]).unwrap()
+        };
+        std::env::set_var("SCAAS_T24_10_ALGOD_0", "token-zero");
+        std::env::set_var("SCAAS_T24_10_ALGOD_1", "token-one");
+        let last = |s: &Seen| s.lock().unwrap().last().cloned().flatten();
+        let ((u0, s0), (u1, s1)) = (algod(false).await, algod(true).await);
+        let a = on(vec![u0.clone(), u1.clone()], "SCAAS_T24_10_ALGOD_0".into());
+        a.get_raw_at(0, "/v2/status", &[]).await.unwrap();
+        let e = a.get_raw_at(1, "/v2/status", &[]).await.unwrap_err();
+        assert_eq!((last(&s0), last(&s1)), (Some("token-zero".into()), None), "the name form: endpoint 0's only");
+        assert!(!format!("{e:#}").contains("token-zero"), "{e:#}");
+        let a = on(vec![u0, u1], toml::Value::Array(vec!["".into(), "SCAAS_T24_10_ALGOD_1".into()]));
+        a.get_raw_at(0, "/v2/status", &[]).await.unwrap();
+        let _ = a.get_raw_at(1, "/v2/status", &[]).await;
+        assert_eq!((last(&s0), last(&s1)), (None, Some("token-one".into())), "the list form: each its own");
+        // a failed-over read logs each endpoint's failure: endpoint 0 down (its token configured), endpoint 1's echoed refusal
+        let buf = Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
+        let w = buf.clone();
+        let sub = tracing_subscriber::fmt().with_ansi(false).with_max_level(tracing::Level::TRACE).with_writer(move || LogBuf(w.clone())).finish();
+        let g = tracing::subscriber::set_default(sub);
+        let (u1, _) = algod(true).await;
+        let a = on(vec![DOWN.into(), u1], "SCAAS_T24_10_ALGOD_0".into());
+        let e = crate::adapters::evm::BUILDING.scope((), a.get_raw("/v2/status", &[])).await.unwrap_err();
+        drop(g);
+        let logs = String::from_utf8_lossy(&buf.lock().unwrap()).to_string();
+        assert!(logs.contains("x-algo-api-token") || logs.contains("HTTP 400"), "endpoint 1's refusal is logged: {logs}");
+        assert!(!logs.contains("token-zero") && !format!("{e:#}").contains("token-zero"), "{logs}");
+    }
+
+    struct LogBuf(Arc<std::sync::Mutex<Vec<u8>>>);
+    impl std::io::Write for LogBuf {
+        fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(b);
+            Ok(b.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
         }
     }
 }

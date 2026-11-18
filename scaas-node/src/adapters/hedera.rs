@@ -14,7 +14,7 @@
 //! - Danh sách token lọc event: token Odoo đăng ký, lấy từ `node_config` mỗi vòng `index_step` (review H2;
 //!   không danh sách tĩnh trong cấu hình node — event của contract lạ không bao giờ gửi Odoo).
 use alloy::primitives::{Address, Bytes, B256, U256};
-use alloy::providers::{DynProvider, Provider, ProviderBuilder};
+use alloy::providers::Provider;
 use anyhow::{anyhow, bail, Result};
 use async_trait::async_trait;
 use serde_json::Value;
@@ -33,7 +33,6 @@ pub const CHAIN_IDS: [u64; 4] = [295, 296, 297, 298];
 
 pub struct HederaAdapter {
     inner: EvmAdapter,
-    rpc: DynProvider,
     lane_addrs: Vec<Address>,
 }
 
@@ -42,10 +41,9 @@ impl HederaAdapter {
         if cfg.family != "hedera" || !CHAIN_IDS.contains(&cfg.evm_chain_number) {
             bail!("chain {}: Hedera needs family=hedera and evm_chain_number 295..298", cfg.chain_key());
         }
-        let url = cfg.rpc_urls.first().ok_or_else(|| anyhow!("chain {}: no rpc_urls", cfg.chain_key()))?;
-        let rpc = ProviderBuilder::new().disable_recommended_fillers().connect_http(url.parse()?).erased();
+        // scaas-rpc T14: the Relay is read through the chain's EvmPool (bounded, its timeout), no provider of its own
         let lane_addrs = chains.iter().map(Chain::address).collect();
-        Ok(Self { inner: EvmAdapter::new(cfg, chains, Default::default())?, rpc, lane_addrs })
+        Ok(Self { inner: EvmAdapter::new(cfg, chains, Default::default())?, lane_addrs })
     }
 
     /// Từ config: một `Chain` mỗi lane (khoá secp256k1 coin 3030).
@@ -151,7 +149,14 @@ impl ChainAdapter for HederaAdapter {
     /// R80: meta-tx ⇒ `mtxNonce(from, batch)` (both structs share the lane); job `call` ⇒ không biết.
     async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
         let Some(m) = work_from_job(job, self.inner.fee_recipient).ok().and_then(|w| w.meta) else { return Ok(None) };
-        Ok(Some(self.inner.lane(0)?.nonce_spent(&m).await?))
+        // scaas-rpc T14b (F3): a verdict rests on endpoint 0 only; any failover answer behind it is unread
+        let chain = self.inner.lane(0)?;
+        let mark = chain.failover_answers();
+        let spent = chain.nonce_spent(&m).await?;
+        if chain.failover_answers() != mark {
+            bail!("FAILOVER_ANSWER: mtxNonce read on a failover endpoint (the first endpoint did not answer); read again");
+        }
+        Ok(Some(spent))
     }
 
     fn call_key(&self, job: &Job) -> Option<B256> {
@@ -189,7 +194,11 @@ impl ChainAdapter for HederaAdapter {
             return Err(SimError::Revert("expired before inclusion".into()));
         }
         let addr = *self.lane_addrs.get(lane).ok_or_else(|| SimError::Transport(format!("no lane {lane}")))?;
-        let bal = self.rpc.get_balance(addr).await.map_err(|e| SimError::Transport(e.to_string()))?;
+        // scaas-rpc T14b (ARCH-POS-15): the balance fails over like the build's other reads; a balance 0 is transport either way
+        let chain = self.inner.lane(lane).map_err(|e| SimError::Transport(e.to_string()))?;
+        let bal = chain
+            .read(|p| async move { p.get_balance(addr).await.map_err(|e| SimError::Transport(e.to_string())) })
+            .await?;
         if bal == U256::ZERO {
             return Err(SimError::Transport(format!("lane {addr:#x} is not a funded Hedera account")));
         }
@@ -200,7 +209,7 @@ impl ChainAdapter for HederaAdapter {
         let chain = self.inner.lane(lane)?;
         let to: Address = built.meta["to"].as_str().unwrap_or_default().parse()?;
         let gas = built.meta["gas"].as_u64().ok_or_else(|| anyhow!("built tx without gas"))?;
-        let fees = fees(self.rpc.get_gas_price().await?);
+        let fees = fees(self.inner.lane(0)?.pool().first_gas_price().await?);
         let (raw, hash) = chain.sign(sequence, to, Bytes::from(built.body), gas, fees).await?;
         Ok(Signed { job_id: built.job_id, tx_id: format!("{hash:#x}"), raw: raw.to_vec(), valid_until: built.valid_until, sequence })
     }
@@ -210,17 +219,27 @@ impl ChainAdapter for HederaAdapter {
     }
 
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
-        let rc: Value = self.rpc.raw_request("eth_getTransactionReceipt".into(), (tx_id,)).await?;
-        if let Some(st) = decode_receipt(&rc) {
-            if let TxStatus::Reverted { reason } = &st {
-                if requeues(reason) {
-                    return Err(Rejected(reason.clone()).into());
+        let st: Result<TxStatus> = async {
+            // F3: endpoint 0 only (scaas-rpc T14)
+            let (pool, id) = (self.inner.lane(0)?.pool(), tx_id.parse()?);
+            if let Some(st) = decode_receipt(&pool.first_relay_receipt(id).await?) {
+                if let TxStatus::Reverted { reason } = &st {
+                    if requeues(reason) {
+                        return Err(Rejected(reason.clone()).into());
+                    }
                 }
+                return Ok(st);
             }
-            return Ok(st);
+            Ok(if pool.first_tx_known(id).await? { TxStatus::Pending } else { TxStatus::Unknown })
         }
-        let tx: Value = self.rpc.raw_request("eth_getTransactionByHash".into(), (tx_id,)).await?;
-        Ok(if tx.is_null() { TxStatus::Unknown } else { TxStatus::Pending })
+        .await;
+        // scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed raises the failover reads' floor
+        if let Ok(TxStatus::Mined { height, .. }) = &st {
+            if let Ok(c) = self.inner.lane(0) {
+                c.saw_block(*height);
+            }
+        }
+        st
     }
 
     async fn sequence(&self, lane: usize) -> Result<u64> {
@@ -326,6 +345,8 @@ mod tests {
         /// `eth_getBlockByNumber` answers this JSON-RPC error instead; `block0_reads` counts the asks.
         block0_err: Option<Value>,
         block0_reads: u32,
+        /// `eth_getTransactionReceipt` asks (scaas-rpc T14b).
+        receipt_reads: u32,
         /// Revert data of an `mtxInvalidateNonces` simulation.
         invalidate_revert: Option<Vec<u8>>,
     }
@@ -340,6 +361,8 @@ mod tests {
             // scaas-rpc T13 point 6 (fixture correction): endpoint 0 is identity-checked now: chain 296's `eth_chainId`
             "eth_chainId" => ok(json!("0x128")),
             "eth_getBalance" => ok(json!(n.balance)),
+            // scaas-rpc T14b: a failover endpoint's head (the pool checks it against the highest seen)
+            "eth_blockNumber" => ok(json!("0x10")),
             // the recorded testnet block's gasLimit (tests/vectors/hedera_testnet.json): the gas cap reads `latest`
             "eth_getBlockByNumber" if b["params"][0] == "latest" => ok(json!({"gasLimit": "0x8f0d180"})),
             "eth_getBlockByNumber" => {
@@ -378,7 +401,10 @@ mod tests {
                     None => ok(json!(format!("0x{}", "11".repeat(32)))),
                 }
             }
-            "eth_getTransactionReceipt" => ok(n.receipt.clone()),
+            "eth_getTransactionReceipt" => {
+                n.receipt_reads += 1;
+                ok(n.receipt.clone())
+            }
             "eth_getTransactionByHash" => ok(Value::Null),
             m => json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32601, "message": format!("unexpected {m}")}}),
         })
@@ -422,13 +448,18 @@ mod tests {
 
     /// The adapter on the fake Relay/client: `(adapter, client, network)`. The job's token 0x70… is registered.
     async fn adapter(net: Net) -> (HederaAdapter, crate::odoo::Odoo, Shared) {
+        adapter_after(net, &[]).await
+    }
+
+    /// [`adapter`] with `first` endpoints before the fake Relay in `rpc_urls` (scaas-rpc T14b: the failover tests).
+    async fn adapter_after(net: Net, first: &[&str]) -> (HederaAdapter, crate::odoo::Odoo, Shared) {
         let s: Shared = Arc::new(Mutex::new(net));
         let app = axum::Router::new().route("/", post(fake_relay)).route("/json/2/{m}/{method}", post(odoo)).with_state(s.clone());
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
         let mut cfg: ChainCfg = toml::from_str("family = \"hedera\"\nevm_chain_number = 296\nrpc_urls = [\"http://x\"]\n").unwrap();
-        cfg.rpc_urls = vec![url.clone()];
+        cfg.rpc_urls = first.iter().map(|u| u.to_string()).chain([url.clone()]).collect();
         // every `eth_call` of the fake answers the same word: `chainUid()` too, so the pinned chain_uid is that word
         cfg.chain_uid = Some(B256::from(U256::from(s.lock().unwrap().mtx_nonce)));
         let signer = LocalSigner::new(crate::signer::Curve::Secp256k1, &[7u8; 32]).unwrap();
@@ -697,5 +728,76 @@ mod tests {
             let rc = json!({"status": "0x2", "blockNumber": format!("0x{n:x}")});
             prop_assert_eq!(decode_receipt(&rc), None);
         }
+    }
+
+    // ---- scaas-rpc T14b: ARCH-POS-15 failover, the first-endpoint carve-out first (F3) ----
+
+    const DOWN: &str = "http://127.0.0.1:9";
+
+    /// F3: a status is endpoint 0's only: with it down, an unread status (asked again), and the Relay behind it counts zero
+    /// receipt asks; a lagging endpoint 1's "unknown" is never read, so the job is never `dead` on it. Control: endpoint 0 up.
+    #[tokio::test]
+    async fn hedera_tx_status_never_fails_over() {
+        let tx = format!("{:#x}", B256::repeat_byte(0x11));
+        let (a, _, s) = adapter_after(Net { balance: "0x1", ..Default::default() }, &[DOWN]).await;
+        assert!(a.tx_status(&tx).await.is_err(), "unread, never Unknown from endpoint 1");
+        assert_eq!(s.lock().unwrap().receipt_reads, 0, "endpoint 1 is never asked");
+        let (a, _, s) = adapter(Net { balance: "0x1", ..Default::default() }).await;
+        assert_eq!(a.tx_status(&tx).await.unwrap(), TxStatus::Unknown, "control");
+        assert_eq!(s.lock().unwrap().receipt_reads, 1);
+    }
+
+    /// F3: `op_consumed` rests on endpoint 0 only: a "spent" answered by a failover endpoint is no verdict (unread). Control:
+    /// the same answer from endpoint 0 is `Some(true)`.
+    #[tokio::test]
+    async fn hedera_op_consumed_never_rests_on_a_failover_answer() {
+        let job: Job = serde_json::from_value(job(now() + 600)).unwrap();
+        let (a, _, _) = adapter_after(Net { balance: "0x1", mtx_nonce: 1, ..Default::default() }, &[DOWN]).await;
+        let e = a.op_consumed(&job).await.unwrap_err().to_string();
+        assert!(e.contains("FAILOVER_ANSWER"), "{e}");
+        let (a, _, _) = adapter(Net { balance: "0x1", mtx_nonce: 1, ..Default::default() }).await;
+        assert_eq!(a.op_consumed(&job).await.unwrap(), Some(true), "control");
+    }
+
+    /// F3: the lane sequence is endpoint 0's only. Control: endpoint 0 up answers 7.
+    #[tokio::test]
+    async fn hedera_the_lane_sequence_never_fails_over() {
+        let (a, _, _) = adapter_after(Net { balance: "0x1", ..Default::default() }, &[DOWN]).await;
+        assert!(a.sequence(0).await.is_err());
+        let (a, _, _) = adapter(Net { balance: "0x1", ..Default::default() }).await;
+        assert_eq!(a.sequence(0).await.unwrap(), 7, "control");
+    }
+
+    /// ARCH-POS-15: `build`'s reads (the lane balance, the simulation and views) fail over: endpoint 0 down, the Relay behind it
+    /// answers and the job is built. Control: a lane of balance 0 there is still refused as unfunded (transport, requeued).
+    #[tokio::test]
+    async fn hedera_build_reads_fail_over_when_the_first_endpoint_is_down() {
+        let job: Job = serde_json::from_value(job(now() + 600)).unwrap();
+        let (a, _, _) = adapter_after(Net { balance: "0x1", ..Default::default() }, &[DOWN]).await;
+        assert!(a.build(&job, 0).await.is_ok());
+        let (a, _, _) = adapter_after(Net { balance: "0x0", ..Default::default() }, &[DOWN]).await;
+        assert!(matches!(a.build(&job, 0).await, Err(SimError::Transport(e)) if e.contains("not a funded")), "control");
+    }
+
+    /// scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed is the failover reads' floor: once it reported a transaction mined
+    /// at block 0x20 (or its head there), endpoint 1, at block 0x10, is skipped by `build`. Control: before that, endpoint 1 builds.
+    #[tokio::test]
+    async fn hedera_a_mined_status_raises_the_floor() {
+        let job: Job = serde_json::from_value(job(now() + 600)).unwrap();
+        let first = || crate::adapters::testkit::scripted(true, |m, p| match m {
+            "eth_chainId" => Some(json!("0x128")),
+            "eth_getBlockByNumber" if p["params"][0] == "0x0" => {
+                let mut b = serde_json::from_str::<Value>(include_str!("../../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
+                b["hash"] = json!(format!("{:#x}", B256::ZERO));
+                Some(b)
+            }
+            "eth_getTransactionReceipt" => Some(json!({"status": "0x1", "blockNumber": "0x20", "transactionHash": format!("{:#x}", B256::repeat_byte(0x11))})),
+            _ => None,
+        });
+        let tx = format!("{:#x}", B256::repeat_byte(0x11));
+        let (a, _, _) = adapter_after(Net { balance: "0x1", ..Default::default() }, &[&first().await]).await;
+        assert!(a.build(&job, 0).await.is_ok());
+        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { height: 0x20, .. }));
+        assert!(matches!(a.build(&job, 0).await, Err(SimError::Transport(_))), "endpoint 1 below block 0x20: skipped");
     }
 }

@@ -620,6 +620,12 @@ impl EvmPool {
             })
     }
 
+    /// Endpoint 0's provider, once it may be asked (a family module's first-endpoint reads: Hedera's Relay).
+    pub(crate) async fn first_provider(&self) -> Result<&DynProvider, RpcError> {
+        self.first().await?;
+        Ok(&self.providers[0])
+    }
+
     /// The pending nonce of `who` from endpoint 0 (the lane's own).
     pub async fn first_pending_nonce(&self, who: Address) -> Result<u64, RpcError> {
         self.first().await?;
@@ -709,7 +715,7 @@ pub struct Fees {
 }
 
 /// A first-endpoint read's failure: endpoint 0's, never failed over.
-fn first_err(e: &TransportError) -> RpcError {
+pub(crate) fn first_err(e: &TransportError) -> RpcError {
     RpcError::EndpointAllFailed {
         last: Some(EndpointFailure::new(
             0,

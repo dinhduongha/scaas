@@ -24,10 +24,24 @@ STEPS=(
   "rpc-clippy|clients/scaas-rpc|$cap cargo clippy $C --all-targets --all-features -- -D warnings"
   "rpc-anvil|clients/scaas-rpc|$cap cargo test $C --features evm --test anvil -- --ignored$TT"
   "rpc-wasm|clients/scaas-rpc|$cap cargo check $C --target wasm32-unknown-unknown --no-default-features --features evm,node-client"
+  "rpc-deny|clients/scaas-rpc|$cap cargo deny --all-features check"
   "node-test|scaas-node|CAPPED_MEM=6G $cap cargo test $C"
   "node-clippy|scaas-node|$cap cargo clippy $C --all-targets -- -D warnings"
   "node-e2e|scaas-node|CAPPED_MEM=6G $cap cargo test $C --test e2e -- --ignored$TT"
   "node-e2e-hedera|scaas-node|(cd ../smartcontracts/evm && $cap forge build test/hedera/HederaMocks.sol) && CAPPED_MEM=6G $cap cargo test $C --test e2e_hedera -- --ignored$TT"
+  "node-e2e-soroban|scaas-node|CARGO_BUILD_JOBS=2 $cap ../smartcontracts/scripts/build.sh soroban && (cd ../clients/clientkeys && [ -d node_modules ] || $cap npm ci --no-audit --no-fund) && ../smartcontracts/soroban/scripts/quickstart.sh up && trap '../smartcontracts/soroban/scripts/quickstart.sh down' EXIT && ../smartcontracts/soroban/scripts/quickstart.sh wait && CAPPED_MEM=6G $cap cargo test $C --test e2e_soroban -- --ignored --test-threads=1 && CAPPED_MEM=6G $cap cargo test $C --test e2e_soroban_ua -- --ignored --test-threads=1"
+  "node-e2e-solana|scaas-node|CARGO_BUILD_JOBS=2 $cap ../smartcontracts/scripts/build.sh solana && CAPPED_MEM=6G $cap bash -c \"../smartcontracts/solana/scripts/devnet.sh up --upgradeable-program BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d ../smartcontracts/solana/target/deploy/scaas.so 73VoVWyfxmaWC6gUjsse6xzNTLLoEhazMCcKakXWbebm --bpf-program A4PasPZEK899MesXpT3MSA4ufnpHcyfxjKuxRXmcZnRJ ../smartcontracts/solana/target/deploy/cpi_wrapper.so && trap '../smartcontracts/solana/scripts/devnet.sh down' EXIT && cargo test $C --test e2e_solana -- --ignored$TT\""
+  "node-e2e-near|scaas-node|CARGO_BUILD_JOBS=2 $cap ../smartcontracts/scripts/build.sh near && (cd ../smartcontracts/near && $cap cargo test --no-run -j2) && CAPPED_MEM=6G $cap cargo test $C --test e2e_near -- --ignored$TT"
+  "node-e2e-algorand|scaas-node|D=../smartcontracts/scripts/devnet.sh; \$D algorand down >/dev/null 2>&1; trap '\$D algorand down >/dev/null 2>&1' EXIT; $cap \$D algorand up && CAPPED_MEM=6G $cap cargo test $C --test e2e_algorand -- --ignored$TT"
+  # node-e2e-aptos: the localnet is a long-lived service: its own memory-capped scope (as Docker's --memory), not a capped slot
+  # (a slot held for the whole run starved the test's own build behind other agents' jobs); the Indexer API's containers
+  # capped by `docker update`
+  "node-e2e-aptos|scaas-node|D=../smartcontracts/move/aptos/scripts/devnet.sh; \$D down >/dev/null 2>&1; trap '\$D down >/dev/null 2>&1' EXIT; systemd-run --user --scope --quiet -p MemoryMax=3G -p MemorySwapMax=1G -- \$D up && $cap \$D publish && docker update --memory 2g --memory-swap 2g \$(docker ps -q --filter name=local-testnet) >/dev/null && CAPPED_MEM=6G $cap cargo test $C --test e2e_aptos -- --ignored$TT"
+  "node-e2e-sui|scaas-node|CAPPED_MEM=6G $cap cargo test $C --test e2e_sui -- --ignored$TT"
+  # node-e2e-ton: the sandbox shim (smartcontracts/ton: npm ci when absent, the Tact build; both git-ignored), started by the test
+  "node-e2e-ton|scaas-node|TD=../smartcontracts/ton; { [ -d \$TD/node_modules ] || (cd \$TD && $cap npm ci); } && (cd \$TD && $cap npx tact --config tact.config.json) && CAPPED_MEM=6G $cap cargo test $C --test e2e_ton -- --ignored$TT"
+  # node-e2e-cosmos: the wasm built when absent (git-ignored artifacts/), the devnet container started by the test (2 GiB, 2 CPUs)
+  "node-e2e-cosmos|scaas-node|{ [ -d ../smartcontracts/cosmos/artifacts ] || (cd ../smartcontracts/cosmos && $cap sh build-wasm.sh); } && CAPPED_MEM=6G $cap cargo test $C --test e2e_cosmos -- --ignored$TT"
   "ver-test|scaas-pqz-verifier|$cap cargo test $C"
   "ver-clippy|scaas-pqz-verifier|$cap cargo clippy $C --all-targets -- -D warnings"
   "ver-anvil|scaas-pqz-verifier|$cap cargo test $C --test anvil -- --ignored$TT"

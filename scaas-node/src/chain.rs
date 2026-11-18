@@ -82,6 +82,11 @@ impl Chain {
         })
     }
 
+    /// The chain's endpoint pool (scaas-rpc), for a family's first-endpoint reads (Hedera's Relay, plan T14).
+    pub fn pool(&self) -> &EvmPool {
+        &self.pool
+    }
+
     pub fn primary(&self) -> &DynProvider {
         self.pool.primary()
     }

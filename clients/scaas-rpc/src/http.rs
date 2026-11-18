@@ -46,6 +46,9 @@ pub struct Http {
 /// `route` (`/v1/…`, its own query after `?`) under the endpoint's URL: its path prefix kept and its query kept before the
 /// route's (T13 S14: `Url::join` of an absolute path dropped both, so two gateways under one host reached one route).
 fn under(base: &url::Url, route: &str) -> url::Url {
+    if route.is_empty() {
+        return base.clone(); // a JSON-RPC endpoint is its URL itself (a family client's call, plan T15)
+    }
     let (path, query) = route.split_once('?').unwrap_or((route, ""));
     let mut u = base.clone();
     u.set_path(&format!(
@@ -211,7 +214,16 @@ impl Http {
         deadline: Option<Instant>,
     ) -> Result<(u16, Value), EndpointFailure> {
         let (status, b) = self
-            .send_any(list, i, method, Some(path), body, cap, deadline)
+            .send_any(
+                list,
+                i,
+                method,
+                Some(path),
+                body,
+                cap,
+                deadline,
+                ("application/json", true),
+            )
             .await?;
         if status >= 500 {
             return Err(self.fail(list, i, FailureKind::Http, &format!("HTTP {status}")));
@@ -222,6 +234,56 @@ impl Http {
             Err(k) => return Err(self.fail(list, i, k, "the answer")),
         };
         Ok((status, v))
+    }
+
+    /// One request whose answer comes back raw: any status but a 3xx (never followed) up to `cap`, a 5xx the endpoint's failure;
+    /// `body` sent as `ctype`. The JSON nesting scan is skipped: a binary answer (msgpack) has its reader's own bound.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn raw(
+        &self,
+        list: &NodeList,
+        i: usize,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<Vec<u8>>,
+        ctype: &str,
+        cap: usize,
+        deadline: Option<Instant>,
+    ) -> Result<(u16, Vec<u8>), EndpointFailure> {
+        let (status, b) = self
+            .raw_any(list, i, method, path, body, ctype, cap, deadline)
+            .await?;
+        if status >= 500 {
+            return Err(self.fail(list, i, FailureKind::Http, &format!("HTTP {status}")));
+        }
+        Ok((status, b))
+    }
+
+    /// [`Http::raw`] keeping a 5xx answer too: a gateway whose error answer is its JSON at any status (Cosmos REST, plan
+    /// T21: a refused simulate is a 500 with its code).
+    #[allow(clippy::too_many_arguments)]
+    pub async fn raw_any(
+        &self,
+        list: &NodeList,
+        i: usize,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<Vec<u8>>,
+        ctype: &str,
+        cap: usize,
+        deadline: Option<Instant>,
+    ) -> Result<(u16, Vec<u8>), EndpointFailure> {
+        self.send_any(
+            list,
+            i,
+            method,
+            Some(path),
+            body,
+            cap,
+            deadline,
+            (ctype, false),
+        )
+        .await
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -236,7 +298,16 @@ impl Http {
         deadline: Option<Instant>,
     ) -> Result<Vec<u8>, EndpointFailure> {
         let (status, b) = self
-            .send_any(list, i, method, path, body, cap, deadline)
+            .send_any(
+                list,
+                i,
+                method,
+                path,
+                body,
+                cap,
+                deadline,
+                ("application/json", true),
+            )
             .await?;
         if !(200..300).contains(&status) {
             return Err(self.fail(list, i, FailureKind::Http, &format!("HTTP {status}")));
@@ -255,6 +326,7 @@ impl Http {
         path: Option<&str>,
         body: Option<Vec<u8>>,
         deadline: Option<Instant>,
+        ctype: &str,
     ) -> Result<(url::Url, reqwest::RequestBuilder), EndpointFailure> {
         let e = list
             .endpoints()
@@ -310,9 +382,7 @@ impl Http {
             }
         }
         if !body.is_empty() {
-            req = req
-                .header(reqwest::header::CONTENT_TYPE, "application/json")
-                .body(body);
+            req = req.header(reqwest::header::CONTENT_TYPE, ctype).body(body);
         }
         Ok((url, req))
     }
@@ -329,8 +399,9 @@ impl Http {
         body: Option<Vec<u8>>,
         cap: usize,
         deadline: Option<Instant>,
+        (ctype, scan): (&str, bool),
     ) -> Result<(u16, Vec<u8>), EndpointFailure> {
-        let (_, req) = self.build(list, i, method, path, body, deadline)?;
+        let (_, req) = self.build(list, i, method, path, body, deadline, ctype)?;
         let net = |err: reqwest::Error| {
             let kind = if err.is_timeout() {
                 FailureKind::Timeout
@@ -364,7 +435,7 @@ impl Http {
             }
             buf.extend_from_slice(&c);
         }
-        if let Err(k) = depth(&buf) {
+        if let Err(k) = if scan { depth(&buf) } else { Ok(()) } {
             return Err(self.fail(list, i, k, "the answer's nesting"));
         }
         Ok((status, buf))
@@ -384,8 +455,9 @@ impl Http {
         body: Option<Vec<u8>>,
         cap: usize,
         deadline: Option<Instant>,
+        (ctype, scan): (&str, bool),
     ) -> Result<(u16, Vec<u8>), EndpointFailure> {
-        let (url, req) = self.build(list, i, method, path, body, deadline)?;
+        let (url, req) = self.build(list, i, method, path, body, deadline, ctype)?;
         let net = |err: reqwest::Error| {
             let kind = if err.is_timeout() {
                 FailureKind::Timeout
@@ -416,7 +488,7 @@ impl Http {
                 &format!("an answer above {cap} bytes"),
             ));
         }
-        if let Err(k) = depth(&buf) {
+        if let Err(k) = if scan { depth(&buf) } else { Ok(()) } {
             return Err(self.fail(list, i, k, "the answer's nesting"));
         }
         Ok((status, buf.to_vec()))
