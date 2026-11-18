@@ -646,20 +646,26 @@ fn never_called_pay_entries() {
     for sig in list {
         assert_eq!(run(sig).err(), Some(Error::PolicyRefused), "{sig}");
     }
-    // the same set as clientkeys' `NEVER_CALLED` (src/evm.js), both ways
-    let js = std::fs::read_to_string(format!(
+    // the same set as clientkeys' `NEVER_CALLED` (src/evm.js), both ways; read as one token string (`//` comments and
+    // whitespace dropped), its entries in either quote, so a Prettier reflow of evm.js leaves the comparison unchanged
+    let js: String = std::fs::read_to_string(format!(
         "{}/../clientkeys/src/evm.js",
         env!("CARGO_MANIFEST_DIR")
     ))
-    .unwrap();
+    .unwrap()
+    .lines()
+    .map(|l| l.find("//").map_or(l, |i| &l[..i]))
+    .flat_map(str::chars)
+    .filter(|c| !c.is_whitespace())
+    .collect();
     let set = js
-        .split("const NEVER_CALLED = new Set([")
+        .split("constNEVER_CALLED=newSet([")
         .nth(1)
         .unwrap()
         .split("].map(sel)")
         .next()
         .unwrap();
-    let mut theirs: Vec<&str> = set.split('\'').skip(1).step_by(2).collect();
+    let mut theirs: Vec<&str> = set.split(['\'', '"']).skip(1).step_by(2).collect();
     let mut ours = list.to_vec();
     theirs.sort_unstable();
     ours.sort_unstable();
