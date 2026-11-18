@@ -50,7 +50,7 @@ STEPS=(
   "ua-c|clients/ua-c|$cap cargo clippy $C --all-targets -- -D warnings && $cap cargo build $C && $cap cargo test $C && python3 -m unittest tests.test_vectors"
   "ua-c-release|clients/ua-c|$cap cargo build $C --release"
   "ua-py|clients/ua-py|python3 -m unittest tests.test_vectors tests.test_wallet"
-  "ua-go|clients/ua-go|go vet ./... && LD_LIBRARY_PATH=../ua-c/target/release $cap go test -count=1 ./..."
+  "ua-go|clients/ua-go|go vet ./... && $cap env LD_LIBRARY_PATH=$W/clients/ua-c/target/release go test -count=1 ./..."
   "ua-cs|clients/ua-cs|$cap dotnet test Scaas.Ua.Tests; rc=\$?; dotnet build-server shutdown >/dev/null 2>&1; exit \$rc"
   "ua-cxx|clients/ua-cxx|$cap cargo clippy $C --all-targets -- -D warnings && $cap cmake -S . -B build -G Ninja && $cap cmake --build build && $cap ctest --test-dir build"
   "docs|.|python3 scripts/docs_check.py check && python3 scripts/test_docs_check.py"
