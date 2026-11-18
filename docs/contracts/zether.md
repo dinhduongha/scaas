@@ -1060,7 +1060,7 @@ The built interface is quoted in [accounts.md](accounts.md#legacy-registry).
 <a id="disclosure"></a>
 <a id="CTR-ZTH-43"></a>**CTR-ZTH-43** — **Disclosure lives in a separate stateless `ZetherDisclosure`** (owner): no state, no admin, no upgrade, one instance for every Zether token on every curve. `verifyTransferAmount` and `transferCiphertext` are there; the token exposes the raw record `transferEntry(entryRef)` (as [CTR-ZTH-38](#CTR-ZTH-38): `R` for every entry, read from state, inline or by SSTORE2 for commit-reveal; empty only for an unknown ref; review C0-3) and the implementation-immutable `disclosure()` (set in the constructor, shared by every clone), so a third party finds the canonical contract from the token. `ZetherDisclosure` reads `transferEntry(entryRef)`, `verifier()` and `auditorKey()` from the token: `token.disclosure().verifyTransferAmount(token, entryRef, j, amount, kind, opening)` serves both formats (a single entry has `j = 0`; there is no `bundles` argument: the record always comes from the token's state; an unknown ref is `UnknownEntry`, an entry that is not a record length `RecordMalformed`). `transferCiphertext(token, entryRef, j)` exports the raw leg for an independent verifier. The caller picks the token it trusts (a fake "token" can answer anything); the challenge binds the token address, not the disclosure contract's.
 
-**Change (owner 2026-11-17; SPECIFIED; [CTR-ZTH-95](#CTR-ZTH-95)).** For `AUDITOR` it reads `auditorKeyOf(entryRef)`, the key
+**Change (owner 2026-11-17; BUILT at `eb05597c8`; [CTR-ZTH-95](#CTR-ZTH-95)).** For `AUDITOR` it reads `auditorKeyOf(entryRef)`, the key
 of the entry's auditor epoch, instead of `auditorKey()`; the other kinds are unchanged. A new `ZetherDisclosure` deployment,
 named by each new release's `disclosure()`; nothing deployed is upgraded.
 
@@ -1127,7 +1127,7 @@ Additional checks: `amount < 2^n_v = 2^64` (otherwise `amount + r` would also "p
 <a id="auditor"></a>
 <a id="CTR-ZTH-09"></a>**CTR-ZTH-09** — **The auditor key is immutable**, set at `initialize` (there is no setter, so no timelock is needed). It follows the immutable `auditorMode` ([CTR-ZTH-49](#CTR-ZTH-49)): none under NONE, required under FULL and OPTIONAL.
 
-**Change (owner 2026-11-17; SPECIFIED; [CTR-ZTH-95](#CTR-ZTH-95)).** Immutable only on a token created without bit 32
+**Change (owner 2026-11-17; BUILT at `eb05597c8`; [CTR-ZTH-95](#CTR-ZTH-95)).** Immutable only on a token created without bit 32
 `AUDITOR`. With bit 32 set at creation a holder of the bit replaces the key, with the new auditor's proof of possession, after
 `max(noticePeriod(), grantDelay)`, the earlier keys kept for the entries of their epochs ([§14.1](#auditor-replacement)); `auditorMode` stays immutable, so the key is never
 empty under FULL or OPTIONAL and never set under NONE.
@@ -1156,8 +1156,8 @@ The single format keeps its one auditor copy under `s` (one leg, no cross-leg di
 
 ### <a id="auditor-replacement"></a>14.1 Replacing the auditor key (bit 32 `AUDITOR`)
 
-Status: **SPECIFIED** (owner 2026-11-17; spec [2026-11-17-set-auditor.md](../superpowers/specs/2026-11-17-set-auditor.md));
-nothing built. **UNAUDITED.** The bit itself (kinds, holder, revoke): [CTR-GOV-31](../decisions.md#CTR-GOV-31); the PQZ
+Status: **BUILT** (owner 2026-11-17; spec [2026-11-17-set-auditor.md](../superpowers/specs/2026-11-17-set-auditor.md));
+`eb05597c8`, matrix rows `db10fdd09`. **UNAUDITED.** The bit itself (kinds, holder, revoke): [CTR-GOV-31](../decisions.md#CTR-GOV-31); the PQZ
 twin: [CTR-PQZ-43](pq-zero-knowledge.md#CTR-PQZ-43).
 
 <a id="CTR-ZTH-95"></a>**CTR-ZTH-95** — **A holder of bit 32 replaces the auditor key with the new auditor's proof of

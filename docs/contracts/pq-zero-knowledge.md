@@ -1065,7 +1065,7 @@ in another form.
 
 **Change (owner 2026-11-13, three-key model; SPECIFIED; [CTR-PQZ-37](#CTR-PQZ-37)).** On an opening token the auditor holds a key of the token's class and scope and an opening KEM key in that scoped record ([CTR-UA-43](accounts.md#CTR-UA-43)); it reads `v_a` from its opening `O_a`, never by applying its PQZ secret, and its outcomes per credit are public and named (`read`, `recipient-unreadable`, `unreadable`, `unreadable, taken`; [CLI-SGN-51](../clients/signers-clientkeys.md#CLI-SGN-51)). The stated guarantee of `FULL` there: an honest recipient cannot spend a credit the auditor cannot read (owner 2026-11-13). On an `offchain-token` the auditor's key is not checked at `init` (the token address does not exist before creation): a transfer with the auditor on reverts `AccountNotRegistered(auditorUA)` until the auditor registers its key for that token.
 
-**Change (owner 2026-11-17; SPECIFIED; [CTR-PQZ-43](#CTR-PQZ-43)).** `auditorMode` stays immutable; `auditorUA` is immutable
+**Change (owner 2026-11-17; BUILT at `eb05597c8`; [CTR-PQZ-43](#CTR-PQZ-43)).** `auditorMode` stays immutable; `auditorUA` is immutable
 only on a token created without bit 32 `AUDITOR`. With bit 32 a holder replaces the auditor UA, with the new auditor's consent,
 after `max(noticePeriod(), grantDelay)` ([§9.7](#auditor-replacement)); a FULL auditor named later reads from its epoch on, so it rebuilds balances only with
 records handed over off chain.
@@ -1396,7 +1396,7 @@ the opening is the proof alone (D11 / D13). The bundle bytes are read from state
 `transferCiphertextHash(entryRef)` is the stored `R`'s hash. Shared randomness and decryption noise must not leak
 ([CTR-PQZ-04](#CTR-PQZ-04)).
 
-**Change (owner 2026-11-17; SPECIFIED).** On a token with bit 32 `AUDITOR` the `AUDITOR` kind's owner is the entry's auditor,
+**Change (owner 2026-11-17; BUILT at `eb05597c8`).** On a token with bit 32 `AUDITOR` the `AUDITOR` kind's owner is the entry's auditor,
 `auditorUAOf(entryRef)`, not the current one ([CTR-PQZ-43](#CTR-PQZ-43)).
 
 `verifyTransferAmount(entryRef, leg, amount, kind, keyVersion, proof)` (`keyVersion` since 3g, [CTR-PQZ-31](#CTR-PQZ-31); leg 0 for a single entry; leg `j` of an op 7 entry,
@@ -2983,8 +2983,8 @@ entries cost ⌈N / ROLL_MAX⌉ signed rollovers); a signed scoped key record ca
 
 ### <a id="auditor-replacement"></a>9.7 Replacing the auditor (bit 32 `AUDITOR`)
 
-Status: **SPECIFIED** (owner 2026-11-17; spec [2026-11-17-set-auditor.md](../superpowers/specs/2026-11-17-set-auditor.md));
-nothing built. **UNAUDITED.** The bit itself (kinds, holder, revoke): [CTR-GOV-31](../decisions.md#CTR-GOV-31); the
+Status: **BUILT** (owner 2026-11-17; spec [2026-11-17-set-auditor.md](../superpowers/specs/2026-11-17-set-auditor.md));
+`eb05597c8`, matrix rows `db10fdd09`. **UNAUDITED.** The bit itself (kinds, holder, revoke): [CTR-GOV-31](../decisions.md#CTR-GOV-31); the
 classical twin, whose state machine this one follows word for word: [CTR-ZTH-95](zether.md#CTR-ZTH-95).
 
 <a id="CTR-PQZ-43"></a>**CTR-PQZ-43** — **A holder of bit 32 replaces the auditor UA with the new auditor's signed consent,

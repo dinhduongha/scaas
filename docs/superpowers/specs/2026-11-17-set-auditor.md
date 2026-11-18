@@ -1,6 +1,6 @@
 # `setAuditor`: replacing the auditor of a confidential token on bit 32 `AUDITOR` — design
 
-**Status:** SPECIFIED, nothing built, **UNAUDITED**. Written 2026-11-17 on branch `prefreeze-contracts` at `f655cb0e`, from
+**Status:** BUILT at `eb05597c8` (plan A1-A8; A9 matrix rows `db10fdd09`), **UNAUDITED**; the closing review (Fable) pending. Written 2026-11-17 on branch `prefreeze-contracts` at `f655cb0e`, from
 the owner's rulings of 2026-11-17 (quoted in §1, not reopened) and the frame in
 [`plans/2026-11-17-code-format.md`](../plans/2026-11-17-code-format.md) ("Bundled: `setAuditor` on one governance bit").
 Revised the same day after the Fable review `scratchpad/set-auditor-review/20261117-18-fable-fable-high-spec.md` (P0 0, P1 2,
