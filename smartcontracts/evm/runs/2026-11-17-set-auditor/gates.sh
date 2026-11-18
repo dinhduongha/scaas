@@ -16,7 +16,8 @@
 #   node-guard       scaas-node cargo test guard (the allow-list and PqChat row tests)
 #   zp-clippy, zp-test, zp-wasm, zp-read-balance   clients/zether-prover (the CI header's commands; read_balance runs anvil)
 #   clientkeys, ua-rs-<cell>, ua-py, ua-go, ua-cs, ua-c, ua-cxx, ua-dart, ua-dart-frb, ua-qt   the clients' own tests (the
-#                    CI header's commands; ua-rs per CI cell)
+#                    CI header's commands; ua-rs per CI cell; ua-rs-pqz-read: the default cell's pqz_read --include-ignored
+#                    against anvil; ua-rs-wallet-rows: the vectors cell's wallet_state.json generator check)
 #   docs, docs-test, ci-guards
 #   mut-<task>       runs/2026-11-17-set-auditor/mutants.py <task> all (MUT_IDS="<id> ...": those only), in a lane
 #   proof-forge, proof-cargo   the lane cache proof (owner 2026-11-18): incremental vs clean, see below
@@ -253,6 +254,13 @@ PY
         ua-rs-zether-only) T="--lib --test facade_zether" uars --no-default-features --features wallet,zether,mlock ;;
         ua-rs-pqz-n2048) T="--lib --bin pqz-read --test pqz_read --test facade_pqz_state --test facade_pqz --test pqz_backup --test no_oracle" \
             uars --no-default-features --features wallet,zether,pqz,pqz-set-n2048-kmax1024,mlock ;;
+        ua-rs-pqz-n2048-vectors) T="--test facade_pqz_state --test facade_pqz --test pqz_backup --test no_oracle" \
+            uars --no-default-features --features wallet,zether,pqz,pqz-set-n2048-kmax1024,mlock,vectors ;;
+        ua-rs-pqz-read) # the default cell's pqz-read against anvil (CI: ua-rs default cell, --include-ignored; ANVIL = foundry's)
+            (cd clients/ua-rs && ANVIL=$HOME/.foundry/bin/anvil "$C" cargo test -j 2 --locked --test pqz_read --bin pqz-read -- --include-ignored) ;;
+        ua-rs-wallet-rows) # the vectors cell's generator check: wallet_state.json stays what write_wallet_rows writes
+            (cd clients/ua-rs && "$C" cargo test -j 2 --locked --features vectors --test pqz_wallet_rows -- --ignored --exact write_wallet_rows &&
+                git diff --exit-code -- ../../smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json) ;;
         zp-clippy) (cd clients/zether-prover && "$C" cargo clippy -j 2 --locked --all-targets -- -D warnings &&
             "$C" cargo clippy -j 2 --locked --all-targets --features hazmat -- -D warnings) ;;
         zp-test) (cd clients/zether-prover && "$C" cargo test -j 2 --locked && "$C" cargo test -j 2 --locked --features hazmat) ;;
