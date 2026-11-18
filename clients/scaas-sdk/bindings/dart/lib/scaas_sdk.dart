@@ -105,7 +105,7 @@ abstract class SecureStore {
 
 /// The app's authenticator (spec §6.10); `getAssertion` writes the PRF output into the secret [prfOutId] by the copy call.
 abstract class Authenticator {
-  Future<AuthAnswer> getAssertion(String rpId, Uint8List challenge, Uint8List? prfSalt, BigInt prfOutId);
+  Future<AuthAnswer> getAssertion(String rpId, Uint8List challenge, List<Uint8List> allow, Uint8List? prfSalt, BigInt prfOutId);
 }
 
 StoreAnswer _ok([int token = 0]) => StoreAnswer(token: BigInt.from(token));
@@ -149,9 +149,9 @@ Future<SdkHandle> openSdk(SecureStore store, Authenticator auth) => sdkOpen(
           await store.unlock(token.toInt());
         } catch (_) {}
       },
-      authGetAssertion: (rpId, challenge, salt, prfOut) async {
+      authGetAssertion: (rpId, challenge, allow, salt, prfOut) async {
         try {
-          return await auth.getAssertion(rpId, challenge, salt, prfOut);
+          return await auth.getAssertion(rpId, challenge, allow, salt, prfOut);
         } catch (_) {
           return AuthAnswer(
               credentialId: _none,

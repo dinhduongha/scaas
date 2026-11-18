@@ -52,6 +52,8 @@ pub(crate) struct Draft {
     pub opaque: bool,
     /// the transfer on ids (`mtxExecuteTransfer`, `POST /v1/ua-metatx`; owner 2026-11-18, ruling 6) instead of the row's entry
     pub ids: bool,
+    /// a relay fee's paid call: its job `op` and signed calldata (owner 2026-11-19, ruling F)
+    pub relay_call: Option<(Value, Vec<u8>)>,
 }
 
 /// The parts `submit` needs; never in a record a caller could rebuild.
@@ -68,6 +70,8 @@ pub(crate) struct Typed {
     pub lane: Option<(Vec<u8>, U256, U256)>,
     /// the transfer on ids
     pub ids: bool,
+    /// a relay fee's paid call (job `op`, signed calldata)
+    pub relay_call: Option<(Value, Vec<u8>)>,
 }
 
 /// A prepared operation (spec §13.1): opaque, kept in the SDK's table; it holds no secret and nothing signed.
@@ -240,6 +244,13 @@ impl Op {
         let id = hex(&td.digest()?);
         let env = envelope(&canonical).cloned().unwrap_or_default();
         let mode = env.get("mode").map(dec).transpose()?.unwrap_or_default();
+        // the fee the relayer takes, as the check computes it: a PERCENT envelope's `fee` is a rate in millionths of the amount
+        // (closing review P2-4); the check's cap and the review's line are this amount
+        let due = if env.is_empty() {
+            "0".to_string()
+        } else {
+            scaas_ua::wallet::fee_due(d.name, &canonical)?
+        };
         let expect = match &d.expect {
             Some(f) => f(now, &canonical)?,
             None => Expect::Op {
@@ -248,12 +259,7 @@ impl Op {
                 chain_id,
                 chain_uid: uid,
                 message: canonical.clone(),
-                max_fee: env
-                    .get("fee")
-                    .map(dec)
-                    .transpose()?
-                    .unwrap_or_default()
-                    .to_string(),
+                max_fee: due.clone(),
                 fee_recipient: (mode.bit(1))
                     .then(|| address_of(&env, "feeRecipient"))
                     .flatten(),
@@ -265,6 +271,9 @@ impl Op {
         let mut review = Vec::new();
         flatten("", &canonical, &mut review);
         review.extend(d.review);
+        if !env.is_empty() {
+            review.push(field("fee.due", &due, &due, Source::Derived));
+        }
         review.push(field(
             "contract",
             &hex(&d.contract),
@@ -316,12 +325,14 @@ impl Op {
                 extra: d.extra,
                 lane,
                 ids: d.ids,
+                relay_call: d.relay_call,
             },
         });
-        sdk.prepared
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .insert(id, p.clone());
+        let mut table = sdk.prepared.lock().unwrap_or_else(PoisonError::into_inner);
+        // the table holds what can still be submitted: one past its `validUntil` on the chain's clock is `PreparedStale` anyway
+        // (closing review P3: the table no longer grows without bound)
+        table.retain(|_, q| q.expires_at > now);
+        table.insert(id, p.clone());
         Ok(p)
     }
 

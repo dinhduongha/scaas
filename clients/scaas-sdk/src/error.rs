@@ -87,8 +87,8 @@ own_codes! {
     Internal,
     /// An account row whose key (the same UA, native key or watched id) the seed lists already (owner 2026-11-18, Q1).
     AccountExists,
-    /// A quote without a signature found no gas figure (no pinned figure, the unsigned form refused by the chain), or the
-    /// signed operation needs more gas than the quote the user confirmed (owner 2026-11-18, ruling 1).
+    /// A relayed operation's quote found no row of the gas table for its key (entry, domain kind, signer kind, fresh lane;
+    /// owner 2026-11-18, ruling 1; owner 2026-11-19, ruling B).
     GasUnquoted,
 }
 

@@ -93,7 +93,7 @@ impl Sdk {
                 return Err(SdkError::AuthenticatorRefused);
             }
         } else {
-            auth.platform_secret(credential, salt, "unlock".into(), out.clone())
+            auth.platform_secret(credential, salt, "unlock".into(), None, out.clone())
                 .await
                 .map_err(|_| SdkError::AuthenticatorRefused)?;
         }
@@ -220,7 +220,6 @@ impl Vault {
         vault_passphrase: Arc<SecretBytes>,
         policy: KeyPolicy,
     ) -> Result<(), SdkError> {
-        let _ = policy; // the app's platform key carries its policy; the SDK names the key
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
@@ -234,6 +233,7 @@ impl Vault {
                     handle.clone(),
                     salt.clone(),
                     "enable unlock".into(),
+                    Some(policy),
                     out.clone(),
                 )
                 .await

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! The FRB surface of the T3 spike (plan T3; spec §16.1): the SDK's objects as opaque handles, its records and the platform
-//! interfaces' answers as plain FRB types, every async call on the SDK's runtime. The `spike_*` calls exercise the boundary
-//! (the PRF return, a panic, a reactor-bound network call) and go with T20's whole surface.
+//! interfaces' answers as plain FRB types, every async call on the SDK's runtime. Not BUILT: T20 brings the whole surface
+//! (profiles, the deployment's RP ID). The spike's `spike_*` calls are gone (closing review P2-10: one returned a function of a
+//! PRF output, one fetched any URL); no exported name starts with `spike_`.
 use flutter_rust_bridge::{frb, DartFnFuture};
 use scaas_sdk::frb::{ClosureAuthenticator, ClosureStore, Fut};
 use scaas_sdk::platform::{Assertion, AssertionRequest, AuthError};
@@ -20,10 +21,6 @@ impl From<SdkError> for SdkFailure {
     fn from(e: SdkError) -> Self {
         SdkFailure { code: e.code().to_owned() }
     }
-}
-
-fn fail(code: &str) -> SdkFailure {
-    SdkFailure { code: code.to_owned() }
 }
 
 /// The binding surface's version this library was built with (spec §16.3).
@@ -155,7 +152,10 @@ pub async fn sdk_open(
     store_delete: impl Fn(String) -> DartFnFuture<StoreAnswer> + Send + Sync + 'static,
     store_lock: impl Fn(String) -> DartFnFuture<StoreAnswer> + Send + Sync + 'static,
     store_unlock: impl Fn(u64) -> DartFnFuture<()> + Send + Sync + 'static,
-    auth_get_assertion: impl Fn(String, Vec<u8>, Option<Vec<u8>>, u64) -> DartFnFuture<AuthAnswer> + Send + Sync + 'static,
+    auth_get_assertion: impl Fn(String, Vec<u8>, Vec<Vec<u8>>, Option<Vec<u8>>, u64) -> DartFnFuture<AuthAnswer>
+        + Send
+        + Sync
+        + 'static,
 ) -> Result<SdkHandle, SdkFailure> {
     let store_get = Arc::new(store_get);
     let store_put_if = Arc::new(store_put_if);
@@ -194,7 +194,8 @@ pub async fn sdk_open(
     let auth = ClosureAuthenticator {
         create_passkey: unavailable(),
         get_assertion: Box::new(move |(req, prf_id): (AssertionRequest, u64)| {
-            let f = auth_get_assertion(req.rp_id, req.challenge, req.prf_salt, prf_id);
+            // the allowed credentials go through: an unlock names its credential (P2-10)
+            let f = auth_get_assertion(req.rp_id, req.challenge, req.allow, req.prf_salt, prf_id);
             Box::pin(async move {
                 let a = f.await;
                 match a.error {
@@ -258,50 +259,6 @@ impl SdkHandle {
     #[frb(sync)]
     pub fn subscribe(&self) -> Events {
         Events(self.0.subscribe())
-    }
-
-    /// Spike: the authenticator writes a PRF output into a fresh 32-byte secret; the sum of its bytes comes back (the bytes
-    /// themselves never do).
-    pub async fn spike_prf(&self, salt: Vec<u8>) -> Result<u64, SdkFailure> {
-        let auth = self.0.authenticator().ok_or_else(|| fail("FeatureMissing"))?;
-        self.0
-            .spawn(async move {
-                let out = Arc::new(SecretBytes::new(32)?);
-                let req = AssertionRequest { rp_id: "example.invalid".into(), challenge: vec![7; 32], allow: vec![], prf_salt: Some(salt) };
-                let a = auth.get_assertion(req, out.clone()).await.map_err(|_| SdkError::AuthenticatorRefused)?;
-                if !a.prf {
-                    return Err(SdkError::AuthenticatorRefused);
-                }
-                Ok(out.with(|b| b.iter().map(|x| u64::from(*x)).sum()))
-            })
-            .await
-            .map_err(SdkFailure::from)
-    }
-
-    /// Spike: a call that panics inside the SDK's runtime answers `Internal`.
-    pub async fn spike_panic(&self) -> Result<u32, SdkFailure> {
-        Ok(self
-            .0
-            .spawn(async {
-                let v: Vec<u32> = vec![];
-                #[allow(clippy::indexing_slicing)]
-                Ok(v[1])
-            })
-            .await?)
-    }
-
-    /// Spike (`no_reactor_panic`): a tokio timer and a `reqwest` call through `scaas-rpc` to the gateway at `url`
-    /// (`GET /v1/dex/markets?chain=`), spawned on the SDK's runtime while FRB polls the caller's future from its own.
-    pub async fn spike_gateway(&self, url: String) -> Result<String, SdkFailure> {
-        Ok(self
-            .0
-            .spawn(async move {
-                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-                let list = scaas_rpc::NodeList::from_urls(&[url])?;
-                let v = scaas_rpc::node::NodeClient::new(list)?.dex_markets(7622).await?;
-                Ok(v.to_string())
-            })
-            .await?)
     }
 }
 

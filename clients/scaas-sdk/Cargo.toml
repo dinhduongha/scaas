@@ -64,6 +64,10 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "m
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
 getrandom = { version = "0.2", features = ["js"] }
+# the page's event loop (closing review P2-9): tasks by spawn_local, timers by the JS clock; both already in the tree through alloy
+wasm-bindgen-futures = "0.4"
+wasmtimer = "0.4"
+
 
 [dev-dependencies]
 # "net", "io-util": tests/account.rs's fake JSON-RPC endpoints on 127.0.0.1:0

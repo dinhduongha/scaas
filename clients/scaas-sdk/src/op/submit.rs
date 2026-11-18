@@ -15,7 +15,7 @@ use alloy::primitives::{Address, U256};
 use scaas_rpc::evm::BroadcastOutcome;
 use scaas_rpc::node::{NodeClient, SubmitOutcome, UaMetaTxReq};
 use scaas_rpc::Fanout;
-use scaas_ua::wallet::entries::{entry, entry_rows, transfer_on_ids, Built};
+use scaas_ua::wallet::entries::{entry, entry_rows, relay_fee_op, transfer_on_ids, Built};
 use scaas_ua::wallet::{sign_scaas, EvmTx};
 use serde_json::{json, Value};
 use std::sync::{Arc, PoisonError};
@@ -62,14 +62,24 @@ fn build(p: &Prepared, sig: &Value) -> Result<Built, SdkError> {
     if p.t.ids {
         return Ok(transfer_on_ids(p.t.kind, &p.t.contract, &p.t.message, sig)?);
     }
-    Ok(entry(
+    let mut b = entry(
         p.t.name,
         p.t.kind,
         &p.t.contract,
         &p.t.message,
         &p.t.extra,
         sig,
-    )?)
+    )?;
+    // a relay fee's job carries the call it pays for (job-api's relay-fee job; owner 2026-11-19, ruling F)
+    if let Some((op, calldata)) = &p.t.relay_call {
+        let call = Built {
+            calldata: calldata.clone(),
+            op: Some(op.clone()),
+            message: Value::Null,
+        };
+        b.op = Some(relay_fee_op(&b, &call)?);
+    }
+    Ok(b)
 }
 
 /// The entry of `p` with an empty signature: the unsigned form a quote estimates (owner 2026-11-18, ruling 1).
@@ -151,6 +161,22 @@ pub(crate) fn sign_tx(
     };
     let signed = k.sign_transaction(&tx)?;
     let id = hex(&scaas_ua::keccak256(&signed.raw));
+    // the payer's next nonce after this one, the floor of its next quote in this session
+    if let (Some(c), Ok(from)) = (
+        sdk.chains
+            .iter()
+            .find(|c| c.profile.chain_id == Some(chain_id)),
+        payer_address(sdk, payer),
+    ) {
+        let mut n = sdk
+            .sent_nonces
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let e = n
+            .entry((c.profile.key.clone(), format!("{from:#x}")))
+            .or_insert(0);
+        *e = (*e).max(nonce.saturating_add(1));
+    }
     Ok((signed.raw, id))
 }
 
@@ -363,7 +389,8 @@ impl Op {
     }
 }
 
-/// Runs `f` on as a task of the SDK's runtime, whatever happens to the caller (spec §13.4); on wasm32, where it is awaited.
+/// Runs `f` on as a task of the SDK's runtime, whatever happens to the caller (spec §13.4); on wasm32 a task of the page's event
+/// loop (`wasm_bindgen_futures::spawn_local`: no tokio `LocalSet` there; closing review P2-9).
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn detach(sdk: &Arc<Sdk>, f: impl std::future::Future<Output = ()> + Send + 'static) {
     match &sdk.rt {
@@ -374,7 +401,7 @@ pub(crate) fn detach(sdk: &Arc<Sdk>, f: impl std::future::Future<Output = ()> + 
 
 #[cfg(target_arch = "wasm32")]
 pub(crate) fn detach(_: &Arc<Sdk>, f: impl std::future::Future<Output = ()> + 'static) {
-    drop(tokio::task::spawn_local(f));
+    wasm_bindgen_futures::spawn_local(f);
 }
 
 /// One send of `row`'s bytes on its path; the row then `sent` with the outcome's detail, and the event. A refused simulation

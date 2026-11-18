@@ -61,6 +61,7 @@ const KINDS: [(&str, &str); 4] = [
 struct T {
     sdk: Arc<Sdk>,
     chain: Fake,
+    store: Arc<MemoryStore>,
     /// the vector key, imported
     signer: KeyRef,
     payer: KeyRef,
@@ -109,9 +110,10 @@ async fn setup(gateways: usize) -> T {
         }],
         gas: gas_rows(),
     };
+    let store = MemoryStore::new();
     let sdk = Sdk::open(SdkConfig {
         profiles: vec![profile],
-        store: MemoryStore::new(),
+        store: store.clone(),
         authenticator: None,
         rp_id: None,
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
@@ -143,6 +145,7 @@ async fn setup(gateways: usize) -> T {
     T {
         sdk,
         chain,
+        store,
         signer: KeyRef::Imported {
             seed: seed.clone(),
             network: "evm".into(),
@@ -154,6 +157,43 @@ async fn setup(gateways: usize) -> T {
             index: 0,
         },
     }
+}
+
+/// A signed operation of another party as a row of `sdk.state` (public data, the row's own form): its contract and calldata,
+/// its job `op` naming `token` (a relay fee's paid call). Returns its id.
+async fn plant_row(t: &T, contract: &str, calldata: &str) -> String {
+    use scaas_sdk::vault::{SecureStore, StorePolicy};
+    let op = "0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f";
+    let row = json!({"op": op, "chain": "local", "entry": "mtxBurn", "struct": "UABurn", "kind": "token", "contract": contract,
+        "from": "", "batch": "", "nonce": "", "valid_until": 0, "digest": format!("0x{}", "00".repeat(32)),
+        "op_json": {"entry": "mtxBurn", "contract": "token", "token": contract, "struct": "UABurn"}, "calldata": calldata,
+        "raw": null, "tx_id": null, "tx_nonce": null, "path": "gateway", "payer": null, "from_block": 0, "state": "sent",
+        "detail": "Queued", "landed": null, "relayer_bound": false});
+    // under the store's lock, as the SDK's own writes of `sdk.state` (a send task may be writing a row)
+    let _lock = t.store.lock("sdk.state".into()).await.unwrap();
+    let item = t
+        .store
+        .get("sdk.state".into(), String::new())
+        .await
+        .unwrap();
+    let mut st = item.as_ref().map_or(json!({"rev": 0, "ops": []}), |i| {
+        serde_json::from_slice(&i.bytes).unwrap()
+    });
+    let ops = st["ops"].as_array_mut().unwrap();
+    ops.retain(|r| r["op"] != op);
+    ops.push(row);
+    st["rev"] = json!(st["rev"].as_u64().unwrap() + 1);
+    let bytes = serde_json::to_vec(&st).unwrap();
+    t.store
+        .put_if(
+            "sdk.state".into(),
+            item.map(|i| i.rev),
+            bytes,
+            StorePolicy::default(),
+        )
+        .await
+        .unwrap();
+    op.into()
 }
 
 fn endpoint(url: &str) -> EndpointConfig {
@@ -405,12 +445,12 @@ async fn prepare_row(
             .await
         }
         "UARelayFee" => {
+            let call = plant_row(t, &f("target"), &s(&d["relayedCall"])).await;
             w.prepare_relay_fee(RelayFee {
                 signer,
                 chain,
                 token: contract,
-                target: f("target"),
-                call_data: s(&d["relayedCall"]),
+                call,
                 payee: f("payee"),
                 value: f("value"),
                 batch,
@@ -819,22 +859,49 @@ async fn transfer_on_ids_is_its_vector_and_posts_ua_metatx() {
         .find(|r| r["name"] == "native")
         .unwrap();
     let m = &row["typedData"]["message"];
-    let p = t
-        .sdk
-        .wallet()
-        .prepare_transfer(Transfer {
-            signer: t.signer.clone(),
-            chain: "local".into(),
-            token: s(&row["typedData"]["domain"]["verifyingContract"]),
-            to: s(&m["to"]),
-            value: s(&m["value"]),
-            entry_ref: Some(s(&m["entryRef"])),
-            envelope: envelope(m),
-        })
-        .await
+    // owner 2026-11-19, ruling D: a plain transfer, entryRef 0 on the lane the caller names, the lane's nonce read
+    let token = s(&row["typedData"]["domain"]["verifyingContract"]);
+    t.chain.lock().unwrap().nonces.insert(token.clone(), 4);
+    let req = Transfer {
+        signer: t.signer.clone(),
+        chain: "local".into(),
+        token: token.clone(),
+        to: s(&m["to"]),
+        value: s(&m["value"]),
+        batch: "9".into(),
+        envelope: envelope(m),
+    };
+    let p = t.sdk.wallet().prepare_transfer(req.clone()).await.unwrap();
+    // the digest: the row's UAMetaTransfer (its domain, typehash and envelope) with entryRef 0, lane 9, nonce 4
+    let mut want = m.clone();
+    want["entryRef"] = json!(format!("0x{}", "00".repeat(32)));
+    want["batch"] = json!("9");
+    want["nonce"] = json!("4");
+    let d = &row["typedData"]["domain"];
+    let uid: [u8; 32] = alloy::hex::decode(&s(&d["salt"])[2..])
+        .unwrap()
+        .try_into()
         .unwrap();
-    assert_eq!(p.id(), row["digest"].as_str().unwrap(), "the row's digest");
+    let to20: [u8; 20] = alloy::hex::decode(&token[2..]).unwrap().try_into().unwrap();
+    let td = scaas_ua::wallet::scaas_typed_data(
+        "UAMetaTransfer",
+        Some("SCaaS MetaToken"),
+        &to20,
+        CHAIN_ID,
+        &uid,
+        &want,
+    )
+    .unwrap();
+    assert_eq!(
+        p.id(),
+        format!("0x{}", alloy::hex::encode(td.digest().unwrap())),
+        "entryRef 0, the named lane"
+    );
     assert_eq!(p.entry(), "mtxExecuteTransfer");
+    // a retry of the same request reads the same lane nonce: the same operation (at most one of the two lands)
+    let again = t.sdk.wallet().prepare_transfer(req).await.unwrap();
+    assert_eq!(again.id(), p.id(), "idempotent by its lane");
+    let p = again; // the table keeps the latest of one id
     let q = t
         .sdk
         .op()
@@ -847,22 +914,66 @@ async fn transfer_on_ids_is_its_vector_and_posts_ua_metatx() {
     assert_eq!(body["struct"], "transfer");
     assert_eq!(body["chain"], CHAIN_ID);
     assert_eq!(
-        body["auth"]["signature"], row["auth"],
-        "the row's signature"
+        body["m"]["entryRef"],
+        json!(format!("0x{}", "00".repeat(32))),
+        "not a payment"
     );
-    // control: a zero entryRef is no payment lane
-    let zero = Transfer {
+    assert_eq!(body["m"]["batch"], json!("9"));
+}
+
+/// Owner 2026-11-19, ruling F: a relay fee's gateway job carries the operation it pays for as `call` (`scaas-ua`
+/// `relay_fee_op`): the paid operation's job op, `target` and `callDataHash` taken from it; an unknown operation is `Argument`.
+#[tokio::test(flavor = "multi_thread")]
+async fn relay_fee_job_carries_its_call() {
+    let t = setup(1).await;
+    let v = load("smartcontracts/vectors/typed/typed_ops.json");
+    let d = &v["ops"]["UARelayFee"]["domains"]["token"];
+    let m = &v["ops"]["UARelayFee"]["message"];
+    let call = plant_row(&t, &s(&m["target"]), &s(&d["relayedCall"])).await;
+    let req = |call: String| RelayFee {
         signer: t.signer.clone(),
         chain: "local".into(),
-        token: s(&row["typedData"]["domain"]["verifyingContract"]),
-        to: s(&m["to"]),
-        value: "1".into(),
-        entry_ref: Some(format!("0x{}", "00".repeat(32))),
-        envelope: envelope(m),
+        token: s(&d["domain"]["verifyingContract"]),
+        call,
+        payee: s(&m["payee"]),
+        value: s(&m["value"]),
+        batch: s(&m["batch"]),
+        valid_until: s(&m["validUntil"]).parse().unwrap(),
+        relayer: s(&m["relayer"]),
     };
     assert_eq!(
-        code(t.sdk.wallet().prepare_transfer(zero).await),
-        "Argument"
+        code(
+            t.sdk
+                .wallet()
+                .prepare_relay_fee(req("0f0f0f0f-0000-4000-8000-000000000000".into()))
+                .await
+        ),
+        "Argument",
+        "no such operation"
+    );
+    let p = t.sdk.wallet().prepare_relay_fee(req(call)).await.unwrap();
+    assert_eq!(
+        p.id(),
+        s(&d["digest"]),
+        "the row's digest (its callDataHash the paid call's)"
+    );
+    let q = t
+        .sdk
+        .op()
+        .quote(p.clone(), SubmitPath::Gateway)
+        .await
+        .unwrap();
+    t.sdk.op().submit(p, q).await.unwrap();
+    let body = body_at(&t, 0).await;
+    assert_eq!(body["op"]["entry"], "mtxRelayFee");
+    assert_eq!(
+        body["op"]["call"]["token"],
+        json!(s(&m["target"])),
+        "the paid call rides along"
+    );
+    assert!(
+        body["op"]["args"].get("target").is_none()
+            && body["op"]["args"].get("callDataHash").is_none()
     );
 }
 
@@ -986,5 +1097,93 @@ async fn domain_kind_from_the_contract() {
     assert_eq!(
         code(t.sdk.wallet().prepare_burn(burn(zether)).await),
         "ProfileMismatch"
+    );
+}
+
+/// Owner 2026-11-19, ruling D: a pay whose request leaves the salt out derives it from the request, so a retry of the same pay
+/// is the same operation on the same pay lane; another payment number (or amount) is another lane.
+#[tokio::test(flavor = "multi_thread")]
+async fn pay_salt_derived_from_the_request() {
+    let t = setup(0).await;
+    let v = load("smartcontracts/vectors/typed/typed_ops.json");
+    let d = &v["ops"]["UABurn"]["domains"]["token"];
+    let pay = |pay_no: Option<String>, value: &str| Pay {
+        signer: t.signer.clone(),
+        chain: "local".into(),
+        token: s(&d["domain"]["verifyingContract"]),
+        to: format!("0x{}", "00".repeat(31) + "aa"),
+        value: value.into(),
+        meta: PayMeta {
+            salt: None,
+            pay_no,
+            save: false,
+            body: PayBody::Note {
+                note: "rent".into(),
+            },
+        },
+        envelope: Envelope {
+            valid_until: 1_800_000_300,
+            mode: 0,
+            relayer: None,
+            fee: "0".into(),
+            fee_recipient: None,
+        },
+    };
+    let a = t.sdk.wallet().prepare_pay(pay(None, "5")).await.unwrap();
+    let b = t.sdk.wallet().prepare_pay(pay(None, "5")).await.unwrap();
+    assert_eq!(a.id(), b.id(), "a retry: the same pay lane and operation");
+    let lane = |p: &Prepared| {
+        p.review()
+            .into_iter()
+            .find(|f| f.name == "batch")
+            .unwrap()
+            .value
+    };
+    let other = t
+        .sdk
+        .wallet()
+        .prepare_pay(pay(Some(format!("0x{}", "01".repeat(32))), "5"))
+        .await
+        .unwrap();
+    assert_ne!(
+        lane(&other),
+        lane(&b),
+        "another payment number: another lane"
+    );
+    let more = t.sdk.wallet().prepare_pay(pay(None, "6")).await.unwrap();
+    assert_ne!(lane(&more), lane(&b), "another amount: another lane");
+}
+
+/// Closing review P2-4: a PERCENT envelope (`UABurn`'s row: mode 0x13, rate 5000 on 135000) is reviewed and quoted as the amount
+/// the relayer takes, 675, never as its rate; it signs under that cap (the row's vector, `every_wallet_pair_is_its_vector`).
+#[tokio::test(flavor = "multi_thread")]
+async fn percent_fee_is_reviewed_as_its_amount() {
+    let t = setup(1).await;
+    let v = load("smartcontracts/vectors/typed/typed_ops.json");
+    let m = v["ops"]["UABurn"]["message"].clone();
+    let d = &v["ops"]["UABurn"]["domains"]["token"];
+    let p = t
+        .sdk
+        .wallet()
+        .prepare_burn(Burn {
+            signer: t.signer.clone(),
+            chain: "local".into(),
+            contract: s(&d["domain"]["verifyingContract"]),
+            batch: s(&m["batch"]),
+            amount: s(&m["amount"]),
+            envelope: envelope(&m),
+        })
+        .await
+        .unwrap();
+    let due = p
+        .review()
+        .into_iter()
+        .find(|f| f.name == "fee.due")
+        .unwrap();
+    assert_eq!(due.value, "675");
+    let q = t.sdk.op().quote(p, SubmitPath::Gateway).await.unwrap();
+    assert_eq!(
+        q.fee_to_relayer, "675",
+        "the quote's fee is the amount, not the rate 5000"
     );
 }

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Display text the user reads (owner 2026-11-18, Q2): a control character or a format character (Unicode category `Cf`: the
 //! bidirectional marks and overrides U+200E/200F, U+202A–202E, U+2066–2069, the zero-widths, the tags …) can make one name look
-//! like another. One rule for every name: an account name refuses them, an unlisted token's name has them stripped (spec §8.2).
+//! like another. One rule for every name: an account name and a seed label refuse them (owner 2026-11-19, ruling E), an unlisted
+//! token's name has them stripped (spec §8.2).
 
 /// Category `Cf` of Unicode 16.0 (`DerivedGeneralCategory.txt`), as ranges.
 // ponytail: a fixed table; a later Unicode version adding a `Cf` code point needs a row here

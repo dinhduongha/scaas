@@ -165,10 +165,16 @@ pub fn is_uuid4(s: &str) -> bool {
         && matches!(b.get(19), Some(b'8' | b'9' | b'a' | b'b'))
 }
 
-/// A seed label: 1 to 64 Unicode scalar values, NFC, no control character.
+/// A stored seed label: 1 to 64 Unicode scalar values, NFC, no control character (clientkeys' parse rule, held equal).
 pub fn label_ok(label: &str) -> bool {
     let n = label.chars().count();
     (1..=64).contains(&n) && !label.chars().any(char::is_control) && is_nfc(label)
+}
+
+/// A label the SDK writes (a new seed): [`label_ok`] and no format (`Cf`, bidi) character either, the account names' rule, one
+/// check for both (owner 2026-11-19, ruling E). A container read keeps clientkeys' parse rule ([`label_ok`]).
+pub fn new_label_ok(label: &str) -> bool {
+    label_ok(label) && !label.chars().any(crate::text::hidden)
 }
 
 fn row(v: &Value) -> Result<AccountRow, SdkError> {

@@ -2,7 +2,7 @@
 //! Seeds (spec §6.4): list, generate. Every key, vault, fingerprint and MAC through `scaas-ua`; the SDK keeps the container's
 //! entry and the session's open wallets.
 
-use super::keystore::{accounts_json, label_ok, SeedEntry};
+use super::keystore::{accounts_json, new_label_ok, SeedEntry};
 use crate::error::SdkError;
 use crate::events::Event;
 use crate::Sdk;
@@ -120,12 +120,30 @@ pub(crate) fn info(e: &SeedEntry, unlocked: bool) -> SeedInfo {
 }
 
 impl Vault {
+    /// Whether the stored keystore is older than its anchor (an earlier copy put back, spec §6.3): an app checks it after
+    /// `Sdk::open`, where no subscriber can see the event yet; every later read emits `Event::KeystoreRollback` while it holds.
+    pub async fn keystore_rollback(&self) -> Result<bool, SdkError> {
+        let sdk = self.sdk.clone();
+        self.sdk
+            .spawn(async move { Ok(sdk.load_keystore().await?.rollback) })
+            .await
+    }
+
+    /// The memory protection of an unlocked seed's key arena now (`mlock`, no-dump; best effort, closing review P3): an app can
+    /// tell whether the retained PRF key and the opened keys are locked in RAM. `WalletLocked` for a locked seed.
+    pub fn memory_protection(
+        &self,
+        seed: String,
+    ) -> Result<scaas_ua::wallet::MemoryProtection, SdkError> {
+        Ok(self.sdk.open_seed(&seed)?.wallet.memory_protection())
+    }
+
     /// The seeds of the keystore, in display order.
     pub async fn seeds(&self) -> Result<Vec<SeedInfo>, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
-                let ks = sdk.keystore.load().await?.keystore;
+                let ks = sdk.load_keystore().await?.keystore;
                 let open = sdk.open.lock().unwrap_or_else(PoisonError::into_inner);
                 Ok(ks
                     .seeds
@@ -143,7 +161,7 @@ impl Vault {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
-                if !label_ok(&req.label) {
+                if !new_label_ok(&req.label) {
                     return Err(SdkError::Argument);
                 }
                 let pass = req.vault_passphrase;
@@ -175,7 +193,32 @@ impl Vault {
 /// The entry's index MAC under its wallet (spec §6.2), 64 hex digits.
 pub(crate) fn mac(w: &Wallet, e: &SeedEntry) -> Result<String, SdkError> {
     let accounts = accounts_json(&e.accounts);
-    let fields = IndexFields {
+    Ok(w.index_mac(&fields_of(e, &accounts))?
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect())
+}
+
+/// Whether `e`'s stored index MAC verifies under the open wallet, compared in constant time by `scaas-ua` (closing review P3);
+/// a stored MAC that is not 64 hex digits does not.
+pub(crate) fn mac_ok(w: &Wallet, e: &SeedEntry) -> Result<bool, SdkError> {
+    let accounts = accounts_json(&e.accounts);
+    let mut stored = [0u8; 32];
+    for (i, b) in stored.iter_mut().enumerate() {
+        match e
+            .index_mac
+            .get(2 * i..2 * i + 2)
+            .map(|h| u8::from_str_radix(h, 16))
+        {
+            Some(Ok(x)) if e.index_mac.len() == 64 => *b = x,
+            _ => return Ok(false),
+        }
+    }
+    Ok(w.verify_index_mac(&fields_of(e, &accounts), &stored)?)
+}
+
+fn fields_of<'a>(e: &'a SeedEntry, accounts: &'a str) -> IndexFields<'a> {
+    IndexFields {
         id: &e.id,
         label: &e.label,
         words: e.words,
@@ -184,12 +227,8 @@ pub(crate) fn mac(w: &Wallet, e: &SeedEntry) -> Result<String, SdkError> {
         class: &e.class,
         warnings: &e.warnings,
         backup: &e.backup,
-        accounts_json: &accounts,
-    };
-    Ok(w.index_mac(&fields)?
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect())
+        accounts_json: accounts,
+    }
 }
 
 /// `vault.import_words`'s request: 12 to 24 English words as a secret.
@@ -253,7 +292,7 @@ impl Vault {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
-                if !label_ok(&req.label) {
+                if !new_label_ok(&req.label) {
                     return Err(SdkError::Argument);
                 }
                 let pass = req.vault_passphrase;
@@ -326,7 +365,7 @@ impl Vault {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
-                if !label_ok(&req.label) {
+                if !new_label_ok(&req.label) {
                     return Err(SdkError::Argument);
                 }
                 let pass = req.vault_passphrase;
@@ -361,7 +400,9 @@ impl Vault {
     /// network, refused for another, CLI-SGN-11; the networks without import refuse it: `Argument`). The seed must be unlocked
     /// (`WalletLocked`); `vault_passphrase` must open the seed's own `seed` vault (`VaultOpen` otherwise: every vault of a seed
     /// opens with one passphrase). The new vault, the re-sealed manifest (same DEK, its envelopes kept), the warning
-    /// `imported_key` and the rewritten MAC go in one write.
+    /// `imported_key` and the rewritten MAC go in one write, refused `StoreConflict` when the stored seed moved since it was read
+    /// (its label taken, its manifest another: a second SDK on the same store). Any failure after the open wallet took the key
+    /// locks the seed, so no later re-seal writes a manifest that lists an import with no vault (closing review P2-7).
     pub async fn import_key(&self, req: ImportKey) -> Result<ImportedKey, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
@@ -370,6 +411,7 @@ impl Vault {
                     scaas_ua::wallet::Network::from_name(&req.network).ok_or(SdkError::Argument)?;
                 let open = sdk.open_seed(&req.seed)?;
                 let e = sdk.entry(&req.seed).await?;
+                let manifest_read = e.vaults.get("manifest").cloned();
                 let seed_vault = super::unlock::vault_of(&e, "seed")?;
                 // a seed with passkey or platform unlock: the new vault carries the PRF envelope too, one assertion
                 let prf = match seed_vault.prf_params() {
@@ -389,10 +431,13 @@ impl Vault {
                 let pass = req.vault_passphrase;
                 let secret = req.secret;
                 let wallet = open.clone();
-                let (label, n, vault, manifest) = sdk
+                let taken = Arc::new(std::sync::atomic::AtomicBool::new(false));
+                let took = taken.clone();
+                let sealed = sdk
                     .heavy(move || {
                         passphrase(&pass, |p| seed_passphrase(&seed_vault, p))?;
                         let key = secret.with(|b| wallet.wallet.import_native_key(network, b))?;
+                        took.store(true, std::sync::atomic::Ordering::SeqCst);
                         let n = key.index();
                         let label = format!("native-import:{}:{n}", network.name());
                         let vault = passphrase(&pass, |p| match &prf {
@@ -411,28 +456,48 @@ impl Vault {
                         let manifest = wallet.wallet.reseal_label_vault("manifest")?;
                         Ok((label, n, vault.to_json(), manifest.to_json()))
                     })
-                    .await?;
-                let ks = sdk
-                    .keystore
-                    .update(|ks| {
-                        let i = ks
-                            .seeds
-                            .iter()
-                            .position(|s| s.id == req.seed)
-                            .ok_or(SdkError::SeedUnknown)?;
-                        let mut e = ks.seeds.get(i).cloned().ok_or(SdkError::SeedUnknown)?;
-                        e.vaults.insert(label.clone(), vault.clone());
-                        e.vaults.insert("manifest".into(), manifest.clone());
-                        if !e.warnings.iter().any(|w| w == "imported_key") {
-                            e.warnings.push("imported_key".into());
+                    .await;
+                let written = match sealed {
+                    Err(e) => Err(e),
+                    Ok((label, n, vault, manifest)) => sdk
+                        .keystore
+                        .update(|ks| {
+                            let i = ks
+                                .seeds
+                                .iter()
+                                .position(|s| s.id == req.seed)
+                                .ok_or(SdkError::SeedUnknown)?;
+                            let mut e = ks.seeds.get(i).cloned().ok_or(SdkError::SeedUnknown)?;
+                            // the seed as read: its label free, its manifest the one the open wallet re-sealed
+                            if e.vaults.contains_key(&label)
+                                || e.vaults.get("manifest") != manifest_read.as_ref()
+                            {
+                                return Err(SdkError::StoreConflict);
+                            }
+                            e.vaults.insert(label.clone(), vault.clone());
+                            e.vaults.insert("manifest".into(), manifest.clone());
+                            if !e.warnings.iter().any(|w| w == "imported_key") {
+                                e.warnings.push("imported_key".into());
+                            }
+                            e.index_mac = mac(&open.wallet, &e)?;
+                            if let Some(slot) = ks.seeds.get_mut(i) {
+                                *slot = e;
+                            }
+                            Ok(())
+                        })
+                        .await
+                        .map(|ks| (ks, n)),
+                };
+                let (ks, n) = match written {
+                    Ok(w) => w,
+                    Err(e) => {
+                        if taken.load(std::sync::atomic::Ordering::SeqCst) {
+                            drop(open);
+                            sdk.lock_seed(&req.seed).await;
                         }
-                        e.index_mac = mac(&open.wallet, &e)?;
-                        if let Some(slot) = ks.seeds.get_mut(i) {
-                            *slot = e;
-                        }
-                        Ok(())
-                    })
-                    .await?;
+                        return Err(e);
+                    }
+                };
                 sdk.emit(Event::KeystoreChanged { rev: ks.rev });
                 Ok(ImportedKey {
                     network: req.network,
@@ -458,7 +523,7 @@ impl Vault {
 
     /// Renames the seed (unlocked: the MAC is rewritten); `LabelTaken`, `Argument` for a label outside its rule.
     pub async fn rename(&self, seed: String, label: String) -> Result<(), SdkError> {
-        if !label_ok(&label) {
+        if !new_label_ok(&label) {
             return Err(SdkError::Argument);
         }
         let sdk = self.sdk.clone();

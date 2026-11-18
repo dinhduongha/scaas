@@ -12,7 +12,7 @@
 mod fake_chain;
 
 use fake_chain::{fake, hash_of, serve, Fake, CHAIN_ID};
-use scaas_sdk::op::{KeyRef, OpState};
+use scaas_sdk::op::{KeyRef, OpState, SubmitPath};
 use scaas_sdk::vault::{ImportWords, MemoryStore};
 use scaas_sdk::wallet::NativeSend;
 use scaas_sdk::{
@@ -494,4 +494,34 @@ async fn native_send_quoted_and_lands() {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     panic!("the native send did not land");
+}
+
+/// Closing review P3: a native send signs with the reviewed key only: a quote whose payer is another key than the reviewed
+/// `key` (an edited record) is `Argument`, nothing signed or sent; the quote as made is sent (the control).
+#[tokio::test(flavor = "multi_thread")]
+async fn native_send_signs_with_the_reviewed_key_only() {
+    let (s, seed, c) = one(0).await;
+    let q = s
+        .wallet()
+        .prepare_native_send(native_send(&seed, Some(2)))
+        .await
+        .unwrap();
+    let mut other = q.clone();
+    other.quote.path = SubmitPath::SelfRelay {
+        payer: KeyRef::Native {
+            seed: seed.clone(),
+            network: "evm".into(),
+            index: 1,
+        },
+    };
+    assert_eq!(
+        s.wallet()
+            .submit_native_send(other)
+            .await
+            .unwrap_err()
+            .code(),
+        "Argument"
+    );
+    assert!(c.lock().unwrap().sent.is_empty());
+    s.wallet().submit_native_send(q).await.unwrap();
 }

@@ -424,6 +424,7 @@ impl crate::platform::Authenticator for Platform {
         handle: String,
         salt: Vec<u8>,
         _: String,
+        _: Option<crate::platform::KeyPolicy>,
         out: Arc<scaas_ua::wallet::SecretBytes>,
     ) -> Result<(), crate::platform::AuthError> {
         out.with_mut(|b| {
@@ -534,5 +535,60 @@ async fn lock_drops_the_retained_key() {
         w.wallet.open_label_vault_retained(&v),
         Err(scaas_ua::wallet::Error::Argument),
         "no key kept across lock"
+    );
+}
+
+/// Closing review P2-7 (A): the keystore write of `import_key` fails after the open wallet took the key: the seed is locked, so
+/// no later re-seal (`derive_child`, the next import) writes a manifest that lists an import without a vault; after the next
+/// unlock the stored manifest has no such import, and the next import takes number 0 again.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn import_key_failed_write_leaves_no_ghost_import() {
+    let m = Arc::new(Mem::default());
+    let s = crate::Sdk::open(crate::SdkConfig {
+        profiles: vec![],
+        store: m.clone(),
+        authenticator: None,
+        rp_id: None,
+        runtime: crate::RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
+        limits: crate::Limits::default(),
+    })
+    .await
+    .unwrap();
+    let v = s.vault();
+    let words = ImportWords {
+        label: "Main".into(),
+        words: secret(REPO),
+        vault_passphrase: secret(PASS),
+    };
+    let id = v.import_words(words).await.unwrap().id;
+    let key = |b: u8| ImportKey {
+        seed: id.clone(),
+        network: "evm".into(),
+        secret: secret(&[b; 32]),
+        vault_passphrase: secret(PASS),
+    };
+    m.conflicts.store(3, Ordering::SeqCst); // every try of the write conflicts
+    assert_eq!(
+        v.import_key(key(0x11)).await.unwrap_err().code(),
+        "StoreConflict"
+    );
+    assert!(
+        s.open_seed(&id).is_err(),
+        "locked: the open wallet held an import the store has not"
+    );
+    v.unlock(id.clone(), Unlock::Passphrase(secret(PASS)))
+        .await
+        .unwrap();
+    let w = s.open_seed(&id).unwrap();
+    assert!(
+        w.wallet
+            .imported_key(scaas_ua::wallet::Network::Evm, 0)
+            .is_err(),
+        "no ghost import"
+    );
+    assert_eq!(
+        v.import_key(key(0x22)).await.unwrap().index,
+        0,
+        "control: the number is free"
     );
 }

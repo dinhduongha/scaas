@@ -109,6 +109,8 @@ fn ua_req(seed: &str, kind: u16, account: u32, index: u32) -> AddUa {
 
 struct Fake {
     registered: HashSet<String>,
+    /// a registered UA answered as one byte `0x01` instead of an ABI `bool` word
+    short: std::sync::atomic::AtomicBool,
     code: Vec<(String, String)>,
     calls: AtomicUsize,
 }
@@ -140,7 +142,11 @@ fn answer(f: &Fake, r: &Value) -> Value {
                 .unwrap_or_default()
                 .to_string();
             let ua = format!("0x{}", &data[10..]);
-            json!(format!("0x{:064x}", u8::from(f.registered.contains(&ua))))
+            if f.short.load(SeqCst) {
+                json!(format!("0x{:02x}", u8::from(f.registered.contains(&ua))))
+            } else {
+                json!(format!("0x{:064x}", u8::from(f.registered.contains(&ua))))
+            }
         }
         "eth_getCode" => {
             let who = r["params"][0]
@@ -214,6 +220,7 @@ fn fake(registered: &[String], code: &[(String, String)]) -> Arc<Fake> {
         registered: registered.iter().cloned().collect(),
         code: code.to_vec(),
         calls: AtomicUsize::new(0),
+        short: Default::default(),
     })
 }
 
@@ -588,4 +595,31 @@ async fn names_bounded() {
     );
     r.name = "x".repeat(64);
     assert_eq!(code(s.account().add_ua(r).await), "Ok", "control: 64 bytes");
+}
+
+/// Closing review P3: a registry answer that is not one ABI `bool` word (an endpoint's one byte `0x01`) registers nothing; the
+/// word answer of the same endpoint does (the control, `restore_gap_scan`).
+#[tokio::test(flavor = "multi_thread")]
+async fn restore_reads_a_whole_bool_word() {
+    let f = fake(&[ua_at(0x0101, 0, 0)], &[]);
+    f.short.store(true, SeqCst);
+    let url = serve(f.clone()).await;
+    let (s, _m, seed) = with_seed(&[url]).await;
+    let req = Restore {
+        seed: seed.clone(),
+        chain: "local-testnet".into(),
+        kinds: vec![0x0101],
+        account: 0,
+        gap: 3,
+    };
+    assert!(
+        s.account().restore(req.clone()).await.unwrap().is_empty(),
+        "a short answer"
+    );
+    f.short.store(false, SeqCst);
+    assert_eq!(
+        s.account().restore(req).await.unwrap().len(),
+        1,
+        "control: the word"
+    );
 }

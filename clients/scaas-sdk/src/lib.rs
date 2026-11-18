@@ -173,6 +173,10 @@ pub struct Sdk {
     /// tokens read in this session, by (chain, address) (spec §8.2: metadata read once per session)
     #[cfg(feature = "wallet")]
     pub(crate) tokens: Mutex<HashMap<(String, String), wallet::TokenInfo>>,
+    /// the next transaction nonce of each payer by (chain, address) after this session's own signed transactions: a quote's
+    /// floor above the endpoints' pending nonce (spec §8.5; under `strict_majority` the agreed nonce is the committed one)
+    #[cfg(feature = "wallet")]
+    pub(crate) sent_nonces: Mutex<HashMap<(String, String), u64>>,
     /// the tests' count of SCaaS signatures made (`op::submit::sign`)
     #[cfg(all(test, feature = "wallet"))]
     pub(crate) signs: std::sync::atomic::AtomicU32,
@@ -245,6 +249,8 @@ impl Sdk {
             prepared: Mutex::new(HashMap::new()),
             #[cfg(feature = "wallet")]
             tokens: Mutex::new(HashMap::new()),
+            #[cfg(feature = "wallet")]
+            sent_nonces: Mutex::new(HashMap::new()),
             #[cfg(all(test, feature = "wallet"))]
             signs: std::sync::atomic::AtomicU32::new(0),
         }))
@@ -282,14 +288,19 @@ impl Sdk {
         use std::sync::atomic::Ordering::SeqCst;
         let _permit = self.heavy.acquire().await.map_err(|_| SdkError::Internal)?;
         let (now, max) = (self.heavy_now.clone(), self.heavy_max.clone());
-        tokio::task::spawn_blocking(move || {
+        let job = move || {
             max.fetch_max(now.fetch_add(1, SeqCst) + 1, SeqCst);
             let r = f();
             now.fetch_sub(1, SeqCst);
             r
-        })
-        .await
-        .map_err(|_| SdkError::Internal)?
+        };
+        // wasm32: no blocking pool and no runtime of the SDK's own; the page's one thread runs it (closing review P2-9)
+        #[cfg(target_arch = "wasm32")]
+        return job();
+        #[cfg(not(target_arch = "wasm32"))]
+        tokio::task::spawn_blocking(job)
+            .await
+            .map_err(|_| SdkError::Internal)?
     }
 
     /// The most heavy jobs (scrypt, Argon2id, proofs) seen running at once in this SDK: a check of

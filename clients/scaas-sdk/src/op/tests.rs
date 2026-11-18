@@ -233,6 +233,7 @@ fn cancel(t: &T, kind: &'static str, contract: &str, lane: &str, fee: &str) -> D
         touched: vec![],
         opaque: false,
         ids: false,
+        relay_call: None,
     }
 }
 
@@ -312,6 +313,7 @@ async fn review_lists_every_named_field_with_its_source() {
         touched: vec![addr20(OTHER).unwrap()],
         opaque: false,
         ids: false,
+        relay_call: None,
     };
     let p = prepare(&t, d).await;
     let r = p.review();
@@ -409,15 +411,20 @@ async fn submit_signs_what_was_reviewed() {
     assert_eq!(row.digest, p.id(), "the row's digest is the reviewed one");
     let body: Value = serde_json::from_str(&bodies(&t, 1).await[0]).unwrap();
     assert_eq!(body["op"], row.op_json, "the gateway got the row's op");
-    // the signed values are the reviewed ones
+    // the signed values are the reviewed ones, read back from what was posted (closing review P3: not from the message the
+    // review was built from)
+    let text = |v: &Value| {
+        v.as_str()
+            .map(String::from)
+            .unwrap_or(v.to_string())
+            .to_ascii_lowercase()
+    };
     for f in p.review().iter().filter(|f| f.source == Source::Signed) {
-        let v = &p.t.message[&f.name];
-        assert_eq!(
-            v.as_str().map(String::from).unwrap_or(v.to_string()),
-            f.value,
-            "{}",
-            f.name
-        );
+        let posted = [&body["op"]["args"], &body["op"]["envelope"], &body["op"]]
+            .into_iter()
+            .find_map(|o| o.get(&f.name))
+            .unwrap_or_else(|| panic!("{} not posted", f.name));
+        assert_eq!(text(posted), f.value.to_ascii_lowercase(), "{}", f.name);
     }
     // the signature is the key's over that digest under the entry's check (scaas-ua's `sign_scaas`)
     let w = Wallet::from_mnemonic(REPO, "").unwrap();
@@ -1272,4 +1279,103 @@ async fn one_pool_per_chain_for_the_session() {
         after_prepare,
         "no second identity read in later calls"
     );
+}
+
+/// Closing review P2-4: the review and the check carry the fee the relayer takes, never a PERCENT envelope's rate: a struct
+/// without an amount refuses PERCENT; FIXED shows its fee (the control). The PERCENT amount itself: `wallet_ops`'
+/// `percent_fee_is_reviewed_as_its_amount`.
+#[tokio::test(flavor = "multi_thread")]
+async fn percent_fee_needs_an_amount() {
+    let t = setup(1, |_, _| {}).await;
+    let mut d = cancel(&t, "token", TOKEN, "5", "5000");
+    d.message["mode"] = json!(0x10);
+    assert_eq!(code(Op::prepare(&t.sdk, d).await), "PolicyRefused");
+    let mut d = cancel(&t, "token", TOKEN, "5", "5000");
+    d.message["mode"] = json!(0x20);
+    let p = Op::prepare(&t.sdk, d).await.unwrap();
+    let due = p
+        .review()
+        .into_iter()
+        .find(|f| f.name == "fee.due")
+        .unwrap();
+    assert_eq!(
+        (due.value.as_str(), due.source),
+        ("5000", Source::Derived),
+        "control: FIXED"
+    );
+}
+
+/// Closing review P3: a read that is not decisive (the first endpoint `discovered`, under failover) never makes an operation
+/// terminal, even with its executed event and its nonce spent; a named endpoint's read does (the control).
+#[tokio::test(flavor = "multi_thread")]
+async fn a_non_decisive_read_is_never_terminal() {
+    for (class, terminal) in [
+        (scaas_rpc::Class::Discovered, false),
+        (scaas_rpc::Class::Named, true),
+    ] {
+        let t = setup(1, |p, _| p.rpc[0].class = class).await;
+        let (op, digest) = submitted(&t, "token", TOKEN, "5").await;
+        {
+            let mut c = t.chain.lock().unwrap();
+            let n = c.finalized;
+            c.logs.push(executed_log(TOKEN, &digest, n, false));
+            c.nonces.insert(TOKEN.into(), 1);
+        }
+        let s = t.sdk.op().state(op).await.unwrap();
+        assert_eq!(s.is_terminal(), terminal, "{class:?}: {s:?}");
+    }
+}
+
+/// Closing review P3: `resend` of a gateway operation whose `relayer` is bound is refused on a self-relay (only that relayer
+/// may send it); an unbound one goes (the control).
+#[tokio::test(flavor = "multi_thread")]
+async fn resend_with_a_bound_relayer_is_refused() {
+    let t = setup(1, |_, _| {}).await;
+    for (mode, relayer, want) in [
+        (1, "0x000000000000000000000000000000000000beef", "Argument"),
+        (0, ZERO, "Ok"),
+    ] {
+        let mut d = cancel(&t, "token", TOKEN, if mode == 1 { "5" } else { "6" }, "0");
+        d.message["mode"] = json!(mode);
+        d.message["relayer"] = json!(relayer);
+        let p = prepare(&t, d).await;
+        let q = gateway_quote(&t, &p).await;
+        let op = t.sdk.op().submit(p.clone(), q).await.unwrap();
+        let p2 = prepare(&t, cancel(&t, "token", TOKEN, "7", "0")).await;
+        let q2 = t
+            .sdk
+            .op()
+            .quote(p2, SubmitPath::SelfRelay { payer: payer(&t) })
+            .await
+            .unwrap();
+        assert_eq!(code(t.sdk.op().resend(op, q2).await), want, "mode {mode}");
+    }
+}
+
+/// Closing review P3: the SDK counts its own signed transactions: a second self-relay quoted before the first lands takes the
+/// next nonce though every endpoint still answers the first's.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_second_self_relay_takes_the_next_nonce() {
+    let t = setup(0, |_, _| {}).await;
+    let path = SubmitPath::SelfRelay { payer: payer(&t) };
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let q = t.sdk.op().quote(p.clone(), path.clone()).await.unwrap();
+    assert_eq!(q.tx_nonce, 0);
+    t.sdk.op().submit(p, q).await.unwrap();
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "6", "0")).await;
+    let q = t.sdk.op().quote(p, path).await.unwrap();
+    assert_eq!(q.tx_nonce, 1, "the endpoints still answer 0");
+}
+
+/// Closing review P3: the prepared table drops what is past its `validUntil` on the chain's clock (it no longer grows without
+/// bound); a live one stays (the control).
+#[tokio::test(flavor = "multi_thread")]
+async fn the_prepared_table_drops_expired_entries() {
+    let t = setup(1, |_, _| {}).await;
+    let old = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    t.chain.lock().unwrap().timestamp += 7200; // past the first's validUntil
+    let live = prepare(&t, cancel(&t, "token", TOKEN, "6", "0")).await;
+    let table = t.sdk.prepared.lock().unwrap();
+    assert!(!table.contains_key(&old.id()), "expired: dropped");
+    assert!(table.contains_key(&live.id()), "control: kept");
 }

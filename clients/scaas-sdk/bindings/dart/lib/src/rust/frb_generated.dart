@@ -65,7 +65,7 @@ class ScaasSdk
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -1834616511;
+  int get rustContentHash => -336198253;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -92,18 +92,6 @@ abstract class ScaasSdkApi extends BaseApi {
 
   Future<List<SeedRow>> crateApiSdkHandleSeeds({required SdkHandle that});
 
-  Future<String> crateApiSdkHandleSpikeGateway({
-    required SdkHandle that,
-    required String url,
-  });
-
-  Future<int> crateApiSdkHandleSpikePanic({required SdkHandle that});
-
-  Future<BigInt> crateApiSdkHandleSpikePrf({
-    required SdkHandle that,
-    required List<int> salt,
-  });
-
   Events crateApiSdkHandleSubscribe({required SdkHandle that});
 
   BigInt crateApiSecretId({required Secret that});
@@ -124,6 +112,7 @@ abstract class ScaasSdkApi extends BaseApi {
     required FutureOr<AuthAnswer> Function(
       String,
       Uint8List,
+      List<Uint8List>,
       Uint8List?,
       BigInt,
     )
@@ -306,115 +295,6 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       const TaskConstMeta(debugName: "SdkHandle_seeds", argNames: ["that"]);
 
   @override
-  Future<String> crateApiSdkHandleSpikeGateway({
-    required SdkHandle that,
-    required String url,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkHandle(
-            that,
-            serializer,
-          );
-          sse_encode_String(url, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 5,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: sse_decode_sdk_failure,
-        ),
-        constMeta: kCrateApiSdkHandleSpikeGatewayConstMeta,
-        argValues: [that, url],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiSdkHandleSpikeGatewayConstMeta =>
-      const TaskConstMeta(
-        debugName: "SdkHandle_spike_gateway",
-        argNames: ["that", "url"],
-      );
-
-  @override
-  Future<int> crateApiSdkHandleSpikePanic({required SdkHandle that}) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkHandle(
-            that,
-            serializer,
-          );
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 6,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_u_32,
-          decodeErrorData: sse_decode_sdk_failure,
-        ),
-        constMeta: kCrateApiSdkHandleSpikePanicConstMeta,
-        argValues: [that],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiSdkHandleSpikePanicConstMeta =>
-      const TaskConstMeta(
-        debugName: "SdkHandle_spike_panic",
-        argNames: ["that"],
-      );
-
-  @override
-  Future<BigInt> crateApiSdkHandleSpikePrf({
-    required SdkHandle that,
-    required List<int> salt,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkHandle(
-            that,
-            serializer,
-          );
-          sse_encode_list_prim_u_8_loose(salt, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 7,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_u_64,
-          decodeErrorData: sse_decode_sdk_failure,
-        ),
-        constMeta: kCrateApiSdkHandleSpikePrfConstMeta,
-        argValues: [that, salt],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateApiSdkHandleSpikePrfConstMeta => const TaskConstMeta(
-    debugName: "SdkHandle_spike_prf",
-    argNames: ["that", "salt"],
-  );
-
-  @override
   Events crateApiSdkHandleSubscribe({required SdkHandle that}) {
     return handler.executeSync(
       SyncTask(
@@ -424,7 +304,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
         },
         codec: SseCodec(
           decodeSuccessData:
@@ -451,7 +331,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_64,
@@ -477,7 +357,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_32,
@@ -499,7 +379,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_32,
@@ -521,7 +401,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 12)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_64,
@@ -548,6 +428,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     required FutureOr<AuthAnswer> Function(
       String,
       Uint8List,
+      List<Uint8List>,
       Uint8List?,
       BigInt,
     )
@@ -577,14 +458,14 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
             storeUnlock,
             serializer,
           );
-          sse_encode_DartFn_Inputs_String_list_prim_u_8_strict_opt_list_prim_u_8_strict_u_64_Output_auth_answer_AnyhowException(
+          sse_encode_DartFn_Inputs_String_list_prim_u_8_strict_list_list_prim_u_8_strict_opt_list_prim_u_8_strict_u_64_Output_auth_answer_AnyhowException(
             authGetAssertion,
             serializer,
           );
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 10,
             port: port_,
           );
         },
@@ -626,7 +507,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_u_32(len, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 14)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11)!;
         },
         codec: SseCodec(
           decodeSuccessData:
@@ -713,20 +594,28 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     };
   }
 
-  Future<void> Function(int, dynamic, dynamic, dynamic, dynamic)
-  encode_DartFn_Inputs_String_list_prim_u_8_strict_opt_list_prim_u_8_strict_u_64_Output_auth_answer_AnyhowException(
-    FutureOr<AuthAnswer> Function(String, Uint8List, Uint8List?, BigInt) raw,
+  Future<void> Function(int, dynamic, dynamic, dynamic, dynamic, dynamic)
+  encode_DartFn_Inputs_String_list_prim_u_8_strict_list_list_prim_u_8_strict_opt_list_prim_u_8_strict_u_64_Output_auth_answer_AnyhowException(
+    FutureOr<AuthAnswer> Function(
+      String,
+      Uint8List,
+      List<Uint8List>,
+      Uint8List?,
+      BigInt,
+    )
+    raw,
   ) {
-    return (callId, rawArg0, rawArg1, rawArg2, rawArg3) async {
+    return (callId, rawArg0, rawArg1, rawArg2, rawArg3, rawArg4) async {
       final arg0 = dco_decode_String(rawArg0);
       final arg1 = dco_decode_list_prim_u_8_strict(rawArg1);
-      final arg2 = dco_decode_opt_list_prim_u_8_strict(rawArg2);
-      final arg3 = dco_decode_u_64(rawArg3);
+      final arg2 = dco_decode_list_list_prim_u_8_strict(rawArg2);
+      final arg3 = dco_decode_opt_list_prim_u_8_strict(rawArg3);
+      final arg4 = dco_decode_u_64(rawArg4);
 
       Box<AuthAnswer>? rawOutput;
       Box<AnyhowException>? rawError;
       try {
-        rawOutput = Box(await raw(arg0, arg1, arg2, arg3));
+        rawOutput = Box(await raw(arg0, arg1, arg2, arg3, arg4));
       } catch (e, s) {
         rawError = Box(AnyhowException("$e\n\n$s"));
       }
@@ -952,8 +841,14 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
-  FutureOr<AuthAnswer> Function(String, Uint8List, Uint8List?, BigInt)
-  dco_decode_DartFn_Inputs_String_list_prim_u_8_strict_opt_list_prim_u_8_strict_u_64_Output_auth_answer_AnyhowException(
+  FutureOr<AuthAnswer> Function(
+    String,
+    Uint8List,
+    List<Uint8List>,
+    Uint8List?,
+    BigInt,
+  )
+  dco_decode_DartFn_Inputs_String_list_prim_u_8_strict_list_list_prim_u_8_strict_opt_list_prim_u_8_strict_u_64_Output_auth_answer_AnyhowException(
     dynamic raw,
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -1089,9 +984,9 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
-  List<int> dco_decode_list_prim_u_8_loose(dynamic raw) {
+  List<Uint8List> dco_decode_list_list_prim_u_8_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw as List<int>;
+    return (raw as List<dynamic>).map(dco_decode_list_prim_u_8_strict).toList();
   }
 
   @protected
@@ -1470,10 +1365,17 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
-  List<int> sse_decode_list_prim_u_8_loose(SseDeserializer deserializer) {
+  List<Uint8List> sse_decode_list_list_prim_u_8_strict(
+    SseDeserializer deserializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+
     var len_ = sse_decode_i_32(deserializer);
-    return deserializer.buffer.getUint8List(len_);
+    var ans_ = <Uint8List>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_list_prim_u_8_strict(deserializer));
+    }
+    return ans_;
   }
 
   @protected
@@ -1784,13 +1686,20 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
 
   @protected
   void
-  sse_encode_DartFn_Inputs_String_list_prim_u_8_strict_opt_list_prim_u_8_strict_u_64_Output_auth_answer_AnyhowException(
-    FutureOr<AuthAnswer> Function(String, Uint8List, Uint8List?, BigInt) self,
+  sse_encode_DartFn_Inputs_String_list_prim_u_8_strict_list_list_prim_u_8_strict_opt_list_prim_u_8_strict_u_64_Output_auth_answer_AnyhowException(
+    FutureOr<AuthAnswer> Function(
+      String,
+      Uint8List,
+      List<Uint8List>,
+      Uint8List?,
+      BigInt,
+    )
+    self,
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_DartOpaque(
-      encode_DartFn_Inputs_String_list_prim_u_8_strict_opt_list_prim_u_8_strict_u_64_Output_auth_answer_AnyhowException(
+      encode_DartFn_Inputs_String_list_prim_u_8_strict_list_list_prim_u_8_strict_opt_list_prim_u_8_strict_u_64_Output_auth_answer_AnyhowException(
         self,
       ),
       serializer,
@@ -1966,15 +1875,15 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
-  void sse_encode_list_prim_u_8_loose(
-    List<int> self,
+  void sse_encode_list_list_prim_u_8_strict(
+    List<Uint8List> self,
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
-    serializer.buffer.putUint8List(
-      self is Uint8List ? self : Uint8List.fromList(self),
-    );
+    for (final item in self) {
+      sse_encode_list_prim_u_8_strict(item, serializer);
+    }
   }
 
   @protected
@@ -2209,20 +2118,6 @@ class SdkHandleImpl extends RustOpaque implements SdkHandle {
   /// `vault.seeds()`.
   Future<List<SeedRow>> seeds() =>
       ScaasSdk.instance.api.crateApiSdkHandleSeeds(that: this);
-
-  /// Spike (`no_reactor_panic`): a tokio timer and a `reqwest` call through `scaas-rpc` to the gateway at `url`
-  /// (`GET /v1/dex/markets?chain=`), spawned on the SDK's runtime while FRB polls the caller's future from its own.
-  Future<String> spikeGateway({required String url}) =>
-      ScaasSdk.instance.api.crateApiSdkHandleSpikeGateway(that: this, url: url);
-
-  /// Spike: a call that panics inside the SDK's runtime answers `Internal`.
-  Future<int> spikePanic() =>
-      ScaasSdk.instance.api.crateApiSdkHandleSpikePanic(that: this);
-
-  /// Spike: the authenticator writes a PRF output into a fresh 32-byte secret; the sum of its bytes comes back (the bytes
-  /// themselves never do).
-  Future<BigInt> spikePrf({required List<int> salt}) =>
-      ScaasSdk.instance.api.crateApiSdkHandleSpikePrf(that: this, salt: salt);
 
   /// A subscription to the SDK's events.
   Events subscribe() =>

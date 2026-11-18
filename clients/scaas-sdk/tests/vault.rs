@@ -3,8 +3,8 @@
 #![allow(clippy::unwrap_used)]
 
 use scaas_sdk::vault::{
-    ConfirmRemove, ConfirmRemoveUnbacked, Generate, ImportKey, ImportWords, Keystore, MemoryStore,
-    Remove, SecureStore, StorePolicy, Unlock,
+    ConfirmRemove, ConfirmRemoveUnbacked, DeriveChild, Generate, ImportKey, ImportWords, Keystore,
+    MemoryStore, Remove, SecureStore, StorePolicy, Unlock,
 };
 use scaas_sdk::{Event, Limits, RuntimeChoice, Sdk, SdkConfig, SdkError};
 use scaas_ua::wallet::SecretBytes;
@@ -365,8 +365,13 @@ async fn mac_mismatch_keeps_the_seed_locked() {
             "KeystoreMismatch",
             "{what}"
         );
+        // a container changed behind the SDK is also older than its anchor at the same rev: `KeystoreRollback` first (P2-2)
+        let mut next = ev.next(1000).await;
+        if next == Some(Event::KeystoreRollback) {
+            next = ev.next(1000).await;
+        }
         assert_eq!(
-            ev.next(1000).await,
+            next,
             Some(Event::KeystoreMismatch { seed: id.clone() }),
             "{what}"
         );
@@ -740,4 +745,147 @@ async fn hidden_set_one_secret_for_both_passphrases() {
         .await
         .unwrap();
     assert_ne!(one.id, two.id, "each opening its own session id");
+}
+
+/// Owner 2026-11-19, ruling E: a seed label refuses control and format (`Cf`, bidi) characters by the account names' rule
+/// (`text::hidden`), at creation and rename; letters, accents and CJK pass (the control). A stored container keeps clientkeys'
+/// parse rule.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn seed_labels_refuse_format_characters() {
+    let (s, _) = sdk().await;
+    for c in ['\u{202E}', '\u{2066}', '\u{200B}', '\u{FEFF}', '\u{200F}'] {
+        let req = Generate {
+            label: format!("Ma{c}in"),
+            vault_passphrase: sec(PASS),
+        };
+        assert_eq!(
+            code(s.vault().generate(req).await),
+            "Argument",
+            "{:#x}",
+            u32::from(c)
+        );
+    }
+    let id = import(&s, "Hộ gia đình 中", REPO)
+        .await
+        .expect("control: letters, accents and CJK");
+    assert_eq!(
+        code(s.vault().rename(id.clone(), "x\u{202E}y".into()).await),
+        "Argument"
+    );
+    assert_eq!(code(s.vault().rename(id, "Chính".into()).await), "Ok");
+}
+
+/// Closing review P2-2: an older container put back (rev N-1 after rev N) is shown: `keystore_rollback` and
+/// `Event::KeystoreRollback` from a read; the current container shows neither (the control).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn rollback_is_shown() {
+    let (s, m) = sdk().await;
+    let id = import(&s, "Main", REPO).await.unwrap();
+    let older = m
+        .get("keystore".into(), String::new())
+        .await
+        .unwrap()
+        .unwrap();
+    s.vault().rename(id, "Main 2".into()).await.unwrap();
+    let sub = s.subscribe();
+    assert!(
+        !s.vault().keystore_rollback().await.unwrap(),
+        "control: the current container"
+    );
+    s.vault().seeds().await.unwrap();
+    assert!(
+        !matches!(sub.next(200).await, Some(Event::KeystoreRollback)),
+        "control: no event"
+    );
+    let now = m
+        .get("keystore".into(), String::new())
+        .await
+        .unwrap()
+        .unwrap();
+    m.put_if(
+        "keystore".into(),
+        Some(now.rev),
+        older.bytes,
+        StorePolicy::default(),
+    )
+    .await
+    .unwrap();
+    assert!(s.vault().keystore_rollback().await.unwrap());
+    let seeds = s.vault().seeds().await.unwrap();
+    assert_eq!(seeds[0].label, "Main", "the older container, shown");
+    let mut seen = false;
+    while let Some(e) = sub.next(200).await {
+        seen |= e == Event::KeystoreRollback;
+    }
+    assert!(seen, "the event");
+}
+
+/// Closing review P2-7 (B): two SDKs on one store import into the same seed: the second's open wallet picked the same number,
+/// so its write is `StoreConflict` (the label taken, the manifest moved), never a replaced vault; its seed is locked, and after
+/// a new unlock it imports under the next number.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn import_key_two_sdks_one_store() {
+    let (a, m) = sdk().await;
+    let id = import(&a, "Main", REPO).await.unwrap();
+    let b = open_with(m.clone()).await;
+    b.vault()
+        .unlock(id.clone(), Unlock::Passphrase(sec(PASS)))
+        .await
+        .unwrap();
+    assert_eq!(
+        a.vault()
+            .import_key(key_req(&id, "evm", &[0x11; 32], PASS))
+            .await
+            .unwrap()
+            .index,
+        0
+    );
+    let first = stored(&m).await.seeds[0].vaults["native-import:evm:0"].clone();
+    assert_eq!(
+        code(
+            b.vault()
+                .import_key(key_req(&id, "evm", &[0x22; 32], PASS))
+                .await
+        ),
+        "StoreConflict"
+    );
+    assert_eq!(
+        stored(&m).await.seeds[0].vaults["native-import:evm:0"],
+        first,
+        "the first import's vault kept"
+    );
+    let child = DeriveChild {
+        parent: id.clone(),
+        label: "Child".into(),
+        vault_passphrase: sec(PASS),
+    };
+    assert_eq!(
+        code(b.vault().derive_child(child).await),
+        "WalletLocked",
+        "no re-seal from the stale wallet"
+    );
+    b.vault()
+        .unlock(id.clone(), Unlock::Passphrase(sec(PASS)))
+        .await
+        .unwrap();
+    assert_eq!(
+        b.vault()
+            .import_key(key_req(&id, "evm", &[0x22; 32], PASS))
+            .await
+            .unwrap()
+            .index,
+        1
+    );
+}
+
+/// Closing review P3: an app can read an unlocked seed's memory protection (best effort, `mlock`): the arena's chunks, how many
+/// are locked in RAM; a locked seed is `WalletLocked`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn memory_protection_is_readable() {
+    let (s, _) = sdk().await;
+    let id = import(&s, "Main", REPO).await.unwrap();
+    let m = s.vault().memory_protection(id.clone()).unwrap();
+    assert!(m.chunks > 0 && m.locked <= m.chunks, "{m:?}");
+    s.vault().lock(id.clone()).await;
+    assert_eq!(code(s.vault().memory_protection(id)), "WalletLocked");
 }

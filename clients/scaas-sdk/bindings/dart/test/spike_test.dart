@@ -79,7 +79,7 @@ class MemStore implements SecureStore {
 class FakeAuth implements Authenticator {
   bool explode = false;
   @override
-  Future<AuthAnswer> getAssertion(String rpId, Uint8List challenge, Uint8List? prfSalt, BigInt prfOutId) async {
+  Future<AuthAnswer> getAssertion(String rpId, Uint8List challenge, List<Uint8List> allow, Uint8List? prfSalt, BigInt prfOutId) async {
     if (explode) throw StateError('a foreign exception');
     secretWrite(prfOutId, Uint8List.fromList(List.generate(32, (i) => i + 1)));
     return AuthAnswer(
@@ -128,25 +128,12 @@ void main() {
     await expectLater(sdk.generate(label: 'Two', vaultPassphrase: weak), throwsA(predicate((e) => code(e!) == 'VaultPassphraseWeak')));
   });
 
-  test('the PRF return: the Dart authenticator writes into the secret the SDK gave, only a checksum comes back', () async {
-    final sdk = await openSdk(MemStore(), FakeAuth());
-    expect(await sdk.spikePrf(salt: Uint8List(32)), BigInt.from(528), reason: 'the bytes 1..32');
-  });
-
   test('a foreign exception in a callback is Unexpected, never a Rust panic', () async {
     final store = MemStore();
-    final auth = FakeAuth()..explode = true;
-    final sdk = await openSdk(store, auth);
-    await expectLater(sdk.spikePrf(salt: Uint8List(32)), throwsA(predicate((e) => code(e!) == 'AuthenticatorRefused')));
+    final sdk = await openSdk(store, FakeAuth());
     store.explode = true;
     await expectLater(sdk.seeds(), throwsA(predicate((e) => code(e!) == 'VaultIo')));
     store.explode = false;
-    expect(await sdk.seeds(), isEmpty, reason: 'the SDK goes on');
-  });
-
-  test('a panic inside a call answers Internal', () async {
-    final sdk = await openSdk(MemStore(), FakeAuth());
-    await expectLater(sdk.spikePanic(), throwsA(predicate((e) => code(e!) == 'Internal')));
     expect(await sdk.seeds(), isEmpty, reason: 'the SDK goes on');
   });
 
@@ -164,19 +151,12 @@ void main() {
     expect((await sdk.seeds()).map((s) => s.label), ['Late']);
   });
 
-  test('no_reactor_panic: a timer and a reqwest call on the SDK runtime while FRB polls', () async {
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    server.listen((r) {
-      r.response.headers.contentType = ContentType.json;
-      r.response.write(r.uri.path == '/v1/dex/markets' ? '{"markets":[]}' : '{}');
-      r.response.close();
-    });
-    try {
-      final sdk = await openSdk(MemStore(), FakeAuth());
-      expect(await sdk.spikeGateway(url: 'http://127.0.0.1:${server.port}/'), '{"markets":[]}');
-    } finally {
-      await server.close(force: true);
-    }
+  test('no spike call is exported (closing review P2-10)', () {
+    final api = File('../../ffi/src/api/mod.rs').readAsStringSync();
+    final wire = File('../../ffi/src/frb_generated.rs').readAsStringSync();
+    expect(RegExp(r'pub (async )?fn spike_').hasMatch(api), isFalse, reason: 'the Rust surface');
+    expect(wire.contains('spike_'), isFalse, reason: 'the generated wire');
+    expect(RegExp(r'pub (async )?fn sdk_open').hasMatch(api), isTrue, reason: 'control: the surface is read');
   });
 
   test('secret_never_in_the_codec: every secret parameter of the generated wire is an opaque handle', () {

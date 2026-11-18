@@ -70,12 +70,15 @@ pub trait Authenticator: Send + Sync {
         req: AssertionRequest,
         prf_out: Arc<SecretBytes>,
     ) -> Result<Assertion, AuthError>;
-    /// HMAC(platform key, `salt`) of a Keychain / Android Keystore key under its policy, written into `out`.
+    /// HMAC(platform key, `salt`) of a Keychain / Android Keystore key, written into `out`. `policy` is `Some` when the SDK
+    /// enables platform unlock: the key `handle` is made (or checked) under that policy; `None` at an unlock: the existing key
+    /// (closing review P2-8; spec §6.10).
     async fn platform_secret(
         &self,
         handle: String,
         salt: Vec<u8>,
         reason: String,
+        policy: Option<KeyPolicy>,
         out: Arc<SecretBytes>,
     ) -> Result<(), AuthError>;
     async fn p256_generate(&self, policy: KeyPolicy) -> Result<SePublic, AuthError>;

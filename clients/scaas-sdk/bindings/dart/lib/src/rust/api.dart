@@ -6,7 +6,7 @@
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `auth_error`, `done`, `fail`, `store_error`, `unavailable`
+// These functions are ignored because they are not marked as `pub`: `auth_error`, `done`, `store_error`, `unavailable`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `fmt`, `from`
 
 /// The binding surface's version this library was built with (spec §16.3).
@@ -27,7 +27,13 @@ Future<SdkHandle> sdkOpen({
   required FutureOr<StoreAnswer> Function(String) storeDelete,
   required FutureOr<StoreAnswer> Function(String) storeLock,
   required FutureOr<void> Function(BigInt) storeUnlock,
-  required FutureOr<AuthAnswer> Function(String, Uint8List, Uint8List?, BigInt)
+  required FutureOr<AuthAnswer> Function(
+    String,
+    Uint8List,
+    List<Uint8List>,
+    Uint8List?,
+    BigInt,
+  )
   authGetAssertion,
 }) => ScaasSdk.instance.api.crateApiSdkOpen(
   storeGet: storeGet,
@@ -60,17 +66,6 @@ abstract class SdkHandle implements RustOpaqueInterface {
 
   /// `vault.seeds()`.
   Future<List<SeedRow>> seeds();
-
-  /// Spike (`no_reactor_panic`): a tokio timer and a `reqwest` call through `scaas-rpc` to the gateway at `url`
-  /// (`GET /v1/dex/markets?chain=`), spawned on the SDK's runtime while FRB polls the caller's future from its own.
-  Future<String> spikeGateway({required String url});
-
-  /// Spike: a call that panics inside the SDK's runtime answers `Internal`.
-  Future<int> spikePanic();
-
-  /// Spike: the authenticator writes a PRF output into a fresh 32-byte secret; the sum of its bytes comes back (the bytes
-  /// themselves never do).
-  Future<BigInt> spikePrf({required List<int> salt});
 
   /// A subscription to the SDK's events.
   Events subscribe();

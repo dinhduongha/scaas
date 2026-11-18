@@ -70,7 +70,8 @@ impl SecureStore for ClosureStore {
 pub struct ClosureAuthenticator {
     pub create_passkey: F<(String, String, Vec<Vec<u8>>), Result<PasskeyCreated, AuthError>>,
     pub get_assertion: F<(AssertionRequest, u64), Result<Assertion, AuthError>>,
-    pub platform_secret: F<(String, Vec<u8>, String, u64), Result<(), AuthError>>,
+    pub platform_secret:
+        F<(String, Vec<u8>, String, Option<KeyPolicy>, u64), Result<(), AuthError>>,
     pub p256_generate: F<KeyPolicy, Result<SePublic, AuthError>>,
     pub p256_sign: F<(String, Vec<u8>, String), Result<Vec<u8>, AuthError>>,
 }
@@ -97,9 +98,10 @@ impl Authenticator for ClosureAuthenticator {
         h: String,
         salt: Vec<u8>,
         reason: String,
+        policy: Option<KeyPolicy>,
         out: Arc<SecretBytes>,
     ) -> Result<(), AuthError> {
-        (self.platform_secret)((h, salt, reason, out.id())).await
+        (self.platform_secret)((h, salt, reason, policy, out.id())).await
     }
     async fn p256_generate(&self, policy: KeyPolicy) -> Result<SePublic, AuthError> {
         (self.p256_generate)(policy).await

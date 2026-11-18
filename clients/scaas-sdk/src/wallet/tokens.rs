@@ -66,12 +66,13 @@ pub(crate) fn small(w: &[u8]) -> Result<u64, SdkError> {
 
 /// The ABI `string` whose offset is head word `i` of a return value, at most 256 bytes read.
 pub(crate) fn abi_string(b: &[u8], i: usize) -> Result<String, SdkError> {
+    // the offset and length are the endpoint's: every sum checked (closing review P3)
     let off = usize::try_from(small(word(b, i)?)?).map_err(|_| SdkError::Argument)?;
-    let len = usize::try_from(small(b.get(off..off + 32).ok_or(SdkError::Argument)?)?)
+    let start = off.checked_add(32).ok_or(SdkError::Argument)?;
+    let len = usize::try_from(small(b.get(off..start).ok_or(SdkError::Argument)?)?)
         .map_err(|_| SdkError::Argument)?;
-    let s = b
-        .get(off + 32..off + 32 + len.min(256))
-        .ok_or(SdkError::Argument)?;
+    let end = start.checked_add(len.min(256)).ok_or(SdkError::Argument)?;
+    let s = b.get(start..end).ok_or(SdkError::Argument)?;
     Ok(String::from_utf8_lossy(s).into_owned())
 }
 
@@ -238,5 +239,26 @@ impl Wallet {
                 Ok(out)
             })
             .await
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+mod tests {
+    /// Closing review P3: an endpoint's offset near `usize::MAX` is refused, never an overflow (a panic in a debug build).
+    #[test]
+    fn abi_string_offset_overflow_is_refused() {
+        let mut b = vec![0u8; 64];
+        if let Some(w) = b.get_mut(24..32) {
+            w.copy_from_slice(&(u64::MAX - 8).to_be_bytes());
+        }
+        assert!(super::abi_string(&b, 0).is_err());
+        // the control: offset 32, length 2, "ok"
+        let mut ok = vec![0u8; 96];
+        ok[31] = 32;
+        ok[63] = 2;
+        ok[64] = b'o';
+        ok[65] = b'k';
+        assert_eq!(super::abi_string(&ok, 0).unwrap(), "ok");
     }
 }

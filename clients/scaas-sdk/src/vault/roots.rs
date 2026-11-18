@@ -153,7 +153,7 @@ impl Vault {
 
 /// The label and the new vault passphrase, checked before the Argon2id runs.
 fn precheck(label: &str, pass: &SecretBytes) -> Result<(), SdkError> {
-    if !super::keystore::label_ok(label) {
+    if !super::keystore::new_label_ok(label) {
         return Err(SdkError::Argument);
     }
     passphrase(pass, |p| {

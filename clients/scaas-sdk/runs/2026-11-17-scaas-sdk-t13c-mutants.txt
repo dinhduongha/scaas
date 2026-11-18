@@ -1,0 +1,9 @@
+# t13c mutants at commit 4be676df3 (name | outcome | test)
+C: Expect::Execute keeps the message's data | killed | ../../scripts/capped cargo test --locked --offline -j2 --test sign_scaas execute_signs_only_the_decoded_call
+D: Expect::Transfer accepts a payment's entryRef | killed | ../../scripts/capped cargo test --locked --offline -j2 --test sign_scaas transfer_is_entry_ref_zero_on_the_named_lane
+D: Expect::Transfer accepts another lane | killed | ../../scripts/capped cargo test --locked --offline -j2 --test sign_scaas transfer_is_entry_ref_zero_on_the_named_lane
+D: the transfer on ids keeps a payment's entryRef | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet_ops transfer_on_ids_is_its_vector_and_posts_ua_metatx
+D: a pay's salt left out is random | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet_ops pay_salt_derived_from_the_request
+D: the derived salt ignores the request | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet_ops pay_salt_derived_from_the_request
+F: a relay fee's job without its call | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet_ops relay_fee_job_carries_its_call
+7 mutants, 7 killed, 0 survived, 0 not loaded

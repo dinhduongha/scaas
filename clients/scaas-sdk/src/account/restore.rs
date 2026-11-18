@@ -131,7 +131,11 @@ impl Account {
                                 .with_to(registry)
                                 .with_input(Bytes::from(data));
                             let out = pool.call_tx(tx).await.map_err(rpc_error)?;
-                            if out.last() == Some(&1) {
+                            // one ABI `bool` word, exactly 1 (closing review P3: never a longer or shorter answer's last byte)
+                            let registered = out.len() == 32
+                                && out.get(..31).is_some_and(|h| h.iter().all(|b| *b == 0))
+                                && out.last() == Some(&1);
+                            if registered {
                                 found.push(AccountRow::Ua {
                                     id: crate::vault::uuid4()?,
                                     name: format!("Restored {kind:#06x} {i}"),

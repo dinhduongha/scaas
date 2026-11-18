@@ -97,7 +97,12 @@ impl Subscription {
     /// The next event, or `None` when none arrives within `timeout_ms`.
     pub async fn next(&self, timeout_ms: u64) -> Option<Event> {
         let mut rx = self.rx.lock().await;
-        let wait = tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), rx.recv());
+        let d = std::time::Duration::from_millis(timeout_ms);
+        // wasm32: the JS clock (tokio's timer needs a runtime the page has not; closing review P2-9)
+        #[cfg(not(target_arch = "wasm32"))]
+        let wait = tokio::time::timeout(d, rx.recv());
+        #[cfg(target_arch = "wasm32")]
+        let wait = wasmtimer::tokio::timeout(d, rx.recv());
         match wait.await {
             Ok(Ok(e)) => Some(e),
             Ok(Err(broadcast::error::RecvError::Lagged(missed))) => Some(Event::Lagged { missed }),

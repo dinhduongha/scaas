@@ -24,6 +24,8 @@ struct Fake {
     enrollment_changed: AtomicBool,
     /// every secret output written, to look for it elsewhere
     outputs: Mutex<Vec<[u8; 32]>>,
+    /// the policy of each platform-secret call
+    policies: Mutex<Vec<Option<KeyPolicy>>>,
 }
 
 impl Fake {
@@ -70,8 +72,10 @@ impl Authenticator for Fake {
         handle: String,
         salt: Vec<u8>,
         _: String,
+        policy: Option<KeyPolicy>,
         out: Arc<SecretBytes>,
     ) -> Result<(), AuthError> {
+        self.policies.lock().unwrap().push(policy);
         if self.enrollment_changed.load(Ordering::SeqCst) {
             return Err(AuthError::Refused);
         }
@@ -218,6 +222,8 @@ async fn platform_secret_unlock() {
         .unlock(id.clone(), Unlock::Platform)
         .await
         .unwrap();
+    // closing review P2-8: the policy reaches the authenticator when the key is made, none at an unlock
+    assert_eq!(*f.policies.lock().unwrap(), vec![Some(policy), None]);
     s.vault().lock(id.clone()).await;
     f.enrollment_changed.store(true, Ordering::SeqCst);
     assert_eq!(

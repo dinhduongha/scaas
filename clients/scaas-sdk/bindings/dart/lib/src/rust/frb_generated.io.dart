@@ -98,8 +98,14 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
-  FutureOr<AuthAnswer> Function(String, Uint8List, Uint8List?, BigInt)
-  dco_decode_DartFn_Inputs_String_list_prim_u_8_strict_opt_list_prim_u_8_strict_u_64_Output_auth_answer_AnyhowException(
+  FutureOr<AuthAnswer> Function(
+    String,
+    Uint8List,
+    List<Uint8List>,
+    Uint8List?,
+    BigInt,
+  )
+  dco_decode_DartFn_Inputs_String_list_prim_u_8_strict_list_list_prim_u_8_strict_opt_list_prim_u_8_strict_u_64_Output_auth_answer_AnyhowException(
     dynamic raw,
   );
 
@@ -171,7 +177,7 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   List<String> dco_decode_list_String(dynamic raw);
 
   @protected
-  List<int> dco_decode_list_prim_u_8_loose(dynamic raw);
+  List<Uint8List> dco_decode_list_list_prim_u_8_strict(dynamic raw);
 
   @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
@@ -335,7 +341,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   List<String> sse_decode_list_String(SseDeserializer deserializer);
 
   @protected
-  List<int> sse_decode_list_prim_u_8_loose(SseDeserializer deserializer);
+  List<Uint8List> sse_decode_list_list_prim_u_8_strict(
+    SseDeserializer deserializer,
+  );
 
   @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
@@ -468,8 +476,15 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   void
-  sse_encode_DartFn_Inputs_String_list_prim_u_8_strict_opt_list_prim_u_8_strict_u_64_Output_auth_answer_AnyhowException(
-    FutureOr<AuthAnswer> Function(String, Uint8List, Uint8List?, BigInt) self,
+  sse_encode_DartFn_Inputs_String_list_prim_u_8_strict_list_list_prim_u_8_strict_opt_list_prim_u_8_strict_u_64_Output_auth_answer_AnyhowException(
+    FutureOr<AuthAnswer> Function(
+      String,
+      Uint8List,
+      List<Uint8List>,
+      Uint8List?,
+      BigInt,
+    )
+    self,
     SseSerializer serializer,
   );
 
@@ -554,7 +569,10 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_prim_u_8_loose(List<int> self, SseSerializer serializer);
+  void sse_encode_list_list_prim_u_8_strict(
+    List<Uint8List> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_prim_u_8_strict(

@@ -4,8 +4,9 @@
 //! its ERC-5267 `eip712Domain()` names it, and its chain id, address and salt must be the profile's (`ProfileMismatch`). The
 //! subject (`from`) is the signer's id: a UA key's UA, a native or imported EVM key's address (zero-padded where the struct
 //! takes an id). Each is signed under its `scaas-ua` check: `Expect::Op` over the whole message by default, a transfer on ids
-//! `Expect::Payment`, a pay `Expect::PayMeta`, a payee fee `Expect::PayeeFee`. `UAExecute` takes a decoded call only; any
-//! other call needs [`AllowOpaqueCall`] (feature `opaque-calls`), else `OpaqueCallRefused` (spec §13.2). The SDK never fills a
+//! `Expect::Transfer`, a pay `Expect::PayMeta`, a payee fee `Expect::PayeeFee`. `UAExecute` takes a decoded call only, signed
+//! under `Expect::Execute` (`scaas-ua` rebuilds its bytes); any other call needs [`AllowOpaqueCall`] (feature `opaque-calls`),
+//! else `OpaqueCallRefused` (spec §13.2). The SDK never fills a
 //! fee the user did not choose; 0 is kept. UNAUDITED.
 use super::tokens::{abi_string, word};
 use super::Wallet;
@@ -17,7 +18,7 @@ use crate::{Sdk, SdkError};
 use alloy::network::TransactionBuilder;
 use alloy::primitives::{Address, Bytes, U256};
 use scaas_ua::wallet::entries::{entry_rows, pay_meta_of};
-use scaas_ua::wallet::Expect;
+use scaas_ua::wallet::{DecodedCall, Expect};
 use serde_json::{json, Map, Value};
 use std::sync::Arc;
 
@@ -79,8 +80,9 @@ pub enum PayBody {
     },
 }
 
-/// The transfer on ids (`UAMetaTransfer`, entry `mtxExecuteTransfer`, `POST /v1/ua-metatx`; owner 2026-11-18, ruling 6): on
-/// the lane `payLane(entry_ref)`, nonce 0, signed under `Expect::Payment`.
+/// The transfer on ids (`UAMetaTransfer`, entry `mtxExecuteTransfer`, `POST /v1/ua-metatx`; owner 2026-11-18, ruling 6): a plain
+/// transfer, `entryRef = 0` on the lane `batch` the caller names, its nonce read, signed under `Expect::Transfer` (owner
+/// 2026-11-19, ruling D): not recorded on chain as a payment, and a retry of the same request reads the same lane nonce.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Transfer {
     pub signer: KeyRef,
@@ -89,8 +91,8 @@ pub struct Transfer {
     /// the receiver's 32-byte id (a native address zero-padded, or a UA)
     pub to: String,
     pub value: String,
-    /// `0x` + 64 hex, not 0; `None`: 32 random bytes
-    pub entry_ref: Option<String>,
+    /// the lane, decimal
+    pub batch: String,
     pub envelope: Envelope,
 }
 
@@ -167,15 +169,16 @@ pub struct PayUnderMandate {
     pub envelope: Envelope,
 }
 
-/// `UARelayFee` (CTR-MTX-27): a fee to `payee` for relaying the call `call_data` to `target`, bound by its hash.
+/// `UARelayFee` (CTR-MTX-27): a fee to `payee` for relaying the operation `call`, bound by the hash of its signed calldata; the
+/// gateway job carries that operation as its `call` (`scaas-ua` `relay_fee_op`; owner 2026-11-19, ruling F).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RelayFee {
     pub signer: KeyRef,
     pub chain: String,
     pub token: String,
-    pub target: String,
-    /// the relayed call's signed calldata, `0x` hex (its keccak is signed)
-    pub call_data: String,
+    /// the operation paid for: an operation id of this SDK (`Op::submit`'s), signed, on this chain, with a gateway job form;
+    /// its contract is the signed `target`
+    pub call: String,
     pub payee: String,
     pub value: String,
     pub batch: String,
@@ -304,10 +307,15 @@ fn put_envelope(m: &mut Map<String, Value>, batch: &str, e: &Envelope) {
     m.insert("feeRecipient".into(), json!(address(&e.fee_recipient)));
 }
 
-fn random32() -> Result<[u8; 32], SdkError> {
-    let mut b = [0u8; 32];
-    getrandom::getrandom(&mut b).map_err(|_| SdkError::Internal)?;
-    Ok(b)
+/// `keccak256("scaas.sdk.pay.salt.v1" ‖ (len ‖ part)…)` over `context` and the meta's fields (its `Debug` form names every one).
+fn derived_salt(m: &PayMeta, context: &[&str]) -> [u8; 32] {
+    let fields = format!("{:?} {} {:?}", m.pay_no, m.save, m.body);
+    let mut b = b"scaas.sdk.pay.salt.v1".to_vec();
+    for part in context.iter().copied().chain([fields.as_str()]) {
+        b.extend_from_slice(&(part.len() as u64).to_be_bytes());
+        b.extend_from_slice(part.as_bytes());
+    }
+    scaas_ua::keccak256(&b)
 }
 
 /// A pay lane's batch (`payLane(entryRef)`), decimal.
@@ -315,13 +323,17 @@ fn pay_lane(entry_ref: &[u8; 32]) -> String {
     U256::from_be_bytes(scaas_ua::pay_lane(entry_ref)).to_string()
 }
 
-/// The meta's named form (`scaas-ua`'s), its `entryRef` (`metaPayId`), the `scaas-ua` value, and its review lines.
+/// The meta's named form (`scaas-ua`'s), its `entryRef` (`metaPayId`), the `scaas-ua` value, and its review lines. A salt the
+/// request leaves out is derived from the request: `context` (the chain, the contract, the payer, the payee, the amounts) and
+/// the meta's number, flag, schema and body (owner 2026-11-19, ruling D): a retry of the same pay takes the same pay lane, so at
+/// most one of the two lands; two pays of the same terms need a `pay_no` or a salt of their own.
 fn meta(
     m: &PayMeta,
+    context: &[&str],
 ) -> Result<(Value, [u8; 32], scaas_ua::pay::PayMeta, Vec<ReviewField>), SdkError> {
     let salt = match &m.salt {
         Some(s) => id32(s)?,
-        None => random32()?,
+        None => derived_salt(m, context),
     };
     let pay_no = match &m.pay_no {
         None => [0; 32],
@@ -436,6 +448,7 @@ fn draft(
         touched: vec![],
         opaque: false,
         ids: false,
+        relay_call: None,
     }
 }
 
@@ -546,8 +559,12 @@ fn payment_expect(
                 .to_string()
         };
         let (fee_recipient, relayer) = bound(o)?;
-        let (account, payee, amount, max_fee) =
-            (id32(&s("from"))?, id32(&s("to"))?, s("value"), s("fee"));
+        let (account, payee, amount, max_fee) = (
+            id32(&s("from"))?,
+            id32(&s("to"))?,
+            s("value"),
+            scaas_ua::wallet::fee_due("UAMetaTransfer", m)?,
+        );
         Ok(match &meta {
             Some(meta) => Expect::PayMeta {
                 meta: meta.clone(),
@@ -584,6 +601,42 @@ fn payment_expect(
     }))
 }
 
+/// `Expect::Transfer` over a canonical plain transfer (ruling D): `entryRef = 0` on lane `batch`.
+fn transfer_expect(
+    sdk: &Sdk,
+    chain: &str,
+    token: [u8; 20],
+    batch: String,
+) -> Result<crate::op::ExpectFn, SdkError> {
+    let (chain_id, chain_uid) = ids(sdk, chain)?;
+    let max_window = sdk.limits.max_valid_secs;
+    Ok(Box::new(move |now, m: &Value| {
+        let o = m.as_object().ok_or(SdkError::Argument)?;
+        let s = |k: &str| {
+            o.get(k)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
+        let (fee_recipient, relayer) = bound(o)?;
+        Ok(Expect::Transfer {
+            account: id32(&s("from"))?,
+            chain_id,
+            chain_uid,
+            amount: s("value"),
+            decimals: 0,
+            payee: id32(&s("to"))?,
+            batch: batch.clone(),
+            expected_token: token,
+            max_fee: scaas_ua::wallet::fee_due("UAMetaTransfer", m)?,
+            fee_recipient,
+            relayer,
+            now,
+            max_window,
+        })
+    }))
+}
+
 impl Wallet {
     /// The transfer on ids (owner 2026-11-18, ruling 6): `UAMetaTransfer` sent as `mtxExecuteTransfer`, a gateway's
     /// `POST /v1/ua-metatx`.
@@ -593,13 +646,6 @@ impl Wallet {
             .spawn(async move {
                 let token = addr20(&req.token.to_ascii_lowercase())?;
                 let kind = kind_of(&sdk, &req.chain, "UAMetaTransfer", token).await?;
-                let entry_ref = match &req.entry_ref {
-                    Some(e) => id32(e)?,
-                    None => random32()?,
-                };
-                if entry_ref == [0; 32] {
-                    return Err(SdkError::Argument);
-                }
                 let mut m = Map::new();
                 m.insert(
                     "from".into(),
@@ -607,9 +653,9 @@ impl Wallet {
                 );
                 m.insert("to".into(), json!(hex(&id32(&req.to)?)));
                 m.insert("value".into(), json!(req.value));
-                m.insert("entryRef".into(), json!(hex(&entry_ref)));
-                put_envelope(&mut m, &pay_lane(&entry_ref), &req.envelope);
-                m.insert("nonce".into(), json!("0"));
+                m.insert("entryRef".into(), json!(hex(&[0u8; 32])));
+                // the lane's nonce is read by `Op::prepare` (no `nonce` here)
+                put_envelope(&mut m, &req.batch, &req.envelope);
                 let mut d = draft(
                     req.chain.clone(),
                     "UAMetaTransfer",
@@ -618,7 +664,7 @@ impl Wallet {
                     m,
                     req.signer,
                 );
-                d.expect = Some(payment_expect(&sdk, &req.chain, token, None, entry_ref)?);
+                d.expect = Some(transfer_expect(&sdk, &req.chain, token, req.batch.clone())?);
                 d.ids = true;
                 Op::prepare(&sdk, d).await
             })
@@ -633,12 +679,13 @@ impl Wallet {
             .spawn(async move {
                 let token = addr20(&req.token.to_ascii_lowercase())?;
                 let kind = kind_of(&sdk, &req.chain, "UAMetaTransfer", token).await?;
-                let (mj, entry_ref, ua, review) = meta(&req.meta)?;
+                let from = from_of(&sdk, &req.signer, "UAMetaTransfer").await?;
+                let (mj, entry_ref, ua, review) = meta(
+                    &req.meta,
+                    &[&req.chain, &hex(&token), &from, &req.to, &req.value],
+                )?;
                 let mut m = Map::new();
-                m.insert(
-                    "from".into(),
-                    json!(from_of(&sdk, &req.signer, "UAMetaTransfer").await?),
-                );
+                m.insert("from".into(), json!(from));
                 m.insert("to".into(), json!(hex(&id32(&req.to)?)));
                 m.insert("value".into(), json!(req.value));
                 m.insert("entryRef".into(), json!(hex(&entry_ref)));
@@ -673,12 +720,20 @@ impl Wallet {
             .spawn(async move {
                 let token = addr20(&req.token.to_ascii_lowercase())?;
                 let kind = kind_of(&sdk, &req.chain, "UAPayWithTax", token).await?;
-                let (mj, entry_ref, _, review) = meta(&req.meta)?;
+                let from = from_of(&sdk, &req.signer, "UAMetaTransfer").await?;
+                let tax_mode = req.tax_mode.to_string();
+                let context = [
+                    &req.chain,
+                    &hex(&token),
+                    &from,
+                    &req.to,
+                    &req.value,
+                    &tax_mode,
+                    &req.tax,
+                ];
+                let (mj, entry_ref, _, review) = meta(&req.meta, &context.map(String::as_str))?;
                 let mut p = Map::new();
-                p.insert(
-                    "from".into(),
-                    json!(from_of(&sdk, &req.signer, "UAMetaTransfer").await?),
-                );
+                p.insert("from".into(), json!(from));
                 p.insert("to".into(), json!(hex(&id32(&req.to)?)));
                 p.insert("value".into(), json!(req.value));
                 p.insert("entryRef".into(), json!(hex(&entry_ref)));
@@ -704,8 +759,9 @@ impl Wallet {
             .spawn(async move {
                 let token = addr20(&req.token.to_ascii_lowercase())?;
                 let kind = kind_of(&sdk, &req.chain, "UAPayeeFee", token).await?;
-                let (mj, entry_ref, _, review) = meta(&req.meta)?;
                 let pm = &req.payment;
+                let (mj, entry_ref, _, review) =
+                    meta(&req.meta, &[&req.chain, &hex(&token), &pm.from, &pm.to, &pm.value])?;
                 let payee = id32(&pm.to)?;
                 let mut p = Map::new();
                 p.insert("from".into(), json!(hex(&id32(&pm.from)?)));
@@ -763,13 +819,19 @@ impl Wallet {
             .spawn(async move {
                 let wallet = addr20(&req.wallet.to_ascii_lowercase())?;
                 let kind = kind_of(&sdk, &req.chain, "UAPayUnderMandate", wallet).await?;
-                let (mj, entry_ref, _, review) = meta(&req.meta)?;
                 let token = addr20(&req.token.to_ascii_lowercase())?;
+                let from = from_of(&sdk, &req.signer, "UAPayUnderMandate").await?;
+                let context = [
+                    &req.chain,
+                    &hex(&wallet),
+                    &hex(&token),
+                    &from,
+                    &req.payee,
+                    &req.amount,
+                ];
+                let (mj, entry_ref, _, review) = meta(&req.meta, &context.map(String::as_str))?;
                 let mut m = Map::new();
-                m.insert(
-                    "from".into(),
-                    json!(from_of(&sdk, &req.signer, "UAPayUnderMandate").await?),
-                );
+                m.insert("from".into(), json!(from));
                 m.insert("token".into(), json!(hex(&token)));
                 m.insert("payee".into(), json!(hex(&id32(&req.payee)?)));
                 m.insert("amount".into(), json!(req.amount));
@@ -792,10 +854,11 @@ impl Wallet {
             .spawn(async move {
                 let token = addr20(&req.token.to_ascii_lowercase())?;
                 let kind = kind_of(&sdk, &req.chain, "UARelayFee", token).await?;
-                let call = unhex(&req.call_data.to_ascii_lowercase())?;
-                if call.len() > 128 * 1024 {
+                let paid = crate::op::state::row(&sdk, &req.call).await?;
+                if paid.chain != req.chain || paid.op_json.is_null() || paid.kind == "native" {
                     return Err(SdkError::Argument);
                 }
+                let call = unhex(&paid.calldata)?;
                 let mut m = Map::new();
                 m.insert(
                     "from".into(),
@@ -803,7 +866,7 @@ impl Wallet {
                 );
                 m.insert(
                     "target".into(),
-                    json!(hex(&addr20(&req.target.to_ascii_lowercase())?)),
+                    json!(hex(&addr20(&paid.contract.to_ascii_lowercase())?)),
                 );
                 m.insert(
                     "callDataHash".into(),
@@ -816,7 +879,10 @@ impl Wallet {
                 m.insert("relayer".into(), json!(req.relayer));
                 let mut d = draft(req.chain, "UARelayFee", kind, token, m, req.signer);
                 let n = call.len().to_string();
+                d.review
+                    .push(field("call", &req.call, &paid.entry, Source::Derived));
                 d.review.push(field("call.length", &n, &n, Source::Derived));
+                d.relay_call = Some((paid.op_json, call));
                 Op::prepare(&sdk, d).await
             })
             .await
@@ -831,15 +897,20 @@ impl Wallet {
                 let wallet = addr20(&req.wallet.to_ascii_lowercase())?;
                 let mut review = vec![];
                 let mut touched = vec![];
+                let mut decoded = None;
                 let (target, value, data, opaque) = match &req.call {
                     ExecuteCall::Transfer { token, to, amount } => {
                         let t = addr20(&token.to_ascii_lowercase())?;
                         let to20 = addr20(&to.to_ascii_lowercase())?;
-                        let n = U256::from_str_radix(amount, 10).map_err(|_| SdkError::Argument)?;
-                        let mut data = super::tokens::selector("transfer(address,uint256)");
-                        data.extend_from_slice(&[0u8; 12]);
-                        data.extend_from_slice(&to20);
-                        data.extend_from_slice(&n.to_be_bytes::<32>());
+                        U256::from_str_radix(amount, 10).map_err(|_| SdkError::Argument)?;
+                        // `scaas-ua` builds the call's bytes and its check rebuilds them (ruling C)
+                        let call = DecodedCall::Erc20Transfer {
+                            token: t,
+                            to: to20,
+                            amount: amount.clone(),
+                        };
+                        let (_, _, data) = call.encode()?;
+                        decoded = Some(call);
                         review.push(field(
                             "call",
                             "transfer",
@@ -887,6 +958,30 @@ impl Wallet {
                 m.insert("value".into(), json!(value));
                 m.insert("data".into(), json!(hex(&data)));
                 put_envelope(&mut m, &req.batch, &req.envelope);
+                if let Some(call) = decoded {
+                    let (chain_id, chain_uid) = ids(&sdk, &req.chain)?;
+                    let max_window = sdk.limits.max_valid_secs;
+                    let mut d = draft(req.chain, "UAExecute", kind, wallet, m, req.signer);
+                    d.expect = Some(Box::new(move |now, msg: &Value| {
+                        let o = msg.as_object().ok_or(SdkError::Argument)?;
+                        let (fee_recipient, relayer) = bound(o)?;
+                        Ok(Expect::Execute {
+                            wallet,
+                            chain_id,
+                            chain_uid,
+                            message: msg.clone(),
+                            call: call.clone(),
+                            max_fee: scaas_ua::wallet::fee_due("UAExecute", msg)?,
+                            fee_recipient,
+                            relayer,
+                            now,
+                            max_window,
+                        })
+                    }));
+                    d.review = review;
+                    d.touched = touched;
+                    return Op::prepare(&sdk, d).await;
+                }
                 let mut d = draft(req.chain, "UAExecute", kind, wallet, m, req.signer);
                 d.review = review;
                 d.touched = touched;

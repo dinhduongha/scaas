@@ -43,8 +43,7 @@ const TRIES: usize = 3;
 pub(crate) struct Loaded {
     pub(crate) keystore: Keystore,
     /// `KeystoreRollback`: the container's `rev` is below the anchor's, or its hash differs at the same `rev` (shown, not
-    /// fatal; emitted as an event by the vault calls, plan T4)
-    #[allow(dead_code)]
+    /// fatal): `Event::KeystoreRollback` from every read of it ([`crate::Sdk::load_keystore`]), `Vault::keystore_rollback`
     pub(crate) rollback: bool,
 }
 

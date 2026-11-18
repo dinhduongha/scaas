@@ -4,7 +4,7 @@
 //! second, session-only wallet of the same vault under a BIP-39 passphrase: nothing about it is written or emitted.
 
 use super::keystore::SeedEntry;
-use super::seeds::{info, mac, passphrase, passphrases, OpenSeed};
+use super::seeds::{info, mac_ok, passphrase, passphrases, OpenSeed};
 use super::Vault;
 use crate::error::SdkError;
 use crate::events::Event;
@@ -73,7 +73,7 @@ fn open_entry(e: &SeedEntry, key: &Key, bip39: Option<&SecretBytes>) -> Result<W
             if w.word_count()? != e.words {
                 return Err(SdkError::VaultFormat);
             }
-            if mac(&w, e)? != e.index_mac {
+            if !mac_ok(&w, e)? {
                 return Err(SdkError::KeystoreMismatch);
             }
             // a PRF unlock opens the manifest and keeps the PRF key; the other vaults open on first use (owner 2026-11-18 (b))
@@ -184,9 +184,19 @@ impl Vault {
 }
 
 impl Sdk {
+    /// The stored keystore; an older container put back (the anchor's verdict) is shown as `Event::KeystoreRollback` on every
+    /// read (closing review P2-2; spec §6.3), never fatal.
+    pub(crate) async fn load_keystore(&self) -> Result<super::Loaded, SdkError> {
+        let l = self.keystore.load().await?;
+        if l.rollback {
+            self.emit(Event::KeystoreRollback);
+        }
+        Ok(l)
+    }
+
     /// The entry of `seed` in the stored keystore (`SeedUnknown`).
     pub(crate) async fn entry(&self, seed: &str) -> Result<SeedEntry, SdkError> {
-        let ks = self.keystore.load().await?.keystore;
+        let ks = self.load_keystore().await?.keystore;
         ks.seeds
             .into_iter()
             .find(|s| s.id == seed)
@@ -245,7 +255,10 @@ impl Sdk {
         let had_hidden = !hidden.is_empty();
         let locked = main.is_some();
         let all: Vec<Arc<OpenSeed>> = main.into_iter().chain(hidden).collect();
+        #[cfg(not(target_arch = "wasm32"))]
         let _ = tokio::task::spawn_blocking(move || all.iter().for_each(|s| s.wallet.lock())).await;
+        #[cfg(target_arch = "wasm32")]
+        all.iter().for_each(|s| s.wallet.lock());
         if had_hidden {
             self.emit(Event::HiddenOpsAbandoned { count: 0 });
         }

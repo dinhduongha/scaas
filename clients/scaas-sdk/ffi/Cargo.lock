@@ -4073,6 +4073,8 @@ dependencies = [
  "tokio",
  "unicode-normalization",
  "uuid",
+ "wasm-bindgen-futures",
+ "wasmtimer",
  "zeroize",
 ]
 

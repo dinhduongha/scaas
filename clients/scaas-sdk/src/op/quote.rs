@@ -4,7 +4,7 @@
 //! endpoint) `FeeAboveCap`; a gas limit above the chain's per-transaction cap or block limit `GasAboveTxCap`; a payer that is an
 //! EIP-7702 designator `PayerDelegated`.
 use super::prepared::{envelope, Prepared};
-use super::{dec, evm, key, sim, KeyRef, Op};
+use super::{evm, key, sim, KeyRef, Op};
 use crate::{Sdk, SdkError};
 use alloy::primitives::{Address, Bytes, U256};
 use scaas_rpc::Purpose;
@@ -126,9 +126,16 @@ pub(crate) async fn self_relay(
     }
     let fees = pool.fees(Purpose::Plain).await?;
     let cost = check_caps(sdk, gas, fees.max_fee_per_gas)?;
-    // ponytail: under `strict_majority` the agreed committed nonce, without the SDK's own count of what it sent since (rpc
-    // F14); two self-relays from one payer before the first lands need that count
-    let tx_nonce = pool.pending_nonce(from, Purpose::Plain).await?;
+    // the endpoints' nonce (under `strict_majority` the agreed committed one), never below what this session signed since
+    // (closing review P3; rpc F14): two self-relays from one payer before the first lands take two nonces
+    let floor = sdk
+        .sent_nonces
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .get(&(chain.to_string(), format!("{from:#x}")))
+        .copied()
+        .unwrap_or(0);
+    let tx_nonce = pool.pending_nonce(from, Purpose::Plain).await?.max(floor);
     Ok(SubmitQuote {
         path: SubmitPath::SelfRelay {
             payer: payer.clone(),
@@ -190,12 +197,11 @@ impl Op {
             .spawn(async move {
                 Op::known(&sdk, &prepared)?;
                 super::submit::fresh(&sdk, &prepared).await?;
-                let fee = envelope(&prepared.t.message)
-                    .and_then(|e| e.get("fee"))
-                    .map(dec)
-                    .transpose()?
-                    .unwrap_or_default()
-                    .to_string();
+                // the amount the relayer takes (a PERCENT envelope's computed fee, never its rate: P2-4)
+                let fee = match envelope(&prepared.t.message) {
+                    Some(_) => scaas_ua::wallet::fee_due(prepared.t.name, &prepared.t.message)?,
+                    None => "0".to_string(),
+                };
                 let gateways = sdk
                     .chains
                     .iter()
