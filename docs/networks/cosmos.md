@@ -253,7 +253,15 @@ longer in the message enum; settle/cancel tests unchanged.
   (anti-lock tests in the contract suite and end to end). An expired transaction is refused by the contract, so the
   lane sequence never hangs.
 - **Fees**: the relayer pays in the lane's native denom.
-- Configuration: `rpc_urls = [CometBFT RPC]`, `params = {rest, prefix, denom, gas_price, zero_fee?}`.
+- Configuration: `rpc_urls = [CometBFT RPC, …]`, `params = {rest = [REST gateway, …], prefix, denom, gas_price, zero_fee?}`:
+  `rest` is a list like `rpc_urls` ([ARCH-POS-15](../decisions.md#ARCH-POS-15), owner 2026-11-18; no single-URL form).
+- Endpoints (BUILT, scaas-rpc T21): both lists are read through the crate's family clients (16 MiB, depth 64, no redirect,
+  20 s a request). `build`'s REST reads (the lane's account, the simulate) fail over across `rest`
+  ([CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04)): the next gateway must answer `node_info` with the configured chain id and
+  a latest block at or above the height the first CometBFT endpoint last showed; an answer other than 2xx from it decides
+  nothing and a refusal read while it answered requeues the job. The transaction status (REST `GetTx` and the block scan), the
+  send, `op_consumed`, the lane sequence and the router's executor (kept for the process) are the first gateway's only; the
+  CometBFT reads (`status`, `block`, `block_results`) are the first endpoint's, as before.
 
 <a id="NET-COS-08"></a>**NET-COS-08** — **`contract` and `valid_until` come from the signed payload**
 ([NODE-LANE-16](../node/submit-lanes.md#NODE-LANE-16)): `relay_msg` parses the payload; a job whose JSON differs ⇒

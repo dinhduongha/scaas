@@ -10760,7 +10760,7 @@ The rules are in [clients/scaas-rpc.md](clients/scaas-rpc.md); the design is the
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-01 · superseded-by: —
 
 **Rule.** (Summary; normative [scaas-rpc.md](clients/scaas-rpc.md#CLI-RPC-01).) `scaas-rpc` holds the endpoint list and its rules, a reader per chain family (EVM through alloy first) and the scaas-node client; the node's adapters, `scaas-pqz-verifier` and `scaas-sdk` read through it. No subject or lane key, no signer; the node's lane sends and its `dead` decisions stay in the node; an endpoint's credential goes to that endpoint only.
-**Status.** BUILT on branch `scaas-sdk` (plan `2026-11-17-scaas-rpc` T1, T5, T8, T14–T22; Cosmos not yet). UNAUDITED.
+**Status.** BUILT on branch `scaas-sdk` (plan `2026-11-17-scaas-rpc` T1, T5, T8, T14–T22). UNAUDITED.
 **Why.** Owner 2026-11-11 (TODO 8b): the shared network crate, so node, SDK and verifier share one rule; lane-key sending stays in the node. Owner 2026-11-17: the spec now, `scaas-rpc` before `scaas-sdk`.
 **Cost if wrong.** Three copies of the endpoint rule drift apart (the node's EVM reads fail over today, its other families read one endpoint, the verifier fails over without the node's head and identity checks).
 **Source.** TODO 8b; owner 2026-11-17 "Ok, theo đề xuất, viết ngay"; owner 2026-11-16 "Làm sdk + ví trước freeze."; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §1, §2.
@@ -10782,7 +10782,7 @@ Change (2026-11-17, plan T13 S12, Fable code review; the controller's call, the 
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-03 · superseded-by: —
 
 **Rule.** (Summary; normative [scaas-rpc.md](clients/scaas-rpc.md#CLI-RPC-03).) Chain id and block 0 hash (EVM, Hedera), the network id elsewhere (NET-ALL-22), read for every endpoint, the first included, before its first answer and kept; another chain dropped; unreadable fails over; `strict_majority` and decryption reads need a pinned `chain_uid`.
-**Status.** BUILT for EVM and Hedera (plan T3, T4, T13 point 6, S16), and for Soroban, Solana, NEAR, Algorand, Aptos, Sui (its chain identifier compared with the first endpoint's) and TON (the profile constant), plan T15–T22; Cosmos SPECIFIED. UNAUDITED.
+**Status.** BUILT for EVM and Hedera (plan T3, T4, T13 point 6, S16), and for Soroban, Solana, NEAR, Algorand, Aptos, Sui (its chain identifier compared with the first endpoint's), TON (the profile constant) and Cosmos's REST gateways (`node_info`'s network), plan T15–T22. UNAUDITED.
 **Why.** A reset or forked network keeps its chain id; only the genesis hash tells it apart. Fable F13: without a pinned `chain_uid`, a wrong first endpoint defines the chain and every honest endpoint is dropped for the process, and nothing checked the first endpoint outside the node's lane start.
 **Cost if wrong.** An endpoint of another network answers state of that network as this one's.
 **Source.** ARCH-POS-15 Changes of 2026-11-12; Fable review 2026-11-17 F13; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §4.2.
@@ -10793,7 +10793,7 @@ Change (2026-11-17, plan T13 S16, Fable code review; the controller's call, the 
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-04 · superseded-by: —
 
 **Rule.** (Summary; normative [scaas-rpc.md](clients/scaas-rpc.md#CLI-RPC-04).) List order; one endpoint per read, never a mix; transport, timeout, any HTTP error status, an error answer, oversize, wrong chain, a head below the first endpoint's highest seen: next endpoint; a revert final only from the first endpoint used, a later one's data kept; failover answers counted, never a verdict; one pass, `EndpointAllFailed`. In every family the lane's status, consumed-operation, nonce or sequence, fee and landed-fee reads stay on the first endpoint; only building (simulations and views) fails over.
-**Status.** BUILT in the crate (plan T3), the node's EVM reads (T5, [submit-lanes.md](node/submit-lanes.md#rpc-failover)) and the node's Hedera, Soroban, Solana, NEAR, Algorand, Aptos, Sui and TON adapters (T14–T22: `build`'s reads fail over, the lane's status, consumed-operation, sequence and fee reads stay on the first endpoint); Cosmos SPECIFIED (its `build` reads one REST gateway). The families' review is plan T24. UNAUDITED.
+**Status.** BUILT in the crate (plan T3), the node's EVM reads (T5, [submit-lanes.md](node/submit-lanes.md#rpc-failover)) and the node's Hedera, Soroban, Solana, NEAR, Algorand, Aptos, Sui, Cosmos and TON adapters (T14–T22: `build`'s reads fail over, the lane's status, consumed-operation, sequence and fee reads stay on the first endpoint; Cosmos's `build` over its list of REST gateways, owner 2026-11-18). The families' review is plan T24. UNAUDITED.
 **Why.** ARCH-POS-15's default, with the node's fixes the owner asked for in 2026-11-12 (Fable rechecks 2 to 7): no failover endpoint's answer makes a job `dead`, and the lane's own sends, nonces, fees and receipts stay on the first endpoint. Fable F3, F4 (2026-11-17): the node's `follow` turns a status value (`Unknown`, `Reverted`) into a verdict, and a lane nonce from a failover endpoint reuses a nonce; both reads must never fail over, in any family. F15 (d): skipping a discovered first endpoint moves the revert rule to the first endpoint used.
 **Cost if wrong.** A lagging failover endpoint kills jobs that would land, a lane signs at a used nonce, or one answer mixes two nodes' state.
 **Source.** ARCH-POS-15 (owner 2026-11-08) and its Changes of 2026-11-12; Fable review 2026-11-17 F3, F4, F15, F25; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §4.3, §5.3.
@@ -10826,7 +10826,7 @@ Change (owner 2026-11-17, "Ok, as proposed, settle the whole table", the rpc spe
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-07 · superseded-by: —
 
 **Rule.** (Summary; normative [scaas-rpc.md](clients/scaas-rpc.md#CLI-RPC-07).) Chunked read to the call's cap (16 MiB default), the EVM providers' answers included through the crate's own transport under alloy; a flat depth scan (64), then one parse; family binary decoders keep their caps; an oversized or deep answer is the endpoint's failure; a log range in at most about 25 requests.
-**Status.** BUILT for EVM (plan T2, T4: through `EvmPool`'s bounded transport) and for the Hedera, Soroban, Solana, NEAR, Algorand, Aptos, Sui and TON family clients (T14–T22); Cosmos SPECIFIED (its adapter reads an answer whole). UNAUDITED.
+**Status.** BUILT for EVM (plan T2, T4: through `EvmPool`'s bounded transport) and for the Hedera, Soroban, Solana, NEAR, Algorand, Aptos, Sui, Cosmos and TON family clients (T14–T22). UNAUDITED.
 **Why.** An unbounded decode of an endpoint's answer can exhaust memory or the stack of the whole process. 16 MiB is the reference reader's `MAX_ANSWER`; the depth scan is `ua-rs`'s, exposed as `depth_within` (CLI-RPC-50). Fable F5: alloy's `connect_reqwest` reads the whole body.
 **Cost if wrong.** One hostile endpoint stops every chain the process serves.
 **Source.** Fable review 2026-11-17 F5, F20; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §5.2, §7; the adapter survey of 2026-11-17 (spec §5.3).
@@ -10889,7 +10889,7 @@ Change (2026-11-17, owner: yes (the owner took the review's proposal, Fable code
 4. **Q4:** non-EVM failover is in this round, after the EVM part (plan T1–T13) is reviewed, family by family, with the first-endpoint status carve-out of CLI-RPC-04 written and tested first; a family without an e2e baseline gets no step (b).
 5. **Q5:** the verifier takes the crate's (the node's) revert classifier, the revert data kept as bytes; a revert stays a refusal by name in the verifier.
 6. **The depth scan:** `ua-rs` exposes its flat JSON depth scan as `pub fn depth_within`; `bounded` stays crate-private.
-**Status.** 1 and 6 BUILT (plan T1); 2 is the app contract's, written by its own writer; 3 after this round; 4 BUILT for Hedera, Soroban, Solana, NEAR, Algorand, Aptos, Sui and TON (plan T14–T22), Cosmos not yet; 5 BUILT (plan T9). UNAUDITED.
+**Status.** 1 and 6 BUILT (plan T1); 2 is the app contract's, written by its own writer; 3 after this round; 4 BUILT for Hedera, Soroban, Solana, NEAR, Algorand, Aptos, Sui, Cosmos and TON (plan T14–T22); 5 BUILT (plan T9). UNAUDITED.
 **Why.** One rule on every consumer; the review's reasons are in the spec's §15.
 **Cost if wrong.** Two endpoint rules between the app's default build and its `scaas` build; reference readers whose block one endpoint can move back.
 **Source.** Owner 2026-11-17 (chat, through the controller), verbatim: "Q1–Q5 theo đề xuất"; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §15; Fable review 2026-11-17 (kept outside the repository).

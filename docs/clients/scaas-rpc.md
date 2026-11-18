@@ -22,8 +22,8 @@ the EVM part by Fable in plan T13; the families' review is plan T24, pending). P
 ## 1. Scope
 
 <a id="CLI-RPC-01"></a>**CLI-RPC-01** — **One network crate; no keys, no signing, no lane sends** (owner 2026-11-11, 2026-11-17;
-BUILT: `clients/scaas-rpc`, plan T1; the node's EVM reads (T5), `scaas-pqz-verifier` (T8) and the node's Hedera, Soroban, Solana, NEAR, Algorand, Aptos, Sui and TON adapters
-(T14–T22) read through it, Cosmos not yet; the SDK is another branch's). `scaas-rpc` holds: the endpoint list and its read and write rules (§2–§4); a reader per chain family, EVM through
+BUILT: `clients/scaas-rpc`, plan T1; the node's EVM reads (T5), `scaas-pqz-verifier` (T8) and the node's Hedera, Soroban, Solana, NEAR, Algorand, Aptos, Sui, Cosmos and TON adapters
+(T14–T22) read through it; the SDK is another branch's). `scaas-rpc` holds: the endpoint list and its read and write rules (§2–§4); a reader per chain family, EVM through
 alloy first (§3.1); the scaas-node client (§6). The node's adapters, `scaas-pqz-verifier` and `scaas-sdk` read through it. It holds
 no subject key, no lane key and no signer, and signs nothing: signed bytes come from `ua-rs` (apps) or from the node's lanes. The
 node's lane sends (journal before broadcast, one transaction per nonce, replacement, gap-fill,
@@ -51,7 +51,7 @@ log line, an error or a `Debug` output (§5). A list also names its read policy:
 T13 point 6 and S16: `the_first_endpoint_is_identity_checked_too`, `a_wrong_chain_endpoint_is_dropped_for_good`,
 `chain_uid_is_block_zero_and_a_wrong_pin_is_refused`; for Soroban, Solana, NEAR, Algorand, Aptos and Sui by their network id
 (Sui's chain identifier, which no configuration names, compared with the first endpoint's), TON by the profile constant, plan
-T15–T22 (`the_failover_drops_another_network_and_skips_an_endpoint_behind` per family); Cosmos SPECIFIED; lifted from the node,
+T15–T22 (`the_failover_drops_another_network_and_skips_an_endpoint_behind` per family), Cosmos's REST gateways by `node_info`'s network (T21; its CometBFT endpoints are read on the first only); lifted from the node,
 [submit-lanes.md](../node/submit-lanes.md#rpc-failover), and [NET-ALL-22](../networks/README.md#NET-ALL-22)). Before any endpoint,
 the first included, answers its first read, its identity is read and compared with the configuration: EVM and Hedera
 `eth_chainId` and the block 0 hash (the pinned `chain_uid`, else the first endpoint's block 0); another family its network id where
@@ -67,9 +67,9 @@ read that feeds a decryption ([CLI-RPC-06](#CLI-RPC-06)) need a pinned `chain_ui
 (ARCH-POS-15, failover; BUILT in the crate, plan T3: `a_revert_from_the_first_is_final`,
 `a_revert_from_a_later_endpoint_moves_on_and_keeps_its_data`, `a_later_endpoint_behind_the_head_is_skipped`,
 `failover_answers_are_counted`, `answers_are_never_mixed`; in the node's EVM reads, T5,
-[submit-lanes.md](../node/submit-lanes.md#rpc-failover); in the Hedera, Soroban, Solana, NEAR, Algorand, Aptos, Sui and TON adapters, plan T14–T22, each with its
+[submit-lanes.md](../node/submit-lanes.md#rpc-failover); in the Hedera, Soroban, Solana, NEAR, Algorand, Aptos, Sui, Cosmos and TON adapters, plan T14–T22, each with its
 `<family>_tx_status_…_never_fail_over` and `<family>_build_reads_fail_over_and_a_failover_refusal_is_no_verdict` tests and the
-endpoints paragraph of its network doc; Cosmos not yet).
+endpoints paragraph of its network doc).
 Endpoints are asked in list order. One endpoint answers the whole read; answers of two endpoints are never mixed. The next endpoint
 starts the read from scratch when the current one: fails in transport, times out, answers any HTTP error status or an error that is
 no revert, answers too large, too deep or malformed (§5), is another chain ([CLI-RPC-03](#CLI-RPC-03)), or (an endpoint after the
@@ -123,8 +123,8 @@ transaction's status (`Pending`, `Mined`, `Reverted`, `Unknown`; never `dead`), 
 and a landed transaction's fee. The EVM reader adds calls, storage, code, transactions and receipts, logs over a bounded range,
 simulation and fee data, at a block the caller names, on the crate's bounded transport. Each other family lifts its transport and
 these generic reads from the node's adapter, after the EVM part; parsing of events and of `build`'s family reads stays in the node
-for now, reading through the family's pooled client so CLI-RPC-04 and §5 apply to every read (BUILT for the Hedera, Soroban, Solana, NEAR, Algorand, Aptos, Sui and TON
-adapters, plan T14–T22; Cosmos not yet). The indexer's event-set quorum
+for now, reading through the family's pooled client so CLI-RPC-04 and §5 apply to every read (BUILT for the Hedera, Soroban, Solana, NEAR, Algorand, Aptos, Sui, Cosmos and TON
+adapters, plan T14–T22). The indexer's event-set quorum
 ([NODE-IDX-01](../node/indexer-feeds.md#NODE-IDX-01)) is unchanged; its helper (`agreed`, NEAR and Aptos) is the crate's.
 
 ## 4. Writes and transaction state
@@ -163,9 +163,9 @@ unreachable node keeps it `InFlight`) ([job-api.md](../node/job-api.md#states)).
 
 <a id="CLI-RPC-07"></a>**CLI-RPC-07** — **Every answer is bounded by length and depth before it is decoded** (follows the bounded
 decode rule of every untrusted input; BUILT for EVM, plan T2, T4: `an_announced_length_above_the_cap_is_refused_unread`,
-`a_depth_of_65_is_too_deep_and_64_read`, `an_evm_answer_above_the_cap_is_that_endpoints_failure`; for the Hedera, Soroban, Solana, NEAR, Algorand, Aptos, Sui and TON
+`a_depth_of_65_is_too_deep_and_64_read`, `an_evm_answer_above_the_cap_is_that_endpoints_failure`; for the Hedera, Soroban, Solana, NEAR, Algorand, Aptos, Sui, Cosmos and TON
 family clients, plan T14–T22, `a_<family>_answer_above_16_mib_is_refused`; a raw answer, Algorand's msgpack, has no JSON scan and
-keeps its reader's depth bound; Cosmos not yet). Every answer, those of the EVM reader's providers included (the crate's own
+keeps its reader's depth bound). Every answer, those of the EVM reader's providers included (the crate's own
 transport under alloy), is read in chunks up to its call's byte cap (default 16 MiB, lower per call where the answer is small; an
 announced length above the cap stops before reading), then its JSON nesting depth is checked by a flat scan (at most 64), and only
 then parsed, once. Family binary decoders keep their own caps (XDR depth 64, msgpack depth 64, BOC 4096 cells). Too large, too deep

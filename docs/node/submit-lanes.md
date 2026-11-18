@@ -379,8 +379,8 @@ with the same id) is dropped with a log line, an unreadable id or block 0 is log
 The lane's own sends, nonces, fees and receipts stay on the first endpoint; the indexers keep their quorum. The rule itself is
 [CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04), BUILT in `scaas-rpc` (plan T3, T5): `Chain` holds the crate's `EvmPool`, the
 lane's nonce, fee and receipt reads are its first-endpoint reads; this paragraph keeps the node's consequences. The other
-families take it in their adapters (plan T14–T22, BUILT for Hedera, Soroban, Solana, NEAR, Algorand, Aptos, Sui and TON; Cosmos
-not yet): `build`'s reads fail over, a refusal read while the count moved is `FAILOVER_ANSWER` (requeued), and the status,
+families take it in their adapters (plan T14–T22, BUILT for Hedera, Soroban, Solana, NEAR, Algorand, Aptos, Sui, Cosmos and
+TON): `build`'s reads fail over, a refusal read while the count moved is `FAILOVER_ANSWER` (requeued), and the status,
 `op_consumed`, sequence and fee reads stay on the first endpoint; each network doc's endpoints paragraph names its reads. The
 strict-majority option is the crate's ([CLI-RPC-05](../clients/scaas-rpc.md#CLI-RPC-05), EVM; the node keeps `failover`). Each request gets `rpc_timeout_ms` (30 s: a read's, each
 span of a log window, the lane's nonce, fee, send and receipt requests), each request of a simulation `rpc_simulate_timeout_ms` (120

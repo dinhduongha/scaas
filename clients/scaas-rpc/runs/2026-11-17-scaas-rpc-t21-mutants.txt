@@ -1,8 +1,13 @@
-# t21 mutants at commit 1bc22f83c (name | outcome | test)
+# t21 mutants at commit 66b9b90d9 (name | outcome | test)
 a: params.rest read as its first entry only | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::cosmos::tests::cosmos_rest_is_a_list_of_gateways
 a: a single URL string accepted | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::cosmos::tests::cosmos_rest_is_a_list_of_gateways
-a: a 5xx read as the endpoint's failure | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test cosmos the_cometbft_and_rest_reads  (added with raw_any_at, after the first e2e run)
+a: a 5xx read as the endpoint's failure | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test cosmos the_cometbft_and_rest_reads
 a: a 4xx read as the endpoint's failure | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test cosmos the_cometbft_and_rest_reads
 a: a CometBFT error lost | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test cosmos the_cometbft_and_rest_reads
 a: the identity a constant | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test cosmos the_failover_drops_another_network_and_skips_an_endpoint_behind
-6 mutants, 6 killed, 0 survived, 0 not loaded
+b: every read fails over (the carve-out gone) | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::cosmos::tests::cosmos_tx_status_op_consumed_and_the_lane_sequence_never_fail_over
+b: the router's executor through the failover | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::cosmos::tests::cosmos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict
+b: the build's reads on endpoint 0 only | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::cosmos::tests::cosmos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict
+b: a failover refusal final (the counter not compared) | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::cosmos::tests::cosmos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict
+b: a later gateway's refusal text kept | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::cosmos::tests::cosmos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict
+11 mutants, 11 killed, 0 survived, 0 not loaded

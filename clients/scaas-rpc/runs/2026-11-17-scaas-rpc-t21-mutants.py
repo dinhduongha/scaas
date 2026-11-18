@@ -25,6 +25,17 @@ MUTANTS = [
      T + "the_cometbft_and_rest_reads"),
     ("a: the identity a constant", [(S, "            Some(n) => Ok(n == self.chain_id),", "            Some(_) => Ok(true),")],
      T + "the_failover_drops_another_network_and_skips_an_endpoint_behind"),
+    # (b) the carve-out (F3) first, then the failover over the REST gateways
+    ("b: every read fails over (the carve-out gone)", [("scaas-node/src/adapters/evm.rs", "    BUILDING.try_with(|_| ()).is_ok()", "    true")],
+     NT + "cosmos_tx_status_op_consumed_and_the_lane_sequence_never_fail_over"),
+    ("b: the router's executor through the failover", [(N, 'self.rest_get_first(&format!("/cosmwasm/wasm/v1/contract/{router}/smart/{q}"))', 'self.rest_get(&format!("/cosmwasm/wasm/v1/contract/{router}/smart/{q}"))')],
+     NT + "cosmos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
+    ("b: the build's reads on endpoint 0 only", [(N, "        match BUILDING.scope((), self.build_on(job, lane)).await {", "        match self.build_on(job, lane).await {")],
+     NT + "cosmos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
+    ("b: a failover refusal final (the counter not compared)", [(N, "            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),\n", "")],
+     NT + "cosmos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
+    ("b: a later gateway's refusal text kept", [(N, "            Err(scaas_rpc::RpcError::EndpointAllFailed { failover_revert: Some(_), .. }) => {\n                bail!(\"{path}: no gateway answered (a failover gateway's refusal decides nothing)\")\n            }\n", "")],
+     NT + "cosmos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
 ]
 
 if __name__ == "__main__":
