@@ -1,12 +1,9 @@
-# t20 mutants at commit 118d28867 (name | outcome | test)
-# the (b) rows ran on the uncommitted tree committed as ecb574968 (T20b); the line above names HEAD at the run (T24.15)
+# t20 mutants at commit d5ca7080d (name | outcome | test)
 a: the final head's quorum on endpoint 0 only | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_final_head_quorum_reads_every_endpoint
 a: the identity a constant | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test sui the_failover_drops_another_network_and_skips_an_endpoint_behind
 a: each endpoint its own reference | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test sui the_failover_drops_another_network_and_skips_an_endpoint_behind
-b: every read fails over (the carve-out gone) | survived | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_tx_status_and_op_consumed_never_fail_over  (first run: the carve-out is structural, rpc_first; replaced by the row below)
-b: tx_status through failover | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_tx_status_and_op_consumed_never_fail_over  (after the F3 test primed endpoint 0)
-b: the journal's status read fails over in build | survived | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_build_reads_fail_over_and_a_failover_refusal_is_no_verdict  (first run: endpoint 0 down before its identity was read)
-b: the journal's status read fails over in build | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_build_reads_fail_over_and_a_failover_refusal_is_no_verdict  (after the journal case primed endpoint 0)
-b: the build's reads on endpoint 0 only | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_build_reads_fail_over_and_a_failover_refusal_is_no_verdict  (killed in the first run and again on the reworked test)
-b: a failover refusal final (the counter not compared) | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_build_reads_fail_over_and_a_failover_refusal_is_no_verdict  (killed in the first run and again on the reworked test)
-7 mutants, 7 killed after the tests were primed (first run: 5 killed, 2 survived), 0 not loaded
+b: tx_status through failover | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_tx_status_and_op_consumed_never_fail_over
+b: the journal's status read fails over in build | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_build_reads_fail_over_and_a_failover_refusal_is_no_verdict
+b: the build's reads on endpoint 0 only | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_build_reads_fail_over_and_a_failover_refusal_is_no_verdict
+b: a failover refusal final (the counter not compared) | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_build_reads_fail_over_and_a_failover_refusal_is_no_verdict
+7 mutants, 7 killed, 0 survived, 0 not loaded

@@ -1,5 +1,4 @@
-# t16 mutants at commit 23748267c (name | outcome | test)
-# the (b) rows ran on the uncommitted tree committed as b3c203755 (T16b); the line above names HEAD at the run (T24.15)
+# t16 mutants at commit d5ca7080d (name | outcome | test)
 a: the block produced at the slot itself | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test solana the_finalized_reads
 a: an error answer's code lost | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::solana::tests::an_error_answer_reaches_the_classifier_whole
 a: the identity a constant | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test solana the_failover_drops_another_cluster_and_skips_an_endpoint_behind

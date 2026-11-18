@@ -1,4 +1,4 @@
-# t24-2 mutants at commit 2d68aaf2d (name | outcome | test)
+# t24-2 mutants at commit d5ca7080d (name | outcome | test)
 2: aptos: a mined status leaves the floor | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::aptos::tests::aptos_a_mined_status_and_the_head_raise_the_floor
 2: aptos: the polled head leaves the floor | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::aptos::tests::aptos_a_mined_status_and_the_head_raise_the_floor
 2: sui: a mined status leaves the floor | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_a_mined_status_and_the_head_raise_the_floor

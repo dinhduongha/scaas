@@ -1,5 +1,4 @@
-# t21 mutants at commit 66b9b90d9 (name | outcome | test)
-# the (b) rows ran on the uncommitted tree committed as cb5fc860c (T21b); the line above names HEAD at the run (T24.15)
+# t21 mutants at commit d5ca7080d (name | outcome | test)
 a: params.rest read as its first entry only | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::cosmos::tests::cosmos_rest_is_a_list_of_gateways
 a: a single URL string accepted | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::cosmos::tests::cosmos_rest_is_a_list_of_gateways
 a: a 5xx read as the endpoint's failure | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test cosmos the_cometbft_and_rest_reads

@@ -1,4 +1,4 @@
-# t24-8 mutants at commit bcbce2c38 (name | outcome | test)
+# t24-8 mutants at commit d5ca7080d (name | outcome | test)
 8: Aptos: endpoint 0 read unchecked | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::aptos::tests::aptos_endpoint_0_of_another_network_answers_no_read
 8: sui: endpoint 0 read unchecked | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_endpoint_0_of_another_network_answers_no_read
 8: near: endpoint 0 read unchecked | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::near::tests::near_endpoint_0_of_another_network_answers_no_read

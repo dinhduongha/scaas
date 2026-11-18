@@ -1,4 +1,4 @@
-# t24-3 mutants at commit 5f0eb739b (name | outcome | test)
+# t24-3 mutants at commit d5ca7080d (name | outcome | test)
 3: Aptos: every status endpoint 0's verdict | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::aptos::tests::aptos_endpoint_0_rate_limited_fails_over
 3: Cosmos: every code the first gateway's verdict | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::cosmos::tests::cosmos_gateway_0_unavailable_fails_over
 3: Algorand: every status endpoint 0's verdict | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::algorand::tests::algorand_endpoint_0_rate_limited_fails_over

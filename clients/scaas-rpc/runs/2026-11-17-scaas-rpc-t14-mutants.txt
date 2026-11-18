@@ -1,5 +1,4 @@
-# t14 mutants at commit 4ee72cfcc (name | outcome | test)
-# the (b) rows ran on the uncommitted tree committed as 96401a7a2 (T14b); the line above names HEAD at the run (T24.15)
+# t14 mutants at commit d5ca7080d (name | outcome | test)
 a: every transaction known | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test hedera the_relay_receipt_is_read_raw_from_the_first_endpoint
 a: the receipt dropped | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test hedera the_relay_receipt_is_read_raw_from_the_first_endpoint
 a: the adapter reads no receipt | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::hedera::tests::contract_revert_stays_terminal

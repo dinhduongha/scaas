@@ -1,4 +1,4 @@
-# t24-12 mutants at commit 4e2910392 (name | outcome | test)
+# t24-12 mutants at commit d5ca7080d (name | outcome | test)
 12: TON: 404 read from the text | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::ton::tests::ton_a_404_is_read_from_the_status_never_the_text
 12: Sui: not found read from the text | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_not_found_is_read_from_the_code_never_the_text
 2 mutants, 2 killed, 0 survived, 0 not loaded

@@ -1,4 +1,4 @@
-# t24-9 mutants at commit 4e2910392 (name | outcome | test)
+# t24-9 mutants at commit d5ca7080d (name | outcome | test)
 9: Algorand: get parsed by serde_json alone | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::algorand::tests::algorand_a_raw_json_answer_deeper_than_64_is_refused
 9: Algorand: a box parsed by serde_json alone | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::algorand::tests::algorand_a_raw_json_answer_deeper_than_64_is_refused
 2 mutants, 2 killed, 0 survived, 0 not loaded
