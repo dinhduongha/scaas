@@ -89,7 +89,9 @@ contract MsgSenderLintTest is Test {
         }
     }
 
-    /// Occurrences of `pat` (not preceded by an identifier character); `exceptSelector` skips `pat<ident>.selector`.
+    /// Occurrences of `pat` (not preceded by an identifier character); `exceptSelector` skips `pat<ident>.selector`. White
+    /// space (line breaks included) between the pattern's characters is skipped, so a formatter's line break inside a match,
+    /// e.g. `I<X>(address(this))` and `.f(...)` on two lines (forge fmt), still counts.
     function _count(string memory path, bytes memory pat, bool exceptSelector) internal view returns (uint256 n) {
         bytes memory s = bytes(vm.readFile(path));
         bool lineStart = true;
@@ -106,15 +108,19 @@ contract MsgSenderLintTest is Test {
                 lineStart = false;
                 comment = c == "/" && i + 1 < s.length && s[i + 1] == "/";
             }
-            if (comment || i + pat.length > s.length) continue;
-            bool hit = true;
-            for (uint256 j; j < pat.length; ++j) {
-                if (s[i + j] != pat[j]) {
-                    hit = false;
-                    break;
+            if (comment) continue;
+            uint256 k = i;
+            uint256 j;
+            while (j < pat.length && k < s.length) {
+                if (j > 0 && (s[k] == " " || s[k] == "\t" || s[k] == "\n" || s[k] == "\r")) {
+                    ++k;
+                    continue;
                 }
+                if (s[k] != pat[j]) break;
+                ++k;
+                ++j;
             }
-            if (hit && (i == 0 || !_ident(s[i - 1])) && !(exceptSelector && _selectorRead(s, i + pat.length))) ++n;
+            if (j == pat.length && (i == 0 || !_ident(s[i - 1])) && !(exceptSelector && _selectorRead(s, k))) ++n;
         }
     }
 
