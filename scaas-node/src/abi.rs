@@ -412,12 +412,31 @@ sol! {
     /// four, Zether's two): `AuditorNotReady` stays `queued` ([`crate::guard`]), every other one `dead` by name.
     #[derive(Debug)]
     interface IAuditorSetter {
+        /// `status` 0 none, 1 waiting (before `eta`), 2 confirmable (`[eta, eta + 7 days]`), 3 expired, 4 void; `pending` the
+        /// proposed key's `keccak256` (Zether) or the proposed UA (PQZ); `proposer` the holder that proposed.
+        function auditorState() external view returns (uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status);
         error AuditorNotReady(uint64 eta);
         error AuditorPending();
         error AuditorSame();
         error AuditorEpochMismatch(uint32 expected, uint32 got);
         error AuditorKeyInvalid();
         error AuditorConsentInvalid();
+    }
+
+    /// `MetaTxLib.UAEnvelope`: a named op's envelope, its eight words inline.
+    #[derive(Debug, PartialEq, Eq)]
+    struct UAEnvelope {
+        bytes32 from; uint256 batch; uint256 nonce; uint256 validUntil; uint32 mode; address relayer; uint256 fee;
+        address feeRecipient;
+    }
+
+    /// The router's bit-32 ops (CTR-GOV-31), decoded to read a held confirm's subject, target and value (closing review C2).
+    #[derive(Debug)]
+    interface IAuditorRouter {
+        function mtxSetAuditorKey(UAEnvelope e, address target, bytes newKey, uint32 epoch, bytes pop, bytes32 chainUid,
+            UASig auth) external;
+        function mtxSetAuditorUA(UAEnvelope e, address target, bytes32 newAuditor, uint32 epoch, UASig consent, bytes32 chainUid,
+            UASig auth) external;
     }
 
     /// A PQZ token's key-version surface (group 3g, spec 2026-11-06-pqz-key-versions §3, §7.3): the errors the node names

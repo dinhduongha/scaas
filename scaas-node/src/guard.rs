@@ -296,7 +296,7 @@ pub async fn revert_verdict(chain: &Chain, w: &Work, reason: String) -> Verdict 
     }
     // set-auditor (spec §8, CTR-GOV-31): a bit-32 confirm before its proposal's `eta` lands once the clock reaches it (as a cap
     // setter's `GrantNotReady(31, …)`); every other auditor refusal stays `dead` by name below
-    if reason.starts_with("AuditorNotReady") {
+    if reason.starts_with("AuditorNotReady") && auditor_op(&w.data) {
         return Verdict::Requeue(format!("AUDITOR_NOT_READY: {reason}"));
     }
     // round 3zb (CTR-GOV-29, spec §4; NODE-LANE-09's class): a burner's or a minter's grant window spent (`GrantExhausted(3)`):
@@ -350,6 +350,34 @@ pub async fn revert_verdict(chain: &Chain, w: &Work, reason: String) -> Verdict 
 const SUPPLY_CAP_ADJUSTABLE: u8 = 31;
 /// `GrantExhausted`'s field 3: the grant's `perWindow` spent in the current window.
 const GRANT_WINDOW: u8 = 3;
+
+/// The router's bit-32 ops (CTR-GOV-31, set-auditor spec §8), by the job's selector: the only ones whose `AuditorNotReady` the
+/// clock lifts (closing review C3; any other job carrying that error is `dead` by name).
+fn auditor_op(data: &[u8]) -> bool {
+    data.get(..4).is_some_and(|s| typed::rows().iter()
+        .any(|r| matches!(r.name, "UASetAuditorKey" | "UASetAuditorUA") && r.sent[..] == *s))
+}
+
+/// Closing review C2 (set-auditor spec §13): a held bit-32 confirm (a job requeued on `AUDITOR_NOT_READY`), read before it is
+/// sent again: `Some(true)` confirmable (`auditorState()` status 2 with the job's own `pending` and `proposer`), `Some(false)`
+/// still waiting (status 1, the same), `None` gone (none, expired, void, another proposal, or not an auditor op): sent, the call
+/// would propose afresh (§5.1), so the job is never sent.
+pub async fn auditor_confirm(chain: &Chain, w: &Work) -> Result<Option<bool>, SimError> {
+    use crate::abi::{IAuditorRouter as R, IAuditorSetter as S};
+    let (from, target, pending) = if let Ok(c) = R::mtxSetAuditorKeyCall::abi_decode(&w.data) {
+        (c.e.from, c.target, alloy::primitives::keccak256(&c.newKey))
+    } else if let Ok(c) = R::mtxSetAuditorUACall::abi_decode(&w.data) {
+        (c.e.from, c.target, c.newAuditor)
+    } else {
+        return Ok(None);
+    };
+    let st = chain.call_view(target, S::auditorStateCall {}).await?;
+    Ok(match (st.status, st.pending == pending && st.proposer == from) {
+        (2, true) => Some(true),
+        (1, true) => Some(false),
+        _ => None,
+    })
+}
 
 /// The ops whose window refusal the next window lifts (spec 2026-11-13-burner-wrap-caps.md §4): a token's `mtxBurn` (bit 30) and
 /// the router's `mtxMint`, `mtxMintToUA` (bit 1), by the job's selector.

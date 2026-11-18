@@ -127,6 +127,10 @@ pub struct Job {
     pub kind: Option<String>,
     #[serde(default)]
     pub op: Option<Value>,
+    /// The job's last reported `error` (a `relay_poll` row; job-api.md): a bit-32 confirm requeued as `AUDITOR_NOT_READY`
+    /// carries that mark across a node restart (set-auditor closing review C2).
+    #[serde(default)]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]

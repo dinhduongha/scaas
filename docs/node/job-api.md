@@ -1209,7 +1209,7 @@ Transitional (BUILT). The node pulls work from the client database over the clie
 | Method | Caller key | In | Out / effect |
 |---|---|---|---|
 | `node_config` | relay worker or indexer | `evm_chain_number, relayer_address?` | chain params, finality, `indexed_block`, token `[{address, decimals}]`, `journal_max_nonce` and `inflight` (jobs `nonce_leased/signed/broadcast` of the relayer, with payload) for cold start |
-| `relay_poll` | relay worker | `evm_chain_number, limit` (clamped to 50) | `queued` jobs with the full meta-tx (struct + signature + token), oldest first |
+| `relay_poll` | relay worker | `evm_chain_number, limit` (clamped to 50) | `queued` jobs with the full meta-tx (struct + signature + token) and the job's last reported `error`, oldest first (the `error` carries a held bit-32 confirm's `AUDITOR_NOT_READY` mark across a node restart, [submit-lanes.md](submit-lanes.md#NODE-LANE-09); SPECIFIED for the client, BUILT in the node) |
 | `relay_claim` | relay worker | `job_ids, worker` | the ids claimed (CAS `UPDATE … WHERE chain_state='queued' RETURNING id`) |
 | `relay_report` | relay worker | `job_id, chain_state, tx_hash?, outer_nonce?, error?` | transition per the client's allowed-transition table |
 | `chain_event_ingest` | indexer | `evm_chain_number, from_block, to_block, to_block_hash, events[]` | record events + apply effects + advance the cursor, **one transaction** |

@@ -389,6 +389,10 @@ pub struct Submitter {
     journal: Option<(Store, String)>,
     /// NODE-JOB-29: [`guard::rpc_cap`] refusals in a row per cache part (its call key), bounded by [`PART_CAP_WAITS`].
     cap_waits: HashMap<B256, u32>,
+    /// Closing review C2 (set-auditor spec §13): the held bit-32 confirms, checked by [`guard::auditor_confirm`] before every
+    /// send: marked by a refusal requeued as `AUDITOR_NOT_READY` and by a pulled row whose `error` carries that mark (so a
+    /// restarted node, whose set starts empty, gives the same verdict); every later requeue of a held job keeps the mark.
+    auditor_held: Mutex<HashSet<i64>>,
 }
 
 impl Submitter {
@@ -441,6 +445,7 @@ impl Submitter {
             failover_mark: 0,
             journal,
             cap_waits: HashMap::new(),
+            auditor_held: Mutex::new(HashSet::new()),
         };
         for n in &p.gap_fill {
             me.gap_fill(*n).await?;
@@ -665,6 +670,27 @@ impl Submitter {
                 Ok(false) => self.fail(&w, "expired before submit".into()).await,
                 Err(e) => self.requeue(&w, format!("mtxNonce: {e:#}")).await,
             };
+        }
+        // closing review C2 (set-auditor spec §13): a held bit-32 confirm is sent again only while its proposal is confirmable;
+        // still waiting stays queued; gone (cancelled, expired, void, replaced) is `dead` with zero sends: sent, it would propose
+        // afresh (§5.1)
+        if let Some(id) = w.job_id.filter(|id| self.auditor_held.lock().unwrap().contains(id)) {
+            match guard::auditor_confirm(&self.chain, &w).await {
+                Ok(Some(true)) => {}
+                Ok(Some(false)) => return self.requeue(&w, "AUDITOR_NOT_READY: the proposal still waits for its eta".into()).await,
+                Ok(None) => {
+                    // a confirm that landed (another relayer, a lost report) is `consumed`, never `dead`
+                    return match self.consumed(&w).await {
+                        Ok(true) => self.report_consumed(&w).await,
+                        Ok(false) => {
+                            self.auditor_held.lock().unwrap().remove(&id);
+                            self.fail(&w, "AUDITOR_PROPOSAL_GONE: the held confirm's proposal is no longer confirmable".into()).await
+                        }
+                        Err(e) => self.requeue(&w, format!("mtxNonce: {e:#}")).await,
+                    };
+                }
+                Err(e) => return self.requeue(&w, format!("auditorState: {e:#}")).await,
+            }
         }
         // group 3f (spec §11.1): a PQZ debit's verdict, rebuilt by the node, before the digest and any simulation
         if let Err(refusal) = self.guard.pqz_fill(&self.chain, &mut w).await {
@@ -995,7 +1021,12 @@ impl Submitter {
                     self.report(id, "consumed", None, None, Some(label)).await;
                 }
             }
-            guard::Verdict::Requeue(r) => self.requeue(w, r).await,
+            guard::Verdict::Requeue(r) => {
+                if let (Some(id), true) = (w.job_id, r.starts_with("AUDITOR_NOT_READY")) {
+                    self.auditor_held.lock().unwrap().insert(id);
+                }
+                self.requeue(w, r).await
+            }
             guard::Verdict::Dead(r) => self.fail(w, r).await,
         }
     }
@@ -1042,6 +1073,12 @@ impl Submitter {
     async fn requeue(&self, w: &Work, reason: String) {
         warn!(job = ?w.job_id, "transient, requeue: {reason}");
         if let Some(id) = w.job_id {
+            // closing review C2: a held confirm keeps its mark in the row's `error`, the one a restarted node reads
+            let reason = if !reason.starts_with("AUDITOR_NOT_READY") && self.auditor_held.lock().unwrap().contains(&id) {
+                format!("AUDITOR_NOT_READY (held): {reason}")
+            } else {
+                reason
+            };
             self.report(id, "queued", None, None, Some(reason)).await;
         }
     }
@@ -1323,6 +1360,10 @@ impl Submitter {
                     continue;
                 }
             }
+            // closing review C2: a row requeued as `AUDITOR_NOT_READY` is a held confirm, whatever this process remembers
+            if job.error.as_deref().is_some_and(|e| e.starts_with("AUDITOR_NOT_READY")) {
+                self.auditor_held.lock().unwrap().insert(job.id);
+            }
             match self.guard.work(&job, self.cfg.fee_recipient) {
                 Ok(w) => self.submit(w).await,
                 Err(e) => {
@@ -1438,6 +1479,8 @@ pub(crate) mod tests {
         tx_gas: Option<u64>,
         /// `registry()` answers 0: the token's UA ledger is off.
         ua_off: bool,
+        /// `auditorState()` (set-auditor, closing review C2): `(status, pending, proposer)`; `None`: it reverts.
+        auditor_state: Option<(u8, B256, B256)>,
         /// The `maxFeePerGas` of each sent tx.
         fees: Vec<u128>,
         /// `GasPriceOracle.getL1Fee` answers this (`None`: it reverts, no oracle).
@@ -1610,6 +1653,14 @@ pub(crate) mod tests {
                         Ok(json!(format!("0x{}", alloy::hex::encode(F::classReleaseOfCall::abi_encode_returns(&F::ClassRelease {
                             implementation: if e.release_unknown { Address::ZERO } else { Address::repeat_byte(0x1e) }, envVersion: 1, envHash: B256::ZERO, usableFrom: 0,
                             deprecated: e.release_deprecated, initSelector: Default::default(), interfaceId: Default::default() })))))
+                    } else if sel == crate::abi::IAuditorSetter::auditorStateCall::SELECTOR {
+                        use crate::abi::IAuditorSetter as S;
+                        match e.auditor_state {
+                            Some((status, pending, proposer)) => Ok(json!(format!("0x{}", alloy::hex::encode(S::auditorStateCall::abi_encode_returns(
+                                &S::auditorStateReturn { epoch: 0, pending, eta: 1, proposer, status })))))
+                            ,
+                            None => Err(err(3, "execution reverted", Some("0x".into()))),
+                        }
                     } else if sel == IToken::chainUidCall::SELECTOR {
                         match e.uid_err {
                             Some("revert") => Err(err(3, "execution reverted", Some("0x".into()))),
@@ -2120,6 +2171,89 @@ pub(crate) mod tests {
                 let r = revert_verdict(&chain, &w, decode_revert(&err)).await;
                 assert!(matches!(&r, Verdict::Dead(e) if e.starts_with(want)), "{name}: {want}: {r:?}");
             }
+        }
+        // closing review C3: `AuditorNotReady` from any other job is `dead` by name, never requeued
+        let w = work_of_op(Some(1), &op_of("UAMint", "gov_router", &v).unwrap(), None).unwrap().0;
+        let r = revert_verdict(&chain, &w, decode_revert(&A::AuditorNotReady { eta: 9 }.abi_encode())).await;
+        assert!(matches!(&r, Verdict::Dead(e) if e.starts_with("AuditorNotReady(")), "UAMint: {r:?}");
+    }
+
+    /// Closing review C2 (set-auditor spec §13): a held bit-32 confirm (requeued on `AUDITOR_NOT_READY`, which marks it) is sent
+    /// again only at `auditorState()` status 2 with its own `pending` and `proposer`; status 1 with them stays `queued`; status 0,
+    /// 3, 4 or another proposal is `dead` `AUDITOR_PROPOSAL_GONE` with zero sends (sent, it would propose afresh). The same
+    /// verdicts on a fresh node process whose memory holds no mark, from the pulled row's `error` alone (a restart).
+    #[tokio::test]
+    async fn a_held_confirm_is_sent_only_while_confirmable() {
+        use crate::abi::{decode_revert, IAuditorRouter as R, IAuditorSetter as A};
+        use alloy::sol_types::SolError;
+        let v = crate::typed::testkit::vectors();
+        for name in ["UASetAuditorKey", "UASetAuditorUA"] {
+            let mut op = crate::typed::testkit::op_of(name, "gov_router", &v).unwrap();
+            // the payer signs on the fake chain ([`resign`])
+            op["envelope"]["from"] = json!(format!("{:#x}", B256::left_padding_from(payer().as_slice())));
+            op["args"]["chainUid"] = json!(format!("{:#x}", B256::from(U256::from(UID))));
+            op["auth"] = json!({"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []});
+            let op = resign(json!({"id": 9, "kind": "ua_metatx", "op": op}))["op"].clone();
+            let router: Address = op["token"].as_str().unwrap().parse().unwrap();
+            let w = work_of_op(Some(9), &op, None).unwrap().0;
+            let (pending, proposer) = match R::mtxSetAuditorKeyCall::abi_decode(&w.data) {
+                Ok(c) => (alloy::primitives::keccak256(&c.newKey), c.e.from),
+                Err(_) => R::mtxSetAuditorUACall::abi_decode(&w.data).map(|c| (c.newAuditor, c.e.from)).unwrap(),
+            };
+            // `mem`: this process marked the job; `row`: the pulled row carries the mark (a restarted node: memory empty)
+            let run_at = |st: Option<(u8, B256, B256)>, mem: bool, row: bool, nonce: u64| {
+                let mut job = json!({"id": 9, "kind": "ua_metatx", "op": op.clone()});
+                if row {
+                    job["error"] = json!("AUDITOR_NOT_READY: AuditorNotReady(9)");
+                }
+                async move {
+                    let e = Evm { mtx_nonce: Some(nonce), auditor_state: st, domain: crate::typed::domain_name("gov_router"), ..Default::default() };
+                    let (url, rpc) = fake_evm(e).await;
+                    let (odoo, o) = fake_odoo(Fake { jobs: vec![job], tokens: toks(), ..Default::default() }).await;
+                    let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.governance_routers = vec![router]).await.unwrap();
+                    if mem {
+                        s.auditor_held.lock().unwrap().insert(9);
+                    }
+                    s.poll_outbox().await;
+                    let r: Vec<(String, String)> = o.lock().unwrap().reports.iter()
+                        .map(|r| (r["chain_state"].as_str().unwrap().to_string(), r["error"].as_str().unwrap_or_default().to_string()))
+                        .collect();
+                    let sent = rpc.lock().unwrap().sent.len();
+                    (r, sent)
+                }
+            };
+            let run = |st: Option<(u8, B256, B256)>, mem: bool, row: bool| run_at(st, mem, row, 0);
+            // the control: not held, the same call is sent (a first proposal)
+            let (r, sent) = run(None, false, false).await;
+            assert!(sent == 1, "{name}: not held: sent: {r:?}");
+            let other = B256::repeat_byte(0x99);
+            for (mem, row) in [(true, false), (false, true)] {
+                let how = if mem { "marked in memory" } else { "fresh node, marked row" };
+                for (st, what) in [((0, pending, proposer), "none"), ((3, pending, proposer), "expired"), ((4, pending, proposer), "void"),
+                    ((2, other, proposer), "another value"), ((2, pending, other), "another proposer")] {
+                    let (r, sent) = run(Some(st), mem, row).await;
+                    assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("AUDITOR_PROPOSAL_GONE"), "{name}: {how}: {what}: {r:?}");
+                    assert_eq!(sent, 0, "{name}: {how}: {what}: zero sends");
+                }
+                let (r, sent) = run(Some((1, pending, proposer)), mem, row).await;
+                assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("AUDITOR_NOT_READY"), "{name}: {how}: waiting: {r:?}");
+                assert_eq!(sent, 0);
+                // `auditorState()` unread: queued, and the requeue keeps the mark for the next process
+                let (r, sent) = run(None, mem, row).await;
+                assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("AUDITOR_NOT_READY"), "{name}: {how}: unread: {r:?}");
+                assert_eq!(sent, 0);
+                let (r, sent) = run(Some((2, pending, proposer)), mem, row).await;
+                assert_eq!(sent, 1, "{name}: {how}: confirmable: sent: {r:?}");
+                // gone, but its nonce spent (it landed through another relayer, or a report was lost): `consumed`, never `dead`
+                let (r, sent) = run_at(Some((0, B256::ZERO, B256::ZERO)), mem, row, 1).await;
+                assert!(r.len() == 1 && r[0].0 == "consumed" && sent == 0, "{name}: {how}: landed: {r:?}");
+            }
+            // the mark: a refused simulation's `AuditorNotReady` holds the job
+            let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+            let (odoo, _) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
+            let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.governance_routers = vec![router]).await.unwrap();
+            s.refused(&w, decode_revert(&A::AuditorNotReady { eta: 9 }.abi_encode())).await;
+            assert!(s.auditor_held.lock().unwrap().contains(&9), "{name}: held after AUDITOR_NOT_READY");
         }
     }
 

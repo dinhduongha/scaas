@@ -40,6 +40,8 @@ GRA = ("test/governance", "GovRouterAuditor.t.sol")
 
 NG = "../../scaas-node/src/guard.rs"
 NS = ("@scaas-node", "--lib auditor_verdicts")
+NSR = "../../scaas-node/src/submit.rs"
+NH = ("@scaas-node", "--lib held_confirm")
 
 # task -> id -> (file, old, new, test dir, match-path glob)
 MUTANTS = {
@@ -53,8 +55,23 @@ MUTANTS = {
                                    "        let slot = if epoch == epoch {\n", "@clients/ua-rs",
                                    "--test pqz_read balance_proven_against_anvil -- --include-ignored"),
     },
+    # Fable C2 (the closing review): a held bit-32 confirm is sent again only while its proposal is confirmable; C3.3: only the
+    # two auditor ops requeue on AuditorNotReady
+    "c2": {
+        "send-on-expired": (NG, "        (2, true) => Some(true),\n", "        (2 | 3, true) => Some(true),\n", *NH),
+        "ignore-proposer": (NG, "st.pending == pending && st.proposer == from", "st.pending == pending", *NH),
+        "row-mark-ignored": (NSR, 'job.error.as_deref().is_some_and(|e| e.starts_with("AUDITOR_NOT_READY"))',
+                             'job.error.as_deref().is_some_and(|e| e.starts_with("AUDITOR_NOT_READY-"))', *NH),
+        "requeue-drops-mark": (NSR, '!reason.starts_with("AUDITOR_NOT_READY") && self.auditor_held', 'false && self.auditor_held', *NH),
+        "refusal-not-marked": (NSR, '(w.job_id, r.starts_with("AUDITOR_NOT_READY"))', '(w.job_id, false)', *NH),
+        "gone-not-consumed": (NSR, "                    return match self.consumed(&w).await {\n                        Ok(true) => self.report_consumed(&w).await,\n                        Ok(false) => {\n                            self.auditor_held",
+                              "                    return match Ok::<bool, anyhow::Error>(false) {\n                        Ok(true) => self.report_consumed(&w).await,\n                        Ok(false) => {\n                            self.auditor_held", *NH),
+        "requeue-any-op": (NG, '    if reason.starts_with("AuditorNotReady") && auditor_op(&w.data) {\n',
+                           '    if reason.starts_with("AuditorNotReady") {\n', *NS),
+    },
     "a8": {
-        "requeue-dropped": (NG, '    if reason.starts_with("AuditorNotReady") {\n', '    if reason.starts_with("AuditorNotReady-") {\n', *NS),
+        "requeue-dropped": (NG, '    if reason.starts_with("AuditorNotReady") && auditor_op(&w.data) {\n',
+                            '    if reason.starts_with("AuditorNotReady-") && auditor_op(&w.data) {\n', *NS),
     },
     "a6": {
         "key-struct-word": (GR, "abi.encode(keccak256(newKey), epoch, chainUid)", "abi.encode(keccak256(pop), epoch, chainUid)", *GRA),

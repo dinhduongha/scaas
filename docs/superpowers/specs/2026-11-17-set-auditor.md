@@ -385,6 +385,13 @@ secret to an entry whose auditor is not its own, before any decryption**: an ent
 key, so applying the secret to it and showing any outcome would decrypt a ciphertext someone else chose. The refusal names the
 entry's auditor and nothing else.
 
+**The proof path** (`ua-rs` `provenOpen` / `provenAdd` / `checkProven`, no-oracle spec §4.14.4, and `pqz-read
+--command balanceProven`) takes no auditor secret, yet names the auditor's key in each audited debit's statement: it resolves the
+auditor of each audited credit and of the own debit the same way (`entryAuditorEpoch[entryRef]`, then `auditorUA` at slot 7 for
+the current epoch or `auditorUAs[epoch]` at 25), from the record's `auditor` words, which `pqz-read` reads and the facade checks
+as `auditRead`'s; a record without them is read by the current auditor (correct for the current epoch, refused otherwise).
+Closing review (Fable, 2026-11-18) C1: the current auditor for every record refused each one audited before a replacement.
+
 ## 10. The three-key model (CTR-PQZ-37), ARCH-POS-13 and `pqz-core`
 
 - **Key class and scope.** The new auditor needs a key of the token's class and scope before the proposal and at the apply
@@ -466,10 +473,14 @@ pass) and changes one thing.
   after it, with no cancel; the holder cancels its own proposal before the confirm; `auditorState().status` 1, 2, 3, 4 in turn; **a `PRECOMPILE`
   PQZ token with the factory notice not 0 waits it** (A8); another holder cannot confirm (`NotProposer`); a revoked proposer's
   pending is dead after a re-grant; a wrong epoch (`AuditorEpochMismatch`) on a proposal, a confirm and a cancel; a held
-  confirm after the window does not propose; cancel by proposing the current, then a new proposal; `AuditorPending`,
+  confirm after the window is not sent by the node (a requeued `AUDITOR_NOT_READY` job is resent only at status 2 with the same
+  `pending` and `proposer`, else `dead` `AUDITOR_PROPOSAL_GONE` with no send, `consumed` if it landed; the mark is the
+  job row's `error`, so a restarted node gives the same verdict; the contract itself proposes afresh, §5.1, which stands: the
+  node rule is extra; ops: sign the confirm at `eta`; closing review C2); cancel by proposing the current, then a new proposal; `AuditorPending`,
   `AuditorSame` (Zether also for another encoding of the current point, if one exists), `AuditorKeyInvalid`; consent: a missing,
   wrong-token, wrong-epoch, wrong-word and wrong-key consent refused at the proposal, and a consent valid at the proposal but
-  refused at the apply (PQZ: the auditor's signing key changed); the Zether proof of possession against its vectors, with `z ≥
+  refused at the apply (PQZ: the auditor's signing key changed); the Zether proof of possession against its vectors (BLS12-381 only: `vectors/zether/auditor_pop.json`; a BN254 verifier
+  needs its own rows, closing review C3), with `z ≥
   r`, `R` invalid, `c = 0` forced and a proof for another `d`; a stranger shielding into the proposed UA no longer blocks the
   apply; PQZ: an unregistered auditor, an `offchain-token` auditor without its token key, an opening token's auditor without an
   opening KEM key, an `OFFCHAIN` auditor key without its proof (A4's outcome); a sibling chain word refused with nothing
@@ -532,6 +543,7 @@ Every chain is test-only: no migration; every confidential kind gets a new relea
 | O9 | One proposal at a time (`AuditorPending`) | kept, with no delegation on bit 32 and the two-use rule |
 | O10 | The PQZ consent's purpose | coordinator ruling 2026-11-17 (controller call, owner may override): its own `PURPOSE_AUDITOR_CONSENT = keccak256("scaas.ua.purpose.auditor-consent.v1")` in `UAKinds`, through `requireAuthorized`, which takes any purpose: the registry and its closed portable list do not change; `PURPOSE_ZETHER_AUTH` is not reused |
 | O12 | The confirm window: `AUDITOR_CONFIRM_WINDOW = 7 days`, independent of `D`; an expired proposal frees the slot; the holder cancels its own | coordinator ruling 2026-11-17 (controller call, owner may override), after the owner asked whether `max(noticePeriod(), grantDelay)` can wait forever: it cannot (both capped at 30 days), but a window sized by `noticePeriod` was empty at notice 0 |
+| O13 | A wallet helper that picks the delay sentences (§4, O4) | **PLANNED in the scaas-sdk round** (owner 2026-11-18, closing review P3-5: no change in this round) |
 | O11 | KV-11: the `AUDITOR` disclosure checks the caller's `keyVersion`; with the epoch on chain the contract could require `keyVersion == kv_a` | existing behaviour, not changed here (review I2) |
 
 ## 16. Review map (Fable, 2026-11-17)
