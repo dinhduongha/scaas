@@ -12,8 +12,7 @@
 # Scope: the components formatted so far. Left out: generated, vendored (vendor/) and legacy/ files (.rustfmt-ignore,
 # .clang-format-ignore, .prettierignore, foundry.toml [fmt] ignore, taplo.toml exclude), and runs/ except its shell,
 # YAML and TOML. Not covered yet: the family contracts' Rust (formatted with their next redeploy: panic locations move
-# the wasm), Python outside clients/ua-py and pqz-core, JavaScript outside clients/clientkeys, the C# of
-# pqz-core/nethermind, Move and TON.
+# the wasm), Python outside clients/ua-py and pqz-core, JavaScript outside clients/clientkeys, Move and TON.
 set -u
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 cd "$root" || exit 2
@@ -93,11 +92,13 @@ if want go; then
     else gofmt -w $(ls_files 'clients/ua-go/*.go') && say "go ok" || fail go; fi
 fi
 
-# C#: dotnet format whitespace (.editorconfig) on clients/ua-cs, folder mode (no restore), legacy/ left out
+# C#: dotnet format whitespace (.editorconfig) on clients/ua-cs and pqz-core/nethermind, folder mode (no restore), legacy/
+# left out
 if want cs; then
-    dotnet format whitespace --folder clients/ua-cs --exclude clients/ua-cs/legacy \
-        $([ $check = 1 ] && echo --verify-no-changes) \
-        -v q && say "cs ok" || fail cs
+    for d in clients/ua-cs pqz-core/nethermind; do
+        dotnet format whitespace --folder $d --exclude $d/legacy $([ $check = 1 ] && echo --verify-no-changes) \
+            -v q && say "cs $d ok" || fail "cs $d"
+    done
     dotnet build-server shutdown >/dev/null 2>&1
 fi
 
