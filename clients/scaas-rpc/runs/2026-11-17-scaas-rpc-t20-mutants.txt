@@ -1,4 +1,5 @@
 # t20 mutants at commit 118d28867 (name | outcome | test)
+# the (b) rows ran on the uncommitted tree committed as ecb574968 (T20b); the line above names HEAD at the run (T24.15)
 a: the final head's quorum on endpoint 0 only | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_final_head_quorum_reads_every_endpoint
 a: the identity a constant | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test sui the_failover_drops_another_network_and_skips_an_endpoint_behind
 a: each endpoint its own reference | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test sui the_failover_drops_another_network_and_skips_an_endpoint_behind

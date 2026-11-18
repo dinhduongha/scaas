@@ -1,4 +1,5 @@
 # t15 mutants at commit 0ed608c33 (name | outcome | test)
+# the (b) rows ran on the uncommitted tree committed as 604462f76 (T15b); the line above names HEAD at the run (T24.15)
 a: the head quorum on endpoint 0 only | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test soroban the_ledger_reads_and_the_head_quorum
 a: the family timeout 30 s | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib family::tests::
 a: an error answer read as a result | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test soroban an_error_answer_is_kept_whole

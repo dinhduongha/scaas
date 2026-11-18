@@ -4499,7 +4499,8 @@ mod tests {
         };
         let (a, _) = adapter_after(refuses(), &[DOWN]).await;
         let r = a.build(&job, 0).await;
-        assert!(matches!(&r, Err(SimError::Transport(e)) if e.contains("FAILOVER_ANSWER") || e.contains("decides nothing")), "{r:?}");
+        // T24.15: every endpoint failed the check (endpoint 0 down, endpoint 1's refusal no verdict): the generic all-failed text
+        assert!(matches!(&r, Err(SimError::Transport(e)) if e.contains("no endpoint answered") && !e.starts_with("FAILOVER_ANSWER")), "{r:?}");
         let (a, _) = adapter_after(refuses(), &[]).await;
         assert!(matches!(a.build(&job, 0).await, Err(SimError::Revert(_))), "control: endpoint 0's refusal");
         // the check's own refusal (`Check { error }`) answered by endpoint 1: the counter moved, requeued; endpoint 0's: the job's

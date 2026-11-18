@@ -129,6 +129,11 @@ MUTANTS = [
      NT + "algorand::tests::algorand_the_token_goes_to_its_own_endpoint_only"),
     ("10: TON: each endpoint endpoint 0's key", [(A + "ton.rs", "            keys.get(i)\n", "            keys.first()\n")],
      NT + "ton::tests::ton_the_key_goes_to_its_own_endpoint_only"),
+    # T24.15: the NEAR assertion that took either of two texts takes the one the path gives (a later endpoint's refusal read as
+    # the job's would pass the old assertion, through FAILOVER_ANSWER)
+    ("15: NEAR: the all-failed check read as a contract refusal", [(A + "near.rs", "            Err(e) => Err(crate::adapters::evm::all_failed(method, &e)),",
+       '            Err(e) => Err(RpcError { cause: "CONTRACT_EXECUTION_ERROR".into(), body: json!(e.to_string()) }.into()),')],
+     NT + "near::tests::near_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
 ]
 
 if __name__ == "__main__":

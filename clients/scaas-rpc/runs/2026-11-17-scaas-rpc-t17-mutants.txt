@@ -1,4 +1,5 @@
 # t17 mutants at commit 9a31ccf1d (name | outcome | test)
+# the (b) rows ran on the uncommitted tree committed as d091f1ca8 (T17b); the line above names HEAD at the run (T24.15)
 a: the quorum read on endpoint 0 only | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test near the_block_reads_and_the_quorum_read
 a: an error's cause lost | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::near::tests::
 a: the identity a constant | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test near the_failover_drops_another_network_and_skips_an_endpoint_behind
