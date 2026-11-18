@@ -1,0 +1,15 @@
+# t3 mutants at commit b77670551 (name | outcome | test)
+need = n / 2 | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool four_two_agree_two_fail_is_no_majority
+the smallest named block | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool the_block_is_the_need_th_highest_named
+answers not compared whole (any two values agree) | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool two_lie_on_different_words_is_no_majority
+skip the re-check | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool a_reorg_during_the_read_is_block_changed
+count only answering endpoints as n | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool four_two_agree_two_fail_is_no_majority
+await every endpoint | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool two_fast_equal_and_one_hung_decide_before_the_timeout
+no fallback round | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool a_far_future_liar_at_n_3_agrees_in_the_fallback_round
+no floor | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool an_agreement_below_the_last_agreed_block_is_refused
+no read deadline | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool a_slow_endpoint_is_bounded_by_the_read_deadline
+a later endpoint's revert ends the read | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool a_revert_from_a_later_endpoint_moves_on_and_keeps_its_data
+a later endpoint raises the head | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool a_later_endpoint_behind_the_head_is_skipped
+a discovered endpoint for a decryption read under failover | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool discovered_is_skipped_under_failover
+identity not checked on endpoint 0 | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool the_first_endpoint_is_identity_checked_too
+13 mutants, 13 killed, 0 survived, 0 not loaded

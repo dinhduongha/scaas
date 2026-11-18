@@ -22,7 +22,7 @@ use serde_json::{json, Value};
 use tower::ServiceExt;
 
 use scaas_pqz_verifier::abi::{IPqzToken as T, IUARegistry as R, KemKey, PqzVerdict, PqzVerifyConfig, UAAttrs};
-use scaas_pqz_verifier::chain::{Chain, ChainError, Rpc};
+use scaas_pqz_verifier::chain::{Block, Chain, ChainError, Rpc};
 use scaas_pqz_verifier::{
     body_limit, check_pins, http, pqz_key_hash, purpose_pqz_verdict, registry_domain, statement_lengths, verdict_auth_digest,
     verdict_digest, Config, Pqz, ProbeRequest, Service, PROBE_STATEMENT, VALID,
@@ -146,6 +146,12 @@ struct World {
     down: HashMap<usize, usize>,
     /// every read as `(node, block)`, in order
     seen: Vec<(usize, u64)>,
+    /// plan T9: a read by number alone refused (the strict-majority path reads by hash only)
+    by_hash: bool,
+    /// node → the UA its registry answers as every key's `keyOwner` (a node lying on a key record)
+    lie: HashMap<usize, B256>,
+    /// how many reads had been made when the proof runner ran, per run
+    proof_at: Vec<usize>,
 }
 
 struct Fake(Mutex<World>);
@@ -181,8 +187,13 @@ macro_rules! answer {
 
 impl Fake {
     /// One read by `node` at `block`: recorded, then refused when the node has stopped answering.
-    fn reach(&self, node: usize, block: u64) -> Result<(), ChainError> {
+    fn reach(&self, node: usize, block: Block) -> Result<(), ChainError> {
         let mut w = self.0.lock().unwrap();
+        let block = match block {
+            Block::Number(_) if w.by_hash => return Err(ChainError::Rpc("a read by number alone".into())),
+            Block::Number(n) => n,
+            Block::Hash(h) => U256::from_be_bytes(h.0).to::<u64>(),
+        };
         let before = w.seen.iter().filter(|s| s.0 == node).count();
         w.seen.push((node, block));
         match w.down.get(&node) {
@@ -205,7 +216,12 @@ impl Chain for Fake {
         }
     }
 
-    async fn code(&self, node: usize, block: u64, at: Address) -> Result<Bytes, ChainError> {
+    /// Block `n`'s hash is `n` as a word, on every node.
+    async fn header(&self, _node: usize, number: u64) -> Result<B256, ChainError> {
+        Ok(B256::from(U256::from(number)))
+    }
+
+    async fn code(&self, node: usize, block: Block, at: Address) -> Result<Bytes, ChainError> {
         self.reach(node, block)?;
         let w = self.0.lock().unwrap();
         if at == TOKEN {
@@ -222,7 +238,7 @@ impl Chain for Fake {
         Ok(k.map(|(_, k)| [&[0u8][..], &k.pk].concat().into()).unwrap_or_default())
     }
 
-    async fn call(&self, node: usize, block: u64, to: Address, data: Bytes) -> Result<Bytes, ChainError> {
+    async fn call(&self, node: usize, block: Block, to: Address, data: Bytes) -> Result<Bytes, ChainError> {
         self.reach(node, block)?;
         let w = self.0.lock().unwrap();
         let sel: [u8; 4] = data[..4].try_into().unwrap();
@@ -270,7 +286,7 @@ impl Chain for Fake {
                 R::pqzScopedKeyDigestCall => |c| tagged("scoped", (c.ua, u16::from(c.keyClass), c.chainUid, c.token, c.version, c.pqzKeyHash)
                     .abi_encode()),
                 R::pqzKeySigOfCall => |c| Bytes::from(at(c.ua, c.version).sig),
-                R::keyOwnerCall => |c| w.owner.get(&c.keyHash).copied().unwrap_or_default(),
+                R::keyOwnerCall => |c| w.lie.get(&node).copied().or(w.owner.get(&c.keyHash).copied()).unwrap_or_default(),
                 R::kindOfCall => |_| 0x0130u16,
                 R::registrationOfCall => |_| R::registrationOfReturn { kind: 0x0130, keyData: Bytes::new(),
                     attrs: UAAttrs { pqzKey: Bytes::new(), pqzPopHash: B256::ZERO,
@@ -914,7 +930,7 @@ async fn only_a_revert_is_a_revert() {
         },
     }))).await;
     let rpc = Rpc::connect(&[node], CHAIN_ID).await.unwrap();
-    let call = |n: u8| rpc.call(0, 1, Address::with_last_byte(n), Bytes::from_static(b"\x01\x02\x03\x04"));
+    let call = |n: u8| rpc.call(0, Block::Number(1), Address::with_last_byte(n), Bytes::from_static(b"\x01\x02\x03\x04"));
     assert!(matches!(call(1).await, Err(ChainError::Revert(d)) if d[..] == [0x08, 0xc3, 0x79, 0xa0]));
     assert!(matches!(call(2).await, Err(ChainError::Revert(d)) if d.is_empty()));
     assert!(matches!(call(3).await, Err(ChainError::Rpc(_))));
@@ -933,6 +949,37 @@ async fn start_pins_generation_and_chain_uid() {
     s.world().pins = (1, B256::repeat_byte(7));
     let e = check_pins(&*s.fake, &cfg).await.unwrap_err().to_string();
     assert!(e.contains("has chainUid"), "{e}");
+}
+
+/// A node of chain `CHAIN_ID` whose block 0 has hash `zero` (`None`: a node without block 0).
+async fn rpc_with_block_0(zero: Option<B256>) -> String {
+    rpc_server(Arc::new(move |r| Some(match r["method"].as_str().unwrap() {
+        "eth_chainId" => json!({"result": format!("{CHAIN_ID:#x}")}),
+        "eth_getBlockByNumber" => json!({"result": zero.map(|h| json!({"timestamp": "0x1", "difficulty": "0x0", "extraData": "0x",
+            "gasLimit": "0x1c9c380", "gasUsed": "0x0", "logsBloom": format!("0x{}", "00".repeat(256)),
+            "miner": format!("{:#x}", Address::ZERO), "mixHash": format!("{:#x}", B256::ZERO), "nonce": "0x0000000000000000",
+            "receiptsRoot": format!("{:#x}", B256::ZERO), "sha3Uncles": format!("{:#x}", B256::ZERO), "size": "0x200",
+            "stateRoot": format!("{:#x}", B256::ZERO), "transactions": [], "transactionsRoot": format!("{:#x}", B256::ZERO),
+            "uncles": [], "number": "0x0", "hash": format!("{h:#x}"), "parentHash": format!("{:#x}", B256::ZERO)}))}),
+        _ => json!({"error": {"code": -32601, "message": "no such method"}}),
+    }))).await
+}
+
+/// Fable code review T13 S11 (CLI-RPC-03): the service starts with `Rpc::connect_pinned`: every node's block 0 is the pinned
+/// `chain_uid`; a node of another genesis, or one without block 0, and it does not start. Control: two nodes of the pin.
+#[tokio::test]
+async fn start_pins_block_0() {
+    let uid = Config::parse(CONFIG).unwrap().chain_uid;
+    let ours = rpc_with_block_0(Some(uid)).await;
+    assert_eq!(Rpc::connect_pinned(&[ours.clone(), rpc_with_block_0(Some(uid)).await], CHAIN_ID, uid).await.unwrap().nodes(), 2);
+    let e = Rpc::connect_pinned(&[ours.clone(), rpc_with_block_0(Some(B256::repeat_byte(7))).await], CHAIN_ID, uid).await
+        .err().expect("another genesis");
+    assert!(e.to_string().contains("rpc_urls[1]: chain identity"), "{e}");
+    let e = Rpc::connect_pinned(&[rpc_with_block_0(Some(B256::repeat_byte(7))).await], CHAIN_ID, uid).await
+        .err().expect("every node of another genesis");
+    assert!(e.to_string().contains("rpc_urls[0]: chain identity"), "{e}");
+    let e = Rpc::connect_pinned(&[ours, rpc_with_block_0(None).await], CHAIN_ID, uid).await.err().expect("no block 0");
+    assert!(e.to_string().contains("serves no block 0"), "{e}");
 }
 
 /// Fable C-6: the configured `chain_id` is compared with every endpoint's `eth_chainId` at start; one other chain, or one
@@ -998,4 +1045,137 @@ fn verdict_vectors() {
         assert_eq!(verdict_auth_digest(&mine, k.address().into_word(), digest), auth, "{r}");
         assert_eq!(k.sign_hash_sync(&auth).unwrap().as_bytes().to_vec(), bytes(&r["signature"]), "{r}");
     }
+}
+
+// ------------------------------------------------------------------ plan T9: rpc_policy = "strict_majority" (CLI-RPC-12)
+
+/// The service over three fake nodes that answer by hash only, under `strict_majority`.
+fn strict_service(w: World, pqz: Pqz) -> Svc {
+    let fake = Arc::new(Fake(Mutex::new(World { nodes: 3, by_hash: true, ..w })));
+    let cfg = Config::parse(&strict_config()).unwrap();
+    let svc = Arc::new(Service::new(fake.clone(), pqz, signer(), &cfg));
+    Svc { app: http::router(svc, &cfg), fake }
+}
+
+fn strict_config() -> String {
+    CONFIG.replace(r#"rpc_urls = ["http://127.0.0.1:1"]"#,
+        "rpc_urls = [\"http://127.0.0.1:1\", \"http://127.0.0.1:2\", \"http://127.0.0.1:3\"]\nrpc_policy = \"strict_majority\"")
+}
+
+#[tokio::test]
+async fn strict_majority_signs_the_honest_answer() {
+    let (st, proof) = vector("TRANSFER", None);
+    let s = strict_service(world(&st, &[A, B, AUD]), all_valid());
+    s.world().lie.insert(2, C);
+    assert_signed(&verdict(&s, &request(single(A, 0, B), &st, &proof)).await, keccak256(&st), keccak256(&proof));
+    assert!(s.world().seen.iter().all(|&(_, b)| b == 100), "every read at the agreed block 100 (Depth(1) of 99, 100, 101)");
+    // control: the liar alone under failover is believed when it is the first node
+    let f = service(World { nodes: 3, ..world(&st, &[A, B, AUD]) }, all_valid());
+    f.world().lie.insert(0, C);
+    assert_refused(&verdict(&f, &request(single(A, 0, B), &st, &proof)).await, "KEY_OWNED_ELSEWHERE");
+}
+
+#[tokio::test]
+async fn two_lying_nodes_refuse_rpc_no_majority_and_sign_nothing() {
+    let (st, proof) = vector("TRANSFER", None);
+    let s = strict_service(world(&st, &[A, B, AUD]), all_valid());
+    s.world().lie.insert(1, C);
+    s.world().lie.insert(2, D);
+    let r = verdict(&s, &request(single(A, 0, B), &st, &proof)).await;
+    assert_refused(&r, "RPC_NO_MAJORITY");
+    assert_eq!(r.0, 503);
+}
+
+#[tokio::test]
+async fn probe_runs_under_agree_too() {
+    let s = strict_service(world(&[], &[]), all_valid());
+    let probe = || post(&s, "/v1/pqz-verdict/probe", json!({"token": TOKEN, "chainId": CHAIN_ID}).to_string());
+    assert_eq!(probe().await.0, 200, "three honest nodes");
+    assert!(s.world().seen.iter().all(|&(_, b)| b == 100), "{:?}", s.world().seen);
+    s.world().down = HashMap::from([(1, 0), (2, 0)]);
+    assert_refused(&probe().await, "RPC_NO_MAJORITY");
+}
+
+#[tokio::test]
+async fn no_chain_read_after_the_proof_check_under_strict_majority() {
+    let (st, proof) = vector("TRANSFER", None);
+    let cell: Arc<std::sync::OnceLock<Arc<Fake>>> = Default::default();
+    let c2 = cell.clone();
+    let pqz: Pqz = Arc::new(move |_: &[u8]| {
+        let f = c2.get().unwrap();
+        let mut w = f.0.lock().unwrap();
+        let n = w.seen.len();
+        w.proof_at.push(n);
+        Ok(VALID)
+    });
+    let s = strict_service(world(&st, &[A, B, AUD]), pqz);
+    let _ = cell.set(s.fake.clone());
+    assert_signed(&verdict(&s, &request(single(A, 0, B), &st, &proof)).await, keccak256(&st), keccak256(&proof));
+    let w = s.world();
+    assert!(!w.proof_at.is_empty(), "the proof and every R_REG ran");
+    assert!(w.proof_at.iter().all(|&n| n == w.seen.len()), "every read before the first proof: {:?} of {}", w.proof_at, w.seen.len());
+}
+
+#[tokio::test]
+async fn the_refusal_is_the_same_under_both_policies() {
+    // VERDICT_ZERO before any key refusal (the receiver's key also unstored), KEY_OWNED_ELSEWHERE before KEY_NOT_STORED
+    let (st, mut bad_proof) = vector("TRANSFER", None);
+    let (_, proof) = vector("TRANSFER", None);
+    let n = bad_proof.len() / 2;
+    bad_proof[n] ^= 1;
+    let h = pqz_key_hash(&st[640 + PK..640 + 2 * PK]);
+    for (proof, owned, want) in [(&bad_proof, true, "VERDICT_ZERO"), (&proof, true, "KEY_OWNED_ELSEWHERE"), (&proof, false, "KEY_NOT_STORED")] {
+        for strict in [false, true] {
+            let mut w = world(&st, &[A, B, AUD]);
+            w.keys.remove(&(B, 0));
+            if owned {
+                w.owner.insert(h, C);
+            }
+            let s = if strict { strict_service(w, real_op()) } else { service(w, real_op()) };
+            assert_refused(&verdict(&s, &request(single(A, 0, B), &st, proof)).await, want);
+        }
+    }
+}
+
+#[tokio::test]
+async fn failover_is_the_default() {
+    let (st, proof) = vector("TRANSFER", None);
+    assert_eq!(Config::parse(CONFIG).unwrap().rpc_policy, scaas_pqz_verifier::RpcPolicy::Failover);
+    let s = service(World { nodes: 3, by_hash: true, ..world(&st, &[A, B, AUD]) }, all_valid());
+    assert_refused(&verdict(&s, &request(single(A, 0, B), &st, &proof)).await, "RPC_UNAVAILABLE");
+    let s = service(World { nodes: 3, ..world(&st, &[A, B, AUD]) }, all_valid());
+    assert_signed(&verdict(&s, &request(single(A, 0, B), &st, &proof)).await, keccak256(&st), keccak256(&proof));
+    assert!(s.world().seen.iter().all(|&r| r == (0, 100)), "today's path: node 0 at its head, by number");
+}
+
+#[tokio::test]
+async fn strict_majority_with_one_endpoint_is_refused_at_start() {
+    let one = CONFIG.replace(r#"rpc_urls = ["http://127.0.0.1:1"]"#, "rpc_urls = [\"http://127.0.0.1:1\"]\nrpc_policy = \"strict_majority\"");
+    assert!(Config::parse(&one).unwrap_err().to_string().contains("two rpc_urls or more"));
+    assert!(Config::parse(&strict_config()).is_ok(), "control: three");
+}
+
+#[tokio::test]
+async fn an_unknown_policy_is_refused_at_start() {
+    let bad = CONFIG.replace(r#"rpc_urls = ["http://127.0.0.1:1"]"#, "rpc_urls = [\"http://127.0.0.1:1\"]\nrpc_policy = \"majority\"");
+    assert!(Config::parse(&bad).is_err());
+}
+
+/// Q5 (CLI-RPC-50): the crate's classifier. An execution error without revert data was the node's (a failover) and is now a
+/// revert (a refusal by name, its data as bytes: none); a node's own limit stays the node's.
+#[tokio::test]
+async fn the_classifier_is_the_crates() {
+    let node = rpc_server(Arc::new(|r| Some(match r["method"].as_str().unwrap() {
+        "eth_chainId" => json!({"result": format!("{CHAIN_ID:#x}")}),
+        _ => match r["params"][0]["to"].as_str().unwrap().chars().last().unwrap() {
+            '1' => json!({"error": {"code": -32000, "message": "VM execution error."}}),
+            '2' => json!({"error": {"code": -32000, "message": "execution aborted (timeout = 5s)"}}),
+            _ => json!({"error": {"code": -32000, "message": "eth_call request was canceled due to enabled timeout."}}),
+        },
+    }))).await;
+    let rpc = Rpc::connect(&[node], CHAIN_ID).await.unwrap();
+    let call = |n: u8| rpc.call(0, Block::Number(1), Address::with_last_byte(n), Bytes::from_static(b"\x01\x02\x03\x04"));
+    assert!(matches!(call(1).await, Err(ChainError::Revert(d)) if d.is_empty()), "an execution error: a revert now");
+    assert!(matches!(call(2).await, Err(ChainError::Rpc(_))), "a node's own limit");
+    assert!(matches!(call(3).await, Err(ChainError::Rpc(_))), "Nethermind's own timeout");
 }

@@ -2,12 +2,15 @@
 //! `MsgExecuteContract{Relay{payload, auth}}` vào `scaas-token`; chủ thể không gửi tx nào nên không có
 //! sequence chủ thể để kẹt (R30, R62). Sequence của lane đọc từ chain trước mỗi job (review S14).
 //!
-//! Mạng: CometBFT RPC (`rpc_urls[0]`: `status`, `block`, `block_results`) + REST gateway (`params.rest`:
-//! account, simulate, broadcast, tx). Protobuf (TxBody/AuthInfo/SignDoc/TxRaw, SIGN_MODE_DIRECT) viết tay:
+//! Mạng: CometBFT RPC (`rpc_urls`, read on the first: `status`, `block`, `block_results`) + REST gateways (`params.rest`, a
+//! list, owner 2026-11-18: account, simulate, broadcast, tx), both through `scaas-rpc` (plan T21). Protobuf (TxBody/AuthInfo/SignDoc/TxRaw, SIGN_MODE_DIRECT) viết tay:
 //! sáu kiểu, không kéo `cosmrs`.
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
+
+use crate::adapters::evm::{building, BUILDING};
+use scaas_rpc::family::FamilyError;
 
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
@@ -478,11 +481,10 @@ pub struct CosmosAdapter {
     denom: String,
     gas_price: f64,
     max_gas: u64,
-    rpc: String,
-    rest: String,
+    /// the CometBFT RPC endpoints and the REST gateways (scaas-rpc T21: the family clients, bounded, 20 s per request)
+    net: scaas_rpc::cosmos::Cosmos,
     lanes: Vec<Lane>,
     signers: Vec<LocalSigner>,
-    http: reqwest::Client,
     account_numbers: Mutex<HashMap<usize, u64>>,
     relay_fee: RelayFeePolicy,
     /// The router's `relayexec` (`QueryMsg::Executor`, fixed at the router's instantiate): never a payee.
@@ -497,7 +499,15 @@ impl CosmosAdapter {
     pub fn new(cfg: &ChainCfg, signers: Vec<LocalSigner>) -> Result<Self> {
         let p = |k: &str| cfg.params.get(k).and_then(|v| v.as_str()).map(str::to_string);
         let prefix = p("prefix").ok_or_else(|| anyhow!("chain {}: params.prefix (bech32) is required", cfg.chain_key()))?;
-        let rest = p("rest").ok_or_else(|| anyhow!("chain {}: params.rest (REST gateway URL) is required", cfg.chain_key()))?;
+        // owner 2026-11-18 (ARCH-POS-15): a list of REST gateways, no single-URL form
+        let rest: Vec<String> = match cfg.params.get("rest") {
+            Some(toml::Value::Array(a)) => a
+                .iter()
+                .map(|v| v.as_str().map(str::to_string).ok_or_else(|| anyhow!("chain {}: params.rest: a URL is not a string", cfg.chain_key())))
+                .collect::<Result<_>>()?,
+            Some(_) => bail!("chain {}: params.rest must be a list of REST gateway URLs", cfg.chain_key()),
+            None => bail!("chain {}: params.rest (a list of REST gateway URLs) is required", cfg.chain_key()),
+        };
         let lanes = signers
             .iter()
             .zip(&cfg.lanes)
@@ -515,6 +525,11 @@ impl CosmosAdapter {
             bail!("chain {}: params.gas_price must be > 0 (params.zero_fee = true only on a zero-fee devnet)", cfg.chain_key());
         }
         let relay_fee = RelayFeePolicy::from_cfg(cfg, &prefix)?;
+        let net = scaas_rpc::cosmos::Cosmos::new(
+            scaas_rpc::family::Client::of_urls(&cfg.rpc_urls, None).map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?,
+            scaas_rpc::family::Client::of_urls(&rest, None).map_err(|e| anyhow!("chain {}: params.rest: {e}", cfg.chain_key()))?,
+            &chain_id,
+        );
         Ok(Self {
             key: cfg.chain_key(),
             chain_id,
@@ -522,11 +537,9 @@ impl CosmosAdapter {
             denom: p("denom").unwrap_or_else(|| "stake".into()),
             gas_price,
             max_gas: cfg.max_gas_per_tx,
-            rpc: cfg.rpc_urls[0].trim_end_matches('/').to_string(),
-            rest: rest.trim_end_matches('/').to_string(),
+            net,
             lanes,
             signers,
-            http: reqwest::Client::builder().timeout(Duration::from_secs(20)).build()?,
             account_numbers: Mutex::new(HashMap::new()),
             relay_fee,
             executor: tokio::sync::OnceCell::new(),
@@ -539,37 +552,90 @@ impl CosmosAdapter {
         &self.prefix
     }
 
-    async fn get(&self, url: &str) -> Result<(u16, Value)> {
-        let r = self.http.get(url).send().await?;
-        let code = r.status().as_u16();
-        Ok((code, r.json().await.unwrap_or(Value::Null)))
-    }
-
-    async fn post(&self, url: &str, body: &Value) -> Result<(u16, Value)> {
-        let r = self.http.post(url).json(body).send().await?;
-        let code = r.status().as_u16();
-        Ok((code, r.json().await.unwrap_or(Value::Null)))
-    }
-
-    async fn rpc(&self, path: &str) -> Result<Value> {
-        let (code, v) = self.get(&format!("{}/{path}", self.rpc)).await?;
-        if code != 200 || v.get("error").is_some_and(|e| !e.is_null()) {
-            bail!("rpc {path}: {code} {}", v.get("error").unwrap_or(&v));
+    /// REST GET `path` on the first gateway (scaas-rpc T21): the status and the JSON (`null` for no body). Inside `build`
+    /// failed over ([`Self::failover`]); outside it the first gateway's (F3: a status, `op_consumed`, the lane sequence).
+    async fn rest_get(&self, path: &str) -> Result<(u16, Value)> {
+        if building() {
+            return self.failover(path, |i| self.net.rest.get(i, path)).await;
         }
-        Ok(v["result"].clone())
+        self.rest_get_first(path).await
+    }
+
+    /// REST GET on the first gateway only (F3; a value kept for the process: the router's executor).
+    async fn rest_get_first(&self, path: &str) -> Result<(u16, Value)> {
+        self.net.rest.get(0, path).await.map_err(|e| anyhow!("GET {path}: {e}"))
+    }
+
+    /// REST POST: inside `build` failed over (the simulate), outside it the first gateway's (the send).
+    async fn rest_post(&self, path: &str, body: &Value) -> Result<(u16, Value)> {
+        if building() {
+            return self.failover(path, |i| self.net.rest.post(i, path, body)).await;
+        }
+        self.net.rest.post(0, path, body).await.map_err(|e| anyhow!("POST {path}: {e}"))
+    }
+
+    /// ARCH-POS-15 (CLI-RPC-04, scaas-rpc T21b): the first gateway, then each next REST gateway of this chain (`node_info`'s
+    /// network) not behind the height the first CometBFT endpoint last showed. An error with gRPC code 2 or 3 (a refused
+    /// simulate, a smart query's error) is the first gateway's to classify as before (any other fails over, T24.3) (its status and body handed back), a later
+    /// gateway's no verdict (the next is asked); every gateway failing after a later one's refusal is a transport error
+    /// without its text; what a failover gateway's answer refuses `build` requeues.
+    async fn failover<F, Fut>(&self, path: &str, f: F) -> Result<(u16, Value)>
+    where
+        F: Fn(usize) -> Fut,
+        Fut: std::future::Future<Output = std::result::Result<(u16, Value), FamilyError>>,
+    {
+        use scaas_rpc::pool::ReadError;
+        let a = self.net.rest.client.failover(&self.net.rest, |i| {
+            let r = f(i);
+            async move {
+                match r.await {
+                    Ok((s, v)) if (200..300).contains(&s) => Ok((s, v)),
+                    // T24.3: gRPC code 2 or 3 (a refused simulate, a smart query's error: `sim_error`'s verdicts) is the
+                    // first gateway's to classify; any other answer (503 code 14, a rate limit, a 404) fails over
+                    Ok((s, v)) if matches!(v["code"].as_u64(), Some(2 | 3)) => Err(ReadError::Revert { data: vec![], reason: format!("{s}\n{v}") }),
+                    Ok((s, _)) => Err(ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Http, &format!("{path}: HTTP {s}")))),
+                    Err(FamilyError::Failure(f)) => Err(ReadError::Failure(f)),
+                    Err(e) => Err(ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string()))),
+                }
+            }
+        }).await;
+        match a {
+            Ok(a) => Ok(a.value),
+            Err(scaas_rpc::RpcError::Revert { reason, .. }) => {
+                let (s, v) = reason.split_once('\n').unwrap_or(("0", "null"));
+                Ok((s.parse().unwrap_or(0), serde_json::from_str(v).unwrap_or(Value::Null)))
+            }
+            Err(e) => Err(crate::adapters::evm::all_failed(path, &e)),
+        }
+    }
+
+    fn failovers(&self) -> u64 {
+        self.net.rest.client.pool().failover_answers()
+    }
+
+    /// CometBFT RPC on the first endpoint: the `result`; an error answer is `rpc {path}: {error}`.
+    async fn rpc(&self, path: &str) -> Result<Value> {
+        self.net.rpc_at(0, path).await.map_err(|e| match e {
+            FamilyError::Rpc { error, .. } => anyhow!("rpc {path}: {}", scaas_rpc::error::endpoint_text(&error.to_string())),
+            e => anyhow!("rpc {path}: {e}"),
+        })
     }
 
     /// (account_number, sequence đã commit).
     async fn account(&self, lane: usize) -> Result<(u64, u64)> {
         let addr = &self.lanes.get(lane).ok_or_else(|| anyhow!("no lane {lane}"))?.address;
-        let (code, v) = self.get(&format!("{}/cosmos/auth/v1beta1/accounts/{addr}", self.rest)).await?;
+        let (code, v) = self.rest_get(&format!("/cosmos/auth/v1beta1/accounts/{addr}")).await?;
         if code != 200 {
             bail!("lane {addr} not found on chain (fund it first): {code} {v}");
         }
         let num = |k: &str| v["account"][k].as_str().unwrap_or("0").parse::<u64>().map_err(|e| anyhow!("{k}: {e}"));
         let (an, seq) = (num("account_number")?, num("sequence")?);
-        if let Ok(mut m) = self.account_numbers.lock() {
-            m.insert(lane, an);
+        // T24.14: the signing account number is kept from the first gateway's answer only: a read outside `build` (inside it
+        // a failover gateway may have answered); `sign` reads it there when none is kept
+        if !building() {
+            if let Ok(mut m) = self.account_numbers.lock() {
+                m.insert(lane, an);
+            }
         }
         Ok((an, seq))
     }
@@ -589,10 +655,45 @@ impl CosmosAdapter {
         let Some(router) = &self.relay_fee.router else { return Ok(None) };
         let e = self.executor.get_or_try_init(|| async {
             let q = base64::engine::general_purpose::URL_SAFE.encode(json!({"executor": {}}).to_string());
-            let (code, v) = self.get(&format!("{}/cosmwasm/wasm/v1/contract/{router}/smart/{q}", self.rest)).await?;
+            let (code, v) = self.rest_get_first(&format!("/cosmwasm/wasm/v1/contract/{router}/smart/{q}")).await?;
             v["data"].as_str().filter(|_| code == 200).map(str::to_string).ok_or_else(|| anyhow!("router executor query: {code} {v}"))
         }).await?;
         Ok(Some(e.as_str()))
+    }
+
+    async fn build_on(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
+        let op = job.op.as_ref().ok_or_else(|| SimError::Revert("job has no op".into()))?;
+        let sender = self.lanes.get(lane).ok_or_else(|| SimError::Transport(format!("no lane {lane}")))?.address.clone();
+        // T17 fix 2: the router's executor is read lazily, only by a job that needs it (a relay-fee job, or a pay to a
+        // contract address that could be the executor), and cached; until it answers such a job is retried, every
+        // other job flows (a down router never stalls plain pays)
+        let executor = if self.relay_fee.router.is_some() && executor_needed(op) {
+            Some(self.executor().await.map_err(|e| {
+                self.warn_executor(&e);
+                SimError::Transport(format!("the relay-fee router's executor is not resolved yet: {e:#}"))
+            })?.unwrap_or_default())
+        } else {
+            self.executor.get().map(String::as_str)
+        };
+        let (contract, msg, valid_until) = job_msg(op, &self.chain_id, &self.relay_fee, &sender, executor)
+            .map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
+        let (_, seq) = self.account(lane).await.map_err(|e| SimError::Transport(format!("{e:#}")))?;
+        let pk = self.pk(lane).map_err(|e| SimError::Transport(e.to_string()))?;
+        let body = tx_body(&sender, &contract, &msg);
+        let sim = tx_raw(&body, &auth_info(&pk, seq, &self.denom, 0, 0), &[]);
+        let (code, v) = self
+            .rest_post("/cosmos/tx/v1beta1/simulate", &json!({"tx_bytes": B64.encode(&sim)}))
+            .await
+            .map_err(|e| SimError::Transport(format!("{e:#}")))?;
+        if code != 200 {
+            return Err(sim_error(code, &v));
+        }
+        let used: u64 = v["gas_info"]["gas_used"].as_str().and_then(|g| g.parse().ok()).unwrap_or(0);
+        let gas = used + used * 3 / 10 + 10_000;
+        if gas > self.max_gas {
+            return Err(SimError::Revert(format!("gas {gas} above max_gas_per_tx")));
+        }
+        Ok(Built { job_id: job.id, body, valid_until, meta: json!({"gas": gas}) })
     }
 
     fn pk(&self, lane: usize) -> Result<Vec<u8>> {
@@ -625,44 +726,19 @@ impl ChainAdapter for CosmosAdapter {
         }
         let q = json!({"nonce": {"owner": payload["from"], "lane": payload["lane"]}});
         let q = base64::engine::general_purpose::URL_SAFE.encode(q.to_string());
-        let (code, v) = self.get(&format!("{}/cosmwasm/wasm/v1/contract/{contract}/smart/{q}", self.rest)).await?;
+        let (code, v) = self.rest_get(&format!("/cosmwasm/wasm/v1/contract/{contract}/smart/{q}")).await?;
         let next = v["data"].as_u64().filter(|_| code == 200).ok_or_else(|| anyhow!("nonce query: {code} {v}"))?;
         Ok(Some(next > nonce))
     }
 
+    /// [`CosmosAdapter::build_on`], its REST reads failed over (scaas-rpc T21b, R4: a refusal read while a failover gateway
+    /// answered is no verdict).
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
-        let op = job.op.as_ref().ok_or_else(|| SimError::Revert("job has no op".into()))?;
-        let sender = self.lanes.get(lane).ok_or_else(|| SimError::Transport(format!("no lane {lane}")))?.address.clone();
-        // T17 fix 2: the router's executor is read lazily, only by a job that needs it (a relay-fee job, or a pay to a
-        // contract address that could be the executor), and cached; until it answers such a job is retried, every
-        // other job flows (a down router never stalls plain pays)
-        let executor = if self.relay_fee.router.is_some() && executor_needed(op) {
-            Some(self.executor().await.map_err(|e| {
-                self.warn_executor(&e);
-                SimError::Transport(format!("the relay-fee router's executor is not resolved yet: {e:#}"))
-            })?.unwrap_or_default())
-        } else {
-            self.executor.get().map(String::as_str)
-        };
-        let (contract, msg, valid_until) = job_msg(op, &self.chain_id, &self.relay_fee, &sender, executor)
-            .map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
-        let (_, seq) = self.account(lane).await.map_err(|e| SimError::Transport(format!("{e:#}")))?;
-        let pk = self.pk(lane).map_err(|e| SimError::Transport(e.to_string()))?;
-        let body = tx_body(&sender, &contract, &msg);
-        let sim = tx_raw(&body, &auth_info(&pk, seq, &self.denom, 0, 0), &[]);
-        let (code, v) = self
-            .post(&format!("{}/cosmos/tx/v1beta1/simulate", self.rest), &json!({"tx_bytes": B64.encode(&sim)}))
-            .await
-            .map_err(|e| SimError::Transport(format!("{e:#}")))?;
-        if code != 200 {
-            return Err(sim_error(code, &v));
+        let mark = self.failovers();
+        match BUILDING.scope((), self.build_on(job, lane)).await {
+            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),
+            r => r,
         }
-        let used: u64 = v["gas_info"]["gas_used"].as_str().and_then(|g| g.parse().ok()).unwrap_or(0);
-        let gas = used + used * 3 / 10 + 10_000;
-        if gas > self.max_gas {
-            return Err(SimError::Revert(format!("gas {gas} above max_gas_per_tx")));
-        }
-        Ok(Built { job_id: job.id, body, valid_until, meta: json!({"gas": gas}) })
     }
 
     async fn sign(&self, built: Built, lane: usize, sequence: u64) -> Result<Signed> {
@@ -689,47 +765,56 @@ impl ChainAdapter for CosmosAdapter {
             }
         }
         let body = json!({"tx_bytes": B64.encode(&signed.raw), "mode": "BROADCAST_MODE_SYNC"});
-        let (code, v) = self.post(&format!("{}/cosmos/tx/v1beta1/txs", self.rest), &body).await?;
+        // scaas-rpc T24.7: the send is the first gateway's, inside `build`'s scope too (never failed over)
+        let (code, v) = self.net.rest.post(0, "/cosmos/tx/v1beta1/txs", &body).await.map_err(|e| anyhow!("POST /cosmos/tx/v1beta1/txs: {e}"))?;
         broadcast_outcome(code, &v)
     }
 
     /// REST `GetTx` đọc indexer tx của CometBFT — có thể tắt (`indexer = "null"`) hay trễ: thấy là chắc, không thấy
     /// thì quét `block`/`block_results` (luôn có) từ mốc lúc gửi (review M2). RPC lỗi ⇒ `Err` ⇒ runner thử lại.
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
-        let h = tx_id.trim_start_matches("0x").to_ascii_uppercase();
-        if let Ok((200, v)) = self.get(&format!("{}/cosmos/tx/v1beta1/txs/{h}", self.rest)).await {
-            let r = &v["tx_response"];
-            let height = r["height"].as_str().and_then(|s| s.parse().ok()).unwrap_or(0);
-            let st = match r["code"].as_u64() {
-                Some(0) => Some(TxStatus::Mined { height, tx_hash: None }),
-                Some(_) => Some(TxStatus::Reverted { reason: r["raw_log"].as_str().unwrap_or("failed").to_string() }),
-                None => None,
-            };
-            if let Some(st) = st {
-                if let Ok(mut m) = self.scan_from.lock() {
-                    m.remove(tx_id);
-                }
-                return Ok(st);
-            }
-        }
-        let Some(from) = self.scan_from.lock().ok().and_then(|m| m.get(tx_id).copied()) else { return Ok(TxStatus::Unknown) };
-        let Some(head) = self.final_head().await? else { return Ok(TxStatus::Unknown) };
-        for height in from..=head.height.min(from + 50) {
-            let b = self.rpc(&format!("block?height={height}")).await?;
-            if b["block"]["data"]["txs"].as_array().is_some_and(|t| !t.is_empty()) {
-                let r = self.rpc(&format!("block_results?height={height}")).await?;
-                if let Some(st) = tx_in_block(&b, &r, tx_id) {
+        let st: Result<TxStatus> = async {
+            let h = tx_id.trim_start_matches("0x").to_ascii_uppercase();
+            if let Ok((200, v)) = self.rest_get(&format!("/cosmos/tx/v1beta1/txs/{h}")).await {
+                let r = &v["tx_response"];
+                let height = r["height"].as_str().and_then(|s| s.parse().ok()).unwrap_or(0);
+                let st = match r["code"].as_u64() {
+                    Some(0) => Some(TxStatus::Mined { height, tx_hash: None }),
+                    Some(_) => Some(TxStatus::Reverted { reason: r["raw_log"].as_str().unwrap_or("failed").to_string() }),
+                    None => None,
+                };
+                if let Some(st) = st {
                     if let Ok(mut m) = self.scan_from.lock() {
                         m.remove(tx_id);
                     }
                     return Ok(st);
                 }
             }
-            if let Ok(mut m) = self.scan_from.lock() {
-                m.insert(tx_id.to_string(), height + 1);
+            let Some(from) = self.scan_from.lock().ok().and_then(|m| m.get(tx_id).copied()) else { return Ok(TxStatus::Unknown) };
+            let Some(head) = self.final_head().await? else { return Ok(TxStatus::Unknown) };
+            for height in from..=head.height.min(from + 50) {
+                let b = self.rpc(&format!("block?height={height}")).await?;
+                if b["block"]["data"]["txs"].as_array().is_some_and(|t| !t.is_empty()) {
+                    let r = self.rpc(&format!("block_results?height={height}")).await?;
+                    if let Some(st) = tx_in_block(&b, &r, tx_id) {
+                        if let Ok(mut m) = self.scan_from.lock() {
+                            m.remove(tx_id);
+                        }
+                        return Ok(st);
+                    }
+                }
+                if let Ok(mut m) = self.scan_from.lock() {
+                    m.insert(tx_id.to_string(), height + 1);
+                }
             }
+            Ok(TxStatus::Unknown)
         }
-        Ok(TxStatus::Unknown)
+        .await;
+        // scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed raises the failover reads' floor
+        if let Ok(TxStatus::Mined { height, .. }) = &st {
+            self.net.rest.client.pool().saw_block(*height);
+        }
+        st
     }
 
     async fn sequence(&self, lane: usize) -> Result<u64> {
@@ -740,6 +825,7 @@ impl ChainAdapter for CosmosAdapter {
     async fn final_head(&self) -> Result<Option<Head>> {
         let s = self.rpc("status").await?;
         let height: u64 = s["sync_info"]["latest_block_height"].as_str().unwrap_or("0").parse()?;
+        self.net.rest.client.pool().saw_block(height); // the failover reads' floor: the first CometBFT endpoint's height
         let hash = s["sync_info"]["latest_block_hash"].as_str().and_then(hash32);
         Ok(match hash {
             Some(hash) if height > 0 => Some(Head { height, hash }),
@@ -933,7 +1019,7 @@ mod tests {
     #[test]
     fn adapter_refuses_unsafe_config() {
         let k = || vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
-        let p = "params = { rest = \"http://x\", prefix = \"wasm\"";
+        let p = "params = { rest = [\"http://x\"], prefix = \"wasm\"";
         assert!(CosmosAdapter::new(&chain(&format!("network = \"c-1\"\n{p}, gas_price = \"0.025\" }}")), k()).is_ok());
         let err = |cfg: &str| CosmosAdapter::new(&chain(cfg), k()).err().map(|e| e.to_string()).unwrap_or_default();
         assert!(err(&format!("{p}, gas_price = \"0.025\" }}")).contains("network"));
@@ -1164,12 +1250,15 @@ mod tests {
             .route("/cosmos/auth/v1beta1/accounts/{a}", axum::routing::get(|| async {
                 axum::Json(json!({"account": {"account_number": "1", "sequence": "0"}}))
             }))
-            .route("/cosmos/tx/v1beta1/simulate", axum::routing::post(|| async { axum::Json(json!({"gas_info": {"gas_used": "100000"}})) }));
+            .route("/cosmos/tx/v1beta1/simulate", axum::routing::post(|| async { axum::Json(json!({"gas_info": {"gas_used": "100000"}})) }))
+            // scaas-rpc T21b: the gateway's identity and head, read by `build`'s failover before its first answer
+            .route("/cosmos/base/tendermint/v1beta1/node_info", axum::routing::get(|| async { axum::Json(json!({"default_node_info": {"network": "c-1"}})) }))
+            .route("/cosmos/base/tendermint/v1beta1/blocks/latest", axum::routing::get(|| async { axum::Json(json!({"block": {"header": {"height": "5"}}})) }));
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let rest = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
         let k = vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
-        let mut cfg = chain(&format!("network = \"c-1\"\nparams = {{ rest = \"{rest}\", prefix = \"wasm\", gas_price = \"0.025\", \
+        let mut cfg = chain(&format!("network = \"c-1\"\nparams = {{ rest = [\"{rest}\"], prefix = \"wasm\", gas_price = \"0.025\", \
                                   relay_fee = {{ router = \"{}\" }} }}", router()));
         cfg.tokens.push(crate::config::TokenCfg { address: token(), decimals: 6 });
         let a = CosmosAdapter::new(&cfg, k).unwrap();
@@ -1195,7 +1284,7 @@ mod tests {
     #[test]
     fn cosmos_relay_fee_policy_config() {
         let k = || vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
-        let cfg = |rf: &str| chain(&format!("network = \"c-1\"\nparams = {{ rest = \"http://x\", prefix = \"wasm\", gas_price = \"0.025\"{rf} }}"));
+        let cfg = |rf: &str| chain(&format!("network = \"c-1\"\nparams = {{ rest = [\"http://x\"], prefix = \"wasm\", gas_price = \"0.025\"{rf} }}"));
         assert!(CosmosAdapter::new(&cfg(""), k()).unwrap().relay_fee.router.is_none());
         let ok = CosmosAdapter::new(&cfg(&format!(", relay_fee = {{ router = \"{}\", min_amount = 7 }}", router())), k()).unwrap();
         assert_eq!((ok.relay_fee.router.clone(), ok.relay_fee.params.min_amount), (Some(router()), 7));
@@ -1257,5 +1346,229 @@ mod tests {
             prop_assert_eq!(out[0]["entry_ref"].as_str().unwrap(), format!("0x{}", alloy::hex::encode(r)));
             prop_assert_eq!(out[0]["log_index"].as_u64().unwrap(), log as u64);
         }
+    }
+
+    /// Owner 2026-11-18 (ARCH-POS-15): `params.rest` is a list of REST gateways; a single URL string, an empty list or a
+    /// repeated URL is refused at start. Control: a list of two.
+    #[test]
+    fn cosmos_rest_is_a_list_of_gateways() {
+        let k = || vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
+        let cfg = |rest: &str| chain(&format!("network = \"c-1\"\nparams = {{ rest = {rest}, prefix = \"wasm\", gas_price = \"0.025\" }}"));
+        let err = |rest: &str| CosmosAdapter::new(&cfg(rest), k()).err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(err("\"http://x\"").contains("must be a list"));
+        assert!(err("[]").contains("params.rest"));
+        assert!(err("[\"http://x\", \"http://x\"]").contains("params.rest"));
+        assert!(CosmosAdapter::new(&cfg("[\"http://x\", \"http://y\"]"), k()).is_ok(), "control");
+    }
+
+    // ---- scaas-rpc T21b: ARCH-POS-15 failover over the REST gateways, the first-endpoint carve-out first (F3) ----
+
+    const DOWN: &str = "http://127.0.0.1:9";
+
+    /// A REST gateway of chain `c-1` at height 5: `node_info`, the latest block, the lane's account (sequence 0), a smart
+    /// query (the router's executor, the lane nonce 1), a landed transaction, and a simulate using `gas` (`None`: refused,
+    /// 500 code 2). Counts every request but the failover's identity and head reads.
+    async fn gateway(gas: Option<&'static str>) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
+        let n = std::sync::Arc::new(AtomicUsize::new(0));
+        let n2 = n.clone();
+        let exec = exec_c();
+        let app = axum::Router::new().fallback(move |uri: axum::http::Uri| {
+            let (n2, exec) = (n2.clone(), exec.clone());
+            async move {
+                let p = uri.path().to_string();
+                let ok = |v: Value| (axum::http::StatusCode::OK, axum::Json(v));
+                match p.as_str() {
+                    "/cosmos/base/tendermint/v1beta1/node_info" => return ok(json!({"default_node_info": {"network": "c-1"}})),
+                    "/cosmos/base/tendermint/v1beta1/blocks/latest" => return ok(json!({"block": {"header": {"height": "5"}}})),
+                    _ => {}
+                }
+                n2.fetch_add(1, SeqCst);
+                if p.starts_with("/cosmos/auth/v1beta1/accounts/") {
+                    ok(json!({"account": {"account_number": "1", "sequence": "0"}}))
+                } else if p.starts_with(&format!("/cosmwasm/wasm/v1/contract/{}/smart/", router())) {
+                    ok(json!({"data": exec}))
+                } else if p.starts_with("/cosmwasm/wasm/v1/contract/") {
+                    ok(json!({"data": 1}))
+                } else if p.starts_with("/cosmos/tx/v1beta1/txs/") {
+                    ok(json!({"tx_response": {"code": 0, "height": "5"}}))
+                } else if p == "/cosmos/tx/v1beta1/simulate" {
+                    match gas {
+                        Some(g) => ok(json!({"gas_info": {"gas_used": g}})),
+                        // a refused simulate: the gateway's 500 with its code (as wasmd's)
+                        None => (axum::http::StatusCode::INTERNAL_SERVER_ERROR, axum::Json(json!({"code": 2, "message": "execute wasm contract failed: lane nonce"}))),
+                    }
+                } else {
+                    (axum::http::StatusCode::NOT_FOUND, axum::Json(json!({"code": 5, "message": "not found"})))
+                }
+            }
+        });
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        (url, n)
+    }
+
+    /// The adapter on REST gateways `rest` (CometBFT unused here), with a router.
+    fn adapter_on(rest: &[&str]) -> CosmosAdapter {
+        adapter_rpc("http://r", rest)
+    }
+
+    /// [`adapter_on`] with the CometBFT endpoint `rpc`.
+    fn adapter_rpc(rpc: &str, rest: &[&str]) -> CosmosAdapter {
+        let rest: Vec<String> = rest.iter().map(|u| format!("\"{u}\"")).collect();
+        let k = vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
+        let mut cfg = chain(&format!("network = \"c-1\"\nparams = {{ rest = [{}], prefix = \"wasm\", gas_price = \"0.025\", \
+                                  relay_fee = {{ router = \"{}\" }} }}", rest.join(", "), router()));
+        cfg.tokens.push(crate::config::TokenCfg { address: token(), decimals: 6 });
+        cfg.rpc_urls = vec![rpc.to_string()];
+        CosmosAdapter::new(&cfg, k).unwrap()
+    }
+
+    /// A plain pay of 10 to an account (no executor needed), nonce 0.
+    fn plain_pay() -> Job {
+        let mut o = job("x", &token(), &pay_payload(&[1; 32], &[2; 32], 0, "", &bech32("wasm", &[0x44; 20]), 10));
+        o.as_object_mut().unwrap().remove("kind");
+        o["op_kind"] = json!("pay");
+        Job { id: 1, op: Some(o), ..serde_json::from_value(json!({"id": 1})).unwrap() }
+    }
+
+    /// F3: a status, `op_consumed` and the lane sequence are the first gateway's only: with it down none is endpoint 1's
+    /// answer (here a landed transaction and a consumed lane), and endpoint 1 is asked nothing. Control: endpoint 0 up.
+    #[tokio::test]
+    async fn cosmos_tx_status_op_consumed_and_the_lane_sequence_never_fail_over() {
+        let (url, n) = gateway(Some("100000")).await;
+        let a = adapter_on(&[DOWN, &url]);
+        let tx = format!("0x{}", "11".repeat(32));
+        assert!(!matches!(a.tx_status(&tx).await, Ok(TxStatus::Mined { .. })), "never Mined from endpoint 1");
+        assert!(a.op_consumed(&plain_pay()).await.is_err());
+        assert!(a.sequence(0).await.is_err());
+        assert_eq!((n.load(std::sync::atomic::Ordering::SeqCst), a.failovers()), (0, 0));
+        let a = adapter_on(&[&url]);
+        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { height: 5, .. }), "control");
+        assert_eq!(a.op_consumed(&plain_pay()).await.unwrap(), Some(true));
+        assert_eq!(a.sequence(0).await.unwrap(), 0);
+    }
+
+    /// ARCH-POS-15: `build`'s reads (the lane's account, the simulate) fail over: the first gateway down, endpoint 1 builds.
+    /// A refused simulate there decides nothing (transport); a refusal read from its answer while it answered is no verdict
+    /// (FAILOVER_ANSWER); both on endpoint 0 are the job's. The router's executor, kept for the process, is the first
+    /// gateway's only: with it down a relay-fee job waits and endpoint 1 is never asked for it.
+    #[tokio::test]
+    async fn cosmos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict() {
+        let (url, _) = gateway(Some("100000")).await;
+        let a = adapter_on(&[DOWN, &url]);
+        a.build(&plain_pay(), 0).await.unwrap();
+        assert!(a.failovers() > 0);
+        let (refused, _) = gateway(None).await;
+        assert!(matches!(adapter_on(&[DOWN, &refused]).build(&plain_pay(), 0).await, Err(SimError::Transport(m)) if !m.contains("lane nonce")));
+        assert!(matches!(adapter_on(&[&refused]).build(&plain_pay(), 0).await, Err(SimError::Revert(m)) if m.contains("lane nonce")), "control");
+        let (huge, _) = gateway(Some("999999999999")).await;
+        match adapter_on(&[DOWN, &huge]).build(&plain_pay(), 0).await {
+            Err(SimError::Transport(m)) => assert!(m.starts_with("FAILOVER_ANSWER") && m.contains("max_gas_per_tx"), "{m}"),
+            r => panic!("{r:?}"),
+        }
+        assert!(matches!(adapter_on(&[&huge]).build(&plain_pay(), 0).await, Err(SimError::Revert(m)) if m.contains("max_gas_per_tx")), "control");
+        // the executor: endpoint 0's only
+        let (url, n) = gateway(Some("100000")).await;
+        let a = adapter_on(&[DOWN, &url]);
+        let rf = relay_ref("c-1", &[0x44; 32], b"{}");
+        let mut fee = job("relay_fee", &router(), &pay_payload(&rf, &pay_lane(&rf), 0, &router(), &router(), 5));
+        fee["extra"] = json!({"target": bech32("wasm", &[0x44; 32]), "msg": "7b7d"});
+        let fee = Job { id: 2, op: Some(fee), ..serde_json::from_value(json!({"id": 2})).unwrap() };
+        assert!(matches!(a.build(&fee, 0).await, Err(SimError::Transport(m)) if m.contains("executor")));
+        assert_eq!((n.load(std::sync::atomic::Ordering::SeqCst), a.executor.get()), (0, None));
+    }
+
+    /// scaas-rpc T24.3: the first gateway's answer other than code 2 or 3 (503 code 14, unavailable) is its failure, never its
+    /// verdict: the read fails over and endpoint 1 builds the job (endpoint 0 passes its identity read).
+    #[tokio::test]
+    async fn cosmos_gateway_0_unavailable_fails_over() {
+        let first = crate::adapters::testkit::refusing(&gateway(Some("100000")).await.0, |p, _| p.ends_with("/node_info"), 503, json!({"code": 14, "message": "unavailable"})).await;
+        let (url, _) = gateway(Some("100000")).await;
+        let a = adapter_on(&[&first, &url]);
+        a.build(&plain_pay(), 0).await.unwrap();
+        assert!(a.failovers() > 0);
+    }
+
+    /// scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed is the failover reads' floor: once it reported a transaction mined
+    /// at height 9 (or its head there), endpoint 1, at height 5, is skipped by `build`. Control: before that, endpoint 1 builds.
+    #[tokio::test]
+    async fn cosmos_a_mined_status_and_the_head_raise_the_floor() {
+        let first = || crate::adapters::testkit::scripted(false, |p, _| match p {
+            "/cosmos/base/tendermint/v1beta1/node_info" => Some(json!({"default_node_info": {"network": "c-1"}})),
+            p if p.starts_with("/cosmos/tx/v1beta1/txs/") => Some(json!({"tx_response": {"code": 0, "height": "9"}})),
+            _ => None,
+        });
+        let comet = || crate::adapters::testkit::scripted(false, |p, _| (p == "/status").then(|| json!({"result": {"node_info": {"network": "c-1"},
+            "sync_info": {"latest_block_height": "9", "latest_block_hash": "AA".repeat(32)}}})));
+        let on = |rpc: String, rest: [String; 2]| {
+            let k = vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
+            let mut cfg = chain(&format!("network = \"c-1\"\nparams = {{ rest = [\"{}\", \"{}\"], prefix = \"wasm\", gas_price = \"0.025\" }}",
+                                         rest[0], rest[1]));
+            cfg.rpc_urls = vec![rpc];
+            cfg.tokens.push(crate::config::TokenCfg { address: token(), decimals: 6 });
+            CosmosAdapter::new(&cfg, k).unwrap()
+        };
+        let a = on(comet().await, [first().await, gateway(Some("100000")).await.0]);
+        a.build(&plain_pay(), 0).await.unwrap();
+        assert!(matches!(a.tx_status(&format!("0x{}", "11".repeat(32))).await.unwrap(), TxStatus::Mined { height: 9, .. }));
+        assert!(matches!(a.build(&plain_pay(), 0).await, Err(SimError::Transport(_))), "endpoint 1 below height 9: skipped");
+        let a = on(comet().await, [first().await, gateway(Some("100000")).await.0]);
+        let _ = a.final_head().await;
+        assert!(matches!(a.build(&plain_pay(), 0).await, Err(SimError::Transport(_))), "the head: the same floor");
+    }
+
+    /// scaas-rpc T24.7: `submit` sends to the first gateway only, inside `build`'s scope too: with it down the send fails and
+    /// gateway 1 is asked nothing. Control: the first gateway up is asked.
+    #[tokio::test]
+    async fn cosmos_submit_inside_build_asks_gateway_0_only() {
+        let s = Signed { job_id: 1, tx_id: format!("0x{}", "11".repeat(32)), raw: vec![1, 2, 3], valid_until: u64::MAX / 2, sequence: 0 };
+        let comet = crate::adapters::testkit::scripted(false, |p, _| (p == "/status").then(|| json!({"result": {"node_info": {"network": "c-1"},
+            "sync_info": {"latest_block_height": "5", "latest_block_hash": "AA".repeat(32)}}}))).await;
+        // the CometBFT head (the floor `submit`'s head read raises) is gateway 1's own: only the explicit send keeps it unasked
+        let (url, n) = gateway(Some("100000")).await;
+        assert!(crate::adapters::evm::BUILDING.scope((), adapter_rpc(&comet, &[DOWN, &url]).submit(&s)).await.is_err());
+        assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst), 0, "gateway 1 is asked nothing");
+        let _ = crate::adapters::evm::BUILDING.scope((), adapter_rpc(&comet, &[&url]).submit(&s)).await;
+        assert_eq!(n.load(std::sync::atomic::Ordering::SeqCst), 1, "control");
+    }
+
+    /// scaas-rpc T24.8 (CLI-RPC-03): endpoint 0 passes its identity before its own reads: one of another network (a REST gateway and a CometBFT endpoint of chain c-2) answers
+    /// no status read (refused unread). Control: the same endpoint of this network answers it.
+    #[tokio::test]
+    async fn cosmos_endpoint_0_of_another_network_answers_no_read() {
+        fn rest(p: &str, net: &str) -> Option<Value> {
+            match p {
+                "/cosmos/base/tendermint/v1beta1/node_info" => Some(json!({"default_node_info": {"network": net}})),
+                p if p.starts_with("/cosmwasm/wasm/v1/contract/") => Some(json!({"data": 1})),
+                _ => None,
+            }
+        }
+        fn status(p: &str, net: &str) -> Option<Value> {
+            (p == "/status").then(|| json!({"result": {"node_info": {"network": net},
+                "sync_info": {"latest_block_height": "9", "latest_block_hash": "AA".repeat(32)}}}))
+        }
+        let other = crate::adapters::testkit::scripted(false, |p, _| rest(p, "c-2")).await;
+        assert!(adapter_on(&[&other]).op_consumed(&plain_pay()).await.is_err(), "the REST gateway");
+        let this = crate::adapters::testkit::scripted(false, |p, _| rest(p, "c-1")).await;
+        assert_eq!(adapter_on(&[&this]).op_consumed(&plain_pay()).await.unwrap(), Some(true), "control");
+        let other = crate::adapters::testkit::scripted(false, |p, _| status(p, "c-2")).await;
+        assert!(adapter_rpc(&other, &[&this]).final_head().await.is_err(), "the CometBFT endpoint: status's node_info.network");
+        let comet = crate::adapters::testkit::scripted(false, |p, _| status(p, "c-1")).await;
+        assert_eq!(adapter_rpc(&comet, &[&this]).final_head().await.unwrap().map(|h| h.height), Some(9), "control");
+    }
+
+    /// scaas-rpc T24.14: the account number `sign` uses is kept from the first gateway only: a `build` answered by gateway 1
+    /// (gateway 0 down) keeps none. Control: a read outside `build`, the first gateway's, keeps it.
+    #[tokio::test]
+    async fn cosmos_the_account_number_is_kept_from_gateway_0_only() {
+        let (url, _) = gateway(Some("100000")).await;
+        let a = adapter_on(&[DOWN, &url]);
+        a.build(&plain_pay(), 0).await.unwrap();
+        assert_eq!(a.account_numbers.lock().unwrap().get(&0), None, "a failover gateway's answer is never kept");
+        let a = adapter_on(&[&url]);
+        a.sequence(0).await.unwrap();
+        assert_eq!(a.account_numbers.lock().unwrap().get(&0), Some(&1), "control");
     }
 }

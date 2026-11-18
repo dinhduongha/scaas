@@ -89,6 +89,25 @@ pub fn failover_answer(reason: &str) -> String {
     format!("FAILOVER_ANSWER: refused on a failover endpoint's answer (the first endpoint did not answer); retried: {reason}")
 }
 
+tokio::task_local! {
+    /// scaas-rpc T18b / T19b: set while a family adapter's `build` runs (ARCH-POS-15: its reads fail over); every other read
+    /// of that adapter is endpoint 0's (F3).
+    pub(crate) static BUILDING: ();
+}
+
+/// scaas-rpc T24.1: every endpoint failed a family read. The error names the read and the crate's code only: no endpoint's
+/// text (a later endpoint's refusal, or its body quoted by a failed identity read) reaches a classifier that reads text; the
+/// detail goes to the log (redacted by the crate, CLI-RPC-11).
+pub(crate) fn all_failed(what: &str, e: &scaas_rpc::RpcError) -> anyhow::Error {
+    tracing::warn!(read = what, "no endpoint answered: {e}");
+    anyhow::anyhow!("{what}: no endpoint answered ({}); a failover endpoint's answer decides nothing", e.code())
+}
+
+/// Whether this read is a family adapter's `build`'s.
+pub(crate) fn building() -> bool {
+    BUILDING.try_with(|_| ()).is_ok()
+}
+
 
 #[async_trait]
 impl ChainAdapter for EvmAdapter {
@@ -196,8 +215,8 @@ impl ChainAdapter for EvmAdapter {
     }
 
     async fn sequence(&self, lane: usize) -> Result<u64> {
-        let chain = self.lane(lane)?;
-        Ok(chain.primary().get_transaction_count(chain.address()).latest().await?)
+        // F3: endpoint 0 only, its identity checked (scaas-rpc `first_nonce_at`, T14b)
+        self.lane(lane)?.nonce_at().await
     }
 
     async fn final_head(&self) -> Result<Option<Head>> {

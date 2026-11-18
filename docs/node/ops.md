@@ -870,8 +870,13 @@ refuse_shield_when_unserved = false                # opt-in
     `ua-mtx-fix-verifier`; [pqz-verifier.example.toml](../../scaas-pqz-verifier/pqz-verifier.example.toml), names and paths
     only, no secret): `rpc_urls` (one or more, asked in order; one request's reads from one node at one block, the next node
     only when one does not answer within 10 s or answers an error that is not a revert,
-    [ARCH-POS-15](../decisions.md#ARCH-POS-15) by failover; **every endpoint must be a node the verifier's operator trusts,
-    until the strict-majority option exists (`scaas-rpc`, [CLI-RPC-12](../clients/scaas-rpc.md#CLI-RPC-12), SPECIFIED)**, owner ruling 2026-11-11 ([decisions.md](../decisions.md)
+    [ARCH-POS-15](../decisions.md#ARCH-POS-15) by failover; **under `rpc_policy = "failover"` (the default) every endpoint must be a
+    node the verifier's operator trusts**; under `rpc_policy = "strict_majority"` (two endpoints or more;
+    [CLI-RPC-12](../clients/scaas-rpc.md#CLI-RPC-12), BUILT) every read of a request is agreed by ⌊n/2⌋ + 1 endpoints at one
+    block by hash before the proof is checked, and the operator trusts that fewer than ⌊n/2⌋ + 1 lie together (`n = 2` detects
+    one liar, tolerates no failure; tolerance of one needs `n ≥ 3`); that reads-first path costs up to the key count (at most
+    9) × about 7 reads per key × `n` before `VERDICT_ZERO`, bounded by `concurrency`, `queue` and `rate_per_minute`, sized for
+    it by the operator who turns it on; no majority is `RPC_NO_MAJORITY` (503); owner ruling 2026-11-11 ([decisions.md](../decisions.md)
     CTR-PQZ-29 Change): the option is deferred to the shared `scaas-rpc` crate (TODO 8b), the block is pinned by number not
     hash (R-6, deferred with it), and a lying RPC could pass a key check (§6, CTR-PQZ-30: the key record, its stored `pqzPop` bytes, `keyOwner`) that `OFFCHAIN` tokens trust the verifier for), `chain_id` (required; every endpoint must answer it at start or
     the service does not start), `chain_uid`, `registry` and `registry_generation` (1 or 2; at start the registry's

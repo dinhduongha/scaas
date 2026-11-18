@@ -97,14 +97,18 @@ pub const JSON_DEPTH: usize = 6;
 pub const SERVICE_PULL_MAX: usize = 64 << 10;
 pub const SERVICE_PULL_DEPTH: usize = 7;
 
-/// The bounded reader of outside JSON (spec §9.3), here under feature `json` so these calls have it without `wallet`, and
-/// `wallet::bounded::json` reads through it: `bytes` as JSON if `bytes.len() ≤ max_len` and no array or object nests deeper
-/// than `max_depth` (`[1]` is depth 1), else `None`; the depth counted by a flat scan (no recursion, strings and escapes
-/// skipped) before `serde_json` sees a byte, so its own recursion stays far below its limit. Malformed JSON is `None`.
-pub(crate) fn bounded(bytes: &[u8], max_len: usize, max_depth: usize) -> Option<Value> {
-    if bytes.len() > max_len {
-        return None;
-    }
+/// Why [`depth_within`] refuses: an array or object nested deeper than its cap, or a close with nothing open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DepthError {
+    Deep,
+    Unbalanced,
+}
+
+/// The flat depth scan of [`bounded`] on its own (scaas-rpc spec §7, F20; CLI-RPC-50): `Ok` when no array or object of `bytes`
+/// nests deeper than `max_depth` (`[1]` is depth 1), counted without recursion, strings and escapes skipped, so a caller runs it
+/// before any parser sees a byte. A close with nothing open is `Unbalanced`; an open never closed passes the scan (the parser
+/// refuses it). It checks nothing else: a malformed text within the depth is `Ok`.
+pub fn depth_within(bytes: &[u8], max_depth: usize) -> Result<(), DepthError> {
     let (mut depth, mut in_string, mut escaped) = (0usize, false, false);
     for &b in bytes {
         if in_string {
@@ -121,13 +125,25 @@ pub(crate) fn bounded(bytes: &[u8], max_len: usize, max_depth: usize) -> Option<
             b'[' | b'{' => {
                 depth += 1;
                 if depth > max_depth {
-                    return None;
+                    return Err(DepthError::Deep);
                 }
             }
-            b']' | b'}' => depth = depth.checked_sub(1)?,
+            b']' | b'}' => depth = depth.checked_sub(1).ok_or(DepthError::Unbalanced)?,
             _ => {}
         }
     }
+    Ok(())
+}
+
+/// The bounded reader of outside JSON (spec §9.3), here under feature `json` so these calls have it without `wallet`, and
+/// `wallet::bounded::json` reads through it: `bytes` as JSON if `bytes.len() ≤ max_len` and no array or object nests deeper
+/// than `max_depth` (`[1]` is depth 1), else `None`; the depth counted by a flat scan (no recursion, strings and escapes
+/// skipped) before `serde_json` sees a byte, so its own recursion stays far below its limit. Malformed JSON is `None`.
+pub(crate) fn bounded(bytes: &[u8], max_len: usize, max_depth: usize) -> Option<Value> {
+    if bytes.len() > max_len {
+        return None;
+    }
+    depth_within(bytes, max_depth).ok()?;
     #[cfg(feature = "vectors")]
     PARSED.with(|n| n.set(n.get() + 1));
     serde_json::from_slice(bytes).ok()

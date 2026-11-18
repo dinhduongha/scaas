@@ -251,6 +251,10 @@ fields from the payload ([NODE-LANE-16](../node/submit-lanes.md#NODE-LANE-16)), 
 ([NODE-LANE-20](../node/submit-lanes.md#NODE-LANE-20)); the lane-deposit and immutable-program rules do not apply
 (no lane-paid rent; factory implementations are already immutable).
 
+Endpoints (BUILT, scaas-rpc T14): the relay is read through the chain's `rpc_urls` pool as on EVM. `build`'s reads (the lane
+balance, the simulation, the views) fail over ([CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04)); the receipt status, the
+lane nonce, `op_consumed` and the gas price are the first endpoint's only, so no failover endpoint's answer makes a job `dead`.
+
 ## 5. Finality and events
 
 <a id="finality"></a>

@@ -2101,7 +2101,12 @@ mod tests {
                 "eth_blockNumber" => Ok(json!("0xa")),
                 "eth_chainId" => Ok(json!("0x7a69")),
                 "eth_getBlockByNumber" => {
-                    Ok(serde_json::from_str::<Value>(include_str!("../../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone())
+                    let mut b = serde_json::from_str::<Value>(include_str!("../../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
+                    // scaas-rpc T13 point 6 (fixture correction): endpoint 0 is identity-checked now: block 0's hash is the venue's pinned chain_uid
+                    if p[0] == "0x0" {
+                        b["hash"] = json!(format!("{:#x}", B256::repeat_byte(0x24)));
+                    }
+                    Ok(b)
                 }
                 "eth_getLogs" => {
                     let asked = p[0]["topics"][0].clone();
@@ -2256,7 +2261,8 @@ mod tests {
     /// `v` on a fresh fake chain of `w` that is its second endpoint, the first down (Fable recheck 3 R3-1).
     async fn on_failover(v: Venue, w: World) -> (Venue, W) {
         let (url, world) = fake_chain(w).await;
-        let block0: B256 = "0xd490a652c286563a398812c62434decf124c8e52d9c820a6185e88813aea05d5".parse().unwrap();
+        // scaas-rpc T13 point 6 (fixture correction): endpoint 0 is identity-checked now: the fake's block 0 hash, as in `venue`
+        let block0 = B256::repeat_byte(0x24);
         let cfg = crate::config::ChainCfg { evm_chain_number: 31337, chain_uid: Some(block0),
             rpc_urls: vec!["http://127.0.0.1:9".into(), url], ..Default::default() };
         (Venue { chain: Arc::new(Chain::with_signer(&cfg, relayer_key()).unwrap()), ..v }, world)

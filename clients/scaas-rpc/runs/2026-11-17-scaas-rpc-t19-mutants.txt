@@ -1,0 +1,10 @@
+# t19 mutants at commit d5ca7080d (name | outcome | test)
+a: the quorum read on endpoint 0 only | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test aptos the_rest_reads_the_quorum_read_and_the_indexer
+a: the indexer key dropped | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::aptos::tests::the_indexer_key_goes_to_the_indexer_only
+a: a 404 an error | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test aptos the_rest_reads_the_quorum_read_and_the_indexer
+a: the identity a constant | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test aptos the_failover_drops_another_network_and_skips_an_endpoint_behind
+b: every read fails over (the carve-out gone) | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::aptos::tests::aptos_tx_status_op_consumed_and_the_lane_sequence_never_fail_over
+b: the build's reads on endpoint 0 only | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::aptos::tests::aptos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict
+b: a failover refusal final (the counter not compared) | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::aptos::tests::aptos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict
+b: a later endpoint's refusal text reaches the classifier | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::aptos::tests::aptos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict
+8 mutants, 8 killed, 0 survived, 0 not loaded

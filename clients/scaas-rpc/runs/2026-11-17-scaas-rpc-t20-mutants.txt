@@ -1,0 +1,9 @@
+# t20 mutants at commit d5ca7080d (name | outcome | test)
+a: the final head's quorum on endpoint 0 only | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_final_head_quorum_reads_every_endpoint
+a: the identity a constant | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test sui the_failover_drops_another_network_and_skips_an_endpoint_behind
+a: each endpoint its own reference | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test sui the_failover_drops_another_network_and_skips_an_endpoint_behind
+b: tx_status through failover | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_tx_status_and_op_consumed_never_fail_over
+b: the journal's status read fails over in build | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_build_reads_fail_over_and_a_failover_refusal_is_no_verdict
+b: the build's reads on endpoint 0 only | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_build_reads_fail_over_and_a_failover_refusal_is_no_verdict
+b: a failover refusal final (the counter not compared) | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_build_reads_fail_over_and_a_failover_refusal_is_no_verdict
+7 mutants, 7 killed, 0 survived, 0 not loaded

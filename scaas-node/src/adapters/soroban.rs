@@ -48,8 +48,11 @@ const EVENT_PAGE: u64 = 1000;
 
 pub struct SorobanAdapter {
     key: String,
+    /// `rpc_urls` as configured (the tests build another adapter on them; the reads go through `net`)
+    #[cfg_attr(not(test), allow(dead_code))]
     rpc: Vec<String>,
-    http: reqwest::Client,
+    /// the RPC endpoints (scaas-rpc T15: the family client, bounded, 20 s per request)
+    net: scaas_rpc::soroban::Soroban,
     network_id: [u8; 32],
     signers: Vec<LocalSigner>,
     lanes: Vec<Lane>,
@@ -321,7 +324,8 @@ impl SorobanAdapter {
         Ok(Self {
             key: cfg.chain_key(),
             rpc: cfg.rpc_urls.clone(),
-            http: reqwest::Client::builder().timeout(std::time::Duration::from_secs(20)).build()?,
+            net: scaas_rpc::soroban::Soroban::new(scaas_rpc::family::Client::of_urls(&cfg.rpc_urls, None)
+                .map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?, passphrase),
             network_id: network_id(passphrase),
             signers: signers.iter().map(clone_signer).collect::<Result<_>>()?,
             lanes,
@@ -337,27 +341,94 @@ impl SorobanAdapter {
         })
     }
 
-    async fn call(&self, url: &str, method: &str, params: Value) -> Result<Value> {
-        let body = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
-        let r: Value = self.http.post(url).json(&body).send().await?.json().await.with_context(|| format!("{method}: decode"))?;
-        if let Some(e) = r.get("error") {
-            bail!("{method}: {e}");
-        }
-        Ok(r["result"].clone())
-    }
-
+    /// One JSON-RPC call to the first endpoint (scaas-rpc T15: the family client). The lane's status, sequence, fee and
+    /// `op_consumed` read here only (F3).
     async fn rpc(&self, method: &str, params: Value) -> Result<Value> {
-        self.call(&self.rpc[0], method, params).await
+        Ok(self.net.call(0, method, params).await?)
     }
 
-    async fn ledger_hash(&self, url: &str, seq: u64) -> Result<String> {
-        let r = self.call(url, "getLedgers", json!({"startLedger": seq, "pagination": {"limit": 1}})).await?;
-        let l = &r["ledgers"][0];
-        if l["sequence"].as_u64() != Some(seq) {
-            bail!("ledger {seq} not available");
+    /// ARCH-POS-15 (CLI-RPC-04, scaas-rpc T15b): `build`'s simulations and views, failed over: the first endpoint, then each next
+    /// one of this network (`getNetwork`'s passphrase) not behind the ledger endpoint 0 last showed. Any error answer is the
+    /// endpoint's failure, as the first endpoint's was; what a failover endpoint's answer refuses `build` requeues.
+    async fn read(&self, method: &str, params: Value) -> Result<Value> {
+        Ok(self.read_from(method, params).await?.0)
+    }
+
+    /// [`Self::read`] and the index of the endpoint that answered (T24.5: a value kept for later reads is endpoint 0's only).
+    async fn read_from(&self, method: &str, params: Value) -> Result<(Value, usize)> {
+        let a = self.net.client.failover(&self.net, |i| {
+            let params = params.clone();
+            async move {
+                self.net.call(i, method, params).await.map_err(|e| scaas_rpc::pool::ReadError::Failure(match e {
+                    scaas_rpc::family::FamilyError::Failure(f) => f,
+                    e => scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string()),
+                }))
+            }
+        }).await.map_err(|e| crate::adapters::evm::all_failed(method, &e))?;
+        Ok((a.value, a.endpoint))
+    }
+
+    /// [`ChainAdapter::build`]'s body (scaas-rpc T15b: the wrapper compares the failover counter).
+    async fn build_on(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
+        let op = job.op.clone().ok_or_else(|| SimError::Revert("job without op".into()))?;
+        let rv = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
+        let pk = lane_pk(self.signer(lane).map_err(rv)?).map_err(rv)?;
+        let lane_addr = ScAddress::from_str(&stellar_account_strkey(&pk)).map_err(|e| SimError::Revert(e.to_string()))?;
+        self.load_executor().await?;
+        let registry_write = job.kind.as_deref() == Some("call") || is_accept(job);
+        if registry_write && !op["args"]["relayer"].is_null() {
+            self.load_relayers().await?;
         }
-        let h = l["hash"].as_str().ok_or_else(|| anyhow!("ledger {seq} without hash"))?;
-        Ok(format!("0x{}", h.to_lowercase()))
+        let (call, auth, valid_until) = job_tx(&self.network_id, job.kind.as_deref(), &op, &lane_addr, &self.relay_fee).map_err(rv)?;
+        let valid_until = tx_deadline(valid_until).map_err(rv)?;
+        if job.kind.as_deref() == Some("ua_metatx") && UA_FNS.iter().any(|f| f.class == Class::Mandate && f.name.as_bytes() == call.function_name.0.as_slice()) {
+            self.mandate_wasm_ok(&call.contract_address, false).await?;
+        }
+        if registry_write {
+            self.ua8_precheck(&op).await?;
+        }
+        let tx = self.tx(lane, 0, valid_until, call.clone(), auth.clone()).map_err(rv)?;
+        let env = TransactionEnvelope::Tx(TransactionV1Envelope { tx: tx.clone(), signatures: Default::default() });
+        let b64 = env.to_xdr_base64(Limits::none()).map_err(|e| SimError::Revert(e.to_string()))?;
+        let sim = self
+            .read("simulateTransaction", json!({"transaction": b64}))
+            .await
+            .map_err(|e| SimError::Transport(format!("{e:#}")))?;
+        if let Some(err) = sim.get("error").and_then(|e| e.as_str()) {
+            if let Some(stale) = self.stale_epoch(&call, err).await {
+                return Err(SimError::Revert(stale));
+            }
+        }
+        let data = sim_data(&sim, self.max_deposit)?;
+        if u64::try_from(data.resource_fee).map_or(true, |f| f > self.max_resource_fee) {
+            return Err(SimError::Revert(format!("{RESOURCE_FEE_OVER_CAP}: {} stroops declared, params.max_resource_fee_per_job {}", data.resource_fee, self.max_resource_fee)));
+        }
+        check_recorded_auth(&sim, &call, &auth).map_err(rv)?;
+        if !auth.iter().any(|e| matches!(e.credentials, SorobanCredentials::Address(_))) {
+            check_no_other_signer(&sim).map_err(rv)?;
+        }
+        let mut tx = tx;
+        tx.fee = u32::try_from(self.base_fee as i64 + data.resource_fee).map_err(|_| SimError::Revert("fee overflow".into()))?;
+        tx.ext = TransactionExt::V1(data);
+        // simulation does not see this limit, and `sendTransaction` would refuse it: this job's own state, named here
+        let size = Self::envelope_size(&tx).map_err(rv)?;
+        let limit = self.tx_max_size().await?;
+        if size > limit {
+            return Err(SimError::Revert(format!("transaction of {size} B over the network's tx_max_size_bytes ({limit})")));
+        }
+        // simulation does not refuse this write, and on chain it fails on the lane's fee: this job's own state
+        if let Some(size) = largest_data_write(&sim) {
+            if let Some(limit) = self.entry_max_size().await.filter(|l| size > *l) {
+                return Err(SimError::Revert(format!("entry of {size} B over the network's contract_data_entry_size_bytes ({limit})")));
+            }
+        }
+        let body = tx.to_xdr(Limits::none()).map_err(|e| SimError::Revert(e.to_string()))?;
+        Ok(Built { job_id: job.id, body, valid_until, meta: json!({}) })
+    }
+
+    /// The failover answers so far (a refusal read while it moved is no verdict).
+    fn failovers(&self) -> u64 {
+        self.net.client.pool().failover_answers()
     }
 
     fn signer(&self, lane: usize) -> Result<&LocalSigner> {
@@ -404,14 +475,20 @@ impl SorobanAdapter {
     /// default value. A simulation error is an `Err` (fail closed): `SimRefused` when the host refused the call or its answer is
     /// over what the node reads, which a retry never changes.
     async fn view(&self, contract: &ScAddress, f: &str, args: Vec<ScVal>) -> Result<Option<ScVal>> {
-        let (value, restore) = self.sim_view(contract, f, args).await?;
+        let (value, restore) = self.sim_view(contract, f, args, false).await?;
+        Ok(value.filter(|_| !restore))
+    }
+
+    /// [`Self::view`] on the first endpoint only (F3: `op_consumed`; the values kept for the process).
+    async fn view_first(&self, contract: &ScAddress, f: &str, args: Vec<ScVal>) -> Result<Option<ScVal>> {
+        let (value, restore) = self.sim_view(contract, f, args, true).await?;
         Ok(value.filter(|_| !restore))
     }
 
     /// `view` for `op_consumed`: a view the host refuses says nothing about the op, so the answer is unknown. As a failed read the job
     /// would go back to the queue on every claim, and the queue is per chain.
     async fn view_or_unknown(&self, contract: &ScAddress, f: &str, args: Vec<ScVal>) -> Result<Option<ScVal>> {
-        match self.view(contract, f, args).await {
+        match self.view_first(contract, f, args).await {
             Err(e) if e.is::<SimRefused>() => Ok(None),
             r => r,
         }
@@ -419,10 +496,11 @@ impl SorobanAdapter {
 
     /// A read-only call by simulation: its value, and whether the simulation needs a restore (it may still have read the
     /// archived entry, so the value can come with `true`, and only with `true` can it be absent).
-    async fn sim_view(&self, contract: &ScAddress, f: &str, args: Vec<ScVal>) -> Result<(Option<ScVal>, bool)> {
+    async fn sim_view(&self, contract: &ScAddress, f: &str, args: Vec<ScVal>, first: bool) -> Result<(Option<ScVal>, bool)> {
         let call = InvokeContractArgs { contract_address: contract.clone(), function_name: ScSymbol(f.try_into()?), args: args.try_into()? };
         let env = TransactionEnvelope::Tx(TransactionV1Envelope { tx: self.tx(0, 0, 0, call, vec![])?, signatures: Default::default() });
-        let sim = self.rpc("simulateTransaction", json!({"transaction": env.to_xdr_base64(Limits::none())?})).await?;
+        let tx = json!({"transaction": env.to_xdr_base64(Limits::none())?});
+        let sim = if first { self.rpc("simulateTransaction", tx).await? } else { self.read("simulateTransaction", tx).await? };
         if let Some(e) = sim.get("error").and_then(|e| e.as_str()) {
             return Err(SimRefused(format!("{f}: {e}")).into());
         }
@@ -445,7 +523,7 @@ impl SorobanAdapter {
         let (Some(router), None) = (&self.relay_fee.router, self.relay_fee.executor.get()) else { return Ok(()) };
         let config = |why: String| SimError::Revert(format!(
             "config: params.relay_fee.router {router} {why}; deploy the router with its executor (deploy.sh soroban <net> relay_fee)"));
-        match self.view(router, "executor", vec![]).await {
+        match self.view_first(router, "executor", vec![]).await {
             Ok(Some(ScVal::Address(x))) => {
                 let _ = self.relay_fee.executor.set(x);
                 Ok(())
@@ -463,7 +541,7 @@ impl SorobanAdapter {
     async fn load_relayers(&self) -> std::result::Result<(), SimError> {
         let (Some(registry), None) = (&self.relay_fee.ua_registry, self.relay_fee.relayers.get()) else { return Ok(()) };
         let config = |why: String| SimError::Revert(format!("config: params.ua_registry {registry} {why}"));
-        match self.view(registry, "relayers", vec![]).await {
+        match self.view_first(registry, "relayers", vec![]).await {
             Ok(Some(ScVal::Vec(Some(v)))) => {
                 let list: Option<Vec<ScAddress>> = v.iter().map(|a| match a {
                     ScVal::Address(a) => Some(a.clone()),
@@ -480,14 +558,17 @@ impl SorobanAdapter {
     }
 
     /// The network's `tx_max_size_bytes`, read for each job: a setting the validators vote, so a change is seen on the next good
-    /// read, with no restart. A read that fails uses the last good answer, so this limit never stops a chain simulation still
-    /// serves; only the first read, with no answer yet, is `Transport`, as a failed simulation.
+    /// read, with no restart. A read that fails uses the last good answer of endpoint 0 (T24.5: a failover endpoint's answer
+    /// serves its job only and is never kept), so this limit never stops a chain simulation still serves; with no such answer
+    /// yet a failed read is `Transport`, as a failed simulation.
     async fn tx_max_size(&self) -> std::result::Result<usize, SimError> {
         let read = self.read_tx_max_size().await;
         let mut last = self.tx_limit.lock().unwrap_or_else(|e| e.into_inner());
         match read {
-            Ok(limit) => {
-                *last = Some(limit);
+            Ok((limit, at)) => {
+                if at == 0 {
+                    *last = Some(limit);
+                }
                 Ok(limit)
             }
             Err(why) => (*last).inspect(|l| tracing::warn!(chain = %self.key, "tx_max_size_bytes: {why}; using the last answer, {l}"))
@@ -495,35 +576,38 @@ impl SorobanAdapter {
         }
     }
 
-    async fn read_tx_max_size(&self) -> std::result::Result<usize, String> {
+    async fn read_tx_max_size(&self) -> std::result::Result<(usize, usize), String> {
         match self.read_setting(ConfigSettingId::ContractBandwidthV0).await? {
-            ConfigSettingEntry::ContractBandwidthV0(b) => Ok(b.tx_max_size_bytes as usize),
+            (ConfigSettingEntry::ContractBandwidthV0(b), at) => Ok((b.tx_max_size_bytes as usize, at)),
             other => Err(format!("not the bandwidth setting: {other:?}")),
         }
     }
 
-    async fn read_setting(&self, id: ConfigSettingId) -> std::result::Result<ConfigSettingEntry, String> {
+    /// A network setting and the index of the endpoint that answered it.
+    async fn read_setting(&self, id: ConfigSettingId) -> std::result::Result<(ConfigSettingEntry, usize), String> {
         let k = LedgerKey::ConfigSetting(LedgerKeyConfigSetting { config_setting_id: id });
         let k = k.to_xdr_base64(Limits::none()).map_err(|e| e.to_string())?;
-        let r = self.rpc("getLedgerEntries", json!({"keys": [k]})).await.map_err(|e| format!("{e:#}"))?;
+        let (r, at) = self.read_from("getLedgerEntries", json!({"keys": [k]})).await.map_err(|e| format!("{e:#}"))?;
         let x = r["entries"][0]["xdr"].as_str().ok_or("no entry")?;
         match LedgerEntryData::from_xdr_base64(x, xdr_limits(1 << 16)) {
-            Ok(LedgerEntryData::ConfigSetting(c)) => Ok(c),
+            Ok(LedgerEntryData::ConfigSetting(c)) => Ok((c, at)),
             other => Err(format!("not a setting: {other:?}")),
         }
     }
 
-    /// The network's `contract_data_entry_size_bytes`, read as `tx_max_size`; a failed read uses the last answer. `None`: never
-    /// answered, so the check cannot run. That job goes on: the chain still refuses an entry over the limit.
+    /// The network's `contract_data_entry_size_bytes`, read as `tx_max_size`; a failed read uses endpoint 0's last answer (a
+    /// failover endpoint's serves its job only, T24.5). `None`: no such answer, so the check cannot run. That job goes on: the
+    /// chain still refuses an entry over the limit.
     async fn entry_max_size(&self) -> Option<usize> {
         let read = match self.read_setting(ConfigSettingId::ContractDataEntrySizeBytes).await {
-            Ok(ConfigSettingEntry::ContractDataEntrySizeBytes(n)) => Ok(n as usize),
-            Ok(other) => Err(format!("not the entry setting: {other:?}")),
+            Ok((ConfigSettingEntry::ContractDataEntrySizeBytes(n), at)) => Ok((n as usize, at)),
+            Ok((other, _)) => Err(format!("not the entry setting: {other:?}")),
             Err(why) => Err(why),
         };
         let mut last = self.entry_limit.lock().unwrap_or_else(|e| e.into_inner());
         match read {
-            Ok(limit) => *last = Some(limit),
+            Ok((limit, 0)) => *last = Some(limit),
+            Ok((limit, _)) => return Some(limit),
             Err(why) => tracing::warn!(chain = %self.key, "contract_data_entry_size_bytes: {why}; using the last answer, {:?}", *last),
         }
         *last
@@ -538,11 +622,13 @@ impl SorobanAdapter {
     /// Owner 2026-11-02: a `ua_metatx` is free to the client and outside the `call` share, so on a mandate it runs only code the operator
     /// listed: the contract's instance entry, read through the host, names a Wasm of `params.mandate_wasm_hashes`. A failed read is
     /// `Transport`; no instance, an executable that is no Wasm, or a hash not listed is `Revert`, `MANDATE_WASM_REFUSED`, unset refusing all.
-    async fn mandate_wasm_ok(&self, c: &ScAddress) -> std::result::Result<(), SimError> {
+    async fn mandate_wasm_ok(&self, c: &ScAddress, first: bool) -> std::result::Result<(), SimError> {
         let refused = |why: String| SimError::Revert(format!("{MANDATE_WASM_REFUSED}: {c} {why}"));
         let k = LedgerKey::ContractData(LedgerKeyContractData { contract: c.clone(), key: ScVal::LedgerKeyContractInstance, durability: ContractDataDurability::Persistent });
         let k = k.to_xdr_base64(Limits::none()).map_err(|e| refused(e.to_string()))?;
-        let r = self.rpc("getLedgerEntries", json!({"keys": [k]})).await.map_err(|e| SimError::Transport(format!("{e:#}")))?;
+        let keys = json!({"keys": [k]});
+        let r = if first { self.rpc("getLedgerEntries", keys).await } else { self.read("getLedgerEntries", keys).await };
+        let r = r.map_err(|e| SimError::Transport(format!("{e:#}")))?;
         if r.get("latestLedger").is_none() {
             return Err(SimError::Transport(format!("getLedgerEntries without latestLedger: {r}")));
         }
@@ -634,60 +720,12 @@ impl ChainAdapter for SorobanAdapter {
     }
 
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
-        let op = job.op.clone().ok_or_else(|| SimError::Revert("job without op".into()))?;
-        let rv = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
-        let pk = lane_pk(self.signer(lane).map_err(rv)?).map_err(rv)?;
-        let lane_addr = ScAddress::from_str(&stellar_account_strkey(&pk)).map_err(|e| SimError::Revert(e.to_string()))?;
-        self.load_executor().await?;
-        let registry_write = job.kind.as_deref() == Some("call") || is_accept(job);
-        if registry_write && !op["args"]["relayer"].is_null() {
-            self.load_relayers().await?;
+        // scaas-rpc T15b (R4): a refusal read while a failover endpoint answered is no verdict
+        let mark = self.failovers();
+        match self.build_on(job, lane).await {
+            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),
+            r => r,
         }
-        let (call, auth, valid_until) = job_tx(&self.network_id, job.kind.as_deref(), &op, &lane_addr, &self.relay_fee).map_err(rv)?;
-        let valid_until = tx_deadline(valid_until).map_err(rv)?;
-        if job.kind.as_deref() == Some("ua_metatx") && UA_FNS.iter().any(|f| f.class == Class::Mandate && f.name.as_bytes() == call.function_name.0.as_slice()) {
-            self.mandate_wasm_ok(&call.contract_address).await?;
-        }
-        if registry_write {
-            self.ua8_precheck(&op).await?;
-        }
-        let tx = self.tx(lane, 0, valid_until, call.clone(), auth.clone()).map_err(rv)?;
-        let env = TransactionEnvelope::Tx(TransactionV1Envelope { tx: tx.clone(), signatures: Default::default() });
-        let b64 = env.to_xdr_base64(Limits::none()).map_err(|e| SimError::Revert(e.to_string()))?;
-        let sim = self
-            .rpc("simulateTransaction", json!({"transaction": b64}))
-            .await
-            .map_err(|e| SimError::Transport(format!("{e:#}")))?;
-        if let Some(err) = sim.get("error").and_then(|e| e.as_str()) {
-            if let Some(stale) = self.stale_epoch(&call, err).await {
-                return Err(SimError::Revert(stale));
-            }
-        }
-        let data = sim_data(&sim, self.max_deposit)?;
-        if u64::try_from(data.resource_fee).map_or(true, |f| f > self.max_resource_fee) {
-            return Err(SimError::Revert(format!("{RESOURCE_FEE_OVER_CAP}: {} stroops declared, params.max_resource_fee_per_job {}", data.resource_fee, self.max_resource_fee)));
-        }
-        check_recorded_auth(&sim, &call, &auth).map_err(rv)?;
-        if !auth.iter().any(|e| matches!(e.credentials, SorobanCredentials::Address(_))) {
-            check_no_other_signer(&sim).map_err(rv)?;
-        }
-        let mut tx = tx;
-        tx.fee = u32::try_from(self.base_fee as i64 + data.resource_fee).map_err(|_| SimError::Revert("fee overflow".into()))?;
-        tx.ext = TransactionExt::V1(data);
-        // simulation does not see this limit, and `sendTransaction` would refuse it: this job's own state, named here
-        let size = Self::envelope_size(&tx).map_err(rv)?;
-        let limit = self.tx_max_size().await?;
-        if size > limit {
-            return Err(SimError::Revert(format!("transaction of {size} B over the network's tx_max_size_bytes ({limit})")));
-        }
-        // simulation does not refuse this write, and on chain it fails on the lane's fee: this job's own state
-        if let Some(size) = largest_data_write(&sim) {
-            if let Some(limit) = self.entry_max_size().await.filter(|l| size > *l) {
-                return Err(SimError::Revert(format!("entry of {size} B over the network's contract_data_entry_size_bytes ({limit})")));
-            }
-        }
-        let body = tx.to_xdr(Limits::none()).map_err(|e| SimError::Revert(e.to_string()))?;
-        Ok(Built { job_id: job.id, body, valid_until, meta: json!({}) })
     }
 
     async fn sign(&self, built: Built, lane: usize, sequence: u64) -> Result<Signed> {
@@ -734,12 +772,20 @@ impl ChainAdapter for SorobanAdapter {
     }
 
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
-        let r = self.rpc("getTransaction", json!({"hash": tx_id.trim_start_matches("0x")})).await?;
-        Ok(match r["status"].as_str() {
-            Some("SUCCESS") => TxStatus::Mined { height: r["ledger"].as_u64().unwrap_or_default(), tx_hash: None },
-            Some("FAILED") => TxStatus::Reverted { reason: format!("tx failed: {}", r["resultXdr"].as_str().unwrap_or("")) },
-            _ => TxStatus::Unknown,
-        })
+        let st: Result<TxStatus> = async {
+            let r = self.rpc("getTransaction", json!({"hash": tx_id.trim_start_matches("0x")})).await?;
+            Ok(match r["status"].as_str() {
+                Some("SUCCESS") => TxStatus::Mined { height: r["ledger"].as_u64().unwrap_or_default(), tx_hash: None },
+                Some("FAILED") => TxStatus::Reverted { reason: format!("tx failed: {}", r["resultXdr"].as_str().unwrap_or("")) },
+                _ => TxStatus::Unknown,
+            })
+        }
+        .await;
+        // scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed raises the failover reads' floor
+        if let Ok(TxStatus::Mined { height, .. }) = &st {
+            self.net.client.pool().saw_block(*height);
+        }
+        st
     }
 
     /// NET-SOR-14: `feeCharged` of a transaction that landed, `SUCCESS` or `FAILED`. Under a fee bump the outer result, the fee
@@ -783,15 +829,10 @@ impl ChainAdapter for SorobanAdapter {
 
     /// SCP: ledger đã đóng là final; quorum = các endpoint khác trả cùng hash cho ledger đó.
     async fn final_head(&self) -> Result<Option<Head>> {
-        let r = self.rpc("getLatestLedger", json!({})).await?;
-        let height = r["sequence"].as_u64().ok_or_else(|| anyhow!("getLatestLedger without sequence"))?;
-        let hash = format!("0x{}", r["id"].as_str().ok_or_else(|| anyhow!("getLatestLedger without id"))?.to_lowercase());
-        let mut agree = 1;
-        for url in &self.rpc[1..] {
-            if self.ledger_hash(url, height).await.ok().as_deref() == Some(hash.as_str()) {
-                agree += 1;
-            }
-        }
+        // scaas-rpc T15: endpoint 0's latest ledger, and how many endpoints give its hash
+        let (head, agree) = self.net.head_agreement().await?;
+        self.net.client.pool().saw_block(head.sequence); // the failover reads' floor (endpoint 0's polled ledger)
+        let (height, hash) = (head.sequence, head.hash);
         Ok((agree >= self.quorum).then_some(Head { height, hash }))
     }
 
@@ -799,7 +840,7 @@ impl ChainAdapter for SorobanAdapter {
         if let Some(h) = self.hashes.lock().ok().and_then(|m| m.get(&height).cloned()) {
             return Ok(h);
         }
-        let h = self.ledger_hash(&self.rpc[0], height).await?;
+        let h = self.net.ledger_hash(0, height).await?;
         if let Ok(mut m) = self.hashes.lock() {
             if m.len() > 4096 {
                 m.clear();
@@ -871,7 +912,7 @@ impl ChainAdapter for SorobanAdapter {
         }
         let (a, c) = (call.args.as_slice(), &call.contract_address);
         if f.class == Class::Mandate {
-            match self.mandate_wasm_ok(c).await {
+            match self.mandate_wasm_ok(c, true).await {
                 Ok(()) => {}
                 Err(SimError::Revert(_)) => return Ok(None),
                 Err(SimError::Transport(e)) => bail!("{e}"),
@@ -2106,7 +2147,7 @@ impl SorobanAdapter {
     /// a requeued job is claimed again first and would starve the chain's queue.
     async fn ua8_record(&self, registry: &ScAddress, ua: &[u8; 32]) -> std::result::Result<Option<(u16, Vec<u8>, bool)>, SimError> {
         let id = sc_bytes(ua).map_err(|e| SimError::Revert(e.to_string()))?;
-        let v = match self.sim_view(registry, "record_of", vec![id]).await {
+        let v = match self.sim_view(registry, "record_of", vec![id], false).await {
             Ok((Some(v), _)) => v,
             Ok((None, _)) => return Err(SimError::Revert("record_of: its state needs a restore, and no value came back".into())),
             Err(e) if e.is::<SimRefused>() => return Err(SimError::Revert(format!("record_of: {e:#}"))),
@@ -2125,7 +2166,7 @@ impl SorobanAdapter {
     /// is refused here, unsent. As `ua8_record`: a failed RPC is `Transport`, what the state answers `Revert`.
     async fn not_yet_accepted(&self, registry: &ScAddress, ua: &[u8; 32], index: u16) -> std::result::Result<(), SimError> {
         let id = sc_bytes(ua).map_err(|e| SimError::Revert(e.to_string()))?;
-        match self.sim_view(registry, "member_accepted", vec![id, ScVal::U32(index.into())]).await {
+        match self.sim_view(registry, "member_accepted", vec![id, ScVal::U32(index.into())], false).await {
             Ok((Some(ScVal::Bool(false)), _)) => Ok(()),
             Ok((Some(ScVal::Bool(true)), _)) => Err(SimError::Revert(format!("slot {index} is already accepted: nothing to send"))),
             Ok((v, _)) => Err(SimError::Revert(format!("member_accepted answered {v:?}"))),
@@ -2138,7 +2179,7 @@ impl SorobanAdapter {
     /// check saves a fee and decides nothing else, so any other answer leaves the job to its simulation.
     async fn pop_not_stored(&self, registry: &ScAddress, ua: &[u8; 32]) -> std::result::Result<(), SimError> {
         let id = sc_bytes(ua).map_err(|e| SimError::Revert(e.to_string()))?;
-        match self.sim_view(registry, "pqz_pop_of", vec![id]).await {
+        match self.sim_view(registry, "pqz_pop_of", vec![id], false).await {
             Ok((Some(ScVal::Bytes(b)), _)) if !b.is_empty() => Err(SimError::Revert("the PQZ proof is already stored: nothing to send".into())),
             Err(e) if !e.is::<SimRefused>() => Err(SimError::Transport(format!("pqz_pop_of: {e:#}"))),
             _ => Ok(()),
@@ -3683,11 +3724,15 @@ mod tests {
         bare_entry: bool,
         /// Every contract's executable; `None` = no instance entry.
         executable: Option<ContractExecutable>,
+        /// `getNetwork`'s passphrase (scaas-rpc T15b; the adapters here name "x").
+        passphrase: &'static str,
+        /// `getTransaction` asks (scaas-rpc T15b).
+        tx_reads: u32,
     }
 
     impl Default for Net {
         fn default() -> Self {
-            Self { tx: json!({"status": "SUCCESS", "ledger": 5}), entry_limit: Some(ENTRY_MAX), accounts: None, refuses: None, no_entries_result: false, bare_entry: false, executable: Some(ContractExecutable::Wasm(Hash(MANDATE_WASM))) }
+            Self { tx: json!({"status": "SUCCESS", "ledger": 5}), entry_limit: Some(ENTRY_MAX), accounts: None, refuses: None, no_entries_result: false, bare_entry: false, executable: Some(ContractExecutable::Wasm(Hash(MANDATE_WASM))), passphrase: "x", tx_reads: 0 }
         }
     }
 
@@ -3743,7 +3788,14 @@ mod tests {
                             json!({"entries": entries.iter().map(|x| json!({"xdr": x})).collect::<Vec<_>>(), "latestLedger": 5})
                         })
                     }
-                    Some("getTransaction") => Some(net.lock().unwrap().tx.clone()),
+                    Some("getTransaction") => {
+                        let mut net = net.lock().unwrap();
+                        net.tx_reads += 1;
+                        Some(net.tx.clone())
+                    }
+                    // scaas-rpc T15b (fixture correction): the failover reads check every endpoint's network and a later one's head
+                    Some("getNetwork") => Some(json!({"passphrase": net.lock().unwrap().passphrase, "protocolVersion": 30})),
+                    Some("getLatestLedger") => Some(json!({"id": "AB", "sequence": 10})),
                     _ => None,
                 };
                 if let Some(r) = lane_rpc {
@@ -5854,5 +5906,133 @@ mod tests {
         let x = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, x);
         let e = sim_data(&json!({"transactionData": x}), 0).unwrap_err();
         assert!(matches!(e, SimError::Transport(ref r) if r.to_lowercase().contains("depth")), "{e:?}");
+    }
+
+    // ---- scaas-rpc T15b: ARCH-POS-15 failover, the first-endpoint carve-out first (F3) ----
+
+    const DOWN: &str = "http://127.0.0.1:9";
+
+    /// The stub adapter (`stub_adapter`'s config) on `urls`, the stub of `net` and `answer` last; `(adapter, calls, net)`.
+    async fn failover_adapter(answer: Answer, net: Net, first: &[&str]) -> (SorobanAdapter, Arc<Mutex<Vec<String>>>, Arc<Mutex<Net>>) {
+        let (calls, net) = (Arc::new(Mutex::new(Vec::new())), Arc::new(Mutex::new(net)));
+        let url = rpc_stub_net(answer, calls.clone(), Arc::new(Mutex::new(Some(TX_MAX))), net.clone()).await;
+        let urls = first.iter().map(|u| u.to_string()).chain([url]).collect();
+        let mut c = ChainCfg { family: "soroban".into(), network: Some("local".into()), rpc_urls: urls, lanes: vec![0], ..Default::default() };
+        c.tokens = vec![crate::config::TokenCfg { address: CONTRACT.into(), decimals: 7 }];
+        c.params.insert("network_passphrase".into(), "x".into());
+        c.params.insert("max_resource_fee_per_job".into(), 1_000_000_000.into());
+        c.params.insert("mandate_wasm_hashes".into(), toml::Value::Array(vec![hex(&MANDATE_WASM).into()]));
+        let s = LocalSigner::Ed(ed25519_dalek::SigningKey::from_bytes(&[1; 32]));
+        (SorobanAdapter::new(&c, &[s]).unwrap(), calls, net)
+    }
+
+    /// F3: a status is endpoint 0's only: with it down, an unread status (asked again), endpoint 1 counts zero `getTransaction`
+    /// asks; a lagging endpoint 1's "not found" is never read, so the job is never `dead` on it. Control: endpoint 0 up.
+    #[tokio::test]
+    async fn soroban_tx_status_never_fails_over() {
+        let lagging = Net { tx: json!({"status": "NOT_FOUND"}), ..Default::default() };
+        let (a, _, net) = failover_adapter(void_answer(), lagging, &[DOWN]).await;
+        assert!(a.tx_status("0xab").await.is_err(), "unread, never Unknown from endpoint 1");
+        assert!(a.tx_fee("0xab").await.is_err());
+        assert_eq!(net.lock().unwrap().tx_reads, 0, "endpoint 1 is never asked");
+        let (a, _, net) = failover_adapter(void_answer(), Net::default(), &[]).await;
+        assert!(matches!(a.tx_status("0xab").await.unwrap(), TxStatus::Mined { height: 5, .. }), "control");
+        assert_eq!(net.lock().unwrap().tx_reads, 1);
+    }
+
+    /// F3: `op_consumed` and the lane sequence are endpoint 0's only. Controls: endpoint 0 up answers both.
+    #[tokio::test]
+    async fn soroban_op_consumed_and_the_lane_sequence_never_fail_over() {
+        let used: Answer = Arc::new(|c| match c.function_name.0.as_slice() {
+            b"ua_ref_used" => view_ok(ScVal::Bool(true)),
+            _ => view_ok(ScVal::Void),
+        });
+        let (c, f, args) = ua_ops(ScVal::Void).into_iter().find(|o| o.1 == "ua_pay").unwrap();
+        let job = ua_job(c, f, args);
+        let (a, calls, _) = failover_adapter(used.clone(), Net::default(), &[DOWN]).await;
+        assert!(a.op_consumed(&job).await.is_err());
+        assert!(a.sequence(0).await.is_err());
+        assert!(calls.lock().unwrap().is_empty(), "endpoint 1 is never asked");
+        let (a, _, _) = failover_adapter(used, Net::default(), &[]).await;
+        assert_eq!(a.op_consumed(&job).await.unwrap(), Some(true), "control");
+        assert_eq!(a.sequence(0).await.unwrap(), 4, "control");
+    }
+
+    /// ARCH-POS-15: `build`'s simulation and views fail over: endpoint 0 down, endpoint 1 answers and the job is built; endpoint 1
+    /// of another network is dropped (nothing built). A refusal endpoint 1 answers is no verdict: transport, the job requeued
+    /// (`FAILOVER_ANSWER`); the same refusal from endpoint 0 is the job's (`Revert`).
+    #[tokio::test]
+    async fn soroban_build_reads_fail_over_and_a_failover_refusal_is_no_verdict() {
+        let (c, f, args) = ua_ops(ScVal::Void).into_iter().find(|o| o.1 == "ua_pay").unwrap();
+        let job = ua_job(c, f, args);
+        let (a, calls, _) = failover_adapter(void_answer(), Net::default(), &[DOWN]).await;
+        assert!(a.build(&job, 0).await.is_ok(), "{:?}", calls.lock().unwrap());
+        let other = Net { passphrase: "another network", ..Default::default() };
+        let (a, calls, _) = failover_adapter(void_answer(), other, &[DOWN]).await;
+        assert!(matches!(a.build(&job, 0).await, Err(SimError::Transport(_))));
+        assert!(calls.lock().unwrap().is_empty(), "another network's endpoint is never asked");
+        let refuses: Answer = Arc::new(|_| json!({"error": "HostError: Error(Contract, #1)"}));
+        let (a, _, _) = failover_adapter(refuses.clone(), Net::default(), &[DOWN]).await;
+        assert!(matches!(a.build(&job, 0).await, Err(SimError::Transport(e)) if e.contains("FAILOVER_ANSWER")));
+        let (a, _, _) = failover_adapter(refuses, Net::default(), &[]).await;
+        assert!(matches!(a.build(&job, 0).await, Err(SimError::Revert(_))), "control: endpoint 0's refusal");
+    }
+
+    /// scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed is the failover reads' floor: once it reported a transaction mined
+    /// at ledger 20 (or its head there), endpoint 1, at ledger 10, is skipped by `build`. Control: before that, endpoint 1 builds.
+    #[tokio::test]
+    async fn soroban_a_mined_status_and_the_head_raise_the_floor() {
+        let (c, f, args) = ua_ops(ScVal::Void).into_iter().find(|o| o.1 == "ua_pay").unwrap();
+        let job = ua_job(c, f, args);
+        let first = || crate::adapters::testkit::scripted(true, |m, _| match m {
+            "getNetwork" => Some(json!({"passphrase": "x", "protocolVersion": 30})),
+            "getTransaction" => Some(json!({"status": "SUCCESS", "ledger": 20})),
+            "getLatestLedger" => Some(json!({"id": "AB", "sequence": 20})),
+            _ => None,
+        });
+        let (a, calls, _) = failover_adapter(void_answer(), Net::default(), &[&first().await]).await;
+        assert!(a.build(&job, 0).await.is_ok(), "{:?}", calls.lock().unwrap());
+        assert!(matches!(a.tx_status("0xab").await.unwrap(), TxStatus::Mined { height: 20, .. }));
+        assert!(matches!(a.build(&job, 0).await, Err(SimError::Transport(_))), "endpoint 1 below ledger 20: skipped");
+        let (a, _, _) = failover_adapter(void_answer(), Net::default(), &[&first().await]).await;
+        let _ = a.final_head().await;
+        assert!(matches!(a.build(&job, 0).await, Err(SimError::Transport(_))), "the head: the same floor");
+    }
+
+    /// scaas-rpc T24.5: the last good network limit is endpoint 0's only. Answered by endpoint 1 (endpoint 0 down), each limit
+    /// serves that job and is never kept, so a later read no endpoint answers is `Transport` (the transaction size) and unknown
+    /// (the entry size), never endpoint 1's old answer. Control: endpoint 0's answer is kept for a failed read.
+    #[tokio::test]
+    async fn soroban_the_last_good_limit_is_endpoint_0s_only() {
+        let (a, _, net) = failover_adapter(void_answer(), Net::default(), &[DOWN]).await;
+        assert_eq!(a.tx_max_size().await.unwrap(), TX_MAX as usize);
+        assert_eq!(a.entry_max_size().await, Some(ENTRY_MAX as usize));
+        net.lock().unwrap().no_entries_result = true;
+        assert!(matches!(a.tx_max_size().await, Err(SimError::Transport(_))), "endpoint 1's answer was never kept");
+        assert_eq!(a.entry_max_size().await, None);
+        let (a, _, net) = failover_adapter(void_answer(), Net::default(), &[]).await;
+        a.tx_max_size().await.unwrap();
+        a.entry_max_size().await.unwrap();
+        net.lock().unwrap().no_entries_result = true;
+        assert_eq!(a.tx_max_size().await.unwrap(), TX_MAX as usize, "control: endpoint 0's answer kept");
+        assert_eq!(a.entry_max_size().await, Some(ENTRY_MAX as usize));
+    }
+
+    /// scaas-rpc T24.8 (CLI-RPC-03): endpoint 0 passes its identity before its own reads: one of another network (another passphrase) answers
+    /// no status read (refused unread). Control: the same endpoint of this network answers it.
+    #[tokio::test]
+    async fn soroban_endpoint_0_of_another_network_answers_no_read() {
+        fn rpc(m: &str, passphrase: &str) -> Option<Value> {
+            match m {
+                "getNetwork" => Some(json!({"passphrase": passphrase, "protocolVersion": 30})),
+                "getTransaction" => Some(json!({"status": "SUCCESS", "ledger": 5})),
+                _ => None,
+            }
+        }
+        let other = crate::adapters::testkit::scripted(true, |m, _| rpc(m, "another network")).await;
+        assert!(failover_adapter(void_answer(), Net::default(), &[&other]).await.0.tx_status("0xab").await.is_err());
+        let this = crate::adapters::testkit::scripted(true, |m, _| rpc(m, "x")).await;
+        let a = failover_adapter(void_answer(), Net::default(), &[&this]).await.0;
+        assert!(matches!(a.tx_status("0xab").await.unwrap(), TxStatus::Mined { .. }), "control");
     }
 }

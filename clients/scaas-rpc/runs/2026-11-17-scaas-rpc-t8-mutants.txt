@@ -1,0 +1,4 @@
+# t8 mutants at commit b77670551 (name | outcome | test)
+no eth_chainId check at start | killed | ../scripts/capped cargo test --locked --offline -j2 --test service start_pins_chain_id
+no answer bound (connect_http reads an answer whole) | killed | ../scripts/capped cargo test --locked --offline -j2 --test bounds an_answer_above_16_mib_is_the_nodes_failure
+2 mutants, 2 killed, 0 survived, 0 not loaded

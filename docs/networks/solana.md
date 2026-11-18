@@ -731,6 +731,14 @@ max_cu = 600000
 max_priority_lamports = 2000000
 ```
 
+Endpoints (BUILT, scaas-rpc T16): `rpc_urls` are read through the crate's family client (16 MiB, depth 64, no redirect,
+20 s a request). `build`'s reads (the subject's Account, the lane PDA and its rent, the lane's nonce value for the
+simulation, the simulation, the priority fees) fail over ([CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04)): the next
+endpoint must answer `getGenesisHash` with the configured cluster and a slot at or above the finalized slot the first
+endpoint last showed; a refusal read while a failover endpoint answered requeues the job (`FAILOVER_ANSWER`). The
+signature status and rebroadcast, the landed fee, the lane sequence (the nonce account, created on the first endpoint
+when absent), `op_consumed`, the lane balance and the domain check (kept for the process) are the first endpoint's only.
+
 ## 11. Finality and events
 
 <a id="events"></a>

@@ -458,6 +458,8 @@ rate_per_minute = 1000
             "openingAuditor": {"mlkemCt": "0x", "x25519Eph": B256::ZERO, "sealedSeed": "0x"}}}});
     let (status, signed) = post(&app, "/v1/pqz-verdict", req.to_string()).await;
     assert_eq!(status, 200, "verdict: {signed}");
+    // plan T9 (CLI-RPC-12): the same request under rpc_policy = "strict_majority" over three anvils of this one state
+    strict_majority_on_three_anvils(&rpc, &cfg, &signer, registry, token, to.ua, &req).await;
     let pv = &signed["pqzVerdict"];
     let verdict = t::PqzSignedVerdict {
         pqzVerdict: t::PqzVerdict { token, chainId: U256::from(CHAIN_ID), proofSystemId: pv["proofSystemId"].as_str().unwrap().parse().unwrap(),
@@ -493,4 +495,106 @@ alloy::sol! {
     interface IFactory {
         function implementationOf(uint8 kind, uint64 version) external view returns (address);
     }
+}
+
+/// A JSON-RPC call by hand (the anvil_* methods).
+async fn raw(url: &str, method: &str, params: Value) -> Value {
+    let p = ProviderBuilder::new().connect_http(url.parse().unwrap());
+    p.raw_request::<Value, Value>(method.to_string().into(), params).await.unwrap_or_else(|e| panic!("{method}: {e}"))
+}
+
+/// Another anvil of the same arguments on a free port (F28), loading `state` (a JSON state file), killed on drop.
+async fn another_anvil(state: &std::path::Path) -> (Anvil, String) {
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let child = Command::new("anvil")
+        .args(["--chain-id", &CHAIN_ID.to_string(), "--hardfork", "amsterdam", "--gas-limit", "200000000",
+            "--code-size-limit", "65536", "--port", &port.to_string(), "--silent", "--load-state"])
+        .arg(state)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("anvil in PATH");
+    let rpc = format!("http://127.0.0.1:{port}");
+    for _ in 0..50 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        if ProviderBuilder::new().connect_http(rpc.parse().unwrap()).get_chain_id().await.is_ok() {
+            break;
+        }
+    }
+    (Anvil(child), rpc)
+}
+
+/// CLI-RPC-12 on real chains: A's state loaded into B and C (the positive control: the three heads' hashes are equal). The reads
+/// of an agreed request are at `Depth(1)`, so each step mines two blocks on every node at the same timestamps (equal states give
+/// equal block hashes). One node's key record altered (the receiver's scoped key pointer's code; its blocks then differ) is
+/// outvoted and the verdict signed; two altered differently is `RPC_NO_MAJORITY`, nothing signed.
+async fn strict_majority_on_three_anvils(a: &str, cfg: &Config, signer: &PrivateKeySigner, registry: Address, token: Address, to: B256,
+    req: &Value) {
+    // anvil_dumpState answers gzipped JSON; --load-state reads the JSON (the RPC anvil_loadState refuses a body this large)
+    let dump = alloy::hex::decode(raw(a, "anvil_dumpState", json!([])).await.as_str().unwrap()).unwrap();
+    let mut state = Vec::new();
+    std::io::Read::read_to_end(&mut flate2::read::GzDecoder::new(&dump[..]), &mut state).unwrap();
+    let file = std::env::temp_dir().join(format!("scaas-ver-anvil-state-{}.json", std::process::id()));
+    std::fs::write(&file, state).unwrap();
+    let ((_b, b), (_c, c)) = (another_anvil(&file).await, another_anvil(&file).await);
+    let _ = std::fs::remove_file(&file);
+    let head = |u: String| async move { raw(&u, "eth_getBlockByNumber", json!(["latest", false])).await["hash"].clone() };
+    let h = head(a.to_string()).await;
+    assert_eq!((head(b.clone()).await, head(c.clone()).await), (h.clone(), h), "the positive control: one state, one head hash");
+    let all = [a.to_string(), b.clone(), c.clone()];
+    let mine = |ts: u64| {
+        let all = all.clone();
+        async move {
+            for _ in 0..2 {
+                for u in &all {
+                    raw(u, "evm_setNextBlockTimestamp", json!([ts])).await;
+                    raw(u, "evm_mine", json!([])).await;
+                }
+            }
+        }
+    };
+    let ts = u64::from_str_radix(head_ts(a).await.trim_start_matches("0x"), 16).unwrap();
+    let urls = [a.to_string(), b.clone(), c.clone()];
+    let strict = Config { rpc_urls: urls.to_vec(), rpc_policy: scaas_pqz_verifier::RpcPolicy::StrictMajority, ..clone_cfg(cfg) };
+    async fn app(cfg: &Config, signer: &PrivateKeySigner) -> axum::Router {
+        let nodes = Rpc::connect(&cfg.rpc_urls, CHAIN_ID).await.unwrap();
+        let pqz: Pqz = Arc::new(|_: &[u8]| Ok(VALID));
+        http::router(Arc::new(Service::new(Arc::new(nodes), pqz, signer.clone(), cfg)), cfg)
+    }
+    let ptr = view(a, registry, IUARegistry::pqzScopedKeyAtCall { ua: to, scope: token, version: 0 }).await.ptr;
+    raw(&c, "anvil_setCode", json!([ptr, "0x00deadbeef"])).await;
+    mine(ts + 1).await;
+    let (status, signed) = post(&app(&strict, signer).await, "/v1/pqz-verdict", req.to_string()).await;
+    assert_eq!(status, 200, "one altered node is outvoted: {signed}");
+    raw(&b, "anvil_setCode", json!([ptr, "0x00cafe"])).await;
+    mine(ts + 2).await;
+    let (status, refused) = post(&app(&strict, signer).await, "/v1/pqz-verdict", req.to_string()).await;
+    assert_eq!((status, refused["error"].as_str()), (503, Some("RPC_NO_MAJORITY")), "{refused}");
+    assert!(refused.get("pqzVerdictSig").is_none());
+}
+
+/// The latest block's timestamp (hex).
+async fn head_ts(u: &str) -> String {
+    raw(u, "eth_getBlockByNumber", json!(["latest", false])).await["timestamp"].as_str().unwrap().to_string()
+}
+
+/// `Config` has no `Clone`: the same values through its TOML.
+fn clone_cfg(c: &Config) -> Config {
+    let releases: String = c.releases.iter().map(|(a, s)| format!("\"{a}\" = \"{s}\"\n")).collect();
+    Config::parse(&format!(r#"
+bind = "{}"
+rpc_urls = {:?}
+chain_id = {}
+chain_uid = "{}"
+registry = "{}"
+registry_generation = {}
+keystore = "unused-in-this-test.json"
+keystore_password_env = "UNUSED_IN_THIS_TEST"
+valid_minutes = {}
+concurrency = {}
+queue = {}
+rate_per_minute = {}
+[releases]
+{releases}"#, c.bind, c.rpc_urls, c.chain_id, c.chain_uid, c.registry, c.registry_generation, c.valid_minutes, c.concurrency, c.queue,
+        c.rate_per_minute)).unwrap()
 }

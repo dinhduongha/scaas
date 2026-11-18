@@ -1,0 +1,8 @@
+# t9 mutants at commit b77670551 (name | outcome | test)
+agree replaced by failover under strict_majority | killed | ../scripts/capped cargo test --locked --offline -j2 --test service strict_majority_signs_the_honest_answer
+probe on failover under strict_majority | killed | ../scripts/capped cargo test --locked --offline -j2 --test service probe_runs_under_agree_too
+Reads compared without the key records | killed | ../scripts/capped cargo test --locked --offline -j2 --test service two_lying_nodes_refuse_rpc_no_majority_and_sign_nothing
+a key read moved after the proof under strict_majority | killed | ../scripts/capped cargo test --locked --offline -j2 --test service strict_majority_signs_the_honest_answer
+check in another order | killed | ../scripts/capped cargo test --locked --offline -j2 --test service the_refusal_is_the_same_under_both_policies
+the old classifier | killed | ../scripts/capped cargo test --locked --offline -j2 --test service the_classifier_is_the_crates
+6 mutants, 6 killed, 0 survived, 0 not loaded
