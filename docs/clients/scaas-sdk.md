@@ -108,7 +108,8 @@ and `SecureStore` are never trusted for policy. The passkey RP ID is the deploym
 `ua-rs` under the vault's same data key, both envelopes kept, so a passkey session persists its changes; a new vault (an imported
 key) takes the vault passphrase and, with a passkey set, its PRF output. A biometric is a platform gate; nothing is derived from it. A
 passphrase change keeps the data key and removing the passkey unlock revokes nothing from an earlier copy of the container: the UI
-says to move the funds if the old passphrase may have leaked. Scrypt, Argon2id and proofs run one at a time by default. `lock` calls
+says to move the funds if the old passphrase may have leaked. A passkey or platform unlock keeps the PRF key-encryption key, derived once, in `ua-rs`'s locked memory until lock (zeroed at lock, drop and `disable_prf_unlock`; never written, never across the FFI) and opens the seed's other vaults with it on first use, the unlock not asked again (owner 2026-11-18): the kept key opens every vault of the seed, so a memory read in the session exposes as much as opening them all, with fewer plaintext secrets resident. The exception (owner 2026-11-18): a passphrase unlock opens every vault at unlock and never keeps the passphrase, since
+vault v1 derives a key per vault salt (no single key to keep) and keeping the passphrase would be worse. Scrypt, Argon2id and proofs run one at a time by default. `lock` calls
 `ua-rs` `lock()`, which revokes every handle of that seed for good ([CLI-UAL-09](ua-libraries.md#CLI-UAL-09)), refusing new calls at
 once and waiting at most for the calls in flight. Export between devices is the sealed backup or the device link only; the container
 is not an export and the words are never shown again.

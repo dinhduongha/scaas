@@ -8,15 +8,16 @@ baseline ua-test | 4de8a5604 | 0 | 503 passed, 0 failed, 3 ignored (47 binaries)
 baseline ua-clippy | 4de8a5604 | 0 | -
 baseline features | 4de8a5604 | 0 | feature_tree not run (crate absent)
 # latest runs:
-sdk-deny | 4196e20cd | 0 | -; tree dirty
 sdk-sets | 4196e20cd | 0 | 6 passed, 0 failed, 0 ignored (3 binaries); tree dirty
 frb-dart | 95b8646e6 | 0 | dart: +46:; tree dirty
-sdk-min | cf5455e4f | 0 | 25 passed, 0 failed, 0 ignored (5 binaries); tree dirty
-sdk-test | cf5455e4f | 0 | 27 passed, 0 failed, 0 ignored (6 binaries); tree dirty
-sdk-wasm | cf5455e4f | 0 | -; tree dirty
-sdk-clippy | cf5455e4f | 0 | -; tree dirty
 ck-test | cf5455e4f | 0 | node: 465 pass, 0 fail, 4 skipped; tree dirty
-ua-test | cf5455e4f | 0 | 517 passed, 0 failed, 3 ignored (50 binaries); tree dirty
-ua-clippy | cf5455e4f | 0 | -; tree dirty
-docs | 2df269175 | 0 | -
-features | 2df269175 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+sdk-min | bb075dd0f | 0 | 45 passed, 0 failed, 0 ignored (6 binaries); tree dirty
+sdk-wasm | bb075dd0f | 0 | -; tree dirty
+sdk-deny | bb075dd0f | 0 | -; tree dirty
+bind-dart | bb075dd0f | 0 | dart: +8:; tree dirty
+ua-test | bb075dd0f | 0 | 521 passed, 0 failed, 3 ignored (52 binaries); tree dirty
+features | bb075dd0f | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+ua-clippy | bb075dd0f | 0 | -; tree dirty
+sdk-test | 380c5cb8d | 0 | 49 passed, 0 failed, 0 ignored (7 binaries); tree dirty
+sdk-clippy | 380c5cb8d | 0 | -; tree dirty
+docs | 380c5cb8d | 0 | -; tree dirty

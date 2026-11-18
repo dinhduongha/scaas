@@ -342,3 +342,39 @@ fn parser_property() {
     }
     assert!(n >= 1500);
 }
+
+fn secret(b: &[u8]) -> Arc<scaas_ua::wallet::SecretBytes> {
+    Arc::new(scaas_ua::wallet::SecretBytes::from_zeroizing(zeroize::Zeroizing::new(b.to_vec())).unwrap())
+}
+
+const PASS: &[u8] = "river-otter-7 ünï".as_bytes();
+const REPO: &[u8] = b"bench hurt jump file august wise shallow faculty impulse spring exact slush thunder author capable act festival slice deposit sauce coconut afford frown better";
+
+/// Owner 2026-11-18 (i): a passphrase unlock opens every vault of the seed at unlock (eager); the passphrase is not kept.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn passphrase_unlock_opens_every_vault() {
+    let s = crate::Sdk::open(crate::SdkConfig {
+        profiles: vec![],
+        store: MemoryStore::new(),
+        authenticator: None,
+        runtime: crate::RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
+        limits: crate::Limits::default(),
+    })
+    .await
+    .unwrap();
+    let v = s.vault();
+    let id = v
+        .import_words(ImportWords { label: "Main".into(), words: secret(REPO), vault_passphrase: secret(PASS) })
+        .await
+        .unwrap()
+        .id;
+    let key = ImportKey { seed: id.clone(), network: "evm".into(), secret: secret(&[0x11; 32]), vault_passphrase: secret(PASS) };
+    v.import_key(key).await.unwrap();
+    v.lock(id.clone()).await;
+    assert!(s.open_seed(&id).is_err(), "control: locked");
+    v.unlock(id.clone(), Unlock::Passphrase(secret(PASS))).await.unwrap();
+    let w = s.open_seed(&id).unwrap();
+    assert!(w.wallet.label_open("manifest"));
+    assert!(w.wallet.label_open("native-import:evm:0"), "opened at unlock");
+    assert!(w.wallet.imported_key(scaas_ua::wallet::Network::Evm, 0).is_ok());
+}

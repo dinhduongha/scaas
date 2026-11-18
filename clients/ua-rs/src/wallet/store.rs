@@ -187,6 +187,9 @@ pub(crate) struct Arena {
     /// The DEK of each label vault opened or sealed while this arena is open, and that vault as it stands (its public
     /// envelopes): what `Wallet::reseal_label_vault` re-seals under the same DEK (scaas-sdk spec §6.10). Wiped with the arena.
     deks: HashMap<String, (Slot, Vault)>,
+    /// The PRF key-encryption key retained at a passkey or platform unlock (scaas-sdk spec §6.10, owner 2026-11-18 (b)): label
+    /// vaults open with it on first use. In the arena's locked pages, so `lock` and drop zero it with them.
+    prf_kek: Option<Slot>,
 }
 
 impl Arena {
@@ -194,7 +197,7 @@ impl Arena {
     fn empty() -> Arena {
         let empty = Slot { chunk: 0, start: 0, len: 0 };
         let (keys, tested) = (HashMap::new(), HashSet::new());
-        Arena { chunks: Vec::new(), used: 0, total: 0, entropy: empty, seed: empty, mini: empty, keys, tested, self_tests: 0, deks: HashMap::new() }
+        Arena { chunks: Vec::new(), used: 0, total: 0, entropy: empty, seed: empty, mini: empty, keys, tested, self_tests: 0, deks: HashMap::new(), prf_kek: None }
     }
 
     fn new(entropy: &[u8], seed: &[u8; 64], mini: &[u8; 32]) -> Result<Arena> {
@@ -255,6 +258,22 @@ impl Arena {
         let (_, v) = self.deks.get_mut(vault.label()).ok_or(Error::Argument)?;
         *v = vault;
         Ok(())
+    }
+
+    /// Retains `kek` as the PRF key-encryption key (replacing one retained before).
+    pub(crate) fn hold_prf_kek(&mut self, kek: &[u8; 32]) -> Result<()> {
+        self.prf_kek = Some(self.put(kek)?);
+        Ok(())
+    }
+
+    /// The retained PRF key-encryption key, if any.
+    pub(crate) fn prf_kek(&self) -> Option<Zeroizing<[u8; 32]>> {
+        Some(Zeroizing::new(self.get(self.prf_kek?).ok()?.try_into().ok()?))
+    }
+
+    /// Whether label vault `label` is open in this arena (its DEK held).
+    pub(crate) fn holds_label(&self, label: &str) -> bool {
+        self.deks.contains_key(label)
     }
 
     /// The DEK held for label vault `label` and that vault, if any.

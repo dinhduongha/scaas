@@ -307,3 +307,13 @@ required-features = ["wallet"]
 [[test]]
 name = "reseal"
 required-features = ["wallet"]
+
+# scaas-sdk T4, owner 2026-11-18 (b): the retained PRF key, label vaults opened on first use (the zeroize check needs `vectors`)
+[[test]]
+name = "retained_key"
+required-features = ["wallet"]
+
+# scaas-sdk T4: the per-word BIP-39 list check
+[[test]]
+name = "word_list"
+required-features = ["wallet"]

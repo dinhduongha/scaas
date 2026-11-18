@@ -10966,6 +10966,23 @@ Change (owner 2026-11-17, "OK, all four points as proposed", on the `scaas-tui` 
 **Cost if wrong.** An imported key lost at lock in a passkey session; a seed no longer opening by passkey; a plain export file guessable offline.
 **Source.** CLI-SGN-02, CLI-SGN-20, CLI-UAL-09, CLI-UAL-16, CLI-UAL-19, CLI-APP-14; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §6.7, §6.10, §6.11.
 
+**Change (owner 2026-11-18, "as proposed (b)"; status: SPECIFIED; the passphrase path by the next Change).** Old: §6.10 said
+import and `pqz-held` vaults open on first use when a passkey or platform unlock is set, without saying with what key. New: at unlock
+the key-encryption key is derived once and kept in locked memory (`ua-rs`'s arena: `mlock` where available, zeroized on lock, on
+drop and on `disable_prf_unlock`), never written to disk and never across the FFI; each import and labelled vault opens on its first
+use with that key, and its secret stays in the same memory until lock; no API change, the unlock secret is not asked again. Stated
+exposure: the retained key opens every vault of the seed, so a memory read during the session exposes as much as opening everything
+would; fewer plaintext secrets stay resident. Found in building it: vault v1's pin KEK is scrypt over a salt of each vault, so only
+the PRF KEK (HKDF of the PRF output or platform secret, one for every vault of the seed) can be derived once. Source: owner via the
+coordinator, 2026-11-18; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §6.10.
+
+**Change (owner 2026-11-18, "as proposed (i)"; status: SPECIFIED).** The passphrase path is the exception to the Change above: a
+passphrase unlock opens every vault of the seed at unlock (eager), and the passphrase itself is never retained; a passkey or platform
+unlock keeps the PRF key and opens on first use. Vault v1 does not change. Reason: vault v1 derives a key per vault salt (scrypt), so
+the passphrase path has no single key to retain, and retaining the passphrase would be worse (a user-chosen secret, often reused
+elsewhere, that opens every vault). Tests: a passphrase unlock opens every vault; the SDK keeps no reference to the passphrase after
+unlock, so it is zeroed and freed when the caller drops it. Source: owner via the coordinator, 2026-11-18.
+
 ### CLI-SDK-07 — Every account names its seed; keys are derived as clientkeys derives them; passkeys sit beside seeds
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-07 · superseded-by: —
 

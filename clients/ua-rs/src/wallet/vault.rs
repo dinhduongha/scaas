@@ -128,6 +128,11 @@ fn pin_kek(pin: &str, salt: &[u8], log_n: u8) -> Result<Zeroizing<[u8; 32]>> {
     Ok(kek)
 }
 
+/// The PRF envelope's key-encryption key of a PRF output or platform secret: one for every vault of a seed (scaas-sdk spec §6.10).
+pub(crate) fn prf_key(output: &[u8; 32]) -> Result<Zeroizing<[u8; 32]>> {
+    prf_kek(output)
+}
+
 fn prf_kek(output: &[u8; 32]) -> Result<Zeroizing<[u8; 32]>> {
     key32(hkdf_sha256(output, &[], PRF_INFO, 32)?, Error::Argument)
 }
@@ -198,6 +203,14 @@ impl Vault {
     /// [`Vault::open`] and the DEK.
     pub(crate) fn open_dek(&self, unlock: Unlock) -> Result<(Zeroizing<Vec<u8>>, Dek)> {
         let dek = self.dek(unlock)?;
+        Ok((gcm_open(&dek, &self.data, &aad(&self.label, "data"))?, dek))
+    }
+
+    /// [`Vault::open_dek`] through the PRF envelope with its key-encryption key `kek` already derived ([`prf_key`]): `Argument`
+    /// for a vault without a PRF envelope, `VaultOpen` for another key or an altered envelope.
+    pub(crate) fn open_dek_prf_kek(&self, kek: &[u8; 32]) -> Result<(Zeroizing<Vec<u8>>, Dek)> {
+        let p = self.prf.as_ref().ok_or(Error::Argument)?;
+        let dek = key32(gcm_open(kek, &p.sealed, &aad(&self.label, "prf"))?, Error::VaultOpen)?;
         Ok((gcm_open(&dek, &self.data, &aad(&self.label, "data"))?, dek))
     }
 

@@ -623,6 +623,34 @@ impl Wallet {
         Ok(())
     }
 
+    /// Keeps the PRF key-encryption key of `output` (a passkey's PRF output or a platform secret) in the arena until `lock()`
+    /// (scaas-sdk spec §6.10, owner 2026-11-18 (b)): derived once, never returned; [`Wallet::open_label_vault_retained`] opens
+    /// the seed's other vaults with it on first use, so the unlock is not asked again. Stated exposure: it opens every vault of
+    /// the seed. `WalletLocked` while locked.
+    pub fn retain_prf_key(&self, output: &[u8; 32]) -> Result<()> {
+        let kek = super::vault::prf_key(output)?;
+        self.store.with_all(|a, _| a.hold_prf_kek(&kek))
+    }
+
+    /// [`Wallet::open_label_vault`] through the vault's PRF envelope with the key [`Wallet::retain_prf_key`] kept: `Argument`
+    /// when none is kept or the vault has no PRF envelope, `VaultOpen` for a vault of another key, `WalletLocked` while locked.
+    pub fn open_label_vault_retained(&self, vault: &Vault) -> Result<()> {
+        let kek = self.store.with_arena(|a| a.prf_kek().ok_or(Error::Argument))?;
+        let (secret, dek) = vault.open_dek_prf_kek(&kek)?;
+        if vault.label() == "manifest" {
+            self.store.set_manifest(Manifest::from_json(&secret)?)?;
+        } else {
+            self.install_held(Held::parse(vault.label())?, &secret)?;
+        }
+        self.hold_dek(&dek, vault);
+        Ok(())
+    }
+
+    /// Whether label vault `label` is open in this wallet's arena (opened or sealed since the last unlock); false while locked.
+    pub fn label_open(&self, label: &str) -> bool {
+        self.store.with_arena(|a| Ok(a.holds_label(label))).unwrap_or(false)
+    }
+
     fn install_held(&self, h: Held, secret: &[u8]) -> Result<()> {
         match h {
             Held::Import(e) => self.import_at(e.network, Some(e.n), secret).map(|_| ()),
