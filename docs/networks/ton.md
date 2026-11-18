@@ -224,7 +224,8 @@ the network's standard `wallet_id`. BUILT.
 available on mainnet/testnet and in MyLocalTon (profile `indexer`). BUILT.
 
 Endpoints (BUILT, scaas-rpc T22): `rpc_urls` are read through the crate's family client (16 MiB, depth 64, no redirect,
-20 s a request; the `api_key_env` key to the first endpoint only, as when only it was read). `build`'s getters fail over
+20 s a request; `api_key_env` names the key's env var: a name, the first endpoint's key only, or a list of names, one per
+`rpc_urls` entry (`""` for none): a later endpoint gets no key unless one is configured for it, scaas-rpc T24.10). `build`'s getters fail over
 ([CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04)): TON Center names no network, so every listed endpoint is this network
 (the profile constant, [NET-ALL-22](README.md#NET-ALL-22)) names endpoint 0's network, and a later endpoint is this network
 when its masterchain block at the last seqno endpoint 0 showed has endpoint 0's root hash (unreadable or none seen yet: skipped

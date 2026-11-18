@@ -1643,13 +1643,7 @@ impl AlgorandAdapter {
         }
         let net = cfg.network.as_deref().ok_or_else(|| anyhow!("algorand: network must be the genesis hash (base64)"))?;
         let network = arr32(&b64d(net).context("algorand: network must be the genesis hash (base64 of 32 bytes)")?)?;
-        let token = match cfg.params.get("algod_token_env") {
-            None => None,
-            Some(v) => {
-                let name = v.as_str().ok_or_else(|| anyhow!("params.algod_token_env must be an env var name"))?;
-                Some(std::env::var(name).with_context(|| format!("params.algod_token_env: {name} is not set"))?)
-            }
-        };
+        let tokens = crate::adapters::endpoint_keys(cfg, "algod_token_env", true)?;
         let cap = |k: &str, d: u64| -> Result<u64> {
             match cfg.params.get(k) {
                 None => Ok(d),
@@ -1668,10 +1662,10 @@ impl AlgorandAdapter {
             key: cfg.chain_key(),
             network,
             net: scaas_rpc::algorand::Algorand::new(
-                scaas_rpc::family::Client::of_urls(
-                    &cfg.rpc_urls,
-                    token.map(|t| scaas_rpc::EndpointAuth::Header { name: "X-Algo-API-Token".into(), value: scaas_rpc::Secret::new(&t) }),
-                )
+                // scaas-rpc T24.10: each endpoint's own token only (a later endpoint gets none unless configured for it)
+                scaas_rpc::family::Client::of_urls_each(&cfg.rpc_urls, |i| {
+                    tokens[i].as_ref().map(|t| scaas_rpc::EndpointAuth::Header { name: "X-Algo-API-Token".into(), value: scaas_rpc::Secret::new(t) })
+                })
                 .map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?,
                 net,
             ),
@@ -3638,7 +3632,7 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
     /// scaas-rpc T18a: the configured `X-Algo-API-Token` goes with each request, to every endpoint, as before (each endpoint's own
     /// credential in the crate); an algod status other than 2xx reaches the classifier as `AlgodError`. Control: unset, none.
     #[tokio::test]
-    async fn the_algod_token_goes_to_every_endpoint_and_a_status_is_algod_error() {
+    async fn the_algod_token_goes_to_endpoint_0_only_and_a_status_is_algod_error() {
         let seen: Arc<Mutex<Vec<Option<String>>>> = Default::default();
         let s2 = seen.clone();
         let app = axum::Router::new().fallback(move |headers: axum::http::HeaderMap| {
@@ -3659,7 +3653,8 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         let e = a.get_raw_at(1, "/v2/status", &[]).await.unwrap_err();
         assert_eq!(status_of(&e), Some(404), "{e:#}");
         assert!(a.get("/v2/status").await.is_err());
-        assert_eq!(*seen.lock().unwrap(), [Some("tok".to_string()), Some("tok".to_string())]);
+        // T24.10 (owner 2026-11-18): the name form is endpoint 0's token only (it went to every endpoint)
+        assert_eq!(*seen.lock().unwrap(), [None, Some("tok".to_string())]);
         let a = AlgorandAdapter::new(&cfg(&url, ""), &[lane0()]).unwrap();
         let _ = a.get("/v2/status").await;
         assert_eq!(seen.lock().unwrap().last().unwrap(), &None, "control: no token configured");
@@ -3842,5 +3837,77 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
             }
         }
         on("max_min_fee = 1000, max_fee_per_byte = 2").await.build(&j, 0).await.unwrap();
+    }
+
+    /// scaas-rpc T24.10 (spec §5.3, owner 2026-11-18): the algod token per endpoint. The name form is endpoint 0's token only
+    /// (it went to every endpoint); the list form gives each endpoint its own (`""`: none). No token appears in an error or a
+    /// log line, though endpoint 1 echoes every header it gets into its refusals.
+    #[tokio::test]
+    async fn algorand_the_token_goes_to_its_own_endpoint_only() {
+        type Seen = Arc<std::sync::Mutex<Vec<Option<String>>>>;
+        /// An algod of this network that records each request's token; `echo`: every request but the identity read answers
+        /// 400 with the request's headers.
+        async fn algod(echo: bool) -> (String, Seen) {
+            let seen: Seen = Default::default();
+            let s2 = seen.clone();
+            let app = axum::Router::new().fallback(move |uri: axum::http::Uri, h: axum::http::HeaderMap| {
+                let s2 = s2.clone();
+                async move {
+                    s2.lock().unwrap().push(h.get("x-algo-api-token").and_then(|v| v.to_str().ok()).map(str::to_string));
+                    if echo && uri.path() != "/v2/transactions/params" {
+                        let all: Vec<String> = h.iter().map(|(k, v)| format!("{k}={}", v.to_str().unwrap_or_default())).collect();
+                        return (axum::http::StatusCode::BAD_REQUEST, axum::Json(json!({"message": all.join(" ")})));
+                    }
+                    (axum::http::StatusCode::OK, axum::Json(json!({"genesis-hash": base64::engine::general_purpose::STANDARD.encode(network()),
+                        "last-round": 5})))
+                }
+            });
+            let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let url = format!("http://{}", l.local_addr().unwrap());
+            tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+            (url, seen)
+        }
+        let on = |urls: Vec<String>, tokens: toml::Value| {
+            let mut c = cfg(&urls[0], FEE_CFG);
+            c.rpc_urls = urls;
+            c.params.insert("algod_token_env".into(), tokens);
+            AlgorandAdapter::new(&c, &[lane0()]).unwrap()
+        };
+        std::env::set_var("SCAAS_T24_10_ALGOD_0", "token-zero");
+        std::env::set_var("SCAAS_T24_10_ALGOD_1", "token-one");
+        let last = |s: &Seen| s.lock().unwrap().last().cloned().flatten();
+        let ((u0, s0), (u1, s1)) = (algod(false).await, algod(true).await);
+        let a = on(vec![u0.clone(), u1.clone()], "SCAAS_T24_10_ALGOD_0".into());
+        a.get_raw_at(0, "/v2/status", &[]).await.unwrap();
+        let e = a.get_raw_at(1, "/v2/status", &[]).await.unwrap_err();
+        assert_eq!((last(&s0), last(&s1)), (Some("token-zero".into()), None), "the name form: endpoint 0's only");
+        assert!(!format!("{e:#}").contains("token-zero"), "{e:#}");
+        let a = on(vec![u0, u1], toml::Value::Array(vec!["".into(), "SCAAS_T24_10_ALGOD_1".into()]));
+        a.get_raw_at(0, "/v2/status", &[]).await.unwrap();
+        let _ = a.get_raw_at(1, "/v2/status", &[]).await;
+        assert_eq!((last(&s0), last(&s1)), (None, Some("token-one".into())), "the list form: each its own");
+        // a failed-over read logs each endpoint's failure: endpoint 0 down (its token configured), endpoint 1's echoed refusal
+        let buf = Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
+        let w = buf.clone();
+        let sub = tracing_subscriber::fmt().with_ansi(false).with_max_level(tracing::Level::TRACE).with_writer(move || LogBuf(w.clone())).finish();
+        let g = tracing::subscriber::set_default(sub);
+        let (u1, _) = algod(true).await;
+        let a = on(vec![DOWN.into(), u1], "SCAAS_T24_10_ALGOD_0".into());
+        let e = crate::adapters::evm::BUILDING.scope((), a.get_raw("/v2/status", &[])).await.unwrap_err();
+        drop(g);
+        let logs = String::from_utf8_lossy(&buf.lock().unwrap()).to_string();
+        assert!(logs.contains("x-algo-api-token") || logs.contains("HTTP 400"), "endpoint 1's refusal is logged: {logs}");
+        assert!(!logs.contains("token-zero") && !format!("{e:#}").contains("token-zero"), "{logs}");
+    }
+
+    struct LogBuf(Arc<std::sync::Mutex<Vec<u8>>>);
+    impl std::io::Write for LogBuf {
+        fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(b);
+            Ok(b.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
     }
 }

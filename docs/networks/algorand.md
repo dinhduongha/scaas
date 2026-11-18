@@ -234,8 +234,9 @@ views).
 
 <a id="NET-ALG-16"></a>**NET-ALG-16** — **Adapter jobs, ids and states.** `[[chains]] network` = the genesis hash in
 base64, chain key `algorand:<b64>`; `params.account_app` (required), `token` app ids in `tokens`, `mandate_app`,
-`dex_app`, `relayfee_app` (no `relay_fee.router`: refused with a pointer), `algod_token_env` (env var of the API
-token), `max_min_fee` and `max_fee_per_byte` (µALGO, defaults 10,000 and 100: algod's `min-fee` or `fee` above its cap is
+`dex_app`, `relayfee_app` (no `relay_fee.router`: refused with a pointer), `algod_token_env` (the env var of the API token: a name,
+endpoint 0's token only, or a list of names, one per `rpc_urls` entry, `""` for none; a later endpoint gets no token unless one
+is configured for it: scaas-rpc T24.10, owner 2026-11-18), `max_min_fee` and `max_fee_per_byte` (µALGO, defaults 10,000 and 100: algod's `min-fee` or `fee` above its cap is
 `Transport`, no verdict, whichever endpoint quoted it; CLI-RPC-05, scaas-rpc T24.4, owner 2026-11-18); price key `relay_fee.min_microalgo_value = { "<token app id>" = µALGO per base unit }`; listed targets
 `relay_fee.targets = { "<app id>" = ["method(args)ret", …] }`, matched by ARC-4 selector (an app of the deployment, an
 empty list or `add_key_native` is a startup error). Job `payload` = hex of label ‖ ARC-4 `MetaOp`, `signature` = hex of

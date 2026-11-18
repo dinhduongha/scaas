@@ -122,6 +122,13 @@ MUTANTS = [
      NT + "sui::tests::sui_a_configured_chain_identifier_checks_endpoint_0_too"),
     ("11: Sui: the configured identifier not passed (node)", [(A + "sui.rs", '                param_str(cfg, "chain_identifier"),\n', "                None,\n")],
      NT + "sui::tests::sui_a_configured_chain_identifier_checks_endpoint_0_too"),
+    # T24.10 (owner 2026-11-18): a family key per endpoint; a later endpoint gets none unless configured for it
+    ("10: every endpoint endpoint 0's key (the name form)", [(A + "mod.rs", "match names.get(i).filter(|v| !v.is_empty()) {", "match names.first().filter(|v| !v.is_empty()) {")],
+     NT + "algorand::tests::algorand_the_token_goes_to_its_own_endpoint_only"),
+    ("10: Algorand: each endpoint endpoint 0's token", [(A + "algorand.rs", "tokens[i].as_ref().map(", "tokens[0].as_ref().map(")],
+     NT + "algorand::tests::algorand_the_token_goes_to_its_own_endpoint_only"),
+    ("10: TON: each endpoint endpoint 0's key", [(A + "ton.rs", "            keys.get(i)\n", "            keys.first()\n")],
+     NT + "ton::tests::ton_the_key_goes_to_its_own_endpoint_only"),
 ]
 
 if __name__ == "__main__":

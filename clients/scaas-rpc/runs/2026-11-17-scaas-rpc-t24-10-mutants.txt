@@ -1,0 +1,5 @@
+# t24-10 mutants at commit 8f5dcfab2 (name | outcome | test)
+10: every endpoint endpoint 0's key (the name form) | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::algorand::tests::algorand_the_token_goes_to_its_own_endpoint_only
+10: Algorand: each endpoint endpoint 0's token | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::algorand::tests::algorand_the_token_goes_to_its_own_endpoint_only
+10: TON: each endpoint endpoint 0's key | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::ton::tests::ton_the_key_goes_to_its_own_endpoint_only
+3 mutants, 3 killed, 0 survived, 0 not loaded

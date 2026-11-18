@@ -18,6 +18,32 @@ pub mod soroban;
 pub mod sui;
 pub mod ton;
 
+/// scaas-rpc T24.10 (spec §5.3, owner 2026-11-18): a family's API key per endpoint, named by env var only. `params.<param>` is a
+/// string (endpoint 0's key) or a list of env var names, one per `rpc_urls` entry (`""`: none). A later endpoint gets no key
+/// unless one is configured for it. A named variable that is unset is an error when `required`, else no key (TON's, as before).
+pub(crate) fn endpoint_keys(cfg: &ChainCfg, param: &str, required: bool) -> Result<Vec<Option<String>>> {
+    let n = cfg.rpc_urls.len();
+    let names: Vec<String> = match cfg.params.get(param) {
+        None => vec![],
+        Some(toml::Value::String(s)) => vec![s.clone()],
+        Some(toml::Value::Array(a)) if a.len() == n => a
+            .iter()
+            .map(|v| v.as_str().map(str::to_string).ok_or_else(|| anyhow::anyhow!("params.{param}: an env var name is not a string")))
+            .collect::<Result<_>>()?,
+        Some(_) => bail!("chain {}: params.{param} must be an env var name or a list of {n} (one per rpc_urls entry)", cfg.chain_key()),
+    };
+    (0..n)
+        .map(|i| match names.get(i).filter(|v| !v.is_empty()) {
+            None => Ok(None),
+            Some(v) => match std::env::var(v) {
+                Ok(k) => Ok(Some(k)),
+                Err(_) if !required => Ok(None),
+                Err(_) => bail!("chain {}: params.{param}: {v} is not set", cfg.chain_key()),
+            },
+        })
+        .collect()
+}
+
 /// Adapter giữ signer của nó; `LocalSigner` không `Clone` nên chép khoá bên trong.
 fn own(s: &LocalSigner) -> LocalSigner {
     match s {

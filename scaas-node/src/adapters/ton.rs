@@ -1160,15 +1160,17 @@ pub struct Api {
 impl Api {
     /// One TON Center (the e2e's shim, tests), its API key when given.
     pub fn new(base: &str, key: Option<String>) -> Result<Self> {
-        Self::of(&[base.to_string()], key)
+        Self::of(&[base.to_string()], &[key])
     }
 
-    /// The configured list: the API key to the first endpoint only, as before (the one endpoint the adapter asked).
-    pub fn of(urls: &[String], key: Option<String>) -> Result<Self> {
+    /// The configured list, each endpoint with its own key only (`keys[i]`; scaas-rpc T24.10: a later endpoint gets none unless
+    /// configured for it).
+    pub fn of(urls: &[String], keys: &[Option<String>]) -> Result<Self> {
         let c = scaas_rpc::family::Client::of_urls_each(urls, |i| {
-            key.as_ref()
-                .filter(|_| i == 0)
-                .map(|k| scaas_rpc::EndpointAuth::Header { name: "X-API-Key".into(), value: scaas_rpc::Secret::new(k) })
+            keys.get(i)
+                .cloned()
+                .flatten()
+                .map(|k| scaas_rpc::EndpointAuth::Header { name: "X-API-Key".into(), value: scaas_rpc::Secret::new(&k) })
         })
         .map_err(|e| anyhow!("rpc_urls: {e}"))?;
         Ok(Self { net: Arc::new(scaas_rpc::ton::Ton::new(c)) })
@@ -1388,7 +1390,7 @@ impl TonAdapter {
             w5.push(w);
         }
         let signers = signers.iter().map(clone_signer).collect::<Result<Vec<_>>>()?;
-        let key = param_str(cfg, "api_key_env").and_then(|e| std::env::var(e).ok());
+        let keys = crate::adapters::endpoint_keys(cfg, "api_key_env", false)?;
         // the node sets it under its store directory (`main`); unset (tests, the example) = in memory only
         let meta_journal = param_str(cfg, "meta_journal").map(std::path::PathBuf::from);
         Ok(Self {
@@ -1396,7 +1398,7 @@ impl TonAdapter {
             lanes,
             signers,
             w5,
-            api: Api::of(&cfg.rpc_urls, key).map_err(|e| anyhow!("chain {}: {e}", cfg.chain_key()))?,
+            api: Api::of(&cfg.rpc_urls, &keys).map_err(|e| anyhow!("chain {}: {e}", cfg.chain_key()))?,
             global_id,
             attach: param_u128(cfg, "attach_nanoton", 150_000_000),
             forward: param_u128(cfg, "forward_nanoton", 0),
@@ -3545,5 +3547,18 @@ mod tests {
         let a = adapter_on(&[first(1).await, fake_api_shared(lane_at(0)).await.0], toml::Table::new());
         a.final_head().await.unwrap();
         assert!(matches!(a.build(&signed_pay(), 0).await, Err(SimError::Transport(_))), "another root hash: dropped");
+    }
+
+    /// scaas-rpc T24.10 (spec §5.3, owner 2026-11-18): the TON Center key per endpoint: the list form gives each endpoint its own
+    /// (`""`: none); the name form stays endpoint 0's only (`the_ton_center_key_goes_to_the_first_endpoint`).
+    #[tokio::test]
+    async fn ton_the_key_goes_to_its_own_endpoint_only() {
+        std::env::set_var("SCAAS_T24_10_TON_1", "key-one");
+        let ((u0, f0), (u1, f1)) = (fake_api_shared(lane_at(0)).await, fake_api_shared(lane_at(0)).await);
+        let keys = toml::Value::Array(vec!["".into(), "SCAAS_T24_10_TON_1".into()]);
+        let a = adapter_on(&[u0, u1], toml::Table::from_iter([("api_key_env".to_string(), keys)]));
+        a.api.net.get(0, "masterchainInfo", &[]).await.unwrap();
+        a.api.net.get(1, "masterchainInfo", &[]).await.unwrap();
+        assert_eq!((f0.lock().unwrap().keys.clone(), f1.lock().unwrap().keys.clone()), (vec![None], vec![Some("key-one".to_string())]));
     }
 }
