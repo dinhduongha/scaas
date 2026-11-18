@@ -33,11 +33,15 @@ abstract contract WrappedZetherRegulatedTokenCore is WrappedZetherTokenCore, Reg
         RegulatedBase(implArgs)
     {}
 
-
     /// @dev The base kind's env checks, restated for the second base.
-    function _validateEnv(IFactoryToken.ChainEnv calldata env) internal view override(MetaTokenBase, WrappedZetherTokenCore) {
+    function _validateEnv(IFactoryToken.ChainEnv calldata env)
+        internal
+        view
+        override(MetaTokenBase, WrappedZetherTokenCore)
+    {
         WrappedZetherTokenCore._validateEnv(env);
     }
+
     function kind() public pure override(MetaTokenBase, WrappedZetherTokenCore) returns (uint8) {
         return TokenStore.KIND_WRAPPED_ZETHER_REGULATED;
     }
@@ -118,7 +122,12 @@ abstract contract WrappedZetherRegulatedTokenCore is WrappedZetherTokenCore, Reg
         super._regReceiver(recipient);
     }
 
-    function _underlyingsBody() internal view override(MetaTokenBase, WrappedZetherTokenCore) returns (address[] memory) {
+    function _underlyingsBody()
+        internal
+        view
+        override(MetaTokenBase, WrappedZetherTokenCore)
+        returns (address[] memory)
+    {
         return super._underlyingsBody();
     }
 
@@ -126,12 +135,21 @@ abstract contract WrappedZetherRegulatedTokenCore is WrappedZetherTokenCore, Reg
         WrappedLib.rescue(asset);
     }
 
-    function _mtxSelectorsBody() internal pure override(MetaTxBaseCore, WrappedZetherTokenCore) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+    function _mtxSelectorsBody()
+        internal
+        pure
+        override(MetaTxBaseCore, WrappedZetherTokenCore)
+        returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         return super._mtxSelectorsBody();
     }
 
-    function _mtxRule(bytes4 sel) internal view override(MetaTxBaseCore, WrappedZetherTokenCore) returns (MtxRule memory) {
+    function _mtxRule(bytes4 sel)
+        internal
+        view
+        override(MetaTxBaseCore, WrappedZetherTokenCore)
+        returns (MtxRule memory)
+    {
         return super._mtxRule(sel);
     }
 
@@ -144,13 +162,19 @@ abstract contract WrappedZetherRegulatedTokenCore is WrappedZetherTokenCore, Reg
     }
 
     function _envelopeBinding(MetaTxLib.MetaTransaction memory m)
-        internal view override(MetaTxBaseCore, WrappedZetherTokenCore) returns (bytes32)
+        internal
+        view
+        override(MetaTxBaseCore, WrappedZetherTokenCore)
+        returns (bytes32)
     {
         return super._envelopeBinding(m);
     }
 
     function _uaEnvelopeBinding(MetaTxLib.UAMetaTransaction memory m)
-        internal view override(UAMetaTxBaseCore, WrappedZetherTokenCore) returns (bytes32)
+        internal
+        view
+        override(UAMetaTxBaseCore, WrappedZetherTokenCore)
+        returns (bytes32)
     {
         return super._uaEnvelopeBinding(m);
     }

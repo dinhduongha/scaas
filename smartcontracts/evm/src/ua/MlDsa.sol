@@ -16,7 +16,8 @@ library MlDsa {
     uint256 internal constant Q = 8380417;
     uint256 internal constant N = 256;
     /// FIPS 204 `zetas[k] = 1753^brv8(k) mod q`, k = 0..255, u32 big-endian (ζ = 1753, a primitive 512-th root of unity).
-    bytes internal constant ZETAS = hex"0000000100495e020039756700396569004f062b0053df73004fe033004f066b0076b1ae00360dd50028edb000207fe4003972830070894a00088192006d3dc8004c72940041e0b40028a3d20066528a004a18a700794034000a52ee006b7d81004e9f1d001a2877002571df001649ee007611bd00492bb7002af6970022d8d50036f72a0030911e0029d13f004926730050685f002010a2003887f70011b2c3000603a4000e2bed0010b72c004a5f35001f9d1500428cd4003177f40020e61200341c1d001ad873007366810049553f003952f60062564a0065ad0500439a1c0053aa5f0030b62200087f38003b0e6d002c83da001c496e00330e2b001c5b70002ee3f100137eb90057a930003ac6ef003fd54c004eb2ea00503ee1007bb175002648b4001ef256001d90a20045a6d4002ae59b0052589c006ef1f5003f72880017510200075d59001187ba0052aca900773e9e000296d8002592ec004cff1200404ce8004aa582001e54e6004f16c1001a7e790003978f004e48170031b859005884cc001b4827005b63d0005d787a0035225e00400c7e006c09d1005bd532006bc4d300258ecb002e534c00097a6c003b8820006d285c002ca4f800337caa0014b2a0005585360028f1860055795d004af67000234a860075e8260078de660005528c007adf59000f6e17005bf3da00459b7e00628b34005dbecb001a9e7b000006d9006257c500574b3c0069a8ef002898380064b5fe007ef8f5002a4e7800120a23000154a80009b7ff00435e8700437ff8005cd5b4004dc04e004728af007f735d000c8d0d000f66d5005a6d800061ab9800185d9600437f310046829800662960004bd5790028de0600465d8d0049b0e30009b434007c0db3005a68b000409ba90064d3d50021762a0065859100246e390048c39b007bc759004f585900392db2002309230012eb6700454df20030c31c002854240013232e007faf80002dbfcb00022a0b007e832c0026587a006b337500095b76006be1cc005e061e0078e00d00628c37003da604004ae53c001f1d68006330bb007361b8005ea06c00671ac700201fc6005ba4ff0060d7720008f201006de02400080e6d0056038e00695688001e6d3e002603bd006a9dfa0007c017006dbfd40074d0bd0063e1e300519573007ab60d002867ba002decd40058018c003f4cf5000b700900427e23003cbd370027333300673957001a4b5d00196926001ef2060011c14e004c76c8003cf42f007fb19a006af66c002e1669003352d6000347600008526000741e78002f6316006f0a110007c0f100776d0b000d1ff000345824000223d40068c559005e8885002faa320023fc65005e69420051e0ed0065adb3002ca5e60079e1fe007b40640035e1dd00433aac00464ade001cfe140073f1ce0010170e0074b6d7";
+    bytes internal constant ZETAS =
+        hex"0000000100495e020039756700396569004f062b0053df73004fe033004f066b0076b1ae00360dd50028edb000207fe4003972830070894a00088192006d3dc8004c72940041e0b40028a3d20066528a004a18a700794034000a52ee006b7d81004e9f1d001a2877002571df001649ee007611bd00492bb7002af6970022d8d50036f72a0030911e0029d13f004926730050685f002010a2003887f70011b2c3000603a4000e2bed0010b72c004a5f35001f9d1500428cd4003177f40020e61200341c1d001ad873007366810049553f003952f60062564a0065ad0500439a1c0053aa5f0030b62200087f38003b0e6d002c83da001c496e00330e2b001c5b70002ee3f100137eb90057a930003ac6ef003fd54c004eb2ea00503ee1007bb175002648b4001ef256001d90a20045a6d4002ae59b0052589c006ef1f5003f72880017510200075d59001187ba0052aca900773e9e000296d8002592ec004cff1200404ce8004aa582001e54e6004f16c1001a7e790003978f004e48170031b859005884cc001b4827005b63d0005d787a0035225e00400c7e006c09d1005bd532006bc4d300258ecb002e534c00097a6c003b8820006d285c002ca4f800337caa0014b2a0005585360028f1860055795d004af67000234a860075e8260078de660005528c007adf59000f6e17005bf3da00459b7e00628b34005dbecb001a9e7b000006d9006257c500574b3c0069a8ef002898380064b5fe007ef8f5002a4e7800120a23000154a80009b7ff00435e8700437ff8005cd5b4004dc04e004728af007f735d000c8d0d000f66d5005a6d800061ab9800185d9600437f310046829800662960004bd5790028de0600465d8d0049b0e30009b434007c0db3005a68b000409ba90064d3d50021762a0065859100246e390048c39b007bc759004f585900392db2002309230012eb6700454df20030c31c002854240013232e007faf80002dbfcb00022a0b007e832c0026587a006b337500095b76006be1cc005e061e0078e00d00628c37003da604004ae53c001f1d68006330bb007361b8005ea06c00671ac700201fc6005ba4ff0060d7720008f201006de02400080e6d0056038e00695688001e6d3e002603bd006a9dfa0007c017006dbfd40074d0bd0063e1e300519573007ab60d002867ba002decd40058018c003f4cf5000b700900427e23003cbd370027333300673957001a4b5d00196926001ef2060011c14e004c76c8003cf42f007fb19a006af66c002e1669003352d6000347600008526000741e78002f6316006f0a110007c0f100776d0b000d1ff000345824000223d40068c559005e8885002faa320023fc65005e69420051e0ed0065adb3002ca5e60079e1fe007b40640035e1dd00433aac00464ade001cfe140073f1ce0010170e0074b6d7";
 
     struct Params {
         uint256 k;
@@ -54,7 +55,9 @@ library MlDsa {
 
     /// Verify against the FIPS 204 public key.
     function verify(Params memory P, bytes calldata pk, bytes memory mPrime, bytes calldata sig)
-        internal pure returns (bool)
+        internal
+        pure
+        returns (bool)
     {
         if (pk.length != P.pkLen) return false;
         return _verify(P, pk, false, mPrime, sig);
@@ -66,7 +69,9 @@ library MlDsa {
     ///      forgery: `Â = 0, t̂1 = 0` (any `tr`) accepts `z = 0, h = 0` for any message, and the victim's own `tr`, `t̂1`
     ///      with `Â[i][0] = t̂1_i`, `Â[i][j>0] = 0` accepts `z = (c, 0, …)` for any message.
     function verifyExpanded(Params memory P, bytes calldata ek, bytes memory mPrime, bytes calldata sig)
-        internal pure returns (bool)
+        internal
+        pure
+        returns (bool)
     {
         if (ek.length != expandedLen(P)) return false;
         return _verify(P, ek, true, mPrime, sig);
@@ -82,7 +87,9 @@ library MlDsa {
     /// into the expanded key of `P`: `ok` false unless there are exactly `parts` pointers, each with code, and their parts
     /// add up to `expandedLen(P)` exactly. `MldsaVerifier.verifyCached`'s read (and the tests'), one copy.
     function readParts(Params memory P, bytes calldata chunks, uint256 parts)
-        internal view returns (bytes memory ek, bool ok)
+        internal
+        view
+        returns (bytes memory ek, bool ok)
     {
         uint256 len = expandedLen(P);
         if (chunks.length != 20 * parts) return (ek, false);
@@ -103,7 +110,9 @@ library MlDsa {
     /// Bytes `[r0·l·1024, …)` of `expandKey(pk)`: rows `r0 … r1 − 1` of `Â`, then (iff `tail`) `tr ‖ NTT(t1·2^d)`. The
     /// UA registry stores the expanded key in parts, each computed in its own transaction under 2^24 regular gas (P6c).
     function expandKeyRows(Params memory P, bytes calldata pk, uint256 r0, uint256 r1, bool tail)
-        internal pure returns (bytes memory ek)
+        internal
+        pure
+        returns (bytes memory ek)
     {
         require(pk.length == P.pkLen, "MlDsa: pk length");
         require(r0 <= r1 && r1 <= P.k, "MlDsa: rows");
@@ -148,7 +157,9 @@ library MlDsa {
     }
 
     function _verify(Params memory P, bytes calldata key, bool expanded, bytes memory mPrime, bytes calldata sig)
-        private pure returns (bool)
+        private
+        pure
+        returns (bool)
     {
         if (sig.length != P.sigLen) return false;
         Work memory W;
@@ -203,7 +214,9 @@ library MlDsa {
 
     /// Row i: w'_i = INTT(Σ_j Â[i][j]∘ẑ_j − ĉ∘NTT(t1_i·2^d)), then UseHint and w1Encode into `W.w`.
     function _row(Params memory P, bytes calldata key, bool expanded, Work memory W, uint256 i)
-        private pure returns (bool)
+        private
+        pure
+        returns (bool)
     {
         uint256 acc = W.acc;
         uint256 a = W.a;
@@ -337,7 +350,9 @@ library MlDsa {
             }
             h[i] = mask;
         }
-        for (; idx < omega; ++idx) if (y[idx] != 0) return (false, h);
+        for (; idx < omega; ++idx) {
+            if (y[idx] != 0) return (false, h);
+        }
         return (true, h);
     }
 
@@ -354,8 +369,10 @@ library MlDsa {
         uint256 signs;
         assembly ("memory-safe") {
             let s := shr(192, mload(buf)) // 8 bytes, little-endian bit order
-            signs := or(or(or(byte(24, s), shl(8, byte(25, s))), or(shl(16, byte(26, s)), shl(24, byte(27, s)))),
-                or(or(shl(32, byte(28, s)), shl(40, byte(29, s))), or(shl(48, byte(30, s)), shl(56, byte(31, s)))))
+            signs := or(
+                or(or(byte(24, s), shl(8, byte(25, s))), or(shl(16, byte(26, s)), shl(24, byte(27, s)))),
+                or(or(shl(32, byte(28, s)), shl(40, byte(29, s))), or(shl(48, byte(30, s)), shl(56, byte(31, s))))
+            )
         }
         uint256 pos = 8;
         uint256 tau = P.tau;

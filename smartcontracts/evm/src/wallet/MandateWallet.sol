@@ -34,8 +34,8 @@ import {UAKinds} from "../ua/UAKinds.sol";
 ///         it also pays by hand with `from = wallet`; a derived owner gets no answer and acts through `mtxExecute`.
 contract MandateWallet is UAMetaTxBase, IERC1271 {
     struct Mandate {
-        bytes32 delegate;      // 0 = none or revoked
-        uint64 expiry;         // unix seconds
+        bytes32 delegate; // 0 = none or revoked
+        uint64 expiry; // unix seconds
         uint64 periodSeconds;
         uint64 periodStart;
         uint128 maxPerPayment;
@@ -50,8 +50,14 @@ contract MandateWallet is UAMetaTxBase, IERC1271 {
     /// @notice Bumped by every `setMandate` and every revoke (CTR-ACC-07): a delegate's signed pay and revoke name it.
     mapping(address token => uint64) public epoch;
 
-    event MandateSet(address indexed token, bytes32 indexed delegate, uint256 maxPerPayment,
-                     uint256 maxPerPeriod, uint256 periodSeconds, uint256 expiry);
+    event MandateSet(
+        address indexed token,
+        bytes32 indexed delegate,
+        uint256 maxPerPayment,
+        uint256 maxPerPeriod,
+        uint256 periodSeconds,
+        uint256 expiry
+    );
     event MandateRevoked(address indexed token, bytes32 indexed by);
     event PayeeSet(address indexed token, bytes32 indexed payee, bool allowed);
     event PaidUnderMandate(address indexed token, bytes32 indexed payee, uint256 amount, bytes32 indexed entryRef);
@@ -89,17 +95,31 @@ contract MandateWallet is UAMetaTxBase, IERC1271 {
 
     // ------------------------------------------------------------------ owner
 
-    function setMandate(address token, bytes32 delegate, uint128 maxPerPayment, uint128 maxPerPeriod,
-                        uint64 periodSeconds, uint64 expiry) external nonReentrant onlyOwner {
+    function setMandate(
+        address token,
+        bytes32 delegate,
+        uint128 maxPerPayment,
+        uint128 maxPerPeriod,
+        uint64 periodSeconds,
+        uint64 expiry
+    ) external nonReentrant onlyOwner {
         // periodSeconds == 0 would reset the period cap at every payment.
-        if (delegate == 0 || periodSeconds == 0 || maxPerPayment == 0
-            || maxPerPayment > maxPerPeriod) revert BadMandate();
+        if (delegate == 0 || periodSeconds == 0 || maxPerPayment == 0 || maxPerPayment > maxPerPeriod) {
+            revert BadMandate();
+        }
         // Same delegate and period length: the running period and what it spent carry over, so an edit (a new expiry,
         // new caps) never grants a fresh period budget; a new delegate or period length (or a revoke first) restarts it.
         Mandate storage md = mandates[token];
         bool keep = md.delegate == delegate && md.periodSeconds == periodSeconds;
-        mandates[token] = Mandate(delegate, expiry, periodSeconds, keep ? md.periodStart : uint64(block.timestamp),
-                                  maxPerPayment, maxPerPeriod, keep ? md.spentInPeriod : 0);
+        mandates[token] = Mandate(
+            delegate,
+            expiry,
+            periodSeconds,
+            keep ? md.periodStart : uint64(block.timestamp),
+            maxPerPayment,
+            maxPerPeriod,
+            keep ? md.spentInPeriod : 0
+        );
         ++epoch[token];
         emit MandateSet(token, delegate, maxPerPayment, maxPerPeriod, periodSeconds, expiry);
     }
@@ -115,7 +135,10 @@ contract MandateWallet is UAMetaTxBase, IERC1271 {
 
     /// @notice The owner does what it wants with its funds (withdraw, move, pay by hand).
     function execute(address target, uint256 value, bytes calldata data)
-        external nonReentrant onlyOwner returns (bytes memory)
+        external
+        nonReentrant
+        onlyOwner
+        returns (bytes memory)
     {
         (bool ok, bytes memory ret) = target.call{value: value}(data);
         if (!ok) revert CallFailed(ret);
@@ -131,9 +154,14 @@ contract MandateWallet is UAMetaTxBase, IERC1271 {
     ///         at most `2 · maxPerPeriod` across one boundary, at boundaries the owner can compute.
     ///         `meta` (last, unsigned) is the token's `PayMeta`, bound by the signed `entryRef` (the token refuses any other,
     ///         pay-meta-tax spec §2.4); `refUsed` is this wallet's rule, not the token's.
-    function payUnderMandate(address token, bytes32 payee, uint256 amount, bytes32 entryRef, uint64 epoch_,
-        MetaTxLib.PayMeta calldata meta) external nonReentrant
-    {
+    function payUnderMandate(
+        address token,
+        bytes32 payee,
+        uint256 amount,
+        bytes32 entryRef,
+        uint64 epoch_,
+        MetaTxLib.PayMeta calldata meta
+    ) external nonReentrant {
         Mandate storage md = mandates[token];
         if (md.delegate == 0) revert NoMandate();
         if (_subject() != md.delegate) revert NotDelegate();
@@ -152,8 +180,8 @@ contract MandateWallet is UAMetaTxBase, IERC1271 {
         md.spentInPeriod = uint128(spent);
         refUsed[entryRef] = true;
         bool paid = UAKinds.inNativeSpace(payee)
-            ? IERC20Payment(token).payWithFee(address(uint160(uint256(payee))), amount, FeeMode.NONE, 0, address(0), entryRef,
-                meta)
+            ? IERC20Payment(token)
+                .payWithFee(address(uint160(uint256(payee))), amount, FeeMode.NONE, 0, address(0), entryRef, meta)
             : IMetaTokenV2(token).payWithFeeToUA(payee, amount, FeeMode.NONE, 0, address(0), entryRef, meta);
         if (!paid) revert PayFailed();
         emit PaidUnderMandate(token, payee, amount, entryRef);
@@ -172,52 +200,94 @@ contract MandateWallet is UAMetaTxBase, IERC1271 {
     // ------------------------------------------------------------------ one signed entry per operation (Q6)
 
     /// @notice The owner's signed `setMandate`: struct `UASetMandate`, submitted by anyone.
-    function mtxSetMandate(MetaTxLib.UAEnvelope calldata e, address token, bytes32 delegate, uint128 maxPerPayment,
-        uint128 maxPerPeriod, uint64 periodSeconds, uint64 expiry, IUARegistry.UASig calldata auth)
-        external nonReentrant returns (bytes memory)
-    {
-        return _namedUA(_UA_SET_MANDATE_TYPEHASH, MandateWallet.setMandate.selector, e,
-            abi.encode(token, delegate, maxPerPayment, maxPerPeriod, periodSeconds, expiry), auth);
+    function mtxSetMandate(
+        MetaTxLib.UAEnvelope calldata e,
+        address token,
+        bytes32 delegate,
+        uint128 maxPerPayment,
+        uint128 maxPerPeriod,
+        uint64 periodSeconds,
+        uint64 expiry,
+        IUARegistry.UASig calldata auth
+    ) external nonReentrant returns (bytes memory) {
+        return _namedUA(
+            _UA_SET_MANDATE_TYPEHASH,
+            MandateWallet.setMandate.selector,
+            e,
+            abi.encode(token, delegate, maxPerPayment, maxPerPeriod, periodSeconds, expiry),
+            auth
+        );
     }
 
     /// @notice The owner's signed `setPayee`: struct `UASetPayee`.
-    function mtxSetPayee(MetaTxLib.UAEnvelope calldata e, address token, bytes32 payee, bool allowed,
-        IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
-    {
-        return _namedUA(_UA_SET_PAYEE_TYPEHASH, MandateWallet.setPayee.selector, e, abi.encode(token, payee, allowed), auth);
+    function mtxSetPayee(
+        MetaTxLib.UAEnvelope calldata e,
+        address token,
+        bytes32 payee,
+        bool allowed,
+        IUARegistry.UASig calldata auth
+    ) external nonReentrant returns (bytes memory) {
+        return _namedUA(
+            _UA_SET_PAYEE_TYPEHASH, MandateWallet.setPayee.selector, e, abi.encode(token, payee, allowed), auth
+        );
     }
 
     /// @notice The owner's signed `revoke(token)`: struct `UARevokeMandate`.
     function mtxRevokeMandate(MetaTxLib.UAEnvelope calldata e, address token, IUARegistry.UASig calldata auth)
-        external nonReentrant returns (bytes memory)
+        external
+        nonReentrant
+        returns (bytes memory)
     {
         return _namedUA(_UA_REVOKE_MANDATE_TYPEHASH, _REVOKE_OWNER, e, abi.encode(token), auth);
     }
 
     /// @notice The delegate's signed `payUnderMandate`: struct `UAPayUnderMandate`, bound to `epoch_` (CTR-ACC-07);
     ///         `meta` last, outside the struct (its commitment is the signed `entryRef`, spec §2.4).
-    function mtxPayUnderMandate(MetaTxLib.UAEnvelope calldata e, address token, bytes32 payee, uint256 amount,
-        bytes32 entryRef, uint64 epoch_, IUARegistry.UASig calldata auth, MetaTxLib.PayMeta calldata meta)
-        external nonReentrant returns (bytes memory)
-    {
-        return _namedCallUA(_UA_PAY_UNDER_MANDATE_TYPEHASH, e, abi.encode(token, payee, amount, entryRef, epoch_),
-            abi.encodeCall(MandateWallet.payUnderMandate, (token, payee, amount, entryRef, epoch_, meta)), auth);
+    function mtxPayUnderMandate(
+        MetaTxLib.UAEnvelope calldata e,
+        address token,
+        bytes32 payee,
+        uint256 amount,
+        bytes32 entryRef,
+        uint64 epoch_,
+        IUARegistry.UASig calldata auth,
+        MetaTxLib.PayMeta calldata meta
+    ) external nonReentrant returns (bytes memory) {
+        return _namedCallUA(
+            _UA_PAY_UNDER_MANDATE_TYPEHASH,
+            e,
+            abi.encode(token, payee, amount, entryRef, epoch_),
+            abi.encodeCall(MandateWallet.payUnderMandate, (token, payee, amount, entryRef, epoch_, meta)),
+            auth
+        );
     }
 
     /// @notice The delegate's signed `revoke(token, epoch)`: struct `UADelegateRevoke`, bound to `epoch_` (CTR-ACC-07).
-    function mtxDelegateRevoke(MetaTxLib.UAEnvelope calldata e, address token, uint64 epoch_,
-        IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
-    {
+    function mtxDelegateRevoke(
+        MetaTxLib.UAEnvelope calldata e,
+        address token,
+        uint64 epoch_,
+        IUARegistry.UASig calldata auth
+    ) external nonReentrant returns (bytes memory) {
         return _namedUA(_UA_DELEGATE_REVOKE_TYPEHASH, _REVOKE_SIGNED, e, abi.encode(token, epoch_), auth);
     }
 
     /// @notice The owner's signed `execute`: struct `UAExecute`, `data` signed as its hash; the wallet shows target and
     ///         value, `data` stays hex.
-    function mtxExecute(MetaTxLib.UAEnvelope calldata e, address target, uint256 value, bytes calldata data,
-        IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
-    {
-        return _namedCallUA(_UA_EXECUTE_TYPEHASH, e, abi.encode(target, value, keccak256(data)),
-            abi.encodeCall(MandateWallet.execute, (target, value, data)), auth);
+    function mtxExecute(
+        MetaTxLib.UAEnvelope calldata e,
+        address target,
+        uint256 value,
+        bytes calldata data,
+        IUARegistry.UASig calldata auth
+    ) external nonReentrant returns (bytes memory) {
+        return _namedCallUA(
+            _UA_EXECUTE_TYPEHASH,
+            e,
+            abi.encode(target, value, keccak256(data)),
+            abi.encodeCall(MandateWallet.execute, (target, value, data)),
+            auth
+        );
     }
 
     // ------------------------------------------------------------------ views
@@ -242,11 +312,17 @@ contract MandateWallet is UAMetaTxBase, IERC1271 {
             ERC7739Lib.unwrap(hash, sig, _domainSeparatorV4(), ERC7739Lib.domainFields(n, v, id, vc, salt));
         (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(message, inner);
         return err == ECDSA.RecoverError.NoError && rec == address(uint160(uint256(owner)))
-            ? IERC1271.isValidSignature.selector : bytes4(0xffffffff);
+            ? IERC1271.isValidSignature.selector
+            : bytes4(0xffffffff);
     }
 
     /// @notice The allowlist (CTR-MTX-19): the base `cancelNonce`, the delegate's two, the owner's four; fee `NONE` only.
-    function _mtxSelectorsBody() internal pure override returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a) {
+    function _mtxSelectorsBody()
+        internal
+        pure
+        override
+        returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+    {
         s = new bytes4[](7);
         c = new uint8[](7);
         a = new uint8[](7);
@@ -257,7 +333,9 @@ contract MandateWallet is UAMetaTxBase, IERC1271 {
         s[4] = MandateWallet.setPayee.selector;
         s[5] = _REVOKE_OWNER;
         s[6] = MandateWallet.execute.selector;
-        for (uint256 i; i < 7; ++i) c[i] = FEE_CLASS_ABSOLUTE;
+        for (uint256 i; i < 7; ++i) {
+            c[i] = FEE_CLASS_ABSOLUTE;
+        }
     }
 
     // ------------------------------------------------------------------ internals
@@ -303,7 +381,12 @@ contract MandateWallet is UAMetaTxBase, IERC1271 {
     }
 
     /// @dev `executeMetaTransaction` refuses every call (MD-11 (b)): the EIP-1776 alias is the token's exception (R3).
-    function _execute(MetaTxLib.MetaTransaction memory m, bytes calldata) internal pure override returns (bytes memory) {
+    function _execute(MetaTxLib.MetaTransaction memory m, bytes calldata)
+        internal
+        pure
+        override
+        returns (bytes memory)
+    {
         revert MtxSelectorNotAllowed(bytes4(m.data));
     }
 

@@ -26,12 +26,16 @@ contract PqChatMessagesTest is PqChatBase {
     }
 
     function _msg(bytes32 sender, uint8 dn, uint64 counter, uint256 size)
-        internal view returns (IPqChat.PqChatMessage memory m)
+        internal
+        view
+        returns (IPqChat.PqChatMessage memory m)
     {
         (m.sessionId, m.epochId, m.sender, m.device, m.counter) = (sid, sid, sender, _dev(dn), counter);
         m.parents = _list(keccak256("head a"), keccak256("head b"));
         m.ciphertext = new bytes(size);
-        for (uint256 i; i < size; i += 32) m.ciphertext[i] = bytes1(uint8(i >> 5));
+        for (uint256 i; i < size; i += 32) {
+            m.ciphertext[i] = bytes1(uint8(i >> 5));
+        }
     }
 
     function _post(PqChat c, IPqChat.PqChatMessage memory m) internal returns (uint256) {
@@ -72,7 +76,9 @@ contract PqChatMessagesTest is PqChatBase {
         // data = abi.encode(index, sig) = index ‖ 0x40 ‖ the struct; abi.encode(sig) = 0x20 ‖ the struct
         assertEq(uint256(bytes32(l.data)), 0, "index 0");
         bytes memory tail = new bytes(l.data.length - 64);
-        for (uint256 i; i < tail.length; ++i) tail[i] = l.data[64 + i];
+        for (uint256 i; i < tail.length; ++i) {
+            tail[i] = l.data[64 + i];
+        }
         return keccak256(bytes.concat(bytes32(uint256(0x20)), tail));
     }
 
@@ -102,8 +108,12 @@ contract PqChatMessagesTest is PqChatBase {
     function test_postMessage_deviceDimensionAnyOrder() public {
         _post(chat, _msg(ids[1], 1, 0, 32));
         _post(chat, _msg(ids[1], 2, 0, 32)); // another device, the same counter
-        _refusedPost(_msg(ids[1], 1, 0, 33), abi.encodeWithSelector(IPqChat.PqChatNonceUsed.selector,
-            PqChatTypes.scopeMessage(sid, ids[1], _dev(1)), uint64(0)));
+        _refusedPost(
+            _msg(ids[1], 1, 0, 33),
+            abi.encodeWithSelector(
+                IPqChat.PqChatNonceUsed.selector, PqChatTypes.scopeMessage(sid, ids[1], _dev(1)), uint64(0)
+            )
+        );
         _post(chat, _msg(ids[1], 1, 5, 32));
         _post(chat, _msg(ids[1], 1, 4, 32)); // 5 before 4
         assertEq(chat.messageCount(sid), 4);
@@ -112,8 +122,13 @@ contract PqChatMessagesTest is PqChatBase {
     /// Owner 2026-11-10 (P6): the device id is 16 opaque bytes; no version or variant bit is checked, so a v7, a v4, the
     /// zero id and an id of no UUID shape all post, and two ids that differ only in the version nibble are two scopes.
     function test_postMessage_deviceIdNeverParsed() public {
-        bytes16[5] memory d = [bytes16(0x0190f5c0a1e07000800000000000d0c5), bytes16(0x3b2f6c1e9d4a4c7e8f1a2b3c4d5e6f70),
-            bytes16(0), bytes16(type(uint128).max), bytes16(0x0190f5c0a1e04000800000000000d0c5)];
+        bytes16[5] memory d = [
+            bytes16(0x0190f5c0a1e07000800000000000d0c5),
+            bytes16(0x3b2f6c1e9d4a4c7e8f1a2b3c4d5e6f70),
+            bytes16(0),
+            bytes16(type(uint128).max),
+            bytes16(0x0190f5c0a1e04000800000000000d0c5)
+        ];
         for (uint256 i; i < d.length; ++i) {
             IPqChat.PqChatMessage memory m = _msg(ids[1], 1, 0, 32);
             m.device = d[i];
@@ -128,7 +143,8 @@ contract PqChatMessagesTest is PqChatBase {
     /// which orders nothing, still takes a message under the old epoch.
     function test_postMessage_supersededEpochRefusedAtHome() public {
         _post(chat, _msg(ids[1], 1, 0, 32));
-        (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory w) = _epoch(sid, ids[0], 1, 1, sid, _list(ids[0]), _members(3));
+        (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(sid, ids[0], 1, 1, sid, _list(ids[0]), _members(3));
         bytes32 e1 = _rekey(chat, e, w);
         _refusedPost(_msg(ids[1], 1, 1, 32), abi.encodeWithSelector(IPqChat.PqChatEpochTaken.selector, sid, e1));
         IPqChat.PqChatMessage memory m = _msg(ids[1], 1, 1, 32);
@@ -195,7 +211,9 @@ contract PqChatMessagesTest is PqChatBase {
     /// element `storedAt`'s.
     function test_storedRange_pages() public {
         bytes8 hint = bytes8(keccak256("hint"));
-        for (uint256 i; i < 20; ++i) chat.storeMessage(1, hint, abi.encodePacked(keccak256(abi.encode(i)), uint8(i)));
+        for (uint256 i; i < 20; ++i) {
+            chat.storeMessage(1, hint, abi.encodePacked(keccak256(abi.encode(i)), uint8(i)));
+        }
         bytes[] memory p0 = chat.storedRange(hint, 0, 3);
         bytes[] memory p1 = chat.storedRange(hint, 3, 3);
         assertEq(p0.length, 3);

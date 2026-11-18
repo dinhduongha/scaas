@@ -54,7 +54,9 @@ contract DexModesTest is UADexBase {
     /// P for `o1` (sells X for Y) against `o2` (sells Y for X), in Y per X: the midpoint of `o1`'s limit `r1 / a1` and
     /// `o2`'s `a2 / r2`. The limits must cross.
     function _midPrice(ITradeToken.TradeOrder memory o1, ITradeToken.TradeOrder memory o2)
-        internal pure returns (uint256 num, uint256 den)
+        internal
+        pure
+        returns (uint256 num, uint256 den)
     {
         require(o1.receiveAmount * o2.receiveAmount <= o1.amount * o2.amount, "limits do not cross");
         return (o1.receiveAmount * o2.receiveAmount + o1.amount * o2.amount, 2 * o1.amount * o2.receiveAmount);
@@ -91,36 +93,47 @@ contract DexModesTest is UADexBase {
     /// An exchange leg signed by `pk`: a `DexOrder` for usdc (shape 0), the token's `UATradeOrder` otherwise (shape 1,
     /// ua-mtx-merge T6, R12).
     function _leg(uint256 pk, address sell, ITradeToken.TradeOrder memory o, uint256 sellFill, uint256 floor)
-        internal view returns (ISCaaSDex.ExchangeLeg memory)
+        internal
+        view
+        returns (ISCaaSDex.ExchangeLeg memory)
     {
         return DexLegs.xLeg(sell, o, _ecdsa(pk, _h(sell, o)), sellFill, floor);
     }
 
     /// A shape-1 exchange leg.
     function _uaXLeg(address sell, ITradeToken.UATradeOrder memory o, uint256 sellFill, uint256 floor)
-        internal view returns (ISCaaSDex.ExchangeLeg memory)
+        internal
+        view
+        returns (ISCaaSDex.ExchangeLeg memory)
     {
         return DexLegs.exchange(_uaLeg(sell, o, sellFill), sellFill, floor);
     }
 
     /// A maker of a mode-3 plan: its floor is its own price `⌈fill · receiveAmount / amount⌉` (spec §3.3).
     function _maker(uint256 pk, address sell, ITradeToken.TradeOrder memory o, uint256 fill)
-        internal view returns (ISCaaSDex.ExchangeLeg memory)
+        internal
+        view
+        returns (ISCaaSDex.ExchangeLeg memory)
     {
         return _leg(pk, sell, o, fill, (fill * o.receiveAmount + o.amount - 1) / o.amount);
     }
 
     function _plan(bytes32 ref, ISCaaSDex.ExchangeLeg memory l0, ISCaaSDex.ExchangeLeg memory l1)
-        internal pure returns (ISCaaSDex.ExchangePlan memory p)
+        internal
+        pure
+        returns (ISCaaSDex.ExchangePlan memory p)
     {
         p.ref = ref;
         p.legs = new ISCaaSDex.ExchangeLeg[](2);
         (p.legs[0], p.legs[1]) = (l0, l1);
     }
 
-    function _plan(bytes32 ref, ISCaaSDex.ExchangeLeg memory l0, ISCaaSDex.ExchangeLeg memory l1,
-        ISCaaSDex.ExchangeLeg memory l2) internal pure returns (ISCaaSDex.ExchangePlan memory p)
-    {
+    function _plan(
+        bytes32 ref,
+        ISCaaSDex.ExchangeLeg memory l0,
+        ISCaaSDex.ExchangeLeg memory l1,
+        ISCaaSDex.ExchangeLeg memory l2
+    ) internal pure returns (ISCaaSDex.ExchangePlan memory p) {
         p.ref = ref;
         p.legs = new ISCaaSDex.ExchangeLeg[](3);
         (p.legs[0], p.legs[1], p.legs[2]) = (l0, l1, l2);
@@ -138,10 +151,16 @@ contract DexModesTest is UADexBase {
     /// (1000 B for 600 A) each sell 400 B at their own price (200 A, 240 A); the other 560 A go outside for at least
     /// `outsideFloor` B. The taker's floor: 800 B from the makers plus `outsideFloor`.
     function _m3(ITradeToken.TradeOrder memory t, uint256 outsideFloor)
-        internal view returns (ISCaaSDex.ExchangePlan memory)
+        internal
+        view
+        returns (ISCaaSDex.ExchangePlan memory)
     {
-        return _plan("m3", _leg(ALICE_PK, address(A), t, 1000, _floor(t, 1000, 800 + outsideFloor)),
-            _maker(BOB_PK, address(B), _bobM(), 400), _maker(DAVE_PK, address(B), _daveM(), 400));
+        return _plan(
+            "m3",
+            _leg(ALICE_PK, address(A), t, 1000, _floor(t, 1000, 800 + outsideFloor)),
+            _maker(BOB_PK, address(B), _bobM(), 400),
+            _maker(DAVE_PK, address(B), _daveM(), 400)
+        );
     }
 
     function _taker(uint256 nonce) internal view returns (ITradeToken.TradeOrder memory o) {
@@ -151,7 +170,9 @@ contract DexModesTest is UADexBase {
 
     /// The v2 way: pay the pair by a transfer, then `swap` `amountOut` of the other token to the DEX.
     function _v2(address tokenIn, uint256 amountIn, uint256 amountOut)
-        internal view returns (ISCaaSDex.Interaction[] memory xs)
+        internal
+        view
+        returns (ISCaaSDex.Interaction[] memory xs)
     {
         xs = new ISCaaSDex.Interaction[](2);
         xs[0] = ISCaaSDex.Interaction(tokenIn, abi.encodeCall(IERC20.transfer, (address(pool), amountIn)));
@@ -161,20 +182,29 @@ contract DexModesTest is UADexBase {
 
     /// The v3-router way: `approve(router, amountIn)` on `tIn`, then the router swaps to the DEX.
     function _swap(address tIn, address tOut, uint256 amountIn, uint256 amountOut)
-        internal view returns (ISCaaSDex.Interaction[] memory xs)
+        internal
+        view
+        returns (ISCaaSDex.Interaction[] memory xs)
     {
         xs = new ISCaaSDex.Interaction[](2);
         xs[0] = ISCaaSDex.Interaction(tIn, abi.encodeCall(IERC20.approve, (address(router), amountIn)));
-        xs[1] = ISCaaSDex.Interaction(address(router),
-            abi.encodeCall(MockRouter.swap, (tIn, tOut, amountIn, amountOut, address(dex))));
+        xs[1] = ISCaaSDex.Interaction(
+            address(router), abi.encodeCall(MockRouter.swap, (tIn, tOut, amountIn, amountOut, address(dex)))
+        );
     }
 
     function _cat(ISCaaSDex.Interaction[] memory x, ISCaaSDex.Interaction[] memory y)
-        internal pure returns (ISCaaSDex.Interaction[] memory z)
+        internal
+        pure
+        returns (ISCaaSDex.Interaction[] memory z)
     {
         z = new ISCaaSDex.Interaction[](x.length + y.length);
-        for (uint256 i; i < x.length; ++i) z[i] = x[i];
-        for (uint256 i; i < y.length; ++i) z[x.length + i] = y[i];
+        for (uint256 i; i < x.length; ++i) {
+            z[i] = x[i];
+        }
+        for (uint256 i; i < y.length; ++i) {
+            z[x.length + i] = y[i];
+        }
     }
 
     function _noIx() internal pure returns (ISCaaSDex.Interaction[] memory) {
@@ -214,11 +244,17 @@ contract DexModesTest is UADexBase {
         ISCaaSDex.ExchangePlan memory p = _m3(t, _buffered(q));
         uint256 bob0 = B.balanceOf(bob);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.UAExchangeLegSettled("m3", _h(address(A), t), DexLegs.pad(alice), DexLegs.pad(alice), 1000, 1898, 12, 6, 0, 1800);
+        emit ISCaaSDex.UAExchangeLegSettled(
+            "m3", _h(address(A), t), DexLegs.pad(alice), DexLegs.pad(alice), 1000, 1898, 12, 6, 0, 1800
+        );
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.UAExchangeLegSettled("m3", _h(address(B), _bobM()), DexLegs.pad(bob), DexLegs.pad(bob), 400, 200, 0, 1, 0, 200);
+        emit ISCaaSDex.UAExchangeLegSettled(
+            "m3", _h(address(B), _bobM()), DexLegs.pad(bob), DexLegs.pad(bob), 400, 200, 0, 1, 0, 200
+        );
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.UAExchangeLegSettled("m3", _h(address(B), _daveM()), DexLegs.pad(dave), DexLegs.pad(dave), 400, 240, 0, 0, 0, 240);
+        emit ISCaaSDex.UAExchangeLegSettled(
+            "m3", _h(address(B), _daveM()), DexLegs.pad(dave), DexLegs.pad(dave), 400, 240, 0, 0, 0, 240
+        );
         _exchange(p, _v2(address(A), 560, q));
         assertEq(B.balanceOf(alice), 1898 - 6 + 12);
         assertEq(A.balanceOf(alice), 800_000 - 1000);
@@ -280,8 +316,12 @@ contract DexModesTest is UADexBase {
         ITradeToken.TradeOrder memory t = _taker(1);
         ITradeToken.UATradeOrder memory u = _ua(uaB, address(A), 2000, 1000, 1_000);
         uint256 q = _quote(address(A), 560);
-        ISCaaSDex.ExchangePlan memory p = _plan("m3", _leg(ALICE_PK, address(A), t, 1000, 800 + _buffered(q)),
-            _uaXLeg(address(B), u, 400, 200), _maker(DAVE_PK, address(B), _daveM(), 400));
+        ISCaaSDex.ExchangePlan memory p = _plan(
+            "m3",
+            _leg(ALICE_PK, address(A), t, 1000, 800 + _buffered(q)),
+            _uaXLeg(address(B), u, 400, 200),
+            _maker(DAVE_PK, address(B), _daveM(), 400)
+        );
         vm.expectEmit(address(dex));
         emit ISCaaSDex.UAExchangeLegSettled("m3", B.tradeOrderDigest(u), uaB, uaB, 400, 200, 0, 1, 0, 200);
         _exchange(p, _v2(address(A), 560, q));
@@ -335,11 +375,17 @@ contract DexModesTest is UADexBase {
     function test_mode3_exchangePlan_excessAToMakersProRata() public {
         ITradeToken.TradeOrder memory t = _taker(1);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.UAExchangeLegSettled("m3", _h(address(A), t), DexLegs.pad(alice), DexLegs.pad(alice), 1000, 1898, 52, 6, 0, 1800);
+        emit ISCaaSDex.UAExchangeLegSettled(
+            "m3", _h(address(A), t), DexLegs.pad(alice), DexLegs.pad(alice), 1000, 1898, 52, 6, 0, 1800
+        );
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.UAExchangeLegSettled("m3", _h(address(B), _bobM()), DexLegs.pad(bob), DexLegs.pad(bob), 400, 200, 4, 1, 0, 200);
+        emit ISCaaSDex.UAExchangeLegSettled(
+            "m3", _h(address(B), _bobM()), DexLegs.pad(bob), DexLegs.pad(bob), 400, 200, 4, 1, 0, 200
+        );
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.UAExchangeLegSettled("m3", _h(address(B), _daveM()), DexLegs.pad(dave), DexLegs.pad(dave), 400, 240, 6, 0, 0, 240);
+        emit ISCaaSDex.UAExchangeLegSettled(
+            "m3", _h(address(B), _daveM()), DexLegs.pad(dave), DexLegs.pad(dave), 400, 240, 6, 0, 0, 240
+        );
         _exchange(_m3(t, _buffered(_quote(address(A), 560))), _swap(address(A), address(B), 550, 1150));
         assertEq(A.balanceOf(bob), 200 - 1 + 4);
         assertEq(A.balanceOf(dave), 246);
@@ -366,8 +412,10 @@ contract DexModesTest is UADexBase {
         assertEq(fa, 1986);
         assertEq(fb, 600);
         uint256 bob0 = B.balanceOf(bob);
-        _exchange(_plan("cow", _leg(ALICE_PK, address(A), oa, 1000, fa), _leg(BOB_PK, address(B), ob, 1200, fb)),
-            _v2(address(A), 400, q));
+        _exchange(
+            _plan("cow", _leg(ALICE_PK, address(A), oa, 1000, fa), _leg(BOB_PK, address(B), ob, 1200, fb)),
+            _v2(address(A), 400, q)
+        );
         assertEq(A.pulled(_h(address(A), oa)), 1000);
         assertEq(B.pulled(_h(address(B), ob)), 1200);
         assertEq(B.balanceOf(alice), 1986 - 6 + 8);
@@ -391,11 +439,16 @@ contract DexModesTest is UADexBase {
         uint256 fa = _floor(oa, 1000, _at(1000, num, den));
         uint256 fb = _floor(ob, 2000, _at(2000, den, num));
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.UAExchangeLegSettled("cow", _h(address(A), oa), DexLegs.pad(alice), DexLegs.pad(alice), 1000, 2000, 0, 0, 0, 1900);
+        emit ISCaaSDex.UAExchangeLegSettled(
+            "cow", _h(address(A), oa), DexLegs.pad(alice), DexLegs.pad(alice), 1000, 2000, 0, 0, 0, 1900
+        );
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.UAExchangeLegSettled("cow", _h(address(B), ob), DexLegs.pad(bob), DexLegs.pad(bob), 2000, 1000, 0, 0, 0, 870);
-        _exchange(_plan("cow", _leg(ALICE_PK, address(A), oa, 1000, fa), _leg(BOB_PK, address(B), ob, 2000, fb)),
-            _noIx());
+        emit ISCaaSDex.UAExchangeLegSettled(
+            "cow", _h(address(B), ob), DexLegs.pad(bob), DexLegs.pad(bob), 2000, 1000, 0, 0, 0, 870
+        );
+        _exchange(
+            _plan("cow", _leg(ALICE_PK, address(A), oa, 1000, fa), _leg(BOB_PK, address(B), ob, 2000, fb)), _noIx()
+        );
         assertEq(B.balanceOf(alice), 2000);
         assertEq(A.balanceOf(bob), 1000);
         (uint256 rB, uint256 rA) = _ammPrice(address(A));
@@ -415,11 +468,14 @@ contract DexModesTest is UADexBase {
         uint256 fa = _floor(oa, 1000, _at(1000, num, den));
         uint256 fd = _floor(od, 2000, _at(2000, den, num));
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.UAExchangeLegSettled("cow", _h(address(A), oa), DexLegs.pad(alice), DexLegs.pad(alice), 1000, 2000, 0, 0, 0, 1900);
+        emit ISCaaSDex.UAExchangeLegSettled(
+            "cow", _h(address(A), oa), DexLegs.pad(alice), DexLegs.pad(alice), 1000, 2000, 0, 0, 0, 1900
+        );
         vm.expectEmit(address(dex));
         emit ISCaaSDex.ExchangeLegSettled("cow", _h(address(usdc), od), dave, dave, 2000, 1000, 0, 0, 0, 953);
-        _exchange(_plan("cow", _leg(ALICE_PK, address(A), oa, 1000, fa), _leg(DAVE_PK, address(usdc), od, 2000, fd)),
-            _noIx());
+        _exchange(
+            _plan("cow", _leg(ALICE_PK, address(A), oa, 1000, fa), _leg(DAVE_PK, address(usdc), od, 2000, fd)), _noIx()
+        );
         assertEq(usdc.balanceOf(alice), 2000);
         assertEq(A.balanceOf(dave), 1000);
         assertEq(dex.pulled(_h(address(usdc), od)), 2000);
@@ -443,17 +499,27 @@ contract DexModesTest is UADexBase {
         p.legs[1] = _leg(BOB_PK, address(B), ob, 2021, _floor(ob, 2021, _at(2021, 3, 2)));
         p.legs[2] = _leg(DAVE_PK, address(C), od, 1200, _floor(od, 1200, _at(1200, 33, 100)));
         p.legs[3] = _leg(ERIN_PK, address(C), oe, 1831, _floor(oe, 1831, _at(1831, 33, 100)));
-        assertEq(abi.encode(p.legs[0].receiveFill, p.legs[1].receiveFill, p.legs[2].receiveFill, p.legs[3].receiveFill),
-            abi.encode(2020, 3031, 396, 604));
+        assertEq(
+            abi.encode(p.legs[0].receiveFill, p.legs[1].receiveFill, p.legs[2].receiveFill, p.legs[3].receiveFill),
+            abi.encode(2020, 3031, 396, 604)
+        );
         uint256 bobC = C.balanceOf(bob);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.UAExchangeLegSettled("ring", _h(address(A), oa), DexLegs.pad(alice), DexLegs.pad(alice), 1010, 2020, 1, 0, 0, 2000);
+        emit ISCaaSDex.UAExchangeLegSettled(
+            "ring", _h(address(A), oa), DexLegs.pad(alice), DexLegs.pad(alice), 1010, 2020, 1, 0, 0, 2000
+        );
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.UAExchangeLegSettled("ring", _h(address(B), ob), DexLegs.pad(bob), DexLegs.pad(bob), 2021, 3031, 0, 0, 0, 3000);
+        emit ISCaaSDex.UAExchangeLegSettled(
+            "ring", _h(address(B), ob), DexLegs.pad(bob), DexLegs.pad(bob), 2021, 3031, 0, 0, 0, 3000
+        );
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.UAExchangeLegSettled("ring", _h(address(C), od), DexLegs.pad(dave), DexLegs.pad(dave), 1200, 396, 3, 0, 0, 390);
+        emit ISCaaSDex.UAExchangeLegSettled(
+            "ring", _h(address(C), od), DexLegs.pad(dave), DexLegs.pad(dave), 1200, 396, 3, 0, 0, 390
+        );
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.UAExchangeLegSettled("ring", _h(address(C), oe), DexLegs.pad(erin), DexLegs.pad(erin), 1831, 604, 7, 0, 0, 600);
+        emit ISCaaSDex.UAExchangeLegSettled(
+            "ring", _h(address(C), oe), DexLegs.pad(erin), DexLegs.pad(erin), 1831, 604, 7, 0, 0, 600
+        );
         _exchange(p, _noIx());
         assertEq(B.balanceOf(alice), 2020 + 1);
         assertEq(C.balanceOf(bob), bobC + 3031);
@@ -469,13 +535,20 @@ contract DexModesTest is UADexBase {
         ITradeToken.TradeOrder memory oa = _nat(alice, address(B), 1000, 2000, 0);
         ITradeToken.TradeOrder memory ob = _nat(bob, address(C), 1500, 2250, 0);
         ITradeToken.TradeOrder memory od = _nat(dave, address(A), 3000, 1000, 0);
-        ISCaaSDex.ExchangePlan memory p = _plan("ring", _leg(ALICE_PK, address(A), oa, 1000, _at(1000, 2, 1)),
-            _leg(BOB_PK, address(B), ob, 1500, _at(1500, 3, 2)), _leg(DAVE_PK, address(C), od, 3000, _at(3000, 1, 3)));
+        ISCaaSDex.ExchangePlan memory p = _plan(
+            "ring",
+            _leg(ALICE_PK, address(A), oa, 1000, _at(1000, 2, 1)),
+            _leg(BOB_PK, address(B), ob, 1500, _at(1500, 3, 2)),
+            _leg(DAVE_PK, address(C), od, 3000, _at(3000, 1, 3))
+        );
         p.extraTokens = new address[](1);
         p.extraTokens[0] = address(usdc);
         ISCaaSDex.Interaction[] memory hop = _swap(address(C), address(usdc), 750, 501);
-        _expect(p, _cat(hop, _swap(address(usdc), address(B), 500, 500)),
-            abi.encodeWithSelector(ISCaaSDex.ConservationBroken.selector, address(usdc)));
+        _expect(
+            p,
+            _cat(hop, _swap(address(usdc), address(B), 500, 500)),
+            abi.encodeWithSelector(ISCaaSDex.ConservationBroken.selector, address(usdc))
+        );
         _exchange(p, _cat(hop, _swap(address(usdc), address(B), 501, 500)));
         assertEq(B.balanceOf(alice), 2000);
         assertEq(A.balanceOf(dave), 1000);
@@ -491,8 +564,11 @@ contract DexModesTest is UADexBase {
         ob.minFill = 1000;
         (uint256 num, uint256 den) = _ammPrice(address(A));
         bytes32 hb = _h(address(B), ob);
-        ISCaaSDex.ExchangePlan memory p = _plan("cow", _leg(ALICE_PK, address(A), oa, 500, _floor(oa, 500, 999)),
-            _leg(BOB_PK, address(B), ob, 999, _at(999, den, num)));
+        ISCaaSDex.ExchangePlan memory p = _plan(
+            "cow",
+            _leg(ALICE_PK, address(A), oa, 500, _floor(oa, 500, 999)),
+            _leg(BOB_PK, address(B), ob, 999, _at(999, den, num))
+        );
         _expect(p, _noIx(), _err(ITradeToken.BelowMinFill.selector, hb));
         p.legs[0] = _leg(ALICE_PK, address(A), oa, 500, _floor(oa, 500, _at(500, num, den)));
         p.legs[1] = _leg(BOB_PK, address(B), ob, 1000, _floor(ob, 1000, _at(1000, den, num)));
@@ -527,13 +603,19 @@ contract DexModesTest is UADexBase {
         ITradeToken.TradeOrder memory oa = _nat(alice, address(B), 1000, 1900, 0);
         ITradeToken.TradeOrder memory ob = _nat(bob, address(A), 2000, 950, 0);
         (uint256 num, uint256 den) = _ammPrice(address(A));
-        return _plan("cow1", _leg(ALICE_PK, address(A), oa, 1000, _floor(oa, 1000, _at(1000, num, den))),
-            _leg(BOB_PK, address(B), ob, 2000, _floor(ob, 2000, _at(2000, den, num))));
+        return _plan(
+            "cow1",
+            _leg(ALICE_PK, address(A), oa, 1000, _floor(oa, 1000, _at(1000, num, den))),
+            _leg(BOB_PK, address(B), ob, 2000, _floor(ob, 2000, _at(2000, den, num)))
+        );
     }
 
     function _uaCow() internal view returns (ISCaaSDex.ExchangePlan memory) {
         (uint256 num, uint256 den) = _ammPrice(address(A));
-        return _plan("cow2", _uaXLeg(address(A), _ua(uaP, address(B), 1000, 1900, 0), 1000, _at(1000, num, den)),
-            _uaXLeg(address(B), _ua(uaB, address(A), 2000, 950, 0), 2000, _at(2000, den, num)));
+        return _plan(
+            "cow2",
+            _uaXLeg(address(A), _ua(uaP, address(B), 1000, 1900, 0), 1000, _at(1000, num, den)),
+            _uaXLeg(address(B), _ua(uaB, address(A), 2000, 950, 0), 2000, _at(2000, den, num))
+        );
     }
 }

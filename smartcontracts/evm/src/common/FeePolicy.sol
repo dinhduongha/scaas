@@ -6,9 +6,9 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 /// @notice Ba chế độ phí. Mẫu số THỐNG NHẤT là ppm (1e6); `perMille` (1e3) đã bị
 /// loại vì không biểu diễn được 0,05%.
 enum FeeMode {
-    NONE,    // feeAmount == 0 và feeRecipient == address(0)
+    NONE, // feeAmount == 0 và feeRecipient == address(0)
     PERCENT, // feeAmount == amount * feePpm / 1e6
-    FIXED    // feeAmount tuyệt đối theo đơn vị token
+    FIXED // feeAmount tuyệt đối theo đơn vị token
 }
 
 /// @title Tính và kiểm tra phí cho tầng MetaTransaction.
@@ -29,11 +29,7 @@ library FeePolicy {
     /// @notice Phí phải trả, theo mode.
     /// @dev PERCENT cũng chịu đúng cái trần 1% như FIXED — nếu không thì `feePpm`
     ///      tuỳ ý sẽ vượt mặt trần và biến FIXED thành nhánh duy nhất được bảo vệ.
-    function compute(FeeMode mode, uint256 amount, uint256 feePpmOrFixed)
-        internal
-        pure
-        returns (uint256 feeAmount)
-    {
+    function compute(FeeMode mode, uint256 amount, uint256 feePpmOrFixed) internal pure returns (uint256 feeAmount) {
         if (mode == FeeMode.NONE) {
             return 0;
         }

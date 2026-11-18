@@ -55,7 +55,6 @@ abstract contract SCaaSDexCore {
         "uint256 batch,uint256 nonce,uint256 validUntil)"
     );
 
-
     bytes32 internal constant CANCEL_DEX_ORDER_TYPEHASH = keccak256(
         "CancelDexOrder(DexOrder order)DexOrder(address sellToken,TradeOrder order)TradeOrder(address from,"
         "address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,"
@@ -85,8 +84,11 @@ abstract contract SCaaSDexCore {
     /// @dev CTR-DEX-08: 400 k for a `SmartKeyAccount` clone, else 50 k.
     function _cap(address signer) internal view returns (uint256) {
         address ska = ChainEnvCode.smartKeyAccountImpl();
-        return ska != address(0) && signer.codehash == keccak256(abi.encodePacked(hex"363d3d373d3d3d363d73", ska,
-            hex"5af43d82803e903d91602b57fd5bf3")) ? SMART_KEY_1271_GAS : SigCheck.ERC1271_GAS;
+        return ska != address(0)
+            && signer.codehash
+                == keccak256(abi.encodePacked(hex"363d3d373d3d3d363d73", ska, hex"5af43d82803e903d91602b57fd5bf3"))
+            ? SMART_KEY_1271_GAS
+            : SigCheck.ERC1271_GAS;
     }
 
     /// @dev An outside-token order's `DexOrder` struct hash (CTR-DEX-18).
@@ -113,7 +115,9 @@ abstract contract SCaaSDexCore {
     /// @dev The fee split (`initialize` in the DEX, `setFeeSplit` in the governance module): `address(this)` is the DEX on
     ///      both sides (DELEGATECALL).
     function _setFeeSplit(DexStorage storage s, uint32 ppm, address t) internal {
-        if (ppm > PPM || (ppm < PPM && (t == address(0) || t == address(this)))) revert ISCaaSDex.FeeSplitInvalid(ppm, t);
+        if (ppm > PPM || (ppm < PPM && (t == address(0) || t == address(this)))) {
+            revert ISCaaSDex.FeeSplitInvalid(ppm, t);
+        }
         s.relayerSharePpm = ppm;
         s.treasury = t;
         emit ISCaaSDex.FeeSplitSet(ppm, t);
@@ -230,9 +234,12 @@ abstract contract SCaaSDexCore {
     /// @dev The balance of an id: `balanceOf` of a native one, `balanceOfUA` of a derived one.
     function _balOf(address token, bytes32 id) internal view returns (uint256 w) {
         bool ok;
-        (ok, w) = _word(token, UAKinds.inNativeSpace(id)
-            ? abi.encodeCall(IERC20.balanceOf, (TradeLib.addr(id)))
-            : abi.encodeCall(IUALedger.balanceOfUA, (id)));
+        (ok, w) = _word(
+            token,
+            UAKinds.inNativeSpace(id)
+                ? abi.encodeCall(IERC20.balanceOf, (TradeLib.addr(id)))
+                : abi.encodeCall(IUALedger.balanceOfUA, (id))
+        );
         if (!ok) _tokenFailed(token);
     }
 

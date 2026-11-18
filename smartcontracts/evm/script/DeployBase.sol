@@ -213,6 +213,7 @@ abstract contract DeployBase is DeployBook {
     /// @notice `pqz-mlwe` 0x0142 (CTR-PQZ-13): `PqzKeyVerifier`'s R_REG PoP through the `PQZ` precompile, the cap of
     ///         `script/pqz/e2e.py` (`CAP_PQZ`, the P6g gen-1 registry of the SCaaS testnet).
     uint64 internal constant CAP_PQZ_MLWE = 4_500_000;
+
     /// @notice The ML-DSA precompile candidates, probed in order (CTR-UA-23 / CTR-UA-39): EIP-8355's `0x12` / `0x13` / `0x14`,
     ///         then the SCaaS testnet's `MLDSA44` / `MLDSA65` / `MLDSA87` `0x…5caa0012` / `…0013` / `…0014`; `i` 0, 1, 2 = 44, 65, 87.
     function _mldsaCandidates(uint256 i) internal pure returns (address[2] memory) {
@@ -264,21 +265,40 @@ abstract contract DeployBase is DeployBook {
     function _checkCodeFits(string memory name, uint256 limit) internal view {
         uint256 runtime = _baselineRuntime(name);
         if (runtime > limit) {
-            revert(string.concat(name, " runtime ", vm.toString(runtime), " B > chain code limit ", vm.toString(limit),
-                " B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+            revert(
+                string.concat(
+                    name,
+                    " runtime ",
+                    vm.toString(runtime),
+                    " B > chain code limit ",
+                    vm.toString(limit),
+                    " B (CHAIN_CODE_LIMIT, CTR-GOV-19)"
+                )
+            );
         }
     }
 
     function _checkReleaseGas(string memory name, uint256 limit) internal view {
         uint256 need = _releaseGasNeed(name);
         if (limit < need) {
-            revert(string.concat("block gas limit ", vm.toString(limit), " < ", vm.toString(need),
-                " needed to deploy the ", name, " release (NET-EVM-06)"));
+            revert(
+                string.concat(
+                    "block gas limit ",
+                    vm.toString(limit),
+                    " < ",
+                    vm.toString(need),
+                    " needed to deploy the ",
+                    name,
+                    " release (NET-EVM-06)"
+                )
+            );
         }
     }
 
     /// @notice The block gas limit the deploy gate reads: the chain's actual `block.gaslimit`.
-    function _blockGasLimit() internal view virtual returns (uint256) { return block.gaslimit; }
+    function _blockGasLimit() internal view virtual returns (uint256) {
+        return block.gaslimit;
+    }
 
     /// @notice The SCaaS testnet's gate: refuses before anything is sent when the release's runtime exceeds the chain's
     ///         declared code limit, or the chain's block gas limit cannot hold `runtime x 1,530 + 2^24`.
@@ -337,15 +357,42 @@ abstract contract DeployBase is DeployBook {
     function _checkMeasuredGas(string memory name, uint256 regular, uint256 state, uint256 limit) internal pure {
         uint256 asked = (regular + state) * 105 / 100;
         if (regular * 105 / 100 >= TX_REGULAR_GAS_CAP) {
-            revert(string.concat(name, " release: regular gas x 1.05 = ", vm.toString(regular * 105 / 100),
-                " >= 2^24 (EIP-7825, NET-EVM-06)"));
+            revert(
+                string.concat(
+                    name,
+                    " release: regular gas x 1.05 = ",
+                    vm.toString(regular * 105 / 100),
+                    " >= 2^24 (EIP-7825, NET-EVM-06)"
+                )
+            );
         }
         if (limit < asked) {
-            revert(string.concat("block gas limit ", vm.toString(limit), " < ", vm.toString(asked), " asked by the ", name,
-                " release (measured regular + state x 1.05, NET-EVM-06)"));
+            revert(
+                string.concat(
+                    "block gas limit ",
+                    vm.toString(limit),
+                    " < ",
+                    vm.toString(asked),
+                    " asked by the ",
+                    name,
+                    " release (measured regular + state x 1.05, NET-EVM-06)"
+                )
+            );
         }
-        console.log(string.concat("release gas | ", name, " | regular ", vm.toString(regular), " | state ", vm.toString(state),
-            " | asked ", vm.toString(asked), " | block gas limit ", vm.toString(limit)));
+        console.log(
+            string.concat(
+                "release gas | ",
+                name,
+                " | regular ",
+                vm.toString(regular),
+                " | state ",
+                vm.toString(state),
+                " | asked ",
+                vm.toString(asked),
+                " | block gas limit ",
+                vm.toString(limit)
+            )
+        );
     }
 
     /// @notice Call first in `run()`, before the broadcast.
@@ -364,7 +411,10 @@ abstract contract DeployBase is DeployBook {
         require(mp == keccak256("on") || mp == keccak256("off"), "MLDSA_PRECOMPILE: on or off");
         mldsaPrecompile = mp == keccak256("on");
         complianceAdmin = vm.envOr("COMPLIANCE_ADMIN", bytes32(0));
-        require(!deployRegulated || complianceAdmin != bytes32(0), "COMPLIANCE_ADMIN: a UA id (bytes32), required with DEPLOY_REGULATED");
+        require(
+            !deployRegulated || complianceAdmin != bytes32(0),
+            "COMPLIANCE_ADMIN: a UA id (bytes32), required with DEPLOY_REGULATED"
+        );
         factoryAdminNext = vm.envOr("FACTORY_ADMIN_NEXT", bytes32(0));
         noticePeriod = _checkedNotice(block.chainid, vm.envOr("NOTICE_PERIOD", _defaultNotice(block.chainid)));
         uid = _chainUid();
@@ -373,8 +423,10 @@ abstract contract DeployBase is DeployBook {
         bool listedUid;
         (chainSiblings, listedUid) = _chainUidListed();
         require(chainSiblings == 0 || listedUid, "chain_uid is not chain-uids.json's for this chain id (NET-ALL-22)");
-        require(CREATE2_FACTORY.code.length != 0,
-            "no deterministic CREATE2 deployer at 0x4e59b44847b379578588920ca78fbf26c0b4956c (runbook NET-EVM-05)");
+        require(
+            CREATE2_FACTORY.code.length != 0,
+            "no deterministic CREATE2 deployer at 0x4e59b44847b379578588920ca78fbf26c0b4956c (runbook NET-EVM-05)"
+        );
     }
 
     function _defaultNotice(uint256 c) internal pure returns (uint256) {
@@ -385,7 +437,9 @@ abstract contract DeployBase is DeployBook {
     ///      2026-10-20); no silent `uint64` truncation.
     function _checkedNotice(uint256 c, uint256 notice) internal pure returns (uint64) {
         require(notice <= type(uint64).max, "NOTICE_PERIOD exceeds uint64");
-        require(_isTestChain(c) || notice >= 3 days, "NOTICE_PERIOD below 3 days on a mainnet (not a listed test chain)");
+        require(
+            _isTestChain(c) || notice >= 3 days, "NOTICE_PERIOD below 3 days on a mainnet (not a listed test chain)"
+        );
         return uint64(notice);
     }
 
@@ -395,9 +449,25 @@ abstract contract DeployBase is DeployBook {
     ///         Arbitrum, Avalanche Fuji, Linea). Every other chain is a mainnet.
     function _isTestChain(uint256 c) internal pure returns (bool) {
         if (c == 31337 || c == 1337 || (c >= 31900 && c <= 31999) || c == 7622 || (c >= 296 && c <= 298)) return true;
-        uint32[14] memory t = [uint32(11155111), 560048, 17000, 63, 97, 10200, 80002, 84532, 11142220, 44787, 11155420,
-            421614, 43113, 59141];
-        for (uint256 i; i < t.length; ++i) if (c == t[i]) return true;
+        uint32[14] memory t = [
+            uint32(11155111),
+            560048,
+            17000,
+            63,
+            97,
+            10200,
+            80002,
+            84532,
+            11142220,
+            44787,
+            11155420,
+            421614,
+            43113,
+            59141
+        ];
+        for (uint256 i; i < t.length; ++i) {
+            if (c == t[i]) return true;
+        }
         return false;
     }
 
@@ -414,7 +484,8 @@ abstract contract DeployBase is DeployBook {
     ///         Each release is refused first when its runtime exceeds the chain's declared `CHAIN_CODE_LIMIT`
     ///         (`_checkCodeFits`, CTR-GOV-19, GD-4).
     function _deployTokenFactory(address registrar, bool register, address smartKeyAccountImpl, bool isHedera)
-        internal returns (OpenFactory f)
+        internal
+        returns (OpenFactory f)
     {
         if (deployZether) {
             require(!isHedera, "DEPLOY_ZETHER: not on Hedera (ZetherLayer refuses a Hedera env)");
@@ -437,8 +508,14 @@ abstract contract DeployBase is DeployBook {
             address[] memory libs = new address[](3);
             (libs[0], libs[1], libs[2]) = (address(GovernanceLib), address(HederaLib), address(MtxPipelineLib));
             _libRows(libs);
-            address none = _kindRelease(f, IOpenFactory.TokenKind.NORMAL, "NormalToken", type(NormalToken).creationCode, "",
-                _env(f, address(reg), smartKeyAccountImpl, isHedera, new address[](0), libs));
+            address none = _kindRelease(
+                f,
+                IOpenFactory.TokenKind.NORMAL,
+                "NormalToken",
+                type(NormalToken).creationCode,
+                "",
+                _env(f, address(reg), smartKeyAccountImpl, isHedera, new address[](0), libs)
+            );
             _gateInstance(f, none, f.tokenEnvOf(IOpenFactory.TokenKind.NORMAL, 1)); // one instance's chainUid (§6.2)
             vm.serializeAddress("deploy", "implementation_normal", none);
             // The DEX release (CTR-DEX-24): clones come from `createDex`; DEX version 1.
@@ -448,20 +525,30 @@ abstract contract DeployBase is DeployBook {
             // the libraries, named in `implArgs` in that order
             address[] memory dexModules = new address[](2);
             dexModules[0] = _module("SCaaSDexAdmin.sol:SCaaSDexGovernanceModule", abi.encode(address(f), bytes("")), 0);
-            dexModules[1] = _module("SCaaSDexLiquidityModule.sol:SCaaSDexLiquidityModule", abi.encode(address(f), bytes("")), 0);
+            dexModules[1] =
+                _module("SCaaSDexLiquidityModule.sol:SCaaSDexLiquidityModule", abi.encode(address(f), bytes("")), 0);
             bytes memory dexArgs = abi.encode(ImplArgs(dexModules));
             _publishDexEnv(f, smartKeyAccountImpl, isHedera, dexLibs, dexModules);
             vm.serializeAddress("deploy", "dex_implementation", _dexRelease(f, dexArgs));
         }
-        if (deployWrapped && register && !configureOnly) _deployWrapped(f, address(reg), smartKeyAccountImpl, isHedera);
-        if (deployRegulated && register && !configureOnly) _deployRegulated(f, address(reg), smartKeyAccountImpl, isHedera);
+        if (deployWrapped && register && !configureOnly) {
+            _deployWrapped(f, address(reg), smartKeyAccountImpl, isHedera);
+        }
+        if (deployRegulated && register && !configureOnly) {
+            _deployRegulated(f, address(reg), smartKeyAccountImpl, isHedera);
+        }
         if (deployPqChat && register && !configureOnly) _deployPqChat(f, address(reg));
         if (deployPqz && register && !configureOnly) _deployPqz(f, address(reg), smartKeyAccountImpl, isHedera);
         if (deployZether && !configureOnly) _deployZether(f, register, smartKeyAccountImpl, address(reg));
-        if (register && !configureOnly && factoryAdminNext != bytes32(0)) f.transferAdmin(factoryAdminNext, f.chainUid());
+        if (register && !configureOnly && factoryAdminNext != bytes32(0)) {
+            f.transferAdmin(factoryAdminNext, f.chainUid());
+        }
         if (register) {
-            require(f.admin() == MetaTxLib.pad(registrar) && f.pendingAdmin() == (configureOnly ? bytes32(0) : factoryAdminNext),
-                "factory admin gate (admin, pendingAdmin)");
+            require(
+                f.admin() == MetaTxLib.pad(registrar)
+                    && f.pendingAdmin() == (configureOnly ? bytes32(0) : factoryAdminNext),
+                "factory admin gate (admin, pendingAdmin)"
+            );
         }
         vm.serializeBytes32("deploy", "factory_admin", f.admin());
         vm.serializeBytes32("deploy", "factory_pending_admin", f.pendingAdmin());
@@ -470,11 +557,18 @@ abstract contract DeployBase is DeployBook {
 
     /// @notice DEX env 1: the libraries and the modules, under the factory's chain word (CTR-GOV-27; its own frame: the
     ///         caller's stack is full).
-    function _publishDexEnv(OpenFactory f, address smartKeyAccountImpl, bool isHedera, address[] memory dexLibs,
-        address[] memory dexModules) internal
-    {
-        f.publishDexEnv(1, uid, _withModules(_env(f, address(0), smartKeyAccountImpl, isHedera, new address[](0), dexLibs),
-            dexModules));
+    function _publishDexEnv(
+        OpenFactory f,
+        address smartKeyAccountImpl,
+        bool isHedera,
+        address[] memory dexLibs,
+        address[] memory dexModules
+    ) internal {
+        f.publishDexEnv(
+            1,
+            uid,
+            _withModules(_env(f, address(0), smartKeyAccountImpl, isHedera, new address[](0), dexLibs), dexModules)
+        );
     }
 
     /// @notice The shared contracts before the factory (spec §13.10): the relay pair under `RELAY_SALT` (reused when there),
@@ -495,16 +589,29 @@ abstract contract DeployBase is DeployBook {
     ///         its init code (`_builtHash`; the executor: the router's CREATE at nonce 1).
     function _writeDirectory(OpenFactory f, UARegistry reg) internal {
         require(relayFeeExecutor == vm.computeCreateAddress(relayFeeRouter, 1), "relay executor: not this build's");
-        f.setChainEntries(IOpenFactory.ChainEntries(relayFeeRouter,
-            _builtHash(relayFeeRouter, type(RelayFeeRouter).creationCode, RELAY_SALT), relayFeeExecutor.codehash,
-            complianceRegistry, complianceRegistry == address(0) ? bytes32(0) : _complianceRegistryCodehash(), accountFactory,
-            _builtHash(accountFactory, abi.encodePacked(type(SmartKeyAccountFactory).creationCode, abi.encode(uid)), salt),
-            zetherStatements, zetherStatements == address(0) ? bytes32(0) : keccak256(type(ZetherStatements).runtimeCode)),
-            f.chainUid());
+        f.setChainEntries(
+            IOpenFactory.ChainEntries(
+                relayFeeRouter,
+                _builtHash(relayFeeRouter, type(RelayFeeRouter).creationCode, RELAY_SALT),
+                relayFeeExecutor.codehash,
+                complianceRegistry,
+                complianceRegistry == address(0) ? bytes32(0) : _complianceRegistryCodehash(),
+                accountFactory,
+                _builtHash(
+                    accountFactory, abi.encodePacked(type(SmartKeyAccountFactory).creationCode, abi.encode(uid)), salt
+                ),
+                zetherStatements,
+                zetherStatements == address(0) ? bytes32(0) : keccak256(type(ZetherStatements).runtimeCode)
+            ),
+            f.chainUid()
+        );
         IOpenFactory.Directory memory d = f.directory();
-        require(d.uaRegistry == address(reg) && d.govRouter == govRouter && d.relayFeeRouter == relayFeeRouter
-            && d.relayFeeExecutor == relayFeeExecutor && d.complianceRegistry == complianceRegistry
-            && d.smartKeyAccountFactory == accountFactory && d.zetherStatements == zetherStatements, "directory gate");
+        require(
+            d.uaRegistry == address(reg) && d.govRouter == govRouter && d.relayFeeRouter == relayFeeRouter
+                && d.relayFeeExecutor == relayFeeExecutor && d.complianceRegistry == complianceRegistry
+                && d.smartKeyAccountFactory == accountFactory && d.zetherStatements == zetherStatements,
+            "directory gate"
+        );
     }
 
     /// @notice The code hash of `at` only when `at` is this build's CREATE2 address of `initCode` under `s` (the init code
@@ -512,7 +619,9 @@ abstract contract DeployBase is DeployBook {
     function _builtHash(address at, bytes memory initCode, bytes32 s) internal view returns (bytes32) {
         if (at == address(0)) return bytes32(0);
         address d = vm.isContext(VmSafe.ForgeContext.ScriptGroup) ? CREATE2_FACTORY : address(this);
-        require(at == vm.computeCreate2Address(s, keccak256(initCode), d), "code hash: not this build's CREATE2 address");
+        require(
+            at == vm.computeCreate2Address(s, keccak256(initCode), d), "code hash: not this build's CREATE2 address"
+        );
         return at.codehash;
     }
 
@@ -532,8 +641,9 @@ abstract contract DeployBase is DeployBook {
         vm.serializeAddress("deploy", "pqchat_implementation", impl);
         IOpenFactory.ReleaseId memory id = IOpenFactory.ReleaseId(3, 0, 1);
         if (f.classReleaseOf(id).usableFrom <= block.timestamp) {
-            address inst =
-                f.createInstance(id, keccak256("scaas.pqchat.instance.1"), abi.encodeCall(IPqChat.initialize, (bytes32(0))));
+            address inst = f.createInstance(
+                id, keccak256("scaas.pqchat.instance.1"), abi.encodeCall(IPqChat.initialize, (bytes32(0)))
+            );
             vm.serializeAddress("deploy", "pqchat_instance", inst);
         }
     }
@@ -553,21 +663,45 @@ abstract contract DeployBase is DeployBook {
     function _dexRelease(OpenFactory f, bytes memory dexArgs) internal returns (address dexImpl) {
         bytes memory dexCode = type(SCaaSDex).creationCode;
         bytes32 u = f.chainUid();
-        _requireReleaseGas("SCaaSDex", address(f), abi.encodeCall(f.deployDexImplementation, (1, 1, dexCode, dexArgs, u)));
+        _requireReleaseGas(
+            "SCaaSDex", address(f), abi.encodeCall(f.deployDexImplementation, (1, 1, dexCode, dexArgs, u))
+        );
         dexImpl = f.deployDexImplementation(1, 1, dexCode, dexArgs, u);
-        _releaseRow("SCaaSDex", 2, 0, 1, dexImpl, keccak256(abi.encodePacked(dexCode, abi.encode(address(f), dexArgs))),
-            keccak256(dexArgs));
+        _releaseRow(
+            "SCaaSDex",
+            2,
+            0,
+            1,
+            dexImpl,
+            keccak256(abi.encodePacked(dexCode, abi.encode(address(f), dexArgs))),
+            keccak256(dexArgs)
+        );
     }
 
     /// @notice Release 1 of `(3, 0)` after its gate, `implArgs` naming the module; its row in the release list.
     function _pqchatRelease(OpenFactory f, bytes memory args) internal returns (address impl) {
         IOpenFactory.ReleaseId memory id = IOpenFactory.ReleaseId(3, 0, 1);
         bytes memory code = type(PqChat).creationCode;
-        _requireReleaseGas("PqChat", address(f), abi.encodeCall(f.deployImplementation,
-            (id, 1, IPqChat.initialize.selector, type(IPqChat).interfaceId, code, args, f.chainUid())));
-        impl = f.deployImplementation(id, 1, IPqChat.initialize.selector, type(IPqChat).interfaceId, code, args, f.chainUid());
-        _releaseRow("PqChat", 3, 0, 1, impl, keccak256(abi.encodePacked(code, abi.encode(id, address(f), args))),
-            keccak256(args));
+        _requireReleaseGas(
+            "PqChat",
+            address(f),
+            abi.encodeCall(
+                f.deployImplementation,
+                (id, 1, IPqChat.initialize.selector, type(IPqChat).interfaceId, code, args, f.chainUid())
+            )
+        );
+        impl = f.deployImplementation(
+            id, 1, IPqChat.initialize.selector, type(IPqChat).interfaceId, code, args, f.chainUid()
+        );
+        _releaseRow(
+            "PqChat",
+            3,
+            0,
+            1,
+            impl,
+            keccak256(abi.encodePacked(code, abi.encode(id, address(f), args))),
+            keccak256(args)
+        );
     }
 
     /// @notice GD-12 (CTR-GOV-19: every kind runs on the SCaaS testnet), in the form of `_deployZether`: env version 1 of
@@ -577,9 +711,15 @@ abstract contract DeployBase is DeployBook {
     function _deployWrapped(OpenFactory f, address reg, address smartKeyAccountImpl, bool isHedera) internal {
         address[] memory libs = new address[](4);
         (libs[0], libs[1], libs[2], libs[3]) =
-            (address(GovernanceLib), address(HederaLib), address(MtxPipelineLib), address(WrappedLib));
-        address w = _kindRelease(f, IOpenFactory.TokenKind.WRAPPED, "WrappedToken", type(WrappedToken).creationCode, "",
-            _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
+        (address(GovernanceLib), address(HederaLib), address(MtxPipelineLib), address(WrappedLib));
+        address w = _kindRelease(
+            f,
+            IOpenFactory.TokenKind.WRAPPED,
+            "WrappedToken",
+            type(WrappedToken).creationCode,
+            "",
+            _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs)
+        );
         vm.serializeAddress("deploy", "implementation_wrapped", w);
     }
 
@@ -594,16 +734,34 @@ abstract contract DeployBase is DeployBook {
     function _deployRegulated(OpenFactory f, address reg, address smartKeyAccountImpl, bool isHedera) internal {
         address[] memory libs = new address[](4);
         (libs[0], libs[1], libs[2], libs[3]) =
-            (address(GovernanceLib), address(HederaLib), address(MtxPipelineLib), address(RegulatedLib));
+        (address(GovernanceLib), address(HederaLib), address(MtxPipelineLib), address(RegulatedLib));
         bytes memory coreArgs = abi.encode(_complianceRegistryCodehash());
-        address n = _kindRelease(f, IOpenFactory.TokenKind.NORMAL_REGULATED, "NormalRegulatedToken",
-            type(NormalRegulatedToken).creationCode, coreArgs, _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
+        address n = _kindRelease(
+            f,
+            IOpenFactory.TokenKind.NORMAL_REGULATED,
+            "NormalRegulatedToken",
+            type(NormalRegulatedToken).creationCode,
+            coreArgs,
+            _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs)
+        );
         vm.serializeAddress("deploy", "implementation_normal_regulated", n);
         libs = new address[](5);
-        (libs[0], libs[1], libs[2], libs[3], libs[4]) = (address(GovernanceLib), address(HederaLib),
-            address(MtxPipelineLib), address(WrappedLib), address(RegulatedLib));
-        address w = _kindRelease(f, IOpenFactory.TokenKind.WRAPPED_REGULATED, "WrappedRegulatedToken",
-            type(WrappedRegulatedToken).creationCode, coreArgs, _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
+        (libs[0], libs[1], libs[2], libs[3], libs[4]) =
+        (
+            address(GovernanceLib),
+            address(HederaLib),
+            address(MtxPipelineLib),
+            address(WrappedLib),
+            address(RegulatedLib)
+        );
+        address w = _kindRelease(
+            f,
+            IOpenFactory.TokenKind.WRAPPED_REGULATED,
+            "WrappedRegulatedToken",
+            type(WrappedRegulatedToken).creationCode,
+            coreArgs,
+            _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs)
+        );
         vm.serializeAddress("deploy", "implementation_wrapped_regulated", w);
         f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true, f.chainUid());
         f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true, f.chainUid());
@@ -619,8 +777,10 @@ abstract contract DeployBase is DeployBook {
     ///         own `setCompliance` call: this script holds no key of the admin.
     function _deployComplianceRegistry() internal returns (address) {
         ComplianceRegistry r = new ComplianceRegistry{salt: salt}(complianceAdmin, govRouter, uid);
-        require(address(r).codehash == _complianceRegistryCodehash(),
-            "ComplianceRegistry: code differs from COMPLIANCE_REGISTRY_CODEHASH (F-11)");
+        require(
+            address(r).codehash == _complianceRegistryCodehash(),
+            "ComplianceRegistry: code differs from COMPLIANCE_REGISTRY_CODEHASH (F-11)"
+        );
         vm.serializeAddress("deploy", "compliance_registry", address(r));
         vm.serializeBytes32("deploy", "compliance_registry_codehash", address(r).codehash);
         return address(r);
@@ -652,33 +812,55 @@ abstract contract DeployBase is DeployBook {
         GovernanceRouter r = new GovernanceRouter{salt: salt}(uid, reg, smartKeyAccountImpl, isHedera);
         _gate(address(r));
         govRouter = address(r);
-        govRouterCodeHash = _builtHash(govRouter, abi.encodePacked(type(GovernanceRouter).creationCode,
-            abi.encode(uid, reg, smartKeyAccountImpl, isHedera)), salt);
+        govRouterCodeHash = _builtHash(
+            govRouter,
+            abi.encodePacked(type(GovernanceRouter).creationCode, abi.encode(uid, reg, smartKeyAccountImpl, isHedera)),
+            salt
+        );
         vm.serializeAddress("deploy", "governance_router", govRouter);
     }
 
     /// @notice The factory's release of `kind`, version 1 on env 1, with its `implArgs` (T66b: `kindImplArgs`), after its gate
     ///         (`_requireReleaseGas`).
-    function _release(OpenFactory f, IOpenFactory.TokenKind kind, string memory name, bytes memory code,
-        bytes memory implArgs) internal returns (address)
-    {
-        _requireReleaseGas(name, address(f),
-            abi.encodeCall(f.deployTokenImplementation, (kind, 1, 1, code, implArgs, f.chainUid())));
+    function _release(
+        OpenFactory f,
+        IOpenFactory.TokenKind kind,
+        string memory name,
+        bytes memory code,
+        bytes memory implArgs
+    ) internal returns (address) {
+        _requireReleaseGas(
+            name, address(f), abi.encodeCall(f.deployTokenImplementation, (kind, 1, 1, code, implArgs, f.chainUid()))
+        );
         address at = f.deployTokenImplementation(kind, 1, 1, code, implArgs, f.chainUid());
-        _releaseRow(name, 1, uint8(kind), 1, at, keccak256(abi.encodePacked(code, abi.encode(address(f), implArgs))),
-            keccak256(implArgs));
+        _releaseRow(
+            name,
+            1,
+            uint8(kind),
+            1,
+            at,
+            keccak256(abi.encodePacked(code, abi.encode(address(f), implArgs))),
+            keccak256(implArgs)
+        );
         return at;
     }
 
     /// @notice T66b §4.5: `kind`'s body modules (`_modules`, with the kind's own constructor arguments `coreArgs`: "" on 0-5,
     ///         `abi.encode(COMPLIANCE_REGISTRY_CODEHASH)` on 8-13), env version 1 of `kind` = `e` with the modules pinned beside its
     ///         libraries, then the release, version 1, its `implArgs` naming the modules (`kindImplArgs`).
-    function _kindRelease(OpenFactory f, IOpenFactory.TokenKind kind, string memory name, bytes memory code,
-        bytes memory coreArgs, IFactoryToken.Env memory e) internal returns (address)
-    {
+    function _kindRelease(
+        OpenFactory f,
+        IOpenFactory.TokenKind kind,
+        string memory name,
+        bytes memory code,
+        bytes memory coreArgs,
+        IFactoryToken.Env memory e
+    ) internal returns (address) {
         string[] memory n = kindModuleNames(uint8(kind));
         address[] memory ms = new address[](n.length);
-        for (uint256 i; i < n.length; ++i) ms[i] = _module(n[i], abi.encode(address(f), coreArgs), uint8(kind));
+        for (uint256 i; i < n.length; ++i) {
+            ms[i] = _module(n[i], abi.encode(address(f), coreArgs), uint8(kind));
+        }
         f.publishTokenEnv(kind, 1, f.chainUid(), _withModules(e, ms));
         return _release(f, kind, name, code, kindImplArgs(uint8(kind), ms, coreArgs));
     }
@@ -705,12 +887,20 @@ abstract contract DeployBase is DeployBook {
     }
 
     /// @notice `e` with `ms` pinned after its libraries (`OpenFactory` refuses a release whose `modules()` it lacks).
-    function _withModules(IFactoryToken.Env memory e, address[] memory ms) internal view returns (IFactoryToken.Env memory) {
+    function _withModules(IFactoryToken.Env memory e, address[] memory ms)
+        internal
+        view
+        returns (IFactoryToken.Env memory)
+    {
         uint256 k = e.libs.length;
         address[] memory l = new address[](k + ms.length);
         bytes32[] memory h = new bytes32[](l.length);
-        for (uint256 i; i < k; ++i) (l[i], h[i]) = (e.libs[i], e.libCodeHashes[i]);
-        for (uint256 i; i < ms.length; ++i) (l[k + i], h[k + i]) = (ms[i], ms[i].codehash);
+        for (uint256 i; i < k; ++i) {
+            (l[i], h[i]) = (e.libs[i], e.libCodeHashes[i]);
+        }
+        for (uint256 i; i < ms.length; ++i) {
+            (l[k + i], h[k + i]) = (ms[i], ms[i].codehash);
+        }
         (e.libs, e.libCodeHashes) = (l, h);
         return e;
     }
@@ -727,15 +917,23 @@ abstract contract DeployBase is DeployBook {
     function _configureChain(OpenFactory f, address registrar) internal {
         uint256 ref = vm.envOr("NO_REF_BLOCK", false) || block.number < 2 ? 0 : block.number - 1;
         // the router's code hash from this build (spec §13.7, Fable 3r3s3t P3-6: `_builtHash` at `_deployGovRouter`)
-        f.configureChain(uid, noticePeriod, govRouter, govRouterCodeHash, ref,
-            ref == 0 ? bytes32(0) : blockhash(ref));
+        f.configureChain(uid, noticePeriod, govRouter, govRouterCodeHash, ref, ref == 0 ? bytes32(0) : blockhash(ref));
         _gate(address(f));
-        _releaseRow("OpenFactory", 0, 0, 0, address(f), keccak256(abi.encodePacked(type(OpenFactory).creationCode,
-            abi.encode(MetaTxLib.pad(registrar)))), keccak256(abi.encode(MetaTxLib.pad(registrar))));
+        _releaseRow(
+            "OpenFactory",
+            0,
+            0,
+            0,
+            address(f),
+            keccak256(abi.encodePacked(type(OpenFactory).creationCode, abi.encode(MetaTxLib.pad(registrar)))),
+            keccak256(abi.encode(MetaTxLib.pad(registrar)))
+        );
         _releaseRow("admin", 0, 0, 0, registrar, bytes32(0), bytes32(0)); // the factory's first admin (round 3r, spec §6)
         if (chainSiblings > 1 && !vm.envOr("SIBLINGS_CONFIGURED", false)) {
             configureOnly = true;
-            console.log("chain id shared by siblings (chain-uids.json): configure every one, then SIBLINGS_CONFIGURED=true");
+            console.log(
+                "chain id shared by siblings (chain-uids.json): configure every one, then SIBLINGS_CONFIGURED=true"
+            );
         }
     }
 
@@ -757,10 +955,15 @@ abstract contract DeployBase is DeployBook {
     ///         (the EIP-1167 proxy with the env the factory appends: its `chain_uid` and router, the release's env)
     ///         etched at a scratch address in this script's EVM only, never sent.
     function _gateInstance(OpenFactory f, address implementation, IFactoryToken.Env memory e) internal {
-        bytes memory env = ChainEnvCode.encode(IFactoryToken.ChainEnv(f.chainUid(), e.registry, f.govRouter(),
-            e.smartKeyAccountImpl, e.hedera, e.deps, e.params));
+        bytes memory env = ChainEnvCode.encode(
+            IFactoryToken.ChainEnv(
+                f.chainUid(), e.registry, f.govRouter(), e.smartKeyAccountImpl, e.hedera, e.deps, e.params
+            )
+        );
         address probe = address(uint160(uint256(keccak256(abi.encode("scaas.deploy.instance-probe", implementation)))));
-        vm.etch(probe, abi.encodePacked(hex"363d3d373d3d3d363d73", implementation, hex"5af43d82803e903d91602b57fd5bf3", env));
+        vm.etch(
+            probe, abi.encodePacked(hex"363d3d373d3d3d363d73", implementation, hex"5af43d82803e903d91602b57fd5bf3", env)
+        );
         _gate(probe);
         vm.etch(probe, "");
     }
@@ -775,9 +978,15 @@ abstract contract DeployBase is DeployBook {
     /// @notice One row of the release list (§6.2): `class`, `kind`, `version`, `address`, `codeHash` (the runtime's),
     ///         `initcodeHash`, `implArgsHash`; written with `RELEASES_WRITE`, else checked against the file when it exists
     ///         and lists `name` (a later chain may add a release the file does not list yet: it is reported).
-    function _releaseRow(string memory name, uint16 cls, uint16 kind, uint64 version, address at, bytes32 initHash,
-        bytes32 argsHash) internal
-    {
+    function _releaseRow(
+        string memory name,
+        uint16 cls,
+        uint16 kind,
+        uint64 version,
+        address at,
+        bytes32 initHash,
+        bytes32 argsHash
+    ) internal {
         string memory k = string.concat("releases.", name);
         vm.serializeUint(k, "class", cls);
         vm.serializeUint(k, "kind", kind);
@@ -795,10 +1004,14 @@ abstract contract DeployBase is DeployBook {
             console.log(string.concat("release list: ", name, " not listed (a release the first chain has not)"));
             return;
         }
-        require(vm.parseJsonAddress(file, string.concat(p, ".address")) == at,
-            string.concat("release list: ", name, " at another address"));
-        require(vm.parseJsonBytes32(file, string.concat(p, ".codeHash")) == at.codehash,
-            string.concat("release list: ", name, " with another code hash"));
+        require(
+            vm.parseJsonAddress(file, string.concat(p, ".address")) == at,
+            string.concat("release list: ", name, " at another address")
+        );
+        require(
+            vm.parseJsonBytes32(file, string.concat(p, ".codeHash")) == at.codehash,
+            string.concat("release list: ", name, " with another code hash")
+        );
     }
 
     /// @notice Writes the release list (`RELEASES_WRITE`), after every row, behind this chain's book header (NET-EVM-13);
@@ -811,10 +1024,14 @@ abstract contract DeployBase is DeployBook {
     ///         implementation, Hedera, the deps, each library's current code hash. Chain-neutral releases (plan T71): the
     ///         factory fills its own `chain_uid` and router (`configureChain`), they are not in the env.
     function _env(OpenFactory, address reg, address ska, bool hedera, address[] memory deps, address[] memory libs)
-        internal view returns (IFactoryToken.Env memory e)
+        internal
+        view
+        returns (IFactoryToken.Env memory e)
     {
         bytes32[] memory h = new bytes32[](libs.length);
-        for (uint256 i; i < libs.length; ++i) h[i] = libs[i].codehash;
+        for (uint256 i; i < libs.length; ++i) {
+            h[i] = libs[i].codehash;
+        }
         e = IFactoryToken.Env(reg, ska, hedera, deps, new bytes32[](0), libs, h);
     }
 
@@ -851,12 +1068,25 @@ abstract contract DeployBase is DeployBook {
         string memory env = ["MLDSA44_VERIFIER", "MLDSA65_VERIFIER", "MLDSA87_VERIFIER"][i];
         string memory hex4 = vm.toString(abi.encodePacked(kind));
         if (!mldsaPrecompile) {
-            require(given == address(0), string.concat(env, ": set with MLDSA_PRECOMPILE=off (pure Solidity with the cache)"));
+            require(
+                given == address(0),
+                string.concat(env, ": set with MLDSA_PRECOMPILE=off (pure Solidity with the cache)")
+            );
         } else if (given != address(0)) {
-            require(given.code.length != 0 && MldsaVerifier(given).KIND() == kind && MldsaVerifier(given).PRECOMPILE() != address(0),
-                string.concat(env, ": not an MldsaVerifier(", hex4, ") with a precompile on this chain"));
-            require(given == _mldsaCreate2(i, MldsaVerifier(given).PRECOMPILE()), string.concat(env,
-                ": not this build's CREATE2 address of MldsaVerifier(", hex4, ", its precompile, pq_kat.json's probe) with DEPLOY_SALT (F-6)"));
+            require(
+                given.code.length != 0 && MldsaVerifier(given).KIND() == kind
+                    && MldsaVerifier(given).PRECOMPILE() != address(0),
+                string.concat(env, ": not an MldsaVerifier(", hex4, ") with a precompile on this chain")
+            );
+            require(
+                given == _mldsaCreate2(i, MldsaVerifier(given).PRECOMPILE()),
+                string.concat(
+                    env,
+                    ": not this build's CREATE2 address of MldsaVerifier(",
+                    hex4,
+                    ", its precompile, pq_kat.json's probe) with DEPLOY_SALT (F-6)"
+                )
+            );
             cap = [CAP_MLDSA44_PRECOMPILE, CAP_MLDSA65_PRECOMPILE, CAP_MLDSA87_PRECOMPILE][i];
             return (_pqKindFits(cap, budget) ? given : address(0), cap);
         } else {
@@ -866,11 +1096,21 @@ abstract contract DeployBase is DeployBook {
                 if (_pqKindFits(cap, budget)) v = address(new MldsaVerifier{salt: salt}(kind, p, ok, bad));
                 return (v, cap);
             }
-            require(!answers, string.concat("gen-1 registry: PQ precompile kind ", hex4, " the probe passes is missing (", env,
-                ": deploy.sh evm's pq-verifiers step)"));
+            require(
+                !answers,
+                string.concat(
+                    "gen-1 registry: PQ precompile kind ",
+                    hex4,
+                    " the probe passes is missing (",
+                    env,
+                    ": deploy.sh evm's pq-verifiers step)"
+                )
+            );
         }
         cap = [CAP_MLDSA44, CAP_MLDSA65, CAP_MLDSA87][i];
-        if (_pqKindFits(cap, budget) && _cacheFits(i)) v = address(new MldsaVerifier{salt: salt}(kind, address(0), "", ""));
+        if (_pqKindFits(cap, budget) && _cacheFits(i)) {
+            v = address(new MldsaVerifier{salt: salt}(kind, address(0), "", ""));
+        }
     }
 
     /// @notice F-6 (owner 2026-11-15): the CREATE2 address (`DEPLOY_SALT`, the deterministic deployer) of
@@ -879,8 +1119,10 @@ abstract contract DeployBase is DeployBook {
     ///         refused). The candidate is the one the verifier names (`PRECOMPILE()`), so both candidates are covered.
     function _mldsaCreate2(uint256 i, address p) internal view returns (address) {
         (bytes memory valid, bytes memory invalid) = _mldsaProbe(i);
-        bytes memory init = abi.encodePacked(type(MldsaVerifier).creationCode,
-            abi.encode([UAKinds.MLDSA44, UAKinds.MLDSA65, UAKinds.MLDSA87][i], p, valid, invalid));
+        bytes memory init = abi.encodePacked(
+            type(MldsaVerifier).creationCode,
+            abi.encode([UAKinds.MLDSA44, UAKinds.MLDSA65, UAKinds.MLDSA87][i], p, valid, invalid)
+        );
         return vm.computeCreate2Address(salt, keccak256(init), CREATE2_FACTORY);
     }
 
@@ -897,9 +1139,23 @@ abstract contract DeployBase is DeployBook {
             uint256 reg = r[i][p];
             uint256 total = (reg + st[i][p]) * 105 / 100;
             if (reg * 105 / 100 >= TX_REGULAR_GAS_CAP || total > limit) {
-                console.log(string.concat("ML-DSA kind ", ["mldsa44", "mldsa65", "mldsa87"][i], " disabled (MD-5): cache part ",
-                    vm.toString(p), " asks regular ", vm.toString(reg), " + state ", vm.toString(uint256(st[i][p])), " x 1.05 = ",
-                    vm.toString(total), " (2^24 on the regular, block gas limit ", vm.toString(limit), ")"));
+                console.log(
+                    string.concat(
+                        "ML-DSA kind ",
+                        ["mldsa44", "mldsa65", "mldsa87"][i],
+                        " disabled (MD-5): cache part ",
+                        vm.toString(p),
+                        " asks regular ",
+                        vm.toString(reg),
+                        " + state ",
+                        vm.toString(uint256(st[i][p])),
+                        " x 1.05 = ",
+                        vm.toString(total),
+                        " (2^24 on the regular, block gas limit ",
+                        vm.toString(limit),
+                        ")"
+                    )
+                );
                 return false;
             }
         }
@@ -931,13 +1187,14 @@ abstract contract DeployBase is DeployBook {
                 UAKinds.BLS_BN254_MINSIG, address(new BlsMinSigBn254Verifier{salt: salt}()), 345_000
             );
         }
-        k[n++] = UARegistry.KindConfig(
-            UAKinds.MUSIG2_SECP256K1, address(new Musig2Secp256k1Verifier{salt: salt}()), 50_000
-        );
-        k[n++] = UARegistry.KindConfig(UAKinds.FROST_SECP256K1, address(new FrostSecp256k1Verifier{salt: salt}()), 50_000);
+        k[n++] =
+            UARegistry.KindConfig(UAKinds.MUSIG2_SECP256K1, address(new Musig2Secp256k1Verifier{salt: salt}()), 50_000);
+        k[n++] =
+            UARegistry.KindConfig(UAKinds.FROST_SECP256K1, address(new FrostSecp256k1Verifier{salt: salt}()), 50_000);
         k[n++] = UARegistry.KindConfig(UAKinds.MUSIG2_BN254, address(new Musig2Bn254Verifier{salt: salt}()), 50_000);
         k[n++] = UARegistry.KindConfig(UAKinds.FROST_BN254, address(new FrostBn254Verifier{salt: salt}()), 50_000);
-        if (bls && !isHedera) { // never on Hedera: no Zether token can exist there (`ZetherLayer`)
+        if (bls && !isHedera) {
+            // never on Hedera: no Zether token can exist there (`ZetherLayer`)
             k[n++] = UARegistry.KindConfig(
                 UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier{salt: salt}()), 70_000
             );
@@ -954,7 +1211,8 @@ abstract contract DeployBase is DeployBook {
             );
         }
         if (_pqKindFits(CAP_SLHDSA128S, budget)) {
-            k[n++] = UARegistry.KindConfig(UAKinds.SLHDSA128S, address(new SlhdsaVerifier{salt: salt}()), CAP_SLHDSA128S);
+            k[n++] =
+                UARegistry.KindConfig(UAKinds.SLHDSA128S, address(new SlhdsaVerifier{salt: salt}()), CAP_SLHDSA128S);
         }
         if (_pqKindFits(CAP_FNDSA1024, budget)) {
             k[n++] = UARegistry.KindConfig(
@@ -966,9 +1224,11 @@ abstract contract DeployBase is DeployBook {
             if (v != address(0)) k[n++] = UARegistry.KindConfig(UAKinds.MLDSA87, v, cap);
         }
         if (pqzKeyVerifier != address(0) && _pqKindFits(CAP_PQZ_MLWE, budget)) {
-            require(pqzKeyVerifier.code.length != 0 && PqzKeyVerifier(pqzKeyVerifier).PRECOMPILE() == PqzSafety.PQZ
-                && PqzKeyVerifier(pqzKeyVerifier).PROOF_SYSTEM_ID() == PqzSafety.PQZL_ID,
-                "PQZ_KEY_VERIFIER: not a PqzKeyVerifier on the PQZ precompile and the set's PQZL id");
+            require(
+                pqzKeyVerifier.code.length != 0 && PqzKeyVerifier(pqzKeyVerifier).PRECOMPILE() == PqzSafety.PQZ
+                    && PqzKeyVerifier(pqzKeyVerifier).PROOF_SYSTEM_ID() == PqzSafety.PQZL_ID,
+                "PQZ_KEY_VERIFIER: not a PqzKeyVerifier on the PQZ precompile and the set's PQZL id"
+            );
             k[n++] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, pqzKeyVerifier, CAP_PQZ_MLWE);
         }
         assembly ("memory-safe") {
@@ -991,8 +1251,11 @@ abstract contract DeployBase is DeployBook {
                 string memory lv = kk == UAKinds.MLDSA44 ? "44" : kk == UAKinds.MLDSA65 ? "65" : "87";
                 vm.serializeAddress("deploy", string.concat("mldsa", lv, "_verifier"), k[i].verifier);
                 address pc = MldsaVerifier(k[i].verifier).PRECOMPILE();
-                vm.serializeString("deploy", string.concat("mldsa", lv, "_path"), // MD-15: the path each kind took
-                    pc == address(0) ? "cache" : string.concat("precompile ", vm.toString(pc)));
+                vm.serializeString(
+                    "deploy",
+                    string.concat("mldsa", lv, "_path"), // MD-15: the path each kind took
+                    pc == address(0) ? "cache" : string.concat("precompile ", vm.toString(pc))
+                );
             }
         }
         vm.serializeString("deploy", "mldsa_precompile", mldsaPrecompile ? "on" : "off");
@@ -1003,8 +1266,11 @@ abstract contract DeployBase is DeployBook {
     /// @notice The gates of the registry's release and of its two libraries', each its own transaction (CREATE2 of the
     ///         registry's init code with these arguments; each library's creation code).
     function _requireRegistryGas(bool isHedera, uint64 budget, address ska, UARegistry.KindConfig[] memory k) internal {
-        _requireReleaseGas("UARegistry", address(0),
-            abi.encodePacked(type(UARegistry).creationCode, abi.encode(uid, address(0), isHedera, budget, ska, true, k)));
+        _requireReleaseGas(
+            "UARegistry",
+            address(0),
+            abi.encodePacked(type(UARegistry).creationCode, abi.encode(uid, address(0), isHedera, budget, ska, true, k))
+        );
         _requireReleaseGas("UARegistryCoreLib", address(0), vm.getCode("UARegistryCoreLib.sol:UARegistryCoreLib"));
         _requireReleaseGas("UARegistryAuxLib", address(0), vm.getCode("UARegistryAuxLib.sol:UARegistryAuxLib"));
     }
@@ -1019,16 +1285,25 @@ abstract contract DeployBase is DeployBook {
     ///         `MLDSA_PRECOMPILE=on`) `mldsa87` 0x0134; that the ML-DSA kinds are on the precompile is `_mldsaVerifier`'s check.
     function _checkGen1Kinds(IUARegistry reg, bool bls, bool isHedera, bool pqz, bool ml87) internal view {
         require(reg.generation() == 1, "gen-1 registry: not generation 1");
-        require(!pqz || reg.kindEnabled(UAKinds.PQZ_MLWE),
-            "gen-1 registry: PQ precompile kind 0x0142 the probe passes is missing (PQZ_KEY_VERIFIER: deploy.sh evm's pq-verifiers step)");
-        require(!ml87 || reg.kindEnabled(UAKinds.MLDSA87),
-            "gen-1 registry: PQ precompile kind 0x0134 the probe passes is missing (MLDSA87_VERIFIER: deploy.sh evm's pq-verifiers step)");
+        require(
+            !pqz || reg.kindEnabled(UAKinds.PQZ_MLWE),
+            "gen-1 registry: PQ precompile kind 0x0142 the probe passes is missing (PQZ_KEY_VERIFIER: deploy.sh evm's pq-verifiers step)"
+        );
+        require(
+            !ml87 || reg.kindEnabled(UAKinds.MLDSA87),
+            "gen-1 registry: PQ precompile kind 0x0134 the probe passes is missing (MLDSA87_VERIFIER: deploy.sh evm's pq-verifiers step)"
+        );
         if (!bls) return;
         uint16[3] memory need = [UAKinds.SCHNORR_BLS12381, UAKinds.BLS12381_MINSIG, UAKinds.ZETHER_BLS12381];
         for (uint256 i; i < (isHedera ? 2 : 3); ++i) {
-            require(reg.kindEnabled(need[i]), string.concat(
-                "gen-1 registry: EIP-2537 kind ", vm.toString(abi.encodePacked(need[i])), " the probe passes is missing"
-            ));
+            require(
+                reg.kindEnabled(need[i]),
+                string.concat(
+                    "gen-1 registry: EIP-2537 kind ",
+                    vm.toString(abi.encodePacked(need[i])),
+                    " the probe passes is missing"
+                )
+            );
         }
     }
 
@@ -1066,7 +1341,11 @@ abstract contract DeployBase is DeployBook {
         bool answered;
         // gas 2^24: EIP-7825's cap, which Nethermind applies to eth_call too (F-7)
         bytes memory out;
-        try vm.rpc("eth_call", string.concat('[{"data":"', vm.toString(init), '","gas":"0x1000000"},"latest"]')) returns (bytes memory o) {
+        try vm.rpc(
+            "eth_call", string.concat('[{"data":"', vm.toString(init), '","gas":"0x1000000"},"latest"]')
+        ) returns (
+            bytes memory o
+        ) {
             out = o;
         } catch {}
         if (out.length == 128) {
@@ -1074,8 +1353,10 @@ abstract contract DeployBase is DeployBook {
             (pqz, ml[0], ml[1], ml[2]) = abi.decode(out, (bool, bool, bool, bool));
         }
         // MD-15 (owner 2026-11-15, F-7): with `on`, only an answered "no" selects the cache, never a failed probe
-        require(answered || !mldsaPrecompile,
-            "MLDSA_PRECOMPILE=on: the chain's PQ precompile probe (PqPrecompileProbe by eth_call) failed or answered no 128 bytes: refused (MD-15)");
+        require(
+            answered || !mldsaPrecompile,
+            "MLDSA_PRECOMPILE=on: the chain's PQ precompile probe (PqPrecompileProbe by eth_call) failed or answered no 128 bytes: refused (MD-15)"
+        );
     }
 
     /// @notice The chain's own verdict on its pairing precompiles (`UAPrecompileProbe`), asked through `eth_call` with
@@ -1092,7 +1373,8 @@ abstract contract DeployBase is DeployBook {
     /// @notice The link closure of a Zether token (task 6): `WrappedLib` and `ZetherWrappedLib` only in `WRAPPED_ZETHER`.
     function _zetherLibs(bool underlying) internal view returns (address[] memory l) {
         l = new address[](underlying ? 6 : 4);
-        (l[0], l[1], l[2], l[3]) = (address(GovernanceLib), address(HederaLib), address(MtxPipelineLib), address(ZetherLib));
+        (l[0], l[1], l[2], l[3]) =
+        (address(GovernanceLib), address(HederaLib), address(MtxPipelineLib), address(ZetherLib));
         if (underlying) (l[4], l[5]) = (address(WrappedLib), address(ZetherWrappedLib));
     }
 
@@ -1132,10 +1414,22 @@ abstract contract DeployBase is DeployBook {
 
     /// @notice `_deployZether`'s two releases (`NORMAL_ZETHER`, `WRAPPED_ZETHER`) on `deps`, each with its body modules.
     function _zetherReleases(OpenFactory f, address reg, address smartKeyAccountImpl, address[] memory deps) internal {
-        address none = _kindRelease(f, IOpenFactory.TokenKind.NORMAL_ZETHER, "NormalZetherToken",
-            type(NormalZetherToken).creationCode, "", _env(f, reg, smartKeyAccountImpl, false, deps, _zetherLibs(false)));
-        address und = _kindRelease(f, IOpenFactory.TokenKind.WRAPPED_ZETHER, "WrappedZetherToken",
-            type(WrappedZetherToken).creationCode, "", _env(f, reg, smartKeyAccountImpl, false, deps, _zetherLibs(true)));
+        address none = _kindRelease(
+            f,
+            IOpenFactory.TokenKind.NORMAL_ZETHER,
+            "NormalZetherToken",
+            type(NormalZetherToken).creationCode,
+            "",
+            _env(f, reg, smartKeyAccountImpl, false, deps, _zetherLibs(false))
+        );
+        address und = _kindRelease(
+            f,
+            IOpenFactory.TokenKind.WRAPPED_ZETHER,
+            "WrappedZetherToken",
+            type(WrappedZetherToken).creationCode,
+            "",
+            _env(f, reg, smartKeyAccountImpl, false, deps, _zetherLibs(true))
+        );
         vm.serializeAddress("deploy", "implementation_normal_zether_bls12381", none);
         vm.serializeAddress("deploy", "implementation_wrapped_zether_bls12381", und);
     }
@@ -1145,14 +1439,26 @@ abstract contract DeployBase is DeployBook {
     ///         the releases, version 1, each refused first by `_requireReleaseGas`, `implArgs` the canonical
     ///         `ComplianceRegistry` runtime's code hash (F-11), then both kinds enabled. JSON
     ///         `implementation_{normal,wrapped}_zether_regulated_bls12381`. Never on Hedera (`ZetherLayer`).
-    function _deployZetherRegulated(OpenFactory f, address reg, address smartKeyAccountImpl, address[] memory deps) internal {
+    function _deployZetherRegulated(OpenFactory f, address reg, address smartKeyAccountImpl, address[] memory deps)
+        internal
+    {
         bytes memory coreArgs = abi.encode(_complianceRegistryCodehash());
-        address n = _kindRelease(f, IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, "NormalZetherRegulatedToken",
-            type(NormalZetherRegulatedToken).creationCode, coreArgs,
-            _env(f, reg, smartKeyAccountImpl, false, deps, _withRegulatedLib(_zetherLibs(false))));
-        address w = _kindRelease(f, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, "WrappedZetherRegulatedToken",
-            type(WrappedZetherRegulatedToken).creationCode, coreArgs,
-            _env(f, reg, smartKeyAccountImpl, false, deps, _withRegulatedLib(_zetherLibs(true))));
+        address n = _kindRelease(
+            f,
+            IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED,
+            "NormalZetherRegulatedToken",
+            type(NormalZetherRegulatedToken).creationCode,
+            coreArgs,
+            _env(f, reg, smartKeyAccountImpl, false, deps, _withRegulatedLib(_zetherLibs(false)))
+        );
+        address w = _kindRelease(
+            f,
+            IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED,
+            "WrappedZetherRegulatedToken",
+            type(WrappedZetherRegulatedToken).creationCode,
+            coreArgs,
+            _env(f, reg, smartKeyAccountImpl, false, deps, _withRegulatedLib(_zetherLibs(true)))
+        );
         vm.serializeAddress("deploy", "implementation_normal_zether_regulated_bls12381", n);
         vm.serializeAddress("deploy", "implementation_wrapped_zether_regulated_bls12381", w);
         f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true, f.chainUid());
@@ -1167,19 +1473,46 @@ abstract contract DeployBase is DeployBook {
     ///         NET-EVM-06); then the four kinds enabled. JSON `implementation_{normal,wrapped}_pqz`,
     ///         `implementation_{normal,wrapped}_pqz_regulated`, `pqz_key_verifier`. **UNAUDITED.**
     function _deployPqz(OpenFactory f, address reg, address ska, bool isHedera) internal {
-        require(pqzKeyVerifier != address(0), "DEPLOY_PQZ: no PQZ_KEY_VERIFIER (deploy.sh evm's pq-verifiers step needs the chain's PQZ precompile)");
+        require(
+            pqzKeyVerifier != address(0),
+            "DEPLOY_PQZ: no PQZ_KEY_VERIFIER (deploy.sh evm's pq-verifiers step needs the chain's PQZ precompile)"
+        );
         IOpenFactory.TokenKind k = IOpenFactory.TokenKind.NORMAL_PQZ;
-        _pqzRelease(f, k, "NormalPqzToken", vm.getCode("NormalPqzToken.sol:NormalPqzToken"), "implementation_normal_pqz",
-            _pqzEnv(f, reg, ska, isHedera, k));
+        _pqzRelease(
+            f,
+            k,
+            "NormalPqzToken",
+            vm.getCode("NormalPqzToken.sol:NormalPqzToken"),
+            "implementation_normal_pqz",
+            _pqzEnv(f, reg, ska, isHedera, k)
+        );
         k = IOpenFactory.TokenKind.WRAPPED_PQZ;
-        _pqzRelease(f, k, "WrappedPqzToken", vm.getCode("WrappedPqzToken.sol:WrappedPqzToken"), "implementation_wrapped_pqz",
-            _pqzEnv(f, reg, ska, isHedera, k));
+        _pqzRelease(
+            f,
+            k,
+            "WrappedPqzToken",
+            vm.getCode("WrappedPqzToken.sol:WrappedPqzToken"),
+            "implementation_wrapped_pqz",
+            _pqzEnv(f, reg, ska, isHedera, k)
+        );
         k = IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED;
-        _pqzRelease(f, k, "NormalPqzRegulatedToken", vm.getCode("NormalPqzRegulatedToken.sol:NormalPqzRegulatedToken"),
-            "implementation_normal_pqz_regulated", _pqzEnv(f, reg, ska, isHedera, k));
+        _pqzRelease(
+            f,
+            k,
+            "NormalPqzRegulatedToken",
+            vm.getCode("NormalPqzRegulatedToken.sol:NormalPqzRegulatedToken"),
+            "implementation_normal_pqz_regulated",
+            _pqzEnv(f, reg, ska, isHedera, k)
+        );
         k = IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED;
-        _pqzRelease(f, k, "WrappedPqzRegulatedToken", vm.getCode("WrappedPqzRegulatedToken.sol:WrappedPqzRegulatedToken"),
-            "implementation_wrapped_pqz_regulated", _pqzEnv(f, reg, ska, isHedera, k));
+        _pqzRelease(
+            f,
+            k,
+            "WrappedPqzRegulatedToken",
+            vm.getCode("WrappedPqzRegulatedToken.sol:WrappedPqzRegulatedToken"),
+            "implementation_wrapped_pqz_regulated",
+            _pqzEnv(f, reg, ska, isHedera, k)
+        );
         f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, f.chainUid());
         f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ, true, f.chainUid());
         f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true, f.chainUid());
@@ -1189,20 +1522,28 @@ abstract contract DeployBase is DeployBook {
     /// @notice One PQZ release of `_deployPqz` on env `e` (`_pqzEnv`), `coreArgs` the registry pin on 12, 13. The init code by
     ///         `vm.getCode` (linked as `_module`'s), not embedded in this script: four more embedded releases would grow every
     ///         contract that inherits `DeployBase` (the test harness) past the test's gas.
-    function _pqzRelease(OpenFactory f, IOpenFactory.TokenKind kind, string memory name, bytes memory code,
-        string memory key, IFactoryToken.Env memory e) internal
-    {
+    function _pqzRelease(
+        OpenFactory f,
+        IOpenFactory.TokenKind kind,
+        string memory name,
+        bytes memory code,
+        string memory key,
+        IFactoryToken.Env memory e
+    ) internal {
         bytes memory coreArgs = uint8(kind) >= 8 ? abi.encode(_complianceRegistryCodehash()) : bytes("");
         vm.serializeAddress("deploy", key, _kindRelease(f, kind, name, code, coreArgs, e));
     }
 
     /// @notice A PQZ kind's env 1: deps `[PQZ_KEY_VERIFIER]`, its closure (`_pqzLibs`; `RegulatedLib` on 12, 13).
     function _pqzEnv(OpenFactory f, address reg, address ska, bool isHedera, IOpenFactory.TokenKind kind)
-        internal view returns (IFactoryToken.Env memory)
+        internal
+        view
+        returns (IFactoryToken.Env memory)
     {
         address[] memory deps = new address[](1);
         deps[0] = pqzKeyVerifier;
-        bool underlying = kind == IOpenFactory.TokenKind.WRAPPED_PQZ || kind == IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED;
+        bool underlying =
+            kind == IOpenFactory.TokenKind.WRAPPED_PQZ || kind == IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED;
         address[] memory libs = uint8(kind) >= 8 ? _withRegulatedLib(_pqzLibs(underlying)) : _pqzLibs(underlying);
         return _env(f, reg, ska, isHedera, deps, libs);
     }
@@ -1215,21 +1556,24 @@ abstract contract DeployBase is DeployBook {
         uint256 n = 3;
         if (underlying) l[n++] = address(WrappedLib);
         (l[n], l[n + 1], l[n + 2], l[n + 3]) =
-            (address(PqzStateLib), address(PqzTransferLib), address(PqzBurnLib), address(PqzViewLib));
+        (address(PqzStateLib), address(PqzTransferLib), address(PqzBurnLib), address(PqzViewLib));
         if (underlying) l[n + 4] = address(PqzWrappedLib);
     }
 
     /// @notice `libs` and `RegulatedLib` last: a regulated kind's closure (it links only `GovernanceLib`, already in `libs`).
     function _withRegulatedLib(address[] memory libs) internal pure returns (address[] memory l) {
         l = new address[](libs.length + 1);
-        for (uint256 i; i < libs.length; ++i) l[i] = libs[i];
+        for (uint256 i; i < libs.length; ++i) {
+            l[i] = libs[i];
+        }
         l[libs.length] = address(RegulatedLib);
     }
 
     /// @notice Two kind-`NORMAL` demo tokens from `f` (dev chains; only when the deployer is the registrar): 6 decimals,
     ///         `PAYABLE`, `supply` each to the deployer, half of each to `holder`; JSON `demo_token`, `demo_token_2`.
     function _demoTokens(OpenFactory f, uint256 supply, address deployer, address holder)
-        internal returns (address demo, address demo2)
+        internal
+        returns (address demo, address demo2)
     {
         require(f.noticePeriod() == 0, "DEMO_SUPPLY needs NOTICE_PERIOD=0: a new release is not usable yet");
         demo = _demoToken(f, "SCaaS Demo USD", "bUSD", supply, deployer, "demo");
@@ -1242,9 +1586,14 @@ abstract contract DeployBase is DeployBook {
         vm.serializeAddress("deploy", "demo_token", demo);
     }
 
-    function _demoToken(OpenFactory f, string memory name, string memory symbol, uint256 supply, address holder,
-        bytes32 tokenSalt) private returns (address)
-    {
+    function _demoToken(
+        OpenFactory f,
+        string memory name,
+        string memory symbol,
+        uint256 supply,
+        address holder,
+        bytes32 tokenSalt
+    ) private returns (address) {
         IFactoryToken.TokenConfig memory c;
         c.name = name;
         c.symbol = symbol;

@@ -133,7 +133,9 @@ function deployKindModules(uint8 kind, address factory, bytes memory coreArgs)
     Vm vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
     string[] memory n = kindModuleNames(kind);
     modules = new address[](n.length);
-    for (uint256 i; i < n.length; ++i) modules[i] = vm.deployCode(n[i], abi.encode(factory, coreArgs));
+    for (uint256 i; i < n.length; ++i) {
+        modules[i] = vm.deployCode(n[i], abi.encode(factory, coreArgs));
+    }
     implArgs = kindImplArgs(kind, modules, coreArgs);
 }
 

@@ -11,5 +11,7 @@ interface IMetaTxAddress {
     function mtxDigest(MetaTxLib.MetaTransaction calldata m) external view returns (bytes32);
     function mtxExecute(MetaTxLib.MetaTransaction calldata m, bytes calldata signature) external returns (bytes memory);
     function mtxBatch(MetaTxLib.MetaTransaction[] calldata ms, bytes[] calldata signatures) external returns (bool);
-    function mtxCancelNonce(MetaTxLib.Envelope calldata e, uint256 lane, bytes calldata sig) external returns (bytes memory);
+    function mtxCancelNonce(MetaTxLib.Envelope calldata e, uint256 lane, bytes calldata sig)
+        external
+        returns (bytes memory);
 }

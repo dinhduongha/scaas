@@ -175,7 +175,10 @@ interface IZetherToken is IConfidentialToken {
     ///         `keccak256` (the key is in `AuditorKeyProposed`); `status` 0 none, 1 waiting (before `eta`), 2 confirmable
     ///         (`[eta, eta + 7 days]`), 3 expired (the slot is free), 4 void (its proposer lost the bit, or bit 32 is off:
     ///         then `pending`, `eta` and `proposer` read 0).
-    function auditorState() external view returns (uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status);
+    function auditorState()
+        external
+        view
+        returns (uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status);
     /// @notice `BUNDLE` (`mtxConfidentialTransfer` stores the record inline; `…Compact` stores it by SSTORE2) or `COMPACT`
     ///         (`mtxConfidentialTransfer` and `…Compact` are commit-reveal; single refused). Both keep `R` in state.
     function disclosureMode() external view returns (ZetherTypes.DisclosureMode);
@@ -215,9 +218,13 @@ interface IZetherToken is IConfidentialToken {
     /// @notice Multi-recipient, in the token's default storage mode.
     function mtxConfidentialTransfer(ZetherMulti calldata t, bytes calldata proof) external returns (bytes32 entryRef);
     /// @notice Multi-recipient, commit-reveal on every token.
-    function mtxConfidentialTransferCompact(ZetherMulti calldata t, bytes calldata proof) external returns (bytes32 entryRef);
+    function mtxConfidentialTransferCompact(ZetherMulti calldata t, bytes calldata proof)
+        external
+        returns (bytes32 entryRef);
     /// @notice Single-recipient, in the token's default storage mode.
-    function mtxConfidentialTransferSingle(ZetherSingle calldata t, bytes calldata proof) external returns (bytes32 entryRef);
+    function mtxConfidentialTransferSingle(ZetherSingle calldata t, bytes calldata proof)
+        external
+        returns (bytes32 entryRef);
     /// @notice `amount` shielded units out as `amount · shieldScale` public units from `SHIELD_POOL` to `recipient`: a
     ///         native address as its zero-padded id, or a registered SIGNING UA (credited on the UA ledger); the pools
     ///         are refused.

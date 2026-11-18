@@ -28,7 +28,9 @@ library AuditorRules {
     function status(uint64 eta, uint32 roleEpoch, bytes32 proposer) internal view returns (uint8) {
         if (eta == 0) return NONE;
         GovernanceLib.GovernanceStorage storage g = GovernanceLib.$();
-        if (g.features >> GovernanceBits.AUDITOR & 1 == 0 || g.epoch[GovernanceBits.AUDITOR][proposer] != roleEpoch) return VOID;
+        if (g.features >> GovernanceBits.AUDITOR & 1 == 0 || g.epoch[GovernanceBits.AUDITOR][proposer] != roleEpoch) {
+            return VOID;
+        }
         if (block.timestamp < eta) return WAITING;
         if (block.timestamp <= uint256(eta) + AUDITOR_CONFIRM_WINDOW) return CONFIRMABLE;
         return EXPIRED;
@@ -57,15 +59,24 @@ library AuditorRules {
 
     /// @notice The typed `AuditorConsent` of this token (`address(this)` under `DELEGATECALL`) under its EIP-712 domain.
     function consentDigest(bytes32 domainSeparator, bytes32 auditor, uint32 epoch, bytes32 chainUid)
-        internal view returns (bytes32)
+        internal
+        view
+        returns (bytes32)
     {
-        return keccak256(abi.encodePacked(hex"1901", domainSeparator,
-            keccak256(abi.encode(AUDITOR_CONSENT_TYPEHASH, address(this), auditor, epoch, chainUid))));
+        return keccak256(
+            abi.encodePacked(
+                hex"1901",
+                domainSeparator,
+                keccak256(abi.encode(AUDITOR_CONSENT_TYPEHASH, address(this), auditor, epoch, chainUid))
+            )
+        );
     }
 
     /// @notice `auditorState()` from the stored fields (spec §8): with bit 32 off the proposal fields read 0, status void.
     function state(uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint32 roleEpoch)
-        internal view returns (uint32, bytes32, uint64, bytes32, uint8 st)
+        internal
+        view
+        returns (uint32, bytes32, uint64, bytes32, uint8 st)
     {
         st = status(eta, roleEpoch, proposer);
         if (st == VOID && GovernanceLib.$().features >> GovernanceBits.AUDITOR & 1 == 0) return (epoch, 0, 0, 0, st);

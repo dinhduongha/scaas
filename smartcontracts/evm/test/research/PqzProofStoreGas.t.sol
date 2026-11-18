@@ -22,7 +22,9 @@ bytes32 constant PROOF_EV = keccak256("PqzDebitProof(address,bytes32,uint64,byte
 /// what it claims).
 function _proofEvents(Vm vm_, address t) returns (uint256 n) {
     Vm.Log[] memory ls = vm_.getRecordedLogs();
-    for (uint256 i; i < ls.length; ++i) if (ls[i].emitter == t && ls[i].topics[0] == PROOF_EV) ++n;
+    for (uint256 i; i < ls.length; ++i) {
+        if (ls[i].emitter == t && ls[i].topics[0] == PROOF_EV) ++n;
+    }
 }
 
 /// Group 3h, T60 (spec 2026-11-06-pqz-proof-path §7, Codex C4; O11, O13): the measurement matrix of `proofStore` `NONE` / `LOG`,
@@ -50,7 +52,8 @@ contract PqzProofStoreGasTest is PqzStatePinGasTest {
 
     /// `_row`'s measurement returning both gases: the call (relayed by `viaUA`'s path when `relay`) as its own transaction.
     function _meas2(string memory sys, string memory key, address to, bytes memory data, bool relay, uint8 mode)
-        internal returns (uint256 reg, uint256 st, uint256 n)
+        internal
+        returns (uint256 reg, uint256 st, uint256 n)
     {
         string memory k = string.concat(".", sys, "['", key, "']");
         uint256 row = vm.parseJsonUint(gj, string.concat(k, ".row"));
@@ -74,7 +77,8 @@ contract PqzProofStoreGasTest is PqzStatePinGasTest {
 
     /// One form under `NONE` then `LOG` on the same state; a `MATRIX` line each, the `LOG` cost above `NONE`.
     function _pair(string memory sys, string memory key, string memory what, address to, bytes memory data, bool relay)
-        internal returns (uint256 regLog)
+        internal
+        returns (uint256 regLog)
     {
         uint256[2] memory regs;
         for (uint8 m; m < 2; ++m) {
@@ -83,11 +87,38 @@ contract PqzProofStoreGasTest is PqzStatePinGasTest {
             (uint256 reg, uint256 st, uint256 n) = _meas2(sys, key, to, data, relay, m);
             vm.revertToState(snap);
             regs[m] = reg;
-            console2.log(string.concat("MATRIX ", PqzSet.NAME, " | ", sys, " | ", relay ? path : "direct", " | ", what, " | ",
-                m == 0 ? "NONE" : "LOG", " | regular ", vm.toString(reg), " | state ", vm.toString(st), " | floor ",
-                vm.toString(15_000 + 64 * n)));
-            console2.log(string.concat("  | 2^24 ", _v(reg <= 1 << 24), " | 60M ", _v(reg + st <= BLOCK_60M), " | 200M ",
-                _v(reg + st <= BLOCK_200M), " | 64M tx ", _v(reg + st <= NODE_64M)));
+            console2.log(
+                string.concat(
+                    "MATRIX ",
+                    PqzSet.NAME,
+                    " | ",
+                    sys,
+                    " | ",
+                    relay ? path : "direct",
+                    " | ",
+                    what,
+                    " | ",
+                    m == 0 ? "NONE" : "LOG",
+                    " | regular ",
+                    vm.toString(reg),
+                    " | state ",
+                    vm.toString(st),
+                    " | floor ",
+                    vm.toString(15_000 + 64 * n)
+                )
+            );
+            console2.log(
+                string.concat(
+                    "  | 2^24 ",
+                    _v(reg <= 1 << 24),
+                    " | 60M ",
+                    _v(reg + st <= BLOCK_60M),
+                    " | 200M ",
+                    _v(reg + st <= BLOCK_200M),
+                    " | 64M tx ",
+                    _v(reg + st <= NODE_64M)
+                )
+            );
         }
         console2.log(string.concat("  | LOG - NONE regular ", vm.toString(regs[1] > regs[0] ? regs[1] - regs[0] : 0)));
         regLog = regs[1];
@@ -111,15 +142,22 @@ contract PqzProofStoreGasTest is PqzStatePinGasTest {
     }
 
     /// One row per frame, its memory back after it (`freed`: PQZH rows of 0.3 MB each run out of memory gas in one frame).
-    function _row1(string memory sys, string memory key, string memory what, bytes32 from, uint256 p, bool aud, bool relay)
-        internal freed
-    {
+    function _row1(
+        string memory sys,
+        string memory key,
+        string memory what,
+        bytes32 from,
+        uint256 p,
+        bool aud,
+        bool relay
+    ) internal freed {
         bytes memory data = _op1p(from, p, aud, "", _pf(sys, key));
         _pair(sys, key, what, address(tok), data, relay);
     }
 
     function _rowB(string memory sys, string memory key, string memory what, uint256 amount, address to, bool relay)
-        internal freed
+        internal
+        freed
     {
         bytes memory data = _burnP(amount, to, _pf(sys, key));
         _pair(sys, key, what, address(tok), data, relay);
@@ -135,8 +173,14 @@ contract PqzProofStoreGasTest is PqzStatePinGasTest {
 
     function _matrix7a(string memory sys, uint256 m, bool aud, bool relay) internal freed {
         string memory key = string.concat("M", vm.toString(m), aud ? "-on" : "-off");
-        _pair(sys, key, string.concat("op 7 M = ", vm.toString(m), aud ? ", auditor" : ", no auditor"), address(tok),
-            _op7a(m, aud, _pf(sys, key)), relay);
+        _pair(
+            sys,
+            key,
+            string.concat("op 7 M = ", vm.toString(m), aud ? ", auditor" : ", no auditor"),
+            address(tok),
+            _op7a(m, aud, _pf(sys, key)),
+            relay
+        );
     }
 
     function test_proofStoreMatrix_pqzl() public {
@@ -177,14 +221,24 @@ contract PqzProofStoreGasTest is PqzStatePinGasTest {
         usd.approve(address(w), 10 * SCALE);
         w.mtxWrapShield(address(usd), 10 * SCALE, carol);
         _public(tok, vm.addr(RKEY), 100 * SCALE);
-        bytes memory wide = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(_payload(0, 5, carol, bob, alice,
-            _out(77, true), "")), _pf("pqzl", "TRANSFER"), _pqAuth(), "", noVerdict()));
+        bytes memory wide = abi.encodeCall(
+            IPqzToken.mtxConfidentialTransferSingle,
+            (
+                _ts(_payload(0, 5, carol, bob, alice, _out(77, true), "")),
+                _pf("pqzl", "TRANSFER"),
+                _pqAuth(),
+                "",
+                noVerdict()
+            )
+        );
         _pair("pqzl", "TRANSFER", "op 1, auditor, wide record (shieldIn 5)", t, wide, true);
         // kind 5's unwrap
-        IPqzToken.PqzBurnArgs memory b = _bs(bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), carol, alice),
-            _blob(5, PqzCt.CT)));
-        IConfidentialWrappedToken.Unwrap memory x = IConfidentialWrappedToken.Unwrap(address(usd), MetaTxLib.pad(address(0xD00D)), 1, 0);
-        bytes memory uw = abi.encodeCall(IPqzWrappedToken.mtxUnshieldUnwrap, (b, x, _pf("pqzl", "BURN"), _pqAuth(), "", noVerdict()));
+        IPqzToken.PqzBurnArgs memory b =
+            _bs(bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), carol, alice), _blob(5, PqzCt.CT)));
+        IConfidentialWrappedToken.Unwrap memory x =
+            IConfidentialWrappedToken.Unwrap(address(usd), MetaTxLib.pad(address(0xD00D)), 1, 0);
+        bytes memory uw =
+            abi.encodeCall(IPqzWrappedToken.mtxUnshieldUnwrap, (b, x, _pf("pqzl", "BURN"), _pqAuth(), "", noVerdict()));
         _pair("pqzl", "BURN", "kind 5 unwrap 1 to the leg", address(w), uw, false);
         // the migration: carol's version 0 stale after a rotation, op 1 to herself, the credit in (carol, 1); the rotation's
         // consent by the ML-DSA-65 stand-in, its R_REG by the precompile's (both answer 1)
@@ -192,8 +246,16 @@ contract PqzProofStoreGasTest is PqzStatePinGasTest {
         vm.mockCall(PQZ, abi.encodePacked(uint8(3)), abi.encode(uint256(1)));
         reg.setPqzKey(carol, 1, _pk(60), keccak256("pqzver carol 1"), UACall.sig(new bytes(ML65_SIG)));
         reg.storePqzPop(carol, 1, "pqzver carol 1");
-        bytes memory mig = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(_payload(0, 0, carol, carol, alice,
-            _out(78, true), "")), _pf("pqzl", "TRANSFER"), _pqAuth(), "", noVerdict()));
+        bytes memory mig = abi.encodeCall(
+            IPqzToken.mtxConfidentialTransferSingle,
+            (
+                _ts(_payload(0, 0, carol, carol, alice, _out(78, true), "")),
+                _pf("pqzl", "TRANSFER"),
+                _pqAuth(),
+                "",
+                noVerdict()
+            )
+        );
         _pair("pqzl", "TRANSFER", "the 3g migration (op 1 to itself from version 0), auditor", t, mig, true);
         _pair("pqzl", "TRANSFER", "the 3g migration (op 1 to itself from version 0), auditor", t, mig, false);
     }
@@ -206,10 +268,22 @@ contract PqzProofStoreGasTest is PqzStatePinGasTest {
     function test_debitMinGas_isTheCheapestLogDebit() public {
         gj = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqz-gas/", PqzSet.NAME, ".json"));
         (viaUA, path) = (true, "uaExecute");
-        uint256 g = _pair("pqzl", "BURN", "burn 1 to an address (the PQZ_DEBIT_MIN_GAS form)", address(tok),
-            _burnP(1, address(0xD00D), _pf("pqzl", "BURN")), true);
-        console2.log(string.concat("PQZ_DEBIT_MIN_GAS ", PqzSet.NAME, " pinned / measured under LOG"), PqzSet.PQZ_DEBIT_MIN_GAS, g);
-        assertGe(PqzSet.PQZ_DEBIT_MIN_GAS, g, "set.toml debit_min_gas: at least the LOG burn's full relayed regular gas");
+        uint256 g = _pair(
+            "pqzl",
+            "BURN",
+            "burn 1 to an address (the PQZ_DEBIT_MIN_GAS form)",
+            address(tok),
+            _burnP(1, address(0xD00D), _pf("pqzl", "BURN")),
+            true
+        );
+        console2.log(
+            string.concat("PQZ_DEBIT_MIN_GAS ", PqzSet.NAME, " pinned / measured under LOG"),
+            PqzSet.PQZ_DEBIT_MIN_GAS,
+            g
+        );
+        assertGe(
+            PqzSet.PQZ_DEBIT_MIN_GAS, g, "set.toml debit_min_gas: at least the LOG burn's full relayed regular gas"
+        );
         assertEq(PqzSet.PQZ_DEBIT_MIN_GAS % 1_000, 0, "set.toml debit_min_gas: a multiple of 1,000");
         assertLt(PqzSet.PQZ_DEBIT_MIN_GAS - g, 1_000, "set.toml debit_min_gas: the measurement rounded up, no more");
     }
@@ -219,7 +293,9 @@ contract PqzProofStoreGasTest is PqzStatePinGasTest {
 /// `BURN` proof, the precompile at its schedule row; the relayed form adds the envelope the kind 5 and burn rows show (the same
 /// for both modes). Same `MATRIX` line shape. UNAUDITED.
 contract PqzProofStoreGas13Test is PqzRegFixture {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 
     function _setMode(uint8 m) internal {
         uint256 w = uint256(vm.load(address(tok), PqzCore._STORAGE));
@@ -241,8 +317,9 @@ contract PqzProofStoreGas13Test is PqzRegFixture {
         _shieldTo(alice, BAL);
         IConfidentialWrappedToken.Unwrap memory x =
             IConfidentialWrappedToken.Unwrap(address(usd), MetaTxLib.pad(address(0xD00D)), 1, SCALE);
-        bytes memory data = abi.encodeCall(IPqzWrappedToken.mtxUnshieldUnwrap, (_burnArgs(bytes32(0), 0, 81), x, proof, _pqAuth(), "",
-            noVerdict()));
+        bytes memory data = abi.encodeCall(
+            IPqzWrappedToken.mtxUnshieldUnwrap, (_burnArgs(bytes32(0), 0, 81), x, proof, _pqAuth(), "", noVerdict())
+        );
         vm.clearMockedCalls();
         vm.etch(PQZ, address(new RowBurner(vm.parseJsonUint(gj, string.concat(k, ".row")))).code);
         vm.etch(ML65, address(new GasBurner(100_006 - 2_900)).code); // the subject's ML-DSA-65 authorization, as the gas table
@@ -251,17 +328,42 @@ contract PqzProofStoreGas13Test is PqzRegFixture {
             _setMode(m);
             vm.recordLogs();
             (bool ok, bytes memory ret) = address(tok).call(data);
-            if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+            if (!ok) {
+                assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+            }
             Vm.Gas memory g = vm.lastCallGas();
             assertEq(_proofEvents(vm, address(tok)), m, "one PqzDebitProof under LOG, none under NONE");
             vm.revertToState(snap);
             uint256 reg = g.gasTotalUsed;
             uint256 st = uint256(int256(g.gasStateUsed));
-            console2.log(string.concat("MATRIX ", PqzSet.NAME, " | ", sys, " | direct | kind 13 unwrap 1 to the leg | ",
-                m == 0 ? "NONE" : "LOG", " | regular ", vm.toString(reg), " | state ", vm.toString(st), " | floor ",
-                vm.toString(15_000 + 64 * data.length)));
-            console2.log(string.concat("  | 2^24 ", reg <= 1 << 24 ? "yes" : "NO", " | 60M ", reg + st <= 60_000_000 ? "yes" : "NO",
-                " | 200M ", reg + st <= 200_000_000 ? "yes" : "NO", " | 64M tx ", reg + st <= 64_000_000 ? "yes" : "NO"));
+            console2.log(
+                string.concat(
+                    "MATRIX ",
+                    PqzSet.NAME,
+                    " | ",
+                    sys,
+                    " | direct | kind 13 unwrap 1 to the leg | ",
+                    m == 0 ? "NONE" : "LOG",
+                    " | regular ",
+                    vm.toString(reg),
+                    " | state ",
+                    vm.toString(st),
+                    " | floor ",
+                    vm.toString(15_000 + 64 * data.length)
+                )
+            );
+            console2.log(
+                string.concat(
+                    "  | 2^24 ",
+                    reg <= 1 << 24 ? "yes" : "NO",
+                    " | 60M ",
+                    reg + st <= 60_000_000 ? "yes" : "NO",
+                    " | 200M ",
+                    reg + st <= 200_000_000 ? "yes" : "NO",
+                    " | 64M tx ",
+                    reg + st <= 64_000_000 ? "yes" : "NO"
+                )
+            );
         }
     }
 

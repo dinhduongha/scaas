@@ -21,7 +21,9 @@ import {nid} from "../helpers/Ids.sol";
 /// Test only: `ZetherLib`'s proof-of-possession equation, so a test can force the challenge `c = 0` (no hash preimage needed).
 contract PopEquationHarness {
     function equation(IZetherVerifier v, bytes memory g, bytes memory y, bytes memory r, uint256 z, uint256 c)
-        external view returns (bool)
+        external
+        view
+        returns (bool)
     {
         return ZetherLib.popEquation(v, g, y, r, z, c);
     }
@@ -76,9 +78,18 @@ contract ZetherAuditorTest is ZetherFixture {
 
     /// The typed `AuditorConsent` under `tok`'s domain, for the key `y`, the epoch and the word (and the token) given.
     function _digest(bytes memory y, uint32 epoch, bytes32 uid, address token) internal view returns (bytes32) {
-        return _typed(tok, keccak256(abi.encode(
-            keccak256("AuditorConsent(address token,bytes32 auditor,uint32 epoch,bytes32 chainUid)"), token,
-            ZetherTypes.UA.unwrap(ZetherTypes.toUA(y)), epoch, uid)));
+        return _typed(
+            tok,
+            keccak256(
+                abi.encode(
+                    keccak256("AuditorConsent(address token,bytes32 auditor,uint32 epoch,bytes32 chainUid)"),
+                    token,
+                    ZetherTypes.UA.unwrap(ZetherTypes.toUA(y)),
+                    epoch,
+                    uid
+                )
+            )
+        );
     }
 
     /// The Schnorr proof of possession of `x` over `d` (spec §5.2): `R ‖ be32(z)`.
@@ -87,7 +98,8 @@ contract ZetherAuditorTest is ZetherFixture {
         uint256 k = uint256(keccak256(abi.encode("pop-k", x, d))) % n;
         bytes memory r = ver.g1MulBase(k);
         uint256 c = ZetherTranscript.hashToScalar(
-            keccak256(abi.encodePacked("SCAAS-ZETHER-AUDITOR-POP-V1", d, ver.g1MulBase(1), ver.g1MulBase(x), r)), n);
+            keccak256(abi.encodePacked("SCAAS-ZETHER-AUDITOR-POP-V1", d, ver.g1MulBase(1), ver.g1MulBase(x), r)), n
+        );
         return bytes.concat(r, bytes32(addmod(k, mulmod(c, x, n), n)));
     }
 
@@ -356,9 +368,13 @@ contract ZetherAuditorTest is ZetherFixture {
     /// Consent refused at the proposal: missing, another token, another epoch, another word, another key.
     function test_consent_refusedAtProposal() public {
         _go(1 days, 0);
-        bytes[5] memory bad = [bytes(""), _pop(X_B, _digest(yB, 1, _uid(), address(0xD0C))), _pop(X_B, _digest(yB, 2, _uid(),
-            address(tok))), _pop(X_B, _digest(yB, 1, bytes32(uint256(_uid()) ^ 1), address(tok))), _pop(X_C, _digest(yB, 1,
-            _uid(), address(tok)))];
+        bytes[5] memory bad = [
+            bytes(""),
+            _pop(X_B, _digest(yB, 1, _uid(), address(0xD0C))),
+            _pop(X_B, _digest(yB, 2, _uid(), address(tok))),
+            _pop(X_B, _digest(yB, 1, bytes32(uint256(_uid()) ^ 1), address(tok))),
+            _pop(X_C, _digest(yB, 1, _uid(), address(tok)))
+        ];
         for (uint256 i; i < 5; ++i) {
             vm.expectRevert(IZetherToken.AuditorConsentInvalid.selector);
             _call(holder, yB, 1, bad[i]);
@@ -423,15 +439,29 @@ contract ZetherAuditorTest is ZetherFixture {
         uint256 rows;
         for (uint256 i; vm.keyExistsJson(j, string.concat(".rows[", vm.toString(i), "]")); ++i) {
             string memory r = string.concat(".rows[", vm.toString(i), "]");
-            assertTrue(h.holds(ver, vm.parseJsonBytes(j, string.concat(r, ".y")), vm.parseJsonBytes(j, string.concat(r, ".pop")),
-                vm.parseJsonBytes32(j, string.concat(r, ".d"))), r);
+            assertTrue(
+                h.holds(
+                    ver,
+                    vm.parseJsonBytes(j, string.concat(r, ".y")),
+                    vm.parseJsonBytes(j, string.concat(r, ".pop")),
+                    vm.parseJsonBytes32(j, string.concat(r, ".d"))
+                ),
+                r
+            );
             ++rows;
         }
         uint256 refused;
         for (uint256 i; vm.keyExistsJson(j, string.concat(".refused[", vm.toString(i), "]")); ++i) {
             string memory r = string.concat(".refused[", vm.toString(i), "]");
-            assertFalse(h.holds(ver, vm.parseJsonBytes(j, string.concat(r, ".y")), vm.parseJsonBytes(j, string.concat(r, ".pop")),
-                vm.parseJsonBytes32(j, string.concat(r, ".d"))), vm.parseJsonString(j, string.concat(r, ".name")));
+            assertFalse(
+                h.holds(
+                    ver,
+                    vm.parseJsonBytes(j, string.concat(r, ".y")),
+                    vm.parseJsonBytes(j, string.concat(r, ".pop")),
+                    vm.parseJsonBytes32(j, string.concat(r, ".d"))
+                ),
+                vm.parseJsonString(j, string.concat(r, ".name"))
+            );
             ++refused;
         }
         assertEq(rows, 2);
@@ -479,7 +509,8 @@ contract ZetherAuditorTest is ZetherFixture {
 
     /// `entryAuditorEpoch[ref]`'s slot (ZetherStorage slot 17).
     function _epochSlot(bytes32 ref) internal pure returns (bytes32) {
-        return keccak256(abi.encode(ref, uint256(0xd1eef6cbeb7b383e0a92b3cb723053d5c39c76707d89da6b14ff91b83198ce00) + 17));
+        return
+            keccak256(abi.encode(ref, uint256(0xd1eef6cbeb7b383e0a92b3cb723053d5c39c76707d89da6b14ff91b83198ce00) + 17));
     }
 
     function _single(User memory from, User memory to, uint256 v, uint256 b) internal returns (bytes32) {
@@ -494,7 +525,9 @@ contract ZetherAuditorTest is ZetherFixture {
     /// No `SSTORE` to `entryAuditorEpoch[ref]` during the recorded calls (a write of 0 would leave the word 0 too).
     function _notWritten(bytes32 ref) internal {
         (, bytes32[] memory writes) = vm.accesses(address(tok));
-        for (uint256 i; i < writes.length; ++i) assertTrue(writes[i] != _epochSlot(ref), "entryAuditorEpoch written");
+        for (uint256 i; i < writes.length; ++i) {
+            assertTrue(writes[i] != _epochSlot(ref), "entryAuditorEpoch written");
+        }
     }
 
     /// Epoch 0: an audited transfer writes no row (no `SSTORE` at all to it) and its key is the current one.
@@ -586,7 +619,9 @@ contract ZetherAuditorTest is ZetherFixture {
     function _audBase(bytes32 ref, uint256 j) internal view returns (bytes memory b) {
         (bytes memory ct,) = dis.transferCiphertext(address(tok), ref, j);
         b = new bytes(128);
-        for (uint256 i; i < 128; ++i) b[i] = ct[384 + i];
+        for (uint256 i; i < 128; ++i) {
+            b[i] = ct[384 + i];
+        }
     }
 
     /// An AUDITOR opening of leg `j` of `ref` for `amount`, made with the key `x`: does `ZetherDisclosure` accept it?
@@ -610,10 +645,14 @@ contract ZetherAuditorTest is ZetherFixture {
         bytes32 out = _single(alice, bob, 13, 967);
         uint256[3] memory xs = [X_AUD, X_B, X_C];
         for (uint256 i; i < 3; ++i) {
-            for (uint256 k; k < 3; ++k) assertEq(_audOpens(rs[i], 0, 10 + i, xs[k]), i == k, "the entry's own epoch key only");
+            for (uint256 k; k < 3; ++k) {
+                assertEq(_audOpens(rs[i], 0, 10 + i, xs[k]), i == k, "the entry's own epoch key only");
+            }
         }
         assertEq(tok.auditorKeyOf(out), yA, "opt-out: epoch 0's key");
-        for (uint256 k; k < 3; ++k) assertFalse(_audOpens(out, 0, 13, xs[k]), "opt-out: no auditor opening");
+        for (uint256 k; k < 3; ++k) {
+            assertFalse(_audOpens(out, 0, 13, xs[k]), "opt-out: no auditor opening");
+        }
     }
 
     /// Multi-recipient: an epoch-0 entry still opens with the old key after the replacement, an epoch-1 entry with the new.

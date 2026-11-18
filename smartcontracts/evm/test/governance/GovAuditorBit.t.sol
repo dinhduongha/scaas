@@ -36,6 +36,7 @@ import {nid} from "../helpers/Ids.sol";
 /// Test only: the masks `GovernanceLib` receives from each kind (bit 32 on 2, 3, 4, 5, 10, 11, 12, 13).
 contract AudMasks2 is NormalZetherToken {
     constructor(address f_, bytes memory a) NormalZetherToken(f_, a) {}
+
     function masks() external pure returns (uint256, uint256, uint256, uint256) {
         return (_validBits(), _roleBits(), _contractOnlyBits(), _delayedRelaxBits());
     }
@@ -43,6 +44,7 @@ contract AudMasks2 is NormalZetherToken {
 
 contract AudMasks3 is WrappedZetherToken {
     constructor(address f_, bytes memory a) WrappedZetherToken(f_, a) {}
+
     function masks() external pure returns (uint256, uint256, uint256, uint256) {
         return (_validBits(), _roleBits(), _contractOnlyBits(), _delayedRelaxBits());
     }
@@ -50,6 +52,7 @@ contract AudMasks3 is WrappedZetherToken {
 
 contract AudMasks4 is NormalPqzToken {
     constructor(address f_, bytes memory a) NormalPqzToken(f_, a) {}
+
     function masks() external pure returns (uint256, uint256, uint256, uint256) {
         return (_validBits(), _roleBits(), _contractOnlyBits(), _delayedRelaxBits());
     }
@@ -57,6 +60,7 @@ contract AudMasks4 is NormalPqzToken {
 
 contract AudMasks5 is WrappedPqzToken {
     constructor(address f_, bytes memory a) WrappedPqzToken(f_, a) {}
+
     function masks() external pure returns (uint256, uint256, uint256, uint256) {
         return (_validBits(), _roleBits(), _contractOnlyBits(), _delayedRelaxBits());
     }
@@ -64,6 +68,7 @@ contract AudMasks5 is WrappedPqzToken {
 
 contract AudMasks10 is NormalZetherRegulatedToken {
     constructor(address f_, bytes memory a) NormalZetherRegulatedToken(f_, a) {}
+
     function masks() external pure returns (uint256, uint256, uint256, uint256) {
         return (_validBits(), _roleBits(), _contractOnlyBits(), _delayedRelaxBits());
     }
@@ -71,6 +76,7 @@ contract AudMasks10 is NormalZetherRegulatedToken {
 
 contract AudMasks11 is WrappedZetherRegulatedToken {
     constructor(address f_, bytes memory a) WrappedZetherRegulatedToken(f_, a) {}
+
     function masks() external pure returns (uint256, uint256, uint256, uint256) {
         return (_validBits(), _roleBits(), _contractOnlyBits(), _delayedRelaxBits());
     }
@@ -78,6 +84,7 @@ contract AudMasks11 is WrappedZetherRegulatedToken {
 
 contract AudMasks12 is NormalPqzRegulatedToken {
     constructor(address f_, bytes memory a) NormalPqzRegulatedToken(f_, a) {}
+
     function masks() external pure returns (uint256, uint256, uint256, uint256) {
         return (_validBits(), _roleBits(), _contractOnlyBits(), _delayedRelaxBits());
     }
@@ -85,6 +92,7 @@ contract AudMasks12 is NormalPqzRegulatedToken {
 
 contract AudMasks13 is WrappedPqzRegulatedToken {
     constructor(address f_, bytes memory a) WrappedPqzRegulatedToken(f_, a) {}
+
     function masks() external pure returns (uint256, uint256, uint256, uint256) {
         return (_validBits(), _roleBits(), _contractOnlyBits(), _delayedRelaxBits());
     }
@@ -111,10 +119,17 @@ contract GovAuditorBitTest is PqzOffchainBase {
         IFactoryToken.Env memory e = pqzEnv(address(f), PQZ_UID, address(reg), address(pqv));
         Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ, 1, e, type(NormalPqzToken).creationCode);
         Catalogue.release(f, IOpenFactory.TokenKind.WRAPPED_PQZ, 1, e, type(WrappedPqzToken).creationCode);
-        Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, 1, e, type(NormalPqzRegulatedToken).creationCode,
-            regArgs());
-        Catalogue.release(f, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, e, type(WrappedPqzRegulatedToken).creationCode,
-            regArgs());
+        Catalogue.release(
+            f, IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, 1, e, type(NormalPqzRegulatedToken).creationCode, regArgs()
+        );
+        Catalogue.release(
+            f,
+            IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED,
+            1,
+            e,
+            type(WrappedPqzRegulatedToken).creationCode,
+            regArgs()
+        );
         vm.startPrank(registrar);
         f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(f)));
         f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ, true, EnvKit.uidOf(address(f)));
@@ -125,7 +140,11 @@ contract GovAuditorBitTest is PqzOffchainBase {
 
     /// The config of PQZ kind `k` (4, 5, 12, 13) with bit 32 set (unless `withBit` is false), the test its admin (`admin`
     /// false: 0), `delay` its grant delay.
-    function _cfg32(uint8 k, bool withBit, bool admin, uint64 delay) internal view returns (IFactoryToken.TokenConfig memory c) {
+    function _cfg32(uint8 k, bool withBit, bool admin, uint64 delay)
+        internal
+        view
+        returns (IFactoryToken.TokenConfig memory c)
+    {
         c = _cfg(uint256(1) << 40);
         // admin 0: the minter's bit 1 locked, so the seat survives creation (B-06), as the fixture's own tokens
         (c.admin, c.grantDelay, c.lockedFeatures) = (admin ? owner_ : bytes32(0), delay, admin ? 0 : c.lockedFeatures);
@@ -190,18 +209,27 @@ contract GovAuditorBitTest is PqzOffchainBase {
     /// Kinds 0, 1, 8, 9 have bit 32 outside their valid and role masks; a creation of kind 0 with it is
     /// `FeatureInvalidForKind(32)`.
     function test_bit32_otherKindsRefused() public {
-        address[4] memory impls = [address(new NormalToken(address(f), kindArgs(0, address(f), ""))),
+        address[4] memory impls = [
+            address(new NormalToken(address(f), kindArgs(0, address(f), ""))),
             address(new WrappedToken(address(f), kindArgs(1, address(f), ""))),
             address(new NormalRegulatedToken(address(f), kindArgs(8, address(f), regArgs()))),
-            address(new WrappedRegulatedToken(address(f), kindArgs(9, address(f), regArgs())))];
-        for (uint256 i; i < 4; ++i) assertEq(IGovernance(impls[i]).validBits() & M, 0, vm.toString(i));
+            address(new WrappedRegulatedToken(address(f), kindArgs(9, address(f), regArgs())))
+        ];
+        for (uint256 i; i < 4; ++i) {
+            assertEq(IGovernance(impls[i]).validBits() & M, 0, vm.toString(i));
+        }
         _tok32(4, 0); // the control: a confidential kind takes it
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         (c.admin, c.lockedFeatures) = (owner_, 0);
         c.features |= M;
         c.conf = IFactoryToken.ConfidentialConfig("", 0, 0, 0, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0, false, false);
-        Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL, 1,
-            plainEnv(address(factory), address(0), PQZ_UID, address(reg), false), type(NormalToken).creationCode);
+        Catalogue.release(
+            factory,
+            IOpenFactory.TokenKind.NORMAL,
+            1,
+            plainEnv(address(factory), address(0), PQZ_UID, address(reg), false),
+            type(NormalToken).creationCode
+        );
         vm.prank(registrar);
         factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL, true, EnvKit.uidOf(address(factory)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, BIT));
@@ -259,12 +287,19 @@ contract GovAuditorBitTest is PqzOffchainBase {
     /// Kinds 8 and 9 refuse a grant of 32 as `NoSuchRole(32)` (their role masks), never `RoleWithoutFeature(32)`; a confidential
     /// kind without the bit set refuses it as `RoleWithoutFeature(32)` (the control of the two checks' order).
     function test_bit32_grantOnKind8_noSuchRole() public {
-        Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_REGULATED, 1, plainEnv(address(f), address(0), PQZ_UID, address(reg), false),
-            type(NormalRegulatedToken).creationCode, regArgs());
+        Catalogue.release(
+            f,
+            IOpenFactory.TokenKind.NORMAL_REGULATED,
+            1,
+            plainEnv(address(f), address(0), PQZ_UID, address(reg), false),
+            type(NormalRegulatedToken).creationCode,
+            regArgs()
+        );
         vm.prank(registrar);
         f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true, EnvKit.uidOf(address(f)));
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
-        (c.admin, c.lockedFeatures) = (owner_, (uint256(1) << GovernanceBits.DENYLIST) | (uint256(1) << GovernanceBits.ALLOWLIST));
+        (c.admin, c.lockedFeatures) =
+        (owner_, (uint256(1) << GovernanceBits.DENYLIST) | (uint256(1) << GovernanceBits.ALLOWLIST));
         c.conf = IFactoryToken.ConfidentialConfig("", 0, 0, 0, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0, false, false);
         IGovernance r8 = IGovernance(f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(c), "kind 8"));
         bytes32 h = nid(vm.addr(0xE0B));
@@ -329,14 +364,32 @@ contract GovAuditorBitZetherTest is ZetherFixture {
         _stack();
         _users();
         usd = new MockERC20("USD", "USD", 6);
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode);
-        Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, 1, _zenv(),
-            type(NormalZetherRegulatedToken).creationCode, regArgs());
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, 1, _zenv(),
-            type(WrappedZetherRegulatedToken).creationCode, regArgs());
+        Catalogue.release(
+            factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode
+        );
+        Catalogue.release(
+            factory,
+            IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED,
+            1,
+            _zenv(),
+            type(NormalZetherRegulatedToken).creationCode,
+            regArgs()
+        );
+        Catalogue.release(
+            factory,
+            IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED,
+            1,
+            _zenv(),
+            type(WrappedZetherRegulatedToken).creationCode,
+            regArgs()
+        );
         vm.startPrank(registrar);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory)));
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory)));
+        factory.setTokenKindEnabled(
+            IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory))
+        );
+        factory.setTokenKindEnabled(
+            IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory))
+        );
         vm.stopPrank();
     }
 

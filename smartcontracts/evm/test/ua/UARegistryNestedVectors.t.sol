@@ -27,7 +27,9 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
     function _registry(address at) internal returns (UARegistry) {
         UARegistry.KindConfig[] memory base = _cfgs(address(mock));
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](base.length + 1);
-        for (uint256 i; i < base.length; ++i) c[i] = base[i];
+        for (uint256 i; i < base.length; ++i) {
+            c[i] = base[i];
+        }
         c[1].verifier = address(new P256Verifier());
         c[2].verifier = address(new Ed25519Verifier());
         c[base.length] = UARegistry.KindConfig(UAKinds.FNDSA512, address(new FndsaVerifier(0x0132)), 2_500_000);
@@ -47,8 +49,11 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
     }
 
     function _attrs(string memory row) internal view returns (IUARegistry.UAAttrs memory) {
-        return UACall.attrs(_bytes(string.concat(row, ".attrs.pqzKey")), vm.parseJsonBytes32(j, string.concat(row, ".attrs.pqzPopHash")),
-            _bytes(string.concat(row, ".attrs.kemPk")));
+        return UACall.attrs(
+            _bytes(string.concat(row, ".attrs.pqzKey")),
+            vm.parseJsonBytes32(j, string.concat(row, ".attrs.pqzPopHash")),
+            _bytes(string.concat(row, ".attrs.kemPk"))
+        );
     }
 
     /// The `registrations` or `afterAcceptance` row `name`.
@@ -89,14 +94,22 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
 
     function _register(uint256 i) internal returns (bytes32 ua) {
         string memory row = _p("registrations", i, "");
-        ua = UACall.register(r, _uint16(string.concat(row, ".kind")), _bytes(string.concat(row, ".keyData")), _attrs(row),
-            _bytes(string.concat(row, ".pop")), _bytes(string.concat(row, ".pqzPop")));
+        ua = UACall.register(
+            r,
+            _uint16(string.concat(row, ".kind")),
+            _bytes(string.concat(row, ".keyData")),
+            _attrs(row),
+            _bytes(string.concat(row, ".pop")),
+            _bytes(string.concat(row, ".pqzPop"))
+        );
     }
 
     /// Up to the row `last`, which this does not register (`""`: every row).
     function _registerUpTo(string memory last) internal {
         for (uint256 i; i < _count(".registrations"); ++i) {
-            if (keccak256(bytes(vm.parseJsonString(j, _p("registrations", i, ".name")))) == keccak256(bytes(last))) return;
+            if (keccak256(bytes(vm.parseJsonString(j, _p("registrations", i, ".name")))) == keccak256(bytes(last))) {
+                return;
+            }
             _register(i);
         }
     }
@@ -111,15 +124,25 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
             assertEq(_register(i), want, row);
             if (_uint16(string.concat(row, ".kind")) != UAKinds.MSIG) continue;
             bytes memory pop = _bytes(string.concat(row, ".pop"));
-            assertEq(r.popOf(want), pop.length == 0 ? bytes("") : abi.encodePacked(keccak256(pop)), "an msig keeps keccak256(pop)");
-            assertEq(_memberSigHashes(row, want), pop.length == 0 ? 0 : UACall.memberSigs(pop).length, "a hash per slot of the pop");
+            assertEq(
+                r.popOf(want),
+                pop.length == 0 ? bytes("") : abi.encodePacked(keccak256(pop)),
+                "an msig keeps keccak256(pop)"
+            );
+            assertEq(
+                _memberSigHashes(row, want),
+                pop.length == 0 ? 0 : UACall.memberSigs(pop).length,
+                "a hash per slot of the pop"
+            );
             string memory digests = string.concat(row, ".innerDigests");
             for (uint256 d; d < _count(digests); ++d) {
                 string memory e = string.concat(digests, "[", vm.toString(d), "]");
                 bytes32 md = vm.parseJsonBytes32(j, string.concat(row, ".memberDigest"));
                 bytes32 inner = vm.parseJsonBytes32(j, string.concat(e, ".inner"));
-                assertEq(UAKinds.memberDigest(inner, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MEMBER, md)),
-                    vm.parseJsonBytes32(j, string.concat(e, ".memberDigest")));
+                assertEq(
+                    UAKinds.memberDigest(inner, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MEMBER, md)),
+                    vm.parseJsonBytes32(j, string.concat(e, ".memberDigest"))
+                );
                 ++nestedRows;
             }
         }
@@ -132,7 +155,11 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
         nh = _count(hs);
         for (uint256 h; h < nh; ++h) {
             string memory e = string.concat(hs, "[", vm.toString(h), "]");
-            assertEq(r.memberSigHashOf(ua, _uint16(string.concat(e, ".index"))), vm.parseJsonBytes32(j, string.concat(e, ".hash")), e);
+            assertEq(
+                r.memberSigHashOf(ua, _uint16(string.concat(e, ".index"))),
+                vm.parseJsonBytes32(j, string.concat(e, ".hash")),
+                e
+            );
         }
     }
 
@@ -164,10 +191,17 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
         bool ran;
         for (uint256 i; i < n; ++i) {
             string memory p = _p("pqzKeyRecords", i, "");
-            if (keccak256(bytes(vm.parseJsonString(j, string.concat(p, ".set")))) != keccak256(bytes(PqzSet.NAME))) continue;
+            if (keccak256(bytes(vm.parseJsonString(j, string.concat(p, ".set")))) != keccak256(bytes(PqzSet.NAME))) {
+                continue;
+            }
             bytes32 u = vm.parseJsonBytes32(j, string.concat(p, ".ua"));
-            r.setPqzKey(u, 0, _bytes(string.concat(p, ".pqzKey")), vm.parseJsonBytes32(j, string.concat(p, ".pqzPopHash")),
-                _sigOf(string.concat(p, ".args.sig")));
+            r.setPqzKey(
+                u,
+                0,
+                _bytes(string.concat(p, ".pqzKey")),
+                vm.parseJsonBytes32(j, string.concat(p, ".pqzPopHash")),
+                _sigOf(string.concat(p, ".args.sig"))
+            );
             assertEq(r.pqzKeySigOf(u, 0), _bytes(string.concat(p, ".sig")));
             ran = true;
         }
@@ -189,7 +223,8 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
             string memory m = _p("memberships", i, "");
             bytes32 ua = vm.parseJsonBytes32(j, string.concat(m, ".ua"));
             uint16 index = _uint16(string.concat(m, ".index"));
-            IUARegistry.MemberSig memory s = IUARegistry.MemberSig(index, _inner(string.concat(m, ".members")), _bytes(string.concat(m, ".sig")));
+            IUARegistry.MemberSig memory s =
+                IUARegistry.MemberSig(index, _inner(string.concat(m, ".members")), _bytes(string.concat(m, ".sig")));
             assertFalse(r.memberAccepted(ua, index));
             if (s.members.length != 0) {
                 IUARegistry.MemberSig memory bad = IUARegistry.MemberSig(index, s.members, hex"01");
@@ -200,7 +235,9 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
             bytes32 storedHash = vm.parseJsonBytes32(j, string.concat(m, ".storedHash"));
             assertEq(keccak256(stored), storedHash, "storedHash");
             vm.expectEmit(address(r));
-            emit IUARegistry.UAMemberSig(ua, vm.parseJsonBytes32(j, string.concat(m, ".member")), index, UAKinds.PURPOSE_MEMBERSHIP, stored);
+            emit IUARegistry.UAMemberSig(
+                ua, vm.parseJsonBytes32(j, string.concat(m, ".member")), index, UAKinds.PURPOSE_MEMBERSHIP, stored
+            );
             r.acceptMembership(ua, s);
             assertTrue(r.memberAccepted(ua, index));
             assertEq(r.memberSigHashOf(ua, index), storedHash);
@@ -213,7 +250,9 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
         vm.pauseGasMetering(); // a 700 KB JSON string per cheatcode call
         _registerUpTo("");
         vm.recordLogs();
-        for (uint256 i; i < _count(".memberships"); ++i) _accept(new Vm.Log[](0), r, r, i);
+        for (uint256 i; i < _count(".memberships"); ++i) {
+            _accept(new Vm.Log[](0), r, r, i);
+        }
         Vm.Log[] memory logs = vm.getRecordedLogs();
         string memory row = ".afterAcceptance[0]";
         IUARegistry.MsigStructure memory st = UACall.structure(_bytes(string.concat(row, ".keyData")));
@@ -228,7 +267,9 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
         _registerUpTo("");
         vm.expectRevert(IUARegistry.UAPoP.selector);
         r.registerMsig(st, _none(), pop, "");
-        for (uint256 i; i < _count(".memberships"); ++i) _accept(logs, first, r, i);
+        for (uint256 i; i < _count(".memberships"); ++i) {
+            _accept(logs, first, r, i);
+        }
         assertEq(r.registerMsig(st, _none(), pop, ""), ua);
         assertEq(r.popOf(ua), first.popOf(ua));
         _memberSigHashes(row, ua);
@@ -240,7 +281,9 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
         bytes32 ua = vm.parseJsonBytes32(j, string.concat(m, ".ua"));
         uint16 index = _uint16(string.concat(m, ".index"));
         if (from == to) {
-            to.acceptMembership(ua, IUARegistry.MemberSig(index, _inner(string.concat(m, ".members")), _bytes(string.concat(m, ".sig"))));
+            to.acceptMembership(
+                ua, IUARegistry.MemberSig(index, _inner(string.concat(m, ".members")), _bytes(string.concat(m, ".sig")))
+            );
             return;
         }
         bytes memory stored = _acceptedSig(logs, from, ua, index);
@@ -284,7 +327,10 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
         for (uint256 i; i < n; ++i) {
             string memory neg = _p("negatives", i, "");
             string memory row = _row(vm.parseJsonString(j, string.concat(neg, ".row")));
-            assertFalse(r.isRegistered(vm.parseJsonBytes32(j, string.concat(row, ".ua"))), "a negative's row is not registered yet");
+            assertFalse(
+                r.isRegistered(vm.parseJsonBytes32(j, string.concat(row, ".ua"))),
+                "a negative's row is not registered yet"
+            );
             assertEq(vm.parseJsonString(j, string.concat(neg, ".error")), "UAPoP");
             IUARegistry.MsigStructure memory s = UACall.structure(_bytes(string.concat(row, ".keyData")));
             vm.expectRevert(IUARegistry.UAPoP.selector);
@@ -336,12 +382,17 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
         uint256 n = _count(".eligibility");
         assertEq(n, 3);
         string memory k = _p("pqzKeyRecords", 0, "");
-        (bytes memory key, bytes32 ph) = (_bytes(string.concat(k, ".pqzKey")), vm.parseJsonBytes32(j, string.concat(k, ".pqzPopHash")));
+        (bytes memory key, bytes32 ph) =
+            (_bytes(string.concat(k, ".pqzKey")), vm.parseJsonBytes32(j, string.concat(k, ".pqzPopHash")));
         for (uint256 i; i < n; ++i) {
             string memory e = _p("eligibility", i, "");
             bytes32 ua = UAKinds.uaOf(UAKinds.MSIG, _bytes(string.concat(e, ".keyData")));
             bool eligible = vm.parseJsonBool(j, string.concat(e, ".eligible"));
-            vm.expectRevert(abi.encodeWithSelector(eligible ? IUARegistry.UAUnauthorized.selector : IUARegistry.UAPqzHolder.selector, ua));
+            vm.expectRevert(
+                abi.encodeWithSelector(
+                    eligible ? IUARegistry.UAUnauthorized.selector : IUARegistry.UAPqzHolder.selector, ua
+                )
+            );
             r.setPqzKey(ua, 0, key, ph, IUARegistry.UASig("", "", new IUARegistry.MemberSig[](0)));
         }
     }

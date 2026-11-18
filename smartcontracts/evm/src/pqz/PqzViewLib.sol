@@ -25,19 +25,28 @@ library PqzViewLib {
     bytes32 private constant TH_BURN_ARGS = keccak256(
         "PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes32 ownTag,bytes u,bytes vFrom)"
     );
-    bytes32 private constant TH_UNWRAP = keccak256("Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)");
+    bytes32 private constant TH_UNWRAP =
+        keccak256("Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)");
 
     /// @notice The op 7 statement an entry point would build for `t`, after every cheap check; a `sealedMemo` reads as
     ///         commit-reveal. `T` is read from the current state (plan 5h D5). Public, so the builders stay in the library
     ///         and out of the tokens' code.
-    function multiStatement(PqzCore.Env memory e, IPqzToken.PqzMultiArgs calldata t) public view returns (bytes memory) {
+    function multiStatement(PqzCore.Env memory e, IPqzToken.PqzMultiArgs calldata t)
+        public
+        view
+        returns (bytes memory)
+    {
         e.mode = t.sealedMemo.length != 0 ? ZetherTypes.TransferMode.HASH : PqzCore._defaultMode();
         (, bytes memory buf) = PqzCore.prepareMulti(e, t, msg.data[0:0], 0);
         return PqzCore._stmtOf(buf);
     }
 
     /// @notice The op 1 statement, as `multiStatement`.
-    function singleStatement(PqzCore.Env memory e, IPqzToken.PqzTransferArgs calldata t) public view returns (bytes memory) {
+    function singleStatement(PqzCore.Env memory e, IPqzToken.PqzTransferArgs calldata t)
+        public
+        view
+        returns (bytes memory)
+    {
         e.mode = t.sealedMemo.length != 0 ? ZetherTypes.TransferMode.HASH : PqzCore._defaultMode();
         (, bytes memory buf) = PqzCore.prepareTransfer(e, t, msg.data[0:0], 0);
         return PqzCore._stmtOf(buf);
@@ -52,12 +61,32 @@ library PqzViewLib {
     // ------------------------------------------------------------------ EIP-712 hashes of the explicit parameters (TS-D17)
 
     function hashTransfer(IPqzToken.PqzTransferArgs calldata t) public pure returns (bytes32) {
-        return keccak256(bytes.concat(
-            abi.encode(TH_TRANSFER_ARGS, t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.toUA, t.beneficiaryUA, t.salt,
-                t.ownTag),
-            abi.encode(keccak256(t.u), keccak256(t.vTo), keccak256(t.vFrom), keccak256(t.vAuditor), keccak256(t.uFrom),
-                keccak256(t.sealedMemo), _hashOpening(t.openingTo), _hashOpening(t.openingAuditor))
-        ));
+        return keccak256(
+            bytes.concat(
+                abi.encode(
+                    TH_TRANSFER_ARGS,
+                    t.p,
+                    t.validUntilBlock,
+                    t.shieldIn,
+                    t.fromUA,
+                    t.keyVersion,
+                    t.toUA,
+                    t.beneficiaryUA,
+                    t.salt,
+                    t.ownTag
+                ),
+                abi.encode(
+                    keccak256(t.u),
+                    keccak256(t.vTo),
+                    keccak256(t.vFrom),
+                    keccak256(t.vAuditor),
+                    keccak256(t.uFrom),
+                    keccak256(t.sealedMemo),
+                    _hashOpening(t.openingTo),
+                    _hashOpening(t.openingAuditor)
+                )
+            )
+        );
     }
 
     bytes32 private constant TH_OPENING = keccak256("PqzOpening(bytes mlkemCt,bytes32 x25519Eph,bytes sealedSeed)");
@@ -67,16 +96,40 @@ library PqzViewLib {
     }
 
     function hashMulti(IPqzToken.PqzMultiArgs calldata t) public pure returns (bytes32) {
-        return keccak256(bytes.concat(
-            abi.encode(TH_MULTI_ARGS, t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.beneficiaryUA, t.decoyFee, t.salt,
-                t.ownTag),
-            abi.encode(_hashParts(t.u), _hashLegs(t.legs), keccak256(t.vFrom), keccak256(t.sealedMemo))
-        ));
+        return keccak256(
+            bytes.concat(
+                abi.encode(
+                    TH_MULTI_ARGS,
+                    t.p,
+                    t.validUntilBlock,
+                    t.shieldIn,
+                    t.fromUA,
+                    t.keyVersion,
+                    t.beneficiaryUA,
+                    t.decoyFee,
+                    t.salt,
+                    t.ownTag
+                ),
+                abi.encode(_hashParts(t.u), _hashLegs(t.legs), keccak256(t.vFrom), keccak256(t.sealedMemo))
+            )
+        );
     }
 
     function hashBurn(IPqzToken.PqzBurnArgs calldata b) public pure returns (bytes32) {
-        return keccak256(abi.encode(TH_BURN_ARGS, b.p, b.validUntilBlock, b.shieldIn, b.fromUA, b.keyVersion, b.beneficiaryUA,
-            b.ownTag, keccak256(b.u), keccak256(b.vFrom)));
+        return keccak256(
+            abi.encode(
+                TH_BURN_ARGS,
+                b.p,
+                b.validUntilBlock,
+                b.shieldIn,
+                b.fromUA,
+                b.keyVersion,
+                b.beneficiaryUA,
+                b.ownTag,
+                keccak256(b.u),
+                keccak256(b.vFrom)
+            )
+        );
     }
 
     function hashUnwrap(IConfidentialWrappedToken.Unwrap calldata x) public pure returns (bytes32) {
@@ -85,7 +138,9 @@ library PqzViewLib {
 
     function _hashParts(bytes[] calldata u) private pure returns (bytes32) {
         bytes32[] memory h = new bytes32[](u.length);
-        for (uint256 g; g < u.length; ++g) h[g] = keccak256(u[g]);
+        for (uint256 g; g < u.length; ++g) {
+            h[g] = keccak256(u[g]);
+        }
         return keccak256(abi.encodePacked(h));
     }
 
@@ -99,15 +154,23 @@ library PqzViewLib {
 
     /// @notice The disclosure statement of leg `leg` of `ref`, `R` from the op blob (reverts as
     ///         `PqzCore.disclosureBuffer`).
-    function disclosureStatementOf(bytes32 ref, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion,
-        PqzCore.Env memory e) public view returns (bytes memory)
-    {
+    function disclosureStatementOf(
+        bytes32 ref,
+        uint256 leg,
+        uint256 amount,
+        uint8 kind,
+        uint64 keyVersion,
+        PqzCore.Env memory e
+    ) public view returns (bytes memory) {
         return PqzCore._stmtOf(PqzCore.disclosureBuffer(ref, leg, amount, kind, keyVersion, e, 0));
     }
 
     /// @notice Group 3f (spec §5.4): the `OFFCHAIN` disclosure's answer, spec §5.3 against the statement's and the proof's
     ///         hashes (`UAVerifyGas` reverts).
-    function verdictOk(bytes32 sh, bytes32 ph, IPqzToken.PqzSignedVerdict calldata pqzVerdict, PqzCore.Env memory e) public view returns (bool)
+    function verdictOk(bytes32 sh, bytes32 ph, IPqzToken.PqzSignedVerdict calldata pqzVerdict, PqzCore.Env memory e)
+        public
+        view
+        returns (bool)
     {
         return PqzCore.verdictStatus(sh, ph, pqzVerdict, e.registry, e.domainSeparator) == 0;
     }
@@ -118,7 +181,8 @@ library PqzViewLib {
         PqzCore.DebitRecord storage d = PqzCore.$().debitRec[ua][counter];
         uint256 w0 = d.w0;
         if (w0 == 0) revert IPqzToken.DebitRecordUnknown(ua, counter);
-        (r.prevBlob, r.p, r.deltaP, r.proofStore) = (address(uint160(w0 >> 96)), uint64(w0 >> 32), uint16(w0 >> 16), uint8(w0 >> 8));
+        (r.prevBlob, r.p, r.deltaP, r.proofStore) =
+        (address(uint160(w0 >> 96)), uint64(w0 >> 32), uint16(w0 >> 16), uint8(w0 >> 8));
         r.hasPrev = r.prevBlob != address(0);
         if (uint8(w0) & PqzCore.WIDE != 0) {
             uint256 w1 = d.w1;
@@ -129,9 +193,15 @@ library PqzViewLib {
     }
 
     /// @notice The precompile's verdict on the disclosure of leg `leg` with `proof` (the token checked the shape).
-    function verifyAmountOf(bytes32 ref, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion, bytes calldata proof,
-        PqzCore.Env memory e) public view returns (bool)
-    {
+    function verifyAmountOf(
+        bytes32 ref,
+        uint256 leg,
+        uint256 amount,
+        uint8 kind,
+        uint64 keyVersion,
+        bytes calldata proof,
+        PqzCore.Env memory e
+    ) public view returns (bool) {
         bytes memory buf = PqzCore.disclosureBuffer(ref, leg, amount, kind, keyVersion, e, proof.length);
         uint256 off = PqzCore.DISCLOSE;
         assembly ("memory-safe") { calldatacopy(add(add(buf, 37), off), proof.offset, proof.length) }

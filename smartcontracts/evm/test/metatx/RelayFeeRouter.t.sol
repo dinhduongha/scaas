@@ -27,7 +27,19 @@ import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {PqzRegistryBase, PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
 import {GasBurner} from "../pqz/PqzStateGas.t.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
-import {TYPED_OPS, TYPED_OPS_LEGACY, checkRow, onChain, domainField, msgField, domainJson, domainOf, h, n, a as a_} from "./NamedEntry.t.sol";
+import {
+    TYPED_OPS,
+    TYPED_OPS_LEGACY,
+    checkRow,
+    onChain,
+    domainField,
+    msgField,
+    domainJson,
+    domainOf,
+    h,
+    n,
+    a as a_
+} from "./NamedEntry.t.sol";
 import {find} from "./TypedOps.t.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
@@ -41,11 +53,21 @@ contract ReenterToken {
         (router, data) = (r, d);
     }
 
-    function mtxRelayFee(bytes32, address, bytes32, bytes32, uint256, uint256, uint256, uint256, IUARegistry.UASig calldata)
-        external
-    {
+    function mtxRelayFee(
+        bytes32,
+        address,
+        bytes32,
+        bytes32,
+        uint256,
+        uint256,
+        uint256,
+        uint256,
+        IUARegistry.UASig calldata
+    ) external {
         (bool ok, bytes memory ret) = router.call(data);
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        }
     }
 }
 
@@ -66,9 +88,11 @@ contract RelayFeeRouterTest is PqzRegistryBase {
     /// pay-meta-tax T38 (spec §4, O4): `batch` and `nonce`, the payer's own lane; the struct without them is in
     /// legacy/ua-mtx-merge/3e/.
     bytes32 internal constant UA_RELAY_FEE = keccak256(
-        "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)");
+        "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)"
+    );
     bytes32 internal constant UA_RELAY_FEE_OLD = keccak256(
-        "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 validUntil,address relayer)");
+        "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 validUntil,address relayer)"
+    );
     /// The lane the tests' payer dedicates to relay fees (O4: "for example lane 2").
     uint256 internal constant RF_LANE = 2;
 
@@ -88,8 +112,15 @@ contract RelayFeeRouterTest is PqzRegistryBase {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
         k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 200_000);
         reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
-        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(PQZ_UID, address(reg), address(0), false)));
-        tok.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 1_000_000, alice, address(this))));
+        tok = NormalToken(
+            EnvKit.clone(
+                address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+                EnvKit.env(PQZ_UID, address(reg), address(0), false)
+            )
+        );
+        tok.initialize(
+            nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 1_000_000, alice, address(this)))
+        );
         ml = _mldsaUA(7);
         tok.mintToUA(ml, 1_000, EnvKit.codeUidOf(address(tok)));
         target = new MtxRegistryMock("SCaaS TestRegistry", PQZ_UID);
@@ -106,8 +137,17 @@ contract RelayFeeRouterTest is PqzRegistryBase {
 
     /// bob's signed `bump(1)` on `target` at nonce `n`, relayer open (or bound to `rel` when non-zero), as `mtxExecute`.
     function _call(uint256 n, address rel) internal view returns (bytes memory) {
-        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(bob, abi.encodeCall(MtxRegistryMock.bump, (1)), 0,
-            n, block.timestamp + 300, rel == address(0) ? 0 : RR, rel, 0, address(0));
+        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(
+            bob,
+            abi.encodeCall(MtxRegistryMock.bump, (1)),
+            0,
+            n,
+            block.timestamp + 300,
+            rel == address(0) ? 0 : RR,
+            rel,
+            0,
+            address(0)
+        );
         return abi.encodeCall(IMetaTx.executeMetaTransaction, (m, _ecdsa(BOB_PK, target.mtxDigest(m))));
     }
 
@@ -127,7 +167,11 @@ contract RelayFeeRouterTest is PqzRegistryBase {
         uint256 nonce;
     }
 
-    function _upay(bytes32 from, bytes32 to, address t, bytes memory cd, uint256 value) internal view returns (Pay memory) {
+    function _upay(bytes32 from, bytes32 to, address t, bytes memory cd, uint256 value)
+        internal
+        view
+        returns (Pay memory)
+    {
         return Pay(from, to, value, block.timestamp + 300, t, keccak256(cd), RF_LANE, tok.mtxNonce(from, RF_LANE));
     }
 
@@ -137,8 +181,15 @@ contract RelayFeeRouterTest is PqzRegistryBase {
     }
 
     function _digest(address token, bytes32 typehash, Pay memory p, address rel) internal view returns (bytes32) {
-        return keccak256(abi.encodePacked(hex"1901", domainOf(token), keccak256(abi.encode(
-            typehash, p.from, p.tgt, p.cdh, p.to, p.value, p.batch, p.nonce, p.validUntil, rel))));
+        return keccak256(
+            abi.encodePacked(
+                hex"1901",
+                domainOf(token),
+                keccak256(
+                    abi.encode(typehash, p.from, p.tgt, p.cdh, p.to, p.value, p.batch, p.nonce, p.validUntil, rel)
+                )
+            )
+        );
     }
 
     /// The digest of alice's `UARelayFee`, relayer = the router (ua-mtx-merge T2: the one relay-fee struct).
@@ -160,7 +211,9 @@ contract RelayFeeRouterTest is PqzRegistryBase {
     }
 
     function _usend(Pay memory u, bytes memory cd, bytes memory auth) internal {
-        router.relay(u.tgt, cd, address(tok), u.from, u.to, u.value, u.batch, u.nonce, u.validUntil, UACall.auth(u.from, auth));
+        router.relay(
+            u.tgt, cd, address(tok), u.from, u.to, u.value, u.batch, u.nonce, u.validUntil, UACall.auth(u.from, auth)
+        );
     }
 
     function _relay(bytes memory cd, Pay memory t) internal {
@@ -186,9 +239,14 @@ contract RelayFeeRouterTest is PqzRegistryBase {
         string memory file = "../vectors/metatx/relayref.json";
         if (vm.envOr("RELAYREF_WRITE", false)) {
             bytes memory long = new bytes(300);
-            for (uint256 i; i < 300; ++i) long[i] = bytes1(uint8(uint256(keccak256(abi.encode("relayref", i / 32))) >> (8 * (i % 32))));
-            string memory j = string.concat("[\n", _refRow("cancel_nonce_7", 7622, address(0xC0FFEE),
-                abi.encodeCall(IMetaTx.cancelNonce, (7))), ",\n");
+            for (uint256 i; i < 300; ++i) {
+                long[i] = bytes1(uint8(uint256(keccak256(abi.encode("relayref", i / 32))) >> (8 * (i % 32))));
+            }
+            string memory j = string.concat(
+                "[\n",
+                _refRow("cancel_nonce_7", 7622, address(0xC0FFEE), abi.encodeCall(IMetaTx.cancelNonce, (7))),
+                ",\n"
+            );
             j = string.concat(j, _refRow("empty_call", 22776, address(0x5CAA5), ""), ",\n");
             vm.writeFile(file, string.concat(j, _refRow("long_call_anvil", 31337, address(0xBEEFCAFE), long), "\n]\n"));
         }
@@ -210,9 +268,22 @@ contract RelayFeeRouterTest is PqzRegistryBase {
     function _refRow(string memory name, uint256 chainId, address t, bytes memory cd) internal returns (string memory) {
         vm.chainId(chainId);
         bytes32 r = router.relayRef(t, cd);
-        string memory head = string.concat('  {"name":"', name, '","chainId":', vm.toString(chainId), ',"target":"',
-            vm.toString(t), '","callData":"', vm.toString(cd), '","callHash":"', vm.toString(keccak256(cd)));
-        return string.concat(head, '","ref":"', vm.toString(r), '","payLane":"', vm.toString(bytes32(tok.payLane(r))), '"}');
+        string memory head = string.concat(
+            '  {"name":"',
+            name,
+            '","chainId":',
+            vm.toString(chainId),
+            ',"target":"',
+            vm.toString(t),
+            '","callData":"',
+            vm.toString(cd),
+            '","callHash":"',
+            vm.toString(keccak256(cd))
+        );
+        return
+            string.concat(
+                head, '","ref":"', vm.toString(r), '","payLane":"', vm.toString(bytes32(tok.payLane(r))), '"}'
+            );
     }
 
     // ------------------------------------------------------------------ CTR-MTX-27 conformance
@@ -249,8 +320,8 @@ contract RelayFeeRouterTest is PqzRegistryBase {
         bytes32 ref = _ref(address(target), cd);
         Pay memory p = _pay(address(router), address(target), cd, FEE);
         bytes memory s = _sig(p);
-        MetaTxLib.UAMetaTransfer memory t = MetaTxLib.UAMetaTransfer(p.from, p.to, FEE, ref, p.batch, 0, p.validUntil, RR,
-            REL, 0, address(0));
+        MetaTxLib.UAMetaTransfer memory t =
+            MetaTxLib.UAMetaTransfer(p.from, p.to, FEE, ref, p.batch, 0, p.validUntil, RR, REL, 0, address(0));
         vm.prank(REL);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         tok.mtxExecuteTransfer(t, _n(s));
@@ -273,8 +344,20 @@ contract RelayFeeRouterTest is PqzRegistryBase {
     function test_relay_callDataIsAnotherRouterPayment() public {
         bytes memory c0 = _call(0, address(0));
         Pay memory inner = _pay(REL, address(target), c0, 500);
-        bytes memory cd = abi.encodeCall(IERC20MetaTx.mtxRelayFee,
-            (inner.from, address(target), inner.cdh, inner.to, 500, inner.batch, inner.nonce, inner.validUntil, _n(_sig(inner))));
+        bytes memory cd = abi.encodeCall(
+            IERC20MetaTx.mtxRelayFee,
+            (
+                inner.from,
+                address(target),
+                inner.cdh,
+                inner.to,
+                500,
+                inner.batch,
+                inner.nonce,
+                inner.validUntil,
+                _n(_sig(inner))
+            )
+        );
         Pay memory t = _pay(address(router), address(tok), cd, FEE);
         bytes memory s = _sig(t);
         vm.prank(REL);
@@ -284,8 +367,9 @@ contract RelayFeeRouterTest is PqzRegistryBase {
 
     /// (4) a target revert leaves no payment: the inner revert data bubbles, nothing moved, the pay lane unused.
     function test_relay_innerRevertBubbles() public {
-        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(bob, abi.encodeCall(MtxRegistryMock.bump, (0)), 0,
-            0, block.timestamp + 300, 0, address(0), 0, address(0));
+        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(
+            bob, abi.encodeCall(MtxRegistryMock.bump, (0)), 0, 0, block.timestamp + 300, 0, address(0), 0, address(0)
+        );
         bytes memory cd = abi.encodeCall(IMetaTx.executeMetaTransaction, (m, _ecdsa(BOB_PK, target.mtxDigest(m))));
         Pay memory t = _pay(address(router), address(target), cd, FEE);
         bytes memory s = _sig(t);
@@ -317,9 +401,13 @@ contract RelayFeeRouterTest is PqzRegistryBase {
         bytes memory s = _sig(t);
         vm.expectEmit(address(tok));
         // ua-mtx-merge T2 (R18, R20), meaning: `UAPaymentSettled` with padded ids (fee 0: feeTo = the relayer)
-        emit IUALedger.UAPaymentSettled(MetaTxLib.pad(alice), MetaTxLib.pad(address(router)), FEE, 0, address(router), ref);
+        emit IUALedger.UAPaymentSettled(
+            MetaTxLib.pad(alice), MetaTxLib.pad(address(router)), FEE, 0, address(router), ref
+        );
         vm.expectEmit(address(router));
-        emit RelayFeeRouter.RelayFeePaid(ref, address(target), address(tok), MetaTxLib.pad(alice), MetaTxLib.pad(REL), FEE);
+        emit RelayFeeRouter.RelayFeePaid(
+            ref, address(target), address(tok), MetaTxLib.pad(alice), MetaTxLib.pad(REL), FEE
+        );
         vm.prank(REL);
         _send(t, cd, address(tok), s);
         assertEq(target.count(bob), 1, "the call ran");
@@ -335,7 +423,9 @@ contract RelayFeeRouterTest is PqzRegistryBase {
         Pay memory t = _pay(PAYEE, address(target), cd, FEE);
         bytes memory s = _sig(t);
         vm.expectEmit(address(router));
-        emit RelayFeeRouter.RelayFeePaid(ref, address(target), address(tok), MetaTxLib.pad(alice), MetaTxLib.pad(PAYEE), FEE);
+        emit RelayFeeRouter.RelayFeePaid(
+            ref, address(target), address(tok), MetaTxLib.pad(alice), MetaTxLib.pad(PAYEE), FEE
+        );
         vm.prank(REL);
         _send(t, cd, address(tok), s);
         assertEq(tok.balanceOf(PAYEE), FEE);
@@ -394,8 +484,10 @@ contract RelayFeeRouterTest is PqzRegistryBase {
         bytes4 reentry = bytes4(keccak256("ReentrancyGuardReentrantCall()"));
         bytes memory cd0 = _call(0, address(0));
         Pay memory ti = _pay(address(router), address(target), cd0, FEE);
-        bytes memory re = abi.encodeCall(RelayFeeRouter.relay,
-            (address(target), cd0, address(tok), ti.from, ti.to, FEE, ti.batch, ti.nonce, ti.validUntil, _n(_sig(ti))));
+        bytes memory re = abi.encodeCall(
+            RelayFeeRouter.relay,
+            (address(target), cd0, address(tok), ti.from, ti.to, FEE, ti.batch, ti.nonce, ti.validUntil, _n(_sig(ti)))
+        );
         Pay memory t = _pay(address(router), address(router), re, FEE);
         bytes memory s = _sig(t);
         vm.prank(REL);
@@ -447,8 +539,11 @@ contract RelayFeeRouterTest is PqzRegistryBase {
     /// the same `t, sig` settles. An EOA and a precompile are refused too.
     function test_relay_targetNoCode_counterfactual() public {
         bytes32 salt = keccak256("t9.counterfactual");
-        address pred = vm.computeCreate2Address(salt, keccak256(abi.encodePacked(type(MtxRegistryMock).creationCode,
-            abi.encode("SCaaS TestRegistry", PQZ_UID))), address(this));
+        address pred = vm.computeCreate2Address(
+            salt,
+            keccak256(abi.encodePacked(type(MtxRegistryMock).creationCode, abi.encode("SCaaS TestRegistry", PQZ_UID))),
+            address(this)
+        );
         assertEq(pred.code.length, 0);
         bytes memory cd = abi.encodeCall(MtxRegistryMock.whoAmI, ());
         Pay memory t = _pay(address(router), pred, cd, FEE);
@@ -544,23 +639,51 @@ contract RelayFeeRouterTest is PqzRegistryBase {
         bytes32 ref = _ref(address(target), cd);
         Pay memory t = _pay(address(router), address(target), cd, FEE);
         // ua-mtx-merge T2 (R28): the wallet shows `UARelayFee`, `from` and `payee` as ids
-        string memory m = string.concat('"from":', h(t.from), ',"target":', a_(address(target)), ',"callDataHash":', h(t.cdh),
-            ',"payee":', h(t.to), ',"value":', n(FEE), ',"batch":', n(t.batch), ',"nonce":', n(t.nonce), ',"validUntil":',
-            n(t.validUntil), ',"relayer":', a_(address(router)));
-        bytes32 wallet = vm.eip712HashTypedData(string.concat(
-            '{"types":{"EIP712Domain":[{"name":"name","type":"string"},{"name":"version","type":"string"},',
-            '{"name":"chainId","type":"uint256"},{"name":"verifyingContract","type":"address"},{"name":"salt","type":"bytes32"}],',
-            '"UARelayFee":[{"name":"from","type":"bytes32"},{"name":"target","type":"address"},{"name":"callDataHash","type":"bytes32"},',
-            '{"name":"payee","type":"bytes32"},{"name":"value","type":"uint256"},{"name":"batch","type":"uint256"},',
-            '{"name":"nonce","type":"uint256"},{"name":"validUntil","type":"uint256"},',
-            '{"name":"relayer","type":"address"}]},"primaryType":"UARelayFee","domain":', domainJson(address(tok)), ',"message":{', m, '}}'));
+        string memory m = string.concat(
+            '"from":',
+            h(t.from),
+            ',"target":',
+            a_(address(target)),
+            ',"callDataHash":',
+            h(t.cdh),
+            ',"payee":',
+            h(t.to),
+            ',"value":',
+            n(FEE),
+            ',"batch":',
+            n(t.batch),
+            ',"nonce":',
+            n(t.nonce),
+            ',"validUntil":',
+            n(t.validUntil),
+            ',"relayer":',
+            a_(address(router))
+        );
+        bytes32 wallet = vm.eip712HashTypedData(
+            string.concat(
+                '{"types":{"EIP712Domain":[{"name":"name","type":"string"},{"name":"version","type":"string"},',
+                '{"name":"chainId","type":"uint256"},{"name":"verifyingContract","type":"address"},{"name":"salt","type":"bytes32"}],',
+                '"UARelayFee":[{"name":"from","type":"bytes32"},{"name":"target","type":"address"},{"name":"callDataHash","type":"bytes32"},',
+                '{"name":"payee","type":"bytes32"},{"name":"value","type":"uint256"},{"name":"batch","type":"uint256"},',
+                '{"name":"nonce","type":"uint256"},{"name":"validUntil","type":"uint256"},',
+                '{"name":"relayer","type":"address"}]},"primaryType":"UARelayFee","domain":',
+                domainJson(address(tok)),
+                ',"message":{',
+                m,
+                "}}"
+            )
+        );
         assertEq(wallet, _d(t), "the wallet's digest");
         assertEq(t.batch, RF_LANE); // pay-meta-tax T38 (O4): the payer's own lane, no `payLane(ref)`
         assertEq(tok.mtxNonce(MetaTxLib.pad(alice), t.batch), 0);
         vm.expectEmit(address(tok));
-        emit IUALedger.UAMetaTransactionExecuted(MetaTxLib.pad(alice), address(router), t.batch, 0, wallet, address(router), 0);
+        emit IUALedger.UAMetaTransactionExecuted(
+            MetaTxLib.pad(alice), address(router), t.batch, 0, wallet, address(router), 0
+        );
         vm.expectEmit(address(router));
-        emit RelayFeeRouter.RelayFeePaid(ref, address(target), address(tok), MetaTxLib.pad(alice), MetaTxLib.pad(REL), FEE);
+        emit RelayFeeRouter.RelayFeePaid(
+            ref, address(target), address(tok), MetaTxLib.pad(alice), MetaTxLib.pad(REL), FEE
+        );
         _relay(cd, t);
         assertEq(tok.mtxNonce(MetaTxLib.pad(alice), t.batch), 1, "nonce 0 of the lane");
         assertEq(tok.balanceOf(REL), FEE);
@@ -595,15 +718,22 @@ contract RelayFeeRouterTest is PqzRegistryBase {
         bytes memory cd = vm.parseJsonBytes(j, domainField(op, "token", "routerCalldata"));
         assertEq(bytes4(cd), RelayFeeRouter.relay.selector, "the row names the router's relay on ids");
         bytes memory rowSig = vm.parseJsonBytes(j, domainField(op, "token", "signature"));
-        assertEq(keccak256(vm.parseJsonBytes(j, domainField(op, "token", "relayedCall"))), vm.parseJsonBytes32(j, msgField(op, "callDataHash")));
+        assertEq(
+            keccak256(vm.parseJsonBytes(j, domainField(op, "token", "relayedCall"))),
+            vm.parseJsonBytes32(j, msgField(op, "callDataHash"))
+        );
         bytes memory sig = onChain(j, op, address(tok));
         uint256 w = find(cd, rowSig);
-        for (uint256 k; k < 65; ++k) cd[w + k] = sig[k];
+        for (uint256 k; k < 65; ++k) {
+            cd[w + k] = sig[k];
+        }
         // the row's token is its own address: the call goes to `tok`
         bytes memory tokWord = abi.encode(vm.parseJsonAddress(j, domainField(op, "token", "domain.verifyingContract")));
         w = find(cd, tokWord);
         bytes memory real = abi.encode(address(tok));
-        for (uint256 k; k < 32; ++k) cd[w + k] = real[k];
+        for (uint256 k; k < 32; ++k) {
+            cd[w + k] = real[k];
+        }
         vm.prank(REL);
         (bool ok, bytes memory ret) = at.call(cd);
         assertTrue(ok, vm.toString(ret));
@@ -630,8 +760,15 @@ contract RelayFeeRouterTest is PqzRegistryBase {
         assertEq(target.count(bob), 0, "the call rolled back");
         assertEq(tok.mtxNonce(MetaTxLib.pad(alice), t.batch), 0);
 
-        NormalToken tok2 = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(PQZ_UID, address(reg), address(0), false)));
-        tok2.initialize(nid(address(this)), 1, abi.encode(normalInit("Other", "OTH", 6, 1_000_000, alice, address(this))));
+        NormalToken tok2 = NormalToken(
+            EnvKit.clone(
+                address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+                EnvKit.env(PQZ_UID, address(reg), address(0), false)
+            )
+        );
+        tok2.initialize(
+            nid(address(this)), 1, abi.encode(normalInit("Other", "OTH", 6, 1_000_000, alice, address(this)))
+        );
         bytes memory s = _sig(t);
         vm.prank(REL);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
@@ -708,15 +845,17 @@ contract RelayFeeRouterTest is PqzRegistryBase {
         vm.prank(REL);
         _usend(u, cd, au);
         (uint256 mo,) = _last("relay, mldsa65 payer, open mode");
-        console2.log("overhead over the bare call (regular): ECDSA open / ECDSA bound / mldsa65 open", eo - bare,
-            eb - bare, mo - bare);
+        console2.log(
+            "overhead over the bare call (regular): ECDSA open / ECDSA bound / mldsa65 open",
+            eo - bare,
+            eb - bare,
+            mo - bare
+        );
         console2.log("bare call state gas", bareSt);
         assertGt(mo, eo, "a PQ payer costs more");
     }
 
-    function _gasRelay(bytes memory cd, Pay memory t, string memory what)
-        internal returns (uint256 g)
-    {
+    function _gasRelay(bytes memory cd, Pay memory t, string memory what) internal returns (uint256 g) {
         bytes memory s = _sig(t);
         vm.prank(REL);
         _send(t, cd, address(tok), s);
@@ -738,8 +877,12 @@ contract RelayFeeRouterTest is PqzRegistryBase {
         (, string memory json) = h.deploy(uid, false, new SmartKeyAccountFactory(uid).IMPLEMENTATION());
         address r = vm.parseJsonAddress(json, ".relay_fee_router");
         address e = vm.parseJsonAddress(json, ".relay_fee_executor");
-        assertEq(r, vm.computeCreate2Address(keccak256("scaas.deploy.v1"), keccak256(type(RelayFeeRouter).creationCode),
-            address(h)));
+        assertEq(
+            r,
+            vm.computeCreate2Address(
+                keccak256("scaas.deploy.v1"), keccak256(type(RelayFeeRouter).creationCode), address(h)
+            )
+        );
         assertEq(RelayFeeRouter(r).EXECUTOR(), e);
         assertEq(RelayFeeExecutor(e).ROUTER(), r);
         assertGt(e.code.length, 0);
@@ -775,8 +918,18 @@ contract RelayFeeRouterTest is PqzRegistryBase {
     function test_relayFee_oldTypehashRefused() public {
         bytes memory cd = abi.encodeCall(MtxRegistryMock.whoAmI, ());
         Pay memory t = _pay(address(router), address(target), cd, FEE);
-        bytes memory old = _ecdsa(ALICE_PK, keccak256(abi.encodePacked(hex"1901", domainOf(address(tok)), keccak256(
-            abi.encode(UA_RELAY_FEE_OLD, t.from, t.tgt, t.cdh, t.to, t.value, t.validUntil, address(router))))));
+        bytes memory old = _ecdsa(
+            ALICE_PK,
+            keccak256(
+                abi.encodePacked(
+                    hex"1901",
+                    domainOf(address(tok)),
+                    keccak256(
+                        abi.encode(UA_RELAY_FEE_OLD, t.from, t.tgt, t.cdh, t.to, t.value, t.validUntil, address(router))
+                    )
+                )
+            )
+        );
         vm.prank(REL);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         _send(t, cd, address(tok), old);
@@ -786,8 +939,10 @@ contract RelayFeeRouterTest is PqzRegistryBase {
 
     /// The payer dedicates lane `RF_LANE` to relay fees: two calls paid on it in order, its other lanes untouched.
     function test_relayFee_dedicatedLane() public {
-        _relay(abi.encodeCall(MtxRegistryMock.whoAmI, ()),
-            _pay(address(router), address(target), abi.encodeCall(MtxRegistryMock.whoAmI, ()), FEE));
+        _relay(
+            abi.encodeCall(MtxRegistryMock.whoAmI, ()),
+            _pay(address(router), address(target), abi.encodeCall(MtxRegistryMock.whoAmI, ()), FEE)
+        );
         bytes memory cd2 = abi.encodeWithSignature("count(address)", bob);
         _relay(cd2, _pay(address(router), address(target), cd2, FEE));
         assertEq(tok.mtxNonce(MetaTxLib.pad(alice), RF_LANE), 2);
@@ -816,5 +971,4 @@ contract RelayFeeRouterTest is PqzRegistryBase {
         assertEq(tok.balanceOf(REL), FEE);
         assertEq(tok.mtxNonce(MetaTxLib.pad(alice), RF_LANE), 1);
     }
-
 }

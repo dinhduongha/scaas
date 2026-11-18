@@ -41,7 +41,9 @@ contract UAAllowlist5aTest is UALedgerBase {
     }
 
     function _withFee(MetaTxLib.UAMetaTransaction memory m, uint256 fee)
-        internal pure returns (MetaTxLib.UAMetaTransaction memory)
+        internal
+        pure
+        returns (MetaTxLib.UAMetaTransaction memory)
     {
         (m.mode, m.fee, m.feeRecipient) = (RR | RF | FIX, fee, FEE_TO);
         return m;
@@ -52,7 +54,8 @@ contract UAAllowlist5aTest is UALedgerBase {
     function test_uaExecute_burnUnderUA() public {
         _fund(uaP, 1_000);
         uint256 supply = tok.totalSupply();
-        MetaTxLib.UAMetaTransaction memory m = _withFee(_m(address(tok), uaP, abi.encodeCall(NormalToken.burn, (400))), 4);
+        MetaTxLib.UAMetaTransaction memory m =
+            _withFee(_m(address(tok), uaP, abi.encodeCall(NormalToken.burn, (400))), 4);
         vm.expectEmit(address(tok));
         emit IUALedger.UATransfer(uaP, bytes32(0), 400);
         vm.expectEmit(address(tok));
@@ -67,17 +70,27 @@ contract UAAllowlist5aTest is UALedgerBase {
         assertEq(tok.balanceOf(FEE_TO), 4);
         assertEq(tok.totalSupply(), supply - 400);
         // more than the UA holds: the burn through the pool refuses; the fee cap is `AMOUNT(0)`'s 1 %
-        _exec(address(tok), _m(address(tok), uaP, abi.encodeCall(NormalToken.burn, (597))),
-            abi.encodeWithSelector(IUALedger.UAInsufficientBalance.selector, uaP, 596, 597));
+        _exec(
+            address(tok),
+            _m(address(tok), uaP, abi.encodeCall(NormalToken.burn, (597))),
+            abi.encodeWithSelector(IUALedger.UAInsufficientBalance.selector, uaP, 596, 597)
+        );
         // `BURNABLE` off: the feature error of `burn`
-        NormalToken nb =
-            NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        NormalToken nb = NormalToken(
+            EnvKit.clone(
+                address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+                EnvKit.env(chainUidA, REG_L, address(0), false)
+            )
+        );
         IFactoryToken.TokenConfig memory c = normalInit("NB", "NB", 6, 0, address(0), address(this));
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.MINTABLE);
         nb.initialize(nid(address(this)), 1, abi.encode(c));
         nb.mintToUA(uaP, 10, EnvKit.codeUidOf(address(nb)));
-        _exec(address(nb), _m(address(nb), uaP, abi.encodeCall(NormalToken.burn, (1))),
-            abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.BURNABLE));
+        _exec(
+            address(nb),
+            _m(address(nb), uaP, abi.encodeCall(NormalToken.burn, (1))),
+            abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.BURNABLE)
+        );
     }
 
     /// A native signer burns its own address balance (`mtxExecute` on the ids path).
@@ -150,8 +163,11 @@ contract UAAllowlist5aTest is UALedgerBase {
         _wrapL(alice, 100);
         vm.prank(alice);
         wrpL.transferToUA(uaP, 100);
-        _exec(address(wrpL), _m(address(wrpL), uaP, abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 10, _pad(bob), 0))),
-            abi.encodeWithSelector(IUALedger.UANotRegistered.selector, _pad(bob)));
+        _exec(
+            address(wrpL),
+            _m(address(wrpL), uaP, abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 10, _pad(bob), 0))),
+            abi.encodeWithSelector(IUALedger.UANotRegistered.selector, _pad(bob))
+        );
         assertEq(wrpL.balanceOfUA(uaP), 100);
     }
 
@@ -165,13 +181,20 @@ contract UAAllowlist5aTest is UALedgerBase {
         bytes[6] memory calls = [
             abi.encodeCall(WrappedToken.wrapToUA, (address(und), 1, uaB)),
             abi.encodeCall(NormalToken.mintToUA, (uaB, 1, EnvKit.codeUidOf(address(tok)))),
-            abi.encodeCall(NormalToken.payWithFeeToUA, (uaB, 1, FeeMode.NONE, 0, address(0), PayMetaKit.ref(bytes32("ref")), PayMetaKit.meta(bytes32("ref")))),
+            abi.encodeCall(
+                NormalToken.payWithFeeToUA,
+                (uaB, 1, FeeMode.NONE, 0, address(0), PayMetaKit.ref(bytes32("ref")), PayMetaKit.meta(bytes32("ref")))
+            ),
             abi.encodeWithSignature("addReserve(address,uint256)", address(und), 1),
             abi.encodeCall(IERC20.approve, (address(this), 1)),
             abi.encodeWithSelector(ITradeToken.mtxTrade.selector)
         ];
         for (uint256 i; i < calls.length; ++i) {
-            _exec(on[i], _m(on[i], uaP, calls[i]), abi.encodeWithSelector(IUALedger.MetaTxUnknownOp.selector, bytes4(calls[i])));
+            _exec(
+                on[i],
+                _m(on[i], uaP, calls[i]),
+                abi.encodeWithSelector(IUALedger.MetaTxUnknownOp.selector, bytes4(calls[i]))
+            );
         }
         // ua-mtx-merge T1 (B), meaning: a native id was refused the same way; it now reads `_mtxRule`: `wrapToUA` and
         // `addReserve` are on it (the wrapper's own rows) and reach their bodies (alice approved nothing: the leg's
@@ -180,11 +203,15 @@ contract UAAllowlist5aTest is UALedgerBase {
             MetaTxLib.UAMetaTransaction memory m = _m(on[i], _pad(alice), calls[i]);
             bytes memory a = _authM(on[i], m);
             vm.prank(RELAYER);
-            (bool ok, bytes memory ret) = on[i].call(abi.encodeCall(UAMetaTxBase.mtxExecute, (m, UACall.auth(m.from, a))));
+            (bool ok, bytes memory ret) =
+                on[i].call(abi.encodeCall(UAMetaTxBase.mtxExecute, (m, UACall.auth(m.from, a))));
             assertFalse(ok);
             if (i == 0 || i == 3) {
-                assertTrue(bytes4(ret) != IMetaTx.MtxSelectorNotAllowed.selector && bytes4(ret) != IUALedger.MetaTxUnknownOp.selector,
-                    "on _mtxRule: the body runs");
+                assertTrue(
+                    bytes4(ret) != IMetaTx.MtxSelectorNotAllowed.selector
+                        && bytes4(ret) != IUALedger.MetaTxUnknownOp.selector,
+                    "on _mtxRule: the body runs"
+                );
             } else {
                 assertEq(ret, abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, bytes4(calls[i])));
             }

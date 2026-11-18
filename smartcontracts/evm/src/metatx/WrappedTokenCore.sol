@@ -35,7 +35,6 @@ abstract contract WrappedTokenCore is MetaTokenBase {
     bytes4 internal constant SEL_WRAP_TO_UA = bytes4(keccak256("wrapToUA(address,uint256,bytes32)"));
     bytes4 internal constant SEL_UNWRAP_TO_UA = bytes4(keccak256("unwrapToUA(address,uint256,bytes32,uint256)"));
 
-
     bytes32 internal constant WRAP_TYPEHASH = keccak256(
         "Wrap(address from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
@@ -72,14 +71,20 @@ abstract contract WrappedTokenCore is MetaTokenBase {
     }
 
     /// @dev The `WRAPPED*` masks (spec §1.2): roles 1, 3, 4; bit 3 contract-only.
-    function _roleBits() internal pure virtual override returns (uint256) { return GovernanceBits.WRAPPED_ROLES; }
-    function _contractOnlyBits() internal pure virtual override returns (uint256) { return GovernanceBits.WRAPPED_CONTRACT_ONLY; }
+    function _roleBits() internal pure virtual override returns (uint256) {
+        return GovernanceBits.WRAPPED_ROLES;
+    }
+
+    function _contractOnlyBits() internal pure virtual override returns (uint256) {
+        return GovernanceBits.WRAPPED_CONTRACT_ONLY;
+    }
 
     /// @dev 5-9 are not in the kind's mask: `init` refuses each with `FeatureInvalidForKind` (regulated-kinds spec Q3).
     function _init(IFactoryToken.TokenConfig memory cfg) internal virtual override {
         _requireUnused(cfg, true, false, false, true);
-        WrappedLib.initToken(cfg, _hedera(), TokenStore.KIND_WRAPPED, _validBits(), _roleBits(), _contractOnlyBits(),
-            _registry());
+        WrappedLib.initToken(
+            cfg, _hedera(), TokenStore.KIND_WRAPPED, _validBits(), _roleBits(), _contractOnlyBits(), _registry()
+        );
     }
 
     // ------------------------------------------------------------------ wrap / unwrap / reserve
@@ -109,14 +114,18 @@ abstract contract WrappedTokenCore is MetaTokenBase {
         (out,) = _unwrap(WrappedLib.sole(), wrapped, recipient, minOut);
     }
 
-    function _unwrapBody(address u, uint256 wrapped, address recipient, uint256 minOut) internal returns (uint256 out, uint256 burned)
+    function _unwrapBody(address u, uint256 wrapped, address recipient, uint256 minOut)
+        internal
+        returns (uint256 out, uint256 burned)
     {
         return _unwrap(WrappedLib.indexOf(u), wrapped, recipient, minOut);
     }
 
     /// @notice `unwrap(u, …)` paid into `to` in leg `u`'s UA ledger (CTR-UA-28): burns from the subject (a native, or a
     ///         UA through `UA_POOL` under `mtxExecute`) before the one outside call, the leg's `transferToUA`.
-    function _unwrapToUABody(address u, uint256 wrapped, bytes32 to, uint256 minOut) internal returns (uint256 out, uint256 burned)
+    function _unwrapToUABody(address u, uint256 wrapped, bytes32 to, uint256 minOut)
+        internal
+        returns (uint256 out, uint256 burned)
     {
         uint256 i = WrappedLib.indexOf(u);
         bytes32 holder = _subject(); // group 3l (R14): the signer's id, never `UA_POOL`
@@ -136,22 +145,30 @@ abstract contract WrappedTokenCore is MetaTokenBase {
     // ------------------------------------------------------------------ named typed entries (TS-D14)
 
     /// @notice The signed `wrap(amount)`, `ABSOLUTE` as on the generic path, like every wrap and `addReserve` below.
-    function _mtxWrapBody(MetaTxLib.Envelope calldata e, uint256 amount, bytes calldata sig) internal returns (bytes memory)
+    function _mtxWrapBody(MetaTxLib.Envelope calldata e, uint256 amount, bytes calldata sig)
+        internal
+        returns (bytes memory)
     {
         return _named(WRAP_TYPEHASH, SEL_WRAP, e, abi.encode(amount), sig);
     }
 
-    function _mtxWrapLegBody(MetaTxLib.Envelope calldata e, address u, uint256 amount, bytes calldata sig) internal returns (bytes memory)
+    function _mtxWrapLegBody(MetaTxLib.Envelope calldata e, address u, uint256 amount, bytes calldata sig)
+        internal
+        returns (bytes memory)
     {
         return _named(WRAP_LEG_TYPEHASH, SEL_WRAP_LEG, e, abi.encode(u, amount), sig);
     }
 
-    function _mtxWrapToUABody(MetaTxLib.Envelope calldata e, address u, uint256 amount, bytes32 to, bytes calldata sig) internal returns (bytes memory)
+    function _mtxWrapToUABody(MetaTxLib.Envelope calldata e, address u, uint256 amount, bytes32 to, bytes calldata sig)
+        internal
+        returns (bytes memory)
     {
         return _named(WRAP_TO_UA_TYPEHASH, SEL_WRAP_TO_UA, e, abi.encode(u, amount, to), sig);
     }
 
-    function _mtxAddReserveBody(MetaTxLib.Envelope calldata e, address u, uint256 amount, bytes calldata sig) internal returns (bytes memory)
+    function _mtxAddReserveBody(MetaTxLib.Envelope calldata e, address u, uint256 amount, bytes calldata sig)
+        internal
+        returns (bytes memory)
     {
         return _named(ADD_RESERVE_TYPEHASH, SEL_ADD_RESERVE, e, abi.encode(u, amount), sig);
     }
@@ -159,21 +176,35 @@ abstract contract WrappedTokenCore is MetaTokenBase {
     /// @notice The signed `unwrap(wrapped, recipient, minOut)`, `AMOUNT(0)` as on the generic path; the other unwraps
     ///         `AMOUNT(1)`, the basis `wrapped`. ua-mtx-merge R23: today's `ua*` bodies under the `mtx*` names, for native
     ///         and derived ids (a native one by its own key, no registry; a derived UA through the registry).
-    function _mtxUnwrapBody(MetaTxLib.UAEnvelope calldata e, uint256 wrapped, address recipient, uint256 minOut,
-        IUARegistry.UASig calldata auth) internal returns (bytes memory)
-    {
+    function _mtxUnwrapBody(
+        MetaTxLib.UAEnvelope calldata e,
+        uint256 wrapped,
+        address recipient,
+        uint256 minOut,
+        IUARegistry.UASig calldata auth
+    ) internal returns (bytes memory) {
         return _namedUA(UA_UNWRAP_TYPEHASH, SEL_UNWRAP_MIN, e, abi.encode(wrapped, recipient, minOut), auth);
     }
 
-    function _mtxUnwrapLegBody(MetaTxLib.UAEnvelope calldata e, address u, uint256 wrapped, address recipient, uint256 minOut,
-        IUARegistry.UASig calldata auth) internal returns (bytes memory)
-    {
+    function _mtxUnwrapLegBody(
+        MetaTxLib.UAEnvelope calldata e,
+        address u,
+        uint256 wrapped,
+        address recipient,
+        uint256 minOut,
+        IUARegistry.UASig calldata auth
+    ) internal returns (bytes memory) {
         return _namedUA(UA_UNWRAP_LEG_TYPEHASH, SEL_UNWRAP_LEG, e, abi.encode(u, wrapped, recipient, minOut), auth);
     }
 
-    function _mtxUnwrapToUABody(MetaTxLib.UAEnvelope calldata e, address u, uint256 wrapped, bytes32 to, uint256 minOut,
-        IUARegistry.UASig calldata auth) internal returns (bytes memory)
-    {
+    function _mtxUnwrapToUABody(
+        MetaTxLib.UAEnvelope calldata e,
+        address u,
+        uint256 wrapped,
+        bytes32 to,
+        uint256 minOut,
+        IUARegistry.UASig calldata auth
+    ) internal returns (bytes memory) {
         return _namedUA(UA_UNWRAP_TO_UA_TYPEHASH, SEL_UNWRAP_TO_UA, e, abi.encode(u, wrapped, to, minOut), auth);
     }
 
@@ -182,7 +213,9 @@ abstract contract WrappedTokenCore is MetaTokenBase {
     ///         `trade`, a native id itself); `minted − fee` goes to `o.destination` (0 ⇒ `o.from`) — a derived id by
     ///         `_uaMint` (registered SIGNING), a native one by `_mint` — and `fee` to the submitter. Not allowlisted: a
     ///         direct read of the caller.
-    function _mtxWrapOrderBody(address u, ITradeToken.UAWrapOrder calldata o, IUARegistry.UASig calldata auth) internal returns (uint256 minted)
+    function _mtxWrapOrderBody(address u, ITradeToken.UAWrapOrder calldata o, IUARegistry.UASig calldata auth)
+        internal
+        returns (uint256 minted)
     {
         if (o.destination != 0 && o.destination != o.from) _regSender(o.from);
         uint256 received;
@@ -211,7 +244,8 @@ abstract contract WrappedTokenCore is MetaTokenBase {
 
     /// @dev Burn before the one outside call (CEI), under the contract-wide guard.
     function _unwrap(uint256 i, uint256 wrapped, address recipient, uint256 minOut)
-        private returns (uint256 out, uint256 burned)
+        private
+        returns (uint256 out, uint256 burned)
     {
         bytes32 holder = _subject(); // group 3l (R14): the signer's id, never `UA_POOL`
         (out, burned) = WrappedLib.quoteUnwrap(i, wrapped, recipient, minOut, holder);
@@ -286,9 +320,13 @@ abstract contract WrappedTokenCore is MetaTokenBase {
 
     /// @notice The admin's limits (spec §6), the subject from the router (`_govSubject`): the admin, then the chain word
     ///         (CTR-GOV-28, round 3zc O5), before any write and before the library's own checks.
-    function _setWrapLimitsBody(IWrappedToken.WrapLegLimits[] calldata legs, bool netUnwrap, bool wrapList, bool unwrapList,
-        bytes32 chainUid_) internal
-    {
+    function _setWrapLimitsBody(
+        IWrappedToken.WrapLegLimits[] calldata legs,
+        bool netUnwrap,
+        bool wrapList,
+        bool unwrapList,
+        bytes32 chainUid_
+    ) internal {
         WrappedLib.setWrapLimits(legs, netUnwrap, wrapList, unwrapList, _adminOnChain(chainUid_), FACTORY);
     }
 
@@ -326,8 +364,19 @@ abstract contract WrappedTokenCore is MetaTokenBase {
         return WrappedLib.pendingSupplyCaps();
     }
 
-    function _wrapLimitsBody() internal view returns (IWrappedToken.WrapLegLimits[] memory legs, bool netUnwrap, bool wrapList,
-        bool unwrapList, bytes32 pendingCommit, uint64 pendingEta, bool pendingLive, uint64 delay)
+    function _wrapLimitsBody()
+        internal
+        view
+        returns (
+            IWrappedToken.WrapLegLimits[] memory legs,
+            bool netUnwrap,
+            bool wrapList,
+            bool unwrapList,
+            bytes32 pendingCommit,
+            uint64 pendingEta,
+            bool pendingLive,
+            uint64 delay
+        )
     {
         return WrappedLib.wrapLimits(FACTORY);
     }
@@ -347,7 +396,12 @@ abstract contract WrappedTokenCore is MetaTokenBase {
     ///         `unwrap(address,uint256,address,uint256)` `AMOUNT(1)` (gasless unwrap, CTR-MTX-12); UA-5a (CTR-UA-28)
     ///         `wrapToUA` `ABSOLUTE`, `unwrapToUA` `AMOUNT(1)`. The two-argument `unwrap` is not listed (same intent,
     ///         second digest, no `minOut`).
-    function _mtxSelectorsBody() internal pure virtual override returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+    function _mtxSelectorsBody()
+        internal
+        pure
+        virtual
+        override
+        returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         s = new bytes4[](8);
         c = new uint8[](8);
@@ -391,10 +445,15 @@ abstract contract WrappedTokenCore is MetaTokenBase {
         WrappedLib.WrappedStorage storage s = WrappedLib.$();
         uint256 n = s.legCount;
         us = new address[](n);
-        for (uint256 i; i < n; ++i) us[i] = s.legs[i].token;
+        for (uint256 i; i < n; ++i) {
+            us[i] = s.legs[i].token;
+        }
     }
 
-    function _legOfBody(address u) internal view returns (uint96 num, uint96 den, uint256 reserve, uint8 decimals_, bool wrapEnabled)
+    function _legOfBody(address u)
+        internal
+        view
+        returns (uint96 num, uint96 den, uint256 reserve, uint8 decimals_, bool wrapEnabled)
     {
         WrappedLib.Leg storage L = WrappedLib.$().legs[WrappedLib.indexOf(u)];
         return (L.num, L.den, L.reserve, L.decimals, L.wrapEnabled);

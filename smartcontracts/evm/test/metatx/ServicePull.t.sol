@@ -16,8 +16,13 @@ import {MtxHash} from "../helpers/MtxHash.sol";
 import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
 import {nid} from "../helpers/Ids.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
-import {RefServiceEscrow, RefServiceEscrowFailAfter, NoopPullToken, ReenterPullToken, NakedPuller}
-    from "./helpers/RefServiceEscrow.sol";
+import {
+    RefServiceEscrow,
+    RefServiceEscrowFailAfter,
+    NoopPullToken,
+    ReenterPullToken,
+    NakedPuller
+} from "./helpers/RefServiceEscrow.sol";
 import {spDepositRef, spNoteRef, spPull, spRelayFeeDigest} from "./helpers/ServicePullKit.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
@@ -69,10 +74,19 @@ contract ServicePullTest is UALedgerBase {
 
     /// The pull of `op` for `svc` on `token`, at the payer's next nonce on `LANE`.
     function _pullOf(address token, address svc, RefServiceEscrow.Deposit memory op)
-        internal view returns (MetaTxLib.UAMetaTransfer memory)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransfer memory)
     {
-        return spPull(op.payer, svc, op.amount, spDepositRef(svc, block.chainid, op), LANE,
-            NormalToken(token).mtxNonce(op.payer, LANE), block.timestamp + 300);
+        return spPull(
+            op.payer,
+            svc,
+            op.amount,
+            spDepositRef(svc, block.chainid, op),
+            LANE,
+            NormalToken(token).mtxNonce(op.payer, LANE),
+            block.timestamp + 300
+        );
     }
 
     function _pull(RefServiceEscrow.Deposit memory op) internal view returns (MetaTxLib.UAMetaTransfer memory) {
@@ -88,15 +102,20 @@ contract ServicePullTest is UALedgerBase {
         return _sigOn(address(tok), t);
     }
 
-    function _deposit(RefServiceEscrow svc, RefServiceEscrow.Deposit memory op, MetaTxLib.UAMetaTransfer memory t) internal {
+    function _deposit(RefServiceEscrow svc, RefServiceEscrow.Deposit memory op, MetaTxLib.UAMetaTransfer memory t)
+        internal
+    {
         IUARegistry.UASig memory a = _sigOn(svc.TOKEN(), t);
         vm.prank(REL);
         svc.deposit(op, t, a);
     }
 
-    function _refused(RefServiceEscrow svc, RefServiceEscrow.Deposit memory op, MetaTxLib.UAMetaTransfer memory t,
-        bytes memory err) internal
-    {
+    function _refused(
+        RefServiceEscrow svc,
+        RefServiceEscrow.Deposit memory op,
+        MetaTxLib.UAMetaTransfer memory t,
+        bytes memory err
+    ) internal {
         IUARegistry.UASig memory a = _sigOn(svc.TOKEN(), t);
         vm.prank(REL);
         vm.expectRevert(err);
@@ -134,7 +153,9 @@ contract ServicePullTest is UALedgerBase {
         vm.expectEmit(address(tok));
         emit IUALedger.UAPaymentSettled(_pad(alice), _pad(address(s)), AMT, 0, address(s), ref);
         vm.expectEmit(address(tok));
-        emit IUALedger.UAMetaTransactionExecuted(_pad(alice), address(s), LANE, 0, tok.mtxTransferDigest(t), address(s), 0);
+        emit IUALedger.UAMetaTransactionExecuted(
+            _pad(alice), address(s), LANE, 0, tok.mtxTransferDigest(t), address(s), 0
+        );
         vm.expectEmit(address(s));
         emit RefServiceEscrow.Deposited(ref, _pad(alice), AMT, op.releaseAfter, op.salt);
         vm.prank(REL);
@@ -189,8 +210,12 @@ contract ServicePullTest is UALedgerBase {
         uint16 ia = _indexOf(d, _pad(alice));
         IUARegistry.UASig memory a;
         a.members = new IUARegistry.MemberSig[](2);
-        a.members[ia] = IUARegistry.MemberSig(ia, new IUARegistry.InnerSig[](0), _nativeSig(lreg, ALICE_PK, UAKinds.PURPOSE_MEMBER, md));
-        a.members[1 - ia] = IUARegistry.MemberSig(1 - ia, new IUARegistry.InnerSig[](0), _nativeSig(lreg, BOB_PK, UAKinds.PURPOSE_MEMBER, md));
+        a.members[ia] = IUARegistry.MemberSig(
+            ia, new IUARegistry.InnerSig[](0), _nativeSig(lreg, ALICE_PK, UAKinds.PURPOSE_MEMBER, md)
+        );
+        a.members[1 - ia] = IUARegistry.MemberSig(
+            1 - ia, new IUARegistry.InnerSig[](0), _nativeSig(lreg, BOB_PK, UAKinds.PURPOSE_MEMBER, md)
+        );
         vm.prank(REL);
         s.deposit(op, t, a);
         assertEq(tok.balanceOfUA(ua), 10_000 - AMT);
@@ -201,8 +226,10 @@ contract ServicePullTest is UALedgerBase {
 
     /// A `SmartKeyAccount` (ERC-1271, its secp256k1 key alice's): `abi.encode(keyIndex, proof, signature)`.
     function test_positive_smartKeyAccount() public {
-        SmartKeyAccount acct = SmartKeyAccount(payable(new SmartKeyAccountFactory(chainUidA).deploy(
-            SubjectKey(KeyKind.SECP256K1, _pad(alice), 0, 0, 0), address(0xD00D))));
+        SmartKeyAccount acct = SmartKeyAccount(
+            payable(new SmartKeyAccountFactory(chainUidA)
+                    .deploy(SubjectKey(KeyKind.SECP256K1, _pad(alice), 0, 0, 0), address(0xD00D)))
+        );
         tok.mint(address(acct), 5_000, EnvKit.codeUidOf(address(tok)));
         RefServiceEscrow.Deposit memory op = _dep(_pad(address(acct)), "ska");
         MetaTxLib.UAMetaTransfer memory t = _pull(op);
@@ -211,9 +238,18 @@ contract ServicePullTest is UALedgerBase {
         bytes32 app = Erc7739Kit.separator(address(tok));
         bytes32 c = MtxHash.hashStruct(t);
         assertEq(keccak256(abi.encodePacked(hex"1901", app, c)), tok.mtxTransferDigest(t));
-        a.signature = Erc7739Kit.wrap(abi.encode(uint256(0), new bytes32[](0), _ecdsa(ALICE_PK,
-            Erc7739Kit.nested(address(acct), app, "UAMetaTransfer", Erc7739Kit.UA_TRANSFER_TYPE, c))), app, c,
-            Erc7739Kit.UA_TRANSFER_TYPE);
+        a.signature = Erc7739Kit.wrap(
+            abi.encode(
+                uint256(0),
+                new bytes32[](0),
+                _ecdsa(
+                    ALICE_PK, Erc7739Kit.nested(address(acct), app, "UAMetaTransfer", Erc7739Kit.UA_TRANSFER_TYPE, c)
+                )
+            ),
+            app,
+            c,
+            Erc7739Kit.UA_TRANSFER_TYPE
+        );
         vm.prank(REL);
         s.deposit(op, t, a);
         assertEq(tok.balanceOf(address(acct)), 5_000 - AMT);
@@ -228,7 +264,12 @@ contract ServicePullTest is UALedgerBase {
         vm.etch(HAS, type(MockHederaAccountService).runtimeCode);
         address ha = address(uint160(1_234_567));
         MockHederaAccountService(HAS).setEdKey(ha, vm.addr(0xA11CE5));
-        NormalToken h = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, address(0), address(0), true)));
+        NormalToken h = NormalToken(
+            EnvKit.clone(
+                address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+                EnvKit.env(chainUidA, address(0), address(0), true)
+            )
+        );
         h.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 5_000, ha, address(this))));
         RefServiceEscrow sh = new RefServiceEscrow(address(h));
         RefServiceEscrow.Deposit memory op = _dep(_pad(ha), "hedera");
@@ -247,7 +288,8 @@ contract ServicePullTest is UALedgerBase {
 
     /// `note`: the dynamic fields (`string`, `bytes`) hashed as `keccak256(value)` in the digest, passed raw in the ABI.
     function test_positive_note() public {
-        RefServiceEscrow.Note memory op = RefServiceEscrow.Note(_pad(alice), AMT, "invoice 42: deposit", hex"c0ffee00", "n1");
+        RefServiceEscrow.Note memory op =
+            RefServiceEscrow.Note(_pad(alice), AMT, "invoice 42: deposit", hex"c0ffee00", "n1");
         bytes32 ref = spNoteRef(address(s), block.chainid, op);
         assertEq(ref, s.noteRef(op));
         MetaTxLib.UAMetaTransfer memory t = spPull(_pad(alice), address(s), AMT, ref, LANE, 0, block.timestamp + 300);
@@ -286,16 +328,35 @@ contract ServicePullTest is UALedgerBase {
 
     // ------------------------------------------------------------------ relay fee (§2.4 (b))
 
-    function _relayFee(address feeToken, bytes memory cd, uint256 batch, uint256 nonce) internal view returns (bytes memory) {
-        return _ecdsa(ALICE_PK, spRelayFeeDigest(feeToken, _pad(alice), address(s), cd, _pad(address(router)), FEE, batch, nonce,
-            block.timestamp + 300, address(router)));
+    function _relayFee(address feeToken, bytes memory cd, uint256 batch, uint256 nonce)
+        internal
+        view
+        returns (bytes memory)
+    {
+        return _ecdsa(
+            ALICE_PK,
+            spRelayFeeDigest(
+                feeToken,
+                _pad(alice),
+                address(s),
+                cd,
+                _pad(address(router)),
+                FEE,
+                batch,
+                nonce,
+                block.timestamp + 300,
+                address(router)
+            )
+        );
     }
 
     function _relay(address feeToken, bytes memory cd, uint256 batch, uint256 nonce, bytes memory sig) internal {
         IUARegistry.UASig memory fa;
         fa.signature = sig;
         vm.prank(REL);
-        router.relay(address(s), cd, feeToken, _pad(alice), _pad(address(router)), FEE, batch, nonce, block.timestamp + 300, fa);
+        router.relay(
+            address(s), cd, feeToken, _pad(alice), _pad(address(router)), FEE, batch, nonce, block.timestamp + 300, fa
+        );
     }
 
     /// F = T on one lane: the pull takes `n`, the fee `n + 1` (the router runs the target first); open mode pays the lane.
@@ -336,7 +397,9 @@ contract ServicePullTest is UALedgerBase {
         fa.signature = fs;
         vm.prank(REL);
         vm.expectRevert(_shape(3));
-        router.relay(address(s), cd, address(wrp), _pad(alice), _pad(address(router)), FEE, 2, 0, block.timestamp + 300, fa);
+        router.relay(
+            address(s), cd, address(wrp), _pad(alice), _pad(address(router)), FEE, 2, 0, block.timestamp + 300, fa
+        );
         assertEq(wrp.balanceOf(REL), 0);
         assertEq(wrp.balanceOf(alice), 1_000);
         assertEq(tok.balanceOf(address(s)), 0);
@@ -355,7 +418,9 @@ contract ServicePullTest is UALedgerBase {
         uint256 a0 = tok.balanceOf(alice);
         vm.prank(REL);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, n + 1, n));
-        router.relay(address(s), cd, address(tok), _pad(alice), _pad(address(router)), FEE, LANE, n, block.timestamp + 300, fa);
+        router.relay(
+            address(s), cd, address(tok), _pad(alice), _pad(address(router)), FEE, LANE, n, block.timestamp + 300, fa
+        );
         assertEq(tok.balanceOf(alice), a0);
         assertEq(tok.balanceOf(REL), 0);
         assertEq(tok.mtxNonce(_pad(alice), LANE), n);
@@ -447,9 +512,15 @@ contract ServicePullTest is UALedgerBase {
         RefServiceEscrow.Deposit memory op = _dep(_pad(alice), "n7");
         _control(op);
         MetaTxLib.UAMetaTransfer memory t = _pull(op);
-        MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(_pad(alice), 9, 0, block.timestamp + 300, 0, address(0), 0, address(0));
-        bytes32 h = keccak256(bytes.concat(abi.encode(MetaTxLib.UA_CANCEL_NONCE_TYPEHASH, e.from), abi.encode(LANE),
-            abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
+        MetaTxLib.UAEnvelope memory e =
+            MetaTxLib.UAEnvelope(_pad(alice), 9, 0, block.timestamp + 300, 0, address(0), 0, address(0));
+        bytes32 h = keccak256(
+            bytes.concat(
+                abi.encode(MetaTxLib.UA_CANCEL_NONCE_TYPEHASH, e.from),
+                abi.encode(LANE),
+                abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))
+            )
+        );
         IUARegistry.UASig memory ca;
         ca.signature = _ecdsa(ALICE_PK, MtxDigest.typed(address(tok), h));
         tok.mtxCancelNonce(e, LANE, ca);
@@ -528,8 +599,9 @@ contract ServicePullTest is UALedgerBase {
         NoopPullToken nt = new NoopPullToken();
         RefServiceEscrow sn = new RefServiceEscrow(address(nt));
         RefServiceEscrow.Deposit memory op = _dep(_pad(alice), "n11");
-        MetaTxLib.UAMetaTransfer memory t = spPull(op.payer, address(sn), AMT, spDepositRef(address(sn), block.chainid, op), LANE, 0,
-            block.timestamp + 300);
+        MetaTxLib.UAMetaTransfer memory t = spPull(
+            op.payer, address(sn), AMT, spDepositRef(address(sn), block.chainid, op), LANE, 0, block.timestamp + 300
+        );
         IUARegistry.UASig memory a;
         vm.expectRevert(abi.encodeWithSelector(RefServiceEscrow.ServicePullNotReceived.selector, AMT, 0));
         sn.deposit(op, t, a);
@@ -550,7 +622,12 @@ contract ServicePullTest is UALedgerBase {
 
     /// N15: a derived payer on a token with the UA ledger off.
     function test_N15_derivedLedgerOff() public {
-        NormalToken off = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, address(0), address(0), false)));
+        NormalToken off = NormalToken(
+            EnvKit.clone(
+                address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+                EnvKit.env(chainUidA, address(0), address(0), false)
+            )
+        );
         off.initialize(nid(address(this)), 1, abi.encode(normalInit("Off", "OFF", 6, 1_000_000, alice, address(this))));
         RefServiceEscrow so = new RefServiceEscrow(address(off));
         RefServiceEscrow.Deposit memory c = _dep(_pad(alice), "n15c");
@@ -596,7 +673,8 @@ contract ServicePullTest is UALedgerBase {
         // what the pin closes: through a contract with no checks, both land (nothing charged; `feeRecipient` in the events)
         NakedPuller naked = new NakedPuller();
         RefServiceEscrow.Deposit memory o2 = _dep(_pad(alice), "n18-naked");
-        MetaTxLib.UAMetaTransfer memory u = spPull(o2.payer, address(naked), AMT, bytes32(uint256(1)), LANE, 0, block.timestamp + 300);
+        MetaTxLib.UAMetaTransfer memory u =
+            spPull(o2.payer, address(naked), AMT, bytes32(uint256(1)), LANE, 0, block.timestamp + 300);
         (u.fee, u.feeRecipient) = (1, bob);
         IUARegistry.UASig memory a = _sig(u);
         vm.expectEmit(address(tok));
@@ -612,10 +690,12 @@ contract ServicePullTest is UALedgerBase {
         RefServiceEscrow sr = new RefServiceEscrow(address(rt));
         RefServiceEscrow.Deposit memory op = _dep(_pad(alice), "n20");
         RefServiceEscrow.Deposit memory op2 = _dep(_pad(alice), "n20'");
-        MetaTxLib.UAMetaTransfer memory t = spPull(op.payer, address(sr), AMT, spDepositRef(address(sr), block.chainid, op), LANE, 0,
-            block.timestamp + 300);
-        MetaTxLib.UAMetaTransfer memory t2 = spPull(op.payer, address(sr), AMT, spDepositRef(address(sr), block.chainid, op2), LANE,
-            1, block.timestamp + 300);
+        MetaTxLib.UAMetaTransfer memory t = spPull(
+            op.payer, address(sr), AMT, spDepositRef(address(sr), block.chainid, op), LANE, 0, block.timestamp + 300
+        );
+        MetaTxLib.UAMetaTransfer memory t2 = spPull(
+            op.payer, address(sr), AMT, spDepositRef(address(sr), block.chainid, op2), LANE, 1, block.timestamp + 300
+        );
         IUARegistry.UASig memory a;
         uint256 snap = vm.snapshotState();
         sr.deposit(op, t, a);
@@ -643,13 +723,26 @@ contract ServicePullRegTest is RegFixture {
     }
 
     function _pullOf(address t, RefServiceEscrow svc, RefServiceEscrow.Deposit memory op)
-        internal view returns (MetaTxLib.UAMetaTransfer memory)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransfer memory)
     {
-        return spPull(op.payer, address(svc), op.amount, spDepositRef(address(svc), block.chainid, op), LANE,
-            NormalToken(t).mtxNonce(op.payer, LANE), block.timestamp + 300);
+        return spPull(
+            op.payer,
+            address(svc),
+            op.amount,
+            spDepositRef(address(svc), block.chainid, op),
+            LANE,
+            NormalToken(t).mtxNonce(op.payer, LANE),
+            block.timestamp + 300
+        );
     }
 
-    function _sigOf(uint256 pk, address t, MetaTxLib.UAMetaTransfer memory x) internal view returns (IUARegistry.UASig memory a) {
+    function _sigOf(uint256 pk, address t, MetaTxLib.UAMetaTransfer memory x)
+        internal
+        view
+        returns (IUARegistry.UASig memory a)
+    {
         (uint8 v, bytes32 r, bytes32 ss) = vm.sign(pk, NormalToken(t).mtxTransferDigest(x));
         a.signature = abi.encodePacked(r, ss, v);
     }
@@ -686,7 +779,12 @@ contract ServicePullRegTest is RegFixture {
     function test_N14_serviceNotEligible() public {
         address t = _listed(0, KYC, 0, "sp-l");
         RefServiceEscrow svc = new RefServiceEscrow(t);
-        _refused(ALICE_PK, svc, _dep(alice, "a"), abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, nid(address(svc)), 0));
+        _refused(
+            ALICE_PK,
+            svc,
+            _dep(alice, "a"),
+            abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, nid(address(svc)), 0)
+        );
         _attestAs(cadmin, nid(address(svc)), ELIGIBLE, type(uint64).max);
         bytes32 ref = _deposit(ALICE_PK, svc, _dep(alice, "a"));
         svc.release(ref);
@@ -702,11 +800,15 @@ contract ServicePullRegTest is RegFixture {
             _deposit(ALICE_PK, svc, _dep(alice, "b"));
             vm.revertToState(snap);
             _freeze(t, nid(alice));
-            _refused(ALICE_PK, svc, _dep(alice, "b"), abi.encodeWithSelector(IRegulatedToken.Frozen.selector, nid(alice)));
+            _refused(
+                ALICE_PK, svc, _dep(alice, "b"), abi.encodeWithSelector(IRegulatedToken.Frozen.selector, nid(alice))
+            );
             _unfreeze(t, nid(alice));
             uint64 until = _now() + 1 days;
             _pause(t, until);
-            _refused(ALICE_PK, svc, _dep(alice, "c"), abi.encodeWithSelector(IRegulatedToken.TokenPaused.selector, until));
+            _refused(
+                ALICE_PK, svc, _dep(alice, "c"), abi.encodeWithSelector(IRegulatedToken.TokenPaused.selector, until)
+            );
         }
     }
 
@@ -721,7 +823,9 @@ contract ServicePullRegTest is RegFixture {
             svc.release(ref);
             (, uint256 v,) = svc.custody(ref);
             assertEq(v, AMT, "custody intact");
-            _refused(ALICE_PK, svc, _dep(alice, "f"), abi.encodeWithSelector(RefServiceEscrow.ServicePullFrozen.selector));
+            _refused(
+                ALICE_PK, svc, _dep(alice, "f"), abi.encodeWithSelector(RefServiceEscrow.ServicePullFrozen.selector)
+            );
             _unfreeze(t, nid(address(svc)));
             svc.release(ref);
             assertEq(IERC20(t).balanceOf(alice), SUPPLY);
@@ -735,10 +839,12 @@ contract ServicePullRegTest is RegFixture {
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(c), "sp-op");
         address clerk = address(0xC1E2);
         vm.prank(ownerA);
-        NormalToken(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(clerk), EnvKit.codeUidOf(address(NormalToken(t))));
+        NormalToken(t)
+            .grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(clerk), EnvKit.codeUidOf(address(NormalToken(t))));
         vm.warp(block.timestamp + GD);
         vm.prank(ownerA);
-        NormalToken(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(clerk), EnvKit.codeUidOf(address(NormalToken(t))));
+        NormalToken(t)
+            .grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(clerk), EnvKit.codeUidOf(address(NormalToken(t))));
         RefServiceEscrow svc = new RefServiceEscrow(t);
         _deposit(ALICE_PK, svc, _dep(alice, "e"));
         vm.prank(clerk);

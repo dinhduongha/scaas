@@ -97,19 +97,26 @@ abstract contract WrapLimitsKit is OnchainBase {
         }
         string memory j = vm.readFile(_file("state.json"));
         string memory kept = vm.parseJsonString(j, ".profile");
-        require(keccak256(bytes(vm.envOr("WRAPLIMITS_PROFILE", kept))) == keccak256(bytes(kept)),
-            string.concat("WRAPLIMITS_PROFILE differs from the setup's: ", kept));
+        require(
+            keccak256(bytes(vm.envOr("WRAPLIMITS_PROFILE", kept))) == keccak256(bytes(kept)),
+            string.concat("WRAPLIMITS_PROFILE differs from the setup's: ", kept)
+        );
         _profile(kept);
         (fw, usd) = (OpenFactory(vm.parseJsonAddress(j, ".fw")), MockERC20(vm.parseJsonAddress(j, ".usd")));
         if (vm.keyExistsJson(j, ".t0")) {
-            for (uint256 i; i < 3; ++i) tk[i] = vm.parseJsonAddress(j, string.concat(".t", vm.toString(i)));
+            for (uint256 i; i < 3; ++i) {
+                tk[i] = vm.parseJsonAddress(j, string.concat(".t", vm.toString(i)));
+            }
         }
     }
 
     /// @dev The profile's values (see the kit's notice); a name other than `full` or `short` is refused by name.
     function _profile(string memory p) internal {
         short_ = keccak256(bytes(p)) == keccak256("short");
-        require(short_ || keccak256(bytes(p)) == keccak256("full"), string.concat("WRAPLIMITS_PROFILE: full or short, not ", p));
+        require(
+            short_ || keccak256(bytes(p)) == keccak256("full"),
+            string.concat("WRAPLIMITS_PROFILE: full or short, not ", p)
+        );
         if (short_) (NOTICE, SHORT, LONG, DECAY, MARGIN) = (300, 300, 900, 1, 30);
         else (NOTICE, SHORT, LONG, DECAY, MARGIN) = (3600, 3600, 86_400, 2, 300);
     }
@@ -173,7 +180,8 @@ abstract contract WrapLimitsKit is OnchainBase {
     ///      100,000 for a call (a refund or a cold path the fork's run did not take); above 60 M it is refused by name.
     ///      The row (`type | detail`) and the ask go to this run's rows file, in send order, for `wraplimits.sh`.
     function _tx(uint256 pk, address to, uint256 value, bytes memory data, bool deploy, string memory row)
-        internal returns (bytes memory ret)
+        internal
+        returns (bytes memory ret)
     {
         uint256 ask = _ask(vm.addr(pk), to, value, data, deploy, row);
         vm.broadcast(pk);
@@ -189,7 +197,8 @@ abstract contract WrapLimitsKit is OnchainBase {
     }
 
     function _ask(address from, address to, uint256 value, bytes memory data, bool deploy, string memory row)
-        internal returns (uint256 ask)
+        internal
+        returns (uint256 ask)
     {
         uint256 snap = vm.snapshotState();
         vm.prank(from, from);
@@ -214,8 +223,13 @@ abstract contract WrapLimitsKit is OnchainBase {
     }
 
     function _nodeTransferGas(address from, address to) internal returns (uint256) {
-        return vm.parseJsonUint(vm.rpcJson("eth_estimateGas", string.concat('[{"from":"', vm.toString(from), '","to":"',
-            vm.toString(to), '","value":"0x1"}]')), "$");
+        return vm.parseJsonUint(
+            vm.rpcJson(
+                "eth_estimateGas",
+                string.concat('[{"from":"', vm.toString(from), '","to":"', vm.toString(to), '","value":"0x1"}]')
+            ),
+            "$"
+        );
     }
 
     function _row(string memory kind, uint256 i, string memory detail) internal pure returns (string memory) {
@@ -251,7 +265,9 @@ abstract contract WrapLimitsKit is OnchainBase {
     }
 
     function _over(uint8 limit, address who, uint256 n, uint256 left) internal view returns (bytes memory) {
-        return abi.encodeWithSelector(IWrappedToken.WrapLimitExceeded.selector, address(usd), limit, _pad(who), n * Q, left * Q);
+        return abi.encodeWithSelector(
+            IWrappedToken.WrapLimitExceeded.selector, address(usd), limit, _pad(who), n * Q, left * Q
+        );
     }
 
     function _capOver(uint8 limit, uint256 n, uint256 left) internal view returns (bytes memory) {
@@ -264,7 +280,11 @@ abstract contract WrapLimitsKit is OnchainBase {
 
     // ------------------------------------------------------------------ the owner's configurations (spec §6)
 
-    function _L(uint24 perUser, uint64 tokenWide, uint32 period) internal pure returns (IWrappedToken.WrapLimit memory) {
+    function _L(uint24 perUser, uint64 tokenWide, uint32 period)
+        internal
+        pure
+        returns (IWrappedToken.WrapLimit memory)
+    {
         return IWrappedToken.WrapLimit(perUser, tokenWide, period);
     }
 
@@ -275,7 +295,9 @@ abstract contract WrapLimitsKit is OnchainBase {
     ///      S, 200 Q per L: at once), 4 the wrap side relaxed (200 Q / 400 Q per S, 400 Q per L) + the unwrapper list (waits
     ///      the notice, once for both).
     function _cfg(uint256 which)
-        internal view returns (IWrappedToken.WrapLegLimits[] memory r, bool net_, bool wlist, bool ulist)
+        internal
+        view
+        returns (IWrappedToken.WrapLegLimits[] memory r, bool net_, bool wlist, bool ulist)
     {
         r = new IWrappedToken.WrapLegLimits[](1);
         IWrappedToken.WrapLegLimits memory l = r[0];
@@ -296,8 +318,18 @@ abstract contract WrapLimitsKit is OnchainBase {
         bytes32[] memory h = new bytes32[](legs.length);
         for (uint256 i; i < legs.length; ++i) {
             IWrappedToken.WrapLegLimits memory l = legs[i];
-            h[i] = keccak256(abi.encode(keccak256(bytes(string.concat(LEG_T, LIMIT_T))), l.underlying, l.unitExp, l.decayDays,
-                _limHash(l.wrapShort), _limHash(l.wrapLong), _limHash(l.unwrapShort), _limHash(l.unwrapLong)));
+            h[i] = keccak256(
+                abi.encode(
+                    keccak256(bytes(string.concat(LEG_T, LIMIT_T))),
+                    l.underlying,
+                    l.unitExp,
+                    l.decayDays,
+                    _limHash(l.wrapShort),
+                    _limHash(l.wrapLong),
+                    _limHash(l.unwrapShort),
+                    _limHash(l.unwrapLong)
+                )
+            );
         }
         return keccak256(abi.encodePacked(h));
     }
@@ -305,7 +337,9 @@ abstract contract WrapLimitsKit is OnchainBase {
     // ------------------------------------------------------------------ GovernanceRouter, signed by key 1, sent by key 2
 
     function _auth(string memory typ, address target, bytes memory words)
-        internal view returns (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s)
+        internal
+        view
+        returns (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s)
     {
         (e.from, e.nonce, e.validUntil) = (_pad(a1), gr.mtxNonce(_pad(a1), 0), vu);
         s = _sig(k1, _named(address(gr), typ, bytes.concat(abi.encode(target), words), e));
@@ -314,9 +348,16 @@ abstract contract WrapLimitsKit is OnchainBase {
     function _setLimitsData(uint256 i, uint256 which) internal view returns (bytes memory) {
         (IWrappedToken.WrapLegLimits[] memory legs, bool n_, bool wl_, bool ul_) = _cfg(which);
         bytes32 u = IMetaTx(tk[i]).chainUid(); // the token's chain word (CTR-GOV-28)
-        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(string.concat(
-            "UASetWrapLimits(bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,bytes32 chainUid,",
-            TAIL, LEG_T, LIMIT_T), tk[i], abi.encode(_legsHash(legs), n_, wl_, ul_, u));
+        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(
+            string.concat(
+                "UASetWrapLimits(bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,bytes32 chainUid,",
+                TAIL,
+                LEG_T,
+                LIMIT_T
+            ),
+            tk[i],
+            abi.encode(_legsHash(legs), n_, wl_, ul_, u)
+        );
         return abi.encodeCall(GovernanceRouter.mtxSetWrapLimits, (e, tk[i], legs, n_, wl_, ul_, u, s));
     }
 
@@ -335,44 +376,75 @@ abstract contract WrapLimitsKit is OnchainBase {
 
     function _memberData(uint256 i, bytes32 who, bool canWrap, bool canUnwrap) internal view returns (bytes memory) {
         bytes32 u = IMetaTx(tk[i]).chainUid(); // the token's chain word (CTR-GOV-28)
-        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(string.concat(
-            "UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,bytes32 chainUid,", TAIL), tk[i],
-            abi.encode(who, canWrap, canUnwrap, u));
+        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(
+            string.concat(
+                "UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,bytes32 chainUid,",
+                TAIL
+            ),
+            tk[i],
+            abi.encode(who, canWrap, canUnwrap, u)
+        );
         return abi.encodeCall(GovernanceRouter.mtxSetWrapMember, (e, tk[i], who, canWrap, canUnwrap, u, s));
     }
 
     function _role(uint256 i, uint8 bit, address who, bool grant) internal {
-        _send(_roleData(i, bit, _pad(who), grant), _row(grant ? "router mtxGrantRole" : "router mtxRevokeRole", i,
-            string.concat("bit ", vm.toString(bit), " ", vm.toString(who))));
+        _send(
+            _roleData(i, bit, _pad(who), grant),
+            _row(
+                grant ? "router mtxGrantRole" : "router mtxRevokeRole",
+                i,
+                string.concat("bit ", vm.toString(bit), " ", vm.toString(who))
+            )
+        );
     }
 
     function _roleData(uint256 i, uint8 bit, bytes32 who, bool grant) internal view returns (bytes memory) {
         bytes32 u = IMetaTx(tk[i]).chainUid(); // the token's chain word, signed and forwarded (CTR-GOV-28)
-        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(string.concat(grant ? "UAGrantRole" : "UARevokeRole",
-            "(bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,", TAIL), tk[i], abi.encode(bit, who, u));
+        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(
+            string.concat(
+                grant ? "UAGrantRole" : "UARevokeRole",
+                "(bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,",
+                TAIL
+            ),
+            tk[i],
+            abi.encode(bit, who, u)
+        );
         if (grant) return abi.encodeCall(GovernanceRouterBase.mtxGrantRole, (e, tk[i], bit, who, u, s));
         return abi.encodeCall(GovernanceRouterBase.mtxRevokeRole, (e, tk[i], bit, who, u, s));
     }
 
     /// @dev Bit 27 to `who` as a limited grant: a budget of `budget` quanta (raw units of the leg above the entitlement).
     function _redeemer(uint256 i, address who, uint256 budget) internal {
-        _send(_redeemerData(i, _pad(who), budget), _row("router mtxSetGrant", i,
-            string.concat("bit 27 ", vm.toString(who), " budget ", _q(budget))));
+        _send(
+            _redeemerData(i, _pad(who), budget),
+            _row("router mtxSetGrant", i, string.concat("bit 27 ", vm.toString(who), " budget ", _q(budget)))
+        );
     }
 
     function _redeemerData(uint256 i, bytes32 who, uint256 budget) internal view returns (bytes memory) {
         IGovernance.GrantTerms memory t;
         (t.max, t.total) = (type(uint128).max, uint128(budget * Q));
         bytes32 u = IMetaTx(tk[i]).chainUid(); // the token's chain word (CTR-GOV-28)
-        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(string.concat(
-            "UASetGrant(bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,bytes32 chainUid,", TAIL, TERMS_T), tk[i],
-            abi.encode(RED, who, keccak256(abi.encode(keccak256(bytes(TERMS_T)), t)), u));
+        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _auth(
+            string.concat(
+                "UASetGrant(bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,bytes32 chainUid,",
+                TAIL,
+                TERMS_T
+            ),
+            tk[i],
+            abi.encode(RED, who, keccak256(abi.encode(keccak256(bytes(TERMS_T)), t)), u)
+        );
         return abi.encodeCall(GovernanceRouterBase.mtxSetGrant, (e, tk[i], RED, who, t, u, s));
     }
 
     function _ready(uint256 i, string memory what) internal {
-        _neg(a2, address(gr), _setLimitsData(i, _pendingOf()), IGovernance.GrantNotReady.selector,
-            string.concat("wraplimits ", ph, " ", _h(i), ": ", what));
+        _neg(
+            a2,
+            address(gr),
+            _setLimitsData(i, _pendingOf()),
+            IGovernance.GrantNotReady.selector,
+            string.concat("wraplimits ", ph, " ", _h(i), ": ", what)
+        );
     }
 
     /// @dev The configuration waiting in this run: 1 in p1, 4 in p3.
@@ -390,14 +462,25 @@ abstract contract WrapLimitsKit is OnchainBase {
 
     // ------------------------------------------------------------------ the token configs
 
-    function _tokenCfg(uint256 i, uint256 features, bool hybrid) internal view returns (IFactoryToken.TokenConfig memory c) {
-        (c.name, c.symbol, c.decimals, c.admin) = (string.concat("Onchain WL ", _h(i)), string.concat("oWL", _h(i)), 6, _pad(a1));
+    function _tokenCfg(uint256 i, uint256 features, bool hybrid)
+        internal
+        view
+        returns (IFactoryToken.TokenConfig memory c)
+    {
+        (c.name, c.symbol, c.decimals, c.admin) =
+        (string.concat("Onchain WL ", _h(i)), string.concat("oWL", _h(i)), 6, _pad(a1));
         c.features = 1 << GovernanceBits.PAYABLE | features;
-        if (hybrid) (c.features, c.roles.minter, c.maxSupply) = (c.features | 1 << GovernanceBits.MINTABLE, _pad(a1), 1e30);
+        if (hybrid) {
+            (c.features, c.roles.minter, c.maxSupply) = (c.features | 1 << GovernanceBits.MINTABLE, _pad(a1), 1e30);
+        }
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
         // the PQZ kinds in the OFFCHAIN verify mode (no PQZ precompile here): a fixed verifier, test key 3's native id
-        if (i != 0) c.conf = IFactoryToken.ConfidentialConfig("", 10_000, uint256(1) << 40, 2, 0, 0, 0, 1, _pad(a3), true, 0, 0, 0, true, false);
+        if (i != 0) {
+            c.conf = IFactoryToken.ConfidentialConfig(
+                "", 10_000, uint256(1) << 40, 2, 0, 0, 0, 1, _pad(a3), true, 0, 0, 0, true, false
+            );
+        }
         // round 3s (token-lists spec §5.5): kind 13 with an admin keeps its deny list enableable, so it carries terms
         if (_kind(i) >= 8) c.reg.termsHash = keccak256("onchain wl terms");
     }
@@ -412,15 +495,35 @@ contract WrapLimitsSetup is WrapLimitsKit {
         OpenFactory f5 = OpenFactory(_dep("token_factory"));
         bytes memory init = abi.encodePacked(vm.getCode("OpenFactory.sol:OpenFactory"), abi.encode(_pad(a1)));
         fw = OpenFactory(_create2(init, "fw", "factory: this group's OpenFactory"));
-        _tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.configureChain, (vm.parseJsonBytes32(dj, ".chain_uid"), NOTICE,
-            address(gr), address(gr).codehash, 0, bytes32(0))), false,
-            string.concat("factory | configureChain, noticePeriod ", vm.toString(NOTICE), " s"));
+        _tx(
+            k1,
+            address(fw),
+            0,
+            abi.encodeCall(
+                OpenFactory.configureChain,
+                (vm.parseJsonBytes32(dj, ".chain_uid"), NOTICE, address(gr), address(gr).codehash, 0, bytes32(0))
+            ),
+            false,
+            string.concat("factory | configureChain, noticePeriod ", vm.toString(NOTICE), " s")
+        );
         init = abi.encodePacked(type(MockERC20).creationCode, abi.encode("Onchain WL USD", "oWLUSD", uint8(6)));
         usd = MockERC20(_create2(init, "usd", "leg | MockERC20, 6 decimals"));
         IFactoryToken.Env memory e5 = f5.tokenEnvOf(IOpenFactory.TokenKind.WRAPPED, 1);
-        for (uint256 i; i < 3; ++i) _release(i, e5);
-        console2.log(string.concat("wl setup factory ", vm.toString(address(fw)), " leg ", vm.toString(address(usd)),
-            " notice ", vm.toString(fw.noticePeriod()), " profile ", short_ ? "short" : "full"));
+        for (uint256 i; i < 3; ++i) {
+            _release(i, e5);
+        }
+        console2.log(
+            string.concat(
+                "wl setup factory ",
+                vm.toString(address(fw)),
+                " leg ",
+                vm.toString(address(usd)),
+                " notice ",
+                vm.toString(fw.noticePeriod()),
+                " profile ",
+                short_ ? "short" : "full"
+            )
+        );
         _save(_afterNotice());
     }
 
@@ -434,10 +537,17 @@ contract WrapLimitsSetup is WrapLimitsKit {
     /// @dev The link closure of kind `_kind(i)` (Catalogue.closureLibs): referenced here, so forge links and deploys them.
     function _libs(uint256 i) internal pure returns (address[] memory l) {
         l = new address[](i == 0 ? 4 : i == 1 ? 9 : 10);
-        (l[0], l[1], l[2], l[3]) = (address(GovernanceLib), address(HederaLib), address(MtxPipelineLib), address(WrappedLib));
+        (l[0], l[1], l[2], l[3]) =
+        (address(GovernanceLib), address(HederaLib), address(MtxPipelineLib), address(WrappedLib));
         if (i == 0) return l;
         (l[4], l[5], l[6], l[7], l[8]) =
-            (address(PqzStateLib), address(PqzTransferLib), address(PqzBurnLib), address(PqzViewLib), address(PqzWrappedLib));
+        (
+            address(PqzStateLib),
+            address(PqzTransferLib),
+            address(PqzBurnLib),
+            address(PqzViewLib),
+            address(PqzWrappedLib)
+        );
         if (i == 2) l[9] = address(RegulatedLib);
     }
 
@@ -446,14 +556,21 @@ contract WrapLimitsSetup is WrapLimitsKit {
         string[] memory n = kindModuleNames(k);
         ms = new address[](n.length);
         for (uint256 j; j < n.length; ++j) {
-            ms[j] = _create2(bytes.concat(vm.getCode(n[j]), abi.encode(address(fw), core)), n[j],
-                string.concat("module | ", vm.split(n[j], ":")[1]));
+            ms[j] = _create2(
+                bytes.concat(vm.getCode(n[j]), abi.encode(address(fw), core)),
+                n[j],
+                string.concat("module | ", vm.split(n[j], ":")[1])
+            );
         }
     }
 
     /// @dev Env 1 of kind `_kind(i)`: the Step 5 registry and SmartKeyAccount implementation, the link closure, the modules;
     ///      a PQZ kind's deps the release verifier 0 (the OFFCHAIN mode reads none).
-    function _env(uint256 i, IFactoryToken.Env memory e5, address[] memory ms) internal view returns (IFactoryToken.Env memory) {
+    function _env(uint256 i, IFactoryToken.Env memory e5, address[] memory ms)
+        internal
+        view
+        returns (IFactoryToken.Env memory)
+    {
         address[] memory libs = _libs(i);
         address[] memory l = new address[](libs.length + ms.length);
         bytes32[] memory h = new bytes32[](l.length);
@@ -461,7 +578,9 @@ contract WrapLimitsSetup is WrapLimitsKit {
             l[j] = j < libs.length ? libs[j] : ms[j - libs.length];
             h[j] = l[j].codehash;
         }
-        return IFactoryToken.Env(e5.registry, e5.smartKeyAccountImpl, false, new address[](i == 0 ? 0 : 1), new bytes32[](0), l, h);
+        return IFactoryToken.Env(
+            e5.registry, e5.smartKeyAccountImpl, false, new address[](i == 0 ? 0 : 1), new bytes32[](0), l, h
+        );
     }
 
     function _release(uint256 i, IFactoryToken.Env memory e5) internal {
@@ -469,14 +588,35 @@ contract WrapLimitsSetup is WrapLimitsKit {
         bytes memory core = k >= 8 ? abi.encode(vm.parseJsonBytes32(dj, ".compliance_registry_codehash")) : bytes("");
         address[] memory ms = _modules(k, core);
         IOpenFactory.TokenKind kind = IOpenFactory.TokenKind(k);
-        _tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.publishTokenEnv, (kind, 1, fw.chainUid(), _env(i, e5, ms))), false,
-            string.concat("factory | publishTokenEnv kind ", vm.toString(k)));
+        _tx(
+            k1,
+            address(fw),
+            0,
+            abi.encodeCall(OpenFactory.publishTokenEnv, (kind, 1, fw.chainUid(), _env(i, e5, ms))),
+            false,
+            string.concat("factory | publishTokenEnv kind ", vm.toString(k))
+        );
         string memory face = string.concat(_label(i), ".sol:", _label(i));
-        _tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.deployTokenImplementation, (kind, 1, 1, vm.getCode(face),
-            kindImplArgs(k, ms, core), fw.chainUid())), true, string.concat("release | ", _label(i)));
+        _tx(
+            k1,
+            address(fw),
+            0,
+            abi.encodeCall(
+                OpenFactory.deployTokenImplementation,
+                (kind, 1, 1, vm.getCode(face), kindImplArgs(k, ms, core), fw.chainUid())
+            ),
+            true,
+            string.concat("release | ", _label(i))
+        );
         if (k != 1) {
-            _tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.setTokenKindEnabled, (kind, true, fw.chainUid())), false,
-                string.concat("factory | setTokenKindEnabled kind ", vm.toString(k)));
+            _tx(
+                k1,
+                address(fw),
+                0,
+                abi.encodeCall(OpenFactory.setTokenKindEnabled, (kind, true, fw.chainUid())),
+                false,
+                string.concat("factory | setTokenKindEnabled kind ", vm.toString(k))
+            );
         }
     }
 }
@@ -491,51 +631,111 @@ contract WrapLimits is WrapLimitsKit {
         _start("p1", true);
         for (uint256 i; i < 3; ++i) {
             IFactoryToken.TokenConfig memory c = _tokenCfg(i, GovernanceBits.WRAP_CONTROLS, true);
-            tk[i] = abi.decode(_tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.createToken, (IOpenFactory.TokenKind(
-                _kind(i)), 1, abi.encode(c), _salt(_h(i)))), false, _row("factory createToken", i, "hybrid, bits 25-27")),
-                (address));
+            tk[i] = abi.decode(
+                _tx(
+                    k1,
+                    address(fw),
+                    0,
+                    abi.encodeCall(
+                        OpenFactory.createToken, (IOpenFactory.TokenKind(_kind(i)), 1, abi.encode(c), _salt(_h(i)))
+                    ),
+                    false,
+                    _row("factory createToken", i, "hybrid, bits 25-27")
+                ),
+                (address)
+            );
             _log(i, string.concat(_label(i), " ", vm.toString(tk[i])));
             for (uint8 bit = WL; bit <= RED; ++bit) {
                 c = _tokenCfg(i, uint256(1) << bit, false);
-                _negData(a1, address(fw), abi.encodeCall(OpenFactory.createToken, (IOpenFactory.TokenKind(_kind(i)), 1,
-                    abi.encode(c), _salt(string.concat("pure", vm.toString(bit))))),
+                _negData(
+                    a1,
+                    address(fw),
+                    abi.encodeCall(
+                        OpenFactory.createToken,
+                        (
+                            IOpenFactory.TokenKind(_kind(i)),
+                            1,
+                            abi.encode(c),
+                            _salt(string.concat("pure", vm.toString(bit)))
+                        )
+                    ),
                     abi.encodeWithSelector(IWrappedToken.WrapControlNeedsHybrid.selector, bit),
-                    string.concat("wraplimits p1 kind ", vm.toString(_kind(i)), ": a pure-wrap token with bit ", vm.toString(bit), ": WrapControlNeedsHybrid"));
+                    string.concat(
+                        "wraplimits p1 kind ",
+                        vm.toString(_kind(i)),
+                        ": a pure-wrap token with bit ",
+                        vm.toString(bit),
+                        ": WrapControlNeedsHybrid"
+                    )
+                );
             }
         }
         _tx(k1, a4, 1 ether, "", false, "fund | 1 ether to the fourth key");
         uint256[4] memory pks = [k1, k2, k3, k4];
         for (uint256 p; p < 4; ++p) {
-            _tx(k1, address(usd), 0, abi.encodeCall(MockERC20.mint, (vm.addr(pks[p]), 1e12)), false, "fund | the leg minted");
+            _tx(
+                k1,
+                address(usd),
+                0,
+                abi.encodeCall(MockERC20.mint, (vm.addr(pks[p]), 1e12)),
+                false,
+                "fund | the leg minted"
+            );
             for (uint256 i; i < 3; ++i) {
-                _tx(pks[p], address(usd), 0, abi.encodeWithSelector(APPROVE, tk[i], type(uint256).max), false,
-                    _row("fund approve", i, vm.toString(vm.addr(pks[p]))));
+                _tx(
+                    pks[p],
+                    address(usd),
+                    0,
+                    abi.encodeWithSelector(APPROVE, tk[i], type(uint256).max),
+                    false,
+                    _row("fund approve", i, vm.toString(vm.addr(pks[p])))
+                );
             }
         }
-        for (uint256 i; i < 3; ++i) _p1(i);
-        for (uint256 i; i < 3; ++i) _propose1(i);
+        for (uint256 i; i < 3; ++i) {
+            _p1(i);
+        }
+        for (uint256 i; i < 3; ++i) {
+            _propose1(i);
+        }
         // the router's negatives last: each signs the router's next nonce of key 1 at this run's end
-        for (uint256 i; i < 3; ++i) _ready(i, "the unwrap tightening confirmed before the notice: GrantNotReady");
+        for (uint256 i; i < 3; ++i) {
+            _ready(i, "the unwrap tightening confirmed before the notice: GrantNotReady");
+        }
         _save(_afterNotice());
     }
 
     function _p1(uint256 i) internal {
         address t = tk[i];
         (IWrappedToken.WrapLegLimits[] memory legs, bool n_, bool wl_, bool ul_) = _cfg(0);
-        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setWrapLimits, (legs, n_, wl_, ul_, IMetaTx(t).chainUid())), false,
-            _row("setWrapLimits direct (first, at once)", i, "configuration 0"));
+        _tx(
+            k1,
+            t,
+            0,
+            abi.encodeCall(IWrappedToken.setWrapLimits, (legs, n_, wl_, ul_, IMetaTx(t).chainUid())),
+            false,
+            _row("setWrapLimits direct (first, at once)", i, "configuration 0")
+        );
         _wrap(k2, i, 100, "wrap (tracked, first use)");
         // relayed: key 1 signs, key 2 (at its own cap) submits; the signer's quota counts
         MetaTxLib.Envelope memory e = _aenv(a1, 11, IUALedgerViews(t).mtxNonce(_pad(a1), 11));
         bytes memory sg = _ecdsa(k1, _namedA(t, WRAP_LEG, abi.encode(address(usd), 100 * Q), e));
-        _tx(k2, t, 0, abi.encodeCall(IWrappedToken.mtxWrapLeg, (e, address(usd), 100 * Q, sg)), false,
-            _row("mtxWrapLeg relayed (tracked, first use)", i, string.concat("signed by ", vm.toString(a1), ", 100 Q")));
+        _tx(
+            k2,
+            t,
+            0,
+            abi.encodeCall(IWrappedToken.mtxWrapLeg, (e, address(usd), 100 * Q, sg)),
+            false,
+            _row("mtxWrapLeg relayed (tracked, first use)", i, string.concat("signed by ", vm.toString(a1), ", 100 Q"))
+        );
         require(_qt(i, a1).netWrapped == 100 * Q && _qt(i, a2).wrapShort.left == 0, "p1: the signer counted");
         _tx(k2, t, 0, abi.encodeWithSelector(TRANSFER, a3, 40 * Q), false, _row("transfer", i, "40 Q to the merchant"));
         _tx(k2, t, 0, abi.encodeWithSelector(TRANSFER, A5, 10 * Q), false, _row("transfer", i, "10 Q to A5"));
         _unwrap(k2, i, 10, "unwrap (tracked, no rule)");
         _redeemer(i, a3, 18);
-        require(_qt(i, a2).netWrapped == 90 * Q && _qt(i, a3).redeemer && _qt(i, a3).netWrapped == 0, "p1: net and role");
+        require(
+            _qt(i, a2).netWrapped == 90 * Q && _qt(i, a3).redeemer && _qt(i, a3).netWrapped == 0, "p1: net and role"
+        );
         _nx(a2, i, _wrapData(1), _over(0, a2, 1, 0), "a wrap over the short per-user cap: WrapLimitExceeded");
         _nx(a3, i, _wrapData(1), _capOver(0, 1, 0), "a wrap over the short token-wide cap: WrapCapExceeded");
     }
@@ -553,8 +753,12 @@ contract WrapLimits is WrapLimitsKit {
     /// waits for a2's long window of p1 to end (15 min: p3 reads it ended; the full profile's 1 day is still open there).
     function p2() external {
         _start("p2", true);
-        for (uint256 i; i < 3; ++i) _confirm1(i);
-        for (uint256 i; i < 3; ++i) _p2(i);
+        for (uint256 i; i < 3; ++i) {
+            _confirm1(i);
+        }
+        for (uint256 i; i < 3; ++i) {
+            _p2(i);
+        }
         uint256 next = block.timestamp + SHORT + MARGIN;
         for (uint256 i; short_ && i < 3; ++i) {
             uint256 r = _qt(i, a2).wrapLong.resetAt;
@@ -567,10 +771,16 @@ contract WrapLimits is WrapLimitsKit {
         address t = tk[i];
         (, bool net_,,,,, bool live,) = IWrappedToken(t).wrapLimits();
         require(!net_ && live, "p2: still pending");
-        require(_qt(i, a2).netWrapped == 90 * Q && _qt(i, a1).netWrapped == 100 * Q && _qt(i, A5).netWrapped == 0
-            && _qt(i, a2).wrapLong.left == 50 * Q && IWrappedToken(t).wrapQuotaTotal(address(usd)).wrapShort.left == 200 * Q,
-            "p2: p1's state read back");
-        _log(i, "read back: b(a2) 90 Q, b(a1) 100 Q, b(A5) 0, a2's long window 50 Q left, the token-wide short window over, pending live");
+        require(
+            _qt(i, a2).netWrapped == 90 * Q && _qt(i, a1).netWrapped == 100 * Q && _qt(i, A5).netWrapped == 0
+                && _qt(i, a2).wrapLong.left == 50 * Q
+                && IWrappedToken(t).wrapQuotaTotal(address(usd)).wrapShort.left == 200 * Q,
+            "p2: p1's state read back"
+        );
+        _log(
+            i,
+            "read back: b(a2) 90 Q, b(a1) 100 Q, b(A5) 0, a2's long window 50 Q left, the token-wide short window over, pending live"
+        );
         _setLimits(i, 1, "router mtxSetWrapLimits (unwrap tighter: confirmed)");
         (IWrappedToken.WrapLegLimits[] memory legs, bool n2,,,,, bool live2,) = IWrappedToken(t).wrapLimits();
         require(n2 && !live2 && legs[0].decayDays == DECAY && legs[0].unwrapShort.perUser == 30, "p2: applied");
@@ -586,16 +796,43 @@ contract WrapLimits is WrapLimitsKit {
         require(q.netWrapped == 100 * Q && q.entitlement == 100 * Q && q.entitlementZeroAt != 0, "p2: the decay row");
         _log(i, string.concat("a4 E ", vm.toString(q.entitlement), " zero at ", vm.toString(q.entitlementZeroAt)));
         _role(i, WLIST, a1, true);
-        _nx(a2, i, _wrapData(1), _over(1, a2, 1, 0), "a wrap over the long per-user cap (the short has room): WrapLimitExceeded");
+        _nx(
+            a2,
+            i,
+            _wrapData(1),
+            _over(1, a2, 1, 0),
+            "a wrap over the long per-user cap (the short has room): WrapLimitExceeded"
+        );
         _nx(a2, i, _unwrapData(a2, 1), _over(2, a2, 1, 0), "an unwrap over the short per-user cap: WrapLimitExceeded");
         _nx(a1, i, _unwrapData(a1, 10), _capOver(2, 10, 5), "an unwrap over the short token-wide cap: WrapCapExceeded");
-        _nx(A5, i, _unwrapData(A5, 5), _aboveNet(A5, 5), "an unwrap of units received by transfer (the net rule): UnwrapAboveNetWrapped");
-        _nx(a3, i, _unwrapData(a3, 4), abi.encodeWithSelector(IGovernance.GrantExhausted.selector, uint8(2)),
-            "the redeemer past its budget (15 of 18 Q spent): GrantExhausted");
-        _nx(a1, i, abi.encodeCall(IGovernance.disableFeature, (WL, IMetaTx(tk[i]).chainUid())),
-            abi.encodeWithSelector(IWrappedToken.WrapControlActive.selector, WL), "disableFeature(25) with the limits on: WrapControlActive");
-        _nx(a1, i, abi.encodeCall(IGovernance.disableFeature, (RED, IMetaTx(tk[i]).chainUid())),
-            abi.encodeWithSelector(IWrappedToken.WrapControlActive.selector, RED), "disableFeature(27) with a holder: WrapControlActive");
+        _nx(
+            A5,
+            i,
+            _unwrapData(A5, 5),
+            _aboveNet(A5, 5),
+            "an unwrap of units received by transfer (the net rule): UnwrapAboveNetWrapped"
+        );
+        _nx(
+            a3,
+            i,
+            _unwrapData(a3, 4),
+            abi.encodeWithSelector(IGovernance.GrantExhausted.selector, uint8(2)),
+            "the redeemer past its budget (15 of 18 Q spent): GrantExhausted"
+        );
+        _nx(
+            a1,
+            i,
+            abi.encodeCall(IGovernance.disableFeature, (WL, IMetaTx(tk[i]).chainUid())),
+            abi.encodeWithSelector(IWrappedToken.WrapControlActive.selector, WL),
+            "disableFeature(25) with the limits on: WrapControlActive"
+        );
+        _nx(
+            a1,
+            i,
+            abi.encodeCall(IGovernance.disableFeature, (RED, IMetaTx(tk[i]).chainUid())),
+            abi.encodeWithSelector(IWrappedToken.WrapControlActive.selector, RED),
+            "disableFeature(27) with a holder: WrapControlActive"
+        );
     }
 
     /// p3 (the windows ended): the wrapper list at once, members direct and by the router, a listed wrap, the unwrap side
@@ -603,9 +840,15 @@ contract WrapLimits is WrapLimitsKit {
     /// three proposals last and together, as in p1).
     function p3() external {
         _start("p3", true);
-        for (uint256 i; i < 3; ++i) _p3(i);
-        for (uint256 i; i < 3; ++i) _setLimits(i, 4, "router mtxSetWrapLimits (wrap looser + unwrapper list: proposed)");
-        for (uint256 i; i < 3; ++i) _ready(i, "the wrap relaxation confirmed before the notice: GrantNotReady");
+        for (uint256 i; i < 3; ++i) {
+            _p3(i);
+        }
+        for (uint256 i; i < 3; ++i) {
+            _setLimits(i, 4, "router mtxSetWrapLimits (wrap looser + unwrapper list: proposed)");
+        }
+        for (uint256 i; i < 3; ++i) {
+            _ready(i, "the wrap relaxation confirmed before the notice: GrantNotReady");
+        }
         _save(_afterNotice());
     }
 
@@ -617,34 +860,78 @@ contract WrapLimits is WrapLimitsKit {
         require(q.netWrapped == 100 * Q && q.entitlement < 100 * Q && q.entitlement >= 95 * Q, "p3: a4's line decays");
         // a2's long window of p1 (150 Q, filled in p2): full (1 day) still open and full; short (15 min) ended, all left
         IWrappedToken.WindowView memory lw = _qt(i, a2).wrapLong;
-        require((short_ ? lw.left == 150 * Q && lw.resetAt == 0 : lw.left == 0) && _qt(i, a3).redeemer, "p3: p2's state read back");
-        _log(i, string.concat("read back: b(a4) 100 Q, a2's long window ", short_ ? "ended (150 Q left)" : "full",
-            ", the merchant a redeemer"));
+        require(
+            (short_ ? lw.left == 150 * Q && lw.resetAt == 0 : lw.left == 0) && _qt(i, a3).redeemer,
+            "p3: p2's state read back"
+        );
+        _log(
+            i,
+            string.concat(
+                "read back: b(a4) 100 Q, a2's long window ",
+                short_ ? "ended (150 Q left)" : "full",
+                ", the merchant a redeemer"
+            )
+        );
         _log(i, string.concat("a4 E at p3 ", vm.toString(q.entitlement)));
         _setLimits(i, 2, "router mtxSetWrapLimits (wrap tighter: at once)");
-        (, , bool wl2,,,,,) = IWrappedToken(t).wrapLimits();
+        (,, bool wl2,,,,,) = IWrappedToken(t).wrapLimits();
         require(wl2, "p3: the wrapper list on");
         _member(i, a2, true, true);
-        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setWrapMember, (_pad(a1), true, true, IMetaTx(t).chainUid())), false,
-            _row("setWrapMember direct", i, vm.toString(a1)));
-        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setWrapMember, (_pad(a4), false, true, IMetaTx(t).chainUid())), false,
-            _row("setWrapMember direct", i, vm.toString(a4)));
-        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setWrapMember, (_pad(a3), false, true, IMetaTx(t).chainUid())), false,
-            _row("setWrapMember direct", i, vm.toString(a3)));
+        _tx(
+            k1,
+            t,
+            0,
+            abi.encodeCall(IWrappedToken.setWrapMember, (_pad(a1), true, true, IMetaTx(t).chainUid())),
+            false,
+            _row("setWrapMember direct", i, vm.toString(a1))
+        );
+        _tx(
+            k1,
+            t,
+            0,
+            abi.encodeCall(IWrappedToken.setWrapMember, (_pad(a4), false, true, IMetaTx(t).chainUid())),
+            false,
+            _row("setWrapMember direct", i, vm.toString(a4))
+        );
+        _tx(
+            k1,
+            t,
+            0,
+            abi.encodeCall(IWrappedToken.setWrapMember, (_pad(a3), false, true, IMetaTx(t).chainUid())),
+            false,
+            _row("setWrapMember direct", i, vm.toString(a3))
+        );
         _wrap(k1, i, 10, "wrap (tracked, listed)");
         _setLimits(i, 3, "router mtxSetWrapLimits (unwrap looser: at once)");
         (IWrappedToken.WrapLegLimits[] memory legs,,,,,,,) = IWrappedToken(t).wrapLimits();
         require(legs[0].unwrapShort.perUser == 100, "p3: the unwrap side relaxed");
         _unwrap(k2, i, 50, "unwrap (tracked, net rule and decay)");
         MetaTxLib.UAEnvelope memory e = _env(a1, 12, IUALedgerViews(t).mtxNonce(_pad(a1), 12));
-        IUARegistry.UASig memory s = _sig(k1, _named(t, UA_UNWRAP_LEG, abi.encode(address(usd), 10 * Q, a1, uint256(0)), e));
-        _tx(k2, t, 0, abi.encodeCall(IWrappedToken.mtxUnwrapLeg, (e, address(usd), 10 * Q, a1, 0, s)), false,
-            _row("mtxUnwrapLeg relayed (tracked)", i, string.concat("signed by ", vm.toString(a1), ", 10 Q")));
+        IUARegistry.UASig memory s =
+            _sig(k1, _named(t, UA_UNWRAP_LEG, abi.encode(address(usd), 10 * Q, a1, uint256(0)), e));
+        _tx(
+            k2,
+            t,
+            0,
+            abi.encodeCall(IWrappedToken.mtxUnwrapLeg, (e, address(usd), 10 * Q, a1, 0, s)),
+            false,
+            _row("mtxUnwrapLeg relayed (tracked)", i, string.concat("signed by ", vm.toString(a1), ", 10 Q"))
+        );
         require(_qt(i, a1).unwrapShort.left == 90 * Q, "p3: the signer counted");
-        _nx(a3, i, _wrapData(1), abi.encodeWithSelector(IWrappedToken.WrapperNotListed.selector, _pad(a3)),
-            "a wrap by an id not on the wrapper list: WrapperNotListed");
-        _nx(a1, i, abi.encodeCall(IGovernance.disableFeature, (WLIST, IMetaTx(tk[i]).chainUid())),
-            abi.encodeWithSelector(IWrappedToken.WrapControlActive.selector, WLIST), "disableFeature(26) with a list on: WrapControlActive");
+        _nx(
+            a3,
+            i,
+            _wrapData(1),
+            abi.encodeWithSelector(IWrappedToken.WrapperNotListed.selector, _pad(a3)),
+            "a wrap by an id not on the wrapper list: WrapperNotListed"
+        );
+        _nx(
+            a1,
+            i,
+            abi.encodeCall(IGovernance.disableFeature, (WLIST, IMetaTx(tk[i]).chainUid())),
+            abi.encodeWithSelector(IWrappedToken.WrapControlActive.selector, WLIST),
+            "disableFeature(26) with a list on: WrapControlActive"
+        );
     }
 
     /// p4 (after the notice): the wrap relaxation and the unwrapper list confirmed; a wrap over the old caps; a listed
@@ -670,8 +957,13 @@ contract WrapLimits is WrapLimitsKit {
         require(ul && !live2 && legs[0].wrapShort.perUser == 200, "p4: applied");
         _wrap(k2, i, 120, "wrap (tracked, listed)");
         _unwrap(k2, i, 10, "unwrap (tracked, listed)");
-        _nx(A5, i, _unwrapData(A5, 1), abi.encodeWithSelector(IWrappedToken.UnwrapperNotListed.selector, _pad(A5)),
-            "an unwrap by an id not on the unwrapper list: UnwrapperNotListed");
+        _nx(
+            A5,
+            i,
+            _unwrapData(A5, 1),
+            abi.encodeWithSelector(IWrappedToken.UnwrapperNotListed.selector, _pad(A5)),
+            "an unwrap by an id not on the unwrapper list: UnwrapperNotListed"
+        );
     }
 
     /// p5 (the decay row's H/2): E is half of what it wrapped; an unwrap within it, one above it refused.
@@ -683,7 +975,13 @@ contract WrapLimits is WrapLimitsKit {
             require(q.netWrapped == 100 * Q && q.entitlement >= 49 * Q && q.entitlement <= 50 * Q, "p5: E at H/2");
             _log(i, string.concat("a4 E at H/2 ", vm.toString(q.entitlement)));
             _unwrap(k4, i, 10, "unwrap (tracked, decay at H/2)");
-            _nxSel(a4, i, _unwrapData(a4, 45), IWrappedToken.UnwrapAboveNetWrapped.selector, "an unwrap above E at H/2: UnwrapAboveNetWrapped");
+            _nxSel(
+                a4,
+                i,
+                _unwrapData(a4, 45),
+                IWrappedToken.UnwrapAboveNetWrapped.selector,
+                "an unwrap above E at H/2: UnwrapAboveNetWrapped"
+            );
             if (q.entitlementZeroAt > zero) zero = q.entitlementZeroAt;
         }
         _save(zero + 30);
@@ -693,7 +991,9 @@ contract WrapLimits is WrapLimitsKit {
     /// tokens per kind (`_caps`): the counter and the wrap cap on a pure wrap, the hybrid's cap set direct.
     function p6() external {
         _start("p6", true);
-        for (uint256 i; i < 3; ++i) _caps(i);
+        for (uint256 i; i < 3; ++i) {
+            _caps(i);
+        }
         for (uint256 i; i < 3; ++i) {
             IWrappedToken.WrapQuota memory q = _qt(i, a4);
             // b after the H/2 unwrap: 80 Q at E = 50 Q, 79 Q at E = 49 Q (a minute later on that token)
@@ -719,37 +1019,116 @@ contract WrapLimits is WrapLimitsKit {
         uint8 sc = GovernanceBits.SUPPLY_CAP_ADJUSTABLE;
         IFactoryToken.TokenConfig memory c = _tokenCfg(i, uint256(1) << sc, false);
         c.symbol = string.concat("oWC", _h(i));
-        address t = abi.decode(_tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.createToken, (IOpenFactory.TokenKind(
-            _kind(i)), 1, abi.encode(c), _salt(string.concat("caps", _h(i))))), false, _row("factory createToken", i,
-            "pure wrap, bit 31")), (address));
+        address t = abi.decode(
+            _tx(
+                k1,
+                address(fw),
+                0,
+                abi.encodeCall(
+                    OpenFactory.createToken,
+                    (IOpenFactory.TokenKind(_kind(i)), 1, abi.encode(c), _salt(string.concat("caps", _h(i))))
+                ),
+                false,
+                _row("factory createToken", i, "pure wrap, bit 31")
+            ),
+            (address)
+        );
         _book(t, _label(i));
-        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setMaxWrapSupply, (200 * Q, IMetaTx(t).chainUid())), false,
-            _row("setMaxWrapSupply direct (at once)", i, "pure wrap, 200 Q"));
+        _tx(
+            k1,
+            t,
+            0,
+            abi.encodeCall(IWrappedToken.setMaxWrapSupply, (200 * Q, IMetaTx(t).chainUid())),
+            false,
+            _row("setMaxWrapSupply direct (at once)", i, "pure wrap, 200 Q")
+        );
         require(IWrappedToken(t).maxWrapSupply() == 200 * Q, "caps: the wrap cap set");
-        _tx(k1, address(usd), 0, abi.encodeWithSelector(APPROVE, t, type(uint256).max), false, _row("fund approve", i, vm.toString(a1)));
-        _tx(k2, address(usd), 0, abi.encodeWithSelector(APPROVE, t, type(uint256).max), false, _row("fund approve", i, vm.toString(a2)));
-        _call(k2, t, _wrapData(100), _row("wrap (counted)", i, string.concat(vm.toString(a2), " wraps 100 Q, pure wrap")));
+        _tx(
+            k1,
+            address(usd),
+            0,
+            abi.encodeWithSelector(APPROVE, t, type(uint256).max),
+            false,
+            _row("fund approve", i, vm.toString(a1))
+        );
+        _tx(
+            k2,
+            address(usd),
+            0,
+            abi.encodeWithSelector(APPROVE, t, type(uint256).max),
+            false,
+            _row("fund approve", i, vm.toString(a2))
+        );
+        _call(
+            k2, t, _wrapData(100), _row("wrap (counted)", i, string.concat(vm.toString(a2), " wraps 100 Q, pure wrap"))
+        );
         require(_wrapped(t) == 100 * Q && IERC20(t).totalSupply() == 100 * Q, "caps: after a wrap");
-        _call(k2, t, _unwrapData(a2, 30), _row("unwrap (counted)", i, string.concat(vm.toString(a2), " unwraps 30 Q, pure wrap")));
+        _call(
+            k2,
+            t,
+            _unwrapData(a2, 30),
+            _row("unwrap (counted)", i, string.concat(vm.toString(a2), " unwraps 30 Q, pure wrap"))
+        );
         require(_wrapped(t) == 70 * Q && IERC20(t).totalSupply() == 70 * Q, "caps: after an unwrap");
         MetaTxLib.Envelope memory e = _aenv(a1, 13, IUALedgerViews(t).mtxNonce(_pad(a1), 13));
         bytes memory sg = _ecdsa(k1, _namedA(t, WRAP_LEG, abi.encode(address(usd), 50 * Q), e));
-        _tx(k2, t, 0, abi.encodeCall(IWrappedToken.mtxWrapLeg, (e, address(usd), 50 * Q, sg)), false,
-            _row("mtxWrapLeg relayed (counted)", i, string.concat("signed by ", vm.toString(a1), ", 50 Q, pure wrap")));
+        _tx(
+            k2,
+            t,
+            0,
+            abi.encodeCall(IWrappedToken.mtxWrapLeg, (e, address(usd), 50 * Q, sg)),
+            false,
+            _row("mtxWrapLeg relayed (counted)", i, string.concat("signed by ", vm.toString(a1), ", 50 Q, pure wrap"))
+        );
         require(_wrapped(t) == 120 * Q && IERC20(t).totalSupply() == 120 * Q, "caps: after a signature wrap");
-        _call(k2, t, _wrapData(80), _row("wrap (counted, to the cap)", i, string.concat(vm.toString(a2), " wraps 80 Q, pure wrap")));
-        require(_wrapped(t) == 200 * Q && IERC20(t).totalSupply() == _wrapped(t), "caps: at the cap, totalWrapped == totalSupply");
-        _log(i, string.concat("caps P ", vm.toString(t), " totalWrapped ", vm.toString(_wrapped(t)), " = totalSupply, cap 200 Q"));
-        _negData(a2, t, _wrapData(1), abi.encodeWithSelector(IWrappedToken.MaxWrapSupplyExceeded.selector, 201 * Q, 200 * Q),
-            string.concat("wraplimits p6 ", _h(i), ": a wrap one quantum over maxWrapSupply: MaxWrapSupplyExceeded"));
+        _call(
+            k2,
+            t,
+            _wrapData(80),
+            _row("wrap (counted, to the cap)", i, string.concat(vm.toString(a2), " wraps 80 Q, pure wrap"))
+        );
+        require(
+            _wrapped(t) == 200 * Q && IERC20(t).totalSupply() == _wrapped(t),
+            "caps: at the cap, totalWrapped == totalSupply"
+        );
+        _log(
+            i,
+            string.concat(
+                "caps P ", vm.toString(t), " totalWrapped ", vm.toString(_wrapped(t)), " = totalSupply, cap 200 Q"
+            )
+        );
+        _negData(
+            a2,
+            t,
+            _wrapData(1),
+            abi.encodeWithSelector(IWrappedToken.MaxWrapSupplyExceeded.selector, 201 * Q, 200 * Q),
+            string.concat("wraplimits p6 ", _h(i), ": a wrap one quantum over maxWrapSupply: MaxWrapSupplyExceeded")
+        );
         c = _tokenCfg(i, uint256(1) << sc, true);
         c.symbol = string.concat("oWCH", _h(i));
-        t = abi.decode(_tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.createToken, (IOpenFactory.TokenKind(_kind(i)), 1,
-            abi.encode(c), _salt(string.concat("capsH", _h(i))))), false, _row("factory createToken", i, "hybrid, bit 31")),
-            (address));
+        t = abi.decode(
+            _tx(
+                k1,
+                address(fw),
+                0,
+                abi.encodeCall(
+                    OpenFactory.createToken,
+                    (IOpenFactory.TokenKind(_kind(i)), 1, abi.encode(c), _salt(string.concat("capsH", _h(i))))
+                ),
+                false,
+                _row("factory createToken", i, "hybrid, bit 31")
+            ),
+            (address)
+        );
         _book(t, _label(i));
-        _tx(k1, t, 0, abi.encodeCall(IWrappedToken.setMaxSupply, (2e30, IMetaTx(t).chainUid())), false,
-            _row("setMaxSupply direct (at once)", i, "hybrid, 1e30 -> 2e30"));
+        _tx(
+            k1,
+            t,
+            0,
+            abi.encodeCall(IWrappedToken.setMaxSupply, (2e30, IMetaTx(t).chainUid())),
+            false,
+            _row("setMaxSupply direct (at once)", i, "hybrid, 1e30 -> 2e30")
+        );
         require(IWrappedToken(t).maxSupply() == 2e30, "caps: the hybrid's cap set");
     }
 }

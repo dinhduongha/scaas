@@ -41,7 +41,9 @@ abstract contract GovernanceBaseCore {
         return _govRouter();
     }
 
-    function _govRouter() internal view virtual returns (address) { return _GOV_ROUTER; }
+    function _govRouter() internal view virtual returns (address) {
+        return _GOV_ROUTER;
+    }
 
     /// @dev The contract's guard (`MetaTxBase` on a token, the transient guard's check on the DEX).
     modifier governed() {
@@ -76,30 +78,64 @@ abstract contract GovernanceBaseCore {
     function _scalarBits() internal pure virtual returns (uint256);
     /// @dev Subset whose power reads `use`'s returned scope (B-10).
     function _scopeBits() internal pure virtual returns (uint256);
+
     /// @dev Subset whose relaxation (revoke, renounce, disable, a `validUntil` cut) waits `grantDelay` (CTR-GOV-09,
     ///      regulated-kinds spec §3.6): 5, 6, 7 on the regulated kinds 8-13; none elsewhere.
-    function _delayedRelaxBits() internal pure virtual returns (uint256) { return 0; }
+    function _delayedRelaxBits() internal pure virtual returns (uint256) {
+        return 0;
+    }
+
     /// @dev The UA registry a grant asks `kindOf` of a derived holder of a regulated contract-only bit (RK-1); 0 = none,
     ///      so no derived id holds such a bit.
-    function _uaRegistry() internal view virtual returns (address) { return address(0); }
+    function _uaRegistry() internal view virtual returns (address) {
+        return address(0);
+    }
 
     /// @dev Whether `child` narrows `parent` for `bit`: equality unless the contract defines an order on its scopes.
     function _scopeNarrows(uint8, bytes32 parent, bytes32 child) internal view virtual returns (bool) {
         return parent == child;
     }
 
-    function _featuresBody() internal view returns (uint256) { return GovernanceLib.$().features; }
-    function _lockedFeaturesBody() internal view returns (uint256) { return GovernanceLib.$().lockedFeatures; }
-    function _adminBody() internal view returns (bytes32) { return GovernanceLib.$().admin; }
-    function _pendingAdminBody() internal view returns (bytes32) { return GovernanceLib.$().pendingAdmin; }
-    function _hasRoleBody(uint8 bit, bytes32 account) internal view returns (bool) { return GovernanceLib.hasRole(bit, account); }
-    function _validBitsBody() internal pure returns (uint256) { return _validBits(); }
-    function _holderCountBody(uint8 bit) internal view returns (uint256) { return GovernanceLib.$().counts[bit].holders; }
-    function _grantDelayBody() internal view returns (uint64) { return GovernanceLib.$().grantDelay; }
-    function _lastProposedAtBody() internal view returns (uint64) { return GovernanceLib.$().lastProposedAt; }
+    function _featuresBody() internal view returns (uint256) {
+        return GovernanceLib.$().features;
+    }
+
+    function _lockedFeaturesBody() internal view returns (uint256) {
+        return GovernanceLib.$().lockedFeatures;
+    }
+
+    function _adminBody() internal view returns (bytes32) {
+        return GovernanceLib.$().admin;
+    }
+
+    function _pendingAdminBody() internal view returns (bytes32) {
+        return GovernanceLib.$().pendingAdmin;
+    }
+
+    function _hasRoleBody(uint8 bit, bytes32 account) internal view returns (bool) {
+        return GovernanceLib.hasRole(bit, account);
+    }
+
+    function _validBitsBody() internal pure returns (uint256) {
+        return _validBits();
+    }
+
+    function _holderCountBody(uint8 bit) internal view returns (uint256) {
+        return GovernanceLib.$().counts[bit].holders;
+    }
+
+    function _grantDelayBody() internal view returns (uint64) {
+        return GovernanceLib.$().grantDelay;
+    }
+
+    function _lastProposedAtBody() internal view returns (uint64) {
+        return GovernanceLib.$().lastProposedAt;
+    }
+
     function _pendingGrantBody(uint8 bit, bytes32 account) internal view returns (uint64, bytes32, bytes32, bool) {
         return GovernanceLib.pendingGrant(bit, account);
     }
+
     function _grantOfBody(uint8 bit, bytes32 holder) internal view returns (IGovernance.Grant memory) {
         return GovernanceLib.$().grants[bit][holder];
     }
@@ -116,12 +152,25 @@ abstract contract GovernanceBaseCore {
     function _grantRoleBody(uint8 bit, bytes32 account, bytes32 chainUid_) internal {
         GovernanceLib.grantRole(bit, account, _adminOnChain(chainUid_), _roleBits(), _contractOnlyBits(), _uaRegistry());
     }
+
     /// @notice The admin sets any holder's grant, a widening in two calls (spec §1.6); a holder with a `delegable` grant sets
     ///         a narrower leaf at once. Spent is carried.
-    function _setGrantBody(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms, bytes32 chainUid_) internal {
+    function _setGrantBody(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms, bytes32 chainUid_)
+        internal
+    {
         (bytes32 c, bool admin) = _subjectWord(chainUid_);
-        (bool leaf, bytes32 parentScope) = GovernanceLib.setGrant(bit, holder, terms, c, _roleBits(),
-            _contractOnlyBits(), _scalarBits(), _scopeBits(), _uaRegistry(), _delayedRelaxBits());
+        (bool leaf, bytes32 parentScope) = GovernanceLib.setGrant(
+            bit,
+            holder,
+            terms,
+            c,
+            _roleBits(),
+            _contractOnlyBits(),
+            _scalarBits(),
+            _scopeBits(),
+            _uaRegistry(),
+            _delayedRelaxBits()
+        );
         if (leaf && !_scopeNarrows(bit, parentScope, terms.scope)) revert IGovernance.GrantNotNarrower(7);
         if (!admin) _govChainWord(chainUid_);
     }
@@ -131,29 +180,37 @@ abstract contract GovernanceBaseCore {
         GovernanceLib.cancelGrant(bit, account, c);
         if (!admin) _govChainWord(chainUid_);
     }
+
     function _revokeRoleBody(uint8 bit, bytes32 account, bytes32 chainUid_) internal {
         (bytes32 c, bool admin) = _subjectWord(chainUid_);
         GovernanceLib.revokeRole(bit, account, c, _delayedRelaxBits());
         if (!admin) _govChainWord(chainUid_);
     }
+
     /// @dev CTR-GOV-28 (owner 2026-11-13): a holder's word before any write; a caller without the bit stays `MissingRole`.
     function _renounceRoleBody(uint8 bit, bytes32 chainUid_) internal {
         bytes32 c = _govSubject();
         if (GovernanceLib.$().roles[bit][c] != 0) _govChainWord(chainUid_);
         GovernanceLib.renounceRole(bit, c, _delayedRelaxBits());
     }
+
     /// @dev The entry's body: the admin, then the word (CTR-GOV-28), then the kind's disable (`_disableFeatureBody(bit)`).
     function _disableFeatureBody(uint8 bit, bytes32 chainUid_) internal {
         _adminOnChain(chainUid_);
         _disableFeatureBody(bit);
     }
+
     function _disableFeatureBody(uint8 bit) internal virtual {
         GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits());
     }
+
     function _transferAdminBody(bytes32 newAdmin, bytes32 chainUid_) internal {
         GovernanceLib.transferAdmin(newAdmin, _adminOnChain(chainUid_));
     }
-    function _acceptAdminBody() internal { GovernanceLib.acceptAdmin(_govSubject()); }
+
+    function _acceptAdminBody() internal {
+        GovernanceLib.acceptAdmin(_govSubject());
+    }
     /// @dev The contract's chain word (`ChainEnvCode.chainUid()` on a factory-made token or DEX): the check of
     ///      every direct admin entry (CTR-GOV-27, CTR-GOV-28).
     function _govChainUid() internal view virtual returns (bytes32);

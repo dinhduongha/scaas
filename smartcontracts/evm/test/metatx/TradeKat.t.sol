@@ -32,7 +32,9 @@ contract TradeKatTest is Test {
         address at = vm.parseJsonAddress(vj, ".tokenA");
         // no registry: a native signer's row needs none (C), and the domain does not name it
         address impl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
-        vm.etch(at, EnvKit.runtime(impl, EnvKit.env(vm.parseJsonBytes32(vj, ".chainUid"), address(0), address(0), false)));
+        vm.etch(
+            at, EnvKit.runtime(impl, EnvKit.env(vm.parseJsonBytes32(vj, ".chainUid"), address(0), address(0), false))
+        );
         tok = NormalToken(at);
         tok.initialize(nid(address(this)), 1, abi.encode(normalInit("T", "T", 6, 0, address(this), address(this))));
     }
@@ -60,23 +62,53 @@ contract TradeKatTest is Test {
     function test_tradeKat() public {
         assertEq(vm.parseJsonString(vj, ".rows[0].name"), "native");
         ITradeToken.UATradeOrder memory o = _order(".rows[0].order.message.");
-        bytes32 domainSep = keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256("SCaaS MetaToken"), keccak256("1"), block.chainid, address(tok), vm.parseJsonBytes32(vj, ".chainUid")));
+        bytes32 domainSep = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256("SCaaS MetaToken"),
+                keccak256("1"),
+                block.chainid,
+                address(tok),
+                vm.parseJsonBytes32(vj, ".chainUid")
+            )
+        );
         assertEq(domainSep, vm.parseJsonBytes32(vj, ".domainSeparatorA"));
-        bytes32 structHash = keccak256(abi.encode(
-            TradeLib.UA_TRADE_ORDER_TYPEHASH, o.from, o.receiveToken, o.amount, o.receiveAmount, o.minFill, o.fee,
-            o.relayer, o.dex, o.destination, o.flags, o.batch, o.nonce, o.validUntil));
+        bytes32 structHash = keccak256(
+            abi.encode(
+                TradeLib.UA_TRADE_ORDER_TYPEHASH,
+                o.from,
+                o.receiveToken,
+                o.amount,
+                o.receiveAmount,
+                o.minFill,
+                o.fee,
+                o.relayer,
+                o.dex,
+                o.destination,
+                o.flags,
+                o.batch,
+                o.nonce,
+                o.validUntil
+            )
+        );
         assertEq(structHash, vm.parseJsonBytes32(vj, ".rows[0].structHash"));
         bytes32 h = keccak256(abi.encodePacked(hex"1901", domainSep, structHash));
         assertEq(h, vm.parseJsonBytes32(vj, ".rows[0].orderHash"));
         assertEq(h, tok.tradeOrderDigest(o));
-        bytes32 cancelDigest = keccak256(abi.encodePacked(hex"1901", domainSep,
-            keccak256(abi.encode(TradeLib.CANCEL_UA_ORDER_TYPEHASH, structHash))));
+        bytes32 cancelDigest = keccak256(
+            abi.encodePacked(hex"1901", domainSep, keccak256(abi.encode(TradeLib.CANCEL_UA_ORDER_TYPEHASH, structHash)))
+        );
         assertEq(cancelDigest, vm.parseJsonBytes32(vj, ".rows[0].cancelDigest"));
         assertEq(cancelDigest, tok.cancelOrderDigest(o));
-        bytes32 invDigest = keccak256(abi.encodePacked(hex"1901", domainSep,
-            keccak256(abi.encode(TradeLib.UA_INVALIDATE_NONCES_TYPEHASH, o.from, uint256(1), uint256(5)))));
+        bytes32 invDigest = keccak256(
+            abi.encodePacked(
+                hex"1901",
+                domainSep,
+                keccak256(abi.encode(TradeLib.UA_INVALIDATE_NONCES_TYPEHASH, o.from, uint256(1), uint256(5)))
+            )
+        );
         assertEq(invDigest, vm.parseJsonBytes32(vj, ".rows[0].invalidateDigest"));
         assertEq(invDigest, tok.invalidateNoncesDigest(o.from, 1, 5));
 

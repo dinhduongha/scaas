@@ -19,8 +19,13 @@ contract SingletonRescueTest is PqChatBase {
     MockERC20 internal foo = new MockERC20("FOO", "FOO", 18);
 
     function _five() internal returns (address[5] memory s) {
-        s = [address(p), address(f), address(new GovernanceRouter(chainUidA, REG_P, address(0), false)),
-            address(new RelayFeeRouter()), address(chat)];
+        s = [
+            address(p),
+            address(f),
+            address(new GovernanceRouter(chainUidA, REG_P, address(0), false)),
+            address(new RelayFeeRouter()),
+            address(chat)
+        ];
     }
 
     function test_eachSingletonRescuesToTheDevAddress() public {

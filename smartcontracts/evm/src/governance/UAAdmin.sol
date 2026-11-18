@@ -14,9 +14,9 @@ import {SigCheck} from "../common/SigCheck.sol";
 abstract contract UAAdmin is IAdmin {
     /// @custom:storage-location erc7201:scaas.admin
     struct AdminStorage {
-        bytes32 admin;           // +0
-        bytes32 pendingAdmin;    // +1
-        uint32 adminGeneration;  // +2, completed changes of admin
+        bytes32 admin; // +0
+        bytes32 pendingAdmin; // +1
+        uint32 adminGeneration; // +2, completed changes of admin
     }
 
     // keccak256(abi.encode(uint256(keccak256("scaas.admin")) - 1)) & ~bytes32(uint256(0xff))

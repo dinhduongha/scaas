@@ -14,7 +14,10 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
 contract Recorder {
     uint256 public hits;
-    function ping() external { ++hits; }
+
+    function ping() external {
+        ++hits;
+    }
 }
 
 /// CTR-MTX-16…19, CTR-MTX-22: the generic pipeline of `MetaTxBase` on a registry-like contract.
@@ -33,9 +36,18 @@ contract MetaTxBaseTest is MtxFixture {
 
     function test_digestIsSaltedEip712() public view {
         MetaTxLib.MetaTransaction memory m = _m(alice, _setName("alice"), 1, 0);
-        bytes32 sep = keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256("SCaaS TestRegistry"), keccak256("1"), uint256(7622), address(reg), UID));
+        bytes32 sep = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256("SCaaS TestRegistry"),
+                keccak256("1"),
+                uint256(7622),
+                address(reg),
+                UID
+            )
+        );
         assertEq(reg.mtxDigest(m), keccak256(abi.encodePacked(hex"1901", sep, m.hashStruct())));
         assertEq(reg.chainUid(), UID);
         (bytes1 fields,, string memory version,,, bytes32 salt,) = reg.eip712Domain();
@@ -130,7 +142,7 @@ contract MetaTxBaseTest is MtxFixture {
         bytes memory sig = _sign(ALICE_PK, m);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxExpired.selector, block.timestamp - 1, block.timestamp));
         _run(m, sig);
-        m.validUntil = block.timestamp;                          // inclusive
+        m.validUntil = block.timestamp; // inclusive
         _run(m, _sign(ALICE_PK, m));
     }
 
@@ -179,7 +191,7 @@ contract MetaTxBaseTest is MtxFixture {
     function test_notAllowlisted_refused() public {
         bytes[3] memory datas = [
             abi.encodeCall(MtxRegistryMock.whoAmI, ()),
-            abi.encodeCall(IMetaTxAddress.mtxExecute, (_m(alice, _setName("a"), 1, 0), hex"")),   // no nesting
+            abi.encodeCall(IMetaTxAddress.mtxExecute, (_m(alice, _setName("a"), 1, 0), hex"")), // no nesting
             abi.encodeCall(IMetaTx.executeMetaTransaction, (_m(alice, _setName("a"), 1, 0), hex""))
         ];
         for (uint256 i; i < 3; ++i) {
@@ -191,7 +203,7 @@ contract MetaTxBaseTest is MtxFixture {
     }
 
     function test_dataShape_refused() public {
-        MetaTxLib.MetaTransaction memory m = _m(alice, hex"cfdd7a", 1, 0);   // 3 bytes
+        MetaTxLib.MetaTransaction memory m = _m(alice, hex"cfdd7a", 1, 0); // 3 bytes
         bytes memory sig = _sign(ALICE_PK, m);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, bytes4(0xcfdd7a00)));
         _run(m, sig);
@@ -259,7 +271,8 @@ contract MetaTxBaseTest is MtxFixture {
     function test_reentryFromOutsideDuringTheSelfCall_refused() public {
         ReenterHook hook = new ReenterHook();
         MetaTxLib.MetaTransaction memory m = _m(
-            alice, abi.encodeCall(MtxRegistryMock.poke, (address(hook), abi.encodeCall(ReenterHook.hit, (reg)))), 1, 0);
+            alice, abi.encodeCall(MtxRegistryMock.poke, (address(hook), abi.encodeCall(ReenterHook.hit, (reg)))), 1, 0
+        );
         bytes memory sig = _sign(ALICE_PK, m);
         vm.expectRevert(IMetaTx.Reentrancy.selector);
         _run(m, sig);

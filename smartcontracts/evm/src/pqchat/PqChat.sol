@@ -40,7 +40,9 @@ contract PqChat is IPqChat, PqChatCore {
     /// @notice `(ReleaseId, factory_, implArgs)` (topics spec §11), `implArgs = abi.encode(topics)`: the body module
     ///         `PqChatTopics` of this factory (CTR-TOK-30, 3C-D2), code present. The implementation is locked.
     constructor(IOpenFactory.ReleaseId memory id, address factory_, bytes memory implArgs) {
-        if (id.contractClass != CLASS || id.kind != KIND || id.version == 0 || factory_ == address(0)) revert PqChatEnv();
+        if (id.contractClass != CLASS || id.kind != KIND || id.version == 0 || factory_ == address(0)) {
+            revert PqChatEnv();
+        }
         address topics_ = abi.decode(implArgs, (address));
         if (topics_.code.length == 0 || PqChatTopics(topics_).FACTORY() != factory_) revert PqChatEnv();
         (FACTORY, VERSION, TOPICS) = (factory_, id.version, topics_);
@@ -81,8 +83,10 @@ contract PqChat is IPqChat, PqChatCore {
 
     /// @notice 3C-D1: a `chain_uid`, a registry and a code-size limit of at least 24,576 B.
     function validateEnv(IFactoryToken.ChainEnv calldata env) external pure {
-        if (env.chainUid == 0 || env.registry == address(0) || env.params.length == 0
-            || uint256(env.params[0]) < MIN_CODE_LIMIT) revert PqChatEnv();
+        if (
+            env.chainUid == 0 || env.registry == address(0) || env.params.length == 0
+                || uint256(env.params[0]) < MIN_CODE_LIMIT
+        ) revert PqChatEnv();
     }
 
     function chainEnv() external view returns (IFactoryToken.ChainEnv memory) {
@@ -92,7 +96,8 @@ contract PqChat is IPqChat, PqChatCore {
     // ------------------------------------------------------------------ sessions
 
     function createSession(PqChatSession calldata s, Wrap[] calldata wraps, IUARegistry.UASig calldata sig)
-        external returns (bytes32 sid)
+        external
+        returns (bytes32 sid)
     {
         (IUARegistry reg, uint256 limit, bytes32 uid) = _env();
         _checkSession(reg, s);
@@ -105,7 +110,9 @@ contract PqChat is IPqChat, PqChatCore {
         ep.wraps = uint32(s.members.length);
         ep.home = s.homeChain == uid && s.homeChatContract == address(this);
         emit PqChatSessionCreated(sid, s.creator, s.homeChain);
-        for (uint256 i; i < s.members.length; ++i) _s().sessions[s.members[i].ua].push(sid);
+        for (uint256 i; i < s.members.length; ++i) {
+            _s().sessions[s.members[i].ua].push(sid);
+        }
         _landWraps(sid, ep, 0, wraps, s.members, s.wrapHashes, limit);
     }
 
@@ -114,14 +121,17 @@ contract PqChat is IPqChat, PqChatCore {
         MemberKey[] memory members = s.members;
         bytes32[] memory admins = s.admins;
         _checkLists(reg, admins, members, s.wrapHashes.length, 2);
-        if (!_has(admins, s.creator) || _memberAt(members, s.creator) == type(uint256).max || s.homeChain == 0
-            || s.homeChatContract == address(0)) revert PqChatShape();
+        if (
+            !_has(admins, s.creator) || _memberAt(members, s.creator) == type(uint256).max || s.homeChain == 0
+                || s.homeChatContract == address(0)
+        ) revert PqChatShape();
     }
 
     /// @notice P9, P10: the parent stored and complete in this instance, `epoch == parent + 1`, the home slot free; a plain
     ///         rekey by a member of the parent, any other change by an admin of it (3C-D7); every member holds `keyId` here.
     function rekey(PqChatEpoch calldata e, Wrap[] calldata wraps, IUARegistry.UASig calldata sig)
-        external returns (bytes32 eid)
+        external
+        returns (bytes32 eid)
     {
         (IUARegistry reg, uint256 limit,) = _env();
         _indexAdded(e, _rightsOf(reg, _parentOf(e.parentEpochId, e.sessionId, e.epoch), e));
@@ -137,7 +147,11 @@ contract PqChat is IPqChat, PqChatCore {
     }
 
     /// @dev The rights of P10 (3C-D7) of `e` over its parent `pe` (`PqGroupBase._rights`); returns the parent's member ids.
-    function _rightsOf(IUARegistry reg, Epoch storage pe, PqChatEpoch calldata e) internal view returns (bytes32[] memory) {
+    function _rightsOf(IUARegistry reg, Epoch storage pe, PqChatEpoch calldata e)
+        internal
+        view
+        returns (bytes32[] memory)
+    {
         MemberKey[] memory members = e.members;
         bytes32[] memory admins = e.admins;
         _checkLists(reg, admins, members, e.wrapHashes.length, 1);
@@ -165,9 +179,15 @@ contract PqChat is IPqChat, PqChatCore {
     }
 
     /// @dev `PqGroupBase._land` and its events: the wraps, then the completion when the last one landed.
-    function _landWraps(bytes32 epochId, Epoch storage ep, uint256 first, Wrap[] calldata wraps, MemberKey[] memory members,
-        bytes32[] memory hashes, uint256 limit) internal
-    {
+    function _landWraps(
+        bytes32 epochId,
+        Epoch storage ep,
+        uint256 first,
+        Wrap[] calldata wraps,
+        MemberKey[] memory members,
+        bytes32[] memory hashes,
+        uint256 limit
+    ) internal {
         bool complete = _land(epochId, ep, first, wraps, members, hashes, limit);
         emit PqChatWraps(epochId, uint32(first), uint32(wraps.length));
         if (complete) emit PqChatEpochComplete(epochId);
@@ -299,7 +319,11 @@ contract PqChat is IPqChat, PqChatCore {
         return _s().messages[sessionId].length;
     }
 
-    function messageAt(bytes32 sessionId, uint256 index) external view returns (PqChatMessage memory m, bytes32 sigHash) {
+    function messageAt(bytes32 sessionId, uint256 index)
+        external
+        view
+        returns (PqChatMessage memory m, bytes32 sigHash)
+    {
         (m, sigHash) = abi.decode(_get(_s().messages[sessionId][index]), (PqChatMessage, bytes32));
     }
 
@@ -318,7 +342,9 @@ contract PqChat is IPqChat, PqChatCore {
         if (limit > STORED_RANGE_MAX) limit = STORED_RANGE_MAX;
         uint256 end = n - offset > limit ? offset + limit : n;
         page = new bytes[](end - offset);
-        for (uint256 i; i < page.length; ++i) page[i] = SSTORE2.read(l[offset + i]);
+        for (uint256 i; i < page.length; ++i) {
+            page[i] = SSTORE2.read(l[offset + i]);
+        }
     }
 
     function sessionCount(bytes32 ua) external view returns (uint256) {
@@ -332,7 +358,9 @@ contract PqChat is IPqChat, PqChatCore {
         if (limit > SESSIONS_RANGE_MAX) limit = SESSIONS_RANGE_MAX;
         uint256 end = n - offset > limit ? offset + limit : n;
         page = new bytes32[](end - offset);
-        for (uint256 i; i < page.length; ++i) page[i] = l[offset + i];
+        for (uint256 i; i < page.length; ++i) {
+            page[i] = l[offset + i];
+        }
     }
 
     /// @dev Epoch 0 implied (no slot) once the session is complete here; then `chain` (owner 2026-11-10).
@@ -349,7 +377,9 @@ contract PqChat is IPqChat, PqChatCore {
         uint256 end = n - offset > limit ? offset + limit : n;
         page = new bytes32[](end - offset);
         bytes32[] storage c = _s().chain[sessionId];
-        for (uint256 i; i < page.length; ++i) page[i] = offset + i == 0 ? sessionId : c[offset + i - 1];
+        for (uint256 i; i < page.length; ++i) {
+            page[i] = offset + i == 0 ? sessionId : c[offset + i - 1];
+        }
     }
 
     function latestEpoch(bytes32 sessionId) external view returns (bytes32) {

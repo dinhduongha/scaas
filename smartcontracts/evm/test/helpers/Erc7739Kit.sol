@@ -32,24 +32,43 @@ library Erc7739Kit {
     }
 
     /// `hashStruct(TypedDataSign{contents, the wallet's five domain fields})` for `contentsName` / `contentsType`.
-    function typedDataSignStruct(address wallet, string memory contentsName, string memory contentsType, bytes32 contents)
-        internal view returns (bytes32)
-    {
+    function typedDataSignStruct(
+        address wallet,
+        string memory contentsName,
+        string memory contentsType,
+        bytes32 contents
+    ) internal view returns (bytes32) {
         (, string memory n, string memory v, uint256 id, address vc, bytes32 s,) = IDomain(wallet).eip712Domain();
-        bytes32 th = keccak256(abi.encodePacked("TypedDataSign(", contentsName,
-            " contents,string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)", contentsType));
+        bytes32 th = keccak256(
+            abi.encodePacked(
+                "TypedDataSign(",
+                contentsName,
+                " contents,string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)",
+                contentsType
+            )
+        );
         return keccak256(abi.encode(th, contents, keccak256(bytes(n)), keccak256(bytes(v)), id, vc, s));
     }
 
     /// The `TypedDataSign` message a key of `wallet` signs for the app hash `keccak256(0x1901 ‖ app ‖ contents)`.
-    function nested(address wallet, bytes32 app, string memory contentsName, string memory contentsType, bytes32 contents)
-        internal view returns (bytes32)
-    {
-        return keccak256(abi.encodePacked(hex"1901", app, typedDataSignStruct(wallet, contentsName, contentsType, contents)));
+    function nested(
+        address wallet,
+        bytes32 app,
+        string memory contentsName,
+        string memory contentsType,
+        bytes32 contents
+    ) internal view returns (bytes32) {
+        return keccak256(
+            abi.encodePacked(hex"1901", app, typedDataSignStruct(wallet, contentsName, contentsType, contents))
+        );
     }
 
     /// `inner ‖ app ‖ contents ‖ contentsDescription ‖ uint16(contentsDescription.length)`.
-    function wrap(bytes memory inner, bytes32 app, bytes32 contents, string memory descr) internal pure returns (bytes memory) {
+    function wrap(bytes memory inner, bytes32 app, bytes32 contents, string memory descr)
+        internal
+        pure
+        returns (bytes memory)
+    {
         return abi.encodePacked(inner, app, contents, descr, uint16(bytes(descr).length));
     }
 
@@ -71,9 +90,15 @@ library Erc7739Kit {
 
     /// `wallet`'s ERC-7739 `TypedDataSign` signature by `pk` for the app struct `contents` of `app` (`descr` its
     /// `contentsDescription`, implicit: `contentsType` itself).
-    function sign(uint256 pk, address wallet, address app, string memory name, string memory contentsType,
-        string memory descr, bytes32 contents) internal view returns (bytes memory)
-    {
+    function sign(
+        uint256 pk,
+        address wallet,
+        address app,
+        string memory name,
+        string memory contentsType,
+        string memory descr,
+        bytes32 contents
+    ) internal view returns (bytes memory) {
         bytes32 sep = separator(app);
         return wrap(inner(pk, wallet, nested(wallet, sep, name, contentsType, contents)), sep, contents, descr);
     }
@@ -85,12 +110,17 @@ library Erc7739Kit {
 
     /// The `PersonalSign` message a key of `wallet` signs for `hash`.
     function personal(address wallet, bytes32 hash) internal view returns (bytes32) {
-        return keccak256(abi.encodePacked(hex"1901", separator(wallet),
-            keccak256(abi.encode(keccak256("PersonalSign(bytes prefixed)"), hash))));
+        return keccak256(
+            abi.encodePacked(
+                hex"1901", separator(wallet), keccak256(abi.encode(keccak256("PersonalSign(bytes prefixed)"), hash))
+            )
+        );
     }
 }
 
 interface IDomain {
-    function eip712Domain() external view returns (bytes1, string memory, string memory, uint256, address, bytes32,
-        uint256[] memory);
+    function eip712Domain()
+        external
+        view
+        returns (bytes1, string memory, string memory, uint256, address, bytes32, uint256[] memory);
 }

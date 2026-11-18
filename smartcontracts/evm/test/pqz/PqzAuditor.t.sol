@@ -84,8 +84,10 @@ contract PqzAuditorTest is PqzOffchainBase {
 
     /// The typed `AuditorConsent` of `ua` for `epoch` under `t`'s domain.
     function _digest(NormalPqzToken t, bytes32 ua, uint32 epoch) internal view returns (bytes32) {
-        return MessageHashUtils.toTypedDataHash(_sepOf(address(t)),
-            keccak256(abi.encode(CONSENT_TYPEHASH, address(t), ua, epoch, EnvKit.codeUidOf(address(t)))));
+        return MessageHashUtils.toTypedDataHash(
+            _sepOf(address(t)),
+            keccak256(abi.encode(CONSENT_TYPEHASH, address(t), ua, epoch, EnvKit.codeUidOf(address(t))))
+        );
     }
 
     function _set(address who, bytes32 ua, uint32 epoch) internal {
@@ -254,8 +256,12 @@ contract PqzAuditorTest is PqzOffchainBase {
         NormalPqzToken tok2 = _newToken("aud2");
         bytes32 uid = _uid();
         bytes memory refusal = abi.encodeWithSignature("UAUnauthorized(bytes32)", a1);
-        bytes32[4] memory signed = [_digestOf(address(tok2), a1, 1, uid), _digestOf(address(tok), a1, 2, uid),
-            _digestOf(address(tok), a1, 1, bytes32(uint256(uid) ^ 1)), _digestOf(address(tok), a1, 1, uid)];
+        bytes32[4] memory signed = [
+            _digestOf(address(tok2), a1, 1, uid),
+            _digestOf(address(tok), a1, 2, uid),
+            _digestOf(address(tok), a1, 1, bytes32(uint256(uid) ^ 1)),
+            _digestOf(address(tok), a1, 1, uid)
+        ];
         string[4] memory what = ["another token", "another epoch", "another word", "another signer"];
         for (uint256 i; i < 4; ++i) {
             uint8 seed = i == 3 ? 12 : 11; // a2's key and signature, else a1's
@@ -296,8 +302,11 @@ contract PqzAuditorTest is PqzOffchainBase {
         vm.clearMockedCalls();
         _mockOps();
         vm.mockCall(ML65, bytes(""), abi.encode(uint256(0)));
-        bytes32 pq = keccak256(abi.encodePacked(PqUA.tag(UAKinds.MLDSA65),
-            UAKinds.uaMessage(UAKinds.MLDSA65, UAKinds.PURPOSE_AUDITOR_CONSENT, d)));
+        bytes32 pq = keccak256(
+            abi.encodePacked(
+                PqUA.tag(UAKinds.MLDSA65), UAKinds.uaMessage(UAKinds.MLDSA65, UAKinds.PURPOSE_AUDITOR_CONSENT, d)
+            )
+        );
         vm.mockCall(ML65, abi.encodePacked(_mlPk(seed), _sigOf(seed), pq), abi.encode(uint256(1)));
     }
 
@@ -305,7 +314,9 @@ contract PqzAuditorTest is PqzOffchainBase {
     function _mockOps() internal {
         (bytes memory valid, bytes memory invalid) = _mockMlDsa();
         (valid, invalid);
-        for (uint8 op = 1; op <= 5; ++op) if (op != 3) _mockOp(op, 1);
+        for (uint8 op = 1; op <= 5; ++op) {
+            if (op != 3) _mockOp(op, 1);
+        }
         vm.mockCall(PQZ, abi.encodePacked(uint8(3)), abi.encode(uint256(1)));
     }
 
@@ -319,7 +330,11 @@ contract PqzAuditorTest is PqzOffchainBase {
         tok.setAuditorUA(plain, 1, c, uid);
         _set(holder, a1, 1);
         vm.warp(block.timestamp + 1 days);
-        vm.mockCall(address(reg), abi.encodeCall(IUARegistry.pqzKeyOf, (a1)), abi.encode(uint64(0), address(0), bytes32(0), false));
+        vm.mockCall(
+            address(reg),
+            abi.encodeCall(IUARegistry.pqzKeyOf, (a1)),
+            abi.encode(uint64(0), address(0), bytes32(0), false)
+        );
         vm.prank(holder);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, a1));
         tok.setAuditorUA(a1, 1, c, uid);
@@ -370,8 +385,13 @@ contract PqzAuditorTest is PqzOffchainBase {
         UARegistry r2 = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
         OpenFactory f2 = new OpenFactory(nid(registrar));
         EnvKit.configure(f2, PQZ_UID, 0, address(0));
-        Catalogue.release(f2, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(f2), PQZ_UID, address(r2), address(0)),
-            type(NormalPqzToken).creationCode);
+        Catalogue.release(
+            f2,
+            IOpenFactory.TokenKind.NORMAL_PQZ,
+            1,
+            pqzEnv(address(f2), PQZ_UID, address(r2), address(0)),
+            type(NormalPqzToken).creationCode
+        );
         vm.prank(registrar);
         f2.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(f2)));
         bytes32 audR = UACall.register(r2, UAKinds.MLDSA65, _mlPk(21), UACall.attrs("", 0, ""), new bytes(ML65_SIG), "");
@@ -384,11 +404,13 @@ contract PqzAuditorTest is PqzOffchainBase {
         assertFalse(r2.kindEnabled(UAKinds.PQZ_MLWE), "no 0x0142 verifier");
         _grant(holder);
         _scopedOn(r2, newR, address(tok), _spk(++keySeed), false, true);
-        (, , , bool proven) = r2.pqzScopedKeyOf(newR, address(tok));
+        (,,, bool proven) = r2.pqzScopedKeyOf(newR, address(tok));
         assertFalse(proven, "never proven without the verifier");
         bytes32 d = _digest(tok, newR, 1);
         IUARegistry.UASig memory s = _pqAuth();
-        vm.expectCall(address(r2), abi.encodeCall(IUARegistry.requireAuthorized, (newR, UAKinds.PURPOSE_AUDITOR_CONSENT, d, s)));
+        vm.expectCall(
+            address(r2), abi.encodeCall(IUARegistry.requireAuthorized, (newR, UAKinds.PURPOSE_AUDITOR_CONSENT, d, s))
+        );
         _set(holder, newR, 1);
         assertEq(tok.auditorUA(), newR, "accepted unproven");
     }
@@ -407,12 +429,15 @@ contract PqzAuditorTest is PqzOffchainBase {
 
     /// `entryAuditorEpoch[ref]`'s slot (`PqzStorage` slot 26).
     function _epochSlot(bytes32 ref) internal pure returns (bytes32) {
-        return keccak256(abi.encode(ref, uint256(0xda865ec17214f25b93cdb133d719c79392c290a4b9089fd0bba156256c521500) + 26));
+        return
+            keccak256(abi.encode(ref, uint256(0xda865ec17214f25b93cdb133d719c79392c290a4b9089fd0bba156256c521500) + 26));
     }
 
     function _notWritten(bytes32 ref) internal {
         (, bytes32[] memory writes) = vm.accesses(address(tok));
-        for (uint256 i; i < writes.length; ++i) assertTrue(writes[i] != _epochSlot(ref), "entryAuditorEpoch written");
+        for (uint256 i; i < writes.length; ++i) {
+            assertTrue(writes[i] != _epochSlot(ref), "entryAuditorEpoch written");
+        }
     }
 
     /// Epoch 0 writes nothing; at epoch 1 an audited op 1 writes 1 and an opt-out writes nothing; three epochs, the
@@ -453,8 +478,9 @@ contract PqzAuditorTest is PqzOffchainBase {
         _set(holder, a1, 1);
         bytes32[] memory rec = new bytes32[](2);
         (rec[0], rec[1]) = (bob, carol);
-        bytes memory pl = _mpayload(tok.pqzAccount(alice, 0).pendingCount, 0, alice, bytes32(0), rec,
-            _blob(201, _outLen(2, true)), "");
+        bytes memory pl = _mpayload(
+            tok.pqzAccount(alice, 0).pendingCount, 0, alice, bytes32(0), rec, _blob(201, _outLen(2, true)), ""
+        );
         _mockOp(7, 1);
         bytes32 ref = tok.mtxConfidentialTransfer(_ms(pl), hex"c0de", _pqAuth(), "", noVerdict());
         assertEq(uint256(vm.load(address(tok), _epochSlot(ref))), 1);
@@ -484,7 +510,9 @@ contract PqzAuditorGasTest is PqzOffchainBase {
         _stack();
         _mockOp(7, 1);
         tok = _newToken("aud-gas");
-        for (uint8 i; i < 8; ++i) xs[i] = _pqzUA(_pk(20 + i), 20 + i);
+        for (uint8 i; i < 8; ++i) {
+            xs[i] = _pqzUA(_pk(20 + i), 20 + i);
+        }
         a1 = _pqzUA(_pk(41), 41);
         _transfer(tok, carol, bob, bytes32(0), 1, true); // carol's acc: a fresh blob reference
         _public(tok, address(this), 1000 * SCALE);
@@ -495,10 +523,26 @@ contract PqzAuditorGasTest is PqzOffchainBase {
 
     function _op7() internal view returns (bytes memory) {
         bytes memory r;
-        for (uint256 j; j < 8; ++j) r = bytes.concat(r, xs[j]);
-        return abi.encodeCall(IPqzToken.mtxConfidentialTransfer, (_ms(bytes.concat(abi.encode(uint256(0), block.number + 100,
-            uint256(0), carol, alice, uint256(8), uint256(0)), salt, r, _blob(89, _outLen(8, true)))), hex"c0de", _pqAuth(), "",
-            noVerdict()));
+        for (uint256 j; j < 8; ++j) {
+            r = bytes.concat(r, xs[j]);
+        }
+        return abi.encodeCall(
+            IPqzToken.mtxConfidentialTransfer,
+            (
+                _ms(
+                    bytes.concat(
+                        abi.encode(uint256(0), block.number + 100, uint256(0), carol, alice, uint256(8), uint256(0)),
+                        salt,
+                        r,
+                        _blob(89, _outLen(8, true))
+                    )
+                ),
+                hex"c0de",
+                _pqAuth(),
+                "",
+                noVerdict()
+            )
+        );
     }
 
     function _measure(bytes memory cd) internal returns (uint256 reg, uint256 st) {
@@ -515,8 +559,12 @@ contract PqzAuditorGasTest is PqzOffchainBase {
         vm.revertToState(snap);
         tok.setAuditorUA(a1, 1, _pqAuth(), EnvKit.codeUidOf(address(tok)));
         (uint256 r1, uint256 s1) = _measure(_op7());
-        console2.log(string.concat("op 7 M = 8 BUNDLE, auditor, fee, at ", PqzSet.NAME, ": epoch 0 regular / state"), r0, s0);
-        console2.log(string.concat("op 7 M = 8 BUNDLE, auditor, fee, at ", PqzSet.NAME, ": epoch 1 regular / state"), r1, s1);
+        console2.log(
+            string.concat("op 7 M = 8 BUNDLE, auditor, fee, at ", PqzSet.NAME, ": epoch 0 regular / state"), r0, s0
+        );
+        console2.log(
+            string.concat("op 7 M = 8 BUNDLE, auditor, fee, at ", PqzSet.NAME, ": epoch 1 regular / state"), r1, s1
+        );
         assertLe(r0, TX_CAP - TX_CAP / 100, "epoch 0: within the cap less 1 %");
         assertLe(r1, TX_CAP - TX_CAP / 100, "epoch 1: within the cap less 1 %");
         assertGt(r1 + s1, r0 + s0, "epoch 1 writes the entry's epoch");

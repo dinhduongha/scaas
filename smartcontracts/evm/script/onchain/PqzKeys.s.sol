@@ -124,7 +124,7 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
         bytes32 md = UAKinds.memberDigest(mu, UAKinds.uaMessage(UAKinds.MSIG, purpose, digest));
         s.members = new IUARegistry.MemberSig[](1);
         (s.members[0].index, s.members[0].sig) =
-            (_bobSlot(), _mlBy(bobSeed, IUARegistry(registry).uaMessage(ML65, UAKinds.PURPOSE_MEMBER, md)));
+        (_bobSlot(), _mlBy(bobSeed, IUARegistry(registry).uaMessage(ML65, UAKinds.PURPOSE_MEMBER, md)));
     }
 
     function _bobSlot() internal view returns (uint16) {
@@ -141,14 +141,15 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
     function _blob(uint256 seed, uint256 n) internal pure returns (bytes memory b) {
         b = new bytes(n);
         for (uint256 i; i < n; i += 32) {
-            uint256 w = uint256(keccak256(abi.encode(seed, i))) & 0x000000ffffffffff000000ffffffffff000000ffffffffff000000ffffffffff;
+            uint256 w = uint256(keccak256(abi.encode(seed, i)))
+                & 0x000000ffffffffff000000ffffffffff000000ffffffffff000000ffffffffff;
             assembly ("memory-safe") { mstore(add(add(b, 32), i), w) }
         }
     }
 
     function _opening(uint256 seed) internal pure returns (IPqzToken.PqzOpening memory o) {
         (o.mlkemCt, o.x25519Eph, o.sealedSeed) =
-            (_blob(seed, PqzCore.MLKEM_CT), keccak256(abi.encode("eph", seed)), _blob(seed + 1, PqzCore.SEALED_SEED));
+        (_blob(seed, PqzCore.MLKEM_CT), keccak256(abi.encode("eph", seed)), _blob(seed + 1, PqzCore.SEALED_SEED));
     }
 
     function _opens(address t) internal view returns (bool) {
@@ -156,15 +157,29 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
     }
 
     /// Op 1 of `from` to `to` at its `pendingCount` (no fee, no auditor); on an opening token `uFrom` and `openingTo`.
-    function _op1(address t, bytes32 from, bytes32 to, uint256 seed) internal view returns (IPqzToken.PqzTransferArgs memory a) {
-        (a.p, a.validUntilBlock, a.fromUA, a.toUA) = (IPqzToken(t).pqzAccount(from, 0).pendingCount, block.number + WIN, from, to);
-        (a.salt, a.u, a.vTo, a.vFrom) = (bytes16(keccak256(abi.encode(seed))), _blob(seed, PqzCt.PK), _blob(seed + 1, PqzCt.V),
-            _blob(seed + 2, PqzCt.V));
+    function _op1(address t, bytes32 from, bytes32 to, uint256 seed)
+        internal
+        view
+        returns (IPqzToken.PqzTransferArgs memory a)
+    {
+        (a.p, a.validUntilBlock, a.fromUA, a.toUA) =
+        (IPqzToken(t).pqzAccount(from, 0).pendingCount, block.number + WIN, from, to);
+        (a.salt, a.u, a.vTo, a.vFrom) =
+        (
+            bytes16(keccak256(abi.encode(seed))),
+            _blob(seed, PqzCt.PK),
+            _blob(seed + 1, PqzCt.V),
+            _blob(seed + 2, PqzCt.V)
+        );
         if (_opens(t)) (a.uFrom, a.openingTo) = (_blob(seed + 7, PqzCt.PK), _opening(seed));
     }
 
     /// Op 7 of `from` to `to` and a decoy leg (`M = 2`), no auditor.
-    function _op7(address t, bytes32 from, bytes32 to, bytes32 decoy, uint256 seed) internal view returns (IPqzToken.PqzMultiArgs memory a) {
+    function _op7(address t, bytes32 from, bytes32 to, bytes32 decoy, uint256 seed)
+        internal
+        view
+        returns (IPqzToken.PqzMultiArgs memory a)
+    {
         (a.p, a.validUntilBlock, a.fromUA) = (IPqzToken(t).pqzAccount(from, 0).pendingCount, block.number + WIN, from);
         (a.salt, a.vFrom) = (bytes16(keccak256(abi.encode(seed))), _blob(seed + 2, PqzCt.V));
         a.u = new bytes[](1);
@@ -183,9 +198,13 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
     /// The holder's `PqzAuth` digest of statement `st` under op byte `op` (PqzCore.authDigest), in `t`'s domain.
     function _authDigest(address t, uint8 op, bytes memory st) internal view returns (bytes32) {
         bytes memory head = new bytes(640);
-        for (uint256 i; i < 640; ++i) head[i] = st[i];
+        for (uint256 i; i < 640; ++i) {
+            head[i] = st[i];
+        }
         bytes memory body = new bytes(st.length - 640);
-        for (uint256 i; i < body.length; ++i) body[i] = st[640 + i];
+        for (uint256 i; i < body.length; ++i) {
+            body[i] = st[640 + i];
+        }
         return _digest(t, keccak256(abi.encodePacked(PqzCore.AUTH_TYPEHASH, uint256(op), head, keccak256(body))));
     }
 
@@ -195,10 +214,18 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
 
     /// The verifier's signed verdict over `st` and `VPROOF` on `t` (its epoch; a day).
     function _sv(address t, bytes memory st) internal view returns (IPqzToken.PqzSignedVerdict memory sv) {
-        IPqzToken.PqzVerdict memory v = IPqzToken.PqzVerdict(t, block.chainid, NormalPqzToken(t).proofSystemId(), keccak256(st),
-            keccak256(VPROOF), IPqzToken(t).pqzVerifyConfig().pqzVerifierEpoch, uint64(block.timestamp + 1 days));
+        IPqzToken.PqzVerdict memory v = IPqzToken.PqzVerdict(
+            t,
+            block.chainid,
+            NormalPqzToken(t).proofSystemId(),
+            keccak256(st),
+            keccak256(VPROOF),
+            IPqzToken(t).pqzVerifyConfig().pqzVerifierEpoch,
+            uint64(block.timestamp + 1 days)
+        );
         bytes32 d = _digest(t, keccak256(abi.encode(PqzCore.VERDICT_TYPEHASH, v)));
-        (uint8 w, bytes32 r, bytes32 s) = vm.sign(vk, IUARegistry(registry).uaAuthDigest(vA, UAKinds.PURPOSE_PQZ_VERDICT, d));
+        (uint8 w, bytes32 r, bytes32 s) =
+            vm.sign(vk, IUARegistry(registry).uaAuthDigest(vA, UAKinds.PURPOSE_PQZ_VERDICT, d));
         sv.pqzVerdict = v;
         sv.sig.signature = abi.encodePacked(r, s, w);
     }
@@ -250,8 +277,14 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
     function _typ(string memory op) internal returns (string memory) {
         if (bytes(typeOf[op]).length != 0) return typeOf[op];
         string[] memory c = new string[](5);
-        (c[0], c[1], c[2], c[3]) = ("python3", "-I", "-c", "import json,sys; sys.stdout.write(json.load(open("
-            "'../vectors/typed/typed_ops.json'))['ops'][sys.argv[1]]['typeString'])");
+        (c[0], c[1], c[2], c[3]) =
+        (
+            "python3",
+            "-I",
+            "-c",
+            "import json,sys; sys.stdout.write(json.load(open("
+            "'../vectors/typed/typed_ops.json'))['ops'][sys.argv[1]]['typeString'])"
+        );
         c[4] = op;
         typeOf[op] = string(vm.ffi(c)); // only the line read: the whole file in the script's memory costs its gas
         return typeOf[op];
@@ -266,13 +299,14 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
     function _bindingOf(address t, MetaTxLib.UAEnvelope memory e) internal view returns (bytes32) {
         MetaTxLib.UAMetaTransaction memory m;
         (m.from, m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient) =
-            (e.from, e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient);
+        (e.from, e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient);
         return NormalPqzToken(t).envelopeBinding(m);
     }
 
     /// The envelope signer's (the holder's ML-DSA key) signature of named entry `op` over `words`.
     function _envAuth(address t, string memory op, MetaTxLib.UAEnvelope memory e, bytes memory words)
-        internal returns (IUARegistry.UASig memory)
+        internal
+        returns (IUARegistry.UASig memory)
     {
         return _uaSig(_seedOf(e.from), UAKinds.PURPOSE_METATX, _named(t, _typ(op), words, e));
     }
@@ -283,8 +317,12 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
         bytes memory st = NormalPqzToken(t).transferSingleStatement(a, _bindingOf(t, e));
         IUARegistry.UASig memory pa = _auth(t, a.fromUA, 1, st);
         IPqzToken.PqzSignedVerdict memory sv = _sv(t, st);
-        IUARegistry.UASig memory au = _envAuth(t, compact ? "UAPqzTransferSingleCompact" : "UAPqzTransferSingle", e,
-            abi.encode(_hashT(a), keccak256(VPROOF), keccak256("")));
+        IUARegistry.UASig memory au = _envAuth(
+            t,
+            compact ? "UAPqzTransferSingleCompact" : "UAPqzTransferSingle",
+            e,
+            abi.encode(_hashT(a), keccak256(VPROOF), keccak256(""))
+        );
         vm.broadcast(k2);
         if (compact) NormalPqzToken(t).mtxConfidentialTransferSingleCompact(e, a, VPROOF, pa, "", au, sv);
         else NormalPqzToken(t).mtxConfidentialTransferSingle(e, a, VPROOF, pa, "", au, sv);
@@ -296,8 +334,12 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
         bytes memory st = NormalPqzToken(t).transferStatement(a, _bindingOf(t, e));
         IUARegistry.UASig memory pa = _auth(t, a.fromUA, 7, st);
         IPqzToken.PqzSignedVerdict memory sv = _sv(t, st);
-        IUARegistry.UASig memory au = _envAuth(t, compact ? "UAPqzTransferCompact" : "UAPqzTransfer", e,
-            abi.encode(_hashM(a), keccak256(VPROOF), keccak256("")));
+        IUARegistry.UASig memory au = _envAuth(
+            t,
+            compact ? "UAPqzTransferCompact" : "UAPqzTransfer",
+            e,
+            abi.encode(_hashM(a), keccak256(VPROOF), keccak256(""))
+        );
         vm.broadcast(k2);
         if (compact) NormalPqzToken(t).mtxConfidentialTransferCompact(e, a, VPROOF, pa, "", au, sv);
         else NormalPqzToken(t).mtxConfidentialTransfer(e, a, VPROOF, pa, "", au, sv);
@@ -309,13 +351,14 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
         bytes memory st = NormalPqzToken(t).burnStatement(b, amount, recipient, _bindingOf(t, e));
         IUARegistry.UASig memory pa = _auth(t, from, 2, st);
         IPqzToken.PqzSignedVerdict memory sv = _sv(t, st);
-        IUARegistry.UASig memory au = _envAuth(t, "UAPqzUnshield", e,
-            abi.encode(_hashB(b), amount, recipient, keccak256(VPROOF), keccak256("")));
+        IUARegistry.UASig memory au =
+            _envAuth(t, "UAPqzUnshield", e, abi.encode(_hashB(b), amount, recipient, keccak256(VPROOF), keccak256("")));
         vm.broadcast(k2);
         NormalPqzToken(t).mtxUnshield(e, b, IPqzToken.Payout(amount, recipient), VPROOF, pa, "", au, sv);
     }
 
-    bytes32 internal constant TH_UNWRAP = keccak256("Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)");
+    bytes32 internal constant TH_UNWRAP =
+        keccak256("Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)");
 
     function _namedUnwrap(address t, bytes32 from, uint256 amount, uint256 seed) internal {
         IPqzToken.PqzBurnArgs memory b = _burnArgs(t, from, seed);
@@ -324,8 +367,17 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
         bytes memory st = WrappedPqzToken(payable(t)).unshieldUnwrapStatement(b, x, _bindingOf(t, e));
         IUARegistry.UASig memory pa = _auth(t, from, 2, st);
         IPqzToken.PqzSignedVerdict memory sv = _sv(t, st);
-        IUARegistry.UASig memory au = _envAuth(t, "UAPqzUnshieldUnwrap", e, abi.encode(_hashB(b),
-            keccak256(abi.encode(TH_UNWRAP, x.underlying, x.recipient, x.amount, x.minOut)), keccak256(VPROOF), keccak256("")));
+        IUARegistry.UASig memory au = _envAuth(
+            t,
+            "UAPqzUnshieldUnwrap",
+            e,
+            abi.encode(
+                _hashB(b),
+                keccak256(abi.encode(TH_UNWRAP, x.underlying, x.recipient, x.amount, x.minOut)),
+                keccak256(VPROOF),
+                keccak256("")
+            )
+        );
         vm.broadcast(k2);
         WrappedPqzToken(payable(t)).mtxUnshieldUnwrap(e, b, x, VPROOF, pa, "", au, sv);
     }
@@ -333,8 +385,8 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
     /// `mtxPrepareAcc` / `mtxRollOver` relayed: test key 1's native id signs the envelope, test key 2 sends.
     function _namedAccOp(address t, bool roll, bytes32 ua, uint256 x) internal {
         MetaTxLib.UAEnvelope memory e = _env(a1, 21, NormalPqzToken(t).mtxNonce(_pad(a1), 21));
-        IUARegistry.UASig memory s = _sig(k1, _named(t, _typ(roll ? "UAPqzRollOver" : "UAPrepareAcc"),
-            abi.encode(ua, uint64(0), x), e));
+        IUARegistry.UASig memory s =
+            _sig(k1, _named(t, _typ(roll ? "UAPqzRollOver" : "UAPrepareAcc"), abi.encode(ua, uint64(0), x), e));
         vm.broadcast(k2);
         if (roll) NormalPqzToken(t).mtxRollOver(e, ua, 0, x, s);
         else NormalPqzToken(t).mtxPrepareAcc(e, ua, 0, x, s);
@@ -343,7 +395,8 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
     // ------------------------------------------------------------------ the owner's ops: direct, and through the router
 
     function _routerAuth(string memory op, address target, bytes memory words)
-        internal returns (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s)
+        internal
+        returns (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s)
     {
         address gr = _dep("governance_router");
         (e.from, e.nonce, e.validUntil) = (_pad(a1), GovernanceRouter(gr).mtxNonce(_pad(a1), 0), vu);
@@ -375,7 +428,8 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
 
     function _routerOps(address t, bytes32 uid) internal {
         GovernanceRouter gr = GovernanceRouter(_dep("governance_router"));
-        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) = _routerAuth("UAPqzSetVerifier", t, abi.encode(_pad(a3), uid));
+        (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory s) =
+            _routerAuth("UAPqzSetVerifier", t, abi.encode(_pad(a3), uid));
         vm.broadcast(k2);
         gr.mtxPqzSetVerifier(e, t, _pad(a3), uid, s);
         (e, s) = _routerAuth("UAPqzCancelVerifier", t, abi.encode(uid));
@@ -408,21 +462,39 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
     function _entries(address t, bytes32 ua, uint64 n, uint64[] memory skip) internal view returns (bytes32) {
         uint64 r = IPqzToken(t).pqzAccount(ua, 0).rolled;
         bytes32[] memory h = new bytes32[](n + skip.length);
-        for (uint256 k_; k_ < n; ++k_) h[k_] = _eh(t, ua, r + k_);
-        for (uint256 j; j < skip.length; ++j) h[n + j] = _eh(t, ua, skip[j]);
+        for (uint256 k_; k_ < n; ++k_) {
+            h[k_] = _eh(t, ua, r + k_);
+        }
+        for (uint256 j; j < skip.length; ++j) {
+            h[n + j] = _eh(t, ua, skip[j]);
+        }
         return keccak256(abi.encodePacked(h));
     }
 
     function _rollDigest(address t, bytes32 ua, uint64 n, uint64[] memory skip, uint64 vub, bytes32 eh)
-        internal view returns (bytes32)
+        internal
+        view
+        returns (bytes32)
     {
         IPqzToken.AccountState memory s = IPqzToken(t).pqzAccount(ua, 0);
-        return _digest(t, keccak256(bytes.concat(abi.encode(ROLL_TH, ua, uint64(0), s.rollSeq, s.rolled, n),
-            abi.encode(keccak256(abi.encodePacked(skip)), eh, vub, NormalPqzToken(t).chainUid()))));
+        return _digest(
+            t,
+            keccak256(
+                bytes.concat(
+                    abi.encode(ROLL_TH, ua, uint64(0), s.rollSeq, s.rolled, n),
+                    abi.encode(keccak256(abi.encodePacked(skip)), eh, vub, NormalPqzToken(t).chainUid())
+                )
+            )
+        );
     }
 
-    function _rollSig(address t, bytes32 ua, uint64 n, uint64[] memory skip, uint64 vub) internal returns (IUARegistry.UASig memory) {
-        return _uaSig(_seedOf(ua), UAKinds.PURPOSE_ZETHER_AUTH, _rollDigest(t, ua, n, skip, vub, _entries(t, ua, n, skip)));
+    function _rollSig(address t, bytes32 ua, uint64 n, uint64[] memory skip, uint64 vub)
+        internal
+        returns (IUARegistry.UASig memory)
+    {
+        return _uaSig(
+            _seedOf(ua), UAKinds.PURPOSE_ZETHER_AUTH, _rollDigest(t, ua, n, skip, vub, _entries(t, ua, n, skip))
+        );
     }
 
     function _sk(uint64 a) internal pure returns (uint64[] memory s) {
@@ -446,7 +518,8 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
 
     /// A PQZ kind: `OFFCHAIN`, class 3 without the opening (the verifier `vA`, transferable).
     function _conf(bool own, bool open) internal view returns (IFactoryToken.ConfidentialConfig memory) {
-        return IFactoryToken.ConfidentialConfig("", 10_000, uint256(1) << 40, 0, 0, 0, 0, 1, vA, false, 0, 0, 3, own, open);
+        return
+            IFactoryToken.ConfidentialConfig("", 10_000, uint256(1) << 40, 0, 0, 0, 0, 1, vA, false, 0, 0, 3, own, open);
     }
 
     function _base(uint8 kind, string memory sym) internal view override returns (IFactoryToken.TokenConfig memory c) {
@@ -454,7 +527,11 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
         if (_pqzKind(kind)) c.conf = _conf(true, false);
     }
 
-    function _create(uint8 kind, IFactoryToken.TokenConfig memory c, string memory what) internal override returns (address x) {
+    function _create(uint8 kind, IFactoryToken.TokenConfig memory c, string memory what)
+        internal
+        override
+        returns (address x)
+    {
         if (!_pqzKind(kind)) return super._create(kind, c, what);
         vm.broadcast(k1);
         x = fp.createToken(IOpenFactory.TokenKind(kind), 1, abi.encode(c), _salt(what));
@@ -476,7 +553,9 @@ contract PqzKeysSetup is PqzKeysKit {
         _msig();
         // the public layer's `_pq` rows (PqzKeysPublic ran the sweep without them)
         uint8[4] memory pk = [uint8(4), 12, 5, 13];
-        for (uint256 i; i < 4; ++i) _pqOn(pk[i], string.concat("pqzkeys-pq", vm.toString(pk[i])));
+        for (uint256 i; i < 4; ++i) {
+            _pqOn(pk[i], string.concat("pqzkeys-pq", vm.toString(pk[i])));
+        }
         _confidential();
         _registryKeys();
         _burnerPqz(4);
@@ -496,7 +575,8 @@ contract PqzKeysSetup is PqzKeysKit {
         bytes memory pop = _mlBy(seed, IUARegistry(registry).uaMessage(ML65, UAKinds.PURPOSE_POP_V2, rd));
         IUARegistry.UAAttrs memory none;
         vm.startBroadcast(k1);
-        if (_mldsaCache(ML65)) { // 3zh: the cache path only (a precompile verifier refuses the cache)
+        if (_mldsaCache(ML65)) {
+            // 3zh: the cache path only (a precompile verifier refuses the cache)
             IUARegistry(registry).cacheExpandedKey{gas: 56_000_000}(ML65, pk, 0);
             IUARegistry(registry).cacheExpandedKey{gas: 56_000_000}(ML65, pk, 1);
         }
@@ -519,10 +599,12 @@ contract PqzKeysSetup is PqzKeysKit {
         IUARegistry.UAAttrs memory none;
         vm.broadcast(k1);
         require(IUARegistry(registry).registerMsig{gas: 56_000_000}(st, none, pop, "") == mu, "msig UA");
-        bytes32 md = UAKinds.memberDigest(mu, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MEMBERSHIP,
-            UAKinds.membershipDigest(mu, bob)));
+        bytes32 md = UAKinds.memberDigest(
+            mu, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MEMBERSHIP, UAKinds.membershipDigest(mu, bob))
+        );
         IUARegistry.MemberSig memory ms;
-        (ms.index, ms.sig) = (_bobSlot(), _mlBy(bobSeed, IUARegistry(registry).uaMessage(ML65, UAKinds.PURPOSE_MEMBER, md)));
+        (ms.index, ms.sig) =
+        (_bobSlot(), _mlBy(bobSeed, IUARegistry(registry).uaMessage(ML65, UAKinds.PURPOSE_MEMBER, md)));
         vm.broadcast(k1);
         IUARegistry(registry).acceptMembership{gas: 56_000_000}(mu, ms);
     }
@@ -539,7 +621,9 @@ contract PqzKeysSetup is PqzKeysKit {
         fp.configureChain(uid, 0, gr, gr.codehash, 0, bytes32(0));
         IFactoryToken.Env memory e = f.tokenEnvOf(IOpenFactory.TokenKind.WRAPPED, 1);
         uint8[4] memory ks = [uint8(4), 5, 12, 13];
-        for (uint256 i; i < 4; ++i) _release(ks[i], e);
+        for (uint256 i; i < 4; ++i) {
+            _release(ks[i], e);
+        }
         vm.startBroadcast(k1);
         leg = new MockERC20("Onchain PQZ leg", "oPQL", 6);
         leg.mint(a1, 1e18);
@@ -549,9 +633,16 @@ contract PqzKeysSetup is PqzKeysKit {
 
     function _libs(uint8 k_) internal pure returns (address[] memory l) {
         l = new address[](k_ >= 12 ? 10 : 9);
-        (l[0], l[1], l[2], l[3]) = (address(GovernanceLib), address(HederaLib), address(MtxPipelineLib), address(WrappedLib));
+        (l[0], l[1], l[2], l[3]) =
+        (address(GovernanceLib), address(HederaLib), address(MtxPipelineLib), address(WrappedLib));
         (l[4], l[5], l[6], l[7], l[8]) =
-            (address(PqzStateLib), address(PqzTransferLib), address(PqzBurnLib), address(PqzViewLib), address(PqzWrappedLib));
+        (
+            address(PqzStateLib),
+            address(PqzTransferLib),
+            address(PqzBurnLib),
+            address(PqzViewLib),
+            address(PqzWrappedLib)
+        );
         if (k_ >= 12) l[9] = address(RegulatedLib);
     }
 
@@ -578,7 +669,11 @@ contract PqzKeysSetup is PqzKeysKit {
         }
     }
 
-    function _envOf(uint8 k_, IFactoryToken.Env memory e, address[] memory ms) internal view returns (IFactoryToken.Env memory) {
+    function _envOf(uint8 k_, IFactoryToken.Env memory e, address[] memory ms)
+        internal
+        view
+        returns (IFactoryToken.Env memory)
+    {
         address[] memory libs = _libs(k_);
         address[] memory l = new address[](libs.length + ms.length);
         bytes32[] memory h = new bytes32[](l.length);
@@ -633,7 +728,8 @@ contract PqzKeysSetup is PqzKeysKit {
     function _trades() internal {
         pA = _counter(a1, "pqzkeys-dexA");
         pB = _counter(a2, "pqzkeys-dexB");
-        bytes memory cfg = abi.encode(ISCaaSDex.DexConfig(_pad(a1), 200_000, address(0x7EA5), false, 0, address(0), 0, 0));
+        bytes memory cfg =
+            abi.encode(ISCaaSDex.DexConfig(_pad(a1), 200_000, address(0x7EA5), false, 0, address(0), 0, 0));
         _dexRelease();
         vm.startBroadcast(k1);
         dx = ISCaaSDex(fp.createDex(1, cfg, _salt("pqzkeys-dex")));
@@ -642,7 +738,12 @@ contract PqzKeysSetup is PqzKeysKit {
         _book(address(dx), "SCaaSDex");
         _book(address(dxF), "SCaaSDex");
         rt = OnchainRouter(_c2(type(OnchainRouter).creationCode, "pqzkeys-router"));
-        usdl = MockERC20(_c2(abi.encodePacked(type(MockERC20).creationCode, abi.encode("Onchain USD K", "oUSDK", uint8(6))), "pqzkeys-usd"));
+        usdl = MockERC20(
+            _c2(
+                abi.encodePacked(type(MockERC20).creationCode, abi.encode("Onchain USD K", "oUSDK", uint8(6))),
+                "pqzkeys-usd"
+            )
+        );
         v2f = MockV2Factory(_c2(type(MockV2Factory).creationCode, "pqzkeys-v2f"));
         _book(address(usdl), "MockERC20");
         _book(address(v2f), "MockV2Factory");
@@ -657,9 +758,13 @@ contract PqzKeysSetup is PqzKeysKit {
         vm.broadcast(k2);
         IERC20(pB).transfer(address(rt), 1e8);
         uint8[4] memory pk = [uint8(4), 5, 12, 13];
-        for (uint256 i; i < 4; ++i) _tradeKind(pk[i]);
+        for (uint256 i; i < 4; ++i) {
+            _tradeKind(pk[i]);
+        }
         uint8[11] memory lk = [uint8(1), 2, 3, 8, 9, 10, 11, 4, 5, 12, 13];
-        for (uint256 i; i < 11; ++i) _pull(lk[i]);
+        for (uint256 i; i < 11; ++i) {
+            _pull(lk[i]);
+        }
     }
 
     /// DEX release 1 on this group's factory, as DeployBase's: env 1 the libraries forge links for this script (GovernanceLib,
@@ -667,12 +772,20 @@ contract PqzKeysSetup is PqzKeysKit {
     function _dexRelease() internal {
         IFactoryToken.Env memory e = f.dexEnvOf(1);
         address[] memory ms = new address[](2);
-        ms[0] = _c2(bytes.concat(type(SCaaSDexGovernanceModule).creationCode, abi.encode(address(fp), bytes(""))), "pqzkeys-dex-gov");
-        ms[1] = _c2(bytes.concat(type(SCaaSDexLiquidityModule).creationCode, abi.encode(address(fp), bytes(""))), "pqzkeys-dex-liq");
+        ms[0] = _c2(
+            bytes.concat(type(SCaaSDexGovernanceModule).creationCode, abi.encode(address(fp), bytes(""))),
+            "pqzkeys-dex-gov"
+        );
+        ms[1] = _c2(
+            bytes.concat(type(SCaaSDexLiquidityModule).creationCode, abi.encode(address(fp), bytes(""))),
+            "pqzkeys-dex-liq"
+        );
         address[] memory l = new address[](4);
         bytes32[] memory h = new bytes32[](4);
         (l[0], l[1], l[2], l[3]) = (address(GovernanceLib), address(TradeLib), ms[0], ms[1]);
-        for (uint256 i; i < 4; ++i) h[i] = l[i].codehash;
+        for (uint256 i; i < 4; ++i) {
+            h[i] = l[i].codehash;
+        }
         (e.libs, e.libCodeHashes) = (l, h);
         bytes32 uid = fp.chainUid();
         vm.startBroadcast(k1);
@@ -709,7 +822,9 @@ contract PqzKeysSetup is PqzKeysKit {
         (c.name, c.symbol, c.decimals, c.admin) = ("Onchain PQZ K", string.concat("oPK", vm.toString(n)), 6, _pad(a1));
         c.features = 1 << GovernanceBits.PAYABLE;
         if (n == 2 || n == 3 || n == 10 || n == 11) {
-            c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0, false, false);
+            c.conf = IFactoryToken.ConfidentialConfig(
+                "", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0, false, false
+            );
         }
         if (_pqzKind(n)) c.conf = _conf(true, false);
         if (n % 2 == 1) {
@@ -727,21 +842,39 @@ contract PqzKeysSetup is PqzKeysKit {
         ITradeToken.UAWrapOrder memory o;
         (o.from, o.wrappedToken, o.amount, o.minMinted, o.minFill) = (_pad(a1), wt, amt, amt, amt);
         (o.batch, o.nonce, o.validUntil) = (7, ++wn, vu);
-        ITradeToken.UATradeOrder memory t = ITradeToken.UATradeOrder(o.from, wt, o.amount, o.minMinted, o.minFill, o.fee,
-            o.relayer, wt, o.destination, o.flags, o.batch, o.nonce, o.validUntil);
+        ITradeToken.UATradeOrder memory t = ITradeToken.UATradeOrder(
+            o.from,
+            wt,
+            o.amount,
+            o.minMinted,
+            o.minFill,
+            o.fee,
+            o.relayer,
+            wt,
+            o.destination,
+            o.flags,
+            o.batch,
+            o.nonce,
+            o.validUntil
+        );
         IUARegistry.UASig memory sg;
         sg.signature = _ecdsa(k1, ITradeToken(base).tradeOrderDigest(t));
         vm.broadcast(k2);
         IWrappedToken(wt).mtxWrapOrder{gas: GT}(base, o, sg);
     }
 
-    function _o(bytes32 from, address recv, uint256 amt, uint256 recvAmt) internal returns (ITradeToken.UATradeOrder memory o) {
+    function _o(bytes32 from, address recv, uint256 amt, uint256 recvAmt)
+        internal
+        returns (ITradeToken.UATradeOrder memory o)
+    {
         (o.from, o.receiveToken, o.amount, o.receiveAmount) = (from, recv, amt, recvAmt);
         (o.dex, o.batch, o.nonce, o.validUntil) = (address(dx), 1, ++tn, vu);
     }
 
     function _leg(address sell, ITradeToken.UATradeOrder memory o, uint256 pk_, uint256 fill)
-        internal view returns (ISCaaSDex.DexLeg memory l)
+        internal
+        view
+        returns (ISCaaSDex.DexLeg memory l)
     {
         (l.sellToken, l.shape, l.uaOrder, l.fill) = (sell, 1, o, fill);
         l.auth.signature = _ecdsa(pk_, ITradeToken(sell).tradeOrderDigest(o));
@@ -754,7 +887,8 @@ contract PqzKeysSetup is PqzKeysKit {
         dx.setMarket{gas: GT}(x, pB, true, dx.chainUid());
         vm.stopBroadcast();
         ISCaaSDex.Settlement[] memory ss = new ISCaaSDex.Settlement[](1);
-        (ss[0].ref, ss[0].taker) = (keccak256(abi.encode(runSalt, "pqzkeys-kind", n)), _leg(x, _o(_pad(a1), pA, 1000, 1000), k1, 1000));
+        (ss[0].ref, ss[0].taker) =
+        (keccak256(abi.encode(runSalt, "pqzkeys-kind", n)), _leg(x, _o(_pad(a1), pA, 1000, 1000), k1, 1000));
         ss[0].makers = new ISCaaSDex.DexLeg[](1);
         ss[0].makers[0] = _leg(pA, _o(_pad(a2), x, 1000, 1000), k2, 1000);
         vm.broadcast(k2);
@@ -794,13 +928,16 @@ contract PqzKeysSetup is PqzKeysKit {
         address pair = v2f.createPair{gas: 30_000_000}(x, address(usdl));
         _book(pair, "MockV2LiquidityPair");
         ITradeToken.LiquidityOrder memory o;
-        (o.from, o.recipient, o.fee, o.relayer, o.batch, o.nonce, o.validUntil) = (_pad(a1), _pad(a2), 3_000, a3, 11, ++tn, vu);
+        (o.from, o.recipient, o.fee, o.relayer, o.batch, o.nonce, o.validUntil) =
+        (_pad(a1), _pad(a2), 3_000, a3, 11, ++tn, vu);
         o.inputs = new ITradeToken.LiquidityToken[](2);
-        (o.inputs[0], o.inputs[1]) = (ITradeToken.LiquidityToken(x, 1e6), ITradeToken.LiquidityToken(address(usdl), 1e6));
+        (o.inputs[0], o.inputs[1]) =
+        (ITradeToken.LiquidityToken(x, 1e6), ITradeToken.LiquidityToken(address(usdl), 1e6));
         o.outputs = new ITradeToken.LiquidityToken[](1);
         o.outputs[0] = ITradeToken.LiquidityToken(pair, 9e5);
         ISCaaSDex.LiquidityPlan memory lp;
-        (lp.ref, lp.order, lp.auth) = (keccak256(abi.encode(runSalt, "pqzkeys-pull", n)), o, _sig(k1, d.liquidityOrderDigest(o)));
+        (lp.ref, lp.order, lp.auth) =
+        (keccak256(abi.encode(runSalt, "pqzkeys-pull", n)), o, _sig(k1, d.liquidityOrderDigest(o)));
         lp.pull = new uint256[](2);
         (lp.pull[0], lp.pull[1]) = (1e6, 1e6);
         ISCaaSDex.Interaction[] memory xs = new ISCaaSDex.Interaction[](3);
@@ -847,11 +984,15 @@ contract PqzKeysSetup is PqzKeysKit {
     }
 
     function _record(bytes32 ua, address scope, uint64 v, bool kem)
-        internal returns (bytes memory key, IUARegistry.KemKey memory k, bytes memory pop)
+        internal
+        returns (bytes memory key, IUARegistry.KemKey memory k, bytes memory pop)
     {
         key = new bytes(PqzCt.PK);
         (key[13], key[14], key[15]) = (bytes1(0x5c), bytes1(uint8(++keySeed >> 8)), bytes1(uint8(keySeed)));
-        if (kem) (k.scheme, k.mlkemEk, k.x25519) = (1, _blob(uint256(keccak256(abi.encode(ua, scope, v))), 1568), keccak256(abi.encode(ua, scope, v)));
+        if (kem) {
+            (k.scheme, k.mlkemEk, k.x25519) =
+            (1, _blob(uint256(keccak256(abi.encode(ua, scope, v))), 1568), keccak256(abi.encode(ua, scope, v)));
+        }
         pop = abi.encodePacked(keccak256(abi.encode(runSalt, ua, scope, v)));
     }
 
@@ -866,19 +1007,36 @@ contract PqzKeysSetup is PqzKeysKit {
         bytes32 uid;
     }
 
-    function _recordSig(bytes32 ua, address scope, uint64 v, bytes memory key, IUARegistry.KemKey memory k, bytes memory pop,
-        uint64 vub, bytes32 uid) internal returns (IUARegistry.UASig memory)
-    {
+    function _recordSig(
+        bytes32 ua,
+        address scope,
+        uint64 v,
+        bytes memory key,
+        IUARegistry.KemKey memory k,
+        bytes memory pop,
+        uint64 vub,
+        bytes32 uid
+    ) internal returns (IUARegistry.UASig memory) {
         bytes memory kp = UAKinds.kemPk(k);
-        RecDigest memory r = RecDigest(ua, scope, v, UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key), keccak256(pop),
-            kp.length == 0 ? bytes32(0) : keccak256(kp), vub, uid);
+        RecDigest memory r = RecDigest(
+            ua,
+            scope,
+            v,
+            UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key),
+            keccak256(pop),
+            kp.length == 0 ? bytes32(0) : keccak256(kp),
+            vub,
+            uid
+        );
         if (ua == mu) return _msigSig(UAKinds.PURPOSE_PQZ_SCOPED_KEY, _rd(r));
         return _uaSig(_seedOf(ua), UAKinds.PURPOSE_PQZ_SCOPED_KEY, _rd(r));
     }
 
     function _rd(RecDigest memory r) internal view returns (bytes32) {
-        return IUARegistry(registry).pqzScopedKeyRecordDigest(r.ua, r.scope == address(0) ? 2 : 3, r.uid, r.scope, r.v,
-            r.keyHash, r.popHash, r.kemHash, r.vub);
+        return IUARegistry(registry)
+            .pqzScopedKeyRecordDigest(
+                r.ua, r.scope == address(0) ? 2 : 3, r.uid, r.scope, r.v, r.keyHash, r.popHash, r.kemHash, r.vub
+            );
     }
 
     function _shield(address t, bytes32 ua, uint256 amount) internal {
@@ -903,19 +1061,28 @@ contract PqzKeysSetup is PqzKeysKit {
             _scoped(hs[i], t13, 0, false);
         }
         // the scoped views
-        require(IUARegistry(registry).pqzScopedKeyLatest(bob, c3o) == 0 && IUARegistry(registry).pqzScopedCount(c3) == 3, "scoped");
+        require(
+            IUARegistry(registry).pqzScopedKeyLatest(bob, c3o) == 0 && IUARegistry(registry).pqzScopedCount(c3) == 3,
+            "scoped"
+        );
         address[6] memory ts = [c2, c3o, c3, t5, t12, t13];
-        for (uint256 i; i < 6; ++i) _life(ts[i], i);
+        for (uint256 i; i < 6; ++i) {
+            _life(ts[i], i);
+        }
         // the msig on a class-3 token with the opening: its record with the opening KEM key, then a credit to it
         _scoped(mu, c3o, 0, true);
         _send1(c3o, _op1(c3o, carol, mu, 0x7f11), false); // from carol: bob's `rolled` stays below run 2's mark
         address[4] memory ns = [c3, t5, t12, t13];
-        for (uint256 i; i < 4; ++i) _namedLife(ns[i], 0x7a00 + 0x100 * i);
+        for (uint256 i; i < 4; ++i) {
+            _namedLife(ns[i], 0x7a00 + 0x100 * i);
+        }
         _wrapShield(t5);
         _wrapShield(t13);
         _rotation();
         _openingKinds();
-        console2.log(string.concat("pqzkeys setup c2 ", vm.toString(c2), " c3o ", vm.toString(c3o), " c3 ", vm.toString(c3)));
+        console2.log(
+            string.concat("pqzkeys setup c2 ", vm.toString(c2), " c3o ", vm.toString(c3o), " c3 ", vm.toString(c3))
+        );
     }
 
     /// A token's life before its rollovers: three shields (the holder's TRIVIAL entry first), credits to the holder uaM from bob
@@ -933,8 +1100,13 @@ contract PqzKeysSetup is PqzKeysKit {
         if (_opens(t)) {
             IPqzToken.PqzMultiArgs memory m = _op7(t, carol, bob, uaM, s + 41);
             IPqzToken.PqzSignedVerdict memory none;
-            _neg(a2, t, abi.encodeCall(IPqzToken.mtxConfidentialTransfer, (m, VPROOF, _pqStub(), "", none)),
-                IPqzToken.OpUnsupported.selector, string.concat(_label(t), ": op 7 with the opening on"));
+            _neg(
+                a2,
+                t,
+                abi.encodeCall(IPqzToken.mtxConfidentialTransfer, (m, VPROOF, _pqStub(), "", none)),
+                IPqzToken.OpUnsupported.selector,
+                string.concat(_label(t), ": op 7 with the opening on")
+            );
         } else {
             _send7(t, _op7(t, carol, bob, uaM, s + 31), false);
             _send7(t, _op7(t, carol, bob, uaM, s + 41), true);
@@ -977,18 +1149,30 @@ contract PqzKeysSetup is PqzKeysKit {
         IGovernance(t).grantRole(GovernanceBits.AUDITOR, bob, uid);
         IGovernance(t).grantRole(GovernanceBits.AUDITOR, mu, uid);
         vm.stopBroadcast();
-        require(IGovernance(t).hasRole(GovernanceBits.AUDITOR, bob) && IGovernance(t).hasRole(GovernanceBits.AUDITOR, mu),
-            "auditor token: bit 32 granted to bob and to the msig");
+        require(
+            IGovernance(t).hasRole(GovernanceBits.AUDITOR, bob) && IGovernance(t).hasRole(GovernanceBits.AUDITOR, mu),
+            "auditor token: bit 32 granted to bob and to the msig"
+        );
         _shield(t, bob, 100);
         bytes32 r0 = _audited1(t, 0x7e01);
         _setAuditorUA(t, bob, dave, 1, uid);
         (uint32 epoch,,,, uint8 st) = IPqzToken(t).auditorState();
-        require(epoch == 1 && st == 0 && NormalPqzToken(t).auditorUA() == dave, "auditor token: dave applied at once (delay 0)");
+        require(
+            epoch == 1 && st == 0 && NormalPqzToken(t).auditorUA() == dave,
+            "auditor token: dave applied at once (delay 0)"
+        );
         bytes32 r1 = _audited1(t, 0x7e11);
-        require(IPqzToken(t).auditorUAOf(r0) == carol && IPqzToken(t).auditorUAOf(r1) == dave, "auditor token: auditorUAOf by epoch");
+        require(
+            IPqzToken(t).auditorUAOf(r0) == carol && IPqzToken(t).auditorUAOf(r1) == dave,
+            "auditor token: auditorUAOf by epoch"
+        );
         _setAuditorUA(t, mu, carol, 2, uid);
         require(NormalPqzToken(t).auditorUA() == carol, "auditor token: the msig's op applied (epoch 2)");
-        console2.log(string.concat("pqzkeys auditor ", vm.toString(t), ": bit 32 to bob and the msig; dave at epoch 1, carol back at 2"));
+        console2.log(
+            string.concat(
+                "pqzkeys auditor ", vm.toString(t), ": bit 32 to bob and the msig; dave at epoch 1, carol back at 2"
+            )
+        );
     }
 
     /// An audited op 1 of bob to uaM (the auditor's ciphertext and opening as filler; OPTIONAL: the sender's choice); its entry ref.
@@ -1006,13 +1190,24 @@ contract PqzKeysSetup is PqzKeysKit {
     /// (its ML-DSA signature under `PURPOSE_AUDITOR_CONSENT` over the token's `AuditorConsent` digest); test key 2 relays.
     function _setAuditorUA(address t, bytes32 holder, bytes32 next, uint32 epoch, bytes32 uid) internal {
         GovernanceRouter gr = GovernanceRouter(_dep("governance_router"));
-        bytes32 cd = _digest(t, keccak256(abi.encode(keccak256("AuditorConsent(address token,bytes32 auditor,uint32 epoch,bytes32 chainUid)"),
-            t, next, epoch, uid)));
+        bytes32 cd = _digest(
+            t,
+            keccak256(
+                abi.encode(
+                    keccak256("AuditorConsent(address token,bytes32 auditor,uint32 epoch,bytes32 chainUid)"),
+                    t,
+                    next,
+                    epoch,
+                    uid
+                )
+            )
+        );
         IUARegistry.UASig memory consent = _uaSig(_seedOf(next), UAKinds.PURPOSE_AUDITOR_CONSENT, cd);
         MetaTxLib.UAEnvelope memory e;
         (e.from, e.nonce, e.validUntil) = (holder, gr.mtxNonce(holder, 0), vu);
         bytes32 d = _named(address(gr), _typ("UASetAuditorUA"), abi.encode(t, next, epoch, uid), e);
-        IUARegistry.UASig memory s = holder == mu ? _msigSig(UAKinds.PURPOSE_METATX, d) : _uaSig(_seedOf(holder), UAKinds.PURPOSE_METATX, d);
+        IUARegistry.UASig memory s =
+            holder == mu ? _msigSig(UAKinds.PURPOSE_METATX, d) : _uaSig(_seedOf(holder), UAKinds.PURPOSE_METATX, d);
         vm.broadcast(k2);
         gr.mtxSetAuditorUA(e, t, next, epoch, consent, uid, s);
     }
@@ -1035,15 +1230,31 @@ contract PqzKeysSetup is PqzKeysKit {
         uint256 s0 = IERC20(x).totalSupply();
         _unshield(x, bob, 5, _pad(a3), 0x7e00 + kind);
         // 5 confidential units at `_conf`'s scale of 10,000 public units each
-        require(IERC20(x).totalSupply() == s0 && IERC20(x).balanceOf(a3) == 5 * 10_000, "BURNER: the unshield not gated, supply kept");
+        require(
+            IERC20(x).totalSupply() == s0 && IERC20(x).balanceOf(a3) == 5 * 10_000,
+            "BURNER: the unshield not gated, supply kept"
+        );
         vm.broadcast(k1);
         NormalPqzToken(x).burn(10);
         require(IERC20(x).totalSupply() == s0 - 10, "BURNER: the seat's burn");
-        console2.log(string.concat("pqzkeys BURNER kind ", vm.toString(kind), " ", vm.toString(x),
-            ": unshield by a non-holder, supply unchanged; the seat's burn(10), supply -10"));
-        _negData(a2, x, abi.encodeCall(NormalPqzToken.burn, (uint256(1))),
+        console2.log(
+            string.concat(
+                "pqzkeys BURNER kind ",
+                vm.toString(kind),
+                " ",
+                vm.toString(x),
+                ": unshield by a non-holder, supply unchanged; the seat's burn(10), supply -10"
+            )
+        );
+        _negData(
+            a2,
+            x,
+            abi.encodeCall(NormalPqzToken.burn, (uint256(1))),
             abi.encodeWithSelector(IGovernance.MissingRole.selector, GovernanceBits.BURNER, _pad(a2)),
-            string.concat("burn by a non-holder with a balance (kind ", vm.toString(kind), ", BURNER): MissingRole(30, id)"));
+            string.concat(
+                "burn by a non-holder with a balance (kind ", vm.toString(kind), ", BURNER): MissingRole(30, id)"
+            )
+        );
     }
 
     function _label(address t) internal view returns (string memory) {
@@ -1155,7 +1366,12 @@ contract PqzKeysSetup is PqzKeysKit {
         // testnet, so the simulation's now + 1 hour was already past when this send landed (PauseTooLong)
         fA.forwardCall(t, abi.encodeCall(r.pause, (ref, now_ + 1 days, uid)));
         fA.forwardCall(t, abi.encodeCall(r.unpause, (ref, uid)));
-        fB.forwardCall(t, abi.encodeCall(IRegulatedToken.recordOrder, (oid, keccak256("order doc"), _pad(a2), _pad(a3), 100, now_ + 1 days, uid)));
+        fB.forwardCall(
+            t,
+            abi.encodeCall(
+                IRegulatedToken.recordOrder, (oid, keccak256("order doc"), _pad(a2), _pad(a3), 100, now_ + 1 days, uid)
+            )
+        );
         fA.forwardCall(t, abi.encodeCall(r.freeze, (_pad(a2), ref, rid, uid)));
         fA.forwardCall(t, abi.encodeCall(r.forceTransfer, (rid, 40, uid)));
         fB.forwardCall(t, abi.encodeCall(r.revokeOrder, (rid, ref, uid)));
@@ -1172,13 +1388,14 @@ contract PqzKeysSetup is PqzKeysKit {
     function _regToken(uint8 kind) internal returns (address t) {
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.admin) = ("Onchain PQZ regulated", "oPQR", 6, _pad(a1));
-        c.features = 1 << GovernanceBits.PAYABLE | 1 << GovernanceBits.FREEZE | 1 << GovernanceBits.FORCE | 1 << GovernanceBits.PAUSE
-            | 1 << GovernanceBits.RECORD | 1 << GovernanceBits.OPERATOR_TRANSFER;
+        c.features = 1 << GovernanceBits.PAYABLE | 1 << GovernanceBits.FREEZE | 1 << GovernanceBits.FORCE | 1
+            << GovernanceBits.PAUSE | 1 << GovernanceBits.RECORD | 1 << GovernanceBits.OPERATOR_TRANSFER;
         (c.roles.issuer, c.roles.compliance) = (_pad(address(fA)), _pad(address(fB))); // contracts (RoleNotContract)
         c.reg.termsHash = keccak256("onchain pqzkeys terms");
         c.conf = _conf(true, false);
-        if (kind == 12) (c.initialSupply, c.initialHolder) = (1e15, a1);
-        else {
+        if (kind == 12) {
+            (c.initialSupply, c.initialHolder) = (1e15, a1);
+        } else {
             c.legs = new IFactoryToken.Leg[](1);
             c.legs[0] = IFactoryToken.Leg(address(leg), 1, 1);
         }
@@ -1195,8 +1412,8 @@ contract PqzKeysSetup is PqzKeysKit {
     /// the admin sets one leg's limits (bit 25 has no role), bit 26 granted to it for a member.
     function _wrapLimits(uint8 kind) internal {
         IFactoryToken.TokenConfig memory c = super._base(kind, "oWL");
-        c.features = 1 << GovernanceBits.PAYABLE | 1 << GovernanceBits.WRAP_LIMIT | 1 << GovernanceBits.WRAP_LIST
-            | 1 << GovernanceBits.MINTABLE; // a wrap control needs a hybrid (WrapControlNeedsHybrid)
+        c.features = 1 << GovernanceBits.PAYABLE | 1 << GovernanceBits.WRAP_LIMIT | 1 << GovernanceBits.WRAP_LIST | 1
+            << GovernanceBits.MINTABLE; // a wrap control needs a hybrid (WrapControlNeedsHybrid)
         (c.roles.minter, c.maxSupply) = (_pad(a1), 1e30);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(m1), 1, 1);
@@ -1204,7 +1421,8 @@ contract PqzKeysSetup is PqzKeysKit {
         address t = _create(kind, c, string.concat("pqzkeys-wl", vm.toString(kind)));
         IWrappedToken.WrapLegLimits[] memory l = new IWrappedToken.WrapLegLimits[](1);
         (l[0].underlying, l[0].unitExp) = (address(m1), 4);
-        (l[0].wrapShort, l[0].wrapLong) = (IWrappedToken.WrapLimit(100, 200, 3600), IWrappedToken.WrapLimit(150, 0, 86_400));
+        (l[0].wrapShort, l[0].wrapLong) =
+        (IWrappedToken.WrapLimit(100, 200, 3600), IWrappedToken.WrapLimit(150, 0, 86_400));
         bytes32 uid = IMetaTx(t).chainUid();
         vm.startBroadcast(k1);
         IGovernance(t).grantRole(GovernanceBits.WRAP_LIST, _pad(a1), uid);
@@ -1239,7 +1457,9 @@ contract PqzKeysSetup is PqzKeysKit {
 
     function _resized(bytes memory key, uint256 n) internal pure returns (bytes memory b) {
         b = new bytes(n);
-        for (uint256 i; i < 16; ++i) b[i] = key[i];
+        for (uint256 i; i < 16; ++i) {
+            b[i] = key[i];
+        }
     }
 
     function _registryNegatives() internal {
@@ -1248,37 +1468,87 @@ contract PqzKeysSetup is PqzKeysKit {
         uint256 pk = PqzCt.PK;
         bytes32 sib = SIBLING_WORD;
         bytes memory unauth = abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, bob);
-        _recNeg(RecNeg(bob, address(0), address(0), false, uid, vub, pk),
-            abi.encodeWithSelector(IUARegistry.UAPqzOpenKem.selector, address(0)), "class 2 record without openKem");
-        _recNeg(RecNeg(bob, address(0), address(0), true, sib, vub, pk), unauth, "class 2 record signed for another chainUid");
-        _recNeg(RecNeg(bob, address(0), address(0), true, uid, uint64(block.number - 1), pk),
-            abi.encodeWithSelector(IUARegistry.UAPqzRecordExpired.selector, bob), "class 2 record expired");
-        _recNeg(RecNeg(bob, address(0), address(0), true, uid, vub, pk == 18_432 ? 16_384 : 18_432),
-            abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.PQZ_MLWE), "class 2 version 1 of another key length");
-        _recNeg(RecNeg(bob, c3o, c3o, false, uid, vub, pk), abi.encodeWithSelector(IUARegistry.UAPqzOpenKem.selector, c3o),
-            "class 3 opening on: record without openKem");
+        _recNeg(
+            RecNeg(bob, address(0), address(0), false, uid, vub, pk),
+            abi.encodeWithSelector(IUARegistry.UAPqzOpenKem.selector, address(0)),
+            "class 2 record without openKem"
+        );
+        _recNeg(
+            RecNeg(bob, address(0), address(0), true, sib, vub, pk),
+            unauth,
+            "class 2 record signed for another chainUid"
+        );
+        _recNeg(
+            RecNeg(bob, address(0), address(0), true, uid, uint64(block.number - 1), pk),
+            abi.encodeWithSelector(IUARegistry.UAPqzRecordExpired.selector, bob),
+            "class 2 record expired"
+        );
+        _recNeg(
+            RecNeg(bob, address(0), address(0), true, uid, vub, pk == 18_432 ? 16_384 : 18_432),
+            abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.PQZ_MLWE),
+            "class 2 version 1 of another key length"
+        );
+        _recNeg(
+            RecNeg(bob, c3o, c3o, false, uid, vub, pk),
+            abi.encodeWithSelector(IUARegistry.UAPqzOpenKem.selector, c3o),
+            "class 3 opening on: record without openKem"
+        );
         _recNeg(RecNeg(bob, c3o, c3o, true, sib, vub, pk), unauth, "class 3 opening on: another chainUid");
-        _recNeg(RecNeg(bob, c3, c3, true, uid, vub, pk), abi.encodeWithSelector(IUARegistry.UAPqzOpenKem.selector, c3),
-            "class 3 opening off: record with openKem");
+        _recNeg(
+            RecNeg(bob, c3, c3, true, uid, vub, pk),
+            abi.encodeWithSelector(IUARegistry.UAPqzOpenKem.selector, c3),
+            "class 3 opening off: record with openKem"
+        );
         _recNeg(RecNeg(bob, c3, c3, false, sib, vub, pk), unauth, "class 3 opening off: another chainUid");
         _recNeg(RecNeg(bob, t5, c3, false, uid, vub, pk), unauth, "class 3: the record of another token");
-        _recNeg(RecNeg(mu, address(0), address(0), true, uid, vub, pk), abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, mu),
-            "class 2: an msig holds no shared key (ruling 9)");
-        _recNeg(RecNeg(mu, c3o, c3o, false, uid, vub, pk), abi.encodeWithSelector(IUARegistry.UAPqzOpenKem.selector, c3o),
-            "class 3 opening on: the msig's record without openKem");
+        _recNeg(
+            RecNeg(mu, address(0), address(0), true, uid, vub, pk),
+            abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, mu),
+            "class 2: an msig holds no shared key (ruling 9)"
+        );
+        _recNeg(
+            RecNeg(mu, c3o, c3o, false, uid, vub, pk),
+            abi.encodeWithSelector(IUARegistry.UAPqzOpenKem.selector, c3o),
+            "class 3 opening on: the msig's record without openKem"
+        );
         // the public rollover on an opening token, the signed one without the opening
-        _neg(a2, c2, abi.encodeCall(IPqzToken.mtxRollOver, (uaM, 0, 1)), IPqzToken.RollOverSignedOnly.selector,
-            "c2: the public rollover with the opening on");
-        _neg(a2, c3o, abi.encodeCall(IPqzToken.mtxRollOver, (uaM, 0, 1)), IPqzToken.RollOverSignedOnly.selector,
-            "c3o: the public rollover with the opening on");
-        _neg(a2, c3, abi.encodeCall(IPqzToken.mtxRollOverSigned, (uaM, 0, 1, new uint64[](0), vub, _pqStub())),
-            IPqzToken.OpUnsupported.selector, "c3: the signed rollover without the opening");
+        _neg(
+            a2,
+            c2,
+            abi.encodeCall(IPqzToken.mtxRollOver, (uaM, 0, 1)),
+            IPqzToken.RollOverSignedOnly.selector,
+            "c2: the public rollover with the opening on"
+        );
+        _neg(
+            a2,
+            c3o,
+            abi.encodeCall(IPqzToken.mtxRollOver, (uaM, 0, 1)),
+            IPqzToken.RollOverSignedOnly.selector,
+            "c3o: the public rollover with the opening on"
+        );
+        _neg(
+            a2,
+            c3,
+            abi.encodeCall(IPqzToken.mtxRollOverSigned, (uaM, 0, 1, new uint64[](0), vub, _pqStub())),
+            IPqzToken.OpUnsupported.selector,
+            "c3: the signed rollover without the opening"
+        );
         // disclosures: with the opening on, RECEIVER_X and AUDITOR refused, SENDER_S answers
         bytes32 ref = IPqzToken(c2).pqzAccount(uaM, 0).accHash; // any ref: the form is refused before the entry is read
-        _neg(a2, c2, abi.encodeCall(NormalPqzToken.disclosureStatement, (ref, 0, 1, 1, 0)), IPqzToken.OpUnsupported.selector,
-            "c2: a RECEIVER_X disclosure with the opening on");
-        _neg(a2, c2, abi.encodeCall(NormalPqzToken.disclosureStatement, (ref, 0, 1, 2, 0)), IPqzToken.OpUnsupported.selector,
-            "c2: an AUDITOR disclosure with the opening on");
+        _neg(
+            a2,
+            c2,
+            abi.encodeCall(NormalPqzToken.disclosureStatement, (ref, 0, 1, 1, 0)),
+            IPqzToken.OpUnsupported.selector,
+            "c2: a RECEIVER_X disclosure with the opening on"
+        );
+        _neg(
+            a2,
+            c2,
+            abi.encodeCall(NormalPqzToken.disclosureStatement, (ref, 0, 1, 2, 0)),
+            IPqzToken.OpUnsupported.selector,
+            "c2: an AUDITOR disclosure with the opening on"
+        );
     }
 
     // ------------------------------------------------------------------ negatives: the factory's key classes
@@ -1292,11 +1562,17 @@ contract PqzKeysSetup is PqzKeysKit {
 
     function _cfgNeg(uint8 kind, uint8 mode, bool own, bool open, bytes memory want, string memory what) internal {
         IFactoryToken.TokenConfig memory c;
-        (c.name, c.symbol, c.decimals, c.admin, c.features) = ("Onchain PQZ neg", "oPQN", 6, _pad(a1), 1 << GovernanceBits.PAYABLE);
+        (c.name, c.symbol, c.decimals, c.admin, c.features) =
+        ("Onchain PQZ neg", "oPQN", 6, _pad(a1), 1 << GovernanceBits.PAYABLE);
         c.conf = _conf(own, open);
         if (mode == 0) (c.conf.pqzVerifyMode, c.conf.pqzVerifierUA, c.conf.verifierFeeMax) = (0, bytes32(0), 0);
-        _negData(a1, address(fp), abi.encodeCall(OpenFactory.createToken, (IOpenFactory.TokenKind(kind), 1, abi.encode(c),
-            _salt(what))), want, what);
+        _negData(
+            a1,
+            address(fp),
+            abi.encodeCall(OpenFactory.createToken, (IOpenFactory.TokenKind(kind), 1, abi.encode(c), _salt(what))),
+            want,
+            what
+        );
     }
 
     function _save() internal {
@@ -1339,7 +1615,9 @@ contract PqzKeysPublic is PqzKeysSetup {
         _regulatedPowers(12);
         _regulatedPowers(13);
         uint8[3] memory wk = [uint8(3), 9, 11];
-        for (uint256 i; i < 3; ++i) _wrapLimits(wk[i]);
+        for (uint256 i; i < 3; ++i) {
+            _wrapLimits(wk[i]);
+        }
         _factoryNegatives();
         vm.serializeAddress("pk0", "fp", address(fp));
         vm.writeJson(vm.serializeAddress("pk0", "leg", address(leg)), _state());
@@ -1402,7 +1680,7 @@ contract PqzKeysRoll is PqzKeysKit {
         s = _rollSig(t, uaM, 1, new uint64[](0), vub);
         MetaTxLib.UAMetaTransaction memory m;
         (m.from, m.data, m.batch, m.validUntil) =
-            (_pad(a1), abi.encodeCall(IPqzToken.mtxRollOverSigned, (uaM, 0, 1, new uint64[](0), vub, s)), 15, vu);
+        (_pad(a1), abi.encodeCall(IPqzToken.mtxRollOverSigned, (uaM, 0, 1, new uint64[](0), vub, s)), 15, vu);
         m.nonce = NormalPqzToken(t).mtxNonce(_pad(a1), 15);
         IUARegistry.UASig memory es = _sig(k1, NormalPqzToken(t).mtxDigest(m));
         vm.broadcast(k3);
@@ -1413,10 +1691,28 @@ contract PqzKeysRoll is PqzKeysKit {
     function _rollByAddress(address t, uint64 vub) internal {
         IUARegistry.UASig memory s = _rollSig(t, uaM, 1, new uint64[](0), vub);
         MetaTxLib.MetaTransaction memory mt;
-        (mt.from, mt.data, mt.batch, mt.nonce, mt.validUntil) = (a1, abi.encodeCall(IPqzToken.mtxRollOverSigned,
-            (uaM, 0, 1, new uint64[](0), vub, s)), 16, NormalPqzToken(t).mtxNonce(_pad(a1), 16), vu);
-        bytes32 h = keccak256(abi.encode(MetaTxLib.METATX_TYPEHASH, mt.from, keccak256(mt.data), mt.batch, mt.nonce,
-            mt.validUntil, mt.mode, address(0), mt.fee, address(0)));
+        (mt.from, mt.data, mt.batch, mt.nonce, mt.validUntil) =
+        (
+            a1,
+            abi.encodeCall(IPqzToken.mtxRollOverSigned, (uaM, 0, 1, new uint64[](0), vub, s)),
+            16,
+            NormalPqzToken(t).mtxNonce(_pad(a1), 16),
+            vu
+        );
+        bytes32 h = keccak256(
+            abi.encode(
+                MetaTxLib.METATX_TYPEHASH,
+                mt.from,
+                keccak256(mt.data),
+                mt.batch,
+                mt.nonce,
+                mt.validUntil,
+                mt.mode,
+                address(0),
+                mt.fee,
+                address(0)
+            )
+        );
         bytes memory sg = _ecdsa(k1, _digest(t, h));
         vm.broadcast(k3);
         NormalPqzToken(t).executeMetaTransaction(mt, sg);
@@ -1432,16 +1728,35 @@ contract PqzKeysRoll is PqzKeysKit {
         uint64 r0 = IPqzToken(t).pqzAccount(bob, 0).rolled;
         vm.broadcast(k2);
         IPqzToken(t).mtxRollOverSigned(bob, 0, 0, _sk(1), vub, s);
-        require(IPqzToken(t).pqzSkipped(bob, 0, 1) && IPqzToken(t).pqzAccount(bob, 0).rolled == r0, "bob marked, nothing rolled");
-        _neg(a2, t, abi.encodeCall(IPqzToken.mtxRollOverSigned, (bob, 0, 0, _sk(1), vub, s)), IPqzToken.AuthRejected.selector,
-            string.concat(_tag(t), ": the mark-only call replayed (rollSeq moved)"));
-        IUARegistry.UASig memory stale = _uaSig(bobSeed, UAKinds.PURPOSE_ZETHER_AUTH,
-            _rollDigest(t, bob, 0, _sk(1), vub, keccak256("another entry")));
-        _neg(a2, t, abi.encodeCall(IPqzToken.mtxRollOverSigned, (bob, 0, 0, _sk(1), vub, stale)), IPqzToken.AuthRejected.selector,
-            string.concat(_tag(t), ": a stale entriesHash"));
+        require(
+            IPqzToken(t).pqzSkipped(bob, 0, 1) && IPqzToken(t).pqzAccount(bob, 0).rolled == r0,
+            "bob marked, nothing rolled"
+        );
+        _neg(
+            a2,
+            t,
+            abi.encodeCall(IPqzToken.mtxRollOverSigned, (bob, 0, 0, _sk(1), vub, s)),
+            IPqzToken.AuthRejected.selector,
+            string.concat(_tag(t), ": the mark-only call replayed (rollSeq moved)")
+        );
+        IUARegistry.UASig memory stale = _uaSig(
+            bobSeed, UAKinds.PURPOSE_ZETHER_AUTH, _rollDigest(t, bob, 0, _sk(1), vub, keccak256("another entry"))
+        );
+        _neg(
+            a2,
+            t,
+            abi.encodeCall(IPqzToken.mtxRollOverSigned, (bob, 0, 0, _sk(1), vub, stale)),
+            IPqzToken.AuthRejected.selector,
+            string.concat(_tag(t), ": a stale entriesHash")
+        );
         IUARegistry.UASig memory triv = _rollSig(t, bob, 0, _sk(2), vub);
-        _negData(a2, t, abi.encodeCall(IPqzToken.mtxRollOverSigned, (bob, 0, 0, _sk(2), vub, triv)),
-            abi.encodeWithSelector(IPqzToken.SkipTrivial.selector, uint256(2)), string.concat(_tag(t), ": a mark on a TRIVIAL entry"));
+        _negData(
+            a2,
+            t,
+            abi.encodeCall(IPqzToken.mtxRollOverSigned, (bob, 0, 0, _sk(2), vub, triv)),
+            abi.encodeWithSelector(IPqzToken.SkipTrivial.selector, uint256(2)),
+            string.concat(_tag(t), ": a mark on a TRIVIAL entry")
+        );
     }
 
     function _tag(address t) internal view returns (string memory) {

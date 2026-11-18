@@ -170,7 +170,9 @@ contract DexLiquidityTokenTest is LiquidityBase {
     /// `mtxLiquidityPull` is on no allowlist (`mtxSelectors`), so `mtxExecute` cannot self-call it.
     function test_T_notAllowlisted() public view {
         (bytes4[] memory sels,,) = a.mtxSelectors();
-        for (uint256 i; i < sels.length; ++i) assertTrue(sels[i] != ILiquidityPullToken.mtxLiquidityPull.selector);
+        for (uint256 i; i < sels.length; ++i) {
+            assertTrue(sels[i] != ILiquidityPullToken.mtxLiquidityPull.selector);
+        }
         assertTrue(UAKinds.inNativeSpace(nid(alice)));
     }
 }

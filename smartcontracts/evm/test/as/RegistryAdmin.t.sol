@@ -56,8 +56,12 @@ interface IRegistryAdmin {
     function setKycProvider(bytes32 provider, bool enabled, bytes32 chainUid_) external;
     function kycProviderId(bytes32 provider) external view returns (uint32);
     function kycProviderEnabled(uint32 id) external view returns (bool);
-    function setCompliance(bytes32[] calldata accounts, uint64[] calldata flags, uint64[] calldata until, bytes32 chainUid_)
-        external;
+    function setCompliance(
+        bytes32[] calldata accounts,
+        uint64[] calldata flags,
+        uint64[] calldata until,
+        bytes32 chainUid_
+    ) external;
     function complianceOf(bytes32 account) external view returns (uint64 flags, uint64 validUntil, uint32 providerId);
     function hasFlags(bytes32 account, uint64 required, uint64 denied) external view returns (bool);
 }
@@ -88,7 +92,9 @@ contract RegistryTestRouter {
         (_subject, _target) = (s, target);
         (bool ok, bytes memory ret) = target.call(data);
         (_subject, _target) = (bytes32(0), address(0));
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        }
     }
 }
 
@@ -186,9 +192,17 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
         }
         msigData = _msigKey(2, m);
         bytes32 id = UAKinds.uaOf(UAKinds.MSIG, msigData);
-        msig = UACall.register(preg, UAKinds.MSIG, msigData, _none(),
-            abi.encode(_memberSigs(id, UAKinds.PURPOSE_POP_V2, _regDigest(id, UAKinds.MSIG), 2)), "");
-        for (uint256 i; i < 3; ++i) preg.acceptMembership(msig, _acceptKeySig(msigData, ML44, mkeys[i]));
+        msig = UACall.register(
+            preg,
+            UAKinds.MSIG,
+            msigData,
+            _none(),
+            abi.encode(_memberSigs(id, UAKinds.PURPOSE_POP_V2, _regDigest(id, UAKinds.MSIG), 2)),
+            ""
+        );
+        for (uint256 i; i < 3; ++i) {
+            preg.acceptMembership(msig, _acceptKeySig(msigData, ML44, mkeys[i]));
+        }
     }
 
     // ------------------------------------------------------------------ fixture
@@ -209,7 +223,9 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
         pk = new bytes(1312);
         for (uint256 i; i < 1312; i += 32) {
             bytes32 w = keccak256(abi.encode(ML44, salt, i));
-            for (uint256 j; j < 32 && i + j < 1312; ++j) pk[i + j] = w[j];
+            for (uint256 j; j < 32 && i + j < 1312; ++j) {
+                pk[i + j] = w[j];
+            }
         }
     }
 
@@ -217,7 +233,9 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
     function _call(address from, address to, bytes memory cd) internal {
         vm.prank(from);
         (bool ok, bytes memory ret) = to.call(cd);
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        }
     }
 
     /// `from` calls `to` with `cd`, which must revert with exactly `err`.
@@ -233,7 +251,9 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
         _call(RELAYER, address(r), abi.encodeCall(RegistryTestRouter.exec, (s, address(c), cd)));
     }
 
-    function _viaRefused(RegistryTestRouter r, bytes32 s, IRegistryAdmin c, bytes memory cd, bytes memory err) internal {
+    function _viaRefused(RegistryTestRouter r, bytes32 s, IRegistryAdmin c, bytes memory cd, bytes memory err)
+        internal
+    {
         _refused(RELAYER, address(r), abi.encodeCall(RegistryTestRouter.exec, (s, address(c), cd)), err);
     }
 
@@ -268,44 +288,75 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
     // ------------------------------------------------------------------ the real router: signing
 
     function _domain(GovernanceRouter r) internal view returns (bytes32) {
-        (, string memory name, string memory version, uint256 chainId, address verifying, bytes32 salt,) = r.eip712Domain();
-        return keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256(bytes(name)), keccak256(bytes(version)), chainId, verifying, salt));
+        (, string memory name, string memory version, uint256 chainId, address verifying, bytes32 salt,) =
+            r.eip712Domain();
+        return keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256(bytes(name)),
+                keccak256(bytes(version)),
+                chainId,
+                verifying,
+                salt
+            )
+        );
     }
 
     function _env(GovernanceRouter r, bytes32 from) internal view returns (MetaTxLib.UAEnvelope memory) {
-        return MetaTxLib.UAEnvelope(from, 0, r.mtxNonce(from, 0), block.timestamp + 1 hours, 0, address(0), 0, address(0));
+        return
+            MetaTxLib.UAEnvelope(from, 0, r.mtxNonce(from, 0), block.timestamp + 1 hours, 0, address(0), 0, address(0));
     }
 
     /// The digest of `UA<op>(bytes32 from,address target<params>,E)` over `words` in `r`'s domain.
-    function _digest(GovernanceRouter r, string memory op, string memory params, MetaTxLib.UAEnvelope memory e,
-        address target, bytes memory words) internal view returns (bytes32)
-    {
+    function _digest(
+        GovernanceRouter r,
+        string memory op,
+        string memory params,
+        MetaTxLib.UAEnvelope memory e,
+        address target,
+        bytes memory words
+    ) internal view returns (bytes32) {
         bytes32 th = keccak256(bytes(string.concat("UA", op, "(bytes32 from,address target", params, TAIL)));
-        bytes32 h = keccak256(bytes.concat(abi.encode(th, e.from, target), words,
-            abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
+        bytes32 h = keccak256(
+            bytes.concat(
+                abi.encode(th, e.from, target),
+                words,
+                abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))
+            )
+        );
         return keccak256(abi.encodePacked("\x19\x01", _domain(r), h));
     }
 
     function _auth(bytes32 id, bytes32 d) internal view returns (IUARegistry.UASig memory a) {
-        if (id == k1) (a.keyData, a.signature) = (k1Key, _sig(k1Key, UAKinds.uaMessage(K1, UAKinds.PURPOSE_METATX, d)));
-        else if (id == ml) a.signature = _sig(mlKey, UAKinds.uaMessage(ML44, UAKinds.PURPOSE_METATX, d));
-        else if (id == msig) a.members = _memberSigs(msig, UAKinds.PURPOSE_METATX, d, 2);
-        else revert("no signer");
+        if (id == k1) {
+            (a.keyData, a.signature) = (k1Key, _sig(k1Key, UAKinds.uaMessage(K1, UAKinds.PURPOSE_METATX, d)));
+        } else if (id == ml) {
+            a.signature = _sig(mlKey, UAKinds.uaMessage(ML44, UAKinds.PURPOSE_METATX, d));
+        } else if (id == msig) {
+            a.members = _memberSigs(msig, UAKinds.PURPOSE_METATX, d, 2);
+        } else {
+            revert("no signer");
+        }
     }
 
     /// Slots 0..n-1 of the `msig` (index order), each over `(purpose, digest)` under `PURPOSE_MEMBER`.
     function _memberSigs(bytes32 ua, bytes32 purpose, bytes32 digest, uint256 n)
-        internal view returns (IUARegistry.MemberSig[] memory s)
+        internal
+        view
+        returns (IUARegistry.MemberSig[] memory s)
     {
         s = new IUARegistry.MemberSig[](n);
         bytes32 md = _memberDigest(ua, purpose, digest);
         for (uint16 i; i < n; ++i) {
             for (uint256 j; j < 3; ++j) {
                 if (_indexOf(msigData, UAKinds.uaOf(ML44, mkeys[j])) != i) continue;
-                s[i] = IUARegistry.MemberSig(i, new IUARegistry.InnerSig[](0),
-                    _sig(mkeys[j], UAKinds.uaMessage(ML44, UAKinds.PURPOSE_MEMBER, md)));
+                s[i] = IUARegistry.MemberSig(
+                    i,
+                    new IUARegistry.InnerSig[](0),
+                    _sig(mkeys[j], UAKinds.uaMessage(ML44, UAKinds.PURPOSE_MEMBER, md))
+                );
             }
         }
     }
@@ -322,8 +373,9 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
 
     function _transferCd(bytes32 by, address target, bytes32 to, bytes32 uid) internal view returns (bytes memory) {
         MetaTxLib.UAEnvelope memory e = _env(router, by);
-        IUARegistry.UASig memory a =
-            _auth(by, _digest(router, "TransferAdmin", ",bytes32 newAdmin,bytes32 chainUid", e, target, abi.encode(to, uid)));
+        IUARegistry.UASig memory a = _auth(
+            by, _digest(router, "TransferAdmin", ",bytes32 newAdmin,bytes32 chainUid", e, target, abi.encode(to, uid))
+        );
         return abi.encodeCall(router.mtxTransferAdmin, (e, target, to, uid, a));
     }
 
@@ -410,8 +462,12 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
         IRegistryAdmin c = _reg(nid(admin), address(router));
         bytes memory mm = abi.encodeWithSelector(IRegistryAdmin.ChainUidMismatch.selector, REG_UID, REG_SIB);
         _refused(admin, address(c), abi.encodeCall(IRegistryAdmin.transferAdmin, (nid(next), REG_SIB)), mm);
-        _refused(STRANGER, address(c), abi.encodeCall(IRegistryAdmin.transferAdmin, (nid(next), REG_SIB)),
-            _notAdmin(nid(STRANGER)));
+        _refused(
+            STRANGER,
+            address(c),
+            abi.encodeCall(IRegistryAdmin.transferAdmin, (nid(next), REG_SIB)),
+            _notAdmin(nid(STRANGER))
+        );
         _call(admin, address(c), _xfer(ml));
         _call(RELAYER, address(router), _acceptCd(router, ml, address(c)));
         _refused(RELAYER, address(router), _transferCd(ml, address(c), nid(next), REG_SIB), mm);
@@ -429,8 +485,12 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
         IRegistryAdmin c = _reg(nid(admin), address(0));
         bytes memory mm = abi.encodeWithSelector(IRegistryAdmin.ChainUidMismatch.selector, REG_UID, REG_SIB);
         _refused(admin, address(c), abi.encodeCall(IRegistryAdmin.setKycProvider, (nid(prov), true, REG_SIB)), mm);
-        _refused(STRANGER, address(c), abi.encodeCall(IRegistryAdmin.setKycProvider, (nid(prov), true, REG_SIB)),
-            _notAdmin(nid(STRANGER)));
+        _refused(
+            STRANGER,
+            address(c),
+            abi.encodeCall(IRegistryAdmin.setKycProvider, (nid(prov), true, REG_SIB)),
+            _notAdmin(nid(STRANGER))
+        );
         assertEq(c.kycProviderId(nid(prov)), 0, "no provider written");
         bytes32[] memory a = new bytes32[](1);
         uint64[] memory f = new uint64[](1);
@@ -599,8 +659,16 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
         assertEq(a.admin(), ml);
 
         bytes32 uidB = keccak256("chain B");
-        UARegistry pregB = _deploy(address(uint160(uint256(keccak256("scaas.test.preg.b")))), uidB, address(0), false,
-            BUDGET, address(0), true, _kinds());
+        UARegistry pregB = _deploy(
+            address(uint160(uint256(keccak256("scaas.test.preg.b")))),
+            uidB,
+            address(0),
+            false,
+            BUDGET,
+            address(0),
+            true,
+            _kinds()
+        );
         GovernanceRouter routerB = new GovernanceRouter(uidB, address(pregB), address(0), false);
         assertEq(_register(pregB, ML44, mlKey), ml, "one derived id on both chains");
         IRegistryAdmin cb = _reg(nid(admin), address(routerB));
@@ -674,7 +742,9 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
             abi.encodeWithSelector(bytes4(0xf358d481), uint32(0)), // attesterEnabled(uint32)
             abi.encodeWithSelector(bytes4(0xf146f55a), prov) // attesterId(address)
         ];
-        for (uint256 i; i < old.length; ++i) _refused(admin, address(c), old[i], "");
+        for (uint256 i; i < old.length; ++i) {
+            _refused(admin, address(c), old[i], "");
+        }
         _call(admin, address(c), _row(ACC, KYC, MAX)); // the control: the new entry
     }
 
@@ -727,14 +797,22 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
             vm.expectEmit(true, true, true, true, address(c));
             emit IRegistryAdmin.ComplianceSet(a, KYC, MAX, uint32(i + 1));
             _via(trouter, ps[i], c, _row(a, KYC, MAX));
-            (, , uint32 id) = _rowOf(c, a);
+            (,, uint32 id) = _rowOf(c, a);
             assertEq(id, c.kycProviderId(ps[i]), "its own id");
         }
         _via(trouter, ml, c, _row(ACC, KYC, MAX)); // the admin through the router: id 0
-        (, , uint32 aid) = _rowOf(c, ACC);
+        (,, uint32 aid) = _rowOf(c, ACC);
         assertEq(aid, 0);
-        _viaRefused(trouter, msig, c, _row(ACC, ELIGIBLE, MAX), abi.encodeWithSelector(IRegistryAdmin.EligibleContractAdminOnly.selector));
-        _viaRefused(trouter, msig, c, _row(ACC, 2, MAX), abi.encodeWithSelector(IRegistryAdmin.AdminWrittenSlot.selector, ACC));
+        _viaRefused(
+            trouter,
+            msig,
+            c,
+            _row(ACC, ELIGIBLE, MAX),
+            abi.encodeWithSelector(IRegistryAdmin.EligibleContractAdminOnly.selector)
+        );
+        _viaRefused(
+            trouter, msig, c, _row(ACC, 2, MAX), abi.encodeWithSelector(IRegistryAdmin.AdminWrittenSlot.selector, ACC)
+        );
         _viaRefused(trouter, k1, c, _row(ACC, KYC, MAX), _notProvider());
         _refused(STRANGER, address(c), _row(ACC, KYC, MAX), _notProvider());
         _refused(address(trouter), address(c), _row(ACC, KYC, MAX), _notProvider()); // the router itself is no one
@@ -768,13 +846,19 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
         _call(admin, address(c), _enable(nid(prov), true));
         _call(prov, address(c), _row(ACC, KYC, MAX)); // the control: an empty slot is open
         _call(admin, address(c), _row(ACC, KYC, MAX));
-        _refused(prov, address(c), _row(ACC, 2, MAX), abi.encodeWithSelector(IRegistryAdmin.AdminWrittenSlot.selector, ACC));
+        _refused(
+            prov, address(c), _row(ACC, 2, MAX), abi.encodeWithSelector(IRegistryAdmin.AdminWrittenSlot.selector, ACC)
+        );
         bytes memory ec = abi.encodeWithSelector(IRegistryAdmin.EligibleContractAdminOnly.selector);
         _refused(prov, address(c), _row(bytes32(uint256(1)), ELIGIBLE, MAX), ec);
         _refused(admin, address(c), _row(bytes32(uint256(1)), ELIGIBLE, MAX - 1), ec);
         _call(admin, address(c), _row(bytes32(uint256(1)), ELIGIBLE, MAX));
-        _refused(admin, address(c), abi.encodeCall(IRegistryAdmin.setCompliance, (new bytes32[](2), new uint64[](1),
-            new uint64[](2), REG_UID)), abi.encodeWithSelector(IRegistryAdmin.LengthMismatch.selector));
+        _refused(
+            admin,
+            address(c),
+            abi.encodeCall(IRegistryAdmin.setCompliance, (new bytes32[](2), new uint64[](1), new uint64[](2), REG_UID)),
+            abi.encodeWithSelector(IRegistryAdmin.LengthMismatch.selector)
+        );
     }
 
     /// At most 256 rows per call (the node's decode bound): 256 pass, 257 `TooManyRows(257)`.
@@ -784,7 +868,9 @@ contract RegistryAdminTest is UARegistryBase, RegistryCalls {
             bytes32[] memory a = new bytes32[](n);
             uint64[] memory f = new uint64[](n);
             uint64[] memory u = new uint64[](n);
-            for (uint256 i; i < n; ++i) (a[i], f[i], u[i]) = (bytes32(i + 1), KYC, MAX);
+            for (uint256 i; i < n; ++i) {
+                (a[i], f[i], u[i]) = (bytes32(i + 1), KYC, MAX);
+            }
             bytes memory cd = abi.encodeCall(IRegistryAdmin.setCompliance, (a, f, u, REG_UID));
             if (n == 256) _call(admin, address(c), cd);
             else _refused(admin, address(c), cd, abi.encodeWithSelector(IRegistryAdmin.TooManyRows.selector, n));
@@ -821,8 +907,14 @@ contract RegistryRouterCheckTest is RegFixture, RegistryCalls {
         RegistryTestRouter own = new RegistryTestRouter(UID, address(ureg));
         RegistryTestRouter other = new RegistryTestRouter(UID, address(ureg));
         OpenFactory g = EnvKit.factory(address(this), UID, 0, address(own));
-        Catalogue.release(g, IOpenFactory.TokenKind.NORMAL_REGULATED, 1, plainEnv(address(g), address(0), UID, address(ureg),
-            false), type(NormalRegulatedToken).creationCode, regArgs());
+        Catalogue.release(
+            g,
+            IOpenFactory.TokenKind.NORMAL_REGULATED,
+            1,
+            plainEnv(address(g), address(0), UID, address(ureg), false),
+            type(NormalRegulatedToken).creationCode,
+            regArgs()
+        );
         g.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true, EnvKit.uidOf(address(g)));
         address r0 = address(_reg(nid(cadmin), address(0)));
         address ro = address(_reg(nid(cadmin), address(own)));

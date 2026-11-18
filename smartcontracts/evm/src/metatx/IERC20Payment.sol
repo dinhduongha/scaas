@@ -7,11 +7,24 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 
 /// @title Payments on a SCaaS token (metatx.md, Interfaces; CTR-MTX-01).
 interface IERC20Payment is IERC20MetaTx {
-    event PaymentSettled(address indexed from, address indexed to, uint256 amount, uint256 feeAmount,
-                         address feeRecipient, bytes32 indexed entryRef);
+    event PaymentSettled(
+        address indexed from,
+        address indexed to,
+        uint256 amount,
+        uint256 feeAmount,
+        address feeRecipient,
+        bytes32 indexed entryRef
+    );
 
     /// @notice `msg.sender` pays `amount` to `to`, the fee on top (CTR-MTX-08: never to the payee); `meta` last, never
     ///         empty, `entryRef == metaPayId(meta)` (pay-meta-tax spec §2.1, O2, O11).
-    function payWithFee(address to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient,
-                        bytes32 entryRef, MetaTxLib.PayMeta calldata meta) external returns (bool);
+    function payWithFee(
+        address to,
+        uint256 amount,
+        FeeMode feeMode,
+        uint256 fee,
+        address feeRecipient,
+        bytes32 entryRef,
+        MetaTxLib.PayMeta calldata meta
+    ) external returns (bool);
 }

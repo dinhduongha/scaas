@@ -32,37 +32,78 @@ abstract contract PqzVerdictKinds is PqzRegFixture {
 
     function _has(bytes4 sel) internal view returns (bool found) {
         (bytes4[] memory s,,) = IMetaTx(address(tok)).mtxSelectors();
-        for (uint256 i; i < s.length; ++i) if (s[i] == sel) found = true;
+        for (uint256 i; i < s.length; ++i) {
+            if (s[i] == sel) found = true;
+        }
     }
 
     function _selectors() internal view {
         string memory v = string.concat(",bytes,", SIG_T, ",bytes,", VERDICT_T, ")");
         assertTrue(_has(bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferSingle(", TARGS_T, v))))), "op 1");
-        assertTrue(_has(bytes4(keccak256(bytes(string.concat("mtxUnshield(", BARGS_T, ",uint256,bytes32", v))))), "unshield");
-        assertTrue(_has(IPqzToken.mtxConfidentialTransfer.selector) && _has(IPqzToken.mtxConfidentialTransferCompact.selector)
-            && _has(IPqzToken.mtxConfidentialTransferSingleCompact.selector), "the rest");
-        assertFalse(_has(bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferSingle(", TARGS_T, ",bytes,", SIG_T,
-            ",bytes)"))))), "no pre-3f op 1");
+        assertTrue(
+            _has(bytes4(keccak256(bytes(string.concat("mtxUnshield(", BARGS_T, ",uint256,bytes32", v))))), "unshield"
+        );
+        assertTrue(
+            _has(IPqzToken.mtxConfidentialTransfer.selector) && _has(IPqzToken.mtxConfidentialTransferCompact.selector)
+                && _has(IPqzToken.mtxConfidentialTransferSingleCompact.selector),
+            "the rest"
+        );
+        assertFalse(
+            _has(
+                bytes4(
+                    keccak256(
+                        bytes(string.concat("mtxConfidentialTransferSingle(", TARGS_T, ",bytes,", SIG_T, ",bytes)"))
+                    )
+                )
+            ),
+            "no pre-3f op 1"
+        );
         if (_isWrapped()) {
             assertTrue(_has(IPqzWrappedToken.mtxUnshieldUnwrap.selector), "unwrap");
-            assertTrue(_has(bytes4(keccak256(bytes(string.concat("mtxUnshieldUnwrap(", BARGS_T,
-                ",(address,bytes32,uint256,uint256)", v))))));
+            assertTrue(
+                _has(
+                    bytes4(
+                        keccak256(
+                            bytes(string.concat("mtxUnshieldUnwrap(", BARGS_T, ",(address,bytes32,uint256,uint256)", v))
+                        )
+                    )
+                )
+            );
         }
     }
 
     function _sepOf(address t) internal view returns (bytes32) {
-        (, string memory n, string memory ver, uint256 cid, address vc, bytes32 salt_,) = NormalPqzToken(t).eip712Domain();
-        return keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256(bytes(n)), keccak256(bytes(ver)), cid, vc, salt_));
+        (, string memory n, string memory ver, uint256 cid, address vc, bytes32 salt_,) =
+            NormalPqzToken(t).eip712Domain();
+        return keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256(bytes(n)),
+                keccak256(bytes(ver)),
+                cid,
+                vc,
+                salt_
+            )
+        );
     }
 
     function _sv(bytes memory st) internal view returns (IPqzToken.PqzSignedVerdict memory sv) {
-        sv.pqzVerdict = IPqzToken.PqzVerdict(address(tok), block.chainid, tok.proofSystemId(), keccak256(st), keccak256(PROOF),
-            tok.pqzVerifyConfig().pqzVerifierEpoch, uint64(block.timestamp + 600));
-        bytes32 d = MessageHashUtils.toTypedDataHash(_sepOf(address(tok)),
-            keccak256(abi.encode(PqzCore.VERDICT_TYPEHASH, sv.pqzVerdict)));
-        (uint8 w, bytes32 r, bytes32 s_) = vm.sign(VKEY, reg.uaAuthDigest(nid(vm.addr(VKEY)), UAKinds.PURPOSE_PQZ_VERDICT, d));
+        sv.pqzVerdict = IPqzToken.PqzVerdict(
+            address(tok),
+            block.chainid,
+            tok.proofSystemId(),
+            keccak256(st),
+            keccak256(PROOF),
+            tok.pqzVerifyConfig().pqzVerifierEpoch,
+            uint64(block.timestamp + 600)
+        );
+        bytes32 d = MessageHashUtils.toTypedDataHash(
+            _sepOf(address(tok)), keccak256(abi.encode(PqzCore.VERDICT_TYPEHASH, sv.pqzVerdict))
+        );
+        (uint8 w, bytes32 r, bytes32 s_) =
+            vm.sign(VKEY, reg.uaAuthDigest(nid(vm.addr(VKEY)), UAKinds.PURPOSE_PQZ_VERDICT, d));
         sv.sig.signature = abi.encodePacked(r, s_, w);
     }
 
@@ -117,18 +158,29 @@ abstract contract PqzVerdictKinds is PqzRegFixture {
 
 /// The views of kind 13 a test needs (`WrappedPqzToken`'s).
 interface WrappedPqzTokenLike {
-    function unshieldUnwrapStatement(IPqzToken.PqzBurnArgs calldata b, IConfidentialWrappedToken.Unwrap calldata x,
-        bytes32 binding) external view returns (bytes memory);
+    function unshieldUnwrapStatement(
+        IPqzToken.PqzBurnArgs calldata b,
+        IConfidentialWrappedToken.Unwrap calldata x,
+        bytes32 binding
+    ) external view returns (bytes memory);
 }
 
 contract PqzVerdictKind12Test is PqzVerdictKinds {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 
-    function test_mtxSelectors_pqzVerdict_12() public view { _selectors(); }
+    function test_mtxSelectors_pqzVerdict_12() public view {
+        _selectors();
+    }
 }
 
 contract PqzVerdictKind13Test is PqzVerdictKinds {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 
-    function test_mtxSelectors_pqzVerdict_13() public view { _selectors(); }
+    function test_mtxSelectors_pqzVerdict_13() public view {
+        _selectors();
+    }
 }

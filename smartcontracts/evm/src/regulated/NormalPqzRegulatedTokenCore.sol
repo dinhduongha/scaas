@@ -31,21 +31,28 @@ abstract contract NormalPqzRegulatedTokenCore is NormalPqzTokenCore, RegulatedBa
         RegulatedBase(implArgs)
     {}
 
-
     /// @dev The base kind's env checks, restated for the second base.
-    function _validateEnv(IFactoryToken.ChainEnv calldata env) internal view override(MetaTokenBase, NormalPqzTokenCore) {
+    function _validateEnv(IFactoryToken.ChainEnv calldata env)
+        internal
+        view
+        override(MetaTokenBase, NormalPqzTokenCore)
+    {
         NormalPqzTokenCore._validateEnv(env);
     }
+
     function kind() public pure override(MetaTokenBase, NormalPqzTokenCore) returns (uint8) {
         return TokenStore.KIND_NORMAL_PQZ_REGULATED;
     }
 
     function _validBits() internal pure override(GovernanceBaseCore, NormalPqzTokenCore) returns (uint256) {
-        return GovernanceBits.NORMAL_BITS | REG_BITS_CONFIDENTIAL | GovernanceBits.PQZ_KIND_BITS | GovernanceBits.AUDITOR_BITS;
+        return
+            GovernanceBits.NORMAL_BITS | REG_BITS_CONFIDENTIAL | GovernanceBits.PQZ_KIND_BITS
+                | GovernanceBits.AUDITOR_BITS;
     }
 
     function _roleBits() internal pure override(MetaTokenBase, NormalPqzTokenCore) returns (uint256) {
-        return GovernanceBits.NORMAL_ROLES | REG_ROLES_CONFIDENTIAL | GovernanceBits.PQZ_KIND_BITS | GovernanceBits.AUDITOR_BITS;
+        return GovernanceBits.NORMAL_ROLES | REG_ROLES_CONFIDENTIAL | GovernanceBits.PQZ_KIND_BITS
+            | GovernanceBits.AUDITOR_BITS;
     }
 
     function _contractOnlyBits() internal pure override returns (uint256) {
@@ -106,7 +113,11 @@ abstract contract NormalPqzRegulatedTokenCore is NormalPqzTokenCore, RegulatedBa
         super._regReceiver(recipient);
     }
 
-    function _mtxSelectorsBody() internal pure override(MetaTxBaseCore, NormalPqzTokenCore) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+    function _mtxSelectorsBody()
+        internal
+        pure
+        override(MetaTxBaseCore, NormalPqzTokenCore)
+        returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         return super._mtxSelectorsBody();
     }
@@ -124,13 +135,19 @@ abstract contract NormalPqzRegulatedTokenCore is NormalPqzTokenCore, RegulatedBa
     }
 
     function _envelopeBinding(MetaTxLib.MetaTransaction memory m)
-        internal view override(MetaTxBaseCore, NormalPqzTokenCore) returns (bytes32)
+        internal
+        view
+        override(MetaTxBaseCore, NormalPqzTokenCore)
+        returns (bytes32)
     {
         return super._envelopeBinding(m);
     }
 
     function _uaEnvelopeBinding(MetaTxLib.UAMetaTransaction memory m)
-        internal view override(NormalPqzTokenCore, UAMetaTxBaseCore) returns (bytes32)
+        internal
+        view
+        override(NormalPqzTokenCore, UAMetaTxBaseCore)
+        returns (bytes32)
     {
         return super._uaEnvelopeBinding(m);
     }

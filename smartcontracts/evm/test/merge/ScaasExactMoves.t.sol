@@ -26,7 +26,24 @@ contract ExactRegRig is RegRig {
         vm.prank(issuer);
         IRegulatedToken(tt).setTaxRate(10_000, EnvKit.codeUidOf(address(tt)));
         require(IRegulatedToken(tt).taxConfig().effectivePpm == 10_000, "the rate");
-        tks.push(Tk("NORMAL_REGULATED_TAX", tt, ALICE_PK, alice, BOB_PK, bob, address(0xFEE), relayer, 0, 0, address(0), address(0), 0, 0));
+        tks.push(
+            Tk(
+                "NORMAL_REGULATED_TAX",
+                tt,
+                ALICE_PK,
+                alice,
+                BOB_PK,
+                bob,
+                address(0xFEE),
+                relayer,
+                0,
+                0,
+                address(0),
+                address(0),
+                0,
+                0
+            )
+        );
         for (uint256 i; i < tks.length; ++i) {
             vm.prank(alice);
             IUALedger(tks[i].t).transferToUA(UA_X, 100_000);
@@ -60,9 +77,13 @@ contract ExactPqzRegRig is PqzRegRig {
 
 /// The order's `dex`: pulls and refunds in one call (a refund is bounded by this transaction's pull).
 contract ExactDex {
-    function pullAndRestore(address t, ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata auth,
-        ITradeToken.TradeFill calldata f, uint256 back) external
-    {
+    function pullAndRestore(
+        address t,
+        ITradeToken.UATradeOrder calldata o,
+        IUARegistry.UASig calldata auth,
+        ITradeToken.TradeFill calldata f,
+        uint256 back
+    ) external {
         ITradeToken(t).mtxTrade(o, auth, f);
         if (back != 0) ITradeToken(t).restorePulled(o, back);
     }
@@ -117,7 +138,9 @@ contract ScaasExactMovesTest is Test {
     }
 
     function _order(Tk memory k, bytes32 from, address dex, uint256 nonce, uint8 flags)
-        internal view returns (ITradeToken.UATradeOrder memory o, IUARegistry.UASig memory auth)
+        internal
+        view
+        returns (ITradeToken.UATradeOrder memory o, IUARegistry.UASig memory auth)
     {
         o.from = from;
         o.receiveToken = address(0x0B7);
@@ -172,7 +195,9 @@ contract ScaasExactMovesTest is Test {
                 d0 = t.balanceOf(dex);
                 (o, auth) = _order(k, k.uaD, dex, 3, 0);
                 x.pullAndRestore(k.t, o, auth, ITradeToken.TradeFill(600, 600, 0, address(this)), 100);
-                assertEq(IUALedger(k.t).balanceOfUA(k.uaD), u0 - 500, string.concat(k.kind, ": derived pull and refund"));
+                assertEq(
+                    IUALedger(k.t).balanceOfUA(k.uaD), u0 - 500, string.concat(k.kind, ": derived pull and refund")
+                );
                 assertEq(t.balanceOf(dex), d0 + 500, string.concat(k.kind, ": derived pull and refund, dex"));
             }
         }

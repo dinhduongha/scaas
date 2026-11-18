@@ -86,7 +86,9 @@ contract PairingVerifiersTest is Test {
 
     /// UA-8: the portable PoP message (no chain context), the same in every context.
     function _popMessage(uint16 kind, bytes32 ua) internal pure returns (bytes32) {
-        return UAKinds.uaMessage(kind, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(ua, kind, 0, UAKinds.kemRecordHash(ua, 0, ""), 0));
+        return UAKinds.uaMessage(
+            kind, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(ua, kind, 0, UAKinds.kemRecordHash(ua, 0, ""), 0)
+        );
     }
 
     function _bls(uint16 k) internal pure returns (bool) {
@@ -255,8 +257,7 @@ contract PairingVerifiersTest is Test {
             }
             assertGt(n, 3);
             // −sig is a valid point and a wrong signature.
-            bytes memory negSig =
-                r.kind == UAKinds.BLS12381_MINSIG ? G1Bls12381.neg(r.metaSig) : G1Bn254.neg(r.metaSig);
+            bytes memory negSig = r.kind == UAKinds.BLS12381_MINSIG ? G1Bls12381.neg(r.metaSig) : G1Bn254.neg(r.metaSig);
             assertFalse(_both(verifier[r.kind], r.keyData, r.metaMsg, negSig), "-sig");
         }
     }
@@ -358,7 +359,12 @@ contract PairingVerifiersTest is Test {
             // Rejecting a malformed point (a failing precompile burns what it is given): bounded by CHECK_GAS.
             bytes memory offCurve = r.metaSig.length == 64 || r.metaSig.length == 96
                 ? bytes.concat(bytes32(uint256(1)), bytes32(uint256(3)), _tail(r.metaSig, r.metaSig.length - 64))
-                : bytes.concat(_cut(r.metaSig, r.metaSig.length - 64), bytes32(0), bytes32(uint256(5)), _tail(r.metaSig, r.metaSig.length - 128));
+                : bytes.concat(
+                    _cut(r.metaSig, r.metaSig.length - 64),
+                    bytes32(0),
+                    bytes32(uint256(5)),
+                    _tail(r.metaSig, r.metaSig.length - 128)
+                );
             uint256 gb = _gas(v, false, r.keyData, r.metaMsg, offCurve);
             console.log(UAKinds.name(r.kind));
             console.log("  verify metatx(cold) / member", gv, gm);
@@ -390,7 +396,9 @@ contract PairingVerifiersTest is Test {
     }
 
     function _gas(UASafeVerifier v, bool pop, bytes memory k, bytes32 m, bytes memory s)
-        internal view returns (uint256 used)
+        internal
+        view
+        returns (uint256 used)
     {
         uint256 g = gasleft();
         pop ? v.verifyPop(k, m, s) : v.verify(k, m, s);
@@ -413,11 +421,15 @@ contract PairingVerifiersTest is Test {
 
     function _cut(bytes memory b, uint256 n) internal pure returns (bytes memory c) {
         c = new bytes(b.length - n);
-        for (uint256 i; i < c.length; ++i) c[i] = b[i];
+        for (uint256 i; i < c.length; ++i) {
+            c[i] = b[i];
+        }
     }
 
     function _tail(bytes memory b, uint256 n) internal pure returns (bytes memory c) {
         c = new bytes(n);
-        for (uint256 i; i < n; ++i) c[i] = b[b.length - n + i];
+        for (uint256 i; i < n; ++i) {
+            c[i] = b[b.length - n + i];
+        }
     }
 }

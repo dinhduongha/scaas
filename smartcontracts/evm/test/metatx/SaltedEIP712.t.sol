@@ -29,9 +29,18 @@ contract SaltedEIP712Test is Test {
     }
 
     function _expected(address verifying) internal view returns (bytes32) {
-        return keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256("SCaaS TestRegistry"), keccak256("1"), block.chainid, verifying, UID));
+        return keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256("SCaaS TestRegistry"),
+                keccak256("1"),
+                block.chainid,
+                verifying,
+                UID
+            )
+        );
     }
 
     function test_separatorIsSalted() public view {
@@ -67,7 +76,9 @@ contract SaltedEIP712Test is Test {
     }
 
     function test_longNameRefused() public {
-        vm.expectRevert(abi.encodeWithSelector(ShortStrings.StringTooLong.selector, "SCaaS A Name Longer Than 31 Bytes"));
+        vm.expectRevert(
+            abi.encodeWithSelector(ShortStrings.StringTooLong.selector, "SCaaS A Name Longer Than 31 Bytes")
+        );
         new SaltedHarness("SCaaS A Name Longer Than 31 Bytes", UID);
     }
 

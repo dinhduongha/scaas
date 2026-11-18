@@ -74,9 +74,12 @@ contract ComplianceRegistry is IComplianceRegistry, UAAdmin {
         return id == 0 || _enabled[id];
     }
 
-    function setCompliance(bytes32[] calldata accounts, uint64[] calldata flags, uint64[] calldata until, bytes32 chainUid_)
-        external
-    {
+    function setCompliance(
+        bytes32[] calldata accounts,
+        uint64[] calldata flags,
+        uint64[] calldata until,
+        bytes32 chainUid_
+    ) external {
         bytes32 c = _adminSubject();
         uint32 id;
         if (c != _adminStorage().admin) {

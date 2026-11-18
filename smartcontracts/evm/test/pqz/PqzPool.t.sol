@@ -72,7 +72,8 @@ contract PqzPoolTest is PqzFixture {
         assertEq(tok.pqzAccount(carol, 0).pendingCount, 0, "no TRIVIAL entry");
         assertEq(tok.totalShielded(), 1000 - FEE);
         _assertConservation(tok);
-        bytes memory pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, carol), _blob(3, PqzCt.CT));
+        bytes memory pl =
+            bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, carol), _blob(3, PqzCt.CT));
         tok.mtxUnshield(_bs(pl), 100, bytes32(uint256(uint160(address(0xD00D)))), hex"c0de", _pqAuth(), "", noVerdict());
         assertEq(tok.balanceOf(address(0xD00D)), 100 * SCALE, "from the pool");
         assertEq(tok.balanceOfUA(carol), 2 * FEE * SCALE, "burn txFee");
@@ -89,11 +90,16 @@ contract PqzPoolTest is PqzFixture {
     /// to or from it too.
     function test_pool_neitherPayeeNorSpender() public {
         _fund(tok, alice, 100);
-        bytes memory pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, bytes32(0)), _blob(3, PqzCt.CT));
+        bytes memory pl =
+            bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, bytes32(0)), _blob(3, PqzCt.CT));
         vm.expectRevert(IUALedger.ShieldPoolNotPayable.selector);
-        tok.mtxUnshield(_bs(pl), 10, bytes32(uint256(uint160(MetaTxLib.SHIELD_POOL))), hex"c0de", _pqAuth(), "", noVerdict());
+        tok.mtxUnshield(
+            _bs(pl), 10, bytes32(uint256(uint160(MetaTxLib.SHIELD_POOL))), hex"c0de", _pqAuth(), "", noVerdict()
+        );
         vm.expectRevert(IUALedger.UAPoolNotPayable.selector);
-        tok.mtxUnshield(_bs(pl), 10, bytes32(uint256(uint160(MetaTxLib.UA_POOL))), hex"c0de", _pqAuth(), "", noVerdict());
+        tok.mtxUnshield(
+            _bs(pl), 10, bytes32(uint256(uint160(MetaTxLib.UA_POOL))), hex"c0de", _pqAuth(), "", noVerdict()
+        );
         vm.expectRevert(IUALedger.ShieldPoolNotPayable.selector);
         tok.burnStatement(_bs(pl), 10, bytes32(uint256(uint160(MetaTxLib.SHIELD_POOL))), 0);
         _public(tok, address(this), 1);
@@ -122,8 +128,9 @@ contract PqzPoolTest is PqzFixture {
         bytes memory out = _out(1, true);
         bytes memory pl = _payloadFor(tok, alice, bob, carol, out);
         address blob = _nextBlob(address(tok));
-        bytes32 ref = keccak256(abi.encode(keccak256("SCAAS-PQZ-ENTRY-V1"), block.chainid, tok.chainUid(), address(tok),
-            alice, uint256(0)));
+        bytes32 ref = keccak256(
+            abi.encode(keccak256("SCAAS-PQZ-ENTRY-V1"), block.chainid, tok.chainUid(), address(tok), alice, uint256(0))
+        );
         vm.expectEmit(true, false, false, true, address(tok));
         emit IPqzToken.Debited(alice, 0, 1, 1, blob);
         vm.expectEmit(true, true, false, true, address(tok));
@@ -139,11 +146,13 @@ contract PqzPoolTest is PqzFixture {
         (rec[0], rec[1]) = (bob, carol);
         pl = _mpayload(1, 0, alice, bytes32(0), rec, _blob(2, _outLen(2, true)), "");
         blob = _nextBlob(address(tok));
-        ref = keccak256(abi.encode(keccak256("SCAAS-PQZ-ENTRY-V1"), block.chainid, tok.chainUid(), address(tok), alice,
-            uint256(1)));
+        ref = keccak256(
+            abi.encode(keccak256("SCAAS-PQZ-ENTRY-V1"), block.chainid, tok.chainUid(), address(tok), alice, uint256(1))
+        );
         vm.expectEmit(true, true, true, true, address(tok));
-        emit IConfidentialToken.ConfidentialTransferMulti(ref, alice, bytes32(0), 2 * decoy, 1, rec,
-            uint8(ZetherTypes.TransferMode.BUNDLE), blob);
+        emit IConfidentialToken.ConfidentialTransferMulti(
+            ref, alice, bytes32(0), 2 * decoy, 1, rec, uint8(ZetherTypes.TransferMode.BUNDLE), blob
+        );
         tok.mtxConfidentialTransfer(_ms(pl), hex"01", _pqAuth(), "", noVerdict());
 
         // burn (refresh: amount 0)
@@ -186,8 +195,11 @@ contract PqzPoolTest is PqzFixture {
         bytes memory r = _rOf(out, bob);
         bytes memory blob = tok.pqzEntryBlob(ref);
         // group 3h (T59, C5): then the tail, ownTag 0 (the fixture's) ‖ kv (bob 0, the auditor 0) ‖ u8(2)
-        assertEq(blob, bytes.concat(r, _packed(_cut(out, PqzCt.CT, PqzCt.V)), bytes32(0), bytes8(0), bytes8(0), bytes1(0x02)),
-            "R || P(v_f) || ownTag || kv || n");
+        assertEq(
+            blob,
+            bytes.concat(r, _packed(_cut(out, PqzCt.CT, PqzCt.V)), bytes32(0), bytes8(0), bytes8(0), bytes1(0x02)),
+            "R || P(v_f) || ownTag || kv || n"
+        );
         assertEq(a.accBlob.code, bytes.concat(hex"00", blob), "the acc reference is the op blob");
         assertEq(tok.transferCiphertextHash(ref), keccak256(r), "ciphertextHash: keccak of the packed R");
         assertEq(tok.pqzEntryBlob(bytes32(0)), "");
@@ -198,7 +210,11 @@ contract PqzPoolTest is PqzFixture {
 
     // ------------------------------------------------------------------ D15: the relayed mode binding (review L1)
 
-    function _m(address signer, bytes memory data, uint256 nonce) internal view returns (MetaTxLib.MetaTransaction memory m) {
+    function _m(address signer, bytes memory data, uint256 nonce)
+        internal
+        view
+        returns (MetaTxLib.MetaTransaction memory m)
+    {
         m.from = signer;
         m.data = data;
         m.nonce = nonce;
@@ -210,8 +226,13 @@ contract PqzPoolTest is PqzFixture {
     /// one passes.
     function test_relayedModeBound() public {
         bytes memory pl = _payload(0, 0, alice, bob, bytes32(0), _out(5, true), "");
-        MetaTxLib.MetaTransaction memory m =
-            _m(vm.addr(KEY), abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(pl), hex"c0de", _pqAuth(), bytes(""), noVerdict())), 0);
+        MetaTxLib.MetaTransaction memory m = _m(
+            vm.addr(KEY),
+            abi.encodeCall(
+                IPqzToken.mtxConfidentialTransferSingle, (_ts(pl), hex"c0de", _pqAuth(), bytes(""), noVerdict())
+            ),
+            0
+        );
         bytes32 env = _addrBinding(tok, m);
         bytes memory st = tok.transferSingleStatement(_ts(pl), env);
         assertEq(bytes32(_cut(st, 544, 32)), _relayed(env, ZetherTypes.TransferMode.BUNDLE), "mode folded in");
@@ -264,8 +285,10 @@ contract PqzPoolWrappedTest is PqzFixture {
         w.mtxWrapShield(address(usd), 1_000 * SCALE, alice);
         assertEq(w.totalSupply(), 1_000 * SCALE, "minted to the pool");
         assertEq(w.balanceOf(MetaTxLib.SHIELD_POOL), 1_000 * SCALE);
-        bytes memory pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, carol), _blob(3, PqzCt.CT));
-        IConfidentialWrappedToken.Unwrap memory x = IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 400, 0);
+        bytes memory pl =
+            bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, carol), _blob(3, PqzCt.CT));
+        IConfidentialWrappedToken.Unwrap memory x =
+            IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 400, 0);
         w.mtxUnshieldUnwrap(_bs(pl), x, hex"c0de", _pqAuth(), "", noVerdict());
         assertEq(usd.balanceOf(address(0xD00D)), 400 * SCALE);
         assertEq(w.totalSupply(), 600 * SCALE, "burnt from the pool");
@@ -283,11 +306,15 @@ contract PqzPoolWrappedTest is PqzFixture {
         usd.mint(address(this), 100 * SCALE);
         usd.approve(address(w), type(uint256).max);
         w.mtxWrapShield(address(usd), 100 * SCALE, alice);
-        bytes memory pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, bytes32(0)), _blob(3, PqzCt.CT));
-        IConfidentialWrappedToken.Unwrap memory x = IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 40, 7);
+        bytes memory pl =
+            bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, bytes32(0)), _blob(3, PqzCt.CT));
+        IConfidentialWrappedToken.Unwrap memory x =
+            IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 40, 7);
         MetaTxLib.MetaTransaction memory m;
         m.from = vm.addr(KEY);
-        m.data = abi.encodeCall(IPqzWrappedToken.mtxUnshieldUnwrap, (_bs(pl), x, hex"c0de", _pqAuth(), bytes(""), noVerdict()));
+        m.data = abi.encodeCall(
+            IPqzWrappedToken.mtxUnshieldUnwrap, (_bs(pl), x, hex"c0de", _pqAuth(), bytes(""), noVerdict())
+        );
         m.validUntil = block.timestamp + 1 hours;
         bytes32 env = _addrBinding(NormalPqzToken(address(w)), m);
         bytes32 want = keccak256(abi.encode(env, w.unwrapBinding(address(usd), 7)));
@@ -334,7 +361,8 @@ contract PqzPoolHandler is Test, PqzArgs {
         uint256 s = ++seed;
         b = new bytes(n);
         for (uint256 i; i < n; i += 32) {
-            uint256 x = uint256(keccak256(abi.encode(s, i))) & 0x000000ffffffffff000000ffffffffff000000ffffffffff000000ffffffffff;
+            uint256 x = uint256(keccak256(abi.encode(s, i)))
+                & 0x000000ffffffffff000000ffffffffff000000ffffffffff000000ffffffffff;
             assembly ("memory-safe") { mstore(add(add(b, 32), i), x) }
         }
     }
@@ -376,8 +404,11 @@ contract PqzPoolHandler is Test, PqzArgs {
         bytes32 ben = _ben(sel);
         top = bound(top, 0, w.balanceOf(address(this)) / SCALE);
         if (w.totalShielded() + top < _fee(ben)) return;
-        bytes memory pl = bytes.concat(abi.encode(_p(), block.number + 100, top, uas[0], uas[1], ben),
-            bytes16(uint128(seed)), _blob(PqzCore.OUT_OFF));
+        bytes memory pl = bytes.concat(
+            abi.encode(_p(), block.number + 100, top, uas[0], uas[1], ben),
+            bytes16(uint128(seed)),
+            _blob(PqzCore.OUT_OFF)
+        );
         w.mtxConfidentialTransferSingle(_ts(pl), hex"c0de", _pqAuth(), "", noVerdict());
         fees += _fee(ben);
     }
@@ -389,8 +420,12 @@ contract PqzPoolHandler is Test, PqzArgs {
         uint256 total = _fee(ben) + 4 * d;
         if (w.totalShielded() < total) return;
         bytes memory legs = abi.encodePacked(uas[1], uas[2], uas[3], uas[4]);
-        bytes memory pl = bytes.concat(abi.encode(_p(), block.number + 100, uint256(0), uas[0], ben, uint256(4), d),
-            bytes16(uint128(seed)), legs, _blob(PqzCt.PK + 128 * 5));
+        bytes memory pl = bytes.concat(
+            abi.encode(_p(), block.number + 100, uint256(0), uas[0], ben, uint256(4), d),
+            bytes16(uint128(seed)),
+            legs,
+            _blob(PqzCt.PK + 128 * 5)
+        );
         w.mtxConfidentialTransfer(_ms(pl), hex"c0de", _pqAuth(), "", noVerdict());
         fees += total;
     }
@@ -411,7 +446,14 @@ contract PqzPoolHandler is Test, PqzArgs {
         if (w.totalShielded() <= f) return;
         a = bound(a, 1, w.totalShielded() - f);
         bytes memory pl = bytes.concat(abi.encode(_p(), block.number + 100, uint256(0), uas[0], ben), _blob(PqzCt.CT));
-        w.mtxUnshieldUnwrap(_bs(pl), IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(uint160(PAYEE))), a, 0), hex"c0de", _pqAuth(), "", noVerdict());
+        w.mtxUnshieldUnwrap(
+            _bs(pl),
+            IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(uint160(PAYEE))), a, 0),
+            hex"c0de",
+            _pqAuth(),
+            "",
+            noVerdict()
+        );
         fees += f;
         supply -= a * SCALE;
     }
@@ -442,11 +484,17 @@ contract PqzPoolInvariantTest is PqzFixture {
         assertEq(w.totalSupply(), h.supply(), "totalSupply moves only with wraps / unwraps");
         assertEq(w.balanceOf(MetaTxLib.SHIELD_POOL), w.totalShielded() * SCALE, "pool = totalShielded * scale");
         uint256 ua;
-        for (uint256 i; i < h.uaCount(); ++i) ua += w.balanceOfUA(h.uaAt(i));
+        for (uint256 i; i < h.uaCount(); ++i) {
+            ua += w.balanceOfUA(h.uaAt(i));
+        }
         assertEq(ua, h.fees() * SCALE, "every fee in a public UA balance");
         assertEq(w.balanceOf(MetaTxLib.UA_POOL), ua, "UA_POOL = sum of the UA balances");
-        assertEq(w.balanceOf(address(h)) + w.balanceOf(h.PAYEE()) + w.balanceOf(MetaTxLib.SHIELD_POOL)
-            + w.balanceOf(MetaTxLib.UA_POOL), w.totalSupply(), "sum of balances = totalSupply");
+        assertEq(
+            w.balanceOf(address(h)) + w.balanceOf(h.PAYEE()) + w.balanceOf(MetaTxLib.SHIELD_POOL)
+                + w.balanceOf(MetaTxLib.UA_POOL),
+            w.totalSupply(),
+            "sum of balances = totalSupply"
+        );
         assertGe(MockERC20(w.underlyings()[0]).balanceOf(address(w)), w.totalSupply(), "reserve >= totalSupply");
     }
 }

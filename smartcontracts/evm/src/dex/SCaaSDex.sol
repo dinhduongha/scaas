@@ -63,8 +63,6 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, IGovernance {
     uint8 internal constant ESCROW = 2;
 
-
-
     /// @notice The factory, at the same address on every chain (chain-neutral spec §2.1): a chain-neutral immutable.
     address public immutable FACTORY;
 
@@ -80,25 +78,25 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     /// @dev Per leg, computed before any transfer.
     struct Calc {
         bytes32 h;
-        uint256 sold;    // matched sell fill
-        uint256 recv;    // gross receive
-        uint256 fee;     // dexFee on recv
-        uint256 refund;  // Path B: amount - sold
-        bool outside;    // an outside-token leg (`DexOrder`), from the factory at use
-        bool ua;         // shape 1: a `UATradeOrder`
+        uint256 sold; // matched sell fill
+        uint256 recv; // gross receive
+        uint256 fee; // dexFee on recv
+        uint256 refund; // Path B: amount - sold
+        bool outside; // an outside-token leg (`DexOrder`), from the factory at use
+        bool ua; // shape 1: a `UATradeOrder`
         ITradeToken.UATradeOrder o; // the decoded order, ids as `bytes32` (shape 0: the address zero-padded)
     }
 
     /// @dev Per token of an exchange plan.
     struct Tok {
         address token;
-        uint256 snap;       // the DEX's balance before the pulls
-        uint256 sold;       // Σ sellFill of the legs selling it: what the route may spend
-        uint256 refunds;    // Σ Path B refunds of the legs selling it
-        uint256 floors;     // Σ receiveFill of the legs receiving it
-        uint256 excess;     // surplus above the floors, for the legs receiving it
+        uint256 snap; // the DEX's balance before the pulls
+        uint256 sold; // Σ sellFill of the legs selling it: what the route may spend
+        uint256 refunds; // Σ Path B refunds of the legs selling it
+        uint256 floors; // Σ receiveFill of the legs receiving it
+        uint256 excess; // surplus above the floors, for the legs receiving it
         uint256 floorsLeft; // floors of the legs not yet paid: the last one takes the rounding remainder
-        uint256 paid;       // surplus paid so far
+        uint256 paid; // surplus paid so far
     }
 
     /// @dev Runs once on the implementation and locks it.
@@ -122,7 +120,6 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         if (ITokenModule(m).moduleGroup() != group || ITokenModule(m).factory() != factory_) revert ModuleMismatch(i);
     }
 
-
     // ------------------------------------------------------------------ init and governance (CTR-DEX-24, CTR-DEX-03, CTR-GOV-01)
 
     /// @notice `initArgs = abi.encode(DexConfig)` (plan 5g-Z2: the factory forwards the creator's bytes), on a clone
@@ -135,9 +132,20 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         if (s.initialized) revert AlreadyInitialized();
         s.initialized = true;
         GovernanceLib.Roles memory none;
-        GovernanceLib.init(GovernanceBits.DEX_BITS | cfg.features, cfg.lockedFeatures, cfg.admin, cfg.grantDelay, address(0),
-            none, GovernanceBits.DEX_VALID, GovernanceBits.DEX_BITS, 0, address(0)); // no contract-only bit: no registry read
-        if (cfg.admin != 0) { // the admin holds both bits from creation (B-27: `grantRole` would only propose)
+        GovernanceLib.init(
+            GovernanceBits.DEX_BITS | cfg.features,
+            cfg.lockedFeatures,
+            cfg.admin,
+            cfg.grantDelay,
+            address(0),
+            none,
+            GovernanceBits.DEX_VALID,
+            GovernanceBits.DEX_BITS,
+            0,
+            address(0)
+        ); // no contract-only bit: no registry read
+        if (cfg.admin != 0) {
+            // the admin holds both bits from creation (B-27: `grantRole` would only propose)
             GovernanceLib.initHolder(GovernanceBits.LISTING, cfg.admin, GovernanceBits.DEX_BITS, 0, address(0));
             GovernanceLib.initHolder(GovernanceBits.FEE_ROUTING, cfg.admin, GovernanceBits.DEX_BITS, 0, address(0));
         }
@@ -162,47 +170,93 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     // (`_forward`: the guard check, DELEGATECALL, the revert data verbatim); `_pair`, `_setFeeSplit`, `_classify` are
     // `SCaaSDexCore`'s, one definition for both sides.
 
-    function _factoryAt() internal view override returns (address) { return FACTORY; }
+    function _factoryAt() internal view override returns (address) {
+        return FACTORY;
+    }
 
     /// @dev Bit 29 `CLOSED_MARKETS` (owner 2026-11-12): on, only listed pairs and known tokens trade; off (the default), any.
-    function _closed() private view returns (bool) { return GovernanceLib.hasFeature(GovernanceBits.CLOSED_MARKETS); }
+    function _closed() private view returns (bool) {
+        return GovernanceLib.hasFeature(GovernanceBits.CLOSED_MARKETS);
+    }
 
     // ------------------------------------------------------------------ views
 
-    function relayerSharePpm() external view returns (uint32) { return _s().relayerSharePpm; }
-    function treasury() external view returns (address) { return _s().treasury; }
-    function listedOnly() external view returns (bool) { return _s().listedOnly; }
-    function marketListed(address a, address b) external view returns (bool) { return _s().listed[_pair(a, b)]; }
-    function tokenKind(address token) external view returns (uint8) { return _s().kind[token]; }
-    function tokenKnown(address token) external view returns (bool) { return _s().listings[token] != 0; }
-    function exchangeTarget(address target) external view returns (bool) { return _s().exchangeTarget[target]; }
-    function factory() external view returns (address) { return FACTORY; }
+    function relayerSharePpm() external view returns (uint32) {
+        return _s().relayerSharePpm;
+    }
+
+    function treasury() external view returns (address) {
+        return _s().treasury;
+    }
+
+    function listedOnly() external view returns (bool) {
+        return _s().listedOnly;
+    }
+
+    function marketListed(address a, address b) external view returns (bool) {
+        return _s().listed[_pair(a, b)];
+    }
+
+    function tokenKind(address token) external view returns (uint8) {
+        return _s().kind[token];
+    }
+
+    function tokenKnown(address token) external view returns (bool) {
+        return _s().listings[token] != 0;
+    }
+
+    function exchangeTarget(address target) external view returns (bool) {
+        return _s().exchangeTarget[target];
+    }
+
+    function factory() external view returns (address) {
+        return FACTORY;
+    }
+
     /// @notice 0 on the implementation (it carries no env).
-    function chainUid() external view returns (bytes32) { return _chainUidRaw(); }
+    function chainUid() external view returns (bytes32) {
+        return _chainUidRaw();
+    }
+
     /// @notice This chain's `SmartKeyAccount` implementation (0 = none), as the tokens expose it; the deploy checks they agree.
-    function SMART_KEY_ACCOUNT_IMPL() external view returns (address) { return ChainEnvCode.smartKeyAccountImpl(); }
+    function SMART_KEY_ACCOUNT_IMPL() external view returns (address) {
+        return ChainEnvCode.smartKeyAccountImpl();
+    }
 
     /// @notice This instance's env, decoded from its code; all zero on the implementation (CTR-TOK-29).
-    function chainEnv() external view returns (IFactoryToken.ChainEnv memory) { return ChainEnvCode.decode(); }
+    function chainEnv() external view returns (IFactoryToken.ChainEnv memory) {
+        return ChainEnvCode.decode();
+    }
 
     /// @notice The DEX's checks of an env, by the factory at release deployment: none (it had no constructor check).
     function validateEnv(IFactoryToken.ChainEnv calldata) external pure {}
 
-    function _chainUidInCode() internal pure override returns (bool) { return true; }
+    function _chainUidInCode() internal pure override returns (bool) {
+        return true;
+    }
 
-    function _chainUidRaw() internal view override returns (bytes32) { return ChainEnvCode.chainUid(); }
+    function _chainUidRaw() internal view override returns (bytes32) {
+        return ChainEnvCode.chainUid();
+    }
 
     /// @notice ERC-5267 under the clone's `chain_uid` (`ChainUidZero` on the implementation).
-    function _eip712DomainBody() internal view override returns (
-        bytes1, string memory, string memory, uint256, address, bytes32, uint256[] memory
-    ) {
+    function _eip712DomainBody()
+        internal
+        view
+        override
+        returns (bytes1, string memory, string memory, uint256, address, bytes32, uint256[] memory)
+    {
         return _eip712DomainUnder(_chainUid());
     }
 
     /// @dev No cache (chain-neutral spec §2.4): rebuilt under the clone's `chain_uid` on every call.
-    function _domainSeparatorV4() internal view override returns (bytes32) { return _separator(_chainUid()); }
+    function _domainSeparatorV4() internal view override returns (bytes32) {
+        return _separator(_chainUid());
+    }
 
-    function puller() external view returns (address) { return _s().puller; }
+    function puller() external view returns (address) {
+        return _s().puller;
+    }
 
     /// @notice Anyone, no signature, not an `mtx*` (Fable D P3-5; `DexPuller.rescue`'s rule, CTR-DEX-22): the DEX's whole
     ///         balance of `token` to `rescueTo` (`DexConfig.rescueTo`, held by the puller; 0: `SCAAS_DEV_RESCUE`,
@@ -213,7 +267,11 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         _send(token, to, amount);
         emit IRescuable.Rescued(token, to, amount);
     }
-    function pulled(bytes32 orderHash) external view returns (uint256) { return TradeLib.$().pulled[orderHash]; }
+
+    function pulled(bytes32 orderHash) external view returns (uint256) {
+        return TradeLib.$().pulled[orderHash];
+    }
+
     function minNonce(address from, uint256 batch) external view returns (uint256) {
         return TradeLib.$().minNonce[TradeLib.pad(from)][batch];
     }
@@ -233,15 +291,21 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         _forwardView(_ML);
     }
 
-    function invalidateNoncesDigest(address, uint256, uint256) external view returns (bytes32 r) { _forwardView(_ML); }
+    function invalidateNoncesDigest(address, uint256, uint256) external view returns (bytes32 r) {
+        _forwardView(_ML);
+    }
 
     // ------------------------------------------------------------------ outside-token cancels (CTR-DEX-18, -02)
 
     /// @notice Never expire; a closed order or a bad signature skips that item (the batch does not revert); a starved
     ///         ERC-1271 check reverts the call (CTR-DEX-08). The body in the liquidity module, under this guard (S1 variant).
-    function mtxCancelOrders(DexOrder[] calldata, bytes[] calldata) external nonReentrant { _forwardML(); }
+    function mtxCancelOrders(DexOrder[] calldata, bytes[] calldata) external nonReentrant {
+        _forwardML();
+    }
 
-    function mtxInvalidateNonces(address, uint256, uint256, bytes calldata) external nonReentrant { _forwardML(); }
+    function mtxInvalidateNonces(address, uint256, uint256, bytes calldata) external nonReentrant {
+        _forwardML();
+    }
 
     // ------------------------------------------------------------------ settle (CTR-DEX-16, CTR-DEX-26)
 
@@ -276,8 +340,10 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
             mstore(0x40, add(add(reason, 0x20), and(add(n, 0x1f), not(0x1f))))
         }
         if (success) return true;
-        if (reason.length >= 4
-            && (bytes4(reason) == SigCheckGasStarved.selector || bytes4(reason) == UAVerifyGas.selector)) {
+        if (
+            reason.length >= 4
+                && (bytes4(reason) == SigCheckGasStarved.selector || bytes4(reason) == UAVerifyGas.selector)
+        ) {
             assembly ("memory-safe") { revert(add(reason, 0x20), mload(reason)) }
         }
         if (exchange) emit ExchangeFailed(ref, reason);
@@ -290,7 +356,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         uint256 n = s.makers.length;
         if (n == 0) revert NoMakers();
         Calc memory taker = _decode(s.taker.sellToken, s.taker.shape, s.taker.order, s.taker.uaOrder);
-        address tokenA = s.taker.sellToken;      // the taker sells A, the makers sell B
+        address tokenA = s.taker.sellToken; // the taker sells A, the makers sell B
         address tokenB = taker.o.receiveToken;
         _checkMarket(tokenA, tokenB);
         (Calc[] memory makers, uint256 takerSell, uint256 takerRecv) =
@@ -300,11 +366,15 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         uint256 balA = _bal(tokenA);
         uint256 balB = _bal(tokenB);
         _pullLeg(tokenA, taker, s.taker, submitter);
-        for (uint256 i; i < n; ++i) _pullLeg(tokenB, makers[i], s.makers[i], submitter);
+        for (uint256 i; i < n; ++i) {
+            _pullLeg(tokenB, makers[i], s.makers[i], submitter);
+        }
         _arrived(tokenA, balA, taker, makers, true);
         _arrived(tokenB, balB, taker, makers, false);
         _pay(s.ref, tokenA, taker, submitter, !makers[0].outside);
-        for (uint256 i; i < n; ++i) _pay(s.ref, tokenB, makers[i], submitter, !taker.outside);
+        for (uint256 i; i < n; ++i) {
+            _pay(s.ref, tokenB, makers[i], submitter, !taker.outside);
+        }
         if (_bal(tokenA) != balA) revert ConservationBroken(tokenA);
         if (_bal(tokenB) != balB) revert ConservationBroken(tokenB);
     }
@@ -349,7 +419,9 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     ///      (makers may share a signer); no order twice. Returns their legs, Σ receive (what the taker sells them) and
     ///      Σ fill (what the taker receives from them).
     function _makers(DexLeg[] calldata ms, bytes32 takerFrom, address tokenA, address tokenB, address submitter)
-        private view returns (Calc[] memory makers, uint256 takerSell, uint256 takerRecv)
+        private
+        view
+        returns (Calc[] memory makers, uint256 takerSell, uint256 takerRecv)
     {
         makers = new Calc[](ms.length);
         for (uint256 i; i < ms.length; ++i) {
@@ -361,7 +433,9 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
             uint256 recv = Math.mulDiv(m.fill, c.o.receiveAmount, c.o.amount, Math.Rounding.Ceil);
             _calc(c, tokenB, submitter, m.fill, recv);
             makers[i] = c;
-            for (uint256 j; j < i; ++j) if (makers[j].h == c.h) revert DuplicateOrder(c.h);
+            for (uint256 j; j < i; ++j) {
+                if (makers[j].h == c.h) revert DuplicateOrder(c.h);
+            }
             takerSell += c.recv;
             takerRecv += c.sold;
         }
@@ -378,9 +452,12 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     ///      (a native id is its address zero-padded, the same word), only on an outside token (`LegShapeUnknown(0)` on a
     ///      SCaaS token, R12); shape 1 a `UATradeOrder`, only on a SCaaS token, whose registry is asked only for a
     ///      derived seller (C; a UA holds no other token, CTR-DEX-26).
-    function _decode(address sellToken, uint8 shape, ITradeToken.TradeOrder calldata order,
-        ITradeToken.UATradeOrder calldata uaOrder) private view returns (Calc memory c)
-    {
+    function _decode(
+        address sellToken,
+        uint8 shape,
+        ITradeToken.TradeOrder calldata order,
+        ITradeToken.UATradeOrder calldata uaOrder
+    ) private view returns (Calc memory c) {
         if (shape > 1) revert LegShapeUnknown(shape);
         c.outside = !_scaas(sellToken);
         if (shape == 0) {
@@ -394,7 +471,6 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
             c.o = uaOrder;
         }
     }
-
 
     /// @dev The shape-0 view of a decoded `TradeOrder` (the same memory words; only ever on a shape-0 leg).
     function _native(ITradeToken.UATradeOrder memory o) private pure returns (ITradeToken.TradeOrder memory t) {
@@ -429,9 +505,13 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
 
     /// @dev Every pull, measured at the seller (owner 2026-11-12): its balance falls by at most what it signed to sell
     ///      (the fill; Path B the whole `amount`), else `SellerOverDebited(h)`; `balanceOfUA` for a derived seller.
-    function _pull(address sellToken, Calc memory c, bytes calldata sig, IUARegistry.UASig calldata auth, address submitter)
-        private
-    {
+    function _pull(
+        address sellToken,
+        Calc memory c,
+        bytes calldata sig,
+        IUARegistry.UASig calldata auth,
+        address submitter
+    ) private {
         // a SCaaS token moves exactly what it is asked (owner 2026-11-12: not measured; test/merge/ScaasExactMoves.t.sol)
         if (!c.outside) return _pullRaw(sellToken, c, sig, auth, submitter);
         uint256 b = _balOf(sellToken, c.o.from);
@@ -440,9 +520,13 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         if (a < b && b - a > (c.o.flags & ESCROW != 0 ? c.o.amount : c.sold)) revert SellerOverDebited(c.h);
     }
 
-    function _pullRaw(address sellToken, Calc memory c, bytes calldata sig, IUARegistry.UASig calldata auth,
-        address submitter) private
-    {
+    function _pullRaw(
+        address sellToken,
+        Calc memory c,
+        bytes calldata sig,
+        IUARegistry.UASig calldata auth,
+        address submitter
+    ) private {
         ITradeToken.UATradeOrder memory o = c.o;
         ITradeToken.TradeFill memory f = o.flags & ESCROW != 0
             ? ITradeToken.TradeFill(o.amount, 0, 0, submitter)
@@ -464,13 +548,25 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
 
     /// @dev `exact`: the receive token is SCaaS (the other side's kind at use), so its payout is not measured.
     function _pay(bytes32 ref, address sellToken, Calc memory c, address submitter, bool exact) private {
-        (bytes32 to, uint256 relayerShare, uint256 treasuryShare) = _payLeg(sellToken, c, 0, submitter, _floor(c), exact);
+        (bytes32 to, uint256 relayerShare, uint256 treasuryShare) =
+            _payLeg(sellToken, c, 0, submitter, _floor(c), exact);
         if (c.ua) {
-            emit UALegSettled(ref, c.h, c.o.from, to, c.sold, c.recv - c.fee, c.fee, c.refund, relayerShare,
-                treasuryShare);
+            emit UALegSettled(
+                ref, c.h, c.o.from, to, c.sold, c.recv - c.fee, c.fee, c.refund, relayerShare, treasuryShare
+            );
         } else {
-            emit LegSettled(ref, c.h, TradeLib.addr(c.o.from), TradeLib.addr(to), c.sold, c.recv - c.fee, c.fee,
-                c.refund, relayerShare, treasuryShare);
+            emit LegSettled(
+                ref,
+                c.h,
+                TradeLib.addr(c.o.from),
+                TradeLib.addr(to),
+                c.sold,
+                c.recv - c.fee,
+                c.fee,
+                c.refund,
+                relayerShare,
+                treasuryShare
+            );
         }
     }
 
@@ -479,7 +575,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     ///      (a book leg: its signed floor; an exchange leg or a hybrid's taker: the floor less the fee, closing review
     ///      C6-4), the refund in full; the fee shares carry no floor.
     function _payLeg(address sellToken, Calc memory c, uint256 surplus, address submitter, uint256 min, bool exact)
-        private returns (bytes32 to, uint256 relayerShare, uint256 treasuryShare)
+        private
+        returns (bytes32 to, uint256 relayerShare, uint256 treasuryShare)
     {
         DexStorage storage s = _s();
         ITradeToken.UATradeOrder memory o = c.o;
@@ -511,7 +608,9 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     ///         data) and the next one runs; `SigCheckGasStarved` / `UAVerifyGas` revert the whole call; no plan settled
     ///         ⇒ `NothingSettled`. A later plan sees the state the earlier ones left (`pulled`, balances).
     function mtxExchangeBatch(ExchangePlan[] calldata ps, Interaction[][] calldata xs)
-        external nonReentrant returns (bool[] memory ok)
+        external
+        nonReentrant
+        returns (bool[] memory ok)
     {
         if (ps.length != xs.length) revert LengthMismatch();
         ok = new bool[](ps.length);
@@ -535,7 +634,6 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         _exchangeOut(p, t, c, submitter);
     }
 
-
     /// @notice Path (b): the sold fills go to `executor` (listed when a leg or the `LISTING` holder asks), which must transfer at
     ///         least the floors to the DEX inside `exchangeCallback`; re-entry hits `nonReentrant`, a `mtxTrade` or a
     ///         puller call from it fails (it is neither `o.dex` nor the DEX).
@@ -543,9 +641,15 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     function mtxExchangeVia(ExchangePlan calldata p, address executor, bytes calldata data) external nonReentrant {
         (Tok[] memory t, Calc[] memory c, bool onlyListed) = _exchangeIn(p, msg.sender);
         if (onlyListed && !_s().exchangeTarget[executor]) revert TargetNotListed(executor);
-        (address[] memory tokensOut, uint256[] memory amountsOut, address[] memory tokensIn, uint256[] memory amountsIn)
-            = _flows(t);
-        for (uint256 i; i < tokensOut.length; ++i) _send(tokensOut[i], executor, amountsOut[i]);
+        (
+            address[] memory tokensOut,
+            uint256[] memory amountsOut,
+            address[] memory tokensIn,
+            uint256[] memory amountsIn
+        ) = _flows(t);
+        for (uint256 i; i < tokensOut.length; ++i) {
+            _send(tokensOut[i], executor, amountsOut[i]);
+        }
         IExchangeExecutor(executor).exchangeCallback(p.ref, tokensOut, amountsOut, tokensIn, amountsIn, data);
         _exchangeOut(p, t, c, msg.sender);
     }
@@ -574,8 +678,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         private
     {
         _send(tokenA, executor, p.outsideSell);
-        IExchangeExecutor(executor).exchangeCallback(p.ref, _one(tokenA), _one(p.outsideSell), _one(tokenB),
-            _one(p.outsideFloor), data);
+        IExchangeExecutor(executor)
+            .exchangeCallback(p.ref, _one(tokenA), _one(p.outsideSell), _one(tokenB), _one(p.outsideFloor), data);
     }
 
     function _one(address a) private pure returns (address[] memory x) {
@@ -593,7 +697,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     ///      snapshot, pulls and pull check. `t[0]` is A (sold by the taker), `t[1]` B (sold by the makers; the taker's
     ///      floor), then the `extraTokens`. `LISTED_POOLS` is read from the taker only (DX8).
     function _hybridIn(HybridPlan calldata p, address submitter)
-        private returns (Tok[] memory t, Calc memory taker, Calc[] memory makers, bool onlyListed)
+        private
+        returns (Tok[] memory t, Calc memory taker, Calc[] memory makers, bool onlyListed)
     {
         taker = _decode(p.taker.sellToken, p.taker.shape, p.taker.order, p.taker.uaOrder);
         address tokenA = p.taker.sellToken;
@@ -614,10 +719,14 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
             b.sold += makers[i].sold;
             b.refunds += makers[i].refund;
         }
-        for (uint256 i; i < p.extraTokens.length; ++i) _tok(t, p.extraTokens[i]);
+        for (uint256 i; i < p.extraTokens.length; ++i) {
+            _tok(t, p.extraTokens[i]);
+        }
         _snap(t);
         _pullLeg(tokenA, taker, p.taker, submitter);
-        for (uint256 i; i < makers.length; ++i) _pullLeg(tokenB, makers[i], p.makers[i], submitter);
+        for (uint256 i; i < makers.length; ++i) {
+            _pullLeg(tokenB, makers[i], p.makers[i], submitter);
+        }
         if (makers.length != 0 && makers[0].outside) _bookShort(b, taker);
         _checkPulled(t);
     }
@@ -643,9 +752,13 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     ///      restored to the order's capacity (not an IOC one: it stays closed); a SCaaS leg's restore moves the leftover
     ///      itself (Fable B P2-1), so the DEX pays it only for an outside or IOC leg; the makers paid as in `mtxSettle`,
     ///      the taker as on the exchange path; conservation over every token.
-    function _hybridOut(HybridPlan calldata p, Tok[] memory t, Calc memory taker, Calc[] memory makers,
-        address submitter) private
-    {
+    function _hybridOut(
+        HybridPlan calldata p,
+        Tok[] memory t,
+        Calc memory taker,
+        Calc[] memory makers,
+        address submitter
+    ) private {
         _excess(t);
         Tok memory a = t[0];
         uint256 bal = _bal(a.token);
@@ -659,7 +772,9 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
             taker.sold -= leftover;
             if (!(restore && taker.ua)) taker.refund += leftover; // a SCaaS leg's restore is its refund (B P2-1)
         }
-        for (uint256 i; i < makers.length; ++i) _pay(p.ref, t[1].token, makers[i], submitter, !taker.outside);
+        for (uint256 i; i < makers.length; ++i) {
+            _pay(p.ref, t[1].token, makers[i], submitter, !taker.outside);
+        }
         _payExchange(p.ref, a.token, taker, t[1].excess, submitter, _floor(taker)); // a book party: its signed floor
         if (restore) _restorePulled(a.token, taker, leftover);
         _conserve(t);
@@ -687,8 +802,15 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
 
     /// @dev Path (b)'s figures: per sold token Σ sellFill (the Path B remainders stay for the refunds), per receive
     ///      token Σ floors.
-    function _flows(Tok[] memory t) private pure returns (address[] memory tokensOut, uint256[] memory amountsOut,
-        address[] memory tokensIn, uint256[] memory amountsIn)
+    function _flows(Tok[] memory t)
+        private
+        pure
+        returns (
+            address[] memory tokensOut,
+            uint256[] memory amountsOut,
+            address[] memory tokensIn,
+            uint256[] memory amountsIn
+        )
     {
         uint256 nOut;
         uint256 nIn;
@@ -707,7 +829,10 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
 
     /// @dev Steps 1-3: check every leg, snapshot every token, pull every leg; each pulled token's balance must rise by
     ///      exactly what was pulled (a fee-on-transfer or rebasing sell token fails here).
-    function _exchangeIn(ExchangePlan calldata p, address submitter) private returns (Tok[] memory t, Calc[] memory c, bool onlyListed) {
+    function _exchangeIn(ExchangePlan calldata p, address submitter)
+        private
+        returns (Tok[] memory t, Calc[] memory c, bool onlyListed)
+    {
         DexStorage storage s = _s();
         uint256 n = p.legs.length;
         if (n == 0) revert NoLegs();
@@ -722,7 +847,9 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
                 if (s.listings[l.sellToken] == 0) revert TokenNotKnown(l.sellToken);
                 if (s.listings[rt] == 0) revert TokenNotKnown(rt);
             }
-            for (uint256 j; j < i; ++j) if (c[j].o.from == ci.o.from) revert SelfTrade(ci.o.from);
+            for (uint256 j; j < i; ++j) {
+                if (c[j].o.from == ci.o.from) revert SelfTrade(ci.o.from);
+            }
             _calc(ci, l.sellToken, submitter, l.sellFill, l.receiveFill);
             c[i] = ci;
             if (ci.o.flags & LISTED_POOLS != 0) onlyListed = true;
@@ -731,9 +858,13 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
             ts.refunds += ci.refund;
             _tok(t, rt).floors += ci.recv;
         }
-        for (uint256 i; i < p.extraTokens.length; ++i) _tok(t, p.extraTokens[i]);
+        for (uint256 i; i < p.extraTokens.length; ++i) {
+            _tok(t, p.extraTokens[i]);
+        }
         _snap(t);
-        for (uint256 i; i < n; ++i) _pull(p.legs[i].sellToken, c[i], p.legs[i].sig, p.legs[i].auth, submitter);
+        for (uint256 i; i < n; ++i) {
+            _pull(p.legs[i].sellToken, c[i], p.legs[i].sig, p.legs[i].auth, submitter);
+        }
         _checkPulled(t);
     }
 
@@ -755,7 +886,6 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
             if (_bal(x.token) != x.snap + x.sold + x.refunds) revert ConservationBroken(x.token);
         }
     }
-
 
     /// @dev Steps 5-6: the surplus per receive token (CTR-DEX-21), the payouts, conservation over every token (a
     ///      sold-only or intermediate leftover fails there: a route bug, not something to assign).
@@ -792,16 +922,22 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     }
 
     /// @dev `min`: an exchange leg's floor less its fee (C6-4); a hybrid's taker, a book party, its signed floor.
-    function _payExchange(bytes32 ref, address sellToken, Calc memory c, uint256 surplus, address submitter, uint256 min)
-        private
-    {
+    function _payExchange(
+        bytes32 ref,
+        address sellToken,
+        Calc memory c,
+        uint256 surplus,
+        address submitter,
+        uint256 min
+    ) private {
         (bytes32 to,,) = _payLeg(sellToken, c, surplus, submitter, min, _scaas(c.o.receiveToken));
         uint256 limit = Math.mulDiv(c.sold, c.o.receiveAmount, c.o.amount, Math.Rounding.Ceil);
         if (c.ua) {
             emit UAExchangeLegSettled(ref, c.h, c.o.from, to, c.sold, c.recv, surplus, c.fee, c.refund, limit);
         } else {
-            emit ExchangeLegSettled(ref, c.h, TradeLib.addr(c.o.from), TradeLib.addr(to), c.sold, c.recv, surplus,
-                c.fee, c.refund, limit);
+            emit ExchangeLegSettled(
+                ref, c.h, TradeLib.addr(c.o.from), TradeLib.addr(to), c.sold, c.recv, surplus, c.fee, c.refund, limit
+            );
         }
     }
 
@@ -817,7 +953,6 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         }
     }
 
-
     // ------------------------------------------------------------------ governance: forwarded to D (T66b §4.2, S1, S2)
 
     /// @notice The governance and liquidity modules (§4.5; `OpenFactory` refuses a release whose module is not pinned in the env).
@@ -831,7 +966,9 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
     /// @notice CTR-DEX-30: the plan runs in `SCaaSDexLiquidityModule` under this entry's guard. An S1 variant (spec
     ///         2026-11-10-dex-liquidity.md §9.2): the modifier around a DELEGATECALL with a normal return (nothing to
     ///         return), the module's revert data verbatim.
-    function mtxLiquidity(LiquidityPlan calldata, Interaction[] calldata) external nonReentrant { _forwardML(); }
+    function mtxLiquidity(LiquidityPlan calldata, Interaction[] calldata) external nonReentrant {
+        _forwardML();
+    }
 
     /// @dev The S1 variant's body: DELEGATECALL of this call's calldata to the liquidity module, its revert data verbatim,
     ///      a normal return (the entries it serves return nothing); the caller's `nonReentrant` holds the guard.
@@ -849,41 +986,111 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         _forwardView(_ML);
     }
 
-    function GOV_ROUTER() external view returns (address r) { _forwardView(_MD); }
-    function features() external view override returns (uint256 r) { _forwardView(_MD); }
-    function lockedFeatures() external view override returns (uint256 r) { _forwardView(_MD); }
-    function admin() external view override returns (bytes32 r) { _forwardView(_MD); }
-    function pendingAdmin() external view override returns (bytes32 r) { _forwardView(_MD); }
-    function hasRole(uint8, bytes32) external view override returns (bool r) { _forwardView(_MD); }
-    function validBits() external pure override returns (uint256 r) { _forwardPure(); }
-    function holderCount(uint8) external view override returns (uint256 r) { _forwardView(_MD); }
-    function grantDelay() external view override returns (uint64 r) { _forwardView(_MD); }
-    function lastProposedAt() external view override returns (uint64 r) { _forwardView(_MD); }
+    function GOV_ROUTER() external view returns (address r) {
+        _forwardView(_MD);
+    }
+
+    function features() external view override returns (uint256 r) {
+        _forwardView(_MD);
+    }
+
+    function lockedFeatures() external view override returns (uint256 r) {
+        _forwardView(_MD);
+    }
+
+    function admin() external view override returns (bytes32 r) {
+        _forwardView(_MD);
+    }
+
+    function pendingAdmin() external view override returns (bytes32 r) {
+        _forwardView(_MD);
+    }
+
+    function hasRole(uint8, bytes32) external view override returns (bool r) {
+        _forwardView(_MD);
+    }
+
+    function validBits() external pure override returns (uint256 r) {
+        _forwardPure();
+    }
+
+    function holderCount(uint8) external view override returns (uint256 r) {
+        _forwardView(_MD);
+    }
+
+    function grantDelay() external view override returns (uint64 r) {
+        _forwardView(_MD);
+    }
+
+    function lastProposedAt() external view override returns (uint64 r) {
+        _forwardView(_MD);
+    }
 
     function pendingGrant(uint8, bytes32) external view override returns (uint64 a, bytes32 b, bytes32 c, bool d) {
         _forwardView(_MD);
     }
 
-    function grantOf(uint8, bytes32) external view override returns (Grant memory g) { _forwardView(_MD); }
+    function grantOf(uint8, bytes32) external view override returns (Grant memory g) {
+        _forwardView(_MD);
+    }
 
     function bitLabel(uint8) external view override returns (BitType t, bytes4 s, string memory l) {
         _forwardView(_MD);
     }
-    function grantRole(uint8, bytes32, bytes32) external override { _forward(); }
-    function setGrant(uint8, bytes32, GrantTerms calldata, bytes32) external override { _forward(); }
-    function cancelGrant(uint8, bytes32, bytes32) external override { _forward(); }
-    function revokeRole(uint8, bytes32, bytes32) external override { _forward(); }
-    function renounceRole(uint8, bytes32) external override { _forward(); }
-    function disableFeature(uint8, bytes32) external override { _forward(); }
-    function transferAdmin(bytes32, bytes32) external override { _forward(); }
-    function acceptAdmin() external override { _forward(); }
-    function renounceAdmin(bytes32) external override { _forward(); }
+
+    function grantRole(uint8, bytes32, bytes32) external override {
+        _forward();
+    }
+
+    function setGrant(uint8, bytes32, GrantTerms calldata, bytes32) external override {
+        _forward();
+    }
+
+    function cancelGrant(uint8, bytes32, bytes32) external override {
+        _forward();
+    }
+
+    function revokeRole(uint8, bytes32, bytes32) external override {
+        _forward();
+    }
+
+    function renounceRole(uint8, bytes32) external override {
+        _forward();
+    }
+
+    function disableFeature(uint8, bytes32) external override {
+        _forward();
+    }
+
+    function transferAdmin(bytes32, bytes32) external override {
+        _forward();
+    }
+
+    function acceptAdmin() external override {
+        _forward();
+    }
+
+    function renounceAdmin(bytes32) external override {
+        _forward();
+    }
+
     /// @notice The powers (CTR-TOK-30 Change, O8): bit 11 `LISTING` (`setMarket`, `setExchangeTarget`, `setListedOnly`), bit 12
     ///         `FEE_ROUTING` (`setFeeSplit`), each with the holder's chain word (CTR-GOV-28 Change), in module D.
-    function setMarket(address, address, bool, bytes32) external { _forward(); }
-    function setFeeSplit(uint32, address, bytes32) external { _forward(); }
-    function setExchangeTarget(address, bool, bytes32) external { _forward(); }
-    function setListedOnly(bool, bytes32) external { _forward(); }
+    function setMarket(address, address, bool, bytes32) external {
+        _forward();
+    }
+
+    function setFeeSplit(uint32, address, bytes32) external {
+        _forward();
+    }
+
+    function setExchangeTarget(address, bool, bytes32) external {
+        _forward();
+    }
+
+    function setListedOnly(bool, bytes32) external {
+        _forward();
+    }
 
     /// @dev S1: today's `governed` entry: `_guardIn` (on the DEX the transient guard's check), DELEGATECALL of this call's
     ///      calldata to D, its revert data verbatim on failure, `_guardOut`, its return data verbatim (never a modifier
@@ -920,7 +1127,9 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, SCaaSDexCore, 
         v(m);
     }
 
-    function _forwardViewD() private view { _forwardView(_MD); }
+    function _forwardViewD() private view {
+        _forwardView(_MD);
+    }
 
     /// @dev S2: `validBits`, `pure` as before: the immutable's read and the forward under the same cast.
     function _forwardPure() private pure {

@@ -60,7 +60,8 @@ contract ProbeTarget {
         reenter = cd;
     }
 
-    function setListedOnly(bool, bytes32) external { // the DEX's entry with its chain word (CTR-GOV-28 Change)
+    function setListedOnly(bool, bytes32) external {
+        // the DEX's entry with its chain word (CTR-GOV-28 Change)
         seen = router.subject();
         seenByOther = other.peek(router);
         if (reenter.length != 0) {
@@ -72,7 +73,9 @@ contract ProbeTarget {
     /// One transaction: a signed op that targets this contract, then `subject()` asked by this contract again.
     function relayThenRead(bytes calldata cd) external {
         (bool ok, bytes memory e) = address(router).call(cd);
-        if (!ok) assembly ("memory-safe") { revert(add(e, 32), mload(e)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(e, 32), mload(e)) }
+        }
         seenAfter = router.subject();
     }
 }
@@ -135,19 +138,24 @@ abstract contract GovRouterFixture is UARegistryBase {
 
     // signers
     bytes internal pqKey;
-    bytes32 internal pq;            // a registered mldsa44 single key
+    bytes32 internal pq; // a registered mldsa44 single key
     bytes[3] internal mkeys;
     bytes internal msigData;
-    bytes32 internal msig;          // {mldsa44 x3} t=2, every slot accepted
+    bytes32 internal msig; // {mldsa44 x3} t=2, every slot accepted
     mapping(bytes32 => uint256) internal pkOf; // native ids: the ECDSA key (a wallet's: its owner's)
     bytes32 internal eoa;
     bytes32 internal next;
     bytes32 internal stranger;
-    bytes32 internal wallet;        // a native id with code (ERC-1271): holds the contract-only RATE_ADJUSTABLE
+    bytes32 internal wallet; // a native id with code (ERC-1271): holds the contract-only RATE_ADJUSTABLE
 
     /// The test is the factory of every clone: it registered no token, so a leg is outside and a market is `KIND_OUTSIDE`.
-    function isRegisteredToken(address) external pure returns (bool) { return false; }
-    function isToken(address) external pure returns (bool) { return false; }
+    function isRegisteredToken(address) external pure returns (bool) {
+        return false;
+    }
+
+    function isToken(address) external pure returns (bool) {
+        return false;
+    }
     /// fix2-dex: the DEX reads the kind at use (`versionOf`, version 0: not a factory token)
     function versionOf(address) external pure returns (uint8, uint64) {}
 
@@ -164,9 +172,17 @@ abstract contract GovRouterFixture is UARegistryBase {
         }
         msigData = _msigKey(2, m);
         bytes32 id = UAKinds.uaOf(UAKinds.MSIG, msigData);
-        msig = UACall.register(preg, UAKinds.MSIG, msigData, _none(),
-            abi.encode(_memberSigs(id, UAKinds.PURPOSE_POP_V2, _regDigest(id, UAKinds.MSIG), 2)), "");
-        for (uint256 i; i < 3; ++i) preg.acceptMembership(msig, _acceptKeySig(msigData, ML44, mkeys[i]));
+        msig = UACall.register(
+            preg,
+            UAKinds.MSIG,
+            msigData,
+            _none(),
+            abi.encode(_memberSigs(id, UAKinds.PURPOSE_POP_V2, _regDigest(id, UAKinds.MSIG), 2)),
+            ""
+        );
+        for (uint256 i; i < 3; ++i) {
+            preg.acceptMembership(msig, _acceptKeySig(msigData, ML44, mkeys[i]));
+        }
         eoa = _native("issuer");
         next = _native("next");
         stranger = _native("stranger");
@@ -193,13 +209,16 @@ abstract contract GovRouterFixture is UARegistryBase {
         pk = new bytes(1312);
         for (uint256 i; i < 1312; i += 32) {
             bytes32 w = keccak256(abi.encode(ML44, salt, i));
-            for (uint256 j; j < 32 && i + j < 1312; ++j) pk[i + j] = w[j];
+            for (uint256 j; j < 32 && i + j < 1312; ++j) {
+                pk[i + j] = w[j];
+            }
         }
     }
 
     function _rows() internal {
         rows[GRANT_ROLE] = Row("GrantRole", ",uint8 bit,bytes32 account,bytes32 chainUid", router.mtxGrantRole.selector);
-        rows[REVOKE_ROLE] = Row("RevokeRole", ",uint8 bit,bytes32 account,bytes32 chainUid", router.mtxRevokeRole.selector);
+        rows[REVOKE_ROLE] =
+            Row("RevokeRole", ",uint8 bit,bytes32 account,bytes32 chainUid", router.mtxRevokeRole.selector);
         rows[SET_GRANT] =
             Row("SetGrant", ",uint8 bit,bytes32 holder,GrantTerms terms,bytes32 chainUid", router.mtxSetGrant.selector);
         rows[CANCEL_GRANT] =
@@ -212,18 +231,23 @@ abstract contract GovRouterFixture is UARegistryBase {
         rows[RENOUNCE_ROLE] = Row("RenounceRole", ",uint8 bit,bytes32 chainUid", router.mtxRenounceRole.selector);
         rows[OP_MINT] = Row("Mint", ",address to,uint256 amount,bytes32 chainUid", router.mtxMint.selector);
         rows[MINT_TO_UA] = Row("MintToUA", ",bytes32 to,uint256 amount,bytes32 chainUid", router.mtxMintToUA.selector);
-        rows[DISABLE_WRAP] = Row("DisableWrap", ",address leg,bytes32 reason,bytes32 chainUid", router.mtxDisableWrap.selector);
+        rows[DISABLE_WRAP] =
+            Row("DisableWrap", ",address leg,bytes32 reason,bytes32 chainUid", router.mtxDisableWrap.selector);
         rows[PROPOSE_RATE] =
             Row("ProposeRate", ",address leg,uint96 num,uint96 den,bytes32 chainUid", router.mtxProposeRate.selector);
         rows[CANCEL_RATE] = Row("CancelRate", ",bytes32 chainUid", router.mtxCancelRate.selector);
         rows[EXECUTE_RATE] = Row("ExecuteRate", ",bytes32 chainUid", router.mtxExecuteRate.selector);
         rows[SET_MARKET] =
             Row("SetMarket", ",address base,address quote,bool listed,bytes32 chainUid", router.mtxSetMarket.selector);
-        rows[SET_EXCHANGE_TARGET] = Row("SetExchangeTarget", ",address exchangeTarget,bool listed,bytes32 chainUid",
-            router.mtxSetExchangeTarget.selector);
+        rows[SET_EXCHANGE_TARGET] = Row(
+            "SetExchangeTarget",
+            ",address exchangeTarget,bool listed,bytes32 chainUid",
+            router.mtxSetExchangeTarget.selector
+        );
         rows[SET_LISTED_ONLY] = Row("SetListedOnly", ",bool on,bytes32 chainUid", router.mtxSetListedOnly.selector);
-        rows[SET_FEE_SPLIT] =
-            Row("SetFeeSplit", ",uint32 relayerSharePpm,address treasury,bytes32 chainUid", router.mtxSetFeeSplit.selector);
+        rows[SET_FEE_SPLIT] = Row(
+            "SetFeeSplit", ",uint32 relayerSharePpm,address treasury,bytes32 chainUid", router.mtxSetFeeSplit.selector
+        );
     }
 
     // ------------------------------------------------------------------ governed contracts
@@ -239,21 +263,25 @@ abstract contract GovRouterFixture is UARegistryBase {
     }
 
     function _normal(bytes32 owner_, bytes32 minter, uint64 delay) internal returns (NormalToken t) {
-        if (normalImpl == address(0)) normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
+        if (normalImpl == address(0)) {
+            normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
+        }
         t = NormalToken(EnvKit.clone(normalImpl, _cenv()));
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features, c.admin, c.grantDelay) =
-            ("G", "G", 6, 1 | (uint256(1) << MINT), owner_, delay);
+        ("G", "G", 6, 1 | (uint256(1) << MINT), owner_, delay);
         c.roles.minter = minter;
         t.initialize(nid(address(this)), 1, abi.encode(c));
     }
 
     function _wrapped(bytes32 owner_, bytes32 guardian, bytes32 rateAdmin) internal returns (WrappedToken w) {
-        if (wrappedImpl == address(0)) wrappedImpl = address(new WrappedToken(address(this), kindArgs(1, address(this), "")));
+        if (wrappedImpl == address(0)) {
+            wrappedImpl = address(new WrappedToken(address(this), kindArgs(1, address(this), "")));
+        }
         w = WrappedToken(payable(EnvKit.clone(wrappedImpl, _cenv())));
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features, c.admin) =
-            ("W", "W", 6, 1 | (uint256(1) << RATE) | (uint256(1) << WRAPOFF), owner_);
+        ("W", "W", 6, 1 | (uint256(1) << RATE) | (uint256(1) << WRAPOFF), owner_);
         (c.roles.guardian, c.roles.rateAdmin) = (guardian, rateAdmin);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
@@ -264,7 +292,9 @@ abstract contract GovRouterFixture is UARegistryBase {
     function _dex(bytes32 owner_) internal returns (SCaaSDex d) {
         if (dexImpl == address(0)) dexImpl = address(new SCaaSDex(address(this), dexArgs(address(this))));
         d = SCaaSDex(EnvKit.clone(dexImpl, _cenv()));
-        d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(owner_, 0, TREASURY, false, 0, address(0), 0, 0)));
+        d.initialize(
+            nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(owner_, 0, TREASURY, false, 0, address(0), 0, 0))
+        );
     }
 
     function _limited(uint128 total) internal pure returns (IGovernance.GrantTerms memory g) {
@@ -275,10 +305,20 @@ abstract contract GovRouterFixture is UARegistryBase {
     // ------------------------------------------------------------------ signing
 
     function _domain(GovernanceRouter r) internal view returns (bytes32) {
-        (, string memory name, string memory version, uint256 chainId, address verifying, bytes32 salt,) = r.eip712Domain();
-        return keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256(bytes(name)), keccak256(bytes(version)), chainId, verifying, salt));
+        (, string memory name, string memory version, uint256 chainId, address verifying, bytes32 salt,) =
+            r.eip712Domain();
+        return keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256(bytes(name)),
+                keccak256(bytes(version)),
+                chainId,
+                verifying,
+                salt
+            )
+        );
     }
 
     function _typehash(uint256 op) internal view returns (bytes32) {
@@ -287,16 +327,30 @@ abstract contract GovRouterFixture is UARegistryBase {
         return keccak256(bytes(s));
     }
 
-    function _envelope(GovernanceRouter r, bytes32 from, uint256 batch) internal view returns (MetaTxLib.UAEnvelope memory) {
-        return MetaTxLib.UAEnvelope(from, batch, r.mtxNonce(from, batch), block.timestamp + 1 hours, 0, address(0), 0, address(0));
+    function _envelope(GovernanceRouter r, bytes32 from, uint256 batch)
+        internal
+        view
+        returns (MetaTxLib.UAEnvelope memory)
+    {
+        return MetaTxLib.UAEnvelope(
+            from, batch, r.mtxNonce(from, batch), block.timestamp + 1 hours, 0, address(0), 0, address(0)
+        );
     }
 
     /// The digest `from` signs: the struct `UA<Op>` over `target` and `words` (the op's own words) in `r`'s domain.
-    function _digest(GovernanceRouter r, uint256 op, MetaTxLib.UAEnvelope memory e, address target,
-        bytes memory words) internal view returns (bytes32)
+    function _digest(GovernanceRouter r, uint256 op, MetaTxLib.UAEnvelope memory e, address target, bytes memory words)
+        internal
+        view
+        returns (bytes32)
     {
-        bytes32 h = keccak256(bytes.concat(abi.encode(_typehash(op), e.from, target), words, _word(op, target),
-            abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
+        bytes32 h = keccak256(
+            bytes.concat(
+                abi.encode(_typehash(op), e.from, target),
+                words,
+                _word(op, target),
+                abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))
+            )
+        );
         return keccak256(abi.encodePacked("\x19\x01", _domain(r), h));
     }
 
@@ -307,10 +361,14 @@ abstract contract GovRouterFixture is UARegistryBase {
 
     /// Members 0..n-1 of the `msig` (index order), each over `(purpose, digest)` under `member`.
     function _memberSigs(bytes32 ua, bytes32 purpose, bytes32 digest, uint256 n)
-        internal view returns (IUARegistry.MemberSig[] memory s)
+        internal
+        view
+        returns (IUARegistry.MemberSig[] memory s)
     {
         s = new IUARegistry.MemberSig[](n);
-        for (uint16 i; i < n; ++i) s[i] = _slot(ua, purpose, digest, i);
+        for (uint16 i; i < n; ++i) {
+            s[i] = _slot(ua, purpose, digest, i);
+        }
     }
 
     function _auth(bytes32 id, bytes32 digest) internal view returns (IUARegistry.UASig memory a) {
@@ -320,9 +378,13 @@ abstract contract GovRouterFixture is UARegistryBase {
     }
 
     /// The calldata of `mtx<Op>`: the envelope, `target`, the op's ABI words `args`, then the signature.
-    function _calldata(uint256 op, MetaTxLib.UAEnvelope memory e, address target, bytes memory args,
-        bytes memory sigTail) internal view returns (bytes memory)
-    {
+    function _calldata(
+        uint256 op,
+        MetaTxLib.UAEnvelope memory e,
+        address target,
+        bytes memory args,
+        bytes memory sigTail
+    ) internal view returns (bytes memory) {
         bytes memory head = bytes.concat(abi.encode(e), abi.encode(target), args, _sentWord(op, target));
         return bytes.concat(rows[op].sel, head, abi.encode(head.length + 32), sigTail);
     }
@@ -345,20 +407,33 @@ abstract contract GovRouterFixture is UARegistryBase {
     /// `abi.encode(x)` of one dynamic value without its leading offset word.
     function _tail(bytes memory enc) internal pure returns (bytes memory t) {
         t = new bytes(enc.length - 32);
-        for (uint256 i; i < t.length; ++i) t[i] = enc[i + 32];
+        for (uint256 i; i < t.length; ++i) {
+            t[i] = enc[i + 32];
+        }
     }
 
     /// The signed call of `op` by `from` on `r`: `args` the call's ABI words, `words` the struct's (equal but for `SetGrant`).
-    function _signed(GovernanceRouter r, uint256 op, bytes32 from, uint256 batch, address target, bytes memory args,
-        bytes memory words) internal view returns (bytes memory)
-    {
+    function _signed(
+        GovernanceRouter r,
+        uint256 op,
+        bytes32 from,
+        uint256 batch,
+        address target,
+        bytes memory args,
+        bytes memory words
+    ) internal view returns (bytes memory) {
         return _signedAt(r, op, _envelope(r, from, batch), target, args, words);
     }
 
     /// `_signed` over a given envelope.
-    function _signedAt(GovernanceRouter r, uint256 op, MetaTxLib.UAEnvelope memory e, address target,
-        bytes memory args, bytes memory words) internal view returns (bytes memory)
-    {
+    function _signedAt(
+        GovernanceRouter r,
+        uint256 op,
+        MetaTxLib.UAEnvelope memory e,
+        address target,
+        bytes memory args,
+        bytes memory words
+    ) internal view returns (bytes memory) {
         bytes32 d = _digest(r, op, e, target, words);
         return _calldata(op, e, target, args, _tail(abi.encode(_auth(e.from, d))));
     }
@@ -369,7 +444,9 @@ abstract contract GovRouterFixture is UARegistryBase {
 
     /// @dev `u` the target's chain word, the op's last field (CTR-GOV-28).
     function _setGrantArgs(uint8 bit, bytes32 holder, IGovernance.GrantTerms memory t, bytes32 u)
-        internal pure returns (bytes memory args, bytes memory words)
+        internal
+        pure
+        returns (bytes memory args, bytes memory words)
     {
         args = abi.encode(bit, holder, t, u);
         bytes32 th = keccak256(bytes(TERMS));
@@ -389,7 +466,9 @@ abstract contract GovRouterFixture is UARegistryBase {
 
     function _runOn(GovernanceRouter r, bytes memory cd) internal {
         (bool ok, bytes memory ret) = address(r).call(cd);
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        }
     }
 
     function _do(uint256 op, bytes32 from, address target, bytes memory args) internal {
@@ -398,13 +477,16 @@ abstract contract GovRouterFixture is UARegistryBase {
 
     /// Slot `idx` of `msigData` signs `(purpose, digest)` for the `msig` `ua`.
     function _slot(bytes32 ua, bytes32 purpose, bytes32 digest, uint16 idx)
-        internal view returns (IUARegistry.MemberSig memory)
+        internal
+        view
+        returns (IUARegistry.MemberSig memory)
     {
         bytes32 md = _memberDigest(ua, purpose, digest);
         for (uint256 j; j < 3; ++j) {
             if (_indexOf(msigData, UAKinds.uaOf(ML44, mkeys[j])) != idx) continue;
-            return IUARegistry.MemberSig(idx, new IUARegistry.InnerSig[](0),
-                _sig(mkeys[j], UAKinds.uaMessage(ML44, UAKinds.PURPOSE_MEMBER, md)));
+            return IUARegistry.MemberSig(
+                idx, new IUARegistry.InnerSig[](0), _sig(mkeys[j], UAKinds.uaMessage(ML44, UAKinds.PURPOSE_MEMBER, md))
+            );
         }
         revert("slot");
     }
@@ -487,15 +569,34 @@ contract GovRouterTest is GovRouterFixture {
         for (uint256 i; i < 2; ++i) {
             address w = ws[i];
             MetaTxLib.UAEnvelope memory e = _envelope(router, _pad(w), 0);
-            bytes32 c = keccak256(abi.encode(MetaTxLib.UA_CANCEL_NONCE_TYPEHASH, e.from, uint256(9), e.batch, e.nonce,
-                e.validUntil, e.mode, address(0), e.fee, address(0)));
+            bytes32 c = keccak256(
+                abi.encode(
+                    MetaTxLib.UA_CANCEL_NONCE_TYPEHASH,
+                    e.from,
+                    uint256(9),
+                    e.batch,
+                    e.nonce,
+                    e.validUntil,
+                    e.mode,
+                    address(0),
+                    e.fee,
+                    address(0)
+                )
+            );
             bytes32 h = keccak256(abi.encodePacked(hex"1901", Erc7739Kit.separator(address(router)), c));
             IUARegistry.UASig memory a;
             a.signature = Erc7739Kit.raw(pk, w, h);
             vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
             router.mtxCancelNonce(e, 9, a);
-            a.signature = Erc7739Kit.sign(pk, w, address(router), "UACancelNonce", Erc7739Kit.UA_CANCEL_NONCE_TYPE,
-                Erc7739Kit.UA_CANCEL_NONCE_TYPE, c);
+            a.signature = Erc7739Kit.sign(
+                pk,
+                w,
+                address(router),
+                "UACancelNonce",
+                Erc7739Kit.UA_CANCEL_NONCE_TYPE,
+                Erc7739Kit.UA_CANCEL_NONCE_TYPE,
+                c
+            );
             router.mtxCancelNonce(e, 9, a);
             assertEq(router.mtxNonce(_pad(w), 9), 1, "positive control: the ERC-7739 op ran");
         }
@@ -512,12 +613,16 @@ contract GovRouterTest is GovRouterFixture {
             bytes32 id = _pad(ws[i]);
             bytes32 h = preg.uaAuthDigest(id, UAKinds.PURPOSE_METATX, dg);
             bytes32 c = keccak256(abi.encode(keccak256(bytes(Erc7739Kit.UA_AUTH_TYPE)), id, UAKinds.PURPOSE_METATX, dg));
-            assertEq(keccak256(abi.encodePacked(hex"1901", Erc7739Kit.separator(address(preg)), c)), h, "the kit rebuilds it");
+            assertEq(
+                keccak256(abi.encodePacked(hex"1901", Erc7739Kit.separator(address(preg)), c)), h, "the kit rebuilds it"
+            );
             IUARegistry.UASig memory a;
             a.signature = Erc7739Kit.raw(pk, ws[i], h);
             vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, id));
             preg.requireAuthorized(id, UAKinds.PURPOSE_METATX, dg, a);
-            a.signature = Erc7739Kit.sign(pk, ws[i], address(preg), "UAAuth", Erc7739Kit.UA_AUTH_TYPE, Erc7739Kit.UA_AUTH_TYPE, c);
+            a.signature = Erc7739Kit.sign(
+                pk, ws[i], address(preg), "UAAuth", Erc7739Kit.UA_AUTH_TYPE, Erc7739Kit.UA_AUTH_TYPE, c
+            );
             preg.requireAuthorized(id, UAKinds.PURPOSE_METATX, dg, a); // positive control: no revert
         }
     }
@@ -568,13 +673,15 @@ contract GovRouterTest is GovRouterFixture {
     /// `terms` round-trips: the nested struct's hash is the signed word, the whole struct reaches `setGrant`.
     function test_nestedTermsRoundTrip() public {
         NormalToken t = _normal(pq, 0, 0);
-        IGovernance.GrantTerms memory g = IGovernance.GrantTerms(2, 50, 1000, 100, 1 days, uint64(block.timestamp + 30 days),
-            7, true, bytes32(0));
+        IGovernance.GrantTerms memory g =
+            IGovernance.GrantTerms(2, 50, 1000, 100, 1 days, uint64(block.timestamp + 30 days), 7, true, bytes32(0));
         (bytes memory a, bytes memory w) = _setGrantArgs(MINT, msig, g, EnvKit.codeUidOf(address(t)));
         _run(_signed(router, SET_GRANT, pq, 0, address(t), a, w));
         IGovernance.Grant memory r = t.grantOf(MINT, msig);
-        assertEq(abi.encode(r.min, r.max, r.total, r.perWindow, r.window, r.validUntil, r.maxUses, r.delegable, r.scope),
-            abi.encode(g.min, g.max, g.total, g.perWindow, g.window, g.validUntil, g.maxUses, g.delegable, g.scope));
+        assertEq(
+            abi.encode(r.min, r.max, r.total, r.perWindow, r.window, r.validUntil, r.maxUses, r.delegable, r.scope),
+            abi.encode(g.min, g.max, g.total, g.perWindow, g.window, g.validUntil, g.maxUses, g.delegable, g.scope)
+        );
         // the terms are signed: other terms under a signature over these are refused
         g.total = 1001;
         (bytes memory a2,) = _setGrantArgs(MINT, msig, g, EnvKit.codeUidOf(address(t)));
@@ -647,7 +754,9 @@ contract GovRouterTest is GovRouterFixture {
 
     function test_msigSlotNotAcceptedIsInert() public {
         Member[] memory m = new Member[](3);
-        for (uint256 i; i < 3; ++i) m[i] = Member(ML44, UAKinds.uaOf(ML44, mkeys[i]), 2);
+        for (uint256 i; i < 3; ++i) {
+            m[i] = Member(ML44, UAKinds.uaOf(ML44, mkeys[i]), 2);
+        }
         bytes memory saved = msigData;
         msigData = _msigKey(2, m); // the same keys at weight 2: another msig, one slot reaches the threshold
         bytes32 id = UAKinds.uaOf(UAKinds.MSIG, msigData);
@@ -688,8 +797,9 @@ contract GovRouterTest is GovRouterFixture {
     function test_refuted_formerOwnersEnvelope() public {
         NormalToken t = _normal(eoa, 0, 0);
         bytes32 tu = EnvKit.codeUidOf(address(t));
-        bytes memory late = _signed(router, GRANT_ROLE, eoa, 1, address(t), abi.encode(MINT, stranger, tu),
-            abi.encode(MINT, stranger, tu));
+        bytes memory late = _signed(
+            router, GRANT_ROLE, eoa, 1, address(t), abi.encode(MINT, stranger, tu), abi.encode(MINT, stranger, tu)
+        );
         _do(TRANSFER_ADMIN, eoa, address(t), abi.encode(next, EnvKit.codeUidOf(address(t))));
         _do(ACCEPT_ADMIN, next, address(t), "");
         vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, eoa));
@@ -709,8 +819,12 @@ contract GovRouterTest is GovRouterFixture {
         _run(cd);
         assertEq(t.admin(), eoa, "the admin kept");
         assertEq(router.mtxNonce(eoa, 0), 0, "the nonce stays unspent");
-        bytes4 oldSel = bytes4(keccak256("mtxRenounceAdmin((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),"
-            "address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"));
+        bytes4 oldSel = bytes4(
+            keccak256(
+                "mtxRenounceAdmin((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),"
+                "address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+            )
+        );
         (bool ok, bytes memory ret) = address(router).call(abi.encodePacked(oldSel, new bytes(32 * 12)));
         assertTrue(!ok && ret.length == 0, "the old entry answers");
         _do(RENOUNCE_ADMIN, eoa, address(t), abi.encode(u));
@@ -734,8 +848,12 @@ contract GovRouterTest is GovRouterFixture {
             assertEq(IAdmin(ts[i]).pendingAdmin(), bytes32(0), "nothing written");
             assertEq(router.mtxNonce(eoa, 0), 0, "the nonce stays unspent");
         }
-        bytes4 oldSel = bytes4(keccak256("mtxTransferAdmin((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),"
-            "address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"));
+        bytes4 oldSel = bytes4(
+            keccak256(
+                "mtxTransferAdmin((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),"
+                "address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+            )
+        );
         (bool ok, bytes memory ret) = address(router).call(abi.encodePacked(oldSel, new bytes(32 * 13)));
         assertTrue(!ok && ret.length == 0, "the old entry answers");
         for (uint256 i; i < 2; ++i) {
@@ -755,7 +873,8 @@ contract GovRouterTest is GovRouterFixture {
         bytes memory mm = abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, u, sib);
         uint256[5] memory ops = [GRANT_ROLE, REVOKE_ROLE, CANCEL_GRANT, DISABLE_FEATURE, RENOUNCE_ROLE];
         for (uint256 i; i < 5; ++i) {
-            bytes memory args = ops[i] == DISABLE_FEATURE || ops[i] == RENOUNCE_ROLE ? abi.encode(MINT, sib)
+            bytes memory args = ops[i] == DISABLE_FEATURE || ops[i] == RENOUNCE_ROLE
+                ? abi.encode(MINT, sib)
                 : abi.encode(MINT, pq, sib);
             bytes memory cd = _op(ops[i], eoa, address(t), args);
             vm.expectRevert(mm);
@@ -768,8 +887,12 @@ contract GovRouterTest is GovRouterFixture {
         assertEq(router.mtxNonce(eoa, 0), 0, "nonces unspent");
         assertTrue(t.hasRole(MINT, eoa) && !t.hasRole(MINT, pq), "nothing written");
         {
-            bytes4 oldSel = bytes4(keccak256("mtxRenounceRole((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),"
-                "address,uint8,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"));
+            bytes4 oldSel = bytes4(
+                keccak256(
+                    "mtxRenounceRole((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),"
+                    "address,uint8,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+                )
+            );
             (bool ok, bytes memory ret) = address(router).call(abi.encodePacked(oldSel, new bytes(32 * 12)));
             assertTrue(!ok && ret.length == 0, "the old mtxRenounceRole answers");
         }
@@ -803,18 +926,36 @@ contract GovRouterTest is GovRouterFixture {
         WrappedToken wt = _wrapped(eoa, eoa, wallet); // `wallet` holds the contract-only RATE_ADJUSTABLE
         SCaaSDex d = _dex(eoa);
         bytes32 sib = keccak256("a sibling with the same chain id");
-        uint256[10] memory ops = [OP_MINT, MINT_TO_UA, DISABLE_WRAP, PROPOSE_RATE, CANCEL_RATE, EXECUTE_RATE, SET_MARKET,
-            SET_EXCHANGE_TARGET, SET_LISTED_ONLY, SET_FEE_SPLIT];
+        uint256[10] memory ops = [
+            OP_MINT,
+            MINT_TO_UA,
+            DISABLE_WRAP,
+            PROPOSE_RATE,
+            CANCEL_RATE,
+            EXECUTE_RATE,
+            SET_MARKET,
+            SET_EXCHANGE_TARGET,
+            SET_LISTED_ONLY,
+            SET_FEE_SPLIT
+        ];
         for (uint256 i; i < 10; ++i) {
             uint256 op = ops[i];
             address target = op <= MINT_TO_UA ? address(t) : op <= EXECUTE_RATE ? address(wt) : address(d);
-            bytes memory args = op == OP_MINT ? abi.encode(BOB, uint256(5)) : op == MINT_TO_UA ? abi.encode(pq, uint256(3))
-                : op == DISABLE_WRAP ? abi.encode(address(usd), bytes32("r"))
-                : op == PROPOSE_RATE ? abi.encode(address(usd), uint96(101), uint96(100))
-                : op == SET_MARKET ? abi.encode(address(usd), address(t), true)
-                : op == SET_EXCHANGE_TARGET ? abi.encode(address(0xE7), true)
-                : op == SET_LISTED_ONLY ? abi.encode(true) : op == SET_FEE_SPLIT ? abi.encode(uint32(500_000), TREASURY)
-                : bytes("");
+            bytes memory args = op == OP_MINT
+                ? abi.encode(BOB, uint256(5))
+                : op == MINT_TO_UA
+                    ? abi.encode(pq, uint256(3))
+                    : op == DISABLE_WRAP
+                        ? abi.encode(address(usd), bytes32("r"))
+                        : op == PROPOSE_RATE
+                            ? abi.encode(address(usd), uint96(101), uint96(100))
+                            : op == SET_MARKET
+                                ? abi.encode(address(usd), address(t), true)
+                                : op == SET_EXCHANGE_TARGET
+                                    ? abi.encode(address(0xE7), true)
+                                    : op == SET_LISTED_ONLY
+                                        ? abi.encode(true)
+                                        : op == SET_FEE_SPLIT ? abi.encode(uint32(500_000), TREASURY) : bytes("");
             bytes32 from = op >= PROPOSE_RATE && op <= EXECUTE_RATE ? wallet : eoa; // the op's holder
             (signWord, sendWord) = (sib, sib);
             bytes memory cd = _op(op, from, target, args);
@@ -907,8 +1048,9 @@ contract GovRouterTest is GovRouterFixture {
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, refused));
         router.executeMetaTransaction(m, sig);
         // the same native signer on the merged generic entries
-        MetaTxLib.UAMetaTransaction memory n =
-            MetaTxLib.UAMetaTransaction(MetaTxLib.pad(a), data, 0, 0, block.timestamp + 1 hours, 0, address(0), 0, address(0));
+        MetaTxLib.UAMetaTransaction memory n = MetaTxLib.UAMetaTransaction(
+            MetaTxLib.pad(a), data, 0, 0, block.timestamp + 1 hours, 0, address(0), 0, address(0)
+        );
         (v, r, s) = vm.sign(k, router.mtxDigest(n));
         MetaTxLib.UAMetaTransaction[] memory ns = new MetaTxLib.UAMetaTransaction[](1);
         IUARegistry.UASig[] memory nas = new IUARegistry.UASig[](1);
@@ -925,7 +1067,8 @@ contract GovRouterTest is GovRouterFixture {
     function _genericUaRefused(bytes memory data, bytes4 refused) internal {
         MetaTxLib.UAMetaTransaction memory u =
             MetaTxLib.UAMetaTransaction(pq, data, 0, 0, block.timestamp + 1 hours, 0, address(0), 0, address(0));
-        bytes memory auth = abi.encode(bytes(""), _sig(pqKey, UAKinds.uaMessage(ML44, UAKinds.PURPOSE_METATX, router.mtxDigest(u))));
+        bytes memory auth =
+            abi.encode(bytes(""), _sig(pqKey, UAKinds.uaMessage(ML44, UAKinds.PURPOSE_METATX, router.mtxDigest(u))));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, refused));
         router.mtxExecute(u, UACall.auth(u.from, auth));
         MetaTxLib.UAMetaTransaction[] memory us = new MetaTxLib.UAMetaTransaction[](1);
@@ -942,9 +1085,25 @@ contract GovRouterTest is GovRouterFixture {
     function test_cancelNonceStays() public {
         NormalToken t = _normal(pq, pq, 0);
         bytes memory cd = _op(OP_MINT, pq, address(t), abi.encode(BOB, uint256(1)));
-        MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(pq, 5, 0, block.timestamp + 1 hours, 0, address(0), 0, address(0));
-        bytes32 d = MtxDigest.typed(address(router), keccak256(abi.encode(MetaTxLib.UA_CANCEL_NONCE_TYPEHASH, e.from, uint256(0),
-            e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
+        MetaTxLib.UAEnvelope memory e =
+            MetaTxLib.UAEnvelope(pq, 5, 0, block.timestamp + 1 hours, 0, address(0), 0, address(0));
+        bytes32 d = MtxDigest.typed(
+            address(router),
+            keccak256(
+                abi.encode(
+                    MetaTxLib.UA_CANCEL_NONCE_TYPEHASH,
+                    e.from,
+                    uint256(0),
+                    e.batch,
+                    e.nonce,
+                    e.validUntil,
+                    e.mode,
+                    address(0),
+                    e.fee,
+                    address(0)
+                )
+            )
+        );
         IUARegistry.UASig memory a;
         a.signature = _sig(pqKey, UAKinds.uaMessage(ML44, UAKinds.PURPOSE_METATX, d));
         router.mtxCancelNonce(e, 0, a);
@@ -1024,24 +1183,38 @@ contract GovRouterRegulatedTest is GovRouterFixture {
 
     function setUp() public override {
         super.setUp();
-        reg8[R_FREEZE] = Row("Freeze", ",bytes32 account,bytes32 ref,bytes32 recordId,bytes32 chainUid", router.mtxFreeze.selector);
+        reg8[R_FREEZE] =
+            Row("Freeze", ",bytes32 account,bytes32 ref,bytes32 recordId,bytes32 chainUid", router.mtxFreeze.selector);
         reg8[R_UNFREEZE] = Row("Unfreeze", ",bytes32 account,bytes32 ref,bytes32 chainUid", router.mtxUnfreeze.selector);
-        reg8[R_FORCE] = Row("ForceTransfer", ",bytes32 recordId,uint256 amount,bytes32 chainUid", router.mtxForceTransfer.selector);
+        reg8[R_FORCE] =
+            Row("ForceTransfer", ",bytes32 recordId,uint256 amount,bytes32 chainUid", router.mtxForceTransfer.selector);
         reg8[R_PAUSE] = Row("Pause", ",bytes32 ref,uint64 until,bytes32 chainUid", router.mtxPause.selector);
         reg8[R_UNPAUSE] = Row("Unpause", ",bytes32 ref,bytes32 chainUid", router.mtxUnpause.selector);
-        reg8[R_RECORD] = Row("RecordOrder",
+        reg8[R_RECORD] = Row(
+            "RecordOrder",
             ",bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,uint256 maxAmount,uint64 freezeUntil,bytes32 chainUid",
-            router.mtxRecordOrder.selector);
-        reg8[R_REVOKE] = Row("RevokeOrder", ",bytes32 recordId,bytes32 reasonRef,bytes32 chainUid", router.mtxRevokeOrder.selector);
-        reg8[R_OPERATOR] = Row("OperatorTransfer", ",bytes32 account,bytes32 to,uint256 amount,bytes32 ref,bytes32 chainUid",
-            router.mtxOperatorTransfer.selector);
+            router.mtxRecordOrder.selector
+        );
+        reg8[R_REVOKE] =
+            Row("RevokeOrder", ",bytes32 recordId,bytes32 reasonRef,bytes32 chainUid", router.mtxRevokeOrder.selector);
+        reg8[R_OPERATOR] = Row(
+            "OperatorTransfer",
+            ",bytes32 account,bytes32 to,uint256 amount,bytes32 ref,bytes32 chainUid",
+            router.mtxOperatorTransfer.selector
+        );
         reg8[R_TAX_RATE] = Row("SetTaxRate", ",uint32 ratePpm,bytes32 chainUid", router.mtxSetTaxRate.selector);
-        reg8[R_TAX_RECIPIENT] = Row("SetTaxRecipient", ",bytes32 taxRecipient,bytes32 chainUid", router.mtxSetTaxRecipient.selector);
+        reg8[R_TAX_RECIPIENT] =
+            Row("SetTaxRecipient", ",bytes32 taxRecipient,bytes32 chainUid", router.mtxSetTaxRecipient.selector);
     }
 
     /// Kind 8 with `FREEZE`, `FORCE`, `PAUSE`, `RECORD`, `OPERATOR_TRANSFER`; owner `eoa`, no grant delay; `BOB` holds 1,000.
-    function _regulated(bytes32 issuer, bytes32 compliance, bytes32 operator) internal returns (NormalRegulatedToken t) {
-        if (regImpl == address(0)) regImpl = address(new NormalRegulatedToken(address(this), kindArgs(8, address(this), regArgs())));
+    function _regulated(bytes32 issuer, bytes32 compliance, bytes32 operator)
+        internal
+        returns (NormalRegulatedToken t)
+    {
+        if (regImpl == address(0)) {
+            regImpl = address(new NormalRegulatedToken(address(this), kindArgs(8, address(this), regArgs())));
+        }
         t = NormalRegulatedToken(EnvKit.clone(regImpl, _cenv()));
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.admin) = ("R", "R", 6, eoa);
@@ -1061,7 +1234,8 @@ contract GovRouterRegulatedTest is GovRouterFixture {
     }
 
     function _typehashR(uint256 op) internal view returns (bytes32) {
-        return keccak256(bytes(string.concat("UA", reg8[op].name, "(bytes32 from,address target", reg8[op].params, TAIL)));
+        return
+            keccak256(bytes(string.concat("UA", reg8[op].name, "(bytes32 from,address target", reg8[op].params, TAIL)));
     }
 
     /// The signed `mtx<Op>` of `from` for `target`, every op word static (the struct words are the call's).
@@ -1069,10 +1243,16 @@ contract GovRouterRegulatedTest is GovRouterFixture {
         MetaTxLib.UAEnvelope memory e = _envelope(router, from, 0);
         bytes32 own = EnvKit.codeUidOf(target); // the target's chain word, every row's last field
         bytes memory signed = bytes.concat(args, abi.encode(signWord != 0 ? signWord : own));
-        bytes32 h = keccak256(bytes.concat(abi.encode(_typehashR(op), e.from, target), signed,
-            abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
+        bytes32 h = keccak256(
+            bytes.concat(
+                abi.encode(_typehashR(op), e.from, target),
+                signed,
+                abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))
+            )
+        );
         bytes32 d = keccak256(abi.encodePacked("\x19\x01", _domain(router), h));
-        bytes memory head = bytes.concat(abi.encode(e), abi.encode(target), args, abi.encode(sendWord != 0 ? sendWord : own));
+        bytes memory head =
+            bytes.concat(abi.encode(e), abi.encode(target), args, abi.encode(sendWord != 0 ? sendWord : own));
         return bytes.concat(reg8[op].sel, head, abi.encode(head.length + 32), _tail(abi.encode(_auth(e.from, d))));
     }
 
@@ -1123,10 +1303,18 @@ contract GovRouterRegulatedTest is GovRouterFixture {
         bytes32 sib = keccak256("a sibling with the same chain id");
         bytes32 bob = _pad(BOB);
         uint64 day = uint64(block.timestamp + 1 days);
-        bytes[10] memory args = [abi.encode(bob, REF, bytes32(0)), abi.encode(bob, REF), abi.encode(bytes32("r"), uint256(1)),
-            abi.encode(REF, day), abi.encode(REF), abi.encode(bytes32("order"), keccak256("doc"), bob, bob, uint256(1), day),
-            abi.encode(bytes32("r"), bytes32("why")), abi.encode(bob, _pad(TREASURY), uint256(5), REF), abi.encode(uint32(7)),
-            abi.encode(_pad(address(0x7A1)))];
+        bytes[10] memory args = [
+            abi.encode(bob, REF, bytes32(0)),
+            abi.encode(bob, REF),
+            abi.encode(bytes32("r"), uint256(1)),
+            abi.encode(REF, day),
+            abi.encode(REF),
+            abi.encode(bytes32("order"), keccak256("doc"), bob, bob, uint256(1), day),
+            abi.encode(bytes32("r"), bytes32("why")),
+            abi.encode(bob, _pad(TREASURY), uint256(5), REF),
+            abi.encode(uint32(7)),
+            abi.encode(_pad(address(0x7A1)))
+        ];
         bytes32[10] memory who = [wallet, wallet, wallet, wallet, wallet, msig, msig, wallet, wallet, wallet];
         for (uint256 op; op < 10; ++op) {
             (signWord, sendWord) = (sib, sib);
@@ -1147,14 +1335,37 @@ contract GovRouterRegulatedTest is GovRouterFixture {
         _eight(op, msig, wallet, msig);
     }
 
-    function test_routerRow_Pause() public { _row(R_PAUSE); }
-    function test_routerRow_Unpause() public { _row(R_UNPAUSE); }
-    function test_routerRow_RecordOrder() public { _row(R_RECORD); }
-    function test_routerRow_Freeze() public { _row(R_FREEZE); }
-    function test_routerRow_ForceTransfer() public { _row(R_FORCE); }
-    function test_routerRow_RevokeOrder() public { _row(R_REVOKE); }
-    function test_routerRow_Unfreeze() public { _row(R_UNFREEZE); }
-    function test_routerRow_OperatorTransfer() public { _row(R_OPERATOR); }
+    function test_routerRow_Pause() public {
+        _row(R_PAUSE);
+    }
+
+    function test_routerRow_Unpause() public {
+        _row(R_UNPAUSE);
+    }
+
+    function test_routerRow_RecordOrder() public {
+        _row(R_RECORD);
+    }
+
+    function test_routerRow_Freeze() public {
+        _row(R_FREEZE);
+    }
+
+    function test_routerRow_ForceTransfer() public {
+        _row(R_FORCE);
+    }
+
+    function test_routerRow_RevokeOrder() public {
+        _row(R_REVOKE);
+    }
+
+    function test_routerRow_Unfreeze() public {
+        _row(R_UNFREEZE);
+    }
+
+    function test_routerRow_OperatorTransfer() public {
+        _row(R_OPERATOR);
+    }
 
     /// pay-meta-tax T39 (spec §6.1, §6.2, O9): bit 23 relayed by every holder class (an EOA, a single-key UA, a contract,
     /// an `msig`) at fee 0, through `mtxSetTaxRate` and `mtxSetTaxRecipient`.
@@ -1190,10 +1401,14 @@ contract GovRouterRegulatedTest is GovRouterFixture {
     /// and the nonce is not spent.
     function test_routerRow_strangerRefused() public {
         NormalRegulatedToken t = _regulated(wallet, msig, wallet);
-        _rfail(_rcall(R_OPERATOR, stranger, address(t), abi.encode(_pad(BOB), _pad(TREASURY), uint256(5), REF)),
-            abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(GovernanceBits.OPERATOR_TRANSFER), stranger));
-        _rfail(_rcall(R_FREEZE, stranger, address(t), abi.encode(_pad(BOB), REF, bytes32(0))),
-            abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(GovernanceBits.FREEZE), stranger));
+        _rfail(
+            _rcall(R_OPERATOR, stranger, address(t), abi.encode(_pad(BOB), _pad(TREASURY), uint256(5), REF)),
+            abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(GovernanceBits.OPERATOR_TRANSFER), stranger)
+        );
+        _rfail(
+            _rcall(R_FREEZE, stranger, address(t), abi.encode(_pad(BOB), REF, bytes32(0))),
+            abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(GovernanceBits.FREEZE), stranger)
+        );
         assertEq(router.mtxNonce(stranger, 0), 0);
         _rdo(R_FREEZE, wallet, address(t), abi.encode(_pad(BOB), REF, bytes32(0))); // the control: the issuer
     }
@@ -1208,7 +1423,8 @@ contract GovRouterRegulatedTest is GovRouterFixture {
     function test_routerRow_targetIsSigned() public {
         NormalRegulatedToken t1 = _regulated(wallet, msig, wallet);
         NormalRegulatedToken t2 = _regulated(wallet, msig, wallet);
-        bytes memory cd = _rcall(R_OPERATOR, wallet, address(t1), abi.encode(_pad(BOB), _pad(TREASURY), uint256(5), REF));
+        bytes memory cd =
+            _rcall(R_OPERATOR, wallet, address(t1), abi.encode(_pad(BOB), _pad(TREASURY), uint256(5), REF));
         bytes memory moved = bytes.concat(cd); // the same call with `target` at word 9 (after the 8-word envelope) moved
         assembly ("memory-safe") { mstore(add(moved, add(36, 256)), t2) }
         (bool ok,) = address(router).call(moved);
@@ -1222,12 +1438,20 @@ contract GovRouterRegulatedTest is GovRouterFixture {
     function test_tokenHasNoTwin() public {
         NormalRegulatedToken t = _regulated(wallet, msig, wallet);
         (bytes4[] memory s,,) = t.mtxSelectors();
-        bytes4[8] memory direct = [IRegulatedToken.freeze.selector, IRegulatedToken.unfreeze.selector,
-            IRegulatedToken.forceTransfer.selector, IRegulatedToken.pause.selector, IRegulatedToken.unpause.selector,
-            IRegulatedToken.recordOrder.selector, IRegulatedToken.revokeOrder.selector,
-            IRegulatedToken.operatorTransfer.selector];
+        bytes4[8] memory direct = [
+            IRegulatedToken.freeze.selector,
+            IRegulatedToken.unfreeze.selector,
+            IRegulatedToken.forceTransfer.selector,
+            IRegulatedToken.pause.selector,
+            IRegulatedToken.unpause.selector,
+            IRegulatedToken.recordOrder.selector,
+            IRegulatedToken.revokeOrder.selector,
+            IRegulatedToken.operatorTransfer.selector
+        ];
         for (uint256 k; k < 8; ++k) {
-            for (uint256 j; j < s.length; ++j) assertTrue(s[j] != direct[k]);
+            for (uint256 j; j < s.length; ++j) {
+                assertTrue(s[j] != direct[k]);
+            }
             (bool ok, bytes memory ret) = address(t).call(bytes.concat(reg8[k].sel, new bytes(32 * 30)));
             assertFalse(ok);
             assertEq(ret.length, 0, reg8[k].name);

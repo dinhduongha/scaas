@@ -46,8 +46,11 @@ contract ZetherHandler is ZetherFixture {
         _stack();
         leg[0] = new MockERC20("USD", "USD", 6);
         leg[1] = new MockERC20("ODD", "ODD", 6);
-        WrappedZetherToken impl = WrappedZetherToken(payable(Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(),
-            type(WrappedZetherToken).creationCode)));
+        WrappedZetherToken impl = WrappedZetherToken(
+            payable(Catalogue.release(
+                    factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode
+                ))
+        );
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals) = ("Z", "Z", 6);
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.RATE_ADJUSTABLE);
@@ -57,8 +60,12 @@ contract ZetherHandler is ZetherFixture {
         c.legs = new IFactoryToken.Leg[](2);
         c.legs[0] = IFactoryToken.Leg(address(leg[0]), 1, 1);
         c.legs[1] = IFactoryToken.Leg(address(leg[1]), 3, 7);
-        c.conf = IFactoryToken.ConfidentialConfig("", SCALE, MAX, FEE, 0, 0, MIN_DECOY, 0, bytes32(0), false, 0, 0, 0, false, false);
-        w = WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "inv")));
+        c.conf = IFactoryToken.ConfidentialConfig(
+            "", SCALE, MAX, FEE, 0, 0, MIN_DECOY, 0, bytes32(0), false, 0, 0, 0, false, false
+        );
+        w = WrappedZetherToken(
+            payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "inv"))
+        );
         tok = NormalZetherToken(address(w));
         _users();
         (us[0], us[1], us[2]) = (alice, bob, carol);
@@ -221,9 +228,15 @@ contract ZetherHandler is ZetherFixture {
 
     function _uu(uint8 i, uint8 l, uint256 amt, uint256 out, ZetherTypes.UA ben) internal {
         bytes memory pl = _unshieldPayload(tok, us[i]);
-        bytes memory st = stm.unshieldUnwrapStatement(address(w), _zBurn(pl, ben), amt, bytes32(uint256(uint160(address(0xD00D)))), address(leg[l]), out, 0);
+        bytes memory st = stm.unshieldUnwrapStatement(
+            address(w), _zBurn(pl, ben), amt, bytes32(uint256(uint160(address(0xD00D)))), address(leg[l]), out, 0
+        );
         s0 = w.totalSupply();
-        w.mtxUnshieldUnwrap(_zBurn(pl, ben), IConfidentialWrappedToken.Unwrap(address(leg[l]), bytes32(uint256(uint160(address(0xD00D)))), amt, out), _proveU(us[i], st, amt, acc[i], ben, tok));
+        w.mtxUnshieldUnwrap(
+            _zBurn(pl, ben),
+            IConfidentialWrappedToken.Unwrap(address(leg[l]), bytes32(uint256(uint160(address(0xD00D)))), amt, out),
+            _proveU(us[i], st, amt, acc[i], ben, tok)
+        );
         require(w.totalSupply() == s0 - amt * SCALE, "unshield-unwrap burns exactly from the pool");
     }
 
@@ -263,7 +276,8 @@ contract ZetherHandler is ZetherFixture {
         if (nn == 0 || nn > type(uint96).max || sd > type(uint96).max) return;
         w.proposeRate(address(leg[l]), uint96(nn), uint96(sd), EnvKit.codeUidOf(address(w)));
         vm.warp(block.timestamp + 2 days);
-        try w.executeRate(EnvKit.codeUidOf(address(w))) {} catch {
+        try w.executeRate(EnvKit.codeUidOf(address(w))) {}
+        catch {
             w.cancelRate(EnvKit.codeUidOf(address(w)));
         }
         require(w.collateralValue() >= w.totalSupply(), "rate broke the invariant");
@@ -309,8 +323,10 @@ contract ZetherInvariantTest is Test {
         h.init();
         targetContract(address(h));
         bytes4[] memory sel = new bytes4[](10);
-        (sel[0], sel[1], sel[2], sel[3]) = (h.shield.selector, h.wrapShield.selector, h.rollOver.selector, h.transfer.selector);
-        (sel[4], sel[5], sel[6], sel[7]) = (h.unshieldUnwrap.selector, h.unshieldPublic.selector, h.unwrap.selector, h.rate.selector);
+        (sel[0], sel[1], sel[2], sel[3]) =
+        (h.shield.selector, h.wrapShield.selector, h.rollOver.selector, h.transfer.selector);
+        (sel[4], sel[5], sel[6], sel[7]) =
+        (h.unshieldUnwrap.selector, h.unshieldPublic.selector, h.unwrap.selector, h.rate.selector);
         (sel[8], sel[9]) = (h.transferFee.selector, h.transferMultiDecoy.selector);
         targetSelector(FuzzSelector(address(h), sel));
     }

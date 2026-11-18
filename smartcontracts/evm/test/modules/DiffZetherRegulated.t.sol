@@ -23,9 +23,13 @@ abstract contract DiffZetherReg is ZetherRegFixture, LegacyDiff {
 }
 
 contract DiffZetherReg10Test is DiffZetherReg {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 }
 
 contract DiffZetherReg11Test is DiffZetherReg {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 }

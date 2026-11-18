@@ -24,8 +24,9 @@ contract Musig2Secp256k1Verifier is IUAPopVerifier {
     uint256 private constant _N = Bip340.N;
 
     function verify(bytes calldata vk, bytes32 message, bytes calldata sig) public view returns (bool) {
-        return vk.length == 33 && (vk[0] == 0x02 || vk[0] == 0x03)
-            && Bip340.verify(uint256(bytes32(vk[1:33])), message, sig);
+        return
+            vk.length == 33 && (vk[0] == 0x02 || vk[0] == 0x03)
+                && Bip340.verify(uint256(bytes32(vk[1:33])), message, sig);
     }
 
     function verifyPop(bytes calldata keyData, bytes32 message, bytes calldata pop) external view returns (bool) {

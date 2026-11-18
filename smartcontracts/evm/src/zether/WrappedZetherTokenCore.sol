@@ -45,7 +45,13 @@ abstract contract WrappedZetherTokenCore is WrappedTokenCore, ZetherLayer {
     constructor(address factory_, bytes memory implArgs) WrappedTokenCore(factory_, implArgs) {}
 
     /// @dev The legs (`WrappedToken`), restated for the second base.
-    function _underlyingsBody() internal view virtual override(MetaTokenBase, WrappedTokenCore) returns (address[] memory) {
+    function _underlyingsBody()
+        internal
+        view
+        virtual
+        override(MetaTokenBase, WrappedTokenCore)
+        returns (address[] memory)
+    {
         return super._underlyingsBody();
     }
 
@@ -75,8 +81,9 @@ abstract contract WrappedZetherTokenCore is WrappedTokenCore, ZetherLayer {
     function _init(IFactoryToken.TokenConfig memory) internal override(MetaTokenBase, WrappedTokenCore) {}
 
     function _initRaw(bytes calldata initArgs) internal virtual override {
-        ZetherWrappedLib.init(initArgs, _transferVerifier(), _registry(), kind(), _validBits(), _roleBits(),
-            _contractOnlyBits());
+        ZetherWrappedLib.init(
+            initArgs, _transferVerifier(), _registry(), kind(), _validBits(), _roleBits(), _contractOnlyBits()
+        );
     }
 
     // ------------------------------------------------------------------ wrap-shield / unshield-unwrap (CTR-ZTH-45)
@@ -87,7 +94,8 @@ abstract contract WrappedZetherTokenCore is WrappedTokenCore, ZetherLayer {
     function _mtxWrapShieldBody(address underlying, uint256 amountIn, bytes32 toUA) internal {
         _regPayer();
         address m = _msgSender();
-        (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value, totalSupply(), toUA);
+        (,, uint256 minted) =
+            WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value, totalSupply(), toUA);
         uint256 scale = ZetherLib.$().shieldScale;
         if (minted % scale != 0) revert IZetherToken.AmountNotScaled(minted, scale);
         ZetherLib.shield(ZetherTypes.UA.wrap(toUA), minted / scale, _registry(), m);
@@ -95,9 +103,20 @@ abstract contract WrappedZetherTokenCore is WrappedTokenCore, ZetherLayer {
     }
 
     /// @notice The signed `mtxWrapShield`; as on the generic path, relayed it takes no coin (the native leg reverts).
-    function _mtxWrapShieldBody(MetaTxLib.Envelope calldata e, address underlying, uint256 amountIn, bytes32 toUA, bytes calldata sig) internal returns (bytes memory)
-    {
-        return _named(WRAP_SHIELD_TYPEHASH, IConfidentialWrappedToken.mtxWrapShield.selector, e, abi.encode(underlying, amountIn, toUA), sig);
+    function _mtxWrapShieldBody(
+        MetaTxLib.Envelope calldata e,
+        address underlying,
+        uint256 amountIn,
+        bytes32 toUA,
+        bytes calldata sig
+    ) internal returns (bytes memory) {
+        return _named(
+            WRAP_SHIELD_TYPEHASH,
+            IConfidentialWrappedToken.mtxWrapShield.selector,
+            e,
+            abi.encode(underlying, amountIn, toUA),
+            sig
+        );
     }
 
     /// @notice The unshield proof (`x.amount` and `x.recipient` in the statement; a direct call also binds
@@ -106,7 +125,11 @@ abstract contract WrappedZetherTokenCore is WrappedTokenCore, ZetherLayer {
     ///         (`UALegNotLedger` otherwise, CTR-ZTH-51) — burning `amount·shieldScale` from `SHIELD_POOL`.
     ///         The leg first (cheap), the proof and the debit, then the payout from the leg's reserve (CEI: the debit
     ///         before the one outside call).
-    function _mtxUnshieldUnwrapBody(IZetherToken.ZetherBurn calldata b, IConfidentialWrappedToken.Unwrap calldata x, bytes calldata proof) internal {
+    function _mtxUnshieldUnwrapBody(
+        IZetherToken.ZetherBurn calldata b,
+        IConfidentialWrappedToken.Unwrap calldata x,
+        bytes calldata proof
+    ) internal {
         proof;
         _regZetherSender(b.yFrom);
         _regName(b.beneficiaryUA);
@@ -120,7 +143,8 @@ abstract contract WrappedZetherTokenCore is WrappedTokenCore, ZetherLayer {
         WrappedLib.quoteTo(i, x.recipient, wrapped, x.minOut, holder);
         // the binding and the proof: `ZetherWrappedLib`, from this call's own arguments (CTR-ZTH-94)
         uint256 fee = abi.decode(
-            _lib(address(ZetherWrappedLib), ZetherWrappedLib.unshieldUnwrap.selector, abi.encode(_env())), (uint256));
+            _lib(address(ZetherWrappedLib), ZetherWrappedLib.unshieldUnwrap.selector, abi.encode(_env())), (uint256)
+        );
         _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), wrapped); // D19: burn from the pool
         _fromPool(ZetherTypes.UA.wrap(b.beneficiaryUA), fee);
         WrappedLib.payOutTo(i, x.recipient, wrapped, x.minOut, holder);
@@ -129,9 +153,13 @@ abstract contract WrappedZetherTokenCore is WrappedTokenCore, ZetherLayer {
     /// @notice The signed form over `UAZetherUnshieldUnwrap` (R35: native and derived ids), the `Unwrap` leg a nested
     ///         struct; `ZetherWrappedLib` builds the struct's words and the op's call from this call's own arguments
     ///         (CTR-ZTH-94).
-    function _mtxUnshieldUnwrapBody(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherBurn calldata b, IConfidentialWrappedToken.Unwrap calldata x, bytes calldata proof,
-        IUARegistry.UASig calldata auth) internal returns (bytes memory)
-    {
+    function _mtxUnshieldUnwrapBody(
+        MetaTxLib.UAEnvelope calldata e,
+        IZetherToken.ZetherBurn calldata b,
+        IConfidentialWrappedToken.Unwrap calldata x,
+        bytes calldata proof,
+        IUARegistry.UASig calldata auth
+    ) internal returns (bytes memory) {
         (b, x, proof);
         (bytes32 th, bytes memory words, bytes memory data) =
             _built(address(ZetherWrappedLib), ZetherWrappedLib.uaUnwrapCall.selector, false);
@@ -157,23 +185,36 @@ abstract contract WrappedZetherTokenCore is WrappedTokenCore, ZetherLayer {
 
     // ------------------------------------------------------------------ the layer's hooks
 
-
     /// @dev The layer's env checks, restated for the second base.
-    function _validateEnv(IFactoryToken.ChainEnv calldata env) internal view virtual override(MetaTokenBase, ZetherLayer) {
+    function _validateEnv(IFactoryToken.ChainEnv calldata env)
+        internal
+        view
+        virtual
+        override(MetaTokenBase, ZetherLayer)
+    {
         ZetherLayer._validateEnv(env);
     }
+
     function _domainName() internal pure virtual override(ERC20MetaTx, ZetherLayer) returns (string memory) {
         return ZetherLayer._domainName();
     }
 
     function _envelopeBinding(MetaTxLib.MetaTransaction memory m)
-        internal view virtual override(MetaTxBaseCore, ZetherLayer) returns (bytes32)
+        internal
+        view
+        virtual
+        override(MetaTxBaseCore, ZetherLayer)
+        returns (bytes32)
     {
         return ZetherLayer._envelopeBinding(m);
     }
 
     function _uaEnvelopeBinding(MetaTxLib.UAMetaTransaction memory m)
-        internal view virtual override(UAMetaTxBaseCore, ZetherLayer) returns (bytes32)
+        internal
+        view
+        virtual
+        override(UAMetaTxBaseCore, ZetherLayer)
+        returns (bytes32)
     {
         return ZetherLayer._uaEnvelopeBinding(m);
     }
@@ -182,13 +223,26 @@ abstract contract WrappedZetherTokenCore is WrappedTokenCore, ZetherLayer {
 
     /// @notice `WrappedToken`'s first six, then the Zether ops and the two underlying paths, each `ABSOLUTE`, then
     ///         `WrappedToken`'s UA-5a two (`wrapToUA` `ABSOLUTE`, `unwrapToUA` `AMOUNT(1)`, CTR-UA-28).
-    function _mtxSelectorsBody() internal pure virtual override(MetaTxBaseCore, WrappedTokenCore) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+    function _mtxSelectorsBody()
+        internal
+        pure
+        virtual
+        override(MetaTxBaseCore, WrappedTokenCore)
+        returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         return ZetherWrappedLib.selectors();
     }
 
-    function _mtxRule(bytes4 sel) internal view virtual override(MetaTxBaseCore, WrappedTokenCore) returns (MtxRule memory) {
-        if (_isZetherOp(sel) || sel == IZetherWrappedToken.mtxUnshieldUnwrap.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 0);
+    function _mtxRule(bytes4 sel)
+        internal
+        view
+        virtual
+        override(MetaTxBaseCore, WrappedTokenCore)
+        returns (MtxRule memory)
+    {
+        if (_isZetherOp(sel) || sel == IZetherWrappedToken.mtxUnshieldUnwrap.selector) {
+            return MtxRule(FEE_CLASS_ABSOLUTE, 0, 0);
+        }
         if (sel == IConfidentialWrappedToken.mtxWrapShield.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 100);
         return WrappedTokenCore._mtxRule(sel);
     }
@@ -197,6 +251,8 @@ abstract contract WrappedZetherTokenCore is WrappedTokenCore, ZetherLayer {
     ///         `NormalZetherToken`); not `mtxWrapShield` (a UA wrap-shields in two signed steps, `mtxWrapOrder` then
     ///         `mtxShield`).
     function _uaAllowed(bytes4 sel) internal view virtual override(UAMetaTxBaseCore, WrappedTokenCore) returns (bool) {
-        return _isZetherOp(sel) || sel == IZetherWrappedToken.mtxUnshieldUnwrap.selector || WrappedTokenCore._uaAllowed(sel);
+        return
+            _isZetherOp(sel) || sel == IZetherWrappedToken.mtxUnshieldUnwrap.selector
+                || WrappedTokenCore._uaAllowed(sel);
     }
 }

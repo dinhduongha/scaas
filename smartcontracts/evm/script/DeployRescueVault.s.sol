@@ -20,8 +20,10 @@ contract DeployRescueVault is Script {
     string internal constant INIT = "./rescue-vault-init.hex";
 
     function run() external {
-        deployAndCatchUp(vm.parseBytes(vm.readFile(INIT)),
-            vm.readFile(vm.envOr("RESCUE_VAULT_LOG", string("./rescue-vault-admin-log.json"))));
+        deployAndCatchUp(
+            vm.parseBytes(vm.readFile(INIT)),
+            vm.readFile(vm.envOr("RESCUE_VAULT_LOG", string("./rescue-vault-admin-log.json")))
+        );
     }
 
     /// @notice `run()` with the init code and the admin log JSON given (tests). Every row is read; the rows above the vault's
@@ -29,13 +31,16 @@ contract DeployRescueVault is Script {
     ///         and the last `newAdmin` (the init code's for a kind with no row): a chain whose vault took another operation
     ///         (an old or equivocating admin, spec §4 R1 / R3) fails here instead of reading as caught up.
     function deployAndCatchUp(bytes memory init, string memory j) public {
-        require(DEPLOYER.code.length != 0,
-            "no deterministic CREATE2 deployer at 0x4e59b44847b379578588920ca78fbf26c0b4956c (runbook NET-EVM-05)");
+        require(
+            DEPLOYER.code.length != 0,
+            "no deterministic CREATE2 deployer at 0x4e59b44847b379578588920ca78fbf26c0b4956c (runbook NET-EVM-05)"
+        );
         address a = vm.computeCreate2Address(SALT, keccak256(init), DEPLOYER);
         require(a == RescueLib.SCAAS_DEV_RESCUE, "rescue-vault-init.hex is not RescueLib.SCAAS_DEV_RESCUE's init code");
         bytes32 wantAdmin;
         address wantRescuer;
-        assembly ("memory-safe") { // the init code ends with abi.encode(initialAdmin, initialRescuer)
+        assembly ("memory-safe") {
+            // the init code ends with abi.encode(initialAdmin, initialRescuer)
             let e := add(add(init, 0x20), mload(init))
             wantAdmin := mload(sub(e, 0x40))
             wantRescuer := mload(sub(e, 0x20))
@@ -70,7 +75,9 @@ contract DeployRescueVault is Script {
         console.log("admin");
         console.logBytes32(v.admin());
         console.log("seq", v.seq());
-        require(v.seq() == wantSeq && v.rescuer() == wantRescuer && v.admin() == wantAdmin,
-            "vault differs from the admin log: another operation was applied on this chain (spec R1 / R3)");
+        require(
+            v.seq() == wantSeq && v.rescuer() == wantRescuer && v.admin() == wantAdmin,
+            "vault differs from the admin log: another operation was applied on this chain (spec R1 / R3)"
+        );
     }
 }

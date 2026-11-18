@@ -88,8 +88,7 @@ contract MultiTest is V2Fixture {
         _wrap(t, usdc, alice, 100e6);
         _wrap(t, usdt, alice, 10e6);
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.InsufficientReserve.selector,
-            address(usdt), 11e6, 10e6));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.InsufficientReserve.selector, address(usdt), 11e6, 10e6));
         t.unwrap(address(usdt), 11e18, alice, 0);
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnknownUnderlying.selector, bob));
@@ -113,7 +112,9 @@ contract MultiTest is V2Fixture {
         this.multiExt(nine, n9, n9);
         address[] memory eight = new address[](8);
         uint256[] memory n8 = new uint256[](8);
-        for (uint256 i; i < 8; ++i) (eight[i], n8[i]) = (nine[i], 1);
+        for (uint256 i; i < 8; ++i) {
+            (eight[i], n8[i]) = (nine[i], 1);
+        }
         assertEq(WrappedToken(this.multiExt(eight, n8, n8)).underlyings().length, 8);
         address[] memory dup = new address[](2);
         (dup[0], dup[1]) = (address(usdc), address(usdc));
@@ -129,7 +130,9 @@ contract MultiTest is V2Fixture {
 
     function _ones(uint256 n) internal pure returns (uint256[] memory a) {
         a = new uint256[](n);
-        for (uint256 i; i < n; ++i) a[i] = 1;
+        for (uint256 i; i < n; ++i) {
+            a[i] = 1;
+        }
     }
 
     function multiExt(address[] memory us, uint256[] memory nums, uint256[] memory dens) external returns (address) {
@@ -178,7 +181,8 @@ contract MultiTest is V2Fixture {
         _wrap(t, usdt, alice, 10e6);
         vm.prank(guardian);
         t.disableWrap(address(usdt), "depeg", EnvKit.codeUidOf(address(t)));
-        bytes memory d = abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(usdt), 3e18, bob, 3e6);
+        bytes memory d =
+            abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(usdt), 3e18, bob, 3e6);
         _execCall(PK, address(t), _call(alice, d, 1, RR));
         assertEq(usdt.balanceOf(bob), 3e6);
     }
@@ -208,13 +212,19 @@ contract MultiTest is V2Fixture {
         a.addReserve(address(usdc), 10e6); // collateral for the decrease
         vm.prank(guardian);
         a.disableWrap(address(usdt), "depeg", EnvKit.codeUidOf(address(a)));
-        adm.exec(address(a), abi.encodeCall(WrappedToken.proposeRate, (address(usdc), 99e10, 1, EnvKit.codeUidOf(address(a)))));
+        adm.exec(
+            address(a),
+            abi.encodeCall(WrappedToken.proposeRate, (address(usdc), 99e10, 1, EnvKit.codeUidOf(address(a))))
+        );
         vm.warp(block.timestamp + 7 days);
         vm.expectRevert(IWrappedToken.RateDecreaseWithDisabledLeg.selector);
         adm.exec(address(a), abi.encodeCall(WrappedToken.executeRate, (EnvKit.codeUidOf(address(a)))));
         // a raise is fine
         adm.exec(address(a), abi.encodeCall(WrappedToken.cancelRate, (EnvKit.codeUidOf(address(a)))));
-        adm.exec(address(a), abi.encodeCall(WrappedToken.proposeRate, (address(usdc), 101e10, 1, EnvKit.codeUidOf(address(a)))));
+        adm.exec(
+            address(a),
+            abi.encodeCall(WrappedToken.proposeRate, (address(usdc), 101e10, 1, EnvKit.codeUidOf(address(a))))
+        );
         vm.warp(block.timestamp + 7 days);
         adm.exec(address(a), abi.encodeCall(WrappedToken.executeRate, (EnvKit.codeUidOf(address(a)))));
     }
@@ -224,7 +234,10 @@ contract MultiTest is V2Fixture {
         WrappedToken a = _three(_adjustable(address(adm)));
         _wrap(a, usdc, alice, 100e6);
         _wrap(a, dai, alice, 100e18);
-        adm.exec(address(a), abi.encodeCall(WrappedToken.proposeRate, (address(usdc), 99e10, 1, EnvKit.codeUidOf(address(a)))));
+        adm.exec(
+            address(a),
+            abi.encodeCall(WrappedToken.proposeRate, (address(usdc), 99e10, 1, EnvKit.codeUidOf(address(a))))
+        );
         dai.mint(bob, 1_000e18);
         vm.startPrank(bob);
         dai.approve(address(a), 1_000e18);
@@ -266,9 +279,7 @@ contract MultiTest is V2Fixture {
     }
 
     /// Ở tỉ lệ danh nghĩa (par), wrap chân i rồi unwrap chân j không bao giờ lời: `out_j·q_j ≤ in_i·q_i`.
-    function testFuzz_wrapIUnwrapJNeverProfitsAtPar(uint256 amount, uint96 qi, uint96 qj, uint96 di, uint96 dj)
-        public
-    {
+    function testFuzz_wrapIUnwrapJNeverProfitsAtPar(uint256 amount, uint96 qi, uint96 qj, uint96 di, uint96 dj) public {
         uint256[4] memory r = [bound(qi, 1, 1e12), bound(qj, 1, 1e12), bound(di, 1, 1e12), bound(dj, 1, 1e12)];
         WrappedToken m = _pair(r);
         amount = bound(amount, 1, 1e24);

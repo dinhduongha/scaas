@@ -14,9 +14,22 @@ import {regArgs} from "../helpers/Catalogue.sol";
 contract ModulesTest is Test {
     address internal constant F = address(0xFAC);
     uint8[12] internal kinds = [0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13];
-    string[14] internal faces = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
-        "WrappedPqzToken", "", "", "NormalRegulatedToken", "WrappedRegulatedToken", "NormalZetherRegulatedToken",
-        "WrappedZetherRegulatedToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"];
+    string[14] internal faces = [
+        "NormalToken",
+        "WrappedToken",
+        "NormalZetherToken",
+        "WrappedZetherToken",
+        "NormalPqzToken",
+        "WrappedPqzToken",
+        "",
+        "",
+        "NormalRegulatedToken",
+        "WrappedRegulatedToken",
+        "NormalZetherRegulatedToken",
+        "WrappedZetherRegulatedToken",
+        "NormalPqzRegulatedToken",
+        "WrappedPqzRegulatedToken"
+    ];
 
     function create(bytes memory init) external returns (address a) {
         assembly ("memory-safe") {
@@ -40,7 +53,9 @@ contract ModulesTest is Test {
 
     function _copy(address[] memory ms) internal pure returns (address[] memory c) {
         c = new address[](ms.length);
-        for (uint256 i; i < ms.length; ++i) c[i] = ms[i];
+        for (uint256 i; i < ms.length; ++i) {
+            c[i] = ms[i];
+        }
     }
 
     function _refused(uint8 k, address[] memory ms, bytes memory err) internal {
@@ -58,7 +73,9 @@ contract ModulesTest is Test {
             assertEq(ITokenModules(impl).modules(), ms, faces[k]);
             // count
             address[] memory short = new address[](n - 1);
-            for (uint256 i; i + 1 < n; ++i) short[i] = ms[i];
+            for (uint256 i; i + 1 < n; ++i) {
+                short[i] = ms[i];
+            }
             _refused(k, short, abi.encodeWithSelector(MetaTokenBase.ModuleMissing.selector, n - 1));
             // no code
             address[] memory c = _copy(ms);
@@ -78,14 +95,18 @@ contract ModulesTest is Test {
             c = _copy(ms);
             c[n - 1] = far[n - 1];
             _refused(k, c, abi.encodeWithSelector(MetaTokenBase.ModuleMismatch.selector, n - 1));
-            if (k >= 8) { // a module built with another registry code hash
+            if (k >= 8) {
+                // a module built with another registry code hash
                 (address[] memory reg,) = deployKindModules(k, F, abi.encode(bytes32(uint256(1))));
                 c = _copy(ms);
                 c[2] = reg[2];
                 _refused(k, c, abi.encodeWithSelector(MetaTokenBase.ModuleMismatch.selector, 2));
             }
-            if (k == 4 || k == 5 || k == 12 || k == 13) { // every module answers this set; one of another set is refused
-                for (uint256 i; i < n; ++i) assertEq(ITokenModule(ms[i]).pqzSet(), PqzSet.SET_DIGEST); // CTR-PQZ-42 (T-26)
+            if (k == 4 || k == 5 || k == 12 || k == 13) {
+                // every module answers this set; one of another set is refused
+                for (uint256 i; i < n; ++i) {
+                    assertEq(ITokenModule(ms[i]).pqzSet(), PqzSet.SET_DIGEST); // CTR-PQZ-42 (T-26)
+                }
                 for (uint256 i; i < n; ++i) {
                     c = _copy(ms);
                     c[i] = _otherSet(ms[i]);
@@ -121,8 +142,10 @@ contract ModulesTest is Test {
                     }
                 }
                 assertGt(n, 0, faces[k]);
-                assertFalse(vm.keyExistsJson(m, string.concat(".storageLayout.storage[", vm.toString(n), "]")),
-                    string.concat(p[1], ": a variable past its kind's layout"));
+                assertFalse(
+                    vm.keyExistsJson(m, string.concat(".storageLayout.storage[", vm.toString(n), "]")),
+                    string.concat(p[1], ": a variable past its kind's layout")
+                );
                 ++rows;
             }
         }
@@ -160,11 +183,13 @@ contract ModulesTest is Test {
     ///      UA ledger's `balanceOfUA` / `transferToUA`, `implementation`, the one-word env views), which run on the module's
     ///      own locked storage and code; and the `pure` entries, which read nothing (accepted without `onlyDelegated`).
     function _exempt(bytes32 s, string memory name, string[] memory pures) internal pure returns (bool) {
-        for (uint256 i; i < pures.length; ++i) if (keccak256(bytes(pures[i])) == keccak256(bytes(name))) return true;
+        for (uint256 i; i < pures.length; ++i) {
+            if (keccak256(bytes(pures[i])) == keccak256(bytes(name))) return true;
+        }
         return s == keccak256("kind()") || s == keccak256("moduleGroup()") || s == keccak256("factory()")
-            || s == keccak256("FACTORY()") || s == keccak256("COMPLIANCE_REGISTRY_CODEHASH()") || s == keccak256("pqzSet()")
-            || s == keccak256("name()") || s == keccak256("symbol()") || s == keccak256("decimals()")
-            || s == keccak256("totalSupply()") || s == keccak256("balanceOf(address)")
+            || s == keccak256("FACTORY()") || s == keccak256("COMPLIANCE_REGISTRY_CODEHASH()")
+            || s == keccak256("pqzSet()") || s == keccak256("name()") || s == keccak256("symbol()")
+            || s == keccak256("decimals()") || s == keccak256("totalSupply()") || s == keccak256("balanceOf(address)")
             || s == keccak256("allowance(address,address)") || s == keccak256("transfer(address,uint256)")
             || s == keccak256("transferFrom(address,address,uint256)") || s == keccak256("approve(address,uint256)")
             || s == keccak256("balanceOfUA(bytes32)") || s == keccak256("transferToUA(bytes32,uint256)")
@@ -181,11 +206,15 @@ contract ModulesTest is Test {
             string memory p = string.concat(".abi[", vm.toString(k), "]");
             if (!vm.keyExistsJson(j, p)) break;
             if (keccak256(bytes(vm.parseJsonString(j, string.concat(p, ".type")))) != keccak256("function")) continue;
-            if (keccak256(bytes(vm.parseJsonString(j, string.concat(p, ".stateMutability")))) != keccak256("pure")) continue;
+            if (keccak256(bytes(vm.parseJsonString(j, string.concat(p, ".stateMutability")))) != keccak256("pure")) {
+                continue;
+            }
             tmp[n++] = vm.parseJsonString(j, string.concat(p, ".name"));
         }
         out = new string[](n);
-        for (uint256 i; i < n; ++i) out[i] = tmp[i];
+        for (uint256 i; i < n; ++i) {
+            out[i] = tmp[i];
+        }
     }
 
     function _nameOf(string memory sig) internal pure returns (string memory) {
@@ -203,8 +232,8 @@ contract ModulesTest is Test {
             string[] memory names = kindModuleNames(k);
             for (uint256 i; i < ms.length; ++i) {
                 string[] memory p = vm.split(names[i], ":");
-                string memory j = vm.readFile(string.concat(vm.envOr("FOUNDRY_OUT", string("out")), "/", p[0], "/", p[1],
-                    ".json"));
+                string memory j =
+                    vm.readFile(string.concat(vm.envOr("FOUNDRY_OUT", string("out")), "/", p[0], "/", p[1], ".json"));
                 string[] memory sigs = vm.parseJsonKeys(j, ".methodIdentifiers");
                 string[] memory pures = _pures(j);
                 for (uint256 s; s < sigs.length; ++s) {
@@ -214,13 +243,21 @@ contract ModulesTest is Test {
                         continue;
                     }
                     (bool ok, bytes memory ret) = ms[i].call(bytes.concat(bytes4(h), new bytes(2048)));
-                    if (vm.envOr("T66B_LIST", false) && (ok || keccak256(ret) != keccak256(abi.encodeWithSelector(MetaTokenBase.NotDelegated.selector)))) {
+                    if (
+                        vm.envOr("T66B_LIST", false)
+                            && (ok
+                                || keccak256(ret)
+                                    != keccak256(abi.encodeWithSelector(MetaTokenBase.NotDelegated.selector)))
+                    ) {
                         emit log(string.concat("ANSWERS | ", p[1], " | ", sigs[s], " | ", ok ? "ok" : vm.toString(ret)));
                         continue;
                     }
                     assertFalse(ok, string.concat(p[1], ".", sigs[s], ": answered a direct call"));
-                    assertEq(ret, abi.encodeWithSelector(MetaTokenBase.NotDelegated.selector),
-                        string.concat(p[1], ".", sigs[s], ": NotDelegated"));
+                    assertEq(
+                        ret,
+                        abi.encodeWithSelector(MetaTokenBase.NotDelegated.selector),
+                        string.concat(p[1], ".", sigs[s], ": NotDelegated")
+                    );
                     ++refused;
                 }
             }

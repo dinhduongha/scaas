@@ -36,16 +36,31 @@ function regArgs() pure returns (bytes memory) {
 /// @notice A plain release environment (plan 5g-Z2): no dependencies, no pinned libraries. Chain-neutral releases (plan
 ///         T71): the factory and `chain_uid` are the factory's own, not the env's; `factory` and `uid` stay as
 ///         arguments for the callers that also build the instance env (`instanceEnv`).
-function plainEnv(address, /* factory */ address ska, bytes32, /* uid */ address registry, bool hedera)
-    pure returns (IFactoryToken.Env memory e)
+function plainEnv(
+    address,
+    /* factory */
+    address ska,
+    bytes32,
+    /* uid */
+    address registry,
+    bool hedera
+)
+    pure
+    returns (IFactoryToken.Env memory e)
 {
     (e.registry, e.smartKeyAccountImpl, e.hedera) = (registry, ska, hedera);
 }
 
 /// @notice A `*_ZETHER` environment: `deps` = transfer, burn, inner-product verifier, disclosure (CTR-ZTH-20).
-function zetherEnv(address factory, bytes32 uid, address registry, address transfer, address burn, address innerProduct,
-    address disclosure) pure returns (IFactoryToken.Env memory e)
-{
+function zetherEnv(
+    address factory,
+    bytes32 uid,
+    address registry,
+    address transfer,
+    address burn,
+    address innerProduct,
+    address disclosure
+) pure returns (IFactoryToken.Env memory e) {
     e = plainEnv(factory, address(0), uid, registry, false);
     e.deps = new address[](4);
     (e.deps[0], e.deps[1], e.deps[2], e.deps[3]) = (transfer, burn, innerProduct, disclosure);
@@ -54,7 +69,8 @@ function zetherEnv(address factory, bytes32 uid, address registry, address trans
 /// @notice A `*_PQZ` environment: `deps` = the `PqzKeyVerifier`; the libraries are the kind's link closure
 ///         (`Catalogue.env` pins them, task 6).
 function pqzEnv(address factory, bytes32 uid, address registry, address verifier)
-    pure returns (IFactoryToken.Env memory e)
+    pure
+    returns (IFactoryToken.Env memory e)
 {
     e = plainEnv(factory, address(0), uid, registry, false);
     e.deps = new address[](1);
@@ -63,7 +79,8 @@ function pqzEnv(address factory, bytes32 uid, address registry, address verifier
 
 /// @notice The instance env a factory on chain `uid` with router `govRouter` composes from `e` (chain-neutral spec §3.2).
 function instanceEnv(IFactoryToken.Env memory e, bytes32 uid, address govRouter)
-    pure returns (IFactoryToken.ChainEnv memory c)
+    pure
+    returns (IFactoryToken.ChainEnv memory c)
 {
     return IFactoryToken.ChainEnv(uid, e.registry, govRouter, e.smartKeyAccountImpl, e.hedera, e.deps, e.params);
 }
@@ -72,10 +89,13 @@ function instanceEnv(IFactoryToken.Env memory e, bytes32 uid, address govRouter)
 ///         references and each body module's, recursively; the modules themselves are pinned by `withModules`), each
 ///         library with its code hash. Checked against the artifacts' `linkReferences` by `LinkClosure.t.sol`.
 function closureLibs(IOpenFactory.TokenKind kind) view returns (address[] memory l) {
-    if (uint8(kind) >= 8) { // a regulated kind 8-13: its base kind's closure and `RegulatedLib` (regulated-kinds spec §6.1)
+    if (uint8(kind) >= 8) {
+        // a regulated kind 8-13: its base kind's closure and `RegulatedLib` (regulated-kinds spec §6.1)
         address[] memory base = closureLibs(IOpenFactory.TokenKind(uint8(kind) - 8));
         l = new address[](base.length + 1);
-        for (uint256 i; i < base.length; ++i) l[i] = base[i];
+        for (uint256 i; i < base.length; ++i) {
+            l[i] = base[i];
+        }
         l[base.length] = address(RegulatedLib);
         return l;
     }
@@ -94,7 +114,7 @@ function closureLibs(IOpenFactory.TokenKind kind) view returns (address[] memory
     if (zwr) l[n++] = address(ZetherWrappedLib);
     if (pqz) {
         (l[n], l[n + 1], l[n + 2], l[n + 3]) =
-            (address(PqzStateLib), address(PqzTransferLib), address(PqzBurnLib), address(PqzViewLib));
+        (address(PqzStateLib), address(PqzTransferLib), address(PqzBurnLib), address(PqzViewLib));
         n += 4;
     }
     if (pwr) l[n] = address(PqzWrappedLib);
@@ -112,7 +132,9 @@ function registryClosureLibs() pure returns (address[] memory l) {
 function pinned(IFactoryToken.Env memory e, IOpenFactory.TokenKind kind) view returns (IFactoryToken.Env memory) {
     e.libs = closureLibs(kind);
     e.libCodeHashes = new bytes32[](e.libs.length);
-    for (uint256 i; i < e.libs.length; ++i) e.libCodeHashes[i] = e.libs[i].codehash;
+    for (uint256 i; i < e.libs.length; ++i) {
+        e.libCodeHashes[i] = e.libs[i].codehash;
+    }
     return e;
 }
 
@@ -120,8 +142,12 @@ function pinned(IFactoryToken.Env memory e, IOpenFactory.TokenKind kind) view re
 function withModules(IFactoryToken.Env memory e, address[] memory ms) view returns (IFactoryToken.Env memory) {
     address[] memory l = new address[](e.libs.length + ms.length);
     bytes32[] memory h = new bytes32[](l.length);
-    for (uint256 i; i < e.libs.length; ++i) (l[i], h[i]) = (e.libs[i], e.libCodeHashes[i]);
-    for (uint256 i; i < ms.length; ++i) (l[e.libs.length + i], h[e.libs.length + i]) = (ms[i], ms[i].codehash);
+    for (uint256 i; i < e.libs.length; ++i) {
+        (l[i], h[i]) = (e.libs[i], e.libCodeHashes[i]);
+    }
+    for (uint256 i; i < ms.length; ++i) {
+        (l[e.libs.length + i], h[e.libs.length + i]) = (ms[i], ms[i].codehash);
+    }
     (e.libs, e.libCodeHashes) = (l, h);
     return e;
 }
@@ -142,36 +168,56 @@ library Catalogue {
     }
 
     /// @dev Release `version` of `kind` from `code` (init code without arguments) on env `e`.
-    function release(OpenFactory f, IOpenFactory.TokenKind kind, uint64 version, IFactoryToken.Env memory e,
-        bytes memory code) internal returns (address)
-    {
+    function release(
+        OpenFactory f,
+        IOpenFactory.TokenKind kind,
+        uint64 version,
+        IFactoryToken.Env memory e,
+        bytes memory code
+    ) internal returns (address) {
         return release(f, kind, version, e, code, "");
     }
 
     /// @dev As above with the release's `implArgs` (a regulated kind 8-13: `regArgs()`, plan T29).
     ///      T66b: the kind's body modules are deployed for `f` first, pinned in the env beside its link closure, and named in
     ///      the release's `implArgs` (`coreArgs` is the kind's own: "" or `regArgs()`).
-    function release(OpenFactory f, IOpenFactory.TokenKind kind, uint64 version, IFactoryToken.Env memory e,
-        bytes memory code, bytes memory coreArgs) internal returns (address)
-    {
+    function release(
+        OpenFactory f,
+        IOpenFactory.TokenKind kind,
+        uint64 version,
+        IFactoryToken.Env memory e,
+        bytes memory code,
+        bytes memory coreArgs
+    ) internal returns (address) {
         (address[] memory ms, bytes memory implArgs) = deployKindModules(uint8(kind), address(f), coreArgs);
         uint16 v = env(f, kind, withModules(e.libs.length == 0 ? pinned(e, kind) : e, ms));
         return _deployRelease(f, kind, version, v, code, implArgs);
     }
 
     /// @dev The admin's own deploy (its own approval) with the factory's chain word (Fable recheck-2 P3-1).
-    function _deployRelease(OpenFactory f, IOpenFactory.TokenKind kind, uint64 version, uint16 v, bytes memory code,
-        bytes memory implArgs) private returns (address)
-    {
+    function _deployRelease(
+        OpenFactory f,
+        IOpenFactory.TokenKind kind,
+        uint64 version,
+        uint16 v,
+        bytes memory code,
+        bytes memory implArgs
+    ) private returns (address) {
         bytes32 u = EnvKit.uidOf(address(f));
         vm.prank(address(uint160(uint256(f.admin()))));
         return f.deployTokenImplementation(kind, version, v, code, implArgs, u);
     }
 
     /// @dev A plain release on `plainEnv(f, ska, f.chainUid(), registry, hedera)`.
-    function plain(OpenFactory f, IOpenFactory.TokenKind kind, uint64 version, bytes memory code, address registry,
-        address ska, bool hedera) internal returns (address)
-    {
+    function plain(
+        OpenFactory f,
+        IOpenFactory.TokenKind kind,
+        uint64 version,
+        bytes memory code,
+        address registry,
+        address ska,
+        bool hedera
+    ) internal returns (address) {
         return release(f, kind, version, plainEnv(address(f), ska, f.chainUid(), registry, hedera), code);
     }
 
@@ -211,29 +257,46 @@ library Catalogue {
     /// @dev Where `deployTokenImplementation(kind, version, any env, code, "")` puts the release: chain-neutral, the env is not
     ///      in its init code (chain-neutral spec §6.1).
     function predict(OpenFactory f, IOpenFactory.TokenKind kind, uint64 version, bytes memory code)
-        internal pure returns (address)
+        internal
+        pure
+        returns (address)
     {
         return predict(f, kind, version, code, "");
     }
 
     /// @dev As above with the release's `implArgs` (T66b: a token kind's body modules).
-    function predict(OpenFactory f, IOpenFactory.TokenKind kind, uint64 version, bytes memory code, bytes memory implArgs)
-        internal pure returns (address)
-    {
-        return vm.computeCreate2Address(keccak256(abi.encode(kind, version)),
-            keccak256(bytes.concat(code, abi.encode(address(f), implArgs))), address(f));
+    function predict(
+        OpenFactory f,
+        IOpenFactory.TokenKind kind,
+        uint64 version,
+        bytes memory code,
+        bytes memory implArgs
+    ) internal pure returns (address) {
+        return vm.computeCreate2Address(
+            keccak256(abi.encode(kind, version)),
+            keccak256(bytes.concat(code, abi.encode(address(f), implArgs))),
+            address(f)
+        );
     }
 
     /// @dev T66b: the body modules env `v` of `kind` pins (its last libs, as `release` appends them).
-    function modulesOn(OpenFactory f, IOpenFactory.TokenKind kind, uint16 v) internal view returns (address[] memory ms) {
+    function modulesOn(OpenFactory f, IOpenFactory.TokenKind kind, uint16 v)
+        internal
+        view
+        returns (address[] memory ms)
+    {
         address[] memory l = f.tokenEnvOf(kind, v).libs;
         ms = new address[](kindModuleNames(uint8(kind)).length);
-        for (uint256 i; i < ms.length; ++i) ms[i] = l[l.length - ms.length + i];
+        for (uint256 i; i < ms.length; ++i) {
+            ms[i] = l[l.length - ms.length + i];
+        }
     }
 
     /// @dev T66b: the `implArgs` of a further release of `kind` on the modules env `v` pins (`coreArgs` "" or `regArgs()`).
     function argsOn(OpenFactory f, IOpenFactory.TokenKind kind, uint16 v, bytes memory coreArgs)
-        internal view returns (bytes memory)
+        internal
+        view
+        returns (bytes memory)
     {
         return kindImplArgs(uint8(kind), modulesOn(f, kind, v), coreArgs);
     }

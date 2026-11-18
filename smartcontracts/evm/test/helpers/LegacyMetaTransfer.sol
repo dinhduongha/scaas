@@ -30,8 +30,8 @@ library LegacyMetaTransfer {
     function hashStruct(MetaTransfer memory t) internal pure returns (bytes32) {
         address r = t.mode & MODE_RESTRICT_RELAYER != 0 ? t.relayer : address(0);
         address f = t.mode & MODE_RESTRICT_FEE_RECIPIENT != 0 ? t.feeRecipient : address(0);
-        return keccak256(abi.encode(
-            TYPEHASH, t.from, t.to, t.value, t.entryRef, t.batch, t.nonce, t.validUntil, t.mode, r, t.fee, f
-        ));
+        return keccak256(
+            abi.encode(TYPEHASH, t.from, t.to, t.value, t.entryRef, t.batch, t.nonce, t.validUntil, t.mode, r, t.fee, f)
+        );
     }
 }

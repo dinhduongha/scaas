@@ -156,8 +156,9 @@ contract Tier2Test is V2Fixture {
         assertEq(t.wrap(50 ether), 50 ether);
         sp.mint(address(t), 1 ether); // so the wrapper can pay the extra fee at all
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(
-            IWrappedToken.UnderlyingTransferMismatch.selector, address(sp), 10 ether, 10.1 ether));
+        vm.expectRevert(
+            abi.encodeWithSelector(IWrappedToken.UnderlyingTransferMismatch.selector, address(sp), 10 ether, 10.1 ether)
+        );
         t.unwrap(10 ether, bob);
     }
 
@@ -278,8 +279,13 @@ contract Tier2Test is V2Fixture {
         bytes memory cfgErr = abi.encodeWithSelector(IWrappedToken.RateConfigInvalid.selector);
         _refuse(address(usdc), 1, 1, c, cfgErr);
         // adjustable: admin must have code, delay [2d, 30d], step [1, 1000]
-        _refuse(address(usdc), 1, 1, _adjustable(bob),
-            abi.encodeWithSelector(IGovernance.RoleNotContract.selector, uint8(3), bob));
+        _refuse(
+            address(usdc),
+            1,
+            1,
+            _adjustable(bob),
+            abi.encodeWithSelector(IGovernance.RoleNotContract.selector, uint8(3), bob)
+        );
         address adm = address(new RateAdminForwarder());
         c = _adjustable(adm);
         c.rateDelay = 2 days - 1;

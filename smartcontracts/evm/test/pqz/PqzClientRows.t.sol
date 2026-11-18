@@ -33,20 +33,32 @@ contract PqzClientRowsTest is PqzOffchainBase {
     }
 
     function test_scopedKeyRecords() public view {
-        for (uint256 i; i < 3; ++i) _record(string.concat(".scopedKeyRecords[", vm.toString(i), "]"));
+        for (uint256 i; i < 3; ++i) {
+            _record(string.concat(".scopedKeyRecords[", vm.toString(i), "]"));
+        }
     }
 
     function _record(string memory k) internal view {
-        Rec memory r = Rec(j.readBytes32(string.concat(k, ".ua")), uint8(j.readUint(string.concat(k, ".keyClass"))),
-            j.readBytes32(string.concat(k, ".chainUid")), j.readAddress(string.concat(k, ".token")),
-            uint64(j.readUint(string.concat(k, ".version"))), j.readBytes32(string.concat(k, ".pqzKeyHash")));
+        Rec memory r = Rec(
+            j.readBytes32(string.concat(k, ".ua")),
+            uint8(j.readUint(string.concat(k, ".keyClass"))),
+            j.readBytes32(string.concat(k, ".chainUid")),
+            j.readAddress(string.concat(k, ".token")),
+            uint64(j.readUint(string.concat(k, ".version"))),
+            j.readBytes32(string.concat(k, ".pqzKeyHash"))
+        );
         bytes32 kd = UAKinds.pqzScopedKeyDigest(r.ua, r.cls, r.cu, r.t, r.v, r.kh);
         assertEq(kd, j.readBytes32(string.concat(k, ".keyDigest")), "UAPqzScopedKey");
         bytes32 rd = _recordDigest(k, r);
         assertEq(rd, j.readBytes32(string.concat(k, ".recordDigest")), "UAPqzScopedKeyRecord");
         uint16 kind = uint16(j.readUint(string.concat(k, ".kind")));
-        assertEq(UAKinds.uaMessage(kind, UAKinds.PURPOSE_PQZ_SCOPED_KEY, rd), j.readBytes32(string.concat(k, ".message")));
-        assertEq(UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_SCOPED_KEY, kd), j.readBytes32(string.concat(k, ".regMessage")));
+        assertEq(
+            UAKinds.uaMessage(kind, UAKinds.PURPOSE_PQZ_SCOPED_KEY, rd), j.readBytes32(string.concat(k, ".message"))
+        );
+        assertEq(
+            UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_SCOPED_KEY, kd),
+            j.readBytes32(string.concat(k, ".regMessage"))
+        );
     }
 
     function _recordDigest(string memory k, Rec memory r) internal view returns (bytes32) {
@@ -100,7 +112,9 @@ contract PqzClientRowsTest is PqzOffchainBase {
         assertEq(_slice(d, puf, PqzCt.PKP), _packed(a.uFrom), "P(u_f)");
         uint256 oT = puf + PqzCt.PKP + PqzCt.VP;
         assertEq(_slice(d, oT, PqzCore.OPEN), abi.encodePacked(ot.mlkemCt, ot.x25519Eph, ot.sealedSeed), "O_t");
-        assertEq(_slice(d, oT + PqzCore.OPEN, PqzCore.OPEN), abi.encodePacked(oa.mlkemCt, oa.x25519Eph, oa.sealedSeed), "O_a");
+        assertEq(
+            _slice(d, oT + PqzCore.OPEN, PqzCore.OPEN), abi.encodePacked(oa.mlkemCt, oa.x25519Eph, oa.sealedSeed), "O_a"
+        );
         assertEq(uint8(d[d.length - 1]), 2, "n");
     }
 
@@ -110,6 +124,6 @@ contract PqzClientRowsTest is PqzOffchainBase {
 
     function _op(uint256 seed) internal pure returns (IPqzToken.PqzOpening memory o) {
         (o.mlkemCt, o.x25519Eph, o.sealedSeed) =
-            (_blob(seed, PqzCore.MLKEM_CT), keccak256(abi.encode("eph", seed)), _blob(seed + 1, PqzCore.SEALED_SEED));
+        (_blob(seed, PqzCore.MLKEM_CT), keccak256(abi.encode("eph", seed)), _blob(seed + 1, PqzCore.SEALED_SEED));
     }
 }

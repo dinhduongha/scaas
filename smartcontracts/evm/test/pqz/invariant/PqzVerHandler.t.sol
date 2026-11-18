@@ -64,7 +64,9 @@ contract PqzVerHandler is PqzFixture {
     /// `pendingCount` of every stored version of `u`.
     function _snap(bytes32 u) internal view returns (uint64[] memory c) {
         c = new uint64[](uint256(reg.pqzKeyLatest(u)) + 1);
-        for (uint256 v; v < c.length; ++v) c[v] = tok.pqzAccount(u, uint64(v)).pendingCount;
+        for (uint256 v; v < c.length; ++v) {
+            c[v] = tok.pqzAccount(u, uint64(v)).pendingCount;
+        }
     }
 
     /// J1 / J5: after a credit to `u`, only version `cur` (read before the call) may have moved, and never down.
@@ -73,7 +75,9 @@ contract PqzVerHandler is PqzFixture {
         for (uint256 v; v < before.length; ++v) {
             if (v == cur ? a[v] < before[v] : a[v] != before[v]) ++misplaced;
         }
-        for (uint256 v = before.length; v < a.length; ++v) if (a[v] != 0) ++misplaced;
+        for (uint256 v = before.length; v < a.length; ++v) {
+            if (a[v] != 0) ++misplaced;
+        }
         ++credited;
     }
 
@@ -131,7 +135,8 @@ contract PqzVerHandler is PqzFixture {
         bytes32[] memory legs = new bytes32[](2);
         (legs[0], legs[1]) = (a, b);
         uint64 p = tok.pqzAccount(from, kv).rolled;
-        IPqzToken.PqzMultiArgs memory t = _ms(_mpayload(p, 0, from, bytes32(0), legs, _blob(nonce++, _outLen(2, false)), ""));
+        IPqzToken.PqzMultiArgs memory t =
+            _ms(_mpayload(p, 0, from, bytes32(0), legs, _blob(nonce++, _outLen(2, false)), ""));
         t.keyVersion = kv;
         try tok.mtxConfidentialTransfer(t, PROOF, _pqAuth(), "", noVerdict()) {
             if (kv != cur) ++bad;
@@ -149,8 +154,11 @@ contract PqzVerHandler is PqzFixture {
         amount = shielded == 0 ? 0 : bound(amount, 0, shielded);
         bytes32 rcpt = amount == 0 ? bytes32(0) : bytes32(uint256(0xD00D));
         uint64 p = tok.pqzAccount(from, kv).rolled;
-        IPqzToken.PqzBurnArgs memory b =
-            _bs(bytes.concat(abi.encode(uint256(p), block.number + 50, uint256(0), from, bytes32(0)), _blob(nonce++, PqzCt.CT)));
+        IPqzToken.PqzBurnArgs memory b = _bs(
+            bytes.concat(
+                abi.encode(uint256(p), block.number + 50, uint256(0), from, bytes32(0)), _blob(nonce++, PqzCt.CT)
+            )
+        );
         b.keyVersion = kv;
         try tok.mtxUnshield(b, amount, rcpt, PROOF, _pqAuth(), "", noVerdict()) {
             if (kv != cur && amount != 0) ++bad;

@@ -66,7 +66,11 @@ contract PqzPackedRef {
         o.from = bytes32(payload[96:128]);
     }
 
-    function _parseTransfer(bytes calldata payload, ZetherTypes.TransferMode mode) private pure returns (PqzCore.Op memory o) {
+    function _parseTransfer(bytes calldata payload, ZetherTypes.TransferMode mode)
+        private
+        pure
+        returns (PqzCore.Op memory o)
+    {
         uint256 memo = mode == ZetherTypes.TransferMode.HASH ? MEMO : 0;
         uint256 len = payload.length;
         uint256 outLen = len - T_OUT - memo;
@@ -82,7 +86,11 @@ contract PqzPackedRef {
         o.memoHash = keccak256(abi.encodePacked(memo != 0 ? payload[len - MEMO:] : payload[0:0], bytes32(0)));
     }
 
-    function _transferBuffer(PqzCore.Op memory o, PqzCore.Env memory e, bytes calldata out) private view returns (bytes memory buf) {
+    function _transferBuffer(PqzCore.Op memory o, PqzCore.Env memory e, bytes calldata out)
+        private
+        view
+        returns (bytes memory buf)
+    {
         bytes memory t = PqzCore._total(o, msg.data[0:0]);
         uint256 nk = 2 + o.auditorOn;
         o.stLen = PqzCore.HEADER + nk * PqzCt.PK + PqzCt.CT + o.outLen;
@@ -95,7 +103,11 @@ contract PqzPackedRef {
         PqzCore._cd(buf, PqzCore.HEADER + nk * PqzCt.PK + PqzCt.CT, out);
     }
 
-    function _parseMulti(bytes calldata payload, ZetherTypes.TransferMode mode) private pure returns (PqzCore.Op memory o) {
+    function _parseMulti(bytes calldata payload, ZetherTypes.TransferMode mode)
+        private
+        pure
+        returns (PqzCore.Op memory o)
+    {
         uint256 m = uint256(bytes32(payload[160:192]));
         o.legs = m;
         o.opTag = PqzCore.OP_TRANSFER_MULTI;
@@ -121,7 +133,11 @@ contract PqzPackedRef {
         if (o.auditorOn == 1) o.keyA = PqzCore._keyPtr(e.registry, PqzCore.$().auditorUA);
     }
 
-    function _multiBuffer(PqzCore.Op memory o, PqzCore.Env memory e, bytes calldata out) private view returns (bytes memory buf) {
+    function _multiBuffer(PqzCore.Op memory o, PqzCore.Env memory e, bytes calldata out)
+        private
+        view
+        returns (bytes memory buf)
+    {
         bytes memory t = PqzCore._total(o, msg.data[0:0]);
         uint256 nk = 1 + o.legs + o.auditorOn;
         o.stLen = PqzCore.HEADER + nk * PqzCt.PK + PqzCt.CT + o.outLen;
@@ -129,7 +145,9 @@ contract PqzPackedRef {
         PqzCore._header(buf, o, e);
         PqzCore._mem(buf, 320, abi.encode(o.legs));
         PqzCore._key(buf, PqzCore.HEADER, o.keyF);
-        for (uint256 j; j < o.legs; ++j) PqzCore._key(buf, PqzCore.HEADER + (1 + j) * PqzCt.PK, o.keys[j]);
+        for (uint256 j; j < o.legs; ++j) {
+            PqzCore._key(buf, PqzCore.HEADER + (1 + j) * PqzCt.PK, o.keys[j]);
+        }
         if (o.auditorOn == 1) PqzCore._key(buf, PqzCore.HEADER + (1 + o.legs) * PqzCt.PK, o.keyA);
         PqzCore._mem(buf, PqzCore.HEADER + nk * PqzCt.PK, t);
         PqzCore._cd(buf, PqzCore.HEADER + nk * PqzCt.PK + PqzCt.CT, out);
@@ -137,7 +155,8 @@ contract PqzPackedRef {
 
     /// The op blob `R ‖ v_f` of an op 1 payload (`_settleTransfer`): `out` packed whole, `u ‖ v_t` in one pass.
     function blobSingle(bytes calldata payload, bool hash) external pure returns (bytes memory blob) {
-        PqzCore.Op memory o = _parseTransfer(payload, hash ? ZetherTypes.TransferMode.HASH : ZetherTypes.TransferMode.BUNDLE);
+        PqzCore.Op memory o =
+            _parseTransfer(payload, hash ? ZetherTypes.TransferMode.HASH : ZetherTypes.TransferMode.BUNDLE);
         bytes calldata out = payload[T_OUT:T_OUT + o.outLen];
         uint256 len = 16 + PqzCt.PKP + PqzCt.VP * (2 + o.auditorOn) + 32 + PqzCore._tailLen(1 + o.auditorOn);
         blob = new bytes(len + 32);
@@ -156,7 +175,8 @@ contract PqzPackedRef {
 
     /// The op blob of an op 7 payload (`_bundleMulti`).
     function blobMulti(bytes calldata payload, bool hash) external pure returns (bytes memory r) {
-        PqzCore.Op memory o = _parseMulti(payload, hash ? ZetherTypes.TransferMode.HASH : ZetherTypes.TransferMode.BUNDLE);
+        PqzCore.Op memory o =
+            _parseMulti(payload, hash ? ZetherTypes.TransferMode.HASH : ZetherTypes.TransferMode.BUNDLE);
         bytes calldata out = payload[M_OUT + 32 * o.legs:M_OUT + 32 * o.legs + o.outLen];
         uint256 ls = 32 + PqzCt.VP * (1 + o.auditorOn);
         uint256 start = 16 + PqzCt.PKP * o.groups;
@@ -164,14 +184,19 @@ contract PqzPackedRef {
         r = new bytes(len + 32);
         PqzCore._put(r, 0, abi.encodePacked(o.salt));
         PqzCt.packCd(r, 16, out[0:PqzCt.PK * o.groups]);
-        for (uint256 j; j < o.legs; ++j) _leg(r, o, payload, out, j);
+        for (uint256 j; j < o.legs; ++j) {
+            _leg(r, o, payload, out, j);
+        }
         uint256 us = PqzCt.PK * o.groups;
         PqzCt.packCd(r, start + ls * o.legs, out[us + PqzCt.V * o.legs:us + PqzCt.V * (o.legs + 1)]);
         PqzCore._putTail(r, start + ls * o.legs + PqzCt.VP, 0, new uint64[](o.legs + o.auditorOn));
         assembly ("memory-safe") { mstore(r, len) }
     }
 
-    function _leg(bytes memory r, PqzCore.Op memory o, bytes calldata payload, bytes calldata out, uint256 j) private pure {
+    function _leg(bytes memory r, PqzCore.Op memory o, bytes calldata payload, bytes calldata out, uint256 j)
+        private
+        pure
+    {
         uint256 us = PqzCt.PK * o.groups;
         uint256 ls = 32 + PqzCt.VP * (1 + o.auditorOn);
         uint256 d = 16 + PqzCt.PKP * o.groups + ls * j;
@@ -184,6 +209,9 @@ contract PqzPackedRef {
 
     /// The typed `PqzAuth` digest of a bare statement, in its precompile buffer.
     function digest(uint8 op, bytes calldata stmt, bytes32 domainSeparator) external pure returns (bytes32) {
-        return PqzCore.authDigest(bytes.concat(bytes1(op), bytes4(uint32(stmt.length)), stmt), stmt.length, domainSeparator);
+        return
+            PqzCore.authDigest(
+                bytes.concat(bytes1(op), bytes4(uint32(stmt.length)), stmt), stmt.length, domainSeparator
+            );
     }
 }

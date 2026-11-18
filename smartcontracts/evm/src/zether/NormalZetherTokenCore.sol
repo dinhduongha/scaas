@@ -48,43 +48,83 @@ abstract contract NormalZetherTokenCore is NormalTokenCore, ZetherLayer {
     ///      stays here. In `NormalToken`'s order: the unused fields and the metadata, `GovernanceLib.init`, the Zether config,
     ///      the initial mint.
     function _initRaw(bytes calldata initArgs) internal virtual override {
-        (uint256 features_, uint256 locked, bytes32 admin_, uint64 delay, address rescueTo_, GovernanceLib.Roles memory roles) =
-            ZetherLib.initNormal(initArgs, kind());
-        GovernanceLib.init(features_, locked, admin_, delay, rescueTo_, roles, _validBits(), _roleBits(), _contractOnlyBits(),
-            _registry());
+        (
+            uint256 features_,
+            uint256 locked,
+            bytes32 admin_,
+            uint64 delay,
+            address rescueTo_,
+            GovernanceLib.Roles memory roles
+        ) = ZetherLib.initNormal(initArgs, kind());
+        GovernanceLib.init(
+            features_,
+            locked,
+            admin_,
+            delay,
+            rescueTo_,
+            roles,
+            _validBits(),
+            _roleBits(),
+            _contractOnlyBits(),
+            _registry()
+        );
         (address holder, uint256 supply) = ZetherLib.initNormalConf(initArgs, _transferVerifier());
         if (supply != 0) _mint(holder, supply);
     }
 
-
     /// @dev The layer's env checks, restated for the second base.
-    function _validateEnv(IFactoryToken.ChainEnv calldata env) internal view virtual override(MetaTokenBase, ZetherLayer) {
+    function _validateEnv(IFactoryToken.ChainEnv calldata env)
+        internal
+        view
+        virtual
+        override(MetaTokenBase, ZetherLayer)
+    {
         ZetherLayer._validateEnv(env);
     }
+
     function _domainName() internal pure virtual override(ERC20MetaTx, ZetherLayer) returns (string memory) {
         return ZetherLayer._domainName();
     }
 
     function _envelopeBinding(MetaTxLib.MetaTransaction memory m)
-        internal view virtual override(MetaTxBaseCore, ZetherLayer) returns (bytes32)
+        internal
+        view
+        virtual
+        override(MetaTxBaseCore, ZetherLayer)
+        returns (bytes32)
     {
         return ZetherLayer._envelopeBinding(m);
     }
 
     function _uaEnvelopeBinding(MetaTxLib.UAMetaTransaction memory m)
-        internal view virtual override(UAMetaTxBaseCore, ZetherLayer) returns (bytes32)
+        internal
+        view
+        virtual
+        override(UAMetaTxBaseCore, ZetherLayer)
+        returns (bytes32)
     {
         return ZetherLayer._uaEnvelopeBinding(m);
     }
 
     /// @notice The allowlist (CTR-MTX-19, CTR-ZTH-34): `cancelNonce` (base), `burn(uint256)` `AMOUNT(0)`, then the
     ///         Zether ops, each `ABSOLUTE`; the table is `ZetherLib.normalSelectors` (CTR-ZTH-94).
-    function _mtxSelectorsBody() internal pure virtual override(MetaTxBaseCore, NormalTokenCore) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+    function _mtxSelectorsBody()
+        internal
+        pure
+        virtual
+        override(MetaTxBaseCore, NormalTokenCore)
+        returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         return ZetherLib.normalSelectors();
     }
 
-    function _mtxRule(bytes4 sel) internal view virtual override(MetaTxBaseCore, NormalTokenCore) returns (MtxRule memory) {
+    function _mtxRule(bytes4 sel)
+        internal
+        view
+        virtual
+        override(MetaTxBaseCore, NormalTokenCore)
+        returns (MtxRule memory)
+    {
         if (_isZetherOp(sel)) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 0);
         return NormalTokenCore._mtxRule(sel);
     }

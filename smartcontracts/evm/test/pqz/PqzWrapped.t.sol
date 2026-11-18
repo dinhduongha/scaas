@@ -32,8 +32,13 @@ contract PqzWrappedTest is PqzFixture {
 
     function setUp() public {
         _stack();
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ, 1,
-            pqzEnv(address(factory), PQZ_UID_(), address(reg), address(pqv)), type(WrappedPqzToken).creationCode);
+        Catalogue.release(
+            factory,
+            IOpenFactory.TokenKind.WRAPPED_PQZ,
+            1,
+            pqzEnv(address(factory), PQZ_UID_(), address(reg), address(pqv)),
+            type(WrappedPqzToken).creationCode
+        );
         usd = new MockERC20("USD", "USD", 6);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features = (1 << GovernanceBits.PAYABLE);
@@ -65,7 +70,9 @@ contract PqzWrappedTest is PqzFixture {
 
         bytes memory nb = _blob(21, PqzCt.CT);
         bytes memory pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, bytes32(0)), nb);
-        IConfidentialWrappedToken.Unwrap memory x = IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 400, 400 * SCALE);
+        IConfidentialWrappedToken.Unwrap memory x = IConfidentialWrappedToken.Unwrap(
+            address(usd), bytes32(uint256(uint160(address(0xD00D)))), 400, 400 * SCALE
+        );
         bytes memory st = w.unshieldUnwrapStatement(_bs(pl), x, 0);
         assertEq(bytes32(_cut(st, 544, 32)), w.unwrapBinding(address(usd), 400 * SCALE), "direct: leg and minOut bound");
         assertEq(uint256(bytes32(_cut(st, 288, 32))), 400);
@@ -81,7 +88,9 @@ contract PqzWrappedTest is PqzFixture {
         assertGe(usd.balanceOf(address(w)), w.totalSupply(), "reserve invariant (the pool is in totalSupply)");
         // minOut above the quote
         pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, bytes32(0)), _blob(22, PqzCt.CT));
-        x = IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 10, 10 * SCALE + 1);
+        x = IConfidentialWrappedToken.Unwrap(
+            address(usd), bytes32(uint256(uint160(address(0xD00D)))), 10, 10 * SCALE + 1
+        );
         vm.expectRevert();
         w.mtxUnshieldUnwrap(_bs(pl), x, hex"c0de", _pqAuth(), "", noVerdict());
         // an unknown leg
@@ -104,8 +113,10 @@ contract PqzWrappedTest is PqzFixture {
             WrappedPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "hook")));
         hook.mint(address(this), SCALE);
         hook.approve(address(z), SCALE);
-        bytes[2] memory calls =
-            [abi.encodeCall(z.disableFeature, (GovernanceBits.RATE_ADJUSTABLE, EnvKit.codeUidOf(address(z)))), abi.encodeCall(z.executeRate, (EnvKit.codeUidOf(address(z))))];
+        bytes[2] memory calls = [
+            abi.encodeCall(z.disableFeature, (GovernanceBits.RATE_ADJUSTABLE, EnvKit.codeUidOf(address(z)))),
+            abi.encodeCall(z.executeRate, (EnvKit.codeUidOf(address(z))))
+        ];
         for (uint256 i; i < 2; ++i) {
             hook.arm(address(z), calls[i]);
             vm.expectRevert(IMetaTx.Reentrancy.selector);
@@ -121,8 +132,8 @@ contract PqzWrappedTest is PqzFixture {
         assertEq(w.totalSupply(), 50 * SCALE, "the shield moved 20 to the pool");
         assertEq(w.totalShielded(), 20);
         // burn through mtxUnshield moves public units out of the pool (supply unchanged)
-        bytes memory pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), bob, bytes32(0)),
-            _blob(23, PqzCt.CT));
+        bytes memory pl =
+            bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), bob, bytes32(0)), _blob(23, PqzCt.CT));
         w.mtxUnshield(_bs(pl), 5, bytes32(uint256(uint160(address(this)))), hex"c0de", _pqAuth(), "", noVerdict());
         assertEq(w.totalSupply(), 50 * SCALE);
         assertEq(w.balanceOf(address(this)), 35 * SCALE);
@@ -139,13 +150,17 @@ contract PqzWrappedTest is PqzFixture {
         bytes memory code = type(WrappedPqzToken).creationCode;
         bytes memory args = Catalogue.argsOn(factory, IOpenFactory.TokenKind.WRAPPED_PQZ, 1, ""); // T66b: env 1's modules
         vm.prank(registrar);
-        address a = factory.deployTokenImplementation(IOpenFactory.TokenKind.WRAPPED_PQZ, 2, 1, code, args, EnvKit.uidOf(address(factory)));
+        address a = factory.deployTokenImplementation(
+            IOpenFactory.TokenKind.WRAPPED_PQZ, 2, 1, code, args, EnvKit.uidOf(address(factory))
+        );
         // F185: the call is its own transaction (`isolate`); under Amsterdam EIP-7825's 2^24 caps the REGULAR gas, which
         // `lastCallGas` reports with the intrinsic and the calldata (or the EIP-7976 floor), and EIP-8037 state gas (the
         // 64 KiB of code, the new slots) comes apart: it needs a limit above 2^24, which a transaction may have.
         Vm.Gas memory vg = vm.lastCallGas();
         uint256 txGas = vg.gasTotalUsed;
-        emit log_named_uint("WrappedPqzToken deployTokenImplementation state gas (EIP-8037)", uint256(int256(vg.gasStateUsed)));
+        emit log_named_uint(
+            "WrappedPqzToken deployTokenImplementation state gas (EIP-8037)", uint256(int256(vg.gasStateUsed))
+        );
         uint256 init = code.length + abi.encode(address(factory), args).length; // chain-neutral: no env appended
         emit log_named_uint("WrappedPqzToken init code bytes (with the factory's append)", init);
         emit log_named_uint("WrappedPqzToken runtime bytes", a.code.length);

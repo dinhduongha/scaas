@@ -61,14 +61,24 @@ contract PathsTest is V2Fixture {
     /// DELEGATECALL to its implementation, nothing more (a forward to a module, or any hop, would show as one more access), the one-word env views
     /// (`registry`, `chainUid`, `IS_HEDERA`, `SMART_KEY_ACCOUNT_IMPL`) the DEX and the factory read on chain among them.
     function test_p_keptViewsMakeNoCall() public {
-        bytes[16] memory calls = [abi.encodeWithSignature("registry()"), abi.encodeWithSignature("chainUid()"),
-            abi.encodeWithSignature("IS_HEDERA()"), abi.encodeWithSignature("SMART_KEY_ACCOUNT_IMPL()"),
-            abi.encodeWithSignature("kind()"), abi.encodeWithSignature("factory()"), abi.encodeWithSignature("FACTORY()"),
-            abi.encodeWithSignature("implementation()"), abi.encodeWithSignature("modules()"),
-            abi.encodeWithSignature("name()"), abi.encodeWithSignature("symbol()"), abi.encodeWithSignature("decimals()"),
-            abi.encodeWithSignature("totalSupply()"), abi.encodeWithSignature("balanceOf(address)", holder),
+        bytes[16] memory calls = [
+            abi.encodeWithSignature("registry()"),
+            abi.encodeWithSignature("chainUid()"),
+            abi.encodeWithSignature("IS_HEDERA()"),
+            abi.encodeWithSignature("SMART_KEY_ACCOUNT_IMPL()"),
+            abi.encodeWithSignature("kind()"),
+            abi.encodeWithSignature("factory()"),
+            abi.encodeWithSignature("FACTORY()"),
+            abi.encodeWithSignature("implementation()"),
+            abi.encodeWithSignature("modules()"),
+            abi.encodeWithSignature("name()"),
+            abi.encodeWithSignature("symbol()"),
+            abi.encodeWithSignature("decimals()"),
+            abi.encodeWithSignature("totalSupply()"),
+            abi.encodeWithSignature("balanceOf(address)", holder),
             abi.encodeWithSignature("allowance(address,address)", holder, address(this)),
-            abi.encodeWithSignature("balanceOfUA(bytes32)", bytes32(0))];
+            abi.encodeWithSignature("balanceOfUA(bytes32)", bytes32(0))
+        ];
         for (uint256 i; i < calls.length; ++i) {
             vm.startStateDiffRecording();
             (bool ok,) = address(n).staticcall(calls[i]);
@@ -76,11 +86,16 @@ contract PathsTest is V2Fixture {
             assertTrue(ok, vm.toString(calls[i]));
             uint256 calls_;
             for (uint256 j; j < acc.length; ++j) {
-                if (acc[j].kind == VmSafe.AccountAccessKind.Call || acc[j].kind == VmSafe.AccountAccessKind.StaticCall
-                    || acc[j].kind == VmSafe.AccountAccessKind.DelegateCall || acc[j].kind == VmSafe.AccountAccessKind.CallCode) {
+                if (
+                    acc[j].kind == VmSafe.AccountAccessKind.Call || acc[j].kind == VmSafe.AccountAccessKind.StaticCall
+                        || acc[j].kind == VmSafe.AccountAccessKind.DelegateCall
+                        || acc[j].kind == VmSafe.AccountAccessKind.CallCode
+                ) {
                     ++calls_;
-                    assertTrue(acc[j].account == address(n) || acc[j].account == normalImpl,
-                        string.concat(vm.toString(calls[i]), ": a call out"));
+                    assertTrue(
+                        acc[j].account == address(n) || acc[j].account == normalImpl,
+                        string.concat(vm.toString(calls[i]), ": a call out")
+                    );
                 }
             }
             assertEq(calls_, 2, string.concat(vm.toString(calls[i]), ": the call and the proxy's DELEGATECALL only"));

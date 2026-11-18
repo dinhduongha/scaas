@@ -35,99 +35,124 @@ contract WrappedZetherTokenP is WrappedZetherTokenCore {
     }
 
     // rule 4 (§4.1): `MtxPipelineLib`'s code compiled in, its internal twins in place of the library call
-    function _pipePreCall(MtxPipelineLib.Ctx memory c, MtxPipelineLib.Envelope memory e,
-        MtxPipelineLib.CallFacts memory f, bytes calldata sig)
-        internal override returns (MtxPipelineLib.Out memory)
-    {
+    function _pipePreCall(
+        MtxPipelineLib.Ctx memory c,
+        MtxPipelineLib.Envelope memory e,
+        MtxPipelineLib.CallFacts memory f,
+        bytes calldata sig
+    ) internal override returns (MtxPipelineLib.Out memory) {
         return MtxPipelineLib._preCall(c, e, f, sig);
     }
 
-    function _pipePreCallUA(MtxPipelineLib.Ctx memory c, MtxPipelineLib.Envelope memory e,
-        MtxPipelineLib.CallFacts memory f, IUARegistry.UASig calldata auth)
-        internal override returns (MtxPipelineLib.Out memory)
-    {
+    function _pipePreCallUA(
+        MtxPipelineLib.Ctx memory c,
+        MtxPipelineLib.Envelope memory e,
+        MtxPipelineLib.CallFacts memory f,
+        IUARegistry.UASig calldata auth
+    ) internal override returns (MtxPipelineLib.Out memory) {
         return MtxPipelineLib._preCallUA(c, e, f, auth);
     }
 
-    function _pipePreNamed(MtxPipelineLib.Ctx memory c, bytes32 typehash, MtxPipelineLib.Envelope memory e,
-        bytes memory args, MtxPipelineLib.CallFacts memory f, bytes calldata sig)
-        internal override returns (MtxPipelineLib.Out memory)
-    {
+    function _pipePreNamed(
+        MtxPipelineLib.Ctx memory c,
+        bytes32 typehash,
+        MtxPipelineLib.Envelope memory e,
+        bytes memory args,
+        MtxPipelineLib.CallFacts memory f,
+        bytes calldata sig
+    ) internal override returns (MtxPipelineLib.Out memory) {
         return MtxPipelineLib._preNamed(c, typehash, e, args, f, sig);
     }
 
-    function _pipePreNamedUA(MtxPipelineLib.Ctx memory c, bytes32 typehash, MtxPipelineLib.Envelope memory e,
-        bytes memory args, MtxPipelineLib.CallFacts memory f, IUARegistry.UASig calldata auth)
-        internal override returns (MtxPipelineLib.Out memory)
-    {
+    function _pipePreNamedUA(
+        MtxPipelineLib.Ctx memory c,
+        bytes32 typehash,
+        MtxPipelineLib.Envelope memory e,
+        bytes memory args,
+        MtxPipelineLib.CallFacts memory f,
+        IUARegistry.UASig calldata auth
+    ) internal override returns (MtxPipelineLib.Out memory) {
         return MtxPipelineLib._preNamedUA(c, typehash, e, args, f, auth);
     }
 
-    function _pipePreTransferUA(MtxPipelineLib.Ctx memory c, MetaTxLib.UAMetaTransfer memory t, bytes32 signed,
-        uint256 have, IUARegistry.UASig calldata auth)
-        internal override returns (MtxPipelineLib.Out memory)
-    {
+    function _pipePreTransferUA(
+        MtxPipelineLib.Ctx memory c,
+        MetaTxLib.UAMetaTransfer memory t,
+        bytes32 signed,
+        uint256 have,
+        IUARegistry.UASig calldata auth
+    ) internal override returns (MtxPipelineLib.Out memory) {
         return MtxPipelineLib._preTransferUA(c, t, signed, have, auth);
     }
 
-    function _pipeAuthorize(MtxPipelineLib.Ctx memory c, bytes32 from, bytes32 purpose, bytes32 digest,
-        IUARegistry.UASig calldata auth)
-        internal view override
-    {
+    function _pipeAuthorize(
+        MtxPipelineLib.Ctx memory c,
+        bytes32 from,
+        bytes32 purpose,
+        bytes32 digest,
+        IUARegistry.UASig calldata auth
+    ) internal view override {
         MtxPipelineLib._authorize(c, from, purpose, digest, auth);
     }
 
     function _pipeCallDigest(bytes32 domainSeparator, bytes32 typehash, MtxPipelineLib.Envelope memory e)
-        internal pure override returns (bytes32)
+        internal
+        pure
+        override
+        returns (bytes32)
     {
         return MtxPipelineLib._callDigest(domainSeparator, typehash, e);
     }
 
     function _pipeTransferDigest(bytes32 domainSeparator, MetaTxLib.UAMetaTransfer calldata t)
-        internal pure override returns (bytes32)
+        internal
+        pure
+        override
+        returns (bytes32)
     {
         return MtxPipelineLib._transferDigest(domainSeparator, t);
     }
 
-    function _pipePayeeFeeDigest(bytes32 domainSeparator, MetaTxLib.UAMetaTransfer calldata t, uint256 fee,
-        address feeRecipient, uint256 validUntil)
-        internal pure override returns (bytes32)
-    {
+    function _pipePayeeFeeDigest(
+        bytes32 domainSeparator,
+        MetaTxLib.UAMetaTransfer calldata t,
+        uint256 fee,
+        address feeRecipient,
+        uint256 validUntil
+    ) internal pure override returns (bytes32) {
         return MtxPipelineLib._payeeFeeDigest(domainSeparator, t, fee, feeRecipient, validUntil);
     }
 
     function _pipePayWithTaxHash(MetaTxLib.UAMetaTransfer calldata t, uint8 taxMode, uint256 tax)
-        internal pure override returns (bytes32)
+        internal
+        pure
+        override
+        returns (bytes32)
     {
         return MtxPipelineLib._payWithTaxHash(t, taxMode, tax);
     }
 
-    function _pipeMetaPayId(MetaTxLib.PayMeta calldata m)
-        internal pure override returns (bytes32)
-    {
+    function _pipeMetaPayId(MetaTxLib.PayMeta calldata m) internal pure override returns (bytes32) {
         return MtxPipelineLib._metaPayId(m);
     }
 
-    function _pipePayMeta(bytes32 entryRef, MetaTxLib.PayMeta calldata m)
-        internal override
-    {
+    function _pipePayMeta(bytes32 entryRef, MetaTxLib.PayMeta calldata m) internal override {
         MtxPipelineLib._payMeta(entryRef, m);
     }
 
-    function _pipePayRecord(bytes32 payNo, bytes32 to, uint256 amount)
-        internal override
-    {
+    function _pipePayRecord(bytes32 payNo, bytes32 to, uint256 amount) internal override {
         MtxPipelineLib._payRecord(payNo, to, amount);
     }
 
-    function _pipePaymentCount(bytes32 payNo)
-        internal view override returns (uint256)
-    {
+    function _pipePaymentCount(bytes32 payNo) internal view override returns (uint256) {
         return MtxPipelineLib._paymentCount(payNo);
     }
 
     function _pipePaymentsOf(bytes32 payNo, uint256 offset, uint256 limit)
-        internal view override returns (MetaTxLib.PayRecord[] memory)
+        internal
+        view
+        override
+        returns (MetaTxLib.PayRecord[] memory)
     {
         return MtxPipelineLib._paymentsOf(payNo, offset, limit);
     }
@@ -136,7 +161,11 @@ contract WrappedZetherTokenP is WrappedZetherTokenCore {
         _cancelNonceBody(batch);
     }
 
-    function executeMetaTransaction(MetaTxLib.MetaTransaction calldata m, bytes calldata signature) external onlyDelegated returns (bool _p0) {
+    function executeMetaTransaction(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
+        external
+        onlyDelegated
+        returns (bool _p0)
+    {
         return _executeMetaTransactionBody(m, signature);
     }
 
@@ -144,15 +173,27 @@ contract WrappedZetherTokenP is WrappedZetherTokenCore {
         return _metaPayIdBody(meta);
     }
 
-    function mtxBatch(MetaTxLib.UAMetaTransaction[] calldata ms, IUARegistry.UASig[] calldata auths) external onlyDelegated returns (bool _p0) {
+    function mtxBatch(MetaTxLib.UAMetaTransaction[] calldata ms, IUARegistry.UASig[] calldata auths)
+        external
+        onlyDelegated
+        returns (bool _p0)
+    {
         return _mtxBatchBody(ms, auths);
     }
 
-    function mtxBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata ts, IUARegistry.UASig[] calldata auths) external onlyDelegated returns (bool _p0) {
+    function mtxBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata ts, IUARegistry.UASig[] calldata auths)
+        external
+        onlyDelegated
+        returns (bool _p0)
+    {
         return _mtxBatchTransferBody(ts, auths);
     }
 
-    function mtxCancelNonce(MetaTxLib.UAEnvelope calldata e, uint256 lane, IUARegistry.UASig calldata auth) external onlyDelegated returns (bytes memory _p0) {
+    function mtxCancelNonce(MetaTxLib.UAEnvelope calldata e, uint256 lane, IUARegistry.UASig calldata auth)
+        external
+        onlyDelegated
+        returns (bytes memory _p0)
+    {
         return _mtxCancelNonceBody(e, lane, auth);
     }
 
@@ -160,11 +201,19 @@ contract WrappedZetherTokenP is WrappedZetherTokenCore {
         return _mtxDigestBody(m);
     }
 
-    function mtxExecute(MetaTxLib.UAMetaTransaction calldata m, IUARegistry.UASig calldata auth) external onlyDelegated returns (bytes memory _p0) {
+    function mtxExecute(MetaTxLib.UAMetaTransaction calldata m, IUARegistry.UASig calldata auth)
+        external
+        onlyDelegated
+        returns (bytes memory _p0)
+    {
         return _mtxExecuteBody(m, auth);
     }
 
-    function mtxExecuteTransfer(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth) external onlyDelegated returns (bool _p0) {
+    function mtxExecuteTransfer(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth)
+        external
+        onlyDelegated
+        returns (bool _p0)
+    {
         return _mtxExecuteTransferBody(t, auth);
     }
 
@@ -172,19 +221,51 @@ contract WrappedZetherTokenP is WrappedZetherTokenCore {
         return _mtxNonceBody(from, batch);
     }
 
-    function mtxPay(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth, MetaTxLib.PayMeta calldata meta) external onlyDelegated returns (bool _p0) {
+    function mtxPay(
+        MetaTxLib.UAMetaTransfer calldata t,
+        IUARegistry.UASig calldata auth,
+        MetaTxLib.PayMeta calldata meta
+    ) external onlyDelegated returns (bool _p0) {
         return _mtxPayBody(t, auth, meta);
     }
 
-    function mtxPayWithPayeeFee(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth, uint256 fee, address feeRecipient, uint256 pfValidUntil, IUARegistry.UASig calldata payeeAuth, MetaTxLib.PayMeta calldata meta) external onlyDelegated returns (bool _p0) {
+    function mtxPayWithPayeeFee(
+        MetaTxLib.UAMetaTransfer calldata t,
+        IUARegistry.UASig calldata payerAuth,
+        uint256 fee,
+        address feeRecipient,
+        uint256 pfValidUntil,
+        IUARegistry.UASig calldata payeeAuth,
+        MetaTxLib.PayMeta calldata meta
+    ) external onlyDelegated returns (bool _p0) {
         return _mtxPayWithPayeeFeeBody(t, payerAuth, fee, feeRecipient, pfValidUntil, payeeAuth, meta);
     }
 
-    function mtxRelayFee(bytes32 from, address target, bytes32 callDataHash, bytes32 payee, uint256 value, uint256 batch, uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) external onlyDelegated {
+    function mtxRelayFee(
+        bytes32 from,
+        address target,
+        bytes32 callDataHash,
+        bytes32 payee,
+        uint256 value,
+        uint256 batch,
+        uint256 nonce,
+        uint256 validUntil,
+        IUARegistry.UASig calldata auth
+    ) external onlyDelegated {
         _mtxRelayFeeBody(from, target, callDataHash, payee, value, batch, nonce, validUntil, auth);
     }
 
-    function mtxTransfer(bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil, uint32 mode, address relayer, IUARegistry.UASig calldata auth) external onlyDelegated returns (bool _p0) {
+    function mtxTransfer(
+        bytes32 from,
+        bytes32 to,
+        uint256 amount,
+        uint256 batch,
+        uint256 nonce,
+        uint256 validUntil,
+        uint32 mode,
+        address relayer,
+        IUARegistry.UASig calldata auth
+    ) external onlyDelegated returns (bool _p0) {
         return _mtxTransferBody(from, to, amount, batch, nonce, validUntil, mode, relayer, auth);
     }
 
@@ -192,23 +273,58 @@ contract WrappedZetherTokenP is WrappedZetherTokenCore {
         return _mtxTransferDigestBody(t);
     }
 
-    function mtxTransferWithFee(bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil, uint32 mode, address relayer, uint256 fee, address feeRecipient, IUARegistry.UASig calldata auth) external onlyDelegated returns (bool _p0) {
-        return _mtxTransferWithFeeBody(from, to, amount, batch, nonce, validUntil, mode, relayer, fee, feeRecipient, auth);
+    function mtxTransferWithFee(
+        bytes32 from,
+        bytes32 to,
+        uint256 amount,
+        uint256 batch,
+        uint256 nonce,
+        uint256 validUntil,
+        uint32 mode,
+        address relayer,
+        uint256 fee,
+        address feeRecipient,
+        IUARegistry.UASig calldata auth
+    ) external onlyDelegated returns (bool _p0) {
+        return _mtxTransferWithFeeBody(
+            from, to, amount, batch, nonce, validUntil, mode, relayer, fee, feeRecipient, auth
+        );
     }
 
     function payLane(bytes32 payId) external pure returns (uint256 _p0) {
         return _payLaneBody(payId);
     }
 
-    function payWithFee(address to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient, bytes32 entryRef, MetaTxLib.PayMeta calldata meta) external onlyDelegated returns (bool _p0) {
+    function payWithFee(
+        address to,
+        uint256 amount,
+        FeeMode feeMode,
+        uint256 fee,
+        address feeRecipient,
+        bytes32 entryRef,
+        MetaTxLib.PayMeta calldata meta
+    ) external onlyDelegated returns (bool _p0) {
         return _payWithFeeBody(to, amount, feeMode, fee, feeRecipient, entryRef, meta);
     }
 
-    function payWithFeeToUA(bytes32 to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient, bytes32 entryRef, MetaTxLib.PayMeta calldata meta) external onlyDelegated returns (bool _p0) {
+    function payWithFeeToUA(
+        bytes32 to,
+        uint256 amount,
+        FeeMode feeMode,
+        uint256 fee,
+        address feeRecipient,
+        bytes32 entryRef,
+        MetaTxLib.PayMeta calldata meta
+    ) external onlyDelegated returns (bool _p0) {
         return _payWithFeeToUABody(to, amount, feeMode, fee, feeRecipient, entryRef, meta);
     }
 
-    function payeeFeeDigest(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil) external view onlyDelegated returns (bytes32 _p0) {
+    function payeeFeeDigest(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil)
+        external
+        view
+        onlyDelegated
+        returns (bytes32 _p0)
+    {
         return _payeeFeeDigestBody(t, fee, feeRecipient, validUntil);
     }
 
@@ -229,10 +345,13 @@ contract WrappedZetherTokenT is WrappedZetherTokenCore {
     }
 
     // rule 4 (§4.1): `MtxPipelineLib`'s code compiled in, its internal twins in place of the library call
-    function _pipeAuthorize(MtxPipelineLib.Ctx memory c, bytes32 from, bytes32 purpose, bytes32 digest,
-        IUARegistry.UASig calldata auth)
-        internal view override
-    {
+    function _pipeAuthorize(
+        MtxPipelineLib.Ctx memory c,
+        bytes32 from,
+        bytes32 purpose,
+        bytes32 digest,
+        IUARegistry.UASig calldata auth
+    ) internal view override {
         MtxPipelineLib._authorize(c, from, purpose, digest, auth);
     }
 
@@ -240,7 +359,12 @@ contract WrappedZetherTokenT is WrappedZetherTokenCore {
         return _cancelOrderDigestBody(o);
     }
 
-    function invalidateNoncesDigest(bytes32 from, uint256 batch, uint256 newMin) external view onlyDelegated returns (bytes32 _p0) {
+    function invalidateNoncesDigest(bytes32 from, uint256 batch, uint256 newMin)
+        external
+        view
+        onlyDelegated
+        returns (bytes32 _p0)
+    {
         return _invalidateNoncesDigestBody(from, batch, newMin);
     }
 
@@ -248,23 +372,42 @@ contract WrappedZetherTokenT is WrappedZetherTokenCore {
         return _minNonceBody(from, batch);
     }
 
-    function mtxCancelOrder(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata auth) external onlyDelegated {
+    function mtxCancelOrder(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata auth)
+        external
+        onlyDelegated
+    {
         _mtxCancelOrderBody(o, auth);
     }
 
-    function mtxInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, IUARegistry.UASig calldata auth) external onlyDelegated {
+    function mtxInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, IUARegistry.UASig calldata auth)
+        external
+        onlyDelegated
+    {
         _mtxInvalidateNoncesBody(from, batch, newMin, auth);
     }
 
-    function mtxLiquidityPull(ITradeToken.LiquidityOrder calldata o, IUARegistry.UASig calldata auth, uint256 amount, address submitter) external onlyDelegated {
+    function mtxLiquidityPull(
+        ITradeToken.LiquidityOrder calldata o,
+        IUARegistry.UASig calldata auth,
+        uint256 amount,
+        address submitter
+    ) external onlyDelegated {
         _mtxLiquidityPullBody(o, auth, amount, submitter);
     }
 
-    function mtxTrade(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata auth, ITradeToken.TradeFill calldata f) external onlyDelegated {
+    function mtxTrade(
+        ITradeToken.UATradeOrder calldata o,
+        IUARegistry.UASig calldata auth,
+        ITradeToken.TradeFill calldata f
+    ) external onlyDelegated {
         _mtxTradeBody(o, auth, f);
     }
 
-    function mtxWrapOrder(address u, ITradeToken.UAWrapOrder calldata o, IUARegistry.UASig calldata auth) external onlyDelegated returns (uint256 minted) {
+    function mtxWrapOrder(address u, ITradeToken.UAWrapOrder calldata o, IUARegistry.UASig calldata auth)
+        external
+        onlyDelegated
+        returns (uint256 minted)
+    {
         return _mtxWrapOrderBody(u, o, auth);
     }
 
@@ -293,14 +436,15 @@ contract WrappedZetherTokenA is WrappedZetherTokenCore {
     }
 
     // rule 4 (§4.1): `MtxPipelineLib`'s code compiled in, its internal twins in place of the library call
-    function _pipePaymentCount(bytes32 payNo)
-        internal view override returns (uint256)
-    {
+    function _pipePaymentCount(bytes32 payNo) internal view override returns (uint256) {
         return MtxPipelineLib._paymentCount(payNo);
     }
 
     function _pipePaymentsOf(bytes32 payNo, uint256 offset, uint256 limit)
-        internal view override returns (MetaTxLib.PayRecord[] memory)
+        internal
+        view
+        override
+        returns (MetaTxLib.PayRecord[] memory)
     {
         return MtxPipelineLib._paymentsOf(payNo, offset, limit);
     }
@@ -317,7 +461,12 @@ contract WrappedZetherTokenA is WrappedZetherTokenCore {
         return _adminBody();
     }
 
-    function bitLabel(uint8 bit) external view onlyDelegated returns (IGovernance.BitType _p0, bytes4 _p1, string memory _p2) {
+    function bitLabel(uint8 bit)
+        external
+        view
+        onlyDelegated
+        returns (IGovernance.BitType _p0, bytes4 _p1, string memory _p2)
+    {
         return _bitLabelBody(bit);
     }
 
@@ -333,7 +482,20 @@ contract WrappedZetherTokenA is WrappedZetherTokenCore {
         return _creatorBody();
     }
 
-    function eip712Domain() external view onlyDelegated returns (bytes1 _p0, string memory _p1, string memory _p2, uint256 _p3, address _p4, bytes32 _p5, uint256[] memory _p6) {
+    function eip712Domain()
+        external
+        view
+        onlyDelegated
+        returns (
+            bytes1 _p0,
+            string memory _p1,
+            string memory _p2,
+            uint256 _p3,
+            address _p4,
+            bytes32 _p5,
+            uint256[] memory _p6
+        )
+    {
         return _eip712DomainBody();
     }
 
@@ -381,7 +543,12 @@ contract WrappedZetherTokenA is WrappedZetherTokenCore {
         return _paymentCountBody(payNo);
     }
 
-    function paymentsOf(bytes32 payNo, uint256 offset, uint256 limit) external view onlyDelegated returns (MetaTxLib.PayRecord[] memory _p0) {
+    function paymentsOf(bytes32 payNo, uint256 offset, uint256 limit)
+        external
+        view
+        onlyDelegated
+        returns (MetaTxLib.PayRecord[] memory _p0)
+    {
         return _paymentsOfBody(payNo, offset, limit);
     }
 
@@ -389,7 +556,12 @@ contract WrappedZetherTokenA is WrappedZetherTokenCore {
         return _pendingAdminBody();
     }
 
-    function pendingGrant(uint8 bit, bytes32 account) external view onlyDelegated returns (uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3) {
+    function pendingGrant(uint8 bit, bytes32 account)
+        external
+        view
+        onlyDelegated
+        returns (uint64 _p0, bytes32 _p1, bytes32 _p2, bool _p3)
+    {
         return _pendingGrantBody(bit, account);
     }
 
@@ -409,7 +581,10 @@ contract WrappedZetherTokenA is WrappedZetherTokenCore {
         _revokeRoleBody(bit, account, chainUid_);
     }
 
-    function setGrant(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms, bytes32 chainUid_) external onlyDelegated {
+    function setGrant(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata terms, bytes32 chainUid_)
+        external
+        onlyDelegated
+    {
         _setGrantBody(bit, holder, terms, chainUid_);
     }
 
@@ -461,7 +636,12 @@ contract WrappedZetherTokenW is WrappedZetherTokenCore {
         _disableWrapBody(u, reason, chainUid_);
     }
 
-    function legOf(address u) external view onlyDelegated returns (uint96 num, uint96 den, uint256 reserve, uint8 decimals_, bool wrapEnabled) {
+    function legOf(address u)
+        external
+        view
+        onlyDelegated
+        returns (uint96 num, uint96 den, uint256 reserve, uint8 decimals_, bool wrapEnabled)
+    {
         return _legOfBody(u);
     }
 
@@ -485,31 +665,67 @@ contract WrappedZetherTokenW is WrappedZetherTokenCore {
         _mintToUABody(to, amount, chainUid_);
     }
 
-    function mtxAddReserve(MetaTxLib.Envelope calldata e, address u, uint256 amount, bytes calldata sig) external onlyDelegated returns (bytes memory _p0) {
+    function mtxAddReserve(MetaTxLib.Envelope calldata e, address u, uint256 amount, bytes calldata sig)
+        external
+        onlyDelegated
+        returns (bytes memory _p0)
+    {
         return _mtxAddReserveBody(e, u, amount, sig);
     }
 
-    function mtxUnwrap(MetaTxLib.UAEnvelope calldata e, uint256 wrapped, address recipient, uint256 minOut, IUARegistry.UASig calldata auth) external onlyDelegated returns (bytes memory _p0) {
+    function mtxUnwrap(
+        MetaTxLib.UAEnvelope calldata e,
+        uint256 wrapped,
+        address recipient,
+        uint256 minOut,
+        IUARegistry.UASig calldata auth
+    ) external onlyDelegated returns (bytes memory _p0) {
         return _mtxUnwrapBody(e, wrapped, recipient, minOut, auth);
     }
 
-    function mtxUnwrapLeg(MetaTxLib.UAEnvelope calldata e, address u, uint256 wrapped, address recipient, uint256 minOut, IUARegistry.UASig calldata auth) external onlyDelegated returns (bytes memory _p0) {
+    function mtxUnwrapLeg(
+        MetaTxLib.UAEnvelope calldata e,
+        address u,
+        uint256 wrapped,
+        address recipient,
+        uint256 minOut,
+        IUARegistry.UASig calldata auth
+    ) external onlyDelegated returns (bytes memory _p0) {
         return _mtxUnwrapLegBody(e, u, wrapped, recipient, minOut, auth);
     }
 
-    function mtxUnwrapToUA(MetaTxLib.UAEnvelope calldata e, address u, uint256 wrapped, bytes32 to, uint256 minOut, IUARegistry.UASig calldata auth) external onlyDelegated returns (bytes memory _p0) {
+    function mtxUnwrapToUA(
+        MetaTxLib.UAEnvelope calldata e,
+        address u,
+        uint256 wrapped,
+        bytes32 to,
+        uint256 minOut,
+        IUARegistry.UASig calldata auth
+    ) external onlyDelegated returns (bytes memory _p0) {
         return _mtxUnwrapToUABody(e, u, wrapped, to, minOut, auth);
     }
 
-    function mtxWrap(MetaTxLib.Envelope calldata e, uint256 amount, bytes calldata sig) external onlyDelegated returns (bytes memory _p0) {
+    function mtxWrap(MetaTxLib.Envelope calldata e, uint256 amount, bytes calldata sig)
+        external
+        onlyDelegated
+        returns (bytes memory _p0)
+    {
         return _mtxWrapBody(e, amount, sig);
     }
 
-    function mtxWrapLeg(MetaTxLib.Envelope calldata e, address u, uint256 amount, bytes calldata sig) external onlyDelegated returns (bytes memory _p0) {
+    function mtxWrapLeg(MetaTxLib.Envelope calldata e, address u, uint256 amount, bytes calldata sig)
+        external
+        onlyDelegated
+        returns (bytes memory _p0)
+    {
         return _mtxWrapLegBody(e, u, amount, sig);
     }
 
-    function mtxWrapToUA(MetaTxLib.Envelope calldata e, address u, uint256 amount, bytes32 to, bytes calldata sig) external onlyDelegated returns (bytes memory _p0) {
+    function mtxWrapToUA(MetaTxLib.Envelope calldata e, address u, uint256 amount, bytes32 to, bytes calldata sig)
+        external
+        onlyDelegated
+        returns (bytes memory _p0)
+    {
         return _mtxWrapToUABody(e, u, amount, to, sig);
     }
 
@@ -517,11 +733,28 @@ contract WrappedZetherTokenW is WrappedZetherTokenCore {
         return _pendingRateBody();
     }
 
-    function pendingSupplyCaps() external view onlyDelegated returns (uint256 pendingMaxSupply, uint64 maxSupplyEta, bool maxSupplyLive, uint256 pendingMaxWrapSupply, uint64 maxWrapSupplyEta, bool maxWrapSupplyLive) {
+    function pendingSupplyCaps()
+        external
+        view
+        onlyDelegated
+        returns (
+            uint256 pendingMaxSupply,
+            uint64 maxSupplyEta,
+            bool maxSupplyLive,
+            uint256 pendingMaxWrapSupply,
+            uint64 maxWrapSupplyEta,
+            bool maxWrapSupplyLive
+        )
+    {
         return _pendingSupplyCapsBody();
     }
 
-    function previewUnwrap(address u, uint256 wrapped) external view onlyDelegated returns (uint256 out, uint256 burned) {
+    function previewUnwrap(address u, uint256 wrapped)
+        external
+        view
+        onlyDelegated
+        returns (uint256 out, uint256 burned)
+    {
         return _previewUnwrapBody(u, wrapped);
     }
 
@@ -553,7 +786,13 @@ contract WrappedZetherTokenW is WrappedZetherTokenCore {
         _setMaxWrapSupplyBody(newMaxWrapSupply, chainUid_);
     }
 
-    function setWrapLimits(IWrappedToken.WrapLegLimits[] calldata legs, bool netUnwrap, bool wrapList, bool unwrapList, bytes32 chainUid_) external onlyDelegated {
+    function setWrapLimits(
+        IWrappedToken.WrapLegLimits[] calldata legs,
+        bool netUnwrap,
+        bool wrapList,
+        bool unwrapList,
+        bytes32 chainUid_
+    ) external onlyDelegated {
         _setWrapLimitsBody(legs, netUnwrap, wrapList, unwrapList, chainUid_);
     }
 
@@ -569,7 +808,11 @@ contract WrappedZetherTokenW is WrappedZetherTokenCore {
         return _underlyingBody();
     }
 
-    function unwrap(address u, uint256 wrapped, address recipient, uint256 minOut) external onlyDelegated returns (uint256 out, uint256 burned) {
+    function unwrap(address u, uint256 wrapped, address recipient, uint256 minOut)
+        external
+        onlyDelegated
+        returns (uint256 out, uint256 burned)
+    {
         return _unwrapBody(u, wrapped, recipient, minOut);
     }
 
@@ -581,7 +824,11 @@ contract WrappedZetherTokenW is WrappedZetherTokenCore {
         return _unwrapBody(wrapped, recipient, minOut);
     }
 
-    function unwrapToUA(address u, uint256 wrapped, bytes32 to, uint256 minOut) external onlyDelegated returns (uint256 out, uint256 burned) {
+    function unwrapToUA(address u, uint256 wrapped, bytes32 to, uint256 minOut)
+        external
+        onlyDelegated
+        returns (uint256 out, uint256 burned)
+    {
         return _unwrapToUABody(u, wrapped, to, minOut);
     }
 
@@ -593,11 +840,30 @@ contract WrappedZetherTokenW is WrappedZetherTokenCore {
         return _wrapBody(amount);
     }
 
-    function wrapLimits() external view onlyDelegated returns (IWrappedToken.WrapLegLimits[] memory legs, bool netUnwrap, bool wrapList, bool unwrapList, bytes32 pendingCommit, uint64 pendingEta, bool pendingLive, uint64 delay) {
+    function wrapLimits()
+        external
+        view
+        onlyDelegated
+        returns (
+            IWrappedToken.WrapLegLimits[] memory legs,
+            bool netUnwrap,
+            bool wrapList,
+            bool unwrapList,
+            bytes32 pendingCommit,
+            uint64 pendingEta,
+            bool pendingLive,
+            uint64 delay
+        )
+    {
         return _wrapLimitsBody();
     }
 
-    function wrapQuotaOf(bytes32 account, address u) external view onlyDelegated returns (IWrappedToken.WrapQuota memory _p0) {
+    function wrapQuotaOf(bytes32 account, address u)
+        external
+        view
+        onlyDelegated
+        returns (IWrappedToken.WrapQuota memory _p0)
+    {
         return _wrapQuotaOfBody(account, u);
     }
 
@@ -621,7 +887,12 @@ contract WrappedZetherTokenZ is WrappedZetherTokenCore {
         return 5;
     }
 
-    function accountState(ZetherTypes.UA ua) external view onlyDelegated returns (IZetherToken.AccountState memory _p0) {
+    function accountState(ZetherTypes.UA ua)
+        external
+        view
+        onlyDelegated
+        returns (IZetherToken.AccountState memory _p0)
+    {
         return _accountStateBody(ua);
     }
 
@@ -637,7 +908,12 @@ contract WrappedZetherTokenZ is WrappedZetherTokenCore {
         return _auditorModeBody();
     }
 
-    function auditorState() external view onlyDelegated returns (uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status) {
+    function auditorState()
+        external
+        view
+        onlyDelegated
+        returns (uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status)
+    {
         return _auditorStateBody();
     }
 
@@ -681,31 +957,62 @@ contract WrappedZetherTokenZ is WrappedZetherTokenCore {
         return _minDecoyFeeBody();
     }
 
-    function mtxConfidentialTransfer(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherMulti calldata t, bytes calldata proof, IUARegistry.UASig calldata auth) external onlyDelegated returns (bytes32 _p0) {
+    function mtxConfidentialTransfer(
+        MetaTxLib.UAEnvelope calldata e,
+        IZetherToken.ZetherMulti calldata t,
+        bytes calldata proof,
+        IUARegistry.UASig calldata auth
+    ) external onlyDelegated returns (bytes32 _p0) {
         return _mtxConfidentialTransferBody(e, t, proof, auth);
     }
 
-    function mtxConfidentialTransfer(IZetherToken.ZetherMulti calldata t, bytes calldata proof) external onlyDelegated returns (bytes32 _p0) {
+    function mtxConfidentialTransfer(IZetherToken.ZetherMulti calldata t, bytes calldata proof)
+        external
+        onlyDelegated
+        returns (bytes32 _p0)
+    {
         return _mtxConfidentialTransferBody(t, proof);
     }
 
-    function mtxConfidentialTransferCompact(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherMulti calldata t, bytes calldata proof, IUARegistry.UASig calldata auth) external onlyDelegated returns (bytes32 _p0) {
+    function mtxConfidentialTransferCompact(
+        MetaTxLib.UAEnvelope calldata e,
+        IZetherToken.ZetherMulti calldata t,
+        bytes calldata proof,
+        IUARegistry.UASig calldata auth
+    ) external onlyDelegated returns (bytes32 _p0) {
         return _mtxConfidentialTransferCompactBody(e, t, proof, auth);
     }
 
-    function mtxConfidentialTransferCompact(IZetherToken.ZetherMulti calldata t, bytes calldata proof) external onlyDelegated returns (bytes32 _p0) {
+    function mtxConfidentialTransferCompact(IZetherToken.ZetherMulti calldata t, bytes calldata proof)
+        external
+        onlyDelegated
+        returns (bytes32 _p0)
+    {
         return _mtxConfidentialTransferCompactBody(t, proof);
     }
 
-    function mtxConfidentialTransferSingle(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherSingle calldata t, bytes calldata proof, IUARegistry.UASig calldata auth) external onlyDelegated returns (bytes32 _p0) {
+    function mtxConfidentialTransferSingle(
+        MetaTxLib.UAEnvelope calldata e,
+        IZetherToken.ZetherSingle calldata t,
+        bytes calldata proof,
+        IUARegistry.UASig calldata auth
+    ) external onlyDelegated returns (bytes32 _p0) {
         return _mtxConfidentialTransferSingleBody(e, t, proof, auth);
     }
 
-    function mtxConfidentialTransferSingle(IZetherToken.ZetherSingle calldata t, bytes calldata proof) external onlyDelegated returns (bytes32 _p0) {
+    function mtxConfidentialTransferSingle(IZetherToken.ZetherSingle calldata t, bytes calldata proof)
+        external
+        onlyDelegated
+        returns (bytes32 _p0)
+    {
         return _mtxConfidentialTransferSingleBody(t, proof);
     }
 
-    function mtxRollOver(MetaTxLib.UAEnvelope calldata e, bytes32 ua, uint256 n, IUARegistry.UASig calldata auth) external onlyDelegated returns (bytes memory _p0) {
+    function mtxRollOver(MetaTxLib.UAEnvelope calldata e, bytes32 ua, uint256 n, IUARegistry.UASig calldata auth)
+        external
+        onlyDelegated
+        returns (bytes memory _p0)
+    {
         return _mtxRollOverBody(e, ua, n, auth);
     }
 
@@ -713,7 +1020,11 @@ contract WrappedZetherTokenZ is WrappedZetherTokenCore {
         _mtxRollOverBody(ua, n);
     }
 
-    function mtxRollOverBatch(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA[] calldata uas, IUARegistry.UASig calldata auth) external onlyDelegated returns (bytes memory _p0) {
+    function mtxRollOverBatch(
+        MetaTxLib.UAEnvelope calldata e,
+        ZetherTypes.UA[] calldata uas,
+        IUARegistry.UASig calldata auth
+    ) external onlyDelegated returns (bytes memory _p0) {
         return _mtxRollOverBatchBody(e, uas, auth);
     }
 
@@ -721,23 +1032,51 @@ contract WrappedZetherTokenZ is WrappedZetherTokenCore {
         _mtxRollOverBatchBody(uas);
     }
 
-    function mtxRollOverSigned(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA ua, uint64 expectedPendingSeq, uint64 validUntilBlock, IUARegistry.UASig calldata ownerSig, IUARegistry.UASig calldata auth) external onlyDelegated returns (bytes memory _p0) {
+    function mtxRollOverSigned(
+        MetaTxLib.UAEnvelope calldata e,
+        ZetherTypes.UA ua,
+        uint64 expectedPendingSeq,
+        uint64 validUntilBlock,
+        IUARegistry.UASig calldata ownerSig,
+        IUARegistry.UASig calldata auth
+    ) external onlyDelegated returns (bytes memory _p0) {
         return _mtxRollOverSignedBody(e, ua, expectedPendingSeq, validUntilBlock, ownerSig, auth);
     }
 
-    function mtxRollOverSigned(ZetherTypes.UA ua, uint64 expectedPendingSeq, uint64 validUntilBlock, IUARegistry.UASig calldata ownerSig) external onlyDelegated {
+    function mtxRollOverSigned(
+        ZetherTypes.UA ua,
+        uint64 expectedPendingSeq,
+        uint64 validUntilBlock,
+        IUARegistry.UASig calldata ownerSig
+    ) external onlyDelegated {
         _mtxRollOverSignedBody(ua, expectedPendingSeq, validUntilBlock, ownerSig);
     }
 
-    function mtxSetRollOverMode(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA ua, ZetherTypes.RollOverMode rollOverMode, uint64 validUntilBlock, IUARegistry.UASig calldata ownerSig, IUARegistry.UASig calldata auth) external onlyDelegated returns (bytes memory _p0) {
+    function mtxSetRollOverMode(
+        MetaTxLib.UAEnvelope calldata e,
+        ZetherTypes.UA ua,
+        ZetherTypes.RollOverMode rollOverMode,
+        uint64 validUntilBlock,
+        IUARegistry.UASig calldata ownerSig,
+        IUARegistry.UASig calldata auth
+    ) external onlyDelegated returns (bytes memory _p0) {
         return _mtxSetRollOverModeBody(e, ua, rollOverMode, validUntilBlock, ownerSig, auth);
     }
 
-    function mtxSetRollOverMode(ZetherTypes.UA ua, ZetherTypes.RollOverMode mode, uint64 validUntilBlock, IUARegistry.UASig calldata ownerSig) external onlyDelegated {
+    function mtxSetRollOverMode(
+        ZetherTypes.UA ua,
+        ZetherTypes.RollOverMode mode,
+        uint64 validUntilBlock,
+        IUARegistry.UASig calldata ownerSig
+    ) external onlyDelegated {
         _mtxSetRollOverModeBody(ua, mode, validUntilBlock, ownerSig);
     }
 
-    function mtxShield(MetaTxLib.UAEnvelope calldata e, bytes32 toUA, uint256 amount, IUARegistry.UASig calldata auth) external onlyDelegated returns (bytes memory _p0) {
+    function mtxShield(MetaTxLib.UAEnvelope calldata e, bytes32 toUA, uint256 amount, IUARegistry.UASig calldata auth)
+        external
+        onlyDelegated
+        returns (bytes memory _p0)
+    {
         return _mtxShieldBody(e, toUA, amount, auth);
     }
 
@@ -745,23 +1084,49 @@ contract WrappedZetherTokenZ is WrappedZetherTokenCore {
         _mtxShieldBody(toUA, amount);
     }
 
-    function mtxUnshield(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherBurn calldata b, uint256 amount, bytes32 recipient, bytes calldata proof, IUARegistry.UASig calldata auth) external onlyDelegated returns (bytes memory _p0) {
+    function mtxUnshield(
+        MetaTxLib.UAEnvelope calldata e,
+        IZetherToken.ZetherBurn calldata b,
+        uint256 amount,
+        bytes32 recipient,
+        bytes calldata proof,
+        IUARegistry.UASig calldata auth
+    ) external onlyDelegated returns (bytes memory _p0) {
         return _mtxUnshieldBody(e, b, amount, recipient, proof, auth);
     }
 
-    function mtxUnshield(IZetherToken.ZetherBurn calldata b, uint256 amount, bytes32 recipient, bytes calldata proof) external onlyDelegated {
+    function mtxUnshield(IZetherToken.ZetherBurn calldata b, uint256 amount, bytes32 recipient, bytes calldata proof)
+        external
+        onlyDelegated
+    {
         _mtxUnshieldBody(b, amount, recipient, proof);
     }
 
-    function mtxUnshieldUnwrap(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherBurn calldata b, IConfidentialWrappedToken.Unwrap calldata x, bytes calldata proof, IUARegistry.UASig calldata auth) external onlyDelegated returns (bytes memory _p0) {
+    function mtxUnshieldUnwrap(
+        MetaTxLib.UAEnvelope calldata e,
+        IZetherToken.ZetherBurn calldata b,
+        IConfidentialWrappedToken.Unwrap calldata x,
+        bytes calldata proof,
+        IUARegistry.UASig calldata auth
+    ) external onlyDelegated returns (bytes memory _p0) {
         return _mtxUnshieldUnwrapBody(e, b, x, proof, auth);
     }
 
-    function mtxUnshieldUnwrap(IZetherToken.ZetherBurn calldata b, IConfidentialWrappedToken.Unwrap calldata x, bytes calldata proof) external onlyDelegated {
+    function mtxUnshieldUnwrap(
+        IZetherToken.ZetherBurn calldata b,
+        IConfidentialWrappedToken.Unwrap calldata x,
+        bytes calldata proof
+    ) external onlyDelegated {
         _mtxUnshieldUnwrapBody(b, x, proof);
     }
 
-    function mtxWrapShield(MetaTxLib.Envelope calldata e, address underlying, uint256 amountIn, bytes32 toUA, bytes calldata sig) external onlyDelegated returns (bytes memory _p0) {
+    function mtxWrapShield(
+        MetaTxLib.Envelope calldata e,
+        address underlying,
+        uint256 amountIn,
+        bytes32 toUA,
+        bytes calldata sig
+    ) external onlyDelegated returns (bytes memory _p0) {
         return _mtxWrapShieldBody(e, underlying, amountIn, toUA, sig);
     }
 
@@ -781,7 +1146,10 @@ contract WrappedZetherTokenZ is WrappedZetherTokenCore {
         return _sendCounterBody(ua);
     }
 
-    function setAuditorKey(bytes calldata newKey, uint32 epoch, bytes calldata pop, bytes32 chainUid_) external onlyDelegated {
+    function setAuditorKey(bytes calldata newKey, uint32 epoch, bytes calldata pop, bytes32 chainUid_)
+        external
+        onlyDelegated
+    {
         _setAuditorKeyBody(newKey, epoch, pop, chainUid_);
     }
 

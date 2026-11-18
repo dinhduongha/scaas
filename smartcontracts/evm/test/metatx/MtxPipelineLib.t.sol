@@ -17,9 +17,13 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 
 /// A token stand-in: every external function of the library, run by DELEGATECALL in this contract's context.
 contract PipeHarness {
-    function preCall(MtxPipelineLib.Ctx calldata c, MtxPipelineLib.Envelope calldata e,
-        MtxPipelineLib.CallFacts calldata f, bool ua, bytes calldata auth) external returns (MtxPipelineLib.Out memory)
-    {
+    function preCall(
+        MtxPipelineLib.Ctx calldata c,
+        MtxPipelineLib.Envelope calldata e,
+        MtxPipelineLib.CallFacts calldata f,
+        bool ua,
+        bytes calldata auth
+    ) external returns (MtxPipelineLib.Out memory) {
         // ua-mtx-merge T1 (R47): the UA path takes a `UASig`; the tests' `bytes auth` converts as the old bridge read it
         return ua ? MtxPipelineLib.preCallUA(c, e, f, UACall.auth(e.from, auth)) : MtxPipelineLib.preCall(c, e, f, auth);
     }
@@ -27,14 +31,20 @@ contract PipeHarness {
     /// ua-mtx-merge T2: one typed path, `preTransferUA`; the address `preTransfer` is in legacy/ua-mtx-merge/. The
     /// second argument named the path; a native id's `bytes` are now its `UASig.signature` (R17), a derived id's the
     /// `abi.encode(keyData, signature)` blob as before.
-    function preTransfer(MtxPipelineLib.Ctx calldata c, MetaTxLib.UAMetaTransfer calldata t, bool, uint256 have,
-        bytes calldata auth) external returns (MtxPipelineLib.Out memory)
-    {
+    function preTransfer(
+        MtxPipelineLib.Ctx calldata c,
+        MetaTxLib.UAMetaTransfer calldata t,
+        bool,
+        uint256 have,
+        bytes calldata auth
+    ) external returns (MtxPipelineLib.Out memory) {
         return MtxPipelineLib.preTransferUA(c, t, 0, have, UACall.auth(t.from, auth));
     }
 
     function callDigest(bytes32 ds, bytes32 typehash, MtxPipelineLib.Envelope calldata e)
-        external pure returns (bytes32)
+        external
+        pure
+        returns (bytes32)
     {
         return MtxPipelineLib.callDigest(ds, typehash, e);
     }
@@ -54,13 +64,17 @@ contract PipeHarness {
 contract PipeRegistryMock {
     mapping(bytes32 => uint16) public kindOf;
 
-    function setKind(bytes32 ua, uint16 k) external { kindOf[ua] = k; }
+    function setKind(bytes32 ua, uint16 k) external {
+        kindOf[ua] = k;
+    }
 
     function requireAuthorized(bytes32 ua, bytes32 purpose, bytes32 digest, IUARegistry.UASig calldata auth)
         external
         pure
     {
-        if (keccak256(auth.signature) != keccak256(abi.encode(purpose, digest))) revert IUARegistry.UAUnauthorized(ua);
+        if (keccak256(auth.signature) != keccak256(abi.encode(purpose, digest))) {
+            revert IUARegistry.UAUnauthorized(ua);
+        }
     }
 }
 
@@ -76,7 +90,9 @@ contract PipeRegistryProbe {
 
     uint256 public mode;
 
-    function setMode(uint256 m) external { mode = m; }
+    function setMode(uint256 m) external {
+        mode = m;
+    }
 
     function longRevert() public pure returns (bytes memory b) {
         b = new bytes(5001);
@@ -114,7 +130,7 @@ contract MtxPipelineLibTest is Test {
     address internal alice = vm.addr(ALICE_PK);
     address internal bob = address(0xB0B);
     bytes32 internal constant DS = keccak256("test domain separator");
-    bytes32 internal constant UA = keccak256("a derived ua");   // top 96 bits non-zero
+    bytes32 internal constant UA = keccak256("a derived ua"); // top 96 bits non-zero
     bytes4 internal constant SEL = 0x12345678;
 
     PipeHarness internal h;
@@ -134,8 +150,9 @@ contract MtxPipelineLibTest is Test {
     }
 
     function _env(bytes32 from) internal view returns (MtxPipelineLib.Envelope memory) {
-        return MtxPipelineLib.Envelope(from, keccak256("data"), 7, 0, block.timestamp + 300,
-            MetaTxLib.MODE_FEE_FIXED, address(0), 1, address(0));
+        return MtxPipelineLib.Envelope(
+            from, keccak256("data"), 7, 0, block.timestamp + 300, MetaTxLib.MODE_FEE_FIXED, address(0), 1, address(0)
+        );
     }
 
     /// AMOUNT(0) on a 36-byte static selector, basis 100 (fee cap 1).
@@ -153,7 +170,8 @@ contract MtxPipelineLibTest is Test {
     }
 
     function _uaAuth(MtxPipelineLib.Envelope memory e) internal view returns (bytes memory) {
-        return abi.encode(bytes(""), abi.encode(UAKinds.PURPOSE_METATX, h.callDigest(DS, MetaTxLib.UAMETATX_TYPEHASH, e)));
+        return
+            abi.encode(bytes(""), abi.encode(UAKinds.PURPOSE_METATX, h.callDigest(DS, MetaTxLib.UAMETATX_TYPEHASH, e)));
     }
 
     function _tauth(MetaTxLib.UAMetaTransfer memory t) internal view returns (bytes memory) {
@@ -161,8 +179,9 @@ contract MtxPipelineLibTest is Test {
     }
 
     function _xfer(bytes32 from, bytes32 to) internal view returns (MetaTxLib.UAMetaTransfer memory) {
-        return MetaTxLib.UAMetaTransfer(from, to, 100, bytes32(0), 3, 0, block.timestamp + 300,
-            MetaTxLib.MODE_FEE_FIXED, address(0), 1, address(0));
+        return MetaTxLib.UAMetaTransfer(
+            from, to, 100, bytes32(0), 3, 0, block.timestamp + 300, MetaTxLib.MODE_FEE_FIXED, address(0), 1, address(0)
+        );
     }
 
     function _nonceSlot(bytes32 from, uint256 batch) internal pure returns (bytes32) {
@@ -176,9 +195,9 @@ contract MtxPipelineLibTest is Test {
         MtxPipelineLib.Ctx memory c = _ctx();
         MtxPipelineLib.Envelope memory e = _env(MetaTxLib.pad(alice));
         MtxPipelineLib.CallFacts memory f = _facts();
-        e.validUntil = block.timestamp - 1;  // envelope
-        e.fee = 1000;                        // fee (cap 1)
-        f.len = 40;                          // shape (static 36)
+        e.validUntil = block.timestamp - 1; // envelope
+        e.fee = 1000; // fee (cap 1)
+        f.len = 40; // shape (static 36)
         bytes memory bad = _sig(0xBAD, keccak256("x"));
 
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxExpired.selector, e.validUntil, block.timestamp));
@@ -227,7 +246,10 @@ contract MtxPipelineLibTest is Test {
     uint256 internal constant ROUTE_GAS = 2_000_000;
 
     /// The same registry on both paths: `preCall` (generic `bytes auth`, the low-level call) and `preTransferUA` (`UASig`, the typed call).
-    function _routes(address r) internal returns (bool okBytes, bytes memory outBytes, bool okTyped, bytes memory outTyped) {
+    function _routes(address r)
+        internal
+        returns (bool okBytes, bytes memory outBytes, bool okTyped, bytes memory outTyped)
+    {
         MtxPipelineLib.Ctx memory c = _ctx();
         c.registry = r;
         MtxPipelineLib.Envelope memory e = _env(UA);
@@ -270,7 +292,7 @@ contract MtxPipelineLibTest is Test {
         _refusedAlike(address(p), abi.encodeWithSignature("Panic(uint256)", 1));
 
         p.setMode(0);
-        (,bytes memory outBytes,, bytes memory outTyped) = _routes(address(p));
+        (, bytes memory outBytes,, bytes memory outTyped) = _routes(address(p));
         (uint256 gasBytes, bytes32 dataBytes) = _seen(outBytes);
         (uint256 gasTyped,) = _seen(outTyped);
         assertGt(gasBytes, ROUTE_GAS * 9 / 10, "all but 1/64 forwarded");
@@ -278,7 +300,11 @@ contract MtxPipelineLibTest is Test {
         bytes32 digest = h.callDigest(DS, MetaTxLib.UAMETATX_TYPEHASH, _env(UA));
         IUARegistry.UASig memory s;
         s.signature = abi.encode(UAKinds.PURPOSE_METATX, digest);
-        assertEq(dataBytes, keccak256(abi.encodeCall(IUARegistry.requireAuthorized, (UA, UAKinds.PURPOSE_METATX, digest, s))), "the typed call's bytes");
+        assertEq(
+            dataBytes,
+            keccak256(abi.encodeCall(IUARegistry.requireAuthorized, (UA, UAKinds.PURPOSE_METATX, digest, s))),
+            "the typed call's bytes"
+        );
 
         p.setMode(1);
         (bool okBytes,, bool okTyped,) = _routes(address(p));
@@ -291,10 +317,10 @@ contract MtxPipelineLibTest is Test {
         MtxPipelineLib.Ctx memory c = _ctx();
         MtxPipelineLib.Envelope memory e = _env(UA);
         MtxPipelineLib.CallFacts memory f = _facts();
-        e.nonce = 5;                       // envelope
+        e.nonce = 5; // envelope
         e.feeRecipient = MetaTxLib.UA_POOL; // fee
-        f.uaAllowed = false;               // unknown op
-        f.len = 40;                        // shape
+        f.uaAllowed = false; // unknown op
+        f.len = 40; // shape
         bytes memory bad = abi.encode(bytes(""), hex"00");
 
         // ua-mtx-merge T1 (C), meaning: the ledger check ran first; it is now the derived id's own, inside step 2, so a
@@ -389,7 +415,7 @@ contract MtxPipelineLibTest is Test {
         MetaTxLib.UAMetaTransfer memory t = _xfer(MetaTxLib.pad(alice), bytes32(0));
         t.mode |= MetaTxLib.MODE_RESTRICT_RELAYER;
         t.relayer = bob; // envelope
-        t.fee = 1000;    // fee (cap 1)
+        t.fee = 1000; // fee (cap 1)
         bytes memory bad = _sig(0xBAD, keccak256("x"));
 
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnauthorizedRelayer.selector, bob, address(this)));
@@ -489,11 +515,15 @@ contract MtxPipelineLibTest is Test {
         bytes memory tauth = _tauth(t);
 
         // solc's library guard: a plain CALL of a state-changing external function reverts with no data
-        (bool ok, bytes memory ret) = lib.call(abi.encodeWithSelector(MtxPipelineLib.preCall.selector, c, e, f, false, sig));
+        (bool ok, bytes memory ret) =
+            lib.call(abi.encodeWithSelector(MtxPipelineLib.preCall.selector, c, e, f, false, sig));
         assertFalse(ok);
         assertEq(ret.length, 0, "preCall: the guard's empty revert");
-        (ok, ret) = lib.call(abi.encodeWithSelector(MtxPipelineLib.preTransferUA.selector, c, t, bytes32(0), 101,
-            UACall.auth(t.from, tauth)));
+        (ok, ret) = lib.call(
+            abi.encodeWithSelector(
+                MtxPipelineLib.preTransferUA.selector, c, t, bytes32(0), 101, UACall.auth(t.from, tauth)
+            )
+        );
         assertFalse(ok);
         assertEq(ret.length, 0, "preTransferUA: the guard's empty revert");
 
@@ -501,7 +531,8 @@ contract MtxPipelineLibTest is Test {
         h.preCall(c, e, f, false, sig);
         h.preTransfer(c, t, true, 101, tauth);
 
-        (ok, ret) = lib.call(abi.encodeWithSelector(MtxPipelineLib.callDigest.selector, DS, MetaTxLib.METATX_TYPEHASH, e));
+        (ok, ret) =
+            lib.call(abi.encodeWithSelector(MtxPipelineLib.callDigest.selector, DS, MetaTxLib.METATX_TYPEHASH, e));
         assertTrue(ok);
         assertEq(abi.decode(ret, (bytes32)), h.callDigest(DS, MetaTxLib.METATX_TYPEHASH, e));
     }
@@ -531,23 +562,48 @@ contract MtxPipelineLibTest is Test {
     /// R2: `callDigest` / `transferDigest` equal `MetaTxLib` hashing of the same struct, for both typehashes of
     /// `callDigest`. ua-mtx-merge T2, meaning: `transferDigest` has one typehash, `UAMetaTransfer`; the digest of a
     /// native transfer is never the retired address `MetaTransfer`'s (invariant 3).
-    function test_digestsEqualMetaTxLib(MetaTxLib.MetaTransaction memory m, LegacyMetaTransfer.MetaTransfer memory t,
-        bytes32 ua)
-        public view
-    {
-        MtxPipelineLib.Envelope memory e = MtxPipelineLib.Envelope(MetaTxLib.pad(m.from), keccak256(m.data), m.batch,
-            m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient);
-        assertEq(h.callDigest(DS, MetaTxLib.METATX_TYPEHASH, e),
-            MessageHashUtils.toTypedDataHash(DS, MtxHash.hashStruct(m)));
+    function test_digestsEqualMetaTxLib(
+        MetaTxLib.MetaTransaction memory m,
+        LegacyMetaTransfer.MetaTransfer memory t,
+        bytes32 ua
+    ) public view {
+        MtxPipelineLib.Envelope memory e = MtxPipelineLib.Envelope(
+            MetaTxLib.pad(m.from),
+            keccak256(m.data),
+            m.batch,
+            m.nonce,
+            m.validUntil,
+            m.mode,
+            m.relayer,
+            m.fee,
+            m.feeRecipient
+        );
+        assertEq(
+            h.callDigest(DS, MetaTxLib.METATX_TYPEHASH, e), MessageHashUtils.toTypedDataHash(DS, MtxHash.hashStruct(m))
+        );
 
         e.from = ua;
-        MetaTxLib.UAMetaTransaction memory um = MetaTxLib.UAMetaTransaction(ua, m.data, m.batch, m.nonce, m.validUntil,
-            m.mode, m.relayer, m.fee, m.feeRecipient);
-        assertEq(h.callDigest(DS, MetaTxLib.UAMETATX_TYPEHASH, e),
-            MessageHashUtils.toTypedDataHash(DS, MtxHash.hashStruct(um)));
+        MetaTxLib.UAMetaTransaction memory um = MetaTxLib.UAMetaTransaction(
+            ua, m.data, m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient
+        );
+        assertEq(
+            h.callDigest(DS, MetaTxLib.UAMETATX_TYPEHASH, e),
+            MessageHashUtils.toTypedDataHash(DS, MtxHash.hashStruct(um))
+        );
 
-        MetaTxLib.UAMetaTransfer memory ut = MetaTxLib.UAMetaTransfer(MetaTxLib.pad(t.from), MetaTxLib.pad(t.to),
-            t.value, t.entryRef, t.batch, t.nonce, t.validUntil, t.mode, t.relayer, t.fee, t.feeRecipient);
+        MetaTxLib.UAMetaTransfer memory ut = MetaTxLib.UAMetaTransfer(
+            MetaTxLib.pad(t.from),
+            MetaTxLib.pad(t.to),
+            t.value,
+            t.entryRef,
+            t.batch,
+            t.nonce,
+            t.validUntil,
+            t.mode,
+            t.relayer,
+            t.fee,
+            t.feeRecipient
+        );
         assertEq(h.transferDigest(DS, ut), MessageHashUtils.toTypedDataHash(DS, MtxHash.hashStruct(ut)));
         assertTrue(h.transferDigest(DS, ut) != MessageHashUtils.toTypedDataHash(DS, LegacyMetaTransfer.hashStruct(t)));
 

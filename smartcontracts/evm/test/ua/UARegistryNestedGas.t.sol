@@ -66,7 +66,9 @@ contract UARegistryNestedGasTest is UARegistryBase {
         if (kind == 0x0133) return abi.encodePacked(keccak256(abi.encode("key", n)));
         k = new bytes(kind == 0x0130 ? 1312 : (kind == 0x0131 ? 1952 : 897));
         if (kind == 0x0132) k[0] = 0x09;
-        for (uint256 i; i < 32; ++i) k[i + 1] = bytes1(uint8(n >> i & 1));
+        for (uint256 i; i < 32; ++i) {
+            k[i + 1] = bytes1(uint8(n >> i & 1));
+        }
     }
 
     // ----- the structures -----
@@ -78,7 +80,9 @@ contract UARegistryNestedGasTest is UARegistryBase {
 
     function _uints(uint256 a, uint256 n) internal pure returns (uint256[] memory r) {
         r = new uint256[](n);
-        for (uint256 i; i < n; ++i) r[i] = a;
+        for (uint256 i; i < n; ++i) {
+            r[i] = a;
+        }
     }
 
     function _none256() internal pure returns (uint256[] memory r) {}
@@ -100,14 +104,18 @@ contract UARegistryNestedGasTest is UARegistryBase {
         IUARegistry.MemberSig[] memory s = _flat(n, c.sigLen);
         ua = UACall.register(r, UAKinds.MSIG, d, _none(), pq ? abi.encode(s) : bytes(""), "");
         if (!pq) {
-            for (uint256 i; i < n; ++i) r.acceptMembership(ua, s[i]);
+            for (uint256 i; i < n; ++i) {
+                r.acceptMembership(ua, s[i]);
+            }
         }
     }
 
     function _flat(uint256 n, uint256 sigLen) internal view returns (IUARegistry.MemberSig[] memory s) {
         s = new IUARegistry.MemberSig[](n);
         bytes memory sig = new bytes(sigLen);
-        for (uint16 i; i < n; ++i) s[i] = IUARegistry.MemberSig(i, noneInner, sig);
+        for (uint16 i; i < n; ++i) {
+            s[i] = IUARegistry.MemberSig(i, noneInner, sig);
+        }
     }
 
     /// The outer's members for `c` on `r`, every inner registered; the inner lists by outer id afterwards in `_sigs`.
@@ -125,7 +133,11 @@ contract UARegistryNestedGasTest is UARegistryBase {
     }
 
     /// Every slot signs: an `msig` slot its whole inner list.
-    function _sigs(UARegistry r, Case memory c, bytes memory d) internal view returns (IUARegistry.MemberSig[] memory s) {
+    function _sigs(UARegistry r, Case memory c, bytes memory d)
+        internal
+        view
+        returns (IUARegistry.MemberSig[] memory s)
+    {
         IUARegistry.MsigStructure memory st = r.msigOf(UAKinds.uaOf(UAKinds.MSIG, d));
         s = new IUARegistry.MemberSig[](st.members.length);
         bytes memory sig = new bytes(c.sigLen);
@@ -136,13 +148,19 @@ contract UARegistryNestedGasTest is UARegistryBase {
             }
             uint256 n = r.msigOf(st.members[i].id).threshold;
             IUARegistry.InnerSig[] memory l = new IUARegistry.InnerSig[](n);
-            for (uint16 j; j < n; ++j) l[j] = IUARegistry.InnerSig(j, sig);
+            for (uint16 j; j < n; ++j) {
+                l[j] = IUARegistry.InnerSig(j, sig);
+            }
             s[i] = IUARegistry.MemberSig(i, l, "");
         }
     }
 
     /// `pop` of the outer before it exists: its slots from the key data alone.
-    function _popSigs(UARegistry r, Case memory c, bytes memory d) internal view returns (IUARegistry.MemberSig[] memory s) {
+    function _popSigs(UARegistry r, Case memory c, bytes memory d)
+        internal
+        view
+        returns (IUARegistry.MemberSig[] memory s)
+    {
         IUARegistry.MsigStructure memory st = UACall.structure(d);
         s = new IUARegistry.MemberSig[](st.members.length);
         bytes memory sig = new bytes(c.sigLen);
@@ -153,14 +171,18 @@ contract UARegistryNestedGasTest is UARegistryBase {
             }
             uint256 n = r.msigOf(st.members[i].id).threshold;
             IUARegistry.InnerSig[] memory l = new IUARegistry.InnerSig[](n);
-            for (uint16 j; j < n; ++j) l[j] = IUARegistry.InnerSig(j, sig);
+            for (uint16 j; j < n; ++j) {
+                l[j] = IUARegistry.InnerSig(j, sig);
+            }
             s[i] = IUARegistry.MemberSig(i, l, "");
         }
     }
 
     function _leaves(Case memory c) internal pure returns (uint256 n) {
         n = c.plain;
-        for (uint256 i; i < c.groups.length; ++i) n += c.groups[i];
+        for (uint256 i; i < c.groups.length; ++i) {
+            n += c.groups[i];
+        }
     }
 
     /// `_membersWorst` of `c`, gen 1: Σ (cap + MEMBER) per signature, MEMBER + ACCEPTED per inner `msig`, ACCEPTED, the hold above 400 k.
@@ -194,29 +216,48 @@ contract UARegistryNestedGasTest is UARegistryBase {
         r = _deploy(_at(), chainUidA, address(0), false, uint64(bound), address(0), true, k);
     }
 
-    function _measure(Case memory c, UARegistry r, bytes memory d, bytes32 ua, uint256 bound) internal returns (uint256 least) {
+    function _measure(Case memory c, UARegistry r, bytes memory d, bytes32 ua, uint256 bound)
+        internal
+        returns (uint256 least)
+    {
         IUARegistry.UASig memory a;
         a.members = _sigs(r, c, d);
         bytes memory call = abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_METATX, DIGEST, a));
         least = _least(address(r), call, bound);
         emit log_string(string.concat(
-            c.name, " | sigs ", vm.toString(_leaves(c)), " | inner ", vm.toString(c.groups.length), " | bound ", vm.toString(bound),
-            " | least ", vm.toString(least), " | margin ", vm.toString(bound - least), " | calldata ", vm.toString(call.length)
-        ));
+                c.name,
+                " | sigs ",
+                vm.toString(_leaves(c)),
+                " | inner ",
+                vm.toString(c.groups.length),
+                " | bound ",
+                vm.toString(bound),
+                " | least ",
+                vm.toString(least),
+                " | margin ",
+                vm.toString(bound - least),
+                " | calldata ",
+                vm.toString(call.length)
+            ));
     }
 
     /// The outer: refused at `tight`, registered at `r`, every slot accepted (a PQ-eligible outer by its `pop`, a classical one with an
     /// empty `pop`, slot by slot).
-    function _registerAt(UARegistry tight, UARegistry r, Case memory c, bytes memory d, IUARegistry.MemberSig[] memory pop)
-        internal
-        returns (bytes32 ua)
-    {
+    function _registerAt(
+        UARegistry tight,
+        UARegistry r,
+        Case memory c,
+        bytes memory d,
+        IUARegistry.MemberSig[] memory pop
+    ) internal returns (bytes32 ua) {
         bytes memory p = c.kind >= 0x0130 ? abi.encode(pop) : bytes("");
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
         UACall.register(tight, UAKinds.MSIG, d, _none(), p, "");
         ua = UACall.register(r, UAKinds.MSIG, d, _none(), p, "");
         if (c.kind < 0x0130) {
-            for (uint256 i; i < pop.length; ++i) r.acceptMembership(ua, pop[i]);
+            for (uint256 i; i < pop.length; ++i) {
+                r.acceptMembership(ua, pop[i]);
+            }
         }
     }
 
@@ -325,7 +366,9 @@ contract UARegistryNestedGasTest is UARegistryBase {
             _case("ml65 200k", 0x0131, 200_000, 3309, 0, _uints(16, 3)),
             _case("cap 50k", 0x0103, 50_000, 64, 0, _uints(16, 7))
         ];
-        for (uint256 i; i < 4; ++i) assertLe(_bound(c[i]), 12_000_000, c[i].name);
+        for (uint256 i; i < 4; ++i) {
+            assertLe(_bound(c[i]), 12_000_000, c[i].name);
+        }
         assertLe(_bound(_case("slh Hedera", 0x0133, 1_400_000, 7856, 0, _uints(1, 7))), 10_500_000);
     }
 
@@ -365,7 +408,10 @@ contract UARegistryNestedGasTest is UARegistryBase {
     // ----- CTR-PQZ-12: the holder fits 2^24 with its authorization's calldata (review I1) -----
 
     /// `{fndsa512, inner of 16 ml65, inner of n ml65}`, n-of-n at both levels, ready for a PQZ key on a registry of caps 200 k and 2.5 M.
-    function _bigHolder(uint256 n) internal returns (UARegistry r, bytes memory d, IUARegistry.MemberSig[] memory pop, IUARegistry.UAAttrs memory a) {
+    function _bigHolder(uint256 n)
+        internal
+        returns (UARegistry r, bytes memory d, IUARegistry.MemberSig[] memory pop, IUARegistry.UAAttrs memory a)
+    {
         Case memory c = _case("ml65", 0x0131, 200_000, 3309, 0, _none256());
         address burn = address(new BurnAll());
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
@@ -381,7 +427,9 @@ contract UARegistryNestedGasTest is UARegistryBase {
         d = _msigKey(3, m);
         pop = _popSigs(r, c, d);
         IUARegistry.MsigStructure memory st = UACall.structure(d);
-        for (uint256 i; i < 3; ++i) if (st.members[i].kind == 0x0132) pop[i].sig = new bytes(666);
+        for (uint256 i; i < 3; ++i) {
+            if (st.members[i].kind == 0x0132) pop[i].sig = new bytes(666);
+        }
         bytes memory key = new bytes(PqzSet.PK);
         key[0] = 0x01;
         a = UACall.attrs(key, keccak256("proof"), "");
@@ -389,7 +437,8 @@ contract UARegistryNestedGasTest is UARegistryBase {
 
     /// The registry's bound for that shape: its worst, the hold, the debit, 16 per byte.
     function _holderBound(uint256 n) internal pure returns (uint256 w, uint256 total) {
-        w = (16 + n) * (200_000 + MEMBER) + (2_500_000 + MEMBER) + 2 * (MEMBER + ACCEPTED) + ACCEPTED + (2_500_000 - SMART) / 63;
+        w = (16 + n) * (200_000 + MEMBER) + (2_500_000 + MEMBER) + 2 * (MEMBER + ACCEPTED) + ACCEPTED
+            + (2_500_000 - SMART) / 63;
         uint256 auth = (192 + 672) + 2 * 192 + (16 + n) * (128 + 3_328);
         total = w + w / 63 + 5_000 + PqzSet.PQZ_DEBIT_MIN_GAS + 16 * auth;
     }
@@ -403,7 +452,8 @@ contract UARegistryNestedGasTest is UARegistryBase {
             if (total <= 1 << 24) break;
         }
         assertLt(n, 12, "the review's shape is refused");
-        (UARegistry r, bytes memory d, IUARegistry.MemberSig[] memory pop, IUARegistry.UAAttrs memory a) = _bigHolder(n + 1);
+        (UARegistry r, bytes memory d, IUARegistry.MemberSig[] memory pop, IUARegistry.UAAttrs memory a) =
+            _bigHolder(n + 1);
         bytes memory p = abi.encode(pop);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, UAKinds.uaOf(UAKinds.MSIG, d)));
         UACall.register(r, UAKinds.MSIG, d, a, p, "");
@@ -413,7 +463,9 @@ contract UARegistryNestedGasTest is UARegistryBase {
         IUARegistry.UASig memory s;
         s.members = pop;
         (uint256 w,) = _holderBound(n);
-        uint256 least = _least(address(r), abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_METATX, DIGEST, s)), w);
+        uint256 least = _least(
+            address(r), abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_METATX, DIGEST, s)), w
+        );
         uint256 spend = least + PqzSet.PQZ_DEBIT_MIN_GAS + 16 * abi.encode(s).length;
         emit log_named_uint("signatures", 17 + n);
         emit log_named_uint("least + debit + 16 per auth byte", spend);
@@ -473,7 +525,9 @@ contract UARegistryNestedGasTest is UARegistryBase {
     /// `{15 EOAs from key `from`, ml of weight 16}`, 16 of 16, and the `pop` of ml alone (weight 16 reaches the threshold).
     function _nativesAnd(bytes32 ml, uint256 from) internal returns (bytes memory d, IUARegistry.MemberSig[] memory s) {
         Member[] memory m = new Member[](16);
-        for (uint256 i; i < 15; ++i) m[i] = Member(UAKinds.EVM_EOA, _pad(vm.addr(from + i)), 1);
+        for (uint256 i; i < 15; ++i) {
+            m[i] = Member(UAKinds.EVM_EOA, _pad(vm.addr(from + i)), 1);
+        }
         m[15] = Member(0x0131, ml, 16);
         d = _msigKey(16, m);
         s = new IUARegistry.MemberSig[](1);
@@ -490,8 +544,18 @@ contract UARegistryNestedGasTest is UARegistryBase {
         bytes memory p = abi.encode(_popSigs(r, c, d));
         UACall.register(r, UAKinds.MSIG, d, _none(), p, "");
         Vm.Gas memory g = vm.lastCallGas();
-        emit log_string(string.concat("REG|", c.name, "|", vm.toString(_leaves(c)), "|", vm.toString(p.length), "|", vm.toString(uint256(g.gasTotalUsed)), "|",
-            vm.toString(uint256(int256(g.gasStateUsed)))));
+        emit log_string(string.concat(
+                "REG|",
+                c.name,
+                "|",
+                vm.toString(_leaves(c)),
+                "|",
+                vm.toString(p.length),
+                "|",
+                vm.toString(uint256(g.gasTotalUsed)),
+                "|",
+                vm.toString(uint256(int256(g.gasStateUsed)))
+            ));
     }
 
     function test_registrationCostRows() public {

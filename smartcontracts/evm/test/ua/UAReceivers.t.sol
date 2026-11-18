@@ -75,7 +75,9 @@ contract UAReceiversTest is UALedgerBase {
     }
 
     function _harness(address registry_) internal returns (UAMintHarness h) {
-        h = UAMintHarness(EnvKit.clone(address(new UAMintHarness()), EnvKit.env(chainUidA, registry_, address(0), false)));
+        h = UAMintHarness(
+            EnvKit.clone(address(new UAMintHarness()), EnvKit.env(chainUidA, registry_, address(0), false))
+        );
         h.initialize(nid(address(this)), 1, abi.encode(normalInit("H", "H", 6, 0, address(0), address(this))));
     }
 
@@ -111,8 +113,11 @@ contract UAReceiversTest is UALedgerBase {
     function test_noFundsBeforeRegister_mldsa() public {
         bytes memory pk = new bytes(2_592);
         pk[0] = 0x87;
-        bytes32[3] memory ids = [UAKinds.uaOf(UAKinds.MLDSA44, new bytes(1_312)), UAKinds.uaOf(UAKinds.MLDSA65, new bytes(1_952)),
-            UAKinds.uaOf(UAKinds.MLDSA87, pk)];
+        bytes32[3] memory ids = [
+            UAKinds.uaOf(UAKinds.MLDSA44, new bytes(1_312)),
+            UAKinds.uaOf(UAKinds.MLDSA65, new bytes(1_952)),
+            UAKinds.uaOf(UAKinds.MLDSA87, pk)
+        ];
         for (uint256 i; i < 3; ++i) {
             vm.expectRevert(abi.encodeWithSelector(IUALedger.UANotRegistered.selector, ids[i]));
             hm.mintUA(ids[i], 1);
@@ -130,14 +135,27 @@ contract UAReceiversTest is UALedgerBase {
 
     /// An address-path `MetaTransaction` of alice on `token`, signed.
     function _mtx(address token, bytes memory data, uint32 mode, uint256 fee, address feeTo)
-        internal view returns (MetaTxLib.MetaTransaction memory m, bytes memory sig)
+        internal
+        view
+        returns (MetaTxLib.MetaTransaction memory m, bytes memory sig)
     {
-        m = MetaTxLib.MetaTransaction({from: alice, data: data, batch: 3, nonce: NormalToken(token).mtxNonce(MetaTxLib.pad(alice), 3),
-            validUntil: block.timestamp + 300, mode: mode, relayer: RELAYER, fee: fee, feeRecipient: feeTo});
+        m = MetaTxLib.MetaTransaction({
+            from: alice,
+            data: data,
+            batch: 3,
+            nonce: NormalToken(token).mtxNonce(MetaTxLib.pad(alice), 3),
+            validUntil: block.timestamp + 300,
+            mode: mode,
+            relayer: RELAYER,
+            fee: fee,
+            feeRecipient: feeTo
+        });
         sig = _ecdsa(ALICE_PK, MtxDigest.metaTx(token, m));
     }
 
-    function _relay(address token, bytes memory data, uint32 mode, uint256 fee, address feeTo, bytes memory err) internal {
+    function _relay(address token, bytes memory data, uint32 mode, uint256 fee, address feeTo, bytes memory err)
+        internal
+    {
         (MetaTxLib.MetaTransaction memory m, bytes memory sig) = _mtx(token, data, mode, fee, feeTo);
         if (err.length != 0) vm.expectRevert(err);
         vm.prank(RELAYER);
@@ -150,7 +168,12 @@ contract UAReceiversTest is UALedgerBase {
 
     /// A NORMAL clone on `REG_L` with `features` and no minter.
     function _normal(uint256 features) internal returns (NormalToken t) {
-        t = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        t = NormalToken(
+            EnvKit.clone(
+                address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+                EnvKit.env(chainUidA, REG_L, address(0), false)
+            )
+        );
         IFactoryToken.TokenConfig memory c = normalInit("N", "N", 6, 1_000, alice, address(0));
         c.features = features;
         t.initialize(nid(address(this)), 1, abi.encode(c));
@@ -218,13 +241,25 @@ contract UAReceiversTest is UALedgerBase {
         assertEq(wrp.balanceOf(FEE_TO), 5);
         _relay(address(wrp), data, RR, 0, address(0), "");
         assertEq(wrp.balanceOfUA(uaP), 2_000);
-        _relay(address(wrp), data, RR | RF | PCT, 1, FEE_TO,
-            abi.encodeWithSelector(IMetaTx.MtxFeeClass.selector, WrappedToken.wrapToUA.selector, RR | RF | PCT));
+        _relay(
+            address(wrp),
+            data,
+            RR | RF | PCT,
+            1,
+            FEE_TO,
+            abi.encodeWithSelector(IMetaTx.MtxFeeClass.selector, WrappedToken.wrapToUA.selector, RR | RF | PCT)
+        );
     }
 
     function test_wrapToUA_nativeLeg_relayedRefused() public {
-        _relay(address(wrpN), abi.encodeCall(WrappedToken.wrapToUA, (address(0), 1_000, uaP)), RR, 0, address(0),
-            abi.encodeWithSelector(IWrappedToken.NativeValueMismatch.selector, 0, 1_000));
+        _relay(
+            address(wrpN),
+            abi.encodeCall(WrappedToken.wrapToUA, (address(0), 1_000, uaP)),
+            RR,
+            0,
+            address(0),
+            abi.encodeWithSelector(IWrappedToken.NativeValueMismatch.selector, 0, 1_000)
+        );
     }
 
     /// The receiver is checked before any pull; the leg's own refusals are `wrap`'s.
@@ -235,8 +270,12 @@ contract UAReceiversTest is UALedgerBase {
         uint256[] memory one = new uint256[](2);
         (one[0], one[1]) = (1, 1);
         Rate memory adj = Rate(true, address(this), 2 days, 1_000);
-        WrappedToken w =
-            WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        WrappedToken w = WrappedToken(
+            EnvKit.clone(
+                address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
+                EnvKit.env(chainUidA, REG_L, address(0), false)
+            )
+        );
         w.initialize(nid(address(this)), 1, abi.encode(wrappedInit(us, one, one, 6, adj, address(this), address(0))));
         und.mint(alice, 1_000);
         und2.mint(alice, 1_000);
@@ -277,7 +316,12 @@ contract UAReceiversTest is UALedgerBase {
 
     /// A one-leg 1:1 wrapper of `leg` with the ledger off (registry 0).
     function _offWrapper(address leg) internal returns (WrappedToken w) {
-        w = WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(chainUidA, address(0), address(0), false)));
+        w = WrappedToken(
+            EnvKit.clone(
+                address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
+                EnvKit.env(chainUidA, address(0), address(0), false)
+            )
+        );
         address[] memory us = new address[](1);
         uint256[] memory one = new uint256[](1);
         (us[0], one[0]) = (leg, 1);
@@ -321,8 +365,12 @@ contract UAReceiversTest is UALedgerBase {
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UALegNotLedger.selector, address(0)));
         wrpN.unwrapToUA(address(0), 100, uaP, 0);
         vm.stopPrank();
-        NormalToken off =
-            NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, address(0), address(0), false)));
+        NormalToken off = NormalToken(
+            EnvKit.clone(
+                address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+                EnvKit.env(chainUidA, address(0), address(0), false)
+            )
+        );
         off.initialize(nid(address(this)), 1, abi.encode(normalInit("Off", "OFF", 6, 0, address(0), address(this))));
         WrappedToken w = _wrapper(address(off));
         off.mint(address(this), 100, EnvKit.codeUidOf(address(off)));
@@ -365,8 +413,12 @@ contract UAReceiversTest is UALedgerBase {
         uint256[] memory one = new uint256[](2);
         (one[0], one[1]) = (1, 1);
         Rate memory fixedRate;
-        WrappedToken w =
-            WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        WrappedToken w = WrappedToken(
+            EnvKit.clone(
+                address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
+                EnvKit.env(chainUidA, REG_L, address(0), false)
+            )
+        );
         w.initialize(nid(address(this)), 1, abi.encode(wrappedInit(us, one, one, 6, fixedRate, address(0), address(0))));
         und.mint(alice, 50);
         vm.startPrank(alice);
@@ -404,13 +456,25 @@ contract UAReceiversTest is UALedgerBase {
     /// Relayed through `mtxExecute`: `AMOUNT(1)`, a fee of 1 % of `wrapped` from the signer's balance after the call.
     function test_unwrapToUA_relayedNative() public {
         _wrapL(alice, 10_000);
-        _relay(address(wrpL), abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 4_000, uaP, 4_000)),
-            RR | RF | PCT, 10_000, FEE_TO, "");
+        _relay(
+            address(wrpL),
+            abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 4_000, uaP, 4_000)),
+            RR | RF | PCT,
+            10_000,
+            FEE_TO,
+            ""
+        );
         assertEq(tok.balanceOfUA(uaP), 4_000);
         assertEq(wrpL.balanceOf(alice), 10_000 - 4_000 - 40);
         assertEq(wrpL.balanceOf(FEE_TO), 40);
-        _relay(address(wrpL), abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 1_000, uaP, 0)), RR | RF | FIX,
-            11, FEE_TO, abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, 11, 10));
+        _relay(
+            address(wrpL),
+            abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 1_000, uaP, 0)),
+            RR | RF | FIX,
+            11,
+            FEE_TO,
+            abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, 11, 10)
+        );
     }
 
     /// C5a-15: a wrapper with its ledger off pays a UA of a ledger-on leg; the credit lives in the leg's ledger (only the
@@ -515,8 +579,14 @@ contract UAReceiversTest is UALedgerBase {
         NormalToken noMint = _normal(1 << GovernanceBits.PAYABLE);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.MINTABLE));
         noMint.mintToUA(uaP, 1, EnvKit.codeUidOf(address(noMint)));
-        _relay(address(tok), abi.encodeCall(NormalToken.mintToUA, (uaP, 1, EnvKit.codeUidOf(address(tok)))), RR, 0, address(0),
-            abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, NormalToken.mintToUA.selector));
+        _relay(
+            address(tok),
+            abi.encodeCall(NormalToken.mintToUA, (uaP, 1, EnvKit.codeUidOf(address(tok)))),
+            RR,
+            0,
+            address(0),
+            abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, NormalToken.mintToUA.selector)
+        );
     }
 
     // ----- payWithFeeToUA -----
@@ -561,8 +631,17 @@ contract UAReceiversTest is UALedgerBase {
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.PAYABLE));
         vm.prank(alice);
         notPayable.payWithFeeToUA(uaP, 1, FeeMode.NONE, 0, address(0), REF, PayMetaKit.meta("scaas.ua5a.ref"));
-        _relay(address(tok), abi.encodeCall(NormalToken.payWithFeeToUA, (uaP, 1, FeeMode.NONE, 0, address(0), REF, PayMetaKit.meta("scaas.ua5a.ref"))), RR,
-            0, address(0), abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, NormalToken.payWithFeeToUA.selector));
+        _relay(
+            address(tok),
+            abi.encodeCall(
+                NormalToken.payWithFeeToUA,
+                (uaP, 1, FeeMode.NONE, 0, address(0), REF, PayMetaKit.meta("scaas.ua5a.ref"))
+            ),
+            RR,
+            0,
+            address(0),
+            abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, NormalToken.payWithFeeToUA.selector)
+        );
     }
 
     /// pay-meta-tax T37 (spec §3.2): `payWithFeeToUA` with a `PayMeta` other than the one `entryRef` commits to is refused
@@ -597,7 +676,9 @@ contract UAReceiversTest is UALedgerBase {
         g = gasleft();
         (bool ok, bytes memory ret) = target.call{value: value}(data);
         g -= gasleft();
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        }
         vm.revertToState(snap);
     }
 
@@ -628,18 +709,66 @@ contract UAReceiversTest is UALedgerBase {
         und.approve(address(wrp), 1_000);
         vm.deal(alice, 1_000);
         _wrapL(alice, 1_000);
-        _logPair("wrap(u, v) ERC-20 leg", _gasOf(alice, address(wrp), 0, abi.encodeWithSignature(
-            "wrap(address,uint256)", address(und), 1_000)),
-            "wrapToUA ERC-20 leg", _gasOf(alice, address(wrp), 0, abi.encodeCall(WrappedToken.wrapToUA, (address(und), 1_000, uaP))));
-        _logPair("wrap(u, v) native leg", _gasOf(alice, address(wrpN), 1_000, abi.encodeWithSignature(
-            "wrap(address,uint256)", address(0), 1_000)),
-            "wrapToUA native leg", _gasOf(alice, address(wrpN), 1_000, abi.encodeCall(WrappedToken.wrapToUA, (address(0), 1_000, uaP))));
-        _logPair("unwrap(u, ...) ledger leg", _gasOf(alice, address(wrpL), 0, abi.encodeWithSignature(
-            "unwrap(address,uint256,address,uint256)", address(tok), 1_000, bob, 0)),
-            "unwrapToUA ledger leg", _gasOf(alice, address(wrpL), 0, abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 1_000, uaB, 0))));
-        _logPair("payWithFee", _gasOf(alice, address(tok), 0, abi.encodeCall(NormalToken.payWithFee, (bob, 1_000, FeeMode.FIXED, 10, FEE_TO, REF, PayMetaKit.meta("scaas.ua5a.ref")))),
-            "payWithFeeToUA", _gasOf(alice, address(tok), 0, abi.encodeCall(NormalToken.payWithFeeToUA, (uaB, 1_000, FeeMode.FIXED, 10, FEE_TO, REF, PayMetaKit.meta("scaas.ua5a.ref")))));
-        _logPair("mint", _gasOf(address(this), address(tok), 0, abi.encodeCall(NormalToken.mint, (bob, 1_000, EnvKit.codeUidOf(address(tok))))),
-            "mintToUA", _gasOf(address(this), address(tok), 0, abi.encodeCall(NormalToken.mintToUA, (uaB, 1_000, EnvKit.codeUidOf(address(tok))))));
+        _logPair(
+            "wrap(u, v) ERC-20 leg",
+            _gasOf(alice, address(wrp), 0, abi.encodeWithSignature("wrap(address,uint256)", address(und), 1_000)),
+            "wrapToUA ERC-20 leg",
+            _gasOf(alice, address(wrp), 0, abi.encodeCall(WrappedToken.wrapToUA, (address(und), 1_000, uaP)))
+        );
+        _logPair(
+            "wrap(u, v) native leg",
+            _gasOf(alice, address(wrpN), 1_000, abi.encodeWithSignature("wrap(address,uint256)", address(0), 1_000)),
+            "wrapToUA native leg",
+            _gasOf(alice, address(wrpN), 1_000, abi.encodeCall(WrappedToken.wrapToUA, (address(0), 1_000, uaP)))
+        );
+        _logPair(
+            "unwrap(u, ...) ledger leg",
+            _gasOf(
+                alice,
+                address(wrpL),
+                0,
+                abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(tok), 1_000, bob, 0)
+            ),
+            "unwrapToUA ledger leg",
+            _gasOf(alice, address(wrpL), 0, abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 1_000, uaB, 0)))
+        );
+        _logPair(
+            "payWithFee",
+            _gasOf(
+                alice,
+                address(tok),
+                0,
+                abi.encodeCall(
+                    NormalToken.payWithFee,
+                    (bob, 1_000, FeeMode.FIXED, 10, FEE_TO, REF, PayMetaKit.meta("scaas.ua5a.ref"))
+                )
+            ),
+            "payWithFeeToUA",
+            _gasOf(
+                alice,
+                address(tok),
+                0,
+                abi.encodeCall(
+                    NormalToken.payWithFeeToUA,
+                    (uaB, 1_000, FeeMode.FIXED, 10, FEE_TO, REF, PayMetaKit.meta("scaas.ua5a.ref"))
+                )
+            )
+        );
+        _logPair(
+            "mint",
+            _gasOf(
+                address(this),
+                address(tok),
+                0,
+                abi.encodeCall(NormalToken.mint, (bob, 1_000, EnvKit.codeUidOf(address(tok))))
+            ),
+            "mintToUA",
+            _gasOf(
+                address(this),
+                address(tok),
+                0,
+                abi.encodeCall(NormalToken.mintToUA, (uaB, 1_000, EnvKit.codeUidOf(address(tok))))
+            )
+        );
     }
 }

@@ -20,23 +20,34 @@ contract UARegistryPqzBoundTest is UARegistryBase {
     function _regs(address where, uint16[3] memory kinds, uint64[3] memory caps) internal returns (UARegistry r) {
         UARegistry.KindConfig[] memory base = _cfgs(address(mock));
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](base.length + 4);
-        for (uint256 i; i < base.length; ++i) c[i] = base[i];
-        for (uint256 i; i < 3; ++i) c[base.length + i] = UARegistry.KindConfig(kinds[i], address(mock), caps[i]);
+        for (uint256 i; i < base.length; ++i) {
+            c[i] = base[i];
+        }
+        for (uint256 i; i < 3; ++i) {
+            c[base.length + i] = UARegistry.KindConfig(kinds[i], address(mock), caps[i]);
+        }
         c[base.length + 3] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(mock), 1_000_000);
         r = _deploy(where, chainUidA, address(0), false, BUDGET, address(0), true, c);
     }
 
     function _pk(uint16 kind, uint256 salt) internal pure returns (bytes memory pk) {
-        uint256 len = kind == 0x0130 ? 1312 : kind == 0x0131 ? 1952 : kind == 0x0132 ? 897 : kind == 0x0133 ? 32 : kind == 0x0134 ? 2592
-            : kind == 0x0135 ? 1793 : 16384;
+        uint256 len = kind == 0x0130
+            ? 1312
+            : kind == 0x0131
+                ? 1952
+                : kind == 0x0132 ? 897 : kind == 0x0133 ? 32 : kind == 0x0134 ? 2592 : kind == 0x0135 ? 1793 : 16384;
         pk = new bytes(len);
         for (uint256 i; i < len; i += 32) {
             bytes32 w = keccak256(abi.encode(kind, salt, i));
-            for (uint256 j; j < 32 && i + j < len; ++j) pk[i + j] = w[j];
+            for (uint256 j; j < 32 && i + j < len; ++j) {
+                pk[i + j] = w[j];
+            }
         }
         if (kind == 0x0132 || kind == 0x0135) {
             pk[0] = kind == 0x0132 ? bytes1(0x09) : bytes1(0x0a);
-            for (uint256 i = 1; i < len; ++i) pk[i] = 0;
+            for (uint256 i = 1; i < len; ++i) {
+                pk[i] = 0;
+            }
             pk[3] = bytes1(uint8(salt % 16)); // distinct keys, every h_i < q
         }
     }
@@ -64,25 +75,40 @@ contract UARegistryPqzBoundTest is UARegistryBase {
     function _holder(UARegistry r, bytes memory d, bytes32 ua, bytes[] memory keys, uint16[] memory ks) internal {
         bytes memory pqz = _pk(0x0142, ++n);
         bytes32 h = UAKinds.keyHashOf(UAKinds.PQZ_MLWE, pqz);
-        bytes memory rReg = _sig(pqz, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, UAKinds.portableRecordDigest(ua, UAKinds.MSIG, h, UAKinds.kemRecordHash(ua, 0, ""))));
+        bytes memory rReg = _sig(
+            pqz,
+            UAKinds.uaMessage(
+                UAKinds.PQZ_MLWE,
+                UAKinds.PURPOSE_POP_V2,
+                UAKinds.portableRecordDigest(ua, UAKinds.MSIG, h, UAKinds.kemRecordHash(ua, 0, ""))
+            )
+        );
         IUARegistry.UAAttrs memory a = UACall.attrs(pqz, keccak256(rReg), "");
         UACall.register(r, UAKinds.MSIG, d, a, _memberSigs(d, ua, a, keys, ks), rReg);
         assertEq(r.uaCount(UAKinds.PQZ_MLWE), 1);
     }
 
-    function _memberSigs(bytes memory d, bytes32 ua, IUARegistry.UAAttrs memory a, bytes[] memory keys, uint16[] memory ks)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function _memberSigs(
+        bytes memory d,
+        bytes32 ua,
+        IUARegistry.UAAttrs memory a,
+        bytes[] memory keys,
+        uint16[] memory ks
+    ) internal pure returns (bytes memory) {
         bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_POP_V2, _regDigest(ua, UAKinds.MSIG, a));
         IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](ks.length);
         for (uint256 i; i < ks.length; ++i) {
             bytes32 id = UAKinds.uaOf(ks[i], keys[i]);
-            s[i] = IUARegistry.MemberSig(_indexOf(d, id), new IUARegistry.InnerSig[](0), _sig(keys[i], UAKinds.uaMessage(ks[i], UAKinds.PURPOSE_MEMBER, md)));
+            s[i] = IUARegistry.MemberSig(
+                _indexOf(d, id),
+                new IUARegistry.InnerSig[](0),
+                _sig(keys[i], UAKinds.uaMessage(ks[i], UAKinds.PURPOSE_MEMBER, md))
+            );
         }
         for (uint256 i = 1; i < s.length; ++i) {
-            for (uint256 j = i; j > 0 && s[j - 1].index > s[j].index; --j) (s[j - 1], s[j]) = (s[j], s[j - 1]);
+            for (uint256 j = i; j > 0 && s[j - 1].index > s[j].index; --j) {
+                (s[j - 1], s[j]) = (s[j], s[j - 1]);
+            }
         }
         return abi.encode(s);
     }
@@ -92,14 +118,16 @@ contract UARegistryPqzBoundTest is UARegistryBase {
     /// registers without a key) and 2-of-2 `fndsa1024` at `DeployBase`'s cap 5,250,000 (about 10.67 M; bound 16.97 M at the
     /// set with the least debit, `n2304-kmax4096`): neither fits 2^24 with a PQZ key.
     function test_register_msigHolderOverBound() public {
-        UARegistry r = _regs(address(0x5CA7001), [uint16(0x0131), 0x0132, 0x0133], [uint64(200_000), 2_500_000, 1_400_000]);
+        UARegistry r =
+            _regs(address(0x5CA7001), [uint16(0x0131), 0x0132, 0x0133], [uint64(200_000), 2_500_000, 1_400_000]);
         (bytes memory d, bytes32 ua,,) = _members(r, 0x0132, 4, true, 5);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, ua));
         UACall.register(r, UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 900)), hex"01", hex"01");
         uint256 b = _bound(5_250_000, 2 * (192 + 1_280));
         emit log_named_uint(string.concat("MD-13 ", PqzSet.NAME, ": 2-of-2 fndsa1024 at 5,250,000, bound"), b);
         assertGt(b, LIM, "over 2^24 at this set");
-        UARegistry r2 = _regs(address(0x5CA700B), [uint16(0x0135), 0x0132, 0x0133], [uint64(5_250_000), 2_500_000, 1_400_000]);
+        UARegistry r2 =
+            _regs(address(0x5CA700B), [uint16(0x0135), 0x0132, 0x0133], [uint64(5_250_000), 2_500_000, 1_400_000]);
         (d, ua,,) = _members(r2, 0x0135, 2, false, 2);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, ua));
         UACall.register(r2, UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 901)), hex"01", hex"01");
@@ -109,7 +137,8 @@ contract UARegistryPqzBoundTest is UARegistryBase {
     /// `n2304-kmax4096` (`PQZ_DEBIT_MIN_GAS` 6,074,000 with its calibrated rows leaves about 10.70 M), `UAPqzHolder` at the
     /// three other sets (7.36 / 7.79 / 8.03 M of debit).
     function test_register_msigHolder_fndsa512x4_perSet() public {
-        UARegistry r = _regs(address(0x5CA700C), [uint16(0x0131), 0x0132, 0x0133], [uint64(200_000), 2_500_000, 1_400_000]);
+        UARegistry r =
+            _regs(address(0x5CA700C), [uint16(0x0131), 0x0132, 0x0133], [uint64(200_000), 2_500_000, 1_400_000]);
         (bytes memory d, bytes32 ua, bytes[] memory keys, uint16[] memory ks) = _members(r, 0x0132, 4, false, 4);
         if (keccak256(bytes(PqzSet.NAME)) == keccak256("n2304-kmax4096")) {
             _holder(r, d, ua, keys, ks);
@@ -121,7 +150,8 @@ contract UARegistryPqzBoundTest is UARegistryBase {
 
     /// 2-of-2 `mldsa65` registers at PQZL with a PQZ key.
     function test_register_msigHolderWithinBound() public {
-        UARegistry r = _regs(address(0x5CA7002), [uint16(0x0131), 0x0132, 0x0133], [uint64(200_000), 2_500_000, 1_400_000]);
+        UARegistry r =
+            _regs(address(0x5CA7002), [uint16(0x0131), 0x0132, 0x0133], [uint64(200_000), 2_500_000, 1_400_000]);
         (bytes memory d, bytes32 ua, bytes[] memory keys, uint16[] memory ks) = _members(r, 0x0131, 2, false, 2);
         _holder(r, d, ua, keys, ks);
     }
@@ -155,7 +185,8 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         UARegistry r = _regs(address(0x5CA7005), [uint16(0x0134), 0x0132, 0x0133], [uint64(lo), 2_500_000, 1_400_000]);
         (bytes memory d, bytes32 ua, bytes[] memory keys, uint16[] memory ks) = _members(r, 0x0134, 2, false, 2);
         _holder(r, d, ua, keys, ks);
-        UARegistry r2 = _regs(address(0x5CA7006), [uint16(0x0134), 0x0132, 0x0133], [uint64(lo + 1), 2_500_000, 1_400_000]);
+        UARegistry r2 =
+            _regs(address(0x5CA7006), [uint16(0x0134), 0x0132, 0x0133], [uint64(lo + 1), 2_500_000, 1_400_000]);
         (d, ua, keys, ks) = _members(r2, 0x0134, 2, false, 2);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, ua));
         UACall.register(r2, UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 903)), hex"01", hex"01");
@@ -175,7 +206,8 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         UARegistry r = _regs(address(0x5CA7007), [uint16(0x0135), 0x0132, 0x0133], [uint64(lo), 2_500_000, 1_400_000]);
         (bytes memory d, bytes32 ua, bytes[] memory keys, uint16[] memory ks) = _members(r, 0x0135, 2, false, 2);
         _holder(r, d, ua, keys, ks);
-        UARegistry r2 = _regs(address(0x5CA7008), [uint16(0x0135), 0x0132, 0x0133], [uint64(lo + 1), 2_500_000, 1_400_000]);
+        UARegistry r2 =
+            _regs(address(0x5CA7008), [uint16(0x0135), 0x0132, 0x0133], [uint64(lo + 1), 2_500_000, 1_400_000]);
         (d, ua, keys, ks) = _members(r2, 0x0135, 2, false, 2);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, ua));
         UACall.register(r2, UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 903)), hex"01", hex"01");
@@ -194,7 +226,8 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         UARegistry r = _regs(address(0x5CA7003), [uint16(0x0131), 0x0132, 0x0133], [uint64(lo), 2_500_000, 1_400_000]);
         (bytes memory d, bytes32 ua, bytes[] memory keys, uint16[] memory ks) = _members(r, 0x0131, 2, false, 2);
         _holder(r, d, ua, keys, ks);
-        UARegistry r2 = _regs(address(0x5CA7004), [uint16(0x0131), 0x0132, 0x0133], [uint64(lo + 1), 2_500_000, 1_400_000]);
+        UARegistry r2 =
+            _regs(address(0x5CA7004), [uint16(0x0131), 0x0132, 0x0133], [uint64(lo + 1), 2_500_000, 1_400_000]);
         (d, ua, keys, ks) = _members(r2, 0x0131, 2, false, 2);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, ua));
         UACall.register(r2, UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 902)), hex"01", hex"01");
@@ -208,8 +241,14 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         ua = r.uaOf(kind, pk);
         bytes memory pqz = _pk(0x0142, ++n);
         bytes32 h = UAKinds.keyHashOf(UAKinds.PQZ_MLWE, pqz);
-        bytes memory rReg = _sig(pqz, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2,
-            UAKinds.portableRecordDigest(ua, kind, h, UAKinds.kemRecordHash(ua, 0, ""))));
+        bytes memory rReg = _sig(
+            pqz,
+            UAKinds.uaMessage(
+                UAKinds.PQZ_MLWE,
+                UAKinds.PURPOSE_POP_V2,
+                UAKinds.portableRecordDigest(ua, kind, h, UAKinds.kemRecordHash(ua, 0, ""))
+            )
+        );
         IUARegistry.UAAttrs memory a = UACall.attrs(pqz, keccak256(rReg), "");
         bytes memory pop = _sig(pk, UAKinds.uaMessage(kind, UAKinds.PURPOSE_POP_V2, _regDigest(ua, kind, a)));
         assertEq(UACall.register(r, kind, pk, a, pop, rReg), ua);
@@ -233,7 +272,8 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         }
         UARegistry r = _regs(address(0x5CA7009), [uint16(0x0134), 0x0132, 0x0133], [uint64(lo), 2_500_000, 1_400_000]);
         _singleHolder(r, 0x0134);
-        UARegistry r2 = _regs(address(0x5CA700A), [uint16(0x0134), 0x0132, 0x0133], [uint64(lo + 1), 2_500_000, 1_400_000]);
+        UARegistry r2 =
+            _regs(address(0x5CA700A), [uint16(0x0134), 0x0132, 0x0133], [uint64(lo + 1), 2_500_000, 1_400_000]);
         bytes memory pk = _pk(0x0134, ++n);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, r2.uaOf(0x0134, pk)));
         UACall.register(r2, 0x0134, pk, _pqzOnly(_pk(0x0142, 904)), hex"01", hex"01");
@@ -249,9 +289,12 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         uint16[3] memory ks = [uint16(0x0130), 0x0131, 0x0134];
         uint256[3] memory sigs = [uint256(2_420), 3_309, 4_627];
         for (uint256 i; i < 3; ++i) {
-            UARegistry r = _regs(address(uint160(0x5CA7010 + i)), [ks[i], 0x0132, 0x0133], [caps[i], 2_500_000, 1_400_000]);
+            UARegistry r =
+                _regs(address(uint160(0x5CA7010 + i)), [ks[i], 0x0132, 0x0133], [caps[i], 2_500_000, 1_400_000]);
             uint256 b = _singleBound(caps[i], sigs[i]);
-            emit log_named_uint(string.concat("MD-13 ", PqzSet.NAME, " bound kind ", vm.toString(abi.encodePacked(ks[i]))), b);
+            emit log_named_uint(
+                string.concat("MD-13 ", PqzSet.NAME, " bound kind ", vm.toString(abi.encodePacked(ks[i]))), b
+            );
             if (b <= LIM) {
                 _singleHolder(r, ks[i]);
             } else {
@@ -260,7 +303,8 @@ contract UARegistryPqzBoundTest is UARegistryBase {
                 UACall.register(r, ks[i], pk, _pqzOnly(_pk(0x0142, 905 + i)), hex"01", hex"01");
             }
         }
-        bool big = keccak256(bytes(PqzSet.NAME)) == keccak256("n2560-kmax16384") || keccak256(bytes(PqzSet.NAME)) == keccak256("n2816-kmax65536");
+        bool big = keccak256(bytes(PqzSet.NAME)) == keccak256("n2560-kmax16384")
+            || keccak256(bytes(PqzSet.NAME)) == keccak256("n2816-kmax65536");
         assertEq(_singleBound(8_850_000, 4_627) > LIM, big, "the cached mldsa87 holds a PQZ key at n2048 / n2304 only");
         assertLe(_singleBound(5_950_000, 3_309), LIM, "the cached mldsa65 holds one at every set");
     }

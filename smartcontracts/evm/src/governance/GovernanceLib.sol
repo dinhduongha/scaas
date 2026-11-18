@@ -36,12 +36,12 @@ library GovernanceLib {
 
     /// @notice Initial role holders (CTR-TOK-25 `Roles`); each only for a set flag, 0 = none.
     struct Roles {
-        bytes32 minter;      // MINTABLE
-        bytes32 rateAdmin;   // RATE_ADJUSTABLE, contract only: a native id with code
-        bytes32 guardian;    // WRAP_DISABLEABLE
-        bytes32 issuer;      // each set bit of FREEZE / FORCE / PAUSE (5-7), contract only, an `msig` UA too (RK-1); 8, 9 (any holder)
-        bytes32 compliance;  // RECORD (bit 10), contract only, an `msig` UA too
-        bytes32 burner;      // BURNER (bit 30, CTR-GOV-29), any holder; the twin of `minter`
+        bytes32 minter; // MINTABLE
+        bytes32 rateAdmin; // RATE_ADJUSTABLE, contract only: a native id with code
+        bytes32 guardian; // WRAP_DISABLEABLE
+        bytes32 issuer; // each set bit of FREEZE / FORCE / PAUSE (5-7), contract only, an `msig` UA too (RK-1); 8, 9 (any holder)
+        bytes32 compliance; // RECORD (bit 10), contract only, an `msig` UA too
+        bytes32 burner; // BURNER (bit 30, CTR-GOV-29), any holder; the twin of `minter`
     }
 
     /// @notice A bit's holders, leaves included, and its live roots (`grantor == 0`): `holderCount` is `holders`, the
@@ -65,20 +65,20 @@ library GovernanceLib {
     /// @dev Spec §1.4. Every identity is a UA id (`bytes32`, CTR-GOV-01 Change, owner 2026-11-04): a native account's id
     ///      is its padded address, a derived UA its registered id. `rescueTo` is a payout address and stays one.
     struct GovernanceStorage {
-        uint256 features;                                                       // +0, written by init, cleared one-way (8, 9, 28: enableFeature)
-        uint256 lockedFeatures;                                                 // +1, no writer after init
-        bytes32 admin;                                                          // +2
-        bytes32 pendingAdmin;                                                   // +3
-        uint64 grantDelay;                                                      // +4, no writer after init (spec §1.6)
-        uint32 adminGeneration;                                                 //    completed changes of admin
+        uint256 features; // +0, written by init, cleared one-way (8, 9, 28: enableFeature)
+        uint256 lockedFeatures; // +1, no writer after init
+        bytes32 admin; // +2
+        bytes32 pendingAdmin; // +3
+        uint64 grantDelay; // +4, no writer after init (spec §1.6)
+        uint32 adminGeneration; //    completed changes of admin
         uint64 lastProposedAt;
-        mapping(uint256 bit => mapping(bytes32 account => uint8)) roles;        // +5, 0 none, 1 WHOLE, 2 LIMITED
-        mapping(uint256 bit => Counts) counts;                                  // +6
+        mapping(uint256 bit => mapping(bytes32 account => uint8)) roles; // +5, 0 none, 1 WHOLE, 2 LIMITED
+        mapping(uint256 bit => Counts) counts; // +6
         mapping(uint256 bit => mapping(bytes32 holder => IGovernance.Grant)) grants; // +7
         /// @dev Bumped when a holder loses the bit, which kills every leaf it granted, without a walk.
-        mapping(uint256 bit => mapping(bytes32 holder => uint32)) epoch;        // +8
+        mapping(uint256 bit => mapping(bytes32 holder => uint32)) epoch; // +8
         mapping(uint256 bit => mapping(bytes32 account => PendingGrant)) pending; // +9
-        address rescueTo;                                                       // +10, no writer after init (spec §6.2)
+        address rescueTo; // +10, no writer after init (spec §6.2)
     }
 
     // keccak256(abi.encode(uint256(keccak256("scaas.governance")) - 1)) & ~bytes32(uint256(0xff))
@@ -96,9 +96,18 @@ library GovernanceLib {
     ///         `rescueTo` 0 stores `RescueLib.SCAAS_DEV_RESCUE` (CTR-GOV-25). `roles.issuer` holds
     ///         each set bit of 5-7, `roles.compliance` bit 10 (regulated-kinds spec §2.4); `uaRegistry` answers `kindOf` for
     ///         a derived holder of a regulated contract-only bit (RK-1).
-    function init(uint256 features, uint256 locked, bytes32 admin, uint64 grantDelay, address rescueTo, Roles memory roles,
-        uint256 valid, uint256 roleBits, uint256 contractOnly, address uaRegistry) public
-    {
+    function init(
+        uint256 features,
+        uint256 locked,
+        bytes32 admin,
+        uint64 grantDelay,
+        address rescueTo,
+        Roles memory roles,
+        uint256 valid,
+        uint256 roleBits,
+        uint256 contractOnly,
+        address uaRegistry
+    ) public {
         if (grantDelay > MAX_GRANT_DELAY) revert IGovernance.GrantDelayTooLong(grantDelay);
         uint256 bad = features & ~valid;
         if (bad != 0) revert IGovernance.FeatureInvalidForKind(_lowest(bad));
@@ -106,8 +115,10 @@ library GovernanceLib {
         if (features & _bit(GovernanceBits.BURNER) != 0 && features & _bit(GovernanceBits.BURNABLE) != 0) {
             revert IGovernance.FeatureConflict(GovernanceBits.BURNER, GovernanceBits.BURNABLE);
         }
-        if ((features & _bit(GovernanceBits.RESCUABLE) == 0 && rescueTo != address(0)) || rescueTo == address(this) || rescueTo == MetaTxLib.UA_POOL
-            || rescueTo == MetaTxLib.SHIELD_POOL) revert IRescuable.RescueConfigInvalid();
+        if (
+            (features & _bit(GovernanceBits.RESCUABLE) == 0 && rescueTo != address(0)) || rescueTo == address(this)
+                || rescueTo == MetaTxLib.UA_POOL || rescueTo == MetaTxLib.SHIELD_POOL
+        ) revert IRescuable.RescueConfigInvalid();
         // a lock holds a set bit on; only 8, 9, 28, where valid, may be locked off (round 3s, spec §5.3)
         if (locked & ~(features | (GovernanceBits.ENABLEABLE & valid)) != 0) revert IGovernance.LockedNotSubset();
         GovernanceStorage storage s = $();
@@ -125,12 +136,17 @@ library GovernanceLib {
         }
         if (roles.issuer != 0) {
             // the set issuer bits, and each list bit 8, 9 that can still be enabled (round 3s, spec §6.3, §5.5, R-7)
-            uint256 iss = (features | GovernanceBits.enableable(features, locked, valid, admin, false)) & GovernanceBits.ISSUER_BITS;
+            uint256 iss = (features | GovernanceBits.enableable(features, locked, valid, admin, false))
+                & GovernanceBits.ISSUER_BITS;
             if (iss == 0) revert IGovernance.RoleWithoutFeature(GovernanceBits.FREEZE);
-            for (; iss != 0; iss &= iss - 1) _grant(s, _lowest(iss), roles.issuer, 0, roleBits, contractOnly, uaRegistry);
+            for (; iss != 0; iss &= iss - 1) {
+                _grant(s, _lowest(iss), roles.issuer, 0, roleBits, contractOnly, uaRegistry);
+            }
         }
         if (roles.compliance != 0) {
-            if (features & _bit(GovernanceBits.RECORD) == 0) revert IGovernance.RoleWithoutFeature(GovernanceBits.RECORD);
+            if (features & _bit(GovernanceBits.RECORD) == 0) {
+                revert IGovernance.RoleWithoutFeature(GovernanceBits.RECORD);
+            }
             _grant(s, GovernanceBits.RECORD, roles.compliance, 0, roleBits, contractOnly, uaRegistry);
         }
         if (admin != 0) {
@@ -151,9 +167,14 @@ library GovernanceLib {
     // ------------------------------------------------------------------ admin
 
     /// @notice Spec §1.6: on a `WHOLE` holder a no-op; else, with a `grantDelay`, two calls (action `GRANT`).
-    function grantRole(uint8 bit, bytes32 account, bytes32 caller, uint256 roleBits, uint256 contractOnly, address uaRegistry)
-        public
-    {
+    function grantRole(
+        uint8 bit,
+        bytes32 account,
+        bytes32 caller,
+        uint256 roleBits,
+        uint256 contractOnly,
+        address uaRegistry
+    ) public {
         GovernanceStorage storage s = _onlyAdmin(caller);
         _check(s, bit, account, roleBits, contractOnly, uaRegistry);
         if (s.roles[bit][account] == WHOLE) return;
@@ -180,9 +201,13 @@ library GovernanceLib {
     function revokeRole(uint8 bit, bytes32 account, bytes32 caller, uint256 delayedRelax) public {
         GovernanceStorage storage s = $();
         bool admin = caller != 0 && caller == s.admin;
-        if (!admin && (caller == 0 || caller != s.grants[bit][account].grantor || s.roles[bit][account] != LIMITED
-            || s.roles[bit][caller] == 0))
-        {
+        if (
+            !admin
+                && (caller == 0
+                    || caller != s.grants[bit][account].grantor
+                    || s.roles[bit][account] != LIMITED
+                    || s.roles[bit][caller] == 0)
+        ) {
             revert IAdmin.NotAdmin(caller);
         }
         if (_delayed(s, bit, delayedRelax)) {
@@ -223,10 +248,18 @@ library GovernanceLib {
     ///         On a bit of `delayedRelax` with a `grantDelay`, terms whose `validUntil` ends before `now + grantDelay`, and
     ///         terms that narrow the holder in any other word (`_cuts`; Fable D P2-2, A-4, re-check C1, C2), are a
     ///         relaxation: two calls on either path (regulated-kinds spec §3.6, CTR-GOV-09 "every path that relaxes").
-    function setGrant(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata t, bytes32 caller, uint256 roleBits,
-        uint256 contractOnly, uint256 scalarBits, uint256 scopeBits, address uaRegistry, uint256 delayedRelax)
-        public returns (bool leaf, bytes32 parentScope)
-    {
+    function setGrant(
+        uint8 bit,
+        bytes32 holder,
+        IGovernance.GrantTerms calldata t,
+        bytes32 caller,
+        uint256 roleBits,
+        uint256 contractOnly,
+        uint256 scalarBits,
+        uint256 scopeBits,
+        address uaRegistry,
+        uint256 delayedRelax
+    ) public returns (bool leaf, bytes32 parentScope) {
         // CTR-GOV-31: no holder of bit 32 adds another at once and unannounced (no leaves, no delegable root)
         if (bit == GovernanceBits.AUDITOR && t.delegable) revert IGovernance.DelegableRefused(bit);
         (leaf, parentScope) = _leafPath(bit, holder, t, caller);
@@ -238,12 +271,17 @@ library GovernanceLib {
     /// @dev Whether a `setGrant` applies now: a leaf's or, with no `grantDelay`, at once; the admin's narrowing at once (spec
     ///      §1.6); a widening, or a cut on a bit of `delayedRelax`, in two calls (regulated-kinds spec §3.6): a `validUntil`
     ///      before `now + grantDelay`, or any other word that narrows the holder (`_cuts`; D P2-2, A-4, re-check C1, C2).
-    function _setDue(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata t, bytes32 caller, bool leaf,
-        uint256 delayedRelax) private returns (bool)
-    {
+    function _setDue(
+        uint8 bit,
+        bytes32 holder,
+        IGovernance.GrantTerms calldata t,
+        bytes32 caller,
+        bool leaf,
+        uint256 delayedRelax
+    ) private returns (bool) {
         GovernanceStorage storage s = $();
-        bool cut = _delayed(s, bit, delayedRelax) && ((t.validUntil != 0 && t.validUntil < block.timestamp + s.grantDelay)
-            || _cuts(s, bit, holder, t));
+        bool cut = _delayed(s, bit, delayedRelax)
+            && ((t.validUntil != 0 && t.validUntil < block.timestamp + s.grantDelay) || _cuts(s, bit, holder, t));
         if (!cut && (leaf || s.grantDelay == 0)) return true;
         if (!cut && _narrowing(s, bit, holder, t)) {
             delete s.pending[bit][holder];
@@ -258,7 +296,9 @@ library GovernanceLib {
     ///      equal or new with the limit it carries, `scope` equal, `delegable` not raised. A leaf the admin would make a root
     ///      drops its parent's bound, and a new holder adds one: neither is a narrowing.
     function _narrowing(GovernanceStorage storage s, uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata t)
-        private view returns (bool)
+        private
+        view
+        returns (bool)
     {
         uint8 r = s.roles[bit][holder];
         if (r == WHOLE) return !t.delegable;
@@ -275,7 +315,9 @@ library GovernanceLib {
     ///      `total`, `perWindow` or `maxUses`, or `delegable` dropped (its leaves die at once by the epoch bump). `validUntil`
     ///      is `_setDue`'s own test. A non-holder has nothing to lose.
     function _cuts(GovernanceStorage storage s, uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata t)
-        private view returns (bool)
+        private
+        view
+        returns (bool)
     {
         uint8 r = s.roles[bit][holder];
         if (r == 0) return false;
@@ -303,9 +345,14 @@ library GovernanceLib {
     ///      proposes (false) and changes nothing else. `commit` binds the action, the key and, for `SET`, the terms.
     ///      The admin's call proposes over a live pending of another proposer (Fable D P2-1): the admin may cancel it
     ///      anyway, and a holder must not keep the one slot so that the admin's delayed revoke never starts.
-    function _due(GovernanceStorage storage s, uint8 bit, bytes32 account, bytes32 caller, uint8 action,
-        IGovernance.GrantTerms memory t) private returns (bool)
-    {
+    function _due(
+        GovernanceStorage storage s,
+        uint8 bit,
+        bytes32 account,
+        bytes32 caller,
+        uint8 action,
+        IGovernance.GrantTerms memory t
+    ) private returns (bool) {
         bytes32 c = keccak256(abi.encode(action, bit, account, action == SET ? keccak256(abi.encode(t)) : bytes32(0)));
         PendingGrant storage p = s.pending[bit][account];
         if (_live(s, p) && (caller != s.admin || p.proposer == caller)) {
@@ -330,7 +377,9 @@ library GovernanceLib {
 
     /// @notice `pendingGrant(bit, account)`: dead ones too, with `live`.
     function pendingGrant(uint8 bit, bytes32 account)
-        public view returns (uint64 eta, bytes32 proposer, bytes32 commit, bool live)
+        public
+        view
+        returns (uint64 eta, bytes32 proposer, bytes32 commit, bool live)
     {
         GovernanceStorage storage s = $();
         PendingGrant storage p = s.pending[bit][account];
@@ -342,7 +391,9 @@ library GovernanceLib {
     ///      holds nothing or is its own leaf and is not barred (B-05), and the terms narrow its own, so an expired parent or
     ///      one with nothing left adds nobody. Returns the parent's scope, which the contract's order checks.
     function _leafPath(uint8 bit, bytes32 holder, IGovernance.GrantTerms calldata t, bytes32 caller)
-        private view returns (bool leaf, bytes32 parentScope)
+        private
+        view
+        returns (bool leaf, bytes32 parentScope)
     {
         GovernanceStorage storage s = $();
         leaf = caller != s.admin || caller == 0;
@@ -374,7 +425,8 @@ library GovernanceLib {
             _root(s, bit, r, g);
         }
         (g.min, g.max, g.total, g.perWindow) = (t.min, t.max, t.total, t.perWindow);
-        (g.window, g.validUntil, g.maxUses, g.scope, g.delegable) = (t.window, t.validUntil, t.maxUses, t.scope, t.delegable);
+        (g.window, g.validUntil, g.maxUses, g.scope, g.delegable) =
+        (t.window, t.validUntil, t.maxUses, t.scope, t.delegable);
         if (r == 0) emit IGovernance.RoleGranted(bit, holder, caller); // B-31: the indexed holder list is whole
         s.roles[bit][holder] = LIMITED;
         emit IGovernance.GrantSet(bit, holder, leaf ? caller : bytes32(0));
@@ -495,7 +547,9 @@ library GovernanceLib {
     /// @dev The two first rows of spec §6.2 on every kind: bit 17, and never the token's own units. Returns `rescueTo`.
     function rescueOpen(address asset) internal view returns (address) {
         GovernanceStorage storage s = $();
-        if (s.features & _bit(GovernanceBits.RESCUABLE) == 0) revert IGovernance.FeatureNotSet(GovernanceBits.RESCUABLE);
+        if (s.features & _bit(GovernanceBits.RESCUABLE) == 0) {
+            revert IGovernance.FeatureNotSet(GovernanceBits.RESCUABLE);
+        }
         if (asset == address(this)) revert IRescuable.RescueAssetInvalid(asset);
         return s.rescueTo;
     }
@@ -506,9 +560,15 @@ library GovernanceLib {
 
     // ------------------------------------------------------------------ internals
 
-    function _grant(GovernanceStorage storage s, uint8 bit, bytes32 account, bytes32 caller, uint256 roleBits,
-        uint256 contractOnly, address uaRegistry) private
-    {
+    function _grant(
+        GovernanceStorage storage s,
+        uint8 bit,
+        bytes32 account,
+        bytes32 caller,
+        uint256 roleBits,
+        uint256 contractOnly,
+        address uaRegistry
+    ) private {
         _check(s, bit, account, roleBits, contractOnly, uaRegistry);
         uint8 r = s.roles[bit][account];
         if (r == WHOLE) return;
@@ -521,9 +581,14 @@ library GovernanceLib {
     /// @dev Every grant path, at every call (the propose and the confirm): the holder is no pool and not this contract
     ///      (F-07), the bit is a set role bit, a contract-only bit's holder is a contract, and no id holds both `FORCE` and
     ///      `RECORD` (CTR-AS-03).
-    function _check(GovernanceStorage storage s, uint8 bit, bytes32 account, uint256 roleBits, uint256 contractOnly,
-        address uaRegistry) private view
-    {
+    function _check(
+        GovernanceStorage storage s,
+        uint8 bit,
+        bytes32 account,
+        uint256 roleBits,
+        uint256 contractOnly,
+        address uaRegistry
+    ) private view {
         if (account == 0) revert IGovernance.RoleAccountZero(bit);
         if (_isPool(account)) revert IGovernance.RoleAccountPool(bit, account);
         if (roleBits & _bit(bit) == 0) revert IGovernance.NoSuchRole(bit);
@@ -533,16 +598,20 @@ library GovernanceLib {
         }
         // contract-only: a native id (top 96 bits 0) whose address has code; on a regulated bit also a threshold (`msig`)
         // UA, its kind read from the registry here, at the grant, never at a use (RK-1)
-        if (contractOnly & _bit(bit) != 0 && (uint256(account) >> 160 == 0
-            ? !SigCheck.isContract(address(uint160(uint256(account))))
-            : (GovernanceBits.REGULATED_ROLES & _bit(bit) == 0 || uaRegistry == address(0)
-                || IUARegistry(uaRegistry).kindOf(account) != UAKinds.MSIG)))
-        {
+        if (
+            contractOnly & _bit(bit) != 0
+                && (uint256(account) >> 160 == 0
+                        ? !SigCheck.isContract(address(uint160(uint256(account))))
+                        : (GovernanceBits.REGULATED_ROLES & _bit(bit) == 0
+                            || uaRegistry == address(0)
+                            || IUARegistry(uaRegistry).kindOf(account) != UAKinds.MSIG))
+        ) {
             revert IGovernance.RoleNotContract(bit, account);
         }
-        if ((bit == GovernanceBits.FORCE && s.roles[GovernanceBits.RECORD][account] != 0)
-            || (bit == GovernanceBits.RECORD && s.roles[GovernanceBits.FORCE][account] != 0))
-        {
+        if (
+            (bit == GovernanceBits.FORCE && s.roles[GovernanceBits.RECORD][account] != 0)
+                || (bit == GovernanceBits.RECORD && s.roles[GovernanceBits.FORCE][account] != 0)
+        ) {
             revert IGovernance.RoleConflict(bit, account);
         }
     }
@@ -626,13 +695,19 @@ library GovernanceLib {
         if (t.delegable) revert IGovernance.GrantNotNarrower(6);
         if (t.min < p.min) revert IGovernance.GrantNotNarrower(0);
         if (t.max > p.max) revert IGovernance.GrantNotNarrower(1);
-        if (p.total != 0 && (t.total == 0 || uint256(p.spentTotal) + t.total > p.total)) revert IGovernance.GrantNotNarrower(2);
+        if (p.total != 0 && (t.total == 0 || uint256(p.spentTotal) + t.total > p.total)) {
+            revert IGovernance.GrantNotNarrower(2);
+        }
         if (p.perWindow != 0) {
             if (t.perWindow == 0 || t.perWindow > p.perWindow) revert IGovernance.GrantNotNarrower(3);
             if (t.window != p.window) revert IGovernance.GrantNotNarrower(8);
         }
-        if (p.validUntil != 0 && (t.validUntil == 0 || t.validUntil > p.validUntil)) revert IGovernance.GrantNotNarrower(4);
-        if (p.maxUses != 0 && (t.maxUses == 0 || uint256(p.uses) + t.maxUses > p.maxUses)) revert IGovernance.GrantNotNarrower(5);
+        if (p.validUntil != 0 && (t.validUntil == 0 || t.validUntil > p.validUntil)) {
+            revert IGovernance.GrantNotNarrower(4);
+        }
+        if (p.maxUses != 0 && (t.maxUses == 0 || uint256(p.uses) + t.maxUses > p.maxUses)) {
+            revert IGovernance.GrantNotNarrower(5);
+        }
     }
 
     function _onlyAdmin(bytes32 caller) private view returns (GovernanceStorage storage s) {
@@ -645,6 +720,9 @@ library GovernanceLib {
     }
 
     function _lowest(uint256 x) private pure returns (uint8 i) {
-        while (x & 1 == 0) { x >>= 1; ++i; }
+        while (x & 1 == 0) {
+            x >>= 1;
+            ++i;
+        }
     }
 }

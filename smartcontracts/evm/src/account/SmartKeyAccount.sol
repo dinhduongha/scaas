@@ -12,9 +12,9 @@ import {ERC7739Lib} from "../common/ERC7739Lib.sol";
 import {WebAuthnClientData} from "../common/WebAuthnClientData.sol";
 
 enum KeyKind {
-    NONE,           // 0: empty or removed slot
-    P256_WEBAUTHN,  // 1: passkey: (x, y) P-256 + rpIdHash + originHash
-    SECP256K1       // 2: seed-derived key: x = address (right-aligned), the rest 0
+    NONE, // 0: empty or removed slot
+    P256_WEBAUTHN, // 1: passkey: (x, y) P-256 + rpIdHash + originHash
+    SECP256K1 // 2: seed-derived key: x = address (right-aligned), the rest 0
 }
 
 /// @dev One authorised key of the subject. `keyId = keccak256(abi.encode(key))`.
@@ -22,8 +22,8 @@ struct SubjectKey {
     KeyKind kind;
     bytes32 x;
     bytes32 y;
-    bytes32 rpIdHash;    // sha256(rpId): the first 32 bytes of authenticatorData
-    bytes32 originHash;  // keccak256(origin): the "origin" value of clientDataJSON
+    bytes32 rpIdHash; // sha256(rpId): the first 32 bytes of authenticatorData
+    bytes32 originHash; // keccak256(origin): the "origin" value of clientDataJSON
 }
 
 /// @dev A signature of the account (CTR-ACC-02): the explicit form of `abi.encode(keyIndex, proof, signature)`, on its own entries.
@@ -76,7 +76,7 @@ contract SmartKeyAccount is WalletExecute, IERC1271 {
     uint256 public keyCount;
     uint256 public nextKeyIndex;
     address public guardian;
-    bytes32 public pendingRecovery;   // keyId of the key the guardian wants to add
+    bytes32 public pendingRecovery; // keyId of the key the guardian wants to add
     uint256 public recoveryReadyAt;
 
     event KeyAdded(uint256 indexed index, KeyKind kind, bytes32 indexed keyId);
@@ -149,7 +149,9 @@ contract SmartKeyAccount is WalletExecute, IERC1271 {
     /// @notice Named builder (CTR-MTX-21): the `MetaTransaction{from: this, data, batch: 0, nonce, validUntil}`, no
     ///         relayer or fee binding, run through the base pipeline. Same digest and lane as `mtxExecute`.
     function mtxExecuteAsOwner(bytes calldata data, uint256 nonce, uint256 validUntil, bytes calldata signature)
-        external nonReentrant returns (bytes memory)
+        external
+        nonReentrant
+        returns (bytes memory)
     {
         MetaTxLib.MetaTransaction memory m;
         m.from = address(this);
@@ -160,41 +162,77 @@ contract SmartKeyAccount is WalletExecute, IERC1271 {
     }
 
     /// @notice The named typed entries (TS-D14): anyone submits, `e.from` is the account (`onlySelf`), `sig` one of its keys.
-    function mtxAddKey(MetaTxLib.Envelope calldata e, uint8 kind, bytes32 x, bytes32 y, bytes32 rpIdHash, bytes32 originHash,
-        AccountSig calldata sig) external nonReentrant returns (bytes memory)
-    {
-        return _named(_ADD_KEY_TYPEHASH, SmartKeyAccount.addKey.selector, e, abi.encode(kind, x, y, rpIdHash, originHash), _blob(sig));
+    function mtxAddKey(
+        MetaTxLib.Envelope calldata e,
+        uint8 kind,
+        bytes32 x,
+        bytes32 y,
+        bytes32 rpIdHash,
+        bytes32 originHash,
+        AccountSig calldata sig
+    ) external nonReentrant returns (bytes memory) {
+        return _named(
+            _ADD_KEY_TYPEHASH,
+            SmartKeyAccount.addKey.selector,
+            e,
+            abi.encode(kind, x, y, rpIdHash, originHash),
+            _blob(sig)
+        );
     }
 
     function mtxRemoveKey(MetaTxLib.Envelope calldata e, uint256 index, AccountSig calldata sig)
-        external nonReentrant returns (bytes memory)
+        external
+        nonReentrant
+        returns (bytes memory)
     {
         return _named(_REMOVE_KEY_TYPEHASH, SmartKeyAccount.removeKey.selector, e, abi.encode(index), _blob(sig));
     }
 
-    function mtxRotateKey(MetaTxLib.Envelope calldata e, uint256 index, uint8 kind, bytes32 x, bytes32 y, bytes32 rpIdHash,
-        bytes32 originHash, AccountSig calldata sig) external nonReentrant returns (bytes memory)
-    {
-        return _named(_ROTATE_KEY_TYPEHASH, SmartKeyAccount.rotateKey.selector, e,
-            abi.encode(index, kind, x, y, rpIdHash, originHash), _blob(sig));
+    function mtxRotateKey(
+        MetaTxLib.Envelope calldata e,
+        uint256 index,
+        uint8 kind,
+        bytes32 x,
+        bytes32 y,
+        bytes32 rpIdHash,
+        bytes32 originHash,
+        AccountSig calldata sig
+    ) external nonReentrant returns (bytes memory) {
+        return _named(
+            _ROTATE_KEY_TYPEHASH,
+            SmartKeyAccount.rotateKey.selector,
+            e,
+            abi.encode(index, kind, x, y, rpIdHash, originHash),
+            _blob(sig)
+        );
     }
 
     function mtxSetGuardian(MetaTxLib.Envelope calldata e, address guardian_, AccountSig calldata sig)
-        external nonReentrant returns (bytes memory)
+        external
+        nonReentrant
+        returns (bytes memory)
     {
-        return _named(_SET_GUARDIAN_TYPEHASH, SmartKeyAccount.setGuardian.selector, e, abi.encode(guardian_), _blob(sig));
+        return _named(
+            _SET_GUARDIAN_TYPEHASH, SmartKeyAccount.setGuardian.selector, e, abi.encode(guardian_), _blob(sig)
+        );
     }
 
     function mtxCancelRecovery(MetaTxLib.Envelope calldata e, AccountSig calldata sig)
-        external nonReentrant returns (bytes memory)
+        external
+        nonReentrant
+        returns (bytes memory)
     {
         return _named(_CANCEL_RECOVERY_TYPEHASH, SmartKeyAccount.cancelRecovery.selector, e, "", _blob(sig));
     }
 
     /// @notice Struct `Execute`: the wallet shows target and value, `data` stays hex.
-    function mtxExecute(MetaTxLib.Envelope calldata e, address target, uint256 value, bytes calldata data, AccountSig calldata sig)
-        external nonReentrant returns (bytes memory)
-    {
+    function mtxExecute(
+        MetaTxLib.Envelope calldata e,
+        address target,
+        uint256 value,
+        bytes calldata data,
+        AccountSig calldata sig
+    ) external nonReentrant returns (bytes memory) {
         return _namedExecute(e, target, value, data, _blob(sig));
     }
 
@@ -227,7 +265,10 @@ contract SmartKeyAccount is WalletExecute, IERC1271 {
     /// @notice The subject does what it wants with its own assets; tokens still apply their own rules (no EOA
     ///         approve). Runs under the guard, so the target cannot re-enter the account.
     function execute(address target, uint256 value, bytes calldata data)
-        external nonReentrant onlySelf returns (bytes memory)
+        external
+        nonReentrant
+        onlySelf
+        returns (bytes memory)
     {
         (bool ok, bytes memory ret) = target.call{value: value}(data);
         if (!ok) revert CallFailed(ret);
@@ -273,7 +314,11 @@ contract SmartKeyAccount is WalletExecute, IERC1271 {
     }
 
     /// @notice The allowlist (CTR-MTX-19): the base `cancelNonce`, then the six self-only functions; fee `NONE` only.
-    function _mtxSelectorsBody() internal pure override returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+    function _mtxSelectorsBody()
+        internal
+        pure
+        override
+        returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         s = new bytes4[](7);
         c = new uint8[](7);
@@ -285,7 +330,9 @@ contract SmartKeyAccount is WalletExecute, IERC1271 {
         s[4] = SmartKeyAccount.setGuardian.selector;
         s[5] = SmartKeyAccount.cancelRecovery.selector;
         s[6] = SmartKeyAccount.execute.selector;
-        for (uint256 i; i < 7; ++i) c[i] = FEE_CLASS_ABSOLUTE;
+        for (uint256 i; i < 7; ++i) {
+            c[i] = FEE_CLASS_ABSOLUTE;
+        }
     }
 
     // ------------------------------------------------------------------ MetaTxBase hooks
@@ -370,8 +417,7 @@ contract SmartKeyAccount is WalletExecute, IERC1271 {
     }
 
     function _isValid(bytes32 digest, bytes calldata signature) private view returns (bool) {
-        (uint256 index, bytes32[] memory proof, bytes memory sig) =
-            abi.decode(signature, (uint256, bytes32[], bytes));
+        (uint256 index, bytes32[] memory proof, bytes memory sig) = abi.decode(signature, (uint256, bytes32[], bytes));
         SubjectKey storage k = _keys[index];
         bytes32 message = proof.length == 0 ? digest : MerkleProof.processProof(proof, batchLeaf(digest));
         KeyKind kind = k.kind;

@@ -129,8 +129,10 @@ contract LigeroVerifier {
             let l1 := and(shr(64, s), M64)
             let l2 := and(shr(128, s), M64)
             let l3 := shr(192, s)
-            c := or(or(sub(l0, mul(Q, iszero(lt(l0, Q)))), shl(64, sub(l1, mul(Q, iszero(lt(l1, Q)))))),
-                or(shl(128, sub(l2, mul(Q, iszero(lt(l2, Q))))), shl(192, sub(l3, mul(Q, iszero(lt(l3, Q)))))))
+            c := or(
+                or(sub(l0, mul(Q, iszero(lt(l0, Q)))), shl(64, sub(l1, mul(Q, iszero(lt(l1, Q)))))),
+                or(shl(128, sub(l2, mul(Q, iszero(lt(l2, Q))))), shl(192, sub(l3, mul(Q, iszero(lt(l3, Q))))))
+            )
         }
     }
 
@@ -150,8 +152,10 @@ contract LigeroVerifier {
 
     function eb(uint256 a, uint256 x) internal pure returns (uint256 c) {
         assembly {
-            c := or(or(mulmod(and(a, M64), x, Q), shl(64, mulmod(and(shr(64, a), M64), x, Q))),
-                or(shl(128, mulmod(and(shr(128, a), M64), x, Q)), shl(192, mulmod(shr(192, a), x, Q))))
+            c := or(
+                or(mulmod(and(a, M64), x, Q), shl(64, mulmod(and(shr(64, a), M64), x, Q))),
+                or(shl(128, mulmod(and(shr(128, a), M64), x, Q)), shl(192, mulmod(shr(192, a), x, Q)))
+            )
         }
     }
 
@@ -198,8 +202,10 @@ contract LigeroVerifier {
 
     function red2(uint256 x02, uint256 x13) internal pure returns (uint256 c) {
         assembly {
-            c := or(or(mod(and(x02, M128), Q), shl(64, mod(and(x13, M128), Q))),
-                or(shl(128, mod(shr(128, x02), Q)), shl(192, mod(shr(128, x13), Q))))
+            c := or(
+                or(mod(and(x02, M128), Q), shl(64, mod(and(x13, M128), Q))),
+                or(shl(128, mod(shr(128, x02), Q)), shl(192, mod(shr(128, x13), Q)))
+            )
         }
     }
 
@@ -300,7 +306,9 @@ contract LigeroVerifier {
         (v.sv, v.ss, v.sb) = (cur, cur + v.nsv, cur + 2 * v.nsv);
         v.m = v.sb + v.nsb;
         uint256 ntri;
-        for (uint256 g; g < nb; ++g) ntri += v.nr * (1 + v.bBits[g]);
+        for (uint256 g; g < nb; ++g) {
+            ntri += v.nr * (1 + v.bBits[g]);
+        }
         ntri += v.nsv + v.nsb;
         v.tri = new uint256[](ntri);
         uint256 p;
@@ -314,12 +322,20 @@ contract LigeroVerifier {
                 }
             }
         }
-        for (uint256 r; r < v.nsv; ++r) v.tri[p++] = (v.sv + r) | (v.sv + r) << 32 | (v.ss + r) << 64;
-        for (uint256 r; r < v.nsb; ++r) v.tri[p++] = (v.sb + r) | (v.sb + r) << 32 | (v.sb + r) << 64;
+        for (uint256 r; r < v.nsv; ++r) {
+            v.tri[p++] = (v.sv + r) | (v.sv + r) << 32 | (v.ss + r) << 64;
+        }
+        for (uint256 r; r < v.nsb; ++r) {
+            v.tri[p++] = (v.sb + r) | (v.sb + r) << 32 | (v.sb + r) << 64;
+        }
     }
 
     // ---------------------------------------------------------------- entry points
-    function verify(uint8 op, bytes calldata stmt, bytes calldata proof, Params calldata p) external view returns (bool ok) {
+    function verify(uint8 op, bytes calldata stmt, bytes calldata proof, Params calldata p)
+        external
+        view
+        returns (bool ok)
+    {
         (ok,) = _verify(op, stmt, proof, p);
     }
 
@@ -410,17 +426,27 @@ contract LigeroVerifier {
     }
 
     /// challenges, PoW, query indices (ligero.rs verify_inner, same order as the prover)
-    function drawAll(V memory v, bytes calldata proof, uint256 polyBytes, uint256 powBits) internal pure returns (bool) {
+    function drawAll(V memory v, bytes calldata proof, uint256 polyBytes, uint256 powBits)
+        internal
+        pure
+        returns (bool)
+    {
         absorbCd(v, proof[0:32]);
         v.ca = new uint256[](v.m);
         v.cb = new uint256[](v.m);
-        for (uint256 i; i < v.m; ++i) v.ca[i] = f4(v);
-        for (uint256 i; i < v.m; ++i) v.cb[i] = f4(v);
+        for (uint256 i; i < v.m; ++i) {
+            v.ca[i] = f4(v);
+        }
+        for (uint256 i; i < v.m; ++i) {
+            v.cb[i] = f4(v);
+        }
         v.cl = f4(v);
         v.cq = f4(v);
         v.rho = f4(v);
         v.rq = new uint256[](v.tri.length);
-        for (uint256 i; i < v.tri.length; ++i) v.rq[i] = f4(v);
+        for (uint256 i; i < v.tri.length; ++i) {
+            v.rq[i] = f4(v);
+        }
         absorbCd(v, proof[32:32 + polyBytes]);
         bytes8 nonce = bytes8(proof[32 + polyBytes:40 + polyBytes]);
         if (uint256(keccak256(abi.encodePacked(TAG_POW, v.st, nonce))) >> (256 - powBits) != 0) return false;
@@ -439,8 +465,10 @@ contract LigeroVerifier {
     function ld4(uint256 o) internal pure returns (uint256 x) {
         assembly {
             let w := calldataload(o)
-            x := or(or(shr(208, w), shl(64, and(shr(160, w), 0xffffffffffff))),
-                or(shl(128, and(shr(112, w), 0xffffffffffff)), shl(192, and(shr(64, w), 0xffffffffffff))))
+            x := or(
+                or(shr(208, w), shl(64, and(shr(160, w), 0xffffffffffff))),
+                or(shl(128, and(shr(112, w), 0xffffffffffff)), shl(192, and(shr(64, w), 0xffffffffffff)))
+            )
         }
     }
 
@@ -514,7 +542,9 @@ contract LigeroVerifier {
             raw[j] = x;
         }
         uint256 d;
-        for (uint256 i; i < v.t; ++i) if (i == 0 || raw[i] != raw[i - 1]) raw[d++] = raw[i];
+        for (uint256 i; i < v.t; ++i) {
+            if (i == 0 || raw[i] != raw[i - 1]) raw[d++] = raw[i];
+        }
         assembly {
             mstore(raw, d)
         }
@@ -528,7 +558,9 @@ contract LigeroVerifier {
         uint256[] memory h = new uint256[](d);
         if (!leaves(v.colOff, v.cw, h)) return false;
         uint256[] memory ix = new uint256[](d);
-        for (uint256 i; i < d; ++i) ix[i] = v.idx[i];
+        for (uint256 i; i < d; ++i) {
+            ix[i] = v.idx[i];
+        }
         return merkleRoot(ix, h, depth, mpOff, v.pOff + plen) == root;
     }
 
@@ -645,16 +677,26 @@ contract LigeroVerifier {
         uint256 m = v.m;
         v.ownIdx = new uint256[](m);
         uint256 nOwn;
-        for (uint256 g; g < v.bBase.length; ++g) for (uint256 r; r < v.nr; ++r) v.ownIdx[v.bBase[g] + r] = ++nOwn;
-        for (uint256 r = v.sv; r < m; ++r) v.ownIdx[r] = ++nOwn;
+        for (uint256 g; g < v.bBase.length; ++g) {
+            for (uint256 r; r < v.nr; ++r) {
+                v.ownIdx[v.bBase[g] + r] = ++nOwn;
+            }
+        }
+        for (uint256 r = v.sv; r < m; ++r) {
+            v.ownIdx[r] = ++nOwn;
+        }
         v.own = new uint256[](nOwn * v.ell);
         v.ownRow = new uint256[](nOwn);
-        for (uint256 r; r < m; ++r) if (v.ownIdx[r] != 0) v.ownRow[v.ownIdx[r] - 1] = r;
+        for (uint256 r; r < m; ++r) {
+            if (v.ownIdx[r] != 0) v.ownRow[v.ownIdx[r] - 1] = r;
+        }
         v.beta = new uint256[](m);
         v.ones = new uint256[](m);
         v.rp = new uint256[](65);
         v.rp[0] = 1;
-        for (uint256 i = 1; i <= 64; ++i) v.rp[i] = em(v.rp[i - 1], v.rho);
+        for (uint256 i = 1; i <= 64; ++i) {
+            v.rp[i] = em(v.rp[i - 1], v.rho);
+        }
         v.rhoL = epow(v.rho, v.ell);
         v.cur = v.rho; // weights start at rho^1
     }
@@ -692,24 +734,37 @@ contract LigeroVerifier {
                     x02 := add(x02, mul(and(w, M02), c))
                     x13 := add(x13, mul(and(shr(64, w), M02), c))
                 }
-                mstore(add(add(a, 32), mul(idx, 32)), or(or(mod(and(x02, M128), Q), shl(64, mod(and(x13, M128), Q))),
-                    or(shl(128, mod(shr(128, x02), Q)), shl(192, mod(shr(128, x13), Q)))))
+                mstore(
+                    add(add(a, 32), mul(idx, 32)),
+                    or(
+                        or(mod(and(x02, M128), Q), shl(64, mod(and(x13, M128), Q))),
+                        or(shl(128, mod(shr(128, x02), Q)), shl(192, mod(shr(128, x13), Q)))
+                    )
+                )
             }
         }
     }
 
     /// ring block (cs.rs Bld::ring): kind 0 A, 1 A^T, 2 one statement polyvec at byte offset `so`; x = big group g.
     /// Big-group own vectors are contiguous: value x of group g is own[g nr l + x].
-    function ring(V memory v, uint256 kind, uint256 so, uint256 kk, uint256 g) internal pure returns (uint256[] memory gam) {
+    function ring(V memory v, uint256 kind, uint256 so, uint256 kk, uint256 g)
+        internal
+        pure
+        returns (uint256[] memory gam)
+    {
         uint256 nout = kind == 2 ? 1 : 32;
         uint256 w0 = take(v, nout * kk);
         gam = new uint256[](nout);
         gam[0] = w0;
-        for (uint256 i = 1; i < nout; ++i) gam[i] = em(gam[i - 1], v.rp[kk]);
+        for (uint256 i = 1; i < nout; ++i) {
+            gam[i] = em(gam[i - 1], v.rp[kk]);
+        }
         uint256[] memory a = new uint256[](64);
         for (uint256 j; j < 32; ++j) {
             if (kind == 2) {
-                for (uint256 idx; idx < 64; ++idx) a[idx] = eb(w0, sc(v, so + 512 * j + 8 * idx));
+                for (uint256 idx; idx < 64; ++idx) {
+                    a[idx] = eb(w0, sc(v, so + 512 * j + 8 * idx));
+                }
             } else {
                 aPass(v.amat, gam, j, kind == 1, a);
             }
@@ -720,7 +775,9 @@ contract LigeroVerifier {
     /// own[p + m] += f_m(a), m < 64 (recurrence f_{m+1} = rho f_m - rho^K (X^m a)_{K-1} - (X^m a)_63)
     function ringJ(V memory v, uint256[] memory a, uint256 kk, uint256 p) internal pure {
         uint256 f;
-        for (uint256 k; k < kk; ++k) f = ea(f, em(v.rp[k], a[k]));
+        for (uint256 k; k < kk; ++k) {
+            f = ea(f, em(v.rp[k], a[k]));
+        }
         uint256[] memory own = v.own;
         for (uint256 m; m < 64; ++m) {
             own[p + m] = ea(own[p + m], f);
@@ -885,7 +942,9 @@ contract LigeroVerifier {
         c.xp = new uint256[](v.d2);
         c.lc = new uint256[](ell);
         c.tmp = new uint256[](ell);
-        for (uint256 d; d < v.idx.length; ++d) if (!oneColumn(v, c, d)) return false;
+        for (uint256 d; d < v.idx.length; ++d) {
+            if (!oneColumn(v, c, d)) return false;
+        }
         return true;
     }
 
@@ -912,7 +971,9 @@ contract LigeroVerifier {
             uint256 acc = ownEval(v, c.lc, u);
             acc = ea(acc, em(dotL(c.bt, c.lc, v.ell), dotU(v.beta, u, m)));
             uint256 lsum;
-            for (uint256 i; i < v.ell; ++i) lsum = addmod(lsum, c.lc[i], Q);
+            for (uint256 i; i < v.ell; ++i) {
+                lsum = addmod(lsum, c.lc[i], Q);
+            }
             acc = ea(acc, eb(dotU(v.ones, u, m), lsum));
             if (evalP(v.qOff, v.d2, c.xp) != ea(acc, blind(u, m, 1))) return false;
         }
@@ -936,8 +997,10 @@ contract LigeroVerifier {
     function blind(uint256 u, uint256 m, uint256 b) internal pure returns (uint256 x) {
         uint256 o = u + 6 * (m + 4 * b);
         assembly {
-            x := or(or(shr(208, calldataload(o)), shl(64, shr(208, calldataload(add(o, 6))))),
-                or(shl(128, shr(208, calldataload(add(o, 12)))), shl(192, shr(208, calldataload(add(o, 18))))))
+            x := or(
+                or(shr(208, calldataload(o)), shl(64, shr(208, calldataload(add(o, 6))))),
+                or(shl(128, shr(208, calldataload(add(o, 12)))), shl(192, shr(208, calldataload(add(o, 18)))))
+            )
         }
     }
 
@@ -1014,7 +1077,10 @@ contract LigeroVerifier {
             for { let c := mload(lc) } gt(c, 0) {} {
                 c := sub(c, 1)
                 let oc := mload(add(add(om, 32), mul(c, 32)))
-                mstore(add(add(lc, 32), mul(c, 32)), mulmod(mulmod(mulmod(inv, mload(add(add(pre, 32), mul(c, 32))), Q), oc, Q), s, Q))
+                mstore(
+                    add(add(lc, 32), mul(c, 32)),
+                    mulmod(mulmod(mulmod(inv, mload(add(add(pre, 32), mul(c, 32))), Q), oc, Q), s, Q)
+                )
                 inv := mulmod(inv, addmod(eta, sub(Q, oc), Q), Q)
             }
         }
@@ -1035,7 +1101,11 @@ contract LigeroVerifier {
     }
 
     /// sum_{c < len} own[off + c] lc_c
-    function rowEval(uint256[] memory own, uint256 off, uint256[] memory lc, uint256 len) internal pure returns (uint256) {
+    function rowEval(uint256[] memory own, uint256 off, uint256[] memory lc, uint256 len)
+        internal
+        pure
+        returns (uint256)
+    {
         uint256 x02;
         uint256 x13;
         assembly {

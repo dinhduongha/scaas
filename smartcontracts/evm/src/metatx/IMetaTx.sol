@@ -6,8 +6,15 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 /// @title The meta-transaction core of every SCaaS contract on `MetaTxBase` (metatx.md, Interfaces; ua-mtx-merge MD-1): the
 ///        wallets add the address entries (`IMetaTxAddress`), tokens and the router the `bytes32` ones (`UAMetaTxBase`).
 interface IMetaTx {
-    event MetaTransactionExecuted(address indexed from, address indexed relayer, uint256 indexed batch,
-                                  uint256 nonce, bytes32 digest, address feeRecipient, uint256 fee);
+    event MetaTransactionExecuted(
+        address indexed from,
+        address indexed relayer,
+        uint256 indexed batch,
+        uint256 nonce,
+        bytes32 digest,
+        address feeRecipient,
+        uint256 fee
+    );
     event MetaNonceCancelled(address indexed from, uint256 indexed batch, uint256 newNonce);
 
     error MetaTxExpired(uint256 validUntil, uint256 nowTs);
@@ -26,10 +33,13 @@ interface IMetaTx {
     error MtxBatchLengthMismatch();
 
     function executeMetaTransaction(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
-        external returns (bool success);
+        external
+        returns (bool success);
     function mtxSelectors()
-        external view returns (bytes4[] memory selectors, uint8[] memory feeClass, uint8[] memory amountArg);
+        external
+        view
+        returns (bytes4[] memory selectors, uint8[] memory feeClass, uint8[] memory amountArg);
     function chainUid() external view returns (bytes32);
-    function supportedModes() external view returns (uint32);   // 0xF3 on tokens, 0x03 elsewhere
+    function supportedModes() external view returns (uint32); // 0xF3 on tokens, 0x03 elsewhere
     function cancelNonce(uint256 batch) external;
 }

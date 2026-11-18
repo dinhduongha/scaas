@@ -15,8 +15,17 @@ import {nid} from "../helpers/Ids.sol";
 import {LiquidityBase} from "./LiquidityBase.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
-import {MockV2LiquidityPair, MockPositionManagerV4, MockDistributor, MockShortReader, MockStickyPositions,
-    MockReenter, MockFixedReader, MockSwap, MockDigestProbe} from "./LiquidityMocks.sol";
+import {
+    MockV2LiquidityPair,
+    MockPositionManagerV4,
+    MockDistributor,
+    MockShortReader,
+    MockStickyPositions,
+    MockReenter,
+    MockFixedReader,
+    MockSwap,
+    MockDigestProbe
+} from "./LiquidityMocks.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 
@@ -31,8 +40,9 @@ contract DexLiquidityTest is LiquidityBase {
         bytes32 h = dex.liquidityOrderDigest(p.order);
         uint256 fee = (LP_FIRST * 3_000 + 999_999) / 1_000_000; // 297
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.LiquiditySettled("liq", h, nid(alice), nid(carol), _u2(ADD, ADD), _u2(0, 0), _u(LP_FIRST - fee),
-            _u(fee), 0, 0);
+        emit ISCaaSDex.LiquiditySettled(
+            "liq", h, nid(alice), nid(carol), _u2(ADD, ADD), _u2(0, 0), _u(LP_FIRST - fee), _u(fee), 0, 0
+        );
         _run(p, _addXs(ADD, ADD, address(dex)));
         assertEq(pair.balanceOf(carol), LP_FIRST - fee);
         assertEq(pair.balanceOf(relayer), fee * 200_000 / 1_000_000);
@@ -62,8 +72,11 @@ contract DexLiquidityTest is LiquidityBase {
     /// fix2-dex (CTR-DEX-32): the kind is the factory's at use: on a DEX that never listed `a` / `b`, a SCaaS-only plan is
     /// pulled by the tokens' `mtxLiquidityPull` (an EOA cannot approve the puller on a SCaaS token).
     function test_unlistedScaasInputs_pulledByTheTokens() public {
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 200_000, treasury, false, 0, address(0), 0,
-            0)), "fresh"));
+        dex = SCaaSDex(
+            f.createDex(
+                1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 200_000, treasury, false, 0, address(0), 0, 0)), "fresh"
+            )
+        );
         ITradeToken.LiquidityOrder memory o = _addOrder(98_000);
         _run(_plan(o, ALICE_PK, _u2(ADD, ADD)), _addXs(ADD, ADD, address(dex)));
         assertEq(dex.pulled(dex.liquidityOrderDigest(o)), 1);
@@ -105,9 +118,11 @@ contract DexLiquidityTest is LiquidityBase {
         ITradeToken.LiquidityOrder memory o = _base();
         o.inputs = _two(_t(address(a), ADD), _t(address(usdc), ADD));
         o.outputs = _one(_t(address(p2), 98_000));
-        ISCaaSDex.Interaction[] memory xs = _xs3(_ix(address(a), abi.encodeCall(IERC20.transfer, (address(p2), ADD))),
+        ISCaaSDex.Interaction[] memory xs = _xs3(
+            _ix(address(a), abi.encodeCall(IERC20.transfer, (address(p2), ADD))),
             _ix(address(usdc), abi.encodeCall(IERC20.transfer, (address(p2), ADD))),
-            _ix(address(p2), abi.encodeCall(MockV2LiquidityPair.mint, (address(dex)))));
+            _ix(address(p2), abi.encodeCall(MockV2LiquidityPair.mint, (address(dex))))
+        );
         _run(_plan(o, ALICE_PK, _u2(ADD, ADD)), xs);
         assertGt(p2.balanceOf(carol), 98_000);
     }
@@ -125,8 +140,13 @@ contract DexLiquidityTest is LiquidityBase {
         o.outputs = _two(_t(address(a), 90_000), _t(address(b), 90_000));
         o.nonce = 1;
         uint256 a0 = a.balanceOf(carol);
-        _run(_plan(o, CAROL_PK, _u(lp)), _xs2(_ix(address(pair), abi.encodeCall(IERC20.transfer, (address(pair), lp))),
-            _ix(address(pair), abi.encodeCall(MockV2LiquidityPair.burn, (address(dex))))));
+        _run(
+            _plan(o, CAROL_PK, _u(lp)),
+            _xs2(
+                _ix(address(pair), abi.encodeCall(IERC20.transfer, (address(pair), lp))),
+                _ix(address(pair), abi.encodeCall(MockV2LiquidityPair.burn, (address(dex))))
+            )
+        );
         assertEq(pair.balanceOf(carol), 0);
         assertGt(a.balanceOf(carol) - a0, 90_000);
     }
@@ -163,8 +183,13 @@ contract DexLiquidityTest is LiquidityBase {
         (p.order.positionPool, p.order.tickLower, p.order.tickUpper) = (0, 0, 0);
         p.positionId = 0;
         p.auth = _sig(p.order, CAROL_PK);
-        _run(p, _xs2(_ix(address(posm), abi.encodeCall(MockPositionManagerV4.decrease, (id, 40_000, address(dex)))),
-            _ix(address(posm), abi.encodeCall(MockPositionManagerV4.burn, (id)))));
+        _run(
+            p,
+            _xs2(
+                _ix(address(posm), abi.encodeCall(MockPositionManagerV4.decrease, (id, 40_000, address(dex)))),
+                _ix(address(posm), abi.encodeCall(MockPositionManagerV4.burn, (id)))
+            )
+        );
         vm.expectRevert();
         posm.ownerOf(id);
     }
@@ -194,9 +219,14 @@ contract DexLiquidityTest is LiquidityBase {
         ISCaaSDex.LiquidityPlan memory p = _plan(o, CAROL_PK, _u2(10_000, 10_000));
         p.positionId = id;
         uint256 a0 = a.balanceOf(carol);
-        _run(p, _xs3(_ix(address(a), abi.encodeCall(IERC20.transfer, (address(posm), 10_000))),
-            _ix(address(b), abi.encodeCall(IERC20.transfer, (address(posm), 10_000))),
-            _ix(address(posm), abi.encodeCall(MockPositionManagerV4.increase, (id, 10_000, address(dex))))));
+        _run(
+            p,
+            _xs3(
+                _ix(address(a), abi.encodeCall(IERC20.transfer, (address(posm), 10_000))),
+                _ix(address(b), abi.encodeCall(IERC20.transfer, (address(posm), 10_000))),
+                _ix(address(posm), abi.encodeCall(MockPositionManagerV4.increase, (id, 10_000, address(dex))))
+            )
+        );
         assertEq(a.balanceOf(carol), a0 + 10_000); // pulled 10 000, refunded 20 000
         assertEq(posm.getPositionLiquidity(id), 50_000);
         assertEq(posm.ownerOf(id), carol);
@@ -207,8 +237,8 @@ contract DexLiquidityTest is LiquidityBase {
         ISCaaSDex.LiquidityPlan memory p = _addPlan(98_000);
         ISCaaSDex.Interaction[] memory xs = new ISCaaSDex.Interaction[](4);
         xs[0] = _ix(address(a), abi.encodeCall(IERC20.approve, (address(pair), 5))); // a contract spender (CTR-TOK-01)
-        (xs[1], xs[2], xs[3]) = (_addXs(ADD, ADD, address(dex))[0], _addXs(ADD, ADD, address(dex))[1],
-            _addXs(ADD, ADD, address(dex))[2]);
+        (xs[1], xs[2], xs[3]) =
+        (_addXs(ADD, ADD, address(dex))[0], _addXs(ADD, ADD, address(dex))[1], _addXs(ADD, ADD, address(dex))[2]);
         _run(p, xs);
         assertEq(a.allowance(address(dex), address(pair)), 0);
     }
@@ -233,11 +263,15 @@ contract DexLiquidityTest is LiquidityBase {
     function test_L2_atMostEight() public {
         ISCaaSDex.LiquidityPlan memory p = _addPlan(98_000);
         p.extraTokens = new address[](9);
-        for (uint256 i; i < 9; ++i) p.extraTokens[i] = address(uint160(0x1000 + i));
+        for (uint256 i; i < 9; ++i) {
+            p.extraTokens[i] = address(uint160(0x1000 + i));
+        }
         _shape(p, 2);
         p = _addPlan(98_000);
         p.order.outputs = new ITradeToken.LiquidityToken[](9);
-        for (uint256 i; i < 9; ++i) p.order.outputs[i] = _t(address(uint160(0x2000 + i)), 1);
+        for (uint256 i; i < 9; ++i) {
+            p.order.outputs[i] = _t(address(uint160(0x2000 + i)), 1);
+        }
         _shape(p, 2);
     }
 
@@ -279,7 +313,8 @@ contract DexLiquidityTest is LiquidityBase {
     }
 
     function test_L5_recipient() public {
-        bytes32[5] memory bad = [nid(address(dex)), nid(puller), nid(address(a)), nid(address(pair)), nid(address(posm))];
+        bytes32[5] memory bad =
+            [nid(address(dex)), nid(puller), nid(address(a)), nid(address(pair)), nid(address(posm))];
         for (uint256 i; i < bad.length; ++i) {
             ISCaaSDex.LiquidityPlan memory p = _addPlan(98_000);
             if (i == 4) (p.order.positionManager, p.order.positionIn) = (address(posm), 1);
@@ -356,8 +391,10 @@ contract DexLiquidityTest is LiquidityBase {
         o.inputs = _one(_t(address(pair), lp));
         o.outputs = _two(_t(address(a), 1), _t(address(b), 1));
         ISCaaSDex.LiquidityPlan memory p = _plan(o, CAROL_PK, _u(lp / 2));
-        ISCaaSDex.Interaction[] memory xs = _xs2(_ix(address(pair), abi.encodeCall(IERC20.transfer, (address(pair), lp / 2))),
-            _ix(address(pair), abi.encodeCall(MockV2LiquidityPair.burn, (address(dex)))));
+        ISCaaSDex.Interaction[] memory xs = _xs2(
+            _ix(address(pair), abi.encodeCall(IERC20.transfer, (address(pair), lp / 2))),
+            _ix(address(pair), abi.encodeCall(MockV2LiquidityPair.burn, (address(dex))))
+        );
         _run(p, xs);
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.OrderClosed.selector, dex.liquidityOrderDigest(o)));
         _run(p, xs);
@@ -430,13 +467,24 @@ contract DexLiquidityTest is LiquidityBase {
     }
 
     function test_L19_interactions() public {
-        _forbidden(_ix(address(dex), hex"00000000"), abi.encodeWithSelector(ISCaaSDex.ForbiddenTarget.selector, address(dex)));
+        _forbidden(
+            _ix(address(dex), hex"00000000"), abi.encodeWithSelector(ISCaaSDex.ForbiddenTarget.selector, address(dex))
+        );
         _forbidden(_ix(puller, hex"00000000"), abi.encodeWithSelector(ISCaaSDex.ForbiddenTarget.selector, puller));
-        bytes4[7] memory sels = [ITradeToken.mtxTrade.selector, ILiquidityPullToken.mtxLiquidityPull.selector,
-            bytes4(0x58c18f87), bytes4(0x8c4a5df6), bytes4(0x39509351), bytes4(0x87517c45), bytes4(0xa22cb465)];
+        bytes4[7] memory sels = [
+            ITradeToken.mtxTrade.selector,
+            ILiquidityPullToken.mtxLiquidityPull.selector,
+            bytes4(0x58c18f87),
+            bytes4(0x8c4a5df6),
+            bytes4(0x39509351),
+            bytes4(0x87517c45),
+            bytes4(0xa22cb465)
+        ];
         for (uint256 i; i < sels.length; ++i) {
-            _forbidden(_ix(address(a), abi.encodePacked(sels[i], bytes32(0))),
-                abi.encodeWithSelector(ISCaaSDex.ForbiddenSelector.selector, address(a), sels[i]));
+            _forbidden(
+                _ix(address(a), abi.encodePacked(sels[i], bytes32(0))),
+                abi.encodeWithSelector(ISCaaSDex.ForbiddenSelector.selector, address(a), sels[i])
+            );
         }
     }
 
@@ -444,8 +492,9 @@ contract DexLiquidityTest is LiquidityBase {
     function test_L19_approveOnManager() public {
         ISCaaSDex.LiquidityPlan memory p = _plan(_mintOrder(40_000), ALICE_PK, _u2(50_000, 50_000));
         p.positionId = posm.nextId();
-        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.ForbiddenSelector.selector, address(posm),
-            IERC20.approve.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(ISCaaSDex.ForbiddenSelector.selector, address(posm), IERC20.approve.selector)
+        );
         _run(p, _xs(_ix(address(posm), abi.encodeCall(IERC20.approve, (attacker, 0)))));
     }
 
@@ -507,8 +556,8 @@ contract DexLiquidityTest is LiquidityBase {
         p = _plan(_mintOrder(40_000), ALICE_PK, _u2(50_000, 50_000));
         p.positionId = id;
         ISCaaSDex.Interaction[] memory xs = new ISCaaSDex.Interaction[](4);
-        (xs[0], xs[1], xs[2]) = (_mintXs(40_000, address(dex))[0], _mintXs(40_000, address(dex))[1],
-            _mintXs(40_000, address(dex))[2]);
+        (xs[0], xs[1], xs[2]) =
+        (_mintXs(40_000, address(dex))[0], _mintXs(40_000, address(dex))[1], _mintXs(40_000, address(dex))[2]);
         xs[3] = _ix(address(posm), abi.encodeCall(MockPositionManagerV4.setSubscriber, (id, true)));
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.PositionMismatch.selector, id));
         _run(p, xs);
@@ -556,7 +605,8 @@ contract DexLiquidityTest is LiquidityBase {
         ITradeToken.LiquidityOrder memory o = _addOrder(40_000);
         o.nonce = 1;
         ISCaaSDex.Interaction[] memory xs = new ISCaaSDex.Interaction[](4);
-        (xs[0], xs[1], xs[2]) = (_addXs(ADD, ADD, relayer)[0], _addXs(ADD, ADD, relayer)[1], _addXs(ADD, ADD, relayer)[2]);
+        (xs[0], xs[1], xs[2]) =
+        (_addXs(ADD, ADD, relayer)[0], _addXs(ADD, ADD, relayer)[1], _addXs(ADD, ADD, relayer)[2]);
         xs[3] = _ix(address(dist), abi.encodeCall(MockDistributor.claim, (address(pair), carol, 50_000)));
         ISCaaSDex.LiquidityPlan memory p = _plan(o, ALICE_PK, _u2(ADD, ADD));
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.InsufficientOutput.selector, address(pair)));
@@ -577,8 +627,10 @@ contract DexLiquidityTest is LiquidityBase {
         o.fee = 10_000; // 1 %
         // the DEX gets 100 001 (1 % of 101 011 burnt), keeps ⌈1 000.01⌉ = 1 001 and pays 99 000 to the treasury, which
         // receives 98 010 (< 98 011); its own fee share (800, 792 after the burn) would cover the gap if it counted
-        ISCaaSDex.Interaction[] memory xs = _xs2(_ix(address(dist), abi.encodeCall(MockDistributor.claim,
-            (address(lp), address(dex), 101_011))), _ix(address(a), abi.encodeCall(IERC20.transfer, (attacker, 1_000))));
+        ISCaaSDex.Interaction[] memory xs = _xs2(
+            _ix(address(dist), abi.encodeCall(MockDistributor.claim, (address(lp), address(dex), 101_011))),
+            _ix(address(a), abi.encodeCall(IERC20.transfer, (attacker, 1_000)))
+        );
         ISCaaSDex.LiquidityPlan memory p = _plan(o, ALICE_PK, _u(1_000));
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.InsufficientOutput.selector, address(lp)));
         _run(p, xs);
@@ -609,8 +661,13 @@ contract DexLiquidityTest is LiquidityBase {
         uint256 id = _carolPosition();
         ISCaaSDex.LiquidityPlan memory p = _returnOrder(id, 30_000, 9_000);
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.PositionBelowMin.selector, id, uint128(20_000)));
-        _run(p, _xs2(_ix(address(posm), abi.encodeCall(MockPositionManagerV4.decrease, (id, 10_000, address(dex)))),
-            _ix(address(posm), abi.encodeCall(MockPositionManagerV4.decrease, (id, 10_000, attacker)))));
+        _run(
+            p,
+            _xs2(
+                _ix(address(posm), abi.encodeCall(MockPositionManagerV4.decrease, (id, 10_000, address(dex)))),
+                _ix(address(posm), abi.encodeCall(MockPositionManagerV4.decrease, (id, 10_000, attacker)))
+            )
+        );
     }
 
     /// A fee collect where the submitter also removes principal.
@@ -623,8 +680,13 @@ contract DexLiquidityTest is LiquidityBase {
         posm.accrue(id, 500, 500);
         ISCaaSDex.LiquidityPlan memory p = _returnOrder(id, 40_000, 400);
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.PositionBelowMin.selector, id, uint128(39_000)));
-        _run(p, _xs2(_ix(address(posm), abi.encodeCall(MockPositionManagerV4.collect, (id, address(dex)))),
-            _ix(address(posm), abi.encodeCall(MockPositionManagerV4.decrease, (id, 1_000, attacker)))));
+        _run(
+            p,
+            _xs2(
+                _ix(address(posm), abi.encodeCall(MockPositionManagerV4.collect, (id, address(dex)))),
+                _ix(address(posm), abi.encodeCall(MockPositionManagerV4.decrease, (id, 1_000, attacker)))
+            )
+        );
     }
 
     /// An interaction moves the given NFT away: the minima bound it, the plan settles (spent whole).
@@ -647,8 +709,8 @@ contract DexLiquidityTest is LiquidityBase {
         p.extraTokens = new address[](1);
         p.extraTokens[0] = address(hop);
         ISCaaSDex.Interaction[] memory xs = new ISCaaSDex.Interaction[](4);
-        (xs[0], xs[1], xs[2]) = (_addXs(ADD, ADD, address(dex))[0], _addXs(ADD, ADD, address(dex))[1],
-            _addXs(ADD, ADD, address(dex))[2]);
+        (xs[0], xs[1], xs[2]) =
+        (_addXs(ADD, ADD, address(dex))[0], _addXs(ADD, ADD, address(dex))[1], _addXs(ADD, ADD, address(dex))[2]);
         MockDistributor dist = new MockDistributor();
         hop.transfer(address(dist), 10);
         xs[3] = _ix(address(dist), abi.encodeCall(MockDistributor.claim, (address(hop), address(dex), 10)));
@@ -685,13 +747,25 @@ contract DexLiquidityTest is LiquidityBase {
         ISCaaSDex.LiquidityPlan memory p = _addPlan(98_000);
         ISCaaSDex.Interaction[] memory none = new ISCaaSDex.Interaction[](0);
         re.set(address(dex), abi.encodeCall(dex.mtxLiquidity, (p, none)));
-        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.InteractionFailed.selector, 0, address(re),
-            abi.encodeWithSelector(ReentrancyGuardTransient.ReentrancyGuardReentrantCall.selector)));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ISCaaSDex.InteractionFailed.selector,
+                0,
+                address(re),
+                abi.encodeWithSelector(ReentrancyGuardTransient.ReentrancyGuardReentrantCall.selector)
+            )
+        );
         _run(p, _xs(_ix(address(re), abi.encodeCall(MockReenter.go, ()))));
         ISCaaSDex.ExchangePlan memory e;
         re.set(address(dex), abi.encodeCall(dex.mtxExchange, (e, none)));
-        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.InteractionFailed.selector, 0, address(re),
-            abi.encodeWithSelector(ReentrancyGuardTransient.ReentrancyGuardReentrantCall.selector)));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ISCaaSDex.InteractionFailed.selector,
+                0,
+                address(re),
+                abi.encodeWithSelector(ReentrancyGuardTransient.ReentrancyGuardReentrantCall.selector)
+            )
+        );
         _run(p, _xs(_ix(address(re), abi.encodeCall(MockReenter.go, ()))));
     }
 
@@ -717,8 +791,8 @@ contract DexLiquidityTest is LiquidityBase {
         probe.probe(address(dex), p.order, h);
         ISCaaSDex.Interaction[] memory xs = new ISCaaSDex.Interaction[](4);
         xs[0] = _ix(address(probe), abi.encodeCall(MockDigestProbe.probe, (address(dex), p.order, h)));
-        (xs[1], xs[2], xs[3]) = (_addXs(ADD, ADD, address(dex))[0], _addXs(ADD, ADD, address(dex))[1],
-            _addXs(ADD, ADD, address(dex))[2]);
+        (xs[1], xs[2], xs[3]) =
+        (_addXs(ADD, ADD, address(dex))[0], _addXs(ADD, ADD, address(dex))[1], _addXs(ADD, ADD, address(dex))[2]);
         _run(p, xs);
         assertEq(dex.pulled(h), 1);
     }
@@ -735,7 +809,8 @@ contract DexLiquidityTest is LiquidityBase {
         (o.tickLower, o.tickUpper, o.minLiquidity) = (LO, HI, 5);
         ISCaaSDex.LiquidityPlan memory p = _plan(o, ALICE_PK, _u(1_000));
         p.positionId = 7;
-        ISCaaSDex.Interaction[] memory xs = _xs(_ix(address(sticky), abi.encodeCall(MockStickyPositions.mint, (address(dex), 7))));
+        ISCaaSDex.Interaction[] memory xs =
+            _xs(_ix(address(sticky), abi.encodeCall(MockStickyPositions.mint, (address(dex), 7))));
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.PositionNotDelivered.selector, 7));
         _run(p, xs);
     }
@@ -766,8 +841,8 @@ contract DexLiquidityTest is LiquidityBase {
         ISCaaSDex.Interaction[] memory xs = new ISCaaSDex.Interaction[](5);
         xs[0] = _ix(address(a), abi.encodeCall(IERC20.transfer, (address(sw), ADD)));
         xs[1] = _ix(address(sw), abi.encodeCall(MockSwap.swap, (address(b), ADD, address(dex))));
-        (xs[2], xs[3], xs[4]) = (_addXs(ADD, ADD, address(dex))[0], _addXs(ADD, ADD, address(dex))[1],
-            _addXs(ADD, ADD, address(dex))[2]);
+        (xs[2], xs[3], xs[4]) =
+        (_addXs(ADD, ADD, address(dex))[0], _addXs(ADD, ADD, address(dex))[1], _addXs(ADD, ADD, address(dex))[2]);
         _run(p, xs);
         assertGt(pair.balanceOf(carol), 98_000);
         assertEq(b.balanceOf(address(dex)), 0);
@@ -803,8 +878,10 @@ contract DexLiquidityTest is LiquidityBase {
     /// L7, L8, L13 on the DEX alone (the tokens repeat them with the same errors on a SCaaS input).
     function test_L7_L8_L13_dexAlone() public {
         (ITradeToken.LiquidityOrder memory o, uint256 lp) = _lpOnly();
-        ISCaaSDex.Interaction[] memory xs = _xs2(_ix(address(pair), abi.encodeCall(IERC20.transfer, (address(pair), lp))),
-            _ix(address(pair), abi.encodeCall(MockV2LiquidityPair.burn, (address(dex)))));
+        ISCaaSDex.Interaction[] memory xs = _xs2(
+            _ix(address(pair), abi.encodeCall(IERC20.transfer, (address(pair), lp))),
+            _ix(address(pair), abi.encodeCall(MockV2LiquidityPair.burn, (address(dex))))
+        );
         ISCaaSDex.LiquidityPlan memory p = _plan(o, CAROL_PK, _u(lp));
         p.pull = _u(lp + 1);
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.Overfill.selector, dex.liquidityOrderDigest(o)));

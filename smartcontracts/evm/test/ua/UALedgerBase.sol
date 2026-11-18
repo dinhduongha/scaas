@@ -43,7 +43,9 @@ abstract contract UALedgerBase is UARegistryBase {
 
     /// The test plays the factory: it registered no token, so the leg check (CTR-GOV-05, spec §6.1) reads every leg as an
     /// outside leg and asks it nothing.
-    function isRegisteredToken(address) external pure returns (bool) { return false; }
+    function isRegisteredToken(address) external pure returns (bool) {
+        return false;
+    }
 
     UARegistry internal lreg;
     NormalToken internal tok;
@@ -61,29 +63,53 @@ abstract contract UALedgerBase is UARegistryBase {
         super.setUp();
         UARegistry.KindConfig[] memory base = _cfgs(address(mock));
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](base.length + 1);
-        for (uint256 i; i < base.length; ++i) c[i] = base[i];
-        c[base.length] = UARegistry.KindConfig(UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier()), 70_000);
+        for (uint256 i; i < base.length; ++i) {
+            c[i] = base[i];
+        }
+        c[base.length] =
+            UARegistry.KindConfig(UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier()), 70_000);
         lreg = _deploy(REG_L, chainUidA, address(0), false, BUDGET, address(0), true, c);
         uaP = _register(lreg, UAKinds.P256, _key(UAKinds.P256));
         uaB = _register(lreg, UAKinds.BIP340, _key(UAKinds.BIP340));
         bytes memory y = ZetherKeys.pub(ZX, true);
         bytes32 z = lreg.uaOf(UAKinds.ZETHER_BLS12381, y);
-        uaZ = UACall.register(lreg, UAKinds.ZETHER_BLS12381,
+        uaZ = UACall.register(
+            lreg,
+            UAKinds.ZETHER_BLS12381,
             y,
             _none(),
-            ZetherKeys.schnorr(ZX, lreg.uaMessage(UAKinds.ZETHER_BLS12381, UAKinds.PURPOSE_POP_V2, _regDigest(z, UAKinds.ZETHER_BLS12381)), true),
-            "");
+            ZetherKeys.schnorr(
+                ZX,
+                lreg.uaMessage(UAKinds.ZETHER_BLS12381, UAKinds.PURPOSE_POP_V2, _regDigest(z, UAKinds.ZETHER_BLS12381)),
+                true
+            ),
+            ""
+        );
         (alice, bob) = (vm.addr(ALICE_PK), vm.addr(BOB_PK));
         vm.warp(1_800_000_000);
-        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
-        tok.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 1_000_000, alice, address(this))));
+        tok = NormalToken(
+            EnvKit.clone(
+                address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+                EnvKit.env(chainUidA, REG_L, address(0), false)
+            )
+        );
+        tok.initialize(
+            nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 1_000_000, alice, address(this)))
+        );
         und = new MockERC20("Und", "UND", 6);
-        wrp = WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        wrp = WrappedToken(
+            EnvKit.clone(
+                address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
+                EnvKit.env(chainUidA, REG_L, address(0), false)
+            )
+        );
         address[] memory us = new address[](1);
         uint256[] memory one = new uint256[](1);
         (us[0], one[0]) = (address(und), 1);
         Rate memory fixedRate;
-        wrp.initialize(nid(address(this)), 1, abi.encode(wrappedInit(us, one, one, 6, fixedRate, address(0), address(0))));
+        wrp.initialize(
+            nid(address(this)), 1, abi.encode(wrappedInit(us, one, one, 6, fixedRate, address(0), address(0)))
+        );
         wrpL = _wrapper(address(tok));
         wrpN = _wrapper(address(0));
     }
@@ -95,7 +121,12 @@ abstract contract UALedgerBase is UARegistryBase {
 
     /// The same at rate `num/den` (units per leg unit).
     function _wrapperAt(address leg, uint256 num, uint256 den) internal returns (WrappedToken w) {
-        w = WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        w = WrappedToken(
+            EnvKit.clone(
+                address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
+                EnvKit.env(chainUidA, REG_L, address(0), false)
+            )
+        );
         address[] memory us = new address[](1);
         uint256[] memory n = new uint256[](1);
         uint256[] memory d = new uint256[](1);
@@ -108,15 +139,35 @@ abstract contract UALedgerBase is UARegistryBase {
 
     function _t(bytes32 from, bytes32 to, uint256 value) internal view returns (MetaTxLib.UAMetaTransfer memory t) {
         t = MetaTxLib.UAMetaTransfer({
-            from: from, to: to, value: value, entryRef: 0, batch: 1, nonce: tok.mtxNonce(from, 1),
-            validUntil: block.timestamp + 300, mode: RR, relayer: RELAYER, fee: 0, feeRecipient: address(0)
+            from: from,
+            to: to,
+            value: value,
+            entryRef: 0,
+            batch: 1,
+            nonce: tok.mtxNonce(from, 1),
+            validUntil: block.timestamp + 300,
+            mode: RR,
+            relayer: RELAYER,
+            fee: 0,
+            feeRecipient: address(0)
         });
     }
 
-    function _m(address token, bytes32 from, bytes memory data) internal view returns (MetaTxLib.UAMetaTransaction memory m) {
+    function _m(address token, bytes32 from, bytes memory data)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransaction memory m)
+    {
         m = MetaTxLib.UAMetaTransaction({
-            from: from, data: data, batch: 1, nonce: NormalToken(token).mtxNonce(from, 1),
-            validUntil: block.timestamp + 300, mode: RR, relayer: RELAYER, fee: 0, feeRecipient: address(0)
+            from: from,
+            data: data,
+            batch: 1,
+            nonce: NormalToken(token).mtxNonce(from, 1),
+            validUntil: block.timestamp + 300,
+            mode: RR,
+            relayer: RELAYER,
+            fee: 0,
+            feeRecipient: address(0)
         });
     }
 
@@ -133,7 +184,10 @@ abstract contract UALedgerBase is UARegistryBase {
 
     /// The Zether UA signs like a stored kind (UA-6 U8): `abi.encode(bytes(""), Schnorr by x over ua_msg)`.
     function _zAuth(bytes32 purpose, bytes32 digest) internal view returns (bytes memory) {
-        return abi.encode(bytes(""), ZetherKeys.schnorr(ZX, lreg.uaMessage(UAKinds.ZETHER_BLS12381, purpose, digest), true));
+        return
+            abi.encode(
+                bytes(""), ZetherKeys.schnorr(ZX, lreg.uaMessage(UAKinds.ZETHER_BLS12381, purpose, digest), true)
+            );
     }
 
     function _authT(address token, MetaTxLib.UAMetaTransfer memory t) internal view returns (bytes memory) {

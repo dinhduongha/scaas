@@ -23,11 +23,17 @@ contract SubjectRouter {
     address public registry; // `configureChain` reads it and its `smartKeyCloneHash()` (spec 2026-11-10-admin-not-owner.md §13.3)
     bytes32 internal _subject;
 
-    constructor(bytes32 uid, address registry_) { (chainUid, registry) = (uid, registry_); }
+    constructor(bytes32 uid, address registry_) {
+        (chainUid, registry) = (uid, registry_);
+    }
 
-    function smartKeyCloneHash() external view returns (bytes32) { return IUARegistry(registry).smartKeyCloneHash(); }
+    function smartKeyCloneHash() external view returns (bytes32) {
+        return IUARegistry(registry).smartKeyCloneHash();
+    }
 
-    function subject() external view returns (bytes32) { return _subject; }
+    function subject() external view returns (bytes32) {
+        return _subject;
+    }
 
     function create(OpenFactory f, bytes32 s, bytes calldata initArgs) external returns (address) {
         _subject = s;
@@ -42,13 +48,28 @@ contract SubjectRouter {
 contract GovRouterCreateTest is GovRouterFixture {
     string constant CTAIL =
         ",uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
-    bytes32 constant CREATE_TOKEN = keccak256(bytes(string.concat(
-        "UACreateToken(bytes32 from,address target,uint8 kind,uint64 version,bytes32 initHash,bytes32 salt", CTAIL)));
-    bytes32 constant CREATE_DEX = keccak256(bytes(string.concat(
-        "UACreateDex(bytes32 from,address target,uint64 version,bytes32 initHash,bytes32 salt", CTAIL)));
-    bytes32 constant CREATE_INSTANCE = keccak256(bytes(string.concat(
-        "UACreateInstance(bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,bytes32 initHash,"
-        "bytes32 salt", CTAIL)));
+    bytes32 constant CREATE_TOKEN = keccak256(
+        bytes(
+            string.concat(
+                "UACreateToken(bytes32 from,address target,uint8 kind,uint64 version,bytes32 initHash,bytes32 salt",
+                CTAIL
+            )
+        )
+    );
+    bytes32 constant CREATE_DEX = keccak256(
+        bytes(
+            string.concat("UACreateDex(bytes32 from,address target,uint64 version,bytes32 initHash,bytes32 salt", CTAIL)
+        )
+    );
+    bytes32 constant CREATE_INSTANCE = keccak256(
+        bytes(
+            string.concat(
+                "UACreateInstance(bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,bytes32 initHash,"
+                "bytes32 salt",
+                CTAIL
+            )
+        )
+    );
     address constant REGISTRAR = address(0x5E6);
     OpenFactory f;
 
@@ -59,17 +80,44 @@ contract GovRouterCreateTest is GovRouterFixture {
         (address[] memory ms, bytes memory args) = deployKindModules(0, address(f), "");
         (address[] memory dm, bytes memory dargs) = deployDexModules(address(f));
         vm.startPrank(REGISTRAR);
-        f.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, EnvKit.uidOf(address(f)), withModules(plainEnv(address(f), address(0), chainUidA, PREG, false), ms));
-        f.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args, EnvKit.uidOf(address(f)));
-        f.publishDexEnv(1, EnvKit.uidOf(address(f)), withModules(plainEnv(address(f), address(0), chainUidA, address(0), false), dm));
+        f.publishTokenEnv(
+            IOpenFactory.TokenKind.NORMAL,
+            1,
+            EnvKit.uidOf(address(f)),
+            withModules(plainEnv(address(f), address(0), chainUidA, PREG, false), ms)
+        );
+        f.deployTokenImplementation(
+            IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args, EnvKit.uidOf(address(f))
+        );
+        f.publishDexEnv(
+            1, EnvKit.uidOf(address(f)), withModules(plainEnv(address(f), address(0), chainUidA, address(0), false), dm)
+        );
         f.deployDexImplementation(1, 1, type(SCaaSDex).creationCode, dargs, EnvKit.uidOf(address(f)));
-        f.publishClassEnv(4, 0, 1, EnvKit.uidOf(address(f)), plainEnv(address(f), address(0), chainUidA, address(0), false));
-        f.deployImplementation(IOpenFactory.ReleaseId(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
-            type(NoteKind).creationCode, "", EnvKit.uidOf(address(f)));
+        f.publishClassEnv(
+            4, 0, 1, EnvKit.uidOf(address(f)), plainEnv(address(f), address(0), chainUidA, address(0), false)
+        );
+        f.deployImplementation(
+            IOpenFactory.ReleaseId(4, 0, 1),
+            1,
+            INoteKind.initialize.selector,
+            type(INoteKind).interfaceId,
+            type(NoteKind).creationCode,
+            "",
+            EnvKit.uidOf(address(f))
+        );
         f.setClassKindEnabled(4, 0, true, EnvKit.uidOf(address(f)));
-        f.publishClassEnv(4, 1, 1, EnvKit.uidOf(address(f)), plainEnv(address(f), address(0), chainUidA, address(0), false));
-        f.deployImplementation(IOpenFactory.ReleaseId(4, 1, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
-            type(BadKind).creationCode, abi.encode(uint8(16)), EnvKit.uidOf(address(f))); // NESTED: its initialize creates a (4, 0, 1) instance
+        f.publishClassEnv(
+            4, 1, 1, EnvKit.uidOf(address(f)), plainEnv(address(f), address(0), chainUidA, address(0), false)
+        );
+        f.deployImplementation(
+            IOpenFactory.ReleaseId(4, 1, 1),
+            1,
+            INoteKind.initialize.selector,
+            type(INoteKind).interfaceId,
+            type(BadKind).creationCode,
+            abi.encode(uint8(16)),
+            EnvKit.uidOf(address(f))
+        ); // NESTED: its initialize creates a (4, 0, 1) instance
         f.setClassKindEnabled(4, 1, true, EnvKit.uidOf(address(f)));
         vm.stopPrank();
     }
@@ -83,8 +131,13 @@ contract GovRouterCreateTest is GovRouterFixture {
     }
 
     function _d(bytes32 th, MetaTxLib.UAEnvelope memory e, bytes memory words) internal view returns (bytes32) {
-        bytes32 h = keccak256(bytes.concat(abi.encode(th, e.from, address(f)), words,
-            abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
+        bytes32 h = keccak256(
+            bytes.concat(
+                abi.encode(th, e.from, address(f)),
+                words,
+                abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))
+            )
+        );
         return keccak256(abi.encodePacked("\x19\x01", _domain(router), h));
     }
 
@@ -168,8 +221,15 @@ contract GovRouterCreateTest is GovRouterFixture {
         OpenFactory g = EnvKit.factory(REGISTRAR, chainUidA, 0, address(r));
         (address[] memory ms, bytes memory args) = deployKindModules(0, address(g), ""); // T66b
         vm.startPrank(REGISTRAR);
-        g.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, EnvKit.uidOf(address(g)), withModules(plainEnv(address(g), address(0), chainUidA, PREG, false), ms));
-        g.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args, EnvKit.uidOf(address(g)));
+        g.publishTokenEnv(
+            IOpenFactory.TokenKind.NORMAL,
+            1,
+            EnvKit.uidOf(address(g)),
+            withModules(plainEnv(address(g), address(0), chainUidA, PREG, false), ms)
+        );
+        g.deployTokenImplementation(
+            IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args, EnvKit.uidOf(address(g))
+        );
         vm.stopPrank();
         vm.expectRevert(IOpenFactory.RouterSubjectZero.selector);
         r.create(g, bytes32(0), _tokenArgs());
@@ -186,7 +246,8 @@ contract GovRouterCreateTest is GovRouterFixture {
     function test_create_reentrantInitialize() public {
         bytes memory initCall = abi.encodeCall(INoteKind.initialize, (eoa, "outer"));
         MetaTxLib.UAEnvelope memory e = _envelope(router, eoa, 0);
-        bytes32 d = _d(CREATE_INSTANCE, e, abi.encode(uint16(4), uint16(1), uint64(1), keccak256(initCall), bytes32("o")));
+        bytes32 d =
+            _d(CREATE_INSTANCE, e, abi.encode(uint16(4), uint16(1), uint64(1), keccak256(initCall), bytes32("o")));
         router.mtxCreateInstance(e, address(f), 4, 1, 1, initCall, "o", _auth(eoa, d));
         address outer = f.predictAddress(eoa, 4, 1, "o");
         address inner = f.predictAddress(nid(outer), 4, 0, "nested");

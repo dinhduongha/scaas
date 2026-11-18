@@ -18,7 +18,9 @@ contract ZetherNoEip2537Test is ZetherFixture {
     }
 
     function _noEip2537() internal {
-        for (uint160 a = 0x0b; a <= 0x11; ++a) vm.mockCall(address(a), bytes(""), bytes(""));
+        for (uint160 a = 0x0b; a <= 0x11; ++a) {
+            vm.mockCall(address(a), bytes(""), bytes(""));
+        }
     }
 
     function test_innerProductVerifierConstructorReverts() public {
@@ -31,7 +33,9 @@ contract ZetherNoEip2537Test is ZetherFixture {
         assertTrue(ver.isSupportedOnThisChain());
         _noEip2537();
         assertFalse(ver.isSupportedOnThisChain());
-        vm.expectRevert(abi.encodeWithSelector(IZetherToken.VerifierUnsupportedOnThisChain.selector, address(ver), "bls12-381"));
+        vm.expectRevert(
+            abi.encodeWithSelector(IZetherToken.VerifierUnsupportedOnThisChain.selector, address(ver), "bls12-381")
+        );
         factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(_cfg(false, 1 << 40)), "no-eip2537");
     }
 

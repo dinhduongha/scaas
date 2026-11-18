@@ -19,14 +19,18 @@ contract ZetherDecoyFeeTest is ZetherFixture {
     function setUp() public {
         minDecoy = MIN;
         _deploy(true);
-        for (uint256 i; i < 4; ++i) rs[i] = _user(0xD00 + i, address(uint160(0xE00 + i)));
+        for (uint256 i; i < 4; ++i) {
+            rs[i] = _user(0xD00 + i, address(uint160(0xE00 + i)));
+        }
         _fund(tok, alice, 1000);
         tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
     }
 
     function _to(uint256 m) internal view returns (User[] memory to) {
         to = new User[](m);
-        for (uint256 j; j < m; ++j) to[j] = rs[j];
+        for (uint256 j; j < m; ++j) {
+            to[j] = rs[j];
+        }
     }
 
     function _vs4() internal pure returns (uint256[] memory vs) {
@@ -47,13 +51,26 @@ contract ZetherDecoyFeeTest is ZetherFixture {
     function test_decoyFee_perLegUniform() public {
         decoyFee = 3;
         Tx memory t = _proveMulti(tok, alice, _to(4), _vs4(), 1000, carol.ua, ZetherTypes.TransferMode.BUNDLE);
-        assertEq(_fee(stm.transferStatement(address(tok), _zMulti(t.payload, carol.ua), ZetherTypes.TransferMode.BUNDLE, 0)),
-            FEE + 4 * 3, "statement fee = txFee + M * decoyFee");
+        assertEq(
+            _fee(stm.transferStatement(address(tok), _zMulti(t.payload, carol.ua), ZetherTypes.TransferMode.BUNDLE, 0)),
+            FEE + 4 * 3,
+            "statement fee = txFee + M * decoyFee"
+        );
         bytes32[] memory uas = new bytes32[](4);
-        for (uint256 j; j < 4; ++j) uas[j] = ZetherTypes.UA.unwrap(rs[j].ua);
+        for (uint256 j; j < 4; ++j) {
+            uas[j] = ZetherTypes.UA.unwrap(rs[j].ua);
+        }
         vm.expectEmit(true, true, true, true, address(tok));
-        emit IConfidentialToken.ConfidentialTransferMulti(_ref(tok, alice, 0), ZetherTypes.UA.unwrap(alice.ua),
-            ZetherTypes.UA.unwrap(carol.ua), FEE + 12, 0, uas, uint8(ZetherTypes.TransferMode.BUNDLE), address(0));
+        emit IConfidentialToken.ConfidentialTransferMulti(
+            _ref(tok, alice, 0),
+            ZetherTypes.UA.unwrap(alice.ua),
+            ZetherTypes.UA.unwrap(carol.ua),
+            FEE + 12,
+            0,
+            uas,
+            uint8(ZetherTypes.TransferMode.BUNDLE),
+            address(0)
+        );
         tok.mtxConfidentialTransfer(_zMulti(t.payload, carol.ua), t.proof);
         assertTrue(_holds(tok, alice, 1000 - 350 - FEE - 12, true), "sender: sum + txFee + M * decoyFee");
         for (uint256 j; j < 4; ++j) {
@@ -72,7 +89,10 @@ contract ZetherDecoyFeeTest is ZetherFixture {
         uint256[] memory vs = new uint256[](2);
         vs[1] = 40;
         Tx memory t = _proveMulti(tok, alice, _to(2), vs, 1000, _none(), ZetherTypes.TransferMode.HASH);
-        assertEq(_fee(stm.transferStatement(address(tok), _zMulti(t.payload, _none()), ZetherTypes.TransferMode.HASH, 0)), 2 * MIN);
+        assertEq(
+            _fee(stm.transferStatement(address(tok), _zMulti(t.payload, _none()), ZetherTypes.TransferMode.HASH, 0)),
+            2 * MIN
+        );
         tok.mtxConfidentialTransferCompact(_zMulti(t.payload, _none()), t.proof);
         assertEq(tok.balanceOfUA(ZetherTypes.UA.unwrap(rs[0].ua)), MIN * SCALE);
         assertEq(tok.balanceOfUA(ZetherTypes.UA.unwrap(rs[1].ua)), MIN * SCALE);
@@ -149,14 +169,18 @@ contract ZetherDecoyFeeGasTest is ZetherFixture {
 
     function setUp() public {
         _deploy(true);
-        for (uint256 i; i < 4; ++i) rs[i] = _user(0xD00 + i, address(uint160(0xE00 + i)));
+        for (uint256 i; i < 4; ++i) {
+            rs[i] = _user(0xD00 + i, address(uint160(0xE00 + i)));
+        }
         _fund(tok, alice, 1000);
         tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
     }
 
     function _run(uint256 d) internal returns (uint256 g) {
         User[] memory to = new User[](4);
-        for (uint256 j; j < 4; ++j) to[j] = rs[j];
+        for (uint256 j; j < 4; ++j) {
+            to[j] = rs[j];
+        }
         uint256[] memory vs = new uint256[](4);
         vs[1] = 100;
         decoyFee = d;

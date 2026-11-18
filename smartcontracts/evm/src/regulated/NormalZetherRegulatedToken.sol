@@ -31,27 +31,82 @@ interface INormalZetherRegulatedTokenAbi {
     event AuditorKeyProposed(uint32 epoch, bytes newKey, bytes32 proposer, uint64 eta);
     event AuditorKeySet(uint32 epoch, bytes previousKey, bytes newKey);
     event AuditorProposalCancelled(uint32 epoch);
-    event ConfidentialTransfer(bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32 indexed toUA, bytes32 beneficiary, uint256 fee, uint64 sendCounter, address blob);
-    event ConfidentialTransferMulti(bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32 indexed beneficiary, uint256 fee, uint64 sendCounter, bytes32[] recipients, uint8 mode, address blob);
+    event ConfidentialTransfer(
+        bytes32 indexed entryRef,
+        bytes32 indexed fromUA,
+        bytes32 indexed toUA,
+        bytes32 beneficiary,
+        uint256 fee,
+        uint64 sendCounter,
+        address blob
+    );
+    event ConfidentialTransferMulti(
+        bytes32 indexed entryRef,
+        bytes32 indexed fromUA,
+        bytes32 indexed beneficiary,
+        uint256 fee,
+        uint64 sendCounter,
+        bytes32[] recipients,
+        uint8 mode,
+        address blob
+    );
     event EIP712DomainChanged();
     event FeatureDisabled(uint8 indexed bit, bytes32 indexed by);
     event ForcedTransfer(bytes32 indexed recordId, bytes32 indexed from, bytes32 indexed to, uint256 amount);
     event GrantCancelled(uint8 indexed bit, bytes32 indexed account, bytes32 indexed by);
-    event GrantProposed(uint8 indexed bit, bytes32 indexed account, bytes32 indexed proposer, uint64 eta, bool whole, IGovernance.GrantTerms terms);
+    event GrantProposed(
+        uint8 indexed bit,
+        bytes32 indexed account,
+        bytes32 indexed proposer,
+        uint64 eta,
+        bool whole,
+        IGovernance.GrantTerms terms
+    );
     event GrantSet(uint8 indexed bit, bytes32 indexed holder, bytes32 indexed grantor);
     event GrantUsed(uint8 indexed bit, bytes32 indexed holder, uint256 scalar);
     event LiquidityPulled(bytes32 indexed orderHash, bytes32 indexed from, address indexed dex, uint256 amount);
     event MetaNonceCancelled(address indexed from, uint256 indexed batch, uint256 newNonce);
-    event MetaTransactionExecuted(address indexed from, address indexed relayer, uint256 indexed batch, uint256 nonce, bytes32 digest, address feeRecipient, uint256 fee);
+    event MetaTransactionExecuted(
+        address indexed from,
+        address indexed relayer,
+        uint256 indexed batch,
+        uint256 nonce,
+        bytes32 digest,
+        address feeRecipient,
+        uint256 fee
+    );
     event NoncesInvalidated(address indexed from, uint256 indexed batch, uint256 minNonce);
     event OperatorTransfer(bytes32 indexed from, bytes32 indexed to, uint256 amount, bytes32 indexed ref);
     event OrderCancelled(bytes32 indexed orderHash, address indexed from);
-    event OrderRecorded(bytes32 indexed recordId, bytes32 indexed orderId, bytes32 indexed subject, bytes32 beneficiary, uint256 maxAmount, uint64 freezeUntil, bytes32 documentHash);
+    event OrderRecorded(
+        bytes32 indexed recordId,
+        bytes32 indexed orderId,
+        bytes32 indexed subject,
+        bytes32 beneficiary,
+        uint256 maxAmount,
+        uint64 freezeUntil,
+        bytes32 documentHash
+    );
     event OrderRevoked(bytes32 indexed recordId, bytes32 reasonRef);
     event Paused(bytes32 indexed ref, uint64 until);
     event PaymentMeta(bytes32 indexed payId, bytes32 indexed payNo, bool save, uint16 schema, bytes body);
-    event PaymentSettled(address indexed from, address indexed to, uint256 amount, uint256 feeAmount, address feeRecipient, bytes32 indexed entryRef);
-    event PaymentTaxed(bytes32 indexed entryRef, bytes32 indexed payee, bytes32 indexed taxRecipient, bytes32 from, uint8 taxMode, uint256 tax, bytes32 digest);
+    event PaymentSettled(
+        address indexed from,
+        address indexed to,
+        uint256 amount,
+        uint256 feeAmount,
+        address feeRecipient,
+        bytes32 indexed entryRef
+    );
+    event PaymentTaxed(
+        bytes32 indexed entryRef,
+        bytes32 indexed payee,
+        bytes32 indexed taxRecipient,
+        bytes32 from,
+        uint8 taxMode,
+        uint256 tax,
+        bytes32 digest
+    );
     event PullRestored(bytes32 indexed orderHash, uint256 amount);
     event RelaxProposed(uint8 indexed bit, bytes32 indexed account, uint8 action, bytes32 proposer, uint64 eta);
     event Rescued(address indexed asset, address indexed to, uint256 amount);
@@ -62,15 +117,36 @@ interface INormalZetherRegulatedTokenAbi {
     event Shielded(bytes32 indexed toUA, address indexed from, uint256 amount, uint64 index);
     event TaxRateSet(uint32 ratePpm, uint64 effectiveAt);
     event TaxRecipientSet(bytes32 indexed taxRecipient);
-    event TradeFilled(bytes32 indexed orderHash, address indexed from, uint256 sellFill, uint256 receiveFill, uint256 dexFee);
+    event TradeFilled(
+        bytes32 indexed orderHash, address indexed from, uint256 sellFill, uint256 receiveFill, uint256 dexFee
+    );
     event TransferBundles(bytes32 indexed entryRef, bytes bundles);
-    event UAMetaTransactionExecuted(bytes32 indexed from, address indexed relayer, uint256 indexed batch, uint256 nonce, bytes32 digest, address feeRecipient, uint256 fee);
+    event UAMetaTransactionExecuted(
+        bytes32 indexed from,
+        address indexed relayer,
+        uint256 indexed batch,
+        uint256 nonce,
+        bytes32 digest,
+        address feeRecipient,
+        uint256 fee
+    );
     event UANonceCancelled(bytes32 indexed ua, uint256 indexed batch, uint256 newNonce);
     event UANoncesInvalidated(bytes32 indexed from, uint256 indexed batch, uint256 minNonce);
     event UAOrderCancelled(bytes32 indexed orderHash, bytes32 indexed from);
-    event UAPayeeFeePaid(bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient, uint256 fee);
-    event UAPaymentSettled(bytes32 indexed from, bytes32 indexed to, uint256 amount, uint256 feeAmount, address feeRecipient, bytes32 indexed entryRef);
-    event UATradeFilled(bytes32 indexed orderHash, bytes32 indexed from, uint256 sellFill, uint256 receiveFill, uint256 dexFee);
+    event UAPayeeFeePaid(
+        bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient, uint256 fee
+    );
+    event UAPaymentSettled(
+        bytes32 indexed from,
+        bytes32 indexed to,
+        uint256 amount,
+        uint256 feeAmount,
+        address feeRecipient,
+        bytes32 indexed entryRef
+    );
+    event UATradeFilled(
+        bytes32 indexed orderHash, bytes32 indexed from, uint256 sellFill, uint256 receiveFill, uint256 dexFee
+    );
     event Unpaused(bytes32 indexed ref);
     event Unshielded(bytes32 indexed ua, uint256 amount, bytes32 indexed recipient, address blob);
     event AllowedSet(bytes32 indexed account, bytes32 indexed by, bool on);
@@ -263,7 +339,10 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
     function _module(address[] memory ms, uint256 i, uint8 group) private view returns (address m) {
         m = ms[i];
         if (m.code.length == 0) revert ModuleMissing(i);
-        if (ITokenModule(m).kind() != uint8(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED) || ITokenModule(m).moduleGroup() != group || ITokenModule(m).factory() != FACTORY) {
+        if (
+            ITokenModule(m).kind() != uint8(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED)
+                || ITokenModule(m).moduleGroup() != group || ITokenModule(m).factory() != FACTORY
+        ) {
             revert ModuleMismatch(i);
         }
         if (ITokenModule(m).COMPLIANCE_REGISTRY_CODEHASH() != COMPLIANCE_REGISTRY_CODEHASH) revert ModuleMismatch(i);
@@ -320,7 +399,11 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
         _forwardView(_MZ);
     }
 
-    function auditorState() external view returns (uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status) {
+    function auditorState()
+        external
+        view
+        returns (uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status)
+    {
         _forwardView(_MZ);
     }
 
@@ -380,7 +463,19 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
         _forwardView(_MZ);
     }
 
-    function eip712Domain() external view returns (bytes1 _p0, string memory _p1, string memory _p2, uint256 _p3, address _p4, bytes32 _p5, uint256[] memory _p6) {
+    function eip712Domain()
+        external
+        view
+        returns (
+            bytes1 _p0,
+            string memory _p1,
+            string memory _p2,
+            uint256 _p3,
+            address _p4,
+            bytes32 _p5,
+            uint256[] memory _p6
+        )
+    {
         _forwardView(_MA);
     }
 
@@ -480,19 +575,31 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
         _forward(_MA);
     }
 
-    function mtxBatch(MetaTxLib.UAMetaTransaction[] calldata, IUARegistry.UASig[] calldata) external returns (bool _p0) {
+    function mtxBatch(MetaTxLib.UAMetaTransaction[] calldata, IUARegistry.UASig[] calldata)
+        external
+        returns (bool _p0)
+    {
         _forward(_MP);
     }
 
-    function mtxBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata, IUARegistry.UASig[] calldata) external returns (bool _p0) {
+    function mtxBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata, IUARegistry.UASig[] calldata)
+        external
+        returns (bool _p0)
+    {
         _forward(_MP);
     }
 
-    function mtxBurn(MetaTxLib.UAEnvelope calldata, uint256, IUARegistry.UASig calldata) external returns (bytes memory _p0) {
+    function mtxBurn(MetaTxLib.UAEnvelope calldata, uint256, IUARegistry.UASig calldata)
+        external
+        returns (bytes memory _p0)
+    {
         _forward(_MA);
     }
 
-    function mtxCancelNonce(MetaTxLib.UAEnvelope calldata, uint256, IUARegistry.UASig calldata) external returns (bytes memory _p0) {
+    function mtxCancelNonce(MetaTxLib.UAEnvelope calldata, uint256, IUARegistry.UASig calldata)
+        external
+        returns (bytes memory _p0)
+    {
         _forward(_MP);
     }
 
@@ -500,7 +607,12 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
         _forward(_MT);
     }
 
-    function mtxConfidentialTransfer(MetaTxLib.UAEnvelope calldata, IZetherToken.ZetherMulti calldata, bytes calldata, IUARegistry.UASig calldata) external returns (bytes32 _p0) {
+    function mtxConfidentialTransfer(
+        MetaTxLib.UAEnvelope calldata,
+        IZetherToken.ZetherMulti calldata,
+        bytes calldata,
+        IUARegistry.UASig calldata
+    ) external returns (bytes32 _p0) {
         _forward(_MZ);
     }
 
@@ -508,19 +620,35 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
         _forward(_MZ);
     }
 
-    function mtxConfidentialTransferCompact(MetaTxLib.UAEnvelope calldata, IZetherToken.ZetherMulti calldata, bytes calldata, IUARegistry.UASig calldata) external returns (bytes32 _p0) {
+    function mtxConfidentialTransferCompact(
+        MetaTxLib.UAEnvelope calldata,
+        IZetherToken.ZetherMulti calldata,
+        bytes calldata,
+        IUARegistry.UASig calldata
+    ) external returns (bytes32 _p0) {
         _forward(_MZ);
     }
 
-    function mtxConfidentialTransferCompact(IZetherToken.ZetherMulti calldata, bytes calldata) external returns (bytes32 _p0) {
+    function mtxConfidentialTransferCompact(IZetherToken.ZetherMulti calldata, bytes calldata)
+        external
+        returns (bytes32 _p0)
+    {
         _forward(_MZ);
     }
 
-    function mtxConfidentialTransferSingle(MetaTxLib.UAEnvelope calldata, IZetherToken.ZetherSingle calldata, bytes calldata, IUARegistry.UASig calldata) external returns (bytes32 _p0) {
+    function mtxConfidentialTransferSingle(
+        MetaTxLib.UAEnvelope calldata,
+        IZetherToken.ZetherSingle calldata,
+        bytes calldata,
+        IUARegistry.UASig calldata
+    ) external returns (bytes32 _p0) {
         _forward(_MZ);
     }
 
-    function mtxConfidentialTransferSingle(IZetherToken.ZetherSingle calldata, bytes calldata) external returns (bytes32 _p0) {
+    function mtxConfidentialTransferSingle(IZetherToken.ZetherSingle calldata, bytes calldata)
+        external
+        returns (bytes32 _p0)
+    {
         _forward(_MZ);
     }
 
@@ -528,11 +656,17 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
         _forwardView(_MP);
     }
 
-    function mtxExecute(MetaTxLib.UAMetaTransaction calldata, IUARegistry.UASig calldata) external returns (bytes memory _p0) {
+    function mtxExecute(MetaTxLib.UAMetaTransaction calldata, IUARegistry.UASig calldata)
+        external
+        returns (bytes memory _p0)
+    {
         _forward(_MP);
     }
 
-    function mtxExecuteTransfer(MetaTxLib.UAMetaTransfer calldata, IUARegistry.UASig calldata) external returns (bool _p0) {
+    function mtxExecuteTransfer(MetaTxLib.UAMetaTransfer calldata, IUARegistry.UASig calldata)
+        external
+        returns (bool _p0)
+    {
         _forward(_MP);
     }
 
@@ -540,7 +674,9 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
         _forward(_MT);
     }
 
-    function mtxLiquidityPull(ITradeToken.LiquidityOrder calldata, IUARegistry.UASig calldata, uint256, address) external {
+    function mtxLiquidityPull(ITradeToken.LiquidityOrder calldata, IUARegistry.UASig calldata, uint256, address)
+        external
+    {
         _forward(_MT);
     }
 
@@ -548,23 +684,53 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
         _forwardView(_MP);
     }
 
-    function mtxPay(MetaTxLib.UAMetaTransfer calldata, IUARegistry.UASig calldata, MetaTxLib.PayMeta calldata) external returns (bool _p0) {
+    function mtxPay(MetaTxLib.UAMetaTransfer calldata, IUARegistry.UASig calldata, MetaTxLib.PayMeta calldata)
+        external
+        returns (bool _p0)
+    {
         _forward(_MP);
     }
 
-    function mtxPayWithPayeeFee(MetaTxLib.UAMetaTransfer calldata, IUARegistry.UASig calldata, uint256, address, uint256, IUARegistry.UASig calldata, MetaTxLib.PayMeta calldata) external returns (bool _p0) {
+    function mtxPayWithPayeeFee(
+        MetaTxLib.UAMetaTransfer calldata,
+        IUARegistry.UASig calldata,
+        uint256,
+        address,
+        uint256,
+        IUARegistry.UASig calldata,
+        MetaTxLib.PayMeta calldata
+    ) external returns (bool _p0) {
         _forward(_MP);
     }
 
-    function mtxPayWithTax(MetaTxLib.UAMetaTransfer calldata, uint8, uint256, IUARegistry.UASig calldata, MetaTxLib.PayMeta calldata) external returns (bool _p0) {
+    function mtxPayWithTax(
+        MetaTxLib.UAMetaTransfer calldata,
+        uint8,
+        uint256,
+        IUARegistry.UASig calldata,
+        MetaTxLib.PayMeta calldata
+    ) external returns (bool _p0) {
         _forward(_MP);
     }
 
-    function mtxRelayFee(bytes32, address, bytes32, bytes32, uint256, uint256, uint256, uint256, IUARegistry.UASig calldata) external {
+    function mtxRelayFee(
+        bytes32,
+        address,
+        bytes32,
+        bytes32,
+        uint256,
+        uint256,
+        uint256,
+        uint256,
+        IUARegistry.UASig calldata
+    ) external {
         _forward(_MP);
     }
 
-    function mtxRollOver(MetaTxLib.UAEnvelope calldata, bytes32, uint256, IUARegistry.UASig calldata) external returns (bytes memory _p0) {
+    function mtxRollOver(MetaTxLib.UAEnvelope calldata, bytes32, uint256, IUARegistry.UASig calldata)
+        external
+        returns (bytes memory _p0)
+    {
         _forward(_MZ);
     }
 
@@ -572,7 +738,10 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
         _forward(_MZ);
     }
 
-    function mtxRollOverBatch(MetaTxLib.UAEnvelope calldata, ZetherTypes.UA[] calldata, IUARegistry.UASig calldata) external returns (bytes memory _p0) {
+    function mtxRollOverBatch(MetaTxLib.UAEnvelope calldata, ZetherTypes.UA[] calldata, IUARegistry.UASig calldata)
+        external
+        returns (bytes memory _p0)
+    {
         _forward(_MZ);
     }
 
@@ -580,7 +749,14 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
         _forward(_MZ);
     }
 
-    function mtxRollOverSigned(MetaTxLib.UAEnvelope calldata, ZetherTypes.UA, uint64, uint64, IUARegistry.UASig calldata, IUARegistry.UASig calldata) external returns (bytes memory _p0) {
+    function mtxRollOverSigned(
+        MetaTxLib.UAEnvelope calldata,
+        ZetherTypes.UA,
+        uint64,
+        uint64,
+        IUARegistry.UASig calldata,
+        IUARegistry.UASig calldata
+    ) external returns (bytes memory _p0) {
         _forward(_MZ);
     }
 
@@ -592,7 +768,14 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
         _forwardPure(_modulePure(3));
     }
 
-    function mtxSetRollOverMode(MetaTxLib.UAEnvelope calldata, ZetherTypes.UA, ZetherTypes.RollOverMode, uint64, IUARegistry.UASig calldata, IUARegistry.UASig calldata) external returns (bytes memory _p0) {
+    function mtxSetRollOverMode(
+        MetaTxLib.UAEnvelope calldata,
+        ZetherTypes.UA,
+        ZetherTypes.RollOverMode,
+        uint64,
+        IUARegistry.UASig calldata,
+        IUARegistry.UASig calldata
+    ) external returns (bytes memory _p0) {
         _forward(_MZ);
     }
 
@@ -600,7 +783,10 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
         _forward(_MZ);
     }
 
-    function mtxShield(MetaTxLib.UAEnvelope calldata, bytes32, uint256, IUARegistry.UASig calldata) external returns (bytes memory _p0) {
+    function mtxShield(MetaTxLib.UAEnvelope calldata, bytes32, uint256, IUARegistry.UASig calldata)
+        external
+        returns (bytes memory _p0)
+    {
         _forward(_MZ);
     }
 
@@ -608,11 +794,23 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
         _forward(_MZ);
     }
 
-    function mtxTrade(ITradeToken.UATradeOrder calldata, IUARegistry.UASig calldata, ITradeToken.TradeFill calldata) external {
+    function mtxTrade(ITradeToken.UATradeOrder calldata, IUARegistry.UASig calldata, ITradeToken.TradeFill calldata)
+        external
+    {
         _forward(_MT);
     }
 
-    function mtxTransfer(bytes32, bytes32, uint256, uint256, uint256, uint256, uint32, address, IUARegistry.UASig calldata) external returns (bool _p0) {
+    function mtxTransfer(
+        bytes32,
+        bytes32,
+        uint256,
+        uint256,
+        uint256,
+        uint256,
+        uint32,
+        address,
+        IUARegistry.UASig calldata
+    ) external returns (bool _p0) {
         _forward(_MP);
     }
 
@@ -620,11 +818,30 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
         _forwardView(_MP);
     }
 
-    function mtxTransferWithFee(bytes32, bytes32, uint256, uint256, uint256, uint256, uint32, address, uint256, address, IUARegistry.UASig calldata) external returns (bool _p0) {
+    function mtxTransferWithFee(
+        bytes32,
+        bytes32,
+        uint256,
+        uint256,
+        uint256,
+        uint256,
+        uint32,
+        address,
+        uint256,
+        address,
+        IUARegistry.UASig calldata
+    ) external returns (bool _p0) {
         _forward(_MP);
     }
 
-    function mtxUnshield(MetaTxLib.UAEnvelope calldata, IZetherToken.ZetherBurn calldata, uint256, bytes32, bytes calldata, IUARegistry.UASig calldata) external returns (bytes memory _p0) {
+    function mtxUnshield(
+        MetaTxLib.UAEnvelope calldata,
+        IZetherToken.ZetherBurn calldata,
+        uint256,
+        bytes32,
+        bytes calldata,
+        IUARegistry.UASig calldata
+    ) external returns (bytes memory _p0) {
         _forward(_MZ);
     }
 
@@ -648,19 +865,32 @@ contract NormalZetherRegulatedToken is NormalZetherRegulatedTokenCore, INormalZe
         _forwardPure(_modulePure(1));
     }
 
-    function payWithFee(address, uint256, FeeMode, uint256, address, bytes32, MetaTxLib.PayMeta calldata) external returns (bool _p0) {
+    function payWithFee(address, uint256, FeeMode, uint256, address, bytes32, MetaTxLib.PayMeta calldata)
+        external
+        returns (bool _p0)
+    {
         _forward(_MP);
     }
 
-    function payWithFeeToUA(bytes32, uint256, FeeMode, uint256, address, bytes32, MetaTxLib.PayMeta calldata) external returns (bool _p0) {
+    function payWithFeeToUA(bytes32, uint256, FeeMode, uint256, address, bytes32, MetaTxLib.PayMeta calldata)
+        external
+        returns (bool _p0)
+    {
         _forward(_MP);
     }
 
-    function payWithTax(bytes32, uint256, uint8, uint256, bytes32, MetaTxLib.PayMeta calldata) external returns (bool _p0) {
+    function payWithTax(bytes32, uint256, uint8, uint256, bytes32, MetaTxLib.PayMeta calldata)
+        external
+        returns (bool _p0)
+    {
         _forward(_MP);
     }
 
-    function payeeFeeDigest(MetaTxLib.UAMetaTransfer calldata, uint256, address, uint256) external view returns (bytes32 _p0) {
+    function payeeFeeDigest(MetaTxLib.UAMetaTransfer calldata, uint256, address, uint256)
+        external
+        view
+        returns (bytes32 _p0)
+    {
         _forwardView(_MP);
     }
 

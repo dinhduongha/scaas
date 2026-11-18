@@ -35,12 +35,16 @@ contract PqzCtTest is PqzMock {
             uint256 o = PqzCt.PK + 8 * i;
             uint256 x = uint64(bytes8(_word8(r, o)));
             x = (x + PqzCt.Q - (PqzCt.DELTA * ((m >> (4 * i)) & 15)) % PqzCt.Q) % PqzCt.Q;
-            for (uint256 k; k < 8; ++k) r[o + k] = bytes1(uint8(x >> (8 * (7 - k))));
+            for (uint256 k; k < 8; ++k) {
+                r[o + k] = bytes1(uint8(x >> (8 * (7 - k))));
+            }
         }
     }
 
     function _word8(bytes memory b, uint256 o) internal pure returns (bytes8 w) {
-        for (uint256 k; k < 8; ++k) w |= bytes8(b[o + k]) >> (8 * k);
+        for (uint256 k; k < 8; ++k) {
+            w |= bytes8(b[o + k]) >> (8 * k);
+        }
     }
 
     /// T of the vector = Enc_F(1,000,000; 0x61…) + Trivial(1000) = enc.json ops[0]; T − Trivial(1000) is rows[0]
@@ -64,7 +68,9 @@ contract PqzCtTest is PqzMock {
         bytes memory t = _T();
         bytes memory x = _X();
         bytes[] memory xs = new bytes[](16);
-        for (uint256 i; i < 16; ++i) xs[i] = x;
+        for (uint256 i; i < 16; ++i) {
+            xs[i] = x;
+        }
         bytes[] memory none = new bytes[](0);
         bytes memory up = h.sum(t, xs, none, 0);
         assertTrue(keccak256(up) != keccak256(t));
@@ -88,9 +94,13 @@ contract PqzCtTest is PqzMock {
         bytes memory bad = bytes.concat(c);
         // coefficient 5 := q
         uint256 q = PqzCt.Q;
-        for (uint256 k; k < 8; ++k) bad[40 + k] = bytes1(uint8(q >> (8 * (7 - k))));
+        for (uint256 k; k < 8; ++k) {
+            bad[40 + k] = bytes1(uint8(q >> (8 * (7 - k))));
+        }
         assertFalse(h.canonical(bad));
-        for (uint256 k; k < 8; ++k) bad[40 + k] = bytes1(uint8((q - 1) >> (8 * (7 - k))));
+        for (uint256 k; k < 8; ++k) {
+            bad[40 + k] = bytes1(uint8((q - 1) >> (8 * (7 - k))));
+        }
         assertTrue(h.canonical(bad));
         bad[PqzCt.CT - 8] = 0xff; // the last coefficient ≥ 2^56
         assertFalse(h.canonical(bad));
@@ -106,7 +116,8 @@ contract PqzCtTest is PqzMock {
         for (uint256 o; o < PqzCt.CT; o += 32) {
             uint256 w;
             for (uint256 k; k < 4; ++k) {
-                uint256 x = mode == 0 ? uint256(keccak256(abi.encode(seed, o, k))) % PqzCt.Q : mode == 1 ? PqzCt.Q - 1 : 0;
+                uint256 x =
+                    mode == 0 ? uint256(keccak256(abi.encode(seed, o, k))) % PqzCt.Q : mode == 1 ? PqzCt.Q - 1 : 0;
                 w = w << 64 | x;
             }
             assembly ("memory-safe") { mstore(add(add(c, 32), o), w) }
@@ -135,7 +146,8 @@ contract PqzCtTest is PqzMock {
         bytes memory c = _ct(7, 0);
         bytes memory p = _packed(c);
         uint256 b = PqzSet.PACK_BITS;
-        for (uint256 i; i < 64; ++i) { // the first 64 coefficients (16 groups)
+        for (uint256 i; i < 64; ++i) {
+            // the first 64 coefficients (16 groups)
             uint256 x = uint64(bytes8(_word8(c, 8 * i)));
             for (uint256 k; k < b; ++k) {
                 uint256 bit = b * i + k; // stream bit, MSB first

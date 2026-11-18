@@ -32,16 +32,39 @@ contract DelayApp is GovernanceBase {
         GovernanceLib.init(b, 0, nid(owner_), delay, address(0), none, b, b, 0, address(0));
     }
 
-    function _guardIn() internal pure override returns (bool) { return false; }
+    function _guardIn() internal pure override returns (bool) {
+        return false;
+    }
     function _guardOut(bool) internal pure override {}
-    function _caller() internal view override returns (address) { return msg.sender; }
+
+    function _caller() internal view override returns (address) {
+        return msg.sender;
+    }
+
     /// @dev A test app has no chain word (not factory-made); its renounce is not exercised by chain (Fable recheck-2 P3-1).
-    function _govChainUid() internal pure override returns (bytes32) { return bytes32(0); }
-    function _validBits() internal pure override returns (uint256) { return uint256(1) << APPROVE; }
-    function _roleBits() internal pure override returns (uint256) { return uint256(1) << APPROVE; }
-    function _contractOnlyBits() internal pure override returns (uint256) { return 0; }
-    function _scalarBits() internal pure override returns (uint256) { return uint256(1) << APPROVE; }
-    function _scopeBits() internal pure override returns (uint256) { return uint256(1) << APPROVE; }
+    function _govChainUid() internal pure override returns (bytes32) {
+        return bytes32(0);
+    }
+
+    function _validBits() internal pure override returns (uint256) {
+        return uint256(1) << APPROVE;
+    }
+
+    function _roleBits() internal pure override returns (uint256) {
+        return uint256(1) << APPROVE;
+    }
+
+    function _contractOnlyBits() internal pure override returns (uint256) {
+        return 0;
+    }
+
+    function _scalarBits() internal pure override returns (uint256) {
+        return uint256(1) << APPROVE;
+    }
+
+    function _scopeBits() internal pure override returns (uint256) {
+        return uint256(1) << APPROVE;
+    }
 }
 
 /// @notice D4 (spec §1.6, CTR-GOV-04 and its Change; B-01, B-27; Codex 2, 7; agy C-3, I-2; Fable M-1): a new holder and every
@@ -64,8 +87,12 @@ contract GovDelayTest is Test {
     function setUp() public {
         vm.warp(1_800_000_000);
         f = EnvKit.factory(address(this), UID, 0);
-        Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
-        Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false);
+        Catalogue.plain(
+            f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false
+        );
+        Catalogue.plain(
+            f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false
+        );
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
         t = _token("t", D);
     }
@@ -130,8 +157,9 @@ contract GovDelayTest is Test {
     }
 
     function _same(IGovernance.Grant memory g, IGovernance.GrantTerms memory x) internal pure returns (bool) {
-        return g.min == x.min && g.max == x.max && g.total == x.total && g.perWindow == x.perWindow && g.window == x.window
-            && g.validUntil == x.validUntil && g.maxUses == x.maxUses && g.delegable == x.delegable && g.scope == x.scope;
+        return g.min == x.min && g.max == x.max && g.total == x.total && g.perWindow == x.perWindow
+            && g.window == x.window && g.validUntil == x.validUntil && g.maxUses == x.maxUses
+            && g.delegable == x.delegable && g.scope == x.scope;
     }
 
     /// The edit proposes: the record is unchanged and a live pending holds `x`.
@@ -183,14 +211,30 @@ contract GovDelayTest is Test {
         IGovernance.GrantTerms memory b = _bounded();
         _set2(MANAGER, b);
         IGovernance.GrantTerms memory x;
-        x = _bounded(); x.min = 9; _proposes(MANAGER, x, "min");
-        x = _bounded(); x.max = 101; _proposes(MANAGER, x, "max");
-        x = _bounded(); x.total = 1001; _proposes(MANAGER, x, "total");
-        x = _bounded(); x.perWindow = 501; _proposes(MANAGER, x, "perWindow");
-        x = _bounded(); x.window = 2 days; _proposes(MANAGER, x, "window");
-        x = _bounded(); x.validUntil += 1; _proposes(MANAGER, x, "validUntil");
-        x = _bounded(); x.maxUses = 51; _proposes(MANAGER, x, "maxUses");
-        x = _bounded(); x.delegable = true; _proposes(MANAGER, x, "delegable");
+        x = _bounded();
+        x.min = 9;
+        _proposes(MANAGER, x, "min");
+        x = _bounded();
+        x.max = 101;
+        _proposes(MANAGER, x, "max");
+        x = _bounded();
+        x.total = 1001;
+        _proposes(MANAGER, x, "total");
+        x = _bounded();
+        x.perWindow = 501;
+        _proposes(MANAGER, x, "perWindow");
+        x = _bounded();
+        x.window = 2 days;
+        _proposes(MANAGER, x, "window");
+        x = _bounded();
+        x.validUntil += 1;
+        _proposes(MANAGER, x, "validUntil");
+        x = _bounded();
+        x.maxUses = 51;
+        _proposes(MANAGER, x, "maxUses");
+        x = _bounded();
+        x.delegable = true;
+        _proposes(MANAGER, x, "delegable");
         DelayApp a = new DelayApp(OWNER, D); // scope, on a scoped bit
         IGovernance.GrantTerms memory s = _open();
         s.scope = bytes32(uint256(7));
@@ -212,13 +256,20 @@ contract GovDelayTest is Test {
         IGovernance.GrantTerms memory x = _bounded();
         x.delegable = true;
         _set2(MANAGER, x);
-        x.delegable = false; _runsAtOnce(MANAGER, x, "delegable");
-        x.min = 11; _runsAtOnce(MANAGER, x, "min");
-        x.max = 99; _runsAtOnce(MANAGER, x, "max");
-        x.total = 999; _runsAtOnce(MANAGER, x, "total");
-        x.perWindow = 499; _runsAtOnce(MANAGER, x, "perWindow");
-        x.validUntil -= 1; _runsAtOnce(MANAGER, x, "validUntil");
-        x.maxUses = 49; _runsAtOnce(MANAGER, x, "maxUses");
+        x.delegable = false;
+        _runsAtOnce(MANAGER, x, "delegable");
+        x.min = 11;
+        _runsAtOnce(MANAGER, x, "min");
+        x.max = 99;
+        _runsAtOnce(MANAGER, x, "max");
+        x.total = 999;
+        _runsAtOnce(MANAGER, x, "total");
+        x.perWindow = 499;
+        _runsAtOnce(MANAGER, x, "perWindow");
+        x.validUntil -= 1;
+        _runsAtOnce(MANAGER, x, "validUntil");
+        x.maxUses = 49;
+        _runsAtOnce(MANAGER, x, "maxUses");
         _runsAtOnce(MANAGER, x, "the same terms");
         _grant2(OFFICER); // a `WHOLE` root: any non-delegable terms narrow it
         _runsAtOnce(OFFICER, _bounded(), "whole to limited");
@@ -228,10 +279,14 @@ contract GovDelayTest is Test {
     function test_finiteOnEachUnboundedWordRunsAtOnce() public {
         IGovernance.GrantTerms memory x = _open();
         _set2(MANAGER, x);
-        x.total = 1000; _runsAtOnce(MANAGER, x, "total");
-        (x.perWindow, x.window) = (500, 1 days); _runsAtOnce(MANAGER, x, "perWindow");
-        x.validUntil = uint64(block.timestamp + 1 days); _runsAtOnce(MANAGER, x, "validUntil");
-        x.maxUses = 5; _runsAtOnce(MANAGER, x, "maxUses");
+        x.total = 1000;
+        _runsAtOnce(MANAGER, x, "total");
+        (x.perWindow, x.window) = (500, 1 days);
+        _runsAtOnce(MANAGER, x, "perWindow");
+        x.validUntil = uint64(block.timestamp + 1 days);
+        _runsAtOnce(MANAGER, x, "validUntil");
+        x.maxUses = 5;
+        _runsAtOnce(MANAGER, x, "maxUses");
     }
 
     /// Codex 7: a new `window` comes with the limit it carries; a window changed under a limit is a widening.
@@ -250,12 +305,24 @@ contract GovDelayTest is Test {
         IGovernance.GrantTerms memory b = _bounded();
         _set2(MANAGER, b);
         IGovernance.GrantTerms memory x;
-        x = _bounded(); x.total = 0; _proposes(MANAGER, x, "total");
-        x = _bounded(); (x.perWindow, x.window) = (0, 0); _proposes(MANAGER, x, "perWindow");
-        x = _bounded(); x.validUntil = 0; _proposes(MANAGER, x, "validUntil");
-        x = _bounded(); x.maxUses = 0; _proposes(MANAGER, x, "maxUses");
-        x = _bounded(); x.max = NONE; _proposes(MANAGER, x, "max");
-        x = _bounded(); x.min = 0; _proposes(MANAGER, x, "min");
+        x = _bounded();
+        x.total = 0;
+        _proposes(MANAGER, x, "total");
+        x = _bounded();
+        (x.perWindow, x.window) = (0, 0);
+        _proposes(MANAGER, x, "perWindow");
+        x = _bounded();
+        x.validUntil = 0;
+        _proposes(MANAGER, x, "validUntil");
+        x = _bounded();
+        x.maxUses = 0;
+        _proposes(MANAGER, x, "maxUses");
+        x = _bounded();
+        x.max = NONE;
+        _proposes(MANAGER, x, "max");
+        x = _bounded();
+        x.min = 0;
+        _proposes(MANAGER, x, "min");
     }
 
     /// B-01, derived: the owner's edit of a leaf makes a root and drops the parent's bound, so it takes two calls, however
@@ -497,7 +564,9 @@ contract GovDelayTest is Test {
     }
 
     function _cancelled(Vm.Log[] memory logs) internal pure returns (uint256 k) {
-        for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == IGovernance.GrantCancelled.selector) ++k;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] == IGovernance.GrantCancelled.selector) ++k;
+        }
     }
 
     function test_cancelGrantLiveAndDead() public {
@@ -556,14 +625,24 @@ contract GovDelayTest is Test {
         NormalToken n = _token("d", 30 days);
         assertEq(n.grantDelay(), 30 days);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantDelayTooLong.selector, uint64(30 days + 1)));
-        f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 30 days + 1, address(0), 0, 0)), "x");
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 30 days, address(0), 0, 0)), "x"));
+        f.createDex(
+            1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 30 days + 1, address(0), 0, 0)), "x"
+        );
+        SCaaSDex d = SCaaSDex(
+            f.createDex(
+                1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 30 days, address(0), 0, 0)), "x"
+            )
+        );
         assertEq(d.grantDelay(), 30 days);
     }
 
     /// B-27: `initHolder` holds both bits from creation, whatever the delay; the powers run at once.
     function test_dexInitHoldsBothBitsWithADelay() public {
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, D, address(0), 0, 0)), "d"));
+        SCaaSDex d = SCaaSDex(
+            f.createDex(
+                1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, D, address(0), 0, 0)), "d"
+            )
+        );
         assertEq(d.grantDelay(), D);
         assertTrue(d.hasRole(GovernanceBits.LISTING, nid(OWNER)));
         assertTrue(d.hasRole(GovernanceBits.FEE_ROUTING, nid(OWNER)));
@@ -632,7 +711,11 @@ contract GovDelayTest is Test {
         vm.expectRevert(IRescuable.RescueConfigInvalid.selector);
         f.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(w), "w");
         // governance T10 (spec §6.2): the DEX's `rescueTo` is its puller's, accepted; the DEX rescues nothing itself
-        SCaaSDex dx = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0xBEEF), 0, 0)), "y"));
+        SCaaSDex dx = SCaaSDex(
+            f.createDex(
+                1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0xBEEF), 0, 0)), "y"
+            )
+        );
         assertEq(DexPuller(dx.puller()).rescueTo(), address(0xBEEF));
         w.rescueTo = address(0); // positive controls
         f.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(w), "w");

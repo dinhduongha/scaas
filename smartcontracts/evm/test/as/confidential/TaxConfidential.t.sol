@@ -29,10 +29,13 @@ import {EnvKit} from "../../helpers/EnvKit.sol";
 /// nor +6. **UNAUDITED.**
 library TaxRows {
     bytes32 internal constant UA_PAY_WITH_TAX = keccak256(
-        "UAPayWithTax(UAMetaTransfer payment,uint8 taxMode,uint256 tax)UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UAPayWithTax(UAMetaTransfer payment,uint8 taxMode,uint256 tax)UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
     /// `scaas.regulated` (RegulatedLib._STORAGE) +5, +6.
-    bytes32 internal constant SLOT5 = bytes32(uint256(0xb2c09f76d73c73fd19cb676c5bc2ea2b05d0674d12ed1b6dc6508457a3913d00) + 5);
-    bytes32 internal constant SLOT6 = bytes32(uint256(0xb2c09f76d73c73fd19cb676c5bc2ea2b05d0674d12ed1b6dc6508457a3913d00) + 6);
+    bytes32 internal constant SLOT5 =
+        bytes32(uint256(0xb2c09f76d73c73fd19cb676c5bc2ea2b05d0674d12ed1b6dc6508457a3913d00) + 5);
+    bytes32 internal constant SLOT6 =
+        bytes32(uint256(0xb2c09f76d73c73fd19cb676c5bc2ea2b05d0674d12ed1b6dc6508457a3913d00) + 6);
     address internal constant TAX_TO = address(0x7A0);
     /// Plan T83: the `payNo` of the public pay saved before the confidential ops, and `scaas.pay.records`' root.
     bytes32 internal constant NO = bytes32(uint256(0x019a6e3c5f007a3b8c4d5e6f708192a3));
@@ -48,8 +51,10 @@ library TaxRows {
             require(writes[j] != len && (w < d || w > d + 3), "a pay record slot written by a confidential op");
         }
         for (uint256 j; j < logs.length; ++j) {
-            require(logs[j].topics.length == 0 || logs[j].topics[0] != IMetaTokenV2.PaymentMeta.selector,
-                "PaymentMeta on a confidential op");
+            require(
+                logs[j].topics.length == 0 || logs[j].topics[0] != IMetaTokenV2.PaymentMeta.selector,
+                "PaymentMeta on a confidential op"
+            );
         }
         require(uint256(vm.load(t, len)) == 1, "the saved record count moved");
         require(IMetaTokenV2(t).paymentCount(NO) == 1, "paymentCount moved");
@@ -87,7 +92,6 @@ contract TaxConfidential13Test is PqzRegFixture {
         factory.createToken(_kind(), 1, abi.encode(c), "tax1");
     }
 }
-
 
 /// The tax rows of the PQZ kinds 12 (`_isWrapped` false) and 13: the fixture's token with bit 23 and a recipient; the test
 /// contract holds public units.
@@ -133,10 +137,16 @@ abstract contract TaxPqzRows is PqzRegFixture {
             for (uint256 j; j < reads.length; ++j) {
                 assertTrue(reads[j] != TaxRows.SLOT5 && reads[j] != TaxRows.SLOT6, "a tax slot read");
             }
-            for (uint256 j; j < writes.length; ++j) assertTrue(writes[j] != TaxRows.SLOT5 && writes[j] != TaxRows.SLOT6);
+            for (uint256 j; j < writes.length; ++j) {
+                assertTrue(writes[j] != TaxRows.SLOT5 && writes[j] != TaxRows.SLOT6);
+            }
             Vm.Log[] memory logs = vm.getRecordedLogs();
-            for (uint256 j; j < logs.length; ++j) assertTrue(logs[j].topics.length == 0
-                || logs[j].topics[0] != IRegulatedToken.PaymentTaxed.selector, "PaymentTaxed on a confidential op");
+            for (uint256 j; j < logs.length; ++j) {
+                assertTrue(
+                    logs[j].topics.length == 0 || logs[j].topics[0] != IRegulatedToken.PaymentTaxed.selector,
+                    "PaymentTaxed on a confidential op"
+                );
+            }
             TaxRows.noRecord(vm, address(tok), writes, logs);
             vm.revertToState(snap);
         }
@@ -148,8 +158,13 @@ contract TaxPqz12Test is TaxPqzRows {
         return false;
     }
 
-    function test_payWithTax_on_12() public { _payWithTaxOn(); }
-    function test_confidentialOps_noTaxLeg_12() public { _noTaxLeg(); }
+    function test_payWithTax_on_12() public {
+        _payWithTaxOn();
+    }
+
+    function test_confidentialOps_noTaxLeg_12() public {
+        _noTaxLeg();
+    }
 }
 
 contract TaxPqz13Test is TaxPqzRows {
@@ -157,8 +172,13 @@ contract TaxPqz13Test is TaxPqzRows {
         return true;
     }
 
-    function test_payWithTax_on_13() public { _payWithTaxOn(); }
-    function test_confidentialOps_noTaxLeg_13() public { _noTaxLeg(); }
+    function test_payWithTax_on_13() public {
+        _payWithTaxOn();
+    }
+
+    function test_confidentialOps_noTaxLeg_13() public {
+        _noTaxLeg();
+    }
 }
 
 /// The tax rows of the Zether kinds 10 (`_isWrapped` false) and 11: the fixture's token re-created with bit 23 and a
@@ -206,10 +226,16 @@ abstract contract TaxZetherRows is ZetherRegFixture {
             for (uint256 j; j < reads.length; ++j) {
                 assertTrue(reads[j] != TaxRows.SLOT5 && reads[j] != TaxRows.SLOT6, "a tax slot read");
             }
-            for (uint256 j; j < writes.length; ++j) assertTrue(writes[j] != TaxRows.SLOT5 && writes[j] != TaxRows.SLOT6);
+            for (uint256 j; j < writes.length; ++j) {
+                assertTrue(writes[j] != TaxRows.SLOT5 && writes[j] != TaxRows.SLOT6);
+            }
             Vm.Log[] memory logs = vm.getRecordedLogs();
-            for (uint256 j; j < logs.length; ++j) assertTrue(logs[j].topics.length == 0
-                || logs[j].topics[0] != IRegulatedToken.PaymentTaxed.selector, "PaymentTaxed on a confidential op");
+            for (uint256 j; j < logs.length; ++j) {
+                assertTrue(
+                    logs[j].topics.length == 0 || logs[j].topics[0] != IRegulatedToken.PaymentTaxed.selector,
+                    "PaymentTaxed on a confidential op"
+                );
+            }
             TaxRows.noRecord(vm, address(tok), writes, logs);
             vm.revertToState(snap);
         }
@@ -221,8 +247,13 @@ contract TaxZether10Test is TaxZetherRows {
         return false;
     }
 
-    function test_payWithTax_on_10() public { _payWithTaxOn(); }
-    function test_confidentialOps_noTaxLeg_10() public { _noTaxLeg(); }
+    function test_payWithTax_on_10() public {
+        _payWithTaxOn();
+    }
+
+    function test_confidentialOps_noTaxLeg_10() public {
+        _noTaxLeg();
+    }
 }
 
 contract TaxZether11Test is TaxZetherRows {
@@ -230,6 +261,11 @@ contract TaxZether11Test is TaxZetherRows {
         return true;
     }
 
-    function test_payWithTax_on_11() public { _payWithTaxOn(); }
-    function test_confidentialOps_noTaxLeg_11() public { _noTaxLeg(); }
+    function test_payWithTax_on_11() public {
+        _payWithTaxOn();
+    }
+
+    function test_confidentialOps_noTaxLeg_11() public {
+        _noTaxLeg();
+    }
 }

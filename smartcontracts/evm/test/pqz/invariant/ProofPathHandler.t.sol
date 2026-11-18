@@ -74,8 +74,12 @@ contract ProofPathHandler is PqzFixture {
                 IPqzToken.AccountState memory a = tok.pqzAccount(u, v);
                 uint64 lim = a.floor > a.rolled ? a.floor : a.rolled;
                 uint64 to = frozenTo[u][v];
-                for (uint64 j; j < to; ++j) if (tok.pqzPending(u, v, j) != frozen[u][v][j]) ++changedBelow;
-                for (uint64 j = to; j < lim; ++j) frozen[u][v][j] = tok.pqzPending(u, v, j);
+                for (uint64 j; j < to; ++j) {
+                    if (tok.pqzPending(u, v, j) != frozen[u][v][j]) ++changedBelow;
+                }
+                for (uint64 j = to; j < lim; ++j) {
+                    frozen[u][v][j] = tok.pqzPending(u, v, j);
+                }
                 if (lim > to) frozenTo[u][v] = lim;
             }
         }
@@ -204,7 +208,8 @@ contract ProofPathHandler is PqzFixture {
         uint256 hi = a.rolled + 16 < a.pendingCount ? a.rolled + 16 : a.pendingCount;
         d.p = uint64(lo + (pSel >> 8) % (hi - lo + 1));
         d.sIn = form == 5 || d.v != cur ? 0 : (pSel >> 4) % 3; // 0, 1 or 2 units shielded in by the debit itself
-        (d.k, d.mode, d.tag) = (tok.pqzAccount(d.from, 0).sendCounter, tok.proofStore(), keccak256(abi.encode("tag", ++nonce)));
+        (d.k, d.mode, d.tag) =
+        (tok.pqzAccount(d.from, 0).sendCounter, tok.proofStore(), keccak256(abi.encode("tag", ++nonce)));
         uint64 last = a.lastDebit;
         vm.recordLogs();
         address blob = form <= 2 || form == 5 ? _transfer(d, j, form) : _burn(d, form == 3);
@@ -241,7 +246,8 @@ contract ProofPathHandler is PqzFixture {
     function _multi(D memory d) internal returns (address) {
         bytes32[] memory legs = new bytes32[](2);
         (legs[0], legs[1]) = (uas[(d.fi + 1) % uas.length], uas[(d.fi + 2) % uas.length]);
-        IPqzToken.PqzMultiArgs memory m = _ms(_mpayload(d.p, 0, d.from, bytes32(0), legs, _blob(++nonce, _outLen(2, true)), ""));
+        IPqzToken.PqzMultiArgs memory m =
+            _ms(_mpayload(d.p, 0, d.from, bytes32(0), legs, _blob(++nonce, _outLen(2, true)), ""));
         (m.keyVersion, m.ownTag) = (d.v, d.tag);
         d.kv = new uint64[](3);
         (d.kv[0], d.kv[1], d.kv[2]) = (_cur(legs[0]), _cur(legs[1]), _cur(tok.auditorUA()));
@@ -260,8 +266,11 @@ contract ProofPathHandler is PqzFixture {
     function _burn(D memory d, bool pay) internal returns (address) {
         uint256 amount = pay && shielded > 0 ? 1 : 0;
         bytes32 rcpt = amount == 0 ? bytes32(0) : bytes32(uint256(0xD00D));
-        IPqzToken.PqzBurnArgs memory b =
-            _bs(bytes.concat(abi.encode(uint256(d.p), block.number + 50, d.sIn, d.from, bytes32(0)), _blob(++nonce, PqzCt.CT)));
+        IPqzToken.PqzBurnArgs memory b = _bs(
+            bytes.concat(
+                abi.encode(uint256(d.p), block.number + 50, d.sIn, d.from, bytes32(0)), _blob(++nonce, PqzCt.CT)
+            )
+        );
         (b.keyVersion, b.ownTag) = (d.v, d.tag);
         d.kv = new uint64[](0);
         try tok.burnStatement(b, amount, rcpt, 0) returns (bytes memory st) {
@@ -278,7 +287,8 @@ contract ProofPathHandler is PqzFixture {
     }
 
     function _ptr(bytes32 ref) internal view returns (address) {
-        return address(uint160(uint256(vm.load(address(tok), keccak256(abi.encode(ref, uint256(PqzCore._STORAGE) + 9))))));
+        return
+            address(uint160(uint256(vm.load(address(tok), keccak256(abi.encode(ref, uint256(PqzCore._STORAGE) + 9))))));
     }
 
     /// The landed debit: ghosts, its blob's tail and `memoHash` (P4), its event (P5).
@@ -288,8 +298,10 @@ contract ProofPathHandler is PqzFixture {
         tHash[d.from][d.k] = keccak256(_slice(d.st, d.tAt, PqzCt.CT));
         modeAt[d.from][d.k] = d.mode;
         (verOf[d.from][d.k], lastBefore[d.from][d.k]) = (d.v, last);
-        uint256 s0 = uint256(keccak256(abi.encode(uint256(d.k), keccak256(abi.encode(d.from, uint256(PqzCore._STORAGE) + 19)))));
-        recHash[d.from][d.k] = keccak256(abi.encode(vm.load(address(tok), bytes32(s0)), vm.load(address(tok), bytes32(s0 + 1))));
+        uint256 s0 =
+            uint256(keccak256(abi.encode(uint256(d.k), keccak256(abi.encode(d.from, uint256(PqzCore._STORAGE) + 19)))));
+        recHash[d.from][d.k] =
+            keccak256(abi.encode(vm.load(address(tok), bytes32(s0)), vm.load(address(tok), bytes32(s0 + 1))));
         _tail(d, blob);
         uint256 n;
         Vm.Log[] memory ls = vm.getRecordedLogs();
@@ -297,8 +309,11 @@ contract ProofPathHandler is PqzFixture {
             if (ls[i].emitter != address(tok) || ls[i].topics[0] != EV) continue;
             ++n;
             (bytes memory h, bytes memory pr) = abi.decode(ls[i].data, (bytes, bytes));
-            if (ls[i].topics[1] != bytes32(uint256(uint160(blob))) || ls[i].topics[2] != d.from || uint256(ls[i].topics[3]) != d.k
-                || keccak256(h) != keccak256(_slice(d.st, 0, 640)) || keccak256(pr) != keccak256(PROOF)) ++badLog;
+            if (
+                ls[i].topics[1] != bytes32(uint256(uint160(blob))) || ls[i].topics[2] != d.from
+                    || uint256(ls[i].topics[3]) != d.k || keccak256(h) != keccak256(_slice(d.st, 0, 640))
+                    || keccak256(pr) != keccak256(PROOF)
+            ) ++badLog;
         }
         if (n != (d.mode == PqzCore.LOG ? 1 : 0)) ++badLog;
         if (d.mode == PqzCore.LOG) ++logged;
@@ -314,7 +329,9 @@ contract ProofPathHandler is PqzFixture {
         }
         uint256 at = c.length - 1 - 8 * n - 32;
         if (bytes32(_slice(c, at, 32)) != d.tag) ++badTail;
-        for (uint256 i; i < n; ++i) if (uint64(bytes8(_slice(c, at + 32 + 8 * i, 8))) != d.kv[i]) ++badTail;
+        for (uint256 i; i < n; ++i) {
+            if (uint64(bytes8(_slice(c, at + 32 + 8 * i, 8))) != d.kv[i]) ++badTail;
+        }
         if (_word(d.st, 608) != keccak256(abi.encodePacked(d.tag))) ++badTail;
     }
 }

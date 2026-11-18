@@ -23,12 +23,18 @@ import {WrapLimitsBase} from "../wrap/WrapLimitsBase.sol";
 /// are built here from the type strings, as a wallet builds them. UNAUDITED.
 contract GovWrapLimitsTest is WrapLimitsBase {
     string constant LIMIT = "WrapLimit(uint24 perUser,uint64 tokenWide,uint32 period)";
-    string constant LEG = "WrapLegLimits(address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong)";
-    string constant SET = "UASetWrapLimits(bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
-    string constant MEMBER = "UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
-    string constant MAXS = "UASetMaxSupply(bytes32 from,address target,uint256 maxSupply,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
-    string constant MAXW = "UASetMaxWrapSupply(bytes32 from,address target,uint256 maxWrapSupply,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
-    string constant GRANT = "UAGrantRole(bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
+    string constant LEG =
+        "WrapLegLimits(address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong)";
+    string constant SET =
+        "UASetWrapLimits(bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
+    string constant MEMBER =
+        "UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
+    string constant MAXS =
+        "UASetMaxSupply(bytes32 from,address target,uint256 maxSupply,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
+    string constant MAXW =
+        "UASetMaxWrapSupply(bytes32 from,address target,uint256 maxWrapSupply,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
+    string constant GRANT =
+        "UAGrantRole(bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
 
     GovernanceRouter internal router;
     WrappedToken internal w;
@@ -37,8 +43,12 @@ contract GovWrapLimitsTest is WrapLimitsBase {
         super.setUp();
         router = new GovernanceRouter(chainUidA, REG_L, address(0), false);
         (address[] memory l, uint256[] memory n) = _one(u);
-        IFactoryToken.TokenConfig memory c = _cfg(l, n, 1 | (uint256(1) << GovernanceBits.MINTABLE) | CONTROLS
-            | (uint256(1) << GovernanceBits.SUPPLY_CAP_ADJUSTABLE)); // round 3zc: bit 31, no grant delay: a cap applies at once
+        IFactoryToken.TokenConfig memory c = _cfg(
+            l,
+            n,
+            1 | (uint256(1) << GovernanceBits.MINTABLE) | CONTROLS
+                | (uint256(1) << GovernanceBits.SUPPLY_CAP_ADJUSTABLE)
+        ); // round 3zc: bit 31, no grant delay: a cap applies at once
         c.admin = _pad(alice);
         address impl_ = address(new WrappedToken(address(this), kindArgs(1, address(this), "")));
         w = WrappedToken(payable(EnvKit.clone(impl_, EnvKit.env(chainUidA, REG_L, address(0), false, address(router)))));
@@ -46,14 +56,26 @@ contract GovWrapLimitsTest is WrapLimitsBase {
     }
 
     function _domain() internal view returns (bytes32) {
-        (, string memory name, string memory version, uint256 chainId, address vc, bytes32 salt,) = router.eip712Domain();
-        return keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256(bytes(name)), keccak256(bytes(version)), chainId, vc, salt));
+        (, string memory name, string memory version, uint256 chainId, address vc, bytes32 salt,) =
+            router.eip712Domain();
+        return keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256(bytes(name)),
+                keccak256(bytes(version)),
+                chainId,
+                vc,
+                salt
+            )
+        );
     }
 
     function _env(bytes32 from) internal view returns (MetaTxLib.UAEnvelope memory) {
-        return MetaTxLib.UAEnvelope(from, 1, router.mtxNonce(from, 1), block.timestamp + 1 hours, 0, address(0), 0, address(0));
+        return MetaTxLib.UAEnvelope(
+            from, 1, router.mtxNonce(from, 1), block.timestamp + 1 hours, 0, address(0), 0, address(0)
+        );
     }
 
     function _limit(IWrappedToken.WrapLimit memory x) internal pure returns (bytes32) {
@@ -64,28 +86,56 @@ contract GovWrapLimitsTest is WrapLimitsBase {
         bytes memory cat;
         for (uint256 i; i < legs.length; ++i) {
             IWrappedToken.WrapLegLimits memory l = legs[i];
-            cat = bytes.concat(cat, keccak256(abi.encode(keccak256(bytes(string.concat(LEG, LIMIT))), l.underlying, l.unitExp,
-                l.decayDays, _limit(l.wrapShort), _limit(l.wrapLong), _limit(l.unwrapShort), _limit(l.unwrapLong))));
+            cat = bytes.concat(
+                cat,
+                keccak256(
+                    abi.encode(
+                        keccak256(bytes(string.concat(LEG, LIMIT))),
+                        l.underlying,
+                        l.unitExp,
+                        l.decayDays,
+                        _limit(l.wrapShort),
+                        _limit(l.wrapLong),
+                        _limit(l.unwrapShort),
+                        _limit(l.unwrapLong)
+                    )
+                )
+            );
         }
         return keccak256(cat);
     }
 
     function _digest(string memory typeString, MetaTxLib.UAEnvelope memory e, bytes memory words)
-        internal view returns (bytes32)
+        internal
+        view
+        returns (bytes32)
     {
-        bytes32 h = keccak256(bytes.concat(abi.encode(keccak256(bytes(typeString)), e.from, address(w)), words,
-            abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
+        bytes32 h = keccak256(
+            bytes.concat(
+                abi.encode(keccak256(bytes(typeString)), e.from, address(w)),
+                words,
+                abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))
+            )
+        );
         return keccak256(abi.encodePacked("\x19\x01", _domain(), h));
     }
 
-    function _setLimits(uint256 pk, bytes32 from, string memory typeString, IWrappedToken.WrapLegLimits[] memory legs,
-        bytes memory err) internal
-    {
+    function _setLimits(
+        uint256 pk,
+        bytes32 from,
+        string memory typeString,
+        IWrappedToken.WrapLegLimits[] memory legs,
+        bytes memory err
+    ) internal {
         MetaTxLib.UAEnvelope memory e = _env(from);
-        bytes memory sig = _ecdsa(pk, _digest(typeString, e, abi.encode(_legs(legs), true, false, false, EnvKit.codeUidOf(address(w)))));
+        bytes memory sig = _ecdsa(
+            pk, _digest(typeString, e, abi.encode(_legs(legs), true, false, false, EnvKit.codeUidOf(address(w))))
+        );
         if (err.length != 0) vm.expectRevert(err);
         vm.prank(RELAYER);
-        router.mtxSetWrapLimits(e, address(w), legs, true, false, false, EnvKit.codeUidOf(address(w)), UACall.auth(from, sig));
+        router.mtxSetWrapLimits(
+            e, address(w), legs, true, false, false, EnvKit.codeUidOf(address(w)), UACall.auth(from, sig)
+        );
     }
 
     function test_setWrapLimitsThroughTheRouter() public {
@@ -99,16 +149,32 @@ contract GovWrapLimitsTest is WrapLimitsBase {
 
     function test_theSubjectIsTheSigner() public {
         IWrappedToken.WrapLegLimits[] memory legs = _cfg1(0, 0, L(10, 0, 1 days), OFF(), OFF(), OFF());
-        _setLimits(BOB_PK, _pad(bob), string.concat(SET, LEG, LIMIT), legs,
-            abi.encodeWithSelector(IAdmin.NotAdmin.selector, _pad(bob)));
+        _setLimits(
+            BOB_PK,
+            _pad(bob),
+            string.concat(SET, LEG, LIMIT),
+            legs,
+            abi.encodeWithSelector(IAdmin.NotAdmin.selector, _pad(bob))
+        );
     }
 
     /// A wallet that leaves a referenced struct type out of the type string signs another digest: refused.
     function test_aMissingStructTypeFails() public {
         IWrappedToken.WrapLegLimits[] memory legs = _cfg1(0, 0, L(10, 0, 1 days), OFF(), OFF(), OFF());
-        _setLimits(ALICE_PK, _pad(alice), string.concat(SET, LEG), legs, abi.encodeWithSelector(IMetaTx.MetaTxBadSignature.selector));
-        _setLimits(ALICE_PK, _pad(alice), string.concat(SET, LIMIT, LEG), legs,
-            abi.encodeWithSelector(IMetaTx.MetaTxBadSignature.selector)); // the referenced types out of order
+        _setLimits(
+            ALICE_PK,
+            _pad(alice),
+            string.concat(SET, LEG),
+            legs,
+            abi.encodeWithSelector(IMetaTx.MetaTxBadSignature.selector)
+        );
+        _setLimits(
+            ALICE_PK,
+            _pad(alice),
+            string.concat(SET, LIMIT, LEG),
+            legs,
+            abi.encodeWithSelector(IMetaTx.MetaTxBadSignature.selector)
+        ); // the referenced types out of order
         _setLimits(ALICE_PK, _pad(alice), string.concat(SET, LEG, LIMIT), legs, ""); // positive control
     }
 
@@ -117,7 +183,9 @@ contract GovWrapLimitsTest is WrapLimitsBase {
         bytes memory sig = _ecdsa(pk, _digest(MEMBER, e, abi.encode(account, true, true, EnvKit.codeUidOf(address(w)))));
         if (err.length != 0) vm.expectRevert(err);
         vm.prank(RELAYER);
-        router.mtxSetWrapMember(e, address(w), account, true, true, EnvKit.codeUidOf(address(w)), UACall.auth(from, sig));
+        router.mtxSetWrapMember(
+            e, address(w), account, true, true, EnvKit.codeUidOf(address(w)), UACall.auth(from, sig)
+        );
     }
 
     function test_setWrapMemberThroughTheRouter() public {
@@ -143,7 +211,9 @@ contract GovWrapLimitsTest is WrapLimitsBase {
     // ------------------------------------------------------------------ round 3zc (CTR-GOV-30): the two cap ops
 
     /// `mtxSetMaxSupply` / `mtxSetMaxWrapSupply` signed by the admin over `word` and sent with `sent`.
-    function _cap(bool wrap, uint256 pk, bytes32 from, uint256 v, bytes32 word, bytes32 sent, bytes memory err) internal {
+    function _cap(bool wrap, uint256 pk, bytes32 from, uint256 v, bytes32 word, bytes32 sent, bytes memory err)
+        internal
+    {
         MetaTxLib.UAEnvelope memory e = _env(from);
         bytes memory sig = _ecdsa(pk, _digest(wrap ? MAXW : MAXS, e, abi.encode(v, word)));
         if (err.length != 0) vm.expectRevert(err);
@@ -161,7 +231,15 @@ contract GovWrapLimitsTest is WrapLimitsBase {
             bool wrap = k == 1;
             uint256 v = wrap ? 500 : CAP / 2;
             _cap(wrap, BOB_PK, _pad(bob), v, wu, wu, abi.encodeWithSelector(IAdmin.NotAdmin.selector, _pad(bob)));
-            _cap(wrap, ALICE_PK, _pad(alice), v, sib, sib, abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, wu, sib));
+            _cap(
+                wrap,
+                ALICE_PK,
+                _pad(alice),
+                v,
+                sib,
+                sib,
+                abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, wu, sib)
+            );
             _cap(wrap, ALICE_PK, _pad(alice), v, wu, sib, abi.encodeWithSelector(IMetaTx.MetaTxBadSignature.selector));
             _cap(wrap, ALICE_PK, _pad(alice), v, wu, wu, ""); // the control
         }

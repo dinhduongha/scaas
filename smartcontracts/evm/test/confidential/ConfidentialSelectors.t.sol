@@ -28,8 +28,10 @@ contract ConfidentialSelectorsTest is Test {
     /// The shared ABI, ids `bytes32`.
     function test_signaturesPinned() public pure {
         assertEq(IConfidentialToken.mtxShield.selector, bytes4(keccak256("mtxShield(bytes32,uint256)")));
-        assertEq(IConfidentialWrappedToken.mtxWrapShield.selector,
-            bytes4(keccak256("mtxWrapShield(address,uint256,bytes32)")));
+        assertEq(
+            IConfidentialWrappedToken.mtxWrapShield.selector,
+            bytes4(keccak256("mtxWrapShield(address,uint256,bytes32)"))
+        );
         assertEq(IConfidentialToken.Shielded.selector, keccak256("Shielded(bytes32,address,uint256,uint64)"));
         assertEq(IConfidentialToken.RolledOver.selector, keccak256("RolledOver(bytes32,uint64,uint32,bytes32)"));
         assertEq(IConfidentialToken.Unshielded.selector, keccak256("Unshielded(bytes32,uint256,bytes32,address)"));
@@ -40,26 +42,47 @@ contract ConfidentialSelectorsTest is Test {
     function test_pqzExplicitSignaturesPinned() public pure {
         // group 3f T45 (PQZ verifier mode spec §5.3): the verdict last, `PqzSignedVerdict` (the stack's struct fallback for
         // `pqzVerdict, pqzVerdictSig`): op 7 0xe680f327 -> 0xff93a099 (the old rows in test/vectors/legacy/ua-mtx-merge/3f/)
-        string memory tail = string.concat(",bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,",
-            "((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))");
+        string memory tail = string.concat(
+            ",bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,",
+            "((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))"
+        );
         // group 3g T52: `uint64 keyVersion` after `fromUA` in the three args structs; group 3h T59: `bytes32 ownTag` after `salt`
         // (op 1, op 7) and after `beneficiaryUA` (the burn forms)
         // the three-key model (CTR-PQZ-38, -40): `bytes uFrom` after `vAuditor`, the two `PqzOpening`s last (op 1 0xc92100fe ->
         // 0x8f913be5, its commit-reveal form 0x240ecea3 -> 0xa4f6024d)
-        string memory single = string.concat("(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,",
-            "bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes))");
-        string memory multi = "(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)";
+        string memory single = string.concat(
+            "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,",
+            "bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes))"
+        );
+        string memory multi =
+            "(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)";
         string memory burn = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes)";
-        assertEq(IPqzToken.mtxConfidentialTransfer.selector, bytes4(keccak256(bytes(string.concat("mtxConfidentialTransfer(", multi, tail)))));
-        assertEq(IPqzToken.mtxConfidentialTransferCompact.selector,
-            bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferCompact(", multi, tail)))));
-        assertEq(IPqzToken.mtxConfidentialTransferSingle.selector,
-            bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferSingle(", single, tail)))));
-        assertEq(IPqzToken.mtxConfidentialTransferSingleCompact.selector,
-            bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferSingleCompact(", single, tail)))));
-        assertEq(IPqzToken.mtxUnshield.selector, bytes4(keccak256(bytes(string.concat("mtxUnshield(", burn, ",uint256,bytes32", tail)))));
-        assertEq(IPqzWrappedToken.mtxUnshieldUnwrap.selector,
-            bytes4(keccak256(bytes(string.concat("mtxUnshieldUnwrap(", burn, ",(address,bytes32,uint256,uint256)", tail)))));
+        assertEq(
+            IPqzToken.mtxConfidentialTransfer.selector,
+            bytes4(keccak256(bytes(string.concat("mtxConfidentialTransfer(", multi, tail))))
+        );
+        assertEq(
+            IPqzToken.mtxConfidentialTransferCompact.selector,
+            bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferCompact(", multi, tail))))
+        );
+        assertEq(
+            IPqzToken.mtxConfidentialTransferSingle.selector,
+            bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferSingle(", single, tail))))
+        );
+        assertEq(
+            IPqzToken.mtxConfidentialTransferSingleCompact.selector,
+            bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferSingleCompact(", single, tail))))
+        );
+        assertEq(
+            IPqzToken.mtxUnshield.selector,
+            bytes4(keccak256(bytes(string.concat("mtxUnshield(", burn, ",uint256,bytes32", tail))))
+        );
+        assertEq(
+            IPqzWrappedToken.mtxUnshieldUnwrap.selector,
+            bytes4(
+                keccak256(bytes(string.concat("mtxUnshieldUnwrap(", burn, ",(address,bytes32,uint256,uint256)", tail)))
+            )
+        );
     }
 
     /// The Zether layer's explicit entries (Appendix X.3); `IZetherToken` has the direct forms only, the signed ones are
@@ -71,18 +94,36 @@ contract ConfidentialSelectorsTest is Test {
         string memory multi = string.concat(head, "uint256,", G1, ",", G1, ",", G1, ",", legs, ",bytes)");
         string memory burn = string.concat("(uint64,uint64,uint256,bytes32,", G1, ")");
         string memory sig = "(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])";
-        assertEq(IZetherToken.mtxConfidentialTransferSingle.selector,
-            bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferSingle(", single, ",bytes)")))));
-        assertEq(IZetherToken.mtxConfidentialTransfer.selector,
-            bytes4(keccak256(bytes(string.concat("mtxConfidentialTransfer(", multi, ",bytes)")))));
-        assertEq(IZetherToken.mtxConfidentialTransferCompact.selector,
-            bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferCompact(", multi, ",bytes)")))));
-        assertEq(IZetherToken.mtxUnshield.selector,
-            bytes4(keccak256(bytes(string.concat("mtxUnshield(", burn, ",uint256,bytes32,bytes)")))));
-        assertEq(IZetherWrappedToken.mtxUnshieldUnwrap.selector,
-            bytes4(keccak256(bytes(string.concat("mtxUnshieldUnwrap(", burn, ",(address,bytes32,uint256,uint256),bytes)")))));
-        assertEq(IZetherToken.mtxRollOverSigned.selector, bytes4(keccak256(bytes(string.concat("mtxRollOverSigned(bytes32,uint64,uint64,", sig, ")")))));
-        assertEq(IZetherToken.mtxSetRollOverMode.selector, bytes4(keccak256(bytes(string.concat("mtxSetRollOverMode(bytes32,uint8,uint64,", sig, ")")))));
+        assertEq(
+            IZetherToken.mtxConfidentialTransferSingle.selector,
+            bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferSingle(", single, ",bytes)"))))
+        );
+        assertEq(
+            IZetherToken.mtxConfidentialTransfer.selector,
+            bytes4(keccak256(bytes(string.concat("mtxConfidentialTransfer(", multi, ",bytes)"))))
+        );
+        assertEq(
+            IZetherToken.mtxConfidentialTransferCompact.selector,
+            bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferCompact(", multi, ",bytes)"))))
+        );
+        assertEq(
+            IZetherToken.mtxUnshield.selector,
+            bytes4(keccak256(bytes(string.concat("mtxUnshield(", burn, ",uint256,bytes32,bytes)"))))
+        );
+        assertEq(
+            IZetherWrappedToken.mtxUnshieldUnwrap.selector,
+            bytes4(
+                keccak256(bytes(string.concat("mtxUnshieldUnwrap(", burn, ",(address,bytes32,uint256,uint256),bytes)")))
+            )
+        );
+        assertEq(
+            IZetherToken.mtxRollOverSigned.selector,
+            bytes4(keccak256(bytes(string.concat("mtxRollOverSigned(bytes32,uint64,uint64,", sig, ")"))))
+        );
+        assertEq(
+            IZetherToken.mtxSetRollOverMode.selector,
+            bytes4(keccak256(bytes(string.concat("mtxSetRollOverMode(bytes32,uint8,uint64,", sig, ")"))))
+        );
     }
 
     function test_badPointInTheAbi() public pure {

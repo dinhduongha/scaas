@@ -117,19 +117,40 @@ interface ISCaaSDex {
     event FeeSplitSet(uint32 relayerSharePpm, address treasury);
     /// @notice `received` is net of the DEX fee: the party gets `receiveFill - dexFee`, so `received + dexFee` is the gross
     ///         and `relayerShare + treasuryShare == dexFee`. `destination` is where `received` went.
-    event LegSettled(bytes32 indexed ref, bytes32 indexed orderHash, address indexed from, address destination,
-        uint256 sold, uint256 received, uint256 dexFee, uint256 refund, uint256 relayerShare, uint256 treasuryShare);
+    event LegSettled(
+        bytes32 indexed ref,
+        bytes32 indexed orderHash,
+        address indexed from,
+        address destination,
+        uint256 sold,
+        uint256 received,
+        uint256 dexFee,
+        uint256 refund,
+        uint256 relayerShare,
+        uint256 treasuryShare
+    );
     /// @notice `LegSettled` of a shape-1 leg, every SCaaS leg (CTR-DEX-26, R18): ids, a native signer zero-padded;
     ///         `destination` is where `received` went. `LegSettled` is an outside leg's.
-    event UALegSettled(bytes32 indexed ref, bytes32 indexed orderHash, bytes32 indexed from, bytes32 destination,
-        uint256 sold, uint256 received, uint256 dexFee, uint256 refund, uint256 relayerShare, uint256 treasuryShare);
+    event UALegSettled(
+        bytes32 indexed ref,
+        bytes32 indexed orderHash,
+        bytes32 indexed from,
+        bytes32 destination,
+        uint256 sold,
+        uint256 received,
+        uint256 dexFee,
+        uint256 refund,
+        uint256 relayerShare,
+        uint256 treasuryShare
+    );
     /// @notice `reason` = the failed settlement's revert data, at most its first 256 bytes.
     event MatchFailed(bytes32 indexed ref, bytes reason);
     /// @notice `mtxExchangeBatch`: `reason` = the failed plan's revert data, at most its first 256 bytes.
     event ExchangeFailed(bytes32 indexed ref, bytes reason);
     /// @notice Raised by `TradeLib` on outside-token legs and DEX-side cancels (same as `ITradeToken`), listed for the ABI.
-    event TradeFilled(bytes32 indexed orderHash, address indexed from, uint256 sellFill, uint256 receiveFill,
-        uint256 dexFee);
+    event TradeFilled(
+        bytes32 indexed orderHash, address indexed from, uint256 sellFill, uint256 receiveFill, uint256 dexFee
+    );
     event OrderCancelled(bytes32 indexed orderHash, address indexed from);
     event PullRestored(bytes32 indexed orderHash, uint256 amount);
     event NoncesInvalidated(address indexed from, uint256 indexed batch, uint256 minNonce);
@@ -137,12 +158,31 @@ interface ISCaaSDex {
     event ListedOnlySet(bool on);
     /// @notice `receivedFloor` is the gross floor (`receiveFill`): the party gets `receivedFloor - dexFee + surplus`;
     ///         `limitReceive = ceil(sold · receiveAmount / amount)` is what the signed price guarantees for `sold`.
-    event ExchangeLegSettled(bytes32 indexed ref, bytes32 indexed orderHash, address indexed from, address destination,
-        uint256 sold, uint256 receivedFloor, uint256 surplus, uint256 dexFee, uint256 refund, uint256 limitReceive);
+    event ExchangeLegSettled(
+        bytes32 indexed ref,
+        bytes32 indexed orderHash,
+        address indexed from,
+        address destination,
+        uint256 sold,
+        uint256 receivedFloor,
+        uint256 surplus,
+        uint256 dexFee,
+        uint256 refund,
+        uint256 limitReceive
+    );
     /// @notice `ExchangeLegSettled` of a shape-1 leg (CTR-DEX-26).
-    event UAExchangeLegSettled(bytes32 indexed ref, bytes32 indexed orderHash, bytes32 indexed from,
-        bytes32 destination, uint256 sold, uint256 receivedFloor, uint256 surplus, uint256 dexFee, uint256 refund,
-        uint256 limitReceive);
+    event UAExchangeLegSettled(
+        bytes32 indexed ref,
+        bytes32 indexed orderHash,
+        bytes32 indexed from,
+        bytes32 destination,
+        uint256 sold,
+        uint256 receivedFloor,
+        uint256 surplus,
+        uint256 dexFee,
+        uint256 refund,
+        uint256 limitReceive
+    );
 
     error NotFactory();
     error AlreadyInitialized();
@@ -226,8 +266,18 @@ interface ISCaaSDex {
     /// @notice A liquidity order executed (CTR-DEX-30 step 9): per input what was pulled and refunded (a refund may exceed
     ///         its pull: fees a position collected), per output what reached the DEX net of the fee and the fee; the
     ///         received position and its liquidity (0, 0 when none).
-    event LiquiditySettled(bytes32 indexed ref, bytes32 indexed orderHash, bytes32 indexed from, bytes32 recipient,
-        uint256[] pulled, uint256[] refunded, uint256[] received, uint256[] dexFees, uint256 positionId, uint128 liquidity);
+    event LiquiditySettled(
+        bytes32 indexed ref,
+        bytes32 indexed orderHash,
+        bytes32 indexed from,
+        bytes32 recipient,
+        uint256[] pulled,
+        uint256[] refunded,
+        uint256[] received,
+        uint256[] dexFees,
+        uint256 positionId,
+        uint128 liquidity
+    );
 
     /// @notice Factory only, in the clone's creating call, on a clone carrying its env (`IFactoryToken.EnvMissing`);
     ///         `creatorId` the creator's UA id (S3); `initArgs = abi.encode(DexConfig)` (plan 5g-Z2).
@@ -246,7 +296,8 @@ interface ISCaaSDex {
     ///         others still settle; `SigCheckGasStarved` / `UAVerifyGas` revert the whole call; `NothingSettled` when
     ///         no plan settles; `LengthMismatch` unless `ps.length == interactions.length`.
     function mtxExchangeBatch(ExchangePlan[] calldata ps, Interaction[][] calldata interactions)
-        external returns (bool[] memory ok);
+        external
+        returns (bool[] memory ok);
     /// @notice The DEX only (`NotSelf`): one plan of `mtxExchangeBatch`, `submitter` its caller.
     function exchangeOne(ExchangePlan calldata p, Interaction[] calldata interactions, address submitter) external;
     /// @notice Hybrid path (a): makers at their own price (`⌈fill · receiveAmount / amount⌉`, `mtxSettle`'s fee and
@@ -299,6 +350,12 @@ interface ISCaaSDex {
 ///         transfer at least `amountsIn` of `tokensIn` (the floors) to the DEX before it returns; anything more is
 ///         surplus for the signers.
 interface IExchangeExecutor {
-    function exchangeCallback(bytes32 ref, address[] calldata tokensOut, uint256[] calldata amountsOut,
-        address[] calldata tokensIn, uint256[] calldata amountsIn, bytes calldata data) external;
+    function exchangeCallback(
+        bytes32 ref,
+        address[] calldata tokensOut,
+        uint256[] calldata amountsOut,
+        address[] calldata tokensIn,
+        uint256[] calldata amountsIn,
+        bytes calldata data
+    ) external;
 }

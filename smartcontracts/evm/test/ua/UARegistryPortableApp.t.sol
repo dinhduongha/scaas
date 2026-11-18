@@ -45,7 +45,10 @@ contract UARegistryPortableAppTest is UARegistryPortableTest {
             assertEq(vm.parseJsonBytes32(j, string.concat(r, ".appId")), ids[i]);
             uint16 kind = uint16(vm.parseJsonUint(j, string.concat(r, ".kind")));
             bytes32 digest = vm.parseJsonBytes32(j, string.concat(r, ".digest"));
-            assertEq(vm.parseJsonBytes32(j, string.concat(r, ".uaMsg")), UAKinds.uaMessage(kind, UAKinds.appPurpose(ids[i]), digest));
+            assertEq(
+                vm.parseJsonBytes32(j, string.concat(r, ".uaMsg")),
+                UAKinds.uaMessage(kind, UAKinds.appPurpose(ids[i]), digest)
+            );
         }
     }
 
@@ -153,7 +156,8 @@ contract UARegistryPortableAppTest is UARegistryPortableTest {
         _app(p, ua, APP_A, s);
         _app(p, ua, APP_B, s);
         _portable(p, ua, UAKinds.PURPOSE_PQCHAT, s);
-        s.members[0].sig = _nativeSig(p, SK, UAKinds.PURPOSE_MEMBER, _memberDigest(ua, UAKinds.appPurpose(APP_A), TYPED));
+        s.members[0].sig =
+            _nativeSig(p, SK, UAKinds.PURPOSE_MEMBER, _memberDigest(ua, UAKinds.appPurpose(APP_A), TYPED));
         _appRefused(p, ua, APP_A, s);
     }
 
@@ -163,7 +167,8 @@ contract UARegistryPortableAppTest is UARegistryPortableTest {
     /// a refusal is gen 1's `UAUnauthorized(ua)`, as is an unregistered id.
     function test_requirePortableApp_gen2() public {
         (bytes memory d, bytes32 ua, bytes memory ml) = _msig3(p, 3);
-        UARegistry g2 = _deploy(REG_G2, chainUidA, address(p), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
+        UARegistry g2 =
+            _deploy(REG_G2, chainUidA, address(p), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
         bytes32 pa = UAKinds.appPurpose(APP_A);
         bytes32[] memory two = _ids(_pad(vm.addr(SK)), UAKinds.uaOf(0x0101, _key(0x0101)));
         _app(g2, ua, APP_A, _members(p, d, ua, two, ml, pa, false));
@@ -181,7 +186,8 @@ contract UARegistryPortableAppTest is UARegistryPortableTest {
         UARegistry g1 = _preApp(_cfgs(address(mock)));
         bytes memory key = _key(0x0101);
         bytes32 ua = _register(g1, 0x0101, key);
-        UARegistry g2 = _deploy(REG_G2B, chainUidA, address(g1), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
+        UARegistry g2 =
+            _deploy(REG_G2B, chainUidA, address(g1), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
         IUARegistry.UASig memory chat = _single(0x0101, key, UAKinds.PURPOSE_PQCHAT);
         _portable(g1, ua, UAKinds.PURPOSE_PQCHAT, chat);
         _portable(g2, ua, UAKinds.PURPOSE_PQCHAT, chat);
@@ -192,7 +198,8 @@ contract UARegistryPortableAppTest is UARegistryPortableTest {
         g2.requirePortableApp(ua, APP_A, TYPED, a);
         // the same record on a gen 1 of this tree: accepted through gen 2
         bytes32 ua2 = _register(p, 0x0101, key);
-        UARegistry g2p = _deploy(REG_G2, chainUidA, address(p), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
+        UARegistry g2p =
+            _deploy(REG_G2, chainUidA, address(p), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
         _app(g2p, ua2, APP_A, a);
     }
 
@@ -201,8 +208,10 @@ contract UARegistryPortableAppTest is UARegistryPortableTest {
     /// `requirePortableApp` and without a fallback. Its creation code with the constructor arguments, so the arguments are this
     /// tree's `KindConfig` (the same struct at f655cb0e0).
     function _preApp(UARegistry.KindConfig[] memory cfgs) internal returns (UARegistry r) {
-        bytes memory init = abi.encodePacked(type(UARegistryPreApp).creationCode,
-            abi.encode(chainUidA, address(0), false, BUDGET, address(0), true, cfgs));
+        bytes memory init = abi.encodePacked(
+            type(UARegistryPreApp).creationCode,
+            abi.encode(chainUidA, address(0), false, BUDGET, address(0), true, cfgs)
+        );
         assembly ("memory-safe") {
             r := create(0, add(init, 32), mload(init))
         }

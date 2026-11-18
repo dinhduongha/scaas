@@ -32,11 +32,13 @@ contract DexKatTest is Test {
     bytes32 constant DEX_ORDER = keccak256(
         "DexOrder(address sellToken,TradeOrder order)TradeOrder(address from,address receiveToken,uint256 amount,"
         "uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,address destination,"
-        "uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)");
+        "uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"
+    );
     bytes32 constant CANCEL_DEX_ORDER = keccak256(
         "CancelDexOrder(DexOrder order)DexOrder(address sellToken,TradeOrder order)TradeOrder(address from,address receiveToken,"
         "uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,address destination,"
-        "uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)");
+        "uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"
+    );
     address alice = vm.addr(ALICE_PK);
     address dave = vm.addr(DAVE_PK);
     NormalToken a;
@@ -47,13 +49,25 @@ contract DexKatTest is Test {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
         OpenFactory f = EnvKit.factory(address(this), UID_, 0);
-        Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
+        Catalogue.plain(
+            f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false
+        );
         // the DEX's two modules (governance, liquidity) are CREATEd by this contract: skip the nonce whose address is the
         // vectors' outside token below (the liquidity module would land there and be overwritten by the token's code)
         vm.setNonce(address(this), vm.getNonce(address(this)) + 2);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 6, 1e9, alice, address(0))), "a"));
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 500_000, TREASURY, false, 0, address(0), 0, 0)), "dex"));
+        a = NormalToken(
+            f.createToken(
+                IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 6, 1e9, alice, address(0))), "a"
+            )
+        );
+        dex = SCaaSDex(
+            f.createDex(
+                1,
+                abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 500_000, TREASURY, false, 0, address(0), 0, 0)),
+                "dex"
+            )
+        );
         // the outside token at its vector address (T66b: the body modules this setUp deploys move the test's nonces)
         usdc = MockERC20(vm.parseJsonAddress(vm.readFile(OUT), ".outside_token"));
         deployCodeTo("Mocks.sol:MockERC20", abi.encode("USD Coin", "USDC", uint8(6)), address(usdc));
@@ -70,26 +84,71 @@ contract DexKatTest is Test {
     }
 
     function _domainSep() internal view returns (bytes32) {
-        return keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256("SCaaS Dex"), keccak256("1"), uint256(7622), address(dex), UID_));
+        return keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256("SCaaS Dex"),
+                keccak256("1"),
+                uint256(7622),
+                address(dex),
+                UID_
+            )
+        );
     }
 
     function _tradeStruct(ITradeToken.TradeOrder memory o) internal pure returns (bytes32) {
-        return keccak256(abi.encode(TradeLib.TRADE_ORDER_TYPEHASH, o.from, o.receiveToken, o.amount, o.receiveAmount,
-            o.minFill, o.fee, o.relayer, o.dex, o.destination, o.flags, o.batch, o.nonce, o.validUntil));
+        return keccak256(
+            abi.encode(
+                TradeLib.TRADE_ORDER_TYPEHASH,
+                o.from,
+                o.receiveToken,
+                o.amount,
+                o.receiveAmount,
+                o.minFill,
+                o.fee,
+                o.relayer,
+                o.dex,
+                o.destination,
+                o.flags,
+                o.batch,
+                o.nonce,
+                o.validUntil
+            )
+        );
     }
 
     /// Dave (maker, outside token) sells 2000 USDC for >= 1000 A; Alice (taker, SCaaS) sells 500 A for >= 1000 USDC.
     function _orders() internal view returns (ITradeToken.TradeOrder memory m, ITradeToken.TradeOrder memory t) {
         m = ITradeToken.TradeOrder({
-            from: dave, receiveToken: address(a), amount: 2000e6, receiveAmount: 1000e6, minFill: 0, fee: 3_000,
-            relayer: RELAYER, dex: address(dex), destination: address(0), flags: 0, batch: 1, nonce: 3,
+            from: dave,
+            receiveToken: address(a),
+            amount: 2000e6,
+            receiveAmount: 1000e6,
+            minFill: 0,
+            fee: 3_000,
+            relayer: RELAYER,
+            dex: address(dex),
+            destination: address(0),
+            flags: 0,
+            batch: 1,
+            nonce: 3,
             validUntil: 1_800_000_300
         });
         t = ITradeToken.TradeOrder({
-            from: alice, receiveToken: address(usdc), amount: 500e6, receiveAmount: 1000e6, minFill: 0, fee: 3_000,
-            relayer: RELAYER, dex: address(dex), destination: address(0x5E11), flags: 1, batch: 2, nonce: 9,
+            from: alice,
+            receiveToken: address(usdc),
+            amount: 500e6,
+            receiveAmount: 1000e6,
+            minFill: 0,
+            fee: 3_000,
+            relayer: RELAYER,
+            dex: address(dex),
+            destination: address(0x5E11),
+            flags: 1,
+            batch: 2,
+            nonce: 9,
             validUntil: 1_800_000_300
         });
     }
@@ -105,10 +164,10 @@ contract DexKatTest is Test {
         ss[0].makers[0] = DexLegs.Leg(address(usdc), m, _sign(DAVE_PK, hm), 1000e6);
         bytes memory settleData = abi.encodeCall(ISCaaSDex.mtxSettle, (DexLegs.wire(ss)));
         vm.prank(RELAYER);
-        (bool ok, bytes memory ret) = address(dex).call(settleData);   // the vectors really execute
+        (bool ok, bytes memory ret) = address(dex).call(settleData); // the vectors really execute
         assertTrue(ok);
         assertTrue(abi.decode(ret, (bool[]))[0]);
-        assertEq(usdc.balanceOf(address(0x5E11)), 1000e6 - 3e6);         // fee ceil(1000e6 * 3000 / 1e6)
+        assertEq(usdc.balanceOf(address(0x5E11)), 1000e6 - 3e6); // fee ceil(1000e6 * 3000 / 1e6)
         assertEq(a.balanceOf(dave), 500e6 - 1.5e6);
         assertEq(dex.pulled(hm), 1000e6);
         vm.serializeString(k, "settle_calldata", vm.toString(settleData));
@@ -118,7 +177,10 @@ contract DexKatTest is Test {
     function _cancels(string memory k, ITradeToken.TradeOrder memory m, bytes32 hm, bytes32 domainSep) internal {
         bytes32 cancelDigest = dex.cancelDexOrderDigest(address(usdc), m);
         bytes32 dexOrderHash = keccak256(abi.encode(DEX_ORDER, address(usdc), _tradeStruct(m)));
-        assertEq(cancelDigest, keccak256(abi.encodePacked(hex"1901", domainSep, keccak256(abi.encode(CANCEL_DEX_ORDER, dexOrderHash)))));
+        assertEq(
+            cancelDigest,
+            keccak256(abi.encodePacked(hex"1901", domainSep, keccak256(abi.encode(CANCEL_DEX_ORDER, dexOrderHash))))
+        );
         ISCaaSDex.DexOrder[] memory os = new ISCaaSDex.DexOrder[](1);
         os[0] = ISCaaSDex.DexOrder(address(usdc), m);
         bytes[] memory sigs = new bytes[](1);
@@ -128,8 +190,16 @@ contract DexKatTest is Test {
         assertTrue(ok);
         assertEq(dex.pulled(hm), m.amount);
         bytes32 invDigest = dex.invalidateNoncesDigest(dave, 1, 5);
-        assertEq(invDigest, keccak256(abi.encodePacked(hex"1901", domainSep,
-            keccak256(abi.encode(TradeLib.INVALIDATE_NONCES_TYPEHASH, dave, uint256(1), uint256(5))))));
+        assertEq(
+            invDigest,
+            keccak256(
+                abi.encodePacked(
+                    hex"1901",
+                    domainSep,
+                    keccak256(abi.encode(TradeLib.INVALIDATE_NONCES_TYPEHASH, dave, uint256(1), uint256(5)))
+                )
+            )
+        );
         bytes memory invData = abi.encodeCall(ISCaaSDex.mtxInvalidateNonces, (dave, 1, 5, _sign(DAVE_PK, invDigest)));
         (ok,) = address(dex).call(invData);
         assertTrue(ok);
@@ -143,7 +213,9 @@ contract DexKatTest is Test {
     /// The fixed exchange plan: the two settlement orders as tagged `ExchangeLeg`s (the outside maker shape 0, the SCaaS
     /// taker shape 1), one extra token.
     function _plan(ITradeToken.TradeOrder memory m, ITradeToken.TradeOrder memory t, bytes32 hm)
-        internal view returns (ISCaaSDex.ExchangePlan memory p)
+        internal
+        view
+        returns (ISCaaSDex.ExchangePlan memory p)
     {
         p.ref = keccak256("scaas.kat.exchange");
         p.legs = new ISCaaSDex.ExchangeLeg[](2);
@@ -166,14 +238,21 @@ contract DexKatTest is Test {
         internal
     {
         ISCaaSDex.ExchangePlan memory p = _plan(m, t, hm);
-        vm.serializeString(k, "exchange_calldata", vm.toString(abi.encodeCall(ISCaaSDex.mtxExchange, (p, _interactions()))));
-        vm.serializeString(k, "exchange_via_calldata",
-            vm.toString(abi.encodeCall(ISCaaSDex.mtxExchangeVia, (p, address(0xE7EC), hex"c0ffee"))));
+        vm.serializeString(
+            k, "exchange_calldata", vm.toString(abi.encodeCall(ISCaaSDex.mtxExchange, (p, _interactions())))
+        );
+        vm.serializeString(
+            k,
+            "exchange_via_calldata",
+            vm.toString(abi.encodeCall(ISCaaSDex.mtxExchangeVia, (p, address(0xE7EC), hex"c0ffee")))
+        );
         ISCaaSDex.ExchangePlan[] memory ps = new ISCaaSDex.ExchangePlan[](1);
         ps[0] = p;
         ISCaaSDex.Interaction[][] memory xss = new ISCaaSDex.Interaction[][](1);
         xss[0] = _interactions();
-        vm.serializeString(k, "exchange_batch_calldata", vm.toString(abi.encodeCall(ISCaaSDex.mtxExchangeBatch, (ps, xss))));
+        vm.serializeString(
+            k, "exchange_batch_calldata", vm.toString(abi.encodeCall(ISCaaSDex.mtxExchangeBatch, (ps, xss)))
+        );
     }
 
     /// `mtxHybrid` / `mtxHybridVia` calldata for one fixed plan: Alice's order as the taker (shape 1), Dave's as the
@@ -191,8 +270,11 @@ contract DexKatTest is Test {
         p.extraTokens = new address[](1);
         p.extraTokens[0] = address(0xE7A);
         vm.serializeString(k, "hybrid_calldata", vm.toString(abi.encodeCall(ISCaaSDex.mtxHybrid, (p, _interactions()))));
-        vm.serializeString(k, "hybrid_via_calldata",
-            vm.toString(abi.encodeCall(ISCaaSDex.mtxHybridVia, (p, address(0xE7EC), hex"c0ffee"))));
+        vm.serializeString(
+            k,
+            "hybrid_via_calldata",
+            vm.toString(abi.encodeCall(ISCaaSDex.mtxHybridVia, (p, address(0xE7EC), hex"c0ffee")))
+        );
     }
 
     function tail(bytes calldata d) external pure returns (bytes memory) {
@@ -204,12 +286,20 @@ contract DexKatTest is Test {
     }
 
     /// Same selector as `ISCaaSDex.mtxHybrid`: the calldata decoder, as `mtxExchangeBatch` below.
-    function mtxHybrid(ISCaaSDex.HybridPlan calldata p, ISCaaSDex.Interaction[] calldata xs) external pure returns (bytes memory) {
+    function mtxHybrid(ISCaaSDex.HybridPlan calldata p, ISCaaSDex.Interaction[] calldata xs)
+        external
+        pure
+        returns (bytes memory)
+    {
         return abi.encodeCall(ISCaaSDex.mtxHybrid, (p, xs));
     }
 
     /// Same selector as `ISCaaSDex.mtxHybridVia`.
-    function mtxHybridVia(ISCaaSDex.HybridPlan calldata p, address ex, bytes calldata data) external pure returns (bytes memory) {
+    function mtxHybridVia(ISCaaSDex.HybridPlan calldata p, address ex, bytes calldata data)
+        external
+        pure
+        returns (bytes memory)
+    {
         return abi.encodeCall(ISCaaSDex.mtxHybridVia, (p, ex, data));
     }
 
@@ -234,7 +324,9 @@ contract DexKatTest is Test {
     /// Same selector as `ISCaaSDex.mtxExchangeBatch`, so the calldata is decoded by the compiler's calldata decoder
     /// (the memory `abi.decode` of this nested shape is stack-too-deep without `via_ir`) and re-encoded.
     function mtxExchangeBatch(ISCaaSDex.ExchangePlan[] calldata ps, ISCaaSDex.Interaction[][] calldata xs)
-        external pure returns (bytes memory)
+        external
+        pure
+        returns (bytes memory)
     {
         return abi.encodeCall(ISCaaSDex.mtxExchangeBatch, (ps, xs));
     }
@@ -257,11 +349,17 @@ contract DexKatTest is Test {
     function test_dexKat() public {
         (ITradeToken.TradeOrder memory m, ITradeToken.TradeOrder memory t) = _orders();
         bytes32 domainSep = _domainSep();
-        bytes32 dexOrderStruct = keccak256(abi.encode(
-            keccak256("DexOrder(address sellToken,TradeOrder order)TradeOrder(address from,address receiveToken,"
-                "uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,"
-                "address destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"),
-            address(usdc), _tradeStruct(m)));
+        bytes32 dexOrderStruct = keccak256(
+            abi.encode(
+                keccak256(
+                    "DexOrder(address sellToken,TradeOrder order)TradeOrder(address from,address receiveToken,"
+                    "uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,"
+                    "address destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"
+                ),
+                address(usdc),
+                _tradeStruct(m)
+            )
+        );
         bytes32 hm = keccak256(abi.encodePacked(hex"1901", domainSep, dexOrderStruct));
         assertEq(hm, dex.dexOrderDigest(address(usdc), m));
 
@@ -291,7 +389,9 @@ contract DexKatTest is Test {
         for (uint256 i; i < keys.length; ++i) {
             assertEq(
                 vm.parseJsonString(onDisk, string.concat(".", keys[i])),
-                vm.parseJsonString(out, string.concat(".", keys[i])), keys[i]);
+                vm.parseJsonString(out, string.concat(".", keys[i])),
+                keys[i]
+            );
         }
     }
 }

@@ -35,15 +35,33 @@ abstract contract SCaaSDexGovernance is ReentrancyGuardTransient, GovernanceBase
         return msg.sender;
     }
 
-    function _validBits() internal pure override returns (uint256) { return GovernanceBits.DEX_VALID; }
-    function _roleBits() internal pure override returns (uint256) { return GovernanceBits.DEX_BITS; }
-    function _contractOnlyBits() internal pure override returns (uint256) { return 0; }
-    function _scalarBits() internal pure override returns (uint256) { return 0; }
-    function _scopeBits() internal pure override returns (uint256) { return 0; }
+    function _validBits() internal pure override returns (uint256) {
+        return GovernanceBits.DEX_VALID;
+    }
 
-    function _govRouter() internal view override returns (address) { return ChainEnvCode.govRouter(); }
+    function _roleBits() internal pure override returns (uint256) {
+        return GovernanceBits.DEX_BITS;
+    }
 
-    function _govChainUid() internal view override returns (bytes32) { return ChainEnvCode.chainUid(); }
+    function _contractOnlyBits() internal pure override returns (uint256) {
+        return 0;
+    }
+
+    function _scalarBits() internal pure override returns (uint256) {
+        return 0;
+    }
+
+    function _scopeBits() internal pure override returns (uint256) {
+        return 0;
+    }
+
+    function _govRouter() internal view override returns (address) {
+        return ChainEnvCode.govRouter();
+    }
+
+    function _govChainUid() internal view override returns (bytes32) {
+        return ChainEnvCode.chainUid();
+    }
 }
 
 /// @title SCaaSDexGovernanceModule: the DEX's governance module (named D until owner ruling R7, 2026-11-10; T66b, spec §4.2,
@@ -68,27 +86,61 @@ contract SCaaSDexGovernanceModule is SCaaSDexGovernance, SCaaSDexCore {
         _FACTORY = factory_;
     }
 
-    function moduleGroup() external pure returns (uint8) { return GROUP_GOVERNANCE; }
+    function moduleGroup() external pure returns (uint8) {
+        return GROUP_GOVERNANCE;
+    }
 
     /// @notice The factory of the DEX releases this module serves (checked by `SCaaSDex`'s constructor).
-    function factory() external view returns (address) { return _FACTORY; }
+    function factory() external view returns (address) {
+        return _FACTORY;
+    }
 
-    function GOV_ROUTER() external view onlyDelegated returns (address) { return _GOV_ROUTERBody(); }
-    function features() external view onlyDelegated returns (uint256) { return _featuresBody(); }
-    function lockedFeatures() external view onlyDelegated returns (uint256) { return _lockedFeaturesBody(); }
-    function admin() external view onlyDelegated returns (bytes32) { return _adminBody(); }
-    function pendingAdmin() external view onlyDelegated returns (bytes32) { return _pendingAdminBody(); }
+    function GOV_ROUTER() external view onlyDelegated returns (address) {
+        return _GOV_ROUTERBody();
+    }
+
+    function features() external view onlyDelegated returns (uint256) {
+        return _featuresBody();
+    }
+
+    function lockedFeatures() external view onlyDelegated returns (uint256) {
+        return _lockedFeaturesBody();
+    }
+
+    function admin() external view onlyDelegated returns (bytes32) {
+        return _adminBody();
+    }
+
+    function pendingAdmin() external view onlyDelegated returns (bytes32) {
+        return _pendingAdminBody();
+    }
 
     function hasRole(uint8 bit, bytes32 account) external view onlyDelegated returns (bool) {
         return _hasRoleBody(bit, account);
     }
 
-    function validBits() external pure returns (uint256) { return _validBitsBody(); }
-    function holderCount(uint8 bit) external view onlyDelegated returns (uint256) { return _holderCountBody(bit); }
-    function grantDelay() external view onlyDelegated returns (uint64) { return _grantDelayBody(); }
-    function lastProposedAt() external view onlyDelegated returns (uint64) { return _lastProposedAtBody(); }
+    function validBits() external pure returns (uint256) {
+        return _validBitsBody();
+    }
 
-    function pendingGrant(uint8 bit, bytes32 account) external view onlyDelegated returns (uint64, bytes32, bytes32, bool) {
+    function holderCount(uint8 bit) external view onlyDelegated returns (uint256) {
+        return _holderCountBody(bit);
+    }
+
+    function grantDelay() external view onlyDelegated returns (uint64) {
+        return _grantDelayBody();
+    }
+
+    function lastProposedAt() external view onlyDelegated returns (uint64) {
+        return _lastProposedAtBody();
+    }
+
+    function pendingGrant(uint8 bit, bytes32 account)
+        external
+        view
+        onlyDelegated
+        returns (uint64, bytes32, bytes32, bool)
+    {
         return _pendingGrantBody(bit, account);
     }
 
@@ -114,23 +166,37 @@ contract SCaaSDexGovernanceModule is SCaaSDexGovernance, SCaaSDexCore {
     function cancelGrant(uint8 bit, bytes32 account, bytes32 chainUid_) external onlyDelegated {
         _cancelGrantBody(bit, account, chainUid_);
     }
+
     function revokeRole(uint8 bit, bytes32 account, bytes32 chainUid_) external onlyDelegated {
         _revokeRoleBody(bit, account, chainUid_);
     }
+
     function renounceRole(uint8 bit, bytes32 chainUid_) external onlyDelegated {
         _renounceRoleBody(bit, chainUid_);
     }
-    function disableFeature(uint8 bit, bytes32 chainUid_) external onlyDelegated { _disableFeatureBody(bit, chainUid_); }
+
+    function disableFeature(uint8 bit, bytes32 chainUid_) external onlyDelegated {
+        _disableFeatureBody(bit, chainUid_);
+    }
+
     function transferAdmin(bytes32 newAdmin, bytes32 chainUid_) external onlyDelegated {
         _transferAdminBody(newAdmin, chainUid_);
     }
-    function acceptAdmin() external onlyDelegated { _acceptAdminBody(); }
-    function renounceAdmin(bytes32 chainUid_) external onlyDelegated { _renounceAdminBody(chainUid_); }
+
+    function acceptAdmin() external onlyDelegated {
+        _acceptAdminBody();
+    }
+
+    function renounceAdmin(bytes32 chainUid_) external onlyDelegated {
+        _renounceAdminBody(chainUid_);
+    }
 
     // ------------------------------------------------------------------ the powers (O8, CTR-TOK-30 Change; bodies moved verbatim)
 
     /// @dev The DEX's factory: this module's immutable, equal to the DEX's (its constructor checks `factory()`).
-    function _factoryAt() internal view override returns (address) { return _FACTORY; }
+    function _factoryAt() internal view override returns (address) {
+        return _FACTORY;
+    }
 
     /// @dev A power: the holder's chain word (CTR-GOV-28 Change, `_holderOnChain`) before the use and any write.
     function _power(uint8 bit, bytes32 chainUid_) private returns (DexStorage storage) {

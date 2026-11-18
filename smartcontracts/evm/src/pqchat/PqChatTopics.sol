@@ -30,7 +30,9 @@ contract PqChatTopics is PqChatCore {
     function createTopic(IPqChat.PqTopic calldata t, IUARegistry.UASig calldata sig) external returns (bytes32 tid) {
         (IUARegistry reg, uint256 limit,) = _env();
         uint256 nl = bytes(t.name).length;
-        if (nl == 0 || nl > NAME_MAX || t.homeChain == 0 || t.homeChatContract == address(0)) revert IPqChat.PqTopicShape();
+        if (nl == 0 || nl > NAME_MAX || t.homeChain == 0 || t.homeChatContract == address(0)) {
+            revert IPqChat.PqTopicShape();
+        }
         _auth(reg, t.admin, PqChatTypes.hashTopic(t), sig);
         _useNonce(PqChatTypes.scopeTopic(t.admin), t.nonce);
         tid = PqChatTypes.topicId(t.admin, t.nonce);
@@ -94,7 +96,9 @@ contract PqChatTopics is PqChatCore {
             depth = pe.depth + 1;
             if (tp.openReplies) return depth;
         }
-        if (e.author != tp.admin && !_s().writers[e.topicId][e.author].granted) revert IPqChat.PqTopicNotWriter(e.author);
+        if (e.author != tp.admin && !_s().writers[e.topicId][e.author].granted) {
+            revert IPqChat.PqTopicNotWriter(e.author);
+        }
     }
 
     function _entryShape(IPqChat.EntryRef calldata r, string calldata mediaType, bytes calldata body) internal pure {
@@ -157,13 +161,16 @@ contract PqChatTopics is PqChatCore {
         (v.topicId, v.author, v.parentId, v.depth, v.ref) = (e.topicId, e.author, e.parentId, en.depth, e.ref);
         (v.mediaType, v.body, v.sigHash, v.versionCount) = (e.mediaType, e.body, sh, uint32(vs.length) + 1);
         if (vs.length != 0) {
-            (IPqChat.PqTopicEdit memory d, bytes32 dh) = abi.decode(_get(vs[vs.length - 1]), (IPqChat.PqTopicEdit, bytes32));
+            (IPqChat.PqTopicEdit memory d, bytes32 dh) =
+                abi.decode(_get(vs[vs.length - 1]), (IPqChat.PqTopicEdit, bytes32));
             (v.mediaType, v.body, v.sigHash) = (d.mediaType, d.body, dh);
         }
     }
 
     function versionAt(bytes32 entryId, uint32 version)
-        external view returns (string memory mediaType, bytes memory body, bytes32 sigHash)
+        external
+        view
+        returns (string memory mediaType, bytes memory body, bytes32 sigHash)
     {
         address original = _s().entries[entryId].record;
         if (original == address(0)) revert IPqChat.PqTopicUnknown(entryId);
@@ -196,11 +203,19 @@ contract PqChatTopics is PqChatCore {
         return _page(_s().allTopics, start, count);
     }
 
-    function topicsByAdmin(bytes32 admin_, uint256 start, uint256 count) external view returns (bytes32[] memory, uint256) {
+    function topicsByAdmin(bytes32 admin_, uint256 start, uint256 count)
+        external
+        view
+        returns (bytes32[] memory, uint256)
+    {
         return _page(_s().topicsByAdmin[admin_], start, count);
     }
 
-    function writersOf(bytes32 topicId, uint256 start, uint256 count) external view returns (bytes32[] memory, uint256) {
+    function writersOf(bytes32 topicId, uint256 start, uint256 count)
+        external
+        view
+        returns (bytes32[] memory, uint256)
+    {
         return _page(_s().writersOf[topicId], start, count);
     }
 
@@ -226,13 +241,17 @@ contract PqChatTopics is PqChatCore {
 
     /// @dev P42: at most `count` ids from `start`, fewer at the end, empty past it; and the list's length.
     function _page(bytes32[] storage l, uint256 start, uint256 count)
-        internal view returns (bytes32[] memory page, uint256 total)
+        internal
+        view
+        returns (bytes32[] memory page, uint256 total)
     {
         total = l.length;
         if (start >= total) return (page, total);
         uint256 end = total - start > count ? start + count : total;
         page = new bytes32[](end - start);
-        for (uint256 i; i < page.length; ++i) page[i] = l[start + i];
+        for (uint256 i; i < page.length; ++i) {
+            page[i] = l[start + i];
+        }
     }
 
     function _topic(bytes32 topicId) internal view returns (Topic storage tp) {
@@ -242,7 +261,10 @@ contract PqChatTopics is PqChatCore {
 
     /// @dev A record a topic's admin signs without naming itself (`PqTopicUpdate`, `PqTopicWriter`): any other signer's
     ///      refusal by the registry is `PqTopicNotAdmin` (P41); every other revert (a starved verifier) bubbles.
-    function _adminAuth(IUARegistry reg, bytes32 admin_, bytes32 structHash, IUARegistry.UASig calldata sig) internal view {
+    function _adminAuth(IUARegistry reg, bytes32 admin_, bytes32 structHash, IUARegistry.UASig calldata sig)
+        internal
+        view
+    {
         try reg.requirePortable(admin_, UAKinds.PURPOSE_PQCHAT, PqChatTypes.typed(structHash), sig) {}
         catch (bytes memory err) {
             if (bytes4(err) == IUARegistry.UAUnauthorized.selector) revert IPqChat.PqTopicNotAdmin(admin_);

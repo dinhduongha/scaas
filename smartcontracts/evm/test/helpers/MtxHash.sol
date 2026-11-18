@@ -8,13 +8,29 @@ import {MtxPipelineLib} from "../../src/metatx/MtxPipelineLib.sol";
 /// second copy of the byte rule (Fable B P3-3: `MetaTxLib.hashStruct` moved to legacy/ua-mtx-fix-contracts/).
 library MtxHash {
     function hashStruct(MetaTxLib.MetaTransaction memory m) internal pure returns (bytes32) {
-        return MtxPipelineLib._structHash(MetaTxLib.METATX_TYPEHASH, MtxPipelineLib.Envelope(MetaTxLib.pad(m.from),
-            keccak256(m.data), m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient));
+        return MtxPipelineLib._structHash(
+            MetaTxLib.METATX_TYPEHASH,
+            MtxPipelineLib.Envelope(
+                MetaTxLib.pad(m.from),
+                keccak256(m.data),
+                m.batch,
+                m.nonce,
+                m.validUntil,
+                m.mode,
+                m.relayer,
+                m.fee,
+                m.feeRecipient
+            )
+        );
     }
 
     function hashStruct(MetaTxLib.UAMetaTransaction memory m) internal pure returns (bytes32) {
-        return MtxPipelineLib._structHash(MetaTxLib.UAMETATX_TYPEHASH, MtxPipelineLib.Envelope(m.from, keccak256(m.data),
-            m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient));
+        return MtxPipelineLib._structHash(
+            MetaTxLib.UAMETATX_TYPEHASH,
+            MtxPipelineLib.Envelope(
+                m.from, keccak256(m.data), m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient
+            )
+        );
     }
 
     function hashStruct(MetaTxLib.UAMetaTransfer memory t) internal pure returns (bytes32) {

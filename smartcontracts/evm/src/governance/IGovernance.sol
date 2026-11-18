@@ -7,7 +7,10 @@ import {IAdmin} from "./IAdmin.sol";
 ///        `GovernanceLib`. The admin's views, entries, events and errors are `IAdmin`'s (CTR-GOV-23); this adds `renounceAdmin(chainUid_)`.
 interface IGovernance is IAdmin {
     /// @notice A capability has no holder and binds or serves everyone; a power has holders. The type is `_roleBits()`.
-    enum BitType { CAPABILITY, POWER }
+    enum BitType {
+        CAPABILITY,
+        POWER
+    }
 
     /// @notice What a grantor chooses (CTR-GOV-02). 0 = no bound, except `max`: `type(uint128).max` = no bound. `delegable`
     ///         only from the admin: a leaf cannot delegate. `scope` is opaque to the base; the contract reads it.
@@ -56,8 +59,9 @@ interface IGovernance is IAdmin {
     event GrantUsed(uint8 indexed bit, bytes32 indexed holder, uint256 scalar);
     /// @notice The first of the admin's two calls (spec §1.6): `terms` for a wallet to compare with the pending's
     ///         `commit`; `whole` is a `grantRole`, its terms empty.
-    event GrantProposed(uint8 indexed bit, bytes32 indexed account, bytes32 indexed proposer, uint64 eta, bool whole,
-        GrantTerms terms);
+    event GrantProposed(
+        uint8 indexed bit, bytes32 indexed account, bytes32 indexed proposer, uint64 eta, bool whole, GrantTerms terms
+    );
     event GrantCancelled(uint8 indexed bit, bytes32 indexed account, bytes32 indexed by);
     /// @notice The first call of a relaxation on a bit of the contract's `_delayedRelaxBits()` (spec
     ///         `2026-11-05-regulated-kinds.md` §3.6, RK-2): `action` 3 revoke, 4 renounce, 5 disable (`account` 0). Nothing
@@ -135,7 +139,9 @@ interface IGovernance is IAdmin {
     ///         account, argsHash))`: action 1 grant, 2 set (`argsHash` the terms' hash), 3 revoke, 4 renounce, 5 disable
     ///         (`account` 0), `argsHash` 0 but for set (regulated-kinds spec §3.6).
     function pendingGrant(uint8 bit, bytes32 account)
-        external view returns (uint64 eta, bytes32 proposer, bytes32 commit, bool live);
+        external
+        view
+        returns (uint64 eta, bytes32 proposer, bytes32 commit, bool live);
     /// @notice The admin, or the pending's proposer, deletes a pending of any action. `chainUid_` this contract's chain word
     ///         (`ChainUidMismatch`, CTR-GOV-28), as on `setGrant` and `revokeRole`: a stranger is `NotAdmin` first; the
     ///         admin's word is checked before any write, another caller's after its own checks (the call reverting whole).

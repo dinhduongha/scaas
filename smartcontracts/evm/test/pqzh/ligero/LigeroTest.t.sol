@@ -46,7 +46,9 @@ contract LigeroTest is Test {
 
     /// EIP-7623 tokens: zero bytes 1, other bytes 4
     function tokens(bytes memory b) internal pure returns (uint256 t) {
-        for (uint256 i; i < b.length; ++i) t += b[i] == 0 ? 1 : 4;
+        for (uint256 i; i < b.length; ++i) {
+            t += b[i] == 0 ? 1 : 4;
+        }
     }
 
     function measure(string memory rel, string memory pre) internal {
@@ -55,16 +57,45 @@ contract LigeroTest is Test {
         bytes memory pf = file(string.concat(rel, "-", pre, ".proof"));
         (bool ok, uint256[9] memory g) = ver.verifyProfiled(o, file(string.concat(rel, "-", pre, ".stmt")), pf, p);
         assertTrue(ok, "honest proof rejected");
-        console2.log(string.concat(
-            '{"rel": "', rel, '", "preset": "', pre, '", "n": ', vm.toString(p.n), ', "k": ', vm.toString(p.k),
-            ', "t": ', vm.toString(p.t), ', "distinct": ', vm.toString(g[8]), ', "proof_bytes": ', vm.toString(pf.length),
-            ', "verify_gas": ', vm.toString(g[7])
-        ));
-        console2.log(string.concat(
-            '  "stages": {"stmt_seed": ', vm.toString(g[0]), ', "transcript_pow_indices": ', vm.toString(g[1]),
-            ', "columns_merkle": ', vm.toString(g[2]), ', "a_copy": ', vm.toString(g[3]), ', "comb_ring": ',
-            vm.toString(g[4]), ', "comb_rest_sum": ', vm.toString(g[5]), ', "column_checks": ', vm.toString(g[6]), '}'
-        ));
+        console2.log(
+            string.concat(
+                '{"rel": "',
+                rel,
+                '", "preset": "',
+                pre,
+                '", "n": ',
+                vm.toString(p.n),
+                ', "k": ',
+                vm.toString(p.k),
+                ', "t": ',
+                vm.toString(p.t),
+                ', "distinct": ',
+                vm.toString(g[8]),
+                ', "proof_bytes": ',
+                vm.toString(pf.length),
+                ', "verify_gas": ',
+                vm.toString(g[7])
+            )
+        );
+        console2.log(
+            string.concat(
+                '  "stages": {"stmt_seed": ',
+                vm.toString(g[0]),
+                ', "transcript_pow_indices": ',
+                vm.toString(g[1]),
+                ', "columns_merkle": ',
+                vm.toString(g[2]),
+                ', "a_copy": ',
+                vm.toString(g[3]),
+                ', "comb_ring": ',
+                vm.toString(g[4]),
+                ', "comb_rest_sum": ',
+                vm.toString(g[5]),
+                ', "column_checks": ',
+                vm.toString(g[6]),
+                "}"
+            )
+        );
         txLine(o, tokens(pf), g[7]);
     }
 
@@ -76,12 +107,27 @@ contract LigeroTest is Test {
         uint256 all = tk + otk;
         uint256 exe = verifyGas + oex;
         uint256 txg = 21_000 + (4 * all + exe > 10 * all ? 4 * all + exe : 10 * all);
-        console2.log(string.concat(
-            '  "tx": {"proof_tokens": ', vm.toString(tk), ', "proof_floor_7623": ', vm.toString(10 * tk),
-            ', "other_tokens": ', vm.toString(otk), ', "other_exec": ', vm.toString(oex), ', "tx_std_2028": ',
-            vm.toString(21_000 + 4 * all + exe), ', "tx_eip7623": ', vm.toString(txg), ', "cap": ', vm.toString(CAP),
-            ', "fits": ', txg <= CAP ? "true" : "false", "}}"
-        ));
+        console2.log(
+            string.concat(
+                '  "tx": {"proof_tokens": ',
+                vm.toString(tk),
+                ', "proof_floor_7623": ',
+                vm.toString(10 * tk),
+                ', "other_tokens": ',
+                vm.toString(otk),
+                ', "other_exec": ',
+                vm.toString(oex),
+                ', "tx_std_2028": ',
+                vm.toString(21_000 + 4 * all + exe),
+                ', "tx_eip7623": ',
+                vm.toString(txg),
+                ', "cap": ',
+                vm.toString(CAP),
+                ', "fits": ',
+                txg <= CAP ? "true" : "false",
+                "}}"
+            )
+        );
     }
 
     function test_gas_reg_proven() public {
@@ -156,7 +202,9 @@ contract LigeroTest is Test {
             uint256 off = body + 8 * (rnd() % ncoef);
             uint64 v = uint64(bytes8(slice8(s, off)));
             uint64 nv = kind == 5 ? uint64((uint256(v) + 1) % Q) : uint64(uint256(v) + Q);
-            for (uint256 i; i < 8; ++i) s[off + i] = bytes1(uint8(nv >> (56 - 8 * i)));
+            for (uint256 i; i < 8; ++i) {
+                s[off + i] = bytes1(uint8(nv >> (56 - 8 * i)));
+            }
         } else if (kind == 7) {
             s[rnd() % 64] ^= bytes1(uint8(1 << (rnd() % 8)));
         } else if (kind == 8) {
@@ -168,9 +216,13 @@ contract LigeroTest is Test {
             // an F_q element of w (offset 32 + 6 r) set to its value + q (non-canonical, still 6 bytes)
             uint256 off = 32 + 6 * (rnd() % 64);
             uint256 x;
-            for (uint256 i; i < 6; ++i) x = x << 8 | uint8(p[off + i]);
+            for (uint256 i; i < 6; ++i) {
+                x = x << 8 | uint8(p[off + i]);
+            }
             x += Q;
-            for (uint256 i; i < 6; ++i) p[off + i] = bytes1(uint8(x >> (40 - 8 * i)));
+            for (uint256 i; i < 6; ++i) {
+                p[off + i] = bytes1(uint8(x >> (40 - 8 * i)));
+            }
         } else {
             p = "";
         }
@@ -182,7 +234,11 @@ contract LigeroTest is Test {
         }
     }
 
-    function rejects(uint8 o, bytes memory s, bytes memory p, LigeroVerifier.Params memory pp) internal view returns (bool, bool) {
+    function rejects(uint8 o, bytes memory s, bytes memory p, LigeroVerifier.Params memory pp)
+        internal
+        view
+        returns (bool, bool)
+    {
         try ver.verify(o, s, p, pp) returns (bool ok) {
             return (!ok, false);
         } catch {
@@ -219,10 +275,19 @@ contract LigeroTest is Test {
                 if (rev) ++reverts;
             }
         }
-        console2.log(string.concat(
-            '{"rel": "', rel, '", "preset": "', pre, '", "mutations": ', vm.toString(12 * perKind),
-            ', "accepted": 0, "reverts": ', vm.toString(reverts), "}"
-        ));
+        console2.log(
+            string.concat(
+                '{"rel": "',
+                rel,
+                '", "preset": "',
+                pre,
+                '", "mutations": ',
+                vm.toString(12 * perKind),
+                ', "accepted": 0, "reverts": ',
+                vm.toString(reverts),
+                "}"
+            )
+        );
     }
 
     /// kind 9's proof (the other statement's) is honest for its own statement, and the right proof under the wrong op
@@ -297,7 +362,11 @@ contract LigeroTest is Test {
         otherAndWrongOp("tx", "johnson");
     }
 
-    function rejected(uint8 o, bytes memory s, bytes memory p, LigeroVerifier.Params memory pp) internal view returns (bool r) {
+    function rejected(uint8 o, bytes memory s, bytes memory p, LigeroVerifier.Params memory pp)
+        internal
+        view
+        returns (bool r)
+    {
         (r,) = rejects(o, s, p, pp);
     }
 
@@ -319,7 +388,9 @@ contract LigeroTest is Test {
         bytes32 other = o == 3
             ? bytes32(0xef22f3d1c1fc2edc565522eb73ca8cb782e8780eaf9b1f677965dd0cd5275414)
             : bytes32(0x69562a9cd615eb3d906cb1934ad56c788c30228d2faf7c517e33d65b4a03c088);
-        for (uint256 i; i < 32; ++i) s2[i] = other[i];
+        for (uint256 i; i < 32; ++i) {
+            s2[i] = other[i];
+        }
         assertTrue(rejected(o, s2, pf, pp), "other op's opTag");
         if (o == 1) {
             uint8[3] memory at = [31, 31, 0];
@@ -350,10 +421,19 @@ contract LigeroTest is Test {
         assertTrue(rejected(o, st, over, pp), "MAX + 1");
         g2 -= gasleft();
         assertLt(g2, g1);
-        console2.log(string.concat(
-            '{"rel": "', rel, '", "max_proof_len": ', vm.toString(max), ', "gas_reject_max_padded": ', vm.toString(g1),
-            ', "gas_reject_max_plus_1": ', vm.toString(g2), "}"
-        ));
+        console2.log(
+            string.concat(
+                '{"rel": "',
+                rel,
+                '", "max_proof_len": ',
+                vm.toString(max),
+                ', "gas_reject_max_padded": ',
+                vm.toString(g1),
+                ', "gas_reject_max_plus_1": ',
+                vm.toString(g2),
+                "}"
+            )
+        );
     }
 
     function test_stmt_and_length_reg() public {
@@ -387,7 +467,11 @@ contract LigeroTest is Test {
             bytes memory p = file(string.concat("neg-", cases[i], ".proof"));
             (bool rej, bool rev) = rejects(o, s, p, params(reg ? "reg" : "tx", "conj"));
             assertTrue(rej, cases[i]);
-            console2.log(string.concat('{"negative": "', cases[i], '", "rejected": true, "revert": ', rev ? "true" : "false", "}"));
+            console2.log(
+                string.concat(
+                    '{"negative": "', cases[i], '", "rejected": true, "revert": ', rev ? "true" : "false", "}"
+                )
+            );
         }
     }
 }

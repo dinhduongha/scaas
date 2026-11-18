@@ -50,11 +50,15 @@ abstract contract ZetherAuditorKinds is ZetherRegFixture {
 }
 
 contract ZetherAuditorKind10Test is ZetherAuditorKinds {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 }
 
 contract ZetherAuditorKind11Test is ZetherAuditorKinds {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 }
 
 abstract contract PqzAuditorKinds is PqzRegFixture {
@@ -88,9 +92,13 @@ abstract contract PqzAuditorKinds is PqzRegFixture {
 }
 
 contract PqzAuditorKind12Test is PqzAuditorKinds {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 }
 
 contract PqzAuditorKind13Test is PqzAuditorKinds {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 }

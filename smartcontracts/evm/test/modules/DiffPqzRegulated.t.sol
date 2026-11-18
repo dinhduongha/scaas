@@ -23,9 +23,13 @@ abstract contract DiffPqzReg is PqzRegFixture, LegacyDiff {
 }
 
 contract DiffPqzReg12Test is DiffPqzReg {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 }
 
 contract DiffPqzReg13Test is DiffPqzReg {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 }

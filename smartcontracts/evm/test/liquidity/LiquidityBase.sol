@@ -46,14 +46,25 @@ abstract contract LiquidityBase is Test {
 
     function setUp() public virtual {
         f = EnvKit.factory(address(this), UID_, 0);
-        Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
+        Catalogue.plain(
+            f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false
+        );
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1,
-            abi.encode(normalInit("A", "A", 0, 2e9, alice, address(0))), "a"));
-        b = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1,
-            abi.encode(normalInit("B", "B", 0, 2e9, alice, address(0))), "b"));
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 200_000, treasury, false, 0, address(0), 0, 0)),
-            "dex"));
+        a = NormalToken(
+            f.createToken(
+                IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 0, 2e9, alice, address(0))), "a"
+            )
+        );
+        b = NormalToken(
+            f.createToken(
+                IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("B", "B", 0, 2e9, alice, address(0))), "b"
+            )
+        );
+        dex = SCaaSDex(
+            f.createDex(
+                1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 200_000, treasury, false, 0, address(0), 0, 0)), "dex"
+            )
+        );
         puller = dex.puller();
         usdc = new MockERC20("USD Coin", "USDC", 6);
         usdc.mint(alice, 1e9);
@@ -86,7 +97,9 @@ abstract contract LiquidityBase is Test {
     }
 
     function _two(ITradeToken.LiquidityToken memory x, ITradeToken.LiquidityToken memory y)
-        internal pure returns (ITradeToken.LiquidityToken[] memory r)
+        internal
+        pure
+        returns (ITradeToken.LiquidityToken[] memory r)
     {
         r = new ITradeToken.LiquidityToken[](2);
         (r[0], r[1]) = (x, y);
@@ -124,25 +137,59 @@ abstract contract LiquidityBase is Test {
             }
             arr[k] = keccak256(packed);
         }
-        bytes32 ot = keccak256(bytes.concat("LiquidityOrder(bytes32 from,LiquidityToken[] inputs,LiquidityToken[] outputs,",
-            "address positionManager,address positionReader,uint256 positionIn,bytes32 positionPool,int24 tickLower,",
-            "int24 tickUpper,uint128 minLiquidity,bytes32 recipient,uint256 fee,address relayer,uint8 flags,uint256 batch,",
-            "uint256 nonce,uint256 validUntil)LiquidityToken(address token,uint256 amount)"));
-        return keccak256(bytes.concat(abi.encode(ot, o.from, arr[0], arr[1], o.positionManager, o.positionReader,
-            o.positionIn, o.positionPool, o.tickLower), abi.encode(o.tickUpper, o.minLiquidity, o.recipient, o.fee,
-            o.relayer, o.flags, o.batch, o.nonce, o.validUntil)));
+        bytes32 ot = keccak256(
+            bytes.concat(
+                "LiquidityOrder(bytes32 from,LiquidityToken[] inputs,LiquidityToken[] outputs,",
+                "address positionManager,address positionReader,uint256 positionIn,bytes32 positionPool,int24 tickLower,",
+                "int24 tickUpper,uint128 minLiquidity,bytes32 recipient,uint256 fee,address relayer,uint8 flags,uint256 batch,",
+                "uint256 nonce,uint256 validUntil)LiquidityToken(address token,uint256 amount)"
+            )
+        );
+        return keccak256(
+            bytes.concat(
+                abi.encode(
+                    ot,
+                    o.from,
+                    arr[0],
+                    arr[1],
+                    o.positionManager,
+                    o.positionReader,
+                    o.positionIn,
+                    o.positionPool,
+                    o.tickLower
+                ),
+                abi.encode(
+                    o.tickUpper, o.minLiquidity, o.recipient, o.fee, o.relayer, o.flags, o.batch, o.nonce, o.validUntil
+                )
+            )
+        );
     }
 
     /// `h` in the DEX domain of `verifyingContract` under this chain's `chain_uid`.
-    function _digestFor(ITradeToken.LiquidityOrder memory o, address verifyingContract) internal view returns (bytes32) {
-        bytes32 sep = keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256("SCaaS Dex"), keccak256("1"), block.chainid, verifyingContract, a.chainUid()));
+    function _digestFor(ITradeToken.LiquidityOrder memory o, address verifyingContract)
+        internal
+        view
+        returns (bytes32)
+    {
+        bytes32 sep = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256("SCaaS Dex"),
+                keccak256("1"),
+                block.chainid,
+                verifyingContract,
+                a.chainUid()
+            )
+        );
         return keccak256(abi.encodePacked(hex"1901", sep, _hashOrder(o)));
     }
 
     function _sigFor(ITradeToken.LiquidityOrder memory o, uint256 pk, address verifyingContract)
-        internal view returns (IUARegistry.UASig memory s)
+        internal
+        view
+        returns (IUARegistry.UASig memory s)
     {
         (uint8 v, bytes32 r, bytes32 ss) = vm.sign(pk, _digestFor(o, verifyingContract));
         s.signature = abi.encodePacked(r, ss, v);
@@ -154,7 +201,9 @@ abstract contract LiquidityBase is Test {
     }
 
     function _plan(ITradeToken.LiquidityOrder memory o, uint256 pk, uint256[] memory pull)
-        internal view returns (ISCaaSDex.LiquidityPlan memory p)
+        internal
+        view
+        returns (ISCaaSDex.LiquidityPlan memory p)
     {
         p.ref = "liq";
         p.order = o;
@@ -172,14 +221,18 @@ abstract contract LiquidityBase is Test {
     }
 
     function _xs2(ISCaaSDex.Interaction memory x, ISCaaSDex.Interaction memory y)
-        internal pure returns (ISCaaSDex.Interaction[] memory r)
+        internal
+        pure
+        returns (ISCaaSDex.Interaction[] memory r)
     {
         r = new ISCaaSDex.Interaction[](2);
         (r[0], r[1]) = (x, y);
     }
 
     function _xs3(ISCaaSDex.Interaction memory x, ISCaaSDex.Interaction memory y, ISCaaSDex.Interaction memory z)
-        internal pure returns (ISCaaSDex.Interaction[] memory r)
+        internal
+        pure
+        returns (ISCaaSDex.Interaction[] memory r)
     {
         r = new ISCaaSDex.Interaction[](3);
         (r[0], r[1], r[2]) = (x, y, z);
@@ -204,9 +257,11 @@ abstract contract LiquidityBase is Test {
 
     /// `a.transfer(pair, x)`, `b.transfer(pair, y)`, `pair.mint(to)`.
     function _addXs(uint256 x, uint256 y, address to) internal view returns (ISCaaSDex.Interaction[] memory) {
-        return _xs3(_ix(address(a), abi.encodeCall(IERC20.transfer, (address(pair), x))),
+        return _xs3(
+            _ix(address(a), abi.encodeCall(IERC20.transfer, (address(pair), x))),
             _ix(address(b), abi.encodeCall(IERC20.transfer, (address(pair), y))),
-            _ix(address(pair), abi.encodeCall(MockV2LiquidityPair.mint, (to))));
+            _ix(address(pair), abi.encodeCall(MockV2LiquidityPair.mint, (to)))
+        );
     }
 
     function _addPlan(uint256 minLp) internal view returns (ISCaaSDex.LiquidityPlan memory) {
@@ -233,9 +288,11 @@ abstract contract LiquidityBase is Test {
     }
 
     function _mintXs(uint128 liq, address owner) internal view returns (ISCaaSDex.Interaction[] memory) {
-        return _xs3(_ix(address(a), abi.encodeCall(IERC20.transfer, (address(posm), 50_000))),
+        return _xs3(
+            _ix(address(a), abi.encodeCall(IERC20.transfer, (address(posm), 50_000))),
             _ix(address(b), abi.encodeCall(IERC20.transfer, (address(posm), 50_000))),
-            _ix(address(posm), abi.encodeCall(MockPositionManagerV4.mint, (_key(), LO, HI, liq, owner, address(dex)))));
+            _ix(address(posm), abi.encodeCall(MockPositionManagerV4.mint, (_key(), LO, HI, liq, owner, address(dex))))
+        );
     }
 
     /// Mints a 40 k position to carol through the DEX; returns its id.
@@ -249,7 +306,11 @@ abstract contract LiquidityBase is Test {
     }
 
     /// Carol gives position `id` and receives it back with at least `minLiq` and at least `out` of each token.
-    function _returnOrder(uint256 id, uint128 minLiq, uint256 out) internal view returns (ISCaaSDex.LiquidityPlan memory p) {
+    function _returnOrder(uint256 id, uint128 minLiq, uint256 out)
+        internal
+        view
+        returns (ISCaaSDex.LiquidityPlan memory p)
+    {
         ITradeToken.LiquidityOrder memory o = _base();
         o.from = nid(carol);
         o.outputs = _two(_t(address(a), out), _t(address(b), out));

@@ -43,7 +43,9 @@ contract ZetherKatTest is Test {
 
     function _at(bytes memory blob, uint256 i, uint256 p) internal pure returns (bytes memory out) {
         out = new bytes(p);
-        for (uint256 k; k < p; ++k) out[k] = blob[i * p + k];
+        for (uint256 k; k < p; ++k) {
+            out[k] = blob[i * p + k];
+        }
     }
 
     function test_generatorsBls12381MatchIndependentReference() public view {
@@ -65,7 +67,9 @@ contract ZetherKatTest is Test {
             for (uint256 i; i < states.length; ++i) {
                 string memory op = string.concat(pre, ".ops[", vm.toString(i), "]");
                 if (vm.keyExistsJson(j, string.concat(op, ".absorb"))) {
-                    st = T.absorb(st, j.readString(string.concat(op, ".absorb")), j.readBytes(string.concat(op, ".data")));
+                    st = T.absorb(
+                        st, j.readString(string.concat(op, ".absorb")), j.readBytes(string.concat(op, ".data"))
+                    );
                 } else {
                     uint256 ch;
                     (st, ch) = T.challenge(st, j.readString(string.concat(op, ".challenge")), r);
@@ -93,13 +97,17 @@ contract ZetherKatTest is Test {
         bytes memory R = j.readBytes(".R");
         assertEq(v.g1MulBase(x), Y, "Y = [x]G");
         assertEq(v.g1MulBase(uint256(j.readBytes32(".k"))), R, "R = [k]G");
-        uint256 e = T.hashToScalar(keccak256(abi.encodePacked("SCAAS-ZETHER-SCHNORR-V1", R, Y, j.readBytes32(".msg"))), v.groupOrder());
+        uint256 e = T.hashToScalar(
+            keccak256(abi.encodePacked("SCAAS-ZETHER-SCHNORR-V1", R, Y, j.readBytes32(".msg"))), v.groupOrder()
+        );
         assertEq(e, uint256(j.readBytes32(".e")), "e");
         // [z]G == R + [e]Y
         assertEq(v.g1MulBase(uint256(j.readBytes32(".z"))), v.g1Add(R, v.g1Mul(Y, e)), "schnorr eq");
     }
 
-    function test_schnorrBls12381MatchesReference() public view { _checkSchnorr(bls, "schnorr_bls12381.json"); }
+    function test_schnorrBls12381MatchesReference() public view {
+        _checkSchnorr(bls, "schnorr_bls12381.json");
+    }
 
     // --------------------------------------------------------------- phép nhóm
 
@@ -121,7 +129,9 @@ contract ZetherKatTest is Test {
         assertEq(v.ringSize(), 2);
     }
 
-    function test_groupLawsBls12381() public view { _groupLaws(bls); }
+    function test_groupLawsBls12381() public view {
+        _groupLaws(bls);
+    }
 
     function test_blsRejectsNonSubgroupAndOffCurve() public {
         string memory j = vm.readFile(string.concat(DIR, "curve_misc.json"));

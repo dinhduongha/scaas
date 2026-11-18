@@ -144,26 +144,45 @@ library UARegistryCoreLib {
     /// fails. The structure `msig` registers through `registerMsig` only (`UAKeyData(kind)` here: its PoP is a
     /// `MemberSig[]`); `webauthn-p256` / MuSig2 / FROST also through their packed key data, next to `registerWebAuthn` /
     /// `registerMuSig2` / `registerFrost` (owner 2026-10-31; TS-D13): same bytes, same id, same record.
-    function register(uint16 kind, bytes calldata keyData, IUARegistry.UAAttrs calldata attrs, bytes calldata pop,
-        bytes calldata pqzPop) external returns (bytes32 ua)
-    {
+    function register(
+        uint16 kind,
+        bytes calldata keyData,
+        IUARegistry.UAAttrs calldata attrs,
+        bytes calldata pop,
+        bytes calldata pqzPop
+    ) external returns (bytes32 ua) {
         if (kind == UAKinds.MSIG) revert IUARegistry.UAKeyData(kind);
         return _register(kind, keyData, attrs, pop, new IUARegistry.MemberSig[](0), pqzPop);
     }
 
     /// TS-D13: `register` of a `webauthn-p256` key from its fields (`x ‖ y ‖ rpIdHash` assembled here).
-    function registerWebAuthn(IUARegistry.WebAuthnKey calldata key, IUARegistry.UAAttrs calldata attrs,
-        bytes calldata pop, bytes calldata pqzPop) external returns (bytes32 ua)
-    {
-        return _register(UAKinds.WEBAUTHN_P256, abi.encodePacked(key.x, key.y, key.rpIdHash), attrs, pop,
-            new IUARegistry.MemberSig[](0), pqzPop);
+    function registerWebAuthn(
+        IUARegistry.WebAuthnKey calldata key,
+        IUARegistry.UAAttrs calldata attrs,
+        bytes calldata pop,
+        bytes calldata pqzPop
+    ) external returns (bytes32 ua) {
+        return _register(
+            UAKinds.WEBAUTHN_P256,
+            abi.encodePacked(key.x, key.y, key.rpIdHash),
+            attrs,
+            pop,
+            new IUARegistry.MemberSig[](0),
+            pqzPop
+        );
     }
 
     /// TS-D13: `register` of a MuSig2 group key from its points (`aggKey ‖ u16 n ‖ n × key` assembled here).
-    function registerMuSig2(uint16 kind, IUARegistry.MuSig2Key calldata key, IUARegistry.UAAttrs calldata attrs,
-        bytes calldata pop, bytes calldata pqzPop) external returns (bytes32 ua)
-    {
-        if (kind != UAKinds.MUSIG2_SECP256K1 && kind != UAKinds.MUSIG2_BN254) revert IUARegistry.UAKeyData(kind);
+    function registerMuSig2(
+        uint16 kind,
+        IUARegistry.MuSig2Key calldata key,
+        IUARegistry.UAAttrs calldata attrs,
+        bytes calldata pop,
+        bytes calldata pqzPop
+    ) external returns (bytes32 ua) {
+        if (kind != UAKinds.MUSIG2_SECP256K1 && kind != UAKinds.MUSIG2_BN254) {
+            revert IUARegistry.UAKeyData(kind);
+        }
         if (uint160(_cfgKind()) == 0) revert IUARegistry.UAKindDisabled(kind); // step 1 before the key's fields (step 2)
         uint256 size = UAStore.vkLength(kind);
         bytes[] calldata m = key.memberKeys;
@@ -176,10 +195,16 @@ library UARegistryCoreLib {
 
     /// TS-D13: `register` of a FROST group key from its fields (`groupKey ‖ u16 t ‖ u16 n ‖ n × (t commitments ‖ r ‖ z)`
     /// assembled here; each member has exactly `threshold` commitments).
-    function registerFrost(uint16 kind, IUARegistry.FrostKey calldata key, IUARegistry.UAAttrs calldata attrs,
-        bytes calldata pop, bytes calldata pqzPop) external returns (bytes32 ua)
-    {
-        if (kind != UAKinds.FROST_SECP256K1 && kind != UAKinds.FROST_BN254) revert IUARegistry.UAKeyData(kind);
+    function registerFrost(
+        uint16 kind,
+        IUARegistry.FrostKey calldata key,
+        IUARegistry.UAAttrs calldata attrs,
+        bytes calldata pop,
+        bytes calldata pqzPop
+    ) external returns (bytes32 ua) {
+        if (kind != UAKinds.FROST_SECP256K1 && kind != UAKinds.FROST_BN254) {
+            revert IUARegistry.UAKeyData(kind);
+        }
         if (uint160(_cfgKind()) == 0) revert IUARegistry.UAKindDisabled(kind); // step 1 before the key's fields (step 2)
         IUARegistry.FrostMember[] calldata m = key.members;
         bytes memory d =
@@ -191,7 +216,11 @@ library UARegistryCoreLib {
     }
 
     /// One FROST member's bytes `t commitments ‖ r ‖ z` (exactly `t` commitments).
-    function _frostMember(uint16 kind, IUARegistry.FrostMember calldata m, uint256 t) internal pure returns (bytes memory d) {
+    function _frostMember(uint16 kind, IUARegistry.FrostMember calldata m, uint256 t)
+        internal
+        pure
+        returns (bytes memory d)
+    {
         uint256 size = UAStore.vkLength(kind);
         if (m.commitments.length != t) revert IUARegistry.UAKeyData(kind);
         for (uint256 j; j < t; ++j) {
@@ -208,9 +237,12 @@ library UARegistryCoreLib {
 
     /// TS-D10: `register` of an `msig` from its typed structure (the CTR-UA-09 bytes assembled here) and its typed
     /// member signatures (stored as `abi.encode(pop)`, "" for none).
-    function registerMsig(IUARegistry.MsigStructure calldata structure, IUARegistry.UAAttrs calldata attrs,
-        IUARegistry.MemberSig[] calldata pop, bytes calldata pqzPop) external returns (bytes32 ua)
-    {
+    function registerMsig(
+        IUARegistry.MsigStructure calldata structure,
+        IUARegistry.UAAttrs calldata attrs,
+        IUARegistry.MemberSig[] calldata pop,
+        bytes calldata pqzPop
+    ) external returns (bytes32 ua) {
         IUARegistry.MsigMember[] calldata m = structure.members;
         bytes memory d = abi.encodePacked(structure.threshold, uint16(m.length));
         for (uint256 i; i < m.length; ++i) {
@@ -232,9 +264,14 @@ library UARegistryCoreLib {
 
     /// Steps 1–8. `sig` (single keys) or `members` (an msig) is the PoP; the stored `pop` is `sig`, or
     /// `abi.encode(members)` ("" for none).
-    function _register(uint16 kind, bytes memory d, IUARegistry.UAAttrs calldata attrs, bytes memory sig,
-        IUARegistry.MemberSig[] memory members, bytes calldata pqzPop) internal returns (bytes32 ua)
-    {
+    function _register(
+        uint16 kind,
+        bytes memory d,
+        IUARegistry.UAAttrs calldata attrs,
+        bytes memory sig,
+        IUARegistry.MemberSig[] memory members,
+        bytes calldata pqzPop
+    ) internal returns (bytes32 ua) {
         UAStore.Layout storage s = UAStore.layout();
         bytes32 kh;
         (ua, kh) = _identify(kind, d); // 1–4
@@ -248,7 +285,9 @@ library UARegistryCoreLib {
             for (uint256 i; i < members.length; ++i) {
                 IUARegistry.MemberSig memory m = members[i];
                 bits |= 1 << m.index;
-                _memberSig(ua, d, m.index, UAKinds.PURPOSE_POP_V2, m.members.length == 0 ? m.sig : abi.encode(m.members));
+                _memberSig(
+                    ua, d, m.index, UAKinds.PURPOSE_POP_V2, m.members.length == 0 ? m.sig : abi.encode(m.members)
+                );
             }
             s.accepted[ua] = bits;
             s.popSlots[ua] = bits; // CTR-UA-33 Change 2026-11-08: the `pop`'s own slots, never moved by `acceptMembership`
@@ -276,7 +315,8 @@ library UARegistryCoreLib {
     ) internal {
         (bytes32 record, bytes32 h) = _attrs(kind, d, ua, attrs, pqzPop); // 5
         bytes32 rd = UAKinds.portableDigest(UAKinds.registrationHash(record, attrs.pqzPopHash));
-        if (!_sigOk(_cfgKind(), kind, d, ua, UAKinds.PURPOSE_POP_V2, rd, sig, members)) { // 6
+        if (!_sigOk(_cfgKind(), kind, d, ua, UAKinds.PURPOSE_POP_V2, rd, sig, members)) {
+            // 6
             _notCached(_cfgKind(), kind, ua);
             revert IUARegistry.UAPoP();
         }
@@ -286,9 +326,14 @@ library UARegistryCoreLib {
     /// Step 8: the record, `keyPtr` (stored kinds), the keyHash (single keys), the kind's list, the initial KEM record
     /// at version 0 (UA8-D4; owner 2026-10-31: `kemMax` stays 0) — the key, or its committed hash —, the registration
     /// blob (UA8-D7).
-    function _record(bytes32 ua, uint16 kind, bytes memory d, bytes32 kh, IUARegistry.UAAttrs calldata attrs, bytes memory pop)
-        private
-    {
+    function _record(
+        bytes32 ua,
+        uint16 kind,
+        bytes memory d,
+        bytes32 kh,
+        IUARegistry.UAAttrs calldata attrs,
+        bytes memory pop
+    ) private {
         UAStore.Layout storage s = UAStore.layout();
         uint256 vl = UAStore.vkLength(kind);
         address ptr = vl == 0 ? address(0) : SSTORE2.write(UAStore.cut(d, 0, vl));
@@ -352,12 +397,16 @@ library UARegistryCoreLib {
         bool commit = attrs.kemPkHash != 0;
         if (pqz) _pqzHolder(kind, d, ua, false);
         if ((commit || kemPk.length != 0) && !_kemHolder(kind)) revert IUARegistry.UAKemHolder(ua);
-        if (pqz != (attrs.pqzPopHash != 0) || attrs.pqzPopHash == EMPTY_PROOF_HASH) revert IUARegistry.UAPqzPopHash(ua);
+        if (pqz != (attrs.pqzPopHash != 0) || attrs.pqzPopHash == EMPTY_PROOF_HASH) {
+            revert IUARegistry.UAPqzPopHash(ua);
+        }
         if (pqzPop.length != 0 && keccak256(pqzPop) != attrs.pqzPopHash) revert IUARegistry.UAPqzPopHash(ua);
         if (pqz) h = _pqzKeyHash(attrs.pqzKey);
         bytes32 kh;
         if (commit) {
-            if (attrs.kem.mlkemEk.length != 0 || attrs.kem.x25519 != 0) revert IUARegistry.UAKemKeyLength(kemPk.length);
+            if (attrs.kem.mlkemEk.length != 0 || attrs.kem.x25519 != 0) {
+                revert IUARegistry.UAKemKeyLength(kemPk.length);
+            }
             _checkKemScheme(attrs.kem.scheme);
             kh = UAKinds.kemRecordHash(ua, 0, attrs.kem.scheme, attrs.kemPkHash);
         } else {
@@ -410,7 +459,9 @@ library UARegistryCoreLib {
     /// call holds the same, `UAStore.capped`). `UAPqzHolder`.
     function _msigDebit(uint256 w, uint256 a, bytes32 ua) internal pure {
         uint256 debit = PqzSet.PQZ_DEBIT_MIN_GAS;
-        if (w + w / 63 + SigCheck.GAS_MARGIN + debit + 16 * a > TX_GAS_CAP || debit + 64 * a > TX_GAS_CAP) revert IUARegistry.UAPqzHolder(ua);
+        if (w + w / 63 + SigCheck.GAS_MARGIN + debit + 16 * a > TX_GAS_CAP || debit + 64 * a > TX_GAS_CAP) {
+            revert IUARegistry.UAPqzHolder(ua);
+        }
     }
 
     /// The PQZ keyHash (group `pqz-mlwe`); `UAKeyData(0x0142)` for a key of no parameter set's length.
@@ -433,7 +484,9 @@ library UARegistryCoreLib {
             uint256 o = 4 + 36 * i;
             uint16 kind = uint16(UAStore.u16(d, o));
             if (UAStore.isPq(kind)) continue;
-            if (kind == UAKinds.MSIG && !inner && _pqEligible(_msigBytes(bytes32(UAStore.word(d, o + 2))), true)) continue;
+            if (kind == UAKinds.MSIG && !inner && _pqEligible(_msigBytes(bytes32(UAStore.word(d, o + 2))), true)) {
+                continue;
+            }
             classical += UAStore.u16(d, o + 34);
         }
         return classical < threshold;
@@ -444,25 +497,42 @@ library UARegistryCoreLib {
     /// portable)` (`portable` = typed `UAPortableRecord`) (it refuses a key of another set's length or with a coefficient
     /// `≥ q`; `UAPoP`), capped with the hold, then the proven key's owner (`UAKeyInUse`, either generation), `keyOwner(h)`,
     /// the `0x0142` list; `UAPqzKeyCurrent(ua, 0)` when eligible. No `UAPqzKeyAdded` (F-10: `UARegistered` carries it).
-    function _pqzAttach(bytes32 ua, IUARegistry.UAAttrs calldata attrs, bytes calldata pqzPop, bytes32 h, bytes32 portable)
-        private
-    {
+    function _pqzAttach(
+        bytes32 ua,
+        IUARegistry.UAAttrs calldata attrs,
+        bytes calldata pqzPop,
+        bytes32 h,
+        bytes32 portable
+    ) private {
         UAStore.Layout storage s = UAStore.layout();
         if (h == 0) return;
         s.pqzKey[ua][0].ptr = SSTORE2.write(attrs.pqzKey);
         s.pqzPopHash[ua][0] = attrs.pqzPopHash;
         s.pqzKeyUsed[ua][h] = true;
         if (pqzPop.length == 0) return;
-        _pqzProof(ua, 0, attrs.pqzKey, pqzPop, h, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, portable),
-            pqzPop[0:0]);
+        _pqzProof(
+            ua,
+            0,
+            attrs.pqzKey,
+            pqzPop,
+            h,
+            UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, portable),
+            pqzPop[0:0]
+        );
     }
 
     /// Version `v`'s proof bytes stored; where slot 0x0142 has a verifier and it accepts `pqzPop` over `message`, proven
     /// (`_pqzOwn`). Eligible (KV-3): proven, or without the verifier this build's set length (C2, F-1: its bytes are stored
     /// here); an eligible version may become current (`_pqzCurrent`).
-    function _pqzProof(bytes32 ua, uint64 v, bytes memory pqzKey, bytes calldata pqzPop, bytes32 h, bytes32 message,
-        bytes calldata logged) internal
-    {
+    function _pqzProof(
+        bytes32 ua,
+        uint64 v,
+        bytes memory pqzKey,
+        bytes calldata pqzPop,
+        bytes32 h,
+        bytes32 message,
+        bytes calldata logged
+    ) internal {
         UAStore.layout().pqzPop[ua][v] = SSTORE2.writeChunks(pqzPop);
         uint256 cfg = _cfgPqz();
         bool proven = uint160(cfg) != 0;
@@ -500,9 +570,14 @@ library UARegistryCoreLib {
     }
 
     /// A portable record's `UASig` (`setPqzKey`, `setKemKey` ≥ 1): never `keyData`; `signature` or `members` (`_sigOk`).
-    function _portableOk(uint16 kind, bytes memory d, bytes32 ua, bytes32 purpose, bytes32 digest,
-        IUARegistry.UASig calldata sig) internal view returns (bool)
-    {
+    function _portableOk(
+        uint16 kind,
+        bytes memory d,
+        bytes32 ua,
+        bytes32 purpose,
+        bytes32 digest,
+        IUARegistry.UASig calldata sig
+    ) internal view returns (bool) {
         return sig.keyData.length == 0 && _sigOk(_cfgKind(), kind, d, ua, purpose, digest, sig.signature, sig.members);
     }
 
@@ -513,9 +588,14 @@ library UARegistryCoreLib {
     /// and `_cfgKind` / `_cfgPqz` / `_cloneHash` are the registry's, as when the Aux library compiled this code in. Each is its
     /// `internal` twin and nothing else. None is `view` or `pure`: solc's library call protection covers each, a direct call
     /// reverts.
-    function portableOk(uint16 kind, bytes memory d, bytes32 ua, bytes32 purpose, bytes32 digest,
-        IUARegistry.UASig calldata sig) external returns (bool)
-    {
+    function portableOk(
+        uint16 kind,
+        bytes memory d,
+        bytes32 ua,
+        bytes32 purpose,
+        bytes32 digest,
+        IUARegistry.UASig calldata sig
+    ) external returns (bool) {
         return _portableOk(kind, d, ua, purpose, digest, sig);
     }
 
@@ -556,7 +636,9 @@ library UARegistryCoreLib {
     }
 
     /// `_pqzProof` with the proof bytes logged (`storePqzPop`).
-    function pqzProof(bytes32 ua, uint64 v, bytes memory pqzKey, bytes calldata pqzPop, bytes32 h, bytes32 message) external {
+    function pqzProof(bytes32 ua, uint64 v, bytes memory pqzKey, bytes calldata pqzPop, bytes32 h, bytes32 message)
+        external
+    {
         _pqzProof(ua, v, pqzKey, pqzPop, h, message, pqzPop);
     }
 
@@ -570,14 +652,18 @@ library UARegistryCoreLib {
 
     /// `IUARegistry.requirePortable` on a record held here (the registry forwards a gen-1 record to gen 1 first): the closed list of
     /// portable purposes (`_portablePurpose`), then `_portable`. No write: the registry runs it inside its view.
-    function requirePortable(bytes32 ua, bytes32 purposeTag, bytes32 typedDigest, IUARegistry.UASig calldata auth) external {
+    function requirePortable(bytes32 ua, bytes32 purposeTag, bytes32 typedDigest, IUARegistry.UASig calldata auth)
+        external
+    {
         _portablePurpose(ua, purposeTag);
         _portable(ua, purposeTag, typedDigest, auth);
     }
 
     /// `IUARegistry.requirePortableApp` on a record held here (CTR-UA-46): `_portable` under `appPurpose(appId)`, a purpose the
     /// registry derives, so no caller names a SCaaS purpose through it; `appId` 0 refused. No write.
-    function requirePortableApp(bytes32 ua, bytes32 appId, bytes32 typedDigest, IUARegistry.UASig calldata auth) external {
+    function requirePortableApp(bytes32 ua, bytes32 appId, bytes32 typedDigest, IUARegistry.UASig calldata auth)
+        external
+    {
         if (appId == 0) revert IUARegistry.UAUnauthorized(ua);
         _portable(ua, UAKinds.appPurpose(appId), typedDigest, auth);
     }
@@ -586,7 +672,10 @@ library UARegistryCoreLib {
     /// `_single` with `signature` only, the check `setKemKey` and `setPqzKey` make; an `msig` by `_msig` over its accepted slots,
     /// minimal, whatever its PQ weight (`_sigOk`'s empty `pop` of a classical-dominant `msig` is the registration's rule, never a
     /// signature: a classical-only `msig` with no members is refused here).
-    function _portable(bytes32 ua, bytes32 purposeTag, bytes32 typedDigest, IUARegistry.UASig calldata auth) internal view {
+    function _portable(bytes32 ua, bytes32 purposeTag, bytes32 typedDigest, IUARegistry.UASig calldata auth)
+        internal
+        view
+    {
         IUARegistry.Record memory r = UAStore.layout().records[ua];
         // the registration's `pop` is `register`'s own check (its slots need no acceptance): never a view's
         if (r.kind == 0 || purposeTag == UAKinds.PURPOSE_POP_V2) revert IUARegistry.UAUnauthorized(ua);
@@ -629,7 +718,13 @@ library UARegistryCoreLib {
         s.accepted[ua] = bits | 1 << index;
         // owner 2026-11-03: the hash kept, written once as the bit it goes with, the bytes in `UAMemberSig`: a copy checks them against
         // `memberSigHashOf` and replays them
-        _memberSig(ua, d, index, UAKinds.PURPOSE_MEMBERSHIP, memberSig.members.length == 0 ? memberSig.sig : abi.encode(memberSig.members));
+        _memberSig(
+            ua,
+            d,
+            index,
+            UAKinds.PURPOSE_MEMBERSHIP,
+            memberSig.members.length == 0 ? memberSig.sig : abi.encode(memberSig.members)
+        );
         emit IUARegistry.UAMembershipAccepted(ua, index, member);
     }
 
@@ -674,9 +769,15 @@ library UARegistryCoreLib {
 
     /// `_sigOk`'s single-key tail, shared with `_portable` (CTR-UA-46): `sig` by the kind's verifier over `uaMessage(kind, purpose,
     /// digest)`; the caller has checked the purpose and that no `members` came.
-    function _single(uint256 cfg, uint16 kind, bytes memory d, bytes32 ua, bytes32 purpose, bytes32 digest, bytes memory sig)
-        internal view returns (bool)
-    {
+    function _single(
+        uint256 cfg,
+        uint16 kind,
+        bytes memory d,
+        bytes32 ua,
+        bytes32 purpose,
+        bytes32 digest,
+        bytes memory sig
+    ) internal view returns (bool) {
         // A6-I1: a gen-1 holder's PQZ key record on gen 2 (the PQ holder kinds are stored: no key data in `auth`); the
         // PQ verifiers' `verify` is their `verifyPop`
         if (uint160(cfg) == 0) {
@@ -699,8 +800,10 @@ library UARegistryCoreLib {
     /// ML-DSA-65 / -87 is over EIP-7825's 2^24 and dearer than every cached cap): `UAKeyNotCached`, `cacheExpandedKey` every part
     /// first. Asked only after a false verdict, so an accepted check pays nothing for it.
     function _notCached(uint256 cfg, uint16 kind, bytes32 ua) internal view {
-        if (PqUA.mldsaParts(kind) != 0 && uint160(cfg) != 0 && UAStore.expanded(ua, kind).length == 0
-            && UAStore.noPrecompile(address(uint160(cfg)))) revert IUARegistry.UAKeyNotCached(ua);
+        if (
+            PqUA.mldsaParts(kind) != 0 && uint160(cfg) != 0 && UAStore.expanded(ua, kind).length == 0
+                && UAStore.noPrecompile(address(uint160(cfg)))
+        ) revert IUARegistry.UAKeyNotCached(ua);
     }
 
     /// The portable purposes (POP_V2, KEM, PQZ_KEY; rulings A1-f1, A5-m3; PQCHAT, UA-7 O1; PQZ_SCOPED_KEY, the three-key model
@@ -771,7 +874,11 @@ library UARegistryCoreLib {
     /// data (the registry reads the member's record, CTR-UA-33); a native member over the typed digest `typed`; an `msig` member by
     /// `_msig`, under `member` over `md`. `here`: this registry holds the structure, else gen 1 does and a clone is one of gen 1's, with the 400 k
     /// cap `_slotCap` counted for it.
-    function _memberOk(bytes memory d, bytes32 md, bytes32 typed, IUARegistry.MemberSig memory s, bool here) internal view returns (bool) {
+    function _memberOk(bytes memory d, bytes32 md, bytes32 typed, IUARegistry.MemberSig memory s, bool here)
+        internal
+        view
+        returns (bool)
+    {
         uint256 o = 4 + 36 * uint256(s.index);
         (uint16 kind, bytes32 id) = (uint16(UAStore.u16(d, o)), bytes32(UAStore.word(d, o + 2)));
         if (kind == UAKinds.MSIG) {
@@ -780,10 +887,17 @@ library UARegistryCoreLib {
         }
         if (s.members.length != 0) return false;
         if (!UAKinds.isNative(kind)) {
-            return UAStore.via(address(this), id, UAKinds.PURPOSE_MEMBER, md,
-                IUARegistry.UASig("", s.sig, new IUARegistry.MemberSig[](0)));
+            return UAStore.via(
+                address(this),
+                id,
+                UAKinds.PURPOSE_MEMBER,
+                md,
+                IUARegistry.UASig("", s.sig, new IUARegistry.MemberSig[](0))
+            );
         }
-        return UAStore.byCode(address(uint160(uint256(id))), typed, s.sig, here ? _cloneHash() : IUARegistry(_pred()).smartKeyCloneHash());
+        return UAStore.byCode(
+            address(uint160(uint256(id))), typed, s.sig, here ? _cloneHash() : IUARegistry(_pred()).smartKeyCloneHash()
+        );
     }
 
     // ----- the msig bound -----
@@ -805,7 +919,11 @@ library UARegistryCoreLib {
     /// counts its own worst as its cap, so the total is every signature across both levels, plain members and inner thresholds
     /// together; `mode & INNER`: this is that member, and it may hold no `msig` (`UAMemberUnknown`: two levels only), unless
     /// `LENIENT`, which leaves such a slot out (MM-14). Only the slots that can sign count (`_signs`), packed to the front.
-    function _worst(bytes memory d, uint256 mode, uint256 nativeCap, bool hedera) internal view returns (uint256 worst, uint256 held) {
+    function _worst(bytes memory d, uint256 mode, uint256 nativeCap, bool hedera)
+        internal
+        view
+        returns (uint256 worst, uint256 held)
+    {
         uint256 count = UAStore.u16(d, 2);
         uint256[] memory weights = new uint256[](count);
         uint256[] memory caps = new uint256[](count);
@@ -833,8 +951,9 @@ library UARegistryCoreLib {
     /// Can slot `i` of `d` sign at this level (CTR-UA-44): enabled (MM-9), and not a member's own `msig` slot under `LENIENT`
     /// (MM-14: verification gives it no list, `UAStore.lift`).
     function _signs(bytes memory d, uint256 i, uint256 mode) internal pure returns (bool) {
-        return UAStore.enabledOf(d) >> i & 1 != 0
-            && (mode != INNER | LENIENT || UAStore.u16(d, 4 + 36 * i) != UAKinds.MSIG);
+        return
+            UAStore.enabledOf(d) >> i & 1 != 0
+                && (mode != INNER | LENIENT || UAStore.u16(d, 4 + 36 * i) != UAKinds.MSIG);
     }
 
     /// How many of the lightest slots reach `threshold`: no quorum has more (a minimal one, or one that stops at the threshold).
@@ -891,7 +1010,9 @@ library UARegistryCoreLib {
     /// member's own worst. A record gen 1 holds is one more call level: `cap / 63 + GAS_MARGIN`, as a member of a kind gen 1 alone
     /// enables; gen 1's natives may be clones of its own, so they count 400 k there.
     function _slotCap(uint16 kind, bytes32 id, uint256 mode, uint256 nativeCap, bool hedera)
-        private view returns (uint256 cap, uint256 held)
+        private
+        view
+        returns (uint256 cap, uint256 held)
     {
         IUARegistry self = IUARegistry(address(this));
         if (!UAKinds.isMember(kind, hedera)) revert IUARegistry.UAMemberUnknown(id);

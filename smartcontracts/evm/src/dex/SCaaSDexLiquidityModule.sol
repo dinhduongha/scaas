@@ -41,13 +41,13 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
     /// @dev One plan's figures, in memory (the stack limit, via_ir off).
     struct Run {
         bytes32 h;
-        bytes32 to;          // the recipient after its default
-        address from;        // the signer's address when native, else 0
+        bytes32 to; // the recipient after its default
+        address from; // the signer's address when native, else 0
         address submitter;
-        address[] tok;       // inputs, outputs, extraTokens
-        uint256[] snap;      // the DEX's balance of each
-        uint256[] rsnap;     // the recipient's balance of each output
-        uint256 posSnap;     // the DEX's ERC-721 balance of the position manager
+        address[] tok; // inputs, outputs, extraTokens
+        uint256[] snap; // the DEX's balance of each
+        uint256[] rsnap; // the recipient's balance of each output
+        uint256 posSnap; // the DEX's ERC-721 balance of the position manager
         uint256[] refunded;
         uint256[] received;
         uint256[] fees;
@@ -64,10 +64,14 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
         _FACTORY = factory_;
     }
 
-    function moduleGroup() external pure returns (uint8) { return GROUP_LIQUIDITY; }
+    function moduleGroup() external pure returns (uint8) {
+        return GROUP_LIQUIDITY;
+    }
 
     /// @notice The factory of the DEX releases this module serves (checked by `SCaaSDex`'s constructor).
-    function factory() external view returns (address) { return _FACTORY; }
+    function factory() external view returns (address) {
+        return _FACTORY;
+    }
 
     /// @notice `h` in the DEX's domain (§4.3): under DELEGATECALL `address(this)` is the clone and `chain_uid` its env.
     function liquidityOrderDigest(ITradeToken.LiquidityOrder calldata o) external view onlyDelegated returns (bytes32) {
@@ -77,13 +81,21 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
     // ------------------------------------------------------------------ the DEX-domain cancels (CTR-DEX-18, -02; lever (b))
 
     /// @notice `CancelDexOrder(DexOrder order)` in the DEX's domain (the clone, its `chain_uid`).
-    function cancelDexOrderDigest(address sellToken, ITradeToken.TradeOrder calldata o) external view onlyDelegated
+    function cancelDexOrderDigest(address sellToken, ITradeToken.TradeOrder calldata o)
+        external
+        view
+        onlyDelegated
         returns (bytes32)
     {
         return _cancelDigest(sellToken, o);
     }
 
-    function invalidateNoncesDigest(address from, uint256 batch, uint256 newMin) external view onlyDelegated returns (bytes32) {
+    function invalidateNoncesDigest(address from, uint256 batch, uint256 newMin)
+        external
+        view
+        onlyDelegated
+        returns (bytes32)
+    {
         return _invalidateDigest(from, batch, newMin);
     }
 
@@ -93,12 +105,17 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
         for (uint256 i; i < orders.length; ++i) {
             ITradeToken.TradeOrder calldata o = orders[i].order;
             if (SigCheck.isValid(o.from, _cancelDigest(orders[i].sellToken, o), sigs[i], _cap(o.from))) {
-                TradeLib._cancel(_dexDigest(_dexOrderHash(orders[i].sellToken, o)), o.amount, TradeLib.pad(o.from), false);
+                TradeLib._cancel(
+                    _dexDigest(_dexOrderHash(orders[i].sellToken, o)), o.amount, TradeLib.pad(o.from), false
+                );
             }
         }
     }
 
-    function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes calldata sig) external onlyDelegated {
+    function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes calldata sig)
+        external
+        onlyDelegated
+    {
         bytes32 d = _invalidateDigest(from, batch, newMin);
         if (!SigCheck.isValid(from, d, sig, _cap(from))) revert ISCaaSDex.BadSignature(d);
         TradeLib._invalidate(TradeLib.pad(from), batch, newMin, false);
@@ -114,11 +131,16 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
 
     /// @dev `SaltedEIP712._hashTypedDataV4` of the DEX: its separator from `LiquidityLib`'s constant hashes (the KATs pin it).
     function _dexDigest(bytes32 structHash) private view returns (bytes32) {
-        return keccak256(abi.encodePacked(hex"1901", LiquidityLib.separator(address(this), ChainEnvCode.chainUid()), structHash));
+        return keccak256(
+            abi.encodePacked(hex"1901", LiquidityLib.separator(address(this), ChainEnvCode.chainUid()), structHash)
+        );
     }
 
     /// @notice CTR-DEX-30: `msg.sender` is the DEX's caller, the submitter.
-    function mtxLiquidity(ISCaaSDex.LiquidityPlan calldata p, ISCaaSDex.Interaction[] calldata xs) external onlyDelegated {
+    function mtxLiquidity(ISCaaSDex.LiquidityPlan calldata p, ISCaaSDex.Interaction[] calldata xs)
+        external
+        onlyDelegated
+    {
         Run memory r = _check(p, msg.sender);
         _snapshot(p, r);
         _pullAll(p, r);
@@ -127,8 +149,9 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
         _outputs(p.order, r);
         _refunds(p.order, r);
         _conserve(p.order, r);
-        emit ISCaaSDex.LiquiditySettled(p.ref, r.h, p.order.from, r.to, p.pull, r.refunded, r.received, r.fees,
-            p.positionId, r.liquidity);
+        emit ISCaaSDex.LiquiditySettled(
+            p.ref, r.h, p.order.from, r.to, p.pull, r.refunded, r.received, r.fees, p.positionId, r.liquidity
+        );
     }
 
     // ------------------------------------------------------------------ 1. check
@@ -174,7 +197,9 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
         t.pulled[h] = 1;
     }
 
-    function _factoryAt() internal view override returns (address) { return _FACTORY; }
+    function _factoryAt() internal view override returns (address) {
+        return _FACTORY;
+    }
 
     /// @dev Shape codes 1-5 (§6 step 1); returns the plan's tokens: inputs, outputs, extraTokens.
     function _shape(ISCaaSDex.LiquidityPlan calldata p, bytes32 to) private view returns (address[] memory tok) {
@@ -188,24 +213,32 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
             if (o.inputs[i].amount == 0) revert ISCaaSDex.LiquidityShape(3);
             tok[i] = o.inputs[i].token;
         }
-        for (uint256 j; j < no; ++j) tok[ni + j] = o.outputs[j].token;
-        for (uint256 k; k < ne; ++k) tok[ni + no + k] = p.extraTokens[k];
+        for (uint256 j; j < no; ++j) {
+            tok[ni + j] = o.outputs[j].token;
+        }
+        for (uint256 k; k < ne; ++k) {
+            tok[ni + no + k] = p.extraTokens[k];
+        }
         address pm = o.positionManager;
         for (uint256 a; a < tok.length; ++a) {
             if (tok[a] == address(0) || tok[a] == pm) revert ISCaaSDex.LiquidityShape(3);
-            for (uint256 b; b < a; ++b) if (tok[b] == tok[a]) revert ISCaaSDex.LiquidityShape(3);
+            for (uint256 b; b < a; ++b) {
+                if (tok[b] == tok[a]) revert ISCaaSDex.LiquidityShape(3);
+            }
         }
         if (pm == address(0) && (o.positionIn != 0 || received)) revert ISCaaSDex.LiquidityShape(4);
         if (received
-            ? (o.positionReader == address(0) || o.tickLower >= o.tickUpper || o.minLiquidity == 0)
-            : (o.positionReader != address(0) || o.tickLower != 0 || o.tickUpper != 0 || o.minLiquidity != 0)) {
+                ? (o.positionReader == address(0) || o.tickLower >= o.tickUpper || o.minLiquidity == 0)
+                : (o.positionReader != address(0) || o.tickLower != 0 || o.tickUpper != 0 || o.minLiquidity != 0)) {
             revert ISCaaSDex.LiquidityShape(4);
         }
         if ((p.positionId != 0) != received) revert ISCaaSDex.LiquidityShape(4);
         if (to == TradeLib.pad(address(this)) || to == TradeLib.pad(_s().puller) || to == TradeLib.pad(pm)) {
             revert ISCaaSDex.LiquidityShape(5);
         }
-        for (uint256 a; a < tok.length; ++a) if (to == TradeLib.pad(tok[a])) revert ISCaaSDex.LiquidityShape(5);
+        for (uint256 a; a < tok.length; ++a) {
+            if (to == TradeLib.pad(tok[a])) revert ISCaaSDex.LiquidityShape(5);
+        }
     }
 
     // ------------------------------------------------------------------ 2-4. snapshot, pull, route
@@ -214,7 +247,9 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
         ITradeToken.LiquidityOrder calldata o = p.order;
         // a token without code holds nothing yet: only the plan's own interactions can create it (a v2 pair, §8.1)
         r.snap = new uint256[](r.tok.length);
-        for (uint256 i; i < r.tok.length; ++i) if (r.tok[i].code.length != 0) r.snap[i] = _bal(r.tok[i]);
+        for (uint256 i; i < r.tok.length; ++i) {
+            if (r.tok[i].code.length != 0) r.snap[i] = _bal(r.tok[i]);
+        }
         if (o.positionManager != address(0)) r.posSnap = _bal(o.positionManager); // ERC-721 `balanceOf`: one selector
         r.rsnap = new uint256[](o.outputs.length);
         for (uint256 j; j < o.outputs.length; ++j) {
@@ -278,8 +313,10 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
         // to `from`; an `ownerOf` that reverts means burnt; another owner means an interaction moved it (the minima bound)
         if (o.positionIn != 0 && (o.positionPool == 0 || p.positionId != o.positionIn)) {
             (bool ok, uint256 w) = _word(pm, abi.encodeWithSelector(OWNER_OF, o.positionIn));
-            if (ok && w == uint160(address(this))
-                && !TokenCall.ok(pm, abi.encodeCall(IERC20.transferFrom, (address(this), r.from, o.positionIn)))) {
+            if (
+                ok && w == uint160(address(this))
+                    && !TokenCall.ok(pm, abi.encodeCall(IERC20.transferFrom, (address(this), r.from, o.positionIn)))
+            ) {
                 _tokenFailed(pm);
             }
         }
@@ -311,8 +348,10 @@ contract SCaaSDexLiquidityModule is SCaaSDexCore {
             enc := mload(add(m, 0x80))
         }
         if (!ok || liq > type(uint128).max) revert ISCaaSDex.PositionUnreadable(rd);
-        if (bytes32(pool) != o.positionPool || lo != uint256(int256(o.tickLower)) || hi != uint256(int256(o.tickUpper))
-            || enc != 0) revert ISCaaSDex.PositionMismatch(id);
+        if (
+            bytes32(pool) != o.positionPool || lo != uint256(int256(o.tickLower)) || hi != uint256(int256(o.tickUpper))
+                || enc != 0
+        ) revert ISCaaSDex.PositionMismatch(id);
         if (liq < o.minLiquidity) revert ISCaaSDex.PositionBelowMin(id, uint128(liq));
         return uint128(liq);
     }

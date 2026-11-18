@@ -42,7 +42,13 @@ contract UARegistryZetherTest is UARegistryBase {
     /// The Zether PoP: Schnorr by `x` under the Zether tag over the portable `uaMessage(0x0141, POP_V2, registrationDigest(ua, 0x0141, 0, zero KEM record, 0))` (UA-8, typed-signing TS-D3).
     function _zpop(UARegistry r, uint256 x) internal view returns (bytes memory) {
         bytes32 ua = r.uaOf(ZK, ZetherKeys.pub(x, true));
-        return ZetherKeys.schnorr(x, r.uaMessage(ZK, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(ua, ZK, 0, UAKinds.kemRecordHash(ua, 0, ""), 0)), true);
+        return ZetherKeys.schnorr(
+            x,
+            r.uaMessage(
+                ZK, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(ua, ZK, 0, UAKinds.kemRecordHash(ua, 0, ""), 0)
+            ),
+            true
+        );
     }
 
     function _zregister(UARegistry r, uint256 x) internal returns (bytes32) {
@@ -111,9 +117,10 @@ contract UARegistryZetherTest is UARegistryBase {
         bytes memory withY = abi.encode(ZetherKeys.pub(X1, true), sig); // stored kind: Y in auth is refused
         _expectUnauthorized(ua, UAKinds.PURPOSE_ZETHER_OWNER, withY);
         // an auth that does not ABI-decode (here: none at all) fails closed without data (as UA-2a)
-        (bool ok, bytes memory ret) = address(zreg).staticcall(
-            abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, ua, UAKinds.PURPOSE_ZETHER_OWNER, DIGEST)
-        );
+        (bool ok, bytes memory ret) = address(zreg)
+            .staticcall(
+                abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, ua, UAKinds.PURPOSE_ZETHER_OWNER, DIGEST)
+            );
         assertFalse(ok);
         assertEq(ret.length, 0);
         bytes32 ghost = UAKinds.uaOf(ZK, ZetherKeys.pub(X2, true));
@@ -132,7 +139,9 @@ contract UARegistryZetherTest is UARegistryBase {
         (, address pqzKey) = gen2.recordOf(z);
         assertEq(pqzKey, address(0));
         assertEq(gen2.keyOf(z), ZetherKeys.pub(X2, true));
-        gen2.requireAuthorized(z, UAKinds.PURPOSE_METATX, DIGEST, UACall.auth(z, _zauth(X2, UAKinds.PURPOSE_METATX, DIGEST)));
+        gen2.requireAuthorized(
+            z, UAKinds.PURPOSE_METATX, DIGEST, UACall.auth(z, _zauth(X2, UAKinds.PURPOSE_METATX, DIGEST))
+        );
         bytes memory other = _zauth(X1, UAKinds.PURPOSE_METATX, DIGEST);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, z));
         gen2.requireAuthorized(z, UAKinds.PURPOSE_METATX, DIGEST, UACall.auth(z, other));

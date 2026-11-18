@@ -27,15 +27,34 @@ import {EnvKit} from "../helpers/EnvKit.sol";
 /// so each test is red there on its own (plan T3 step 3).
 interface IMergedT3 {
     function mtxBurn(MetaTxLib.UAEnvelope calldata e, uint256 amount, IUARegistry.UASig calldata auth)
-        external returns (bytes memory);
-    function mtxUnwrap(MetaTxLib.UAEnvelope calldata e, uint256 wrapped, address recipient, uint256 minOut,
-        IUARegistry.UASig calldata auth) external returns (bytes memory);
-    function mtxUnwrapLeg(MetaTxLib.UAEnvelope calldata e, address u, uint256 wrapped, address recipient,
-        uint256 minOut, IUARegistry.UASig calldata auth) external returns (bytes memory);
-    function mtxUnwrapToUA(MetaTxLib.UAEnvelope calldata e, address u, uint256 wrapped, bytes32 to, uint256 minOut,
-        IUARegistry.UASig calldata auth) external returns (bytes memory);
+        external
+        returns (bytes memory);
+    function mtxUnwrap(
+        MetaTxLib.UAEnvelope calldata e,
+        uint256 wrapped,
+        address recipient,
+        uint256 minOut,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes memory);
+    function mtxUnwrapLeg(
+        MetaTxLib.UAEnvelope calldata e,
+        address u,
+        uint256 wrapped,
+        address recipient,
+        uint256 minOut,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes memory);
+    function mtxUnwrapToUA(
+        MetaTxLib.UAEnvelope calldata e,
+        address u,
+        uint256 wrapped,
+        bytes32 to,
+        uint256 minOut,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes memory);
     function mtxWrapOrder(address u, ITradeToken.UAWrapOrder calldata o, IUARegistry.UASig calldata auth)
-        external returns (uint256);
+        external
+        returns (uint256);
 }
 
 /// The address `WrapOrder` (R39: in legacy/ua-mtx-merge/ after T3), kept here to encode the retired entry.
@@ -57,35 +76,79 @@ struct OldWrapOrder {
 /// The retired address entries and the `ua*` names (invariant 3): after T3 no token serves these selectors.
 interface IOldT3 {
     function mtxBurn(MetaTxLib.Envelope calldata e, uint256 amount, bytes calldata sig) external returns (bytes memory);
-    function mtxUnwrap(MetaTxLib.Envelope calldata e, uint256 wrapped, address recipient, uint256 minOut,
-        bytes calldata sig) external returns (bytes memory);
-    function mtxUnwrapLeg(MetaTxLib.Envelope calldata e, address u, uint256 wrapped, address recipient, uint256 minOut,
-        bytes calldata sig) external returns (bytes memory);
-    function mtxUnwrapToUA(MetaTxLib.Envelope calldata e, address u, uint256 wrapped, bytes32 to, uint256 minOut,
-        bytes calldata sig) external returns (bytes memory);
+    function mtxUnwrap(
+        MetaTxLib.Envelope calldata e,
+        uint256 wrapped,
+        address recipient,
+        uint256 minOut,
+        bytes calldata sig
+    ) external returns (bytes memory);
+    function mtxUnwrapLeg(
+        MetaTxLib.Envelope calldata e,
+        address u,
+        uint256 wrapped,
+        address recipient,
+        uint256 minOut,
+        bytes calldata sig
+    ) external returns (bytes memory);
+    function mtxUnwrapToUA(
+        MetaTxLib.Envelope calldata e,
+        address u,
+        uint256 wrapped,
+        bytes32 to,
+        uint256 minOut,
+        bytes calldata sig
+    ) external returns (bytes memory);
     function mtxWrapOrder(address u, OldWrapOrder calldata o, bytes calldata sig) external returns (uint256);
     function uaBurn(MetaTxLib.UAEnvelope calldata e, uint256 amount, IUARegistry.UASig calldata auth)
-        external returns (bytes memory);
-    function uaUnwrap(MetaTxLib.UAEnvelope calldata e, uint256 wrapped, address recipient, uint256 minOut,
-        IUARegistry.UASig calldata auth) external returns (bytes memory);
-    function uaUnwrapLeg(MetaTxLib.UAEnvelope calldata e, address u, uint256 wrapped, address recipient,
-        uint256 minOut, IUARegistry.UASig calldata auth) external returns (bytes memory);
-    function uaUnwrapToUA(MetaTxLib.UAEnvelope calldata e, address u, uint256 wrapped, bytes32 to, uint256 minOut,
-        IUARegistry.UASig calldata auth) external returns (bytes memory);
+        external
+        returns (bytes memory);
+    function uaUnwrap(
+        MetaTxLib.UAEnvelope calldata e,
+        uint256 wrapped,
+        address recipient,
+        uint256 minOut,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes memory);
+    function uaUnwrapLeg(
+        MetaTxLib.UAEnvelope calldata e,
+        address u,
+        uint256 wrapped,
+        address recipient,
+        uint256 minOut,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes memory);
+    function uaUnwrapToUA(
+        MetaTxLib.UAEnvelope calldata e,
+        address u,
+        uint256 wrapped,
+        bytes32 to,
+        uint256 minOut,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes memory);
     function uaWrapOrder(address u, ITradeToken.UAWrapOrder calldata o, IUARegistry.UASig calldata auth)
-        external returns (uint256);
+        external
+        returns (uint256);
 }
 
 /// The no-twin wrap entries moved onto `UAEnvelope` (what must NOT exist, spec §2.1).
 interface INoTwinOnUA {
     function mtxWrap(MetaTxLib.UAEnvelope calldata e, uint256 amount, IUARegistry.UASig calldata auth)
-        external returns (bytes memory);
+        external
+        returns (bytes memory);
     function mtxWrapLeg(MetaTxLib.UAEnvelope calldata e, address u, uint256 amount, IUARegistry.UASig calldata auth)
-        external returns (bytes memory);
-    function mtxWrapToUA(MetaTxLib.UAEnvelope calldata e, address u, uint256 amount, bytes32 to,
-        IUARegistry.UASig calldata auth) external returns (bytes memory);
+        external
+        returns (bytes memory);
+    function mtxWrapToUA(
+        MetaTxLib.UAEnvelope calldata e,
+        address u,
+        uint256 amount,
+        bytes32 to,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes memory);
     function mtxAddReserve(MetaTxLib.UAEnvelope calldata e, address u, uint256 amount, IUARegistry.UASig calldata auth)
-        external returns (bytes memory);
+        external
+        returns (bytes memory);
 }
 
 /// T3: the token kinds' own pairs (`mtxBurn`, `mtxUnwrap`, `mtxUnwrapLeg`, `mtxUnwrapToUA`, `mtxWrapOrder`) in today's
@@ -113,7 +176,12 @@ contract KindPairsTest is UALedgerBase {
 
     function setUp() public override {
         super.setUp();
-        off = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, address(0), address(0), false)));
+        off = NormalToken(
+            EnvKit.clone(
+                address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+                EnvKit.env(chainUidA, address(0), address(0), false)
+            )
+        );
         off.initialize(nid(address(this)), 1, abi.encode(normalInit("Off", "OFF", 6, 1_000_000, alice, address(this))));
         wOff = _wrapperOff(address(und));
         wOffL = _wrapperOff(address(off));
@@ -130,7 +198,12 @@ contract KindPairsTest is UALedgerBase {
     }
 
     function _wrapperOff(address leg) internal returns (WrappedToken w) {
-        w = WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(chainUidA, address(0), address(0), false)));
+        w = WrappedToken(
+            EnvKit.clone(
+                address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
+                EnvKit.env(chainUidA, address(0), address(0), false)
+            )
+        );
         address[] memory us = new address[](1);
         uint256[] memory one = new uint256[](1);
         (us[0], one[0]) = (leg, 1);
@@ -150,16 +223,25 @@ contract KindPairsTest is UALedgerBase {
 
     /// The digest of `<head><E>` over `(from, args…, E)` in `t`'s domain, from the type string (not read from the token).
     function _digest(address t, string memory head, bytes memory args, MetaTxLib.UAEnvelope memory e)
-        internal view returns (bytes32)
+        internal
+        view
+        returns (bytes32)
     {
-        bytes32 structHash = keccak256(bytes.concat(abi.encode(keccak256(bytes(string.concat(head, E_TAIL))), e.from),
-            args, abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
+        bytes32 structHash = keccak256(
+            bytes.concat(
+                abi.encode(keccak256(bytes(string.concat(head, E_TAIL))), e.from),
+                args,
+                abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))
+            )
+        );
         return MtxDigest.typed(t, structHash);
     }
 
     /// The signer's `UASig`: a native id its own ECDSA signature only (R17), a derived one through `lreg` (`metatx`).
     function _sigFor(address t, string memory head, bytes memory args, MetaTxLib.UAEnvelope memory e)
-        internal view returns (IUARegistry.UASig memory)
+        internal
+        view
+        returns (IUARegistry.UASig memory)
     {
         return UACall.auth(e.from, _authFor(e.from, _digest(t, head, args, e)));
     }
@@ -202,7 +284,9 @@ contract KindPairsTest is UALedgerBase {
 
     /// A `UAWrapOrder` of `amount` at 1:1, no fee, relayer `ANY` (the order's own field), lane 1 at `nonce`.
     function _o(WrappedToken w, bytes32 from, uint256 amount, uint256 nonce)
-        internal view returns (ITradeToken.UAWrapOrder memory o)
+        internal
+        view
+        returns (ITradeToken.UAWrapOrder memory o)
     {
         (o.from, o.wrappedToken, o.amount, o.minMinted, o.minFill) = (from, address(w), amount, amount, amount);
         (o.relayer, o.batch, o.nonce, o.validUntil) = (ANY, 1, nonce, block.timestamp + 300);
@@ -309,8 +393,12 @@ contract KindPairsTest is UALedgerBase {
         c.roles.minter = nid(address(0x313));
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(tok), 1, 1);
-        WrappedToken w = WrappedToken(payable(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
-            EnvKit.env(chainUidA, REG_L, address(0), false))));
+        WrappedToken w = WrappedToken(
+            payable(EnvKit.clone(
+                    address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
+                    EnvKit.env(chainUidA, REG_L, address(0), false)
+                ))
+        );
         w.initialize(nid(address(this)), 1, abi.encode(c));
         _wrapOrder(w, address(tok), _o(w, _pad(alice), CAP, 1));
         assertEq(w.totalSupply(), CAP);
@@ -330,7 +418,9 @@ contract KindPairsTest is UALedgerBase {
         _unwrapLeg(wOff, address(und), _pad(alice), 1);
         _unwrapToUA(_pad(alice), uaB, 1);
         _wrapOrder(wOffL, address(off), _o(wOffL, _pad(alice), 1, 1));
-        assertEq(off.balanceOf(ANY) + wOff.balanceOf(ANY) + wrpL.balanceOf(ANY) + wOffL.balanceOf(ANY), 0, "no fee taken");
+        assertEq(
+            off.balanceOf(ANY) + wOff.balanceOf(ANY) + wrpL.balanceOf(ANY) + wOffL.balanceOf(ANY), 0, "no fee taken"
+        );
         assertEq(off.mtxNonce(_pad(alice), LANE) + wOff.mtxNonce(_pad(alice), LANE), 3);
     }
 
@@ -339,31 +429,64 @@ contract KindPairsTest is UALedgerBase {
     /// Spec §2.1: `mtxWrap`, `mtxWrapLeg`, `mtxWrapToUA`, `mtxAddReserve` stay on `Envelope` + `bytes sig` with `address
     /// from` (their selectors pinned by signature); no `UAEnvelope` twin exists. Positive control: a signed `mtxWrap`.
     function test_noTwinWrapsStayAddress() public {
-        assertEq(IWrappedToken.mtxWrap.selector, bytes4(keccak256(bytes(string.concat("mtxWrap(", ENV, ",uint256,bytes)")))));
-        assertEq(IWrappedToken.mtxWrapLeg.selector,
-            bytes4(keccak256(bytes(string.concat("mtxWrapLeg(", ENV, ",address,uint256,bytes)")))));
-        assertEq(IWrappedToken.mtxWrapToUA.selector,
-            bytes4(keccak256(bytes(string.concat("mtxWrapToUA(", ENV, ",address,uint256,bytes32,bytes)")))));
-        assertEq(IWrappedToken.mtxAddReserve.selector,
-            bytes4(keccak256(bytes(string.concat("mtxAddReserve(", ENV, ",address,uint256,bytes)")))));
+        assertEq(
+            IWrappedToken.mtxWrap.selector, bytes4(keccak256(bytes(string.concat("mtxWrap(", ENV, ",uint256,bytes)"))))
+        );
+        assertEq(
+            IWrappedToken.mtxWrapLeg.selector,
+            bytes4(keccak256(bytes(string.concat("mtxWrapLeg(", ENV, ",address,uint256,bytes)"))))
+        );
+        assertEq(
+            IWrappedToken.mtxWrapToUA.selector,
+            bytes4(keccak256(bytes(string.concat("mtxWrapToUA(", ENV, ",address,uint256,bytes32,bytes)"))))
+        );
+        assertEq(
+            IWrappedToken.mtxAddReserve.selector,
+            bytes4(keccak256(bytes(string.concat("mtxAddReserve(", ENV, ",address,uint256,bytes)"))))
+        );
         IUARegistry.UASig memory none;
         MetaTxLib.UAEnvelope memory ue = _e(address(wOff), _pad(alice));
         _noEntry(address(wOff), abi.encodeCall(INoTwinOnUA.mtxWrap, (ue, 1, none)), "mtxWrap on UAEnvelope");
-        _noEntry(address(wOff), abi.encodeCall(INoTwinOnUA.mtxWrapLeg, (ue, address(und), 1, none)), "mtxWrapLeg on UAEnvelope");
-        _noEntry(address(wOff), abi.encodeCall(INoTwinOnUA.mtxWrapToUA, (ue, address(und), 1, uaP, none)), "mtxWrapToUA on UAEnvelope");
-        _noEntry(address(wOff), abi.encodeCall(INoTwinOnUA.mtxAddReserve, (ue, address(und), 1, none)), "mtxAddReserve on UAEnvelope");
+        _noEntry(
+            address(wOff),
+            abi.encodeCall(INoTwinOnUA.mtxWrapLeg, (ue, address(und), 1, none)),
+            "mtxWrapLeg on UAEnvelope"
+        );
+        _noEntry(
+            address(wOff),
+            abi.encodeCall(INoTwinOnUA.mtxWrapToUA, (ue, address(und), 1, uaP, none)),
+            "mtxWrapToUA on UAEnvelope"
+        );
+        _noEntry(
+            address(wOff),
+            abi.encodeCall(INoTwinOnUA.mtxAddReserve, (ue, address(und), 1, none)),
+            "mtxAddReserve on UAEnvelope"
+        );
         // positive control: the address `Wrap` struct, signed by the EOA, wraps with no registry
-        MetaTxLib.Envelope memory e = MetaTxLib.Envelope(alice, 9, 0, block.timestamp + 300, 0, address(0), 0, address(0));
-        bytes32 h = keccak256(abi.encode(keccak256(bytes(string.concat("Wrap(address from,uint256 amount,", E_TAIL))),
-            alice, uint256(10), e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0)));
+        MetaTxLib.Envelope memory e =
+            MetaTxLib.Envelope(alice, 9, 0, block.timestamp + 300, 0, address(0), 0, address(0));
+        bytes32 h = keccak256(
+            abi.encode(
+                keccak256(bytes(string.concat("Wrap(address from,uint256 amount,", E_TAIL))),
+                alice,
+                uint256(10),
+                e.batch,
+                e.nonce,
+                e.validUntil,
+                e.mode,
+                address(0),
+                e.fee,
+                address(0)
+            )
+        );
         und.mint(alice, 10);
         vm.prank(alice);
         und.approve(address(wOff), 10);
         uint256 w0 = wOff.balanceOf(alice);
         bytes memory sig = _ecdsa(ALICE_PK, MtxDigest.typed(address(wOff), h));
         vm.prank(ANY); // by its signature, so the file compiles whatever form the token's interface declares
-        (bool ok, bytes memory ret) = address(wOff).call(abi.encodeWithSignature(
-            string.concat("mtxWrap(", ENV, ",uint256,bytes)"), e, uint256(10), sig));
+        (bool ok, bytes memory ret) = address(wOff)
+            .call(abi.encodeWithSignature(string.concat("mtxWrap(", ENV, ",uint256,bytes)"), e, uint256(10), sig));
         assertTrue(ok, string(ret));
         assertEq(wOff.balanceOf(alice), w0 + 10);
     }
@@ -372,20 +495,33 @@ contract KindPairsTest is UALedgerBase {
     /// `mtxBurn` of the same burn runs.
     function test_oldAddressFormsAndUaNamesHaveNoEntry() public {
         _burn(off, _pad(alice), 1);
-        MetaTxLib.Envelope memory e = MetaTxLib.Envelope(alice, LANE, 1, block.timestamp + 300, 0, address(0), 0, address(0));
+        MetaTxLib.Envelope memory e =
+            MetaTxLib.Envelope(alice, LANE, 1, block.timestamp + 300, 0, address(0), 0, address(0));
         MetaTxLib.UAEnvelope memory ue = _e(address(wrpL), _pad(alice));
         IUARegistry.UASig memory none;
         OldWrapOrder memory ow;
         _noEntry(address(off), abi.encodeCall(IOldT3.mtxBurn, (e, 1, "")), "mtxBurn(Envelope)");
         _noEntry(address(off), abi.encodeCall(IOldT3.uaBurn, (ue, 1, none)), "uaBurn");
         _noEntry(address(wrpL), abi.encodeCall(IOldT3.mtxUnwrap, (e, 1, bob, 0, "")), "mtxUnwrap(Envelope)");
-        _noEntry(address(wrpL), abi.encodeCall(IOldT3.mtxUnwrapLeg, (e, address(tok), 1, bob, 0, "")), "mtxUnwrapLeg(Envelope)");
-        _noEntry(address(wrpL), abi.encodeCall(IOldT3.mtxUnwrapToUA, (e, address(tok), 1, uaB, 0, "")), "mtxUnwrapToUA(Envelope)");
+        _noEntry(
+            address(wrpL),
+            abi.encodeCall(IOldT3.mtxUnwrapLeg, (e, address(tok), 1, bob, 0, "")),
+            "mtxUnwrapLeg(Envelope)"
+        );
+        _noEntry(
+            address(wrpL),
+            abi.encodeCall(IOldT3.mtxUnwrapToUA, (e, address(tok), 1, uaB, 0, "")),
+            "mtxUnwrapToUA(Envelope)"
+        );
         _noEntry(address(wrpL), abi.encodeCall(IOldT3.mtxWrapOrder, (address(tok), ow, "")), "mtxWrapOrder(WrapOrder)");
         _noEntry(address(wrpL), abi.encodeCall(IOldT3.uaUnwrap, (ue, 1, bob, 0, none)), "uaUnwrap");
         _noEntry(address(wrpL), abi.encodeCall(IOldT3.uaUnwrapLeg, (ue, address(tok), 1, bob, 0, none)), "uaUnwrapLeg");
-        _noEntry(address(wrpL), abi.encodeCall(IOldT3.uaUnwrapToUA, (ue, address(tok), 1, uaB, 0, none)), "uaUnwrapToUA");
-        _noEntry(address(wrpL), abi.encodeCall(IOldT3.uaWrapOrder, (address(tok), _o(wrpL, uaP, 1, 1), none)), "uaWrapOrder");
+        _noEntry(
+            address(wrpL), abi.encodeCall(IOldT3.uaUnwrapToUA, (ue, address(tok), 1, uaB, 0, none)), "uaUnwrapToUA"
+        );
+        _noEntry(
+            address(wrpL), abi.encodeCall(IOldT3.uaWrapOrder, (address(tok), _o(wrpL, uaP, 1, 1), none)), "uaWrapOrder"
+        );
     }
 
     // ------------------------------------------------------------------ interface ids (pins, old -> new)

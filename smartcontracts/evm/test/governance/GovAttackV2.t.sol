@@ -28,20 +28,53 @@ contract BranchApp is GovernanceBase {
 
     constructor(address owner_) GovernanceBaseCore(address(0)) {
         GovernanceLib.Roles memory none;
-        GovernanceLib.init(uint256(1) << APPROVE, 0, nid(owner_), 0, address(0), none, uint256(1) << APPROVE, uint256(1) << APPROVE, 0,
-            address(0));
+        GovernanceLib.init(
+            uint256(1) << APPROVE,
+            0,
+            nid(owner_),
+            0,
+            address(0),
+            none,
+            uint256(1) << APPROVE,
+            uint256(1) << APPROVE,
+            0,
+            address(0)
+        );
     }
 
-    function _guardIn() internal pure override returns (bool) { return false; }
+    function _guardIn() internal pure override returns (bool) {
+        return false;
+    }
     function _guardOut(bool) internal pure override {}
-    function _caller() internal view override returns (address) { return msg.sender; }
+
+    function _caller() internal view override returns (address) {
+        return msg.sender;
+    }
+
     /// @dev A test app has no chain word (not factory-made); its renounce is not exercised by chain (Fable recheck-2 P3-1).
-    function _govChainUid() internal pure override returns (bytes32) { return bytes32(0); }
-    function _validBits() internal pure override returns (uint256) { return uint256(1) << APPROVE; }
-    function _roleBits() internal pure override returns (uint256) { return uint256(1) << APPROVE; }
-    function _contractOnlyBits() internal pure override returns (uint256) { return 0; }
-    function _scalarBits() internal pure override returns (uint256) { return uint256(1) << APPROVE; }
-    function _scopeBits() internal pure override returns (uint256) { return uint256(1) << APPROVE; }
+    function _govChainUid() internal pure override returns (bytes32) {
+        return bytes32(0);
+    }
+
+    function _validBits() internal pure override returns (uint256) {
+        return uint256(1) << APPROVE;
+    }
+
+    function _roleBits() internal pure override returns (uint256) {
+        return uint256(1) << APPROVE;
+    }
+
+    function _contractOnlyBits() internal pure override returns (uint256) {
+        return 0;
+    }
+
+    function _scalarBits() internal pure override returns (uint256) {
+        return uint256(1) << APPROVE;
+    }
+
+    function _scopeBits() internal pure override returns (uint256) {
+        return uint256(1) << APPROVE;
+    }
 
     function approve(bytes32 branch, uint128 principal) external {
         require(GovernanceUse.use(APPROVE, _govSubject(), principal) == branch, "branch");
@@ -59,20 +92,35 @@ contract LyingLeg {
         (factory, chainUid) = (f, uid);
     }
 
-    function kind() external pure returns (uint8) { return 0; }
+    function kind() external pure returns (uint8) {
+        return 0;
+    }
     function modules() external pure returns (address[] memory) {} // T66b: no body module
     function validateEnv(IFactoryToken.ChainEnv calldata) external pure {}
     function initialize(bytes32, uint64, bytes calldata) external {}
     function underlyings() external pure returns (address[] memory) {}
-    function features() external pure returns (uint256) { return 1; } // PAYABLE only: no bit 6, no bit 9
-    function lockedFeatures() external pure returns (uint256) { return 1; }
+
+    function features() external pure returns (uint256) {
+        return 1; // PAYABLE only: no bit 6, no bit 9
+    }
+
+    function lockedFeatures() external pure returns (uint256) {
+        return 1;
+    }
     function admin() external pure returns (address) {}
-    function decimals() external pure returns (uint8) { return 18; }
+
+    function decimals() external pure returns (uint8) {
+        return 18;
+    }
+
     function seize(address from, address to, uint256 v) external {
         balanceOf[from] -= v;
         balanceOf[to] += v;
     }
-    function fund(address a, uint256 v) external { balanceOf[a] += v; }
+
+    function fund(address a, uint256 v) external {
+        balanceOf[a] += v;
+    }
 }
 
 /// Attack round on the permission model v2 and the prototype: docs/research/governance/permission-model-v2-attack.md. Each
@@ -96,8 +144,12 @@ contract GovAttackV2Test is Test {
     function setUp() public {
         vm.warp(1_800_000_000);
         f = EnvKit.factory(address(this), UID, 0);
-        Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
-        Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false);
+        Catalogue.plain(
+            f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false
+        );
+        Catalogue.plain(
+            f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false
+        );
         t = _token("t", 0, OWNER);
     }
 
@@ -149,7 +201,11 @@ contract GovAttackV2Test is Test {
 
     function _dex(bytes32 salt) internal returns (SCaaSDex) {
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        return SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), salt));
+        return SCaaSDex(
+            f.createDex(
+                1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), salt
+            )
+        );
     }
 
     // ------------------------------------------------------------------ delay (B-01, B-02)
@@ -209,13 +265,16 @@ contract GovAttackV2Test is Test {
     /// is published, and the registrar can enable it, so a frozen factory can still make it.
     function test_fixed_aReservedKindDecodes() public {
         bytes memory cfg = abi.encode(_config(0, OWNER));
-        (bool ok,) = address(f).call(abi.encodeWithSelector(f.createToken.selector, uint8(0), uint64(1), cfg, bytes32("a")));
+        (bool ok,) =
+            address(f).call(abi.encodeWithSelector(f.createToken.selector, uint8(0), uint64(1), cfg, bytes32("a")));
         assertTrue(ok); // positive control: the same call, kind 0
         bytes memory ret;
-        (ok, ret) = address(f).call(abi.encodeWithSelector(f.createToken.selector, uint8(8), uint64(1), cfg, bytes32("b")));
+        (ok, ret) =
+            address(f).call(abi.encodeWithSelector(f.createToken.selector, uint8(8), uint64(1), cfg, bytes32("b")));
         assertFalse(ok);
         assertEq(ret, abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, uint8(8), uint64(1)));
-        (ok,) = address(f).call(abi.encodeWithSelector(f.setTokenKindEnabled.selector, uint8(8), true, EnvKit.uidOf(address(f))));
+        (ok,) = address(f)
+            .call(abi.encodeWithSelector(f.setTokenKindEnabled.selector, uint8(8), true, EnvKit.uidOf(address(f))));
         assertTrue(ok);
         assertTrue(f.tokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED));
     }
@@ -223,7 +282,9 @@ contract GovAttackV2Test is Test {
     /// B-03, stated: a token of a second factory stays an outside leg to the first's `isToken`, whatever its bits.
     function test_stated_aSecondFactorysTokenIsOutsideToTheFirst() public {
         OpenFactory f2 = EnvKit.factory(address(this), UID, 0);
-        Catalogue.plain(f2, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
+        Catalogue.plain(
+            f2, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false
+        );
         address other = f2.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(_config(0, OWNER)), "x");
         assertTrue(f2.isToken(other)); // positive control
         assertFalse(f.isToken(other));

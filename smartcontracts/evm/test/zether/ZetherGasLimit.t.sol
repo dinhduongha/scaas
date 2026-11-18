@@ -46,7 +46,9 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
 
     function setUp() public {
         _deploy(true);
-        for (uint256 i; i < rs.length; ++i) rs[i] = _user(0xD00 + i, address(uint160(0xE00 + i)));
+        for (uint256 i; i < rs.length; ++i) {
+            rs[i] = _user(0xD00 + i, address(uint160(0xE00 + i)));
+        }
         _public(tok, vm.addr(PAYER_PK), 1000);
         _fund(tok, alice, 1_000_000);
         tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
@@ -62,7 +64,9 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
     ///      case); relayed: a fixed-fee envelope signed by a fresh payer.
     function _build(uint256 m, ZetherTypes.TransferMode mode, bool relayed) internal view returns (bytes memory) {
         User[] memory to = new User[](m);
-        for (uint256 j; j < m; ++j) to[j] = rs[j];
+        for (uint256 j; j < m; ++j) {
+            to[j] = rs[j];
+        }
         uint256[] memory vs = new uint256[](m);
         vs[m / 2] = 1000;
         if (!relayed) {
@@ -70,9 +74,15 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
             return abi.encodeWithSelector(_sel(mode), _zMulti(t.payload, carol.ua), t.proof);
         }
         MetaTxLib.MetaTransaction memory mt = MetaTxLib.MetaTransaction({
-            from: vm.addr(PAYER_PK), data: "", batch: 1, nonce: tok.mtxNonce(MetaTxLib.pad(vm.addr(PAYER_PK)), 1),
-            validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED,
-            relayer: relayer, fee: 3, feeRecipient: address(0)
+            from: vm.addr(PAYER_PK),
+            data: "",
+            batch: 1,
+            nonce: tok.mtxNonce(MetaTxLib.pad(vm.addr(PAYER_PK)), 1),
+            validUntil: block.timestamp + 300,
+            mode: MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED,
+            relayer: relayer,
+            fee: 3,
+            feeRecipient: address(0)
         });
         Tx memory u = _proveMulti(tok, alice, to, vs, 1_000_000, carol.ua, mode, _addrBinding(tok, mt));
         mt.data = abi.encodeWithSelector(_sel(mode), _zMulti(u.payload, carol.ua), u.proof);
@@ -85,30 +95,64 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
     ///      `UAZetherTransfer…` (R35), the EOA's id padded, its proof bound to the UA tag, its signature a `UASig`.
     function _buildNamed(uint256 m, ZetherTypes.TransferMode mode) internal view returns (bytes memory) {
         User[] memory to = new User[](m);
-        for (uint256 j; j < m; ++j) to[j] = rs[j];
+        for (uint256 j; j < m; ++j) {
+            to[j] = rs[j];
+        }
         uint256[] memory vs = new uint256[](m);
         vs[m / 2] = 1000;
-        MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(MetaTxLib.pad(vm.addr(PAYER_PK)), 1, tok.mtxNonce(MetaTxLib.pad(vm.addr(PAYER_PK)), 1), block.timestamp + 300,
-            MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, relayer, 3, address(0));
-        bytes32 b = tok.envelopeBinding(MetaTxLib.UAMetaTransaction(e.from, "", e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient));
+        MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(
+            MetaTxLib.pad(vm.addr(PAYER_PK)),
+            1,
+            tok.mtxNonce(MetaTxLib.pad(vm.addr(PAYER_PK)), 1),
+            block.timestamp + 300,
+            MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED,
+            relayer,
+            3,
+            address(0)
+        );
+        bytes32 b = tok.envelopeBinding(
+            MetaTxLib.UAMetaTransaction(
+                e.from, "", e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient
+            )
+        );
         Tx memory u = _proveMulti(tok, alice, to, vs, 1_000_000, carol.ua, mode, b);
         IZetherToken.ZetherMulti memory t = _zMulti(u.payload, carol.ua);
         bool compact = mode == ZetherTypes.TransferMode.HASH;
         string memory primary = compact ? "UAZetherTransferCompact" : "UAZetherTransfer";
-        bytes32 d = typedDigest(address(tok), primary,
+        bytes32 d = typedDigest(
+            address(tok),
+            primary,
             '{"name":"from","type":"bytes32"},{"name":"args","type":"ZetherMulti"},{"name":"proof","type":"bytes"}',
-            string.concat(',', T_G1, ',', T_LEG, ',', T_MULTI), string.concat('"from":', h(e.from), ',"args":', multiJson(t), ',"proof":',
-            hexJson(u.proof), _envelopeJson(e)));
+            string.concat(",", T_G1, ",", T_LEG, ",", T_MULTI),
+            string.concat(
+                '"from":', h(e.from), ',"args":', multiJson(t), ',"proof":', hexJson(u.proof), _envelopeJson(e)
+            )
+        );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, d);
         IUARegistry.UASig memory auth;
         auth.signature = abi.encodePacked(r, s, v);
-        return compact ? abi.encodeCall(IZetherMergedT4.mtxConfidentialTransferCompact, (e, t, u.proof, auth))
+        return compact
+            ? abi.encodeCall(IZetherMergedT4.mtxConfidentialTransferCompact, (e, t, u.proof, auth))
             : abi.encodeCall(IZetherMergedT4.mtxConfidentialTransfer, (e, t, u.proof, auth));
     }
 
     function _envelopeJson(MetaTxLib.UAEnvelope memory e) internal pure returns (string memory) {
-        return string.concat(',"batch":', n(e.batch), ',"nonce":', n(e.nonce), ',"validUntil":', n(e.validUntil), ',"mode":', n(e.mode),
-            ',"relayer":', a(e.relayer), ',"fee":', n(e.fee), ',"feeRecipient":', a(address(0)));
+        return string.concat(
+            ',"batch":',
+            n(e.batch),
+            ',"nonce":',
+            n(e.nonce),
+            ',"validUntil":',
+            n(e.validUntil),
+            ',"mode":',
+            n(e.mode),
+            ',"relayer":',
+            a(e.relayer),
+            ',"fee":',
+            n(e.fee),
+            ',"feeRecipient":',
+            a(address(0))
+        );
     }
 
     /// @dev One isolated transaction with gas limit `limit`: does it settle, and its regular / state gas
@@ -136,22 +180,54 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
         uint8[8] memory e = _edges();
         for (uint256 r; r < 2; ++r) {
             (bool ok, uint256 reg, uint256 st) = _run(_build(e[2 * cell + r], mode, r == 1), EDGE_LIMIT, r == 1);
-            console2.log(string.concat("EDGE cell ", vm.toString(cell), r == 1 ? " relayed" : " direct", " M=", vm.toString(e[2 * cell + r]),
-                " regular=", vm.toString(reg), " state=", vm.toString(st)));
+            console2.log(
+                string.concat(
+                    "EDGE cell ",
+                    vm.toString(cell),
+                    r == 1 ? " relayed" : " direct",
+                    " M=",
+                    vm.toString(e[2 * cell + r]),
+                    " regular=",
+                    vm.toString(reg),
+                    " state=",
+                    vm.toString(st)
+                )
+            );
             assertTrue(ok, "edge settles");
             assertLe(reg, CAP - MARGIN, "regular within the cap less the margin");
         }
         (bool signed, uint256 regular, uint256 state) = _run(_buildNamed(e[2 * cell + 1], mode), EDGE_LIMIT, true);
-        console2.log(string.concat("EDGE cell ", vm.toString(cell), " named M=", vm.toString(e[2 * cell + 1]), " regular=", vm.toString(regular),
-            " state=", vm.toString(state)));
+        console2.log(
+            string.concat(
+                "EDGE cell ",
+                vm.toString(cell),
+                " named M=",
+                vm.toString(e[2 * cell + 1]),
+                " regular=",
+                vm.toString(regular),
+                " state=",
+                vm.toString(state)
+            )
+        );
         assertTrue(signed, "edge settles through the signed entry");
         assertLe(regular, CAP - MARGIN, "regular within the cap less the margin, signed entry");
     }
 
-    function test_edge_compactOn() public { _edge(0); }
-    function test_edge_compactOut() public { _edge(1); }
-    function test_edge_bundleOn() public { _edge(2); }
-    function test_edge_bundleOut() public { _edge(3); }
+    function test_edge_compactOn() public {
+        _edge(0);
+    }
+
+    function test_edge_compactOut() public {
+        _edge(1);
+    }
+
+    function test_edge_bundleOn() public {
+        _edge(2);
+    }
+
+    function test_edge_bundleOut() public {
+        _edge(3);
+    }
 
     /// @dev Set-auditor A2 (spec §7, CTR-ZTH-95): a token with bit 32 whose auditor was replaced once (epoch 1, delay 0), so each
     ///      audited transfer also writes its `entryAuditorEpoch` row; alice funded on it as in `setUp`.
@@ -169,8 +245,15 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
     }
 
     /// The cells with the auditor on at epoch 1: the same `M`, regular gas still within the cap less the margin.
-    function test_edge_compactOn_epoch1() public { _epoch1(); _edge(0); }
-    function test_edge_bundleOn_epoch1() public { _epoch1(); _edge(2); }
+    function test_edge_compactOn_epoch1() public {
+        _epoch1();
+        _edge(0);
+    }
+
+    function test_edge_bundleOn_epoch1() public {
+        _epoch1();
+        _edge(2);
+    }
 
     /// @dev Regular and state gas per `M` (one isolated transaction each, limit `CAP + STATE_RESERVOIR`); stops at the first
     ///      `M` whose REGULAR gas passes `CAP - MARGIN` (state gas is not under the cap).
@@ -180,13 +263,26 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
             audOut = k & 1 == 1;
             bool relayed = k >= 2;
             string memory head = string.concat(
-                "GAS ", bls ? "bls12381 " : "bn254 ", relayed ? "relayed " : "direct ",
+                "GAS ",
+                bls ? "bls12381 " : "bn254 ",
+                relayed ? "relayed " : "direct ",
                 mode == ZetherTypes.TransferMode.HASH ? "compact" : "bundle",
                 audOut ? " out" : " on"
             );
             for (uint256 m = 1; m <= rs.length; ++m) {
                 (bool ok, uint256 reg, uint256 st) = _run(_build(m, mode, relayed), CAP + STATE_RESERVOIR, relayed);
-                console2.log(string.concat(head, " M=", vm.toString(m), " regular=", vm.toString(reg), " state=", vm.toString(st), ok ? " ok" : " FAIL"));
+                console2.log(
+                    string.concat(
+                        head,
+                        " M=",
+                        vm.toString(m),
+                        " regular=",
+                        vm.toString(reg),
+                        " state=",
+                        vm.toString(st),
+                        ok ? " ok" : " FAIL"
+                    )
+                );
                 if (reg + MARGIN > CAP) break;
                 require(ok, "settles under the cap");
                 require(m < rs.length, "more recipients needed");
@@ -211,26 +307,53 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
             bytes memory cd;
             if (!relayed) {
                 Tx memory t = _proveTransfer(tok, alice, rs[0], 1000, 1_000_000, carol.ua, 0);
-                cd = abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (_zSingle(t.payload, carol.ua), t.proof));
+                cd = abi.encodeCall(
+                    IZetherToken.mtxConfidentialTransferSingle, (_zSingle(t.payload, carol.ua), t.proof)
+                );
             } else {
                 MetaTxLib.MetaTransaction memory mt = MetaTxLib.MetaTransaction({
-                    from: vm.addr(PAYER_PK), data: "", batch: 1, nonce: tok.mtxNonce(MetaTxLib.pad(vm.addr(PAYER_PK)), 1),
-                    validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED,
-                    relayer: relayer, fee: 3, feeRecipient: address(0)
+                    from: vm.addr(PAYER_PK),
+                    data: "",
+                    batch: 1,
+                    nonce: tok.mtxNonce(MetaTxLib.pad(vm.addr(PAYER_PK)), 1),
+                    validUntil: block.timestamp + 300,
+                    mode: MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED,
+                    relayer: relayer,
+                    fee: 3,
+                    feeRecipient: address(0)
                 });
                 Tx memory u = _proveTransfer(tok, alice, rs[0], 1000, 1_000_000, carol.ua, _addrBinding(tok, mt));
-                mt.data = abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (_zSingle(u.payload, carol.ua), u.proof));
+                mt.data = abi.encodeCall(
+                    IZetherToken.mtxConfidentialTransferSingle, (_zSingle(u.payload, carol.ua), u.proof)
+                );
                 (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, MtxDigest.metaTx(address(tok), mt));
                 cd = abi.encodeCall(IMetaTx.executeMetaTransaction, (mt, abi.encodePacked(r, s, v)));
             }
             (bool ok, uint256 reg, uint256 st) = _run(cd, CAP + STATE_RESERVOIR, relayed);
-            console2.log(string.concat("GAS ", bls ? "bls12381 " : "bn254 ", relayed ? "relayed " : "direct ", "single",
-                audOut ? " out" : " on", " M=1 regular=", vm.toString(reg), " state=", vm.toString(st), ok ? " ok" : " FAIL"));
+            console2.log(
+                string.concat(
+                    "GAS ",
+                    bls ? "bls12381 " : "bn254 ",
+                    relayed ? "relayed " : "direct ",
+                    "single",
+                    audOut ? " out" : " on",
+                    " M=1 regular=",
+                    vm.toString(reg),
+                    " state=",
+                    vm.toString(st),
+                    ok ? " ok" : " FAIL"
+                )
+            );
         }
     }
 
-    function test_measure_compact() public { _measure(ZetherTypes.TransferMode.HASH); }
-    function test_measure_bundle() public { _measure(ZetherTypes.TransferMode.BUNDLE); }
+    function test_measure_compact() public {
+        _measure(ZetherTypes.TransferMode.HASH);
+    }
+
+    function test_measure_bundle() public {
+        _measure(ZetherTypes.TransferMode.BUNDLE);
+    }
 }
 
 /// forge-config: default.isolate = true

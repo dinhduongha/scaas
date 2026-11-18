@@ -47,29 +47,47 @@ abstract contract NormalPqzTokenCore is NormalTokenCore, PqzLayer {
     function _init(IFactoryToken.TokenConfig memory cfg) internal override(MetaTokenBase, NormalTokenCore) {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
-        GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.admin, cfg.grantDelay, cfg.rescueTo, cfg.roles, _validBits(),
-            _roleBits(), _contractOnlyBits(), _registry());
+        GovernanceLib.init(
+            cfg.features,
+            cfg.lockedFeatures,
+            cfg.admin,
+            cfg.grantDelay,
+            cfg.rescueTo,
+            cfg.roles,
+            _validBits(),
+            _roleBits(),
+            _contractOnlyBits(),
+            _registry()
+        );
         PqzStateLib.init(cfg.conf, _registry(), _pqzVerifier(), FACTORY);
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
     }
-
 
     /// @dev The layer's env checks, restated for the second base.
     function _validateEnv(IFactoryToken.ChainEnv calldata env) internal view virtual override(MetaTokenBase, PqzLayer) {
         PqzLayer._validateEnv(env);
     }
+
     function _domainName() internal pure virtual override(ERC20MetaTx, PqzLayer) returns (string memory) {
         return PqzLayer._domainName();
     }
 
     function _envelopeBinding(MetaTxLib.MetaTransaction memory m)
-        internal view virtual override(MetaTxBaseCore, PqzLayer) returns (bytes32)
+        internal
+        view
+        virtual
+        override(MetaTxBaseCore, PqzLayer)
+        returns (bytes32)
     {
         return PqzLayer._envelopeBinding(m);
     }
 
     function _uaEnvelopeBinding(MetaTxLib.UAMetaTransaction memory m)
-        internal view virtual override(PqzLayer, UAMetaTxBaseCore) returns (bytes32)
+        internal
+        view
+        virtual
+        override(PqzLayer, UAMetaTxBaseCore)
+        returns (bytes32)
     {
         return PqzLayer._uaEnvelopeBinding(m);
     }
@@ -80,7 +98,12 @@ abstract contract NormalPqzTokenCore is NormalTokenCore, PqzLayer {
 
     /// @notice The allowlist (CTR-MTX-19, CTR-PQZ-21): `cancelNonce`, `burn(uint256)` `AMOUNT(0)`, the PQZ ops
     ///         `ABSOLUTE` (incl. the rollover and `mtxPrepareAcc`).
-    function _mtxSelectorsBody() internal pure virtual override(MetaTxBaseCore, NormalTokenCore) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+    function _mtxSelectorsBody()
+        internal
+        pure
+        virtual
+        override(MetaTxBaseCore, NormalTokenCore)
+        returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         s = new bytes4[](11);
         c = new uint8[](11);
@@ -98,7 +121,13 @@ abstract contract NormalPqzTokenCore is NormalTokenCore, PqzLayer {
         (s[10], c[10]) = (IPqzToken.mtxRollOverSigned.selector, FEE_CLASS_ABSOLUTE); // CTR-PQZ-41
     }
 
-    function _mtxRule(bytes4 sel) internal view virtual override(MetaTxBaseCore, NormalTokenCore) returns (MtxRule memory) {
+    function _mtxRule(bytes4 sel)
+        internal
+        view
+        virtual
+        override(MetaTxBaseCore, NormalTokenCore)
+        returns (MtxRule memory)
+    {
         if (_isPqzOp(sel)) return _pqzRule(sel);
         return NormalTokenCore._mtxRule(sel);
     }

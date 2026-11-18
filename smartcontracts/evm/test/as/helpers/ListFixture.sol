@@ -46,8 +46,12 @@ abstract contract ListFixture is RegFixture {
     }
 
     function _create(uint256 i, IFactoryToken.TokenConfig memory c, bytes32 salt) internal returns (address t) {
-        t = f.createToken(i == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED : IOpenFactory.TokenKind.WRAPPED_REGULATED, 1,
-            abi.encode(c), salt);
+        t = f.createToken(
+            i == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED : IOpenFactory.TokenKind.WRAPPED_REGULATED,
+            1,
+            abi.encode(c),
+            salt
+        );
     }
 
     /// A token of kind 8 or 9 with `on` (a mask of 8, 9, 28) at creation and `locked`; `alice` holds `SUPPLY`.

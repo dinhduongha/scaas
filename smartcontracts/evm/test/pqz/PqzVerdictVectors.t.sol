@@ -20,7 +20,8 @@ contract PqzVerdictVectorsTest is Test {
     /// T-05 (owner 2026-11-13, CTR-PQZ-37's Change): the file of the build's set in that set's own directory,
     /// `pqz/verdict.json` at `n2048-kmax1024`, `pqz/<set>/verdict.json` at every other set (as `state.json`).
     function _rel() internal pure returns (string memory) {
-        return keccak256(bytes(PqzSet.NAME)) == keccak256("n2048-kmax1024") ? "pqz/verdict.json"
+        return keccak256(bytes(PqzSet.NAME)) == keccak256("n2048-kmax1024")
+            ? "pqz/verdict.json"
             : string.concat("pqz/", PqzSet.NAME, "/verdict.json");
     }
 
@@ -36,7 +37,9 @@ contract PqzVerdictVectorsTest is Test {
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)");
 
     function _sep(string memory name, string memory version, address at) internal pure returns (bytes32) {
-        return keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name)), keccak256(bytes(version)), CHAIN_ID, at, CHAIN_UID));
+        return keccak256(
+            abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name)), keccak256(bytes(version)), CHAIN_ID, at, CHAIN_UID)
+        );
     }
 
     function _hex32(string memory s) internal pure returns (bytes32) {
@@ -62,12 +65,16 @@ contract PqzVerdictVectorsTest is Test {
         r.proofHash = _hex32(src.readString(string.concat(k, ".proof_keccak")));
         r.epoch = epoch;
         r.validUntil = 1_800_000_000 + uint64(i);
-        IPqzToken.PqzVerdict memory v = IPqzToken.PqzVerdict(TOKEN, CHAIN_ID, PqzSet.PQZL_ID, r.statementHash, r.proofHash,
-            r.epoch, r.validUntil);
+        IPqzToken.PqzVerdict memory v =
+            IPqzToken.PqzVerdict(TOKEN, CHAIN_ID, PqzSet.PQZL_ID, r.statementHash, r.proofHash, r.epoch, r.validUntil);
         r.structHash = keccak256(abi.encode(PqzCore.VERDICT_TYPEHASH, v));
         r.digest = MessageHashUtils.toTypedDataHash(_sep("SCaaS PqzToken", "1", TOKEN), r.structHash);
-        r.uaAuthDigest = UAKinds.uaAuthDigest(_sep("SCaaS UARegistry", "1", REGISTRY), bytes32(uint256(uint160(vm.addr(VKEY)))),
-            UAKinds.PURPOSE_PQZ_VERDICT, r.digest);
+        r.uaAuthDigest = UAKinds.uaAuthDigest(
+            _sep("SCaaS UARegistry", "1", REGISTRY),
+            bytes32(uint256(uint160(vm.addr(VKEY)))),
+            UAKinds.PURPOSE_PQZ_VERDICT,
+            r.digest
+        );
         (uint8 w, bytes32 rr, bytes32 ss) = vm.sign(VKEY, r.uaAuthDigest);
         r.signature = abi.encodePacked(rr, ss, w);
     }
@@ -85,12 +92,18 @@ contract PqzVerdictVectorsTest is Test {
         while (vm.keyExistsJson(src, string.concat(".rows[", vm.toString(n), "]"))) ++n;
         uint256 m;
         for (uint256 i; i < n; ++i) {
-            if (keccak256(bytes(src.readString(string.concat(".rows[", vm.toString(i), "].form")))) != keccak256("REGISTER")) ++m;
+            if (
+                keccak256(bytes(src.readString(string.concat(".rows[", vm.toString(i), "].form"))))
+                    != keccak256("REGISTER")
+            ) ++m;
         }
         rows = new Row[](m);
         uint256 j;
         for (uint256 i; i < n; ++i) {
-            if (keccak256(bytes(src.readString(string.concat(".rows[", vm.toString(i), "].form")))) == keccak256("REGISTER")) continue;
+            if (
+                keccak256(bytes(src.readString(string.concat(".rows[", vm.toString(i), "].form"))))
+                    == keccak256("REGISTER")
+            ) continue;
             rows[j] = _row(src, i, uint32(j % 3)); // epochs 0, 1, 2
             ++j;
         }
@@ -127,12 +140,20 @@ contract PqzVerdictVectorsTest is Test {
         string memory reg = vm.serializeBytes32(g, "separator", _sep("SCaaS UARegistry", "1", REGISTRY));
         string memory t = "top";
         vm.serializeString(t, "file", _rel());
-        vm.serializeString(t, "description",
-            "Group 3f (PQZ verifier mode spec 5.1, 11.3): PqzVerdict struct hashes and digests in a PqzToken domain over the (stmt_keccak, proof_keccak) pairs of proof_pqzl.json (REGISTER left out), and the EOA verifier's 65-byte ECDSA UASig.signature over the registry's uaAuthDigest(ua, PURPOSE_PQZ_VERDICT, digest). statementHash = keccak256 of the statement bytes the token's views return; proofHash = keccak256 of the proof bytes. UNAUDITED.");
-        vm.serializeString(t, "generator", "smartcontracts/evm/test/pqz/PqzVerdictVectors.t.sol (WRITE_VERDICT_VECTORS=true)");
+        vm.serializeString(
+            t,
+            "description",
+            "Group 3f (PQZ verifier mode spec 5.1, 11.3): PqzVerdict struct hashes and digests in a PqzToken domain over the (stmt_keccak, proof_keccak) pairs of proof_pqzl.json (REGISTER left out), and the EOA verifier's 65-byte ECDSA UASig.signature over the registry's uaAuthDigest(ua, PURPOSE_PQZ_VERDICT, digest). statementHash = keccak256 of the statement bytes the token's views return; proofHash = keccak256 of the proof bytes. UNAUDITED."
+        );
+        vm.serializeString(
+            t, "generator", "smartcontracts/evm/test/pqz/PqzVerdictVectors.t.sol (WRITE_VERDICT_VECTORS=true)"
+        );
         vm.serializeString(t, "set", PqzSet.NAME);
-        vm.serializeString(t, "typeString",
-            "PqzVerdict(address token,uint256 chainId,bytes32 proofSystemId,bytes32 statementHash,bytes32 proofHash,uint32 pqzVerifierEpoch,uint64 validUntil)");
+        vm.serializeString(
+            t,
+            "typeString",
+            "PqzVerdict(address token,uint256 chainId,bytes32 proofSystemId,bytes32 statementHash,bytes32 proofHash,uint32 pqzVerifierEpoch,uint64 validUntil)"
+        );
         vm.serializeBytes32(t, "typehash", PqzCore.VERDICT_TYPEHASH);
         vm.serializeString(t, "purpose", "scaas.ua.purpose.pqz-verdict.v1");
         vm.serializeBytes32(t, "purposeTag", UAKinds.PURPOSE_PQZ_VERDICT);

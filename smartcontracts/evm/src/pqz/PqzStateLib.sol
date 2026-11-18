@@ -32,8 +32,10 @@ library PqzStateLib {
     ///         a chain where it cannot be deployed; only an `OFFCHAIN` token initialises on it), never Hedera, a registry
     ///         with code. The mode is never inferred from a missing dependency.
     function validateEnv(address[] calldata d, bool hedera, address registry) public view {
-        if (d.length != 1 || hedera || (d[ENV_PQZ_VERIFIER] != address(0) && !SigCheck.isContract(d[ENV_PQZ_VERIFIER]))
-            || !SigCheck.isContract(registry)) {
+        if (
+            d.length != 1 || hedera || (d[ENV_PQZ_VERIFIER] != address(0) && !SigCheck.isContract(d[ENV_PQZ_VERIFIER]))
+                || !SigCheck.isContract(registry)
+        ) {
             revert IPqzToken.BadInit();
         }
     }
@@ -51,26 +53,36 @@ library PqzStateLib {
     ///         `confidentialFee + verifierFeeMax + 8 · minDecoyFee` `< 2^64` and `< cap` (`BadInit`; controller call 2: every
     ///         fee the setter can write keeps it); `PRECOMPILE` with a fee or a cap `PqzVerifyConfigInvalid`; `OFFCHAIN` with
     ///         `verifierFee > verifierFeeMax` `VerifierFeeAboveMax`; both written on `OFFCHAIN`.
-    function init(IFactoryToken.ConfidentialConfig memory c, address registry, address verifier, address factory) public {
+    function init(IFactoryToken.ConfidentialConfig memory c, address registry, address verifier, address factory)
+        public
+    {
         bytes memory aud = c.auditorKey;
-        if (c.shieldScale == 0 || c.maxShielded == 0 || c.maxShielded > PqzCore.MAX_TOTAL_SHIELDED
-            || c.confidentialFee >= PqzCore.VALUE_BOUND || c.confidentialFee >= c.maxShielded
-            || c.minDecoyFee >= PqzCore.VALUE_BOUND
-            || c.confidentialFee + c.verifierFeeMax + 8 * c.minDecoyFee >= PqzCore.VALUE_BOUND
-            || c.confidentialFee + c.verifierFeeMax + 8 * c.minDecoyFee >= c.maxShielded
-            || (aud.length != 0 && aud.length != 32) || c.maxShielded > type(uint256).max / c.shieldScale) {
+        if (
+            c.shieldScale == 0 || c.maxShielded == 0 || c.maxShielded > PqzCore.MAX_TOTAL_SHIELDED
+                || c.confidentialFee >= PqzCore.VALUE_BOUND || c.confidentialFee >= c.maxShielded
+                || c.minDecoyFee >= PqzCore.VALUE_BOUND
+                || c.confidentialFee + c.verifierFeeMax + 8 * c.minDecoyFee >= PqzCore.VALUE_BOUND
+                || c.confidentialFee + c.verifierFeeMax + 8 * c.minDecoyFee >= c.maxShielded
+                || (aud.length != 0 && aud.length != 32) || c.maxShielded > type(uint256).max / c.shieldScale
+        ) {
             revert IPqzToken.BadInit();
         }
-        if (c.disclosureMode > uint8(ZetherTypes.DisclosureMode.COMPACT)) revert IPqzToken.BadDisclosureMode(c.disclosureMode);
-        if (c.auditorMode > uint8(ZetherTypes.AuditorMode.OPTIONAL)
-            || (aud.length == 0) != (c.auditorMode == uint8(ZetherTypes.AuditorMode.NONE))) {
+        if (c.disclosureMode > uint8(ZetherTypes.DisclosureMode.COMPACT)) {
+            revert IPqzToken.BadDisclosureMode(c.disclosureMode);
+        }
+        if (
+            c.auditorMode > uint8(ZetherTypes.AuditorMode.OPTIONAL)
+                || (aud.length == 0) != (c.auditorMode == uint8(ZetherTypes.AuditorMode.NONE))
+        ) {
             revert IPqzToken.BadAuditorMode(c.auditorMode);
         }
         {
             // CTR-GOV-31, after `GovernanceLib.init`: bit 32 needs an auditor and an admin (as `ZetherLib.auditorBitAtInit`)
             GovernanceLib.GovernanceStorage storage g = GovernanceLib.$();
             if (g.features >> GovernanceBits.AUDITOR & 1 != 0) {
-                if (c.auditorMode == uint8(ZetherTypes.AuditorMode.NONE)) revert IPqzToken.BadAuditorMode(c.auditorMode);
+                if (c.auditorMode == uint8(ZetherTypes.AuditorMode.NONE)) {
+                    revert IPqzToken.BadAuditorMode(c.auditorMode);
+                }
                 if (g.admin == 0) revert IGovernance.FeatureNeedsAdmin(GovernanceBits.AUDITOR);
             }
         }
@@ -79,9 +91,10 @@ library PqzStateLib {
         if (m > PqzCore.OFFCHAIN) revert IPqzToken.PqzVerifyModeInvalid(m);
         bool off = m == PqzCore.OFFCHAIN;
         // CTR-PQZ-37: `PRECOMPILE` neither flag; `OFFCHAIN` the shared key with the opening, or its own key either way
-        if (off ? (c.pqzVerifierUA == 0 || (!c.pqzOwnKey && !c.pqzOpening))
+        if (off
+                ? (c.pqzVerifierUA == 0 || (!c.pqzOwnKey && !c.pqzOpening))
                 : (c.pqzVerifierUA != 0 || c.pqzVerifierFixed || c.verifierFee != 0 || c.verifierFeeMax != 0
-                    || c.pqzOwnKey || c.pqzOpening)) {
+                        || c.pqzOwnKey || c.pqzOpening)) {
             revert IPqzToken.PqzVerifyConfigInvalid();
         }
         if (c.verifierFee > c.verifierFeeMax) revert IPqzToken.VerifierFeeAboveMax(c.verifierFee, c.verifierFeeMax);
@@ -228,12 +241,16 @@ library PqzStateLib {
             return;
         }
         (s.verifierFeePending, s.verifierFeeEta, s.verifierFeeProposer, s.verifierFeeProposerGeneration) =
-            (next, eta, caller, g.adminGeneration);
+        (next, eta, caller, g.adminGeneration);
     }
 
     /// @dev A pending increase still confirmable: proposed in this admin generation, `[eta, eta + noticePeriod]` not passed.
     ///      An increase is `> verifierFee ≥ 0`, so `verifierFeePending ≠ 0` marks one.
-    function _feeLive(PqzCore.PqzStorage storage s, GovernanceLib.GovernanceStorage storage g) private view returns (bool) {
+    function _feeLive(PqzCore.PqzStorage storage s, GovernanceLib.GovernanceStorage storage g)
+        private
+        view
+        returns (bool)
+    {
         return s.verifierFeePending != 0 && s.verifierFeeProposerGeneration == g.adminGeneration
             && block.timestamp <= uint256(s.verifierFeeEta) + s.noticePeriod;
     }
@@ -266,9 +283,16 @@ library PqzStateLib {
     ///         its own UA (the proposer's confirm from `eta` on: the checks again, then the apply) or the current one (the
     ///         proposer's cancel); anything else `AuditorPending`. Without one, the current UA is `AuditorSame`; else the
     ///         checks and a proposal that applies at once when `delay` is 0. An expired or void proposal is overwritten.
-    function setAuditorUA(bytes32 newAuditor, uint32 epoch, IUARegistry.UASig calldata consent, bytes32 caller, uint64 delay,
-        address registry, bytes32 domainSeparator, bytes32 chainUid) public
-    {
+    function setAuditorUA(
+        bytes32 newAuditor,
+        uint32 epoch,
+        IUARegistry.UASig calldata consent,
+        bytes32 caller,
+        uint64 delay,
+        address registry,
+        bytes32 domainSeparator,
+        bytes32 chainUid
+    ) public {
         PqzCore.PqzStorage storage s = PqzCore.$();
         AuditorRules.requireNext(s.auditorEpoch, epoch);
         if (AuditorRules.live(s.auditorEta, s.auditorProposerRoleEpoch, s.auditorProposer)) {
@@ -295,7 +319,7 @@ library PqzStateLib {
             return;
         }
         (s.auditorEta, s.auditorProposerRoleEpoch, s.auditorProposer, s.pendingAuditorUA) =
-            (eta, AuditorRules.roleEpochOf(caller), caller, newAuditor);
+        (eta, AuditorRules.roleEpochOf(caller), caller, newAuditor);
     }
 
     /// @dev Spec §5.2, at the proposal and again at the apply: the new auditor's current key of the token's class and scope
@@ -303,20 +327,30 @@ library PqzStateLib {
     ///      verifier, `_usable`'s rule ("proven, or nothing": without the verifier no proven check, the key-copy residual of
     ///      T3 stands); on an opening token the opening KEM key of that scoped version; then its consent, a signature under
     ///      `PURPOSE_AUDITOR_CONSENT` over the `AuditorConsent` digest (the registry's refusal).
-    function _auditorChecks(bytes32 a, uint32 epoch, IUARegistry.UASig calldata consent, address registry, bytes32 ds,
-        bytes32 chainUid) private view
-    {
+    function _auditorChecks(
+        bytes32 a,
+        uint32 epoch,
+        IUARegistry.UASig calldata consent,
+        address registry,
+        bytes32 ds,
+        bytes32 chainUid
+    ) private view {
         PqzCore.PqzStorage storage s = PqzCore.$();
         (uint64 v, address ptr, bool proven) = PqzCore._keyOf(registry, a);
         if (!PqzCore._usable(proven, ptr) || (!proven && IUARegistry(registry).kindEnabled(UAKinds.PQZ_MLWE))) {
             revert IPqzToken.AccountNotRegistered(a);
         }
-        if (s.pqzOpening
-            && IUARegistry(registry).pqzOpenKemAt(a, s.pqzOwnKey ? address(this) : address(0), v).mlkemEk.length == 0) {
+        if (
+            s.pqzOpening
+                && IUARegistry(registry).pqzOpenKemAt(a, s.pqzOwnKey ? address(this) : address(0), v).mlkemEk.length
+                    == 0
+        ) {
             revert IPqzToken.AccountNotRegistered(a);
         }
-        IUARegistry(registry).requireAuthorized(a, UAKinds.PURPOSE_AUDITOR_CONSENT,
-            AuditorRules.consentDigest(ds, a, epoch, chainUid), consent);
+        IUARegistry(registry)
+            .requireAuthorized(
+                a, UAKinds.PURPOSE_AUDITOR_CONSENT, AuditorRules.consentDigest(ds, a, epoch, chainUid), consent
+            );
     }
 
     /// @dev Spec §5.4: the outgoing UA enters the history at its epoch, `next` is the auditor from `epoch` on.
@@ -339,7 +373,7 @@ library PqzStateLib {
         PqzCore.PqzStorage storage s = PqzCore.$();
         GovernanceLib.GovernanceStorage storage g = GovernanceLib.$();
         (c.pqzVerifyMode, c.verifier, c.fixed_, c.pqzVerifierEpoch, c.noticePeriod) =
-            (s.pqzVerifyMode, s.pqzVerifierUA, s.pqzVerifierFixed, s.pqzVerifierEpoch, s.noticePeriod);
+        (s.pqzVerifyMode, s.pqzVerifierUA, s.pqzVerifierFixed, s.pqzVerifierEpoch, s.noticePeriod);
         if (_live(s, g)) (c.pending, c.eta) = (s.pqzPendingVerifier, s.eta);
         (c.verifierFee, c.verifierFeeMax) = (s.verifierFee, s.verifierFeeMax);
         if (_feeLive(s, g)) (c.verifierFeePending, c.verifierFeeEta) = (s.verifierFeePending, s.verifierFeeEta);
@@ -359,7 +393,11 @@ library PqzStateLib {
 
     /// @dev A pending transfer still confirmable: proposed in this admin generation, its window `[eta, eta + notice]` not
     ///      passed.
-    function _live(PqzCore.PqzStorage storage s, GovernanceLib.GovernanceStorage storage g) private view returns (bool) {
+    function _live(PqzCore.PqzStorage storage s, GovernanceLib.GovernanceStorage storage g)
+        private
+        view
+        returns (bool)
+    {
         return s.pqzPendingVerifier != 0 && s.pqzProposerGeneration == g.adminGeneration
             && block.timestamp <= uint256(s.eta) + s.noticePeriod;
     }
@@ -415,9 +453,15 @@ library PqzStateLib {
     ///         in `[rolled, pendingCount)`, a credit; `SkipRange`, `SkipTrivial`) gets the skip mark, never cleared
     ///         (`PqzSkipped` each, none for an index already marked), then, for `n > 0`, `rollOver`'s rules and body (`PqzRolledOver`). `n = 0` with no skip:
     ///         `RollOverRange(0)`. `rollSeq + 1` on every accepted call.
-    function rollOverSigned(PqzCore.Env memory e, bytes32 ua, uint64 v, uint64 n, uint64[] calldata skip,
-        uint64 validUntilBlock, IUARegistry.UASig calldata sig) public
-    {
+    function rollOverSigned(
+        PqzCore.Env memory e,
+        bytes32 ua,
+        uint64 v,
+        uint64 n,
+        uint64[] calldata skip,
+        uint64 validUntilBlock,
+        IUARegistry.UASig calldata sig
+    ) public {
         PqzCore.PqzStorage storage s = PqzCore.$();
         if (!s.pqzOpening) revert IPqzToken.OpUnsupported();
         if (block.number > validUntilBlock) revert IPqzToken.Expired(validUntilBlock);
@@ -439,12 +483,24 @@ library PqzStateLib {
     }
 
     /// @dev The `PqzRollOver` digest from state (the skip list checked on the way: `SkipRange`, `SkipTrivial`).
-    function _rollDigest(PqzCore.Env memory e, PqzCore.Account storage a, bytes32 ua, uint64 v, uint64 n,
-        uint64[] calldata skip, uint64 validUntilBlock) private view returns (bytes32)
-    {
-        return MessageHashUtils.toTypedDataHash(e.domainSeparator, keccak256(bytes.concat(
-            abi.encode(PqzCore.ROLL_OVER_TYPEHASH, ua, v, a.rollSeq, a.rolled, n),
-            abi.encode(keccak256(abi.encodePacked(skip)), _entriesHash(a, n, skip), validUntilBlock, e.chainUid))));
+    function _rollDigest(
+        PqzCore.Env memory e,
+        PqzCore.Account storage a,
+        bytes32 ua,
+        uint64 v,
+        uint64 n,
+        uint64[] calldata skip,
+        uint64 validUntilBlock
+    ) private view returns (bytes32) {
+        return MessageHashUtils.toTypedDataHash(
+            e.domainSeparator,
+            keccak256(
+                bytes.concat(
+                    abi.encode(PqzCore.ROLL_OVER_TYPEHASH, ua, v, a.rollSeq, a.rolled, n),
+                    abi.encode(keccak256(abi.encodePacked(skip)), _entriesHash(a, n, skip), validUntilBlock, e.chainUid)
+                )
+            )
+        );
     }
 
     /// @dev `entriesHash = keccak256(h(rolled) ‖ … ‖ h(rolled + n − 1) ‖ h(skip_0) ‖ …)`.
@@ -453,7 +509,9 @@ library PqzStateLib {
         uint64 pc = a.pendingCount;
         if (r + n > pc) revert IPqzToken.RollOverRange(n);
         bytes32[] memory h = new bytes32[](n + skip.length);
-        for (uint256 k; k < n; ++k) h[k] = entryHash(a, r + k);
+        for (uint256 k; k < n; ++k) {
+            h[k] = entryHash(a, r + k);
+        }
         for (uint256 j; j < skip.length; ++j) {
             uint64 i = skip[j];
             if (i < r || i >= pc || (j != 0 && i <= skip[j - 1])) revert IPqzToken.SkipRange(i);

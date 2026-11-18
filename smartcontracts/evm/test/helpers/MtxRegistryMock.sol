@@ -28,7 +28,9 @@ contract MtxRegistryMock is MetaTxAddressBase {
 
     function poke(address target, bytes calldata data) external nonReentrant {
         (bool ok, bytes memory ret) = target.call(data);
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 0x20), mload(ret)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 0x20), mload(ret)) }
+        }
     }
 
     /// Not allowlisted, not guarded: shows what `_msgSender()` answers outside a self-call.
@@ -48,7 +50,11 @@ contract MtxRegistryMock is MetaTxAddressBase {
     }
 
     function _mtxSelectorsBody()
-        internal view virtual override returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+        internal
+        view
+        virtual
+        override
+        returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         s = new bytes4[](4);
         c = new uint8[](4);

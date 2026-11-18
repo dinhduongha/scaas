@@ -19,7 +19,9 @@ import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 
 contract Always1271 {
-    function isValidSignature(bytes32, bytes memory) external pure returns (bytes4) { return 0x1626ba7e; }
+    function isValidSignature(bytes32, bytes memory) external pure returns (bytes4) {
+        return 0x1626ba7e;
+    }
 }
 
 /// @title Bảng gas v2 so với v1 (TW2 §10.3): clone `NormalToken` v2 against the v1 numbers frozen at P5.
@@ -98,8 +100,12 @@ contract MetaTxGasV2Test is Test {
         vm.warp(1_800_000_000);
         signer = vm.addr(PK);
         OpenFactory f2 = EnvKit.factory(address(this), UID, 0);
-        Catalogue.plain(f2, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
-        Catalogue.plain(f2, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false);
+        Catalogue.plain(
+            f2, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false
+        );
+        Catalogue.plain(
+            f2, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false
+        );
         acct = new Always1271();
         v2 = _v2(f2, "a");
         v2b = _v2(f2, "b");
@@ -111,7 +117,14 @@ contract MetaTxGasV2Test is Test {
         uint256[] memory one = new uint256[](1);
         one[0] = 1;
         Rate memory c;
-        w = WrappedToken(f2.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(wrappedInit(us, one, one, 6, c, address(0), address(0))), "w"));
+        w = WrappedToken(
+            f2.createToken(
+                IOpenFactory.TokenKind.WRAPPED,
+                1,
+                abi.encode(wrappedInit(us, one, one, 6, c, address(0), address(0))),
+                "w"
+            )
+        );
         usdc.mint(signer, 1_000e6);
         vm.startPrank(signer);
         usdc.approve(address(w), type(uint256).max);
@@ -121,7 +134,14 @@ contract MetaTxGasV2Test is Test {
     }
 
     function _v2(OpenFactory f2, bytes32 salt) internal returns (NormalToken t) {
-        t = NormalToken(f2.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("V2", "V2", 18, 0, address(this), address(this))), salt));
+        t = NormalToken(
+            f2.createToken(
+                IOpenFactory.TokenKind.NORMAL,
+                1,
+                abi.encode(normalInit("V2", "V2", 18, 0, address(this), address(this))),
+                salt
+            )
+        );
         _fund(address(t));
     }
 
@@ -129,7 +149,9 @@ contract MetaTxGasV2Test is Test {
     /// của WARM đã đốt.
     function _fund(address t) internal {
         address[5] memory holders = [signer, recipient, relayer, address(acct), feeTaker];
-        for (uint256 i; i < 5; ++i) NormalToken(t).mint(holders[i], i == 0 ? 1_000_000 ether : 1 ether, EnvKit.codeUidOf(address(t)));
+        for (uint256 i; i < 5; ++i) {
+            NormalToken(t).mint(holders[i], i == 0 ? 1_000_000 ether : 1 ether, EnvKit.codeUidOf(address(t)));
+        }
         _execT(t, _mt(0, WARM, 0, 0, address(0)));
     }
 
@@ -139,18 +161,32 @@ contract MetaTxGasV2Test is Test {
     function _named(bytes4 sel, bytes memory words, IUARegistry.UASig memory sig) internal pure returns (bytes memory) {
         bytes memory enc = abi.encode(sig); // 0x20 ‖ the tuple
         bytes memory tuple = new bytes(enc.length - 32);
-        for (uint256 i; i < tuple.length; ++i) tuple[i] = enc[i + 32];
+        for (uint256 i; i < tuple.length; ++i) {
+            tuple[i] = enc[i + 32];
+        }
         return abi.encodePacked(sel, words, uint256(words.length + 32), tuple);
     }
 
     /// The v1 rows' intent as a `UAMetaTransfer` (ua-mtx-merge T2: the token's one typed struct; the signer and the
     /// recipient as padded native ids): `value` 1 ether to `recipient`, `entryRef` 0.
     function _mt(uint32 mode, uint256 batch, uint256 nonce, uint256 fee, address feeRcpt)
-        internal view returns (MetaTxLib.UAMetaTransfer memory)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransfer memory)
     {
-        return MetaTxLib.UAMetaTransfer({from: MetaTxLib.pad(signer), to: MetaTxLib.pad(recipient), value: 1 ether,
-            entryRef: 0, batch: batch, nonce: nonce, validUntil: block.timestamp + 600, mode: mode, relayer: relayer,
-            fee: fee, feeRecipient: feeRcpt});
+        return MetaTxLib.UAMetaTransfer({
+            from: MetaTxLib.pad(signer),
+            to: MetaTxLib.pad(recipient),
+            value: 1 ether,
+            entryRef: 0,
+            batch: batch,
+            nonce: nonce,
+            validUntil: block.timestamp + 600,
+            mode: mode,
+            relayer: relayer,
+            fee: fee,
+            feeRecipient: feeRcpt
+        });
     }
 
     /// The EOA signer's `UASig`: its own signature only (R17).
@@ -200,7 +236,10 @@ contract MetaTxGasV2Test is Test {
         assertTrue(ok);
     }
 
-    function _row(string memory label, MetaTxLib.UAMetaTransfer memory x, uint256 g1, uint256 lim) internal returns (uint256 g2) {
+    function _row(string memory label, MetaTxLib.UAMetaTransfer memory x, uint256 g1, uint256 lim)
+        internal
+        returns (uint256 g2)
+    {
         bytes memory c2 = _cdT(address(v2), x);
         _snap();
         g2 = _measure(address(v2), c2);
@@ -209,9 +248,13 @@ contract MetaTxGasV2Test is Test {
         assertLe(g2, lim + BUDGET, label);
     }
 
-    function test_gasA_warmBatchNoFee() public { _row("A warm batch, NONE", _mt(0, WARM, 1, 0, address(0)), V1_A, AMS_A); }
+    function test_gasA_warmBatchNoFee() public {
+        _row("A warm batch, NONE", _mt(0, WARM, 1, 0, address(0)), V1_A, AMS_A);
+    }
 
-    function test_gasB_coldBatchNoFee() public { _row("B cold batch, NONE", _mt(0, COLD, 0, 0, address(0)), V1_B, AMS_B); }
+    function test_gasB_coldBatchNoFee() public {
+        _row("B cold batch, NONE", _mt(0, COLD, 0, 0, address(0)), V1_B, AMS_B);
+    }
 
     function test_gasC_warmFixedFee() public {
         _row("C warm batch, FIXED fee", _mt(MetaTxLib.MODE_FEE_FIXED, WARM, 1, 0.001 ether, relayer), V1_C, AMS_C);
@@ -222,8 +265,18 @@ contract MetaTxGasV2Test is Test {
     }
 
     function test_gasE_warmFixedRestricted() public {
-        _row("E warm batch, FIXED+restrict", _mt(MetaTxLib.MODE_FEE_FIXED | MetaTxLib.MODE_RESTRICT_RELAYER
-            | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT, WARM, 1, 0.001 ether, feeTaker), V1_E, AMS_E);
+        _row(
+            "E warm batch, FIXED+restrict",
+            _mt(
+                MetaTxLib.MODE_FEE_FIXED | MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT,
+                WARM,
+                1,
+                0.001 ether,
+                feeTaker
+            ),
+            V1_E,
+            AMS_E
+        );
     }
 
     function test_gasF_newRecipient() public {
@@ -309,8 +362,11 @@ contract MetaTxGasV2Test is Test {
     function test_gasNamedTransferVersusGeneric_logOnly() public {
         MetaTxLib.UAMetaTransfer memory x = _mt(MetaTxLib.MODE_RESTRICT_RELAYER, WARM, 1, 0, address(0));
         bytes memory cg = _cdT(address(v2), x);
-        bytes memory cn = _named(v2.mtxTransfer.selector, abi.encode(signer, recipient, 1 ether, WARM, 1,
-            x.validUntil, x.mode, relayer), _sigT(address(v2), x));
+        bytes memory cn = _named(
+            v2.mtxTransfer.selector,
+            abi.encode(signer, recipient, 1 ether, WARM, 1, x.validUntil, x.mode, relayer),
+            _sigT(address(v2), x)
+        );
         uint256 s = _snap();
         uint256 gc = _measure(address(v2), cg);
         vm.revertToState(s);
@@ -326,8 +382,11 @@ contract MetaTxGasV2Test is Test {
         uint32 mode = MetaTxLib.MODE_FEE_PERCENT | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT;
         MetaTxLib.UAMetaTransfer memory x = _mt(mode, WARM, 1, 5_000, feeTaker);
         bytes memory cg = _cdT(address(v2), x);
-        bytes memory cn = _named(v2.mtxTransferWithFee.selector, abi.encode(signer, recipient, 1 ether, WARM, 1,
-            x.validUntil, mode, relayer, 5_000, feeTaker), _sigT(address(v2), x));
+        bytes memory cn = _named(
+            v2.mtxTransferWithFee.selector,
+            abi.encode(signer, recipient, 1 ether, WARM, 1, x.validUntil, mode, relayer, 5_000, feeTaker),
+            _sigT(address(v2), x)
+        );
         uint256 s = _snap();
         uint256 gc = _measure(address(v2), cg);
         vm.revertToState(s);
@@ -370,10 +429,17 @@ contract MetaTxGasV2Test is Test {
     }
 
     function test_gasGaslessUnwrap() public {
-        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({from: signer,
-            data: abi.encodeWithSignature("unwrap(uint256,address,uint256)", 10e6, recipient, 10e6), batch: WARM,
-            nonce: 0, validUntil: block.timestamp + 600, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer,
-            fee: 0, feeRecipient: address(0)});
+        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
+            from: signer,
+            data: abi.encodeWithSignature("unwrap(uint256,address,uint256)", 10e6, recipient, 10e6),
+            batch: WARM,
+            nonce: 0,
+            validUntil: block.timestamp + 600,
+            mode: MetaTxLib.MODE_RESTRICT_RELAYER,
+            relayer: relayer,
+            fee: 0,
+            feeRecipient: address(0)
+        });
         (uint8 v, bytes32 r, bytes32 sg) = vm.sign(PK, MtxDigest.metaTx(address(w), m));
         bytes memory cd = abi.encodeCall(IMetaTx.executeMetaTransaction, (m, abi.encodePacked(r, sg, v)));
         _snap();
@@ -385,8 +451,14 @@ contract MetaTxGasV2Test is Test {
         MetaTxLib.UAMetaTransfer memory x = _mt(MetaTxLib.MODE_RESTRICT_RELAYER, WARM, 1, 0, address(0));
         IUARegistry.UASig memory s = _sigT(address(v2), x);
         _cd("I calldata mtxExecuteTransfer", abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (x, s)));
-        _cd("I calldata mtxTransfer", _named(v2.mtxTransfer.selector, abi.encode(signer, recipient, 1 ether, WARM, 1,
-            x.validUntil, x.mode, relayer), s));
+        _cd(
+            "I calldata mtxTransfer",
+            _named(
+                v2.mtxTransfer.selector,
+                abi.encode(signer, recipient, 1 ether, WARM, 1, x.validUntil, x.mode, relayer),
+                s
+            )
+        );
         bytes32 p = PayMetaKit.ref("inv");
         x.entryRef = p;
         x.batch = v2.payLane(p);
@@ -396,7 +468,9 @@ contract MetaTxGasV2Test is Test {
 
     function _cd(string memory label, bytes memory cd) internal pure {
         uint256 g;
-        for (uint256 i; i < cd.length; ++i) g += cd[i] == 0 ? 4 : 16;
+        for (uint256 i; i < cd.length; ++i) {
+            g += cd[i] == 0 ? 4 : 16;
+        }
         console.log(label, cd.length, g);
     }
 }

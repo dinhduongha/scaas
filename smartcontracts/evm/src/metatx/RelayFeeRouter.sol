@@ -27,7 +27,9 @@ contract RelayFeeExecutor {
     function exec(address target, bytes calldata callData) external {
         if (msg.sender != ROUTER) revert NotRouter();
         (bool ok, bytes memory ret) = target.call(callData);
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 0x20), mload(ret)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 0x20), mload(ret)) }
+        }
     }
 }
 
@@ -45,8 +47,9 @@ contract RelayFeeRouter is ReentrancyGuardTransient {
 
     /// @notice `payer` and `payee` are ids: an address zero-padded, or a derived UA id. `payee` is the one paid:
     ///         `pad(msg.sender)` in open mode, else the signed `payee`.
-    event RelayFeePaid(bytes32 indexed ref, address indexed target, address indexed token, bytes32 payer, bytes32 payee,
-                       uint256 amount);
+    event RelayFeePaid(
+        bytes32 indexed ref, address indexed target, address indexed token, bytes32 payer, bytes32 payee, uint256 amount
+    );
 
     error RelayFeeShape();
     /// @notice The target has no code at relay time (a counterfactual address not yet deployed, an EOA, a precompile)
@@ -66,9 +69,18 @@ contract RelayFeeRouter is ReentrancyGuardTransient {
     ///         with its own key, a derived one through the token's registry. `batch` / `nonce` are the payer's lane (pay-meta-
     ///         tax spec §4, O4): one signature pays once; a call is paid twice only by two signatures and a target that
     ///         runs it twice.
-    function relay(address target, bytes calldata callData, address token, bytes32 from, bytes32 payee, uint256 value,
-                   uint256 batch, uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) external nonReentrant
-    {
+    function relay(
+        address target,
+        bytes calldata callData,
+        address token,
+        bytes32 from,
+        bytes32 payee,
+        uint256 value,
+        uint256 batch,
+        uint256 nonce,
+        uint256 validUntil,
+        IUARegistry.UASig calldata auth
+    ) external nonReentrant {
         _shape(target, payee);
         RelayFeeExecutor(EXECUTOR).exec(target, callData);
         IERC20MetaTx(token).mtxRelayFee(from, target, keccak256(callData), payee, value, batch, nonce, validUntil, auth);

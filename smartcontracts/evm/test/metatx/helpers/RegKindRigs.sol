@@ -34,14 +34,49 @@ contract RegRig is RegFixture, KindRig {
     function init() external {
         setUp();
         vm.roll(P_BLOCK);
-        tks.push(Tk("NORMAL_REGULATED", t8, ALICE_PK, alice, BOB_PK, bob, address(0xFEE), relayer, 0, 0, address(0), address(0), 0, 0));
-        tks.push(Tk("WRAPPED_REGULATED", t9, ALICE_PK, alice, BOB_PK, bob, address(0xFEE), relayer, 0, 1, address(usd), address(0), 0, 0));
+        tks.push(
+            Tk(
+                "NORMAL_REGULATED",
+                t8,
+                ALICE_PK,
+                alice,
+                BOB_PK,
+                bob,
+                address(0xFEE),
+                relayer,
+                0,
+                0,
+                address(0),
+                address(0),
+                0,
+                0
+            )
+        );
+        tks.push(
+            Tk(
+                "WRAPPED_REGULATED",
+                t9,
+                ALICE_PK,
+                alice,
+                BOB_PK,
+                bob,
+                address(0xFEE),
+                relayer,
+                0,
+                1,
+                address(usd),
+                address(0),
+                0,
+                0
+            )
+        );
     }
 }
 
 /// The regulated part of a config (as `test/as/confidential`'s fixtures): an owner, the four controls, their holders.
 function regulate(IFactoryToken.TokenConfig memory c, address issuer, address compliance, bool wrapped, address leg)
-    pure returns (IFactoryToken.TokenConfig memory)
+    pure
+    returns (IFactoryToken.TokenConfig memory)
 {
     c.lockedFeatures = 0;
     c.admin = nid(address(0x0A11));
@@ -65,25 +100,83 @@ contract ZetherRegRig is ZetherFixture, KindRig {
         vm.roll(P_BLOCK);
         _stack();
         _users();
-        Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, 1, _zenv(),
-            type(NormalZetherRegulatedToken).creationCode, regArgs());
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, 1, _zenv(),
-            type(WrappedZetherRegulatedToken).creationCode, regArgs());
+        Catalogue.release(
+            factory,
+            IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED,
+            1,
+            _zenv(),
+            type(NormalZetherRegulatedToken).creationCode,
+            regArgs()
+        );
+        Catalogue.release(
+            factory,
+            IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED,
+            1,
+            _zenv(),
+            type(WrappedZetherRegulatedToken).creationCode,
+            regArgs()
+        );
         vm.startPrank(registrar);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory)));
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory)));
+        factory.setTokenKindEnabled(
+            IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory))
+        );
+        factory.setTokenKindEnabled(
+            IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory))
+        );
         vm.stopPrank();
         (address issuer, address compliance) = (address(new Holder()), address(new Holder()));
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         address signer = vm.addr(RIG_SK);
-        address t = factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, 1,
-            abi.encode(regulate(_cfg(true, uint256(1) << 40), issuer, compliance, false, address(0))), "zr10");
+        address t = factory.createToken(
+            IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED,
+            1,
+            abi.encode(regulate(_cfg(true, uint256(1) << 40), issuer, compliance, false, address(0))),
+            "zr10"
+        );
         NormalZetherRegulatedToken(t).mint(signer, 20_000_000, EnvKit.codeUidOf(address(t)));
-        tks.push(Tk("NORMAL_ZETHER_REGULATED", t, RIG_SK, signer, 0xB0B, vm.addr(0xB0B), address(0xFEE), address(0xBEEF), 0, 0, address(0), address(0), 0, 0));
-        address w = factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, 1,
-            abi.encode(regulate(_cfg(true, uint256(1) << 40), issuer, compliance, true, address(usd))), "zr11");
+        tks.push(
+            Tk(
+                "NORMAL_ZETHER_REGULATED",
+                t,
+                RIG_SK,
+                signer,
+                0xB0B,
+                vm.addr(0xB0B),
+                address(0xFEE),
+                address(0xBEEF),
+                0,
+                0,
+                address(0),
+                address(0),
+                0,
+                0
+            )
+        );
+        address w = factory.createToken(
+            IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED,
+            1,
+            abi.encode(regulate(_cfg(true, uint256(1) << 40), issuer, compliance, true, address(usd))),
+            "zr11"
+        );
         wrapUnits(usd, w, signer);
-        tks.push(Tk("WRAPPED_ZETHER_REGULATED", w, RIG_SK, signer, 0xB0B, vm.addr(0xB0B), address(0xFEE), address(0xBEEF), 0, 1, address(usd), address(0), 0, 0));
+        tks.push(
+            Tk(
+                "WRAPPED_ZETHER_REGULATED",
+                w,
+                RIG_SK,
+                signer,
+                0xB0B,
+                vm.addr(0xB0B),
+                address(0xFEE),
+                address(0xBEEF),
+                0,
+                1,
+                address(usd),
+                address(0),
+                0,
+                0
+            )
+        );
     }
 }
 
@@ -94,10 +187,22 @@ contract PqzRegRig is PqzFixture, KindRig {
         vm.roll(P_BLOCK);
         _stack();
         IFactoryToken.Env memory e = pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv));
-        Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, 1, e,
-            type(NormalPqzRegulatedToken).creationCode, regArgs());
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, e,
-            type(WrappedPqzRegulatedToken).creationCode, regArgs());
+        Catalogue.release(
+            factory,
+            IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED,
+            1,
+            e,
+            type(NormalPqzRegulatedToken).creationCode,
+            regArgs()
+        );
+        Catalogue.release(
+            factory,
+            IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED,
+            1,
+            e,
+            type(WrappedPqzRegulatedToken).creationCode,
+            regArgs()
+        );
         vm.startPrank(registrar);
         factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true, EnvKit.uidOf(address(factory)));
         factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true, EnvKit.uidOf(address(factory)));
@@ -105,14 +210,56 @@ contract PqzRegRig is PqzFixture, KindRig {
         (address issuer, address compliance) = (address(new Holder()), address(new Holder()));
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         address signer = vm.addr(RIG_SK);
-        address t = factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, 1,
-            abi.encode(regulate(_cfg(uint256(1) << 40), issuer, compliance, false, address(0))), "pr12");
+        address t = factory.createToken(
+            IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED,
+            1,
+            abi.encode(regulate(_cfg(uint256(1) << 40), issuer, compliance, false, address(0))),
+            "pr12"
+        );
         NormalPqzRegulatedToken(t).mint(signer, 20_000_000, EnvKit.codeUidOf(address(t)));
-        tks.push(Tk("NORMAL_PQZ_REGULATED", t, RIG_SK, signer, 0xB0B, vm.addr(0xB0B), address(0xFEE), address(0xBEEF), 0, 0, address(0), address(0), 0, 0));
-        address w = factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1,
-            abi.encode(regulate(_cfg(uint256(1) << 40), issuer, compliance, true, address(usd))), "pr13");
+        tks.push(
+            Tk(
+                "NORMAL_PQZ_REGULATED",
+                t,
+                RIG_SK,
+                signer,
+                0xB0B,
+                vm.addr(0xB0B),
+                address(0xFEE),
+                address(0xBEEF),
+                0,
+                0,
+                address(0),
+                address(0),
+                0,
+                0
+            )
+        );
+        address w = factory.createToken(
+            IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED,
+            1,
+            abi.encode(regulate(_cfg(uint256(1) << 40), issuer, compliance, true, address(usd))),
+            "pr13"
+        );
         wrapUnits(usd, w, signer);
-        tks.push(Tk("WRAPPED_PQZ_REGULATED", w, RIG_SK, signer, 0xB0B, vm.addr(0xB0B), address(0xFEE), address(0xBEEF), 0, 1, address(usd), address(0), 0, 0));
+        tks.push(
+            Tk(
+                "WRAPPED_PQZ_REGULATED",
+                w,
+                RIG_SK,
+                signer,
+                0xB0B,
+                vm.addr(0xB0B),
+                address(0xFEE),
+                address(0xBEEF),
+                0,
+                1,
+                address(usd),
+                address(0),
+                0,
+                0
+            )
+        );
     }
 }
 

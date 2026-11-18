@@ -57,16 +57,20 @@ contract PqChatGasTest is PqTopicsBase {
         emit log_named_uint(string.concat("GAS ", what, " regular"), g.gasTotalUsed);
         emit log_named_uint(string.concat("GAS ", what, " state"), s);
         emit log_named_uint(string.concat("GAS ", what, " total"), g.gasTotalUsed + s);
-        if (regular != 0 && !vm.envOr("GAS_MEASURE", false)) { // GAS_MEASURE=true: the figures, no pin
+        if (regular != 0 && !vm.envOr("GAS_MEASURE", false)) {
+            // GAS_MEASURE=true: the figures, no pin
             assertApproxEqAbs(g.gasTotalUsed, regular, SLACK, string.concat(what, " regular"));
             assertEq(s, state, string.concat(what, " state"));
         }
     }
 
     function _msg(bytes32 sid, bytes32 eid, bytes32 sender, uint64 counter, uint256 size)
-        internal pure returns (IPqChat.PqChatMessage memory m)
+        internal
+        pure
+        returns (IPqChat.PqChatMessage memory m)
     {
-        (m.sessionId, m.epochId, m.sender, m.device, m.counter) = (sid, eid, sender, bytes16(0x0190f5c0a1e07000800000000000d0c5), counter);
+        (m.sessionId, m.epochId, m.sender, m.device, m.counter) =
+        (sid, eid, sender, bytes16(0x0190f5c0a1e07000800000000000d0c5), counter);
         m.parents = new bytes32[](2);
         (m.parents[0], m.parents[1]) = (keccak256("a"), keccak256("b"));
         m.ciphertext = new bytes(size);
@@ -144,7 +148,9 @@ contract PqChatGasTest is PqTopicsBase {
     // ----- groups (correct, not optimised for) -----
 
     function test_gas_groups() public {
-        for (uint8 i = 6; i <= 20; ++i) _member(i);
+        for (uint8 i = 6; i <= 20; ++i) {
+            _member(i);
+        }
         (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _session(10, 1, address(chat));
         IUARegistry.UASig memory sig = _sig(s.creator, h.session(s));
         vm.prank(STRANGER);
@@ -246,8 +252,15 @@ contract PqChatGasTest is PqTopicsBase {
     function test_gas_deployImplementation() public {
         bytes memory code = type(PqChat).creationCode;
         vm.prank(REGISTRAR);
-        address r = f.deployImplementation(IOpenFactory.ReleaseId(3, 0, 2), 1, IPqChat.initialize.selector,
-            type(IPqChat).interfaceId, code, _args(), EnvKit.uidOf(address(f)));
+        address r = f.deployImplementation(
+            IOpenFactory.ReleaseId(3, 0, 2),
+            1,
+            IPqChat.initialize.selector,
+            type(IPqChat).interfaceId,
+            code,
+            _args(),
+            EnvKit.uidOf(address(f))
+        );
         Vm.Gas memory g = vm.lastCallGas();
         (uint256 regular, uint256 state) = (uint256(g.gasTotalUsed) * 64 / 63, uint256(int256(g.gasStateUsed)));
         uint256 asked = (regular + state) * 105 / 100;

@@ -13,7 +13,6 @@ import {PqGroupBase} from "../pqgroup/PqGroupBase.sol";
 ///        env. The group code (epochs, wraps, lists, nonces, blobs, the env read) is `PqGroupBase`'s (CTR-PQV-12), reached
 ///        through this namespace by the hooks below. **UNAUDITED.**
 abstract contract PqChatCore is PqGroupBase {
-
     struct Topic {
         bytes32 admin; // 0 = unknown
         address record; // the create record's head blob
@@ -77,7 +76,6 @@ abstract contract PqChatCore is PqGroupBase {
         }
     }
 
-
     // ------------------------------------------------------------------ the group hooks (PqGroupBase)
 
     function _epochs() internal view override returns (mapping(bytes32 => Epoch) storage) {
@@ -98,7 +96,10 @@ abstract contract PqChatCore is PqGroupBase {
 
     /// @dev The admins, members and wrap hashes of a stored epoch record (the session for epoch 0).
     function _lists(Epoch storage ep)
-        internal view override returns (bytes32[] memory admins, IPqChat.MemberKey[] memory members, bytes32[] memory hashes)
+        internal
+        view
+        override
+        returns (bytes32[] memory admins, IPqChat.MemberKey[] memory members, bytes32[] memory hashes)
     {
         bytes memory b = _get(ep.record);
         if (ep.epoch == 0) {

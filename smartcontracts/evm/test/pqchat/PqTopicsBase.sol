@@ -27,7 +27,9 @@ abstract contract PqTopicsBase is PqChatBase {
     }
 
     function _entryRec(bytes32 tid, bytes32 author, uint64 nonce, bytes32 parent, bytes memory body)
-        internal pure returns (IPqChat.PqTopicEntry memory e)
+        internal
+        pure
+        returns (IPqChat.PqTopicEntry memory e)
     {
         e.topicId = tid;
         e.author = author;
@@ -52,7 +54,9 @@ abstract contract PqTopicsBase is PqChatBase {
     }
 
     function _editRec(bytes32 eid, bytes32 author, uint64 nonce, uint32 version)
-        internal pure returns (IPqChat.PqTopicEdit memory d)
+        internal
+        pure
+        returns (IPqChat.PqTopicEdit memory d)
     {
         d = IPqChat.PqTopicEdit(eid, author, nonce, version, "text/markdown", abi.encodePacked("edit ", uint8(version)));
     }

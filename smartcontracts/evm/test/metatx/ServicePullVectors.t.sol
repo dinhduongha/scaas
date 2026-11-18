@@ -56,8 +56,19 @@ contract ServicePullVectorsTest is Test {
     }
 
     function _t() internal view returns (MetaTxLib.UAMetaTransfer memory t) {
-        t = MetaTxLib.UAMetaTransfer(_b32(".t.from"), _b32(".t.to"), _u(".t.value"), _b32(".t.entryRef"), _u(".t.batch"),
-            _u(".t.nonce"), _u(".t.validUntil"), uint32(_u(".t.mode")), _a(".t.relayer"), _u(".t.fee"), _a(".t.feeRecipient"));
+        t = MetaTxLib.UAMetaTransfer(
+            _b32(".t.from"),
+            _b32(".t.to"),
+            _u(".t.value"),
+            _b32(".t.entryRef"),
+            _u(".t.batch"),
+            _u(".t.nonce"),
+            _u(".t.validUntil"),
+            uint32(_u(".t.mode")),
+            _a(".t.relayer"),
+            _u(".t.fee"),
+            _a(".t.feeRecipient")
+        );
     }
 
     function _auth() internal view returns (IUARegistry.UASig memory a) {
@@ -69,7 +80,13 @@ contract ServicePullVectorsTest is Test {
     function _place() internal returns (address tok, RefServiceEscrow s) {
         vm.chainId(_u(".chainId"));
         tok = _a(".token.address");
-        vm.etch(tok, EnvKit.runtime(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(_b32(".token.salt"), address(0), address(0), false)));
+        vm.etch(
+            tok,
+            EnvKit.runtime(
+                address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+                EnvKit.env(_b32(".token.salt"), address(0), address(0), false)
+            )
+        );
         s = RefServiceEscrow(_a(".service.address"));
         vm.etch(address(s), address(new RefServiceEscrow(tok)).code);
         assertEq(s.TOKEN(), tok);
@@ -97,14 +114,22 @@ contract ServicePullVectorsTest is Test {
         bytes memory cd;
         bytes32 ref;
         if (keccak256(bytes(_s(".entry"))) == keccak256("deposit")) {
-            RefServiceEscrow.Deposit memory op = RefServiceEscrow.Deposit(_b32(".typedData.message.payer"),
-                _u(".typedData.message.amount"), uint64(_u(".typedData.message.releaseAfter")), _b32(".typedData.message.salt"));
+            RefServiceEscrow.Deposit memory op = RefServiceEscrow.Deposit(
+                _b32(".typedData.message.payer"),
+                _u(".typedData.message.amount"),
+                uint64(_u(".typedData.message.releaseAfter")),
+                _b32(".typedData.message.salt")
+            );
             (ref, cd) = (s.depositRef(op), abi.encodeCall(RefServiceEscrow.deposit, (op, t, a)));
             assertEq(spDepositRef(address(s), block.chainid, op), ref, name);
         } else {
-            RefServiceEscrow.Note memory op = RefServiceEscrow.Note(_b32(".typedData.message.payer"),
-                _u(".typedData.message.amount"), _s(".typedData.message.memo"), _b(".typedData.message.commitment"),
-                _b32(".typedData.message.salt"));
+            RefServiceEscrow.Note memory op = RefServiceEscrow.Note(
+                _b32(".typedData.message.payer"),
+                _u(".typedData.message.amount"),
+                _s(".typedData.message.memo"),
+                _b(".typedData.message.commitment"),
+                _b32(".typedData.message.salt")
+            );
             (ref, cd) = (s.noteRef(op), abi.encodeCall(RefServiceEscrow.note, (op, t, a)));
             assertEq(spNoteRef(address(s), block.chainid, op), ref, name);
         }
@@ -137,8 +162,11 @@ contract ServicePullVectorsTest is Test {
         assertEq(IERC20(tok).balanceOf(REL), _u(".relayFee.value"), name);
         assertEq(NormalToken(tok).mtxNonce(t.from, t.batch), 2, name);
         assertEq(keccak256(cd), _b32(".relayFee.callDataHash"), name);
-        assertEq(keccak256(abi.encodePacked("scaas.relayfee", block.chainid, address(s), keccak256(cd))),
-            _b32(".relayFee.relayRef"), name);
+        assertEq(
+            keccak256(abi.encodePacked("scaas.relayfee", block.chainid, address(s), keccak256(cd))),
+            _b32(".relayFee.relayRef"),
+            name
+        );
     }
 
     function test_servicePullVectors() public {

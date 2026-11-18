@@ -33,14 +33,25 @@ contract CodeCeilingTest is Test {
         h.limitCode(rt);
         h.requireGas("WrappedPqzToken"); // control: at the limit
         h.limitCode(rt - 1);
-        vm.expectRevert(bytes(string.concat("WrappedPqzToken runtime ", vm.toString(rt), " B > chain code limit ",
-            vm.toString(rt - 1), " B (CHAIN_CODE_LIMIT, CTR-GOV-19)")));
+        vm.expectRevert(
+            bytes(
+                string.concat(
+                    "WrappedPqzToken runtime ",
+                    vm.toString(rt),
+                    " B > chain code limit ",
+                    vm.toString(rt - 1),
+                    " B (CHAIN_CODE_LIMIT, CTR-GOV-19)"
+                )
+            )
+        );
         h.requireGas("WrappedPqzToken");
         // a contract outside the baseline is under the EIP-170 limit: priced at 24,576 B
         h.limitCode(24_576);
         h.requireGas("UniswapExecutor");
         h.limitCode(24_575);
-        vm.expectRevert(bytes("UniswapExecutor runtime 24576 B > chain code limit 24575 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        vm.expectRevert(
+            bytes("UniswapExecutor runtime 24576 B > chain code limit 24575 B (CHAIN_CODE_LIMIT, CTR-GOV-19)")
+        );
         h.requireGas("UniswapExecutor");
     }
 

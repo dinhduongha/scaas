@@ -60,7 +60,10 @@ abstract contract PqGroupBase {
     function _chain() internal view virtual returns (mapping(bytes32 => bytes32[]) storage);
     /// @dev The admins, members and wrap hashes of a stored epoch record (the group's first record for epoch 0).
     function _lists(Epoch storage ep)
-        internal view virtual returns (bytes32[] memory admins, IPqChat.MemberKey[] memory members, bytes32[] memory hashes);
+        internal
+        view
+        virtual
+        returns (bytes32[] memory admins, IPqChat.MemberKey[] memory members, bytes32[] memory hashes);
     /// @dev Reverts with the contract's named error for `code` (`F_*`); never returns.
     function _fail(uint8 code, uint256 a, uint256 b) internal pure virtual;
 
@@ -107,7 +110,9 @@ abstract contract PqGroupBase {
             assembly ("memory-safe") {
                 mcopy(add(part, 32), add(add(data, 32), o), len)
             }
-            head = SSTORE2.write(head == address(0) ? bytes.concat(bytes1(0), part) : bytes.concat(bytes1(0x01), bytes20(head), part));
+            head = SSTORE2.write(
+                head == address(0) ? bytes.concat(bytes1(0), part) : bytes.concat(bytes1(0x01), bytes20(head), part)
+            );
         }
     }
 
@@ -136,7 +141,11 @@ abstract contract PqGroupBase {
 
     /// @notice P9, P10: the parent `parentEpochId` stored and complete in this instance, of `sessionId`, `epoch == parent + 1`, the
     ///         home slot free.
-    function _parentOf(bytes32 parentEpochId, bytes32 sessionId, uint64 epoch) internal view returns (Epoch storage pe) {
+    function _parentOf(bytes32 parentEpochId, bytes32 sessionId, uint64 epoch)
+        internal
+        view
+        returns (Epoch storage pe)
+    {
         pe = _known(parentEpochId);
         if (pe.sessionId != sessionId) _fail(F_UNKNOWN, uint256(parentEpochId), 0);
         if (pe.landed != pe.wraps) _fail(F_INCOMPLETE, uint256(parentEpochId), 0);
@@ -150,9 +159,14 @@ abstract contract PqGroupBase {
     /// @dev The rights of P10 (3C-D7) over lists: the parent's admins `pa` and members `pm`, the child's `admins` and `members`,
     ///      its `author`. A plain rekey (the child keeps the parent's admins and members, less those who left or were removed) by a
     ///      member of the parent who did not leave it, any other by an admin of it. Returns the parent's member ids.
-    function _rights(Epoch storage pe, bytes32[] memory pa, IPqChat.MemberKey[] memory pm, bytes32[] memory admins,
-        IPqChat.MemberKey[] memory members, bytes32 author) internal view returns (bytes32[] memory pu)
-    {
+    function _rights(
+        Epoch storage pe,
+        bytes32[] memory pa,
+        IPqChat.MemberKey[] memory pm,
+        bytes32[] memory admins,
+        IPqChat.MemberKey[] memory members,
+        bytes32 author
+    ) internal view returns (bytes32[] memory pu) {
         pu = _uas(pm);
         if (pe.removed != 0 && pe.removedOf[author]) _fail(F_NOT_MEMBER, uint256(author), 0); // P48
         if (_keeps(pe, pa, admins) && _keeps(pe, pu, _uas(members))) {
@@ -176,22 +190,32 @@ abstract contract PqGroupBase {
 
     function _uas(IPqChat.MemberKey[] memory m) internal pure returns (bytes32[] memory u) {
         u = new bytes32[](m.length);
-        for (uint256 i; i < m.length; ++i) u[i] = m[i].ua;
+        for (uint256 i; i < m.length; ++i) {
+            u[i] = m[i].ua;
+        }
     }
 
     /// @dev P48: the completing child `ep` holds no UA a `remove` took out of its parent, in its members or its admins.
     function _noneRemoved(Epoch storage ep) internal view {
         Epoch storage pe = _epochs()[ep.parent];
         (bytes32[] memory admins, IPqChat.MemberKey[] memory m,) = _lists(ep);
-        for (uint256 i; i < m.length; ++i) if (pe.removedOf[m[i].ua]) _fail(F_REMOVED_KEPT, uint256(ep.parent), uint256(m[i].ua));
-        for (uint256 i; i < admins.length; ++i) if (pe.removedOf[admins[i]]) _fail(F_REMOVED_KEPT, uint256(ep.parent), uint256(admins[i]));
+        for (uint256 i; i < m.length; ++i) {
+            if (pe.removedOf[m[i].ua]) _fail(F_REMOVED_KEPT, uint256(ep.parent), uint256(m[i].ua));
+        }
+        for (uint256 i; i < admins.length; ++i) {
+            if (pe.removedOf[admins[i]]) _fail(F_REMOVED_KEPT, uint256(ep.parent), uint256(admins[i]));
+        }
     }
 
     /// @dev 3C-D6: members strictly sorted, at least `min`, one hash each, each holding its `keyId` here (P3); admins
     ///      strictly sorted and registered (P8).
-    function _checkLists(IUARegistry reg, bytes32[] memory admins, IPqChat.MemberKey[] memory members, uint256 nHashes, uint256 min)
-        internal view
-    {
+    function _checkLists(
+        IUARegistry reg,
+        bytes32[] memory admins,
+        IPqChat.MemberKey[] memory members,
+        uint256 nHashes,
+        uint256 min
+    ) internal view {
         uint256 n = members.length;
         if (n < min || nHashes != n) _fail(F_SHAPE, 0, 0);
         for (uint256 i; i < n; ++i) {
@@ -216,13 +240,21 @@ abstract contract PqGroupBase {
     /// @dev P11: `wraps` as indices `first..` of `epochId`, each against its signed hash, then its shape and its member's
     ///      `ua` / `keyId` (3C-D6), stored once; packed as many per blob as the limit holds, one slot each (pointer | offset
     ///      << 160). The epoch completes when its last wrap lands (`complete`); the caller emits the events of both.
-    function _land(bytes32 epochId, Epoch storage ep, uint256 first, IPqChat.Wrap[] calldata wraps,
-        IPqChat.MemberKey[] memory members, bytes32[] memory hashes, uint256 limit) internal returns (bool complete)
-    {
+    function _land(
+        bytes32 epochId,
+        Epoch storage ep,
+        uint256 first,
+        IPqChat.Wrap[] calldata wraps,
+        IPqChat.MemberKey[] memory members,
+        bytes32[] memory hashes,
+        uint256 limit
+    ) internal returns (bool complete) {
         uint256 n = wraps.length;
         if (first + n > members.length) _fail(F_SHAPE, 0, 0);
         uint256 per = (_codeCap(limit) - 1) / WRAP_BYTES;
-        for (uint256 j; j < n; j += per) _blob(epochId, ep, first, wraps, j, n - j < per ? n : j + per, members, hashes);
+        for (uint256 j; j < n; j += per) {
+            _blob(epochId, ep, first, wraps, j, n - j < per ? n : j + per, members, hashes);
+        }
         uint32 landed = ep.landed + uint32(n);
         ep.landed = landed;
         if (landed == ep.wraps && n != 0) {
@@ -236,21 +268,32 @@ abstract contract PqGroupBase {
     }
 
     /// @dev One blob of `wraps[from..to)`, indices `first + from..`.
-    function _blob(bytes32 epochId, Epoch storage ep, uint256 first, IPqChat.Wrap[] calldata wraps, uint256 from, uint256 to,
-        IPqChat.MemberKey[] memory members, bytes32[] memory hashes) private
-    {
+    function _blob(
+        bytes32 epochId,
+        Epoch storage ep,
+        uint256 first,
+        IPqChat.Wrap[] calldata wraps,
+        uint256 from,
+        uint256 to,
+        IPqChat.MemberKey[] memory members,
+        bytes32[] memory hashes
+    ) private {
         bytes memory buf = new bytes((to - from) * WRAP_BYTES);
         for (uint256 j = from; j < to; ++j) {
             uint256 i = first + j;
             IPqChat.Wrap calldata w = wraps[j];
             if (PqChatTypes.hashWrap(w) != hashes[i]) _fail(F_WRAP_HASH, uint256(epochId), i);
-            if (w.mlkemCt.length != MLKEM_CT || w.sealedKey.length != SEALED_KEY || w.member != members[i].ua
-                || w.keyId != members[i].keyId) _fail(F_SHAPE, 0, 0);
+            if (
+                w.mlkemCt.length != MLKEM_CT || w.sealedKey.length != SEALED_KEY || w.member != members[i].ua
+                    || w.keyId != members[i].keyId
+            ) _fail(F_SHAPE, 0, 0);
             if (ep.wrapAt[i] != 0) _fail(F_WRAP_STORED, uint256(epochId), i);
             _pack(buf, (j - from) * WRAP_BYTES, w);
         }
         uint256 ptr = uint160(SSTORE2.write(buf));
-        for (uint256 j = from; j < to; ++j) ep.wrapAt[first + j] = ptr | ((j - from) * WRAP_BYTES) << 160;
+        for (uint256 j = from; j < to; ++j) {
+            ep.wrapAt[first + j] = ptr | ((j - from) * WRAP_BYTES) << 160;
+        }
     }
 
     /// @dev One wrap at `off`: member (32) ‖ keyId (8, big-endian) ‖ mlkemCt (1,568) ‖ x25519Eph (32) ‖ sealedKey (48).
@@ -294,12 +337,16 @@ abstract contract PqGroupBase {
 
     /// @dev ponytail: linear scans; a sorted list's binary search if groups grow past a few hundred.
     function _has(bytes32[] memory a, bytes32 x) internal pure returns (bool) {
-        for (uint256 i; i < a.length; ++i) if (a[i] == x) return true;
+        for (uint256 i; i < a.length; ++i) {
+            if (a[i] == x) return true;
+        }
         return false;
     }
 
     function _memberAt(IPqChat.MemberKey[] memory m, bytes32 ua) internal pure returns (uint256) {
-        for (uint256 i; i < m.length; ++i) if (m[i].ua == ua) return i;
+        for (uint256 i; i < m.length; ++i) {
+            if (m[i].ua == ua) return i;
+        }
         return type(uint256).max;
     }
 }

@@ -117,7 +117,9 @@ contract ZetherMore is ZetherE2E {
         (c.initialSupply, c.initialHolder) = (1_000_000, me);
         c.conf = _conf(); // the burner's conf
         vm.startBroadcast(pk);
-        tb = fac.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), keccak256(abi.encode(salt, "burner")));
+        tb = fac.createToken(
+            IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), keccak256(abi.encode(salt, "burner"))
+        );
         console.log(string.concat("      BURNER Zether token at ", vm.toString(tb)));
         NormalZetherToken(tb).mtxShield(uas[0], 100);
         NormalZetherToken(tb).mtxRollOver(uas[0], 1);
@@ -130,21 +132,39 @@ contract ZetherMore is ZetherE2E {
 
     function _burnerUse(uint256 pk, address payer, address tb) internal {
         uint256 s0 = IERC20(tb).totalSupply();
-        bytes memory cd = _cli("proveBurn", _req(tb, 100, string.concat(',"amount":30,', _q("recipient", vm.toString(payer)))))
+        bytes memory cd = _cli(
+                "proveBurn", _req(tb, 100, string.concat(',"amount":30,', _q("recipient", vm.toString(payer))))
+            )
             .readBytes(".directCalldata");
         vm.broadcast(PAYER_PK);
         (bool ok,) = tb.call(cd);
         require(ok, "BURNER token: the non-holder's unshield reverted");
-        require(IERC20(tb).totalSupply() == s0 && IERC20(tb).balanceOf(payer) == 80, "BURNER token: unshield not gated, supply kept");
+        require(
+            IERC20(tb).totalSupply() == s0 && IERC20(tb).balanceOf(payer) == 80,
+            "BURNER token: unshield not gated, supply kept"
+        );
         _expect(tb, 0, 70, 0, "BURNER token: alice after unshielding 30 (sent by the payer, no role)");
         vm.broadcast(pk);
         NormalZetherToken(tb).burn(10);
         require(IERC20(tb).totalSupply() == s0 - 10, "BURNER token: the seat's burn");
         console.log("ok    BURNER token: unshield by a non-holder (supply unchanged), the seat's burn(10) (supply -10)");
-        vm.writeLine(_negFile(), string.concat(vm.toString(payer), " ", vm.toString(tb), " ",
-            vm.toString(abi.encodeCall(NormalZetherToken.burn, (uint256(1)))), " ",
-            vm.toString(abi.encodeWithSelector(IGovernance.MissingRole.selector, GovernanceBits.BURNER, bytes32(uint256(uint160(payer))))),
-            " burn by a non-holder with a balance (Zether, BURNER): MissingRole(30, id)"));
+        vm.writeLine(
+            _negFile(),
+            string.concat(
+                vm.toString(payer),
+                " ",
+                vm.toString(tb),
+                " ",
+                vm.toString(abi.encodeCall(NormalZetherToken.burn, (uint256(1)))),
+                " ",
+                vm.toString(
+                    abi.encodeWithSelector(
+                        IGovernance.MissingRole.selector, GovernanceBits.BURNER, bytes32(uint256(uint160(payer)))
+                    )
+                ),
+                " burn by a non-holder with a balance (Zether, BURNER): MissingRole(30, id)"
+            )
+        );
     }
 
     // ------------------------------------------------------------------ AUDITOR (set-auditor: CTR-GOV-31, CTR-ZTH-95)
@@ -161,8 +181,14 @@ contract ZetherMore is ZetherE2E {
     ///      `AUDITOR` opening by that key verifies and one by the other key does not. Then the msig proposes A0 back through
     ///      the router (`mtxSetAuditorKey`, its native member's signature over the router's typed struct, fee 0): epoch 2.
     function _auditor(uint256 pk, address payer) internal returns (address ta) {
-        bytes memory y0 = _cli("keygen", string.concat('{"curve":"bls12381","key":{', _q("x", vm.toString(bytes32(XA0))), "}}")).readBytes(".Y");
-        bytes memory y1 = _cli("keygen", string.concat('{"curve":"bls12381","key":{', _q("x", vm.toString(bytes32(XA1))), "}}")).readBytes(".Y");
+        bytes memory y0 = _cli(
+                "keygen", string.concat('{"curve":"bls12381","key":{', _q("x", vm.toString(bytes32(XA0))), "}}")
+            )
+            .readBytes(".Y");
+        bytes memory y1 = _cli(
+                "keygen", string.concat('{"curve":"bls12381","key":{', _q("x", vm.toString(bytes32(XA1))), "}}")
+            )
+            .readBytes(".Y");
         bytes32 uid = dep.readBytes32(".chain_uid");
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals) = ("Zether auditor", "zAUD", 6);
@@ -171,7 +197,9 @@ contract ZetherMore is ZetherE2E {
         c.conf = _conf(); // the auditor token's conf
         (c.conf.auditorKey, c.conf.auditorMode) = (y0, uint8(ZetherTypes.AuditorMode.OPTIONAL));
         vm.startBroadcast(pk);
-        ta = fac.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), keccak256(abi.encode(salt, "auditor")));
+        ta = fac.createToken(
+            IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), keccak256(abi.encode(salt, "auditor"))
+        );
         console.log(string.concat("      AUDITOR Zether token at ", vm.toString(ta)));
         bytes32 mu = _auditorMsig(pk, payer);
         IGovernance(ta).grantRole(GovernanceBits.AUDITOR, bytes32(uint256(uint160(me))), uid);
@@ -189,17 +217,32 @@ contract ZetherMore is ZetherE2E {
         (uint32 epoch,, uint64 eta,, uint8 st) = NormalZetherToken(ta).auditorState();
         if (epoch == 0) {
             require(st == 1, "AUDITOR token: the proposal waits");
-            console.log(string.concat("ok    AUDITOR token: setAuditorKey proposed, waiting until ", vm.toString(eta),
-                " (the factory's notice period); not run here: the confirm, the epoch-1 transfer and disclosures, the msig's op"));
+            console.log(
+                string.concat(
+                    "ok    AUDITOR token: setAuditorKey proposed, waiting until ",
+                    vm.toString(eta),
+                    " (the factory's notice period); not run here: the confirm, the epoch-1 transfer and disclosures, the msig's op"
+                )
+            );
             return ta;
         }
-        require(epoch == 1 && keccak256(NormalZetherToken(ta).auditorKey()) == keccak256(y1), "AUDITOR token: applied at once");
+        require(
+            epoch == 1 && keccak256(NormalZetherToken(ta).auditorKey()) == keccak256(y1),
+            "AUDITOR token: applied at once"
+        );
         console.log("ok    AUDITOR token: setAuditorKey(A1, epoch 1) applied at once (delay 0)");
         bytes32 r1 = _audSend(y1, 10, "AUDITOR token: audited transfer at epoch 1");
-        require(keccak256(NormalZetherToken(ta).auditorKeyOf(r0)) == keccak256(y0)
-            && keccak256(NormalZetherToken(ta).auditorKeyOf(r1)) == keccak256(y1), "AUDITOR token: auditorKeyOf by epoch");
-        require(_audOpens(ta, r0, 10, XA0) && !_audOpens(ta, r0, 10, XA1), "AUDITOR token: epoch 0's entry opens by A0 only");
-        require(_audOpens(ta, r1, 10, XA1) && !_audOpens(ta, r1, 10, XA0), "AUDITOR token: epoch 1's entry opens by A1 only");
+        require(
+            keccak256(NormalZetherToken(ta).auditorKeyOf(r0)) == keccak256(y0)
+                && keccak256(NormalZetherToken(ta).auditorKeyOf(r1)) == keccak256(y1),
+            "AUDITOR token: auditorKeyOf by epoch"
+        );
+        require(
+            _audOpens(ta, r0, 10, XA0) && !_audOpens(ta, r0, 10, XA1), "AUDITOR token: epoch 0's entry opens by A0 only"
+        );
+        require(
+            _audOpens(ta, r1, 10, XA1) && !_audOpens(ta, r1, 10, XA0), "AUDITOR token: epoch 1's entry opens by A1 only"
+        );
         console.log("ok    AUDITOR token: AUDITOR disclosure at epochs 0 and 1, each by its epoch's key only");
         _auditorRouter(ta, mu, y0, uid);
         require(keccak256(NormalZetherToken(ta).auditorKey()) == keccak256(y0), "AUDITOR token: the msig's op applied");
@@ -208,9 +251,23 @@ contract ZetherMore is ZetherE2E {
 
     /// @dev The new key's proof of possession over the token's `AuditorConsent` at `epoch` (`zether-cli auditorPop`, BLS12-381).
     function _auditorPop(uint256 x, address ta, bytes32 uid, uint32 epoch) internal returns (bytes memory) {
-        return _cli("auditorPop", string.concat('{"curve":"bls12381","key":{', _q("x", vm.toString(bytes32(x))), '},"chainId":',
-            vm.toString(block.chainid), ",", _q("chainUid", vm.toString(uid)), ",", _q("token", vm.toString(ta)), ',"epoch":',
-            vm.toString(epoch), "}")).readBytes(".pop");
+        return _cli(
+                "auditorPop",
+                string.concat(
+                    '{"curve":"bls12381","key":{',
+                    _q("x", vm.toString(bytes32(x))),
+                    '},"chainId":',
+                    vm.toString(block.chainid),
+                    ",",
+                    _q("chainUid", vm.toString(uid)),
+                    ",",
+                    _q("token", vm.toString(ta)),
+                    ',"epoch":',
+                    vm.toString(epoch),
+                    "}"
+                )
+            )
+            .readBytes(".pop");
     }
 
     /// @dev An msig of the sender and the payer (native ids, ascending), threshold 1, both slots accepted by their own keys;
@@ -224,14 +281,28 @@ contract ZetherMore is ZetherE2E {
         ms.members[1] = IUARegistry.MsigMember(UAKinds.EVM_EOA, bytes32(uint256(uint160(hi))), 1);
         IUARegistry.UAAttrs memory none;
         IUARegistry.MemberSig[] memory nopop;
-        mu = UAKinds.uaOf(UAKinds.MSIG, abi.encodePacked(uint16(1), uint16(2), UAKinds.EVM_EOA, ms.members[0].id, uint16(1),
-            UAKinds.EVM_EOA, ms.members[1].id, uint16(1)));
-        if (!reg.isRegistered(mu)) require(reg.registerMsig(ms, none, nopop, "") == mu, "AUDITOR token: the msig's id");
+        mu = UAKinds.uaOf(
+            UAKinds.MSIG,
+            abi.encodePacked(
+                uint16(1),
+                uint16(2),
+                UAKinds.EVM_EOA,
+                ms.members[0].id,
+                uint16(1),
+                UAKinds.EVM_EOA,
+                ms.members[1].id,
+                uint16(1)
+            )
+        );
+        if (!reg.isRegistered(mu)) {
+            require(reg.registerMsig(ms, none, nopop, "") == mu, "AUDITOR token: the msig's id");
+        }
         for (uint16 i; i < 2; ++i) {
             if (reg.memberAccepted(mu, i)) continue;
             address a = i == 0 ? lo : hi;
             IUARegistry.MemberSig memory s;
-            (uint8 v, bytes32 r, bytes32 ss) = vm.sign(a == me ? pk : PAYER_PK, UAKinds.membershipDigest(mu, bytes32(uint256(uint160(a)))));
+            (uint8 v, bytes32 r, bytes32 ss) =
+                vm.sign(a == me ? pk : PAYER_PK, UAKinds.membershipDigest(mu, bytes32(uint256(uint160(a)))));
             (s.index, s.sig) = (i, abi.encodePacked(r, ss, v));
             reg.acceptMembership(mu, s);
         }
@@ -240,8 +311,21 @@ contract ZetherMore is ZetherE2E {
     /// @dev alice -> bob `v` on `t` audited by `y` (OPTIONAL mode, the sender's choice), checked by decryption.
     function _audSend(bytes memory y, uint256 v, string memory what) internal returns (bytes32 ref) {
         (bAcc, bPend) = _balances(t, 1);
-        string memory out = _cli("proveTransfer", _req(t, aAcc, string.concat(",", _q("yTo", vm.toString(ys[1])), ',"amount":',
-            vm.toString(v), ',"auditorMode":"optional",', _q("yAud", vm.toString(y)))));
+        string memory out = _cli(
+            "proveTransfer",
+            _req(
+                t,
+                aAcc,
+                string.concat(
+                    ",",
+                    _q("yTo", vm.toString(ys[1])),
+                    ',"amount":',
+                    vm.toString(v),
+                    ',"auditorMode":"optional",',
+                    _q("yAud", vm.toString(y))
+                )
+            )
+        );
         vm.broadcast(vm.envUint("PRIVATE_KEY"));
         ref = _send(t, out, what);
         _moved(v, v, what);
@@ -250,9 +334,20 @@ contract ZetherMore is ZetherE2E {
     /// @dev Does an `AUDITOR` opening of leg 0 of `ref` for `amount` by the key `x` (`zether-cli openDisclosure`) verify?
     function _audOpens(address ta, bytes32 ref, uint256 amount, uint256 x) internal returns (bool) {
         (bytes memory ct, bytes memory yt) = dis.transferCiphertext(ta, ref, 0);
-        string memory r = string.concat('{"curve":"bls12381","key":{', _q("x", vm.toString(bytes32(x))), '},"kind":"auditor","chainId":',
-            vm.toString(block.chainid), ",", _q("chainUid", vm.toString(dep.readBytes32(".chain_uid"))), ",", _q("token", vm.toString(ta)),
-            ",", _q("entryRef", vm.toString(ref)), ',"index":0,"amount":', vm.toString(amount));
+        string memory r = string.concat(
+            '{"curve":"bls12381","key":{',
+            _q("x", vm.toString(bytes32(x))),
+            '},"kind":"auditor","chainId":',
+            vm.toString(block.chainid),
+            ",",
+            _q("chainUid", vm.toString(dep.readBytes32(".chain_uid"))),
+            ",",
+            _q("token", vm.toString(ta)),
+            ",",
+            _q("entryRef", vm.toString(ref)),
+            ',"index":0,"amount":',
+            vm.toString(amount)
+        );
         r = string.concat(r, ",", _audParts(ct, yt, NormalZetherToken(ta).auditorKeyOf(ref)), "}");
         (bool built, bytes memory o) = _openOrRefused(r);
         if (!built) return false;
@@ -279,15 +374,29 @@ contract ZetherMore is ZetherE2E {
 
     /// @dev The opening request's points: the recipient key, the leg's outgoing and auditor ciphertext parts, the auditor key.
     function _audParts(bytes memory ct, bytes memory yt, bytes memory ya) internal returns (string memory r) {
-        r = string.concat(_q("Yt", vm.toString(yt)), ",", _q("Cout", vm.toString(_part(ct, 0))), ",",
-            _q("Dout", vm.toString(_part(ct, 1))), ",");
-        r = string.concat(r, _q("Ya", vm.toString(ya)), ",", _q("Caud", vm.toString(_part(ct, 2))), ",",
-            _q("Daud", vm.toString(_part(ct, 3))));
+        r = string.concat(
+            _q("Yt", vm.toString(yt)),
+            ",",
+            _q("Cout", vm.toString(_part(ct, 0))),
+            ",",
+            _q("Dout", vm.toString(_part(ct, 1))),
+            ","
+        );
+        r = string.concat(
+            r,
+            _q("Ya", vm.toString(ya)),
+            ",",
+            _q("Caud", vm.toString(_part(ct, 2))),
+            ",",
+            _q("Daud", vm.toString(_part(ct, 3)))
+        );
     }
 
     function _part(bytes memory ct, uint256 i) internal pure returns (bytes memory p) {
         p = new bytes(128);
-        for (uint256 j; j < 128; ++j) p[j] = ct[128 * i + j];
+        for (uint256 j; j < 128; ++j) {
+            p[j] = ct[128 * i + j];
+        }
     }
 
     /// @dev The msig's `mtxSetAuditorKey(key, epoch 2)` on the router: its lower native member signs the router's typed
@@ -295,10 +404,14 @@ contract ZetherMore is ZetherE2E {
     function _auditorRouter(address ta, bytes32 mu, bytes memory key, bytes32 uid) internal {
         GovernanceRouter gr = GovernanceRouter(dep.readAddress(".governance_router"));
         bytes memory pop = _auditorPop(XA0, ta, uid, 2);
-        MetaTxLib.UAEnvelope memory u = MetaTxLib.UAEnvelope(mu, 0, gr.mtxNonce(mu, 0), block.timestamp + 1 days, 0, address(0), 0,
-            address(0));
-        bytes32 sh = keccak256(bytes.concat(abi.encode(GovernanceRouterTypes.UA_SET_AUDITOR_KEY, u.from, ta, keccak256(key),
-            uint32(2), uid), abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))));
+        MetaTxLib.UAEnvelope memory u =
+            MetaTxLib.UAEnvelope(mu, 0, gr.mtxNonce(mu, 0), block.timestamp + 1 days, 0, address(0), 0, address(0));
+        bytes32 sh = keccak256(
+            bytes.concat(
+                abi.encode(GovernanceRouterTypes.UA_SET_AUDITOR_KEY, u.from, ta, keccak256(key), uint32(2), uid),
+                abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))
+            )
+        );
         IUARegistry.UASig memory a = _auditorSig(address(gr), mu, sh);
         vm.broadcast(vm.envUint("PRIVATE_KEY"));
         gr.mtxSetAuditorKey(u, ta, key, 2, pop, uid, a);
@@ -310,10 +423,16 @@ contract ZetherMore is ZetherE2E {
     function _auditorSig(address gr, bytes32 mu, bytes32 sh) internal returns (IUARegistry.UASig memory a) {
         address payer = vm.addr(PAYER_PK);
         bool meLow = me < payer;
-        bytes32 md = UAKinds.memberDigest(mu, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_METATX,
-            keccak256(abi.encodePacked(hex"1901", _dom(gr), sh))));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(meLow ? vm.envUint("PRIVATE_KEY") : PAYER_PK,
-            reg.uaAuthDigest(bytes32(uint256(uint160(meLow ? me : payer))), UAKinds.PURPOSE_MEMBER, md));
+        bytes32 md = UAKinds.memberDigest(
+            mu,
+            UAKinds.uaMessage(
+                UAKinds.MSIG, UAKinds.PURPOSE_METATX, keccak256(abi.encodePacked(hex"1901", _dom(gr), sh))
+            )
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
+            meLow ? vm.envUint("PRIVATE_KEY") : PAYER_PK,
+            reg.uaAuthDigest(bytes32(uint256(uint160(meLow ? me : payer))), UAKinds.PURPOSE_MEMBER, md)
+        );
         a.members = new IUARegistry.MemberSig[](1);
         (a.members[0].index, a.members[0].sig) = (0, abi.encodePacked(r, s, v));
     }
@@ -325,17 +444,28 @@ contract ZetherMore is ZetherE2E {
         (aAcc, aPend) = _balances(t, 0);
         (bAcc, bPend) = _balances(t, 1);
         // direct: single, Compact M = 2, BUNDLE M = 2, unshield; unshield-unwrap (wrapped)
-        _send(t, _cli("proveTransfer", _req(t, aAcc, string.concat(",", _q("yTo", vm.toString(ys[1])), ',"amount":10'))),
-            string.concat("direct single transfer alice -> bob 10", w));
+        _send(
+            t,
+            _cli("proveTransfer", _req(t, aAcc, string.concat(",", _q("yTo", vm.toString(ys[1])), ',"amount":10'))),
+            string.concat("direct single transfer alice -> bob 10", w)
+        );
         _moved(10, 10, "direct single");
-        _send(t, _cli("proveTransferMulti", _req(t, aAcc, string.concat(',"mode":"compact"', _two(5)))),
-            string.concat("direct Compact M = 2 (bob 5 + 1 decoy)", w));
+        _send(
+            t,
+            _cli("proveTransferMulti", _req(t, aAcc, string.concat(',"mode":"compact"', _two(5)))),
+            string.concat("direct Compact M = 2 (bob 5 + 1 decoy)", w)
+        );
         _moved(5, 5, "direct Compact");
-        _send(t, _cli("proveTransferMulti", _req(t, aAcc, string.concat(',"mode":"bundle"', _two(5)))),
-            string.concat("direct BUNDLE M = 2 (bob 5 + 1 decoy)", w));
+        _send(
+            t,
+            _cli("proveTransferMulti", _req(t, aAcc, string.concat(',"mode":"bundle"', _two(5)))),
+            string.concat("direct BUNDLE M = 2 (bob 5 + 1 decoy)", w)
+        );
         _moved(5, 5, "direct BUNDLE");
-        (bool ok,) = t.call(_cli("proveBurn", _req(t, aAcc, string.concat(',"amount":7,', _q("recipient", vm.toString(me)))))
-            .readBytes(".directCalldata"));
+        (bool ok,) = t.call(
+            _cli("proveBurn", _req(t, aAcc, string.concat(',"amount":7,', _q("recipient", vm.toString(me)))))
+                .readBytes(".directCalldata")
+        );
         require(ok, "direct unshield reverted");
         _moved(7, 0, "direct unshield 7");
         if (wrapped) _unwrapDirect();
@@ -382,11 +512,23 @@ contract ZetherMore is ZetherE2E {
     /// the `ZetherBurn` decoded from the build's payload (`be32 accSeq ‖ be32 sendCounter ‖ be32 validUntilBlock ‖ Y_f`).
     function _unwrapDirect() internal {
         bytes32 ub = IZetherStatementsUnwrap(dep.readAddress(".zether_statements")).unwrapBinding(und, 0);
-        string memory out = _cli("proveBurn", _req(t, aAcc, string.concat(',"amount":6,', _q("recipient", vm.toString(me)), ",",
-            _q("unwrapBinding", vm.toString(ub)))));
+        string memory out = _cli(
+            "proveBurn",
+            _req(
+                t,
+                aAcc,
+                string.concat(
+                    ',"amount":6,', _q("recipient", vm.toString(me)), ",", _q("unwrapBinding", vm.toString(ub))
+                )
+            )
+        );
         uint256 before = IERC20(und).balanceOf(me);
-        WrappedZetherToken(payable(t)).mtxUnshieldUnwrap(_burnOf(out.readBytes(".payload")),
-            IConfidentialWrappedToken.Unwrap(und, MetaTxLib.pad(me), 6, 0), out.readBytes(".proof"));
+        WrappedZetherToken(payable(t))
+            .mtxUnshieldUnwrap(
+                _burnOf(out.readBytes(".payload")),
+                IConfidentialWrappedToken.Unwrap(und, MetaTxLib.pad(me), 6, 0),
+                out.readBytes(".proof")
+            );
         require(IERC20(und).balanceOf(me) == before + 6, "direct unshield-unwrap: underlying");
         _moved(6, 0, "direct mtxUnshieldUnwrap 6 (wrapped)");
     }
@@ -401,55 +543,116 @@ contract ZetherMore is ZetherE2E {
     function _namedTransfers(bool wrapped) internal {
         string memory w = wrapped ? " (wrapped)" : "";
         MetaTxLib.UAMetaTransaction memory m = _envelope();
-        string memory out = _cli("proveTransfer", _req(t, aAcc, string.concat(_bindingOf(m), ',"uaSigner":"ecdsa",',
-            _q("yTo", vm.toString(ys[1])), ',"amount":4')));
+        string memory out = _cli(
+            "proveTransfer",
+            _req(
+                t,
+                aAcc,
+                string.concat(_bindingOf(m), ',"uaSigner":"ecdsa",', _q("yTo", vm.toString(ys[1])), ',"amount":4')
+            )
+        );
         _named("UAZetherTransferSingle", m, out, "", string.concat("named single alice -> bob 4", w));
         _moved(4, 4, "named single");
         m = _envelope();
-        out = _cli("proveTransferMulti", _req(t, aAcc, string.concat(',"mode":"compact"', _bindingOf(m), ',"uaSigner":"ecdsa"', _two(3))));
+        out = _cli(
+            "proveTransferMulti",
+            _req(t, aAcc, string.concat(',"mode":"compact"', _bindingOf(m), ',"uaSigner":"ecdsa"', _two(3)))
+        );
         _named("UAZetherTransferCompact", m, out, "", string.concat("named Compact M = 2 (bob 3)", w));
         _moved(3, 3, "named Compact");
         m = _envelope();
-        out = _cli("proveTransferMulti", _req(t, aAcc, string.concat(',"mode":"bundle"', _bindingOf(m), ',"uaSigner":"ecdsa"', _two(3))));
+        out = _cli(
+            "proveTransferMulti",
+            _req(t, aAcc, string.concat(',"mode":"bundle"', _bindingOf(m), ',"uaSigner":"ecdsa"', _two(3)))
+        );
         _named("UAZetherTransfer", m, out, "", string.concat("named BUNDLE M = 2 (bob 3)", w));
         _moved(3, 3, "named BUNDLE");
         m = _envelope();
-        out = _cli("proveBurn", _req(t, aAcc, string.concat(_bindingOf(m), ',"amount":2,', _q("recipient", vm.toString(me)))));
-        _named("UAZetherUnshield", m, out, string.concat(',"amount":2,', _q("recipient", vm.toString(MetaTxLib.pad(me)))),
-            string.concat("named unshield 2", w));
+        out = _cli(
+            "proveBurn", _req(t, aAcc, string.concat(_bindingOf(m), ',"amount":2,', _q("recipient", vm.toString(me))))
+        );
+        _named(
+            "UAZetherUnshield",
+            m,
+            out,
+            string.concat(',"amount":2,', _q("recipient", vm.toString(MetaTxLib.pad(me)))),
+            string.concat("named unshield 2", w)
+        );
         _moved(2, 0, "named unshield");
         if (!wrapped) return;
         m = _envelope();
-        out = _cli("proveBurn", _req(t, aAcc, string.concat(_bindingOf(m), ',"amount":2,', _q("recipient", vm.toString(me)))));
+        out = _cli(
+            "proveBurn", _req(t, aAcc, string.concat(_bindingOf(m), ',"amount":2,', _q("recipient", vm.toString(me))))
+        );
         uint256 before = IERC20(und).balanceOf(me);
-        _named("UAZetherUnshieldUnwrap", m, out, string.concat(',"unwrap":{', _q("underlying", vm.toString(und)), ",",
-            _q("recipient", vm.toString(MetaTxLib.pad(me))), ',"amount":"2","minOut":"0"}'), "named unshield-unwrap 2 (wrapped)");
+        _named(
+            "UAZetherUnshieldUnwrap",
+            m,
+            out,
+            string.concat(
+                ',"unwrap":{',
+                _q("underlying", vm.toString(und)),
+                ",",
+                _q("recipient", vm.toString(MetaTxLib.pad(me))),
+                ',"amount":"2","minOut":"0"}'
+            ),
+            "named unshield-unwrap 2 (wrapped)"
+        );
         require(IERC20(und).balanceOf(me) == before + 2, "named unshield-unwrap: underlying");
         _moved(2, 0, "named unshield-unwrap");
     }
 
     function _namedRollOver(string memory w) internal {
         MetaTxLib.UAMetaTransaction memory m = _envelope();
-        NormalZetherToken(t).mtxRollOver(_ue(m), uas[1], 1,
-            _uaSig(string.concat("UARollOver(bytes32 from,bytes32 ua,uint256 n,", ENV_TAIL), abi.encode(uas[1], uint256(1)), m));
+        NormalZetherToken(t)
+            .mtxRollOver(
+                _ue(m),
+                uas[1],
+                1,
+                _uaSig(
+                    string.concat("UARollOver(bytes32 from,bytes32 ua,uint256 n,", ENV_TAIL),
+                    abi.encode(uas[1], uint256(1)),
+                    m
+                )
+            );
         (bAcc, bPend) = (bAcc + bPend, 0);
         _check(string.concat("named mtxRollOver(bob, 1)", w));
-        _send(t, _cli("proveTransfer", _req(t, aAcc, string.concat(",", _q("yTo", vm.toString(ys[1])), ',"amount":1'))),
-            string.concat("direct single transfer alice -> bob 1", w));
+        _send(
+            t,
+            _cli("proveTransfer", _req(t, aAcc, string.concat(",", _q("yTo", vm.toString(ys[1])), ',"amount":1'))),
+            string.concat("direct single transfer alice -> bob 1", w)
+        );
         _moved(1, 1, "direct single 1");
         ZetherTypes.UA[] memory b = new ZetherTypes.UA[](1);
         b[0] = ZetherTypes.UA.wrap(uas[1]);
         m = _envelope();
-        NormalZetherToken(t).mtxRollOverBatch(_ue(m), b, _uaSig(string.concat("UARollOverBatch(bytes32 from,bytes32[] uas,", ENV_TAIL),
-            abi.encode(keccak256(abi.encodePacked(uas[1]))), m));
+        NormalZetherToken(t)
+            .mtxRollOverBatch(
+                _ue(m),
+                b,
+                _uaSig(
+                    string.concat("UARollOverBatch(bytes32 from,bytes32[] uas,", ENV_TAIL),
+                    abi.encode(keccak256(abi.encodePacked(uas[1]))),
+                    m
+                )
+            );
         (bAcc, bPend) = (bAcc + bPend, 0);
         _check(string.concat("named mtxRollOverBatch([bob])", w));
     }
 
     function _namedShield(uint256 v, string memory w) internal {
         MetaTxLib.UAMetaTransaction memory m = _envelope();
-        NormalZetherToken(t).mtxShield(_ue(m), uas[0], v, _uaSig(string.concat("UAShield(bytes32 from,bytes32 toUA,uint256 amount,",
-            ENV_TAIL), abi.encode(uas[0], v), m));
+        NormalZetherToken(t)
+            .mtxShield(
+                _ue(m),
+                uas[0],
+                v,
+                _uaSig(
+                    string.concat("UAShield(bytes32 from,bytes32 toUA,uint256 amount,", ENV_TAIL),
+                    abi.encode(uas[0], v),
+                    m
+                )
+            );
         aPend += v;
         _check(string.concat("named mtxShield(alice, ", vm.toString(v), "), the payer's UASig", w));
     }
@@ -465,9 +668,22 @@ contract ZetherMore is ZetherE2E {
     function _rollOverSignedNamed(string memory w) internal {
         (uint64 seq, IUARegistry.UASig memory o, uint64 vub) = _ownerRoll();
         MetaTxLib.UAMetaTransaction memory m = _envelope();
-        NormalZetherToken(t).mtxRollOverSigned(_ue(m), ZetherTypes.UA.wrap(uas[0]), seq, vub, o, _uaSig(string.concat(
-            "UARollOverSigned(bytes32 from,bytes32 ua,uint64 expectedPendingSeq,uint64 validUntilBlock,", ENV_TAIL),
-            abi.encode(uas[0], seq, vub), m));
+        NormalZetherToken(t)
+            .mtxRollOverSigned(
+                _ue(m),
+                ZetherTypes.UA.wrap(uas[0]),
+                seq,
+                vub,
+                o,
+                _uaSig(
+                    string.concat(
+                        "UARollOverSigned(bytes32 from,bytes32 ua,uint64 expectedPendingSeq,uint64 validUntilBlock,",
+                        ENV_TAIL
+                    ),
+                    abi.encode(uas[0], seq, vub),
+                    m
+                )
+            );
         (aAcc, aPend) = (aAcc + aPend, 0);
         _check(string.concat("named mtxRollOverSigned(alice): the owner's Schnorr inside, the payer's UASig", w));
     }
@@ -483,16 +699,38 @@ contract ZetherMore is ZetherE2E {
         ZetherTypes.UA a = ZetherTypes.UA.wrap(uas[0]);
         uint64 vub = uint64(block.number + 100_000);
         IZetherToken.AccountState memory s = IZetherToken(t).accountState(a);
-        NormalZetherToken(t).mtxSetRollOverMode(a, ZetherTypes.RollOverMode.OWNER_ONLY, vub,
-            _owner(keccak256(abi.encode(TH_SET_MODE, uas[0], uint8(ZetherTypes.RollOverMode.OWNER_ONLY), s.modeNonce, vub))));
+        NormalZetherToken(t)
+            .mtxSetRollOverMode(
+                a,
+                ZetherTypes.RollOverMode.OWNER_ONLY,
+                vub,
+                _owner(
+                    keccak256(
+                        abi.encode(TH_SET_MODE, uas[0], uint8(ZetherTypes.RollOverMode.OWNER_ONLY), s.modeNonce, vub)
+                    )
+                )
+            );
         s = IZetherToken(t).accountState(a);
         require(s.mode == ZetherTypes.RollOverMode.OWNER_ONLY, "mode OWNER_ONLY");
         console.log(string.concat("ok    mtxSetRollOverMode(alice, OWNER_ONLY), the owner's Schnorr", w));
         MetaTxLib.UAMetaTransaction memory m = _envelope();
-        NormalZetherToken(t).mtxSetRollOverMode(_ue(m), a, ZetherTypes.RollOverMode.PUBLIC, vub,
-            _owner(keccak256(abi.encode(TH_SET_MODE, uas[0], uint8(ZetherTypes.RollOverMode.PUBLIC), s.modeNonce, vub))),
-            _uaSig(string.concat("UASetRollOverMode(bytes32 from,bytes32 ua,uint8 rollOverMode,uint64 validUntilBlock,", ENV_TAIL),
-                abi.encode(uas[0], uint8(ZetherTypes.RollOverMode.PUBLIC), vub), m));
+        NormalZetherToken(t)
+            .mtxSetRollOverMode(
+                _ue(m),
+                a,
+                ZetherTypes.RollOverMode.PUBLIC,
+                vub,
+                _owner(
+                    keccak256(abi.encode(TH_SET_MODE, uas[0], uint8(ZetherTypes.RollOverMode.PUBLIC), s.modeNonce, vub))
+                ),
+                _uaSig(
+                    string.concat(
+                        "UASetRollOverMode(bytes32 from,bytes32 ua,uint8 rollOverMode,uint64 validUntilBlock,", ENV_TAIL
+                    ),
+                    abi.encode(uas[0], uint8(ZetherTypes.RollOverMode.PUBLIC), vub),
+                    m
+                )
+            );
         require(IZetherToken(t).accountState(a).mode == ZetherTypes.RollOverMode.PUBLIC, "mode PUBLIC");
         console.log(string.concat("ok    named mtxSetRollOverMode(alice, PUBLIC), the payer's UASig", w));
     }
@@ -502,10 +740,32 @@ contract ZetherMore is ZetherE2E {
         vm.broadcast(PAYER_PK);
         IERC20(und).approve(wt, 10);
         MetaTxLib.Envelope memory e;
-        (e.from, e.batch, e.nonce, e.validUntil) = (payer, 8, NormalZetherToken(wt).mtxNonce(MetaTxLib.pad(payer), 8), block.timestamp + 1 days);
-        bytes32 d = keccak256(abi.encodePacked(hex"1901", _dom(wt), keccak256(abi.encode(keccak256(
-            "WrapShield(address from,address underlying,uint256 amountIn,bytes32 toUA,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
-            payer, und, uint256(10), uas[0], e.batch, e.nonce, e.validUntil, uint32(0), address(0), uint256(0), address(0)))));
+        (e.from, e.batch, e.nonce, e.validUntil) =
+        (payer, 8, NormalZetherToken(wt).mtxNonce(MetaTxLib.pad(payer), 8), block.timestamp + 1 days);
+        bytes32 d = keccak256(
+            abi.encodePacked(
+                hex"1901",
+                _dom(wt),
+                keccak256(
+                    abi.encode(
+                        keccak256(
+                            "WrapShield(address from,address underlying,uint256 amountIn,bytes32 toUA,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+                        ),
+                        payer,
+                        und,
+                        uint256(10),
+                        uas[0],
+                        e.batch,
+                        e.nonce,
+                        e.validUntil,
+                        uint32(0),
+                        address(0),
+                        uint256(0),
+                        address(0)
+                    )
+                )
+            )
+        );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, d);
         vm.broadcast(pk);
         WrappedZetherToken(payable(wt)).mtxWrapShield(e, und, 10, uas[0], abi.encodePacked(r, s, v));
@@ -516,7 +776,8 @@ contract ZetherMore is ZetherE2E {
     // ------------------------------------------------------------------ signing
 
     function _dom(address c) internal view returns (bytes32) {
-        (, string memory name, string memory version, uint256 chainId, address vc, bytes32 s,) = IERC5267(c).eip712Domain();
+        (, string memory name, string memory version, uint256 chainId, address vc, bytes32 s,) =
+            IERC5267(c).eip712Domain();
         return keccak256(abi.encode(SALTED, keccak256(bytes(name)), keccak256(bytes(version)), chainId, vc, s));
     }
 
@@ -527,12 +788,26 @@ contract ZetherMore is ZetherE2E {
     /// The payer's `UASig` over a named UA-envelope entry's struct `typ` (words = its own fields, a dynamic one hashed) in the
     /// token's domain, relayer / fee recipient canonical (`MetaTxLib.canon`).
     function _uaSig(string memory typ, bytes memory words, MetaTxLib.UAMetaTransaction memory m)
-        internal view returns (IUARegistry.UASig memory a)
+        internal
+        view
+        returns (IUARegistry.UASig memory a)
     {
         address r = m.mode & MetaTxLib.MODE_RESTRICT_RELAYER != 0 ? m.relayer : address(0);
         address f = m.mode & MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT != 0 ? m.feeRecipient : address(0);
-        bytes32 d = keccak256(abi.encodePacked(hex"1901", _dom(t), keccak256(bytes.concat(keccak256(bytes(typ)), m.from, words,
-            abi.encode(m.batch, m.nonce, m.validUntil, m.mode, r, m.fee, f)))));
+        bytes32 d = keccak256(
+            abi.encodePacked(
+                hex"1901",
+                _dom(t),
+                keccak256(
+                    bytes.concat(
+                        keccak256(bytes(typ)),
+                        m.from,
+                        words,
+                        abi.encode(m.batch, m.nonce, m.validUntil, m.mode, r, m.fee, f)
+                    )
+                )
+            )
+        );
         (uint8 v, bytes32 rr, bytes32 s) = vm.sign(PAYER_PK, d);
         a.signature = abi.encodePacked(rr, s, v);
     }
@@ -541,7 +816,8 @@ contract ZetherMore is ZetherE2E {
     /// domain, as `UASig{signature}`.
     function _owner(bytes32 structHash) internal returns (IUARegistry.UASig memory o) {
         bytes32 d = keccak256(abi.encodePacked(hex"1901", _dom(t), structHash));
-        o.signature = _cli("ownerAuth", string.concat("{", _key(0), ",", _q("digest", vm.toString(d)), "}")).readBytes(".sig");
+        o.signature =
+            _cli("ownerAuth", string.concat("{", _key(0), ",", _q("digest", vm.toString(d)), "}")).readBytes(".sig");
     }
 }
 

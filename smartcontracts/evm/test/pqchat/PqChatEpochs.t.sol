@@ -31,7 +31,9 @@ contract PqChatEpochsTest is PqChatBase {
     // ----- removal by an admin (P48, owner 2026-11-10) -----
 
     function _rm(bytes32 epochId, uint64 next, bytes32[] memory members, bytes32 admin, uint64 nonce)
-        internal view returns (IPqChat.PqChatRemove memory r)
+        internal
+        view
+        returns (IPqChat.PqChatRemove memory r)
     {
         r = IPqChat.PqChatRemove(sid, epochId, next, members, admin, nonce);
     }
@@ -103,7 +105,8 @@ contract PqChatEpochsTest is PqChatBase {
     /// P48: the child may not keep a removed UA among its admins either.
     function test_remove_childAdminsExcludeRemoved() public {
         IPqChat.MemberKey[] memory m = _members(3);
-        (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory w) = _epoch(sid, ids[0], 1, 1, sid, _list(ids[0], ids[1]), m);
+        (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(sid, ids[0], 1, 1, sid, _list(ids[0], ids[1]), m);
         bytes32 e1 = _rekey(chat, e, w); // ids[1] made an admin
         IPqChat.PqChatRemove memory r = _rm(e1, 2, _list(ids[1]), ids[0], 8);
         _remove(chat, r);
@@ -128,7 +131,9 @@ contract PqChatEpochsTest is PqChatBase {
         r.members = new bytes32[](0);
         _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqChat.PqChatShape.selector));
         r.members = new bytes32[](17); // over REMOVE_MAX = 16
-        for (uint256 i; i < 17; ++i) r.members[i] = bytes32(i + 1);
+        for (uint256 i; i < 17; ++i) {
+            r.members[i] = bytes32(i + 1);
+        }
         _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqChat.PqChatShape.selector));
         r.members = _list(ids[2], ids[1]); // not sorted
         _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqChat.PqChatShape.selector));
@@ -141,8 +146,11 @@ contract PqChatEpochsTest is PqChatBase {
         r.epochId = sid;
         assertEq(chat.REMOVE_MAX(), 16);
         _remove(chat, r); // the control
-        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqChat.PqChatNonceUsed.selector,
-            PqChatTypes.scopeEpoch(sid, ids[0]), uint64(7))); // replayed
+        _refusedRemove(
+            r,
+            ids[0],
+            abi.encodeWithSelector(IPqChat.PqChatNonceUsed.selector, PqChatTypes.scopeEpoch(sid, ids[0]), uint64(7))
+        ); // replayed
         (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory w) =
             _epoch(sid, ids[0], 1, 1, sid, _admins(), _without(_members(3), ids[2]));
         bytes32 eid = _rekey(chat, e, w);
@@ -178,7 +186,11 @@ contract PqChatEpochsTest is PqChatBase {
         p.setKemKey(ua, version, k, _kemSig(ua, version, k));
     }
 
-    function _kemSig(bytes32 ua, uint64 version, IUARegistry.KemKey memory k) internal view returns (IUARegistry.UASig memory s) {
+    function _kemSig(bytes32 ua, uint64 version, IUARegistry.KemKey memory k)
+        internal
+        view
+        returns (IUARegistry.UASig memory s)
+    {
         s.signature = _sig(keyOf_[ua], UAKinds.uaMessage(ML, UAKinds.PURPOSE_KEM, p.kemRecordDigest(ua, version, k)));
     }
 
@@ -262,7 +274,8 @@ contract PqChatEpochsTest is PqChatBase {
 
     /// An incomplete child never takes the slot; anyone may finish it; once another child holds the slot it cannot land.
     function test_rekey_incompleteChildNeverTakesSlot() public {
-        (IPqChat.PqChatEpoch memory a, IPqChat.Wrap[] memory aw) = _epoch(sid, ids[1], 1, 1, sid, _admins(), _members(3));
+        (IPqChat.PqChatEpoch memory a, IPqChat.Wrap[] memory aw) =
+            _epoch(sid, ids[1], 1, 1, sid, _admins(), _members(3));
         bytes32 ea = chat.rekey(a, _slice(aw, 0, 1), _sig(a.author, h.epoch(a)));
         assertEq(chat.childOf(sid), bytes32(0));
         (IPqChat.PqChatEpoch memory b, IPqChat.Wrap[] memory bw) =
@@ -281,7 +294,8 @@ contract PqChatEpochsTest is PqChatBase {
 
     /// A parent not complete, unknown, or of another session.
     function test_rekey_parentRules() public {
-        (IPqChat.PqChatEpoch memory a, IPqChat.Wrap[] memory aw) = _epoch(sid, ids[1], 1, 1, sid, _admins(), _members(3));
+        (IPqChat.PqChatEpoch memory a, IPqChat.Wrap[] memory aw) =
+            _epoch(sid, ids[1], 1, 1, sid, _admins(), _members(3));
         bytes32 ea = chat.rekey(a, _slice(aw, 0, 1), _sig(a.author, h.epoch(a)));
         (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory w) = _epoch(sid, ids[1], 2, 2, ea, _admins(), _members(3));
         IUARegistry.UASig memory sig = _sig(e.author, h.epoch(e));
@@ -315,7 +329,9 @@ contract PqChatEpochsTest is PqChatBase {
         // the same (session, author, nonce) again, another record (a child of e1)
         (e, w) = _epoch(sid, ids[1], 1, 2, e1, _admins(), _members(3));
         IUARegistry.UASig memory sig = _sig(e.author, h.epoch(e));
-        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatNonceUsed.selector, PqChatTypes.scopeEpoch(sid, ids[1]), uint64(1)));
+        vm.expectRevert(
+            abi.encodeWithSelector(IPqChat.PqChatNonceUsed.selector, PqChatTypes.scopeEpoch(sid, ids[1]), uint64(1))
+        );
         chat.rekey(e, w, sig);
         // a forged record burns no nonce
         (e, w) = _epoch(sid, ids[1], 2, 2, e1, _admins(), _members(3));
@@ -343,7 +359,8 @@ contract PqChatEpochsTest is PqChatBase {
         chatB.createSession(s0, sw, _sig(s0.creator, h.session(s0))); // the copy of the session homed in A
         (IPqChat.PqChatEpoch memory a, IPqChat.Wrap[] memory aw) =
             _epoch(sid, ids[0], 1, 1, sid, _admins(), _without(_members(3), ids[2]));
-        (IPqChat.PqChatEpoch memory b, IPqChat.Wrap[] memory bw) = _epoch(sid, ids[2], 1, 1, sid, _admins(), _members(3));
+        (IPqChat.PqChatEpoch memory b, IPqChat.Wrap[] memory bw) =
+            _epoch(sid, ids[2], 1, 1, sid, _admins(), _members(3));
         bytes32 ea = _rekey(chat, a, aw);
         IUARegistry.UASig memory bs = _sig(b.author, h.epoch(b));
         vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatEpochTaken.selector, sid, ea));
@@ -363,7 +380,8 @@ contract PqChatEpochsTest is PqChatBase {
         bytes32 sid2 = _create(chat, s, w);
         (IPqChat.PqChatEpoch memory a, IPqChat.Wrap[] memory aw) =
             _epoch(sid2, ids[0], 1, 1, sid2, _admins(), _without(_members(3), ids[2]));
-        (IPqChat.PqChatEpoch memory b, IPqChat.Wrap[] memory bw) = _epoch(sid2, ids[2], 1, 1, sid2, _admins(), _members(3));
+        (IPqChat.PqChatEpoch memory b, IPqChat.Wrap[] memory bw) =
+            _epoch(sid2, ids[2], 1, 1, sid2, _admins(), _members(3));
         _rekey(chat, a, aw);
         _rekey(chat, b, bw);
         assertEq(chat.childOf(sid2), bytes32(0));
@@ -373,7 +391,8 @@ contract PqChatEpochsTest is PqChatBase {
 
     /// O2: a member's plain rekey takes the slot before the admin's change; the admin's next rekey from it removes the member.
     function test_O2_plainRekeyFirstThenAdminFromIt() public {
-        (IPqChat.PqChatEpoch memory g, IPqChat.Wrap[] memory gw) = _epoch(sid, ids[2], 1, 1, sid, _admins(), _members(3));
+        (IPqChat.PqChatEpoch memory g, IPqChat.Wrap[] memory gw) =
+            _epoch(sid, ids[2], 1, 1, sid, _admins(), _members(3));
         bytes32 eg = _rekey(chat, g, gw);
         (IPqChat.PqChatEpoch memory a, IPqChat.Wrap[] memory aw) =
             _epoch(sid, ids[0], 1, 1, sid, _admins(), _without(_members(3), ids[2]));
@@ -404,7 +423,8 @@ contract PqChatEpochsTest is PqChatBase {
         _register(p, 0x0101, _key(0x0101));
         _register(p, 0x0102, _key(0x0102));
         (lo, hi) = UAKinds.uaOf(0x0101, _key(0x0101)) < UAKinds.uaOf(0x0102, _key(0x0102))
-            ? (uint16(0x0101), uint16(0x0102)) : (uint16(0x0102), uint16(0x0101));
+            ? (uint16(0x0101), uint16(0x0102))
+            : (uint16(0x0102), uint16(0x0101));
         Member[] memory mm = new Member[](2);
         mm[0] = Member(lo, UAKinds.uaOf(lo, _key(lo)), 1);
         mm[1] = Member(hi, UAKinds.uaOf(hi, _key(hi)), 1);
@@ -416,14 +436,19 @@ contract PqChatEpochsTest is PqChatBase {
 
     /// The `msig`'s portable signature over `digest` by its first `n` slots.
     function _quorum(bytes32 ms, uint16 lo, uint16 hi, bytes32 digest, uint256 n)
-        internal view returns (IUARegistry.UASig memory q)
+        internal
+        view
+        returns (IUARegistry.UASig memory q)
     {
         bytes32 md = _memberDigest(ms, UAKinds.PURPOSE_PQCHAT, digest);
         q.members = new IUARegistry.MemberSig[](n);
         for (uint256 i; i < n; ++i) {
             uint16 k = i == 0 ? lo : hi;
-            q.members[i] = IUARegistry.MemberSig(uint16(i), new IUARegistry.InnerSig[](0),
-                _sig(_key(k), UAKinds.uaMessage(k, UAKinds.PURPOSE_MEMBER, md)));
+            q.members[i] = IUARegistry.MemberSig(
+                uint16(i),
+                new IUARegistry.InnerSig[](0),
+                _sig(_key(k), UAKinds.uaMessage(k, UAKinds.PURPOSE_MEMBER, md))
+            );
         }
     }
 
@@ -466,7 +491,9 @@ contract PqChatEpochsTest is PqChatBase {
         assertFalse(chat.leftIn(sid, ids[1]));
         l = IPqChat.PqChatLeave(sid, sid, ids[2], 1);
         sig = _sig(ids[2], h.leave(l));
-        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatNonceUsed.selector, PqChatTypes.scopeEpoch(sid, ids[2]), uint64(1)));
+        vm.expectRevert(
+            abi.encodeWithSelector(IPqChat.PqChatNonceUsed.selector, PqChatTypes.scopeEpoch(sid, ids[2]), uint64(1))
+        );
         chat.leave(l, sig);
     }
 }

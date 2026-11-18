@@ -253,7 +253,9 @@ interface IPqzToken is IConfidentialToken {
     error ProofStoreInvalid(uint8 proofStore);
     /// @notice Group 3h (spec §4.2, PP-4, C7): under `proofStore` `LOG`, each debit's verified statement header (its first 640
     ///         bytes) and the calldata proof, `blob` the debit's op blob, `sendCounter` its counter (the record's key).
-    event PqzDebitProof(address indexed blob, bytes32 indexed ua, uint64 indexed sendCounter, bytes header, bytes proof);
+    event PqzDebitProof(
+        address indexed blob, bytes32 indexed ua, uint64 indexed sendCounter, bytes header, bytes proof
+    );
     /// @notice Group 3h (spec §5, O10): a holder of bit 24 changed the mode, effective from the next debit.
     event ProofStoreSet(uint8 previous, uint8 next);
     /// @notice Bit 32 (CTR-PQZ-43): a holder proposed `newAuditor` as the auditor of `epoch`; it applies at `eta` on the same
@@ -320,22 +322,49 @@ interface IPqzToken is IConfidentialToken {
 
     /// @notice Multi-recipient, in the token's default storage mode. Every proof-carrying entry takes the verdict pair last
     ///         (group 3f, spec §5.3): empty and never read on a `PRECOMPILE` token, required on an `OFFCHAIN` one.
-    function mtxConfidentialTransfer(PqzMultiArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
-        bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) external returns (bytes32 entryRef);
+    function mtxConfidentialTransfer(
+        PqzMultiArgs calldata t,
+        bytes calldata proof,
+        IUARegistry.UASig calldata pqzAuth,
+        bytes calldata accHint,
+        PqzSignedVerdict calldata pqzVerdict
+    ) external returns (bytes32 entryRef);
     /// @notice Multi-recipient, commit-reveal on every token.
-    function mtxConfidentialTransferCompact(PqzMultiArgs calldata t, bytes calldata proof,
-        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) external returns (bytes32 entryRef);
+    function mtxConfidentialTransferCompact(
+        PqzMultiArgs calldata t,
+        bytes calldata proof,
+        IUARegistry.UASig calldata pqzAuth,
+        bytes calldata accHint,
+        PqzSignedVerdict calldata pqzVerdict
+    ) external returns (bytes32 entryRef);
     /// @notice Single-recipient, in the token's default storage mode.
-    function mtxConfidentialTransferSingle(PqzTransferArgs calldata t, bytes calldata proof,
-        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) external returns (bytes32 entryRef);
+    function mtxConfidentialTransferSingle(
+        PqzTransferArgs calldata t,
+        bytes calldata proof,
+        IUARegistry.UASig calldata pqzAuth,
+        bytes calldata accHint,
+        PqzSignedVerdict calldata pqzVerdict
+    ) external returns (bytes32 entryRef);
     /// @notice Single-recipient, commit-reveal on every token.
-    function mtxConfidentialTransferSingleCompact(PqzTransferArgs calldata t, bytes calldata proof,
-        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) external returns (bytes32 entryRef);
+    function mtxConfidentialTransferSingleCompact(
+        PqzTransferArgs calldata t,
+        bytes calldata proof,
+        IUARegistry.UASig calldata pqzAuth,
+        bytes calldata accHint,
+        PqzSignedVerdict calldata pqzVerdict
+    ) external returns (bytes32 entryRef);
     /// @notice `amount` shielded units out as `amount · shieldScale` public units from `SHIELD_POOL` to `recipient`: a
     ///         native address as its zero-padded id, or a registered SIGNING UA (credited on the UA ledger); the pools
     ///         are refused. PQZ: `amount = 0` with `recipient = 0` is a refresh.
-    function mtxUnshield(PqzBurnArgs calldata b, uint256 amount, bytes32 recipient, bytes calldata proof,
-        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) external;
+    function mtxUnshield(
+        PqzBurnArgs calldata b,
+        uint256 amount,
+        bytes32 recipient,
+        bytes calldata proof,
+        IUARegistry.UASig calldata pqzAuth,
+        bytes calldata accHint,
+        PqzSignedVerdict calldata pqzVerdict
+    ) external;
     /// @notice The account of `(ua, keyVersion)` (pq-zero-knowledge.md §9.4): counters, the `acc` reference, `accUnits`, flags,
     ///         the UA's `sendCounter`, `accHash`, `lastDebit` (group 3h).
     function pqzAccount(bytes32 ua, uint64 keyVersion) external view returns (AccountState memory);
@@ -354,13 +383,17 @@ interface IPqzToken is IConfidentialToken {
     ///         `AuditorConsent(address token,bytes32 auditor,uint32 epoch,bytes32 chainUid)` of this token; it and the new
     ///         auditor's key of the token's class and scope (proven where the registry has a `0x0142` verifier; on an opening
     ///         token with its opening KEM key) are checked at the proposal and at the apply.
-    function setAuditorUA(bytes32 newAuditor, uint32 epoch, IUARegistry.UASig calldata consent, bytes32 chainUid_) external;
+    function setAuditorUA(bytes32 newAuditor, uint32 epoch, IUARegistry.UASig calldata consent, bytes32 chainUid_)
+        external;
     /// @notice The auditor UA of `entryRef`'s epoch (CTR-PQZ-43); an unknown or opt-out `entryRef` answers epoch 0's.
     function auditorUAOf(bytes32 entryRef) external view returns (bytes32);
     /// @notice The current `auditorEpoch` and the stored proposal (set-auditor spec §8): `pending` the proposed UA; `status`
     ///         0 none, 1 waiting, 2 confirmable (`[eta, eta + 7 days]`), 3 expired, 4 void (its proposer lost the bit, or bit
     ///         32 is off: then `pending`, `eta` and `proposer` read 0).
-    function auditorState() external view returns (uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status);
+    function auditorState()
+        external
+        view
+        returns (uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status);
     /// @notice Pending slot `i` of `(ua, keyVersion)`: `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`, for every `i <
     ///         pendingCount` (group 3h PP-1: kept for good); 0 for an unwritten index. Bit 63 of `block` is the skip mark
     ///         (CTR-PQZ-41): the creation block is `block & (2^63 − 1)`.
@@ -381,8 +414,14 @@ interface IPqzToken is IConfidentialToken {
     ///         pendingCount)`, credits), signed by `ua` (`ownerSig`, purpose `zether-auth`) over the typed `PqzRollOver`
     ///         in the token's domain: `rollSeq` and `rolled` from state, `entriesHash` over the entries' contents. Anyone
     ///         submits; relayed on both paths with any fee, 0 included.
-    function mtxRollOverSigned(bytes32 ua, uint64 keyVersion, uint64 n, uint64[] calldata skip, uint64 validUntilBlock,
-        IUARegistry.UASig calldata ownerSig) external;
+    function mtxRollOverSigned(
+        bytes32 ua,
+        uint64 keyVersion,
+        uint64 n,
+        uint64[] calldata skip,
+        uint64 validUntilBlock,
+        IUARegistry.UASig calldata ownerSig
+    ) external;
     /// @notice CTR-PQZ-41: whether pending entry `index` of `(ua, keyVersion)` carries the skip mark (bit 63 of its
     ///         `pqzPending` slot's block field).
     function pqzSkipped(bytes32 ua, uint64 keyVersion, uint64 index) external view returns (bool);
@@ -406,6 +445,12 @@ interface IPqzWrappedToken is IConfidentialWrappedToken {
     /// @notice `mtxUnshield`'s debit of `x.amount`, then leg `x.underlying` pays `⌊amount·shieldScale·den/num⌋ ≥ minOut`
     ///         to `x.recipient`: a native address, or a derived UA in the leg's own UA ledger (`transferToUA`;
     ///         `UALegNotLedger` otherwise).
-    function mtxUnshieldUnwrap(IPqzToken.PqzBurnArgs calldata b, Unwrap calldata x, bytes calldata proof,
-        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IPqzToken.PqzSignedVerdict calldata pqzVerdict) external;
+    function mtxUnshieldUnwrap(
+        IPqzToken.PqzBurnArgs calldata b,
+        Unwrap calldata x,
+        bytes calldata proof,
+        IUARegistry.UASig calldata pqzAuth,
+        bytes calldata accHint,
+        IPqzToken.PqzSignedVerdict calldata pqzVerdict
+    ) external;
 }

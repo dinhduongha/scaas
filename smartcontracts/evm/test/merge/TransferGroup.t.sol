@@ -33,30 +33,72 @@ import {probeArgs} from "../helpers/ProbeModules.sol";
 /// The merged entries of ua-mtx-merge T2 (spec §2.1, R1, R4, R20, R21, R27, R28), called by selector: this file compiles on
 /// the tree before T2 too, so each test is red there on its own (plan T2 step 3).
 interface IMergedT2 {
-    function mtxTransfer(bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
-        uint32 mode, address relayer, IUARegistry.UASig calldata auth) external returns (bool);
-    function mtxTransferWithFee(bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce,
-        uint256 validUntil, uint32 mode, address relayer, uint256 fee, address feeRecipient,
-        IUARegistry.UASig calldata auth) external returns (bool);
+    function mtxTransfer(
+        bytes32 from,
+        bytes32 to,
+        uint256 amount,
+        uint256 batch,
+        uint256 nonce,
+        uint256 validUntil,
+        uint32 mode,
+        address relayer,
+        IUARegistry.UASig calldata auth
+    ) external returns (bool);
+    function mtxTransferWithFee(
+        bytes32 from,
+        bytes32 to,
+        uint256 amount,
+        uint256 batch,
+        uint256 nonce,
+        uint256 validUntil,
+        uint32 mode,
+        address relayer,
+        uint256 fee,
+        address feeRecipient,
+        IUARegistry.UASig calldata auth
+    ) external returns (bool);
     // pay-meta-tax T37: the pay entries in their struct form with `PayMeta` last (`mtxPayMeta` in legacy/)
-    function mtxPay(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth, MetaTxLib.PayMeta calldata meta)
-        external returns (bool);
-    function mtxPayWithPayeeFee(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth, uint256 fee,
-        address feeRecipient, uint256 pfValidUntil, IUARegistry.UASig calldata payeeAuth, MetaTxLib.PayMeta calldata meta)
-        external returns (bool);
+    function mtxPay(
+        MetaTxLib.UAMetaTransfer calldata t,
+        IUARegistry.UASig calldata auth,
+        MetaTxLib.PayMeta calldata meta
+    ) external returns (bool);
+    function mtxPayWithPayeeFee(
+        MetaTxLib.UAMetaTransfer calldata t,
+        IUARegistry.UASig calldata payerAuth,
+        uint256 fee,
+        address feeRecipient,
+        uint256 pfValidUntil,
+        IUARegistry.UASig calldata payeeAuth,
+        MetaTxLib.PayMeta calldata meta
+    ) external returns (bool);
     function mtxExecuteTransfer(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth)
-        external returns (bool);
+        external
+        returns (bool);
     function mtxBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata ts, IUARegistry.UASig[] calldata auths)
-        external returns (bool);
+        external
+        returns (bool);
     function mtxTransferDigest(MetaTxLib.UAMetaTransfer calldata t) external view returns (bytes32);
-    function payeeFeeDigest(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient,
-        uint256 validUntil) external view returns (bytes32);
+    function payeeFeeDigest(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil)
+        external
+        view
+        returns (bytes32);
 }
 
 /// `RelayFeeRouter.relay` on ids (R28: today's `uaRelay` under the name `relay`).
 interface IRelayT2 {
-    function relay(address target, bytes calldata callData, address token, bytes32 from, bytes32 payee, uint256 value,
-        uint256 batch, uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) external;
+    function relay(
+        address target,
+        bytes calldata callData,
+        address token,
+        bytes32 from,
+        bytes32 payee,
+        uint256 value,
+        uint256 batch,
+        uint256 nonce,
+        uint256 validUntil,
+        IUARegistry.UASig calldata auth
+    ) external;
 }
 
 /// The address `MetaTransfer` (R46: in legacy/ua-mtx-merge/ after T2), kept here to sign and encode the retired forms.
@@ -78,18 +120,66 @@ struct OldMetaTransfer {
 interface IOldT2 {
     function mtxExecuteTransfer(OldMetaTransfer calldata t, bytes calldata signature) external returns (bool);
     function mtxBatchTransfer(OldMetaTransfer[] calldata ts, bytes[] calldata signatures) external returns (bool);
-    function mtxTransfer(address from, address to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
-        uint32 mode, address relayer, bytes calldata signature) external returns (bool);
-    function mtxPay(address from, address to, uint256 amount, bytes32 payId, uint256 validUntil, uint32 mode,
-        address relayer, uint256 fee, address feeRecipient, bytes calldata signature) external returns (bool);
-    function mtxPayReceiverFee(OldMetaTransfer calldata t, bytes calldata payerSig, uint256 fee, address feeRecipient,
-        uint256 rfValidUntil, bytes calldata payeeSig) external returns (bool);
-    function mtxRelayFee(address from, address target, bytes32 callDataHash, address payee, uint256 value,
-        uint256 validUntil, bytes calldata sig) external;
-    function relay(address target, bytes calldata callData, address token, address from, address payee, uint256 value,
-        uint256 validUntil, bytes calldata sig) external;
-    function uaRelay(address target, bytes calldata callData, address token, bytes32 from, bytes32 payee, uint256 value,
-        uint256 validUntil, IUARegistry.UASig calldata auth) external;
+    function mtxTransfer(
+        address from,
+        address to,
+        uint256 amount,
+        uint256 batch,
+        uint256 nonce,
+        uint256 validUntil,
+        uint32 mode,
+        address relayer,
+        bytes calldata signature
+    ) external returns (bool);
+    function mtxPay(
+        address from,
+        address to,
+        uint256 amount,
+        bytes32 payId,
+        uint256 validUntil,
+        uint32 mode,
+        address relayer,
+        uint256 fee,
+        address feeRecipient,
+        bytes calldata signature
+    ) external returns (bool);
+    function mtxPayReceiverFee(
+        OldMetaTransfer calldata t,
+        bytes calldata payerSig,
+        uint256 fee,
+        address feeRecipient,
+        uint256 rfValidUntil,
+        bytes calldata payeeSig
+    ) external returns (bool);
+    function mtxRelayFee(
+        address from,
+        address target,
+        bytes32 callDataHash,
+        address payee,
+        uint256 value,
+        uint256 validUntil,
+        bytes calldata sig
+    ) external;
+    function relay(
+        address target,
+        bytes calldata callData,
+        address token,
+        address from,
+        address payee,
+        uint256 value,
+        uint256 validUntil,
+        bytes calldata sig
+    ) external;
+    function uaRelay(
+        address target,
+        bytes calldata callData,
+        address token,
+        bytes32 from,
+        bytes32 payee,
+        uint256 value,
+        uint256 validUntil,
+        IUARegistry.UASig calldata auth
+    ) external;
 }
 
 /// A relay target that records what the payee held while it ran: the call runs before its fee (invariant 5).
@@ -161,16 +251,21 @@ contract TransferGroupTest is Test {
     address internal constant REL = address(0x7E1A);
     address internal constant FEE_TO = address(0xFEE5);
     bytes32 internal constant OLD_METATRANSFER_TYPEHASH = keccak256(
-        "MetaTransfer(address from,address to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "MetaTransfer(address from,address to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
     bytes32 internal constant OLD_RECEIVER_FEE_TYPEHASH = keccak256(
-        "ReceiverFee(MetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)MetaTransfer(address from,address to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "ReceiverFee(MetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)MetaTransfer(address from,address to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
     bytes32 internal constant UA_PAYEE_FEE_TYPEHASH = keccak256(
-        "UAPayeeFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UAPayeeFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
     bytes32 internal constant OLD_RELAY_FEE_TYPEHASH = keccak256(
-        "RelayFee(address from,address target,bytes32 callDataHash,address payee,uint256 value,uint256 validUntil,address relayer)");
+        "RelayFee(address from,address target,bytes32 callDataHash,address payee,uint256 value,uint256 validUntil,address relayer)"
+    );
     // pay-meta-tax T38 (spec §4): `batch` and `nonce`, the payer's own lane
     bytes32 internal constant UA_RELAY_FEE_TYPEHASH = keccak256(
-        "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)");
+        "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)"
+    );
     uint256 internal constant RF_LANE = 31;
 
     address internal signer = vm.addr(PK);
@@ -195,7 +290,9 @@ contract TransferGroupTest is Test {
     }
 
     /// The test plays the factory of its own clones: no token is registered, every leg is an outside leg.
-    function isRegisteredToken(address) external pure returns (bool) { return false; }
+    function isRegisteredToken(address) external pure returns (bool) {
+        return false;
+    }
 
     function setUp() public {
         IRig[3] memory rigs;
@@ -210,7 +307,9 @@ contract TransferGroupTest is Test {
         rigs[2] = IRig(address(zeth));
         for (uint256 r; r < 3; ++r) {
             (, address[] memory t,) = rigs[r].setup();
-            for (uint256 i; i < t.length; ++i) ks.push(KindRig(address(rigs[r])).tkAt(i));
+            for (uint256 i; i < t.length; ++i) {
+                ks.push(KindRig(address(rigs[r])).tkAt(i));
+            }
         }
         Tk memory off;
         off.kind = "WRAPPED_LEDGEROFF";
@@ -220,7 +319,9 @@ contract TransferGroupTest is Test {
         off.style = 1;
         ks.push(off);
         assertEq(ks.length, 8, "six kinds, NORMAL and WRAPPED with no registry");
-        for (uint256 i; i < ks.length; ++i) assertEq(ks[i].signer, signer, ks[i].kind);
+        for (uint256 i; i < ks.length; ++i) {
+            assertEq(ks[i].signer, signer, ks[i].kind);
+        }
         (from, to) = (MetaTxLib.pad(signer), MetaTxLib.pad(payee));
         router = new RelayFeeRouter();
         probe = new RelayProbe();
@@ -228,12 +329,16 @@ contract TransferGroupTest is Test {
 
     function _wrappedOff() internal returns (address w) {
         MockERC20 u = new MockERC20("U", "U", 6);
-        w = EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(bytes32(uint256(7)), address(0), address(0), false));
+        w = EnvKit.clone(
+            address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
+            EnvKit.env(bytes32(uint256(7)), address(0), address(0), false)
+        );
         address[] memory us = new address[](1);
         uint256[] memory one = new uint256[](1);
         (us[0], one[0]) = (address(u), 1);
         Rate memory r;
-        WrappedToken(payable(w)).initialize(nid(address(this)), 1, abi.encode(wrappedInit(us, one, one, 6, r, address(0), address(0))));
+        WrappedToken(payable(w))
+            .initialize(nid(address(this)), 1, abi.encode(wrappedInit(us, one, one, 6, r, address(0), address(0))));
         u.mint(signer, 10_000_000);
         vm.startPrank(signer);
         u.approve(w, 10_000_000);
@@ -255,7 +360,9 @@ contract TransferGroupTest is Test {
 
     /// A transfer at fee mode `NONE`, any relayer, on lane `lane` at its next nonce.
     function _x(address t, bytes32 f, bytes32 dst, uint256 v, uint256 lane)
-        internal view returns (MetaTxLib.UAMetaTransfer memory x)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransfer memory x)
     {
         x.from = f;
         x.to = dst;
@@ -293,9 +400,18 @@ contract TransferGroupTest is Test {
 
     function _oldHash(OldMetaTransfer memory o) internal pure returns (bytes32) {
         bytes memory head = abi.encode(OLD_METATRANSFER_TYPEHASH, o.from, o.to, o.value, o.entryRef, o.batch, o.nonce);
-        return keccak256(bytes.concat(head, abi.encode(o.validUntil, o.mode,
-            o.mode & MetaTxLib.MODE_RESTRICT_RELAYER != 0 ? o.relayer : address(0), o.fee,
-            o.mode & MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT != 0 ? o.feeRecipient : address(0))));
+        return keccak256(
+            bytes.concat(
+                head,
+                abi.encode(
+                    o.validUntil,
+                    o.mode,
+                    o.mode & MetaTxLib.MODE_RESTRICT_RELAYER != 0 ? o.relayer : address(0),
+                    o.fee,
+                    o.mode & MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT != 0 ? o.feeRecipient : address(0)
+                )
+            )
+        );
     }
 
     /// The signer's signature of the address `MetaTransfer` of `x`.
@@ -313,7 +429,11 @@ contract TransferGroupTest is Test {
     }
 
     /// The payment `mtxPay` builds: lane `payLane(payId)`, nonce 0, relayer `REL`.
-    function _payX(address t, bytes32 payId, uint256 v, uint32 mode) internal view returns (MetaTxLib.UAMetaTransfer memory x) {
+    function _payX(address t, bytes32 payId, uint256 v, uint32 mode)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransfer memory x)
+    {
         x.from = from;
         x.to = to;
         x.value = v;
@@ -324,24 +444,33 @@ contract TransferGroupTest is Test {
         x.relayer = REL;
     }
 
-    function _transfer(address t, MetaTxLib.UAMetaTransfer memory x, IUARegistry.UASig memory s) internal returns (bool) {
+    function _transfer(address t, MetaTxLib.UAMetaTransfer memory x, IUARegistry.UASig memory s)
+        internal
+        returns (bool)
+    {
         vm.prank(REL);
         return IMergedT2(t).mtxTransfer(x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, s);
     }
 
     function _transferWithFee(address t, MetaTxLib.UAMetaTransfer memory x, IUARegistry.UASig memory s)
-        internal returns (bool)
+        internal
+        returns (bool)
     {
         vm.prank(REL);
-        return IMergedT2(t).mtxTransferWithFee(x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer,
-            x.fee, x.feeRecipient, s);
+        return IMergedT2(t)
+            .mtxTransferWithFee(
+                x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, x.fee, x.feeRecipient, s
+            );
     }
 
     function _pay(address t, MetaTxLib.UAMetaTransfer memory x) internal returns (bool) {
         return _payWith(t, x, _s(t, x));
     }
 
-    function _payWith(address t, MetaTxLib.UAMetaTransfer memory x, IUARegistry.UASig memory s) internal returns (bool) {
+    function _payWith(address t, MetaTxLib.UAMetaTransfer memory x, IUARegistry.UASig memory s)
+        internal
+        returns (bool)
+    {
         vm.prank(REL);
         return IMergedT2(t).mtxPay(x, s, PayMetaKit.meta(seedOf[x.entryRef]));
     }
@@ -359,17 +488,32 @@ contract TransferGroupTest is Test {
     /// `UARelayFee` (or the old `RelayFee`, ids padded) with the router as `relayer`.
     function _relayHash(bytes32 typehash, bytes32 f, RelayArgs memory r) internal view returns (bytes32) {
         if (typehash != UA_RELAY_FEE_TYPEHASH) {
-            return keccak256(abi.encode(typehash, f, address(probe), keccak256(r.cd), r.payee, r.value, r.validUntil,
-                address(router)));
+            return keccak256(
+                abi.encode(
+                    typehash, f, address(probe), keccak256(r.cd), r.payee, r.value, r.validUntil, address(router)
+                )
+            );
         }
-        return keccak256(abi.encode(typehash, f, address(probe), keccak256(r.cd), r.payee, r.value, r.batch, r.nonce,
-            r.validUntil, address(router)));
+        return keccak256(
+            abi.encode(
+                typehash,
+                f,
+                address(probe),
+                keccak256(r.cd),
+                r.payee,
+                r.value,
+                r.batch,
+                r.nonce,
+                r.validUntil,
+                address(router)
+            )
+        );
     }
 
     function _relayWith(RelayArgs memory r) internal {
         vm.prank(REL);
-        IRelayT2(address(router)).relay(address(probe), r.cd, r.t, from, r.payee, r.value, r.batch, r.nonce, r.validUntil,
-            r.auth);
+        IRelayT2(address(router))
+            .relay(address(probe), r.cd, r.t, from, r.payee, r.value, r.batch, r.nonce, r.validUntil, r.auth);
     }
 
     function _relay(address t, uint256 v, bytes32 p) internal {
@@ -383,18 +527,26 @@ contract TransferGroupTest is Test {
 
     /// The payee's `UASig` over `UAPayeeFee` nesting `x`, fee `fee` to `FEE_TO`.
     function _rfSig(address t, MetaTxLib.UAMetaTransfer memory x, uint256 fee, uint256 vu)
-        internal view returns (IUARegistry.UASig memory)
+        internal
+        view
+        returns (IUARegistry.UASig memory)
     {
-        return _sig(PAYEE_PK, MtxDigest.typed(t,
-            keccak256(abi.encode(UA_PAYEE_FEE_TYPEHASH, MtxHash.hashStruct(x), fee, FEE_TO, vu))));
+        return _sig(
+            PAYEE_PK,
+            MtxDigest.typed(t, keccak256(abi.encode(UA_PAYEE_FEE_TYPEHASH, MtxHash.hashStruct(x), fee, FEE_TO, vu)))
+        );
     }
 
-    function _payeeFeeWith(address t, MetaTxLib.UAMetaTransfer memory x, IUARegistry.UASig memory a, uint256 fee,
-        IUARegistry.UASig memory b) internal returns (bool)
-    {
+    function _payeeFeeWith(
+        address t,
+        MetaTxLib.UAMetaTransfer memory x,
+        IUARegistry.UASig memory a,
+        uint256 fee,
+        IUARegistry.UASig memory b
+    ) internal returns (bool) {
         vm.prank(REL);
-        return IMergedT2(t).mtxPayWithPayeeFee(x, a, fee, FEE_TO, block.timestamp + 600, b,
-            PayMetaKit.meta(seedOf[x.entryRef]));
+        return IMergedT2(t)
+            .mtxPayWithPayeeFee(x, a, fee, FEE_TO, block.timestamp + 600, b, PayMetaKit.meta(seedOf[x.entryRef]));
     }
 
     function _payeeFee(address t, MetaTxLib.UAMetaTransfer memory x, uint256 fee) internal returns (bool) {
@@ -485,7 +637,9 @@ contract TransferGroupTest is Test {
 
     /// Every merged entry of the group runs at fee mode `NONE` on every kind, with and without a registry.
     function test_mtxTransfer_feeZero() public {
-        for (uint256 i; i < ks.length; ++i) _feeZero(ks[i].t, i, ks[i].kind);
+        for (uint256 i; i < ks.length; ++i) {
+            _feeZero(ks[i].t, i, ks[i].kind);
+        }
     }
 
     function _feeZero(address t, uint256 i, string memory kind) internal {
@@ -526,7 +680,9 @@ contract TransferGroupTest is Test {
 
     /// `mtxTransferWithFee` is the fee form: `NONE` is refused (`mtxTransfer` is the form at 0); a bound FIXED fee runs.
     function test_mtxTransferWithFee_needsFee() public {
-        for (uint256 i; i < ks.length; ++i) _withFee(ks[i].t, ks[i].kind);
+        for (uint256 i; i < ks.length; ++i) {
+            _withFee(ks[i].t, ks[i].kind);
+        }
     }
 
     function _withFee(address t, string memory kind) internal {
@@ -546,7 +702,9 @@ contract TransferGroupTest is Test {
     /// Payee fee: the payer's leg is `NONE`; the payee (an EOA holding nothing before) co-signs `UAPayeeFee` and
     /// pays the fee out of what it received. A payer leg with a fee mode is the wrong shape.
     function test_mtxPayWithPayeeFee_payerLegNone() public {
-        for (uint256 i; i < ks.length; ++i) _payerLegNone(ks[i].t, i, ks[i].kind);
+        for (uint256 i; i < ks.length; ++i) {
+            _payerLegNone(ks[i].t, i, ks[i].kind);
+        }
     }
 
     function _payerLegNone(address t, uint256 i, string memory kind) internal {
@@ -565,7 +723,9 @@ contract TransferGroupTest is Test {
 
     /// The router's `relay` takes the payer's id and `UASig` (R28); the target runs before the fee (invariant 5).
     function test_relayFeeRouter_relayTakesUASig() public {
-        for (uint256 i; i < ks.length; ++i) _relayCase(ks[i].t, ks[i].kind);
+        for (uint256 i; i < ks.length; ++i) {
+            _relayCase(ks[i].t, ks[i].kind);
+        }
     }
 
     function _relayCase(address t, string memory kind) internal {
@@ -628,7 +788,9 @@ contract TransferGroupTest is Test {
     /// Positive control first: the `UAMetaTransfer` signature runs. The same transfer signed as the address
     /// `MetaTransfer` verifies on no merged entry, and the address selectors have no entry on any kind.
     function test_oldMetaTransferSignatureRefusedOnEveryEntry() public {
-        for (uint256 i; i < ks.length; ++i) _oldRefused(ks[i].t, i, ks[i].kind);
+        for (uint256 i; i < ks.length; ++i) {
+            _oldRefused(ks[i].t, i, ks[i].kind);
+        }
     }
 
     function _oldRefused(address t, uint256 i, string memory kind) internal {
@@ -684,15 +846,22 @@ contract TransferGroupTest is Test {
     }
 
     function _oldTransferCd(OldMetaTransfer memory o, bytes memory sig) internal pure returns (bytes memory) {
-        return abi.encodeCall(IOldT2.mtxTransfer, (o.from, o.to, o.value, o.batch, o.nonce, o.validUntil, o.mode,
-            o.relayer, sig));
+        return abi.encodeCall(
+            IOldT2.mtxTransfer, (o.from, o.to, o.value, o.batch, o.nonce, o.validUntil, o.mode, o.relayer, sig)
+        );
     }
 
     function _oldPaySelector(address t, MetaTxLib.UAMetaTransfer memory p, string memory kind) internal {
         OldMetaTransfer memory o = _old(p);
         bytes memory sig = _oldSig(t, p);
-        _noEntry(t, abi.encodeCall(IOldT2.mtxPay, (o.from, o.to, o.value, o.entryRef, o.validUntil, o.mode, o.relayer,
-            o.fee, o.feeRecipient, sig)), kind);
+        _noEntry(
+            t,
+            abi.encodeCall(
+                IOldT2.mtxPay,
+                (o.from, o.to, o.value, o.entryRef, o.validUntil, o.mode, o.relayer, o.fee, o.feeRecipient, sig)
+            ),
+            kind
+        );
     }
 
     /// The address `ReceiverFee` and `RelayFee` have no entry (token and router), and a payee or payer that signs them
@@ -708,10 +877,17 @@ contract TransferGroupTest is Test {
         MetaTxLib.UAMetaTransfer memory x = _rfLeg(t, i, 100);
         OldMetaTransfer memory o = _old(x);
         IUARegistry.UASig memory b;
-        b.signature = _raw(PAYEE_PK, MtxDigest.typed(t,
-            keccak256(abi.encode(OLD_RECEIVER_FEE_TYPEHASH, _oldHash(o), 4, FEE_TO, block.timestamp + 600))));
-        _noEntry(t, abi.encodeCall(IOldT2.mtxPayReceiverFee, (o, _oldSig(t, x), 4, FEE_TO, block.timestamp + 600,
-            b.signature)), kind);
+        b.signature = _raw(
+            PAYEE_PK,
+            MtxDigest.typed(
+                t, keccak256(abi.encode(OLD_RECEIVER_FEE_TYPEHASH, _oldHash(o), 4, FEE_TO, block.timestamp + 600))
+            )
+        );
+        _noEntry(
+            t,
+            abi.encodeCall(IOldT2.mtxPayReceiverFee, (o, _oldSig(t, x), 4, FEE_TO, block.timestamp + 600, b.signature)),
+            kind
+        );
         IUARegistry.UASig memory a = _s(t, x);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         _payeeFeeWith(t, x, a, 4, b);
@@ -721,18 +897,27 @@ contract TransferGroupTest is Test {
     function _oldRelayFee(address t, string memory kind) internal {
         RelayArgs memory r = _relayArgs(t, 8, to);
         r.auth.signature = _raw(PK, MtxDigest.typed(t, _relayHash(OLD_RELAY_FEE_TYPEHASH, from, r)));
-        _noEntry(t, abi.encodeCall(IOldT2.mtxRelayFee, (signer, address(probe), keccak256(r.cd), payee, 8, r.validUntil,
-            r.auth.signature)), kind);
+        _noEntry(
+            t,
+            abi.encodeCall(
+                IOldT2.mtxRelayFee, (signer, address(probe), keccak256(r.cd), payee, 8, r.validUntil, r.auth.signature)
+            ),
+            kind
+        );
         _noEntry(address(router), _oldRelayCd(r), kind);
-        _noEntry(address(router), abi.encodeCall(IOldT2.uaRelay, (address(probe), r.cd, t, from, to, 8, r.validUntil,
-            r.auth)), kind);
+        _noEntry(
+            address(router),
+            abi.encodeCall(IOldT2.uaRelay, (address(probe), r.cd, t, from, to, 8, r.validUntil, r.auth)),
+            kind
+        );
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         _relayWith(r);
     }
 
     function _oldRelayCd(RelayArgs memory r) internal view returns (bytes memory) {
-        return abi.encodeCall(IOldT2.relay, (address(probe), r.cd, r.t, signer, payee, r.value, r.validUntil,
-            r.auth.signature));
+        return abi.encodeCall(
+            IOldT2.relay, (address(probe), r.cd, r.t, signer, payee, r.value, r.validUntil, r.auth.signature)
+        );
     }
 
     // ------------------------------------------------------------------ events (R18, R20)
@@ -810,8 +995,11 @@ contract TransferGroupTest is Test {
     /// A hook in `_update` alone sees a direct transfer and misses a relayed one: every signed transfer moves through
     /// `_uaMove`, which calls `ERC20._update` directly. The stated risk, pinned: CTR-GOV-17 must hook `_uaMove` too.
     function test_regulatedHookSeatIsUaMove() public {
-        address h = EnvKit.clone(address(new HookedNormal(address(this))), EnvKit.env(bytes32(uint256(7)), address(0), address(0), false));
-        HookedNormal(h).initialize(nid(address(this)), 1, abi.encode(normalInit("Hooked", "HK", 6, 1_000, signer, address(this))));
+        address h = EnvKit.clone(
+            address(new HookedNormal(address(this))), EnvKit.env(bytes32(uint256(7)), address(0), address(0), false)
+        );
+        HookedNormal(h)
+            .initialize(nid(address(this)), 1, abi.encode(normalInit("Hooked", "HK", 6, 1_000, signer, address(this))));
         uint256 h0 = HookedNormal(h).hits();
         vm.prank(signer);
         IERC20(h).transfer(payee, 1);

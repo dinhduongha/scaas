@@ -21,11 +21,17 @@ contract SkewLeg {
     mapping(address => uint256) public balanceOf;
     int256 public skew;
 
-    function decimals() external pure returns (uint8) { return 0; }
+    function decimals() external pure returns (uint8) {
+        return 0;
+    }
 
-    function setSkew(int256 s) external { skew = s; }
+    function setSkew(int256 s) external {
+        skew = s;
+    }
 
-    function setBalance(address a, uint256 v) external { balanceOf[a] = v; }
+    function setBalance(address a, uint256 v) external {
+        balanceOf[a] = v;
+    }
 
     function mtxTrade(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata, ITradeToken.TradeFill calldata)
         external
@@ -50,7 +56,11 @@ contract MtxWrapTest is V2Fixture {
         w = _single(address(u), 0, 3, 1, _fixedRate()); // 1 u -> 3 w
     }
 
-    function _order(uint256 amount, uint256 minOut, uint256 fee) internal view returns (ITradeToken.UAWrapOrder memory o) {
+    function _order(uint256 amount, uint256 minOut, uint256 fee)
+        internal
+        view
+        returns (ITradeToken.UAWrapOrder memory o)
+    {
         o.from = MetaTxLib.pad(alice);
         o.wrappedToken = address(w);
         o.amount = amount;
@@ -92,12 +102,28 @@ contract MtxWrapTest is V2Fixture {
     function test_mtxWrapOrderRenamed() public {
         ITradeToken.UAWrapOrder memory o = _order(1000, 3000, 0);
         IUARegistry.UASig memory sig = _sig(o);
-        assertEq(IWrappedToken.mtxWrapOrder.selector, bytes4(keccak256("mtxWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))")), "the row's selector");
-        bytes4 old = bytes4(keccak256("mtxWrap(address,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes)"));
+        assertEq(
+            IWrappedToken.mtxWrapOrder.selector,
+            bytes4(
+                keccak256(
+                    "mtxWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+                )
+            ),
+            "the row's selector"
+        );
+        bytes4 old = bytes4(
+            keccak256(
+                "mtxWrap(address,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes)"
+            )
+        );
         (bool ok, bytes memory ret) = address(w).call(abi.encodePacked(old, abi.encode(address(u), o, sig.signature)));
         assertFalse(ok);
         assertEq(ret.length, 0, "no such function");
-        old = bytes4(keccak256("mtxWrapOrder(address,(address,address,uint256,uint256,uint256,uint256,address,address,uint8,uint256,uint256,uint256),bytes)"));
+        old = bytes4(
+            keccak256(
+                "mtxWrapOrder(address,(address,address,uint256,uint256,uint256,uint256,address,address,uint8,uint256,uint256,uint256),bytes)"
+            )
+        );
         assertEq(old, bytes4(0x423d548d), "the address entry's selector");
         (ok, ret) = address(w).call(abi.encodePacked(old, abi.encode(address(u), o, sig.signature)));
         assertFalse(ok);
@@ -190,7 +216,9 @@ contract MtxWrapTest is V2Fixture {
 
     function test_mtxWrapOrder_isNotAllowlisted() public view {
         (bytes4[] memory s,,) = w.mtxSelectors();
-        for (uint256 i; i < s.length; ++i) assertTrue(s[i] != IWrappedToken.mtxWrapOrder.selector);
+        for (uint256 i; i < s.length; ++i) {
+            assertTrue(s[i] != IWrappedToken.mtxWrapOrder.selector);
+        }
     }
 
     // ------------------------------------------------------------------ more refusals
@@ -231,7 +259,9 @@ contract MtxWrapTest is V2Fixture {
         ITradeToken.UAWrapOrder memory o = _order(1000, 3000, 0);
         o.flags = 3; // IOC | ESCROW: Path B wants a (amount, 0, 0) fill, the wrapper passes the price
         IUARegistry.UASig memory sig = _sig(o);
-        vm.expectRevert(abi.encodeWithSelector(ITradeToken.EscrowFillShape.selector, u.tradeOrderDigest(DexLegs.asTrade(o))));
+        vm.expectRevert(
+            abi.encodeWithSelector(ITradeToken.EscrowFillShape.selector, u.tradeOrderDigest(DexLegs.asTrade(o)))
+        );
         w.mtxWrapOrder(address(u), o, sig);
     }
 
@@ -246,8 +276,9 @@ contract MtxWrapTest is V2Fixture {
         (SkewLeg leg, WrappedToken x, ITradeToken.UAWrapOrder memory o) = _skewWrapper();
         for (uint256 k; k < 2; ++k) {
             leg.setSkew(k == 0 ? -1 : int256(1));
-            vm.expectRevert(abi.encodeWithSelector(
-                IWrappedToken.WrapReceivedMismatch.selector, 1000, k == 0 ? 999 : 1001));
+            vm.expectRevert(
+                abi.encodeWithSelector(IWrappedToken.WrapReceivedMismatch.selector, 1000, k == 0 ? 999 : 1001)
+            );
             x.mtxWrapOrder(address(leg), o, none);
             assertEq(x.totalSupply(), 0);
             (,, uint256 reserve,,) = x.legOf(address(leg));
@@ -270,7 +301,9 @@ contract MtxWrapTest is V2Fixture {
         MetaTxLib.MetaTransaction memory m = _call(alice, data, 1, RR);
         bytes memory sig = _signCall(ALICE_PK, address(w), m);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, IWrappedToken.mtxWrapOrder.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, IWrappedToken.mtxWrapOrder.selector)
+        );
         NormalToken(address(w)).executeMetaTransaction(m, sig);
     }
 }

@@ -44,7 +44,9 @@ abstract contract PqzSlots is PqzFixture {
 
     /// The expected `T` of a debit: the last debit's `(u, v_f)` plus every entry in `[lastP, p)` (D4 / D5).
     function _expectT(bytes32 ua, bytes memory ref, uint256 lastP, uint256 p, uint256 shieldIn)
-        internal view returns (bytes memory)
+        internal
+        view
+        returns (bytes memory)
     {
         return _sumRange(ref, ua, lastP, p, shieldIn);
     }
@@ -90,8 +92,12 @@ contract PqzStateTest is PqzSlots {
         bytes32[] memory legs = new bytes32[](1);
         legs[0] = bob;
         bytes memory out = _blob(2, PqzCt.PK + 2 * PqzCt.V);
-        bytes memory pl = bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0), alice, bytes32(0),
-            uint256(1), uint256(0)), salt, legs[0], out);
+        bytes memory pl = bytes.concat(
+            abi.encode(uint256(0), block.number + 100, uint256(0), alice, bytes32(0), uint256(1), uint256(0)),
+            salt,
+            legs[0],
+            out
+        );
         _mockOp(7, 1);
         tok.mtxConfidentialTransfer(_ms(pl), hex"c0de", _pqAuth(), "", noVerdict());
         assertEq(tok.pqzAccount(bob, 0).pendingCount, 3);
@@ -123,8 +129,8 @@ contract PqzStateTest is PqzSlots {
         vm.expectRevert(IPqzToken.UnitsInvariant.selector);
         tok.transferSingleStatement(_ts(_pl(4, alice, bob, 1, false)), 0);
         // the refresh at p = rolled: units K_MAX
-        bytes memory pl = bytes.concat(abi.encode(uint256(3), block.number + 5, uint256(0), alice, bytes32(0)),
-            _blob(9, PqzCt.CT));
+        bytes memory pl =
+            bytes.concat(abi.encode(uint256(3), block.number + 5, uint256(0), alice, bytes32(0)), _blob(9, PqzCt.CT));
         tok.mtxUnshield(_bs(pl), 0, bytes32(0), hex"c0de", _pqAuth(), "", noVerdict());
         a = tok.pqzAccount(alice, 0);
         assertEq(a.accUnits, 1, "refresh resets");
@@ -205,7 +211,9 @@ contract PqzStateTest is PqzSlots {
         assertEq(a.rolled, r - 16, "un-rolled");
         assertEq(a.floor, r - 16);
         assertEq(a.accUnits, 1);
-        for (uint256 i = r - 16; i < total; ++i) assertEq(tok.pqzPendingCt(alice, 0, uint64(i)), _entCt(alice, i), "pending again");
+        for (uint256 i = r - 16; i < total; ++i) {
+            assertEq(tok.pqzPendingCt(alice, 0, uint64(i)), _entCt(alice, i), "pending again");
+        }
         _roll(tok, alice, 32);
         assertEq(tok.pqzAccount(alice, 0).rolled, total);
         assertEq(tok.pqzAcc(alice, 0), accOf[alice], "rolled again, nothing lost");
@@ -338,7 +346,11 @@ contract PqzStateTest is PqzSlots {
         bytes32 before = keccak256(abi.encode(a, tok.pqzAcc(alice, 0), tok.totalShielded()));
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.PendingRange.selector, 1, a.floor, a.pendingCount));
         _send(pl, "");
-        assertEq(keccak256(abi.encode(tok.pqzAccount(alice, 0), tok.pqzAcc(alice, 0), tok.totalShielded())), before, "no state change");
+        assertEq(
+            keccak256(abi.encode(tok.pqzAccount(alice, 0), tok.pqzAcc(alice, 0), tok.totalShielded())),
+            before,
+            "no state change"
+        );
         // the wallet re-proves at the new p and the debit settles
         bytes memory pl2 = _pl(a.pendingCount, alice, bob, 51, false);
         _send(pl2, "");
@@ -347,7 +359,9 @@ contract PqzStateTest is PqzSlots {
 
     /// `p < rolled` at proving (an un-roll); anyone rolls further before the submit; the un-rolled entries roll again.
     function test_rollRace_unrollThenRollover() public {
-        for (uint256 i; i < 3; ++i) _transfer(tok, carol, alice, bytes32(0), 10 + i, false);
+        for (uint256 i; i < 3; ++i) {
+            _transfer(tok, carol, alice, bytes32(0), 10 + i, false);
+        }
         _roll(tok, alice, 3);
         bytes memory p1 = _pl(1, alice, bob, 20, false);
         _send(p1, "");
@@ -372,7 +386,9 @@ contract PqzStateTest is PqzSlots {
 
     /// `p > rolled` at proving; after `ROLL_AGE` anyone rolls past `p`; the debit still settles and un-rolls.
     function test_rollRace_rolloverPastP() public {
-        for (uint256 i; i < 5; ++i) _transfer(tok, carol, alice, bytes32(0), 30 + i, false);
+        for (uint256 i; i < 5; ++i) {
+            _transfer(tok, carol, alice, bytes32(0), 30 + i, false);
+        }
         vm.roll(block.number + ROLL_AGE);
         bytes memory pl = _pl(2, alice, bob, 40, true);
         bytes memory st = tok.transferSingleStatement(_ts(pl), 0);
@@ -418,7 +434,11 @@ contract PqzStateTest is PqzSlots {
         _send(pl, ""); // spends entry 0 inline, same block
         _fund(tok, alice, 4);
         assertEq(tok.pqzAccount(alice, 0).pendingCount, 2, "appended, not merged into the spent entry");
-        assertEq((tok.pqzPending(alice, 0, 0) >> 96) & type(uint64).max, 5, "the spent entry kept, unchanged (group 3h PP-1, P1')");
+        assertEq(
+            (tok.pqzPending(alice, 0, 0) >> 96) & type(uint64).max,
+            5,
+            "the spent entry kept, unchanged (group 3h PP-1, P1')"
+        );
         assertEq((tok.pqzPending(alice, 0, 1) >> 96) & type(uint64).max, 4);
     }
 
@@ -503,8 +523,9 @@ contract PqzStateTest is PqzSlots {
         _assertConservation(tok);
         // over the cap or over the balance
         pl = _payload(1, 1 << 41, alice, bob, bytes32(0), _out(2, false), "");
-        vm.expectRevert(abi.encodeWithSelector(IPqzToken.AmountOutOfRange.selector, uint256(1) << 41,
-            (uint256(1) << 40) - 45));
+        vm.expectRevert(
+            abi.encodeWithSelector(IPqzToken.AmountOutOfRange.selector, uint256(1) << 41, (uint256(1) << 40) - 45)
+        );
         _send(pl, "");
         vm.expectRevert();
         _send(_payload(1, 1, alice, bob, bytes32(0), _out(2, false), ""), "");
@@ -514,7 +535,9 @@ contract PqzStateTest is PqzSlots {
 
     function test_zeroURefused() public {
         bytes memory out = _out(1, true);
-        for (uint256 i; i < PqzCt.PK; ++i) out[i] = 0;
+        for (uint256 i; i < PqzCt.PK; ++i) {
+            out[i] = 0;
+        }
         vm.expectRevert(IPqzToken.ZeroU.selector);
         _send(_payload(0, 0, alice, bob, bytes32(0), out, ""), "");
         // op 7, M = 8: either group's u all zero
@@ -522,18 +545,28 @@ contract PqzStateTest is PqzSlots {
         bytes32[] memory legs = new bytes32[](8);
         legs[0] = bob;
         legs[1] = carol;
-        for (uint256 j = 2; j < 8; ++j) legs[j] = _pqzUA(_pk(uint8(40 + j)), uint8(40 + j));
+        for (uint256 j = 2; j < 8; ++j) {
+            legs[j] = _pqzUA(_pk(uint8(40 + j)), uint8(40 + j));
+        }
         for (uint256 g; g < 2; ++g) {
             bytes memory o7 = _blob(2, 2 * PqzCt.PK + 9 * PqzCt.V);
-            for (uint256 i; i < PqzCt.PK; ++i) o7[g * PqzCt.PK + i] = 0;
-            bytes memory pl = bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0), alice, bytes32(0),
-                uint256(8), uint256(0)), salt, abi.encodePacked(legs), o7);
+            for (uint256 i; i < PqzCt.PK; ++i) {
+                o7[g * PqzCt.PK + i] = 0;
+            }
+            bytes memory pl = bytes.concat(
+                abi.encode(uint256(0), block.number + 100, uint256(0), alice, bytes32(0), uint256(8), uint256(0)),
+                salt,
+                abi.encodePacked(legs),
+                o7
+            );
             vm.expectRevert(IPqzToken.ZeroU.selector);
             tok.mtxConfidentialTransfer(_ms(pl), hex"c0de", _pqAuth(), "", noVerdict());
         }
         // burn and refresh: u' all zero
         bytes memory nb = _blob(3, PqzCt.CT);
-        for (uint256 i; i < PqzCt.PK; ++i) nb[i] = 0;
+        for (uint256 i; i < PqzCt.PK; ++i) {
+            nb[i] = 0;
+        }
         bytes memory bp = bytes.concat(abi.encode(uint256(0), block.number + 5, uint256(0), alice, bytes32(0)), nb);
         vm.expectRevert(IPqzToken.ZeroU.selector);
         tok.mtxUnshield(_bs(bp), 1, bytes32(uint256(uint160(address(0xD00D)))), hex"c0de", _pqAuth(), "", noVerdict());
@@ -557,8 +590,20 @@ contract PqzStateTest is PqzSlots {
         bytes32[] memory legs = new bytes32[](2);
         (legs[0], legs[1]) = (bob, alice);
         bytes memory o7 = _blob(5, PqzCt.PK + 3 * PqzCt.V + 2 * PqzCt.V);
-        tok.mtxConfidentialTransfer(_ms(bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0), carol, bytes32(0),
-            uint256(2), uint256(0)), salt, abi.encodePacked(legs), o7)), hex"c0de", _pqAuth(), "", noVerdict());
+        tok.mtxConfidentialTransfer(
+            _ms(
+                bytes.concat(
+                    abi.encode(uint256(0), block.number + 100, uint256(0), carol, bytes32(0), uint256(2), uint256(0)),
+                    salt,
+                    abi.encodePacked(legs),
+                    o7
+                )
+            ),
+            hex"c0de",
+            _pqAuth(),
+            "",
+            noVerdict()
+        );
         pend[bob].push(bytes.concat(_cut(o7, 0, PqzCt.PK), _cut(o7, PqzCt.PK, PqzCt.V)));
         pend[alice].push(bytes.concat(_cut(o7, 0, PqzCt.PK), _cut(o7, PqzCt.PK + PqzCt.V, PqzCt.V)));
         _restoreCheck(alice);
@@ -577,8 +622,12 @@ contract PqzStateTest is PqzSlots {
     function _restoreCheck(bytes32 ua) internal view {
         IPqzToken.AccountState memory a = tok.pqzAccount(ua, 0);
         assertEq(tok.pqzAcc(ua, 0), _acc(ua), "acc from state");
-        for (uint256 i = a.rolled; i < a.pendingCount; ++i) assertEq(tok.pqzPendingCt(ua, 0, uint64(i)), _entCt(ua, i), "pending ct");
-        if (a.flags & 1 != 0) assertEq(a.accHash, keccak256(_packed(tok.pqzAcc(ua, 0))), "accHash of the materialised acc (packed)");
+        for (uint256 i = a.rolled; i < a.pendingCount; ++i) {
+            assertEq(tok.pqzPendingCt(ua, 0, uint64(i)), _entCt(ua, i), "pending ct");
+        }
+        if (a.flags & 1 != 0) {
+            assertEq(a.accHash, keccak256(_packed(tok.pqzAcc(ua, 0))), "accHash of the materialised acc (packed)");
+        }
     }
 
     // ------------------------------------------------------------------ D1: the op blob is the bundle
@@ -635,7 +684,8 @@ contract PqzStateHandler is Test, PqzArgs {
     function _blob(uint256 s, uint256 n) internal pure returns (bytes memory b) {
         b = new bytes(n);
         for (uint256 i; i < n; i += 32) {
-            uint256 w = uint256(keccak256(abi.encode(s, i))) & 0x000000ffffffffff000000ffffffffff000000ffffffffff000000ffffffffff;
+            uint256 w = uint256(keccak256(abi.encode(s, i)))
+                & 0x000000ffffffffff000000ffffffffff000000ffffffffff000000ffffffffff;
             assembly ("memory-safe") { mstore(add(add(b, 32), i), w) }
         }
     }
@@ -651,8 +701,11 @@ contract PqzStateHandler is Test, PqzArgs {
 
     function credit() external {
         bytes memory out = _blob(++seed, PqzCore.OUT_OFF);
-        bytes memory pl = bytes.concat(abi.encode(tok.pqzAccount(carol, 0).pendingCount, block.number + 100, uint256(0),
-            carol, alice, bytes32(0)), bytes16(uint128(seed)), out);
+        bytes memory pl = bytes.concat(
+            abi.encode(tok.pqzAccount(carol, 0).pendingCount, block.number + 100, uint256(0), carol, alice, bytes32(0)),
+            bytes16(uint128(seed)),
+            out
+        );
         tok.mtxConfidentialTransferSingle(_ts(pl), hex"c0de", _pqAuth(), "", noVerdict());
         bytes memory u = new bytes(PqzCt.CT);
         uint256 n = PqzCt.CT;
@@ -702,11 +755,14 @@ contract PqzStateHandler is Test, PqzArgs {
         if (hi < lo) return;
         uint256 p = bound(sel, lo, hi);
         bytes memory out = _blob(++seed, PqzCore.OUT_OFF);
-        bytes memory pl = bytes.concat(abi.encode(p, block.number + 100, uint256(0), alice, bob, bytes32(0)),
-            bytes16(uint128(seed)), out);
+        bytes memory pl = bytes.concat(
+            abi.encode(p, block.number + 100, uint256(0), alice, bob, bytes32(0)), bytes16(uint128(seed)), out
+        );
         bytes memory st = tok.transferSingleStatement(_ts(pl), 0);
         bytes[] memory win = new bytes[](p - lastP);
-        for (uint256 i; i < win.length; ++i) win[i] = entAt(lastP + i);
+        for (uint256 i; i < win.length; ++i) {
+            win[i] = entAt(lastP + i);
+        }
         bytes memory want = ct.sum(ref, win, none, 0);
         bytes memory got = new bytes(PqzCt.CT);
         (uint256 at_, uint256 n) = (640 + 2 * PqzCt.PK, PqzCt.CT); // R_TX0: header ‖ pk_f ‖ pk_t ‖ T
@@ -714,7 +770,8 @@ contract PqzStateHandler is Test, PqzArgs {
         assertEq(got, want, "T = ref + sum [lastP, p)");
         hint %= 3;
         // the hint is the packed `acc` stream (P46): the current one (hashes to `accHash` when materialised) or a stale one
-        bytes memory h = hint == 1 ? PqzCt.packMem(tok.pqzAcc(alice, 0)) : hint == 2 ? PqzCt.packMem(lastMat) : bytes("");
+        bytes memory h =
+            hint == 1 ? PqzCt.packMem(tok.pqzAcc(alice, 0)) : hint == 2 ? PqzCt.packMem(lastMat) : bytes("");
         // the precompile accepts exactly the state's statement: a hint that changed `T` would be `ProofRejected`
         vm.mockCall(PqzSafety.PQZ, abi.encodePacked(uint8(1)), abi.encode(uint256(0)));
         vm.mockCall(PqzSafety.PQZ, abi.encodePacked(uint8(1), uint32(st.length), st, hex"c0de"), abi.encode(uint256(1)));
@@ -738,8 +795,8 @@ contract PqzStateInvariantTest is PqzFixture {
         tok.mtxPrepareAcc(alice, 0, 1);
         targetContract(address(h));
         bytes4[] memory sel = new bytes4[](5);
-        (sel[0], sel[1], sel[2]) = (PqzStateHandler.credit.selector, PqzStateHandler.shield.selector,
-            PqzStateHandler.advance.selector);
+        (sel[0], sel[1], sel[2]) =
+        (PqzStateHandler.credit.selector, PqzStateHandler.shield.selector, PqzStateHandler.advance.selector);
         (sel[3], sel[4]) = (PqzStateHandler.roll.selector, PqzStateHandler.debit.selector);
         targetSelector(FuzzSelector(address(h), sel));
     }
@@ -754,9 +811,13 @@ contract PqzStateInvariantTest is PqzFixture {
         assertEq(a.pendingCount, h.entCount());
         assertLe(h.lastP(), a.rolled);
         bytes[] memory acc = new bytes[](a.rolled - h.lastP());
-        for (uint256 i; i < acc.length; ++i) acc[i] = h.entAt(h.lastP() + i);
+        for (uint256 i; i < acc.length; ++i) {
+            acc[i] = h.entAt(h.lastP() + i);
+        }
         assertEq(tok.pqzAcc(alice, 0), ct.sum(h.ref(), acc, new bytes[](0), 0), "acc = ref + sum [lastP, rolled)");
-        for (uint256 i = a.rolled; i < a.pendingCount; ++i) assertEq(tok.pqzPendingCt(alice, 0, uint64(i)), h.entAt(i));
+        for (uint256 i = a.rolled; i < a.pendingCount; ++i) {
+            assertEq(tok.pqzPendingCt(alice, 0, uint64(i)), h.entAt(i));
+        }
     }
 
     function afterInvariant() external view {

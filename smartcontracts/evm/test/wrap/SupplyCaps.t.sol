@@ -26,7 +26,9 @@ contract ReaderLeg {
     uint256 public seenWrapped;
     uint256 public seenSupply;
 
-    function decimals() external pure returns (uint8) { return 0; }
+    function decimals() external pure returns (uint8) {
+        return 0;
+    }
 
     function mtxTrade(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata, ITradeToken.TradeFill calldata)
         external
@@ -50,19 +52,37 @@ contract ReenterLeg {
     bytes4[] public errs;
     address public u;
 
-    function decimals() external pure returns (uint8) { return 0; }
+    function decimals() external pure returns (uint8) {
+        return 0;
+    }
 
-    function setU(address u_) external { u = u_; }
+    function setU(address u_) external {
+        u = u_;
+    }
 
-    function n() external view returns (uint256) { return errs.length; }
+    function n() external view returns (uint256) {
+        return errs.length;
+    }
 
     function mtxTrade(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata, ITradeToken.TradeFill calldata)
         external
     {
         WrappedToken w = WrappedToken(payable(msg.sender));
-        try w.wrap(u, 1) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
-        try w.unwrap(u, 1, address(this), 0) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
-        try w.setMaxWrapSupply(0, bytes32(0)) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try w.wrap(u, 1) {
+            errs.push(0);
+        } catch (bytes memory r) {
+            errs.push(bytes4(r));
+        }
+        try w.unwrap(u, 1, address(this), 0) {
+            errs.push(0);
+        } catch (bytes memory r) {
+            errs.push(bytes4(r));
+        }
+        try w.setMaxWrapSupply(0, bytes32(0)) {
+            errs.push(0);
+        } catch (bytes memory r) {
+            errs.push(bytes4(r));
+        }
         balanceOf[o.dex] += o.amount;
     }
 }
@@ -79,7 +99,10 @@ contract SupplyCapsTest is WrapLimitsBase {
     // ------------------------------------------------------------------ fixtures
 
     /// A token over `leg` at `num`:1, `features`, `maxSupply` (hybrid: `CAP`), `maxWrapSupply`, `grantDelay`.
-    function _tok(uint256 features, address leg, uint256 num, uint256 maxWrap, uint64 delay) internal returns (WrappedToken) {
+    function _tok(uint256 features, address leg, uint256 num, uint256 maxWrap, uint64 delay)
+        internal
+        returns (WrappedToken)
+    {
         (address[] memory l, uint256[] memory n) = _one(leg);
         n[0] = num;
         IFactoryToken.TokenConfig memory c = _cfg(l, n, features);
@@ -111,16 +134,34 @@ contract SupplyCapsTest is WrapLimitsBase {
     }
 
     function _wrapDigest(WrappedToken w, MetaTxLib.Envelope memory e, uint256 amount) internal view returns (bytes32) {
-        return MtxDigest.typed(address(w), keccak256(abi.encode(keccak256("Wrap(address from,uint256 amount,uint256 batch,"
-            "uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"), e.from, amount,
-            e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
+        return MtxDigest.typed(
+            address(w),
+            keccak256(
+                abi.encode(
+                    keccak256(
+                        "Wrap(address from,uint256 amount,uint256 batch,"
+                        "uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+                    ),
+                    e.from,
+                    amount,
+                    e.batch,
+                    e.nonce,
+                    e.validUntil,
+                    e.mode,
+                    address(0),
+                    e.fee,
+                    address(0)
+                )
+            )
+        );
     }
 
     /// `mtxWrap(amount)` signed by alice, relayed.
     function _mtxWrap(WrappedToken w, uint256 amount, bytes memory err) internal {
         _fundW(w, alice, amount);
-        MetaTxLib.Envelope memory e =
-            MetaTxLib.Envelope(alice, 1, w.mtxNonce(_pad(alice), 1), block.timestamp + 300, 0, address(0), 0, address(0));
+        MetaTxLib.Envelope memory e = MetaTxLib.Envelope(
+            alice, 1, w.mtxNonce(_pad(alice), 1), block.timestamp + 300, 0, address(0), 0, address(0)
+        );
         bytes memory sig = _ecdsa(ALICE_PK, _wrapDigest(w, e, amount));
         if (err.length != 0) vm.expectRevert(err);
         vm.prank(RELAYER);
@@ -144,7 +185,11 @@ contract SupplyCapsTest is WrapLimitsBase {
     }
 
     /// A signature wrap of `tok` (a SCaaS ledger leg) by alice, nonce `nonce`.
-    function _order(WrappedToken w, uint256 amount, uint256 nonce) internal view returns (ITradeToken.UAWrapOrder memory o) {
+    function _order(WrappedToken w, uint256 amount, uint256 nonce)
+        internal
+        view
+        returns (ITradeToken.UAWrapOrder memory o)
+    {
         (o.from, o.wrappedToken, o.amount, o.minMinted, o.minFill) = (_pad(alice), address(w), amount, 1, amount);
         (o.relayer, o.batch, o.nonce, o.validUntil) = (RELAYER, 1, nonce, block.timestamp + 300);
     }
@@ -434,8 +479,11 @@ contract SupplyCapsTest is WrapLimitsBase {
         _setMS(w, CAP * 2);
         assertEq(w.maxSupply(), CAP, "not yet");
         assertEq(w.lastProposedAt(), block.timestamp, "the pending signal");
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotReady.selector, SCA, bytes32(0),
-            uint64(block.timestamp + 1 hours)));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IGovernance.GrantNotReady.selector, SCA, bytes32(0), uint64(block.timestamp + 1 hours)
+            )
+        );
         _setMS(w, CAP * 2);
         vm.warp(block.timestamp + 1 hours);
         _setMS(w, CAP * 2);
@@ -487,8 +535,11 @@ contract SupplyCapsTest is WrapLimitsBase {
         vm.warp(block.timestamp + 30 minutes);
         _setMW(w, 600); // replaces, the clock restarts
         vm.warp(block.timestamp + 40 minutes);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotReady.selector, SCA, bytes32(0),
-            uint64(block.timestamp + 20 minutes)));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IGovernance.GrantNotReady.selector, SCA, bytes32(0), uint64(block.timestamp + 20 minutes)
+            )
+        );
         _setMW(w, 600);
         _setMW(w, 500); // 500 is no longer pending: proposes
         assertEq(w.maxWrapSupply(), 0);
@@ -626,7 +677,9 @@ contract SupplyCapsTest is WrapLimitsBase {
         IUARegistry.UASig memory none;
         w.mtxWrapOrder(address(leg), o, none);
         assertEq(leg.n(), 3);
-        for (uint256 i; i < 3; ++i) assertEq(leg.errs(i), IMetaTx.Reentrancy.selector, "the guard, inside the leg");
+        for (uint256 i; i < 3; ++i) {
+            assertEq(leg.errs(i), IMetaTx.Reentrancy.selector, "the guard, inside the leg");
+        }
         assertEq(w.totalWrapped(), 60);
         assertLe(w.totalWrapped(), w.maxWrapSupply());
     }

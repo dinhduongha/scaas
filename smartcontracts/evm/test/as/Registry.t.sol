@@ -25,7 +25,8 @@ contract RegistryTest is RegFixture {
     /// The canonical registry runtime's code hash (a pin: it moves with the registry's source, its interface or the
     /// compiler settings, old -> new in the commit).
     ///      Fix3 CTR-GOV-28 (`setKycProvider` and `setCompliance` take `chainUid_`): 0x1dc2f8a7…8da4 -> this.
-    bytes32 internal constant COMPLIANCE_REGISTRY_CODEHASH = 0x368a66a3d8e30f2147f5298b21b315e63c62b40555d17d7671aafa4e4de40383;
+    bytes32 internal constant COMPLIANCE_REGISTRY_CODEHASH =
+        0x368a66a3d8e30f2147f5298b21b315e63c62b40555d17d7671aafa4e4de40383;
     uint64 internal constant ACCR = 2;
     uint64 internal constant MAX = type(uint64).max;
     bytes32 internal constant ACC = bytes32(uint256(0xACC));
@@ -319,13 +320,25 @@ contract RegistryTest is RegFixture {
     function test_registryRuntimeHashPinned() public {
         assertEq(keccak256(type(ComplianceRegistry).runtimeCode), COMPLIANCE_REGISTRY_CODEHASH, "runtime pin");
         assertEq(address(creg).codehash, COMPLIANCE_REGISTRY_CODEHASH, "deployed");
-        assertEq(address(new ComplianceRegistry(nid(address(new Holder())), address(0), bytes32(uint256(0x5EC0)))).codehash,
-            COMPLIANCE_REGISTRY_CODEHASH, "another admin");
+        assertEq(
+            address(new ComplianceRegistry(nid(address(new Holder())), address(0), bytes32(uint256(0x5EC0)))).codehash,
+            COMPLIANCE_REGISTRY_CODEHASH,
+            "another admin"
+        );
         for (uint256 i; i < 2; ++i) {
-            address impl = f.implementationOf(i == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED
-                : IOpenFactory.TokenKind.WRAPPED_REGULATED, 1);
-            assertEq(NormalRegulatedToken(payable(impl)).COMPLIANCE_REGISTRY_CODEHASH(), COMPLIANCE_REGISTRY_CODEHASH, "release");
-            assertEq(NormalRegulatedToken(payable(_ks()[i])).COMPLIANCE_REGISTRY_CODEHASH(), COMPLIANCE_REGISTRY_CODEHASH, "token");
+            address impl = f.implementationOf(
+                i == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED : IOpenFactory.TokenKind.WRAPPED_REGULATED, 1
+            );
+            assertEq(
+                NormalRegulatedToken(payable(impl)).COMPLIANCE_REGISTRY_CODEHASH(),
+                COMPLIANCE_REGISTRY_CODEHASH,
+                "release"
+            );
+            assertEq(
+                NormalRegulatedToken(payable(_ks()[i])).COMPLIANCE_REGISTRY_CODEHASH(),
+                COMPLIANCE_REGISTRY_CODEHASH,
+                "token"
+            );
         }
     }
 
@@ -333,7 +346,8 @@ contract RegistryTest is RegFixture {
     /// other code, an EOA, an empty address; the canonical one creates (the control) and is written in slot +0.
     function test_registryCodehashPinned() public {
         for (uint256 i; i < 2; ++i) {
-            IOpenFactory.TokenKind k = i == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED : IOpenFactory.TokenKind.WRAPPED_REGULATED;
+            IOpenFactory.TokenKind k =
+                i == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED : IOpenFactory.TokenKind.WRAPPED_REGULATED;
             IFactoryToken.TokenConfig memory c = i == 0 ? _cfg8() : _cfg9();
             c.features |= 1 << GovernanceBits.KYC;
             c.reg.deniedFlags = SANCTIONED;
@@ -341,8 +355,11 @@ contract RegistryTest is RegFixture {
             address[3] memory bad = [other, bob, address(0xDEAD0)];
             for (uint256 j; j < 3; ++j) {
                 c.reg.complianceRegistry = bad[j];
-                vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.ComplianceRegistryCodeMismatch.selector, bad[j],
-                    bad[j].codehash));
+                vm.expectRevert(
+                    abi.encodeWithSelector(
+                        IRegulatedToken.ComplianceRegistryCodeMismatch.selector, bad[j], bad[j].codehash
+                    )
+                );
                 f.createToken(k, 1, abi.encode(c), bytes32(j));
             }
             c.reg.complianceRegistry = address(creg);
@@ -365,7 +382,8 @@ contract RegistryTest is RegFixture {
     }
 
     function releaseWith(IFactoryToken.Env memory e, bytes memory implArgs) external returns (address) {
-        return Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_REGULATED, 2, e, type(NormalRegulatedToken).creationCode,
-            implArgs);
+        return Catalogue.release(
+            f, IOpenFactory.TokenKind.NORMAL_REGULATED, 2, e, type(NormalRegulatedToken).creationCode, implArgs
+        );
     }
 }

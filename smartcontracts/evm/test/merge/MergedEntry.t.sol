@@ -26,30 +26,43 @@ import {nid} from "../helpers/Ids.sol";
 interface IMergedT1 {
     function mtxNonce(bytes32 from, uint256 batch) external view returns (uint256);
     function mtxExecute(MetaTxLib.UAMetaTransaction calldata m, IUARegistry.UASig calldata auth)
-        external returns (bytes memory);
+        external
+        returns (bytes memory);
     function mtxBatch(MetaTxLib.UAMetaTransaction[] calldata ms, IUARegistry.UASig[] calldata auths)
-        external returns (bool);
+        external
+        returns (bool);
     function mtxCancelNonce(MetaTxLib.UAEnvelope calldata e, uint256 lane, IUARegistry.UASig calldata auth)
-        external returns (bytes memory);
+        external
+        returns (bytes memory);
 }
 
 interface SaltedDomain {
-    function eip712Domain() external view returns (bytes1, string memory, string memory, uint256, address, bytes32,
-        uint256[] memory);
+    function eip712Domain()
+        external
+        view
+        returns (bytes1, string memory, string memory, uint256, address, bytes32, uint256[] memory);
 }
 
 /// The UA ledger fixture plus `tok0`, a `NORMAL` clone with no registry (`registry() == 0`), and the digests computed
 /// here from the type strings and `eip712Domain()` (ERC-5267), not read from the token.
 abstract contract MergeBase is UALedgerBase {
     bytes32 internal constant UA_CANCEL_NONCE_TYPEHASH = keccak256(
-        "UACancelNonce(bytes32 from,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UACancelNonce(bytes32 from,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
 
     NormalToken internal tok0;
 
     function setUp() public virtual override {
         super.setUp();
-        tok0 = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, address(0), address(0), false)));
-        tok0.initialize(nid(address(this)), 1, abi.encode(normalInit("Zero", "ZRO", 6, 1_000_000, alice, address(this))));
+        tok0 = NormalToken(
+            EnvKit.clone(
+                address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+                EnvKit.env(chainUidA, address(0), address(0), false)
+            )
+        );
+        tok0.initialize(
+            nid(address(this)), 1, abi.encode(normalInit("Zero", "ZRO", 6, 1_000_000, alice, address(this)))
+        );
         assertEq(tok0.registry(), address(0));
     }
 
@@ -61,9 +74,18 @@ abstract contract MergeBase is UALedgerBase {
     function _dig(address t, bytes32 structHash) internal view returns (bytes32) {
         (, string memory name, string memory version, uint256 chainId, address vc, bytes32 salt,) =
             SaltedDomain(t).eip712Domain();
-        bytes32 ds = keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256(bytes(name)), keccak256(bytes(version)), chainId, vc, salt));
+        bytes32 ds = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256(bytes(name)),
+                keccak256(bytes(version)),
+                chainId,
+                vc,
+                salt
+            )
+        );
         return keccak256(abi.encodePacked(hex"1901", ds, structHash));
     }
 
@@ -79,10 +101,21 @@ abstract contract MergeBase is UALedgerBase {
     }
 
     function _call(bytes32 from, bytes memory data, uint256 batch, uint256 nonce)
-        internal view returns (MetaTxLib.UAMetaTransaction memory)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransaction memory)
     {
-        return MetaTxLib.UAMetaTransaction({from: from, data: data, batch: batch, nonce: nonce,
-            validUntil: block.timestamp + 600, mode: 0, relayer: address(0), fee: 0, feeRecipient: address(0)});
+        return MetaTxLib.UAMetaTransaction({
+            from: from,
+            data: data,
+            batch: batch,
+            nonce: nonce,
+            validUntil: block.timestamp + 600,
+            mode: 0,
+            relayer: address(0),
+            fee: 0,
+            feeRecipient: address(0)
+        });
     }
 
     function _callDigest(address t, MetaTxLib.UAMetaTransaction memory m) internal view returns (bytes32) {
@@ -90,10 +123,23 @@ abstract contract MergeBase is UALedgerBase {
     }
 
     function _xfer(bytes32 from, bytes32 to, uint256 value, uint256 nonce)
-        internal view returns (MetaTxLib.UAMetaTransfer memory)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransfer memory)
     {
-        return MetaTxLib.UAMetaTransfer({from: from, to: to, value: value, entryRef: 0, batch: 1, nonce: nonce,
-            validUntil: block.timestamp + 600, mode: 0, relayer: address(0), fee: 0, feeRecipient: address(0)});
+        return MetaTxLib.UAMetaTransfer({
+            from: from,
+            to: to,
+            value: value,
+            entryRef: 0,
+            batch: 1,
+            nonce: nonce,
+            validUntil: block.timestamp + 600,
+            mode: 0,
+            relayer: address(0),
+            fee: 0,
+            feeRecipient: address(0)
+        });
     }
 
     function _xferDigest(address t, MetaTxLib.UAMetaTransfer memory x) internal view returns (bytes32) {
@@ -108,9 +154,23 @@ abstract contract MergeBase is UALedgerBase {
     }
 
     function _cancelDigest(address t, MetaTxLib.UAEnvelope memory e, uint256 lane) internal view returns (bytes32) {
-        return _dig(t, keccak256(abi.encode(UA_CANCEL_NONCE_TYPEHASH, e.from, lane, e.batch, e.nonce, e.validUntil, e.mode,
-            e.mode & MetaTxLib.MODE_RESTRICT_RELAYER != 0 ? e.relayer : address(0), e.fee,
-            e.mode & MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT != 0 ? e.feeRecipient : address(0))));
+        return _dig(
+            t,
+            keccak256(
+                abi.encode(
+                    UA_CANCEL_NONCE_TYPEHASH,
+                    e.from,
+                    lane,
+                    e.batch,
+                    e.nonce,
+                    e.validUntil,
+                    e.mode,
+                    e.mode & MetaTxLib.MODE_RESTRICT_RELAYER != 0 ? e.relayer : address(0),
+                    e.fee,
+                    e.mode & MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT != 0 ? e.feeRecipient : address(0)
+                )
+            )
+        );
     }
 
     /// A relayer that is no party (any submitter may relay at mode 0).
@@ -119,17 +179,27 @@ abstract contract MergeBase is UALedgerBase {
         (ok, ret) = t.call(cd);
     }
 
-    function _execCd(MetaTxLib.UAMetaTransaction memory m, IUARegistry.UASig memory a) internal pure returns (bytes memory) {
+    function _execCd(MetaTxLib.UAMetaTransaction memory m, IUARegistry.UASig memory a)
+        internal
+        pure
+        returns (bytes memory)
+    {
         return abi.encodeCall(IMergedT1.mtxExecute, (m, a));
     }
 
     function _cancelCd(MetaTxLib.UAEnvelope memory e, uint256 lane, IUARegistry.UASig memory a)
-        internal pure returns (bytes memory)
+        internal
+        pure
+        returns (bytes memory)
     {
         return abi.encodeCall(IMergedT1.mtxCancelNonce, (e, lane, a));
     }
 
-    function _xferCd(MetaTxLib.UAMetaTransfer memory x, IUARegistry.UASig memory a) internal pure returns (bytes memory) {
+    function _xferCd(MetaTxLib.UAMetaTransfer memory x, IUARegistry.UASig memory a)
+        internal
+        pure
+        returns (bytes memory)
+    {
         return abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (x, a));
     }
 }
@@ -216,8 +286,9 @@ contract MergedEntryTest is MergeBase {
     /// What the registry answers for `id`'s ECDSA-by-alice `UASig` over `d` under `metatx`: a revert, by its own error.
     function _registrySays(bytes32 id, bytes32 d) internal view returns (bytes memory ret) {
         bool ok;
-        (ok, ret) = REG_L.staticcall(abi.encodeCall(IUARegistry.requireAuthorized,
-            (id, UAKinds.PURPOSE_METATX, d, _sig(ALICE_PK, d))));
+        (ok, ret) = REG_L.staticcall(
+            abi.encodeCall(IUARegistry.requireAuthorized, (id, UAKinds.PURPOSE_METATX, d, _sig(ALICE_PK, d)))
+        );
         assertFalse(ok, "the registry does not authorize it");
         assertGt(ret.length, 3);
     }
@@ -366,12 +437,16 @@ contract MergedEntryTest is MergeBase {
         uint256 n;
         for (uint256 i; i < a.length; ++i) {
             bool seen;
-            for (uint256 j; j < n; ++j) if (out[j] == a[i]) seen = true;
+            for (uint256 j; j < n; ++j) {
+                if (out[j] == a[i]) seen = true;
+            }
             if (!seen) out[n++] = a[i];
         }
         assembly ("memory-safe") { mstore(out, n) }
         for (uint256 i = 1; i < n; ++i) {
-            for (uint256 j = i; j > 0 && out[j - 1] > out[j]; --j) (out[j - 1], out[j]) = (out[j], out[j - 1]);
+            for (uint256 j = i; j > 0 && out[j - 1] > out[j]; --j) {
+                (out[j - 1], out[j]) = (out[j], out[j - 1]);
+            }
         }
     }
 }

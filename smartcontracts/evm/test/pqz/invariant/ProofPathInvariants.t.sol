@@ -37,9 +37,10 @@ contract ProofPathInvariantsTest is PqzFixture {
         _public(tok, address(h), 1_000_000 * SCALE);
         targetContract(address(h));
         bytes4[] memory sel = new bytes4[](9); // the actions; debit three times (the forms are what P2-P5 read)
-        (sel[0], sel[1], sel[2], sel[3]) = (h.shield.selector, h.rollOver.selector, h.rotate.selector, h.setMode.selector);
-        (sel[4], sel[5], sel[6], sel[7], sel[8]) = (h.disable24.selector, h.debit.selector, h.debit.selector, h.debit.selector,
-            h.bulk.selector);
+        (sel[0], sel[1], sel[2], sel[3]) =
+        (h.shield.selector, h.rollOver.selector, h.rotate.selector, h.setMode.selector);
+        (sel[4], sel[5], sel[6], sel[7], sel[8]) =
+        (h.disable24.selector, h.debit.selector, h.debit.selector, h.debit.selector, h.bulk.selector);
         targetSelector(FuzzSelector({addr: address(h), selectors: sel}));
     }
 
@@ -53,7 +54,9 @@ contract ProofPathInvariantsTest is PqzFixture {
         for (uint64 v; v <= reg.pqzKeyLatest(u); ++v) {
             IPqzToken.AccountState memory a = tok.pqzAccount(u, v);
             assertTrue(a.floor <= a.rolled && a.rolled <= a.pendingCount, "P1: floor <= rolled <= pendingCount");
-            for (uint64 i; i < a.pendingCount; ++i) assertTrue(tok.pqzPending(u, v, i) != 0, "P1: no pending slot deleted");
+            for (uint64 i; i < a.pendingCount; ++i) {
+                assertTrue(tok.pqzPending(u, v, i) != 0, "P1: no pending slot deleted");
+            }
         }
     }
 
@@ -72,12 +75,15 @@ contract ProofPathInvariantsTest is PqzFixture {
             PqzCt.loadBlob(r.prevBlob, uo, vo, c);
         }
         bytes[] memory plus = new bytes[](r.deltaP);
-        for (uint256 i; i < r.deltaP; ++i) plus[i] = tok.pqzPendingCt(u, r.keyVersion, r.p - r.deltaP + uint64(i));
+        for (uint256 i; i < r.deltaP; ++i) {
+            plus[i] = tok.pqzPendingCt(u, r.keyVersion, r.p - r.deltaP + uint64(i));
+        }
         return ct.sum(c, plus, new bytes[](0), r.shieldIn);
     }
 
     function _recWords(bytes32 u, uint64 k) internal view returns (uint256 w0, uint256 w1) {
-        uint256 s0 = uint256(keccak256(abi.encode(uint256(k), keccak256(abi.encode(u, uint256(PqzCore._STORAGE) + 19)))));
+        uint256 s0 =
+            uint256(keccak256(abi.encode(uint256(k), keccak256(abi.encode(u, uint256(PqzCore._STORAGE) + 19)))));
         (w0, w1) = (uint256(vm.load(address(tok), bytes32(s0))), uint256(vm.load(address(tok), bytes32(s0 + 1))));
     }
 
@@ -100,8 +106,13 @@ contract ProofPathInvariantsTest is PqzFixture {
                 assertTrue(last == 0 || last == k, "P3: a narrow record follows k - 1 of its version");
                 assertEq(h.verOf(u, k), 0, "P3: a narrow record is of version 0");
             }
-            assertEq(keccak256(_t(u, k)), h.tHash(u, k), string.concat("P2: T from the one record = the statement's T, ",
-                vm.toString(u), " ", vm.toString(uint256(k))));
+            assertEq(
+                keccak256(_t(u, k)),
+                h.tHash(u, k),
+                string.concat(
+                    "P2: T from the one record = the statement's T, ", vm.toString(u), " ", vm.toString(uint256(k))
+                )
+            );
             assertEq(uint8(w0 >> 8), h.modeAt(u, k), "P5: the record's proofStore = the setting at its debit");
         }
         for (uint64 v; v <= reg.pqzKeyLatest(u); ++v) {
@@ -118,7 +129,9 @@ contract ProofPathInvariantsTest is PqzFixture {
             _records(_uas(i));
         }
         assertEq(h.changedBelow(), 0, "P1': a pending entry below a past max(floor, rolled) never changes");
-        assertEq(h.badTail(), 0, "P4: every own blob ends with its ownTag, kv and n; memoHash = keccak256(memo || ownTag)");
+        assertEq(
+            h.badTail(), 0, "P4: every own blob ends with its ownTag, kv and n; memoHash = keccak256(memo || ownTag)"
+        );
         assertEq(h.badLog(), 0, "P5: LOG <=> exactly one PqzDebitProof with the verified header and the calldata proof");
         assertEq(h.badMode(), 0, "bit 24: setProofStore lands while the bit is set, never after disableFeature(24)");
         assertEq(tok.totalShielded(), h.shielded(), "P6: the pool");
@@ -126,7 +139,9 @@ contract ProofPathInvariantsTest is PqzFixture {
         for (uint256 i; i < h.uaCount(); ++i) {
             bytes32 u = _uas(i);
             (uint64 cur,,,) = reg.pqzKeyOf(u);
-            for (uint64 v = cur + 1; v <= reg.pqzKeyLatest(u); ++v) assertEq(tok.pqzAccount(u, v).pendingCount, 0, "P6: 3g J1");
+            for (uint64 v = cur + 1; v <= reg.pqzKeyLatest(u); ++v) {
+                assertEq(tok.pqzAccount(u, v).pendingCount, 0, "P6: 3g J1");
+            }
         }
     }
 
@@ -197,10 +212,19 @@ contract ProofPathInvariantsTest is PqzFixture {
     /// 46,506, uaExecuteTransfer wrapped 139,449 -> 139,471. The test keeps P7's claim as: these rows are the pins.
     function test_P7_zetherPinsUnchanged() public view {
         string memory j = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/plus_zero_gas.json"));
-        string[8] memory k = ["mtxTransfer_normalZether", "mtxTransfer_wrappedZether", "transferToUA_normalZether",
-            "transferToUA_wrappedZether", "transfer_normalZether", "transfer_wrappedZether", "uaExecuteTransfer_normalZether",
-            "uaExecuteTransfer_wrappedZether"];
+        string[8] memory k = [
+            "mtxTransfer_normalZether",
+            "mtxTransfer_wrappedZether",
+            "transferToUA_normalZether",
+            "transferToUA_wrappedZether",
+            "transfer_normalZether",
+            "transfer_wrappedZether",
+            "uaExecuteTransfer_normalZether",
+            "uaExecuteTransfer_wrappedZether"
+        ];
         uint256[8] memory at7558 = [uint256(83759), 83846, 69239, 69239, 46484, 46506, 139436, 139471]; // + B P3-1, CTR-GOV-26, -27, -28, CTR-MTX-86, K3-3, 3zb + 3zc, 3zh, pqvault R1, set-auditor A2
-        for (uint256 i; i < 8; ++i) assertEq(vm.parseJsonUint(j, string.concat(".", k[i])), at7558[i], k[i]);
+        for (uint256 i; i < 8; ++i) {
+            assertEq(vm.parseJsonUint(j, string.concat(".", k[i])), at7558[i], k[i]);
+        }
     }
 }

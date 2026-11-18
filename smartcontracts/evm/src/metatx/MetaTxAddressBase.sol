@@ -28,14 +28,18 @@ abstract contract MetaTxAddressBase is MetaTxBase, IMetaTxAddress {
     }
 
     function mtxExecute(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
-        external nonReentrant returns (bytes memory)
+        external
+        nonReentrant
+        returns (bytes memory)
     {
         return _execute(m, signature);
     }
 
     /// @notice Atomic: items run in order, each with a fresh ticket; any failure reverts all (CTR-MTX-11).
     function mtxBatch(MetaTxLib.MetaTransaction[] calldata ms, bytes[] calldata signatures)
-        external nonReentrant returns (bool)
+        external
+        nonReentrant
+        returns (bool)
     {
         uint256 n = ms.length;
         if (n == 0) revert MtxBatchEmpty();
@@ -49,7 +53,9 @@ abstract contract MetaTxAddressBase is MetaTxBase, IMetaTxAddress {
 
     /// @notice The signed `cancelNonce(lane)` (TS-D14): `lane` is cancelled, `e.batch` is the lane of the cancel itself.
     function mtxCancelNonce(MetaTxLib.Envelope calldata e, uint256 lane, bytes calldata sig)
-        external nonReentrant returns (bytes memory)
+        external
+        nonReentrant
+        returns (bytes memory)
     {
         return _named(_CANCEL_NONCE_TYPEHASH, IMetaTx.cancelNonce.selector, e, abi.encode(lane), sig);
     }

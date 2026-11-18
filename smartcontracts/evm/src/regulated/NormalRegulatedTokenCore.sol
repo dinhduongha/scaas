@@ -17,10 +17,7 @@ import {RegulatedBase} from "./RegulatedBase.sol";
 /// @notice **UNAUDITED.** `_initRaw` runs `RegulatedLib.init` before `NormalToken`'s init, so before the initial-supply mint.
 abstract contract NormalRegulatedTokenCore is NormalTokenCore, RegulatedBase {
     /// @dev `implArgs = abi.encode(COMPLIANCE_REGISTRY_CODEHASH)` (plan T29).
-    constructor(address factory_, bytes memory implArgs)
-        NormalTokenCore(factory_, implArgs)
-        RegulatedBase(implArgs)
-    {}
+    constructor(address factory_, bytes memory implArgs) NormalTokenCore(factory_, implArgs) RegulatedBase(implArgs) {}
 
     function kind() public pure override(MetaTokenBase, NormalTokenCore) returns (uint8) {
         return TokenStore.KIND_NORMAL_REGULATED;
@@ -90,7 +87,11 @@ abstract contract NormalRegulatedTokenCore is NormalTokenCore, RegulatedBase {
         super._regReceiver(recipient);
     }
 
-    function _mtxSelectorsBody() internal pure override(MetaTxBaseCore, NormalTokenCore) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+    function _mtxSelectorsBody()
+        internal
+        pure
+        override(MetaTxBaseCore, NormalTokenCore)
+        returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         return super._mtxSelectorsBody();
     }

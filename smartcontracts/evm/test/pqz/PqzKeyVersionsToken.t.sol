@@ -59,7 +59,9 @@ contract PqzKeyVersionsTokenTest is PqzFixture {
 
     /// An op 1 of `from` (debit version `kv`) to `to` at `p`, no fee, no auditor copies.
     function _op1(bytes32 from, uint64 kv, bytes32 to, uint64 p, uint256 seed)
-        internal view returns (IPqzToken.PqzTransferArgs memory t)
+        internal
+        view
+        returns (IPqzToken.PqzTransferArgs memory t)
     {
         t = _ts(_payload(p, 0, from, to, bytes32(0), _out(seed, false), ""));
         t.keyVersion = kv;
@@ -67,15 +69,23 @@ contract PqzKeyVersionsTokenTest is PqzFixture {
 
     /// An op 7 of `from` (version `kv`) to `legs`, no auditor copies.
     function _op7(bytes32 from, uint64 kv, bytes32[] memory legs, uint64 p, uint256 seed)
-        internal view returns (IPqzToken.PqzMultiArgs memory t)
+        internal
+        view
+        returns (IPqzToken.PqzMultiArgs memory t)
     {
         t = _ms(_mpayload(p, 0, from, bytes32(0), legs, _blob(seed, _outLen(legs.length, false)), ""));
         t.keyVersion = kv;
     }
 
     /// A burn (refresh with `amount` 0) of `from` (version `kv`) at `p`.
-    function _burnArgs(bytes32 from, uint64 kv, uint64 p, uint256 seed) internal view returns (IPqzToken.PqzBurnArgs memory b) {
-        b = _bs(bytes.concat(abi.encode(uint256(p), block.number + 50, uint256(0), from, bytes32(0)), _blob(seed, PqzCt.CT)));
+    function _burnArgs(bytes32 from, uint64 kv, uint64 p, uint256 seed)
+        internal
+        view
+        returns (IPqzToken.PqzBurnArgs memory b)
+    {
+        b = _bs(
+            bytes.concat(abi.encode(uint256(p), block.number + 50, uint256(0), from, bytes32(0)), _blob(seed, PqzCt.CT))
+        );
         b.keyVersion = kv;
     }
 
@@ -102,7 +112,9 @@ contract PqzKeyVersionsTokenTest is PqzFixture {
 
     function _hasSel(address t, bytes4 sel) internal view returns (bool found) {
         (bytes4[] memory s,,) = IMetaTx(t).mtxSelectors();
-        for (uint256 i; i < s.length; ++i) if (s[i] == sel) found = true;
+        for (uint256 i; i < s.length; ++i) {
+            if (s[i] == sel) found = true;
+        }
     }
 
     function _selectors(address t) internal view {
@@ -307,11 +319,26 @@ contract PqzKeyVersionsTokenTest is PqzFixture {
         assertEq(_slice(st, 640 + PqzCt.PK, PqzCt.CT), _trivCt(5), "T: (alice, 0)'s");
         tok.mtxUnshield(b, 0, bytes32(0), PROOF, _pqAuth(), "", noVerdict());
         IPqzToken.AccountState memory a0 = tok.pqzAccount(alice, 0);
-        assertEq(abi.encode(a0.rolled, a0.floor, a0.cleared), abi.encode(uint64(1), uint64(1), uint64(1)), "(alice, 0) settled");
+        assertEq(
+            abi.encode(a0.rolled, a0.floor, a0.cleared),
+            abi.encode(uint64(1), uint64(1), uint64(1)),
+            "(alice, 0) settled"
+        );
         IPqzToken.AccountState memory a1 = tok.pqzAccount(alice, 1);
-        assertEq(abi.encode(a1.pendingCount, a1.rolled, a1.floor, a1.cleared, a1.accBlob, a1.accUnits, a1.flags, a1.accHash),
-            abi.encode(before.pendingCount, before.rolled, before.floor, before.cleared, before.accBlob, before.accUnits,
-                before.flags, before.accHash), "(alice, 1) untouched");
+        assertEq(
+            abi.encode(a1.pendingCount, a1.rolled, a1.floor, a1.cleared, a1.accBlob, a1.accUnits, a1.flags, a1.accHash),
+            abi.encode(
+                before.pendingCount,
+                before.rolled,
+                before.floor,
+                before.cleared,
+                before.accBlob,
+                before.accUnits,
+                before.flags,
+                before.accHash
+            ),
+            "(alice, 1) untouched"
+        );
         assertEq(tok.pqzPending(alice, 1, 0) >> 96 & type(uint64).max, 5, "(alice, 1)'s entry still pending");
     }
 

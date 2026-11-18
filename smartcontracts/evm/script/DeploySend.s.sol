@@ -67,8 +67,20 @@ contract DeploySend is Script {
             if (regular + state > block.gaslimit) revert TxGasOverBlockLimit(i, regular, state, block.gaslimit);
             limit[i] = (regular + state) * 105 / 100;
             if (limit[i] > block.gaslimit) limit[i] = block.gaslimit;
-            console.log(string.concat("tx gas | ", vm.toString(i), " | regular ", vm.toString(regular), " | state ",
-                vm.toString(state), " | limit ", vm.toString(limit[i]), " | block gas limit ", vm.toString(block.gaslimit)));
+            console.log(
+                string.concat(
+                    "tx gas | ",
+                    vm.toString(i),
+                    " | regular ",
+                    vm.toString(regular),
+                    " | state ",
+                    vm.toString(state),
+                    " | limit ",
+                    vm.toString(limit[i]),
+                    " | block gas limit ",
+                    vm.toString(block.gaslimit)
+                )
+            );
         }
         vm.revertToStateAndDelete(snap);
         vm.startBroadcast(pk);
@@ -108,7 +120,9 @@ contract DeploySend is Script {
         if (input.length < 4) return address(0);
         bytes4 s = bytes4(input);
         bytes memory a = new bytes(input.length - 4);
-        for (uint256 k; k < a.length; ++k) a[k] = input[k + 4];
+        for (uint256 k; k < a.length; ++k) {
+            a[k] = input[k + 4];
+        }
         bytes32 salt;
         bytes memory code;
         if (s == bytes4(keccak256("deployTokenImplementation(uint8,uint64,uint16,bytes,bytes,bytes32)"))) {
@@ -119,7 +133,12 @@ contract DeploySend is Script {
             (uint64 version,, bytes memory initcode, bytes memory implArgs,) =
                 abi.decode(a, (uint64, uint16, bytes, bytes, bytes32));
             (salt, code) = (keccak256(abi.encode("dex", version)), bytes.concat(initcode, abi.encode(f, implArgs)));
-        } else if (s == bytes4(keccak256("deployImplementation((uint16,uint16,uint64),uint16,bytes4,bytes4,bytes,bytes,bytes32)"))) {
+        } else if (
+            s
+                == bytes4(
+                    keccak256("deployImplementation((uint16,uint16,uint64),uint16,bytes4,bytes4,bytes,bytes,bytes32)")
+                )
+        ) {
             (ReleaseId memory id,,,, bytes memory initcode, bytes memory implArgs,) =
                 abi.decode(a, (ReleaseId, uint16, bytes4, bytes4, bytes, bytes, bytes32));
             (salt, code) = (keccak256(abi.encode("release", id)), bytes.concat(initcode, abi.encode(id, f, implArgs)));
@@ -135,7 +154,9 @@ contract DeploySend is Script {
         address at = releaseAt(f, input);
         if (at == address(0) || at.code.length == 0) return false;
         bytes memory a = new bytes(input.length - 4);
-        for (uint256 k; k < a.length; ++k) a[k] = input[k + 4];
+        for (uint256 k; k < a.length; ++k) {
+            a[k] = input[k + 4];
+        }
         bytes4 s = bytes4(input);
         (address impl, uint16 env, uint16 want) = (address(0), 0, 0);
         if (s == bytes4(keccak256("deployTokenImplementation(uint8,uint64,uint16,bytes,bytes,bytes32)"))) {
@@ -145,10 +166,13 @@ contract DeploySend is Script {
             (uint64 version, uint16 e,,,) = abi.decode(a, (uint64, uint16, bytes, bytes, bytes32));
             (impl, env, want) = _rel(f, abi.encodeWithSignature("dexReleaseOf(uint64)", version), e);
         } else {
-            (ReleaseId memory id, uint16 e,,,,,) = abi.decode(a, (ReleaseId, uint16, bytes4, bytes4, bytes, bytes, bytes32));
+            (ReleaseId memory id, uint16 e,,,,,) =
+                abi.decode(a, (ReleaseId, uint16, bytes4, bytes4, bytes, bytes, bytes32));
             (impl, env, want) = _rel(f, abi.encodeWithSignature("classReleaseOf((uint16,uint16,uint64))", id), e);
         }
-        if (impl != at || env != want) revert PlanTxNotSendable(i, "the release is there, not with the plan's envVersion");
+        if (impl != at || env != want) {
+            revert PlanTxNotSendable(i, "the release is there, not with the plan's envVersion");
+        }
         console.log(string.concat("tx gas | ", vm.toString(i), " | done: the release is at ", vm.toString(at)));
         return true;
     }

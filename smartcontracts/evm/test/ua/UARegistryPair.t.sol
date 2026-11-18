@@ -84,7 +84,9 @@ contract UARegistryPairTest is UARegistryBase {
         bytes[5] memory d = [
             abi.encodeCall(KindsDirect.portableRecordDigest, (bytes32(uint256(1)), 0x0130, bytes32(uint256(2)), 0)),
             abi.encodeCall(KindsDirect.registrationDigest, (bytes32(uint256(1)), 0x0130, bytes32(uint256(2)), 0, 0)),
-            abi.encodeCall(KindsDirect.pqzKeyRecordDigest, (bytes32(uint256(1)), bytes32(uint256(2)), bytes32(uint256(3)))),
+            abi.encodeCall(
+                KindsDirect.pqzKeyRecordDigest, (bytes32(uint256(1)), bytes32(uint256(2)), bytes32(uint256(3)))
+            ),
             abi.encodeCall(KindsDirect.pqzKeyVersionDigest, (bytes32(uint256(1)), 2, bytes32(uint256(3)))),
             abi.encodeCall(KindsDirect.pqzKeyVersionRecordDigest, (bytes32(uint256(1)), 2, bytes32(uint256(3)), 0))
         ];
@@ -143,7 +145,10 @@ contract UARegistryPairTest is UARegistryBase {
         _same(abi.encodeCall(KindsDirect.keyHashOf, (uint16(0x0100 + kind % 0x50), keyData)));
     }
 
-    function testFuzz_r1_diff_digests(bytes32 ua, uint16 kind, uint64 version, bytes32 a, bytes32 b, bytes32 c) public view {
+    function testFuzz_r1_diff_digests(bytes32 ua, uint16 kind, uint64 version, bytes32 a, bytes32 b, bytes32 c)
+        public
+        view
+    {
         _same(abi.encodeCall(KindsDirect.portableRecordDigest, (ua, kind, a, b)));
         _same(abi.encodeCall(KindsDirect.registrationDigest, (ua, kind, a, b, c)));
         _same(abi.encodeCall(KindsDirect.pqzKeyRecordDigest, (ua, a, b)));
@@ -154,9 +159,13 @@ contract UARegistryPairTest is UARegistryBase {
     /// Malformed calldata (a short or truncated argument area) is refused the same way.
     function testFuzz_r1_diff_raw(uint8 which, bytes calldata tail) public view {
         bytes4[7] memory s = [
-            KindsDirect.uaOf.selector, KindsDirect.keyHashOf.selector, KindsDirect.portableRecordDigest.selector,
-            KindsDirect.registrationDigest.selector, KindsDirect.pqzKeyRecordDigest.selector,
-            KindsDirect.pqzKeyVersionDigest.selector, KindsDirect.pqzKeyVersionRecordDigest.selector
+            KindsDirect.uaOf.selector,
+            KindsDirect.keyHashOf.selector,
+            KindsDirect.portableRecordDigest.selector,
+            KindsDirect.registrationDigest.selector,
+            KindsDirect.pqzKeyRecordDigest.selector,
+            KindsDirect.pqzKeyVersionDigest.selector,
+            KindsDirect.pqzKeyVersionRecordDigest.selector
         ];
         _same(bytes.concat(s[which % 7], tail));
     }
@@ -174,7 +183,8 @@ contract UARegistryPairTest is UARegistryBase {
     }
 
     function test_b_keyWritersRunInTheAuxLibrary() public {
-        (address k, address r, bytes32 ua) = (address(UARegistryAuxLib), address(UARegistryCoreLib), bytes32(uint256(7)));
+        (address k, address r, bytes32 ua) =
+            (address(UARegistryAuxLib), address(UARegistryCoreLib), bytes32(uint256(7)));
         IUARegistry.UASig memory none;
         IUARegistry.KemKey memory kem;
         IUARegistry.MemberSig memory m;
@@ -192,15 +202,25 @@ contract UARegistryPairTest is UARegistryBase {
 
     /// The reads off the hot path run in their library inside the view; the hot views run in no library.
     function test_b_readsRunInTheirLibrary() public {
-        (address k, address r, bytes32 ua) = (address(UARegistryAuxLib), address(UARegistryCoreLib), bytes32(uint256(7)));
+        (address k, address r, bytes32 ua) =
+            (address(UARegistryAuxLib), address(UARegistryCoreLib), bytes32(uint256(7)));
         _routed(k, r, UARegistryAuxLib.registrationOf.selector); // D1 (owner 2026-11-15): moved from the core library
         reg.registrationOf(ua);
         _routed(r, k, UARegistryCoreLib.uaCount.selector);
         reg.uaCount(0x0103);
-        bytes4[8] memory aux = [UARegistryAuxLib.popOf.selector, UARegistryAuxLib.popSlotsOf.selector,
-            UARegistryAuxLib.webAuthnKeyOf.selector, UARegistryAuxLib.pqzPopOf.selector, UARegistryAuxLib.pqzKeySigOf.selector,
-            UARegistryAuxLib.uaAt.selector, UARegistryAuxLib.uaPage.selector, UARegistryAuxLib.uaIndex.selector];
-        for (uint256 i; i < aux.length; ++i) _routed(k, r, aux[i]);
+        bytes4[8] memory aux = [
+            UARegistryAuxLib.popOf.selector,
+            UARegistryAuxLib.popSlotsOf.selector,
+            UARegistryAuxLib.webAuthnKeyOf.selector,
+            UARegistryAuxLib.pqzPopOf.selector,
+            UARegistryAuxLib.pqzKeySigOf.selector,
+            UARegistryAuxLib.uaAt.selector,
+            UARegistryAuxLib.uaPage.selector,
+            UARegistryAuxLib.uaIndex.selector
+        ];
+        for (uint256 i; i < aux.length; ++i) {
+            _routed(k, r, aux[i]);
+        }
         reg.popOf(ua);
         reg.popSlotsOf(ua);
         reg.webAuthnKeyOf(ua);
@@ -261,10 +281,14 @@ contract UARegistryPairTest is UARegistryBase {
     function _pqReg() internal returns (UARegistry r, bytes32 ua, bytes memory pk) {
         uint16[8] memory ks = [uint16(0x0101), 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135, 0x0142];
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](8);
-        for (uint256 i; i < 8; ++i) c[i] = UARegistry.KindConfig(ks[i], address(mock), i == 0 ? 400_000 : 4_250_000);
+        for (uint256 i; i < 8; ++i) {
+            c[i] = UARegistry.KindConfig(ks[i], address(mock), i == 0 ? 400_000 : 4_250_000);
+        }
         r = _deploy(REG_C, chainUidA, address(0), false, BUDGET, address(0), true, c);
         pk = new bytes(1312);
-        for (uint256 i; i < pk.length; ++i) pk[i] = bytes1(uint8(i * 7 + 1));
+        for (uint256 i; i < pk.length; ++i) {
+            pk[i] = bytes1(uint8(i * 7 + 1));
+        }
         ua = _register(r, UAKinds.MLDSA44, pk);
     }
 
@@ -277,8 +301,10 @@ contract UARegistryPairTest is UARegistryBase {
         pure
         returns (IUARegistry.UASig memory s)
     {
-        s.signature = _sig(pk, UAKinds.uaMessage(UAKinds.MLDSA44, UAKinds.PURPOSE_KEM,
-            UAKinds.kemRecordDigest(ua, v, UAKinds.kemPk(k))));
+        s.signature = _sig(
+            pk,
+            UAKinds.uaMessage(UAKinds.MLDSA44, UAKinds.PURPOSE_KEM, UAKinds.kemRecordDigest(ua, v, UAKinds.kemPk(k)))
+        );
     }
 
     /// `setKemKey` (version >= 1) checks its signature by the core's `portableOk`, once; a bad signature is refused
@@ -300,13 +326,17 @@ contract UARegistryPairTest is UARegistryBase {
     function test_c_pqzWritesRunTheCoreHelpers() public {
         (UARegistry r, bytes32 ua, bytes memory pk) = _pqReg();
         bytes memory key = new bytes(16_384);
-        for (uint256 i; i < key.length; i += 32) key[i] = bytes1(uint8(i >> 5) | 1);
+        for (uint256 i; i < key.length; i += 32) {
+            key[i] = bytes1(uint8(i >> 5) | 1);
+        }
         bytes32 h = UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key);
-        bytes memory pqzPop = _sig(key, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_KEY, UAKinds.pqzKeyDigest(ua, h)));
+        bytes memory pqzPop =
+            _sig(key, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_KEY, UAKinds.pqzKeyDigest(ua, h)));
         bytes32 popHash = keccak256(pqzPop);
         IUARegistry.UASig memory s;
-        s.signature = _sig(pk, UAKinds.uaMessage(UAKinds.MLDSA44, UAKinds.PURPOSE_PQZ_KEY,
-            UAKinds.pqzKeyRecordDigest(ua, h, popHash)));
+        s.signature = _sig(
+            pk, UAKinds.uaMessage(UAKinds.MLDSA44, UAKinds.PURPOSE_PQZ_KEY, UAKinds.pqzKeyRecordDigest(ua, h, popHash))
+        );
         IUARegistry.UASig memory bad;
         bad.signature = _sig(pk, bytes32(0));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
@@ -324,7 +354,9 @@ contract UARegistryPairTest is UARegistryBase {
     function test_c_cacheRunsTheCoreKeyCheck() public {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](2);
         c[0] = UARegistry.KindConfig(0x0101, address(mock), 400_000);
-        c[1] = UARegistry.KindConfig(UAKinds.MLDSA44, address(new MldsaVerifier(UAKinds.MLDSA44, address(0), "", "")), 4_250_000);
+        c[1] = UARegistry.KindConfig(
+            UAKinds.MLDSA44, address(new MldsaVerifier(UAKinds.MLDSA44, address(0), "", "")), 4_250_000
+        );
         UARegistry r = _deploy(REG_C, chainUidA, address(0), false, BUDGET, address(0), true, c);
         vm.expectCall(address(UARegistryCoreLib), abi.encodeWithSelector(UARegistryCoreLib.keyUa.selector), 1);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MLDSA44));
@@ -340,15 +372,23 @@ contract UARegistryPairTest is UARegistryBase {
         assertTrue(ok, "control: a pure view answers");
         IUARegistry.UASig memory s;
         s.keyData = hex"01";
-        (ok,) = core.call(abi.encodeWithSelector(UARegistryCoreLib.portableOk.selector, uint16(0x0103), bytes(""), bytes32(0),
-            bytes32(0), bytes32(0), s));
+        (ok,) = core.call(
+            abi.encodeWithSelector(
+                UARegistryCoreLib.portableOk.selector, uint16(0x0103), bytes(""), bytes32(0), bytes32(0), bytes32(0), s
+            )
+        );
         assertFalse(ok, "portableOk");
         (ok,) = core.call(abi.encodeWithSelector(UARegistryCoreLib.keyUa.selector, uint16(0x0103), _key(0x0103)));
         assertFalse(ok, "keyUa");
-        (ok,) = core.call(abi.encodeWithSelector(UARegistryCoreLib.pqzHolder.selector, uint16(0x0103), bytes(""), bytes32(0), false));
+        (ok,) = core.call(
+            abi.encodeWithSelector(UARegistryCoreLib.pqzHolder.selector, uint16(0x0103), bytes(""), bytes32(0), false)
+        );
         assertFalse(ok, "pqzHolder");
-        (ok,) = core.call(abi.encodeWithSelector(UARegistryCoreLib.pqzProof.selector, bytes32(0), uint64(0), bytes(""), bytes(""),
-            bytes32(0), bytes32(0)));
+        (ok,) = core.call(
+            abi.encodeWithSelector(
+                UARegistryCoreLib.pqzProof.selector, bytes32(0), uint64(0), bytes(""), bytes(""), bytes32(0), bytes32(0)
+            )
+        );
         assertFalse(ok, "pqzProof");
     }
 

@@ -13,8 +13,17 @@ import {PqUA} from "../src/ua/PqUA.sol";
 ///         EIP-8355 address (`0x12` / `0x13` / `0x14`) or at the SCaaS testnet's `0x…5caa0012` / `…0013` / `…0014`
 ///         (`DeployBase._mldsaCandidates`). UNAUDITED.
 contract PqPrecompileProbe {
-    constructor(bytes memory v44, bytes memory i44, bytes memory v65, bytes memory i65, bytes memory v87, bytes memory i87) {
-        bytes memory out = abi.encode(PqzSafety.selfTest(PqzSafety.PQZ), _ml(0, v44, i44), _ml(1, v65, i65), _ml(2, v87, i87));
+    constructor(
+        bytes memory v44,
+        bytes memory i44,
+        bytes memory v65,
+        bytes memory i65,
+        bytes memory v87,
+        bytes memory i87
+    ) {
+        bytes memory out = abi.encode(
+            PqzSafety.selfTest(PqzSafety.PQZ), _ml(0, v44, i44), _ml(1, v65, i65), _ml(2, v87, i87)
+        );
         assembly ("memory-safe") {
             return(add(out, 32), mload(out))
         }

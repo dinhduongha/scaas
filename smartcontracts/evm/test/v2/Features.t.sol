@@ -48,10 +48,12 @@ contract FeaturesTest is Test {
     }
 
     function _cfg(uint256 features, uint256 locked, address owner_, address minter_, uint256 supply)
-        internal view returns (IFactoryToken.TokenConfig memory c)
+        internal
+        view
+        returns (IFactoryToken.TokenConfig memory c)
     {
         (c.name, c.symbol, c.decimals, c.features, c.lockedFeatures, c.admin) =
-            ("Points", "PTS", 6, features, locked, nid(owner_));
+        ("Points", "PTS", 6, features, locked, nid(owner_));
         c.roles.minter = nid(minter_);
         (c.initialSupply, c.initialHolder) = (supply, alice);
     }
@@ -62,7 +64,8 @@ contract FeaturesTest is Test {
 
     /// A clone of `implementation` with the env the factory would append (`UID`, no registry, Hedera as given).
     function _token(address implementation, bool hedera, IFactoryToken.TokenConfig memory cfg)
-        internal returns (NormalToken t)
+        internal
+        returns (NormalToken t)
     {
         t = NormalToken(EnvKit.clone(implementation, EnvKit.env(UID, address(0), address(0), hedera)));
         t.initialize(nid(address(this)), 1, abi.encode(cfg));
@@ -129,9 +132,17 @@ contract FeaturesTest is Test {
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(2)));
         off.burn(1);
-        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({from: alice,
-            data: abi.encodeCall(NormalToken.burn, (1)), batch: 1, nonce: 0, validUntil: block.timestamp + 300,
-            mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
+        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
+            from: alice,
+            data: abi.encodeCall(NormalToken.burn, (1)),
+            batch: 1,
+            nonce: 0,
+            validUntil: block.timestamp + 300,
+            mode: RR,
+            relayer: relayer,
+            fee: 0,
+            feeRecipient: address(0)
+        });
         bytes memory s = _sig(MtxDigest.metaTx(address(off), m));
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(2)));
@@ -154,9 +165,19 @@ contract FeaturesTest is Test {
         vm.expectRevert(off);
         t.payWithFee(shop, 1, FeeMode.NONE, 0, address(0), PayMetaKit.ref("r"), PayMetaKit.meta("r"));
         bytes32 ref = PayMetaKit.ref("r");
-        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({from: MetaTxLib.pad(alice), to: MetaTxLib.pad(shop),
-            value: 10, entryRef: ref, batch: t.payLane(ref), nonce: 0, validUntil: block.timestamp + 300, mode: RR,
-            relayer: relayer, fee: 0, feeRecipient: address(0)});
+        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({
+            from: MetaTxLib.pad(alice),
+            to: MetaTxLib.pad(shop),
+            value: 10,
+            entryRef: ref,
+            batch: t.payLane(ref),
+            nonce: 0,
+            validUntil: block.timestamp + 300,
+            mode: RR,
+            relayer: relayer,
+            fee: 0,
+            feeRecipient: address(0)
+        });
         IUARegistry.UASig memory s;
         s.signature = _sig(t.mtxTransferDigest(x));
         vm.prank(relayer);
@@ -182,8 +203,12 @@ contract FeaturesTest is Test {
     function test_supportsInterface_paymentOnlyWhenPayable() public {
         NormalToken off = _token(impl, _cfg(0, 0, address(0), address(0), 0));
         NormalToken on = _token(impl, _cfg(PAYABLE, 0, address(0), address(0), 0));
-        bytes4[4] memory always = [type(IERC165).interfaceId, type(IERC20).interfaceId, type(IMetaTx).interfaceId,
-            type(IERC20MetaTx).interfaceId];
+        bytes4[4] memory always = [
+            type(IERC165).interfaceId,
+            type(IERC20).interfaceId,
+            type(IMetaTx).interfaceId,
+            type(IERC20MetaTx).interfaceId
+        ];
         for (uint256 i; i < 4; ++i) {
             assertTrue(off.supportsInterface(always[i]));
             assertTrue(on.supportsInterface(always[i]));
@@ -212,7 +237,7 @@ contract FeaturesTest is Test {
         t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         assertEq(t.admin(), bytes32(0));
         vm.prank(minter);
-        t.mint(alice, 1, EnvKit.codeUidOf(address(t)));                                     // holders keep their role after the owner renounces
+        t.mint(alice, 1, EnvKit.codeUidOf(address(t))); // holders keep their role after the owner renounces
         vm.prank(minter);
         t.renounceRole(1, EnvKit.codeUidOf(address(t)));
         vm.prank(minter);
@@ -222,13 +247,27 @@ contract FeaturesTest is Test {
 
     function test_adminFunctionsAreNeverSelfCalls() public {
         NormalToken t = _token(impl, _cfg(MINTABLE, 0, alice, address(0), 0));
-        bytes4[7] memory sels = [t.grantRole.selector, t.revokeRole.selector, t.renounceRole.selector,
-            t.disableFeature.selector, t.transferAdmin.selector, t.acceptAdmin.selector,
-            t.renounceAdmin.selector];
+        bytes4[7] memory sels = [
+            t.grantRole.selector,
+            t.revokeRole.selector,
+            t.renounceRole.selector,
+            t.disableFeature.selector,
+            t.transferAdmin.selector,
+            t.acceptAdmin.selector,
+            t.renounceAdmin.selector
+        ];
         for (uint256 i; i < 7; ++i) {
-            MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({from: alice,
-                data: abi.encodeWithSelector(sels[i]), batch: i, nonce: 0, validUntil: block.timestamp + 300,
-                mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
+            MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
+                from: alice,
+                data: abi.encodeWithSelector(sels[i]),
+                batch: i,
+                nonce: 0,
+                validUntil: block.timestamp + 300,
+                mode: RR,
+                relayer: relayer,
+                fee: 0,
+                feeRecipient: address(0)
+            });
             bytes memory s = _sig(MtxDigest.metaTx(address(t), m));
             vm.prank(relayer);
             vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, sels[i]));
@@ -239,8 +278,14 @@ contract FeaturesTest is Test {
     /// GovernanceLib writes `scaas.governance` only: the meta-tx lanes (`scaas.metatx`) and the ERC-20 slots stay put.
     function test_adminWritesDoNotTouchOtherNamespaces() public {
         NormalToken t = _token(impl, _cfg(MINTABLE, 0, ownerA, address(0), 100));
-        bytes32 lane = keccak256(abi.encode(uint256(1), keccak256(abi.encode(alice,
-            bytes32(0x06b01547c739946503c06c80685cc72ae2fec5074fd602f84cd2fa888722ac00)))));
+        bytes32 lane = keccak256(
+            abi.encode(
+                uint256(1),
+                keccak256(
+                    abi.encode(alice, bytes32(0x06b01547c739946503c06c80685cc72ae2fec5074fd602f84cd2fa888722ac00))
+                )
+            )
+        );
         bytes32 bal = keccak256(abi.encode(alice, uint256(0)));
         vm.prank(alice);
         t.cancelNonce(1);
@@ -278,9 +323,19 @@ contract FeaturesTest is Test {
         NormalToken h = _token(hImpl, true, cfg);
         NormalToken e = _token(impl, cfg);
         assertTrue(h.IS_HEDERA());
-        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({from: MetaTxLib.pad(native),
-            to: MetaTxLib.pad(shop), value: 10, entryRef: 0, batch: 1, nonce: 0, validUntil: block.timestamp + 300,
-            mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
+        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({
+            from: MetaTxLib.pad(native),
+            to: MetaTxLib.pad(shop),
+            value: 10,
+            entryRef: 0,
+            batch: 1,
+            nonce: 0,
+            validUntil: block.timestamp + 300,
+            mode: RR,
+            relayer: relayer,
+            fee: 0,
+            feeRecipient: address(0)
+        });
         (bytes32 rr, bytes32 vs) = vm.signCompact(edKey, h.mtxTransferDigest(x));
         IUARegistry.UASig memory s;
         s.signature = abi.encodePacked(rr, vs);

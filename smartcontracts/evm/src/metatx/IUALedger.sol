@@ -12,11 +12,24 @@ interface IUALedger {
     /// @notice Every movement with a derived side (a burn under a UA has `to = 0`).
     event UATransfer(bytes32 indexed from, bytes32 indexed to, uint256 value);
     /// @notice Per executed `UAMetaTransaction` / `UAMetaTransfer`; `digest` is the mesh `intent_id`.
-    event UAMetaTransactionExecuted(bytes32 indexed from, address indexed relayer, uint256 indexed batch, uint256 nonce,
-                                    bytes32 digest, address feeRecipient, uint256 fee);
+    event UAMetaTransactionExecuted(
+        bytes32 indexed from,
+        address indexed relayer,
+        uint256 indexed batch,
+        uint256 nonce,
+        bytes32 digest,
+        address feeRecipient,
+        uint256 fee
+    );
     /// @notice A `UAMetaTransfer` with `entryRef ≠ 0` (the UA ledger's `PaymentSettled`).
-    event UAPaymentSettled(bytes32 indexed from, bytes32 indexed to, uint256 amount, uint256 feeAmount,
-                           address feeRecipient, bytes32 indexed entryRef);
+    event UAPaymentSettled(
+        bytes32 indexed from,
+        bytes32 indexed to,
+        uint256 amount,
+        uint256 feeAmount,
+        address feeRecipient,
+        bytes32 indexed entryRef
+    );
     event UANonceCancelled(bytes32 indexed ua, uint256 indexed batch, uint256 newNonce);
 
     error UALedgerOff();

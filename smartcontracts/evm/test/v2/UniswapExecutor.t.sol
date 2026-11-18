@@ -95,9 +95,14 @@ contract UniswapExecutorTest is UADexBase {
         e.exchangeCallback("t", _one(tIn), new uint256[](1), _one(tOut), new uint256[](1), data);
     }
 
-    function _expectRun(UniswapExecutor e, address tIn, uint256 amountIn, address tOut, bytes memory data,
-        bytes memory err) internal
-    {
+    function _expectRun(
+        UniswapExecutor e,
+        address tIn,
+        uint256 amountIn,
+        address tOut,
+        bytes memory data,
+        bytes memory err
+    ) internal {
         _fund(tIn, address(e), amountIn);
         vm.prank(address(dex));
         vm.expectRevert(err);
@@ -192,15 +197,27 @@ contract UniswapExecutorTest is UADexBase {
 
     function test_executor_v4_nativeCurrency_refused() public {
         PoolKey memory k = PoolKey(address(0), address(A), 3000, 60, address(0));
-        _expectRun(ex, address(A), 1000, address(B), _hops(_v4(k, address(A))),
-            abi.encodeWithSelector(UniswapExecutor.NativeCurrency.selector));
+        _expectRun(
+            ex,
+            address(A),
+            1000,
+            address(B),
+            _hops(_v4(k, address(A))),
+            abi.encodeWithSelector(UniswapExecutor.NativeCurrency.selector)
+        );
     }
 
     /// The C → B pool consumes only 500 of the C the first hop bought: the dust of C is refused, never kept.
     function test_executor_leftover_refused() public {
         MockV3Pool(pCB).setMaxIn(500);
-        _expectRun(ex, address(A), 1000, address(B), _hops(_v3(address(A), address(C)), _v3(address(C), address(B))),
-            abi.encodeWithSelector(UniswapExecutor.Leftover.selector, address(C)));
+        _expectRun(
+            ex,
+            address(A),
+            1000,
+            address(B),
+            _hops(_v3(address(A), address(C)), _v3(address(C), address(B))),
+            abi.encodeWithSelector(UniswapExecutor.Leftover.selector, address(C))
+        );
     }
 
     /// A stray balance sent to the executor is spent or forwarded at its next use: 100 A ride the hop, 50 B go to the
@@ -215,14 +232,38 @@ contract UniswapExecutorTest is UADexBase {
 
     function test_executor_hopKindOff() public {
         UniswapExecutor off = new UniswapExecutor(address(dex), address(0), bytes32(0), address(0));
-        _expectRun(off, address(A), 10, address(B), _hops(_v3(address(A), address(B))),
-            abi.encodeWithSelector(UniswapExecutor.HopKindOff.selector, uint8(1)));
-        _expectRun(off, address(A), 10, address(B), _hops(_v4(keyAB, address(A))),
-            abi.encodeWithSelector(UniswapExecutor.HopKindOff.selector, uint8(2)));
-        _expectRun(ex, address(A), 10, address(B), _hops(UniswapExecutor.Hop(3, "")),
-            abi.encodeWithSelector(UniswapExecutor.HopKindOff.selector, uint8(3)));
-        _expectRun(ex, address(A), 10, address(B), _hops(UniswapExecutor.Hop(0, "")),
-            abi.encodeWithSelector(UniswapExecutor.HopKindOff.selector, uint8(0)));
+        _expectRun(
+            off,
+            address(A),
+            10,
+            address(B),
+            _hops(_v3(address(A), address(B))),
+            abi.encodeWithSelector(UniswapExecutor.HopKindOff.selector, uint8(1))
+        );
+        _expectRun(
+            off,
+            address(A),
+            10,
+            address(B),
+            _hops(_v4(keyAB, address(A))),
+            abi.encodeWithSelector(UniswapExecutor.HopKindOff.selector, uint8(2))
+        );
+        _expectRun(
+            ex,
+            address(A),
+            10,
+            address(B),
+            _hops(UniswapExecutor.Hop(3, "")),
+            abi.encodeWithSelector(UniswapExecutor.HopKindOff.selector, uint8(3))
+        );
+        _expectRun(
+            ex,
+            address(A),
+            10,
+            address(B),
+            _hops(UniswapExecutor.Hop(0, "")),
+            abi.encodeWithSelector(UniswapExecutor.HopKindOff.selector, uint8(0))
+        );
     }
 
     /// D5: the DEX, a v3 factory and a v4 pool manager must be contracts (an EOA or an EIP-7702 designator is not);
@@ -288,7 +329,9 @@ contract UniswapExecutorTest is UADexBase {
         p.outsideFloor = 180;
         uint256 a0 = A.balanceOf(alice);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.UAExchangeLegSettled("hy", A.tradeOrderDigest(DexLegs.ua(t)), DexLegs.pad(alice), DexLegs.pad(alice), 460, 980, 58, 3, 0, 828); // the 40: by the restore (B P2-1)
+        emit ISCaaSDex.UAExchangeLegSettled(
+            "hy", A.tradeOrderDigest(DexLegs.ua(t)), DexLegs.pad(alice), DexLegs.pad(alice), 460, 980, 58, 3, 0, 828
+        ); // the 40: by the restore (B P2-1)
         vm.prank(RELAYER);
         dex.mtxHybridVia(p, address(ex), _hops(_v3(address(A), address(B), 500)));
         assertEq(A.balanceOf(alice), a0 - 460);

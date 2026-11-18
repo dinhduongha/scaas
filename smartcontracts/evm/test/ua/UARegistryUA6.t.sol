@@ -30,9 +30,13 @@ contract UARegistryUA6Test is UARegistryBase {
         super.setUp();
         UARegistry.KindConfig[] memory base = _cfgs(address(mock));
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](base.length + 9);
-        for (uint256 i; i < base.length; ++i) c[i] = base[i];
+        for (uint256 i; i < base.length; ++i) {
+            c[i] = base[i];
+        }
         uint16[8] memory pq = [uint16(0x0108), 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135, 0x0142];
-        for (uint256 i; i < 8; ++i) c[base.length + i] = UARegistry.KindConfig(pq[i], address(mock), i == 0 ? 50_000 : PQ_CAP);
+        for (uint256 i; i < 8; ++i) {
+            c[base.length + i] = UARegistry.KindConfig(pq[i], address(mock), i == 0 ? 50_000 : PQ_CAP);
+        }
         c[base.length + 8] =
             UARegistry.KindConfig(UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier()), 70_000);
         r = _deploy(REG_U, chainUidA, address(0), false, BUDGET, address(0), true, c);
@@ -45,16 +49,23 @@ contract UARegistryUA6Test is UARegistryBase {
     // ----- helpers -----
 
     function _pk(uint16 kind, uint256 salt) internal pure returns (bytes memory pk) {
-        uint256 len = kind == 0x0130 ? 1312 : kind == 0x0131 ? 1952 : kind == 0x0132 ? 897 : kind == 0x0133 ? 32
-            : kind == 0x0134 ? 2592 : kind == 0x0135 ? 1793 : 16384;
+        uint256 len = kind == 0x0130
+            ? 1312
+            : kind == 0x0131
+                ? 1952
+                : kind == 0x0132 ? 897 : kind == 0x0133 ? 32 : kind == 0x0134 ? 2592 : kind == 0x0135 ? 1793 : 16384;
         pk = new bytes(len);
         for (uint256 i; i < len; i += 32) {
             bytes32 w = keccak256(abi.encode(kind, salt, i));
-            for (uint256 j; j < 32 && i + j < len; ++j) pk[i + j] = w[j];
+            for (uint256 j; j < 32 && i + j < len; ++j) {
+                pk[i + j] = w[j];
+            }
         }
         if (kind == 0x0132 || kind == 0x0135) {
             pk[0] = kind == 0x0132 ? bytes1(0x09) : bytes1(0x0a);
-            for (uint256 i = 1; i < len; ++i) pk[i] = 0; // every h_i = 0 < q
+            for (uint256 i = 1; i < len; ++i) {
+                pk[i] = 0; // every h_i = 0 < q
+            }
         }
     }
 
@@ -109,9 +120,12 @@ contract UARegistryUA6Test is UARegistryBase {
         bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_POP_V2, _regDigest(ua, UAKinds.MSIG, a));
         uint16 mi = _indexOf(d, mlUa);
         uint16 pi = _indexOf(d, p256Ua);
-        IUARegistry.MemberSig memory ms = IUARegistry.MemberSig(mi, new IUARegistry.InnerSig[](0), _sig(mlKey, r.uaMessage(0x0131, UAKinds.PURPOSE_MEMBER, md)));
-        IUARegistry.MemberSig memory ps =
-            IUARegistry.MemberSig(pi, new IUARegistry.InnerSig[](0), _sig(p256Key, r.uaMessage(0x0101, UAKinds.PURPOSE_MEMBER, md)));
+        IUARegistry.MemberSig memory ms = IUARegistry.MemberSig(
+            mi, new IUARegistry.InnerSig[](0), _sig(mlKey, r.uaMessage(0x0131, UAKinds.PURPOSE_MEMBER, md))
+        );
+        IUARegistry.MemberSig memory ps = IUARegistry.MemberSig(
+            pi, new IUARegistry.InnerSig[](0), _sig(p256Key, r.uaMessage(0x0101, UAKinds.PURPOSE_MEMBER, md))
+        );
         IUARegistry.MemberSig[] memory sigs = new IUARegistry.MemberSig[](both ? 2 : 1);
         if (!both) sigs[0] = ms;
         else (sigs[0], sigs[1]) = mi < pi ? (ms, ps) : (ps, ms);
@@ -130,8 +144,15 @@ contract UARegistryUA6Test is UARegistryBase {
     function _zetherUa() internal returns (bytes32 ua) {
         bytes memory y = ZetherKeys.pub(ZX, true);
         ua = r.uaOf(UAKinds.ZETHER_BLS12381, y);
-        bytes memory pop =
-            ZetherKeys.schnorr(ZX, r.uaMessage(UAKinds.ZETHER_BLS12381, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(ua, UAKinds.ZETHER_BLS12381, 0, UAKinds.kemRecordHash(ua, 0, ""), 0)), true);
+        bytes memory pop = ZetherKeys.schnorr(
+            ZX,
+            r.uaMessage(
+                UAKinds.ZETHER_BLS12381,
+                UAKinds.PURPOSE_POP_V2,
+                UAKinds.registrationDigest(ua, UAKinds.ZETHER_BLS12381, 0, UAKinds.kemRecordHash(ua, 0, ""), 0)
+            ),
+            true
+        );
         assertEq(UACall.register(r, UAKinds.ZETHER_BLS12381, y, _none(), pop, ""), ua);
     }
 
@@ -338,7 +359,8 @@ contract UARegistryUA6Test is UARegistryBase {
     /// registration (PQZ key and proof) to gen 2 first must be refused, else the key would stay unproven in gen 2 for
     /// good; the same bytes then register in gen 1, proven.
     function test_UA6_gen2GrieferRefused() public {
-        UARegistry g2 = new UARegistry(chainUidA, address(r), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
+        UARegistry g2 =
+            new UARegistry(chainUidA, address(r), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
         (bytes memory d, bytes32 msUa) = _msig(2, 1, 1);
         bytes memory key = _pk(0x0142, 20);
         IUARegistry.UAAttrs memory a = _a(msUa, UAKinds.MSIG, key);
@@ -439,13 +461,15 @@ contract UARegistryUA6Test is UARegistryBase {
             r.requireAuthorized(z, ps[i], DIGEST, au435);
             if (i == 0) console.log("requireAuthorized zether-bls12381 (metatx)", g - gasleft());
         }
-        bytes memory s = ZetherKeys.schnorr(ZX, r.uaMessage(UAKinds.ZETHER_BLS12381, UAKinds.PURPOSE_METATX, DIGEST), true);
+        bytes memory s =
+            ZetherKeys.schnorr(ZX, r.uaMessage(UAKinds.ZETHER_BLS12381, UAKinds.PURPOSE_METATX, DIGEST), true);
         bytes memory withY = abi.encode(ZetherKeys.pub(ZX, true), s); // before expectRevert: pub() calls a precompile
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, z));
         r.requireAuthorized(z, UAKinds.PURPOSE_METATX, DIGEST, UACall.auth(z, withY));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, z));
         r.requireAuthorized(z, UAKinds.PURPOSE_TRADE, DIGEST, UACall.auth(z, abi.encode(bytes(""), s)));
-        bytes memory other = ZetherKeys.schnorr(0xB0B5, r.uaMessage(UAKinds.ZETHER_BLS12381, UAKinds.PURPOSE_METATX, DIGEST), true);
+        bytes memory other =
+            ZetherKeys.schnorr(0xB0B5, r.uaMessage(UAKinds.ZETHER_BLS12381, UAKinds.PURPOSE_METATX, DIGEST), true);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, z));
         r.requireAuthorized(z, UAKinds.PURPOSE_METATX, DIGEST, UACall.auth(z, abi.encode(bytes(""), other)));
     }

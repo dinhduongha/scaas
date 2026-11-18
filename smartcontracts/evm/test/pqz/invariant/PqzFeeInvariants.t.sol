@@ -44,20 +44,32 @@ contract PqzFeeInvariantsTest is PqzOffchainBase {
         h = new PqzFeeHandler(reg, alice, bob, carol, _mldsaUA(9));
         fN = new OpenFactory(nid(registrar));
         EnvKit.configure(fN, PQZ_UID, 1 days, address(0));
-        Catalogue.release(fN, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(fN), PQZ_UID, address(reg), address(pqv)),
-            type(NormalPqzToken).creationCode);
-        Catalogue.release(fN, IOpenFactory.TokenKind.WRAPPED_PQZ, 1, pqzEnv(address(fN), PQZ_UID, address(reg), address(pqv)),
-            type(WrappedPqzToken).creationCode);
+        Catalogue.release(
+            fN,
+            IOpenFactory.TokenKind.NORMAL_PQZ,
+            1,
+            pqzEnv(address(fN), PQZ_UID, address(reg), address(pqv)),
+            type(NormalPqzToken).creationCode
+        );
+        Catalogue.release(
+            fN,
+            IOpenFactory.TokenKind.WRAPPED_PQZ,
+            1,
+            pqzEnv(address(fN), PQZ_UID, address(reg), address(pqv)),
+            type(WrappedPqzToken).creationCode
+        );
         vm.startPrank(registrar);
         fN.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(fN)));
         fN.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ, true, EnvKit.uidOf(address(fN)));
         vm.stopPrank();
         vm.warp(block.timestamp + 1 days); // the releases usable
-        NormalPqzToken pre = NormalPqzToken(fN.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1,
-            abi.encode(_cfg(uint256(1) << 40)), "fee-pre"));
+        NormalPqzToken pre = NormalPqzToken(
+            fN.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(uint256(1) << 40)), "fee-pre")
+        );
         (vMode, vUA, vFixed, vFee, vFeeMax) = (PqzCore.OFFCHAIN, vA, false, FEE0, CAP);
-        NormalPqzToken off = NormalPqzToken(fN.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1,
-            abi.encode(_cfg(uint256(1) << 40)), "fee-off"));
+        NormalPqzToken off = NormalPqzToken(
+            fN.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(uint256(1) << 40)), "fee-off")
+        );
         _holders(address(off));
         IFactoryToken.TokenConfig memory cw = _cfg(uint256(1) << 40);
         (vMode, vUA, vFixed, vFee, vFeeMax) = (0, bytes32(0), false, 0, 0);
@@ -67,10 +79,15 @@ contract PqzFeeInvariantsTest is PqzOffchainBase {
         _public(pre, address(h), 1_000_000 * SCALE);
         _public(off, address(h), 1_000_000 * SCALE);
         h.setTokens(pre, off, offW);
-        for (uint256 t; t < 3; ++t) for (uint256 j; j < 3; ++j) h.shield(t, j, 500);
+        for (uint256 t; t < 3; ++t) {
+            for (uint256 j; j < 3; ++j) {
+                h.shield(t, j, 500);
+            }
+        }
         targetContract(address(h));
         bytes4[] memory sel = new bytes4[](8);
-        (sel[0], sel[1], sel[2], sel[3]) = (h.shield.selector, h.debit.selector, h.feeDecrease.selector, h.feePropose.selector);
+        (sel[0], sel[1], sel[2], sel[3]) =
+        (h.shield.selector, h.debit.selector, h.feeDecrease.selector, h.feePropose.selector);
         (sel[4], sel[5], sel[6], sel[7]) = (h.feeConfirm.selector, h.warp.selector, h.hold.selector, h.replay.selector);
         targetSelector(FuzzSelector(address(h), sel));
     }
@@ -84,11 +101,15 @@ contract PqzFeeInvariantsTest is PqzOffchainBase {
         c.roles.minter = 0;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(new MockERC20("USD", "USD", 6)), 1, 1);
-        return WrappedPqzToken(payable(_factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "fee-offw")));
+        return WrappedPqzToken(
+            payable(_factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "fee-offw"))
+        );
     }
 
     function _all(function(uint256) view f) internal view {
-        for (uint256 t; t < 3; ++t) f(t);
+        for (uint256 t; t < 3; ++t) {
+            f(t);
+        }
     }
 
     function _f1(uint256 t) internal view {
@@ -109,10 +130,21 @@ contract PqzFeeInvariantsTest is PqzOffchainBase {
         assertEq(h.toks(t).totalSupply(), h.supplyWant(t), "F4 / I-V3: totalSupply by wraps, mints and unwraps only");
     }
 
-    function invariant_F1_pool() public view { _all(_f1); }
-    function invariant_F2_hidden() public view { _all(_f2); }
-    function invariant_F3_payouts() public view { _all(_f3); }
-    function invariant_F4_supply() public view { _all(_f4); }
+    function invariant_F1_pool() public view {
+        _all(_f1);
+    }
+
+    function invariant_F2_hidden() public view {
+        _all(_f2);
+    }
+
+    function invariant_F3_payouts() public view {
+        _all(_f3);
+    }
+
+    function invariant_F4_supply() public view {
+        _all(_f4);
+    }
 
     function invariant_F5_honest() public view {
         assertEq(h.landedShort(), 0, "F5: a debit landed with T < v + fee");
@@ -134,7 +166,9 @@ contract PqzFeeInvariantsTest is PqzOffchainBase {
     /// The control: a fixed sequence lands debits of every kind on the three tokens, a fee decrease, a proposal confirmed
     /// after the notice, a held op 7 refused after the change (and with `d` shifted); every ghost still 0.
     function test_handler_acts() public {
-        for (uint256 k; k < 5; ++k) h.debit(2, 0, k, 7 + k * 1000);
+        for (uint256 k; k < 5; ++k) {
+            h.debit(2, 0, k, 7 + k * 1000);
+        }
         h.debit(0, 1, 0, 11);
         h.debit(1, 2, 1, 13 << 16);
         h.hold(0, 0, 1);

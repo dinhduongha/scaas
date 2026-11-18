@@ -10,8 +10,20 @@ import {Catalogue} from "../helpers/Catalogue.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {ZetherKeys} from "../zether/helpers/ZetherKeys.sol";
 import {n, a, h, eJson, ecdsa} from "../metatx/NamedEntry.t.sol";
-import {typedDigest, singleJson, multiJson, burnJson, hexJson, T_G1, T_SINGLE, T_LEG, T_MULTI, T_BURN, T_UNWRAP,
-    StatementHarness} from "../zether/ZetherTyped.t.sol";
+import {
+    typedDigest,
+    singleJson,
+    multiJson,
+    burnJson,
+    hexJson,
+    T_G1,
+    T_SINGLE,
+    T_LEG,
+    T_MULTI,
+    T_BURN,
+    T_UNWRAP,
+    StatementHarness
+} from "../zether/ZetherTyped.t.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -32,28 +44,65 @@ import {IConfidentialToken, IConfidentialWrappedToken} from "../../src/confident
 /// before T4 too, so each test is red there on its own (plan T4 step 3).
 interface IZetherMergedT4 {
     function mtxShield(MetaTxLib.UAEnvelope calldata e, bytes32 toUA, uint256 amount, IUARegistry.UASig calldata auth)
-        external returns (bytes memory);
-    function mtxConfidentialTransfer(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherMulti calldata t,
-        bytes calldata proof, IUARegistry.UASig calldata auth) external returns (bytes32);
-    function mtxConfidentialTransferCompact(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherMulti calldata t,
-        bytes calldata proof, IUARegistry.UASig calldata auth) external returns (bytes32);
-    function mtxConfidentialTransferSingle(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherSingle calldata t,
-        bytes calldata proof, IUARegistry.UASig calldata auth) external returns (bytes32);
-    function mtxUnshield(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherBurn calldata b, uint256 amount,
-        bytes32 recipient, bytes calldata proof, IUARegistry.UASig calldata auth) external returns (bytes memory);
+        external
+        returns (bytes memory);
+    function mtxConfidentialTransfer(
+        MetaTxLib.UAEnvelope calldata e,
+        IZetherToken.ZetherMulti calldata t,
+        bytes calldata proof,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes32);
+    function mtxConfidentialTransferCompact(
+        MetaTxLib.UAEnvelope calldata e,
+        IZetherToken.ZetherMulti calldata t,
+        bytes calldata proof,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes32);
+    function mtxConfidentialTransferSingle(
+        MetaTxLib.UAEnvelope calldata e,
+        IZetherToken.ZetherSingle calldata t,
+        bytes calldata proof,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes32);
+    function mtxUnshield(
+        MetaTxLib.UAEnvelope calldata e,
+        IZetherToken.ZetherBurn calldata b,
+        uint256 amount,
+        bytes32 recipient,
+        bytes calldata proof,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes memory);
     function mtxRollOver(MetaTxLib.UAEnvelope calldata e, bytes32 ua, uint256 n_, IUARegistry.UASig calldata auth)
-        external returns (bytes memory);
-    function mtxRollOverBatch(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA[] calldata uas,
-        IUARegistry.UASig calldata auth) external returns (bytes memory);
-    function mtxRollOverSigned(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA ua, uint64 expectedPendingSeq,
-        uint64 validUntilBlock, IUARegistry.UASig calldata ownerSig, IUARegistry.UASig calldata auth)
-        external returns (bytes memory);
-    function mtxSetRollOverMode(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA ua, ZetherTypes.RollOverMode rollOverMode,
-        uint64 validUntilBlock, IUARegistry.UASig calldata ownerSig, IUARegistry.UASig calldata auth)
-        external returns (bytes memory);
-    function mtxUnshieldUnwrap(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherBurn calldata b,
-        IConfidentialWrappedToken.Unwrap calldata x, bytes calldata proof, IUARegistry.UASig calldata auth)
-        external returns (bytes memory);
+        external
+        returns (bytes memory);
+    function mtxRollOverBatch(
+        MetaTxLib.UAEnvelope calldata e,
+        ZetherTypes.UA[] calldata uas,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes memory);
+    function mtxRollOverSigned(
+        MetaTxLib.UAEnvelope calldata e,
+        ZetherTypes.UA ua,
+        uint64 expectedPendingSeq,
+        uint64 validUntilBlock,
+        IUARegistry.UASig calldata ownerSig,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes memory);
+    function mtxSetRollOverMode(
+        MetaTxLib.UAEnvelope calldata e,
+        ZetherTypes.UA ua,
+        ZetherTypes.RollOverMode rollOverMode,
+        uint64 validUntilBlock,
+        IUARegistry.UASig calldata ownerSig,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes memory);
+    function mtxUnshieldUnwrap(
+        MetaTxLib.UAEnvelope calldata e,
+        IZetherToken.ZetherBurn calldata b,
+        IConfidentialWrappedToken.Unwrap calldata x,
+        bytes calldata proof,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes memory);
     function envelopeBinding(MetaTxLib.UAMetaTransaction calldata m) external view returns (bytes32);
 }
 
@@ -61,48 +110,123 @@ interface IZetherMergedT4 {
 /// no Zether token serves these selectors.
 interface IZetherOldT4 {
     function mtxShield(MetaTxLib.Envelope calldata e, bytes32 toUA, uint256 amount, bytes calldata sig)
-        external returns (bytes memory);
-    function mtxConfidentialTransfer(MetaTxLib.Envelope calldata e, IZetherToken.ZetherMulti calldata t,
-        bytes calldata proof, bytes calldata sig) external returns (bytes32);
-    function mtxConfidentialTransferCompact(MetaTxLib.Envelope calldata e, IZetherToken.ZetherMulti calldata t,
-        bytes calldata proof, bytes calldata sig) external returns (bytes32);
-    function mtxConfidentialTransferSingle(MetaTxLib.Envelope calldata e, IZetherToken.ZetherSingle calldata t,
-        bytes calldata proof, bytes calldata sig) external returns (bytes32);
-    function mtxUnshield(MetaTxLib.Envelope calldata e, IZetherToken.ZetherBurn calldata b, uint256 amount,
-        bytes32 recipient, bytes calldata proof, bytes calldata sig) external returns (bytes memory);
+        external
+        returns (bytes memory);
+    function mtxConfidentialTransfer(
+        MetaTxLib.Envelope calldata e,
+        IZetherToken.ZetherMulti calldata t,
+        bytes calldata proof,
+        bytes calldata sig
+    ) external returns (bytes32);
+    function mtxConfidentialTransferCompact(
+        MetaTxLib.Envelope calldata e,
+        IZetherToken.ZetherMulti calldata t,
+        bytes calldata proof,
+        bytes calldata sig
+    ) external returns (bytes32);
+    function mtxConfidentialTransferSingle(
+        MetaTxLib.Envelope calldata e,
+        IZetherToken.ZetherSingle calldata t,
+        bytes calldata proof,
+        bytes calldata sig
+    ) external returns (bytes32);
+    function mtxUnshield(
+        MetaTxLib.Envelope calldata e,
+        IZetherToken.ZetherBurn calldata b,
+        uint256 amount,
+        bytes32 recipient,
+        bytes calldata proof,
+        bytes calldata sig
+    ) external returns (bytes memory);
     function mtxRollOver(MetaTxLib.Envelope calldata e, bytes32 ua, uint256 n_, bytes calldata sig)
-        external returns (bytes memory);
+        external
+        returns (bytes memory);
     function mtxRollOverBatch(MetaTxLib.Envelope calldata e, ZetherTypes.UA[] calldata uas, bytes calldata sig)
-        external returns (bytes memory);
-    function mtxRollOverSigned(MetaTxLib.Envelope calldata e, ZetherTypes.UA ua, uint64 expectedPendingSeq,
-        uint64 validUntilBlock, IUARegistry.UASig calldata ownerSig, bytes calldata sig) external returns (bytes memory);
-    function mtxSetRollOverMode(MetaTxLib.Envelope calldata e, ZetherTypes.UA ua, ZetherTypes.RollOverMode rollOverMode,
-        uint64 validUntilBlock, IUARegistry.UASig calldata ownerSig, bytes calldata sig) external returns (bytes memory);
-    function mtxUnshieldUnwrap(MetaTxLib.Envelope calldata e, IZetherToken.ZetherBurn calldata b,
-        IConfidentialWrappedToken.Unwrap calldata x, bytes calldata proof, bytes calldata sig) external returns (bytes memory);
+        external
+        returns (bytes memory);
+    function mtxRollOverSigned(
+        MetaTxLib.Envelope calldata e,
+        ZetherTypes.UA ua,
+        uint64 expectedPendingSeq,
+        uint64 validUntilBlock,
+        IUARegistry.UASig calldata ownerSig,
+        bytes calldata sig
+    ) external returns (bytes memory);
+    function mtxSetRollOverMode(
+        MetaTxLib.Envelope calldata e,
+        ZetherTypes.UA ua,
+        ZetherTypes.RollOverMode rollOverMode,
+        uint64 validUntilBlock,
+        IUARegistry.UASig calldata ownerSig,
+        bytes calldata sig
+    ) external returns (bytes memory);
+    function mtxUnshieldUnwrap(
+        MetaTxLib.Envelope calldata e,
+        IZetherToken.ZetherBurn calldata b,
+        IConfidentialWrappedToken.Unwrap calldata x,
+        bytes calldata proof,
+        bytes calldata sig
+    ) external returns (bytes memory);
     function uaShield(MetaTxLib.UAEnvelope calldata e, bytes32 toUA, uint256 amount, IUARegistry.UASig calldata auth)
-        external returns (bytes memory);
-    function uaConfidentialTransfer(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherMulti calldata t,
-        bytes calldata proof, IUARegistry.UASig calldata auth) external returns (bytes32);
-    function uaConfidentialTransferCompact(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherMulti calldata t,
-        bytes calldata proof, IUARegistry.UASig calldata auth) external returns (bytes32);
-    function uaConfidentialTransferSingle(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherSingle calldata t,
-        bytes calldata proof, IUARegistry.UASig calldata auth) external returns (bytes32);
-    function uaUnshield(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherBurn calldata b, uint256 amount,
-        bytes32 recipient, bytes calldata proof, IUARegistry.UASig calldata auth) external returns (bytes memory);
+        external
+        returns (bytes memory);
+    function uaConfidentialTransfer(
+        MetaTxLib.UAEnvelope calldata e,
+        IZetherToken.ZetherMulti calldata t,
+        bytes calldata proof,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes32);
+    function uaConfidentialTransferCompact(
+        MetaTxLib.UAEnvelope calldata e,
+        IZetherToken.ZetherMulti calldata t,
+        bytes calldata proof,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes32);
+    function uaConfidentialTransferSingle(
+        MetaTxLib.UAEnvelope calldata e,
+        IZetherToken.ZetherSingle calldata t,
+        bytes calldata proof,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes32);
+    function uaUnshield(
+        MetaTxLib.UAEnvelope calldata e,
+        IZetherToken.ZetherBurn calldata b,
+        uint256 amount,
+        bytes32 recipient,
+        bytes calldata proof,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes memory);
     function uaRollOver(MetaTxLib.UAEnvelope calldata e, bytes32 ua, uint256 n_, IUARegistry.UASig calldata auth)
-        external returns (bytes memory);
-    function uaRollOverBatch(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA[] calldata uas,
-        IUARegistry.UASig calldata auth) external returns (bytes memory);
-    function uaRollOverSigned(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA ua, uint64 expectedPendingSeq,
-        uint64 validUntilBlock, IUARegistry.UASig calldata ownerSig, IUARegistry.UASig calldata auth)
-        external returns (bytes memory);
-    function uaSetRollOverMode(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA ua, ZetherTypes.RollOverMode rollOverMode,
-        uint64 validUntilBlock, IUARegistry.UASig calldata ownerSig, IUARegistry.UASig calldata auth)
-        external returns (bytes memory);
-    function uaUnshieldUnwrap(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherBurn calldata b,
-        IConfidentialWrappedToken.Unwrap calldata x, bytes calldata proof, IUARegistry.UASig calldata auth)
-        external returns (bytes memory);
+        external
+        returns (bytes memory);
+    function uaRollOverBatch(
+        MetaTxLib.UAEnvelope calldata e,
+        ZetherTypes.UA[] calldata uas,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes memory);
+    function uaRollOverSigned(
+        MetaTxLib.UAEnvelope calldata e,
+        ZetherTypes.UA ua,
+        uint64 expectedPendingSeq,
+        uint64 validUntilBlock,
+        IUARegistry.UASig calldata ownerSig,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes memory);
+    function uaSetRollOverMode(
+        MetaTxLib.UAEnvelope calldata e,
+        ZetherTypes.UA ua,
+        ZetherTypes.RollOverMode rollOverMode,
+        uint64 validUntilBlock,
+        IUARegistry.UASig calldata ownerSig,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes memory);
+    function uaUnshieldUnwrap(
+        MetaTxLib.UAEnvelope calldata e,
+        IZetherToken.ZetherBurn calldata b,
+        IConfidentialWrappedToken.Unwrap calldata x,
+        bytes calldata proof,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes memory);
     function envelopeBinding(MetaTxLib.MetaTransaction calldata m) external view returns (bytes32);
     function uaEnvelopeBinding(MetaTxLib.UAMetaTransaction calldata m) external view returns (bytes32);
 }
@@ -139,7 +263,9 @@ contract ZetherPairsTest is ZetherFixture {
         tok.transferToUA(aId, 40 * SCALE); // alice's UA balance: what a derived shield takes
 
         usd = new MockERC20("USD", "USD", 6);
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode);
+        Catalogue.release(
+            factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode
+        );
         IFactoryToken.TokenConfig memory c;
         c.name = "Zether wrapped";
         c.symbol = "zW";
@@ -147,8 +273,12 @@ contract ZetherPairsTest is ZetherFixture {
         c.features = 1 << GovernanceBits.PAYABLE;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
-        c.conf = IFactoryToken.ConfidentialConfig(bytes(""), SCALE, uint256(1) << 40, FEE, dMode, 0, 0, 0, bytes32(0), false, 0, 0, 0, false, false);
-        w = WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "zw")));
+        c.conf = IFactoryToken.ConfidentialConfig(
+            bytes(""), SCALE, uint256(1) << 40, FEE, dMode, 0, 0, 0, bytes32(0), false, 0, 0, 0, false, false
+        );
+        w = WrappedZetherToken(
+            payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "zw"))
+        );
         usd.mint(payer, 1_000 * SCALE);
         vm.startPrank(payer);
         usd.approve(address(w), 1_000 * SCALE);
@@ -160,37 +290,58 @@ contract ZetherPairsTest is ZetherFixture {
     // ------------------------------------------------------------------ the envelope, the bindings, the signatures
 
     function _u(bytes32 from, address t) internal view returns (MetaTxLib.UAEnvelope memory u) {
-        u = MetaTxLib.UAEnvelope(from, LANE, IUALedgerViews(t).mtxNonce(from, LANE), block.timestamp + 300, 0, address(0), 0,
-            address(0));
+        u = MetaTxLib.UAEnvelope(
+            from, LANE, IUALedgerViews(t).mtxNonce(from, LANE), block.timestamp + 300, 0, address(0), 0, address(0)
+        );
     }
 
     /// CTR-ZTH-51 / R35: the merged entries' binding, `from` as `bytes32`.
     function _uaTag(address t, MetaTxLib.UAEnvelope memory u) internal view returns (bytes32) {
-        return keccak256(bytes.concat(
-            abi.encode(keccak256("SCAAS-ZETHER-UA-ENVELOPE-V1"), block.chainid, IMetaTx(t).chainUid(), t, u.from, u.batch),
-            abi.encode(u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))));
+        return keccak256(
+            bytes.concat(
+                abi.encode(
+                    keccak256("SCAAS-ZETHER-UA-ENVELOPE-V1"), block.chainid, IMetaTx(t).chainUid(), t, u.from, u.batch
+                ),
+                abi.encode(u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))
+            )
+        );
     }
 
     /// CTR-ZTH-06: `executeMetaTransaction`'s binding over the same fields, `from` an address.
     function _addrTag(address t, MetaTxLib.UAEnvelope memory u) internal view returns (bytes32) {
-        return keccak256(bytes.concat(
-            abi.encode(keccak256("SCAAS-ZETHER-ENVELOPE-V1"), block.chainid, IMetaTx(t).chainUid(), t,
-                address(uint160(uint256(u.from))), u.batch),
-            abi.encode(u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))));
+        return keccak256(
+            bytes.concat(
+                abi.encode(
+                    keccak256("SCAAS-ZETHER-ENVELOPE-V1"),
+                    block.chainid,
+                    IMetaTx(t).chainUid(),
+                    t,
+                    address(uint160(uint256(u.from))),
+                    u.batch
+                ),
+                abi.encode(u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))
+            )
+        );
     }
 
     /// What the subject of `u` signs over `primary` (a wallet's digest of the JSON it is handed).
-    function _auth(address t, MetaTxLib.UAEnvelope memory u, string memory primary, string memory fields, string memory nested,
-        string memory op) internal view returns (IUARegistry.UASig memory s)
-    {
-        bytes32 d = typedDigest(t, primary, string.concat(F_FROM, ',', fields), nested, _msgOf(u, op));
-        s.signature = u.from == nId ? ecdsa(PK, d)
+    function _auth(
+        address t,
+        MetaTxLib.UAEnvelope memory u,
+        string memory primary,
+        string memory fields,
+        string memory nested,
+        string memory op
+    ) internal view returns (IUARegistry.UASig memory s) {
+        bytes32 d = typedDigest(t, primary, string.concat(F_FROM, ",", fields), nested, _msgOf(u, op));
+        s.signature = u.from == nId
+            ? ecdsa(PK, d)
             : ZetherKeys.schnorr(alice.x, reg.uaMessage(_zkind(), UAKinds.PURPOSE_METATX, d), bls);
     }
 
     function _msgOf(MetaTxLib.UAEnvelope memory u, string memory op) internal pure returns (string memory) {
         string memory e = eJson(u.batch, u.nonce, u.validUntil, u.mode, u.fee);
-        return string.concat('"from":', h(u.from), ',', op, ',', e);
+        return string.concat('"from":', h(u.from), ",", op, ",", e);
     }
 
     function _proofMsg(string memory args, bytes memory proof) internal pure returns (string memory) {
@@ -213,12 +364,21 @@ contract ZetherPairsTest is ZetherFixture {
         return _go(address(tok), _singleCd(_u(from, address(tok)), bal, binding));
     }
 
-    function _singleCd(MetaTxLib.UAEnvelope memory u, uint256 bal, bytes32 binding) internal view returns (bytes memory) {
+    function _singleCd(MetaTxLib.UAEnvelope memory u, uint256 bal, bytes32 binding)
+        internal
+        view
+        returns (bytes memory)
+    {
         Tx memory x = _proveTransfer(tok, alice, bob, 10, bal, _none(), _bind(address(tok), u, binding));
         IZetherToken.ZetherSingle memory t = _zSingle(x.payload, _none());
-        IUARegistry.UASig memory s = _auth(address(tok), u, "UAZetherTransferSingle",
-            '{"name":"args","type":"ZetherSingle"},{"name":"proof","type":"bytes"}', string.concat(',', T_G1, ',', T_SINGLE),
-            _proofMsg(singleJson(t), x.proof));
+        IUARegistry.UASig memory s = _auth(
+            address(tok),
+            u,
+            "UAZetherTransferSingle",
+            '{"name":"args","type":"ZetherSingle"},{"name":"proof","type":"bytes"}',
+            string.concat(",", T_G1, ",", T_SINGLE),
+            _proofMsg(singleJson(t), x.proof)
+        );
         return abi.encodeCall(IZetherMergedT4.mtxConfidentialTransferSingle, (u, t, x.proof, s));
     }
 
@@ -235,14 +395,24 @@ contract ZetherPairsTest is ZetherFixture {
     }
 
     function _multiCd(MetaTxLib.UAEnvelope memory u, uint256 bal, bool compact, bytes32 binding)
-        internal view returns (bytes memory)
+        internal
+        view
+        returns (bytes memory)
     {
-        Tx memory x = _multiTx(bal, compact ? ZetherTypes.TransferMode.HASH : ZetherTypes.TransferMode.BUNDLE,
-            _bind(address(tok), u, binding));
+        Tx memory x = _multiTx(
+            bal,
+            compact ? ZetherTypes.TransferMode.HASH : ZetherTypes.TransferMode.BUNDLE,
+            _bind(address(tok), u, binding)
+        );
         IZetherToken.ZetherMulti memory t = _zMulti(x.payload, _none());
-        IUARegistry.UASig memory s = _auth(address(tok), u, compact ? "UAZetherTransferCompact" : "UAZetherTransfer",
+        IUARegistry.UASig memory s = _auth(
+            address(tok),
+            u,
+            compact ? "UAZetherTransferCompact" : "UAZetherTransfer",
             '{"name":"args","type":"ZetherMulti"},{"name":"proof","type":"bytes"}',
-            string.concat(',', T_G1, ',', T_LEG, ',', T_MULTI), _proofMsg(multiJson(t), x.proof));
+            string.concat(",", T_G1, ",", T_LEG, ",", T_MULTI),
+            _proofMsg(multiJson(t), x.proof)
+        );
         return compact
             ? abi.encodeCall(IZetherMergedT4.mtxConfidentialTransferCompact, (u, t, x.proof, s))
             : abi.encodeCall(IZetherMergedT4.mtxConfidentialTransfer, (u, t, x.proof, s));
@@ -252,47 +422,87 @@ contract ZetherPairsTest is ZetherFixture {
         return _go(address(tok), _unshieldCd(_u(from, address(tok)), bal, binding));
     }
 
-    function _unshieldCd(MetaTxLib.UAEnvelope memory u, uint256 bal, bytes32 binding) internal view returns (bytes memory) {
-        (bytes memory pl, bytes memory pr) = _proveUnshield(tok, alice, 10, bal, TO, _none(), _bind(address(tok), u, binding));
+    function _unshieldCd(MetaTxLib.UAEnvelope memory u, uint256 bal, bytes32 binding)
+        internal
+        view
+        returns (bytes memory)
+    {
+        (bytes memory pl, bytes memory pr) =
+            _proveUnshield(tok, alice, 10, bal, TO, _none(), _bind(address(tok), u, binding));
         IZetherToken.ZetherBurn memory b = _zBurn(pl, _none());
-        IUARegistry.UASig memory s = _auth(address(tok), u, "UAZetherUnshield",
+        IUARegistry.UASig memory s = _auth(
+            address(tok),
+            u,
+            "UAZetherUnshield",
             '{"name":"args","type":"ZetherBurn"},{"name":"amount","type":"uint256"},{"name":"recipient","type":"bytes32"},{"name":"proof","type":"bytes"}',
-            string.concat(',', T_G1, ',', T_BURN), _unshieldMsg(b, pr));
+            string.concat(",", T_G1, ",", T_BURN),
+            _unshieldMsg(b, pr)
+        );
         return abi.encodeCall(IZetherMergedT4.mtxUnshield, (u, b, 10, MetaTxLib.pad(TO), pr, s));
     }
 
     function _unshieldMsg(IZetherToken.ZetherBurn memory b, bytes memory pr) internal pure returns (string memory) {
-        return string.concat('"args":', burnJson(b), ',"amount":', n(10), ',"recipient":', h(MetaTxLib.pad(TO)), ',"proof":',
-            hexJson(pr));
+        return string.concat(
+            '"args":', burnJson(b), ',"amount":', n(10), ',"recipient":', h(MetaTxLib.pad(TO)), ',"proof":', hexJson(pr)
+        );
     }
 
     function _unshieldUnwrap(bytes32 from, uint256 bal, bytes32 binding) internal returns (bool, bytes memory) {
         return _go(address(w), _unshieldUnwrapCd(_u(from, address(w)), bal, binding));
     }
 
-    function _uwProof(IZetherToken.ZetherBurn memory b, IConfidentialWrappedToken.Unwrap memory x, uint256 bal, bytes32 bd)
-        internal view returns (bytes memory)
-    {
-        return _proveU(alice, stm.unshieldUnwrapStatement(address(w), b, x.amount, x.recipient, x.underlying, x.minOut, bd),
-            x.amount, bal, _none(), NormalZetherToken(address(w)));
+    function _uwProof(
+        IZetherToken.ZetherBurn memory b,
+        IConfidentialWrappedToken.Unwrap memory x,
+        uint256 bal,
+        bytes32 bd
+    ) internal view returns (bytes memory) {
+        return _proveU(
+            alice,
+            stm.unshieldUnwrapStatement(address(w), b, x.amount, x.recipient, x.underlying, x.minOut, bd),
+            x.amount,
+            bal,
+            _none(),
+            NormalZetherToken(address(w))
+        );
     }
 
     function _uwMsg(IZetherToken.ZetherBurn memory b, IConfidentialWrappedToken.Unwrap memory x, bytes memory pr)
-        internal pure returns (string memory)
+        internal
+        pure
+        returns (string memory)
     {
-        string memory uw = string.concat('{"underlying":', a(x.underlying), ',"recipient":', h(x.recipient), ',"amount":',
-            n(x.amount), ',"minOut":', n(x.minOut), '}');
+        string memory uw = string.concat(
+            '{"underlying":',
+            a(x.underlying),
+            ',"recipient":',
+            h(x.recipient),
+            ',"amount":',
+            n(x.amount),
+            ',"minOut":',
+            n(x.minOut),
+            "}"
+        );
         return string.concat('"args":', burnJson(b), ',"unwrap":', uw, ',"proof":', hexJson(pr));
     }
 
-    function _unshieldUnwrapCd(MetaTxLib.UAEnvelope memory u, uint256 bal, bytes32 binding) internal view returns (bytes memory) {
+    function _unshieldUnwrapCd(MetaTxLib.UAEnvelope memory u, uint256 bal, bytes32 binding)
+        internal
+        view
+        returns (bytes memory)
+    {
         IConfidentialWrappedToken.Unwrap memory x =
             IConfidentialWrappedToken.Unwrap(address(usd), MetaTxLib.pad(TO), 10, 10 * SCALE);
         IZetherToken.ZetherBurn memory b = _zBurn(_unshieldPayload(NormalZetherToken(address(w)), alice), _none());
         bytes memory pr = _uwProof(b, x, bal, _bind(address(w), u, binding));
-        IUARegistry.UASig memory s = _auth(address(w), u, "UAZetherUnshieldUnwrap",
+        IUARegistry.UASig memory s = _auth(
+            address(w),
+            u,
+            "UAZetherUnshieldUnwrap",
             '{"name":"args","type":"ZetherBurn"},{"name":"unwrap","type":"Unwrap"},{"name":"proof","type":"bytes"}',
-            string.concat(',', T_G1, ',', T_UNWRAP, ',', T_BURN), _uwMsg(b, x, pr));
+            string.concat(",", T_G1, ",", T_UNWRAP, ",", T_BURN),
+            _uwMsg(b, x, pr)
+        );
         return abi.encodeCall(IZetherMergedT4.mtxUnshieldUnwrap, (u, b, x, pr, s));
     }
 
@@ -357,8 +567,14 @@ contract ZetherPairsTest is ZetherFixture {
         _eachProofEntry(aId);
         // a derived signer's shield: `_msgSender()` is `UA_POOL` (the passed subject, not the library's `msg.sender`)
         MetaTxLib.UAEnvelope memory u = _u(aId, address(tok));
-        IUARegistry.UASig memory s = _auth(address(tok), u, "UAShield",
-            '{"name":"toUA","type":"bytes32"},{"name":"amount","type":"uint256"}', '', string.concat('"toUA":', h(bId), ',"amount":', n(3)));
+        IUARegistry.UASig memory s = _auth(
+            address(tok),
+            u,
+            "UAShield",
+            '{"name":"toUA","type":"bytes32"},{"name":"amount","type":"uint256"}',
+            "",
+            string.concat('"toUA":', h(bId), ',"amount":', n(3))
+        );
         vm.expectEmit(address(tok));
         emit IConfidentialToken.Shielded(bId, MetaTxLib.UA_POOL, 3, tok.accountState(bob.ua).pendingSeq + 1);
         vm.prank(ANY);
@@ -369,20 +585,24 @@ contract ZetherPairsTest is ZetherFixture {
     /// The binding the token computes is the spec formula (the merged view under the plain name, R35, spec §2.3).
     function test_zetherEnvelopeBindingViewIsTheUATag() public view {
         MetaTxLib.UAEnvelope memory u = _u(aId, address(tok));
-        MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction(u.from, hex"beef", u.batch, u.nonce, u.validUntil,
-            u.mode, address(0x1234), u.fee, address(0x5678)); // unbound relayer / fee recipient: not in the binding
+        MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction(
+            u.from, hex"beef", u.batch, u.nonce, u.validUntil, u.mode, address(0x1234), u.fee, address(0x5678)
+        ); // unbound relayer / fee recipient: not in the binding
         assertEq(IZetherMergedT4(address(tok)).envelopeBinding(m), _uaTag(address(tok), u));
     }
 
     // ------------------------------------------------------------------ executeMetaTransaction keeps the address tag
 
     function _meta(bytes memory data) internal view returns (MetaTxLib.MetaTransaction memory) {
-        return MetaTxLib.MetaTransaction(payer, data, LANE, tok.mtxNonce(nId, LANE), block.timestamp + 300, 0, address(0), 0,
-            address(0));
+        return MetaTxLib.MetaTransaction(
+            payer, data, LANE, tok.mtxNonce(nId, LANE), block.timestamp + 300, 0, address(0), 0, address(0)
+        );
     }
 
     function _asUA(MetaTxLib.MetaTransaction memory m) internal pure returns (MetaTxLib.UAEnvelope memory) {
-        return MetaTxLib.UAEnvelope(MetaTxLib.pad(m.from), m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient);
+        return MetaTxLib.UAEnvelope(
+            MetaTxLib.pad(m.from), m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient
+        );
     }
 
     function _singleCall(uint256 bal, bytes32 binding) internal view returns (bytes memory) {
@@ -406,8 +626,8 @@ contract ZetherPairsTest is ZetherFixture {
         assertTrue(_holds(tok, bob, 10, false));
 
         MetaTxLib.MetaTransaction memory n2 = _meta("");
-        MetaTxLib.UAMetaTransaction memory um = MetaTxLib.UAMetaTransaction(nId, "", n2.batch, n2.nonce, n2.validUntil, 0,
-            address(0), 0, address(0));
+        MetaTxLib.UAMetaTransaction memory um =
+            MetaTxLib.UAMetaTransaction(nId, "", n2.batch, n2.nonce, n2.validUntil, 0, address(0), 0, address(0));
         um.data = _singleCall(490, _addrTag(address(tok), _asUA(n2)));
         IUARegistry.UASig memory s;
         s.signature = ecdsa(PK, tok.mtxDigest(um));
@@ -431,8 +651,14 @@ contract ZetherPairsTest is ZetherFixture {
 
         // shield: `Shielded.from` is the subject's address (the passed subject, not the library's `msg.sender`)
         MetaTxLib.UAEnvelope memory u = _u(nId, address(tok));
-        IUARegistry.UASig memory s = _auth(address(tok), u, "UAShield",
-            '{"name":"toUA","type":"bytes32"},{"name":"amount","type":"uint256"}', '', string.concat('"toUA":', h(bId), ',"amount":', n(5)));
+        IUARegistry.UASig memory s = _auth(
+            address(tok),
+            u,
+            "UAShield",
+            '{"name":"toUA","type":"bytes32"},{"name":"amount","type":"uint256"}',
+            "",
+            string.concat('"toUA":', h(bId), ',"amount":', n(5))
+        );
         uint256 pub = tok.balanceOf(payer);
         vm.expectEmit(address(tok));
         emit IConfidentialToken.Shielded(bId, payer, 5, tok.accountState(bob.ua).pendingSeq + 1);
@@ -461,8 +687,14 @@ contract ZetherPairsTest is ZetherFixture {
     /// The four roll-over entries of `test_zetherFeeZero_everyMergedEntry` (bob has pending credits from its transfers).
     function _feeZeroRollOvers() internal {
         MetaTxLib.UAEnvelope memory u = _u(nId, address(tok));
-        IUARegistry.UASig memory s = _auth(address(tok), u, "UARollOver", '{"name":"ua","type":"bytes32"},{"name":"n","type":"uint256"}', '',
-            string.concat('"ua":', h(bId), ',"n":', n(1)));
+        IUARegistry.UASig memory s = _auth(
+            address(tok),
+            u,
+            "UARollOver",
+            '{"name":"ua","type":"bytes32"},{"name":"n","type":"uint256"}',
+            "",
+            string.concat('"ua":', h(bId), ',"n":', n(1))
+        );
         uint64 acc = tok.accountState(bob.ua).accSeq;
         vm.prank(ANY);
         IZetherMergedT4(address(tok)).mtxRollOver(u, bId, 1, s);
@@ -472,7 +704,14 @@ contract ZetherPairsTest is ZetherFixture {
         ZetherTypes.UA[] memory uas = new ZetherTypes.UA[](1);
         uas[0] = bob.ua;
         u = _u(nId, address(tok));
-        s = _auth(address(tok), u, "UARollOverBatch", '{"name":"uas","type":"bytes32[]"}', '', string.concat('"uas":[', h(bId), ']'));
+        s = _auth(
+            address(tok),
+            u,
+            "UARollOverBatch",
+            '{"name":"uas","type":"bytes32[]"}',
+            "",
+            string.concat('"uas":[', h(bId), "]")
+        );
         vm.prank(ANY);
         IZetherMergedT4(address(tok)).mtxRollOverBatch(u, uas, s);
         assertEq(tok.accountState(bob.ua).accSeq, acc + 2, "rollOverBatch");
@@ -486,20 +725,31 @@ contract ZetherPairsTest is ZetherFixture {
         uint64 seq = tok.accountState(bob.ua).pendingSeq;
         IUARegistry.UASig memory owner = _ownerAuth(bob, _rollOverDigest(tok, bob.ua, acc + 2, seq, until));
         MetaTxLib.UAEnvelope memory u = _u(nId, address(tok));
-        IUARegistry.UASig memory s = _auth(address(tok), u, "UARollOverSigned",
-            '{"name":"ua","type":"bytes32"},{"name":"expectedPendingSeq","type":"uint64"},{"name":"validUntilBlock","type":"uint64"}', '',
-            string.concat('"ua":', h(bId), ',"expectedPendingSeq":', n(seq), ',"validUntilBlock":', n(until)));
+        IUARegistry.UASig memory s = _auth(
+            address(tok),
+            u,
+            "UARollOverSigned",
+            '{"name":"ua","type":"bytes32"},{"name":"expectedPendingSeq","type":"uint64"},{"name":"validUntilBlock","type":"uint64"}',
+            "",
+            string.concat('"ua":', h(bId), ',"expectedPendingSeq":', n(seq), ',"validUntilBlock":', n(until))
+        );
         vm.prank(ANY);
         IZetherMergedT4(address(tok)).mtxRollOverSigned(u, bob.ua, seq, until, owner, s);
         assertEq(tok.accountState(bob.ua).accSeq, acc + 3, "rollOverSigned");
 
         owner = _ownerAuth(bob, _setModeDigest(tok, bob.ua, 1, 0, until));
         u = _u(nId, address(tok));
-        s = _auth(address(tok), u, "UASetRollOverMode",
-            '{"name":"ua","type":"bytes32"},{"name":"rollOverMode","type":"uint8"},{"name":"validUntilBlock","type":"uint64"}', '',
-            string.concat('"ua":', h(bId), ',"rollOverMode":', n(1), ',"validUntilBlock":', n(until)));
+        s = _auth(
+            address(tok),
+            u,
+            "UASetRollOverMode",
+            '{"name":"ua","type":"bytes32"},{"name":"rollOverMode","type":"uint8"},{"name":"validUntilBlock","type":"uint64"}',
+            "",
+            string.concat('"ua":', h(bId), ',"rollOverMode":', n(1), ',"validUntilBlock":', n(until))
+        );
         vm.prank(ANY);
-        IZetherMergedT4(address(tok)).mtxSetRollOverMode(u, bob.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, owner, s);
+        IZetherMergedT4(address(tok))
+            .mtxSetRollOverMode(u, bob.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, owner, s);
         assertEq(uint8(tok.accountState(bob.ua).mode), 1, "setRollOverMode");
     }
 
@@ -512,9 +762,14 @@ contract ZetherPairsTest is ZetherFixture {
         MetaTxLib.UAEnvelope memory u = _u(nId, address(tok));
         Tx memory x = _proveTransfer(tok, alice, bob, 10, 500, _none(), _uaTag(address(tok), u));
         IZetherToken.ZetherSingle memory t = _zSingle(x.payload, _none());
-        IUARegistry.UASig memory s = _auth(address(tok), u, "UAZetherTransferSingle",
-            '{"name":"args","type":"ZetherSingle"},{"name":"proof","type":"bytes"}', string.concat(',', T_G1, ',', T_SINGLE),
-            _proofMsg(singleJson(t), x.proof));
+        IUARegistry.UASig memory s = _auth(
+            address(tok),
+            u,
+            "UAZetherTransferSingle",
+            '{"name":"args","type":"ZetherSingle"},{"name":"proof","type":"bytes"}',
+            string.concat(",", T_G1, ",", T_SINGLE),
+            _proofMsg(singleJson(t), x.proof)
+        );
         vm.prank(ANY);
         bytes32 ref = IZetherMergedT4(address(tok)).mtxConfidentialTransferSingle(u, t, x.proof, s);
         assertEq(tok.transferEntry(ref), _singleRecord(x.payload), "the record in state");
@@ -532,13 +787,20 @@ contract ZetherPairsTest is ZetherFixture {
     }
 
     function _singleRecord(bytes memory p) internal pure returns (bytes memory) {
-        return bytes.concat(_cut(p, 96, 16), _cut(p, 112 + 128, 128), _cut(p, 112 + 2 * 128, 128), _cut(p, 112 + 3 * 128, 128),
-            _cut(p, 112 + 5 * 128, 128));
+        return bytes.concat(
+            _cut(p, 96, 16),
+            _cut(p, 112 + 128, 128),
+            _cut(p, 112 + 2 * 128, 128),
+            _cut(p, 112 + 3 * 128, 128),
+            _cut(p, 112 + 5 * 128, 128)
+        );
     }
 
     function _cut(bytes memory b, uint256 from, uint256 len) internal pure returns (bytes memory r) {
         r = new bytes(len);
-        for (uint256 i; i < len; ++i) r[i] = b[from + i];
+        for (uint256 i; i < len; ++i) {
+            r[i] = b[from + i];
+        }
     }
 
     // ------------------------------------------------------------------ the retired forms (invariant 3), the ids
@@ -553,19 +815,33 @@ contract ZetherPairsTest is ZetherFixture {
     /// The address signed entries, the `ua*` names and both old binding views: no function serves them (valid calldata,
     /// so a function that existed would answer or revert by name).
     function test_zetherRetiredFormsHaveNoEntry() public {
-        MetaTxLib.Envelope memory e = MetaTxLib.Envelope(payer, LANE, 0, block.timestamp + 300, 0, address(0), 0, address(0));
+        MetaTxLib.Envelope memory e =
+            MetaTxLib.Envelope(payer, LANE, 0, block.timestamp + 300, 0, address(0), 0, address(0));
         address t = address(tok);
         _noEntry(t, abi.encodeCall(IZetherOldT4.mtxShield, (e, bId, 1, "")), "address mtxShield");
-        _noEntry(t, abi.encodeCall(IZetherOldT4.mtxConfidentialTransfer, (e, _mt(), "", "")), "address mtxConfidentialTransfer");
+        _noEntry(
+            t,
+            abi.encodeCall(IZetherOldT4.mtxConfidentialTransfer, (e, _mt(), "", "")),
+            "address mtxConfidentialTransfer"
+        );
         _noEntry(t, abi.encodeCall(IZetherOldT4.mtxConfidentialTransferCompact, (e, _mt(), "", "")), "address compact");
         _noEntry(t, abi.encodeCall(IZetherOldT4.mtxConfidentialTransferSingle, (e, _st(), "", "")), "address single");
         _noEntry(t, abi.encodeCall(IZetherOldT4.mtxUnshield, (e, _bt(), 1, bId, "", "")), "address mtxUnshield");
         _noEntry(t, abi.encodeCall(IZetherOldT4.mtxRollOver, (e, bId, 1, "")), "address mtxRollOver");
         _noEntry(t, abi.encodeCall(IZetherOldT4.mtxRollOverBatch, (e, _uas(), "")), "address mtxRollOverBatch");
-        _noEntry(t, abi.encodeCall(IZetherOldT4.mtxRollOverSigned, (e, bob.ua, 0, 0, _s(), "")), "address mtxRollOverSigned");
-        _noEntry(t, abi.encodeCall(IZetherOldT4.mtxSetRollOverMode, (e, bob.ua, ZetherTypes.RollOverMode.PUBLIC, 0, _s(), "")),
-            "address mtxSetRollOverMode");
-        _noEntry(address(w), abi.encodeCall(IZetherOldT4.mtxUnshieldUnwrap, (e, _bt(), _x(), "", "")), "address mtxUnshieldUnwrap");
+        _noEntry(
+            t, abi.encodeCall(IZetherOldT4.mtxRollOverSigned, (e, bob.ua, 0, 0, _s(), "")), "address mtxRollOverSigned"
+        );
+        _noEntry(
+            t,
+            abi.encodeCall(IZetherOldT4.mtxSetRollOverMode, (e, bob.ua, ZetherTypes.RollOverMode.PUBLIC, 0, _s(), "")),
+            "address mtxSetRollOverMode"
+        );
+        _noEntry(
+            address(w),
+            abi.encodeCall(IZetherOldT4.mtxUnshieldUnwrap, (e, _bt(), _x(), "", "")),
+            "address mtxUnshieldUnwrap"
+        );
         _retiredUA();
         MetaTxLib.MetaTransaction memory m = _meta("");
         _noEntry(t, abi.encodeCall(IZetherOldT4.envelopeBinding, (m)), "address envelopeBinding view");
@@ -579,15 +855,28 @@ contract ZetherPairsTest is ZetherFixture {
         address t = address(tok);
         _noEntry(t, abi.encodeCall(IZetherOldT4.uaShield, (u, bId, 1, _s())), "uaShield");
         _noEntry(t, abi.encodeCall(IZetherOldT4.uaConfidentialTransfer, (u, _mt(), "", _s())), "uaConfidentialTransfer");
-        _noEntry(t, abi.encodeCall(IZetherOldT4.uaConfidentialTransferCompact, (u, _mt(), "", _s())), "uaConfidentialTransferCompact");
-        _noEntry(t, abi.encodeCall(IZetherOldT4.uaConfidentialTransferSingle, (u, _st(), "", _s())), "uaConfidentialTransferSingle");
+        _noEntry(
+            t,
+            abi.encodeCall(IZetherOldT4.uaConfidentialTransferCompact, (u, _mt(), "", _s())),
+            "uaConfidentialTransferCompact"
+        );
+        _noEntry(
+            t,
+            abi.encodeCall(IZetherOldT4.uaConfidentialTransferSingle, (u, _st(), "", _s())),
+            "uaConfidentialTransferSingle"
+        );
         _noEntry(t, abi.encodeCall(IZetherOldT4.uaUnshield, (u, _bt(), 1, bId, "", _s())), "uaUnshield");
         _noEntry(t, abi.encodeCall(IZetherOldT4.uaRollOver, (u, bId, 1, _s())), "uaRollOver");
         _noEntry(t, abi.encodeCall(IZetherOldT4.uaRollOverBatch, (u, _uas(), _s())), "uaRollOverBatch");
         _noEntry(t, abi.encodeCall(IZetherOldT4.uaRollOverSigned, (u, bob.ua, 0, 0, _s(), _s())), "uaRollOverSigned");
-        _noEntry(t, abi.encodeCall(IZetherOldT4.uaSetRollOverMode, (u, bob.ua, ZetherTypes.RollOverMode.PUBLIC, 0, _s(), _s())),
-            "uaSetRollOverMode");
-        _noEntry(address(w), abi.encodeCall(IZetherOldT4.uaUnshieldUnwrap, (u, _bt(), _x(), "", _s())), "uaUnshieldUnwrap");
+        _noEntry(
+            t,
+            abi.encodeCall(IZetherOldT4.uaSetRollOverMode, (u, bob.ua, ZetherTypes.RollOverMode.PUBLIC, 0, _s(), _s())),
+            "uaSetRollOverMode"
+        );
+        _noEntry(
+            address(w), abi.encodeCall(IZetherOldT4.uaUnshieldUnwrap, (u, _bt(), _x(), "", _s())), "uaUnshieldUnwrap"
+        );
     }
 
     function _mt() internal pure returns (IZetherToken.ZetherMulti memory t) {}
@@ -604,7 +893,9 @@ contract ZetherPairsTest is ZetherFixture {
         // set-auditor A2 (CTR-ZTH-95): 0xe65bc5f0 -> 0x5484dd2f (+ `setAuditorKey`, `auditorKeyOf`, `auditorState`)
         assertEq(type(IZetherToken).interfaceId, bytes4(0x5484dd2f), "IZetherToken");
         assertEq(type(IConfidentialToken).interfaceId, IConfidentialToken.mtxShield.selector, "IConfidentialToken");
-        assertEq(type(IZetherWrappedToken).interfaceId, IZetherWrappedToken.mtxUnshieldUnwrap.selector, "IZetherWrappedToken");
+        assertEq(
+            type(IZetherWrappedToken).interfaceId, IZetherWrappedToken.mtxUnshieldUnwrap.selector, "IZetherWrappedToken"
+        );
     }
 }
 
@@ -649,16 +940,27 @@ contract ZetherStatementLayoutTest is ZetherFixture {
     }
 
     function _ben(string memory j) internal view returns (ZetherTypes.UA) {
-        if (!vm.keyExistsJson(j, ".request.beneficiary") || bytes(j.readString(".request.beneficiary")).length < 66) return _none();
+        if (!vm.keyExistsJson(j, ".request.beneficiary") || bytes(j.readString(".request.beneficiary")).length < 66) {
+            return _none();
+        }
         return ZetherTypes.UA.wrap(j.readBytes32(".request.beneficiary"));
     }
 
     /// A UA binding of a fixed envelope on the vector's token (the spec formula).
     function _uaBinding(ZetherLib.Ctx memory c) internal view returns (bytes32) {
-        return keccak256(bytes.concat(
-            abi.encode(keccak256("SCAAS-ZETHER-UA-ENVELOPE-V1"), block.chainid, c.chainUid, c.token,
-                bytes32(uint256(0xD0D0) << 160 | 0xA11CE), uint256(7)),
-            abi.encode(uint256(3), uint256(1_800_000_000), uint32(0), address(0), uint256(0), address(0))));
+        return keccak256(
+            bytes.concat(
+                abi.encode(
+                    keccak256("SCAAS-ZETHER-UA-ENVELOPE-V1"),
+                    block.chainid,
+                    c.chainUid,
+                    c.token,
+                    bytes32(uint256(0xD0D0) << 160 | 0xA11CE),
+                    uint256(7)
+                ),
+                abi.encode(uint256(3), uint256(1_800_000_000), uint32(0), address(0), uint256(0), address(0))
+            )
+        );
     }
 
     /// `s0` with its binding word (bytes 192–223, after the tag word) replaced by `b`.

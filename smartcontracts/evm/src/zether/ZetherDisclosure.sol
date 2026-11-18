@@ -70,7 +70,9 @@ contract ZetherDisclosure is ITransferDisclosure {
 
     /// @notice `C_out ‖ D_out ‖ C_aud ‖ D_aud` of leg `index` (`D_aud = D_out` on the single format), and `Y_t`.
     function transferCiphertext(address token, bytes32 entryRef, uint256 index)
-        external view returns (bytes memory encodedCiphertext, bytes memory encodedYTo)
+        external
+        view
+        returns (bytes memory encodedCiphertext, bytes memory encodedYTo)
     {
         Leg memory l = _leg(token, entryRef, index);
         return (bytes.concat(l.cOut, l.dOut, l.cAud, l.dAud), l.yt);
@@ -80,14 +82,17 @@ contract ZetherDisclosure is ITransferDisclosure {
     ///      `e = H(DISCLOSE_TAG ‖ chainid ‖ chainUid ‖ token ‖ entryRef ‖ index ‖ amount ‖ kind ‖ G ‖ K ‖ B ‖ M ‖ A1 ‖ A2)`
     ///      (CTR-ZTH-36, CTR-ZTH-40; the points in the token's G1 encoding).
     function _chaumPedersen(Leg memory l, bytes memory pre, uint256 amount, bytes calldata opening)
-        private view returns (bool)
+        private
+        view
+        returns (bool)
     {
         (bytes memory a1, bytes memory a2, uint256 z) = abi.decode(opening, (bytes, bytes, uint256));
         if (a1.length != l.p || a2.length != l.p || z >= l.r) revert OpeningMalformed();
         if (_isO(l.k)) return false; // the key point K = O would make both equations trivial (mirrors the prover)
         bytes memory g = l.v.g1MulBase(1);
         // strong Fiat-Shamir (review C0-4): the statement points G, K, B, M are absorbed, in the token's own encoding
-        uint256 e = ZetherTranscript.hashToScalar(keccak256(bytes.concat(bytes.concat(pre, g, l.k, l.b, l.m), a1, a2)), l.r);
+        uint256 e =
+            ZetherTranscript.hashToScalar(keccak256(bytes.concat(bytes.concat(pre, g, l.k, l.b, l.m), a1, a2)), l.r);
         if (e == 0) return false;
         amount = mulmod(e, amount, l.r); // từ đây: e·amount
         if (!_cpEq(l, bytes.concat(g, a1, l.k), z, e, 0)) return false;
@@ -107,21 +112,21 @@ contract ZetherDisclosure is ITransferDisclosure {
     ///      SSTORE2 ở commit-reveal; review C0-3). Token không ghi gì (ref lạ) ⇒ `UnknownEntry`. Định dạng một người nhận: `R` đúng `16 + 4P` byte,
     ///      `B = Y_t ‖ C_out ‖ D_out ‖ C_aud`, `D_aud = D_out`, chỉ `index = 0`; nhiều người nhận: `16 + 5P·M`,
     ///      `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j ‖ D_aud_j` (review C0-1).
-    function _leg(address token, bytes32 entryRef, uint256 index)
-        private view returns (Leg memory l)
-    {
+    function _leg(address token, bytes32 entryRef, uint256 index) private view returns (Leg memory l) {
         l.v = IZetherToken(token).verifier();
         l.p = l.v.g1EncodedBytes();
         l.r = l.v.groupOrder();
         bytes memory all = IZetherToken(token).transferEntry(entryRef);
         if (all.length == 0) revert UnknownEntry(entryRef);
         uint256 len = 5 * l.p;
-        if (all.length != 16 + 4 * l.p && (all.length < 16 || (all.length - 16) % len != 0)) revert RecordMalformed(entryRef);
+        if (all.length != 16 + 4 * l.p && (all.length < 16 || (all.length - 16) % len != 0)) {
+            revert RecordMalformed(entryRef);
+        }
         if (all.length == 16 + 4 * l.p) len = 4 * l.p; // the single format (a multi-recipient R is 16 + 5P·M: never 16 + 4P)
         if (16 + (index + 1) * len > all.length) revert BadRecipientIndex(index);
         uint256 o = 16 + index * len;
         (l.yt, l.cOut, l.dOut, l.cAud) =
-            (_cut(all, o, l.p), _cut(all, o + l.p, l.p), _cut(all, o + 2 * l.p, l.p), _cut(all, o + 3 * l.p, l.p));
+        (_cut(all, o, l.p), _cut(all, o + l.p, l.p), _cut(all, o + 2 * l.p, l.p), _cut(all, o + 3 * l.p, l.p));
         l.dAud = len == 4 * l.p ? l.dOut : _cut(all, o + 4 * l.p, l.p);
     }
 

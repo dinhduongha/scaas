@@ -26,7 +26,8 @@ contract PayRecordsTest is PayRigBase {
     address internal constant RF_TO = address(0xFEE6);
     address internal constant PAYEE2 = address(0xB0B6);
     /// keccak256(abi.encode(uint256(keccak256("scaas.pay.records")) - 1)) & ~bytes32(uint256(0xff)), computed in the test
-    bytes32 internal ROOT = keccak256(abi.encode(uint256(keccak256("scaas.pay.records")) - 1)) & ~bytes32(uint256(0xff));
+    bytes32 internal ROOT = keccak256(abi.encode(uint256(keccak256("scaas.pay.records")) - 1))
+        & ~bytes32(uint256(0xff));
     /// A right-aligned UUIDv7, the recommended `payNo`.
     bytes32 internal constant NO = bytes32(uint256(0x019a6e3c5f007a3b8c4d5e6f708192a3));
     string internal constant FILE = "../vectors/metatx/payrecords.json";
@@ -35,7 +36,9 @@ contract PayRecordsTest is PayRigBase {
         m = PayMetaKit.saved(keccak256(abi.encode("payrecords.test", i)), payNo);
     }
 
-    function _utTo(bytes32 ref, uint256 nonce, address to, uint256 amount) internal view
+    function _utTo(bytes32 ref, uint256 nonce, address to, uint256 amount)
+        internal
+        view
         returns (MetaTxLib.UAMetaTransfer memory x)
     {
         x = _ut(ref, 7, nonce);
@@ -43,7 +46,8 @@ contract PayRecordsTest is PayRigBase {
     }
 
     function _eq(MetaTxLib.PayRecord memory r, address to, uint256 amount, uint256 blockNumber, string memory what)
-        internal pure
+        internal
+        pure
     {
         assertEq(r.to, MetaTxLib.pad(to), what);
         assertEq(r.amount, amount, what);
@@ -81,12 +85,22 @@ contract PayRecordsTest is PayRigBase {
             assertEq(NormalToken(t).metaPayId(m), PayMetaKit.id(m), kinds[i]);
             _pay(t, _ut(PayMetaKit.id(m), 7, 0), m);
             MetaTxLib.PayMeta memory m2 = _saved(90 + i, NO);
-            MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer(MetaTxLib.pad(signer),
-                MetaTxLib.pad(vm.addr(PAYEE_PK)), AMOUNT, PayMetaKit.id(m2), 7, 1, block.timestamp + 300,
-                MetaTxLib.MODE_RESTRICT_RELAYER, REL, 0, address(0));
+            MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer(
+                MetaTxLib.pad(signer),
+                MetaTxLib.pad(vm.addr(PAYEE_PK)),
+                AMOUNT,
+                PayMetaKit.id(m2),
+                7,
+                1,
+                block.timestamp + 300,
+                MetaTxLib.MODE_RESTRICT_RELAYER,
+                REL,
+                0,
+                address(0)
+            );
             IUARegistry.UASig memory pa = _sigOf(t, x);
-            IUARegistry.UASig memory qa = UACall.auth(x.to,
-                _ecdsa(PAYEE_PK, NormalToken(t).payeeFeeDigest(x, 10, RF_TO, block.timestamp + 300)));
+            IUARegistry.UASig memory qa =
+                UACall.auth(x.to, _ecdsa(PAYEE_PK, NormalToken(t).payeeFeeDigest(x, 10, RF_TO, block.timestamp + 300)));
             uint256 vu = block.timestamp + 300;
             vm.prank(REL);
             NormalToken(t).mtxPayWithPayeeFee(x, pa, 10, RF_TO, vu, qa, m2);
@@ -182,12 +196,22 @@ contract PayRecordsTest is PayRigBase {
         for (uint256 i; i < toks.length; ++i) {
             address t = toks[i];
             MetaTxLib.PayMeta memory m = _saved(50 + i, NO);
-            MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer(MetaTxLib.pad(signer),
-                MetaTxLib.pad(vm.addr(PAYEE_PK)), AMOUNT, PayMetaKit.id(m), 7, 0, block.timestamp + 300,
-                MetaTxLib.MODE_RESTRICT_RELAYER, REL, 0, address(0));
+            MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer(
+                MetaTxLib.pad(signer),
+                MetaTxLib.pad(vm.addr(PAYEE_PK)),
+                AMOUNT,
+                PayMetaKit.id(m),
+                7,
+                0,
+                block.timestamp + 300,
+                MetaTxLib.MODE_RESTRICT_RELAYER,
+                REL,
+                0,
+                address(0)
+            );
             IUARegistry.UASig memory pa = _sigOf(t, x);
-            IUARegistry.UASig memory qa = UACall.auth(x.to,
-                _ecdsa(PAYEE_PK, NormalToken(t).payeeFeeDigest(x, 10, RF_TO, block.timestamp + 300)));
+            IUARegistry.UASig memory qa =
+                UACall.auth(x.to, _ecdsa(PAYEE_PK, NormalToken(t).payeeFeeDigest(x, 10, RF_TO, block.timestamp + 300)));
             uint256 vu = block.timestamp + 300;
             vm.prank(REL);
             NormalToken(t).mtxPayWithPayeeFee(x, pa, 10, RF_TO, vu, qa, m);
@@ -230,9 +254,19 @@ contract PayRecordsTest is PayRigBase {
     // ------------------------------------------------------------------ the shared vectors
 
     function _recJson(MetaTxLib.PayRecord memory r, bytes32 at) internal pure returns (string memory) {
-        return string.concat('{"to":"', vm.toString(r.to), '","amount":"', vm.toString(uint256(r.amount)),
-            '","blockNumber":', vm.toString(uint256(r.blockNumber)), ',"slots":["', vm.toString(at), '","',
-            vm.toString(bytes32(uint256(at) + 1)), '"]}');
+        return string.concat(
+            '{"to":"',
+            vm.toString(r.to),
+            '","amount":"',
+            vm.toString(uint256(r.amount)),
+            '","blockNumber":',
+            vm.toString(uint256(r.blockNumber)),
+            ',"slots":["',
+            vm.toString(at),
+            '","',
+            vm.toString(bytes32(uint256(at) + 1)),
+            '"]}'
+        );
     }
 
     function _call(string memory key, bytes memory cd, bytes memory ret) internal pure returns (string memory) {
@@ -254,23 +288,44 @@ contract PayRecordsTest is PayRigBase {
         bytes32 len = _lengthSlot(NO);
         bytes32 data = keccak256(abi.encode(len));
         MetaTxLib.PayRecord[] memory r = NormalToken(t).paymentsOf(NO, 0, 2);
-        bytes[4] memory cd = [abi.encodeCall(NormalToken.paymentCount, (NO)), abi.encodeCall(NormalToken.paymentsOf,
-            (NO, 0, 10)), abi.encodeCall(NormalToken.paymentsOf, (NO, 1, 1)), abi.encodeCall(NormalToken.paymentsOf,
-            (NO, 2, 1))];
+        bytes[4] memory cd = [
+            abi.encodeCall(NormalToken.paymentCount, (NO)),
+            abi.encodeCall(NormalToken.paymentsOf, (NO, 0, 10)),
+            abi.encodeCall(NormalToken.paymentsOf, (NO, 1, 1)),
+            abi.encodeCall(NormalToken.paymentsOf, (NO, 2, 1))
+        ];
         bytes[4] memory ret;
         for (uint256 k; k < 4; ++k) {
             (bool ok, bytes memory out) = t.staticcall(cd[k]);
             assertTrue(ok);
             ret[k] = out;
         }
-        string memory j = string.concat('{\n  "_comment":"plan T83 (owner 2026-11-09): the pay records of one payNo on a ',
+        string memory j = string.concat(
+            '{\n  "_comment":"plan T83 (owner 2026-11-09): the pay records of one payNo on a ',
             'token, written by test/metatx/PayRecords.t.sol test_payRecordsVectors (PAYMETA_WRITE=1). UNAUDITED.",\n',
-            '  "namespace":"scaas.pay.records","root":"', vm.toString(ROOT), '","payNo":"', vm.toString(NO),
-            '","payNoUuid":"019a6e3c-5f00-7a3b-8c4d-5e6f708192a3",\n  "lengthSlot":"', vm.toString(len), '","length":2,\n');
-        j = string.concat(j, '  "records":[', _recJson(r[0], data), ',', _recJson(r[1], bytes32(uint256(data) + 2)),
-            '],\n  ', _call("paymentCount", cd[0], ret[0]), ',\n  ', _call("paymentsOfAll", cd[1], ret[1]), ',\n  ');
-        j = string.concat(j, _call("paymentsOfSecond", cd[2], ret[2]), ',\n  ', _call("paymentsOfPastEnd", cd[3], ret[3]),
-            '\n}\n');
+            '  "namespace":"scaas.pay.records","root":"',
+            vm.toString(ROOT),
+            '","payNo":"',
+            vm.toString(NO),
+            '","payNoUuid":"019a6e3c-5f00-7a3b-8c4d-5e6f708192a3",\n  "lengthSlot":"',
+            vm.toString(len),
+            '","length":2,\n'
+        );
+        j = string.concat(
+            j,
+            '  "records":[',
+            _recJson(r[0], data),
+            ",",
+            _recJson(r[1], bytes32(uint256(data) + 2)),
+            "],\n  ",
+            _call("paymentCount", cd[0], ret[0]),
+            ",\n  ",
+            _call("paymentsOfAll", cd[1], ret[1]),
+            ",\n  "
+        );
+        j = string.concat(
+            j, _call("paymentsOfSecond", cd[2], ret[2]), ",\n  ", _call("paymentsOfPastEnd", cd[3], ret[3]), "\n}\n"
+        );
         if (vm.envOr("PAYMETA_WRITE", false)) vm.writeFile(FILE, j);
         assertEq(vm.readFile(FILE), j, "payrecords.json is stale: PAYMETA_WRITE=1");
         // the slots as the row states them, read raw

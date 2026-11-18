@@ -113,7 +113,8 @@ contract SigCheckTest is Test {
         vm.signAndAttachDelegation(address(new SigCheckHarness()), 0xD7702); // no isValidSignature
         assertFalse(h.isValid(delegated, D, viaDelegate, SigCheck.ERC1271_GAS), "no 1271");
         assertTrue(h.isValid(delegated, D, _sig(0xD7702, D), SigCheck.ERC1271_GAS));
-        Mock1271Wallet.Mode[3] memory modes = [Mock1271Wallet.Mode.WrongMagic, Mock1271Wallet.Mode.Reverts, Mock1271Wallet.Mode.Short];
+        Mock1271Wallet.Mode[3] memory modes =
+            [Mock1271Wallet.Mode.WrongMagic, Mock1271Wallet.Mode.Reverts, Mock1271Wallet.Mode.Short];
         for (uint256 i; i < modes.length; ++i) {
             // the delegate's code runs on the account's storage: its mode is set through the account
             vm.signAndAttachDelegation(address(new Mock1271Wallet(signer)), 0xD7702);

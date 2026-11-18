@@ -60,7 +60,9 @@ abstract contract RegRows is Test {
         address t = f.createToken(kind, 1, abi.encode(c), "ok");
         assertEq(NormalToken(t).kind(), uint8(kind));
         // plan T28 (M-10): a plain kind 0-5 does not answer `IRegulatedToken`
-        assertFalse(NormalToken(t).supportsInterface(type(IRegulatedToken).interfaceId), "IRegulatedToken on a plain kind");
+        assertFalse(
+            NormalToken(t).supportsInterface(type(IRegulatedToken).interfaceId), "IRegulatedToken on a plain kind"
+        );
     }
 
     /// The kind byte `init` wrote in `scaas.token` (creator 20 B, version 8 B, then kind).
@@ -88,29 +90,40 @@ abstract contract RegRows is Test {
 
     /// The three refusals and the stored kind that only the token's own kind id and masks give (`Masked*` below), each
     /// against the real kind first (the positive control: the same config passes there).
-    function _takesKindMasks(address real, address masked, address fac, IFactoryToken.TokenConfig memory c, uint8 kindId)
-        internal
-    {
+    function _takesKindMasks(
+        address real,
+        address masked,
+        address fac,
+        IFactoryToken.TokenConfig memory c,
+        uint8 kindId
+    ) internal {
         assertEq(_storedKind(_init(real, fac, c)), NormalToken(real).kind());
         assertEq(_storedKind(_init(masked, fac, c)), kindId);
         IFactoryToken.TokenConfig memory x = c; // the same memory: `c` is not read after this line
         x.features = 1 << GovernanceBits.PAYABLE; // outside the masked kind's valid bits
         _init(real, fac, x);
-        _initRefused(masked, fac, x,
-            abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, GovernanceBits.PAYABLE));
+        _initRefused(
+            masked, fac, x, abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, GovernanceBits.PAYABLE)
+        );
         x.features = 1 << GovernanceBits.WRAP_DISABLEABLE; // not a role of the masked kind
         x.lockedFeatures = x.features;
         x.roles.guardian = nid(address(0x6A2D));
         _init(real, fac, x);
-        _initRefused(masked, fac, x, abi.encodeWithSelector(IGovernance.NoSuchRole.selector, GovernanceBits.WRAP_DISABLEABLE));
+        _initRefused(
+            masked, fac, x, abi.encodeWithSelector(IGovernance.NoSuchRole.selector, GovernanceBits.WRAP_DISABLEABLE)
+        );
         x.roles.guardian = 0;
         x.features = 1 << GovernanceBits.MINTABLE; // contract-only on the masked kind: an EOA minter is refused
         x.lockedFeatures = x.features;
         x.maxSupply = 1e30;
         x.roles.minter = nid(address(0xA11CE));
         _init(real, fac, x);
-        _initRefused(masked, fac, x, abi.encodeWithSelector(IGovernance.RoleNotContract.selector, GovernanceBits.MINTABLE,
-            nid(address(0xA11CE))));
+        _initRefused(
+            masked,
+            fac,
+            x,
+            abi.encodeWithSelector(IGovernance.RoleNotContract.selector, GovernanceBits.MINTABLE, nid(address(0xA11CE)))
+        );
     }
 }
 
@@ -120,13 +133,18 @@ abstract contract RegRows is Test {
 contract MaskedWrappedZether is WrappedZetherTokenA {
     constructor(address f_, bytes memory a) WrappedZetherTokenA(f_, a) {}
 
-    function kind() public pure override returns (uint8) { return TokenStore.KIND_WRAPPED_ZETHER_REGULATED; }
+    function kind() public pure override returns (uint8) {
+        return TokenStore.KIND_WRAPPED_ZETHER_REGULATED;
+    }
+
     function _validBits() internal pure override returns (uint256) {
         return GovernanceBits.WRAPPED_BITS & ~(uint256(1) << GovernanceBits.PAYABLE);
     }
+
     function _roleBits() internal pure override returns (uint256) {
         return GovernanceBits.WRAPPED_ROLES & ~(uint256(1) << GovernanceBits.WRAP_DISABLEABLE);
     }
+
     function _contractOnlyBits() internal pure override returns (uint256) {
         return GovernanceBits.WRAPPED_CONTRACT_ONLY | (uint256(1) << GovernanceBits.MINTABLE);
     }
@@ -136,13 +154,18 @@ contract MaskedWrappedZether is WrappedZetherTokenA {
 contract MaskedWrappedPqz is WrappedPqzTokenA {
     constructor(address f_, bytes memory a) WrappedPqzTokenA(f_, a) {}
 
-    function kind() public pure override returns (uint8) { return TokenStore.KIND_WRAPPED_PQZ_REGULATED; }
+    function kind() public pure override returns (uint8) {
+        return TokenStore.KIND_WRAPPED_PQZ_REGULATED;
+    }
+
     function _validBits() internal pure override returns (uint256) {
         return GovernanceBits.WRAPPED_BITS & ~(uint256(1) << GovernanceBits.PAYABLE);
     }
+
     function _roleBits() internal pure override returns (uint256) {
         return GovernanceBits.WRAPPED_ROLES & ~(uint256(1) << GovernanceBits.WRAP_DISABLEABLE);
     }
+
     function _contractOnlyBits() internal pure override returns (uint256) {
         return GovernanceBits.WRAPPED_CONTRACT_ONLY | (uint256(1) << GovernanceBits.MINTABLE);
     }
@@ -152,7 +175,9 @@ contract MaskedWrappedPqz is WrappedPqzTokenA {
 contract KindNormalZether is NormalZetherTokenA {
     constructor(address f_, bytes memory a) NormalZetherTokenA(f_, a) {}
 
-    function kind() public pure override returns (uint8) { return TokenStore.KIND_NORMAL_ZETHER_REGULATED; }
+    function kind() public pure override returns (uint8) {
+        return TokenStore.KIND_NORMAL_ZETHER_REGULATED;
+    }
 }
 
 contract RegConfigPlainTest is RegRows {
@@ -161,8 +186,12 @@ contract RegConfigPlainTest is RegRows {
 
     function setUp() public {
         f = EnvKit.factory(address(0xF00D), UID_, 0);
-        Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
-        Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false);
+        Catalogue.plain(
+            f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false
+        );
+        Catalogue.plain(
+            f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false
+        );
     }
 
     function test_plainKindRefusesReg_0() public {
@@ -199,7 +228,9 @@ contract RegConfigZetherTest is ZetherFixture, RegRows {
 
     function setUp() public {
         _stack();
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode);
+        Catalogue.release(
+            factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode
+        );
     }
 
     function _wrapped() internal returns (IFactoryToken.TokenConfig memory c) {

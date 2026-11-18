@@ -60,8 +60,12 @@ abstract contract ZetherFreezeSuite is ZetherRegFixture {
             assertFalse(ok2);
             assertEq(ret, abi.encodeWithSelector(IRegulatedToken.Frozen.selector, aId), "Frozen(uaOf(yFrom))");
             assertLt(used, auth + PREFIX, "refused before the proof (I10)");
-            emit log_named_uint(string.concat("I10 signed refusal (ECDSA), entry ", vm.toString(k), ", authorization"), auth);
-            emit log_named_uint(string.concat("I10 signed refusal (ECDSA), entry ", vm.toString(k), ", refused at"), used);
+            emit log_named_uint(
+                string.concat("I10 signed refusal (ECDSA), entry ", vm.toString(k), ", authorization"), auth
+            );
+            emit log_named_uint(
+                string.concat("I10 signed refusal (ECDSA), entry ", vm.toString(k), ", refused at"), used
+            );
             vm.revertToState(snap);
         }
     }
@@ -79,7 +83,11 @@ abstract contract ZetherFreezeSuite is ZetherRegFixture {
             vm.revertToState(snap);
             (bool ok2, bytes memory ret,) = _try(_signedCall(k, _envOf(p, true), BAL, true));
             assertFalse(ok2);
-            assertEq(ret, abi.encodeWithSelector(IRegulatedToken.Frozen.selector, p), "fee-bearing: Frozen before the signature");
+            assertEq(
+                ret,
+                abi.encodeWithSelector(IRegulatedToken.Frozen.selector, p),
+                "fee-bearing: Frozen before the signature"
+            );
         }
         // the derived signer class: alice's own id, fee-bearing and frozen, refused before her Zether-key signature
         _public(tok, address(this), 1000);
@@ -101,8 +109,9 @@ abstract contract ZetherFreezeSuite is ZetherRegFixture {
         Tx memory x = _proveTransfer(tok, alice, bob, 10, BAL, carol.ua, 0);
         cds[1] = abi.encodeWithSelector(_sel(2), _zSingle(x.payload, carol.ua), x.proof);
         (bytes memory pl, bytes memory pr) = _proveUnshield(tok, alice, 10, BAL, address(0xB0C), carol.ua, 0);
-        cds[2] = abi.encodeWithSelector(IZetherToken.mtxUnshield.selector, _zBurn(pl, carol.ua), 10,
-            MetaTxLib.pad(address(0xB0C)), pr);
+        cds[2] = abi.encodeWithSelector(
+            IZetherToken.mtxUnshield.selector, _zBurn(pl, carol.ua), 10, MetaTxLib.pad(address(0xB0C)), pr
+        );
         for (uint256 i; i < 3; ++i) {
             uint256 snap = vm.snapshotState();
             (bool ok,,) = _try(cds[i]);
@@ -132,11 +141,15 @@ abstract contract ZetherFreezeSuite is ZetherRegFixture {
 }
 
 contract ZetherFreeze10Test is ZetherFreezeSuite {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 }
 
 contract ZetherFreeze11Test is ZetherFreezeSuite {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 
     /// Spec §4.1: the unshield-unwrap's sender at the top, before the reserve quote and the proof.
     function test_unshieldUnwrapFrozenRefused() public {

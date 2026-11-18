@@ -15,8 +15,13 @@ import {EnvKit} from "../helpers/EnvKit.sol";
 contract KindTable {
     mapping(bytes32 => uint16) public kinds;
 
-    function set(bytes32 id, uint16 k) external { kinds[id] = k; }
-    function kindOf(bytes32 id) external view returns (uint16) { return kinds[id]; }
+    function set(bytes32 id, uint16 k) external {
+        kinds[id] = k;
+    }
+
+    function kindOf(bytes32 id) external view returns (uint16) {
+        return kinds[id];
+    }
 }
 
 /// An empty contract: a native holder with code.
@@ -45,7 +50,9 @@ contract RelaxApp is GovernanceBase {
     }
 
     /// The power of `bit` for the caller, as a regulated entry runs it.
-    function act(uint8 bit, uint256 x) external returns (bytes32) { return GovernanceUse.use(bit, _govSubject(), x); }
+    function act(uint8 bit, uint256 x) external returns (bytes32) {
+        return GovernanceUse.use(bit, _govSubject(), x);
+    }
 
     /// The same power for a derived `subject`, as the router hands it to a governed entry (test stand-in for the router).
     function actFor(bytes32 subject, uint8 bit, uint256 x) external returns (bytes32) {
@@ -57,20 +64,51 @@ contract RelaxApp is GovernanceBase {
         return GovernanceLib.disableFeature(bit, _govSubject(), DELAYED);
     }
 
-    function barred(uint8 bit, bytes32 a) external view returns (bool) { return GovernanceLib.$().grants[bit][a].barred; }
+    function barred(uint8 bit, bytes32 a) external view returns (bool) {
+        return GovernanceLib.$().grants[bit][a].barred;
+    }
 
-    function _guardIn() internal pure override returns (bool) { return false; }
+    function _guardIn() internal pure override returns (bool) {
+        return false;
+    }
     function _guardOut(bool) internal pure override {}
-    function _caller() internal view override returns (address) { return msg.sender; }
+
+    function _caller() internal view override returns (address) {
+        return msg.sender;
+    }
+
     /// @dev A test app has no chain word (not factory-made); its renounce is not exercised by chain (Fable recheck-2 P3-1).
-    function _govChainUid() internal pure override returns (bytes32) { return bytes32(0); }
-    function _validBits() internal pure override returns (uint256) { return VALID; }
-    function _roleBits() internal pure override returns (uint256) { return ROLES; }
-    function _contractOnlyBits() internal pure override returns (uint256) { return ONLY; }
-    function _scalarBits() internal pure override returns (uint256) { return SCALAR; }
-    function _scopeBits() internal pure override returns (uint256) { return 0; }
-    function _delayedRelaxBits() internal pure override returns (uint256) { return DELAYED; }
-    function _uaRegistry() internal view override returns (address) { return REG; }
+    function _govChainUid() internal pure override returns (bytes32) {
+        return bytes32(0);
+    }
+
+    function _validBits() internal pure override returns (uint256) {
+        return VALID;
+    }
+
+    function _roleBits() internal pure override returns (uint256) {
+        return ROLES;
+    }
+
+    function _contractOnlyBits() internal pure override returns (uint256) {
+        return ONLY;
+    }
+
+    function _scalarBits() internal pure override returns (uint256) {
+        return SCALAR;
+    }
+
+    function _scopeBits() internal pure override returns (uint256) {
+        return 0;
+    }
+
+    function _delayedRelaxBits() internal pure override returns (uint256) {
+        return DELAYED;
+    }
+
+    function _uaRegistry() internal view override returns (address) {
+        return REG;
+    }
 }
 
 /// @notice ua-mtx-merge T24: `GovernanceLib`'s relaxation state machine (regulated-kinds spec §3.6, RK-2, RK-3, CTR-GOV-09),
@@ -89,7 +127,8 @@ contract GovRelaxTest is Test {
     uint128 constant NONE = type(uint128).max;
     uint8 constant MODERATE = 21;
     uint8 constant OPERATOR = 22;
-    uint256 constant FEATURES = (1 << 1) | (1 << 3) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 10) | (1 << 21) | (1 << 22);
+    uint256 constant FEATURES = (1 << 1) | (1 << 3) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 10) | (1 << 21)
+        | (1 << 22);
     address constant OWNER = address(0x0A);
     address constant NEXT = address(0x0D);
     address constant STRANGER = address(0x0E);
@@ -130,14 +169,20 @@ contract GovRelaxTest is Test {
     }
 
     /// Terms of a scalarless bit (5, 7): only `validUntil`, `maxUses` and `delegable` bind.
-    function _t(uint64 validUntil, uint32 maxUses, bool delegable) internal pure returns (IGovernance.GrantTerms memory t) {
+    function _t(uint64 validUntil, uint32 maxUses, bool delegable)
+        internal
+        pure
+        returns (IGovernance.GrantTerms memory t)
+    {
         (t.max, t.validUntil, t.maxUses, t.delegable) = (NONE, validUntil, maxUses, delegable);
     }
 
     // ------------------------------------------------------------------ init: issuer and compliance
 
     function test_initGrantsIssuerAndCompliance() public view {
-        for (uint8 b = FREEZE; b <= PAUSE; ++b) assertTrue(a.hasRole(b, nid(issuer)), "issuer holds each of 5-7");
+        for (uint8 b = FREEZE; b <= PAUSE; ++b) {
+            assertTrue(a.hasRole(b, nid(issuer)), "issuer holds each of 5-7");
+        }
         assertTrue(a.hasRole(RECORD, nid(compliance)), "compliance holds 10");
         assertFalse(a.hasRole(RECORD, nid(issuer)));
         assertEq(a.holderCount(FREEZE), 1);
@@ -150,7 +195,9 @@ contract GovRelaxTest is Test {
         assertTrue(x.hasRole(FREEZE, nid(issuer)));
         assertTrue(x.hasRole(PAUSE, nid(issuer)));
         assertFalse(x.hasRole(FORCE, nid(issuer)));
-        assertTrue(x.hasRole(8, nid(issuer)) && x.hasRole(9, nid(issuer)), "round 3s: the list bits, off and enableable");
+        assertTrue(
+            x.hasRole(8, nid(issuer)) && x.hasRole(9, nid(issuer)), "round 3s: the list bits, off and enableable"
+        );
         x = new RelaxApp(address(reg));
         x.init(1 << 1, nid(OWNER), D, _roles(nid(issuer), 0)); // round 3s: a seat of the list bits alone (was RoleWithoutFeature)
         assertFalse(x.hasRole(FREEZE, nid(issuer)));

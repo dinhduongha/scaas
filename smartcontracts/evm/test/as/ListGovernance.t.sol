@@ -279,7 +279,9 @@ contract ListGovernanceTest is ListFixture {
                 assertEq(l[k].topics[2], bytes32(0));
                 assertEq(abi.decode(l[k].data, (bool)), true);
             }
-            if (l[k].topics[0] == keccak256("Transfer(address,address,uint256)") && at != type(uint256).max) mintAt = k;
+            if (l[k].topics[0] == keccak256("Transfer(address,address,uint256)") && at != type(uint256).max) {
+                mintAt = k;
+            }
         }
         assertTrue(at != type(uint256).max && mintAt != type(uint256).max, "AllowedSet before the mint");
         assertEq(IERC20(t).balanceOf(alice), SUPPLY);
@@ -303,7 +305,9 @@ contract ListGovernanceTest is ListFixture {
     function test_ops_bounds() public {
         address t = _lt(0, 0, 0, "b");
         bytes32[] memory as_ = new bytes32[](257);
-        for (uint256 k; k < 257; ++k) as_[k] = bytes32(k + 1);
+        for (uint256 k; k < 257; ++k) {
+            as_[k] = bytes32(k + 1);
+        }
         vm.prank(issuer);
         vm.expectRevert(abi.encodeWithSelector(BATCH_INVALID, uint256(257)));
         IListOps(t).setDenied(as_, true, EnvKit.codeUidOf(t));
@@ -423,7 +427,9 @@ contract ListGovernanceTest is ListFixture {
             c = _bare(i);
             (c.admin, c.roles.minter, c.reg.termsHash) = (0, 0, 0);
             c.roles.issuer = nid(bob);
-            vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleWithoutFeature.selector, uint8(GovernanceBits.FREEZE)));
+            vm.expectRevert(
+                abi.encodeWithSelector(IGovernance.RoleWithoutFeature.selector, uint8(GovernanceBits.FREEZE))
+            );
             _create(i, c, bytes32(++salt)); // admin 0: the seat holds no list bit, so nothing
         }
     }

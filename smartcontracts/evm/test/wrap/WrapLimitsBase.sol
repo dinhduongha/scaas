@@ -42,19 +42,27 @@ abstract contract WrapLimitsBase is UALedgerBase {
 
     function OFF() internal pure returns (IWrappedToken.WrapLimit memory l) {}
 
-    function L(uint24 perUser, uint64 tokenWide, uint32 period) internal pure returns (IWrappedToken.WrapLimit memory l) {
+    function L(uint24 perUser, uint64 tokenWide, uint32 period)
+        internal
+        pure
+        returns (IWrappedToken.WrapLimit memory l)
+    {
         l = IWrappedToken.WrapLimit(perUser, tokenWide, period);
     }
 
     function _cfg(address[] memory legs, uint256[] memory num, uint256 features)
-        internal pure returns (IFactoryToken.TokenConfig memory c)
+        internal
+        pure
+        returns (IFactoryToken.TokenConfig memory c)
     {
         (c.name, c.symbol, c.decimals, c.admin, c.maxSupply) = ("H", "H", 6, nid(OWNER), CAP);
         c.features = features;
         if (features & (uint256(1) << GovernanceBits.MINTABLE) != 0) c.roles.minter = nid(MINTER);
         else c.maxSupply = 0;
         c.legs = new IFactoryToken.Leg[](legs.length);
-        for (uint256 i; i < legs.length; ++i) c.legs[i] = IFactoryToken.Leg(legs[i], num[i], 1);
+        for (uint256 i; i < legs.length; ++i) {
+            c.legs[i] = IFactoryToken.Leg(legs[i], num[i], 1);
+        }
     }
 
     function _clone() internal returns (WrappedToken) {
@@ -84,27 +92,42 @@ abstract contract WrapLimitsBase is UALedgerBase {
         return _make(_cfg(l, n, features));
     }
 
-    function _leg(address leg, uint8 unitExp, uint16 decayDays, IWrappedToken.WrapLimit memory ws,
-        IWrappedToken.WrapLimit memory wl, IWrappedToken.WrapLimit memory us, IWrappedToken.WrapLimit memory ul)
-        internal pure returns (IWrappedToken.WrapLegLimits memory)
-    {
+    function _leg(
+        address leg,
+        uint8 unitExp,
+        uint16 decayDays,
+        IWrappedToken.WrapLimit memory ws,
+        IWrappedToken.WrapLimit memory wl,
+        IWrappedToken.WrapLimit memory us,
+        IWrappedToken.WrapLimit memory ul
+    ) internal pure returns (IWrappedToken.WrapLegLimits memory) {
         return IWrappedToken.WrapLegLimits(leg, unitExp, decayDays, ws, wl, us, ul);
     }
 
-    function _legs1(IWrappedToken.WrapLegLimits memory a) internal pure returns (IWrappedToken.WrapLegLimits[] memory r) {
+    function _legs1(IWrappedToken.WrapLegLimits memory a)
+        internal
+        pure
+        returns (IWrappedToken.WrapLegLimits[] memory r)
+    {
         r = new IWrappedToken.WrapLegLimits[](1);
         r[0] = a;
     }
 
     /// One leg `u` at unit `10^e`, decay `d`, four limits.
-    function _cfg1(uint8 e, uint16 d, IWrappedToken.WrapLimit memory ws, IWrappedToken.WrapLimit memory wl,
-        IWrappedToken.WrapLimit memory us, IWrappedToken.WrapLimit memory ul)
-        internal view returns (IWrappedToken.WrapLegLimits[] memory)
-    {
+    function _cfg1(
+        uint8 e,
+        uint16 d,
+        IWrappedToken.WrapLimit memory ws,
+        IWrappedToken.WrapLimit memory wl,
+        IWrappedToken.WrapLimit memory us,
+        IWrappedToken.WrapLimit memory ul
+    ) internal view returns (IWrappedToken.WrapLegLimits[] memory) {
         return _legs1(_leg(u, e, d, ws, wl, us, ul));
     }
 
-    function _set(WrappedToken w, IWrappedToken.WrapLegLimits[] memory a, bool net, bool wrapList, bool unwrapList) internal {
+    function _set(WrappedToken w, IWrappedToken.WrapLegLimits[] memory a, bool net, bool wrapList, bool unwrapList)
+        internal
+    {
         vm.prank(OWNER);
         w.setWrapLimits(a, net, wrapList, unwrapList, EnvKit.codeUidOf(address(w)));
     }

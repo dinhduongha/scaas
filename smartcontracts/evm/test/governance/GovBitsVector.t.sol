@@ -26,14 +26,16 @@ contract GovBitsVectorTest is Test {
     string constant OUT = "../vectors/governance/governance_bits.json";
 
     /// The bits that have holders on some kind of this release (`_roleBits()` of `NORMAL*`, `WRAPPED*`, `SCaaSDex`).
-    uint256 constant ROLES = B.NORMAL_ROLES | B.WRAPPED_ROLES | B.DEX_BITS | B.REGULATED_ROLES | (1 << B.OPERATOR_TRANSFER)
-        | (1 << B.TAX) | (1 << B.PQZ_PROOF) | (1 << B.ALLOWLIST) | (1 << B.DENYLIST) | B.AUDITOR_BITS;
+    uint256 constant ROLES = B.NORMAL_ROLES | B.WRAPPED_ROLES | B.DEX_BITS | B.REGULATED_ROLES
+        | (1 << B.OPERATOR_TRANSFER) | (1 << B.TAX) | (1 << B.PQZ_PROOF) | (1 << B.ALLOWLIST) | (1 << B.DENYLIST)
+        | B.AUDITOR_BITS;
     /// The last row (CTR-GOV-20).
     uint256 constant LAST = B.AUDITOR; // CTR-GOV-31 (was B.SUPPLY_CAP_ADJUSTABLE, CTR-GOV-30; B.CLOSED_MARKETS, CTR-DEX-32; …)
     /// `RegulatedBase`'s masks (internal there), composed from the same constants: the bits 8-13 add, without `ALLOWLIST` on
     /// 10-13 (CTR-GOV-17); the contract-only ones (an `msig` UA counts, RK-1); bit 22 any holder. Kind 8's `validBits()` is
     /// held to `REG` below, kinds 9 and 13 in `RegulatedSkeleton.test_masks`.
-    uint256 constant REG = B.REGULATED | (1 << B.RECORD) | (1 << B.MODERATE) | (1 << B.OPERATOR_TRANSFER) | (1 << B.TAX);
+    uint256 constant REG = B.REGULATED | (1 << B.RECORD) | (1 << B.MODERATE) | (1 << B.OPERATOR_TRANSFER)
+        | (1 << B.TAX);
     uint256 constant REG_CONFIDENTIAL = REG & ~(uint256(1) << B.ALLOWLIST);
     uint256 constant REG_CONTRACT_ONLY = B.REGULATED_ROLES;
     uint256 constant REG_ROLES =
@@ -465,14 +467,20 @@ contract GovBitsVectorTest is Test {
                         "A holder can replace this token's auditor with one that consents: the new auditor reads every later transfer that includes the auditor, never an earlier one. Each replacement is announced on chain, takes two calls of the same holder (two uses of its grant) and applies only after {auditorDelay}, the longer of the factory's notice period and this token's grant delay; the admin can stop it at once by revoking the holder before it applies. A token without an auditor never gains one."
                     ),
                     ", ",
-                    _one("atOnce", "This token's delay is 0: a holder of this power replaces the auditor at once, with no notice."),
+                    _one(
+                        "atOnce",
+                        "This token's delay is 0: a holder of this power replaces the auditor at once, with no notice."
+                    ),
                     ", ",
                     _one(
                         "singleKey",
                         "A holder of this power is a single key: that one key can redirect who reads later transfers, after the delay. A threshold (msig) holder is recommended."
                     ),
                     ", ",
-                    _one("locked", "This power can never be switched off, and its admin is gone: nobody can revoke its holders.")
+                    _one(
+                        "locked",
+                        "This power can never be switched off, and its admin is gone: nobody can revoke its holders."
+                    )
                 )
             )
         );
@@ -518,8 +526,7 @@ contract GovBitsVectorTest is Test {
     /// The kinds' masks are what the rows say: every role bit and every valid bit of this release has a row with a name.
     function test_everyBitOfAKindHasANamedRow() public {
         string memory j = _build();
-        uint256 all =
-            ROLES | B.NORMAL_BITS | B.WRAPPED_BITS | B.DEX_VALID | REG | B.AUDITOR_BITS;
+        uint256 all = ROLES | B.NORMAL_BITS | B.WRAPPED_BITS | B.DEX_VALID | REG | B.AUDITOR_BITS;
         for (uint256 bit; bit < 256; ++bit) {
             if (all & (1 << bit) == 0) continue;
             assertLe(bit, LAST, "a row exists");

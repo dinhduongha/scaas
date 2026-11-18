@@ -155,20 +155,31 @@ interface IPqChat {
 
     event PqChatSessionCreated(bytes32 indexed sessionId, bytes32 indexed creator, bytes32 homeChain);
     event PqChatEpochAdded(
-        bytes32 indexed sessionId, bytes32 indexed epochId, bytes32 indexed parentEpochId, uint64 epoch, bytes32 author);
+        bytes32 indexed sessionId, bytes32 indexed epochId, bytes32 indexed parentEpochId, uint64 epoch, bytes32 author
+    );
     event PqChatWraps(bytes32 indexed epochId, uint32 first, uint32 count);
     event PqChatEpochComplete(bytes32 indexed epochId);
     event PqChatLeft(bytes32 indexed sessionId, bytes32 indexed epochId, bytes32 indexed member);
     event PqChatRemoved(bytes32 indexed sessionId, bytes32 indexed epochId, bytes32 indexed admin, bytes32[] members);
     /// @notice D11: the signature's bytes here, its hash in the stored blob.
     event PqChatMessagePosted(
-        bytes32 indexed sessionId, bytes32 indexed messageId, bytes32 indexed sender, uint256 index, IUARegistry.UASig sig);
+        bytes32 indexed sessionId,
+        bytes32 indexed messageId,
+        bytes32 indexed sender,
+        uint256 index,
+        IUARegistry.UASig sig
+    );
     event PqChatStored(bytes8 indexed hint, uint256 index);
     event PqTopicCreated(bytes32 indexed topicId, bytes32 indexed admin);
     event PqTopicUpdated(bytes32 indexed topicId, uint64 seq);
     event PqTopicWriterSet(bytes32 indexed topicId, bytes32 indexed writer, bool granted, uint64 seq);
     event PqTopicEntryPosted(
-        bytes32 indexed topicId, bytes32 indexed entryId, bytes32 indexed parentId, bytes32 author, IUARegistry.UASig sig);
+        bytes32 indexed topicId,
+        bytes32 indexed entryId,
+        bytes32 indexed parentId,
+        bytes32 author,
+        IUARegistry.UASig sig
+    );
     event PqTopicEntryEdited(bytes32 indexed entryId, uint32 version, IUARegistry.UASig sig);
     event PqTopicVoted(bytes32 indexed entryId, bytes32 indexed voter, int8 value, uint64 seq);
 
@@ -219,9 +230,11 @@ interface IPqChat {
     // ------------------------------------------------------------------ sessions (spec §4.4)
 
     function createSession(PqChatSession calldata s, Wrap[] calldata wraps, IUARegistry.UASig calldata sig)
-        external returns (bytes32 sessionId);
+        external
+        returns (bytes32 sessionId);
     function rekey(PqChatEpoch calldata e, Wrap[] calldata wraps, IUARegistry.UASig calldata sig)
-        external returns (bytes32 epochId);
+        external
+        returns (bytes32 epochId);
     /// @notice Anyone, no signature: `wraps[j]` must hash to `wrapHashes[first + j]` (P11).
     function addWraps(bytes32 epochId, uint32 first, Wrap[] calldata wraps) external;
     function leave(PqChatLeave calldata l, IUARegistry.UASig calldata sig) external;
@@ -294,7 +307,9 @@ interface IPqChat {
     function entryOf(bytes32 entryId) external view returns (EntryView memory);
     /// @notice Version `version` (1 = the original, 2.. the edits).
     function versionAt(bytes32 entryId, uint32 version)
-        external view returns (string memory mediaType, bytes memory body, bytes32 sigHash);
+        external
+        view
+        returns (string memory mediaType, bytes memory body, bytes32 sigHash);
     function writerOf(bytes32 topicId, bytes32 ua) external view returns (bool granted, uint64 seq);
     function scoreOf(bytes32 entryId) external view returns (uint128 up, uint128 down);
     function voteOf(bytes32 entryId, bytes32 ua) external view returns (int8 value, uint64 seq);
@@ -302,14 +317,25 @@ interface IPqChat {
     ///         length only).
     function topics(uint256 start, uint256 count) external view returns (bytes32[] memory ids, uint256 total);
     function topicsByAdmin(bytes32 admin_, uint256 start, uint256 count)
-        external view returns (bytes32[] memory ids, uint256 total);
+        external
+        view
+        returns (bytes32[] memory ids, uint256 total);
     function writersOf(bytes32 topicId, uint256 start, uint256 count)
-        external view returns (bytes32[] memory ids, uint256 total);
-    function posts(bytes32 topicId, uint256 start, uint256 count) external view returns (bytes32[] memory ids, uint256 total);
+        external
+        view
+        returns (bytes32[] memory ids, uint256 total);
+    function posts(bytes32 topicId, uint256 start, uint256 count)
+        external
+        view
+        returns (bytes32[] memory ids, uint256 total);
     function replies(bytes32 parentId, uint256 start, uint256 count)
-        external view returns (bytes32[] memory ids, uint256 total);
+        external
+        view
+        returns (bytes32[] memory ids, uint256 total);
     function byAuthor(bytes32 author, uint256 start, uint256 count)
-        external view returns (bytes32[] memory ids, uint256 total);
+        external
+        view
+        returns (bytes32[] memory ids, uint256 total);
     function topicNonceUsed(bytes32 admin_, uint64 nonce) external view returns (bool);
     function entryNonceUsed(bytes32 topicId, bytes32 author, uint64 nonce) external view returns (bool);
 }

@@ -60,8 +60,12 @@ abstract contract SelectorAuditRows is Test {
     }
 
     function _pin(string memory name) internal view returns (AuditRow[] memory) {
-        return abi.decode(vm.parseJsonTypeArray(vm.readFile(PIN), string.concat(".", name),
-            "AuditRow(string sig,string class,string error)"), (AuditRow[]));
+        return abi.decode(
+            vm.parseJsonTypeArray(
+                vm.readFile(PIN), string.concat(".", name), "AuditRow(string sig,string class,string error)"
+            ),
+            (AuditRow[])
+        );
     }
 
     // ------------------------------------------------------------------ the ABI in the build's out
@@ -73,7 +77,8 @@ abstract contract SelectorAuditRows is Test {
     /// The artifacts of this build: `FOUNDRY_OUT` when set (`script/pqz/at-set.sh` builds into `out/at-set-<set>`),
     /// else `out`; a fixed `out/` read another build's artifacts, or none on a fresh checkout.
     function _writes(string memory name) internal view returns (string[] memory out) {
-        string memory a = vm.readFile(string.concat(vm.envOr("FOUNDRY_OUT", string("out")), "/", name, ".sol/", name, ".json"));
+        string memory a =
+            vm.readFile(string.concat(vm.envOr("FOUNDRY_OUT", string("out")), "/", name, ".sol/", name, ".json"));
         string[] memory sigs = vm.parseJsonKeys(a, ".methodIdentifiers");
         (string[] memory w, string[] memory r) = _byMutability(a);
         out = new string[](sigs.length);
@@ -83,7 +88,10 @@ abstract contract SelectorAuditRows is Test {
             bool generic = _eq(fn, "mtxExecute") || _eq(fn, "executeMetaTransaction") || _eq(fn, "mtxBatch")
                 || _eq(fn, "uaExecute") || _eq(fn, "uaBatch");
             bool writes = generic || _in(fn, w);
-            require(generic || !(writes && _in(fn, r)), string.concat(name, ": ", fn, " is overloaded across view and non-view"));
+            require(
+                generic || !(writes && _in(fn, r)),
+                string.concat(name, ": ", fn, " is overloaded across view and non-view")
+            );
             if (writes) out[n++] = sigs[i];
         }
         assembly ("memory-safe") { mstore(out, n) }
@@ -114,7 +122,9 @@ abstract contract SelectorAuditRows is Test {
         uint256 i;
         while (b[i] != "(") ++i;
         bytes memory n = new bytes(i);
-        for (uint256 k; k < i; ++k) n[k] = b[k];
+        for (uint256 k; k < i; ++k) {
+            n[k] = b[k];
+        }
         return string(n);
     }
 
@@ -123,7 +133,9 @@ abstract contract SelectorAuditRows is Test {
     }
 
     function _in(string memory s, string[] memory list) internal pure returns (bool) {
-        for (uint256 i; i < list.length; ++i) if (_eq(s, list[i])) return true;
+        for (uint256 i; i < list.length; ++i) {
+            if (_eq(s, list[i])) return true;
+        }
         return false;
     }
 
@@ -131,7 +143,9 @@ abstract contract SelectorAuditRows is Test {
         bytes memory a = bytes(s);
         bytes memory b = bytes(p);
         if (a.length < b.length) return false;
-        for (uint256 i; i < b.length; ++i) if (a[i] != b[i]) return false;
+        for (uint256 i; i < b.length; ++i) {
+            if (a[i] != b[i]) return false;
+        }
         return true;
     }
 
@@ -174,18 +188,28 @@ abstract contract SelectorAuditRows is Test {
     function _classError(string memory where, AuditRow memory r) internal pure {
         bytes4 e = bytes4(keccak256(bytes(r.error)));
         if (_bitOf(r.class) != 0) {
-            require(_eq(r.error, "MissingRole(uint8,bytes32)") || _eq(r.error, "NotGuardian()") || _eq(r.error, "NotRateAdmin()"),
-                string.concat(where, ": a BIT row names a role's refusal"));
+            require(
+                _eq(r.error, "MissingRole(uint8,bytes32)") || _eq(r.error, "NotGuardian()")
+                    || _eq(r.error, "NotRateAdmin()"),
+                string.concat(where, ": a BIT row names a role's refusal")
+            );
         } else if (_eq(r.class, "ADMIN")) {
             require(_eq(r.error, "NotAdmin(bytes32)"), string.concat(where, ": an ADMIN row names NotAdmin"));
         } else if (_eq(r.class, "GUARDIAN")) {
             require(_eq(r.error, "NotGuardian()"), string.concat(where, ": a GUARDIAN row names NotGuardian"));
         } else if (_eq(r.class, "HOLDER_OWN")) {
-            require(_eq(r.error, "MissingRole(uint8,bytes32)") || _eq(r.error, "NotPendingAdmin(bytes32)"),
-                string.concat(where, ": a HOLDER_OWN row names the holder's refusal"));
+            require(
+                _eq(r.error, "MissingRole(uint8,bytes32)") || _eq(r.error, "NotPendingAdmin(bytes32)"),
+                string.concat(where, ": a HOLDER_OWN row names the holder's refusal")
+            );
         } else {
-            require(bytes(r.error).length == 0 || !_gate(e), string.concat(where, ": a gate's error on an ungated class"));
-            require(!_eq(r.class, "FACTORY") || bytes(r.error).length != 0, string.concat(where, ": a FACTORY row names its error"));
+            require(
+                bytes(r.error).length == 0 || !_gate(e), string.concat(where, ": a gate's error on an ungated class")
+            );
+            require(
+                !_eq(r.class, "FACTORY") || bytes(r.error).length != 0,
+                string.concat(where, ": a FACTORY row names its error")
+            );
         }
     }
 
@@ -238,7 +262,9 @@ abstract contract SelectorAuditRows is Test {
             if (_eq(r.error, "MissingRole(uint8,bytes32)")) {
                 (uint8 bit, bytes32 who) = abi.decode(_args(ret), (uint8, bytes32));
                 assertEq(who, me, where);
-                if (_bitOf(r.class) != 0) assertEq(uint256(bit) + 1, _bitOf(r.class), string.concat(where, ": another bit"));
+                if (_bitOf(r.class) != 0) {
+                    assertEq(uint256(bit) + 1, _bitOf(r.class), string.concat(where, ": another bit"));
+                }
             } else if (_eq(r.error, "NotAdmin(bytes32)") || _eq(r.error, "NotPendingAdmin(bytes32)")) {
                 assertEq(abi.decode(_args(ret), (bytes32)), me, where);
             }
@@ -247,7 +273,9 @@ abstract contract SelectorAuditRows is Test {
 
     function _args(bytes memory ret) internal pure returns (bytes memory a) {
         a = new bytes(ret.length - 4);
-        for (uint256 i; i < a.length; ++i) a[i] = ret[i + 4];
+        for (uint256 i; i < a.length; ++i) {
+            a[i] = ret[i + 4];
+        }
     }
 
     // ------------------------------------------------------------------ the allow-lists of a governed token
@@ -263,10 +291,19 @@ abstract contract SelectorAuditRows is Test {
             if (!_named(pin[i].class)) continue;
             bytes4 sel = bytes4(keccak256(bytes(pin[i].sig)));
             string memory where = string.concat(name, ".", pin[i].sig);
-            for (uint256 k; k < published.length; ++k) assertTrue(published[k] != sel, string.concat(where, ": on mtxSelectors()"));
-            assertEq(_mtxProbe(t, sel), IMetaTx.MtxSelectorNotAllowed.selector,
-                string.concat(where, ": relayable by executeMetaTransaction"));
-            assertEq(_uaProbe(t, sel), IMetaTx.MtxSelectorNotAllowed.selector, string.concat(where, ": relayable by mtxExecute"));
+            for (uint256 k; k < published.length; ++k) {
+                assertTrue(published[k] != sel, string.concat(where, ": on mtxSelectors()"));
+            }
+            assertEq(
+                _mtxProbe(t, sel),
+                IMetaTx.MtxSelectorNotAllowed.selector,
+                string.concat(where, ": relayable by executeMetaTransaction")
+            );
+            assertEq(
+                _uaProbe(t, sel),
+                IMetaTx.MtxSelectorNotAllowed.selector,
+                string.concat(where, ": relayable by mtxExecute")
+            );
         }
     }
 
@@ -277,16 +314,36 @@ abstract contract SelectorAuditRows is Test {
 
     /// The revert of a signed `executeMetaTransaction` of `sel` (one zero word), or 0 when it ran.
     function _mtxProbe(address t, bytes4 sel) internal returns (bytes4) {
-        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(vm.addr(SA_PK), bytes.concat(sel, bytes32(0)), 9,
-            UAMetaTxBase(t).mtxNonce(MetaTxLib.pad(vm.addr(SA_PK)), 9), block.timestamp + 300, 0, address(0), 0, address(0));
+        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(
+            vm.addr(SA_PK),
+            bytes.concat(sel, bytes32(0)),
+            9,
+            UAMetaTxBase(t).mtxNonce(MetaTxLib.pad(vm.addr(SA_PK)), 9),
+            block.timestamp + 300,
+            0,
+            address(0),
+            0,
+            address(0)
+        );
         return _probe(t, abi.encodeCall(MetaTxBase.executeMetaTransaction, (m, _sign(MtxDigest.metaTx(t, m)))));
     }
 
     function _uaProbe(address t, bytes4 sel) internal returns (bytes4) {
         bytes32 from = bytes32(uint256(uint160(vm.addr(SA_PK))));
-        MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction(from, bytes.concat(sel, bytes32(0)), 9,
-            UAMetaTxBase(t).mtxNonce(from, 9), block.timestamp + 300, 0, address(0), 0, address(0));
-        return _probe(t, abi.encodeCall(UAMetaTxBase.mtxExecute, (m, UACall.auth(m.from, _sign(UAMetaTxBase(t).mtxDigest(m))))));
+        MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction(
+            from,
+            bytes.concat(sel, bytes32(0)),
+            9,
+            UAMetaTxBase(t).mtxNonce(from, 9),
+            block.timestamp + 300,
+            0,
+            address(0),
+            0,
+            address(0)
+        );
+        return _probe(
+            t, abi.encodeCall(UAMetaTxBase.mtxExecute, (m, UACall.auth(m.from, _sign(UAMetaTxBase(t).mtxDigest(m)))))
+        );
     }
 
     function _probe(address t, bytes memory cd) internal returns (bytes4 e) {
@@ -331,7 +388,9 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
     OpenFactory internal fac; // round 3r: the test its admin, configured (no router)
 
     /// The test is the factory of every clone and registered no token.
-    function isToken(address) external pure returns (bool) { return false; }
+    function isToken(address) external pure returns (bool) {
+        return false;
+    }
     /// fix2-dex: the DEX reads the kind at use (`versionOf`, version 0: not a factory token)
     function versionOf(address) external pure returns (uint8, uint64) {}
 
@@ -347,15 +406,27 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
         IFactoryToken.TokenConfig memory w;
         (w.name, w.symbol, w.decimals) = ("W", "W", 6);
         _govern(w, address(new MockERC20("Leg", "LEG", 6)));
-        wt = WrappedToken(payable(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), e)));
+        wt = WrappedToken(
+            payable(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), e))
+        );
         wt.initialize(nid(address(this)), 1, abi.encode(w));
         dex = SCaaSDex(EnvKit.clone(address(new SCaaSDex(address(this), dexArgs(address(this)))), e));
-        dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(OWNER_ID, 0, address(0x7EA5), false, 0, address(0), 0, 0)));
+        dex.initialize(
+            nid(address(this)),
+            1,
+            abi.encode(ISCaaSDex.DexConfig(OWNER_ID, 0, address(0x7EA5), false, 0, address(0), 0, 0))
+        );
         _regulate(c);
-        nr = NormalRegulatedToken(EnvKit.clone(address(new NormalRegulatedToken(address(this), kindArgs(8, address(this), regArgs()))), e));
+        nr = NormalRegulatedToken(
+            EnvKit.clone(address(new NormalRegulatedToken(address(this), kindArgs(8, address(this), regArgs()))), e)
+        );
         nr.initialize(nid(address(this)), 1, abi.encode(c));
         _regulate(w);
-        wr = WrappedRegulatedToken(payable(EnvKit.clone(address(new WrappedRegulatedToken(address(this), kindArgs(9, address(this), regArgs()))), e)));
+        wr = WrappedRegulatedToken(
+            payable(EnvKit.clone(
+                    address(new WrappedRegulatedToken(address(this), kindArgs(9, address(this), regArgs()))), e
+                ))
+        );
         wr.initialize(nid(address(this)), 1, abi.encode(w));
         fac = new OpenFactory(nid(address(this)));
         EnvKit.genesis(chainUidA);
@@ -369,8 +440,8 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
         c.features |= (uint256(1) << 5) | (uint256(1) << 6) | (uint256(1) << 7) | (uint256(1) << 10)
             | (uint256(1) << GovernanceBits.OPERATOR_TRANSFER) | (uint256(1) << GovernanceBits.TAX);
         c.reg.taxRecipient = bytes32(uint256(0x7A0));
-        (c.roles.issuer, c.roles.compliance) = (bytes32(uint256(uint160(address(this)))),
-            bytes32(uint256(uint160(address(new AuditHolder())))));
+        (c.roles.issuer, c.roles.compliance) =
+        (bytes32(uint256(uint160(address(this)))), bytes32(uint256(uint160(address(new AuditHolder())))));
         c.reg.termsHash = keccak256("terms");
     }
 
@@ -378,12 +449,33 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
         // Fable review of ua-mtx-merge E N-10: + UARegistry and SmartKeyAccountFactory (the node's `registry` and `factory` kinds);
         // owner 2026-11-12: + SmartKeyAccount (`account`, class GUARDIAN); fix2 CTR-GOV-26: + `RelayFeeRouter`, `PqChat` (their
         // `rescue`, and every other entry with them)
-        string[21] memory all = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
-            "WrappedPqzToken", "SCaaSDex", "DexPuller", "GovernanceRouter", "NormalRegulatedToken", "WrappedRegulatedToken",
-            "NormalZetherRegulatedToken", "WrappedZetherRegulatedToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken",
-            "OpenFactory", "UARegistry", "SmartKeyAccountFactory", "SmartKeyAccount", "RelayFeeRouter", "PqChat"];
+        string[21] memory all = [
+            "NormalToken",
+            "WrappedToken",
+            "NormalZetherToken",
+            "WrappedZetherToken",
+            "NormalPqzToken",
+            "WrappedPqzToken",
+            "SCaaSDex",
+            "DexPuller",
+            "GovernanceRouter",
+            "NormalRegulatedToken",
+            "WrappedRegulatedToken",
+            "NormalZetherRegulatedToken",
+            "WrappedZetherRegulatedToken",
+            "NormalPqzRegulatedToken",
+            "WrappedPqzRegulatedToken",
+            "OpenFactory",
+            "UARegistry",
+            "SmartKeyAccountFactory",
+            "SmartKeyAccount",
+            "RelayFeeRouter",
+            "PqChat"
+        ];
         uint256 bad;
-        for (uint256 i; i < all.length; ++i) bad += _classified(all[i]);
+        for (uint256 i; i < all.length; ++i) {
+            bad += _classified(all[i]);
+        }
         assertEq(bad, 0, "every non-view external of the twenty-one has exactly one pinned row");
     }
 
@@ -399,7 +491,10 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
         _stranger("RelayFeeRouter", address(new RelayFeeRouter())); // fix2 CTR-GOV-26
         // owner 2026-11-12: a live account with a guardian that is not the stranger (GUARDIAN: `NotGuardian()`, FACTORY: `NotFactory()`)
         SmartKeyAccountFactory kf = new SmartKeyAccountFactory(chainUidA);
-        _stranger("SmartKeyAccount", kf.deploy(SubjectKey(KeyKind.SECP256K1, bytes32(uint256(0x5EED)), 0, 0, 0), address(0x6A2D)));
+        _stranger(
+            "SmartKeyAccount",
+            kf.deploy(SubjectKey(KeyKind.SECP256K1, bytes32(uint256(0x5EED)), 0, 0, 0), address(0x6A2D))
+        );
     }
 
     function test_noGovernanceSelectorIsRelayable() public {
@@ -432,7 +527,9 @@ contract SelectorAuditZetherTest is SelectorAuditRows, ZetherFixture {
         _govern(c, address(0));
         c.features |= uint256(1) << GovernanceBits.AUDITOR;
         nz = factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "sa");
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode);
+        Catalogue.release(
+            factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode
+        );
         c = _cfg(true, uint256(1) << 40);
         c.features = 0;
         _govern(c, address(new MockERC20("USD", "USD", 6)));

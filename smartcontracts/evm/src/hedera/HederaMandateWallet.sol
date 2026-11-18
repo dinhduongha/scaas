@@ -10,5 +10,7 @@ import {MandateWallet} from "../wallet/MandateWallet.sol";
 ///         owner pays by hand through `mtxExecute`: `isValidSignature` (ERC-1271, under STATICCALL where HIP-632 halts)
 ///         stays ECDSA, so a payment with `from = wallet` works for ECDSA owners only.
 contract HederaMandateWallet is MandateWallet {
-    constructor(bytes32 owner_, bytes32 chainUid_, address registry_) MandateWallet(owner_, chainUid_, registry_, true) {}
+    constructor(bytes32 owner_, bytes32 chainUid_, address registry_)
+        MandateWallet(owner_, chainUid_, registry_, true)
+    {}
 }

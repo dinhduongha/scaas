@@ -61,7 +61,11 @@ contract PqzMarkHandler is PqzOffchainBase {
         ++nonce;
         uint256 i = t.pqzAccount(holder, 0).pendingCount;
         bytes memory st;
-        try t.transferSingleStatement(a, 0) returns (bytes memory x) { st = x; } catch { return; } // the view refuses too
+        try t.transferSingleStatement(a, 0) returns (bytes memory x) { // the view refuses too
+            st = x;
+        } catch {
+            return;
+        }
         try t.mtxConfidentialTransferSingle(a, VPROOF, _pqAuth(), "", _sv(t, st)) {
             if (t.pqzAccount(holder, 0).pendingCount != i + 1) ++bad;
             slot0[i] = t.pqzPending(holder, 0, uint64(i)) & ~uint256(PqzCore.SKIP);
@@ -86,7 +90,9 @@ contract PqzMarkHandler is PqzOffchainBase {
         uint64 vub = uint64(block.number + 10);
         _only(_rollDigest(uint64(n), skip, vub));
         try t.mtxRollOverSigned(holder, 0, uint64(n), skip, vub, _pqAuth()) {
-            for (uint256 j; j < k; ++j) marked[skip[j]] = true;
+            for (uint256 j; j < k; ++j) {
+                marked[skip[j]] = true;
+            }
             marks += k;
             ++rolls;
             rolledEntries += n;
@@ -99,10 +105,15 @@ contract PqzMarkHandler is PqzOffchainBase {
     function refresh(uint256 p) external {
         IPqzToken.AccountState memory s = t.pqzAccount(holder, 0);
         p = bound(p, 0, s.pendingCount);
-        IPqzToken.PqzBurnArgs memory b = _bs(bytes.concat(abi.encode(p, block.number + 50, uint256(0), holder, bytes32(0)),
-            _blob(nonce++, PqzCt.CT)));
+        IPqzToken.PqzBurnArgs memory b = _bs(
+            bytes.concat(abi.encode(p, block.number + 50, uint256(0), holder, bytes32(0)), _blob(nonce++, PqzCt.CT))
+        );
         bytes memory st;
-        try t.burnStatement(b, 0, bytes32(0), 0) returns (bytes memory x) { st = x; } catch { return; } // p < floor: PendingRange
+        try t.burnStatement(b, 0, bytes32(0), 0) returns (bytes memory x) { // p < floor: PendingRange
+            st = x;
+        } catch {
+            return;
+        }
         try t.mtxUnshield(b, 0, bytes32(0), VPROOF, _pqAuth(), "", _sv(t, st)) {
             if (p < s.rolled) ++unrolls;
             ++refreshes;
@@ -121,10 +132,14 @@ contract PqzMarkHandler is PqzOffchainBase {
     function modelAcc() external view returns (bytes memory) {
         uint256 r = t.pqzAccount(holder, 0).rolled;
         uint256 c;
-        for (uint256 i = baseIdx; i < r; ++i) if (!marked[i]) ++c;
+        for (uint256 i = baseIdx; i < r; ++i) {
+            if (!marked[i]) ++c;
+        }
         bytes[] memory plus = new bytes[](c);
         c = 0;
-        for (uint256 i = baseIdx; i < r; ++i) if (!marked[i]) plus[c++] = ct0[i];
+        for (uint256 i = baseIdx; i < r; ++i) {
+            if (!marked[i]) plus[c++] = ct0[i];
+        }
         return ct.sumMixed(base, plus, new uint256[](0));
     }
 
@@ -136,7 +151,7 @@ contract PqzMarkHandler is PqzOffchainBase {
 
     function _openingOf(uint256 seed) internal pure returns (IPqzToken.PqzOpening memory o) {
         (o.mlkemCt, o.x25519Eph, o.sealedSeed) =
-            (_blob(seed, PqzCore.MLKEM_CT), keccak256(abi.encode("eph", seed)), _blob(seed + 1, PqzCore.SEALED_SEED));
+        (_blob(seed, PqzCore.MLKEM_CT), keccak256(abi.encode("eph", seed)), _blob(seed + 1, PqzCore.SEALED_SEED));
     }
 
     function _eh(uint256 i) internal view returns (bytes32) {
@@ -148,22 +163,43 @@ contract PqzMarkHandler is PqzOffchainBase {
     function _rollDigest(uint64 n, uint64[] memory skip, uint64 vub) internal view returns (bytes32) {
         IPqzToken.AccountState memory s = t.pqzAccount(holder, 0);
         bytes32[] memory h = new bytes32[](n + skip.length);
-        for (uint256 k; k < n; ++k) h[k] = _eh(s.rolled + k);
-        for (uint256 j; j < skip.length; ++j) h[n + j] = _eh(skip[j]);
+        for (uint256 k; k < n; ++k) {
+            h[k] = _eh(s.rolled + k);
+        }
+        for (uint256 j; j < skip.length; ++j) {
+            h[n + j] = _eh(skip[j]);
+        }
         bytes memory head = abi.encode(ROLL_TH, holder, uint64(0), s.rollSeq, s.rolled, n);
-        return MessageHashUtils.toTypedDataHash(_sepOf(address(t)), keccak256(bytes.concat(head,
-            abi.encode(keccak256(abi.encodePacked(skip)), keccak256(abi.encodePacked(h)), vub, t.chainUid()))));
+        return MessageHashUtils.toTypedDataHash(
+            _sepOf(address(t)),
+            keccak256(
+                bytes.concat(
+                    head,
+                    abi.encode(keccak256(abi.encodePacked(skip)), keccak256(abi.encodePacked(h)), vub, t.chainUid())
+                )
+            )
+        );
     }
 
     /// The registry accepts the holder's signature over `d` only (as `PqzThreeKeysTest._onlyDigest`).
     function _only(bytes32 d) internal {
-        vm.mockCallRevert(address(reg), abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, holder,
-            UAKinds.PURPOSE_ZETHER_AUTH), "another digest");
-        vm.mockCall(address(reg), abi.encodeCall(IUARegistry.requireAuthorized, (holder, UAKinds.PURPOSE_ZETHER_AUTH, d, _pqAuth())), "");
+        vm.mockCallRevert(
+            address(reg),
+            abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, holder, UAKinds.PURPOSE_ZETHER_AUTH),
+            "another digest"
+        );
+        vm.mockCall(
+            address(reg),
+            abi.encodeCall(IUARegistry.requireAuthorized, (holder, UAKinds.PURPOSE_ZETHER_AUTH, d, _pqAuth())),
+            ""
+        );
     }
 
     function _any() internal {
-        vm.mockCall(address(reg), abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, holder,
-            UAKinds.PURPOSE_ZETHER_AUTH), "");
+        vm.mockCall(
+            address(reg),
+            abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, holder, UAKinds.PURPOSE_ZETHER_AUTH),
+            ""
+        );
     }
 }

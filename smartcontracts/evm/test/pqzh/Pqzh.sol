@@ -17,7 +17,7 @@ library Pqzh {
         assembly ("memory-safe") {
             function sq(x, n) -> y {
                 y := x
-                for { } n { n := sub(n, 1) } { y := mulmod(y, y, 0xffffffff00000001) }
+                for {} n { n := sub(n, 1) } { y := mulmod(y, y, 0xffffffff00000001) }
             }
             let p := 0xffffffff00000001
             let e2 := mulmod(mulmod(a, a, p), a, p)
@@ -61,8 +61,10 @@ library Pqzh {
         assembly ("memory-safe") {
             let p := 0xffffffff00000001
             let m := 0xffffffffffffffff
-            r := or(or(addmod(and(a, m), and(b, m), p), shl(64, addmod(and(shr(64, a), m), and(shr(64, b), m), p))),
-                shl(128, addmod(shr(128, a), shr(128, b), p)))
+            r := or(
+                or(addmod(and(a, m), and(b, m), p), shl(64, addmod(and(shr(64, a), m), and(shr(64, b), m), p))),
+                shl(128, addmod(shr(128, a), shr(128, b), p))
+            )
         }
     }
 
@@ -71,7 +73,10 @@ library Pqzh {
             let p := 0xffffffff00000001
             let m := 0xffffffffffffffff
             r := or(
-                or(addmod(and(a, m), sub(p, and(b, m)), p), shl(64, addmod(and(shr(64, a), m), sub(p, and(shr(64, b), m)), p))),
+                or(
+                    addmod(and(a, m), sub(p, and(b, m)), p),
+                    shl(64, addmod(and(shr(64, a), m), sub(p, and(shr(64, b), m)), p))
+                ),
                 shl(128, addmod(shr(128, a), sub(p, shr(128, b)), p))
             )
         }
@@ -82,7 +87,10 @@ library Pqzh {
         assembly ("memory-safe") {
             let p := 0xffffffff00000001
             let m := 0xffffffffffffffff
-            r := or(or(mulmod(and(a, m), s, p), shl(64, mulmod(and(shr(64, a), m), s, p))), shl(128, mulmod(shr(128, a), s, p)))
+            r := or(
+                or(mulmod(and(a, m), s, p), shl(64, mulmod(and(shr(64, a), m), s, p))),
+                shl(128, mulmod(shr(128, a), s, p))
+            )
         }
     }
 
@@ -272,7 +280,9 @@ library Pqzh {
         unchecked {
             uint256 z = escale(beta, sInv);
             r = ev[k - 1];
-            for (uint256 j = k - 1; j > 0; --j) r = eadd(emul(r, z, E), ev[j - 1]);
+            for (uint256 j = k - 1; j > 0; --j) {
+                r = eadd(emul(r, z, E), ev[j - 1]);
+            }
             r = escale(r, P - (P - 1) / k); // 1 / k, as k divides p - 1
         }
     }
@@ -290,11 +300,23 @@ library Pqzh {
                 let u0 := and(u, 0xffffffffffffffff)
                 let u1 := and(shr(64, u), 0xffffffffffffffff)
                 u := shr(128, u)
-                mstore(pu, or(or(addmod(u0, v0, 0xffffffff00000001), shl(64, addmod(u1, v1, 0xffffffff00000001))),
-                    shl(128, addmod(u, v2, 0xffffffff00000001))))
-                mstore(pv, or(or(addmod(u0, sub(0xffffffff00000001, v0), 0xffffffff00000001),
-                    shl(64, addmod(u1, sub(0xffffffff00000001, v1), 0xffffffff00000001))),
-                    shl(128, addmod(u, sub(0xffffffff00000001, v2), 0xffffffff00000001))))
+                mstore(
+                    pu,
+                    or(
+                        or(addmod(u0, v0, 0xffffffff00000001), shl(64, addmod(u1, v1, 0xffffffff00000001))),
+                        shl(128, addmod(u, v2, 0xffffffff00000001))
+                    )
+                )
+                mstore(
+                    pv,
+                    or(
+                        or(
+                            addmod(u0, sub(0xffffffff00000001, v0), 0xffffffff00000001),
+                            shl(64, addmod(u1, sub(0xffffffff00000001, v1), 0xffffffff00000001))
+                        ),
+                        shl(128, addmod(u, sub(0xffffffff00000001, v2), 0xffffffff00000001))
+                    )
+                )
             }
             let k := shl(a, 1)
             let base := add(ev, 32)
@@ -314,12 +336,18 @@ library Pqzh {
     }
 
     /// LogUp public side: sum m_i / (beta - k_i), batched inversion (prefix products, one inverse, back pass).
-    function logup(uint256[] memory keys, uint256[] memory mults, uint256 beta, uint256 E) internal pure returns (uint256 acc) {
+    function logup(uint256[] memory keys, uint256[] memory mults, uint256 beta, uint256 E)
+        internal
+        pure
+        returns (uint256 acc)
+    {
         uint256 n = keys.length;
         uint256[] memory pre = new uint256[](n + 1);
         pre[0] = 1;
         unchecked {
-            for (uint256 i; i < n; ++i) pre[i + 1] = emul(pre[i], esub(beta, keys[i]), E);
+            for (uint256 i; i < n; ++i) {
+                pre[i + 1] = emul(pre[i], esub(beta, keys[i]), E);
+            }
             uint256 iv = einv(pre[n], E);
             for (uint256 i = n; i > 0; --i) {
                 uint256 d = esub(beta, keys[i - 1]);
@@ -344,7 +372,7 @@ library Pqzh {
             let bad := 0
             switch E
             case 2 {
-                for { } lt(ptr, end) { ptr := add(ptr, 8) } {
+                for {} lt(ptr, end) { ptr := add(ptr, 8) } {
                     let c := shr(192, calldataload(ptr))
                     bad := or(bad, gt(c, 0x3ffffffff28))
                     let n0 := mod(add(add(mul(a0, g0), mul(7, mul(a1, g1))), c), p)
@@ -353,7 +381,7 @@ library Pqzh {
                 }
             }
             default {
-                for { } lt(ptr, end) { ptr := add(ptr, 8) } {
+                for {} lt(ptr, end) { ptr := add(ptr, 8) } {
                     let c := shr(192, calldataload(ptr))
                     bad := or(bad, gt(c, 0x3ffffffff28))
                     let c3 := add(mul(a1, g2), mul(a2, g1))
@@ -372,7 +400,11 @@ library Pqzh {
 
     /// sum_c apow[c] * v_c over the `w` 8-byte base values at calldata `ptr` (apow unpacked: E words per power);
     /// `bad` = some value is not canonical (>= p).
-    function rowsum(uint256 ptr, uint256 w, uint256[] memory apow, uint256 E) internal pure returns (uint256 r, bool bad) {
+    function rowsum(uint256 ptr, uint256 w, uint256[] memory apow, uint256 E)
+        internal
+        pure
+        returns (uint256 r, bool bad)
+    {
         assembly ("memory-safe") {
             let p := 0xffffffff00000001
             let q := add(apow, 32)
@@ -383,7 +415,7 @@ library Pqzh {
             let end := add(ptr, shl(3, w))
             switch E
             case 2 {
-                for { } lt(ptr, end) { ptr := add(ptr, 8) } {
+                for {} lt(ptr, end) { ptr := add(ptr, 8) } {
                     let v := shr(192, calldataload(ptr))
                     b := or(b, iszero(lt(v, p)))
                     s0 := add(s0, mul(v, mload(q)))
@@ -392,7 +424,7 @@ library Pqzh {
                 }
             }
             default {
-                for { } lt(ptr, end) { ptr := add(ptr, 8) } {
+                for {} lt(ptr, end) { ptr := add(ptr, 8) } {
                     let v := shr(192, calldataload(ptr))
                     b := or(b, iszero(lt(v, p)))
                     s0 := add(s0, mul(v, mload(q)))
@@ -488,7 +520,11 @@ contract PqzhSkeleton {
     /// work, 2 Horner fingerprint, 3 DEEP precomputation, 4 constraint stand-in, 5 per-query opened rows (DEEP
     /// numerators), 6 trace Merkle openings, 7 DEEP inversions, 8 FRI rows and Merkle paths, 9 FRI folds,
     /// 10 final polynomial and query overhead (the rest of the query loop), 11 total.
-    function profile(bytes calldata shape, bytes calldata stmt, bytes calldata proof) external view returns (uint256[12] memory) {
+    function profile(bytes calldata shape, bytes calldata stmt, bytes calldata proof)
+        external
+        view
+        returns (uint256[12] memory)
+    {
         return _run(shape, stmt, proof).prof;
     }
 
@@ -550,7 +586,9 @@ contract PqzhSkeleton {
             }
         }
         c.arity = new uint256[](_w(s, i++));
-        for (uint256 r; r < c.arity.length; ++r) c.arity[r] = _w(s, i++);
+        for (uint256 r; r < c.arity.length; ++r) {
+            c.arity[r] = _w(s, i++);
+        }
         c.finalLen = _w(s, i++);
         c.oodMuls = _w(s, i++);
         c.perBf = _w(s, i++);
@@ -616,7 +654,9 @@ contract PqzhSkeleton {
         }
         uint256 n;
         for (uint256 t; t < c.trees.length; ++t) {
-            for (uint256 g; g < c.trees[t].lh.length; ++g) n += c.trees[t].w[g] * c.trees[t].npts;
+            for (uint256 g; g < c.trees[t].lh.length; ++g) {
+                n += c.trees[t].w[g] * c.trees[t].npts;
+            }
         }
         c.oodPtr = p;
         _observe(c, p, n * c.E * 8);
@@ -632,7 +672,9 @@ contract PqzhSkeleton {
             p += 32;
             uint256 b = _sample(c);
             c.betas[r] = b;
-            for (uint256 j; j < c.arity[r]; ++j) b = b.emul(b, c.E);
+            for (uint256 j; j < c.arity[r]; ++j) {
+                b = b.emul(b, c.E);
+            }
             c.betaK[r] = b;
         }
         c.finalPtr = p;
@@ -671,14 +713,18 @@ contract PqzhSkeleton {
         uint256 a = 1;
         for (uint256 i; i < maxw; ++i) {
             packed[i] = a;
-            for (uint256 j; j < E; ++j) c.apow[i * E + j] = (a >> (64 * j)) & Pqzh.M;
+            for (uint256 j; j < E; ++j) {
+                c.apow[i * E + j] = (a >> (64 * j)) & Pqzh.M;
+            }
             a = a.emul(c.ad, E);
         }
     }
 
     function _oodCombine(Ctx memory c, uint256[] memory packed) private view {
         uint256 terms;
-        for (uint256 t; t < c.trees.length; ++t) terms += c.trees[t].w.length * c.trees[t].npts;
+        for (uint256 t; t < c.trees.length; ++t) {
+            terms += c.trees[t].w.length * c.trees[t].npts;
+        }
         c.lam = new uint256[](terms);
         c.O = new uint256[](terms);
         uint256 lam = 1;
@@ -691,13 +737,19 @@ contract PqzhSkeleton {
                     (c.O[ti], ptr) = _combine(packed, ptr, tr.w[g], c.E);
                     c.lam[ti] = lam;
                     ++ti;
-                    for (uint256 j; j < tr.w[g]; ++j) lam = lam.emul(c.ad, c.E); // ad^w
+                    for (uint256 j; j < tr.w[g]; ++j) {
+                        lam = lam.emul(c.ad, c.E); // ad^w
+                    }
                 }
             }
         }
     }
 
-    function _combine(uint256[] memory packed, uint256 ptr, uint256 w, uint256 E) private view returns (uint256 o, uint256) {
+    function _combine(uint256[] memory packed, uint256 ptr, uint256 w, uint256 E)
+        private
+        view
+        returns (uint256 o, uint256)
+    {
         for (uint256 col; col < w; ++col) {
             o = o.eadd(packed[col].emul(Pqzh.ldExt(ptr, E), E));
             ptr += 8 * E;
@@ -749,14 +801,20 @@ contract PqzhSkeleton {
             c.num[2 * h + 1] = 0;
         }
         uint256 ti;
-        for (uint256 t; t < c.trees.length; ++t) (p, ti) = _tree(c, t, idx, p, q, ti);
+        for (uint256 t; t < c.trees.length; ++t) {
+            (p, ti) = _tree(c, t, idx, p, q, ti);
+        }
         uint256 g2 = gasleft();
         _deep(c, x);
         c.prof[7] += g2 - gasleft();
         return _fri(c, idx, p, q);
     }
 
-    function _tree(Ctx memory c, uint256 t, uint256 idx, uint256 p, uint256 q, uint256 ti) private view returns (uint256, uint256) {
+    function _tree(Ctx memory c, uint256 t, uint256 idx, uint256 p, uint256 q, uint256 ti)
+        private
+        view
+        returns (uint256, uint256)
+    {
         Tree memory tr = c.trees[t];
         uint256 rowsBytes;
         uint256 g = gasleft();
@@ -769,7 +827,11 @@ contract PqzhSkeleton {
     }
 
     /// DEEP numerators of one tree's opened rows: num[h, point] += lambda (sum_c ad^c v_c - O).
-    function _rows(Ctx memory c, Tree memory tr, uint256 p, uint256 ti) private view returns (uint256 rowsBytes, uint256) {
+    function _rows(Ctx memory c, Tree memory tr, uint256 p, uint256 ti)
+        private
+        view
+        returns (uint256 rowsBytes, uint256)
+    {
         for (uint256 g; g < tr.w.length; ++g) {
             (uint256 R, bool bad) = Pqzh.rowsum(p + rowsBytes, tr.w[g], c.apow, c.E);
             if (bad) revert NonCanonical();
@@ -816,11 +878,15 @@ contract PqzhSkeleton {
 
     function _fri(Ctx memory c, uint256 i, uint256 p, uint256 q) private view returns (uint256) {
         uint256[4] memory st = [i, c.H0, p, c.ro[c.H0]]; // index, log height, proof pointer, folded value
-        for (uint256 r; r < c.arity.length; ++r) _round(c, r, st, q);
+        for (uint256 r; r < c.arity.length; ++r) {
+            _round(c, r, st, q);
+        }
         // final polynomial at the query point (computed, not enforced: synthetic proof)
         uint256 xf = Pqzh.pw(c.tbl, st[0], st[1], 31);
         uint256 v;
-        for (uint256 j = c.finalLen; j > 0; --j) v = v.escale(xf).eadd(Pqzh.ldExt(c.finalPtr + (j - 1) * 8 * c.E, c.E));
+        for (uint256 j = c.finalLen; j > 0; --j) {
+            v = v.escale(xf).eadd(Pqzh.ldExt(c.finalPtr + (j - 1) * 8 * c.E, c.E));
+        }
         c.out ^= v ^ st[3];
         return st[2];
     }
@@ -831,7 +897,9 @@ contract PqzhSkeleton {
         uint256 h = st[1];
         uint256 s = _gather(c.ev, 1 << a, st[0] & ((1 << a) - 1), st[3], st[2], c.E);
         uint256 li = st[0] >> a;
-        if (Pqzh.merkle(_leaf(c.ev, 1 << a, c.E), li, h - a, st[2] + s) != c.friRoots[r]) revert MerkleMismatch(100 + r, q);
+        if (Pqzh.merkle(_leaf(c.ev, 1 << a, c.E), li, h - a, st[2] + s) != c.friRoots[r]) {
+            revert MerkleMismatch(100 + r, q);
+        }
         st[2] += s + 32 * (h - a);
         c.prof[8] += g - gasleft();
         g = gasleft();

@@ -49,19 +49,35 @@ contract ZetherUA5cTest is ZetherFixture {
     /// A UA envelope signed by `u` (the Zether UA is SIGNING, U8), fixed outer fee 3, restricted to the relayer.
     function _uam(User memory u, bytes memory data) internal view returns (MetaTxLib.UAMetaTransaction memory m) {
         m = MetaTxLib.UAMetaTransaction({
-            from: _id(u), data: data, batch: 1, nonce: tok.mtxNonce(_id(u), 1), validUntil: block.timestamp + 300,
-            mode: RR | FIX, relayer: relayer, fee: 3, feeRecipient: address(0)
+            from: _id(u),
+            data: data,
+            batch: 1,
+            nonce: tok.mtxNonce(_id(u), 1),
+            validUntil: block.timestamp + 300,
+            mode: RR | FIX,
+            relayer: relayer,
+            fee: 3,
+            feeRecipient: address(0)
         });
     }
 
     function _uaAuth(User memory u, MetaTxLib.UAMetaTransaction memory m) internal view returns (bytes memory) {
-        return abi.encode(bytes(""), ZetherKeys.schnorr(u.x, reg.uaMessage(_zkind(), UAKinds.PURPOSE_METATX, tok.mtxDigest(m)), bls));
+        return abi.encode(
+            bytes(""), ZetherKeys.schnorr(u.x, reg.uaMessage(_zkind(), UAKinds.PURPOSE_METATX, tok.mtxDigest(m)), bls)
+        );
     }
 
     function _mt(bytes memory data) internal view returns (MetaTxLib.MetaTransaction memory m) {
         m = MetaTxLib.MetaTransaction({
-            from: payer, data: data, batch: 1, nonce: tok.mtxNonce(MetaTxLib.pad(payer), 1), validUntil: block.timestamp + 300,
-            mode: RR | FIX, relayer: relayer, fee: 3, feeRecipient: address(0)
+            from: payer,
+            data: data,
+            batch: 1,
+            nonce: tok.mtxNonce(MetaTxLib.pad(payer), 1),
+            validUntil: block.timestamp + 300,
+            mode: RR | FIX,
+            relayer: relayer,
+            fee: 3,
+            feeRecipient: address(0)
         });
     }
 
@@ -80,8 +96,25 @@ contract ZetherUA5cTest is ZetherFixture {
     /// token's `envelopeBinding` view is this one (R35); the address binding is the client's (`_addrBinding`).
     function test_uaEnvelopeBinding_formula() public view {
         MetaTxLib.UAMetaTransaction memory m = _uam(bob, "");
-        assertEq(tok.envelopeBinding(m), keccak256(abi.encode(keccak256("SCAAS-ZETHER-UA-ENVELOPE-V1"), block.chainid,
-            ZUID, address(tok), _id(bob), uint256(1), uint256(0), m.validUntil, RR | FIX, relayer, uint256(3), address(0))));
+        assertEq(
+            tok.envelopeBinding(m),
+            keccak256(
+                abi.encode(
+                    keccak256("SCAAS-ZETHER-UA-ENVELOPE-V1"),
+                    block.chainid,
+                    ZUID,
+                    address(tok),
+                    _id(bob),
+                    uint256(1),
+                    uint256(0),
+                    m.validUntil,
+                    RR | FIX,
+                    relayer,
+                    uint256(3),
+                    address(0)
+                )
+            )
+        );
         MetaTxLib.MetaTransaction memory a = _mt("");
         assertTrue(tok.envelopeBinding(m) != _addrBinding(tok, a));
     }
@@ -125,7 +158,8 @@ contract ZetherUA5cTest is ZetherFixture {
     /// Review C0-3: the retired `mtxConfidentialTransferNoBundle` selector is refused inside a UA envelope too.
     function test_uaExecute_retiredNoBundleSelector_refused() public {
         bytes4 old = bytes4(keccak256("mtxConfidentialTransferNoBundle(bytes,bytes,bytes,bytes32,bytes)"));
-        MetaTxLib.UAMetaTransaction memory u = _uam(bob, abi.encodeWithSelector(old, bytes(""), bytes(""), bytes(""), bytes32(0), bytes("")));
+        MetaTxLib.UAMetaTransaction memory u =
+            _uam(bob, abi.encodeWithSelector(old, bytes(""), bytes(""), bytes(""), bytes32(0), bytes("")));
         bytes memory au = _uaAuth(bob, u);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSignature("MetaTxUnknownOp(bytes4)", old)); // the UA path's own unknown-op error
@@ -167,14 +201,16 @@ contract ZetherUA5cTest is ZetherFixture {
         (to[0], to[1]) = (carol, bob);
         uint256[] memory vs = new uint256[](2);
         vs[0] = 50;
-        Tx memory t = _proveMulti(tok, alice, to, vs, 500, _none(), ZetherTypes.TransferMode.BUNDLE, tok.envelopeBinding(m));
+        Tx memory t =
+            _proveMulti(tok, alice, to, vs, 500, _none(), ZetherTypes.TransferMode.BUNDLE, tok.envelopeBinding(m));
         m.data = abi.encodeCall(IZetherToken.mtxConfidentialTransfer, (_zMulti(t.payload, _none()), t.proof));
         bytes memory au = _uaAuth(bob, m);
         vm.prank(relayer);
         tok.mtxExecute(m, UACall.auth(m.from, au));
         assertTrue(_holds(tok, carol, 50, false));
         m = _uam(bob, "");
-        (bytes memory pl, bytes memory pr) = _proveUnshieldTo(tok, alice, 60, 450, _id(bob), _none(), tok.envelopeBinding(m));
+        (bytes memory pl, bytes memory pr) =
+            _proveUnshieldTo(tok, alice, 60, 450, _id(bob), _none(), tok.envelopeBinding(m));
         m.data = abi.encodeCall(IZetherToken.mtxUnshield, (_zBurn(pl, _none()), 60, _id(bob), pr));
         uint256 pool = tok.balanceOf(SHIELD_POOL_);
         au = _uaAuth(bob, m);
@@ -259,11 +295,19 @@ contract ZetherUA5cTest is ZetherFixture {
         s.signature = "bad";
     }
 
-    function _modeSig(User memory u, ZetherTypes.RollOverMode mode, uint64 nonce, uint64 until) internal view returns (IUARegistry.UASig memory) {
+    function _modeSig(User memory u, ZetherTypes.RollOverMode mode, uint64 nonce, uint64 until)
+        internal
+        view
+        returns (IUARegistry.UASig memory)
+    {
         return _ownerAuth(u, _setModeDigest(tok, u.ua, uint8(mode), nonce, until));
     }
 
-    function _rollSig(User memory u, uint64 accSeq, uint64 pendSeq, uint64 until) internal view returns (IUARegistry.UASig memory) {
+    function _rollSig(User memory u, uint64 accSeq, uint64 pendSeq, uint64 until)
+        internal
+        view
+        returns (IUARegistry.UASig memory)
+    {
         return _ownerAuth(u, _rollOverDigest(tok, u.ua, accSeq, pendSeq, until));
     }
 
@@ -303,28 +347,57 @@ contract ZetherUA5cTest is ZetherFixture {
     /// The owner-signed pair relayed: the owner's own signature is still checked inside (a bad one reverts).
     function test_relayedSignedRollOver_bothEnvelopes() public {
         uint64 until = uint64(block.number + 50);
-        _relayAddr(abi.encodeCall(IZetherToken.mtxSetRollOverMode,
-            (alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, _modeSig(alice, ZetherTypes.RollOverMode.OWNER_ONLY, 0, until))), 0);
+        _relayAddr(
+            abi.encodeCall(
+                IZetherToken.mtxSetRollOverMode,
+                (
+                    alice.ua,
+                    ZetherTypes.RollOverMode.OWNER_ONLY,
+                    until,
+                    _modeSig(alice, ZetherTypes.RollOverMode.OWNER_ONLY, 0, until)
+                )
+            ),
+            0
+        );
         assertTrue(tok.accountState(alice.ua).mode == ZetherTypes.RollOverMode.OWNER_ONLY, "mode set via the relayer");
         _fund(tok, alice, 5);
         uint64 acc = tok.accountState(alice.ua).accSeq;
         uint64 pend = tok.accountState(alice.ua).pendingSeq;
-        MetaTxLib.MetaTransaction memory m = _mt(abi.encodeCall(IZetherToken.mtxRollOverSigned, (alice.ua, pend, until, _badOwnerSig())));
+        MetaTxLib.MetaTransaction memory m =
+            _mt(abi.encodeCall(IZetherToken.mtxRollOverSigned, (alice.ua, pend, until, _badOwnerSig())));
         bytes memory sig = _sign(m);
         vm.prank(relayer);
         vm.expectRevert();
         tok.executeMetaTransaction(m, sig);
-        _relayAddr(abi.encodeCall(IZetherToken.mtxRollOverSigned, (alice.ua, pend, until, _rollSig(alice, acc, pend, until))), 3);
+        _relayAddr(
+            abi.encodeCall(IZetherToken.mtxRollOverSigned, (alice.ua, pend, until, _rollSig(alice, acc, pend, until))),
+            3
+        );
         assertEq(tok.accountState(alice.ua).accSeq, acc + 1, "owner roll-over via the address envelope");
         assertEq(tok.balanceOf(relayer), 3);
         // the UA envelope
         _fund(tok, alice, 5);
         acc = tok.accountState(alice.ua).accSeq;
         pend = tok.accountState(alice.ua).pendingSeq;
-        _relayUA(bob, abi.encodeCall(IZetherToken.mtxRollOverSigned, (alice.ua, pend, until, _rollSig(alice, acc, pend, until))), 0);
+        _relayUA(
+            bob,
+            abi.encodeCall(IZetherToken.mtxRollOverSigned, (alice.ua, pend, until, _rollSig(alice, acc, pend, until))),
+            0
+        );
         assertEq(tok.accountState(alice.ua).accSeq, acc + 1, "owner roll-over via the UA envelope");
-        _relayUA(bob, abi.encodeCall(IZetherToken.mtxSetRollOverMode,
-            (alice.ua, ZetherTypes.RollOverMode.PUBLIC, until, _modeSig(alice, ZetherTypes.RollOverMode.PUBLIC, 1, until))), 3);
+        _relayUA(
+            bob,
+            abi.encodeCall(
+                IZetherToken.mtxSetRollOverMode,
+                (
+                    alice.ua,
+                    ZetherTypes.RollOverMode.PUBLIC,
+                    until,
+                    _modeSig(alice, ZetherTypes.RollOverMode.PUBLIC, 1, until)
+                )
+            ),
+            3
+        );
         assertTrue(tok.accountState(alice.ua).mode == ZetherTypes.RollOverMode.PUBLIC, "mode set via the UA envelope");
         assertEq(tok.balanceOfUA(_id(bob)), 7);
     }

@@ -28,9 +28,13 @@ contract UAMsigGroupMemberTest is UARegistryBase, GroupFixtures {
             address(new FrostBn254Verifier())
         ];
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](4);
-        for (uint256 i; i < 4; ++i) c[i] = UARegistry.KindConfig(kinds[i], v[i], 50_000);
+        for (uint256 i; i < 4; ++i) {
+            c[i] = UARegistry.KindConfig(kinds[i], v[i], 50_000);
+        }
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, c);
-        for (uint256 i; i < 4; ++i) _member(r, _main(kinds[i]));
+        for (uint256 i; i < 4; ++i) {
+            _member(r, _main(kinds[i]));
+        }
     }
 
     function _member(UARegistry r, Group memory g) internal {
@@ -50,7 +54,9 @@ contract UAMsigGroupMemberTest is UARegistryBase, GroupFixtures {
         bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_METATX, DIGEST);
         IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](2);
         s[ig] = _slot(g, ig, md);
-        s[1 - ig] = IUARegistry.MemberSig(1 - ig, new IUARegistry.InnerSig[](0), _nativeSig(r, PK_E, UAKinds.PURPOSE_MEMBER, md));
+        s[1 - ig] = IUARegistry.MemberSig(
+            1 - ig, new IUARegistry.InnerSig[](0), _nativeSig(r, PK_E, UAKinds.PURPOSE_MEMBER, md)
+        );
         _req(r, ua, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s));
 
         s[ig].sig = _flip(s[ig].sig, 40);
@@ -60,6 +66,10 @@ contract UAMsigGroupMemberTest is UARegistryBase, GroupFixtures {
 
     /// The group's real signature under `member` over `md`.
     function _slot(Group memory g, uint16 index, bytes32 md) internal returns (IUARegistry.MemberSig memory) {
-        return IUARegistry.MemberSig(index, new IUARegistry.InnerSig[](0), _gsign(g.kind, g.secret, g.vk, UAKinds.uaMessage(g.kind, UAKinds.PURPOSE_MEMBER, md)));
+        return IUARegistry.MemberSig(
+            index,
+            new IUARegistry.InnerSig[](0),
+            _gsign(g.kind, g.secret, g.vk, UAKinds.uaMessage(g.kind, UAKinds.PURPOSE_MEMBER, md))
+        );
     }
 }

@@ -55,7 +55,8 @@ abstract contract LegacyDiff is Test {
     }
 
     function _kindFile(uint8 k) internal view returns (string memory) {
-        return vm.readFile(string.concat(DIR, k == type(uint8).max ? "dex" : string.concat("k", vm.toString(k)), ".json"));
+        return
+            vm.readFile(string.concat(DIR, k == type(uint8).max ? "dex" : string.concat("k", vm.toString(k)), ".json"));
     }
 
     /// @dev The pre-split implementation of `token`'s kind for its factory (the regulated kinds with the registry code hash).
@@ -74,7 +75,9 @@ abstract contract LegacyDiff is Test {
         require(impl != address(0), "legacy implementation");
         legacyImpl[id] = impl;
         address[] memory ms = ITokenModules(_implOf(token)).modules();
-        for (uint256 i; i < ms.length; ++i) routing.push(ms[i]);
+        for (uint256 i; i < ms.length; ++i) {
+            routing.push(ms[i]);
+        }
     }
 
     /// @dev The implementation in an EIP-1167 clone's code (bytes 10..30).
@@ -88,7 +91,9 @@ abstract contract LegacyDiff is Test {
 
     function _withImpl(bytes memory c, address impl) internal pure returns (bytes memory out) {
         out = bytes.concat(c);
-        for (uint256 i; i < 20; ++i) out[10 + i] = bytes20(impl)[i];
+        for (uint256 i; i < 20; ++i) {
+            out[10 + i] = bytes20(impl)[i];
+        }
     }
 
     struct Run {
@@ -123,7 +128,8 @@ abstract contract LegacyDiff is Test {
             for (uint256 j; j < acc[i].storageAccesses.length; ++j) {
                 VmSafe.StorageAccess memory s = acc[i].storageAccesses[j];
                 if (!s.isWrite || s.reverted) continue;
-                (r.writes[nw], r.writes[nw + 1], r.writes[nw + 2]) = (bytes32(uint256(uint160(s.account))), s.slot, s.newValue);
+                (r.writes[nw], r.writes[nw + 1], r.writes[nw + 2]) =
+                (bytes32(uint256(uint160(s.account))), s.slot, s.newValue);
                 nw += 3;
             }
             if (_behaviour(acc[i].kind) && !_routing(acc[i].account)) {
@@ -135,14 +141,22 @@ abstract contract LegacyDiff is Test {
     /// @dev The accesses from the call under test on (the recording can hold earlier ones of the same test, e.g. the
     ///      legacy libraries' deployment).
     function _from(VmSafe.AccountAccess[] memory acc, address token, address caller)
-        internal pure returns (VmSafe.AccountAccess[] memory out)
+        internal
+        pure
+        returns (VmSafe.AccountAccess[] memory out)
     {
         uint256 s;
-        while (s < acc.length && !(acc[s].kind == VmSafe.AccountAccessKind.Call && acc[s].account == token
-            && acc[s].accessor == caller)) ++s;
+        while (
+            s < acc.length
+                && !(acc[s].kind == VmSafe.AccountAccessKind.Call
+                    && acc[s].account == token
+                    && acc[s].accessor == caller)
+        ) ++s;
         require(s < acc.length, "the call under test is not in the recording");
         out = new VmSafe.AccountAccess[](acc.length - s);
-        for (uint256 i; i < out.length; ++i) out[i] = acc[s + i];
+        for (uint256 i; i < out.length; ++i) {
+            out[i] = acc[s + i];
+        }
     }
 
     function _behaviour(VmSafe.AccountAccessKind k) internal pure returns (bool) {
@@ -152,7 +166,9 @@ abstract contract LegacyDiff is Test {
     }
 
     function _routing(address a) internal view returns (bool) {
-        for (uint256 i; i < routing.length; ++i) if (routing[i] == a) return true;
+        for (uint256 i; i < routing.length; ++i) {
+            if (routing[i] == a) return true;
+        }
         return false;
     }
 
@@ -182,16 +198,20 @@ abstract contract LegacyDiff is Test {
         assertEq(n.writes, o.writes, string.concat(what, ": storage writes"));
         if (n.calls.length != o.calls.length) {
             for (uint256 i; i < n.calls.length && i < 6; ++i) {
-                (VmSafe.AccountAccessKind ck, address ca,,,) = abi.decode(n.calls[i], (VmSafe.AccountAccessKind, address, uint256, bytes, bool));
+                (VmSafe.AccountAccessKind ck, address ca,,,) =
+                    abi.decode(n.calls[i], (VmSafe.AccountAccessKind, address, uint256, bytes, bool));
                 emit log_named_address(string.concat("new call out kind ", vm.toString(uint8(ck))), ca);
             }
             for (uint256 i; i < o.calls.length && i < 6; ++i) {
-                (VmSafe.AccountAccessKind ck, address ca,,,) = abi.decode(o.calls[i], (VmSafe.AccountAccessKind, address, uint256, bytes, bool));
+                (VmSafe.AccountAccessKind ck, address ca,,,) =
+                    abi.decode(o.calls[i], (VmSafe.AccountAccessKind, address, uint256, bytes, bool));
                 emit log_named_address(string.concat("old call out kind ", vm.toString(uint8(ck))), ca);
             }
         }
         assertEq(n.calls.length, o.calls.length, string.concat(what, ": calls out"));
-        for (uint256 i; i < n.calls.length; ++i) assertEq(n.calls[i], o.calls[i], string.concat(what, ": call out"));
+        for (uint256 i; i < n.calls.length; ++i) {
+            assertEq(n.calls[i], o.calls[i], string.concat(what, ": call out"));
+        }
         ++diffed;
         if (n.ok) ++bothOk;
     }
@@ -222,24 +242,61 @@ abstract contract LegacyDiff is Test {
             bytes4[] memory s2 = new bytes4[](s.length + 1);
             uint8[] memory c2 = new uint8[](s.length + 1);
             uint8[] memory a2 = new uint8[](s.length + 1);
-            for (uint256 i; i < s.length; ++i) (s2[i], c2[i], a2[i]) = (_argsMovedSel(s[i]), c[i], a[i]);
+            for (uint256 i; i < s.length; ++i) {
+                (s2[i], c2[i], a2[i]) = (_argsMovedSel(s[i]), c[i], a[i]);
+            }
             (s2[s.length], c2[s.length]) =
-                (bytes4(keccak256("mtxRollOverSigned(bytes32,uint64,uint64,uint64[],uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))")), 1);
+            (
+                bytes4(
+                    keccak256(
+                        "mtxRollOverSigned(bytes32,uint64,uint64,uint64[],uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+                    )
+                ),
+                1
+            );
             return abi.encode(s2, c2, a2);
         }
         if (o.ok && o.ret.length == 32 && bytes4(data) == bytes4(0x7c4fa261)) {
             bytes memory args = new bytes(data.length - 4);
-            for (uint256 i; i < args.length; ++i) args[i] = data[i + 4];
+            for (uint256 i; i < args.length; ++i) {
+                args[i] = data[i + 4];
+            }
             (MetaTxLib.UAMetaTransfer memory t, uint256 fee, address to, uint256 until) =
                 abi.decode(args, (MetaTxLib.UAMetaTransfer, uint256, address, uint256));
             bytes32 sep = Erc7739Kit.separator(token);
-            bytes32 old = keccak256(abi.encodePacked(hex"1901", sep, keccak256(abi.encode(
-                bytes32(0xb12d2a080dcf6d9edea1a63b0fd3a59ebffa656c929d21f676d1f1507c75021a), MtxHash.hashStruct(t), fee, to,
-                until))));
+            bytes32 old = keccak256(
+                abi.encodePacked(
+                    hex"1901",
+                    sep,
+                    keccak256(
+                        abi.encode(
+                            bytes32(0xb12d2a080dcf6d9edea1a63b0fd3a59ebffa656c929d21f676d1f1507c75021a),
+                            MtxHash.hashStruct(t),
+                            fee,
+                            to,
+                            until
+                        )
+                    )
+                )
+            );
             require(abi.decode(o.ret, (bytes32)) == old, "receiverFeeDigest: the old answer");
-            return abi.encode(keccak256(abi.encodePacked(hex"1901", sep, keccak256(abi.encode(
-                bytes32(0x8a3955a6c3529266f588d56c7bfd28bdd0b5ad194fc9ca4428e159686a16c7ca), MtxHash.hashStruct(t), fee, to,
-                until)))));
+            return abi.encode(
+                keccak256(
+                    abi.encodePacked(
+                        hex"1901",
+                        sep,
+                        keccak256(
+                            abi.encode(
+                                bytes32(0x8a3955a6c3529266f588d56c7bfd28bdd0b5ad194fc9ca4428e159686a16c7ca),
+                                MtxHash.hashStruct(t),
+                                fee,
+                                to,
+                                until
+                            )
+                        )
+                    )
+                )
+            );
         }
         if (!o.ok || o.ret.length != 32 || bytes4(data) != bytes4(keccak256("validBits()"))) return o.ret;
         uint8 k = _kindOf(token);
@@ -250,7 +307,9 @@ abstract contract LegacyDiff is Test {
         // round 3zb + 3zc (CTR-GOV-29, CTR-GOV-30): bit 30 `BURNER` on the Normal kinds, bit 31 `SUPPLY_CAP_ADJUSTABLE` on the
         // wrapped kinds
         if (k == 0 || k == 2 || k == 4 || k == 8 || k == 10 || k == 12) b |= uint256(1) << GovernanceBits.BURNER;
-        if (k == 1 || k == 3 || k == 5 || k == 9 || k == 11 || k == 13) b |= uint256(1) << GovernanceBits.SUPPLY_CAP_ADJUSTABLE;
+        if (k == 1 || k == 3 || k == 5 || k == 9 || k == 11 || k == 13) {
+            b |= uint256(1) << GovernanceBits.SUPPLY_CAP_ADJUSTABLE;
+        }
         // set-auditor A1 (CTR-GOV-31): bit 32 `AUDITOR` on the confidential kinds 2-5 and 10-13
         if ((k >= 2 && k <= 5) || (k >= 10 && k <= 13)) b |= GovernanceBits.AUDITOR_BITS;
         return abi.encode(b);
@@ -284,8 +343,10 @@ abstract contract LegacyDiff is Test {
         for (uint256 i; i < calls.length; ++i) {
             (VmSafe.AccountAccessKind k, address to,, bytes memory d,) =
                 abi.decode(calls[i], (VmSafe.AccountAccessKind, address, uint256, bytes, bool));
-            if (k == VmSafe.AccountAccessKind.StaticCall && to == factory && d.length >= 4
-                && bytes4(d) == bytes4(keccak256("versionOf(address)"))) continue;
+            if (
+                k == VmSafe.AccountAccessKind.StaticCall && to == factory && d.length >= 4
+                    && bytes4(d) == bytes4(keccak256("versionOf(address)"))
+            ) continue;
             out[n++] = calls[i];
         }
         assembly ("memory-safe") { mstore(out, n) }
@@ -301,7 +362,9 @@ abstract contract LegacyDiff is Test {
     function _r3Sel(bytes4 s) internal pure returns (bytes4) {
         if (s == bytes4(keccak256("owner()"))) return bytes4(keccak256("admin()"));
         if (s == bytes4(keccak256("pendingOwner()"))) return bytes4(keccak256("pendingAdmin()"));
-        if (s == bytes4(keccak256("transferOwnership(bytes32)"))) return bytes4(keccak256("transferAdmin(bytes32,bytes32)"));
+        if (s == bytes4(keccak256("transferOwnership(bytes32)"))) {
+            return bytes4(keccak256("transferAdmin(bytes32,bytes32)"));
+        }
         if (s == bytes4(keccak256("acceptOwnership()"))) return bytes4(keccak256("acceptAdmin()"));
         if (s == bytes4(keccak256("renounceOwnership()"))) return bytes4(keccak256("renounceAdmin(bytes32)"));
         if (s == bytes4(keccak256("NotOwner(bytes32)"))) return bytes4(keccak256("NotAdmin(bytes32)"));
@@ -321,7 +384,9 @@ abstract contract LegacyDiff is Test {
         if (s == 0x0de1ca2d) return IMetaTokenV2.mtxPayWithPayeeFee.selector; // mtxPayReceiverFee
         if (s == 0x7c4fa261) return IMetaTokenV2.payeeFeeDigest.selector; // receiverFeeDigest
         if (s == bytes4(keccak256("ReceiverFeeShape()"))) return IMetaTokenV2.PayeeFeeShape.selector;
-        if (s == bytes4(keccak256("ReceiverFeeExpired(uint256,uint256)"))) return IMetaTokenV2.PayeeFeeExpired.selector;
+        if (s == bytes4(keccak256("ReceiverFeeExpired(uint256,uint256)"))) {
+            return IMetaTokenV2.PayeeFeeExpired.selector;
+        }
         if (s == bytes4(keccak256("ReceiverFeeAmount(uint256,uint256)"))) return IMetaTokenV2.PayeeFeeAmount.selector;
         return s;
     }
@@ -329,26 +394,55 @@ abstract contract LegacyDiff is Test {
     /// @dev Fix3 CTR-GOV-28 (owner 2026-11-13): d142b57c's direct admin entries whose new form takes a trailing
     ///      `chainUid_`: the old selector, the new one and the old static words before the word (0 = not such an entry).
     function _f3Words(bytes4 s) internal pure returns (bytes4 n, uint256 words) {
-        if (s == bytes4(keccak256("grantRole(uint8,bytes32)"))) return (bytes4(keccak256("grantRole(uint8,bytes32,bytes32)")), 2);
-        if (s == bytes4(keccak256("revokeRole(uint8,bytes32)"))) return (bytes4(keccak256("revokeRole(uint8,bytes32,bytes32)")), 2);
+        if (s == bytes4(keccak256("grantRole(uint8,bytes32)"))) {
+            return (bytes4(keccak256("grantRole(uint8,bytes32,bytes32)")), 2);
+        }
+        if (s == bytes4(keccak256("revokeRole(uint8,bytes32)"))) {
+            return (bytes4(keccak256("revokeRole(uint8,bytes32,bytes32)")), 2);
+        }
         if (s == bytes4(keccak256("cancelGrant(uint8,bytes32)"))) {
             return (bytes4(keccak256("cancelGrant(uint8,bytes32,bytes32)")), 2);
         }
-        if (s == bytes4(keccak256("setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))"))) {
-            return (bytes4(keccak256("setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)")),
-                11);
+        if (
+            s
+                == bytes4(
+                    keccak256(
+                        "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))"
+                    )
+                )
+        ) {
+            return (
+                bytes4(
+                    keccak256(
+                        "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)"
+                    )
+                ),
+                11
+            );
         }
-        if (s == bytes4(keccak256("disableFeature(uint8)"))) return (bytes4(keccak256("disableFeature(uint8,bytes32)")), 1);
-        if (s == bytes4(keccak256("enableFeature(uint8)"))) return (bytes4(keccak256("enableFeature(uint8,bytes32)")), 1);
-        if (s == bytes4(keccak256("pqzSetVerifier(bytes32)"))) return (bytes4(keccak256("pqzSetVerifier(bytes32,bytes32)")), 1);
+        if (s == bytes4(keccak256("disableFeature(uint8)"))) {
+            return (bytes4(keccak256("disableFeature(uint8,bytes32)")), 1);
+        }
+        if (s == bytes4(keccak256("enableFeature(uint8)"))) {
+            return (bytes4(keccak256("enableFeature(uint8,bytes32)")), 1);
+        }
+        if (s == bytes4(keccak256("pqzSetVerifier(bytes32)"))) {
+            return (bytes4(keccak256("pqzSetVerifier(bytes32,bytes32)")), 1);
+        }
         if (s == bytes4(keccak256("pqzCancelVerifier()"))) return (bytes4(keccak256("pqzCancelVerifier(bytes32)")), 0);
         if (s == bytes4(keccak256("pqzRevokeVerifier()"))) return (bytes4(keccak256("pqzRevokeVerifier(bytes32)")), 0);
-        if (s == bytes4(keccak256("setVerifierFee(uint64)"))) return (bytes4(keccak256("setVerifierFee(uint64,bytes32)")), 1);
+        if (s == bytes4(keccak256("setVerifierFee(uint64)"))) {
+            return (bytes4(keccak256("setVerifierFee(uint64,bytes32)")), 1);
+        }
         // owner 2026-11-13 (renounceRole carries the chain word too): a holder's own renounce too
-        if (s == bytes4(keccak256("renounceRole(uint8)"))) return (bytes4(keccak256("renounceRole(uint8,bytes32)")), 1);
+        if (s == bytes4(keccak256("renounceRole(uint8)"))) {
+            return (bytes4(keccak256("renounceRole(uint8,bytes32)")), 1);
+        }
         // round 3zb + 3zc (CTR-GOV-28): every direct entry of a role holder carries the chain word too (the static ones of
         // the pre-split release; its tokens had no setAllowed, setDenied, setWrapLimits or setWrapMember)
-        if (s == bytes4(keccak256("mint(address,uint256)"))) return (bytes4(keccak256("mint(address,uint256,bytes32)")), 2);
+        if (s == bytes4(keccak256("mint(address,uint256)"))) {
+            return (bytes4(keccak256("mint(address,uint256,bytes32)")), 2);
+        }
         if (s == bytes4(keccak256("mintToUA(bytes32,uint256)"))) {
             return (bytes4(keccak256("mintToUA(bytes32,uint256,bytes32)")), 2);
         }
@@ -369,7 +463,9 @@ abstract contract LegacyDiff is Test {
         if (s == bytes4(keccak256("forceTransfer(bytes32,uint256)"))) {
             return (bytes4(keccak256("forceTransfer(bytes32,uint256,bytes32)")), 2);
         }
-        if (s == bytes4(keccak256("pause(bytes32,uint64)"))) return (bytes4(keccak256("pause(bytes32,uint64,bytes32)")), 2);
+        if (s == bytes4(keccak256("pause(bytes32,uint64)"))) {
+            return (bytes4(keccak256("pause(bytes32,uint64,bytes32)")), 2);
+        }
         if (s == bytes4(keccak256("unpause(bytes32)"))) return (bytes4(keccak256("unpause(bytes32,bytes32)")), 1);
         if (s == bytes4(keccak256("recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)"))) {
             return (bytes4(keccak256("recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32)")), 6);
@@ -381,8 +477,12 @@ abstract contract LegacyDiff is Test {
             return (bytes4(keccak256("operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32)")), 4);
         }
         if (s == bytes4(keccak256("setTaxRate(uint32)"))) return (bytes4(keccak256("setTaxRate(uint32,bytes32)")), 1);
-        if (s == bytes4(keccak256("setTaxRecipient(bytes32)"))) return (bytes4(keccak256("setTaxRecipient(bytes32,bytes32)")), 1);
-        if (s == bytes4(keccak256("setProofStore(uint8)"))) return (bytes4(keccak256("setProofStore(uint8,bytes32)")), 1);
+        if (s == bytes4(keccak256("setTaxRecipient(bytes32)"))) {
+            return (bytes4(keccak256("setTaxRecipient(bytes32,bytes32)")), 1);
+        }
+        if (s == bytes4(keccak256("setProofStore(uint8)"))) {
+            return (bytes4(keccak256("setProofStore(uint8,bytes32)")), 1);
+        }
         if (s == bytes4(keccak256("setMarket(address,address,bool)"))) {
             return (bytes4(keccak256("setMarket(address,address,bool,bytes32)")), 3);
         }
@@ -392,7 +492,9 @@ abstract contract LegacyDiff is Test {
         if (s == bytes4(keccak256("setExchangeTarget(address,bool)"))) {
             return (bytes4(keccak256("setExchangeTarget(address,bool,bytes32)")), 2);
         }
-        if (s == bytes4(keccak256("setListedOnly(bool)"))) return (bytes4(keccak256("setListedOnly(bool,bytes32)")), 1);
+        if (s == bytes4(keccak256("setListedOnly(bool)"))) {
+            return (bytes4(keccak256("setListedOnly(bool,bytes32)")), 1);
+        }
     }
 
     function _r3Call(bytes memory data) internal view returns (bytes memory out) {
@@ -403,29 +505,43 @@ abstract contract LegacyDiff is Test {
         if (f3 != 0 && out.length >= 4 + 32 * w) {
             bytes memory head = new bytes(4 + 32 * w);
             bytes memory rest = new bytes(out.length - head.length);
-            for (uint256 i; i < head.length; ++i) head[i] = out[i];
-            for (uint256 i; i < rest.length; ++i) rest[i] = out[i + head.length];
+            for (uint256 i; i < head.length; ++i) {
+                head[i] = out[i];
+            }
+            for (uint256 i; i < rest.length; ++i) {
+                rest[i] = out[i + head.length];
+            }
             out = bytes.concat(head, r3Uid, rest);
-            for (uint256 i; i < 4; ++i) out[i] = f3[i];
+            for (uint256 i; i < 4; ++i) {
+                out[i] = f3[i];
+            }
             return out;
         }
         // Fable recheck-2 P3-1 (CTR-GOV-27): the renounce names the token's chain word, `r3Uid`, its first argument (the
         // old entry took none and ignored any bytes after its selector, so they follow the word)
         if (bytes4(out) == bytes4(keccak256("renounceOwnership()"))) {
             bytes memory rest = new bytes(out.length - 4);
-            for (uint256 i; i < rest.length; ++i) rest[i] = out[i + 4];
+            for (uint256 i; i < rest.length; ++i) {
+                rest[i] = out[i + 4];
+            }
             out = bytes.concat(bytes4(out), r3Uid, rest);
         }
         // CTR-GOV-27: the transfer names the token's chain word after `newAdmin` (the words after it follow the word)
         if (bytes4(out) == bytes4(keccak256("transferOwnership(bytes32)")) && out.length >= 36) {
             bytes memory head = new bytes(36);
             bytes memory rest = new bytes(out.length - 36);
-            for (uint256 i; i < 36; ++i) head[i] = out[i];
-            for (uint256 i; i < rest.length; ++i) rest[i] = out[i + 36];
+            for (uint256 i; i < 36; ++i) {
+                head[i] = out[i];
+            }
+            for (uint256 i; i < rest.length; ++i) {
+                rest[i] = out[i + 36];
+            }
             out = bytes.concat(head, r3Uid, rest);
         }
         bytes4 s = _r3Sel(bytes4(out));
-        for (uint256 i; i < 4; ++i) out[i] = s[i];
+        for (uint256 i; i < 4; ++i) {
+            out[i] = s[i];
+        }
     }
 
     function _r3Old(Run memory o) internal view {
@@ -465,7 +581,9 @@ abstract contract LegacyDiff is Test {
             string memory sig = vm.parseJsonString(j, string.concat(p, ".sig"));
             if (keccak256(bytes(sig)) == keccak256("implementation()") || _argsMoved(sig)) continue;
             bytes memory data = vm.parseJsonBytes(j, string.concat(p, ".data"));
-            for (uint256 c; c < callers.length; ++c) _diff(token, oldImpl, callers[c], data, sig);
+            for (uint256 c; c < callers.length; ++c) {
+                _diff(token, oldImpl, callers[c], data, sig);
+            }
         }
         emit log_named_uint(string.concat("T66B-DIFF | kind ", vm.toString(k), " | calls compared"), diffed);
         emit log_named_uint(string.concat("T66B-DIFF | kind ", vm.toString(k), " | calls that succeeded"), bothOk);
@@ -491,10 +609,13 @@ abstract contract LegacyDiff is Test {
     ///      `test/pqz` (`PqzThreeKeys`, the OFFCHAIN and typed suites).
     function _argsMoved(string memory sig) internal pure returns (bool) {
         bytes memory s = bytes(sig);
-        bytes memory t = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes)";
+        bytes memory t =
+            "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes)";
         for (uint256 i; i + t.length <= s.length; ++i) {
             bool m = true;
-            for (uint256 j; j < t.length && m; ++j) m = s[i + j] == t[j];
+            for (uint256 j; j < t.length && m; ++j) {
+                m = s[i + j] == t[j];
+            }
             if (m) return true;
         }
         return false;

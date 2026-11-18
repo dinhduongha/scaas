@@ -58,23 +58,34 @@ contract PqzMarkInvariantsTest is PqzOffchainBase {
     /// Positive control (the handler is not vacuous): credits, a mark-only call, a roll over a marked slot, a refresh below
     /// `rolled` (un-roll), a mark on an un-rolled entry, a re-roll; the invariants hold at every step.
     function test_handler_reachesEveryPath() public {
-        for (uint256 i; i < 6; ++i) h.credit(i);
+        for (uint256 i; i < 6; ++i) {
+            h.credit(i);
+        }
         assertEq(h.entries(), 6);
         h.age(2 * ROLL_AGE);
         h.roll(0, 1 << 1); // mark entry 1 only
-        assertEq(abi.encode(h.marks(), h.rolls(), c2.pqzAccount(alice, 0).rolled), abi.encode(uint256(1), uint256(1), uint256(0)));
+        assertEq(
+            abi.encode(h.marks(), h.rolls(), c2.pqzAccount(alice, 0).rolled),
+            abi.encode(uint256(1), uint256(1), uint256(0))
+        );
         _check();
         h.roll(4, 0); // roll 0..3 over the marked slot 1
         assertEq(c2.pqzAccount(alice, 0).rolled, 4);
         _check();
         h.refresh(2); // un-roll [2, 4)
-        assertEq(abi.encode(h.refreshes(), h.unrolls(), c2.pqzAccount(alice, 0).rolled), abi.encode(uint256(1), uint256(1), uint256(2)));
+        assertEq(
+            abi.encode(h.refreshes(), h.unrolls(), c2.pqzAccount(alice, 0).rolled),
+            abi.encode(uint256(1), uint256(1), uint256(2))
+        );
         _check();
         h.age(2 * ROLL_AGE);
         h.roll(0, 1 << 1); // entry 3 (rolled 2: bit 1) marked after the un-roll
         assertTrue(c2.pqzSkipped(alice, 0, 3));
         h.roll(4, 0); // re-roll [2, 6): entry 3 adds zero
-        assertEq(abi.encode(c2.pqzAccount(alice, 0).rolled, h.marks(), h.rolls()), abi.encode(uint256(6), uint256(2), uint256(4)));
+        assertEq(
+            abi.encode(c2.pqzAccount(alice, 0).rolled, h.marks(), h.rolls()),
+            abi.encode(uint256(6), uint256(2), uint256(4))
+        );
         _check();
         assertTrue(keccak256(c2.pqzAcc(alice, 0)) != keccak256(new bytes(PqzCt.CT)), "acc moved");
     }

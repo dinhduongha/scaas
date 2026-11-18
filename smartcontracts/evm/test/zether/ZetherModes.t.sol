@@ -58,12 +58,29 @@ abstract contract ZetherModesSuite is ZetherFixture {
 
     // ------------------------------------------------------------------ the matrix
 
-    function test_bundleNone() public { _pair(BUNDLE, NONE); }
-    function test_bundleFull() public { _pair(BUNDLE, FULL); }
-    function test_bundleOptional() public { _pair(BUNDLE, OPTIONAL); }
-    function test_compactNone() public { _pair(COMPACT, NONE); }
-    function test_compactFull() public { _pair(COMPACT, FULL); }
-    function test_compactOptional() public { _pair(COMPACT, OPTIONAL); }
+    function test_bundleNone() public {
+        _pair(BUNDLE, NONE);
+    }
+
+    function test_bundleFull() public {
+        _pair(BUNDLE, FULL);
+    }
+
+    function test_bundleOptional() public {
+        _pair(BUNDLE, OPTIONAL);
+    }
+
+    function test_compactNone() public {
+        _pair(COMPACT, NONE);
+    }
+
+    function test_compactFull() public {
+        _pair(COMPACT, FULL);
+    }
+
+    function test_compactOptional() public {
+        _pair(COMPACT, OPTIONAL);
+    }
 
     function _pair(uint8 d, uint8 a) internal {
         (dMode, aMode) = (d, a);
@@ -85,14 +102,16 @@ abstract contract ZetherModesSuite is ZetherFixture {
     function _auditorRule(uint8 d, uint8 a) internal {
         if (a == OPTIONAL) {
             audOut = true;
-            (bytes32 ref, Tx memory t) = _multi(ZetherTypes.TransferMode.HASH, IZetherToken.mtxConfidentialTransferCompact.selector, 5);
+            (bytes32 ref, Tx memory t) =
+                _multi(ZetherTypes.TransferMode.HASH, IZetherToken.mtxConfidentialTransferCompact.selector, 5);
             _openAll(ref, t.s, 5, 0);
             audOut = false;
             return;
         }
         bytes4 err = a == NONE ? IZetherToken.AuditorForbidden.selector : IZetherToken.AuditorRequired.selector;
         (audForce, audOut) = (a == NONE, a == FULL);
-        bytes memory multi = bytes.concat(_multiPayload(tok, alice, _two(), _vs(5), 7, tok.accountState(alice.ua)), _memo(2));
+        bytes memory multi =
+            bytes.concat(_multiPayload(tok, alice, _two(), _vs(5), 7, tok.accountState(alice.ua)), _memo(2));
         bytes memory single = _payload(tok, alice, bob, 5, 7, tok.accountState(alice.ua));
         (audForce, audOut) = (false, false);
         vm.expectRevert(err);
@@ -110,7 +129,8 @@ abstract contract ZetherModesSuite is ZetherFixture {
     ///      single format stores `R` with its one leg: every form keeps `R` in state (review C0-3).
     function _bundleForms(uint8 a) internal {
         bool audIn = a != NONE;
-        (bytes32 ref, Tx memory t) = _multi(ZetherTypes.TransferMode.BUNDLE, IZetherToken.mtxConfidentialTransfer.selector, 11);
+        (bytes32 ref, Tx memory t) =
+            _multi(ZetherTypes.TransferMode.BUNDLE, IZetherToken.mtxConfidentialTransfer.selector, 11);
         bytes memory r = _rebuild(_two(), _vs(11), t.s);
         assertEq(tok.transferEntry(ref), r, "mtxConfidentialTransfer on BUNDLE: R, the salt first");
         _openAll(ref, t.s, 11, audIn ? 1 : 0);
@@ -170,7 +190,9 @@ abstract contract ZetherModesSuite is ZetherFixture {
         vm.expectRevert(IZetherToken.ProofRejected.selector);
         tok.mtxConfidentialTransferCompact(_zMulti(salt1, _none()), t.proof);
         bytes memory short = new bytes(t.payload.length - 1);
-        for (uint256 i; i < short.length; ++i) short[i] = t.payload[i];
+        for (uint256 i; i < short.length; ++i) {
+            short[i] = t.payload[i];
+        }
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.BadPayload.selector, 80));
         tok.mtxConfidentialTransferCompact(_zMulti(short, _none()), t.proof);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.BadPayload.selector, 81));
@@ -189,8 +211,11 @@ abstract contract ZetherModesSuite is ZetherFixture {
         tok = _newToken(true, "mixFull", 0);
         _fund(tok, alice, 500);
         tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
-        bytes memory pl = bytes.concat(_multiPayload(tok, alice, _two(), _vs(9), 7, tok.accountState(alice.ua)), _memo(2));
-        for (uint256 i; i < p; ++i) pl[176 + 5 * p + i] = 0; // leg 1: C_aud = O, leg 2 ≠ O
+        bytes memory pl =
+            bytes.concat(_multiPayload(tok, alice, _two(), _vs(9), 7, tok.accountState(alice.ua)), _memo(2));
+        for (uint256 i; i < p; ++i) {
+            pl[176 + 5 * p + i] = 0; // leg 1: C_aud = O, leg 2 ≠ O
+        }
         vm.expectRevert(IZetherToken.AuditorRequired.selector);
         tok.mtxConfidentialTransferCompact(_zMulti(pl, _none()), "");
         vm.expectRevert(IZetherToken.AuditorRequired.selector);
@@ -202,16 +227,24 @@ abstract contract ZetherModesSuite is ZetherFixture {
         audForce = true;
         pl = _multiPayload(tok, alice, _two(), _vs(9), 7, tok.accountState(alice.ua));
         audForce = false;
-        for (uint256 i; i < p; ++i) pl[176 + 5 * p + i] = 0;
+        for (uint256 i; i < p; ++i) {
+            pl[176 + 5 * p + i] = 0;
+        }
         vm.expectRevert(IZetherToken.AuditorForbidden.selector);
         tok.mtxConfidentialTransfer(_zMulti(pl, _none()), "");
         vm.expectRevert(IZetherToken.AuditorForbidden.selector);
         stm.transferStatement(address(tok), _zMulti(pl, _none()), ZetherTypes.TransferMode.BUNDLE, 0);
         uint256 pk = 0x9A7E5;
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
-            from: vm.addr(pk), data: abi.encodeCall(IZetherToken.mtxConfidentialTransfer, (_zMulti(pl, _none()), bytes(""))),
-            batch: 3, nonce: 0, validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer,
-            fee: 0, feeRecipient: address(0)
+            from: vm.addr(pk),
+            data: abi.encodeCall(IZetherToken.mtxConfidentialTransfer, (_zMulti(pl, _none()), bytes(""))),
+            batch: 3,
+            nonce: 0,
+            validUntil: block.timestamp + 300,
+            mode: MetaTxLib.MODE_RESTRICT_RELAYER,
+            relayer: relayer,
+            fee: 0,
+            feeRecipient: address(0)
         });
         (uint8 v, bytes32 r, bytes32 s_) = vm.sign(pk, MtxDigest.metaTx(address(tok), m));
         vm.prank(relayer);
@@ -250,7 +283,7 @@ abstract contract ZetherModesSuite is ZetherFixture {
     function test_invalidModesRefused() public {
         IFactoryToken.TokenConfig[6] memory bad;
         (bad[0], bad[1], bad[2], bad[3], bad[4], bad[5]) =
-            (_kindCfg(false), _kindCfg(false), _kindCfg(true), _kindCfg(false), _kindCfg(false), _kindCfg(true));
+        (_kindCfg(false), _kindCfg(false), _kindCfg(true), _kindCfg(false), _kindCfg(false), _kindCfg(true));
         bad[0].conf.auditorMode = FULL;
         bad[1].conf.auditorMode = OPTIONAL;
         bad[2].conf.auditorMode = NONE;
@@ -294,7 +327,9 @@ abstract contract ZetherModesSuite is ZetherFixture {
     function _multi(ZetherTypes.TransferMode mode, bytes4 sel, uint256 v) internal returns (bytes32 ref, Tx memory t) {
         t = _proveMulti(tok, alice, _two(), _vs(v), bal, _none(), mode);
         (bool ok, bytes memory r) = address(tok).call(abi.encodeWithSelector(sel, _zMulti(t.payload, _none()), t.proof));
-        if (!ok) assembly ("memory-safe") { revert(add(r, 32), mload(r)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(r, 32), mload(r)) }
+        }
         ref = abi.decode(r, (bytes32));
         bal -= v;
     }
@@ -315,7 +350,8 @@ abstract contract ZetherModesSuite is ZetherFixture {
 
     /// @dev The single format's record `salt ‖ Y_t ‖ C_out ‖ D_out ‖ C_aud` (its auditor copy under `s`) of bob's 14.
     function _rebuildSingle(uint256 s) internal view returns (bytes memory) {
-        (bytes memory cOut, bytes memory dOut,, bytes memory cAud) = prover.ciphertexts(ver, alice.y, bob.y, _aud(tok), 14, s);
+        (bytes memory cOut, bytes memory dOut,, bytes memory cAud) =
+            prover.ciphertexts(ver, alice.y, bob.y, _aud(tok), 14, s);
         return bytes.concat(abi.encodePacked(salt), bob.y, cOut, dOut, cAud);
     }
 
@@ -361,8 +397,11 @@ contract ZetherModesWrappedTest is ZetherModesSuite {
 
     function setUp() public {
         _stack();
-        WrappedZetherToken impl = WrappedZetherToken(payable(Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(),
-            type(WrappedZetherToken).creationCode)));
+        WrappedZetherToken impl = WrappedZetherToken(
+            payable(Catalogue.release(
+                    factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode
+                ))
+        );
         _users();
     }
 

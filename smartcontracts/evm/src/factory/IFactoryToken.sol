@@ -135,19 +135,19 @@ interface IFactoryToken {
         uint8 decimals;
         uint256 features;
         uint256 lockedFeatures;
-        bytes32 admin;               // a UA id (a native account: its padded address); 0 = no administration ever
-        GovernanceLib.Roles roles;        // initial holders, each only for a set flag
-        uint256 initialSupply;       // NORMAL* only
-        address initialHolder;       // NORMAL* only
-        Leg[] legs;                  // WRAPPED* only, 1..8
-        RateConfig rate;             // WRAPPED* only, with RATE_ADJUSTABLE
-        ConfidentialConfig conf;     // *_ZETHER only
-        uint64 grantDelay;           // spec §1.6: the admin's two calls, at most 30 days; 0 = one call
-        address rescueTo;            // spec §6.2: with `RESCUABLE` only (0 there: SCAAS_DEV_RESCUE, CTR-GOV-25), immutable;
-                                     // never the token or a pool
-        uint256 maxSupply;           // WRAPPED* only, spec §5.2: the hybrid's cap, with `MINTABLE` only; 0 = no hybrid
-        uint256 maxWrapSupply;       // WRAPPED* only, CTR-GOV-30: the wrap cap, 0 = none; <= maxSupply when that is not 0
-        RegulatedParams reg;         // *_REGULATED (8-13) only
+        bytes32 admin; // a UA id (a native account: its padded address); 0 = no administration ever
+        GovernanceLib.Roles roles; // initial holders, each only for a set flag
+        uint256 initialSupply; // NORMAL* only
+        address initialHolder; // NORMAL* only
+        Leg[] legs; // WRAPPED* only, 1..8
+        RateConfig rate; // WRAPPED* only, with RATE_ADJUSTABLE
+        ConfidentialConfig conf; // *_ZETHER only
+        uint64 grantDelay; // spec §1.6: the admin's two calls, at most 30 days; 0 = one call
+        address rescueTo; // spec §6.2: with `RESCUABLE` only (0 there: SCAAS_DEV_RESCUE, CTR-GOV-25), immutable;
+        // never the token or a pool
+        uint256 maxSupply; // WRAPPED* only, spec §5.2: the hybrid's cap, with `MINTABLE` only; 0 = no hybrid
+        uint256 maxWrapSupply; // WRAPPED* only, CTR-GOV-30: the wrap cap, 0 = none; <= maxSupply when that is not 0
+        RegulatedParams reg; // *_REGULATED (8-13) only
     }
 
     /// @notice A field set for another kind (`field`: 1 initialSupply/initialHolder, 2 legs, 3 rate, 4 conf, 5 maxSupply /
@@ -177,8 +177,14 @@ interface IFactoryToken {
 /// @dev Regulated-kinds spec §2.4: a plain kind (0-5) refuses a set `reg` with `ConfigFieldForOtherKind(6)`; a regulated kind
 ///      (8-13) reads it. Every init path of the kinds calls it with the token's own `kind()`.
 function requireRegOfKind(uint8 kind, IFactoryToken.RegulatedParams memory r) pure {
-    if (kind < TokenStore.KIND_NORMAL_REGULATED && (r.complianceRegistry != address(0) || r.requiredFlags != 0
-        || r.deniedFlags != 0 || r.termsHash != 0 || r.taxRecipient != 0)) {
+    if (
+        kind < TokenStore.KIND_NORMAL_REGULATED
+            && (r.complianceRegistry != address(0)
+                || r.requiredFlags != 0
+                || r.deniedFlags != 0
+                || r.termsHash != 0
+                || r.taxRecipient != 0)
+    ) {
         revert IFactoryToken.ConfigFieldForOtherKind(6); // every field, `taxRecipient` too (Fable A-3)
     }
 }

@@ -19,11 +19,15 @@ contract PqTopicsTest is PqTopicsBase {
         assertEq(got.admin, ids[0]);
         assertEq(seq, 0);
         bytes32 p0 = _post(chat, t, ids[0], 1, 0); // the admin
-        _refusedPost(chat, _entryRec(t, ids[1], 1, 0, "x"), abi.encodeWithSelector(IPqChat.PqTopicNotWriter.selector, ids[1]));
+        _refusedPost(
+            chat, _entryRec(t, ids[1], 1, 0, "x"), abi.encodeWithSelector(IPqChat.PqTopicNotWriter.selector, ids[1])
+        );
         _grant(chat, t, ids[0], ids[1], true, 1);
         bytes32 p1 = _post(chat, t, ids[1], 1, 0); // a granted writer
         _grant(chat, t, ids[0], ids[1], false, 2);
-        _refusedPost(chat, _entryRec(t, ids[1], 2, 0, "x"), abi.encodeWithSelector(IPqChat.PqTopicNotWriter.selector, ids[1]));
+        _refusedPost(
+            chat, _entryRec(t, ids[1], 2, 0, "x"), abi.encodeWithSelector(IPqChat.PqTopicNotWriter.selector, ids[1])
+        );
         (bytes32[] memory l, uint256 n) = chat.posts(t, 0, 10);
         assertEq(n, 2);
         assertEq(l[0], p0);
@@ -68,7 +72,9 @@ contract PqTopicsTest is PqTopicsBase {
         IUARegistry.UASig memory sig = _sig(ids[4], h.topicWriter(w));
         vm.expectRevert(abi.encodeWithSelector(IPqChat.PqTopicNotAdmin.selector, ids[0]));
         c.setTopicWriter(w, sig);
-        _refusedPost(c, _entryRec(t, ids[4], 1, 0, "x"), abi.encodeWithSelector(IPqChat.PqTopicNotWriter.selector, ids[4]));
+        _refusedPost(
+            c, _entryRec(t, ids[4], 1, 0, "x"), abi.encodeWithSelector(IPqChat.PqTopicNotWriter.selector, ids[4])
+        );
     }
 
     // 3. replies
@@ -90,7 +96,9 @@ contract PqTopicsTest is PqTopicsBase {
         (IPqChat.PqTopic memory got, uint64 seq) = chat.topicOf(t);
         assertFalse(got.openReplies);
         assertEq(seq, 1);
-        _refusedPost(chat, _entryRec(t, ids[2], 2, p, "x"), abi.encodeWithSelector(IPqChat.PqTopicNotWriter.selector, ids[2]));
+        _refusedPost(
+            chat, _entryRec(t, ids[2], 2, p, "x"), abi.encodeWithSelector(IPqChat.PqTopicNotWriter.selector, ids[2])
+        );
         _grant(chat, t, ids[0], ids[1], true, 1);
         _post(chat, t, ids[1], 1, p); // a writer replies
     }
@@ -102,8 +110,11 @@ contract PqTopicsTest is PqTopicsBase {
         bytes32 t2 = _createTopic(chat, _topicRec(ids[0], 2, true));
         bytes32 q = _post(chat, t2, ids[0], 1, 0);
         _refusedPost(chat, _entryRec(t, ids[0], 9, q, "x"), abi.encodeWithSelector(IPqChat.PqTopicParent.selector, q));
-        _refusedPost(chat, _entryRec(t, ids[0], 9, keccak256("x"), "x"),
-            abi.encodeWithSelector(IPqChat.PqTopicParent.selector, keccak256("x")));
+        _refusedPost(
+            chat,
+            _entryRec(t, ids[0], 9, keccak256("x"), "x"),
+            abi.encodeWithSelector(IPqChat.PqTopicParent.selector, keccak256("x"))
+        );
         bytes32 tb = _createTopic(chatB, _topicRec(ids[0], 1, true)); // the same record in B: the same id
         assertEq(tb, t);
         _refusedPost(chatB, _entryRec(t, ids[2], 1, p, "x"), abi.encodeWithSelector(IPqChat.PqTopicParent.selector, p));
@@ -134,7 +145,9 @@ contract PqTopicsTest is PqTopicsBase {
         chat.editEntry(d, sig);
         d = _editRec(r, ids[2], 2, 4); // the nonce of an earlier edit, in the original's topic scope
         sig = _sig(ids[2], h.edit(d));
-        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatNonceUsed.selector, PqChatTypes.scopeEntry(t, ids[2]), uint64(2)));
+        vm.expectRevert(
+            abi.encodeWithSelector(IPqChat.PqChatNonceUsed.selector, PqChatTypes.scopeEntry(t, ids[2]), uint64(2))
+        );
         chat.editEntry(d, sig);
         bytes32 rr = _post(chat, t, ids[3], 1, r); // replies attach to the original id
         assertEq(chat.entryOf(rr).parentId, r);
@@ -146,7 +159,9 @@ contract PqTopicsTest is PqTopicsBase {
     function test_topics_bodiesAndRefs() public {
         bytes32 t = _newTopic(true);
         bytes memory big = new bytes(150_000); // over two 65,535 B blobs
-        for (uint256 i; i < big.length; i += 97) big[i] = bytes1(uint8(i));
+        for (uint256 i; i < big.length; i += 97) {
+            big[i] = bytes1(uint8(i));
+        }
         IPqChat.PqTopicEntry memory e = _entryRec(t, ids[0], 1, 0, big);
         bytes32 p = _postRec(chat, e);
         assertEq(keccak256(chat.entryOf(p).body), keccak256(big), "read back byte-exact");
@@ -221,8 +236,11 @@ contract PqTopicsTest is PqTopicsBase {
         bytes32 t = _newTopic(true);
         _post(chat, t, ids[0], 5, 0);
         _post(chat, t, ids[0], 4, 0); // any order
-        _refusedPost(chat, _entryRec(t, ids[0], 5, 0, "other"), abi.encodeWithSelector(IPqChat.PqChatNonceUsed.selector,
-            PqChatTypes.scopeEntry(t, ids[0]), uint64(5)));
+        _refusedPost(
+            chat,
+            _entryRec(t, ids[0], 5, 0, "other"),
+            abi.encodeWithSelector(IPqChat.PqChatNonceUsed.selector, PqChatTypes.scopeEntry(t, ids[0]), uint64(5))
+        );
         IPqChat.PqTopicEntry memory e = _entryRec(t, ids[0], 6, 0, "x");
         IUARegistry.UASig memory forged = _sig(ids[1], h.entry(e));
         vm.expectRevert(_unauthorized(ids[0]));
@@ -232,7 +250,9 @@ contract PqTopicsTest is PqTopicsBase {
         assertTrue(chat.topicNonceUsed(ids[0], 1));
         IPqChat.PqTopic memory tr = _topicRec(ids[0], 1, false);
         IUARegistry.UASig memory sig = _sig(ids[0], h.topic(tr));
-        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatNonceUsed.selector, PqChatTypes.scopeTopic(ids[0]), uint64(1)));
+        vm.expectRevert(
+            abi.encodeWithSelector(IPqChat.PqChatNonceUsed.selector, PqChatTypes.scopeTopic(ids[0]), uint64(1))
+        );
         chat.createTopic(tr, sig);
     }
 
@@ -289,7 +309,8 @@ contract PqTopicsTest is PqTopicsBase {
         _register(p, 0x0101, _key(0x0101));
         _register(p, 0x0102, _key(0x0102));
         (uint16 lo, uint16 hi) = UAKinds.uaOf(0x0101, _key(0x0101)) < UAKinds.uaOf(0x0102, _key(0x0102))
-            ? (uint16(0x0101), uint16(0x0102)) : (uint16(0x0102), uint16(0x0101));
+            ? (uint16(0x0101), uint16(0x0102))
+            : (uint16(0x0102), uint16(0x0101));
         Member[] memory mm = new Member[](2);
         mm[0] = Member(lo, UAKinds.uaOf(lo, _key(lo)), 1);
         mm[1] = Member(hi, UAKinds.uaOf(hi, _key(hi)), 1);
@@ -310,11 +331,19 @@ contract PqTopicsTest is PqTopicsBase {
         chat.createTopic(t2, sessionSig);
     }
 
-    function _quorum(bytes32 ms, uint16 lo, uint16 hi, bytes32 digest) internal view returns (IUARegistry.UASig memory q) {
+    function _quorum(bytes32 ms, uint16 lo, uint16 hi, bytes32 digest)
+        internal
+        view
+        returns (IUARegistry.UASig memory q)
+    {
         bytes32 md = _memberDigest(ms, UAKinds.PURPOSE_PQCHAT, digest);
         q.members = new IUARegistry.MemberSig[](2);
-        q.members[0] = IUARegistry.MemberSig(0, new IUARegistry.InnerSig[](0), _sig(_key(lo), UAKinds.uaMessage(lo, UAKinds.PURPOSE_MEMBER, md)));
-        q.members[1] = IUARegistry.MemberSig(1, new IUARegistry.InnerSig[](0), _sig(_key(hi), UAKinds.uaMessage(hi, UAKinds.PURPOSE_MEMBER, md)));
+        q.members[0] = IUARegistry.MemberSig(
+            0, new IUARegistry.InnerSig[](0), _sig(_key(lo), UAKinds.uaMessage(lo, UAKinds.PURPOSE_MEMBER, md))
+        );
+        q.members[1] = IUARegistry.MemberSig(
+            1, new IUARegistry.InnerSig[](0), _sig(_key(hi), UAKinds.uaMessage(hi, UAKinds.PURPOSE_MEMBER, md))
+        );
     }
 
     function test_topics_unknownIds() public {

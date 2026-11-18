@@ -152,9 +152,14 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     ///         transaction to this chain against a sibling with the same chain id (Fable P1-1); a router has the code
     ///         hash `govRouterCodeHash`, names the same `chainUid()`, a `registry()` with code and that registry's
     ///         `smartKeyCloneHash()` (spec §13.3, §13.4); router 0 with hash 0 is none.
-    function configureChain(bytes32 chainUid_, uint64 noticePeriod_, address govRouter_, bytes32 govRouterCodeHash,
-        uint256 refBlock, bytes32 refHash) external onlyAdmin
-    {
+    function configureChain(
+        bytes32 chainUid_,
+        uint64 noticePeriod_,
+        address govRouter_,
+        bytes32 govRouterCodeHash,
+        uint256 refBlock,
+        bytes32 refHash
+    ) external onlyAdmin {
         if (chainUid != bytes32(0)) revert ChainAlreadyConfigured();
         if (chainUid_ == bytes32(0)) revert ChainUidZero();
         if (noticePeriod_ > MAX_NOTICE_PERIOD) revert NoticePeriodTooLong(noticePeriod_);
@@ -190,7 +195,9 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     function setChainEntries(ChainEntries calldata entries, bytes32 chainUid_) external onlyAdmin onChain(chainUid_) {
         address relayFeeRouter_ = entries.relayFeeRouter;
         if (relayFeeRouter_ != address(0)) {
-            _entry(relayFeeRouter, relayFeeRouter_, entries.relayFeeRouterCodeHash, IOpenFactory.relayFeeRouter.selector);
+            _entry(
+                relayFeeRouter, relayFeeRouter_, entries.relayFeeRouterCodeHash, IOpenFactory.relayFeeRouter.selector
+            );
             bytes4 v = IOpenFactory.relayFeeExecutor.selector;
             address x = _addr(relayFeeRouter_, _EXECUTOR, v);
             _requireCode(x, entries.relayFeeExecutorCodeHash);
@@ -220,15 +227,26 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         }
         address zetherStatements_ = entries.zetherStatements;
         if (zetherStatements_ != address(0)) {
-            _entry(zetherStatements, zetherStatements_, entries.zetherStatementsCodeHash,
-                IOpenFactory.zetherStatements.selector);
+            _entry(
+                zetherStatements,
+                zetherStatements_,
+                entries.zetherStatementsCodeHash,
+                IOpenFactory.zetherStatements.selector
+            );
             zetherStatements = zetherStatements_;
         }
     }
 
     function directory() external view returns (Directory memory) {
-        return Directory(uaRegistry(), govRouter, relayFeeRouter, relayFeeExecutor(), complianceRegistry,
-            smartKeyAccountFactory, zetherStatements);
+        return Directory(
+            uaRegistry(),
+            govRouter,
+            relayFeeRouter,
+            relayFeeExecutor(),
+            complianceRegistry,
+            smartKeyAccountFactory,
+            zetherStatements
+        );
     }
 
     /// @notice The router's `registry()` (an immutable of its pinned code: one source, spec §13.4); 0 without a router.
@@ -300,26 +318,58 @@ contract OpenFactory is IOpenFactory, UAAdmin {
 
     // ------------------------------------------------------------------ release approvals (spec §5.6)
 
-    function approveTokenRelease(TokenKind kind, uint64 version, uint16 envVersion, bytes32 initcodeHash,
-        bytes32 implArgsHash, bytes32 chainUid_, address factory_, uint32 adminGeneration_, uint64 until)
-        external onlyAdmin configured
-    {
-        _approve(_tokenKey(kind, version, envVersion, initcodeHash, implArgsHash), chainUid_, factory_, adminGeneration_,
-            until);
+    function approveTokenRelease(
+        TokenKind kind,
+        uint64 version,
+        uint16 envVersion,
+        bytes32 initcodeHash,
+        bytes32 implArgsHash,
+        bytes32 chainUid_,
+        address factory_,
+        uint32 adminGeneration_,
+        uint64 until
+    ) external onlyAdmin configured {
+        _approve(
+            _tokenKey(kind, version, envVersion, initcodeHash, implArgsHash),
+            chainUid_,
+            factory_,
+            adminGeneration_,
+            until
+        );
     }
 
-    function approveDexRelease(uint64 version, uint16 envVersion, bytes32 initcodeHash, bytes32 implArgsHash,
-        bytes32 chainUid_, address factory_, uint32 adminGeneration_, uint64 until) external onlyAdmin configured
-    {
+    function approveDexRelease(
+        uint64 version,
+        uint16 envVersion,
+        bytes32 initcodeHash,
+        bytes32 implArgsHash,
+        bytes32 chainUid_,
+        address factory_,
+        uint32 adminGeneration_,
+        uint64 until
+    ) external onlyAdmin configured {
         _approve(_dexKey(version, envVersion, initcodeHash, implArgsHash), chainUid_, factory_, adminGeneration_, until);
     }
 
-    function approveRelease(ReleaseId calldata id, uint16 envVersion, bytes4 initSelector, bytes4 interfaceId,
-        bytes32 initcodeHash, bytes32 implArgsHash, bytes32 chainUid_, address factory_, uint32 adminGeneration_,
-        uint64 until) external onlyAdmin configured
-    {
-        _approve(_classKey(id, envVersion, initSelector, interfaceId, initcodeHash, implArgsHash), chainUid_, factory_,
-            adminGeneration_, until);
+    function approveRelease(
+        ReleaseId calldata id,
+        uint16 envVersion,
+        bytes4 initSelector,
+        bytes4 interfaceId,
+        bytes32 initcodeHash,
+        bytes32 implArgsHash,
+        bytes32 chainUid_,
+        address factory_,
+        uint32 adminGeneration_,
+        uint64 until
+    ) external onlyAdmin configured {
+        _approve(
+            _classKey(id, envVersion, initSelector, interfaceId, initcodeHash, implArgsHash),
+            chainUid_,
+            factory_,
+            adminGeneration_,
+            until
+        );
     }
 
     function revokeApproval(bytes32 key, bytes32 chainUid_) external onlyAdmin onChain(chainUid_) {
@@ -337,7 +387,9 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     function _approve(bytes32 key, bytes32 chainUid_, address factory_, uint32 generation, uint64 until) private {
         if (chainUid_ != chainUid) revert ApprovalFieldMismatch(ApprovalField.CHAIN_UID);
         if (factory_ != address(this)) revert ApprovalFieldMismatch(ApprovalField.FACTORY);
-        if (generation != _adminStorage().adminGeneration) revert ApprovalFieldMismatch(ApprovalField.ADMIN_GENERATION);
+        if (generation != _adminStorage().adminGeneration) {
+            revert ApprovalFieldMismatch(ApprovalField.ADMIN_GENERATION);
+        }
         if (until <= block.timestamp || until > block.timestamp + MAX_NOTICE_PERIOD) revert ApprovalTooLong(until);
         Approval storage a = _approvals[key];
         if (_live(a)) revert ApprovalLive(key);
@@ -354,43 +406,70 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     ///      own call passes (`msg.sender` alone, never a router's subject, never a 7702 designator).
     function _useApproval(bytes32 key) private {
         Approval storage a = _approvals[key];
-        if (_live(a)) a.state = ApprovalState.CONSUMED;
-        else if (bytes32(uint256(uint160(msg.sender))) != _adminStorage().admin || SigCheck.isDesignator(msg.sender)) {
+        if (_live(a)) {
+            a.state = ApprovalState.CONSUMED;
+        } else if (bytes32(uint256(uint160(msg.sender))) != _adminStorage().admin || SigCheck.isDesignator(msg.sender))
+        {
             revert ReleaseNotApproved(key);
         }
     }
 
     function _tokenKey(TokenKind kind, uint64 version, uint16 envVersion, bytes32 initcodeHash, bytes32 implArgsHash)
-        private view returns (bytes32)
+        private
+        view
+        returns (bytes32)
     {
-        return keccak256(abi.encode(_TAG_TOKEN, chainUid, address(this), kind, version, envVersion, initcodeHash,
-            implArgsHash));
+        return keccak256(
+            abi.encode(_TAG_TOKEN, chainUid, address(this), kind, version, envVersion, initcodeHash, implArgsHash)
+        );
     }
 
     function _dexKey(uint64 version, uint16 envVersion, bytes32 initcodeHash, bytes32 implArgsHash)
-        private view returns (bytes32)
+        private
+        view
+        returns (bytes32)
     {
         return keccak256(abi.encode(_TAG_DEX, chainUid, address(this), version, envVersion, initcodeHash, implArgsHash));
     }
 
     /// @dev `id` encodes in place, its three words (`contractClass, kind, version`).
-    function _classKey(ReleaseId calldata id, uint16 envVersion, bytes4 initSelector, bytes4 interfaceId,
-        bytes32 initcodeHash, bytes32 implArgsHash) private view returns (bytes32)
-    {
-        return keccak256(abi.encode(_TAG_CLASS, chainUid, address(this), id, envVersion, initSelector, interfaceId,
-            initcodeHash, implArgsHash));
+    function _classKey(
+        ReleaseId calldata id,
+        uint16 envVersion,
+        bytes4 initSelector,
+        bytes4 interfaceId,
+        bytes32 initcodeHash,
+        bytes32 implArgsHash
+    ) private view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                _TAG_CLASS,
+                chainUid,
+                address(this),
+                id,
+                envVersion,
+                initSelector,
+                interfaceId,
+                initcodeHash,
+                implArgsHash
+            )
+        );
     }
 
     // ------------------------------------------------------------------ environments
 
     function publishTokenEnv(TokenKind kind, uint16 envVersion, bytes32 chainUid_, IFactoryToken.Env calldata env)
-        external onlyAdmin onChain(chainUid_)
+        external
+        onlyAdmin
+        onChain(chainUid_)
     {
         emit EnvPublished(uint8(kind), envVersion, _publish(uint8(kind), envVersion, env));
     }
 
     function publishDexEnv(uint16 envVersion, bytes32 chainUid_, IFactoryToken.Env calldata env)
-        external onlyAdmin onChain(chainUid_)
+        external
+        onlyAdmin
+        onChain(chainUid_)
     {
         emit EnvPublished(DEX_DOMAIN, envVersion, _publish(DEX_DOMAIN, envVersion, env));
     }
@@ -403,9 +482,13 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         return _envs[DEX_DOMAIN][envVersion];
     }
 
-    function latestTokenEnvVersion(TokenKind kind) external view returns (uint16) { return _latestEnv[uint8(kind)]; }
+    function latestTokenEnvVersion(TokenKind kind) external view returns (uint16) {
+        return _latestEnv[uint8(kind)];
+    }
 
-    function latestDexEnvVersion() external view returns (uint16) { return _latestEnv[DEX_DOMAIN]; }
+    function latestDexEnvVersion() external view returns (uint16) {
+        return _latestEnv[DEX_DOMAIN];
+    }
 
     // ------------------------------------------------------------------ releases
 
@@ -423,14 +506,23 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         address existing = _releases[kind][version].implementation;
         if (existing != address(0)) revert VersionAlreadyRegistered(kind, version, existing);
         Release memory r;
-        (implementation, r) = _deploy(uint8(kind), envVersion, keccak256(abi.encode(kind, version)), initcode,
-            abi.encode(address(this), implArgs));
+        (implementation, r) = _deploy(
+            uint8(kind), envVersion, keccak256(abi.encode(kind, version)), initcode, abi.encode(address(this), implArgs)
+        );
         _checkImplementation(kind, implementation, _chainEnv(uint8(kind), envVersion));
         _checkModules(implementation, uint8(kind), envVersion);
         _releases[kind][version] = r;
         if (version > _latest[kind]) _latest[kind] = version;
-        emit ImplementationDeployed(kind, version, implementation, r.envVersion, r.envHash, keccak256(initcode),
-            implementation.codehash, r.usableFrom);
+        emit ImplementationDeployed(
+            kind,
+            version,
+            implementation,
+            r.envVersion,
+            r.envHash,
+            keccak256(initcode),
+            implementation.codehash,
+            r.usableFrom
+        );
     }
 
     function deprecateToken(TokenKind kind, uint64 version, bytes32 chainUid_, string calldata reason)
@@ -449,7 +541,9 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         emit TokenKindEnabled(kind, on);
     }
 
-    function tokenKindEnabled(TokenKind kind) public view returns (bool) { return _enabled & (1 << uint8(kind)) != 0; }
+    function tokenKindEnabled(TokenKind kind) public view returns (bool) {
+        return _enabled & (1 << uint8(kind)) != 0;
+    }
 
     function releaseOf(TokenKind kind, uint64 version) external view returns (Release memory) {
         return _releases[kind][version];
@@ -463,12 +557,16 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         return _releases[kind][version].deprecated;
     }
 
-    function latestVersion(TokenKind kind) external view returns (uint64) { return _latest[kind]; }
+    function latestVersion(TokenKind kind) external view returns (uint64) {
+        return _latest[kind];
+    }
 
     // ------------------------------------------------------------------ create
 
     function createToken(TokenKind kind, uint64 version, bytes calldata initArgs, bytes32 salt)
-        external configured returns (address)
+        external
+        configured
+        returns (address)
     {
         Release storage r = _releases[kind][version];
         address impl = r.implementation;
@@ -480,7 +578,9 @@ contract OpenFactory is IOpenFactory, UAAdmin {
 
     /// @notice The clone carries the kind's latest published env (the admin's values for this chain).
     function createTokenUnregistered(TokenKind kind, address implementation, bytes calldata initArgs, bytes32 salt)
-        external configured returns (address)
+        external
+        configured
+        returns (address)
     {
         if (uint8(kind) >= uint8(TokenKind.NORMAL_ZETHER)) revert UnregisteredConfidentialKind(kind);
         uint16 v = _latestEnv[uint8(kind)];
@@ -493,14 +593,18 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     /// @notice Where `creatorId`'s creation of `(contractClass, kind)` with `salt` is, on every chain (CREATE3): neither
     ///         the version, the implementation nor the env moves it (chain-neutral spec §4.2, §4.3).
     function predictAddress(bytes32 creatorId, uint16 contractClass, uint16 kind, bytes32 salt)
-        external view returns (address)
+        external
+        view
+        returns (address)
     {
         return Create3.addressOf(address(this), _s(creatorId, contractClass, kind, salt));
     }
 
     // ------------------------------------------------------------------ provenance
 
-    function isToken(address token) external view returns (bool) { return _rec[token].contractClass == CLASS_TOKEN; }
+    function isToken(address token) external view returns (bool) {
+        return _rec[token].contractClass == CLASS_TOKEN;
+    }
 
     function isRegisteredToken(address token) external view returns (bool) {
         Rec storage r = _rec[token];
@@ -542,16 +646,21 @@ contract OpenFactory is IOpenFactory, UAAdmin {
 
     // ------------------------------------------------------------------ DEX (CTR-DEX-24)
 
-    function deployDexImplementation(uint64 version, uint16 envVersion, bytes calldata initcode, bytes calldata implArgs,
-        bytes32 chainUid_) external onChain(chainUid_) returns (address implementation)
-    {
+    function deployDexImplementation(
+        uint64 version,
+        uint16 envVersion,
+        bytes calldata initcode,
+        bytes calldata implArgs,
+        bytes32 chainUid_
+    ) external onChain(chainUid_) returns (address implementation) {
         _useApproval(_dexKey(version, envVersion, keccak256(initcode), keccak256(implArgs)));
         if (version == 0) revert DexVersionUnknown(0);
         address existing = _dexReleases[version].implementation;
         if (existing != address(0)) revert DexVersionAlreadyRegistered(version, existing);
         Release memory r;
-        (implementation, r) = _deploy(DEX_DOMAIN, envVersion, keccak256(abi.encode("dex", version)), initcode,
-            abi.encode(address(this), implArgs));
+        (implementation, r) = _deploy(
+            DEX_DOMAIN, envVersion, keccak256(abi.encode("dex", version)), initcode, abi.encode(address(this), implArgs)
+        );
         if (!SigCheck.isContract(implementation)) revert ImplementationNotAContract(implementation);
         (bool ok, uint256 got) = _word(implementation, bytes4(keccak256("factory()")));
         if (!ok || got != uint256(uint160(address(this)))) revert ImplementationFactoryMismatch(implementation);
@@ -559,27 +668,42 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         _checkModules(implementation, DEX_DOMAIN, envVersion);
         _dexReleases[version] = r;
         if (version > _latestDex) _latestDex = version;
-        emit DexImplementationDeployed(version, implementation, r.envVersion, r.envHash, keccak256(initcode),
-            implementation.codehash, r.usableFrom);
+        emit DexImplementationDeployed(
+            version, implementation, r.envVersion, r.envHash, keccak256(initcode), implementation.codehash, r.usableFrom
+        );
     }
 
-    function dexReleaseOf(uint64 version) external view returns (Release memory) { return _dexReleases[version]; }
+    function dexReleaseOf(uint64 version) external view returns (Release memory) {
+        return _dexReleases[version];
+    }
 
     function dexImplementationOf(uint64 version) external view returns (address) {
         return _dexReleases[version].implementation;
     }
 
-    function deprecateDex(uint64 version, bytes32 chainUid_, string calldata reason) external onlyAdmin onChain(chainUid_) {
+    function deprecateDex(uint64 version, bytes32 chainUid_, string calldata reason)
+        external
+        onlyAdmin
+        onChain(chainUid_)
+    {
         if (_dexReleases[version].implementation == address(0)) revert DexVersionUnknown(version);
         _dexReleases[version].deprecated = true;
         emit DexImplementationDeprecated(version, reason);
     }
 
-    function isDexDeprecated(uint64 version) external view returns (bool) { return _dexReleases[version].deprecated; }
+    function isDexDeprecated(uint64 version) external view returns (bool) {
+        return _dexReleases[version].deprecated;
+    }
 
-    function latestDexVersion() external view returns (uint64) { return _latestDex; }
+    function latestDexVersion() external view returns (uint64) {
+        return _latestDex;
+    }
 
-    function createDex(uint64 version, bytes calldata initArgs, bytes32 salt) external configured returns (address dex) {
+    function createDex(uint64 version, bytes calldata initArgs, bytes32 salt)
+        external
+        configured
+        returns (address dex)
+    {
         Release storage r = _dexReleases[version];
         address impl = r.implementation;
         if (impl == address(0)) revert DexVersionUnknown(version);
@@ -593,7 +717,9 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         emit DexCreated(dex, creatorId, version, impl);
     }
 
-    function isDex(address dex) external view returns (bool) { return _rec[dex].contractClass == CLASS_DEX; }
+    function isDex(address dex) external view returns (bool) {
+        return _rec[dex].contractClass == CLASS_DEX;
+    }
 
     function dexVersionOf(address dex) external view returns (uint64) {
         Rec storage r = _rec[dex];
@@ -602,16 +728,22 @@ contract OpenFactory is IOpenFactory, UAAdmin {
 
     // ------------------------------------------------------------------ the generic catalogue (index spec §8, CTR-TOK-28)
 
-    function publishClassEnv(uint16 contractClass, uint16 kind, uint16 envVersion, bytes32 chainUid_,
-        IFactoryToken.Env calldata env) external onlyAdmin onChain(chainUid_)
-    {
+    function publishClassEnv(
+        uint16 contractClass,
+        uint16 kind,
+        uint16 envVersion,
+        bytes32 chainUid_,
+        IFactoryToken.Env calldata env
+    ) external onlyAdmin onChain(chainUid_) {
         uint32 d = _domain(contractClass, kind);
         bytes32 h = _publish(d, envVersion, env);
         emit ClassEnvPublished(contractClass, kind, envVersion, h);
     }
 
     function classEnvOf(uint16 contractClass, uint16 kind, uint16 envVersion)
-        external view returns (IFactoryToken.Env memory)
+        external
+        view
+        returns (IFactoryToken.Env memory)
     {
         return _envs[_domainOf(contractClass, kind)][envVersion];
     }
@@ -620,10 +752,15 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         return _latestEnv[_domainOf(contractClass, kind)];
     }
 
-    function deployImplementation(ReleaseId calldata id, uint16 envVersion, bytes4 initSelector, bytes4 interfaceId,
-        bytes calldata initcode, bytes calldata implArgs, bytes32 chainUid_) external onChain(chainUid_)
-        returns (address implementation)
-    {
+    function deployImplementation(
+        ReleaseId calldata id,
+        uint16 envVersion,
+        bytes4 initSelector,
+        bytes4 interfaceId,
+        bytes calldata initcode,
+        bytes calldata implArgs,
+        bytes32 chainUid_
+    ) external onChain(chainUid_) returns (address implementation) {
         _useApproval(_classKey(id, envVersion, initSelector, interfaceId, keccak256(initcode), keccak256(implArgs)));
         uint32 d = _domain(id.contractClass, id.kind);
         if (id.version == 0) revert ReleaseUnknown(id.contractClass, id.kind, 0);
@@ -638,9 +775,14 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     /// @dev The generic release `id`: `CREATE2` of `initcode ‖ abi.encode(id, factory, implArgs)` under the salt
     ///      `keccak256(abi.encode("release", id))`, then its checks (`_checkRelease`) and its body modules
     ///      (`_checkModules`, CTR-TOK-30: every class's release, owner 2026-11-10).
-    function _newRelease(uint32 d, ReleaseId calldata id, uint16 envVersion, bytes4 interfaceId, bytes calldata initcode,
-        bytes calldata implArgs) private returns (Release memory r)
-    {
+    function _newRelease(
+        uint32 d,
+        ReleaseId calldata id,
+        uint16 envVersion,
+        bytes4 interfaceId,
+        bytes calldata initcode,
+        bytes calldata implArgs
+    ) private returns (Release memory r) {
         {
             bytes memory args = abi.encode(id, address(this), implArgs);
             (, r) = _deploy(d, envVersion, keccak256(abi.encode("release", id)), initcode, args);
@@ -651,19 +793,36 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     }
 
     /// @dev A checked generic release into the catalogue: its row, the latest version, the class and kind lists.
-    function _register(uint32 d, ReleaseId calldata id, Release memory r, bytes4 initSelector, bytes4 interfaceId,
-        bytes32 initcodeHash) private
-    {
-        _classReleases[d][id.version] =
-            ClassRelease(r.implementation, r.envVersion, r.envHash, r.usableFrom, false, initSelector, interfaceId);
+    function _register(
+        uint32 d,
+        ReleaseId calldata id,
+        Release memory r,
+        bytes4 initSelector,
+        bytes4 interfaceId,
+        bytes32 initcodeHash
+    ) private {
+        _classReleases[d][id.version] = ClassRelease(
+            r.implementation, r.envVersion, r.envHash, r.usableFrom, false, initSelector, interfaceId
+        );
         if (id.version > _latestClass[d]) _latestClass[d] = id.version;
         if (_kinds[id.contractClass].length == 0) _classes.push(id.contractClass);
         if (!_kindListed[d]) {
             _kindListed[d] = true;
             _kinds[id.contractClass].push(id.kind);
         }
-        emit ReleaseDeployed(id.contractClass, id.kind, id.version, r.implementation, r.envVersion, r.envHash,
-            initcodeHash, r.implementation.codehash, initSelector, interfaceId, r.usableFrom);
+        emit ReleaseDeployed(
+            id.contractClass,
+            id.kind,
+            id.version,
+            r.implementation,
+            r.envVersion,
+            r.envHash,
+            initcodeHash,
+            r.implementation.codehash,
+            initSelector,
+            interfaceId,
+            r.usableFrom
+        );
     }
 
     function deprecateRelease(ReleaseId calldata id, bytes32 chainUid_, string calldata reason)
@@ -698,12 +857,18 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         return _classKindOn[_domainOf(contractClass, kind)];
     }
 
-    function classes() external view returns (uint16[] memory) { return _classes; }
+    function classes() external view returns (uint16[] memory) {
+        return _classes;
+    }
 
-    function kindsOf(uint16 contractClass) external view returns (uint16[] memory) { return _kinds[contractClass]; }
+    function kindsOf(uint16 contractClass) external view returns (uint16[] memory) {
+        return _kinds[contractClass];
+    }
 
     function createInstance(ReleaseId calldata id, bytes32 salt, bytes calldata initCall)
-        external configured returns (address instance)
+        external
+        configured
+        returns (address instance)
     {
         (address impl, IFactoryToken.ChainEnv memory e) = _usableRelease(id, initCall);
         bytes32 creatorId = _creatorId();
@@ -715,14 +880,18 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     /// @dev Steps 1-2 of index spec §8.4: the release exists, is not deprecated, is usable, its `(class, kind)` on; the
     ///      call is its catalogued initializer.
     function _usableRelease(ReleaseId calldata id, bytes calldata initCall)
-        private view returns (address impl, IFactoryToken.ChainEnv memory e)
+        private
+        view
+        returns (address impl, IFactoryToken.ChainEnv memory e)
     {
         uint32 d = _domain(id.contractClass, id.kind);
         ClassRelease storage r = _classReleases[d][id.version];
         impl = r.implementation;
         if (impl == address(0)) revert ReleaseUnknown(id.contractClass, id.kind, id.version);
         if (r.deprecated) revert ReleaseIsDeprecated(id.contractClass, id.kind, id.version);
-        if (block.timestamp < r.usableFrom) revert ReleaseNotYetUsable(id.contractClass, id.kind, id.version, r.usableFrom);
+        if (block.timestamp < r.usableFrom) {
+            revert ReleaseNotYetUsable(id.contractClass, id.kind, id.version, r.usableFrom);
+        }
         if (!_classKindOn[d]) revert ClassKindDisabled(id.contractClass, id.kind);
         bytes4 sel = r.initSelector;
         bytes4 got = initCall.length < 4 ? bytes4(0) : bytes4(initCall[:4]);
@@ -753,8 +922,10 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     ///      record and `InstanceCreated`.
     function _recordInstance(address instance, bytes32 creatorId, ReleaseId calldata id, address impl) private {
         (bool got, FactoryInfo memory fi) = _factoryInfo(instance);
-        if (!got || !fi.initialized || fi.factory != address(this) || fi.contractClass != id.contractClass
-            || fi.kind != id.kind || fi.version != id.version) revert InstanceInfoMismatch(instance);
+        if (
+            !got || !fi.initialized || fi.factory != address(this) || fi.contractClass != id.contractClass
+                || fi.kind != id.kind || fi.version != id.version
+        ) revert InstanceInfoMismatch(instance);
         if (fi.chainUid != chainUid) revert ChainUidMismatch(chainUid, fi.chainUid);
         _index(instance, creatorId, id.contractClass, id.kind, id.version);
         emit InstanceCreated(instance, creatorId, id.contractClass, id.kind, id.version, impl);
@@ -768,27 +939,38 @@ contract OpenFactory is IOpenFactory, UAAdmin {
 
     // ------------------------------------------------------------------ the index (CTR-TOK-27)
 
-    function infoOf(address c) external view returns (Created memory) { return _created(c); }
+    function infoOf(address c) external view returns (Created memory) {
+        return _created(c);
+    }
 
     function contractsPage(uint16 contractClass, uint256 from, uint256 n)
-        external view returns (Created[] memory, uint256)
+        external
+        view
+        returns (Created[] memory, uint256)
     {
         return _page(_all[_known(contractClass)], from, n);
     }
 
     function contractsOfCreator(bytes32 creatorId, uint16 contractClass, uint256 from, uint256 n)
-        external view returns (Created[] memory, uint256)
+        external
+        view
+        returns (Created[] memory, uint256)
     {
         return _page(_byCreator[creatorId][_known(contractClass)], from, n);
     }
 
     // ------------------------------------------------------------------ internal
 
-    function _publish(uint32 domain, uint16 envVersion, IFactoryToken.Env calldata env) private returns (bytes32 envHash) {
+    function _publish(uint32 domain, uint16 envVersion, IFactoryToken.Env calldata env)
+        private
+        returns (bytes32 envHash)
+    {
         if (envVersion == 0) revert EnvUnknown(domain, 0);
         if (_envHash[domain][envVersion] != bytes32(0)) revert EnvAlreadyPublished(domain, envVersion);
-        if (env.libs.length != env.libCodeHashes.length || env.libs.length > MAX_LIBS
-            || env.deps.length > ChainEnvCode.MAX_DEPS || env.params.length > ChainEnvCode.MAX_PARAMS) revert EnvInvalid();
+        if (
+            env.libs.length != env.libCodeHashes.length || env.libs.length > MAX_LIBS
+                || env.deps.length > ChainEnvCode.MAX_DEPS || env.params.length > ChainEnvCode.MAX_PARAMS
+        ) revert EnvInvalid();
         // An empty pin (0: no account; keccak256(""): no code) checks nothing (review 5g-Z2 P2-1).
         for (uint256 i; i < env.libCodeHashes.length; ++i) {
             bytes32 h = env.libCodeHashes[i];
@@ -815,14 +997,16 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     /// @dev The instance env of `domain`'s env `v`: this factory's `chainUid` and router, the admin's values.
     function _chainEnv(uint32 domain, uint16 v) private view returns (IFactoryToken.ChainEnv memory c) {
         IFactoryToken.Env storage e = _envs[domain][v];
-        return IFactoryToken.ChainEnv(chainUid, e.registry, govRouter, e.smartKeyAccountImpl, e.hedera, e.deps, e.params);
+        return
+            IFactoryToken.ChainEnv(chainUid, e.registry, govRouter, e.smartKeyAccountImpl, e.hedera, e.deps, e.params);
     }
 
     /// @dev The domain's env `v` (named by the deploy's caller, bound by its approval): every linked library's code hash, then `CREATE2` of
     ///      `initcode ‖ args` (chain-neutral: no env in it); a constructor's revert is bubbled, an empty failure is
     ///      `DeployFailed`.
     function _deploy(uint32 domain, uint16 v, bytes32 salt, bytes calldata initcode, bytes memory args)
-        private returns (address at, Release memory r)
+        private
+        returns (address at, Release memory r)
     {
         if (_envHash[domain][v] == bytes32(0)) revert EnvUnknown(domain, v);
         IFactoryToken.Env storage env = _envs[domain][v];
@@ -848,7 +1032,8 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     /// @dev Code, `kind()`, `factory()`, each read by staticcall (a missing or short answer refused), then
     ///      `validateEnv(env)`.
     function _checkImplementation(TokenKind kind, address implementation, IFactoryToken.ChainEnv memory env)
-        private view
+        private
+        view
     {
         if (!SigCheck.isContract(implementation)) revert ImplementationNotAContract(implementation);
         (bool ok, uint256 got) = _word(implementation, IFactoryToken.kind.selector);
@@ -917,9 +1102,14 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     /// @dev The CREATE3 instance of `(creatorId, contractClass, kind, salt)`: a clone of `impl` with `env` appended.
     ///      Salt used (`SaltAlreadyUsed`): the proxy exists, the address has a record or code. `InstanceNotCreated`: the
     ///      proxy's `CREATE` failed (it answers success there, Fable P2-5).
-    function _instance(bytes32 creatorId, uint16 contractClass, uint16 kind, bytes32 salt, address impl,
-        IFactoryToken.ChainEnv memory env) private returns (address c)
-    {
+    function _instance(
+        bytes32 creatorId,
+        uint16 contractClass,
+        uint16 kind,
+        bytes32 salt,
+        address impl,
+        IFactoryToken.ChainEnv memory env
+    ) private returns (address c) {
         bytes32 s = _s(creatorId, contractClass, kind, salt);
         address proxy = Create3.proxyOf(address(this), s);
         address predicted = Create3.instanceOf(proxy);
@@ -967,12 +1157,15 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     ///      `factoryInfo()` 192 B naming this factory, its own id, initialized; ERC-165 for `0x01ffc9a7` and
     ///      `interfaceId`, not `0xffffffff`; `validateEnv`.
     function _checkRelease(ReleaseId calldata id, address impl, bytes4 interfaceId, IFactoryToken.ChainEnv memory env)
-        private view
+        private
+        view
     {
         if (!SigCheck.isContract(impl)) revert ImplementationNotAContract(impl);
         (bool ok, FactoryInfo memory fi) = _factoryInfo(impl);
-        if (!ok || fi.factory != address(this) || fi.contractClass != id.contractClass || fi.kind != id.kind
-            || fi.version != id.version || !fi.initialized) revert ReleaseInfoMismatch(impl);
+        if (
+            !ok || fi.factory != address(this) || fi.contractClass != id.contractClass || fi.kind != id.kind
+                || fi.version != id.version || !fi.initialized
+        ) revert ReleaseInfoMismatch(impl);
         if (!_supports(impl, 0x01ffc9a7)) revert InterfaceNotSupported(impl, 0x01ffc9a7);
         if (!_supports(impl, interfaceId)) revert InterfaceNotSupported(impl, interfaceId);
         if (_supports(impl, 0xffffffff)) revert InterfaceNotSupported(impl, 0xffffffff);
@@ -999,14 +1192,18 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     }
 
     function _page(address[] storage l, uint256 from, uint256 n)
-        private view returns (Created[] memory page, uint256 total)
+        private
+        view
+        returns (Created[] memory page, uint256 total)
     {
         if (n > MAX_PAGE) revert PageTooLarge(n);
         total = l.length;
         uint256 m = from >= total ? 0 : total - from;
         if (m > n) m = n;
         page = new Created[](m);
-        for (uint256 i; i < m; ++i) page[i] = _created(l[from + i]);
+        for (uint256 i; i < m; ++i) {
+            page[i] = _created(l[from + i]);
+        }
     }
 
     function _word(address target, bytes4 sel) private view returns (bool ok, uint256 w) {
@@ -1020,9 +1217,14 @@ contract OpenFactory is IOpenFactory, UAAdmin {
     ///      `initArgs`, the `chainUid()` post-check (an unregistered implementation's code is unvetted: what it reports as
     ///      its domain salt must be this factory's), then the record and its lists, the leg index and the event from the
     ///      token's own views (no `admin()` read: 3r R1).
-    function _create(TokenKind kind, uint64 version, address impl, uint16 envVersion, bytes calldata initArgs, bytes32 salt)
-        private returns (address token)
-    {
+    function _create(
+        TokenKind kind,
+        uint64 version,
+        address impl,
+        uint16 envVersion,
+        bytes calldata initArgs,
+        bytes32 salt
+    ) private returns (address token) {
         if (!tokenKindEnabled(kind)) revert KindDisabled(kind);
         bytes32 creatorId = _creatorId();
         token = _instance(creatorId, CLASS_TOKEN, uint16(kind), salt, impl, _chainEnv(uint8(kind), envVersion));

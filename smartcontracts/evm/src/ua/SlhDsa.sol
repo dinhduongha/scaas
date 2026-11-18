@@ -69,7 +69,9 @@ library SlhDsaSha2128s {
 
     /// Algorithm 17 `fors_pkFromSig` then `T_k` (internal: the gas test composes the worst case from it).
     function forsPk(bytes calldata sig, uint256 md, uint256 tree, uint256 leaf, uint256 b, uint256 t)
-        internal view returns (uint256 pk)
+        internal
+        view
+        returns (uint256 pk)
     {
         uint256 base = _adrs(0, tree, FORS_TREE, leaf);
         assembly ("memory-safe") {
@@ -89,8 +91,14 @@ library SlhDsaSha2128s {
                     ti := shr(1, ti) // (ti - odd) / 2 == ti >> 1
                     mstore(add(b, 54), or(or(base, shl(32, add(j, 1))), ti))
                     switch odd
-                    case 0 { mstore(add(b, 86), nd) mstore(add(b, 102), au) }
-                    default { mstore(add(b, 86), au) mstore(add(b, 102), nd) }
+                    case 0 {
+                        mstore(add(b, 86), nd)
+                        mstore(add(b, 102), au)
+                    }
+                    default {
+                        mstore(add(b, 86), au)
+                        mstore(add(b, 102), nd)
+                    }
                     if iszero(staticcall(gas(), 2, b, 118, 0, 0x20)) { revert(0, 0) }
                     nd := and(mload(0), HI16)
                 }
@@ -107,9 +115,16 @@ library SlhDsaSha2128s {
 
     /// Algorithm 11 `xmss_pkFromSig` (with Algorithm 8 `wots_pkFromSig` inline) at hypertree layer `layer`; the work
     /// is largest for `m = 0` (510 chain steps).
-    function xmssPk(bytes calldata sig, uint256 off, uint256 m, uint256 layer, uint256 tree, uint256 leaf,
-        uint256 b, uint256 t) internal view returns (uint256 node)
-    {
+    function xmssPk(
+        bytes calldata sig,
+        uint256 off,
+        uint256 m,
+        uint256 layer,
+        uint256 tree,
+        uint256 leaf,
+        uint256 b,
+        uint256 t
+    ) internal view returns (uint256 node) {
         uint256 chainBase = _adrs(layer, tree, WOTS_HASH, leaf);
         uint256 pkAdrs = _adrs(layer, tree, WOTS_PK, leaf);
         uint256 treeBase = _adrs(layer, tree, TREE, 0);
@@ -145,8 +160,14 @@ library SlhDsaSha2128s {
                 ti := shr(1, ti)
                 mstore(add(b, 54), or(or(treeBase, shl(32, add(k, 1))), ti))
                 switch odd
-                case 0 { mstore(add(b, 86), node) mstore(add(b, 102), au) }
-                default { mstore(add(b, 86), au) mstore(add(b, 102), node) }
+                case 0 {
+                    mstore(add(b, 86), node)
+                    mstore(add(b, 102), au)
+                }
+                default {
+                    mstore(add(b, 86), au)
+                    mstore(add(b, 102), node)
+                }
                 if iszero(staticcall(gas(), 2, b, 118, 0, 0x20)) { revert(0, 0) }
                 node := and(mload(0), HI16)
             }
