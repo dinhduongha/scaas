@@ -38,6 +38,7 @@ fn this_build() -> Vec<&'static str> {
         (cfg!(feature = "admin"), "admin"),
         (cfg!(feature = "mlock"), "mlock"),
         (cfg!(feature = "file-store"), "file-store"),
+        (cfg!(feature = "classical-roots"), "classical-roots"),
     ];
     all.iter().filter(|(on, _)| *on).map(|(_, f)| *f).collect()
 }

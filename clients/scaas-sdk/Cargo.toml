@@ -10,8 +10,8 @@ description = "SCaaS SDK: the one API apps call (CLI-SDK-01). Signs only through
 
 # docs/clients/scaas-sdk.md (CLI-SDK-*), spec docs/superpowers/specs/2026-11-17-scaas-sdk.md §3.2, §3.3. Each feature's bit is
 # the table's (`Sdk::features`, src/lib.rs): appended only, never reused (bit 12, the withdrawn `chat`, stays unused).
-# Not defined yet, by the plan: `native-networks` (3) and `raw-native` (23) in T19, `classical-roots` (24) in T6, `app-core` (26)
-# and `pqchat-records` (27) in T21.
+# Not defined yet, by the plan: `native-networks` (3) and `raw-native` (23) in T19, `app-core` (26) and `pqchat-records` (27) in
+# T21.
 [features]
 default = ["vault", "account", "wallet", "file-store", "mlock"]
 vault = ["scaas-ua/wallet"]
@@ -35,6 +35,8 @@ sui = ["scaas-rpc/sui"]
 cosmos = ["scaas-rpc/cosmos"]
 ton = ["scaas-rpc/ton"]
 file-store = ["vault"]
+# roots (c) and (d) (spec §6.6; T6): scaas-ua's Argon2id roots
+classical-roots = ["vault", "scaas-ua/roots"]
 opaque-calls = []
 # the Dart adapter (src/frb.rs): the platform interfaces as records of async closures; no dependency of its own
 frb = []
@@ -72,3 +74,7 @@ opt-level = 3
 [[test]]
 name = "sets"
 required-features = ["pqz"]
+
+[[test]]
+name = "roots"
+required-features = ["classical-roots"]

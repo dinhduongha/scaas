@@ -259,6 +259,7 @@ fn features_bits_match_the_build() {
         (cfg!(feature = "admin"), bits::ADMIN),
         (cfg!(feature = "file-store"), bits::FILE_STORE),
         (cfg!(feature = "mlock"), bits::MLOCK),
+        (cfg!(feature = "classical-roots"), bits::CLASSICAL_ROOTS),
     ];
     for (on, bit) in expect {
         assert_eq!(f & bit != 0, on, "bit {bit:#x}");
@@ -274,7 +275,8 @@ fn features_bits_match_the_build() {
             bits::DEX,
             bits::ADMIN,
             bits::MLOCK,
-            bits::FILE_STORE
+            bits::FILE_STORE,
+            bits::CLASSICAL_ROOTS
         ],
         [
             1 << 0,
@@ -285,7 +287,8 @@ fn features_bits_match_the_build() {
             1 << 10,
             1 << 11,
             1 << 13,
-            1 << 22
+            1 << 22,
+            1 << 24
         ]
     );
     let sets = [

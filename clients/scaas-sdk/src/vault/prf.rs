@@ -21,7 +21,7 @@ fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
-fn unhex(s: &str) -> Option<Vec<u8>> {
+pub(crate) fn unhex(s: &str) -> Option<Vec<u8>> {
     (0..s.len())
         .step_by(2)
         .map(|i| s.get(i..i + 2).and_then(|h| u8::from_str_radix(h, 16).ok()))

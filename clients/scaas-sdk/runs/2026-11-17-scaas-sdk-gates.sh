@@ -16,7 +16,7 @@ SUMMARY=$R/2026-11-17-scaas-sdk-summary.txt
 export PATH="$HOME/.foundry/bin:$PATH"
 C="--locked --offline ${J:--j2}"
 cap="$W/scripts/capped"
-F="vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin"
+F="vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots"
 SETS_CMD=""
 for s in n2048-kmax1024 n2560-kmax16384 n2816-kmax65536; do
   m="--no-default-features --features vault,account,wallet,pqz,pqz-set-$s"

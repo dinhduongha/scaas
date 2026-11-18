@@ -85,7 +85,7 @@ session-only hidden set: nothing about it is written, emitted or logged; its ope
 Removing a seed whose backup is `pending` needs a second confirmation. A seed import may check one word at a time against the BIP-39 list inside `ua-rs` (`word_in_list`, the word as `SecretBytes`); no list leaves the SDK (owner 2026-11-17, "OK, all four points as proposed").
 
 <a id="CLI-SDK-05"></a>**CLI-SDK-05** — **A seed set derived from a classical key is marked classical-rooted and may carry every
-kind** (owner 2026-11-11; SPECIFIED). Root (c), an external EVM wallet's EIP-712 signature over typed data `ua-rs` builds: signed twice
+kind** (owner 2026-11-11; BUILT in plan T6). Root (c), an external EVM wallet's EIP-712 signature over typed data `ua-rs` builds: signed twice
 and required byte-equal, 65 bytes (a 64-byte compact form converted explicitly), `r` and `s` in range, recovering to the named account,
 low-s, `r ‖ s` only, with a user-chosen derivation passphrase of at least 10 code points after NFKC, mandatory; no RPC call names the
 origin. Root (d), a secp256k1 EVM private key: `KDF(privkey, passphrase, label, index)`, the passphrase empty or at least 10 code
@@ -94,8 +94,9 @@ points, `index` the seed-set number. Both are built in `ua-rs`; a failed check i
 inherited by its children); it may hold PQ, PQZ and KEM keys (the owner accepted the risk that they are only as strong as the
 passphrase against a quantum attacker), and the UI says so when such a key is made. The mark is advisory across devices: the same
 words imported elsewhere carry none. The exact constructions follow the owner's answers of 2026-11-17 (spec §25 Q-K4: Argon2id `0x13`,
-`m = 128 MiB`, `t = 3`, `p = 4`; Q-K5; Q-K18); until plan T6 builds them with their vectors the feature that holds both calls
-does not exist in any build.
+`m = 128 MiB`, `t = 3`, `p = 4`; Q-K5; Q-K18), with the labels `scaas.sdk.root.eoa-sig.v1` / `scaas.sdk.root.raw-key.v1`, root (d)'s
+empty-passphrase HKDF salt SHA-256 of its label and the numbers as 4-byte big-endian (plan T6, pinned by
+`smartcontracts/vectors/keys/roots.json`); both calls are in the feature `classical-roots` (bit 24, off by default; BUILT, UNAUDITED).
 
 <a id="CLI-SDK-06"></a>**CLI-SDK-06** — **Seeds unlock and lock one by one; changes are re-sealed under the same data key;
 biometrics only gate** (SPECIFIED). A seed unlocks with its vault passphrase, its passkey's PRF output or a platform secret (the

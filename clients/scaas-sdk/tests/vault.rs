@@ -518,17 +518,20 @@ async fn vault_never_formatted() {
     assert!(seen > 5, "control: the sources were read");
 }
 
+/// Plan T6 replaces T4's `classical_roots_absent`: the feature exists (bit 24), off by default (spec §3.3).
 #[test]
-fn classical_roots_absent() {
+fn classical_roots_defined_off_by_default() {
     let manifest = std::fs::read_to_string(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"),
     )
     .unwrap();
-    assert!(
-        !manifest.contains("classical-roots ="),
-        "the feature does not exist before plan T6"
-    );
-    assert!(manifest.contains("\nvault ="), "control");
+    assert!(manifest.contains("\nclassical-roots = ["));
+    let default = manifest
+        .lines()
+        .find(|l| l.starts_with("default = "))
+        .unwrap();
+    assert!(!default.contains("classical-roots"), "{default}");
+    assert!(default.contains("\"vault\""), "control");
 }
 
 #[cfg(feature = "file-store")]
@@ -717,4 +720,24 @@ async fn passphrase_not_retained_after_unlock() {
         scaas_ua::wallet::secret_read(sid, &mut buf).is_err(),
         "gone (zeroed and freed) once dropped"
     );
+}
+
+/// One secret object given as both the vault and the BIP-39 passphrase opens (read once: a second lock of the same secret
+/// would wait on itself), as two equal secrets do (the control).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hidden_set_one_secret_for_both_passphrases() {
+    let (s, _) = sdk().await;
+    let id = import(&s, "Main", REPO).await.unwrap();
+    let p = sec(PASS);
+    let one = s
+        .vault()
+        .open_hidden(id.clone(), Unlock::Passphrase(p.clone()), p)
+        .await
+        .unwrap();
+    let two = s
+        .vault()
+        .open_hidden(id.clone(), Unlock::Passphrase(sec(PASS)), sec(PASS))
+        .await
+        .unwrap();
+    assert_ne!(one.id, two.id, "each opening its own session id");
 }

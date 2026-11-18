@@ -38,7 +38,7 @@ pub struct NewSeed {
 }
 
 /// The words of a seed made here: revealed once, a three-word check, then forgotten (`scaas-ua`'s `SeedBackup`, CLI-SGN-11).
-pub struct SeedBackup(Mutex<scaas_ua::wallet::SeedBackup>);
+pub struct SeedBackup(pub(crate) Mutex<scaas_ua::wallet::SeedBackup>);
 
 impl SeedBackup {
     fn with<R>(&self, f: impl FnOnce(&mut scaas_ua::wallet::SeedBackup) -> R) -> R {

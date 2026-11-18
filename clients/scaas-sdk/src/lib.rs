@@ -61,6 +61,7 @@ pub mod bits {
     pub const COSMOS: u64 = 1 << 20;
     pub const TON: u64 = 1 << 21;
     pub const FILE_STORE: u64 = 1 << 22;
+    pub const CLASSICAL_ROOTS: u64 = 1 << 24;
     pub const OPAQUE_CALLS: u64 = 1 << 25;
 }
 
@@ -101,6 +102,7 @@ pub fn features() -> u64 {
         (cfg!(feature = "cosmos"), COSMOS),
         (cfg!(feature = "ton"), TON),
         (cfg!(feature = "file-store"), FILE_STORE),
+        (cfg!(feature = "classical-roots"), CLASSICAL_ROOTS),
         (cfg!(feature = "opaque-calls"), OPAQUE_CALLS),
     ];
     on.iter()

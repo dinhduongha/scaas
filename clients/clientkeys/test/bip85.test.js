@@ -38,11 +38,12 @@ test('bip85.json: children 0-2 of the main set; another parent passphrase, other
   assert.ok(v.manifests[1].json.endsWith(',"bip85Next":1}'));
 });
 
-test('the generator reproduces bip85.json byte for byte', () => {
+test('the generator reproduces bip85.json and roots.json byte for byte', () => {
   const out = mkdtempSync(join(tmpdir(), 'keys-vectors-'));
   try {
     execFileSync(process.execPath, [fileURLToPath(new URL('../scripts/keys-vectors.mjs', import.meta.url)), out]);
     assert.equal(readFileSync(join(out, 'bip85.json'), 'utf8'), readFileSync(FILE, 'utf8'));
+    assert.equal(readFileSync(join(out, 'roots.json'), 'utf8'), readFileSync(join(FILE, '../roots.json'), 'utf8'));
   } finally {
     rmSync(out, { recursive: true, force: true });
   }

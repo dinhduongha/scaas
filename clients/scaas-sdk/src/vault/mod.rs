@@ -4,10 +4,14 @@
 //! container kept as `keystore.prev`, and the anchor `keystore.head` that detects an older container put back.
 pub mod keystore;
 mod prf;
+#[cfg(feature = "classical-roots")]
+mod roots;
 mod seeds;
 pub mod store;
 mod unlock;
 
+#[cfg(feature = "classical-roots")]
+pub use roots::{DeriveFromKey, DeriveFromSignature};
 pub use unlock::{SessionSet, Unlock};
 
 pub(crate) use seeds::OpenSeed;

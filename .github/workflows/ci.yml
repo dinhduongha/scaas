@@ -670,6 +670,9 @@ jobs:
           - cell: pqz-n2048-vectors
             features: --no-default-features --features wallet,zether,pqz,pqz-set-n2048-kmax1024,mlock,vectors
             tests: --test facade_pqz_state --test facade_pqz --test pqz_backup --test no_oracle
+          - cell: roots
+            features: --no-default-features --features roots
+            tests: --test roots
     defaults:
       run:
         working-directory: clients/ua-rs

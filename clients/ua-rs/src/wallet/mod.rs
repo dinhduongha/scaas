@@ -37,6 +37,8 @@ pub mod pairing;
 mod pairing;
 mod manifest;
 mod policy;
+#[cfg(feature = "roots")]
+pub mod roots;
 mod secret;
 mod service_pull;
 #[cfg(feature = "vectors")]

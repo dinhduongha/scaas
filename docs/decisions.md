@@ -10952,10 +10952,18 @@ Change (owner 2026-11-17, "OK, all four points as proposed", on the `scaas-tui` 
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-05 · superseded-by: —
 
 **Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-05).) Root (c) EOA signature over typed data `ua-rs` builds, twice and equal, checked, with a mandatory passphrase of 10 or more; root (d) `KDF(privkey, passphrase, label, index)` for a secp256k1 EVM key, passphrase empty or 10 or more, `index` the set number; built in `ua-rs`; `classical-rooted` authenticated and inherited, advisory across devices; PQ, PQZ and KEM keys allowed with the risk shown; the feature absent until the constructions are fixed.
-**Status.** SPECIFIED; the derivations wait for the owner's answer to research decisions 4, 5 and 18. UNAUDITED.
+**Status.** BUILT (plan T6, the Change below; before it: SPECIFIED, the derivations waiting for research decisions 4, 5 and 18). UNAUDITED.
 **Why.** Owner 2026-11-11: the risk is accepted; the passphrase at least 10 characters for (c); (d) offered with the passphrase optional. A feature absent until then (Fable F30), the EVM-key and index reading of root (d) (F39) are controller calls.
 **Cost if wrong.** A classical-rooted set shown as post-quantum strong; or a construction frozen into every key before the owner fixed it.
 **Source.** Owner 2026-11-11 "chỉ mạnh ngang passphrase => Chấp nhận rủi ro này. Yêu cầu passphrase phải đủ dài (10 ký tự) trong trường hợp này. Hoặc có lựa chọn dùng seed' = KDF(privkey, passphrase, nhãn, index)."; research [sdk-keys-and-derivation.md](research/sdk-keys-and-derivation.md) §5, §14; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §6.6.
+
+**Change (2026-11-18, plan T6; status: BUILT, UNAUDITED; the details spec §25 left to the task).** Old: Q-K18's label string and
+fixed salt constant open, the feature `classical-roots` absent. New: tags `scaas.sdk.root.eoa-sig.v1` (root (c); its keccak256 is
+the derivation domain's `salt`) and `scaas.sdk.root.raw-key.v1` (root (d)); root (d) with an empty passphrase takes the HKDF salt
+SHA-256(tag); `set` / `index` as 4-byte big-endian in the HKDF info; root (c)'s `v` read in {0, 1, 27, 28}; built in clientkeys
+(`rootFromEoaSignature`, `rootFromKey`), `ua-rs` (feature `roots`, RustCrypto `argon2` =0.5.3) and the SDK (feature
+`classical-roots`, bit 24), pinned by `smartcontracts/vectors/keys/roots.json`. Source: research §5.5 as the owner's answers
+(spec §25) fixed it; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §6.6.
 
 ### CLI-SDK-06 — Seeds unlock and lock one by one; changes are re-sealed under the same data key; biometrics only gate
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-06 · superseded-by: —
