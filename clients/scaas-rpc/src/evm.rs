@@ -128,6 +128,8 @@ pub struct BlockGas {
     pub limit: u64,
     /// EIP-7928's `blockAccessListHash` is in the header: the Amsterdam two-dimensional gas model applies.
     pub amsterdam: bool,
+    /// The header's `baseFeePerGas` (EIP-1559); `None` on a chain without one, which takes legacy transactions.
+    pub base_fee: Option<u128>,
 }
 
 /// What several pools of one chain share: the highest block seen from the first endpoint, the total of failover answers.
@@ -427,6 +429,9 @@ impl EvmPool {
         Ok(BlockGas {
             limit,
             amsterdam: b.get("blockAccessListHash").is_some(),
+            base_fee: b["baseFeePerGas"]
+                .as_str()
+                .and_then(|f| u128::from_str_radix(f.trim_start_matches("0x"), 16).ok()),
         })
     }
 

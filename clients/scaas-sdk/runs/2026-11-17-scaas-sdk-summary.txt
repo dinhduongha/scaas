@@ -16,9 +16,9 @@ ua-clippy | 24991fc64 | 0 | -; tree dirty
 ua-test | 24991fc64 | 0 | 535 passed, 0 failed, 3 ignored (55 binaries); tree dirty
 sdk-min | 523479bb7 | 0 | 63 passed, 0 failed, 0 ignored (8 binaries); tree dirty
 features | 523479bb7 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-rpc-test | 523479bb7 | 0 | 161 passed, 0 failed, 10 ignored (16 binaries); tree dirty
-sdk-clippy | f56800650 | 0 | -; tree dirty
-sdk-test | f56800650 | 0 | 105 passed, 0 failed, 1 ignored (12 binaries); tree dirty
-docs | f56800650 | 0 | -; tree dirty
-sdk-wasm | f56800650 | 0 | -; tree dirty
-bind-dart | f56800650 | 0 | dart: +8:; tree dirty
+sdk-clippy | 87cf36103 | 0 | -; tree dirty
+sdk-test | 87cf36103 | 0 | 107 passed, 0 failed, 1 ignored (12 binaries); tree dirty
+sdk-wasm | 87cf36103 | 0 | -; tree dirty
+rpc-test | 87cf36103 | 0 | 161 passed, 0 failed, 10 ignored (16 binaries); tree dirty
+bind-dart | 87cf36103 | 0 | dart: +8:; tree dirty
+docs | 87cf36103 | 0 | -; tree dirty

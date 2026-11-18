@@ -41,8 +41,10 @@ pub enum Event {
 pub enum OpState {
     /// the executed event of the operation's digest at or below the final block
     Landed { block: u64, hash: String },
-    /// the lane's nonce spent at the final block without that event
+    /// the lane's nonce spent at the final block without that event; a replaced native send
     Consumed,
+    /// an EVM native send final at or below the final block and reverted (owner 2026-11-18, ruling 4; the node's `reverted`)
+    Reverted { block: u64, hash: String },
     /// `validUntil` below the final block's timestamp while the nonce is unspent
     Expired,
     /// anything else, with what is known (never an end)

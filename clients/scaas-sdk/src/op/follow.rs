@@ -34,6 +34,10 @@ fn stored(row: &Row) -> OpState {
             block: *block,
             hash: hash.clone(),
         },
+        ("reverted", Some((block, hash))) => OpState::Reverted {
+            block: *block,
+            hash: hash.clone(),
+        },
         ("consumed", _) => OpState::Consumed,
         ("expired", _) => OpState::Expired,
         _ => OpState::InFlight {
@@ -146,6 +150,10 @@ impl Op {
                             row.state = "landed".into();
                             row.landed = Some((*block, hash.clone()));
                         }
+                        OpState::Reverted { block, hash } => {
+                            row.state = "reverted".into();
+                            row.landed = Some((*block, hash.clone()));
+                        }
                         OpState::Consumed => row.state = "consumed".into(),
                         OpState::Expired => row.state = "expired".into(),
                         OpState::InFlight { detail } => row.detail = format!("{detail:?}"),
@@ -163,7 +171,8 @@ impl Op {
 }
 
 /// An EVM native send (no operation nonce) by `tx_state`'s own terminal facts (spec §13.5): final and successful is
-/// `Landed`; final and failed, or replaced, is `Consumed` (the account's nonce spent without the transfer).
+/// `Landed`; final and failed is `Reverted` (owner 2026-11-18, ruling 4); replaced is `Consumed` (the account's nonce spent
+/// without the transfer).
 async fn native_state(
     pool: &scaas_rpc::evm::EvmPool,
     row: &Row,
@@ -185,7 +194,15 @@ async fn native_state(
             block: number,
             hash: format!("{hash:#x}"),
         },
-        Ok(TxState::Final { .. } | TxState::Replaced { .. }) => OpState::Consumed,
+        Ok(TxState::Final {
+            success: false,
+            number,
+            hash,
+        }) => OpState::Reverted {
+            block: number,
+            hash: format!("{hash:#x}"),
+        },
+        Ok(TxState::Replaced { .. }) => OpState::Consumed,
         Ok(TxState::Included { .. }) => OpState::InFlight {
             detail: InFlight::TxIncluded,
         },

@@ -40,6 +40,8 @@ pub struct SubmitQuote {
     pub gateways: Vec<u32>,
     /// the payer's transaction nonce
     pub tx_nonce: u64,
+    /// a self-relay's EIP-2718 type: 2 where the chain's head has a base fee, else 0 (owner 2026-11-18, ruling 3)
+    pub tx_type: u8,
 }
 
 /// A gateway takes it (NODE-GW-03 door A: a registered token's `mtx*` entries on `POST /v1/op`).
@@ -144,6 +146,7 @@ pub(crate) async fn self_relay(
         fee_to_relayer,
         gateways: vec![],
         tx_nonce,
+        tx_type: if block.base_fee.is_some() { 2 } else { 0 },
     })
 }
 
@@ -214,6 +217,7 @@ impl Op {
                     fee_to_relayer: fee.clone(),
                     gateways: (0..gateways as u32).collect(),
                     tx_nonce: 0,
+                    tx_type: 0,
                 };
                 let payer = match path {
                     SubmitPath::Gateway | SubmitPath::Auto { .. }

@@ -150,7 +150,9 @@ allow-list; an undecoded call exists only behind its own feature and marker, fla
 or relayed by the holder** (SPECIFIED). Paths: a scaas-node gateway, for the entries the gateway takes
 ([NODE-GW-03](../node/gateway.md#NODE-GW-03): a registered token's `mtx*` entries, the transfer on ids, the DEX routes, and UA
 registration once served), with the same body to the gateways chosen ([CLI-RPC-08](scaas-rpc.md#CLI-RPC-08)); or self-relay, for any
-entry, as an EIP-1559 transaction from the holder's own native account, which pays the gas, with the entry's calldata from `ua-rs`. Before
+entry, as a transaction (type 2 where the chain has a base fee, else 0) from the holder's own native account, which pays the gas, with the
+entry's calldata from `ua-rs`. The quote never makes or sends a signature: a pinned gas figure or the estimate of the unsigned form with a
+margin, else `GasUnquoted`; `submit` signs once and simulates the signed calldata before it writes (owner 2026-11-18, ruling 1). Before
 `submit` a quote shows the payer, the gas limit, the maximum fee per gas and the maximum cost; the user confirms it; above the profile's
 caps it is `FeeAboveCap`, and the caps come from the SDK's configuration, never from the answering endpoint. A gas limit above the
 chain's per-transaction cap or the block limit is `GasAboveTxCap` (a PQ registration is split as the node splits it); a payer that is an
@@ -164,7 +166,7 @@ at restart, a row sent is never sent again automatically, only by the user's `re
 SPECIFIED). Terminal, from a decisive read at the profile's final block only: `Landed` (the executed event of the operation's digest,
 `UAMetaTransactionExecuted` on tokens, mandate wallets and the governance router, `MetaTransactionExecuted` on `SmartKeyAccount`; for a
 registry write, its record present), `Consumed` (the lane nonce spent without that event), `Expired` (`validUntil` passed with the nonce
-unspent). Everything else is `InFlight` with its detail: queued or sent, the gateways' merged state (never terminal, every node `dead`
+unspent), and for an EVM native send `Reverted` (final and reverted; owner 2026-11-18, ruling 4). Everything else is `InFlight` with its detail: queued or sent, the gateways' merged state (never terminal, every node `dead`
 included), a self-relay transaction that failed or was replaced (not a failed operation: the signed operation is public and may still
 land). While in flight the user may wait, resend the same bytes, or cancel the lane's nonce, which makes the operation `Consumed`.
 After a restart every operation resumes from the chain.
@@ -290,8 +292,9 @@ bounded and stripped of control and direction-override characters. Fees, gas lim
 profile's caps; a gas price of 0 is a value like any other; no block limit is configured.
 
 <a id="CLI-SDK-16"></a>**CLI-SDK-16** — **EVM keys sign only built transactions; other native chains sign through one guarded entry**
-(owner 2026-11-17; SPECIFIED). EVM native sends (`evm`, `hedera_ecdsa`) are EIP-1559 transactions built and signed in `ua-rs`, quoted
-and capped; no EVM key signs a raw digest. For another chain an app's own encoder builds the transaction and the SDK signs it through
+(owner 2026-11-17; SPECIFIED). EVM native sends (`evm`, `hedera_ecdsa`) are transactions of type 0, 1 or 2 built and signed in `ua-rs`
+(3 and 4 refused; 0 by default where the chain has no base fee; owner 2026-11-18, ruling 3), quoted and capped, a delegated sender's
+quote carrying the delegation mark (ruling 5); no EVM key signs a raw digest. For another chain an app's own encoder builds the transaction and the SDK signs it through
 one entry that exists only behind its own feature and marker and is absent from the default generated surface. The entry, not
 `ua-rs`'s existing calls, enforces the restrictions (`ua-rs` keeps its native-key digest signing for other uses): native keys only,
 never a UA key or a SCaaS kind, never an EVM-address key; NEAR, Sui, Stellar and Hedera Ed25519 through `ua-rs`'s envelope-building

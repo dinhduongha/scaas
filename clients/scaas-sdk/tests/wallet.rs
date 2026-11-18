@@ -136,7 +136,7 @@ fn evm_key(seed: &str) -> KeyRef {
     }
 }
 
-fn native_send(seed: &str, tx_type: u8) -> NativeSend {
+fn native_send(seed: &str, tx_type: Option<u8>) -> NativeSend {
     NativeSend {
         key: evm_key(seed),
         chain: "local".into(),
@@ -262,7 +262,7 @@ async fn zero_gas_price_is_a_value() {
     }
     let q = s
         .wallet()
-        .prepare_native_send(native_send(&seed, 2))
+        .prepare_native_send(native_send(&seed, Some(2)))
         .await
         .unwrap();
     assert_eq!(q.quote.gas_limit, 21_000, "a plain transfer");
@@ -284,23 +284,117 @@ async fn zero_gas_price_is_a_value() {
     panic!("not sent");
 }
 
+/// The EIP-2718 type of the `n`-th raw transaction the fake got.
+async fn sent_type(c: &Fake, n: usize) -> u8 {
+    for _ in 0..100 {
+        if let Some(raw) = c.lock().unwrap().sent.get(n) {
+            let b = u8::from_str_radix(&raw[2..4], 16).unwrap();
+            return if b >= 0xc0 { 0 } else { b };
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    panic!("transaction {n} not sent");
+}
+
 #[tokio::test(flavor = "multi_thread")]
-async fn native_send_refuses_type4() {
+async fn native_send_types() {
+    // owner 2026-11-18, ruling 3: 0, 1, 2 sent as asked; 3 (blob) and 4 (EIP-7702) refused before any read
     let (s, seed, c) = one(0).await;
-    for t in [4u8, 1, 3, 0] {
+    for t in [4u8, 3, 5] {
         assert_eq!(
-            code(s.wallet().prepare_native_send(native_send(&seed, t)).await),
+            code(
+                s.wallet()
+                    .prepare_native_send(native_send(&seed, Some(t)))
+                    .await
+            ),
             "TxTypeRefused",
             "type {t}"
         );
     }
+    assert!(c.lock().unwrap().sent.is_empty());
+    for (i, t) in [Some(0u8), Some(1), Some(2), None].into_iter().enumerate() {
+        let q = s
+            .wallet()
+            .prepare_native_send(native_send(&seed, t))
+            .await
+            .unwrap();
+        assert_eq!(q.from, address());
+        s.wallet().submit_native_send(q).await.unwrap();
+        assert_eq!(
+            sent_type(&c, i).await,
+            t.unwrap_or(2),
+            "{t:?}: sent as asked, 2 by default"
+        );
+    }
+    // a chain without a base fee: type 0 by default, type 2 refused
+    let (s, seed, c) = one(0).await;
+    c.lock().unwrap().no_base_fee = true;
+    assert_eq!(
+        code(
+            s.wallet()
+                .prepare_native_send(native_send(&seed, Some(2)))
+                .await
+        ),
+        "TxTypeRefused",
+        "type 2 without a base fee"
+    );
     let q = s
         .wallet()
-        .prepare_native_send(native_send(&seed, 2))
+        .prepare_native_send(native_send(&seed, None))
         .await
         .unwrap();
-    assert_eq!(q.from, address(), "control: type 2");
-    assert!(c.lock().unwrap().sent.is_empty());
+    assert_eq!(q.quote.tx_type, 0, "no base fee: legacy");
+    s.wallet().submit_native_send(q).await.unwrap();
+    assert_eq!(sent_type(&c, 0).await, 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn native_send_reverted_is_reverted() {
+    // owner 2026-11-18, ruling 4: a native send final and reverted is `Reverted`; the control, final and successful, `Landed`
+    let (s, seed, c) = one(0).await;
+    let mut ops = vec![];
+    for (i, ok) in [false, true].into_iter().enumerate() {
+        let req = NativeSend {
+            value: (1000 + i).to_string(), // two transactions, two ids (the fake's account nonce stays 0)
+            ..native_send(&seed, None)
+        };
+        let q = s.wallet().prepare_native_send(req).await.unwrap();
+        let op = s.wallet().submit_native_send(q).await.unwrap();
+        sent_type(&c, i).await;
+        let raw = c.lock().unwrap().sent[i].clone();
+        let id = fake_chain::keccak_hex(&alloy::hex::decode(&raw[2..]).unwrap());
+        c.lock().unwrap().receipts.insert(id, ok);
+        ops.push(op);
+    }
+    let st = s.op().state(ops[0].clone()).await.unwrap();
+    assert!(matches!(st, OpState::Reverted { .. }), "{st:?}");
+    assert!(st.is_terminal());
+    let st = s.op().state(ops[1].clone()).await.unwrap();
+    assert!(matches!(st, OpState::Landed { .. }), "control: {st:?}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn delegated_sender_send_carries_the_mark() {
+    // owner 2026-11-18, ruling 5: allowed, the review carries the delegation mark
+    let (s, seed, c) = one(0).await;
+    let q = s
+        .wallet()
+        .prepare_native_send(native_send(&seed, None))
+        .await
+        .unwrap();
+    assert!(!q.delegated, "control: no code");
+    c.lock()
+        .unwrap()
+        .code
+        .insert(address(), format!("0xef0100{}", "33".repeat(20)));
+    let q = s
+        .wallet()
+        .prepare_native_send(native_send(&seed, None))
+        .await
+        .unwrap();
+    assert!(q.delegated, "the mark");
+    s.wallet().submit_native_send(q).await.unwrap();
+    sent_type(&c, 0).await;
 }
 
 // --- anvil (ignored: the `sdk-e2e` step's binary on PATH or `ANVIL`) ---
@@ -385,7 +479,7 @@ async fn native_send_quoted_and_lands() {
     let (s, seed) = sdk(p).await;
     let q = s
         .wallet()
-        .prepare_native_send(native_send(&seed, 2))
+        .prepare_native_send(native_send(&seed, Some(2)))
         .await
         .unwrap();
     assert_eq!(q.quote.gas_limit, 21_000);

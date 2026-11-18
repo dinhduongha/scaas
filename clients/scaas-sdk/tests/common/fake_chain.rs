@@ -61,6 +61,8 @@ pub struct Chain {
     pub requests: Vec<String>,
     /// `eth_call` and `eth_estimateGas` of a contract revert (an unsigned form the contract refuses)
     pub call_revert: bool,
+    /// the blocks carry no `baseFeePerGas` (a chain without EIP-1559)
+    pub no_base_fee: bool,
 }
 
 impl Default for Chain {
@@ -90,6 +92,7 @@ impl Default for Chain {
             index: vec![],
             requests: vec![],
             call_revert: false,
+            no_base_fee: false,
         }
     }
 }
@@ -115,12 +118,16 @@ fn number_of_hash(h: &str) -> Option<u64> {
 
 fn block(c: &Chain, n: u64) -> Value {
     let z = format!("0x{}", "00".repeat(32));
-    json!({"timestamp": format!("{:#x}", c.timestamp), "difficulty": "0x0", "extraData": "0x",
+    let mut b = json!({"timestamp": format!("{:#x}", c.timestamp), "difficulty": "0x0", "extraData": "0x",
         "gasLimit": format!("{:#x}", c.block_gas_limit), "baseFeePerGas": format!("{:#x}", c.base_fee),
         "gasUsed": "0x0", "logsBloom": format!("0x{}", "00".repeat(256)), "miner": format!("0x{}", "00".repeat(20)),
         "mixHash": z, "nonce": "0x0000000000000000", "receiptsRoot": z, "sha3Uncles": z, "size": "0x200", "stateRoot": z,
         "totalDifficulty": "0x0", "transactions": [], "transactionsRoot": z, "uncles": [], "number": format!("{n:#x}"),
-        "hash": hash_of(n), "parentHash": if n == 0 { z.clone() } else { hash_of(n - 1) }})
+        "hash": hash_of(n), "parentHash": if n == 0 { z.clone() } else { hash_of(n - 1) }});
+    if c.no_base_fee {
+        b.as_object_mut().unwrap().remove("baseFeePerGas");
+    }
+    b
 }
 
 /// The `n`-th item of an RLP list's payload (`raw` after the type byte), as an unsigned integer.

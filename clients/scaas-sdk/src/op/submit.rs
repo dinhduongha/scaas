@@ -103,16 +103,45 @@ pub(crate) fn sign_tx(
             .map_err(|_| SdkError::Argument)?
             .to_be_bytes::<32>())
     };
-    let tx = EvmTx::Eip1559 {
-        chain_id,
-        nonce: quote.tx_nonce,
-        max_priority_fee_per_gas: word(&quote.max_priority_fee_per_gas)?,
-        max_fee_per_gas: word(&quote.max_fee_per_gas)?,
-        gas_limit: quote.gas_limit,
-        to: Some(to),
-        value: value.to_be_bytes::<32>(),
-        data,
-        access_list: vec![],
+    let (nonce, gas_limit, to, value) = (
+        quote.tx_nonce,
+        quote.gas_limit,
+        Some(to),
+        value.to_be_bytes::<32>(),
+    );
+    // types 0, 1, 2 (owner 2026-11-18, ruling 3); a legacy price is the quote's maximum fee per gas
+    let tx = match quote.tx_type {
+        0 => EvmTx::Legacy {
+            chain_id,
+            nonce,
+            gas_price: word(&quote.max_fee_per_gas)?,
+            gas_limit,
+            to,
+            value,
+            data,
+        },
+        1 => EvmTx::Eip2930 {
+            chain_id,
+            nonce,
+            gas_price: word(&quote.max_fee_per_gas)?,
+            gas_limit,
+            to,
+            value,
+            data,
+            access_list: vec![],
+        },
+        2 => EvmTx::Eip1559 {
+            chain_id,
+            nonce,
+            max_priority_fee_per_gas: word(&quote.max_priority_fee_per_gas)?,
+            max_fee_per_gas: word(&quote.max_fee_per_gas)?,
+            gas_limit,
+            to,
+            value,
+            data,
+            access_list: vec![],
+        },
+        _ => return Err(SdkError::TxTypeRefused),
     };
     let signed = k.sign_transaction(&tx)?;
     let id = hex(&scaas_ua::keccak256(&signed.raw));

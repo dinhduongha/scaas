@@ -1,0 +1,7 @@
+# t11b mutants at commit 87cf36103 (name | outcome | test)
+type 3 (blob) accepted (3) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet native_send_types
+type 2 on a chain without a base fee (3) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet native_send_types
+an asked type 2 kept without a base fee (3) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet native_send_types
+a reverted send is Consumed (4) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet native_send_reverted_is_reverted
+no delegation mark (5) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet delegated_sender_send_carries_the_mark
+5 mutants, 5 killed, 0 survived, 0 not loaded
