@@ -16,6 +16,11 @@ type Seen = Arc<Mutex<Vec<(String, Option<String>)>>>;
 
 /// A TON Center at masterchain seqno `seqno`; `runGetMethod` answers its body back, anything unknown a 404.
 async fn center(seqno: u64, seen: Seen) -> String {
+    center_of(seqno, "b", seen).await
+}
+
+/// [`center`] whose masterchain block `n` has root hash `{fork}{n}` (T24.6: a later endpoint's identity reads it).
+async fn center_of(seqno: u64, fork: &'static str, seen: Seen) -> String {
     serve(axum::Router::new().fallback(
         move |uri: axum::http::Uri, h: axum::http::HeaderMap, body: axum::body::Bytes| {
             let seen = seen.clone();
@@ -28,7 +33,8 @@ async fn center(seqno: u64, seen: Seen) -> String {
                 } else if p.starts_with("/api/v3/runGetMethod") {
                     ok(json!({"exit_code": 0, "echo": serde_json::from_slice::<Value>(&body).unwrap()}))
                 } else if p.starts_with("/api/v3/blocks") {
-                    ok(json!({"blocks": [{"root_hash": format!("b{seqno}")}]}))
+                    let n = p.split("seqno=").nth(1).and_then(|s| s.split('&').next()).unwrap_or_default().to_string();
+                    ok(json!({"blocks": [{"root_hash": format!("{fork}{n}")}]}))
                 } else {
                     (axum::http::StatusCode::NOT_FOUND, b"not found".to_vec())
                 }
@@ -124,7 +130,8 @@ async fn the_failover_skips_an_endpoint_behind() {
     let s: Seen = Default::default();
     let (behind, good) = (center(10, s.clone()).await, center(100, s).await);
     let n = ton(&[DOWN, &behind, &good], None);
-    n.client.pool().saw_block(100);
+    // T24.6 (fixture correction): endpoint 0's head seen with its root hash, the later endpoints' identity reference
+    n.saw(100, "b100");
     let seen: Arc<Mutex<Vec<usize>>> = Default::default();
     let a = n
         .client
@@ -151,5 +158,43 @@ async fn the_failover_skips_an_endpoint_behind() {
         (a.endpoint, seen.lock().unwrap().clone()),
         (2, vec![0, 2]),
         "the endpoint behind is never asked"
+    );
+}
+
+/// T24.6 (owner 2026-11-18): a later endpoint is this network when its masterchain block at the last seqno endpoint 0 showed
+/// has endpoint 0's root hash. None seen yet: unread (skipped, asked again); another hash: dropped; the same: it answers.
+#[tokio::test]
+async fn a_later_endpoint_is_checked_by_endpoint_0s_root_hash() {
+    let s: Seen = Default::default();
+    let (other, good) = (center_of(100, "x", s.clone()).await, center(100, s).await);
+    let n = ton(&[DOWN, &other, &good], None);
+    let read = || {
+        n.client.failover(&n, |i| async move {
+            if i == 0 {
+                return Err(scaas_rpc::pool::ReadError::Failure(
+                    scaas_rpc::EndpointFailure::new(0, scaas_rpc::FailureKind::Transport, "down"),
+                ));
+            }
+            Ok(i)
+        })
+    };
+    assert!(
+        read().await.is_err(),
+        "no block of endpoint 0 seen: no later endpoint is this network yet"
+    );
+    assert_eq!(
+        (
+            n.client.pool().identity_of(1),
+            n.client.pool().identity_of(2)
+        ),
+        (None, None),
+        "asked again"
+    );
+    n.saw(100, "b100");
+    assert_eq!(read().await.unwrap().endpoint, 2);
+    assert_eq!(
+        n.client.pool().identity_of(1),
+        Some(false),
+        "another root hash: dropped"
     );
 }

@@ -110,6 +110,13 @@ MUTANTS = [
      NT + "algorand::tests::algorand_a_fee_above_the_caps_is_refused"),
     ("4: NEAR: the deposit cap off", [(A + "near.rs", "        if call.deposit > self.max_deposit {", "        if false {")],
      NT + "near::tests::near_a_deposit_above_the_cap_is_refused"),
+    # T24.6 (owner 2026-11-18): a later TON endpoint is checked by endpoint 0's masterchain root hash
+    ("6: TON: every later endpoint this network", [(C + "ton.rs", "        if i == 0 {\n            return Ok(true);\n        }\n        let seen", "        if i < usize::MAX {\n            return Ok(true);\n        }\n        let seen")],
+     "cd clients/scaas-rpc && ../../scripts/capped cargo test --locked --offline -j2 --all-features --test ton a_later_endpoint_is_checked_by_endpoint_0s_root_hash"),
+    ("6: TON: the root hash not compared", [(C + "ton.rs", "Ok(self.header(i, seqno, d).await? == want)", "Ok(self.header(i, seqno, d).await.is_ok() || want.is_empty())")],
+     "cd clients/scaas-rpc && ../../scripts/capped cargo test --locked --offline -j2 --all-features --test ton a_later_endpoint_is_checked_by_endpoint_0s_root_hash"),
+    ("6: TON: the polled head not kept as the reference", [(A + "ton.rs", 'self.api.saw_head(height, last.get("root_hash").and_then(Value::as_str).unwrap_or_default());', "self.api.saw(height);")],
+     NT + "ton::tests::ton_a_later_endpoint_is_checked_against_endpoint_0s_head"),
 ]
 
 if __name__ == "__main__":

@@ -1,0 +1,5 @@
+# t24-6 mutants at commit 6d881629e (name | outcome | test)
+6: TON: every later endpoint this network | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test ton a_later_endpoint_is_checked_by_endpoint_0s_root_hash
+6: TON: the root hash not compared | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test ton a_later_endpoint_is_checked_by_endpoint_0s_root_hash
+6: TON: the polled head not kept as the reference | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::ton::tests::ton_a_later_endpoint_is_checked_against_endpoint_0s_head
+3 mutants, 3 killed, 0 survived, 0 not loaded

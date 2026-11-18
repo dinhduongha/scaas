@@ -1243,6 +1243,12 @@ impl Api {
         self.net.client.pool().failover_answers()
     }
 
+    /// Endpoint 0's polled head: the failover reads' floor and a later endpoint's identity reference (its root hash at that
+    /// seqno, T24.6).
+    fn saw_head(&self, seqno: u64, root_hash: &str) {
+        self.net.saw(seqno, root_hash);
+    }
+
     /// The failover reads' floor: endpoint 0's masterchain seqno.
     fn saw(&self, seqno: u64) {
         self.net.client.pool().saw_block(seqno);
@@ -2041,7 +2047,8 @@ impl ChainAdapter for TonAdapter {
         let v = self.api.get("masterchainInfo", &[]).await?;
         let last = v.get("last").ok_or_else(|| anyhow!("masterchainInfo.last"))?;
         let height = last.get("seqno").and_then(Value::as_u64).ok_or_else(|| anyhow!("masterchainInfo.last.seqno"))?;
-        self.api.saw(height); // the failover reads' floor: endpoint 0's masterchain seqno
+        // the failover reads' floor and a later endpoint's identity reference (T24.6): endpoint 0's masterchain block
+        self.api.saw_head(height, last.get("root_hash").and_then(Value::as_str).unwrap_or_default());
         Ok(Some(Head { height, hash: hex0x(&api_hash(last.get("root_hash").unwrap_or(&Value::Null))?) }))
     }
 
@@ -2429,6 +2436,8 @@ mod tests {
             f.keys.push(headers.get("x-api-key").and_then(|v| v.to_str().ok()).map(str::to_string));
             axum::Json(match path.as_str() {
                 "masterchainInfo" => json!({"last": {"seqno": 1, "root_hash": b64encode(&[0; 32])}}),
+                // T24.6: a masterchain block's root hash (a later endpoint's identity read)
+                "blocks" => json!({"blocks": [{"root_hash": b64encode(&[0; 32])}]}),
                 "runGetMethod" => {
                     let b: Value = serde_json::from_str(&body).unwrap();
                     let method = b["method"].as_str().unwrap().to_string();
@@ -3449,11 +3458,15 @@ mod tests {
         let key = toml::Table::from_iter([("api_key_env".to_string(), toml::Value::from("SCAAS_T22B_TON_KEY"))]);
         let (url, f) = fake_api_shared(lane_at(0)).await;
         let a = adapter_on(&[DOWN.to_string(), url], key.clone());
+        // T24.6 (fixture correction): endpoint 0's head seen while it was up (seqno 1, the fake's root hash): a later endpoint is checked against it
+        a.api.saw_head(1, &b64encode(&[0; 32]));
         a.build(&signed_pay(), 0).await.unwrap();
         assert!(a.api.failovers() > 0);
         assert!(f.lock().unwrap().keys.iter().all(Option::is_none), "endpoint 0's key never reaches endpoint 1");
         let (url, _) = fake_api_shared(lane_at(1)).await;
-        match adapter_on(&[DOWN.to_string(), url.clone()], key).build(&signed_pay(), 0).await {
+        let a = adapter_on(&[DOWN.to_string(), url.clone()], key);
+        a.api.saw_head(1, &b64encode(&[0; 32])); // T24.6 (fixture correction): endpoint 0's head seen while it was up (seqno 1, the fake's root hash): a later endpoint is checked against it
+        match a.build(&signed_pay(), 0).await {
             Err(SimError::Transport(m)) => assert!(m.starts_with("FAILOVER_ANSWER") && m.contains("lane nonce is 1"), "{m}"),
             r => panic!("{r:?}"),
         }
@@ -3466,6 +3479,7 @@ mod tests {
     async fn ton_endpoint_0_rate_limited_fails_over() {
         let first = crate::adapters::testkit::refusing(&fake_api_shared(lane_at(0)).await.0, |_, _| false, 429, json!({"error": "rate limited"})).await;
         let a = adapter_on(&[first, fake_api_shared(lane_at(0)).await.0], toml::Table::new());
+        a.api.saw_head(1, &b64encode(&[0; 32])); // T24.6 (fixture correction): endpoint 0's head seen while it was up (seqno 1, the fake's root hash): a later endpoint is checked against it
         a.build(&signed_pay(), 0).await.unwrap();
         assert!(a.api.failovers() > 0);
     }
@@ -3483,6 +3497,7 @@ mod tests {
             _ => None,
         });
         let a = adapter_on(&[first().await, fake_api_shared(lane_at(0)).await.0], toml::Table::new());
+        a.api.saw_head(1, &b64encode(&[0; 32])); // T24.6 (fixture correction): endpoint 0's head seen while it was up (seqno 1, the fake's root hash): a later endpoint is checked against it
         a.build(&signed_pay(), 0).await.unwrap();
         assert!(matches!(a.tx_status(&hex0x(&[0x0a; 32])).await.unwrap(), TxStatus::Mined { height: 6, .. }));
         assert!(matches!(a.build(&signed_pay(), 0).await, Err(SimError::Transport(_))), "endpoint 1 below seqno 6: skipped");
@@ -3513,5 +3528,22 @@ mod tests {
         assert!(adapter(&limited).sequence(0).await.is_err());
         let gone = crate::adapters::testkit::refusing(&url, |_, _| false, 404, json!({"error": "not found"})).await;
         assert_eq!(adapter(&gone).sequence(0).await.unwrap(), 0, "control");
+    }
+
+    /// scaas-rpc T24.6 (owner 2026-11-18): a later endpoint is checked against endpoint 0's polled head: endpoint 0's
+    /// masterchain block (seqno 1) read by `final_head`, then endpoint 0 refusing every other read, endpoint 1 whose block 1 has
+    /// that root hash builds the job; one whose block has another root hash is dropped (nothing built).
+    #[tokio::test]
+    async fn ton_a_later_endpoint_is_checked_against_endpoint_0s_head() {
+        let first = |root: u8| match root {
+            0 => crate::adapters::testkit::scripted(false, |p, _| (p == "/api/v3/masterchainInfo").then(|| json!({"last": {"seqno": 1, "root_hash": b64encode(&[0; 32])}}))),
+            _ => crate::adapters::testkit::scripted(false, |p, _| (p == "/api/v3/masterchainInfo").then(|| json!({"last": {"seqno": 1, "root_hash": b64encode(&[1; 32])}}))),
+        };
+        let a = adapter_on(&[first(0).await, fake_api_shared(lane_at(0)).await.0], toml::Table::new());
+        a.final_head().await.unwrap();
+        a.build(&signed_pay(), 0).await.unwrap();
+        let a = adapter_on(&[first(1).await, fake_api_shared(lane_at(0)).await.0], toml::Table::new());
+        a.final_head().await.unwrap();
+        assert!(matches!(a.build(&signed_pay(), 0).await, Err(SimError::Transport(_))), "another root hash: dropped");
     }
 }
