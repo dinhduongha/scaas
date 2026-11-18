@@ -101,8 +101,9 @@ static void table_groups_purposes_constants() {
         CHECK(hx(*groupTag(g)) == r["GROUP"].get<std::string>(), g);
     }
     CHECK(!groupTag("nope") && !groupTagString("nope"), "unknown group");
-    CHECK(k["purposes"].size() == 18,
-          "purposes size"); // 17 purposes (pqz-verdict: group 3f; msig-update: CTR-UA-44; auditor-consent: CTR-PQZ-43), `pop` has v1 and v2
+    CHECK(
+        k["purposes"].size() == 18,
+        "purposes size"); // 17 purposes (pqz-verdict: group 3f; msig-update: CTR-UA-44; auditor-consent: CTR-PQZ-43), `pop` has v1 and v2
     for (auto &r : k["purposes"]) {
         CHECK(hx(purposeTag(r["purpose"], r["version"].get<uint32_t>())) == r["purposeTag"].get<std::string>(),
               r["purpose"].get<std::string>());
