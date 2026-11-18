@@ -12,19 +12,30 @@ node="$here/../../../../scaas-node"
 capped="$here/../../../../scripts/capped"
 cd "$node" || exit 2
 files=$(python3 "$here/t18_mutants.py" --files)
-git diff --quiet -- $files || { echo "scaas-node is not clean" >&2; exit 2; }
+git diff --quiet -- $files || {
+    echo "scaas-node is not clean" >&2
+    exit 2
+}
 names=${*:-$(python3 "$here/t18_mutants.py" --list)}
 for m in $names; do
-  python3 "$here/t18_mutants.py" "$m" || { echo "$m: anchor missing" >&2; echo 99 > "$here/mutant-t18-$m.rc.log"; git checkout -- $files; continue; }
-  : > "$here/mutant-t18-$m.log"
-  rc=0
-  while read -r args; do
-    "$capped" cargo test -j2 $args < /dev/null >> "$here/mutant-t18-$m.log" 2>&1 || rc=$?
-  done < <(python3 "$here/t18_mutants.py" --tests "$m")
-  echo $rc > "$here/mutant-t18-$m.rc.log"
-  git checkout -- $files
+    python3 "$here/t18_mutants.py" "$m" || {
+        echo "$m: anchor missing" >&2
+        echo 99 >"$here/mutant-t18-$m.rc.log"
+        git checkout -- $files
+        continue
+    }
+    : >"$here/mutant-t18-$m.log"
+    rc=0
+    while read -r args; do
+        "$capped" cargo test -j2 $args </dev/null >>"$here/mutant-t18-$m.log" 2>&1 || rc=$?
+    done < <(python3 "$here/t18_mutants.py" --tests "$m")
+    echo $rc >"$here/mutant-t18-$m.rc.log"
+    git checkout -- $files
 done
-git diff --quiet -- $files || { echo "scaas-node not restored" >&2; exit 3; }
+git diff --quiet -- $files || {
+    echo "scaas-node not restored" >&2
+    exit 3
+}
 python3 - "$here" <<'PY'
 import os, re, sys
 here = sys.argv[1]

@@ -14,22 +14,28 @@ FAMILIES="soroban ua-rs ua-rs-signers ua-rs-json ua-qt ua-py ua-go ua-cs ua-c ua
 export ZETHER_CROSS_N=10
 # pqz-kat-<set>: pqz-vectors --check (regenerate and compare byte for byte) + pqz_kat.py --check, as vectors/run.sh's check steps
 extra_step() {
-  case $1 in
-    pqz-kat-*) local S=${1#pqz-kat-} BF=
-      [ "$S" = n2304-kmax4096 ] || BF="--no-default-features --features pqzl-rust,set-$S"
-      cd pqz-core/ffi || return 1
-      export PQZ_SET=$S CARGO_TARGET_DIR=$PWD/target/$S
-      ../../scripts/capped cargo build --release --offline $BF --features prove --bin pqz-vectors &&
-        ../../scripts/capped "$CARGO_TARGET_DIR/release/pqz-vectors" --check &&
-        ../../scripts/capped python3 -I ../../smartcontracts/vectors/pqz/pqz_kat.py --check ;;
-    # the PQZ gas table per set (as the R2 gates): the debit_min_gas figure is its "pqzl-ua | burn 1 to an address, fresh ref" regular gas
-    gas-*) scripts/capped smartcontracts/evm/script/pqz/at-set.sh "${1#gas-}" test --match-path test/pqz/PqzStateGas.t.sol --match-contract PqzStatePinGasTest --match-test test_gasTable -vv ;;
-    *) echo "unknown step $1"; return 2 ;;
-  esac
+    case $1 in
+        pqz-kat-*)
+            local S=${1#pqz-kat-} BF=
+            [ "$S" = n2304-kmax4096 ] || BF="--no-default-features --features pqzl-rust,set-$S"
+            cd pqz-core/ffi || return 1
+            export PQZ_SET=$S CARGO_TARGET_DIR=$PWD/target/$S
+            ../../scripts/capped cargo build --release --offline $BF --features prove --bin pqz-vectors &&
+                ../../scripts/capped "$CARGO_TARGET_DIR/release/pqz-vectors" --check &&
+                ../../scripts/capped python3 -I ../../smartcontracts/vectors/pqz/pqz_kat.py --check
+            ;;
+        # the PQZ gas table per set (as the R2 gates): the debit_min_gas figure is its "pqzl-ua | burn 1 to an address, fresh ref" regular gas
+        gas-*) scripts/capped smartcontracts/evm/script/pqz/at-set.sh "${1#gas-}" test --match-path test/pqz/PqzStateGas.t.sol --match-contract PqzStatePinGasTest --match-test test_gasTable -vv ;;
+        *)
+            echo "unknown step $1"
+            return 2
+            ;;
+    esac
 }
 # "<step>|<form>|<name>": the names of 2026-10-31-typed-signing-p-gates.sh that are still tests at HEAD, then every test of C0-C8,
 # R2, N1 (runs/2026-10-31-typed-signing-c-newtests.py over 006c6dfe..HEAD; a name removed later is not listed)
-NEW_TESTS=$(cat <<'NAMES'
+NEW_TESTS=$(
+    cat <<'NAMES'
 forge|forge|test_noKemRecordIsZeroRecord
 forge|forge|test_portableDomainSeparatorPinned
 forge|forge|test_portableRecordDigestVectors

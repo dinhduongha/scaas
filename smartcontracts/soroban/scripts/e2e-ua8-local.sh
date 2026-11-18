@@ -20,17 +20,19 @@ export UA8_EVM_A="$a,http://127.0.0.1:$a" UA8_EVM_B="$b,http://127.0.0.1:$b"
 
 # the node's chain id on $1, empty when nothing answers there
 chain_id() {
-  curl -s -m 1 -X POST -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId"}' "http://127.0.0.1:$1" 2>/dev/null \
-    | python3 -I -c 'import json,sys; print(int(json.load(sys.stdin)["result"], 16))' 2>/dev/null || true
+    curl -s -m 1 -X POST -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId"}' "http://127.0.0.1:$1" 2>/dev/null |
+        python3 -I -c 'import json,sys; print(int(json.load(sys.stdin)["result"], 16))' 2>/dev/null || true
 }
 for p in "$a" "$b"; do
-  if [ -n "$(chain_id "$p")" ] || ss -ltn "sport = :$p" | grep -q LISTEN; then
-    echo "e2e-ua8-local: port $p is taken: a stale anvil would answer for ours, not started" >&2; exit 5
-  fi
+    if [ -n "$(chain_id "$p")" ] || ss -ltn "sport = :$p" | grep -q LISTEN; then
+        echo "e2e-ua8-local: port $p is taken: a stale anvil would answer for ours, not started" >&2
+        exit 5
+    fi
 done
 avail=$(awk '/MemAvailable/ {print int($2 / 1048576)}' /proc/meminfo)
 if [ "$avail" -lt 6 ]; then
-  echo "e2e-ua8-local: ${avail} GB available, under 6 GB: not started" >&2; exit 4
+    echo "e2e-ua8-local: ${avail} GB available, under 6 GB: not started" >&2
+    exit 4
 fi
 # the commit under test; "+uncommitted" when the tree (run logs aside) differs from it
 rev="$(git -C "$ROOT" rev-parse --short HEAD)"
@@ -43,26 +45,32 @@ echo "== EVM deploy build"
 
 pids=()
 down() {
-  [ ${#pids[@]} -eq 0 ] || kill "${pids[@]}" 2>/dev/null || true
-  "$QS" down
-  # the anvils' books (NET-EVM-13: e2e_ua8.rs deploys each with DEPLOY_NAME=local-<chain id>-testnet)
-  rm -f "$ROOT/smartcontracts/evm/deployments/local-$a-testnet.json" "$ROOT/smartcontracts/evm/deployments/local-$b-testnet.json"
+    [ ${#pids[@]} -eq 0 ] || kill "${pids[@]}" 2>/dev/null || true
+    "$QS" down
+    # the anvils' books (NET-EVM-13: e2e_ua8.rs deploys each with DEPLOY_NAME=local-<chain id>-testnet)
+    rm -f "$ROOT/smartcontracts/evm/deployments/local-$a-testnet.json" "$ROOT/smartcontracts/evm/deployments/local-$b-testnet.json"
 }
 echo "== quickstart"
-"$QS" up   # exit 3 when a scaas-stellar container already exists: never ours to remove
+"$QS" up # exit 3 when a scaas-stellar container already exists: never ours to remove
 trap down EXIT
 trap 'exit 130' INT TERM
 "$QS" wait
 echo "== anvil $a, $b"
 for p in "$a" "$b"; do
-  anvil --chain-id "$p" --hardfork amsterdam --gas-limit 200000000 --code-size-limit 65536 --port "$p" --silent >/dev/null 2>&1 &
-  pids+=($!)
-  up=
-  for _ in $(seq 1 50); do
-    [ "$(chain_id "$p")" = "$p" ] && { up=1; break; }
-    sleep 0.2
-  done
-  [ -n "$up" ] || { echo "e2e-ua8-local: anvil on $p did not answer as chain $p" >&2; exit 6; }
+    anvil --chain-id "$p" --hardfork amsterdam --gas-limit 200000000 --code-size-limit 65536 --port "$p" --silent >/dev/null 2>&1 &
+    pids+=($!)
+    up=
+    for _ in $(seq 1 50); do
+        [ "$(chain_id "$p")" = "$p" ] && {
+            up=1
+            break
+        }
+        sleep 0.2
+    done
+    [ -n "$up" ] || {
+        echo "e2e-ua8-local: anvil on $p did not answer as chain $p" >&2
+        exit 6
+    }
 done
 
 cd "$ROOT/scaas-node"

@@ -14,7 +14,8 @@ FAMILIES="soroban soroban-spike-local e2e-soroban-local"
 # "<step>|<form>|<name>": every test added by Tasks T0-T10 (T2b, T6b included; the names as in the code now, from the
 # tasks' commits), in its tool's pass form (forms: see the base runner); then main's router-fix test kept at the merge
 # and the two node tests of the carried router-fix review fixes; then the final fix wave's tests (2026-10-31).
-NEW_TESTS=$(cat <<'NAMES'
+NEW_TESTS=$(
+    cat <<'NAMES'
 soroban-spike-local|cargo|spike_ua_pay_passkey_model_budget
 soroban-spike-local|cargo|spike_bls_add_mul_fr_budget
 soroban-spike-local|cargo|spike_bls_g1_msm_budget

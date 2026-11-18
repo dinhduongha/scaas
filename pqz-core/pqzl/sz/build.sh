@@ -13,10 +13,19 @@ B=$PB
 mkdir -p "$B/include" "$B/sz"
 CC=${CC:-clang}
 # lazer.h, as build.sh assembles it
-{ cat lazer/lazer-in1.h; echo; echo "#ifndef LAZER_CONFIG_H"; echo "#define LAZER_CONFIG_H"
-  cat lazer/config.h; echo "#endif"; echo; cat lazer/lazer-in2.h; echo
-  echo "#define moduli_d64 ((const modulus_srcptr *)0)"
-  echo "#define moduli_d128 ((const modulus_srcptr *)0)"; } > "$B/include/lazer.h"
+{
+    cat lazer/lazer-in1.h
+    echo
+    echo "#ifndef LAZER_CONFIG_H"
+    echo "#define LAZER_CONFIG_H"
+    cat lazer/config.h
+    echo "#endif"
+    echo
+    cat lazer/lazer-in2.h
+    echo
+    echo "#define moduli_d64 ((const modulus_srcptr *)0)"
+    echo "#define moduli_d128 ((const modulus_srcptr *)0)"
+} >"$B/include/lazer.h"
 . ./set.sh
 
 CFLAGS="-std=gnu11 -O2 -fno-builtin -fno-math-errno -ffp-contract=off -DPQZ_SZ_TRACE -DPQZ_SV \
@@ -24,10 +33,10 @@ CFLAGS="-std=gnu11 -O2 -fno-builtin -fno-math-errno -ffp-contract=off -DPQZ_SZ_T
 
 objs=""
 for f in src/pqz_lazer.c src/pqz_ntt.c src/pqz_arena.c src/pqz_rel.c src/pqz_sv.c; do
-  o="$B/sz/$(basename "$f" .c).o"
-  case $f in src/pqz_rel.c | src/pqz_sv.c) h=-DPQZ_TEST_HOOKS ;; *) h= ;; esac
-  $CC $CFLAGS $h -c "$f" -o "$o"
-  objs="$objs $o"
+    o="$B/sz/$(basename "$f" .c).o"
+    case $f in src/pqz_rel.c | src/pqz_sv.c) h=-DPQZ_TEST_HOOKS ;; *) h= ;; esac
+    $CC $CFLAGS $h -c "$f" -o "$o"
+    objs="$objs $o"
 done
 $CC -std=gnu11 -O2 -I"$B/include" -Isrc -o "$B/sz/sz_trace" sz/sz_trace.c $objs
 $CC -std=gnu11 -O2 -Wall -Wextra -I"$B/include" -Isrc -o "$B/sz/fs_bind" sz/fs_bind.c $objs

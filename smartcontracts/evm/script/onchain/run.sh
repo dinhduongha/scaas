@@ -28,23 +28,27 @@ A=
 F=
 trap '[ -z "$F" ] || kill "$F" 2> /dev/null; [ -n "$A" ] && kill "$A" 2>/dev/null; rm -rf "$T"' EXIT INT TERM
 if [ -n "${ONCHAIN_RPC:-}" ]; then
-  RPC=$ONCHAIN_RPC
+    RPC=$ONCHAIN_RPC
 elif [ "$net" = local ]; then
-  PORT=${PORT:-18601}
-  FORK=${FORK_RPC:-${RPC_7622:?the local target forks FORK_RPC or RPC_7622, named explicitly (no default)}}
-  anvil --fork-url "$FORK" --port "$PORT" --hardfork amsterdam > "$T/anvil.log" 2>&1 &
-  A=$!
-  for i in $(seq 90); do
-    cast chain-id --rpc-url "http://127.0.0.1:$PORT" > /dev/null 2>&1 && break
-    [ "$i" -lt 90 ] || { echo "anvil did not start"; cat "$T/anvil.log"; exit 1; }
-    sleep 1
-  done
-  RPC=http://127.0.0.1:$PORT
+    PORT=${PORT:-18601}
+    FORK=${FORK_RPC:-${RPC_7622:?the local target forks FORK_RPC or RPC_7622, named explicitly (no default)}}
+    anvil --fork-url "$FORK" --port "$PORT" --hardfork amsterdam >"$T/anvil.log" 2>&1 &
+    A=$!
+    for i in $(seq 90); do
+        cast chain-id --rpc-url "http://127.0.0.1:$PORT" >/dev/null 2>&1 && break
+        [ "$i" -lt 90 ] || {
+            echo "anvil did not start"
+            cat "$T/anvil.log"
+            exit 1
+        }
+        sleep 1
+    done
+    RPC=http://127.0.0.1:$PORT
 elif [ "$net" = 7622 ] || [ "$net" = scaas-testnet ]; then
-  RPC=${RPC_7622:?the $net target needs RPC_7622, named explicitly (no default)}
+    RPC=${RPC_7622:?the $net target needs RPC_7622, named explicitly (no default)}
 else
-  echo "[$net/$lg] the target $net needs ONCHAIN_RPC (no default RPC)"
-  exit 1
+    echo "[$net/$lg] the target $net needs ONCHAIN_RPC (no default RPC)"
+    exit 1
 fi
 CHAIN=$(cast chain-id --rpc-url "$RPC")
 B=broadcast/$g.s.sol/$CHAIN/run-latest.json
@@ -55,51 +59,52 @@ rc=0
 # remote: the 30 s heartbeat counts the transactions on chain by the senders' nonce deltas (no --slow, runs never silent)
 SENT_A=
 if [ "${ONCHAIN_REMOTE:-0}" = 1 ]; then
-  for k in "${PRIVATE_KEY:-}" "${ONCHAIN_K1:-}" "${ONCHAIN_K2:-}" "${ONCHAIN_K3:-}"; do
-    [ -n "$k" ] && SENT_A="$SENT_A $(cast wallet address --private-key "$k")"
-  done
-  SENT_A=$(printf '%s\n' $SENT_A | sort -u | tr '\n' ' ')
+    for k in "${PRIVATE_KEY:-}" "${ONCHAIN_K1:-}" "${ONCHAIN_K2:-}" "${ONCHAIN_K3:-}"; do
+        [ -n "$k" ] && SENT_A="$SENT_A $(cast wallet address --private-key "$k")"
+    done
+    SENT_A=$(printf '%s\n' $SENT_A | sort -u | tr '\n' ' ')
 fi
-nonces() { for a in $SENT_A; do cast nonce --rpc-url "$RPC" "$a" 2> /dev/null || echo 0; done | paste -sd+ | bc 2> /dev/null || echo 0; }
-SENT0=$( [ -n "$SENT_A" ] && nonces || echo 0)
-sent() { [ -n "$SENT_A" ] && echo ", $(( $(nonces) - SENT0 )) tx on chain" || true; }
+nonces() { for a in $SENT_A; do cast nonce --rpc-url "$RPC" "$a" 2>/dev/null || echo 0; done | paste -sd+ | bc 2>/dev/null || echo 0; }
+SENT0=$([ -n "$SENT_A" ] && nonces || echo 0)
+sent() { [ -n "$SENT_A" ] && echo ", $(($(nonces) - SENT0)) tx on chain" || true; }
 echo "[$net/$lg] forge $g.s.sol on chain $CHAIN …"
 t0=$(date +%s)
 # --slow (one transaction per receipt) on a local chain only; a remote target sends each forge run at once (owner 2026-11-15:
 # a run is one unit, the groups stay sequential)
-SLOW=--slow; [ "${ONCHAIN_REMOTE:-0}" != 1 ] || SLOW=
-. script/onchain/fee.sh  # a remote target: a fee with headroom (fee.sh)
+SLOW=--slow
+[ "${ONCHAIN_REMOTE:-0}" != 1 ] || SLOW=
+. script/onchain/fee.sh # a remote target: a fee with headroom (fee.sh)
 remote_fee "$RPC"
 ONCHAIN_NET=$net forge script "script/onchain/$g.s.sol" --rpc-url "$RPC" --broadcast $SLOW \
-  --out "out/onchain-$lg" --cache-path "cache/onchain-$lg" --gas-estimate-multiplier "${ONCHAIN_GAS_MULTIPLIER:-130}" "$@" \
-  > "$L" 2>&1 &
+    --out "out/onchain-$lg" --cache-path "cache/onchain-$lg" --gas-estimate-multiplier "${ONCHAIN_GAS_MULTIPLIER:-130}" "$@" \
+    >"$L" 2>&1 &
 F=$!
 i=0
-while kill -0 "$F" 2> /dev/null; do
-  sleep 1
-  i=$((i + 1))
-  [ $((i % 30)) != 0 ] || echo "[$net/$lg] … forge, $(($(date +%s) - t0))s$(sent)"
-  # a remote target (ONCHAIN_REMOTE=1, matrix.sh: compiled under scripts/capped first): no compile here, fail closed
-  if [ "${ONCHAIN_REMOTE:-0}" = 1 ] && grep -q '^Compiling' "$L"; then
-    kill "$F" 2> /dev/null
-    echo "[$net/$lg] FAIL forge recompiles (compile first)"
-    break
-  fi
+while kill -0 "$F" 2>/dev/null; do
+    sleep 1
+    i=$((i + 1))
+    [ $((i % 30)) != 0 ] || echo "[$net/$lg] … forge, $(($(date +%s) - t0))s$(sent)"
+    # a remote target (ONCHAIN_REMOTE=1, matrix.sh: compiled under scripts/capped first): no compile here, fail closed
+    if [ "${ONCHAIN_REMOTE:-0}" = 1 ] && grep -q '^Compiling' "$L"; then
+        kill "$F" 2>/dev/null
+        echo "[$net/$lg] FAIL forge recompiles (compile first)"
+        break
+    fi
 done
 wait "$F" || rc=$?
 F=
 if [ "${ONCHAIN_REMOTE:-0}" = 1 ] && ! grep -q 'No files changed, compilation skipped' "$L"; then
-  rc=1
-  echo "[$net/$lg] FAIL forge did not skip compilation: a remote run compiles under scripts/capped first"
+    rc=1
+    echo "[$net/$lg] FAIL forge did not skip compilation: a remote run compiles under scripts/capped first"
 fi
 [ $rc = 0 ] || echo "[$net/$lg] FAIL forge: $(grep -E '^Error|revert' "$L" | tail -1 | cut -c1-160)"
 if [ -f "$B" ]; then
-  python3 -I script/onchain/coverage.py forge "$net" "deployments/onchain-$net-$lg.json" "$B" >> "$L" 2>&1
-  [ "${ONCHAIN_TRACE:-$([ "$net" = local ] && echo 1)}" != 1 ] ||
-    python3 -I script/onchain/coverage.py trace "$net" "$lg" "$RPC" >> "$L" 2>&1
-  python3 -I script/onchain/coverage.py neg "$net" "$lg" "$RPC" >> "$L" 2>&1 || rc=1
-  grep -E '^BAD' "$L" | sed "s/^/[$net\/$lg] FAIL /" || true
-  echo "[$net/$lg] $([ $rc = 0 ] && echo ok || echo FAIL) $(grep -c . "$OUTD/records-$net-$lg.jsonl") records, \
+    python3 -I script/onchain/coverage.py forge "$net" "deployments/onchain-$net-$lg.json" "$B" >>"$L" 2>&1
+    [ "${ONCHAIN_TRACE:-$([ "$net" = local ] && echo 1)}" != 1 ] ||
+        python3 -I script/onchain/coverage.py trace "$net" "$lg" "$RPC" >>"$L" 2>&1
+    python3 -I script/onchain/coverage.py neg "$net" "$lg" "$RPC" >>"$L" 2>&1 || rc=1
+    grep -E '^BAD' "$L" | sed "s/^/[$net\/$lg] FAIL /" || true
+    echo "[$net/$lg] $([ $rc = 0 ] && echo ok || echo FAIL) $(grep -c . "$OUTD/records-$net-$lg.jsonl") records, \
 $(grep '^negatives:' "$L" | tail -1) ($(($(date +%s) - t0))s)"
 fi
 exit $rc

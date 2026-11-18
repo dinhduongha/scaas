@@ -9,13 +9,21 @@
 set -u
 cd "$(dirname "$0")/.."
 case ${1:?round} in
-  n2560) S=n2560-kmax16384
-    runs/c8.sh c8c-n2560 $S && runs/c8-wasm.sh c8c-n2560 $S && target/$S/release/ligero_kat sizes > runs/c8c-n2560-sizes.jsonl &&
-      runs/ct.sh c8c-n2560 4095 1 $S ;;
-  n2048) runs/c8.sh c8c-n2048 n2048-kmax1024 && runs/c8-wasm.sh c8c-n2048 n2048-kmax1024 ;;
-  n2304) runs/c8.sh c8c-n2304 n2304-kmax4096 && runs/c8-wasm.sh c8c-n2304 n2304-kmax4096 ;;
-  fallback) CARGO_TARGET_DIR=$(pwd)/target/n2304-kmax4096-fallback cargo test --release --offline --no-fail-fast \
-      --features set-n2304-kmax4096,fallback-retry -- --test-threads 1 > runs/c8c-fallback-tests.txt 2>&1
-    grep -E '^test result|FAILED|fallback_retry' runs/c8c-fallback-tests.txt; ! grep -q FAILED runs/c8c-fallback-tests.txt ;;
-  *) echo "round: n2560 | n2048 | n2304 | fallback" >&2; exit 2 ;;
+    n2560)
+        S=n2560-kmax16384
+        runs/c8.sh c8c-n2560 $S && runs/c8-wasm.sh c8c-n2560 $S && target/$S/release/ligero_kat sizes >runs/c8c-n2560-sizes.jsonl &&
+            runs/ct.sh c8c-n2560 4095 1 $S
+        ;;
+    n2048) runs/c8.sh c8c-n2048 n2048-kmax1024 && runs/c8-wasm.sh c8c-n2048 n2048-kmax1024 ;;
+    n2304) runs/c8.sh c8c-n2304 n2304-kmax4096 && runs/c8-wasm.sh c8c-n2304 n2304-kmax4096 ;;
+    fallback)
+        CARGO_TARGET_DIR=$(pwd)/target/n2304-kmax4096-fallback cargo test --release --offline --no-fail-fast \
+            --features set-n2304-kmax4096,fallback-retry -- --test-threads 1 >runs/c8c-fallback-tests.txt 2>&1
+        grep -E '^test result|FAILED|fallback_retry' runs/c8c-fallback-tests.txt
+        ! grep -q FAILED runs/c8c-fallback-tests.txt
+        ;;
+    *)
+        echo "round: n2560 | n2048 | n2304 | fallback" >&2
+        exit 2
+        ;;
 esac

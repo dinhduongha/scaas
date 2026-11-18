@@ -13,9 +13,12 @@ cd "$(dirname "$0")"
 B=$(cd .. && pwd)/build/fuzz${PQZ_BUILD_TAG:+-$PQZ_BUILD_TAG} # gate.sh: build/fuzz-<set> (concurrent gates)
 TRIPLE=x86_64-unknown-linux-gnu
 case ${PQZ_FUZZ_MODE:-} in
-  "") S= F= ;;
-  pqzl-diff) S=-pqzl-diff F="--features pqzl-diff" ;;
-  *) echo "PQZ_FUZZ_MODE=$PQZ_FUZZ_MODE: unset or pqzl-diff" >&2; exit 2 ;;
+    "") S= F= ;;
+    pqzl-diff) S=-pqzl-diff F="--features pqzl-diff" ;;
+    *)
+        echo "PQZ_FUZZ_MODE=$PQZ_FUZZ_MODE: unset or pqzl-diff" >&2
+        exit 2
+        ;;
 esac
 # PQZ_SET: the parameter set (default n2304-kmax4096, pqz-ffi's; run.sh / seeds.py take the same variable)
 export PQZ_SET=${PQZ_SET:-n2304-kmax4096}
@@ -28,6 +31,6 @@ export RUSTFLAGS="-C passes=sancov-module -C llvm-args=-sanitizer-coverage-level
 cargo build --release --offline --target $TRIPLE $F
 LIB=$CARGO_TARGET_DIR/$TRIPLE/release/libpqz_fuzz.a
 for t in precompile mutate codec offchain; do
-  clang-18 -g -O1 -fsanitize=fuzzer,address,undefined -o "$B/$t$S" "targets/$t.c" "$LIB" -lpthread -ldl -lm -lrt -lgcc_s
+    clang-18 -g -O1 -fsanitize=fuzzer,address,undefined -o "$B/$t$S" "targets/$t.c" "$LIB" -lpthread -ldl -lm -lrt -lgcc_s
 done
 ls -l "$B/precompile$S" "$B/mutate$S" "$B/codec$S" "$B/offchain$S"

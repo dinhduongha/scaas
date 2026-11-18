@@ -16,7 +16,8 @@ FAMILIES=""
 # Not listed: the invariant_* of T8 (forge prints an invariant "[PASS] <name>" without "(", which the forge form does not
 # match; their PASS lines are in the forge log, DexInvariantTest) and the opt-in Uniswap fork tests of T10 (skipped
 # without the fork RPC, PD8; run log runs/2026-10-30-dex-round-fork.txt).
-NEW_TESTS=$(cat <<'NAMES'
+NEW_TESTS=$(
+    cat <<'NAMES'
 forge|forge|test_uaTrade_belowHalfSettles
 forge|forge|test_ua_minFill_remainderClosesBelowMinFill
 forge|forge|test_settle_makerAtTenPercent_settles

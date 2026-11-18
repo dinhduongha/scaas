@@ -20,89 +20,116 @@ cap="$W/scripts/capped"
 
 # step | directory | command (run with bash -c from the directory)
 STEPS=(
-  "rpc-test|clients/scaas-rpc|$cap cargo test $C --all-features"
-  "rpc-clippy|clients/scaas-rpc|$cap cargo clippy $C --all-targets --all-features -- -D warnings"
-  "rpc-anvil|clients/scaas-rpc|$cap cargo test $C --features evm --test anvil -- --ignored$TT"
-  "rpc-wasm|clients/scaas-rpc|$cap cargo check $C --target wasm32-unknown-unknown --no-default-features --features evm,node-client"
-  "rpc-deny|clients/scaas-rpc|$cap cargo deny --all-features check"
-  "node-test|scaas-node|CAPPED_MEM=6G $cap cargo test $C"
-  "node-clippy|scaas-node|$cap cargo clippy $C --all-targets -- -D warnings"
-  "node-e2e|scaas-node|CAPPED_MEM=6G $cap cargo test $C --test e2e -- --ignored$TT"
-  "node-e2e-hedera|scaas-node|(cd ../smartcontracts/evm && $cap forge build test/hedera/HederaMocks.sol) && CAPPED_MEM=6G $cap cargo test $C --test e2e_hedera -- --ignored$TT"
-  "node-e2e-soroban|scaas-node|CARGO_BUILD_JOBS=2 $cap ../smartcontracts/scripts/build.sh soroban && (cd ../clients/clientkeys && [ -d node_modules ] || $cap npm ci --no-audit --no-fund) && ../smartcontracts/soroban/scripts/quickstart.sh up && trap '../smartcontracts/soroban/scripts/quickstart.sh down' EXIT && ../smartcontracts/soroban/scripts/quickstart.sh wait && CAPPED_MEM=6G $cap cargo test $C --test e2e_soroban -- --ignored --test-threads=1 && CAPPED_MEM=6G $cap cargo test $C --test e2e_soroban_ua -- --ignored --test-threads=1"
-  "node-e2e-solana|scaas-node|CARGO_BUILD_JOBS=2 $cap ../smartcontracts/scripts/build.sh solana && CAPPED_MEM=6G $cap bash -c \"../smartcontracts/solana/scripts/devnet.sh up --upgradeable-program BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d ../smartcontracts/solana/target/deploy/scaas.so 73VoVWyfxmaWC6gUjsse6xzNTLLoEhazMCcKakXWbebm --bpf-program A4PasPZEK899MesXpT3MSA4ufnpHcyfxjKuxRXmcZnRJ ../smartcontracts/solana/target/deploy/cpi_wrapper.so && trap '../smartcontracts/solana/scripts/devnet.sh down' EXIT && cargo test $C --test e2e_solana -- --ignored$TT\""
-  "node-e2e-near|scaas-node|CARGO_BUILD_JOBS=2 $cap ../smartcontracts/scripts/build.sh near && (cd ../smartcontracts/near && $cap cargo test --no-run -j2) && CAPPED_MEM=6G $cap cargo test $C --test e2e_near -- --ignored$TT"
-  "node-e2e-algorand|scaas-node|D=../smartcontracts/scripts/devnet.sh; \$D algorand down >/dev/null 2>&1; trap '\$D algorand down >/dev/null 2>&1' EXIT; $cap \$D algorand up && CAPPED_MEM=6G $cap cargo test $C --test e2e_algorand -- --ignored$TT"
-  # node-e2e-aptos: the localnet is a long-lived service: its own memory-capped scope (as Docker's --memory), not a capped slot
-  # (a slot held for the whole run starved the test's own build behind other agents' jobs); the Indexer API's containers
-  # capped by `docker update`
-  "node-e2e-aptos|scaas-node|D=../smartcontracts/move/aptos/scripts/devnet.sh; \$D down >/dev/null 2>&1; trap '\$D down >/dev/null 2>&1' EXIT; systemd-run --user --scope --quiet -p MemoryMax=3G -p MemorySwapMax=1G -- \$D up && $cap \$D publish && docker update --memory 2g --memory-swap 2g \$(docker ps -q --filter name=local-testnet) >/dev/null && CAPPED_MEM=6G $cap cargo test $C --test e2e_aptos -- --ignored$TT"
-  "node-e2e-sui|scaas-node|CAPPED_MEM=6G $cap cargo test $C --test e2e_sui -- --ignored$TT"
-  # node-e2e-ton: the sandbox shim (smartcontracts/ton: npm ci when absent, the Tact build; both git-ignored), started by the test
-  "node-e2e-ton|scaas-node|TD=../smartcontracts/ton; { [ -d \$TD/node_modules ] || (cd \$TD && $cap npm ci); } && (cd \$TD && $cap npx tact --config tact.config.json) && CAPPED_MEM=6G $cap cargo test $C --test e2e_ton -- --ignored$TT"
-  # node-e2e-cosmos: the wasm built when absent (git-ignored artifacts/), the devnet container started by the test (2 GiB, 2 CPUs)
-  "node-e2e-cosmos|scaas-node|{ [ -d ../smartcontracts/cosmos/artifacts ] || (cd ../smartcontracts/cosmos && $cap sh build-wasm.sh); } && CAPPED_MEM=6G $cap cargo test $C --test e2e_cosmos -- --ignored$TT"
-  "ver-test|scaas-pqz-verifier|$cap cargo test $C"
-  "ver-clippy|scaas-pqz-verifier|$cap cargo clippy $C --all-targets -- -D warnings"
-  "ver-anvil|scaas-pqz-verifier|$cap cargo test $C --test anvil -- --ignored$TT"
-  "ua-json|clients/ua-rs|$cap cargo test $C --no-default-features --features json --test json && $cap cargo clippy $C --all-targets --no-default-features --features json -- -D warnings"
-  "ua-verify|clients/ua-rs|$cap cargo clippy $C --all-targets --no-default-features -- -D warnings && $cap cargo test $C --no-default-features"
-  "ua-default|clients/ua-rs|$cap cargo clippy $C --all-targets -- -D warnings && $cap cargo test $C --lib --test json"
-  "eip1898|.|bash $R/2026-11-17-scaas-rpc-eip1898.sh"
-  "docs|.|python3 scripts/docs_check.py check && python3 scripts/test_docs_check.py"
-  "features|.|python3 scripts/check_test_features.py"
+    "rpc-test|clients/scaas-rpc|$cap cargo test $C --all-features"
+    "rpc-clippy|clients/scaas-rpc|$cap cargo clippy $C --all-targets --all-features -- -D warnings"
+    "rpc-anvil|clients/scaas-rpc|$cap cargo test $C --features evm --test anvil -- --ignored$TT"
+    "rpc-wasm|clients/scaas-rpc|$cap cargo check $C --target wasm32-unknown-unknown --no-default-features --features evm,node-client"
+    "rpc-deny|clients/scaas-rpc|$cap cargo deny --all-features check"
+    "node-test|scaas-node|CAPPED_MEM=6G $cap cargo test $C"
+    "node-clippy|scaas-node|$cap cargo clippy $C --all-targets -- -D warnings"
+    "node-e2e|scaas-node|CAPPED_MEM=6G $cap cargo test $C --test e2e -- --ignored$TT"
+    "node-e2e-hedera|scaas-node|(cd ../smartcontracts/evm && $cap forge build test/hedera/HederaMocks.sol) && CAPPED_MEM=6G $cap cargo test $C --test e2e_hedera -- --ignored$TT"
+    "node-e2e-soroban|scaas-node|CARGO_BUILD_JOBS=2 $cap ../smartcontracts/scripts/build.sh soroban && (cd ../clients/clientkeys && [ -d node_modules ] || $cap npm ci --no-audit --no-fund) && ../smartcontracts/soroban/scripts/quickstart.sh up && trap '../smartcontracts/soroban/scripts/quickstart.sh down' EXIT && ../smartcontracts/soroban/scripts/quickstart.sh wait && CAPPED_MEM=6G $cap cargo test $C --test e2e_soroban -- --ignored --test-threads=1 && CAPPED_MEM=6G $cap cargo test $C --test e2e_soroban_ua -- --ignored --test-threads=1"
+    "node-e2e-solana|scaas-node|CARGO_BUILD_JOBS=2 $cap ../smartcontracts/scripts/build.sh solana && CAPPED_MEM=6G $cap bash -c \"../smartcontracts/solana/scripts/devnet.sh up --upgradeable-program BDo6exf1vzqX44BJc1WDf4Pw6sGZcxqmuVmQPfgUgS3d ../smartcontracts/solana/target/deploy/scaas.so 73VoVWyfxmaWC6gUjsse6xzNTLLoEhazMCcKakXWbebm --bpf-program A4PasPZEK899MesXpT3MSA4ufnpHcyfxjKuxRXmcZnRJ ../smartcontracts/solana/target/deploy/cpi_wrapper.so && trap '../smartcontracts/solana/scripts/devnet.sh down' EXIT && cargo test $C --test e2e_solana -- --ignored$TT\""
+    "node-e2e-near|scaas-node|CARGO_BUILD_JOBS=2 $cap ../smartcontracts/scripts/build.sh near && (cd ../smartcontracts/near && $cap cargo test --no-run -j2) && CAPPED_MEM=6G $cap cargo test $C --test e2e_near -- --ignored$TT"
+    "node-e2e-algorand|scaas-node|D=../smartcontracts/scripts/devnet.sh; \$D algorand down >/dev/null 2>&1; trap '\$D algorand down >/dev/null 2>&1' EXIT; $cap \$D algorand up && CAPPED_MEM=6G $cap cargo test $C --test e2e_algorand -- --ignored$TT"
+    # node-e2e-aptos: the localnet is a long-lived service: its own memory-capped scope (as Docker's --memory), not a capped slot
+    # (a slot held for the whole run starved the test's own build behind other agents' jobs); the Indexer API's containers
+    # capped by `docker update`
+    "node-e2e-aptos|scaas-node|D=../smartcontracts/move/aptos/scripts/devnet.sh; \$D down >/dev/null 2>&1; trap '\$D down >/dev/null 2>&1' EXIT; systemd-run --user --scope --quiet -p MemoryMax=3G -p MemorySwapMax=1G -- \$D up && $cap \$D publish && docker update --memory 2g --memory-swap 2g \$(docker ps -q --filter name=local-testnet) >/dev/null && CAPPED_MEM=6G $cap cargo test $C --test e2e_aptos -- --ignored$TT"
+    "node-e2e-sui|scaas-node|CAPPED_MEM=6G $cap cargo test $C --test e2e_sui -- --ignored$TT"
+    # node-e2e-ton: the sandbox shim (smartcontracts/ton: npm ci when absent, the Tact build; both git-ignored), started by the test
+    "node-e2e-ton|scaas-node|TD=../smartcontracts/ton; { [ -d \$TD/node_modules ] || (cd \$TD && $cap npm ci); } && (cd \$TD && $cap npx tact --config tact.config.json) && CAPPED_MEM=6G $cap cargo test $C --test e2e_ton -- --ignored$TT"
+    # node-e2e-cosmos: the wasm built when absent (git-ignored artifacts/), the devnet container started by the test (2 GiB, 2 CPUs)
+    "node-e2e-cosmos|scaas-node|{ [ -d ../smartcontracts/cosmos/artifacts ] || (cd ../smartcontracts/cosmos && $cap sh build-wasm.sh); } && CAPPED_MEM=6G $cap cargo test $C --test e2e_cosmos -- --ignored$TT"
+    "ver-test|scaas-pqz-verifier|$cap cargo test $C"
+    "ver-clippy|scaas-pqz-verifier|$cap cargo clippy $C --all-targets -- -D warnings"
+    "ver-anvil|scaas-pqz-verifier|$cap cargo test $C --test anvil -- --ignored$TT"
+    "ua-json|clients/ua-rs|$cap cargo test $C --no-default-features --features json --test json && $cap cargo clippy $C --all-targets --no-default-features --features json -- -D warnings"
+    "ua-verify|clients/ua-rs|$cap cargo clippy $C --all-targets --no-default-features -- -D warnings && $cap cargo test $C --no-default-features"
+    "ua-default|clients/ua-rs|$cap cargo clippy $C --all-targets -- -D warnings && $cap cargo test $C --lib --test json"
+    "eip1898|.|bash $R/2026-11-17-scaas-rpc-eip1898.sh"
+    "docs|.|python3 scripts/docs_check.py check && python3 scripts/test_docs_check.py"
+    "features|.|python3 scripts/check_test_features.py"
 )
 
-cmd_of() { local s; for s in "${STEPS[@]}"; do [[ ${s%%|*} == "$1" ]] && { echo "$s"; return 0; }; done; return 1; }
+cmd_of() {
+    local s
+    for s in "${STEPS[@]}"; do [[ ${s%%|*} == "$1" ]] && {
+        echo "$s"
+        return 0
+    }; done
+    return 1
+}
 
 case "${1:-}" in
-  --list) for s in "${STEPS[@]}"; do IFS='|' read -r n d c <<<"$s"; printf '%-16s %s: %s\n' "$n" "$d" "$c"; done; exit 0 ;;
-  --only) [[ -n "${2:-}" ]] || { echo "[G] --only needs a step (--list)" >&2; exit 2; } ;;
-  *) echo "usage: $0 --list | --only <step>[,<step>…] [--force]" >&2; exit 2 ;;
+    --list)
+        for s in "${STEPS[@]}"; do
+            IFS='|' read -r n d c <<<"$s"
+            printf '%-16s %s: %s\n' "$n" "$d" "$c"
+        done
+        exit 0
+        ;;
+    --only) [[ -n "${2:-}" ]] || {
+        echo "[G] --only needs a step (--list)" >&2
+        exit 2
+    } ;;
+    *)
+        echo "usage: $0 --list | --only <step>[,<step>…] [--force]" >&2
+        exit 2
+        ;;
 esac
 IFS=',' read -ra WANT <<<"$2"
 FORCE=${3:-}
-for s in "${WANT[@]}"; do cmd_of "$s" >/dev/null || { echo "[G] no such step: $s (--list)" >&2; exit 2; }; done
+for s in "${WANT[@]}"; do cmd_of "$s" >/dev/null || {
+    echo "[G] no such step: $s (--list)" >&2
+    exit 2
+}; done
 
 sha=$(git rev-parse --short=9 HEAD)
 X=":!$SUMMARY"
 clean() { git diff --quiet HEAD -- . "$X" && git diff --quiet --cached HEAD -- . "$X"; }
 
 counts() { # sum of the `test result:` lines of a log
-  awk '/^test result:/ { for (i = 1; i <= NF; i++) { if ($(i+1) ~ /^passed/) p += $i; if ($(i+1) ~ /^failed/) f += $i; if ($(i+1) ~ /^ignored/) g += $i }; n++ }
+    awk '/^test result:/ { for (i = 1; i <= NF; i++) { if ($(i+1) ~ /^passed/) p += $i; if ($(i+1) ~ /^failed/) f += $i; if ($(i+1) ~ /^ignored/) g += $i }; n++ }
        /^RESULT / { sub(/^RESULT /, ""); r = r (r ? "; " : "") $0 }
        END { if (n) printf "%d passed, %d failed, %d ignored (%d binaries)", p, f, g, n; else if (r) printf "%s", r; else printf "-" }' "$1"
 }
 
 row() { # replace the step's summary row
-  touch "$SUMMARY"
-  grep -v "^$1 |" "$SUMMARY" >"$SUMMARY.new" || true
-  echo "$1 | $2 | $3 | $4" >>"$SUMMARY.new"
-  mv "$SUMMARY.new" "$SUMMARY"
+    touch "$SUMMARY"
+    grep -v "^$1 |" "$SUMMARY" >"$SUMMARY.new" || true
+    echo "$1 | $2 | $3 | $4" >>"$SUMMARY.new"
+    mv "$SUMMARY.new" "$SUMMARY"
 }
 
 worst=0
 for s in "${WANT[@]}"; do
-  IFS='|' read -r name dir cmd <<<"$(cmd_of "$s")"
-  log=$R/2026-11-17-scaas-rpc-$name.log
-  if [[ $FORCE != --force && -f $log ]] && clean && [[ $(head -1 "$log") == "# $name at commit $sha" ]] && [[ $(tail -1 "$log") == rc=0 ]]; then
-    echo "[G] $name: done at $sha (clean tree), skipped"
-    continue
-  fi
-  state=clean; clean || state=dirty
-  echo "# $name at commit $sha" >"$log"
-  echo "# tree $state; $dir: $cmd" >>"$log"
-  echo "[G] $name start ($dir, tree $state)"
-  t0=$SECONDS
-  ( while sleep 30; do echo "[G] $name running $((SECONDS - t0)) s"; done ) &
-  hb=$!
-  (cd "$dir" && bash -c "$cmd") >>"$log" 2>&1
-  rc=$?
-  kill "$hb" 2>/dev/null; wait "$hb" 2>/dev/null
-  echo "rc=$rc" >>"$log"
-  n=$(counts "$log")
-  [[ $state == dirty ]] && n="$n; tree dirty"
-  row "$name" "$sha" "$rc" "$n"
-  if ((rc == 0)); then echo "[G] $name ok in $((SECONDS - t0)) s: $n"; else echo "[G] $name FAIL rc=$rc in $((SECONDS - t0)) s: $n (see $log)"; worst=$rc; fi
+    IFS='|' read -r name dir cmd <<<"$(cmd_of "$s")"
+    log=$R/2026-11-17-scaas-rpc-$name.log
+    if [[ $FORCE != --force && -f $log ]] && clean && [[ $(head -1 "$log") == "# $name at commit $sha" ]] && [[ $(tail -1 "$log") == rc=0 ]]; then
+        echo "[G] $name: done at $sha (clean tree), skipped"
+        continue
+    fi
+    state=clean
+    clean || state=dirty
+    echo "# $name at commit $sha" >"$log"
+    echo "# tree $state; $dir: $cmd" >>"$log"
+    echo "[G] $name start ($dir, tree $state)"
+    t0=$SECONDS
+    (while sleep 30; do echo "[G] $name running $((SECONDS - t0)) s"; done) &
+    hb=$!
+    (cd "$dir" && bash -c "$cmd") >>"$log" 2>&1
+    rc=$?
+    kill "$hb" 2>/dev/null
+    wait "$hb" 2>/dev/null
+    echo "rc=$rc" >>"$log"
+    n=$(counts "$log")
+    [[ $state == dirty ]] && n="$n; tree dirty"
+    row "$name" "$sha" "$rc" "$n"
+    if ((rc == 0)); then echo "[G] $name ok in $((SECONDS - t0)) s: $n"; else
+        echo "[G] $name FAIL rc=$rc in $((SECONDS - t0)) s: $n (see $log)"
+        worst=$rc
+    fi
 done
 exit "$worst"

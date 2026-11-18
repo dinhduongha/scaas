@@ -7,15 +7,22 @@
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 export PATH="$HOME/.foundry/bin:$PATH"
-git diff --quiet -- src || { echo "src is not clean" >&2; exit 2; }
+git diff --quiet -- src || {
+    echo "src is not clean" >&2
+    exit 2
+}
 for m in $(python3 "$here/t5_mutants.py" --list); do
-  python3 "$here/t5_mutants.py" "$m" || { echo "$m: anchor missing" >&2; echo 99 > "$here/mutant-t5-$m.rc.log"; continue; }
-  FOUNDRY_TEST=test/merge ../../scripts/capped forge test --match-path 'test/merge/*.t.sol' > "$here/mutant-t5-$m.log" 2>&1
-  rc=$?
-  ../../scripts/capped forge test --match-path 'test/pqz/*.t.sol' >> "$here/mutant-t5-$m.log" 2>&1
-  r2=$?
-  echo "$rc$r2" > "$here/mutant-t5-$m.rc.log"
-  git checkout -- src
+    python3 "$here/t5_mutants.py" "$m" || {
+        echo "$m: anchor missing" >&2
+        echo 99 >"$here/mutant-t5-$m.rc.log"
+        continue
+    }
+    FOUNDRY_TEST=test/merge ../../scripts/capped forge test --match-path 'test/merge/*.t.sol' >"$here/mutant-t5-$m.log" 2>&1
+    rc=$?
+    ../../scripts/capped forge test --match-path 'test/pqz/*.t.sol' >>"$here/mutant-t5-$m.log" 2>&1
+    r2=$?
+    echo "$rc$r2" >"$here/mutant-t5-$m.rc.log"
+    git checkout -- src
 done
 python3 - "$here" <<'PY'
 import os, re, sys

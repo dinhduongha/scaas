@@ -13,18 +13,21 @@ ROOT=$(cd "$(dirname "$0")/../../../.." && pwd)
 EVM=$ROOT/smartcontracts/evm
 PRE=d142b57c
 if [ "$S" = default ]; then
-  P=$ROOT/scratchpad/t66b-pre
+    P=$ROOT/scratchpad/t66b-pre
 else
-  P=$ROOT/scratchpad/t66b-pre-$S
-  if [ ! -d "$P/smartcontracts/evm/out" ]; then
-    rm -rf "$P" && mkdir -p "$P"
-    git -C "$ROOT" archive --format=tar "$PRE" smartcontracts/evm/src smartcontracts/evm/foundry.toml | tar -x -C "$P"
-    git -C "$ROOT" show "$PRE:pqz-core/params/sets/$S/PqzSet.sol" > "$P/smartcontracts/evm/src/pqz/PqzSet.sol"
-    cp -al "$EVM/lib" "$P/smartcontracts/evm/lib"
-    (cd "$P/smartcontracts/evm" && "$ROOT/scripts/capped" "$HOME/.foundry/bin/forge" build src > /dev/null)
-  fi
+    P=$ROOT/scratchpad/t66b-pre-$S
+    if [ ! -d "$P/smartcontracts/evm/out" ]; then
+        rm -rf "$P" && mkdir -p "$P"
+        git -C "$ROOT" archive --format=tar "$PRE" smartcontracts/evm/src smartcontracts/evm/foundry.toml | tar -x -C "$P"
+        git -C "$ROOT" show "$PRE:pqz-core/params/sets/$S/PqzSet.sol" >"$P/smartcontracts/evm/src/pqz/PqzSet.sol"
+        cp -al "$EVM/lib" "$P/smartcontracts/evm/lib"
+        (cd "$P/smartcontracts/evm" && "$ROOT/scripts/capped" "$HOME/.foundry/bin/forge" build src >/dev/null)
+    fi
 fi
 grep -q "NAME = \"$([ "$S" = default ] && echo n2304-kmax4096 || echo "$S")\"" "$P/smartcontracts/evm/src/pqz/PqzSet.sol" ||
-  { echo "legacy-at-set.sh: $P is not at set $S"; exit 1; }
+    {
+        echo "legacy-at-set.sh: $P is not at set $S"
+        exit 1
+    }
 (cd "$EVM" && python3 script/modules/legacy_artifacts.py json "$P/smartcontracts/evm/out")
 echo "out/t66b-legacy: d142b57c at $S"

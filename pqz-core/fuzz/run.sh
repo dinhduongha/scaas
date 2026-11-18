@@ -12,43 +12,58 @@ set -u
 cd "$(dirname "$0")"
 T=$1 S=$2 L=${3:-$(date +%F)}
 case ${PQZ_FUZZ_MODE:-} in
-  "") X=$T ;;
-  pqzl-diff) X=$T-pqzl-diff ;;
-  *) echo "PQZ_FUZZ_MODE=$PQZ_FUZZ_MODE: unset or pqzl-diff" >&2; exit 2 ;;
+    "") X=$T ;;
+    pqzl-diff) X=$T-pqzl-diff ;;
+    *)
+        echo "PQZ_FUZZ_MODE=$PQZ_FUZZ_MODE: unset or pqzl-diff" >&2
+        exit 2
+        ;;
 esac
 B=$(cd .. && pwd)/build/fuzz${PQZ_BUILD_TAG:+-$PQZ_BUILD_TAG} # as build.sh
 W=$B/work/$T SEEDS=$B/seeds/$T M=$B/merged/$T LOG=runs/$L-$T.txt
 # the merged set goes to the committed corpus/<target>/, or under gate.sh (PQZ_BUILD_TAG set: a smoke run, concurrent
 # gates) to $B/corpus/<target>/ so corpus/ is only read
-C=corpus/$T; [ -z "${PQZ_BUILD_TAG:-}" ] || C=$B/corpus/$T
+C=corpus/$T
+[ -z "${PQZ_BUILD_TAG:-}" ] || C=$B/corpus/$T
 mkdir -p "$W" "$SEEDS" runs "corpus/$T" "regress/$T" "$C"
 # precompile: above the set's MAX_INPUT (set.json max_input: 524,288 at every set since the R0 review fix 2026-10-25, n2048-kmax1024 was 393,216; plan
 # 5h Task 8c part 2) so the revert path is reached and no honest seed is truncated; the others edit inputs in memory
 export PQZ_SET=${PQZ_SET:-n2304-kmax4096} # build.sh's default; seeds.py (pqz_kat.py) reads the same set
 MI=$(python3 -I -c "import json, sys; print(json.load(open(sys.argv[1]))['max_input'])" "../params/sets/$PQZ_SET/set.json")
-[ -n "$MI" ] || { echo "fuzz/run.sh: no max_input in set.json of $PQZ_SET" >&2; exit 2; } # 8c2 re-review N1
+[ -n "$MI" ] || {
+    echo "fuzz/run.sh: no max_input in set.json of $PQZ_SET" >&2
+    exit 2
+} # 8c2 re-review N1
 case $T in precompile | offchain) ML=$((MI + 4096)) ;; *) ML=512 ;; esac
 # memory: the C core's arenas (mode pqzl-diff: ARENA_SMALL 512 MiB; the C generic verifier's ARENA_BIG = 1 GiB is one
 # malloc of exactly 1024 MiB, which -malloc_limit_mb=1024 reported as an OOM in P6-ANON S5); scripts/capped caps at 4 GB
 LIM="-rss_limit_mb=3072 -malloc_limit_mb=1536"
 export PQZ_FUZZ_HONEST=$B/honest.bin PQZ_FUZZ_SPLIT=$B/honest_split.bin ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1
-python3 -I seeds.py "$B" > "$LOG" 2>&1 || { cat "$LOG"; exit 1; }
+python3 -I seeds.py "$B" >"$LOG" 2>&1 || {
+    cat "$LOG"
+    exit 1
+}
 # a work corpus from other honest inputs holds valid proofs the oracle does not know (a false "wrong accept"): drop it
 H=$(sha256sum "$B/honest.bin" | cut -c1-64)
-[ "$(cat "$W.honest" 2>/dev/null)" = "$H" ] || { rm -rf "$W" && mkdir -p "$W" && echo "$H" > "$W.honest"; }
+[ "$(cat "$W.honest" 2>/dev/null)" = "$H" ] || { rm -rf "$W" && mkdir -p "$W" && echo "$H" >"$W.honest"; }
 {
-  echo "# fuzz $T (binary $X), $S s, $(date -Is), commit $(git rev-parse --short HEAD), $(clang-18 --version | head -1), $(rustc --version)"
-  "$B/$X" -max_total_time="$S" -max_len=$ML $LIM -timeout=120 -print_final_stats=1 \
-    -artifact_prefix="$B/crash-$T-" "$W" "corpus/$T" "regress/$T" "$SEEDS"
-  frc=$?; echo "[fuzz rc=$frc]"
-  rm -rf "$M" && mkdir -p "$M"
-  # -artifact_prefix: without it a crash in the merge step lands in this directory (P6e smoke3: the stray crash file)
-  "$B/$X" -merge=1 -artifact_prefix="$B/crash-$T-merge-" -max_len=$ML $LIM -timeout=120 "$M" "$W" "corpus/$T"
-  mrc=$?; echo "[merge rc=$mrc]"
-  rm -f "$C"/*
-  find "$M" -type f -size -513c -exec cp {} "$C/" \;
-  echo "corpus/$T: $(ls "$C" | wc -l) inputs ($C), $(du -sb "$C" | cut -f1) B (merged set $(ls "$M" | wc -l) inputs, $(du -sb "$M" | cut -f1) B)"
-} >> "$LOG" 2>&1
+    echo "# fuzz $T (binary $X), $S s, $(date -Is), commit $(git rev-parse --short HEAD), $(clang-18 --version | head -1), $(rustc --version)"
+    "$B/$X" -max_total_time="$S" -max_len=$ML $LIM -timeout=120 -print_final_stats=1 \
+        -artifact_prefix="$B/crash-$T-" "$W" "corpus/$T" "regress/$T" "$SEEDS"
+    frc=$?
+    echo "[fuzz rc=$frc]"
+    rm -rf "$M" && mkdir -p "$M"
+    # -artifact_prefix: without it a crash in the merge step lands in this directory (P6e smoke3: the stray crash file)
+    "$B/$X" -merge=1 -artifact_prefix="$B/crash-$T-merge-" -max_len=$ML $LIM -timeout=120 "$M" "$W" "corpus/$T"
+    mrc=$?
+    echo "[merge rc=$mrc]"
+    rm -f "$C"/*
+    find "$M" -type f -size -513c -exec cp {} "$C/" \;
+    echo "corpus/$T: $(ls "$C" | wc -l) inputs ($C), $(du -sb "$C" | cut -f1) B (merged set $(ls "$M" | wc -l) inputs, $(du -sb "$M" | cut -f1) B)"
+} >>"$LOG" 2>&1
 sed -i "s|'[^']*/libFuzzerTemp\.|'<tmp>/libFuzzerTemp.|" "$LOG" # libFuzzer's merge file is in $TMPDIR: no temp path in a log
 grep -E "pqz-fuzz (init|summary|FINDING)|^stat::|Done [0-9]+ runs|\[(fuzz|merge) rc|^corpus/|ERROR|SUMMARY" "$LOG"
-[ "$frc" = 0 ] && [ "$mrc" = 0 ] && ! grep -q "pqz-fuzz FINDING" "$LOG" || { echo "fuzz/run.sh $T: FAILED (fuzz rc=$frc, merge rc=$mrc)"; exit 1; }
+[ "$frc" = 0 ] && [ "$mrc" = 0 ] && ! grep -q "pqz-fuzz FINDING" "$LOG" || {
+    echo "fuzz/run.sh $T: FAILED (fuzz rc=$frc, merge rc=$mrc)"
+    exit 1
+}

@@ -14,11 +14,11 @@ ROOT=$(cd ../.. && pwd)
 SDK=mcr.microsoft.com/dotnet/sdk:10.0.402-resolute@sha256:6924c5c6564690089a67509f5a6ae85d7afa28d7f0f6466ec1b8a5439764ca92
 OUT=runs/$(date +%F)-test${PQZ_SET:+-$PQZ_SET}${PQZ_TEST_FILTER:+-filtered}.txt
 docker run --rm --memory 4g --cpus 4 -u "$(id -u):$(id -g)" -e HOME=/tmp -e DOTNET_CLI_HOME=/tmp -e DOTNET_CLI_TELEMETRY_OPTOUT=1 -e DOTNET_NOLOGO=1 \
-  -e PQZ_SET="${PQZ_SET:-n2304-kmax4096}" ${PQZ_FFI_DIR:+-e PQZ_FFI_DIR="$PQZ_FFI_DIR"} ${PQZ_CORPUS:+-e PQZ_CORPUS="$PQZ_CORPUS"} \
-  ${PQZ_HOOKS_DIR:+-e PQZ_HOOKS_DIR="$PQZ_HOOKS_DIR"} -e PQZ_TEST_FILTER="${PQZ_TEST_FILTER:-}" \
-  -e NUGET_PACKAGES="$HOME/.nuget/packages" -v "$HOME/.nuget/packages:$HOME/.nuget/packages" \
-  -v "$ROOT:$ROOT" -w "$HERE" "$SDK" sh -c '
+    -e PQZ_SET="${PQZ_SET:-n2304-kmax4096}" ${PQZ_FFI_DIR:+-e PQZ_FFI_DIR="$PQZ_FFI_DIR"} ${PQZ_CORPUS:+-e PQZ_CORPUS="$PQZ_CORPUS"} \
+    ${PQZ_HOOKS_DIR:+-e PQZ_HOOKS_DIR="$PQZ_HOOKS_DIR"} -e PQZ_TEST_FILTER="${PQZ_TEST_FILTER:-}" \
+    -e NUGET_PACKAGES="$HOME/.nuget/packages" -v "$HOME/.nuget/packages:$HOME/.nuget/packages" \
+    -v "$ROOT:$ROOT" -w "$HERE" "$SDK" sh -c '
     echo "# P6f tests in $(. /etc/os-release; echo $PRETTY_NAME), $(openssl version), SDK $(dotnet --version), $(date -u +%FT%TZ)"
     dotnet test Nethermind.Pqz.Test/Nethermind.Pqz.Test.csproj -c Release -m:2 -p:UseSharedCompilation=false -p:PqzSet="$PQZ_SET" ${PQZ_TEST_FILTER:+--filter "$PQZ_TEST_FILTER"} --logger "console;verbosity=normal"
-    echo "rc=$?"' > "$OUT" 2>&1
+    echo "rc=$?"' >"$OUT" 2>&1
 grep -E "^# P6f|Passed!|Failed!|Total tests|Passed:|Failed:|rc=" "$OUT"

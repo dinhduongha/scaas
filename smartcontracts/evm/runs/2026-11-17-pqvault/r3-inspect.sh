@@ -11,13 +11,13 @@ mkdir -p "$D"
 C=../../scripts/capped
 export FOUNDRY_OUT=out/t66a-test-pqchat FOUNDRY_CACHE_PATH=cache/t66a-test-pqchat FOUNDRY_TEST=test/pqchat FOUNDRY_SCRIPT=test/pqchat
 for c in PqChat PqChatTopics; do
-  for f in abi methodIdentifiers storageLayout; do
-    "$C" ~/.foundry/bin/forge inspect "$c" "$f" --json > "$D/$c.$f.json"
-  done
+    for f in abi methodIdentifiers storageLayout; do
+        "$C" ~/.foundry/bin/forge inspect "$c" "$f" --json >"$D/$c.$f.json"
+    done
 done
-"$C" ~/.foundry/bin/forge inspect IPqChat methodIdentifiers --json > "$D/IPqChat.methodIdentifiers.json"
+"$C" ~/.foundry/bin/forge inspect IPqChat methodIdentifiers --json >"$D/IPqChat.methodIdentifiers.json"
 python3 -c "
 import json, functools, sys
 m = json.load(open(sys.argv[1]))
-print('0x%08x' % functools.reduce(lambda a, b: a ^ b, (int(v, 16) for v in m.values()), 0))" "$D/IPqChat.methodIdentifiers.json" > "$D/IPqChat.interfaceId.txt"
+print('0x%08x' % functools.reduce(lambda a, b: a ^ b, (int(v, 16) for v in m.values()), 0))" "$D/IPqChat.methodIdentifiers.json" >"$D/IPqChat.interfaceId.txt"
 cat "$D/IPqChat.interfaceId.txt"

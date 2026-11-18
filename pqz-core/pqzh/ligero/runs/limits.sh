@@ -9,10 +9,10 @@ set -u
 cd "$(dirname "$0")/.."
 tag=${1:-l12}
 cargo run --release --offline --quiet --bin ligero_export -- ../../../smartcontracts/evm/test/vectors/pqzh-ligero proven conj johnson \
-  > runs/$tag-export.jsonl || exit 1
-/usr/bin/time -v cargo test --release --offline -- --nocapture --test-threads 1 > runs/$tag-tests.txt 2>&1 || exit 1
-cargo test --release --offline --no-default-features --lib > runs/$tag-nobench.txt 2>&1 || exit 1
-(cd wasm && cargo build --release --offline --target wasm32-unknown-unknown 2> ../runs/$tag-wasm-build.txt) || exit 1
+    >runs/$tag-export.jsonl || exit 1
+/usr/bin/time -v cargo test --release --offline -- --nocapture --test-threads 1 >runs/$tag-tests.txt 2>&1 || exit 1
+cargo test --release --offline --no-default-features --lib >runs/$tag-nobench.txt 2>&1 || exit 1
+(cd wasm && cargo build --release --offline --target wasm32-unknown-unknown 2>../runs/$tag-wasm-build.txt) || exit 1
 runs/bench.sh $tag-proven --rel all --regime proven --r431 1 --np 5 --nv 10 --nadv 4 || exit 1
-../xcheck/ligero.sh > runs/$tag-xcheck.txt 2>&1 || exit 1
+../xcheck/ligero.sh >runs/$tag-xcheck.txt 2>&1 || exit 1
 runs/forge.sh $tag

@@ -8,16 +8,23 @@
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 export PATH="$HOME/.foundry/bin:$PATH"
-git diff --quiet -- src script || { echo "src or script is not clean (commit first)" >&2; exit 2; }
+git diff --quiet -- src script || {
+    echo "src or script is not clean (commit first)" >&2
+    exit 2
+}
 suites='test/{governance/GovDeploy,v2/LinkClosure}.t.sol'
 for m in ${ONLY:-$(python3 "$here/t33_mutants.py" --list)}; do
-  python3 "$here/t33_mutants.py" "$m" || { echo "$m: anchor missing" >&2; echo 99 > "$here/mutant-t33-$m.rc.log"; continue; }
-  case "$m" in
-    e2e-*) python3 -I script/pqz/e2e.py --self-test > "$here/mutant-t33-$m.log" 2>&1 ;;
-    *) ../../scripts/capped forge test --match-path "$suites" > "$here/mutant-t33-$m.log" 2>&1 ;;
-  esac
-  echo $? > "$here/mutant-t33-$m.rc.log"
-  git checkout -- script
+    python3 "$here/t33_mutants.py" "$m" || {
+        echo "$m: anchor missing" >&2
+        echo 99 >"$here/mutant-t33-$m.rc.log"
+        continue
+    }
+    case "$m" in
+        e2e-*) python3 -I script/pqz/e2e.py --self-test >"$here/mutant-t33-$m.log" 2>&1 ;;
+        *) ../../scripts/capped forge test --match-path "$suites" >"$here/mutant-t33-$m.log" 2>&1 ;;
+    esac
+    echo $? >"$here/mutant-t33-$m.rc.log"
+    git checkout -- script
 done
 python3 - "$here" <<'PY'
 import os, re, sys

@@ -14,5 +14,5 @@ cp src/pqz/PqzSet.sol "$out/PqzSet.sol.keep"
 trap 'cp "$out/PqzSet.sol.keep" src/pqz/PqzSet.sol' EXIT
 cp "$root/pqz-core/params/sets/$set_name/PqzSet.sol" src/pqz/PqzSet.sol
 FOUNDRY_TEST=runs/2026-11-07-ua-mtx-merge-pqzver/regdeploy FOUNDRY_OUT="$out/out-$set_name" FOUNDRY_CACHE_PATH="$out/cache-$set_name" \
-  "$root/scripts/capped" "$HOME/.foundry/bin/forge" test -vv > "$out/regdeploy-$set_name.log" 2>&1
+    "$root/scripts/capped" "$HOME/.foundry/bin/forge" test -vv >"$out/regdeploy-$set_name.log" 2>&1
 grep -E "REGDEPLOY" "$out/regdeploy-$set_name.log" | sed "s/^ */$set_name | /"

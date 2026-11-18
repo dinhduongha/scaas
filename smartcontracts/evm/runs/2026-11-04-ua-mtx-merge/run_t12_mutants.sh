@@ -10,14 +10,25 @@ here=$(cd "$(dirname "$0")" && pwd)
 zp="$here/../../../../clients/zether-prover"
 capped="$here/../../../../scripts/capped"
 cd "$zp" || exit 2
-git diff --quiet -- src/envelope.rs || { echo "src/envelope.rs is not clean" >&2; exit 2; }
+git diff --quiet -- src/envelope.rs || {
+    echo "src/envelope.rs is not clean" >&2
+    exit 2
+}
 for m in $(python3 "$here/t12_mutants.py" --list); do
-  python3 "$here/t12_mutants.py" "$m" || { echo "$m: anchor missing" >&2; echo 99 > "$here/mutant-t12-$m.rc.log"; git checkout -- src/envelope.rs; continue; }
-  "$capped" cargo test -j2 --no-fail-fast --test typed_ops --test envelope_disclosure > "$here/mutant-t12-$m.log" 2>&1
-  echo $? > "$here/mutant-t12-$m.rc.log"
-  git checkout -- src/envelope.rs
+    python3 "$here/t12_mutants.py" "$m" || {
+        echo "$m: anchor missing" >&2
+        echo 99 >"$here/mutant-t12-$m.rc.log"
+        git checkout -- src/envelope.rs
+        continue
+    }
+    "$capped" cargo test -j2 --no-fail-fast --test typed_ops --test envelope_disclosure >"$here/mutant-t12-$m.log" 2>&1
+    echo $? >"$here/mutant-t12-$m.rc.log"
+    git checkout -- src/envelope.rs
 done
-git diff --quiet -- src/envelope.rs || { echo "src/envelope.rs not restored" >&2; exit 3; }
+git diff --quiet -- src/envelope.rs || {
+    echo "src/envelope.rs not restored" >&2
+    exit 3
+}
 python3 - "$here" <<'PY'
 import os, re, sys
 here = sys.argv[1]

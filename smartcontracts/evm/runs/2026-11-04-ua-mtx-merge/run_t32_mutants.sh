@@ -9,25 +9,35 @@
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 export PATH="$HOME/.foundry/bin:$HOME/.cargo/bin:$PATH"
-git diff --quiet -- src ../../scaas-node/src || { echo "src or scaas-node/src is not clean" >&2; exit 2; }
+git diff --quiet -- src ../../scaas-node/src || {
+    echo "src or scaas-node/src is not clean" >&2
+    exit 2
+}
 suites='test/{as/OperatorTransfer,as/RegulatedSkeleton,as/confidential/ZetherOperator,as/confidential/PqzOperator,governance/GovRouter,governance/GovRouterTypehash,governance/GovRegulatedBits,governance/SelectorAudit}.t.sol'
 for m in ${ONLY:-$(python3 "$here/t32_mutants.py" --list)}; do
-  python3 "$here/t32_mutants.py" "$m" || { echo "$m: anchor missing" >&2; echo 99 > "$here/mutant-t32-$m.rc.log"; continue; }
-  ../../scripts/capped forge test --match-path "$suites" > "$here/mutant-t32-$m.log" 2>&1
-  echo $? > "$here/mutant-t32-$m.rc.log"
-  git checkout -- src
+    python3 "$here/t32_mutants.py" "$m" || {
+        echo "$m: anchor missing" >&2
+        echo 99 >"$here/mutant-t32-$m.rc.log"
+        continue
+    }
+    ../../scripts/capped forge test --match-path "$suites" >"$here/mutant-t32-$m.log" 2>&1
+    echo $? >"$here/mutant-t32-$m.rc.log"
+    git checkout -- src
 done
 if [ "${NODE:-1}" = 1 ]; then
-  m=router-row-on-token-domain
-  f=../../scaas-node/src/typed.rs
-  old='("UAOperatorTransfer", "mtxOperatorTransfer", GR,'
-  new='("UAOperatorTransfer", "mtxOperatorTransfer", T,'
-  [ "$(grep -cF "$old" "$f")" = 1 ] || { echo "$m: anchor missing" >&2; exit 3; }
-  sed -i "s/(\"UAOperatorTransfer\", \"mtxOperatorTransfer\", GR,/(\"UAOperatorTransfer\", \"mtxOperatorTransfer\", T,/" "$f"
-  (cd ../../scaas-node && ../scripts/capped cargo test --lib -- guard::tests::allow_lists_equal_the_selector_audit_both_directions \
-    typed::tests::router_ops_are_named_and_refuse_hex) > "$here/mutant-t32-$m.log" 2>&1
-  echo $? > "$here/mutant-t32-$m.rc.log"
-  git checkout -- ../../scaas-node/src/typed.rs
+    m=router-row-on-token-domain
+    f=../../scaas-node/src/typed.rs
+    old='("UAOperatorTransfer", "mtxOperatorTransfer", GR,'
+    new='("UAOperatorTransfer", "mtxOperatorTransfer", T,'
+    [ "$(grep -cF "$old" "$f")" = 1 ] || {
+        echo "$m: anchor missing" >&2
+        exit 3
+    }
+    sed -i "s/(\"UAOperatorTransfer\", \"mtxOperatorTransfer\", GR,/(\"UAOperatorTransfer\", \"mtxOperatorTransfer\", T,/" "$f"
+    (cd ../../scaas-node && ../scripts/capped cargo test --lib -- guard::tests::allow_lists_equal_the_selector_audit_both_directions \
+        typed::tests::router_ops_are_named_and_refuse_hex) >"$here/mutant-t32-$m.log" 2>&1
+    echo $? >"$here/mutant-t32-$m.rc.log"
+    git checkout -- ../../scaas-node/src/typed.rs
 fi
 python3 - "$here" <<'PY'
 import os, re, sys

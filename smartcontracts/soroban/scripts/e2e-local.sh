@@ -24,12 +24,12 @@ CARGO_BUILD_JOBS=2 "$ROOT/scripts/capped" "$ROOT/smartcontracts/scripts/build.sh
 echo "== registry interface"
 "$here/check-registry-interface.sh" "$SOR/target/wasm32v1-none/release/scaas_ua_registry.wasm"
 if [ ! -d "$ROOT/clients/clientkeys/node_modules" ]; then
-  echo "== clientkeys npm ci (the e2e signer, SOR-D13)"
-  (cd "$ROOT/clients/clientkeys" && "$ROOT/scripts/capped" npm ci --no-audit --no-fund)
+    echo "== clientkeys npm ci (the e2e signer, SOR-D13)"
+    (cd "$ROOT/clients/clientkeys" && "$ROOT/scripts/capped" npm ci --no-audit --no-fund)
 fi
 
 echo "== quickstart"
-"$QS" up   # exit 3 when a scaas-stellar container already exists: never ours to remove
+"$QS" up # exit 3 when a scaas-stellar container already exists: never ours to remove
 trap '"$QS" down' EXIT
 trap 'exit 130' INT TERM
 "$QS" wait

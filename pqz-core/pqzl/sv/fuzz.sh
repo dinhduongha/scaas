@@ -16,11 +16,11 @@ INC="-std=gnu11 -g -fno-omit-frame-pointer -w -DPQZ_SV -Ibuild/include -Isrc -Il
 # all UBSan checks on, vla-bound and pointer-overflow included (their nits fixed in review Q-F; owner 2026-10-19)
 SAN="-fsanitize=address,undefined -fno-sanitize-recover=all"
 ${CC:-clang} -O1 $INC $SAN -DPQZ_DEBUG_MALLOC -o build/sv-san/pqz_bench $SRC test/pqz_bench.c
-ASAN_OPTIONS=detect_leaks=0 PQZ_VERIFY=fast $CAPPED build/sv-san/pqz_bench 1 3 > "sv/runs/$L-asan.jsonl" 2>&1 \
-  || echo "asan rc=$?"
+ASAN_OPTIONS=detect_leaks=0 PQZ_VERIFY=fast $CAPPED build/sv-san/pqz_bench 1 3 >"sv/runs/$L-asan.jsonl" 2>&1 ||
+    echo "asan rc=$?"
 ${CC:-clang} -O1 $INC $SAN -fsanitize=fuzzer -o build/sv-san/pqz_sv_fuzz $SRC test/pqz_sv_fuzz.c
 mkdir -p build/sv-san/corpus
 ASAN_OPTIONS=detect_leaks=0 $CAPPED build/sv-san/pqz_sv_fuzz -max_total_time="$T" -max_len=256 -seed=1 \
-  -rss_limit_mb=3500 build/sv-san/corpus > "sv/runs/$L-fuzz.txt" 2>&1 || echo "fuzz rc=$?"
+    -rss_limit_mb=3500 build/sv-san/corpus >"sv/runs/$L-fuzz.txt" 2>&1 || echo "fuzz rc=$?"
 grep -h -e timing -e fails "sv/runs/$L-asan.jsonl"
 grep -E "^#[0-9]+ +(DONE|pulse)|ERROR|Done" "sv/runs/$L-fuzz.txt" | tail -3

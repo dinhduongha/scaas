@@ -9,25 +9,30 @@
 set -u
 cd "$(dirname "$0")/.."
 tag=${1:-l14}
-/usr/bin/time -v cargo test --release --offline -- --nocapture --test-threads 1 > runs/$tag-tests.txt 2>&1 || exit 1
+/usr/bin/time -v cargo test --release --offline -- --nocapture --test-threads 1 >runs/$tag-tests.txt 2>&1 || exit 1
 { cargo test --release --offline --no-default-features && cargo build --release --offline --no-default-features --examples --bins; } \
-  > runs/$tag-nobench.txt 2>&1 || exit 1
+    >runs/$tag-nobench.txt 2>&1 || exit 1
 {
-  echo "## cargo clippy --no-default-features -- -D clippy::float_arithmetic"
-  cargo clippy --release --offline --no-default-features -- -D clippy::float_arithmetic; echo "rc=$?"
-  echo "## cargo clippy --all-targets (default features, the crate's own lints)"
-  cargo clippy --release --offline --all-targets; echo "rc=$?"
-} > runs/$tag-clippy.txt 2>&1
+    echo "## cargo clippy --no-default-features -- -D clippy::float_arithmetic"
+    cargo clippy --release --offline --no-default-features -- -D clippy::float_arithmetic
+    echo "rc=$?"
+    echo "## cargo clippy --all-targets (default features, the crate's own lints)"
+    cargo clippy --release --offline --all-targets
+    echo "rc=$?"
+} >runs/$tag-clippy.txt 2>&1
 {
-  echo "## cargo tree --no-default-features -e normal"; cargo tree --offline --no-default-features -e normal
-  echo "## cargo tree (default features, all edges)"; cargo tree --offline
-  echo "## wasm/ cargo tree"; (cd wasm && cargo tree --offline)
-  scan() { objdump -d target/release/libpqzh_ligero.rlib 2>/dev/null | grep -cE '\b(cvt[a-z0-9]*|add|sub|mul|div|sqrt)s[sd]\b'; }
-  echo "## scalar float instructions (objdump -d | grep -cE '(cvt[a-z0-9]*|add|sub|mul|div|sqrt)s[sd]') in the rlib of"
-  cargo build --release --offline --lib 2>&1 | tail -1
-  echo "default features (bench): $(scan)"
-  cargo build --release --offline --no-default-features --lib 2>&1 | tail -1
-  echo "--no-default-features (production): $(scan)"
-} > runs/$tag-deps.txt 2>&1
-(cd wasm && cargo build --release --offline --target wasm32-unknown-unknown 2> ../runs/$tag-wasm-build.txt) || exit 1
+    echo "## cargo tree --no-default-features -e normal"
+    cargo tree --offline --no-default-features -e normal
+    echo "## cargo tree (default features, all edges)"
+    cargo tree --offline
+    echo "## wasm/ cargo tree"
+    (cd wasm && cargo tree --offline)
+    scan() { objdump -d target/release/libpqzh_ligero.rlib 2>/dev/null | grep -cE '\b(cvt[a-z0-9]*|add|sub|mul|div|sqrt)s[sd]\b'; }
+    echo "## scalar float instructions (objdump -d | grep -cE '(cvt[a-z0-9]*|add|sub|mul|div|sqrt)s[sd]') in the rlib of"
+    cargo build --release --offline --lib 2>&1 | tail -1
+    echo "default features (bench): $(scan)"
+    cargo build --release --offline --no-default-features --lib 2>&1 | tail -1
+    echo "--no-default-features (production): $(scan)"
+} >runs/$tag-deps.txt 2>&1
+(cd wasm && cargo build --release --offline --target wasm32-unknown-unknown 2>../runs/$tag-wasm-build.txt) || exit 1
 runs/bench.sh $tag-proven --rel all --regime proven --r431 1 --np 5 --nv 10 --nadv 4

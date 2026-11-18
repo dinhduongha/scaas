@@ -18,11 +18,14 @@ mkdir -p "$W" runs "regress/$T"
 # pqz_cmd: 256 KiB, so a transfer request with its keys and T (about 150 KB of hex) is not cut
 case $T in kem_pk | sealed | mnemonic) ML=4096 ;; pqz_cmd) ML=262144 ;; *) ML=65536 ;; esac
 export UA_FUZZ_TARGET=$T ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1
-python3 -I seeds.py "$SEEDS" > "$LOG" 2>&1 || { cat "$LOG"; exit 1; }
+python3 -I seeds.py "$SEEDS" >"$LOG" 2>&1 || {
+    cat "$LOG"
+    exit 1
+}
 {
-  echo "# fuzz $T, $S s, $(date -Is), commit $(git rev-parse --short HEAD), $(clang-18 --version | head -1), $(rustc --version)"
-  "$B/ua-fuzz" -max_total_time="$S" -max_len=$ML -rss_limit_mb=2048 -timeout=30 -print_final_stats=1 \
-    -artifact_prefix="$B/crash-$T-" "$W" "regress/$T" "$SEEDS/$T"
-  echo "[fuzz rc=$?]"
-} >> "$LOG" 2>&1
+    echo "# fuzz $T, $S s, $(date -Is), commit $(git rev-parse --short HEAD), $(clang-18 --version | head -1), $(rustc --version)"
+    "$B/ua-fuzz" -max_total_time="$S" -max_len=$ML -rss_limit_mb=2048 -timeout=30 -print_final_stats=1 \
+        -artifact_prefix="$B/crash-$T-" "$W" "regress/$T" "$SEEDS/$T"
+    echo "[fuzz rc=$?]"
+} >>"$LOG" 2>&1
 grep -E "ua-fuzz FINDING|^stat::number_of_executed_units|^stat::peak_rss|Done [0-9]+ runs|\[fuzz rc|ERROR|SUMMARY|deadly signal" "$LOG"

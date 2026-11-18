@@ -14,7 +14,7 @@ trap 'rm -rf "$T" ffi/target/ctl ffi/target/ctl-wasm build/fuzz-ctl; rm -f ffi/r
 mkdir -p "$T/bin"
 # cargo: `build` makes the cdylib and the wasm32 module, `test` with PQZ_FFI_DIGESTS writes the native digests, `tree` names the backend;
 # CTL_CARGO_FAIL=<subcommand> makes that one exit 1
-cat > "$T/bin/cargo" << 'EOF'
+cat >"$T/bin/cargo" <<'EOF'
 #!/bin/sh
 for a; do case $a in build | test | tree | clippy | run) c=$a; break ;; esac; done
 case $c in
@@ -26,20 +26,26 @@ esac
 [ "${CTL_CARGO_FAIL:-}" != "$c" ]
 EOF
 # node: the wasm32 digests (CTL_WASM_DIFF=1: another line)
-printf '#!/bin/sh\n[ "${CTL_WASM_DIFF:-0}" = 1 ] && echo %s || echo %s\n' "'{\"d\": 2}'" "'{\"d\": 1}'" > "$T/bin/node"
+printf '#!/bin/sh\n[ "${CTL_WASM_DIFF:-0}" = 1 ] && echo %s || echo %s\n' "'{\"d\": 2}'" "'{\"d\": 1}'" >"$T/bin/node"
 # strings: the library's strings (CTL_HOOKS=1: a test hook name in the production cdylib)
-printf '#!/bin/sh\n[ "${CTL_HOOKS:-0}" = 1 ] && echo TEST_ARENA_MB\nexit 0\n' > "$T/bin/strings"
+printf '#!/bin/sh\n[ "${CTL_HOOKS:-0}" = 1 ] && echo TEST_ARENA_MB\nexit 0\n' >"$T/bin/strings"
 # clang: an executable that exits 0
-printf '#!/bin/sh\nwhile [ "$1" != -o ]; do shift; done\nprintf "#!/bin/sh\\nexit 0\\n" > "$2" && chmod +x "$2"\n' > "$T/bin/clang"
-for t in readelf nm llvm-nm-18; do printf '#!/bin/sh\nexit 0\n' > "$T/bin/$t"; done
+printf '#!/bin/sh\nwhile [ "$1" != -o ]; do shift; done\nprintf "#!/bin/sh\\nexit 0\\n" > "$2" && chmod +x "$2"\n' >"$T/bin/clang"
+for t in readelf nm llvm-nm-18; do printf '#!/bin/sh\nexit 0\n' >"$T/bin/$t"; done
 chmod +x "$T/bin"/*
 P=$T/bin:$PATH
 bad=0
 ctl() { # ctl <expected status 0|1> <label> [VAR=value…] <cmd…>
-  want=$1 lab=$2; shift 2
-  env PATH="$P" PQZ_BUILD_TAG=ctl "$@" > "$T/out" 2>&1; got=$?
-  [ $got != 0 ] && got=1
-  if [ $got = "$want" ]; then echo "ok   $lab (exit $got)"; else echo "BAD  $lab: exit $got, want $want"; tail -5 "$T/out"; bad=1; fi
+    want=$1 lab=$2
+    shift 2
+    env PATH="$P" PQZ_BUILD_TAG=ctl "$@" >"$T/out" 2>&1
+    got=$?
+    [ $got != 0 ] && got=1
+    if [ $got = "$want" ]; then echo "ok   $lab (exit $got)"; else
+        echo "BAD  $lab: exit $got, want $want"
+        tail -5 "$T/out"
+        bad=1
+    fi
 }
 F=${CTL_FFI:-ffi/run.sh}
 ctl 0 "ffi/run.sh, every check passes" sh $F ctl
@@ -53,9 +59,9 @@ ctl 1 "ffi/run.sh, the bench fails (part ffi/bench)" CTL_CARGO_FAIL=run sh $F ct
 # honest input file
 B=build/fuzz-ctl
 mkdir -p $B
-printf '#!/bin/sh\n[ "${CTL_FINDING:-0}" = 1 ] && echo "pqz-fuzz FINDING (precompile): control" >&2\nexit ${CTL_FUZZ_RC:-0}\n' > $B/precompile
+printf '#!/bin/sh\n[ "${CTL_FINDING:-0}" = 1 ] && echo "pqz-fuzz FINDING (precompile): control" >&2\nexit ${CTL_FUZZ_RC:-0}\n' >$B/precompile
 chmod +x $B/precompile
-cat > "$T/bin/python3" << EOF
+cat >"$T/bin/python3" <<EOF
 #!/bin/sh
 case "\$*" in *seeds.py*) : > "$(pwd)/$B/honest.bin"; exit 0 ;; esac
 exec $(command -v python3) "\$@"
@@ -66,7 +72,8 @@ ctl 1 "fuzz/run.sh, the fuzz binary exits 77" CTL_FUZZ_RC=77 sh ${CTL_FUZZ:-fuzz
 ctl 1 "fuzz/run.sh, a pqz-fuzz FINDING line" CTL_FINDING=1 sh ${CTL_FUZZ:-fuzz/run.sh} precompile 1 ctl
 # pqz_kat.py: another writer's file passes as such, an unknown file still fails
 V=../smartcontracts/vectors/pqz
-echo '{}' > "$T/verdict.json"; echo '{}' > "$T/unknown.json"
+echo '{}' >"$T/verdict.json"
+echo '{}' >"$T/unknown.json"
 ctl 0 "pqz_kat.py, verdict.json (another writer's)" python3 -I -c "import importlib.util as u, sys
 s = u.spec_from_file_location('k', '$V/pqz_kat.py'); k = u.module_from_spec(s); s.loader.exec_module(k)
 sys.exit(1 if k.check_files(['$T/verdict.json'], print) else 0)"

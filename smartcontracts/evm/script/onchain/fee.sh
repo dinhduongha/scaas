@@ -8,10 +8,10 @@
 # (tip 0 at that base fee) were never sealed (wraplimits setup on the SCaaS testnet, 2026-11-15). Call it before each
 # forge run: the base fee is read then. A local target keeps forge's own fee.
 remote_fee() {
-  [ "${ONCHAIN_REMOTE:-0}" = 1 ] || return 0
-  _tip=${ONCHAIN_TIP:-1000000000}
-  _base=$(cast base-fee --rpc-url "$1")
-  ETH_PRIORITY_GAS_PRICE=$_tip
-  ETH_GAS_PRICE=${ONCHAIN_MAXFEE:-$((2 * _base + _tip))}
-  export ETH_PRIORITY_GAS_PRICE ETH_GAS_PRICE
+    [ "${ONCHAIN_REMOTE:-0}" = 1 ] || return 0
+    _tip=${ONCHAIN_TIP:-1000000000}
+    _base=$(cast base-fee --rpc-url "$1")
+    ETH_PRIORITY_GAS_PRICE=$_tip
+    ETH_GAS_PRICE=${ONCHAIN_MAXFEE:-$((2 * _base + _tip))}
+    export ETH_PRIORITY_GAS_PRICE ETH_GAS_PRICE
 }

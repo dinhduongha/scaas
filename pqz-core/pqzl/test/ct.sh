@@ -25,34 +25,34 @@ if [ "$PQZ_SET" = n2304-kmax4096 ]; then RF="--features ctgrind"; else RF="--no-
 RT=target/$PQZ_SET
 mkdir -p test/runs $B/ct
 VG="valgrind --tool=memcheck --error-limit=no --num-callers=12 --track-origins=no --max-stackframe=4000000"
-count () { grep -c "Conditional jump or move depends\|Use of uninitialised value\|Syscall param" "$1"; }
+count() { grep -c "Conditional jump or move depends\|Use of uninitialised value\|Syscall param" "$1"; }
 fail=0
 # the tree: HEAD and a hash of the uncommitted diff of this directory (empty diff: e3b0c442...)
-echo "# ct $L: HEAD $(git rev-parse HEAD), diff sha256 $(git diff HEAD -- . | sha256sum | cut -c1-16), $(valgrind --version), set $PQZ_SET, rels ${2:-1}, nprove ${3:-1}, keys ${4:-1}" > "$O"
+echo "# ct $L: HEAD $(git rev-parse HEAD), diff sha256 $(git diff HEAD -- . | sha256sum | cut -c1-16), $(valgrind --version), set $PQZ_SET, rels ${2:-1}, nprove ${3:-1}, keys ${4:-1}" >"$O"
 if [ "${CT_ONLY:-}" != rust ]; then
-  B=$B ./build.sh native > /dev/null || exit 1 # lazer.h and the set's headers in $B/include
-  CC=${CC:-clang}
-  # build.sh's library flags (CFLAGS_LIB, -fPIC -fstack-protector-strong) plus -g and the client requests
-  F="-std=gnu11 -O2 -g -fno-builtin -fno-math-errno -ffp-contract=off -fPIC -fstack-protector-strong -ffunction-sections -fdata-sections -w -DPQZ_SV -DPQZ_CTGRIND"
-  F="$F -I$B/include -Isrc -Ilazer -Iparams"
-  $CC --version | head -1 >> "$O"
-  $CC $F -o $B/ct/pqz_ct src/pqz_lazer.c src/pqz_ntt.c src/pqz_arena.c src/pqz_rel.c src/pqz_sv.c src/pqz_keys.c \
-    test/pqz_ct.c >> "$O" 2>&1 || exit 1
-  $VG --log-file=$B/ct/c.vg $B/ct/pqz_ct "${2:-1}" "${3:-1}" "${4:-1}" >> "$O" 2>&1
-  rc=$?
-  cat $B/ct/c.vg >> "$O"
-  n=$(count $B/ct/c.vg)
-  echo "ct $L C ($($CC --version | head -1)): rc=$rc secret-dependent reports=$n" | tee -a "$O"
-  { [ $rc = 0 ] && [ "$n" = 0 ]; } || fail=1
+    B=$B ./build.sh native >/dev/null || exit 1 # lazer.h and the set's headers in $B/include
+    CC=${CC:-clang}
+    # build.sh's library flags (CFLAGS_LIB, -fPIC -fstack-protector-strong) plus -g and the client requests
+    F="-std=gnu11 -O2 -g -fno-builtin -fno-math-errno -ffp-contract=off -fPIC -fstack-protector-strong -ffunction-sections -fdata-sections -w -DPQZ_SV -DPQZ_CTGRIND"
+    F="$F -I$B/include -Isrc -Ilazer -Iparams"
+    $CC --version | head -1 >>"$O"
+    $CC $F -o $B/ct/pqz_ct src/pqz_lazer.c src/pqz_ntt.c src/pqz_arena.c src/pqz_rel.c src/pqz_sv.c src/pqz_keys.c \
+        test/pqz_ct.c >>"$O" 2>&1 || exit 1
+    $VG --log-file=$B/ct/c.vg $B/ct/pqz_ct "${2:-1}" "${3:-1}" "${4:-1}" >>"$O" 2>&1
+    rc=$?
+    cat $B/ct/c.vg >>"$O"
+    n=$(count $B/ct/c.vg)
+    echo "ct $L C ($($CC --version | head -1)): rc=$rc secret-dependent reports=$n" | tee -a "$O"
+    { [ $rc = 0 ] && [ "$n" = 0 ]; } || fail=1
 fi
 if [ "${CT_ONLY:-}" != c ]; then
-  (cd rust && CARGO_TARGET_DIR=$RT cargo build -j2 --release --offline $RF --bin ct) >> "$O" 2>&1 || exit 1
-  (cd rust && rustc --version) >> "$O" # rust-toolchain.toml's compiler
-  $VG --log-file=$B/ct/rust.vg rust/$RT/release/ct "${2:-1}" "${3:-1}" "${4:-1}" >> "$O" 2>&1
-  rc=$?
-  cat $B/ct/rust.vg >> "$O"
-  n=$(count $B/ct/rust.vg)
-  echo "ct $L Rust ($(cd rust && rustc --version)): rc=$rc secret-dependent reports=$n" | tee -a "$O"
-  { [ $rc = 0 ] && [ "$n" = 0 ]; } || fail=1
+    (cd rust && CARGO_TARGET_DIR=$RT cargo build -j2 --release --offline $RF --bin ct) >>"$O" 2>&1 || exit 1
+    (cd rust && rustc --version) >>"$O" # rust-toolchain.toml's compiler
+    $VG --log-file=$B/ct/rust.vg rust/$RT/release/ct "${2:-1}" "${3:-1}" "${4:-1}" >>"$O" 2>&1
+    rc=$?
+    cat $B/ct/rust.vg >>"$O"
+    n=$(count $B/ct/rust.vg)
+    echo "ct $L Rust ($(cd rust && rustc --version)): rc=$rc secret-dependent reports=$n" | tee -a "$O"
+    { [ $rc = 0 ] && [ "$n" = 0 ]; } || fail=1
 fi
 exit $fail
