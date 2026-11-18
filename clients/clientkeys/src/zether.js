@@ -7,20 +7,20 @@
 // so the browser does not need the 1 MB prover wasm just to register. `x` is sealed like the seed
 // (vault.js) and never sent anywhere; only `Y`, `UA` and the PoP leave the device. The UA, the PoP and the
 // owner-op signature are the UA registry's (accounts.md CTR-UA-07, CTR-UA-16; ids and digests from ua.js).
-import { bls12_381 } from '@noble/curves/bls12-381.js';
-import { hkdf } from '@noble/hashes/hkdf.js';
-import { sha256, sha512 } from '@noble/hashes/sha2.js';
-import { keccak_256, concatBytes, utf8ToBytes, bytesToHex, fromHex, hex, word, wipe } from './bytes.js';
-import { createVault, openVault, seal, open } from './vault.js';
-import { uaOf, uaMessage, purposeTag, holderPopMessage, uaSig } from './ua.js';
-import { OP_BUILDERS, hashTypedData } from './evm.js';
+import { bls12_381 } from "@noble/curves/bls12-381.js";
+import { hkdf } from "@noble/hashes/hkdf.js";
+import { sha256, sha512 } from "@noble/hashes/sha2.js";
+import { keccak_256, concatBytes, utf8ToBytes, bytesToHex, fromHex, hex, word, wipe } from "./bytes.js";
+import { createVault, openVault, seal, open } from "./vault.js";
+import { uaOf, uaMessage, purposeTag, holderPopMessage, uaSig } from "./ua.js";
+import { OP_BUILDERS, hashTypedData } from "./evm.js";
 
 export const USE_CONF = 7;
 export const USE_DISCLOSURE = 8;
 const L = 48; // ceil(3 * ceil(log2 r) / 16) for both curves
 
 export const CURVES = {
-  bls12381: { Point: bls12_381.G1.Point, root: 12381, salt: 'BLS-SIG-KEYGEN-SALT-', coordLen: 64 },
+  bls12381: { Point: bls12_381.G1.Point, root: 12381, salt: "BLS-SIG-KEYGEN-SALT-", coordLen: 64 },
 };
 
 function curveOf(name) {
@@ -29,7 +29,7 @@ function curveOf(name) {
   return c;
 }
 
-const toInt = (b) => BigInt('0x' + (bytesToHex(b) || '0'));
+const toInt = (b) => BigInt("0x" + (bytesToHex(b) || "0"));
 const u32 = (i) => new Uint8Array([i >>> 24, (i >>> 16) & 255, (i >>> 8) & 255, i & 255]);
 
 /** EIP-2333 `HKDF_mod_r` with the curve's salt and `r`. */
@@ -41,7 +41,7 @@ export function hkdfModR(curve, ikm, keyInfo = new Uint8Array(0)) {
 /** EIP-2333 over a group of order `r` with the initial salt string `salt` (the UA paths of ua-rs-sign spec §4: BLS12-381 with
  *  EIP-2333's own salt, bn254 with `SCAAS-UA-BN254-v1`): master from `seed`, then one child per entry of `path`. */
 export function eip2333(seed, path, { r, salt }) {
-  if (seed.length < 32) throw new Error('EIP-2333 seed must be at least 32 bytes');
+  if (seed.length < 32) throw new Error("EIP-2333 seed must be at least 32 bytes");
   let sk = modR(r, salt, seed);
   for (const i of path) sk = modR(r, salt, lamportPk(sk, pathIndex(i)));
   return sk;
@@ -77,7 +77,7 @@ function lamportPk(parent, index) {
 }
 
 export function deriveMasterSk(curve, seed) {
-  if (seed.length < 32) throw new Error('EIP-2333 seed must be at least 32 bytes');
+  if (seed.length < 32) throw new Error("EIP-2333 seed must be at least 32 bytes");
   return hkdfModR(curve, seed);
 }
 
@@ -89,13 +89,13 @@ export function encodePoint(curve, P) {
   const { coordLen } = curveOf(curve);
   if (P.is0()) return new Uint8Array(2 * coordLen);
   const { x, y } = P.toAffine();
-  const pad = (v) => fromHex(v.toString(16).padStart(2 * coordLen, '0'));
+  const pad = (v) => fromHex(v.toString(16).padStart(2 * coordLen, "0"));
   return concatBytes(pad(x), pad(y));
 }
 
 export function decodePoint(curve, bytes) {
   const { Point, coordLen } = curveOf(curve);
-  if (bytes.length !== 2 * coordLen) throw new Error('wrong point length');
+  if (bytes.length !== 2 * coordLen) throw new Error("wrong point length");
   if (bytes.every((b) => b === 0)) return Point.ZERO;
   const P = Point.fromAffine({ x: toInt(bytes.subarray(0, coordLen)), y: toInt(bytes.subarray(coordLen)) });
   P.assertValidity(); // on curve + prime-order subgroup
@@ -108,8 +108,8 @@ export const zetherKind = (curve) => (curveOf(curve), 0x0141);
 /** `Y = g^x`, `UA = keccak256(TAG(zether-<curve>) ‖ Y)` (ZetherTypes.toUA, CTR-UA-16). */
 export function confPublic(curve, x) {
   const { Point } = curveOf(curve);
-  const s = typeof x === 'bigint' ? x : toInt(x);
-  if (s === 0n || s >= Point.Fn.ORDER) throw new Error('bad Zether scalar');
+  const s = typeof x === "bigint" ? x : toInt(x);
+  if (s === 0n || s >= Point.Fn.ORDER) throw new Error("bad Zether scalar");
   const Y = encodePoint(curve, Point.BASE.multiply(s));
   return { Y: hex(Y), UA: hex(uaOf(zetherKind(curve), Y)) };
 }
@@ -117,9 +117,10 @@ export function confPublic(curve, x) {
 /** Same rule as the S3 prover's JSON API (`api.rs num32`): an integer in [0, 2^32 - 1], as a number
  *  or a decimal string; anything else throws instead of wrapping to another key. */
 function pathIndex(i) {
-  const ok = typeof i === 'number' ? Number.isInteger(i) : typeof i === 'string' && /^\+?[0-9]+$/.test(i);
+  const ok = typeof i === "number" ? Number.isInteger(i) : typeof i === "string" && /^\+?[0-9]+$/.test(i);
   const v = ok ? Number(i) : NaN;
-  if (!(v >= 0 && v <= 0xffffffff)) throw new Error(`bad path index ${JSON.stringify(i)}: need an integer in [0, 2^32 - 1]`);
+  if (!(v >= 0 && v <= 0xffffffff))
+    throw new Error(`bad path index ${JSON.stringify(i)}: need an integer in [0, 2^32 - 1]`);
   return v;
 }
 
@@ -139,13 +140,21 @@ export function deriveConfKey(seed, { curve, coin, account, use = USE_CONF }) {
 
 function hashToScalar(curve, seed32) {
   const r = curveOf(curve).Point.Fn.ORDER;
-  return toInt(concatBytes(keccak_256(concatBytes(seed32, new Uint8Array([2]))),
-                           keccak_256(concatBytes(seed32, new Uint8Array([3]))))) % r;
+  return (
+    toInt(
+      concatBytes(
+        keccak_256(concatBytes(seed32, new Uint8Array([2]))),
+        keccak_256(concatBytes(seed32, new Uint8Array([3]))),
+      ),
+    ) % r
+  );
 }
 
 function challenge(curve, R, Y, msg) {
-  return hashToScalar(curve, keccak_256(concatBytes(utf8ToBytes('SCAAS-ZETHER-SCHNORR-V1'),
-                                                    encodePoint(curve, R), encodePoint(curve, Y), msg)));
+  return hashToScalar(
+    curve,
+    keccak_256(concatBytes(utf8ToBytes("SCAAS-ZETHER-SCHNORR-V1"), encodePoint(curve, R), encodePoint(curve, Y), msg)),
+  );
 }
 
 /** `sig = R ‖ be32(z)`. `k` only for vectors; otherwise hedged `k = H(x ‖ msg ‖ CSPRNG) mod r`. */
@@ -188,16 +197,24 @@ export function schnorrVerify(curve, Ybytes, msg, sig) {
  * module (`zetherSign(curve, x, …)`); an old caller still passing the chain context gets an error, not a silent drop.
  */
 export function zetherPop(curve, x, ...rest) {
-  if (rest.length) throw new Error('zetherPop takes no chain context since UA-8 (the PoP is portable): zetherPop(curve, x)');
+  if (rest.length)
+    throw new Error("zetherPop takes no chain context since UA-8 (the PoP is portable): zetherPop(curve, x)");
   const kind = zetherKind(curve);
   const { Y, UA } = confPublic(curve, x);
   const p = holderPopMessage(kind, { ua: UA });
-  return { kind, Y, UA, popDigest: hex(p.portableRecordDigest), registrationDigest: hex(p.registrationDigest), uaMsg: hex(p.message),
-    pop: hex(schnorrSign(curve, x, p.message)) };
+  return {
+    kind,
+    Y,
+    UA,
+    popDigest: hex(p.portableRecordDigest),
+    registrationDigest: hex(p.registrationDigest),
+    uaMsg: hex(p.message),
+    pop: hex(schnorrSign(curve, x, p.message)),
+  };
 }
 
 // The purposes a Zether UA signs: no contract accepts `member` (the kind is SIGNING, not MEMBER) or `zether-auth` (no PQZ key).
-const ZETHER_PURPOSES = ['metatx', 'metatx-cancel', 'keyop', 'payee-fee', 'vp', 'vc-anchor', 'trade', 'zether-owner'];
+const ZETHER_PURPOSES = ["metatx", "metatx-cancel", "keyop", "payee-fee", "vp", "vc-anchor", "trade", "zether-owner"];
 
 /**
  * The `sig` a Zether UA gives every UA-ledger write (metatx, metatx-cancel, keyop, payee-fee, vp, vc-anchor, trade,
@@ -207,13 +224,13 @@ const ZETHER_PURPOSES = ['metatx', 'metatx-cancel', 'keyop', 'payee-fee', 'vp', 
  * proof alone authorizes them (UA-6).
  */
 export function zetherSign(curve, x, purpose, digest) {
-  if (purpose === 'pop') throw new Error('the PoP has its own signer: zetherPop');
+  if (purpose === "pop") throw new Error("the PoP has its own signer: zetherPop");
   if (!ZETHER_PURPOSES.includes(purpose)) throw new Error(`a Zether UA does not sign purpose ${purpose}`);
   return schnorrSign(curve, x, uaMessage(zetherKind(curve), purposeTag(purpose), digest));
 }
 
 /** `ownerSig` of a typed owner op (typed-signing TS-D19): `UASig{signature: Schnorr by x over uaMessage(kind, zether-owner, digest)}`. */
-export const zetherOwnerSig = (curve, x, digest) => uaSig({ signature: zetherSign(curve, x, 'zether-owner', digest) });
+export const zetherOwnerSig = (curve, x, digest) => uaSig({ signature: zetherSign(curve, x, "zether-owner", digest) });
 
 // ------------------------------------------------------------------ the confidential entries (typed-signing C3 / C4)
 // From the one table of src/evm.js, on the explicit structs of Appendix X: `<op>TypedData({name, contract, chainId,
@@ -222,7 +239,7 @@ export const zetherOwnerSig = (curve, x, digest) => uaSig({ signature: zetherSig
 /** The explicit Zether point (Appendix X.1, `struct G1`): the 128 encoded bytes, word by word. */
 export function g1(point) {
   const b = point instanceof Uint8Array ? point : fromHex(point);
-  if (b.length !== 128) throw new Error('wrong point length');
+  if (b.length !== 128) throw new Error("wrong point length");
   const w = (i) => hex(b.subarray(32 * i, 32 * i + 32));
   return { x0: w(0), x1: w(1), y0: w(2), y1: w(3) };
 }
@@ -230,21 +247,52 @@ export function g1(point) {
 // ua-mtx-merge (R35, R36): one signed entry per operation, `mtx<Op>(UAEnvelope, …, UASig)` over `UA<Op>`; the address
 // builders are in legacy/ua-mtx-merge/src/zether.js.
 export const {
-  uaZetherTransferSingleTypedData, uaZetherTransferSingleCalldata, uaZetherTransferTypedData, uaZetherTransferCalldata,
-  uaZetherTransferCompactTypedData, uaZetherTransferCompactCalldata, uaZetherUnshieldTypedData, uaZetherUnshieldCalldata,
-  uaZetherUnshieldUnwrapTypedData, uaZetherUnshieldUnwrapCalldata, uaRollOverSignedTypedData, uaRollOverSignedCalldata,
-  uaSetRollOverModeTypedData, uaSetRollOverModeCalldata, uaRollOverBatchTypedData, uaRollOverBatchCalldata,
-  zetherRollOverTypedData, zetherRollOverCalldata, zetherSetRollOverModeTypedData, zetherSetRollOverModeCalldata,
+  uaZetherTransferSingleTypedData,
+  uaZetherTransferSingleCalldata,
+  uaZetherTransferTypedData,
+  uaZetherTransferCalldata,
+  uaZetherTransferCompactTypedData,
+  uaZetherTransferCompactCalldata,
+  uaZetherUnshieldTypedData,
+  uaZetherUnshieldCalldata,
+  uaZetherUnshieldUnwrapTypedData,
+  uaZetherUnshieldUnwrapCalldata,
+  uaRollOverSignedTypedData,
+  uaRollOverSignedCalldata,
+  uaSetRollOverModeTypedData,
+  uaSetRollOverModeCalldata,
+  uaRollOverBatchTypedData,
+  uaRollOverBatchCalldata,
+  zetherRollOverTypedData,
+  zetherRollOverCalldata,
+  zetherSetRollOverModeTypedData,
+  zetherSetRollOverModeCalldata,
 } = OP_BUILDERS;
 
 export const {
-  uaPqzTransferSingleTypedData, uaPqzTransferSingleCalldata, uaPqzTransferSingleCompactTypedData, uaPqzTransferSingleCompactCalldata,
-  uaPqzTransferTypedData, uaPqzTransferCalldata, uaPqzTransferCompactTypedData, uaPqzTransferCompactCalldata,
-  uaPqzUnshieldTypedData, uaPqzUnshieldCalldata, uaPqzUnshieldUnwrapTypedData, uaPqzUnshieldUnwrapCalldata,
+  uaPqzTransferSingleTypedData,
+  uaPqzTransferSingleCalldata,
+  uaPqzTransferSingleCompactTypedData,
+  uaPqzTransferSingleCompactCalldata,
+  uaPqzTransferTypedData,
+  uaPqzTransferCalldata,
+  uaPqzTransferCompactTypedData,
+  uaPqzTransferCompactCalldata,
+  uaPqzUnshieldTypedData,
+  uaPqzUnshieldCalldata,
+  uaPqzUnshieldUnwrapTypedData,
+  uaPqzUnshieldUnwrapCalldata,
   pqzAuthTypedData,
 } = OP_BUILDERS;
 // group 3f (PQZ verifier mode spec §5): the verdict a verifier UA signs, and the pair the PQZ entries take last
-export { pqzVerdictTypedData, pqzVerdictDigest, PQZ_VERDICT_TYPEHASH, EMPTY_PQZ_VERDICT, statementHash, proofHash } from './evm.js';
+export {
+  pqzVerdictTypedData,
+  pqzVerdictDigest,
+  PQZ_VERDICT_TYPEHASH,
+  EMPTY_PQZ_VERDICT,
+  statementHash,
+  proofHash,
+} from "./evm.js";
 
 /** The digest of `mtxRollOverSigned`: `ZetherRollOver` in the token's domain, signed under `zether-owner`. */
 export const zetherRollOverDigest = (opts) => hashTypedData(zetherRollOverTypedData(opts));
@@ -292,7 +340,7 @@ export const openConfKey = openVault;
 // cache box (`--cache-box`). Comments only here: this module's code is unchanged.
 
 export const DEVICE_BOUND_BITS = 44;
-const CACHE_INFO = utf8ToBytes('scaas-zether-balance-cache-v1');
+const CACHE_INFO = utf8ToBytes("scaas-zether-balance-cache-v1");
 
 const pointOf = (curve, h) => decodePoint(curve, fromHex(h));
 const keyOf = ({ ua, token }) => `${String(ua).toLowerCase()}:${String(token).toLowerCase()}`;
@@ -302,21 +350,25 @@ export function checkBalance(curve, x, acc, balance) {
   const { Point } = curveOf(curve);
   const b = BigInt(balance);
   if (b < 0n || b >= Point.Fn.ORDER) return false;
-  const xs = typeof x === 'bigint' ? x : toInt(x);
+  const xs = typeof x === "bigint" ? x : toInt(x);
   const D = pointOf(curve, acc.D);
   const m = pointOf(curve, acc.C).subtract(D.is0() ? D : D.multiply(xs));
   return m.equals(b === 0n ? Point.ZERO : Point.BASE.multiply(b));
 }
 
 function cacheKey(x) {
-  return hkdf(sha256, typeof x === 'bigint' ? word(x) : x, undefined, CACHE_INFO, 32);
+  return hkdf(sha256, typeof x === "bigint" ? word(x) : x, undefined, CACHE_INFO, 32);
 }
 
 /** Seal the cache entries (`{key: {ua, token, accSeq, balance}}`) under `x`. */
 export async function sealBalanceCache(curve, x, entries) {
   const k = cacheKey(x);
-  const json = JSON.stringify(entries, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
-  try { return await seal(k, utf8ToBytes(json), `zether-cache:${curve}`); } finally { wipe(k); }
+  const json = JSON.stringify(entries, (_, v) => (typeof v === "bigint" ? v.toString() : v));
+  try {
+    return await seal(k, utf8ToBytes(json), `zether-cache:${curve}`);
+  } finally {
+    wipe(k);
+  }
 }
 
 /** Open a box from `sealBalanceCache`; a missing or unreadable box is an empty cache. */
@@ -382,7 +434,7 @@ export function cacheAfterRollOver(curve, x, entries, state, pending) {
 export async function readBalance(curve, x, entries, state, decrypt) {
   const e = entries[keyOf(state)];
   if (staleSeq(entries, state)) throw new Error(`acc with accSeq ${state.accSeq} is older than the cached ${e.accSeq}`);
-  if (e && checkBalance(curve, x, state.acc, e.balance)) return { balance: e.balance, source: 'cache' };
+  if (e && checkBalance(curve, x, state.acc, e.balance)) return { balance: e.balance, source: "cache" };
   const tries = [];
   if (e) {
     const { Point } = curveOf(curve);
@@ -390,10 +442,10 @@ export async function readBalance(curve, x, entries, state, decrypt) {
     const C = pointOf(curve, state.acc.C);
     const D = pointOf(curve, state.acc.D);
     const ct = (c, d) => ({ C: hex(encodePoint(curve, c)), D: hex(encodePoint(curve, d)) });
-    tries.push(['delta', ct(C.subtract(bG), D), (d) => e.balance + d]); // decrypts to a − b_cached
-    tries.push(['delta', ct(bG.subtract(C), D.negate()), (d) => e.balance - d]); // b_cached − a
+    tries.push(["delta", ct(C.subtract(bG), D), (d) => e.balance + d]); // decrypts to a − b_cached
+    tries.push(["delta", ct(bG.subtract(C), D.negate()), (d) => e.balance - d]); // b_cached − a
   }
-  tries.push(['bsgs', state.acc, (d) => d]);
+  tries.push(["bsgs", state.acc, (d) => d]);
   let decrypted = false;
   for (const [source, ct, balanceOf] of tries) {
     let d;
@@ -406,7 +458,9 @@ export async function readBalance(curve, x, entries, state, decrypt) {
     const b = balanceOf(d);
     if (setCachedBalance(curve, x, entries, state, b)) return { balance: b, source };
   }
-  if (decrypted) throw new Error('decrypted balance does not match acc');
-  throw new Error(`This balance is above what this device can read (2^${DEVICE_BOUND_BITS} units). `
-    + 'Run `zether-read-balance` on a desktop, then enter the balance it prints here.');
+  if (decrypted) throw new Error("decrypted balance does not match acc");
+  throw new Error(
+    `This balance is above what this device can read (2^${DEVICE_BOUND_BITS} units). ` +
+      "Run `zether-read-balance` on a desktop, then enter the balance it prints here.",
+  );
 }

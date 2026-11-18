@@ -6,57 +6,67 @@
 //     clients (N=2^15, 6-digit PIN) still open and are re-wrapped on unlock (`rewrapPin`);
 //   - optionally the passkey PRF output (HKDF-SHA256) — unlock without typing the PIN.
 // No wrapping key and no plaintext is ever stored. The vault object is plain JSON (localStorage).
-import { scryptAsync } from '@noble/hashes/scrypt.js';
-import { hkdf } from '@noble/hashes/hkdf.js';
-import { sha256 } from '@noble/hashes/sha2.js';
-import { utf8ToBytes, b64url, fromB64url, wipe } from './bytes.js';
+import { scryptAsync } from "@noble/hashes/scrypt.js";
+import { hkdf } from "@noble/hashes/hkdf.js";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { utf8ToBytes, b64url, fromB64url, wipe } from "./bytes.js";
 
 export const SCRYPT = Object.freeze({ N: 2 ** 17, r: 8, p: 1, dkLen: 32 });
 const VERSION = 1;
 const PIN_N = Object.freeze([2 ** 15, 2 ** 16, 2 ** 17]); // CLI-SGN-21: the only N an envelope may carry
-const PRF_INFO = utf8ToBytes('scaas-clientkeys-vault-v1/prf');
+const PRF_INFO = utf8ToBytes("scaas-clientkeys-vault-v1/prf");
 /** An error with the status name every client shares (`VaultOpen`, `VaultParams`, `VaultVersion`, `Argument`; ua-rs-sign §8.1). */
-const refuse = (code, message) => { throw Object.assign(new Error(message), { code }); };
+const refuse = (code, message) => {
+  throw Object.assign(new Error(message), { code });
+};
 const SEED_LENGTHS = Object.freeze([16, 20, 24, 28, 32]); // BIP-39 entropy of 12, 15, 18, 21, 24 words
 
 async function gcm(op, keyBytes, iv, data, aad) {
-  const key = await crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, [op]);
-  const params = { name: 'AES-GCM', iv, additionalData: utf8ToBytes(aad) };
-  const out = op === 'encrypt' ? await crypto.subtle.encrypt(params, key, data) : await crypto.subtle.decrypt(params, key, data);
+  const key = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, [op]);
+  const params = { name: "AES-GCM", iv, additionalData: utf8ToBytes(aad) };
+  const out =
+    op === "encrypt" ? await crypto.subtle.encrypt(params, key, data) : await crypto.subtle.decrypt(params, key, data);
   return new Uint8Array(out);
 }
 
 /** AES-256-GCM box `{iv, ct}` (also the Zether balance-cache box, zether.js). */
 export async function seal(keyBytes, data, aad) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  return { iv: b64url(iv), ct: b64url(await gcm('encrypt', keyBytes, iv, data, aad)) };
+  return { iv: b64url(iv), ct: b64url(await gcm("encrypt", keyBytes, iv, data, aad)) };
 }
 
 export async function open(keyBytes, box, aad) {
   try {
-    return await gcm('decrypt', keyBytes, fromB64url(box.iv), fromB64url(box.ct), aad);
+    return await gcm("decrypt", keyBytes, fromB64url(box.iv), fromB64url(box.ct), aad);
   } catch {
-    refuse('VaultOpen', 'Wrong PIN or the vault was altered.');
+    refuse("VaultOpen", "Wrong PIN or the vault was altered.");
   }
 }
 
 /** Policy for a NEW passphrase only; opening never checks it (old vaults keep working). */
 export function checkPassphrase(pin) {
-  const p = String(pin || '').normalize('NFKC');
+  const p = String(pin || "").normalize("NFKC");
   if ([...p].length < 8 || !/[^\d\s]/u.test(p)) {
-    throw new Error('Choose a passphrase of at least 8 characters, not only digits.');
+    throw new Error("Choose a passphrase of at least 8 characters, not only digits.");
   }
 }
 
 async function pinKey(pin, salt, params = SCRYPT) {
-  return scryptAsync(utf8ToBytes(String(pin ?? '').normalize('NFKC')), salt, params);
+  return scryptAsync(utf8ToBytes(String(pin ?? "").normalize("NFKC")), salt, params);
 }
 
 async function pinEnvelope(label, dek, pin, params = SCRYPT) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const kek = await pinKey(pin, salt, params);
   try {
-    return { kdf: 'scrypt', N: params.N, r: params.r, p: params.p, salt: b64url(salt), ...(await seal(kek, dek, `${label}|pin`)) };
+    return {
+      kdf: "scrypt",
+      N: params.N,
+      r: params.r,
+      p: params.p,
+      salt: b64url(salt),
+      ...(await seal(kek, dek, `${label}|pin`)),
+    };
   } finally {
     wipe(kek);
   }
@@ -71,7 +81,12 @@ export async function createVault(secret, { label, pin, prf }) {
   checkPassphrase(pin);
   const dek = crypto.getRandomValues(new Uint8Array(32));
   try {
-    const vault = { v: VERSION, label, data: await seal(dek, secret, `${label}|data`), pin: await pinEnvelope(label, dek, pin) };
+    const vault = {
+      v: VERSION,
+      label,
+      data: await seal(dek, secret, `${label}|data`),
+      pin: await pinEnvelope(label, dek, pin),
+    };
     if (prf) await addPrfEnvelope(vault, dek, prf);
     return vault;
   } finally {
@@ -108,33 +123,45 @@ async function addPrfEnvelope(vault, dek, { output, credentialId, salt }) {
 }
 
 async function dekFrom(vault, { pin, prfOutput }) {
-  if (vault.v !== VERSION) refuse('VaultVersion', 'Unknown vault version.'); // v 2 and its tombstone too: never a wrong passphrase
+  if (vault.v !== VERSION) refuse("VaultVersion", "Unknown vault version."); // v 2 and its tombstone too: never a wrong passphrase
   if (prfOutput) {
-    if (!vault.prf) throw new Error('This vault has no passkey unlock.');
+    if (!vault.prf) throw new Error("This vault has no passkey unlock.");
     const kek = prfKey(prfOutput);
-    try { return await open(kek, vault.prf, `${vault.label}|prf`); } finally { wipe(kek); }
+    try {
+      return await open(kek, vault.prf, `${vault.label}|prf`);
+    } finally {
+      wipe(kek);
+    }
   }
   const p = vault.pin;
   // CLI-SGN-21: refuse a stored envelope outside the known parameters before scrypt runs (a crafted N would exhaust memory).
-  if (!PIN_N.includes(p?.N) || p.r !== 8 || p.p !== 1) refuse('VaultParams', 'Unsupported vault parameters.');
+  if (!PIN_N.includes(p?.N) || p.r !== 8 || p.p !== 1) refuse("VaultParams", "Unsupported vault parameters.");
   const kek = await pinKey(pin, fromB64url(p.salt), { N: p.N, r: p.r, p: p.p, dkLen: 32 });
-  try { return await open(kek, p, `${vault.label}|pin`); } finally { wipe(kek); }
+  try {
+    return await open(kek, p, `${vault.label}|pin`);
+  } finally {
+    wipe(kek);
+  }
 }
 
 /** Returns the secret bytes; the caller wipes them as soon as it is done. */
 export async function openVault(vault, unlock) {
   const dek = await dekFrom(vault, unlock);
-  try { return await open(dek, vault.data, `${vault.label}|data`); } finally { wipe(dek); }
+  try {
+    return await open(dek, vault.data, `${vault.label}|data`);
+  } finally {
+    wipe(dek);
+  }
 }
 
 /** The seed vault (label `seed`): the BIP-39 entropy at its own length, 16, 20, 24, 28 or 32 bytes (spec §8.1, C-10); any other
  *  length is refused (`VaultOpen`) before a wallet is built, never padded or cut. Another label: `Argument`. */
 export async function openSeedVault(vault, unlock) {
-  if (vault?.v === VERSION && vault.label !== 'seed') refuse('Argument', 'Not a seed vault.'); // another v: VaultVersion first
+  if (vault?.v === VERSION && vault.label !== "seed") refuse("Argument", "Not a seed vault."); // another v: VaultVersion first
   const entropy = await openVault(vault, unlock);
   if (!SEED_LENGTHS.includes(entropy.length)) {
     wipe(entropy);
-    refuse('VaultOpen', 'The seed vault does not hold BIP-39 entropy.');
+    refuse("VaultOpen", "The seed vault does not hold BIP-39 entropy.");
   }
   return entropy;
 }
@@ -142,6 +169,10 @@ export async function openSeedVault(vault, unlock) {
 /** Add passkey-PRF unlock to an existing vault (needs the PIN once). */
 export async function enablePrf(vault, pin, prf) {
   const dek = await dekFrom(vault, { pin });
-  try { await addPrfEnvelope(vault, dek, prf); } finally { wipe(dek); }
+  try {
+    await addPrfEnvelope(vault, dek, prf);
+  } finally {
+    wipe(dek);
+  }
   return vault;
 }

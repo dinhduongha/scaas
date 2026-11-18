@@ -1,41 +1,54 @@
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { p256 } from '@noble/curves/nist.js';
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { p256 } from "@noble/curves/nist.js";
 import {
-  derToRS, publicKeyFromSpki, encodeAssertion, creationOptions, requestOptions, passkeySupported, P256_N,
-} from '../src/webauthn.js';
-import { sha256, concatBytes, bytesToHex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
-import { softAuthenticator, p1363ToDer } from './softauthn.js';
+  derToRS,
+  publicKeyFromSpki,
+  encodeAssertion,
+  creationOptions,
+  requestOptions,
+  passkeySupported,
+  P256_N,
+} from "../src/webauthn.js";
+import { sha256, concatBytes, bytesToHex, fromHex, keccak_256, utf8ToBytes } from "../src/bytes.js";
+import { softAuthenticator, p1363ToDer } from "./softauthn.js";
 
-const RP = 'pay.example.com';
-const ORIGIN = 'https://pay.example.com';
+const RP = "pay.example.com";
+const ORIGIN = "https://pay.example.com";
 
-function big(b) { return BigInt('0x' + bytesToHex(b)); }
+function big(b) {
+  return BigInt("0x" + bytesToHex(b));
+}
 
-test('DER decode, low-s normalisation and strictness', () => {
-  const r = fromHex('00'.repeat(31) + '05');
-  const sHigh = fromHex((P256_N - 7n).toString(16).padStart(64, '0'));
+test("DER decode, low-s normalisation and strictness", () => {
+  const r = fromHex("00".repeat(31) + "05");
+  const sHigh = fromHex((P256_N - 7n).toString(16).padStart(64, "0"));
   const out = derToRS(p1363ToDer(concatBytes(r, sHigh)));
   assert.equal(big(out.r), 5n);
   assert.equal(big(out.s), 7n);
   assert.ok(out.highS);
-  const low = derToRS(p1363ToDer(concatBytes(r, fromHex('00'.repeat(31) + '07'))));
+  const low = derToRS(p1363ToDer(concatBytes(r, fromHex("00".repeat(31) + "07"))));
   assert.equal(big(low.s), 7n);
   assert.equal(low.highS, false);
   // Non-minimal integer, trailing junk, wrong tag, zero: all refused.
-  assert.throws(() => derToRS(fromHex('3008020200050202000700')), /malformed/);
-  assert.throws(() => derToRS(fromHex('300602010502010700')), /malformed/);
-  assert.throws(() => derToRS(fromHex('310602010502010')), /./);
-  assert.throws(() => derToRS(fromHex('3006020100020107')), /malformed/);
+  assert.throws(() => derToRS(fromHex("3008020200050202000700")), /malformed/);
+  assert.throws(() => derToRS(fromHex("300602010502010700")), /malformed/);
+  assert.throws(() => derToRS(fromHex("310602010502010")), /./);
+  assert.throws(() => derToRS(fromHex("3006020100020107")), /malformed/);
 });
 
-test('options builders: ES256, user verification required, challenge = 32-byte digest, PRF opt-in', () => {
-  const c = creationOptions({ rpId: RP, userName: 'outlet', challenge: new Uint8Array(32), excludeCredentialIds: [] });
-  assert.deepEqual(c.publicKey.pubKeyCredParams, [{ type: 'public-key', alg: -7 }]);
-  assert.equal(c.publicKey.authenticatorSelection.userVerification, 'required');
+test("options builders: ES256, user verification required, challenge = 32-byte digest, PRF opt-in", () => {
+  const c = creationOptions({ rpId: RP, userName: "outlet", challenge: new Uint8Array(32), excludeCredentialIds: [] });
+  assert.deepEqual(c.publicKey.pubKeyCredParams, [{ type: "public-key", alg: -7 }]);
+  assert.equal(c.publicKey.authenticatorSelection.userVerification, "required");
   assert.deepEqual(c.publicKey.extensions, { prf: {} });
-  const g = requestOptions({ rpId: RP, challenge: new Uint8Array(32), credentialIds: [new Uint8Array([9])], prfSalt: new Uint8Array(32) });
-  assert.equal(g.publicKey.userVerification, 'required');
+  const g = requestOptions({
+    rpId: RP,
+    challenge: new Uint8Array(32),
+    credentialIds: [new Uint8Array([9])],
+    prfSalt: new Uint8Array(32),
+  });
+  assert.equal(g.publicKey.userVerification, "required");
   assert.equal(g.publicKey.allowCredentials[0].id[0], 9);
   assert.ok(g.publicKey.extensions.prf.eval.first);
   assert.throws(() => requestOptions({ rpId: RP, challenge: new Uint8Array(31) }), /32-byte/);
@@ -43,10 +56,10 @@ test('options builders: ES256, user verification required, challenge = 32-byte d
   assert.equal(passkeySupported({ PublicKeyCredential: class {}, navigator: { credentials: {} } }), true);
 });
 
-test('software authenticator: SPKI → (x,y), assertion verifies over sha256(authData ‖ sha256(cdj)) after low-s', async () => {
+test("software authenticator: SPKI → (x,y), assertion verifies over sha256(authData ‖ sha256(cdj)) after low-s", async () => {
   const auth = await softAuthenticator({ rpId: RP, origin: ORIGIN });
   const { x, y } = publicKeyFromSpki(auth.spki);
-  const digest = keccak_256(utf8ToBytes('op'));
+  const digest = keccak_256(utf8ToBytes("op"));
   let sawHigh = false;
   for (let i = 0; i < 24; i++) {
     const a = await auth.get(digest);
@@ -59,29 +72,48 @@ test('software authenticator: SPKI → (x,y), assertion verifies over sha256(aut
     const enc = encodeAssertion(a);
     assert.equal(enc.length % 32, 0);
   }
-  assert.ok(sawHigh, 'WebCrypto produced at least one high-s signature in 24 tries');
+  assert.ok(sawHigh, "WebCrypto produced at least one high-s signature in 24 tries");
   assert.throws(() => publicKeyFromSpki(auth.spki.subarray(1)), /SPKI/);
 });
 
-test('clientDataJSON shape is what SmartKeyAccount checks (RS4-2)', async () => {
+test("clientDataJSON shape is what SmartKeyAccount checks (RS4-2)", async () => {
   const auth = await softAuthenticator({ rpId: RP, origin: ORIGIN });
   const a = await auth.get(new Uint8Array(32).fill(0xab));
-  assert.equal(new TextDecoder().decode(a.clientDataJSON),
-    `{"type":"webauthn.get","challenge":"${'q6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6s'}","origin":"${ORIGIN}","crossOrigin":false}`);
+  assert.equal(
+    new TextDecoder().decode(a.clientDataJSON),
+    `{"type":"webauthn.get","challenge":"${"q6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6s"}","origin":"${ORIGIN}","crossOrigin":false}`,
+  );
 });
 
 // Review S4-H1: a discoverable credential is stored per (rpId, user handle). One handle per
 // partner made "add a passkey on this device" REPLACE the account's passkey in a synced keychain.
-test('creationOptions: random 16-byte user handle per credential, account passkeys excluded', () => {
-  const ex = [new Uint8Array([1, 2, 3]), 'AQID'];
-  const a = creationOptions({ rpId: RP, userName: 'outlet', challenge: new Uint8Array(32), excludeCredentialIds: ex });
-  const b = creationOptions({ rpId: RP, userName: 'outlet', challenge: new Uint8Array(32), excludeCredentialIds: ex });
+test("creationOptions: random 16-byte user handle per credential, account passkeys excluded", () => {
+  const ex = [new Uint8Array([1, 2, 3]), "AQID"];
+  const a = creationOptions({ rpId: RP, userName: "outlet", challenge: new Uint8Array(32), excludeCredentialIds: ex });
+  const b = creationOptions({ rpId: RP, userName: "outlet", challenge: new Uint8Array(32), excludeCredentialIds: ex });
   assert.equal(a.publicKey.user.id.length, 16);
   assert.notEqual(bytesToHex(a.publicKey.user.id), bytesToHex(b.publicKey.user.id));
-  assert.deepEqual(a.publicKey.excludeCredentials.map((c) => [c.type, bytesToHex(c.id)]),
-    [['public-key', '010203'], ['public-key', '010203']]);
-  assert.equal(a.publicKey.authenticatorSelection.residentKey, 'required');
-  assert.throws(() => creationOptions({ rpId: RP, userName: 'o', challenge: new Uint8Array(32) }), /excludeCredentialIds/);
-  assert.throws(() => creationOptions({ rpId: RP, userName: 'o', challenge: new Uint8Array(32), userId: new Uint8Array(16),
-    excludeCredentialIds: [] }), /user handle/);
+  assert.deepEqual(
+    a.publicKey.excludeCredentials.map((c) => [c.type, bytesToHex(c.id)]),
+    [
+      ["public-key", "010203"],
+      ["public-key", "010203"],
+    ],
+  );
+  assert.equal(a.publicKey.authenticatorSelection.residentKey, "required");
+  assert.throws(
+    () => creationOptions({ rpId: RP, userName: "o", challenge: new Uint8Array(32) }),
+    /excludeCredentialIds/,
+  );
+  assert.throws(
+    () =>
+      creationOptions({
+        rpId: RP,
+        userName: "o",
+        challenge: new Uint8Array(32),
+        userId: new Uint8Array(16),
+        excludeCredentialIds: [],
+      }),
+    /user handle/,
+  );
 });

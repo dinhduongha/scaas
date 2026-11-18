@@ -1,37 +1,54 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 // governance T14: smartcontracts/vectors/governance/governance_bits.json (written by forge, GovBitsVector.t.sol) against
 // evm.GOVERNANCE_BITS, every row both ways; each row carries its sentences.
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import * as evm from '../src/evm.js';
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import * as evm from "../src/evm.js";
 
-const FILE = new URL('../../../smartcontracts/vectors/governance/governance_bits.json', import.meta.url);
+const FILE = new URL("../../../smartcontracts/vectors/governance/governance_bits.json", import.meta.url);
 
-test('governance_bits.json: every row equals GOVERNANCE_BITS, none missing, each with its sentences', () => {
-  const v = JSON.parse(readFileSync(FILE, 'utf8'));
+test("governance_bits.json: every row equals GOVERNANCE_BITS, none missing, each with its sentences", () => {
+  const v = JSON.parse(readFileSync(FILE, "utf8"));
   assert.equal(v.bits.length, evm.GOVERNANCE_BITS.length);
   for (const [i, row] of v.bits.entries()) {
     assert.deepEqual({ bit: row.bit, name: row.name, type: row.type }, { ...evm.GOVERNANCE_BITS[i] }, `bit ${i}`);
-    assert.ok(Object.values(row.sentences).length > 0 && Object.values(row.sentences).every((s) => s.length > 0), `bit ${i}`);
+    assert.ok(
+      Object.values(row.sentences).length > 0 && Object.values(row.sentences).every((s) => s.length > 0),
+      `bit ${i}`,
+    );
   }
-  assert.deepEqual(Object.keys(v.bits[1].sentences), ['plain', 'hybrid', 'hybridBrackets'], 'bit 1: plain and hybrid');
-  assert.deepEqual(Object.keys(v.bits[5].sentences), ['public', 'confidential'], 'bit 5: one per class of kind');
-  for (const k of ['delegable', 'leg', 'grantDelay']) assert.ok(v.sentences[k], k);
+  assert.deepEqual(Object.keys(v.bits[1].sentences), ["plain", "hybrid", "hybridBrackets"], "bit 1: plain and hybrid");
+  assert.deepEqual(Object.keys(v.bits[5].sentences), ["public", "confidential"], "bit 5: one per class of kind");
+  for (const k of ["delegable", "leg", "grantDelay"]) assert.ok(v.sentences[k], k);
 });
 
 // ua-mtx-merge T34 (regulated-kinds spec §7; CTR-GOV-17, CTR-GOV-20): the regulated rows name their kinds (bit 8 not on the
 // confidential 10-13) and their holder rule (contract-only with an `msig` UA counting, RK-1; bit 22 any holder); the
 // confidential decoy-fee sentence; bit 22 `OPERATOR_TRANSFER`; bit 23 `TAX` (any holder, T39); bit 24 `PQZ_PROOF` (3h T61) last.
-test('governance_bits.json: the regulated rows carry their kinds and holder rule; bit 22; the decoy-fee sentence', () => {
-  const v = JSON.parse(readFileSync(FILE, 'utf8'));
+test("governance_bits.json: the regulated rows carry their kinds and holder rule; bit 22; the decoy-fee sentence", () => {
+  const v = JSON.parse(readFileSync(FILE, "utf8"));
   const all = [8, 9, 10, 11, 12, 13];
   // round 3s (CTR-GOV-24): 8 and 9 the token's lists, any holder; 28 `KYC` a capability on 8-13
-  const want = { 5: [all, 'contractOrMsig'], 6: [all, 'contractOrMsig'], 7: [all, 'contractOrMsig'], 8: [[8, 9], 'any'],
-    9: [all, 'any'], 10: [all, 'contractOrMsig'], 28: [all, undefined], 21: [all, 'contractOrMsig'], 22: [all, 'any'], 23: [all, 'any'],
-    24: [[4, 5, 12, 13], 'any'], 25: [[1, 3, 5, 9, 11, 13], undefined], 26: [[1, 3, 5, 9, 11, 13], 'any'],
-    27: [[1, 3, 5, 9, 11, 13], 'any'], 30: [[0, 2, 4, 8, 10, 12], 'any'], 31: [[1, 3, 5, 9, 11, 13], undefined],
-    32: [[2, 3, 4, 5, 10, 11, 12, 13], 'any'] };
+  const want = {
+    5: [all, "contractOrMsig"],
+    6: [all, "contractOrMsig"],
+    7: [all, "contractOrMsig"],
+    8: [[8, 9], "any"],
+    9: [all, "any"],
+    10: [all, "contractOrMsig"],
+    28: [all, undefined],
+    21: [all, "contractOrMsig"],
+    22: [all, "any"],
+    23: [all, "any"],
+    24: [[4, 5, 12, 13], "any"],
+    25: [[1, 3, 5, 9, 11, 13], undefined],
+    26: [[1, 3, 5, 9, 11, 13], "any"],
+    27: [[1, 3, 5, 9, 11, 13], "any"],
+    30: [[0, 2, 4, 8, 10, 12], "any"],
+    31: [[1, 3, 5, 9, 11, 13], undefined],
+    32: [[2, 3, 4, 5, 10, 11, 12, 13], "any"],
+  };
   for (const row of v.bits) {
     const w = want[row.bit];
     assert.deepEqual([row.kinds, row.holder], w ?? [undefined, undefined], `bit ${row.bit}`);
@@ -43,19 +60,25 @@ test('governance_bits.json: the regulated rows carry their kinds and holder rule
   // `sentences.wrapCap`, selected by `maxWrapSupply() != 0`
   // the setAuditor round (CTR-GOV-31): bit 32 `AUDITOR` (a power of the confidential kinds, any holder) the last row, its four
   // sentences and the rule that selects them (`sentencesWhen`)
-  assert.equal(v.bits.at(-1).bit, 32, 'bit 32 AUDITOR is the last row (CTR-GOV-31)');
-  assert.deepEqual(v.bits.slice(25).map((r) => r.name), ['WRAP_LIMIT', 'WRAP_LIST', 'REDEEMER', 'KYC', 'CLOSED_MARKETS', 'BURNER',
-    'SUPPLY_CAP_ADJUSTABLE', 'AUDITOR']);
-  assert.deepEqual(v.bits.slice(29).map((r) => r.type), ['capability', 'power', 'capability', 'power']);
-  assert.deepEqual(Object.keys(v.bits[32].sentences), ['all', 'atOnce', 'singleKey', 'locked']);
-  assert.ok(v.bits[32].sentences.all.includes('{auditorDelay}'), 'the delay is a value read on chain');
-  for (const k of ['atOnce', 'singleKey', 'locked']) assert.ok(v.bits[32].sentencesWhen.includes(k), k);
-  assert.ok(v.note.includes('Bits 33-127 are free'));
-  for (const k of ['wrapCap', 'wrapCapWhen']) assert.ok(v.sentences[k], k);
-  for (const b of [8, 9]) assert.deepEqual([v.bits[b].type, Object.keys(v.bits[b].sentences).includes('enableable')], ['power', true]);
-  assert.ok(v.sentences.enableableWhen, 'enableableWhen');
-  assert.equal(v.bits[24].name, 'PQZ_PROOF');
-  assert.equal(v.bits[22].name, 'OPERATOR_TRANSFER');
-  assert.equal(v.bits[23].name, 'TAX');
-  for (const k of ['msig', 'decoyFee', 'decoyFeeWhen']) assert.ok(v.sentences[k], k);
+  assert.equal(v.bits.at(-1).bit, 32, "bit 32 AUDITOR is the last row (CTR-GOV-31)");
+  assert.deepEqual(
+    v.bits.slice(25).map((r) => r.name),
+    ["WRAP_LIMIT", "WRAP_LIST", "REDEEMER", "KYC", "CLOSED_MARKETS", "BURNER", "SUPPLY_CAP_ADJUSTABLE", "AUDITOR"],
+  );
+  assert.deepEqual(
+    v.bits.slice(29).map((r) => r.type),
+    ["capability", "power", "capability", "power"],
+  );
+  assert.deepEqual(Object.keys(v.bits[32].sentences), ["all", "atOnce", "singleKey", "locked"]);
+  assert.ok(v.bits[32].sentences.all.includes("{auditorDelay}"), "the delay is a value read on chain");
+  for (const k of ["atOnce", "singleKey", "locked"]) assert.ok(v.bits[32].sentencesWhen.includes(k), k);
+  assert.ok(v.note.includes("Bits 33-127 are free"));
+  for (const k of ["wrapCap", "wrapCapWhen"]) assert.ok(v.sentences[k], k);
+  for (const b of [8, 9])
+    assert.deepEqual([v.bits[b].type, Object.keys(v.bits[b].sentences).includes("enableable")], ["power", true]);
+  assert.ok(v.sentences.enableableWhen, "enableableWhen");
+  assert.equal(v.bits[24].name, "PQZ_PROOF");
+  assert.equal(v.bits[22].name, "OPERATOR_TRANSFER");
+  assert.equal(v.bits[23].name, "TAX");
+  for (const k of ["msig", "decoyFee", "decoyFeeWhen"]) assert.ok(v.sentences[k], k);
 });
