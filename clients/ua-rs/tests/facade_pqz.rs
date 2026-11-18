@@ -670,27 +670,72 @@ fn release_has_no_raw_decrypt() {
     }
 }
 
+/// `src/facade/pqz.rs` as one token string for the source assertions below: `//` comments dropped, then every whitespace
+/// character, so a reflow by rustfmt leaves the assertions unchanged (the file has no `//` inside a string literal).
+fn pqz_src_tokens() -> String {
+    let src = std::fs::read_to_string(format!("{}/src/facade/pqz.rs", env!("CARGO_MANIFEST_DIR")))
+        .unwrap();
+    src.lines()
+        .map(|l| l.find("//").map_or(l, |i| &l[..i]))
+        .flat_map(str::chars)
+        .filter(|c| !c.is_whitespace())
+        .collect()
+}
+
+/// The starts of `pat` in the token string `t` that begin a token (no identifier character right before) and whose
+/// previous character is one of `prev`.
+fn starts(t: &str, pat: &str, prev: &[char]) -> Vec<usize> {
+    t.match_indices(pat)
+        .map(|(i, _)| i)
+        .filter(|&i| {
+            let c = t[..i].chars().next_back();
+            c.is_none_or(|c| !(c.is_ascii_alphanumeric() || c == '_') && prev.contains(&c))
+        })
+        .collect()
+}
+
 /// Fable P3-3 (T15c2): the raw commands' typed requests and match arms compile only under `vectors`: in `src/facade/pqz.rs`
 /// each `Req` variant, `req()` arm and `run()` arm of `dec`, the debits, `proveDisclose` and `openMemo` sits right under
 /// `#[cfg(feature = "vectors")]` (a source assertion: the enum is private, so no `compile_fail` test can name it from outside;
-/// its helpers are gated too, so an ungated arm also fails to build). The kept commands' variants are not gated.
+/// its helpers are gated too, so an ungated arm also fails to build). The kept commands' variants are not gated. Read as one
+/// token string (`pqz_src_tokens`): no line layout is assumed.
 #[test]
 fn raw_requests_compile_only_under_vectors() {
-    let src = std::fs::read_to_string(format!("{}/src/facade/pqz.rs", env!("CARGO_MANIFEST_DIR")))
-        .unwrap();
-    let lines: Vec<&str> = src.lines().map(str::trim).collect();
-    let gated = |i: usize| i > 0 && lines[i - 1] == "#[cfg(feature = \"vectors\")]";
+    let t = pqz_src_tokens();
+    let gated = |i: usize| t[..i].ends_with("#[cfg(feature=\"vectors\")]");
+    // where an item, an arm or a list element starts: after `{`, `,`, `}` or an attribute's `]`
+    const START: &[char] = &['{', ',', '}', ']'];
+    // a `{ .. }` at `i` (its `{`) closed and followed by `=>`, `|` or `if`: a match arm's pattern, not a constructor
+    let arm = |i: usize| {
+        let mut d = 0usize;
+        for (j, c) in t[i..].char_indices() {
+            match c {
+                '{' => d += 1,
+                '}' => {
+                    d -= 1;
+                    if d == 0 {
+                        let r = &t[i + j + 1..];
+                        return r.starts_with("=>") || r.starts_with('|') || r.starts_with("if");
+                    }
+                }
+                _ => {}
+            }
+        }
+        false
+    };
     // the variant (`Dec {`), the `run()` arm (`Req::Dec { .. } =>`), the `req()` and allow-list arms (`"dec" =>`)
     let at = |v: &str, cmd: &str| -> Vec<usize> {
-        let l = &lines;
-        (0..l.len())
-            .filter(|&i| {
-                l[i].starts_with(&format!("{v} {{"))
-                    || (l[i].starts_with(&format!("Req::{v} {{")) && l[i].contains("=>"))
-                    || l[i].starts_with(&format!("\"{cmd}\" =>"))
-            })
-            .collect()
+        let mut found = starts(&t, &format!("{v}{{"), START);
+        found.extend(
+            starts(&t, &format!("Req::{v}{{"), START)
+                .into_iter()
+                .filter(|&i| arm(i + format!("Req::{v}").len())),
+        );
+        found.extend(starts(&t, &format!("\"{cmd}\"=>"), START));
+        found.sort();
+        found
     };
+    let shown = |i: usize| t[i..].chars().take(60).collect::<String>();
     // `dec` and the raw disclosure: their own variants; the raw debits and memo (T15e): the words commands' variants, built
     // from a caller's `T` or memo only by these gated arms and the gated `Fields::ct` / `Fields::header`
     for (v, cmd) in [
@@ -700,14 +745,9 @@ fn raw_requests_compile_only_under_vectors() {
     ] {
         let found = at(v, cmd);
         assert_eq!(found.len(), 4, "{v}: variant, two arms, allow-list");
-        found.iter().for_each(|&i| {
-            assert!(
-                gated(i),
-                "{v}: line {} not under cfg(vectors): {}",
-                i + 1,
-                lines[i]
-            )
-        });
+        found
+            .iter()
+            .for_each(|&i| assert!(gated(i), "{v}: not under cfg(vectors): {}", shown(i)));
     }
     for cmd in [
         "rawProveTransfer",
@@ -716,25 +756,18 @@ fn raw_requests_compile_only_under_vectors() {
         "rawProveTransferMulti",
         "rawOpenMemo",
     ] {
-        let found: Vec<usize> = (0..lines.len())
-            .filter(|&i| {
-                lines[i].starts_with(&format!("\"{cmd}\" =>")) || lines[i] == format!("\"{cmd}\",")
-            })
-            .collect();
+        let mut found = starts(&t, &format!("\"{cmd}\"=>"), START);
+        found.extend(starts(&t, &format!("\"{cmd}\","), &['[', ',', ']']));
         assert_eq!(found.len(), 3, "{cmd}: COMMANDS, req() and allow-list");
-        found.iter().for_each(|&i| {
-            assert!(
-                gated(i),
-                "{cmd}: line {} not under cfg(vectors): {}",
-                i + 1,
-                lines[i]
-            )
-        });
+        found
+            .iter()
+            .for_each(|&i| assert!(gated(i), "{cmd}: not under cfg(vectors): {}", shown(i)));
     }
-    for f in ["fn ct(&self, k: &str)", "fn header(&self)"] {
-        let i = lines.iter().position(|l| l.starts_with(f)).unwrap();
+    for f in ["fnct(&self,k:&str)", "fnheader(&self)"] {
+        let found = starts(&t, f, START);
+        assert_eq!(found.len(), 1, "{f}");
         assert!(
-            gated(i),
+            gated(found[0]),
             "{f}: the caller's T and header parse only under vectors"
         );
     }
@@ -762,10 +795,8 @@ fn raw_requests_compile_only_under_vectors() {
 /// (`subtle::ConstantTimeEq`), not with a slice `!=` (a source assertion; no timing test).
 #[test]
 fn disclose_sender_compares_in_constant_time() {
-    let src = std::fs::read_to_string(format!("{}/src/facade/pqz.rs", env!("CARGO_MANIFEST_DIR")))
-        .unwrap();
-    let body =
-        &src[src.find("    fn disclose_sender(").unwrap()..src.find("    fn cache_key(").unwrap()];
+    let t = pqz_src_tokens();
+    let body = &t[t.find("fndisclose_sender(").unwrap()..t.find("fncache_key(").unwrap()];
     assert!(
         body.contains(".ct_eq(u)") && body.contains(".ct_eq(v)"),
         "ct_eq on u and v"
@@ -774,19 +805,19 @@ fn disclose_sender_compares_in_constant_time() {
 }
 
 /// Fable P3-2 (T15l): `openMemo` compares the opened memo's `auditorOn` and UAs with the entry's in constant time (the opened
-/// values come from the key's keystream), not with `Iterator::ne` or `!=` (a source assertion; the lengths are public).
+/// values come from the key's keystream), not with `Iterator::ne` or `!=` (a source assertion; the lengths are public). The
+/// `run()` arm binds `chain_uid` by shorthand (`Req::OpenMemo { chain_uid,`); the constructors write `chain_uid:`.
 #[test]
 fn open_memo_compares_in_constant_time() {
-    let src = std::fs::read_to_string(format!("{}/src/facade/pqz.rs", env!("CARGO_MANIFEST_DIR")))
-        .unwrap();
-    let arm = &src[src.find("            Req::OpenMemo { chain_uid").unwrap()
-        ..src.find("        Ok(out.to_string())").unwrap()];
+    let t = pqz_src_tokens();
+    let from = t.find("Req::OpenMemo{chain_uid,").unwrap();
+    let arm = &t[from..from + t[from..].find("Ok(out.to_string())").unwrap()];
     assert!(
         arm.contains("l.1.ct_eq(w)") && arm.contains("u8::from(*a).ct_eq(&u8::from(aud))"),
         "ct_eq on the UAs and auditorOn"
     );
     assert!(
-        !arm.contains(".ne(") && !arm.contains("*a != aud"),
+        !arm.contains(".ne(") && !arm.contains("*a!=aud"),
         "no variable-time compare of opened values"
     );
 }
