@@ -13,53 +13,93 @@
 // smartcontracts/vectors/pqz/ itself)
 // A parameter set without PQZH (none of the sets with pqz-ffi since plan 5h Task 8c part 2): its directory has no
 // proof_pqzh.json, and only the PQZL id is replayed.
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from "node:fs";
 
-const SET = process.env.PQZ_SET || 'n2304-kmax4096';
-const [file, dir = new URL(`../../../smartcontracts/vectors/pqz/${SET === 'n2048-kmax1024' ? '' : SET + '/'}`, import.meta.url).pathname] = process.argv.slice(2);
-const J = (n) => JSON.parse(readFileSync(`${dir}/${n}`, 'utf8'));
+const SET = process.env.PQZ_SET || "n2304-kmax4096";
+const [
+  file,
+  dir = new URL(`../../../smartcontracts/vectors/pqz/${SET === "n2048-kmax1024" ? "" : SET + "/"}`, import.meta.url)
+    .pathname,
+] = process.argv.slice(2);
+const J = (n) => JSON.parse(readFileSync(`${dir}/${n}`, "utf8"));
 const hex = (s) => Uint8Array.from(s.match(/../g).map((b) => parseInt(b, 16)));
 const out = (o) => console.log(JSON.stringify(o));
-const IDS = ['pqzl', 'pqzh'].filter((id) => existsSync(`${dir}/proof_${id}.json`));
+const IDS = ["pqzl", "pqzh"].filter((id) => existsSync(`${dir}/proof_${id}.json`));
 const ID = Object.fromEntries(IDS.map((id) => [id, J(`proof_${id}.json`).proof_system_id]));
 const withId = (s, id) => hex(s.slice(0, 64) + ID[id] + s.slice(128));
 const stmts = {};
-for (const f of ['statement_transfer.json', 'statement_burn.json', 'statement_refresh.json', 'statement_register.json',
-  'statement_disclose.json']) for (const r of J(f).rows) stmts[r.form] = r.stmt;
+for (const f of [
+  "statement_transfer.json",
+  "statement_burn.json",
+  "statement_refresh.json",
+  "statement_register.json",
+  "statement_disclose.json",
+])
+  for (const r of J(f).rows) stmts[r.form] = r.stmt;
 const multi = {};
-for (const r of J('statement_transfer_multi.json').rows) multi[r.case] = r;
+for (const r of J("statement_transfer_multi.json").rows) multi[r.case] = r;
 // the op 7 disclosures (R0-1) by case, under their own op
-for (const r of J('statement_transfer_multi.json').disclosures || []) stmts[r.case] = r.stmt;
+for (const r of J("statement_transfer_multi.json").disclosures || []) stmts[r.case] = r.stmt;
 
 const cases = [];
-const add = (name, op, stmt, wit, rnd, o) => { for (const id of IDS)
-  cases.push({ id, form: name, op, stmt: withId(stmt, id), wit: hex(wit), rnd: hex(rnd), proof: o[id].proof }); };
+const add = (name, op, stmt, wit, rnd, o) => {
+  for (const id of IDS)
+    cases.push({ id, form: name, op, stmt: withId(stmt, id), wit: hex(wit), rnd: hex(rnd), proof: o[id].proof });
+};
 for (const id of IDS)
   for (const r of J(`proof_${id}.json`).rows) {
     const m = r.case && multi[r.case];
-    cases.push({ id, form: r.case ? `${r.form} ${r.case}` : r.form, op: r.op, stmt: withId(m ? m.stmt : stmts[r.case || r.form], id),
-      wit: hex(r.wit), rnd: hex(r.rnd32), proof: r.proof, pqzlM: m && id === 'pqzl' ? m.M : 0 });
+    cases.push({
+      id,
+      form: r.case ? `${r.form} ${r.case}` : r.form,
+      op: r.op,
+      stmt: withId(m ? m.stmt : stmts[r.case || r.form], id),
+      wit: hex(r.wit),
+      rnd: hex(r.rnd32),
+      proof: r.proof,
+      pqzlM: m && id === "pqzl" ? m.M : 0,
+    });
   }
 // the split transfer (K3-4): its own statement under its own id
-const SPLIT = existsSync(`${dir}/proof_pqzl_split.json`) ? J('proof_pqzl_split.json').rows : [];
+const SPLIT = existsSync(`${dir}/proof_pqzl_split.json`) ? J("proof_pqzl_split.json").rows : [];
 for (const r of SPLIT)
-  cases.push({ id: 'pqzl_split', form: r.form, op: r.op, stmt: hex(r.stmt), wit: hex(r.wit), rnd: hex(r.rnd32), proof: r.proof,
-    split: true });
-const w = J('worstcase_noise.json');
+  cases.push({
+    id: "pqzl_split",
+    form: r.form,
+    op: r.op,
+    stmt: hex(r.stmt),
+    wit: hex(r.wit),
+    rnd: hex(r.rnd32),
+    proof: r.proof,
+    split: true,
+  });
+const w = J("worstcase_noise.json");
 // the register statement: opTag || id || message || pk; pk comes from the receiver's R_REG witness only in C, so take
 // it from the bound debit's statement (pk_f at 640)
 const b = w.bound;
-const pkBytes = J('statement_register.json').rows[0].stmt_bytes - 96; // the set's pk (v3: 16,384 B)
+const pkBytes = J("statement_register.json").rows[0].stmt_bytes - 96; // the set's pk (v3: 16,384 B)
 const pk = b.debit.stmt.slice(2 * 640, 2 * (640 + pkBytes));
-const regTag = J('statement_register.json').rows[0].stmt.slice(0, 64);
-add('bound R_REG', 3, regTag + ID.pqzl + b.receiver.register.message + pk, b.receiver.register.wit, b.receiver.register.rnd32,
-  b.receiver.register);
+const regTag = J("statement_register.json").rows[0].stmt.slice(0, 64);
+add(
+  "bound R_REG",
+  3,
+  regTag + ID.pqzl + b.receiver.register.message + pk,
+  b.receiver.register.wit,
+  b.receiver.register.rnd32,
+  b.receiver.register,
+);
 for (const r of b.sender.rows) add(`bound sender R_TX credit ${r.credit}`, 1, r.stmt, b.sender.wit, r.rnd32, r);
-add('bound debit', 1, b.debit.stmt, b.debit.wit, b.debit.rnd32, b.debit);
-add('illustrative debit', 1, w.illustrative.debit.stmt, w.illustrative.debit.wit, w.illustrative.debit.rnd32,
-  w.illustrative.debit);
+add("bound debit", 1, b.debit.stmt, b.debit.wit, b.debit.rnd32, b.debit);
+add(
+  "illustrative debit",
+  1,
+  w.illustrative.debit.stmt,
+  w.illustrative.debit.wit,
+  w.illustrative.debit.rnd32,
+  w.illustrative.debit,
+);
 
-for (const r of J('fee0.json').rows) add(`fee 0 ${r.form}`, r.op, r.stmt, r.wit, r.rnd32, r);
+for (const r of J("fee0.json").rows) add(`fee 0 ${r.form}`, r.op, r.stmt, r.wit, r.rnd32, r);
 
 const mod = await WebAssembly.compile(readFileSync(file));
 let x = new WebAssembly.Instance(mod, {}).exports;
@@ -68,17 +108,22 @@ const maxLegs = x.pqzl_max_legs();
 // case, so a case's arena is the one the per-set limit was measured with, not the sum over every relation replayed
 const fresh = maxLegs < 8;
 for (const c of cases) c.verifyOnly = c.pqzlM > maxLegs;
-const put = (bytes) => { const p = x.alloc(bytes.length); new Uint8Array(x.memory.buffer, p, bytes.length).set(bytes); return p; };
+const put = (bytes) => {
+  const p = x.alloc(bytes.length);
+  new Uint8Array(x.memory.buffer, p, bytes.length).set(bytes);
+  return p;
+};
 let fails = 0;
 let verifyOnly = 0;
 for (const c of cases) {
   if (fresh) x = new WebAssembly.Instance(mod, {}).exports;
   const t = performance.now();
-  const n = c.verifyOnly ? c.proof.length / 2
+  const n = c.verifyOnly
+    ? c.proof.length / 2
     : x.prove_v(c.op, put(c.stmt), c.stmt.length, put(c.wit), c.wit.length, put(c.rnd));
   const p = c.verifyOnly ? hex(c.proof) : new Uint8Array(x.memory.buffer, x.proof_ptr(), n).slice();
   verifyOnly += !!c.verifyOnly;
-  const got = Buffer.from(p).toString('hex');
+  const got = Buffer.from(p).toString("hex");
   const inp = new Uint8Array(5 + c.stmt.length + n);
   inp[0] = c.op;
   new DataView(inp.buffer).setUint32(1, c.stmt.length);
@@ -90,11 +135,27 @@ for (const c of cases) {
   const ok = c.split ? (pre === 0 && off === 1 ? 1 : 0) : pre;
   const equal = n > 0 && got === c.proof;
   // above the limit the prover must refuse before any core work
-  const refused = c.verifyOnly ? x.prove_v(c.op, put(c.stmt), c.stmt.length, put(c.wit), c.wit.length, put(c.rnd)) === 0 : true;
+  const refused = c.verifyOnly
+    ? x.prove_v(c.op, put(c.stmt), c.stmt.length, put(c.wit), c.wit.length, put(c.rnd)) === 0
+    : true;
   fails += (!c.verifyOnly && !equal) || ok !== 1 || !refused;
-  out({ id: c.id, form: c.form, proof_bytes: n, wasm_equal_native: c.verifyOnly ? 'native proof (verify only)' : equal,
-        ...(c.verifyOnly && { wasm_prover_refused: refused }), wasm_precompile: pre, ...(c.split && { wasm_offchain: off }),
-        ms: Math.round(performance.now() - t) });
+  out({
+    id: c.id,
+    form: c.form,
+    proof_bytes: n,
+    wasm_equal_native: c.verifyOnly ? "native proof (verify only)" : equal,
+    ...(c.verifyOnly && { wasm_prover_refused: refused }),
+    wasm_precompile: pre,
+    ...(c.split && { wasm_offchain: off }),
+    ms: Math.round(performance.now() - t),
+  });
 }
-out({ cases: cases.length, split: SPLIT.length, verify_only: verifyOnly, pqzl_max_legs: maxLegs, fails, node: process.version });
+out({
+  cases: cases.length,
+  split: SPLIT.length,
+  verify_only: verifyOnly,
+  pqzl_max_legs: maxLegs,
+  fails,
+  node: process.version,
+});
 process.exit(fails ? 1 : 0);

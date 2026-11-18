@@ -11,7 +11,17 @@ const call = (cmd, req) => JSON.parse(zetherCall(cmd, JSON.stringify(req)));
 // ARCH-POS-13 (ua-rs-sign T15c): the shipped wasm (no feature `hazmat`) refuses every command that decrypts or opens a
 // caller's ciphertext; ZETHER_HAZMAT=1 ../wasm-smoke.sh builds the test-only `hazmat` wasm and runs the prover checks.
 const hazmat = process.env.ZETHER_HAZMAT === "1";
-const HAZMAT = ["decrypt", "decryptPending", "checkBalance", "proveTransfer", "proveTransferMulti", "proveBurn", "openMemo", "recoverTransfer", "openDisclosure"];
+const HAZMAT = [
+  "decrypt",
+  "decryptPending",
+  "checkBalance",
+  "proveTransfer",
+  "proveTransferMulti",
+  "proveBurn",
+  "openMemo",
+  "recoverTransfer",
+  "openDisclosure",
+];
 const mnemonic = Array(23).fill("abandon").concat("art").join(" ");
 const token = "0x5fbdb2315678afecb367f032d93f642f64180aa3";
 const r33 = JSON.parse(fs.readFileSync(path.join(__dirname, "../vectors/r33_keys.json"), "utf8"));
@@ -30,7 +40,11 @@ for (const curve of ["bls12381"]) {
   const acc = call("encrypt", { curve, Y: from.Y, amount: 50000 });
   if (!hazmat) {
     for (const cmd of HAZMAT) {
-      assert.throws(() => zetherCall(cmd, JSON.stringify({ curve, key: k0, ct: acc, acc, balance: 50000 })), /ARCH-POS-13/, cmd);
+      assert.throws(
+        () => zetherCall(cmd, JSON.stringify({ curve, key: k0, ct: acc, acc, balance: 50000 })),
+        /ARCH-POS-13/,
+        cmd,
+      );
     }
     n++;
     const vec = JSON.parse(fs.readFileSync(path.join(__dirname, `../vectors/transfer_${curve}.json`), "utf8"));
@@ -44,13 +58,28 @@ for (const curve of ["bls12381"]) {
   // wasm refuses the 2 GiB table (limits §4): only the native zether-read-balance goes to 2^27.
   assert.throws(() => zetherCall("decrypt", JSON.stringify({ curve, key: k0, ct: acc, tableBits: 27 })), /wasm/);
   // review L4: a browser tab stays at <= 2^24 (256 MiB) unless the caller opts in.
-  assert.throws(() => zetherCall("decrypt", JSON.stringify({ curve, key: k0, ct: acc, tableBits: 25 })), /allowLargeTable/);
+  assert.throws(
+    () => zetherCall("decrypt", JSON.stringify({ curve, key: k0, ct: acc, tableBits: 25 })),
+    /allowLargeTable/,
+  );
   n++;
 
   const t0 = Date.now();
   const tx = call("proveTransfer", {
-    curve, key: k0, chainId: 31337, chainUid: "0x" + "24".repeat(32), token, sendCounter: 0, accSeq: 1, validUntilBlock: 100, acc, balance: 50000,
-    yTo: to.Y, amount: 1234, fee: 10, beneficiary: "0x" + "22".repeat(32),
+    curve,
+    key: k0,
+    chainId: 31337,
+    chainUid: "0x" + "24".repeat(32),
+    token,
+    sendCounter: 0,
+    accSeq: 1,
+    validUntilBlock: 100,
+    acc,
+    balance: 50000,
+    yTo: to.Y,
+    amount: 1234,
+    fee: 10,
+    beneficiary: "0x" + "22".repeat(32),
   });
   const ms = Date.now() - t0;
   assert.deepEqual(call("verifyTransfer", { curve, statement: tx.statement, proof: tx.proof }), { ok: true });
@@ -76,7 +105,13 @@ for (const curve of ["bls12381"]) {
   // SSTORE2), memo = transferMemo; openMemo names the recipients, recoverTransfer rebuilds R and compares it.
   const chain = { curve, key: k0, chainId: 31337, chainUid: "0x" + "24".repeat(32), token, sendCounter: 0 };
   const mt = call("proveTransferMulti", {
-    ...chain, accSeq: 1, validUntilBlock: 100, acc, balance: 50000, disclosureMode: "compact", recipients: [{ yTo: to.Y, amount: 1234 }],
+    ...chain,
+    accSeq: 1,
+    validUntilBlock: 100,
+    acc,
+    balance: 50000,
+    disclosureMode: "compact",
+    recipients: [{ yTo: to.Y, amount: 1234 }],
   });
   assert.equal(mt.mode, "compact");
   const stored = { ...chain, entry: mt.bundles, memo: mt.memo };
@@ -90,7 +125,10 @@ for (const curve of ["bls12381"]) {
   // the UA registry's PoP (CTR-UA-07) equals the vector's (UA-8 P1, portable: same key, no chain context)
   const v = r33[curve].keys[0].pop;
   const pop = call("pop", { curve, key: k0 });
-  assert.deepEqual([pop.UA, pop.kind, pop.popDigest, pop.registrationDigest, pop.uaMsg], [from.UA, v.kind, v.popDigest, v.registrationDigest, v.uaMsg]);
+  assert.deepEqual(
+    [pop.UA, pop.kind, pop.popDigest, pop.registrationDigest, pop.uaMsg],
+    [from.UA, v.kind, v.popDigest, v.registrationDigest, v.uaMsg],
+  );
   n++;
 
   assert.throws(() => zetherCall("proveTransfer", JSON.stringify({ curve, key: k0 })));

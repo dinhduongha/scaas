@@ -12,7 +12,7 @@
 # Scope: the components formatted so far. Left out: generated, vendored (vendor/) and legacy/ files (.rustfmt-ignore,
 # .clang-format-ignore, .prettierignore, foundry.toml [fmt] ignore, taplo.toml exclude), and runs/ except its shell,
 # YAML and TOML. Not covered yet: the family contracts' Rust (formatted with their next redeploy: panic locations move
-# the wasm), Python under docs/ (research and history notes), JavaScript outside clients/clientkeys, Move and TON.
+# the wasm), Python and JavaScript under docs/ (research and history notes), Move and TON.
 set -u
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 cd "$root" || exit 2
@@ -67,11 +67,12 @@ if want sol; then
         say "sol ok" || fail "sol (forge fmt in smartcontracts/evm)"
 fi
 
-# Prettier: clientkeys' JavaScript and the YAML files
+# Prettier: the JavaScript and TypeScript outside runs/ and docs/ (clientkeys, the pqz-core wasm runners, the TON tests
+# and shim, the family and vector scripts) and the YAML files
 prettier_bin() { command -v prettier || echo clients/clientkeys/node_modules/.bin/prettier; }
 if want js; then
     $(prettier_bin) --log-level warn $([ $check = 1 ] && echo --check || echo --write) \
-        $(ls_files 'clients/clientkeys/*.js' 'clients/clientkeys/*.mjs' 'clients/clientkeys/*.cjs') &&
+        $(ls_files '*.js' '*.mjs' '*.cjs' '*.ts' | grep -v '^docs/') &&
         say "js ok" || fail js
 fi
 if want yaml; then
