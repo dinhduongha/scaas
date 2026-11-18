@@ -1134,6 +1134,23 @@ pub fn decode_event(body: &Arc<Cell>) -> Result<Option<TonEvent>> {
 
 // ====================================================================== TON Center v3 client
 
+/// TON Center's answer other than 2xx: its status, kept typed so a classifier reads the status, never the text (scaas-rpc
+/// T24.12).
+#[derive(Debug)]
+pub struct HttpStatus {
+    pub what: String,
+    pub status: u16,
+    pub message: String,
+}
+
+impl std::fmt::Display for HttpStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: HTTP {}: {}", self.what, self.status, self.message)
+    }
+}
+
+impl std::error::Error for HttpStatus {}
+
 #[derive(Clone)]
 pub struct Api {
     /// the TON Center endpoints (scaas-rpc T22: the family client, bounded, 20 s per request)
@@ -1157,10 +1174,10 @@ impl Api {
         Ok(Self { net: Arc::new(scaas_rpc::ton::Ton::new(c)) })
     }
 
-    /// A family error as before: `"{what}: HTTP {status}: {text}"` for a status other than 2xx.
+    /// A family error as before: `"{what}: HTTP {status}: {text}"` for a status other than 2xx, typed ([`HttpStatus`]).
     fn error(what: &str, e: scaas_rpc::family::FamilyError) -> anyhow::Error {
         match e {
-            scaas_rpc::family::FamilyError::Status { status, message } => anyhow!("{what}: HTTP {status}: {message}"),
+            scaas_rpc::family::FamilyError::Status { status, message } => HttpStatus { what: what.into(), status, message }.into(),
             e => anyhow!("{what}: {e}"),
         }
     }
@@ -2014,7 +2031,7 @@ impl ChainAdapter for TonAdapter {
         let v = self.api.get("walletInformation", &[("address", me.raw()), ("use_v2", "false".into())]).await;
         Ok(match v {
             Ok(v) => v.get("seqno").and_then(Value::as_u64).unwrap_or(0),
-            Err(e) if format!("{e:#}").contains("404") => 0, // never deployed
+            Err(e) if e.downcast_ref::<HttpStatus>().is_some_and(|s| s.status == 404) => 0, // never deployed (T24.12: by its status)
             Err(e) => return Err(e),
         })
     }
@@ -3485,5 +3502,16 @@ mod tests {
         assert!(f.lock().unwrap().posted.is_empty(), "endpoint 1 is sent nothing");
         crate::adapters::evm::BUILDING.scope((), adapter(&url).submit(&s)).await.unwrap();
         assert_eq!(f.lock().unwrap().posted.len(), 1, "control");
+    }
+
+    /// scaas-rpc T24.12: the lane's `seqno` reads "never deployed" from endpoint 0's status 404 only, never from a text that
+    /// holds "404" (here a rate limit's): that one is an unread sequence. Control: a 404 is seqno 0.
+    #[tokio::test]
+    async fn ton_a_404_is_read_from_the_status_never_the_text() {
+        let (url, _) = fake_api_shared(lane_at(0)).await;
+        let limited = crate::adapters::testkit::refusing(&url, |_, _| false, 429, json!({"error": "rate limited, retry in 404 ms"})).await;
+        assert!(adapter(&limited).sequence(0).await.is_err());
+        let gone = crate::adapters::testkit::refusing(&url, |_, _| false, 404, json!({"error": "not found"})).await;
+        assert_eq!(adapter(&gone).sequence(0).await.unwrap(), 0, "control");
     }
 }

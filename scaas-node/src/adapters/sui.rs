@@ -993,7 +993,7 @@ impl SuiAdapter {
 
     /// One call on endpoint `i` (scaas-rpc T20: the family client); an error answer is `"{method}: {error}"`, as before.
     async fn rpc_at(&self, i: usize, method: &str, params: Value) -> Result<Value> {
-        self.net.call(i, method, params).await.map_err(|e| anyhow!("{e}"))
+        self.net.call(i, method, params).await.map_err(anyhow::Error::from)
     }
 
     /// A call: `build`'s fail over, any other is endpoint 0's (F3). ARCH-POS-15 (CLI-RPC-04, scaas-rpc T20b): endpoint 0,
@@ -1255,7 +1255,10 @@ impl ChainAdapter for SuiAdapter {
             let d = bs58::encode(parse_addr(tx_id)?).into_string();
             let r = match self.rpc_first("sui_getTransactionBlock", json!([d, {"showEffects": true}])).await {
                 Ok(r) => r,
-                Err(e) if format!("{e:#}").contains("Could not find") => return Ok(TxStatus::Unknown),
+                // T24.12: "not found" is the error object's invalid-params code (-32602), never a text search
+                Err(e) if e.downcast_ref::<FamilyError>().and_then(FamilyError::rpc_error).is_some_and(|x| x["code"] == -32602) => {
+                    return Ok(TxStatus::Unknown)
+                }
                 Err(e) => return Err(e),
             };
             let height = r["checkpoint"].as_str().and_then(|s| s.parse().ok()).or_else(|| r["checkpoint"].as_u64());
@@ -2108,5 +2111,20 @@ mod tests {
         assert!(adapter_on(&[unread], &dir).tx_status(&addr_hex(&[0x11; 32])).await.is_err());
         let this = crate::adapters::testkit::scripted(true, |m, _| if m == "sui_getChainIdentifier" { Some(json!("4c78adac")) } else { tx(m) }).await;
         assert!(matches!(adapter_on(&[this], &dir).tx_status(&addr_hex(&[0x11; 32])).await.unwrap(), TxStatus::Mined { .. }), "control");
+    }
+
+    /// scaas-rpc T24.12: an unknown transaction is endpoint 0's error code -32602 only, never a text that holds "Could not
+    /// find" (here a server error's): that one is an unread status, never `Unknown`. Control: -32602 is `Unknown`.
+    #[tokio::test]
+    async fn sui_not_found_is_read_from_the_code_never_the_text() {
+        let dir = tmp_dir("t24-12");
+        let tx = addr_hex(&[0x11; 32]);
+        let (url, _) = fake_sui(coin()).await;
+        let pass = |_: &str, b: &Value| b["method"] == "sui_getChainIdentifier";
+        let err = |code: i64| json!({"jsonrpc": "2.0", "id": 1, "error": {"code": code, "message": "Could not find the referenced transaction"}});
+        let busy = crate::adapters::testkit::refusing(&url, pass, 200, err(-32000)).await;
+        assert!(adapter_on(&[busy], &dir).tx_status(&tx).await.is_err());
+        let gone = crate::adapters::testkit::refusing(&url, pass, 200, err(-32602)).await;
+        assert_eq!(adapter_on(&[gone], &dir).tx_status(&tx).await.unwrap(), TxStatus::Unknown, "control");
     }
 }
