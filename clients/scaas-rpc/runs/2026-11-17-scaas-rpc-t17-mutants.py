@@ -13,8 +13,8 @@ MUTANTS = [
     # the plan's family mutants (a): the quorum helper on endpoint 0 only; no API key on NEAR; the 20 s is T15's family mutant
     ("a: the quorum read on endpoint 0 only", [(S, "            for i in 1..self.client.len() {", "            for i in 1..1 {")],
      T + "the_block_reads_and_the_quorum_read"),
-    ("a: an error's cause lost", [(N, "            let cause = error.pointer(\"/cause/name\").or_else(|| error.get(\"name\")).and_then(Value::as_str).unwrap_or(\"UNKNOWN\").to_string();",
-        "            let cause = \"UNKNOWN\".to_string();")],
+    ("a: an error's cause lost", [(N, "    error.pointer(\"/cause/name\").or_else(|| error.get(\"name\")).and_then(Value::as_str).unwrap_or(\"UNKNOWN\")\n",
+        "    \"UNKNOWN\"\n")],
      NT),
     ("a: the identity a constant", [(S, "            Some(g) => Ok(g == self.genesis),", "            Some(_) => Ok(true),")],
      T + "the_failover_drops_another_network_and_skips_an_endpoint_behind"),

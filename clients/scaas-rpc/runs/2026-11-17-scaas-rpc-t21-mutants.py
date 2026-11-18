@@ -34,7 +34,7 @@ MUTANTS = [
      NT + "cosmos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
     ("b: a failover refusal final (the counter not compared)", [(N, "            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),\n", "")],
      NT + "cosmos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
-    ("b: a later gateway's refusal text kept", [(N, "            Err(scaas_rpc::RpcError::EndpointAllFailed { failover_revert: Some(_), .. }) => {\n                bail!(\"{path}: no gateway answered (a failover gateway's refusal decides nothing)\")\n            }\n", "")],
+    ("b: a later gateway's refusal text kept", [(N, "            Err(e) => Err(crate::adapters::evm::all_failed(path, &e)),", "            Err(e) => bail!(\"{path}: {e}\"),")],
      NT + "cosmos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
 ]
 

@@ -12,7 +12,7 @@ NT = "cd scaas-node && CAPPED_MEM=6G ../scripts/capped cargo test --locked --off
 MUTANTS = [
     # the plan's family mutants (a): the API key dropped; the key to every endpoint; TON has no quorum helper (one endpoint
     # read today); the 20 s is T15's family mutant
-    ("a: the TON Center key dropped", [(N, "                .filter(|_| i == 0)\n", "                .filter(|_| false)\n")],
+    ("a: the TON Center key dropped", [(N, "                .flatten()\n                .map(|k| scaas_rpc::EndpointAuth::Header", "                .flatten()\n                .filter(|_| false)\n                .map(|k| scaas_rpc::EndpointAuth::Header")],
      NT + "the_ton_center_key_goes_to_the_first_endpoint"),
     ("a: each endpoint the first's credential", [("clients/scaas-rpc/src/family.rs", ".map(|(i, u)| Endpoint::new(u, crate::Class::Named, None, auth(i)))", ".map(|(_, u)| Endpoint::new(u, crate::Class::Named, None, auth(0)))")],
      T + "the_reads_the_status_class_and_the_key_to_the_first_endpoint_only"),
@@ -25,7 +25,7 @@ MUTANTS = [
      NT + "ton_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
     ("b: a failover refusal final (the counter not compared)", [(N, "            Err(SimError::Revert(r)) if self.api.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),\n", "")],
      NT + "ton_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
-    ("b: the first endpoint's key to every endpoint", [(N, "                .filter(|_| i == 0)\n", "                .filter(|_| true)\n")],
+    ("b: the first endpoint's key to every endpoint", [(N, "            keys.get(i)\n", "            keys.first()\n")],
      NT + "ton_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
 ]
 

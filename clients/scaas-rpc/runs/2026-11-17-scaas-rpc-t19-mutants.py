@@ -26,7 +26,7 @@ MUTANTS = [
      NT + "aptos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
     ("b: a failover refusal final (the counter not compared)", [(N, "            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),\n            r => r,\n        }\n    }\n\n    async fn sign", "            r => r,\n        }\n    }\n\n    async fn sign")],
      NT + "aptos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
-    ("b: a later endpoint's refusal text reaches the classifier", [(N, "            Err(scaas_rpc::RpcError::EndpointAllFailed { failover_revert: Some(_), .. }) => {\n                bail!(\"{path}: no endpoint answered (a failover endpoint's refusal decides nothing)\")\n            }\n", "")],
+    ("b: a later endpoint's refusal text reaches the classifier", [(N, "            Err(e) => Err(crate::adapters::evm::all_failed(path, &e)),", "            Err(e) => bail!(\"{path}: {e}\"),")],
      NT + "aptos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
 ]
 
