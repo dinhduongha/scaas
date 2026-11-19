@@ -247,6 +247,40 @@ pub(crate) fn lookup_by(
     })
 }
 
+/// The execution gas of a group registration (`entry`, kind `account`: `registerBlsMulti`, spec 2026-11-19-bls12381-multi
+/// §8.4) of `n` members and its source: the base row of the registry's first registration of the kind (`fresh`), its gas
+/// plus `per_item × n` when the row counts `members`; no verify part (no signer: the PoP authorizes it) and no other part.
+/// `None`: no row; `GasCountUnknown`: a row counting another item, or `n` above [`COUNT_MAX`] (fail closed, as [`lookup_by`]).
+#[cfg_attr(not(test), allow(dead_code))] // the registration quote's (plan Task 17)
+pub(crate) fn registration_gas(
+    chain: &GasRows,
+    opt_in: &[String],
+    tables: &[GasTable],
+    entry: &str,
+    n: u64,
+) -> Result<Option<(u64, GasFrom)>, SdkError> {
+    let uncounted = std::cell::Cell::new(false);
+    let found = part(chain, opt_in, tables, |r| {
+        let b = r
+            .base
+            .iter()
+            .find(|b| b.key() == (entry, "account", true))?;
+        let per = match &b.per_item {
+            None => 0,
+            Some(p) if p.item == "members" && n <= COUNT_MAX => p.gas.saturating_mul(n),
+            Some(_) => {
+                uncounted.set(true);
+                return None;
+            }
+        };
+        Some(b.gas.saturating_add(per))
+    });
+    if uncounted.get() {
+        return Err(SdkError::GasCountUnknown);
+    }
+    Ok(found)
+}
+
 /// [`lookup_by`] of an operation without a variable-length input, a saved record, a fee, a second signature or a count
 /// (a row with a per-item part: no figure).
 #[cfg(test)]
@@ -1932,5 +1966,96 @@ mod tests {
                 "signer {s:#06x}: a row with sig_bytes"
             );
         }
+    }
+
+    /// bls-multi Task 16 (spec 2026-11-19-bls12381-multi §8.4, owner ruling R2-Q2 / I1): the reference table's
+    /// `registerBlsMulti` base row and signer 289's verify row each quote `gas + per_item × n`, `n` the group's member count
+    /// (`members`), and the quote is at or above the forge measurement at n = 2, 16, 32, 64
+    /// (`account_registerBlsMulti_n<n>_fresh_registry`, `verify_0x0121_n<n>`); without the count the row refuses
+    /// (`GasCountUnknown`), never a figure at a count of 0.
+    #[test]
+    fn gas_bls_multi_rows_quote_by_members() {
+        let t = GasTable::parse(REFERENCE_FILE).unwrap();
+        let b = t
+            .rows
+            .base
+            .iter()
+            .find(|b| b.key() == ("registerBlsMulti", "account", true))
+            .unwrap();
+        let v = t.rows.verify.iter().find(|v| v.signer == 0x0121).unwrap();
+        let (bp, vp) = (b.per_item.clone().unwrap(), v.per_item.clone().unwrap());
+        assert_eq!((bp.item.as_str(), vp.item.as_str()), ("members", "members"));
+        let file = format!(
+            "{}/../../smartcontracts/evm/test/vectors/sdk_gas.json",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let m: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap();
+        let reference = [REFERENCE.to_string()];
+        let empty = GasRows {
+            base: vec![],
+            verify: vec![],
+        };
+        for n in [2u64, 16, 32, 64] {
+            let tables = std::slice::from_ref(&t);
+            let (g, from) = registration_gas(&empty, &reference, tables, "registerBlsMulti", n)
+                .unwrap()
+                .unwrap();
+            assert_eq!(from, GasFrom::Reference);
+            assert_eq!(g, b.gas + bp.gas * n, "base: gas + per_item × {n}");
+            let measured = m[format!("account_registerBlsMulti_n{n}_fresh_registry")]
+                .as_u64()
+                .unwrap();
+            assert!(g >= measured, "base n {n}: {g} < {measured}");
+            let items = |p: &Option<GasPerItem>| Some(p.as_ref().map_or(0, |p| p.gas * n));
+            let (vg, _) = verify_part(
+                &empty,
+                &reference,
+                std::slice::from_ref(&t),
+                0x0121,
+                false,
+                &items,
+            )
+            .unwrap();
+            assert_eq!(vg, v.gas + vp.gas * n, "verify: gas + per_item × {n}");
+            let measured = m[format!("verify_0x0121_n{n}")].as_u64().unwrap();
+            assert!(vg >= measured, "verify n {n}: {vg} < {measured}");
+        }
+        let tables = std::slice::from_ref(&t);
+        assert!(
+            matches!(
+                registration_gas(
+                    &empty,
+                    &reference,
+                    tables,
+                    "registerBlsMulti",
+                    COUNT_MAX + 1
+                ),
+                Err(SdkError::GasCountUnknown)
+            ),
+            "a count above COUNT_MAX: refused"
+        );
+        let mut other = t.clone();
+        for b in other
+            .rows
+            .base
+            .iter_mut()
+            .filter(|b| b.entry == "registerBlsMulti")
+        {
+            b.per_item.as_mut().unwrap().item = "legs".into();
+        }
+        assert!(
+            matches!(
+                registration_gas(&empty, &reference, &[other], "registerBlsMulti", 2),
+                Err(SdkError::GasCountUnknown)
+            ),
+            "a row counting another item: refused"
+        );
+        assert!(
+            registration_gas(&empty, &[], tables, "registerBlsMulti", 2)
+                .unwrap()
+                .is_none(),
+            "the reference not opted in: no figure"
+        );
     }
 }

@@ -29,6 +29,7 @@ import {UACall} from "../ua/UACall.sol";
 import {Vm} from "forge-std/Test.sol";
 import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {SdkGasRows} from "./SdkGasOps.sol";
+import {BlsMultiKit} from "../ua/BlsMultiKit.sol";
 
 /// The copy-cost forwarder (owner 2026-11-19, "OK"): what a token does with a signature, nothing else: the token's own
 /// `MtxPipelineLib._authorize` (a native id: the pool and key-data guards, then `SigCheck.isValid`; a derived one: the
@@ -448,5 +449,120 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
             ++rows;
         }
         assertEq(rows, 6, "0x0130 - 0x0135");
+    }
+
+    // --- bls12381-multi (0x0121), plan Task 16 (spec 2026-11-19-bls12381-multi §8.4, owner ruling R2-Q2 / I1) ---
+
+    uint256[4] internal SG_BLS_N = [uint256(2), 16, 32, 64];
+
+    /// A group of `n` members (unit weights, `sk` from `seed`) at threshold `t`.
+    function _blsGroup(uint256 n, uint16 t, uint256 seed) internal view returns (BlsMultiKit.Group memory) {
+        uint256[] memory sks = new uint256[](n);
+        uint16[] memory w = new uint16[](n);
+        for (uint256 i; i < n; ++i) {
+            sks[i] = uint256(keccak256(abi.encode("sg-bls", seed, i)))
+                % 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001;
+            w[i] = 1;
+        }
+        return BlsMultiKit.group(sks, w, t);
+    }
+
+    /// `registerBlsMulti(key, none, pop, "")` of group `g`, its PoP made here (all members).
+    function _blsRegisterCd(BlsMultiKit.Group memory g) internal view returns (bytes memory) {
+        IUARegistry.BlsMultiKey memory key;
+        (bytes[] memory keys, uint16[] memory weights) = BlsMultiKit.members(g);
+        key.aggKey = BlsMultiKit._cut(g.d, 0, 256);
+        key.threshold = uint16(bytes2(BlsMultiKit._cut(g.d, 256, 2)));
+        key.members = new IUARegistry.BlsMultiMember[](keys.length);
+        for (uint256 i; i < keys.length; ++i) {
+            key.members[i] = IUARegistry.BlsMultiMember(keys[i], weights[i]);
+        }
+        return abi.encodeCall(
+            IUARegistry.registerBlsMulti, (key, _none(), BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua)), bytes(""))
+        );
+    }
+
+    /// Owner ruling 2026-11-19 (plan Task 16, "approved"; was a plan choice): the line of a counted row from its n = 2 and
+    /// n = 64 points, `per_item = ⌈(g(64) − g(2)) / 62⌉` (the worst over `g`'s rows), `gas = g(2) − 2·per_item`, checked
+    /// at or above all four points. Controller call (owner auto-run 2026-11-19): where a point lies above that line (the
+    /// verify row at n = 16, by 304 gas), the row's gas is raised to the largest `g(n) − per_item·n`, the slope kept; the
+    /// line then stays within 1,000 gas of the n = 64 point (asserted).
+    function _blsFit(uint256[4][] memory g) internal view returns (uint256 s, uint256[] memory b) {
+        for (uint256 r; r < g.length; ++r) {
+            uint256 c = (g[r][3] - g[r][0] + 61) / 62;
+            if (c > s) s = c;
+        }
+        b = new uint256[](g.length);
+        for (uint256 r; r < g.length; ++r) {
+            b[r] = g[r][0] - 2 * s;
+            for (uint256 i; i < 4; ++i) {
+                if (g[r][i] - s * SG_BLS_N[i] > b[r]) b[r] = g[r][i] - s * SG_BLS_N[i];
+            }
+            for (uint256 i; i < 4; ++i) {
+                assertGe(b[r] + s * SG_BLS_N[i], g[r][i], "the per-item line at or above every point");
+            }
+            assertLt(b[r] + s * 64 - g[r][3], 1_000, "the line within 1,000 of the n = 64 point");
+        }
+    }
+
+    /// The `0x0121` verify row (`"item": "members"`): the forwarder's check of a hot-path signature (`verify`, as a minimal
+    /// set is accepted there too) less the native key's, at n = 2, 16, 32, 64, each at the worst k of the two sides of the
+    /// pinned `apk(S)` boundary (k = ⌊(n + 1)/2⌋ adds, k + 1 subtracts with the negation; unit weights, t = k); pinned
+    /// `verify_0x0121_n<n>_k<k>` (metered) and `verify_0x0121_n<n>` (the worst, less the native key's); the line by
+    /// `_blsFit` into `verify_0x0121_delta` (its gas at a count of 0) and `verify_0x0121_per_item` (its slope).
+    function test_sdkGas_verifyBlsMulti() public {
+        uint256 nat = _native();
+        uint256[4][] memory g = new uint256[4][](1);
+        bytes32 dg = keccak256("sdk-gas-verify-bls-multi");
+        IUARegistry.UASig memory u;
+        bytes32 ua;
+        for (uint256 i; i < 4; ++i) {
+            uint256 n = SG_BLS_N[i];
+            for (uint256 k = (n + 1) / 2; k <= (n + 1) / 2 + 1 && k <= n; ++k) {
+                BlsMultiKit.Group memory grp = _blsGroup(n, uint16(k), 100 * n + k);
+                (bool ok,) = address(reg).call(_blsRegisterCd(grp));
+                assertTrue(ok, "registerBlsMulti");
+                u.signature = BlsMultiKit.sign(
+                    grp, (uint256(1) << k) - 1, UAKinds.uaMessage(UAKinds.BLS12381_MULTI, UAKinds.PURPOSE_METATX, dg)
+                );
+                string memory key = string.concat("verify_0x0121_n", vm.toString(n), "_k", vm.toString(k));
+                uint256 m = _metered(key, _cd(grp.ua, dg, u));
+                if (m - nat > g[0][i]) g[0][i] = m - nat;
+                ua = grp.ua;
+            }
+            _pin(string.concat("verify_0x0121_n", vm.toString(n)), g[0][i]);
+        }
+        (uint256 s, uint256[] memory b) = _blsFit(g);
+        _pin("verify_0x0121_per_item", s);
+        _pin("verify_0x0121_delta", b[0]);
+        _sigBytes("verify_0x0121", ua, dg, u);
+    }
+
+    /// The `registerBlsMulti` base row (kind `account`, variant `registry`, `"item": "members"`): the registration of a group
+    /// of n members (unit weights, t = n / 2; its PoP and calldata as `scaas-ua` builds them) by the relayer, execution gas
+    /// with its state gas (`SdkGasRows._measure`), at n = 2, 16, 32, 64 (keys `account_registerBlsMulti_n<n>_<lane>_registry`):
+    /// `fresh` the registry's first `0x0121` registration (the kind's list count slot new: what the SDK quotes, it reads no
+    /// list), `used` one after another group's. The line by `_blsFit` over both into `account_registerBlsMulti_<fresh|used>_registry`
+    /// (the gas at a count of 0) and `account_registerBlsMulti_per_item_registry`.
+    function test_sdkGas_registerBlsMulti() public {
+        uint256[4][] memory g = new uint256[4][](2);
+        bytes memory other = _blsRegisterCd(_blsGroup(2, 1, 7));
+        for (uint256 i; i < 4; ++i) {
+            uint256 n = SG_BLS_N[i];
+            sgCountTag = string.concat("n", vm.toString(n), "_");
+            bytes memory cd = _blsRegisterCd(_blsGroup(n, uint16(n / 2), 1_000 + n));
+            uint256 snap = vm.snapshotState();
+            g[0][i] = _measure(_k("account", "registerBlsMulti", "fresh", "registry"), address(reg), cd);
+            vm.revertToState(snap);
+            (bool ok,) = address(reg).call(other);
+            assertTrue(ok, "another group first");
+            g[1][i] = _measure(_k("account", "registerBlsMulti", "used", "registry"), address(reg), cd);
+            vm.revertToState(snap);
+        }
+        sgCountTag = "";
+        (uint256 s, uint256[] memory b) = _blsFit(g);
+        _pin("account_registerBlsMulti_per_item_registry", s);
+        _pin("account_registerBlsMulti_fresh_registry", b[0]);
+        _pin("account_registerBlsMulti_used_registry", b[1]);
     }
 }
