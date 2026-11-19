@@ -110,8 +110,9 @@ pub use signer::TestExternalKey;
 pub use signer::{AllowRawDigest, ExternalKey, KeyRef, SigRole, SignRequest, Signer};
 pub use tx::{sign_transaction_by, AccessListItem, EvmTx, SignedTx};
 pub use uasig::{
-    membership_sig, membership_sig_current, msig_sig, msig_sig_app, msig_sig_current,
-    msig_update_typed_data, ua_sig, ua_sig_app, Slot, UaSigRequest,
+    membership_sig, membership_sig_current, msig_combine, msig_sig, msig_sig_app, msig_sig_current,
+    msig_slot_sig_current, msig_update_typed_data, registration_typed_data, ua_sig, ua_sig_app,
+    Slot, UaSigRequest,
 };
 pub use vault::{check_passphrase, PrfEnvelope, Unlock, Vault};
 #[cfg(feature = "vectors")]

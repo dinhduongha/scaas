@@ -1,0 +1,8 @@
+# t13m mutants at commit dff035bc3 (name | outcome | test)
+M1: msig_combine keeps the caller's order | killed | ../../scripts/capped cargo test --locked --offline -j2 --test wallet_uasig msig_updated_rows_through_the_builder
+M1: a Signed slot under another index | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib msig_members_apart
+M5: the device asked over another member digest | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib msig_members_apart
+M2: an inactive slot is Argument | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib msig_minimal_sets
+M3: an update landed by its version alone | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib update_msig_current
+M4: holds_pqz_key never read | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib update_msig_current
+6 mutants, 6 killed, 0 survived, 0 not loaded

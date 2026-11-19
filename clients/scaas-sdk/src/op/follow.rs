@@ -247,7 +247,7 @@ async fn registry_state(
     row: &Row,
     choice: scaas_rpc::pool::BlockChoice,
 ) -> Result<OpState, SdkError> {
-    use crate::account::{record_call, record_holds, Landed};
+    use crate::account::{record_call, record_call2, record_holds, record_holds2, Landed};
     let landed = Landed::parse(&row.batch).ok_or(SdkError::Internal)?;
     let ua: [u8; 32] = unhex(&row.from)?
         .try_into()
@@ -256,13 +256,19 @@ async fn registry_state(
     let a = pool
         .read_at_block(choice, Purpose::Plain, |at| async move {
             let out = pool.call_at(&at, registry, record_call(landed, &ua)).await?;
-            let holds = record_holds(landed, &out).ok_or_else(|| {
+            let bad = || {
                 ReadError::Failure(scaas_rpc::EndpointFailure::new(
                     at.endpoint,
                     scaas_rpc::FailureKind::AnswerMalformed,
                     "a registry record of another shape",
                 ))
-            })?;
+            };
+            let mut holds = record_holds(landed, &out).ok_or_else(bad)?;
+            // M3: an update's structure too, at the same block
+            if let (true, Some(c2)) = (holds, record_call2(landed, &ua)) {
+                let out = pool.call_at(&at, registry, c2).await?;
+                holds = record_holds2(landed, &out).ok_or_else(bad)?;
+            }
             Ok::<_, ReadError>((holds, at.number, format!("{:#x}", at.hash)))
         })
         .await?;

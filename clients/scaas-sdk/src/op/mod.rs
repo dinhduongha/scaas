@@ -66,6 +66,17 @@ pub enum MsigSlot {
     Member { index: u16, key: KeyRef },
     /// the `msig` member at `index` signs by its own slots, one level down
     Msig { index: u16, members: Vec<MsigLeaf> },
+    /// the slot at `index` already signed on another device: its `MemberSig` JSON (`{index, members, sig}`) as
+    /// [`Op::member_sign`] returned it, combined with the others by `scaas-ua` `msig_combine` (M1, owner 2026-11-19)
+    Signed { index: u16, member: String },
+}
+
+impl MsigSlot {
+    pub(crate) fn index(&self) -> u16 {
+        match self {
+            MsigSlot::Member { index, .. } | MsigSlot::Msig { index, .. } | MsigSlot::Signed { index, .. } => *index,
+        }
+    }
 }
 
 /// A slot of an inner `msig`: its index there and its key.

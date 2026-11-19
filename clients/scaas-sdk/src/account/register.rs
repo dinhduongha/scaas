@@ -55,9 +55,10 @@ pub(crate) enum Landed {
     Kem(u64),
     /// `msigStateOf(ua).accepted` has bit `i`: the slot accepted (CTR-UA-37; enabled or not)
     Accepted(u16),
-    /// `msigStateOf(ua).version >= v`: the `msig` at or past update `v` on this registry (CTR-UA-44; whoever sent it, as a
-    /// registration)
-    MsigVersion(u64),
+    /// `msigStateOf(ua).version >= v` and `keccak256(msigOf(ua))` the update's structure hash: the `msig` at or past update `v`
+    /// on this registry with this update's structure (CTR-UA-44; whoever sent it, as a registration; M3, owner 2026-11-19: a
+    /// competing update of the same version by another quorum is not this one)
+    MsigUpdate(u64, [u8; 32]),
     /// `expandedKeyOf(ua)[p] != 0`: part `p` of an ML-DSA key's expanded-key cache stored (CTR-UA-23 MD-3, MD-4)
     Cached(u64),
 }
@@ -69,7 +70,7 @@ impl Landed {
             Landed::PqzPop(v) => format!("pqzPop:{v}"),
             Landed::Kem(v) => format!("kem:{v}"),
             Landed::Accepted(i) => format!("accepted:{i}"),
-            Landed::MsigVersion(v) => format!("msigVersion:{v}"),
+            Landed::MsigUpdate(v, h) => format!("msigUpdate:{v}:{}", crate::op::hex(&h)),
             Landed::Cached(p) => format!("cached:{p}"),
         }
     }
@@ -79,7 +80,11 @@ impl Landed {
             Some(("pqzPop", v)) => v.parse().ok().map(Landed::PqzPop),
             Some(("kem", v)) => v.parse().ok().map(Landed::Kem),
             Some(("accepted", i)) => i.parse().ok().map(Landed::Accepted),
-            Some(("msigVersion", v)) => v.parse().ok().map(Landed::MsigVersion),
+            Some(("msigUpdate", r)) => {
+                let (v, h) = r.split_once(':')?;
+                let h: [u8; 32] = crate::op::unhex(h).ok()?.try_into().ok()?;
+                v.parse().ok().map(|v| Landed::MsigUpdate(v, h))
+            }
             Some(("cached", p)) => p.parse().ok().map(Landed::Cached),
             _ => None,
         }
@@ -177,15 +182,33 @@ pub(crate) fn record_call(landed: Landed, ua: &[u8; 32]) -> Bytes {
         Landed::Registered => selector("isRegistered(bytes32)"),
         Landed::PqzPop(_) => selector("pqzPopOf(bytes32,uint64)"),
         Landed::Kem(_) => selector("kemKeyAt(bytes32,uint64)"),
-        Landed::Accepted(_) | Landed::MsigVersion(_) => selector("msigStateOf(bytes32)"),
+        Landed::Accepted(_) | Landed::MsigUpdate(..) => selector("msigStateOf(bytes32)"),
         Landed::Cached(_) => selector("expandedKeyOf(bytes32)"),
     };
     d.extend_from_slice(ua);
     match landed {
         Landed::PqzPop(v) | Landed::Kem(v) => d.extend_from_slice(&word_u64(v)),
-        Landed::Registered | Landed::Accepted(_) | Landed::MsigVersion(_) | Landed::Cached(_) => {}
+        Landed::Registered | Landed::Accepted(_) | Landed::MsigUpdate(..) | Landed::Cached(_) => {}
     }
     Bytes::from(d)
+}
+
+/// The second view of `landed` on `ua`, read when the first holds (M3: `msigOf(ua)`, the current structure).
+pub(crate) fn record_call2(landed: Landed, ua: &[u8; 32]) -> Option<Bytes> {
+    let Landed::MsigUpdate(..) = landed else {
+        return None;
+    };
+    let mut d = selector("msigOf(bytes32)");
+    d.extend_from_slice(ua);
+    Some(Bytes::from(d))
+}
+
+/// The second view's answer: the current structure (`msigOf`), its key data's keccak256 the update's; `None` for another shape.
+pub(crate) fn record_holds2(landed: Landed, out: &[u8]) -> Option<bool> {
+    let Landed::MsigUpdate(_, h) = landed else {
+        return Some(true);
+    };
+    super::msig::decode_structure(out).map(|kd| scaas_ua::keccak256(&kd) == h)
 }
 
 fn word(out: &[u8], i: usize) -> Option<U256> {
@@ -213,7 +236,7 @@ pub(crate) fn record_holds(landed: Landed, out: &[u8]) -> Option<bool> {
         }
         // `(uint64 version, uint256 enabled, uint256 accepted)`
         Landed::Accepted(i) => (out.len() == 96).then(|| i < 256 && word(out, 2).is_some_and(|w| w.bit(usize::from(i)))),
-        Landed::MsigVersion(v) => match (out.len(), word(out, 0)?) {
+        Landed::MsigUpdate(v, _) => match (out.len(), word(out, 0)?) {
             (96, w) if w <= U256::from(u64::MAX) => Some(w >= U256::from(v)),
             _ => None,
         },
@@ -222,7 +245,7 @@ pub(crate) fn record_holds(landed: Landed, out: &[u8]) -> Option<bool> {
     }
 }
 
-async fn read_record(
+pub(crate) async fn read_record(
     pool: &EvmPool,
     registry: Address,
     landed: Landed,
@@ -232,10 +255,20 @@ async fn read_record(
         .with_to(registry)
         .with_input(record_call(landed, ua));
     let out = pool.call_tx(tx).await.map_err(sim)?;
-    record_holds(landed, &out).ok_or(SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed {
-        last: None,
-        failover_revert: None,
-    }))
+    let bad = || {
+        SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed {
+            last: None,
+            failover_revert: None,
+        })
+    };
+    if !record_holds(landed, &out).ok_or_else(bad)? {
+        return Ok(false);
+    }
+    let Some(c2) = record_call2(landed, ua) else {
+        return Ok(true);
+    };
+    let out = pool.call_tx(TransactionRequest::default().with_to(registry).with_input(c2)).await.map_err(sim)?;
+    record_holds2(landed, &out).ok_or_else(bad)
 }
 
 /// `pqzKeyAt(ua, 0).proven`: a PoP verifier checked version 0's proof.

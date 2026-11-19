@@ -7,8 +7,16 @@
 //! (`msigStateOf`), the same for each `msig` member of the current structure; then `scaas-ua` builds the signature
 //! (`msig_sig_current`, `membership_sig_current`), refusing a set not minimal at either level (`UAPoP`) or a disabled slot.
 //! The SDK refuses before anything is signed a slot (or an inner leaf) that is not enabled and accepted on this registry
-//! (CTR-UA-37: an `msig` names no signer until then; `Argument`). A native member signs an operation as `UAAuth` under the
-//! registry's domain, gen 1 only (`predecessor() == 0`; a gen-2 registry `Argument`). UNAUDITED.
+//! (CTR-UA-37: an `msig` names no signer until then; `MsigSlotInactive`, M2). A native member signs an operation as `UAAuth`
+//! under the registry's domain, gen 1 only (`predecessor() == 0`; a gen-2 registry `Argument`), and a `registerMsig` PoP as the
+//! registration's typed data (`scaas-ua` `registration_typed_data`, M1).
+//!
+//! Members on different devices (M1, owner 2026-11-19): [`crate::op::Op::member_sign`] signs one slot of a prepared operation
+//! (its check first) and returns that slot's `MemberSig`; the device that submits names it as `MsigSlot::Signed` beside its own
+//! slots, each signed apart (`msig_slot_sig_current`) and combined by `msig_combine` (index order, minimal). A passkey or
+//! secure-element row signs a slot through the external flow (M5): a dry run that only refuses, then the device asked for
+//! `uaMessage(kind, member, memberDigest(msig, uaMessage(msig, purpose, digest)))`, then `scaas-ua` verifies its answer.
+//! UNAUDITED.
 use super::register::{keep, registry_of, writes, Landed, RegistryWrite};
 use super::Account;
 use crate::op::{evm, hex, key_opened, sim, unhex, Key, KeyRef, MsigSlot};
@@ -20,9 +28,10 @@ use scaas_rpc::evm::EvmPool;
 use scaas_ua::ua_portable::{
     msig_update_digest, plan_msig_update, MsigMember, MsigStructure, MsigUpdateState, UASig,
 };
+use scaas_ua::ua_portable::{InnerSig, MemberSig};
 use scaas_ua::wallet::{
-    membership_sig_current, msig_sig_current, msig_update_typed_data, scaas_purpose, sign_scaas,
-    Expect, ExternalKey, Slot, TypedData,
+    membership_sig_current, msig_combine, msig_sig_current, msig_slot_sig_current, msig_update_typed_data,
+    registration_typed_data, scaas_purpose, sign_scaas, Expect, ExternalKey, Slot, TypedData,
 };
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -168,6 +177,10 @@ pub struct UpdateMsig {
     pub valid_until_block: u64,
     pub slots: Vec<MsigSlot>,
     pub payer: KeyRef,
+    /// the caller's facts for `plan_msig_update` (M4, owner 2026-11-19): a token names this `msig` as its PQZ verifier; the UA is
+    /// in use on a family with no `msig` update yet. Whether it holds a PQZ key is read (`pqzKeyAt(ua, 0)`).
+    pub verifier: bool,
+    pub family_without_update: bool,
 }
 
 /// A prepared update: its write and `scaas-ua`'s warnings (`plan_msig_update`, none a refusal), in their `Debug` form.
@@ -243,7 +256,7 @@ fn decode_key_data(out: &[u8]) -> Option<Vec<u8>> {
 }
 
 /// `msigOf(ua)`: `(uint16 threshold, (uint16 kind, bytes32 id, uint16 weight)[] members)`, at most 256 members, as key data.
-fn decode_structure(out: &[u8]) -> Option<Vec<u8>> {
+pub(crate) fn decode_structure(out: &[u8]) -> Option<Vec<u8>> {
     let base = small(out, 0, 1 << 20)?;
     let threshold = u16::try_from(small(out, base, u64::from(u16::MAX))?).ok()?;
     let list = base.checked_add(small(out, base + 32, 1 << 20)?)?;
@@ -302,12 +315,14 @@ async fn views(pool: &EvmPool, registry: Address, ids: &[[u8; 32]]) -> Result<Ha
 }
 
 /// The keys of `slots` in their order (a slot's key, then an `msig` slot's leaves); a key that is an `msig` itself `Argument`.
+/// A slot signed elsewhere (`Signed`) has none.
 async fn open(sdk: &Sdk, slots: &[MsigSlot]) -> Result<Vec<Key>, SdkError> {
     let mut keys = vec![];
     for s in slots {
         let refs: Vec<&KeyRef> = match s {
             MsigSlot::Member { key, .. } => vec![key],
             MsigSlot::Msig { members, .. } => members.iter().map(|l| &l.key).collect(),
+            MsigSlot::Signed { .. } => vec![],
         };
         for r in refs {
             if matches!(r, KeyRef::Msig { .. }) {
@@ -338,6 +353,7 @@ fn ua_slots<'a>(slots: &[MsigSlot], keys: &'a [Key]) -> Result<Vec<Slot<'a>>, Sd
                         .map(|l| Ok((l.index, next()?)))
                         .collect::<Result<_, SdkError>>()?,
                 },
+                MsigSlot::Signed { .. } => return Err(SdkError::Argument),
             })
         })
         .collect()
@@ -351,19 +367,19 @@ fn leaves_active(views: &HashMap<[u8; 32], View>, structure: &MsigStructure, slo
             let id = structure.members.get(usize::from(*index)).ok_or(SdkError::Argument)?.id;
             let v = views.get(&id).ok_or(SdkError::Argument)?;
             if members.iter().any(|l| !v.active(l.index)) {
-                return Err(SdkError::Argument);
+                return Err(SdkError::MsigSlotInactive);
             }
         }
     }
     Ok(())
 }
 
-/// Every slot enabled and accepted in `v` (the outer `msig`), and every leaf in its inner one: `Argument` otherwise.
+/// Every slot enabled and accepted in `v` (the outer `msig`), and every leaf in its inner one: `MsigSlotInactive` otherwise
+/// (M2).
 fn slots_active(views: &HashMap<[u8; 32], View>, v: &View, slots: &[MsigSlot]) -> Result<(), SdkError> {
     for s in slots {
-        let (MsigSlot::Member { index, .. } | MsigSlot::Msig { index, .. }) = s;
-        if !v.active(*index) {
-            return Err(SdkError::Argument);
+        if !v.active(s.index()) {
+            return Err(SdkError::MsigSlotInactive);
         }
     }
     leaves_active(views, &structure(&v.current)?, slots)
@@ -392,8 +408,87 @@ async fn domain(sdk: &Sdk, chain: &str, pool: &EvmPool, registry: Address) -> Re
     })
 }
 
+/// A `MemberSig` from its JSON (`{index, members: [{index, sig}], sig}`, `0x` hex), as [`members_json`] writes one: bounded
+/// (64 KiB, 256 inner signatures), else `Argument`.
+fn member_of(s: &str) -> Result<MemberSig, SdkError> {
+    if s.len() > 64 << 10 {
+        return Err(SdkError::Argument);
+    }
+    let v: Value = serde_json::from_str(s).map_err(|_| SdkError::Argument)?;
+    let index = |v: &Value| -> Result<u16, SdkError> {
+        let n = match v.get("index") {
+            Some(Value::Number(n)) => n.as_u64(),
+            Some(Value::String(s)) => s.parse().ok(),
+            _ => None,
+        };
+        n.and_then(|n| u16::try_from(n).ok()).ok_or(SdkError::Argument)
+    };
+    let sig = |v: &Value| v.get("sig").and_then(Value::as_str).ok_or(SdkError::Argument).and_then(unhex);
+    let inner = v.get("members").and_then(Value::as_array).ok_or(SdkError::Argument)?;
+    if inner.len() > 256 {
+        return Err(SdkError::Argument);
+    }
+    Ok(MemberSig {
+        index: index(&v)?,
+        members: inner
+            .iter()
+            .map(|m| Ok(InnerSig { index: index(m)?, sig: sig(m)? }))
+            .collect::<Result<_, SdkError>>()?,
+        sig: sig(&v)?,
+    })
+}
+
+/// One local slot's `MemberSig` (M1) over `uaMessage(msig, purpose, digest)`; a passkey or secure-element member through the
+/// external flow (M5: a dry run that only refuses, then the device, then `scaas-ua` verifies its answer).
+#[allow(clippy::too_many_arguments)]
+async fn slot_sig(
+    sdk: &Sdk,
+    views: &HashMap<[u8; 32], View>,
+    first: &[u8],
+    ua: &[u8; 32],
+    s: &MsigSlot,
+    purpose: &[u8; 32],
+    digest: &[u8; 32],
+    d: Option<&scaas_ua::Domain>,
+    record: Option<&TypedData>,
+) -> Result<MemberSig, SdkError> {
+    let keys = open(sdk, std::slice::from_ref(s)).await?;
+    let current = |id: [u8; 32]| views.get(&id).map(|v| (v.current.clone(), v.enabled));
+    let inner = |id: [u8; 32]| views.get(&id).map(|v| v.first.clone());
+    if let (MsigSlot::Member { index, .. }, Some(Key::External(row, _))) = (s, keys.first()) {
+        let asked = AtomicBool::new(false);
+        let refuse = ExternalKey::new(row.key_ref(), |_| {
+            asked.store(true, Ordering::SeqCst);
+            Err(scaas_ua::wallet::Error::ExternalSignature)
+        });
+        let slot = Slot::Member { index: *index, key: &refuse };
+        let dry = msig_slot_sig_current(first, &current, &inner, purpose, digest, d, record, &slot);
+        if !asked.load(Ordering::SeqCst) {
+            return Err(dry.err().map_or(SdkError::Internal, SdkError::from));
+        }
+        let md = scaas_ua::member_digest(ua, &scaas_ua::ua_message(MSIG, purpose, digest).map_err(ua_err)?);
+        let tag = scaas_ua::purpose_tag("member").map_err(ua_err)?;
+        let answer = crate::op::external::answer(sdk, row, &tag, &md).await?;
+        let device = ExternalKey::new(row.key_ref(), move |_| Ok(answer.clone()));
+        let slot = Slot::Member { index: *index, key: &device };
+        return Ok(msig_slot_sig_current(first, &current, &inner, purpose, digest, d, record, &slot)?);
+    }
+    let slots = ua_slots(std::slice::from_ref(s), &keys)?;
+    Ok(msig_slot_sig_current(
+        first,
+        &current,
+        &inner,
+        purpose,
+        digest,
+        d,
+        record,
+        slots.first().ok_or(SdkError::Internal)?,
+    )?)
+}
+
 /// The `UASig` of the `msig` `ua` over `uaMessage(msig, purpose, digest)` by `slots` (module doc); `record` what a native
-/// member signs in a portable purpose.
+/// member signs in a portable purpose. Local key slots only: one `scaas-ua` call over the set; with a slot signed elsewhere or
+/// a stored key row: each slot apart, then `msig_combine`.
 async fn uasig(
     sdk: &Sdk,
     chain: &str,
@@ -415,16 +510,35 @@ async fn uasig(
     };
     let current = |id: [u8; 32]| views.get(&id).map(|v| (v.current.clone(), v.enabled));
     let inner = |id: [u8; 32]| views.get(&id).map(|v| v.first.clone());
-    Ok(msig_sig_current(
-        &v.first,
-        &current,
-        &inner,
-        purpose,
-        digest,
-        d.as_ref(),
-        None,
-        &ua_slots(slots, &keys)?,
-    )?)
+    let apart = slots.iter().any(|s| matches!(s, MsigSlot::Signed { .. }))
+        || keys.iter().any(|k| matches!(k, Key::External(..)));
+    if !apart {
+        return Ok(msig_sig_current(
+            &v.first,
+            &current,
+            &inner,
+            purpose,
+            digest,
+            d.as_ref(),
+            None,
+            &ua_slots(slots, &keys)?,
+        )?);
+    }
+    drop(keys);
+    let mut members = Vec::with_capacity(slots.len());
+    for s in slots {
+        members.push(match s {
+            MsigSlot::Signed { index, member } => {
+                let m = member_of(member)?;
+                if m.index != *index {
+                    return Err(SdkError::Argument);
+                }
+                m
+            }
+            _ => slot_sig(sdk, &views, &v.first, ua, s, purpose, digest, d.as_ref(), None).await?,
+        });
+    }
+    Ok(msig_combine(&v.first, &current, &members)?)
 }
 
 /// An operation's `UASig` by the `msig` `ua` (`KeyRef::Msig`, spec §13.4): the entry's check first (`sign_scaas` through a
@@ -438,11 +552,21 @@ pub(crate) async fn sign_typed(
     expect: &Expect,
 ) -> Result<UASig, SdkError> {
     let ua = id32(ua)?;
-    let probe = match slots.first() {
-        Some(MsigSlot::Member { key, .. }) => key,
-        Some(MsigSlot::Msig { members, .. }) => &members.first().ok_or(SdkError::Argument)?.key,
-        None => return Err(SdkError::Argument),
-    };
+    check_first(sdk, slots, td, expect).await?;
+    uasig(sdk, chain, &ua, slots, &scaas_purpose(td)?, &td.digest()?).await
+}
+
+/// The entry's check through the first local slot's key, a key that only refuses: `PolicyRefused` (or the typed data's own
+/// error) before any member key signs; `Argument` when no slot is local.
+async fn check_first(sdk: &Sdk, slots: &[MsigSlot], td: &TypedData, expect: &Expect) -> Result<(), SdkError> {
+    let probe = slots
+        .iter()
+        .find_map(|s| match s {
+            MsigSlot::Member { key, .. } => Some(key),
+            MsigSlot::Msig { members, .. } => members.first().map(|l| &l.key),
+            MsigSlot::Signed { .. } => None,
+        })
+        .ok_or(SdkError::Argument)?;
     let k = key_opened(sdk, probe).await?;
     let asked = AtomicBool::new(false);
     let refuse = ExternalKey::new(k.signer().key_ref(), |_| {
@@ -453,7 +577,50 @@ pub(crate) async fn sign_typed(
     if !asked.load(Ordering::SeqCst) {
         return Err(dry.err().map_or(SdkError::Internal, SdkError::from));
     }
-    uasig(sdk, chain, &ua, slots, &scaas_purpose(td)?, &td.digest()?).await
+    Ok(())
+}
+
+impl crate::op::Op {
+    /// One member's signature of a prepared operation signed by an `msig` (M1, owner 2026-11-19: members on different
+    /// devices): `prepared`'s signer is `KeyRef::Msig` with exactly one local slot; the entry's check runs first, then that slot
+    /// signs (its keys enabled and accepted, `MsigSlotInactive` otherwise). The `MemberSig` JSON the submitting device names as
+    /// `MsigSlot::Signed`. Nothing is sent. `PreparedUnknown`, `PolicyRefused`, `Argument` (another signer, several slots).
+    pub async fn member_sign(&self, prepared: Arc<crate::op::Prepared>) -> Result<String, SdkError> {
+        let sdk = self.sdk.clone();
+        self.sdk
+            .spawn(async move {
+                crate::op::Op::known(&sdk, &prepared)?;
+                let KeyRef::Msig { ua, slots } = prepared.signer() else {
+                    return Err(SdkError::Argument);
+                };
+                let [slot] = slots.as_slice() else {
+                    return Err(SdkError::Argument);
+                };
+                if matches!(slot, MsigSlot::Signed { .. }) {
+                    return Err(SdkError::Argument);
+                }
+                let (td, expect) = (&prepared.t.td, &prepared.t.expect);
+                check_first(&sdk, &slots, td, expect).await?;
+                let ua = id32(&ua)?;
+                let chain = prepared.chain();
+                let (_, _, pool) = evm(&sdk, &chain)?;
+                let registry = registry_of(&sdk, &chain)?;
+                let views = views(&pool, registry, &[ua]).await?;
+                let v = views.get(&ua).ok_or(SdkError::Internal)?;
+                slots_active(&views, v, &slots)?;
+                let native = matches!(slot, MsigSlot::Member { key: KeyRef::Native { .. }, .. })
+                    || matches!(slot, MsigSlot::Msig { members, .. } if members.iter().any(|l| matches!(l.key, KeyRef::Native { .. })));
+                let d = match native {
+                    true => Some(domain(&sdk, &chain, &pool, registry).await?),
+                    false => None,
+                };
+                let (purpose, digest) = (scaas_purpose(td)?, td.digest()?);
+                let m = slot_sig(&sdk, &views, &v.first, &ua, slot, &purpose, &digest, d.as_ref(), None).await?;
+                let j = members_json(&UASig { members: vec![m], ..Default::default() })?;
+                serde_json::to_string(j.get(0).ok_or(SdkError::Internal)?).map_err(|_| SdkError::Internal)
+            })
+            .await
+    }
 }
 
 /// `MemberSig[]` as the registry calls take them.
@@ -536,6 +703,8 @@ impl Account {
                         let keys = open(&sdk, &req.slots).await?;
                         let current = |id: [u8; 32]| views.get(&id).map(|v| (v.current.clone(), v.enabled));
                         let inner = |id: [u8; 32]| views.get(&id).map(|v| v.first.clone());
+                        // a native member signs the registration's typed data itself (M1)
+                        let record = registration_typed_data(&ua, MSIG, &hp.pqz_key_hash, &hp.pqz_pop_hash)?;
                         let sig = msig_sig_current(
                             &kd,
                             &current,
@@ -543,7 +712,7 @@ impl Account {
                             &scaas_ua::ua_portable::pop_v2_tag(),
                             &hp.registration_digest,
                             None,
-                            None,
+                            Some(&record),
                             &ua_slots(&req.slots, &keys)?,
                         )?;
                         members_json(&sig)?
@@ -578,9 +747,7 @@ impl Account {
                 let registry = registry_of(&sdk, &req.chain)?;
                 let views = views(&pool, registry, &[ua]).await?;
                 let v = views.get(&ua).ok_or(SdkError::Internal)?;
-                let index = match &req.slot {
-                    MsigSlot::Member { index, .. } | MsigSlot::Msig { index, .. } => *index,
-                };
+                let index = req.slot.index();
                 if bit(&v.accepted, index) {
                     return Ok(None);
                 }
@@ -630,12 +797,17 @@ impl Account {
                     let b = enabled.get_mut(31usize.checked_sub(i / 8).ok_or(SdkError::Argument)?);
                     *b.ok_or(SdkError::Argument)? |= 1 << (i % 8);
                 }
+                // M4: whether the `msig` holds a PQZ key, read (`pqzKeyAt(ua, 0)`: a key at version 0 once any is set); the
+                // verifier and family facts are the caller's
+                let key = call(&pool, registry, "pqzKeyAt(bytes32,uint64)", &[ua, [0; 32]]).await?;
                 let state = MsigUpdateState {
                     current: structure(&v.current)?,
                     version: v.version,
                     enabled: v.enabled,
                     accepted: v.accepted,
-                    ..Default::default()
+                    holds_pqz_key: word(&key, 0).ok_or_else(bad)? != U256::ZERO,
+                    verifier: req.verifier,
+                    family_without_update: req.family_without_update,
                 };
                 let chain_uid = id32(&profile.chain_uid)?;
                 let (u, warnings) = plan_msig_update(
@@ -678,7 +850,9 @@ impl Account {
                 )
                 .map_err(|_| SdkError::Internal)?;
                 let args = out.get("args").ok_or(SdkError::Internal)?;
-                let write = keep(&sdk, &req.chain, "updateMsig", ua, args, &req.payer, Landed::MsigVersion(u.version))?;
+                // M3: landed when the registry's version reached it and its current structure is this update's
+                let hash = scaas_ua::keccak256(&u.structure.key_data());
+                let write = keep(&sdk, &req.chain, "updateMsig", ua, args, &req.payer, Landed::MsigUpdate(u.version, hash))?;
                 Ok(MsigUpdatePlan {
                     write,
                     warnings: warnings.iter().map(|w| format!("{w:?}")).collect(),

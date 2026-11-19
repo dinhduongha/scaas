@@ -1443,6 +1443,55 @@ fn msig_updated_rows_through_the_builder() {
         Some(&all_accepted),
     );
     assert!(ok.is_ok(), "{ok:?}");
+    // M1 (owner 2026-11-19): each slot signed apart (members on different devices), combined in any order: authorized as the
+    // whole set; a slot twice is refused
+    let apart: Vec<_> = slots
+        .iter()
+        .rev()
+        .map(|s| {
+            scaas_ua::wallet::msig_slot_sig_current(
+                &first,
+                &current,
+                &none,
+                &purpose,
+                &digest,
+                Some(&domain),
+                None,
+                s,
+            )
+            .unwrap()
+        })
+        .collect();
+    let combined = scaas_ua::wallet::msig_combine(&first, &current, &apart).unwrap();
+    assert_eq!(
+        combined.members.iter().map(|m| m.index).collect::<Vec<_>>(),
+        quorum,
+        "index order"
+    );
+    let ok = check_authorization_current(
+        &first,
+        &ua,
+        &purpose,
+        &digest,
+        &combined.members,
+        &domain,
+        &members,
+        &current,
+        Some(&all_accepted),
+    );
+    assert!(ok.is_ok(), "combined: {ok:?}");
+    let mut twice = apart.clone();
+    twice.push(apart[0].clone());
+    assert_eq!(
+        scaas_ua::wallet::msig_combine(&first, &current, &twice).err(),
+        Some(Error::Argument)
+    );
+    assert!(
+        scaas_ua::wallet::msig_combine(&first, &current, &apart[..1]).err()
+            == Some(Error::Ua(scaas_ua::UAError::Pop))
+            || quorum.len() == 1,
+        "one slot of a larger quorum is not a minimal authorizing set"
+    );
     // the first-structure builder cannot reach the appended slot
     assert!(
         msig_sig(
@@ -1636,4 +1685,24 @@ fn msig_update_rows_native_signs_the_update_digest() {
         msig_sig(&stored, &none, &tag, &digest, Some(&domain), None, &slots).err(),
         Some(Error::Argument)
     );
+}
+
+/// M1 (owner 2026-11-19): the typed `UARegistration` a native `msig` member signs for a `registerMsig` PoP has the digest the
+/// registry checks (`registration_digest` with the zero KEM record), with and without a PQZ key.
+#[test]
+fn registration_typed_data_digest() {
+    use scaas_ua::ua_portable::{kem_record_hash, registration_digest};
+    let ua = [7u8; 32];
+    for (pk, pop) in [([0u8; 32], [0u8; 32]), ([1u8; 32], [2u8; 32])] {
+        let td = scaas_ua::wallet::registration_typed_data(&ua, 0x0120, &pk, &pop).unwrap();
+        let kem = kem_record_hash(&ua, 0, &[]).unwrap();
+        assert_eq!(
+            td.digest().unwrap(),
+            registration_digest(&ua, 0x0120, &pk, &kem, &pop)
+        );
+        assert_eq!(
+            td.domain_separator().unwrap(),
+            scaas_ua::ua_portable::PORTABLE_DOMAIN_SEPARATOR
+        );
+    }
 }

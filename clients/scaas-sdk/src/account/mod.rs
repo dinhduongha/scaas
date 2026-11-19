@@ -27,7 +27,7 @@ pub use sponsor::{
     AttrsArgs, KemArgs, KemRecord, RegisterArgs, RegistrationBlob, WebAuthnArgs, BLOB_MAX,
 };
 #[cfg(feature = "wallet")]
-pub(crate) use register::{receiver_registered, record_call, record_holds, Landed};
+pub(crate) use register::{receiver_registered, record_call, record_call2, record_holds, record_holds2, Landed};
 pub use restore::Restore;
 
 use crate::vault::{change_entry, AccountRow, SeedEntry};

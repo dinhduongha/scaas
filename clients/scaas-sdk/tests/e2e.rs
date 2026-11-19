@@ -1064,6 +1064,8 @@ async fn e2e_msig_register_accept_transfer_update_on_anvil() {
             valid_until_block: block + 100,
             slots: vec![slot(0), slot(1)],
             payer: key0(&seed),
+            verifier: false,
+            family_without_update: false,
         })
         .await
         .unwrap();

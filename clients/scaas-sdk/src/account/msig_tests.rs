@@ -57,6 +57,14 @@ struct T {
 }
 
 async fn setup(registry: &str, genesis: Option<&str>) -> T {
+    setup_auth(registry, genesis, None).await
+}
+
+async fn setup_auth(
+    registry: &str,
+    genesis: Option<&str>,
+    authenticator: Option<Arc<dyn crate::platform::Authenticator>>,
+) -> T {
     let chain = fake();
     if let Some(g) = genesis {
         chain.lock().unwrap().genesis = g.into();
@@ -90,7 +98,7 @@ async fn setup(registry: &str, genesis: Option<&str>) -> T {
     let sdk = Sdk::open(SdkConfig {
         profiles: vec![profile],
         store: MemoryStore::new(),
-        authenticator: None,
+        authenticator,
         rp_id: None,
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: Limits::default(),
@@ -263,11 +271,11 @@ async fn msig_minimal_sets() {
     assert_eq!((s.members.len(), s.members[0].members.len()), (1, 2));
     assert_eq!(code(sign(&outer, vec![leaves(&[0, 1]), member(&t, 1, FNDSA512, 2)]).await), "UAPoP");
     assert_eq!(code(sign(&outer, vec![leaves(&[0])]).await), "UAPoP", "an inner list short of its threshold");
-    // not accepted here: an outer slot, then an inner leaf (CTR-UA-37)
+    // not accepted here: an outer slot, then an inner leaf (CTR-UA-37; their own code, M2)
     record(&t, REGISTRY, &heavy, &heavy, 0, 0b11, 0b01);
-    assert_eq!(code(sign(&heavy, vec![member(&t, 1, FNDSA512, 1)]).await), "Argument");
+    assert_eq!(code(sign(&heavy, vec![member(&t, 1, FNDSA512, 1)]).await), "MsigSlotInactive");
     record(&t, REGISTRY, &inner_pq, &inner_pq, 0, 0b11, 0b01);
-    assert_eq!(code(sign(&outer, vec![leaves(&[0, 1])]).await), "Argument");
+    assert_eq!(code(sign(&outer, vec![leaves(&[0, 1])]).await), "MsigSlotInactive");
     record(&t, REGISTRY, &inner_pq, &inner_pq, 0, 0b11, 0b11);
     assert!(sign(&outer, vec![leaves(&[0, 1])]).await.is_ok(), "the control: accepted again");
 }
@@ -320,12 +328,24 @@ async fn update_msig_current() {
         valid_until_block: row["validUntilBlock"].as_u64().unwrap(),
         slots,
         payer: payer.clone(),
+        verifier: false,
+        family_without_update: false,
     };
     let quorum = || vec![member(&t, 1, MLDSA65, 1), member(&t, 2, MLDSA65, 2)];
     let acc = t.sdk.account();
+    // M4: `pqzKeyAt(ua, 0)` read; no key: no rotation warning for the disabled slot, a key: the warning
+    let key_at = format!("{}{}{}", sel("pqzKeyAt(bytes32,uint64)"), &hex(&ua)[2..], w(0));
+    answer(&t, &registry, key_at.clone(), format!("0x{}{}{}", w(0), w(0), w(0)));
     let plan = acc.prepare_update_msig(update(quorum())).await.unwrap();
+    assert!(!plan.warnings.iter().any(|w| w == "RotatePqzKey"), "{:?}", plan.warnings);
+    answer(&t, &registry, key_at.clone(), format!("0x{}{}{}", w(0x5ca), w(0), w(1)));
+    let keyed = acc.prepare_update_msig(update(quorum())).await.unwrap();
+    assert!(keyed.warnings.iter().any(|w| w == "RotatePqzKey"), "{:?}", keyed.warnings);
+    answer(&t, &registry, key_at, format!("0x{}{}{}", w(0), w(0), w(0)));
     let wr = &plan.write;
-    assert_eq!((wr.entry(), wr.landed), ("updateMsig".to_string(), Landed::MsigVersion(1)));
+    let updated = b(&p["msigUpdated"]["current"]);
+    let want = Landed::MsigUpdate(1, scaas_ua::keccak256(&updated));
+    assert_eq!((wr.entry(), wr.landed), ("updateMsig".to_string(), want));
     assert!(plan.warnings.iter().any(|w| w.starts_with("SlotsLeft(252)")), "{:?}", plan.warnings);
     // the signatures: argument 5 (`sigs`) to the end; every other byte the row's call
     let sigs = decode_member_sigs(&tail(&wr.calldata, 5, None)).unwrap();
@@ -343,10 +363,16 @@ async fn update_msig_current() {
     assert_eq!(ok, Ok(()), "a quorum of the stored structure over the row's digest");
     // an update signed by a slot of the stored structure not accepted here: refused before signing
     record(&t, &registry, &first, &first, 0, 0b111, 0b011);
-    assert_eq!(code(acc.prepare_update_msig(update(quorum())).await), "Argument");
+    assert_eq!(code(acc.prepare_update_msig(update(quorum())).await), "MsigSlotInactive");
     // the updated record: four slots, enabled 0, 1, 3, version 1, every slot accepted
     let now = b(&p["msigUpdated"]["current"]);
+    // M3: version 1 reached by another structure (a competing quorum's update) is not this update; this structure is
+    let (_, _, pool) = crate::op::evm(&t.sdk, "local").unwrap();
+    let reg: Address = registry.parse().unwrap();
+    record(&t, &registry, &first, &first, 1, 0b111, 0b111);
+    assert!(!super::super::register::read_record(&pool, reg, want, &ua).await.unwrap(), "another structure at version 1");
     record(&t, &registry, &first, &now, 1, 0b1011, 0b1111);
+    assert!(super::super::register::read_record(&pool, reg, want, &ua).await.unwrap(), "this update's structure");
     let (purpose, digest) = (scaas_ua::purpose_tag("metatx").unwrap(), [9u8; 32]);
     let by_current = [member(&t, 1, MLDSA65, 1), member(&t, 3, FNDSA512, 0)];
     let s = uasig(&t.sdk, "local", &ua, &by_current, &purpose, &digest).await.unwrap();
@@ -360,7 +386,7 @@ async fn update_msig_current() {
     assert_eq!(code(sign_typed(&t.sdk, "local", &hex(&ua), &by_current, &td, &any).await), "Argument");
     assert_eq!(
         code(uasig(&t.sdk, "local", &ua, &quorum(), &purpose, &digest).await),
-        "Argument",
+        "MsigSlotInactive",
         "a disabled slot"
     );
     let next = acc
@@ -370,7 +396,7 @@ async fn update_msig_current() {
         })
         .await
         .unwrap();
-    assert_eq!(next.write.landed, Landed::MsigVersion(2), "version = stored + 1");
+    assert_eq!(next.write.landed, Landed::MsigUpdate(2, scaas_ua::keccak256(&now)), "version = stored + 1");
 }
 
 /// The three registry writes on the fake chain (spec §7, CTR-UA-37): `registerMsig` of a 2-of-3 over fndsa512 #0-#2 with an
@@ -481,4 +507,92 @@ async fn msig_writes_landed_by_record() {
     assert_eq!((st.active_weight, st.active), (1, false));
     let x = &st.slots[usize::from(i2)];
     assert!(x.accepted && x.sig_hash == format!("0x{}", "ab".repeat(32)), "{x:?}");
+}
+
+
+/// A secure element holding one P-256 key (MESSAGE mode: ECDSA over SHA-256 of the 32 bytes given); asked `n` times.
+#[derive(Default)]
+struct Se {
+    n: std::sync::atomic::AtomicUsize,
+}
+
+fn se_key() -> p256::ecdsa::SigningKey {
+    p256::ecdsa::SigningKey::from_slice(&scaas_ua::sha256(b"scaas-sdk.m5.se")).unwrap()
+}
+
+#[async_trait::async_trait]
+impl crate::platform::Authenticator for Se {
+    async fn create_passkey(&self, _: String, _: String, _: Vec<Vec<u8>>) -> Result<crate::platform::PasskeyCreated, crate::platform::AuthError> {
+        Err(crate::platform::AuthError::Unavailable)
+    }
+    async fn get_assertion(&self, _: crate::platform::AssertionRequest, _: Arc<SecretBytes>) -> Result<crate::platform::Assertion, crate::platform::AuthError> {
+        Err(crate::platform::AuthError::Unavailable)
+    }
+    async fn platform_secret(&self, _: String, _: Vec<u8>, _: String, _: Option<crate::platform::KeyPolicy>, _: Arc<SecretBytes>) -> Result<(), crate::platform::AuthError> {
+        Err(crate::platform::AuthError::Unavailable)
+    }
+    async fn p256_generate(&self, _: crate::platform::KeyPolicy) -> Result<crate::platform::SePublic, crate::platform::AuthError> {
+        Ok(crate::platform::SePublic { handle: "se-m5".into(), key_data: se_key().verifying_key().to_sec1_point(false).as_bytes()[1..].to_vec() })
+    }
+    async fn p256_sign(&self, _: String, ua_msg: Vec<u8>, _: String) -> Result<Vec<u8>, crate::platform::AuthError> {
+        use p256::ecdsa::signature::Signer as _;
+        self.n.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let sig: p256::ecdsa::Signature = se_key().sign(&ua_msg);
+        Ok(sig.to_bytes().to_vec())
+    }
+}
+
+/// M1 and M5 (owner 2026-11-19, "approved M1–M5 as proposed"): a 2-of-2 over fndsa512 #0 and a secure-element row. The
+/// fndsa512 slot signed apart (what `member_sign` returns on its device) comes back as `MsigSlot::Signed`; the secure-element
+/// slot signs through the external flow (one device request after a dry run); `msig_combine` puts them in index order and the
+/// set verifies. A `Signed` slot naming another index, and the same slot twice, are refused; an inactive slot is
+/// `MsigSlotInactive` (M2) with no device asked.
+#[tokio::test(flavor = "multi_thread")]
+async fn msig_members_apart() {
+    let se = Arc::new(Se::default());
+    let t = setup_auth(REGISTRY, None, Some(se.clone())).await;
+    let policy = crate::platform::KeyPolicy { biometry_current_set: true, invalidated_by_enrollment: true };
+    let row = t
+        .sdk
+        .account()
+        .create_se_key(crate::account::CreateSeKey { seed: t.seed.clone(), name: "element".into(), policy })
+        .await
+        .unwrap();
+    let se_kd = se_key().verifying_key().to_sec1_point(false).as_bytes()[1..].to_vec();
+    let se_ua = scaas_ua::derive_ua(0x0101, &se_kd, false).unwrap();
+    let wallet = Wallet::from_mnemonic(REPO, "").unwrap();
+    let f = wallet.ua_key(FNDSA512, 0, 0).unwrap();
+    let mut ms = vec![
+        MsigMember { kind: FNDSA512, id: f.ua().unwrap(), weight: 1 },
+        MsigMember { kind: 0x0101, id: se_ua, weight: 1 },
+    ];
+    ms.sort_by_key(|m| m.id);
+    let kd = MsigStructure { threshold: 2, members: ms.clone() }.key_data();
+    let ua = scaas_ua::derive_ua(MSIG, &kd, false).unwrap();
+    record(&t, REGISTRY, &kd, &kd, 0, 0b11, 0b11);
+    let (fi, si) = (ms.iter().position(|m| m.kind == FNDSA512).unwrap() as u16, ms.iter().position(|m| m.kind == 0x0101).unwrap() as u16);
+    let (purpose, digest) = (scaas_ua::purpose_tag("metatx").unwrap(), [5u8; 32]);
+    // the fndsa512 slot on its own device
+    let (_, _, pool) = crate::op::evm(&t.sdk, "local").unwrap();
+    let reg: Address = REGISTRY.parse().unwrap();
+    let vs = views(&pool, reg, &[ua]).await.unwrap();
+    let m = slot_sig(&t.sdk, &vs, &kd, &ua, &member(&t, fi, FNDSA512, 0), &purpose, &digest, None, None).await.unwrap();
+    let j = serde_json::to_string(&members_json(&UASig { members: vec![m], ..Default::default() }).unwrap()[0]).unwrap();
+    let slots = vec![MsigSlot::Member { index: si, key: row.clone() }, MsigSlot::Signed { index: fi, member: j.clone() }];
+    let s = uasig(&t.sdk, "local", &ua, &slots, &purpose, &digest).await.unwrap();
+    assert_eq!(se.n.load(std::sync::atomic::Ordering::SeqCst), 1, "the device asked once");
+    assert_eq!(s.members.iter().map(|m| m.index).collect::<Vec<_>>(), [fi.min(si), fi.max(si)], "index order");
+    let lookup = |id: [u8; 32]| (id == se_ua).then(|| (0x0101, se_kd.clone())).or_else(|| (id == f.ua().unwrap()).then(|| (FNDSA512, f.key_data())));
+    let ok = check_authorization_current(&kd, &ua, &purpose, &digest, &s.members, &domain(), &lookup, &|_| None, Some(&all));
+    assert_eq!(ok, Ok(()), "the combined set verifies");
+    // a `Signed` slot under another index; the same slot twice
+    let wrong = vec![MsigSlot::Member { index: si, key: row.clone() }, MsigSlot::Signed { index: si, member: j.clone() }];
+    assert_eq!(code(uasig(&t.sdk, "local", &ua, &wrong, &purpose, &digest).await), "Argument");
+    let twice = vec![MsigSlot::Signed { index: fi, member: j.clone() }, MsigSlot::Signed { index: fi, member: j.clone() }];
+    assert_eq!(code(uasig(&t.sdk, "local", &ua, &twice, &purpose, &digest).await), "Argument");
+    // the secure-element slot not accepted: its own code, no device asked
+    record(&t, REGISTRY, &kd, &kd, 0, 0b11, 1 << fi);
+    let n = se.n.load(std::sync::atomic::Ordering::SeqCst);
+    assert_eq!(code(uasig(&t.sdk, "local", &ua, &slots, &purpose, &digest).await), "MsigSlotInactive");
+    assert_eq!(se.n.load(std::sync::atomic::Ordering::SeqCst), n, "no device asked");
 }
