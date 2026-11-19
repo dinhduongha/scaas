@@ -23,7 +23,7 @@ largest measured for the same entry and lane state on another kind (`from_kind`,
 and (Q1) where a second derived party was measured (`..._ua2_<variant>`) its `second_party`, the worst of that less the one
 derived party less the verify delta; a verify row `verify_<kind>_delta`, its `sig_bytes` (ruling 2, A4: every row) `verify_<kind>_sig_bytes`, its
 `margin` (ruling 2 (b) of the sampled check: a kind whose worst case cannot be determined) and `stand_in` from the input
-list. A base or verify row whose cost grows with a count (owner 2026-11-19, I1; optional `per_item` of the input list:
+list (a base row's: `base_stand_in`, keyed `<kind>:<entry>`, owner 2026-11-19, I2). A base or verify row whose cost grows with a count (owner 2026-11-19, I1; optional `per_item` of the input list:
 `<kind>:<entry>` (kind-qualified, I1 part 2: Zether's `mtxRollOver` has no count, PQZ's has) or a signer kind's number →
 the item counted, one of ITEMS) gets `item` and `per_item` {gas, base_count 0, source}: its gas the worst whole-gas slope
 `<kind>_<entry>_per_item_<variant>` (a verify row: `verify_<kind>_per_item`), and its figure keys then hold the gas at a
@@ -206,6 +206,8 @@ def table(inputs, m):
                         row["fee_extra"] = fee
                     ua_row(inputs, m, src, row, pending)
                     row.update(per_item(inputs, m, src, f"{kind}:{entry}", f"{kind}_{entry}_per_item_"))
+                    if f"{kind}:{entry}" in inputs.get("base_stand_in", {}):  # I2: a stand-in priced the row
+                        row["stand_in"] = inputs["base_stand_in"][f"{kind}:{entry}"]
                     base.append(row)
     ua_fallback(base, pending)
     verify = [

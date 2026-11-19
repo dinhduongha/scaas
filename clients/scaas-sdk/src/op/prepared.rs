@@ -159,9 +159,9 @@ pub(crate) const QUOTABLE: &[(&str, &[&str])] = &[
     ("mtxCancelRecovery", &["account"]),
     ("mtxShield", &["zether", "pqz"]),
     ("mtxWrapShield", &["zether", "pqz"]),
-    ("mtxConfidentialTransferSingle", &["zether"]),
-    ("mtxUnshield", &["zether"]),
-    ("mtxUnshieldUnwrap", &["zether"]),
+    ("mtxConfidentialTransferSingle", &["zether", "pqz"]),
+    ("mtxUnshield", &["zether", "pqz"]),
+    ("mtxUnshieldUnwrap", &["zether", "pqz"]),
     ("mtxRollOver", &["zether", "pqz"]),
     ("mtxRollOverSigned", &["zether"]),
     // I1 part 2 (owner 2026-11-19): measured at several counts, a per-item part
@@ -170,6 +170,8 @@ pub(crate) const QUOTABLE: &[(&str, &[&str])] = &[
     ("mtxRollOverBatch", &["zether"]),
     ("mtxSetRollOverMode", &["zether"]),
     ("mtxPrepareAcc", &["pqz"]),
+    // I2 (owner 2026-11-19): with the stand-ins of the PQZ precompile and the holder's ML-DSA-65 (`stand_in`)
+    ("mtxConfidentialTransferSingleCompact", &["pqz"]),
     ("mtxAcceptAdmin", &["gov_router"]),
     ("mtxApproveDexRelease", &["gov_router"]),
     ("mtxApproveRelease", &["gov_router"]),
@@ -244,11 +246,6 @@ pub(crate) const UNMEASURED: &[(&str, &[&str])] = &[
     ("mtxConfidentialTransfer", &["pqz"]),
     ("mtxConfidentialTransferCompact", &["pqz"]),
     ("mtxRollOverSigned", &["pqz"]),
-    // the PQZ debits: the proof's precompile and the holder's ML-DSA authorization have no forge path yet
-    ("mtxConfidentialTransferSingle", &["pqz"]),
-    ("mtxConfidentialTransferSingleCompact", &["pqz"]),
-    ("mtxUnshield", &["pqz"]),
-    ("mtxUnshieldUnwrap", &["pqz"]),
 ];
 
 /// The EIP-712 domain's name of a domain kind (`typed_ops.json`'s `domains`).

@@ -10,6 +10,14 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {nid} from "../helpers/Ids.sol";
 import {SdkGasPqzBase} from "./SdkGasConfidential.t.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
+import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
+import {IConfidentialWrappedToken} from "../../src/confidential/IConfidentialToken.sol";
+import {IPqzSigned} from "../as/confidential/PqzRegFixture.sol";
+import {transferJson, burnJson, T_TRANSFER, T_BURN, T_UNWRAP} from "../merge/PqzPairs.t.sol";
+import {n, a, h} from "../metatx/NamedEntry.t.sol";
+import {typedDigest} from "../zether/ZetherTyped.t.sol";
+import {noVerdict} from "../pqz/helpers/PqzVerdicts.sol";
+import {GasBurner} from "../pqz/PqzStateGas.t.sol";
 
 /// The enveloped (relayed) forms of the `pqz` kind's non-debit entries the SDK prepares (`entries/pqz.rs`, `zether.rs`'s
 /// shields).
@@ -53,9 +61,13 @@ interface ISdkGasPqz {
 /// I1 part 2 (owner 2026-11-19, P3: at the bound): `mtxRollOver` at 1, 2, 4, …, `ROLL_MAX` entries
 /// (`test_sdkGas_pqzConfRoll…`), of `more[3]`, both halves prepared, `ROLL_MAX` pending entries old enough, no `acc` yet.
 ///
-/// The debits (`mtxConfidentialTransfer`, `…Compact`, `…Single`, `…SingleCompact`, `mtxUnshield`, `mtxUnshieldUnwrap`) are
-/// not here: the fixture mocks the `PQZ` precompile and the holder's ML-DSA authorization, the bulk of a real debit, so a
-/// row of it would understate (still unmeasured, reported).
+/// I2 (owner 2026-11-19): the single debits (`mtxConfidentialTransferSingle`, `…SingleCompact`, `mtxUnshield`,
+/// `mtxUnshieldUnwrap`, `test_sdkGas_pqzConfDebit…`) with stand-ins (`stand_in`) for what the fixture mocks: the `PQZ`
+/// precompile a `GasBurner` at the set's calibrated row (`test/vectors/pqz-gas/n2304-kmax4096.json`, calibrated rows
+/// 2026-11-15: the worse of `TRANSFER` and `TRANSFER0`, or `BURN`) plus 3 gas a word of the row's input (CTR-PQZ-11), less
+/// 2,900 (a cold stand-in against a warm precompile); the holder's ML-DSA-65 authorization a `GasBurner` at 100,006 (as
+/// `PqzStateGas._precompiles`); the proof a filler of the row's proof length, so the calldata's handling is the real size.
+/// The multi transfers (P2) are not here yet.
 contract SdkGasConfPqzTest is SdkGasPqzBase {
     function setUp() public override {
         super.setUp();
@@ -162,6 +174,57 @@ contract SdkGasConfPqzTest is SdkGasPqzBase {
         _pRollRows(true, true);
     }
 
+    /// I2: the stand-ins in place of the fixture's mocks (`vm.clearMockedCalls`: every mock, the setup's PoPs done).
+    function _pStandIns(string memory op) internal {
+        string memory f = vm.readFile("test/vectors/pqz-gas/n2304-kmax4096.json");
+        uint256 g = _pRow(f, op);
+        if (keccak256(bytes(op)) == keccak256("TRANSFER")) {
+            uint256 g0 = _pRow(f, "TRANSFER0");
+            if (g0 > g) g = g0;
+        }
+        vm.clearMockedCalls();
+        vm.etch(PQZ, address(new GasBurner(g - 2_900)).code);
+        vm.etch(ML65, address(new GasBurner(100_006 - 2_900)).code);
+        pProof = new bytes(vm.parseJsonUint(f, string.concat(".pqzl.", op, ".proof")));
+    }
+
+    /// A calibrated row's price: `row + 3 · ⌈input / 32⌉`.
+    function _pRow(string memory f, string memory op) internal pure returns (uint256) {
+        string memory k = string.concat(".pqzl.", op);
+        return vm.parseJsonUint(f, string.concat(k, ".row")) + 3
+            * ((vm.parseJsonUint(f, string.concat(k, ".input")) + 31) / 32);
+    }
+
+    bytes internal pProof;
+
+    function _pDebitRows(bool reg, bool wrapped) internal {
+        if (reg) _pAttest();
+        (address t, string memory v) = _pToken(wrapped, reg);
+        bytes32 from = _sgFrom();
+        _pStandIns("TRANSFER");
+        _both("pqz", "mtxConfidentialTransferSingle", v, t, from, _pSingle);
+        _both("pqz", "mtxConfidentialTransferSingleCompact", v, t, from, _pSingleCompact);
+        _pStandIns("BURN");
+        _both("pqz", "mtxUnshield", v, t, from, _pUnshield);
+        if (wrapped) _both("pqz", "mtxUnshieldUnwrap", v, t, from, _pUnwrap);
+    }
+
+    function test_sdkGas_pqzConfDebit() public {
+        _pDebitRows(false, false);
+    }
+
+    function test_sdkGas_pqzConfDebitWrapped() public {
+        _pDebitRows(false, true);
+    }
+
+    function test_sdkGas_pqzConfDebitRegulated() public {
+        _pDebitRows(true, false);
+    }
+
+    function test_sdkGas_pqzConfDebitRegulatedWrapped() public {
+        _pDebitRows(true, true);
+    }
+
     function test_sdkGas_pqzConf() public {
         _pRows(false);
     }
@@ -195,6 +258,83 @@ contract SdkGasConfPqzTest is SdkGasPqzBase {
             c, "UARollOver(bytes32 from,bytes32 ua,uint64 keyVersion,uint256 n,", abi.encode(more[3], 0, n), nonce
         );
         return abi.encodeCall(ISdkGasPqz.mtxRollOver, (_sgE(nonce), more[3], 0, n, _sgUaSig(d)));
+    }
+
+    /// `alice`'s single transfer of the fixture to `bob`, bound to the envelope, signed by the reference signer.
+    function _pSingleOf(bool compact, uint256 nonce) internal view returns (bytes memory) {
+        MetaTxLib.UAEnvelope memory u = _sgE(nonce);
+        IPqzToken.PqzTransferArgs memory x = _single(compact, bob, 0, 0, compact ? 83 : 82);
+        IUARegistry.UASig memory s = _sgUaSig(
+            typedDigest(
+                address(tok),
+                compact ? "UAPqzTransferSingleCompact" : "UAPqzTransferSingle",
+                _argFields(true, "PqzTransferArgs", ""),
+                string.concat(",", T_TRANSFER),
+                _msgOf(u, _argMsg(transferJson(x), "", pProof, ""))
+            )
+        );
+        return compact
+            ? abi.encodeCall(
+                IPqzSigned.mtxConfidentialTransferSingleCompact, (u, x, pProof, _pqAuth(), "", s, noVerdict())
+            )
+            : abi.encodeCall(IPqzSigned.mtxConfidentialTransferSingle, (u, x, pProof, _pqAuth(), "", s, noVerdict()));
+    }
+
+    function _pSingle(address, uint256 nonce) internal view returns (bytes memory) {
+        return _pSingleOf(false, nonce);
+    }
+
+    function _pSingleCompact(address, uint256 nonce) internal view returns (bytes memory) {
+        return _pSingleOf(true, nonce);
+    }
+
+    /// `alice`'s unshield of 5 to `0xD00D`.
+    function _pUnshield(address, uint256 nonce) internal view returns (bytes memory) {
+        MetaTxLib.UAEnvelope memory u = _sgE(nonce);
+        IPqzToken.PqzBurnArgs memory b = _burnArgs(0, 0, 84);
+        IPqzToken.Payout memory p = IPqzToken.Payout(_amt(5), MetaTxLib.pad(address(0xD00D)));
+        string memory pj = string.concat('"amount":', n(p.amount), ',"recipient":', h(p.recipient), ",");
+        IUARegistry.UASig memory s = _sgUaSig(
+            typedDigest(
+                address(tok),
+                "UAPqzUnshield",
+                _argFields(
+                    true, "PqzBurnArgs", '{"name":"amount","type":"uint256"},{"name":"recipient","type":"bytes32"},'
+                ),
+                string.concat(",", T_BURN),
+                _msgOf(u, _argMsg(burnJson(b), pj, pProof, ""))
+            )
+        );
+        return abi.encodeCall(IPqzSigned.mtxUnshield, (u, b, p, pProof, _pqAuth(), "", s, noVerdict()));
+    }
+
+    /// `alice`'s unshield-unwrap of 5 to `0xD00D` through `usd` (`minOut` 0: a regulated variant's tax lowers the payout).
+    function _pUnwrap(address, uint256 nonce) internal view returns (bytes memory) {
+        MetaTxLib.UAEnvelope memory u = _sgE(nonce);
+        IPqzToken.PqzBurnArgs memory b = _burnArgs(0, 0, 85);
+        IConfidentialWrappedToken.Unwrap memory x =
+            IConfidentialWrappedToken.Unwrap(address(usd), MetaTxLib.pad(address(0xD00D)), _amt(5), 0);
+        string memory xj = string.concat(
+            '"unwrap":{"underlying":',
+            a(x.underlying),
+            ',"recipient":',
+            h(x.recipient),
+            ',"amount":',
+            n(x.amount),
+            ',"minOut":',
+            n(x.minOut),
+            "},"
+        );
+        IUARegistry.UASig memory s = _sgUaSig(
+            typedDigest(
+                address(tok),
+                "UAPqzUnshieldUnwrap",
+                _argFields(true, "PqzBurnArgs", '{"name":"unwrap","type":"Unwrap"},'),
+                string.concat(",", T_BURN, ",", T_UNWRAP),
+                _msgOf(u, _argMsg(burnJson(b), xj, pProof, ""))
+            )
+        );
+        return abi.encodeCall(IPqzSigned.mtxUnshieldUnwrap, (u, b, x, pProof, _pqAuth(), "", s, noVerdict()));
     }
 
     function _pPrepare(address c, uint256 nonce, uint256 half) internal view returns (bytes memory) {

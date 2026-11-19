@@ -103,6 +103,29 @@ def main():
     a = table(r, kinds=("zether", "pqz"), entries=("mtxRollOver",), per_item={"pqz:mtxRollOver": "entries"}, full=True)
     assert [x for x in a["assumptions"] if x.startswith("pqz mtxRollOver:") and "2,051 gas" in x], a["assumptions"]
     assert not [x for x in a["assumptions"] if x.startswith("zether")], "no overshoot pinned for Zether's"
+    # I2: a base row priced by a stand-in carries it, keyed by kind and entry
+    sb = dict(r, **lanes("zether", "mtxRollOver", "normal", 10_000))
+    inputs_si = {"pqz:mtxRollOver": "the PQZ precompile's stand-in"}
+    t = generate.table(
+        {
+            "measurements": "m.json",
+            "name": "t",
+            "family": "evm",
+            "assumptions": [],
+            "ua_signer": 0x0108,
+            "ua_native": {"kinds": [], "entries": []},
+            "per_byte": {},
+            "save": [],
+            "verify": [],
+            "margin": {},
+            "stand_in": {},
+            "base_stand_in": inputs_si,
+            "base": [{"kinds": ["zether", "pqz"], "entries": ["mtxRollOver"]}],
+        },
+        dict(sb, verify_native_sig_bytes=96, **{V: 1_000}),
+    )
+    got = {(x["kind"], x.get("stand_in")) for x in t["base"]}
+    assert got == {("pqz", "the PQZ precompile's stand-in"), ("zether", None)}, got
     print("[test_generate] ok")
 
 
