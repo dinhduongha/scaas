@@ -1,0 +1,5 @@
+step | commit | rc | counts
+t1 forge test/ua | task 1 | 1 | 816 tests, 812 passed, 4 failed: 2 dispatch gas pins (CoreLibMsig registerMsig 153,452 > 153,451; UaPortable register webauthn-p256 190,649 > 190,627; re-pinned in Task 15), 2 test registries over the new P17 rule (fixed: txCap set to their budget)
+t1 forge touched suites (pqz, metatx, zether, liquidity, v2, as) | task 1 | 0 | 14 suites, 183 passed, 2 skipped
+t1 mutants | task 1 | 0 | 3 of 3 killed (task1-mutants.txt)
+t1 size gate | task 1 | 0 | UARegistry 33,335 -> 33,385; UARegistryRegLib 30,157 -> 30,330 (30,209 at the round's base, B1-B3)

@@ -157,6 +157,8 @@ fn deploy_env(
         .env("DEMO_SUPPLY", "1000000000000")
         .env("DEMO_HOLDER", format!("{holder:#x}"))
         .env("FOUNDRY_PROFILE", "scaas-testnet")
+        // owner X1: the registry's txGasCap, the deploy book's value; a local anvil applies EIP-7825's 2^24
+        .env("TX_GAS_CAP", "16777216")
         .env("DEPLOY_NAME", book_name(chain_id))
         .status()
         .expect("forge in PATH");

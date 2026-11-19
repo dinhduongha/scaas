@@ -128,7 +128,7 @@ abstract contract SdkGasDeploy is Test {
         require(sgSka != address(0), "_sgSkaSetup first");
         deployCodeTo(
             "UARegistry.sol:UARegistry",
-            abi.encode(uid, address(0), false, uint64(12_000_000), sgSka, true, _sgDeployKinds(keep)),
+            abi.encode(uid, address(0), false, uint64(12_000_000), uint64(1 << 24), sgSka, true, _sgDeployKinds(keep)),
             at
         );
     }

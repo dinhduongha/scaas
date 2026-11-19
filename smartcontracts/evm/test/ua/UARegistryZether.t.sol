@@ -134,7 +134,7 @@ contract UARegistryZetherTest is UARegistryBase {
     function test_gen2HandsZetherToGen1() public {
         bytes32 z = _zregister(zreg, X2);
         UARegistry.KindConfig[] memory none = new UARegistry.KindConfig[](0);
-        UARegistry gen2 = new UARegistry(chainUidA, address(zreg), false, BUDGET, address(0), true, none);
+        UARegistry gen2 = new UARegistry(chainUidA, address(zreg), false, BUDGET, 1 << 24, address(0), true, none);
         assertEq(gen2.kindOf(z), ZK);
         (, address pqzKey) = gen2.recordOf(z);
         assertEq(pqzKey, address(0));
@@ -151,7 +151,7 @@ contract UARegistryZetherTest is UARegistryBase {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
         c[0] = UARegistry.KindConfig(ZK, address(zbls), 70_000);
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, ZK));
-        new UARegistry(chainUidA, address(zreg), false, BUDGET, address(0), true, c);
+        new UARegistry(chainUidA, address(zreg), false, BUDGET, 1 << 24, address(0), true, c);
     }
 
     // ----- constructor, verifiers -----
@@ -167,7 +167,7 @@ contract UARegistryZetherTest is UARegistryBase {
         for (uint256 i; i < refused.length; ++i) {
             c[0] = UARegistry.KindConfig(refused[i], address(mock), 50_000);
             vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, refused[i]));
-            new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, c);
+            new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, c);
         }
     }
 

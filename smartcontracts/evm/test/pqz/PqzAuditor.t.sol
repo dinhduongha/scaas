@@ -382,7 +382,7 @@ contract PqzAuditorTest is PqzOffchainBase {
         _offStack();
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
         k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 200_000);
-        UARegistry r2 = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
+        UARegistry r2 = new UARegistry(PQZ_UID, address(0), false, 12_000_000, 1 << 24, address(0), true, k);
         OpenFactory f2 = new OpenFactory(nid(registrar));
         EnvKit.configure(f2, PQZ_UID, 0, address(0));
         Catalogue.release(

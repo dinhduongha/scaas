@@ -391,9 +391,7 @@ contract ZetherS3VectorsTest is Test {
             address at = address(uint160(0xaa00 + i));
             deployCodeTo(
                 "UARegistry.sol:UARegistry",
-                abi.encode(
-                    keccak256(abi.encode("s3 chain", i)), address(0), false, uint64(12_000_000), address(0), false, k
-                ),
+                _regArgs(keccak256(abi.encode("s3 chain", i)), k),
                 at
             );
             IUARegistry reg = IUARegistry(at);
@@ -408,5 +406,10 @@ contract ZetherS3VectorsTest is Test {
             assertEq(UACall.register(reg, kind, y, UACall.attrs("", 0, ""), pop, ""), ua);
             assertEq(reg.keyOf(ua), y);
         }
+    }
+
+    /// The registry's constructor arguments on chain `uid` (owner X1: `txGasCap` 2^24, a test chain under EIP-7825).
+    function _regArgs(bytes32 uid, UARegistry.KindConfig[] memory k) internal pure returns (bytes memory) {
+        return abi.encode(uid, address(0), false, uint64(12_000_000), uint64(1 << 24), address(0), false, k);
     }
 }

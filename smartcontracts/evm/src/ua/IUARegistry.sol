@@ -258,6 +258,10 @@ interface IUARegistry is IERC5267 {
     function kindEnabled(uint16 kind) external view returns (bool);
     function verifyCap(uint16 kind) external view returns (uint64); // measured per chain
     function verifyBudget() external view returns (uint64); // UA_VERIFY_BUDGET of this chain
+    /// The chain's per-transaction gas cap (owner X1, spec 2026-11-19-registry-verify-only-kinds §2): an immutable constructor
+    /// argument from the deploy book (EIP-7825's 2^24 on the SCaaS chains and Ethereum), `verifyBudget ≤ txGasCap`; every bound
+    /// of this generation (`msigBound`, the PQZ debit bound) reads it. A raised cap later is a new generation.
+    function txGasCap() external view returns (uint64);
     function chainUid() external view returns (bytes32); // genesis hash, constructor immutable
     function chainKeyHash() external view returns (bytes32); // keccak256("evm:" ‖ decimal(chainid)), at deploy (CTR-UA-07)
     function hederaNative() external view returns (bool); // Hedera profile: 0x0003 ∈ MEMBER

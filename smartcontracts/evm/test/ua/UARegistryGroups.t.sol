@@ -330,7 +330,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
         for (uint256 i; i < 4; ++i) {
             one[0] = UARegistry.KindConfig(g[i], vMS, GROUP_CAP);
             vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, g[i]));
-            new UARegistry(chainUidA, address(reg), false, BUDGET, address(0), true, one);
+            new UARegistry(chainUidA, address(reg), false, BUDGET, 1 << 24, address(0), true, one);
         }
         // gen 1 without any secp256k1 / bn254-g1 kind (webauthn-p256, p256, ed25519, BLS)
         UARegistry.KindConfig[] memory c1 = new UARegistry.KindConfig[](6);

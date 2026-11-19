@@ -273,7 +273,7 @@ contract PqzRollSignedGasSolTest is PqzRollSignedGasBase {
         k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, mlSol, 5_950_000);
         k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(pqv), CAP_PQZ);
         k[2] = UARegistry.KindConfig(UAKinds.FNDSA512, fnSol, 2_500_000);
-        reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
+        reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, 1 << 24, address(0), true, k);
         OpenFactory f2 = new OpenFactory(nid(registrar));
         EnvKit.configure(f2, PQZ_UID, 0, address(0));
         Catalogue.release(
@@ -334,7 +334,7 @@ contract PqzRollSignedGasSol87Test is PqzRollSignedGasBase {
         k[0] = UARegistry.KindConfig(UAKinds.MLDSA87, ml87, 8_850_000);
         k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(pqv), CAP_PQZ);
         k[2] = UARegistry.KindConfig(UAKinds.MLDSA65, ml65, 5_950_000);
-        reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
+        reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, 1 << 24, address(0), true, k);
         OpenFactory f2 = new OpenFactory(nid(registrar));
         EnvKit.configure(f2, PQZ_UID, 0, address(0));
         Catalogue.release(

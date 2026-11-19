@@ -22,6 +22,17 @@ contract DeployHarness is DeployBase {
 
     constructor() {
         mldsaPrecompile = true; // `MLDSA_PRECOMPILE`'s default, `on` (`_setup` does not run here)
+        txGasCap = 1 << 24; // `TX_GAS_CAP` (owner X1): a test chain under EIP-7825 (`setTxGasCap` for another)
+    }
+
+    /// Stands in for `TX_GAS_CAP` (the process env is shared by parallel tests).
+    function setTxGasCap(uint64 cap) external {
+        txGasCap = cap;
+    }
+
+    /// `_setup`'s read of `TX_GAS_CAP` (owner X1: required, no default).
+    function txGasCapEnv() external view returns (uint64) {
+        return _txGasCapEnv();
     }
 
     function force(bool bls12381, bool bn254G2) external {
@@ -56,7 +67,7 @@ contract DeployHarness is DeployBase {
         return (releaseGas[name][0], releaseGas[name][1]);
     }
 
-    function checkMeasured(string calldata name, uint256 regular, uint256 state, uint256 limit) external pure {
+    function checkMeasured(string calldata name, uint256 regular, uint256 state, uint256 limit) external view {
         _checkMeasuredGas(name, regular, state, limit);
     }
 

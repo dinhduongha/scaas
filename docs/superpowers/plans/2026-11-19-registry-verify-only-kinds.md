@@ -619,7 +619,7 @@ paths).
 | docs | `python3 scripts/docs_check.py check`; `paths`; `consumer`; `python3 scripts/test_docs_check.py`; `! git grep -nE '/[t]mp/' -- . ':!*/legacy/*' ':!docs/history/*'` |
 
 A red step is reported with its output; no pin, bound or test is edited to go green. Commit the summary:
-`runs: gen2-verify round gate`.
+`runs: multi-gen-verify round gate`.
 
 ### Task 21: review before merge
 

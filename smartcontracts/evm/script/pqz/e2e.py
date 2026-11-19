@@ -79,6 +79,9 @@ MLDSA44, MLDSA65, PQZ_MLWE, SECP256K1, MSIG = 0x0130, 0x0131, 0x0142, 0x0108, 0x
 # provisional row 3,504,000, test PqzStatePinGasTest.test_gasTable_pqzl; 3,000,000 refused every PQZ key registration
 # under those rows). PQZL only: a PQZH registry needs >= 5.1 M (its verifyPop 4.82-5.03 M)
 CAP_ML, CAP_PQZ, BUDGET = 200_000, 4_500_000, 12_000_000
+# the registry's txGasCap (owner X1): the local chain's per-transaction cap, from the env as the deploy book gives it (a local
+# test chain under EIP-7825 when unset)
+TX_GAS_CAP = int(os.environ.get("TX_GAS_CAP", str(1 << 24)))
 FAILS, LOG = [], []
 RPC = None
 SPLIT = False  # --split: force the register + storePqzPop path
@@ -1718,7 +1721,7 @@ def run(kd, kr, ke):
     require_release_gas("UARegistryRegLib")
     reg = D.deploy(
         "UARegistry",
-        encs(["w", "w", "w", "w", "w", "w", ("a", ("t", ["w", "w", "w"]))], [uid, 0, 0, BUDGET, 0, 1, kinds]),
+        encs(["w", "w", "w", "w", "w", "w", "w", ("a", ("t", ["w", "w", "w"]))], [uid, 0, 0, BUDGET, TX_GAS_CAP, 0, 1, kinds]),
         label="UARegistry gen 1",
     )
     REG[0] = reg

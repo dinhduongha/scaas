@@ -1,0 +1,4 @@
+mutant | red tests | rc | killed by
+msigDebit-literal-2-24 | test_msigDebit_readsTxGasCap | 1 | test_msigDebit_readsTxGasCap
+msigBound-literal-2-24 | test_msigBound_readsTxGasCap | 1 | test_msigBound_readsTxGasCap
+constructor-no-budget-check | test_txGasCap_belowBudget_UAConfig0 | 1 | test_txGasCap_belowBudget_UAConfig0

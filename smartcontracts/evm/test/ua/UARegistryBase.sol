@@ -148,6 +148,8 @@ abstract contract UARegistryBase is Test {
 
     /// What `_deploy` deploys; a suite may point it at another artifact for one run of a scenario.
     string internal registryArtifact = "UARegistry.sol:UARegistry";
+    /// The `txGasCap` (owner X1) `_deploy` builds with: a chain under EIP-7825 unless a test sets another.
+    uint64 internal txCap = 1 << 24;
     bytes32 internal chainUidA;
     MockVerifier internal mock;
     UARegistry internal reg;
@@ -270,7 +272,7 @@ abstract contract UARegistryBase is Test {
         bool msig,
         UARegistry.KindConfig[] memory cfgs
     ) internal returns (UARegistry) {
-        deployCodeTo(registryArtifact, abi.encode(uid, pred, hedera, budget, ska, msig, cfgs), where);
+        deployCodeTo(registryArtifact, abi.encode(uid, pred, hedera, budget, txCap, ska, msig, cfgs), where);
         return UARegistry(where);
     }
 

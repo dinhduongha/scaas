@@ -160,6 +160,11 @@ abstract contract DeployBase is DeployBook {
     ///         default and floor 3 days; 7622 defaults to 10 minutes, the other test / dev chains to 0. At most 30 days
     ///         (`MAX_NOTICE_PERIOD`, the factory's).
     uint64 internal noticePeriod;
+    /// @notice The chain's per-transaction gas cap (owner X1, spec 2026-11-19-registry-verify-only-kinds §9): `TX_GAS_CAP`
+    ///         (env), required, no default: the deploy book's value, which `script/tx_gas_cap.py` probes. The registry's
+    ///         constructor argument `txGasCap` and every deploy gate that counted EIP-7825's 2^24 read it. 0 until `_setup`:
+    ///         `_deployUARegistry` refuses it by name.
+    uint64 internal txGasCap;
     /// @notice This chain's `GovernanceRouter` (`_deployGovRouter`), the factory's one-time `govRouter`; 0 until deployed.
     address internal govRouter;
     /// @notice Its code hash from this build (`_builtHash`), what `configureChain` pins; 0 with no router.
@@ -229,7 +234,7 @@ abstract contract DeployBase is DeployBook {
 
     /// @notice C5-1, NET-EVM-06. A release is one CREATE2 of the whole implementation in the registrar's transaction.
     ///         Under EIP-8037 the code deposit is state gas, `STATE_GAS_PER_BYTE` per byte of runtime, on top of the
-    ///         regular gas, which EIP-7825 caps at `TX_REGULAR_GAS_CAP` (2^24). Two gates, chosen by the declared
+    ///         regular gas, which EIP-7825 caps at the chain's `txGasCap` (2^24 there; owner X1: `TX_GAS_CAP`). Two gates, chosen by the declared
     ///         `RELEASE_GAS_GATE` (`_publicGate`; Q4 of CTR-MTX-30, R40), each refusing by name before anything is sent:
     ///         the SCaaS testnet's (`testnet`, the default, the owner's formula): the transaction needs
     ///         `runtime x 1,530 + 2^24` and may not exceed the block gas limit, runtime sizes from `size-baseline.json`
@@ -241,7 +246,6 @@ abstract contract DeployBase is DeployBook {
     ///         (`public`): the release transaction measured (`_measuredGas`), regular + state x 1.05 within the block
     ///         gas limit and regular x 1.05 < 2^24 (`_checkMeasuredGas`).
     uint256 internal constant STATE_GAS_PER_BYTE = 1530;
-    uint256 internal constant TX_REGULAR_GAS_CAP = 1 << 24;
     uint256 internal constant EIP170_LIMIT = 24_576;
 
     /// @notice EIP-7954's code size limit, the default of `CHAIN_CODE_LIMIT` (GD-4).
@@ -257,7 +261,7 @@ abstract contract DeployBase is DeployBook {
 
     /// @notice The block gas limit the release of contract `name` needs.
     function _releaseGasNeed(string memory name) internal view returns (uint256) {
-        return _baselineRuntime(name) * STATE_GAS_PER_BYTE + TX_REGULAR_GAS_CAP;
+        return _baselineRuntime(name) * STATE_GAS_PER_BYTE + txGasCap;
     }
 
     /// @notice CTR-GOV-19, GD-4: the chain's code size limit is declared, never derived from a chain id. `CHAIN_CODE_LIMIT`
@@ -361,15 +365,17 @@ abstract contract DeployBase is DeployBook {
     /// @notice The public-chain gate (Q4, R40): a release fits when `(regular + state) x 1.05` (the gas limit the deploy sends,
     ///         `DeploySend.s.sol`, NET-EVM-11; EIP-8037: a transaction is included only if regular + state fits, never by
     ///         a block's `gas_used`) is within the chain's block gas limit, and `regular x 1.05 < 2^24` (EIP-7825).
-    function _checkMeasuredGas(string memory name, uint256 regular, uint256 state, uint256 limit) internal pure {
+    function _checkMeasuredGas(string memory name, uint256 regular, uint256 state, uint256 limit) internal view {
         uint256 asked = (regular + state) * 105 / 100;
-        if (regular * 105 / 100 >= TX_REGULAR_GAS_CAP) {
+        if (regular * 105 / 100 >= txGasCap) {
             revert(
                 string.concat(
                     name,
                     " release: regular gas x 1.05 = ",
                     vm.toString(regular * 105 / 100),
-                    " >= 2^24 (EIP-7825, NET-EVM-06)"
+                    " >= txGasCap ",
+                    vm.toString(uint256(txGasCap)),
+                    " (EIP-7825, NET-EVM-06)"
                 )
             );
         }
@@ -405,6 +411,7 @@ abstract contract DeployBase is DeployBook {
     /// @notice Call first in `run()`, before the broadcast.
     function _setup() internal {
         salt = vm.envOr("DEPLOY_SALT", keccak256("scaas.deploy.v1"));
+        txGasCap = _txGasCapEnv();
         deployZether = vm.envOr("DEPLOY_ZETHER", false);
         deployWrapped = vm.envOr("DEPLOY_WRAPPED", false);
         deployRegulated = vm.envOr("DEPLOY_REGULATED", false);
@@ -1148,7 +1155,7 @@ abstract contract DeployBase is DeployBook {
         for (uint256 p; p < PqUA.mldsaParts([UAKinds.MLDSA44, UAKinds.MLDSA65, UAKinds.MLDSA87][i]); ++p) {
             uint256 reg = r[i][p];
             uint256 total = (reg + st[i][p]) * 105 / 100;
-            if (reg * 105 / 100 >= TX_REGULAR_GAS_CAP || total > limit) {
+            if (reg * 105 / 100 >= txGasCap || total > limit) {
                 console.log(
                     string.concat(
                         "ML-DSA kind ",
@@ -1172,7 +1179,14 @@ abstract contract DeployBase is DeployBook {
         return true;
     }
 
+    /// @notice `TX_GAS_CAP` (owner X1): required, no default; a missing or zero value reverts by name.
+    function _txGasCapEnv() internal view returns (uint64 cap) {
+        cap = uint64(vm.envUint("TX_GAS_CAP"));
+        require(cap != 0, "TX_GAS_CAP: the chain's per-transaction gas cap from the deploy book (owner X1)");
+    }
+
     function _deployUARegistry(address smartKeyAccountImpl, bool isHedera) internal returns (UARegistry reg) {
+        require(txGasCap != 0, "TX_GAS_CAP: the chain's per-transaction gas cap from the deploy book (owner X1)");
         (bool bls, bool bnG2) = _precompiles();
         (bool pqz, bool[3] memory ml) = _pqPrecompiles();
         uint64 budget = isHedera ? UA_VERIFY_BUDGET_HEDERA : UA_VERIFY_BUDGET;
@@ -1256,7 +1270,7 @@ abstract contract DeployBase is DeployBook {
         // them the registry's, depend on the sources only. Each one's own transaction is a release like the registry's: the
         // same gate.
         _requireRegistryGas(isHedera, budget, smartKeyAccountImpl, k);
-        reg = new UARegistry{salt: salt}(uid, address(0), isHedera, budget, smartKeyAccountImpl, true, k);
+        reg = new UARegistry{salt: salt}(uid, address(0), isHedera, budget, txGasCap, smartKeyAccountImpl, true, k);
         _checkGen1Kinds(reg, bls, isHedera, pqz, ml[2] && mldsaPrecompile);
         _gate(address(reg));
         vm.serializeAddress("deploy", "ua_registry", address(reg));
@@ -1296,7 +1310,7 @@ abstract contract DeployBase is DeployBook {
         _requireReleaseGas(
             "UARegistry",
             address(0),
-            abi.encodePacked(type(UARegistry).creationCode, abi.encode(uid, address(0), isHedera, budget, ska, true, k))
+            abi.encodePacked(type(UARegistry).creationCode, abi.encode(uid, address(0), isHedera, budget, txGasCap, ska, true, k))
         );
         _requireReleaseGas("UARegistryCoreLib", address(0), vm.getCode("UARegistryCoreLib.sol:UARegistryCoreLib"));
         _requireReleaseGas("UARegistryAuxLib", address(0), vm.getCode("UARegistryAuxLib.sol:UARegistryAuxLib"));

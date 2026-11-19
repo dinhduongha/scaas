@@ -133,6 +133,8 @@ async fn deployed(slot: u16) -> (Anvil, String, serde_json::Value, String, Strin
         .env("DEMO_SUPPLY", "1000000000000")
         .env("DEMO_HOLDER", &holder)
         .env("FOUNDRY_PROFILE", "scaas-testnet")
+        // owner X1: the registry's txGasCap, the deploy book's value; a local anvil applies EIP-7825's 2^24
+        .env("TX_GAS_CAP", "16777216")
         .env("DEPLOY_NAME", &name)
         .status()
         .expect("forge in PATH");

@@ -126,7 +126,7 @@ contract UARegistryPqTest is UARegistryBase {
         for (uint256 i; i < 4; ++i) {
             c[0] = UARegistry.KindConfig(refused[i], address(mock), 50_000);
             vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, refused[i]));
-            new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, c);
+            new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, c);
         }
     }
 
@@ -164,7 +164,7 @@ contract UARegistryPqTest is UARegistryBase {
         (two[0], two[1]) =
         (UARegistry.KindConfig(0x0134, address(mock), 250_000), UARegistry.KindConfig(0x0134, address(mock), 1));
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0x0134)));
-        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, two);
+        new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, two);
         // a registry configured without it (e.g. a budget it does not fit, CTR-UA-23): not registrable
         UARegistry off =
             _deploy(address(0x5ca5), chainUidA, address(0), false, BUDGET, address(0), true, _cfgs(address(mock)));
@@ -191,7 +191,7 @@ contract UARegistryPqTest is UARegistryBase {
         (two[0], two[1]) =
         (UARegistry.KindConfig(0x0135, address(mock), 5_250_000), UARegistry.KindConfig(0x0135, address(mock), 1));
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0x0135)));
-        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, two);
+        new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, two);
         // without a verifier for it: not registrable
         UARegistry off =
             _deploy(address(0x5ca5), chainUidA, address(0), false, BUDGET, address(0), true, _cfgs(address(mock)));

@@ -132,6 +132,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     address public immutable predecessor;
     bool public immutable hederaNative;
     uint64 public immutable verifyBudget;
+    /// @notice The chain's per-transaction gas cap (owner X1): the bound of `msigBound` and of the PQZ debit.
+    uint64 public immutable txGasCap;
     /// @notice `keccak256("evm:" ‖ decimal(block.chainid))`, computed at deploy (CTR-UA-07).
     bytes32 public immutable chainKeyHash;
     bytes32 private immutable _SMART_KEY_CLONE_CODEHASH;
@@ -164,6 +166,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     /// @param chainUid_ the chain's genesis hash (≠ 0, `SaltedEIP712.ChainUidZero`).
     /// @param predecessor_ 0 for generation 1, else the chain's gen-1 registry.
+    /// @param txGasCap_ the chain's per-transaction gas cap from the deploy book (owner X1), at least `verifyBudget_`.
     /// @param smartKeyAccountImpl_ the chain's `SmartKeyAccount` implementation (0 = none): its EIP-1167 clones get the
     ///        400 k ERC-1271 cap.
     /// @param msig_ enables the structure kind `msig`.
@@ -173,11 +176,13 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         address predecessor_,
         bool hederaNative_,
         uint64 verifyBudget_,
+        uint64 txGasCap_,
         address smartKeyAccountImpl_,
         bool msig_,
         KindConfig[] memory kinds_
     ) SaltedEIP712Core("SCaaS UARegistry", predecessor_ == address(0) ? "1" : "2", chainUid_) {
-        if (verifyBudget_ == 0 || (smartKeyAccountImpl_ != address(0) && !SigCheck.isContract(smartKeyAccountImpl_))) {
+        // owner P17: `verifyBudget ≤ txGasCap < 2^64` (the type bounds the top)
+        if (verifyBudget_ == 0 || verifyBudget_ > txGasCap_ || (smartKeyAccountImpl_ != address(0) && !SigCheck.isContract(smartKeyAccountImpl_))) {
             revert UAConfig(0);
         }
         // `_lib`'s DELEGATECALL would "succeed" on an empty account, every write a silent no-op; the library has no way to
@@ -235,6 +240,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         predecessor = predecessor_;
         hederaNative = hederaNative_;
         verifyBudget = verifyBudget_;
+        txGasCap = txGasCap_;
         chainKeyHash = UAKinds.chainKeyHash(block.chainid);
         _SMART_KEY_CLONE_CODEHASH = smartKeyAccountImpl_ == address(0)
             ? bytes32(0)

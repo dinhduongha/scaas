@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Deploy one family's contracts with its native tool. Keys/credentials come from the tool's own config or env.
 # usage: deploy.sh <family> <network> [args…]   (args go to the native tool)
-#   evm     <rpc-url>        forge script script/Deploy.s.sol --broadcast; env PRIVATE_KEY, REGISTRAR?, DEMO_SUPPLY?,
+#   evm     <rpc-url>        forge script script/Deploy.s.sol --broadcast; env PRIVATE_KEY, TX_GAS_CAP (required: the chain's
+#                            per-transaction gas cap from the deploy book, the registry's txGasCap, owner X1), REGISTRAR?, DEMO_SUPPLY?,
 #                            DEMO_HOLDER?, CHAIN_UID? (genesis hash from evm/chain-uids.json; defaults to blockhash(0),
 #                            which is 0 past block 256, so a long-running chain needs it), DEPLOY_SALT? (CREATE2 salt);
 #                            FOUNDRY_PROFILE=scaas-testnet|gnosis|celo|bsc|polygon|base (all osaka). Needs the deterministic
@@ -115,6 +116,7 @@ shift 2
 case "$FAMILY" in
     evm)
         cd "$SC/evm"
+        : "${TX_GAS_CAP:?TX_GAS_CAP: the per-transaction gas cap of the chain, from the deploy book (owner X1)}"
         Z=(--disable-code-size-limit) # forge 1.8.5: EIP-3860 on the script contract itself (Deploy.s.sol initcode > 48 KiB); the chain enforces 64 KiB
         # The scripts' own gas budget (forge's gas_limit, foundry.toml 2^33), not a chain figure: the simulations run every
         # transaction twice (DeploySend: measured, then sent; Deploy.s.sol's public gate: each release measured, then
@@ -262,7 +264,8 @@ json.dump({"from": [x["from"] for x in t], "to": [x.get("to") or "0x" + "00" * 2
             echo "[local/verify] local, not verified (no explorer)"
         else VERIFY_RPC="$NET" sh script/onchain/verify.sh "${VERIFY_TARGET:-chain-$C}"; fi
         ;;
-    hedera) cd "$SC/evm" && exec forge script script/hedera/DeployHedera.s.sol --rpc-url "$NET" --broadcast --slow --disable-code-size-limit \
+    hedera) : "${TX_GAS_CAP:?TX_GAS_CAP: the per-transaction gas cap of the chain, from the deploy book (owner X1)}"
+        cd "$SC/evm" && exec forge script script/hedera/DeployHedera.s.sol --rpc-url "$NET" --broadcast --slow --disable-code-size-limit \
         --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@" ;;
     aptos) exec aptos move deploy-object --package-dir "$SC/move/aptos" --address-name scaas --profile "$NET" "$@" ;;
     sui)

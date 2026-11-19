@@ -334,9 +334,9 @@ contract UARegistryUA6Test is UARegistryBase {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
         c[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(mock), PQ_CAP);
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, UAKinds.PQZ_MLWE));
-        new UARegistry(chainUidA, address(r), false, BUDGET, address(0), true, c);
+        new UARegistry(chainUidA, address(r), false, BUDGET, 1 << 24, address(0), true, c);
         UARegistry.KindConfig[] memory none = new UARegistry.KindConfig[](0);
-        UARegistry g2 = new UARegistry(chainUidA, address(r), false, BUDGET, address(0), true, none);
+        UARegistry g2 = new UARegistry(chainUidA, address(r), false, BUDGET, 1 << 24, address(0), true, none);
         (IUARegistry.Record memory rec, address p2) = g2.recordOf(holder);
         assertEq(rec.kind, 0x0130);
         assertEq(p2, ptr, "gen 2 forwards the pointer");
@@ -360,7 +360,7 @@ contract UARegistryUA6Test is UARegistryBase {
     /// good; the same bytes then register in gen 1, proven.
     function test_UA6_gen2GrieferRefused() public {
         UARegistry g2 =
-            new UARegistry(chainUidA, address(r), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
+            new UARegistry(chainUidA, address(r), false, BUDGET, 1 << 24, address(0), true, new UARegistry.KindConfig[](0));
         (bytes memory d, bytes32 msUa) = _msig(2, 1, 1);
         bytes memory key = _pk(0x0142, 20);
         IUARegistry.UAAttrs memory a = _a(msUa, UAKinds.MSIG, key);

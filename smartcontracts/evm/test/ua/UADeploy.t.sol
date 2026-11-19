@@ -351,7 +351,7 @@ contract UADeployTest is Test {
         assembly ("memory-safe") {
             mstore(k, n)
         }
-        return IUARegistry(address(new UARegistry(UID, address(0), hedera, 12_000_000, address(0), true, k)));
+        return IUARegistry(address(new UARegistry(UID, address(0), hedera, 12_000_000, 1 << 24, address(0), true, k)));
     }
 
     function _missing(string memory kind) internal pure returns (bytes memory) {
@@ -398,7 +398,7 @@ contract UADeployTest is Test {
         assembly ("memory-safe") {
             mstore(k, n)
         }
-        return IUARegistry(address(new UARegistry(UID, address(0), false, 12_000_000, address(0), true, k)));
+        return IUARegistry(address(new UARegistry(UID, address(0), false, 12_000_000, 1 << 24, address(0), true, k)));
     }
 
     function _missingPq(string memory kind, string memory env) internal pure returns (bytes memory) {

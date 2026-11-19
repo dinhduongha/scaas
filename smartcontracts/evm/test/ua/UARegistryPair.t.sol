@@ -276,18 +276,18 @@ contract UARegistryPairTest is UARegistryBase {
 
     /// The constructor refuses a registry whose auxiliary library has no code (`_lib` would "succeed" on it, every write a no-op).
     function test_b_constructorNeedsTheAuxLibrary() public {
-        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, _cfgs(address(mock))); // the control
+        new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, _cfgs(address(mock))); // the control
         vm.etch(address(UARegistryAuxLib), "");
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
-        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, _cfgs(address(mock)));
+        new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, _cfgs(address(mock)));
     }
 
     /// The same for the registration library (owner 2026-11-19): without its code every `register` would be a silent no-op.
     function test_b_constructorNeedsTheRegLibrary() public {
-        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, _cfgs(address(mock))); // the control
+        new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, _cfgs(address(mock))); // the control
         vm.etch(address(UARegistryRegLib), "");
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
-        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, _cfgs(address(mock)));
+        new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, _cfgs(address(mock)));
     }
 
     // ----- 3.1c (owner 2026-11-09, spec §11 (f)): the auxiliary library runs the core's shared helpers by a nested DELEGATECALL -----

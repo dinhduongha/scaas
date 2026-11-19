@@ -382,18 +382,18 @@ contract UARegistryTest is UARegistryBase {
         for (uint256 i; i < KINDS.length; ++i) {
             c[0] = UARegistry.KindConfig(KINDS[i], address(mock), 50_000);
             vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, KINDS[i]));
-            new UARegistry(chainUidA, address(reg), false, BUDGET, address(0), true, c);
+            new UARegistry(chainUidA, address(reg), false, BUDGET, 1 << 24, address(0), true, c);
         }
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
         new UARegistry(
-            bytes32(uint256(1)), address(reg), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0)
+            bytes32(uint256(1)), address(reg), false, BUDGET, 1 << 24, address(0), true, new UARegistry.KindConfig[](0)
         );
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
-        new UARegistry(chainUidA, address(reg), true, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
+        new UARegistry(chainUidA, address(reg), true, BUDGET, 1 << 24, address(0), true, new UARegistry.KindConfig[](0));
         _gen1WithoutEd25519();
         UARegistry gen2 = _gen2();
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0))); // no gen 3
-        new UARegistry(chainUidA, address(gen2), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
+        new UARegistry(chainUidA, address(gen2), false, BUDGET, 1 << 24, address(0), true, new UARegistry.KindConfig[](0));
         assertEq(gen2.generation(), 2);
         assertEq(gen2.predecessor(), address(reg));
         (,, string memory version,,,,) = gen2.eip712Domain();
@@ -1057,7 +1057,7 @@ contract UARegistryTest is UARegistryBase {
 
     function test_constructorSmartKeyNoCode() public {
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
-        new UARegistry(chainUidA, address(0), false, BUDGET, address(0x1234), true, new UARegistry.KindConfig[](0));
+        new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0x1234), true, new UARegistry.KindConfig[](0));
     }
 
     /// Owner ruling 2026-10-30 (D5): a deployer-chosen implementation, verifier or predecessor that is an EIP-7702
@@ -1066,17 +1066,17 @@ contract UARegistryTest is UARegistryBase {
         address d = address(0xD7702);
         vm.etch(d, abi.encodePacked(hex"ef0100", address(mock)));
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
-        new UARegistry(chainUidA, address(0), false, BUDGET, d, true, new UARegistry.KindConfig[](0));
+        new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, d, true, new UARegistry.KindConfig[](0));
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
         c[0] = UARegistry.KindConfig(0x0101, d, 50_000);
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0x0101)));
-        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, c);
+        new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, c);
         // a gen-2 predecessor delegating to the real gen 1 (review m2): every view would pass, the delegate could change
         address p = address(0xD7703);
         vm.etch(p, abi.encodePacked(hex"ef0100", address(reg)));
         assertEq(UARegistry(p).generation(), 1, "the delegate answers as gen 1");
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
-        new UARegistry(chainUidA, p, false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
+        new UARegistry(chainUidA, p, false, BUDGET, 1 << 24, address(0), true, new UARegistry.KindConfig[](0));
     }
 
     // ----- T-CHAIN, T-MEMBER -----
@@ -1107,7 +1107,7 @@ contract UARegistryTest is UARegistryBase {
         _assertDomain(rB, uidB);
         // chainUid 0 refused
         vm.expectRevert(SaltedEIP712Core.ChainUidZero.selector);
-        new UARegistry(0, address(0), false, BUDGET, address(0), true, _cfgs(address(mock)));
+        new UARegistry(0, address(0), false, BUDGET, 1 << 24, address(0), true, _cfgs(address(mock)));
     }
 
     /// structures.json `pop` rows (UA-8: no context, the same on every registry): both digests.
@@ -1189,24 +1189,24 @@ contract UARegistryTest is UARegistryBase {
         for (uint256 i; i < refused.length; ++i) {
             c[0] = UARegistry.KindConfig(refused[i], address(mock), 50_000);
             vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, refused[i]));
-            new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, c);
+            new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, c);
         }
         c[0] = UARegistry.KindConfig(0x0101, address(0x1234), 50_000); // no code
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0x0101)));
-        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, c);
+        new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, c);
         c[0] = UARegistry.KindConfig(0x0101, address(mock), 0); // cap 0
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0x0101)));
-        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, c);
+        new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, c);
         c[0] = UARegistry.KindConfig(0x0101, address(mock), BUDGET + 1); // cap above the budget
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0x0101)));
-        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, c);
+        new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, c);
         UARegistry.KindConfig[] memory dup = new UARegistry.KindConfig[](2);
         dup[0] = UARegistry.KindConfig(0x0101, address(mock), 50_000);
         dup[1] = dup[0];
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0x0101)));
-        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, dup);
+        new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, dup);
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
-        new UARegistry(chainUidA, address(0), false, 0, address(0), true, new UARegistry.KindConfig[](0));
+        new UARegistry(chainUidA, address(0), false, 0, 1 << 24, address(0), true, new UARegistry.KindConfig[](0));
         // msig off
         UARegistry r =
             _deploy(address(0x5cf1), chainUidA, address(0), false, BUDGET, address(0), false, _cfgs(address(mock)));

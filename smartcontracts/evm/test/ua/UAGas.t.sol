@@ -697,7 +697,7 @@ contract UAGasBlsMultiTest is Test {
     function _reg(uint64 budget, uint64 cap) internal returns (UARegistry) {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
         k[0] = UARegistry.KindConfig(K, address(verifier), cap);
-        return new UARegistry(UID, address(0), false, budget, address(0), true, k);
+        return new UARegistry(UID, address(0), false, budget, 1 << 24, address(0), true, k);
     }
 
     function _none() internal pure returns (IUARegistry.UAAttrs memory) {}

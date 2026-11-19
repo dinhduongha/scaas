@@ -233,6 +233,30 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         UACall.register(r2, UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 902)), hex"01", hex"01");
     }
 
+    /// Owner X1: the debit bound reads the registry's `txGasCap`. The boundary 2-of-2 `mldsa65` holder that registers with a PQZ key
+    /// at 2^24 (`test_register_msigHolderBoundary`'s largest cap `lo`) is refused `UAPqzHolder` on a registry whose `txGasCap` is
+    /// its bound minus 1, and registers at exactly its bound.
+    function test_msigDebit_readsTxGasCap() public {
+        uint256 lo = 400_000;
+        uint256 hi = 8_000_000;
+        while (hi - lo > 1) {
+            uint256 mid = (lo + hi) / 2;
+            if (_bound(mid) <= LIM) lo = mid;
+            else hi = mid;
+        }
+        txCap = uint64(_bound(lo));
+        UARegistry r = _regs(address(0x5CA7011), [uint16(0x0131), 0x0132, 0x0133], [uint64(lo), 2_500_000, 1_400_000]);
+        (bytes memory d, bytes32 ua, bytes[] memory keys, uint16[] memory ks) = _members(r, 0x0131, 2, false, 2);
+        _holder(r, d, ua, keys, ks);
+        txCap = uint64(_bound(lo) - 1);
+        UARegistry r2 =
+            _regs(address(0x5CA7012), [uint16(0x0131), 0x0132, 0x0133], [uint64(lo), 2_500_000, 1_400_000]);
+        (d, ua, keys, ks) = _members(r2, 0x0131, 2, false, 2);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, ua));
+        UACall.register(r2, UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 904)), hex"01", hex"01");
+        txCap = 1 << 24;
+    }
+
     // ----- MD-13 (owner 2026-11-15, F-1): the debit bound for every holder kind -----
 
     /// A single-key PQZ holder of `kind` on `r` with its R_REG stand-in; reverts as the registry does.

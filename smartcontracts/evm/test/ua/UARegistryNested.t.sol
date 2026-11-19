@@ -988,7 +988,7 @@ contract UARegistryNestedTest is UARegistryBase {
     function test_newGen2OverOldGen1() public {
         OldGen1 old = new OldGen1(chainUidA, idP);
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
-        new UARegistry(chainUidA, address(old), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
+        new UARegistry(chainUidA, address(old), false, BUDGET, 1 << 24, address(0), true, new UARegistry.KindConfig[](0));
     }
 
     // ----- CTR-UA-33 / CTR-UA-37: a member signature's hash is kept, its bytes are in `UAMemberSig`, a copy replays them (owner 2026-11-03) -----

@@ -97,7 +97,7 @@ abstract contract PqzRegistryBase is PqzMock {
         k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(pqv), CAP_PQZ);
         k[2] = UARegistry.KindConfig(UAKinds.SLHDSA128S, address(new SlhStandIn(790_000)), 1_400_000); // DeployBase's cap
         k[3] = UARegistry.KindConfig(UAKinds.FNDSA512, address(new SlhStandIn(2_300_000)), 2_500_000);
-        reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
+        reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, 1 << 24, address(0), true, k);
     }
 
     /// The filler `mldsa65` key `seed ‖ 0…`.

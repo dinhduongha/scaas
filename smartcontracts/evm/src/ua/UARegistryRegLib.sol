@@ -25,8 +25,6 @@ library UARegistryRegLib {
     /// `UARegistry.UAConfig(0)`: the core library this one is linked to has no code.
     error UAConfig(uint16 kind);
 
-    /// @notice EIP-7825 per-transaction gas cap, the bound of a PQZ `msig` holder (`_attrs`).
-    uint256 internal constant TX_GAS_CAP = 1 << 24;
     /// @notice Registration bound for `msig` (register step 4): gas per member beyond its cap — MemberSig decoding,
     ///         `uaOf`, `uaMessage`, the member's key read from its record (CTR-UA-33: the key bytes only, never the
     ///         member's `pop`, so the figure does not depend on how the member registered), the call or the gen-1
@@ -47,7 +45,7 @@ library UARegistryRegLib {
     /// `test_gasHotPath`, 2-of-2, 52,185 -> 52,968); 2,500 -> 3,500 (gen 2 case 1 of `test_T_GAS_msigAtBudget` was 512 short at 2,500).
     uint256 internal constant MSIG_ACCEPTED_GAS = 3_500;
     /// CTR-UA-44 row 13 (TODO 3ze): what an `updateMsig` costs beyond its authorization (`_membersWorst`), so that a target whose
-    /// next update would not fit `TX_GAS_CAP` is refused: `MSIG_UPDATE_GAS` once (intrinsic, the fixed calldata, the nested
+    /// next update would not fit the registry's `txGasCap` is refused: `MSIG_UPDATE_GAS` once (intrinsic, the fixed calldata, the nested
     /// DELEGATECALLs, the typed digest, the blob's CREATE and its 45 fixed bytes of EIP-8037 state gas), `MSIG_UPDATE_SLOT_GAS` per
     /// slot of the target (its 96 calldata bytes, its 36 blob bytes of state gas, its checks and hashing; an update that appends
     /// pays its own uniqueness walk on top and fits or not by itself). Measured (`test_gas_updateRowModel`, `--isolate`, regular +
@@ -330,7 +328,7 @@ library UARegistryRegLib {
     /// `UAPortableRecord` struct hash (typed-signing TS-D1; the zero KEM record without one, TS-D2) and the PQZ keyHash `h` (group `pqz-mlwe`, 0 without a key). `UAPqzHolder` / `UAKemHolder` for
     /// a kind (or an `msig` that is not PQ-eligible) that may not hold the key, and `UAPqzHolder` for an `msig` PQZ holder
     /// whose worst-case authorization, with a gen-2 registry's forwarding hold, + `PqzSet.PQZ_DEBIT_MIN_GAS` exceeds
-    /// 2^24; `UAPqzPopHash` unless a PQZ key comes with a proof hash and only with it, and given proof bytes hash to it;
+    /// the registry's `txGasCap`; `UAPqzPopHash` unless a PQZ key comes with a proof hash and only with it, and given proof bytes hash to it;
     /// `UAKeyData(0x0142)` for a PQZ key of no parameter set's length; the KEM key (version 0, owner 2026-10-31):
     /// `UAKemKeyLength` for an assembled key other than the scheme-1 length (1,601 B) — for the hash commit
     /// (`kemPkHash` ≠ 0), any key bytes next to the scheme —, `UAKemScheme` for a scheme id not enabled;
@@ -399,7 +397,7 @@ library UARegistryRegLib {
         }
         // CTR-PQZ-12 (review2 C0-5, controller proposal, owner may override): an `msig` holder's worst-case
         // authorization plus the set's cheapest PQZL debit (its full relayed transaction, fee signer included) must fit
-        // one transaction at the EIP-7825 cap 2^24, else every credit to it could be locked. Not the chain's own limit.
+        // one transaction at the registry's `txGasCap` (owner X1), else every credit to it could be locked. Not the chain's own limit.
         // UA8-D12: the PQZ key only, not the KEM record. The authorization's own calldata counts too, 16 gas a byte and the EIP-7976 floor of
         // 64: `PQZ_DEBIT_MIN_GAS` holds one holder signature, which is counted again here, on the safe side.
         // CTR-UA-44 MM-14: a member that grew a level since is left out, never a revert (the key write still runs)
@@ -410,9 +408,9 @@ library UARegistryRegLib {
     /// a single key: its kind's cap), `a` its calldata bytes. A gen-2 registry in front forwards the whole authorization to the one
     /// that holds the record (`UAStore.via`) and holds 1/63 of it again plus the margin: counted here (a single key's verifier
     /// call holds the same, `UAStore.capped`). `UAPqzHolder`.
-    function _msigDebit(uint256 w, uint256 a, bytes32 ua) internal pure {
-        uint256 debit = PqzSet.PQZ_DEBIT_MIN_GAS;
-        if (w + w / 63 + SigCheck.GAS_MARGIN + debit + 16 * a > TX_GAS_CAP || debit + 64 * a > TX_GAS_CAP) {
+    function _msigDebit(uint256 w, uint256 a, bytes32 ua) internal view {
+        (uint256 debit, uint256 cap) = (PqzSet.PQZ_DEBIT_MIN_GAS, _txGasCap());
+        if (w + w / 63 + SigCheck.GAS_MARGIN + debit + 16 * a > cap || debit + 64 * a > cap) {
             revert IUARegistry.UAPqzHolder(ua);
         }
     }
@@ -524,9 +522,14 @@ library UARegistryRegLib {
         }
         uint256 regular = w + 16 * a;
         uint256 floor = 64 * a;
-        if ((regular > floor ? regular : floor) + MSIG_UPDATE_GAS + n * MSIG_UPDATE_SLOT_GAS > TX_GAS_CAP) {
+        if ((regular > floor ? regular : floor) + MSIG_UPDATE_GAS + n * MSIG_UPDATE_SLOT_GAS > _txGasCap()) {
             revert IUARegistry.UAMsigSlots(n);
         }
+    }
+
+    /// The registry's per-transaction gas cap (owner X1): its immutable, called back on `address(this)` like `verifyBudget`.
+    function _txGasCap() internal view returns (uint256) {
+        return IUARegistry(address(this)).txGasCap();
     }
 
     /// `_pqzProof` with the proof bytes logged (`storePqzPop`).
