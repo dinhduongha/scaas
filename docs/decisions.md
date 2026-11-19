@@ -350,6 +350,19 @@ Change (2026-11-12, branch `ua-mtx-fix2-node`, Fable recheck R-6 and recheck 2 P
 **Cost if wrong.** None in behaviour: only where a script writes its scratch files changes.
 **Source.** owner 2026-11-10 (chat): "không đưa cả đường dẫn tạm tmp lên".
 
+<a id="ARCH-POS-18"></a>
+### ARCH-POS-18 — Maximal support: a missing precompile or host function never disables a kind
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: decisions.md#ARCH-POS-18 · superseded-by: —
+
+**Rule.** Every key kind and feature is supported on every chain of every family. A chain that lacks a precompile (EIP-2537 BLS12-381, a PQ verifier) or a family's host function runs the same check in software (Solidity on EVM, the family's own language elsewhere), with the same checks (subgroup, infinity, minimal form) and the same caps, never a weaker check and never a lower cap; PQZ already runs this way on chains without native PQ support. A deploy probe chooses the precompile or the software path; it never chooses between enabled and disabled. Where a software path cannot fit a hard limit (the EIP-7825 per-transaction cap of 2^24, a family's transaction or compute limit), the round measures it and brings the numbers and the options to the owner. A kind is disabled on a chain only with the owner's explicit confirmation for that kind and chain, recorded as its own entry here; never by a round on its own.
+**Confirmed disablements** (owner, per kind and chain; nothing else is disabled under this rule):
+- Hedera, `0x0105` `schnorr-bls12381` and `0x0106` `bls12381-minsig`: no EIP-2537 on Hedera; the deploy enables them only where `UAPrecompileProbe` passes (`DeployBase._checkGen1Kinds`), so they stay disabled there. Owner 2026-11-19, in chat: "0x0105 and 0x0106 are off because Hedera has no precompile? OK, disable them."
+- Hedera, `0x0121` `bls12381-multi`: a software registration would cost 5 to 23 times Hedera's per-transaction limit ([spec](superpowers/specs/2026-11-19-bls12381-multi.md) §8.5, Q-SW1). Owner 2026-11-19, in chat: "Option 3: only Hedera is affected; disabling it there is fine while the kind is not supported."
+**Status.** PLANNED. First applied in the `bls12381-multi` spec (revision 4). A survey of every kind × chain that is disabled or relayer-checked today for lack of a precompile or host function (e.g. `0x0105` / `0x0106` on Hedera) is a TODO item, with a software path planned for each.
+**Why.** One rule on every chain ([NET-ALL-20](networks/README.md#NET-ALL-20)) and no assumptions about a chain: a customer chain without a given precompile must not lose a kind.
+**Cost if wrong.** A software path is far more expensive in gas than a precompile and may not fit a transaction on some chains; that case comes back to the owner with numbers.
+**Source.** Owner 2026-11-19 (chat): "Lưu ý thêm chút là evm support tối đa, đến cả pqz dù chain chưa hỗ trợ native PQ. Các chain khác cũng phải hỗ trợ được như vậy." (EVM supports the maximum, PQZ included, even where the chain has no native PQ support; other chains must support it the same way), then "Duyệt, ghi vào tài liệu" (approved; write it into the docs); then "Trường hợp gas cao quá, phải tắt thì phải được xác nhận." (where gas is too high and the kind must be disabled, that needs confirmation).
+
 ### ARCH-POS-80 — EVM-only, META-only first scope
 - old: R1 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-ALL-02, CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11, ARCH-POS-02
 

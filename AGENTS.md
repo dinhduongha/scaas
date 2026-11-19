@@ -43,6 +43,9 @@ Follow a stated rule as stated; do not add assumptions or reopen it with options
 - **Every state-changing `mtx*` is relayable**, with a fee of 0 too.
 - **No EIP-7702.** An EOA signs with its own key and runs no code.
 - **No assumptions about a chain:** no gas price 0, no block limit of ours. The precompile may ship to customer chains.
+- **Maximal support** ([ARCH-POS-18](docs/decisions.md#ARCH-POS-18)): a missing precompile or host function never disables a kind;
+  run the check in software, same checks and caps. A hard limit it cannot fit goes to the owner with numbers; disabling a kind
+  on a chain needs the owner's explicit confirmation.
 - **One rule on every chain.** Never split a rule by L1, L2 or chain kind.
 - **Every RPC consumer takes a list of nodes** ([ARCH-POS-15](docs/decisions.md#ARCH-POS-15)): named, default or discovered; reads
   fail over by default, never mixing nodes; an option asks a strict majority to agree; writes send the same signed bytes; a read that
