@@ -601,23 +601,23 @@ pub fn mldsa_register(data: &[u8]) -> Option<(u16, Bytes)> {
 /// this name before the lane sends any cache part: the registry runs the same check once the key is cached, so it could never land.
 pub const UA_REGISTER_POP_REFUSED: &str = "UA_REGISTER_POP_REFUSED";
 
-/// `ua8::check_registration` on a `register` calldata (a single key, no `msig` members): what the registry checks at step 6 once
+/// `ua_portable::check_registration` on a `register` calldata (a single key, no `msig` members): what the registry checks at step 6 once
 /// the key's cache is complete. An extra check; the contract stays the guard.
 pub fn register_pop(data: &[u8]) -> Result<(), String> {
     use alloy::sol_types::SolCall;
     let c = crate::abi::IUARegistry::registerCall::abi_decode(data)
         .map_err(|e| format!("register calldata: {e}"))?;
-    let a = scaas_ua::ua8::UAAttrs {
+    let a = scaas_ua::ua_portable::UAAttrs {
         pqz_key: c.attrs.pqzKey.to_vec(),
         pqz_pop_hash: c.attrs.pqzPopHash.0,
-        kem: scaas_ua::ua8::KemKey {
+        kem: scaas_ua::ua_portable::KemKey {
             scheme: c.attrs.kem.scheme,
             mlkem_ek: c.attrs.kem.mlkemEk.to_vec(),
             x25519: c.attrs.kem.x25519.0,
         },
         kem_pk_hash: c.attrs.kemPkHash.0,
     };
-    scaas_ua::ua8::check_registration(c.kind, &c.keyData, &a, &c.pop, &c.pqzPop, &|_| None)
+    scaas_ua::ua_portable::check_registration(c.kind, &c.keyData, &a, &c.pop, &c.pqzPop, &|_| None)
         .map_err(|e| e.code().to_string())
 }
 
@@ -5068,6 +5068,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         let ams = |limit| BlockGas {
             limit,
             amsterdam: true,
+            base_fee: None,
         };
         let cap = total_cap(u64::MAX, ams(200_000_000));
         assert_eq!(gas_limit(100_000, 0, cap), 120_000);
@@ -5101,6 +5102,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         let osaka = BlockGas {
             limit: 200_000_000,
             amsterdam: false,
+            base_fee: None,
         };
         assert_eq!(
             total_cap(50_000_000, osaka),
