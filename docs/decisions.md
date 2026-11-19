@@ -6959,6 +6959,15 @@ Change (2026-11-16, owner ruling relayed by the controller: "ok, option 2, one c
 **Cost if wrong.** The testnet vault differs from every other chain's (its admin is a public test key, so anyone can take it on the testnet, which holds no value); the alloc moves the testnet's genesis hash (= `chainUid`).
 **Source.** Owner 2026-11-14, in chat, relayed by the controller: "ok, vậy đi" (OK, do it that way: the testnet genesis alloc with test-key admin and rescuer, never a real-key rotation signature) and "Và phải ghi rõ là mainnet sẽ không alloc" (and it must be written clearly that mainnet gets no alloc); TODO 3zd.
 
+
+### NET-EVM-15 — The SCaaS chains keep their PQ precompiles in the `0x…5caa` range; a Draft EIP's address is never taken
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: networks/evm.md#NET-EVM-15 · superseded-by: —
+
+**Rule.** The SCaaS testnet and mainnet 22776 serve their PQ precompiles (`PQZ`, `MLDSA44`, `MLDSA65`, `MLDSA87`) at the `0x…5caa` addresses, never at a Draft EIP's address (EIP-8355's `0x12` / `0x13` / `0x14`, also claimed by EIP-8051 and EIP-7932). When an EIP becomes Final, the SCaaS chains add its precompile at the Final address by a fork, with the same verify, and keep the `0x…5caa` address so deployed verifiers keep working.
+**Status.** Current: the chains already use the `0x…5caa` range (`networks/evm.md`, PQ precompiles); nothing to build until an EIP is Final.
+**Why.** A Draft's address can be assigned to another function later; the same address with a different function on our chain would make a contract written for Ethereum call the wrong code. Verifiers take the address by probe at deploy, so matching a Draft gains nothing today.
+**Cost if wrong.** A third-party contract written for a Draft EIP-8355 address does not find the precompile on our chains until the EIP is Final and the fork adds it.
+**Source.** Owner 2026-11-19, in chat: "OK, không đổi địa chỉ." (OK, do not change the address), on the controller's proposal to keep the `0x…5caa` range and add the Final address alongside once an EIP is Final.
 ### NET-EVM-80 — First chain Gnosis, then Celo
 - old: UD:§1:first-chain · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: NET-EVM-03
 
