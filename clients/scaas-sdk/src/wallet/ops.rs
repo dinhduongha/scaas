@@ -263,7 +263,7 @@ pub(crate) async fn kind_of(
 }
 
 /// The signer's id as `name`'s `from` takes it: a UA key's UA (`bytes32`); an EVM key's address, zero-padded for `bytes32`.
-async fn from_of(sdk: &Sdk, signer: &KeyRef, name: &str) -> Result<String, SdkError> {
+pub(crate) async fn from_of(sdk: &Sdk, signer: &KeyRef, name: &str) -> Result<String, SdkError> {
     let ty = entry_rows()
         .into_iter()
         .find(|r| r.name == name)
@@ -489,6 +489,10 @@ impl Wallet {
             .spawn(async move {
                 let contract = addr20(&contract.to_ascii_lowercase())?;
                 let kind = kind_of(&sdk, &chain, name, contract).await?;
+                // the router's rows are `admin`'s (its `UACancelNonce` too): one entry point per pair
+                if kind == "gov_router" {
+                    return Err(SdkError::Argument);
+                }
                 let mut m = Map::new();
                 m.insert("from".into(), json!(from_of(&sdk, &signer, name).await?));
                 m.extend(fields.clone());

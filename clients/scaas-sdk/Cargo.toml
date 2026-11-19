@@ -134,3 +134,7 @@ required-features = ["pqz"]
 [[test]]
 name = "dex"
 required-features = ["dex"]
+
+[[test]]
+name = "completeness"
+required-features = ["wallet"]

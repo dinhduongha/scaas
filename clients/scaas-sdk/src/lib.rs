@@ -15,6 +15,8 @@ compile_error!("scaas-sdk needs the feature `vault` (every module does)");
 
 #[cfg(feature = "account")]
 pub mod account;
+#[cfg(feature = "admin")]
+pub mod admin;
 #[cfg(any(feature = "zether", feature = "pqz"))]
 pub mod confidential;
 pub mod config;
@@ -27,6 +29,7 @@ pub mod frb;
 #[cfg(feature = "wallet")]
 pub mod op;
 pub mod platform;
+pub mod surface;
 pub(crate) mod text;
 pub mod vault;
 #[cfg(feature = "wallet")]
