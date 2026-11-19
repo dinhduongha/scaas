@@ -459,6 +459,11 @@ impl super::Confidential {
     /// read again. `WalletLocked`, `ChainUnknown`, `ProfileMismatch`, `TokenUncatalogued`, `PqzSetMismatch`, `LegKeyMismatch`,
     /// the pool's codes.
     pub async fn pqz_balance(&self, r: PqzBalanceRequest) -> Result<PqzBalance, SdkError> {
+        Ok(self.balance_of(r).await?.0)
+    }
+
+    /// [`Self::pqz_balance`] and the `latest` version of the `pqzVersions` word it read.
+    async fn balance_of(&self, r: PqzBalanceRequest) -> Result<(PqzBalance, u64), SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
@@ -467,14 +472,67 @@ impl super::Confidential {
                 let w = read(&sdk, &r.chain, &r.token, ua, r.key_version, &pk, false, &[]).await?;
                 let out = call(&sdk, key, "balance", &w.words).await?;
                 let n = |k: &str| out.get(k).and_then(Value::as_u64).ok_or(SdkError::Internal);
-                Ok(PqzBalance {
-                    amount: out.get("value").map(|v| v.to_string().trim_matches('"').to_string()).ok_or(SdkError::Internal)?,
-                    block: w.block,
-                    p: n("p")?,
-                    send_counter: n("sendCounter")?,
-                })
+                let versions: W = w
+                    .words
+                    .get("keyVersions")
+                    .and_then(Value::as_str)
+                    .map(unhex)
+                    .transpose()?
+                    .and_then(|b| b.try_into().ok())
+                    .ok_or(SdkError::Internal)?;
+                let latest = versions.get(24..).and_then(|b| b.try_into().ok()).map_or(0, u64::from_be_bytes);
+                Ok((
+                    PqzBalance {
+                        amount: out.get("value").map(|v| v.to_string().trim_matches('"').to_string()).ok_or(SdkError::Internal)?,
+                        block: w.block,
+                        p: n("p")?,
+                        send_counter: n("sendCounter")?,
+                    },
+                    latest,
+                ))
             })
             .await
+    }
+}
+
+/// Every key version's balance of `signer` on `token` and their sum (P-T16-5): versions `0..=latest`, `latest` the registry's
+/// `pqzVersions` word read with version 0's words; each version a [`super::Confidential::pqz_balance`] read of its own fixed
+/// word set (R1 to R7), decrypted by its own key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PqzBalanceAll {
+    /// the sum, decimal
+    pub amount: String,
+    /// version `i`'s balance at index `i`
+    pub versions: Vec<PqzBalance>,
+}
+
+/// At most this many key versions are summed (`Argument` above it): a bound on the reads one call makes.
+const VERSIONS_MAX: u64 = 64;
+
+impl super::Confidential {
+    /// The holder's PQZ balance over every key version up to `pqzVersions.latest` (P-T16-5). `key_version` of the request is
+    /// ignored. The codes of [`Self::pqz_balance`]; `Argument`: more than 64 versions.
+    pub async fn pqz_balance_all(&self, r: PqzBalanceRequest) -> Result<PqzBalanceAll, SdkError> {
+        let mut first = r.clone();
+        first.key_version = 0;
+        let (b0, latest) = self.balance_of(first).await?;
+        if latest >= VERSIONS_MAX {
+            return Err(SdkError::Argument);
+        }
+        let mut versions = vec![b0];
+        for v in 1..=latest {
+            let mut q = r.clone();
+            q.key_version = v;
+            versions.push(self.balance_of(q).await?.0);
+        }
+        let mut sum: u128 = 0;
+        for b in &versions {
+            sum = sum.checked_add(b.amount.parse::<u128>().map_err(|_| SdkError::Internal)?).ok_or(SdkError::Internal)?;
+        }
+        Ok(PqzBalanceAll {
+            amount: sum.to_string(),
+            versions,
+        })
     }
 }
 

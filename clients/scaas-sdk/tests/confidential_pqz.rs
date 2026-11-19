@@ -1069,3 +1069,67 @@ async fn opening_token_refused() {
     assert_eq!(count(&c, "eth_getStorageAt"), 4, "the factory record and psid only, twice");
 }
 
+
+// --- P-T16-3: a native-id verifier; P-T16-5: every key version's balance ---
+
+/// The EVM key `index` of the `pq_kat` seed, its 20-byte address, beside its wallet.
+fn native_verifier(index: u32) -> (scaas_ua::wallet::Wallet, scaas_ua::wallet::NativeKey, [u8; 20]) {
+    use scaas_ua::wallet::Signer;
+    let w = scaas_ua::wallet::Wallet::from_mnemonic(PQ_KAT, "").unwrap();
+    let k = w.native_key(scaas_ua::wallet::Network::Evm, index, None).unwrap();
+    let scaas_ua::wallet::KeyRef::Native { address: Some(a), .. } = k.key_ref() else { panic!("an EVM key") };
+    let a = a20(&a.to_ascii_lowercase());
+    (w, k, a)
+}
+
+/// `m` signed by the EVM key `index` as a native-id verifier: `uaAuthDigest` under the registry's generation-`generation` domain.
+fn native_answer(m: &Value, index: u32, generation: u32) -> Value {
+    let uid: W = unhex(&hash_of(0)).try_into().unwrap();
+    let d = scaas_ua::wallet::pqz_verdict_typed_data(&a20(TOKEN), CHAIN_ID, &uid, m).unwrap().digest().unwrap();
+    let (_w, k, _) = native_verifier(index);
+    let dom = scaas_ua::Domain { generation, chain_id: CHAIN_ID, registry: a20(REGISTRY), chain_uid: uid };
+    let s = scaas_ua::wallet::ua_sig(&k, Some(&dom), &scaas_ua::purpose_tag("pqz-verdict").unwrap(), &d).unwrap();
+    serde_json::json!({"pqzVerdict": m, "pqzVerdictSig": {"keyData": "0x", "signature": hx(&s.signature), "members": []}})
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn verdict_native_verifier() {
+    let (s, c, psid) = verdict_setup(None, scaas_rpc::Policy::Failover).await;
+    // the token names the EVM address of key 3 (a native id, no registry record)
+    let (_w, _k, addr) = native_verifier(3);
+    let mut id = [0u8; 32];
+    id[12..].copy_from_slice(&addr);
+    put(&c, TOKEN, &add(&root(), 13), &id);
+    let m = verdict_of(&psid);
+    for g in [1, 2] {
+        c.lock().unwrap().verdict = Some((200, native_answer(&m, 3, g)));
+        let v = s.confidential().request_verdict(vreq()).await.unwrap();
+        assert_eq!((v["sig"]["keyData"].as_str(), v["sig"]["members"].as_array().map(Vec::len)), (Some("0x"), Some(0)), "gen {g}");
+    }
+    // another EOA's signature; key data beside it; the address holding code (ERC-1271, not checked off chain): refused
+    c.lock().unwrap().verdict = Some((200, native_answer(&m, 4, 1)));
+    assert_eq!(code(s.confidential().request_verdict(vreq()).await), "VerdictRefused", "another key");
+    let mut a = native_answer(&m, 3, 1);
+    a["pqzVerdictSig"]["keyData"] = serde_json::json!("0x01");
+    c.lock().unwrap().verdict = Some((200, a));
+    assert_eq!(code(s.confidential().request_verdict(vreq()).await), "VerdictRefused", "key data");
+    c.lock().unwrap().verdict = Some((200, native_answer(&m, 3, 1)));
+    c.lock().unwrap().code.insert(hx(&addr), "0x6000".into());
+    assert_eq!(code(s.confidential().request_verdict(vreq()).await), "VerdictRefused", "code at the address");
+    c.lock().unwrap().code.remove(&hx(&addr));
+    assert_eq!(code(s.confidential().request_verdict(vreq()).await), "Ok", "control again");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn pqz_balance_all_versions() {
+    // A holds version 0 (the migration's reference) and version 1 (the migrated credit pending)
+    let (s, seed, c, r1) = one("A v1", 0).await;
+    let r0 = row("A v0");
+    pqz_state(&c, &ua_of(&s, &seed, 0).await, &r0);
+    let all = s.confidential().pqz_balance_all(req(&seed, 0, 7)).await.unwrap();
+    let (v0, v1) = (r0["value"].to_string().parse::<u128>().unwrap(), r1["value"].to_string().parse::<u128>().unwrap());
+    assert_eq!(all.versions.len(), 2);
+    assert_eq!((all.versions[0].amount.clone(), all.versions[1].amount.clone()), (v0.to_string(), v1.to_string()));
+    assert_eq!(all.amount, (v0 + v1).to_string());
+    assert_eq!(count(&c, "eth_call"), 0, "storage and code only");
+}

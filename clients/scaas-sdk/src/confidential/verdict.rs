@@ -8,7 +8,11 @@
 //! T16-c), its key the signature's, `UA(key)` the token's verifier, the signature over `uaMessage(kind, pqz-verdict, digest)`
 //! verified by `scaas-ua`. Refused, unreachable or not checking: `VerdictRefused`, and nothing is attached or sent.
 //!
-//! A verifier UA that is a native id (an EOA signing the registry's `uaAuthDigest`) or an `msig` is not checked here yet:
+//! A native-id verifier (an EOA, `UAKinds.inNativeSpace`) signs the registry's `uaAuthDigest(verifier, pqz-verdict, digest)`
+//! (`UARegistry._native`): its code read at the same block must be empty (an account with code answers ERC-1271 by a call, not
+//! checked here) and the low-s ECDSA signature must recover the verifier's address under the token's registry's domain
+//! (P-T16-3). The registry's generation is an immutable of its code, not a storage word: the signature is accepted under the
+//! generation-1 or the generation-2 domain of that registry; the token's own check decides on chain. An `msig` verifier stays
 //! `VerdictRefused` (fail closed). UNAUDITED.
 use super::words::{add, be, class_kind, map_slot, rec_slot, word, CLASS_TOKEN, PURPOSE, W};
 use crate::op::{addr20, evm, final_block, hex, unhex};
@@ -35,6 +39,9 @@ struct Raw {
     /// the verifier UA's registry record and the code at its key pointer
     record: W,
     key_code: Vec<u8>,
+    /// the token's registry; a native-id verifier's own code
+    registry: [u8; 20],
+    native_code: Vec<u8>,
 }
 
 /// `STATE_LAYOUT`'s namespace slot and `(byte, width)` of `label` under the `scaas.pqz` root.
@@ -50,8 +57,12 @@ async fn fetch(pool: &EvmPool, at: ReadAt<B256>, factory: Address, token: Addres
     let psid = word(pool, at, token, &slot_of("psid").0).await?;
     let verifier = word(pool, at, token, &slot_of("pqzVerifierUA").0).await?;
     let epoch = word(pool, at, token, &slot_of("pqzVerifierEpoch").0).await?;
-    let (mut record, mut key_code) = ([0; 32], vec![]);
+    let (mut record, mut key_code, mut registry, mut native_code) = ([0; 32], vec![], [0; 20], vec![]);
+    if native(&verifier) {
+        native_code = pool.code_at(at, Address::from_slice(&verifier[12..])).await?.to_vec();
+    }
     if let Some((_, env)) = scaas_ua::factory::clone_env(&code) {
+        registry = env.registry;
         record = word(pool, at, Address::from(env.registry), &map_slot(&verifier, &be(REG_RECORDS_SLOT))).await?;
         let ptr = Address::from_slice(&record[5..25]);
         if !ptr.is_zero() {
@@ -66,7 +77,14 @@ async fn fetch(pool: &EvmPool, at: ReadAt<B256>, factory: Address, token: Addres
         epoch,
         record,
         key_code,
+        registry,
+        native_code,
     })
+}
+
+/// A native id: the top 96 bits zero (`UAKinds.inNativeSpace`).
+fn native(ua: &W) -> bool {
+    ua.iter().take(12).all(|b| *b == 0)
 }
 
 /// A verdict request (spec §9.3): the verifier's named fields of the operation (`op`: `{entry, args, binding?, amount?,
@@ -156,6 +174,24 @@ fn checked(
     if s.get("members").and_then(Value::as_array).is_none_or(|m| !m.is_empty()) {
         return None;
     }
+    let digest = scaas_ua::wallet::pqz_verdict_typed_data(token, chain_id, uid, v).ok()?.digest().ok()?;
+    let purpose = scaas_ua::purpose_tag("pqz-verdict").ok()?;
+    if native(&x.verifier) {
+        // P-T16-3: an EOA signs the registry's `uaAuthDigest`; no key data, no code
+        let addr: [u8; 20] = x.verifier.get(12..)?.try_into().ok()?;
+        let refused = !key_data.is_empty()
+            || !x.native_code.is_empty()
+            || ![1, 2].iter().any(|g| {
+                let d = scaas_ua::Domain {
+                    generation: *g,
+                    chain_id,
+                    registry: x.registry,
+                    chain_uid: *uid,
+                };
+                scaas_ua::verify::native_ecdsa(&addr, &scaas_ua::ua_auth_digest(&d, &x.verifier, &purpose, &digest), &sig)
+            });
+        return (!refused).then(|| json!({"pqzVerdict": v, "sig": {"keyData": "0x", "signature": hex(&sig), "members": []}}));
+    }
     let kind = u16::from_be_bytes([x.record[30], x.record[31]]);
     if kind == 0 || x.key_code.split_first() != Some((&0, key_data.as_slice())) {
         return None;
@@ -163,8 +199,7 @@ fn checked(
     if scaas_ua::derive_ua(kind, &key_data, false).ok()? != x.verifier {
         return None;
     }
-    let digest = scaas_ua::wallet::pqz_verdict_typed_data(token, chain_id, uid, v).ok()?.digest().ok()?;
-    let msg = scaas_ua::ua_message(kind, &scaas_ua::purpose_tag("pqz-verdict").ok()?, &digest).ok()?;
+    let msg = scaas_ua::ua_message(kind, &purpose, &digest).ok()?;
     if !scaas_ua::verify::verify(kind, &key_data, &msg, &sig, false) {
         return None;
     }
