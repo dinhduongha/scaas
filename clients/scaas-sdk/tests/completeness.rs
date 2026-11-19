@@ -14,7 +14,8 @@ fn root(p: &str) -> String {
 /// The vectors' pairs.
 fn pairs() -> BTreeSet<(String, String)> {
     let v: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(root("../../smartcontracts/vectors/typed/typed_ops.json")).unwrap(),
+        &std::fs::read_to_string(root("../../smartcontracts/vectors/typed/typed_ops.json"))
+            .unwrap(),
     )
     .unwrap();
     let mut out = BTreeSet::new();
@@ -74,13 +75,19 @@ fn every_pair_has_one_entry_point() {
         assert!(!e.pairs.is_empty(), "{} has no pair", e.function);
         let src = source(e.module);
         assert!(
-            src.contains(&format!("fn {}(", e.function)) || src.contains(&format!(" {},", e.function)),
+            src.contains(&format!("fn {}(", e.function))
+                || src.contains(&format!(" {},", e.function)),
             "{} not in src/{}",
             e.function,
             e.module
         );
         let features = ["wallet", "account", "zether", "pqz", "dex", "admin"];
-        assert!(features.contains(&e.feature), "{}: {}", e.function, e.feature);
+        assert!(
+            features.contains(&e.feature),
+            "{}: {}",
+            e.function,
+            e.feature
+        );
     }
 }
 
@@ -91,7 +98,11 @@ fn zether_and_pqz_pairs_are_apart() {
     for e in ENTRY_POINTS {
         let kinds: BTreeSet<_> = e.pairs.iter().map(|(_, k)| *k).collect();
         if kinds.contains("zether") && kinds.contains("pqz") {
-            assert!(kinds.contains("token"), "{} mixes Zether and PQZ", e.function);
+            assert!(
+                kinds.contains("token"),
+                "{} mixes Zether and PQZ",
+                e.function
+            );
         }
         if e.module == "confidential" {
             assert_eq!(kinds.len(), 1, "{} mixes domain kinds", e.function);
