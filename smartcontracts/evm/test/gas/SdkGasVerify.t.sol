@@ -16,7 +16,8 @@ import {
     SchnorrBn254Verifier,
     SchnorrBls12381Verifier,
     BlsMinSigBls12381Verifier,
-    BlsMinSigBn254Verifier
+    BlsMinSigBn254Verifier,
+    ZetherSchnorrBls12381Verifier
 } from "../../src/ua/verifiers/PairingVerifiers.sol";
 import {MldsaVerifier} from "../../src/ua/MlDsa.sol";
 import {FndsaVerifier} from "../../src/ua/FnDsa.sol";
@@ -113,11 +114,13 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
             address(new BlsMinSigBls12381Verifier()),
             address(new BlsMinSigBn254Verifier())
         ];
-        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](9);
+        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](10);
         for (uint256 i; i < 8; ++i) {
             c[i] = UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]));
         }
         c[8] = UARegistry.KindConfig(0x0108, address(new Secp256k1Verifier()), 50_000);
+        // the Zether UA kind (owner 2026-11-19, P1): Schnorr under the Zether tag, `UALedgerBase`'s cap
+        c[9] = UARegistry.KindConfig(0x0141, address(new ZetherSchnorrBls12381Verifier()), 70_000);
         reg = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _withPq(c));
         fwd = new SdkGasForwarder(reg);
         meter = new SdkGasMeter();
@@ -292,19 +295,29 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
     function _fnVaried(uint16 kind, bytes memory pk, bytes32 m, bytes memory sig) internal returns (uint256 extra) {
         address v = address(new FndsaVerifier(kind));
         uint256 same = meter.run(v, abi.encodeCall(FndsaVerifier.verify, (pk, m, sig)));
-        uint256 worst;
+        uint256 worst = _fnMost(v, kind, pk, m, sig, "sg-fn");
+        extra = worst > same ? worst - same : 0;
+        _pin(string.concat("verify_", _hex4(kind), "_varied_extra"), extra);
+        // the safety check (owner 2026-11-19, "approved, as proposed"): 64 further salts, never above the row with its margin
+        // (`scaas-sdk` holds `verify_<kind>_safety_extra` to it)
+        worst = _fnMost(v, kind, pk, m, sig, "sg-fn-safety");
+        _pin(string.concat("verify_", _hex4(kind), "_safety_extra"), worst > same ? worst - same : 0);
+    }
+
+    /// The most expensive of 64 runs of the vector `sig` with its salt replaced by `keccak256(seed, kind, j)` (40 bytes).
+    function _fnMost(address v, uint16 kind, bytes memory pk, bytes32 m, bytes memory sig, string memory seed)
+        internal
+        returns (uint256 worst)
+    {
         for (uint256 j; j < 64; ++j) {
             bytes memory s = bytes.concat(sig);
-            bytes memory salt =
-                abi.encodePacked(keccak256(abi.encode("sg-fn", kind, j)), bytes8(keccak256(abi.encode(j))));
+            bytes memory salt = abi.encodePacked(keccak256(abi.encode(seed, kind, j)), bytes8(keccak256(abi.encode(j))));
             for (uint256 i; i < 40; ++i) {
                 s[1 + i] = salt[i];
             }
             uint256 g = meter.run(v, abi.encodeCall(FndsaVerifier.verify, (pk, m, s)));
             if (g > worst) worst = g;
         }
-        extra = worst > same ? worst - same : 0;
-        _pin(string.concat("verify_", _hex4(kind), "_varied_extra"), extra);
     }
 
     /// What a PQ kind's worst case adds over its vector: SLH-DSA forced (A5), FN-DSA the most of 64 salts (ruling 2 (b)).
@@ -319,13 +332,17 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
         uint256 rows;
         for (uint256 i; vm.keyExistsJson(sj, string.concat(".derived[", vm.toString(i), "]")); ++i) {
             uint16 kind = uint16(vm.parseJsonUint(sj, _d(i, "kind")));
-            if (kind > 0x0108) continue; // the stored Zether kind signs no SCaaS op
+            // 0x0141 (owner 2026-11-19, P1): a Zether UA signs its own operations (e.g. the multi-recipient proof's UA
+            // signature); its cost is the BLS12-381 G1MSM of three points and fixed-size hashes: no data dependence
+            if (kind > 0x0108 && kind != 0x0141) continue;
             bytes memory k = vm.parseJsonBytes(sj, _d(i, "keyData"));
             bytes32 ua = vm.parseJsonBytes32(sj, _d(i, "ua"));
             UACall.register(reg, kind, k, _none(), vm.parseJsonBytes(sj, _d(i, "pop.sig")), "");
             string memory row = _metatxRow(sj, string.concat(".derived[", vm.toString(i), "]."));
-            IUARegistry.UASig memory u =
-                UACall.auth(ua, abi.encode(k, vm.parseJsonBytes(sj, string.concat(row, "sig"))));
+            // a stored kind (the Zether one) signs with empty key data, as `scaas-ua` sends it
+            IUARegistry.UASig memory u = UACall.auth(
+                ua, abi.encode(kind == 0x0141 ? bytes("") : k, vm.parseJsonBytes(sj, string.concat(row, "sig")))
+            );
             uint256 worst = kind == 0x0102
                 ? _edWorst(
                     k,
@@ -336,7 +353,7 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
             _row(kind, ua, vm.parseJsonBytes32(sj, string.concat(row, "digest")), u, n, worst);
             ++rows;
         }
-        assertEq(rows, 9, "0x0100 - 0x0108");
+        assertEq(rows, 10, "0x0100 - 0x0108, 0x0141");
     }
 
     /// The PQ kinds 0x0130-0x0135 (item 6) on `smartcontracts/vectors/ua/pq_signatures.json` (context A): each registered

@@ -639,16 +639,22 @@ mod tests {
         }
     }
 
-    /// The sampled end-to-end check (spec §13.3; owner 2026-11-19, item 7 and A1): the `token` entries `SdkGasSample.t.sol`
-    /// signs end to end on `NormalToken` by the native key, P-256, ed25519 and secp256k1, both lanes, held to the SDK's own
-    /// composition (`lookup`: base + verify + `ua_extra`, the verify part's calldata bytes left out, the run being execution
-    /// gas) with the base row at that variant's own figure (the table's is the worst of the variants, regulated included):
-    /// measured <= composed < measured + 3,000 (owner 2026-11-19, "approved": three parts each rounded up to 1,000; it was
-    /// 2,000). The sampled signature's bytes are the verify row's `sig_bytes`. Red in ed25519's 8 cells only (3,441–6,498
-    /// over: its row is the forced worst case, 2,876 above the vector, as ruled; the sampled signatures are ordinary), open
-    /// for the owner: run with `--ignored`; the bound is not loosened further.
+    /// The kinds whose verify gas depends on the data (owner 2026-11-19, "approved, as proposed"): ed25519 (its row the forced
+    /// worst case), FN-DSA-512 / -1024 (the most of 64 salts plus `margin`). Each is checked twice: its composition at a
+    /// signature of its row's worst-case class (both bounds) and many ordinary ones (the lower bound only).
+    const DATA_DEPENDENT: [u16; 3] = [0x0102, 0x0132, 0x0135];
+
+    /// The sampled end-to-end check (spec §13.3; owner 2026-11-19, item 7, A1 and the two rulings on the check): the `token`
+    /// entries `SdkGasSample.t.sol` signs end to end on `NormalToken` by the native key, P-256, ed25519 and secp256k1, both
+    /// lanes, held to the SDK's own composition (`lookup`: base + verify (with `margin`) + `ua_extra`, the verify part's
+    /// calldata bytes left out, the run being execution gas) with the base row at that variant's own figure (the table's is
+    /// the worst of the variants, regulated included): measured <= composed < measured + 3,000 (three parts each rounded up
+    /// to 1,000; it was 2,000). A data-dependent kind's cell is signed by a signature of its row's worst-case class
+    /// (ed25519: every window of `S` and `k` nonzero), and its `_safety` key, the most expensive of 32 ordinary signatures, is
+    /// held to the lower bound only; FN-DSA (not forge-signable) is held at its verify row: the delta less the measured extra
+    /// plus the 64 further salts' extra (`verify_<kind>_safety_extra`) never above the row with its margin. The sampled
+    /// signature's bytes are the verify row's `sig_bytes`.
     #[test]
-    #[ignore = "red: ed25519 3,441-6,498 over the 3,000 bound (its row is the forced worst case); open for the owner"]
     fn sampled_end_to_end_check() {
         let file = format!(
             "{}/../../smartcontracts/evm/test/vectors/sdk_gas.json",
@@ -684,8 +690,26 @@ mod tests {
                         lane,
                         composed.cast_signed() - measured.cast_signed(),
                     ));
+                    if DATA_DEPENDENT.contains(&signer) {
+                        let most = key(&format!("{s}_{entry}_{lane}_normal_safety"));
+                        assert!(
+                            composed >= most,
+                            "{s} {entry} {lane}: safety {most} > {composed}"
+                        );
+                    }
                 }
             }
+        }
+        for k in [0x0132u16, 0x0135] {
+            let v = t.rows.verify.iter().find(|v| v.signer == k).unwrap();
+            let h = format!("verify_{k:#06x}");
+            let safe = key(&format!("{h}_delta")) - key(&format!("{h}_varied_extra"))
+                + key(&format!("{h}_safety_extra"));
+            assert!(
+                v.gas + v.margin >= safe,
+                "{h}: safety {safe} > {}",
+                v.gas + v.margin
+            );
         }
         let bad: Vec<_> = out.iter().filter(|x| !(0..3_000).contains(&x.3)).collect();
         assert!(
