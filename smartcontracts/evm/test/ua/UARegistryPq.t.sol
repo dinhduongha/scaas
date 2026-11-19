@@ -860,7 +860,8 @@ contract UARegistryPqTest is UARegistryBase {
         m[0] = Member(0x0131, mlId, 1);
         m[1] = Member(UAKinds.EVM_EOA, _pad(a), 1);
         bytes memory d = _msigKey(2, m);
-        uint256 held = CAP_MLDSA65 + CAP_MLDSA65 / 63 + 5_000; // gen 1's hold inside gen 2's 63/64
+        // gen 1's hold inside gen 2's 63/64, and the walk of one generation (LINE_HOP_GAS, spec 2026-11-19-registry-verify-only-kinds §4 P3)
+        uint256 held = CAP_MLDSA65 + CAP_MLDSA65 / 63 + 5_000 + 10_000;
         uint256 bound = 445_000 + 45_000 + held + (held - 400_000) / 63 + 3_500; // MSIG_ACCEPTED_GAS (3ze: 2,500 -> 3,500)
         UARegistry.KindConfig[] memory none = new UARegistry.KindConfig[](0);
         UARegistry tight =

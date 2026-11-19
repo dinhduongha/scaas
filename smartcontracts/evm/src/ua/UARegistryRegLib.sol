@@ -44,6 +44,13 @@ library UARegistryRegLib {
     /// current structure, once per `msig` level (its pointer, the enabled word): measured +783 (`UARegistryCoreLibMsig.t.sol`
     /// `test_gasHotPath`, 2-of-2, 52,185 -> 52,968); 2,500 -> 3,500 (gen 2 case 1 of `test_T_GAS_msigAtBudget` was 512 short at 2,500).
     uint256 internal constant MSIG_ACCEPTED_GAS = 3_500;
+    /// Spec 2026-11-19-registry-verify-only-kinds §4 (P3): one generation of the walk `holderOf` between a generation and the holder of
+    /// a member it does not hold, the per-hop figure `UARegistryLine.t.sol` pins (`HOP_GAS`, a miss at depth 4 measured 37,016).
+    uint256 internal constant LINE_HOP_GAS = 10_000;
+    /// The reads of a verify-only member's record at its holder on the consumer path (`UARegistryCoreLib._voCheck`): `keyOf` of a
+    /// stored kind, a classical member's registration key data, or the key form 1 cache pointers, with this generation's library
+    /// entry and its own walk. Measured in `UARegistryHardBound.t.sol` (`test_voMember_readsWithinConstant`).
+    uint256 internal constant VO_READ_GAS = 60_000;
     /// CTR-UA-44 row 13 (TODO 3ze): what an `updateMsig` costs beyond its authorization (`_membersWorst`), so that a target whose
     /// next update would not fit the registry's `txGasCap` is refused: `MSIG_UPDATE_GAS` once (intrinsic, the fixed calldata, the nested
     /// DELEGATECALLs, the typed digest, the blob's CREATE and its 45 fixed bytes of EIP-8037 state gas), `MSIG_UPDATE_SLOT_GAS` per
@@ -705,19 +712,30 @@ library UARegistryRegLib {
             (cap, held) = _worst(
                 UARegistryCoreLib._msigBytes(id), mode | INNER, here ? nativeCap : UAStore.SMART_KEY_1271_GAS, hedera
             );
-            if (!here) cap += cap / 63 + SigCheck.GAS_MARGIN;
+            if (!here) cap += cap / 63 + SigCheck.GAS_MARGIN + _walk(self, id); // forwarded whole to its holder (R6, N3)
             return (cap, held);
         }
-        cap = self.verifyCap(kind); // 0: this generation does not enable the kind (an enabled cap is ≠ 0)
+        cap = self.verifyCap(kind); // 0: this generation does not carry the kind (a carried cap is ≠ 0, verify-only included)
         // a surplus-form kind (`bls12381-multi`) this generation does not verify: its stored paths are `false` here (no
         // hand-off), so the slot could never accept or sign; refused at registration and update (Fable build review B1)
         if (cap == 0 && UAKinds.hasSurplusForm(kind)) revert IUARegistry.UAMemberUnknown(id);
-        if (cap == 0) {
-            // handed to gen 1, which holds cap / 63 + GAS_MARGIN again inside the 63/64 gen 2 gives it; gen 2 holds for it too
-            cap = IUARegistry(self.predecessor()).verifyCap(kind);
-            cap = cap + cap / 63 + SigCheck.GAS_MARGIN;
+        address h = UARegistryCoreLib._holder(id);
+        if (h != address(0)) {
+            // spec 2026-11-19-registry-verify-only-kinds §4 (P3, N3): a member held elsewhere costs its walk (`LINE_HOP_GAS` a
+            // generation between here and its holder); verify-only here, this generation's cap and the reads of its record
+            // (`VO_READ_GAS`); not carried here, the holder's cap and one hand-off (the holder holds cap / 63 + GAS_MARGIN again
+            // inside the 63/64 this generation gives it), never `predecessor`'s cap
+            uint256 reads = _walk(self, id);
+            if (cap != 0) return (cap + reads + VO_READ_GAS, cap);
+            cap = IUARegistry(h).verifyCap(kind);
+            cap = cap + cap / 63 + SigCheck.GAS_MARGIN + reads;
         }
         return (cap, cap);
+    }
+
+    /// The walk to the holder of `id`, held elsewhere (§4, P3): `LINE_HOP_GAS` a generation between this one and the holder.
+    function _walk(IUARegistry self, bytes32 id) private view returns (uint256) {
+        return (self.generation() - IUARegistry(UARegistryCoreLib._holder(id)).generation()) * LINE_HOP_GAS;
     }
 
     /// A native member may be (or later become, counterfactually) a `SmartKeyAccount` clone: the bound takes its cap.

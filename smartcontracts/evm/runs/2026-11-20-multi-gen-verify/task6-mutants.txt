@@ -1,0 +1,7 @@
+mutant | red tests | rc | killed by
+return-2-read-as-accept | test_threeStates_andFallback | 1 | test_threeStates_andFallback
+revert-read-as-refuse | test_fallback_entry_perPath, test_gasBelowCap_UAVerifyGas, test_threeStates_andFallback | 1 | test_threeStates_andFallback
+fallback-on-word-0 | test_member_verifyOnly_ownVerifier, test_signer_verifyOnly_ownVerifier, test_storedPath_member_verifyOnly, test_threeStates_andFallback | 1 | test_threeStates_andFallback
+hold-dropped | test_gasBelowCap_UAVerifyGas, test_groupKind_verifyOnly_holds | 1 | test_gasBelowCap_UAVerifyGas
+group-kinds-cap-not-budget | test_groupKind_verifyOnly_holds | 1 | test_groupKind_verifyOnly_holds
+app-fallback-via-requirePortable | test_fallback_entry_perPath, test_threeStates_andFallback | 1 | test_fallback_entry_perPath

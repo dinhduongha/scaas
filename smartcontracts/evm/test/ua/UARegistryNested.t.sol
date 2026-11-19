@@ -1213,7 +1213,7 @@ contract UARegistryNestedTest is UARegistryBase {
         m[1] = Member(UAKinds.EVM_EOA, _eoa(PK_B), 1);
         bytes memory du = _msigKey(2, m);
         uint256 w = 2 * (400_000 + 45_000) + 3_500; // the inner: its natives may be gen 1's clones
-        w += w / 63 + 5_000; // gen 2's hold over it
+        w += w / 63 + 5_000 + 10_000; // gen 2's hold over it and the walk to gen 1 (LINE_HOP_GAS, spec 2026-11-19-registry-verify-only-kinds §4 P3)
         w += 2 * 45_000 + 3_500 + 50_000; // the outer, gen 2's own native at 50 k: no implementation here
         UARegistry tight = _deploy(
             address(0x5cc7),

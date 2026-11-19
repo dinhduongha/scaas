@@ -23,3 +23,10 @@ t5 mutants | task 5 | 0 | 9 of 9 killed (task5-mutants.txt), with the deferred N
 t6 VerifyOnly red before the change | task 6 | 1 | 19 tests, 16 passed, 3 failed (threeStates, gasBelowCap, fallback_entry_perPath) as intended; groupKind_verifyOnly_holds added after (P10 came with Task 5's `_voPortable`)
 t6 forge test/ua except UaPortable | task 6 | 1 | 56 suites, 791 tests, 788 passed, 3 failed: the same three as Task 5 (CoreLibMsig requireAuthorized 256 17,177 -> 17,427, Task 15; UAGas msigAtBudget / memberPopSizeFree gen 2 case 0, Task 7) -- still red
 t6 size gate | task 6 | 0 | UARegistryCoreLib 19,377 -> 20,201 (voCall, verdict, the fallbacks); UARegistry 34,607, RegLib 30,346, AuxLib 35,670, OpenFactory 34,999 unchanged
+t6 mutants | task 6 | 0 | 6 of 6 killed (task6-mutants.txt)
+t6 UaPortable (after Task 6) | task 6 | 1 | 88 tests, 85 passed, 3 failed: the dispatch gas pins (register msig-classical 177,879 -> 178,554; popOf mldsa65/v2 20,298 -> 20,319; registrationOf msig-pq on gen 2 146,805 -> 146,929), Task 15
+t7.1 HardBound + UAGas at-budget | task 7 part 1 | 0 | test_voMember_readsWithinConstant (gen-2 msig, one verify-only mldsa87 member at gen 1: 68,517 gas for the frame, cold), test_voMember_boundCountsReads, test_notCarriedMember_boundUsesHoldersCap; UAGas msigAtBudget / memberPopSizeFree green again (gen 2 case 0 bound 5,716,058 -> 5,796,216)
+t7.1 changed rows (the rule: a member held elsewhere costs its walk, P3) | task 7 part 1 | 0 | the test-side bound models add LINE_HOP_GAS 10,000 a handed leaf / inner msig: UAGas `_boundOf`, UARegistryNestedGas `_boundGen2`, UARegistryNested test_gen1InnerNativeCapAtTheBound, UARegistryPq test_T_GAS_pqHandedAtBudget
+t7.1 forge test/ua except UaPortable | task 7 part 1 | 1 | 57 suites, 794 tests, 793 passed after the Pq model row (re-run 19 / 19); red: CoreLibMsig requireAuthorized 256 gas pin 17,177 -> 17,427 (Task 15) -- still red
+t7.1 mutants | task 7 part 1 | 0 | 3 of 3 killed (task7-mutants.txt)
+t7.1 size gate | task 7 part 1 | 0 | UARegistryRegLib 30,346 -> 30,837 (`_walk`, the holder's cap); UARegistry 34,607, CoreLib 20,201, AuxLib 35,670, OpenFactory 34,999 unchanged
