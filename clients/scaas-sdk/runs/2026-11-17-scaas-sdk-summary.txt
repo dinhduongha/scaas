@@ -12,9 +12,6 @@ ck-test | 81a8cbcf2 | 0 | node: 472 pass, 0 fail, 4 skipped
 ua-vectors | 81a8cbcf2 | 0 | 647 passed, 0 failed, 6 ignored (62 binaries)
 ua-verify-only | 81a8cbcf2 | 0 | 84 passed, 0 failed, 0 ignored (18 binaries)
 ua-wallet-rows | 81a8cbcf2 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-rpc-test | 81a8cbcf2 | 0 | 162 passed, 0 failed, 10 ignored (16 binaries)
-rpc-clippy | 81a8cbcf2 | 0 | -
-rpc-wasm | 81a8cbcf2 | 0 | -
 sdk-opaque | 81a8cbcf2 | 0 | 9 passed, 0 failed, 0 ignored (1 binaries)
 sdk-sets | 81a8cbcf2 | 0 | 6 passed, 0 failed, 0 ignored (3 binaries)
 sdk-deny | 81a8cbcf2 | 0 | -
@@ -47,3 +44,6 @@ docs | 98b4eeb1d | 0 | -; tree dirty
 sdk-clippy | 98b4eeb1d | 0 | -; tree dirty
 sdk-test | 98b4eeb1d | 0 | 173 passed, 0 failed, 2 ignored (16 binaries); tree dirty
 bind-dart | 98b4eeb1d | 0 | dart: +6:; tree dirty
+rpc-wasm | 9172eb6dd | 0 | -; tree dirty
+rpc-test | 9172eb6dd | 0 | 332 passed, 0 failed, 20 ignored (32 binaries); tree dirty
+rpc-clippy | 9172eb6dd | 0 | -; tree dirty

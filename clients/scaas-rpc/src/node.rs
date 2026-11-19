@@ -471,3 +471,134 @@ impl NodeClient {
         MergedState::InFlight
     }
 }
+
+// ---------------------------------------------------------------- the PQZ verifier client (spec §6.1; owner 2026-11-19, C1)
+
+/// `POST /v1/pqz-verdict` of a PQZ verifier (`scaas-pqz-verifier`'s HTTP door, CTR-PQZ-29).
+pub const VERDICT_ROUTE: &str = "/v1/pqz-verdict";
+/// `POST /v1/pqz-verdict/probe`: whether a verifier would serve a token's verifier-mode operation.
+pub const PROBE_ROUTE: &str = "/v1/pqz-verdict/probe";
+/// The body cap of a verdict request: a statement and a PQZ proof of the largest set fit (the verifier's own `body_limit()`
+/// refuses above its set's figure). ponytail: one cap for every set; the verifier's per-set limit is the real bound.
+pub const VERDICT_BODY_MAX: usize = 8 << 20;
+
+/// The client of a list of PQZ verifiers, each endpoint with its own credential (spec §6.1, §6.3: no redirect followed, answers
+/// bounded by [`ANSWER_MAX`] and depth). ARCH-POS-15 by the list's policy: `failover` (the default) takes the first endpoint's
+/// 2xx answer in list order, moving on past an unreachable one (transport, timeout, 3xx, 5xx: the verifier's `BUSY`,
+/// `RPC_UNAVAILABLE`), and a 4xx is the verifier's refusal, final (`NodeRefused` by its `error` code, never retried elsewhere);
+/// `strict_majority` asks every endpoint and needs more than half of them to give a 2xx answer equal in what is compared (a
+/// verdict's `pqzVerdict`, the signature apart; a probe's whole answer), else `EndpointNoMajority`. The answer is returned
+/// as the verifier sent it: the caller checks the verdict's typed data and its signer before it attaches it.
+#[derive(Clone)]
+pub struct VerifierClient {
+    list: Arc<NodeList>,
+    http: Http,
+}
+
+impl std::fmt::Debug for VerifierClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VerifierClient")
+            .field("list", &self.list)
+            .finish()
+    }
+}
+
+impl VerifierClient {
+    pub fn new(list: NodeList) -> Result<Self, RpcError> {
+        Ok(Self {
+            http: Http::new(list.timeout_ms)?,
+            list: Arc::new(list),
+        })
+    }
+
+    /// `POST /v1/pqz-verdict` with `req` (the verifier's named fields), serialised once and sent byte for byte: its
+    /// `{pqzVerdict, pqzVerdictSig}`.
+    pub async fn verdict(&self, req: &Value) -> Result<Value, RpcError> {
+        self.post(VERDICT_ROUTE, req, |v| v["pqzVerdict"].clone())
+            .await
+    }
+
+    /// `POST /v1/pqz-verdict/probe` with `req`: the verifier's answer.
+    pub async fn probe(&self, req: &Value) -> Result<Value, RpcError> {
+        self.post(PROBE_ROUTE, req, Value::clone).await
+    }
+
+    async fn post(
+        &self,
+        route: &str,
+        req: &Value,
+        compared: fn(&Value) -> Value,
+    ) -> Result<Value, RpcError> {
+        object(req, "the verifier request")?;
+        let body = serde_json::to_vec(req).expect("a Value serialises");
+        if body.len() > VERDICT_BODY_MAX {
+            return Err(RpcError::BodyTooLarge {
+                len: body.len(),
+                cap: VERDICT_BODY_MAX,
+            });
+        }
+        let n = self.list.len();
+        let majority = self.list.policy == crate::Policy::StrictMajority;
+        let (mut last, mut failures, mut answers) = (None, vec![], Vec::<(Value, Value)>::new());
+        for i in 0..n {
+            let a = self
+                .http
+                .request(
+                    &self.list,
+                    i,
+                    reqwest::Method::POST,
+                    route,
+                    Some(body.clone()),
+                    ANSWER_MAX,
+                    None,
+                )
+                .await;
+            let f = match a {
+                Ok((s, v)) if (200..300).contains(&s) && v.is_object() => {
+                    if !majority {
+                        return Ok(v);
+                    }
+                    answers.push((compared(&v), v));
+                    continue;
+                }
+                Ok((s, _)) if (200..300).contains(&s) => EndpointFailure::new(
+                    i,
+                    crate::FailureKind::AnswerMalformed,
+                    "a 2xx answer that is not an object",
+                ),
+                Ok((s, v)) => match answer(i, s, v) {
+                    NodeOutcome::Refused(e) if !majority => return Err(e),
+                    NodeOutcome::Refused(e) => {
+                        EndpointFailure::new(i, crate::FailureKind::Http, e.code())
+                    }
+                    NodeOutcome::Unreachable(f) => f,
+                    NodeOutcome::Queued { .. } => unreachable!("not a 2xx"),
+                },
+                Err(f) => f,
+            };
+            failures.push(f.clone());
+            last = Some(f);
+        }
+        if !majority {
+            return Err(RpcError::EndpointAllFailed {
+                last,
+                failover_revert: None,
+            });
+        }
+        let need = n / 2 + 1;
+        let mut largest = 0;
+        for (c, v) in &answers {
+            let k = answers.iter().filter(|(d, _)| d == c).count();
+            if k >= need {
+                return Ok(v.clone());
+            }
+            largest = largest.max(k);
+        }
+        Err(RpcError::EndpointNoMajority {
+            n,
+            need,
+            largest,
+            failures,
+        })
+    }
+}
