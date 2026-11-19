@@ -446,7 +446,7 @@ pub(crate) fn build(sdk: &Sdk, key_ref: &KeyRef, attrs: RegisterAttrs) -> Result
             let (y, pop) = z.pop()?;
             (crate::confidential::ZETHER_KIND, y, z.ua(), pop, vec![])
         }
-        Key::Native(..) => return Err(SdkError::Argument),
+        Key::Native(..) | Key::External(..) => return Err(SdkError::Argument),
     };
     let pop_hash = match pqz_pop.is_empty() {
         true => "0x".to_string(),

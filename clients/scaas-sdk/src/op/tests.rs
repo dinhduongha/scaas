@@ -92,16 +92,22 @@ fn endpoint(url: &str) -> EndpointConfig {
 }
 
 async fn open(store: Arc<Flaky>, profile: ChainProfile, limits: Limits) -> Arc<Sdk> {
-    open_at(store, profile, limits, 1_800_000_000).await
+    open_at(store, profile, limits, 1_800_000_000, None).await
 }
 
 /// `open` on a clock fixed at `now`.
-async fn open_at(store: Arc<Flaky>, profile: ChainProfile, limits: Limits, now: u64) -> Arc<Sdk> {
+async fn open_at(
+    store: Arc<Flaky>,
+    profile: ChainProfile,
+    limits: Limits,
+    now: u64,
+    auth: Option<Arc<dyn crate::platform::Authenticator>>,
+) -> Arc<Sdk> {
     Sdk::open(SdkConfig {
         profiles: vec![profile],
         store,
-        authenticator: None,
-        rp_id: None,
+        rp_id: auth.as_ref().map(|_| RP_ID.to_string()),
+        authenticator: auth,
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits,
         clock: Some(std::sync::Arc::new(move || now)),
@@ -118,6 +124,15 @@ async fn open_at(store: Arc<Flaky>, profile: ChainProfile, limits: Limits, now: 
 
 /// A seed on a fresh SDK over a fake chain with `gateways` gateways (each a server of the same fake).
 async fn setup(gateways: usize, edit: impl FnOnce(&mut ChainProfile, &mut Limits)) -> T {
+    setup_with(gateways, edit, None).await
+}
+
+/// `setup` with the platform authenticator `auth` (its RP ID [`RP_ID`]).
+async fn setup_with(
+    gateways: usize,
+    edit: impl FnOnce(&mut ChainProfile, &mut Limits),
+    auth: Option<Arc<dyn crate::platform::Authenticator>>,
+) -> T {
     let chain = fake();
     let url = serve(chain.clone()).await;
     let mut gws = vec![];
@@ -149,7 +164,7 @@ async fn setup(gateways: usize, edit: impl FnOnce(&mut ChainProfile, &mut Limits
     let mut limits = Limits::default();
     edit(&mut profile, &mut limits);
     let store = Arc::new(Flaky::default());
-    let sdk = open(store.clone(), profile.clone(), limits).await;
+    let sdk = open_at(store.clone(), profile.clone(), limits, 1_800_000_000, auth).await;
     let words =
         Arc::new(SecretBytes::from_zeroizing(Zeroizing::new(REPO.as_bytes().to_vec())).unwrap());
     let pass =
@@ -1612,6 +1627,7 @@ async fn terminal_rows_pruned_after_retention() {
         t.profile.clone(),
         Limits::default(),
         1_800_000_000 + 90 * day - 1,
+        None,
     )
     .await;
     state::put(&soon, &state::row(&soon, &open_op).await.unwrap())
@@ -1626,6 +1642,7 @@ async fn terminal_rows_pruned_after_retention() {
         t.profile.clone(),
         Limits::default(),
         1_800_000_000 + 90 * day,
+        None,
     )
     .await;
     state::put(&late, &state::row(&late, &open_op).await.unwrap())
@@ -1637,6 +1654,7 @@ async fn terminal_rows_pruned_after_retention() {
         t.profile.clone(),
         Limits::default(),
         1_800_000_000 + 900 * day,
+        None,
     )
     .await;
     state::put(
@@ -1678,4 +1696,216 @@ async fn retry_on_a_lane_waits_for_expired() {
     assert_ne!(second, first);
     assert_eq!(t.sdk.op().state(first).await.unwrap(), OpState::Expired);
     assert_eq!(signs(&t), 2);
+}
+
+// --- plan T13: passkey and secure-element signing (owner 2026-11-19, S1, P1) ---
+
+const RP_ID: &str = "scaas.example";
+
+/// A platform device over test P-256 keys: a passkey on [`RP_ID`] (assertions with UP and UV, DER signatures) and a secure
+/// element signing in MESSAGE mode (`r ‖ s`); each failure mode switchable; every signing request counted.
+#[derive(Default)]
+struct Device {
+    wrong_key: AtomicBool,
+    no_uv: AtomicBool,
+    digest_mode: AtomicBool,
+    asked: std::sync::atomic::AtomicU32,
+}
+
+fn device_key(tag: u8) -> p256::ecdsa::SigningKey {
+    p256::ecdsa::SigningKey::from_slice(&scaas_ua::sha256(&[b"scaas-sdk.t13.device".as_slice(), &[tag]].concat())).unwrap()
+}
+
+fn xy(k: &p256::ecdsa::SigningKey) -> Vec<u8> {
+    k.verifying_key().to_sec1_point(false).as_bytes()[1..].to_vec()
+}
+
+fn der(sig: &p256::ecdsa::Signature) -> Vec<u8> {
+    let (r, s) = sig.split_bytes();
+    let int = |v: &[u8]| {
+        let v = &v[v.iter().position(|b| *b != 0).unwrap_or(31)..];
+        let pad = usize::from(v[0] >= 0x80);
+        [&[0x02, (v.len() + pad) as u8][..], &vec![0; pad], v].concat()
+    };
+    let body = [int(&r), int(&s)].concat();
+    [&[0x30, body.len() as u8][..], &body].concat()
+}
+
+fn b64url(b: &[u8]) -> String {
+    const A: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut out = String::new();
+    for c in b.chunks(3) {
+        let n = c.iter().enumerate().fold(0u32, |n, (i, x)| n | u32::from(*x) << (16 - 8 * i));
+        (0..=c.len()).for_each(|i| out.push(A[(n >> (18 - 6 * i) & 63) as usize] as char));
+    }
+    out
+}
+
+impl Device {
+    /// The key that answers: the device's own (`tag`), or another one when `wrong_key` is set.
+    fn key(&self, tag: u8) -> p256::ecdsa::SigningKey {
+        self.asked.fetch_add(1, SeqCst);
+        device_key(if self.wrong_key.load(SeqCst) { 9 } else { tag })
+    }
+}
+
+#[async_trait::async_trait]
+impl crate::platform::Authenticator for Device {
+    async fn create_passkey(
+        &self,
+        rp_id: String,
+        _: String,
+        _: Vec<Vec<u8>>,
+    ) -> Result<crate::platform::PasskeyCreated, crate::platform::AuthError> {
+        Ok(crate::platform::PasskeyCreated {
+            credential_id: vec![7; 16],
+            key_data: [xy(&device_key(1)), scaas_ua::sha256(rp_id.as_bytes()).to_vec()].concat(),
+        })
+    }
+    async fn get_assertion(
+        &self,
+        req: crate::platform::AssertionRequest,
+        _: Arc<SecretBytes>,
+    ) -> Result<crate::platform::Assertion, crate::platform::AuthError> {
+        use p256::ecdsa::signature::hazmat::PrehashSigner;
+        assert_eq!(req.allow, vec![vec![7u8; 16]], "the row's credential");
+        let flags = if self.no_uv.load(SeqCst) { 0x01 } else { 0x05 };
+        let auth = [&scaas_ua::sha256(req.rp_id.as_bytes())[..], &[flags], &1u32.to_be_bytes()].concat();
+        let cdj = format!(
+            r#"{{"type":"webauthn.get","challenge":"{}","origin":"https://{RP_ID}"}}"#,
+            b64url(&req.challenge)
+        )
+        .into_bytes();
+        let pre = scaas_ua::sha256(&[auth.as_slice(), &scaas_ua::sha256(&cdj)].concat());
+        let sig: p256::ecdsa::Signature = self.key(1).sign_prehash(&pre).unwrap();
+        Ok(crate::platform::Assertion {
+            credential_id: vec![7; 16],
+            authenticator_data: auth,
+            client_data_json: cdj,
+            signature: der(&sig),
+            prf: false,
+        })
+    }
+    async fn platform_secret(
+        &self,
+        _: String,
+        _: Vec<u8>,
+        _: String,
+        _: Option<crate::platform::KeyPolicy>,
+        _: Arc<SecretBytes>,
+    ) -> Result<(), crate::platform::AuthError> {
+        Err(crate::platform::AuthError::Unavailable)
+    }
+    async fn p256_generate(
+        &self,
+        _: crate::platform::KeyPolicy,
+    ) -> Result<crate::platform::SePublic, crate::platform::AuthError> {
+        Ok(crate::platform::SePublic {
+            handle: "se-1".into(),
+            key_data: xy(&device_key(2)),
+        })
+    }
+    /// MESSAGE mode: ECDSA over SHA-256 of the 32 bytes given; `digest_mode`: the 32 bytes taken as the digest.
+    async fn p256_sign(&self, handle: String, ua_msg: Vec<u8>, _: String) -> Result<Vec<u8>, crate::platform::AuthError> {
+        use p256::ecdsa::signature::hazmat::PrehashSigner;
+        use p256::ecdsa::signature::Signer as _;
+        assert_eq!(handle, "se-1");
+        let k = self.key(2);
+        let sig: p256::ecdsa::Signature = if self.digest_mode.load(SeqCst) {
+            k.sign_prehash(&ua_msg).unwrap()
+        } else {
+            k.sign(&ua_msg)
+        };
+        Ok(sig.to_bytes().to_vec())
+    }
+}
+
+/// An SDK over the fake chain with `dev` as its authenticator, a verify row for both device kinds; a passkey row (or a
+/// secure-element row, `se`), and a `UACancelNonce` its UA signs, prepared and quoted for the gateway.
+async fn device_op(
+    dev: &Arc<Device>,
+    se: bool,
+) -> (T, Arc<Prepared>, SubmitQuote) {
+    let auth: Arc<dyn crate::platform::Authenticator> = dev.clone();
+    let t = setup_with(
+        1,
+        |p, _| {
+            p.gas.verify.extend([0x0100, 0x0101].map(|signer| crate::GasVerify { signer, gas: 0 }));
+        },
+        Some(auth),
+    )
+    .await;
+    let acc = t.sdk.account();
+    let key = if se {
+        let policy = crate::platform::KeyPolicy {
+            biometry_current_set: true,
+            invalidated_by_enrollment: true,
+        };
+        acc.create_se_key(crate::account::CreateSeKey {
+            seed: t.seed.clone(),
+            name: "element".into(),
+            policy,
+        })
+        .await
+        .unwrap()
+    } else {
+        acc.create_passkey_key(crate::account::CreatePasskeyKey {
+            seed: t.seed.clone(),
+            name: "phone".into(),
+        })
+        .await
+        .unwrap()
+    };
+    let rows = acc.accounts(t.seed.clone()).await.unwrap();
+    let ua = rows.iter().find(|r| r.shape == "key").unwrap().id_text.clone();
+    let mut d = cancel(&t, "token", TOKEN, "5", "0");
+    d.signer = key;
+    d.message["from"] = json!(ua);
+    let p = prepare(&t, d).await;
+    let q = gateway_quote(&t, &p).await;
+    (t, p, q)
+}
+
+/// Plan T13 `passkey_signs_through_the_authenticator` (owner 2026-11-19, S1, P1): a passkey row signs a `UACancelNonce`
+/// through the `Authenticator` (asked once: the policy's dry run asks no device), the assertion verified before use; an
+/// assertion by another key, or with UV clear, is `AuthenticatorRefused` and nothing is sent.
+#[tokio::test(flavor = "multi_thread")]
+async fn passkey_signs_through_the_authenticator() {
+    let dev = Arc::new(Device::default());
+    let (t, p, q) = device_op(&dev, false).await;
+    t.sdk.op().submit(p, q).await.unwrap();
+    assert_eq!(dev.asked.load(SeqCst), 1, "one assertion");
+    for wrong_key in [true, false] {
+        let dev = Arc::new(Device::default());
+        let (t, p, q) = device_op(&dev, false).await;
+        if wrong_key {
+            dev.wrong_key.store(true, SeqCst);
+        } else {
+            dev.no_uv.store(true, SeqCst);
+        }
+        assert_eq!(code(t.sdk.op().submit(p, q).await), "AuthenticatorRefused", "another key: {wrong_key}");
+        assert!(t.chain.lock().unwrap().bodies.is_empty(), "nothing sent");
+    }
+}
+
+/// Plan T13 `se_key_message_mode` (S1): a secure-element row signs the `ua_msg` in MESSAGE mode and the signature verifies; a
+/// device answering in digest mode, or with another key, fails `scaas-ua`'s verification of the external answer:
+/// `ExternalSignature`, nothing sent.
+#[tokio::test(flavor = "multi_thread")]
+async fn se_key_message_mode() {
+    let dev = Arc::new(Device::default());
+    let (t, p, q) = device_op(&dev, true).await;
+    t.sdk.op().submit(p, q).await.unwrap();
+    assert_eq!(dev.asked.load(SeqCst), 1);
+    for digest in [true, false] {
+        let dev = Arc::new(Device::default());
+        let (t, p, q) = device_op(&dev, true).await;
+        if digest {
+            dev.digest_mode.store(true, SeqCst);
+        } else {
+            dev.wrong_key.store(true, SeqCst);
+        }
+        assert_eq!(code(t.sdk.op().submit(p, q).await), "ExternalSignature", "digest mode: {digest}");
+        assert!(t.chain.lock().unwrap().bodies.is_empty(), "nothing sent");
+    }
 }

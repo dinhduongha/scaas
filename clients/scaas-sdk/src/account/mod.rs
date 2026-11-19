@@ -88,6 +88,21 @@ pub struct AddWatch {
     pub name: String,
 }
 
+/// `create_passkey_key`: a new passkey of the deployment's RP ID (`SdkConfig::rp_id`), named `name` beside seed `seed`.
+#[derive(Debug, Clone)]
+pub struct CreatePasskeyKey {
+    pub seed: String,
+    pub name: String,
+}
+
+/// `create_se_key`: a new secure-element P-256 key under `policy`, named `name` beside seed `seed`.
+#[derive(Debug, Clone)]
+pub struct CreateSeKey {
+    pub seed: String,
+    pub name: String,
+    pub policy: crate::platform::KeyPolicy,
+}
+
 const NAME_MAX: usize = 64;
 
 fn hex(b: &[u8]) -> String {
@@ -241,6 +256,66 @@ impl Account {
             .await
     }
 
+    /// A new passkey (spec §7 "Passkey keys"; owner 2026-11-19, S1): the `Authenticator` creates it on the deployment's RP ID
+    /// (the seed's other passkeys excluded), its `webauthn-p256` (0x0100) key data and credential id stored as a key row of
+    /// `seed` (unlocked: `WalletLocked`), the UA `scaas-ua` derives; the `KeyRef` that signs with it. `AuthenticatorRefused`: no
+    /// authenticator or RP ID, a refusal; `Argument`: a bad name or key data.
+    #[cfg(feature = "wallet")]
+    pub async fn create_passkey_key(&self, req: CreatePasskeyKey) -> Result<crate::op::KeyRef, SdkError> {
+        let sdk = self.sdk.clone();
+        self.sdk
+            .spawn(async move {
+                if !name_ok(&req.name) {
+                    return Err(SdkError::Argument);
+                }
+                drop(sdk.open_seed(&req.seed)?);
+                let auth = sdk.authenticator.clone().ok_or(SdkError::AuthenticatorRefused)?;
+                let rp_id = sdk.rp_id.clone().ok_or(SdkError::AuthenticatorRefused)?;
+                let exclude = sdk
+                    .entry(&req.seed)
+                    .await?
+                    .accounts
+                    .iter()
+                    .filter_map(|r| match r {
+                        AccountRow::Key { credential_id: Some(c), .. } => crate::op::unhex(c).ok(),
+                        _ => None,
+                    })
+                    .collect();
+                let c = auth
+                    .create_passkey(rp_id, req.name.clone(), exclude)
+                    .await
+                    .map_err(|_| SdkError::AuthenticatorRefused)?;
+                let kind = crate::op::external::PASSKEY;
+                let row = key_row(&req.name, kind, &c.key_data, Some(crate::op::hex(&c.credential_id)), None)?;
+                key_ref(&sdk, &req.seed, row).await
+            })
+            .await
+    }
+
+    /// A new secure-element P-256 key (spec §7 "Secure-element keys"; S1): the `Authenticator` generates it under `policy`, its
+    /// `p256` (0x0101) key data and handle stored as a key row of `seed` (unlocked); the `KeyRef` that signs with it (MESSAGE
+    /// mode). Not recoverable without a second member or a guardian: the app says so. Errors as [`Account::create_passkey_key`].
+    #[cfg(feature = "wallet")]
+    pub async fn create_se_key(&self, req: CreateSeKey) -> Result<crate::op::KeyRef, SdkError> {
+        let sdk = self.sdk.clone();
+        self.sdk
+            .spawn(async move {
+                if !name_ok(&req.name) {
+                    return Err(SdkError::Argument);
+                }
+                drop(sdk.open_seed(&req.seed)?);
+                let auth = sdk.authenticator.clone().ok_or(SdkError::AuthenticatorRefused)?;
+                let k = auth
+                    .p256_generate(req.policy)
+                    .await
+                    .map_err(|_| SdkError::AuthenticatorRefused)?;
+                let kind = crate::op::external::SECURE_ELEMENT;
+                let row = key_row(&req.name, kind, &k.key_data, None, Some(k.handle))?;
+                key_ref(&sdk, &req.seed, row).await
+            })
+            .await
+    }
+
     /// Adds a watch row: an id, no key; nothing is ever signed for it ([`Account::signs`]).
     pub async fn add_watch(&self, req: AddWatch) -> Result<AccountInfo, SdkError> {
         let sdk = self.sdk.clone();
@@ -320,6 +395,37 @@ fn same(a: &AccountRow, b: &AccountRow) -> bool {
         (AccountRow::Watch { watch: x, .. }, AccountRow::Watch { watch: y, .. }) => x == y,
         _ => false,
     }
+}
+
+/// A key row of `kind` and `key_data`, its UA the one `scaas-ua` derives.
+#[cfg(feature = "wallet")]
+fn key_row(
+    name: &str,
+    kind: u16,
+    key_data: &[u8],
+    credential_id: Option<String>,
+    handle: Option<String>,
+) -> Result<AccountRow, SdkError> {
+    let ua = scaas_ua::derive_ua(kind, key_data, false).map_err(|_| SdkError::Argument)?;
+    Ok(AccountRow::Key {
+        id: crate::vault::uuid4()?,
+        name: name.into(),
+        kind: u64::from(kind),
+        key_data: crate::op::hex(key_data),
+        credential_id,
+        handle,
+        ua: crate::op::hex(&ua),
+    })
+}
+
+/// `row` added to `seed`; its `KeyRef`.
+#[cfg(feature = "wallet")]
+async fn key_ref(sdk: &Arc<Sdk>, seed: &str, row: AccountRow) -> Result<crate::op::KeyRef, SdkError> {
+    let info = add_row(sdk, seed, row).await?;
+    Ok(crate::op::KeyRef::Key {
+        seed: seed.into(),
+        id: info.id,
+    })
 }
 
 async fn add_row(sdk: &Arc<Sdk>, seed: &str, row: AccountRow) -> Result<AccountInfo, SdkError> {

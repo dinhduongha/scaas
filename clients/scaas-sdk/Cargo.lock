@@ -3861,6 +3861,7 @@ dependencies = [
  "async-trait",
  "bip39",
  "getrandom 0.2.17",
+ "p256",
  "scaas-rpc",
  "scaas-ua",
  "serde",

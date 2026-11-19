@@ -252,6 +252,10 @@ impl Op {
                 let signer = match prepared.signer() {
                     KeyRef::Ua { kind, .. } => kind,
                     KeyRef::Native { .. } | KeyRef::Imported { .. } => super::gas::NATIVE_EVM,
+                    KeyRef::Key { .. } => match super::key_opened(&sdk, &prepared.signer()).await? {
+                        super::Key::External(row, _) => row.kind,
+                        _ => return Err(SdkError::Internal),
+                    },
                 };
                 let fresh = prepared
                     .t

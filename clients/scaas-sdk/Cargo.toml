@@ -83,6 +83,8 @@ wasmtimer = "0.4"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros", "net", "io-util"] }
 # the tests' mnemonics of every length (the reference outside the SDK; the pin of scaas-ua)
 bip39 = { version = "=2.2.2", default-features = false, features = ["alloc"] }
+# the test device's passkey and secure-element keys (plan T13, S1); scaas-ua's pin
+p256 = { version = "=0.14.0", default-features = false, features = ["arithmetic", "ecdsa"] }
 
 # scrypt (N = 2^17) and the ML-KEM / arkworks code crawl unoptimised: the dependencies built at opt-level 3, as ua-rs
 [profile.dev.package."*"]

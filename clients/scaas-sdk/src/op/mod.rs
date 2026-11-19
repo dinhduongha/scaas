@@ -4,6 +4,7 @@
 //! the chain's time, builds the typed data with `scaas-ua`, and keeps an opaque [`Prepared`] in the SDK's table. `submit` signs
 //! exactly that value under its `scaas-ua` check, writes the row (state `signed`) to `sdk.state`, and returns the operation's id;
 //! the send runs on as a task and reports as `Event::OpState`. An operation ends only on a chain fact. UNAUDITED.
+pub(crate) mod external;
 mod follow;
 pub(crate) mod gas;
 mod prepared;
@@ -27,8 +28,8 @@ use scaas_rpc::Purpose;
 use scaas_ua::wallet::{NativeKey, Network, UaKey};
 use std::sync::Arc;
 
-/// A key the SDK signs with, by reference (spec §5): the seed's open wallet holds it. The passkey and secure-element keys join
-/// with the tasks that sign with them (plan T13).
+/// A key the SDK signs with, by reference (spec §5): the seed's open wallet holds it, or, for [`KeyRef::Key`], the platform's
+/// authenticator (a passkey or a secure-element key, a row of the seed: owner 2026-11-19, S1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KeyRef {
     Ua {
@@ -49,6 +50,9 @@ pub enum KeyRef {
         network: String,
         index: u32,
     },
+    /// the stored key row `id` of seed `seed` (`AccountRow::Key`: a passkey `webauthn-p256` with its credential id, a
+    /// secure-element `p256` key with its handle), signing through the `Authenticator` (`external`)
+    Key { seed: String, id: String },
 }
 
 /// The operations module.
@@ -73,6 +77,8 @@ pub(crate) enum Key {
         #[allow(dead_code)] Arc<crate::vault::OpenSeed>,
         crate::confidential::ZetherSigner,
     ),
+    /// a stored key row: its public parts, and a key that refuses every request (it signs only through `external::sign`)
+    External(external::ExternalRow, scaas_ua::wallet::ExternalKey<'static>),
 }
 
 impl Key {
@@ -82,6 +88,7 @@ impl Key {
             Key::Native(_, k) => k,
             #[cfg(feature = "zether")]
             Key::Zether(_, k) => k,
+            Key::External(_, k) => k,
         }
     }
 }
@@ -127,6 +134,8 @@ pub(crate) fn key(sdk: &Sdk, r: &KeyRef) -> Result<Key, SdkError> {
             let k = s.wallet.imported_key(n, *index)?;
             Key::Native(s, k)
         }
+        // a stored key row is read from the keystore: `key_opened`
+        KeyRef::Key { .. } => return Err(SdkError::Argument),
     })
 }
 
@@ -140,6 +149,31 @@ pub(crate) async fn key_opened(sdk: &Sdk, r: &KeyRef) -> Result<Key, SdkError> {
     {
         sdk.open_on_use(seed, &format!("native-import:{network}:{index}"))
             .await?;
+    }
+    if let KeyRef::Key { seed, id } = r {
+        drop(sdk.open_seed(seed)?); // a row is trusted once its seed's MAC verified (unlocked)
+        let row = sdk.entry(seed).await?.accounts.into_iter().find_map(|a| match a {
+            crate::vault::AccountRow::Key {
+                id: i,
+                kind,
+                key_data,
+                credential_id,
+                handle,
+                ua,
+                ..
+            } if i == *id => Some((kind, key_data, credential_id, handle, ua)),
+            _ => None,
+        });
+        let (kind, key_data, credential_id, handle, ua) = row.ok_or(SdkError::Argument)?;
+        let row = external::ExternalRow {
+            kind: u16::try_from(kind).map_err(|_| SdkError::Argument)?,
+            key_data: unhex(&key_data)?,
+            ua: unhex(&ua)?.try_into().map_err(|_| SdkError::Argument)?,
+            credential_id: credential_id.as_deref().map(unhex).transpose()?,
+            handle,
+        };
+        let refuse = scaas_ua::wallet::ExternalKey::new(row.key_ref(), |_| Err(scaas_ua::wallet::Error::ExternalSignature));
+        return Ok(Key::External(row, refuse));
     }
     key(sdk, r)
 }

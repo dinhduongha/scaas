@@ -1,0 +1,4 @@
+# t13external mutants at commit ea845adad (name | outcome | test)
+ua-rs: skip the external answer's verification | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib -- se_key_message_mode
+digest-mode SE call (the SDK hashes ua_msg first) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib -- se_key_message_mode
+2 mutants, 2 killed, 0 survived, 0 not loaded

@@ -273,6 +273,7 @@ async fn from_of(sdk: &Sdk, signer: &KeyRef, name: &str) -> Result<String, SdkEr
         (Key::Ua(_, k), "bytes32") => hex(&k.ua().ok_or(SdkError::Argument)?),
         #[cfg(feature = "zether")]
         (Key::Zether(_, k), "bytes32") => hex(&k.ua()),
+        (Key::External(row, _), "bytes32") => hex(&row.ua),
         (Key::Native(_, k), t) => {
             let a = addr20(&k.address().ok_or(SdkError::Argument)?.to_ascii_lowercase())?;
             if t == "address" {
