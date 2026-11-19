@@ -29,6 +29,7 @@ import {
   P256_N,
 } from "./ua-verify.js";
 import { kemPrk, kemKeyFromPrk, isKemHolder } from "./kem.js";
+import { WEBAUTHN_MAX_ASSERTION } from "./webauthn.js";
 
 const fail = (code, reason) => {
   throw new ua.UAError(code, reason);
@@ -315,8 +316,8 @@ export function signContainer(sender, digest, fixed) {
 export const webauthnChallenge = (purposeTag, digest) => ua.uaMessage(0x0100, purposeOf(purposeTag), digest);
 
 /** The longest assertion encoded: `authData` and `clientDataJSON` together, 1,024 bytes (owner 2026-11-19, G3; ua-rs
- *  `WEBAUTHN_MAX_ASSERTION`, its basis there). Longer: `WebAuthnTooLong`. */
-export const WEBAUTHN_MAX_ASSERTION = 1024;
+ *  `WEBAUTHN_MAX_ASSERTION`, its basis there; one constant with `webauthn.js`). Longer: `WebAuthnTooLong`. */
+export { WEBAUTHN_MAX_ASSERTION };
 
 /** A `webauthn-p256` signature from any member key (a third party's `signMember` too; owner 2026-11-19, Q3, as ua-rs's
  *  `UASig` builders): canonical, `authData` and `clientDataJSON` at most `WEBAUTHN_MAX_ASSERTION` together, else

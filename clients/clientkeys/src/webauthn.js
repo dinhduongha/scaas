@@ -103,8 +103,24 @@ export function derToRS(der) {
   return { r: to32(r), s: to32(s), highS };
 }
 
-/** Inner payload for a P-256 key: `abi.encode(authenticatorData, clientDataJSON, r, s)`. */
+/** The longest assertion encoded: `authenticatorData` and `clientDataJSON` together, 1,024 bytes (owner 2026-11-19: G3 for a
+ *  `webauthn-p256` UA, Q4 for a `SmartKeyAccount` passkey and the NEAR / Algorand passkey path; ua-rs `WEBAUTHN_MAX_ASSERTION`,
+ *  its basis there). */
+export const WEBAUTHN_MAX_ASSERTION = 1024;
+
+/** `WebAuthnTooLong` (error `code`) when `authenticatorData` and `clientDataJSON` (bytes) together exceed the cap. */
+export function assertionCapped(authenticatorData, clientDataJSON) {
+  if (authenticatorData.length + clientDataJSON.length > WEBAUTHN_MAX_ASSERTION) {
+    const e = new Error(`WebAuthnTooLong: authenticatorData and clientDataJSON above ${WEBAUTHN_MAX_ASSERTION} bytes`);
+    e.code = "WebAuthnTooLong";
+    throw e;
+  }
+}
+
+/** Inner payload for a P-256 key: `abi.encode(authenticatorData, clientDataJSON, r, s)`; first, above the cap together:
+ *  `WebAuthnTooLong` (Q4). */
 export function encodeAssertion({ authenticatorData, clientDataJSON, signature }) {
+  assertionCapped(authenticatorData, clientDataJSON);
   const { r, s } = derToRS(signature);
   return abiEncode(["bytes", "bytes", "bytes32", "bytes32"], [authenticatorData, clientDataJSON, r, s]);
 }
