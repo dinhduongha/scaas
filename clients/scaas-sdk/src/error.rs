@@ -101,6 +101,11 @@ own_codes! {
     LegKeyMismatch,
     /// A `SmartKeyAccount` entry's signer that is not a key of the account (owner 2026-11-19, P2).
     SignerNotAccountKey,
+    /// A PQZ token with the sealed opening (`proofSystemId` `PQZL_SPLIT_ID`, CTR-PQZ-38): its keys and debits are the `pqz3k`
+    /// handles', not built in the SDK yet (P-T16-4, controller call 2026-11-19).
+    PqzOpeningUnsupported,
+    /// An `msig` slot (or an inner leaf) that is not both enabled and accepted: it cannot sign (spec §15; M2, owner 2026-11-19).
+    MsigSlotInactive,
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).

@@ -20,6 +20,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 pub const CHAIN_ID: u64 = 31337;
 
 /// How the gateway answers `POST /v1/op`.
+/// A verifier's answer `(status, body)` from its request.
+pub type VerdictFn = fn(&Value) -> (u16, Value);
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Gw {
     Queue,
@@ -83,6 +86,8 @@ pub struct Chain {
     pub verdict: Option<(u16, Value)>,
     /// every verdict request body, as received
     pub verdict_bodies: Vec<String>,
+    /// a verifier answering from the request (plan T16: a verdict over the statement it was sent); read before `verdict`
+    pub verdict_fn: Option<VerdictFn>,
 }
 
 impl Default for Chain {
@@ -123,6 +128,7 @@ impl Default for Chain {
             estimate_reverts: None,
             verdict: None,
             verdict_bodies: vec![],
+            verdict_fn: None,
         }
     }
 }
@@ -509,7 +515,10 @@ pub async fn serve(c: Fake) -> String {
                             (200, c.gw_info.clone())
                         } else if path.ends_with("/v1/pqz-verdict") {
                             c.verdict_bodies.push(String::from_utf8_lossy(&body).to_string());
-                            c.verdict.clone().unwrap_or((503, json!({"error": "BUSY"})))
+                            match (c.verdict_fn, serde_json::from_slice::<Value>(&body)) {
+                                (Some(f), Ok(v)) => f(&v),
+                                _ => c.verdict.clone().unwrap_or((503, json!({"error": "BUSY"}))),
+                            }
                         } else if path.ends_with("/v1/op") || path.ends_with("/v1/ua-metatx") {
                             let text = String::from_utf8_lossy(&body).to_string();
                             c.bodies.push(text.clone());

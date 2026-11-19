@@ -56,8 +56,20 @@ pub struct SubmitQuote {
 
 /// A gateway takes it (NODE-GW-03 door A: a registered token's `mtx*` entries on `POST /v1/op`).
 pub(crate) fn door_a(p: &Prepared) -> bool {
-    matches!(p.t.kind, "token" | "zether" | "pqz")
+    // a PQZ debit (its proof and ciphertext parts) is above the gateway's body cap (`scaas_rpc::node::BODY_MAX`, the node's
+    // 64 KiB): self-relayed only (controller call P-T16-8, owner auto-run 2026-11-19)
+    matches!(p.t.kind, "token" | "zether" | "pqz") && !(p.t.kind == "pqz" && PQZ_DEBITS.contains(&p.t.name))
 }
+
+/// The PQZ entries that carry a proof.
+const PQZ_DEBITS: [&str; 6] = [
+    "UAPqzTransferSingle",
+    "UAPqzTransferSingleCompact",
+    "UAPqzTransfer",
+    "UAPqzTransferCompact",
+    "UAPqzUnshield",
+    "UAPqzUnshieldUnwrap",
+];
 
 fn cap(s: &str) -> Result<U256, SdkError> {
     U256::from_str_radix(s, 10).map_err(|_| SdkError::Argument)

@@ -89,13 +89,13 @@ pub(crate) async fn sign(sdk: &Sdk, p: &Prepared) -> Result<Built, SdkError> {
     let k = super::key_opened(sdk, &p.signer()).await?;
     #[cfg(test)]
     sdk.signs.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-    // the owner statement first (`ownerSig`, owner 2026-11-19 C3), then the entry: each digest approved, then signed under its check
+    // the statement of the named slot first (`ownerSig`, owner 2026-11-19 C3; a PQZ debit's `pqzAuth`), then the entry: each
+    // digest approved, then signed under its check
     let mut extra = p.t.extra.clone();
-    if let Some((td, ex)) = &p.t.owner {
+    if let Some((td, ex, slot)) = &p.t.owner {
         let o = sign_one(sdk, &k, td, ex).await?;
-        let slot = extra.as_object_mut().ok_or(SdkError::Internal)?;
-        slot.insert(
-            "ownerSig".into(),
+        extra.as_object_mut().ok_or(SdkError::Internal)?.insert(
+            (*slot).into(),
             json!({"keyData": hex(&o.key_data), "signature": hex(&o.signature), "members": []}),
         );
     }

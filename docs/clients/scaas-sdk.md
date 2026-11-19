@@ -216,8 +216,12 @@ The PQZ reading layer, the balance, the verdicts and the PQZ rows without a proo
 code and `psid` first, a token of another set `PqzSetMismatch` with no account word read; then the account's slots, `sendCounter`,
 `pqzKey` / `pqzVersions`, `accWords` or `accBlob`, the window and the blobs, `proofStore` a storage word (owner 2026-11-19, T16-b);
 the registry's proven key the handle's. A verdict comes from `ChainProfile.verifiers` under its own policy (T16-a), its signer checked
-against the verifier UA's registry record read at the same final block (T16-c). The six PQZ debits with `PqzAuth`, `PqzRollOver`
-and the PQZ e2e are SPECIFIED.
+against the verifier UA's registry record read at the same final block (T16-c). The six PQZ debits are BUILT (plan T16 part 3,
+`src/confidential/pqz_debit.rs`, UNAUDITED; spec §9.2): the recipients' and the auditor's keys as a second fixed word set, the
+envelope binding folded by the form, the facade's proof off the async workers, `PqzAuth` signed by the holder under `zether-auth`
+and attached, the checked verdict attached on an `OFFCHAIN` token, self-relayed only (above the gateway's body cap). An opening token
+is `PqzOpeningUnsupported`. `PqzRollOver` (opening tokens only), an `OFFCHAIN` holder's scoped key (the `pqz3k` handle) and the PQZ
+e2e on `anvil` (no PQZ precompile there, and an `OFFCHAIN` token needs the scoped key) are SPECIFIED.
 
 ## 7. App cores above the SDK
 

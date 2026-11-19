@@ -1932,3 +1932,54 @@ fn pick_decoys() {
         "no key used"
     );
 }
+
+/// Plan T16 part 3: `pqz_auth_message` of each debit statement row gives, typed in the token's domain, the row's `auth_digest`
+/// (`PqzCore.authDigest`, pqz-core `pqz-vectors`); a refused `op` and a statement shorter than its header are `Argument`.
+#[test]
+fn pqz_auth_message_rows() {
+    use scaas_ua::facade::pqz::pqz_auth_message;
+    let set = pqz_set().name;
+    for (file, op) in [
+        ("statement_transfer", 1u8),
+        ("statement_burn", 2),
+        ("statement_transfer_multi", 7),
+    ] {
+        let p = format!(
+            "{}/../../smartcontracts/vectors/pqz/{set}/{file}.json",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        for r in v["rows"].as_array().unwrap() {
+            let stmt = hex::decode(r["stmt"].as_str().unwrap()).unwrap();
+            assert_eq!(
+                hex::encode(scaas_ua::keccak256(&stmt)),
+                r["stmt_keccak"]["pqzl"].as_str().unwrap(),
+                "{file}"
+            );
+            let m = pqz_auth_message(op, &stmt).unwrap();
+            let w = |i: usize| &stmt[i * 32..i * 32 + 32];
+            let chain_id = u64::from_be_bytes(w(2)[24..].try_into().unwrap());
+            let td = scaas_ua::wallet::scaas_typed_data(
+                "PqzAuth",
+                Some("SCaaS PqzToken"),
+                &w(3)[12..].try_into().unwrap(),
+                chain_id,
+                &w(16).try_into().unwrap(),
+                &m,
+            )
+            .unwrap();
+            assert_eq!(
+                hex::encode(td.digest().unwrap()),
+                r["auth_digest"]["pqzl"].as_str().unwrap(),
+                "{file}"
+            );
+        }
+    }
+    let stmt = vec![0u8; 700];
+    assert!(pqz_auth_message(1, &stmt).is_ok(), "control");
+    assert_eq!(pqz_auth_message(3, &stmt).unwrap_err(), Error::Argument);
+    assert_eq!(
+        pqz_auth_message(1, &stmt[..639]).unwrap_err(),
+        Error::Argument
+    );
+}

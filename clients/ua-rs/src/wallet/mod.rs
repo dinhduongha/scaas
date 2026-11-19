@@ -70,7 +70,7 @@ mod webauthn;
 
 pub use aead::{aead_open, aead_seal, hkdf_expand_sha256, hkdf_sha256, hmac_sha256, Alg};
 #[cfg(any(feature = "zether", feature = "pqz"))]
-pub(crate) use eip712::{from_hex, to_hex};
+pub(crate) use eip712::{from_hex, to_hex, u256_to_dec};
 pub use eip712::{
     liquidity_order_typed_data, pqz_verdict_typed_data, rescue_vault_typed_data, scaas_typed_data,
     Erc7739Wallet, RescueVaultOp, TypedData,

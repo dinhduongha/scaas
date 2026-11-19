@@ -54,9 +54,9 @@ pub(crate) struct Draft {
     pub ids: bool,
     /// a relay fee's paid call: its job `op` and signed calldata (owner 2026-11-19, ruling F)
     pub relay_call: Option<(Value, Vec<u8>)>,
-    /// an owner statement the same key signs first, passed as the entry's `ownerSig` (`UARollOverSigned`,
-    /// `UASetRollOverMode`: its struct name and message; owner 2026-11-19, C3)
-    pub owner: Option<(&'static str, Value)>,
+    /// a statement the same key signs first, passed as the entry's named slot: its struct name, the slot and its message
+    /// (`ownerSig` of `UARollOverSigned`, `UASetRollOverMode`, owner 2026-11-19, C3; a PQZ debit's `pqzAuth`, plan T16)
+    pub owner: Option<(&'static str, &'static str, Value)>,
     /// a `SmartKeyAccount` entry's `AccountSig.keyIndex`: the signing key's index in the account (owner 2026-11-19, S3)
     pub key_index: U256,
 }
@@ -77,8 +77,8 @@ pub(crate) struct Typed {
     pub ids: bool,
     /// a relay fee's paid call (job `op`, signed calldata)
     pub relay_call: Option<(Value, Vec<u8>)>,
-    /// the owner statement signed before the entry, with its check
-    pub owner: Option<(TypedData, Expect)>,
+    /// the statement signed before the entry, with its check and the slot its signature goes in
+    pub owner: Option<(TypedData, Expect, &'static str)>,
     /// the signing key's index in a `SmartKeyAccount`
     pub key_index: U256,
 }
@@ -288,10 +288,10 @@ impl Op {
         review.extend(d.review);
         let mut extra = d.extra;
         let owner = match d.owner {
-            Some((name, m)) => {
+            Some((name, slot, m)) => {
                 let otd = scaas_typed_data(name, Some(domain_name(d.kind)?), &d.contract, chain_id, &uid, &m)?;
                 let om = otd.to_value().get("message").cloned().ok_or(SdkError::Internal)?;
-                flatten("owner", &om, &mut review);
+                flatten(slot.trim_end_matches("Sig"), &om, &mut review);
                 let ex = Expect::Op {
                     op: name.into(),
                     contract: d.contract,
@@ -304,12 +304,12 @@ impl Op {
                     now,
                     max_window: sdk.window(&d.chain),
                 };
-                // the quote's unsigned form carries an empty `ownerSig`; `submit` puts the signed one
+                // the quote's unsigned form carries an empty signature in the slot; `submit` puts the signed one
                 extra.as_object_mut().ok_or(SdkError::Internal)?.insert(
-                    "ownerSig".into(),
+                    slot.into(),
                     serde_json::json!({"keyData": "0x", "signature": "0x", "members": []}),
                 );
-                Some((otd, ex))
+                Some((otd, ex, slot))
             }
             None => None,
         };

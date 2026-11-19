@@ -602,7 +602,7 @@ impl super::Confidential {
                     crate::wallet::put_envelope(&mut m, &relay.batch, &relay.envelope);
                     d.name = outer;
                     d.message = Value::Object(m);
-                    d.owner = Some(inner);
+                    d.owner = Some((inner.0, "ownerSig", inner.1));
                 }
                 Op::prepare(&sdk, d).await
             })

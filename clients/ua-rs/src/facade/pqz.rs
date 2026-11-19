@@ -158,8 +158,9 @@ impl PqzSet {
     }
 }
 
-/// This build's set's `K_MAX`: the credits an account holds between refreshes (`pqz-core/params/sets/<set>`; P-T16-2).
-pub use pqz_ffi::stmt::K_MAX;
+/// This build's set's `K_MAX` (the credits an account holds between refreshes, `pqz-core/params/sets/<set>`; P-T16-2), the
+/// opening tokens' `proofSystemId` (CTR-PQZ-38) and a ciphertext part `v`'s length (a statement's offsets).
+pub use pqz_ffi::stmt::{K_MAX, PQZL_SPLIT_ID, V_BYTES};
 
 /// This build's parameter set.
 pub fn pqz_set() -> PqzSet {
@@ -370,6 +371,10 @@ pub const STATE_LAYOUT: &[(&str, u64, u64, usize, usize)] = &[
     ("proofStore", 0, 0, 23, 1),
     ("pqzVerifierUA", 13, 0, 0, 32),
     ("pqzVerifierEpoch", 15, 0, 0, 4),
+    // scaas-sdk T16 part 3: the token's key class (CTR-PQZ-37: `OFFCHAIN` with `pqzOwnKey` the token's scope, else scope 0) and
+    // the sealed opening, read by the debits' key reads
+    ("pqzOwnKey", 0, 0, 24, 1),
+    ("pqzOpening", 0, 0, 25, 1),
 ];
 
 /// The ERC-7201 root of `scaas.pqz` (`keccak256(abi.encode(uint256(keccak256("scaas.pqz")) - 1)) & ~0xff`).
@@ -786,6 +791,49 @@ pub fn bind_mode(binding: &Word, mode: Mode, verification: Verification) -> Word
             .concat(),
         ),
     }
+}
+
+/// An unwrap's envelope word (`WrappedPqzToken._envUnwrap`): `unwrapBinding = keccak256(abi.encode(TAG_UNWRAP, underlying,
+/// minOut))`, relayed (`binding` ≠ 0) `keccak256(abi.encode(binding, unwrapBinding))`. The one copy (the proof path's NONE
+/// header reads it too).
+pub fn unwrap_envelope(binding: &Word, underlying: &[u8; 20], min_out: u64) -> Word {
+    let w = crate::keccak256(
+        &[
+            crate::keccak256(b"SCAAS-PQZ-UNWRAP-V1"),
+            addr(underlying),
+            u64_word(min_out),
+        ]
+        .concat(),
+    );
+    if *binding == [0; 32] {
+        w
+    } else {
+        crate::keccak256(&[*binding, w].concat())
+    }
+}
+
+/// The typed `PqzAuth` message of a debit statement (`PqzCore.authDigest`; plan T16): `op` and the 20 header words by name,
+/// `bodyHash = keccak256(stmt[640..])`; signed by the holder under `zether-auth` in the token's domain (the header's chainId,
+/// token, chainUid). `Argument`: a statement shorter than its header or an `op` other than 1, 2, 7.
+pub fn pqz_auth_message(op: u8, stmt: &[u8]) -> Result<Value> {
+    if !matches!(op, 1 | 2 | 7) {
+        return Err(Error::Argument);
+    }
+    let (head, body) = (stmt.get(..640).ok_or(Error::Argument)?, &stmt[640..]);
+    let w = |i: usize| -> &[u8] { &head[i * 32..i * 32 + 32] };
+    let n = |i: usize| {
+        let mut v = [0u8; 32];
+        v.copy_from_slice(w(i));
+        crate::wallet::u256_to_dec(&v)
+    };
+    let a = |i: usize| to_hex(&w(i)[12..]);
+    let x = |i: usize| to_hex(w(i));
+    Ok(
+        json!({"op": op, "opTag": x(0), "psid": x(1), "chainId": n(2), "token": a(3), "registry": a(4), "from": x(5),
+        "to": x(6), "beneficiary": x(7), "fee": n(8), "amount": n(9), "recipient": x(10), "sendCounter": n(11), "p": n(12),
+        "validUntilBlock": n(13), "auditorOn": w(14).iter().any(|b| *b != 0), "shieldIn": n(15), "chainUid": x(16),
+        "binding": x(17), "salt": n(18), "memoHash": x(19), "bodyHash": to_hex(&crate::keccak256(body))}),
+    )
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------

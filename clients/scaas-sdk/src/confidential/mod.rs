@@ -13,10 +13,14 @@ mod zether;
 #[cfg(feature = "pqz")]
 pub(crate) mod pqz;
 #[cfg(feature = "pqz")]
+mod pqz_debit;
+#[cfg(feature = "pqz")]
 mod verdict;
 
 #[cfg(feature = "pqz")]
 pub use pqz::*;
+#[cfg(feature = "pqz")]
+pub use pqz_debit::*;
 #[cfg(feature = "pqz")]
 pub use verdict::PqzVerdictRequest;
 #[cfg(feature = "zether")]

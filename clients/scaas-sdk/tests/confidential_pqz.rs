@@ -133,9 +133,16 @@ fn profile(rpc: Vec<EndpointConfig>) -> ChainProfile {
 }
 
 async fn sdk(p: ChainProfile) -> (Arc<Sdk>, String) {
+    let (s, seed, _) = sdk_with(p).await;
+    (s, seed)
+}
+
+/// [`sdk`] with its store (the operations' rows).
+async fn sdk_with(p: ChainProfile) -> (Arc<Sdk>, String, Arc<MemoryStore>) {
+    let store = MemoryStore::new();
     let s = Sdk::open(SdkConfig {
         profiles: vec![p],
-        store: MemoryStore::new(),
+        store: store.clone(),
         authenticator: None,
         rp_id: None,
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
@@ -156,7 +163,7 @@ async fn sdk(p: ChainProfile) -> (Arc<Sdk>, String) {
         .await
         .unwrap()
         .id;
-    (s, seed)
+    (s, seed, store)
 }
 
 fn put(c: &Fake, who: &str, slot: &W, word: &W) {
@@ -684,3 +691,381 @@ async fn pqz_plain_pairs() {
     };
     assert_eq!(code(cf.prepare_pqz_shield(shield).await), "Argument");
 }
+
+// --- the PQZ debits (spec §9.2, §9.3; plan T16 part 3) ---
+
+const DEBITS: [&str; 6] = [
+    "mtxConfidentialTransferSingle",
+    "mtxConfidentialTransferSingleCompact",
+    "mtxConfidentialTransfer",
+    "mtxConfidentialTransferCompact",
+    "mtxUnshield",
+    "mtxUnshieldUnwrap",
+];
+
+/// The verifier of index 7 answering from the statement and proof it was sent (a verdict over exactly those).
+fn verifier_answers(body: &Value) -> (u16, Value) {
+    let (st, pr) = (unhex(body["statement"].as_str().unwrap()), unhex(body["proof"].as_str().unwrap()));
+    let m = serde_json::json!({"token": TOKEN, "chainId": CHAIN_ID, "proofSystemId": hx(&st[32..64]),
+        "statementHash": hx(&keccak256(&st)), "proofHash": hx(&keccak256(&pr)), "pqzVerifierEpoch": EPOCH,
+        "validUntil": now() + 600});
+    (200, answer(&m, 7))
+}
+
+/// A fake holding B (index 1: 257 units at key version 0) and A (index 0, its current key version 1), a gateway, the PQZ
+/// token's domain, the debits' gas rows. `offchain`: the token verifies off chain (`pqzVerifyMode` 1, scope 0), each holder's
+/// scoped record holding its key, the verifier of index 7 named and answering from what it is sent.
+async fn debit_setup(offchain: bool) -> (Arc<Sdk>, String, Fake, W, W, Arc<MemoryStore>) {
+    let c = fake();
+    let url = serve(c.clone()).await;
+    let mut pr = profile(vec![endpoint(&url)]);
+    pr.gateways = vec![endpoint(&url)];
+    if offchain {
+        pr.verifiers = vec![endpoint(&url)];
+    }
+    pr.gas = scaas_sdk::GasRows {
+        base: DEBITS
+            .iter()
+            .flat_map(|e| {
+                [true, false].map(|fresh| scaas_sdk::GasBase { entry: (*e).into(), kind: "pqz".into(), fresh, gas: 100_000 })
+            })
+            .collect(),
+        verify: vec![scaas_sdk::GasVerify { signer: KIND, gas: 0 }],
+    };
+    let (s, seed, store) = sdk_with(pr).await;
+    let (a, b) = (ua_of(&s, &seed, 0).await, ua_of(&s, &seed, 1).await);
+    pqz_state(&c, &a, &row("A v1"));
+    pqz_state(&c, &b, &row("B:"));
+    {
+        let mut cc = c.lock().unwrap();
+        cc.timestamp = now();
+        cc.domains.insert(TOKEN.into(), ("SCaaS PqzToken".into(), hash_of(0)));
+    }
+    if offchain {
+        let mut slot0 = [0u8; 32];
+        slot0[32 - 22 - 1] = 1;
+        put(&c, TOKEN, &root(), &slot0);
+        for (ua, r) in [(&a, row("A v1")), (&b, row("B:"))] {
+            let q = &r["request"];
+            let v = q["keyVersion"].as_u64().unwrap();
+            let scope = [0u8; 32];
+            put(&c, REGISTRY, &map(&be(v), &map(&scope, &map(ua, &be(20)))), &w(&q["keyRecord"]));
+            put(&c, REGISTRY, &map(&scope, &map(ua, &be(24))), &w(&q["keyVersions"]));
+        }
+        name_verifier(&c, 7);
+        c.lock().unwrap().verdict_fn = Some(verifier_answers);
+    }
+    (s, seed, c, a, b, store)
+}
+
+/// Self-relays `p` (a PQZ debit is above the gateway's body cap, P-T16-8) by the seed's EVM key; the operation's job (`op`)
+/// from its row in the store, the same JSON a gateway would take.
+async fn relay(s: &Arc<Sdk>, seed: &str, store: &Arc<MemoryStore>, p: Arc<scaas_sdk::op::Prepared>) -> (String, Value) {
+    use scaas_sdk::vault::SecureStore;
+    let payer = KeyRef::Native { seed: seed.into(), network: "evm".into(), index: 0 };
+    assert_eq!(code(s.op().quote(p.clone(), scaas_sdk::op::SubmitPath::Gateway).await), "SubmitPathNone", "no gateway");
+    let q = s.op().quote(p.clone(), scaas_sdk::op::SubmitPath::SelfRelay { payer }).await.unwrap();
+    let op = s.op().submit(p, q).await.unwrap();
+    let item = store.get("sdk.state".into(), "test".into()).await.unwrap().unwrap();
+    let st: Value = serde_json::from_slice(&item.bytes).unwrap();
+    let row = st["ops"].as_array().unwrap().iter().find(|r| r["op"] == serde_json::json!(op)).unwrap().clone();
+    (op, row["op_json"].clone())
+}
+
+/// The reviewed `PqzAuth` message of `p` and its typed digest in the token's domain.
+fn auth_of(p: &scaas_sdk::op::Prepared) -> (Value, W) {
+    let mut m = serde_json::Map::new();
+    for f in p.review() {
+        if let Some(k) = f.name.strip_prefix("pqzAuth.") {
+            let v = match k {
+                "op" => serde_json::json!(f.value.parse::<u64>().unwrap()),
+                "auditorOn" => serde_json::json!(f.value == "true"),
+                _ => serde_json::json!(f.value),
+            };
+            m.insert(k.into(), v);
+        }
+    }
+    let m = Value::Object(m);
+    let uid: W = unhex(&hash_of(0)).try_into().unwrap();
+    let td = scaas_ua::wallet::scaas_typed_data("PqzAuth", Some("SCaaS PqzToken"), &a20(TOKEN), CHAIN_ID, &uid, &m).unwrap();
+    (m, td.digest().unwrap())
+}
+
+/// The holder's `pqzAuth` in the job verifies over `digest` under `zether-auth` (P-T16-1), never under `metatx`.
+fn pqz_auth_ok(op: &Value, digest: &W) {
+    let a = &op["args"]["pqzAuth"];
+    // the holder's key (index 1): an ML-DSA UA's signature carries no key data, the registry holds it
+    let kd = scaas_ua::wallet::Wallet::from_mnemonic(PQ_KAT, "").unwrap().ua_key(KIND, 0, 1).unwrap().key_data();
+    let sig = unhex(a["signature"].as_str().unwrap());
+    let ok = |p: &str| {
+        let m = scaas_ua::ua_message(KIND, &scaas_ua::purpose_tag(p).unwrap(), digest).unwrap();
+        scaas_ua::verify::verify(KIND, &kd, &m, &sig, false)
+    };
+    assert!(ok("zether-auth"), "pqzAuth under zether-auth: {a}");
+    assert!(!ok("metatx"), "never metatx");
+}
+
+fn transfer(seed: &str, to: &W, amount: &str) -> scaas_sdk::confidential::PqzTransfer {
+    scaas_sdk::confidential::PqzTransfer {
+        signer: signer(seed, 1),
+        chain: "local".into(),
+        token: TOKEN.into(),
+        batch: "0".into(),
+        key_version: 0,
+        to_ua: hx(to),
+        amount: amount.into(),
+        valid_until_block: 1000,
+        envelope: env(),
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn pqz_transfer_single_pairs() {
+    let (s, seed, c, a, b, store) = debit_setup(false).await;
+    let cf = s.confidential();
+    // a balance below the amount: refused before anything is signed or sent
+    assert_eq!(code(cf.prepare_pqz_transfer(transfer(&seed, &a, "258")).await), "Argument");
+    for (n, compact) in [false, true].into_iter().enumerate() {
+        let r = transfer(&seed, &a, "100");
+        let p = if compact { cf.prepare_pqz_transfer_compact(r).await } else { cf.prepare_pqz_transfer(r).await }.unwrap();
+        assert_eq!(p.entry(), DEBITS[n]);
+        let rv = p.review();
+        let req = |k: &str| rv.iter().find(|f| f.name == k).map(|f| (f.value.clone(), f.source));
+        assert_eq!(req("request.amount"), Some(("100".into(), scaas_sdk::op::Source::Request)));
+        assert_eq!(req("request.to"), Some((hx(&a), scaas_sdk::op::Source::Request)));
+        let (m, d) = auth_of(&p);
+        assert_eq!((m["from"].as_str(), m["to"].as_str(), m["op"].as_u64()), (Some(hx(&b).as_str()), Some(hx(&a).as_str()), Some(1)));
+        let (_, op) = relay(&s, &seed, &store, p).await;
+        assert_eq!(op["entry"], serde_json::json!(DEBITS[n]));
+        pqz_auth_ok(&op, &d);
+        let args = &op["args"]["args"];
+        assert_eq!((args["fromUA"].as_str(), args["toUA"].as_str()), (Some(hx(&b).as_str()), Some(hx(&a).as_str())));
+        assert_eq!(args["p"].as_str(), Some(m["p"].as_str().unwrap()), "the proof's p");
+        // commit-reveal keeps the 42-byte sealed memo, the bundle none; no auditor on this token
+        let memo = unhex(args["sealedMemo"].as_str().unwrap()).len();
+        assert_eq!(memo, if compact { 42 } else { 0 });
+        assert_eq!(args["vAuditor"], serde_json::json!("0x"));
+        assert!(op["args"].get("pqz_verdict").is_none(), "no verdict on a PRECOMPILE token");
+    }
+    // the recipient's key pointer holding another key size: unregistered as the token reads it
+    let ar = row("A v1");
+    let ptr = format!("0x{}", hex_tail(&w(&ar["request"]["keyRecord"])));
+    let good = c.lock().unwrap().code[&ptr].clone();
+    c.lock().unwrap().code.insert(ptr.clone(), "0x00".into());
+    assert_eq!(code(cf.prepare_pqz_transfer(transfer(&seed, &a, "100")).await), "ReceiverUnregistered");
+    c.lock().unwrap().code.insert(ptr, good);
+}
+
+/// The low 20 bytes of a word, hex without `0x`.
+fn hex_tail(w: &W) -> String {
+    hx(&w[12..])[2..].to_string()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn pqz_transfer_multi_pairs() {
+    use scaas_sdk::confidential::{PqzLeg, PqzTransferMulti};
+    let (s, seed, _, a, b, store) = debit_setup(false).await;
+    let cf = s.confidential();
+    let r = || PqzTransferMulti {
+        signer: signer(&seed, 1),
+        chain: "local".into(),
+        token: TOKEN.into(),
+        batch: "0".into(),
+        key_version: 0,
+        legs: vec![PqzLeg { to_ua: hx(&a), amount: "60".into() }],
+        decoy_fee: "0".into(),
+        valid_until_block: 1000,
+        envelope: env(),
+    };
+    for (n, compact) in [false, true].into_iter().enumerate() {
+        let p = if compact { cf.prepare_pqz_transfer_multi_compact(r()).await } else { cf.prepare_pqz_transfer_multi(r()).await }
+            .unwrap();
+        assert_eq!(p.entry(), DEBITS[2 + n]);
+        let (m, d) = auth_of(&p);
+        assert_eq!((m["from"].as_str(), m["op"].as_u64()), (Some(hx(&b).as_str()), Some(7)));
+        let (_, op) = relay(&s, &seed, &store, p).await;
+        assert_eq!(op["entry"], serde_json::json!(DEBITS[2 + n]));
+        pqz_auth_ok(&op, &d);
+        let args = &op["args"]["args"];
+        assert_eq!(args["legs"][0]["ua"].as_str(), Some(hx(&a).as_str()));
+        assert_eq!(args["u"].as_array().unwrap().len(), 1, "one randomness group for one leg");
+        // the header's recipients hash is the legs' UAs
+        assert_eq!(m["to"].as_str(), Some(hx(&keccak256(&a)).as_str()));
+        assert_eq!(unhex(args["sealedMemo"].as_str().unwrap()).len(), if compact { 42 } else { 0 });
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn pqz_unshield_pairs() {
+    use scaas_sdk::confidential::{PqzUnshield, PqzUnshieldUnwrap};
+    let (s, seed, _, _, b, store) = debit_setup(false).await;
+    let cf = s.confidential();
+    let to = hx(&[3u8; 32]);
+    let p = cf
+        .prepare_pqz_unshield(PqzUnshield {
+            signer: signer(&seed, 1),
+            chain: "local".into(),
+            token: TOKEN.into(),
+            batch: "0".into(),
+            key_version: 0,
+            recipient: to.clone(),
+            amount: "7".into(),
+            valid_until_block: 1000,
+            envelope: env(),
+        })
+        .await
+        .unwrap();
+    let under = "0x5ca00000000000000000000000000000000000a1";
+    let pu = cf
+        .prepare_pqz_unshield_unwrap(PqzUnshieldUnwrap {
+            signer: signer(&seed, 1),
+            chain: "local".into(),
+            token: TOKEN.into(),
+            batch: "1".into(),
+            key_version: 0,
+            underlying: under.into(),
+            recipient: to.clone(),
+            amount: "7".into(),
+            min_out: "5".into(),
+            valid_until_block: 1000,
+            envelope: env(),
+        })
+        .await
+        .unwrap();
+    for (n, p) in [p, pu].into_iter().enumerate() {
+        assert_eq!(p.entry(), DEBITS[4 + n]);
+        let (m, d) = auth_of(&p);
+        assert_eq!((m["from"].as_str(), m["recipient"].as_str(), m["amount"].as_str(), m["op"].as_u64()), (Some(hx(&b).as_str()), Some(to.as_str()), Some("7"), Some(2)));
+        let (_, op) = relay(&s, &seed, &store, p).await;
+        assert_eq!(op["entry"], serde_json::json!(DEBITS[4 + n]));
+        pqz_auth_ok(&op, &d);
+        if n == 1 {
+            assert_eq!(op["args"]["unwrap"]["minOut"].as_str(), Some("5"), "{op}");
+            assert_eq!(op["args"]["unwrap"]["underlying"].as_str(), Some(under));
+        }
+    }
+}
+
+/// The verifier-mode token (round 3f): the facade's statement is the one the verifier sees and the holder's `pqzAuth` signs
+/// (its header words, `bodyHash` over its body), the arguments are its parts, the envelope word the binding folded by the
+/// form, and the checked verdict is attached.
+#[tokio::test(flavor = "multi_thread")]
+async fn pqz_auth_attached_by_the_facade() {
+    use scaas_ua::facade::pqz::{bind_mode, envelope_binding, pqz_set, Mode, PqzEnvelope, Verification, V_BYTES};
+    let (s, seed, c, a, b, store) = debit_setup(true).await;
+    let p = s.confidential().prepare_pqz_transfer(transfer(&seed, &a, "100")).await.unwrap();
+    let asked = c.lock().unwrap().verdict_bodies.clone();
+    assert_eq!(asked.len(), 1, "the token's verifier asked for this debit's verdict");
+    let body: Value = serde_json::from_str(&asked[0]).unwrap();
+    let stmt = unhex(body["statement"].as_str().unwrap());
+    let (m, d) = auth_of(&p);
+    assert_eq!(m["bodyHash"].as_str(), Some(hx(&keccak256(&stmt[640..])).as_str()), "bodyHash over the statement");
+    for (k, i) in [("opTag", 0), ("from", 5), ("to", 6), ("chainUid", 16), ("binding", 17), ("memoHash", 19)] {
+        assert_eq!(m[k].as_str(), Some(hx(&stmt[i * 32..i * 32 + 32]).as_str()), "{k}");
+    }
+    let (_, op) = relay(&s, &seed, &store, p).await;
+    pqz_auth_ok(&op, &d);
+    // the arguments are the statement's parts: header ‖ pk_f ‖ pk_t ‖ T ‖ u ‖ v_t ‖ v_f
+    let (pk, v) = (pqz_set().pk_len, V_BYTES);
+    let off = 640 + 2 * pk + pk + v;
+    let args = &op["args"]["args"];
+    for (k, at, n) in [("u", off, pk), ("vTo", off + pk, v), ("vFrom", off + pk + v, v)] {
+        assert_eq!(args[k].as_str(), Some(hx(&stmt[at..at + n]).as_str()), "{k}");
+    }
+    assert_eq!(args["salt"].as_str(), Some(hx(&stmt[18 * 32 + 16..19 * 32]).as_str()));
+    // the envelope word: the job's envelope bound (`envelope_binding`), then the form's mode folded (BUNDLE, OFFCHAIN fee 0)
+    let e = &op["envelope"];
+    let word = |x: &Value| -> W {
+        let n: u128 = x.as_str().map(|s| s.parse().unwrap()).unwrap_or_else(|| x.as_u64().unwrap().into());
+        be(n as u64)
+    };
+    let zero = [0u8; 32];
+    let pe = PqzEnvelope {
+        from: b,
+        batch: word(&e["batch"]),
+        nonce: word(&e["nonce"]),
+        valid_until: word(&e["validUntil"]),
+        mode: word(&e["mode"]),
+        relayer: zero,
+        fee: word(&e["fee"]),
+        fee_recipient: zero,
+    };
+    let uid: W = unhex(&hash_of(0)).try_into().unwrap();
+    let binding = envelope_binding(CHAIN_ID, &uid, &a20(TOKEN), &pe);
+    let want = bind_mode(&binding, Mode::Bundle, Verification::Offchain { verifier_fee: 0 });
+    assert_eq!(&stmt[17 * 32..18 * 32], &want[..], "the header's envelope word");
+    // the verdict the token's verifier signed over this statement and proof, checked and attached
+    let pv = &op["args"]["pqz_verdict"];
+    assert_eq!(pv["pqzVerifierEpoch"], serde_json::json!(EPOCH), "{op}");
+    assert_eq!(body["proof"], op["args"]["proof"]);
+    // a verifier that signs another statement: refused, nothing sent
+    c.lock().unwrap().verdict_fn = None;
+    c.lock().unwrap().verdict = Some((200, answer(&verdict_of(&hx(&stmt[32..64])), 7)));
+    assert_eq!(code(s.confidential().prepare_pqz_transfer(transfer(&seed, &a, "100")).await), "VerdictRefused");
+    assert_eq!(c.lock().unwrap().sent.len(), 1, "nothing more sent");
+}
+
+/// The proof runs off the async workers: on a one-worker runtime a `seeds()` call answers at once while the proof runs (the
+/// words and the lane's nonce read, then no request while the facade proves).
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn proof_runs_off_the_async_workers() {
+    use std::time::{Duration, Instant};
+    let (s, seed, c, a, _, _) = debit_setup(false).await;
+    let base = c.lock().unwrap().requests.len();
+    let (s2, seed2) = (s.clone(), seed.clone());
+    let job = tokio::spawn(async move { s2.confidential().prepare_pqz_transfer(transfer(&seed2, &a, "100")).await });
+    let mut last = (base, Instant::now());
+    while !job.is_finished() {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        let n = c.lock().unwrap().requests.len();
+        if n != last.0 {
+            last = (n, Instant::now());
+        } else if n > base && last.1.elapsed() > Duration::from_millis(150) {
+            break;
+        }
+    }
+    // the call on the runtime's one worker (the one the debit's task runs on)
+    let t0 = Instant::now();
+    let s3 = s.clone();
+    tokio::spawn(async move { s3.vault().seeds().await }).await.unwrap().unwrap();
+    let took = t0.elapsed();
+    assert!(!job.is_finished(), "the proof was still running");
+    assert!(took < Duration::from_millis(300), "seeds answered while the proof ran: {took:?}");
+    job.await.unwrap().unwrap();
+}
+
+/// A proof of words the chain moved past (another debit after the read block): the node's refusal leaves the operation in
+/// flight, never terminal; the user retries with fresh words.
+#[tokio::test(flavor = "multi_thread")]
+async fn stale_proof_is_not_terminal() {
+    let (s, seed, c, a, _, store) = debit_setup(false).await;
+    let p = s.confidential().prepare_pqz_transfer(transfer(&seed, &a, "100")).await.unwrap();
+    let payer = KeyRef::Native { seed: seed.clone(), network: "evm".into(), index: 0 };
+    let q = s.op().quote(p.clone(), scaas_sdk::op::SubmitPath::SelfRelay { payer }).await.unwrap();
+    // the chain moved after the read block: the signed debit's simulation reverts
+    c.lock().unwrap().call_revert = true;
+    let op = s.op().submit(p, q).await.unwrap();
+    let mut st = s.op().state(op.clone()).await.unwrap();
+    for _ in 0..100 {
+        if st != (scaas_sdk::op::OpState::InFlight { detail: scaas_sdk::op::InFlight::Signed }) {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        st = s.op().state(op.clone()).await.unwrap();
+    }
+    assert_eq!(st, scaas_sdk::op::OpState::InFlight { detail: scaas_sdk::op::InFlight::SimRefused });
+    assert!(!st.is_terminal() && c.lock().unwrap().sent.is_empty(), "in flight, nothing sent");
+    let _ = store;
+}
+
+/// P-T16-4: a token with the sealed opening (`PQZL_SPLIT_ID`) has its own code, before any account word is read.
+#[tokio::test(flavor = "multi_thread")]
+async fn opening_token_refused() {
+    let (s, seed, c, a, _, _) = debit_setup(false).await;
+    put(&c, TOKEN, &add(&root(), 2), &scaas_ua::facade::pqz::PQZL_SPLIT_ID);
+    c.lock().unwrap().requests.clear();
+    assert_eq!(code(s.confidential().prepare_pqz_transfer(transfer(&seed, &a, "100")).await), "PqzOpeningUnsupported");
+    assert_eq!(code(s.confidential().pqz_balance(req(&seed, 1, 0)).await), "PqzOpeningUnsupported");
+    assert_eq!(count(&c, "eth_getStorageAt"), 4, "the factory record and psid only, twice");
+}
+
