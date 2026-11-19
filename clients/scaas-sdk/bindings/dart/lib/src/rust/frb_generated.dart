@@ -33329,7 +33329,8 @@ class AdminImpl extends RustOpaque implements Admin {
   );
 
   /// The new auditor's consent on a PQZ token (`AuditorConsent`, for `UASetAuditorUA`): the auditor UA's `UASig` under
-  /// `auditor-consent`, JSON (the `consent` argument). `Argument` for another domain kind.
+  /// `auditor-consent`, JSON (the `consent` argument). `PqzAuditorNative` for a native (address) auditor, before any read;
+  /// `Argument` for another domain kind.
   Future<String> signPqzAuditorConsent({required AuditorConsent req}) =>
       ScaasSdk.instance.api.scaasSdkAdminAdminSignPqzAuditorConsent(
         that: this,
