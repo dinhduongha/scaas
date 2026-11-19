@@ -8,6 +8,7 @@ import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {MtxHash} from "../helpers/MtxHash.sol";
@@ -181,8 +182,29 @@ abstract contract SdkGasOps is SdkGasRows {
         if (sgFee != 0) (mode, fee) = (MetaTxLib.MODE_FEE_FIXED, sgFee);
     }
 
+    /// Item 7's sampled signer: a UA of kind `sgKind` (0: the reference signer, the native key `sgPk`), its key data and
+    /// secret (`SdkGasSampleTest`); `sgNoSig`: an empty `UASig` (the operation the SDK quotes, ruling 2).
+    uint16 internal sgKind;
+    bytes internal sgKeyData;
+    uint256 internal sgSk;
+    bool internal sgNoSig;
+    uint256 internal constant SG_N_P256 = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551;
+
     function _sgFrom() internal view returns (bytes32) {
-        return MetaTxLib.pad(vm.addr(sgPk));
+        return sgKind == 0 ? MetaTxLib.pad(vm.addr(sgPk)) : UAKinds.uaOf(sgKind, sgKeyData);
+    }
+
+    /// The signature of UA kind `kind` (P-256 low-s over sha256, ed25519, secp256k1 `r ‖ s ‖ v`) by `sk` over `m`.
+    function _sgUaSign(uint16 kind, uint256 sk, bytes32 m) internal pure returns (bytes memory) {
+        if (kind == UAKinds.P256) {
+            (bytes32 r, bytes32 s) = vm.signP256(sk, sha256(abi.encodePacked(m)));
+            if (uint256(s) > SG_N_P256 / 2) s = bytes32(SG_N_P256 - uint256(s));
+            return abi.encodePacked(r, s);
+        }
+        if (kind == UAKinds.ED25519) return vm.signEd25519("", abi.encodePacked(m), bytes32(sk));
+        require(kind == UAKinds.SECP256K1, "a sampled kind");
+        (uint8 v, bytes32 r2, bytes32 s2) = vm.sign(sk, m);
+        return abi.encodePacked(r2, s2, v);
     }
 
     function _sgSign(uint256 pk, bytes32 digest) internal pure returns (bytes memory) {
@@ -191,7 +213,13 @@ abstract contract SdkGasOps is SdkGasRows {
     }
 
     function _sgUaSig(bytes32 digest) internal view returns (IUARegistry.UASig memory a) {
-        a.signature = _sgSign(sgPk, digest);
+        if (sgNoSig) return a;
+        if (sgKind == 0) {
+            a.signature = _sgSign(sgPk, digest);
+        } else {
+            (a.keyData, a.signature) =
+            (sgKeyData, _sgUaSign(sgKind, sgSk, UAKinds.uaMessage(sgKind, UAKinds.PURPOSE_METATX, digest)));
+        }
     }
 
     function _sgT(uint256 nonce, bytes32 to, uint256 value, bytes32 entryRef)

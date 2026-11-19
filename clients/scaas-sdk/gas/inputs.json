@@ -89,6 +89,11 @@
       "test/gas/SdkGasVerify.t.sol",
       "SdkGasVerifyTest",
       "test_sdkGas_verifyPq"
+    ],
+    [
+      "test/gas/SdkGasSample.t.sol",
+      "SdkGasSampleTest",
+      "test_sdkGas_sample"
     ]
   ],
   "base": [
