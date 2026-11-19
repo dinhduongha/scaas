@@ -3,7 +3,9 @@
 """generate.py's G2 / Q1 logic (owner 2026-11-19) on a synthetic measurement: a variant without a derived run is listed
 `unmeasured`, a row without any takes the largest on another kind (`from_kind`), a native-only entry has none and refuses a
 derived measurement, a row with no donor is refused, `second_party` is the second derived party over the first less the
-verify delta. Run: python3 clients/scaas-sdk/gas/test_generate.py"""
+verify delta; I1 part 2 / K2: `per_item` keyed by `<kind>:<entry>` only (Zether's `mtxRollOver` has no count, PQZ's
+has), the new items `env_items` and `orders` taken, an unknown one refused, an overshoot pinned by the harness stated as an
+assumption. Run: python3 clients/scaas-sdk/gas/test_generate.py"""
 
 import os
 import sys
@@ -14,8 +16,9 @@ import generate
 V = "verify_0x0108_delta"
 
 
-def table(m, kinds=("token", "zether"), entries=("mtxPay",), native=None):
+def table(m, kinds=("token", "zether"), entries=("mtxPay",), native=None, per_item=None, full=False):
     inputs = {
+        "per_item": per_item or {},
         "measurements": "m.json",
         "name": "t",
         "family": "evm",
@@ -31,7 +34,8 @@ def table(m, kinds=("token", "zether"), entries=("mtxPay",), native=None):
     }
     m = dict(m, verify_native_sig_bytes=96)
     m.setdefault(V, 1_000)
-    return {(r["kind"], r["entry"], r["fresh"]): r for r in generate.table(inputs, m)["base"]}
+    t = generate.table(inputs, m)
+    return t if full else {(r["kind"], r["entry"], r["fresh"]): r for r in t["base"]}
 
 
 def lanes(kind, entry, variant, fresh):
@@ -77,6 +81,28 @@ def main():
     }
     s = table(q, kinds=("token",))[("token", "mtxPay", True)]["ua_extra"]["second_party"]
     assert s["measured"] == -500, s  # 15,500 - 15,000 - 1,000
+    # I1 part 2: kind-qualified per-item keys; the new items; an overshoot stated
+    r = {**lanes("zether", "mtxRollOver", "normal", 10_000), **lanes("pqz", "mtxRollOver", "normal", 20_000)}
+    r.update({"zether_mtxRollOver_ua_normal": 11_000, "pqz_mtxRollOver_ua_normal": 21_000})
+    r["pqz_mtxRollOver_per_item_normal"] = 5_574
+    t = table(r, kinds=("zether", "pqz"), entries=("mtxRollOver",), per_item={"pqz:mtxRollOver": "entries"})
+    assert t[("pqz", "mtxRollOver", True)]["item"] == "entries", "the PQZ rollover counted"
+    assert t[("pqz", "mtxRollOver", True)]["per_item"]["gas"] == 5_574
+    assert "per_item" not in t[("zether", "mtxRollOver", True)], "Zether's rollover not counted"
+    assert (
+        "per_item"
+        not in table(r, kinds=("zether", "pqz"), entries=("mtxRollOver",), per_item={"mtxRollOver": "entries"})[
+            ("pqz", "mtxRollOver", True)
+        ]
+    ), "an unqualified key counts nothing"
+    for item in ("env_items", "orders"):
+        t = table(r, kinds=("pqz",), entries=("mtxRollOver",), per_item={"pqz:mtxRollOver": item})
+        assert t[("pqz", "mtxRollOver", False)]["item"] == item, item
+    assert refused(lambda: table(r, kinds=("pqz",), entries=("mtxRollOver",), per_item={"pqz:mtxRollOver": "rows"}))
+    r["pqz_mtxRollOver_overshoot_normal"] = 2_051
+    a = table(r, kinds=("zether", "pqz"), entries=("mtxRollOver",), per_item={"pqz:mtxRollOver": "entries"}, full=True)
+    assert [x for x in a["assumptions"] if x.startswith("pqz mtxRollOver:") and "2,051 gas" in x], a["assumptions"]
+    assert not [x for x in a["assumptions"] if x.startswith("zether")], "no overshoot pinned for Zether's"
     print("[test_generate] ok")
 
 

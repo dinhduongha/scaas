@@ -13,11 +13,18 @@
     "save (owner 2026-11-19, ruling 1): the fixed cost a pay entry adds when it saves its PayMeta record (save set, payNo non-zero): the worst difference, per variant, between the saved record with an empty body and the unsaved pay, both on a fresh lane; the SDK adds it when the operation saves.",
     "fee_extra (owner 2026-11-19, ruling 3): the worst difference, per variant, between the entry with a fee of 1 (FIXED, amounts of 1 raised to 100 for the 1 % cap, the recipient unbound: the relayer, holding nothing) and without, both on a fresh lane; the SDK adds it when the fee is > 0. Not on mtxRelayFee and mtxPayWithPayeeFee (their payment is their fee, in the row) On the wrap-in entries (A6) the fee row less the same call at fee 0, the signer already holding units (their fee is charged in units the signer holds before the call).",
     "mtxExecute: the wallet's or the account's own cost, calling an account without code with no value; the target's cost is never in the row.",
-    "Order entries (mtxCancelOrder, mtxInvalidateNonces, mtxWrapOrder; the DEX's mtxCancelOrders, one order, and mtxInvalidateNonces): no envelope or meta-tx lane, signed over the order under the UA purpose trade (a native key signs the digest itself), the DEX's by an address. The SDK keys a struct without a lane as used and mtxWrapOrder by its order nonce, so both rows are the worst case: nothing of the signer's on the batch written yet (the floor raised the first time, the wrapper holding none of the leg, the signer none of its units). The call sits on EIP-7976's calldata floor: measured inside the transaction, by a meter contract's gasleft around the call less the meter's own 3,038 (a cold callee and its opcodes; held equal to the transaction's figure on two rows off the floor).",
+    "Order entries (mtxCancelOrder, mtxInvalidateNonces, mtxWrapOrder; the DEX's mtxCancelOrders at 1, 2, 4 and 8 orders (K2; the SDK sends one), and mtxInvalidateNonces): no envelope or meta-tx lane, signed over the order under the UA purpose trade (a native key signs the digest itself), the DEX's by an address. The SDK keys a struct without a lane as used and mtxWrapOrder by its order nonce, so both rows are the worst case: nothing of the signer's on the batch written yet (the floor raised the first time, the wrapper holding none of the leg, the signer none of its units). The call sits on EIP-7976's calldata floor: measured inside the transaction, by a meter contract's gasleft around the call less the meter's own 3,038 (a cold callee and its opcodes; held equal to the transaction's figure on two rows off the floor).",
     "account (SmartKeyAccount): signed by its secp256k1 key 0 (the reference signer) in an AccountSig with an empty proof; the worst over the key kinds added, removed or replaced (a secp256k1 key or a passkey) and over a guardian set with or without a recovery pending; mtxExecute's data per byte measured inside the transaction as the order entries are.",
-    "gov_router (GovernanceRouter): each entry signed for its target by the role it needs, a native key where the role takes one, else an ERC-1271 wallet (the contract-only bits: RATE_ADJUSTABLE's rate entries, the regulated issuer's pause, freeze, force transfer and the compliance seat's order entries); the target in the state the governance sequence reaches just before the entry, every write a first write; the worst over the targets measured: a Normal, a regulated Normal (kind 8), a Wrapped, a hybrid with the wrap controls, the DEX, the factory, the compliance registry, an OFFCHAIN PQZ token, a Zether token; the factory's notice period 0 and no grant delay where a change applies at once; the list entries with one account, the directory with all four entries, mtxCreate* one new contract each. ua_extra (G2): the whole sequence run once more with the native ids that sign (the admin, its successor) replaced by derived secp256k1 UAs on the router's registry, every row measured on its fresh lane; a role a native key cannot hold keeps its ERC-1271 wallet, so its row adds nothing.",
-    "Confidential entries (Zether and PQZ apart): the enveloped (relayed) form on the kind's Normal and Wrapped tokens, plain and regulated, signed by the reference signer; Zether with real proofs (the fixture's prover, the real BLS12-381 verifiers), the transfer and unshields from an account holding a rolled-over balance, the receiver holding nothing; mtxRollOverSigned and mtxSetRollOverMode in their enveloped form, a superset of the owner-only form; PQZ at the build's parameter set n2304-kmax4096, mtxPrepareAcc the worst of its two halves on an account never prepared. ua_extra as every row's (G2): the derived reference signer holds the native signer's public units and signs the envelope (mtxWrapShield, signed by a native address, has none).",
-    "Verify rows: the copy-cost forwarder's check (the token's own MtxPipelineLib._authorize) of the kind's vector signature (smartcontracts/vectors/ua/signatures.json; the PQ kinds pq_signatures.json, keyData empty as for a stored kind) on the real verifiers at the gen-1 caps, P-256 on the 0x100 precompile, ML-DSA on GasBurner stand-ins for its precompiles (stand_in), SLH-DSA-128s and FN-DSA-512 / -1024 pure Solidity, minus the native key's check, both metered inside one meter contract. sig_bytes (owner 2026-11-19, ruling 2): the signer's UASig in the call's calldata less an empty one (keyData and signature, ABI-padded); the SDK adds 64 gas a byte of it to the calldata of the operation built with an empty signature. Worst cases (owner 2026-11-19, A5 and the sampled check's ruling 2): WebAuthn (Q2) at ua-rs's cap on an assertion (authenticatorData and clientDataJSON 1,024 bytes together) in its worst case there, the longest origin the cap leaves (WebAuthnClientData.parse scans it byte by byte; the cap vector's shape, a 21-byte origin and a filler member, is 182,593 below it), sig_bytes that assertion's; SLH-DSA-128s and ed25519 at their forced worst case (SLH-DSA: every hypertree layer's WOTS+ message 0; ed25519: every 4-bit window of S and of k nonzero, the worst of eight keys), the forced run less the vector's added to the delta; FN-DSA-512 / -1024 (rejection sampling, no bound) the most expensive of 64 salts, plus margin (64 further salts stay inside it). 0x0141 (the Zether UA kind): the vector's signature, key data empty (a stored kind). ua_extra (A1, G2): the worst per-variant difference of the derived reference signer (secp256k1, ua_signer) and the native one on a fresh lane, less that kind's verify delta; absent where not positive; measured on every variant a derived signer can sign, on the fixtures' deploy-configured registries (the regulated kinds 8-13, Zether, PQZ, the router, the orders); none on an entry only a native address signs (ua_native: the wrap-in entries, mtxWrapShield, the account and dex kinds). A variant without its own derived run is listed in its row's ua_extra.unmeasured and takes the largest measured on another variant; a row with none takes the largest measured for the same entry and lane state on another kind (from_kind); the generator fills both (G2). mtxPayWithPayeeFee (Q1): a derived payer and a derived payee both debited, ua_extra.second_party the second derived party over the first less its verify delta (measured -4,852: the payee's derived debit adds nothing beyond its verify row, so the one ua_extra covers both)."
+    "gov_router (GovernanceRouter): each entry signed for its target by the role it needs, a native key where the role takes one, else an ERC-1271 wallet (the contract-only bits: RATE_ADJUSTABLE's rate entries, the regulated issuer's pause, freeze, force transfer and the compliance seat's order entries); the target in the state the governance sequence reaches just before the entry, every write a first write; the worst over the targets measured: a Normal, a regulated Normal (kind 8), a Wrapped, a hybrid with the wrap controls, the DEX, the factory, the compliance registry, an OFFCHAIN PQZ token, a Zether token; the factory's notice period 0 and no grant delay where a change applies at once; the list entries (mtxSetAllowed, mtxSetDenied, mtxSetCompliance) at 1, 2, 4 and 8 accounts each holding nothing, mtxSetWrapLimits at 1, 2, 4 and 8 legs of a hybrid, the env publishes over seven env shapes (each Env array grown on its own from the empty env: deps 0 and 4, params 0 and 2, libs with their code hashes 0, 2 and 4; env_items counts every element of the four arrays), mtxCreateToken's Wrapped at 1, 2, 4 and 8 TokenConfig.legs (K2), the directory with all four entries, mtxCreate* one new contract each. ua_extra (G2): the whole sequence run once more with the native ids that sign (the admin, its successor) replaced by derived secp256k1 UAs on the router's registry, every row measured on its fresh lane; a role a native key cannot hold keeps its ERC-1271 wallet, so its row adds nothing.",
+    "Confidential entries (Zether and PQZ apart): the enveloped (relayed) form on the kind's Normal and Wrapped tokens, plain and regulated, signed by the reference signer; Zether with real proofs (the fixture's prover, the real BLS12-381 verifiers), the transfer and unshields from an account holding a rolled-over balance, the receiver holding nothing; mtxRollOverSigned and mtxSetRollOverMode in their enveloped form, a superset of the owner-only form; Zether's multi transfers (mtxConfidentialTransfer, \u2026Compact) at 1, 2, 4, 8 and 16 legs (the bound; one leg of 10, the rest decoys of 0, every receiver holding nothing) and mtxRollOverBatch at 1, 2, 4 and 8 accounts (each with one pending entry, no acc yet); PQZ at the build's parameter set n2304-kmax4096, mtxRollOver at 1, 2, 4, \u2026, 64 entries (ROLL_MAX) on an account with both halves prepared and no acc yet, mtxPrepareAcc the worst of its two halves on an account never prepared. ua_extra as every row's (G2): the derived reference signer holds the native signer's public units and signs the envelope (mtxWrapShield, signed by a native address, has none).",
+    "Verify rows: the copy-cost forwarder's check (the token's own MtxPipelineLib._authorize) of the kind's vector signature (smartcontracts/vectors/ua/signatures.json; the PQ kinds pq_signatures.json, keyData empty as for a stored kind) on the real verifiers at the gen-1 caps, P-256 on the 0x100 precompile, ML-DSA on GasBurner stand-ins for its precompiles (stand_in), SLH-DSA-128s and FN-DSA-512 / -1024 pure Solidity, minus the native key's check, both metered inside one meter contract. sig_bytes (owner 2026-11-19, ruling 2): the signer's UASig in the call's calldata less an empty one (keyData and signature, ABI-padded); the SDK adds 64 gas a byte of it to the calldata of the operation built with an empty signature. Worst cases (owner 2026-11-19, A5 and the sampled check's ruling 2): WebAuthn (Q2) at ua-rs's cap on an assertion (authenticatorData and clientDataJSON 1,024 bytes together) in its worst case there, the longest origin the cap leaves (WebAuthnClientData.parse scans it byte by byte; the cap vector's shape, a 21-byte origin and a filler member, is 182,593 below it), sig_bytes that assertion's; SLH-DSA-128s and ed25519 at their forced worst case (SLH-DSA: every hypertree layer's WOTS+ message 0; ed25519: every 4-bit window of S and of k nonzero, the worst of eight keys), the forced run less the vector's added to the delta; FN-DSA-512 / -1024 (rejection sampling, no bound) the most expensive of 64 salts, plus margin (64 further salts stay inside it). 0x0141 (the Zether UA kind): the vector's signature, key data empty (a stored kind). ua_extra (A1, G2): the worst per-variant difference of the derived reference signer (secp256k1, ua_signer) and the native one on a fresh lane, less that kind's verify delta; absent where not positive; measured on every variant a derived signer can sign, on the fixtures' deploy-configured registries (the regulated kinds 8-13, Zether, PQZ, the router, the orders); none on an entry only a native address signs (ua_native: the wrap-in entries, mtxWrapShield, the account and dex kinds). A variant without its own derived run is listed in its row's ua_extra.unmeasured and takes the largest measured on another variant; a row with none takes the largest measured for the same entry and lane state on another kind (from_kind); the generator fills both (G2). mtxPayWithPayeeFee (Q1): a derived payer and a derived payee both debited, ua_extra.second_party the second derived party over the first less its verify delta (measured -4,852: the payee's derived debit adds nothing beyond its verify row, so the one ua_extra covers both).",
+    "Counted rows (owner 2026-11-19, I1 part 2, K2; P3: measured at the entry's bound where feasible): measured at several counts; the row's figure is the line's intercept at a count of 0 (the largest measured gas less the slope times its count over the points) and per_item the worst whole-gas rise a count between two measured points, so intercept + per_item \u00d7 count is at least the measured gas at every measured count.",
+    "gov_router mtxPublishClassEnv: the per-item line (worst slope) is above the measured figure at every measured count, by up to 215,839 gas at the largest (gov_router_mtxPublishClassEnv_overshoot_factory, gov_router_mtxPublishClassEnv_overshoot_ua_factory); the excess is refunded.",
+    "gov_router mtxPublishDexEnv: the per-item line (worst slope) is above the measured figure at every measured count, by up to 215,839 gas at the largest (gov_router_mtxPublishDexEnv_overshoot_factory, gov_router_mtxPublishDexEnv_overshoot_ua_factory); the excess is refunded.",
+    "gov_router mtxPublishTokenEnv: the per-item line (worst slope) is above the measured figure at every measured count, by up to 215,839 gas at the largest (gov_router_mtxPublishTokenEnv_overshoot_factory, gov_router_mtxPublishTokenEnv_overshoot_ua_factory); the excess is refunded.",
+    "pqz mtxRollOver: the per-item line (worst slope) is above the measured figure at every measured count, by up to 2,051 gas at the largest (pqz_mtxRollOver_overshoot_normal, pqz_mtxRollOver_overshoot_normal_reg, pqz_mtxRollOver_overshoot_wrapped, pqz_mtxRollOver_overshoot_wrapped_reg); the excess is refunded.",
+    "zether mtxConfidentialTransfer: the per-item line (worst slope) is above the measured figure at every measured count, by up to 302,335 gas at the largest (zether_mtxConfidentialTransfer_overshoot_normal, zether_mtxConfidentialTransfer_overshoot_normal_reg, zether_mtxConfidentialTransfer_overshoot_wrapped, zether_mtxConfidentialTransfer_overshoot_wrapped_reg); the excess is refunded.",
+    "zether mtxConfidentialTransferCompact: the per-item line (worst slope) is above the measured figure at every measured count, by up to 606,095 gas at the largest (zether_mtxConfidentialTransferCompact_overshoot_normal, zether_mtxConfidentialTransferCompact_overshoot_normal_reg, zether_mtxConfidentialTransferCompact_overshoot_wrapped, zether_mtxConfidentialTransferCompact_overshoot_wrapped_reg); the excess is refunded."
   ],
   "base": [
     {
@@ -1972,17 +1979,29 @@
       "entry": "mtxCancelOrders",
       "kind": "dex",
       "fresh": true,
-      "gas": 139000,
-      "measured": 138134,
-      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#dex_mtxCancelOrders_fresh_dex"
+      "gas": 11000,
+      "measured": 10923,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#dex_mtxCancelOrders_fresh_dex",
+      "item": "orders",
+      "per_item": {
+        "gas": 127211,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#dex_mtxCancelOrders_per_item_dex"
+      }
     },
     {
       "entry": "mtxCancelOrders",
       "kind": "dex",
       "fresh": false,
-      "gas": 139000,
-      "measured": 138134,
-      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#dex_mtxCancelOrders_used_dex"
+      "gas": 11000,
+      "measured": 10923,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#dex_mtxCancelOrders_used_dex",
+      "item": "orders",
+      "per_item": {
+        "gas": 127211,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#dex_mtxCancelOrders_per_item_dex"
+      }
     },
     {
       "entry": "mtxInvalidateNonces",
@@ -2326,7 +2345,13 @@
       "fresh": true,
       "gas": 2272000,
       "measured": 2271508,
-      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCreateToken_fresh_normal"
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCreateToken_fresh_normal,gov_router_mtxCreateToken_fresh_wrapped",
+      "item": "legs",
+      "per_item": {
+        "gas": 787071,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCreateToken_per_item_ua_wrapped,gov_router_mtxCreateToken_per_item_wrapped"
+      }
     },
     {
       "entry": "mtxCreateToken",
@@ -2334,7 +2359,13 @@
       "fresh": false,
       "gas": 2174000,
       "measured": 2173588,
-      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCreateToken_used_normal"
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCreateToken_used_normal,gov_router_mtxCreateToken_used_wrapped",
+      "item": "legs",
+      "per_item": {
+        "gas": 787071,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCreateToken_per_item_ua_wrapped,gov_router_mtxCreateToken_per_item_wrapped"
+      }
     },
     {
       "entry": "mtxDeprecateDex",
@@ -2748,49 +2779,85 @@
       "entry": "mtxPublishClassEnv",
       "kind": "gov_router",
       "fresh": true,
-      "gas": 1731000,
-      "measured": 1730403,
-      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishClassEnv_fresh_factory"
+      "gas": 415000,
+      "measured": 414098,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishClassEnv_fresh_factory",
+      "item": "env_items",
+      "per_item": {
+        "gas": 164678,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishClassEnv_per_item_factory,gov_router_mtxPublishClassEnv_per_item_ua_factory"
+      }
     },
     {
       "entry": "mtxPublishClassEnv",
       "kind": "gov_router",
       "fresh": false,
-      "gas": 1633000,
-      "measured": 1632483,
-      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishClassEnv_used_factory"
+      "gas": 317000,
+      "measured": 316178,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishClassEnv_used_factory",
+      "item": "env_items",
+      "per_item": {
+        "gas": 164678,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishClassEnv_per_item_factory,gov_router_mtxPublishClassEnv_per_item_ua_factory"
+      }
     },
     {
       "entry": "mtxPublishDexEnv",
       "kind": "gov_router",
       "fresh": true,
-      "gas": 1730000,
-      "measured": 1729426,
-      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishDexEnv_fresh_factory"
+      "gas": 414000,
+      "measured": 413121,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishDexEnv_fresh_factory",
+      "item": "env_items",
+      "per_item": {
+        "gas": 164678,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishDexEnv_per_item_factory,gov_router_mtxPublishDexEnv_per_item_ua_factory"
+      }
     },
     {
       "entry": "mtxPublishDexEnv",
       "kind": "gov_router",
       "fresh": false,
-      "gas": 1632000,
-      "measured": 1631506,
-      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishDexEnv_used_factory"
+      "gas": 316000,
+      "measured": 315201,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishDexEnv_used_factory",
+      "item": "env_items",
+      "per_item": {
+        "gas": 164678,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishDexEnv_per_item_factory,gov_router_mtxPublishDexEnv_per_item_ua_factory"
+      }
     },
     {
       "entry": "mtxPublishTokenEnv",
       "kind": "gov_router",
       "fresh": true,
-      "gas": 1730000,
-      "measured": 1729897,
-      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishTokenEnv_fresh_factory"
+      "gas": 414000,
+      "measured": 413592,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishTokenEnv_fresh_factory",
+      "item": "env_items",
+      "per_item": {
+        "gas": 164678,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishTokenEnv_per_item_factory,gov_router_mtxPublishTokenEnv_per_item_ua_factory"
+      }
     },
     {
       "entry": "mtxPublishTokenEnv",
       "kind": "gov_router",
       "fresh": false,
-      "gas": 1632000,
-      "measured": 1631977,
-      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishTokenEnv_used_factory"
+      "gas": 316000,
+      "measured": 315672,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishTokenEnv_used_factory",
+      "item": "env_items",
+      "per_item": {
+        "gas": 164678,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishTokenEnv_per_item_factory,gov_router_mtxPublishTokenEnv_per_item_ua_factory"
+      }
     },
     {
       "entry": "mtxRecordOrder",
@@ -2932,26 +2999,38 @@
       "entry": "mtxSetAllowed",
       "kind": "gov_router",
       "fresh": true,
-      "gas": 273000,
-      "measured": 272262,
+      "gas": 160000,
+      "measured": 159798,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetAllowed_fresh_regulated",
       "ua_extra": {
         "gas": 1000,
-        "measured": 28,
+        "measured": 8,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetAllowed_ua_regulated-gov_router_mtxSetAllowed_fresh_regulated-verify_0x0108_delta"
+      },
+      "item": "accounts",
+      "per_item": {
+        "gas": 112484,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetAllowed_per_item_regulated,gov_router_mtxSetAllowed_per_item_ua_regulated"
       }
     },
     {
       "entry": "mtxSetAllowed",
       "kind": "gov_router",
       "fresh": false,
-      "gas": 175000,
-      "measured": 174342,
+      "gas": 62000,
+      "measured": 61878,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetAllowed_used_regulated",
       "ua_extra": {
         "gas": 1000,
-        "measured": 28,
+        "measured": 8,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetAllowed_ua_regulated-gov_router_mtxSetAllowed_fresh_regulated-verify_0x0108_delta"
+      },
+      "item": "accounts",
+      "per_item": {
+        "gas": 112484,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetAllowed_per_item_regulated,gov_router_mtxSetAllowed_per_item_ua_regulated"
       }
     },
     {
@@ -3036,52 +3115,76 @@
       "entry": "mtxSetCompliance",
       "kind": "gov_router",
       "fresh": true,
-      "gas": 267000,
-      "measured": 266532,
+      "gas": 152000,
+      "measured": 151940,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetCompliance_fresh_registry",
       "ua_extra": {
         "gas": 1000,
         "measured": 28,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetCompliance_ua_registry-gov_router_mtxSetCompliance_fresh_registry-verify_0x0108_delta"
+      },
+      "item": "accounts",
+      "per_item": {
+        "gas": 114592,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetCompliance_per_item_registry,gov_router_mtxSetCompliance_per_item_ua_registry"
       }
     },
     {
       "entry": "mtxSetCompliance",
       "kind": "gov_router",
       "fresh": false,
-      "gas": 169000,
-      "measured": 168612,
+      "gas": 55000,
+      "measured": 54020,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetCompliance_used_registry",
       "ua_extra": {
         "gas": 1000,
         "measured": 28,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetCompliance_ua_registry-gov_router_mtxSetCompliance_fresh_registry-verify_0x0108_delta"
+      },
+      "item": "accounts",
+      "per_item": {
+        "gas": 114592,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetCompliance_per_item_registry,gov_router_mtxSetCompliance_per_item_ua_registry"
       }
     },
     {
       "entry": "mtxSetDenied",
       "kind": "gov_router",
       "fresh": true,
-      "gas": 175000,
-      "measured": 174326,
+      "gas": 160000,
+      "measured": 159792,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetDenied_fresh_regulated",
       "ua_extra": {
         "gas": 1000,
         "measured": 28,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetDenied_ua_regulated-gov_router_mtxSetDenied_fresh_regulated-verify_0x0108_delta"
+      },
+      "item": "accounts",
+      "per_item": {
+        "gas": 112454,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetDenied_per_item_regulated,gov_router_mtxSetDenied_per_item_ua_regulated"
       }
     },
     {
       "entry": "mtxSetDenied",
       "kind": "gov_router",
       "fresh": false,
-      "gas": 77000,
-      "measured": 76406,
+      "gas": 62000,
+      "measured": 61872,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetDenied_used_regulated",
       "ua_extra": {
         "gas": 1000,
         "measured": 28,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetDenied_ua_regulated-gov_router_mtxSetDenied_fresh_regulated-verify_0x0108_delta"
+      },
+      "item": "accounts",
+      "per_item": {
+        "gas": 112454,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetDenied_per_item_regulated,gov_router_mtxSetDenied_per_item_ua_regulated"
       }
     },
     {
@@ -3323,7 +3426,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 277000,
-      "measured": 276140,
+      "measured": 276162,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetTaxRate_fresh_regulated",
       "ua_extra": {
         "gas": 1000,
@@ -3336,7 +3439,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 179000,
-      "measured": 178220,
+      "measured": 178242,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetTaxRate_used_regulated",
       "ua_extra": {
         "gas": 1000,
@@ -3426,26 +3529,38 @@
       "entry": "mtxSetWrapLimits",
       "kind": "gov_router",
       "fresh": true,
-      "gas": 444000,
-      "measured": 443651,
+      "gas": 180000,
+      "measured": 179284,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetWrapLimits_fresh_hybrid",
       "ua_extra": {
         "gas": 1000,
-        "measured": 48,
+        "measured": 33,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetWrapLimits_ua_hybrid-gov_router_mtxSetWrapLimits_fresh_hybrid-verify_0x0108_delta"
+      },
+      "item": "legs",
+      "per_item": {
+        "gas": 264278,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetWrapLimits_per_item_hybrid,gov_router_mtxSetWrapLimits_per_item_ua_hybrid"
       }
     },
     {
       "entry": "mtxSetWrapLimits",
       "kind": "gov_router",
       "fresh": false,
-      "gas": 346000,
-      "measured": 345731,
+      "gas": 82000,
+      "measured": 81364,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetWrapLimits_used_hybrid",
       "ua_extra": {
         "gas": 1000,
-        "measured": 48,
+        "measured": 33,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetWrapLimits_ua_hybrid-gov_router_mtxSetWrapLimits_fresh_hybrid-verify_0x0108_delta"
+      },
+      "item": "legs",
+      "per_item": {
+        "gas": 264278,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetWrapLimits_per_item_hybrid,gov_router_mtxSetWrapLimits_per_item_ua_hybrid"
       }
     },
     {
@@ -3761,6 +3876,130 @@
       }
     },
     {
+      "entry": "mtxConfidentialTransfer",
+      "kind": "zether",
+      "fresh": true,
+      "gas": 2397000,
+      "measured": 2396659,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransfer_fresh_normal,zether_mtxConfidentialTransfer_fresh_normal_reg,zether_mtxConfidentialTransfer_fresh_wrapped,zether_mtxConfidentialTransfer_fresh_wrapped_reg",
+      "fee_extra": {
+        "gas": 148000,
+        "measured": 147587,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransfer_fee_normal-zether_mtxConfidentialTransfer_fresh_normal,zether_mtxConfidentialTransfer_fee_normal_reg-zether_mtxConfidentialTransfer_fresh_normal_reg,zether_mtxConfidentialTransfer_fee_wrapped-zether_mtxConfidentialTransfer_fresh_wrapped,zether_mtxConfidentialTransfer_fee_wrapped_reg-zether_mtxConfidentialTransfer_fresh_wrapped_reg"
+      },
+      "item": "legs",
+      "per_item": {
+        "gas": 3128270,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransfer_per_item_normal,zether_mtxConfidentialTransfer_per_item_normal_reg,zether_mtxConfidentialTransfer_per_item_wrapped,zether_mtxConfidentialTransfer_per_item_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxConfidentialTransfer",
+      "kind": "zether",
+      "fresh": false,
+      "gas": 2299000,
+      "measured": 2298739,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransfer_used_normal,zether_mtxConfidentialTransfer_used_normal_reg,zether_mtxConfidentialTransfer_used_wrapped,zether_mtxConfidentialTransfer_used_wrapped_reg",
+      "fee_extra": {
+        "gas": 148000,
+        "measured": 147587,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransfer_fee_normal-zether_mtxConfidentialTransfer_fresh_normal,zether_mtxConfidentialTransfer_fee_normal_reg-zether_mtxConfidentialTransfer_fresh_normal_reg,zether_mtxConfidentialTransfer_fee_wrapped-zether_mtxConfidentialTransfer_fresh_wrapped,zether_mtxConfidentialTransfer_fee_wrapped_reg-zether_mtxConfidentialTransfer_fresh_wrapped_reg"
+      },
+      "item": "legs",
+      "per_item": {
+        "gas": 3128270,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransfer_per_item_normal,zether_mtxConfidentialTransfer_per_item_normal_reg,zether_mtxConfidentialTransfer_per_item_wrapped,zether_mtxConfidentialTransfer_per_item_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxConfidentialTransferCompact",
+      "kind": "zether",
+      "fresh": true,
+      "gas": 2682000,
+      "measured": 2681482,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransferCompact_fresh_normal,zether_mtxConfidentialTransferCompact_fresh_normal_reg,zether_mtxConfidentialTransferCompact_fresh_wrapped,zether_mtxConfidentialTransferCompact_fresh_wrapped_reg",
+      "fee_extra": {
+        "gas": 148000,
+        "measured": 147587,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransferCompact_fee_normal-zether_mtxConfidentialTransferCompact_fresh_normal,zether_mtxConfidentialTransferCompact_fee_normal_reg-zether_mtxConfidentialTransferCompact_fresh_normal_reg,zether_mtxConfidentialTransferCompact_fee_wrapped-zether_mtxConfidentialTransferCompact_fresh_wrapped,zether_mtxConfidentialTransferCompact_fee_wrapped_reg-zether_mtxConfidentialTransferCompact_fresh_wrapped_reg"
+      },
+      "item": "legs",
+      "per_item": {
+        "gas": 2935233,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransferCompact_per_item_normal,zether_mtxConfidentialTransferCompact_per_item_normal_reg,zether_mtxConfidentialTransferCompact_per_item_wrapped,zether_mtxConfidentialTransferCompact_per_item_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxConfidentialTransferCompact",
+      "kind": "zether",
+      "fresh": false,
+      "gas": 2584000,
+      "measured": 2583562,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransferCompact_used_normal,zether_mtxConfidentialTransferCompact_used_normal_reg,zether_mtxConfidentialTransferCompact_used_wrapped,zether_mtxConfidentialTransferCompact_used_wrapped_reg",
+      "fee_extra": {
+        "gas": 148000,
+        "measured": 147587,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransferCompact_fee_normal-zether_mtxConfidentialTransferCompact_fresh_normal,zether_mtxConfidentialTransferCompact_fee_normal_reg-zether_mtxConfidentialTransferCompact_fresh_normal_reg,zether_mtxConfidentialTransferCompact_fee_wrapped-zether_mtxConfidentialTransferCompact_fresh_wrapped,zether_mtxConfidentialTransferCompact_fee_wrapped_reg-zether_mtxConfidentialTransferCompact_fresh_wrapped_reg"
+      },
+      "item": "legs",
+      "per_item": {
+        "gas": 2935233,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransferCompact_per_item_normal,zether_mtxConfidentialTransferCompact_per_item_normal_reg,zether_mtxConfidentialTransferCompact_per_item_wrapped,zether_mtxConfidentialTransferCompact_per_item_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxRollOverBatch",
+      "kind": "zether",
+      "fresh": true,
+      "gas": 164000,
+      "measured": 163828,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOverBatch_fresh_normal,zether_mtxRollOverBatch_fresh_normal_reg,zether_mtxRollOverBatch_fresh_wrapped,zether_mtxRollOverBatch_fresh_wrapped_reg",
+      "fee_extra": {
+        "gas": 150000,
+        "measured": 149574,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOverBatch_fee_normal-zether_mtxRollOverBatch_fresh_normal,zether_mtxRollOverBatch_fee_normal_reg-zether_mtxRollOverBatch_fresh_normal_reg,zether_mtxRollOverBatch_fee_wrapped-zether_mtxRollOverBatch_fresh_wrapped,zether_mtxRollOverBatch_fee_wrapped_reg-zether_mtxRollOverBatch_fresh_wrapped_reg"
+      },
+      "ua_extra": {
+        "gas": 1000,
+        "measured": 72,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOverBatch_ua_normal-zether_mtxRollOverBatch_fresh_normal-verify_0x0108_delta,zether_mtxRollOverBatch_ua_normal_reg-zether_mtxRollOverBatch_fresh_normal_reg-verify_0x0108_delta,zether_mtxRollOverBatch_ua_wrapped-zether_mtxRollOverBatch_fresh_wrapped-verify_0x0108_delta,zether_mtxRollOverBatch_ua_wrapped_reg-zether_mtxRollOverBatch_fresh_wrapped_reg-verify_0x0108_delta"
+      },
+      "item": "accounts",
+      "per_item": {
+        "gas": 763921,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOverBatch_per_item_normal,zether_mtxRollOverBatch_per_item_normal_reg,zether_mtxRollOverBatch_per_item_wrapped,zether_mtxRollOverBatch_per_item_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxRollOverBatch",
+      "kind": "zether",
+      "fresh": false,
+      "gas": 66000,
+      "measured": 65908,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOverBatch_used_normal,zether_mtxRollOverBatch_used_normal_reg,zether_mtxRollOverBatch_used_wrapped,zether_mtxRollOverBatch_used_wrapped_reg",
+      "fee_extra": {
+        "gas": 150000,
+        "measured": 149574,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOverBatch_fee_normal-zether_mtxRollOverBatch_fresh_normal,zether_mtxRollOverBatch_fee_normal_reg-zether_mtxRollOverBatch_fresh_normal_reg,zether_mtxRollOverBatch_fee_wrapped-zether_mtxRollOverBatch_fresh_wrapped,zether_mtxRollOverBatch_fee_wrapped_reg-zether_mtxRollOverBatch_fresh_wrapped_reg"
+      },
+      "ua_extra": {
+        "gas": 1000,
+        "measured": 72,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOverBatch_ua_normal-zether_mtxRollOverBatch_fresh_normal-verify_0x0108_delta,zether_mtxRollOverBatch_ua_normal_reg-zether_mtxRollOverBatch_fresh_normal_reg-verify_0x0108_delta,zether_mtxRollOverBatch_ua_wrapped-zether_mtxRollOverBatch_fresh_wrapped-verify_0x0108_delta,zether_mtxRollOverBatch_ua_wrapped_reg-zether_mtxRollOverBatch_fresh_wrapped_reg-verify_0x0108_delta"
+      },
+      "item": "accounts",
+      "per_item": {
+        "gas": 763921,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOverBatch_per_item_normal,zether_mtxRollOverBatch_per_item_normal_reg,zether_mtxRollOverBatch_per_item_wrapped,zether_mtxRollOverBatch_per_item_wrapped_reg"
+      }
+    },
+    {
       "entry": "mtxShield",
       "kind": "pqz",
       "fresh": true,
@@ -3846,6 +4085,54 @@
         "gas": 150000,
         "measured": 149556,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxPrepareAcc_fee_normal-pqz_mtxPrepareAcc_fresh_normal,pqz_mtxPrepareAcc_fee_normal_half1-pqz_mtxPrepareAcc_fresh_normal_half1,pqz_mtxPrepareAcc_fee_normal_reg-pqz_mtxPrepareAcc_fresh_normal_reg,pqz_mtxPrepareAcc_fee_normal_reg_half1-pqz_mtxPrepareAcc_fresh_normal_reg_half1,pqz_mtxPrepareAcc_fee_wrapped-pqz_mtxPrepareAcc_fresh_wrapped,pqz_mtxPrepareAcc_fee_wrapped_half1-pqz_mtxPrepareAcc_fresh_wrapped_half1,pqz_mtxPrepareAcc_fee_wrapped_reg-pqz_mtxPrepareAcc_fresh_wrapped_reg,pqz_mtxPrepareAcc_fee_wrapped_reg_half1-pqz_mtxPrepareAcc_fresh_wrapped_reg_half1"
+      }
+    },
+    {
+      "entry": "mtxRollOver",
+      "kind": "pqz",
+      "fresh": true,
+      "gas": 5735000,
+      "measured": 5734888,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxRollOver_fresh_normal,pqz_mtxRollOver_fresh_normal_reg,pqz_mtxRollOver_fresh_wrapped,pqz_mtxRollOver_fresh_wrapped_reg",
+      "fee_extra": {
+        "gas": 150000,
+        "measured": 149556,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxRollOver_fee_normal-pqz_mtxRollOver_fresh_normal,pqz_mtxRollOver_fee_normal_reg-pqz_mtxRollOver_fresh_normal_reg,pqz_mtxRollOver_fee_wrapped-pqz_mtxRollOver_fresh_wrapped,pqz_mtxRollOver_fee_wrapped_reg-pqz_mtxRollOver_fresh_wrapped_reg"
+      },
+      "ua_extra": {
+        "gas": 1000,
+        "measured": 72,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxRollOver_ua_normal-pqz_mtxRollOver_fresh_normal-verify_0x0108_delta,pqz_mtxRollOver_ua_normal_reg-pqz_mtxRollOver_fresh_normal_reg-verify_0x0108_delta,pqz_mtxRollOver_ua_wrapped-pqz_mtxRollOver_fresh_wrapped-verify_0x0108_delta,pqz_mtxRollOver_ua_wrapped_reg-pqz_mtxRollOver_fresh_wrapped_reg-verify_0x0108_delta"
+      },
+      "item": "entries",
+      "per_item": {
+        "gas": 5574,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxRollOver_per_item_normal,pqz_mtxRollOver_per_item_normal_reg,pqz_mtxRollOver_per_item_wrapped,pqz_mtxRollOver_per_item_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxRollOver",
+      "kind": "pqz",
+      "fresh": false,
+      "gas": 5637000,
+      "measured": 5636968,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxRollOver_used_normal,pqz_mtxRollOver_used_normal_reg,pqz_mtxRollOver_used_wrapped,pqz_mtxRollOver_used_wrapped_reg",
+      "fee_extra": {
+        "gas": 150000,
+        "measured": 149556,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxRollOver_fee_normal-pqz_mtxRollOver_fresh_normal,pqz_mtxRollOver_fee_normal_reg-pqz_mtxRollOver_fresh_normal_reg,pqz_mtxRollOver_fee_wrapped-pqz_mtxRollOver_fresh_wrapped,pqz_mtxRollOver_fee_wrapped_reg-pqz_mtxRollOver_fresh_wrapped_reg"
+      },
+      "ua_extra": {
+        "gas": 1000,
+        "measured": 72,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxRollOver_ua_normal-pqz_mtxRollOver_fresh_normal-verify_0x0108_delta,pqz_mtxRollOver_ua_normal_reg-pqz_mtxRollOver_fresh_normal_reg-verify_0x0108_delta,pqz_mtxRollOver_ua_wrapped-pqz_mtxRollOver_fresh_wrapped-verify_0x0108_delta,pqz_mtxRollOver_ua_wrapped_reg-pqz_mtxRollOver_fresh_wrapped_reg-verify_0x0108_delta"
+      },
+      "item": "entries",
+      "per_item": {
+        "gas": 5574,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxRollOver_per_item_normal,pqz_mtxRollOver_per_item_normal_reg,pqz_mtxRollOver_per_item_wrapped,pqz_mtxRollOver_per_item_wrapped_reg"
       }
     }
   ],

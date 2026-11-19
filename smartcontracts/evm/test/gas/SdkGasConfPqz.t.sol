@@ -9,6 +9,7 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {nid} from "../helpers/Ids.sol";
 import {SdkGasPqzBase} from "./SdkGasConfidential.t.sol";
+import {PqzSet} from "../../src/pqz/PqzSet.sol";
 
 /// The enveloped (relayed) forms of the `pqz` kind's non-debit entries the SDK prepares (`entries/pqz.rs`, `zether.rs`'s
 /// shields).
@@ -49,6 +50,8 @@ interface ISdkGasPqz {
 /// `carol`, the multi transfers' second receiver, and `0xD00D`, the unshields' recipient. `mtxPrepareAcc` counts both
 /// halves (`<variant>` half 0, `<variant>_half1`). G2: the derived reference signer
 /// (`SdkGasPqzBase`, on the fixture's registry made again as a deploy makes it) holds `signer`'s public units in its run.
+/// I1 part 2 (owner 2026-11-19, P3: at the bound): `mtxRollOver` at 1, 2, 4, …, `ROLL_MAX` entries
+/// (`test_sdkGas_pqzConfRoll…`), of `more[3]`, both halves prepared, `ROLL_MAX` pending entries old enough, no `acc` yet.
 ///
 /// The debits (`mtxConfidentialTransfer`, `…Compact`, `…Single`, `…SingleCompact`, `mtxUnshield`, `mtxUnshieldUnwrap`) are
 /// not here: the fixture mocks the `PQZ` precompile and the holder's ML-DSA authorization, the bulk of a real debit, so a
@@ -115,6 +118,50 @@ contract SdkGasConfPqzTest is SdkGasPqzBase {
         }
     }
 
+    /// I1 part 2: `mtxRollOver` of `more[3]` at each count, on the Normal (`wrapped` false) or the Wrapped token.
+    function _pRollRows(bool reg, bool wrapped) internal {
+        if (reg) _pAttest();
+        (address t, string memory v) = _pToken(wrapped, reg);
+        _pPub(t, wrapped, address(this), PqzSet.ROLL_MAX * SCALE);
+        for (uint256 i = 1; i < PqzSet.ROLL_MAX; ++i) {
+            vm.roll(block.number + 1); // an entry a block
+            tok.mtxShield(more[3], 1);
+        }
+        assertEq(tok.pqzAccount(more[3], 0).pendingCount, PqzSet.ROLL_MAX, "ROLL_MAX entries");
+        tok.mtxPrepareAcc(more[3], 0, 0);
+        tok.mtxPrepareAcc(more[3], 0, 1);
+        vm.roll(block.number + 64);
+        uint256 k = 1;
+        while (1 << k <= PqzSet.ROLL_MAX) {
+            ++k;
+        }
+        uint256[] memory counts = new uint256[](k); // 1, 2, 4, …, ROLL_MAX (a power of two)
+        for (uint256 i; i < k; ++i) {
+            counts[i] = 1 << i;
+        }
+        assertEq(counts[k - 1], PqzSet.ROLL_MAX, "measured at the bound");
+        // P4 (proposed to the owner, not ruled): the rise an entry steps from 5,531 to 5,574 between 16 and 32, so the
+        // worst slope's line overshoots the largest count by about 2,000; at or above every point, the excess pinned
+        sgLineLoose = true;
+        _bothN("pqz", "mtxRollOver", v, t, _sgFrom(), _pRoll, counts);
+    }
+
+    function test_sdkGas_pqzConfRoll() public {
+        _pRollRows(false, false);
+    }
+
+    function test_sdkGas_pqzConfRollWrapped() public {
+        _pRollRows(false, true);
+    }
+
+    function test_sdkGas_pqzConfRollRegulated() public {
+        _pRollRows(true, false);
+    }
+
+    function test_sdkGas_pqzConfRollRegulatedWrapped() public {
+        _pRollRows(true, true);
+    }
+
     function test_sdkGas_pqzConf() public {
         _pRows(false);
     }
@@ -140,6 +187,14 @@ contract SdkGasConfPqzTest is SdkGasPqzBase {
             nonce
         );
         return abi.encodeCall(ISdkGasPqz.mtxWrapShield, (_sgAddrE(nonce), address(usd), amt, bob, _sgSign(sgPk, d)));
+    }
+
+    function _pRoll(address c, uint256 nonce) internal view returns (bytes memory) {
+        uint256 n = _sgN(1);
+        bytes32 d = _sgNamed(
+            c, "UARollOver(bytes32 from,bytes32 ua,uint64 keyVersion,uint256 n,", abi.encode(more[3], 0, n), nonce
+        );
+        return abi.encodeCall(ISdkGasPqz.mtxRollOver, (_sgE(nonce), more[3], 0, n, _sgUaSig(d)));
     }
 
     function _pPrepare(address c, uint256 nonce, uint256 half) internal view returns (bytes memory) {

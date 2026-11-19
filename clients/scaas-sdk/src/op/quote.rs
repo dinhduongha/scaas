@@ -321,7 +321,7 @@ impl Op {
                     let op = super::gas::OpGas {
                         len: &|input| super::gas::input_len(extra, message, input),
                         // I1: the count a per-item part names
-                        count: &|item| super::gas::item_count(message, item),
+                        count: &|item| super::gas::item_count(extra, message, item),
                         // ruling 1: the record saved (`PayMeta.save`)
                         saves: extra.get("meta").is_some_and(|m| {
                             scaas_ua::wallet::entries::pay_meta_of(m).is_ok_and(|m| m.save)

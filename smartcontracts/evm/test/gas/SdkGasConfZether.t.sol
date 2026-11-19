@@ -13,6 +13,7 @@ import {n, a, h} from "../metatx/NamedEntry.t.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {nid} from "../helpers/Ids.sol";
 import {SdkGasZetherBase} from "./SdkGasConfidential.t.sol";
+import {IZetherSigned} from "../as/confidential/ZetherRegFixture.sol";
 
 /// The enveloped (relayed) forms of the `zether` kind's confidential entries the SDK prepares (`entries/zether.rs`).
 interface ISdkGasZether {
@@ -79,14 +80,29 @@ interface ISdkGasZether {
 /// and signs the envelope (the transfer's builder too, `_auth`) in its run. `mtxRollOverSigned` and `mtxSetRollOverMode` are
 /// measured in their enveloped form (`UARollOverSigned`, `UASetRollOverMode`: the owner's Schnorr signature and the
 /// envelope's), a superset of the owner-only form (`ZetherRollOver`) the SDK also prepares; `mtxRollOver` rolls the
-/// account's one pending ciphertext (Zether's `n` changes nothing). Not here, their cost growing with a count the SDK has no
-/// row part for (reported): `mtxConfidentialTransfer` and `…Compact` (the legs), `mtxRollOverBatch` (the accounts).
+/// account's one pending ciphertext (Zether's `n` changes nothing). I1 part 2 (owner 2026-11-19, P3: at the bounds): the
+/// counted rows (`test_sdkGas_zetherConfCounted…`), `mtxConfidentialTransfer` and `…Compact` at 1, 2, 4, 8 and 16 legs (the
+/// contract's bound; `alice` pays 10 to the first, the others decoys of 0, every recipient holding nothing) and
+/// `mtxRollOverBatch` at 1, 2, 4 and 8 accounts (each with one pending entry and an empty `acc`).
 contract SdkGasConfZetherTest is SdkGasZetherBase {
     uint256 internal constant Z_BAL = 500;
+    uint256 internal constant Z_LEGS = 16;
+    uint256 internal constant Z_ACCTS = 8;
+    /// the counted rows' recipients and accounts
+    User[] internal zTo;
+    User[] internal zRoll;
+    /// the counted rows are measured (`_zRows`), on the Normal (1) or the Wrapped (2) token only
+    uint256 internal zCounted;
 
     function setUp() public override {
         super.setUp();
         sgPk = PAYER_PK; // the fixture's transfer builders sign by `payer`
+        for (uint256 i; i < Z_LEGS; ++i) {
+            zTo.push(_user(0xD00 + i, address(uint160(0xE00 + i))));
+        }
+        for (uint256 i; i < Z_ACCTS; ++i) {
+            zRoll.push(_user(0xD80 + i, address(uint160(0xE80 + i))));
+        }
     }
 
     // ------------------------------------------------------------------ fixture
@@ -113,6 +129,12 @@ contract SdkGasConfZetherTest is SdkGasZetherBase {
         tok.mtxShield(aId, Z_BAL);
         tok.mtxRollOver(aId, 1);
         tok.mtxShield(dId, 20);
+        if (zCounted != 0) {
+            _zPub(t, wrapped, address(this), Z_ACCTS * 20 * SCALE);
+            for (uint256 i; i < Z_ACCTS; ++i) {
+                tok.mtxShield(ZetherTypes.UA.unwrap(zRoll[i].ua), 20);
+            }
+        }
     }
 
     function _zRows(bool reg) internal {
@@ -125,14 +147,36 @@ contract SdkGasConfZetherTest is SdkGasZetherBase {
             _sgAttest(bId);
             _sgAttest(dId);
             _sgAttest(UAKinds.uaOf(sgUaKind, sgUaKey)); // G2: the derived reference signer
+            for (uint256 i; i < Z_LEGS; ++i) {
+                _sgAttest(ZetherTypes.UA.unwrap(zTo[i].ua));
+            }
+            for (uint256 i; i < Z_ACCTS; ++i) {
+                _sgAttest(ZetherTypes.UA.unwrap(zRoll[i].ua));
+            }
         }
         for (uint256 w; w < 2; ++w) {
+            if (zCounted != 0 && zCounted != w + 1) continue;
             bool wrapped = w == 1;
             string memory v = wrapped ? (reg ? "wrapped_reg" : "wrapped") : (reg ? "normal_reg" : "normal");
             address t =
                 _sgCreate(wrapped, reg, wrapped ? address(usd) : address(0), keccak256(abi.encode("sgz", w, reg)));
             _zPrep(t, wrapped);
             bytes32 from = _sgFrom();
+            if (zCounted != 0) {
+                uint256[] memory legs = new uint256[](5);
+                (legs[0], legs[1], legs[2], legs[3], legs[4]) = (1, 2, 4, 8, Z_LEGS);
+                // P4 (proposed to the owner, not ruled): the per-leg rise grows with the legs (3.07 M a leg from 1 to 2,
+                // 3.13 M from 8 to 16), so the worst slope's line overshoots the largest count; the line stays at or above
+                // every point, the excess pinned (`..._overshoot_...`)
+                sgLineLoose = true;
+                _bothN("zether", "mtxConfidentialTransfer", v, t, from, _zMultiFull, legs);
+                _bothN("zether", "mtxConfidentialTransferCompact", v, t, from, _zMultiCompact, legs);
+                sgLineLoose = false;
+                uint256[] memory accts = new uint256[](4);
+                (accts[0], accts[1], accts[2], accts[3]) = (1, 2, 4, Z_ACCTS);
+                _bothN("zether", "mtxRollOverBatch", v, t, from, _zRollBatch, accts);
+                continue;
+            }
             _both("zether", "mtxShield", v, t, from, _zShield);
             _both("zether", "mtxConfidentialTransferSingle", v, t, from, _zTransferSingle);
             _both("zether", "mtxUnshield", v, t, from, _zUnshield);
@@ -161,6 +205,26 @@ contract SdkGasConfZetherTest is SdkGasZetherBase {
     }
 
     function test_sdkGas_zetherConfRegulated() public {
+        _zRows(true);
+    }
+
+    function test_sdkGas_zetherConfCounted() public {
+        zCounted = 1;
+        _zRows(false);
+    }
+
+    function test_sdkGas_zetherConfCountedWrapped() public {
+        zCounted = 2;
+        _zRows(false);
+    }
+
+    function test_sdkGas_zetherConfCountedRegulated() public {
+        zCounted = 1;
+        _zRows(true);
+    }
+
+    function test_sdkGas_zetherConfCountedRegulatedWrapped() public {
+        zCounted = 2;
         _zRows(true);
     }
 
@@ -265,6 +329,60 @@ contract SdkGasConfZetherTest is SdkGasZetherBase {
             string.concat(",", T_G1, ",", T_UNWRAP, ",", T_BURN),
             _msg(e.from, string.concat('"args":', burnJson(b), ',"unwrap":', uw, ',"proof":', hexJson(pr)), e)
         );
+    }
+
+    /// `alice`'s multi transfer to the first `_sgN(1)` of `zTo` (10 to the first, decoys of 0), bound to the envelope; the
+    /// token's default form, or COMPACT.
+    function _zMultiOf(bool compact, uint256 nonce) internal view returns (bytes memory) {
+        return this.zMultiCd(compact, nonce, _sgN(1));
+    }
+
+    /// `_zMultiOf`'s body in a call frame of its own: the prover's memory freed on return (a run proves dozens of legs).
+    function zMultiCd(bool compact, uint256 nonce, uint256 m) external view returns (bytes memory) {
+        MetaTxLib.UAEnvelope memory e = _sgE(nonce);
+        User[] memory to = new User[](m);
+        uint256[] memory vs = new uint256[](m);
+        for (uint256 i; i < m; ++i) {
+            to[i] = zTo[i];
+        }
+        vs[0] = 10;
+        Tx memory y = _proveMulti(
+            tok,
+            alice,
+            to,
+            vs,
+            Z_BAL,
+            _none(),
+            compact ? ZetherTypes.TransferMode.HASH : _defaultForm(tok),
+            _uaBindingOf(tok, e)
+        );
+        IZetherToken.ZetherMulti memory x = _zMulti(y.payload, _none());
+        IUARegistry.UASig memory s = _auth(e, _multiDigest(compact, e, x, y.proof), false);
+        return compact
+            ? abi.encodeCall(IZetherSigned.mtxConfidentialTransferCompact, (e, x, y.proof, s))
+            : abi.encodeCall(IZetherSigned.mtxConfidentialTransfer, (e, x, y.proof, s));
+    }
+
+    function _zMultiFull(address, uint256 nonce) internal view returns (bytes memory) {
+        return _zMultiOf(false, nonce);
+    }
+
+    function _zMultiCompact(address, uint256 nonce) internal view returns (bytes memory) {
+        return _zMultiOf(true, nonce);
+    }
+
+    /// The roll-over of the first `_sgN(1)` accounts of `zRoll`.
+    function _zRollBatch(address c, uint256 nonce) internal view returns (bytes memory) {
+        uint256 m = _sgN(1);
+        ZetherTypes.UA[] memory uas = new ZetherTypes.UA[](m);
+        bytes32[] memory ids = new bytes32[](m);
+        for (uint256 i; i < m; ++i) {
+            (uas[i], ids[i]) = (zRoll[i].ua, ZetherTypes.UA.unwrap(zRoll[i].ua));
+        }
+        bytes32 d = _sgNamed(
+            c, "UARollOverBatch(bytes32 from,bytes32[] uas,", abi.encode(keccak256(abi.encodePacked(ids))), nonce
+        );
+        return abi.encodeCall(ISdkGasZether.mtxRollOverBatch, (_sgE(nonce), uas, _sgUaSig(d)));
     }
 
     function _zRoll(address c, uint256 nonce) internal view returns (bytes memory) {

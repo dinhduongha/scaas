@@ -11,6 +11,9 @@ import {RelayFeeRouter} from "../../src/metatx/RelayFeeRouter.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {ZetherStatements} from "../../src/zether/ZetherStatements.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {MockERC20} from "../helpers/Mocks.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {IAdmin} from "../../src/governance/IAdmin.sol";
@@ -86,6 +89,55 @@ contract SdkGasRouterAdminTest is SdkGasRouterBase {
         (e.libCodeHashes[0], e.libCodeHashes[1]) = (keccak256("lib 1"), keccak256("lib 2"));
     }
 
+    /// I1 part 2, K2 (owner 2026-11-19): the env of a counted point, `adShape[sgPoint]` = (deps, params, libs with their
+    /// code hashes); the item counts every element of the four arrays. Each array grows from the empty env on its own
+    /// sequence (deps 0, 4; params 0, 2; libs 0, 2, 4), so the slope is the worst array's.
+    uint256[3][] internal adShape;
+
+    function _adEnvN() internal view returns (IFactoryToken.Env memory e) {
+        if (bytes(sgCountTag).length == 0) return _adEnv();
+        uint256[3] memory sh = adShape[sgPoint];
+        e.registry = PREG;
+        e.deps = new address[](sh[0]);
+        for (uint256 i; i < sh[0]; ++i) {
+            e.deps[i] = address(uint160(0xD1 + i));
+        }
+        e.params = new bytes32[](sh[1]);
+        for (uint256 i; i < sh[1]; ++i) {
+            e.params[i] = keccak256(abi.encode("param", i));
+        }
+        (e.libs, e.libCodeHashes) = (new address[](sh[2]), new bytes32[](sh[2]));
+        for (uint256 i; i < sh[2]; ++i) {
+            (e.libs[i], e.libCodeHashes[i]) = (address(uint160(0x11B1 + i)), keccak256(abi.encode("lib", i)));
+        }
+    }
+
+    /// The env rows of `entry` at the points of `adShape` (tags `d<deps>p<params>l<libs>_`).
+    function _adEnvRows(string memory entry, string memory v) internal {
+        uint256[3][7] memory sh = [
+            [uint256(0), 0, 0],
+            [uint256(4), 0, 0],
+            [uint256(0), 0, 0],
+            [uint256(0), 2, 0],
+            [uint256(0), 0, 0],
+            [uint256(0), 0, 2],
+            [uint256(0), 0, 4]
+        ];
+        delete adShape;
+        uint256[] memory counts = new uint256[](7);
+        string[] memory tags = new string[](7);
+        for (uint256 i; i < 7; ++i) {
+            adShape.push(sh[i]);
+            counts[i] = sh[i][0] + sh[i][1] + 2 * sh[i][2];
+            tags[i] =
+                string.concat("d", vm.toString(sh[i][0]), "p", vm.toString(sh[i][1]), "l", vm.toString(sh[i][2]), "_");
+        }
+        (grWho, sgLineLoose) = (eoa, true); // P1 (owner 2026-11-19, "approved"): the worst array's slope, a line above
+        _bothTagged("gov_router", entry, v, address(router), eoa, _adPublish, counts, tags);
+        sgLineLoose = false;
+        _grApply(_adPublish);
+    }
+
     function _adEnvHash(IFactoryToken.Env memory v) internal pure returns (bytes32) {
         return keccak256(
             abi.encode(
@@ -104,7 +156,7 @@ contract SdkGasRouterAdminTest is SdkGasRouterBase {
     /// `PublishTokenEnv` / `PublishDexEnv` / `PublishClassEnv` (by `adWhich`) of env 9.
     function _adPublish(address, uint256 nonce) internal view returns (bytes memory) {
         MetaTxLib.UAEnvelope memory e = _grE(nonce);
-        IFactoryToken.Env memory v = _adEnv();
+        IFactoryToken.Env memory v = _adEnvN();
         bytes32 h = _adEnvHash(v);
         address t = address(f);
         if (adWhich == 0) {
@@ -143,9 +195,12 @@ contract SdkGasRouterAdminTest is SdkGasRouterBase {
     /// `SetCompliance` of one account holding nothing yet (KYC, no expiry).
     function _adCompliance(address, uint256 nonce) internal view returns (bytes memory) {
         MetaTxLib.UAEnvelope memory e = _grE(nonce);
+        uint256 n = _sgN(1); // I1 part 2: the accounts counted, each holding nothing yet
         (bytes32[] memory a, uint64[] memory fl, uint64[] memory un) =
-            (new bytes32[](1), new uint64[](1), new uint64[](1));
-        (a[0], fl[0], un[0]) = (bytes32(uint256(0xACC1)), 1, type(uint64).max);
+            (new bytes32[](n), new uint64[](n), new uint64[](n));
+        for (uint256 i; i < n; ++i) {
+            (a[i], fl[i], un[i]) = (bytes32(uint256(0xACC1 + i)), 1, type(uint64).max);
+        }
         bytes memory w = abi.encode(
             keccak256(abi.encodePacked(a)), keccak256(abi.encodePacked(fl)), keccak256(abi.encodePacked(un)), chainUidA
         );
@@ -199,7 +254,7 @@ contract SdkGasRouterAdminTest is SdkGasRouterBase {
         string memory v = "factory";
         for (uint8 k; k < 3; ++k) {
             adWhich = k;
-            _grRow(["mtxPublishTokenEnv", "mtxPublishDexEnv", "mtxPublishClassEnv"][k], v, eoa, _adPublish);
+            _adEnvRows(["mtxPublishTokenEnv", "mtxPublishDexEnv", "mtxPublishClassEnv"][k], v);
         }
         bytes32[3] memory th = [T.UA_APPROVE_TOKEN_RELEASE, T.UA_APPROVE_DEX_RELEASE, T.UA_APPROVE_RELEASE];
         bytes4[3] memory sel = [
@@ -249,7 +304,7 @@ contract SdkGasRouterAdminTest is SdkGasRouterBase {
             address(cr),
             abi.encode(PROV, true, chainUidA)
         );
-        _grRow("mtxSetCompliance", "registry", eoa, _adCompliance);
+        _grRowN("mtxSetCompliance", "registry", eoa, _adCompliance, _grCounts(true));
         bytes memory nine = abi.encode(
             address(relay),
             address(relay).codehash,
@@ -289,6 +344,7 @@ contract SdkGasRouterCreateTest is SdkGasRouterBase {
     uint16 internal constant CLS = 4;
     OpenFactory internal f;
     uint8 internal crWhich;
+    address[] internal crUnd;
 
     function setUp() public override {
         super.setUp();
@@ -301,6 +357,15 @@ contract SdkGasRouterCreateTest is SdkGasRouterBase {
             IOpenFactory.TokenKind.NORMAL, 1, fu, withModules(plainEnv(address(f), sgSka, chainUidA, PREG, false), ms)
         );
         f.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args, fu);
+        // K2: the Wrapped kind's release, whose `TokenConfig.legs` the creation counts
+        (address[] memory wm, bytes memory wargs) = deployKindModules(1, address(f), "");
+        f.publishTokenEnv(
+            IOpenFactory.TokenKind.WRAPPED, 1, fu, withModules(plainEnv(address(f), sgSka, chainUidA, PREG, false), wm)
+        );
+        f.deployTokenImplementation(IOpenFactory.TokenKind.WRAPPED, 1, 1, type(WrappedToken).creationCode, wargs, fu);
+        for (uint256 i; i < 8; ++i) {
+            crUnd.push(address(new MockERC20("L", "L", 6)));
+        }
         f.publishDexEnv(1, fu, withModules(plainEnv(address(f), sgSka, chainUidA, address(0), false), dm));
         f.deployDexImplementation(1, 1, type(SCaaSDex).creationCode, dargs, fu);
         f.publishClassEnv(CLS, 0, 1, fu, plainEnv(address(f), sgSka, chainUidA, address(0), false));
@@ -329,6 +394,21 @@ contract SdkGasRouterCreateTest is SdkGasRouterBase {
                     router.mtxCreateToken, (e, t, IOpenFactory.TokenKind.NORMAL, 1, a, salt, _auth(grWho, d))
                 );
         }
+        if (crWhich == 3) {
+            // K2: a Wrapped token of `_sgN(1)` legs 1:1, each an ERC-20 of its own
+            IFactoryToken.TokenConfig memory c;
+            (c.name, c.symbol, c.decimals, c.features) = ("W", "W", 6, uint256(1) << GovernanceBits.PAYABLE);
+            c.legs = new IFactoryToken.Leg[](_sgN(1));
+            for (uint256 i; i < c.legs.length; ++i) {
+                c.legs[i] = IFactoryToken.Leg(crUnd[i], 1, 1);
+            }
+            bytes memory a = abi.encode(c);
+            bytes32 d = _grD(T.UA_CREATE_TOKEN, t, abi.encode(uint8(1), uint64(1), keccak256(a), salt), e);
+            return
+                abi.encodeCall(
+                    router.mtxCreateToken, (e, t, IOpenFactory.TokenKind.WRAPPED, 1, a, salt, _auth(grWho, d))
+                );
+        }
         if (crWhich == 1) {
             bytes memory a = abi.encode(ISCaaSDex.DexConfig(eoa, 0, TREASURY, false, 0, address(0), 0, 0));
             bytes32 d = _grD(T.UA_CREATE_DEX, t, abi.encode(uint64(1), keccak256(a), salt), e);
@@ -353,5 +433,8 @@ contract SdkGasRouterCreateTest is SdkGasRouterBase {
             grWho = eoa;
             _both("gov_router", entry[k], variant[k], address(router), eoa, _crBuild);
         }
+        // K2: `TokenConfig.legs`, 1 to 8 (the kind's bound)
+        (crWhich, grWho) = (3, eoa);
+        _bothN("gov_router", "mtxCreateToken", "wrapped", address(router), eoa, _crBuild, _grCounts(true));
     }
 }

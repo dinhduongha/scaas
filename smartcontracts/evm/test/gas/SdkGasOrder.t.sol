@@ -97,18 +97,36 @@ abstract contract SdkGasOrderOps is SdkGasOps, SdkGasMetered {
         address c,
         function(address, uint256) internal view returns (bytes memory) build
     ) internal {
-        string memory k = string.concat(kind, "_", entry, "_");
         uint256 s = vm.snapshotState();
-        _measureMetered(string.concat(k, "fresh_", variant), c, build(c, 1));
+        _measureMetered(_k(kind, entry, "fresh", variant), c, build(c, 1));
         vm.revertToState(s);
-        _measureMetered(string.concat(k, "used_", variant), c, build(c, 2));
+        _measureMetered(_k(kind, entry, "used", variant), c, build(c, 2));
         vm.revertToState(s);
         if (sgUaKind != 0) {
             _sgUaPrep(c);
             (sgKind, sgKeyData, sgSk) = (sgUaKind, sgUaKey, sgUaSk); // the revert below restores the native signer
-            _measureMetered(string.concat(k, "ua_", variant), c, build(c, 1));
+            _measureMetered(_k(kind, entry, "ua", variant), c, build(c, 1));
             vm.revertToState(s);
         }
+    }
+
+    /// I1 part 2, K2: `_twice` at each of `counts` (key infix `n<count>_`), then the line (`_sgLine`).
+    function _twiceN(
+        string memory kind,
+        string memory entry,
+        string memory variant,
+        address c,
+        function(address, uint256) internal view returns (bytes memory) build,
+        uint256[] memory counts
+    ) internal {
+        string[] memory tags = new string[](counts.length);
+        for (uint256 i; i < counts.length; ++i) {
+            (sgCount, sgPoint, sgCountTag) = (counts[i], i, string.concat("n", vm.toString(counts[i]), "_"));
+            tags[i] = sgCountTag;
+            _twice(kind, entry, variant, c, build);
+        }
+        (sgCount, sgPoint, sgCountTag) = (0, 0, "");
+        _sgLine(kind, entry, variant, counts, tags);
     }
 
     /// The cancel (both order forms: `<variant>_wo` the wrap form) and the floor of a token `c`.
@@ -387,11 +405,15 @@ contract SdkGasOrderDexTest is SdkGasOrderOps {
         (o.dex, o.batch, o.nonce, o.validUntil) = (c, SG_BATCH, n, block.timestamp + 600);
     }
 
+    /// K2: `_sgN(1)` orders (the SDK's one, or the counted row's), each its own nonce on the batch.
     function _dexCancel(address c, uint256 n) internal view returns (bytes memory) {
-        ISCaaSDex.DexOrder[] memory os = new ISCaaSDex.DexOrder[](1);
-        os[0] = ISCaaSDex.DexOrder(SG_SELL, _dexOrd(c, n));
-        bytes[] memory sigs = new bytes[](1);
-        sigs[0] = _sgSign(sgPk, ISCaaSDex(c).cancelDexOrderDigest(SG_SELL, os[0].order));
+        uint256 m = _sgN(1);
+        ISCaaSDex.DexOrder[] memory os = new ISCaaSDex.DexOrder[](m);
+        bytes[] memory sigs = new bytes[](m);
+        for (uint256 i; i < m; ++i) {
+            os[i] = ISCaaSDex.DexOrder(SG_SELL, _dexOrd(c, n + 16 * i));
+            sigs[i] = _sgSign(sgPk, ISCaaSDex(c).cancelDexOrderDigest(SG_SELL, os[i].order));
+        }
         return abi.encodeCall(ISCaaSDex.mtxCancelOrders, (os, sigs));
     }
 
@@ -402,7 +424,9 @@ contract SdkGasOrderDexTest is SdkGasOrderOps {
     }
 
     function test_sdkGas_order_dex() public {
-        _twice("dex", "mtxCancelOrders", "dex", address(dex), _dexCancel);
+        uint256[] memory counts = new uint256[](4);
+        (counts[0], counts[1], counts[2], counts[3]) = (1, 2, 4, 8);
+        _twiceN("dex", "mtxCancelOrders", "dex", address(dex), _dexCancel, counts);
         _twice("dex", "mtxInvalidateNonces", "dex", address(dex), _dexInvalidate);
         // a skipped item (a bad signature) is no error: the measured call closed the order
         uint256 s = vm.snapshotState();

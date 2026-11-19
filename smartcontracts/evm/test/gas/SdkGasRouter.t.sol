@@ -19,6 +19,7 @@ import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
 import {SdkGasRouterFix} from "./SdkGasFixtures.sol";
 import {MockWallet} from "../ua/UARegistryBase.sol";
+import {MockERC20} from "../helpers/Mocks.sol";
 
 /// The `gov_router` domain kind's base rows (owner 2026-11-19, part 3b): each router entry signed for its target, on the
 /// router of `GovRouterFixture` (its targets clones of the real kinds, this test their factory), the variant the target's
@@ -107,6 +108,26 @@ abstract contract SdkGasRouterBase is SdkGasRouterFix {
         grWho = who;
         _both("gov_router", entry, variant, address(router), who, build);
         _grApply(build);
+    }
+
+    /// I1 part 2: a counted entry's rows at each of `counts` (`_bothN`), then the op applied at the fixture's own count.
+    function _grRowN(
+        string memory entry,
+        string memory variant,
+        bytes32 who,
+        function(address, uint256) internal view returns (bytes memory) build,
+        uint256[] memory counts
+    ) internal {
+        grWho = who;
+        _bothN("gov_router", entry, variant, address(router), who, build, counts);
+        _grApply(build);
+    }
+
+    /// The counts 1, 2, 4 (and 8 when `eight`).
+    function _grCounts(bool eight) internal pure returns (uint256[] memory c) {
+        c = new uint256[](eight ? 4 : 3);
+        (c[0], c[1], c[2]) = (1, 2, 4);
+        if (eight) c[3] = 8;
     }
 
     function _grSet(bytes32 th, bytes4 sel, address t, bytes memory args, bytes memory words) internal {
@@ -310,16 +331,21 @@ contract SdkGasRouterWrappedTest is SdkGasRouterBase {
 /// only), one account denied (each further account adds its own write).
 contract SdkGasRouterRegulatedTest is SdkGasRouterBase {
     bytes32 internal constant REF = bytes32(uint256(0x5EF));
-    bytes32[] internal grAccts;
     bool internal grDeny;
 
     function _grList(address, uint256 nonce) internal view returns (bytes memory) {
         MetaTxLib.UAEnvelope memory e = _grE(nonce);
         bytes32 u = EnvKit.codeUidOf(grT);
-        bytes memory w = abi.encode(keccak256(abi.encodePacked(grAccts)), true, u);
+        // I1 part 2: the accounts counted, each holding nothing yet (the denied ones apart from the allowed ones the
+        // allow row's op wrote: a first write)
+        bytes32[] memory as_ = new bytes32[](_sgN(1));
+        for (uint256 i; i < as_.length; ++i) {
+            as_[i] = _pad(address(uint160((grDeny ? 0xD11 : 0xA11) + i)));
+        }
+        bytes memory w = abi.encode(keccak256(abi.encodePacked(as_)), true, u);
         bytes32 d = _grD(grDeny ? T.UA_SET_DENIED : T.UA_SET_ALLOWED, grT, w, e);
-        if (grDeny) return abi.encodeCall(router.mtxSetDenied, (e, grT, grAccts, true, u, _auth(grWho, d)));
-        return abi.encodeCall(router.mtxSetAllowed, (e, grT, grAccts, true, u, _auth(grWho, d)));
+        if (grDeny) return abi.encodeCall(router.mtxSetDenied, (e, grT, as_, true, u, _auth(grWho, d)));
+        return abi.encodeCall(router.mtxSetAllowed, (e, grT, as_, true, u, _auth(grWho, d)));
     }
 
     /// `GovRouterRegulatedTest._regulated`: kind 8 with bits 5-7, 10, 22 and 23, the seats given, bits 22 and 23 granted to
@@ -434,14 +460,13 @@ contract SdkGasRouterRegulatedTest is SdkGasRouterBase {
         bytes32 u = EnvKit.codeUidOf(t);
         bytes memory on8 = abi.encode(uint8(GovernanceBits.ALLOWLIST), u);
         _grSt("mtxEnableFeature", v, T.UA_ENABLE_FEATURE, router.mtxEnableFeature.selector, eoa, t, on8);
-        grAccts.push(_pad(address(0xA11)));
         grT = t;
-        _grRow("mtxSetAllowed", v, eoa, _grList);
+        _grRowN("mtxSetAllowed", v, eoa, _grList, _grCounts(true));
         _grDo(
             T.UA_ENABLE_FEATURE, router.mtxEnableFeature.selector, eoa, t, abi.encode(uint8(GovernanceBits.DENYLIST), u)
         );
         (grDeny, grT) = (true, t);
-        _grRow("mtxSetDenied", v, eoa, _grList);
+        _grRowN("mtxSetDenied", v, eoa, _grList, _grCounts(true));
     }
 }
 
@@ -456,24 +481,54 @@ contract SdkGasRouterHybridTest is SdkGasRouterBase {
         return keccak256(abi.encode(T.WRAP_LIMIT, x.perUser, x.tokenWide, x.period));
     }
 
+    /// I1 part 2: the hybrid of each counted point (`grHy[sgPoint]`, `_grCounts(true)[sgPoint]` legs; the fixture's own
+    /// `grT` outside a counted row), its legs' limits all on.
+    address[] internal grHy;
+
     function _grLimits(address, uint256 nonce) internal view returns (bytes memory) {
         MetaTxLib.UAEnvelope memory e = _grE(nonce);
-        bytes32 u = EnvKit.codeUidOf(grT);
-        IWrappedToken.WrapLegLimits memory l = grLegs[0];
-        bytes32 lh = keccak256(
-            abi.encode(
-                T.WRAP_LEG_LIMITS,
-                l.underlying,
-                l.unitExp,
-                l.decayDays,
-                _grLimitHash(l.wrapShort),
-                _grLimitHash(l.wrapLong),
-                _grLimitHash(l.unwrapShort),
-                _grLimitHash(l.unwrapLong)
-            )
-        );
-        bytes32 d = _grD(T.UA_SET_WRAP_LIMITS, grT, abi.encode(keccak256(abi.encode(lh)), true, true, true, u), e);
-        return abi.encodeCall(router.mtxSetWrapLimits, (e, grT, grLegs, true, true, true, u, _auth(grWho, d)));
+        address t = bytes(sgCountTag).length == 0 ? grT : grHy[sgPoint];
+        bytes32 u = EnvKit.codeUidOf(t);
+        address[] memory und = IWrappedToken(t).underlyings();
+        IWrappedToken.WrapLegLimits[] memory ls = new IWrappedToken.WrapLegLimits[](und.length);
+        bytes32[] memory lh = new bytes32[](und.length);
+        for (uint256 i; i < und.length; ++i) {
+            IWrappedToken.WrapLegLimits memory l = grLegs[0];
+            l.underlying = und[i];
+            ls[i] = l;
+            lh[i] = keccak256(
+                abi.encode(
+                    T.WRAP_LEG_LIMITS,
+                    l.underlying,
+                    l.unitExp,
+                    l.decayDays,
+                    _grLimitHash(l.wrapShort),
+                    _grLimitHash(l.wrapLong),
+                    _grLimitHash(l.unwrapShort),
+                    _grLimitHash(l.unwrapLong)
+                )
+            );
+        }
+        bytes32 d = _grD(T.UA_SET_WRAP_LIMITS, t, abi.encode(keccak256(abi.encodePacked(lh)), true, true, true, u), e);
+        return abi.encodeCall(router.mtxSetWrapLimits, (e, t, ls, true, true, true, u, _auth(grWho, d)));
+    }
+
+    /// A hybrid as the fixture's (`MINTABLE`, the wrap controls, `SUPPLY_CAP_ADJUSTABLE`, cap 1e30, admin `eoa`) of `n`
+    /// legs 1:1: `usd` and `n - 1` further ERC-20s.
+    function _grHybrid(uint256 n) internal returns (address) {
+        WrappedToken w = WrappedToken(payable(EnvKit.clone(wrappedImpl, _cenv())));
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.decimals, c.admin, c.maxSupply) = ("H", "H", 6, eoa, 1e30);
+        c.features = 1 | (uint256(1) << MINT) | GovernanceBits.WRAP_CONTROLS
+            | (uint256(1) << GovernanceBits.SUPPLY_CAP_ADJUSTABLE);
+        c.roles.minter = eoa;
+        c.legs = new IFactoryToken.Leg[](n);
+        c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
+        for (uint256 i = 1; i < n; ++i) {
+            c.legs[i] = IFactoryToken.Leg(address(new MockERC20("L", "L", 6)), 1, 1);
+        }
+        w.initialize(nid(address(this)), 1, abi.encode(c));
+        return address(w);
     }
 
     /// G2: the same sequence by derived identities (`_grUaRun`).
@@ -486,16 +541,12 @@ contract SdkGasRouterHybridTest is SdkGasRouterBase {
         if (wrappedImpl == address(0)) {
             wrappedImpl = address(new WrappedToken(address(this), kindArgs(1, address(this), "")));
         }
-        WrappedToken w = WrappedToken(payable(EnvKit.clone(wrappedImpl, _cenv())));
-        IFactoryToken.TokenConfig memory c;
-        (c.name, c.symbol, c.decimals, c.admin, c.maxSupply) = ("H", "H", 6, eoa, 1e30);
-        c.features = 1 | (uint256(1) << MINT) | GovernanceBits.WRAP_CONTROLS
-            | (uint256(1) << GovernanceBits.SUPPLY_CAP_ADJUSTABLE);
-        c.roles.minter = eoa;
-        c.legs = new IFactoryToken.Leg[](1);
-        c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
-        w.initialize(nid(address(this)), 1, abi.encode(c));
+        WrappedToken w = WrappedToken(payable(_grHybrid(1)));
         address t = address(w);
+        uint256[] memory n = _grCounts(true);
+        for (uint256 i; i < n.length; ++i) {
+            grHy.push(_grHybrid(n[i]));
+        }
         bytes32 u = EnvKit.codeUidOf(t);
         string memory v = "hybrid";
         grLegs.push(
@@ -510,7 +561,7 @@ contract SdkGasRouterHybridTest is SdkGasRouterBase {
             )
         );
         grT = t;
-        _grRow("mtxSetWrapLimits", v, eoa, _grLimits);
+        _grRowN("mtxSetWrapLimits", v, eoa, _grLimits, n);
         _grGrant(address(w), GovernanceBits.WRAP_LIST, eoa);
         _grSt(
             "mtxSetWrapMember",

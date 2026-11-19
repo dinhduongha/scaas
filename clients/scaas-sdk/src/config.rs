@@ -105,9 +105,9 @@ pub struct GasBase {
 }
 
 /// A row's per-item part (owner 2026-11-19, I1), on a base or a verify row: `gas` (whole gas, the measured slope rounded
-/// up) for each counted `item` of the operation, one of `GAS_ITEMS` (`legs`, `accounts`, `entries`, `members`). The row's
-/// own `gas` is its figure at a count of 0 (the line's intercept; the file states `"base_count": 0`), so the quote adds
-/// `gas × count` with no offset.
+/// up) for each counted `item` of the operation, one of `GAS_ITEMS` (`legs`, `accounts`, `entries`, `members`,
+/// `env_items`, `orders`). The row's own `gas` is its figure at a count of 0 (the line's intercept; the file states
+/// `"base_count": 0`), so the quote adds `gas × count` with no offset.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GasPerItem {
     pub item: String,
@@ -173,12 +173,14 @@ const GAS_PER_BYTE_MAX: u64 = 1_000;
 const GAS_SIG_BYTES_MAX: u64 = 65_536;
 /// A verify row's largest `margin`.
 const GAS_MARGIN_MAX: u64 = 100_000;
-/// The counts a row's `item` may name (owner 2026-11-19, I1), each read from the operation by `op::gas::item_count`:
-/// `legs` (a multi-recipient transfer's `args.legs`, a list parameter `legs`), `accounts` (`uas` of `mtxRollOverBatch`, a
-/// list parameter `accounts`), `entries` (a PQZ rollover's `n`), `members` (a `0x0121` signer's n; not read by the SDK yet).
-pub(crate) const GAS_ITEMS: [&str; 4] = ["legs", "accounts", "entries", "members"];
-/// A per-item part's largest `gas`.
-const GAS_PER_ITEM_MAX: u64 = 1_000_000;
+/// The counts a row's `item` may name (owner 2026-11-19, I1; K2 and P1 add `env_items` and `orders`), each read from the
+/// operation by `op::gas::item_count`: `legs` (a multi-recipient transfer's `args.legs`, a list parameter `legs`,
+/// `mtxCreateToken`'s `extra.config.legs`), `accounts` (`uas` of `mtxRollOverBatch`, a list parameter `accounts`),
+/// `entries` (a PQZ rollover's `n` and its `skip` marks), `members` (a `0x0121` signer's n; not read by the SDK yet),
+/// `env_items` (an env publish's four `Env` arrays), `orders` (a DEX cancel's orders).
+pub(crate) const GAS_ITEMS: [&str; 6] = ["legs", "accounts", "entries", "members", "env_items", "orders"];
+/// A per-item part's largest `gas`: EIP-7825's transaction cap, 2^24 (a Zether leg is about 3.1 M).
+const GAS_PER_ITEM_MAX: u64 = 1 << 24;
 
 /// A figure rounded up to the next 1,000 from `measured` (owner 2026-11-19): a multiple of 1,000, `measured <= gas < measured +
 /// 1000`.
@@ -194,11 +196,11 @@ impl GasTable {
     /// input of [`GasPerByte`] with a `gas` of 1–1,000 and its `source`; a base row's optional `save`, `fee_extra` and
     /// `ua_extra` are `{gas, measured, source}` held like a row's figure, positive; a verify row's `sig_bytes` at most 65,536,
     /// its optional `margin` 1–100,000; a base or verify row's optional `item` and `per_item` come together (owner 2026-11-19,
-    /// I1), `item` one of `GAS_ITEMS` (`legs`, `accounts`, `entries`, `members`), `per_item` `{gas, base_count, source}` with
-    /// a `gas` of 1–1,000,000 and `base_count` 0 (the row's figure is at a count of 0); no key twice. By name when the file
-    /// is otherwise sound (the first such fault): `GasSigBytesMissing` when a verify row has no `sig_bytes` (owner
-    /// 2026-11-19, A4), `GasItemUnpaired` when a row has `per_item` without `item` or the reverse, `GasItemUnknown` when an
-    /// `item` is not one of `GAS_ITEMS`; `Argument` on any other failure.
+    /// I1), `item` one of `GAS_ITEMS` (`legs`, `accounts`, `entries`, `members`, `env_items`, `orders`), `per_item` `{gas,
+    /// base_count, source}` with a `gas` of 1–2^24 and `base_count` 0 (the row's figure is at a count of 0); no key twice.
+    /// By name when the file is otherwise sound (the first such fault): `GasSigBytesMissing` when a verify row has no
+    /// `sig_bytes` (owner 2026-11-19, A4), `GasItemUnpaired` when a row has `per_item` without `item` or the reverse,
+    /// `GasItemUnknown` when an `item` is not one of `GAS_ITEMS`; `Argument` on any other failure.
     pub fn parse(text: &str) -> Result<GasTable, crate::SdkError> {
         match Self::parse_inner(text) {
             Some((t, None)) => Ok(t),
@@ -338,7 +340,7 @@ fn per_item(
     }))
 }
 
-/// A per-item part's `{gas, base_count, source}` (owner 2026-11-19, I1): its `gas` of 1–1,000,000, `base_count` 0 (the row's
+/// A per-item part's `{gas, base_count, source}` (owner 2026-11-19, I1): its `gas` of 1–2^24, `base_count` 0 (the row's
 /// figure is at a count of 0), `source` present.
 fn per_item_gas(p: &serde_json::Value) -> Option<u64> {
     p.get("source")?.as_str().filter(|s| !s.is_empty())?;

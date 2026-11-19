@@ -162,8 +162,12 @@ pub(crate) const QUOTABLE: &[(&str, &[&str])] = &[
     ("mtxConfidentialTransferSingle", &["zether"]),
     ("mtxUnshield", &["zether"]),
     ("mtxUnshieldUnwrap", &["zether"]),
-    ("mtxRollOver", &["zether"]),
+    ("mtxRollOver", &["zether", "pqz"]),
     ("mtxRollOverSigned", &["zether"]),
+    // I1 part 2 (owner 2026-11-19): measured at several counts, a per-item part
+    ("mtxConfidentialTransfer", &["zether"]),
+    ("mtxConfidentialTransferCompact", &["zether"]),
+    ("mtxRollOverBatch", &["zether"]),
     ("mtxSetRollOverMode", &["zether"]),
     ("mtxPrepareAcc", &["pqz"]),
     ("mtxAcceptAdmin", &["gov_router"]),
@@ -232,11 +236,11 @@ const TOKEN_KINDS: &[&str] = &["token", "zether", "pqz"];
 /// What the SDK prepares without a reference row yet (PLANNED: their fixtures), each on the domain kinds listed.
 #[cfg(test)] // the coverage test's
 pub(crate) const UNMEASURED: &[(&str, &[&str])] = &[
-    // their cost grows with a count the row has no part for (the legs, the accounts, the entries rolled)
-    ("mtxConfidentialTransfer", &["pqz", "zether"]),
-    ("mtxConfidentialTransferCompact", &["pqz", "zether"]),
-    ("mtxRollOver", &["pqz"]),
-    ("mtxRollOverBatch", &["zether"]),
+    // PQZ's multi transfers (P2, owner 2026-11-19: one line over the legs, "approved"): the PQZ precompile's stand-in
+    // at each auditor-group count not built yet; PQZ's signed rollover (P1: entries = min(n, ROLL_MAX) + len(skip)): an
+    // opening token and the holder's ML-DSA authorization not built yet
+    ("mtxConfidentialTransfer", &["pqz"]),
+    ("mtxConfidentialTransferCompact", &["pqz"]),
     ("mtxRollOverSigned", &["pqz"]),
     // the PQZ debits: the proof's precompile and the holder's ML-DSA authorization have no forge path yet
     ("mtxConfidentialTransferSingle", &["pqz"]),

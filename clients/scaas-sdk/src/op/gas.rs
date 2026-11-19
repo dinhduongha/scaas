@@ -348,24 +348,46 @@ pub(crate) fn input_len(
     u64::try_from(n).ok()
 }
 
-/// The count a per-item part names (owner 2026-11-19, I1), read from the operation's signed message: `legs`, the length of
-/// `args.legs` (a Zether or PQZ multi-recipient transfer, `mtxConfidentialTransfer[Compact]`) or of a list parameter `legs`
-/// (`mtxSetWrapLimits`); `accounts`, the length of `uas` (`mtxRollOverBatch`) or of a list parameter `accounts`
-/// (`mtxSetAllowed`, `mtxSetDenied`, `mtxSetCompliance`); `entries`, a rollover's `n` (PQZ `mtxRollOver`,
-/// `mtxRollOverSigned`), any `uint256` held to the set's [`roll_max`] (owner 2026-11-19, K1: the contract's own bound, so an
-/// app's huge `n` meaning "all" is quoted at `ROLL_MAX`); `members` is not read (no `0x0121` signer in the SDK yet). `None`:
-/// the operation has no such count.
-pub(crate) fn item_count(message: &serde_json::Value, item: &str) -> Option<u64> {
+/// The count a per-item part names (owner 2026-11-19, I1), read from the operation's signed message (and its `extra`):
+/// `legs`, the length of `args.legs` (a Zether or PQZ multi-recipient transfer, `mtxConfidentialTransfer[Compact]`), of a
+/// list parameter `legs` (`mtxSetWrapLimits`) or of `extra.config.legs` (`mtxCreateToken`'s `TokenConfig`, K2); `accounts`,
+/// the length of `uas` (`mtxRollOverBatch`) or of a list parameter `accounts` (`mtxSetAllowed`, `mtxSetDenied`,
+/// `mtxSetCompliance`); `entries`, a rollover's `n` (PQZ `mtxRollOver`, `mtxRollOverSigned`), any `uint256` held to the
+/// set's [`roll_max`] (owner 2026-11-19, K1: the contract's own bound, so an app's huge `n` meaning "all" is quoted at
+/// `ROLL_MAX`), plus the length of its `skip` marks where it has them (P1, "approved": min(n, ROLL_MAX) + len(skip));
+/// `env_items` (P1, K2), the elements of an env publish's four `Env` arrays (`env.deps`, `env.params`, `env.libs`,
+/// `env.libCodeHashes`) together; `orders` (K2), a DEX cancel's orders, 1 for its one `order`; `members` is not read (no
+/// `0x0121` signer in the SDK yet). `None`: the operation has no such count.
+pub(crate) fn item_count(
+    extra: &serde_json::Value,
+    message: &serde_json::Value,
+    item: &str,
+) -> Option<u64> {
     let len = |v: Option<&serde_json::Value>| v?.as_array().map(Vec::len);
     let n = match item {
         "legs" => len(message.get("args").and_then(|a| a.get("legs")))
-            .or_else(|| len(message.get("legs")))?,
+            .or_else(|| len(message.get("legs")))
+            .or_else(|| len(extra.get("config").and_then(|c| c.get("legs"))))?,
         "accounts" => len(message.get("uas")).or_else(|| len(message.get("accounts")))?,
         "entries" => {
             let n = super::dec(message.get("n")?).ok()?;
             let n = roll_max().map_or(n, |m| n.min(alloy::primitives::U256::from(m)));
-            return u64::try_from(n).ok();
+            let skip = match message.get("skip") {
+                Some(s) => s.as_array()?.len(),
+                None => 0,
+            };
+            return u64::try_from(n).ok()?.checked_add(u64::try_from(skip).ok()?);
         }
+        "env_items" => {
+            let env = message.get("env")?;
+            let mut t = 0;
+            for a in ["deps", "params", "libs", "libCodeHashes"] {
+                t += len(env.get(a))?;
+            }
+            t
+        }
+        "orders" => len(message.get("orders"))
+            .or_else(|| message.get("order").filter(|o| o.is_object()).map(|_| 1))?,
         _ => return None,
     };
     u64::try_from(n).ok()
@@ -1068,6 +1090,8 @@ mod tests {
     #[test]
     fn item_count_reads_the_operations_counts() {
         use serde_json::json as j;
+        let none = j!({});
+        let item_count = |m: &serde_json::Value, i: &str| item_count(&none, m, i);
         let multi = j!({"from": "0x01", "args": {"legs": [{}, {}, {}], "u": [1]}});
         assert_eq!(item_count(&multi, "legs"), Some(3), "a multi-recipient transfer's legs");
         assert_eq!(item_count(&j!({"legs": [{}, {}]}), "legs"), Some(2), "mtxSetWrapLimits' legs");
@@ -1076,6 +1100,25 @@ mod tests {
         assert_eq!(item_count(&j!({"n": "7"}), "entries"), Some(7), "a rollover's n, decimal");
         assert_eq!(item_count(&j!({"n": 9}), "entries"), Some(9));
         assert_eq!(item_count(&j!({"legs": []}), "legs"), Some(0));
+        // K2: mtxCreateToken's TokenConfig.legs, in the op's extra (the message carries only its hash)
+        let cfg = j!({"config": {"name": "W", "legs": [{}, {}, {}, {}]}});
+        assert_eq!(super::item_count(&cfg, &j!({"initHash": "0x01"}), "legs"), Some(4), "TokenConfig.legs");
+        assert_eq!(super::item_count(&j!({"config": {"legs": []}}), &none, "legs"), Some(0));
+        assert_eq!(super::item_count(&cfg, &j!({"legs": [{}]}), "legs"), Some(1), "the message's own first");
+        // P1: a signed rollover's skip marks added to n; none without the field
+        assert_eq!(item_count(&j!({"n": 3, "skip": [5, 9]}), "entries"), Some(5), "n + len(skip)");
+        assert_eq!(item_count(&j!({"n": 0, "skip": [5]}), "entries"), Some(1), "marks only");
+        assert_eq!(item_count(&j!({"n": 2, "skip": "x"}), "entries"), None, "a skip not a list");
+        // P1, K2: an env publish's four arrays together
+        let env = j!({"env": {"deps": ["0x01"], "params": ["0x02", "0x03"], "libs": ["0x04"], "libCodeHashes": ["0x05"]}});
+        assert_eq!(item_count(&env, "env_items"), Some(5), "every element of the four arrays");
+        let empty = j!({"env": {"deps": [], "params": [], "libs": [], "libCodeHashes": []}});
+        assert_eq!(item_count(&empty, "env_items"), Some(0));
+        assert_eq!(item_count(&j!({"env": {"deps": []}}), "env_items"), None, "an array missing");
+        // K2: the DEX cancel's one order; a list of them counted
+        assert_eq!(item_count(&j!({"order": {"nonce": "1"}}), "orders"), Some(1), "the SDK's one order");
+        assert_eq!(item_count(&j!({"orders": [{}, {}]}), "orders"), Some(2));
+        assert_eq!(item_count(&j!({"order": "0x01"}), "orders"), None);
         // K1: a rollover's n held to the set's ROLL_MAX (control: n at ROLL_MAX itself); every other count unclamped; a
         // build without a set (no PQZ entry) reads n as given
         let huge = alloy::primitives::U256::MAX.to_string();
@@ -1084,6 +1127,8 @@ mod tests {
             for n in [j!(m + 1), j!(huge), j!(u64::MAX)] {
                 assert_eq!(item_count(&j!({"n": n}), "entries"), Some(m), "{n}");
             }
+            // P1: n clamped first, then the skip marks added
+            assert_eq!(item_count(&j!({"n": huge, "skip": [1, 2]}), "entries"), Some(m + 2));
         } else {
             assert_eq!(item_count(&j!({"n": 1_000}), "entries"), Some(1_000));
             assert_eq!(item_count(&j!({"n": huge}), "entries"), None);
@@ -1115,7 +1160,7 @@ mod tests {
         let quote = |item: &str, message: serde_json::Value| {
             let mut r = rows(1_000, 10);
             r.base[0].per_item = per_item(item, 30_000);
-            let count = |i: &str| item_count(&message, i);
+            let count = |i: &str| item_count(&serde_json::Value::Null, &message, i);
             lookup_by(
                 &r,
                 &[],
@@ -1195,7 +1240,7 @@ mod tests {
     }
 
     /// I1, the parse: `item` and `per_item` together on base and verify rows (`GasItemUnpaired` otherwise), `item` one the SDK
-    /// reads (`GasItemUnknown` otherwise), `per_item` `{gas 1–1,000,000, base_count 0, source}` (`Argument` otherwise); a
+    /// reads (`GasItemUnknown` otherwise), `per_item` `{gas 1–2^24, base_count 0, source}` (`Argument` otherwise); a
     /// file without them reads unchanged. Each refusal beside its control.
     #[test]
     fn gas_table_per_item_parse() {
@@ -1207,7 +1252,11 @@ mod tests {
         let members = format!(r#""item":"members",{}"#, part(450, 0));
         assert_eq!(GasTable::parse(&verify(&members)).unwrap().rows.verify[0].per_item, per_item("members", 450));
         assert_eq!(GasTable::parse(&file(&b(98_000, 97_947), "")).unwrap().rows.base[0].per_item, None, "absent");
-        assert!(GasTable::parse(&base(&format!(r#""item":"entries",{}"#, part(1_000_000, 0)))).is_ok());
+        assert!(GasTable::parse(&base(&format!(r#""item":"entries",{}"#, part(1 << 24, 0)))).is_ok());
+        for item in ["env_items", "orders"] {
+            let f = format!(r#""item":"{item}",{}"#, part(450, 0));
+            assert_eq!(GasTable::parse(&base(&f)).unwrap().rows.base[0].per_item, per_item(item, 450), "{item}");
+        }
         for row in [base, verify] {
             for (f, code) in [
                 (part(450, 0), "GasItemUnpaired"),
@@ -1216,7 +1265,8 @@ mod tests {
                 (format!(r#""item":"Legs",{}"#, part(450, 0)), "GasItemUnknown"),
                 (format!(r#""item":"legs",{}"#, part(450, 1)), "Argument"),
                 (format!(r#""item":"legs",{}"#, part(0, 0)), "Argument"),
-                (format!(r#""item":"legs",{}"#, part(1_000_001, 0)), "Argument"),
+                (format!(r#""item":"legs",{}"#, part((1 << 24) + 1, 0)), "Argument"),
+                (format!(r#""item":"env",{}"#, part(450, 0)), "GasItemUnknown"),
                 (format!(r#""item":"legs",{}"#, part(450, 0).replace(r#","source":"s""#, "")), "Argument"),
                 (format!(r#""item":"legs",{}"#, part(450, 0).replace(r#""base_count":0,"#, "")), "Argument"),
                 (format!(r#""item":7,{}"#, part(450, 0)), "Argument"),

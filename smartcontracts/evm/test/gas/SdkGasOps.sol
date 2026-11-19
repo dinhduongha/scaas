@@ -135,37 +135,192 @@ abstract contract SdkGasRows is SdkGasDeploy {
     ) internal {
         if (sgUaRun) return _bothUaRun(kind, entry, variant, c, build);
         uint256 s = vm.snapshotState();
-        _measure(string.concat(kind, "_", entry, "_fresh_", variant), c, build(c, 0));
+        _measure(_k(kind, entry, "fresh", variant), c, build(c, 0));
         vm.revertToState(s);
         _setNonce(c, from, SG_LANE, 1);
-        _measure(string.concat(kind, "_", entry, "_used_", variant), c, build(c, 1));
+        _measure(_k(kind, entry, "used", variant), c, build(c, 1));
         vm.revertToState(s);
         if (_feeable(kind, entry)) {
             sgFee = 1; // a revert restores this contract's storage too: back to 0 after it
-            _measure(string.concat(kind, "_", entry, "_fee_", variant), c, build(c, 0));
+            _measure(_k(kind, entry, "fee", variant), c, build(c, 0));
             vm.revertToState(s);
         } else if (_wrapIn(entry)) {
             _sgHold(c);
-            _measure(string.concat(kind, "_", entry, "_held_", variant), c, build(c, 0));
+            _measure(_k(kind, entry, "held", variant), c, build(c, 0));
             vm.revertToState(s);
             _sgHold(c);
             sgFee = 1;
-            _measure(string.concat(kind, "_", entry, "_fee_", variant), c, build(c, 0));
+            _measure(_k(kind, entry, "fee", variant), c, build(c, 0));
             vm.revertToState(s);
         }
         if (sgUaKind != 0 && !_uaNative(entry)) {
             address cu = sgUaAt[c] == address(0) ? c : sgUaAt[c];
             _sgUaPrep(cu);
             (sgKind, sgKeyData, sgSk) = (sgUaKind, sgUaKey, sgUaSk); // the revert below restores the native signer
-            _measure(string.concat(kind, "_", entry, "_ua_", variant), cu, build(cu, 0));
+            _measure(_k(kind, entry, "ua", variant), cu, build(cu, 0));
             vm.revertToState(s);
             if (sgPayeeKey.length != 0 && keccak256(bytes(entry)) == keccak256("mtxPayWithPayeeFee")) {
                 // Q1 (owner 2026-11-19): the payer and the payee both derived, both debited
                 _sgUaPrep(cu);
                 (sgKind, sgKeyData, sgSk, sgPayeeUa) = (sgUaKind, sgUaKey, sgUaSk, true);
-                _measure(string.concat(kind, "_", entry, "_ua2_", variant), cu, build(cu, 0));
+                _measure(_k(kind, entry, "ua2", variant), cu, build(cu, 0));
                 vm.revertToState(s);
             }
+        }
+    }
+
+    /// I1 part 2 (owner 2026-11-19): the point of a counted row being measured: its count (`sgCount`, what the builders
+    /// read through `_sgN`), its index (`sgPoint`) and its key infix (`sgCountTag`, `n<count>_` or a fixture's own; empty
+    /// outside a counted row, so every other key is as before).
+    uint256 internal sgCount;
+    /// The line's upper check waived, by the owner's rulings of 2026-11-19 ("approved") that accept a line above the points:
+    /// P1, the env publishes' `env_items` at the worst array's per-element slope (the other arrays, and an array's elements
+    /// past its first, below it); P2, PQZ `mtxConfidentialTransfer` / `…Compact` (the precompile's price steps with the
+    /// auditor groups). Proposed, not ruled (P4): Zether's multi transfers and PQZ `mtxRollOver`, whose rise a count grows with the count. The excess is refunded.
+    bool internal sgLineLoose;
+    uint256 internal sgPoint;
+    string internal sgCountTag;
+
+    /// The key `<kind>_<entry>_[<tag>]<what>_<variant>`.
+    function _k(string memory kind, string memory entry, string memory what, string memory variant)
+        internal
+        view
+        returns (string memory)
+    {
+        return string.concat(kind, "_", entry, "_", sgCountTag, what, "_", variant);
+    }
+
+    /// The count a builder uses: the counted row's point, else the fixture's own `dflt`.
+    function _sgN(uint256 dflt) internal view returns (uint256) {
+        return bytes(sgCountTag).length == 0 ? dflt : sgCount;
+    }
+
+    /// I1 part 2: a row whose cost grows with a count, measured by `_both` at each point (`counts[i]`, key infix
+    /// `n<counts[i]>_`), then fitted (`_sgLine`).
+    function _bothN(
+        string memory kind,
+        string memory entry,
+        string memory variant,
+        address c,
+        bytes32 from,
+        function(address, uint256) internal view returns (bytes memory) build,
+        uint256[] memory counts
+    ) internal {
+        string[] memory tags = new string[](counts.length);
+        for (uint256 i; i < counts.length; ++i) {
+            tags[i] = string.concat("n", vm.toString(counts[i]), "_");
+        }
+        _bothTagged(kind, entry, variant, c, from, build, counts, tags);
+    }
+
+    /// `_bothN` with the fixture's own key infixes (`tags[i]`, a point's shape where one count has several: the env's
+    /// arrays).
+    function _bothTagged(
+        string memory kind,
+        string memory entry,
+        string memory variant,
+        address c,
+        bytes32 from,
+        function(address, uint256) internal view returns (bytes memory) build,
+        uint256[] memory counts,
+        string[] memory tags
+    ) internal {
+        for (uint256 i; i < counts.length; ++i) {
+            (sgCount, sgPoint, sgCountTag) = (counts[i], i, tags[i]);
+            _both(kind, entry, variant, c, from, build);
+        }
+        (sgCount, sgPoint, sgCountTag) = (0, 0, "");
+        _sgLine(kind, entry, variant, counts, tags);
+    }
+
+    /// `key` as measured: the pin file's value (written by this run under `SDK_GAS_WRITE`, else asserted equal to it), in a
+    /// frame of its own as `sgPin`; `false` when the key is absent.
+    function sgRead(string calldata key) external view returns (bool, uint256) {
+        string memory f = vm.envOr("SDK_GAS_WRITE", false) ? vm.envOr("SDK_GAS_OUT", SDK_GAS) : SDK_GAS;
+        string memory j = vm.readFile(f);
+        string memory k = string.concat(".", key);
+        if (!vm.keyExistsJson(j, k)) return (false, 0);
+        return (true, vm.parseJsonUint(j, k));
+    }
+
+    /// The measured gas `<head><tags[i]><tail>` at each point.
+    function _sgPoints(string memory head, string memory tail, string[] memory tags)
+        internal
+        view
+        returns (uint256[] memory g)
+    {
+        g = new uint256[](tags.length);
+        for (uint256 i; i < tags.length; ++i) {
+            bool ok;
+            (ok, g[i]) = this.sgRead(string.concat(head, tags[i], tail));
+            assertTrue(ok, "a counted key measured at every point");
+        }
+    }
+
+    /// Whether this run measures the key `what` (`_sgLine`'s `ws[w]`) of `entry` on `kind`: `_both`'s choice, so a key
+    /// another run wrote (the derived run's `ua`) never enters this run's line.
+    function _sgMeasured(string memory kind, string memory entry, uint256 w) internal view returns (bool) {
+        if (sgUaRun) return w == 4;
+        if (w < 2) return true;
+        if (w == 2) return _feeable(kind, entry) || _wrapIn(entry);
+        if (w == 3) return _wrapIn(entry);
+        bool ua = sgUaKind != 0 && !_uaNative(entry);
+        if (w == 4) return ua;
+        return ua && sgPayeeKey.length != 0 && keccak256(bytes(entry)) == keccak256("mtxPayWithPayeeFee");
+    }
+
+    /// I1 part 2: the line of a counted row over its points (`counts`, `tags`; a point whose count does not exceed the one
+    /// before it starts a new sequence). For every key the run measured (`fresh`, `used`, `fee`, `held`, `ua`, `ua2`; a
+    /// derived run `ua` only) the run's slope `s` is the worst over those keys and sequences of the whole-gas rise a count
+    /// (rounded up), pinned as `<kind>_<entry>_per_item_<variant>` (a derived run `..._per_item_ua_<variant>`); each key's
+    /// intercept, the gas at a count of 0, is the largest `g(c) - s * c` over its points, pinned under the key without a
+    /// tag. The check (owner 2026-11-19): the line `intercept + s * c` is at least the measured gas at every point (by
+    /// construction), and less than it + 1,000 at the largest count (asserted), unless `sgLineLoose` (P1, P2): then the
+    /// worst excess there over the keys is pinned as `<kind>_<entry>_overshoot_<variant>` (a derived run
+    /// `..._overshoot_ua_<variant>`), stated with the row.
+    function _sgLine(
+        string memory kind,
+        string memory entry,
+        string memory variant,
+        uint256[] memory counts,
+        string[] memory tags
+    ) internal {
+        string[6] memory ws = ["fresh", "used", "fee", "held", "ua", "ua2"];
+        uint256[][6] memory g;
+        uint256 s;
+        uint256 last;
+        for (uint256 i; i < counts.length; ++i) {
+            if (counts[i] >= counts[last]) last = i;
+        }
+        for (uint256 w; w < 6; ++w) {
+            if (!_sgMeasured(kind, entry, w)) continue;
+            g[w] = _sgPoints(string.concat(kind, "_", entry, "_"), string.concat(ws[w], "_", variant), tags);
+            for (uint256 i = 1; i < g[w].length; ++i) {
+                if (counts[i] > counts[i - 1]) {
+                    assertGe(g[w][i], g[w][i - 1], "the cost grows with the count");
+                    uint256 d = counts[i] - counts[i - 1];
+                    uint256 r = (g[w][i] - g[w][i - 1] + d - 1) / d;
+                    if (r > s) s = r;
+                }
+            }
+        }
+        assertGt(s, 0, "a counted row's slope");
+        _pin(string.concat(kind, "_", entry, sgUaRun ? "_per_item_ua_" : "_per_item_", variant), s);
+        uint256 over;
+        for (uint256 w; w < 6; ++w) {
+            if (g[w].length == 0) continue;
+            uint256 b;
+            for (uint256 i; i < counts.length; ++i) {
+                assertGe(g[w][i], s * counts[i], "a positive intercept");
+                if (g[w][i] - s * counts[i] > b) b = g[w][i] - s * counts[i];
+            }
+            uint256 o = b + s * counts[last] - g[w][last];
+            if (!sgLineLoose) assertLt(o, 1_000, "the line within 1,000 of the largest count");
+            if (o > over) over = o;
+            _pin(string.concat(kind, "_", entry, "_", ws[w], "_", variant), b);
+        }
+        if (sgLineLoose) {
+            _pin(string.concat(kind, "_", entry, sgUaRun ? "_overshoot_ua_" : "_overshoot_", variant), over);
         }
     }
 
@@ -179,7 +334,7 @@ abstract contract SdkGasRows is SdkGasDeploy {
         function(address, uint256) internal view returns (bytes memory) build
     ) internal {
         uint256 s = vm.snapshotState();
-        _measure(string.concat(kind, "_", entry, "_ua_", variant), c, build(c, 0));
+        _measure(_k(kind, entry, "ua", variant), c, build(c, 0));
         vm.revertToState(s);
     }
 

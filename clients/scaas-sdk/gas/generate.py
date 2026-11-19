@@ -23,11 +23,13 @@ largest measured for the same entry and lane state on another kind (`from_kind`,
 and (Q1) where a second derived party was measured (`..._ua2_<variant>`) its `second_party`, the worst of that less the one
 derived party less the verify delta; a verify row `verify_<kind>_delta`, its `sig_bytes` (ruling 2, A4: every row) `verify_<kind>_sig_bytes`, its
 `margin` (ruling 2 (b) of the sampled check: a kind whose worst case cannot be determined) and `stand_in` from the input
-list. A base or verify row whose cost grows with a count (owner 2026-11-19, I1; optional `per_item` of the input list: an
-entry's name or a signer kind's number → the item counted, one of ITEMS) gets `item` and `per_item` {gas, base_count 0,
-source}: its gas the worst whole-gas slope `<kind>_<entry>_per_item_<variant>` (a verify row: `verify_<kind>_per_item`),
-and its figure keys then hold the gas at a count of 0 (the line's intercept, fitted by the forge harness). Prints its run
-time.
+list. A base or verify row whose cost grows with a count (owner 2026-11-19, I1; optional `per_item` of the input list:
+`<kind>:<entry>` (kind-qualified, I1 part 2: Zether's `mtxRollOver` has no count, PQZ's has) or a signer kind's number →
+the item counted, one of ITEMS) gets `item` and `per_item` {gas, base_count 0, source}: its gas the worst whole-gas slope
+`<kind>_<entry>_per_item_<variant>` (a verify row: `verify_<kind>_per_item`), and its figure keys then hold the gas at a
+count of 0 (the line's intercept, fitted by the forge harness); where the harness pinned the line's excess at the largest
+count (`<kind>_<entry>_overshoot_<variant>`: owner rulings P1, P2; proposal P4) an assumption states the worst. Prints its
+run time.
 """
 
 import argparse
@@ -39,7 +41,7 @@ import sys
 import time
 
 # The counts a row's `item` may name: the SDK's `GAS_ITEMS` (src/config.rs), which reads each from the operation.
-ITEMS = ("legs", "accounts", "entries", "members")
+ITEMS = ("legs", "accounts", "entries", "members", "env_items", "orders")
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
 
@@ -151,6 +153,21 @@ def per_item(inputs, m, src, name, prefix):
     }
 
 
+def overshoots(m, base):
+    """The counted rows whose line the harness let sit above the largest count (owner 2026-11-19, P1, P2; proposal P4):
+    one assumption each, its worst excess over the variants and signers."""
+    out = []
+    for kind, entry in sorted({(r["kind"], r["entry"]) for r in base if "per_item" in r}):
+        keys = sorted(k for k in m if k.startswith(f"{kind}_{entry}_overshoot_"))
+        if keys:
+            src = ", ".join(keys)
+            out.append(
+                f"{kind} {entry}: the per-item line (worst slope) is above the measured figure at every measured count, "
+                f"by up to {max(m[k] for k in keys):,} gas at the largest ({src}); the excess is refunded."
+            )
+    return out
+
+
 def table(inputs, m):
     src = inputs["measurements"]
     base = []
@@ -188,7 +205,7 @@ def table(inputs, m):
                     if fee is not None:
                         row["fee_extra"] = fee
                     ua_row(inputs, m, src, row, pending)
-                    row.update(per_item(inputs, m, src, entry, f"{kind}_{entry}_per_item_"))
+                    row.update(per_item(inputs, m, src, f"{kind}:{entry}", f"{kind}_{entry}_per_item_"))
                     base.append(row)
     ua_fallback(base, pending)
     verify = [
@@ -217,7 +234,7 @@ def table(inputs, m):
         "v": 2,
         "name": inputs["name"],
         "family": inputs["family"],
-        "assumptions": inputs["assumptions"],
+        "assumptions": inputs["assumptions"] + overshoots(m, base),
         "base": base,
         "verify": verify,
     }
