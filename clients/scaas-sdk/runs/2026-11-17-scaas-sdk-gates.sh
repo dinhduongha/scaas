@@ -53,6 +53,8 @@ STEPS=(
     "ua-go|clients/ua-go|go vet ./... && $cap env LD_LIBRARY_PATH=$W/clients/ua-c/target/release go test -count=1 ./..."
     "ua-cs|clients/ua-cs|$cap dotnet test Scaas.Ua.Tests; rc=\$?; dotnet build-server shutdown >/dev/null 2>&1; exit \$rc"
     "ua-cxx|clients/ua-cxx|$cap cargo clippy $C --all-targets -- -D warnings && $cap cmake -S . -B build -G Ninja && $cap cmake --build build && $cap ctest --test-dir build"
+    "ffi|clients/scaas-sdk/ffi|$cap cargo clippy $C --all-targets -- -D warnings && $cap cargo test $C"
+    "gas-gen|clients/scaas-sdk/gas|python3 -I generate.py --check && python3 -I test_generate.py"
     "docs|.|python3 scripts/docs_check.py check && python3 scripts/test_docs_check.py"
     "features|.|python3 scripts/check_test_features.py && cd clients/scaas-sdk 2>/dev/null; $TREE"
 )
