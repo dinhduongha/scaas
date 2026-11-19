@@ -32,7 +32,6 @@ sdk-opaque | 81a8cbcf2 | 0 | 9 passed, 0 failed, 0 ignored (1 binaries)
 # sdk-min's one red is the same pre-existing tests/config.rs open_checks_gas_tables_and_opt_ins (gas-table work on ua-rs-sign);
 # sdk-e2e is T12's pay (T15's anvil e2e is not built). bind-cpp not applicable (no bindings/cpp). T15 mutants: 9/9 killed.
 rpc-wasm | 9172eb6dd | 0 | -; tree dirty
-ck-test | 818595dbf | 0 | node: 480 pass, 0 fail, 4 skipped
 # Plan T13 part 1 (registration, split, records) 5721c48da, T13b (sponsored registration) 66e995ee2, the T15 e2e switch to
 # SDK registration 818595dbf: the rows above at 818595dbf. sdk-e2e 4 passed (the PQ-kind registration, the sponsored
 # registration then pay, the T12 pay, the T15 Zether e2e registering through the SDK). sdk-min's one red is the same
@@ -83,7 +82,6 @@ ua-cs | b0c917a2c | 0 | -; tree dirty
 ua-cxx | b0c917a2c | 0 | ctest: 0 tests failed out of 43; tree dirty
 frb-dart | b0c917a2c | 0 | dart: +46:; tree dirty
 gas-gen | cd3cc4c93 | 0 | -
-ck-test | cd3cc4c93 | 0 | node: 482 pass, 0 fail, 4 skipped
 # PR A review fixes (findings 1-6) at cd3cc4c93, clean tree: the 11 rows above, every rc 0. One red first, at b4d5285fb:
 # sdk-test 84 passed, 1 failed (gas_verify_margin read a filler key "x" as "no margin"; finding 1 refuses it), fixed at
 # cd3cc4c93 (the control reads a row without `margin`, the filler asserted GasFieldUnknown). Also at cd3cc4c93: docs_check
@@ -108,15 +106,11 @@ bind-dart | 7f5e03caf | 0 | dart: +14:; tree dirty
 ffi | 7f5e03caf | 0 | 0 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 sdk-test | 7f5e03caf | 0 | 264 passed, 0 failed, 12 ignored (21 binaries); tree dirty
 sdk-min | 7f5e03caf | 0 | 70 passed, 0 failed, 0 ignored (8 binaries); tree dirty
-sdk-clippy | 7f5e03caf | 0 | -; tree dirty
 sdk-wasm | 7f5e03caf | 0 | -; tree dirty
 features | 7f5e03caf | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 sdk-deny | 7f5e03caf | 0 | -; tree dirty
 sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirty
 ua-test | 7f5e03caf | 0 | 560 passed, 0 failed, 3 ignored (55 binaries); tree dirty
-ua-clippy | 1233ed00d | 0 | -; tree dirty
-bind-gen | c1a17c82f | 0 | -
-docs | c1a17c82f | 0 | -
 ua-vectors | c1a17c82f | 0 | 665 passed, 0 failed, 6 ignored (62 binaries)
 sdk-e2e | c1a17c82f | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 # T20 rest and the native auditor's PQZ consent (1233ed00d, c1a17c82f): the rows at 7f5e03caf "tree dirty" ran on the working
@@ -127,3 +121,14 @@ sdk-e2e | c1a17c82f | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 # ci_changes.py self-tests ok, format.sh --check rust dart sh toml yaml py clean, docs check 0 errors, paths 0,
 # test_docs_check ok. No vector file changed (the consent rows were already in typed_ops.json). Mutants t20b 8/8 killed,
 # each by its intended assertion (t20b-mutants.txt).
+bind-gen | 6dded4e97 | 0 | -
+docs | 6dded4e97 | 0 | -
+sdk-clippy | 6dded4e97 | 0 | -
+ua-clippy | 6dded4e97 | 0 | -
+ck-test | 6dded4e97 | 0 | node: 484 pass, 0 fail, 4 skipped
+# PqzAuditorNative and AuditorConsent's per-domain message (b35f0515d, 6dded4e97; controller call, owner auto-run 2026-11-19):
+# the rows above at 6dded4e97 (bind-gen, docs, sdk-clippy, ua-clippy, ck-test 484). Also run on the b35f0515d tree before its
+# commit: SDK admin::tests 7/7 (red first: unwrap_err on Ok), config 13/13; ua-rs (vectors,roots) entries, sign_scaas,
+# wallet_typed, wallet_uasig, facade_zether, admin green; zether-prover typed_ops 8/8; scaas-node typed:: 41 and
+# guard/submit/abi 139 green (node clippy not run). A rustfmt-only follow-up of scaas-node/src/typed.rs and admin_tests.rs.
+# Mutants t20c 2/2 killed, each by its intended assertion. Not run this round: sdk-test whole, sdk-e2e, ua-test whole.

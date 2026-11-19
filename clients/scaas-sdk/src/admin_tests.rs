@@ -418,7 +418,11 @@ async fn zether_auditor_consent_against_the_rows() {
     let contract: [u8; 20] = unhex(&token).unwrap().try_into().unwrap();
     let uid: [u8; 32] = unhex(&salt).unwrap().try_into().unwrap();
     // the Zether domain's own message: it names the Zether token, as the SDK's consent does
-    assert_eq!(text(&d["message"]["token"]), token, "the row names its own token");
+    assert_eq!(
+        text(&d["message"]["token"]),
+        token,
+        "the row names its own token"
+    );
     let digest = |auditor: &str, epoch: u32| {
         let mut m = d["message"].clone();
         m["auditor"] = auditor.into();
