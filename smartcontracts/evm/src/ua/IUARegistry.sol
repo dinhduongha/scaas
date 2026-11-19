@@ -273,6 +273,10 @@ interface IUARegistry is IERC5267 {
     function holderOf(bytes32 ua) external view returns (address holder, uint16 kind, address pqzHome);
     /// §11.2 (P14): `holderOf`'s third word.
     function pqzHomeOf(bytes32 ua) external view returns (address);
+    /// Spec 2026-11-19-registry-verify-only-kinds §10 (CTR-UA-67, owner R1, R10, P4): this registry is `root` or reaches it by
+    /// `predecessor()` within `MAX_GENERATION - 1` steps, each a contract, and its `smartKeyCloneHash()` is `root`'s (the
+    /// factory's env check of a release that binds a later generation).
+    function lineReaches(address root) external view returns (bool);
     function verifyCap(uint16 kind) external view returns (uint64); // measured per chain
     function verifyBudget() external view returns (uint64); // UA_VERIFY_BUDGET of this chain
     /// The chain's per-transaction gas cap (owner X1, spec 2026-11-19-registry-verify-only-kinds §2): an immutable constructor

@@ -14,6 +14,7 @@ import {ComplianceRegistry} from "../../src/regulated/ComplianceRegistry.sol";
 import {ZetherStatements} from "../../src/zether/ZetherStatements.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {StubUARegistry} from "../helpers/Mocks.sol";
+import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
 import {TestRouter} from "./FactoryAdmin.t.sol";
@@ -644,6 +645,78 @@ contract FactoryDirectoryTest is Test {
 
     function test_publishClassEnv_boundToTheRouter() public {
         _bound(2);
+    }
+
+    // ------------------------------------------------------------------ a release binds a later generation (CTR-UA-67)
+
+    /// Generation `g` + 1 over `pred` (0: generation 1) with the `SmartKeyAccount` implementation `ska`, chain `uid`.
+    function _gen(bytes32 uid, address pred, address ska) internal returns (UARegistry) {
+        return new UARegistry(uid, pred, false, 12_000_000, 1 << 24, ska, true, new UARegistry.KindConfig[](0));
+    }
+
+    /// A factory whose router's registry is a real generation 1 (`impl`), and the line gen 2, gen 3 over it.
+    function _line() internal returns (OpenFactory f, UARegistry g1, UARegistry g2, UARegistry g3) {
+        g1 = _gen(UID, address(0), impl);
+        g2 = _gen(UID, address(g1), impl);
+        g3 = _gen(UID, address(g2), impl);
+        f = _factory(address(new GovernanceRouter(UID, address(g1), impl, false)));
+    }
+
+    function _mismatch(OpenFactory f, address root, address got) internal {
+        _refused(
+            deployer,
+            address(f),
+            _pub(0, 1, _env(got, address(0))),
+            abi.encodeWithSelector(IFactoryDirectory.EnvRegistryMismatch.selector, root, got)
+        );
+    }
+
+    /// Spec 2026-11-19-registry-verify-only-kinds §10: a later generation of the router's registry's line, each publish entry.
+    function test_env_gen3OfRouterLine_accepted() public {
+        (OpenFactory f,, UARegistry g2, UARegistry g3) = _line();
+        _call(deployer, address(f), _pub(0, 1, _env(address(g3), impl)));
+        _call(deployer, address(f), _pub(1, 1, _env(address(g2), address(0))));
+        _call(deployer, address(f), _pub(2, 1, _env(address(g3), address(0))));
+    }
+
+    function test_env_routerRegistry_unchanged() public {
+        (OpenFactory f, UARegistry g1,,) = _line();
+        _call(deployer, address(f), _pub(0, 1, _env(address(g1), address(0))));
+        _call(deployer, address(f), _pub(0, 2, _env(address(0), address(0))));
+    }
+
+    /// A line of another chain: not the router's line (its root is another generation 1).
+    function test_env_otherChainUid_refused() public {
+        (OpenFactory f, UARegistry g1,,) = _line();
+        UARegistry x1 = _gen(keccak256("chain B"), address(0), impl);
+        _mismatch(f, address(g1), address(_gen(keccak256("chain B"), address(x1), impl)));
+    }
+
+    function test_env_nonRegistry_refused() public {
+        (OpenFactory f, UARegistry g1,,) = _line();
+        _mismatch(f, address(g1), address(relay));
+        _mismatch(f, address(g1), address(0xBEEF));
+    }
+
+    /// Owner P4: a later generation built with another `SmartKeyAccount` implementation is refused.
+    function test_env_otherCloneHash_refused() public {
+        (OpenFactory f, UARegistry g1,,) = _line();
+        address otherImpl = new SmartKeyAccountFactory(UID).IMPLEMENTATION();
+        _mismatch(f, address(g1), address(_gen(UID, address(g1), otherImpl)));
+    }
+
+    /// The walk's bound: generation 16 reaches generation 1 in 15 steps (the most a line has: the constructor refuses
+    /// generation 17, so a deeper line cannot exist; the bound in `lineReaches` keeps a hostile predecessor from looping).
+    function test_env_walkOverDepth_refused() public {
+        (OpenFactory f, UARegistry g1,, UARegistry g3) = _line();
+        address r = address(g3);
+        for (uint256 g = 4; g <= 16; ++g) {
+            r = address(_gen(UID, r, impl));
+        }
+        assertEq(UARegistry(r).generation(), 16);
+        assertTrue(UARegistry(r).lineReaches(address(g1)));
+        _call(deployer, address(f), _pub(0, 1, _env(r, address(0))));
+        assertFalse(UARegistry(r).lineReaches(address(_gen(UID, address(0), impl))), "another generation 1: not on the line");
     }
 
     /// `MAX_LIBS` (spec §5.4, the node's decode bound): 32 libraries pass, 33 are `EnvInvalid`.

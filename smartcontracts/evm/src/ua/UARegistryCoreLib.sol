@@ -613,6 +613,19 @@ library UARegistryCoreLib {
         return p == address(0) ? address(0) : IUARegistry(p).kindHome(kind);
     }
 
+    /// `IUARegistry.lineReaches` (§10, CTR-UA-67): `root`'s clone hash is this registry's (`_cloneHash()`, owner P4), and the
+    /// walk from here reaches `root` within `MAX_GENERATION - 1` (15) predecessor steps, each a contract.
+    function lineReaches(address root) external returns (bool) {
+        if (root.code.length == 0 || IUARegistry(root).smartKeyCloneHash() != _cloneHash()) return false;
+        address r = address(this);
+        for (uint256 i; i < 16; ++i) {
+            if (r == root) return true;
+            if (i == 15 || r.code.length == 0) return false;
+            r = IUARegistry(r).predecessor();
+        }
+        return false;
+    }
+
     /// `IUARegistry.holderOf` (the registry answers a native-space id itself, P5).
     function holderOf(bytes32 ua) external returns (address, uint16, address) {
         return _holderOf(ua);

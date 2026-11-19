@@ -272,6 +272,10 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         _libView(address(UARegistryCoreLib), UARegistryCoreLib.holderOf.selector, 0);
     }
 
+    function lineReaches(address root) external view returns (bool) {
+        _libView(address(UARegistryCoreLib), UARegistryCoreLib.lineReaches.selector, 0);
+    }
+
     function pqzHomeOf(bytes32 ua) external view returns (address) {
         if (UAKinds.inNativeSpace(ua)) return address(0);
         _libView(address(UARegistryCoreLib), UARegistryCoreLib.pqzHomeOf.selector, 0);
