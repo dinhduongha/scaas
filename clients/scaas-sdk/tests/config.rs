@@ -163,7 +163,7 @@ fn gas_table(name: &str, family: &str) -> GasTable {
 }
 
 /// The gas-table rulings (owner 2026-11-19): a profile opts in only to tables the SDK holds (the reference table, a module
-/// table of the configuration), once each; a module table may not take the reference table's name or another table's, and is
+/// table of the configuration; the reference table only in a build with `wallet`, which quotes), once each; a module table may not take the reference table's name or another table's, and is
 /// EVM (the only family with a table today). Each refusal beside its control.
 #[tokio::test]
 async fn open_checks_gas_tables_and_opt_ins() {
@@ -176,8 +176,18 @@ async fn open_checks_gas_tables_and_opt_ins() {
     };
     let ok = |r: Result<std::sync::Arc<Sdk>, SdkError>| code(r.map(|_| ()));
     assert_eq!(
-        ok(with(&["reference", "vault"], vec![gas_table("vault", "evm")]).await),
+        ok(with(&["vault"], vec![gas_table("vault", "evm")]).await),
         "Ok"
+    );
+    // the reference table is data of the quote (`op`, feature `wallet`): a build without it holds no reference table, so an
+    // opt-in to it names a table the SDK does not hold
+    assert_eq!(
+        ok(with(&["reference", "vault"], vec![gas_table("vault", "evm")]).await),
+        if cfg!(feature = "wallet") {
+            "Ok"
+        } else {
+            "Argument"
+        }
     );
     assert_eq!(
         ok(with(&["missing"], vec![gas_table("vault", "evm")]).await),
