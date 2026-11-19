@@ -25,10 +25,12 @@ use crate::Sdk;
 use std::sync::Arc;
 
 /// The wallet module.
+#[derive(Clone)]
 pub struct Wallet {
     pub(crate) sdk: Arc<Sdk>,
 }
 
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 impl Sdk {
     /// The wallet module (spec §8).
     pub fn wallet(self: &Arc<Self>) -> Arc<Wallet> {

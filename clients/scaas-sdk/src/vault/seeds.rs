@@ -26,12 +26,14 @@ pub struct SeedInfo {
 }
 
 /// `vault.generate`'s request: the seed's label and its new vault passphrase (vault v1's rule).
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub struct Generate {
     pub label: String,
     pub vault_passphrase: Arc<SecretBytes>,
 }
 
 /// A new seed and its one reveal.
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub struct NewSeed {
     pub info: SeedInfo,
     pub backup: Arc<SeedBackup>,
@@ -40,6 +42,7 @@ pub struct NewSeed {
 /// The words of a seed made here: revealed once, a three-word check, then forgotten (`scaas-ua`'s `SeedBackup`, CLI-SGN-11).
 pub struct SeedBackup(pub(crate) Mutex<scaas_ua::wallet::SeedBackup>);
 
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 impl SeedBackup {
     fn with<R>(&self, f: impl FnOnce(&mut scaas_ua::wallet::SeedBackup) -> R) -> R {
         f(&mut self.0.lock().unwrap_or_else(PoisonError::into_inner))
@@ -74,6 +77,7 @@ pub(crate) struct OpenSeed {
 }
 
 /// The seed module (spec §6).
+#[derive(Clone)]
 pub struct Vault {
     pub(crate) sdk: Arc<Sdk>,
 }
@@ -233,6 +237,7 @@ fn fields_of<'a>(e: &'a SeedEntry, accounts: &'a str) -> IndexFields<'a> {
 }
 
 /// `vault.import_words`'s request: 12 to 24 English words as a secret.
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub struct ImportWords {
     pub label: String,
     pub words: Arc<SecretBytes>,
@@ -240,6 +245,7 @@ pub struct ImportWords {
 }
 
 /// `vault.derive_child`'s request: a stored seed (never a hidden set), the child's label and vault passphrase.
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub struct DeriveChild {
     pub parent: String,
     pub label: String,
@@ -248,6 +254,7 @@ pub struct DeriveChild {
 
 /// `vault.import_key`'s request (spec §6.7): a classical private key of `network` (32 bytes) as a leaf of a seed, sealed as the
 /// new label vault `native-import:<network>:<n>` under the seed's vault passphrase.
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub struct ImportKey {
     pub seed: String,
     /// `ua-rs`'s network name (`evm`, `cosmos`, `hedera_ecdsa`, `hedera_ed25519`, `sui`, `stellar`, `ton`, `aptos`, `solana`)
@@ -272,10 +279,10 @@ fn seed_passphrase(seed_vault: &scaas_ua::wallet::Vault, p: &str) -> Result<(), 
 
 /// The first marker of `remove`.
 #[derive(Debug, Clone, Copy)]
-pub struct ConfirmRemove;
+pub struct ConfirmRemove {}
 /// The second marker of `remove`, for a seed whose backup is `pending`.
 #[derive(Debug, Clone, Copy)]
-pub struct ConfirmRemoveUnbacked;
+pub struct ConfirmRemoveUnbacked {}
 
 /// `vault.remove`'s request.
 pub struct Remove {

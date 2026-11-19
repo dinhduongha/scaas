@@ -55,6 +55,7 @@ fn platform_handle(seed: &str) -> String {
     format!("{PLATFORM_PREFIX}{seed}")
 }
 
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 impl Sdk {
     /// The secret `unlock` opens `e` with: the passphrase as given; for `Passkey` / `Platform` the seed vault's PRF envelope's
     /// credential and salt asked of the authenticator, its output written into a fresh 32-byte secret.

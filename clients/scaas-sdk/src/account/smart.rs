@@ -86,6 +86,7 @@ pub struct SmartOp {
 
 /// The call of a `SmartKeyAccount`'s `Execute` (spec §13.2): decoded, or opaque under the marker.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum SmartCall {
     /// an ERC-20 `transfer(to, amount)` of `token` held by the account
     Transfer {

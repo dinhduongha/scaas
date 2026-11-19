@@ -19,6 +19,7 @@ macro_rules! own_codes {
         /// The SDK's own codes, in declaration order.
         pub const OWN_CODES: &[&str] = &[$(stringify!($v),)*];
 
+        #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
         impl SdkError {
             /// The stable code: the variant's name, or the lower layer's code.
             pub fn code(&self) -> &'static str {

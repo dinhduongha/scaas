@@ -13,6 +13,7 @@ use scaas_ua::wallet::{SecretBytes, Vault as V1, Wallet};
 use std::sync::{Arc, PoisonError};
 
 /// How a seed opens (spec §6.10). `Passkey` and `Platform` go through the seed's PRF envelope (plan T7).
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum Unlock {
     Passphrase(Arc<SecretBytes>),
     Passkey,
@@ -183,6 +184,7 @@ impl Vault {
     }
 }
 
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 impl Sdk {
     /// The stored keystore; an older container put back (the anchor's verdict) is shown as `Event::KeystoreRollback` on every
     /// read (closing review P2-2; spec §6.3), never fatal.

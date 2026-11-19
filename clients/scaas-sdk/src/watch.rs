@@ -49,6 +49,7 @@ fn rows_id(r: &AccountRow) -> &str {
     }
 }
 
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 impl Sdk {
     /// Watches `account` (a `0x` address or UA that an account row of the keystore names) on `chains` (EVM profiles) and
     /// starts the poll loop once. `Argument`: an id no row names (a hidden set's account is never watched) or a bad id;

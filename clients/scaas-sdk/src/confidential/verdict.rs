@@ -109,6 +109,7 @@ fn native(ua: &W) -> bool {
 /// recipient?, unwrap?}`, the proof-carrying entry and its argument struct, as `POST /v1/pqz-verdict` takes them), the
 /// statement the token rebuilds and the proof, `0x` hex.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(opaque))]
 pub struct PqzVerdictRequest {
     pub chain: String,
     pub token: String,

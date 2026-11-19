@@ -18,10 +18,12 @@ use std::sync::Arc;
 pub mod delay;
 
 /// The admin module.
+#[derive(Clone)]
 pub struct Admin {
     sdk: Arc<Sdk>,
 }
 
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 impl Sdk {
     /// The admin module (spec §11).
     pub fn admin(self: &Arc<Self>) -> Arc<Admin> {
@@ -249,6 +251,7 @@ UaGrantRole, admin_ua_grant_role, "UAGrantRole" { target: s => "target", bit: n 
 
 /// A rescue vault's admin operation (CTR-GOV-25): `seq` the vault's shared order, from 1.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum RescueOp {
     /// `setRescuer(seq, newRescuer)`, `new_rescuer` an address (not 0)
     SetRescuer { seq: u64, new_rescuer: String },

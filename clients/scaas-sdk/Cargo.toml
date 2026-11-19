@@ -145,3 +145,7 @@ required-features = ["wallet"]
 [[test]]
 name = "governance_delay"
 required-features = ["admin"]
+
+[lints.rust]
+# `frb_expand`: flutter_rust_bridge_codegen's scan (`frb_hint!`, src/lib.rs)
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

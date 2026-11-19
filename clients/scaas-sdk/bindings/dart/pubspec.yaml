@@ -10,6 +10,10 @@ dependencies:
   flutter_rust_bridge: 2.13.0
   ffi: ^2.1.3
   meta: ^1.15.0
+  # the generated data-carrying enums (KeyRef, Event, OpState, …) are freezed sealed classes (plan T20)
+  freezed_annotation: ^3.1.0
 
 dev_dependencies:
   test: 1.25.15
+  build_runner: ^2.4.15
+  freezed: ^3.2.3

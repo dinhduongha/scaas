@@ -115,6 +115,7 @@ impl std::fmt::Debug for Prepared {
     }
 }
 
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 impl Prepared {
     /// The typed digest (`scaas-ua`'s), the node's in-flight key too.
     pub fn id(&self) -> String {

@@ -191,6 +191,7 @@ pub struct UpdateMsig {
 
 /// A prepared update: its write and `scaas-ua`'s warnings (`plan_msig_update`, none a refusal), in their `Debug` form.
 #[derive(Debug)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub struct MsigUpdatePlan {
     pub write: Arc<RegistryWrite>,
     pub warnings: Vec<String>,

@@ -29,10 +29,12 @@ const ZERO20: &str = "0x0000000000000000000000000000000000000000";
 const ZERO32: &str = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
 /// The DEX module.
+#[derive(Clone)]
 pub struct Dex {
     sdk: Arc<Sdk>,
 }
 
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 impl Sdk {
     /// The DEX module (spec §10).
     pub fn dex(self: &Arc<Self>) -> Arc<Dex> {
@@ -218,6 +220,7 @@ impl std::fmt::Debug for PreparedOrder {
     }
 }
 
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 impl PreparedOrder {
     /// The order's hash (its typed digest): the venue's `orderHash`.
     pub fn id(&self) -> String {

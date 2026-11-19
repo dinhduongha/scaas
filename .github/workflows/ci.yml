@@ -69,9 +69,10 @@
 #                          (n2048-kmax1024, n2560-kmax16384, n2816-kmax65536): cargo test --locked --no-default-features --features vault,account,wallet,pqz,pqz-set-<set> --test sets;
 #                          cargo test --locked --test feature_tree (the e2e on anvil, 6 GB, stays the local gate sdk-e2e)
 #   scaas-sdk-wasm:        in clients/scaas-sdk: cargo check --locked --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet
-#   scaas-sdk-bindings:    clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check (flutter_rust_bridge_codegen 2.13.0: the generated FRB Dart
-#                          surface equals the committed one); in clients/scaas-sdk/ffi: cargo clippy --locked --all-targets -- -D warnings; cargo build --locked;
-#                          in clients/scaas-sdk/bindings/dart: dart pub get --enforce-lockfile; dart test (the load check, the vault and keystore rows)
+#   scaas-sdk-bindings:    clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check (flutter_rust_bridge_codegen 2.13.0 with cargo-expand 1.0.127: the
+#                          generated FRB Dart surface of the whole SDK equals the committed one); in clients/scaas-sdk/ffi: cargo clippy --locked --all-targets
+#                          -- -D warnings; cargo build --locked; in clients/scaas-sdk/bindings/dart: dart pub get --enforce-lockfile; dart test (the load check,
+#                          the vault and keystore rows, the e2e smoke on a local anvil: foundry v1.8.5)
 #   keystore-vectors:      smartcontracts/vectors/keystore/ read by both sides: in clients/clientkeys npm ci --ignore-scripts;
 #                          node --test test/keystore.test.js test/keystore-index.test.js test/vault.test.js; in clients/scaas-sdk cargo test --locked --test keystore_vectors
 #   test-features:         python3 scripts/check_test_features.py (ARCH-POS-13: no `vectors` / `hazmat` of scaas-ua, zether-prover, pqz-ffi
@@ -1199,8 +1200,14 @@ jobs:
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: 3.12.2
-      - name: flutter_rust_bridge_codegen 2.13.0
-        run: cargo install flutter_rust_bridge_codegen --version 2.13.0 --locked
+      # the Dart test's e2e smoke runs a local anvil
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.8.5
+      - name: flutter_rust_bridge_codegen 2.13.0 and cargo-expand 1.0.127 (its scan of the scaas-sdk crate)
+        run: |
+          cargo install flutter_rust_bridge_codegen --version 2.13.0 --locked
+          cargo install cargo-expand --version 1.0.127 --locked
       - name: the generated FRB surface has no drift
         run: bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check
       - name: the reference library

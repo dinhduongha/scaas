@@ -286,15 +286,15 @@ async fn remove_pending_needs_both_markers() {
     let id = new.info.id;
     let r = Remove {
         seed: id.clone(),
-        confirm: ConfirmRemove,
+        confirm: ConfirmRemove {},
         unbacked: None,
     };
     assert_eq!(code(s.vault().remove(r).await), "ConfirmationMissing");
     assert_eq!(stored(&m).await.seeds.len(), 1);
     let r = Remove {
         seed: id.clone(),
-        confirm: ConfirmRemove,
-        unbacked: Some(ConfirmRemoveUnbacked),
+        confirm: ConfirmRemove {},
+        unbacked: Some(ConfirmRemoveUnbacked {}),
     };
     s.vault().remove(r).await.unwrap();
     assert!(stored(&m).await.seeds.is_empty());
@@ -303,7 +303,7 @@ async fn remove_pending_needs_both_markers() {
     s.vault()
         .remove(Remove {
             seed: id,
-            confirm: ConfirmRemove,
+            confirm: ConfirmRemove {},
             unbacked: None,
         })
         .await

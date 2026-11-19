@@ -16,6 +16,7 @@ const MSIG: u16 = 0x0120;
 
 /// How an operation reaches the chain (spec §13.3).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum SubmitPath {
     /// a gateway when the profile has one and the entry is one a gateway takes (door A), else a self-relay by `payer` when
     /// given, else `SubmitPathNone`

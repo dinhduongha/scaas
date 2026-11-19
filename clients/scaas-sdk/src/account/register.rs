@@ -113,6 +113,7 @@ impl std::fmt::Debug for RegistryWrite {
     }
 }
 
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 impl RegistryWrite {
     pub fn id(&self) -> String {
         self.id.clone()

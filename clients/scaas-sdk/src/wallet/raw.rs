@@ -31,6 +31,7 @@ impl Default for AllowRawNative {
 
 /// What the app's encoder built (hex, `0x`), by kind.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum NativeSignRequest {
     /// a Bitcoin sighash (BIP-143 / BIP-341), 32 bytes
     Digest32 { digest: String },

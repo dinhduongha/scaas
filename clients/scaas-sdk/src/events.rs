@@ -7,6 +7,7 @@ use tokio::sync::broadcast;
 
 /// An SDK event (appended only).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum Event {
     SeedUnlocked {
         seed: String,
@@ -55,6 +56,7 @@ pub enum Event {
 /// An operation's state (spec §13.5, CLI-SDK-18): terminal only on a chain fact from a decisive read at the profile's final
 /// block.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum OpState {
     /// the executed event of the operation's digest at or below the final block
     Landed { block: u64, hash: String },
@@ -76,6 +78,7 @@ impl OpState {
 
 /// What is known of an operation in flight (spec §13.5): none of it ends the operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum InFlight {
     /// signed and written, not sent yet
     Signed,
@@ -104,6 +107,7 @@ pub struct Subscription {
     rx: tokio::sync::Mutex<broadcast::Receiver<Event>>,
 }
 
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 impl Subscription {
     pub(crate) fn new(tx: &broadcast::Sender<Event>) -> Arc<Subscription> {
         Arc::new(Subscription {

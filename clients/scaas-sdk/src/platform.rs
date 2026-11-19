@@ -57,6 +57,7 @@ pub struct KeyPolicy {
 }
 
 #[async_trait]
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub trait Authenticator: Send + Sync {
     async fn create_passkey(
         &self,

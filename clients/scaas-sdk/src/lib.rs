@@ -10,6 +10,25 @@
     clippy::indexing_slicing
 )]
 
+/// An attribute for `flutter_rust_bridge_codegen`'s scan of this crate (spec §16.1; plan T20), written as the doc line its `frb`
+/// macro encodes (`frb_encoded(<hex of "#[frb(...)]">)`), so the SDK needs no FRB dependency: active only under the codegen's
+/// `--cfg frb_expand`, no effect on a build. Use: `#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]`.
+#[allow(unused_macros)]
+macro_rules! frb_hint {
+    // #[frb(ignore)]: a Rust-only item, or one the FRB surface (clients/scaas-sdk/ffi/src/api) wraps
+    (ignore) => {
+        "frb_encoded(235b6672622869676e6f7265295d)"
+    };
+    // #[frb(non_opaque)]: a record or enum translated field by field (FRB makes a foreign crate's data enum opaque by default)
+    (non_opaque) => {
+        "frb_encoded(235b667262286e6f6e5f6f7061717565295d)"
+    };
+    // #[frb(opaque)]: a record holding a JSON value, built and read through the FRB surface's helpers
+    (opaque) => {
+        "frb_encoded(235b667262286f7061717565295d)"
+    };
+}
+
 #[cfg(not(feature = "vault"))]
 compile_error!("scaas-sdk needs the feature `vault` (every module does)");
 
@@ -25,6 +44,7 @@ pub mod dex;
 pub mod error;
 pub mod events;
 #[cfg(feature = "frb")]
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub mod frb;
 #[cfg(feature = "wallet")]
 pub mod op;
@@ -86,6 +106,7 @@ pub mod bits {
 }
 
 /// The bits of this build's features.
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub fn features() -> u64 {
     use bits::*;
     let on = [
@@ -229,6 +250,7 @@ fn gas_tables(modules: Vec<GasTable>) -> Result<Vec<GasTable>, SdkError> {
     Ok(out)
 }
 
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 impl Sdk {
     /// Checks the configuration and builds the endpoint lists; no network I/O. Refuses: a profile without a `0x` + 64 hex
     /// `chain_uid` and two profiles with one `key` (`Argument`); an empty RPC list (`EndpointListEmpty`); `strict_majority` with

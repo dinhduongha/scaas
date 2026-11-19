@@ -18,10 +18,11 @@ use std::sync::Arc;
 pub type Fut<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 type F<A, T> = Box<dyn Fn(A) -> Fut<T> + Send + Sync>;
 
-/// `SecureStore` as closures; `lock` answers a token that `unlock` releases (called when the lock drops).
+/// `SecureStore` as closures; `lock` answers a token that `unlock` releases (called when the lock drops). `get` takes the item's
+/// name and the reason shown at a presence check; `put_if` the name, the expected `rev`, the bytes and the item's policy.
 pub struct ClosureStore {
-    pub get: F<String, Result<Option<StoredItem>, StoreError>>,
-    pub put_if: F<(String, Option<u64>, Vec<u8>), Result<(), StoreError>>,
+    pub get: F<(String, String), Result<Option<StoredItem>, StoreError>>,
+    pub put_if: F<(String, Option<u64>, Vec<u8>, StorePolicy), Result<(), StoreError>>,
     pub delete: F<String, Result<(), StoreError>>,
     pub lock: F<String, Result<u64, StoreError>>,
     pub unlock: Arc<dyn Fn(u64) -> Fut<()> + Send + Sync>,
@@ -41,17 +42,17 @@ impl Drop for Release {
 
 #[async_trait]
 impl SecureStore for ClosureStore {
-    async fn get(&self, name: String, _reason: String) -> Result<Option<StoredItem>, StoreError> {
-        (self.get)(name).await
+    async fn get(&self, name: String, reason: String) -> Result<Option<StoredItem>, StoreError> {
+        (self.get)((name, reason)).await
     }
     async fn put_if(
         &self,
         name: String,
         prev: Option<u64>,
         bytes: Vec<u8>,
-        _: StorePolicy,
+        policy: StorePolicy,
     ) -> Result<(), StoreError> {
-        (self.put_if)((name, prev, bytes)).await
+        (self.put_if)((name, prev, bytes, policy)).await
     }
     async fn delete(&self, name: String) -> Result<(), StoreError> {
         (self.delete)(name).await

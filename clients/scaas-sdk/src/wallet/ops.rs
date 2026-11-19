@@ -61,6 +61,7 @@ pub struct PayMeta {
 
 /// The `PayMeta` body by schema (pay-meta-tax spec §7.1), named.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum PayBody {
     None,
     Note {
@@ -199,6 +200,7 @@ impl AllowOpaqueCall {
 
 /// A mandate wallet's call (spec §13.2): decoded, or opaque under the marker.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum ExecuteCall {
     /// an ERC-20 `transfer(to, amount)` of `token` held by the wallet
     Transfer {

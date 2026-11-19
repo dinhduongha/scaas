@@ -23,6 +23,7 @@ pub(crate) const REFERENCE_FILE: &str = include_str!("../../gas/reference.json")
 /// Where a part of a quote's gas figure came from (owner 2026-11-19), so the app and the operator see a figure not measured on
 /// the chain.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum GasFrom {
     /// a row of the chain profile, measured on that chain
     Chain,

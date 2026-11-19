@@ -31,6 +31,7 @@ use std::sync::Arc;
 /// A key the SDK signs with, by reference (spec §5): the seed's open wallet holds it, or, for [`KeyRef::Key`], the platform's
 /// authenticator (a passkey or a secure-element key, a row of the seed: owner 2026-11-19, S1).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum KeyRef {
     Ua {
         seed: String,
@@ -61,6 +62,7 @@ pub enum KeyRef {
 
 /// One slot of an `msig` signature (`KeyRef::Msig`; `scaas-ua` `Slot`).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum MsigSlot {
     /// the signing (or native) member at `index` signs with `key`
     Member { index: u16, key: KeyRef },
@@ -89,10 +91,12 @@ pub struct MsigLeaf {
 }
 
 /// The operations module.
+#[derive(Clone)]
 pub struct Op {
     pub(crate) sdk: Arc<Sdk>,
 }
 
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 impl Sdk {
     /// The operations module (spec §13).
     pub fn op(self: &Arc<Self>) -> Arc<Op> {

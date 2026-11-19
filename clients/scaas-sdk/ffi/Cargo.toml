@@ -14,11 +14,22 @@ license-file = "../../../LICENSE"
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
-scaas-sdk = { path = "..", features = ["frb"] }
+scaas-sdk = { path = "..", features = [
+  "frb",
+  "zether",
+  "pqz",
+  "pqz-set-n2304-kmax4096",
+  "dex",
+  "admin",
+  "native-networks",
+  "classical-roots",
+] }
 scaas-ua = { path = "../../ua-rs", default-features = false, features = ["wallet"] }
 scaas-rpc = { path = "../../scaas-rpc", default-features = false, features = ["evm", "node-client"] }
 flutter_rust_bridge = "=2.13.0"
 tokio = { version = "1", features = ["rt", "time"] }
+# the SDK's records holding a JSON value (an opaque handle across the binding)
+serde_json = "1"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

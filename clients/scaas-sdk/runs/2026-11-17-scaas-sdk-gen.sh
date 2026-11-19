@@ -5,9 +5,11 @@
 #   clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check    regenerate, then fail if a generated file differs from the
 #                                                                 committed one (the drift test, as ua-c's header test)
 # Today the one generated binding is the FRB Dart surface (flutter_rust_bridge_codegen 2.13.0, the pin of the ffi crate's
-# flutter_rust_bridge): bindings/dart/lib/src/rust/ and ffi/src/frb_generated.rs from ffi/src/api. The UniFFI targets
-# (T20b-T20h) add their generators here. The codegen runs through scripts/capped, in the foreground (on CI, which sets `CI`,
-# directly: the runner is the job's own machine).
+# flutter_rust_bridge): bindings/dart/lib/src/rust/ (the freezed classes of the data-carrying enums by build_runner, which the
+# codegen runs) and ffi/src/frb_generated.rs, from ffi/src/api and the scaas-sdk crate itself (`rust_input`). The old Dart
+# output is removed first, so a file the surface no longer produces cannot stay behind. The UniFFI targets (T20b-T20h) add
+# their generators here. The codegen runs through scripts/capped, in the foreground (on CI, which sets `CI`, directly: the
+# runner is the job's own machine; pub resolves offline locally only).
 set -euo pipefail
 W=$(git rev-parse --show-toplevel)
 D="$W/clients/scaas-sdk"
@@ -20,8 +22,11 @@ if [ "$have" != "$want" ]; then
 fi
 cap=("$W/scripts/capped")
 [ -n "${CI:-}" ] && cap=()
+off=(--offline)
+[ -n "${CI:-}" ] && off=()
 echo "[gen] start: FRB Dart"
-(cd "$D/bindings/dart" && "${cap[@]}" flutter_rust_bridge_codegen generate >/dev/null)
+(cd "$D/bindings/dart" && "${cap[@]}" dart pub get "${off[@]}" --enforce-lockfile >/dev/null &&
+    rm -rf lib/src/rust && "${cap[@]}" flutter_rust_bridge_codegen generate >/dev/null)
 echo "[gen] ok: FRB Dart"
 if [ "${1:-}" = --check ]; then
     cd "$D"

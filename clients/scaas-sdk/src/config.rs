@@ -24,6 +24,7 @@ pub enum Family {
 /// One endpoint of a profile's RPC or gateway list (CLI-RPC-02): `{url, class, label, auth}`; `auth` belongs to this endpoint
 /// only and is built by the app from its own secret source.
 #[derive(Clone)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub struct EndpointConfig {
     pub url: String,
     pub class: Class,
@@ -43,6 +44,7 @@ impl std::fmt::Debug for EndpointConfig {
 
 /// The block of every decisive and decryption read (§9.4 requirement 3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum Finality {
     Finalized,
     Depth(u64),
@@ -521,6 +523,7 @@ impl Default for Limits {
 
 /// The tokio runtime the SDK spawns every exported async call on (§14): the app's, or one the SDK starts (two workers).
 #[derive(Debug, Clone)]
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub enum RuntimeChoice {
     Adopt(tokio::runtime::Handle),
     Own,
@@ -532,6 +535,7 @@ pub type Clock = std::sync::Arc<dyn Fn() -> u64 + Send + Sync>;
 
 /// Everything `Sdk::open` takes.
 #[derive(Clone)]
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub struct SdkConfig {
     pub profiles: Vec<ChainProfile>,
     /// where the keystore and the SDK's state live (spec §6.9); `FileStore` on native by default

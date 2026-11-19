@@ -46,10 +46,12 @@ pub(crate) const ZETHER_KIND: u16 = 0x0141;
 pub(crate) const COIN_EVM: u32 = 60;
 
 /// The confidential module.
+#[derive(Clone)]
 pub struct Confidential {
     pub(crate) sdk: Arc<Sdk>,
 }
 
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 impl Sdk {
     /// The confidential module (spec §9).
     pub fn confidential(self: &Arc<Self>) -> Arc<Confidential> {

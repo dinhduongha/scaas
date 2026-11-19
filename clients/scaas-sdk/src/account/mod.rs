@@ -4,12 +4,12 @@
 //! wallet takes the next free index, so no two wallets share one); the EIP-2333 kinds at index 0 only (CLI-UAL-15). Every change
 //! rewrites the seed's index MAC (the seed unlocked). A watch row holds no key and signs nothing. UNAUDITED.
 #[cfg(feature = "wallet")]
-pub(crate) mod msig;
+pub mod msig;
 #[cfg(feature = "wallet")]
 mod register;
 mod restore;
 #[cfg(feature = "wallet")]
-mod smart;
+pub mod smart;
 #[cfg(feature = "wallet")]
 mod sponsor;
 
@@ -37,10 +37,12 @@ use crate::{Sdk, SdkError};
 use std::sync::Arc;
 
 /// The account module.
+#[derive(Clone)]
 pub struct Account {
     pub(crate) sdk: Arc<Sdk>,
 }
 
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 impl Sdk {
     /// The account module (spec §7).
     pub fn account(self: &Arc<Self>) -> Arc<Account> {

@@ -6,7 +6,7 @@ and the generic surface that app cores above it use (`pqchat-core`, `pqvault-cor
 `scaas-rpc` ([CLI-RPC-01](scaas-rpc.md#CLI-RPC-01)), and the bindings are generated from its one API. Status: **SPECIFIED**, partly
 built: `vault`, `account` (rows, restore, marks, registration), `wallet` (tokens, balances, native sends, the token and mandate-wallet operations)
 and the operations core in `clients/scaas-sdk` on branch `sdk-code` (plan tasks T0–T12 and the T13 fix round of the closing review);
-the Dart binding is still the plan's T3 spike, so no binding is BUILT (spec `docs/superpowers/specs/2026-11-17-scaas-sdk.md`, reviewed
+the Dart binding (`flutter_rust_bridge`, the whole public surface generated, plan T20) is BUILT, the other bindings are not (spec `docs/superpowers/specs/2026-11-17-scaas-sdk.md`, reviewed
 by Fable on 2026-11-17 with every finding applied; plan `docs/superpowers/plans/2026-11-17-scaas-sdk.md`). UNAUDITED.
 
 **Contents**
@@ -305,7 +305,8 @@ warning (`short_seed`, `imported_key`) comes beside a success, never as an error
 ## 9. Bindings
 
 <a id="CLI-SDK-12"></a>**CLI-SDK-12** — **Bindings are generated from the SDK's one API; an app links one Rust library** (owner
-2026-11-11; generators and the C point controller calls; SPECIFIED). The public Rust API is the binding surface: module objects
+2026-11-11; generators and the C point controller calls; SPECIFIED; the Dart binding BUILT: `clients/scaas-sdk/bindings/dart`, generated
+by `clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh` with its drift check, plan T20, decisions CLI-SDK-30). The public Rust API is the binding surface: module objects
 shared by reference, owned strings, byte vectors, integers, records and enums, string ids, no fixed-size arrays, lifetimes or generics,
 secrets only as `SecretBytes`, every async call on the SDK's runtime. Generators: `flutter_rust_bridge` 2 for Dart and Flutter (the
 two platform interfaces as one generated record of async closures); official UniFFI for Python, Kotlin and Swift over the async API;
