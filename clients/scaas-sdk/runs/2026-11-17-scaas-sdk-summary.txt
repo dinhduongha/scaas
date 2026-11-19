@@ -8,7 +8,6 @@ baseline ua-test | 4de8a5604 | 0 | 503 passed, 0 failed, 3 ignored (47 binaries)
 baseline ua-clippy | 4de8a5604 | 0 | -
 baseline features | 4de8a5604 | 0 | feature_tree not run (crate absent)
 # latest runs:
-ck-test | 81a8cbcf2 | 0 | node: 472 pass, 0 fail, 4 skipped
 ua-vectors | 81a8cbcf2 | 0 | 647 passed, 0 failed, 6 ignored (62 binaries)
 ua-verify-only | 81a8cbcf2 | 0 | 84 passed, 0 failed, 0 ignored (18 binaries)
 ua-wallet-rows | 81a8cbcf2 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
@@ -31,19 +30,27 @@ frb-dart | 81a8cbcf2 | 0 | dart: +46:
 # T14 (history, watching, events) replaced seven rows above, run on the T14 tree before its commit. sdk-min's one red is
 # tests/config.rs open_checks_gas_tables_and_opt_ins, from the gas-table commits 64c8ed24d and 2df23400e (without `wallet` the
 # SDK holds no `reference` table, so the opt-in is refused); T14 touches no file of it. T14 mutants: 8/8 killed.
-sdk-min | 36621b5e5 | 101 | 30 passed, 1 failed, 0 ignored (3 binaries); tree dirty
 # T15 (confidential: the reading layer, part of Zether) replaced eight rows above, run on the T15 tree before its commit.
 # sdk-min's one red is the same pre-existing tests/config.rs open_checks_gas_tables_and_opt_ins (gas-table work on ua-rs-sign);
 # sdk-e2e is T12's pay (T15's anvil e2e is not built). bind-cpp not applicable (no bindings/cpp). T15 mutants: 9/9 killed.
-ua-clippy | 342b1c773 | 0 | -; tree dirty
-ua-test | 342b1c773 | 0 | 551 passed, 0 failed, 3 ignored (55 binaries); tree dirty
 rpc-wasm | 9172eb6dd | 0 | -; tree dirty
 rpc-test | 9172eb6dd | 0 | 332 passed, 0 failed, 20 ignored (32 binaries); tree dirty
 rpc-clippy | 9172eb6dd | 0 | -; tree dirty
-sdk-test | e924d70e4 | 0 | 174 passed, 0 failed, 3 ignored (16 binaries); tree dirty
-sdk-wasm | e924d70e4 | 0 | -; tree dirty
-features | e924d70e4 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-bind-dart | e924d70e4 | 0 | dart: +6:; tree dirty
-sdk-e2e | 1d5c5f9b3 | 0 | 2 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-sdk-clippy | 1d5c5f9b3 | 0 | -; tree dirty
-docs | 1d5c5f9b3 | 0 | -; tree dirty
+sdk-test | 818595dbf | 0 | 181 passed, 0 failed, 5 ignored (17 binaries)
+sdk-clippy | 818595dbf | 0 | -
+sdk-wasm | 818595dbf | 0 | -
+features | 818595dbf | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+docs | 818595dbf | 0 | -
+bind-dart | 818595dbf | 0 | dart: +6:
+sdk-min | 818595dbf | 101 | 30 passed, 1 failed, 0 ignored (3 binaries)
+ck-test | 818595dbf | 0 | node: 480 pass, 0 fail, 4 skipped
+ua-clippy | 818595dbf | 0 | -
+ua-test | 818595dbf | 0 | 553 passed, 0 failed, 3 ignored (55 binaries)
+sdk-e2e | 818595dbf | 0 | 4 passed, 0 failed, 0 ignored (1 binaries)
+# Plan T13 part 1 (registration, split, records) 5721c48da, T13b (sponsored registration) 66e995ee2, the T15 e2e switch to
+# SDK registration 818595dbf: the rows above at 818595dbf. sdk-e2e 4 passed (the PQ-kind registration, the sponsored
+# registration then pay, the T12 pay, the T15 Zether e2e registering through the SDK). sdk-min's one red is the same
+# pre-existing tests/config.rs open_checks_gas_tables_and_opt_ins (fixed on ua-rs-sign, arrives by merge); no other failure.
+# bind-cpp not applicable (no bindings/cpp). Mutants: t13 5/5 killed, t13sponsor 9/9 killed (the t13a..t13f files are an
+# earlier round's numbering).
+# This commit also formats clients/clientkeys/scripts/registration-blob-vectors.mjs (Prettier; its output unchanged, the blobs regenerate byte for byte).

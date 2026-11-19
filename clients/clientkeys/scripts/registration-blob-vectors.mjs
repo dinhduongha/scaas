@@ -26,9 +26,11 @@ export function blobRows() {
       pop: r.args.pop,
     };
     const full = registrationBlob({ ...input, kemCommit: false });
-    if (JSON.stringify(full.args) !== JSON.stringify(r.args) || full.ua !== r.ua) throw new Error(`${r.name}: not the row's`);
+    if (JSON.stringify(full.args) !== JSON.stringify(r.args) || full.ua !== r.ua)
+      throw new Error(`${r.name}: not the row's`);
     rows.push({ name: r.name, blob: full });
-    if (r.attrs.kemPk !== "0x") rows.push({ name: `${r.name}/kem-commit`, blob: registrationBlob({ ...input, kemCommit: true }) });
+    if (r.attrs.kemPk !== "0x")
+      rows.push({ name: `${r.name}/kem-commit`, blob: registrationBlob({ ...input, kemCommit: true }) });
   }
   return rows;
 }
