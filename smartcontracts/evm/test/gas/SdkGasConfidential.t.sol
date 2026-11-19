@@ -13,9 +13,10 @@ import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
+import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {nid} from "../helpers/Ids.sol";
 import {SdkGasZetherFix, SdkGasPqzFix} from "./SdkGasFixtures.sol";
-import {SdkGasOps} from "./SdkGasOps.sol";
+import {SdkGasOps, SdkGasRows} from "./SdkGasOps.sol";
 
 /// The `zether` and `pqz` domain kinds' base rows (owner 2026-11-19: the token kinds' entry set; ruling A: the regulated
 /// variants count): each entry on the kind's Normal, Wrapped and regulated Normal / Wrapped tokens, public balances, the
@@ -78,6 +79,8 @@ abstract contract SdkGasKindBase is SdkGasOps {
                 _sgAttest(nid(parties[i]));
             }
             _sgAttest(sgUaTo);
+            _sgAttest(UAKinds.uaOf(sgUaKind, sgUaKey));
+            _sgAttest(_sgPayeeUa());
         }
         address tn = _sgCreate(false, reg, address(0), reg ? bytes32("sgnr") : bytes32("sgn"));
         NormalToken(tn).mint(alice_, 1_000_000, EnvKit.codeUidOf(tn));
@@ -174,10 +177,16 @@ abstract contract SdkGasZetherBase is SdkGasKindBase, SdkGasZetherFix {
             factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode
         );
         (sgPk, sgUaTo) = (0xA11CE5EED, ZetherTypes.UA.unwrap(bob.ua));
+        _sgUaSignerOn(address(reg)); // G2: the derived reference signer and Q1's derived payee
     }
 
     function _sgKind() internal pure override returns (string memory) {
         return "zether";
+    }
+
+    /// G2: the derived signer holds the native signer's units of the token `c` (every one), in its run only.
+    function _sgUaPrep(address c) internal virtual override {
+        _sgUaFund(c, vm.addr(sgPk), type(uint256).max);
     }
 
     function _sgCfg(bool reg) internal view override returns (IFactoryToken.TokenConfig memory) {
@@ -203,7 +212,11 @@ abstract contract SdkGasZetherBase is SdkGasKindBase, SdkGasZetherFix {
     }
 }
 
-contract SdkGasZetherTest is SdkGasKind, SdkGasZetherBase {}
+contract SdkGasZetherTest is SdkGasKind, SdkGasZetherBase {
+    function _sgUaPrep(address c) internal override(SdkGasRows, SdkGasZetherBase) {
+        super._sgUaPrep(c);
+    }
+}
 
 /// The `pqz` kind's fixture: `PqzRegFixture` with the `WRAPPED_PQZ` release.
 abstract contract SdkGasPqzBase is SdkGasKindBase, SdkGasPqzFix {
@@ -215,10 +228,16 @@ abstract contract SdkGasPqzBase is SdkGasKindBase, SdkGasPqzFix {
         super.setUp();
         _releaseWrapped();
         (sgPk, sgUaTo) = (0xA11CE5EED, more[2]);
+        _sgUaSignerOn(address(reg)); // G2: the derived reference signer and Q1's derived payee
     }
 
     function _sgKind() internal pure override returns (string memory) {
         return "pqz";
+    }
+
+    /// G2: the derived signer holds the native signer's units of the token `c` (every one), in its run only.
+    function _sgUaPrep(address c) internal virtual override {
+        _sgUaFund(c, vm.addr(sgPk), type(uint256).max);
     }
 
     function _sgCfg(bool reg) internal view override returns (IFactoryToken.TokenConfig memory) {
@@ -241,4 +260,8 @@ abstract contract SdkGasPqzBase is SdkGasKindBase, SdkGasPqzFix {
     }
 }
 
-contract SdkGasPqzTest is SdkGasKind, SdkGasPqzBase {}
+contract SdkGasPqzTest is SdkGasKind, SdkGasPqzBase {
+    function _sgUaPrep(address c) internal override(SdkGasRows, SdkGasPqzBase) {
+        super._sgUaPrep(c);
+    }
+}

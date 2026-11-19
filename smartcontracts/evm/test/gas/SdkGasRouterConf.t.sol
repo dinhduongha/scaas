@@ -16,6 +16,7 @@ import {ZetherFixture, ZUID} from "../zether/helpers/ZetherFixture.sol";
 import {PqzOffchainBase} from "../pqz/helpers/PqzOffchainBase.sol";
 import {PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
+import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
@@ -32,6 +33,14 @@ abstract contract SdkGasRouterConfOps is SdkGasOps {
     bytes4 internal gcSel;
     address internal gcT;
     bytes internal gcWords;
+    /// G2: the target the derived reference signer signs for, where it is another one (its own seats), else 0
+    mapping(address => address) internal gcUaTarget;
+
+    /// The op's target: `gcT`, or its twin whose seats the derived signer holds (in its run).
+    function _gcT() internal view returns (address) {
+        address t = gcUaTarget[gcT];
+        return sgKind != 0 && t != address(0) ? t : gcT;
+    }
 
     /// `gcSel(E, target, words…, auth)`: every argument static but the envelope's tail and the signature.
     function _gc(address c, uint256 nonce) internal view returns (bytes memory) {
@@ -39,13 +48,13 @@ abstract contract SdkGasRouterConfOps is SdkGasOps {
             c,
             keccak256(
                 bytes.concat(
-                    abi.encode(gcTh, _sgFrom(), gcT),
+                    abi.encode(gcTh, _sgFrom(), _gcT()),
                     gcWords,
                     abi.encode(SG_LANE, nonce, block.timestamp + 600, uint32(0), address(0), uint256(0), address(0))
                 )
             )
         );
-        bytes memory head = bytes.concat(abi.encode(_sgE(nonce)), abi.encode(gcT), gcWords);
+        bytes memory head = bytes.concat(abi.encode(_sgE(nonce)), abi.encode(_gcT()), gcWords);
         bytes memory sig = abi.encode(_sgUaSig(d));
         // the `UASig` tuple's offset (the head's length plus its own word), then its body (`abi.encode` of a dynamic
         // tuple: its offset word first, dropped)
@@ -90,6 +99,11 @@ contract SdkGasRouterPqzTest is SdkGasRouterConfOps, PqzOffchainBase {
         (c.admin, c.roles.issuer) = (_sgFrom(), _sgFrom());
         gcTok = NormalPqzToken(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "sg-router-pqz"));
         _holders(address(gcTok));
+        // G2: the same token with the derived reference signer its admin and issuer seat
+        (c.admin, c.roles.issuer) = (_sgUaSignerOn(address(reg)), UAKinds.uaOf(sgUaKind, sgUaKey));
+        address twin = f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "sg-router-pqz-ua");
+        _holders(twin);
+        gcUaTarget[address(gcTok)] = twin;
     }
 
     function _fixtureSka() internal view override returns (address) {
@@ -136,6 +150,13 @@ contract SdkGasRouterZetherTest is SdkGasRouterConfOps, ZetherFixture {
         (c.admin, c.lockedFeatures) = (nid(address(this)), 0);
         tok = NormalZetherToken(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "sg-router-aud"));
         IGovernance(address(tok)).grantRole(GovernanceBits.AUDITOR, _sgFrom(), EnvKit.codeUidOf(address(tok)));
+        _sgUaSignerOn(address(reg)); // G2: the derived reference signer
+    }
+
+    /// G2: the derived signer holds `AUDITOR` too, in its run only.
+    function _sgUaPrep(address) internal override {
+        IGovernance(address(tok))
+            .grantRole(GovernanceBits.AUDITOR, UAKinds.uaOf(sgUaKind, sgUaKey), EnvKit.codeUidOf(address(tok)));
     }
 
     /// `mtxSetAuditorKey(E, target, newKey, epoch, pop, chainUid, auth)`: the struct signs `keccak256(newKey)`.

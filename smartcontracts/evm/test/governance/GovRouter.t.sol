@@ -371,7 +371,7 @@ abstract contract GovRouterFixture is UARegistryBase {
         }
     }
 
-    function _auth(bytes32 id, bytes32 digest) internal view returns (IUARegistry.UASig memory a) {
+    function _auth(bytes32 id, bytes32 digest) internal view virtual returns (IUARegistry.UASig memory a) {
         if (id == pq) a.signature = _sig(pqKey, UAKinds.uaMessage(ML44, UAKinds.PURPOSE_METATX, digest));
         else if (id == msig) a.members = _memberSigs(msig, UAKinds.PURPOSE_METATX, digest, 2);
         else a.signature = _ecdsa(id, digest);

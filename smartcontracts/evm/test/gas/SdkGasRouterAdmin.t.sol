@@ -13,6 +13,8 @@ import {ZetherStatements} from "../../src/zether/ZetherStatements.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
+import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {plainEnv, withModules} from "../helpers/Catalogue.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
@@ -178,6 +180,20 @@ contract SdkGasRouterAdminTest is SdkGasRouterBase {
         _grSt(entry, t == address(cr) ? "registry" : "factory", th, sel, eoa, t, args);
     }
 
+    /// G2: the same sequence by derived identities (`_grUaRun`): the factory and the compliance registry, made by `eoa`'s
+    /// key in `setUp`, handed to the derived `eoa` first (transferred by the key, accepted through the router, no row).
+    function test_sdkGas_routerAdmin_ua() public {
+        bytes32 ua = UAKinds.uaOf(UAKinds.SECP256K1, sgUaKey);
+        vm.startPrank(address(uint160(uint256(eoa))));
+        IAdmin(address(f)).transferAdmin(ua, chainUidA);
+        IAdmin(address(cr)).transferAdmin(ua, chainUidA);
+        vm.stopPrank();
+        _grUaRun();
+        _grDo(T.UA_ACCEPT_ADMIN, router.mtxAcceptAdmin.selector, eoa, address(f), "");
+        _grDo(T.UA_ACCEPT_ADMIN, router.mtxAcceptAdmin.selector, eoa, address(cr), "");
+        test_sdkGas_routerAdmin();
+    }
+
     function test_sdkGas_routerAdmin() public {
         address t = address(f);
         string memory v = "factory";
@@ -321,6 +337,12 @@ contract SdkGasRouterCreateTest is SdkGasRouterBase {
         bytes memory ic = abi.encodeCall(INoteKind.initialize, (eoa, "by router"));
         bytes32 di = _grD(T.UA_CREATE_INSTANCE, t, abi.encode(CLS, uint16(0), uint64(1), keccak256(ic), salt), e);
         return abi.encodeCall(router.mtxCreateInstance, (e, t, CLS, 0, 1, ic, salt, _auth(grWho, di)));
+    }
+
+    /// G2: the same sequence by derived identities (`_grUaRun`).
+    function test_sdkGas_routerCreate_ua() public {
+        _grUaRun();
+        test_sdkGas_routerCreate();
     }
 
     function test_sdkGas_routerCreate() public {

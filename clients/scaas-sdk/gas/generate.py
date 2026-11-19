@@ -17,7 +17,11 @@ the worst `<kind>_<entry>_saved_<variant>` less `..._fresh_<variant>`, its `fee_
 `..._fee_<variant>` less `..._fresh_<variant>` (a wrap-in entry: less `..._held_<variant>`, the signer holding units, A6),
 its `ua_extra` (A1) the worst `..._ua_<variant>` (the derived reference signer `ua_signer` of the input list) less
 `..._fresh_<variant>` less that signer's verify delta, absent when not positive (a source item `a-b[-c]` is the first key less
-the others); a verify row `verify_<kind>_delta`, its `sig_bytes` (ruling 2, A4: every row) `verify_<kind>_sig_bytes`, its
+the others), the variants measured without that signer listed `unmeasured` (G2: theirs is the largest measured on another
+variant), none on an entry a derived signer cannot sign (`ua_native`), and a row no variant of which was measured so takes the
+largest measured for the same entry and lane state on another kind (`from_kind`, every variant `unmeasured`; none anywhere is refused),
+and (Q1) where a second derived party was measured (`..._ua2_<variant>`) its `second_party`, the worst of that less the one
+derived party less the verify delta; a verify row `verify_<kind>_delta`, its `sig_bytes` (ruling 2, A4: every row) `verify_<kind>_sig_bytes`, its
 `margin` (ruling 2 (b) of the sampled check: a kind whose worst case cannot be determined) and `stand_in` from the input
 list. Prints its run time.
 """
@@ -70,9 +74,64 @@ def extra(m, src, kind, entry, what, less=None):
     }
 
 
+def ua_row(inputs, m, src, row, pending):
+    """A1 and G2 (owner 2026-11-19): the row's `ua_extra`, the worst of the variants measured with the derived reference signer
+    (`<kind>_<entry>_ua_<variant>`), the variants measured without it listed `unmeasured` (theirs is that largest measured on
+    another variant); none on an entry a derived signer cannot sign (`ua_native`: its kind or entry); a row with no variant
+    measured is left to `ua_fallback` (`pending`)."""
+    kind, entry = row["kind"], row["entry"]
+    pre = f"{kind}_{entry}_"
+    fresh = {k[len(pre) + 6 :] for k in variants(m, pre + "fresh_")}
+    ua = {k[len(pre) + 3 :] for k in variants(m, pre + "ua_")}
+    if kind in inputs["ua_native"]["kinds"] or entry in inputs["ua_native"]["entries"]:
+        if ua:
+            raise SystemExit(f"{kind} {entry}: listed native-only (ua_native) but measured with a derived signer")
+        return
+    if not ua:
+        pending.append((row, sorted(fresh)))
+        return
+    x = extra(m, src, kind, entry, "ua", f"verify_0x{inputs['ua_signer']:04x}_delta")
+    if x is not None:
+        if fresh - ua:
+            x["unmeasured"] = sorted(fresh - ua)
+        row["ua_extra"] = x
+    two = variants(m, pre + "ua2_")
+    if two:
+        # Q1 (owner 2026-11-19): a second derived party debited (the payee beside the payer), over the first and its verify
+        less = f"verify_0x{inputs['ua_signer']:04x}_delta"
+        items = [(k, pre + "ua_" + k[len(pre) + 4 :]) for k in two]
+        worst = max(m[a] - m[b] - m[less] for a, b in items)
+        if x is None:
+            raise SystemExit(f"{kind} {entry}: a second derived party measured without the first")
+        x["second_party"] = {"measured": worst, "source": f"{src}#{','.join(f'{a}-{b}-{less}' for a, b in items)}"}
+
+
+def ua_fallback(base, pending):
+    """G2: a row whose variants none was measured with the derived signer takes the largest `ua_extra` measured for the same
+    entry and lane state on another kind (`from_kind`, every variant `unmeasured`); none measured anywhere is refused."""
+    for row, unmeasured in pending:
+        donors = [
+            r
+            for r in base
+            if r["entry"] == row["entry"]
+            and r["fresh"] == row["fresh"]
+            and r["kind"] != row["kind"]
+            and "ua_extra" in r
+            and "from_kind" not in r["ua_extra"]
+        ]
+        if not donors:
+            raise SystemExit(f"{row['kind']} {row['entry']}: no ua_extra measured for the entry on any kind (G2)")
+        d = max(donors, key=lambda r: r["ua_extra"]["measured"])
+        x = {k: d["ua_extra"][k] for k in ("gas", "measured", "source")}
+        x["from_kind"] = d["kind"]
+        x["unmeasured"] = unmeasured
+        row["ua_extra"] = x
+
+
 def table(inputs, m):
     src = inputs["measurements"]
     base = []
+    pending = []
     for group in inputs["base"]:
         for kind in group["kinds"]:
             for entry in group["entries"]:
@@ -105,10 +164,9 @@ def table(inputs, m):
                     fee = extra(m, src, kind, entry, "fee")
                     if fee is not None:
                         row["fee_extra"] = fee
-                    ua = extra(m, src, kind, entry, "ua", f"verify_0x{inputs['ua_signer']:04x}_delta")
-                    if ua is not None:
-                        row["ua_extra"] = ua
+                    ua_row(inputs, m, src, row, pending)
                     base.append(row)
+    ua_fallback(base, pending)
     verify = [
         {
             "signer": 0,

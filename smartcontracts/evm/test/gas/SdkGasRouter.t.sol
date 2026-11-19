@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {kindArgs} from "../../script/KindModules.sol";
 import {GovernanceRouterTypes as T} from "../../src/governance/GovernanceRouterBase.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
@@ -10,6 +11,7 @@ import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {NormalRegulatedToken} from "../../src/regulated/NormalRegulatedToken.sol";
+import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {regArgs} from "../helpers/Catalogue.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
@@ -26,9 +28,8 @@ import {MockWallet} from "../ua/UARegistryBase.sol";
 /// bit: no native key can hold it, so the rate rows carry that wallet's ERC-1271 check). Each entry is measured in the
 /// state the fixture's own sequence of ops reaches just before it (`_grSt` measures, then applies the op on lane 0 so the
 /// next entry finds its effect); every write a first write (a mint, a force or operator transfer to an account holding
-/// nothing, a list entry, a grant, a freeze). The router has no derived reference signer here (A1): its registry is the
-/// fixture's PQ stand-in registry at `PREG`, without the secp256k1 verifier, and every target would need the derived UA
-/// as its admin or holder; no `_ua_` row.
+/// nothing, a list entry, a grant, a freeze). G2: each sequence runs once more with derived identities
+/// (`_grUaRun`), its rows `gov_router_<entry>_ua_<variant>`.
 abstract contract SdkGasRouterBase is SdkGasRouterFix {
     /// the signer of the row (a native id of the fixture, or `wallet`), the lane of the call built (`SG_LANE` measured, 0
     /// the sequence's own lane)
@@ -48,6 +49,14 @@ abstract contract SdkGasRouterBase is SdkGasRouterFix {
     function setUp() public virtual override {
         super.setUp();
         grLane = SG_LANE;
+        sgUaKind = 0; // the derived identities sign in a run of their own (`_grUaRun`), not beside each native row
+    }
+
+    /// G2 (owner 2026-11-19): the fixture's sequence once more with `eoa` and `next` the derived UAs registered on `PREG`
+    /// (secp256k1 `SG_UA_SK`, `SG_UA_SK2`), every row measured once as `gov_router_<entry>_ua_<variant>` (`_bothUaRun`);
+    /// the roles a native key cannot hold keep their ERC-1271 wallet, whose rows so add nothing.
+    function _grUaRun() internal {
+        (eoa, next, sgUaRun) = (UAKinds.uaOf(UAKinds.SECP256K1, sgUaKey), _sgPayeeUa(), true);
     }
 
     function _grE(uint256 nonce) internal view returns (MetaTxLib.UAEnvelope memory) {
@@ -125,6 +134,15 @@ abstract contract SdkGasRouterBase is SdkGasRouterFix {
         _grApply(_grStatic);
     }
 
+    /// The admin `eoa` grants `bit` of `t` to `account`, a step of the sequence: directly by its key, or (G2, a derived `eoa`
+    /// in `_grUaRun`, which has no key to call with) through the router on lane 0, no row.
+    function _grGrant(address t, uint8 bit, bytes32 account) internal {
+        bytes32 u = EnvKit.codeUidOf(t);
+        if (sgUaRun) return _grDo(T.UA_GRANT_ROLE, router.mtxGrantRole.selector, eoa, t, abi.encode(bit, account, u));
+        vm.prank(address(uint160(uint256(eoa))));
+        IGovernance(t).grantRole(bit, account, u);
+    }
+
     /// The admin hand-over of `t` (admin `eoa`): to `next`, accepted by `next`, renounced by `next`.
     function _grAdminRows(string memory v, address t) internal {
         bytes32 u = EnvKit.codeUidOf(t);
@@ -186,6 +204,12 @@ contract SdkGasRouterTokenTest is SdkGasRouterBase {
         _grAdminRows(v, t);
     }
 
+    /// G2: the same sequence by derived identities (`_grUaRun`).
+    function test_sdkGas_routerToken_ua() public {
+        _grUaRun();
+        test_sdkGas_routerToken();
+    }
+
     function test_sdkGas_routerToken() public {
         _grGov("normal", address(_normal(eoa, eoa, 1 hours)));
         _grGov("regulated", address(_grRegulated(uint256(1) << MINT, 1 hours)));
@@ -197,6 +221,12 @@ contract SdkGasRouterTokenTest is SdkGasRouterBase {
 /// disabled, the admin handed over; and the DEX entries on a DEX (`dex`, the fixture's `_dex`): a market listed, an exchange
 /// target listed, listed-only on, the fee split set, the admin handed over.
 contract SdkGasRouterWrappedTest is SdkGasRouterBase {
+    /// G2: the same sequence by derived identities (`_grUaRun`).
+    function test_sdkGas_routerWrapped_ua() public {
+        _grUaRun();
+        test_sdkGas_routerWrapped();
+    }
+
     function test_sdkGas_routerWrapped() public {
         WrappedToken wt = _wrapped(eoa, eoa, wallet);
         address t = address(wt);
@@ -217,6 +247,12 @@ contract SdkGasRouterWrappedTest is SdkGasRouterBase {
             abi.encode(address(usd), bytes32("r"), u)
         );
         _grHandOver("wrapped", t);
+    }
+
+    /// G2: the same sequence by derived identities (`_grUaRun`).
+    function test_sdkGas_routerDex_ua() public {
+        _grUaRun();
+        test_sdkGas_routerDex();
     }
 
     function test_sdkGas_routerDex() public {
@@ -302,14 +338,18 @@ contract SdkGasRouterRegulatedTest is SdkGasRouterBase {
         (c.initialSupply, c.initialHolder) = (1000, BOB);
         c.reg.termsHash = keccak256("terms");
         t.initialize(nid(address(this)), 1, abi.encode(c));
-        vm.startPrank(address(uint160(uint256(eoa))));
-        t.grantRole(GovernanceBits.OPERATOR_TRANSFER, operator, EnvKit.codeUidOf(address(t)));
-        t.grantRole(GovernanceBits.TAX, operator, EnvKit.codeUidOf(address(t)));
-        vm.stopPrank();
+        _grGrant(address(t), GovernanceBits.OPERATOR_TRANSFER, operator);
+        _grGrant(address(t), GovernanceBits.TAX, operator);
     }
 
     function _grOrderArgs(bytes32 bob, bytes32 ben, uint64 day, bytes32 u) internal pure returns (bytes memory) {
         return abi.encode(bytes32("order"), keccak256("doc"), bob, ben, uint256(100), day, u);
+    }
+
+    /// G2: the same sequence by derived identities (`_grUaRun`).
+    function test_sdkGas_routerRegulated_ua() public {
+        _grUaRun();
+        test_sdkGas_routerRegulated();
     }
 
     function test_sdkGas_routerRegulated() public {
@@ -436,6 +476,12 @@ contract SdkGasRouterHybridTest is SdkGasRouterBase {
         return abi.encodeCall(router.mtxSetWrapLimits, (e, grT, grLegs, true, true, true, u, _auth(grWho, d)));
     }
 
+    /// G2: the same sequence by derived identities (`_grUaRun`).
+    function test_sdkGas_routerHybrid_ua() public {
+        _grUaRun();
+        test_sdkGas_routerHybrid();
+    }
+
     function test_sdkGas_routerHybrid() public {
         if (wrappedImpl == address(0)) {
             wrappedImpl = address(new WrappedToken(address(this), kindArgs(1, address(this), "")));
@@ -465,8 +511,7 @@ contract SdkGasRouterHybridTest is SdkGasRouterBase {
         );
         grT = t;
         _grRow("mtxSetWrapLimits", v, eoa, _grLimits);
-        vm.prank(address(uint160(uint256(eoa))));
-        w.grantRole(GovernanceBits.WRAP_LIST, eoa, u);
+        _grGrant(address(w), GovernanceBits.WRAP_LIST, eoa);
         _grSt(
             "mtxSetWrapMember",
             v,

@@ -147,8 +147,8 @@ contract SdkGasOrderTokenTest is SdkGasLedger, SdkGasOrderOps {
 
 /// The same on the regulated variants (ruling A), configured as `SdkGasRegulatedTest`: kinds 8 and 9 with `KYC` (every
 /// party attested) and `TAX` at 10 %. `mtxWrapOrder` on a fresh kind-9 wrapper of a factory `NORMAL` leg the signer holds
-/// (a leg with `FORCE` or `MODERATE`, as the regulated kinds have, is refused). No `_ua_` row: the fixture has no registry
-/// with a secp256k1 verifier.
+/// (a leg with `FORCE` or `MODERATE`, as the regulated kinds have, is refused). G2: the derived reference signer (attested)
+/// holds 10,000 of the leg in its run.
 contract SdkGasOrderRegulatedTest is SdkGasOrderOps, SdkGasRegFix {
     address internal constant SG_TAX_TO = address(0x7A0);
 
@@ -173,6 +173,12 @@ contract SdkGasOrderRegulatedTest is SdkGasOrderOps, SdkGasRegFix {
         for (uint256 i; i < parties.length; ++i) {
             _attest(nid(parties[i]), KYC, type(uint64).max);
         }
+        _attest(_sgUaSignerOn(address(ureg)), KYC, type(uint64).max); // G2: the derived reference signer
+    }
+
+    /// G2: the derived signer holds 10,000 of `mtxWrapOrder`'s leg, in its run only.
+    function _sgUaPrep(address) internal override {
+        if (sgWrapU != address(0)) _sgUaFund(sgWrapU, alice, 10_000);
     }
 
     function test_sdkGas_order_tokenRegulated() public {
@@ -192,8 +198,8 @@ contract SdkGasOrderRegulatedTest is SdkGasOrderOps, SdkGasRegFix {
 
 /// The `zether` and `pqz` kinds' order rows on their Normal, Wrapped and regulated Normal / Wrapped tokens, configured as
 /// `SdkGasKind` (a regulated token: the registry check, `KYC` with the deny mask, and `TAX` at 10 %). `mtxWrapOrder` on a
-/// fresh wrapper of a plain Normal of the kind (a ledger leg) the signer holds. No `_ua_` row: the fixtures have no
-/// registry with a secp256k1 verifier.
+/// fresh wrapper of a plain Normal of the kind (a ledger leg) the signer holds. G2: the derived reference signer (attested on
+/// the regulated tokens) holds 10,000 of the leg in its run.
 abstract contract SdkGasOrderKind is SdkGasOrderOps {
     address internal constant SG_TAX_TO = address(0x7A0);
     uint64 internal constant SG_KYC = 1;
@@ -246,6 +252,7 @@ abstract contract SdkGasOrderKind is SdkGasOrderOps {
             for (uint256 i; i < parties.length; ++i) {
                 _sgAttest(nid(parties[i]));
             }
+            _sgAttest(UAKinds.uaOf(sgUaKind, sgUaKey));
         }
         _orderRows(k, vn, _sgCreate(false, reg, address(0), reg ? bytes32("sgonr") : bytes32("sgon")));
         MockERC20 und = new MockERC20("Und", "UND", 6);
@@ -276,10 +283,16 @@ contract SdkGasOrderZetherTest is SdkGasOrderKind, SdkGasZetherFix {
             factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode
         );
         sgPk = 0xA11CE5EED;
+        _sgUaSignerOn(address(reg)); // G2: the derived reference signer
     }
 
     function _sgKind() internal pure override returns (string memory) {
         return "zether";
+    }
+
+    /// G2: the derived signer holds 10,000 of `mtxWrapOrder`'s leg, in its run only.
+    function _sgUaPrep(address) internal override {
+        if (sgWrapU != address(0)) _sgUaFund(sgWrapU, vm.addr(sgPk), 10_000);
     }
 
     function _sgCfg(bool reg) internal view override returns (IFactoryToken.TokenConfig memory) {
@@ -314,10 +327,16 @@ contract SdkGasOrderPqzTest is SdkGasOrderKind, SdkGasPqzFix {
         super.setUp();
         _releaseWrapped();
         sgPk = 0xA11CE5EED;
+        _sgUaSignerOn(address(reg)); // G2: the derived reference signer
     }
 
     function _sgKind() internal pure override returns (string memory) {
         return "pqz";
+    }
+
+    /// G2: the derived signer holds 10,000 of `mtxWrapOrder`'s leg, in its run only.
+    function _sgUaPrep(address) internal override {
+        if (sgWrapU != address(0)) _sgUaFund(sgWrapU, vm.addr(sgPk), 10_000);
     }
 
     function _sgCfg(bool reg) internal view override returns (IFactoryToken.TokenConfig memory) {

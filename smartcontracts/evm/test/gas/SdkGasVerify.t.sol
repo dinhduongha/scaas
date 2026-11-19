@@ -27,6 +27,7 @@ import {GasBurner} from "../pqz/PqzStateGas.t.sol";
 import {UARegistryBase} from "../ua/UARegistryBase.sol";
 import {UACall} from "../ua/UACall.sol";
 import {Vm} from "forge-std/Test.sol";
+import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {SdkGasRows} from "./SdkGasOps.sol";
 
 /// The copy-cost forwarder (owner 2026-11-19, "OK"): what a token does with a signature, nothing else: the token's own
@@ -331,6 +332,62 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
         return 0;
     }
 
+    /// ua-rs's cap on a WebAuthn assertion (`WEBAUTHN_MAX_ASSERTION`, owner 2026-11-19, G3): authenticatorData and
+    /// clientDataJSON together at most 1,024 bytes; the chains take any length.
+    uint256 internal constant SG_WA_CAP = 1_024;
+
+    /// Q2 (owner 2026-11-19, "approved"): `0x0100`'s verify gas grows with clientDataJSON, so its row is measured at the cap.
+    /// The worst case there (`WebAuthnClientData.parse`): the origin, scanned byte by byte up to its closing quote, as long as
+    /// the cap leaves (`prefix ‖ origin ‖ "}`, the L2 form); the vector key's own authenticatorData (37 bytes), signed by its
+    /// vector secret over `message` (the challenge), low-s. Beside it, pinned for the record and not in the row, ua-rs's
+    /// cap vector's shape (`smartcontracts/vectors/ua/sign.json` `webauthn.accepted`, the row at the cap: a 21-byte origin,
+    /// `crossOrigin` false, then a filler member): `verify_0x0100_cap_row` and `verify_0x0100_origin_extra`, what the long
+    /// origin adds over it; and `verify_0x0100_vector`, the longest vector's check.
+    function _waCap(uint256 sk, bytes32 message, bytes memory vsig, bytes memory k)
+        internal
+        returns (bytes memory sig)
+    {
+        (bytes memory ad,,,) = abi.decode(vsig, (bytes, bytes, bytes32, bytes32));
+        sig = _waSign(sk, ad, _waClientData(message, ad.length, ""));
+        bytes memory rowShape = _waSign(sk, ad, _waClientData(message, ad.length, "https://scaas.example"));
+        address v = address(new WebAuthnP256Verifier());
+        uint256 shape = _waMeter(v, k, message, rowShape);
+        _pin("verify_0x0100_cap_row", shape);
+        _pin("verify_0x0100_origin_extra", _waMeter(v, k, message, sig) - shape);
+        _pin("verify_0x0100_vector", _waMeter(v, k, message, vsig));
+    }
+
+    /// A clientDataJSON for challenge `m` filling the cap beside `adLen` bytes of authenticatorData: with `origin` empty, an
+    /// origin of `x` as long as the cap leaves (`prefix ‖ origin ‖ "}`); else that origin, `crossOrigin` false and a filler
+    /// member of `x` (the cap vector's shape).
+    function _waClientData(bytes32 m, uint256 adLen, bytes memory origin) internal pure returns (bytes memory cd) {
+        cd = abi.encodePacked(
+            '{"type":"webauthn.get","challenge":"', Base64.encodeURL(abi.encodePacked(m)), '","origin":"', origin
+        );
+        if (origin.length != 0) cd = abi.encodePacked(cd, '","crossOrigin":false,"other_keys_can_be_added_here":"');
+        uint256 fill = SG_WA_CAP - adLen - cd.length - 2;
+        bytes memory x = new bytes(fill);
+        for (uint256 i; i < fill; ++i) {
+            x[i] = "x";
+        }
+        cd = abi.encodePacked(cd, x, '"}');
+    }
+
+    /// The verifier's `verify` of `sig`, metered (it must accept).
+    function _waMeter(address v, bytes memory k, bytes32 m, bytes memory sig) internal returns (uint256 g) {
+        assertTrue(WebAuthnP256Verifier(v).verify(k, m, sig), "an accepted assertion");
+        g = meter.run(v, abi.encodeCall(WebAuthnP256Verifier.verify, (k, m, sig)));
+    }
+
+    /// The canonical WebAuthn assertion `abi.encode(authData, clientDataJSON, r, s)` by P-256 secret `sk`, low-s.
+    function _waSign(uint256 sk, bytes memory ad, bytes memory cd) internal pure returns (bytes memory) {
+        assertEq(ad.length + cd.length, SG_WA_CAP, "at the cap");
+        (bytes32 r, bytes32 s_) = vm.signP256(sk, sha256(abi.encodePacked(ad, sha256(cd))));
+        uint256 n = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551; // the P-256 group order
+        if (uint256(s_) > n / 2) s_ = bytes32(n - uint256(s_));
+        return abi.encode(ad, cd, r, s_);
+    }
+
     function test_sdkGas_verify() public {
         uint256 n = _native();
         uint256 rows;
@@ -344,9 +401,17 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
             UACall.register(reg, kind, k, _none(), vm.parseJsonBytes(sj, _d(i, "pop.sig")), "");
             string memory row = _metatxRow(sj, string.concat(".derived[", vm.toString(i), "]."));
             // a stored kind (the Zether one) signs with empty key data, as `scaas-ua` sends it
-            IUARegistry.UASig memory u = UACall.auth(
-                ua, abi.encode(kind == 0x0141 ? bytes("") : k, vm.parseJsonBytes(sj, string.concat(row, "sig")))
-            );
+            bytes memory sig = vm.parseJsonBytes(sj, string.concat(row, "sig"));
+            // Q2 (owner 2026-11-19): WebAuthn at ua-rs's cap, its worst case (`_waCap`), instead of the longest vector
+            if (kind == 0x0100) {
+                sig = _waCap(
+                    vm.parseJsonUint(sj, _d(i, "secret")),
+                    vm.parseJsonBytes32(sj, string.concat(row, "message")),
+                    sig,
+                    k
+                );
+            }
+            IUARegistry.UASig memory u = UACall.auth(ua, abi.encode(kind == 0x0141 ? bytes("") : k, sig));
             uint256 worst = kind == 0x0102
                 ? _edWorst(
                     k,

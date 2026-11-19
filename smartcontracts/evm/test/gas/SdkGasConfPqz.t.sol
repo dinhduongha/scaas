@@ -6,6 +6,7 @@ import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {nid} from "../helpers/Ids.sol";
 import {SdkGasPqzBase} from "./SdkGasConfidential.t.sol";
 
@@ -46,8 +47,8 @@ interface ISdkGasPqz {
 /// pending entry of an earlier block and no `acc` (the first roll-over); `more[4]` is registered and holds nothing (the
 /// first prepare of each half); `bob`, the receiver of the shields and transfers, holds nothing (a first write), as do
 /// `carol`, the multi transfers' second receiver, and `0xD00D`, the unshields' recipient. `mtxPrepareAcc` counts both
-/// halves (`<variant>` half 0, `<variant>_half1`). No `_ua_` row (A1): the
-/// fixture's registry has no secp256k1 verifier, and the PQZ UAs and tokens are bound to it at creation.
+/// halves (`<variant>` half 0, `<variant>_half1`). G2: the derived reference signer
+/// (`SdkGasPqzBase`, on the fixture's registry made again as a deploy makes it) holds `signer`'s public units in its run.
 ///
 /// The debits (`mtxConfidentialTransfer`, `…Compact`, `…Single`, `…SingleCompact`, `mtxUnshield`, `mtxUnshieldUnwrap`) are
 /// not here: the fixture mocks the `PQZ` precompile and the holder's ML-DSA authorization, the bulk of a real debit, so a
@@ -89,6 +90,7 @@ contract SdkGasConfPqzTest is SdkGasPqzBase {
         for (uint256 i; i < ps.length; ++i) {
             _sgAttest(nid(ps[i]));
         }
+        _sgAttest(UAKinds.uaOf(sgUaKind, sgUaKey)); // G2: the derived reference signer
         bytes32[5] memory us = [alice, bob, carol, more[3], more[4]];
         for (uint256 i; i < us.length; ++i) {
             _sgAttest(us[i]);

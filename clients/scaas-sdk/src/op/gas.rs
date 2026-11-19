@@ -641,6 +641,105 @@ mod tests {
         }
     }
 
+    /// G2 (owner 2026-11-19, "approved"): a base row's `ua_extra` covers every variant a derived signer can sign. Its own figure
+    /// is the worst of the variants measured with the derived reference signer (`reference_rows_hold_their_sources`), the
+    /// variants measured without it listed `unmeasured` (theirs is the largest measured on another variant); a row none of
+    /// whose variants was measured takes the largest `ua_extra` measured for the same entry and lane state on another kind
+    /// (`from_kind`, every variant `unmeasured`), never none; an entry a derived signer cannot sign (`ua_native` of the input
+    /// list: its kind or its entry) has none and no derived measurement.
+    #[test]
+    fn reference_ua_extra_covers_every_variant() {
+        use std::collections::BTreeSet;
+        let t: serde_json::Value = serde_json::from_str(REFERENCE_FILE).unwrap();
+        let inputs: serde_json::Value =
+            serde_json::from_str(include_str!("../../gas/inputs.json")).unwrap();
+        let file = format!(
+            "{}/../../{}",
+            env!("CARGO_MANIFEST_DIR"),
+            inputs["measurements"].as_str().unwrap()
+        );
+        let m: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap();
+        let keys: Vec<&str> = m
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .filter(|k| !k.ends_with("_regular") && !k.ends_with("_state"))
+            .collect();
+        let vars = |pre: &str| -> BTreeSet<String> {
+            keys.iter()
+                .filter_map(|k| k.strip_prefix(pre))
+                .map(str::to_string)
+                .collect()
+        };
+        let native = |list: &str, x: &str| {
+            inputs["ua_native"][list]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v == x)
+        };
+        let base = t["base"].as_array().unwrap();
+        for r in base {
+            let (kind, entry) = (r["kind"].as_str().unwrap(), r["entry"].as_str().unwrap());
+            let fresh = vars(&format!("{kind}_{entry}_fresh_"));
+            let ua = vars(&format!("{kind}_{entry}_ua_"));
+            let x = r.get("ua_extra");
+            if native("kinds", kind) || native("entries", entry) {
+                assert!(x.is_none() && ua.is_empty(), "native-only {r}");
+                continue;
+            }
+            let listed: BTreeSet<String> = x
+                .and_then(|x| x.get("unmeasured"))
+                .map(|u| {
+                    u.as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|v| v.as_str().unwrap().to_string())
+                        .collect()
+                })
+                .unwrap_or_default();
+            if ua.is_empty() {
+                let x = x.unwrap_or_else(|| panic!("no ua_extra and none measured: {r}"));
+                let own = |o: &&serde_json::Value| {
+                    o["entry"] == r["entry"]
+                        && o["fresh"] == r["fresh"]
+                        && o["kind"] != r["kind"]
+                        && o.get("ua_extra").is_some_and(|u| u.get("from_kind").is_none())
+                };
+                let best = base
+                    .iter()
+                    .filter(own)
+                    .map(|o| o["ua_extra"]["measured"].as_u64().unwrap())
+                    .max()
+                    .unwrap_or_else(|| panic!("no donor: {r}"));
+                assert_eq!(x["measured"].as_u64(), Some(best), "the largest on another kind: {r}");
+                assert!(
+                    base.iter().filter(own).any(|o| o["kind"] == x["from_kind"]
+                        && o["ua_extra"]["measured"] == x["measured"]),
+                    "from_kind names it: {r}"
+                );
+                assert_eq!(listed, fresh, "every variant unmeasured: {r}");
+            } else {
+                // its own: present exactly when a variant's derived run cost more than the native one and its verify row
+                let worst = ua
+                    .iter()
+                    .map(|v| {
+                        let k = |w: &str| m[format!("{kind}_{entry}_{w}_{v}")].as_i64().unwrap();
+                        k("ua") - k("fresh") - m["verify_0x0108_delta"].as_i64().unwrap()
+                    })
+                    .max()
+                    .unwrap();
+                assert_eq!(x.is_some(), worst > 0, "ua_extra where the derived run costs more: {r}");
+                if let Some(x) = x {
+                    assert!(x.get("from_kind").is_none(), "{r}");
+                    assert_eq!(listed, &fresh - &ua, "the variants without a derived run: {r}");
+                }
+            }
+        }
+    }
+
     /// The kinds whose verify gas depends on the data (owner 2026-11-19, "approved, as proposed"): ed25519 (its row the forced
     /// worst case), FN-DSA-512 / -1024 (the most of 64 salts plus `margin`). Each is checked twice: its composition at a
     /// signature of its row's worst-case class (both bounds) and many ordinary ones (the lower bound only).

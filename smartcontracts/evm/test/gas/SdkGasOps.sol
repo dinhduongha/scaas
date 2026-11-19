@@ -8,6 +8,7 @@ import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
@@ -132,6 +133,7 @@ abstract contract SdkGasRows is SdkGasDeploy {
         bytes32 from,
         function(address, uint256) internal view returns (bytes memory) build
     ) internal {
+        if (sgUaRun) return _bothUaRun(kind, entry, variant, c, build);
         uint256 s = vm.snapshotState();
         _measure(string.concat(kind, "_", entry, "_fresh_", variant), c, build(c, 0));
         vm.revertToState(s);
@@ -151,13 +153,46 @@ abstract contract SdkGasRows is SdkGasDeploy {
             _measure(string.concat(kind, "_", entry, "_fee_", variant), c, build(c, 0));
             vm.revertToState(s);
         }
-        if (sgUaKind != 0 && !_wrapIn(entry)) {
+        if (sgUaKind != 0 && !_uaNative(entry)) {
             address cu = sgUaAt[c] == address(0) ? c : sgUaAt[c];
             _sgUaPrep(cu);
             (sgKind, sgKeyData, sgSk) = (sgUaKind, sgUaKey, sgUaSk); // the revert below restores the native signer
             _measure(string.concat(kind, "_", entry, "_ua_", variant), cu, build(cu, 0));
             vm.revertToState(s);
+            if (sgPayeeKey.length != 0 && keccak256(bytes(entry)) == keccak256("mtxPayWithPayeeFee")) {
+                // Q1 (owner 2026-11-19): the payer and the payee both derived, both debited
+                _sgUaPrep(cu);
+                (sgKind, sgKeyData, sgSk, sgPayeeUa) = (sgUaKind, sgUaKey, sgUaSk, true);
+                _measure(string.concat(kind, "_", entry, "_ua2_", variant), cu, build(cu, 0));
+                vm.revertToState(s);
+            }
         }
+    }
+
+    /// G2 (owner 2026-11-19): a run of the fixture's whole sequence with derived identities (`sgUaRun`, the router's): each
+    /// row measured once, on the fresh lane, as `<kind>_<entry>_ua_<variant>`; the native rows come from the native run.
+    function _bothUaRun(
+        string memory kind,
+        string memory entry,
+        string memory variant,
+        address c,
+        function(address, uint256) internal view returns (bytes memory) build
+    ) internal {
+        uint256 s = vm.snapshotState();
+        _measure(string.concat(kind, "_", entry, "_ua_", variant), c, build(c, 0));
+        vm.revertToState(s);
+    }
+
+    /// The entries a derived signer cannot sign (A1, G2): the wrap-in entries and `mtxWrapShield`, signed by a native address.
+    function _uaNative(string memory entry) internal pure returns (bool) {
+        return _wrapIn(entry) || keccak256(bytes(entry)) == keccak256("mtxWrapShield");
+    }
+
+    /// A1: `amount` (at most what `holder` has) of the token `t`, from `holder` to the derived reference signer.
+    function _sgUaFund(address t, address holder, uint256 amount) internal {
+        uint256 b = IERC20MetaTx(t).balanceOf(holder);
+        vm.prank(holder);
+        IUALedger(t).transferToUA(UAKinds.uaOf(sgUaKind, sgUaKey), b < amount ? b : amount);
     }
 
     /// A1: what the derived signer needs on `c` before its run, given inside the run's snapshot only (the native rows keep the
@@ -185,6 +220,11 @@ abstract contract SdkGasRows is SdkGasDeploy {
     bytes internal sgUaKey;
     uint256 internal sgUaSk;
     mapping(address => address) internal sgUaAt;
+    /// G2: the run's identities are derived (the router's sequences, `_bothUaRun`)
+    bool internal sgUaRun;
+    /// Q1: a second derived UA (secp256k1 `SG_UA_SK2`), the payee of `mtxPayWithPayeeFee` when `sgPayeeUa`
+    bytes internal sgPayeeKey;
+    bool internal sgPayeeUa;
 
     /// Ruling 3 (owner 2026-11-19): the entries whose envelope carries a fee, measured once more on a fresh lane with a fee
     /// of 1 (`<kind>_<entry>_fee_<variant>`; the generator's `fee_extra` is the worst difference to the fresh row): the
@@ -245,8 +285,9 @@ abstract contract SdkGasOps is SdkGasRows {
         return sgKind == 0 ? MetaTxLib.pad(vm.addr(sgPk)) : UAKinds.uaOf(sgKind, sgKeyData);
     }
 
-    /// A1's derived reference signer: secp256k1 (0x0108), forge-signable by `vm.sign`.
+    /// A1's derived reference signer: secp256k1 (0x0108), forge-signable by `vm.sign`; Q1's derived payee.
     uint256 internal constant SG_UA_SK = 0x5A3B10;
+    uint256 internal constant SG_UA_SK2 = 0x5A3B11;
 
     /// The UA of `kind` (P-256, ed25519, secp256k1) from secret `sk`, registered on the registry `r` with its PoP, no
     /// attributes: its id and key data.
@@ -273,6 +314,12 @@ abstract contract SdkGasOps is SdkGasRows {
         bytes memory k;
         (ua, k) = _sgRegisterOn(r, UAKinds.SECP256K1, SG_UA_SK);
         (sgUaKind, sgUaKey, sgUaSk) = (UAKinds.SECP256K1, k, SG_UA_SK);
+        (, sgPayeeKey) = _sgRegisterOn(r, UAKinds.SECP256K1, SG_UA_SK2);
+    }
+
+    /// Q1's derived payee.
+    function _sgPayeeUa() internal view returns (bytes32) {
+        return UAKinds.uaOf(UAKinds.SECP256K1, sgPayeeKey);
     }
 
     /// The signature of UA kind `kind` (P-256 low-s over sha256, ed25519, secp256k1 `r ‖ s ‖ v`) by `sk` over `m`.
@@ -367,18 +414,32 @@ abstract contract SdkGasOps is SdkGasRows {
     /// The payer pays the payee (`SG_PAYEE_PK`), who gives 1 to `SG_FEE_TO`; the relayer bound (the entry's shape).
     function _payeeFee(address c, uint256 nonce) internal view returns (bytes memory) {
         MetaTxLib.PayMeta memory m = _sgMeta();
-        MetaTxLib.UAMetaTransfer memory x = _sgT(nonce, MetaTxLib.pad(vm.addr(SG_PAYEE_PK)), 10, PayMetaKit.id(m));
+        bytes32 payee = sgPayeeUa ? UAKinds.uaOf(UAKinds.SECP256K1, sgPayeeKey) : MetaTxLib.pad(vm.addr(SG_PAYEE_PK));
+        MetaTxLib.UAMetaTransfer memory x = _sgT(nonce, payee, 10, PayMetaKit.id(m));
         (x.mode, x.relayer) = (x.mode | MetaTxLib.MODE_RESTRICT_RELAYER, SG_RELAYER); // the entry binds the relayer
         uint256 until = block.timestamp + 600;
         bytes32 rf = MtxDigest.typed(
             c, keccak256(abi.encode(UA_PAYEE_FEE, MtxHash.hashStruct(x), uint256(1), SG_FEE_TO, until))
         );
-        IUARegistry.UASig memory payee;
-        payee.signature = _sgSign(SG_PAYEE_PK, rf);
         return abi.encodeCall(
             IMetaTokenV2.mtxPayWithPayeeFee,
-            (x, _sgUaSig(MtxDigest.typed(c, MtxHash.hashStruct(x))), 1, SG_FEE_TO, until, payee, m)
+            (x, _sgUaSig(MtxDigest.typed(c, MtxHash.hashStruct(x))), 1, SG_FEE_TO, until, _sgPayeeSig(rf), m)
         );
+    }
+
+    /// The payee's signature of its fee `rf`: the native `SG_PAYEE_PK`, or (Q1, `sgPayeeUa`) the derived `SG_UA_SK2`.
+    function _sgPayeeSig(bytes32 rf) internal view returns (IUARegistry.UASig memory a) {
+        if (!sgPayeeUa) {
+            a.signature = _sgSign(SG_PAYEE_PK, rf);
+        } else {
+            (a.keyData, a.signature) =
+            (
+                sgPayeeKey,
+                _sgUaSign(
+                    UAKinds.SECP256K1, SG_UA_SK2, UAKinds.uaMessage(UAKinds.SECP256K1, UAKinds.PURPOSE_PAYEE_FEE, rf)
+                )
+            );
+        }
     }
 
     function _payWithTax(address c, uint256 nonce) internal view returns (bytes memory) {

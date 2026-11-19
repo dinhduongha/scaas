@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {RegFixture} from "../as/helpers/RegFixture.sol";
 import {ZetherRegFixture} from "../as/confidential/ZetherRegFixture.sol";
 import {PqzRegFixture} from "../as/confidential/PqzRegFixture.sol";
@@ -62,6 +63,19 @@ abstract contract SdkGasRouterFix is SdkGasOps, GovRouterFixture {
         _sgSkaSetup(vm.parseJsonBytes32(_structures(), ".contexts.A.chainUid"));
         super.setUp();
         _sgDeployRegistry(PREG, chainUidA, _mockPqCfg());
+        _sgUaSignerOn(PREG); // G2: the derived reference signer and a second derived UA
+    }
+
+    /// G2: a derived UA of the fixture (`SG_UA_SK`, `SG_UA_SK2`) signs its own purpose message; every other id as the
+    /// fixture signs it.
+    function _auth(bytes32 id, bytes32 digest) internal view virtual override returns (IUARegistry.UASig memory a) {
+        uint256 sk = id == UAKinds.uaOf(UAKinds.SECP256K1, sgUaKey) ? SG_UA_SK : id == _sgPayeeUa() ? SG_UA_SK2 : 0;
+        if (sk == 0) return super._auth(id, digest);
+        (a.keyData, a.signature) =
+        (
+            id == _sgPayeeUa() ? sgPayeeKey : sgUaKey,
+            _sgUaSign(UAKinds.SECP256K1, sk, UAKinds.uaMessage(UAKinds.SECP256K1, UAKinds.PURPOSE_METATX, digest))
+        );
     }
 
     function _fixtureSka() internal view override returns (address) {

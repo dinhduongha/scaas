@@ -10,6 +10,7 @@ import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {IConfidentialWrappedToken} from "../../src/confidential/IConfidentialToken.sol";
 import {typedDigest, burnJson, hexJson, T_G1, T_BURN, T_UNWRAP} from "../zether/ZetherTyped.t.sol";
 import {n, a, h} from "../metatx/NamedEntry.t.sol";
+import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {nid} from "../helpers/Ids.sol";
 import {SdkGasZetherBase} from "./SdkGasConfidential.t.sol";
 
@@ -74,8 +75,8 @@ interface ISdkGasZether {
 /// `Z_BAL` units in `acc` (shielded, rolled over), the sender of the transfers and unshields; `dave` holds one pending entry
 /// and an empty `acc`, the account of the roll-overs and the mode change (the first roll-over: `acc` written the first
 /// time); `bob`, the receiver of the transfers and shields, holds nothing (a first write), as does `SG_PAYEE`, the unshield's
-/// recipient. No `_ua_` row (A1): the fixture's UA registry has no secp256k1 verifier, and the Zether UAs and tokens are bound
-/// to it at creation, so a derived signer would need the fixture rebuilt. `mtxRollOverSigned` and `mtxSetRollOverMode` are
+/// recipient. G2: the derived reference signer (`SdkGasZetherBase`) holds `payer`'s public units
+/// and signs the envelope (the transfer's builder too, `_auth`) in its run. `mtxRollOverSigned` and `mtxSetRollOverMode` are
 /// measured in their enveloped form (`UARollOverSigned`, `UASetRollOverMode`: the owner's Schnorr signature and the
 /// envelope's), a superset of the owner-only form (`ZetherRollOver`) the SDK also prepares; `mtxRollOver` rolls the
 /// account's one pending ciphertext (Zether's `n` changes nothing). Not here, their cost growing with a count the SDK has no
@@ -123,6 +124,7 @@ contract SdkGasConfZetherTest is SdkGasZetherBase {
             _sgAttest(aId);
             _sgAttest(bId);
             _sgAttest(dId);
+            _sgAttest(UAKinds.uaOf(sgUaKind, sgUaKey)); // G2: the derived reference signer
         }
         for (uint256 w; w < 2; ++w) {
             bool wrapped = w == 1;
@@ -142,6 +144,16 @@ contract SdkGasConfZetherTest is SdkGasZetherBase {
                 _both("zether", "mtxUnshieldUnwrap", v, t, from, _zUnwrap);
             }
         }
+    }
+
+    /// G2: the fixture's envelope signature (the transfer's builder) by the derived reference signer in its run.
+    function _auth(MetaTxLib.UAEnvelope memory e, bytes32 d, bool bad)
+        internal
+        view
+        override
+        returns (IUARegistry.UASig memory)
+    {
+        return sgKind != 0 && !bad ? _sgUaSig(d) : super._auth(e, d, bad);
     }
 
     function test_sdkGas_zetherConf() public {
