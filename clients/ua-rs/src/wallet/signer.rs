@@ -174,7 +174,7 @@ pub(crate) fn external_answer(key: &KeyRef, req: &SignRequest, sig: Vec<u8>) -> 
         ) if k == kind => {
             let sig = low_s(*kind, sig);
             (
-                verify(*kind, key_data, ua_msg, &sig, *role == SigRole::Pop),
+                verify(*kind, key_data, ua_msg, &sig, *role == SigRole::Pop, false),
                 sig,
             )
         }
@@ -189,7 +189,7 @@ pub(crate) fn external_answer(key: &KeyRef, req: &SignRequest, sig: Vec<u8>) -> 
             if let Some((a, c)) = crate::verify::webauthn_fields(&sig) {
                 super::webauthn::capped(a.len(), c.len())?;
             }
-            (verify(0x0100, key_data, challenge, &sig, false), sig)
+            (verify(0x0100, key_data, challenge, &sig, false, false), sig)
         }
         (
             KeyRef::Native {
@@ -239,6 +239,7 @@ pub(crate) fn external_answer(key: &KeyRef, req: &SignRequest, sig: Vec<u8>) -> 
     } else {
         Err(Error::ExternalSignature)
     }
+                            false,
 }
 
 /// Low-s for the ECDSA forms: P-256 `r ‖ s` (`0x0101`), secp256k1 `r ‖ s ‖ v` (`0x0108`, native keys; `v` 0 / 1 read as

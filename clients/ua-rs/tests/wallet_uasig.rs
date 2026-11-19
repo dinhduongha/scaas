@@ -962,7 +962,8 @@ fn single_key_uasig_forms() {
                 &key.key_data(),
                 &ua_message(kind, &purpose, &digest).unwrap(),
                 &sig.signature,
-                pop
+                pop,
+                false
             ),
             "{kind:#06x}"
         );
@@ -1349,7 +1350,7 @@ fn pqz_scoped_key_uasig_is_bare_and_pop() {
         assert!(s.key_data.is_empty() && s.members.is_empty(), "{kind:#06x}");
         let m = ua_message(kind, &p, &d).unwrap();
         assert!(
-            verify(kind, &key.key_data(), &m, &s.signature, true),
+            verify(kind, &key.key_data(), &m, &s.signature, true, false),
             "{kind:#06x}: verifyPop"
         );
         assert_eq!(
@@ -1611,6 +1612,7 @@ fn msig_update_rows_native_signs_the_update_digest() {
             &key_data,
             &ua_message(m.kind, &purpose_tag("member").unwrap(), &md).unwrap(),
             &s.sig,
+            false,
             false
         ));
     }

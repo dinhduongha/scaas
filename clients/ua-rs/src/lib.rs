@@ -10,6 +10,8 @@
 use sha3::{Digest, Keccak256};
 
 pub mod algorand;
+/// `bls12381-multi` (0x0121): key data, the stored form, verify / verifyMinimal / verifyPop, partials and aggregation.
+pub mod bls_multi;
 mod keydata;
 pub mod near;
 pub use keydata::validate_key_data;
@@ -206,6 +208,7 @@ pub const KINDS: &[Kind] = &[
     derived(0x0108, "secp256k1", &[64], Some("secp256k1")), // 2026-10-17, appended as in kinds.json
     derived(0x0134, "mldsa87", &[2592], Some("mldsa87")), // CTR-UA-39, 2026-11-04, appended as in kinds.json
     derived(0x0135, "fndsa1024", &[1793], Some("fndsa1024")), // CTR-UA-40, 2026-11-04, appended as in kinds.json
+    derived(0x0121, "bls12381-multi", &[], None), // CTR-UA-47 (placeholder), 2026-11-19, appended as in kinds.json
 ];
 
 /// Schemes are not kinds (UA-6 U14): 0x0142 is the PQZ key attribute of a PQ holder; it keeps its tag and keyHash group.
@@ -354,7 +357,12 @@ pub fn is_zether(kind: u16) -> bool {
     kind == 0x0141
 }
 pub fn is_signing(kind: u16) -> bool {
-    kind == 0x0120 || kind == 0x0141 || single_signing(kind)
+    kind == 0x0120 || kind == 0x0121 || kind == 0x0141 || single_signing(kind)
+}
+/// Kinds whose signatures have a surplus form (spec 2026-11-19-bls12381-multi §5.3): the stored paths take the minimal form
+/// (`verify::verify(…, minimal = true)`). A closed set: `bls12381-multi` (0x0121) only.
+pub fn has_surplus_form(kind: u16) -> bool {
+    kind == 0x0121
 }
 /// Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512, mldsa87, fndsa1024 (CTR-UA-39 / -40; an `msig` per
 /// [`msig_pqz_eligible`]).
@@ -411,6 +419,7 @@ fn eligible_at(
 pub fn is_member(kind: u16, hedera_native: bool) -> bool {
     single_signing(kind)
         || kind == 0x0120
+        || kind == 0x0121
         || kind == 0x0001
         || kind == 0x0002
         || (hedera_native && kind == 0x0003)

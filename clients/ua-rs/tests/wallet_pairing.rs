@@ -82,11 +82,21 @@ fn sign_json_pairing_rows() {
         assert_eq!(ua_msg, b32(&r["uaMsg"]), "{r}");
         let pop = r["role"] == "pop";
         assert!(
-            verify(kind, &key.key_data(), &ua_msg, &bytes(&r["signature"]), pop),
+            verify(
+                kind,
+                &key.key_data(),
+                &ua_msg,
+                &bytes(&r["signature"]),
+                pop,
+                false
+            ),
             "{r}"
         );
         let mine = key.sign_ua(&purpose, &digest).unwrap();
-        assert!(verify(kind, &key.key_data(), &ua_msg, &mine, pop), "{r}");
+        assert!(
+            verify(kind, &key.key_data(), &ua_msg, &mine, pop, false),
+            "{r}"
+        );
         if matches!(kind, 0x0106 | 0x0107) {
             assert_eq!(
                 hex::encode(&mine),
@@ -117,11 +127,14 @@ fn bls_wrong_dst_refusal_rows() {
             bytes(&r["signature"]),
         );
         assert_eq!(
-            verify(kind, &kd, &m, &sig, r["pop"].as_bool().unwrap()),
+            verify(kind, &kd, &m, &sig, r["pop"].as_bool().unwrap(), false),
             r["valid"].as_bool().unwrap(),
             "{r}"
         );
-        assert!(verify(kind, &kd, &m, &sig, r["signedAs"] == "pop"), "{r}");
+        assert!(
+            verify(kind, &kd, &m, &sig, r["signedAs"] == "pop", false),
+            "{r}"
+        );
         n += 1;
     }
     assert_eq!(n, 6); // T21 L03: + the pqz-scoped-key rows
@@ -148,16 +161,19 @@ fn right_message_wrong_dst_refused() {
             ua_message(kind, &pop, &d).unwrap(),
         );
         assert!(
-            verify(kind, &key.key_data(), &ma, &sa, false),
+            verify(kind, &key.key_data(), &ma, &sa, false, false),
             "{kind:#06x}"
         );
         assert!(
-            !verify(kind, &key.key_data(), &ma, &sa, true),
+            !verify(kind, &key.key_data(), &ma, &sa, true, false),
             "{kind:#06x}"
         );
-        assert!(verify(kind, &key.key_data(), &mp, &sp, true), "{kind:#06x}");
         assert!(
-            !verify(kind, &key.key_data(), &mp, &sp, false),
+            verify(kind, &key.key_data(), &mp, &sp, true, false),
+            "{kind:#06x}"
+        );
+        assert!(
+            !verify(kind, &key.key_data(), &mp, &sp, false, false),
             "{kind:#06x}"
         );
     }
@@ -175,8 +191,8 @@ fn release_randomness_per_kind() {
         assert_eq!(a == b, matches!(kind, 0x0106 | 0x0107), "{kind:#06x}");
         let m = ua_message(kind, &p, &d).unwrap();
         assert!(
-            verify(kind, &key.key_data(), &m, &a, false)
-                && verify(kind, &key.key_data(), &m, &b, false),
+            verify(kind, &key.key_data(), &m, &a, false, false)
+                && verify(kind, &key.key_data(), &m, &b, false, false),
             "{kind:#06x}"
         );
     }
@@ -252,7 +268,7 @@ fn second_sign_on_a_session_errors() {
         let sig = mu::partial_sig_agg::<C>(&[p0, p1], &agg, &pks, &msg).unwrap();
         let q = C::ser(&mu::key_agg::<C>(&pks).unwrap().q);
         assert!(
-            verify(kind, &q, &msg, &sig, false),
+            verify(kind, &q, &msg, &sig, false, false),
             "{kind:#06x}: the aggregate"
         );
         assert_eq!(
@@ -489,11 +505,11 @@ mod vectors {
                 let sig = Signer::sign_request(&key, &req).unwrap();
                 let pop = want == SigRole::Pop;
                 assert!(
-                    verify(kind, &key.key_data(), &ua_msg, &sig, pop),
+                    verify(kind, &key.key_data(), &ua_msg, &sig, pop, false),
                     "{kind:#06x} {want:?}"
                 );
                 assert!(
-                    !verify(kind, &key.key_data(), &ua_msg, &sig, !pop),
+                    !verify(kind, &key.key_data(), &ua_msg, &sig, !pop, false),
                     "{kind:#06x} {want:?}"
                 );
             }

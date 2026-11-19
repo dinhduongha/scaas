@@ -78,11 +78,11 @@ fn groups_register_and_sign() {
             "{name}"
         );
         assert!(
-            verify(kind, &kd, &m, &bytes(&g["pop"]["blob"]), true),
+            verify(kind, &kd, &m, &bytes(&g["pop"]["blob"]), true, false),
             "{name}: verifyPop"
         );
         assert!(
-            verify(kind, &vk, &m, &bytes(&g["pop"]["sig"]), false),
+            verify(kind, &vk, &m, &bytes(&g["pop"]["sig"]), false, false),
             "{name}: the PoP signature against vk"
         );
         for s in arr(&g["sigs"]) {
@@ -94,7 +94,7 @@ fn groups_register_and_sign() {
             .unwrap();
             assert_eq!(mm, b32(&s["message"]));
             assert!(
-                verify(kind, &vk, &mm, &bytes(&s["sig"]), false),
+                verify(kind, &vk, &mm, &bytes(&s["sig"]), false, false),
                 "{name} {}",
                 s["purpose"]
             );
@@ -120,6 +120,7 @@ fn group_negatives_refused() {
                         &bytes(&x["vk"]),
                         &b32(&x["message"]),
                         &bytes(&x["sig"]),
+                        false,
                         false
                     ),
                     "{name}"
@@ -137,14 +138,21 @@ fn group_negatives_refused() {
                 };
                 let blob = bytes(&x["pop"]);
                 assert_eq!(
-                    verify(kind, &kd[..w], &m, &blob[..sl.min(blob.len())], false),
+                    verify(
+                        kind,
+                        &kd[..w],
+                        &m,
+                        &blob[..sl.min(blob.len())],
+                        false,
+                        false
+                    ),
                     x["sigValid"].as_bool().unwrap(),
                     "{name}: sigValid"
                 );
                 match x["error"].as_str().unwrap() {
                     "UAKeyData" => assert!(!valid, "{name}: key data must be refused"),
                     "UAPoP" => assert!(
-                        valid && !verify(kind, &kd, &m, &bytes(&x["pop"]), true),
+                        valid && !verify(kind, &kd, &m, &bytes(&x["pop"]), true, false),
                         "{name}: verifyPop must refuse"
                     ),
                     e => panic!("{name}: {e}"),

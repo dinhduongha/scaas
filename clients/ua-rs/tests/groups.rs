@@ -147,8 +147,14 @@ fn neg_register(
 ) -> Value {
     let (ua, pd, m) = pop_of(kind, kd, a);
     let (w, sl) = sig_layout(kind);
-    let sig_valid =
-        scaas_ua::verify::verify(kind, &kd[..w], &m, &blob[..sl.min(blob.len())], false);
+    let sig_valid = scaas_ua::verify::verify(
+        kind,
+        &kd[..w],
+        &m,
+        &blob[..sl.min(blob.len())],
+        false,
+        false,
+    );
     json!({ "name": name, "entry": "register", "error": error, "keyData": hx(kd), "ua": hx(&ua), "popDigest": hx(&pd),
             "message": hx(&m), "pop": hx(blob), "sigValid": sig_valid, "comment": comment })
 }

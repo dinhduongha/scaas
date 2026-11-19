@@ -1645,7 +1645,7 @@ fn signature_ok(
 ) -> Result<bool> {
     let message = ua_message(kind, purpose, digest)?;
     if kind != 0x0120 {
-        return Ok(crate::verify::verify(kind, d, &message, sig, true));
+        return Ok(crate::verify::verify(kind, d, &message, sig, true, false));
     }
     let keys = member_keys(d, cx)?;
     if !msig_pqz_eligible_with(eligible, &inner_of(cx))? {
@@ -1703,14 +1703,14 @@ fn slot_ok(
             let i = x.index as usize;
             if !bits.slot(&m.id, x.index)
                 || !cx.on(&m.id, x.index)
-                || !leaf_ok(&leaves[i], &keys[i], digest, &inner, &x.sig)?
+                || !leaf_ok(&leaves[i], &keys[i], digest, &inner, &x.sig, true)?
             {
                 return Ok(false);
             }
         }
         return Ok(true);
     }
-    Ok(s.members.is_empty() && leaf_ok(m, key, digest, md, &s.sig)?)
+    Ok(s.members.is_empty() && leaf_ok(m, key, digest, md, &s.sig, true)?)
 }
 fn leaf_ok(
     m: &MsigMember,
@@ -1723,6 +1723,11 @@ fn leaf_ok(
         0 => key.len(),
         head => head, // a group kind signs against its stored `vk`
     }];
+    if crate::has_surplus_form(kind) {
+        // spec 2026-11-19-bls12381-multi §5.3 dispatch: `pop` v2 → verifyPop(d), every other purpose → verifyMinimal
+        let pop = *purpose == pop_v2_tag();
+        return Ok(crate::verify::verify(kind, d, &message, sig, pop, !pop));
+    }
     Ok(match m.kind {
         0x0001 => {
             crate::verify::native_ecdsa(m.id[12..].try_into().expect("20 bytes"), digest, sig)
@@ -1791,12 +1796,15 @@ fn registration_attrs(
     };
     Ok(registration_digest(
         ua,
+/// `minimal`: a stored path (every caller but [`auth_ok`]), where a surplus-form member (`0x0121`) takes its minimal form (spec
+/// 2026-11-19-bls12381-multi §5.3).
         kind,
         &pqz_key_hash,
         &kem,
         &a.pqz_pop_hash,
     ))
 }
+    minimal: bool,
 
 /// A registration as `register` checks it, on bytes only (no state, no `keyHash`): the id from canonical key data, every
 /// `msig` member resolved, the attributes in `_attrs`' order, `keccak256(pqz_pop) == pqz_pop_hash` when proof bytes come,
@@ -1813,6 +1821,7 @@ pub fn check_registration(
     check_registration_with(kind, key_data, attrs, pop, pqz_pop, members, None)
 }
 /// [`check_registration`] on the target registry's accepted bits (CTR-UA-37): the `pop` accepts its own record's slots, never an inner
+            minimal,
 /// `msig`'s, so with no `accepted` a `pop` with an inner list is `NotVerifiable`. The same `accepted` in every `check_*_with`.
 pub fn check_registration_with(
     kind: u16,
@@ -2364,3 +2373,4 @@ pub fn pqz_keys_distinct(entries: &[([u8; 32], &[u8])]) -> core::result::Result<
     }
     Ok(())
 }
+                    false,

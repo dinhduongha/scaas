@@ -223,6 +223,7 @@ fn sign_json_accepted_rows() {
             &bytes(&r["keyData"]),
             &b32(&r["expectedChallenge"]),
             &blob,
+            false,
             false
         ));
         assert!(low(&fields(&blob).3));
@@ -336,7 +337,7 @@ fn signatures_json_rows() {
         if name == "high-s" {
             let blob = got.unwrap();
             assert!(!low(&fields(&sig).3) && low(&fields(&blob).3));
-            assert!(verify(0x0100, &kd, &msg, &blob, false));
+            assert!(verify(0x0100, &kd, &msg, &blob, false, false));
         } else {
             assert_eq!(got, Err(Error::WebAuthnAssertion), "{name}");
             refused += 1;
@@ -408,7 +409,7 @@ fn non_utf8_client_data_refused() {
         enc.resize(enc.len() + f.len().next_multiple_of(32) - f.len(), 0);
     }
     assert!(
-        verify(0x0100, &k.key_data(), &ch, &enc, false),
+        verify(0x0100, &k.key_data(), &ch, &enc, false, false),
         "control: the chains' byte rule accepts it"
     );
 }
@@ -509,6 +510,7 @@ fn passkey_signs_through_the_uasig_builder() {
         &k.key_data(),
         &webauthn_challenge(&purpose, &digest).unwrap(),
         &sig.signature,
+        false,
         false
     ));
     let id = derive_ua(0x0100, &k.key_data(), false).unwrap();
@@ -531,6 +533,7 @@ fn passkey_signs_through_the_uasig_builder() {
         &k.key_data(),
         &member_msg,
         &s.members[0].sig,
+        false,
         false
     ));
 }
@@ -573,7 +576,7 @@ fn abi_words_are_read_in_full() {
         b32(&r["expectedChallenge"]),
         bytes(&r["assertion"]),
     );
-    assert!(verify(0x0100, &kd, &ch, &blob, false), "control");
+    assert!(verify(0x0100, &kd, &ch, &blob, false, false), "control");
     let oc = word(&blob, 32);
     for (what, at) in [
         ("offset a", 0),
@@ -583,7 +586,7 @@ fn abi_words_are_read_in_full() {
     ] {
         let mut b = blob.clone();
         b[at + 27] |= 1; // + 2^32
-        assert!(!verify(0x0100, &kd, &ch, &b, false), "{what}");
+        assert!(!verify(0x0100, &kd, &ch, &b, false, false), "{what}");
     }
 }
 
@@ -634,6 +637,7 @@ fn unclosed_client_data_refused() {
                 &kd,
                 &ch,
                 &encode(&ad, &cd, &b32(&r["r"]), &s),
+                false,
                 false
             ),
             "{}",

@@ -43,7 +43,7 @@ fn signs(key: &UaKey) -> bool {
     let (p, d) = md();
     let m = ua_message(key.kind(), &p, &d).unwrap();
     key.sign_ua(&p, &d)
-        .is_ok_and(|s| verify(key.kind(), &key.key_data(), &m, &s, false))
+        .is_ok_and(|s| verify(key.kind(), &key.key_data(), &m, &s, false, false))
 }
 
 #[test]
@@ -447,7 +447,7 @@ fn concurrent_lock_and_sign() {
                                     "a call started after lock() returned signed"
                                 );
                                 assert_eq!(revoked, 0, "a signature after KeyRevoked");
-                                assert!(verify(0x0108, &kd, &m, &sig, false));
+                                assert!(verify(0x0108, &kd, &m, &sig, false, false));
                                 ok += 1;
                                 if ok == 1 {
                                     first_tx.send(()).unwrap();

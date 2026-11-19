@@ -86,9 +86,15 @@ fn sign_json_ua_rows() {
         assert_eq!(signed, bytes(&r["signed"]), "{r}");
         let pop = r["role"] == "pop";
         let sig = bytes(&r["signature"]);
-        assert!(verify(kind, &key.key_data(), &ua_msg, &sig, pop), "{r}");
+        assert!(
+            verify(kind, &key.key_data(), &ua_msg, &sig, pop, false),
+            "{r}"
+        );
         let mine = key.sign_ua(&purpose, &digest).unwrap();
-        assert!(verify(kind, &key.key_data(), &ua_msg, &mine, pop), "{r}");
+        assert!(
+            verify(kind, &key.key_data(), &ua_msg, &mine, pop, false),
+            "{r}"
+        );
         match (r["compare"].as_str().unwrap(), r["fixed"]["aux"].as_str()) {
             ("bytes", None) => assert_eq!(hex::encode(&mine), hex::encode(&sig), "{r}"),
             ("bytes", Some(_)) => {
@@ -350,8 +356,8 @@ fn bip340_release_aux_is_random() {
     assert_ne!(a, b);
     let m = ua_message(0x0103, &p, &d).unwrap();
     assert!(
-        verify(0x0103, &key.key_data(), &m, &a, false)
-            && verify(0x0103, &key.key_data(), &m, &b, false)
+        verify(0x0103, &key.key_data(), &m, &a, false, false)
+            && verify(0x0103, &key.key_data(), &m, &b, false, false)
     );
 }
 
@@ -697,13 +703,20 @@ fn portable_app_rows() {
         let s = ua_sig_app(&key, &app_id, &digest).unwrap();
         assert!(s.key_data.is_empty() && s.members.is_empty());
         assert!(
-            verify(kind, &key.key_data(), &b32(&r["uaMsg"]), &s.signature, true),
+            verify(
+                kind,
+                &key.key_data(),
+                &b32(&r["uaMsg"]),
+                &s.signature,
+                true,
+                false
+            ),
             "{}",
             r["name"]
         );
         let theirs = ua_message(kind, &app_purpose(&other(&r["appId"])).unwrap(), &digest).unwrap();
         assert!(
-            !verify(kind, &key.key_data(), &theirs, &s.signature, true),
+            !verify(kind, &key.key_data(), &theirs, &s.signature, true, false),
             "{}: under the other app",
             r["name"]
         );

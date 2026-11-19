@@ -650,7 +650,7 @@ fn open_container_with(
             )?
     } else {
         auth.members.is_empty()
-            && crate::verify::verify(kind, &auth.key_data, &m0, &auth.signature, false)
+            && crate::verify::verify(kind, &auth.key_data, &m0, &auth.signature, false, false)
     };
     if !ok {
         return Err(Error::SealOpen);
@@ -685,7 +685,7 @@ fn accepted_ok(
 /// A leaf member's signature (a sender kind, no list below it) over `uaMessage(kind, member, md)`.
 fn leaf_ok(kind: u16, key: &[u8], md: &[u8; 32], sig: &[u8]) -> Result<bool> {
     let msg = ua_message(kind, &purpose_tag("member")?, md)?;
-    Ok(SENDER_KINDS.contains(&kind) && crate::verify::verify(kind, key, &msg, sig, false))
+    Ok(SENDER_KINDS.contains(&kind) && crate::verify::verify(kind, key, &msg, sig, false, false))
 }
 
 /// An `msig` sender's member signatures over its `ua_msg` `m0`: member keys from `members` (re-derived; unknown:

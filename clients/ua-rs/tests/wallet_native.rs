@@ -618,7 +618,7 @@ fn p2tr_release_signatures_verify_under_the_output_key_and_differ() {
         assert_ne!(a, b, "aux from the OS RNG");
         for s in [&a, &b] {
             assert!(
-                scaas_ua::verify::verify(0x0103, &xq, &d, s, false),
+                scaas_ua::verify::verify(0x0103, &xq, &d, s, false, false),
                 "index {i}"
             );
         }
@@ -1124,7 +1124,7 @@ fn regenerate() {
         );
         match r["scheme"].as_str().unwrap() {
             "bip340-taproot" => {
-                scaas_ua::verify::verify(0x0103, &pk, &m.try_into().unwrap(), &s, false)
+                scaas_ua::verify::verify(0x0103, &pk, &m.try_into().unwrap(), &s, false, false)
             }
             _ => sr_verify(&pk, &m, &s),
         }

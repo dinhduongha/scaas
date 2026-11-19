@@ -518,7 +518,8 @@ fn pop_and_check_balance_through_the_facade() {
         &k.y(),
         &msg,
         &h(&pop["pop"]),
-        true
+        true,
+        false
     ));
     #[cfg(feature = "vectors")]
     {
@@ -563,6 +564,7 @@ fn pop_and_check_balance_through_the_facade() {
         &k.y(),
         &m,
         &h(&s["sig"]),
+        false,
         false
     ));
 }

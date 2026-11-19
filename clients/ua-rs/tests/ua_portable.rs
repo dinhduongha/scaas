@@ -1028,11 +1028,18 @@ fn negatives_refused() {
                 assert_ne!(hx(&msg), row["popMessage"], "{name}");
                 let (kd, pop) = (bytes(&row["keyData"]), bytes(&m["set"]["pop"]));
                 assert!(
-                    scaas_ua::verify::verify(kind, &kd, &msg, &pop, true),
+                    scaas_ua::verify::verify(kind, &kd, &msg, &pop, true, false),
                     "{name}: signed over the other kind"
                 );
                 assert!(
-                    !scaas_ua::verify::verify(kind, &kd, &b32(&row["popMessage"]), &pop, true),
+                    !scaas_ua::verify::verify(
+                        kind,
+                        &kd,
+                        &b32(&row["popMessage"]),
+                        &pop,
+                        true,
+                        false
+                    ),
                     "{name}"
                 );
                 run += 1;
@@ -2298,6 +2305,7 @@ fn check_refuses_negatives() {
             assert_eq!(code(check_row(&p, r)), Some(err), "{name}");
             refused += 1;
             continue;
+                        false,
         }
         let m = &n["mutation"];
         let set = &m["set"];
@@ -2369,6 +2377,7 @@ fn check_refuses_negatives() {
                 }
                 let got = check_kem(
                     &p,
+                                false,
                     &k,
                     set.get("ua").unwrap_or(&k["ua"]),
                     &bytes(set.get("sig").unwrap_or(&k["sig"])),
