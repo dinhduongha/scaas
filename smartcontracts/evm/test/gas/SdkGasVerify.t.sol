@@ -16,6 +16,10 @@ import {
     BlsMinSigBls12381Verifier,
     BlsMinSigBn254Verifier
 } from "../../src/ua/verifiers/PairingVerifiers.sol";
+import {MldsaVerifier} from "../../src/ua/MlDsa.sol";
+import {FndsaVerifier} from "../../src/ua/FnDsa.sol";
+import {SlhdsaVerifier} from "../../src/ua/SlhDsa.sol";
+import {GasBurner} from "../pqz/PqzStateGas.t.sol";
 import {UARegistryBase} from "../ua/UARegistryBase.sol";
 import {UACall} from "../ua/UACall.sol";
 import {Vm} from "forge-std/Test.sol";
@@ -81,9 +85,41 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
             c[i] = UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]));
         }
         c[8] = UARegistry.KindConfig(0x0108, address(new Secp256k1Verifier()), 50_000);
-        reg = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, c);
+        reg = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _withPq(c));
         fwd = new SdkGasForwarder(reg);
         meter = new SdkGasMeter();
+    }
+
+    /// The PQ kinds on the paths the registry executes (owner 2026-11-19, item 6): ML-DSA-44 / -65 / -87 on their
+    /// precompiles at the SCaaS testnet's addresses, each a `GasBurner` at the calibrated price (59,000 / 100,000 / 135,000
+    /// + 6 for the one message word, less 2,900: the stand-in is a cold account, a precompile a warm one), the verifier's
+    /// probe answered by mocks first; SLH-DSA-128s and FN-DSA-512 / -1024 on their pure-Solidity verifiers (no precompile
+    /// for them exists). Caps: `DeployBase`'s (the precompile path 250,000).
+    function _withPq(UARegistry.KindConfig[] memory b) internal returns (UARegistry.KindConfig[] memory c) {
+        c = new UARegistry.KindConfig[](b.length + 6);
+        for (uint256 i; i < b.length; ++i) {
+            c[i] = b[i];
+        }
+        uint16[3] memory ml = [uint16(0x0130), 0x0131, 0x0134];
+        uint256[3] memory len = [uint256(1312 + 2420), 1952 + 3309, 2592 + 4627];
+        uint256[3] memory price = [uint256(59_000), 100_000, 135_000];
+        for (uint256 i; i < 3; ++i) {
+            address at = address(uint160(0x5caa0012 + i));
+            (bytes memory valid, bytes memory invalid) = (new bytes(len[i] + 32), new bytes(len[i] + 32));
+            valid[0] = 0x01;
+            vm.mockCall(at, bytes(""), abi.encode(uint256(1)));
+            vm.mockCall(at, invalid, abi.encode(uint256(0)));
+            MldsaVerifier v = new MldsaVerifier(ml[i], at, valid, invalid);
+            assertEq(v.PRECOMPILE(), at, "the precompile path");
+            c[b.length + i] = UARegistry.KindConfig(ml[i], address(v), 250_000);
+        }
+        vm.clearMockedCalls();
+        for (uint256 i; i < 3; ++i) {
+            vm.etch(address(uint160(0x5caa0012 + i)), address(new GasBurner(price[i] + 6 - 2_900)).code);
+        }
+        c[b.length + 3] = UARegistry.KindConfig(0x0133, address(new SlhdsaVerifier()), 1_400_000);
+        c[b.length + 4] = UARegistry.KindConfig(0x0132, address(new FndsaVerifier(0x0132)), 2_500_000);
+        c[b.length + 5] = UARegistry.KindConfig(0x0135, address(new FndsaVerifier(0x0135)), 5_250_000);
     }
 
     function _d(uint256 i, string memory f) internal pure returns (string memory) {
@@ -106,14 +142,49 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
         _pin(key, g);
     }
 
-    function test_sdkGas_verify() public {
+    /// The native key's check (the reference) and its signature's calldata (ruling 2: `verify_native_sig_bytes`).
+    function _native() internal returns (uint256 n) {
         bytes32 dg = keccak256("sdk-gas-verify");
         uint256 pk = 0xA11CE;
         IUARegistry.UASig memory a;
         a.signature = _ecdsa(pk, dg);
         bytes32 native = bytes32(uint256(uint160(vm.addr(pk))));
-        uint256 n =
-            _metered("verify_native", abi.encodeCall(SdkGasForwarder.check, (native, UAKinds.PURPOSE_METATX, dg, a)));
+        n = _metered("verify_native", _cd(native, dg, a));
+        _sigBytes("verify_native", native, dg, a);
+    }
+
+    function _cd(bytes32 ua, bytes32 dg, IUARegistry.UASig memory a) internal pure returns (bytes memory) {
+        return abi.encodeCall(SdkGasForwarder.check, (ua, UAKinds.PURPOSE_METATX, dg, a));
+    }
+
+    /// Ruling 2 (owner 2026-11-19): the signature's length in calldata, `<key>_sig_bytes`: the call with the signer's
+    /// `UASig` less the call with an empty one (the operation the SDK quotes, built with an empty signature).
+    function _sigBytes(string memory key, bytes32 ua, bytes32 dg, IUARegistry.UASig memory a) internal {
+        IUARegistry.UASig memory none;
+        _pin(string.concat(key, "_sig_bytes"), _cd(ua, dg, a).length - _cd(ua, dg, none).length);
+    }
+
+    /// The index of `j`'s first `metatx` signature row in `sigs[]` of row prefix `r`.
+    function _metatxRow(string memory j, string memory r) internal view returns (string memory) {
+        uint256 s;
+        while (
+            keccak256(bytes(vm.parseJsonString(j, string.concat(r, "sigs[", vm.toString(s), "].purpose"))))
+                != keccak256("metatx")
+        ) {
+            ++s;
+        }
+        return string.concat(r, "sigs[", vm.toString(s), "].");
+    }
+
+    /// One derived kind's row: its check of the vector signature, the difference to the native key's, its sig bytes.
+    function _row(uint16 kind, bytes32 ua, bytes32 dg, IUARegistry.UASig memory u, uint256 n) internal {
+        string memory key = string.concat("verify_", _hex4(kind));
+        _pin(string.concat(key, "_delta"), _metered(key, _cd(ua, dg, u)) - n); // the verify row's figure
+        _sigBytes(key, ua, dg, u);
+    }
+
+    function test_sdkGas_verify() public {
+        uint256 n = _native();
         uint256 rows;
         for (uint256 i; vm.keyExistsJson(sj, string.concat(".derived[", vm.toString(i), "]")); ++i) {
             uint16 kind = uint16(vm.parseJsonUint(sj, _d(i, "kind")));
@@ -121,24 +192,36 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
             bytes memory k = vm.parseJsonBytes(sj, _d(i, "keyData"));
             bytes32 ua = vm.parseJsonBytes32(sj, _d(i, "ua"));
             UACall.register(reg, kind, k, _none(), vm.parseJsonBytes(sj, _d(i, "pop.sig")), "");
-            uint256 s;
-            while (
-                keccak256(bytes(vm.parseJsonString(sj, _d(i, string.concat("sigs[", vm.toString(s), "].purpose")))))
-                    != keccak256("metatx")
-            ) {
-                ++s;
-            }
-            string memory row = string.concat("sigs[", vm.toString(s), "].");
+            string memory row = _metatxRow(sj, string.concat(".derived[", vm.toString(i), "]."));
             IUARegistry.UASig memory u =
-                UACall.auth(ua, abi.encode(k, vm.parseJsonBytes(sj, _d(i, string.concat(row, "sig")))));
-            bytes memory cd = abi.encodeCall(
-                SdkGasForwarder.check,
-                (ua, UAKinds.PURPOSE_METATX, vm.parseJsonBytes32(sj, _d(i, string.concat(row, "digest"))), u)
-            );
-            string memory key = string.concat("verify_", _hex4(kind));
-            _pin(string.concat(key, "_delta"), _metered(key, cd) - n); // the verify row's figure
+                UACall.auth(ua, abi.encode(k, vm.parseJsonBytes(sj, string.concat(row, "sig"))));
+            _row(kind, ua, vm.parseJsonBytes32(sj, string.concat(row, "digest")), u, n);
             ++rows;
         }
         assertEq(rows, 9, "0x0100 - 0x0108");
+    }
+
+    /// The PQ kinds 0x0130-0x0135 (item 6) on `smartcontracts/vectors/ua/pq_signatures.json` (context A): each registered
+    /// with its vector PoP, its `metatx` signature checked with an empty `keyData` (a stored kind's `UASig`, as `scaas-ua`
+    /// sends it).
+    function test_sdkGas_verifyPq() public {
+        string memory pj = vm.readFile("../vectors/ua/pq_signatures.json");
+        uint256 n = _native();
+        uint256 rows;
+        for (uint256 i; vm.keyExistsJson(pj, string.concat(".kinds[", vm.toString(i), "]")); ++i) {
+            string memory r = string.concat(".kinds[", vm.toString(i), "].");
+            uint16 kind = uint16(vm.parseJsonUint(pj, string.concat(r, "kind")));
+            bytes32 ua = vm.parseJsonBytes32(pj, string.concat(r, "ua"));
+            bytes memory pk = vm.parseJsonBytes(pj, string.concat(r, "keyData"));
+            assertEq(
+                UACall.register(reg, kind, pk, _none(), vm.parseJsonBytes(pj, string.concat(r, "pop.sig")), ""), ua
+            );
+            string memory row = _metatxRow(pj, r);
+            IUARegistry.UASig memory u;
+            u.signature = vm.parseJsonBytes(pj, string.concat(row, "sig"));
+            _row(kind, ua, vm.parseJsonBytes32(pj, string.concat(row, "digest")), u, n);
+            ++rows;
+        }
+        assertEq(rows, 6, "0x0130 - 0x0135");
     }
 }

@@ -49,6 +49,8 @@ abstract contract SdkGasRows is Test {
     /// transaction's total (about 1.2 KiB of body on `mtxPay`), so the difference is execution gas.
     uint256 internal constant SG_BODY_LO = 256;
     uint256 internal constant SG_BODY_HI = 1_024;
+    /// ruling 3 (owner 2026-11-19): the envelope's fee (`FIXED`, the recipient unbound: the relayer, who holds nothing)
+    uint256 internal sgFee;
 
     /// The standard calldata gas of `cd`: 4 a zero byte, 16 a non-zero one.
     function _cdGas(bytes memory cd) internal pure returns (uint256 g) {
@@ -117,6 +119,25 @@ abstract contract SdkGasRows is Test {
         _setNonce(c, from, SG_LANE, 1);
         _measure(string.concat(kind, "_", entry, "_used_", variant), c, build(c, 1));
         vm.revertToState(s);
+        if (_feeable(kind, entry)) {
+            sgFee = 1; // a revert restores this contract's storage too: back to 0 after it
+            _measure(string.concat(kind, "_", entry, "_fee_", variant), c, build(c, 0));
+            vm.revertToState(s);
+        }
+    }
+
+    /// Ruling 3 (owner 2026-11-19): the entries whose envelope carries a fee, measured once more on a fresh lane with a fee
+    /// of 1 (`<kind>_<entry>_fee_<variant>`; the generator's `fee_extra` is the worst difference to the fresh row): the
+    /// token kinds' entries but `mtxRelayFee` and `mtxPayWithPayeeFee` (their fee is their own payment, already in the row
+    /// to a recipient holding nothing; the payee-fee entry refuses an envelope fee, `PayeeFeeShape`) and the wrap-in entries
+    /// (`mtxWrap`, `mtxWrapLeg`, `mtxAddReserve`, `mtxWrapToUA`: their fee is charged in units the signer holds before the
+    /// call, and their rows are measured with a signer holding none, `ERC20InsufficientBalance`); the wallet and the router
+    /// take fee `NONE` only.
+    function _feeable(string memory kind, string memory entry) internal pure returns (bool) {
+        (bytes32 k, bytes32 e) = (keccak256(bytes(kind)), keccak256(bytes(entry)));
+        return (k == keccak256("token") || k == keccak256("zether") || k == keccak256("pqz"))
+            && e != keccak256("mtxRelayFee") && e != keccak256("mtxPayWithPayeeFee") && e != keccak256("mtxWrap")
+            && e != keccak256("mtxWrapLeg") && e != keccak256("mtxAddReserve") && e != keccak256("mtxWrapToUA");
     }
 }
 
@@ -151,6 +172,15 @@ abstract contract SdkGasOps is SdkGasRows {
     uint256 internal sgBody;
     bool internal sgSave;
 
+    /// An entry's amount: `a`, raised to 100 under a fee so that the 1 % cap of an amount-class entry admits a fee of 1.
+    function _amt(uint256 a) internal view returns (uint256) {
+        return sgFee != 0 && a < 100 ? 100 : a;
+    }
+
+    function _sgFeeTerms() internal view returns (uint32 mode, uint256 fee) {
+        if (sgFee != 0) (mode, fee) = (MetaTxLib.MODE_FEE_FIXED, sgFee);
+    }
+
     function _sgFrom() internal view returns (bytes32) {
         return MetaTxLib.pad(vm.addr(sgPk));
     }
@@ -169,16 +199,19 @@ abstract contract SdkGasOps is SdkGasRows {
         view
         returns (MetaTxLib.UAMetaTransfer memory x)
     {
-        (x.from, x.to, x.value, x.entryRef) = (_sgFrom(), to, value, entryRef);
+        (x.from, x.to, x.value, x.entryRef) = (_sgFrom(), to, _amt(value), entryRef);
         (x.batch, x.nonce, x.validUntil) = (SG_LANE, nonce, block.timestamp + 600);
+        (x.mode, x.fee) = _sgFeeTerms();
     }
 
     function _sgE(uint256 nonce) internal view returns (MetaTxLib.UAEnvelope memory e) {
         (e.from, e.batch, e.nonce, e.validUntil) = (_sgFrom(), SG_LANE, nonce, block.timestamp + 600);
+        (e.mode, e.fee) = _sgFeeTerms();
     }
 
     function _sgAddrE(uint256 nonce) internal view returns (MetaTxLib.Envelope memory e) {
         (e.from, e.batch, e.nonce, e.validUntil) = (vm.addr(sgPk), SG_LANE, nonce, block.timestamp + 600);
+        (e.mode, e.fee) = _sgFeeTerms();
     }
 
     /// The digest of `<head><E>` over `(from, args…, E)` in `c`'s domain, relayer and fee recipient unbound.
@@ -226,7 +259,7 @@ abstract contract SdkGasOps is SdkGasRows {
     function _payeeFee(address c, uint256 nonce) internal view returns (bytes memory) {
         MetaTxLib.PayMeta memory m = _sgMeta();
         MetaTxLib.UAMetaTransfer memory x = _sgT(nonce, MetaTxLib.pad(vm.addr(SG_PAYEE_PK)), 10, PayMetaKit.id(m));
-        (x.mode, x.relayer) = (MetaTxLib.MODE_RESTRICT_RELAYER, SG_RELAYER); // the entry binds the relayer
+        (x.mode, x.relayer) = (x.mode | MetaTxLib.MODE_RESTRICT_RELAYER, SG_RELAYER); // the entry binds the relayer
         uint256 until = block.timestamp + 600;
         bytes32 rf = MtxDigest.typed(
             c, keccak256(abi.encode(UA_PAYEE_FEE, MtxHash.hashStruct(x), uint256(1), SG_FEE_TO, until))
@@ -280,67 +313,66 @@ abstract contract SdkGasOps is SdkGasRows {
     }
 
     function _burn(address c, uint256 nonce) internal view returns (bytes memory) {
-        bytes32 d = _sgNamed(c, "UABurn(bytes32 from,uint256 amount,", abi.encode(uint256(1)), nonce);
-        return abi.encodeCall(ISdkGasBurn.mtxBurn, (_sgE(nonce), 1, _sgUaSig(d)));
+        bytes32 d = _sgNamed(c, "UABurn(bytes32 from,uint256 amount,", abi.encode(_amt(1)), nonce);
+        return abi.encodeCall(ISdkGasBurn.mtxBurn, (_sgE(nonce), _amt(1), _sgUaSig(d)));
     }
 
     function _wrap(address c, uint256 nonce) internal view returns (bytes memory) {
-        bytes32 d = _sgNamed(c, "Wrap(address from,uint256 amount,", abi.encode(uint256(1)), nonce);
-        return abi.encodeCall(IWrappedToken.mtxWrap, (_sgAddrE(nonce), 1, _sgSign(sgPk, d)));
+        bytes32 d = _sgNamed(c, "Wrap(address from,uint256 amount,", abi.encode(_amt(1)), nonce);
+        return abi.encodeCall(IWrappedToken.mtxWrap, (_sgAddrE(nonce), _amt(1), _sgSign(sgPk, d)));
     }
 
     function _wrapLeg(address c, uint256 nonce) internal view returns (bytes memory) {
-        bytes32 d = _sgNamed(
-            c, "WrapLeg(address from,address underlying,uint256 amount,", abi.encode(sgLeg, uint256(1)), nonce
-        );
-        return abi.encodeCall(IWrappedToken.mtxWrapLeg, (_sgAddrE(nonce), sgLeg, 1, _sgSign(sgPk, d)));
+        bytes32 d =
+            _sgNamed(c, "WrapLeg(address from,address underlying,uint256 amount,", abi.encode(sgLeg, _amt(1)), nonce);
+        return abi.encodeCall(IWrappedToken.mtxWrapLeg, (_sgAddrE(nonce), sgLeg, _amt(1), _sgSign(sgPk, d)));
     }
 
     function _addReserve(address c, uint256 nonce) internal view returns (bytes memory) {
         bytes32 d = _sgNamed(
-            c, "AddReserve(address from,address underlying,uint256 amount,", abi.encode(sgLeg, uint256(1)), nonce
+            c, "AddReserve(address from,address underlying,uint256 amount,", abi.encode(sgLeg, _amt(1)), nonce
         );
-        return abi.encodeCall(IWrappedToken.mtxAddReserve, (_sgAddrE(nonce), sgLeg, 1, _sgSign(sgPk, d)));
+        return abi.encodeCall(IWrappedToken.mtxAddReserve, (_sgAddrE(nonce), sgLeg, _amt(1), _sgSign(sgPk, d)));
     }
 
     function _wrapToUA(address c, uint256 nonce) internal view returns (bytes memory) {
         bytes32 d = _sgNamed(
             c,
             "WrapToUA(address from,address underlying,uint256 amount,bytes32 to,",
-            abi.encode(sgLeg, uint256(1), sgUaTo),
+            abi.encode(sgLeg, _amt(1), sgUaTo),
             nonce
         );
-        return abi.encodeCall(IWrappedToken.mtxWrapToUA, (_sgAddrE(nonce), sgLeg, 1, sgUaTo, _sgSign(sgPk, d)));
+        return abi.encodeCall(IWrappedToken.mtxWrapToUA, (_sgAddrE(nonce), sgLeg, _amt(1), sgUaTo, _sgSign(sgPk, d)));
     }
 
     function _unwrap(address c, uint256 nonce) internal view returns (bytes memory) {
         bytes32 d = _sgNamed(
             c,
             "UAUnwrap(bytes32 from,uint256 wrapped,address recipient,uint256 minOut,",
-            abi.encode(uint256(1), SG_PAYEE, uint256(0)),
+            abi.encode(_amt(1), SG_PAYEE, uint256(0)),
             nonce
         );
-        return abi.encodeCall(IWrappedToken.mtxUnwrap, (_sgE(nonce), 1, SG_PAYEE, 0, _sgUaSig(d)));
+        return abi.encodeCall(IWrappedToken.mtxUnwrap, (_sgE(nonce), _amt(1), SG_PAYEE, 0, _sgUaSig(d)));
     }
 
     function _unwrapLeg(address c, uint256 nonce) internal view returns (bytes memory) {
         bytes32 d = _sgNamed(
             c,
             "UAUnwrapLeg(bytes32 from,address underlying,uint256 wrapped,address recipient,uint256 minOut,",
-            abi.encode(sgLeg, uint256(1), SG_PAYEE, uint256(0)),
+            abi.encode(sgLeg, _amt(1), SG_PAYEE, uint256(0)),
             nonce
         );
-        return abi.encodeCall(IWrappedToken.mtxUnwrapLeg, (_sgE(nonce), sgLeg, 1, SG_PAYEE, 0, _sgUaSig(d)));
+        return abi.encodeCall(IWrappedToken.mtxUnwrapLeg, (_sgE(nonce), sgLeg, _amt(1), SG_PAYEE, 0, _sgUaSig(d)));
     }
 
     function _unwrapToUA(address c, uint256 nonce) internal view returns (bytes memory) {
         bytes32 d = _sgNamed(
             c,
             "UAUnwrapToUA(bytes32 from,address underlying,uint256 wrapped,bytes32 to,uint256 minOut,",
-            abi.encode(sgLedgerLeg, uint256(1), sgUaTo, uint256(0)),
+            abi.encode(sgLedgerLeg, _amt(1), sgUaTo, uint256(0)),
             nonce
         );
-        return abi.encodeCall(IWrappedToken.mtxUnwrapToUA, (_sgE(nonce), sgLedgerLeg, 1, sgUaTo, 0, _sgUaSig(d)));
+        return abi.encodeCall(IWrappedToken.mtxUnwrapToUA, (_sgE(nonce), sgLedgerLeg, _amt(1), sgUaTo, 0, _sgUaSig(d)));
     }
 
     // ------------------------------------------------------------------ rows
