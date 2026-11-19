@@ -387,6 +387,35 @@ library UAStore {
         }
     }
 
+    /// Spec 2026-11-19-registry-verify-only-kinds §5 (CTR-UA-68; P2, M7): a verify-only verifier's call, `capped`'s gas rule (the cap,
+    /// the hold, `UAVerifyGas`), read in three states: 1 exactly one word 1 (accept), 0 exactly one word 0 (refuse), 2 anything else
+    /// (any revert, `PqNoAnswer` or out of gas, an empty, longer or other return): no answer, the caller falls back to the holder.
+    function voCall(address target, uint256 cap, bytes memory data) internal view returns (uint256 r) {
+        if (gasleft() < cap + cap / 63 + SigCheck.GAS_MARGIN) revert UAKinds.UAVerifyGas();
+        assembly ("memory-safe") {
+            mstore(0, 2)
+            let s := staticcall(cap, target, add(data, 0x20), mload(data), 0, 0x20)
+            r := 2
+            if and(s, eq(returndatasize(), 0x20)) {
+                r := mload(0)
+                if gt(r, 1) { r := 2 }
+            }
+        }
+    }
+
+    /// A holder's portable check `call` (`requirePortable` / `requirePortableApp`) as a verdict, `via`'s rule: starvation is
+    /// `UAVerifyGas`, any other revert a refusal.
+    function verdict(address target, bytes memory call) internal view returns (bool ok) {
+        uint256 g = gasleft();
+        bytes memory err;
+        (ok, err) = target.staticcall(call);
+        if (
+            !ok
+                && ((err.length == 4 && bytes4(err) == UAKinds.UAVerifyGas.selector)
+                    || (err.length == 0 && gasleft() < g / 63))
+        ) revert UAKinds.UAVerifyGas();
+    }
+
     function via(address target, bytes32 id, bytes32 purposeTag, bytes32 digest, IUARegistry.UASig memory auth)
         internal
         view

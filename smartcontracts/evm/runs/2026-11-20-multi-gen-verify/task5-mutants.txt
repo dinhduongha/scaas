@@ -1,0 +1,10 @@
+mutant | red tests | rc | killed by
+handoff-to-predecessor | test_kindNotCarried_goesToHolderDirectly | 1 | test_kindNotCarried_goesToHolderDirectly
+verifyOnly-branch-for-not-carried | test_kindNotCarried_goesToHolderDirectly | 1 | test_kindNotCarried_goesToHolderDirectly
+registered-kind-to-library (msig held elsewhere) | test_predecessorMsig_forwardedWhole | 1 | test_predecessorMsig_forwardedWhole
+portableApp-via-requirePortable | test_kindNotCarried_goesToHolderDirectly | 1 | test_kindNotCarried_goesToHolderDirectly
+member-handoff-to-predecessor | test_kindNotCarried_member_goesToHolderDirectly | 1 | test_kindNotCarried_member_goesToHolderDirectly
+member-kind-read-locally | test_failedRead_UAVerifyGas, test_keyForm1_incompleteCache_UAKeyNotCached, test_memberKind_fromHolderOf, test_member_verifyOnly_ownVerifier, test_signer_verifyOnly_ownVerifier, test_storedPath_member_verifyOnly, test_twoVerifyOnlyCarriers_readerUsesOwn | 1 | test_memberKind_fromHolderOf
+keyForm1-cache-ignored | test_keyForm1_incompleteCache_UAKeyNotCached | 1 | test_keyForm1_incompleteCache_UAKeyNotCached
+failed-read-as-refusal | test_failedRead_UAVerifyGas | 1 | test_failedRead_UAVerifyGas
+n12-capOf-unmasked (deferred from Task 2: the verify-only path reads a flagged word) | test_memberKind_fromHolderOf, test_member_verifyOnly_ownVerifier, test_requirePortableApp_verifyOnly, test_requirePortable_verifyOnly, test_signer_verifyOnly_ownVerifier, test_storedPath_member_verifyOnly, test_twoVerifyOnlyCarriers_readerUsesOwn | 1 | test_signer_verifyOnly_ownVerifier

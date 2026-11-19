@@ -50,8 +50,8 @@ M = [
     (
         "inner-held-elsewhere-on-reader",
         CORE,
-        "                    write || UAStore.layout().records[id].kind == 0",
-        "                    write",
+        "                write || UAStore.layout().records[id].kind == 0\n            );",
+        "                write\n            );",
         V,
         "test_storedPath_innerMsig_heldElsewhere_holderVerifiers",
     ),

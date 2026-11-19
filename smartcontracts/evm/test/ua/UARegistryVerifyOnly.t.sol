@@ -359,6 +359,92 @@ contract UARegistryVerifyOnlyTest is UARegistryBase {
         s = new IUARegistry.MemberSig[](1);
         s[0] = IUARegistry.MemberSig(0, l, "");
     }
+
+    // ----- Task 6: the three-state call and the fallback (§5, CTR-UA-68) -----
+
+    /// Every stand-in answer: 1 accepts (even a bad signature: this generation's verdict), 0 refuses with no fallback (even a good
+    /// one), every "no answer" (revert `PqNoAnswer`, revert empty, out of gas at the cap, empty return, two words, `abi.encode(2)`,
+    /// Review Focus 3) falls back to the holder: good accepted, bad refused. On the signer, the member-free portable and the app path.
+    function test_threeStates_andFallback() public {
+        for (uint8 mode = 1; mode <= 8; ++mode) {
+            UARegistry g2 = _over(address(g1), mode);
+            bool good = _ok(g2, pId, _pAuth(false));
+            bool bad = _ok(g2, pId, _pAuth(true));
+            bool pg = _portableOk(g2, false, false);
+            bool pb = _portableOk(g2, false, true);
+            bool ag = _portableOk(g2, true, false);
+            bool ab = _portableOk(g2, true, true);
+            if (mode == 1) {
+                assertTrue(good && bad && pg && pb && ag && ab, "1 accepts");
+            } else if (mode == 2) {
+                assertFalse(good || bad || pg || pb || ag || ab, "0 refuses, no fallback");
+            } else {
+                assertTrue(good && pg && ag, string.concat("no answer: the holder accepts, mode ", vm.toString(mode)));
+                assertFalse(bad || pb || ab, string.concat("no answer: the holder refuses, mode ", vm.toString(mode)));
+            }
+        }
+    }
+
+    /// T-AUTH-4 on the new path: a caller that leaves less than this generation's cap plus its hold gets `UAVerifyGas`, never a
+    /// fallback bought below the cap. The portable path holds too (P10: group kinds included, one code path).
+    function test_gasBelowCap_UAVerifyGas() public {
+        UARegistry g2 = _over(address(g1), 5); // out of gas at the cap: a fallback only with the full cap
+        bytes memory call = _reqCall(pId, UAKinds.PURPOSE_METATX, DIGEST, _pAuth(false));
+        (bool ok, bytes memory err) = address(g2).staticcall{gas: CAP_VO + 10_000}(call);
+        assertFalse(ok);
+        assertEq(err, abi.encodeWithSelector(UAKinds.UAVerifyGas.selector), "starved: UAVerifyGas");
+        bytes memory pcall = abi.encodeCall(
+            IUARegistry.requirePortable, (fnId, UAKinds.PURPOSE_PQCHAT, TYPED, _fnSig(UAKinds.PURPOSE_PQCHAT, false))
+        );
+        (ok, err) = address(g2).staticcall{gas: CAP_VO + 20_000}(pcall);
+        assertFalse(ok);
+        assertEq(err, abi.encodeWithSelector(UAKinds.UAVerifyGas.selector), "the portable path holds");
+        assertTrue(_ok(g2, pId, _pAuth(false)), "with the gas: the holder's verdict");
+    }
+
+    /// P10 (N9): the group kinds' portable path holds too, at the cap `verifyBudget` (their holder's `verifyPop` runs the group check
+    /// under it): a caller below `verifyBudget` plus its hold gets `UAVerifyGas`, never a fallback; with the gas, the verdict.
+    function test_groupKind_verifyOnly_holds() public {
+        string memory j = _kindsJson();
+        uint256 i;
+        while (vm.parseJsonUint(j, string.concat(".valid[", vm.toString(i), "].kind")) != UAKinds.MUSIG2_SECP256K1) {
+            ++i;
+        }
+        bytes memory d = vm.parseJsonBytes(j, string.concat(".valid[", vm.toString(i), "].keyData"));
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
+        k[0] = UARegistry.KindConfig(UAKinds.MUSIG2_SECP256K1, address(mock), 400_000, false, 0);
+        UARegistry h = _deploy(address(0x6f02), chainUidA, address(0), false, BUDGET, address(0), true, k);
+        bytes32 ua = _register(h, UAKinds.MUSIG2_SECP256K1, d);
+        k[0] =
+            UARegistry.KindConfig(UAKinds.MUSIG2_SECP256K1, address(new VerifyOnlyStandIn(PC, 0, 1)), CAP_VO, true, 0);
+        UARegistry g2 = _deploy(address(uint160(++at)), chainUidA, address(h), false, BUDGET, address(0), true, k);
+        bytes memory call =
+            abi.encodeCall(IUARegistry.requirePortable, (ua, UAKinds.PURPOSE_PQCHAT, TYPED, UACall.sig(hex"01")));
+        (bool ok, bytes memory err) = address(g2).staticcall{gas: BUDGET + 50_000}(call);
+        assertFalse(ok);
+        assertEq(err, abi.encodeWithSelector(UAKinds.UAVerifyGas.selector), "held at verifyBudget");
+        (ok,) = address(g2).staticcall{gas: BUDGET + BUDGET / 63 + 600_000}(call); // the library frame keeps 63/64
+        assertTrue(ok, "with the gas: this generation's verdict");
+    }
+
+    /// N10: the fallback entry is the holder's entry for that path, the caller's `auth` unchanged: `requirePortableApp` with its
+    /// `appId` (its derived purpose through `requirePortable` would be refused by the holder's closed list).
+    function test_fallback_entry_perPath() public {
+        UARegistry g2 = _over(address(g1), 3);
+        vm.expectCall(
+            address(g1),
+            abi.encodeCall(IUARegistry.requirePortableApp, (fnId, APP, TYPED, _fnSig(UAKinds.appPurpose(APP), false)))
+        );
+        assertTrue(_portableOk(g2, true, false));
+        vm.expectCall(
+            address(g1),
+            abi.encodeCall(
+                IUARegistry.requirePortable,
+                (fnId, UAKinds.PURPOSE_PQCHAT, TYPED, _fnSig(UAKinds.PURPOSE_PQCHAT, false))
+            )
+        );
+        assertTrue(_portableOk(g2, false, false));
+    }
 }
 
 /// A holder whose every read fails (F11).

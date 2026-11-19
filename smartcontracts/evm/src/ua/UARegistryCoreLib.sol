@@ -222,7 +222,7 @@ library UARegistryCoreLib {
         external
     {
         _portablePurpose(ua, purposeTag);
-        _portable(ua, purposeTag, typedDigest, auth);
+        _portable(ua, purposeTag, typedDigest, auth, 0);
     }
 
     /// `IUARegistry.requirePortableApp` on a record held here (CTR-UA-46): `_portable` under `appPurpose(appId)`, a purpose the
@@ -231,17 +231,20 @@ library UARegistryCoreLib {
         external
     {
         if (appId == 0) revert IUARegistry.UAUnauthorized(ua);
-        _portable(ua, UAKinds.appPurpose(appId), typedDigest, auth);
+        _portable(ua, UAKinds.appPurpose(appId), typedDigest, auth, appId);
     }
 
     /// The portable check of `requirePortable` and `requirePortableApp` (its purpose already checked by the caller): a single key by
     /// `_single` with `signature` only, the check `setKemKey` and `setPqzKey` make; an `msig` by `_msig` over its accepted slots,
     /// minimal, whatever its PQ weight (`_sigOk`'s empty `pop` of a classical-dominant `msig` is the registration's rule, never a
     /// signature: a classical-only `msig` with no members is refused here).
-    function _portable(bytes32 ua, bytes32 purposeTag, bytes32 typedDigest, IUARegistry.UASig calldata auth)
-        internal
-        view
-    {
+    function _portable(
+        bytes32 ua,
+        bytes32 purposeTag,
+        bytes32 typedDigest,
+        IUARegistry.UASig calldata auth,
+        bytes32 appId
+    ) internal view {
         IUARegistry.Record memory r = UAStore.layout().records[ua];
         // the registration's `pop` is `register`'s own check (its slots need no acceptance): never a view's, never a later generation's
         if (purposeTag == UAKinds.PURPOSE_POP_V2) revert IUARegistry.UAUnauthorized(ua);
@@ -250,7 +253,7 @@ library UARegistryCoreLib {
             // spec 2026-11-19-registry-verify-only-kinds §4: held elsewhere, of a kind verify-only here (the registry hands every other
             // such record to its holder), or held nowhere (refused)
             ok = auth.keyData.length == 0 && auth.members.length == 0
-                && _voPortable(ua, purposeTag, typedDigest, auth.signature);
+                && _voPortable(ua, purposeTag, typedDigest, auth.signature, appId);
         } else if (r.kind != UAKinds.MSIG) {
             bytes memory d; // a surplus-form kind verifies its stored `p` (`_multi`), never `d`
             if (!UAKinds.hasSurplusForm(r.kind)) (d,) = UAStore.registration(ua, r);
@@ -299,6 +302,8 @@ library UARegistryCoreLib {
         uint256 cfg = _cfgKind();
         bytes4 sel = IUAKindVerifier.verify.selector;
         uint256 vl = UAStore.vkLength(kind);
+        // §5's fallback (N10): the holder's `requireAuthorized` with the caller's `auth` (a member's: `UASig("", sig, [])`)
+        IUARegistry.UASig memory back = IUARegistry.UASig(keyData, sig, new IUARegistry.MemberSig[](0));
         if (vl != 0 || purposeTag == UAKinds.PURPOSE_MEMBER) {
             if (keyData.length != 0) return false;
             if (cfg >> 225 & 1 != 0) {
@@ -312,14 +317,20 @@ library UARegistryCoreLib {
             return false;
         }
         bytes memory data = abi.encodeWithSelector(sel, keyData, UAKinds.uaMessage(kind, purposeTag, digest), sig);
-        return UAStore.capped(address(uint160(cfg)), UAStore._capOf(cfg), data, 1, true);
+        // §5 (CTR-UA-68): 1 accepts, 0 refuses (no fallback), no answer falls back to the holder's verdict
+        uint256 v = UAStore.voCall(address(uint160(cfg)), UAStore._capOf(cfg), data);
+        return v == 2 ? UAStore.via(h, id, purposeTag, digest, back) : v == 1;
     }
 
     /// §4 / §5 (CTR-UA-60): the portable check of a record held elsewhere by this generation's verify-only verifier (`_cfgKind()`, the
     /// word of the holder's kind the registry passed): `verifyPop` on the holder's registration key data (`verifyCached` on its
     /// complete cache under key form 1), the path and DST the holder's `_single` takes; under the cap with the hold, the group kinds'
     /// cap `verifyBudget` held too (P10). False where no generation holds `ua` or the word is not verify-only.
-    function _voPortable(bytes32 ua, bytes32 purpose, bytes32 digest, bytes memory sig) internal view returns (bool) {
+    function _voPortable(bytes32 ua, bytes32 purpose, bytes32 digest, bytes memory sig, bytes32 appId)
+        internal
+        view
+        returns (bool)
+    {
         uint256 cfg = _cfgKind();
         (address h, uint16 k,) = _holderOf(ua);
         if (h == address(0) || cfg >> 224 & 1 == 0) return false;
@@ -330,7 +341,16 @@ library UARegistryCoreLib {
         uint256 cap = k >= UAKinds.MUSIG2_SECP256K1 && k <= UAKinds.FROST_BN254
             ? IUARegistry(address(this)).verifyBudget()
             : UAStore._capOf(cfg);
-        return UAStore.capped(address(uint160(cfg)), cap, data, 1, true);
+        // §5: no answer falls back to the holder's entry for this path, `requirePortableApp` with its `appId` (N10), never on 0
+        uint256 v = UAStore.voCall(address(uint160(cfg)), cap, data);
+        if (v != 2) return v == 1;
+        IUARegistry.UASig memory back = IUARegistry.UASig("", sig, new IUARegistry.MemberSig[](0));
+        return UAStore.verdict(
+            h,
+            appId == 0
+                ? abi.encodeCall(IUARegistry.requirePortable, (ua, purpose, digest, back))
+                : abi.encodeCall(IUARegistry.requirePortableApp, (ua, appId, digest, back))
+        );
     }
 
     // ----- acceptance (CTR-UA-37) -----

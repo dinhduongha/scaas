@@ -70,4 +70,12 @@ M = [
         V,
         "test_failedRead_UAVerifyGas",
     ),
+    (
+        "n12-capOf-unmasked (deferred from Task 2: the verify-only path reads a flagged word)",
+        "src/ua/UAStore.sol",
+        "        return uint64(cfg >> 160);",
+        "        return cfg >> 160;",
+        V,
+        "test_signer_verifyOnly_ownVerifier",
+    ),
 ]
