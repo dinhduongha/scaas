@@ -513,6 +513,13 @@ async fn verdict_checked_before_attach() {
     put(&c, REGISTRY, &map(&ua, &be(0)), &rec);
     assert_eq!(refuse(verdict_of(&psid), 7).await, "VerdictRefused", "the record's kind");
     put(&c, REGISTRY, &map(&ua, &be(0)), &good);
+    // the record's key pointer holding another key: the signer is checked against the registry's record (T16-c)
+    let kc = c.lock().unwrap().code[VKEYPTR].clone();
+    let mut other = vec![0u8];
+    other.extend(verifier_key(8).1.key_data());
+    c.lock().unwrap().code.insert(VKEYPTR.into(), hx(&other));
+    assert_eq!(refuse(verdict_of(&psid), 7).await, "VerdictRefused", "the record's key");
+    c.lock().unwrap().code.insert(VKEYPTR.into(), kc);
     assert_eq!(refuse(verdict_of(&psid), 7).await, "Ok", "control again");
     let cc = c.lock().unwrap();
     assert!(cc.sent.is_empty() && cc.bodies.is_empty(), "nothing sent");
