@@ -5048,6 +5048,11 @@
    "error": ""
   },
   {
+   "sig": "registerBlsMulti((bytes,uint16,(bytes,uint16)[]),(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "registerFrost(uint16,(bytes,uint16,(bytes[],bytes,bytes32)[]),(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes)",
    "class": "SIGNED",
    "error": ""

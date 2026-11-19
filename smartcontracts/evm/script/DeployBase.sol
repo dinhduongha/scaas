@@ -51,6 +51,7 @@ import {
     ZetherSchnorrBls12381Verifier
 } from "../src/ua/verifiers/PairingVerifiers.sol";
 import {Musig2Secp256k1Verifier} from "../src/ua/verifiers/Musig2Secp256k1Verifier.sol";
+import {BlsMultiBls12381Verifier} from "../src/ua/verifiers/BlsMultiBls12381Verifier.sol";
 import {FrostSecp256k1Verifier} from "../src/ua/verifiers/FrostSecp256k1Verifier.sol";
 import {Musig2Bn254Verifier} from "../src/ua/verifiers/Musig2Bn254Verifier.sol";
 import {FrostBn254Verifier} from "../src/ua/verifiers/FrostBn254Verifier.sol";
@@ -213,6 +214,9 @@ abstract contract DeployBase is DeployBook {
     /// @notice `pqz-mlwe` 0x0142 (CTR-PQZ-13): `PqzKeyVerifier`'s R_REG PoP through the `PQZ` precompile, the cap of
     ///         `script/pqz/e2e.py` (`CAP_PQZ`, the P6g gen-1 registry of the SCaaS testnet).
     uint64 internal constant CAP_PQZ_MLWE = 4_500_000;
+    /// `bls12381-multi` (0x0121): `BlsMultiBls12381Verifier.CHECK_GAS` (300,000) + 1/63 + 5,000 plus the call around it with the
+    /// stored `p` (up to 12,644 B) as calldata; provisional, plan Task 9 measures it (spec 2026-11-19-bls12381-multi §8.2).
+    uint64 internal constant CAP_BLS12381_MULTI = 330_000;
 
     /// @notice The ML-DSA precompile candidates, probed in order (CTR-UA-23 / CTR-UA-39): EIP-8355's `0x12` / `0x13` / `0x14`,
     ///         then the SCaaS testnet's `MLDSA44` / `MLDSA65` / `MLDSA87` `0x…5caa0012` / `…0013` / `…0014`; `i` 0, 1, 2 = 44, 65, 87.
@@ -1040,7 +1044,10 @@ abstract contract DeployBase is DeployBook {
     ///         everywhere;
     ///         `schnorr-bls12381` and `bls12381-minsig` where `UAPrecompileProbe` passes EIP-2537; `bls-bn254-minsig` where
     ///         it passes the bn254 G2 check (no chain-id lock, owner ruling 2026-10-31); `zether-bls12381` with
-    ///         EIP-2537 on every chain but Hedera (owner ruling 2026-10-31; `zether-bn254` is in `legacy/ua6/`, UA-6 U10); the PQ
+    ///         EIP-2537 on every chain but Hedera (owner ruling 2026-10-31; `zether-bn254` is in `legacy/ua6/`, UA-6 U10);
+    ///         `bls12381-multi` (spec 2026-11-19-bls12381-multi §7, ARCH-POS-18) where the probe passes EIP-2537, Hedera's profile
+    ///         excepted, and the deploy book names its path (`ua_kind_0x0121`): Hedera disabled (owner-confirmed 2026-11-19,
+    ///         Q-SW1), any other chain without EIP-2537 refused (no software BLS12-381 path in this round; the owner decides); the PQ
     ///         signing kinds (P6c; unaudited, CTR-UA-23) on every chain where the kind's cap is at most 75 % of the chain's
     ///         verify budget (`_pqKindFits`; owner rulings 2026-10-31: no chain-id lock; 2026-11-15: 75 % instead of 66 %) —
     ///         ML-DSA on the chain's precompile or on the registry's cached expanded key (`MLDSA_PRECOMPILE`, `_mldsaVerifier`);
@@ -1194,6 +1201,13 @@ abstract contract DeployBase is DeployBook {
         k[n++] = UARegistry.KindConfig(UAKinds.MUSIG2_BN254, address(new Musig2Bn254Verifier{salt: salt}()), 50_000);
         k[n++] = UARegistry.KindConfig(UAKinds.FROST_BN254, address(new FrostBn254Verifier{salt: salt}()), 50_000);
         if (bls && !isHedera) {
+            // ARCH-POS-18: the probe chooses the path; the EIP-2537 one, the only one built (spec 2026-11-19-bls12381-multi §7)
+            k[n++] = UARegistry.KindConfig(
+                UAKinds.BLS12381_MULTI, address(new BlsMultiBls12381Verifier{salt: salt}()), CAP_BLS12381_MULTI
+            );
+        }
+        vm.serializeString("deploy", "ua_kind_0x0121", _blsMultiPath(bls, isHedera));
+        if (bls && !isHedera) {
             // never on Hedera: no Zether token can exist there (`ZetherLayer`)
             k[n++] = UARegistry.KindConfig(
                 UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier{salt: salt}()), 70_000
@@ -1263,6 +1277,15 @@ abstract contract DeployBase is DeployBook {
         vm.serializeAddress("deploy", "ua_registry_aux_lib", address(UARegistryAuxLib));
     }
 
+    /// @notice `bls12381-multi`'s line in the deploy book (spec 2026-11-19-bls12381-multi §7, §10; ARCH-POS-18): its path where the
+    ///         probe passes, else why the chain has none: on Hedera disabled by the owner's confirmation for that kind and chain
+    ///         (2026-11-19, Q-SW1); anywhere else refused, the software BLS12-381 path not being built, a case for the owner.
+    function _blsMultiPath(bool bls, bool isHedera) internal pure returns (string memory) {
+        if (isHedera) return "disabled: Hedera, owner-confirmed 2026-11-19 (Q-SW1, ARCH-POS-18)";
+        if (bls) return "precompile: EIP-2537";
+        return "refused: no EIP-2537 and no software BLS12-381 path built (ARCH-POS-18): a case for the owner";
+    }
+
     /// @notice The gates of the registry's release and of its two libraries', each its own transaction (CREATE2 of the
     ///         registry's init code with these arguments; each library's creation code).
     function _requireRegistryGas(bool isHedera, uint64 budget, address ska, UARegistry.KindConfig[] memory k) internal {
@@ -1278,7 +1301,8 @@ abstract contract DeployBase is DeployBook {
     /// @notice The gen-1 kind gate (U8S-D9, owner ruling 2026-10-31, option (a)): every gen-1 deploy carries every kind the
     ///         chain can run, so when the probe passes EIP-2537 (`bls`) the gen-1 registry `reg` must enable
     ///         `schnorr-bls12381` 0x0105, `bls12381-minsig` 0x0106 and, except on Hedera (no Zether token can exist there,
-    ///         `ZetherLayer`), `zether-bls12381` 0x0141; otherwise the deploy reverts before anything is sent. No
+    ///         `ZetherLayer`; `bls12381-multi` disabled there, owner-confirmed 2026-11-19), `zether-bls12381` 0x0141 and
+    ///         `bls12381-multi` 0x0121; otherwise the deploy reverts before anything is sent. No
     ///         `UARegistry` change. A probe that fails (the RPC refuses the call) requires nothing (`_precompiles`).
     ///         Owner 2026-11-15: the same for the chain's own PQ precompiles (`_pqPrecompiles`): `pqz` (the `PQZ` self-test
     ///         answers) requires `pqz-mlwe` 0x0142, `ml87` (an ML-DSA-87 precompile answers the KAT probe, with
@@ -1294,8 +1318,9 @@ abstract contract DeployBase is DeployBook {
             "gen-1 registry: PQ precompile kind 0x0134 the probe passes is missing (MLDSA87_VERIFIER: deploy.sh evm's pq-verifiers step)"
         );
         if (!bls) return;
-        uint16[3] memory need = [UAKinds.SCHNORR_BLS12381, UAKinds.BLS12381_MINSIG, UAKinds.ZETHER_BLS12381];
-        for (uint256 i; i < (isHedera ? 2 : 3); ++i) {
+        uint16[4] memory need =
+            [UAKinds.SCHNORR_BLS12381, UAKinds.BLS12381_MINSIG, UAKinds.ZETHER_BLS12381, UAKinds.BLS12381_MULTI];
+        for (uint256 i; i < (isHedera ? 2 : 4); ++i) {
             require(
                 reg.kindEnabled(need[i]),
                 string.concat(

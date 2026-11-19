@@ -535,13 +535,14 @@ contract UARegistryUaPortableTest is UARegistryBase {
     /// A11 / UA8-D16: the four UA-8 registry writes keep these selectors; scaas-node's `ua_portable_registry_writes_are_call_jobs`
     /// pins the same literals, so an ABI change fails a test on both sides. typed-signing R1 (TS-D10 … TS-D12): the
     /// explicit ABI moved `register`, `setKemKey`, `setPqzKey` and added `registerMsig`; R1b (TS-D13) added
-    /// `registerWebAuthn`, `registerMuSig2`, `registerFrost`.
+    /// `registerWebAuthn`, `registerMuSig2`, `registerFrost`; bls-multi Task 7 `registerBlsMulti`.
     function test_ua_portable_writeSelectorsPinned() public pure {
         assert(IUARegistry.register.selector == bytes4(0x4e229efb));
         assert(IUARegistry.registerMsig.selector == bytes4(0x61947129));
         assert(IUARegistry.registerWebAuthn.selector == bytes4(0xee03a1fe));
         assert(IUARegistry.registerMuSig2.selector == bytes4(0xe1eddcdf));
         assert(IUARegistry.registerFrost.selector == bytes4(0x7bd63410));
+        assert(IUARegistry.registerBlsMulti.selector == bytes4(0x5f0c0ad6)); // bls12381-multi (spec 2026-11-19)
         assert(IUARegistry.setKemKey.selector == bytes4(0x6a3318f9));
         assert(IUARegistry.storePqzPop.selector == bytes4(0x9f7be2a3)); // group 3g: 0x7fac161a -> versioned
         assert(IUARegistry.setPqzKey.selector == bytes4(0xbd97b6a1)); // group 3g: 0x0052c1b5 -> versioned

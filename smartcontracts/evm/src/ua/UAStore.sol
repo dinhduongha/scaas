@@ -8,6 +8,7 @@ import {UAKinds} from "./UAKinds.sol";
 import {PqUA} from "./PqUA.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
+import {BlsMultiKeyData} from "./BlsMultiKeyData.sol";
 
 /// @title The registry's storage as one struct at slot 0, shared by `UARegistry` and `UARegistryCoreLib` (which runs by
 ///        DELEGATECALL on it), and the helpers both need (typed-signing R2). `SaltedEIP712` has no storage (immutables
@@ -165,6 +166,11 @@ library UAStore {
     {
         bytes memory rest;
         (rest, pop) = abi.decode(SSTORE2.readChunks(layout().reg[ua]), (bytes, bytes));
+        if (r.kind == UAKinds.BLS12381_MULTI) {
+            // the pointer holds `ua ‖ s`, the blob no key bytes (spec 2026-11-19-bls12381-multi §2): `d` byte-identical
+            bytes memory p = SSTORE2.read(r.keyPtr);
+            return (BlsMultiKeyData.expand(cut(p, 32, p.length - 32)), pop);
+        }
         keyData = bytes.concat(SSTORE2.read(vkLength(r.kind) == 0 ? address(0) : r.keyPtr), rest);
     }
 

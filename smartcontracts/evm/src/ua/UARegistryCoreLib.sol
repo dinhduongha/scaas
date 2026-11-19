@@ -10,6 +10,7 @@ import {UAStore} from "./UAStore.sol";
 import {PqUA} from "./PqUA.sol";
 import {PqzSet} from "../pqz/PqzSet.sol";
 import {MldsaVerifier} from "./MlDsa.sol";
+import {BlsMultiKeyData} from "./BlsMultiKeyData.sol";
 
 /// @title `UARegistry`'s core library (typed-signing R2, owner 2026-11-01; T66b 3.1b, owner 2026-11-09, spec
 ///        2026-11-09-t66b-library-organisation.md §11 (f)): the `register` forms, the `msig`, `acceptMembership`,
@@ -215,6 +216,37 @@ library UARegistryCoreLib {
         return _register(kind, d, attrs, pop, new IUARegistry.MemberSig[](0), pqzPop);
     }
 
+    /// `register` of a `bls12381-multi` key from its fields (spec 2026-11-19-bls12381-multi §2: `aggKey ‖ u16 threshold ‖ u16 n ‖
+    /// n × (key ‖ u16 weight)` assembled here, each point 256 bytes; the rest is `validateKeyData`'s, on the assembled bytes).
+    function registerBlsMulti(
+        IUARegistry.BlsMultiKey calldata key,
+        IUARegistry.UAAttrs calldata attrs,
+        bytes calldata pop,
+        bytes calldata pqzPop
+    ) external returns (bytes32 ua) {
+        uint16 kind = UAKinds.BLS12381_MULTI;
+        if (uint160(_cfgKind()) == 0) revert IUARegistry.UAKindDisabled(kind); // step 1 before the key's fields (step 2)
+        IUARegistry.BlsMultiMember[] calldata m = key.members;
+        bytes memory d = new bytes(260 + 258 * m.length); // one allocation: n ≤ 64 members of 258 B
+        _put(d, 0, _point(kind, key.aggKey, 256), key.threshold);
+        d[258] = bytes1(uint8(m.length >> 8));
+        d[259] = bytes1(uint8(m.length));
+        for (uint256 i; i < m.length; ++i) {
+            _put(d, 260 + 258 * i, _point(kind, m[i].key, 256), m[i].weight);
+        }
+        return _register(kind, d, attrs, pop, new IUARegistry.MemberSig[](0), pqzPop);
+    }
+
+    /// `d[o:o + 256] = p` (256 bytes), `d[o + 256:o + 258] = w` big-endian.
+    function _put(bytes memory d, uint256 o, bytes calldata p, uint16 w) private pure {
+        assembly ("memory-safe") {
+            let at := add(add(d, 32), o)
+            calldatacopy(at, p.offset, 256)
+            mstore8(add(at, 256), shr(8, w))
+            mstore8(add(at, 257), and(w, 0xff))
+        }
+    }
+
     /// One FROST member's bytes `t commitments ‖ r ‖ z` (exactly `t` commitments).
     function _frostMember(uint16 kind, IUARegistry.FrostMember calldata m, uint256 t)
         internal
@@ -336,7 +368,13 @@ library UARegistryCoreLib {
     ) private {
         UAStore.Layout storage s = UAStore.layout();
         uint256 vl = UAStore.vkLength(kind);
-        address ptr = vl == 0 ? address(0) : SSTORE2.write(UAStore.cut(d, 0, vl));
+        // `bls12381-multi` (spec 2026-11-19-bls12381-multi §2, owner ruling R2-Q1): the pointer holds `ua ‖ s` (48-byte limbs), the
+        // blob no key bytes; `vl` (228) is its stored-kind flag, never a cut length
+        bool multi = kind == UAKinds.BLS12381_MULTI;
+        if (multi) vl = d.length;
+        address ptr = vl == 0
+            ? address(0)
+            : SSTORE2.write(multi ? bytes.concat(ua, BlsMultiKeyData.compress(d)) : UAStore.cut(d, 0, vl));
         s.records[ua] = IUARegistry.Record(kind, uint40(block.timestamp), ptr, _list(kind, ua));
         if (kh != 0) s.keyOwner[kh] = ua; // msig: none
         if (attrs.kemPkHash != 0) s.kemCommit[ua] = UAStore.KemCommit(attrs.kemPkHash, attrs.kem.scheme);
@@ -788,8 +826,12 @@ library UARegistryCoreLib {
         bytes memory data = ek.length != 0
             ? abi.encodeWithSelector(MldsaVerifier.verifyCached.selector, ek, message, sig)
             : abi.encodeWithSelector(IUAPopVerifier.verifyPop.selector, d, message, sig);
-        // group kinds: the whole group check runs here, bounded by verifyBudget (§1.8 step 6), without the hold
-        if (kind >= UAKinds.MUSIG2_SECP256K1 && kind <= UAKinds.FROST_BN254) {
+        // group kinds: the whole group check runs here, bounded by verifyBudget (§1.8 step 6), without the hold; `bls12381-multi`'s
+        // registration PoP too (n + 1 pairings over `d`, spec 2026-11-19-bls12381-multi §4, §5.3)
+        if (
+            (kind >= UAKinds.MUSIG2_SECP256K1 && kind <= UAKinds.FROST_BN254)
+                || (kind == UAKinds.BLS12381_MULTI && purpose == UAKinds.PURPOSE_POP_V2)
+        ) {
             return UAStore.capped(address(uint160(cfg)), IUARegistry(address(this)).verifyBudget(), data, 1, false);
         }
         return UAStore.capped(address(uint160(cfg)), cfg >> 160, data, 1, true);

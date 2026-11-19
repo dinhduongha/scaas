@@ -717,6 +717,22 @@ library UARegistryAuxLib {
         (bytes32(UAStore.word(d, 0)), bytes32(UAStore.word(d, 32)), bytes32(UAStore.word(d, 64)));
     }
 
+    /// `bls12381-multi`'s typed key (spec 2026-11-19-bls12381-multi §2): `d` expanded from the stored `ua ‖ s` (the blob holds no key
+    /// bytes), cut into `aggKey ‖ u16 threshold ‖ u16 n ‖ n × (key ‖ u16 weight)`.
+    function blsMultiKeyOf(bytes32 ua) external returns (IUARegistry.BlsMultiKey memory k) {
+        if (UARegistryCoreLib._elsewhere(ua)) return IUARegistry(UARegistryCoreLib._pred()).blsMultiKeyOf(ua);
+        IUARegistry.Record memory r = UAStore.layout().records[ua];
+        if (r.kind != UAKinds.BLS12381_MULTI) return k;
+        (bytes memory d,) = UAStore.registration(ua, r);
+        k.aggKey = UAStore.cut(d, 0, 256);
+        k.threshold = uint16(UAStore.u16(d, 256));
+        k.members = new IUARegistry.BlsMultiMember[](UAStore.u16(d, 258));
+        for (uint256 i; i < k.members.length; ++i) {
+            uint256 o = 260 + 258 * i;
+            k.members[i] = IUARegistry.BlsMultiMember(UAStore.cut(d, o, 256), uint16(UAStore.u16(d, o + 256)));
+        }
+    }
+
     // ----- moved from `UARegistry` (T66b 3.1b): a read off the hot path, run by `_libView` -----
 
     function pqzPopOf(bytes32 ua, uint64 version) external returns (bytes memory) {

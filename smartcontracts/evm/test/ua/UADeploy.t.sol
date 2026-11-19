@@ -68,6 +68,8 @@ contract UADeployTest is Test {
         assertEq(reg.generation(), 1);
         assertEq(reg.verifyCap(UAKinds.ED25519), 210_000);
         assertEq(reg.verifyCap(UAKinds.ZETHER_BLS12381), 70_000);
+        assertTrue(reg.kindEnabled(UAKinds.BLS12381_MULTI), "bls12381-multi where the probe passes EIP-2537");
+        assertEq(reg.verifyCap(UAKinds.BLS12381_MULTI), 330_000);
         assertFalse(reg.kindEnabled(UAKinds.PQZ_MLWE));
         _pq(reg, true);
         assertTrue(
@@ -97,6 +99,11 @@ contract UADeployTest is Test {
         assertEq(_registry(31337, false).verifyCap(0x0134), 8_850_000, "no precompile counts: the cache");
         vm.clearMockedCalls();
         assertEq(_registry(7622, false).verifyCap(0x0134), 8_850_000, "no precompile in this EVM: the cache");
+    }
+
+    /// `test_mldsa87_precompileOrCache`'s Hedera row, its own test since bls-multi Task 7: five full deploys (each ~1 G of EIP-8037
+    /// state gas for its harness) no longer fit one test's `gas_limit`.
+    function test_mldsa87_hederaCacheFails() public {
         assertFalse(_registry(298, true).kindEnabled(0x0134), "Hedera: 8,850,000 > 75 % of 10.5 M");
     }
 
@@ -204,6 +211,10 @@ contract UADeployTest is Test {
             assertTrue(on[0] && on[1] && on[2] && !on[3] && on[4]);
             _pq(r, true);
         }
+    }
+
+    /// `test_otherChains`'s Hedera row, its own test since bls-multi Task 7 (five deploys no longer fit one test's `gas_limit`).
+    function test_otherChains_hedera() public {
         IUARegistry h = _registry(298, true);
         assertTrue(h.hederaNative());
         assertFalse(h.kindEnabled(UAKinds.ZETHER_BLS12381), "never on Hedera (CTR-ZTH-52)");
@@ -242,6 +253,43 @@ contract UADeployTest is Test {
         h.force(false, true);
         vm.expectRevert("DEPLOY_ZETHER: the chain has no EIP-2537 (BLS12-381 precompiles)");
         h.deploy(UID, true, ska, false);
+    }
+
+    /// `bls12381-multi` without EIP-2537 (spec 2026-11-19-bls12381-multi §7, ARCH-POS-18; Q-SW1): on a chain other than Hedera the
+    /// deploy refuses the kind (no verifier: no software BLS12-381 path is built) and names it in the deploy book, a case for the
+    /// owner; where the probe passes, the book names the precompile path.
+    function test_deploy_noEip2537_refuses0x0121_named() public {
+        vm.chainId(31337);
+        DeployHarness h = new DeployHarness();
+        (, string memory json) = h.deploy(UID, false, ska, false);
+        assertEq(vm.parseJsonString(json, ".ua_kind_0x0121"), "precompile: EIP-2537");
+        h = new DeployHarness();
+        h.force(false, false);
+        (, json) = h.deploy(UID, false, ska, false);
+        IUARegistry reg = IUARegistry(vm.parseJsonAddress(json, ".ua_registry"));
+        assertFalse(reg.kindEnabled(UAKinds.BLS12381_MULTI));
+        assertEq(
+            vm.parseJsonString(json, ".ua_kind_0x0121"),
+            "refused: no EIP-2537 and no software BLS12-381 path built (ARCH-POS-18): a case for the owner"
+        );
+    }
+
+    /// Q-SW1 (owner 2026-11-19, ARCH-POS-18's confirmation for this kind and chain): Hedera's profile disables `bls12381-multi`,
+    /// whatever the probe answers, and the book says so.
+    function test_deploy_hedera_0x0121Disabled() public {
+        bool[2] memory probe = [true, false];
+        for (uint256 i; i < 2; ++i) {
+            vm.chainId(298);
+            DeployHarness h = new DeployHarness();
+            if (!probe[i]) h.force(false, false);
+            (, string memory json) = h.deploy(UID, false, ska, true);
+            IUARegistry reg = IUARegistry(vm.parseJsonAddress(json, ".ua_registry"));
+            assertFalse(reg.kindEnabled(UAKinds.BLS12381_MULTI));
+            assertEq(
+                vm.parseJsonString(json, ".ua_kind_0x0121"),
+                "disabled: Hedera, owner-confirmed 2026-11-19 (Q-SW1, ARCH-POS-18)"
+            );
+        }
     }
 
     /// C5-1 (NET-EVM-06): a release deploys only where the chain's block gas limit covers its state gas (1,530 per byte
@@ -285,13 +333,21 @@ contract UADeployTest is Test {
     }
 
     /// U8S-D9 (owner 2026-10-31, option (a)): a gen-1 registry built in-test with the EIP-2537 kinds given (verifier: any
-    /// code), budget 12 M.
+    /// code), budget 12 M. `bls12381-multi` goes with `zether-bls12381` (both: EIP-2537, not on Hedera); `_gen1m` sets it apart.
     function _gen1(bool schnorrBls, bool blsMinSig, bool zether, bool hedera) internal returns (IUARegistry) {
-        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](3);
+        return _gen1m(schnorrBls, blsMinSig, zether, hedera, zether);
+    }
+
+    function _gen1m(bool schnorrBls, bool blsMinSig, bool zether, bool hedera, bool multi)
+        internal
+        returns (IUARegistry)
+    {
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](4);
         uint256 n;
         if (schnorrBls) k[n++] = UARegistry.KindConfig(UAKinds.SCHNORR_BLS12381, address(this), 70_000);
         if (blsMinSig) k[n++] = UARegistry.KindConfig(UAKinds.BLS12381_MINSIG, address(this), 200_000);
         if (zether) k[n++] = UARegistry.KindConfig(UAKinds.ZETHER_BLS12381, address(this), 70_000);
+        if (multi) k[n++] = UARegistry.KindConfig(UAKinds.BLS12381_MULTI, address(this), 330_000);
         assembly ("memory-safe") {
             mstore(k, n)
         }
@@ -309,6 +365,17 @@ contract UADeployTest is Test {
         vm.expectRevert(_missing("0x0141"));
         h.checkGen1Kinds(reg, true, false);
         h.checkGen1Kinds(_gen1(true, true, true, false), true, false);
+    }
+
+    /// The probe passes EIP-2537 and the registry lacks `bls12381-multi` 0x0121 (not Hedera): refused, naming it; on Hedera not
+    /// required (disabled there, owner-confirmed 2026-11-19, Q-SW1).
+    function test_gen1KindGate_refusesMissing0121() public {
+        DeployHarness h = new DeployHarness();
+        IUARegistry reg = _gen1m(true, true, true, false, false);
+        vm.expectRevert(_missing("0x0121"));
+        h.checkGen1Kinds(reg, true, false);
+        h.checkGen1Kinds(_gen1m(true, true, true, false, true), true, false);
+        h.checkGen1Kinds(_gen1m(true, true, false, true, false), true, true);
     }
 
     /// Without `schnorr-bls12381` 0x0105 or without `bls12381-minsig` 0x0106: refused, naming the kind.
