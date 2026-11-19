@@ -202,9 +202,11 @@ The Zether reading layer and part of the Zether operations are BUILT (plan T15; 
 `tests/confidential.rs`; UNAUDITED): one read at the profile's final block through `Purpose::FeedsDecryption` fetches a fixed set of
 storage words and code (the factory's `_rec[token]`, the token's clone code and `ChainEnv`, `psid`, modes, auditor key, the account's
 six slots and every point's four data words, each named UA's registry record and key pointer code) and checks it only after the pool
-returned; `zether_balance` decrypts it in the facade; `zether_shield`, `zether_wrap_shield`, `UARollOver`, `UARollOverBatch`,
-`UAZetherTransferSingle` and `UAZetherUnshield` are prepared operations, the Zether UA signing through `sign_scaas`. The other Zether
-entries, the confidential watch and the anvil e2e are PLANNED (plan T15's status line).
+returned; `zether_balance` decrypts it in the facade; every Zether entry of spec §9.1 is a prepared operation, the Zether UA signing
+through `sign_scaas`: the multi-recipient transfers draw their decoys uniformly from the registry's `0x0141` list read as a second
+fixed word set (CTR-UA-29) and shuffle every leg; the owner statements sign under `zether-owner`, their relayed forms carrying that
+signature as `ownerSig` (owner 2026-11-19, C3). A failed check is a named error (`TokenUncatalogued`, `LegKeyMismatch`, C4). The
+watch loop reads a watched Zether UA's words on its fixed schedule, nothing decrypted. The anvil e2e is PLANNED.
 
 ## 7. App cores above the SDK
 

@@ -19,7 +19,7 @@ MUTANTS = [
        "                    Ok(o) => o,\n"
        "                    Err(e) => {\n"
        "                        let key = handle(&sdk, &req.seed, req.account)?;\n"
-       "                        read::zether(&sdk, &req.chain, &req.token, &key.1.y(), key.1.ua(), &[]).await?;\n"
+       "                        read::zether(&sdk, &req.chain, &req.token, Some(&key.1.y()), key.1.ua(), &[]).await?;\n"
        "                        return Err(e);\n"
        "                    }\n"
        "                };")],
@@ -29,7 +29,7 @@ MUTANTS = [
        "    let b = pool.call_at(at, who, alloy::primitives::Bytes::from(slot.to_vec())).await?;\n"
        "    Ok(U256::from_be_slice(&b).to_be_bytes::<32>())")],
      T + "view_never_serves_a_word"),
-    ("read at Depth(1)", [(R, ".read_at_block(final_block(&profile), PURPOSE,", ".read_at_block(scaas_rpc::pool::BlockChoice::Depth(1), PURPOSE,")],
+    ("read at Depth(1)", [(R, ".read_at_block(final_block(&profile), PURPOSE, |at| fetch(", ".read_at_block(scaas_rpc::pool::BlockChoice::Depth(1), PURPOSE, |at| fetch(")],
      T + "words_at_one_final_block"),
     # each check of the task
     ("no factory record check", [(R, "if class != CLASS_TOKEN || !ZETHER_KINDS.contains(&kind) {", "if false {")],

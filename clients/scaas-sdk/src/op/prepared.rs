@@ -54,6 +54,9 @@ pub(crate) struct Draft {
     pub ids: bool,
     /// a relay fee's paid call: its job `op` and signed calldata (owner 2026-11-19, ruling F)
     pub relay_call: Option<(Value, Vec<u8>)>,
+    /// an owner statement the same key signs first, passed as the entry's `ownerSig` (`UARollOverSigned`,
+    /// `UASetRollOverMode`: its struct name and message; owner 2026-11-19, C3)
+    pub owner: Option<(&'static str, Value)>,
 }
 
 /// The parts `submit` needs; never in a record a caller could rebuild.
@@ -72,6 +75,8 @@ pub(crate) struct Typed {
     pub ids: bool,
     /// a relay fee's paid call (job `op`, signed calldata)
     pub relay_call: Option<(Value, Vec<u8>)>,
+    /// the owner statement signed before the entry, with its check
+    pub owner: Option<(TypedData, Expect)>,
 }
 
 /// A prepared operation (spec §13.1): opaque, kept in the SDK's table; it holds no secret and nothing signed.
@@ -271,6 +276,33 @@ impl Op {
         let mut review = Vec::new();
         flatten("", &canonical, &mut review);
         review.extend(d.review);
+        let mut extra = d.extra;
+        let owner = match d.owner {
+            Some((name, m)) => {
+                let otd = scaas_typed_data(name, Some(domain_name(d.kind)?), &d.contract, chain_id, &uid, &m)?;
+                let om = otd.to_value().get("message").cloned().ok_or(SdkError::Internal)?;
+                flatten("owner", &om, &mut review);
+                let ex = Expect::Op {
+                    op: name.into(),
+                    contract: d.contract,
+                    chain_id,
+                    chain_uid: uid,
+                    message: om,
+                    max_fee: "0".into(),
+                    fee_recipient: None,
+                    relayer: None,
+                    now,
+                    max_window: sdk.window(&d.chain),
+                };
+                // the quote's unsigned form carries an empty `ownerSig`; `submit` puts the signed one
+                extra.as_object_mut().ok_or(SdkError::Internal)?.insert(
+                    "ownerSig".into(),
+                    serde_json::json!({"keyData": "0x", "signature": "0x", "members": []}),
+                );
+                Some((otd, ex))
+            }
+            None => None,
+        };
         if !env.is_empty() {
             review.push(field("fee.due", &due, &due, Source::Derived));
         }
@@ -330,10 +362,11 @@ impl Op {
                 td,
                 expect,
                 message: canonical,
-                extra: d.extra,
+                extra,
                 lane,
                 ids: d.ids,
                 relay_call: d.relay_call,
+                owner,
             },
         });
         let mut table = sdk.prepared.lock().unwrap_or_else(PoisonError::into_inner);

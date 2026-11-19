@@ -58,18 +58,11 @@ fn sig_json(p: &Prepared, key_data: &[u8], signature: &[u8]) -> Result<Value, Sd
     })
 }
 
-fn build(p: &Prepared, sig: &Value) -> Result<Built, SdkError> {
+fn build(p: &Prepared, sig: &Value, extra: &Value) -> Result<Built, SdkError> {
     if p.t.ids {
         return Ok(transfer_on_ids(p.t.kind, &p.t.contract, &p.t.message, sig)?);
     }
-    let mut b = entry(
-        p.t.name,
-        p.t.kind,
-        &p.t.contract,
-        &p.t.message,
-        &p.t.extra,
-        sig,
-    )?;
+    let mut b = entry(p.t.name, p.t.kind, &p.t.contract, &p.t.message, extra, sig)?;
     // a relay fee's job carries the call it pays for (job-api's relay-fee job; owner 2026-11-19, ruling F)
     if let Some((op, calldata)) = &p.t.relay_call {
         let call = Built {
@@ -84,7 +77,7 @@ fn build(p: &Prepared, sig: &Value) -> Result<Built, SdkError> {
 
 /// The entry of `p` with an empty signature: the unsigned form a quote estimates (owner 2026-11-18, ruling 1).
 pub(crate) fn unsigned(p: &Prepared) -> Result<Built, SdkError> {
-    build(p, &sig_json(p, &[], &[])?)
+    build(p, &sig_json(p, &[], &[])?, &p.t.extra)
 }
 
 /// The signature of `p` under its check, and the entry built with it (calldata and job op from one parse).
@@ -92,15 +85,29 @@ pub(crate) fn sign(sdk: &Sdk, p: &Prepared) -> Result<Built, SdkError> {
     let k = key(sdk, &p.signer())?;
     #[cfg(test)]
     sdk.signs.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-    #[cfg(feature = "zether")]
-    if let super::Key::Zether(_, z) = &k {
-        z.approve(p.t.td.digest()?);
+    // the owner statement first (`ownerSig`, owner 2026-11-19 C3), then the entry: each digest approved, then signed under its check
+    let mut extra = p.t.extra.clone();
+    let sign_one = |td: &scaas_ua::wallet::TypedData, ex: &scaas_ua::wallet::Expect| -> Result<_, SdkError> {
+        #[cfg(feature = "zether")]
+        if let super::Key::Zether(_, z) = &k {
+            z.approve(td.digest()?);
+        }
+        let s = sign_scaas(k.signer(), td, ex.clone())?;
+        if !s.members.is_empty() {
+            return Err(SdkError::Argument);
+        }
+        Ok(s)
+    };
+    if let Some((td, ex)) = &p.t.owner {
+        let o = sign_one(td, ex)?;
+        let slot = extra.as_object_mut().ok_or(SdkError::Internal)?;
+        slot.insert(
+            "ownerSig".into(),
+            json!({"keyData": hex(&o.key_data), "signature": hex(&o.signature), "members": []}),
+        );
     }
-    let s = sign_scaas(k.signer(), &p.t.td, p.t.expect.clone())?;
-    if !s.members.is_empty() {
-        return Err(SdkError::Argument);
-    }
-    build(p, &sig_json(p, &s.key_data, &s.signature)?)
+    let s = sign_one(&p.t.td, &p.t.expect)?;
+    build(p, &sig_json(p, &s.key_data, &s.signature)?, &extra)
 }
 
 /// An EIP-1559 transaction of `quote` from its payer to `to` with `data`, signed by `scaas-ua`: the raw bytes and the id.

@@ -72,6 +72,10 @@ pub(crate) struct Read {
     pub words: Value,
     /// `auditorMode(8)` of the modes word
     pub auditor_mode: u8,
+    /// `disclosureMode(8)` of the modes word (`ZetherTypes.DisclosureMode`: 0 BUNDLE, 1 COMPACT)
+    pub disclosure_mode: u8,
+    /// the account's six slots (`acct[ua]`: four length words, the counters word, `modeNonce ‖ mode`)
+    pub account: Vec<W>,
     /// the token's current auditor key (128 bytes) when it has one
     pub y_aud: Option<Vec<u8>>,
     /// the registered `Y` of each UA after the holder's, in order
@@ -213,8 +217,9 @@ fn registered(ua: &W, rec: &W, code: &[u8]) -> Result<Vec<u8>, SdkError> {
     }
 }
 
-/// The checks of a fetched set (R2, R5, R6) and the facade's words; public data only.
-fn check(r: Raw, block: u64, chain_id: u64, chain_uid: &W, token: &[u8; 20], y: &[u8], uas: &[W]) -> Result<Read, SdkError> {
+/// The checks of a fetched set (R2, R5, R6) and the facade's words; public data only. `y`: the handle's key (`None`: no
+/// handle, the watch loop's read of a keystore row's UA; R6 still binds the record's `Y` to the UA).
+fn check(r: Raw, block: u64, chain_id: u64, chain_uid: &W, token: &[u8; 20], y: Option<&[u8]>, uas: &[W]) -> Result<Read, SdkError> {
     // R5: catalogued by the profile's factory, a Zether kind
     let class = u16::from_be_bytes([r.rec[30], r.rec[31]]);
     let kind = u16::from_be_bytes([r.rec[28], r.rec[29]]);
@@ -231,7 +236,7 @@ fn check(r: Raw, block: u64, chain_id: u64, chain_uid: &W, token: &[u8; 20], y: 
     for (ua, (rec, code)) in uas.iter().zip(&r.keys) {
         ys.push(registered(ua, rec, code)?);
     }
-    if ys.first().map(Vec::as_slice) != Some(y) {
+    if y.is_some_and(|y| ys.first().map(Vec::as_slice) != Some(y)) {
         return Err(SdkError::LegKeyMismatch);
     }
     ys.remove(0);
@@ -255,6 +260,8 @@ fn check(r: Raw, block: u64, chain_id: u64, chain_uid: &W, token: &[u8; 20], y: 
         block,
         words,
         auditor_mode: u8::try_from(field(&r.modes, "auditorMode")?).map_err(|_| SdkError::Internal)?,
+        disclosure_mode: u8::try_from(field(&r.modes, "disclosureMode")?).map_err(|_| SdkError::Internal)?,
+        account: r.account,
         y_aud,
         ys,
     })
@@ -268,7 +275,7 @@ pub(crate) async fn zether(
     sdk: &Sdk,
     chain: &str,
     token: &str,
-    y: &[u8],
+    y: Option<&[u8]>,
     ua: W,
     others: &[W],
 ) -> Result<Read, SdkError> {
@@ -293,4 +300,53 @@ pub(crate) async fn zether(
         .read_at_block(final_block(&profile), PURPOSE, |at| fetch(pool, at, plan))
         .await?;
     check(a.value, a.number, chain_id, &uid, &t, y, &uas)
+}
+
+/// `UAStore.Layout` slots 4 and 5: `uaCount[kind]`, `uaAt[kind][i]` (CTR-UA-29).
+const REG_COUNT_SLOT: u64 = 4;
+const REG_AT_SLOT: u64 = 5;
+/// The longest `0x0141` list read (zether-prover's `zether-read-balance` reads the same at most).
+const MAX_LIST: u64 = 50_000;
+
+/// The decoy candidates of a multi-recipient transfer on `token` (CTR-UA-29, the default: uniform over the whole list): the
+/// registry's `0x0141` list as the token's `ChainEnv` names it, at the profile's final block, through the same sources as
+/// every read here (R1 to R3). A fixed set too: the list's length, then each of its words, chosen by that public length only,
+/// never by a decryption. `TokenUncatalogued`: the token's code is not a clone; `Argument`: a list longer than [`MAX_LIST`].
+/// Each picked decoy's record and key are then checked by [`zether`] (R6).
+pub(crate) async fn candidates(sdk: &Sdk, chain: &str, token: &str) -> Result<Vec<W>, SdkError> {
+    let (profile, _, pool) = evm(sdk, chain)?;
+    let t = Address::from(addr20(&token.to_ascii_lowercase())?);
+    let kind = be(u64::from(ZETHER_UA_KIND));
+    let count = map_slot(&kind, &be(REG_COUNT_SLOT));
+    let list = map_slot(&kind, &be(REG_AT_SLOT));
+    let pool = &pool;
+    let (count, list) = (&count, &list);
+    let a = pool
+        .read_at_block(final_block(&profile), PURPOSE, |at| async move {
+            let code = pool.code_at(&at, t).await?;
+            let Some((_, env)) = scaas_ua::factory::clone_env(&code) else {
+                return Ok(None);
+            };
+            let reg = Address::from(env.registry);
+            let n = U256::from_be_bytes(word(pool, &at, reg, count).await?);
+            let n = u64::try_from(n).unwrap_or(u64::MAX);
+            if n > MAX_LIST {
+                return Ok(Some(Err(n)));
+            }
+            let mut out = Vec::new();
+            for i in 0..n {
+                out.push(word(pool, &at, reg, &map_slot(&be(i), list)).await?);
+            }
+            Ok(Some(Ok(out)))
+        })
+        .await?;
+    match a.value {
+        None => Err(SdkError::TokenUncatalogued),
+        Some(Err(_)) => Err(SdkError::Argument),
+        Some(Ok(mut l)) => {
+            let mut seen = std::collections::HashSet::new();
+            l.retain(|u| seen.insert(*u));
+            Ok(l)
+        }
+    }
 }

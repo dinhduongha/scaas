@@ -174,8 +174,10 @@ impl Account {
                     return Err(SdkError::Argument);
                 }
                 let open = sdk.open_seed(&req.seed)?;
-                let key = open.wallet.ua_key(req.kind, req.account, req.index)?;
-                let ua = hex(&key.ua().ok_or(SdkError::Argument)?);
+                let ua = match zether_ua(&sdk, &req)? {
+                    Some(ua) => ua,
+                    None => hex(&open.wallet.ua_key(req.kind, req.account, req.index)?.ua().ok_or(SdkError::Argument)?),
+                };
                 let row = AccountRow::Ua {
                     id: crate::vault::uuid4()?,
                     name: req.name.clone(),
@@ -338,4 +340,22 @@ pub(crate) async fn add_rows(
     .await?;
     let rows = added.into_inner().map_err(|_| SdkError::Internal)?;
     Ok(rows.iter().map(|r| info(seed, r, true)).collect())
+}
+
+/// The Zether UA (`zether-bls12381`, index 0 only) of an `add_ua` request: the facade's conf key `m/12381/60/<account>/7`, the
+/// key that signs as `KeyRef::Ua { kind: 0x0141, .. }`; `None` for any other kind.
+#[cfg(feature = "zether")]
+fn zether_ua(sdk: &crate::Sdk, r: &AddUa) -> Result<Option<String>, SdkError> {
+    if r.kind != crate::confidential::ZETHER_KIND {
+        return Ok(None);
+    }
+    if r.index != 0 {
+        return Err(SdkError::Argument);
+    }
+    Ok(Some(hex(&crate::confidential::handle(sdk, &r.seed, r.account)?.1.ua())))
+}
+
+#[cfg(not(feature = "zether"))]
+fn zether_ua(_: &crate::Sdk, _: &AddUa) -> Result<Option<String>, SdkError> {
+    Ok(None)
 }

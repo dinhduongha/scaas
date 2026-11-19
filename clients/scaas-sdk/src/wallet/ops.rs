@@ -300,7 +300,7 @@ fn address(o: &Option<String>) -> String {
 }
 
 /// The envelope's fields into `m` (the nonce left to the lane's read).
-fn put_envelope(m: &mut Map<String, Value>, batch: &str, e: &Envelope) {
+pub(crate) fn put_envelope(m: &mut Map<String, Value>, batch: &str, e: &Envelope) {
     m.insert("batch".into(), json!(batch));
     m.insert("validUntil".into(), json!(e.valid_until.to_string()));
     m.insert("mode".into(), json!(e.mode));
@@ -451,6 +451,7 @@ fn draft(
         opaque: false,
         ids: false,
         relay_call: None,
+        owner: None,
     }
 }
 

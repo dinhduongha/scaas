@@ -121,7 +121,7 @@ impl Confidential {
         self.sdk
             .spawn(async move {
                 let key = handle(&sdk, &req.seed, req.account)?;
-                let r = read::zether(&sdk, &req.chain, &req.token, &key.1.y(), key.1.ua(), &[]).await?;
+                let r = read::zether(&sdk, &req.chain, &req.token, Some(&key.1.y()), key.1.ua(), &[]).await?;
                 let mut words = r.words;
                 for (k, v) in [("tableBits", req.table_bits), ("boundBits", req.bound_bits)] {
                     if let Some(v) = v {

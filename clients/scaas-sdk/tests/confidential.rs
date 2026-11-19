@@ -722,3 +722,249 @@ async fn zether_plain_pairs() {
         .await;
     assert_eq!(code(r), "Argument");
 }
+
+// --- the rest of the Zether pairs (plan T15, second commit) ---
+
+const KEYPTR3: &str = "0x5ca00000000000000000000000000000000000b3";
+const KEYPTR4: &str = "0x5ca00000000000000000000000000000000000b4";
+
+/// The registry's `0x0141` list (`UAStore.Layout` slots 4 and 5) holding `uas` in order.
+fn list(c: &Fake, uas: &[&ZetherKeyInfo]) {
+    let kind = be(0x0141);
+    put(c, REGISTRY, &map(&kind, &be(4)), &be(uas.len() as u64));
+    for (i, k) in uas.iter().enumerate() {
+        let ua: W = unhex(&k.ua).try_into().unwrap();
+        put(c, REGISTRY, &map(&be(i as u64), &map(&kind, &be(5))), &ua);
+    }
+}
+
+/// The holder's counters word: `accSeq`, `pendingSeq`, `lastRolledPendingSeq` (low end first), and `modeNonce`.
+fn counters(c: &Fake, k: &ZetherKeyInfo, acc: u64, pending: u64, rolled: u64, mode_nonce: u64) {
+    let ua: W = unhex(&k.ua).try_into().unwrap();
+    let base = map(&ua, &add(&ROOT, 8));
+    let mut w = [0u8; 32];
+    w[24..].copy_from_slice(&acc.to_be_bytes());
+    w[16..24].copy_from_slice(&pending.to_be_bytes());
+    w[8..16].copy_from_slice(&rolled.to_be_bytes());
+    put(c, TOKEN, &add(&base, 4), &w);
+    put(c, TOKEN, &add(&base, 5), &be(mode_nonce));
+}
+
+/// The gateway body `n` (waiting for it).
+async fn body(c: &Fake, n: usize) -> Value {
+    for _ in 0..100 {
+        if let Some(b) = c.lock().unwrap().bodies.get(n) {
+            return serde_json::from_str(b).unwrap();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    panic!("no gateway body {n}");
+}
+
+/// `sig` (a `UASig` JSON) verifies under the Zether key over `uaMessage(0x0141, purpose, digest)`.
+fn zether_sig_ok(k: &ZetherKeyInfo, purpose: &str, digest: &str, sig: &Value) -> bool {
+    let d: W = unhex(digest).try_into().unwrap();
+    let m = scaas_ua::ua_message(0x0141, &scaas_ua::purpose_tag(purpose).unwrap(), &d).unwrap();
+    let s = sig["signature"].as_str().unwrap_or_else(|| panic!("no UASig in {sig}"));
+    scaas_ua::verify::verify(0x0141, &unhex(&k.y), &m, &unhex(s), false)
+}
+
+fn rev(p: &scaas_sdk::op::Prepared, n: &str) -> Option<(String, scaas_sdk::op::Source)> {
+    p.review().into_iter().find(|f| f.name == n).map(|f| (f.value, f.source))
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn zether_unshield_unwrap_pair() {
+    use scaas_sdk::confidential::ZetherUnshieldUnwrap;
+    let (s, seed, c, k, _) = pairs_setup().await;
+    let to = format!("0x{}{}", "00".repeat(12), "11".repeat(20));
+    let p = s
+        .confidential()
+        .prepare_zether_unshield_unwrap(ZetherUnshieldUnwrap {
+            seed: seed.clone(),
+            account: 0,
+            chain: "local".into(),
+            token: TOKEN.into(),
+            batch: "0".into(),
+            underlying: UNDERLYING.into(),
+            recipient: to.clone(),
+            amount: "2".into(),
+            min_out: "1".into(),
+            valid_until_block: 1000,
+            envelope: env(),
+            table_bits: Some(18),
+            bound_bits: Some(18),
+        })
+        .await
+        .unwrap();
+    assert_eq!(p.entry(), "mtxUnshieldUnwrap");
+    use scaas_sdk::op::Source::{Derived, Signed};
+    assert_eq!(rev(&p, "unwrap.recipient"), Some((to.clone(), Signed)));
+    assert_eq!(rev(&p, "unwrap.amount"), Some(("2".into(), Signed)));
+    assert_eq!(rev(&p, "unwrap.minOut"), Some(("1".into(), Signed)));
+    assert!(p.review().iter().any(|f| f.name == "token" && f.value == UNDERLYING && f.source == Derived));
+    send(&s, p.clone()).await;
+    assert_eq!(signed_by_zether(&c, 0, &p.id(), &k).await["op"]["entry"], "mtxUnshieldUnwrap");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn zether_transfer_multi_pairs() {
+    use scaas_sdk::confidential::{ZetherLeg, ZetherTransferMulti};
+    let (s, seed, c, k, k2) = pairs_setup().await;
+    let k3 = s.confidential().zether_key(seed.clone(), 2).await.unwrap();
+    let k4 = s.confidential().zether_key(seed.clone(), 3).await.unwrap();
+    register(&c, &k3, KEYPTR3);
+    register(&c, &k4, KEYPTR4);
+    list(&c, &[&k, &k2, &k3, &k4]);
+    let t = |decoys: u32| ZetherTransferMulti {
+        seed: seed.clone(),
+        account: 0,
+        chain: "local".into(),
+        token: TOKEN.into(),
+        batch: "0".into(),
+        recipients: vec![ZetherLeg { to_ua: k2.ua.clone(), amount: "3".into() }],
+        decoys,
+        decoy_fee: "0".into(),
+        ua_signer_gas: 0,
+        valid_until_block: 1000,
+        envelope: env(),
+        table_bits: Some(18),
+        bound_bits: Some(18),
+    };
+    // more decoys than the list holds besides the holder and the recipient: refused before anything is proved
+    assert_eq!(code(s.confidential().prepare_zether_transfer_multi(t(3)).await), "Argument");
+    // the decoys are never the holder or a real recipient: with two eligible UAs, both are drawn every time (three runs: a
+    // draw that ignored the exclusions passes all three with probability (1/6)^3)
+    let mut p = None;
+    for _ in 0..3 {
+        c.lock().unwrap().requests.clear();
+        let q = s.confidential().prepare_zether_transfer_multi(t(2)).await.unwrap();
+        let slots: Vec<String> = reads(&c).iter().filter_map(|r| r["params"][1].as_str().map(String::from)).collect();
+        for x in [&k3, &k4] {
+            let ua: W = unhex(&x.ua).try_into().unwrap();
+            assert!(slots.contains(&hx(&map(&ua, &be(0)))), "each eligible decoy's record is read");
+        }
+        p = Some(q);
+    }
+    let p = p.unwrap();
+    assert_eq!(p.entry(), "mtxConfidentialTransfer");
+    use scaas_sdk::op::Source::{Derived, Request};
+    assert_eq!(rev(&p, "request.to[0]"), Some((k2.ua.clone(), Request)));
+    assert_eq!(rev(&p, "request.amount[0]"), Some(("3".into(), Request)));
+    assert_eq!(rev(&p, "request.decoys"), Some(("2".into(), Derived)));
+    send(&s, p.clone()).await;
+    assert_eq!(signed_by_zether(&c, 0, &p.id(), &k).await["op"]["entry"], "mtxConfidentialTransfer");
+    let p = s.confidential().prepare_zether_transfer_compact(t(1)).await.unwrap();
+    assert_eq!(p.entry(), "mtxConfidentialTransferCompact");
+    send(&s, p.clone()).await;
+    assert_eq!(signed_by_zether(&c, 1, &p.id(), &k).await["op"]["entry"], "mtxConfidentialTransferCompact");
+    // a listed UA whose record is gone: when it must be drawn, the key read refuses it (R6)
+    put(&c, REGISTRY, &map(&unhex(&k4.ua).try_into().unwrap(), &be(0)), &[0; 32]);
+    assert_eq!(code(s.confidential().prepare_zether_transfer_multi(t(2)).await), "LegKeyMismatch");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn zether_owner_statements() {
+    use scaas_sdk::confidential::{OwnerRelay, ZetherOwnerRollOver, ZetherOwnerSetMode};
+    let (s, seed, c, k, _) = pairs_setup().await;
+    let cf = s.confidential();
+    let roll = || ZetherOwnerRollOver {
+        seed: seed.clone(),
+        account: 0,
+        chain: "local".into(),
+        token: TOKEN.into(),
+        valid_until_block: 1000,
+    };
+    let mode = |m: u8| ZetherOwnerSetMode {
+        seed: seed.clone(),
+        account: 0,
+        chain: "local".into(),
+        token: TOKEN.into(),
+        mode: m,
+        valid_until_block: 1000,
+    };
+    let relay = || OwnerRelay { batch: "0".into(), envelope: env() };
+    // nothing pending: refused
+    counters(&c, &k, 1, 2, 2, 0);
+    assert_eq!(code(cf.prepare_zether_owner_roll_over(roll()).await), "Argument");
+    assert_eq!(code(cf.prepare_zether_owner_set_mode(mode(2)).await), "Argument");
+    counters(&c, &k, 1, 3, 1, 4);
+    // the direct forms: the Zether UA signs the owner statement under zether-owner, never metatx
+    let p = cf.prepare_zether_owner_roll_over(roll()).await.unwrap();
+    assert_eq!(p.entry(), "mtxRollOverSigned");
+    assert_eq!(rev(&p, "accSeq").map(|r| r.0), Some("1".into()));
+    assert_eq!(rev(&p, "expectedPendingSeq").map(|r| r.0), Some("3".into()));
+    send(&s, p.clone()).await;
+    let b = body(&c, 0).await;
+    let sig = &b["op"]["auth"];
+    assert!(zether_sig_ok(&k, "zether-owner", &p.id(), sig), "{b}");
+    assert!(!zether_sig_ok(&k, "metatx", &p.id(), sig));
+    let p = cf.prepare_zether_owner_set_mode(mode(1)).await.unwrap();
+    assert_eq!(p.entry(), "mtxSetRollOverMode");
+    assert_eq!(rev(&p, "modeNonce").map(|r| r.0), Some("4".into()));
+    send(&s, p.clone()).await;
+    let b = body(&c, 1).await;
+    let sig = &b["op"]["auth"];
+    assert!(zether_sig_ok(&k, "zether-owner", &p.id(), sig), "{b}");
+    // the relayed forms: the envelope under metatx, the owner statement's signature (zether-owner) as `ownerSig`
+    let uid: W = unhex(&hash_of(0)).try_into().unwrap();
+    for (n, (p, inner)) in [
+        (cf.prepare_zether_roll_over_signed(roll(), relay()).await.unwrap(),
+         json!({"ua": k.ua, "accSeq": "1", "expectedPendingSeq": "3", "validUntilBlock": "1000"})),
+        (cf.prepare_zether_set_roll_over_mode(mode(1), relay()).await.unwrap(),
+         json!({"ua": k.ua, "mode": 1, "modeNonce": "4", "validUntilBlock": "1000"})),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let name = if n == 0 { "ZetherRollOver" } else { "ZetherSetRollOverMode" };
+        let d = scaas_ua::wallet::scaas_typed_data(name, Some("SCaaS ZetherToken"), &a20(TOKEN), CHAIN_ID, &uid, &inner)
+            .unwrap()
+            .digest()
+            .unwrap();
+        assert!(p.review().iter().any(|f| f.name.starts_with("owner.")), "the owner statement is reviewed");
+        send(&s, p.clone()).await;
+        let b = signed_by_zether(&c, 2 + n, &p.id(), &k).await;
+        assert!(zether_sig_ok(&k, "zether-owner", &hx(&d), &b["op"]["args"]["ownerSig"]), "{b}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn watch_reads_a_zether_account() {
+    let c = fake();
+    let url = serve(c.clone()).await;
+    let mut p = profile(vec![endpoint(&url, scaas_rpc::Class::Named)], scaas_rpc::Policy::Failover, Finality::Finalized);
+    p.tokens = vec![scaas_sdk::ListedToken { address: TOKEN.into(), symbol: "Z".into(), decimals: 0 }];
+    let (s, seed) = sdk(p).await;
+    let k = s.confidential().zether_key(seed.clone(), 0).await.unwrap();
+    zether_state(&c, &k, 5);
+    {
+        let mut g = c.lock().unwrap();
+        g.tokens.insert(TOKEN.into(), ("Z".into(), "Z".into(), 0, hash_of(0)));
+        g.balances.insert(TOKEN.into(), 0);
+    }
+    // only an account a keystore row names (C2): the Zether UA's row first
+    assert_eq!(code(s.watch(k.ua.clone(), vec!["local".into()]).await), "Argument");
+    let row = s
+        .account()
+        .add_ua(scaas_sdk::account::AddUa { seed: seed.clone(), name: "z".into(), kind: 0x0141, account: 0, index: 0 })
+        .await
+        .unwrap();
+    assert_eq!(row.id_text, k.ua, "the row's UA is the Zether key's");
+    let sub = s.subscribe();
+    s.watch(k.ua.clone(), vec!["local".into()]).await.unwrap();
+    c.lock().unwrap().requests.clear();
+    s.poll().await.unwrap();
+    let first = reads(&c);
+    assert!(!first.is_empty(), "the Zether words are read");
+    // the holder's words move: one more poll, the same reads, `BalanceChanged`
+    set_amount(&c, &k, 77);
+    c.lock().unwrap().requests.clear();
+    s.poll().await.unwrap();
+    assert_eq!(reads(&c), first, "a changed balance changes no read");
+    let mut ev = vec![];
+    while let Some(e) = sub.next(50).await {
+        ev.push(e);
+    }
+    assert!(ev.contains(&scaas_sdk::Event::BalanceChanged { account: k.ua.clone(), chain: "local".into(), token: TOKEN.into() }), "{ev:?}");
+}

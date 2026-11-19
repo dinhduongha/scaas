@@ -4,7 +4,10 @@
 //! the profile's final block (`BalanceChanged` when it moved) and one span window of its logs past the triple's cursor
 //! (`HistoryAdded`); the cursor lives in `sdk.state`. Only an account a keystore row names is watched, so no event and no
 //! cursor names a hidden set's account (a hidden set is never written). Each poll first reads `sdk.state`'s `rev`:
-//! `StateChanged` when another process moved it. No websockets. UNAUDITED.
+//! `StateChanged` when another process moved it. No websockets. A watched Zether UA (a row of kind `0x0141`) also has each
+//! listed Zether token's confidential words read on the same schedule through the reading layer (spec §9.4, feature `zether`):
+//! the same fixed set every poll, nothing decrypted, `BalanceChanged` when the account's words moved (owner 2026-11-19, C2:
+//! only an account a keystore row names). UNAUDITED.
 use crate::op::{evm, final_block, state};
 use crate::vault::AccountRow;
 use crate::wallet::balances::id_word;
@@ -29,9 +32,13 @@ pub(crate) struct Watching {
     pairs: Vec<(String, String)>,
     /// the first triple of the next poll
     next: usize,
-    /// the last balance read by triple key
+    /// the last balance read by triple key (a Zether account's words: their hash, under the key with `|z`)
     last: HashMap<String, U256>,
     started: bool,
+    /// the watched Zether UAs (rows of kind `0x0141`), lower case
+    zether: std::collections::HashSet<String>,
+    /// `chain|token` of listed tokens the factory does not catalogue as Zether (public: not read again)
+    not_zether: std::collections::HashSet<String>,
 }
 
 fn rows_id(r: &AccountRow) -> &str {
@@ -55,19 +62,23 @@ impl Sdk {
             }
             let account = account.to_ascii_lowercase();
             let ks = sdk.load_keystore().await?.keystore;
-            if !ks
+            let Some(row) = ks
                 .seeds
                 .iter()
                 .flat_map(|s| &s.accounts)
-                .any(|r| rows_id(r).eq_ignore_ascii_case(&account))
-            {
+                .find(|r| rows_id(r).eq_ignore_ascii_case(&account))
+            else {
                 return Err(SdkError::Argument);
-            }
+            };
+            let zether = matches!(row, AccountRow::Ua { kind: 0x0141, .. });
             let _ = sdk
                 .state_seen
                 .compare_exchange(REV_UNSEEN, state::rev(&sdk).await?, SeqCst, SeqCst);
             let start = {
                 let mut w = sdk.watching.lock().unwrap_or_else(PoisonError::into_inner);
+                if zether {
+                    w.zether.insert(account.clone());
+                }
                 for c in chains {
                     let p = (account.clone(), c);
                     if !w.pairs.contains(&p) {
@@ -150,6 +161,8 @@ impl Sdk {
             let mut w = self.watching.lock().unwrap_or_else(PoisonError::into_inner);
             w.last.insert(key.clone(), a.value).is_some_and(|v| v != a.value)
         };
+        #[cfg(feature = "zether")]
+        let moved = moved | self.poll_zether(account, chain, token, &key).await?;
         if moved {
             self.emit(Event::BalanceChanged {
                 account: account.into(),
@@ -176,6 +189,32 @@ impl Sdk {
             });
         }
         Ok(())
+    }
+
+    /// A watched Zether UA's words of `token` (spec §9.4: the fixed set, nothing decrypted): whether they moved since the last
+    /// poll. A token not catalogued as Zether is noted and not read again; any other refusal is the poll's error.
+    #[cfg(feature = "zether")]
+    async fn poll_zether(&self, account: &str, chain: &str, token: Address, key: &str) -> Result<bool, SdkError> {
+        let t = crate::op::hex(token.as_slice());
+        let tk = format!("{chain}|{t}");
+        {
+            let w = self.watching.lock().unwrap_or_else(PoisonError::into_inner);
+            if !w.zether.contains(account) || w.not_zether.contains(&tk) {
+                return Ok(false);
+            }
+        }
+        let (ua, _) = id_word(account)?;
+        let r = match crate::confidential::read::zether(self, chain, &t, None, ua, &[]).await {
+            Err(SdkError::TokenUncatalogued) => {
+                self.watching.lock().unwrap_or_else(PoisonError::into_inner).not_zether.insert(tk);
+                return Ok(false);
+            }
+            r => r?,
+        };
+        let seen = serde_json::to_vec(&[r.words.get("account"), r.words.get("accountData")]).map_err(|_| SdkError::Internal)?;
+        let h = U256::from_be_bytes(scaas_ua::keccak256(&seen));
+        let mut w = self.watching.lock().unwrap_or_else(PoisonError::into_inner);
+        Ok(w.last.insert(format!("{key}|z"), h).is_some_and(|v| v != h))
     }
 
     /// Notes the `rev` the SDK itself wrote over `prev`: no `StateChanged` for it, unless another process wrote since the poll.
