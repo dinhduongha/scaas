@@ -8,7 +8,6 @@ baseline ua-test | 4de8a5604 | 0 | 503 passed, 0 failed, 3 ignored (47 binaries)
 baseline ua-clippy | 4de8a5604 | 0 | -
 baseline features | 4de8a5604 | 0 | feature_tree not run (crate absent)
 # latest runs:
-features | 81a8cbcf2 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 ua-verify-only | 81a8cbcf2 | 0 | 84 passed, 0 failed, 0 ignored (18 binaries)
 ua-wallet-rows | 81a8cbcf2 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 rpc-test | 81a8cbcf2 | 0 | 162 passed, 0 failed, 10 ignored (16 binaries)
@@ -16,9 +15,7 @@ rpc-clippy | 81a8cbcf2 | 0 | -
 rpc-wasm | 81a8cbcf2 | 0 | -
 sdk-opaque | 81a8cbcf2 | 0 | 9 passed, 0 failed, 0 ignored (1 binaries)
 sdk-sets | 81a8cbcf2 | 0 | 6 passed, 0 failed, 0 ignored (3 binaries)
-sdk-wasm | 81a8cbcf2 | 0 | -
 sdk-deny | 81a8cbcf2 | 0 | -
-bind-dart | 81a8cbcf2 | 0 | dart: +6:
 # SDK round-end matrix (T0-T13b) at 81a8cbcf2: the 27 rows above, clean tree, every rc 0. The first full run at f1a93439a
 # started from `cargo clean` of scaas-sdk, its ffi, ua-rs, scaas-rpc, ua-c, ua-cxx and ua-dart-frb; it had two reds (sdk-min:
 # tests/e2e.rs without `wallet`; ua-go: the runner's library path), fixed at 81a8cbcf2, whose run reused that build.
@@ -32,16 +29,18 @@ ua-go | b0c917a2c | 0 | -; tree dirty
 ua-cs | b0c917a2c | 0 | -; tree dirty
 ua-cxx | b0c917a2c | 0 | ctest: 0 tests failed out of 43; tree dirty
 frb-dart | b0c917a2c | 0 | dart: +46:; tree dirty
-sdk-test | c0b97063f | 0 | 170 passed, 0 failed, 2 ignored (14 binaries)
 ck-test | c0b97063f | 0 | node: 480 pass, 0 fail, 4 skipped
-sdk-min | c0b97063f | 0 | 70 passed, 0 failed, 0 ignored (8 binaries)
-sdk-clippy | c0b97063f | 0 | -
-sdk-e2e | c0b97063f | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 docs | c0b97063f | 0 | -
 ua-test | c0b97063f | 0 | 551 passed, 0 failed, 3 ignored (55 binaries)
 ua-clippy | c0b97063f | 0 | -
 ua-vectors | c0b97063f | 0 | 656 passed, 0 failed, 6 ignored (62 binaries)
-sdk-test | 540d18a70 | 0 | 172 passed, 0 failed, 2 ignored (14 binaries)
-sdk-min | 540d18a70 | 0 | 70 passed, 0 failed, 0 ignored (8 binaries)
-sdk-clippy | 540d18a70 | 0 | -
 docs | 540d18a70 | 0 | -
+sdk-min | 44ea8ddd6 | 0 | 70 passed, 0 failed, 0 ignored (8 binaries)
+ffi | c01e6587b | 0 | clippy clean (generated module allowed), cargo test ok
+bind-dart | 44ea8ddd6 | 0 | dart: +6:
+sdk-wasm | 44ea8ddd6 | 0 | -
+sdk-clippy | 44ea8ddd6 | 0 | -
+sdk-test | 44ea8ddd6 | 0 | 172 passed, 0 failed, 2 ignored (14 binaries)
+gas-gen | 44ea8ddd6 | 0 | -
+features | 44ea8ddd6 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+sdk-e2e | 44ea8ddd6 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)

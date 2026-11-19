@@ -1,0 +1,42 @@
+ci-guards | 44ea8ddd6 | 0 | no temp path
+clientkeys | 44ea8ddd6 | 0 | -
+docs | 44ea8ddd6 | 0 | docs ok
+features | 44ea8ddd6 | 0 | -
+forge-account | 44ea8ddd6 | 0 | forge 103 passed, 0 failed, 0 skipped (6 suites)
+forge-as | 44ea8ddd6 | 0 | forge 568 passed, 0 failed, 0 skipped (92 suites)
+forge-confidential | 44ea8ddd6 | 0 | forge 5 passed, 0 failed, 0 skipped (1 suites)
+forge-factory | 44ea8ddd6 | 0 | forge 2 passed, 0 failed, 0 skipped (1 suites)
+forge-fork | 44ea8ddd6 | 0 | forge 0 passed, 0 failed, 1 skipped (1 suites)
+forge-gas | 44ea8ddd6 | 0 | forge 399 passed, 0 failed, 1 skipped (52 suites)
+forge-governance | 44ea8ddd6 | 0 | forge 929 passed, 0 failed, 0 skipped (89 suites)
+forge-hedera | 44ea8ddd6 | 0 | forge 20 passed, 0 failed, 0 skipped (2 suites)
+forge-liquidity | 44ea8ddd6 | 0 | forge 93 passed, 0 failed, 1 skipped (9 suites)
+forge-merge | 44ea8ddd6 | 0 | forge 350 passed, 0 failed, 0 skipped (30 suites)
+forge-metatx | 44ea8ddd6 | 0 | forge 548 passed, 0 failed, 1 skipped (44 suites); tree dirty
+forge-modules | 44ea8ddd6 | 0 | forge 35 passed, 0 failed, 0 skipped (12 suites)
+forge-p6f | 44ea8ddd6 | 0 | forge 4 passed, 0 failed, 0 skipped (1 suites)
+forge-pqchat | 44ea8ddd6 | 0 | forge 99 passed, 0 failed, 0 skipped (9 suites)
+forge-pqz | 44ea8ddd6 | 0 | forge 693 passed, 0 failed, 4 skipped (64 suites); tree dirty
+forge-pqzh | 44ea8ddd6 | 0 | forge 42 passed, 0 failed, 0 skipped (3 suites)
+forge-research | 44ea8ddd6 | 0 | forge 360 passed, 0 failed, 7 skipped (29 suites)
+forge-top | 44ea8ddd6 | 0 | forge 29 passed, 0 failed, 0 skipped (5 suites)
+forge-ua | 44ea8ddd6 | 0 | forge 847 passed, 0 failed, 0 skipped (58 suites); tree dirty
+forge-v2 | 44ea8ddd6 | 0 | forge 750 passed, 0 failed, 0 skipped (57 suites); tree dirty
+forge-wallet | 44ea8ddd6 | 0 | forge 185 passed, 0 failed, 0 skipped (12 suites)
+format | 44ea8ddd6 | 0 | -
+gen-set | 44ea8ddd6 | 0 | generated files in sync
+node-clippy | 44ea8ddd6 | 0 | -; tree dirty
+node-e2e | 44ea8ddd6 | 0 | cargo 24 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+node-test | 44ea8ddd6 | 0 | cargo 859 passed, 0 failed, 72 ignored (18 binaries); tree dirty
+ua-c | 44ea8ddd6 | 0 | cargo 9 passed, 0 failed, 0 ignored (2 binaries); Ran 101 tests in 17.360s
+ua-c-release | 44ea8ddd6 | 0 | release library built
+ua-cs | 44ea8ddd6 | 0 | Passed!  - Failed:     0, Passed:    61, Skipped:     0, Total:    61, Duration: 24 s - Scaas.Ua.Tests.dll (net10.0)
+ua-cxx | 44ea8ddd6 | 0 | 100% tests passed, 0 tests failed out of 43
+ua-dart | 44ea8ddd6 | 0 | -
+ua-dart-frb | 44ea8ddd6 | 0 | cargo 3 passed, 0 failed, 0 ignored (1 binaries)
+uagas | 44ea8ddd6 | 0 | forge 22 passed, 0 failed, 0 skipped (2 suites); tree dirty
+ua-go | 44ea8ddd6 | 0 | -
+ua-py | 44ea8ddd6 | 0 | Ran 99 tests in 17.029s
+ua-qt | 44ea8ddd6 | 0 | 100% tests passed, 0 tests failed out of 1
+ua-rs-default | 44ea8ddd6 | 0 | cargo 552 passed, 0 failed, 3 ignored (55 binaries)
+ua-rs-vectors | 44ea8ddd6 | 0 | cargo 653 passed, 0 failed, 6 ignored (61 binaries)
