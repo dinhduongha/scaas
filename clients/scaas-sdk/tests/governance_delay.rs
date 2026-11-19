@@ -35,7 +35,8 @@ fn views(c: &Fake, notice: u64, grant: u64, locked: &str, admin: &str) {
     c.answers.push((TOKEN.into(), sel("factory()"), f));
     c.answers
         .push((FACTORY.into(), sel("noticePeriod()"), w(notice)));
-    c.answers.push((TOKEN.into(), sel("grantDelay()"), w(grant)));
+    c.answers
+        .push((TOKEN.into(), sel("grantDelay()"), w(grant)));
     c.answers
         .push((TOKEN.into(), sel("lockedFeatures()"), locked.into()));
     c.answers.push((TOKEN.into(), sel("admin()"), admin.into()));
@@ -121,21 +122,34 @@ async fn every_bit_has_its_named_sentence() {
         let ask = |h| a.governance_delay("local".into(), TOKEN.into(), bit, h);
         if !marked {
             views(&chain, 0, 0, &zero, &zero);
-            assert_eq!(ask(None).await.unwrap(), [DelaySentence::NoDelay], "bit {bit}");
+            assert_eq!(
+                ask(None).await.unwrap(),
+                [DelaySentence::NoDelay],
+                "bit {bit}"
+            );
             continue;
         }
         // the longer of the factory's notice and the token's grant delay, each read
         views(&chain, 7_200, 3_600, &zero, &w(1));
-        assert_eq!(ask(None).await.unwrap(), [DelaySentence::After { delay: 7_200 }]);
+        assert_eq!(
+            ask(None).await.unwrap(),
+            [DelaySentence::After { delay: 7_200 }]
+        );
         views(&chain, 600, 86_400, &zero, &w(1));
-        assert_eq!(ask(None).await.unwrap(), [DelaySentence::After { delay: 86_400 }]);
+        assert_eq!(
+            ask(None).await.unwrap(),
+            [DelaySentence::After { delay: 86_400 }]
+        );
         // both 0: at once; a single-key holder adds its sentence (never read as "at once")
         views(&chain, 0, 0, &zero, &w(1));
         assert_eq!(ask(None).await.unwrap(), [DelaySentence::AtOnce]);
         views(&chain, 0, 3_600, &zero, &w(1));
         assert_eq!(
             ask(Some(HolderKind::SingleKey)).await.unwrap(),
-            [DelaySentence::After { delay: 3_600 }, DelaySentence::SingleKey]
+            [
+                DelaySentence::After { delay: 3_600 },
+                DelaySentence::SingleKey
+            ]
         );
         assert_eq!(
             ask(Some(HolderKind::Threshold)).await.unwrap(),
@@ -149,7 +163,10 @@ async fn every_bit_has_its_named_sentence() {
             [DelaySentence::After { delay: 3_600 }, DelaySentence::Locked]
         );
         views(&chain, 0, 3_600, &locked, &w(1));
-        assert_eq!(ask(None).await.unwrap(), [DelaySentence::After { delay: 3_600 }]);
+        assert_eq!(
+            ask(None).await.unwrap(),
+            [DelaySentence::After { delay: 3_600 }]
+        );
     }
     // a bit the table does not know
     let r = a
@@ -165,7 +182,11 @@ async fn a_failed_read_is_an_error() {
     let (sdk, chain) = setup().await;
     let marked = bits().into_iter().find(|(_, m)| *m).unwrap().0;
     views(&chain, 0, 0, &w(0), &w(1));
-    chain.lock().unwrap().answers.retain(|(to, _, _)| to != FACTORY);
+    chain
+        .lock()
+        .unwrap()
+        .answers
+        .retain(|(to, _, _)| to != FACTORY);
     let r = sdk
         .admin()
         .governance_delay("local".into(), TOKEN.into(), marked, None)

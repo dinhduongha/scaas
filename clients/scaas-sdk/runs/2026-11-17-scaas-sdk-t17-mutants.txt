@@ -1,0 +1,9 @@
+# t17 mutants at commit 01a284f17 (name | outcome | test)
+skip the DEX list check | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test dex dex_not_on_profile_list_is_refused
+skip the wrapper list check | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test dex cancel_and_wrap_rows_equal_the_vectors
+ignore the liquidity mark | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test dex dex_not_on_profile_list_is_refused
+the order's form from the request, not the factory | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test dex place_posts_the_named_order_signed_in_its_form
+another signer's order cancelled | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test dex cancel_and_wrap_rows_equal_the_vectors
+post to a gateway of another chain_uid | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test dex place_posts_the_named_order_signed_in_its_form
+an order cancel followed by the executed event | killed | CAPPED_MEM=6G ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test e2e -- --ignored e2e_dex_cancel_order_on_anvil
+7 mutants, 7 killed, 0 survived, 0 not loaded
