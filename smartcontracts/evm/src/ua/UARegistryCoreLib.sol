@@ -105,6 +105,19 @@ library UARegistryCoreLib {
         if (UAStore.layout().records[ua].kind == 0) (h,,) = IUARegistry(address(this)).holderOf(ua);
     }
 
+    /// The clone codehash of the generation holding the structure `ua` (0: the registration's own, held here), its native members'.
+    function _cloneHashOf(bytes32 ua) private view returns (bytes32) {
+        address h = ua == 0 ? address(0) : _holder(ua);
+        return h == address(0) ? _cloneHash() : IUARegistry(h).smartKeyCloneHash();
+    }
+
+    /// `holderOf(ua)`'s holder for a check: this generation where it holds the record or where no generation does (its own answer
+    /// then refuses), else the holder (W1, N2).
+    function _at(bytes32 ua) internal view returns (address h) {
+        h = _holder(ua);
+        if (h == address(0)) h = address(this);
+    }
+
     /// The one walk (§11.1, M4; owner Y1): this generation's record `(this, kind, this if it enables 0x0142)`; else the predecessor's
     /// answer (`(0, 0, 0)` at generation 1), its PQZ home filled with this generation where none is below and this one enables
     /// `0x0142` (`_cfgPqz()`) for a record some generation holds. One call per generation; three words, nothing re-encoded.
@@ -171,7 +184,8 @@ library UARegistryCoreLib {
         bytes32 digest,
         IUARegistry.UASig calldata sig
     ) internal view returns (bool) {
-        return sig.keyData.length == 0 && _sigOk(_cfgKind(), kind, d, ua, purpose, digest, sig.signature, sig.members);
+        return sig.keyData.length == 0
+            && _sigOk(_cfgKind(), kind, d, ua, purpose, digest, sig.signature, sig.members, true);
     }
 
     // ----- the helpers the other two libraries call (T66b 3.1c, owner 2026-11-09, spec 2026-11-09-t66b-library-organisation.md §11 (f); owner 2026-11-19) -----
@@ -197,7 +211,7 @@ library UARegistryCoreLib {
         external
         returns (bool)
     {
-        return _msig(ua, md, typed, false, d, sigs);
+        return _msig(ua, md, typed, false, d, sigs, true);
     }
 
     // ----- the portable check (UA-7 O1, owner 2026-11-04; plan T66a) -----
@@ -241,7 +255,7 @@ library UARegistryCoreLib {
             bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, purposeTag, typedDigest));
             // CTR-UA-44: the current structure (MM-9)
             ok = auth.keyData.length == 0 && auth.signature.length == 0
-                && _msig(ua, md, typedDigest, false, UAStore.msig(ua, r.keyPtr), auth.members);
+                && _msig(ua, md, typedDigest, false, UAStore.msig(ua, r.keyPtr), auth.members, false);
         }
         // No UAKeyNotCached here (3zh, 2026-11-15): a record of this registry exists only after `register`, which needs the
         // complete ML-DSA cache without a precompile (`_consent`), and SSTORE2 parts are never removed; a gen-1 record has no
@@ -267,7 +281,7 @@ library UARegistryCoreLib {
         bytes32 member = bytes32(UAStore.word(d, 4 + 36 * uint256(index) + 2));
         bytes32 typed = UAKinds.membershipDigest(ua, member);
         bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MEMBERSHIP, typed));
-        if (!_memberOk(d, md, typed, memberSig, true)) revert IUARegistry.UAUnauthorized(ua);
+        if (!_memberOk(d, md, typed, memberSig, 0, true)) revert IUARegistry.UAUnauthorized(ua);
         s.accepted[ua] = bits | 1 << index;
         // owner 2026-11-03: the hash kept, written once as the bit it goes with, the bytes in `UAMemberSig`: a copy checks them against
         // `memberSigHashOf` and replays them
@@ -296,14 +310,15 @@ library UARegistryCoreLib {
         bytes32 purpose,
         bytes32 digest,
         bytes memory sig,
-        IUARegistry.MemberSig[] memory members
+        IUARegistry.MemberSig[] memory members,
+        bool write
     ) internal view returns (bool) {
         _portablePurpose(ua, purpose);
         if (kind == UAKinds.MSIG) {
             if (sig.length != 0) return false;
             if (!_pqEligible(d, false)) return members.length == 0;
             bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, purpose, digest));
-            return members.length != 0 && _msig(ua, md, digest, purpose == UAKinds.PURPOSE_POP_V2, d, members);
+            return members.length != 0 && _msig(ua, md, digest, purpose == UAKinds.PURPOSE_POP_V2, d, members, write);
         }
         if (members.length != 0) return false;
         return _single(cfg, kind, d, ua, purpose, digest, sig);
@@ -322,10 +337,12 @@ library UARegistryCoreLib {
     ) internal view returns (bool) {
         // spec 2026-11-19-bls12381-multi §5.3 (N1): a surplus-form kind by its own dispatch, `cfg` 0 included (no hand-off)
         if (UAKinds.hasSurplusForm(kind)) return _multi(cfg, kind, ua, purpose, digest, d, sig);
-        // A6-I1: a gen-1 holder's PQZ key record on gen 2 (the PQ holder kinds are stored: no key data in `auth`); the
-        // PQ verifiers' `verify` is their `verifyPop`
+        // A6-I1: a predecessor's holder's PQZ key record on its PQZ home (the PQ holder kinds are stored: no key data in `auth`); the
+        // PQ verifiers' `verify` is their `verifyPop`. R2 / N2 / M1 (spec 2026-11-19-registry-verify-only-kinds §3): any record whose
+        // kind is not registrable here (not carried, or carried verify-only) goes to the generation that holds it, directly, never
+        // through `predecessor` (a middle generation would answer with its verify-only verifier)
         if (!UAStore._registrable(cfg)) {
-            return UAStore.via(_pred(), ua, purpose, digest, IUARegistry.UASig("", sig, new IUARegistry.MemberSig[](0)));
+            return UAStore.via(_at(ua), ua, purpose, digest, IUARegistry.UASig("", sig, new IUARegistry.MemberSig[](0)));
         }
         bytes32 message = UAKinds.uaMessage(kind, purpose, digest);
         bytes memory ek = UAStore.expanded(ua, kind); // ML-DSA: a complete cache is the key the PoP verifies on
@@ -388,25 +405,31 @@ library UARegistryCoreLib {
     /// An `msig` member is this same check one level down: its members sign under `member`, its native members `typed` still, its
     /// slots are minimal too and count only if accepted in it, a `pop` above exempting no slot of it (spec 2026-11-02-msig-nested).
     /// `md`: this structure's `member_digest`; `typed`: the record's typed digest, the same at both levels.
-    function _msig(bytes32 ua, bytes32 md, bytes32 typed, bool pop, bytes memory d, IUARegistry.MemberSig[] memory sigs)
-        private
-        view
-        returns (bool)
-    {
+    function _msig(
+        bytes32 ua,
+        bytes32 md,
+        bytes32 typed,
+        bool pop,
+        bytes memory d,
+        IUARegistry.MemberSig[] memory sigs,
+        bool write
+    ) private view returns (bool) {
         uint256 threshold = UAStore.u16(d, 0);
         uint256 acc;
         // the slots that may sign: the enabled ones (CTR-UA-44 MM-3; past the members is none of them, MM-9: no count mask, which
         // would panic at 256 slots)
         uint256 yes = (pop ? type(uint256).max : _accepted(ua, sigs)) & UAStore.enabledOf(d);
-        bool here = pop || UAStore.layout().records[ua].kind != 0;
         uint256 wMin = type(uint256).max; // the smallest slot weight
         uint256 next; // lowest index the next MemberSig may use
+        bytes32 at = pop ? bytes32(0) : ua; // the structure (0: the registration's own, held here; `_cloneHashOf`)
         for (uint256 i; i < sigs.length; ++i) {
-            IUARegistry.MemberSig memory s = sigs[i];
-            if (acc >= threshold || s.index < next || yes >> s.index & 1 == 0) return false;
-            next = uint256(s.index) + 1;
-            if (!_memberOk(d, md, typed, s, here)) return false;
-            uint256 w = UAStore.u16(d, 4 + 36 * uint256(s.index) + 34);
+            {
+                uint256 x = sigs[i].index;
+                if (acc >= threshold || x < next || yes >> x & 1 == 0) return false;
+                next = x + 1;
+            }
+            if (!_memberOk(d, md, typed, sigs[i], at, write)) return false;
+            uint256 w = UAStore.u16(d, 4 + 36 * uint256(sigs[i].index) + 34);
             acc += w;
             if (w < wMin) wMin = w;
         }
@@ -419,7 +442,7 @@ library UARegistryCoreLib {
     function _accepted(bytes32 ua, IUARegistry.MemberSig[] memory sigs) internal view returns (uint256 bits) {
         UAStore.Layout storage s = UAStore.layout();
         if (s.records[ua].kind != 0) return s.accepted[ua];
-        IUARegistry g1 = IUARegistry(_pred());
+        IUARegistry g1 = IUARegistry(_holder(ua)); // N11: the bits live with the record, at its holder
         for (uint256 i; i < sigs.length; ++i) {
             uint256 index = sigs[i].index;
             try g1.memberAccepted(ua, index) returns (bool yes) {
@@ -432,35 +455,50 @@ library UARegistryCoreLib {
 
     /// The signature `s` of member `s.index` of the structure `d`: a registered member over `md` under `member`, without key
     /// data (the registry reads the member's record, CTR-UA-33); a native member over the typed digest `typed`; an `msig` member by
-    /// `_msig`, under `member` over `md`. `here`: this registry holds the structure, else gen 1 does and a clone is one of gen 1's, with the 400 k
-    /// cap `_slotCap` counted for it.
-    function _memberOk(bytes memory d, bytes32 md, bytes32 typed, IUARegistry.MemberSig memory s, bool here)
-        internal
-        view
-        returns (bool)
-    {
+    /// `_msig`, under `member` over `md`. `ua`: the structure (0: the registration's own); held elsewhere, a clone is its holder's,
+    /// with the 400 k cap `_slotCap` counted for it. `write` (W1, spec 2026-11-19-registry-verify-only-kinds §3): a write's derived
+    /// member is checked by its holder, a consumer entry's by this generation (§4).
+    function _memberOk(
+        bytes memory d,
+        bytes32 md,
+        bytes32 typed,
+        IUARegistry.MemberSig memory s,
+        bytes32 ua,
+        bool write
+    ) internal view returns (bool) {
         uint256 o = 4 + 36 * uint256(s.index);
         (uint16 kind, bytes32 id) = (uint16(UAStore.u16(d, o)), bytes32(UAStore.word(d, o + 2)));
         if (kind == UAKinds.MSIG) {
             bytes32 inner = UAKinds.memberDigest(id, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MEMBER, md));
-            return s.sig.length == 0 && _msig(id, inner, typed, false, _msigBytes(id), UAStore.lift(s.members));
+            // R6 (spec 2026-11-19-registry-verify-only-kinds §4): an inner `msig` held elsewhere keeps its holding generation's
+            // verifiers on every path: its members are checked by their holder, as on a write
+            return s.sig.length == 0
+                && _msig(
+                id,
+                inner,
+                typed,
+                false,
+                _msigBytes(id),
+                UAStore.lift(s.members),
+                write || UAStore.layout().records[id].kind == 0
+            );
         }
         if (s.members.length != 0) return false;
         // spec 2026-11-19-bls12381-multi §5.3 (N1): a surplus-form member is checked here by `verifyMinimal`, never by the hop below
         // (whose `requireAuthorized` takes `verify`, extra signers included)
         if (UAKinds.hasSurplusForm(kind)) return _multi(_cfgMulti(), kind, id, UAKinds.PURPOSE_MEMBER, md, "", s.sig);
         if (!UAKinds.isNative(kind)) {
+            // W1 (spec 2026-11-19-registry-verify-only-kinds §3): on a write the member's own holder checks it under its verifier, never a
+            // verify-only one; a consumer entry asks this generation (§4)
             return UAStore.via(
-                address(this),
+                write ? _at(id) : address(this),
                 id,
                 UAKinds.PURPOSE_MEMBER,
                 md,
                 IUARegistry.UASig("", s.sig, new IUARegistry.MemberSig[](0))
             );
         }
-        return UAStore.byCode(
-            address(uint160(uint256(id))), typed, s.sig, here ? _cloneHash() : IUARegistry(_pred()).smartKeyCloneHash()
-        );
+        return UAStore.byCode(address(uint160(uint256(id))), typed, s.sig, _cloneHashOf(ua));
     }
 
     // ----- the line (spec 2026-11-19-registry-verify-only-kinds §11.1, owner Y1): run by `_libView` -----

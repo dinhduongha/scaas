@@ -80,7 +80,7 @@ contract SigOkHarness is UARegistry {
         bytes32 digest,
         bytes calldata sig
     ) external view returns (bool) {
-        return UARegistryCoreLib._sigOk(cfg, kind, d, ua, purpose, digest, sig, new IUARegistry.MemberSig[](0));
+        return UARegistryCoreLib._sigOk(cfg, kind, d, ua, purpose, digest, sig, new IUARegistry.MemberSig[](0), true);
     }
 }
 
