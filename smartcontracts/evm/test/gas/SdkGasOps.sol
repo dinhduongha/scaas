@@ -176,7 +176,7 @@ abstract contract SdkGasRows is SdkGasDeploy {
     /// The line's upper check waived, by the owner's rulings of 2026-11-19 ("approved") that accept a line above the points:
     /// P1, the env publishes' `env_items` at the worst array's per-element slope (the other arrays, and an array's elements
     /// past its first, below it); P2, PQZ `mtxConfidentialTransfer` / `…Compact` (the precompile's price steps with the
-    /// auditor groups). Proposed, not ruled (P4): Zether's multi transfers and PQZ `mtxRollOver`, whose rise a count grows with the count. The excess is refunded.
+    /// auditor groups). P4 ("approved"): a row whose chord is not at or above every point keeps the worst slope's line (Zether `mtxConfidentialTransferCompact`, PQZ `mtxRollOver`). The excess is refunded.
     bool internal sgLineLoose;
     uint256 internal sgPoint;
     string internal sgCountTag;
@@ -271,11 +271,15 @@ abstract contract SdkGasRows is SdkGasDeploy {
 
     /// I1 part 2: the line of a counted row over its points (`counts`, `tags`; a point whose count does not exceed the one
     /// before it starts a new sequence). For every key the run measured (`fresh`, `used`, `fee`, `held`, `ua`, `ua2`; a
-    /// derived run `ua` only) the run's slope `s` is the worst over those keys and sequences of the whole-gas rise a count
-    /// (rounded up), pinned as `<kind>_<entry>_per_item_<variant>` (a derived run `..._per_item_ua_<variant>`); each key's
-    /// intercept, the gas at a count of 0, is the largest `g(c) - s * c` over its points, pinned under the key without a
-    /// tag. The check (owner 2026-11-19): the line `intercept + s * c` is at least the measured gas at every point (by
-    /// construction), and less than it + 1,000 at the largest count (asserted), unless `sgLineLoose` (P1, P2): then the
+    /// derived run `ua` only) the run's slope `s` is, on one rising sequence whose chord is at or above every point (P4,
+    /// owner 2026-11-19, "approved": tight where the cost rises faster at higher counts), the chord's: the worst over those
+    /// keys of the whole-gas rise a count from the first point to the last (rounded up), each key's intercept its line
+    /// through its first point; else the worst over the keys and sequences of the whole-gas rise a count between two
+    /// points, each key's intercept the largest `g(c) - s * c` over its points. `s` is pinned as
+    /// `<kind>_<entry>_per_item_<variant>` (a derived run `..._per_item_ua_<variant>`), the intercept, the gas at a count
+    /// of 0, under the key without a tag. The check (owner 2026-11-19): the line `intercept + s * c` is at least the
+    /// measured gas at every point, and less than it + 1,000 at the largest count (asserted), unless `sgLineLoose` (P1, P2,
+    /// P4 where the chord does not hold): then the
     /// worst excess there over the keys is pinned as `<kind>_<entry>_overshoot_<variant>` (a derived run
     /// `..._overshoot_ua_<variant>`), stated with the row.
     function _sgLine(
@@ -305,22 +309,54 @@ abstract contract SdkGasRows is SdkGasDeploy {
             }
         }
         assertGt(s, 0, "a counted row's slope");
-        _pin(string.concat(kind, "_", entry, sgUaRun ? "_per_item_ua_" : "_per_item_", variant), s);
+        (uint256 c, bool chord) = _sgChord(counts, g);
+        if (chord) s = c;
+        uint256[6] memory bs;
         uint256 over;
         for (uint256 w; w < 6; ++w) {
             if (g[w].length == 0) continue;
-            uint256 b;
-            for (uint256 i; i < counts.length; ++i) {
+            assertGe(g[w][0], s * counts[0], "a positive intercept");
+            uint256 b = g[w][0] - s * counts[0]; // P4: the chord's line through the first point
+            for (uint256 i; i < counts.length && !chord; ++i) {
                 assertGe(g[w][i], s * counts[i], "a positive intercept");
                 if (g[w][i] - s * counts[i] > b) b = g[w][i] - s * counts[i];
+            }
+            for (uint256 i; i < counts.length; ++i) {
+                assertGe(b + s * counts[i], g[w][i], "the line at or above every point");
             }
             uint256 o = b + s * counts[last] - g[w][last];
             if (!sgLineLoose) assertLt(o, 1_000, "the line within 1,000 of the largest count");
             if (o > over) over = o;
-            _pin(string.concat(kind, "_", entry, "_", ws[w], "_", variant), b);
+            bs[w] = b;
+        }
+        _pin(string.concat(kind, "_", entry, sgUaRun ? "_per_item_ua_" : "_per_item_", variant), s);
+        for (uint256 w; w < 6; ++w) {
+            if (g[w].length != 0) _pin(string.concat(kind, "_", entry, "_", ws[w], "_", variant), bs[w]);
         }
         if (sgLineLoose) {
             _pin(string.concat(kind, "_", entry, sgUaRun ? "_overshoot_ua_" : "_overshoot_", variant), over);
+        }
+    }
+
+    /// P4 (owner 2026-11-19, "approved"): on one rising sequence (`counts` strictly increasing), the chord's slope `c`, the
+    /// worst over the measured keys `g[w]` of the whole-gas rise a count from the first point to the last (rounded up), and
+    /// whether each key's line through its first point at `c` is at or above every one of its points.
+    function _sgChord(uint256[] memory counts, uint256[][6] memory g) internal pure returns (uint256 c, bool ok) {
+        uint256 n = counts.length;
+        for (uint256 i = 1; i < n; ++i) {
+            if (counts[i] <= counts[i - 1]) return (0, false);
+        }
+        uint256 span = counts[n - 1] - counts[0];
+        for (uint256 w; w < 6; ++w) {
+            if (g[w].length == 0) continue;
+            uint256 r = (g[w][n - 1] - g[w][0] + span - 1) / span;
+            if (r > c) c = r;
+        }
+        ok = c != 0;
+        for (uint256 w; w < 6 && ok; ++w) {
+            for (uint256 i; i < g[w].length && ok; ++i) {
+                ok = g[w][0] + c * (counts[i] - counts[0]) >= g[w][i];
+            }
         }
     }
 

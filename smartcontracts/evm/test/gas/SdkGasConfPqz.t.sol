@@ -152,8 +152,8 @@ contract SdkGasConfPqzTest is SdkGasPqzBase {
             counts[i] = 1 << i;
         }
         assertEq(counts[k - 1], PqzSet.ROLL_MAX, "measured at the bound");
-        // P4 (proposed to the owner, not ruled): the rise an entry steps from 5,531 to 5,574 between 16 and 32, so the
-        // worst slope's line overshoots the largest count by about 2,000; at or above every point, the excess pinned
+        // P4 (owner 2026-11-19, "approved"): the chord does not hold (the rise an entry steps from 5,531 to 5,574 between 16
+        // and 32 and back), so the worst slope's line, about 2,000 above the largest count; the excess pinned and stated
         sgLineLoose = true;
         _bothN("pqz", "mtxRollOver", v, t, _sgFrom(), _pRoll, counts);
     }

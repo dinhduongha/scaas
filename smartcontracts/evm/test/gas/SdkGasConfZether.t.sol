@@ -165,11 +165,11 @@ contract SdkGasConfZetherTest is SdkGasZetherBase {
             if (zCounted != 0) {
                 uint256[] memory legs = new uint256[](5);
                 (legs[0], legs[1], legs[2], legs[3], legs[4]) = (1, 2, 4, 8, Z_LEGS);
-                // P4 (proposed to the owner, not ruled): the per-leg rise grows with the legs (3.07 M a leg from 1 to 2,
-                // 3.13 M from 8 to 16), so the worst slope's line overshoots the largest count; the line stays at or above
-                // every point, the excess pinned (`..._overshoot_...`)
-                sgLineLoose = true;
+                // P4 (owner 2026-11-19, "approved"): the per-leg rise grows with the legs, the chord holds; on the compact
+                // form the first leg's rise is the largest (its memo), the chord below the 2-leg point: the worst slope's
+                // line, about 606,000 above the largest count, the excess pinned and stated
                 _bothN("zether", "mtxConfidentialTransfer", v, t, from, _zMultiFull, legs);
+                sgLineLoose = true;
                 _bothN("zether", "mtxConfidentialTransferCompact", v, t, from, _zMultiCompact, legs);
                 sgLineLoose = false;
                 uint256[] memory accts = new uint256[](4);
