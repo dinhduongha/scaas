@@ -61,6 +61,19 @@ const PER_BYTE: u64 = 64;
 /// refused as `GasCountUnknown`.
 pub(crate) const COUNT_MAX: u64 = 65_536;
 
+/// The contracts' `ROLL_MAX` of each PQZ set (`PqzSet.ROLL_MAX`, `pqz-core/params/sets/<set>/set.toml` `roll_max`), in the
+/// order of `scaas_ua::build::PQZ_SETS`; a test holds them equal to each set's generated `PqzSet.sol` (owner 2026-11-19, K1).
+const ROLL_MAX: [u64; 4] = [80, 64, 48, 32];
+
+/// This build's set's `ROLL_MAX`; `None` without a `pqz-set-*` feature.
+pub(crate) fn roll_max() -> Option<u64> {
+    scaas_ua::build::PQZ_SETS
+        .iter()
+        .zip(ROLL_MAX)
+        .find(|(on, _)| **on)
+        .map(|(_, m)| m)
+}
+
 /// The stated margin: the figure plus half of it.
 pub(crate) fn with_margin(g: u64) -> u64 {
     g.saturating_add(g / 2)
@@ -339,7 +352,9 @@ pub(crate) fn input_len(
 /// `args.legs` (a Zether or PQZ multi-recipient transfer, `mtxConfidentialTransfer[Compact]`) or of a list parameter `legs`
 /// (`mtxSetWrapLimits`); `accounts`, the length of `uas` (`mtxRollOverBatch`) or of a list parameter `accounts`
 /// (`mtxSetAllowed`, `mtxSetDenied`, `mtxSetCompliance`); `entries`, a rollover's `n` (PQZ `mtxRollOver`,
-/// `mtxRollOverSigned`); `members` is not read (no `0x0121` signer in the SDK yet). `None`: the operation has no such count.
+/// `mtxRollOverSigned`), any `uint256` held to the set's [`roll_max`] (owner 2026-11-19, K1: the contract's own bound, so an
+/// app's huge `n` meaning "all" is quoted at `ROLL_MAX`); `members` is not read (no `0x0121` signer in the SDK yet). `None`:
+/// the operation has no such count.
 pub(crate) fn item_count(message: &serde_json::Value, item: &str) -> Option<u64> {
     let len = |v: Option<&serde_json::Value>| v?.as_array().map(Vec::len);
     let n = match item {
@@ -347,8 +362,9 @@ pub(crate) fn item_count(message: &serde_json::Value, item: &str) -> Option<u64>
             .or_else(|| len(message.get("legs")))?,
         "accounts" => len(message.get("uas")).or_else(|| len(message.get("accounts")))?,
         "entries" => {
-            let n = message.get("n")?;
-            return n.as_u64().or_else(|| n.as_str()?.parse().ok());
+            let n = super::dec(message.get("n")?).ok()?;
+            let n = roll_max().map_or(n, |m| n.min(alloy::primitives::U256::from(m)));
+            return u64::try_from(n).ok();
         }
         _ => return None,
     };
@@ -960,6 +976,24 @@ mod tests {
         assert_eq!(item_count(&j!({"n": "7"}), "entries"), Some(7), "a rollover's n, decimal");
         assert_eq!(item_count(&j!({"n": 9}), "entries"), Some(9));
         assert_eq!(item_count(&j!({"legs": []}), "legs"), Some(0));
+        // K1: a rollover's n held to the set's ROLL_MAX (control: n at ROLL_MAX itself); every other count unclamped; a
+        // build without a set (no PQZ entry) reads n as given
+        let huge = alloy::primitives::U256::MAX.to_string();
+        if let Some(m) = roll_max() {
+            assert_eq!(item_count(&j!({"n": m.to_string()}), "entries"), Some(m));
+            for n in [j!(m + 1), j!(huge), j!(u64::MAX)] {
+                assert_eq!(item_count(&j!({"n": n}), "entries"), Some(m), "{n}");
+            }
+        } else {
+            assert_eq!(item_count(&j!({"n": 1_000}), "entries"), Some(1_000));
+            assert_eq!(item_count(&j!({"n": huge}), "entries"), None);
+        }
+        let legs = vec![j!({}); (COUNT_MAX + 1) as usize];
+        assert_eq!(
+            item_count(&j!({"legs": legs}), "legs"),
+            Some(COUNT_MAX + 1),
+            "not clamped"
+        );
         for (m, item) in [
             (j!({"n": "0x07"}), "entries"),
             (j!({"n": "-1"}), "entries"),
@@ -971,6 +1005,93 @@ mod tests {
         ] {
             assert_eq!(item_count(&m, item), None, "{m} {item}");
         }
+    }
+
+    /// K1: a rollover whose `n` is far above the contract's bound is quoted at `ROLL_MAX` entries, not refused; a count of
+    /// another item above `COUNT_MAX` is still `GasCountUnknown` (each read by `item_count` from the operation's message).
+    #[test]
+    fn a_huge_rollover_is_quoted_at_roll_max() {
+        use serde_json::json as j;
+        let quote = |item: &str, message: serde_json::Value| {
+            let mut r = rows(1_000, 10);
+            r.base[0].per_item = per_item(item, 30_000);
+            let count = |i: &str| item_count(&message, i);
+            lookup_by(
+                &r,
+                &[],
+                &[],
+                None,
+                K,
+                &OpGas {
+                    count: &count,
+                    ..OpGas::PLAIN
+                },
+            )
+            .map(|f| f.map(|f| f.0))
+            .map_err(|e| e.code())
+        };
+        let huge = j!({"n": alloy::primitives::U256::MAX.to_string()});
+        match roll_max() {
+            Some(m) => assert_eq!(quote("entries", huge), Ok(Some(1_010 + 30_000 * m))),
+            None => assert_eq!(
+                quote("entries", huge),
+                Err("GasCountUnknown"),
+                "no set: no bound to hold it to"
+            ),
+        }
+        assert_eq!(
+            quote("entries", j!({"n": 3})),
+            Ok(Some(1_010 + 90_000)),
+            "control: below the bound"
+        );
+        let legs = |n: u64| j!({"legs": vec![j!(0); n as usize]});
+        assert_eq!(
+            quote("legs", legs(COUNT_MAX)),
+            Ok(Some(1_010 + 30_000 * COUNT_MAX)),
+            "control: the cap"
+        );
+        assert_eq!(quote("legs", legs(COUNT_MAX + 1)), Err("GasCountUnknown"));
+    }
+
+    /// K1: `ROLL_MAX` per set equals the generated `PqzSet.sol` of that set, in the order of `scaas_ua::build::PQZ_SETS`.
+    #[test]
+    fn roll_max_is_the_sets_own() {
+        for (set, want) in [
+            "n2048-kmax1024",
+            "n2304-kmax4096",
+            "n2560-kmax16384",
+            "n2816-kmax65536",
+        ]
+        .iter()
+        .zip(ROLL_MAX)
+        {
+            let path = format!(
+                "{}/../../pqz-core/params/sets/{set}/PqzSet.sol",
+                env!("CARGO_MANIFEST_DIR")
+            );
+            let src = std::fs::read_to_string(path).unwrap();
+            let line = src
+                .lines()
+                .find(|l| l.contains("uint256 internal constant ROLL_MAX = "))
+                .unwrap();
+            let got: u64 = line
+                .split("= ")
+                .nth(1)
+                .unwrap()
+                .trim_end_matches(';')
+                .trim()
+                .parse()
+                .unwrap();
+            assert_eq!(got, want, "{set}");
+        }
+        // the build's set picks its own figure
+        let pinned = [
+            (cfg!(feature = "pqz-set-n2048-kmax1024"), 80),
+            (cfg!(feature = "pqz-set-n2304-kmax4096"), 64),
+            (cfg!(feature = "pqz-set-n2560-kmax16384"), 48),
+            (cfg!(feature = "pqz-set-n2816-kmax65536"), 32),
+        ];
+        assert_eq!(roll_max(), pinned.iter().find(|p| p.0).map(|p| p.1));
     }
 
     /// I1, the parse: `item` and `per_item` together on base and verify rows (`GasItemUnpaired` otherwise), `item` one the SDK
