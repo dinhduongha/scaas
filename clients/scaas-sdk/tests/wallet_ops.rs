@@ -565,6 +565,7 @@ fn gas_rows() -> GasRows {
         verify: [0u16]
             .into_iter()
             .chain(0x0101..=0x0108)
+            .chain([0x0121]) // bls-multi Task 17: a group signer
             .chain(0x0130..=0x0135)
             .map(|signer| GasVerify {
                 signer,

@@ -42,7 +42,7 @@ pub(crate) async fn fresh(sdk: &Sdk, p: &Prepared) -> Result<(), SdkError> {
 /// A signature in the entry's form (`scaas-ua`'s rows): `bytes` for `@bytes` and the address entries, a `UASig` for `@ua` and
 /// the `UA*` / `CancelUA*` structs, `SmartKeyAccount`'s own an `AccountSig{keyIndex, proof, signature}` (plan T13 adds the key
 /// tree's proof).
-fn sig_json(p: &Prepared, key_data: &[u8], signature: &[u8]) -> Result<Value, SdkError> {
+pub(crate) fn sig_json(p: &Prepared, key_data: &[u8], signature: &[u8]) -> Result<Value, SdkError> {
     let plan = entry_rows()
         .into_iter()
         .find(|r| r.name == p.t.name && r.kinds.contains(&p.t.kind))
@@ -61,7 +61,7 @@ fn sig_json(p: &Prepared, key_data: &[u8], signature: &[u8]) -> Result<Value, Sd
     })
 }
 
-fn build(p: &Prepared, sig: &Value) -> Result<Built, SdkError> {
+pub(crate) fn build(p: &Prepared, sig: &Value) -> Result<Built, SdkError> {
     if p.t.ids {
         return Ok(transfer_on_ids(p.t.kind, &p.t.contract, &p.t.message, sig)?);
     }
@@ -92,6 +92,9 @@ pub(crate) fn unsigned(p: &Prepared) -> Result<Built, SdkError> {
 
 /// The signature of `p` under its check, and the entry built with it (calldata and job op from one parse).
 pub(crate) fn sign(sdk: &Sdk, p: &Prepared) -> Result<Built, SdkError> {
+    if let super::KeyRef::BlsMulti { .. } = p.signer() {
+        return Err(SdkError::Argument); // a group signs by its members' aggregate: `Op::submit_bls_multi`
+    }
     let k = key(sdk, &p.signer())?;
     #[cfg(test)]
     sdk.signs.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -258,6 +261,13 @@ async fn earlier_on_lane(sdk: &Arc<Sdk>, p: &Prepared) -> Result<Option<String>,
     Ok(None)
 }
 
+/// How `submit` signs: the signer's own key, or a `bls12381-multi` group's aggregate of its members' partials (plan Task 17:
+/// the parts, `surplus`).
+pub(crate) enum Signing {
+    Key,
+    BlsMulti(Vec<super::BlsMultiPart>, bool),
+}
+
 /// Puts `p` back after a failure before anything was signed or written.
 fn put_back(sdk: &Sdk, p: &Arc<Prepared>) {
     sdk.prepared
@@ -279,6 +289,16 @@ impl Op {
         prepared: Arc<Prepared>,
         quote: SubmitQuote,
     ) -> Result<String, SdkError> {
+        self.submit_with(prepared, quote, Signing::Key).await
+    }
+
+    /// [`Op::submit`] signed as `how` says.
+    pub(crate) async fn submit_with(
+        &self,
+        prepared: Arc<Prepared>,
+        quote: SubmitQuote,
+        how: Signing,
+    ) -> Result<String, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
@@ -296,7 +316,13 @@ impl Op {
                     return Ok(op);
                 }
                 take(&sdk, &prepared)?;
-                let signed = sign(&sdk, &prepared).and_then(|b| {
+                let signed = match &how {
+                    Signing::Key => sign(&sdk, &prepared),
+                    Signing::BlsMulti(parts, surplus) => {
+                        super::bls_multi::sign(&prepared, parts, *surplus)
+                    }
+                }
+                .and_then(|b| {
                     if quote.path == SubmitPath::Gateway && b.op.is_none() {
                         return Err(SdkError::SubmitPathNone);
                     }

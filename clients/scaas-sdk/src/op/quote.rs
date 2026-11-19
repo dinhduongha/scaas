@@ -169,6 +169,7 @@ pub(crate) async fn self_relay(
 pub(crate) fn signer_kind(p: &Prepared) -> u16 {
     match p.signer() {
         KeyRef::Ua { kind, .. } => kind,
+        KeyRef::BlsMulti { .. } => scaas_ua::bls_multi::KIND,
         KeyRef::Native { .. } | KeyRef::Imported { .. } => super::gas::NATIVE_EVM,
     }
 }
@@ -316,12 +317,17 @@ impl Op {
                     .as_ref()
                     .is_some_and(|(_, _, n)| n.is_zero());
                 let entry = prepared.entry();
+                // a group signer's n (plan Task 17): `members`, read from its key data
+                let members = super::bls_multi::members(&prepared.signer());
                 let figure = {
                     let (extra, message) = (&prepared.t.extra, &prepared.t.message);
                     let op = super::gas::OpGas {
                         len: &|input| super::gas::input_len(extra, message, input),
                         // I1: the count a per-item part names
-                        count: &|item| super::gas::item_count(extra, message, item),
+                        count: &|item| match (item, members) {
+                            ("members", Some(n)) => Some(n),
+                            _ => super::gas::item_count(extra, message, item),
+                        },
                         // ruling 1: the record saved (`PayMeta.save`)
                         saves: extra.get("meta").is_some_and(|m| {
                             scaas_ua::wallet::entries::pay_meta_of(m).is_ok_and(|m| m.save)

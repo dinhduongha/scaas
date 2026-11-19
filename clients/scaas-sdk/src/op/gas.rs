@@ -54,8 +54,8 @@ impl GasSources {
 }
 
 /// The transaction's base cost and calldata at the highest price per byte (EIP-7976's floor, 64 gas a byte).
-const INTRINSIC: u64 = 21_000;
-const PER_BYTE: u64 = 64;
+pub(crate) const INTRINSIC: u64 = 21_000;
+pub(crate) const PER_BYTE: u64 = 64;
 
 /// The largest count a per-item part is quoted at (owner 2026-11-19, I1: a bounded count); above it the operation is
 /// refused as `GasCountUnknown`.
@@ -104,13 +104,17 @@ fn part(
     None
 }
 
-/// The signer kinds the SDK accepts (spec §13.3: each UA kind `ua_key` derives that can sign alone, and the native key): the
-/// verify rows the reference table carries, and the kinds an attached signature of unknown kind may be (owner 2026-11-19,
-/// ruling 4).
-pub(crate) const ACCEPTED_SIGNERS: [u16; 15] = [
-    NATIVE_EVM, 0x0101, 0x0102, 0x0103, 0x0104, 0x0105, 0x0106, 0x0107, 0x0108, 0x0130, 0x0131,
-    0x0132, 0x0133, 0x0134, 0x0135,
+/// The signer kinds the SDK accepts (spec §13.3: each UA kind `ua_key` derives that can sign alone, the native key, and
+/// `bls12381-multi` `0x0121`, a group of member keys, plan Task 17): the verify rows the reference table carries, and the
+/// kinds an attached signature of unknown kind may be (owner 2026-11-19, ruling 4).
+pub(crate) const ACCEPTED_SIGNERS: [u16; 16] = [
+    NATIVE_EVM, 0x0101, 0x0102, 0x0103, 0x0104, 0x0105, 0x0106, 0x0107, 0x0108, 0x0121, 0x0130,
+    0x0131, 0x0132, 0x0133, 0x0134, 0x0135,
 ];
+
+/// `bls12381-multi`'s member cap (spec 2026-11-19-bls12381-multi §8.3, the registry's `UAKeyData(0x0121)` above it): the count
+/// `members` an attached signature of unknown kind is quoted at.
+const BLS_MULTI_MAX: u64 = 64;
 
 /// The entry whose inner call the app prices (owner 2026-11-19, ruling 5).
 pub(crate) const EXECUTE: &str = "mtxExecute";
@@ -173,7 +177,8 @@ fn verify_part(
 /// 3; a row without one adds nothing: the entry's fee is its own payment), its `ua_extra` once when either party the entry
 /// debits is a derived UA, the signer or an attached signature's owner (A1, G1; a row without one adds nothing); the verify
 /// part adds 64 gas a byte of its `sig_bytes` (ruling 2); a second signature, the one attached (ruling 4 as A2 reads it), adds its kind's verify gas without its bytes (A3), or when its kind
-/// is unknown the most expensive of [`ACCEPTED_SIGNERS`] (a kind without a row: no answer). `mtxExecute` (ruling 5): the
+/// is unknown the most expensive of [`ACCEPTED_SIGNERS`] (a kind without a row: no answer; a row counting `members` at
+/// `bls12381-multi`'s cap of 64). `mtxExecute` (ruling 5): the
 /// app's figure is its inner call's, added to the rows, never a total; without it, or without the rows, no figure. A base
 /// or verify row's `per_item` (I1) adds its gas times the count it names, read by `op.count` (the signer's verify row) and
 /// at most [`COUNT_MAX`]; a row read whose count is unknown or above it refuses the operation, `GasCountUnknown` (fail
@@ -223,9 +228,16 @@ pub(crate) fn lookup_by(
     let second = match op.attached {
         None => Some(0),
         Some(Some(k)) => verify_part(chain, opt_in, tables, k, false, &attached).map(|v| v.0),
+        // an unknown kind may be a group's (0x0121), whose n is not read: its `members` at the kind's cap (controller call,
+        // owner auto-run 2026-11-19: a bound of the kind's own rule, as K1's `ROLL_MAX`; a known kind's count stays unread)
         Some(None) => ACCEPTED_SIGNERS
             .iter()
-            .map(|k| verify_part(chain, opt_in, tables, *k, false, &attached).map(|v| v.0))
+            .map(|k| {
+                let capped = |p: &Option<GasPerItem>| {
+                    items(p, &|i| (i == "members").then_some(BLS_MULTI_MAX))
+                };
+                verify_part(chain, opt_in, tables, *k, false, &capped).map(|v| v.0)
+            })
             .try_fold(0, |m, v| v.map(|v| m.max(v))),
     };
     if uncounted.get() {
@@ -251,7 +263,6 @@ pub(crate) fn lookup_by(
 /// §8.4) of `n` members and its source: the base row of the registry's first registration of the kind (`fresh`), its gas
 /// plus `per_item × n` when the row counts `members`; no verify part (no signer: the PoP authorizes it) and no other part.
 /// `None`: no row; `GasCountUnknown`: a row counting another item, or `n` above [`COUNT_MAX`] (fail closed, as [`lookup_by`]).
-#[cfg_attr(not(test), allow(dead_code))] // the registration quote's (plan Task 17)
 pub(crate) fn registration_gas(
     chain: &GasRows,
     opt_in: &[String],
@@ -392,8 +403,9 @@ pub(crate) fn input_len(
 /// set's [`roll_max`] (owner 2026-11-19, K1: the contract's own bound, so an app's huge `n` meaning "all" is quoted at
 /// `ROLL_MAX`), plus the length of its `skip` marks where it has them (P1, "approved": min(n, ROLL_MAX) + len(skip));
 /// `env_items` (P1, K2), the elements of an env publish's four `Env` arrays (`env.deps`, `env.params`, `env.libs`,
-/// `env.libCodeHashes`) together; `orders` (K2), a DEX cancel's orders, 1 for its one `order`; `members` is not read (no
-/// `0x0121` signer in the SDK yet). `None`: the operation has no such count.
+/// `env.libCodeHashes`) together; `orders` (K2), a DEX cancel's orders, 1 for its one `order`; `members` is not read here: it
+/// is a `0x0121` signer's n, which the quote reads from the signer's key data (plan Task 17). `None`: the operation has no such
+/// count.
 pub(crate) fn item_count(
     extra: &serde_json::Value,
     message: &serde_json::Value,
@@ -2056,6 +2068,56 @@ mod tests {
                 .unwrap()
                 .is_none(),
             "the reference not opted in: no figure"
+        );
+    }
+
+    /// bls-multi Task 17: an attached signature of unknown kind may be a `bls12381-multi` group's, whose n the SDK does not read:
+    /// a row counting `members` is quoted at the kind's cap, 64 (controller call, owner auto-run 2026-11-19), so it may be the
+    /// dearest; a known kind's count stays unread (`GasCountUnknown`, I1).
+    #[test]
+    fn gas_attached_unknown_counts_members_at_the_cap() {
+        let mut r = rows(1_000, 10);
+        r.verify = ACCEPTED_SIGNERS
+            .iter()
+            .map(|s| GasVerify {
+                signer: *s,
+                gas: if *s == 0x0135 { 5_000 } else { 0 },
+                sig_bytes: 0,
+                margin: 0,
+                per_item: (*s == 0x0121).then(|| GasPerItem {
+                    item: "members".into(),
+                    gas: 100,
+                }),
+            })
+            .collect();
+        let by = |r: &GasRows, attached| {
+            lookup_by(
+                r,
+                &[],
+                &[],
+                None,
+                K,
+                &OpGas {
+                    attached,
+                    ..OpGas::PLAIN
+                },
+            )
+            .map(|f| f.map(|f| f.0))
+        };
+        assert_eq!(
+            by(&r, Some(None)).unwrap(),
+            Some(1_000 + 100 * 64),
+            "the group's row at 64 members, dearer than 0x0135's 5,000"
+        );
+        assert!(
+            matches!(by(&r, Some(Some(0x0121))), Err(SdkError::GasCountUnknown)),
+            "a known group kind: its count unread"
+        );
+        r.verify.retain(|v| v.signer != 0x0121);
+        assert_eq!(
+            by(&r, Some(None)).unwrap(),
+            None,
+            "a table without the group's row: no answer"
         );
     }
 }
