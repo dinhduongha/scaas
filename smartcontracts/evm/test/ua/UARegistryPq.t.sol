@@ -920,7 +920,7 @@ contract UARegistryPqTest is UARegistryBase {
         _notCached(r, 0x0131, pk, vm.parseJsonBytes(pj, _row(1, "pop.sig")), r.uaOf(0x0131, pk));
     }
 
-    /// Gen 2 hands PQ records to gen 1: it authorizes with gen 1's cache; it has no cache of its own.
+    /// Gen 2 hands PQ records to gen 1: it authorizes with gen 1's cache, which its `expandedKeyOf` reads there; none of its own.
     function test_gen2PqHandoff() public {
         string memory pj = _pj();
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _realPq());
@@ -931,10 +931,10 @@ contract UARegistryPqTest is UARegistryBase {
         _cache(r, 0x0130, pk, "mldsa44");
         bytes32 ua = UACall.register(r, 0x0130, pk, _none(), vm.parseJsonBytes(pj, _row(0, "pop.sig")), "");
         _pqSigs(g2, pj, 0, ua);
+        // spec 2026-11-19-registry-verify-only-kinds §3 (F12): gen 2 forwards `expandedKeyOf` to the holder, gen 1's cache
         address[3] memory z = g2.expandedKeyOf(ua);
-        assertEq(z[0], address(0));
-        assertEq(z[1], address(0));
-        assertEq(z[2], address(0));
+        assertEq(keccak256(abi.encode(z)), keccak256(abi.encode(r.expandedKeyOf(ua))));
+        assertTrue(z[0] != address(0));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyCache.selector, uint16(0x0130)));
         g2.cacheExpandedKey(0x0130, pk, 0);
     }

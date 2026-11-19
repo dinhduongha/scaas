@@ -111,7 +111,7 @@ library UARegistryRegLib {
         if (kind != UAKinds.MUSIG2_SECP256K1 && kind != UAKinds.MUSIG2_BN254) {
             revert IUARegistry.UAKeyData(kind);
         }
-        if (!UAStore._registrable(UARegistryCoreLib._cfgKind())) revert IUARegistry.UAKindDisabled(kind); // step 1 before the key's fields (step 2)
+        _step1(kind); // before the key's fields (step 2)
         uint256 size = UAStore.vkLength(kind);
         bytes[] calldata m = key.memberKeys;
         bytes memory d = abi.encodePacked(_point(kind, key.aggKey, size), uint16(m.length));
@@ -133,7 +133,7 @@ library UARegistryRegLib {
         if (kind != UAKinds.FROST_SECP256K1 && kind != UAKinds.FROST_BN254) {
             revert IUARegistry.UAKeyData(kind);
         }
-        if (!UAStore._registrable(UARegistryCoreLib._cfgKind())) revert IUARegistry.UAKindDisabled(kind); // step 1 before the key's fields (step 2)
+        _step1(kind); // before the key's fields (step 2)
         IUARegistry.FrostMember[] calldata m = key.members;
         bytes memory d =
             abi.encodePacked(_point(kind, key.groupKey, UAStore.vkLength(kind)), key.threshold, uint16(m.length));
@@ -152,7 +152,7 @@ library UARegistryRegLib {
         bytes calldata pqzPop
     ) external returns (bytes32 ua) {
         uint16 kind = UAKinds.BLS12381_MULTI;
-        if (!UAStore._registrable(UARegistryCoreLib._cfgKind())) revert IUARegistry.UAKindDisabled(kind); // step 1 before the key's fields (step 2)
+        _step1(kind); // before the key's fields (step 2)
         IUARegistry.BlsMultiMember[] calldata m = key.members;
         bytes memory d = new bytes(260 + 258 * m.length); // one allocation: n ≤ 64 members of 258 B
         _put(d, 0, _point(kind, key.aggKey, 256), key.threshold);
@@ -300,16 +300,29 @@ library UARegistryRegLib {
         return uint40(n);
     }
 
+    /// Step 1 (spec 2026-11-19-registry-verify-only-kinds §3): registrable here, else `UAVerifyOnly` for a kind carried verify-only (its
+    /// home is `kindHome(kind)`), else `UAKindDisabled`; before any other check.
+    function _step1(uint16 kind) internal pure {
+        uint256 cfg = UARegistryCoreLib._cfgKind();
+        if (UAStore._registrable(cfg)) return;
+        if (cfg >> 224 & 1 != 0) revert IUARegistry.UAVerifyOnly(kind);
+        revert IUARegistry.UAKindDisabled(kind);
+    }
+
     /// Steps 1–4: kind enabled, key data canonical, the id (not native-space, not registered here or in gen 1), the
     /// keyHash (single keys) or the members (msig).
     function _identify(uint16 kind, bytes memory d) internal view returns (bytes32 ua, bytes32 kh) {
-        if (!UAStore._registrable(UARegistryCoreLib._cfgKind())) revert IUARegistry.UAKindDisabled(kind); // 1
+        _step1(kind); // 1
         bool structure = kind == UAKinds.MSIG;
         // 2. msig: the layout with the widest member set; the profile's MEMBER set is step 4 (UAMemberUnknown).
         UAKinds.validateKeyData(kind, d, structure || IUARegistry(address(this)).hederaNative());
         ua = UAKinds.uaOf(kind, d); // 3
         if (UAKinds.inNativeSpace(ua)) revert IUARegistry.UAIdInNativeSpace(ua);
-        if (UARegistryCoreLib._kindOf(ua) != 0) revert IUARegistry.UAAlreadyRegistered(ua);
+        // P12 (spec 2026-11-19-registry-verify-only-kinds §11.1): a single-key kind and its keyHash group live in this generation only
+        // (the constructor's line rule), so its id and key are looked up here; `msig` (every generation) walks the line
+        if (structure ? UARegistryCoreLib._kindOf(ua) != 0 : UAStore.layout().records[ua].kind != 0) {
+            revert IUARegistry.UAAlreadyRegistered(ua);
+        }
         kh = _claim(kind, d, structure); // 4
     }
 
@@ -320,7 +333,7 @@ library UARegistryRegLib {
             return 0;
         }
         kh = UAKinds.keyHashOf(kind, d);
-        bytes32 owner = UARegistryCoreLib._keyOwner(kh);
+        bytes32 owner = UAStore.layout().keyOwner[kh]; // P12: the group lives here only
         if (owner != 0) revert IUARegistry.UAKeyInUse(kh, owner);
     }
 

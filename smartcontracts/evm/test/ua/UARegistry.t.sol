@@ -505,19 +505,18 @@ contract UARegistryTest is UARegistryBase {
         return _deploy(address(0x5ca2), chainUidA, address(reg), false, BUDGET, address(0), true, c);
     }
 
-    /// The code path of `UAKeyInUse` across generations (a real gen 1 cannot reach it once gen 2's group rule holds).
+    /// P12 (spec 2026-11-19-registry-verify-only-kinds §11.1): a single-key kind and its keyHash group live in one generation (the
+    /// constructor's line rule), so a single-key registration reads this generation only: a predecessor that claims the keyHash (which a
+    /// real one cannot, W5's trust) is not asked; `keyOwner` still answers it through the line.
     function test_T_REG_4_keyInUseAcrossGenerations() public {
         bytes memory p = _key(0x0101);
         bytes32 kh = UAKinds.keyHashOf(0x0101, p);
         MockPredecessor pred = new MockPredecessor(chainUidA, kh, bytes32(uint256(0xdead) << 200));
         UARegistry gen2 =
             _deploy(address(0x5ca3), chainUidA, address(pred), false, BUDGET, address(0), false, _cfgs(address(mock)));
-        _registerReverts(
-            gen2,
-            0x0101,
-            p,
-            abi.encodeWithSelector(IUARegistry.UAKeyInUse.selector, kh, bytes32(uint256(0xdead) << 200))
-        );
+        assertEq(gen2.keyOwner(kh), bytes32(uint256(0xdead) << 200));
+        bytes32 ua = _register(gen2, 0x0101, p);
+        assertEq(gen2.keyOwner(kh), ua, "local first");
     }
 
     /// Invariants: no value, records never change, `uaOf(keyData) == ua`.

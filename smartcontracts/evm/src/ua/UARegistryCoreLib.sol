@@ -98,6 +98,26 @@ library UARegistryCoreLib {
         return UAStore.layout().records[ua].kind == 0 && _pred() != address(0);
     }
 
+    /// N11 (spec 2026-11-19-registry-verify-only-kinds §11.1): the generation that holds a record this one does not, read there
+    /// directly; 0 when held here or nowhere. The walk by a static self-call to the registry's `holderOf` (plan C8; its smallest form:
+    /// the libraries' readers have the least room).
+    function _holder(bytes32 ua) internal view returns (address h) {
+        if (UAStore.layout().records[ua].kind == 0) (h,,) = IUARegistry(address(this)).holderOf(ua);
+    }
+
+    /// The one walk (§11.1, M4; owner Y1): this generation's record `(this, kind, this if it enables 0x0142)`; else the predecessor's
+    /// answer (`(0, 0, 0)` at generation 1), its PQZ home filled with this generation where none is below and this one enables
+    /// `0x0142` (`_cfgPqz()`) for a record some generation holds. One call per generation; three words, nothing re-encoded.
+    function _holderOf(bytes32 ua) internal view returns (address h, uint16 k, address home) {
+        bool pqz = uint160(_cfgPqz()) != 0;
+        k = UAStore.layout().records[ua].kind;
+        if (k != 0) return (address(this), k, pqz ? address(this) : address(0));
+        address p = _pred();
+        if (p == address(0)) return (address(0), 0, address(0));
+        (h, k, home) = IUARegistry(p).holderOf(ua);
+        if (h != address(0) && home == address(0) && pqz) home = address(this);
+    }
+
     /// A kind this generation lists itself (`UARegistry._listedHere`): `_cfgKind()` is the kind's word the entry appended.
     function _listedHere() internal view returns (bool) {
         return _pred() == address(0) || UAStore._registrable(_cfgKind());
@@ -451,6 +471,16 @@ library UARegistryCoreLib {
         if (UAStore._registrable(_cfgKind())) return address(this);
         address p = _pred();
         return p == address(0) ? address(0) : IUARegistry(p).kindHome(kind);
+    }
+
+    /// `IUARegistry.holderOf` (the registry answers a native-space id itself, P5).
+    function holderOf(bytes32 ua) external returns (address, uint16, address) {
+        return _holderOf(ua);
+    }
+
+    /// `IUARegistry.pqzHomeOf`: the walk's third word, never a second walk (M4).
+    function pqzHomeOf(bytes32 ua) external returns (address home) {
+        (,, home) = _holderOf(ua);
     }
 
     // ----- moved from `UARegistry` (T66b 3.1b): a read off the hot path, run by `_libView` -----

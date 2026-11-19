@@ -116,6 +116,7 @@ library UARegistryAuxLib {
         UAStore.Layout storage s = UAStore.layout();
         uint256 cfg = UARegistryCoreLib._cfgKind();
         address v = address(uint160(cfg));
+        if (cfg >> 224 & 1 != 0) revert IUARegistry.UAVerifyOnly(kind); // §3: the cache is filled in the holding generation
         if (part >= PqUA.mldsaParts(kind) || !UAStore._registrable(cfg) || MldsaVerifier(v).PRECOMPILE() != address(0))
         {
             revert IUARegistry.UAKeyCache(kind);
@@ -391,7 +392,8 @@ library UARegistryAuxLib {
 
     /// `IUARegistry.msigStateOf` (CTR-UA-44): run by `_libView`.
     function msigStateOf(bytes32 ua) external returns (uint64 version, uint256 enabled, uint256 accepted) {
-        if (UARegistryCoreLib._elsewhere(ua)) return IUARegistry(UARegistryCoreLib._pred()).msigStateOf(ua);
+        address h = UARegistryCoreLib._holder(ua);
+        if (h != address(0)) return IUARegistry(h).msigStateOf(ua);
         IUARegistry.Record memory r = UAStore.layout().records[ua];
         if (r.kind != UAKinds.MSIG) return (0, 0, 0);
         accepted = UAStore.layout().accepted[ua];
@@ -710,7 +712,8 @@ library UARegistryAuxLib {
     // ----- moved from `UARegistry` (T66b 3.1b): a read off the hot path, run by `_libView` -----
 
     function popSlotsOf(bytes32 ua) external returns (uint16[] memory index, bytes32[] memory hash) {
-        if (UARegistryCoreLib._elsewhere(ua)) return IUARegistry(UARegistryCoreLib._pred()).popSlotsOf(ua);
+        address h = UARegistryCoreLib._holder(ua);
+        if (h != address(0)) return IUARegistry(h).popSlotsOf(ua);
         uint256 bits = UAStore.layout().popSlots[ua];
         uint256 n;
         for (uint256 b = bits; b != 0; b &= b - 1) {
@@ -729,7 +732,8 @@ library UARegistryAuxLib {
 
     /// TS-D13: the typed keys of `webauthn-p256` / MuSig2 / FROST records (empty for any other id).
     function webAuthnKeyOf(bytes32 ua) external returns (IUARegistry.WebAuthnKey memory k) {
-        if (UARegistryCoreLib._elsewhere(ua)) return IUARegistry(UARegistryCoreLib._pred()).webAuthnKeyOf(ua);
+        address h = UARegistryCoreLib._holder(ua);
+        if (h != address(0)) return IUARegistry(h).webAuthnKeyOf(ua);
         if (UAStore.layout().records[ua].kind != UAKinds.WEBAUTHN_P256) return k;
         bytes memory d = UAStore.keyRest(ua);
         (k.x, k.y, k.rpIdHash) =
@@ -739,7 +743,8 @@ library UARegistryAuxLib {
     /// `bls12381-multi`'s typed key (spec 2026-11-19-bls12381-multi §2): `d` expanded from the stored `ua ‖ s` (the blob holds no key
     /// bytes), cut into `aggKey ‖ u16 threshold ‖ u16 n ‖ n × (key ‖ u16 weight)`.
     function blsMultiKeyOf(bytes32 ua) external returns (IUARegistry.BlsMultiKey memory k) {
-        if (UARegistryCoreLib._elsewhere(ua)) return IUARegistry(UARegistryCoreLib._pred()).blsMultiKeyOf(ua);
+        address h = UARegistryCoreLib._holder(ua);
+        if (h != address(0)) return IUARegistry(h).blsMultiKeyOf(ua);
         IUARegistry.Record memory r = UAStore.layout().records[ua];
         if (r.kind != UAKinds.BLS12381_MULTI) return k;
         (bytes memory d,) = UAStore.registration(ua, r);
@@ -787,10 +792,9 @@ library UARegistryAuxLib {
     // ----- moved from `UARegistry` (T66b 3.1b): a read off the hot path, run by `_libView` -----
 
     function uaIndex(bytes32 ua) external returns (uint256) {
+        address h = UARegistryCoreLib._holder(ua);
+        if (h != address(0)) return IUARegistry(h).uaIndex(ua);
         IUARegistry.Record memory r = UAStore.layout().records[ua];
-        if (r.kind == 0 && UARegistryCoreLib._pred() != address(0)) {
-            return IUARegistry(UARegistryCoreLib._pred()).uaIndex(ua);
-        }
         if (r.kind == 0) revert IUARegistry.UANotIndexed(ua);
         return r.index;
     }
@@ -840,7 +844,8 @@ library UARegistryAuxLib {
     // ----- moved from `UARegistry` (T66b 3.1b): a read off the hot path, run by `_libView` -----
 
     function popOf(bytes32 ua) external returns (bytes memory pop) {
-        if (UARegistryCoreLib._elsewhere(ua)) return IUARegistry(UARegistryCoreLib._pred()).popOf(ua);
+        address h = UARegistryCoreLib._holder(ua);
+        if (h != address(0)) return IUARegistry(h).popOf(ua);
         if (UAStore.layout().records[ua].kind == 0) return pop;
         (, pop) = abi.decode(SSTORE2.readChunks(UAStore.layout().reg[ua]), (bytes, bytes));
     }

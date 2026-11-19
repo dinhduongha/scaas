@@ -261,6 +261,17 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return address(uint160(_cfg(kind)));
     }
 
+    /// §11.1 (owner Y1, P5): the one walk, in `UARegistryCoreLib`; a native-space id without it.
+    function holderOf(bytes32 ua) external view returns (address, uint16, address) {
+        if (UAKinds.inNativeSpace(ua)) return (address(0), 0, address(0));
+        _libView(address(UARegistryCoreLib), UARegistryCoreLib.holderOf.selector, 0);
+    }
+
+    function pqzHomeOf(bytes32 ua) external view returns (address) {
+        if (UAKinds.inNativeSpace(ua)) return address(0);
+        _libView(address(UARegistryCoreLib), UARegistryCoreLib.pqzHomeOf.selector, 0);
+    }
+
     /// §11.1 (owner Y1): the generation of the line where `kind` registers, 0 if none; the walk in `UARegistryCoreLib`.
     function kindHome(uint16 kind) external view returns (address) {
         _libView(address(UARegistryCoreLib), UARegistryCoreLib.kindHome.selector, kind);
@@ -357,6 +368,14 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return predecessor != address(0) && _s.records[ua].kind == 0;
     }
 
+    /// N11 (spec 2026-11-19-registry-verify-only-kinds §11.1): the generation that holds a record this one does not, read at it
+    /// directly; 0 when held here or nowhere (then this generation's empty answer is the line's). The predecessor's `holderOf`
+    /// answers it (controller call (auto-run): for a record not held here it is this generation's own walk without the PQZ fill,
+    /// one DELEGATECALL and one self-call fewer than `IUARegistry(address(this)).holderOf`, plan C8).
+    function _away(bytes32 ua) private view returns (address h) {
+        if (predecessor != address(0) && _s.records[ua].kind == 0) (h,,) = IUARegistry(predecessor).holderOf(ua);
+    }
+
     /// Ruling A6-I1: a UA's PQZ attachment (the versions from `setPqzKey`, the proofs, `proven`, the owner of a proven key,
     /// the `0x0142` list entry, `current`) lives in the oldest generation that enables 0x0142; the record stays where it
     /// was registered. This gen 2 is such a host: it answers `current` itself and reads each version from its own record
@@ -385,7 +404,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     function msigOf(bytes32 ua) external view returns (MsigStructure memory s) {
-        if (_elsewhere(ua)) return IUARegistry(predecessor).msigOf(ua);
+        address h = _away(ua);
+        if (h != address(0)) return IUARegistry(h).msigOf(ua);
         Record memory r = _s.records[ua];
         if (r.kind != UAKinds.MSIG) return s;
         bytes memory d = UAStore.msig(ua, r.keyPtr); // CTR-UA-44: the current structure, every slot
@@ -400,7 +420,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     function memberAccepted(bytes32 ua, uint256 index) external view returns (bool) {
-        if (_elsewhere(ua)) return IUARegistry(predecessor).memberAccepted(ua, index);
+        address h = _away(ua);
+        if (h != address(0)) return IUARegistry(h).memberAccepted(ua, index);
         Record memory r = _s.records[ua];
         uint256 en = type(uint256).max; // never updated: every slot, and no accepted bit lies past them
         if (r.kind == UAKinds.MSIG && r.keyPtr != address(0)) (en,) = UAStore.trailer(r.keyPtr);
@@ -412,7 +433,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     function memberSigHashOf(bytes32 ua, uint256 index) external view returns (bytes32) {
-        if (_elsewhere(ua)) return IUARegistry(predecessor).memberSigHashOf(ua, index);
+        address h = _away(ua);
+        if (h != address(0)) return IUARegistry(h).memberSigHashOf(ua, index);
         return _s.memberSigHash[ua][index];
     }
 
@@ -430,7 +452,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     function muSig2KeyOf(bytes32 ua) external view returns (MuSig2Key memory k) {
-        if (_elsewhere(ua)) return IUARegistry(predecessor).muSig2KeyOf(ua);
+        address h = _away(ua);
+        if (h != address(0)) return IUARegistry(h).muSig2KeyOf(ua);
         Record memory r = _s.records[ua];
         if (r.kind != UAKinds.MUSIG2_SECP256K1 && r.kind != UAKinds.MUSIG2_BN254) return k;
         (uint256 size, bytes memory d) = (UAStore.vkLength(r.kind), UAStore.keyRest(ua)); // u16 n ‖ n × key
@@ -447,7 +470,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     function frostKeyOf(bytes32 ua) external view returns (FrostKey memory k) {
-        if (_elsewhere(ua)) return IUARegistry(predecessor).frostKeyOf(ua);
+        address h = _away(ua);
+        if (h != address(0)) return IUARegistry(h).frostKeyOf(ua);
         Record memory r = _s.records[ua];
         if (r.kind != UAKinds.FROST_SECP256K1 && r.kind != UAKinds.FROST_BN254) return k;
         (uint256 size, bytes memory d) = (UAStore.vkLength(r.kind), UAStore.keyRest(ua)); // u16 t ‖ u16 n ‖ n × member
@@ -598,7 +622,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     function kemKeyOf(bytes32 ua) external view returns (uint64 version, KemKey memory kem, bytes memory sig) {
-        if (_elsewhere(ua)) return IUARegistry(predecessor).kemKeyOf(ua);
+        address h = _away(ua);
+        if (h != address(0)) return IUARegistry(h).kemKeyOf(ua);
         version = _s.kemMax[ua];
         (kem, sig) = UAStore.kemAt(ua, version);
     }
@@ -609,14 +634,16 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     function kemKeyAt(bytes32 ua, uint64 version) external view returns (KemKey memory kem, bytes memory sig) {
-        if (_elsewhere(ua)) return IUARegistry(predecessor).kemKeyAt(ua, version);
+        address h = _away(ua);
+        if (h != address(0)) return IUARegistry(h).kemKeyAt(ua, version);
         return UAStore.kemAt(ua, version);
     }
 
     /// The stored key of a stored kind (MuSig2 `Q`, FROST `Y`, Zether `Y`, PQ `pk`), empty for every other id.
     function keyOf(bytes32 ua) external view returns (bytes memory) {
+        address h = _away(ua);
+        if (h != address(0)) return IUARegistry(h).keyOf(ua);
         Record memory r = _s.records[ua];
-        if (r.kind == 0 && predecessor != address(0)) return IUARegistry(predecessor).keyOf(ua);
         if (r.kind == UAKinds.MSIG) return ""; // CTR-UA-44 MM-10: its `keyPtr` is a structure, never a key
         // `bls12381-multi` (N2): `apk` in EIP-2537 form, one point of the stored `ua ‖ c(apk) ‖ …`, never the pointer's bytes
         if (r.kind == UAKinds.BLS12381_MULTI) return BlsMultiKeyData.point(SSTORE2.read(r.keyPtr, 0, 224), 0);
@@ -647,9 +674,11 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         _libView(address(UARegistryAuxLib), UARegistryAuxLib.uaIndex.selector, 0);
     }
 
+    /// P5: a native-space id without a walk; else the walk's kind (one call per generation).
     function kindOf(bytes32 ua) public view returns (uint16 kind) {
+        if (UAKinds.inNativeSpace(ua)) return 0;
         kind = _s.records[ua].kind;
-        if (kind == 0 && predecessor != address(0)) kind = IUARegistry(predecessor).kindOf(ua);
+        if (kind == 0 && predecessor != address(0)) (, kind,) = IUARegistry(predecessor).holderOf(ua);
     }
 
     function isRegistered(bytes32 ua) external view returns (bool) {
@@ -662,8 +691,10 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     /// The ML-DSA expanded-key parts stored for `ua` (0 = not yet; ML-DSA-44 uses the first only, ML-DSA-65 two, ML-DSA-87
-    /// three). This generation's cache only.
+    /// three): the holding generation's cache (F12: a record held elsewhere forwards to its holder), else this generation's.
     function expandedKeyOf(bytes32 ua) external view returns (address[3] memory) {
+        address h = _away(ua);
+        if (h != address(0)) return IUARegistry(h).expandedKeyOf(ua);
         return _s.ekPtr[ua];
     }
 
@@ -1081,6 +1112,35 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     /// The views a successor reads on a predecessor (§11.3, W3): each answers, or `UAConfig(0)`. Review n3: the UA-8 views
     /// (`checkedOf`); the `InnerSig` ABI of its hand-offs (`memberSigHashOf`); CTR-UA-44's current structure (`msigStateOf`).
     function _probe(IUARegistry p) private view {
+        // §11.3 (W3): the line's views
+        try p.holderOf(0) {}
+        catch {
+            revert UAConfig(0);
+        }
+        try p.kindHome(0) {}
+        catch {
+            revert UAConfig(0);
+        }
+        try p.verifierOf(0) {}
+        catch {
+            revert UAConfig(0);
+        }
+        try p.verifyOnly(0) {}
+        catch {
+            revert UAConfig(0);
+        }
+        try p.pqzHomeOf(0) {}
+        catch {
+            revert UAConfig(0);
+        }
+        try p.txGasCap() {}
+        catch {
+            revert UAConfig(0);
+        }
+        try p.expandedKeyOf(0) {}
+        catch {
+            revert UAConfig(0);
+        }
         try p.checkedOf(0) {}
         catch {
             revert UAConfig(0);

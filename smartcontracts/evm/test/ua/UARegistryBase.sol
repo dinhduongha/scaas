@@ -120,6 +120,17 @@ contract MockPredecessor {
     /// The line's view (spec 2026-11-19-registry-verify-only-kinds §11.1): this stand-in enables no kind.
     function kindHome(uint16) external pure returns (address) {}
 
+    /// The rest of the line's views a successor probes (§11.3, W3): this stand-in holds nothing.
+    function holderOf(bytes32) external pure returns (address, uint16, address) {}
+    function verifierOf(uint16) external pure returns (address) {}
+    function verifyOnly(uint16) external pure returns (bool) {}
+    function pqzHomeOf(bytes32) external pure returns (address) {}
+    function expandedKeyOf(bytes32) external pure returns (address[3] memory) {}
+
+    function txGasCap() external pure returns (uint64) {
+        return 1 << 24;
+    }
+
     function hederaNative() external pure returns (bool) {
         return false;
     }

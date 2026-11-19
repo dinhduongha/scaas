@@ -202,6 +202,9 @@ interface IUARegistry is IERC5267 {
     event UAMsigUpdated(bytes32 indexed ua, uint64 indexed version, uint16 threshold, uint16 count, uint256 enabled);
 
     error UAKindDisabled(uint16 kind); // not enabled in this generation (incl. kinds a predecessor offers)
+    /// Spec 2026-11-19-registry-verify-only-kinds §3 (CTR-UA-59): this generation carries `kind` verify-only; register (and fill the
+    /// ML-DSA cache) in the generation that enables it, `kindHome(kind)`.
+    error UAVerifyOnly(uint16 kind);
     error UAKeyData(uint16 kind); // non-canonical, curve, subgroup, identity, ordering, threshold, cap bound
     error UAIdInNativeSpace(bytes32 ua);
     error UAAlreadyRegistered(bytes32 ua);
@@ -264,6 +267,12 @@ interface IUARegistry is IERC5267 {
     /// at generation 1); for `0x0142` the newest enabling generation. A client offers registration only where
     /// `kindHome(kind) == registry`.
     function kindHome(uint16 kind) external view returns (address);
+    /// §11.1 (M4): the one walk. The generation that holds `ua`'s record, its kind and its PQZ home (§11.2: the oldest generation from
+    /// the holder to this one that enables `0x0142`, 0 if none); `(0, 0, 0)` for an id no generation of the line holds, and without
+    /// a walk for a native-space id (P5).
+    function holderOf(bytes32 ua) external view returns (address holder, uint16 kind, address pqzHome);
+    /// §11.2 (P14): `holderOf`'s third word.
+    function pqzHomeOf(bytes32 ua) external view returns (address);
     function verifyCap(uint16 kind) external view returns (uint64); // measured per chain
     function verifyBudget() external view returns (uint64); // UA_VERIFY_BUDGET of this chain
     /// The chain's per-transaction gas cap (owner X1, spec 2026-11-19-registry-verify-only-kinds §2): an immutable constructor

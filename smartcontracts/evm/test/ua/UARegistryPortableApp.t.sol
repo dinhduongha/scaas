@@ -180,22 +180,20 @@ contract UARegistryPortableAppTest is UARegistryPortableTest {
     }
 
     /// Spec §4.1 (iii), review r2 R10: gen 1 deployed from the pre-change `UARegistry` bytecode (no stub, which could have a fallback)
-    /// holds a record and answers `requirePortable` (directly and through gen 2: the positive control). It has no `requirePortableApp`
-    /// and no fallback, so the entry reverts with empty data, called directly and forwarded by gen 2: a refusal of a void view.
+    /// holds a record and answers `requirePortable`. It has no `requirePortableApp` and no fallback, so the entry reverts with empty
+    /// data: a refusal of a void view. Spec 2026-11-19-registry-verify-only-kinds §11.3 (W3): it lacks the line's views too, so no
+    /// later generation takes it as predecessor (`UAConfig(0)`).
     function test_requirePortableApp_gen2PreChangeGen1() public {
         UARegistry g1 = _preApp(_cfgs(address(mock)));
         bytes memory key = _key(0x0101);
         bytes32 ua = _register(g1, 0x0101, key);
-        UARegistry g2 =
-            _deploy(REG_G2B, chainUidA, address(g1), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
         IUARegistry.UASig memory chat = _single(0x0101, key, UAKinds.PURPOSE_PQCHAT);
         _portable(g1, ua, UAKinds.PURPOSE_PQCHAT, chat);
-        _portable(g2, ua, UAKinds.PURPOSE_PQCHAT, chat);
         IUARegistry.UASig memory a = _single(0x0101, key, UAKinds.appPurpose(APP_A));
         vm.expectRevert(bytes(""));
         g1.requirePortableApp(ua, APP_A, TYPED, a);
-        vm.expectRevert(bytes(""));
-        g2.requirePortableApp(ua, APP_A, TYPED, a);
+        vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
+        new UARegistry(chainUidA, address(g1), false, BUDGET, 1 << 24, address(0), true, new UARegistry.KindConfig[](0));
         // the same record on a gen 1 of this tree: accepted through gen 2
         bytes32 ua2 = _register(p, 0x0101, key);
         UARegistry g2p =
