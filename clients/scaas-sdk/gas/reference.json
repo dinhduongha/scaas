@@ -11,13 +11,13 @@
     "Base rows: the reference signer, a native EVM key (no registry call); fee 0, relayer and fee recipient unbound (mtxPayWithPayeeFee binds its relayer, as the entry requires); every payee, fee recipient and credited account holding nothing before (a first write); a fresh lane has nonce 0, a used one nonce 1. A token kind's row is the worst of its Normal, Wrapped and regulated variants that have the entry (owner 2026-11-19, ruling A); a regulated token with the registry check (KYC; kinds 10-13 the deny mask) and TAX at 10 %.",
     "per_byte (owner 2026-11-19, ruling B): whole gas a byte of the input, the slope between two lengths below where the calldata floor binds (PayMeta body: 256 and 1,024 bytes, a saved record; mtxExecute data: 32 and 160 bytes).",
     "save (owner 2026-11-19, ruling 1): the fixed cost a pay entry adds when it saves its PayMeta record (save set, payNo non-zero): the worst difference, per variant, between the saved record with an empty body and the unsaved pay, both on a fresh lane; the SDK adds it when the operation saves.",
-    "fee_extra (owner 2026-11-19, ruling 3): the worst difference, per variant, between the entry with a fee of 1 (FIXED, amounts of 1 raised to 100 for the 1 % cap, the recipient unbound: the relayer, holding nothing) and without, both on a fresh lane; the SDK adds it when the fee is > 0. Not on mtxRelayFee and mtxPayWithPayeeFee (their payment is their fee, in the row) nor on the wrap-in entries (their fee is charged in units the signer holds before the call; the rows are measured with a signer holding none).",
+    "fee_extra (owner 2026-11-19, ruling 3): the worst difference, per variant, between the entry with a fee of 1 (FIXED, amounts of 1 raised to 100 for the 1 % cap, the recipient unbound: the relayer, holding nothing) and without, both on a fresh lane; the SDK adds it when the fee is > 0. Not on mtxRelayFee and mtxPayWithPayeeFee (their payment is their fee, in the row) On the wrap-in entries (A6) the fee row less the same call at fee 0, the signer already holding units (their fee is charged in units the signer holds before the call).",
     "mtxExecute: the wallet's or the account's own cost, calling an account without code with no value; the target's cost is never in the row.",
     "Order entries (mtxCancelOrder, mtxInvalidateNonces, mtxWrapOrder; the DEX's mtxCancelOrders, one order, and mtxInvalidateNonces): no envelope or meta-tx lane, signed over the order under the UA purpose trade (a native key signs the digest itself), the DEX's by an address. The SDK keys a struct without a lane as used and mtxWrapOrder by its order nonce, so both rows are the worst case: nothing of the signer's on the batch written yet (the floor raised the first time, the wrapper holding none of the leg, the signer none of its units). The call sits on EIP-7976's calldata floor: measured inside the transaction, by a meter contract's gasleft around the call less the meter's own 3,038 (a cold callee and its opcodes; held equal to the transaction's figure on two rows off the floor).",
     "account (SmartKeyAccount): signed by its secp256k1 key 0 (the reference signer) in an AccountSig with an empty proof; the worst over the key kinds added, removed or replaced (a secp256k1 key or a passkey) and over a guardian set with or without a recovery pending; mtxExecute's data per byte measured inside the transaction as the order entries are.",
     "gov_router (GovernanceRouter): each entry signed for its target by the role it needs, a native key where the role takes one, else an ERC-1271 wallet (the contract-only bits: RATE_ADJUSTABLE's rate entries, the regulated issuer's pause, freeze, force transfer and the compliance seat's order entries); the target in the state the governance sequence reaches just before the entry, every write a first write; the worst over the targets measured: a Normal, a regulated Normal (kind 8), a Wrapped, a hybrid with the wrap controls, the DEX, the factory, the compliance registry, an OFFCHAIN PQZ token, a Zether token; the factory's notice period 0 and no grant delay where a change applies at once; the list entries with one account, the directory with all four entries, mtxCreate* one new contract each.",
     "Confidential entries (Zether and PQZ apart): the enveloped (relayed) form on the kind's Normal and Wrapped tokens, plain and regulated, signed by the reference signer; Zether with real proofs (the fixture's prover, the real BLS12-381 verifiers), the transfer and unshields from an account holding a rolled-over balance, the receiver holding nothing; mtxRollOverSigned and mtxSetRollOverMode in their enveloped form, a superset of the owner-only form; PQZ at the build's parameter set n2304-kmax4096, mtxPrepareAcc the worst of its two halves on an account never prepared. No ua_extra (the fixtures' registries have no secp256k1 verifier).",
-    "Verify rows: the copy-cost forwarder's check of the kind's vector signature (smartcontracts/vectors/ua/signatures.json; the PQ kinds pq_signatures.json, keyData empty as for a stored kind) on the real verifiers at the gen-1 caps, P-256 on the 0x100 precompile, ML-DSA on GasBurner stand-ins for its precompiles (stand_in), SLH-DSA-128s and FN-DSA-512 / -1024 pure Solidity, minus the native key's check, both metered inside one meter contract. sig_bytes (owner 2026-11-19, ruling 2): the signer's UASig in the call's calldata less an empty one (keyData and signature, ABI-padded); the SDK adds 64 gas a byte of it to the calldata of the operation built with an empty signature."
+    "Verify rows: the copy-cost forwarder's check (the token's own MtxPipelineLib._authorize) of the kind's vector signature (smartcontracts/vectors/ua/signatures.json; the PQ kinds pq_signatures.json, keyData empty as for a stored kind) on the real verifiers at the gen-1 caps, P-256 on the 0x100 precompile, ML-DSA on GasBurner stand-ins for its precompiles (stand_in), SLH-DSA-128s and FN-DSA-512 / -1024 pure Solidity, minus the native key's check, both metered inside one meter contract. sig_bytes (owner 2026-11-19, ruling 2): the signer's UASig in the call's calldata less an empty one (keyData and signature, ABI-padded); the SDK adds 64 gas a byte of it to the calldata of the operation built with an empty signature. Worst cases (owner 2026-11-19, A5 and the sampled check's ruling 2): WebAuthn on the longest vector signature; SLH-DSA-128s and ed25519 at their forced worst case (SLH-DSA: every hypertree layer's WOTS+ message 0; ed25519: every 4-bit window of S and of k nonzero, the worst of eight keys), the forced run less the vector's added to the delta; FN-DSA-512 / -1024 (rejection sampling, no bound) the most expensive of 64 salts, plus margin (64 further salts stay inside it). 0x0141 (the Zether UA kind): the vector's signature, key data empty (a stored kind). ua_extra (A1): the worst per-variant difference of the derived reference signer (secp256k1, ua_signer) and the native one on a fresh lane, less that kind's verify delta; absent where not positive."
   ],
   "base": [
     {
@@ -33,8 +33,8 @@
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxExecuteTransfer_fee_normal-token_mtxExecuteTransfer_fresh_normal,token_mtxExecuteTransfer_fee_normal_reg-token_mtxExecuteTransfer_fresh_normal_reg,token_mtxExecuteTransfer_fee_wrapped-token_mtxExecuteTransfer_fresh_wrapped,token_mtxExecuteTransfer_fee_wrapped_reg-token_mtxExecuteTransfer_fresh_wrapped_reg"
       },
       "ua_extra": {
-        "gas": 14000,
-        "measured": 13479,
+        "gas": 15000,
+        "measured": 14186,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxExecuteTransfer_ua_normal-token_mtxExecuteTransfer_fresh_normal-verify_0x0108_delta,token_mtxExecuteTransfer_ua_wrapped-token_mtxExecuteTransfer_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -51,8 +51,8 @@
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxExecuteTransfer_fee_normal-token_mtxExecuteTransfer_fresh_normal,token_mtxExecuteTransfer_fee_normal_reg-token_mtxExecuteTransfer_fresh_normal_reg,token_mtxExecuteTransfer_fee_wrapped-token_mtxExecuteTransfer_fresh_wrapped,token_mtxExecuteTransfer_fee_wrapped_reg-token_mtxExecuteTransfer_fresh_wrapped_reg"
       },
       "ua_extra": {
-        "gas": 14000,
-        "measured": 13479,
+        "gas": 15000,
+        "measured": 14186,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxExecuteTransfer_ua_normal-token_mtxExecuteTransfer_fresh_normal-verify_0x0108_delta,token_mtxExecuteTransfer_ua_wrapped-token_mtxExecuteTransfer_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -79,8 +79,8 @@
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxPay_fee_normal-token_mtxPay_fresh_normal,token_mtxPay_fee_normal_reg-token_mtxPay_fresh_normal_reg,token_mtxPay_fee_wrapped-token_mtxPay_fresh_wrapped,token_mtxPay_fee_wrapped_reg-token_mtxPay_fresh_wrapped_reg"
       },
       "ua_extra": {
-        "gas": 14000,
-        "measured": 13455,
+        "gas": 15000,
+        "measured": 14162,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxPay_ua_normal-token_mtxPay_fresh_normal-verify_0x0108_delta,token_mtxPay_ua_wrapped-token_mtxPay_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -107,8 +107,8 @@
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxPay_fee_normal-token_mtxPay_fresh_normal,token_mtxPay_fee_normal_reg-token_mtxPay_fresh_normal_reg,token_mtxPay_fee_wrapped-token_mtxPay_fresh_wrapped,token_mtxPay_fee_wrapped_reg-token_mtxPay_fresh_wrapped_reg"
       },
       "ua_extra": {
-        "gas": 14000,
-        "measured": 13455,
+        "gas": 15000,
+        "measured": 14162,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxPay_ua_normal-token_mtxPay_fresh_normal-verify_0x0108_delta,token_mtxPay_ua_wrapped-token_mtxPay_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -130,8 +130,8 @@
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxPayWithPayeeFee_saved_normal-token_mtxPayWithPayeeFee_fresh_normal,token_mtxPayWithPayeeFee_saved_normal_reg-token_mtxPayWithPayeeFee_fresh_normal_reg,token_mtxPayWithPayeeFee_saved_wrapped-token_mtxPayWithPayeeFee_fresh_wrapped,token_mtxPayWithPayeeFee_saved_wrapped_reg-token_mtxPayWithPayeeFee_fresh_wrapped_reg"
       },
       "ua_extra": {
-        "gas": 14000,
-        "measured": 13437,
+        "gas": 15000,
+        "measured": 14144,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxPayWithPayeeFee_ua_normal-token_mtxPayWithPayeeFee_fresh_normal-verify_0x0108_delta,token_mtxPayWithPayeeFee_ua_wrapped-token_mtxPayWithPayeeFee_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -153,8 +153,8 @@
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxPayWithPayeeFee_saved_normal-token_mtxPayWithPayeeFee_fresh_normal,token_mtxPayWithPayeeFee_saved_normal_reg-token_mtxPayWithPayeeFee_fresh_normal_reg,token_mtxPayWithPayeeFee_saved_wrapped-token_mtxPayWithPayeeFee_fresh_wrapped,token_mtxPayWithPayeeFee_saved_wrapped_reg-token_mtxPayWithPayeeFee_fresh_wrapped_reg"
       },
       "ua_extra": {
-        "gas": 14000,
-        "measured": 13437,
+        "gas": 15000,
+        "measured": 14144,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxPayWithPayeeFee_ua_normal-token_mtxPayWithPayeeFee_fresh_normal-verify_0x0108_delta,token_mtxPayWithPayeeFee_ua_wrapped-token_mtxPayWithPayeeFee_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -212,8 +212,8 @@
       "measured": 288530,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxRelayFee_fresh_normal,token_mtxRelayFee_fresh_normal_reg,token_mtxRelayFee_fresh_wrapped,token_mtxRelayFee_fresh_wrapped_reg",
       "ua_extra": {
-        "gas": 14000,
-        "measured": 13475,
+        "gas": 15000,
+        "measured": 14182,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxRelayFee_ua_normal-token_mtxRelayFee_fresh_normal-verify_0x0108_delta,token_mtxRelayFee_ua_wrapped-token_mtxRelayFee_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -225,8 +225,8 @@
       "measured": 190610,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxRelayFee_used_normal,token_mtxRelayFee_used_normal_reg,token_mtxRelayFee_used_wrapped,token_mtxRelayFee_used_wrapped_reg",
       "ua_extra": {
-        "gas": 14000,
-        "measured": 13475,
+        "gas": 15000,
+        "measured": 14182,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxRelayFee_ua_normal-token_mtxRelayFee_fresh_normal-verify_0x0108_delta,token_mtxRelayFee_ua_wrapped-token_mtxRelayFee_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -241,6 +241,11 @@
         "gas": 145000,
         "measured": 144280,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxCancelNonce_fee_normal-token_mtxCancelNonce_fresh_normal,token_mtxCancelNonce_fee_normal_reg-token_mtxCancelNonce_fresh_normal_reg,token_mtxCancelNonce_fee_wrapped-token_mtxCancelNonce_fresh_wrapped,token_mtxCancelNonce_fee_wrapped_reg-token_mtxCancelNonce_fresh_wrapped_reg"
+      },
+      "ua_extra": {
+        "gas": 1000,
+        "measured": 31,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxCancelNonce_ua_normal-token_mtxCancelNonce_fresh_normal-verify_0x0108_delta,token_mtxCancelNonce_ua_wrapped-token_mtxCancelNonce_fresh_wrapped-verify_0x0108_delta"
       }
     },
     {
@@ -254,6 +259,11 @@
         "gas": 145000,
         "measured": 144280,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxCancelNonce_fee_normal-token_mtxCancelNonce_fresh_normal,token_mtxCancelNonce_fee_normal_reg-token_mtxCancelNonce_fresh_normal_reg,token_mtxCancelNonce_fee_wrapped-token_mtxCancelNonce_fresh_wrapped,token_mtxCancelNonce_fee_wrapped_reg-token_mtxCancelNonce_fresh_wrapped_reg"
+      },
+      "ua_extra": {
+        "gas": 1000,
+        "measured": 31,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxCancelNonce_ua_normal-token_mtxCancelNonce_fresh_normal-verify_0x0108_delta,token_mtxCancelNonce_ua_wrapped-token_mtxCancelNonce_fresh_wrapped-verify_0x0108_delta"
       }
     },
     {
@@ -270,7 +280,7 @@
       },
       "ua_extra": {
         "gas": 15000,
-        "measured": 14035,
+        "measured": 14742,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxBurn_ua_normal-token_mtxBurn_fresh_normal-verify_0x0108_delta"
       }
     },
@@ -288,7 +298,7 @@
       },
       "ua_extra": {
         "gas": 15000,
-        "measured": 14035,
+        "measured": 14742,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxBurn_ua_normal-token_mtxBurn_fresh_normal-verify_0x0108_delta"
       }
     },
@@ -410,7 +420,7 @@
       },
       "ua_extra": {
         "gas": 15000,
-        "measured": 14022,
+        "measured": 14729,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxUnwrap_ua_wrapped-token_mtxUnwrap_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -428,7 +438,7 @@
       },
       "ua_extra": {
         "gas": 15000,
-        "measured": 14022,
+        "measured": 14729,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxUnwrap_ua_wrapped-token_mtxUnwrap_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -446,7 +456,7 @@
       },
       "ua_extra": {
         "gas": 15000,
-        "measured": 14022,
+        "measured": 14729,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxUnwrapLeg_ua_wrapped-token_mtxUnwrapLeg_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -464,7 +474,7 @@
       },
       "ua_extra": {
         "gas": 15000,
-        "measured": 14022,
+        "measured": 14729,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxUnwrapLeg_ua_wrapped-token_mtxUnwrapLeg_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -482,7 +492,7 @@
       },
       "ua_extra": {
         "gas": 12000,
-        "measured": 11122,
+        "measured": 11829,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxUnwrapToUA_ua_wrapped-token_mtxUnwrapToUA_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -500,7 +510,7 @@
       },
       "ua_extra": {
         "gas": 12000,
-        "measured": 11122,
+        "measured": 11829,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxUnwrapToUA_ua_wrapped-token_mtxUnwrapToUA_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -1318,7 +1328,12 @@
       "fresh": true,
       "gas": 591000,
       "measured": 590293,
-      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxSetMandate_fresh_hedera,wallet_mtxSetMandate_fresh_mandate"
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxSetMandate_fresh_hedera,wallet_mtxSetMandate_fresh_mandate",
+      "ua_extra": {
+        "gas": 1000,
+        "measured": 48,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxSetMandate_ua_hedera-wallet_mtxSetMandate_fresh_hedera-verify_0x0108_delta,wallet_mtxSetMandate_ua_mandate-wallet_mtxSetMandate_fresh_mandate-verify_0x0108_delta"
+      }
     },
     {
       "entry": "mtxSetMandate",
@@ -1326,7 +1341,12 @@
       "fresh": false,
       "gas": 493000,
       "measured": 492373,
-      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxSetMandate_used_hedera,wallet_mtxSetMandate_used_mandate"
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxSetMandate_used_hedera,wallet_mtxSetMandate_used_mandate",
+      "ua_extra": {
+        "gas": 1000,
+        "measured": 48,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxSetMandate_ua_hedera-wallet_mtxSetMandate_fresh_hedera-verify_0x0108_delta,wallet_mtxSetMandate_ua_mandate-wallet_mtxSetMandate_fresh_mandate-verify_0x0108_delta"
+      }
     },
     {
       "entry": "mtxSetPayee",
@@ -1334,7 +1354,12 @@
       "fresh": true,
       "gas": 255000,
       "measured": 254938,
-      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxSetPayee_fresh_hedera,wallet_mtxSetPayee_fresh_mandate"
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxSetPayee_fresh_hedera,wallet_mtxSetPayee_fresh_mandate",
+      "ua_extra": {
+        "gas": 1000,
+        "measured": 35,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxSetPayee_ua_hedera-wallet_mtxSetPayee_fresh_hedera-verify_0x0108_delta,wallet_mtxSetPayee_ua_mandate-wallet_mtxSetPayee_fresh_mandate-verify_0x0108_delta"
+      }
     },
     {
       "entry": "mtxSetPayee",
@@ -1342,7 +1367,12 @@
       "fresh": false,
       "gas": 158000,
       "measured": 157018,
-      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxSetPayee_used_hedera,wallet_mtxSetPayee_used_mandate"
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxSetPayee_used_hedera,wallet_mtxSetPayee_used_mandate",
+      "ua_extra": {
+        "gas": 1000,
+        "measured": 35,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxSetPayee_ua_hedera-wallet_mtxSetPayee_fresh_hedera-verify_0x0108_delta,wallet_mtxSetPayee_ua_mandate-wallet_mtxSetPayee_fresh_mandate-verify_0x0108_delta"
+      }
     },
     {
       "entry": "mtxRevokeMandate",
@@ -1350,7 +1380,12 @@
       "fresh": true,
       "gas": 196000,
       "measured": 195889,
-      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxRevokeMandate_fresh_hedera,wallet_mtxRevokeMandate_fresh_mandate"
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxRevokeMandate_fresh_hedera,wallet_mtxRevokeMandate_fresh_mandate",
+      "ua_extra": {
+        "gas": 1000,
+        "measured": 36,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxRevokeMandate_ua_hedera-wallet_mtxRevokeMandate_fresh_hedera-verify_0x0108_delta,wallet_mtxRevokeMandate_ua_mandate-wallet_mtxRevokeMandate_fresh_mandate-verify_0x0108_delta"
+      }
     },
     {
       "entry": "mtxRevokeMandate",
@@ -1358,7 +1393,12 @@
       "fresh": false,
       "gas": 98000,
       "measured": 97969,
-      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxRevokeMandate_used_hedera,wallet_mtxRevokeMandate_used_mandate"
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxRevokeMandate_used_hedera,wallet_mtxRevokeMandate_used_mandate",
+      "ua_extra": {
+        "gas": 1000,
+        "measured": 36,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxRevokeMandate_ua_hedera-wallet_mtxRevokeMandate_fresh_hedera-verify_0x0108_delta,wallet_mtxRevokeMandate_ua_mandate-wallet_mtxRevokeMandate_fresh_mandate-verify_0x0108_delta"
+      }
     },
     {
       "entry": "mtxExecute",
@@ -1371,6 +1411,11 @@
         "input": "data",
         "gas": 1,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxExecute_per_byte_mandate"
+      },
+      "ua_extra": {
+        "gas": 1000,
+        "measured": 27,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxExecute_ua_hedera-wallet_mtxExecute_fresh_hedera-verify_0x0108_delta,wallet_mtxExecute_ua_mandate-wallet_mtxExecute_fresh_mandate-verify_0x0108_delta"
       }
     },
     {
@@ -1384,6 +1429,11 @@
         "input": "data",
         "gas": 1,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxExecute_per_byte_mandate"
+      },
+      "ua_extra": {
+        "gas": 1000,
+        "measured": 27,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxExecute_ua_hedera-wallet_mtxExecute_fresh_hedera-verify_0x0108_delta,wallet_mtxExecute_ua_mandate-wallet_mtxExecute_fresh_mandate-verify_0x0108_delta"
       }
     },
     {
@@ -1392,7 +1442,12 @@
       "fresh": true,
       "gas": 250000,
       "measured": 249889,
-      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxCancelNonce_fresh_hedera,wallet_mtxCancelNonce_fresh_mandate"
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxCancelNonce_fresh_hedera,wallet_mtxCancelNonce_fresh_mandate",
+      "ua_extra": {
+        "gas": 1000,
+        "measured": 46,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxCancelNonce_ua_hedera-wallet_mtxCancelNonce_fresh_hedera-verify_0x0108_delta,wallet_mtxCancelNonce_ua_mandate-wallet_mtxCancelNonce_fresh_mandate-verify_0x0108_delta"
+      }
     },
     {
       "entry": "mtxCancelNonce",
@@ -1400,7 +1455,12 @@
       "fresh": false,
       "gas": 152000,
       "measured": 151969,
-      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxCancelNonce_used_hedera,wallet_mtxCancelNonce_used_mandate"
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxCancelNonce_used_hedera,wallet_mtxCancelNonce_used_mandate",
+      "ua_extra": {
+        "gas": 1000,
+        "measured": 46,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxCancelNonce_ua_hedera-wallet_mtxCancelNonce_fresh_hedera-verify_0x0108_delta,wallet_mtxCancelNonce_ua_mandate-wallet_mtxCancelNonce_fresh_mandate-verify_0x0108_delta"
+      }
     },
     {
       "entry": "mtxPayUnderMandate",
@@ -1418,6 +1478,11 @@
         "gas": 331000,
         "measured": 330657,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxPayUnderMandate_saved_mandate-wallet_mtxPayUnderMandate_fresh_mandate"
+      },
+      "ua_extra": {
+        "gas": 1000,
+        "measured": 37,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxPayUnderMandate_ua_hedera-wallet_mtxPayUnderMandate_fresh_hedera-verify_0x0108_delta,wallet_mtxPayUnderMandate_ua_mandate-wallet_mtxPayUnderMandate_fresh_mandate-verify_0x0108_delta"
       }
     },
     {
@@ -1436,6 +1501,11 @@
         "gas": 331000,
         "measured": 330657,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxPayUnderMandate_saved_mandate-wallet_mtxPayUnderMandate_fresh_mandate"
+      },
+      "ua_extra": {
+        "gas": 1000,
+        "measured": 37,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxPayUnderMandate_ua_hedera-wallet_mtxPayUnderMandate_fresh_hedera-verify_0x0108_delta,wallet_mtxPayUnderMandate_ua_mandate-wallet_mtxPayUnderMandate_fresh_mandate-verify_0x0108_delta"
       }
     },
     {
@@ -1444,7 +1514,12 @@
       "fresh": true,
       "gas": 197000,
       "measured": 196445,
-      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxDelegateRevoke_fresh_hedera,wallet_mtxDelegateRevoke_fresh_mandate"
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxDelegateRevoke_fresh_hedera,wallet_mtxDelegateRevoke_fresh_mandate",
+      "ua_extra": {
+        "gas": 1000,
+        "measured": 48,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxDelegateRevoke_ua_hedera-wallet_mtxDelegateRevoke_fresh_hedera-verify_0x0108_delta,wallet_mtxDelegateRevoke_ua_mandate-wallet_mtxDelegateRevoke_fresh_mandate-verify_0x0108_delta"
+      }
     },
     {
       "entry": "mtxDelegateRevoke",
@@ -1452,7 +1527,12 @@
       "fresh": false,
       "gas": 99000,
       "measured": 98525,
-      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxDelegateRevoke_used_hedera,wallet_mtxDelegateRevoke_used_mandate"
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxDelegateRevoke_used_hedera,wallet_mtxDelegateRevoke_used_mandate",
+      "ua_extra": {
+        "gas": 1000,
+        "measured": 48,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxDelegateRevoke_ua_hedera-wallet_mtxDelegateRevoke_fresh_hedera-verify_0x0108_delta,wallet_mtxDelegateRevoke_ua_mandate-wallet_mtxDelegateRevoke_fresh_mandate-verify_0x0108_delta"
+      }
     },
     {
       "entry": "mtxCancelNonce",
@@ -1510,8 +1590,8 @@
       "measured": 761806,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxWrapOrder_fresh_wrapped,token_mtxWrapOrder_fresh_wrapped_reg",
       "ua_extra": {
-        "gas": 140000,
-        "measured": 139335,
+        "gas": 141000,
+        "measured": 140042,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxWrapOrder_ua_wrapped-token_mtxWrapOrder_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -1523,8 +1603,8 @@
       "measured": 761806,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxWrapOrder_used_wrapped,token_mtxWrapOrder_used_wrapped_reg",
       "ua_extra": {
-        "gas": 140000,
-        "measured": 139335,
+        "gas": 141000,
+        "measured": 140042,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxWrapOrder_ua_wrapped-token_mtxWrapOrder_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -3035,111 +3115,120 @@
     },
     {
       "signer": 256,
-      "gas": 35000,
-      "measured": 34507,
+      "gas": 34000,
+      "measured": 33799,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0100_delta",
       "sig_bytes": 608
     },
     {
       "signer": 257,
-      "gas": 20000,
-      "measured": 19210,
+      "gas": 19000,
+      "measured": 18503,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0101_delta",
       "sig_bytes": 128
     },
     {
       "signer": 258,
-      "gas": 177000,
-      "measured": 176916,
+      "gas": 180000,
+      "measured": 179084,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0102_delta",
       "sig_bytes": 96
     },
     {
       "signer": 259,
-      "gas": 21000,
-      "measured": 20004,
+      "gas": 20000,
+      "measured": 19296,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0103_delta",
       "sig_bytes": 96
     },
     {
       "signer": 260,
       "gas": 38000,
-      "measured": 37714,
+      "measured": 37007,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0104_delta",
       "sig_bytes": 160
     },
     {
       "signer": 261,
-      "gas": 50000,
-      "measured": 49674,
+      "gas": 49000,
+      "measured": 48966,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0105_delta",
       "sig_bytes": 288
     },
     {
       "signer": 262,
-      "gas": 173000,
-      "measured": 172349,
+      "gas": 172000,
+      "measured": 171641,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0106_delta",
       "sig_bytes": 384
     },
     {
       "signer": 263,
       "gas": 155000,
-      "measured": 154957,
+      "measured": 154250,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0107_delta",
       "sig_bytes": 192
     },
     {
       "signer": 264,
       "gas": 15000,
-      "measured": 14895,
+      "measured": 14188,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0108_delta",
       "sig_bytes": 160
     },
     {
       "signer": 304,
-      "gas": 81000,
-      "measured": 80544,
+      "gas": 80000,
+      "measured": 79837,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0130_delta",
       "sig_bytes": 2432,
       "stand_in": "ML-DSA-44 on a GasBurner standing in for its precompile (SCaaS testnet address 0x...5caa0012) at the calibrated 59,000 + 6 a message word; a chain without the precompile runs the registry's cached path, far dearer"
     },
     {
       "signer": 305,
-      "gas": 124000,
-      "measured": 123008,
+      "gas": 123000,
+      "measured": 122302,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0131_delta",
       "sig_bytes": 3328,
       "stand_in": "ML-DSA-65 on a GasBurner standing in for its precompile (0x...5caa0013) at the calibrated 100,000 + 6 a message word; a chain without the precompile runs the registry's cached path, far dearer"
     },
     {
       "signer": 306,
-      "gas": 2354000,
-      "measured": 2353960,
+      "gas": 2355000,
+      "measured": 2354624,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0132_delta",
-      "sig_bytes": 672
+      "sig_bytes": 672,
+      "margin": 1000
     },
     {
       "signer": 307,
       "gas": 1339000,
-      "measured": 1338853,
+      "measured": 1338149,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0133_delta",
       "sig_bytes": 7872
     },
     {
       "signer": 308,
       "gas": 160000,
-      "measured": 159910,
+      "measured": 159204,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0134_delta",
       "sig_bytes": 4640,
       "stand_in": "ML-DSA-87 on a GasBurner standing in for its precompile (0x...5caa0014) at the calibrated 135,000 + 6 a message word; the kind is enabled only where a precompile verifies it (CTR-UA-39)"
     },
     {
       "signer": 309,
-      "gas": 4753000,
-      "measured": 4752439,
+      "gas": 4824000,
+      "measured": 4823467,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0135_delta",
-      "sig_bytes": 1280
+      "sig_bytes": 1280,
+      "margin": 1000
+    },
+    {
+      "signer": 321,
+      "gas": 52000,
+      "measured": 51229,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0141_delta",
+      "sig_bytes": 160
     }
   ]
 }

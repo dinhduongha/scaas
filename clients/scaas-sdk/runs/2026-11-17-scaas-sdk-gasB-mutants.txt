@@ -1,0 +1,8 @@
+# gasB mutants at commit 9982146d7 (name | outcome | test)
+margin not added | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_verify_margin
+parse: margin dropped | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_verify_margin
+parse: margin unbounded | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_verify_margin
+reference: FN-DSA-512's margin dropped | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_rows_hold_their_sources
+reference: ed25519's row at the vector, not the forced worst case | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_rows_hold_their_sources
+reference: FN-DSA-1024's row at the vector, not the worst salt | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_rows_hold_their_sources
+6 mutants, 6 killed, 0 survived, 0 not loaded

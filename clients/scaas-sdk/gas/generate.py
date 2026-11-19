@@ -18,7 +18,8 @@ the worst `<kind>_<entry>_saved_<variant>` less `..._fresh_<variant>`, its `fee_
 its `ua_extra` (A1) the worst `..._ua_<variant>` (the derived reference signer `ua_signer` of the input list) less
 `..._fresh_<variant>` less that signer's verify delta, absent when not positive (a source item `a-b[-c]` is the first key less
 the others); a verify row `verify_<kind>_delta`, its `sig_bytes` (ruling 2, A4: every row) `verify_<kind>_sig_bytes`, its
-`stand_in` from the input list. Prints its run time.
+`margin` (ruling 2 (b) of the sampled check: a kind whose worst case cannot be determined) and `stand_in` from the input
+list. Prints its run time.
 """
 
 import argparse
@@ -123,6 +124,8 @@ def table(inputs, m):
             raise SystemExit(f"no measurement {k}")
         row = {"signer": signer, "gas": ceil1000(m[k]), "measured": m[k], "source": f"{src}#{k}"}
         row["sig_bytes"] = m[f"verify_0x{signer:04x}_sig_bytes"]
+        if str(signer) in inputs["margin"]:
+            row["margin"] = inputs["margin"][str(signer)]
         if str(signer) in inputs["stand_in"]:
             row["stand_in"] = inputs["stand_in"][str(signer)]
         verify.append(row)

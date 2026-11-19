@@ -120,6 +120,9 @@ pub struct GasVerify {
     /// 2; for an `msig`, per member); the quote adds 64 gas a byte of it. Required in every row (owner 2026-11-19, A4); a
     /// variable-length kind's longest (A5)
     pub sig_bytes: u64,
+    /// a safety margin added to the row's gas, where the kind's worst case cannot be determined and the row is the most
+    /// expensive of many measurements (owner 2026-11-19, the sampled check's ruling 2 (b)); 0 when absent
+    pub margin: u64,
 }
 
 /// The rows of a gas table: base and verify, looked up independently (spec §13.3). The quote's figure is base + verify.
@@ -132,7 +135,7 @@ pub struct GasRows {
 /// A gas table file (spec §13.3, the gas table format): `{format: "scaas.gas-table", v: 2, name, family, assumptions, base,
 /// verify}`, each base row `{entry, kind, fresh, gas, measured, source, calldata_gas?, per_byte?: {input, gas, source},
 /// save?: {gas, measured, source}, fee_extra?: {gas, measured, source}, ua_extra?: {gas, measured, source}, stand_in?}`, each
-/// verify row `{signer, gas, measured, source, sig_bytes, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
+/// verify row `{signer, gas, measured, source, sig_bytes, margin?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
 /// and the SDK's reference table.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GasTable {
@@ -152,6 +155,8 @@ const GAS_PER_BYTE_INPUTS: [&str; 2] = ["meta.body", "data"];
 const GAS_PER_BYTE_MAX: u64 = 1_000;
 /// A verify row's largest `sig_bytes` (SLH-DSA-128s, the longest, is 7,872).
 const GAS_SIG_BYTES_MAX: u64 = 65_536;
+/// A verify row's largest `margin`.
+const GAS_MARGIN_MAX: u64 = 100_000;
 
 /// A figure rounded up to the next 1,000 from `measured` (owner 2026-11-19): a multiple of 1,000, `measured <= gas < measured +
 /// 1000`.
@@ -165,7 +170,8 @@ impl GasTable {
     /// with `measured <= gas < measured + 1000` (owner 2026-11-19: rounded up to the next 1,000), a base row's positive (a
     /// verify row's may be 0: the reference signer's own row); `source` present; a base row's optional `per_byte` names an
     /// input of [`GasPerByte`] with a `gas` of 1–1,000 and its `source`; a base row's optional `save`, `fee_extra` and
-    /// `ua_extra` are `{gas, measured, source}` held like a row's figure, positive; a verify row's `sig_bytes` at most 65,536;
+    /// `ua_extra` are `{gas, measured, source}` held like a row's figure, positive; a verify row's `sig_bytes` at most 65,536,
+    /// its optional `margin` 1–100,000;
     /// no key twice. `GasSigBytesMissing` when a verify row has no `sig_bytes` (owner 2026-11-19, A4) and the file is otherwise
     /// sound; `Argument` on any other failure.
     pub fn parse(text: &str) -> Result<GasTable, crate::SdkError> {
@@ -257,6 +263,10 @@ impl GasTable {
                         0
                     }
                     Some(b) => b.as_u64().filter(|b| *b <= GAS_SIG_BYTES_MAX)?,
+                },
+                margin: match r.get("margin") {
+                    None => 0,
+                    Some(m) => m.as_u64().filter(|m| (1..=GAS_MARGIN_MAX).contains(m))?,
                 },
             };
             if rows.verify.iter().any(|o| o.signer == row.signer) {

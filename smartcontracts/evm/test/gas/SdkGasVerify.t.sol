@@ -4,7 +4,9 @@ pragma solidity ^0.8.24;
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
-import {SigCheck} from "../../src/common/SigCheck.sol";
+import {MtxPipelineLib} from "../../src/metatx/MtxPipelineLib.sol";
+import {Sha512} from "../../src/common/Sha512.sol";
+import {Ed25519} from "../../src/common/Ed25519.sol";
 import {P256Verifier} from "../../src/ua/verifiers/P256Verifier.sol";
 import {WebAuthnP256Verifier} from "../../src/ua/verifiers/WebAuthnP256Verifier.sol";
 import {Bip340Verifier} from "../../src/ua/verifiers/Bip340Verifier.sol";
@@ -14,7 +16,8 @@ import {
     SchnorrBn254Verifier,
     SchnorrBls12381Verifier,
     BlsMinSigBls12381Verifier,
-    BlsMinSigBn254Verifier
+    BlsMinSigBn254Verifier,
+    ZetherSchnorrBls12381Verifier
 } from "../../src/ua/verifiers/PairingVerifiers.sol";
 import {MldsaVerifier} from "../../src/ua/MlDsa.sol";
 import {FndsaVerifier} from "../../src/ua/FnDsa.sol";
@@ -26,22 +29,23 @@ import {UACall} from "../ua/UACall.sol";
 import {Vm} from "forge-std/Test.sol";
 import {SdkGasRows} from "./SdkGasOps.sol";
 
-/// The copy-cost forwarder (owner 2026-11-19, "OK"): what a token does with a signature, nothing else. A native id is checked
-/// here as `MtxPipelineLib._authorizeNative` does (`SigCheck.isValid`); a derived one goes to the registry, the `UASig`
-/// copied from calldata into the call, as `MtxPipelineLib` does.
+/// The copy-cost forwarder (owner 2026-11-19, "OK"): what a token does with a signature, nothing else: the token's own
+/// `MtxPipelineLib._authorize` (a native id: the pool and key-data guards, then `SigCheck.isValid`; a derived one: the
+/// registry's `requireAuthorized`, the `UASig` copied from calldata into the call). Owner 2026-11-19 (the sampled check):
+/// a bare `SigCheck.isValid` as the native reference was 938 gas cheaper than the token's native path and its derived
+/// side 231 cheaper, so every verify delta stood about 707 above the token's.
 contract SdkGasForwarder {
-    IUARegistry internal immutable REG;
+    address internal immutable REG;
+    bytes32 internal immutable SKA;
 
     constructor(IUARegistry reg_) {
-        REG = reg_;
+        (REG, SKA) = (address(reg_), UARegistry(address(reg_)).smartKeyCloneHash());
     }
 
     function check(bytes32 from, bytes32 purpose, bytes32 digest, IUARegistry.UASig calldata auth) external view {
-        if (UAKinds.inNativeSpace(from)) {
-            require(SigCheck.isValid(address(uint160(uint256(from))), digest, auth.signature, SigCheck.ERC1271_GAS));
-        } else {
-            REG.requireAuthorized(from, purpose, digest, auth);
-        }
+        MtxPipelineLib.Ctx memory c;
+        (c.registry, c.skaCloneCodehash) = (REG, SKA);
+        MtxPipelineLib._authorize(c, from, purpose, digest, auth);
     }
 }
 
@@ -110,11 +114,13 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
             address(new BlsMinSigBls12381Verifier()),
             address(new BlsMinSigBn254Verifier())
         ];
-        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](9);
+        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](10);
         for (uint256 i; i < 8; ++i) {
             c[i] = UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]));
         }
         c[8] = UARegistry.KindConfig(0x0108, address(new Secp256k1Verifier()), 50_000);
+        // the Zether UA kind (owner 2026-11-19, P1): Schnorr under the Zether tag, `UALedgerBase`'s cap
+        c[9] = UARegistry.KindConfig(0x0141, address(new ZetherSchnorrBls12381Verifier()), 70_000);
         reg = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _withPq(c));
         fwd = new SdkGasForwarder(reg);
         meter = new SdkGasMeter();
@@ -227,22 +233,127 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
         _pin("verify_0x0133_worst_extra", extra);
     }
 
+    function _rev(uint256 v) internal pure returns (uint256 r) {
+        for (uint256 i; i < 32; ++i) {
+            r = (r << 8) | ((v >> (8 * i)) & 0xff);
+        }
+    }
+
+    /// Owner 2026-11-19 (ruling 2 of the sampled check, case (a)): ed25519's verify gas depends on the data only through
+    /// `Ed25519._straus`, which adds a point for every nonzero 4-bit window of `S` and of `k = SHA-512(R ‖ A ‖ M) mod L`
+    /// (MODEXP and SHA-512 cost the same for every 32-byte message). The most work: every window 0-62 of both nonzero (a
+    /// window 63 cannot be nonzero without zeroing windows 31-62, as both are below L < 2^253). Forced here: `S` with every
+    /// window 1, and `R` ground until `k` has every window nonzero; the call returns false only at the final compare, after
+    /// the full work. The key's own branches (the square root of -1, the parity flip) are the worst of eight keys. Pinned as
+    /// `verify_0x0102_worst_extra`: the forced run less the vector's, both metered alike.
+    function _edWorst(bytes memory pk, bytes32 m, bytes memory sig) internal returns (uint256 extra) {
+        address v = address(new Ed25519Verifier());
+        uint256 sv;
+        for (uint256 i; i < 63; ++i) {
+            sv |= 1 << (4 * i);
+        }
+        uint256 same = meter.run(v, abi.encodeCall(Ed25519Verifier.verify, (pk, m, sig)));
+        uint256 worst;
+        for (uint256 key; key < 8; ++key) {
+            bytes memory a = key == 0 ? pk : abi.encodePacked(vm.publicKeyEd25519(keccak256(abi.encode("sg-ed", key))));
+            bytes memory forced = abi.encodePacked(_edR(a, m, key), bytes32(_rev(sv)));
+            uint256 g = meter.run(v, abi.encodeCall(Ed25519Verifier.verify, (a, m, forced)));
+            if (g > worst) worst = g;
+        }
+        assertGt(worst, same, "the forced case does more work");
+        extra = worst - same;
+        _pin("verify_0x0102_worst_extra", extra);
+    }
+
+    /// An `R` for key `a` and message `m` whose `k = SHA-512(R ‖ A ‖ M) mod L` has every window 0-62 nonzero.
+    function _edR(bytes memory a, bytes32 m, uint256 key) internal pure returns (bytes32 r) {
+        uint256 r256 = (type(uint256).max % Ed25519.L + 1) % Ed25519.L; // 2^256 mod L
+        for (uint256 j;; ++j) {
+            r = keccak256(abi.encode("sg-ed-r", key, j));
+            if (_fullWindows(_edK(r, a, m, r256))) return r;
+        }
+    }
+
+    function _edK(bytes32 r, bytes memory a, bytes32 m, uint256 r256) internal pure returns (uint256) {
+        (bytes32 hi, bytes32 lo) = Sha512.hash(abi.encodePacked(r, a, m));
+        return addmod(mulmod(_rev(uint256(lo)), r256, Ed25519.L), _rev(uint256(hi)), Ed25519.L);
+    }
+
+    function _fullWindows(uint256 k) internal pure returns (bool) {
+        for (uint256 i; i < 63; ++i) {
+            if ((k >> (4 * i)) & 15 == 0) return false;
+        }
+        return true;
+    }
+
+    /// Owner 2026-11-19 (ruling 2 of the sampled check, case (b)): FN-DSA's verify gas depends on the data without a bound:
+    /// `HashToPoint` rejection-samples SHAKE256 output (one more Keccak-f block when a salt's draws are rejected more often;
+    /// no number of blocks is impossible), and the compressed `s2` decodes in a data-dependent loop. Measured as the most
+    /// expensive of 64 signatures: the vector's with its 40-byte salt replaced by `keccak256("sg-fn", kind, j)` (40 bytes),
+    /// each run to the final norm check (full work, false at the end), less the vector's own; pinned as
+    /// `verify_<kind>_varied_extra`. The row's `margin` (the input list) is added on top.
+    function _fnVaried(uint16 kind, bytes memory pk, bytes32 m, bytes memory sig) internal returns (uint256 extra) {
+        address v = address(new FndsaVerifier(kind));
+        uint256 same = meter.run(v, abi.encodeCall(FndsaVerifier.verify, (pk, m, sig)));
+        uint256 worst = _fnMost(v, kind, pk, m, sig, "sg-fn");
+        extra = worst > same ? worst - same : 0;
+        _pin(string.concat("verify_", _hex4(kind), "_varied_extra"), extra);
+        // the safety check (owner 2026-11-19, "approved, as proposed"): 64 further salts, never above the row with its margin
+        // (`scaas-sdk` holds `verify_<kind>_safety_extra` to it)
+        worst = _fnMost(v, kind, pk, m, sig, "sg-fn-safety");
+        _pin(string.concat("verify_", _hex4(kind), "_safety_extra"), worst > same ? worst - same : 0);
+    }
+
+    /// The most expensive of 64 runs of the vector `sig` with its salt replaced by `keccak256(seed, kind, j)` (40 bytes).
+    function _fnMost(address v, uint16 kind, bytes memory pk, bytes32 m, bytes memory sig, string memory seed)
+        internal
+        returns (uint256 worst)
+    {
+        for (uint256 j; j < 64; ++j) {
+            bytes memory s = bytes.concat(sig);
+            bytes memory salt = abi.encodePacked(keccak256(abi.encode(seed, kind, j)), bytes8(keccak256(abi.encode(j))));
+            for (uint256 i; i < 40; ++i) {
+                s[1 + i] = salt[i];
+            }
+            uint256 g = meter.run(v, abi.encodeCall(FndsaVerifier.verify, (pk, m, s)));
+            if (g > worst) worst = g;
+        }
+    }
+
+    /// What a PQ kind's worst case adds over its vector: SLH-DSA forced (A5), FN-DSA the most of 64 salts (ruling 2 (b)).
+    function _pqWorst(uint16 kind, bytes memory pk, bytes32 m, bytes memory sig) internal returns (uint256) {
+        if (kind == 0x0133) return _slhWorst(pk, m, sig);
+        if (kind == 0x0132 || kind == 0x0135) return _fnVaried(kind, pk, m, sig);
+        return 0;
+    }
+
     function test_sdkGas_verify() public {
         uint256 n = _native();
         uint256 rows;
         for (uint256 i; vm.keyExistsJson(sj, string.concat(".derived[", vm.toString(i), "]")); ++i) {
             uint16 kind = uint16(vm.parseJsonUint(sj, _d(i, "kind")));
-            if (kind > 0x0108) continue; // the stored Zether kind signs no SCaaS op
+            // 0x0141 (owner 2026-11-19, P1): a Zether UA signs its own operations (e.g. the multi-recipient proof's UA
+            // signature); its cost is the BLS12-381 G1MSM of three points and fixed-size hashes: no data dependence
+            if (kind > 0x0108 && kind != 0x0141) continue;
             bytes memory k = vm.parseJsonBytes(sj, _d(i, "keyData"));
             bytes32 ua = vm.parseJsonBytes32(sj, _d(i, "ua"));
             UACall.register(reg, kind, k, _none(), vm.parseJsonBytes(sj, _d(i, "pop.sig")), "");
             string memory row = _metatxRow(sj, string.concat(".derived[", vm.toString(i), "]."));
-            IUARegistry.UASig memory u =
-                UACall.auth(ua, abi.encode(k, vm.parseJsonBytes(sj, string.concat(row, "sig"))));
-            _row(kind, ua, vm.parseJsonBytes32(sj, string.concat(row, "digest")), u, n, 0);
+            // a stored kind (the Zether one) signs with empty key data, as `scaas-ua` sends it
+            IUARegistry.UASig memory u = UACall.auth(
+                ua, abi.encode(kind == 0x0141 ? bytes("") : k, vm.parseJsonBytes(sj, string.concat(row, "sig")))
+            );
+            uint256 worst = kind == 0x0102
+                ? _edWorst(
+                    k,
+                    vm.parseJsonBytes32(sj, string.concat(row, "message")),
+                    vm.parseJsonBytes(sj, string.concat(row, "sig"))
+                )
+                : 0;
+            _row(kind, ua, vm.parseJsonBytes32(sj, string.concat(row, "digest")), u, n, worst);
             ++rows;
         }
-        assertEq(rows, 9, "0x0100 - 0x0108");
+        assertEq(rows, 10, "0x0100 - 0x0108, 0x0141");
     }
 
     /// The PQ kinds 0x0130-0x0135 (item 6) on `smartcontracts/vectors/ua/pq_signatures.json` (context A): each registered
@@ -263,8 +374,7 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
             string memory row = _metatxRow(pj, r);
             IUARegistry.UASig memory u;
             u.signature = vm.parseJsonBytes(pj, string.concat(row, "sig"));
-            uint256 worst =
-                kind == 0x0133 ? _slhWorst(pk, vm.parseJsonBytes32(pj, string.concat(row, "message")), u.signature) : 0;
+            uint256 worst = _pqWorst(kind, pk, vm.parseJsonBytes32(pj, string.concat(row, "message")), u.signature);
             _row(kind, ua, vm.parseJsonBytes32(pj, string.concat(row, "digest")), u, n, worst);
             ++rows;
         }
