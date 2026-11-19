@@ -132,6 +132,9 @@ pub(crate) struct OpGas<'a> {
     /// a second signature the operation carries besides its signer's (ruling 4: `mtxPayWithPayeeFee`): `Some(kind)`, or
     /// `Some(None)` when its kind cannot be determined
     pub attached: Option<Option<u16>>,
+    /// a third party the entry debits besides its signer and the attached signature's owner (PR A review, finding 4:
+    /// [`holder_derived`]) is, or may be, a derived UA
+    pub holder: bool,
 }
 
 impl OpGas<'_> {
@@ -143,6 +146,7 @@ impl OpGas<'_> {
         saves: false,
         fee: false,
         attached: None,
+        holder: false,
     };
 }
 
@@ -216,9 +220,9 @@ pub(crate) fn lookup_by(
         if op.fee {
             g = g.saturating_add(b.fee_extra.unwrap_or(0));
         }
-        // G1: either party the entry debits a derived UA, the signer or the attached signature's owner (an attached
-        // signature of unknown kind counts as derived: fail closed); added once
-        if signer != NATIVE_EVM || op.attached.is_some_and(|k| k != Some(NATIVE_EVM)) {
+        // G1: any party the entry debits a derived UA, the signer, the attached signature's owner (an attached signature of
+        // unknown kind counts as derived: fail closed) or a third party's holder (PR A review, finding 4); added once
+        if signer != NATIVE_EVM || op.attached.is_some_and(|k| k != Some(NATIVE_EVM)) || op.holder {
             g = g.saturating_add(b.ua_extra.unwrap_or(0));
         }
         g = g.saturating_add(own(&b.per_item)?);
@@ -475,6 +479,26 @@ pub(crate) fn attached_kind(
             .find(|k| scaas_ua::ua_of(*k, &kd).ok() == Some(from))
     };
     Some(kind())
+}
+
+/// Whether an entry debits a third party besides its signer that is, or may be, a derived UA (PR A review, finding 4; G1's
+/// "either debited party" read on the holder): `mtxOperatorTransfer` moves the message's `account` (derived unless a native
+/// id); `mtxForceTransfer` the holder of its court-order record, which the message names only by `recordId`, so it counts as
+/// derived (fail closed, as an attached signature of unknown kind). No other entry debits a third party: every other debit
+/// is the signer's (`from`) or the attached signature's owner (`mtxPayWithPayeeFee`'s payer); `mtxMintToUA` credits.
+pub(crate) fn holder_derived(entry: &str, message: &serde_json::Value) -> bool {
+    match entry {
+        "mtxOperatorTransfer" => {
+            let id = message
+                .get("account")
+                .and_then(|a| a.as_str())
+                .and_then(|a| super::unhex(a).ok())
+                .and_then(|b| <[u8; 32]>::try_from(b).ok());
+            id.is_none_or(|id| !scaas_ua::in_native_space(&id))
+        }
+        "mtxForceTransfer" => true,
+        _ => false,
+    }
 }
 
 #[cfg(test)]
@@ -1490,6 +1514,70 @@ mod tests {
         }
     }
 
+    /// PR A review, finding 1: a key outside the format, at the top, on a base or verify row, or inside a row's `per_byte`,
+    /// `per_item`, `save`, `fee_extra`, `ua_extra` or its `second_party`, is refused by name, `GasFieldUnknown`, never dropped
+    /// from a quote; every key the format and the generator write is read (control: each part with all its keys, `calldata_gas`
+    /// with its source keys, `stand_in`, `assumptions`, and the reference table).
+    #[test]
+    fn gas_table_unknown_key_refused() {
+        let fig = r#"{"gas":1000,"measured":900,"source":"s"}"#;
+        let full = format!(
+            r#""calldata_gas":{{"k1":10}},"stand_in":"t","per_byte":{{"input":"data","gas":16,"source":"s"}},"save":{fig},"fee_extra":{fig},"ua_extra":{{"gas":1000,"measured":900,"source":"s","second_party":{{"measured":-5,"source":"s"}},"unmeasured":[],"from_kind":"token"}},"item":"legs","per_item":{{"gas":450,"base_count":0,"source":"s"}}"#
+        );
+        let base = |f: &str| {
+            file(
+                &b(98_000, 97_947).replace(r#""source":"s""#, &format!(r#""source":"s",{f}"#)),
+                "",
+            )
+        };
+        let verify = |f: &str| {
+            file(
+                "",
+                &v(289, 1_000, 900).replace(r#""source":"s""#, &format!(r#""source":"s",{f}"#)),
+            )
+        };
+        let top = |f: &str| file(&b(98_000, 97_947), "").replace(r#""assumptions":[]"#, f);
+        let vfull = r#""margin":1000,"stand_in":"t","item":"members","per_item":{"gas":450,"base_count":0,"source":"s"}"#;
+        for (t, what) in [
+            (base(&full), "base"),
+            (verify(vfull), "verify"),
+            (top(r#""assumptions":["a"]"#), "top"),
+        ] {
+            assert!(GasTable::parse(&t).is_ok(), "control: {what}");
+        }
+        assert!(
+            GasTable::parse(REFERENCE_FILE).is_ok(),
+            "control: the reference table"
+        );
+        for t in [
+            top(r#""assumptions":[],"comment":"x""#),
+            base(&format!(r#"{full},"per_iten":1"#)),
+            base(&full.replace(r#""fee_extra""#, r#""fee_xtra""#)),
+            base(&full.replace(r#""stand_in""#, r#""ua_extra ""#)),
+            base(&full.replace(r#""input":"data""#, r#""input":"data","inptu":1"#)),
+            base(&full.replace(r#""base_count":0"#, r#""base_count":0,"slope":1"#)),
+            base(&full.replace(r#""save":{"gas":1000"#, r#""save":{"gas":1000,"extra":1"#)),
+            base(&full.replace(
+                r#""fee_extra":{"gas":1000"#,
+                r#""fee_extra":{"gas":1000,"extra":1"#,
+            )),
+            base(&full.replace(r#""from_kind""#, r#""from_knd""#)),
+            base(&full.replace(r#""measured":-5"#, r#""measured":-5,"gas":1"#)),
+            verify(&format!(r#"{vfull},"margn":1"#)),
+            verify(&vfull.replace(r#""base_count":0"#, r#""base_count":0,"x":1"#)),
+            // a part of `ua_extra` only, never of a row
+            base(&format!(
+                r#"{full},"second_party":{{"measured":1,"source":"s"}}"#
+            )),
+        ] {
+            assert_eq!(
+                GasTable::parse(&t).unwrap_err().code(),
+                "GasFieldUnknown",
+                "{t}"
+            );
+        }
+    }
+
     /// Owner 2026-11-19, rulings 1-3: a saving operation adds the row's `save` (a row without one does not answer); a fee > 0
     /// adds its `fee_extra` (a row without one adds nothing); the verify part adds 64 gas a byte of `sig_bytes`. Each beside
     /// its control.
@@ -1569,9 +1657,18 @@ mod tests {
                 .margin,
             1_000
         );
+        // no `margin`: 0 (the control's filler key `"x"` is refused since the PR A review's finding 1)
         assert_eq!(
-            GasTable::parse(&with(r#""x":0"#)).unwrap().rows.verify[0].margin,
+            GasTable::parse(&file("", &v(306, 3_000, 2_100)))
+                .unwrap()
+                .rows
+                .verify[0]
+                .margin,
             0
+        );
+        assert_eq!(
+            GasTable::parse(&with(r#""x":0"#)).unwrap_err().code(),
+            "GasFieldUnknown"
         );
         for bad in [r#""margin":0"#, r#""margin":100001"#, r#""margin":"1000""#] {
             assert!(GasTable::parse(&with(bad)).is_err(), "{bad}");
@@ -1631,6 +1728,73 @@ mod tests {
             Some(1_010 + 14_000 + 10),
             "derived both: once"
         );
+    }
+
+    /// PR A review, finding 4: an entry that debits a third party adds the row's `ua_extra` when that holder is (or may be) a
+    /// derived UA, under a native signer too, once; a native holder adds nothing. `holder_derived` reads it:
+    /// `mtxOperatorTransfer`'s `account`, `mtxForceTransfer`'s record holder (not in the message: derived), no other entry.
+    #[test]
+    fn gas_ua_extra_for_a_derived_holder() {
+        let mut r = rows(1_000, 10);
+        r.base[0].entry = "mtxOperatorTransfer".into();
+        r.base[0].kind = "gov_router".into();
+        r.base[0].ua_extra = Some(15_000);
+        r.verify.push(GasVerify {
+            signer: NATIVE_EVM,
+            gas: 0,
+            sig_bytes: 0,
+            margin: 0,
+            per_item: None,
+        });
+        let by = |signer: u16, holder: bool| {
+            let op = OpGas {
+                holder,
+                ..OpGas::PLAIN
+            };
+            let key = ("mtxOperatorTransfer", "gov_router", signer, false);
+            lookup_by(&r, &[], &[], None, key, &op)
+                .unwrap()
+                .map(|f| f.0)
+        };
+        assert_eq!(
+            by(NATIVE_EVM, false),
+            Some(1_000),
+            "native signer, native holder"
+        );
+        assert_eq!(
+            by(NATIVE_EVM, true),
+            Some(1_000 + 15_000),
+            "native signer, derived holder"
+        );
+        assert_eq!(by(0x0101, true), Some(1_010 + 15_000), "derived both: once");
+        let native = format!("0x{}{}", "00".repeat(12), "ab".repeat(20));
+        let derived = format!("0x{}", "5c".repeat(32));
+        assert!(scaas_ua::in_native_space(
+            &super::super::unhex(&native).unwrap().try_into().unwrap()
+        ));
+        let msg = |a: &str| serde_json::json!({"from": native, "account": a, "to": native});
+        assert!(
+            !holder_derived("mtxOperatorTransfer", &msg(&native)),
+            "a native holder"
+        );
+        assert!(
+            holder_derived("mtxOperatorTransfer", &msg(&derived)),
+            "a derived holder"
+        );
+        assert!(
+            holder_derived("mtxOperatorTransfer", &serde_json::json!({})),
+            "unreadable: derived"
+        );
+        assert!(
+            holder_derived("mtxForceTransfer", &msg(&native)),
+            "the record's holder: derived"
+        );
+        for e in ["mtxPay", "mtxFreeze", "mtxMintToUA", "mtxGrantRole"] {
+            assert!(
+                !holder_derived(e, &msg(&derived)),
+                "{e}: no third-party debit"
+            );
+        }
     }
 
     /// Owner 2026-11-19, ruling 4 (A2: the attached signature): a second signature adds its kind's verify gas, not its

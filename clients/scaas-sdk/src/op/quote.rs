@@ -174,40 +174,102 @@ pub(crate) fn signer_kind(p: &Prepared) -> u16 {
     }
 }
 
+/// The amount an operation's relayer takes (a PERCENT envelope's computed fee, never its rate: P2-4); "0" without an envelope.
+pub(crate) fn fee_of(name: &str, message: &serde_json::Value) -> Result<String, SdkError> {
+    Ok(match envelope(message) {
+        Some(_) => scaas_ua::wallet::fee_due(name, message)?,
+        None => "0".to_string(),
+    })
+}
+
+/// The gas figure of an operation's key `(entry, domain kind, signer kind, fresh lane)` on `profile`'s tables, with what it
+/// reads of the operation (`extra`, `message`: ruling B, rulings 1-4, I1, PR A review finding 4) and its relayer `fee`, its
+/// unsigned calldata `unsigned` bytes ([`super::gas::quoted`]); shared by the quote and a gateway row's self-relay `resend`
+/// (PR A review, finding 2).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn figure(
+    sdk: &Sdk,
+    profile: &crate::ChainProfile,
+    key: (&str, &str, u16, bool),
+    extra: &serde_json::Value,
+    message: &serde_json::Value,
+    fee: &str,
+    app: Option<u64>,
+    unsigned: usize,
+    members: Option<u64>,
+) -> Result<Option<(u64, GasSources)>, SdkError> {
+    let op = super::gas::OpGas {
+        len: &|input| super::gas::input_len(extra, message, input),
+        // I1: the count a per-item part names; a group signer's n (bls-multi plan Task 17: `members`, from its key data)
+        count: &|item| match (item, members) {
+            ("members", Some(n)) => Some(n),
+            _ => super::gas::item_count(extra, message, item),
+        },
+        // ruling 1: the record saved (`PayMeta.save`)
+        saves: extra
+            .get("meta")
+            .is_some_and(|m| scaas_ua::wallet::entries::pay_meta_of(m).is_ok_and(|m| m.save)),
+        // ruling 3: a fee > 0 (the amount the relayer takes)
+        fee: fee.bytes().any(|b| b != b'0'),
+        // ruling 4: the second signature attached
+        attached: super::gas::attached_kind(extra, message),
+        // PR A review, finding 4: a third party's derived holder debited
+        holder: super::gas::holder_derived(key.0, message),
+    };
+    super::gas::quoted(
+        &profile.gas,
+        &profile.gas_opt_in,
+        &sdk.gas_tables,
+        app,
+        key,
+        unsigned,
+        &op,
+    )
+}
+
 /// A self-relay quote `q` of an operation on `chain` by a signer of kind `signer`, whose unsigned calldata is `unsigned` bytes,
 /// once signed into `signed` calldata bytes (owner 2026-11-19, G3 at `submit`, Q5 at a gateway operation's self-relay
 /// `resend`, from the row's stored signed calldata): its gas recomputed from the real signature's length, never below `q`'s
-/// (`q` itself when nothing grew); above `Limits::max_gas` `SignedGasAboveCap`, above the profile's per-transaction cap
-/// `GasAboveTxCap`, a cost above the caps `FeeAboveCap`.
-pub(crate) fn signed_quote(
+/// (`q` itself when nothing grew); above `Limits::max_gas` `SignedGasAboveCap`, above the profile's per-transaction cap or the
+/// chain's block gas limit `GasAboveTxCap` (PR A review, finding 3: as `self_relay` checks it), a cost above the caps
+/// `FeeAboveCap`. `own`: the operation's own figure where the caller recomputed it (a gateway row's `resend`, PR A review
+/// finding 2): the larger of it and `q`'s is the base, so a quote of another entry, kind or lane state never lowers it.
+pub(crate) async fn signed_quote(
     sdk: &Sdk,
     chain: &str,
     signer: u16,
     unsigned: usize,
     q: &SubmitQuote,
     signed: usize,
+    own: Option<(u64, GasSources)>,
 ) -> Result<SubmitQuote, SdkError> {
-    let chain = sdk
+    let c = sdk
         .chains
         .iter()
         .find(|c| c.profile.key == chain)
         .ok_or(SdkError::ChainUnknown)?;
+    let (base, gas_from) = match own {
+        Some((g, from)) if g > q.gas_limit => (g, Some(from)),
+        _ => (q.gas_limit, q.gas_from.clone()),
+    };
     let counted = super::gas::counted_bytes(
-        &chain.profile.gas,
-        &chain.profile.gas_opt_in,
+        &c.profile.gas,
+        &c.profile.gas_opt_in,
         &sdk.gas_tables,
         signer,
-        q.gas_from.as_ref(),
+        gas_from.as_ref(),
         unsigned,
     );
-    let gas = super::gas::signed_gas(q.gas_limit, counted, signed);
+    let gas = super::gas::signed_gas(base, counted, signed);
     if gas == q.gas_limit {
         return Ok(q.clone());
     }
     if gas > sdk.limits.max_gas {
         return Err(SdkError::SignedGasAboveCap);
     }
-    if chain.profile.tx_gas_cap.is_some_and(|c| gas > c) {
+    let (_, _, pool) = evm(sdk, chain)?;
+    let block = pool.block_gas().await.map_err(sim)?;
+    if c.profile.tx_gas_cap.is_some_and(|cap| gas > cap) || gas > block.limit {
         return Err(SdkError::GasAboveTxCap);
     }
     let fee = q
@@ -218,6 +280,7 @@ pub(crate) fn signed_quote(
     Ok(SubmitQuote {
         gas_limit: gas,
         gas: Some(gas),
+        gas_from,
         max_cost: cost.to_string(),
         ..q.clone()
     })
@@ -297,10 +360,7 @@ impl Op {
                 Op::known(&sdk, &prepared)?;
                 super::submit::fresh(&sdk, &prepared).await?;
                 // the amount the relayer takes (a PERCENT envelope's computed fee, never its rate: P2-4)
-                let fee = match envelope(&prepared.t.message) {
-                    Some(_) => scaas_ua::wallet::fee_due(prepared.t.name, &prepared.t.message)?,
-                    None => "0".to_string(),
-                };
+                let fee = fee_of(prepared.t.name, &prepared.t.message)?;
                 let chain = sdk
                     .chains
                     .iter()
@@ -319,34 +379,17 @@ impl Op {
                 let entry = prepared.entry();
                 // a group signer's n (plan Task 17): `members`, read from its key data
                 let members = super::bls_multi::members(&prepared.signer());
-                let figure = {
-                    let (extra, message) = (&prepared.t.extra, &prepared.t.message);
-                    let op = super::gas::OpGas {
-                        len: &|input| super::gas::input_len(extra, message, input),
-                        // I1: the count a per-item part names
-                        count: &|item| match (item, members) {
-                            ("members", Some(n)) => Some(n),
-                            _ => super::gas::item_count(extra, message, item),
-                        },
-                        // ruling 1: the record saved (`PayMeta.save`)
-                        saves: extra.get("meta").is_some_and(|m| {
-                            scaas_ua::wallet::entries::pay_meta_of(m).is_ok_and(|m| m.save)
-                        }),
-                        // ruling 3: a fee > 0 (the amount the relayer takes, computed above)
-                        fee: fee.bytes().any(|b| b != b'0'),
-                        // ruling 4: the second signature attached
-                        attached: super::gas::attached_kind(extra, message),
-                    };
-                    super::gas::quoted(
-                        &chain.profile.gas,
-                        &chain.profile.gas_opt_in,
-                        &sdk.gas_tables,
-                        app,
-                        (&entry, prepared.t.kind, signer, fresh),
-                        unsigned.calldata.len(),
-                        &op,
-                    )?
-                }; // `op` borrows a closure that is not `Send`: dropped before any await
+                let figure = figure(
+                    &sdk,
+                    &chain.profile,
+                    (&entry, prepared.t.kind, signer, fresh),
+                    &prepared.t.extra,
+                    &prepared.t.message,
+                    &fee,
+                    app,
+                    unsigned.calldata.len(),
+                    members,
+                )?;
                 let gateway = || SubmitQuote {
                     path: SubmitPath::Gateway,
                     payer: None,

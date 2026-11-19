@@ -58,12 +58,19 @@ pub(crate) struct Row {
     pub signer_kind: Option<u16>,
     #[serde(default)]
     pub unsigned_len: Option<u64>,
+    /// a `bls12381-multi` group signer's member count (bls-multi plan Task 17): the `members` count its `resend` quotes with
+    #[serde(default)]
+    pub members: Option<u64>,
     /// when the row became terminal, on the SDK's clock (unix seconds): kept `Limits::state_retention_secs` after it
     #[serde(default)]
     pub ended_at: Option<u64>,
     /// the signed message, canonical (public: the calldata holds it): a retry is the same message but its `validUntil`
     #[serde(default)]
     pub message: serde_json::Value,
+    /// the prepared operation's unsigned arguments beside the message (public: the calldata holds them): a gateway row's
+    /// self-relay `resend` recomputes the operation's own gas figure from them (PR A review, finding 2)
+    #[serde(default)]
+    pub extra: serde_json::Value,
 }
 
 impl Row {

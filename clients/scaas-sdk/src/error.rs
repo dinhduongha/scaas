@@ -107,6 +107,9 @@ own_codes! {
     GasCountUnknown,
     /// bls12381-multi (plan Task 17): the valid partials' weight is below the group's threshold
     BlsMultiBelowThreshold,
+    /// A gas table with a key outside the format, at the top, on a row or inside a row's part (PR A review, finding 1): an
+    /// unknown part is refused, never dropped from a quote.
+    GasFieldUnknown,
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).

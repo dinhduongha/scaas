@@ -153,9 +153,11 @@ impl Wallet {
                     detail: "Signed".into(),
                     landed: None,
                     relayer_bound: false,
+                    extra: serde_json::Value::Null,
                     gas_limit: Some(q.quote.gas_limit),
                     signer_kind: None,
                     unsigned_len: None,
+                    members: None,
                     ended_at: None,
                     message: serde_json::Value::Null,
                 };
