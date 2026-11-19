@@ -134,7 +134,7 @@ library UARegistryAuxLib {
     // ----- the PQZ proof later (UA8-D8, P8) and the PQZ key versions later (ruling A1-I1; group 3g) -----
 
     function storePqzPop(bytes32 ua, uint64 version, bytes calldata pqzPop) external {
-        bool host = _host(ua);
+        address host = _host(ua);
         if (pqzPop.length == 0) revert IUARegistry.UAPqzPopHash(ua); // an empty proof is no proof (ruling A6-m)
         UAStore.PqzKey memory k = _pqzRecord(ua, version, host, keccak256(pqzPop));
         if (UAStore.layout().pqzPop[ua][version].length != 0) return; // stored: proven, or never provable here (no verifier)
@@ -155,16 +155,16 @@ library UARegistryAuxLib {
     /// hash is 0). On a host without its own record, gen 1's (from its `register` or `setPqzKey`), proven in this generation
     /// (ruling A6-I1, host rule 3) and copied here: from then on the host answers this version from its own record,
     /// whatever gen 1 writes later (host rule 2).
-    function _pqzRecord(bytes32 ua, uint64 version, bool host, bytes32 popHash)
+    function _pqzRecord(bytes32 ua, uint64 version, address host, bytes32 popHash)
         private
         returns (UAStore.PqzKey memory k)
     {
         UAStore.Layout storage s = UAStore.layout();
         k = s.pqzKey[ua][version];
         bytes32 ph = s.pqzPopHash[ua][version];
-        bool copy = host && k.ptr == address(0);
+        bool copy = host != address(0) && k.ptr == address(0);
         if (copy) {
-            IUARegistry g1 = IUARegistry(UARegistryCoreLib._pred());
+            IUARegistry g1 = IUARegistry(host);
             (k.ptr, ph,) = g1.pqzKeyAt(ua, version);
             k.added = version != 0 || g1.pqzKeySigOf(ua, 0).length != 0;
         }
@@ -179,19 +179,19 @@ library UARegistryAuxLib {
 
     /// The R_REG message of a `register` key: `uaMessage(0x0142, PURPOSE_POP_V2, typed(UAPortableRecord))` with the
     /// registering kind from either generation (a gen-1 record on its gen-2 host: `kindOf` reads gen 1).
-    function _registerKeyMessage(bytes32 ua, bytes32 h, bool host) private view returns (bytes32) {
+    function _registerKeyMessage(bytes32 ua, bytes32 h, address host) private view returns (bytes32) {
         bytes32 d = UAKinds.portableRecordDigest(ua, UARegistryCoreLib._kindOf(ua), h, _kemHash(ua, host));
         return UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, d);
     }
 
     /// The initial KEM record's struct hash (the zero record = none) that `register`'s PoP signed: version 0 — the key,
     /// or its committed hash, filled or not (owner 2026-10-31) —, of the `register` arguments here or gen 1's.
-    function _kemHash(bytes32 ua, bool host) private view returns (bytes32) {
+    function _kemHash(bytes32 ua, address host) private view returns (bytes32) {
         UAStore.Layout storage s = UAStore.layout();
         IUARegistry.KemKey memory kem;
         bytes32 committed;
-        if (host) {
-            (,, IUARegistry.UAAttrs memory a,,) = IUARegistry(UARegistryCoreLib._pred()).registrationOf(ua);
+        if (host != address(0)) {
+            (,, IUARegistry.UAAttrs memory a,,) = IUARegistry(host).registrationOf(ua);
             (kem, committed) = (a.kem, a.kemPkHash);
         } else {
             UAStore.KemCommit memory c = s.kemCommit[ua];
@@ -202,17 +202,13 @@ library UARegistryAuxLib {
         return UAKinds.kemRecordHash(ua, 0, UAKinds.kemPk(kem));
     }
 
-    /// Where `storePqzPop` / `setPqzKey` write (ruling A6-I1): false = the record is here; true = gen 1 holds it and this
-    /// gen 2 enables 0x0142 (its constructor refuses 0x0142 when gen 1 enables it, so this is the oldest generation
-    /// with the verifier); else `UAUnauthorized` (unregistered, or a gen-1 record on a gen 2 without 0x0142: UA8-D11).
-    function _host(bytes32 ua) private view returns (bool) {
-        UAStore.Layout storage s = UAStore.layout();
-        if (s.records[ua].kind != 0) return false;
-        if (
-            UARegistryCoreLib._pred() != address(0) && uint160(UARegistryCoreLib._cfgPqz()) != 0
-                && UARegistryCoreLib._kindOf(ua) != 0
-        ) return true;
-        revert IUARegistry.UAUnauthorized(ua);
+    /// Where `storePqzPop` / `setPqzKey` write (spec 2026-11-19-registry-verify-only-kinds §11.2, owner P7): 0 = the record is here
+    /// (`_pqzHolder` then decides whether a key is allowed, A5-I1 (3)); its holder = a record held elsewhere whose PQZ home
+    /// this generation is; else `UAUnauthorized` (unregistered, or not its home: UA8-D11).
+    function _host(bytes32 ua) private view returns (address h) {
+        if (UAStore.layout().records[ua].kind != 0) return h;
+        (, h) = UARegistryCoreLib._pqzWhere(ua);
+        if (h == address(0)) revert IUARegistry.UAUnauthorized(ua);
     }
 
     function setPqzKey(
@@ -223,12 +219,15 @@ library UARegistryAuxLib {
         IUARegistry.UASig calldata sig
     ) external {
         UAStore.Layout storage s = UAStore.layout();
-        (uint16 kind, bytes memory d, bool host) = _holderOf(ua);
-        _core(address(UARegistryRegLib), abi.encodeWithSelector(UARegistryRegLib.pqzHolder.selector, kind, d, ua, host));
+        (uint16 kind, bytes memory d, address host) = _holderOf(ua);
+        _core(
+            address(UARegistryRegLib),
+            abi.encodeWithSelector(UARegistryRegLib.pqzHolder.selector, kind, d, ua, host != address(0))
+        );
         _pqzNext(ua, version, host);
         bytes32 h = UARegistryRegLib._pqzKeyHash(pqzKey);
         // KV-1 (Codex #1): no two versions of one UA hold the same key, before any proof exists; a host reads gen 1's too
-        if (s.pqzKeyUsed[ua][h] || (host && IUARegistry(UARegistryCoreLib._pred()).pqzKeyUsed(ua, h))) {
+        if (s.pqzKeyUsed[ua][h] || (host != address(0) && IUARegistry(host).pqzKeyUsed(ua, h))) {
             revert IUARegistry.UAKeyInUse(h, ua);
         }
         if (pqzPopHash == 0 || pqzPopHash == UARegistryRegLib.EMPTY_PROOF_HASH) revert IUARegistry.UAPqzPopHash(ua);
@@ -248,12 +247,12 @@ library UARegistryAuxLib {
     /// The record `setPqzKey` / `setPqzScopedKey` sign for (`_host`'s rule): its kind and key data, here or in gen 1 on a host. An
     /// `msig`: its **current** structure (CTR-UA-44), gen 1's `msigOf` + `msigStateOf` on a host, never `registrationOf` (a raised
     /// threshold would be read as the first one).
-    function _holderOf(bytes32 ua) private view returns (uint16 kind, bytes memory d, bool host) {
+    function _holderOf(bytes32 ua) private view returns (uint16 kind, bytes memory d, address host) {
         host = _host(ua);
         IUARegistry.Record memory r = UAStore.layout().records[ua];
-        kind = host ? UARegistryCoreLib._kindOf(ua) : r.kind;
+        kind = host != address(0) ? UARegistryCoreLib._kindOf(ua) : r.kind;
         if (kind == UAKinds.MSIG) d = UARegistryCoreLib._msigBytes(ua);
-        else if (host) (, d,,,) = IUARegistry(UARegistryCoreLib._pred()).registrationOf(ua);
+        else if (host != address(0)) (, d,,,) = IUARegistry(host).registrationOf(ua);
         else (d,) = UAStore.registration(ua, r);
     }
 
@@ -412,7 +411,7 @@ library UARegistryAuxLib {
     struct Scoped {
         uint16 kind;
         bytes d;
-        bool host;
+        address host;
         bytes32 h;
         bytes kemPk;
     }
@@ -433,7 +432,7 @@ library UARegistryAuxLib {
         (c.kind, c.d, c.host) = _holderOf(ua);
         _core(
             address(UARegistryRegLib),
-            abi.encodeWithSelector(UARegistryRegLib.pqzHolder.selector, c.kind, c.d, ua, c.host)
+            abi.encodeWithSelector(UARegistryRegLib.pqzHolder.selector, c.kind, c.d, ua, c.host != address(0))
         );
         // ruling 9 (owner 2026-11-13): no `msig` holds the shared key at first
         if (scope == address(0) && c.kind == UAKinds.MSIG) revert IUARegistry.UAPqzHolder(ua);
@@ -470,7 +469,7 @@ library UARegistryAuxLib {
     /// K3-3's sequence and key checks: `version == latest + 1`, the first 0 (`UAPqzKeyVersion`); a set's length and version 0's
     /// length (`UAKeyData(0x0142)`, review S-5: a holder's set is fixed per scope); key bytes in no record space of the UA
     /// (`pqzKeyUsed`, a host's gen 1 too; `UAKeyInUse(h, ua)`). Returns the key hash.
-    function _scopedNext(bytes32 ua, address scope, uint64 version, bytes calldata pqzKey, bool host)
+    function _scopedNext(bytes32 ua, address scope, uint64 version, bytes calldata pqzKey, address host)
         private
         view
         returns (bytes32 h)
@@ -482,7 +481,7 @@ library UARegistryAuxLib {
         }
         h = UARegistryRegLib._pqzKeyHash(pqzKey);
         if (p0 != address(0) && pqzKey.length + 1 != p0.code.length) revert IUARegistry.UAKeyData(UAKinds.PQZ_MLWE);
-        if (s.pqzKeyUsed[ua][h] || (host && IUARegistry(UARegistryCoreLib._pred()).pqzKeyUsed(ua, h))) {
+        if (s.pqzKeyUsed[ua][h] || (host != address(0) && IUARegistry(host).pqzKeyUsed(ua, h))) {
             revert IUARegistry.UAKeyInUse(h, ua);
         }
     }
@@ -576,53 +575,6 @@ library UARegistryAuxLib {
         emit IUARegistry.UAPqzScopedKeyCurrent(ua, scope, version);
     }
 
-    /// A gen-1 record read on a gen 2 that is not the PQZ host: the scoped views forward it (as `pqzKeyOf`).
-    function _away(bytes32 ua) private view returns (bool) {
-        return UARegistryCoreLib._elsewhere(ua) && uint160(UARegistryCoreLib._cfgPqz()) == 0;
-    }
-
-    function pqzScopedKeyLatest(bytes32 ua, address scope) external returns (uint64) {
-        if (_away(ua)) return IUARegistry(UARegistryCoreLib._pred()).pqzScopedKeyLatest(ua, scope);
-        return UAStore.layout().scopedVersions[ua][scope].latest;
-    }
-
-    function pqzScopedPopOf(bytes32 ua, address scope, uint64 version) external returns (bytes memory) {
-        if (_away(ua)) return IUARegistry(UARegistryCoreLib._pred()).pqzScopedPopOf(ua, scope, version);
-        return SSTORE2.readChunks(UAStore.layout().scopedPop[ua][scope][version]);
-    }
-
-    function pqzOpenKemAt(bytes32 ua, address scope, uint64 version) external returns (IUARegistry.KemKey memory k) {
-        if (_away(ua)) return IUARegistry(UARegistryCoreLib._pred()).pqzOpenKemAt(ua, scope, version);
-        address p = UAStore.layout().scopedOpenKem[ua][scope][version];
-        if (p == address(0)) return k;
-        bytes memory pk = SSTORE2.read(p); // scheme 1 (1 B) ‖ ek (1,568 B) ‖ x25519 (32 B)
-        (k.scheme, k.mlkemEk, k.x25519) = (uint8(pk[0]), UAStore.cut(pk, 1, 1568), bytes32(UAStore.word(pk, 1569)));
-    }
-
-    /// Codex U4h-2 (owner 2026-11-15): a scope's holder list follows the scoped key reads' forwarding (`_away`): on a registry that
-    /// is not the PQZ host (slot 0x0142 empty) in front of a predecessor, the predecessor's list first, then this registry's own.
-    function _scopedFrom() private view returns (address p) {
-        if (uint160(UARegistryCoreLib._cfgPqz()) == 0) p = UARegistryCoreLib._pred();
-    }
-
-    function pqzScopedCount(address scope) external returns (uint256 n) {
-        address p = _scopedFrom();
-        if (p != address(0)) n = IUARegistry(p).pqzScopedCount(scope);
-        n += UAStore.layout().scopedCount[scope];
-    }
-
-    function pqzScopedAt(address scope, uint256 i) external returns (bytes32) {
-        address p = _scopedFrom();
-        uint256 j = i;
-        if (p != address(0)) {
-            uint256 m = IUARegistry(p).pqzScopedCount(scope);
-            if (j < m) return IUARegistry(p).pqzScopedAt(scope, j);
-            j -= m;
-        }
-        if (j >= UAStore.layout().scopedCount[scope]) revert IUARegistry.UAIndex(UAKinds.PQZ_MLWE, i);
-        return UAStore.layout().scopedAt[scope][j];
-    }
-
     function pqzScopedKeyDigest(
         bytes32 ua,
         uint8 keyClass,
@@ -652,12 +604,12 @@ library UARegistryAuxLib {
 
     /// KV-1 (R2, O6): version 0 is write-once (`UAPqzKeySet` once the UA has one, here or, on a host, in gen 1); a version
     /// v ≥ 1 needs version 0 and `v == latest + 1` (`UAPqzKeyVersion`), `latest` the larger of both generations' on a host.
-    function _pqzNext(bytes32 ua, uint64 version, bool host) private view {
+    function _pqzNext(bytes32 ua, uint64 version, address host) private view {
         UAStore.Layout storage s = UAStore.layout();
         bool has0 = s.pqzKey[ua][0].ptr != address(0);
         uint64 latest = s.pqzVersions[ua].latest;
-        if (host) {
-            IUARegistry g1 = IUARegistry(UARegistryCoreLib._pred());
+        if (host != address(0)) {
+            IUARegistry g1 = IUARegistry(host);
             (address p0,,) = g1.pqzKeyAt(ua, 0);
             has0 = has0 || p0 != address(0);
             uint64 l1 = g1.pqzKeyLatest(ua);
@@ -759,25 +711,6 @@ library UARegistryAuxLib {
 
     // ----- moved from `UARegistry` (T66b 3.1b): a read off the hot path, run by `_libView` -----
 
-    function pqzPopOf(bytes32 ua, uint64 version) external returns (bytes memory) {
-        if (UAStore.layout().pqzKey[ua][version].ptr == address(0) && UARegistryCoreLib._elsewhere(ua)) {
-            return IUARegistry(UARegistryCoreLib._pred()).pqzPopOf(ua, version);
-        }
-        return SSTORE2.readChunks(UAStore.layout().pqzPop[ua][version]);
-    }
-
-    // ----- moved from `UARegistry` (T66b 3.1b): a read off the hot path, run by `_libView` -----
-
-    function pqzKeySigOf(bytes32 ua, uint64 version) external returns (bytes memory) {
-        // gen 2 proving gen 1's `setPqzKey` key keeps no copy of the signature: gen 1 has it
-        if (UAStore.layout().pqzKeySig[ua][version].length == 0 && UARegistryCoreLib._elsewhere(ua)) {
-            return IUARegistry(UARegistryCoreLib._pred()).pqzKeySigOf(ua, version);
-        }
-        return SSTORE2.readChunks(UAStore.layout().pqzKeySig[ua][version]);
-    }
-
-    // ----- moved from `UARegistry` (T66b 3.1b): a read off the hot path, run by `_libView` -----
-
     function uaPage(uint16 kind, uint256 start, uint256 n) external returns (bytes32[] memory page) {
         if (!UARegistryCoreLib._listedHere()) return IUARegistry(UARegistryCoreLib._pred()).uaPage(kind, start, n);
         uint256 count = UAStore.layout().uaCount[kind];
@@ -820,9 +753,11 @@ library UARegistryAuxLib {
             bytes memory pqzPop
         )
     {
-        if (UARegistryCoreLib._elsewhere(ua)) {
-            (kind, keyData, attrs, pop, pqzPop) = IUARegistry(UARegistryCoreLib._pred()).registrationOf(ua);
-            // A5-c2 / A6-I1: gen 1's `register` key (version 0) proven here, its proof stored here
+        (address t, address h) = UARegistryCoreLib._pqzWhere(ua);
+        if (t != address(0)) return IUARegistry(t).registrationOf(ua); // §11.2: its PQZ home, or its holder
+        if (h != address(0)) {
+            (kind, keyData, attrs, pop, pqzPop) = IUARegistry(h).registrationOf(ua);
+            // A5-c2 / A6-I1: the holder's `register` key (version 0) proven here, its PQZ home, its proof stored here
             if (attrs.pqzKey.length != 0 && pqzPop.length == 0 && !UAStore.layout().pqzKey[ua][0].added) {
                 pqzPop = SSTORE2.readChunks(UAStore.layout().pqzPop[ua][0]);
             }

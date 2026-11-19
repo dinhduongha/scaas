@@ -424,12 +424,13 @@ library UARegistryRegLib {
     /// (`setPqzKey` on a gen-2 host); gen 1 verifies its native slots with its own clone hash, so they count 400 k, as `_slotCap`
     /// counts a gen-1 inner's.
     function _pqzHolder(uint16 kind, bytes memory d, bytes32 ua, bool gen1) internal view {
-        // ruling A5-I1: 0x0142 lives in one generation; a gen 2 in front of a gen 1 that holds it refuses a PQZ key (the
-        // portable PoP lets anyone choose the registry: a key placed here could never be proven on this chain)
+        // ruling A5-I1 (3) (spec 2026-11-19-registry-verify-only-kinds §11.2): a generation without 0x0142 behind one that enables it
+        // refuses a PQZ key for its own records (no home yet: a key placed here could never be proven on this chain)
         address g1 = UARegistryCoreLib._pred();
-        if (g1 != address(0) && IUARegistry(g1).kindEnabled(UAKinds.PQZ_MLWE)) {
-            revert IUARegistry.UAKindDisabled(UAKinds.PQZ_MLWE);
-        }
+        if (
+            !gen1 && uint160(UARegistryCoreLib._cfgPqz()) == 0 && g1 != address(0)
+                && IUARegistry(g1).kindHome(UAKinds.PQZ_MLWE) != address(0)
+        ) revert IUARegistry.UAKindDisabled(UAKinds.PQZ_MLWE);
         if (!_holder(kind, d)) revert IUARegistry.UAPqzHolder(ua);
         // MD-13 (owner 2026-11-15, F-1): every holder kind, a single key with its own cap (gen 1's for a record gen 1 holds)
         // owner M2: `w` the fallback worst of the consumer path (§4's consumer mode), for a record held elsewhere `_slotCap`'s

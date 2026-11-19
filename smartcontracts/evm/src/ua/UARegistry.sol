@@ -356,22 +356,17 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     /// `r.keyPtr ≠ 0` only for stored kinds and an updated `msig` (CTR-UA-44 MM-7: its structure blob, no key); `pqzKey ≠ 0` only for PQZ holders with a key (proven or not): the current
-    /// version's (group 3g). Gen 2: a gen-1 record with gen 1's key, or a host's own current (ruling A6-I1).
+    /// version's (group 3g). A record held elsewhere: its PQZ home's answer (§11.2), or the holder's where it has none; here the
+    /// home of a record held elsewhere: the holder's record with this generation's key.
     function recordOf(bytes32 ua) external view returns (Record memory r, address pqzKey) {
+        (address t, address h) = _pqzWhere(ua);
+        if (t != address(0)) return IUARegistry(t).recordOf(ua);
         r = _s.records[ua];
-        if (r.kind == 0 && predecessor != address(0)) {
-            (r, pqzKey) = IUARegistry(predecessor).recordOf(ua);
-            if (!_pqzHost()) return (r, pqzKey);
-        }
+        if (h != address(0)) (r,) = IUARegistry(h).recordOf(ua);
         (, pqzKey,,) = pqzKeyOf(ua);
     }
 
     // ----- UA-8 reads (gen 2 forwards a record it does not hold, UA8-D11) -----
-
-    /// A record gen 1 holds (this registry is gen 2 and has none of its own). Gen 1 reads no storage here.
-    function _elsewhere(bytes32 ua) private view returns (bool) {
-        return predecessor != address(0) && _s.records[ua].kind == 0;
-    }
 
     /// N11 (spec 2026-11-19-registry-verify-only-kinds §11.1): the generation that holds a record this one does not, read at it
     /// directly; 0 when held here or nowhere (then this generation's empty answer is the line's). The predecessor's `holderOf`
@@ -381,18 +376,27 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         if (predecessor != address(0) && _s.records[ua].kind == 0) (h,,) = IUARegistry(predecessor).holderOf(ua);
     }
 
-    /// Ruling A6-I1: a UA's PQZ attachment (the versions from `setPqzKey`, the proofs, `proven`, the owner of a proven key,
-    /// the `0x0142` list entry, `current`) lives in the oldest generation that enables 0x0142; the record stays where it
-    /// was registered. This gen 2 is such a host: it answers `current` itself and reads each version from its own record
-    /// when it holds one, else gen 1's (group 3g, host rules 2 and 3).
-    function _pqzHost() private view returns (bool) {
-        return predecessor != address(0) && uint160(_CFG18) != 0;
+    /// Spec 2026-11-19-registry-verify-only-kinds §11.2 (owner P7; ruling A6-I1 for N generations): a UA's PQZ attachment (the
+    /// versions, the proofs, `proven`, the owner of a proven key, the `0x0142` list entry, `current`) lives in its **PQZ home**,
+    /// the oldest generation from its holder to the reader that enables 0x0142 (`holderOf`'s third word). From here: `t` the
+    /// generation to forward a read to (its home, or its holder where it has none; 0: this one answers); `h` the holder of a
+    /// record held elsewhere whose home this generation is (it reads each version from its own record when it has one, else the
+    /// holder's: host rules 2 and 3), 0 otherwise.
+    function _pqzWhere(bytes32 ua) private view returns (address t, address h) {
+        if (predecessor == address(0) || _s.records[ua].kind != 0) return (t, h);
+        address home;
+        (h,, home) = IUARegistry(predecessor).holderOf(ua);
+        if (home == address(0) && h != address(0) && uint160(_CFG18) != 0) return (t, h);
+        (t, h) = (home != address(0) ? home : h, address(0));
     }
 
-    /// Version `v` of `ua`: this generation's record, else gen 1's for a gen-1 record (host rule 2).
+    /// Version `v` of `ua`: this generation's record, else the home's or the holder's (host rule 2).
     function _pqzAt(bytes32 ua, uint64 v) private view returns (address ptr, bytes32 pqzPopHash, bool proven) {
         UAStore.PqzKey memory k = _s.pqzKey[ua][v];
-        if (k.ptr == address(0) && _elsewhere(ua)) return IUARegistry(predecessor).pqzKeyAt(ua, v);
+        if (k.ptr == address(0)) {
+            (address t, address h) = _pqzWhere(ua);
+            if (t != address(0) || h != address(0)) return IUARegistry(t != address(0) ? t : h).pqzKeyAt(ua, v);
+        }
         return (k.ptr, _s.pqzPopHash[ua][v], k.proven);
     }
 
@@ -497,16 +501,17 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     function pqzPopOf(bytes32 ua, uint64 version) external view returns (bytes memory) {
-        _libView(address(UARegistryAuxLib), UARegistryAuxLib.pqzPopOf.selector, 0);
+        _libView(address(UARegistryCoreLib), UARegistryCoreLib.pqzPopOf.selector, 0);
     }
 
     function pqzKeySigOf(bytes32 ua, uint64 version) external view returns (bytes memory) {
-        _libView(address(UARegistryAuxLib), UARegistryAuxLib.pqzKeySigOf.selector, 0);
+        _libView(address(UARegistryCoreLib), UARegistryCoreLib.pqzKeySigOf.selector, 0);
     }
 
-    /// Group 3g (KV-3): one current per UA and registry generation; a gen 2 that is no PQZ host forwards a gen-1 record.
+    /// Group 3g (KV-3): one current per UA at its PQZ home (§11.2); a generation that is not the home forwards.
     function pqzKeyOf(bytes32 ua) public view returns (uint64 version, address ptr, bytes32 pqzPopHash, bool proven) {
-        if (_elsewhere(ua) && !_pqzHost()) return IUARegistry(predecessor).pqzKeyOf(ua);
+        (address t,) = _pqzWhere(ua);
+        if (t != address(0)) return IUARegistry(t).pqzKeyOf(ua);
         version = _s.pqzVersions[ua].current;
         (ptr, pqzPopHash, proven) = _pqzAt(ua, version);
     }
@@ -516,15 +521,19 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     function pqzKeyLatest(bytes32 ua) external view returns (uint64 latest) {
+        (address t, address h) = _pqzWhere(ua);
+        if (t != address(0)) return IUARegistry(t).pqzKeyLatest(ua);
         latest = _s.pqzVersions[ua].latest;
-        if (_elsewhere(ua)) {
-            uint64 g = IUARegistry(predecessor).pqzKeyLatest(ua);
+        if (h != address(0)) {
+            uint64 g = IUARegistry(h).pqzKeyLatest(ua);
             if (g > latest) latest = g;
         }
     }
 
     function pqzKeyUsed(bytes32 ua, bytes32 pqzKeyHash) external view returns (bool) {
-        return _s.pqzKeyUsed[ua][pqzKeyHash] || (_elsewhere(ua) && IUARegistry(predecessor).pqzKeyUsed(ua, pqzKeyHash));
+        (address t, address h) = _pqzWhere(ua);
+        if (t != address(0)) return IUARegistry(t).pqzKeyUsed(ua, pqzKeyHash);
+        return _s.pqzKeyUsed[ua][pqzKeyHash] || (h != address(0) && IUARegistry(h).pqzKeyUsed(ua, pqzKeyHash));
     }
 
     // ----- the PQZ three-key model: scoped PQZ key records (spec 2026-11-13-pqz-three-keys K3-3) -----
@@ -535,7 +544,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         view
         returns (uint64 version, address ptr, bytes32 pqzPopHash, bool proven)
     {
-        if (_elsewhere(ua) && !_pqzHost()) return IUARegistry(predecessor).pqzScopedKeyOf(ua, scope);
+        (address t,) = _pqzWhere(ua);
+        if (t != address(0)) return IUARegistry(t).pqzScopedKeyOf(ua, scope);
         version = _s.scopedVersions[ua][scope].current;
         UAStore.PqzKey memory k = _s.scopedKey[ua][scope][version];
         (ptr, pqzPopHash, proven) = (k.ptr, _s.scopedPopHash[ua][scope][version], k.proven);
@@ -546,29 +556,30 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         view
         returns (address ptr, bytes32 pqzPopHash, bool proven)
     {
-        if (_elsewhere(ua) && !_pqzHost()) return IUARegistry(predecessor).pqzScopedKeyAt(ua, scope, version);
+        (address t,) = _pqzWhere(ua);
+        if (t != address(0)) return IUARegistry(t).pqzScopedKeyAt(ua, scope, version);
         UAStore.PqzKey memory k = _s.scopedKey[ua][scope][version];
         return (k.ptr, _s.scopedPopHash[ua][scope][version], k.proven);
     }
 
     function pqzScopedKeyLatest(bytes32 ua, address scope) external view returns (uint64) {
-        _libView(address(UARegistryAuxLib), UARegistryAuxLib.pqzScopedKeyLatest.selector, 0);
+        _libView(address(UARegistryCoreLib), UARegistryCoreLib.pqzScopedKeyLatest.selector, 0);
     }
 
     function pqzScopedPopOf(bytes32 ua, address scope, uint64 version) external view returns (bytes memory) {
-        _libView(address(UARegistryAuxLib), UARegistryAuxLib.pqzScopedPopOf.selector, 0);
+        _libView(address(UARegistryCoreLib), UARegistryCoreLib.pqzScopedPopOf.selector, 0);
     }
 
     function pqzOpenKemAt(bytes32 ua, address scope, uint64 version) external view returns (KemKey memory) {
-        _libView(address(UARegistryAuxLib), UARegistryAuxLib.pqzOpenKemAt.selector, 0);
+        _libView(address(UARegistryCoreLib), UARegistryCoreLib.pqzOpenKemAt.selector, 0);
     }
 
     function pqzScopedCount(address scope) external view returns (uint256) {
-        _libView(address(UARegistryAuxLib), UARegistryAuxLib.pqzScopedCount.selector, 0);
+        _libView(address(UARegistryCoreLib), UARegistryCoreLib.pqzScopedCount.selector, 0);
     }
 
     function pqzScopedAt(address scope, uint256 i) external view returns (bytes32) {
-        _libView(address(UARegistryAuxLib), UARegistryAuxLib.pqzScopedAt.selector, 0);
+        _libView(address(UARegistryCoreLib), UARegistryCoreLib.pqzScopedAt.selector, 0);
     }
 
     function pqzScopedKeyDigest(
@@ -615,10 +626,11 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     function checkedOf(bytes32 ua) external view returns (uint8 pop, uint8 pqzPop, uint8 kem) {
         bool proven;
-        if (_elsewhere(ua)) {
-            (pop, pqzPop, kem) = IUARegistry(predecessor).checkedOf(ua);
-            if (!_pqzHost()) return (pop, pqzPop, kem);
-            (,,, proven) = pqzKeyOf(ua); // A6-I1: the host's current
+        (address t, address h) = _pqzWhere(ua);
+        if (t != address(0)) return IUARegistry(t).checkedOf(ua);
+        if (h != address(0)) {
+            (pop, pqzPop, kem) = IUARegistry(h).checkedOf(ua);
+            (,,, proven) = pqzKeyOf(ua); // A6-I1: the home's current
             return (pop, UAStore.checked(proven), kem);
         }
         if (_s.records[ua].kind == 0) return (pop, pqzPop, kem);

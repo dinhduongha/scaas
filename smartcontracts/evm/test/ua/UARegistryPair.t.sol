@@ -210,12 +210,15 @@ contract UARegistryPairTest is UARegistryBase {
         reg.registrationOf(ua);
         _routed(r, k, UARegistryCoreLib.uaCount.selector);
         reg.uaCount(0x0103);
-        bytes4[8] memory aux = [
+        // spec 2026-11-19-registry-verify-only-kinds §11.2 (controller call): the PQZ readers moved to the core library (Aux's size)
+        _routed(r, k, UARegistryCoreLib.pqzPopOf.selector);
+        reg.pqzPopOf(ua, 0);
+        _routed(r, k, UARegistryCoreLib.pqzKeySigOf.selector);
+        reg.pqzKeySigOf(ua, 0);
+        bytes4[6] memory aux = [
             UARegistryAuxLib.popOf.selector,
             UARegistryAuxLib.popSlotsOf.selector,
             UARegistryAuxLib.webAuthnKeyOf.selector,
-            UARegistryAuxLib.pqzPopOf.selector,
-            UARegistryAuxLib.pqzKeySigOf.selector,
             UARegistryAuxLib.uaAt.selector,
             UARegistryAuxLib.uaPage.selector,
             UARegistryAuxLib.uaIndex.selector
@@ -226,8 +229,6 @@ contract UARegistryPairTest is UARegistryBase {
         reg.popOf(ua);
         reg.popSlotsOf(ua);
         reg.webAuthnKeyOf(ua);
-        reg.pqzPopOf(ua, 0);
-        reg.pqzKeySigOf(ua, 0);
         _try(abi.encodeCall(UARegistry.uaAt, (0x0103, 0)));
         reg.uaPage(0x0103, 0, 4);
         _try(abi.encodeCall(UARegistry.uaIndex, (ua)));

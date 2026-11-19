@@ -1,0 +1,7 @@
+mutant | red tests | rc | killed by
+home-newest-enabling | test_pqzHome_a_gen1With_gen2Without_gen3With, test_pqzHome_b_gen1Without_gen2With_gen3With | 1 | test_pqzHome_a_gen1With_gen2Without_gen3With
+0142-lists-concatenated | test_0142List_perGeneration_stablePositions | 1 | test_0142List_perGeneration_stablePositions
+auditor-kindEnabled | test_pqzHome_e_auditorChecks_lineWide | 1 | test_pqzHome_e_auditorChecks_lineWide
+a5i1-any-predecessor | test_0142List_perGeneration_stablePositions, test_pqzHome_a_gen1With_gen2Without_gen3With, test_pqzHome_b_gen1Without_gen2With_gen3With, test_pqzHome_c_residualPinned, test_pqzHome_d_scopedListsAndLatest | 1 | test_pqzHome_a_gen1With_gen2Without_gen3With
+writes-off-home | test_pqzWrites_onlyAtHome | 1 | test_pqzWrites_onlyAtHome
+reads-to-predecessor | - | 0 | SURVIVED

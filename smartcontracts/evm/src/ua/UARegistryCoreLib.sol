@@ -111,6 +111,18 @@ library UARegistryCoreLib {
         return h == address(0) ? _cloneHash() : IUARegistry(h).smartKeyCloneHash();
     }
 
+    /// Spec 2026-11-19-registry-verify-only-kinds §11.2 (owner P7), `UARegistry._pqzWhere`'s rule: `t` the generation a PQZ read of
+    /// `ua` forwards to (its home, or its holder where it has none; 0: this one), `h` the holder of a record held elsewhere whose PQZ
+    /// home this generation is (0 otherwise).
+    function _pqzWhere(bytes32 ua) internal view returns (address t, address h) {
+        address p = _pred();
+        if (p == address(0) || UAStore.layout().records[ua].kind != 0) return (t, h);
+        address home;
+        (h,, home) = IUARegistry(p).holderOf(ua);
+        if (home == address(0) && h != address(0) && uint160(_cfgPqz()) != 0) return (t, h);
+        (t, h) = (home != address(0) ? home : h, address(0));
+    }
+
     /// `holderOf(ua)`'s holder for a check: this generation where it holds the record or where no generation does (its own answer
     /// then refuses), else the holder (W1, N2).
     function _at(bytes32 ua) internal view returns (address h) {
@@ -609,6 +621,84 @@ library UARegistryCoreLib {
     /// `IUARegistry.pqzHomeOf`: the walk's third word, never a second walk (M4).
     function pqzHomeOf(bytes32 ua) external returns (address home) {
         (,, home) = _holderOf(ua);
+    }
+
+    // ----- the PQZ readers off the hot path, run by `_libView` (moved from `UARegistryAuxLib` for its size, spec
+    // 2026-11-19-registry-verify-only-kinds §11.2, controller call (auto-run)) -----
+
+    /// The scoped views forward a record whose PQZ home is elsewhere (§11.2): to its home, or its holder where it has none.
+    function _away(bytes32 ua) private view returns (address t) {
+        (t,) = _pqzWhere(ua);
+    }
+
+    function pqzScopedKeyLatest(bytes32 ua, address scope) external returns (uint64) {
+        address t = _away(ua);
+        if (t != address(0)) return IUARegistry(t).pqzScopedKeyLatest(ua, scope);
+        return UAStore.layout().scopedVersions[ua][scope].latest;
+    }
+
+    function pqzScopedPopOf(bytes32 ua, address scope, uint64 version) external returns (bytes memory) {
+        address t = _away(ua);
+        if (t != address(0)) return IUARegistry(t).pqzScopedPopOf(ua, scope, version);
+        return SSTORE2.readChunks(UAStore.layout().scopedPop[ua][scope][version]);
+    }
+
+    function pqzOpenKemAt(bytes32 ua, address scope, uint64 version) external returns (IUARegistry.KemKey memory k) {
+        address t = _away(ua);
+        if (t != address(0)) return IUARegistry(t).pqzOpenKemAt(ua, scope, version);
+        address p = UAStore.layout().scopedOpenKem[ua][scope][version];
+        if (p == address(0)) return k;
+        bytes memory pk = SSTORE2.read(p); // scheme 1 (1 B) ‖ ek (1,568 B) ‖ x25519 (32 B)
+        (k.scheme, k.mlkemEk, k.x25519) = (uint8(pk[0]), UAStore.cut(pk, 1, 1568), bytes32(UAStore.word(pk, 1569)));
+    }
+
+    /// Codex U4h-2 (owner 2026-11-15), §11.2 for N generations: a scope's holder list is the line's, the predecessor's list first
+    /// (itself the lists below it), then this registry's own: every generation's scoped records, oldest first.
+    function _scopedFrom() private view returns (address) {
+        return _pred();
+    }
+
+    function pqzScopedCount(address scope) external returns (uint256 n) {
+        address p = _scopedFrom();
+        if (p != address(0)) n = IUARegistry(p).pqzScopedCount(scope);
+        n += UAStore.layout().scopedCount[scope];
+    }
+
+    function pqzScopedAt(address scope, uint256 i) external returns (bytes32) {
+        address p = _scopedFrom();
+        uint256 j = i;
+        if (p != address(0)) {
+            uint256 m = IUARegistry(p).pqzScopedCount(scope);
+            if (j < m) return IUARegistry(p).pqzScopedAt(scope, j);
+            j -= m;
+        }
+        if (j >= UAStore.layout().scopedCount[scope]) revert IUARegistry.UAIndex(UAKinds.PQZ_MLWE, i);
+        return UAStore.layout().scopedAt[scope][j];
+    }
+
+    /// A version this generation has no copy of: the home's, or the holder's (host rule 2); 0 for one of its own records.
+    function _pqzFrom(bytes32 ua) private view returns (address) {
+        (address t, address h) = _pqzWhere(ua);
+        return t != address(0) ? t : h;
+    }
+
+    function pqzPopOf(bytes32 ua, uint64 version) external returns (bytes memory) {
+        if (UAStore.layout().pqzKey[ua][version].ptr == address(0)) {
+            address t = _pqzFrom(ua);
+            if (t != address(0)) return IUARegistry(t).pqzPopOf(ua, version);
+        }
+        return SSTORE2.readChunks(UAStore.layout().pqzPop[ua][version]);
+    }
+
+    // ----- moved from `UARegistry` (T66b 3.1b): a read off the hot path, run by `_libView` -----
+
+    function pqzKeySigOf(bytes32 ua, uint64 version) external returns (bytes memory) {
+        // gen 2 proving gen 1's `setPqzKey` key keeps no copy of the signature: gen 1 has it
+        if (UAStore.layout().pqzKeySig[ua][version].length == 0) {
+            address t = _pqzFrom(ua);
+            if (t != address(0)) return IUARegistry(t).pqzKeySigOf(ua, version);
+        }
+        return SSTORE2.readChunks(UAStore.layout().pqzKeySig[ua][version]);
     }
 
     // ----- moved from `UARegistry` (T66b 3.1b): a read off the hot path, run by `_libView` -----

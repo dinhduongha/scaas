@@ -415,6 +415,48 @@ contract PqzAuditorTest is PqzOffchainBase {
         assertEq(tok.auditorUA(), newR, "accepted unproven");
     }
 
+    /// Spec 2026-11-19-registry-verify-only-kinds §11.2 (e): the proven check is line-wide (`kindHome(0x0142)`). A token bound to a gen 2
+    /// without the `0x0142` verifier over a gen 1 with it: a gen-1 holder's unproven key of the token's scope (at its PQZ home, gen 1)
+    /// is refused, as on gen 1 itself.
+    function test_pqzHome_e_auditorChecks_lineWide() public {
+        notice = 0;
+        _offStack();
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
+        k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 200_000, false, 0);
+        k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(mlv), 1_000_000, false, 0);
+        UARegistry r1 = new UARegistry(PQZ_UID, address(0), false, 12_000_000, 1 << 24, address(0), true, k);
+        UARegistry r2 =
+            new UARegistry(PQZ_UID, address(r1), false, 12_000_000, 1 << 24, address(0), true, new UARegistry.KindConfig[](0));
+        OpenFactory f2 = new OpenFactory(nid(registrar));
+        EnvKit.configure(f2, PQZ_UID, 0, address(0));
+        Catalogue.release(
+            f2,
+            IOpenFactory.TokenKind.NORMAL_PQZ,
+            1,
+            pqzEnv(address(f2), PQZ_UID, address(r2), address(0)),
+            type(NormalPqzToken).creationCode
+        );
+        vm.prank(registrar);
+        f2.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(f2)));
+        bytes32 audR = UACall.register(r1, UAKinds.MLDSA65, _mlPk(23), UACall.attrs("", 0, ""), new bytes(ML65_SIG), "");
+        bytes32 newR = UACall.register(r1, UAKinds.MLDSA65, _mlPk(24), UACall.attrs("", 0, ""), new bytes(ML65_SIG), "");
+        (vMode, vUA, vOwnKey) = (PqzCore.OFFCHAIN, vA, true);
+        IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
+        (vMode, vUA, vOwnKey) = (0, bytes32(0), false);
+        c.conf.auditorKey = abi.encode(audR);
+        tok = NormalPqzToken(f2.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "line-aud"));
+        assertFalse(r2.kindEnabled(UAKinds.PQZ_MLWE), "no 0x0142 verifier on the token's registry");
+        assertEq(r2.kindHome(UAKinds.PQZ_MLWE), address(r1), "the line has one");
+        _grant(holder);
+        _scopedOn(r1, newR, address(tok), _spk(++keySeed), false, false);
+        (, address ptr,, bool proven) = r2.pqzScopedKeyOf(newR, address(tok));
+        assertTrue(ptr != address(0) && !proven, "read through gen 2 at its home: stored, unproven");
+        (IUARegistry.UASig memory cs, bytes32 uid) = (_pqAuth(), _uid());
+        vm.prank(holder);
+        vm.expectRevert(abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, newR));
+        tok.setAuditorUA(newR, 1, cs, uid);
+    }
+
     /// A stranger's shield into the proposed UA does not block the apply (consent replaced the account-state check).
     function test_strangerShield_doesNotBlock() public {
         _go(1 days, 0);
