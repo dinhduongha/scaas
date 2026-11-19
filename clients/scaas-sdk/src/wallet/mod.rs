@@ -5,14 +5,20 @@
 //! mark. Values are decimal strings of the smallest unit; no floating point. UNAUDITED.
 pub(crate) mod balances;
 pub(crate) mod history;
+pub(crate) mod native;
 mod native_evm;
 pub(crate) mod ops;
+#[cfg(feature = "raw-native")]
+mod raw;
 pub(crate) mod tokens;
 
 pub use balances::{Balances, TokenBalance};
 pub use history::{Cursor, HistoryItem, HistoryPage, OpItem};
+pub use native::{NativeAddress, NativeKeyRef};
 pub use native_evm::{NativeQuote, NativeSend};
 pub use ops::*;
+#[cfg(feature = "raw-native")]
+pub use raw::{AllowRawNative, NativeSignRequest};
 pub use tokens::TokenInfo;
 
 use crate::Sdk;

@@ -61,6 +61,7 @@ pub mod bits {
     pub const VAULT: u64 = 1 << 0;
     pub const ACCOUNT: u64 = 1 << 1;
     pub const WALLET: u64 = 1 << 2;
+    pub const NATIVE_NETWORKS: u64 = 1 << 3;
     pub const ZETHER: u64 = 1 << 4;
     pub const PQZ: u64 = 1 << 5;
     pub const PQZ_SET_N2048_KMAX1024: u64 = 1 << 6;
@@ -79,6 +80,7 @@ pub mod bits {
     pub const COSMOS: u64 = 1 << 20;
     pub const TON: u64 = 1 << 21;
     pub const FILE_STORE: u64 = 1 << 22;
+    pub const RAW_NATIVE: u64 = 1 << 23;
     pub const CLASSICAL_ROOTS: u64 = 1 << 24;
     pub const OPAQUE_CALLS: u64 = 1 << 25;
 }
@@ -90,6 +92,7 @@ pub fn features() -> u64 {
         (cfg!(feature = "vault"), VAULT),
         (cfg!(feature = "account"), ACCOUNT),
         (cfg!(feature = "wallet"), WALLET),
+        (cfg!(feature = "native-networks"), NATIVE_NETWORKS),
         (cfg!(feature = "zether"), ZETHER),
         (cfg!(feature = "pqz"), PQZ),
         (
@@ -120,6 +123,7 @@ pub fn features() -> u64 {
         (cfg!(feature = "cosmos"), COSMOS),
         (cfg!(feature = "ton"), TON),
         (cfg!(feature = "file-store"), FILE_STORE),
+        (cfg!(feature = "raw-native"), RAW_NATIVE),
         (cfg!(feature = "classical-roots"), CLASSICAL_ROOTS),
         (cfg!(feature = "opaque-calls"), OPAQUE_CALLS),
     ];
